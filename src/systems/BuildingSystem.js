@@ -22,7 +22,7 @@
 import EventBus from '../core/EventBus.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
-import { TERRAIN_TYPES }  from '../map/HexTile.js';
+import { TERRAIN_TYPES, evaluatePlacement }  from '../map/HexTile.js';
 import { TECHS }          from '../data/TechData.js';
 import { HexGrid }        from '../map/HexGrid.js';
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
@@ -448,8 +448,13 @@ export class BuildingSystem {
       return;
     }
 
-    if (!this._canBuildOnTile(tile, building)) {
-      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.terrainForbidden') });
+    // Bramka teren+klimat (jedno źródło prawdy) — emituj KONKRETNY powód (teren/klimat).
+    const placement = evaluatePlacement(tile, building, {
+      techSystem: this.techSystem,
+      planet: this._resolveOwnPlanet(),
+    });
+    if (!placement.ok) {
+      EventBus.emit('planet:buildResult', { success: false, tile, reason: t(placement.reason) });
       return;
     }
 
@@ -1463,17 +1468,18 @@ export class BuildingSystem {
       || (planet.temperatureC != null && planet.temperatureC < -100);
   }
 
+  // Planeta TEJ kolonii (multi-colony-safe) — NIE window.KOSMOS.homePlanet (bug audytu).
+  // Fail-open: brak referencji → null → bramka klimatyczna pomijana (nigdy nie blokuje na braku danych).
+  _resolveOwnPlanet() {
+    return window.KOSMOS?.colonyManager?.getColony(this._planetId)?.planet ?? null;
+  }
+
   _canBuildOnTile(tile, building) {
-    const terrain = TERRAIN_TYPES[tile.type];
-    if (!terrain?.buildable) return false;
-    if (tile.damaged)        return false;
-    if (building.terrainOnly) return building.terrainOnly.includes(tile.type);
-    if (building.terrainAny) return true;
-    // Sprawdź standardowe allowedCategories terenu
-    if (terrain.allowedCategories.includes(building.category)) return true;
-    // Sprawdź terrain unlock z technologii (Etap 38)
-    const techUnlocks = this.techSystem?.getTerrainUnlocks(tile.type) ?? [];
-    return techUnlocks.includes(building.category);
+    // Deleguje do jednego źródła prawdy (teren + klimat). Zachowuje kontrakt =>bool dla 3 callerów.
+    return evaluatePlacement(tile, building, {
+      techSystem: this.techSystem,
+      planet: this._resolveOwnPlanet(),
+    }).ok;
   }
 
   // Oblicz stawki bazowe z uwzględnieniem poziomu budynku
@@ -1493,6 +1499,12 @@ export class BuildingSystem {
     const terrain = TERRAIN_TYPES[tile.type];
     const bonuses = terrain?.yieldBonus ?? {};
     const multiplier = bonuses[building.category] ?? bonuses.default ?? 1.0;
+
+    // Kara klimatyczna (Stage 1): budynek open-air (flaga requiresOpenAirClimate — farm) na
+    // cienkiej atmosferze → ×0.5 do produkcji żywności. Planeta TEJ kolonii (nie homePlanet).
+    // Stackuje MULTIPLIKATYWNIE z terenowym multiplier (np. ice_sheet 0.8 × 0.5 = 0.4).
+    const climatePlanet = this._resolveOwnPlanet();
+    const climateFoodMult = (building.requiresOpenAirClimate && climatePlanet?.atmosphere === 'thin') ? 0.5 : 1.0;
 
     const latMod = (!this._isRegionMode && this._gridHeight > 0)
       ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
@@ -1536,7 +1548,7 @@ export class BuildingSystem {
           // Konsumpcja rośnie liniowo z levelem: Lv2 = 2×, Lv3 = 3×
           base[key] = val * levelMult;
         } else {
-          base[key] = val * multiplier * latMod.production * levelMult * anomalyMult;
+          base[key] = val * multiplier * (key === 'food' ? climateFoodMult : 1) * latMod.production * levelMult * anomalyMult;
         }
       }
     }

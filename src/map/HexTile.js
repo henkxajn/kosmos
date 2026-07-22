@@ -150,6 +150,33 @@ export const TERRAIN_TYPES = {
   },
 };
 
+// ── Bramka budowy — JEDNO źródło prawdy (teren + klimat) ──────────────────────
+// Zwraca { ok, reason, kind } gdzie reason to KLUCZ i18n (nieprzetłumaczony),
+// a kind ∈ {'terrain','climate',null}. Delegują tu: BuildingSystem._canBuildOnTile/_build,
+// HexTile.canBuild, Region.canBuild, ColonyOverlay._getAvailableBuildings.
+//   tile     — HexTile/Region (czyta .type, .damaged)
+//   building — definicja z BuildingsData (czyta .category, .terrainOnly, .terrainAny,
+//              .requiresOpenAirClimate) lub syntetyczny { category } dla wariantu kategoria-only
+//   techSystem — opcjonalny (gałąź terrainUnlock, Etap 38); planet — opcjonalny (bramka klimatyczna)
+export function evaluatePlacement(tile, building, { techSystem = null, planet = null } = {}) {
+  const terrain = TERRAIN_TYPES[tile.type];
+  if (!terrain?.buildable) return { ok: false, reason: 'ui.terrainForbidden', kind: 'terrain' };
+  if (tile.damaged)        return { ok: false, reason: 'ui.terrainForbidden', kind: 'terrain' };
+  // Ladder terenowy (kolejność jak w BuildingSystem._canBuildOnTile — authority)
+  let terrainOk;
+  if (building.terrainOnly)      terrainOk = building.terrainOnly.includes(tile.type);
+  else if (building.terrainAny)  terrainOk = true;
+  else if (terrain.allowedCategories.includes(building.category)) terrainOk = true;
+  else terrainOk = (techSystem?.getTerrainUnlocks(tile.type) ?? []).includes(building.category); // fix desync pickera
+  if (!terrainOk) return { ok: false, reason: 'ui.terrainForbidden', kind: 'terrain' };
+  // Bramka klimatyczna (Stage 1) — tylko budynki z flagą, tylko gdy znamy planetę TEJ kolonii
+  if (building.requiresOpenAirClimate && planet) {
+    if (planet.atmosphere === 'none')     return { ok: false, reason: 'ui.requiresAtmosphere', kind: 'climate' };
+    if ((planet.temperatureC ?? 0) < 0)   return { ok: false, reason: 'ui.requiresWarmth',     kind: 'climate' };
+  }
+  return { ok: true, reason: null, kind: null };
+}
+
 // ── Klasa HexTile ─────────────────────────────────────────────────────────────
 export class HexTile {
   constructor(q, r, type = 'plains') {
@@ -214,13 +241,12 @@ export class HexTile {
   }
 
   // Czy można tu postawić budynek danej kategorii?
+  // Zajętość sprawdzamy tutaj; ladder terenowy deleguje do evaluatePlacement (jedno źródło prawdy).
   canBuild(category) {
-    if (!this.terrainDef.buildable) return false;
     if (this.buildingId !== null) return false;           // zajęte przez budynek
     if (this.underConstruction !== null) return false;    // zajęte przez budowę w toku
     if (this.pendingBuild !== null) return false;         // zajęte przez oczekujące zamówienie
-    if (this.damaged) return false;
-    return this.terrainDef.allowedCategories.includes(category);
+    return evaluatePlacement(this, { category }).ok;
   }
 
   // Czy pole jest zajęte przez budynek lub budowę w toku?

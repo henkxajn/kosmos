@@ -798,6 +798,8 @@ export default {
   'ui.factionSliderRequired': 'Requires faction slider {0}',
   'ui.tileOccupied': 'Tile occupied',
   'ui.terrainForbidden': 'Forbidden terrain',
+  'ui.requiresWarmth': 'Too cold for this building',
+  'ui.requiresAtmosphere': 'Requires atmosphere',
   'ui.maxLevel': 'Max level ({0})',
   'ui.noBuilding': 'No building',
   'ui.constructionInProgress': 'Construction in progress on this tile',

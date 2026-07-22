@@ -162,6 +162,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    requiresOpenAirClimate: true,  // Stage 1: rolnictwo pod gołym niebem — blok bez atmosfery / poniżej 0°C, ×0.5 przy 'thin'
     popType:     'laborer',
   },
 

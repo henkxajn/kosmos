@@ -9,7 +9,7 @@
 // Generowanie: RegionGenerator.generate(planet, homeWorld)
 // Serializacja: version 2 (odróżnia od HexGrid version 1)
 
-import { TERRAIN_TYPES } from './HexTile.js';
+import { TERRAIN_TYPES, evaluatePlacement } from './HexTile.js';
 import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 
 // ── Seeded PRNG (Mulberry32) ───────────────────────────────────────────────────
@@ -97,13 +97,12 @@ class Region {
   }
 
   // Czy można tu postawić budynek danej kategorii?
+  // Zajętość tutaj; ladder terenowy deleguje do evaluatePlacement (jedno źródło prawdy).
   canBuild(category) {
-    if (!this.terrainDef.buildable) return false;
     if (this.buildingId !== null) return false;
     if (this.underConstruction !== null) return false;
     if (this.pendingBuild !== null) return false;
-    if (this.damaged) return false;
-    return this.terrainDef.allowedCategories.includes(category);
+    return evaluatePlacement(this, { category }).ok;
   }
 
   // Czy pole jest zajęte?

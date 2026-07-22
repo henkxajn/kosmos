@@ -12,7 +12,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { STATIONS } from '../data/StationData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
 import EntityManager from '../core/EntityManager.js';
-import { TERRAIN_TYPES } from '../map/HexTile.js';
+import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
@@ -2940,7 +2940,8 @@ export class ColonyOverlay extends BaseOverlay {
       // Scroll offset — tylko lista budynków
       cy -= (this._floatScroll ?? 0);
 
-      for (const bid of available) {
+      for (const entry of available) {
+        const bid = entry.id;
         const bd = BUILDINGS[bid];
         if (!bd) continue;
         const rowH = 22;
@@ -2949,20 +2950,24 @@ export class ColonyOverlay extends BaseOverlay {
         if (cy + rowH < listTop - 50 || cy > listBot + 50) { cy += rowH + 2; continue; }
 
         const canAfford = this._canAfford(colony, bd);
+        const locked = entry.locked;            // Stage 1: klimat — widoczny, ale zablokowany
+        const greyed = locked || !canAfford;    // wyszarzenie jak przy braku surowców
         const isHov = this._hoveredBuildId === bid;
 
         ctx.fillStyle = isHov ? 'rgba(0,255,180,0.12)' : 'rgba(6,12,20,0.5)';
         ctx.fillRect(x + 6, cy, FLOAT_W - 12, rowH);
-        ctx.strokeStyle = canAfford ? (CAT_COLORS[bd.category] ?? '#446') : '#442222';
+        ctx.strokeStyle = greyed ? '#442222' : (CAT_COLORS[bd.category] ?? '#446');
         ctx.lineWidth = isHov ? 1.5 : 0.5;
         ctx.strokeRect(x + 6, cy, FLOAT_W - 12, rowH);
 
         ctx.font = `11px ${THEME.fontFamily}`;
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = canAfford ? '#ddd' : '#666';
-        ctx.fillText(`${bd.icon ?? '?'} ${bd.namePL ?? bd.id}`, x + 10, cy + rowH / 2);
+        ctx.fillStyle = greyed ? '#666' : '#ddd';
+        const lockIcon = locked ? '🔒 ' : '';
+        ctx.fillText(`${lockIcon}${bd.icon ?? '?'} ${bd.namePL ?? bd.id}`, x + 10, cy + rowH / 2);
 
-        // Hit zone tylko dla widocznych elementów wewnątrz listy
+        // Hit zone tylko dla widocznych elementów wewnątrz listy.
+        // Zablokowany klimatem zostaje klikalny: klik → _build odrzuci z powodem → flash (serwer = jedyna bramka).
         if (cy >= listTop && cy + rowH <= listBot) {
           this._addHit(x + 6, cy, FLOAT_W - 12, rowH, 'build', { buildingId: bid });
         }
@@ -3110,7 +3115,10 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.restore();
   }
 
+  // Zwraca listę pozycji budowy: [{ id, locked, reason }]. Budynki zablokowane KLIMATEM są
+  // pokazywane (locked:true, z powodem), teren/tech/frakcja/prereq nadal pomijane (jak dotąd).
   _getAvailableBuildings(tile) {
+    this._buildLockReasons = new Map();  // bid → klucz i18n powodu (dla tooltipa)
     if (!tile) return [];
     const techSys = window.KOSMOS?.techSystem;
     const facSys  = window.KOSMOS?.factionSystem;
@@ -3122,36 +3130,43 @@ export class ColonyOverlay extends BaseOverlay {
     // Faza D2b: aktywne budynki na bieżącej kolonii — do sprawdzenia requiresBuilding
     const activeCol = colMgr?.getColony(colMgr?.activePlanetId);
     const activeBuildingsMap = activeCol?.buildingSystem?._active;
+    const planet = activeCol?.planet ?? null;   // Stage 1: bramka klimatyczna — planeta TEJ kolonii
 
-    const result = Object.values(BUILDINGS)
-      .filter(b => {
-        if (!b.id || b.isCapital) return false;
-        if (b.requires && techSys && !techSys.isResearched(b.requires)) return false;
-        // Faza D2b: budynek-prereq (np. heritage_dome wymaga mission_archive)
-        if (b.requiresBuilding && activeBuildingsMap) {
-          let found = false;
-          for (const entry of activeBuildingsMap.values()) {
-            if (entry.building?.id === b.requiresBuilding) { found = true; break; }
-          }
-          if (!found) return false;
+    const result = [];
+    for (const b of Object.values(BUILDINGS)) {
+      if (!b.id || b.isCapital) continue;
+      if (b.requires && techSys && !techSys.isResearched(b.requires)) continue;
+      // Faza D2b: budynek-prereq (np. heritage_dome wymaga mission_archive)
+      if (b.requiresBuilding && activeBuildingsMap) {
+        let found = false;
+        for (const entry of activeBuildingsMap.values()) {
+          if (entry.building?.id === b.requiresBuilding) { found = true; break; }
         }
-        // Faza C5: gating frakcyjny — ukryj budynki kulturowe gdy frakcje zablokowane
-        if (b.requiresFactionUnlocked || b.factionGating) {
-          if (!facSys || facSys.isLocked) return false;
-          if (b.factionGating) {
-            const slider = facSys.slider ?? 50;
-            const { slider: op, value } = b.factionGating;
-            if (op === '>'  && !(slider >  value)) return false;
-            if (op === '<'  && !(slider <  value)) return false;
-            if (op === '>=' && !(slider >= value)) return false;
-            if (op === '<=' && !(slider <= value)) return false;
-          }
+        if (!found) continue;
+      }
+      // Faza C5: gating frakcyjny — ukryj budynki kulturowe gdy frakcje zablokowane
+      if (b.requiresFactionUnlocked || b.factionGating) {
+        if (!facSys || facSys.isLocked) continue;
+        if (b.factionGating) {
+          const slider = facSys.slider ?? 50;
+          const { slider: op, value } = b.factionGating;
+          if (op === '>'  && !(slider >  value)) continue;
+          if (op === '<'  && !(slider <  value)) continue;
+          if (op === '>=' && !(slider >= value)) continue;
+          if (op === '<=' && !(slider <= value)) continue;
         }
-        if (b.terrainAny) return true;
-        if (b.terrainOnly) return b.terrainOnly.includes(tile.type);
-        return terrain.allowedCategories?.includes(b.category) ?? false;
-      })
-      .map(b => b.id);
+      }
+      // Bramka teren+klimat (jedno źródło prawdy — evaluatePlacement)
+      const verdict = evaluatePlacement(tile, b, { techSystem: techSys, planet });
+      if (verdict.ok) {
+        result.push({ id: b.id, locked: false, reason: null });
+      } else if (verdict.kind === 'climate') {
+        // Klimat: pokaż zablokowany z powodem (nie znikaj z pickera)
+        result.push({ id: b.id, locked: true, reason: verdict.reason });
+        this._buildLockReasons.set(b.id, verdict.reason);
+      }
+      // teren niedozwolony → pomiń (bez zmian względem dotychczasowego zachowania)
+    }
     return result;
   }
 
@@ -3847,6 +3862,11 @@ export class ColonyOverlay extends BaseOverlay {
         const missing = this._getMissing(colony, bd);
         if (missing.length > 0) {
           html += `<br><span style="color:#f66">Brakuje: ${missing.join(', ')}</span>`;
+        }
+        // Stage 1: blokada klimatyczna — pokaż powód na hover (nie tylko przy kliknięciu)
+        const lockReason = this._buildLockReasons?.get(this._hoveredBuildId);
+        if (lockReason) {
+          html += `<br><span style="color:#f66">🔒 ${t(lockReason)}</span>`;
         }
         if (bd.rates) {
           html += '<br>' + Object.entries(bd.rates).map(([k, v]) =>
