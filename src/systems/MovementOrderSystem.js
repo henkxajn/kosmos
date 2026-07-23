@@ -20,7 +20,7 @@ import { addMissionLog }     from '../entities/Vessel.js';
 import { PredictionConeMath } from '../utils/PredictionConeMath.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { SHIP_MODULES }      from '../data/ShipModulesData.js';
-import { canLaunchFromCurrent } from '../utils/SpaceportCheck.js';
+import { canLaunchFromCurrent, launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -490,7 +490,9 @@ export class MovementOrderSystem {
     // M4 P1: spec.bypassFuelCheck=true → wydaj order mimo niedoboru (AutoRetreat
     // low_fuel_drift fallback). Vessel doleci na cel — fuel.current zostaje co jest
     // (clamped do 0), reforma w P4 nada temu real consequences (degradacja velocity).
-    const fuelNeeded = totalDistAU * (vessel.fuel?.consumption ?? 0);
+    // Etap 4 reformy — dopłata paliwowa za studnię grawitacyjną ciała-źródła (start naziemny;
+    // stacja / przestrzeń → ×1.0). fuelNeeded płynie do bramki, mission.fuelCost i zużycia niżej.
+    const fuelNeeded = totalDistAU * (vessel.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(vessel);
     if (vessel.fuel && vessel.fuel.current < fuelNeeded && !spec.bypassFuelCheck) {
       return { ok: false, reason: 'insufficient_fuel' };
     }

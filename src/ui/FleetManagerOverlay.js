@@ -29,6 +29,7 @@ import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
+import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
@@ -8600,7 +8601,9 @@ export class FleetManagerOverlay {
     const distAU = this._calcDistAU(vessel, target);
     const effectiveSpeed = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
     const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;
-    const fuelCost = distAU * (vessel.fuel.consumption ?? 0);
+    // Etap 4 reformy — podgląd MUSI odzwierciedlać dopłatę za studnię grawitacyjną (podgląd == wydatek);
+    // ta sama zasada co podgląd kosztu budowy (Etap 2) i komponentów (Etap 3). Zasila też bramkę „BRAK PALIWA".
+    const fuelCost = distAU * (vessel.fuel.consumption ?? 0) * launchFuelMultiplierForVessel(vessel);
 
     const tableData = isCrossSystem ? [] : [
       [t('fleet.distanceLabel'), `${distAU.toFixed(2)} AU`],

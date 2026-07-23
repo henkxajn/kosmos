@@ -20,6 +20,7 @@
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
+import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { SHIPS }         from '../data/ShipsData.js';
 import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
@@ -514,7 +515,9 @@ export class MissionSystem {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
         return;
       }
-      const fuelNeeded = distance * vessel.fuel.consumption;
+      // Etap 4 reformy — dopłata paliwowa za studnię grawitacyjną ciała-źródła (start naziemny;
+      // stacja / przestrzeń → ×1.0). Fail-open: brak zadokowanego źródła → ×1.0.
+      const fuelNeeded = distance * vessel.fuel.consumption * launchFuelMultiplierForVessel(vessel);
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
           reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
@@ -558,6 +561,7 @@ export class MissionSystem {
     this._missions.push(mission);
 
     if (vMgr && assignedVesselId) {
+      const dispatchVessel = vMgr.getVessel(assignedVesselId);
       vMgr.dispatchOnMission(assignedVesselId, {
         type,
         targetId,
@@ -565,7 +569,8 @@ export class MissionSystem {
         departYear,
         arrivalYear: mission.arrivalYear,
         returnYear:  mission.returnYear,
-        fuelCost:    distance * (vMgr.getVessel(assignedVesselId)?.fuel?.consumption ?? 0),
+        // Etap 4 — dopłata za studnię grawitacyjną (spójna z pre-checkiem paliwa wyżej).
+        fuelCost:    distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel),
       });
     }
 
@@ -600,7 +605,9 @@ export class MissionSystem {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
         return;
       }
-      const fuelNeeded = distance * vessel.fuel.consumption;
+      // Etap 4 reformy — dopłata paliwowa za studnię grawitacyjną ciała-źródła (start naziemny;
+      // stacja / przestrzeń → ×1.0). Fail-open: brak zadokowanego źródła → ×1.0.
+      const fuelNeeded = distance * vessel.fuel.consumption * launchFuelMultiplierForVessel(vessel);
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
           reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
@@ -652,6 +659,7 @@ export class MissionSystem {
     this._missions.push(mission);
 
     if (vMgr && vesselId) {
+      const dispatchVessel = vMgr.getVessel(vesselId);
       vMgr.dispatchOnMission(vesselId, {
         type:        'colony',
         targetId,
@@ -659,7 +667,8 @@ export class MissionSystem {
         departYear,
         arrivalYear: mission.arrivalYear,
         returnYear:  null,
-        fuelCost:    distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0),
+        // Etap 4 — dopłata za studnię grawitacyjną (spójna z pre-checkiem paliwa wyżej).
+        fuelCost:    distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel),
       });
     }
 
@@ -700,8 +709,9 @@ export class MissionSystem {
 
     const distance = this._calcDistance(target);
 
-    // Sprawdź paliwo
-    const fuelNeeded = distance * vessel.fuel.consumption;
+    // Sprawdź paliwo — Etap 4: ×dopłata za studnię grawitacyjną ciała-źródła (stacja/przestrzeń → ×1.0).
+    // fuelNeeded płynie do dispatchOnMission niżej (fuelCost: fuelNeeded) — jedno źródło prawdy.
+    const fuelNeeded = distance * vessel.fuel.consumption * launchFuelMultiplierForVessel(vessel);
     if (vessel.fuel.current < fuelNeeded) {
       this._emit('mission:failed', 'expedition:launchFailed', {
         reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
@@ -817,9 +827,13 @@ export class MissionSystem {
       distance = this._calcDistance(target || { orbital: { a: 2 } });
     }
 
+    // Etap 4 reformy — mnożnik paliwa startu (studnia grawitacyjna ciała-źródła; stacja/przestrzeń
+    // → ×1.0, re-dispatch z orbity → ×1.0 bo nie zadokowany). Jedno źródło dla pre-checku i fuelCost.
+    const launchMult = vessel ? launchFuelMultiplierForVessel(vessel) : 1;
+
     // Sprawdź paliwo
     if (vessel) {
-      const fuelNeeded = distance * vessel.fuel.consumption;
+      const fuelNeeded = distance * vessel.fuel.consumption * launchMult;
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
           reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
@@ -883,7 +897,7 @@ export class MissionSystem {
     this._missions.push(mission);
 
     if (vMgr && vesselId) {
-      const fuelCost = distance * (vessel?.fuel?.consumption ?? 0);
+      const fuelCost = distance * (vessel?.fuel?.consumption ?? 0) * launchMult;
       const missionData = {
         type: 'transport', targetId,
         targetName: mission.targetName,
@@ -963,7 +977,9 @@ export class MissionSystem {
     const target   = this._findTarget(targetId);
     const distance = Math.max(0.001, DistanceUtils.euclideanAU(
       { x: vessel.position.x, y: vessel.position.y }, target || { x: 0, y: 0 }));
-    const fuelNeeded = distance * vessel.fuel.consumption;
+    // Etap 4 reformy — mnożnik paliwa startu (studnia grawitacyjna ciała-źródła; stacja/przestrzeń → ×1.0).
+    const launchMult = launchFuelMultiplierForVessel(vessel);
+    const fuelNeeded = distance * vessel.fuel.consumption * launchMult;
     if (vessel.fuel.current < fuelNeeded) {
       this._emit('mission:failed', 'expedition:launchFailed', {
         reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
@@ -1027,7 +1043,7 @@ export class MissionSystem {
       type: 'passenger', targetId,
       targetName: mission.targetName,
       departYear, arrivalYear: mission.arrivalYear, returnYear: null,
-      fuelCost: distance * (vessel.fuel?.consumption ?? 0),
+      fuelCost: distance * (vessel.fuel?.consumption ?? 0) * launchMult,
     });
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
@@ -1242,7 +1258,9 @@ export class MissionSystem {
       this._missions.push(mission);
 
       if (vMgr && vesselId) {
-        const fuelCost = distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0);
+        const dispatchVessel = vMgr.getVessel(vesselId);
+        // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (start naziemny; stacja/przestrzeń → ×1.0).
+        const fuelCost = distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel);
         vMgr.dispatchOnMission(vesselId, {
           type: 'recon', targetId: firstTarget.id,
           targetName: firstTarget.name,
@@ -1284,7 +1302,9 @@ export class MissionSystem {
     this._missions.push(mission);
 
     if (vMgr && vesselId) {
-      const fuelCost = distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0);
+      const dispatchVessel = vMgr.getVessel(vesselId);
+      // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (start naziemny; stacja/przestrzeń → ×1.0).
+      const fuelCost = distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel);
       vMgr.dispatchOnMission(vesselId, {
         type: 'recon', targetId: nearest?.id ?? 'nearest',
         targetName: mission.targetName,
@@ -1321,7 +1341,8 @@ export class MissionSystem {
       }
       // (d) one-way spójnie — recon też może utknąć (luka D pokaże "⛽ Utknął").
       // Jedna reguła "wyruszysz jeśli dolecisz" zamiast wyjątku round-trip dla recon.
-      const fuelNeeded = distance * vessel.fuel.consumption;
+      // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (stacja/przestrzeń → ×1.0).
+      const fuelNeeded = distance * vessel.fuel.consumption * launchFuelMultiplierForVessel(vessel);
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
           reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
@@ -1367,7 +1388,9 @@ export class MissionSystem {
     this._missions.push(mission);
 
     if (vMgr && vesselId) {
-      const fuelCost = distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0);
+      const dispatchVessel = vMgr.getVessel(vesselId);
+      // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (start naziemny; stacja/przestrzeń → ×1.0).
+      const fuelCost = distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel);
       vMgr.dispatchOnMission(vesselId, {
         type: 'recon', targetId,
         targetName: mission.targetName,
@@ -1912,7 +1935,10 @@ export class MissionSystem {
       { x: vessel.position.x, y: vessel.position.y },
       nextTarget
     ));
-    const fuelNeeded = distance * (vessel.fuel?.consumption ?? 0);
+    // Etap 4 reformy — każdy leg pętli to nowy start z zadokowanego ciała → dopłata za studnię
+    // grawitacyjną jak przy pierwszym locie (stacja/przestrzeń → ×1.0). fuelNeeded płynie do
+    // dispatchOnMission niżej (fuelCost: fuelNeeded), więc pętla nie omija podatku.
+    const fuelNeeded = distance * (vessel.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(vessel);
     if (vessel.fuel && vessel.fuel.current < fuelNeeded) {
       // Brak paliwa — czekaj na tankowanie
       exp.status = nextLeg === 'return' ? 'waiting_return_cargo' : 'waiting_reload';
