@@ -51,6 +51,8 @@ export function peekRowsTotalHeight(rows) {
   return h;
 }
 export const PEEK_HIDE_DELAY = 160;  // ms zwłoki schowania po zjechaniu kursora (można wjechać na kartę)
+export const PEEK_HOVER_DELAY = 500; // ms — kursor musi spocząć na slocie tyle czasu, zanim karta się wysunie
+                                     // (blokuje przypadkowe wywołanie przy zwykłym przejechaniu myszą)
 
 // ── Easing ──────────────────────────────────────────────────────────────────
 export function easeOutCubic(p) {

@@ -17,6 +17,7 @@ import { NAV_GROUPS, CIV_TABS, getNavGroup } from './CivPanelDrawer.js';
 import { bottomNavBarRect, navSlotLayout, hitNavSlot, pointInRect } from './BottomNavBarLogic.js';
 import { NAV_TILE_FILES, NAV_ICON_DIR } from './NavDrawerLogic.js';
 import { NavPeekCard } from './NavPeekCard.js';
+import { PEEK_HOVER_DELAY } from './NavPeekCardLogic.js';
 import { getPeekAlert } from './NavPeekProviders.js';
 
 export class BottomNavBar {
@@ -33,13 +34,18 @@ export class BottomNavBar {
     this._peekEnabled = GAME_CONFIG.FEATURES?.navPeekCards !== false;
     this._peek     = this._peekEnabled ? new NavPeekCard() : null;
     this._peekSlot = -1;      // slot karty peek (pod kursorem LUB trzymany gdy kursor na karcie)
+    this._dwellSlot = -1;     // slot, na którym spoczywa kursor (do naliczania zwłoki hovera)
+    this._dwellAt   = 0;      // znacznik czasu wejścia na _dwellSlot (dwell timer)
     this._alertCache = {};    // primary → bool (odświeżane throttlingiem)
     this._alertAt  = 0;
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
-  // UIManager kontynuuje redraw póki hover animuje LUB karta peek jest widoczna (żywe liczby).
-  isAnimating() { return this._anim || (this._peek?.isActive?.() ?? false); }
+  // UIManager kontynuuje redraw póki hover animuje LUB karta peek jest widoczna (żywe liczby)
+  // LUB trwa zwłoka hovera (dwell) — inaczej przy pauzie karta nie wysunęłaby się po upływie czasu.
+  isAnimating() {
+    return this._anim || (this._peek?.isActive?.() ?? false) || this._dwellSlot >= 0;
+  }
 
   _tabFor(primary) { return CIV_TABS.find(tb => tb.id === primary) ?? null; }
 
@@ -149,7 +155,14 @@ export class BottomNavBar {
       const slotP = (gi >= 0 && gi < slots.length) ? slots[gi] : null;
       const slotRect = (slotP && !suppress) ? { x: slotP.x, y: rect.y, w: slotP.w, h: rect.h } : null;
       const img = grpP ? this._imgCache.get(grpP.primary) : null;   // grafika przycisku → baner karty
-      this._peek.update(suppress ? null : (grpP?.primary ?? null), slotRect, rect, W, H, img);
+      // Bramka zwłoki: karta wysuwa się dopiero po PEEK_HOVER_DELAY ms ciągłego hovera na slocie.
+      // Gdy karta już wysunięta dla tej grupy — trzymaj (nie re-bramkuj), inaczej chowałaby się i
+      // wysuwała w kółko. Blokuje przypadkowe wywołanie przy zwykłym przejechaniu myszą nad paskiem.
+      const dwellOk = gi >= 0 && this._dwellSlot === gi &&
+                      (now - this._dwellAt) >= PEEK_HOVER_DELAY;
+      const alreadyShown = this._peek.activeGroup() === grpP?.primary && this._peek.isActive();
+      const armed = grpP && !suppress && (dwellOk || alreadyShown);
+      this._peek.update(armed ? grpP.primary : null, slotRect, rect, W, H, img);
       this._peek.draw(ctx);
     }
   }
@@ -246,6 +259,9 @@ export class BottomNavBar {
     else if (this._peek && this._peekSlot >= 0 && this._peek.isOver(x, y)) newSlot = this._peekSlot;
     else newSlot = -1;
     if (newSlot !== this._hoverSlot || newSlot !== this._peekSlot) this._markDirty();
+    // Zwłoka hovera: gdy kursor przechodzi na INNY slot, restartuj timer dwell. Wjechanie na już
+    // wysuniętą kartę nie zmienia _peekSlot (isOver-branch) → timer nie jest restartowany.
+    if (newSlot !== this._peekSlot) { this._dwellSlot = newSlot; this._dwellAt = Date.now(); }
     this._hoverSlot = newSlot;
     this._peekSlot  = newSlot;
   }
