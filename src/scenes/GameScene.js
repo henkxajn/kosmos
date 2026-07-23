@@ -4000,6 +4000,15 @@ export class GameScene {
         }
       }
 
+      // SHIFT-hold → „czysty widok": ukryj cały UI (linie, etykiety, paski, pierścienie),
+      // zostaw samą grafikę układu i modele statków. Box-select (SHIFT+LPM) działa dalej —
+      // marquee rysuje się mimo ukrytego UI. Znika po puszczeniu Shift (keyup/blur).
+      // Nie łączymy z CTRL (koliduje z „pokaż wszystkie etykiety"); tylko w widoku układu.
+      if (e.key === 'Shift' && !e.ctrlKey && window.KOSMOS?.civMode
+          && !this.uiManager?.overlayManager?.isAnyOpen?.() && !this.planetScene?.isOpen) {
+        this._setCleanView(true);
+      }
+
       // ── M3 P1.3 — picker / menu / selection keyboard (priorytet PRZED overlay/menu/Space) ──
       // ESC priority: picker → rightClickMenu → selectedVesselId → existing handlers.
       // ENTER: tylko gdy picker aktywny (finalize).
@@ -4123,14 +4132,30 @@ export class GameScene {
           this.uiManager?.markDirty?.();
         }
       }
+      // Puszczenie Shift → wyjdź z czystego widoku.
+      if (e.key === 'Shift' || !e.shiftKey) this._setCleanView(false);
     });
-    // Edge case: utrata focusu okna podczas trzymania CTRL
+    // Edge case: utrata focusu okna podczas trzymania CTRL / Shift
     window.addEventListener('blur', () => {
       if (this.threeRenderer?._showAllLabels) {
         this.threeRenderer.setShowAllLabels(false);
         this.uiManager?.markDirty?.();
       }
+      this._setCleanView(false);
     });
+  }
+
+  // SHIFT „czysty widok" — synchronizuje ukrycie UI 2D (UIManager) i nakładek 3D
+  // (ThreeRenderer). Idempotentne; markDirty odświeża canvas 2D (WebGL ma własną pętlę).
+  _setCleanView(active) {
+    active = !!active;
+    if (this._cleanViewActive === active) return;
+    this._cleanViewActive = active;
+    if (this.uiManager) {
+      this.uiManager._cleanView = active;
+      this.uiManager.markDirty?.();
+    }
+    this.threeRenderer?.setCleanView?.(active);
   }
 
   // ── M3 P1.3 — Picker mode HUD banner ─────────────────────────────

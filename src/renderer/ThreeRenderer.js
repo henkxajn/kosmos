@@ -295,6 +295,7 @@ export class ThreeRenderer {
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
     this._tacticalGhosts       = new Map();  // F2: vesselId → Sprite-duch ETA w punkcie celu misji
+    this._cleanView            = false;      // SHIFT-hold „czysty widok": ukryj linie/pierścienie/glify (tylko ciała + modele statków)
     this._tacticalHoverVid     = null;       // F4 Dok: vesselId pod kursorem w doku (hover-podgląd: routeLine jaśniej + puls ducha)
     this._tacticalHoverYear    = null;       // F4 Dok OŚ: rok pod kursorem na osi → marker pozycji planety celu w tym roku
     this._lastTacticalPingMs   = 0;          // F4 Dok: throttle ping-FX przy kliku wiersza
@@ -3261,6 +3262,50 @@ export class ThreeRenderer {
   suspend() { this._renderingEnabled = false; }
   resume()  { this._renderingEnabled = true;  }
 
+  // ── SHIFT „czysty widok" (cinematic) ──────────────────────────
+  // Ukrywa nakładki 3D (linie orbit/tras/handlu, pierścienie sensorów, stożki
+  // predykcji, markery wroga, glify taktyczne), zostawiając gwiazdę, planety,
+  // księżyce, planetoidy i modele statków. Dekoracyjne pierścienie planet są
+  // dziećmi grupy planety → nietknięte. Wywoływane przez GameScene przy Shift.
+  setCleanView(active) {
+    active = !!active;
+    if (this._cleanView === active) return;
+    this._cleanView = active;
+    // active=true → ukryj; false → przywróć widoczność (syncy skorygują fog-edge
+    // na najbliższym zdarzeniu detekcji).
+    this._applyCleanViewVisibility(active);
+  }
+
+  _applyCleanViewVisibility(hidden) {
+    // Cache oryginalnej widoczności w userData._cvVis: orbity/pierścienie mają
+    // widoczność zależną od filtra/focusu (nie zawsze true), więc na wyjściu
+    // MUSIMY przywrócić stan sprzed ukrycia, nie ślepe true. Obiekty odtwarzane
+    // co klatkę (nowy Line/Sprite) dostają świeży _cvVis przy pierwszym ukryciu.
+    const each = (obj) => {
+      if (!obj) return;
+      if (hidden) {
+        if (obj.userData._cvVis === undefined) obj.userData._cvVis = obj.visible;
+        obj.visible = false;
+      } else if (obj.userData._cvVis !== undefined) {
+        obj.visible = obj.userData._cvVis;
+        delete obj.userData._cvVis;
+      } else {
+        obj.visible = true;
+      }
+    };
+    for (const [, line] of this._orbits)              each(line);
+    for (const [, line] of this._planetoidOrbits)     each(line);
+    for (const [, e] of this._moons)                  each(e?.ring);
+    for (const [, sp] of this._tacticalOrbitMarkers)  each(sp);
+    for (const line of this._tradeLines)              each(line);
+    for (const f of this._tradeFireflies)             each(f?.sprite);
+    for (const [, e] of this._vessels)                each(e?.routeLine);
+    for (const [, e] of this._sensorRingMeshes)       each(e?.mesh);
+    for (const [, e] of this._predictionConeMeshes)   each(e?.group);
+    for (const [, sp] of this._enemyAlertMarkers)     each(sp);
+    for (const [, sp] of this._tacticalGlyphs)        each(sp);
+  }
+
   // ── Pętla renderowania ────────────────────────────────────────
   _startLoop() {
     // Faza 5: bramka na rendering (BattleView3D zawiesza przy starciu)
@@ -3321,6 +3366,10 @@ export class ThreeRenderer {
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
         this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
         this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
+
+        // SHIFT „czysty widok" — po WSZYSTKICH syncach (część odtwarza obiekty co klatkę)
+        // wymuś ukrycie linii/pierścieni/glifów, zostaw gwiazdę, planety i modele statków.
+        if (this._cleanView) this._applyCleanViewVisibility(true);
 
         // Pipeline HDR: Render → Bloom(próg 1.0) → OutputPass (ACES+sRGB).
         // Fallback: bezpośredni render gdy composer padł (ACES aplikuje renderer, brak bloomu).

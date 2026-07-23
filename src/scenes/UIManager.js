@@ -200,6 +200,10 @@ export class UIManager {
     this._selectedVesselIds = new Set();
     // Slice 8 — prostokąt box-select (client px) rysowany w draw(); ustawia GameScene.
     this._marqueeRect = null;
+    // SHIFT-hold „czysty widok" — ukrywa cały UI 2D (etykiety/paski/HUD), zostawia
+    // tylko marquee box-selectu. Ustawia GameScene przy trzymaniu Shift; 3D linie/pierścienie
+    // ukrywa równolegle ThreeRenderer.setCleanView(). Cinematic / zrzut ekranu.
+    this._cleanView = false;
     // Player Fleet Groups (P2) — analogiczne selektor floty (single source of truth).
     // RightClickMenu czyta przez getSelectedFleetId() żeby pokazywać fleet-context
     // entries. FleetManagerOverlay._selectedFleetId pełni rolę cache rendering.
@@ -1709,6 +1713,15 @@ export class UIManager {
     ctx.save();
     ctx.setTransform(UI_SCALE * _DPR, 0, 0, UI_SCALE * _DPR, 0, 0);  // logiczne → px urządzenia
     ctx.clearRect(0, 0, W, H);
+
+    // SHIFT „czysty widok" — pomiń CAŁY UI 2D (etykiety, paski, HUD, ramki, EventLog).
+    // Zostaje wyłącznie prostokąt box-selectu, by zaznaczanie statków miało feedback.
+    // 3D (linie orbit/tras/handlu, pierścienie sensorów) ukrywa ThreeRenderer.setCleanView().
+    if (this._cleanView) {
+      if (this._marqueeRect) this._drawMarquee(ctx);
+      ctx.restore();
+      return;
+    }
 
     const civMode = !!window.KOSMOS?.civMode;
     const globeOpen = !!window.KOSMOS?.planetGlobeOpen;
