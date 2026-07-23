@@ -24,6 +24,11 @@ export class Asteroid extends CelestialBody {
       inclinationOffset: config.inclinationOffset || 0,
     };
 
+    // Atmosfera — asteroidy są BEZPOWIETRZNE. Jawne 'none' (nie undefined) — spójne z Planetoid
+    // (bezpowietrzna klasa siostrzana). Asteroidy nie są kolonizowalne, więc nie zasilają obecnie
+    // ścieżki kosztu/bramki reformy, ale jawne pole zamyka tę samą klasę latentnego błędu.
+    this.atmosphere = config.atmosphere || 'none';
+
     // Skład skalny: żelazo + krzem + tlen + nikiel
     this.composition = config.composition || {
       Fe: 40, Si: 35, O: 20, Ni: 5,

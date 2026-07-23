@@ -30,6 +30,7 @@ import { DepositSystem }    from '../systems/DepositSystem.js';
 import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
 import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
 import { t, getName }      from '../i18n/i18n.js';
+import { envMultiplier, computeBuildResourceCost } from '../data/EnvironmentCost.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
 const BASE_MAX_LEVEL = 10;
@@ -540,13 +541,10 @@ export class BuildingSystem {
       ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
       : { production: 1.0, buildCost: 1.0, label: null };
 
-    // Oblicz koszt (surowce + commodities) z modyfikatorem polarnym
+    // Oblicz koszt surowców: modyfikator polarny (latMod) × dopłata środowiskowa (Stage 2).
+    // Wspólny helper z UI (computeBuildResourceCost) → podgląd == rzeczywisty koszt dla części środowiskowej.
     const actualCost = {};
-    if (building.cost) {
-      for (const [k, v] of Object.entries(building.cost)) {
-        actualCost[k] = Math.ceil(v * latMod.buildCost);
-      }
-    }
+    Object.assign(actualCost, computeBuildResourceCost(building, this._resolveOwnPlanet(), latMod.buildCost));
     // Commodity cost (bez modyfikatora polarnego — to gotowe komponenty)
     if (building.commodityCost) {
       for (const [k, v] of Object.entries(building.commodityCost)) {
@@ -1567,15 +1565,19 @@ export class BuildingSystem {
       base[res] = (base[res] ?? 0) + amt;
     }
 
+    // Dopłata środowiskowa do UTRZYMANIA (połowa siły — Stage 2). climatePlanet rozwiązany wyżej
+    // (planeta TEJ kolonii, nie homePlanet). Fail-open: brak planety → envUpkeep=1.
+    const envUpkeep = envMultiplier(building.category, climatePlanet, { half: true });
+
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
     if (hasEnergyCost) {
-      base.energy = (base.energy ?? 0) - building.energyCost * levelMult;
+      base.energy = (base.energy ?? 0) - building.energyCost * levelMult * envUpkeep;
     }
 
     // Maintenance — stały koszt utrzymania per level (ujemne stawki surowców)
     if (hasMaintenance) {
       for (const [res, amount] of Object.entries(building.maintenance)) {
-        base[res] = (base[res] ?? 0) - amount * levelMult;
+        base[res] = (base[res] ?? 0) - amount * levelMult * envUpkeep;
       }
     }
 

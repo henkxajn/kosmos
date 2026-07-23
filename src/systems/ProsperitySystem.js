@@ -24,6 +24,7 @@ import {
   LAYER_GOODS,
   PROSPERITY_EFFECTS,
 } from '../data/ConsumerGoodsData.js';
+import { gravityBand, temperatureBand } from '../data/EnvironmentBands.js';
 
 export class ProsperitySystem {
   constructor(resourceSystem, civSystem, techSystem, planet) {
@@ -192,10 +193,10 @@ export class ProsperitySystem {
     const unlockedGoods = epochData.unlockedGoods;
     const epochMult = epochData.demandMult;
 
-    // Mnożniki środowiskowe z planety
-    const tempKey = this._getTempKey(this.planet?.temperatureC);
+    // Mnożniki środowiskowe z planety — pasma z EnvironmentBands (jedno źródło progów)
+    const tempKey = temperatureBand(this.planet?.temperatureC);
     const atmoKey = this.planet?.atmosphere || 'none';
-    const gravKey = this._getGravKey(this.planet?.surfaceGravity);
+    const gravKey = gravityBand(this.planet?.surfaceGravity);
 
     const maturity = this._getMaturityFactor();
 
@@ -212,19 +213,6 @@ export class ProsperitySystem {
     }
   }
 
-  _getTempKey(temperatureC) {
-    if (temperatureC == null) return 'moderate';
-    if (temperatureC > 77) return 'hot';
-    if (temperatureC < -53) return 'cold';
-    return 'moderate';
-  }
-
-  _getGravKey(surfaceGravity) {
-    if (surfaceGravity == null) return 'normal';
-    if (surfaceGravity < 0.4) return 'low';
-    if (surfaceGravity > 1.5) return 'high';
-    return 'normal';
-  }
 
   _getMaturityFactor() {
     // Wiek kolonii (tymczasowo: totalYears jako przybliżenie)

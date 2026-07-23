@@ -3,6 +3,7 @@
 // Wizualizowana jak mała skalista planeta, ma orbitę rysowaną przez OrbitRenderer
 
 import { CelestialBody } from './CelestialBody.js';
+import { WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 
 export class Planetoid extends CelestialBody {
   constructor(config) {
@@ -26,6 +27,13 @@ export class Planetoid extends CelestialBody {
 
     // Typ planetoidy (metallic / carbonaceous / silicate)
     this.planetoidType = config.planetoidType || 'silicate';
+
+    // Atmosfera — planetoidy są BEZPOWIETRZNE. Jawne 'none' (nie undefined), aby dopłata
+    // środowiskowa Stage 2 (envMultiplier: ATMOSPHERE_SURCHARGE[undefined] ?? 0 = 0 → brak kary)
+    // oraz bramka klimatyczna Stage 1 (Farma: atmosphere === 'none') działały jak na ciałach
+    // z atmosferą. Konstruktor uruchamia się TAKŻE przy restore (serialize planetoidy NIE zapisuje
+    // atmosphere) → naprawia też już-zapisane planetoidy przy następnym loadzie, bez migracji save.
+    this.atmosphere = config.atmosphere || 'none';
 
     // Promień powierzchniowy (R⊕) i grawitacja powierzchniowa (g)
     this.surfaceRadius  = config.surfaceRadius  ?? null;
@@ -55,5 +63,10 @@ export class Planetoid extends CelestialBody {
       Fe: 25, Si: 25, O: 28, Mg: 8, Ca: 3, Al: 3,
       H2O: 2, C: 1.5, N: 0.5, P: 0.2, H: 1, S: 0.8,
     };
+
+    // Woda z kompozycji (Stage 2) — jednolita reguła. Planetoidy nie serializują surface,
+    // więc konstruktor przelicza hasWater z composition przy każdym loadzie.
+    // Zmiana zachowania: carbonaceous (~8%) / silicate (~5%) → mokre; metallic (0%) → suche.
+    this.surface.hasWater = (this.composition.H2O ?? 0) >= WATER_H2O_THRESHOLD;
   }
 }

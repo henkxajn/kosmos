@@ -3,6 +3,7 @@
 // PhysicsSystem aktualizuje pozycję po aktualizacji planety-rodzica
 
 import { CelestialBody } from './CelestialBody.js';
+import { WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 
 export class Moon extends CelestialBody {
   constructor(config) {
@@ -40,9 +41,12 @@ export class Moon extends CelestialBody {
     this.atmosphere   = config.atmosphere   || 'none';
 
     // Pola powierzchniowe (kompatybilność z PlanetMapGenerator / RegionSystem)
+    // Woda z kompozycji (Stage 2) — jednolita reguła. Księżyce nie serializują surface,
+    // więc konstruktor przelicza hasWater z composition (H2O round-trippuje) przy każdym loadzie.
+    // Icy H2O≈55% → mokry, rocky H2O≈0.5% → suchy (zgodne z dawnym moonType==='icy').
     this.surface = {
       temperature:   this.temperatureC ?? (this.temperatureK ? this.temperatureK - 273 : -50), // °C
-      hasWater:      this.moonType === 'icy',
+      hasWater:      (this.composition?.H2O ?? 0) >= WATER_H2O_THRESHOLD,
       magneticField: 0,
     };
 

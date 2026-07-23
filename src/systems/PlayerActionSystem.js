@@ -5,7 +5,7 @@
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { KeplerMath } from '../utils/KeplerMath.js';
-import { COMET_COMPOSITION, normalizeComposition } from '../data/ElementsData.js';
+import { COMET_COMPOSITION, normalizeComposition, WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 
 // Koszty energii wpływu
 export const ACTION_COSTS = {
@@ -133,8 +133,8 @@ export class PlayerActionSystem {
       }
       p.composition = normalizeComposition(newComp);
 
-      // Aktualizuj flagę wody gdy H₂O przekroczy 3%
-      if (p.composition.H2O >= 3 && !p.surface.hasWater) {
+      // Aktualizuj flagę wody gdy H₂O przekroczy próg (WATER_H2O_THRESHOLD)
+      if (p.composition.H2O >= WATER_H2O_THRESHOLD && !p.surface.hasWater) {
         p.surface.hasWater = true;
       }
 

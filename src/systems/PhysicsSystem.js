@@ -6,7 +6,7 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { KeplerMath }  from '../utils/KeplerMath.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
-import { mergeCompositions, normalizeComposition } from '../data/ElementsData.js';
+import { mergeCompositions, normalizeComposition, WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 
 // Przelicznik: 1 masa Ziemi ≈ 3×10⁻⁶ mas Słońca
 const EARTH_TO_SOLAR = 3e-6;
@@ -180,7 +180,7 @@ export class PhysicsSystem {
           mergeCompositions(bigger.composition, smaller.composition, bigW)
         );
         // Aktualizuj hasWater po absorpcji
-        bigger.surface.hasWater = (bigger.composition.H2O || 0) >= 3;
+        bigger.surface.hasWater = (bigger.composition.H2O || 0) >= WATER_H2O_THRESHOLD;
       }
       bigger.physics.mass  = totalMass;
       bigger.visual.radius = Math.min(bigger.visual.radius + 1, 22);
@@ -232,7 +232,7 @@ export class PhysicsSystem {
         bigger.composition = normalizeComposition(
           mergeCompositions(bigger.composition, smaller.composition, bigW)
         );
-        bigger.surface.hasWater = (bigger.composition.H2O || 0) >= 3;
+        bigger.surface.hasWater = (bigger.composition.H2O || 0) >= WATER_H2O_THRESHOLD;
       }
       bigger.physics.mass  = totalMass * 0.82;   // 18% masy ucieka jako odłamki
       bigger.visual.radius = Math.min(bigger.visual.radius + 1, 22);
@@ -252,7 +252,7 @@ export class PhysicsSystem {
         smaller.physics.mass *= 0.55;
         // Skład małej planety: traci część składu na rzecz dużej, reszta zostaje
         if (smaller.composition && bigger.composition) {
-          smaller.surface.hasWater = (smaller.composition.H2O || 0) >= 3;
+          smaller.surface.hasWater = (smaller.composition.H2O || 0) >= WATER_H2O_THRESHOLD;
         }
         smaller.visual.radius = Math.max(3, smaller.visual.radius - 1);
         // Nie zerujemy lifeScore — LifeSystem obsługuje to przez body:collision event
@@ -340,7 +340,7 @@ export class PhysicsSystem {
         planet.composition = normalizeComposition(
           mergeCompositions(planet.composition, small.composition, bigW)
         );
-        if (planet.surface) planet.surface.hasWater = (planet.composition.H2O || 0) >= 3;
+        if (planet.surface) planet.surface.hasWater = (planet.composition.H2O || 0) >= WATER_H2O_THRESHOLD;
       }
       planet.physics.mass = totalMass;
 
@@ -364,7 +364,7 @@ export class PhysicsSystem {
         planet.composition = normalizeComposition(
           mergeCompositions(planet.composition, small.composition, bigW)
         );
-        if (planet.surface) planet.surface.hasWater = (planet.composition.H2O || 0) >= 3;
+        if (planet.surface) planet.surface.hasWater = (planet.composition.H2O || 0) >= WATER_H2O_THRESHOLD;
       }
       planet.physics.mass  = totalMass;
       planet.impactCount   = (planet.impactCount  || 0) + 1;

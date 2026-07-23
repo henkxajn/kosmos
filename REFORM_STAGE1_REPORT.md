@@ -9,6 +9,14 @@ inventory (B3). Builds on `PLANET_SYSTEM_AUDIT.md`.
 Part B changed **no** game logic (findings only). Save version untouched (v92 — the reform builds only on
 already-round-tripping fields: `atmosphere`, `temperatureC`; no migration needed).
 
+> **A2 latent-gate note (found during Stage 2 live-gate, 2026-07-23).** The Farm gate at `HexTile.js:174`
+> hard-blocks on `planet.atmosphere === 'none'`. **Planetoid bodies carried `atmosphere === undefined`**
+> (the class never assigned it — only `Planet`/`Moon` did), so `=== 'none'` silently failed to fire on them:
+> a warm airless planetoid would slip the atmosphere half of the gate. It hadn't manifested (all such bodies
+> observed were also below the temperature threshold, so Farm stayed blocked on temperature anyway). Fixed at
+> the source in Stage 2 — `Planetoid`/`Asteroid` constructors now set `atmosphere = 'none'` (airless), which
+> makes this gate fire correctly with no change to A2's own logic. Detail: `REFORM_STAGE2_REPORT.md`.
+
 **Two decisions taken with the user before coding:**
 1. **Gate scope = universal** — the hard block applies to player *and* AI, using each colony's **own**
    planet (not `window.KOSMOS.homePlanet`). AI-expansion-colony exposure is documented in B2 as the

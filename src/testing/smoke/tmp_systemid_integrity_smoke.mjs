@@ -110,7 +110,7 @@ const save = {
 };
 const out = migrate(save);
 assert(!out.error, 'migracja bez błędu');
-assert(out.version === CURRENT_VERSION && CURRENT_VERSION === 92, 'wersja → 92');
+assert(out.version === CURRENT_VERSION, 'wersja → CURRENT_VERSION');
 const mv = (id) => out.civ4x.vesselManager.vessels.find(v => v.id === id);
 assert(mv('v_1').systemId === null, 'v_1 warp_transit → null (przywrócony tranzyt)');
 assert(mv('v_2').systemId === 'sys_beta', 'v_2 arrived mis-homed → toSystemId');

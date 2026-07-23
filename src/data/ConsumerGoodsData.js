@@ -9,7 +9,7 @@ export const BASE_DEMAND = {
 };
 
 // Mnożniki temperatury planety (temperatureC)
-// Klucze: 'hot' (>77C), 'moderate' (-53C do 77C), 'cold' (<-53C)
+// Klucze pasm (hot/moderate/cold) + progi: patrz EnvironmentBands.js (temperatureBand / TEMP_THRESHOLDS)
 export const TEMP_MULTIPLIERS = {
     hot:      { basic_supplies: 1.3, civilian_goods: 0.8, neurostimulants: 1.2 },
     moderate: { basic_supplies: 1.0, civilian_goods: 1.0, neurostimulants: 1.0 },
@@ -25,7 +25,7 @@ export const ATMO_MULTIPLIERS = {
 };
 
 // Mnożniki grawitacji powierzchniowej (surfaceGravity w g)
-// Klucze: 'low' (<0.4g), 'normal' (0.4-1.5g), 'high' (>1.5g)
+// Klucze pasm (low/normal/high) + progi: patrz EnvironmentBands.js (gravityBand / GRAVITY_THRESHOLDS)
 export const GRAV_MULTIPLIERS = {
     low:    { basic_supplies: 1.0, civilian_goods: 1.0, neurostimulants: 1.2 },
     normal: { basic_supplies: 1.0, civilian_goods: 1.0, neurostimulants: 1.0 },

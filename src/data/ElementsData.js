@@ -11,6 +11,13 @@
 // nazwaPL:  polska nazwa
 // kat:      kategoria (metal|skala|gaz|organiczny|radioaktywny|rzadki|gazSzlachetny)
 // zycie:    wpływ na potencjał życia (0=brak, 1=pośredni, 2=ważny, 3=kluczowy)
+
+// Próg wody powierzchniowej (Stage 2): surface.hasWater = (composition.H2O% >= WATER_H2O_THRESHOLD).
+// JEDNO źródło prawdy — używane przez konstruktory ciał (generacja + reload), regułę reaktywną
+// (kolizje/bombard) oraz migrację. Wartość = dawna reguła reaktywna (`>= 3`), potwierdzona próbką:
+// daje realny podział rocky ~46%/54% (1.5 dawałoby 100% mokrych = brak podziału), ice zawsze mokre.
+export const WATER_H2O_THRESHOLD = 3;  // % masy (frakcja H2O w composition)
+
 export const ELEMENTS = {
   Fe:  { symbol: 'Fe',  nazwaPL: 'Żelazo',   kat: 'metal',         zycie: 0 },
   Si:  { symbol: 'Si',  nazwaPL: 'Krzem',     kat: 'skala',         zycie: 0 },

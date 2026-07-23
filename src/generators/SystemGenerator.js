@@ -12,7 +12,7 @@ import { Planetoid }     from '../entities/Planetoid.js';
 import { KeplerMath }    from '../utils/KeplerMath.js';
 import { GAME_CONFIG, STAR_TYPES, PLANET_TYPE_CONFIG } from '../config/GameConfig.js';
 import EntityManager     from '../core/EntityManager.js';
-import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, getMoonComposition } from '../data/ElementsData.js';
+import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, getMoonComposition, WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 
 // Bonus cieplarniany wg typu atmosfery (°C)
@@ -638,7 +638,9 @@ export class SystemGenerator {
   // Wymusza oddychalną atmosferę + przelicza temperaturę do zakresu Earth-like
   // (5–30°C). Mutuje planet in-place. Reużywane przez generateCivScenario,
   // generatePowerTestScenario ORAZ EmpireColonyBootstrap.bootstrapHomeColony
-  // (S3.1b — parytet home AI z sys_home gracza). Composition/Ti NIE ruszane.
+  // (S3.1b — parytet home AI z sys_home gracza). Ti NIE ruszane (osobno).
+  // Stage 2: gwarantuje wodę na KAŻDEJ kołysce życia (gracz + AI + power-test) — przez
+  // composition.H2O (nie sztywną flagę), oceniane jednolitą regułą hasWater.
   static makeHomeworldBreathable(planet) {
     if (!planet) return;
     planet.surface = planet.surface || {};
@@ -661,6 +663,12 @@ export class SystemGenerator {
       planet.temperatureK = 288.15;
       planet.surface.temperature = 15;
     }
+    // Gwarancja wody macierzystej: podbij H2O z zapasem nad progiem (jitter już zastosowany),
+    // potem przelicz hasWater tą samą regułą — kołyska życia = świat wodny (gracz i AI).
+    if (planet.composition) {
+      planet.composition.H2O = Math.max(planet.composition.H2O ?? 0, WATER_H2O_THRESHOLD + 3); // ~6% = 2× próg
+    }
+    planet.surface.hasWater = (planet.composition?.H2O ?? 0) >= WATER_H2O_THRESHOLD;
   }
 
   // ── Scenariusz CYWILIZACJA ───────────────────────────────────────────────────
@@ -701,7 +709,7 @@ export class SystemGenerator {
     bestPlanet.lifeScore        = 100;
     bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
     bestPlanet.surface          = bestPlanet.surface || {};
-    bestPlanet.surface.hasWater = true;
+    // Woda macierzysta: ustawiana przez makeHomeworldBreathable z composition.H2O (Stage 2)
     // Atmosfera breathable + temp Earth-like — reuse helpera (też home AI, S3.1b)
     SystemGenerator.makeHomeworldBreathable(bestPlanet);
     // Gwarancja minimalnego Ti w composition — żeby gracz nie utknął bez tego surowca
@@ -770,7 +778,7 @@ export class SystemGenerator {
     bestPlanet.lifeScore        = 100;
     bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
     bestPlanet.surface          = bestPlanet.surface || {};
-    bestPlanet.surface.hasWater = true;
+    // Woda macierzysta: ustawiana przez makeHomeworldBreathable z composition.H2O (Stage 2)
     // Atmosfera breathable + temp Earth-like — reuse helpera (POWER TEST)
     SystemGenerator.makeHomeworldBreathable(bestPlanet);
     if (!bestPlanet.surfaceRadius) {

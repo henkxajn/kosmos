@@ -2,7 +2,7 @@
 // Zawiera dane orbitalne, fizyczne, temperaturę i potencjał życia
 
 import { CelestialBody }  from './CelestialBody.js';
-import { emptyComposition } from '../data/ElementsData.js';
+import { emptyComposition, WATER_H2O_THRESHOLD } from '../data/ElementsData.js';
 
 export class Planet extends CelestialBody {
   constructor(config) {
@@ -58,6 +58,10 @@ export class Planet extends CelestialBody {
     // Skład chemiczny planety — frakcje procentowe 20 pierwiastków (suma ≈ 100%)
     // Inicjalizowany przez SystemGenerator na podstawie typu planety i odległości od HZ
     this.composition = config.composition || emptyComposition();
+
+    // Woda powierzchniowa z kompozycji (Stage 2) — jednolita reguła dla wszystkich ciał.
+    // (Reload planety nadpisze to zserializowanym surface.hasWater; migracja backfilluje stare save'y.)
+    this.surface.hasWater = (this.composition.H2O ?? 0) >= WATER_H2O_THRESHOLD;
   }
 
   getDisplayInfo() {
