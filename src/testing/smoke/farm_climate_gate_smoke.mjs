@@ -94,8 +94,10 @@ header('T3: bramka klimatyczna (farm)');
 // ── T4 — spared budynki (bramka placement) ───────────────────────────────────
 header('T4: well/synth nigdy nie blokowane klimatem');
 {
-  const none = { atmosphere: 'none', temperatureC: -50 };
-  assert(evaluatePlacement(tile('plains'), WELL, { planet: none }).ok === true, 'well na none/zimno → ok (brak flagi)');
+  // Stage 3: well ma teraz requiresWater — dajemy wodę, by izolować OŚ KLIMATU (intencja T4:
+  // well nie jest tykany bramką KLIMATU). Bramka wody testowana osobno w stage3_well_gate_smoke.
+  const none = { atmosphere: 'none', temperatureC: -50, surface: { hasWater: true } };
+  assert(evaluatePlacement(tile('plains'), WELL, { planet: none }).ok === true, 'well na none/zimno (z wodą) → ok (brak flagi klimatu)');
   assert(evaluatePlacement(tile('plains'), SYNTH, { planet: none }).ok === true, 'synth na none/zimno → ok (terrainAny + brak flagi)');
 }
 

@@ -30,7 +30,7 @@ import { DepositSystem }    from '../systems/DepositSystem.js';
 import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
 import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
 import { t, getName }      from '../i18n/i18n.js';
-import { envMultiplier, computeBuildResourceCost } from '../data/EnvironmentCost.js';
+import { envMultiplier, computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
 const BASE_MAX_LEVEL = 10;
@@ -545,12 +545,9 @@ export class BuildingSystem {
     // Wspólny helper z UI (computeBuildResourceCost) → podgląd == rzeczywisty koszt dla części środowiskowej.
     const actualCost = {};
     Object.assign(actualCost, computeBuildResourceCost(building, this._resolveOwnPlanet(), latMod.buildCost));
-    // Commodity cost (bez modyfikatora polarnego — to gotowe komponenty)
-    if (building.commodityCost) {
-      for (const [k, v] of Object.entries(building.commodityCost)) {
-        actualCost[k] = v;
-      }
-    }
+    // Commodity cost: bez modyfikatora polarnego, ale Z dopłatą środowiskową (Stage 3 Part A) —
+    // ta sama premia % co surowce, żeby harsh planeta nie była do obejścia komponentami.
+    Object.assign(actualCost, computeBuildCommodityCost(building, this._resolveOwnPlanet()));
 
     // Habitat na planecie z atmosferą thick/dense — nie wymaga habitat_modules
     if (buildingId === 'habitat') {
@@ -687,17 +684,21 @@ export class BuildingSystem {
 
     const nextLevel = currentLevel + 1;
 
-    // Koszt ulepszenia: baseCost × level × 1.2
+    // Koszt ulepszenia: baseCost × level × 1.2 × dopłata środowiskowa (Stage 3 — pełna siła jak
+    // budowa, tylko część SUROWCOWA; commodityCost bez zmian, spójnie z computeBuildResourceCost).
+    // Planeta TEJ kolonii (nie homePlanet); fail-open: brak planety → envMultiplier=1. Zamyka lukę
+    // „upgrade omija premię środowiskową" z REFORM_STAGE2_REPORT (Part B, known scope gap).
+    const upgradeEnvMult = envMultiplier(building.category, this._resolveOwnPlanet(), { building });
     const upgradeCost = {};
     if (building.cost) {
       for (const [k, v] of Object.entries(building.cost)) {
-        upgradeCost[k] = Math.ceil(v * nextLevel * 1.2);
+        upgradeCost[k] = Math.ceil(v * nextLevel * 1.2 * upgradeEnvMult);
       }
     }
-    // Commodities od poziomu 3
+    // Commodities od poziomu 3 — Z dopłatą środowiskową (Stage 3 Part A; ta sama premia % co surowce).
     if (nextLevel >= 3 && building.commodityCost) {
       for (const [k, v] of Object.entries(building.commodityCost)) {
-        upgradeCost[k] = Math.ceil(v * (nextLevel - 1));
+        upgradeCost[k] = Math.ceil(v * (nextLevel - 1) * upgradeEnvMult);
       }
     }
 
@@ -1567,7 +1568,7 @@ export class BuildingSystem {
 
     // Dopłata środowiskowa do UTRZYMANIA (połowa siły — Stage 2). climatePlanet rozwiązany wyżej
     // (planeta TEJ kolonii, nie homePlanet). Fail-open: brak planety → envUpkeep=1.
-    const envUpkeep = envMultiplier(building.category, climatePlanet, { half: true });
+    const envUpkeep = envMultiplier(building.category, climatePlanet, { half: true, building });
 
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
     if (hasEnergyCost) {

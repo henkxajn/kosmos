@@ -185,6 +185,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    requiresWater: true,  // Stage 3: studnia potrzebuje wody powierzchniowej (surface.hasWater) — twardy blok bez wody
     popType:     'laborer',
   },
 
@@ -667,6 +668,7 @@ export const BUILDINGS = {
 
   orbital_mine: {
     id:            'orbital_mine',
+    orbitalAnchored: true,   // Stage 3B: struktura orbitalna (wydobycie z planetoidów) — zero wrażliwości środowiskowej
     namePL:        'Kopalnia Orbitalna',
     category:      'mining',
     icon:          '🛰⛏',
@@ -880,6 +882,7 @@ export const BUILDINGS = {
 
   orbital_habitat: {
     id:            'orbital_habitat',
+    orbitalAnchored: true,   // Stage 3B: stacja orbitalna — zero wrażliwości środowiskowej (mimo population atm/temp 1.0)
     namePL:        'Habitat Orbitalny',
     category:      'population',
     icon:          '🛸🏠',
@@ -1009,6 +1012,7 @@ export const BUILDINGS = {
 
   warp_beacon: {
     id:            'warp_beacon',
+    orbitalAnchored: true,   // Stage 3B: megastruktura FTL orbitalna (isOrbital) — zero wrażliwości; rozwiązuje soft-flag B1
     namePL:        'Radiolatarnia Osnowy',
     nameEN:        'Warp Beacon',
     category:      'infrastructure',
@@ -1035,6 +1039,7 @@ export const BUILDINGS = {
 
   jump_gate: {
     id:            'jump_gate',
+    orbitalAnchored: true,   // Stage 3B: megastruktura FTL orbitalna (isOrbital) — zero wrażliwości; rozwiązuje soft-flag B1
     namePL:        'Brama Skokowa',
     nameEN:        'Jump Gate',
     category:      'infrastructure',
@@ -1493,6 +1498,7 @@ export const BUILDINGS = {
 
   dyson_command: {
     id:            'dyson_command',
+    orbitalAnchored: true,   // Stage 3B: centrum dowodzenia Sfery (orbita gwiazdy) — zero wrażliwości środowiskowej
     namePL:        'Centrum Dowodzenia Sferą',
     nameEN:        'Dyson Command Center',
     category:      'space',                    // 'infrastructure' nie istnieje — używamy 'space'
@@ -1518,6 +1524,7 @@ export const BUILDINGS = {
 
   orbital_fabricator: {
     id:            'orbital_fabricator',
+    orbitalAnchored: true,   // Stage 3B: montaż w zerowej grawitacji — zero wrażliwości środowiskowej
     namePL:        'Fabryka Orbitalna',
     nameEN:        'Orbital Fabricator',
     category:      'mining',

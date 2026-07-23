@@ -30,9 +30,13 @@ export const TEMPERATURE_SURCHARGE = { cold: 0.25, moderate: 0, hot: 0.15 };
 
 // Mnożnik kosztu środowiskowego dla kategorii na danej planecie.
 //   half=true → połowa siły (utrzymanie budynków).
+//   building (opcjonalny) → budynek orbitalny (orbitalAnchored) ma ZEROWĄ wrażliwość na wszystkich
+//     3 osiach (Stage 3 Part B — nie stoi na powierzchni, więc grawitacja/atmosfera/temperatura
+//     ciała go nie dotyczą). Per-budynkowy override, NIE zmiana wag kategorii.
 //   Fail-open: brak planety → 1 (nigdy nie dopłaca na braku referencji; wzór Stage 1).
 //   Nieznana atmosfera (np. legacy 'thick') → 0 dopłaty (?? 0).
-export function envMultiplier(category, planet, { half = false } = {}) {
+export function envMultiplier(category, planet, { half = false, building = null } = {}) {
+  if (building?.orbitalAnchored) return 1;   // Stage 3B: budynek orbitalny — brak wrażliwości środowiskowej
   if (!planet) return 1;
   const s = ENVIRONMENT_SENSITIVITY[category] ?? { gravity: 0, atmosphere: 0, temperature: 0 };
   const gSur = GRAVITY_SURCHARGE[gravityBand(planet.surfaceGravity)] ?? 0;
@@ -47,10 +51,24 @@ export function envMultiplier(category, planet, { half = false } = {}) {
 //   latBuildCost — modyfikator polarny (zna go tylko _build z kafelka; UI podaje domyślne 1).
 //   Zaokrąglenie Math.ceil — spójne z dawnym _build.
 export function computeBuildResourceCost(building, planet, latBuildCost = 1) {
-  const mult = envMultiplier(building.category, planet);
+  const mult = envMultiplier(building.category, planet, { building });
   const out = {};
   for (const [k, v] of Object.entries(building.cost ?? {})) {
     out[k] = Math.ceil(v * latBuildCost * mult);
+  }
+  return out;
+}
+
+// Koszt COMMODITY (prefab) z tą samą dopłatą środowiskową co surowce (Stage 3 Part A).
+// BEZ modyfikatora polarnego (latMod) — komponenty prefab, jak dotąd — ale premię ŚRODOWISKOWĄ
+// nakładamy tą samą wartością (envMultiplier), żeby harsh planeta nie była do obejścia płacąc
+// komponentami. JEDNO źródło prawdy dla _build/_upgrade i podglądu UI (podgląd == spend).
+// Orbital-exempt automatycznie (envMultiplier({building}) → 1).
+export function computeBuildCommodityCost(building, planet) {
+  const mult = envMultiplier(building.category, planet, { building });
+  const out = {};
+  for (const [k, v] of Object.entries(building.commodityCost ?? {})) {
+    out[k] = Math.ceil(v * mult);
   }
   return out;
 }

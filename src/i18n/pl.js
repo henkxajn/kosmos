@@ -802,6 +802,7 @@ export default {
   'ui.terrainForbidden': 'Teren niedozwolony',
   'ui.requiresWarmth': 'Za zimno dla tego budynku',
   'ui.requiresAtmosphere': 'Wymaga atmosfery',
+  'ui.requiresWater': 'Brak wody',
   'ui.maxLevel': 'Max poziom ({0})',
   'ui.noBuilding': 'Brak budynku',
   'ui.constructionInProgress': 'Trwa budowa na tym polu',

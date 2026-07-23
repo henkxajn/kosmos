@@ -13,7 +13,7 @@ import { STATIONS } from '../data/StationData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
 import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
-import { computeBuildResourceCost } from '../data/EnvironmentCost.js';
+import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
@@ -3233,7 +3233,7 @@ export class ColonyOverlay extends BaseOverlay {
     for (const [key, amount] of Object.entries(computeBuildResourceCost(building, colony.planet))) {
       if ((res.getAmount?.(key) ?? res.inventory?.get(key) ?? 0) < amount) return false;
     }
-    for (const [key, amount] of Object.entries(building.commodityCost ?? {})) {
+    for (const [key, amount] of Object.entries(computeBuildCommodityCost(building, colony.planet))) {
       if ((res.inventory?.get(key) ?? 0) < amount) return false;
     }
     return true;
@@ -3252,7 +3252,7 @@ export class ColonyOverlay extends BaseOverlay {
         missing.push(`${amount - have}${icon}${key}`);
       }
     }
-    for (const [key, amount] of Object.entries(building.commodityCost ?? {})) {
+    for (const [key, amount] of Object.entries(computeBuildCommodityCost(building, colony?.planet))) {
       const have = res.inventory?.get(key) ?? 0;
       if (have < amount) {
         const icon = COMMODITIES[key]?.icon ?? '📦';
@@ -3908,9 +3908,10 @@ export class ColonyOverlay extends BaseOverlay {
             return `<span style="color:${color}">${k}:${v}</span>`;
           }).join(' ');
         }
-        // Koszt commodities
-        if (bd.commodityCost && Object.keys(bd.commodityCost).length > 0) {
-          const parts = Object.entries(bd.commodityCost).map(([k, v]) => {
+        // Koszt commodities (z dopłatą środowiskową — Stage 3 Part A; podgląd == rzeczywisty spend)
+        const envCommodity = computeBuildCommodityCost(bd, colony?.planet);
+        if (Object.keys(envCommodity).length > 0) {
+          const parts = Object.entries(envCommodity).map(([k, v]) => {
             const have = res?.inventory?.get(k) ?? 0;
             const color = have >= v ? '#8f8' : '#f66';
             const icon = COMMODITIES[k]?.icon ?? '📦';

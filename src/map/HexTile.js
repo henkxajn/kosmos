@@ -174,6 +174,12 @@ export function evaluatePlacement(tile, building, { techSystem = null, planet = 
     if (planet.atmosphere === 'none')     return { ok: false, reason: 'ui.requiresAtmosphere', kind: 'climate' };
     if ((planet.temperatureC ?? 0) < 0)   return { ok: false, reason: 'ui.requiresWarmth',     kind: 'climate' };
   }
+  // Bramka wody (Stage 3) — Studnia wymaga wody powierzchniowej (surface.hasWater, kompozycja Stage 2).
+  // Twardy blok (hasWater = bool, bez gradacji jak atmosfera). Fail-open: brak planety → pomiń (wzór Stage 1).
+  // kind:'climate' → picker pokazuje ZABLOKOWANY z powodem (ta sama ścieżka co bramka klimatyczna).
+  if (building.requiresWater && planet && !planet.surface?.hasWater) {
+    return { ok: false, reason: 'ui.requiresWater', kind: 'climate' };
+  }
   return { ok: true, reason: null, kind: null };
 }
 

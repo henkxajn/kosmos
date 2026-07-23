@@ -801,6 +801,7 @@ export default {
   'ui.terrainForbidden': 'Forbidden terrain',
   'ui.requiresWarmth': 'Too cold for this building',
   'ui.requiresAtmosphere': 'Requires atmosphere',
+  'ui.requiresWater': 'No water',
   'ui.maxLevel': 'Max level ({0})',
   'ui.noBuilding': 'No building',
   'ui.constructionInProgress': 'Construction in progress on this tile',
