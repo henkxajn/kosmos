@@ -108,6 +108,12 @@ export class FactorySystem {
     // { commodityId, qty, produced } | null. Nowe zlecenie zastępuje poprzednie.
     this._oneShotJob = null;
 
+    // Master-switch produkcji (per kolonia). false = fabryki OFFLINE:
+    // zero konsumpcji surowców (gate w _update) I zero poboru energii
+    // (BuildingSystem pomija energyCost fabryk po evencie productionEnabledChanged).
+    // Budynki zostają nietknięte — to stan idle, nie rozbiórka.
+    this._productionEnabled = true;
+
     // ── Tryb automatyzacji ──────────────────────────────────────────────────
     // 'manual' = obecny system, 'priority' = lista celów, 'reactive' = auto
     this._mode = 'manual';
@@ -268,6 +274,22 @@ export class FactorySystem {
   // ══════════════════════════════════════════════════════════════════════════
 
   get mode() { return this._mode; }
+
+  // ── Master-switch produkcji (offline / online) ──────────────────────────
+  isProductionEnabled() { return this._productionEnabled; }
+
+  setProductionEnabled(on) {
+    const next = !!on;
+    if (next === this._productionEnabled) return;
+    this._productionEnabled = next;
+    // Energia fabryk jest rejestrowana w BuildingSystem (poziom budynku, nie
+    // produkcji) — poproś właściwą kolonię o przeliczenie stawek producentów.
+    EventBus.emit('factory:productionEnabledChanged', {
+      colonyId: this._getOwnerColony()?.planetId ?? null,
+      enabled:  next,
+    });
+    this._emitStatus();
+  }
 
   setMode(mode) {
     if (!['manual', 'priority', 'reactive'].includes(mode)) return;
@@ -621,6 +643,7 @@ export class FactorySystem {
     }
     return {
       totalPoints:          this._totalPoints,
+      productionEnabled:    this._productionEnabled,
       allocations:          allocs,
       queue:                [...this._queue],
       oneShotJob:           this._oneShotJob ? { ...this._oneShotJob } : null,
@@ -645,6 +668,7 @@ export class FactorySystem {
 
   restore(data) {
     this._totalPoints = data.totalPoints ?? 0;
+    this._productionEnabled = data.productionEnabled ?? true;   // stare save = włączone (bez migracji)
     this._allocations.clear();
     if (data.allocations) {
       for (const a of data.allocations) {
@@ -714,6 +738,10 @@ export class FactorySystem {
     // Z4: osierocona fabryka (kolonia zniszczona) — nie tykaj. Zapobiega warn per-frame
     // w isRecipeAvailable oraz jałowej pracy zombie-systemu (m.in. ścieżka transferColony).
     if (!this._getOwnerColony()) return;
+
+    // Master-switch: fabryki offline → brak konsumpcji surowców i produkcji.
+    // (Pobór energii jest wyłączony osobno przez BuildingSystem.)
+    if (!this._productionEnabled) return;
 
     // Jednorazowy cleanup po restore: usuń alokacje na commodities których
     // kolonia nie ma jak lokalnie zrobić (stare save'y z buga sprzed v57).

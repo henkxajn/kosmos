@@ -1103,6 +1103,16 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText(t('econPanel.fpFree', fs.freePoints, fs.totalPoints), x + pad + 160, ry + 12);
+
+    // ── Master-switch: fabryki ONLINE / OFFLINE (0 surowców, 0 energii) ──────
+    const online = fs.isProductionEnabled();
+    const swLabel = online ? t('econPanel.factoriesOnline') : t('econPanel.factoriesOffline');
+    const swW = 150, swBx = x + w - pad - swW;
+    this._drawSmallBtnWide(ctx, swBx, ry, swW, swLabel, online ? 'primary' : 'danger');
+    this._addHit(swBx, ry, swW, 16, 'factory_btn', {
+      action: 'toggle_production', colonyId: colony.planetId,
+      label: swLabel, x: swBx,
+    });
     ry += 20;
 
     // Pasek trybów USUNIĘTY — gracz produkuje WYŁĄCZNIE reactive (reforma).
@@ -2293,6 +2303,11 @@ export class EconomyOverlay extends BaseOverlay {
     if (!fs) return;
 
     switch (data.action) {
+      // ── Master-switch produkcji (offline/online) ─────
+      case 'toggle_production':
+        fs.setProductionEnabled(!fs.isProductionEnabled());
+        break;
+
       // ── Przełączanie trybów ──────────────────────────
       case 'setMode':
         fs.setMode(data.mode);

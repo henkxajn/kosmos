@@ -2013,6 +2013,8 @@ export default {
   'econPanel.stall': 'STALL',
   'econPanel.managementHeader': 'PRODUCTION MANAGEMENT',
   'econPanel.fpFree': 'FP: {0} free / {1} total',
+  'econPanel.factoriesOnline': '⏻ Production: ON',
+  'econPanel.factoriesOffline': '⏸ Factories OFFLINE',
   'econPanel.activeLabel': 'ACTIVE:',
   'econPanel.startProduction': 'START PRODUCTION:',
   'econPanel.noFlows': 'No resource flows',

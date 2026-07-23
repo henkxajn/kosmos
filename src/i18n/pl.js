@@ -2014,6 +2014,8 @@ export default {
   'econPanel.stall': 'STALL',
   'econPanel.managementHeader': 'ZARZĄDZANIE PRODUKCJĄ',
   'econPanel.fpFree': 'FP: {0} wolnych / {1} łącznie',
+  'econPanel.factoriesOnline': '⏻ Produkcja: WŁ.',
+  'econPanel.factoriesOffline': '⏸ Fabryki OFFLINE',
   'econPanel.activeLabel': 'AKTYWNE:',
   'econPanel.startProduction': 'URUCHOM PRODUKCJĘ:',
   'econPanel.noFlows': 'Brak przepływów surowców',

@@ -135,6 +135,12 @@ export class BuildingSystem {
       if (this._planetId && planetId === this._planetId) this._reapplyAllRates();
     });
 
+    // Master-switch produkcji: fabryki offline/online → przelicz stawki, by
+    // budynki 'factory' przestały/wznowiły pobór energii (per kolonia).
+    EventBus.on('factory:productionEnabledChanged', ({ colonyId }) => {
+      if (this._planetId && colonyId === this._planetId) this._reapplyAllRates();
+    });
+
     // Tick: budowa + wydobycie surowców z deposits przez kopalnie + pending queue
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — mechaniki 4X biegną szybciej
     this._onTick = ({ civDeltaYears: deltaYears }) => {
@@ -1570,13 +1576,19 @@ export class BuildingSystem {
     // (planeta TEJ kolonii, nie homePlanet). Fail-open: brak planety → envUpkeep=1.
     const envUpkeep = envMultiplier(building.category, climatePlanet, { half: true, building });
 
+    // Master-switch: gdy fabryki tej kolonii są OFFLINE, budynek 'factory'
+    // przechodzi w pełny idle — zero poboru energii I zero utrzymania (surowce).
+    // Spójne z gate produkcji w FactorySystem (zero składników receptur).
+    const factoryOffline = building.id === 'factory'
+      && this._factorySystem && !this._factorySystem.isProductionEnabled();
+
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
-    if (hasEnergyCost) {
+    if (hasEnergyCost && !factoryOffline) {
       base.energy = (base.energy ?? 0) - building.energyCost * levelMult * envUpkeep;
     }
 
     // Maintenance — stały koszt utrzymania per level (ujemne stawki surowców)
-    if (hasMaintenance) {
+    if (hasMaintenance && !factoryOffline) {
       for (const [res, amount] of Object.entries(building.maintenance)) {
         base[res] = (base[res] ?? 0) - amount * levelMult * envUpkeep;
       }
@@ -1731,9 +1743,12 @@ export class BuildingSystem {
       const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
       entry.effectiveRates = newEffective;
 
-      if (hasKeys(newEffective) && this.resourceSystem) {
+      if (this.resourceSystem) {
         const pid = entry.producerId ?? (activeKey.startsWith('capital_') ? activeKey : `building_${activeKey}`);
-        this.resourceSystem.registerProducer(pid, newEffective);
+        // Puste stawki (np. fabryka OFFLINE = zero energii/utrzymania) → wyrejestruj,
+        // inaczej zostałby STARY producent z poprzednimi (pobierającymi) stawkami.
+        if (hasKeys(newEffective)) this.resourceSystem.registerProducer(pid, newEffective);
+        else this.resourceSystem.removeProducer(pid);
       }
     }
   }

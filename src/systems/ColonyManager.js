@@ -2203,6 +2203,9 @@ export class ColonyManager {
       const factSys = new FactorySystem(resSys);
       bSys.setFactorySystem(factSys);
       if (colData.factorySystem) factSys.restore(colData.factorySystem);
+      // Fabryki zapisane jako OFFLINE: przelicz stawki, by budynki 'factory' nie pobierały
+      // energii/utrzymania po wczytaniu (restoreFromSave zarejestrował je z pełnym poborem).
+      if (factSys.isProductionEnabled() === false) bSys._reapplyAllRates();
 
       // ProsperitySystem per-kolonia
       const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
