@@ -2365,13 +2365,17 @@ export class MissionSystem {
     if (exp.scope === 'target' || exp.scope === 'nearest') {
       const discovered = [];
       const target = this._findTarget(exp.targetId);
-      if (target && !target.explored) {
+      // Statek naukowy = PEŁNA analiza (analyzed). Guard `!analyzed` (nie `!explored`),
+      // by ciało zbadane zgrubnie obserwatorium (explored) upgradeować rough→detailed.
+      // Parytet z ExpeditionSystem._processReconArrival (mission-vs-expedition-parallel).
+      if (target && !target.analyzed) {
         target.explored = true;
+        target.analyzed = true;   // dokładne ilości złóż (remaining) — odblokowuje „Mapa ciała"
         discovered.push(target.id);
         if (target.type === 'planet') {
           for (const m of EntityManager.getByType('moon')) {
             if (m.parentPlanetId === target.id && !m.explored) {
-              m.explored = true;
+              m.explored = true;   // księżyce odkryte zgrubnie (własna wizyta = analyzed)
               discovered.push(m.id);
             }
           }
@@ -2401,14 +2405,17 @@ export class MissionSystem {
     // Sekwencyjny full_system (deep_scan)
     if (exp.scope === 'full_system') {
       const target = this._findTarget(exp.targetId);
-      if (target && !target.explored) {
+      // Statek naukowy = pełna analiza (analyzed) każdego odwiedzonego ciała. Parytet
+      // z ExpeditionSystem (mission-vs-expedition-parallel). Guard `!analyzed` = upgrade rough→detailed.
+      if (target && !target.analyzed) {
         target.explored = true;
+        target.analyzed = true;   // odblokowuje „Mapa ciała"
         if (!exp.bodiesDiscovered) exp.bodiesDiscovered = [];
         exp.bodiesDiscovered.push(target.id);
         if (target.type === 'planet') {
           for (const m of EntityManager.getByType('moon')) {
             if (m.parentPlanetId === target.id && !m.explored) {
-              m.explored = true;
+              m.explored = true;   // księżyce zgrubnie (własna wizyta = analyzed)
               exp.bodiesDiscovered.push(m.id);
             }
           }

@@ -13,6 +13,7 @@ import { STATIONS } from '../data/StationData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
 import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
+import { computeBuildResourceCost } from '../data/EnvironmentCost.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
@@ -68,6 +69,14 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedHex      = null;
     this._hoveredHex       = null;
     this._hoveredBuildId   = null;
+
+    // Tryb podglądu — mapa ciała PRZEANALIZOWANEGO (analyzed) bez kolonii. Read-only:
+    // teren + biomy + globus + dossier, BEZ budowy/POP/zakładek. Wirtualna „kolonia"
+    // (buildingSystem=null) trzymana lokalnie; NIE dotyka ColonyManager. Osobny cache
+    // siatki, by preview (bez stolicy) nie kolidował z realną kolonią na tym ciele.
+    this._previewMode      = false;
+    this._previewColony    = null;
+    this._previewGridCache = {};
 
     // Globus 3D w prawej kolumnie info (PlanetGlobeRenderer, tryb embedded)
     this._globe = null;
@@ -335,6 +344,27 @@ export class ColonyOverlay extends BaseOverlay {
   show(opts = {}) {
     super.show();
     const colMgr = window.KOSMOS?.colonyManager;
+
+    // Tryb podglądu — mapa ciała bez kolonii (analyzed). Wirtualna kolonia lokalna.
+    if (opts.previewPlanet) {
+      const p = opts.previewPlanet;
+      this._previewMode = true;
+      this._previewColony = {
+        planetId: p.id, planet: p, buildingSystem: null,
+        isPreview: true, isOutpost: false, isHomePlanet: false,
+      };
+      this._selectedColonyId = p.id;
+      this._stationMode = false;
+      this._selectedHex = null;
+      this._hoveredBuildId = null;
+      const grid = this._getGrid(this._previewColony);
+      if (grid) { this._fitMapToView(grid); this._centerOnCapital(grid); }
+      if (opts.originX !== undefined) this._animateOpen(opts.originX, opts.originY);
+      return;
+    }
+    this._previewMode = false;
+    this._previewColony = null;
+
     // opts.colonyId ma priorytet (np. drop mode na obcej planecie).
     // Inaczej: activePlanetId gracza.
     if (opts.colonyId) {
@@ -389,6 +419,7 @@ export class ColonyOverlay extends BaseOverlay {
 
   hide() {
     super.hide();
+    this._previewMode = false; this._previewColony = null;
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null;
     this._hideTooltip();
@@ -426,7 +457,13 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   // ── Dane ─────────────────────────────────────────────────────────────────
-  _getColony() { return window.KOSMOS?.colonyManager?.getColony(this._selectedColonyId) ?? null; }
+  _getColony() {
+    // Tryb podglądu — wirtualna „kolonia" ciała bez faktycznej kolonii.
+    if (this._previewMode && this._previewColony?.planetId === this._selectedColonyId) {
+      return this._previewColony;
+    }
+    return window.KOSMOS?.colonyManager?.getColony(this._selectedColonyId) ?? null;
+  }
 
   // S3.4 FAZA 3 — encja stacji pokazywanej w trybie stacji (null gdy zniknęła → wyjście z trybu).
   _getSelectedStation() {
@@ -449,6 +486,18 @@ export class ColonyOverlay extends BaseOverlay {
   _getGrid(colony) {
     if (!colony) return null;
     const pid = colony.planetId;
+
+    // Podgląd — czysty teren (bez stolicy/budynków), osobny cache by nie zderzyć się
+    // z realną kolonią gdyby powstała na tym samym ciele.
+    if (colony.isPreview) {
+      if (this._previewGridCache[pid]) return this._previewGridCache[pid];
+      const g = PlanetMapGenerator.generate(colony.planet, false);
+      this._previewGridCache[pid] = g;
+      colony.grid = g;
+      this._loadBiomeMap(colony.planet, g, pid);   // async — biomy 1:1 z teksturą 3D
+      return g;
+    }
+
     if (this._gridCache[pid]) return this._gridCache[pid];
 
     // Obca/test-enemy kolonia wygenerowana poza overlay (np. spawnTestEnemy już ustawił
@@ -806,8 +855,8 @@ export class ColonyOverlay extends BaseOverlay {
     const infoW = this._infoW(ow);
     const mapW  = ow - infoW;
     const colTop = oy + HDR_H;          // szczyt treści pod nagłówkiem
-    // Pasek listy budynków nad mapą (tylko kolumna mapy)
-    this._drawBuildingsBar(ctx, ox, colTop, mapW, BUILD_BAR_H, colony);
+    // Pasek listy budynków nad mapą (tylko kolumna mapy) — ukryty w podglądzie (brak kolonii).
+    if (!colony?.isPreview) this._drawBuildingsBar(ctx, ox, colTop, mapW, BUILD_BAR_H, colony);
     const mapY = colTop + BUILD_BAR_H;
     const mapH = oh - HDR_H - BUILD_BAR_H;
     if (grid) {
@@ -822,7 +871,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Floating panel obok zaznaczonego hexa (nie pokazuj gdy jednostka zaznaczona).
     // Clampowany do obszaru MAPY (ox..ox+mapW), żeby nie wchodził pod kolumnę info.
-    if (this._selectedHex && !this._selectedUnit && grid && colony) {
+    if (this._selectedHex && !this._selectedUnit && grid && colony && !colony.isPreview) {
       const tile = grid.get(this._selectedHex.q, this._selectedHex.r);
       if (tile) {
         // Jeśli na hexie jest stack (≥2 player units) → pokaż stack panel
@@ -928,7 +977,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Przycisk budowy stacji (S3.3b-S4) — nagłówek, na lewo od [✕]. Bramka tech orbital_construction.
     // W trybie stacji ukryty (dotyczy budowy NOWEJ stacji z kolonii, nie zarządzania bieżącą).
-    if (!this._stationMode && colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
+    if (!this._stationMode && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
       ctx.save();
       const hasStationTech = window.KOSMOS?.techSystem?.isResearched('orbital_construction') ?? false;
       const sBtnW = 84, sBtnH = 20, sBtnY = oy + 6, sBtnX = ox + ow - 116;
@@ -957,6 +1006,13 @@ export class ColonyOverlay extends BaseOverlay {
   _drawHeader(ctx, ox, oy, ow, colony) {
     if (!colony) {
       this._drawOverlayHeader(ctx, ox, oy, ow, 'Brak kolonii');
+      return;
+    }
+
+    // Podgląd — tytuł = nazwa ciała (bez zakładek kolonii ani POP).
+    if (colony.isPreview) {
+      const nm = colony.planet?.name ?? colony.planetId ?? '?';
+      this._drawOverlayHeader(ctx, ox, oy, ow, `${nm} — ${t('colonyInfo.previewTag')}`);
       return;
     }
 
@@ -3173,7 +3229,8 @@ export class ColonyOverlay extends BaseOverlay {
   _canAfford(colony, building) {
     if (!colony?.resourceSystem) return false;
     const res = colony.resourceSystem;
-    for (const [key, amount] of Object.entries(building.cost ?? {})) {
+    // Stage 2: koszt surowców z dopłatą środowiskową (spójne z _build i podglądem)
+    for (const [key, amount] of Object.entries(computeBuildResourceCost(building, colony.planet))) {
       if ((res.getAmount?.(key) ?? res.inventory?.get(key) ?? 0) < amount) return false;
     }
     for (const [key, amount] of Object.entries(building.commodityCost ?? {})) {
@@ -3187,7 +3244,8 @@ export class ColonyOverlay extends BaseOverlay {
     const res = colony?.resourceSystem;
     if (!res) return [];
     const missing = [];
-    for (const [key, amount] of Object.entries(building.cost ?? {})) {
+    // Stage 2: koszt surowców z dopłatą środowiskową (spójne z _build i podglądem)
+    for (const [key, amount] of Object.entries(computeBuildResourceCost(building, colony?.planet))) {
       const have = res.getAmount?.(key) ?? res.inventory?.get(key) ?? 0;
       if (have < amount) {
         const icon = RESOURCE_ICONS[key] ?? '';
@@ -3251,6 +3309,8 @@ export class ColonyOverlay extends BaseOverlay {
 
     // S3.4 FAZA 3 — w trybie stacji brak mapy hex: klik poza przyciskiem konsumowany (bez logiki kafla).
     if (this._stationMode) return true;
+    // Podgląd — read-only: klik w mapę nic nie buduje/selekcjonuje (pan/zoom działają osobno).
+    if (this._previewMode) return true;
 
     if (!this._hasDragged) {
       const colony = this._getColony();
@@ -3839,9 +3899,10 @@ export class ColonyOverlay extends BaseOverlay {
         const colony = this._getColony();
         const res = colony?.resourceSystem;
         let html = `<b>${bd.icon ?? ''} ${bd.namePL ?? bd.id}</b>`;
-        // Koszt surowców
-        if (bd.cost) {
-          html += '<br>Koszt: ' + Object.entries(bd.cost).map(([k, v]) => {
+        // Koszt surowców (z dopłatą środowiskową — Stage 2; podgląd == rzeczywisty spend)
+        const envCost = computeBuildResourceCost(bd, colony?.planet);
+        if (Object.keys(envCost).length > 0) {
+          html += '<br>Koszt: ' + Object.entries(envCost).map(([k, v]) => {
             const have = res?.getAmount?.(k) ?? res?.inventory?.get(k) ?? 0;
             const color = have >= v ? '#8f8' : '#f66';
             return `<span style="color:${color}">${k}:${v}</span>`;

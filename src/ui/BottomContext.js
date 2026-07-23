@@ -118,6 +118,10 @@ export class BottomContext {
     const colMgr  = window.KOSMOS?.colonyManager;
     if (!civMode && entity.type === 'planet' && (entity.lifeScore ?? 0) > 80) return t('context.takeCiv');
     if (civMode && (isHome || colMgr?.hasColony(entity.id))) return t('context.openMap');
+    // Ciało przeanalizowane (pełny skan naukowy) bez kolonii → ta sama „Mapa ciała", read-only.
+    if (civMode && entity.analyzed && entity.type !== 'star' && !isHome && !colMgr?.hasColony(entity.id)) {
+      return t('context.openMap');
+    }
     return null;
   }
 
@@ -419,6 +423,10 @@ export class BottomContext {
     if (civMode && (isHome || colMgr?.hasColony(entity.id))) {
       if (colMgr) colMgr.switchActiveColony(entity.id);
       window.KOSMOS?.overlayManager?.openPanel('colony');
+      return;
+    }
+    if (civMode && entity.analyzed && entity.type !== 'star') {
+      EventBus.emit('planet:previewMap', { planet: entity });
     }
   }
 

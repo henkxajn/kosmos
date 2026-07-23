@@ -785,6 +785,7 @@ export default {
   'colonyInfo.elements': 'ELEMENTS',
   'colonyInfo.resources': 'RESOURCES',
   'colonyInfo.buildings': 'BUILDINGS',
+  'colonyInfo.previewTag': 'preview',
   'colonyInfo.noResources': 'No deposits detected',
   'colonyInfo.noBuildings': 'No buildings',
   'colonyInfo.massUnit': 'M⊕',
@@ -2319,7 +2320,7 @@ export default {
   'context.atm': 'Atm',
   'context.life': 'Life',
   'context.takeCiv': '► Take Civilization',
-  'context.openMap': '► Planet Map',
+  'context.openMap': '► Body Map',
 
   // === BottomBar ===
   'bottomBar.stab': 'STAB:',

@@ -1715,6 +1715,11 @@ export class GameScene {
       this.colonyManager.switchActiveColony(planet.id);
       this.uiManager?.overlayManager?.openPanel('colony');
     });
+    // Podgląd powierzchni ciała przeanalizowanego (analyzed), ale NIE skolonizowanego.
+    // Read-only — ColonyOverlay w trybie podglądu (bez switchActiveColony; ciało nie ma kolonii).
+    EventBus.on('planet:previewMap', ({ planet }) => {
+      this.uiManager?.overlayManager?.openPanel('colony', { previewPlanet: planet });
+    });
     EventBus.on('colony:founded', ({ colony }) => {
       // Kolonie imperiów AI NIE otwierają panelu graczowi — to przeciek szczegółów przeciwnika.
       if (!ColonyManager.isPlayerColony(colony)) return;

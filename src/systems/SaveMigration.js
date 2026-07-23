@@ -20,7 +20,7 @@ import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 92;
+export const CURRENT_VERSION     = 94;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -149,7 +149,27 @@ const MIGRATIONS = {
   89: _migrateV89toV90,
   90: _migrateV90toV91,
   91: _migrateV91toV92,
+  92: _migrateV92toV93,
+  93: _migrateV93toV94,
 };
+
+// ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
+// Backfill TYLKO dla PLANET (jedyny typ, którego surface jest serializowane i czytane w restore).
+// Próg hardkodowany = 3 (wartość WATER_H2O_THRESHOLD w chwili v93; migracja jest historycznym
+// snapshotem i NIE może dryfować z żywą stałą, gdyby ta się zmieniła).
+// `|| istniejąca` ZACHOWUJE wcześniejszą wodę: kołyski życia (gracz/AI/power-test) miały hasWater
+// wymuszane na true przy composition.H2O ~2.5% — bez preserwacji stałyby się pustyniami po loadzie.
+// Reguła reaktywna (kolizje) i tak dawała true tylko przy H2O>=3, więc preserwacja dotyka wyłącznie
+// wymuszonych kołysek. Księżyce/planetoidy NIE serializują surface → ich konstruktory przeliczają
+// hasWater z composition (H2O round-trippuje) przy KAŻDYM loadzie — migracja ich nie dotyczy.
+function _migrateV92toV93(data) {
+  for (const p of (data.planets || [])) {
+    const wet = (p.composition?.H2O ?? 0) >= 3;
+    p.surface = p.surface || {};
+    p.surface.hasWater = wet || !!p.surface.hasWater;
+  }
+  return data;
+}
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
 
@@ -2249,6 +2269,19 @@ function _migrateV88toV89(data) {
   for (const p of (data.planets    || [])) if (p.analyzed == null) p.analyzed = !!p.explored;
   for (const m of (data.moons      || [])) if (m.analyzed == null) m.analyzed = !!m.explored;
   for (const p of (data.planetoids || [])) if (p.analyzed == null) p.analyzed = !!p.explored;
+  return data;
+}
+
+// v93 → v94 — heal analyzed po bugu ścieżki rozpoznania statku naukowego.
+// MissionSystem._processReconArrival (żywa ścieżka recon) ustawiał tylko `explored`,
+// NIGDY `analyzed` → ciała zbadane statkiem naukowym utknęły na „rough" (analyzed=false,
+// nie null → v88→v89 backfill z guardem `== null` ich nie naprawiał). FORCE analyzed=true
+// wszędzie gdzie explored (inwariant analyzed⇒explored) → odblokowuje „Mapa ciała" +
+// dokładne złoża na istniejących save. Nowe skany rozróżniają już rough(obs)/detailed(statek).
+function _migrateV93toV94(data) {
+  for (const p of (data.planets    || [])) if (p.explored) p.analyzed = true;
+  for (const m of (data.moons      || [])) if (m.explored) m.analyzed = true;
+  for (const p of (data.planetoids || [])) if (p.explored) p.analyzed = true;
   return data;
 }
 

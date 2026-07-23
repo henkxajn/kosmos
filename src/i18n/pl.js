@@ -785,6 +785,7 @@ export default {
   'colonyInfo.elements': 'PIERWIASTKI',
   'colonyInfo.resources': 'SUROWCE',
   'colonyInfo.buildings': 'BUDYNKI',
+  'colonyInfo.previewTag': 'podgląd',
   'colonyInfo.noResources': 'Brak wykrytych złóż',
   'colonyInfo.noBuildings': 'Brak budynków',
   'colonyInfo.massUnit': 'M⊕',
@@ -2320,7 +2321,7 @@ export default {
   'context.atm': 'Atm',
   'context.life': '\u017bycie',
   'context.takeCiv': '► Przejmij cywilizację',
-  'context.openMap': '► Mapa planety',
+  'context.openMap': '► Mapa ciała',
 
   // === BottomBar ===
   'bottomBar.stab': 'STAB:',
