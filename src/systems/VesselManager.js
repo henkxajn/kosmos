@@ -2553,7 +2553,7 @@ export class VesselManager {
         ...EntityManager.getByTypeInSystem('planet', systemId),
         ...EntityManager.getByTypeInSystem('moon', systemId),
         ...EntityManager.getByTypeInSystem('planetoid', systemId),
-      ].filter(b => !b.explored);
+      ].filter(b => !b.analyzed);   // statek upgraduje zgrubny (teleskop/obcy skan) → pełny; parytet z guardem `!analyzed` recon macierzystego
 
       if (allBodies.length === 0) {
         addMissionLog(vessel, gameYear, t('vessel.foreignReconAllDone'), 'info');
@@ -2622,6 +2622,7 @@ export class VesselManager {
         const target = this._findEntity(m.targetId);
         if (target) {
           target.explored = true;
+          target.analyzed = true;   // statek naukowy = pełna analiza (parytet z recon macierzystym)
           // Auto-discover księżyce
           const moons = EntityManager.getByTypeInSystem('moon', m.systemId)
             .filter(moon => moon.parentPlanetId === m.targetId);
@@ -2689,6 +2690,7 @@ export class VesselManager {
         const body = this._findEntity(bodyId);
         if (body) {
           body.explored = true;
+          body.analyzed = true;     // statek naukowy = pełna analiza (parytet z recon macierzystym)
           // Auto-discover księżyce
           const moons = EntityManager.getByTypeInSystem('moon', m.systemId)
             .filter(moon => moon.parentPlanetId === bodyId);

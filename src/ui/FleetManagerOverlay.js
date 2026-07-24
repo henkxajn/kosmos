@@ -6781,18 +6781,21 @@ export class FleetManagerOverlay {
 
       // ── Recon ciała (recon cap) ──
       if (caps.has('recon')) {
-        const isExplored = orbitBody?.explored ?? false;
-        ctx.fillStyle = isExplored ? 'rgba(100,100,100,0.08)' : 'rgba(0,180,255,0.08)';
+        // Bramka na `analyzed` (nie `explored`): statek naukowy może domknąć ciało
+        // zbadane wcześniej zgrubnie (teleskop / obcy skan) → pełna analiza. Parytet
+        // z recon macierzystym (guard `!target.analyzed`).
+        const isAnalyzed = orbitBody?.analyzed ?? false;
+        ctx.fillStyle = isAnalyzed ? 'rgba(100,100,100,0.08)' : 'rgba(0,180,255,0.08)';
         ctx.fillRect(x + pad, cy, btnW, btnH);
-        ctx.strokeStyle = isExplored ? THEME.textDim : THEME.info;
+        ctx.strokeStyle = isAnalyzed ? THEME.textDim : THEME.info;
         ctx.lineWidth = 1;
         ctx.strokeRect(x + pad, cy, btnW, btnH);
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = isExplored ? THEME.textDim : THEME.info;
+        ctx.fillStyle = isAnalyzed ? THEME.textDim : THEME.info;
         ctx.textAlign = 'center';
         ctx.fillText(t('fleet.foreignReconBody'), x + w / 2, cy + 15);
         ctx.textAlign = 'left';
-        if (!isExplored) {
+        if (!isAnalyzed) {
           this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
             type: 'foreign_recon_body', data: { vesselId: vessel.id, targetId: isMission.targetId } });
         }
