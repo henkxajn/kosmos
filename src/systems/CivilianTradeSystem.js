@@ -299,20 +299,24 @@ export class CivilianTradeSystem {
       // Max transfer z TC
       const maxFromTC = tcAvail / price;
 
-      // Max transfer z zapasu eksportera (30% nadwyżki × 0.5 bo half-year)
+      // Max transfer z zapasu eksportera (90% nadwyżki × 0.5 bo half-year)
       const stock = this._getStock(goodId, fromCol);
       const consumption = this._getConsumption(goodId, fromCol);
       const ownPending = this._getPendingDemand(goodId, fromCol);
       // Zachowaj 2-letni zapas konsumpcji + rezerwę na własne pending orders
       const reserve = consumption * 2 + ownPending;
       const surplus = Math.max(0, stock - reserve);
-      const maxFromSurplus = surplus * 0.3 * this._TICK_INTERVAL;
+      const maxFromSurplus = surplus * 1.8 * this._TICK_INTERVAL; // 1.8 × 0.5 = 0.9 → 90% nadwyżki/tick
 
       // Efektywność routingu
       const efficiency = 1.0 + this._getBuildingBonus(fromCol, 'routingEfficiencyBonus')
                              + this._getBuildingBonus(toCol, 'routingEfficiencyBonus');
 
-      const qty = Math.min(maxFromTC, maxFromSurplus) * Math.min(2.0, efficiency);
+      // Zawór przepustowości: 90% nadwyżki/tick. Twardy clamp do `surplus` — efficiency (×≤2.0)
+      // przy stawce 90% dałoby teoretyczne 180% nadwyżki, a _executeTransfer clampuje `actualQty`
+      // tylko do stanu magazynu (NIE do surplus) → bez tego handel zjadałby 2-letnią rezerwę
+      // konsumpcyjną, którą reszta gry traktuje jako nienaruszalną.
+      const qty = Math.min(Math.min(maxFromTC, maxFromSurplus) * Math.min(2.0, efficiency), surplus);
       if (qty < 0.01) continue;
 
       // Wykonaj transfer
