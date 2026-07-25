@@ -4168,8 +4168,9 @@ export class GameScene {
           this.uiManager?.markDirty?.();
         }
       }
-      // Puszczenie Shift → wyjdź z czystego widoku.
-      if (e.key === 'Shift' || !e.shiftKey) this._setCleanView(false);
+      // Puszczenie Shift → wyjdź z czystego widoku. NIE podczas lotu intro — lock chroni
+      // clean-view (inaczej stray keyup gasił go i wracał pasek symulacji).
+      if (!this._introLockActive && (e.key === 'Shift' || !e.shiftKey)) this._setCleanView(false);
     });
     // Edge case: utrata focusu okna podczas trzymania CTRL / Shift
     window.addEventListener('blur', () => {
@@ -4177,7 +4178,7 @@ export class GameScene {
         this.threeRenderer.setShowAllLabels(false);
         this.uiManager?.markDirty?.();
       }
-      this._setCleanView(false);
+      if (!this._introLockActive) this._setCleanView(false);   // lock chroni clean-view lotu intro
     });
   }
 
@@ -4218,12 +4219,18 @@ export class GameScene {
     // 2b — lockdown
     const prevIsOverUI = cam._isOverUI;
     let blackLayer = null;
+    // Mysz CAŁKOWICIE martwa na czas lotu: capture-listenery na window pochłaniają WSZYSTKIE
+    // zdarzenia myszy PRZED handlerami gry (kamera, hover UI → paski/tooltips, box-select) →
+    // nic się nie rusza ani nie pojawia. Deklaracja PRZED try → dostępne w finally do zdjęcia.
+    const swallowMouse = (ev) => { ev.stopPropagation(); if (ev.type === 'wheel' || ev.type === 'contextmenu') ev.preventDefault(); };
+    const MOUSE_EVENTS = ['mousemove', 'mousedown', 'mouseup', 'click', 'dblclick', 'wheel', 'contextmenu'];
     try {
+      MOUSE_EVENTS.forEach((t) => window.addEventListener(t, swallowMouse, true));  // capture-phase (przed grą)
       this._setCleanView(true);              // ukryj UI 2D + nakładki 3D (orbity/linie/glify)
       setCrtHidden(true);                    // ukryj CRT (z9999)
       this.toastSystem?.setSuppressed?.(true);
-      cam._isOverUI = () => true;            // blokuj drag + wheel
-      this._introLockActive = true;          // keydown guard (H/Spacja/1–5 bezczynne; ESC przerywa)
+      cam._isOverUI = () => true;            // blokuj drag + wheel (redundancja do swallow)
+      this._introLockActive = true;          // keydown/keyup/blur guard (klawisze bezczynne; ESC przerywa; clean-view chroniony)
       blackLayer = this._createIntroBlackLayer();
 
       // ── Geometria (próbka RAZ — sim spauzowany, ciała zamrożone) ──
@@ -4403,6 +4410,7 @@ export class GameScene {
     } catch (err) {
       console.error('[GameScene] Intro cinematic — błąd:', err);
     } finally {
+      MOUSE_EVENTS.forEach((t) => window.removeEventListener(t, swallowMouse, true));  // przywróć mysz
       renderer.setCinematicDriver?.(null);
       this._introLockActive = false;
       this._abortIntroFlight = null;
