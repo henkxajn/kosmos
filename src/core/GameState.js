@@ -31,7 +31,7 @@ function createDefaultState() {
     crossEmpireTrade: {},  // S3.5b — empireId → bool: toggle auto-handlu cywilnego cross-empire (brak klucza ⇒ ON)
     // Warstwa polityczna (strefy wpływów) — kolor tożsamości gracza. Wybór na
     // starcie (B2); domyślnie cyjan. Klucz MUSI tu być, inaczej restore() go pominie.
-    player:           { empireColor: '#33ccff' },
+    player:           { empireColor: '#33ccff', introSeen: false },
   };
 }
 

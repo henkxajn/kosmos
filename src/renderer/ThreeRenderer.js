@@ -304,6 +304,14 @@ export class ThreeRenderer {
     this._tacticalOrbitMarkers = new Map();  // 2g: klucz → Sprite (chevron/tik przyszłej pozycji/ETA)
     this._alertReticleTex      = null;       // współdzielona tekstura reticle (lazy)
 
+    // ── Cinematic intro (start nowej gry) ───────────────────────
+    // Driver kamery per-frame (rejestrowany przez GameScene) wołany w pętli
+    // renderowania TUŻ PRZED cameraController.update(). Sygnał gotowości tekstur
+    // (_texturesReady) — intro czeka na to przed lotem, by planeta nie „doskoczyła".
+    this._cinematicDriver       = null;      // fn(nowMs) | null
+    this._texturesReadyResolved = false;
+    this._texturesReady         = new Promise((res) => { this._resolveTexturesReady = res; });
+
     // ── Cache modeli 3D statków ─────────────────────────────────
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
     this._shipModelPromises  = new Map(); // modelPath → Promise — deduplikacja równoległych load
@@ -1552,12 +1560,12 @@ export class ThreeRenderer {
   // ── Przebuduj diffuse tekstury planet po załadowaniu tekstur terenu ────────
   // Async: jedna planeta na klatkę → bez zamrażania UI
   async _rebakePlanetTextures() {
-    if (!texturesLoaded()) return;
+    if (!texturesLoaded()) { this._markTexturesReady(); return; }
 
     const entries = [...this._planets.entries()]
       .filter(([, e]) => e.planet && e.planet.planetType !== 'gas' && e.mesh?.material?.map);
     const total = entries.length;
-    if (total === 0) { window._hideLoadingScreen?.(); return; }
+    if (total === 0) { window._hideLoadingScreen?.(); this._markTexturesReady(); return; }
 
     window._updateLoading?.(60, 'Generowanie tekstur planet...');
     let count = 0;
@@ -1620,6 +1628,7 @@ export class ThreeRenderer {
     window._updateLoading?.(100, 'Gotowe!');
     await new Promise(r => setTimeout(r, 200));
     window._hideLoadingScreen?.();
+    this._markTexturesReady();
 
     if (count) console.log(`[ThreeRenderer] Rebake: ${count} tekstur (planety+księżyce+planetoidy)`);
   }
@@ -3262,6 +3271,22 @@ export class ThreeRenderer {
   suspend() { this._renderingEnabled = false; }
   resume()  { this._renderingEnabled = true;  }
 
+  // ── Cinematic intro (start nowej gry) ──────────────────────────
+  // Driver kamery per-frame — GameScene rejestruje fn(nowMs) wołaną w pętli
+  // renderowania TUŻ PRZED cameraController.update() (własny dt; lerpy kontrolera
+  // driver neutralizuje przez _targetDist/_goalTarget). null = brak lotu.
+  setCinematicDriver(fn) { this._cinematicDriver = fn; }
+
+  // Sygnał gotowości tekstur planet — rozwiązywany w _rebakePlanetTextures na
+  // WSZYSTKICH wyjściach. Intro czeka na to (z 6 s backstopem w GameScene) przed
+  // lotem, żeby planeta nie zmieniała tekstury w trakcie zbliżenia (recon F17.1).
+  whenTexturesReady() { return this._texturesReady; }
+  _markTexturesReady() {
+    if (this._texturesReadyResolved) return;
+    this._texturesReadyResolved = true;
+    this._resolveTexturesReady?.();
+  }
+
   // ── SHIFT „czysty widok" (cinematic) ──────────────────────────
   // Ukrywa nakładki 3D (linie orbit/tras/handlu, pierścienie sensorów, stożki
   // predykcji, markery wroga, glify taktyczne), zostawiając gwiazdę, planety,
@@ -3341,6 +3366,17 @@ export class ThreeRenderer {
 
         // Podgląd obserwatorium — twardy lock kamery na ciele co klatkę (przed update, bez lerp-lag).
         if (this._observatoryPreviewActive) this._updateCameraFocus();
+
+        // Cinematic intro — driver kamery tuż PRZED update kontrolera (własny dt).
+        // Pętla łyka wyjątki (catch niżej), więc izolujemy driver i wyłączamy przy błędzie,
+        // żeby jeden zły frame nie zablokował gracza w zamrożonej kamerze.
+        if (this._cinematicDriver) {
+          try { this._cinematicDriver(performance.now()); }
+          catch (err) {
+            console.error('[ThreeRenderer] Cinematic driver error:', err);
+            this._cinematicDriver = null;
+          }
+        }
 
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();

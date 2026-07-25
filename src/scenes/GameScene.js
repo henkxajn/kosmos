@@ -67,6 +67,7 @@ import { NARRATIVE_EVENTS_BY_ID } from '../data/NarrativeEventsData.js';
 import { EndgameScene }         from './EndgameScene.js';
 import { ANOMALIES } from '../data/AnomalyData.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
+import { setCrtHidden }          from '../ui/CrtOverlay.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
@@ -422,6 +423,17 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // KOSMOS.debug.replayIntro()      — odtwórz sam lot kinowy startu (kalibracja bez nowej gry).
+      // KOSMOS.debug.replayIntro(true)  — lot + ekrany narracyjne (LOG → MANUAL → nazwy).
+      replayIntro: (withText) => {
+        const home = window.KOSMOS?.homePlanet ?? EntityManager.get(this._civPlanetId);
+        if (!home) { console.warn('[intro] brak planety macierzystej (homePlanet/_civPlanetId)'); return; }
+        EventBus.emit('time:pause');
+        Promise.resolve(this._runIntroCinematic(home))
+          .then(() => (withText ? showIntroSequence() : null))
+          .then(() => console.log('[intro] replay zakończony'))
+          .catch((e) => console.error('[intro] replay błąd:', e));
+      },
       // S3.4 FAZA 6 — backup/restore save'a przed bumpem wersji (single-slot save utrudnia
       //   test migracji na żywo). exportSave() → pobiera plik + kopiuje do schowka + zwraca string;
       //   importSave(json) → nadpisuje slot (string LUB obiekt) i instruuje reload (migracja przy load).
@@ -2827,9 +2839,15 @@ export class GameScene {
         // Pauzuj grę na czas intro
         EventBus.emit('time:pause');
 
-        // Focus kamery na planecie macierzystej + bliski zoom
-        EventBus.emit('body:selected', { entity: civPlanet });
-        this.cameraController._targetDist = 8;
+        // Focus kamery na planecie macierzystej + bliski zoom.
+        // Ścieżka BOOSTED (świeża gra) robi to w handoffie lotu kinowego
+        // (_runIntroCinematic), więc tu tylko dla scenariuszy pomijających lot:
+        // Power Test / Combat Sandbox / civilization. Nie może biec przed lotem —
+        // body:selected + _targetDist=8 walczyłoby z driverem (recon Part 2).
+        if (!isBoosted) {
+          EventBus.emit('body:selected', { entity: civPlanet });
+          this.cameraController._targetDist = 8;
+        }
 
         // COMBAT SANDBOX — testowy scenariusz M2 (player vs enemy w jednym układzie)
         if (isCombatSandbox) {
@@ -2877,7 +2895,17 @@ export class GameScene {
 
         // BOOSTED — scenariusz "Nowa Gra 2": intro → boosted budynki + 3 POP + tech
         if (isBoosted) {
-          await new Promise(r => setTimeout(r, 1200));
+          // Cinematic intro (lot kamery od krawędzi układu do planety) → ekrany
+          // narracyjne (LOG → MANUAL → nazwy). Lot i narracja TYLKO na świeżej grze
+          // (gate introSeen); replay bez nowej gry przez KOSMOS.debug.replayIntro().
+          if (!gameState.get('player')?.introSeen) {
+            await this._runIntroCinematic(civPlanet);   // texture-gate + lockdown + lot + handoff + fade UI
+            gameState.set('player.introSeen', true, 'intro_seen');
+          } else {
+            // Skip lotu (już widziany) — zwykły focus startowy jak dla pozostałych scenariuszy.
+            EventBus.emit('body:selected', { entity: civPlanet });
+            this.cameraController._targetDist = 8;
+          }
           const { civName, capitalName } = await showIntroSequence();
           this._setupColony(civPlanet);
           window.KOSMOS.civName = civName;
@@ -3991,6 +4019,14 @@ export class GameScene {
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
 
+      // Cinematic intro — lockdown lotu kamery: wszystkie klawisze bezczynne (H/Spacja/1–5),
+      // TYLKO ESC przechodzi i przerywa lot (skok do stanu końcowego). Ekrany tekstowe
+      // (LOG/MANUAL) mają własne listenery capture-phase, więc lock ich nie dotyczy.
+      if (this._introLockActive) {
+        if (e.key === 'Escape') { e.preventDefault(); this._abortIntroFlight?.(); }
+        return;
+      }
+
       // CTRL-hold → pokaż labele wszystkich obiektów 3D (planety, statki, wraki).
       // Znika po puszczeniu (keyup).
       if ((e.key === 'Control' || e.ctrlKey) && this.threeRenderer?.setShowAllLabels) {
@@ -4156,6 +4192,257 @@ export class GameScene {
       this.uiManager.markDirty?.();
     }
     this.threeRenderer?.setCleanView?.(active);
+  }
+
+  // ── Cinematic intro (start nowej gry) ────────────────────────────
+  // Lot kamery: krawędź układu → przelot obok największego ciała → planeta macierzysta
+  // (backlit, słońce za planetą) → półobrót na stronę oświetloną (słońce ZA kamerą).
+  // Sekwencja: 2a texture-gate (6 s backstop) → 2b lockdown (UI/CRT/toasty/input/klawiatura
+  //   + czarna warstwa) → 2c driver per-frame (własny dt, klatki kluczowe, ease-in-out)
+  //   → 2d handoff (stan kontrolera = ostatnia klatka, body:selected).
+  // Sim jest spauzowany PRZED wywołaniem → ciała zamrożone (próbka pozycji RAZ).
+  // Wszystko przywracane w finally (render loop łyka wyjątki — nie zostawić gracza w locku).
+  async _runIntroCinematic(homePlanet) {
+    const renderer = this.threeRenderer;
+    const cam = this.cameraController;
+    if (!renderer || !cam || !homePlanet) return;
+
+    // 2a — brama tekstur (planeta nie „doskakuje" teksturą w zbliżeniu); 6 s backstop.
+    try {
+      await Promise.race([
+        renderer.whenTexturesReady?.() ?? Promise.resolve(),
+        new Promise((r) => setTimeout(r, 6000)),
+      ]);
+    } catch (_) { /* nieistotne — lecimy dalej */ }
+
+    // 2b — lockdown
+    const prevIsOverUI = cam._isOverUI;
+    let blackLayer = null;
+    try {
+      this._setCleanView(true);              // ukryj UI 2D + nakładki 3D (orbity/linie/glify)
+      setCrtHidden(true);                    // ukryj CRT (z9999)
+      this.toastSystem?.setSuppressed?.(true);
+      cam._isOverUI = () => true;            // blokuj drag + wheel
+      this._introLockActive = true;          // keydown guard (H/Spacja/1–5 bezczynne; ESC przerywa)
+      blackLayer = this._createIntroBlackLayer();
+
+      // ── Geometria (próbka RAZ — sim spauzowany, ciała zamrożone) ──
+      // Świat: 1 AU = 11 j. (AU_TO_PX 110 / WORLD_SCALE 10). Środek = gwiazda
+      // (NIE zakładamy origin — recon F17.6). Pozycje ciał = ich mesh.group.position.
+      const cx = renderer._starGroup?.position?.x ?? 0;
+      const cz = renderer._starGroup?.position?.z ?? 0;
+      const pEntry = renderer._planets?.get(homePlanet.id);
+      let hx, hz;
+      if (pEntry?.group?.position && (pEntry.group.position.x || pEntry.group.position.z)) {
+        hx = pEntry.group.position.x; hz = pEntry.group.position.z;
+      } else {
+        hx = (homePlanet.x || 0) / 10; hz = (homePlanet.y || 0) / 10;  // fallback z encji (px→świat)
+      }
+      const planetAngle = Math.atan2(hz - cz, hx - cx);   // azymut planety wokół gwiazdy
+      const distToStar  = Math.hypot(hx - cx, hz - cz);   // j. świata (planeta↔gwiazda)
+
+      // Konwencja kontrolera: phi = polar od +Y → elewacja E nad ekliptyką: phi = π/2 − E.
+      const elev = (deg) => Math.PI / 2 - (deg * Math.PI / 180);
+      const lerp = (a, b, e) => a + (b - a) * e;
+
+      // ── Trasa „po elipsie": ciała ZEWNĘTRZNE względem domu (orbital.a > home.a),
+      //    wybrane po JEDNEJ stronie gwiazdy i sortowane KĄTOWO → gładki łuk (elipsa),
+      //    NIE zygzak lewo-prawo (azymut targetu narasta monotonicznie). Otwarcie:
+      //    szeroki widok gwiazdy + całego układu z daleka, hold, POTEM dolot i przelot
+      //    BLISKO kolejnych ciał, koniec na domu. ──
+      const homeR = renderer._getEntityRadius?.(homePlanet) ?? 0.8;
+      const homeA = homePlanet.orbital?.a ?? 0;
+      const homeAngle = planetAngle;
+      const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a <= -Math.PI) a += 2 * Math.PI; return a; };
+      const maxOrbitAU = renderer._computeSystemExtentAU?.() ?? 10;
+      const wideDist   = Math.max(70, Math.min(450, maxOrbitAU * 20));  // = frameSystem (cały układ w kadrze)
+
+      const outer = [];
+      for (const [id, e] of (renderer._planets ?? new Map())) {
+        if (id === homePlanet.id || !e?.planet || !e?.group?.position) continue;
+        const bx = e.group.position.x, bz = e.group.position.z;
+        if (!bx && !bz) continue;
+        const a = e.planet.orbital?.a ?? 0;
+        if (a > homeA) outer.push({ x: bx, z: bz, a, r: renderer._getEntityRadius?.(e.planet) ?? 0.5, delta: wrap(Math.atan2(bz - cz, bx - cx) - homeAngle) });
+      }
+      // Strona sweepu = strona NAJDALSZEGO ciała (max a). Bierzemy TYLKO ciała po tej stronie
+      // domu, sort |delta| MALEJĄCO (najdalej kątowo → do domu) → azymut monotoniczny (bez szarpania).
+      let flyby = [];
+      if (outer.length) {
+        const farthest = outer.reduce((m, o) => (o.a > m.a ? o : m), outer[0]);
+        const side = Math.sign(farthest.delta) || 1;
+        flyby = outer.filter((o) => Math.sign(o.delta) === side);
+        if (!flyby.length) flyby = [farthest];
+        flyby.sort((p, q) => Math.abs(q.delta) - Math.abs(p.delta));
+        flyby = flyby.slice(0, 4);   // MAX_FLYBY
+      }
+      const nodes = flyby.map((f) => ({ x: f.x, z: f.z, r: f.r }));
+      nodes.push({ x: hx, z: hz, r: homeR });              // dom = ostatni węzeł
+
+      // Brak ciał zewnętrznych → syntetyczny punkt wejścia poza orbitą domu (dolot styczny).
+      if (nodes.length === 1) {
+        const rr = distToStar > 1 ? distToStar * 1.7 : 40;
+        nodes.unshift({ x: cx + Math.cos(homeAngle + 0.7) * rr, z: cz + Math.sin(homeAngle + 0.7) * rr, r: 0.5 });
+      }
+
+      // Poza per-węzeł: niska elewacja (wzdłuż ekliptyki) + BLISKI przelot (dystans ~5× promień
+      // ciała → każde mijamy z bliska). AZYMUT liczony PER-KLATKĘ z pozycji targetu (w sampleTour).
+      const segCount = nodes.length - 1;
+      const OFF      = Math.PI / 2 + 0.4;                  // ~113° od kierunku promienistego targetu
+      const homeRad  = distToStar;                         // promień orbity domu (clamp „nie w stronę słońca")
+      nodes.forEach((n, i) => {
+        const frac = segCount > 0 ? i / segCount : 1;
+        n.phi  = elev(lerp(8, 15, frac));                 // 8°→15°: nisko nad ekliptyką, wyżej u domu
+        n.dist = Math.min(30, Math.max(6, n.r * 5));      // ~5× promień → bliski przelot (clamp 6..30)
+      });
+
+      // Otwarcie: szeroki widok gwiazdy + całego układu z daleka (elewacja wyższa → dysk układu
+      // + słońce). Azymut = azymut 1. węzła (płynny blend w dolot). Trzymane, POTEM kamera rusza.
+      const openAngle = Math.atan2(nodes[0].z - cz, nodes[0].x - cx);
+      const Po = { tx: cx, tz: cz, dist: wideDist, phi: elev(38), theta: openAngle + OFF };
+
+      // ── Fazy czasu (s). Spokojne, WOLNE tempo: dłuższe otwarcie, wolny dolot, wolny przelot.
+      //    To główne pokrętła tempa — zwiększ, by lot był dłuższy/spokojniejszy. ──
+      const T_OPEN   = 4.5;                               // szeroki widok układu + słońce (fade + hold)
+      const BLEND    = 6.5;                               // WOLNY dolot z szerokiego ujęcia do 1. ciała
+      const SEG_TIME = 9.0;                               // s na segment przelotu (wolno, spokojnie)
+      const TOTAL    = T_OPEN + BLEND + Math.max(1, segCount) * SEG_TIME;
+
+      const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+      // Smootherstep — łagodniejszy ease-in/out niż smoothstep: zero prędkości I zero
+      // przyspieszenia na końcach → spokojne, miękkie ruszanie i wyhamowanie (nic nie szarpie).
+      const smooth  = (x) => x * x * x * (x * (x * 6 - 15) + 10);
+      // Catmull-Rom (tension 0.5) — gładka krzywa PRZEZ węzły, ciągła prędkość (brak stopów).
+      const cr = (p0, p1, p2, p3, u) => {
+        const u2 = u * u, u3 = u2 * u;
+        return 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3);
+      };
+      const ci = (i) => Math.max(0, Math.min(nodes.length - 1, i));  // clamp indeksu (padding końców)
+      const sampleTour = (g) => {   // g ∈ [0,1] → poza na splajnie (target + azymut z targetu)
+        let tx, tz, dist, phi;
+        if (segCount <= 0) { const n = nodes[0]; tx = n.x; tz = n.z; dist = n.dist; phi = n.phi; }
+        else {
+          const gf = g * segCount;
+          let i = Math.floor(gf);
+          if (i >= segCount) i = segCount - 1;
+          const u = gf - i;
+          const a = nodes[ci(i - 1)], b = nodes[i], c = nodes[i + 1], d = nodes[ci(i + 2)];
+          tx = cr(a.x, b.x, c.x, d.x, u);
+          tz = cr(a.z, b.z, c.z, d.z, u);
+          dist = cr(a.dist, b.dist, c.dist, d.dist, u);
+          phi = cr(a.phi, b.phi, c.phi, d.phi, u);
+        }
+        // Clamp promienia targetu: NIGDY bliżej słońca niż orbita domu → splajn nie „nurkuje".
+        const rr = Math.hypot(tx - cx, tz - cz);
+        if (rr > 0.01 && rr < homeRad) { const s = homeRad / rr; tx = cx + (tx - cx) * s; tz = cz + (tz - cz) * s; }
+        const theta = Math.atan2(tz - cz, tx - cx) + OFF;
+        return { tx, tz, dist: Math.max(4, dist), phi, theta };
+      };
+
+      // Ustaw pozę i ZNEUTRALIZUJ lerpy kontrolera (driver jest autorytatywny co klatkę).
+      const applyPose = (theta, phi, dist, tx, tz) => {
+        cam._goalTheta = null; cam._goalPhi = null;   // bez lerpa kątów
+        cam._theta = theta; cam._phi = phi;
+        cam._dist = dist; cam._targetDist = dist;     // dist-lerp = no-op
+        cam._target.set(tx, 0, tz);
+        cam._goalTarget.set(tx, 0, tz);               // target-lerp = no-op
+      };
+
+      // Blend pozy A→B (theta rozwinięta najkrótszą drogą, by nie obróciło o ~2π).
+      const blendPose = (A, B, e) => {
+        let dth = B.theta - A.theta;
+        while (dth >  Math.PI) dth -= 2 * Math.PI;
+        while (dth < -Math.PI) dth += 2 * Math.PI;
+        return { theta: A.theta + dth * e, phi: lerp(A.phi, B.phi, e), dist: lerp(A.dist, B.dist, e), tx: lerp(A.tx, B.tx, e), tz: lerp(A.tz, B.tz, e) };
+      };
+
+      // Poza otwarcia OD RAZU (pierwsza klatka bez migu poprzedniej kamery pod czernią).
+      applyPose(Po.theta, Po.phi, Po.dist, Po.tx, Po.tz);
+
+      // Fade czarnej warstwy w trakcie otwarcia (odsłania szeroki widok układu).
+      requestAnimationFrame(() => { if (blackLayer) blackLayer.style.opacity = '0'; });
+
+      // 2c — driver per-frame (własny dt z performance.now przekazanego przez renderer)
+      await new Promise((resolve) => {
+        let startNow = null;
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          renderer.setCinematicDriver(null);
+          resolve();
+        };
+        this._abortIntroFlight = () => { finish(); };  // ESC → koniec → handoff (skok do stanu końcowego)
+
+        renderer.setCinematicDriver((now) => {
+          if (startNow === null) startNow = now;
+          const elapsed = (now - startNow) / 1000;     // s
+          let pose;
+          if (elapsed <= T_OPEN) {
+            pose = Po;                                  // OTWARCIE: szeroki widok + słońce, hold
+          } else if (elapsed <= T_OPEN + BLEND) {
+            const e = smooth((elapsed - T_OPEN) / BLEND);
+            pose = blendPose(Po, sampleTour(0), e);     // DOLOT: z szerokiego ujęcia do 1. ciała
+          } else {
+            const g = smooth(clamp01((elapsed - T_OPEN - BLEND) / (TOTAL - T_OPEN - BLEND)));
+            pose = sampleTour(g);                       // PRZELOT po elipsie do domu
+          }
+          applyPose(pose.theta, pose.phi, Math.max(4, pose.dist), pose.tx, pose.tz);
+          if (elapsed >= TOTAL) finish();
+        });
+      });
+
+      // 2d — handoff (stan kontrolera == dom (koniec trasy) → brak skoku na 1. update())
+      const sEnd = sampleTour(1);
+      applyPose(sEnd.theta, sEnd.phi, sEnd.dist, sEnd.tx, sEnd.tz);
+      cam.setMinDist(0.3);
+      EventBus.emit('body:selected', { entity: homePlanet });
+      // body:selected auto-zoom mógł zejść do ~idealDist — przywróć dystans z trasy.
+      cam._targetDist = sEnd.dist;
+      cam._dist = sEnd.dist;
+    } catch (err) {
+      console.error('[GameScene] Intro cinematic — błąd:', err);
+    } finally {
+      renderer.setCinematicDriver?.(null);
+      this._introLockActive = false;
+      this._abortIntroFlight = null;
+      cam._isOverUI = prevIsOverUI;
+      await this._fadeIntroUIBackIn(blackLayer);
+    }
+  }
+
+  // Czarna warstwa DOM nad #three-canvas — kryje snap do pozy startowej i pop tekstur;
+  // pointer-events:auto łyka klik-y w trakcie lotu (lockdown). Usuwana w fade-in.
+  _createIntroBlackLayer() {
+    const el = document.createElement('div');
+    el.id = 'intro-black-layer';
+    Object.assign(el.style, {
+      position: 'fixed', inset: '0', background: '#000',
+      zIndex: '500', opacity: '1', pointerEvents: 'auto',
+      transition: 'opacity 1000ms ease',
+    });
+    document.body.appendChild(el);
+    return el;
+  }
+
+  // Fade UI z powrotem (~800 ms) po locie: clean-view off, CRT wraca, input odblokowany,
+  // toasty odciszone. #ui-canvas wjeżdża opacity 0→1 nad żywą sceną 3D (bez migu pełnego UI).
+  async _fadeIntroUIBackIn(blackLayer) {
+    setCrtHidden(false);
+    const uiCanvas = document.getElementById('ui-canvas');
+    if (uiCanvas) { uiCanvas.style.transition = 'none'; uiCanvas.style.opacity = '0'; }
+    this._setCleanView(false);              // UI znów rysuje (ale canvas na opacity 0)
+    if (blackLayer) blackLayer.remove();
+    if (uiCanvas) {
+      requestAnimationFrame(() => {
+        uiCanvas.style.transition = 'opacity 800ms ease';
+        uiCanvas.style.opacity = '1';
+      });
+      await new Promise((r) => setTimeout(r, 840));
+      uiCanvas.style.transition = '';
+      uiCanvas.style.opacity = '';
+    }
+    this.toastSystem?.setSuppressed?.(false);
   }
 
   // ── M3 P1.3 — Picker mode HUD banner ─────────────────────────────

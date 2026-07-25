@@ -19,6 +19,7 @@ export class ToastSystem {
   constructor() {
     this._container = null;
     this._stack = [];  // [{ el, timer }]
+    this._suppressed = false;  // cinematic intro — wycisz toasty na czas lotu kamery
     this._ensureContainer();
     EventBus.on('ui:toast', (payload) => this._showToast(payload));
   }
@@ -42,7 +43,11 @@ export class ToastSystem {
     this._container = c;
   }
 
+  // Cinematic intro — wycisza/odcisza toasty (lot kamery: brak wyskakujących powiadomień).
+  setSuppressed(v) { this._suppressed = !!v; }
+
   _showToast({ text, color, durationMs } = {}) {
+    if (this._suppressed) return;
     if (!text) return;
     this._ensureContainer();
     const accent = color || THEME.accent;

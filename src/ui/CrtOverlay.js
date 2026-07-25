@@ -34,6 +34,15 @@ export function updateCrt() {
   }
 }
 
+// ── Cinematic intro — ukryj/pokaż CRT bez niszczenia węzłów (odwracalne) ────────
+// Toggle display na istniejących warstwach (scanlines/vignette). Nie rusza THEME —
+// updateCrt() nadal jest źródłem prawdy o istnieniu warstw; to tylko chwilowe skrycie.
+export function setCrtHidden(hidden) {
+  const disp = hidden ? 'none' : '';
+  if (_scanlines) _scanlines.style.display = disp;
+  if (_vignette)  _vignette.style.display  = disp;
+}
+
 // ── Style globalne (CRT text-shadow glow na Canvas kontenerach) ─
 
 function _ensureStyle() {
