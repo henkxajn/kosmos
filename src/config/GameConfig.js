@@ -161,6 +161,14 @@ export const GAME_CONFIG = {
     //   Kill-switch WEWNĘTRZNY (nie user-toggle — warstwa zawsze widoczna dla
     //   gracza). OFF = TerritoryField nie liczy pola, Stratcom bez tintu/izolinii.
     territoryOverlay:     true,
+    // ── Zlecenia Transportowe (MVP logistyki — save v95) ──────────────────
+    //   Ręcznie inicjowany transport: gracz deklaruje zlecenie (ile dobra A/B,
+    //   skąd→dokąd), a statki z opt-in „puli logistycznej" wożą to automatycznie
+    //   (mirror maszyny stanów kurierów AI, ale przez OrderService + realne paliwo).
+    //   Kill-switch: OFF = TransportOrderSystem nie dyspatchuje, zakładka logistyki
+    //   ukryta, toggle puli nieaktywny. Default ON — cały sens tej wersji to
+    //   hands-on ocena w praktyce (default OFF działałby przeciw temu celowi).
+    transportOrders:      true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

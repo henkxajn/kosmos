@@ -304,6 +304,13 @@ function _truncateStr(s, max) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
+// Pełny katalog transportowalnych dóbr: surowce (bez research/energy — niefizyczne)
+// + wszystkie towary (commodities). Kolejność: surowce, potem towary.
+const _LOGI_GOOD_CATALOG = [
+  ...Object.keys(ALL_RESOURCES).filter(id => id !== 'research' && id !== 'energy'),
+  ...Object.keys(COMMODITIES),
+];
+
 function _actionStyle(actionId, ok) {
   if (!ok) return { bg: THEME.bgTertiary, fg: THEME.textDim, border: THEME.border };
   if (actionId === 'return_home') return { bg: 'rgba(255,51,68,0.12)', fg: THEME.danger, border: THEME.dangerDim };
@@ -385,6 +392,19 @@ export class FleetManagerOverlay {
     // teraz osobne pełnoekranowe zakładki obok mapy taktycznej i stoczni.
     this._activeTab = 'tactical';
     this._contentBounds = null;   // { x,y,w,h } — obszar treści pod paskiem zakładek
+    // Zakładka Logistyka (MVP Zlecenia Transportowe) — stan buildera zlecenia.
+    this._logiFrom  = null;       // colonyId źródła
+    this._logiTo    = null;       // colonyId celu
+    this._logiGoods = {};         // { goodId: qty } budowanego zlecenia (wybrane towary)
+    this._logiOrdersScrollY = 0;  // scroll listy aktywnych zleceń (prawa kolumna)
+    this._logiBuilderScrollY = 0; // scroll buildera (lewa kolumna — pickery + towary)
+    this._logiGoodDropdownOpen = false;  // drop-down wyboru towaru (pełny katalog surowce+commodities)
+    this._logiGoodDropdownScrollY = 0;   // scroll listy drop-downu
+    this._logiDropdownRect = null;       // rect panelu drop-downu towaru (routing wheel)
+    this._logiColDropdown = null;        // 'from' | 'to' | null — otwarty drop-down kolonii
+    this._logiColDropdownScrollY = 0;    // scroll drop-downu kolonii
+    this._logiColDropdownRect = null;    // rect panelu drop-downu kolonii (routing wheel)
+    this._logiQtyInput = null;           // DOM <input> ręcznej ilości (wzór safety stock)
     this._shipyardScrollY = 0;    // wspólny pionowy scroll zakładki Stocznia (budowa + edytor projektów)
     this._shipyardContentH = 0;   // łączna wysokość treści Stoczni (do clampu scrolla)
     this._shipyardViewH = 0;      // widoczna wysokość zakładki Stocznia
@@ -513,7 +533,7 @@ export class FleetManagerOverlay {
       }
     }
   }
-  close()  { this._visible = false; this._closeRegistrySearch(); this._close(); }
+  close()  { this._visible = false; this._closeRegistrySearch(); this._closeLogiQtyInput(); this._close(); }
 
   // Przy otwarciu overlay'a — jeśli mapa w stanie domyślnym (pan=0, zoom=1),
   // ustaw domyślne ujęcie: gwiazda w centrum (pan=0) z zoomem fit-all, przy
@@ -561,6 +581,10 @@ export class FleetManagerOverlay {
     if (!tab || tab === this._activeTab) return;
     this._activeTab = tab;
     this._closeRegistrySearch();   // F3: DOM input żyje tylko w widoku REJESTR
+    // Logistyka: zamknij drop-downy + DOM input ilości przy wyjściu z zakładki
+    this._closeLogiQtyInput();
+    this._logiColDropdown = null;
+    this._logiGoodDropdownOpen = false;
     // Wyczyść hovery wszystkich widoków
     this._mapHoverBody = null;
     this._clusterHoverSystem = null;
@@ -746,7 +770,505 @@ export class FleetManagerOverlay {
         const pw = Math.min(220, ow - 16);
         this._drawShipPicker(ctx, ox + ow - pw - 8, contentY + 8, pw, contentH - 16, vMgr, colMgr, activePid);
       }
+    } else if (this._activeTab === 'logistics') {
+      this._drawLogisticsTab(ctx, ox, contentY, ow, contentH, colMgr);
     }
+  }
+
+  // ── Zakładka LOGISTYKA (MVP Zlecenia Transportowe) ──────────────────────────
+  // Dwukolumnowy layout (wzór TradeOverlay._drawMarket): lewa = builder zlecenia
+  // (picker kolonii gracza + lista towarów z magazynu źródła + qty [−]N[+]),
+  // prawa = aktywne zlecenia z paskami postępu per dobro + liczba statków + FIFO.
+  _drawLogisticsTab(ctx, ox, oy, ow, oh, colMgr) {
+    const LEFT_W = Math.min(460, Math.floor(ow * 0.5));
+    // Separator kolumn
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
+    ctx.stroke();
+    this._drawLogiBuilder(ctx, ox, oy, LEFT_W, oh, colMgr);
+    this._drawLogiOrders(ctx, ox + LEFT_W, oy, ow - LEFT_W, oh, colMgr);
+  }
+
+  // Lewa kolumna — builder nowego zlecenia (źródło → cel → dobra → utwórz).
+  // Zawartość (pickery + towary) jest PRZEWIJALNA (`_logiBuilderScrollY`); przycisk
+  // „Utwórz" przypięty do dołu (zawsze widoczny/klikalny). Bez tego przy większej
+  // liczbie kolonii/towarów przyciski +/− na dole były nieosiągalne.
+  _drawLogiBuilder(ctx, x, y, w, h, colMgr) {
+    const tos = window.KOSMOS?.transportOrderSystem;
+    const pad = 14;
+    const playerCols = colMgr?.getPlayerColonies?.() ?? [];
+    const activePid = colMgr?.activePlanetId;
+
+    // Domyślne źródło = aktywna kolonia gracza (jeśli jest na liście).
+    if (!this._logiFrom && playerCols.some(c => c.planetId === activePid)) this._logiFrom = activePid;
+
+    // Geometria: przycisk Utwórz przypięty do dołu, reszta przewijalna nad nim.
+    const btnH = 30, by = y + h - btnH - 8;
+    const scrollTop = y + 6;
+    const viewH = (by - 6) - scrollTop;
+
+    // Defensywny clamp scrolla wg poprzedniej klatki (gdy zawartość się skurczyła).
+    const maxScrollPrev = Math.max(0, (this._logiBuilderContentH || 0) - viewH);
+    this._logiBuilderScrollY = Math.max(0, Math.min(maxScrollPrev, this._logiBuilderScrollY || 0));
+    const scrollY = this._logiBuilderScrollY;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, scrollTop, w, viewH); ctx.clip();
+    const hzStart = this._hitZones.length;   // do przycięcia hit-zon poza widokiem
+
+    let cy = scrollTop - scrollY;
+    // Podsumowanie puli.
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(t('transportOrder.poolSummary', tos?.getPool?.().length ?? 0), x + pad, cy + 10);
+    cy += 24;
+
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('transportOrder.newOrder'), x + pad, cy + 12);
+    cy += 26;
+
+    // ── Drop-down źródła / celu ──────────────────────────────────
+    const drawColDropdownBtn = (label, selId, toggleType, cyStart) => {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x + pad, cyStart + 10);
+      const btnY = cyStart + 14, btnH = 22, btnW = w - pad * 2;
+      const selName = selId ? _truncateStr(colMgr?.getColony(selId)?.name ?? selId, 22)
+                            : t('transportOrder.pickColony');
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(x + pad, btnY, btnW, btnH);
+      ctx.strokeStyle = selId ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1; ctx.strokeRect(x + pad + 0.5, btnY + 0.5, btnW - 1, btnH - 1);
+      ctx.fillStyle = selId ? THEME.accent : THEME.textSecondary;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillText(selName, x + pad + 8, btnY + 15);
+      ctx.textAlign = 'right';
+      ctx.fillText('▾', x + pad + btnW - 8, btnY + 15);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: x + pad, y: btnY, w: btnW, h: btnH, type: toggleType, data: {} });
+      return btnY + btnH + 8;
+    };
+    cy = drawColDropdownBtn(t('transportOrder.from'), this._logiFrom, 'logi_from_dropdown_toggle', cy);
+    cy = drawColDropdownBtn(t('transportOrder.to'),   this._logiTo,   'logi_to_dropdown_toggle',   cy);
+
+    // ── Towary do przewiezienia (drop-down z pełnego katalogu) ───
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.textAlign = 'left';
+    ctx.fillText(t('transportOrder.goodsHeader'), x + pad, cy + 10);
+    cy += 18;
+
+    const srcCol = this._logiFrom ? colMgr?.getColony(this._logiFrom) : null;
+    const srcInv = srcCol?.resourceSystem?.inventory;
+    const srcAmount = (id) => (srcInv instanceof Map ? Math.floor(srcInv.get(id) ?? 0) : 0);
+
+    // Przycisk otwierający drop-down (dodaj dowolny towar — surowiec LUB commodity).
+    const ddH = 24;
+    ctx.fillStyle = 'rgba(0,200,255,0.08)';
+    ctx.fillRect(x + pad, cy, w - pad * 2, ddH);
+    ctx.strokeStyle = THEME.accent;
+    ctx.lineWidth = 1; ctx.strokeRect(x + pad + 0.5, cy + 0.5, w - pad * 2 - 1, ddH - 1);
+    ctx.fillStyle = THEME.accent;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillText(t('transportOrder.addGood'), x + pad + 8, cy + 16);
+    this._hitZones.push({ x: x + pad, y: cy, w: w - pad * 2, h: ddH, type: 'logi_good_dropdown_toggle', data: {} });
+    cy += ddH + 6;
+
+    // Lista wybranych towarów (każdy: nazwa · [−] N [+] · [✕]).
+    const selected = Object.entries(this._logiGoods).filter(([, q]) => q > 0);
+    if (selected.length === 0) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillText(t('transportOrder.noGoodsSelected'), x + pad, cy + 12);
+      cy += 20;
+    } else {
+      const rowH = 22, btnW = 22, qtyW = 34;
+      for (const [id, qty] of selected) {
+        const rmX  = x + w - pad - 18;
+        const incX = rmX - 6 - btnW;
+        const qtyX = incX - 4 - qtyW;
+        const decX = qtyX - 4 - btnW;
+        // Nazwa
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.textAlign = 'left';
+        ctx.fillText(`${_cargoIcon(id)} ${_truncateStr(_cargoName(id), 11)}`, x + pad, cy + 15);
+        // Podpowiedź „w magazynie" (jeśli źródło ma ten towar) — wyrównana do prawej przed [−]
+        const inStock = srcAmount(id);
+        if (inStock > 0) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.textAlign = 'right';
+          ctx.fillText(t('transportOrder.inStock', inStock), decX - 6, cy + 15);
+          ctx.textAlign = 'left';
+        }
+        // [−]
+        this._drawMiniBtn(ctx, decX, cy, btnW, rowH - 2, '−', qty > 0);
+        this._hitZones.push({ x: decX, y: cy, w: btnW, h: rowH - 2, type: 'logi_good_dec', data: { goodId: id } });
+        // Pole ilości — KLIKANE (ręczne wpisanie, wzór safety stock)
+        ctx.fillStyle = 'rgba(0,200,255,0.08)';
+        ctx.fillRect(qtyX, cy, qtyW, rowH - 2);
+        ctx.strokeStyle = THEME.accent;
+        ctx.lineWidth = 1; ctx.strokeRect(qtyX + 0.5, cy + 0.5, qtyW - 1, rowH - 3);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.textAlign = 'center';
+        ctx.fillText(String(qty), qtyX + qtyW / 2, cy + 15);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: qtyX, y: cy, w: qtyW, h: rowH - 2, type: 'logi_good_qty_input',
+          data: { goodId: id, boxCanvasX: qtyX, boxCanvasY: cy } });
+        // [+]
+        this._drawMiniBtn(ctx, incX, cy, btnW, rowH - 2, '+', true);
+        this._hitZones.push({ x: incX, y: cy, w: btnW, h: rowH - 2, type: 'logi_good_inc', data: { goodId: id } });
+        // [✕] usuń towar
+        this._drawMiniBtn(ctx, rmX, cy, 18, rowH - 2, '✕', true);
+        this._hitZones.push({ x: rmX, y: cy, w: 18, h: rowH - 2, type: 'logi_good_remove', data: { goodId: id } });
+        cy += rowH + 3;
+      }
+    }
+
+    // Wysokość zawartości (do clampu scrolla) + przycięcie hit-zon poza widokiem.
+    this._logiBuilderContentH = (cy + scrollY) - scrollTop;
+    this._logiBuilderViewH = viewH;
+    ctx.restore();
+    this._clipRightHitZones(hzStart, scrollTop, viewH);
+
+    // Mini-pasek scrolla (gdy zawartość przekracza widok).
+    if (this._logiBuilderContentH > viewH + 1) {
+      const trackH = viewH, thumbH = Math.max(20, trackH * (viewH / this._logiBuilderContentH));
+      const maxS = this._logiBuilderContentH - viewH;
+      const thumbY = scrollTop + (trackH - thumbH) * (maxS > 0 ? (scrollY / maxS) : 0);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(x + w - 5, scrollTop, 3, trackH);
+      ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = THEME.accent;
+      ctx.fillRect(x + w - 5, thumbY, 3, thumbH); ctx.restore();
+    }
+
+    // ── Przycisk Utwórz (przypięty do dołu kolumny) ──────────────
+    const totalGoods = Object.values(this._logiGoods).filter(q => q > 0).length;
+    const canCreate = !!this._logiFrom && !!this._logiTo && this._logiFrom !== this._logiTo && totalGoods > 0;
+    ctx.fillStyle = canCreate ? 'rgba(0,200,255,0.14)' : THEME.bgTertiary;
+    ctx.fillRect(x + pad, by, w - pad * 2, btnH);
+    ctx.strokeStyle = canCreate ? THEME.accent : THEME.border;
+    ctx.lineWidth = 1; ctx.strokeRect(x + pad + 0.5, by + 0.5, w - pad * 2 - 1, btnH - 1);
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = canCreate ? THEME.accent : THEME.textDim;
+    ctx.textAlign = 'center';
+    ctx.fillText(t('transportOrder.createBtn', totalGoods), x + w / 2, by + 19);
+    ctx.textAlign = 'left';
+    if (canCreate) this._hitZones.push({ x: x + pad, y: by, w: w - pad * 2, h: btnH, type: 'logi_create', data: {} });
+
+    // Drop-downy (kolonia LUB towar) — NAD wszystkim; hit-zony na końcu = priorytet.
+    if (this._logiColDropdown) {
+      this._drawLogiColDropdown(ctx, x, scrollTop, w, viewH, colMgr, playerCols);
+      this._logiDropdownRect = null;
+    } else if (this._logiGoodDropdownOpen) {
+      this._drawLogiGoodDropdown(ctx, x, scrollTop, w, viewH, colMgr);
+      this._logiColDropdownRect = null;
+    } else {
+      this._logiDropdownRect = null;
+      this._logiColDropdownRect = null;
+    }
+  }
+
+  // Panel drop-downu kolonii (źródło LUB cel wg `_logiColDropdown`). Wzór _drawLogiGoodDropdown.
+  _drawLogiColDropdown(ctx, x, top, w, viewH, colMgr, playerCols) {
+    const pad = 14;
+    const px = x + pad, py = top + 2, pw = w - pad * 2, ph = viewH - 4;
+    this._logiColDropdownRect = { x: px, y: py, w: pw, h: ph };
+    const which = this._logiColDropdown;               // 'from' | 'to'
+    const selId = which === 'from' ? this._logiFrom : this._logiTo;
+    const oppId = which === 'from' ? this._logiTo   : this._logiFrom;
+
+    ctx.fillStyle = 'rgba(8,14,22,0.98)';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = THEME.accent;
+    ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+    this._hitZones.push({ x: px, y: py, w: pw, h: ph, type: 'logi_col_dropdown_bg', data: {} });
+
+    const headH = 22;
+    ctx.fillStyle = THEME.accentMed; ctx.fillRect(px, py, pw, headH);
+    ctx.fillStyle = THEME.accent;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(which === 'from' ? t('transportOrder.pickSource') : t('transportOrder.pickTarget'), px + 8, py + 15);
+    const clX = px + pw - 22;
+    ctx.fillStyle = THEME.danger ?? '#ff4444';
+    ctx.textAlign = 'center'; ctx.fillText('✕', clX + 8, py + 15); ctx.textAlign = 'left';
+    this._hitZones.push({ x: clX, y: py, w: 22, h: headH, type: 'logi_col_dropdown_close', data: {} });
+
+    const listY = py + headH, listH = ph - headH;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(px, listY, pw, listH); ctx.clip();
+    const hzStart = this._hitZones.length;
+    const rowH = 22;
+    let ry = listY + 2 - (this._logiColDropdownScrollY || 0);
+    for (let i = 0; i < playerCols.length; i++) {
+      const c = playerCols[i];
+      const isSel = c.planetId === selId;
+      const isOpp = c.planetId === oppId;   // przeciwny koniec — niewybieralny
+      ctx.fillStyle = isSel ? 'rgba(0,200,255,0.14)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
+      ctx.fillRect(px + 2, ry, pw - 4, rowH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = isOpp ? THEME.textDim : (isSel ? THEME.accent : THEME.textSecondary);
+      ctx.textAlign = 'left';
+      const mark = isSel ? '● ' : (isOpp ? '· ' : '○ ');
+      ctx.fillText(`${mark}${_truncateStr(c.name ?? c.planetId, 26)}`, px + 8, ry + 15);
+      if (!isOpp) this._hitZones.push({ x: px + 2, y: ry, w: pw - 4, h: rowH, type: 'logi_col_pick', data: { which, colonyId: c.planetId } });
+      ry += rowH;
+    }
+    this._logiColDropdownContentH = playerCols.length * rowH + 4;
+    this._logiColDropdownViewH = listH;
+    ctx.restore();
+    this._clipRightHitZones(hzStart, listY, listH);
+  }
+
+  // DOM <input> ręcznego wpisania ilości towaru (wzór EconomyOverlay._openOneShotQtyInput).
+  _openLogiQtyInput(goodId, canvasX, canvasY) {
+    this._closeLogiQtyInput();
+    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const boxW = 34, boxH = 20;
+    const sx = (canvasX ?? 100) * SCALE, sy = (canvasY ?? 100) * SCALE;
+    const sw = boxW * SCALE, sh = boxH * SCALE;
+
+    const input = document.createElement('input');
+    input.type = 'number'; input.min = '0'; input.max = '999990'; input.step = '10';
+    input.value = String(this._logiGoods[goodId] ?? 0);
+    Object.assign(input.style, {
+      position: 'fixed', left: `${Math.round(sx)}px`, top: `${Math.round(sy)}px`,
+      width: `${Math.round(sw)}px`, height: `${Math.round(sh)}px`, boxSizing: 'border-box',
+      padding: '0 3px', margin: '0', background: THEME.bgPrimary,
+      border: `1px solid ${THEME.borderActive}`, color: THEME.accent, fontFamily: THEME.fontFamily,
+      fontSize: `${Math.max(10, Math.round(sh * 0.6))}px`, textAlign: 'center', outline: 'none',
+      zIndex: '300', caretColor: THEME.accent,
+    });
+    input.style.appearance = 'textfield';
+    document.body.appendChild(input);
+    this._logiQtyInput = input;
+
+    let done = false;
+    const commit = () => {
+      if (done) return; done = true;
+      const raw = parseInt(input.value, 10);
+      const val = Number.isFinite(raw) ? Math.max(0, Math.min(999990, raw)) : 0;
+      if (val > 0) this._logiGoods[goodId] = val;
+      else delete this._logiGoods[goodId];
+      this._closeLogiQtyInput();
+    };
+    const cancel = () => { if (done) return; done = true; this._closeLogiQtyInput(); };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
+    for (const evt of ['click', 'mousedown', 'mouseup']) input.addEventListener(evt, (e) => e.stopPropagation());
+    requestAnimationFrame(() => { input.focus(); input.select(); });
+  }
+
+  _closeLogiQtyInput() {
+    const el = this._logiQtyInput;
+    if (!el) return;
+    this._logiQtyInput = null;
+    el.onblur = null;
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  // Panel drop-downu — pełny katalog dóbr (surowce + commodities), scrollowalny.
+  // Klik pozycji → dodaje towar (+10) i zamyka; [✕] zamyka. Wypełnia obszar buildera.
+  _drawLogiGoodDropdown(ctx, x, top, w, viewH, colMgr) {
+    const pad = 14;
+    const px = x + pad, py = top + 2, pw = w - pad * 2, ph = viewH - 4;
+    this._logiDropdownRect = { x: px, y: py, w: pw, h: ph };
+
+    // Tło panelu + absorber (klik w puste miejsce panelu = nic; nie przebija do pickerów).
+    ctx.fillStyle = 'rgba(8,14,22,0.98)';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = THEME.accent;
+    ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+    this._hitZones.push({ x: px, y: py, w: pw, h: ph, type: 'logi_dropdown_bg', data: {} });
+
+    // Nagłówek + [✕]
+    const headH = 22;
+    ctx.fillStyle = THEME.accentMed; ctx.fillRect(px, py, pw, headH);
+    ctx.fillStyle = THEME.accent;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(t('transportOrder.pickGood'), px + 8, py + 15);
+    const clX = px + pw - 22;
+    ctx.fillStyle = THEME.danger ?? '#ff4444';
+    ctx.textAlign = 'center'; ctx.fillText('✕', clX + 8, py + 15); ctx.textAlign = 'left';
+    this._hitZones.push({ x: clX, y: py, w: 22, h: headH, type: 'logi_dropdown_close', data: {} });
+
+    // Lista dóbr (scrollowalna).
+    const listY = py + headH, listH = ph - headH;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(px, listY, pw, listH); ctx.clip();
+    const hzStart = this._hitZones.length;
+    const rowH = 20;
+    const srcInv = this._logiFrom ? colMgr?.getColony(this._logiFrom)?.resourceSystem?.inventory : null;
+    const srcAmt = (id) => (srcInv instanceof Map ? Math.floor(srcInv.get(id) ?? 0) : 0);
+    let ry = listY + 2 - (this._logiGoodDropdownScrollY || 0);
+    for (let i = 0; i < _LOGI_GOOD_CATALOG.length; i++) {
+      const id = _LOGI_GOOD_CATALOG[i];
+      const already = (this._logiGoods[id] ?? 0) > 0;
+      ctx.fillStyle = already ? 'rgba(0,200,255,0.12)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
+      ctx.fillRect(px + 2, ry, pw - 4, rowH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = already ? THEME.accent : THEME.textSecondary;
+      ctx.textAlign = 'left';
+      ctx.fillText(`${_cargoIcon(id)} ${_truncateStr(_cargoName(id), 22)}`, px + 8, ry + 14);
+      const amt = srcAmt(id);
+      if (amt > 0) {
+        ctx.fillStyle = THEME.textDim;
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(String(amt), px + pw - 10, ry + 14);
+        ctx.textAlign = 'left';
+      }
+      this._hitZones.push({ x: px + 2, y: ry, w: pw - 4, h: rowH, type: 'logi_good_pick', data: { goodId: id } });
+      ry += rowH;
+    }
+    this._logiDropdownContentH = _LOGI_GOOD_CATALOG.length * rowH + 4;
+    this._logiDropdownViewH = listH;
+    ctx.restore();
+    this._clipRightHitZones(hzStart, listY, listH);
+  }
+
+  _drawMiniBtn(ctx, x, y, w, h, label, enabled) {
+    ctx.fillStyle = enabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = enabled ? THEME.border : 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = enabled ? THEME.textPrimary : THEME.textDim;
+    ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + w / 2, y + h / 2 + 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // Prawa kolumna — aktywne zlecenia z postępem per dobro.
+  _drawLogiOrders(ctx, x, y, w, h, colMgr) {
+    const tos = window.KOSMOS?.transportOrderSystem;
+    const pad = 14;
+    const orders = tos?.getOrders?.() ?? [];
+
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(t('transportOrder.activeHeader', orders.length), x + pad, y + 16);
+
+    const listY = y + 30, listH = h - 30;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, listY, w, listH); ctx.clip();
+    let ry = listY + 4 - (this._logiOrdersScrollY || 0);
+
+    if (orders.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('transportOrder.noneActive'), x + pad, ry + 14);
+      ctx.restore();
+      return;
+    }
+
+    const vMgr = window.KOSMOS?.vesselManager;
+    const phaseLabel = (phase) => {
+      switch (phase) {
+        case 'hauling':   return t('transportOrder.phase_hauling');
+        case 'to_origin': return t('transportOrder.phase_to_origin');
+        case 'waiting':   return t('transportOrder.phase_waiting');
+        default:          return t('transportOrder.phase_idle');
+      }
+    };
+    const colName = (id) => _truncateStr(colMgr?.getColony(id)?.name ?? id, 14);
+    let fifo = 0;
+    for (const o of orders) {
+      fifo++;
+      const goodIds = Object.keys(o.goods);
+      const assigns = o.assignments ?? [];
+      const cardH = 30 + goodIds.length * 16 + (assigns.length ? assigns.length * 14 + 4 : 0) + 20;
+      // Tło karty
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.fillRect(x + pad, ry, w - pad * 2, cardH);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1; ctx.strokeRect(x + pad + 0.5, ry + 0.5, w - pad * 2 - 1, cardH - 1);
+
+      // Nagłówek: #N  Źródło → Cel   [✕]
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(`#${o.id}  ${colName(o.fromColonyId)} → ${colName(o.toColonyId)}`, x + pad + 8, ry + 16);
+      // Przycisk anuluj
+      const cxB = x + w - pad - 24;
+      ctx.fillStyle = 'rgba(255,60,60,0.12)';
+      ctx.fillRect(cxB, ry + 4, 20, 18);
+      ctx.strokeStyle = THEME.danger ?? '#ff4444';
+      ctx.strokeRect(cxB + 0.5, ry + 4.5, 19, 17);
+      ctx.fillStyle = THEME.danger ?? '#ff4444';
+      ctx.textAlign = 'center';
+      ctx.fillText('✕', cxB + 10, ry + 17);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: cxB, y: ry + 4, w: 20, h: 18, type: 'logi_cancel', data: { orderId: o.id } });
+
+      // Paski postępu per dobro
+      let gy = ry + 26;
+      for (const g of goodIds) {
+        const total = o.goods[g] ?? 0;
+        const done = o.delivered?.[g] ?? 0;
+        const pct = total > 0 ? done / total : 0;
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${_cargoIcon(g)} ${_truncateStr(_cargoName(g), 8)}`, x + pad + 8, gy + 9);
+        const barX = x + pad + 96, barW = w - pad * 2 - 96 - 70;
+        // Pasek postępu (inline — FleetManagerOverlay nie dziedziczy BaseOverlay._drawBar).
+        ctx.fillStyle = THEME.border;
+        ctx.fillRect(barX, gy + 2, barW, 8);
+        ctx.fillStyle = THEME.success ?? THEME.accent;
+        ctx.fillRect(barX, gy + 2, Math.round(barW * Math.max(0, Math.min(1, pct))), 8);
+        ctx.fillStyle = THEME.textDim;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${done}/${total}`, x + w - pad - 8, gy + 9);
+        ctx.textAlign = 'left';
+        gy += 16;
+      }
+
+      // Statki wykonujące + ich etap
+      if (assigns.length) {
+        gy += 2;
+        for (const a of assigns) {
+          const v = vMgr?.getVessel?.(a.vesselId);
+          const vName = _truncateStr(v?.name ?? a.vesselId, 14);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textSecondary;
+          ctx.textAlign = 'left';
+          ctx.fillText(`🚀 ${vName}`, x + pad + 8, gy + 10);
+          ctx.fillStyle = a.phase === 'hauling' ? (THEME.success ?? THEME.accent)
+                        : a.phase === 'waiting' ? (THEME.warning ?? '#ffcc44')
+                        : THEME.textDim;
+          ctx.textAlign = 'right';
+          ctx.fillText(phaseLabel(a.phase), x + w - pad - 8, gy + 10);
+          ctx.textAlign = 'left';
+          gy += 14;
+        }
+        gy += 2;
+      }
+
+      // Stopka: statki + pozycja FIFO
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      const ships = assigns.length;
+      ctx.fillText(t('transportOrder.orderFooter', ships, fifo), x + pad + 8, gy + 12);
+
+      ry += cardH + 6;
+    }
+
+    this._logiOrdersContentH = ry - (listY + 4) + (this._logiOrdersScrollY || 0);
+    this._logiOrdersViewH = listH;
+    ctx.restore();
   }
 
   // ── Pasek zakładek (wzór EconomyOverlay) ────────────────────────────────────
@@ -767,6 +1289,8 @@ export class FleetManagerOverlay {
       { id: 'shipyard', label: t('fleet.tabShipyard') },
       { id: 'ground',   label: t('fleet.tabGround') },
       { id: 'atlas',    label: t('fleet.tabAtlas') },
+      // MVP Zlecenia Transportowe — zakładka tylko gdy funkcja włączona (kill-switch).
+      ...(GAME_CONFIG.FEATURES?.transportOrders ? [{ id: 'logistics', label: t('fleet.tabLogistics') }] : []),
     ];
     const TW = 118, TH = 20, ty = oy + 4;
     let tx = ox + 12 + titleW + 24;
@@ -1003,6 +1527,34 @@ export class FleetManagerOverlay {
     if (this._activeTab === 'ground') {
       if (inRect(this._contentBounds)) {
         this._getDesignEditor()?._groundPanel?.handleScroll(delta, mx, my);
+      }
+      return true;
+    }
+
+    // ── LOGISTYKA — scroll buildera (lewa) LUB listy zleceń (prawa) wg kursora ─
+    if (this._activeTab === 'logistics') {
+      const cb = this._contentBounds;
+      // Drop-down towaru otwarty i kursor nad nim → scroll katalogu.
+      if (this._logiGoodDropdownOpen && inRect(this._logiDropdownRect)) {
+        const maxD = Math.max(0, (this._logiDropdownContentH || 0) - (this._logiDropdownViewH || 0));
+        this._logiGoodDropdownScrollY = Math.max(0, Math.min(maxD, (this._logiGoodDropdownScrollY || 0) + delta * 0.5));
+        return true;
+      }
+      // Drop-down kolonii otwarty i kursor nad nim → scroll listy kolonii.
+      if (this._logiColDropdown && inRect(this._logiColDropdownRect)) {
+        const maxC = Math.max(0, (this._logiColDropdownContentH || 0) - (this._logiColDropdownViewH || 0));
+        this._logiColDropdownScrollY = Math.max(0, Math.min(maxC, (this._logiColDropdownScrollY || 0) + delta * 0.5));
+        return true;
+      }
+      if (inRect(cb)) {
+        const leftW = Math.min(460, Math.floor(cb.w * 0.5));
+        if (mx < cb.x + leftW) {
+          const maxB = Math.max(0, (this._logiBuilderContentH || 0) - (this._logiBuilderViewH || 0));
+          this._logiBuilderScrollY = Math.max(0, Math.min(maxB, (this._logiBuilderScrollY || 0) + delta * 0.5));
+        } else {
+          const maxO = Math.max(0, (this._logiOrdersContentH || 0) - (this._logiOrdersViewH || 0));
+          this._logiOrdersScrollY = Math.max(0, Math.min(maxO, (this._logiOrdersScrollY || 0) + delta * 0.5));
+        }
       }
       return true;
     }
@@ -1548,6 +2100,87 @@ export class FleetManagerOverlay {
         break;
       case 'tab':
         this._switchTab(zone.data.tab);
+        break;
+      // ── Zakładka Logistyka (MVP Zlecenia Transportowe) ──────────────────
+      case 'logi_from_dropdown_toggle':
+        this._logiColDropdown = this._logiColDropdown === 'from' ? null : 'from';
+        this._logiGoodDropdownOpen = false;
+        this._logiColDropdownScrollY = 0;
+        break;
+      case 'logi_to_dropdown_toggle':
+        this._logiColDropdown = this._logiColDropdown === 'to' ? null : 'to';
+        this._logiGoodDropdownOpen = false;
+        this._logiColDropdownScrollY = 0;
+        break;
+      case 'logi_col_pick': {
+        const { which, colonyId } = zone.data;
+        if (which === 'from') {
+          this._logiFrom = colonyId;
+          this._logiGoods = {};                  // zmiana źródła → wyczyść dobra (inny magazyn)
+          if (this._logiTo === colonyId) this._logiTo = null;
+        } else if (colonyId !== this._logiFrom) {
+          this._logiTo = colonyId;
+        }
+        this._logiColDropdown = null;
+        break;
+      }
+      case 'logi_col_dropdown_close':
+        this._logiColDropdown = null;
+        break;
+      case 'logi_col_dropdown_bg':
+        break;   // absorber — klik w puste miejsce panelu kolonii nie przebija
+      case 'logi_good_inc': {
+        const cur = this._logiGoods[zone.data.goodId] ?? 0;
+        this._logiGoods[zone.data.goodId] = Math.min(999990, cur + 10);
+        break;
+      }
+      case 'logi_good_dec': {
+        const cur = this._logiGoods[zone.data.goodId] ?? 0;
+        const next = Math.max(0, cur - 10);
+        if (next === 0) delete this._logiGoods[zone.data.goodId];
+        else this._logiGoods[zone.data.goodId] = next;
+        break;
+      }
+      case 'logi_good_remove':
+        delete this._logiGoods[zone.data.goodId];
+        break;
+      case 'logi_good_dropdown_toggle':
+        this._logiGoodDropdownOpen = !this._logiGoodDropdownOpen;
+        this._logiColDropdown = null;
+        this._logiGoodDropdownScrollY = 0;
+        break;
+      case 'logi_good_qty_input':
+        this._openLogiQtyInput(zone.data.goodId, zone.data.boxCanvasX, zone.data.boxCanvasY);
+        break;
+      case 'logi_dropdown_close':
+        this._logiGoodDropdownOpen = false;
+        break;
+      case 'logi_dropdown_bg':
+        break;   // absorber — klik w puste miejsce panelu nie przebija do pickerów
+      case 'logi_good_pick': {
+        const id = zone.data.goodId;
+        this._logiGoods[id] = (this._logiGoods[id] ?? 0) + 10;   // dodaj / dołóż 10
+        this._logiGoodDropdownOpen = false;
+        break;
+      }
+      case 'logi_create': {
+        const tos = window.KOSMOS?.transportOrderSystem;
+        const goods = {};
+        for (const [g, q] of Object.entries(this._logiGoods)) if (q > 0) goods[g] = q;
+        const res = tos?.createOrder?.({ fromColonyId: this._logiFrom, toColonyId: this._logiTo, goods });
+        if (res?.ok) {
+          this._logiGoods = {};   // reset buildera (from/to zostają dla kolejnego zlecenia)
+          EventBus.emit('ui:toast', { text: t('transportOrder.created', res.orderId), color: THEME.success ?? '#44cc88', durationMs: 2500 });
+        } else if (res?.reason) {
+          EventBus.emit('ui:toast', { text: t('transportOrder.createFailed', t('transportOrder.reason_' + res.reason)), color: THEME.warning ?? '#ffcc44', durationMs: 3000 });
+        }
+        break;
+      }
+      case 'logi_cancel':
+        window.KOSMOS?.transportOrderSystem?.cancelOrder?.(zone.data.orderId);
+        break;
+      case 'toggle_logistics_pool':
+        window.KOSMOS?.transportOrderSystem?.togglePool?.(zone.data.vesselId);
         break;
       case 'stratcom_detail_bg':
         break;   // absorber klików tła panelu detalu (nie przepuszcza do gwiazd pod spodem)
@@ -8431,6 +9064,24 @@ export class FleetManagerOverlay {
       ctx.fillText(autoOn ? t('fleet.refuelAutoOn') : t('fleet.refuelAutoOff'), tx2 + 6, cy + 15);
       this._hitZones.push({ x: tx2, y: cy, w: halfW, h: rfH, type: 'toggle_refuel_auto', data: { vesselId: vessel.id } });
       cy += rfH + 4;
+    }
+
+    // ── Toggle „w puli logistycznej" (MVP Zlecenia Transportowe) ──
+    // BEZ warunku isDocked — członkostwo w puli jest trwałe, niezależne od doku.
+    const tos = window.KOSMOS?.transportOrderSystem;
+    if (GAME_CONFIG.FEATURES?.transportOrders && tos && !isEnemyVessel(vessel)) {
+      const inPool = tos.isInPool?.(vessel.id) ?? false;
+      const plW = w - pad * 2;
+      const plH = 22;
+      ctx.fillStyle = inPool ? 'rgba(20,60,80,0.7)' : 'rgba(40,40,40,0.5)';
+      ctx.fillRect(dbx, cy, plW, plH);
+      ctx.strokeStyle = inPool ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1; ctx.strokeRect(dbx + 0.5, cy + 0.5, plW - 1, plH - 1);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = inPool ? THEME.accent : THEME.textSecondary;
+      ctx.fillText(inPool ? t('fleet.removeFromPool') : t('fleet.addToPool'), dbx + 8, cy + 15);
+      this._hitZones.push({ x: dbx, y: cy, w: plW, h: plH, type: 'toggle_logistics_pool', data: { vesselId: vessel.id } });
+      cy += plH + 4;
     }
 
     return cy;

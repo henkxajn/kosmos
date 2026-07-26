@@ -20,7 +20,7 @@ import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 94;
+export const CURRENT_VERSION     = 95;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -151,6 +151,7 @@ const MIGRATIONS = {
   91: _migrateV91toV92,
   92: _migrateV92toV93,
   93: _migrateV93toV94,
+  94: _migrateV94toV95,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2282,6 +2283,20 @@ function _migrateV93toV94(data) {
   for (const p of (data.planets    || [])) if (p.explored) p.analyzed = true;
   for (const m of (data.moons      || [])) if (m.explored) m.analyzed = true;
   for (const p of (data.planetoids || [])) if (p.explored) p.analyzed = true;
+  return data;
+}
+
+// v94 → v95: MVP Zlecenia Transportowe. Stan żyje w gameState (reactive store) pod
+//   data.civ4x.gameState.transportOrders. gameState.restore() i tak merguje domyślne
+//   klucze (`data[k] ?? def[k]`), więc funkcjonalnie migracja jest zbędna — ale seed
+//   jawny (Q3 planu): spójność z konwencją repo (każda funkcja ma wpis „vN→vN+1") +
+//   tania polisa, gdyby przyszły refaktor zmienił semantykę merge'a. Guard na brak
+//   gameState (civMode off = brak 4X → restore() utworzy default).
+function _migrateV94toV95(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.gameState && !c4x.gameState.transportOrders) {
+    c4x.gameState.transportOrders = { orders: [], pool: [], nextId: 1 };
+  }
   return data;
 }
 

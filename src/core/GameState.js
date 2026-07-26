@@ -29,6 +29,11 @@ function createDefaultState() {
     pois:       {},  // M2b — POIRegistry (poiId → poi object); init w createDefaultState żeby restore() nie pomijał klucza
     tradeOrders:      [],  // S3.5b — Order Board: kolejka zleceń kupna/sprzedaży z AI (init by restore() nie pominął klucza)
     crossEmpireTrade: {},  // S3.5b — empireId → bool: toggle auto-handlu cywilnego cross-empire (brak klucza ⇒ ON)
+    // MVP Zlecenia Transportowe (save v95). orders[] = aktywne zlecenia (jednorazowe,
+    // FIFO po createdYear); pool[] = vesselId statków w „puli logistycznej" (opt-in);
+    // nextId = licznik zleceń. Autorytatywny przydział statku żyje w order.assignments[]
+    // (NIE na Vessel — świadome unikanie dual-source-of-truth jak martwy assignedRouteId AI).
+    transportOrders:  { orders: [], pool: [], nextId: 1 },
     // Warstwa polityczna (strefy wpływów) — kolor tożsamości gracza. Wybór na
     // starcie (B2); domyślnie cyjan. Klucz MUSI tu być, inaczej restore() go pominie.
     player:           { empireColor: '#33ccff', introSeen: false },
