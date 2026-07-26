@@ -261,6 +261,54 @@ ok('orders round-trip',   st11.orders.length === 1 && st11.orders[0].goods.Fe ==
 ok('pool round-trip',     st11.pool.includes(v11.id));
 ok('nextId round-trip',   st11.nextId === snapshot.nextId && st11.nextId >= 2);
 
+// ── T12 — cross-system (warp): dobór statku + leg target ─────────────────────
+header('T12 cross-system (warp)');
+clearState();
+// Drugi układ + kolonia B w nim (5 ly od domu).
+EntityManager.add({ id: 'star_b', name: 'Beta', type: 'star', x: 550, y: 550, mass: 1, systemId: 'sys_beta' });
+EntityManager.add({
+  id: 'B', name: 'Beta-1', type: 'planet', planetType: 'rocky', radius: 1, mass: 1,
+  atmosphere: 'breathable', temperatureK: 280, systemId: 'sys_beta', x: 600, y: 550, explored: true,
+  deposits: [], composition: { Fe: 0.3 },
+});
+window.KOSMOS.galaxyData.systems.push({ id: 'sys_beta', name: 'Beta', x: 5, y: 0, z: 0 });
+const colB = colonyManager.createColony('B', { food: 5000, water: 5000 }, 2, 100);
+
+// Spy na OrderService.issueTransport — rejestruje leg target.
+const issueCalls = [];
+const origIssue = orderService.issueTransport.bind(orderService);
+orderService.issueTransport = (id, opts) => { issueCalls.push({ id, opts }); return origIssue(id, opts); };
+
+const warpShip = mkVessel('F', { warpFuelMax: 100, warpFuelCurrent: 100, warpFuelPerLY: 0.5 });
+const plainShip = mkVessel('F');   // bez warp (warpFuel.max=0)
+
+// createOrder cross-system dozwolone (brak odrzucenia cross_system).
+const rc = tos.createOrder({ fromColonyId: 'F', toColonyId: 'B', goods: { Fe: 40 } });
+ok('cross-system createOrder → ok (bez bramki)', rc.ok === true);
+const oc = tos.getOrder(rc.orderId);
+ok('_isCrossSystem(order) === true', tos._isCrossSystem(oc) === true);
+ok('_canServe: warp ship → true',  tos._canServe(warpShip, oc) === true);
+ok('_canServe: non-warp ship → false', tos._canServe(plainShip, oc) === false);
+
+// Dispatch: tylko statek warp przypisany.
+tos.addToPool(plainShip.id);
+tos.addToPool(warpShip.id);
+tos._pump();
+const oc2 = tos.getOrder(rc.orderId);
+ok('cross-system: statek WARP przypisany', (oc2.assignments ?? []).some(a => a.vesselId === warpShip.id));
+ok('cross-system: statek non-warp NIE przypisany', !(oc2.assignments ?? []).some(a => a.vesselId === plainShip.id));
+ok('leg haul wysłany z targetSystemId=sys_beta', issueCalls.some(c => c.id === warpShip.id && c.opts?.targetId === 'B' && c.opts?.targetSystemId === 'sys_beta'));
+
+// ── T13 — cross-system bez statku warp → czeka ───────────────────────────────
+header('T13 cross-system bez statku warp');
+clearState();
+const plain2 = mkVessel('F');   // tylko non-warp w puli
+tos.addToPool(plain2.id);
+const rc3 = tos.createOrder({ fromColonyId: 'F', toColonyId: 'B', goods: { Fe: 30 } });
+ok('zlecenie cross-system utworzone', tos.getOrder(rc3.orderId) !== null);
+ok('brak statku warp → 0 przydziałów (czeka)', (tos.getOrder(rc3.orderId).assignments ?? []).length === 0);
+orderService.issueTransport = origIssue;   // przywróć
+
 // ── Podsumowanie ────────────────────────────────────────────────────────────
 console.log(`\n=== TransportOrderSystem smoke: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

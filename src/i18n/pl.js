@@ -1162,6 +1162,7 @@ export default {
   'transportOrder.phase_hauling': '⇒ wiezie do celu',
   'transportOrder.phase_to_origin': '→ powrót po ładunek',
   'transportOrder.phase_waiting': '⏳ czeka na zapas',
+  'transportOrder.phase_warp': '⚡ skok warp',
   'transportOrder.phase_idle': 'przydzielony',
   'transportOrder.created': 'Utworzono zlecenie #{0}',
   'transportOrder.createFailed': 'Nie utworzono zlecenia: {0}',

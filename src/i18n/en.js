@@ -1161,6 +1161,7 @@ export default {
   'transportOrder.phase_hauling': '⇒ hauling to target',
   'transportOrder.phase_to_origin': '→ returning for cargo',
   'transportOrder.phase_waiting': '⏳ waiting for stock',
+  'transportOrder.phase_warp': '⚡ warp jump',
   'transportOrder.phase_idle': 'assigned',
   'transportOrder.created': 'Created order #{0}',
   'transportOrder.createFailed': 'Order not created: {0}',

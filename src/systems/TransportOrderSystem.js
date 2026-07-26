@@ -119,8 +119,10 @@ export class TransportOrderSystem {
     if (!from || !to) return { ok: false, reason: 'colony_missing' };
     if (!_isPlayerColony(from) || !_isPlayerColony(to)) return { ok: false, reason: 'not_player_colony' };
 
-    const fromSys = from.systemId ?? 'sys_home', toSys = to.systemId ?? 'sys_home';
-    if (fromSys !== toSys) return { ok: false, reason: 'cross_system' };   // MVP: same-system only
+    // Cross-system dozwolone: OrderService robi composite (warp→dostawa). Bez bramki tech —
+    // brak statku warp w puli → zlecenie po prostu czeka (jak przy pustej puli). Układy
+    // wyprowadzamy NA ŻYWO z kolonii w dispatcherze (kolonie nie zmieniają układu) → bez migracji.
+    const fromSys = from.systemId ?? 'sys_home';
 
     // Sanityzacja dóbr — tylko dodatnie całkowite ilości.
     const clean = {};
@@ -238,9 +240,11 @@ export class TransportOrderSystem {
   /** Pusty przelot do źródła F (statek zadokowany w innym ciele, np. w T po dostawie). */
   _issueEmptyToF(order, a, v) {
     a.phase = 'to_origin'; a.courseCargo = {};
-    // issueTransport({cargo:{}}) → same-system → MissionSystem._launchTransport → dockAtTarget w F.
-    // Jeśli launch padnie na paliwie, statek zostaje docked → sweep ponowi po dotankowaniu.
-    this._os()?.issueTransport?.(v.id, { targetId: order.fromColonyId, targetSystemId: order.systemId, cargo: {} });
+    // targetSystemId = układ źródła (live). Ten sam układ → direct pusty lot; inny → OrderService
+    // robi composite (skok warp z powrotem → lot in-system do F). Launch może paść (paliwo/warp) →
+    // statek zostaje docked, sweep ponowi po dotankowaniu (in-system LUB warp_cores). Zadbanie o
+    // zatankowanie statków warp w puli należy do gracza (brak automatycznej bramki round-trip).
+    this._os()?.issueTransport?.(v.id, { targetId: order.fromColonyId, targetSystemId: this._sysOf(order.fromColonyId), cargo: {} });
   }
 
   /** Na F: załaduj mix dóbr (clamp cargoMax/waga, ≤ remaining−inFlight) i wyślij do T. */
@@ -275,8 +279,9 @@ export class TransportOrderSystem {
 
   /** Wyślij załadowany statek do celu T. Cargo już fizycznie na statku (cargoPreloaded). */
   _issueHaul(order, a, v) {
+    // targetSystemId = układ celu (live). Ten sam co statek → direct; inny → composite warp→dostawa.
     this._os()?.issueTransport?.(v.id, {
-      targetId: order.toColonyId, targetSystemId: order.systemId, cargo: { ...a.courseCargo },
+      targetId: order.toColonyId, targetSystemId: this._sysOf(order.toColonyId), cargo: { ...a.courseCargo },
     });
   }
 
@@ -335,23 +340,43 @@ export class TransportOrderSystem {
       .filter(o => this._unreservedUnits(o) > 0)
       .sort((x, y) => (x.createdYear - y.createdYear) || (x.id - y.id));
 
-    let fi = 0;
+    // Dobór per zdatność: same-system zlecenie → dowolny cargo; cross-system → statek warp.
+    // Set `consumed` zamiast wspólnego kursora — statek pominięty dla jednego zlecenia
+    // (nie może go obsłużyć) może trafić do kolejnego. Bez tego warp-only zablokowałby resztę.
+    const consumed = new Set();
     for (const order of open) {
-      if (fi >= free.length) break;
-      // Pozostała tonaż do przewiezienia minus pojemność statków JUŻ przypisanych, jeszcze
-      // niezaładowanych (to_origin/waiting) — anti-overshoot na poziomie dispatchu.
+      // Pozostała tonaż minus pojemność statków JUŻ przypisanych, niezaładowanych (anti-overshoot).
       let tons = this._remainingTonnage(order);
       for (const a of order.assignments) {
         if (a.phase === 'to_origin' || a.phase === 'waiting') {
           tons -= (vm.getVessel(a.vesselId)?.cargoMax ?? 0);
         }
       }
-      while (fi < free.length && tons > 0) {
-        const v = free[fi++];
+      for (const v of free) {
+        if (tons <= 0) break;
+        if (consumed.has(v.id)) continue;
+        if (!this._canServe(v, order)) continue;
+        consumed.add(v.id);
         this._assignVessel(order, v.id);
         tons -= (v.cargoMax ?? 0);
       }
     }
+  }
+
+  /** Układ (systemId) kolonii — live (kolonie nie zmieniają układu). Fallback 'sys_home'. */
+  _sysOf(colonyId) {
+    return this._cm()?.getColony(colonyId)?.systemId ?? 'sys_home';
+  }
+
+  _isCrossSystem(order) {
+    return this._sysOf(order.fromColonyId) !== this._sysOf(order.toColonyId);
+  }
+
+  /** Czy statek może obsłużyć zlecenie? Cross-system wymaga zdolności warp (bak warp_cores>0). */
+  _canServe(vessel, order) {
+    if (!(vessel?.cargoMax > 0)) return false;            // musi mieć ładownię
+    if (this._isCrossSystem(order)) return (vessel.warpFuel?.max ?? 0) > 0;
+    return true;
   }
 
   _assignVessel(order, vesselId) {

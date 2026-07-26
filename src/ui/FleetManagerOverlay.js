@@ -838,8 +838,13 @@ export class FleetManagerOverlay {
       ctx.textAlign = 'left';
       ctx.fillText(label, x + pad, cyStart + 10);
       const btnY = cyStart + 14, btnH = 22, btnW = w - pad * 2;
-      const selName = selId ? _truncateStr(colMgr?.getColony(selId)?.name ?? selId, 22)
-                            : t('transportOrder.pickColony');
+      let selName;
+      if (selId) {
+        const sc = colMgr?.getColony(selId);
+        selName = `${_truncateStr(sc?.name ?? selId, 16)} · ${_truncateStr(this._sysName(sc?.systemId), 10)}`;
+      } else {
+        selName = t('transportOrder.pickColony');
+      }
       ctx.fillStyle = 'rgba(255,255,255,0.04)';
       ctx.fillRect(x + pad, btnY, btnW, btnH);
       ctx.strokeStyle = selId ? THEME.accent : THEME.border;
@@ -1018,7 +1023,14 @@ export class FleetManagerOverlay {
       ctx.fillStyle = isOpp ? THEME.textDim : (isSel ? THEME.accent : THEME.textSecondary);
       ctx.textAlign = 'left';
       const mark = isSel ? '● ' : (isOpp ? '· ' : '○ ');
-      ctx.fillText(`${mark}${_truncateStr(c.name ?? c.planetId, 26)}`, px + 8, ry + 15);
+      ctx.fillText(`${mark}${_truncateStr(c.name ?? c.planetId, 18)}`, px + 8, ry + 15);
+      // Nazwa układu (prawa) — czytelne przy trasach warp.
+      ctx.fillStyle = THEME.textDim;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'right';
+      ctx.fillText(_truncateStr(this._sysName(c.systemId), 12), px + pw - 10, ry + 15);
+      ctx.textAlign = 'left';
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       if (!isOpp) this._hitZones.push({ x: px + 2, y: ry, w: pw - 4, h: rowH, type: 'logi_col_pick', data: { which, colonyId: c.planetId } });
       ry += rowH;
     }
@@ -1140,6 +1152,12 @@ export class FleetManagerOverlay {
     this._clipRightHitZones(hzStart, listY, listH);
   }
 
+  // Nazwa układu gwiezdnego (galaxyData). Fallback = id.
+  _sysName(systemId) {
+    const sys = window.KOSMOS?.galaxyData?.systems?.find(s => s.id === systemId);
+    return sys?.name ?? systemId ?? '?';
+  }
+
   _drawMiniBtn(ctx, x, y, w, h, label, enabled) {
     ctx.fillStyle = enabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
     ctx.fillRect(x, y, w, h);
@@ -1198,10 +1216,13 @@ export class FleetManagerOverlay {
       ctx.strokeStyle = THEME.border;
       ctx.lineWidth = 1; ctx.strokeRect(x + pad + 0.5, ry + 0.5, w - pad * 2 - 1, cardH - 1);
 
-      // Nagłówek: #N  Źródło → Cel   [✕]
+      // Nagłówek: #N  [⚡] Źródło → Cel   [✕]
+      const fromSys = colMgr?.getColony(o.fromColonyId)?.systemId;
+      const toSys   = colMgr?.getColony(o.toColonyId)?.systemId;
+      const cross   = fromSys && toSys && fromSys !== toSys;
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`#${o.id}  ${colName(o.fromColonyId)} → ${colName(o.toColonyId)}`, x + pad + 8, ry + 16);
+      ctx.fillStyle = cross ? (THEME.warning ?? '#ffcc44') : THEME.textPrimary;
+      ctx.fillText(`#${o.id}  ${cross ? '⚡ ' : ''}${colName(o.fromColonyId)} → ${colName(o.toColonyId)}`, x + pad + 8, ry + 16);
       // Przycisk anuluj
       const cxB = x + w - pad - 24;
       ctx.fillStyle = 'rgba(255,60,60,0.12)';
@@ -1242,15 +1263,17 @@ export class FleetManagerOverlay {
         for (const a of assigns) {
           const v = vMgr?.getVessel?.(a.vesselId);
           const vName = _truncateStr(v?.name ?? a.vesselId, 14);
+          const warping = v?.mission?.phase === 'warp_transit';   // skok warp między układami
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textSecondary;
           ctx.textAlign = 'left';
           ctx.fillText(`🚀 ${vName}`, x + pad + 8, gy + 10);
-          ctx.fillStyle = a.phase === 'hauling' ? (THEME.success ?? THEME.accent)
+          ctx.fillStyle = warping ? (THEME.info ?? THEME.accent)
+                        : a.phase === 'hauling' ? (THEME.success ?? THEME.accent)
                         : a.phase === 'waiting' ? (THEME.warning ?? '#ffcc44')
                         : THEME.textDim;
           ctx.textAlign = 'right';
-          ctx.fillText(phaseLabel(a.phase), x + w - pad - 8, gy + 10);
+          ctx.fillText(warping ? t('transportOrder.phase_warp') : phaseLabel(a.phase), x + w - pad - 8, gy + 10);
           ctx.textAlign = 'left';
           gy += 14;
         }

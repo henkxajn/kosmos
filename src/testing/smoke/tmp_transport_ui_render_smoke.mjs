@@ -151,6 +151,23 @@ overlay._hitZones.push({ x: zx, y: zy, w: 20, h: 20, type: 'toggle_logistics_poo
 overlay.handleClick(zx + 2, zy + 2);
 ok('toggle puli: dodał statek', tos.isInPool(hauler.id) === true);
 
+// ── Cross-system UI (etykieta układu + badge ⚡) ──────────────────────────────
+EntityManager.add({ id: 'star_b', name: 'Beta', type: 'star', x: 900, y: 900, mass: 1, systemId: 'sys_beta' });
+EntityManager.add({ id: 'B', name: 'Beta-1', type: 'planet', planetType: 'rocky', radius: 1, mass: 1,
+  atmosphere: 'breathable', temperatureK: 280, systemId: 'sys_beta', x: 950, y: 900, explored: true, deposits: [] });
+window.KOSMOS.galaxyData.systems.push({ id: 'sys_beta', name: 'Beta', x: 5, y: 0, z: 0 });
+colonyManager.createColony('B', { food: 500, water: 500 }, 2, 100);
+ok('_sysName rozwiązuje nazwę układu', overlay._sysName('sys_beta') === 'Beta');
+tos.createOrder({ fromColonyId: 'F', toColonyId: 'B', goods: { Fe: 20 } });   // cross-system
+try { overlay.draw(ctx, W, H); ok('draw() z zleceniem cross-system (badge ⚡) nie rzuca', true); }
+catch (e) { ok('draw() z zleceniem cross-system (badge ⚡) nie rzuca', false); console.error(e); }
+// Drop-down źródła zawiera kolonię z innego układu.
+overlay._logiTo = 'T';   // ustal przeciwny koniec ≠ B
+clickZone(zonesOf('logi_from_dropdown_toggle')[0]);
+overlay.draw(ctx, W, H);
+ok('drop-down kolonii zawiera B (sys_beta)', zonesOf('logi_col_pick').some(z => z.data.colonyId === 'B'));
+overlay._logiColDropdown = null;
+
 // ── Scroll lewej kolumny (mały viewport → overflow) ──────────────────────────
 for (let i = 0; i < 8; i++) {
   const id = `C${i}`;
