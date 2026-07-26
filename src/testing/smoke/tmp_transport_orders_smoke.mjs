@@ -309,6 +309,21 @@ ok('zlecenie cross-system utworzone', tos.getOrder(rc3.orderId) !== null);
 ok('brak statku warp → 0 przydziałów (czeka)', (tos.getOrder(rc3.orderId).assignments ?? []).length === 0);
 orderService.issueTransport = origIssue;   // przywróć
 
+// ── T14 — round-robin: równoległa obsługa wielu zleceń ───────────────────────
+header('T14 round-robin (równoległy dispatch, nie FIFO-greedy)');
+clearState();
+window.KOSMOS.timeSystem.gameTime = 300; syncYear();
+// #1 = ogromne zlecenie (Fe:1000 → 20 statków po cargoMax 100), #2 = małe (Fe:40 → 1 statek).
+// Pula = 4 statki. FIFO-greedy oddałoby wszystkie 4 do #1 (#2 = 0). Round-robin: #2 dostaje statek.
+const bigO   = tos.createOrder({ fromColonyId: 'F', toColonyId: 'T',  goods: { Fe: 1000 } }); // starsze/pierwsze
+const smallO = tos.createOrder({ fromColonyId: 'F', toColonyId: 'T2', goods: { Fe: 40 } });   // nowsze/drugie
+const v14 = [mkVessel('F'), mkVessel('F'), mkVessel('F'), mkVessel('F')];
+v14.forEach(v => tos.addToPool(v.id));
+const oBig = tos.getOrder(bigO.orderId), oSmall = tos.getOrder(smallO.orderId);
+ok('małe/nowsze zlecenie DOSTAŁO statek (nie 0)', oSmall.assignments.length >= 1);
+ok('duże/starsze NIE zabrało całej puli',         oBig.assignments.length < 4);
+ok('cała pula rozdana (4 statki, oba zlecenia)',  (oBig.assignments.length + oSmall.assignments.length) === 4);
+
 // ── Podsumowanie ────────────────────────────────────────────────────────────
 console.log(`\n=== TransportOrderSystem smoke: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

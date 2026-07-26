@@ -798,9 +798,16 @@ GameScene po `orderService`, restore-hook `onRestore()` po `vesselManager.restor
   OBA, subskrypcja obu = podwójny `_onArrival` → „kończy" haul na statku w locie): `to_origin` (pusty
   lot/skok do źródła) → `_loadAndHaul` (mix dóbr wg wagi/cargoMax, ≤ `remaining−inFlight`) → `hauling` →
   dostawa (MissionSystem `dockAtTarget`+`store.receive`). `_completeHaul` idempotentne przez pusty courseCargo.
-- Dispatcher FIFO (`createdYear`), anti-overshoot przez `inFlight` + rezerwację pojemności, `consumed`-set
-  (statek pominięty dla jednego zlecenia trafia do kolejnego). Cleanup na `vessel:wrecked`/`colony:destroyed`.
-  Lekki sweep `time:tick` (`SWEEP_INTERVAL_CIVYEARS=0.5`) łapie fazę `waiting` (źródło puste) + launch-retry.
+- Dispatcher **fair-share/round-robin** (`_pump` krok 2 + `_pickFreeVessel`): WSZYSTKIE otwarte zlecenia
+  obsługiwane RÓWNOLEGLE. Statki dobierane wg GŁODU — zlecenie z mniejszą liczbą już przypisanych
+  statków bierze pierwsze, FIFO (`createdYear`/`id`) tylko tie-break. ⚠ sort po LICZBIE PRZYDZIAŁÓW, nie
+  tylko wewnątrz jednego `_pump` (statki dochodzą do puli pojedynczo → każdy `addToPool`/dostawa = osobny
+  `_pump`; bez tego duże zlecenie łapało każdy kolejny statek — root-cause „idzie w kolejności"). Preferencja
+  `_pickFreeVessel`: same-system zlecenie bierze statek BEZ warp (rzadkie warp zostają dla cross-system;
+  fallback na warp gdy tylko taki zdatny). Anti-overshoot przez `inFlight` + rezerwację pojemności (`tonsLeft`);
+  `consumed`-set (statek pominięty dla jednego zlecenia trafia do kolejnego). Cleanup na
+  `vessel:wrecked`/`colony:destroyed`. Lekki sweep `time:tick` (`SWEEP_INTERVAL_CIVYEARS=0.5`) łapie fazę
+  `waiting` (źródło puste) + launch-retry.
 - **Cross-system (warp):** `createOrder` DOZWALA różne układy BEZ bramki tech (brak statku warp w puli →
   zlecenie czeka). Odcinki (`_issueHaul`/`_issueEmptyToF`) celują w układ celu/źródła **live** (`_sysOf`) →
   `OrderService` sam robi composite (skok warp→dostawa + skok powrotny przez `vessel.pendingOrder`). Dobór

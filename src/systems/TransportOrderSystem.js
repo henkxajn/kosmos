@@ -17,7 +17,8 @@
 //  • Maszyna stanów per przydzielony statek — mirror kurierów AI, ale przez OrderService i
 //    z REALNYM paliwem (potwierdzone empirycznie: pusty lot to_origin zużywa paliwo, statek
 //    dokuje w źródle F przez dockAtTarget). Zamiast sztywnego outpost→stolica: (F, T, goods).
-//  • Kolejka FIFO (najstarsze niepokryte zlecenie ma pierwszeństwo). Bez scoringu pilności.
+//  • Dispatcher fair-share: wszystkie otwarte zlecenia obsługiwane RÓWNOLEGLE — statki dobierane
+//    wg głodu (mniej przypisanych statków = pierwszeństwo), FIFO tylko tie-break. Bez scoringu pilności.
 //  • Zlecenie JEDNORAZOWE — po dostarczeniu całości znika, statki wracają do puli.
 //  • MVP: same-system only (loty warp = Warstwa 3), tylko kolonie (nie stacje).
 //
@@ -332,35 +333,70 @@ export class TransportOrderSystem {
       }
     }
 
-    // 2. FIFO dispatch wolnych statków z puli.
+    // 2. Fair-share dispatch wolnych statków z puli — WSZYSTKIE otwarte zlecenia obsługiwane
+    //    RÓWNOLEGLE. Wcześniej pętla FIFO-greedy nasycała najstarsze zlecenie do pełna zanim
+    //    tknęła następne → jedno duże zlecenie zabierało całą pulę, a reszta czekała z „0
+    //    statków". Teraz każda runda przydziela statki wg GŁODU: zlecenie z mniejszą liczbą
+    //    już przypisanych statków bierze pierwsze (FIFO tie-break). Kluczowe, że sortujemy po
+    //    LICZBIE PRZYDZIAŁÓW (nie tylko wewnątrz jednego _pump) — statki dochodzą do puli
+    //    pojedynczo (każdy addToPool/dostawa = osobny _pump), więc bez tego duże zlecenie i tak
+    //    łapałoby każdy kolejny statek. Zlecenie z 0 statków wyprzedza to, które ma już flotę.
     const free = this._freePoolVessels();
     if (!free.length) return;
 
-    const open = st.orders
-      .filter(o => this._unreservedUnits(o) > 0)
-      .sort((x, y) => (x.createdYear - y.createdYear) || (x.id - y.id));
-
-    // Dobór per zdatność: same-system zlecenie → dowolny cargo; cross-system → statek warp.
-    // Set `consumed` zamiast wspólnego kursora — statek pominięty dla jednego zlecenia
-    // (nie może go obsłużyć) może trafić do kolejnego. Bez tego warp-only zablokowałby resztę.
-    const consumed = new Set();
-    for (const order of open) {
-      // Pozostała tonaż minus pojemność statków JUŻ przypisanych, niezaładowanych (anti-overshoot).
+    // Pozostała tonaż per zlecenie (minus pojemność statków JUŻ przypisanych, niezaładowanych
+    // — anti-overshoot). Liczona raz; w rundach odejmujemy cargoMax dobranego statku.
+    const tonsLeft = new Map();
+    for (const order of st.orders) {
+      if (this._unreservedUnits(order) <= 0) continue;
       let tons = this._remainingTonnage(order);
       for (const a of order.assignments) {
         if (a.phase === 'to_origin' || a.phase === 'waiting') {
           tons -= (vm.getVessel(a.vesselId)?.cargoMax ?? 0);
         }
       }
-      for (const v of free) {
-        if (tons <= 0) break;
-        if (consumed.has(v.id)) continue;
-        if (!this._canServe(v, order)) continue;
+      tonsLeft.set(order, tons);
+    }
+    if (tonsLeft.size === 0) return;
+
+    // Set `consumed` — statek trafia do co najwyżej JEDNEGO zlecenia; pominięty dla jednego
+    // (np. brak warp) może obsłużyć inne. Bez tego warp-only zablokowałby resztę.
+    const consumed = new Set();
+    let progress = true;
+    while (progress) {
+      progress = false;
+      // Sortuj wygłodzone zlecenia: najmniej przypisanych statków → pierwsze; FIFO tie-break.
+      const ordered = [...tonsLeft.keys()]
+        .filter(o => (tonsLeft.get(o) ?? 0) > 0)
+        .sort((x, y) =>
+          (x.assignments.length - y.assignments.length) ||
+          (x.createdYear - y.createdYear) || (x.id - y.id));
+      for (const order of ordered) {
+        const v = this._pickFreeVessel(free, consumed, order);
+        if (!v) continue;
         consumed.add(v.id);
         this._assignVessel(order, v.id);
-        tons -= (v.cargoMax ?? 0);
+        tonsLeft.set(order, (tonsLeft.get(order) ?? 0) - (v.cargoMax ?? 0));
+        progress = true;
       }
     }
+  }
+
+  /**
+   * Wybierz wolny (niezużyty) statek zdatny do obsługi zlecenia. Dla zleceń same-system
+   * preferuj statek BEZ warp — rzadkie statki warp zostawiamy zleceniom cross-system, które
+   * inaczej w ogóle nie ruszą. Gdy zdatny jest wyłącznie statek warp, użyj go (brak strandowania).
+   */
+  _pickFreeVessel(free, consumed, order) {
+    const cross = this._isCrossSystem(order);
+    let warpFallback = null;
+    for (const v of free) {
+      if (consumed.has(v.id)) continue;
+      if (!this._canServe(v, order)) continue;
+      if (!cross && (v.warpFuel?.max ?? 0) > 0) { warpFallback ??= v; continue; }
+      return v;
+    }
+    return warpFallback;
   }
 
   /** Układ (systemId) kolonii — live (kolonie nie zmieniają układu). Fallback 'sys_home'. */
