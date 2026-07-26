@@ -130,6 +130,11 @@ export class MovementOrderSystem {
    *   - Deep-copy mission do vessel._suspendedMission (marker istnienia = flag "mission paused").
    *   - suspendedDuringReturn = (mission.phase === 'returning') — przy resume target = originId.
    *   - move_to_point mission NIE suspendujemy (to synth stworzone przez nas — nic do zachowania).
+   *   - Suspendujemy TYLKO misję którą statek AKTUALNIE leci (position.state === 'in_transit').
+   *     Statek który już doleciał (orbiting/docked) ma misję zakończoną — nie ma legu w locie
+   *     do wznowienia. Snapshot takiej martwej misji powodował, że po ukończeniu nowego rozkazu
+   *     (pursue/intercept) _resumeMissionAfterOrder "wracał" statek do targetId starej misji
+   *     ("powrót na stare miejsce"). Patrz też _issueMoveToPoint (terminalny — bez suspendu).
    *   - Już suspended → no-op.
    * @returns {boolean} true gdy coś suspendowaliśmy (używane do UI log).
    */
@@ -138,6 +143,7 @@ export class MovementOrderSystem {
     if (!m) return false;
     if (m.type === 'move_to_point') return false;
     if (vessel._suspendedMission) return false;  // już jest w zawieszeniu
+    if (vessel.position?.state !== 'in_transit') return false;  // misja zakończona — nic do wznowienia
 
     const snapshot = { ...m };
     if (m.waypoints)        snapshot.waypoints        = m.waypoints.map(w => ({ ...w }));
@@ -445,7 +451,16 @@ export class MovementOrderSystem {
     // ciała → przewiduj pozycję na ten ETA. mission.targetId (niżej) zapewnia snap do
     // ŻYWEJ pozycji na arrival + orbitę (statek śledzi planetę). Fallback gdy ciało bez
     // orbity / brak predykcji → zostaje snapshot z spec.targetPoint.
-    const bodyId = spec.targetBodyId ?? null;
+    // Cel-CIAŁO: jawny targetBodyId (klik na planecie w menu „Leć do planety") LUB — gdy gracz
+    // kliknął „Leć tutaj" w punkt pokrywający się z ciałem (klik obok/na planecie, target='empty')
+    // — auto-przejęcie ciała spod punktu. Bez tego statek leciał do martwego punktu
+    // heliocentrycznego i ZAMARZAŁ, gdy planeta orbitowała dalej (nie orbitował wskazanego ciała —
+    // ground-truth tmp_moveto_orbit_groundtruth). Chokepoint = wszystkie ścieżki rozkazu ruchu.
+    let bodyId = spec.targetBodyId ?? null;
+    if (!bodyId && p && typeof p.x === 'number' && typeof p.y === 'number') {
+      const near = this._vm._findBodyNearPoint?.(p.x, p.y);
+      if (near) bodyId = near.id;
+    }
     if (bodyId) {
       const bodyNow = this._vm._findEntity?.(bodyId);
       const nowX = bodyNow?.x ?? p?.x;
@@ -562,8 +577,12 @@ export class MovementOrderSystem {
       vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelNeeded);
     }
 
-    // Suspend oryginalnej mission (jeśli aktywna) — resume po orderCompleted/cancelled.
-    this._suspendMissionIfAny(vessel);
+    // "Lec do punktu" jest rozkazem TERMINALNYM: statek leci do celu i tam ZOSTAJE
+    // (zgodnie z pierwotnym projektem — _onVesselArrived ustawia mission=null, idle).
+    // NIE zawieszamy/wznawiamy żadnej misji — gracz świadomie przekierowuje statek i nie
+    // chce, by "wracał na stare miejsce". Czyścimy też ewentualną misję zawieszoną wcześniej
+    // (np. przerwany pursue), by nie ożyła po dotarciu do tego punktu.
+    delete vessel._suspendedMission;
 
     vessel.mission           = mission;
     vessel.movementOrder     = order;

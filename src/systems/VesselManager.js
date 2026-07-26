@@ -62,6 +62,9 @@ export class VesselManager {
   // S3.5a-1 — utrzymanie floty (core mechanic, bez FEATURES flagi — stałe lokalne klasy).
   static UPKEEP_GRACE_YEARS = 2;      // LATA GRY bez opłaty → immobilized (pochodna isImmobilized)
   static DEFAULT_VESSEL_UPKEEP = 50;  // Kr/rok (rok gry) fallback dla nieznanego shipId
+  // Rozkaz "leć do punktu" wskazujący (blisko) ciała → przejmij ciało jako cel, by statek je
+  // ŚLEDZIŁ i orbitował, zamiast zamarznąć w heliocentrycznym punkcie gdy ciało odleci. AU.
+  static SNAP_TO_BODY_AU = 0.5;
 
   constructor() {
     /** @type {Map<string, object>} vesselId → VesselInstance */
@@ -2975,6 +2978,30 @@ export class VesselManager {
   _findEntity(targetId) {
     if (!targetId) return null;
     return EntityManager.get(targetId);
+  }
+
+  /**
+   * Znajdź ciało (planeta/księżyc/planetoida) którego BIEŻĄCA pozycja pokrywa się z punktem
+   * (x, y) w promieniu maxAU. Używane przez MovementOrderSystem._issueMoveToPoint: gdy gracz
+   * wyda „leć do punktu" wskazując (blisko) ciała, rozkaz przejmuje to ciało jako cel — statek
+   * przewidzi jego pozycję na ETA, snapnie do żywej pozycji na przylocie i będzie je ORBITOWAŁ
+   * (zamiast zamarznąć w heliocentrycznym punkcie, gdy ciało odleci dalej). Pomija gwiazdę i
+   * stacje (statyczne — nie odlatują, więc bug zamrożenia ich nie dotyczy).
+   * @returns {object|null} najbliższe ciało w zasięgu lub null (pusta przestrzeń → drift).
+   */
+  _findBodyNearPoint(x, y, maxAU = VesselManager.SNAP_TO_BODY_AU) {
+    if (typeof x !== 'number' || typeof y !== 'number') return null;
+    const maxPx = maxAU * AU_TO_PX;
+    let best = null;
+    let bestDist = Infinity;
+    for (const type of ['planet', 'moon', 'planetoid']) {
+      for (const body of EntityManager.getByType(type)) {
+        if (typeof body.x !== 'number' || typeof body.y !== 'number') continue;
+        const d = Math.hypot(body.x - x, body.y - y);
+        if (d <= maxPx && d < bestDist) { best = body; bestDist = d; }
+      }
+    }
+    return best;
   }
 
   /**
