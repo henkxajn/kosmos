@@ -796,6 +796,18 @@ export class UIManager {
       else if (typeof speedCap === 'number') extra = ` (cap ${speedCap.toFixed(1)} AU/r)`;
       const sev = rN > 0 ? 'warn' : 'info';
       this._addNotification(`⚑ ${fname} → ${type}: ${aN}/${total}${extra}`, 'fleet', sev);
+      // Pominięte statki — nazwa + powód (np. USS Enterprise: brak uzbrojenia). Bez tego
+      // gracz widział tylko „2/3" i nie wiedział, KTÓRY statek i DLACZEGO nie ruszył.
+      if (rN > 0 && Array.isArray(rejected)) {
+        const vm = window.KOSMOS?.vesselManager;
+        for (const r of rejected) {
+          const key = `vessel.reason${_pascalCaseReason(r?.reason)}`;
+          const rt  = t(key);
+          const reason = rt !== key ? rt : (r?.reason ?? 'unknown');
+          const nm = vm?.getVessel?.(r?.vesselId)?.name ?? r?.vesselId;
+          this._addNotification(`⚑ ${nm}: ${reason}`, 'fleet', 'warn');
+        }
+      }
     });
     EventBus.on('fleet:orderCompleted', ({ fleetId, type }) => {
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
@@ -2756,4 +2768,10 @@ function _shortYear(y) {
 function _truncate(str, maxLen) {
   if (!str) return '';
   return str.length <= maxLen ? str : str.slice(0, maxLen - 1) + '…';
+}
+
+// snake_case reason → PascalCase dla klucza i18n `vessel.reason<Reason>`.
+function _pascalCaseReason(s) {
+  if (!s) return 'Unknown';
+  return String(s).split('_').map(w => (w[0]?.toUpperCase() ?? '') + w.slice(1)).join('');
 }

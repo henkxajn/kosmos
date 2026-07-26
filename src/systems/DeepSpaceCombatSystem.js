@@ -48,20 +48,37 @@ const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 // Bufor team-up gather wokół midpoint spotkania (kopia z VCS).
 const TEAMUP_BUFFER_FACTOR = 1.5;
 
-// Limit rund per encounter — safety cap. P3-4 dodaje time-out semantykę.
-export const MAX_ROUNDS = 30;
+// Limit rund per encounter — safety cap + time-out. Obniżone 30→20 (2026-07-26):
+// przy ×DAMAGE_MULT większość starć kończy się zabiciem grubo przed cap, a niższy
+// limit skraca patowe remisy.
+export const MAX_ROUNDS = 20;
 
 // Próg retreat: gdy aggregate HP strony spadnie ≤ tej frakcji startowej
 // (z reinforcement) → strona retreat. P3-4 logika.
 export const RETREAT_THRESHOLD = 0.2;
 
-// Throttling tempa rund (hotfix po playtest M4 P3):
-// Bez throttle przy wysokich civDy (10r/s → civDy ~2/frame) wszystkie weapon
-// cooldowny resetowały się w 1 frame → 30 rund w 0.5s real time. Z accumulatorem:
-// jeden "round" potrzebuje CIV_PER_ROUND civYears nagromadzonej civDy. Max
-// MAX_ROUNDS_PER_TICK rund per _tick call (zapobiega batching).
+// ── Tempo walki — STAŁE tempo realnego czasu (fix „walka trwa cholernie długo", 2026-07-26) ──
+// Wcześniej rundy bramkowane akumulatorem civDeltaYears (potrzeba CIV_PER_ROUND=0.3 civY na
+// rundę). Przy 1 dzień/s (domyślna prędkość ORAZ cel auto-slow przy starciu) civDy≈0.033/s →
+// ~9 SEKUND realnego czasu na jedną rundę → do ~4.5 minuty na bitwę. Teraz rundy płyną stałym
+// tempem realnego czasu (ROUND_INTERVAL_MS), NIEZALEŻNIE od prędkości gry — starcie to lokalny
+// spektakl odpięty od zegara galaktyki: ani instant przy 1 rok/s, ani wielominutowe przy 1 dzień/s.
+// CIV_PER_ROUND zostaje jako krok symulacji na rundę (rządzi cooldownami broni w rundach: laser
+// co 2 rundy, kinetyk co 3, rakieta co 5) — NIE bramkuje już realnego tempa.
 export const CIV_PER_ROUND = 0.3;
-export const MAX_ROUNDS_PER_TICK = 1;
+export const ROUND_INTERVAL_MS = 110;    // ~9 rund/s — szybko, ale wciąż czytelnie
+export const MAX_ROUNDS_PER_TICK = 4;    // catch-up przy spadku klatek / wysokim odświeżaniu
+
+// Celność (fix „strzały przeważnie niecelne", 2026-07-26): mnożnik do tracking. Bazowo kinetyk
+// 0.6 / rakieta 0.5 × (1−evasion) dawało ~40-55% trafień → większość pudeł. ×1.5 podnosi typowe
+// trafienia do ~70-90% (laser clampuje do 0.95); evasion kadłuba dalej różnicuje cele.
+export const HIT_CHANCE_MULT = 1.5;
+
+// Śmiertelność (druga przyczyna „walka trwa cholernie długo"): bazowe obrażenia (5/8/12) vs HP
+// kadłubów (120-350) sprawiały, że bitwa NIGDY nie kończyła się zabiciem — zawsze time-out po
+// MAX_ROUNDS. ×3 → starcia rozstrzygają się przez zniszczenie w kilku-kilkunastu rundach.
+// DSCS-local (nie dotyka orbital BattleSystem, który czyta surowe mod.stats.damage).
+export const DAMAGE_MULT = 3.0;
 
 // Deterministyczny PRNG (kopia z BattleSystem — nie eksportowane).
 function mulberry32(seed) {
@@ -320,10 +337,8 @@ export class DeepSpaceCombatSystem {
       timeline:           [],
       isActive:           true,
       seedBase:           (Math.floor(year * 10000) * 7919) & 0x7FFFFFFF,
-      // Accumulator throttle — init przy CIV_PER_ROUND aby pierwszy _tick zawsze
-      // odpalił przynajmniej jedną rundę (smoke test compat + UX: combat startuje
-      // od razu po pierwszym frame).
-      _civAcc:            CIV_PER_ROUND,
+      // Zegar tempa realnego czasu — null → pierwszy _tick odpala rundę od razu.
+      _lastRoundMs:       null,
     };
 
     this._activeEncounters.set(id, encounter);
@@ -416,21 +431,24 @@ export class DeepSpaceCombatSystem {
    * @param {number} civDy — civDeltaYears
    */
   _tick(civDy) {
-    if (civDy <= 0) return;
+    if (civDy <= 0) return;   // pauza / 0× → brak postępu (respektuje pauzę gry)
+    const now = _nowMs();
     for (const encounter of this._activeEncounters.values()) {
       if (!encounter.isActive) continue;
-      // Accumulator throttling — zapobiega instant resolve przy wysokim civDy
-      // (10r/s → civDy ~2/frame). Round fires gdy _civAcc >= CIV_PER_ROUND.
-      // MAX_ROUNDS_PER_TICK ogranicza batching (max 1 round/frame przez default).
-      if (encounter._civAcc == null) encounter._civAcc = CIV_PER_ROUND;
-      encounter._civAcc += civDy;
+      // Pacing STAŁYM tempem realnego czasu (ROUND_INTERVAL_MS), NIEZALEŻNIE od prędkości
+      // gry. Wcześniejszy akumulator civDy sprawiał, że przy 1 dzień/s (cel auto-slow!)
+      // jedna runda zajmowała ~9 s realnego czasu → bitwa ciągnęła się minutami. Teraz
+      // rundy płyną ~9/s przy każdej prędkości. MAX_ROUNDS_PER_TICK = catch-up przy
+      // spadku klatek. Determinizm WYNIKU zależy od liczby rund + seeda, nie od realnego
+      // tempa — save/load w trakcie po prostu resetuje zegar tempa.
+      if (encounter._lastRoundMs == null) encounter._lastRoundMs = now - ROUND_INTERVAL_MS;
       let roundsThisTick = 0;
       while (
         encounter.isActive &&
-        encounter._civAcc >= CIV_PER_ROUND &&
+        now - encounter._lastRoundMs >= ROUND_INTERVAL_MS &&
         roundsThisTick < MAX_ROUNDS_PER_TICK
       ) {
-        encounter._civAcc -= CIV_PER_ROUND;
+        encounter._lastRoundMs += ROUND_INTERVAL_MS;
         this._tickEncounter(encounter, CIV_PER_ROUND);
         roundsThisTick++;
       }
@@ -516,7 +534,8 @@ export class DeepSpaceCombatSystem {
               effectiveTracking *= techSys.getMultiplier(`weapon_tracking_${weapon.category}`);
             }
           }
-          const hitChance = Math.max(0.05, Math.min(0.95, effectiveTracking * (1 - tState.evasion)));
+          // Celność (fix „strzały przeważnie niecelne"): ×HIT_CHANCE_MULT + wyższy floor.
+          const hitChance = Math.max(0.10, Math.min(0.95, effectiveTracking * HIT_CHANCE_MULT * (1 - tState.evasion)));
           const hit = rng() < hitChance;
 
           if (!hit) {
@@ -531,7 +550,9 @@ export class DeepSpaceCombatSystem {
           }
 
           // Apply damage: shield absorb → armor reduce → hp.
-          let damage = weapon.damage;
+          // ×DAMAGE_MULT (fix „walka trwa cholernie długo") — starcia rozstrzygają się
+          // przez zniszczenie w kilku-kilkunastu rundach, nie przez time-out po MAX_ROUNDS.
+          let damage = weapon.damage * DAMAGE_MULT;
           let blockedByShield = 0;
           if (tState.shieldHP > 0) {
             blockedByShield = Math.min(tState.shieldHP, damage);
@@ -1302,6 +1323,14 @@ export class DeepSpaceCombatSystem {
 }
 
 // ── Module helpers (kopia z VesselCombatSystem dla symetrii) ───────────
+
+// Zegar realnego czasu (ms) — performance.now w przeglądarce, Date.now fallback (headless).
+// Pacing walki jest wizualny (nie serializowany), więc niedeterminizm nie rusza wyniku.
+function _nowMs() {
+  return (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now();
+}
 
 function _inCombatState(v) {
   const st = v.position?.state;

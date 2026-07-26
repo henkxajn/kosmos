@@ -304,32 +304,43 @@ export class RightClickMenu {
     }
 
     let anyOk = false;
-    let firstFail = null;  // { vesselId, reason } — do feedbacku gdy NIC się nie udało
+    const fails = [];  // [{ vesselId, reason }] — WSZYSTKIE pominięte (nie tylko pierwszy)
     for (const vid of ids) {
       const built = buildOrderSpec(option, target, vid);
       if (!built.ok) {
-        if (!firstFail) firstFail = { vesselId: vid, reason: built.reason };
+        fails.push({ vesselId: vid, reason: built.reason });
         continue;
       }
       // Zunifikowana ścieżka rozkazu ruchu przez OrderService (forward do MOS.issueOrder).
       const os = window.KOSMOS?.orderService;
       const result = os ? os.issueMove(vid, built.spec) : mos.issueOrder(vid, built.spec);
       if (result?.ok) anyOk = true;
-      else if (!firstFail) firstFail = { vesselId: vid, reason: result?.reason };
-      if (result && result.ok === false) {
+      else {
+        fails.push({ vesselId: vid, reason: result?.reason });
         console.warn(`[RightClickMenu] MOS.issueOrder failed (${option.orderType}, ${vid}):`, result?.reason);
       }
     }
 
-    // EventLog feedback tylko gdy ŻADEN statek nie przyjął rozkazu (mniej spamu przy multi).
-    if (!anyOk && firstFail) {
-      const reasonKey = `vessel.reason${_pascalCase(firstFail.reason ?? 'unknown')}`;
-      const reasonText = t(reasonKey);
+    // Feedback: pokaż KAŻDY pominięty statek z powodem — także gdy część floty poleciała.
+    // Wcześniej log leciał wyłącznie gdy NIC się nie udało → przy „2 z 3 poleciały" gracz
+    // nie wiedział, czemu trzeci (np. USS Enterprise bez uzbrojenia) został na orbicie.
+    if (fails.length > 0) {
+      const vm = window.KOSMOS?.vesselManager;
+      const describe = (f) => {
+        const key = `vessel.reason${_pascalCase(f.reason ?? 'unknown')}`;
+        const rt  = t(key);
+        const reason = rt !== key ? rt : (f.reason ?? 'unknown');
+        const nm = vm?.getVessel?.(f.vesselId)?.name ?? f.vesselId;
+        return `${nm} (${reason})`;
+      };
+      const skipped = fails.map(describe).join(', ');
       window.KOSMOS?.eventLogSystem?.push({
-        text: reasonText !== reasonKey ? reasonText : `Order rejected: ${firstFail.reason ?? 'unknown'}`,
+        text: anyOk
+          ? t('vessel.orderPartial', ids.length - fails.length, ids.length, skipped)
+          : t('vessel.orderNoneMoved', skipped),
         channel: 'fleet',
         severity: 'warn',
-        entityRef: firstFail.vesselId,
+        entityRef: fails[0].vesselId,
       });
     }
   }

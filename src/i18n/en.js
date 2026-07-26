@@ -651,6 +651,20 @@ export default {
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',
   'vessel.reasonVesselImmobilized': 'Vessel immobilized — fleet upkeep in arrears (fund the colony)',
+  // Attack-order (engage/pursue) rejection reasons — shown per skipped vessel
+  'vessel.reasonNoWeapons': 'unarmed (cannot attack)',
+  'vessel.reasonTargetAlreadyInRange': 'target already in range',
+  'vessel.reasonTargetNotFound': 'no target',
+  'vessel.reasonTargetIsWreck': 'target is a wreck',
+  'vessel.reasonTargetSelf': 'target is the same vessel',
+  'vessel.reasonTargetNotVessel': 'target is not a vessel',
+  'vessel.reasonOutOfRange': 'target out of range',
+  'vessel.reasonVesselNotFound': 'vessel does not exist',
+  'vessel.reasonVesselIsWreck': 'vessel is a wreck',
+  'vessel.reasonUnknown': 'order rejected',
+  // Group-order aggregate feedback (some vessels skipped)
+  'vessel.orderPartial': 'Order: {0}/{1} moved · skipped: {2}',
+  'vessel.orderNoneMoved': 'No vessel moved · {0}',
   // Identity fog-of-war — enemy vessel ghost (observatory detection = position without identity)
   'intel.unidentifiedContact': 'Unidentified contact',
   'intel.unknownEmpire': 'Unknown empire',

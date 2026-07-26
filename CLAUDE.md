@@ -1264,6 +1264,27 @@ Smoke tests: `tmp_m4_p3_smoke.mjs` (51/51 PASS consolidated) + per-commit `tmp_m
 - Pliki: `DeepSpaceCombatSystem.js`, `AutoRetreatSystem.js`, `MovementOrderSystem.js`, `MovementOrderTypes.js`, `OrderDispatcher.js`, `RightClickMenuOptions.js`, `UIManager.js`, `pl/en.js`. Bez save migration.
 - Smoke: `tmp_m4_p3_smoke.mjs` 61/61 PASS (rewrite T6 enemy retreat + 4 nowe case'y w T6 + 2 manual retreat test cases w T7).
 
+**Combat tempo + celność + feedback rozkazu grupowego (2026-07-26, bez migracji save):**
+- **Tempo walki = STAŁE tempo realnego czasu** (`DeepSpaceCombatSystem._tick`): rundy odpięte od
+  `civDeltaYears`. Wcześniej runda bramkowana akumulatorem `CIV_PER_ROUND=0.3 civY` → przy 1 dzień/s
+  (domyślna prędkość ORAZ cel auto-slow przy starciu) ~9 SEKUND realnych na rundę → do ~4.5 min na bitwę.
+  Teraz `_lastRoundMs` + `ROUND_INTERVAL_MS=110` (~9 rund/s) niezależnie od prędkości gry; `_nowMs()`
+  (performance.now / Date.now fallback). `MAX_ROUNDS_PER_TICK 1→4` (catch-up). `CIV_PER_ROUND` ZOSTAJE jako
+  krok symulacji/rundę (cooldowny broni w rundach: laser co 2, kinetyk co 3, rakieta co 5). Pacing wizualny —
+  NIE serializowany (save/load resetuje zegar); wynik deterministyczny (liczba rund + seed).
+- **Śmiertelność** `DAMAGE_MULT=3.0` (DSCS-local, nie rusza orbital BattleSystem) — bazowe obrażenia (5/8/12)
+  vs HP kadłubów (120-350) sprawiały, że bitwa NIGDY nie kończyła się zabiciem, zawsze time-out po `MAX_ROUNDS`.
+  `MAX_ROUNDS 30→20`. Teraz starcia rozstrzygają się przez zniszczenie w kilku-kilkunastu rundach (~1-2 s real).
+- **Celność** `HIT_CHANCE_MULT=1.5` + floor 0.05→0.10 (`_tickEncounter`) — kinetyk 0.6 / rakieta 0.5 ×
+  (1−evasion) dawało ~40-55% trafień (przeważnie pudła); teraz ~70-90% (laser clampuje 0.95), evasion dalej
+  różnicuje cele. Walidacja headless: 13 rund do killa (cap 20), celność 80%.
+- **Feedback rozkazu grupowego** (fix „nie wiem, czemu 1 statek nie poleciał"): fan-out rozkazu ataku do
+  wielu statków (multi-select `RightClickMenu._handleOptionClick` ORAZ flota `fleet:orderIssued` w UIManager)
+  CICHO pomijał statki odrzucone przez `MovementOrderSystem` (engage bramkuje na uzbrojeniu → `no_weapons`;
+  też `vessel_immobilized`/`target_already_in_range`), logując TYLKO gdy ŻADEN nie ruszył. Teraz KAŻDY pominięty
+  statek raportowany z nazwą + powodem (`vessel.orderPartial`/`orderNoneMoved` + brakujące `vessel.reason*` PL+EN).
+  Root: statek bez modułu broni nie może „Zaangażuj" (jedyny rozkaz ataku bramkowany bronią; „Ścigaj" nie jest).
+
 **Known issues deferred do M4 P4:**
 - Range bands cyan ring wokół player vessel w BattleView3D cinematic (range gating feedback) — backlog P6.
 - Distance label HUD per round w cinematic — backlog P6.

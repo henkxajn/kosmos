@@ -652,6 +652,20 @@ export default {
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',
   'vessel.reasonVesselImmobilized': 'Statek unieruchomiony — zaległe utrzymanie floty (opłać kolonię)',
+  // Powody odrzucenia rozkazu ataku (engage/pursue) — pokazywane per pominięty statek
+  'vessel.reasonNoWeapons': 'brak uzbrojenia (nie może zaatakować)',
+  'vessel.reasonTargetAlreadyInRange': 'cel już w zasięgu',
+  'vessel.reasonTargetNotFound': 'brak celu',
+  'vessel.reasonTargetIsWreck': 'cel to wrak',
+  'vessel.reasonTargetSelf': 'cel to ten sam statek',
+  'vessel.reasonTargetNotVessel': 'cel nie jest statkiem',
+  'vessel.reasonOutOfRange': 'cel poza zasięgiem',
+  'vessel.reasonVesselNotFound': 'statek nie istnieje',
+  'vessel.reasonVesselIsWreck': 'statek to wrak',
+  'vessel.reasonUnknown': 'rozkaz odrzucony',
+  // Zbiorczy feedback rozkazu grupowego (część statków pominięta)
+  'vessel.orderPartial': 'Rozkaz: ruszyło {0}/{1} · pominięto: {2}',
+  'vessel.orderNoneMoved': 'Żaden statek nie ruszył · {0}',
   // Fog-of-war tożsamości — ghost wrogiego statku (detekcja obserwatorium = pozycja bez tożsamości)
   'intel.unidentifiedContact': 'Niezidentyfikowany kontakt',
   'intel.unknownEmpire': 'Nieznane imperium',
