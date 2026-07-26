@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v91 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v95 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -772,6 +772,68 @@ Smoke: `tmp_holotable_cam_smoke` 19 · `tmp_stratcom_smoke` 42 (przepisany: jedn
 territory b2-b6 / obs-scan / cross-system-leak / fc-command 0 FAIL. Pliki: `StratcomGalaxyRenderer.js`,
 `FleetManagerOverlay.js`, `TerritoryField.js`, `TerritoryRenderLogic.js`, `GameConfig.js`, i18n; NEW
 `HolotableCamera.js`. Backlog: kalibracja (riser/pool/sweep), foreshortening panu, invert flags kierunku panu.
+
+---
+
+## MVP Zlecenia Transportowe (logistyka) — UKOŃCZONE (save v95, live-gate PASS, commity `5fbe873`+`5009d41` push main)
+
+Pierwszy, celowo wąski wycinek reformy logistyki (`docs/plan-gielda-ladunkowa.md`) — reszta (Giełda
+Ładunkowa, tryby Manual/Priorytetowy/Reaktywny, auto-detekcja deficytu) czeka na ocenę tej wersji light.
+Plan: `docs/plan-mvp-zlecenia-transportowe.md`. **NIE zaczynać pełnej Giełdy bez potwierdzenia gracza.**
+
+**Zachowanie:** gracz jawnie deklaruje zlecenie (ile dobra A/B, z kolonii F do T), a statki z opt-in
+„puli logistycznej" wożą to automatycznie — **przez `OrderService`, z realnym paliwem** (nie fuel-immune
+jak kurierzy AI). Zlecenie jednorazowe (po dostawie znika), FIFO, wiele statków/zlecenie.
+
+**Część A (osobny commit `e6a331c`):** zawór przepustowości handlu cywilnego — stawka `_routeGoods`
+0.3→1.8 (90%/tick) + twardy clamp `qty=min(qty, surplus)` (ochrona rezerwy 2-letniej). Nic więcej w
+`CivilianTradeSystem` nietknięte.
+
+**System `src/systems/TransportOrderSystem.js`** (`window.KOSMOS.transportOrderSystem`, instancja w
+GameScene po `orderService`, restore-hook `onRestore()` po `vesselManager.restore`):
+- Stan w `gameState.transportOrders {orders, pool, nextId}` (reactive store). Przydział statku w
+  `order.assignments[]` (NIE na Vessel — bez dual-source-of-truth jak martwy `assignedRouteId` AI).
+  Pula = osobny rejestr vesselId (opt-in, `!isEnemyVessel` → rozłączna z kurierami AI).
+- Maszyna stanów **event-driven** (`expedition:arrived`, NIE `mission:arrived` — MissionSystem emituje
+  OBA, subskrypcja obu = podwójny `_onArrival` → „kończy" haul na statku w locie): `to_origin` (pusty
+  lot/skok do źródła) → `_loadAndHaul` (mix dóbr wg wagi/cargoMax, ≤ `remaining−inFlight`) → `hauling` →
+  dostawa (MissionSystem `dockAtTarget`+`store.receive`). `_completeHaul` idempotentne przez pusty courseCargo.
+- Dispatcher FIFO (`createdYear`), anti-overshoot przez `inFlight` + rezerwację pojemności, `consumed`-set
+  (statek pominięty dla jednego zlecenia trafia do kolejnego). Cleanup na `vessel:wrecked`/`colony:destroyed`.
+  Lekki sweep `time:tick` (`SWEEP_INTERVAL_CIVYEARS=0.5`) łapie fazę `waiting` (źródło puste) + launch-retry.
+- **Cross-system (warp):** `createOrder` DOZWALA różne układy BEZ bramki tech (brak statku warp w puli →
+  zlecenie czeka). Odcinki (`_issueHaul`/`_issueEmptyToF`) celują w układ celu/źródła **live** (`_sysOf`) →
+  `OrderService` sam robi composite (skok warp→dostawa + skok powrotny przez `vessel.pendingOrder`). Dobór
+  statku `_canServe`: same-system=dowolny cargo, cross-system=**warp-capable** (`warpFuel.max>0`).
+  ⚠ **Tankowanie statków warp w puli = sprawa GRACZA** (świadomie brak automatycznej bramki round-trip;
+  bez zapasu `warp_cores` na trasie statek utyka w źródle po załadunku).
+- Kill-switch `FEATURES.transportOrders` (default ON). Kolaboratorzy leniwie przez `window.KOSMOS`.
+
+**UI (zakładka LOGISTYKA w `FleetManagerOverlay`, gated `transportOrders`):**
+- Builder (lewa, **scrollowalny** — przycisk „Utwórz" przypięty do dołu): drop-downy From/To (kolonie
+  gracza + nazwa układu; przeciwny koniec niewybieralny) + drop-down **pełnego katalogu dóbr**
+  (`_LOGI_GOOD_CATALOG` = surowce bez research/energy + wszystkie commodities) + wybrane towary z
+  `[−]/[+]/[✕]` i **ręcznym wpisaniem ilości** (DOM `<input>`, wzór `EconomyOverlay._openOneShotQtyInput`,
+  `×SCALE`, Enter/blur commit). Drop-downy wzajemnie wykluczające, wheel routowany per-panel, hit-zony
+  przycinane poza widokiem (`_clipRightHitZones`).
+- Lista zleceń (prawa, scrollowalna): paski postępu per dobro + **statki z fazą** (⇒ wiezie / → powrót /
+  ⏳ czeka / **⚡ skok warp** gdy `mission.phase==='warp_transit'`) + FIFO + anuluj. **Badge ⚡** na
+  zleceniu cross-system.
+- Toggle „w puli logistycznej" w panelu statku (`_drawActions`, obok Refuel Auto, BEZ wymogu doku).
+- Cleanup DOM inputu przy `_switchTab`/`close`.
+
+**Save v94→v95** (`_migrateV94toV95` — jawny seed `transportOrders`; cross-system BEZ migracji, układy
+live). i18n PL+EN `transportOrder.*` + `fleet.tabLogistics/addToPool/removeFromPool`.
+
+**Smoke:** `tmp_transport_orders_smoke.mjs` 53/53 (walidacja, pula+odrzucenie AI, mix dóbr, kursy,
+FIFO, anty-nadmiar, end-to-end pusty powrót, cleanup, round-trip, **T12 cross-system dobór warp + leg
+target, T13 brak warp→czeka**) + `tmp_transport_ui_render_smoke.mjs` 32/32 (drop-downy, katalog,
+qty-input, statki+fazy, badge ⚡, scroll) + regresja 0 FAIL. **3 realne bugi złapane przez smoke:**
+podwójny `expedition:arrived`/`mission:arrived`, `_drawBar` (FMO nie dziedziczy BaseOverlay), izolacja testów.
+
+**POZA zakresem (backlog, po ocenie gracza):** auto-detekcja deficytu, tryby Manual/Priorytetowy/Reaktywny,
+Giełda Ładunkowa, zdarzenia logistyczne, auto-budowa statków gdy pula pusta, handel cross-empire (osobny
+`TradeOrderBoard`/S3.5b), automatyczna bramka round-trip paliwa warp.
 
 ---
 
