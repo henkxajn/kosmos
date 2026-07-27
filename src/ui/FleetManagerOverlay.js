@@ -137,6 +137,15 @@ function _isEnemyTracked(v) {
   return _enemyVisLevel(v) === 'identified';
 }
 
+// ── Helper: ikona ciała dla list redirect (spójna: interstellar_redirect + foreign_redirect) ──
+function _redirectBodyIcon(type) {
+  return type === 'moon'      ? '🌙'
+       : type === 'planetoid' ? '🪨'
+       : type === 'asteroid'  ? '◆'
+       : type === 'comet'     ? '☄'
+       : '🪐';   // planet (i fallback)
+}
+
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['star', 'planet', 'moon', 'asteroid', 'comet', 'planetoid'];
 function _findBody(id) {
@@ -7350,18 +7359,21 @@ export class FleetManagerOverlay {
         cy += switchBtnH + 4;
       }
 
-      // Lista planet w nowym układzie — redirect
-      const planets = EntityManager.getByType('planet')?.filter(p => p.systemId === isMission.toSystemId) ?? [];
-      if (planets.length > 0) {
+      // Lista ciał w nowym układzie — redirect. WSZYSTKIE typy (planeta/księżyc/planetoida/
+      // asteroida/kometa) — backend _redirectInterstellarVessel przyjmuje dowolne ciało (_findEntity).
+      const bodies = ['planet', 'moon', 'planetoid', 'asteroid', 'comet']
+        .flatMap(tp => EntityManager.getByTypeInSystem(tp, isMission.toSystemId));
+      if (bodies.length > 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
         ctx.fillText(t('fleet.systemPlanets'), x + pad, cy + 10);
         cy += 16;
 
-        for (const planet of planets.slice(0, 6)) {
+        // Bez cap/`break` — cała lista rysowana w treść panelu; przewija ją wspólny
+        // _rightScrollY (clip + scrollbar + clip hit-zon w _finishRight). Każde ciało osiągalne.
+        for (const body of bodies) {
           const pBtnW = w - pad * 2;
           const pBtnH = 20;
-          if (cy + pBtnH > y + h - 40) break; // nie wychodź poza panel
 
           ctx.fillStyle = 'rgba(170,136,255,0.06)';
           ctx.fillRect(x + pad, cy, pBtnW, pBtnH);
@@ -7370,17 +7382,17 @@ export class FleetManagerOverlay {
           ctx.strokeRect(x + pad, cy, pBtnW, pBtnH);
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textPrimary;
-          ctx.fillText(`🪐 ${planet.name ?? planet.id}`, x + pad + 6, cy + 14);
+          ctx.fillText(`${_redirectBodyIcon(body.type)} ${body.name ?? body.id}`, x + pad + 6, cy + 14);
 
-          // Odległość od gwiazdy
+          // Odległość od statku (spójnie z listą foreign_redirect niżej; sensowna dla każdego typu)
           ctx.textAlign = 'right';
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${(planet.orbital?.a ?? 0).toFixed(1)} AU`, x + w - pad - 4, cy + 14);
+          ctx.fillText(`${this._calcDistAU(vessel, body).toFixed(1)} AU`, x + w - pad - 4, cy + 14);
           ctx.textAlign = 'left';
 
           this._hitZones.push({
             x: x + pad, y: cy, w: pBtnW, h: pBtnH,
-            type: 'interstellar_redirect', data: { vesselId: vessel.id, targetId: planet.id },
+            type: 'interstellar_redirect', data: { vesselId: vessel.id, targetId: body.id },
           });
           cy += pBtnH + 2;
         }
@@ -7526,13 +7538,15 @@ export class FleetManagerOverlay {
 
       // ── Leć do innego ciała (planety + księżyce + planetoidy w tym układzie) ──
       // Redirect (_redirectInterstellarVessel) przyjmuje dowolne ciało przez _findEntity,
-      // więc lista musi obejmować też księżyce i planetoidy — nie tylko planety. Sortujemy
-      // wg realnej odległości od statku (_calcDistAU), nie wg półosi orbity.
+      // więc lista obejmuje WSZYSTKIE typy (planeta/księżyc/planetoida/asteroida/kometa) —
+      // nie tylko planety. Sortujemy wg realnej odległości od statku (_calcDistAU), nie półosi.
       const sysId = vessel.systemId;
       const redirectBodies = [
         ...EntityManager.getByTypeInSystem('planet', sysId),
         ...EntityManager.getByTypeInSystem('moon', sysId),
         ...EntityManager.getByTypeInSystem('planetoid', sysId),
+        ...EntityManager.getByTypeInSystem('asteroid', sysId),
+        ...EntityManager.getByTypeInSystem('comet', sysId),
       ]
         .filter(b => b.id !== isMission.targetId)
         .map(b => ({ body: b, distAU: this._calcDistAU(vessel, b) }))
@@ -7543,10 +7557,10 @@ export class FleetManagerOverlay {
         ctx.fillText(t('fleet.foreignRedirect'), x + pad, cy + 10);
         cy += 16;
 
+        // Bez `break` — pełna lista przewijalna wspólnym _rightScrollY (parytet z listą wyżej).
         for (const { body: rb, distAU: rDist } of redirectBodies) {
           const pBtnH2 = 20;
-          if (cy + pBtnH2 > y + h - 40) break;
-          const rIcon = rb.type === 'moon' ? '🌙' : rb.type === 'planetoid' ? '🪨' : '🪐';
+          const rIcon = _redirectBodyIcon(rb.type);
           ctx.fillStyle = 'rgba(170,136,255,0.06)';
           ctx.fillRect(x + pad, cy, btnW, pBtnH2);
           ctx.strokeStyle = THEME.border;
