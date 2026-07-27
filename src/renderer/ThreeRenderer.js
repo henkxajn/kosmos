@@ -3052,7 +3052,7 @@ export class ThreeRenderer {
       }
     }
     if (b.energyCost) html += `<br><span style="color:#ffdd44">⚡ -${b.energyCost} energy/rok</span>`;
-    if (b.popCost) html += `<br>👤 ${b.popCost} POP`;
+    if (b.jobs) html += `<br>👤 ${b.jobs} POP`;
     if (b.housing) html += `<br>🏠 +${b.housing} housing`;
 
     this._showColonyTooltipEl(html, sx, sy);

@@ -473,9 +473,9 @@ export class RandomEventSystem {
         if (entry.housing > 0 && bSys.civSystem) {
           bSys.civSystem.removeHousing(entry.housing, !!entry.building?.isHabitat);
         }
-        const popCost = entry.popCost ?? 0;
-        if (popCost > 0 && bSys.civSystem) {
-          bSys.civSystem.changeEmployment(-popCost);
+        const jobs = entry.jobs ?? 0;   // Population 2.0: employment w `jobs` (×4)
+        if (jobs > 0 && bSys.civSystem) {
+          bSys.civSystem.changeEmployment(-jobs);
         }
         bSys._active.delete(activeKey);
       }

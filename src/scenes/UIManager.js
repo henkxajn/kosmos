@@ -2465,7 +2465,7 @@ export class UIManager {
       }
     }
     lines.push({ type: 'separator' });
-    const costStr = formatCost(b.cost, b.popCost, b.commodityCost);
+    const costStr = formatCost(b.cost, b.jobs, b.commodityCost);   // Population 2.0: pokaż etaty (jobs), nie popCost
     if (costStr) lines.push({ type: 'line', text: `Koszt: ${costStr}`, color: C.yellow });
     if (b.energyCost > 0) lines.push({ type: 'line', text: `⚡ Energia: -${b.energyCost}/r`, color: C.orange });
     if (b.housing > 0) lines.push({ type: 'line', text: `Mieszkania: +${b.housing} POPów`, color: C.green });

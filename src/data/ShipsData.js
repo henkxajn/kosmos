@@ -152,3 +152,9 @@ export const SHIPS = {
   },
 
 };
+
+// Population 2.0 (Faza 1): crewCost ×4 (redenominacja jednostek POP). Liczone RAZ
+// przy ładowaniu modułu (DRY) — legacy statki (science/cargo/supply) też skalują załogę.
+for (const s of Object.values(SHIPS)) {
+  if (typeof s.crewCost === 'number') s.crewCost *= 4;
+}

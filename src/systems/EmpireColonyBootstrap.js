@@ -243,7 +243,7 @@ export class EmpireColonyBootstrap {
     if (!empire) throw new Error(`[bootstrapColony] imperium ${empireId} nie istnieje`);
 
     // 2. Defaults + walidacja parametrów startowych
-    const startPop = options.startPop ?? { laborer: 1, worker: 1 };
+    const startPop = options.startPop ?? { laborer: 4, worker: 4 };   // Population 2.0: ×4 (było 1/1)
     const startResources = { ...(options.startResources ?? { food: 200, water: 200 }) };
     const startBuildings = Array.isArray(options.startBuildings)
       ? options.startBuildings

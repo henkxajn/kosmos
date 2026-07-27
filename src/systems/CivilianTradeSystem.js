@@ -216,7 +216,7 @@ export class CivilianTradeSystem {
     const prosperity = colony.prosperitySystem?.prosperity ?? 50;
 
     // Bazowe TC z populacji + prosperity
-    let tc = 200 * pop + Math.floor(prosperity / 20) * 50;
+    let tc = 50 * pop + Math.floor(prosperity / 20) * 50;   // Population 2.0: 200→50 (÷4, pop ×4)
 
     // Bonus z budynków trade_hub
     tc += this._getBuildingBonus(colony, 'tcBonus');

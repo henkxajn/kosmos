@@ -260,7 +260,7 @@ export const SHIP_MODULES = {
     mass: 20,  // tony — life support
     cost: { Ti: 20, Fe: 30 },
     commodityCost: { pressure_modules: 4, compact_bioreactor: 2 },
-    stats: { colonistCapacity: 1.0, enablesMissions: ['colony'] },
+    stats: { colonistCapacity: 4.0, enablesMissions: ['colony'] },   // Population 2.0: ×4 (było 1.0)
     requires: 'colonization',
     description: 'Ciśnieniowy moduł dla 1 POP kolonistów.',
     descEN: 'Pressurized module for 1 POP of colonists.',
@@ -276,7 +276,7 @@ export const SHIP_MODULES = {
     mass: 25,  // tony
     cost: { Ti: 30, Fe: 40 },
     commodityCost: { pressure_modules: 6, electronic_systems: 3 },
-    stats: { colonistCapacity: 3.0, enablesMissions: ['colony'] },
+    stats: { colonistCapacity: 12.0, enablesMissions: ['colony'] },   // Population 2.0: ×4 (było 3.0)
     requires: 'cryogenics',
     description: '3 POP w hibernacji kriogenicznej.',
     descEN: '3 POP in cryogenic hibernation.',
@@ -295,7 +295,7 @@ export const SHIP_MODULES = {
     mass: 8,   // tony — lekka kabina ciśnieniowa
     cost: { Fe: 20, Ti: 8 },
     commodityCost: { pressure_modules: 2 },
-    stats: { colonistCapacity: 1 },   // 1 POP pasażera — reuse vessel.colonists (bez zakładania kolonii)
+    stats: { colonistCapacity: 4 },   // Population 2.0: ×4 (było 1) — pasażer = 1 stary POP = 4 nowe jednostki
     requires: null,
     description: 'Kabina ciśnieniowa dla 1 pasażera (POP). Przewóz ludności — bez zakładania kolonii.',
     descEN: 'Pressurized cabin for 1 passenger (POP). Population transport — without founding a colony.',

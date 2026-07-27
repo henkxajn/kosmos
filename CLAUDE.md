@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v95 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v96 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -774,6 +774,94 @@ territory b2-b6 / obs-scan / cross-system-leak / fc-command 0 FAIL. Pliki: `Stra
 `HolotableCamera.js`. Backlog: kalibracja (riser/pool/sweep), foreshortening panu, invert flags kierunku panu.
 
 ---
+
+## Population 2.0 — Faza 1: jednostki całkowite + wzrost logistyczny + satysfakcja + rekalibracja prosperity (save v96, live-gate PENDING)
+
+Pierwsza faza redesignu populacji (`docs/POPULATION_REDESIGN.md` — źródło prawdy: §2.5/3.1/3.5/3.6/7).
+Reszta (zatrudnienie/bezrobocie/płace/slider = Faza 2, ekonomia = Faza 3, droidy = Faza 4) czeka. **NIE
+zaczynać Fazy 2 bez potwierdzenia.**
+
+**Redenominacja ×4 (jednostka POP przedefiniowana; agregat NIEZMIENIONY — Decision 2 „pełna"):**
+- Populacja ×4 (migracja `strata.count`; starty: `DEFAULT_POP 2→8`, Power Test 48, GameCore 16, CombatSandbox,
+  SpawnTestEnemy, EmpireStrategy/Bootstrap), housing budynków ×4 (`BuildingsData` augment loop: colony_base
+  16 / habitat 12 / launch_pad 4 / arcology 32 / orbital_habitat 80), `POP_CONSUMPTION ÷4` (food 0.625 / water
+  0.375 / energy 0.25). Colonist ×4 (`SHIP_MODULES` colonistCapacity), crewCost ×4 (`HullsData`/`ShipsData`
+  augment loops), `GROUND_UNIT_POP_COSTS`/`SURGE_POP_COST` ×4, MissionSystem crew consts (EXPEDITION/COLONY/
+  RECON) ×4. Balans: pop×4 × per-pop÷4 = to samo.
+- **`popCost → jobs`** (całkowite etaty, AUTORYTATYWNE): `BuildingsData` augment `jobs = popCost×4`
+  (trade_union_hall 0.4→1). `BuildingSystem` czyta `jobs` w CAŁEJ logice zatrudnienia/demand/gating
+  (`getSlotDemand`, `_getBuildingLaborEfficiency`, `installSynthetic`, build/upgrade/downgrade/demolish,
+  `restoreFromSave` totalJobs, `entry.jobs`); `popCost`/`entry.popCost` ZOSTAJE tylko jako pole serialize
+  (backward compat, NIEczytane przez logikę). Zewnętrzne modyfikatory zatrudnienia (`ImpactDamageSystem`,
+  `RandomEventSystem`) też przełączone na `entry.jobs` (inaczej desync ×4). UI kosztu POP budynku (UIManager/
+  ColonyOverlay/ThreeRenderer) pokazuje `jobs` (całkowite) zamiast ułamka.
+
+**Model (§2.5, desync-proof):** `population` zostaje getterem `Σ strata.count`; NOWY getter
+`humans = population + _growthProgress` (float). Inwariant `floor(humans)=Σ strata` Z KONSTRUKCJI (brak
+drugiego zapisu totalu). Wzrost akumuluje `_growthProgress` (reużyty, martwy przed); pełna jednostka →
+`addPop` (Faza 1 placeholder `_assignNewPopStrata`: max niezaspokojony demand, inaczej laborer, PHASE2_TODO).
+
+**Wzrost logistyczny (§3.1, `CivilizationSystem._computeLogisticGrowth`/`_updateLogisticGrowth`):**
+`growth = 0.04 × prosperityGrowthMult × planetMod × humans × (1 − humans/capacity)`. `planetMod` z pasm
+temp/atmo/grav (`PopulationData.planetGrowthMod`, iloczyn clamp 0.6–1.0, ideał breathable+moderate+normal
+= 1.0 baza, reużycie `EnvironmentBands`).
+**Decision 1: capacity = Σ housing (skończony — dotyczy TAKŻE macierzystej)**; bramka non-breathable (hard
+cap na `effectiveHabitatHousing`) ZACHOWANA. Stare `_updateStrataGrowth`/`_updatePopGrowth` = martwe (nie wołane).
+
+**Satysfakcja kolonii (§3.5, NOWE `civSystem.satisfaction` 0-100):** `clamp(50 + 40×(1−unemp×3) −
+15×crowding + tax, 0, 100)`; Faza 1 `unemploymentRate=0` (PHASE2_TODO), `crowding=max(0, humans/cap−0.85)/0.15`.
+Dren podatkowy wydzielony do `ConsumerGoodsData.taxSatisfactionDrain` (reużyty przez `_calcSatisfaction` +
+satysfakcję — jedno źródło progów, zero importu system↔system).
+
+**Prosperity — rekalibracja (§3.6, 3 chirurgiczne zmiany, reszta NIETKNIĘTA):** (1) warstwa infrastructure →
+`civSystem.satisfaction/100`; (2) GAMMA `target = 100×(raw/100)^1.5` PO wszystkich modyfikatorach (events/
+tech/trade/faction), PRZED inercją; (3) inercja 0.15→0.08/rok. Efekt: zawyżone prosperity ze starych save
+samo dryfuje w dół.
+
+**Save v95→v96** (`_migrateV95toV96`): `col.civ.strata.count ×4` + `col.buildings[].housing ×4` +
+population/housing/habitatHousing ×4 + `satisfaction=50`. `jobs` z ŻYWEJ definicji budynku przy restore (nie
+w save); konsumpcja÷4 to zmiana danych. Poza tym format bez zmian.
+
+**UI (minimum Fazy 1):** `displayPopulation → floor(humans)`; ColonyOverlay nagłówek
+`POP: floor(humans)/capacity  ☺ satisfaction%`. Pełna zakładka Workforce = Faza 2.
+
+**Pliki:** NEW `src/data/PopulationData.js`; edycje `CivilizationSystem`, `ProsperitySystem`, `BuildingSystem`,
+`BuildingsData`, `ResourcesData`, `ConsumerGoodsData`, `SaveMigration`, `ShipModulesData`, `HullsData`,
+`ShipsData`, `ColonyManager`, `MissionSystem`, `EmpireStrategySystem`/`EmpireColonyBootstrap`/`CombatSandbox`/
+`SpawnTestEnemy`/`GameScene`/`GameCore`, `ImpactDamageSystem`, `RandomEventSystem`, `UIManager`/`ColonyOverlay`/
+`ThreeRenderer`. i18n bez zmian (readout `POP`/`☺` neutralne). Legacy `PlanetScene` (nigdy nie otwierany) NIE
+tknięty — czyta stary `popCost` w martwym UI.
+
+**Testy:** `tmp_pop2_migration_smoke` 19 (migracja+neutralność konsumpcji/kolonizacji/rekrutacji) ·
+`tmp_pop2_growth_smoke` 8 (krzywa logistyczna + gate non-breathable) · `tmp_pop2_prosperity_smoke` 5 (inercja
+0.08 + GAMMA decay + math); regr colony-auto-expander (fixture'y ×4; T13 → nowy sygnał `humans`; 1 FAIL
+pre-existing — well/waterless), bootstrap 33, breathable-home 23, save-restore-ai 18, transport 56, s34c 28 +
+inne 0 FAIL. **Live-gate PENDING (użytkownik).**
+
+**Re-gate FIX (po 1. live-gate — domknięcie redenominacji + growth/home UI):** live-gate złapał NIEPEŁNĄ
+redenominację POZA `POP_CONSUMPTION`. Doskalowane (÷4 lub ×4, WSZYSTKIE site'y — grep raw-pop): survival
+needs (`ProsperitySystem` food 3.0→0.75, water 1.5→0.375), consumer `BASE_DEMAND` ÷4 (`ProsperitySystem`
+popyt/satysfakcja + `FactorySystem` cel produkcji — jedno źródło), `maturityFactor` popFactor /15→/60 +
+distFactor gate pop<15→<60, `epochScore` totalPop/5→/20, `CIV_EPOCHS` minPop ×4 (40/120/320),
+`CivilianTradeSystem` TC 200→50×pop, `ColonyManager` tax 5→1.25×pop + max ground units /4→/16 + „mała
+kolonia" pop≤2→≤8, `PopulationOverlay` display ÷4, debug TC mirror. **AI/faction/war — ZERO progów pop**
+(grep czysty; test-boty NIE skalowane — Faza 5 balans). planetMod: breathable 1.2→**1.0** (ideał=baza) →
+growth breathable = `0.04 × humans × (1−h/K)` (weryfikacja: humans=48, cap=160 → **1.344/rok cyw., RAZ na
+rok cywilny** — potwierdzone testem kadencji). **Home cap UI:** `effectiveHousing` NIE zwraca już ∞ na
+macierzystej (Decision 1 — home capowana Σ housing) → wszystkie UI (TopBar/Outliner/PopOverlay/NavPeek)
+pokazują skończony humans/capacity; ∞ zniknął.
+**Growth display (re-gate #2):** JEDYNA metryka `CivilizationSystem.getAnnualGrowth()` (float z
+`_computeLogisticGrowth` PRZED promocją, JEDNOSTKI POP/rok — NIE mieszkańcy); legacy `populationGrowthRate`
+USUNIĘTE, `_lastGrowth` (binarny flag) MARTWY. Root-cause „+0/rok": `_fmtInhab`/`_fmtPop`/`fmtPeople`
+(round(n) dla n<1000) zaokrąglały pop-unit float (0.2→„0") na TopBar/PopulationOverlay/NavPeek → teraz
+`.toFixed(1)` (jednostki POP) WSZĘDZIE; ColonyOverlay nagłówek `+n.n/rok`. „0" = kolonia w capie (build habitaty).
+Testy: migration **29** (+10 neutralność demand/survival/maturity/epoch/CIV_EPOCHS), growth **12** (+cadence
++getAnnualGrowth), prosperity 5; regr 0 FAIL (auto-expander 74/1 = pre-existing well/waterless). **Re-gate PENDING.**
+
+**Świadomie POZA zakresem Fazy 1 (PHASE2_TODO):** zatrudnienie/bezrobocie/płace/pressure/slider, zakładka
+Workforce, `_assignNewPopStrata` pełna alokacja, przeskalowanie zewnętrznych locków (crew/expedition/ground)
+na całkowite jobs (dziś ×4 ułamkowo — spójne skalą), test-boty (RuleBot/MCTSBot/EvoBot) progi pop, droidy
+tier-1 (`automation_droid`).
 
 ## MVP Zlecenia Transportowe (logistyka) — UKOŃCZONE (save v95, live-gate PASS, commity `5fbe873`+`5009d41` push main)
 

@@ -281,6 +281,12 @@ export const HULLS = {
   },
 };
 
+// Population 2.0 (Faza 1): crewCost ×4 (redenominacja jednostek POP). Liczone RAZ
+// przy ładowaniu modułu (DRY) — utrzymuje relatywny koszt załogi względem populacji ×4.
+for (const h of Object.values(HULLS)) {
+  if (typeof h.crewCost === 'number') h.crewCost *= 4;
+}
+
 // ── Pomocnik: zlicz sloty wg typu ────────────────────────────────────────────
 export function getSlotCounts(hullId) {
   const hull = HULLS[hullId];

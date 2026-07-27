@@ -31,7 +31,7 @@ export const SANDBOX_ENEMY_ID = 'emp_sandbox_enemy';
 // ── Konfiguracja deterministyczna ─────────────────────────────────
 
 const START_YEAR = 5;                    // unika pierwszych ticków systemów 4X
-const PLAYER_POPULATION = 6;
+const PLAYER_POPULATION = 24;   // Population 2.0: ×4 redenominacja (było 6)
 const ENEMY_POPULATION = 4;
 
 // Layout startowy gracza — minimalny żeby ekonomia nie tonęła od razu

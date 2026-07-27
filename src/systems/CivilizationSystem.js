@@ -37,17 +37,23 @@ import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { MOVEMENT_TYPES, IDENTITY_WEIGHTS, RESOLUTION_OPTIONS } from '../data/MovementsData.js';
 import { MILESTONE_DEFINITIONS, MILESTONE_BY_TYPE, CULTURAL_TRAITS } from '../data/MilestonesData.js';
+// Population 2.0 (Faza 1) — stałe wzrostu/satysfakcji + reużyty dren podatkowy
+import {
+  BASE_GROWTH_RATE, planetGrowthMod,
+  SAT_BASE, SAT_W_EMP, SAT_K_UNEMP, SAT_W_CROWD, SAT_CROWD_START, SAT_CROWD_SPAN, SAT_W_TAX,
+} from '../data/PopulationData.js';
+import { taxSatisfactionDrain } from '../data/ConsumerGoodsData.js';
 
 // ── Epoki cywilizacyjne (progi POPowe) ──────────────────────────────────────
 export const CIV_EPOCHS = [
-  { id: 0, namePL: 'Pierwotna',    key: 'epoch.primitive',      minPop:  0 },
-  { id: 1, namePL: 'Industrialna', key: 'epoch.industrial',     minPop: 10 },
-  { id: 2, namePL: 'Kosmiczna',    key: 'epoch.space',          minPop: 30 },
-  { id: 3, namePL: 'Międzyplan.',  key: 'epoch.interplanetary', minPop: 80 },
+  { id: 0, namePL: 'Pierwotna',    key: 'epoch.primitive',      minPop:   0 },
+  { id: 1, namePL: 'Industrialna', key: 'epoch.industrial',     minPop:  40 },  // Population 2.0: ×4 (było 10)
+  { id: 2, namePL: 'Kosmiczna',    key: 'epoch.space',          minPop: 120 },  // ×4 (było 30)
+  { id: 3, namePL: 'Międzyplan.',  key: 'epoch.interplanetary', minPop: 320 },  // ×4 (było 80)
 ];
 
 // ── Stałe populacji POP ─────────────────────────────────────────────────────
-const DEFAULT_POP      = 2;    // startowa liczba POPów
+const DEFAULT_POP      = 8;    // startowa liczba POPów (Population 2.0: ×4 redenominacja, było 2)
 const DEFAULT_HOUSING  = 0;    // housing pochodzi wyłącznie z budynków (colony_base = 4)
 export const POP_PER_BUILDING = 0.25;  // domyślny koszt POP na budynek
 
@@ -128,7 +134,8 @@ export class CivilizationSystem {
     this._snapCache = null;
 
     // ── System POP ──────────────────────────────────────────────────────
-    this._growthProgress  = 0;     // akumulator wzrostu 0.0–1.0
+    this._growthProgress  = 0;     // Population 2.0: ułamek `humans` (floor(humans)=Σ strata, §2.5)
+    this.satisfaction     = 50;    // Population 2.0 §3.5: satysfakcja kolonii 0-100 → prosperity infra
     this._starvationYears = 0;     // licznik lat głodu
     this._employedPops    = 0;     // POPy zatrudnione przez budynki
     this._lockedPerStrata = {};    // POPy zablokowane per strata (załogi statków itp.)
@@ -463,6 +470,9 @@ export class CivilizationSystem {
     return sum;
   }
 
+  /** Population 2.0: kanoniczna liczba ludzi (float). floor(humans)=Σ strata (§2.5). */
+  get humans() { return this.population + this._growthProgress; }
+
   /** Setter safety-net: przechwytuje stare przypisania `civSystem.population = X` */
   set population(val) {
     this.setPopulation(val);
@@ -541,9 +551,9 @@ export class CivilizationSystem {
     return this.planet && this.planet === window.KOSMOS?.homePlanet;
   }
 
-  /** Efektywny housing — ∞ na planecie macierzystej */
+  /** Efektywny housing = Σ housing. Population 2.0 (Decision 1): macierzysta NIE ma już
+   *  nieograniczonego housingu — wzrost capowany przez Σ housing jak wszędzie (skończony). */
   get effectiveHousing() {
-    if (this.isHomePlanet) return Infinity;
     return this.housing;
   }
 
@@ -590,23 +600,20 @@ export class CivilizationSystem {
 
   // ── Wyświetlanie populacji (1 POP = 100,000 mieszkańców) ────────────────
 
-  /** Populacja wyświetlana jako liczba mieszkańców */
+  /** Population 2.0: wyświetlana populacja = floor(humans) (jednostki POP, bez ułamków). */
   get displayPopulation() {
-    let total = 0;
-    for (const s of Object.values(this.strata)) {
-      total += s.count + s.growthProgress;
-    }
-    return Math.round(total * 100_000);
+    return Math.floor(this.humans);
   }
 
-  /** Tempo wzrostu w mieszkańcach/rok (suma per-strata rates) */
-  get populationGrowthRate() {
+  /**
+   * JEDYNA metryka tempa wzrostu (Population 2.0): float z `_computeLogisticGrowth` PRZED
+   * promocją do całkowitych jednostek, w JEDNOSTKACH POP / rok cywilny (NIE mieszkańcy — bez
+   * konwersji ×100k). WSZYSTKIE UI czytają TO. Legacy `populationGrowthRate` USUNIĘTE,
+   * `_lastGrowth` (binarny flag born>0?1:0) MARTWY — nie mylić z tempem.
+   */
+  getAnnualGrowth() {
     if (this.population <= 0) return 0;
-    let totalRate = 0;
-    for (const type of STRATA_TYPES) {
-      totalRate += this._calcStrataGrowthRate(type);
-    }
-    return Math.round(totalRate * 100_000);
+    return this._computeLogisticGrowth();
   }
 
   /** Breakdown strat do UI */
@@ -631,7 +638,7 @@ export class CivilizationSystem {
         icon:         n.icon,
         count:        s.count,
         satisfaction: Math.round(s.satisfaction),
-        displayPop:   Math.round((s.count + s.growthProgress) * 100_000),
+        displayPop:   s.count,   // Population 2.0: jednostki POP (bez ×100k)
       });
     }
     return result;
@@ -689,6 +696,7 @@ export class CivilizationSystem {
       habitatHousing:       this.habitatHousing,   // diagnostyka; restore przelicza z budynków
       epochIndex:           this.epochIndex,
       growthProgress:       this._growthProgress,
+      satisfaction:         this.satisfaction,
       starvationYears:      this._starvationYears,
       employedPops:         this._employedPops,
       lockedPops:           this._lockedPops,           // backward compat (sum)
@@ -736,6 +744,7 @@ export class CivilizationSystem {
 
     this.epochIndex           = data.epochIndex           ?? 0;
     this._growthProgress      = data.growthProgress       ?? 0;
+    this.satisfaction         = data.satisfaction         ?? 50;
     this._starvationYears     = data.starvationYears      ?? 0;
     // employedPops ustawiane na 0 — zostanie ponownie obliczone przez BuildingSystem.restoreFromSave()
     // lockedPerStrata przywracane z save (EventBus guard blokuje emisję z ExpeditionSystem.restore())
@@ -782,11 +791,12 @@ export class CivilizationSystem {
     // Cache resource ratios raz na yearly update (unika wielokrotnego obliczania)
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
 
-    // 0. Satisfakcja per-strata (przed wzrostem — wpływa na satMult)
+    // 0. Satisfakcja per-strata (loyalty) + kolonii (Population 2.0 §3.5 → prosperity)
     this._updateStrataSatisfaction();
+    this._updateSatisfaction();
 
-    // 1. Wzrost populacji per-strata (demand-based)
-    this._updateStrataGrowth();
+    // 1. Wzrost populacji — logistyczny na `humans` (Population 2.0 §3.1)
+    this._updateLogisticGrowth();
 
     // 2. Śmierć POPa (głód) — przekaż cached foodRatio
     this._updatePopDeath(foodRatio);
@@ -1088,7 +1098,8 @@ export class CivilizationSystem {
     return 0.5;
   }
 
-  /** Aktualizacja wzrostu per-strata (zastępuje stary akumulator) */
+  /** DEAD (Population 2.0): wzrost przeniesiony do _updateLogisticGrowth. Nie wołane
+   *  z _yearlyUpdate; zostawione na wypadek rollbacku. */
   _updateStrataGrowth() {
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
@@ -1117,6 +1128,72 @@ export class CivilizationSystem {
       }
     }
     this._lastGrowth = anyBorn ? 1 : 0;
+  }
+
+  // ── Population 2.0: wzrost logistyczny + satysfakcja kolonii ─────────────
+
+  /** Growth/rok wg logistyki (§3.1) — bez mutacji. Capacity = Σ housing (Decision 1). */
+  _computeLogisticGrowth() {
+    // Bramka non-breathable ZACHOWANA: bez dedykowanych habitatów brak wzrostu.
+    const canLiveOutside = (this.planet?.atmosphere ?? 'breathable') === 'breathable';
+    if (!canLiveOutside && this.population >= this.effectiveHabitatHousing) return 0;
+
+    const capacity = this.housing;              // Σ housing wszystkich budynków (skończony)
+    const humans = this.humans;
+    if (capacity <= 0 || humans >= capacity) return 0;
+
+    const prosperityMult = window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0;
+    const factionMult    = window.KOSMOS?.factionSystem?.getModifier?.('popGrowth') ?? 1.0;
+    const rate = BASE_GROWTH_RATE * prosperityMult * planetGrowthMod(this.planet) * factionMult;
+    return Math.max(0, rate * humans * (1 - humans / capacity));
+  }
+
+  /** Wzrost logistyczny — akrecja do `_growthProgress`; pełna jednostka → nowy POP. */
+  _updateLogisticGrowth() {
+    const growth = this._computeLogisticGrowth();
+    if (growth <= 0) { this._lastGrowth = 0; return; }
+    this._growthProgress += growth;
+    let born = 0, guard = 0;
+    while (this._growthProgress >= 1.0 && guard++ < 10000) {
+      this._growthProgress -= 1.0;
+      const type = this._assignNewPopStrata();
+      this.addPop(type);
+      born++;
+      if (window.KOSMOS?.civSystem === this) {
+        EventBus.emit('civ:popBorn', {
+          population: this.population, strataType: type,
+          planetId: this._colonyId, colonyName: this.planet?.name ?? 'kolonia',
+        });
+      }
+    }
+    this._lastGrowth = born > 0 ? 1 : 0;
+  }
+
+  /**
+   * Przydział nowego POPa do straty. PHASE2_TODO: Faza 2 zastąpi to pełną
+   * alokacją dwustopniową (demand + pressure). Faza 1: strata z największym
+   * niezaspokojonym demandem, inaczej laborer (placeholder).
+   */
+  _assignNewPopStrata() {
+    let best = 'laborer', bestDeficit = 0;
+    for (const type of STRATA_TYPES) {
+      const deficit = (this.buildingSystem?.getSlotDemand?.(type) ?? 0) - this.strata[type].count;
+      if (deficit > bestDeficit) { bestDeficit = deficit; best = type; }
+    }
+    return best;
+  }
+
+  /** Satysfakcja kolonii (0-100, §3.5) — zasila warstwę infrastructure prosperity. */
+  _updateSatisfaction() {
+    const capacity = Math.max(1, this.housing);
+    const crowding = Math.max(0, this.humans / capacity - SAT_CROWD_START) / SAT_CROWD_SPAN;
+    const unemploymentRate = 0;   // PHASE2_TODO: realne bezrobocie w Fazie 2
+    const taxEffect = -taxSatisfactionDrain(window.KOSMOS?.colonyManager?.taxRate ?? 0.08) * SAT_W_TAX;
+    const raw = SAT_BASE
+              + SAT_W_EMP * (1 - unemploymentRate * SAT_K_UNEMP)
+              - SAT_W_CROWD * crowding
+              + taxEffect;
+    this.satisfaction = Math.max(0, Math.min(100, raw));
   }
 
   /** Aktualizacja satisfakcji per-strata (co rok cywilny) */
@@ -1508,9 +1585,9 @@ export class CivilizationSystem {
     return {
       population:        this.population,
       displayPopulation: this.displayPopulation,
-      growthRate:        this.populationGrowthRate,
+      growthRate:        this.getAnnualGrowth(),
       housing:           this.effectiveHousing,
-      growth:            this._lastGrowth,
+      growth:            this._lastGrowth,   // DEAD: binarny flag (born>0?1:0), NIE tempo — użyj growthRate
       growthProgress:    this._growthProgress,
       freePops:          this.freePops,
       employedPops:      this._employedPops,

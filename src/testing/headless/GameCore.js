@@ -236,7 +236,7 @@ export class GameCore {
     if (this._scenario === 'civilization_boosted') {
       // Nowa Gra 2 — boosted start: odblokuj techy + postaw dodatkowe budynki
       this._setupBoostedTechs();
-      this.civSystem.setPopulation(4);
+      this.civSystem.setPopulation(16);   // Population 2.0: ×4 redenominacja (było 4)
       this._autoPlaceBoostedBuildings(grid);
     } else {
       this._autoPlaceStarterBuildings(grid);

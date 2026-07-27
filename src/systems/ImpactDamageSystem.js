@@ -247,10 +247,10 @@ export class ImpactDamageSystem {
         civSystem.housing = Math.max(0, civSystem.housing - entry.housing);
       }
 
-      // Zwolnij POPy (employment)
-      const popCost = entry.popCost ?? entry.building?.popCost ?? 0.25;
-      if (popCost > 0) {
-        civSystem._employedPops = Math.max(0, civSystem._employedPops - popCost);
+      // Zwolnij etaty (employment). Population 2.0: employment liczone w `jobs` (×4).
+      const jobs = entry.jobs ?? entry.building?.jobs ?? 0;
+      if (jobs > 0) {
+        civSystem._employedPops = Math.max(0, civSystem._employedPops - jobs);
       }
 
       // Fabryka: przelicz punkty

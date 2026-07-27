@@ -1033,12 +1033,15 @@ export class ColonyOverlay extends BaseOverlay {
     // (ekran stacji ma własny nagłówek z załogą/energią) — nie mieszaj danych kolonii i stacji.
     if (!this._stationMode) {
       const civ = colony.civSystem;
-      const pop = civ?.population ?? 0;
-      const housing = civ?.housing ?? 0;
+      // Population 2.0: floor(humans)/capacity + satysfakcja (§3.5). Pełna zakładka Workforce = Faza 2.
+      const pop = Math.floor(civ?.humans ?? civ?.population ?? 0);
+      const capacity = civ?.housing ?? 0;
+      const sat = Math.round(civ?.satisfaction ?? 50);
+      const growth = civ?.getAnnualGrowth?.() ?? 0;   // Population 2.0: wzrost logistyczny (jednostki POP/rok, §3.1)
       ctx.textBaseline = 'alphabetic';
       ctx.font = `11px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
-      ctx.fillText(`POP: ${pop}/${housing}`, ox + 14, oy + 38);
+      ctx.fillText(`POP: ${pop}/${capacity}  +${growth.toFixed(1)}/rok  ☺ ${sat}%`, ox + 14, oy + 38);
     }
   }
 
@@ -2754,7 +2757,7 @@ export class ColonyOverlay extends BaseOverlay {
       // Maintenance
       if (b.maintenance && Object.keys(b.maintenance).length > 0) h += 13 + Object.keys(b.maintenance).length * 14;
       if (b.energyCost) h += 14;
-      if (b.popCost) h += 14;
+      if (b.jobs) h += 14;
       if (b.housing) h += 14;
       h += 8 + 28 + 6; // separator + buttons
       if (b.maxLevel && (tile.buildingLevel ?? 1) < b.maxLevel) h += 28;
@@ -2917,10 +2920,10 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillText(`⚡ -${b.energyCost} energy/rok`, x + 8, cy); cy += 14;
       }
 
-      // POP
-      if (b.popCost) {
+      // POP (etaty — Population 2.0)
+      if (b.jobs) {
         ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(`👤 ${b.popCost} POP`, x + 8, cy); cy += 14;
+        ctx.fillText(`👤 ${b.jobs} POP`, x + 8, cy); cy += 14;
       }
 
       // Housing
@@ -3885,7 +3888,7 @@ export class ColonyOverlay extends BaseOverlay {
             }
           }
         }
-        if (bd.popCost) html += `<br>👤 ${bd.popCost} POP/szt`;
+        if (bd.jobs) html += `<br>👤 ${bd.jobs} POP/szt`;
         if (bd.housing) html += ` 🏠 +${bd.housing}`;
         this._showTooltip(html, x * _UI_SCALE, y * _UI_SCALE);
       }
@@ -3935,7 +3938,7 @@ export class ColonyOverlay extends BaseOverlay {
             `<span style="color:${v > 0 ? '#8f8' : '#f88'}">${v > 0 ? '+' : ''}${v} ${k}</span>`
           ).join(' ');
         }
-        if (bd.popCost) html += `<br>👤 ${bd.popCost} POP`;
+        if (bd.jobs) html += `<br>👤 ${bd.jobs} POP`;
         if (bd.housing) html += `<br>🏠 +${bd.housing} housing`;
         this._showTooltip(html, x * _UI_SCALE, y * _UI_SCALE);
       }

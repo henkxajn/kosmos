@@ -276,7 +276,7 @@ const civ7 = new CivilizationSystem({}, techRealT7, planet); civ7.resourceSystem
 const bSys7 = new BuildingSystem(res7, civ7, techRealT7); civ7.buildingSystem = bSys7;
 bSys7._grid = grid7; bSys7._gridHeight = grid7.height; bSys7.setDeposits?.([]);
 const fact7 = new FactorySystem(res7); bSys7.setFactorySystem(fact7);
-civ7.population = 40;  // dużo POP → upgrade rusza (underConstruction)
+civ7.population = 160;  // dużo POP → upgrade rusza (Population 2.0: ×4 redenominacja, było 40)
 
 // Pre-stawienie startingBuildings (jak bootstrap: instant, stamp grid tile).
 const placeBootstrap = (bid, count, terrains) => {
@@ -504,17 +504,17 @@ const civ13 = new CivilizationSystem({}, techReal13, planetThin); civ13.resource
 const bSys13 = new BuildingSystem(res13, civ13, techReal13); civ13.buildingSystem = bSys13;
 bSys13._grid = grid13; bSys13._gridHeight = grid13.height; bSys13.setDeposits?.([]);
 const fact13 = new FactorySystem(res13); bSys13.setFactorySystem(fact13);
-civ13.population    = 8;
-civ13.housing       = 8;   // cap: pop === housing
-civ13.habitatHousing = 8;  // 8 POP w habitatach → cap wzrostu (non-breathable gate'owany habitatami)
-civ13._employedPops = 8;   // wszystkie POP zatrudnione → freePops = 0 (deadlock przed fixem)
+civ13.population    = 32;  // Population 2.0: ×4 redenominacja (było 8)
+civ13.housing       = 32;  // cap: pop === housing (×4)
+civ13.habitatHousing = 32; // 32 POP w habitatach → cap wzrostu (non-breathable gate'owany habitatami)
+civ13._employedPops = 32;  // wszystkie POP zatrudnione → freePops = 0 (deadlock przed fixem)
 const colony13 = { planetId:'p13', ownerEmpireId:'e13', isOutpost:false, planet:planetThin,
   resourceSystem:res13, civSystem:civ13, buildingSystem:bSys13, factorySystem:fact13 };
 colonyRef.c = colony13;   // expander zarządza tą kolonią
 window.KOSMOS.civMode = true;  // CivilizationSystem._update early-returnuje gdy !civMode (linia ~739)
 
 ok('warunek startowy: freePops === 0', civ13.freePops === 0);
-ok('warunek startowy: effectiveHousing === 8', civ13.effectiveHousing === 8);
+ok('warunek startowy: effectiveHousing === 32', civ13.effectiveHousing === 32);
 
 // Spójność rebalansu: wszystkie czyste budynki mieszkalne (kategoria 'population')
 // mają popCost=0 — nie zatrudniają POP, więc nie blokują się w housing cap.
@@ -535,23 +535,22 @@ for (let i = 0; i < 5; i++) {
 const habitat13 = expander._countBuilding(colony13, 'habitat');
 console.log(`    habitat _active=${habitat13}, effectiveHousing=${civ13.effectiveHousing}, freePops=${civ13.freePops}`);
 ok('habitat wszedł do _active (deadlock rozbity)', habitat13 > 0);
-ok('housing wzrosło > 8 (habitat dodał miejsca)', civ13.effectiveHousing > 8);
+ok('housing wzrosło > 32 (habitat dodał miejsca)', civ13.effectiveHousing > 32);
 ok('freePops nadal === 0 (habitat NIE zatrudnia — popCost 0)', civ13.freePops === 0);
 
-// Po odblokowaniu housing wzrost populacji może ruszyć: tikuj dalej i sprawdź,
-// że strata growthProgress > 0 (housing > pop → _updateStrataGrowth nie early-returnuje).
-// UWAGA: globalny _growthProgress to legacy (path _updatePopGrowth nieaktywny);
-// realny wzrost akumuluje się per-strata (strata[type].growthProgress).
-for (let i = 0; i < 5; i++) {
+// Po odblokowaniu housing wzrost populacji może ruszyć: tikuj dalej i sprawdź, że
+// `humans` rośnie. Population 2.0: wzrost logistyczny akumuluje się w globalnym
+// _growthProgress (floor(humans)=Σ strata), NIE w per-strata growthProgress.
+const humansBefore13 = civ13.humans;
+for (let i = 0; i < 8; i++) {
   gt13 += 0.25;
   window.KOSMOS.timeSystem.gameTime = gt13;
   EventBus.emit('time:tick', { deltaYears: 0.25, civDeltaYears: 3, gameTime: gt13, multiplier: 3 });
   res13.receive(startResources);
 }
-const totalGrowthProgress = Object.values(civ13.strata).reduce((s, st) => s + (st.growthProgress ?? 0), 0);
-console.log(`    Σ strata growthProgress=${totalGrowthProgress.toFixed(3)} (habitatHousing ${civ13.effectiveHabitatHousing} > pop ${civ13.population})`);
+console.log(`    humans ${humansBefore13.toFixed(2)}→${civ13.humans.toFixed(2)} (habitatHousing ${civ13.effectiveHabitatHousing} > pop ${civ13.population})`);
 ok('habitatHousing > pop po dobudowaniu habitatu', civ13.effectiveHabitatHousing > civ13.population);
-ok('wzrost populacji odblokowany (Σ strata growthProgress > 0)', totalGrowthProgress > 0);
+ok('wzrost populacji odblokowany (humans wzrosło)', civ13.humans > humansBefore13);
 
 // ── T14: _syncGridFromActive — stempluje buildingId/level z _active (#3) ──────
 // Budynek aktywowany BEZ stempla grid (ścieżka AutoExpandera: _build buildTime>0 →

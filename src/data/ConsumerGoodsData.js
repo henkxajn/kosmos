@@ -2,10 +2,13 @@
 // Dane popytu na dobra konsumpcyjne - używane przez ProsperitySystem
 // 3 dobra: basic_supplies (functioning), civilian_goods (comfort), neurostimulants (luxury)
 
+// Population 2.0 (Faza 1): wartości ÷4 (redenominacja — populacja ×4, więc per-nowy-POP
+// popyt ÷4 → agregat per-stara-jednostkę NIEZMIENIONY; symetrycznie do POP_CONSUMPTION).
+// Czytane przez ProsperitySystem (popyt/satysfakcja) I FactorySystem (cel produkcji) — jedno źródło.
 export const BASE_DEMAND = {
-    basic_supplies:   0.15,  // per POP per rok
-    civilian_goods:   0.12,
-    neurostimulants:  0.08,
+    basic_supplies:   0.0375,  // per POP per rok (było 0.15)
+    civilian_goods:   0.03,    // (było 0.12)
+    neurostimulants:  0.02,    // (było 0.08)
 };
 
 // Mnożniki temperatury planety (temperatureC)
@@ -74,3 +77,14 @@ export const PROSPERITY_EFFECTS = [
     { maxProsperity: 80,  growthMult: 1.0, researchMult: 1.05, crisisRisk: false },
     { maxProsperity: 100, growthMult: 1.2, researchMult: 1.1, crisisRisk: false },
 ];
+
+// Wpływ podatków na satysfakcję/konsumpcję — piecewise „dren" (0 = neutralny).
+// Population 2.0 (Faza 1): wydzielone z ProsperitySystem._calcSatisfaction (było
+// inline), by CivilizationSystem._updateSatisfaction reużył TYCH SAMYCH progów
+// bez duplikacji i bez importu systemu. Zwrot: <0 = bonus (niski podatek),
+// >0 = kara (wysoki podatek); zakres ~[-0.10, +0.40].
+export function taxSatisfactionDrain(taxRate) {
+    return taxRate <= 0.05 ? -(0.05 - taxRate) * 2   // bonus 0→0.10 (niski podatek)
+         : taxRate <= 0.12 ? 0                         // strefa neutralna
+         : (taxRate - 0.12) / 0.13 * 0.40;            // kara 0→0.40 (wysoki podatek)
+}

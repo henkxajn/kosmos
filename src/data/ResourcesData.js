@@ -58,9 +58,12 @@ for (const [id, def] of Object.entries(ALL_RESOURCES)) {
 export const BASE_MINE_RATE = 10; // jednostek surowca / rok / poziom kopalni przy richness=1.0
 
 // ── Konsumpcja POP per rok ─────────────────────────────────────────────────
+// Population 2.0 (Faza 1): wartości ÷4 względem starego systemu (food 2.5→0.625,
+// water 1.5→0.375, energy 1.0→0.25). Populacja jest teraz ×4 (redenominacja
+// POP_UNIT_SCALE), więc AGREGAT konsumpcji = pop×4 × per-pop÷4 = niezmieniony.
 export const POP_CONSUMPTION = {
-  food:   2.5,  // z farm lub Food Synthesizers (obniżone z 3.0 — szerszy margines)
-  water:  1.5,  // ze studni
-  energy: 1.0,  // z bilansu energii (flow)
+  food:   0.625,  // z farm lub Food Synthesizers
+  water:  0.375,  // ze studni
+  energy: 0.25,   // z bilansu energii (flow)
 };
 

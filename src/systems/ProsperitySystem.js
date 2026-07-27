@@ -23,8 +23,13 @@ import {
   SATISFACTION_THRESHOLDS,
   LAYER_GOODS,
   PROSPERITY_EFFECTS,
+  taxSatisfactionDrain,
 } from '../data/ConsumerGoodsData.js';
 import { gravityBand, temperatureBand } from '../data/EnvironmentBands.js';
+
+// Population 2.0 (Faza 1) §3.6: rekalibracja prosperity
+const PROSPERITY_GAMMA   = 1.5;   // malejące przyrosty u góry: target = 100×(raw/100)^GAMMA
+const PROSPERITY_INERTIA = 0.08;  // pościg za target (było 0.15)
 
 export class ProsperitySystem {
   constructor(resourceSystem, civSystem, techSystem, planet) {
@@ -133,8 +138,13 @@ export class ProsperitySystem {
       this.targetProsperity = Math.max(0, Math.min(100, this.targetProsperity * factionProsMult));
     }
 
-    // 5. Zastosuj inercję: prosperity dąży do target
-    const delta = (this.targetProsperity - this.prosperity) * 0.15;
+    // 4f. GAMMA (Population 2.0 §3.6) — malejące przyrosty u góry, PO wszystkich
+    //     modyfikatorach (events/tech/trade/faction), PRZED inercją/clampem.
+    const rawTarget = Math.max(0, Math.min(100, this.targetProsperity));
+    this.targetProsperity = 100 * Math.pow(rawTarget / 100, PROSPERITY_GAMMA);
+
+    // 5. Zastosuj inercję: prosperity dąży do target (wolniejszy pościg — §3.6)
+    const delta = (this.targetProsperity - this.prosperity) * PROSPERITY_INERTIA;
     this.prosperity = Math.max(0, Math.min(100, this.prosperity + delta));
 
     // 6. Zarejestruj konsumpcję i produkcję w ResourceSystem
@@ -223,12 +233,12 @@ export class ProsperitySystem {
     // Rośnie do 1.0: ageFactor osiąga 1.0 po ~53 latach
     const ageFactor = Math.min(1.0, 0.3 + (age / 75));
 
-    // popFactor: 0.3 przy pop=0, 1.0 przy pop>=10.5
-    const popFactor = Math.min(1.0, 0.3 + (pop / 15));
+    // popFactor: 0.3 przy pop=0, 1.0 przy pop>=42 (Population 2.0: /15→/60, pop ×4)
+    const popFactor = Math.min(1.0, 0.3 + (pop / 60));
 
     // Odległość od macierzystej — hamuje TYLKO młode/małe kolonie
     let distFactor = 1.0;
-    if (pop < 15 && this.prosperity < 50) {
+    if (pop < 60 && this.prosperity < 50) {   // Population 2.0: ×4 (było 15)
       const dist = this._getDistanceFromHome();
       distFactor = Math.max(0.6, 1.0 - dist * 0.03);
     }
@@ -314,12 +324,10 @@ export class ProsperitySystem {
         ratio = production / demand;
       }
 
-      // Podatki obcinają efektywną konsumpcję — rząd zabiera część dóbr
+      // Podatki obcinają efektywną konsumpcję — rząd zabiera część dóbr.
+      // Population 2.0: reużyty wspólny helper (ConsumerGoodsData) — jedno źródło progów.
       const taxRate = window.KOSMOS?.colonyManager?.taxRate ?? 0.08;
-      const taxDrain = taxRate <= 0.05 ? -(0.05 - taxRate) * 2   // bonus 0→0.10
-                     : taxRate <= 0.12 ? 0                         // strefa neutralna
-                     : (taxRate - 0.12) / 0.13 * 0.40;            // kara 0→0.40
-      ratio *= (1 - taxDrain);
+      ratio *= (1 - taxSatisfactionDrain(taxRate));
 
       this._satisfaction[goodId] = this._ratioToSatisfaction(ratio);
     }
@@ -379,10 +387,10 @@ export class ProsperitySystem {
     // Food
     const foodStock = this.resourceSystem?.inventory?.get('food') ?? 0;
     const foodRate = this._getPerYear('food');
-    // UWAGA: 3.0 ≠ POP_CONSUMPTION.food (2.5) — rozjazd historyczny
-    // (food obniżone 3.0→2.5, ten próg nie). NIE "naprawiać" bez
-    // playtestu balansu — ROADMAP "rebalans prosperity threshold".
-    const foodNeed = pop * 3.0;
+    // UWAGA: 0.75 ≠ POP_CONSUMPTION.food (0.625) — rozjazd historyczny ZACHOWANY
+    // (Population 2.0: oba ÷4 z 3.0/2.5; per-old-pop need niezmieniony). NIE "naprawiać"
+    // różnicy bez playtestu balansu — ROADMAP "rebalans prosperity threshold".
+    const foodNeed = pop * 0.75;   // ÷4 redenominacja (było 3.0)
     if (foodNeed > 0) {
       total += this._ratioToSatisfaction((foodStock + Math.max(0, foodRate)) / foodNeed);
       count++;
@@ -391,7 +399,7 @@ export class ProsperitySystem {
     // Water
     const waterStock = this.resourceSystem?.inventory?.get('water') ?? 0;
     const waterRate = this._getPerYear('water');
-    const waterNeed = pop * 1.5;  // POP_CONSUMPTION.water
+    const waterNeed = pop * 0.375;  // Population 2.0: ÷4 (było 1.5; = POP_CONSUMPTION.water)
     if (waterNeed > 0) {
       total += this._ratioToSatisfaction((waterStock + Math.max(0, waterRate)) / waterNeed);
       count++;
@@ -409,21 +417,10 @@ export class ProsperitySystem {
   }
 
   _calcInfrastructureSatisfaction() {
-    const pop = this.civSystem?.population ?? 1;
-    const housing = this.civSystem?.housing ?? 0;
-    const employed = this.civSystem?.employedPops ?? 0;
-    const locked = this.civSystem?.lockedPops ?? 0;
-
-    // Housing ratio
-    const housingRatio = pop > 0 ? housing / pop : 1.0;
-    const housingSat = this._ratioToSatisfaction(housingRatio);
-
-    // Employment — freePops > 0 to dobrze (nie ma przeludnienia bezrobotnych)
-    const totalNeeded = employed + locked;
-    const empRatio = pop > 0 ? Math.min(1.5, pop / Math.max(1, totalNeeded)) : 1.0;
-    const empSat = this._ratioToSatisfaction(empRatio);
-
-    return (housingSat + empSat) / 2;
+    // Population 2.0 §3.6: wnętrze warstwy infrastructure ZASTĄPIONE satysfakcją
+    // kolonii (§3.5, liczoną w CivilizationSystem._updateSatisfaction). Housing +
+    // employment są już objęte w satisfaction (crowding + — Faza 2 — bezrobocie).
+    return (this.civSystem?.satisfaction ?? 50) / 100;
   }
 
   _calcLayerSatisfaction(layerKey) {
@@ -586,7 +583,7 @@ export class ProsperitySystem {
     const avgProsperity = this.prosperity;
     const totalPop = this.civSystem?.population ?? 0;
 
-    this.epochScore = techPoints + Math.floor(avgProsperity / 10) * 15 + Math.floor(totalPop / 5) * 10;
+    this.epochScore = techPoints + Math.floor(avgProsperity / 10) * 15 + Math.floor(totalPop / 20) * 10;   // Population 2.0: /5→/20 (pop ×4)
   }
 
   // ── Metody publiczne ────────────────────────────────────────────────────

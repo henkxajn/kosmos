@@ -99,8 +99,8 @@ function _civilization() {
   for (const c of full) if (_colonyCrisis(c)) crisisCount++;
   for (const c of shown) {
     const civ = c.civSystem;
-    const pop = civ?.population ?? 0, free = civ?.freePops ?? 0, growth = civ?.populationGrowthRate ?? 0;
-    rows.push(kv(_cut(c.name, 12), `${fmtDec(pop, 0, loc)}P · ${fmtDec(free, 1, loc)}fr · +${fmtPeople(growth, loc)}`, 'normal'));
+    const pop = civ?.population ?? 0, free = civ?.freePops ?? 0, growth = civ?.getAnnualGrowth?.() ?? 0;
+    rows.push(kv(_cut(c.name, 12), `${fmtDec(pop, 0, loc)}P · ${fmtDec(free, 1, loc)}fr · +${fmtDec(growth, 1, loc)}`, 'normal'));
     const crisis = _colonyCrisis(c);
     if (crisis) rows.push(alert(`${_cut(c.name, 10)}: ${crisis.text}`, crisis.tone));
   }

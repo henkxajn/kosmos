@@ -37,9 +37,9 @@ const COLONY_LAUNCH_COST   = { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 };
 const RECON_COST           = { Fe: 10 };
 const MIN_TRAVEL_YEARS     = 0.008; // ~3 dni gry
 const MIN_COLONY_TRAVEL    = 0.02;  // ~7 dni gry
-const EXPEDITION_CREW_COST = 0.5;
-const COLONY_CREW_COST     = 2.0;
-const RECON_CREW_COST      = 0.5;
+const EXPEDITION_CREW_COST = 2.0;   // Population 2.0: ×4 (było 0.5)
+const COLONY_CREW_COST     = 8.0;   // Population 2.0: ×4 (było 2.0)
+const RECON_CREW_COST      = 2.0;   // Population 2.0: ×4 (było 0.5)
 const BASE_DISASTER_CHANCE = 2.0;   // % — bazowe ryzyko katastrofy (było 5%)
 const MIN_DISASTER_CHANCE  = 0.1;   // % — minimum (nigdy nie spada do zera)
 const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
@@ -1733,7 +1733,7 @@ export class MissionSystem {
       // fallback do minimum 2 POP — out-of-thin-air, ale tylko dla starych misji.
       const arrivingVessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
       const colonistsLoaded = arrivingVessel?.colonists ?? 0;
-      const startPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(2, exp.crewCost ?? 2);
+      const startPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(8, exp.crewCost ?? 8);  // Population 2.0: ×4 floor
       colMgr.upgradeOutpostToColony(exp.targetId, startPop);
 
       // Postaw stolicę (colony_base) — daje housing i status pełnej kolonii
@@ -1818,7 +1818,7 @@ export class MissionSystem {
     // Załadowani koloniści ze statku (loadColonists w UI fizycznie usuwa POPy ze źródła).
     // Brak kolonistów (legacy save w locie): fallback do min 2 POP — out-of-thin-air,
     // ale tylko dla starych misji.
-    const newColonyStartPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(2, exp.crewCost ?? 2);
+    const newColonyStartPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(8, exp.crewCost ?? 8);  // Population 2.0: ×4 floor
 
     this._emit('expedition:colonyFounded', null, {
       expedition:     exp,
@@ -2189,7 +2189,7 @@ export class MissionSystem {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr   = window.KOSMOS?.vesselManager;
     const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
-    const colonists    = vessel?.colonists ?? exp.colonists ?? 1;
+    const colonists    = vessel?.colonists ?? exp.colonists ?? 4;   // Population 2.0: ×4 (było 1)
     const firstArrival = exp.status !== 'no_housing';   // retry NIE dokuje ponownie (już zadokowany)
 
     // Cel = STACJA: mutuj encję LIVE (kopia z _findTarget nie ma getterów popCapacity ani nie mutuje pop).

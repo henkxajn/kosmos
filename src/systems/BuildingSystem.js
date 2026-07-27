@@ -51,7 +51,7 @@ export class BuildingSystem {
     this.techSystem     = techSystem;
 
     // Rejestr aktywnych producentów:
-    //   tileKey → { building, baseRates, effectiveRates, housing, popCost, level }
+    //   tileKey → { building, baseRates, effectiveRates, housing, popCost, jobs, level }
     this._active = new Map();
 
     // Kolejka budowy:
@@ -245,8 +245,8 @@ export class BuildingSystem {
     let demand = 0;
     for (const entry of this._active.values()) {
       const pType = entry.building?.popType ?? 'laborer';
-      if (pType === strataType && entry.popCost > 0) {
-        demand += entry.popCost * entry.level;
+      if (pType === strataType && (entry.jobs ?? 0) > 0) {
+        demand += entry.jobs * entry.level;
       }
     }
     return demand;
@@ -256,7 +256,7 @@ export class BuildingSystem {
   getMineEfficiency() {
     let total = 0, active = 0;
     for (const entry of this._active.values()) {
-      if (entry.building?.isMine && entry.popCost > 0) {
+      if (entry.building?.isMine && (entry.jobs ?? 0) > 0) {
         total++;
         // Kopalnia jest aktywna jeśli ma pracowników (nie ma syntheticSlot i empPenalty < 1)
         active++;
@@ -283,7 +283,7 @@ export class BuildingSystem {
     let total = 0, running = 0;
     for (const entry of this._active.values()) {
       const req = entry.building?.requires;
-      if (req && entry.popCost > 0) {
+      if (req && (entry.jobs ?? 0) > 0) {
         total++;
         running++;  // na razie zakładamy 100% uptime — Faza 6 doda real check
       }
@@ -306,8 +306,8 @@ export class BuildingSystem {
     const entry = this._active.get(tileKey);
     if (!entry) return { success: false, reason: 'no_building' };
 
-    // Sprawdź czy budynek akceptuje syntetyki (musi mieć popCost > 0 i nie być autonomiczny)
-    if (entry.building.isAutonomous || entry.popCost === 0) {
+    // Sprawdź czy budynek akceptuje syntetyki (musi mieć jobs > 0 i nie być autonomiczny)
+    if (entry.building.isAutonomous || (entry.jobs ?? 0) === 0) {
       return { success: false, reason: 'autonomous_building' };
     }
 
@@ -395,23 +395,25 @@ export class BuildingSystem {
       this._factorySystem.setTotalPoints(this._factorySystem.totalPoints + 1);
     }
 
-    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
+    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);  // oryginał (serialize compat)
+    const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);                     // Population 2.0: etaty (×4)
 
     // Zapamiętaj aktywny budynek
     this._active.set(activeKey, {
       building, baseRates, effectiveRates,
       housing: building.housing,
       popCost,
+      jobs,
       level,
       producerId,
     });
 
     // Zatrudnienie (pomiń w outpost) — bezpośrednio na własnym civSystem
-    if (popCost > 0 && !this._isOutpost && this.civSystem) {
+    if (jobs > 0 && !this._isOutpost && this.civSystem) {
       // Konwertuj wolnego POPa z innej strata jeśli brakuje w wymaganej
       const pType = building.popType ?? 'laborer';
-      this.civSystem.convertToStrata(pType, popCost);
-      this.civSystem.changeEmployment(popCost);
+      this.civSystem.convertToStrata(pType, jobs);
+      this.civSystem.changeEmployment(jobs);
     }
 
     // Invaliduj cache mine level jeśli zbudowano kopalnię
@@ -522,7 +524,7 @@ export class BuildingSystem {
 
     // Outpost: tylko budynki autonomiczne (popCost=0 lub isAutonomous)
     if (this._isOutpost && !isCapital && !building.isSpaceport) {
-      const isAllowedOnOutpost = building.isAutonomous || building.popCost === 0;
+      const isAllowedOnOutpost = building.isAutonomous || (building.jobs ?? 0) === 0;
       if (!isAllowedOnOutpost) {
         EventBus.emit('planet:buildResult', {
           success: false, tile,
@@ -564,7 +566,7 @@ export class BuildingSystem {
     }
 
     // Surcharge Si na ekstremalnych planetach (brak atmo, gorąco, zimno)
-    if (this._isPlanetExtreme() && building.popCost > 0 && !building.isAutonomous) {
+    if (this._isPlanetExtreme() && (building.jobs ?? 0) > 0 && !building.isAutonomous) {
       actualCost.Si = (actualCost.Si || 0) + 5;
     }
 
@@ -594,8 +596,9 @@ export class BuildingSystem {
 
     // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
+    const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);
     const canAffordResources = !(this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost));
-    const hasFreePops = !(popCost > 0 && this.civSystem && this.civSystem.freePops < popCost);
+    const hasFreePops = !(jobs > 0 && this.civSystem && this.civSystem.freePops < jobs);
 
     if (!canAffordResources || !hasFreePops) {
       const tileKey = tile.key;
@@ -604,6 +607,7 @@ export class BuildingSystem {
         buildingId,
         cost: { ...actualCost },
         popCost,
+        jobs,
         isUpgrade: false,
         targetLevel: null,
         tileR: tile.r,
@@ -710,8 +714,9 @@ export class BuildingSystem {
 
     // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (entry.popCost ?? building.popCost ?? POP_PER_BUILDING);
+    const jobs    = this._isOutpost ? 0 : (entry.jobs ?? building.jobs ?? 0);
     const canAffordUpgrade = !(this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost));
-    const hasFreePopsUpg = !(popCost > 0 && this.civSystem && this.civSystem.freePops < popCost);
+    const hasFreePopsUpg = !(jobs > 0 && this.civSystem && this.civSystem.freePops < jobs);
 
     if (!canAffordUpgrade || !hasFreePopsUpg) {
       const tileKey = tile.key;
@@ -720,6 +725,7 @@ export class BuildingSystem {
         buildingId: building.id,
         cost: { ...upgradeCost },
         popCost,
+        jobs,
         isUpgrade: true,
         targetLevel: nextLevel,
         tileR: tile.r,
@@ -758,17 +764,17 @@ export class BuildingSystem {
     }
 
     // Natychmiastowy upgrade (buildTime === 0)
-    this._applyUpgrade(tile, entry, building, nextLevel, popCost);
+    this._applyUpgrade(tile, entry, building, nextLevel, jobs);
     EventBus.emit('planet:upgradeResult', { success: true, tile, level: nextLevel });
   }
 
   // Wspólna logika natychmiastowego ulepszenia
-  _applyUpgrade(tile, entry, building, nextLevel, popCost) {
-    // Zatrudnienie — upgrade wymaga dodatkowego POPa (bezpośrednio)
-    if (popCost > 0 && this.civSystem) {
+  _applyUpgrade(tile, entry, building, nextLevel, jobs) {
+    // Zatrudnienie — upgrade wymaga dodatkowych etatów (bezpośrednio)
+    if (jobs > 0 && this.civSystem) {
       const pType = building.popType ?? 'laborer';
-      this.civSystem.convertToStrata(pType, popCost);
-      this.civSystem.changeEmployment(popCost);
+      this.civSystem.convertToStrata(pType, jobs);
+      this.civSystem.changeEmployment(jobs);
     }
 
     // Aktualizuj level
@@ -939,9 +945,9 @@ export class BuildingSystem {
       }
 
       // Zwolnij POPy za obniżony poziom (bezpośrednio)
-      const downgradePop = entry.popCost ?? building?.popCost ?? POP_PER_BUILDING;
-      if (downgradePop > 0 && this.civSystem) {
-        this.civSystem.changeEmployment(-downgradePop);
+      const downgradeJobs = entry.jobs ?? building?.jobs ?? 0;
+      if (downgradeJobs > 0 && this.civSystem) {
+        this.civSystem.changeEmployment(-downgradeJobs);
       }
 
       // Invaliduj cache mine level jeśli rozebrano kopalnię
@@ -990,9 +996,9 @@ export class BuildingSystem {
     }
 
     // Zwolnij POPy (bezpośrednio)
-    const popCost = entry?.popCost ?? building?.popCost ?? POP_PER_BUILDING;
-    if (popCost > 0 && this.civSystem) {
-      this.civSystem.changeEmployment(-popCost);
+    const jobs = entry?.jobs ?? building?.jobs ?? 0;
+    if (jobs > 0 && this.civSystem) {
+      this.civSystem.changeEmployment(-jobs);
     }
 
     // Invaliduj cache mine level jeśli rozebrano kopalnię
@@ -1036,11 +1042,11 @@ export class BuildingSystem {
         if (activeEntry) {
           const building = activeEntry.building;
           const nextLevel = entry.targetLevel ?? (activeEntry.level + 1);
-          const popCost = activeEntry.popCost ?? building?.popCost ?? POP_PER_BUILDING;
+          const jobs = activeEntry.jobs ?? building?.jobs ?? 0;
 
           // Użyj tile-like do _applyUpgrade
           const tileLike = { key: tileKey, r: entry.tileR, type: entry.tileType, buildingLevel: activeEntry.level, buildingId: building.id };
-          this._applyUpgrade(tileLike, activeEntry, building, nextLevel, popCost);
+          this._applyUpgrade(tileLike, activeEntry, building, nextLevel, jobs);
         }
       } else {
         // Nowa budowa zakończona — aktywuj budynek
@@ -1072,7 +1078,7 @@ export class BuildingSystem {
       if (hasKeys(order.cost) && !this.resourceSystem?.canAfford(order.cost)) continue;
 
       // Sprawdź POPy (re-check po każdym fulfillment)
-      const neededPop = order.popCost ?? 0;
+      const neededPop = order.jobs ?? Math.round((order.popCost ?? 0) * 4);  // Population 2.0: etaty (fallback: stary pending ×4)
       if (neededPop > 0 && this.civSystem && this.civSystem.freePops < neededPop) continue;
 
       // ── Fulfill — usuń z pending, pobierz koszt, uruchom budowę ──
@@ -1293,7 +1299,7 @@ export class BuildingSystem {
   // ── Przywracanie zapisanego stanu ───────────────────────────────────────
 
   restoreFromSave(buildings) {
-    let totalPopCost = 0;
+    let totalJobs = 0;
     let totalHousing = 0;
     let totalHabitatHousing = 0;   // tylko dedykowane habitaty (isHabitat) — limit wzrostu non-breathable
 
@@ -1309,7 +1315,8 @@ export class BuildingSystem {
 
       const activeKey  = isCapital ? (b.tileKey.startsWith('capital_') ? b.tileKey : `capital_${b.tileKey}`) : b.tileKey;
       const producerId = isCapital ? `capital_${b.tileKey.replace('capital_', '')}` : `building_${b.tileKey}`;
-      const popCost    = this._isOutpost ? 0 : (b.popCost ?? building.popCost ?? POP_PER_BUILDING);
+      const popCost    = this._isOutpost ? 0 : (b.popCost ?? building.popCost ?? POP_PER_BUILDING);  // oryginał (compat)
+      const jobs       = this._isOutpost ? 0 : (building.jobs ?? 0);  // Population 2.0: z żywej definicji (stare+nowe save → ×4)
       const housing    = b.housing || 0;
 
       if (hasKeys(effectiveRates) && this.resourceSystem) {
@@ -1319,18 +1326,19 @@ export class BuildingSystem {
         building, baseRates, effectiveRates,
         housing,
         popCost,
+        jobs,
         level,
         producerId,
       });
-      totalPopCost += popCost * level;
+      totalJobs += jobs * level;
       totalHousing += housing;  // housing już skumulowany (per-level) w serialize()
       if (building.isHabitat) totalHabitatHousing += housing;
     }
 
     if (this.civSystem) {
       // Przelicz zatrudnienie z budynków
-      if (totalPopCost > 0) {
-        this.civSystem._employedPops = Math.max(0, this.civSystem._employedPops + totalPopCost);
+      if (totalJobs > 0) {
+        this.civSystem._employedPops = Math.max(0, this.civSystem._employedPops + totalJobs);
       }
       // Przelicz housing z budynków (analogicznie — bezpośrednio, nie przez EventBus)
       if (totalHousing > 0) {
@@ -1366,6 +1374,7 @@ export class BuildingSystem {
         building, baseRates, effectiveRates,
         housing: building.housing,
         popCost: building.popCost ?? POP_PER_BUILDING,
+        jobs: building.jobs ?? 0,
         level,
         producerId,
       });
@@ -1650,8 +1659,8 @@ export class BuildingSystem {
   /** Per-budynkowe labor efficiency oparte o matching strata type lub syntheticSlot */
   _getBuildingLaborEfficiency(building, tileKey = null) {
     if (!building || !this.civSystem?.strata) return 1.0;
-    // Autonomiczne / popCost=0 → pełna wydajność
-    if (building.isAutonomous || building.popCost === 0) return 1.0;
+    // Autonomiczne / jobs=0 → pełna wydajność
+    if (building.isAutonomous || (building.jobs ?? 0) === 0) return 1.0;
     // Singularność: tech allBuildingsAutonomous
     if (this.techSystem?.isAllAutonomous?.()) return 1.0;
 
@@ -1678,7 +1687,7 @@ export class BuildingSystem {
     // Per-budynkowe labor efficiency (zamiast globalnego employmentPenalty)
     const empPenalty = this._getBuildingLaborEfficiency(building, tileKey);
 
-    const isAutonomous = building.isAutonomous || building.popCost === 0;
+    const isAutonomous = building.isAutonomous || (building.jobs ?? 0) === 0;
     const isSingularity = this.techSystem?.isAllAutonomous?.() ?? false;
 
     // Adjacency bonus (Etap 38) — mnożnik produkcji z sąsiadów tej samej kategorii

@@ -150,7 +150,7 @@ export class PopulationOverlay extends BaseOverlay {
 
     const totalPop = colonies.reduce((s, c) => s + (c.civSystem?.population ?? 0), 0);
     const totalDispPop = colonies.reduce((s, c) => s + (c.civSystem?.displayPopulation ?? 0), 0);
-    const totalGrowthRate = colonies.reduce((s, c) => s + (c.civSystem?.populationGrowthRate ?? 0), 0);
+    const totalGrowthRate = colonies.reduce((s, c) => s + (c.civSystem?.getAnnualGrowth?.() ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(t('popPanel.summary', colonies.length, _fmtInhab(totalDispPop)), x + pad, y + 32);
@@ -168,7 +168,7 @@ export class PopulationOverlay extends BaseOverlay {
 
     const stats = [
       { label: t('popPanel.totalPop'), value: _fmtInhab(totalDispPop), color: THEME.textPrimary },
-      { label: t('popPanel.growthPerYear'),  value: `+${_fmtInhab(totalGrowthRate)}/yr`, color: THEME.success },
+      { label: t('popPanel.growthPerYear'),  value: `+${totalGrowthRate.toFixed(1)}/yr`, color: THEME.success },   // Population 2.0: jednostki POP (bez ×100k)
       { label: t('popPanel.avgProsperity'),  value: `${avgProsperity}`, color: avgProsperity > 60 ? THEME.success : avgProsperity > 30 ? THEME.warning : THEME.danger },
       { label: t('popPanel.housingSlots'), value: `${totalPop}/${totalHousing === Infinity ? '∞' : totalHousing} POP`, color: THEME.textPrimary },
     ];
@@ -239,9 +239,9 @@ export class PopulationOverlay extends BaseOverlay {
       const barColor = pct >= 1 ? THEME.danger : pct >= 0.8 ? THEME.warning : THEME.success;
       this._drawBar(ctx, barX, barY, barW, 3, Math.min(1, pct), barColor, THEME.border);
 
-      // Wzrost delta (mieszkańcy/rok)
-      const growthRate = civ?.populationGrowthRate ?? 0;
-      const growthStr = growthRate > 0 ? `+${_fmtInhab(growthRate)}/yr` : '0/yr';
+      // Wzrost delta (jednostki POP/rok — Population 2.0, bez konwersji na mieszkańców)
+      const growthRate = civ?.getAnnualGrowth?.() ?? 0;
+      const growthStr = growthRate > 0 ? `+${growthRate.toFixed(1)}/yr` : '0/yr';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = growthRate > 0 ? THEME.success : THEME.textDim;
       ctx.textAlign = 'right';
@@ -1094,9 +1094,9 @@ export class PopulationOverlay extends BaseOverlay {
     }
 
     // Konsumpcja per POP per rok
-    const foodCons  = pop * 3.0;
-    const waterCons = pop * 1.5;
-    const energyCons = pop * 1.0;
+    const foodCons  = pop * 0.75;   // Population 2.0: ÷4 (redenominacja — pop ×4)
+    const waterCons = pop * 0.375;
+    const energyCons = pop * 0.25;
 
     // Produkcja / zapas
     const foodAmt = (rs.getAmount?.('food') ?? rs.inventory?.get?.('food') ?? 0);

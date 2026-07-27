@@ -991,11 +991,11 @@ export class ColonyManager {
     ground_supply_unit: { structural_alloys: 5, electronic_systems: 3 },
   };
 
-  // POP cost (zawsze 'laborer' — rekruci z wolnej populacji)
+  // POP cost (zawsze 'laborer' — rekruci z wolnej populacji). Population 2.0: ×4 redenominacja.
   static GROUND_UNIT_POP_COSTS = {
-    shock_infantry: 0.15, garrison_unit: 0.30, rocket_artillery: 0.40,
-    aa_platform: 0.30, medic_unit: 0.25, recon_drone: 0.00,
-    ground_supply_unit: 0.30,
+    shock_infantry: 0.60, garrison_unit: 1.20, rocket_artillery: 1.60,
+    aa_platform: 1.20, medic_unit: 1.00, recon_drone: 0.00,
+    ground_supply_unit: 1.20,
   };
 
   static GROUND_UNIT_CREDITS_BUILD = {
@@ -1058,10 +1058,10 @@ export class ColonyManager {
     return slots;
   }
 
-  /** Maks jednostek w kolonii (floor(pop/4), min 2). Drony i supply unit exempt. */
+  /** Maks jednostek w kolonii (Population 2.0: floor(pop/16), min 2 — ÷4 redenominacja). Drony i supply unit exempt. */
   _getMaxGroundUnits(colony) {
     const pop = Math.floor(colony.civSystem?.population ?? 0);
-    return Math.max(2, Math.floor(pop / 4));
+    return Math.max(2, Math.floor(pop / 16));
   }
 
   /** Czy można zrekrutować kolejną jednostkę (pop cap)? */
@@ -1446,7 +1446,7 @@ export class ColonyManager {
   // ── Surge — przyspieszenie budowy statku (POP + Kr) ─────────────────────
   // Koszt: 0.5 POP (lock do zakończenia) + 500 Kr
   // Efekt: −50% remaining time per surge
-  static SURGE_POP_COST = 0.5;
+  static SURGE_POP_COST = 2;   // Population 2.0: ×4 (było 0.5)
   static SURGE_KR_COST  = 500;
   static SURGE_TIME_REDUCTION = 0.5;
 
@@ -1514,7 +1514,7 @@ export class ColonyManager {
   calculateTaxIncome(colony) {
     const pop = colony.civSystem?.population ?? 0;
     const prosperity = colony.prosperitySystem?.prosperity ?? 50;
-    return Math.floor(pop * 5 * prosperity * this._taxRate);
+    return Math.floor(pop * 1.25 * prosperity * this._taxRate);   // Population 2.0: 5→1.25 (÷4, pop ×4)
   }
 
   _tickTaxCollection(deltaYears) {
@@ -2087,7 +2087,7 @@ export class ColonyManager {
     const low  = colonies.filter(c => !c.isOutpost && (c.prosperitySystem?.prosperity ?? 50) < MIGRATION_PROSPERITY_LOW  && c.allowEmigration);
 
     for (const src of low) {
-      if (src.civSystem.population <= 2) continue; // nie opuści małej kolonii
+      if (src.civSystem.population <= 8) continue; // nie opuści małej kolonii (Population 2.0: ×4, było 2)
       for (const dst of high) {
         if (src.planetId === dst.planetId) continue;
         // Sprawdź housing w docelowej
@@ -2282,7 +2282,7 @@ export class ColonyManager {
         }
         // Pop = 0 na pełnej kolonii → minimum 2 POP startowe
         if (civSys.population <= 0) {
-          civSys.setPopulation(2);
+          civSys.setPopulation(8);   // Population 2.0: ×4 (było 2)
         }
       }
     }

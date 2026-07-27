@@ -20,7 +20,7 @@ import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 95;
+export const CURRENT_VERSION     = 96;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -152,6 +152,7 @@ const MIGRATIONS = {
   92: _migrateV92toV93,
   93: _migrateV93toV94,
   94: _migrateV94toV95,
+  95: _migrateV95toV96,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2296,6 +2297,35 @@ function _migrateV94toV95(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (c4x?.gameState && !c4x.gameState.transportOrders) {
     c4x.gameState.transportOrders = { orders: [], pool: [], nextId: 1 };
+  }
+  return data;
+}
+
+// ── v95 → v96 — Population 2.0 Faza 1: redenominacja jednostek POP ×4 ────────
+// Populacja (strata.count) i housing budynków ×4. Konsumpcja per-pop ÷4 to zmiana
+// DANYCH (ResourcesData), nie save; `jobs` liczone z żywej definicji budynku przy
+// restore. Balans niezmieniony: pop×4 × per-pop÷4 = ten sam agregat.
+function _migrateV95toV96(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (!c4x?.colonies) return data;
+  const S = 4;
+  for (const col of c4x.colonies) {
+    const civ = col.civ;
+    if (civ) {
+      if (civ.strata) {
+        for (const s of Object.values(civ.strata)) {
+          if (s && typeof s.count === 'number') s.count *= S;
+        }
+      }
+      if (typeof civ.population === 'number')     civ.population *= S;      // backward-compat (recomputed z strata)
+      if (typeof civ.housing === 'number')        civ.housing *= S;         // diagnostyka (recomputed z budynków)
+      if (typeof civ.habitatHousing === 'number') civ.habitatHousing *= S;
+      civ.satisfaction ??= 50;                                              // nowe pole §3.5
+    }
+    // Housing budynków ×4 — restoreFromSave czyta b.housing WPROST.
+    for (const b of (col.buildings ?? [])) {
+      if (typeof b.housing === 'number') b.housing *= S;
+    }
   }
   return data;
 }

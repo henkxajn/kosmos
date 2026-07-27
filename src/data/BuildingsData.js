@@ -1572,6 +1572,18 @@ export const BUILDINGS = {
   },
 };
 
+// ── Population 2.0 (Faza 1): jobs + redenominacja housing ×4 ─────────────────
+// `jobs` = całkowite etaty/poziom, AUTORYTATYWNE pole zatrudnienia (logika czyta
+// jobs, NIE popCost — popCost zostaje wyłącznie dla kompatybilności wstecznej).
+// Wartości = doc §7.1: popCost×4 zaokrąglone; trade_union_hall 0.4→1 (w górę).
+// Housing ×4 (colony_base 4→16, habitat 3→12, launch_pad 1→4, arcology 8→32,
+// orbital_habitat 20→80) — spójne z populacją ×4. Liczone RAZ przy ładowaniu
+// modułu (DRY — nie drift-uje przy zmianie popCost/dodaniu budynku).
+for (const b of Object.values(BUILDINGS)) {
+  b.jobs = b.id === 'trade_union_hall' ? 1 : Math.round((b.popCost ?? 0) * 4);
+  if (b.housing) b.housing *= 4;
+}
+
 // ── Ikony zasobów — rozszerzony zestaw ──────────────────────────────────────
 export const RESOURCE_ICONS = {
   // Mined

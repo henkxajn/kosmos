@@ -1064,7 +1064,7 @@ export class GameScene {
         const isOutpost = colony.isOutpost ?? false;
         const pop = colony.civSystem?.population ?? 0;
         const prosperity = colony.prosperitySystem?.prosperity ?? 50;
-        const basePop        = isOutpost ? 0 : 200 * pop;
+        const basePop        = isOutpost ? 0 : 50 * pop;   // Population 2.0: 200→50 (÷4, pop ×4)
         const baseProsperity = isOutpost ? 0 : Math.floor(prosperity / 20) * 50;
         const buildingBonus  = cts._getBuildingBonus(colony, 'tcBonus');
         const stationBonus   = cts._getStationTradeBonus(colony);
@@ -2879,8 +2879,8 @@ export class GameScene {
           this.leaderSystem.setLeaderNoFaction('yara_osei', 0);
           // Power Test: wszystkie technologie odkryte od startu (ułatwia testy combat/floty)
           this.techSystem.restore({ researched: Object.keys(TECHS) });
-          // Populacja 12 POP (suma popCost budynków Power Test ≈ 7.75, z marginesem)
-          this.civSystem.setPopulation(12);
+          // Populacja 48 POP (Population 2.0: ×4 redenominacja, było 12)
+          this.civSystem.setPopulation(48);
           // Domyślne nazwy
           window.KOSMOS.civName = 'Test Empire';
           civPlanet.name = 'Test Capital';
@@ -2920,8 +2920,8 @@ export class GameScene {
           if (colony) colony.name = capitalName;
           // Zbadaj technologie wymagane dla dodatkowych budynków
           this._setupBoostedTechs();
-          // 4 POPy (3 zużyte przez budynki + 1 zapas na wzrost)
-          this.civSystem.setPopulation(4);
+          // 16 POPów (Population 2.0: ×4 redenominacja, było 4)
+          this.civSystem.setPopulation(16);
           // Generuj grid i postaw budynki (standardowe + boosted)
           const grid = PlanetMapGenerator.generate(civPlanet, true);
           if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;

@@ -50,7 +50,7 @@ export const INDUSTRIALIST = {
   strategicColonization: {
     targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
     targetNtOutposts:       1,    // ile outpostów Nt (Neutronium) — Slice 2 S3, P5
-    popTransferSize:        2,    // ile POP wysłać na pełną kolonię (suma ≥ 2)
+    popTransferSize:        8,    // ile POP wysłać na pełną kolonię (Population 2.0: ×4, było 2)
     minFreePops:            8,    // min freePops macierzystej by uruchomić full-colony path
     minFoodTransfer:        200,  // próg = transfer food (bootstrap wymaga ≥ 200)
     minWaterTransfer:       200,  // próg = transfer water

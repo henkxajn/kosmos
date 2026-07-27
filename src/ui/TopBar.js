@@ -421,7 +421,7 @@ export class TopBar {
     // Szczegóły POP
     if (item._popDetails) {
       const p = item._popDetails;
-      lines.push({ text: `${t('topBar.populationLabel')}: ${_fmtPop(p.dispPop)} (+${_fmtPop(p.growthRate)}/yr)`, color: C.text });
+      lines.push({ text: `${t('topBar.populationLabel')}: ${_fmtPop(p.dispPop)} (+${p.growthRate.toFixed(1)}/yr)`, color: C.text });   // growth: jednostki POP (bez ×100k)
       lines.push({ text: `POP: ${p.pop} (${t('topBar.employed')} ${p.employed}, ${t('topBar.freePops')} ${p.free})`, color: C.text });
       lines.push({ text: `${t('topBar.locked')} ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
       lines.push({ text: `${t('topBar.housingLabel')} ${p.housing === Infinity ? '∞' : p.housing}`, color: (p.housing !== Infinity && p.pop >= p.housing) ? C.orange : C.text });
@@ -705,7 +705,7 @@ export class TopBar {
       const locked    = civSys._lockedPops ?? 0;
       const atCap     = housing !== Infinity && pop >= housing && housing > 0;
       const dispPop   = civSys.displayPopulation ?? 0;
-      const growthRate = civSys.populationGrowthRate ?? 0;
+      const growthRate = civSys.getAnnualGrowth?.() ?? 0;
       items.push({
         icon: '👤', symbol: '',
         value: _fmtPop(dispPop),
