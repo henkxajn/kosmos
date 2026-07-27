@@ -16,7 +16,7 @@
 //   seed = hash z planet.id → ta sama planeta → ta sama mapa zawsze
 
 import { HexGrid }  from './HexGrid.js';
-import { HexTile }  from './HexTile.js';
+import { HexTile, BIOTIC_TERRAIN_TYPES }  from './HexTile.js';
 import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 import { getEligibleAnomalies, ANOMALIES } from '../data/AnomalyData.js';
 
@@ -215,9 +215,42 @@ export class PlanetMapGenerator {
     }
 
     // Skonwertuj do tablicy [{type, weight}] eliminując zerowe
-    return Object.entries(base)
+    let entries = Object.entries(base)
       .filter(([, w]) => w > 0)
       .map(([type, weight]) => ({ type, weight }));
+
+    // ── Bramka atmosferyczna ──────────────────────────────────────────────
+    // Ciało bez atmosfery (atmosphere === 'none'): biomy biotyczne (roślinność /
+    // ciekła woda) nie mogą powstać. Usuń je z puli kandydatów i rozdziel ich wagę
+    // proporcjonalnie na biomy abiotyczne już obecne w puli. Ciała z atmosferą
+    // przechodzą tędy bez zmian (dystrybucja identyczna jak przed zmianą).
+    if (atmo === 'none') entries = PlanetMapGenerator._gateBioticBiomes(entries);
+
+    return entries;
+  }
+
+  // ── Bramka atmosferyczna: usuwa biomy biotyczne, rozdziela wagi na abiotyczne ─
+  // Wejście/wyjście: tablica [{type, weight}]. Wywoływana TYLKO dla ciał bez atmosfery.
+  // Suma wag zachowana; względne proporcje biomów abiotycznych bez zmian (redystrybucja
+  // proporcjonalna do udziału). Bez nowych typów heksów, bez pustej puli.
+  static _gateBioticBiomes(entries) {
+    const biotic = entries.filter(e => BIOTIC_TERRAIN_TYPES.has(e.type));
+    if (biotic.length === 0) return entries;                 // nic biotycznego → bez zmian
+
+    const abiotic       = entries.filter(e => !BIOTIC_TERRAIN_TYPES.has(e.type));
+    const bioticWeight  = biotic.reduce((s, e) => s + e.weight, 0);
+    const abioticWeight = abiotic.reduce((s, e) => s + e.weight, 0);
+
+    // Skrajny (praktycznie nieosiągalny — każda baza ma biomy abiotyczne) przypadek:
+    // pula wyłącznie biotyczna. Gwarantuj niepuste pole — jałowe 'wasteland' zamiast
+    // pustego/undefined heksa (priorytet: żaden hex nie zostaje bez typu).
+    if (abioticWeight <= 0) return [{ type: 'wasteland', weight: bioticWeight || 1 }];
+
+    // Rozdziel wagę biotyczną proporcjonalnie do udziału każdego biomu abiotycznego
+    return abiotic.map(e => ({
+      type:   e.type,
+      weight: e.weight + bioticWeight * (e.weight / abioticWeight),
+    }));
   }
 
   // Bazowe wagi per typ planety
@@ -314,8 +347,9 @@ export class PlanetMapGenerator {
   // ── Krok 5: Efekty biegunowe i specjalne ──────────────────────────────────
 
   static _applyPolarEffects(grid, planet, rand) {
-    const temp = planet.surface?.temperature ?? 20;
-    const type = planet.planetType           ?? 'rocky';
+    const temp    = planet.surface?.temperature ?? 20;
+    const type    = planet.planetType           ?? 'rocky';
+    const airless = (planet.atmosphere ?? 'none') === 'none';  // bramka atmosferyczna (patrz _calcWeights)
 
     // Czapy lodowe — gradientowe: im zimniej, tym więcej rzędów pokrywy
     // hot_rocky i gas nie mają czap
@@ -352,7 +386,9 @@ export class PlanetMapGenerator {
               if (rand() < chance) {
                 tile.type = 'ice_sheet';
               } else if (tile.type !== 'ocean' && tile.type !== 'mountains') {
-                tile.type = 'tundra'; // przejściowa strefa
+                // Przejściowa strefa: tundra (biotyczna) wymaga atmosfery — na ciele
+                // bez atmosfery zamiast niej lód (abiotyczny). Bramka atmosferyczna.
+                tile.type = airless ? 'ice_sheet' : 'tundra';
               }
             }
           }

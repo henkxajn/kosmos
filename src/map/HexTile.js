@@ -17,6 +17,10 @@
 // allowedCategories: które kategorie budynków mogą tu stanąć
 //   'mining' | 'energy' | 'food' | 'population' | 'research' | 'military' | 'space' | 'market' | 'synthetic' | 'governance'
 // baseYield: pasywna produkcja bez budynku (per rok gry)
+// biotic: teren wymaga atmosfery (roślinność / ciekła woda). Na ciałach bez atmosfery
+//   (atmosphere === 'none') worldgen (PlanetMapGenerator) usuwa te biomy z puli i rozdziela
+//   ich wagi proporcjonalnie na biomy abiotyczne. Brak flagi (falsy) = abiotyczny. Zbiór
+//   kluczy pochodny: BIOTIC_TERRAIN_TYPES (niżej).
 export const TERRAIN_TYPES = {
   plains: {
     namePL:            'Równina',
@@ -24,6 +28,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x4e7b38,
     icon:              '🟢',
     buildable:         true,
+    biotic:            true,          // wymaga atmosfery (roślinność)
     allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space', 'market', 'synthetic', 'governance'],
     yieldBonus:        { food: 1.4, default: 1.0 },  // bonus do żywności
     baseYield:         { organics: 0.5 },
@@ -50,6 +55,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x142870,
     icon:              '🌊',
     buildable:         false,        // tylko ze specjalną technologią (etap późniejszy)
+    biotic:            true,          // ciekła woda wymaga ciśnienia atmosferycznego
     allowedCategories: [],
     yieldBonus:        { default: 1.0 },
     baseYield:         { water: 1.0, organics: 0.3 },
@@ -62,6 +68,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x285828,
     icon:              '🌲',
     buildable:         true,         // wymaga karczowania (koszt minerałów)
+    biotic:            true,          // wymaga atmosfery (roślinność)
     allowedCategories: ['food', 'population', 'research', 'governance'],
     yieldBonus:        { food: 1.3, default: 0.9 },
     baseYield:         { organics: 1.2 },
@@ -89,6 +96,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x6e8a98,
     icon:              '🧊',
     buildable:         true,
+    biotic:            true,          // wymaga atmosfery (roślinność/permafrost)
     allowedCategories: ['mining', 'energy', 'food', 'military', 'market', 'governance'],
     yieldBonus:        { mining: 1.2, default: 0.8 },
     baseYield:         { minerals: 0.4, water: 0.3 },
@@ -149,6 +157,14 @@ export const TERRAIN_TYPES = {
     description:       'Zdegradowany teren, niska wydajność',
   },
 };
+
+// ── Biomy biotyczne (pochodne z flagi biotic) ─────────────────────────────────
+// Zbiór kluczy TERRAIN_TYPES wymagających atmosfery — JEDNO źródło prawdy = flaga
+// `biotic` w definicjach powyżej. Konsument: PlanetMapGenerator (bramka atmosferyczna).
+// Aktualnie: forest, plains, tundra, ocean.
+export const BIOTIC_TERRAIN_TYPES = new Set(
+  Object.entries(TERRAIN_TYPES).filter(([, def]) => def.biotic).map(([key]) => key)
+);
 
 // ── Bramka budowy — JEDNO źródło prawdy (teren + klimat) ──────────────────────
 // Zwraca { ok, reason, kind } gdzie reason to KLUCZ i18n (nieprzetłumaczony),
