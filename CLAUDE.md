@@ -775,7 +775,7 @@ territory b2-b6 / obs-scan / cross-system-leak / fc-command 0 FAIL. Pliki: `Stra
 
 ---
 
-## Population 2.0 — Faza 1: jednostki całkowite + wzrost logistyczny + satysfakcja + rekalibracja prosperity (save v96, live-gate PENDING)
+## Population 2.0 — Faza 1: jednostki całkowite + wzrost logistyczny + satysfakcja + rekalibracja prosperity (save v96, live-gate PASS — Faza 2 niżej)
 
 Pierwsza faza redesignu populacji (`docs/POPULATION_REDESIGN.md` — źródło prawdy: §2.5/3.1/3.5/3.6/7).
 Reszta (zatrudnienie/bezrobocie/płace/slider = Faza 2, ekonomia = Faza 3, droidy = Faza 4) czeka. **NIE
@@ -862,6 +862,75 @@ Testy: migration **29** (+10 neutralność demand/survival/maturity/epoch/CIV_EP
 Workforce, `_assignNewPopStrata` pełna alokacja, przeskalowanie zewnętrznych locków (crew/expedition/ground)
 na całkowite jobs (dziś ×4 ułamkowo — spójne skalą), test-boty (RuleBot/MCTSBot/EvoBot) progi pop, droidy
 tier-1 (`automation_droid`).
+
+## Population 2.0 — Faza 2: zatrudnienie, bezrobocie, płace, migracja, focus, zakładka Workforce (save v97, commit `d95d9b8`, live-gate PASS)
+
+Druga faza redesignu populacji (`docs/POPULATION_REDESIGN.md` §2.5/2.6/3.2/3.3/3.4/5.1/7.2). Buduje na Fazie 1.
+Ekonomia (płace jako wydatek/tax/handel) = **Faza 3**; droidy = Faza 4. **NIE zaczynać Fazy 3 bez potwierdzenia.**
+
+**Model B (fundament — „unemployed = realna pula POZA stratami"):**
+- NOWE pola `civSystem._unemployed` (int) + `_focusBonus` (per strata). `population` getter = **Σstrata + _unemployed**
+  (SUMA identyczna jak w Fazie 1 — nadwyżka, która pęchła w `laborer`, siedzi teraz w U → żaden konsument
+  `population` nie widzi innej liczby; konsumpcja/housing/progi liczą wszystkich). `humans = population + _growthProgress`.
+  Inwariant `floor(humans) = Σstrata + unemployed` z konstrukcji. Wzrost: nowy POP → `_unemployed++` (NIE `addPop`).
+- **workers(type) = strata.count** (zawiera zablokowanych — spójne z produkcją). `unemployed = _unemployed`.
+- `setPopulation` zeruje U; `removePop` fallback na U; `_recalcLoyalty` mianownik `_strataCount` (NIE population —
+  inaczej U rozcieńcza lojalność); `emigrate/immigrate` przez pulę U (klucz breakdown `'unemployed'`).
+
+**Alokacja `_allocateWorkforce()`** (raz/rok cyw. w `_yearlyUpdate` PRZED satysfakcją): (1) rekoncyliacja utraty
+etatów — workers ponad `_humanJobs` (poza locked) → U; (2) Etap 1 bez tarcia — wolne etaty zasysają U wg płacy
+malejąco; (3) Etap 2 z tarciem — migracja ≤10%/rok (`MIGRATION_FRICTION`) TYLKO do ściśle wyższej płacy z wolnym
+etatem, locked nigdy nie migrują. Snapshot płac po rekoncyliacji (deterministyczne priorytety).
+
+**Płace/pressure (§3.3):** `getStrataPressure = clamp((getSlotDemand+focus − workers − syntheticJobs)/effDemand,0,1)`;
+`getStrataWage = BASE_WAGE[type]×(1+pressure)` (cap ×2). `getWorkforceBreakdown()` (name/icon/jobs/workers/pressure/
+wage/focus/focusCap) zasila UI. `getTotalLaborCost()` = hook **Fazy 3** (BEZ odejmowania Kr — wydatek to Faza 3).
+Stałe w `PopulationData.js`: `BASE_WAGE`, `MIGRATION_FRICTION=0.10`, `FOCUS_BONUS_MAX=0.25`.
+
+**Focus slider (§2.6):** `_focusBonus[type]` int 0..`_focusCap = jobs>0 ? max(1, floor(0.25×jobs)) : 0` (FIX B — strata
+z 1–3 etatami dostaje ≥1 krok; 0 budynków = brak slidera). Tworzy pressure/płacę, NIE realne etaty (staffing = `_humanJobs`).
+
+**Synthetic (§3.4):** `BuildingSystem.getSyntheticJobs(type)` netuje syntetyki TYLKO w pressure/alokacji; `getSlotDemand`
+zostaje brutto (`PHASE4_TODO` na kwirk: synth influje demand → niższa eff. innych budynków tej straty; behawior
+syntetyków = Faza 4).
+
+**FIX A (live-gate) — koniec bramki POP na budowie** (§1/§3.4 płynna obsada): usunięte gate'y `freePops<jobs` w
+`BuildingSystem._build`/`_upgrade`/`_tickPendingQueue` + `ColonyAutoExpander` (`restFromBuilds` już nie odpoczywa na
+`freePops≤0`, tylko limit kolejki). Budynek dodaje wolne etaty, działa `min(1, staffing)`, alokacja/wzrost go zapełniają.
+Koszty surowców/Kr bez zmian. Player build UI nie miał gate'a POP (grep czysty). `convertToStrata` przy aktywacji =
+best-effort (return ignorowany, teraz źródło = U najpierw). Crew-locki statków (ColonyManager) DALEJ gate'ują — poza A.
+
+**⚠ freePops NIETKNIĘTE:** formuła `population − employedPops − lockedPops` zostaje (Model B → steady-state
+freePops ≈ unemployed; test (f) pilnuje `freePops===unemployed` przy synth/lock=0). Komentarz „future-refactor hook"
+(NIE `TODO`) przy getterze. ~40 konsumentów freePops (ekspedycje/załogi/ground/AI/UI) nietkniętych.
+
+**Satysfakcja:** `_updateSatisfaction` czyta realny `unemploymentRate = _unemployed/population` (był stały 0, §3.5).
+Desync-fixy Fazy 1 (ImpactDamage/RandomEvent) route'ują OK — oba `_active.delete` → getSlotDemand spada → alokacja
+wiktuje nadmiar do U.
+
+**Zakładka Workforce (ColonyOverlay, prawa kolumna, §5.1):** `_infoTab` 'planet'(default)|'workforce';
+`_drawInfoTabs`+`_drawWorkforceTab`. Tabela `jobs | workers | wage (amber gdy pressure>0.25) | focus [− n +]` + stopka
+(bezrobotni red>10% humans, satysfakcja, prosperity+strzałka trendu do targetu, wzrost `+n.n/rok`). Hity
+`infoTab`/`focusMinus`/`focusPlus` → `_onHit`. Gate `canWorkforce = civSystem && !isPreview && !isOutpost`.
+`STRATA_META` (hoisted PL+EN+ikona) reużyte w `getStrataBreakdown` + `getWorkforceBreakdown`. i18n `workforce.*` +
+`colonyInfo.tabPlanet/tabWorkforce`.
+
+**Debug:** `window.KOSMOS.debug.colonies()` (GameScene) — console.table wszystkich kolonii (gracz+AI): nazwa/
+właściciel/pop(humans/cap)/bezrobotni/satysfakcja/prosperity(`colony.prosperitySystem`)/wzrost/budynki. Zwraca też
+tablicę wierszy.
+
+**Save v96→v97** (`_migrateV96toV97`: seed `unemployed:0`+`focusBonus:{}` per kolonia; restore broni `?? 0`/`?? {}`).
+Serialize/restore + `_popSnapshot` niosą `unemployed`.
+
+**Pliki:** `CivilizationSystem` (rdzeń), `BuildingSystem` (getSyntheticJobs + 3× usunięty gate POP), `PopulationData`
+(BASE_WAGE/friction/focus), `ColonyAutoExpander` (rest bez freePops), `SaveMigration` (v97), `ColonyOverlay` (Workforce
+tab), `GameScene` (debug.colonies), i18n pl/en. Testy: `tmp_pop2_employment_smoke` **43/43** (a–f + FIX A 6 + FIX B 6).
+Regr 0 nowych FAIL (auto-expander 74/1 = pre-existing well/waterless; **s34c_trade_selfcargo 6/15 + s34c_z1_tradecap
+7/12 = PRE-EXISTING**, stała formuła TC 200×pop vs 50×pop — naprawa w Fazie 3).
+
+**Świadomie POZA zakresem Fazy 2 (Faza 3+):** płace jako wydatek imperium + tax na EMPLOYED + mnożnik handlu +
+bilans per kolonia + staffing-scaled energy (Faza 3); naprawa fixture'ów s34c TC (Faza 3); droidy tier-1 (Faza 4);
+re-ewaluacja sprzężenia bezrobocie→satysfakcja→prosperity→wzrost (Faza 5 — może za karzące).
 
 ## MVP Zlecenia Transportowe (logistyka) — UKOŃCZONE (save v95, live-gate PASS, commity `5fbe873`+`5009d41` push main)
 
