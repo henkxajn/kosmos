@@ -67,10 +67,15 @@ export class GroundUnitPanel {
    * @param {Function} deps.getHoverZone — () → parent._hoverZone (do tooltipów)
    * @param {Function} deps.getMouse    — () → {x, y} aktualna pozycja kursora
    */
-  constructor({ addHit, getHoverZone, getMouse }) {
+  constructor({ addHit, getHoverZone, getMouse, getColony }) {
     this._addHit       = addHit;
     this._getHoverZone = getHoverZone ?? (() => null);
     this._getMouse     = getMouse ?? (() => ({ x: 0, y: 0 }));
+    // Źródło kolonii docelowej — WSTRZYKIWALNE. Default = globalna aktywna kolonia
+    // (zachowuje zachowanie UnitDesignOverlay/JEDNOSTKI). ColonyOverlay wstrzykuje
+    // kolonię ZE SWOJEGO widoku → rozkaz rekrutacji celuje w konkretną, oglądaną kolonię
+    // (koniec dwuznaczności "gdzie powstaje jednostka" przy wielu koszarach).
+    this._getColonyDep = getColony ?? (() => window.KOSMOS?.colonyManager?.getActiveColony?.() ?? null);
 
     this._selectedArchetypeId = DEFAULT_ARCHETYPE;
     this._selectedFactionId   = 'humanity';     // faction selector ukryty do unlocku
@@ -111,7 +116,7 @@ export class GroundUnitPanel {
   // ── Helpery gameplay ─────────────────────────────────────────
 
   _getActiveColony() {
-    return window.KOSMOS?.colonyManager?.getActiveColony?.() ?? null;
+    return this._getColonyDep();
   }
 
   /** Zwraca pełny koszt rekrutacji dla selected archetype (Opcja C v3). */
