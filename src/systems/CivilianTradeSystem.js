@@ -17,6 +17,7 @@ import { BASE_PRICE, scarcityMultiplier, routingPriority, TRADEABLE_GOODS } from
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
+import { K_TRADE } from '../data/PopulationData.js';   // Faza 3: mnożnik handlu z zatrudnienia przemysłu
 
 export class CivilianTradeSystem {
   constructor(colonyManager) {
@@ -401,9 +402,12 @@ export class CivilianTradeSystem {
       resSysTo.spend({ [goodId]: actualQty });
       return;
     } else {
-      // Kolonia → Kolonia: normalny handel
-      exportKr = baseExportCredits * distBonus;
-      importKr = baseImportCredits * distBonus;
+      // Kolonia → Kolonia: normalny handel. Population 2.0 Faza 3 (§3.7): mnożnik handlu z udziału
+      // przemysłu w zatrudnieniu KOLONII-BENEFICJENTA (×1.0 gdy brak przemysłu, ×1.5 gdy sam przemysł).
+      const fromMult = 1 + K_TRADE * (fromCol.civSystem?.getIndustryEmploymentShare?.() ?? 0);
+      const toMult   = 1 + K_TRADE * (toCol.civSystem?.getIndustryEmploymentShare?.() ?? 0);
+      exportKr = baseExportCredits * distBonus * fromMult;
+      importKr = baseImportCredits * distBonus * toMult;
       fromCol.credits = (fromCol.credits ?? 0) + exportKr;
       toCol.credits = (toCol.credits ?? 0) + importKr;
     }

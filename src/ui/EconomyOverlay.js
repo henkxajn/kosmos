@@ -2716,11 +2716,16 @@ export class EconomyOverlay extends BaseOverlay {
       fleetUpkeepCount++;
     }
 
+    // Population 2.0 Faza 3 (§3.7) — płace (Kr/rok) = Σ getTotalLaborCost pełnych kolonii gracza.
+    let totalLaborCost = 0;
+    for (const col of fullColonies) totalLaborCost += col.civSystem?.getTotalLaborCost?.() ?? 0;
+
     return {
       totalCredits, totalCreditsPerYear, totalResearch,
       globalResources, taxIncome, taxRate, taxEffect,
       totalUnitUpkeep, unitUpkeepCount,
       totalFleetUpkeep, fleetUpkeepCount,
+      totalLaborCost,
     };
   }
 
@@ -2745,15 +2750,20 @@ export class EconomyOverlay extends BaseOverlay {
       `${data.totalCredits.toFixed(0)} Kr`, THEME.warning);
     ry += RH;
 
-    // Bilans Kr = NETTO: handel + podatki − utrzymanie jednostek − utrzymanie floty
+    // Bilans Kr = NETTO: handel + podatki − utrzymanie jednostek − utrzymanie floty − PŁACE (Faza 3 §3.7)
     const netPerYear = data.totalCreditsPerYear + data.taxIncome
-                     - data.totalUnitUpkeep - data.totalFleetUpkeep;
+                     - data.totalUnitUpkeep - data.totalFleetUpkeep - (data.totalLaborCost ?? 0);
     const sign = netPerYear >= 0 ? '+' : '';
     this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.creditsPerYear'),
       `${sign}${netPerYear.toFixed(1)} Kr/${t('tradePanel.perYear')}`,
       netPerYear >= 0 ? THEME.success : THEME.danger);
     ry += RH;
 
+    if ((data.totalLaborCost ?? 0) > 0) {
+      this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.laborCost'),
+        `-${data.totalLaborCost.toFixed(0)} Kr/${t('tradePanel.perYear')}`, THEME.danger);
+      ry += RH;
+    }
     if (data.unitUpkeepCount > 0) {
       this._statRow(ctx, x + pad, ry, PANEL_W,
         `${t('civOverlay.unitUpkeep')} (${data.unitUpkeepCount})`,

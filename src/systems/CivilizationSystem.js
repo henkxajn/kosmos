@@ -810,6 +810,11 @@ export class CivilizationSystem {
     // 0a. Alokacja siły roboczej (Population 2.0 Faza 2 §3.2) — PRZED satysfakcją, by
     //     bezrobocie było świeże. Wolne etaty zasysają bezrobotnych + migracja z tarciem.
     this._allocateWorkforce();
+    // Faza 3 BUG 1: obsada zmieniła się → przelicz stawki budynków TEJ kolonii BEZPOŚREDNIO, by
+    // ZUŻYCIE ENERGII (skalowane obsadą, max(0.2,staffing)) i produkcja trafiły do LIVE bilansu.
+    // Wywołanie na własnym buildingSystem (nie event z guardem window.KOSMOS) → działa dla KAŻDEJ
+    // kolonii (aktywnej i w tle); wcześniej event tylko dla aktywnej zostawiał tło ze stale stawkami.
+    this.buildingSystem?._reapplyAllRates?.();
 
     // 0b. Satisfakcja per-strata (loyalty) + kolonii (Population 2.0 §3.5 → prosperity)
     this._updateStrataSatisfaction();
@@ -1226,11 +1231,24 @@ export class CivilizationSystem {
   getStrataWage(type)      { return (BASE_WAGE[type] ?? 1) * (1 + this.getStrataPressure(type)); }
   /** Koszt pracy straty (Faza 3 hook): workers × wage. Faza 2: TYLKO liczony/eksponowany. */
   getStrataLaborCost(type) { return this.getStrataWorkers(type) * this.getStrataWage(type); }
-  /** Sumaryczny koszt utrzymania siły roboczej (Faza 3 wpina jako wydatek imperium). */
+  /** Sumaryczny koszt utrzymania siły roboczej (Faza 3: wydatek imperium — płace). */
   getTotalLaborCost() {
     let sum = 0;
     for (const type of STRATA_TYPES) sum += this.getStrataLaborCost(type);
     return sum;
+  }
+
+  /** Zatrudnieni (workers) = Σ strata = population − unemployed. Baza podatku (Faza 3, §3.7):
+   *  bezrobotni ORAZ etaty obsadzone syntetykami płacą 0 (żadne nie mają workera w stracie).
+   *  Zablokowani (crew/ekspedycje) SĄ zatrudnieni — trzymają etaty → płacą podatek i pobierają płacę. */
+  get employed() { return this._strataCount; }
+
+  /** Udział przemysłu w zatrudnieniu (§3.7): {laborer,miner,worker}/wszyscy zatrudnieni; 0 gdy brak. */
+  getIndustryEmploymentShare() {
+    const emp = this._strataCount;
+    if (emp <= 0) return 0;
+    const ind = (this.strata.laborer?.count ?? 0) + (this.strata.miner?.count ?? 0) + (this.strata.worker?.count ?? 0);
+    return ind / emp;
   }
 
   /** Breakdown zatrudnienia do UI (zakładka Workforce) + Faza 3. */
@@ -1266,27 +1284,45 @@ export class CivilizationSystem {
   _allocateWorkforce() {
     if (!this.buildingSystem) return;   // abstrakcyjna kolonia bez budynków — pomiń (PHASE5_TODO: AI)
 
+    // 0) Normalizacja CAŁKOWITOŚCI (Faza 3 BUG 3): `_lockedPerStrata` bywa UŁAMKOWE (crew rozdzielone
+    //    proporcjonalnie przez _distributeLock) → dawniej `count − locked` wciekał ułamek do strata.count
+    //    i _unemployed. Tu: floor każdej straty, reszta → bezrobotni; suma ludzi (całkowici) zachowana,
+    //    inwariant floor(humans)=Σstrata+U trzyma. Czyści też legacy ułamki ze starych sesji.
+    const totalPeople = Math.round(this._strataCount + this._unemployed);
+    let assigned = 0;
+    for (const type of STRATA_TYPES) { const c = Math.floor(this.strata[type].count); this.strata[type].count = c; assigned += c; }
+    this._unemployed = Math.max(0, totalPeople - assigned);
+
+    // Dostępni do ruchu = całkowici odblokowani workers (floor — zablokowani ułamkowo NIE ruszają
+    // strata.count z całkowitości).
+    const unlocked = (type) => Math.max(0, Math.floor(this.strata[type].count - (this._lockedPerStrata[type] ?? 0)));
+
     // 1) Rekoncyliacja utraty etatów (rozbiórka/downgrade/uszkodzenie): workers ponad realny
     //    popyt (poza zablokowanymi) → bezrobotni. To spina desync-fixy Fazy 1 (ImpactDamageSystem,
     //    RandomEventSystem zdejmują etaty przez changeEmployment → tutaj nadmiar staje się U).
     for (const type of STRATA_TYPES) {
       const s = this.strata[type];
-      const locked = this._lockedPerStrata[type] ?? 0;
-      const evictable = Math.max(0, (s.count - locked) - this._humanJobs(type));
+      const evictable = Math.max(0, unlocked(type) - this._humanJobs(type));   // całkowite (floor unlocked)
       if (evictable > 0) { s.count -= evictable; this._unemployed += evictable; }
     }
 
-    // Snapshot płac PO rekoncyliacji — deterministyczne priorytety w obu etapach.
-    const wage = {};
-    for (const type of STRATA_TYPES) wage[type] = this.getStrataWage(type);
+    // Snapshot płac + pressure PO rekoncyliacji — deterministyczne priorytety.
+    const wage = {}, pressure = {};
+    for (const type of STRATA_TYPES) { wage[type] = this.getStrataWage(type); pressure[type] = this.getStrataPressure(type); }
 
-    // 2) Etap 1 (bez tarcia) — wolne etaty zasysają bezrobotnych, wg płacy malejąco.
+    // 2) Etap 1 (bez tarcia) — wolne etaty zasysają bezrobotnych wg PRESSURE malejąco (tie-break: płaca).
+    //    §3.2 (Faza 3): pressure zamiast płacy — inaczej focus na warstwach o niskiej baseWage (laborer)
+    //    jest bezużyteczny (laborer focus→wage 1.6 przegrywa z workers 2.0). Pressure rośnie z focusem,
+    //    więc skupienie realnie ściąga bezrobotnych do wskazanej warstwy. Etap 2 (migracja) zostaje wg płacy.
     let guard = 0;
     while (this._unemployed > 0 && guard++ < 100000) {
-      let bestType = null, bestWage = -Infinity;
+      let bestType = null, bestP = -Infinity, bestW = -Infinity;
       for (const type of STRATA_TYPES) {
         const open = this._humanJobs(type) - this.strata[type].count;
-        if (open > 0 && wage[type] > bestWage) { bestWage = wage[type]; bestType = type; }
+        if (open <= 0) continue;
+        if (pressure[type] > bestP || (pressure[type] === bestP && wage[type] > bestW)) {
+          bestP = pressure[type]; bestW = wage[type]; bestType = type;
+        }
       }
       if (!bestType) break;
       this.strata[bestType].count += 1;
@@ -1298,12 +1334,12 @@ export class CivilizationSystem {
     const cap = {}, moved = {};
     for (const type of STRATA_TYPES) cap[type] = Math.floor(MIGRATION_FRICTION * this.strata[type].count);
     for (const src of STRATA_TYPES) {
-      const locked = this._lockedPerStrata[src] ?? 0;
       for (const dst of STRATA_TYPES) {
         if (dst === src || wage[dst] <= wage[src]) continue;           // tylko ściśle wyższa płaca
         const open = this._humanJobs(dst) - this.strata[dst].count;
         if (open <= 0) continue;
-        const n = Math.min(cap[src] - (moved[src] ?? 0), open, this.strata[src].count - locked);
+        // n = min(budżet 10%, wolne etaty, odblokowani całkowici) — WSZYSTKO całkowite → count zostaje int.
+        const n = Math.min(cap[src] - (moved[src] ?? 0), open, unlocked(src));
         if (n <= 0) continue;
         this.strata[src].count -= n;
         this.strata[dst].count += n;

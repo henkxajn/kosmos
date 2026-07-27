@@ -47,31 +47,31 @@ const mkStation = (id, cfg) => { const s = new Station({ id, name: id, ...cfg })
 colonies.clear();
 EntityManager.clear?.();
 const home = setColony('planet_home');
-// bazowe TC: 200*pop(1) + floor(50/20)*50 = 200 + 100 = 300, brak budynków, brak stacji
-T('1.1 baza TC bez stacji = 300', cts._allocateTC(home) === 300);
+// bazowe TC: 50*pop(1) + floor(50/20)*50 = 50 + 100 = 150 (Population 2.0 Faza 1: TC 200→50/pop)
+T('1.1 baza TC bez stacji = 150', cts._allocateTC(home) === 150);
 mkStation('stA', { bodyId: 'planet_home', ownerColonyId: 'planet_home', modules: [makeStationModule('trade_module', 1, true)] });
-T('1.2 trade_module lv1 aktywny → +200 (TC=500)', cts._allocateTC(home) === 500);
+T('1.2 trade_module lv1 aktywny → +200 (TC=350)', cts._allocateTC(home) === 350);
 mkStation('stB', { bodyId: 'planet_home', ownerColonyId: 'planet_home', modules: [makeStationModule('trade_module', 2, true)] });
-T('1.3 druga stacja trade lv2 → +400 (TC=900)', cts._allocateTC(home) === 900);
+T('1.3 druga stacja trade lv2 → +400 (TC=750)', cts._allocateTC(home) === 750);
 
 // ══ 2. Wygaszony moduł (active:false) NIE liczy ═════════════════════════════════════════════════════
 mkStation('stC', { bodyId: 'planet_home', ownerColonyId: 'planet_home', modules: [makeStationModule('trade_module', 3, false)] });
-T('2.1 wygaszony trade_module nie dolicza (TC nadal 900)', cts._allocateTC(home) === 900);
+T('2.1 wygaszony trade_module nie dolicza (TC nadal 750)', cts._allocateTC(home) === 750);
 
 // ══ 3. Brak double-count przy 2 koloniach w systemie (atrybucja po ownerColonyId) ══════════════════
 const home2 = setColony('planet_home2');   // druga kolonia gracza w tym samym systemie
-T('3.1 druga kolonia NIE dostaje bonusu stacji planet_home (TC=300)', cts._allocateTC(home2) === 300);
-T('3.2 pierwsza kolonia nadal 900 (bez zmian)', cts._allocateTC(home) === 900);
+T('3.1 druga kolonia NIE dostaje bonusu stacji planet_home (TC=150)', cts._allocateTC(home2) === 150);
+T('3.2 pierwsza kolonia nadal 750 (bez zmian)', cts._allocateTC(home) === 750);
 
 // ══ 4. Osierocona stacja (depotDetached) NIE liczy ══════════════════════════════════════════════════
 const stD = mkStation('stD', { bodyId: 'planet_home', ownerColonyId: 'planet_home', modules: [makeStationModule('trade_module', 1, true)] });
-T('4.1 świeża aktywna stacja dolicza (TC=1100)', cts._allocateTC(home) === 1100);
+T('4.1 świeża aktywna stacja dolicza (TC=950)', cts._allocateTC(home) === 950);
 stD.depotDetached = true;
-T('4.2 po osieroceniu nie dolicza (TC=900)', cts._allocateTC(home) === 900);
+T('4.2 po osieroceniu nie dolicza (TC=750)', cts._allocateTC(home) === 750);
 
 // ══ 5. Stacje obce (AI) NIE liczą ═══════════════════════════════════════════════════════════════════
 mkStation('stAI', { bodyId: 'planet_home', ownerColonyId: 'planet_home', ownerEmpireId: 'ai_1', modules: [makeStationModule('trade_module', 3, true)] });
-T('5.1 stacja AI ignorowana (TC nadal 900)', cts._allocateTC(home) === 900);
+T('5.1 stacja AI ignorowana (TC nadal 750)', cts._allocateTC(home) === 750);
 
 // ══ 6. Outpost dostaje bonus stacji (bez bazy pop) ══════════════════════════════════════════════════
 colonies.clear();

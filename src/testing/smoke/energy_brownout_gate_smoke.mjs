@@ -277,6 +277,32 @@ header('T10: kompozycja avail × inne mnożniki (bez capa)');
   assert(near(comp, baseFull), `mina: avail0.5 × asteroid×2 = pełne (got ${comp} == ${baseFull}) — bez capa`);
 }
 
+// ── T11 — Faza 3: staffing-scaled energy × brownout NIE oscyluje ────────────
+// Zużycie energii skaluje się obsadą (stałą per alokacja), a brownout throttluje TYLKO
+// nie-energetyczną produkcję (minerały/badania), NIGDY zużycie energii ani obsadę → brak
+// pętli deficyt→throttle→spadek zużycia→recovery. getEnergyAvailability = CZYSTA funkcja.
+header('T11: staffing energy × brownout — brak oscylacji (Faza 3)');
+{
+  const rs = new ResourceSystem();
+  rs.registerProducer('plant',    { energy: 6 });    // produkcja energii
+  rs.registerProducer('consumer', { energy: -12 });  // zużycie (obsadzony budynek) → deficyt
+  rs.registerProducer('mine',     { Fe: 10 });       // produkcja nie-energetyczna (throttlowana)
+  const a1 = rs.getEnergyAvailability();
+  assert(a1 === 0.5, `deficyt {+6}/{-12} → avail 0.5 (got ${a1})`);
+  // Determinizm: 5× wywołanie → identyczny wynik (throttle nie mutuje stanu energii → brak oscylacji).
+  let stable = true;
+  for (let i = 0; i < 5; i++) if (rs.getEnergyAvailability() !== a1) stable = false;
+  assert(stable, 'getEnergyAvailability STABILNE przez 5 wywołań (brak feedbacku/oscylacji)');
+  // Brownout throttluje Fe (nie-energetyczne), NIE zużycie energii → balance/avail niezmienione.
+  assert(rs.energy.consumption === 12, 'throttle NIE zmniejsza zużycia energii (nadal 12)');
+  assert(rs.getEnergyAvailability() === a1, 'po odczycie throttle Fe — avail bez zmian (brak recovery-loop)');
+  // Standby (nieobsadzony budynek → 20% zużycia, Faza 3) POPRAWIA balance monotonicznie, bez migotania.
+  const rs2 = new ResourceSystem();
+  rs2.registerProducer('plant',    { energy: 6 });
+  rs2.registerProducer('consumer', { energy: -12 * 0.2 });   // 20% standby (nieobsadzony) → -2.4
+  assert(rs2.getEnergyAvailability() === 1.0, 'standby 20% zużycia → balance≥0 → avail 1.0 (monotoniczna poprawa)');
+}
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`WYNIK: ${pass} PASS / ${fail} FAIL`);
 console.log('='.repeat(50));

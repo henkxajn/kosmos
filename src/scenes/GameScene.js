@@ -462,6 +462,41 @@ export class GameScene {
         console.table(rows);
         return rows;
       },
+      // KOSMOS.debug.energyChain(planetId?) — instrumentacja łańcucha energii per budynek
+      //   energochłonny (Faza 3): staffing (workers/jobs) | empPenalty | energyCost | baseRates.energy |
+      //   effectiveRates.energy | zarejestrowane w ResourceSystem | + sumaryczny bilans. Weryfikuje,
+      //   że skalowanie zużycia obsadą (max(0.2,staffing)) trafia do ŻYWEGO bilansu. Bez planetId =
+      //   aktywna kolonia.
+      energyChain: (planetId) => {
+        const cm = window.KOSMOS?.colonyManager;
+        const col = planetId ? cm?.getColony(planetId) : cm?.getColony(cm?._activePlanetId);
+        if (!col) { console.warn('[energyChain] brak kolonii — podaj planetId lub przełącz aktywną'); return; }
+        const bs = col.buildingSystem, civ = col.civSystem, res = col.resourceSystem;
+        if (!bs || !res) { console.warn('[energyChain] kolonia bez buildingSystem/resourceSystem'); return; }
+        const rows = [];
+        for (const [key, entry] of (bs._active ?? [])) {
+          const b = entry.building; if (!b) continue;
+          const baseE = entry.baseRates?.energy ?? 0, effE = entry.effectiveRates?.energy ?? 0;
+          if (baseE === 0 && effE === 0 && !(b.energyCost > 0)) continue;   // tylko energochłonne
+          const popType = b.popType ?? 'laborer';
+          const emp = bs._getBuildingLaborEfficiency?.(b, key);
+          const pid = entry.producerId ?? `building_${key}`;
+          const reg = res._producers?.get(pid)?.energy;
+          rows.push({
+            building:  b.id,
+            staffing:  `${civ?.strata?.[popType]?.count ?? 0}/${bs.getSlotDemand?.(popType) ?? 0}`,
+            empPenalty: emp == null ? '?' : +Number(emp).toFixed(2),
+            autonomous: !!b.isAutonomous || (b.jobs ?? 0) === 0,
+            energyCost: b.energyCost ?? 0,
+            baseE:      +baseE.toFixed(2),
+            effEnergy:  +effE.toFixed(2),
+            registered: typeof reg === 'number' ? +reg.toFixed(2) : '(brak)',
+          });
+        }
+        console.table(rows);
+        console.log(`energy: production=${res.energy?.production} consumption=${res.energy?.consumption} balance=${res.energy?.balance}`);
+        return rows;
+      },
       // S3.4 FAZA 6 — backup/restore save'a przed bumpem wersji (single-slot save utrudnia
       //   test migracji na żywo). exportSave() → pobiera plik + kopiuje do schowka + zwraca string;
       //   importSave(json) → nadpisuje slot (string LUB obiekt) i instruuje reload (migracja przy load).

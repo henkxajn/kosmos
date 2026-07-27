@@ -129,8 +129,11 @@ employed = Σ workers per strata
 unemployed = max(0, floor(humans) − employed)
 ```
 Alokacja per tick: (1) wolne etaty zasysają bezrobotnych bez tarcia,
-wg płacy desc; (2) migracja między stratami z tarciem: max 10% źródła/tick,
-tylko do wyższej płacy z wolnym etatem; (3) utrata etatów → unemployed.
+**wg PRESSURE desc (tie-break: płaca desc)** — Faza 3: pressure zamiast płacy, inaczej
+focus na warstwach o niskiej baseWage (laborer) jest bezużyteczny (focus podnosi pressure,
+nie samą płacę, więc ranking po płacy ignorowałby skupienie); (2) migracja między stratami
+z tarciem: max 10% źródła/tick, tylko do wyższej PŁACY z wolnym etatem (ekonomiczny ciąg —
+zostaje wg płacy); (3) utrata etatów → unemployed.
 
 ### 3.3 Pressure i płace (per strata)
 
@@ -416,6 +419,20 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   (`SAT_K_UNEMP=3`, GAMMA 1.5, inercja 0.08 + gate wzrostu). Ocenić PO tym, jak
   usunięcie bramki POP na budowie (Faza 2 FIX A) zmieni realną dynamikę
   bezrobocia — dopiero wtedy kalibrować stałe (nie na oko przed obserwacją).
+- **Pełna ekonomia AI (z Fazy 3):** dziś AI NIE ma powtarzalnego dochodu (podatek
+  pomija AI, handel wymaga portu którego mają tylko stolice, brak budżetu imperium,
+  1000 Kr stolica / 0 Kr ekspansja, brak dotacji). Faza 3 obciąża AI płacami
+  symetrycznie → kredyty AI drenują do 0 (kosmetycznie — AI działa na surowcach,
+  zero bramek kredytowych). Faza 5: dać AI realny dochód (ścieżka podatku dla AI),
+  budżet imperium, decyzje świadome kredytów. Do tego czasu płace AI = soft flow.
+- **Konsekwencje chronicznego niepłacenia płac (z Fazy 3):** kolonia przy 0 Kr płaci
+  częściowo/wcale bez kary (soft flow, §3.7). Faza 5: rozważyć realną konsekwencję
+  (spadek satysfakcji? niepokój?) przy tuningu — dopiero po obserwacji, nie na oko.
+- **Profilowanie (narzędzie z Fazy 3):** `KOSMOS.debug.energyChain(planetId?)` — STAŁE
+  narzędzie debug (console.table łańcucha energii per budynek: staffing/empPenalty/
+  energyCost/baseRates.energy/effectiveRates.energy/zarejestrowane w ResourceSystem/bilans).
+  Użyć w Fazie 5 do profilowania bilansu energii i weryfikacji skalowania zużycia obsadą po
+  zmianach balansu (analogicznie `KOSMOS.debug.colonies()` dla zdrowia populacji/AI).
 
 ---
 

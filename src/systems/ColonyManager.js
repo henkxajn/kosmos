@@ -259,11 +259,15 @@ export class ColonyManager {
     const colony = this.getColony(planetId);
     if (!colony) return false;
     this._activePlanetId = planetId;
+    // ⚠ BEZWARUNKOWO — wszystkie systemy window.KOSMOS MUSZĄ opisywać JEDNĄ (aktywną) kolonię.
+    // Wcześniej `if (colony.X)` zostawiał stary system poprzedniej kolonii, gdy nowa go nie miała →
+    // desync: UI czytało satysfakcję nowej kolonii OBOK prosperity STAREJ (Faza 3 BUG 2). Brak systemu
+    // = null (czytniki UI mają guardy), NIGDY stale-inna-kolonia.
     window.KOSMOS.resourceSystem  = colony.resourceSystem;
     window.KOSMOS.civSystem       = colony.civSystem;
-    if (colony.buildingSystem) window.KOSMOS.buildingSystem = colony.buildingSystem;
-    if (colony.factorySystem)     window.KOSMOS.factorySystem     = colony.factorySystem;
-    if (colony.prosperitySystem)  window.KOSMOS.prosperitySystem  = colony.prosperitySystem;
+    window.KOSMOS.buildingSystem  = colony.buildingSystem  ?? null;
+    window.KOSMOS.factorySystem   = colony.factorySystem   ?? null;
+    window.KOSMOS.prosperitySystem = colony.prosperitySystem ?? null;
     if (window.KOSMOS.expeditionSystem) window.KOSMOS.expeditionSystem.resourceSystem = colony.resourceSystem;
     if (window.KOSMOS.techSystem)       window.KOSMOS.techSystem.resourceSystem       = colony.resourceSystem;
     // Wymuś odświeżenie UI zasobów nowej kolonii (usuwa stale dane z poprzedniej)
@@ -1512,9 +1516,11 @@ export class ColonyManager {
   }
 
   calculateTaxIncome(colony) {
-    const pop = colony.civSystem?.population ?? 0;
+    // Population 2.0 Faza 3 (§3.7): baza = ZATRUDNIENI (nie cała populacja). Bezrobotni i etaty
+    // obsadzone syntetykami płacą 0. prosperity pełni rolę prosperityTaxMod (integracja z istniejącym).
+    const employed = colony.civSystem?.employed ?? 0;
     const prosperity = colony.prosperitySystem?.prosperity ?? 50;
-    return Math.floor(pop * 1.25 * prosperity * this._taxRate);   // Population 2.0: 5→1.25 (÷4, pop ×4)
+    return Math.floor(employed * 1.25 * prosperity * this._taxRate);
   }
 
   _tickTaxCollection(deltaYears) {
@@ -1528,7 +1534,7 @@ export class ColonyManager {
   }
 
   _applyTaxes(fraction) {
-    // Slice 1: pomiń kolonie imperium AI (ownerEmpireId !== null)
+    // Podatek: TYLKO kolonie gracza (ownerEmpireId null). AI bez podatku — patrz PHASE5_TODO niżej.
     const colonies = this.getAllColonies().filter(c => !c.ownerEmpireId);
     let totalIncome = 0;
 
@@ -1539,6 +1545,23 @@ export class ColonyManager {
       const income = Math.floor(annual * fraction);
       colony.credits = (colony.credits ?? 0) + income;
       totalIncome += income;
+    }
+
+    // Population 2.0 Faza 3 (§3.7): PŁACE — wydatek imperium, SYMETRYCZNIE dla WSZYSTKICH kolonii
+    // (gracz + AI). Miesięczna rata `getTotalLaborCost × fraction`, floor przy 0 (soft flow, bez kary).
+    // PHASE5_TODO: pełna ekonomia AI (dochód z podatku, realny budżet, decyzje świadome kredytów) = Faza 5
+    //   (docs/POPULATION_REDESIGN.md §8). Dziś AI nie ma dochodu → kredyty AI drenują do 0 (kosmetycznie —
+    //   AI działa na surowcach, nie kredytach). PHASE5_TODO: rozważyć konsekwencje chronicznego niepłacenia
+    //   płac (spadek satysfakcji?) przy tuningu — teraz brak konsekwencji (świadomie, doc §3.7 = soft flow).
+    for (const colony of this.getAllColonies()) {
+      if (colony.isOutpost) continue;
+      const wages = Math.floor((colony.civSystem?.getTotalLaborCost?.() ?? 0) * fraction);
+      if (wages <= 0) continue;
+      const pay = Math.min(wages, colony.credits ?? 0);   // floor przy 0 — reszta „niezapłacona" NIGDZIE nie powstaje
+      if (pay > 0) {
+        colony.credits -= pay;
+        EventBus.emit('trade:creditsChanged', { colonyId: colony.planetId, credits: colony.credits, delta: -pay });
+      }
     }
 
     // Ryzyko protestu przy ekstremalnych podatkach (>20%) — co 12 miesięcy

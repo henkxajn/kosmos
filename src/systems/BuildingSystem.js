@@ -122,6 +122,9 @@ export class BuildingSystem {
       if (window.KOSMOS?.buildingSystem !== this) return;
       this._reapplyAllRates();
     });
+    // Faza 3 BUG 1: przeliczenie stawek po alokacji siły roboczej wywołuje TERAZ CivilizationSystem
+    // BEZPOŚREDNIO na swoim buildingSystem (this.buildingSystem._reapplyAllRates po _allocateWorkforce)
+    // — działa dla każdej kolonii bez guardu window.KOSMOS. Osobny listener zbędny.
     EventBus.on('civ:popDied', () => {
       if (window.KOSMOS?.buildingSystem !== this) return;
       this._reapplyAllRates();
@@ -393,12 +396,37 @@ export class BuildingSystem {
     const realTile = this._grid?.get(...tileKey.split(',').map(Number));
     const tileLike = realTile ?? { r: tileR, type: tileType, key: tileKey, anomalyEffect: null };
 
-    const baseRates      = this._calcBaseRates(building, tileLike, level);
+    const baseRates  = this._calcBaseRates(building, tileLike, level);
     const activeKey  = isCapital ? `capital_${tileKey}` : tileKey;
-    const effectiveRates = this._applyTechMultipliers(baseRates, building, activeKey);
-
     const producerId = isCapital ? `capital_${tileKey}` : `building_${tileKey}`;
+    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);  // oryginał (serialize compat)
+    const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);                     // Population 2.0: etaty (×4)
 
+    // ⚠ Faza 3 BUG 1 (root-cause): wpis do _active ORAZ obsada (convertToStrata) MUSZĄ poprzedzić
+    // liczenie effectiveRates. Inaczej getSlotDemand(popType) NIE liczy tego budynku (demand=0 →
+    // guard empPenalty=1.0), a strata nie ma jeszcze pracowników → budynek rejestrował PEŁNĄ
+    // energię/produkcję mimo braku obsady (staffing-scaled energy nie działało w LIVE bilansie).
+    // Wpis z pustymi effectiveRates — uzupełniany PO obsadzie.
+    this._active.set(activeKey, {
+      building, baseRates, effectiveRates: {},
+      housing: building.housing,
+      popCost,
+      jobs,
+      level,
+      producerId,
+    });
+
+    // Zatrudnienie (pomiń w outpost) — obsadź stratę PRZED liczeniem stawek.
+    if (jobs > 0 && !this._isOutpost && this.civSystem) {
+      // Konwertuj wolnego POPa z innej strata jeśli brakuje w wymaganej
+      const pType = building.popType ?? 'laborer';
+      this.civSystem.convertToStrata(pType, jobs);
+      this.civSystem.changeEmployment(jobs);
+    }
+
+    // Teraz budynek jest w _active i strata obsadzona → POPRAWNY empPenalty (obsada per strata).
+    const effectiveRates = this._applyTechMultipliers(baseRates, building, activeKey);
+    this._active.get(activeKey).effectiveRates = effectiveRates;
     // Zarejestruj produkcję (bezpośrednio — unika cross-colony bleed)
     if (hasKeys(effectiveRates) && this.resourceSystem) {
       this.resourceSystem.registerProducer(producerId, effectiveRates);
@@ -413,27 +441,6 @@ export class BuildingSystem {
     // Fabryka: dodaj punkt produkcji
     if (buildingId === 'factory' && this._factorySystem) {
       this._factorySystem.setTotalPoints(this._factorySystem.totalPoints + 1);
-    }
-
-    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);  // oryginał (serialize compat)
-    const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);                     // Population 2.0: etaty (×4)
-
-    // Zapamiętaj aktywny budynek
-    this._active.set(activeKey, {
-      building, baseRates, effectiveRates,
-      housing: building.housing,
-      popCost,
-      jobs,
-      level,
-      producerId,
-    });
-
-    // Zatrudnienie (pomiń w outpost) — bezpośrednio na własnym civSystem
-    if (jobs > 0 && !this._isOutpost && this.civSystem) {
-      // Konwertuj wolnego POPa z innej strata jeśli brakuje w wymaganej
-      const pType = building.popType ?? 'laborer';
-      this.civSystem.convertToStrata(pType, jobs);
-      this.civSystem.changeEmployment(jobs);
     }
 
     // Invaliduj cache mine level jeśli zbudowano kopalnię
@@ -1750,7 +1757,11 @@ export class BuildingSystem {
         effective[key] = Number.isFinite(result) ? result : 0;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
-        effective[key] = val * techMult;
+        // Population 2.0 Faza 3: zużycie ENERGII skaluje się obsadą — 20% standby dla wybudowanego-
+        // nieobsadzonego, pełny pobór przy pełnej obsadzie. TYLKO strona konsumpcji (produkcja plantów
+        // skaluje się przez empPenalty w gałęzi val>0). Autonomiczne: empPenalty=1 → max(0.2,1)=1 (bez zmian).
+        const energyStaffMult = (key === 'energy') ? Math.max(0.2, empPenalty) : 1.0;
+        effective[key] = val * techMult * energyStaffMult;
       } else {
         effective[key] = val;
       }

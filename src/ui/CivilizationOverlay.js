@@ -118,7 +118,7 @@ export class CivilizationOverlay extends BaseOverlay {
     let totalPop = 0, totalMaxPop = 0;
     let avgProsperity = 0, prosperityCount = 0;
     let avgLoyalty = 0, loyaltyCount = 0;
-    let totalCreditsPerYear = 0, taxIncome = 0;
+    let totalCreditsPerYear = 0, taxIncome = 0, totalLaborCost = 0;   // Faza 3: płace = wydatek
     const perColony = [];
     const history = [];
 
@@ -138,6 +138,7 @@ export class CivilizationOverlay extends BaseOverlay {
         if (prosp) { avgProsperity += prosperity; prosperityCount++; }
         avgLoyalty += loyalty; loyaltyCount++;
         taxIncome += colMgr?.calculateTaxIncome(col) ?? 0;
+        totalLaborCost += civ?.getTotalLaborCost?.() ?? 0;   // Faza 3 §3.7: płace kolonii
       }
 
       perColony.push({
@@ -179,7 +180,8 @@ export class CivilizationOverlay extends BaseOverlay {
       }
     }
     const totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
-    const netCreditsPerYear = totalCreditsPerYear + taxIncome - totalUnitUpkeep - totalFleetUpkeep;
+    // Faza 3 §3.7: NETTO = handel + podatki − utrzymanie jednostek − utrzymanie floty − PŁACE
+    const netCreditsPerYear = totalCreditsPerYear + taxIncome - totalUnitUpkeep - totalFleetUpkeep - totalLaborCost;
 
     // Handel — liczba aktywnych połączeń sieci handlu cywilnego
     const tradeConnections = civTrade?.getAllConnections?.()?.length ?? 0;

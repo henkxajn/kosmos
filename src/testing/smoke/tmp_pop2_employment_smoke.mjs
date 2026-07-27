@@ -45,10 +45,11 @@ function fresh(jobs = {}, synth = {}) {
 }
 const strataSum = (civ) => Object.values(civ.strata).reduce((a, s) => a + s.count, 0);
 
-// ── (a) Alokacja: wolne etaty zasysają bezrobotnych wg płacy malejąco ────────
-console.log('--- (a) Etap 1: wolne etaty wg płacy malejąco (jeden przebieg) ---');
+// ── (a) Alokacja: wolne etaty zasysają bezrobotnych — pressure desc, tie-break płaca ─
+console.log('--- (a) Etap 1: pressure desc (równa pressure → tie-break płaca) ---');
 {
-  // jobs: scientist 3 (baseWage 4), laborer 3 (baseWage 1); 4 bezrobotnych → sci PRZED lab.
+  // jobs: scientist 3 (baseWage 4), laborer 3 (baseWage 1); OBA nieobsadzone → pressure 1.0=1.0
+  // → tie-break PŁACA → scientist PRZED laborer. 4 bezrobotnych.
   const civ = fresh({ scientist: 3, laborer: 3 });
   civ._unemployed = 4;
   civ._allocateWorkforce();
@@ -255,6 +256,51 @@ console.log('--- FIX B: focus cap ≥ 1 dla każdej aktywnej straty ---');
   ok('FIX B: focusBonus clampuje do capa (5 → 1)', civ.getStrataFocus('laborer') === 1);
   civ.setStrataFocus('laborer', 0);
   ok('FIX B: focusBonus schodzi do 0', civ.getStrataFocus('laborer') === 0);
+  civ.dispose();
+}
+
+// ── (BUG 3) Alokacja z UŁAMKOWYM lockiem → strata.count CAŁKOWITE + Σ ≤ floor(humans) ──
+console.log('--- (BUG 3) fractional lock → strata.count całkowite (Faza 3) ---');
+{
+  // Ułamkowy lock (crew rozdzielony proporcjonalnie) NIE może wciekać do strata.count.
+  const civ = fresh({ laborer: 20, scientist: 6 });
+  civ.strata.laborer.count = 30; civ._unemployed = 0;
+  civ._lockedPerStrata = { laborer: 9.8 };   // UŁAMKOWY lock
+  civ._allocateWorkforce();
+  let allInt = Number.isInteger(civ._unemployed);
+  for (const t of Object.keys(civ.strata)) if (!Number.isInteger(civ.strata[t].count)) allInt = false;
+  ok('(BUG3) każda strata.count CAŁKOWITA po alokacji', allInt);
+  ok('(BUG3) _unemployed CAŁKOWITE', Number.isInteger(civ._unemployed));
+  ok('(BUG3) Σstrata ≤ floor(humans)', civ._strataCount <= Math.floor(civ.humans));
+  ok('(BUG3) inwariant floor(humans) = Σstrata + unemployed', Math.floor(civ.humans) === civ._strataCount + civ._unemployed);
+
+  // Legacy: strata JUŻ ułamkowe (stare save) → alokacja NORMALIZUJE do całkowitych.
+  const civ2 = fresh({ laborer: 10 });
+  civ2.strata.laborer.count = 12.4; civ2._unemployed = 3.6;   // ułamkowy stan wejściowy
+  civ2._allocateWorkforce();
+  let allInt2 = Number.isInteger(civ2._unemployed);
+  for (const t of Object.keys(civ2.strata)) if (!Number.isInteger(civ2.strata[t].count)) allInt2 = false;
+  ok('(BUG3) legacy ułamkowe → znormalizowane do całkowitych', allInt2);
+  ok('(BUG3) legacy: suma ludzi zachowana (16)', civ2._strataCount + civ2._unemployed === 16);
+  civ.dispose(); civ2.dispose();
+}
+
+// ── (Faza 3) Etap 1 pressure-desc: focus na niskopłatnej warstwie ŚCIĄGA bezrobotnych ──
+console.log('--- (F3) Etap 1 wg pressure: focus na laborer > wage workera ---');
+{
+  // laborer i worker OBA częściowo obsadzone (workers 3 / jobs 4 → open w obu). laborer focus maxed
+  // → wyższa PRESSURE mimo NIŻSZEJ płacy → bezrobotny idzie do laborer (nie do wyżej płatnego workera).
+  const civ = fresh({ laborer: 4, worker: 4 });
+  civ.strata.laborer.count = 3; civ.strata.worker.count = 3;
+  civ.setStrataFocus('laborer', 99);   // max (cap = floor(0.25×4) = 1)
+  civ._unemployed = 1;
+  const pL = civ.getStrataPressure('laborer'), pW = civ.getStrataPressure('worker');
+  const wL = civ.getStrataWage('laborer'), wW = civ.getStrataWage('worker');
+  console.log(`    laborer: pressure=${pL.toFixed(2)} wage=${wL.toFixed(2)} | worker: pressure=${pW.toFixed(2)} wage=${wW.toFixed(2)}`);
+  ok('(F3) focus podnosi pressure laborer > worker', pL > pW);
+  ok('(F3) worker MA wyższą płacę niż laborer (mimo to)', wW > wL);
+  civ._allocateWorkforce();
+  ok('(F3) bezrobotny → LABORER (pressure-desc, nie wage-desc)', civ.strata.laborer.count === 4 && civ.strata.worker.count === 3);
   civ.dispose();
 }
 

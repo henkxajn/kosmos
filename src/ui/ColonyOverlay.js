@@ -8,6 +8,7 @@ import { BaseOverlay, HEADER_H }  from './BaseOverlay.js';
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
+import { STRATA_META } from '../systems/CivilizationSystem.js';   // Faza 3: nazwy warstw w tooltipach
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { STATIONS } from '../data/StationData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
@@ -1236,7 +1237,15 @@ export class ColonyOverlay extends BaseOverlay {
     const drawer = window.KOSMOS?.uiManager?._outliner;
     const drawerCover = drawer?.getCoveredWidth?.() ?? 0;
     const availRight = (x + w - drawerCover) - 4;
-    let discSize = Math.min(w - pad * 2, Math.round(h * 0.42));
+    // ── Zakładki prawej kolumny: [Planeta | Załoga] (Population 2.0 Faza 2) ──
+    // Podgląd (isPreview) i outposty (brak civSystem/POP) → tylko dane planety.
+    const civ = colony?.civSystem ?? null;
+    const canWorkforce = !!civ && !colony?.isPreview && !colony?.isOutpost;
+    if (!canWorkforce) this._infoTab = 'planet';
+    // Faza 3 FIX 4: w trybie Załoga globus MNIEJSZY — zwolnij pion na stopkę bilansu (przychód/
+    // płace/netto), by linia „Bilans" nie chowała się pod widżet czasu na dole panelu.
+    const wfMode = canWorkforce && this._infoTab === 'workforce';
+    let discSize = Math.min(w - pad * 2, Math.round(h * (wfMode ? 0.26 : 0.42)));
     let discX = x + (w - discSize) / 2;
     if (discX + discSize > availRight) {
       discX = availRight - discSize;            // przesuń w lewo spod drawera
@@ -1251,13 +1260,8 @@ export class ColonyOverlay extends BaseOverlay {
     const cw = w - pad * 2;
     const lx = x + pad;
 
-    // ── Zakładki prawej kolumny: [Planeta | Załoga] (Population 2.0 Faza 2) ──
-    // Podgląd (isPreview) i outposty (brak civSystem/POP) → tylko dane planety.
-    const civ = colony?.civSystem ?? null;
-    const canWorkforce = !!civ && !colony?.isPreview && !colony?.isOutpost;
     let cy = discY + discSize + 10;
     if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw);
-    else this._infoTab = 'planet';
 
     // Treść poniżej zakładek — clip do panelu
     ctx.save();
@@ -1388,9 +1392,11 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = r.focus > 0 ? THEME.accent : THEME.textDim;
       ctx.fillText(String(r.focus), (focusX0 + focusRight) / 2, my);
       if (!capOff) {
-        this._addHit(focusX0, cy, 18, ROW_H, 'focusMinus', { type: r.type });
-        this._addHit(focusRight - 18, cy, 18, ROW_H, 'focusPlus', { type: r.type });
+        this._addHit(focusX0, cy, 18, ROW_H, 'focusMinus', { type: r.type, tooltip: t('workforce.focusTooltip') });
+        this._addHit(focusRight - 18, cy, 18, ROW_H, 'focusPlus', { type: r.type, tooltip: t('workforce.focusTooltip') });
       }
+      // Hover na wierszu straty (obszar nazwy) → lista budynków zatrudniających tę warstwę.
+      this._addHit(x, cy, nameRight - x, ROW_H, 'strataRow', { type: r.type, tooltip: this._strataBuildingsTooltip(colony, r.type) });
       cy += ROW_H;
     }
 
@@ -1420,7 +1426,46 @@ export class ColonyOverlay extends BaseOverlay {
     cy = this._drawWfRow(ctx, x, cy, w, t('workforce.growth'),
       `+${growth.toFixed(1)}/${t('workforce.perYear')}`, growth > 0 ? THEME.success : THEME.textDim);
 
+    // ── Bilans kolonii (Faza 3 §3.7/§5.2): przychód (podatek+handel) − płace = netto ──
+    const colMgr = window.KOSMOS?.colonyManager;
+    const tax    = colMgr?.calculateTaxIncome?.(colony) ?? 0;
+    const trade  = colony.creditsPerYear ?? 0;
+    const income = tax + trade;
+    const wages  = civ.getTotalLaborCost?.() ?? 0;
+    const net    = income - wages;
+    cy += 3;
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.income'), `+${income.toFixed(0)} Kr`, THEME.textPrimary);
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.wages'),  `-${wages.toFixed(0)} Kr`, THEME.danger);
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.net'),
+      `${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, net >= 0 ? THEME.success : THEME.danger);
+
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  /** Tooltip listy budynków zatrudniających daną warstwę (hover w wierszu Załogi). */
+  _strataBuildingsTooltip(colony, strataType) {
+    const lang = getLocale();
+    const bs = colony?.buildingSystem;
+    const counts = {};
+    if (bs?._active) {
+      for (const [, entry] of bs._active) {
+        const b = entry.building;
+        if (!b || (b.jobs ?? 0) <= 0) continue;
+        if ((b.popType ?? 'laborer') !== strataType) continue;
+        counts[b.id] = (counts[b.id] ?? 0) + 1;
+      }
+    }
+    const stMeta = STRATA_META[strataType];
+    const strataName = stMeta ? (lang === 'en' ? stMeta.en : stMeta.pl) : strataType;
+    const entries = Object.entries(counts);
+    let html = `<b>${t('workforce.buildingsUsing', strataName)}</b><br>`;
+    if (!entries.length) return html + `<span style="opacity:.6">${t('workforce.noBuildings')}</span>`;
+    for (const [bid, n] of entries) {
+      const b = BUILDINGS[bid];
+      const nm = b ? (lang === 'en' ? (b.nameEN ?? b.namePL) : b.namePL) : bid;
+      html += `${b?.icon ?? '▪'} ${nm}${n > 1 ? ` ×${n}` : ''}<br>`;
+    }
+    return html;
   }
 
   _drawWfRow(ctx, x, y, w, label, val, valColor) {
@@ -1438,6 +1483,13 @@ export class ColonyOverlay extends BaseOverlay {
     let s = str;
     while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     return s + '…';
+  }
+
+  /** „Etaty: n× <warstwa>" dla tooltipa budynku (Faza 3 §6). */
+  _jobsLine(bd) {
+    const meta = STRATA_META[bd.popType ?? 'laborer'];
+    const sn = meta ? (getLocale() === 'en' ? meta.en : meta.pl) : (bd.popType ?? 'laborer');
+    return t('workforce.jobsLine', bd.jobs ?? 0, sn);
   }
 
   // ── Pasek listy budynków nad mapą (poziomy, kompaktowe chipy ikona+×count) ─
@@ -4143,6 +4195,9 @@ export class ColonyOverlay extends BaseOverlay {
     const oldHov = this._hoveredBuildId;
     this._hoveredBuildId = (hit?.type === 'build') ? hit.data?.buildingId : null;
 
+    // Faza 3: generyczny tooltip z pola zone.data.tooltip (focus slider, lista budynków warstw).
+    if (hit?.data?.tooltip) { this._showTooltip(hit.data.tooltip, x * _UI_SCALE, y * _UI_SCALE); return; }
+
     // Tooltip budynku w nagłówku (ikony budynków kolonii)
     if (hit?.type === 'headerBuilding') {
       const bd = BUILDINGS[hit.data.buildingId];
@@ -4169,7 +4224,7 @@ export class ColonyOverlay extends BaseOverlay {
             }
           }
         }
-        if (bd.jobs) html += `<br>👤 ${bd.jobs} POP/szt`;
+        if (bd.jobs) html += `<br>${this._jobsLine(bd)}`;   // Faza 3: „Etaty: n× <warstwa>"
         if (bd.housing) html += ` 🏠 +${bd.housing}`;
         this._showTooltip(html, x * _UI_SCALE, y * _UI_SCALE);
       }
@@ -4219,7 +4274,7 @@ export class ColonyOverlay extends BaseOverlay {
             `<span style="color:${v > 0 ? '#8f8' : '#f88'}">${v > 0 ? '+' : ''}${v} ${k}</span>`
           ).join(' ');
         }
-        if (bd.jobs) html += `<br>👤 ${bd.jobs} POP`;
+        if (bd.jobs) html += `<br>${this._jobsLine(bd)}`;   // Faza 3: „Etaty: n× <warstwa>"
         if (bd.housing) html += `<br>🏠 +${bd.housing} housing`;
         this._showTooltip(html, x * _UI_SCALE, y * _UI_SCALE);
       }

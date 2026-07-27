@@ -56,3 +56,8 @@ export const BASE_WAGE = {
 // wage = baseWage × (1 + pressure), pressure ∈ [0,1] → cap płacy = ×2 bazy (§7.2).
 export const MIGRATION_FRICTION = 0.10;  // max 10% straty źródłowej może migrować / rok cywilny
 export const FOCUS_BONUS_MAX    = 0.25;  // slider focus: demandBonus do +25% etatów budynkowych straty
+
+// ── Mnożnik handlu z zatrudnienia w przemyśle (Faza 3, §3.7) ────────────────
+// trade = civilianTradeIncome × (1 + K_TRADE × industryEmploymentShare),
+// gdzie industryEmploymentShare = zatrudnieni {laborer,miner,worker} / wszyscy zatrudnieni.
+export const K_TRADE = 0.5;
