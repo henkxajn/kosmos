@@ -1433,7 +1433,7 @@ export const BUILDINGS = {
     popCost:       0.25,
     maxLevel:      3,
     capacityBonus: null,
-    terrainOnly:   ['plains', 'tundra', 'crater'],   // wymaga otwartego horyzontu
+    terrainOnly:   ['plains', 'tundra', 'crater', 'wasteland', 'mountains'],   // otwarty horyzont; wasteland/mountains: grywalność airless (bramka biotyczna zdejmuje plains/tundra)
     terrainAny:    false,
     requires:      'kronika_lokalizacji',             // tech z C5
     popType:       'scientist',

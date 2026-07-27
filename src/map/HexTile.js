@@ -42,7 +42,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x6a5e4e,
     icon:              '⛰',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'military', 'synthetic', 'governance'],  // brak rolnictwa
+    allowedCategories: ['mining', 'energy', 'military', 'synthetic', 'governance', 'research'],  // brak rolnictwa; research: grota obserwacyjna na airless (bramka biotyczna)
     yieldBonus:        { mining: 1.6, default: 0.8 },     // trudniejsza budowa, ale więcej rud
     baseYield:         { minerals: 0.8 },
     defenseBonus:      1.25,          // walka: +25% obrony — łatwo się okopać
@@ -150,7 +150,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x585040,
     icon:              '🌑',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'military', 'synthetic'],
+    allowedCategories: ['mining', 'energy', 'military', 'synthetic', 'research', 'market'],  // research/market: grywalność airless po bramce biotycznej
     yieldBonus:        { default: 0.7 },
     baseYield:         {},
     defenseBonus:      1.0,           // walka: neutralnie
