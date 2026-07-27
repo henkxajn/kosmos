@@ -9485,12 +9485,14 @@ export class FleetManagerOverlay {
         continue;
       }
 
-      // Transport (cargo/pasażer) — tylko ciała z kolonią/outpostem (POP dostarczany do kolonii).
+      // Transport PASAŻERSKI — POP dostarczany do kolonii/stacji z housingiem. Uncolonised body NIE ma
+      // habitatów: _processPassengerArrival zeruje colonists (POPy przepadają) → wymagaj kolonii/outpostu.
+      if (actionId === 'transport_passenger' && !colMgr?.hasColony(body.id)) continue;
+      // Transport CARGO (A3) — uncolonised body DOZWOLONE: _processTransportArrival same-system tworzy
+      // outpost z ładunku, cross-system orbituje (Etap 37) — delivery NIE zakłada istniejącej kolonii.
+      // (AI-colonised in-system = cel jak dotąd, pre-existing; hostility filtr cross-empire = Slice D niżej.)
       if (actionId === 'transport' || actionId === 'transport_passenger') {
-        if (!colMgr?.hasColony(body.id)) continue;
-        // S3.4c Z3 — wyklucz cel tożsamy ze ŹRÓDŁEM (kolonia→ta sama kolonia = self-transfer cargo /
-        // self-POP bez sensu). Stacja↔matka dla pasażerów ZOSTAJE legalna (to blok stacji niżej, nie
-        // ta pętla ciał — źródło=kolonia, cel=stacja, różne id).
+        // S3.4c Z3 — wyklucz cel tożsamy ze ŹRÓDŁEM (self-transfer cargo / self-POP bez sensu).
         if (sourceColonyId && body.id === sourceColonyId) continue;
       }
       // Kolonizacja — nie pokazuj pełnych kolonii (outposty można upgrade'ować)
