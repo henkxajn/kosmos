@@ -2110,14 +2110,19 @@ export class MissionSystem {
       const originSysId = originCol?.systemId ?? 'sys_home';
       const targetSysId = targetBody?.systemId ?? 'sys_home';
 
-      if (originSysId !== targetSysId) {
-        // Obcy układ — statek orbituje cel, NIE tworzymy outpostu (wymaga moduł kolonizacyjny)
+      // A4 — outpost z DOSTAWY tylko na ciele ZBADANYM (parytet z found_outpost/colonize; body.explored,
+      // NIE analyzed — invariant analyzed⇒explored, więc analyzed też przechodzi). Ciało niezbadane
+      // w tym samym układzie idzie TĄ SAMĄ ścieżką co obcy układ: statek orbituje z cargo NA POKŁADZIE,
+      // misja kończy się bez błędu, bez outpostu, bez utraty ładunku.
+      const targetExplored = targetBody?.explored === true;
+      if (originSysId !== targetSysId || !targetExplored) {
+        // Obcy układ LUB ciało niezbadane — statek orbituje cel, NIE tworzymy outpostu.
         exp.status = 'orbiting';
         if (exp.vesselId && vMgr) {
           vMgr.arriveAtTarget(exp.vesselId, exp.targetId);
         }
       } else {
-        // Ten sam układ — utwórz outpost z cargo (jeśli jest co dostarczyć)
+        // Ten sam układ + ciało ZBADANE — utwórz outpost z cargo (jeśli jest co dostarczyć)
         const outpostResources = {};
 
         if (vessel?.cargo) {
