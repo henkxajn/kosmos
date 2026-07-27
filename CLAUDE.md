@@ -932,6 +932,68 @@ Regr 0 nowych FAIL (auto-expander 74/1 = pre-existing well/waterless; **s34c_tra
 bilans per kolonia + staffing-scaled energy (Faza 3); naprawa fixture'ów s34c TC (Faza 3); droidy tier-1 (Faza 4);
 re-ewaluacja sprzężenia bezrobocie→satysfakcja→prosperity→wzrost (Faza 5 — może za karzące).
 
+## Population 2.0 — Faza 3: ekonomia (płace/podatek/handel/bilans) + staffing-scaled energy + UX (save v97 bez migracji, commit `6b7dc3b`, live-gate PASS)
+
+Trzecia faza redesignu populacji (`docs/POPULATION_REDESIGN.md` §3.7/3.8/5.2/7.2). Buduje na Fazie 2. Droidy =
+**Faza 4**; tuning + AI economy = Faza 5. **NIE zaczynać Fazy 4 bez potwierdzenia.**
+
+**Ekonomia:**
+- **Płace = realny wydatek** (`ColonyManager._applyTaxes`, miesięcznie per kolonia): `getTotalLaborCost × fraction`,
+  floor przy 0 (soft flow, bez kary). **SYMETRYCZNIE gracz+AI** — kredyty AI drenują do 0 KOSMETYCZNIE (AI NIE ma
+  powtarzalnego dochodu: podatek pomija AI, handel wymaga portu tylko-stolice, brak budżetu imperium, 1000 Kr
+  stolica/0 ekspansja; AI działa na SUROWCACH, zero bramek kredytowych → 0 Kr nie psuje zachowania AI). 2× `PHASE5_TODO`
+  przy sicie (pełna ekonomia AI + konsekwencje niepłacenia płac).
+- **Podatek na ZATRUDNIONYCH** (`calculateTaxIncome`): `employed × 1.25 × prosperity × taxRate`; `employed =
+  civSystem.employed` (= `_strataCount` = population − unemployed; WYKLUCZA bezrobotnych I etaty syntetyczne — żadne
+  nie ma workera w stracie). Zablokowani (crew) PŁACĄ (trzymają etaty). taxRate/prosperity coupling NIETKNIĘTY.
+- **Mnożnik handlu** (`CivilianTradeSystem._routeGoods`, colony→colony): `exportKr/importKr × (1 + K_TRADE ×
+  getIndustryEmploymentShare())` per kolonia-beneficjent. `K_TRADE=0.5` (PopulationData). Share = {laborer,miner,
+  worker}/employed (0→×1.0, sam przemysł→×1.5).
+- **Bilans**: EconomyOverlay BUDŻET + CivilizationOverlay net `− totalLaborCost` (linia „Płace"/`civOverlay.laborCost`);
+  Workforce footer: przychód(podatek+handel) / płace / netto ±Kr/rok. Inwariant: Δkredytów = Σpodatek − Σpłac (floor
+  przy 0, bez fantomów — test a).
+
+**Staffing-scaled energy** (`BuildingSystem._applyTechMultipliers`, gałąź `val<0 && key==='energy'`):
+`× max(0.2, empPenalty)` — 20% standby dla wybudowanego-nieobsadzonego, pełny pobór przy pełnej obsadzie.
+Autonomiczne (jobs=0 → empPenalty 1.0) bez zmian; TYLKO strona konsumpcji (produkcja plantów skaluje się w gałęzi
+val>0). Brownout throttluje TYLKO nie-energetyczną PRODUKCJĘ, niezależny od obsady → **brak oscylacji** (brownout T11).
+
+**Alokacja Etap 1 — pressure-desc** (§3.2, zmiana z Fazy 2): ranking bezrobotnych po PRESSURE malejąco (tie-break:
+płaca desc), NIE po płacy. Inaczej focus na niskopłatnej stracie (laborer) bezużyteczny (focus podnosi pressure, nie
+płacę). Etap 2 migracja ZOSTAJE wg płacy (ekonomiczny ciąg).
+
+**⚠ 3 root-cause bugfixy z live-gate (kluczowe):**
+- **BUG 1 (energia nie skalowała w LIVE bilansie) — ORDERING:** `_activateBuilding` liczył `effectiveRates` PRZED
+  wpisem budynku do `_active` I przed `convertToStrata` → `getSlotDemand=0` → guard `_getBuildingLaborEfficiency`
+  (`demand<=0 return 1.0`) → empPenalty=1 → pełna energia rejestrowana na starcie, nigdy nieskalowana. FIX: wpis do
+  `_active` + obsada PRZED liczeniem stawek. `civ:staffingChanged` (event tylko-aktywna kolonia) ZASTĄPIONY
+  bezpośrednim `this.buildingSystem._reapplyAllRates()` po `_allocateWorkforce` (KAŻDA kolonia). **Debug:
+  `KOSMOS.debug.energyChain(planetId?)` STAŁE narzędzie** (console.table łańcucha energii per budynek — Faza 5 profiling).
+- **BUG 2 (satysfakcja 0% obok prosperity 97↑100):** `ColonyManager.switchActiveColony` ustawiał `civSystem`
+  bezwarunkowo, ale `prosperitySystem`/`factorySystem`/`buildingSystem` warunkowo `if (colony.X)` → przełączenie przez
+  kolonię bez systemu zostawiało `prosperitySystem` STAREJ kolonii → UI czytało satysfakcję nowej OBOK prosperity
+  innej. FIX: WSZYSTKIE bezwarunkowo `?? null`. (Model satysfakcji zweryfikowany OK: ~46 przy 35% bezrob.)
+- **BUG 3 (Emp. 10.2 ułamkowe > Jobs):** `_lockedPerStrata` bywa UŁAMKOWE (`_distributeLock` proporcjonalnie) →
+  `count − locked` wciekał ułamek do strata.count/_unemployed. FIX w MODELU (`_allocateWorkforce`): normalizacja
+  całkowitości na wejściu (floor strata, reszta→U, suma zachowana) + `Math.floor(count − locked)` we WSZYSTKICH ruchach.
+
+**UX:** Workforce strata-row hover → lista budynków tej straty; tooltip budynku (menu + postawiony) „Etaty: n× <warstwa>";
+tooltip slidera focus (mechanika). FIX 4: w trybie Workforce globus 26% (nie 42%) → miejsce na linię Bilans. i18n
+`workforce.*` + `civOverlay.laborCost`. `STRATA_META` eksportowane z CivilizationSystem (import w ColonyOverlay).
+
+**Save v97 BEZ migracji** (round-trip przez istniejący format — zero nowego stanu persystentnego). **Fixture'y s34c
+naprawione** (formuła TC 200→50/pop): z1 700→250 / 900→450, selfcargo base 150.
+
+**Pliki:** `ColonyManager` (tax/wages/switchActiveColony), `CivilizationSystem` (employed/industryShare/Etap1 pressure/
+BUG3), `BuildingSystem` (energy scale/`_activateBuilding` ordering), `CivilianTradeSystem` (mnożnik), `PopulationData`
+(K_TRADE), `GameScene` (debug.energyChain), `ColonyOverlay`/`EconomyOverlay`/`CivilizationOverlay`, i18n. Testy:
+`tmp_pop3_economy_smoke` **32** (a–e + BUG1 real-path), `tmp_pop2_employment_smoke` **52** (+BUG3 +F3 pressure),
+`energy_brownout_gate_smoke` **32** (+T11). Regr 0 nowych FAIL.
+
+**Świadomie POZA zakresem Fazy 3:** droidy tier-1 (`automation_droid`, Faza 4); pełna ekonomia AI (dochód/budżet AI,
+Faza 5); re-ewaluacja sprzężenia bezrobocie→satysfakcja→prosperity→wzrost (Faza 5); konsekwencje chronicznego
+niepłacenia płac (Faza 5).
+
 ## MVP Zlecenia Transportowe (logistyka) — UKOŃCZONE (save v95, live-gate PASS, commity `5fbe873`+`5009d41` push main)
 
 Pierwszy, celowo wąski wycinek reformy logistyki (`docs/plan-gielda-ladunkowa.md`) — reszta (Giełda
