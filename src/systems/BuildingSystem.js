@@ -243,12 +243,11 @@ export class BuildingSystem {
 
   // ── Query metody dla CivilizationSystem (strata demand) ─────────────────
 
-  /** Zapotrzebowanie na dany typ straty (suma popCost budynków z matching popType).
-   *  PHASE4_TODO: getSlotDemand liczy TAKŻE etaty budynków z zainstalowanym syntheticSlot
-   *  (inflacja demand danej straty → inne budynki tej straty dostają niższą efektywność
-   *  w _getBuildingLaborEfficiency). Faza 2 obchodzi to netując synthetic wyłącznie w
-   *  matematyce pressure/alokacji (getSyntheticJobs), NIE tutaj — behawior syntetyków to
-   *  zakres Fazy 4 (droidy). Wtedy zdecydować, czy synthetic ma znikać z demand globalnie. */
+  /** Zapotrzebowanie na dany typ straty (suma jobs budynków z matching popType, BRUTTO — z
+   *  syntetykami). getSlotDemand ZOSTAJE brutto (liczba etatów strukturalnie; employment/UI),
+   *  a konsumenci netują syntetyki (getSyntheticJobs) SAMI: pressure/alokacja (Faza 2) ORAZ
+   *  _getBuildingLaborEfficiency (Faza 4 — demand netto → budynki obsadzone droidem nie rozcieńczają
+   *  ludzkiej efektywności same-strata). Kwirk PHASE4_TODO rozwiązany w Fazie 4 (net w efficiency). */
   getSlotDemand(strataType) {
     let demand = 0;
     for (const entry of this._active.values()) {
@@ -316,8 +315,41 @@ export class BuildingSystem {
 
   // ── Synthetic units: install/remove ─────────────────────────────────────
 
-  /** Mapa tier → efficiency multiplier */
-  static SYNTH_EFFICIENCY = { 2: 1.7 };
+  /** Mapa droidTier → mnożnik wydajności budynku (obsada syntetyczna). Faza 4: 1 (droid) jawnie ×1.4. */
+  static SYNTH_EFFICIENCY = { 1: 1.4, 2: 1.7 };
+
+  /** Faza 4: upkeep energii aktywnego slotu syntetycznego (energii/rok, per slot). Magazyn = 0. */
+  static SYNTH_ENERGY_UPKEEP = { 1: 2, 2: 6 };
+
+  /** Faza 4: dozwolone straty per droidTier. tier 1 (droid) = prosta praca; tier 2 (android) =
+   *  BEZ ograniczenia (undefined → preserve dotychczasowe zachowanie; doc §4.2, zawężenie w epicu AI). */
+  static ALLOWED_SYNTH_STRATA = { 1: ['laborer', 'miner', 'worker'] };
+
+  /** Faza 4: priorytet doboru droida do instalacji (tier-1 subject Fazy 4 najpierw, potem android). */
+  static DROID_INSTALL_PRIORITY = ['automation_droid', 'android_worker'];
+
+  /** Faza 4: podgląd instalacji syntetyka (stan przycisku UI, BEZ konsumpcji). Zwraca droida do
+   *  instalacji (priorytet tier-1) albo powód blokady. */
+  previewSyntheticInstall(tileKey) {
+    const entry = this._active.get(tileKey);
+    if (!entry) return { ok: false, reason: 'no_building' };
+    if (entry.building?.isAutonomous || (entry.jobs ?? 0) === 0) return { ok: false, reason: 'autonomous_building' };
+    const [q, r] = tileKey.split(',').map(Number);
+    const slot = this._grid?.get(q, r)?.syntheticSlot;
+    if (slot) return { ok: false, reason: 'slot_occupied', installed: slot };
+    const popType = entry.building.popType ?? 'laborer';
+    // Dobór wg priorytetu: droid w magazynie ORAZ dozwolony dla straty budynku.
+    for (const cid of BuildingSystem.DROID_INSTALL_PRIORITY) {
+      if ((this.resourceSystem?.getAmount?.(cid) ?? 0) < 1) continue;
+      const tier = COMMODITIES[cid]?.droidTier ?? 1;
+      const allowed = BuildingSystem.ALLOWED_SYNTH_STRATA[tier];
+      if (allowed && !allowed.includes(popType)) continue;
+      return { ok: true, commodityId: cid, tier };
+    }
+    // Żaden nie pasuje — brak w magazynie czy zła strata?
+    const anyStock = BuildingSystem.DROID_INSTALL_PRIORITY.some(cid => (this.resourceSystem?.getAmount?.(cid) ?? 0) >= 1);
+    return { ok: false, reason: anyStock ? 'strata_not_allowed' : 'no_commodity' };
+  }
 
   /**
    * Zainstaluj syntetyczną jednostkę w budynku.
@@ -340,17 +372,24 @@ export class BuildingSystem {
     if (!tile) return { success: false, reason: 'no_tile' };
     if (tile.syntheticSlot) return { success: false, reason: 'slot_occupied' };
 
-    // Sprawdź commodity w inventory
-    const inv = this.resourceSystem?._inventory;
-    if (!inv || (inv[commodityId] ?? 0) < 1) {
+    // Sprawdź commodity w inventory (Faza 4 fix: ResourceSystem trzyma inventory jako Map —
+    // stary `resourceSystem._inventory[id]` NIE ISTNIAŁ [martwy kod], używamy getAmount/spend).
+    if ((this.resourceSystem?.getAmount?.(commodityId) ?? 0) < 1) {
       return { success: false, reason: 'no_commodity' };
     }
 
     // Pobierz tier z commodity definition
     const tier = COMMODITIES[commodityId]?.droidTier ?? 1;
 
+    // Faza 4: allowedStrata per droidTier — droid tier 1 obsadza TYLKO prostą pracę
+    // (laborer/miner/worker); tier 2 (android) bez ograniczenia (undefined). Odrzuć inaczej.
+    const allowed = BuildingSystem.ALLOWED_SYNTH_STRATA[tier];
+    if (allowed && !allowed.includes(entry.building.popType ?? 'laborer')) {
+      return { success: false, reason: 'strata_not_allowed' };
+    }
+
     // Zużyj commodity
-    inv[commodityId] -= 1;
+    this.resourceSystem.spend({ [commodityId]: 1 });
 
     // Ustaw slot
     tile.syntheticSlot = { commodityId, tier };
@@ -1700,16 +1739,26 @@ export class BuildingSystem {
       }
     }
 
-    // Biologiczne strata: matching type
+    // Biologiczne strata: matching type. Faza 4 (scope 6, fix PHASE4_TODO): demand NETTO
+    // (− syntetyki) — budynki obsadzone droidem/androidem NIE konkurują o ludzką pulę pracy,
+    // więc ludzkie budynki tej samej straty nie są rozcieńczane (empPenalty poprawnie wyższy).
     const strataType = building.popType ?? 'laborer';
     const strataCount = this.civSystem.strata[strataType]?.count ?? 0;
-    const demand = this.getSlotDemand(strataType);
+    const demand = this.getSlotDemand(strataType) - this.getSyntheticJobs(strataType);
     if (demand <= 0) return 1.0;
     return Math.min(1.0, strataCount / demand);
   }
 
   _applyTechMultipliers(baseRates, building, tileKey = null) {
-    if (!hasKeys(baseRates)) return {};
+    // Faza 4: upkeep energii AKTYWNEGO slotu syntetycznego — liczony NIEZALEŻNIE od baseRates
+    // (budynek bez własnych stawek też obciąża energię przez droida). Flat (per tier), doliczany niżej.
+    let synthUpkeep = 0;
+    if (tileKey && this._grid) {
+      const [sq, sr] = tileKey.split(',').map(Number);
+      const slot = this._grid.get(sq, sr)?.syntheticSlot;
+      if (slot) synthUpkeep = BuildingSystem.SYNTH_ENERGY_UPKEEP[slot.tier] ?? BuildingSystem.SYNTH_ENERGY_UPKEEP[1];
+    }
+    if (!hasKeys(baseRates)) return synthUpkeep > 0 ? { energy: -synthUpkeep } : {};
 
     // Per-budynkowe labor efficiency (zamiast globalnego employmentPenalty)
     const empPenalty = this._getBuildingLaborEfficiency(building, tileKey);
@@ -1766,6 +1815,10 @@ export class BuildingSystem {
         effective[key] = val;
       }
     }
+
+    // Faza 4: dolicz upkeep slotu syntetycznego (flat, NIE skalowany obsadą; magazyn=0). Recompute
+    // na install/remove przez _reapplyAllRates → widoczne w energyChain (effectiveRates.energy).
+    if (synthUpkeep > 0) effective.energy = (effective.energy ?? 0) - synthUpkeep;
     return effective;
   }
 

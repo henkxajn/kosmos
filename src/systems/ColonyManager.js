@@ -2263,6 +2263,9 @@ export class ColonyManager {
         factorySystem:    factSys,
         prosperitySystem: prospSys,
         grid:             savedGrid,
+        // Flaga dla ColonyOverlay._getGrid: grid pochodzi z SAVE → uszanuj kafle (syntheticSlot/
+        // droidy, owner) zamiast regenerować. Bez tego droidy znikały po każdym wczytaniu (Faza 4).
+        _gridFromSave:    !!savedGrid,
         allowImmigration: colData.allowImmigration ?? true,
         allowEmigration:  colData.allowEmigration  ?? true,
         fleet:            colData.fleet ?? [],

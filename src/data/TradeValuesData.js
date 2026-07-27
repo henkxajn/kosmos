@@ -50,6 +50,10 @@ export const BASE_PRICE = {
   // ── T2 consumer goods ───────────────────────────────────────
   neurostimulants:      25,   // Li:3(15) + C:2(2) + water:1(2) = 19 → ×1.3 = 25
 
+  // ⚠ ŚWIADOME złamanie konwencji raw×1.3: receptura droida (Li1000/C1000/Fe1000/Cu500/Si2000 +
+  // 500 Kr) to PRODUCTION SINK, nie cena rynkowa. raw×1.3 dałoby ~14 300 Kr (absurd vs android 160).
+  // Cena rynkowa ustawiona RĘCZNIE na 450 Kr (droid jako towar handlowy ≈ android, mimo drogiej produkcji).
+  automation_droid:     450,
   // ── T3 commodities (bracket 80–160 Kr) ─────────────────────
   android_worker:       160,  // wymaga 5×electronic + 3×semiconductor + 2×polymer
   plasma_cores:         100,  // Ti:8 + Hv:6 + Li:4 → surowe 100

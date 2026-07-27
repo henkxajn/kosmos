@@ -17,6 +17,7 @@ import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -519,11 +520,24 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (this._gridCache[pid]) return this._gridCache[pid];
 
-    // Obca/test-enemy kolonia wygenerowana poza overlay (np. spawnTestEnemy już ustawił
-    // grid z tile.owner=empireId i zbudował capital). Uszanuj istniejący grid — nie regeneruj.
+    // Uszanuj istniejący grid zamiast regenerować, gdy:
+    //  • kolonia obca (spawnTestEnemy/EmpireGenerator ustawił grid z owner+capital), LUB
+    //  • kolonia gracza z gridem z SAVE (kafle niosą stan: syntheticSlot/droidy, owner).
+    // ⚠ ROOT-CAUSE (Faza 4): dawny guard obejmował tylko `isHostileColony` → grid gracza był
+    // regenerowany po każdym reloadzie, gubiąc syntheticSlot (droidy znikały; BUG A/B/C).
     const isHostileColony = !!colony.ownerEmpireId || !!colony.isTestEnemy;
-    if (colony.grid && isHostileColony) {
+    if (shouldReuseColonyGrid(colony, isHostileColony)) {
       this._gridCache[pid] = colony.grid;
+      const bSys = colony.buildingSystem;
+      if (bSys) {
+        // Zsynchronizuj BuildingSystem z tą SAMĄ instancją grida (install/energyChain/render
+        // muszą czytać/pisać jeden grid). Dla kolonii gracza z save inaczej bSys._grid = null.
+        bSys._grid = colony.grid;
+        bSys._gridHeight = colony.grid.height ?? 10;
+        if (typeof bSys.setDeposits === 'function') bSys.setDeposits(colony.planet?.deposits ?? []);
+      }
+      this._loadBiomeMap(colony.planet, colony.grid, pid);   // biomy nie są serializowane (async)
+      this._syncTileBuildings(colony.grid, bSys);
       return colony.grid;
     }
 
@@ -1371,11 +1385,17 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(this._truncateText(ctx, `${r.icon} ${name}`, nameRight - x - 4), x, my);
 
-      // Etaty (realne dla ludzi) + pracownicy (amber gdy niedobór obsady).
+      // Etaty (realne dla ludzi) + pracownicy (amber gdy niedobór obsady; +N🤖 = etaty na droidach).
       ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'right';
       ctx.fillStyle = THEME.textDim; ctx.fillText(String(r.jobs), jobsRight, my);
       ctx.fillStyle = (r.workers < r.jobs) ? THEME.amber : THEME.textPrimary;
-      ctx.fillText(String(r.workers), workRight, my);
+      if (r.synthetic > 0) {   // Faza 4: obsada syntetyczna widoczna per warstwa (np. 6+2🤖)
+        ctx.font = `10px ${THEME.fontFamily}`;
+        ctx.fillText(`${r.workers}+${r.synthetic}🤖`, workRight, my);
+        ctx.font = `11px ${THEME.fontFamily}`;
+      } else {
+        ctx.fillText(String(r.workers), workRight, my);
+      }
 
       // Płaca — highlight gdy pressure > 0.25.
       ctx.fillStyle = (r.pressure > 0.25) ? THEME.amber : THEME.textDim;
@@ -3227,6 +3247,34 @@ export class ColonyOverlay extends BaseOverlay {
       }
       this._drawBtn(ctx, '🗑 Rozbiórka', x + 8, cy, FLOAT_W - 16, 24, '#6e1a1a');
       this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'demolish');
+      cy += 28;
+
+      // Faza 4: droid (syntetyk) — tylko budynki z etatami (jobs>0, nie autonomiczne).
+      const bsSyn = colony?.buildingSystem;
+      if (bsSyn && (b.jobs ?? 0) > 0 && !b.isAutonomous) {
+        const tileKey = `${tile.q},${tile.r}`;
+        if (tile.syntheticSlot) {
+          // Zainstalowany → Usuń (NISZCZY jednostkę — komunikat niżej).
+          this._drawBtn(ctx, `🗑 ${t('colonyPanel.removeSynthetic')}`, x + 8, cy, FLOAT_W - 16, 22, '#6e4a1a');
+          this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'removeSynthetic', { tileKey });
+          cy += 24;
+          ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
+          ctx.fillText(t('synthetic.removeWarn'), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
+        } else {
+          const prev = bsSyn.previewSyntheticInstall?.(tileKey);
+          if (prev?.ok) {
+            this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#1a5a6e');
+            this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'installSynthetic', { tileKey, commodityId: prev.commodityId });
+            cy += 24;
+          } else if (prev && prev.reason !== 'no_building') {
+            // Zablokowany — przycisk wyszarzony + powód (i18n).
+            this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#333');
+            cy += 24;
+            ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.amber; ctx.textAlign = 'center';
+            ctx.fillText(t('synthetic.reason.' + prev.reason), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
+          }
+        }
+      }
 
     } else if (tile.underConstruction) {
       const ub = BUILDINGS[tile.underConstruction.buildingId];
@@ -3981,6 +4029,19 @@ export class ColonyOverlay extends BaseOverlay {
       case 'demolish':
         if (tile) EventBus.emit('planet:demolishRequest', { tile });
         break;
+      // Faza 4: instalacja/usuwanie droida (syntetyk) w budynku.
+      case 'installSynthetic': {
+        const bSyn = colony?.buildingSystem;
+        const res = bSyn?.installSynthetic?.(zone.data?.tileKey, zone.data?.commodityId);
+        this._showFlash(res?.success ? t('synthetic.installedFlash') : t('synthetic.reason.' + (res?.reason ?? 'no_commodity')));
+        break;
+      }
+      case 'removeSynthetic': {
+        const bSyn = colony?.buildingSystem;
+        const res = bSyn?.removeSynthetic?.(zone.data?.tileKey);
+        this._showFlash(res?.success ? t('synthetic.removedFlash') : t('synthetic.reason.' + (res?.reason ?? 'no_synthetic')));
+        break;
+      }
       case 'cancelPending':
         if (tile) {
           // Anuluj oczekujące zamówienie

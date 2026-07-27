@@ -199,22 +199,32 @@ systemem podatkowym, NIE tworzyć drugiego.
 tier 1 = "Droid" (EN "Droid") — dziś automation_droid ("Droid
 Automatyzacyjny") — UPRASZCZAMY nazwę.
 
-### 4.1 Droid (tier 1 — DO ZDEFINIOWANIA, Faza 4)
+### 4.1 Droid (tier 1 — ✅ ZDEFINIOWANY, Faza 4 SHIPPED)
 
-automation_droid jest zreferowany (i18n, save v26→v27, starting inventory,
-HexTile ×1.4), ale NIE ISTNIEJE w COMMODITIES. Definiujemy:
+automation_droid był zreferowany (i18n, save v26→v27, starting inventory,
+HexTile ×1.4), a Faza 4 ZDEFINIOWAŁA go w COMMODITIES (rename i18n → „Droid"):
+Storage upkeep = ZERO (commodity semantics — potwierdzone niżej „zero upkeepu"),
+aktywny slot = 2 energii (tier 1) / 6 (tier 2). assemblyBonus 2.0 = FLAT ×2 output.
 
 ```js
 automation_droid: {
   tier: 1, droidTier: 1, isDroidUnit: true,
-  recipe: { Fe: 20, Cu: 10, Si: 15, C: 10 },   // TYLKO basic (rarity 1–2)
+  recipe: { Li: 1000, C: 1000, Fe: 1000, Cu: 500, Si: 2000 },   // basic-only, DROGI w ilości
+  creditCost: 500,                              // Kr/szt. — sink kredytów przy ukończeniu (pauza gdy brak)
   baseTime: 1.0,                                // rok/szt.
   weight: 3.0,
   requiresTech: null,                           // OD STARTU GRY
   efficiencyBonus: 0.40,                        // spójne z fallbackiem ×1.4
 }
 ```
-Trade value wg konwencji raw×1.3: ≈ 95 Kr (android_worker: 160 Kr).
+Trade value (cena rynkowa): **450 Kr, RĘCZNIE** (android_worker: 160 Kr).
+⚠ **Re-gate ISSUE 1 (decyzja Filipa — finalna):** droid = STRATEGICZNA INWESTYCJA, nie akcja-spam.
+Pierwotny recipe (Fe20/Cu10/Si15/C10, ~95 Kr) był ~10× za tani. Finalnie: recipe masowy (tylko
+basic-mined, ale duże ilości) **+ `creditCost: 500 Kr/szt`** (nowe pole schematu receptury —
+pobierane z kredytów kolonii przy ukończeniu; niewypłacalność PAUZUJE produkcję do czasu odzysku Kr).
+Cena rynkowa RĘCZNIE 450 Kr — **świadome złamanie konwencji raw×1.3** (dałaby ~14 300 Kr, absurd vs
+android 160): recipe to PRODUCTION SINK, nie cena rynkowa. Produkcja w praktyce **stockpile-gated
+(surowce) + credit-gated (Kr)** — potwierdzone testem. baseTime bez zmian (1.0).
 Produkcja: factory (FactorySystem, jak android_worker) — **plus AKTYWACJA
 martwego pola assemblyBonus: 2.0 w robot_assembly** (2× szybciej, dokładnie
 tak jak opisuje komentarz w kodzie).
@@ -347,7 +357,7 @@ trade_union_hall zaokrąglony 0.4→1.)
 | S_BASE / W_EMP / K_UNEMP / W_CROWD | 50 / 40 / 3 / 15 | 15% bezrob. zeruje W_EMP |
 | GAMMA (prosperity target) | 1.5 | |
 | INERTIA (prosperity) | 0.08/rok | z 0.15 |
-| droid t1: recipe / czas / eff / upkeep | Fe20 Cu10 Si15 C10 / 1 rok / ×1.4 / 2 energii | od startu, bez tech |
+| droid t1: recipe / czas / eff / upkeep | Li1000 C1000 Fe1000 Cu500 Si2000 +500Kr / 1 rok / ×1.4 / 2 energii | od startu, bez tech; rynek 450 Kr |
 | droid t2 (android_worker) upkeep | 6 energii/slot | reszta bez zmian |
 
 ---
@@ -404,11 +414,42 @@ Live-gate: bilans = delta budżetu; focus kosztuje; bezrobocie = niższe podatki
   po redenominacji ×4 na 50×pop (Faza 1). Naprawić fixture'y wraz z pracą nad
   handlem/płacami w Fazie 3 (dotykamy `CivilianTradeSystem`).
 
-**Faza 4 — Droid tier 1:** definicja automation_droid (basic recipe, bez
-tech), aktywacja assemblyBonus w robot_assembly, allowedStrata per tier,
-upkeep energii aktywnych slotów, rename w i18n.
-Live-gate: produkcja droida od startu gry możliwa; instalacja tylko
-w laborer/miner/worker; energia obciążona; robot_assembly przyspiesza ×2.
+**Faza 4 — Droid tier 1 — ✅ SHIPPED (save v97 bez migracji):** definicja
+automation_droid w COMMODITIES (basic-only recipe Fe60/Cu40/Si50/C30/Ti10, bez tech, od
+startu; trade 371 Kr), rename i18n → „Droid", assemblyBonus 2.0 FLAT (robot_assembly
+×2 output automation_droid), allowedStrata per droidTier (`ALLOWED_SYNTH_STRATA[1]=
+[laborer,miner,worker]`; tier 2 unrestricted), upkeep energii aktywnego slotu
+(`SYNTH_ENERGY_UPKEEP {1:2,2:6}`, per-budynek w effectiveRates → energyChain), scope 6
+fix (net demand w `_getBuildingLaborEfficiency` — droid nie rozcieńcza ludzkiej efektywności).
+- **⚠ Odkrycia:** (1) `installSynthetic`/`removeSynthetic` były MARTWE — zero callerów
+  UI; (2) `installSynthetic` czytał nieistniejące `resourceSystem._inventory[id]` (ResourceSystem
+  = Map) → naprawione na `getAmount`/`spend`. Debug: `KOSMOS.debug.installDroid/removeDroid`.
+- **UI:** przycisk Zainstaluj/Usuń droida w pływającym panelu budynku (ColonyOverlay), stan
+  allowed/blocked + powód i18n, tier-priority (droid→android), ostrzeżenie „Usunięcie NISZCZY
+  droida". Workforce pokazuje syntetyki per warstwa („6+2🤖").
+
+**Faza 4 — RE-GATE (2. live-gate, save v97 bez migracji):** live-gate złapał „testy zielone,
+gra zepsuta" — install działał w headless, znikał w grze. **ROOT-CAUSE = `ColonyOverlay._getGrid`
+REGENEROWAŁ grid gracza** przy każdym otwarciu mapy (guard reuse obejmował TYLKO kolonie obce
+`isHostileColony`). Po wczytaniu zapisu `ColonyManager.restore` ustawiał `colony.grid = savedGrid`
+(z `syntheticSlot`), a `_getGrid` go wyrzucał i generował świeży → **droidy znikały po reloadzie
+(BUG C), a energyChain/Usuń działały na innej instancji grida (BUG A/B)**. Testy używały JEDNEGO
+grida → nigdy nie łapały diverencji.
+- **Fix:** wydzielony pure `shouldReuseColonyGrid(colony, isHostile)` (`src/ui/ColonyGridResolveLogic.js`,
+  bez THREE — testowalny headless); `_getGrid` uszanuje grid gdy obcy LUB `colony._gridFromSave`
+  (stempel w `ColonyManager.restore`) + synchronizuje `bSys._grid` do tej samej instancji + biomy +
+  `_syncTileBuildings`. Jeden grid dla install/energyChain/render/save.
+- **ISSUE 1 (recipe/cena — FINALNE, decyzja Filipa):** droid = strategiczna inwestycja, nie spam.
+  Recipe masowy `Li1000/C1000/Fe1000/Cu500/Si2000` **+ nowe pole `creditCost: 500 Kr/szt`** (pobierane
+  z kredytów kolonii przy ukończeniu w `FactorySystem._update` → `_trySpendProductionCredits`; brak Kr
+  PAUZUJE alokację, progress+składniki nietknięte). Cena rynkowa RĘCZNIE 450 Kr (świadome złamanie
+  raw×1.3 — recipe = sink, nie cena). Praktycznie stockpile+credit-gated (test k). UI: `formatRecipe`
+  pokazuje `💰500Kr`, `_productionBlockHtml` ostrzega o niewypłacalności (i18n `econPanel.*`).
+- **ISSUE 2 (tempo produkcji): brak units-buga.** Diagnoza headless: automation_droid @1 pkt
+  produkcji = **dokładnie 1 szt / 1 civ-rok** (= baseTime, spec), android baseTime 2.5 → 0.4/civ-rok
+  (też zgodne). Percepcja „10× za szybko" = mnożniki stakują się (punkty × techFactorySpeed ×
+  assemblyBonus 2.0) w rozwiniętej kolonii + skala civ-vs-game-year. Źródłowa matematyka poprawna —
+  NIE ruszano baseTime ani ticku. Ekonomiczny hamulec floodu = ISSUE 1 (limit składników).
 
 **Faza 5 — Tuning i AI:** stałe na realnej rozgrywce; ColonyAutoExpander:
 habitaty przy pełnym capacity, budynki-etaty przy bezrobociu, bez bankructwa
@@ -433,6 +474,10 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   energyCost/baseRates.energy/effectiveRates.energy/zarejestrowane w ResourceSystem/bilans).
   Użyć w Fazie 5 do profilowania bilansu energii i weryfikacji skalowania zużycia obsadą po
   zmianach balansu (analogicznie `KOSMOS.debug.colonies()` dla zdrowia populacji/AI).
+- **Przegląd cen (z re-gate Fazy 4):** droid dostał wysoką cenę produkcji (recipe masowy +
+  creditCost 500) z uzasadnieniem „inwestycja, nie spam". Faza 5: analogiczny przegląd
+  `android_worker` (też droga produkcja, ta sama zasada) + audyt pozostałych cen commodities
+  (spójność `BASE_PRICE` vs realny koszt produkcji — dziś część to raw×1.3, część ręczna).
 
 ---
 

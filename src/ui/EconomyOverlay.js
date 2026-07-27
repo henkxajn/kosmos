@@ -422,6 +422,15 @@ export class EconomyOverlay extends BaseOverlay {
       }
     }
 
+    // 4) Faza 4: creditCost — niewypłacalność kolonii PAUZUJE produkcję (droid = sink Kr).
+    if ((def.creditCost ?? 0) > 0) {
+      const credits = checkCol?.credits ?? 0;
+      const line = credits < def.creditCost
+        ? `<div style="color:${THEME.danger};margin-top:4px">💰 ${t('econPanel.insufficientCredits', def.creditCost)} (${Math.floor(credits)} Kr)</div>`
+        : `<div style="color:${THEME.textDim};margin-top:4px">💰 ${t('econPanel.creditCostPerUnit', def.creditCost)}</div>`;
+      lines.push(line);
+    }
+
     return lines.join('');
   }
 
@@ -1034,7 +1043,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(formatRecipe(def.recipe), x + 24, y + 24);
+    ctx.fillText(formatRecipe(def.recipe, def.creditCost), x + 24, y + 24);
 
     // Target info
     if (alloc.targetQty !== null) {
@@ -2211,7 +2220,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Receptura — po nazwie z odstępem
     const nameWidth = arIw + 4 + ctx.measureText(arName).width;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(formatRecipe(def.recipe), nameX + nameWidth + 8, ry + 12);
+    ctx.fillText(formatRecipe(def.recipe, def.creditCost), nameX + nameWidth + 8, ry + 12);
 
     return ry + ADD_ROW_H;
   }

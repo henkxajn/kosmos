@@ -556,7 +556,7 @@ export class FactorySystem {
       if (!def) continue;
       const scenarioMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
       const techSpeedMult = this._getOwnerColony()?.buildingSystem?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
-      const speedMult = scenarioMult * techSpeedMult;
+      const speedMult = scenarioMult * techSpeedMult * this._getAssemblyBonus(id);
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
       // Alokacja z 0 FP (zwykle zablokowana przez _autoConsolidate — brak
       // składników lub cel osiągnięty) UI traktuje jako "stalled".
@@ -797,7 +797,7 @@ export class FactorySystem {
       // Czas na 1 szt
       const scenarioMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
       const techSpeedMult = this._getOwnerColony()?.buildingSystem?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
-      const speedMult = scenarioMult * techSpeedMult;
+      const speedMult = scenarioMult * techSpeedMult * this._getAssemblyBonus(commodityId);
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
       alloc.progress += deltaYears * avail;   // brownout: avail<1 → wolniejsza produkcja; avail=0 → brak akumulacji
 
@@ -809,6 +809,14 @@ export class FactorySystem {
         if (alloc.targetQty !== null && alloc.produced >= alloc.targetQty) {
           alloc._paused = true;
           targetReached.push({ commodityId, points: alloc.points });
+          break;
+        }
+
+        // Faza 4: creditCost — koszt Kr per sztuka (droid = strategiczny sink kredytów).
+        // Pobierz PRZED zużyciem składników; niewypłacalność PAUZUJE (progress i składniki
+        // nietknięte → wznów gdy kredyty wrócą). Bez systemu kredytów (headless) → nie blokuj.
+        if ((def.creditCost ?? 0) > 0 && !this._trySpendProductionCredits(def.creditCost)) {
+          alloc._paused = true;
           break;
         }
 
@@ -1283,6 +1291,31 @@ export class FactorySystem {
       if (col.factorySystem === this) return col;
     }
     return null;
+  }
+
+  /** Faza 4: mnożnik szybkości montażu droida — robot_assembly (assemblyBonus 2.0) DWOI produkcję
+   *  automation_droid. FLAT (nie skaluje z poziomem — pole `assemblyBonus` to stała 2.0, komentarz „2×
+   *  szybsza"). Wymaga budynku w _active (gate na obsadzie zbędny — bonus montowni). Max po budynkach. */
+  _getAssemblyBonus(commodityId) {
+    if (commodityId !== 'automation_droid') return 1.0;
+    const bs = this._getOwnerColony()?.buildingSystem;
+    if (!bs?._active) return 1.0;
+    let bonus = 1.0;
+    for (const entry of bs._active.values()) {
+      const ab = entry.building?.assemblyBonus;
+      if (ab && ab > bonus) bonus = ab;
+    }
+    return bonus;
+  }
+
+  /** Faza 4: pobierz koszt Kr produkcji z kredytów kolonii (atomowo). Zwraca true jeśli opłacono
+   *  LUB brak systemu kredytów (headless/test → nie blokuj), false = niewypłacalność (PAUZA). */
+  _trySpendProductionCredits(amount) {
+    if (!(amount > 0)) return true;
+    const cts = window.KOSMOS?.civilianTradeSystem;
+    const pid = this._getOwnerColony()?.planetId;
+    if (!cts || !pid || typeof cts.spendCredits !== 'function') return true;   // brak systemu → nie blokuj
+    return cts.spendCredits(pid, amount, 'droid_production');   // atomowo: deduct-or-false
   }
 
   // Źródło 2: Paliwo — power_cells potrzebne do tankowania floty

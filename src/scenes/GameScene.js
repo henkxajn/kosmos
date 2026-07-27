@@ -497,6 +497,22 @@ export class GameScene {
         console.log(`energy: production=${res.energy?.production} consumption=${res.energy?.consumption} balance=${res.energy?.balance}`);
         return rows;
       },
+      // Faza 4 — droidy: instalacja/usuwanie syntetyka w budynku aktywnej kolonii.
+      //   installDroid("q,r", "automation_droid") — zwraca {success, reason?}. Domyślnie automation_droid.
+      installDroid: (tileKey, commodityId = 'automation_droid') => {
+        const bs = window.KOSMOS?.buildingSystem;
+        if (!bs?.installSynthetic) { console.warn('[installDroid] brak buildingSystem'); return; }
+        const res = bs.installSynthetic(tileKey, commodityId);
+        console.log(`[installDroid] ${tileKey} ← ${commodityId}:`, res);
+        return res;
+      },
+      removeDroid: (tileKey) => {
+        const bs = window.KOSMOS?.buildingSystem;
+        if (!bs?.removeSynthetic) { console.warn('[removeDroid] brak buildingSystem'); return; }
+        const res = bs.removeSynthetic(tileKey);
+        console.log(`[removeDroid] ${tileKey}:`, res);
+        return res;
+      },
       // S3.4 FAZA 6 — backup/restore save'a przed bumpem wersji (single-slot save utrudnia
       //   test migracji na żywo). exportSave() → pobiera plik + kopiuje do schowka + zwraca string;
       //   importSave(json) → nadpisuje slot (string LUB obiekt) i instruuje reload (migracja przy load).

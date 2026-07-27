@@ -216,6 +216,30 @@ export const COMMODITIES = {
     isConsumerGood: false, consumptionLayer: null,
   },
 
+  // Droid tier 1 (Population 2.0 Faza 4) — prosta automatyzacja OD STARTU (bez tech).
+  // Obsadza slot w budynku laborer/miner/worker bez ludzi, +40% wydajności (SYNTH_EFFICIENCY[1]=1.4).
+  automation_droid: {
+    id:          'automation_droid',
+    namePL:      'Droid',
+    nameEN:      'Droid',
+    icon:        '🤖',
+    tier:        1,
+    // ⚠ WYSOKI koszt jest CELOWY (decyzja Filipa): dodatkowe ręce muszą być STRATEGICZNĄ
+    // INWESTYCJĄ, nie akcją-spamem. Droga w ILOŚCI (tylko basic-mined, ale masowo) + koszt Kr:
+    recipe:      { Li: 1000, C: 1000, Fe: 1000, Cu: 500, Si: 2000 },
+    creditCost:  500,                                  // Kr/szt. — pobierane z kredytów kolonii
+                                                       // przy ukończeniu; niewypłacalność PAUZUJE produkcję
+    baseTime:    1.0,                                  // rok/szt. (×2 szybciej z robot_assembly)
+    weight:      3.0,
+    isDroidUnit:      true,
+    droidTier:        1,
+    efficiencyBonus:  0.40,   // +40% wydajności budynku — spójne z SYNTH_EFFICIENCY fallback ×1.4
+    requiresTech:     null,   // OD STARTU GRY (bez tech)
+    description: 'Prosta jednostka automatyzacyjna — obsadza slot w budynku (laborer/miner/worker) ' +
+                 'bez ludzi, +40% wydajności. Aktywny slot pobiera energię.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
   plasma_cores: {
     id:          'plasma_cores',
     namePL:      'Rdzenie Plazmatyczne',
@@ -424,9 +448,9 @@ for (const id of Object.keys(COMMODITIES)) {
 }
 
 // ── Pomocnik: formatuj recepturę jako string ──────────────────────────────
-export function formatRecipe(recipe) {
+export function formatRecipe(recipe, creditCost = 0) {
   if (!recipe) return '';
-  return Object.entries(recipe)
+  const str = Object.entries(recipe)
     .map(([id, qty]) => {
       // Sprawdź czy to surowiec
       const res = MINED_RESOURCES[id] || HARVESTED_RESOURCES[id];
@@ -437,4 +461,6 @@ export function formatRecipe(recipe) {
       return `${id}×${qty}`;
     })
     .join(' ');
+  // Koszt Kr per szt. (Faza 4: droid = sink kredytów) doklejony do receptury surowcowej.
+  return creditCost > 0 ? `${str} 💰${creditCost}Kr` : str;
 }
