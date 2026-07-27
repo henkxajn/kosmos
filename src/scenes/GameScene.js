@@ -438,6 +438,30 @@ export class GameScene {
           .then(() => console.log('[intro] replay zakończony'))
           .catch((e) => console.error('[intro] replay błąd:', e));
       },
+      // KOSMOS.debug.colonies() — tabela WSZYSTKICH skolonizowanych ciał (gracz + AI):
+      //   nazwa, właściciel, pop (humans/capacity), bezrobotni, satysfakcja, prosperity,
+      //   wzrost/rok, liczba budynków. Do obserwacji zdrowia AI w dłuższych sesjach
+      //   (Population 2.0 Faza 2). Zwraca też tablicę wierszy do dalszej inspekcji.
+      colonies: () => {
+        const cols = window.KOSMOS?.colonyManager?.getAllColonies?.() ?? [];
+        const rows = cols.map((c) => {
+          const civ = c.civSystem;
+          const humans = Math.floor(civ?.humans ?? civ?.population ?? 0);
+          const cap = Math.round(civ?.housing ?? 0);
+          return {
+            nazwa:        c.planet?.name ?? c.planetId ?? '?',
+            właściciel:   c.ownerEmpireId ?? 'player',
+            pop:          `${humans}/${cap}`,
+            bezrobotni:   civ?.unemployed ?? 0,
+            satysfakcja:  Math.round(civ?.satisfaction ?? 0),
+            prosperity:   Math.round(c.prosperitySystem?.prosperity ?? 0),
+            'wzrost/rok': +(civ?.getAnnualGrowth?.() ?? 0).toFixed(2),
+            budynki:      c.buildingSystem?._active?.size ?? 0,
+          };
+        });
+        console.table(rows);
+        return rows;
+      },
       // S3.4 FAZA 6 — backup/restore save'a przed bumpem wersji (single-slot save utrudnia
       //   test migracji na żywo). exportSave() → pobiera plik + kopiuje do schowka + zwraca string;
       //   importSave(json) → nadpisuje slot (string LUB obiekt) i instruuje reload (migracja przy load).

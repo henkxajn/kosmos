@@ -31,6 +31,7 @@ import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingText
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 import { drawStationManagement } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji
 import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
+import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -82,6 +83,10 @@ export class ColonyOverlay extends BaseOverlay {
     this._globe = null;
     this._globePlanetId = null;
 
+    // Zakładka prawej kolumny info: 'planet' (dane planety — domyślna) | 'workforce'
+    // (Population 2.0 Faza 2 — załoga/etaty/płace/focus).
+    this._infoTab = 'planet';
+
     // Poziome przewinięcie paska budynków nad mapą (px)
     this._buildBarScroll = 0;
     // Poziome przewinięcie paska zakładek kolonii w nagłówku (px)
@@ -98,6 +103,18 @@ export class ColonyOverlay extends BaseOverlay {
     this._controlGroups = new Map();    // number → Set<unitId> (Ctrl+1..9 grupy bojowe)
     this._unitSprites = new Map();
     this._loadUnitSprites();
+
+    // Rekrutacja jednostek naziemnych — modal SCOPED do oglądanej kolonii.
+    // Panel rekrutacji (reużyty z JEDNOSTKI) dostaje getColony → this._getColony(),
+    // więc rozkaz `startGroundUnitBuild` celuje w TĘ kolonię (nie globalną aktywną).
+    this._mouseX = 0; this._mouseY = 0;   // pozycja kursora dla tooltipów panelu (jak UnitDesignOverlay)
+    this._draftOpen = false;              // czy modal rekrutacji otwarty
+    this._draftPanel = new GroundUnitPanel({
+      addHit:       (x, y, w, h, type, data) => this._addHit(x, y, w, h, `ground:${type}`, data),
+      getHoverZone: () => this._hoverZone,
+      getMouse:     () => ({ x: this._mouseX, y: this._mouseY }),
+      getColony:    () => this._getColony(),
+    });
 
     // Modifiery ostatniego kliknięcia — ustawiane przez window.mousedown listener w GameScene.
     // Używane w handleClick do rozróżnienia single-select (bez modifierów) vs add-to-selection.
@@ -420,6 +437,7 @@ export class ColonyOverlay extends BaseOverlay {
   hide() {
     super.hide();
     this._previewMode = false; this._previewColony = null;
+    this._draftOpen = false; this._draftPanel?.hide();   // zamknij modal rekrutacji
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null;
     this._hideTooltip();
@@ -994,12 +1012,74 @@ export class ColonyOverlay extends BaseOverlay {
       this._addHit(sBtnX, sBtnY, sBtnW, sBtnH, 'station_open', { hasTech: hasStationTech });
     }
 
+    // Przycisk rekrutacji jednostek (na lewo od stacji) — SCOPED do tej kolonii.
+    // Bramka: kolonia gracza (nie podgląd/wróg) + koszary. Brak koszar → disabled + powód.
+    if (!this._stationMode && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      const barracksLv  = window.KOSMOS?.colonyManager?._getBarracksLevel?.(colony) ?? 0;
+      const hasBarracks = barracksLv > 0;
+      const dBtnW = 84, dBtnH = 20, dBtnY = oy + 6, dBtnX = ox + ow - 206;
+      ctx.save();
+      ctx.fillStyle = this._draftOpen ? 'rgba(40,70,90,0.92)'
+                    : (hasBarracks ? 'rgba(20,40,60,0.82)' : 'rgba(22,22,30,0.55)');
+      ctx.fillRect(dBtnX, dBtnY, dBtnW, dBtnH);
+      ctx.strokeStyle = hasBarracks ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1; ctx.strokeRect(dBtnX, dBtnY, dBtnW, dBtnH);
+      ctx.font = `bold 11px ${THEME.fontFamily}`;
+      ctx.fillStyle = hasBarracks ? THEME.accent : THEME.textDim;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(`${hasBarracks ? '🎖' : '🔒'} ${t('groundPanel.draftBtn')}`, dBtnX + dBtnW / 2, dBtnY + dBtnH / 2);
+      ctx.restore();
+      this._addHit(dBtnX, dBtnY, dBtnW, dBtnH, 'draft_open', { hasBarracks });
+    }
+
     // Zamknij [X]
     const closeX = ox + ow - 24;
     ctx.font = `bold 14px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
     ctx.fillText('✕', closeX, oy + 20);
     this._addHit(closeX - 4, oy + 6, 22, 22, 'close');
+
+    // Modal rekrutacji — rysowany OSTATNI (na wierzchu). Klik/hover/scroll izolowane
+    // w handleClick/handleMouseMove/handleScroll gdy _draftOpen (true modal).
+    if (this._draftOpen && !this._stationMode && colony && !colony.isPreview
+        && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      this._drawDraftModal(ctx, ox, oy, ow, oh);
+    }
+  }
+
+  /** Modal rekrutacji jednostek naziemnych — panel scoped do this._getColony(). */
+  _drawDraftModal(ctx, ox, oy, ow, oh) {
+    ctx.save();
+    // Backdrop przyciemniający kolonię
+    ctx.fillStyle = 'rgba(2,6,10,0.55)';
+    ctx.fillRect(ox, oy, ow, oh);
+
+    // Panel wyśrodkowany
+    const DW = Math.min(384, ow - 40);
+    const DH = Math.min(560, oh - 40);
+    const dx = Math.round(ox + ow / 2 - DW / 2);
+    const dy = Math.round(oy + Math.max(HDR_H + 8, oh / 2 - DH / 2));
+
+    ctx.fillStyle = 'rgba(6,12,20,0.98)';
+    ctx.fillRect(dx, dy, DW, DH);
+    ctx.strokeStyle = THEME.borderActive ?? '#3a6'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(dx, dy, DW, DH);
+
+    // [✕] close — hit PRZED panelem (priorytet; short-circuit i tak filtruje strefy draftu)
+    this._addHit(dx + DW - 24, dy + 4, 22, 22, 'draft_close');
+
+    // Panel rekrutacji (dodaje własne strefy 'ground:*' podczas draw)
+    this._draftPanel.draw(ctx, dx, dy, DW, DH);
+
+    // Glyph [✕] na wierzchu panelu
+    ctx.font = `bold 14px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('✕', dx + DW - 8, dy + 18);
+    ctx.textAlign = 'left';
+
+    // Tło modalu na KOŃCU — absorber (wzór station dialog)
+    this._addHit(dx, dy, DW, DH, 'draftDialogBg');
+    ctx.restore();
   }
 
   // ── Nagłówek (standard: BaseOverlay._drawOverlayHeader — pasmo 44 + tytuł + linia) ──
@@ -1168,42 +1248,196 @@ export class ColonyOverlay extends BaseOverlay {
     const discY = y + 8;
     this._syncGlobe(discX, discY, discSize, discSize, planet, grid);
 
-    // Treść poniżej globu — clip do panelu (poniżej strefy globu)
-    let cy = discY + discSize + 12;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x, cy - 4, w, y + h - cy + 4); ctx.clip();
-
     const cw = w - pad * 2;
     const lx = x + pad;
 
-    // ── Charakterystyka ──
-    cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.physics'));
-    const tempC = planet.temperatureC ?? planet.surface?.temperature ?? 0;
-    const tempStr = `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)} °C`;
-    const atmKey = `colonyInfo.atm.${planet.atmosphere || 'none'}`;
-    const rows = [
-      [t('colonyInfo.temperature'), tempStr],
-      [t('colonyInfo.mass'),     `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`],
-      [t('colonyInfo.gravity'),  `${(planet.surfaceGravity ?? 1).toFixed(2)} g`],
-      [t('colonyInfo.radius'),   `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`],
-      [t('colonyInfo.atmosphere'), t(atmKey)],
-    ];
-    for (const [label, val] of rows) cy = this._drawInfoRow(ctx, lx, cy, cw, label, val);
-    cy += 8;
+    // ── Zakładki prawej kolumny: [Planeta | Załoga] (Population 2.0 Faza 2) ──
+    // Podgląd (isPreview) i outposty (brak civSystem/POP) → tylko dane planety.
+    const civ = colony?.civSystem ?? null;
+    const canWorkforce = !!civ && !colony?.isPreview && !colony?.isOutpost;
+    let cy = discY + discSize + 10;
+    if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw);
+    else this._infoTab = 'planet';
 
-    // ── Surowce (złoża) ──
-    cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.resources'));
-    const deps = planet.deposits || [];
-    if (!deps.length) {
-      ctx.font = `italic 10px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
-      ctx.fillText(t('colonyInfo.noResources'), lx, cy + 10); cy += 18;
+    // Treść poniżej zakładek — clip do panelu
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, cy - 4, w, y + h - cy + 4); ctx.clip();
+
+    if (this._infoTab === 'workforce' && canWorkforce) {
+      this._drawWorkforceTab(ctx, lx, cy, cw, y + h - cy - 4, colony, civ);
     } else {
-      // Surowce mają teraz cały panel (budynki → pasek nad mapą)
-      for (const d of deps) cy = this._drawDepositRow(ctx, lx, cy, cw, d);
+      // ── Charakterystyka (domyślna zakładka: dane planety) ──
+      cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.physics'));
+      const tempC = planet.temperatureC ?? planet.surface?.temperature ?? 0;
+      const tempStr = `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)} °C`;
+      const atmKey = `colonyInfo.atm.${planet.atmosphere || 'none'}`;
+      const rows = [
+        [t('colonyInfo.temperature'), tempStr],
+        [t('colonyInfo.mass'),     `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`],
+        [t('colonyInfo.gravity'),  `${(planet.surfaceGravity ?? 1).toFixed(2)} g`],
+        [t('colonyInfo.radius'),   `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`],
+        [t('colonyInfo.atmosphere'), t(atmKey)],
+      ];
+      for (const [label, val] of rows) cy = this._drawInfoRow(ctx, lx, cy, cw, label, val);
+      cy += 8;
+
+      // ── Surowce (złoża) ──
+      cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.resources'));
+      const deps = planet.deposits || [];
+      if (!deps.length) {
+        ctx.font = `italic 10px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+        ctx.fillText(t('colonyInfo.noResources'), lx, cy + 10); cy += 18;
+      } else {
+        // Surowce mają teraz cały panel (budynki → pasek nad mapą)
+        for (const d of deps) cy = this._drawDepositRow(ctx, lx, cy, cw, d);
+      }
     }
     ctx.restore();
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // ── Zakładki prawej kolumny: [Planeta | Załoga] (pigułki, wzór _drawColonyTabs) ──
+  _drawInfoTabs(ctx, x, y, w) {
+    const tabs = [
+      { id: 'planet',    label: t('colonyInfo.tabPlanet') },
+      { id: 'workforce', label: t('colonyInfo.tabWorkforce') },
+    ];
+    const tabH = 20, gap = 6;
+    const tw = Math.floor((w - gap) / 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold 11px ${THEME.fontFamily}`;
+    let sx = x;
+    for (const tab of tabs) {
+      const active = this._infoTab === tab.id;
+      ctx.fillStyle = active ? THEME.accentDim : 'rgba(255,255,255,0.03)';
+      ctx.fillRect(sx, y, tw, tabH);
+      ctx.strokeStyle = active ? THEME.accent : THEME.borderLight;
+      ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, y + 0.5, tw - 1, tabH - 1);
+      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
+      ctx.fillText(tab.label, sx + tw / 2, y + tabH / 2);
+      this._addHit(sx, y, tw, tabH, 'infoTab', { tab: tab.id });
+      sx += tw + gap;
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return y + tabH + 10;
+  }
+
+  // ── Zakładka Załoga (Population 2.0 Faza 2 §5.1) — tabela strat + stopka ──
+  // Tabela: strata | etaty | pracownicy | płaca (highlight pressure>0.25) | focus [− n +].
+  // Stopka: bezrobotni (warn >10%), satysfakcja, prosperity + strzałka trendu, wzrost.
+  _drawWorkforceTab(ctx, x, y, w, h, colony, civ) {
+    const lang = getLocale();
+    const rows = civ.getWorkforceBreakdown();
+    const humans = Math.floor(civ.humans ?? civ.population ?? 0);
+    const unemployed = civ.unemployed ?? 0;
+
+    // Kolumny liczbowe kotwiczone od prawej krawędzi panelu.
+    const NUMW = 42, FOCUSW = 58;
+    const focusRight = x + w;
+    const focusX0    = focusRight - FOCUSW;
+    const wageRight  = focusX0 - 6;
+    const workRight  = wageRight - NUMW;
+    const jobsRight  = workRight - NUMW;
+    const nameRight  = jobsRight - NUMW;
+
+    // Nagłówek kolumn.
+    ctx.font = `bold 9px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';  ctx.fillText(t('workforce.colStrata'), x, y + 9);
+    ctx.textAlign = 'right';
+    ctx.fillText(t('workforce.colJobs'),    jobsRight, y + 9);
+    ctx.fillText(t('workforce.colWorkers'), workRight, y + 9);
+    ctx.fillText(t('workforce.colWage'),    wageRight, y + 9);
+    ctx.textAlign = 'center';
+    ctx.fillText(t('workforce.colFocus'), (focusX0 + focusRight) / 2, y + 9);
+    let cy = y + 13;
+    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + w, cy); ctx.stroke();
+    ctx.globalAlpha = 1; cy += 4;
+
+    const ROW_H = 20;
+    for (const r of rows) {
+      const name = lang === 'en' ? r.nameEN : r.namePL;
+      const my = cy + ROW_H / 2;
+      ctx.textBaseline = 'middle';
+
+      // Nazwa (ikona + skrót, truncate do dostępnej szerokości).
+      ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'left';
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(this._truncateText(ctx, `${r.icon} ${name}`, nameRight - x - 4), x, my);
+
+      // Etaty (realne dla ludzi) + pracownicy (amber gdy niedobór obsady).
+      ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'right';
+      ctx.fillStyle = THEME.textDim; ctx.fillText(String(r.jobs), jobsRight, my);
+      ctx.fillStyle = (r.workers < r.jobs) ? THEME.amber : THEME.textPrimary;
+      ctx.fillText(String(r.workers), workRight, my);
+
+      // Płaca — highlight gdy pressure > 0.25.
+      ctx.fillStyle = (r.pressure > 0.25) ? THEME.amber : THEME.textDim;
+      ctx.fillText(r.wage.toFixed(1), wageRight, my);
+
+      // Focus [− n +] (wyszarzony gdy cap=0, czyli <4 etaty brutto).
+      const capOff = r.focusCap <= 0;
+      ctx.textAlign = 'center';
+      ctx.font = `bold 13px ${THEME.fontFamily}`;
+      ctx.fillStyle = capOff ? THEME.textDim : THEME.accent;
+      ctx.fillText('−', focusX0 + 9, my);
+      ctx.fillText('+', focusRight - 9, my);
+      ctx.font = `11px ${THEME.fontFamily}`;
+      ctx.fillStyle = r.focus > 0 ? THEME.accent : THEME.textDim;
+      ctx.fillText(String(r.focus), (focusX0 + focusRight) / 2, my);
+      if (!capOff) {
+        this._addHit(focusX0, cy, 18, ROW_H, 'focusMinus', { type: r.type });
+        this._addHit(focusRight - 18, cy, 18, ROW_H, 'focusPlus', { type: r.type });
+      }
+      cy += ROW_H;
+    }
+
+    // Separator + stopka.
+    cy += 4;
+    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + w, cy); ctx.stroke();
+    ctx.globalAlpha = 1; cy += 6;
+
+    // Bezrobotni (kolor ostrzegawczy > 10% ludzi).
+    const unempFrac = humans > 0 ? unemployed / humans : 0;
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.unemployed'),
+      `${unemployed} (${Math.round(unempFrac * 100)}%)`, unempFrac > 0.10 ? THEME.danger : THEME.textPrimary);
+    // Satysfakcja.
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.satisfaction'),
+      `${Math.round(civ.satisfaction ?? 50)}%`, THEME.textPrimary);
+    // Prosperity + strzałka trendu do targetu.
+    const pros = window.KOSMOS?.prosperitySystem;
+    if (pros && window.KOSMOS?.civSystem === civ) {
+      const cur = pros.prosperity ?? 50, tgt = pros.targetProsperity ?? 50;
+      const arrow = tgt > cur + 0.5 ? '↑' : tgt < cur - 0.5 ? '↓' : '→';
+      const acol  = tgt > cur + 0.5 ? THEME.success : tgt < cur - 0.5 ? THEME.danger : THEME.textDim;
+      cy = this._drawWfRow(ctx, x, cy, w, t('workforce.prosperity'), `${Math.round(cur)} ${arrow} ${Math.round(tgt)}`, acol);
+    }
+    // Wzrost (reuse getAnnualGrowth — jednostki POP/rok cyw.).
+    const growth = civ.getAnnualGrowth?.() ?? 0;
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.growth'),
+      `+${growth.toFixed(1)}/${t('workforce.perYear')}`, growth > 0 ? THEME.success : THEME.textDim);
+
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  _drawWfRow(ctx, x, y, w, label, val, valColor) {
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+    ctx.fillText(label, x, y + 11);
+    ctx.fillStyle = valColor ?? THEME.textPrimary; ctx.textAlign = 'right';
+    ctx.fillText(val, x + w, y + 11);
+    ctx.textAlign = 'left';
+    return y + 18;
+  }
+
+  _truncateText(ctx, str, maxW) {
+    if (ctx.measureText(str).width <= maxW) return str;
+    let s = str;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
   }
 
   // ── Pasek listy budynków nad mapą (poziomy, kompaktowe chipy ikona+×count) ─
@@ -3295,8 +3529,28 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   // ── Input ────────────────────────────────────────────────────────────────
+  /**
+   * Klik przy otwartym modalu rekrutacji. TYLKO strefy 'draft_*' / 'ground:*' są aktywne
+   * (find-first po przefiltrowanych strefach — niezależne od kolejności dodania). Klik poza
+   * panelem zamyka modal; każdy klik jest pochłaniany (nie przebija do mapy/UI pod spodem).
+   */
+  _handleDraftClick(x, y) {
+    const z = this._hitZones.find(zn =>
+      x >= zn.x && x <= zn.x + zn.w && y >= zn.y && y <= zn.y + zn.h &&
+      (zn.type === 'draft_close' || zn.type === 'draftDialogBg' || zn.type?.startsWith('ground:'))
+    );
+    if (!z) { this._draftOpen = false; return true; }          // klik poza panelem → zamknij
+    if (z.type === 'draft_close')          this._draftOpen = false;
+    else if (z.type === 'draftDialogBg')   { /* konsumuj klik w pustą część panelu */ }
+    else                                   this._draftPanel.onHit(z.type.slice(7), z.data ?? {});
+    return true;
+  }
+
   handleClick(x, y) {
     if (!this.visible) return false;
+
+    // Modal rekrutacji otwarty → TYLKO strefy draftu żyją; reszta pochłonięta (true modal).
+    if (this._draftOpen) return this._handleDraftClick(x, y);
 
     // Sprawdź czy klik jest w overlay bounds
     const canvas = document.getElementById('ui-canvas');
@@ -3527,6 +3781,20 @@ export class ColonyOverlay extends BaseOverlay {
         if (window.KOSMOS?.overlayManager) window.KOSMOS.overlayManager.active = null;
         break;
       case 'deselectHex': this._selectedHex = null; break;
+      // Population 2.0 Faza 2 — przełącznik prawej kolumny [Planeta | Załoga].
+      case 'infoTab':
+        if (zone.data?.tab) this._infoTab = zone.data.tab;
+        break;
+      // Slider focus straty (demandBonus → pressure). Krok całkowity, clamp w setStrataFocus.
+      case 'focusMinus':
+      case 'focusPlus': {
+        const civ = colony?.civSystem;
+        const ty = zone.data?.type;
+        if (civ?.setStrataFocus && ty) {
+          civ.setStrataFocus(ty, civ.getStrataFocus(ty) + (zone.type === 'focusPlus' ? 1 : -1));
+        }
+        break;
+      }
       case 'colonyTab':
         if (zone.data?.planetId) {
           // B1 fix: wyjście z trybu stacji MUSI nastąpić nawet gdy klikamy zakładkę TEJ SAMEJ
@@ -3627,6 +3895,10 @@ export class ColonyOverlay extends BaseOverlay {
       case 'station_open':
         if (zone.data?.hasTech) this._stationDialogOpen = !this._stationDialogOpen;
         else this._showFlash('🔒 ' + t('station.requiresTech'));
+        break;
+      case 'draft_open':
+        if (zone.data?.hasBarracks) this._draftOpen = !this._draftOpen;
+        else this._showFlash('🔒 ' + t('groundPanel.needBarracks'));
         break;
       case 'station_dialog_close':
         this._stationDialogOpen = false;
@@ -3845,6 +4117,15 @@ export class ColonyOverlay extends BaseOverlay {
   handleMouseMove(x, y) {
     if (!this.visible) return;
     super.handleMouseMove(x, y);  // aktualizuje _hoverZone + _rectSelect.curX/Y
+    this._mouseX = x; this._mouseY = y;   // dla tooltipów panelu rekrutacji
+
+    // Modal rekrutacji → hover TYLKO po strefach panelu (tooltipy); reszta widoku nieaktywna.
+    if (this._draftOpen) {
+      this._hoverZone = this._hitZones.find(zn =>
+        x >= zn.x && x <= zn.x + zn.w && y >= zn.y && y <= zn.y + zn.h && zn.type?.startsWith('ground:')
+      ) ?? null;
+      return;
+    }
 
     // Rect-select aktywne → nic więcej nie rób (pan i hover nie dotyczą drag-select)
     if (this._rectSelect.active) return;
@@ -4080,6 +4361,9 @@ export class ColonyOverlay extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+
+    // Modal rekrutacji → scroll rusza detal panelu (nie mapę/paski pod spodem).
+    if (this._draftOpen) { this._draftPanel.handleScroll(delta, x, y); return true; }
 
     const mb = this._getMapBounds();
     // Scroll poziomy zakładek kolonii (kursor nad pasmem nagłówka)

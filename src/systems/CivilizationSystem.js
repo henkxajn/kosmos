@@ -41,6 +41,7 @@ import { MILESTONE_DEFINITIONS, MILESTONE_BY_TYPE, CULTURAL_TRAITS } from '../da
 import {
   BASE_GROWTH_RATE, planetGrowthMod,
   SAT_BASE, SAT_W_EMP, SAT_K_UNEMP, SAT_W_CROWD, SAT_CROWD_START, SAT_CROWD_SPAN, SAT_W_TAX,
+  BASE_WAGE, MIGRATION_FRICTION, FOCUS_BONUS_MAX,   // Population 2.0 Faza 2: zatrudnienie/płace/focus
 } from '../data/PopulationData.js';
 import { taxSatisfactionDrain } from '../data/ConsumerGoodsData.js';
 
@@ -89,6 +90,18 @@ const DEFAULT_STRATA = () => ({
 
 export const STRATA_TYPES = ['laborer', 'miner', 'worker', 'scientist', 'merchant', 'engineer', 'bureaucrat'];
 
+// Metadane strat (dwujęzyczne — reguła PL+EN) — jedno źródło dla getStrataBreakdown +
+// getWorkforceBreakdown (Population 2.0 Faza 2, zakładka Workforce).
+export const STRATA_META = {
+  laborer:    { pl: 'Robotnicy',    en: 'Laborers',    icon: '👷' },
+  miner:      { pl: 'Górnicy',      en: 'Miners',      icon: '⛏' },
+  worker:     { pl: 'Fabryczni',    en: 'Workers',     icon: '🏭' },
+  scientist:  { pl: 'Naukowcy',     en: 'Scientists',  icon: '🔬' },
+  merchant:   { pl: 'Kupcy',        en: 'Merchants',   icon: '💰' },
+  engineer:   { pl: 'Inżynierowie', en: 'Engineers',   icon: '⚙' },
+  bureaucrat: { pl: 'Urzędnicy',    en: 'Bureaucrats', icon: '🏢' },
+};
+
 export class CivilizationSystem {
   constructor(initialOverride = {}, techSystem = null, planet = null) {
     this.techSystem = techSystem;
@@ -134,7 +147,10 @@ export class CivilizationSystem {
     this._snapCache = null;
 
     // ── System POP ──────────────────────────────────────────────────────
-    this._growthProgress  = 0;     // Population 2.0: ułamek `humans` (floor(humans)=Σ strata, §2.5)
+    this._growthProgress  = 0;     // Population 2.0: ułamek `humans` (floor(humans)=Σ strata + unemployed, §2.5)
+    this._unemployed      = 0;     // Population 2.0 Faza 2 §3.2: pula bezrobotnych (POZA stratami; §2.3 —
+                                   //   koniec nieskończonego laborera). floor(humans)=Σ strata + _unemployed.
+    this._focusBonus      = {};    // Faza 2 §2.6: slider focus per strata (demandBonus, wirtualne etaty → pressure)
     this.satisfaction     = 50;    // Population 2.0 §3.5: satysfakcja kolonii 0-100 → prosperity infra
     this._starvationYears = 0;     // licznik lat głodu
     this._employedPops    = 0;     // POPy zatrudnione przez budynki
@@ -336,6 +352,16 @@ export class CivilizationSystem {
     let wholeDeficit = needed - target.count;
     if (wholeDeficit <= 0) return true;
 
+    // Population 2.0 Faza 2: najpierw z puli bezrobotnych (naturalne obsadzenie nowego etatu,
+    // bez podbierania pracowników innym stratom).
+    if (this._unemployed > 0) {
+      const take = Math.min(wholeDeficit, this._unemployed);
+      target.count += take;
+      this._unemployed -= take;
+      wholeDeficit -= take;
+    }
+    if (wholeDeficit <= 0) return true;
+
     // Szukaj wolnych POPów w innych stratach (priorytet: laborer)
     const donors = STRATA_TYPES.filter(t => t !== targetType);
     donors.sort((a, b) => (a === 'laborer' ? -1 : b === 'laborer' ? 1 : 0));
@@ -358,59 +384,22 @@ export class CivilizationSystem {
   // ── Migracja cywilna (handel cywilny — CivilianTradeSystem) ─────────────
 
   /**
-   * Emigracja: zabierz ułamek POPa z kolonii (nadreprezentowane strata).
-   * @param {number} fraction — ułamek POPa do emigracji (np. 0.1)
-   * @returns {{ breakdown: Object<string,number> }} — ile zabrano z każdej strata
+   * Emigracja: zabierz osoby z kolonii do migracji cywilnej.
+   * Population 2.0 Faza 2 (§2.3): emigrują BEZROBOTNI — mobilna pula. Zatrudnieni trzymają
+   * etaty; po alokacji strata nie mają nadwyżki, więc źródłem jest wyłącznie `_unemployed`.
+   * @param {number} fraction — ilu ludzi (całkowita część) najwyżej zabrać
+   * @returns {{ breakdown: Object<string,number> }} — { unemployed: n } (immigrate rozumie klucz)
    */
   emigrate(fraction) {
     if (fraction <= 0 || this.population <= 0) return { breakdown: {} };
-
-    // Oblicz nadreprezentację: strata z największym surplus (count - demand)
-    const surpluses = [];
-    for (const type of STRATA_TYPES) {
-      const s = this.strata[type];
-      if (s.count <= 0) continue;
-      const demand = this.buildingSystem?.getSlotDemand(type) ?? 0;
-      const surplus = (s.count + s.growthProgress) - demand;
-      if (surplus > 0) surpluses.push({ type, surplus, available: s.count + s.growthProgress });
-    }
-
-    if (surpluses.length === 0) return { breakdown: {} };
-
-    // Rozdziel fraction proporcjonalnie do surplus
-    const totalSurplus = surpluses.reduce((s, e) => s + e.surplus, 0);
-    const breakdown = {};
-    let remaining = fraction;
-
-    for (const { type, surplus, available } of surpluses) {
-      const share = Math.min(remaining, fraction * (surplus / totalSurplus));
-      const take = Math.min(share, available - 0.01); // zostaw minimum
-      if (take <= 0) continue;
-
-      // Zabierz z growthProgress najpierw, potem z count
-      let toTake = take;
-      const gp = this.strata[type].growthProgress;
-      if (gp > 0) {
-        const fromGP = Math.min(gp, toTake);
-        this.strata[type].growthProgress -= fromGP;
-        toTake -= fromGP;
-      }
-      if (toTake > 0 && this.strata[type].count > 0) {
-        const fromCount = Math.min(this.strata[type].count, Math.ceil(toTake));
-        this.strata[type].count -= fromCount;
-        // Nadmiar wraca do growthProgress
-        const overshoot = fromCount - toTake;
-        if (overshoot > 0) this.strata[type].growthProgress += overshoot;
-      }
-
-      breakdown[type] = take;
-      remaining -= take;
-    }
+    const n = Math.min(Math.floor(fraction), this._unemployed);
+    if (n <= 0) return { breakdown: {} };
+    this._unemployed -= n;
 
     this._registeredPop = -1; // wymuś przeliczenie konsumpcji
     this._syncConsumption();
     EventBus.emit('civ:populationChanged', this._popSnapshot());
-    return { breakdown };
+    return { breakdown: { unemployed: n } };
   }
 
   /**
@@ -421,6 +410,9 @@ export class CivilizationSystem {
     if (!breakdown) return;
     for (const [type, amount] of Object.entries(breakdown)) {
       if (amount <= 0) continue;
+      // Population 2.0 Faza 2: przybysze wchodzą jako BEZROBOTNI (alokacja wchłonie ich do
+      // wolnych etatów w następnym przebiegu, §3.2).
+      if (type === 'unemployed') { this._unemployed += Math.round(amount); continue; }
       if (!this.strata[type]) continue;
       // Dodaj do growthProgress; jeśli ≥1 → promuj do count
       this.strata[type].growthProgress += amount;
@@ -436,11 +428,14 @@ export class CivilizationSystem {
   }
 
   /**
-   * Wskaźnik bezrobocia: freePops / population
+   * Wskaźnik bezrobocia (Population 2.0 Faza 2): unemployed / population.
+   * Realna pochodna z puli bezrobotnych (§3.2) — zasila satysfakcję (§3.5) i próg
+   * migracji cywilnej. W stanie ustalonym ≈ freePops/population (patrz komentarz
+   * przy `freePops`; test steady-state pilnuje zbieżności obu miar).
    */
   get unemploymentRate() {
     if (this.population <= 0) return 0;
-    return this.freePops / this.population;
+    return this._unemployed / this.population;
   }
 
   /**
@@ -463,23 +458,38 @@ export class CivilizationSystem {
     this.strata.laborer.count = totalPop;
   }
 
-  /** Getter backwards-compatible: suma count ze wszystkich strat */
-  get population() {
+  /** Suma count ze wszystkich strat = zatrudnieni (workers). Population 2.0 Faza 2:
+   *  strata NIE zawierają już nadwyżki (nadwyżka → _unemployed, §2.3). */
+  get _strataCount() {
     let sum = 0;
     for (const s of Object.values(this.strata)) sum += s.count;
     return sum;
   }
 
-  /** Population 2.0: kanoniczna liczba ludzi (float). floor(humans)=Σ strata (§2.5). */
+  /** Getter backwards-compatible: CAŁKOWITA populacja = zatrudnieni (Σ strata) + bezrobotni.
+   *  Population 2.0 Faza 2 (Model B): SUMA niezmieniona względem Fazy 1 — nadwyżka, która
+   *  wcześniej pęczniała w `laborer`, siedzi teraz w `_unemployed`. Konsumpcja/housing/
+   *  progi liczą się jak dawniej (bezrobotni to też ludzie). */
+  get population() {
+    return this._strataCount + this._unemployed;
+  }
+
+  /** Population 2.0: kanoniczna liczba ludzi (float). floor(humans)=Σ strata + _unemployed (§2.5). */
   get humans() { return this.population + this._growthProgress; }
+
+  /** Bezrobotni (pochodna per tick, §3.2). Inwariant: floor(humans) = Σ strata + unemployed. */
+  get unemployed() { return this._unemployed; }
 
   /** Setter safety-net: przechwytuje stare przypisania `civSystem.population = X` */
   set population(val) {
     this.setPopulation(val);
   }
 
-  /** Ustaw całkowitą populację (rozdziel proporcjonalnie lub do laborer) */
+  /** Ustaw całkowitą populację (rozdziel proporcjonalnie lub do laborer).
+   *  Population 2.0 Faza 2: zeruje pulę bezrobotnych — cały `total` trafia do strat
+   *  (alokacja per-tick i tak przeliczy zatrudnienie/bezrobocie). */
   setPopulation(total) {
+    this._unemployed = 0;
     const current = this.population;
     if (total === current) return;
     if (current <= 0 || total <= 0) {
@@ -510,7 +520,9 @@ export class CivilizationSystem {
     s.count += count;
   }
 
-  /** Usuń POP — null = z najniższej satisfaction, lub z podanego typu */
+  /** Usuń POP — null = z najniższej satisfaction, lub z podanego typu.
+   *  Population 2.0 Faza 2: gdy brak zatrudnionych do usunięcia → zabiera z puli bezrobotnych
+   *  (kolonia całkowicie bezrobotna też może tracić ludzi; inwariant zachowany). */
   removePop(type = null, count = 1) {
     for (let i = 0; i < count; i++) {
       let target = type;
@@ -524,8 +536,10 @@ export class CivilizationSystem {
           }
         }
       }
-      if (target && this.strata[target]) {
-        this.strata[target].count = Math.max(0, this.strata[target].count - 1);
+      if (target && (this.strata[target]?.count ?? 0) > 0) {
+        this.strata[target].count -= 1;
+      } else if (this._unemployed > 0) {
+        this._unemployed -= 1;
       }
     }
   }
@@ -567,7 +581,13 @@ export class CivilizationSystem {
     return this.habitatHousing;
   }
 
-  // Wolne POPy dostępne do budowy/ekspedycji
+  // Wolne POPy dostępne do budowy/ekspedycji.
+  // Population 2.0 Faza 2 (Model B): formuła CELOWO niezmieniona — ~40 konsumentów
+  // (ekspedycje, załogi, jednostki naziemne, AI, UI) polega na jej semantyce.
+  // Ponieważ `population` = Σ strata + unemployed, a `_employedPops` = Σ etatów, w stanie
+  // ustalonym freePops ≈ _unemployed (test steady-state pilnuje tolerancji; rozjazd = fail).
+  // Przyszły refactor hook: gdy lock/expedition przejdą na pulę bezrobotnych, ten getter
+  // można zredukować do `return this._unemployed`. Do tego czasu — bez zmian.
   get freePops() {
     return Math.max(0, this.population - this._employedPops - this._lockedPops);
   }
@@ -618,15 +638,7 @@ export class CivilizationSystem {
 
   /** Breakdown strat do UI */
   getStrataBreakdown() {
-    const NAMES = {
-      laborer:    { pl: 'Robotnicy',   en: 'Laborers',     icon: '👷' },
-      miner:      { pl: 'Górnicy',     en: 'Miners',       icon: '⛏' },
-      worker:     { pl: 'Fabryczni',   en: 'Workers',      icon: '🏭' },
-      scientist:  { pl: 'Naukowcy',    en: 'Scientists',   icon: '🔬' },
-      merchant:   { pl: 'Kupcy',       en: 'Merchants',    icon: '💰' },
-      engineer:   { pl: 'Inżynierowie', en: 'Engineers',   icon: '⚙' },
-      bureaucrat: { pl: 'Urzędnicy',   en: 'Bureaucrats',  icon: '🏢' },
-    };
+    const NAMES = STRATA_META;
     const result = [];
     for (const type of STRATA_TYPES) {
       const s = this.strata[type];
@@ -696,6 +708,8 @@ export class CivilizationSystem {
       habitatHousing:       this.habitatHousing,   // diagnostyka; restore przelicza z budynków
       epochIndex:           this.epochIndex,
       growthProgress:       this._growthProgress,
+      unemployed:           this._unemployed,           // Population 2.0 Faza 2: pula bezrobotnych
+      focusBonus:           { ...this._focusBonus },     // Faza 2: slider focus per strata
       satisfaction:         this.satisfaction,
       starvationYears:      this._starvationYears,
       employedPops:         this._employedPops,
@@ -744,6 +758,8 @@ export class CivilizationSystem {
 
     this.epochIndex           = data.epochIndex           ?? 0;
     this._growthProgress      = data.growthProgress       ?? 0;
+    this._unemployed          = data.unemployed           ?? 0;   // Population 2.0 Faza 2 (stary save → 0)
+    this._focusBonus          = data.focusBonus ? { ...data.focusBonus } : {};
     this.satisfaction         = data.satisfaction         ?? 50;
     this._starvationYears     = data.starvationYears      ?? 0;
     // employedPops ustawiane na 0 — zostanie ponownie obliczone przez BuildingSystem.restoreFromSave()
@@ -791,11 +807,15 @@ export class CivilizationSystem {
     // Cache resource ratios raz na yearly update (unika wielokrotnego obliczania)
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
 
-    // 0. Satisfakcja per-strata (loyalty) + kolonii (Population 2.0 §3.5 → prosperity)
+    // 0a. Alokacja siły roboczej (Population 2.0 Faza 2 §3.2) — PRZED satysfakcją, by
+    //     bezrobocie było świeże. Wolne etaty zasysają bezrobotnych + migracja z tarciem.
+    this._allocateWorkforce();
+
+    // 0b. Satisfakcja per-strata (loyalty) + kolonii (Population 2.0 §3.5 → prosperity)
     this._updateStrataSatisfaction();
     this._updateSatisfaction();
 
-    // 1. Wzrost populacji — logistyczny na `humans` (Population 2.0 §3.1)
+    // 1. Wzrost populacji — logistyczny na `humans` (Population 2.0 §3.1). Nowi = bezrobotni.
     this._updateLogisticGrowth();
 
     // 2. Śmierć POPa (głód) — przekaż cached foodRatio
@@ -1148,7 +1168,9 @@ export class CivilizationSystem {
     return Math.max(0, rate * humans * (1 - humans / capacity));
   }
 
-  /** Wzrost logistyczny — akrecja do `_growthProgress`; pełna jednostka → nowy POP. */
+  /** Wzrost logistyczny — akrecja do `_growthProgress`; pełna jednostka → nowy BEZROBOTNY.
+   *  Population 2.0 Faza 2 (§3.2): nowi ludzie wchodzą jako bezrobotni; alokacja (Etap 1)
+   *  wchłania ich do wolnych etatów w następnym przebiegu. */
   _updateLogisticGrowth() {
     const growth = this._computeLogisticGrowth();
     if (growth <= 0) { this._lastGrowth = 0; return; }
@@ -1156,12 +1178,11 @@ export class CivilizationSystem {
     let born = 0, guard = 0;
     while (this._growthProgress >= 1.0 && guard++ < 10000) {
       this._growthProgress -= 1.0;
-      const type = this._assignNewPopStrata();
-      this.addPop(type);
+      this._unemployed += 1;
       born++;
       if (window.KOSMOS?.civSystem === this) {
         EventBus.emit('civ:popBorn', {
-          population: this.population, strataType: type,
+          population: this.population, strataType: 'unemployed',
           planetId: this._colonyId, colonyName: this.planet?.name ?? 'kolonia',
         });
       }
@@ -1169,25 +1190,133 @@ export class CivilizationSystem {
     this._lastGrowth = born > 0 ? 1 : 0;
   }
 
-  /**
-   * Przydział nowego POPa do straty. PHASE2_TODO: Faza 2 zastąpi to pełną
-   * alokacją dwustopniową (demand + pressure). Faza 1: strata z największym
-   * niezaspokojonym demandem, inaczej laborer (placeholder).
-   */
-  _assignNewPopStrata() {
-    let best = 'laborer', bestDeficit = 0;
+  // ── Population 2.0 Faza 2: zatrudnienie, płace, alokacja siły roboczej ─────
+
+  /** Etaty budynkowe straty (brutto, wraz z syntetykami — jak getSlotDemand). */
+  getStrataJobs(type)   { return this.buildingSystem?.getSlotDemand?.(type) ?? 0; }
+  /** Etaty straty obsadzone przez syntetyki (netowane z popytu na ludzi, §3.4). */
+  _syntheticJobs(type)  { return this.buildingSystem?.getSyntheticJobs?.(type) ?? 0; }
+  /** Realne etaty dla LUDZI = brutto − syntetyki. Alokacja obsadza tylko te. */
+  _humanJobs(type)      { return Math.max(0, this.getStrataJobs(type) - this._syntheticJobs(type)); }
+  /** Zatrudnieni w stracie (workers) = count (zawiera zablokowanych — spójne z produkcją). */
+  getStrataWorkers(type){ return this.strata[type]?.count ?? 0; }
+
+  /** Górny limit slidera focus straty = 25% etatów brutto (całkowite kroki, §2.6).
+   *  Faza 2 fix: strata z 1–3 etatami dostaje min. 1 krok (inaczej slider znikał). */
+  _focusCap(type) {
+    const jobs = this.getStrataJobs(type);
+    return jobs > 0 ? Math.max(1, Math.floor(FOCUS_BONUS_MAX * jobs)) : 0;
+  }
+  /** demandBonus (slider focus) straty — clamp do [0, cap]. */
+  getStrataFocus(type)  { return Math.max(0, Math.min(this._focusCap(type), Math.round(this._focusBonus[type] ?? 0))); }
+  /** Ustaw slider focus straty (intent method z UI). Nie tworzy realnych etatów — tylko pressure. */
+  setStrataFocus(type, value) {
+    if (!this.strata[type]) return;
+    this._focusBonus[type] = Math.max(0, Math.min(this._focusCap(type), Math.round(value ?? 0)));
+  }
+
+  /** Pressure straty (§3.3): (effDemand − workers − syntheticJobs) / effDemand, clamp[0,1]. */
+  getStrataPressure(type) {
+    const effDemand = this.getStrataJobs(type) + this.getStrataFocus(type);   // + demandBonus (focus)
+    if (effDemand <= 0) return 0;
+    const raw = (effDemand - this.getStrataWorkers(type) - this._syntheticJobs(type)) / effDemand;
+    return Math.max(0, Math.min(1, raw));
+  }
+  /** Płaca straty (§3.3): baseWage × (1 + pressure), cap ×2 (pressure∈[0,1]). */
+  getStrataWage(type)      { return (BASE_WAGE[type] ?? 1) * (1 + this.getStrataPressure(type)); }
+  /** Koszt pracy straty (Faza 3 hook): workers × wage. Faza 2: TYLKO liczony/eksponowany. */
+  getStrataLaborCost(type) { return this.getStrataWorkers(type) * this.getStrataWage(type); }
+  /** Sumaryczny koszt utrzymania siły roboczej (Faza 3 wpina jako wydatek imperium). */
+  getTotalLaborCost() {
+    let sum = 0;
+    for (const type of STRATA_TYPES) sum += this.getStrataLaborCost(type);
+    return sum;
+  }
+
+  /** Breakdown zatrudnienia do UI (zakładka Workforce) + Faza 3. */
+  getWorkforceBreakdown() {
+    const rows = [];
     for (const type of STRATA_TYPES) {
-      const deficit = (this.buildingSystem?.getSlotDemand?.(type) ?? 0) - this.strata[type].count;
-      if (deficit > bestDeficit) { bestDeficit = deficit; best = type; }
+      const meta = STRATA_META[type] ?? { pl: type, en: type, icon: '•' };
+      rows.push({
+        type,
+        namePL:    meta.pl,
+        nameEN:    meta.en,
+        icon:      meta.icon,
+        jobs:      this._humanJobs(type),         // realne etaty dla ludzi (bez syntetyków)
+        grossJobs: this.getStrataJobs(type),
+        synthetic: this._syntheticJobs(type),
+        workers:   this.getStrataWorkers(type),
+        locked:    this._lockedPerStrata[type] ?? 0,
+        pressure:  this.getStrataPressure(type),
+        wage:      this.getStrataWage(type),
+        focus:     this.getStrataFocus(type),
+        focusCap:  this._focusCap(type),
+      });
     }
-    return best;
+    return rows;
+  }
+
+  /**
+   * Alokacja dwustopniowa siły roboczej (§3.2) — raz na rok cywilny, PRZED satysfakcją.
+   * Inwariant floor(humans) = Σ strata + _unemployed utrzymany: każdy ruch przenosi 1
+   * osobę między pulą bezrobotnych a stratą (Etap 1) lub między stratami (Etap 2) — suma
+   * zachowana. Zablokowani (załogi/ekspedycje) NIGDY nie migrują i nie stają się bezrobotni.
+   */
+  _allocateWorkforce() {
+    if (!this.buildingSystem) return;   // abstrakcyjna kolonia bez budynków — pomiń (PHASE5_TODO: AI)
+
+    // 1) Rekoncyliacja utraty etatów (rozbiórka/downgrade/uszkodzenie): workers ponad realny
+    //    popyt (poza zablokowanymi) → bezrobotni. To spina desync-fixy Fazy 1 (ImpactDamageSystem,
+    //    RandomEventSystem zdejmują etaty przez changeEmployment → tutaj nadmiar staje się U).
+    for (const type of STRATA_TYPES) {
+      const s = this.strata[type];
+      const locked = this._lockedPerStrata[type] ?? 0;
+      const evictable = Math.max(0, (s.count - locked) - this._humanJobs(type));
+      if (evictable > 0) { s.count -= evictable; this._unemployed += evictable; }
+    }
+
+    // Snapshot płac PO rekoncyliacji — deterministyczne priorytety w obu etapach.
+    const wage = {};
+    for (const type of STRATA_TYPES) wage[type] = this.getStrataWage(type);
+
+    // 2) Etap 1 (bez tarcia) — wolne etaty zasysają bezrobotnych, wg płacy malejąco.
+    let guard = 0;
+    while (this._unemployed > 0 && guard++ < 100000) {
+      let bestType = null, bestWage = -Infinity;
+      for (const type of STRATA_TYPES) {
+        const open = this._humanJobs(type) - this.strata[type].count;
+        if (open > 0 && wage[type] > bestWage) { bestWage = wage[type]; bestType = type; }
+      }
+      if (!bestType) break;
+      this.strata[bestType].count += 1;
+      this._unemployed -= 1;
+    }
+
+    // 3) Etap 2 (z tarciem) — migracja między stratami: max 10% straty źródłowej / rok,
+    //    tylko do ŚCIŚLE wyższej płacy z wolnym etatem. Zablokowani zostają.
+    const cap = {}, moved = {};
+    for (const type of STRATA_TYPES) cap[type] = Math.floor(MIGRATION_FRICTION * this.strata[type].count);
+    for (const src of STRATA_TYPES) {
+      const locked = this._lockedPerStrata[src] ?? 0;
+      for (const dst of STRATA_TYPES) {
+        if (dst === src || wage[dst] <= wage[src]) continue;           // tylko ściśle wyższa płaca
+        const open = this._humanJobs(dst) - this.strata[dst].count;
+        if (open <= 0) continue;
+        const n = Math.min(cap[src] - (moved[src] ?? 0), open, this.strata[src].count - locked);
+        if (n <= 0) continue;
+        this.strata[src].count -= n;
+        this.strata[dst].count += n;
+        moved[src] = (moved[src] ?? 0) + n;
+      }
+    }
   }
 
   /** Satysfakcja kolonii (0-100, §3.5) — zasila warstwę infrastructure prosperity. */
   _updateSatisfaction() {
     const capacity = Math.max(1, this.housing);
     const crowding = Math.max(0, this.humans / capacity - SAT_CROWD_START) / SAT_CROWD_SPAN;
-    const unemploymentRate = 0;   // PHASE2_TODO: realne bezrobocie w Fazie 2
+    const unemploymentRate = this.unemploymentRate;   // Population 2.0 Faza 2: realna pochodna (§3.2)
     const taxEffect = -taxSatisfactionDrain(window.KOSMOS?.colonyManager?.taxRate ?? 0.08) * SAT_W_TAX;
     const raw = SAT_BASE
               + SAT_W_EMP * (1 - unemploymentRate * SAT_K_UNEMP)
@@ -1217,7 +1346,10 @@ export class CivilizationSystem {
 
   /** Oblicz docelową lojalność i wygładź (wywoływane w _updateMovementsAndLoyalty) */
   _recalcLoyalty() {
-    const total = this.population;
+    // Population 2.0 Faza 2: mianownik = Σ strata (zatrudnieni), NIE population (która zawiera
+    // teraz bezrobotnych) — inaczej pula bezrobotnych rozcieńczałaby średnią satysfakcję strat.
+    // Wpływ bezrobocia na kolonię idzie osobno przez satisfaction (§3.5).
+    const total = this._strataCount;
     if (total === 0) { this._smoothedLoyalty = 80; return; }
 
     // Baza: weighted avg satisfaction strat
@@ -1591,6 +1723,7 @@ export class CivilizationSystem {
       growthProgress:    this._growthProgress,
       freePops:          this.freePops,
       employedPops:      this._employedPops,
+      unemployed:        this._unemployed,   // Population 2.0 Faza 2
       lockedPops:        this._lockedPops,
       epoch:             this.epochName,
       isUnrest:          this._unrestActive,

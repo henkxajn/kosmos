@@ -39,3 +39,20 @@ export const SAT_W_CROWD     = 15;    // kara za przeludnienie habitatów
 export const SAT_CROWD_START = 0.85;  // >85% zapełnienia capacity = crowding rośnie od 0
 export const SAT_CROWD_SPAN  = 0.15;  // pełne crowding (=1) przy 100% zapełnienia
 export const SAT_W_TAX       = 100;   // mapowanie drenu podatkowego (−drain × W_TAX) na punkty
+
+// ── Zatrudnienie / płace / migracja (Faza 2, §3.2/§3.3/§7.2) ────────────────
+// Płaca bazowa per strata (Kr/pop/rok). Faza 2: LICZONA i WYŚWIETLANA (napędza
+// pressure→migrację). Faza 3 wpina jako realny wydatek imperium (laborCost).
+export const BASE_WAGE = {
+  laborer:    1,
+  miner:      1.5,
+  worker:     1.5,
+  engineer:   3,
+  scientist:  4,
+  merchant:   2,
+  bureaucrat: 2,
+};
+
+// wage = baseWage × (1 + pressure), pressure ∈ [0,1] → cap płacy = ×2 bazy (§7.2).
+export const MIGRATION_FRICTION = 0.10;  // max 10% straty źródłowej może migrować / rok cywilny
+export const FOCUS_BONUS_MAX    = 0.25;  // slider focus: demandBonus do +25% etatów budynkowych straty

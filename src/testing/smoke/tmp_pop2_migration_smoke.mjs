@@ -43,7 +43,7 @@ const saveV95 = {
 const r = migrate(saveV95);
 const col = r?.civ4x?.colonies?.[0];
 const civ = col?.civ;
-ok('version === 96 (CURRENT)', r?.version === CURRENT_VERSION && CURRENT_VERSION === 96);
+ok('version === CURRENT (97 po Fazie 2)', r?.version === CURRENT_VERSION && CURRENT_VERSION === 97);
 ok('strata.laborer ×4 (2→8)', civ?.strata?.laborer?.count === 8);
 ok('strata.miner ×4 (1→4)', civ?.strata?.miner?.count === 4);
 ok('civ.population ×4 (3→12)', civ?.population === 12);

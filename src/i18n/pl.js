@@ -789,6 +789,19 @@ export default {
   'station.mgmt.flashShipCost': 'Za mało surowców w magazynie',
   'station.mgmt.flashNoShipyard': 'Brak aktywnej stoczni',
   // ── Panel info planety (ColonyOverlay prawa kolumna) ──
+  'colonyInfo.tabPlanet': 'Planeta',
+  'colonyInfo.tabWorkforce': 'Załoga',
+  // Zakładka Załoga (Population 2.0 Faza 2)
+  'workforce.colStrata': 'Warstwa',
+  'workforce.colJobs': 'Etaty',
+  'workforce.colWorkers': 'Prac.',
+  'workforce.colWage': 'Płaca',
+  'workforce.colFocus': 'Focus',
+  'workforce.unemployed': 'Bezrobotni',
+  'workforce.satisfaction': 'Satysfakcja',
+  'workforce.prosperity': 'Dobrobyt',
+  'workforce.growth': 'Wzrost',
+  'workforce.perYear': 'rok',
   'colonyInfo.physics': 'CHARAKTERYSTYKA',
   'colonyInfo.temperature': 'Temperatura',
   'colonyInfo.mass': 'Masa',
@@ -2633,6 +2646,8 @@ export default {
 
   // === GroundUnitPanel (Ground Unit System) ===
   'groundPanel.title':             'JEDNOSTKI NAZIEMNE',
+  'groundPanel.draftBtn':          'Rekrutuj',
+  'groundPanel.needBarracks':      'Wymaga Koszar w tej kolonii',
   'groundPanel.colony':            'Kolonia',
   'groundPanel.noColony':          'Brak aktywnej kolonii',
   'groundPanel.archetypes':        'ARCHETYPY',

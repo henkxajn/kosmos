@@ -20,7 +20,7 @@ import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 96;
+export const CURRENT_VERSION     = 97;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -153,6 +153,7 @@ const MIGRATIONS = {
   93: _migrateV93toV94,
   94: _migrateV94toV95,
   95: _migrateV95toV96,
+  96: _migrateV96toV97,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2305,6 +2306,24 @@ function _migrateV94toV95(data) {
 // Populacja (strata.count) i housing budynków ×4. Konsumpcja per-pop ÷4 to zmiana
 // DANYCH (ResourcesData), nie save; `jobs` liczone z żywej definicji budynku przy
 // restore. Balans niezmieniony: pop×4 × per-pop÷4 = ten sam agregat.
+// v96 → v97: Population 2.0 Faza 2 — zatrudnienie/bezrobocie/płace/focus. Nowe pola per kolonia:
+//   civ.unemployed (pula bezrobotnych, POZA stratami) + civ.focusBonus (slider focus per strata).
+//   Stary save: strata zawierają jeszcze nadwyżkę (Faza 1 pchała ją do laborera) — seedujemy
+//   unemployed=0, a pierwsza alokacja siły roboczej (_allocateWorkforce) sama zewiktuje nadwyżkę
+//   do puli bezrobotnych (populacja TOTAL niezmieniona). CivilizationSystem.restore i tak broni
+//   `?? 0` / `?? {}`, ale seed jawny = konwencja repo (każda funkcja ma wpis vN→vN+1).
+function _migrateV96toV97(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (!c4x?.colonies) return data;
+  for (const col of c4x.colonies) {
+    const civ = col.civ;
+    if (!civ) continue;
+    civ.unemployed ??= 0;
+    civ.focusBonus ??= {};
+  }
+  return data;
+}
+
 function _migrateV95toV96(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (!c4x?.colonies) return data;

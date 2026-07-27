@@ -195,15 +195,13 @@ export class ColonyAutoExpander {
       const pop = civ.population ?? 0;
 
       // Y1/Y2: pogodź kolejkę z realnym stanem (usuń ukończone, porzuć stuck) i
-      //   ustal czy wolno jeszcze coś budować. restFromBuilds = kolejka pełna LUB
-      //   nie ma kto budować (freePops=0) a coś już wisi → odpoczynek po brownout.
+      //   ustal czy wolno jeszcze coś budować. Population 2.0 Faza 2: budowa NIE wymaga
+      //   wolnych POP (§3.4 płynna obsada) — jedynym hamulcem jest limit kolejki, NIE brak
+      //   rąk. Budynki działają understaffed; alokacja dośle ludzi, a wzrost je zapełni.
       this._reconcilePending(colony, civYear);
       this._syncGridFromActive(colony);   // #3: grid AI niesynchronizowany przez UI — re-derive z _active przed _findFreeTile
       const pendingBuilds = this._pendingCounts(colony).builds;
-      const freePops      = civ.freePops ?? 0;
-      const restFromBuilds =
-        pendingBuilds >= MAX_PENDING_BUILDS_PER_COLONY ||
-        (freePops <= 0 && pendingBuilds >= 1);
+      const restFromBuilds = pendingBuilds >= MAX_PENDING_BUILDS_PER_COLONY;
       if (restFromBuilds) this._logQueueThrottled(colony, civYear, pendingBuilds);
 
       // 0) Housing cap — pop osiągnął housing → wzrost STOI. Najwyższy priorytet:

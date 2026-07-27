@@ -240,7 +240,12 @@ export class BuildingSystem {
 
   // ── Query metody dla CivilizationSystem (strata demand) ─────────────────
 
-  /** Zapotrzebowanie na dany typ straty (suma popCost budynków z matching popType) */
+  /** Zapotrzebowanie na dany typ straty (suma popCost budynków z matching popType).
+   *  PHASE4_TODO: getSlotDemand liczy TAKŻE etaty budynków z zainstalowanym syntheticSlot
+   *  (inflacja demand danej straty → inne budynki tej straty dostają niższą efektywność
+   *  w _getBuildingLaborEfficiency). Faza 2 obchodzi to netując synthetic wyłącznie w
+   *  matematyce pressure/alokacji (getSyntheticJobs), NIE tutaj — behawior syntetyków to
+   *  zakres Fazy 4 (droidy). Wtedy zdecydować, czy synthetic ma znikać z demand globalnie. */
   getSlotDemand(strataType) {
     let demand = 0;
     for (const entry of this._active.values()) {
@@ -250,6 +255,21 @@ export class BuildingSystem {
       }
     }
     return demand;
+  }
+
+  /** Etaty danej straty obsadzone przez syntetyki (syntheticSlot zainstalowany) —
+   *  budynek działa BEZ ludzi (§3.4). Netowane z realnego zapotrzebowania na ludzi
+   *  w alokacji siły roboczej i z licznika pressure (CivilizationSystem). */
+  getSyntheticJobs(strataType) {
+    if (!this._grid) return 0;
+    let synth = 0;
+    for (const [tileKey, entry] of this._active.entries()) {
+      const pType = entry.building?.popType ?? 'laborer';
+      if (pType !== strataType || (entry.jobs ?? 0) <= 0) continue;
+      const [q, r] = tileKey.split(',').map(Number);
+      if (this._grid.get(q, r)?.syntheticSlot) synth += entry.jobs * entry.level;
+    }
+    return synth;
   }
 
   /** Efektywność kopalń: ratio produkcji vs max capacity (0-1) */
@@ -598,9 +618,10 @@ export class BuildingSystem {
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
     const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);
     const canAffordResources = !(this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost));
-    const hasFreePops = !(jobs > 0 && this.civSystem && this.civSystem.freePops < jobs);
-
-    if (!canAffordResources || !hasFreePops) {
+    // Population 2.0 Faza 2: budowa NIE wymaga wolnych POP (§1/§3.4 — płynna obsada). Budynek
+    // dodaje wolne etaty i działa understaffed (min(1, staffing)), aż alokacja przydzieli ludzi.
+    // Do pending queue trafia WYŁĄCZNIE z braku surowców.
+    if (!canAffordResources) {
       const tileKey = tile.key;
       this._pendingQueue.set(tileKey, {
         tileKey,
@@ -716,9 +737,9 @@ export class BuildingSystem {
     const popCost = this._isOutpost ? 0 : (entry.popCost ?? building.popCost ?? POP_PER_BUILDING);
     const jobs    = this._isOutpost ? 0 : (entry.jobs ?? building.jobs ?? 0);
     const canAffordUpgrade = !(this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost));
-    const hasFreePopsUpg = !(jobs > 0 && this.civSystem && this.civSystem.freePops < jobs);
-
-    if (!canAffordUpgrade || !hasFreePopsUpg) {
+    // Population 2.0 Faza 2: upgrade NIE wymaga wolnych POP (§3.4 — płynna obsada). Pending
+    // tylko z braku surowców; dodatkowe etaty obsadza alokacja.
+    if (!canAffordUpgrade) {
       const tileKey = tile.key;
       this._pendingQueue.set(tileKey, {
         tileKey,
@@ -1077,9 +1098,8 @@ export class BuildingSystem {
       // Sprawdź środki (re-check — stan mógł się zmienić po poprzednim fulfillment)
       if (hasKeys(order.cost) && !this.resourceSystem?.canAfford(order.cost)) continue;
 
-      // Sprawdź POPy (re-check po każdym fulfillment)
-      const neededPop = order.jobs ?? Math.round((order.popCost ?? 0) * 4);  // Population 2.0: etaty (fallback: stary pending ×4)
-      if (neededPop > 0 && this.civSystem && this.civSystem.freePops < neededPop) continue;
+      // Population 2.0 Faza 2: pending fulfilluje się na samych surowcach — brak wolnych POP
+      // NIE blokuje (§3.4 płynna obsada). Bramka POP usunięta świadomie.
 
       // ── Fulfill — usuń z pending, pobierz koszt, uruchom budowę ──
       this._pendingQueue.delete(tileKey);

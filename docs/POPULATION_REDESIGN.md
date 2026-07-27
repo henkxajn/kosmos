@@ -394,6 +394,12 @@ zasysa bezrobotnych; produkcja skaluje się płynnie; zakładka renderuje się.
 **Faza 3 — Ekonomia:** płace jako wydatek imperium, tax (integracja
 z istniejącym taxRate!), mnożnik handlu, bilans per kolonia.
 Live-gate: bilans = delta budżetu; focus kosztuje; bezrobocie = niższe podatki.
+- **Dług testowy do naprawy w Fazie 3:** dwa smoke'y trade-capacity —
+  `src/testing/smoke/s34c_trade_selfcargo_smoke.mjs` (6/15) i
+  `s34c_z1_tradecap_diagnosis_smoke.mjs` (7/12) — FAILUJĄ już na bazie sprzed
+  Fazy 2 (potwierdzone `git stash`), bo asertują STARĄ formułę TC (200×pop)
+  po redenominacji ×4 na 50×pop (Faza 1). Naprawić fixture'y wraz z pracą nad
+  handlem/płacami w Fazie 3 (dotykamy `CivilianTradeSystem`).
 
 **Faza 4 — Droid tier 1:** definicja automation_droid (basic recipe, bez
 tech), aktywacja assemblyBonus w robot_assembly, allowedStrata per tier,
@@ -405,6 +411,11 @@ w laborer/miner/worker; energia obciążona; robot_assembly przyspiesza ×2.
 habitaty przy pełnym capacity, budynki-etaty przy bezrobociu, bez bankructwa
 na płacach.
 Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
+- **Do re-ewaluacji (obserwacja z live-gate Fazy 2):** sprzężenie
+  bezrobocie → satysfakcja → prosperity → wzrost może być zbyt karzące
+  (`SAT_K_UNEMP=3`, GAMMA 1.5, inercja 0.08 + gate wzrostu). Ocenić PO tym, jak
+  usunięcie bramki POP na budowie (Faza 2 FIX A) zmieni realną dynamikę
+  bezrobocia — dopiero wtedy kalibrować stałe (nie na oko przed obserwacją).
 
 ---
 

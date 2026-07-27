@@ -789,6 +789,19 @@ export default {
   'station.mgmt.flashShipCost': 'Not enough resources in depot',
   'station.mgmt.flashNoShipyard': 'No active shipyard',
   // ── Planet info panel (ColonyOverlay right column) ──
+  'colonyInfo.tabPlanet': 'Planet',
+  'colonyInfo.tabWorkforce': 'Workforce',
+  // Workforce tab (Population 2.0 Phase 2)
+  'workforce.colStrata': 'Class',
+  'workforce.colJobs': 'Jobs',
+  'workforce.colWorkers': 'Emp.',
+  'workforce.colWage': 'Wage',
+  'workforce.colFocus': 'Focus',
+  'workforce.unemployed': 'Unemployed',
+  'workforce.satisfaction': 'Satisfaction',
+  'workforce.prosperity': 'Prosperity',
+  'workforce.growth': 'Growth',
+  'workforce.perYear': 'yr',
   'colonyInfo.physics': 'CHARACTERISTICS',
   'colonyInfo.temperature': 'Temperature',
   'colonyInfo.mass': 'Mass',
@@ -2632,6 +2645,8 @@ export default {
 
   // === GroundUnitPanel (Ground Unit System) ===
   'groundPanel.title':             'GROUND UNITS',
+  'groundPanel.draftBtn':          'Draft',
+  'groundPanel.needBarracks':      'Requires Barracks on this colony',
   'groundPanel.colony':            'Colony',
   'groundPanel.noColony':          'No active colony',
   'groundPanel.archetypes':        'ARCHETYPES',

@@ -399,8 +399,9 @@ ok('wszystkie farm na plains', farmTypes.length === 2 && farmTypes.every(t => t 
 ok('wszystkie mine na mountains', mineTypes.length === 1 && mineTypes.every(t => t === 'mountains'));
 
 // ── T10: Y1 — stuck pending queue → abandon + unreachable ────────
-// Kolonia bez surowców i POP: każdy _build → queued (pendingBuild, czeka w
-// nieskończoność). _reconcilePending musi: trzymać świeży wpis, a po
+// Kolonia bez SUROWCÓW: każdy _build → queued (pendingBuild, czeka w nieskończoność).
+// Population 2.0 Faza 2: budowa NIE wymaga wolnych POP (§3.4) — queuing jest resource-bound;
+// pop=0 tu nieistotne. _reconcilePending musi: trzymać świeży wpis, a po
 // PENDING_STUCK_CIVYEARS (30) anulować zamówienie i oznaczyć unreachable.
 console.log('--- T10: Y1 stuck queue (queued bez końca → abandon) ---');
 const techReal10 = new TechSystem(); techReal10.grantTechs(INDUSTRIALIST.startingTechs);
@@ -415,7 +416,7 @@ const colony10 = { planetId:'p10', ownerEmpireId:'e10', isOutpost:false, planet,
   resourceSystem:res10, civSystem:civ10, buildingSystem:bSys10, factorySystem:fact10 };
 
 const out10 = expander._tryBuild(colony10, 'farm', { module:'target', civYear:0, why:'T10' });
-ok("_tryBuild('farm') === 'queued' (brak surowców+POP)", out10 === 'queued');
+ok("_tryBuild('farm') === 'queued' (brak surowców — POP nie bramkuje)", out10 === 'queued');
 ok('_caePendingBuilds śledzi 1 zamówienie', colony10._caePendingBuilds?.size === 1);
 expander._reconcilePending(colony10, 5);              // age 5 < 30 → trzymaj
 ok('reconcile@cy=5: wpis nadal śledzony (age<30)', colony10._caePendingBuilds?.size === 1);
