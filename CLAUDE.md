@@ -1,5 +1,7 @@
 # KOSMOS — Symulator Układu Słonecznego + Strategia 4X
 
+> **Odroczone live-gate'y** (weryfikacje w przeglądarce świadomie odroczone + luki znalezione przy próbie): `docs/deferred-live-gates.md`.
+
 ## Wizja gry
 
 Dwuwarstwowa gra przeglądarkowa:
