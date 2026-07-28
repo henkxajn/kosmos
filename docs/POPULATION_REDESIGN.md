@@ -533,6 +533,17 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   per droid** (2/6 × D). Faza 5: ocenić czy to podwójnie wycenia energię automatyzacji (double-pricing) —
   decyzja przy tuningu na realnej rozgrywce, nie na oko.
 
+**Post-Faza 4 — poprawka produkcji droidów (2 atomowe commity, save v98 bez migracji, live-gate PASS):**
+- **`3a02f37` — boosted ×5 exemption + czytelne STALL-e:** `_getScaledRecipe` ×5'owało KAŻDĄ recepturę
+  tier-1 w `civilization_boosted`, więc łapało `automation_droid` (tier 1, receptura ABSOLUTNA ~1000/szt.)
+  → Li 1000→5000 > zapas gracza → perma-STALL „BRAK SUROWCÓW" (tylko boosted; testy w default nie łapały).
+  Fix: exempt `isDroidUnit`. + `getStallReason` (tech > brak-składnika-z-ilościami > insolvent > no-points) na
+  `getAllocations()`; `_productionBlockHtml` czyta SKALOWANĄ recepturę (czytał surową → „wszystko OK" mimo STALL).
+- **`bec2028` — model dobra INWESTYCYJNEGO (Build-N):** droidy wyjęte z reactive/safety-stock (min-zapas 3
+  wymuszał nadprodukcję + install cicho auto-uzupełniał). Rejestr `_droidOrders` per-typ (Build-N one-shot,
+  koszt Kr/szt., ZERO auto-replenish, anulowanie zachowuje ukończone). Sekcja 🤖 DROIDY w panelu produkcji;
+  min-zapas ukryty. Migracja soft (v98): konwersja jawnego one-shot droida, anulowanie in-flight reactive.
+
 ---
 
 ## 9. Poza zakresem (świadomie)
