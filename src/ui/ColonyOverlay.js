@@ -931,6 +931,10 @@ export class ColonyOverlay extends BaseOverlay {
           fy = Math.max(mapY + 4, Math.min(oy + oh - panelH - 4, fy));
           fx = Math.max(ox + 4, Math.min(ox + mapW - FLOAT_W - 4, fx));
           this._floatX = fx; this._floatY = fy;
+          // Dostępny pion dla panelu = cały obszar mapy (panel dosuwany w górę powyżej) —
+          // pozwala zmieścić wysokie panele budynków bez przycinania; nadmiar → scroll.
+          this._floatMapTop = mapY + 4;
+          this._floatMapBot = oy + oh - 4;
           this._drawFloatingPanel(ctx, fx, fy, tile, colony, grid);
         }
       }
@@ -3053,15 +3057,25 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (b) {
       h += 20 + 16; // nazwa + level
-      // Produkcja (header + entries)
+      // Produkcja / wydobycie (header + linie) — MUSI odzwierciedlać blok rysujący 1:1, inaczej
+      // panel jest za krótki i dolne elementy (Rozbiórka/droidy) wypadają pod clip (były ucinane).
       const tileKey = `${tile.q},${tile.r}`;
       const aEntry = colony?.buildingSystem?._active?.get(tileKey);
       const rates = aEntry?.effectiveRates ?? aEntry?.baseRates ?? b.rates;
       const baseRates = b.rates ?? {};
-      // Liczbę widocznych linii: efektywne != 0 + bazowe > 0 które wypadły na 0
-      const shownCount = Object.keys(rates).filter(k => rates[k] !== 0).length;
-      const zeroedCount = Object.keys(baseRates).filter(k => baseRates[k] > 0 && !(rates[k] > 0 || rates[k] < 0)).length;
-      if (rates) h += 13 + (shownCount + zeroedCount) * 14;
+      // Kopalnie NIE mają `rates` — urobek liczony ze złóż (getMineOutputEstimate). Bez tej gałęzi
+      // wysokość gubiła wszystkie linie wydobycia (~8×14 px) i panel obcinał przyciski.
+      const _isMineH = (b.isMine || b.id === 'mine');
+      const _mineEstH = _isMineH ? colony?.buildingSystem?.getMineOutputEstimate?.(tileKey) : null;
+      if (_mineEstH && Object.keys(_mineEstH.gains).length > 0) {
+        const gainLines = Object.values(_mineEstH.gains).filter(a => a > 0).length;
+        h += 13 + gainLines * 14; // nagłówek „Extraction/yr" + po linii na dodatni urobek
+      } else if (!_isMineH && rates) {
+        // Liczba widocznych linii: efektywne != 0 + bazowe > 0 które wypadły na 0
+        const shownCount = Object.keys(rates).filter(k => rates[k] !== 0).length;
+        const zeroedCount = Object.keys(baseRates).filter(k => baseRates[k] > 0 && !(rates[k] > 0 || rates[k] < 0)).length;
+        h += 13 + (shownCount + zeroedCount) * 14;
+      }
       // Maintenance
       if (b.maintenance && Object.keys(b.maintenance).length > 0) h += 13 + Object.keys(b.maintenance).length * 14;
       if (b.energyCost) h += 14;
@@ -3091,9 +3105,18 @@ export class ColonyOverlay extends BaseOverlay {
     }
     h += 8; // padding bottom
 
-    // Ogranicz max wysokość panelu do 70% viewport
+    // Cap wysokości zależny od trybu panelu:
+    //  • ISTNIEJĄCY BUDYNEK (b): fit-to-map — panel rośnie, by zmieścić wszystko (Ulepsz/Rozbiórka/
+    //    droidy). Panel jest dosuwany w górę, więc pełna wysokość mapy się mieści; gdy treść przewyższy
+    //    nawet obszar mapy → scroll sekcji budynku (niżej).
+    //  • LISTA BUDOWY (pusty hex): jak dawniej — 65% viewportu, scrollowalna. NIE fit-to-map, bo pełna
+    //    lista budynków zabrałaby cały ekran.
     const canvas = document.getElementById('ui-canvas');
-    const maxPanelH = canvas ? (canvas.getBoundingClientRect().height / _UI_SCALE) * 0.65 : 500;
+    const viewportH = canvas ? (canvas.getBoundingClientRect().height / _UI_SCALE) : 700;
+    const mapAvailH = (this._floatMapBot ?? 0) - (this._floatMapTop ?? 0);
+    const maxPanelH = b
+      ? (mapAvailH > 60 ? mapAvailH : viewportH * 0.85)
+      : viewportH * 0.65;
     const contentH = h;
     h = Math.min(h, maxPanelH);
 
@@ -3172,6 +3195,19 @@ export class ColonyOverlay extends BaseOverlay {
 
     // ── Sekcja: Budynek / Budowa / Build list ──
     if (b) {
+      // Sekcja budynku scrolluje się jako całość (clip poniżej stałego nagłówka terenu).
+      // Dzięki temu przyciski (Ulepsz/Rozbiórka/droidy) są ZAWSZE osiągalne kółkiem myszy,
+      // nawet gdy wysoka kopalnia nie mieści się w panelu. Hit-zony przycisków dodawane
+      // tylko gdy widoczne w [_bTop, _bBot] (poza panelem klik nie może ich wyzwolić).
+      const _bTop = cy;
+      const _bBot = y + h;
+      const _bVis = (hy, hh) => hy >= _bTop - 0.5 && hy + hh <= _bBot + 0.5;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, _bTop, FLOAT_W, Math.max(0, _bBot - _bTop));
+      ctx.clip();
+      cy -= (this._floatScroll ?? 0);
+
       // Budynek
       ctx.font = `bold 12px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] ?? THEME.accent;
@@ -3186,7 +3222,22 @@ export class ColonyOverlay extends BaseOverlay {
       const activeEntry = colony.buildingSystem?._active?.get(tileKey);
       const rates = activeEntry?.effectiveRates ?? activeEntry?.baseRates ?? b.rates;
 
-      if (rates) {
+      // Population 2.0 (Report 2): kopalnie nie mają `rates` — wydobycie liczone ze złóż.
+      // Pokaż realny urobek z mnożnikiem obsady zamiast mylącego pustego „Produkcja (×0)".
+      const _isMineB = (b.isMine || b.id === 'mine');
+      const _mineEst = _isMineB ? colony.buildingSystem?.getMineOutputEstimate?.(tileKey) : null;
+      if (_mineEst && Object.keys(_mineEst.gains).length > 0) {
+        ctx.font = `10px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        const _mult = _mineEst.staff < 0.995 ? ` (×${+_mineEst.staff.toFixed(2)})` : '';
+        ctx.fillText(t('colonyPanel.mineExtraction', _mult), x + 8, cy); cy += 13;
+        ctx.font = `11px ${THEME.fontFamily}`;
+        for (const [res, amt] of Object.entries(_mineEst.gains)) {
+          if (amt <= 0) continue;
+          ctx.fillStyle = '#88ff88';
+          ctx.fillText(`+${amt.toFixed(1)} ${res}`, x + 12, cy); cy += 14;
+        }
+      } else if (!_isMineB && rates) {
         ctx.font = `10px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
         // UI 1: mnożnik obsady (D2 efficiency) w nagłówku — gracz widzi CZEMU produkcja się zmieniła.
@@ -3268,11 +3319,11 @@ export class ColonyOverlay extends BaseOverlay {
       // Przyciski
       if (b.maxLevel && (tile.buildingLevel ?? 1) < b.maxLevel) {
         this._drawBtn(ctx, '⬆ Ulepsz', x + 8, cy, FLOAT_W - 16, 24, '#1a6e50');
-        this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'upgrade');
+        if (_bVis(cy, 24)) this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'upgrade');
         cy += 28;
       }
       this._drawBtn(ctx, '🗑 Rozbiórka', x + 8, cy, FLOAT_W - 16, 24, '#6e1a1a');
-      this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'demolish');
+      if (_bVis(cy, 24)) this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'demolish');
       cy += 28;
 
       // Droid-per-job: „n🤖 / J" + Install (dopóki count<J) I Remove (gdy count>0) współistnieją.
@@ -3287,7 +3338,7 @@ export class ColonyOverlay extends BaseOverlay {
         // Install — aktywny gdy jest miejsce i droid pasuje; inaczej wyszarzony + powód (poza no_building/autonomous).
         if (prev.ok) {
           this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#1a5a6e');
-          this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'installSynthetic', { tileKey, commodityId: prev.commodityId });
+          if (_bVis(cy, 22)) this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'installSynthetic', { tileKey, commodityId: prev.commodityId });
           cy += 24;
         } else if (prev.reason && prev.reason !== 'no_building' && prev.reason !== 'autonomous_building') {
           this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#333');
@@ -3298,12 +3349,13 @@ export class ColonyOverlay extends BaseOverlay {
         // Remove — gdy jest choć jeden droid (zdejmuje JEDNEGO, NISZCZY — komunikat niżej).
         if (dCount > 0) {
           this._drawBtn(ctx, `🗑 ${t('colonyPanel.removeSynthetic')}`, x + 8, cy, FLOAT_W - 16, 22, '#6e4a1a');
-          this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'removeSynthetic', { tileKey });
+          if (_bVis(cy, 22)) this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'removeSynthetic', { tileKey });
           cy += 24;
           ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
           ctx.fillText(t('synthetic.removeWarn'), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
         }
       }
+      ctx.restore(); // koniec clip+scroll sekcji budynku
 
     } else if (tile.underConstruction) {
       const ub = BUILDINGS[tile.underConstruction.buildingId];
