@@ -505,6 +505,11 @@ przy stałym koszcie jednostki (jeden drogi droid automatyzujący 10 etatów = z
 habitaty przy pełnym capacity, budynki-etaty przy bezrobociu, bez bankructwa
 na płacach.
 Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
+- **⚠ PRIORYTET (runaway zaobserwowany w grze, field-gate):** wzrost logistyczny PRZESKALOWUJE przy
+  dużej populacji — pop 100+ z arcologiami → ~1.8/rok → skokowe bezrobocie ~50% → satysfakcja ~19% →
+  wzrost zduszony (sprzężenie bezrobocie→satysfakcja→wzrost za ostre przy skali). Cele tuningu:
+  bazowe tempo wzrostu (0.04) / **ABSOLUTNY cap wzrostu (nowy)** / złagodzenie `SAT_K_UNEMP`.
+  Podniesiony priorytet — nie teoretyczny, realny cykl runaway/crush obserwowany na żywym save.
 - **Do re-ewaluacji (obserwacja z live-gate Fazy 2):** sprzężenie
   bezrobocie → satysfakcja → prosperity → wzrost może być zbyt karzące
   (`SAT_K_UNEMP=3`, GAMMA 1.5, inercja 0.08 + gate wzrostu). Ocenić PO tym, jak
@@ -544,6 +549,33 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   koszt Kr/szt., ZERO auto-replenish, anulowanie zachowuje ukończone). Sekcja 🤖 DROIDY w panelu produkcji;
   min-zapas ukryty. Migracja soft (v98): konwersja jawnego one-shot droida, anulowanie in-flight reactive.
 
+**Post-Faza 4 — field-fixes Report 1+2 (2 atomowe commity, live-gate PASS):**
+- **`dbeab34` (Report 2) — wydobycie kopalni bramkowane obsadą górników (TWARDA bramka):** regularna
+  kopalnia skaluje urobek frakcją obsady (`_getBuildingLaborEfficiency`, clamp ≤1.0, droidy liczą się);
+  `MINE_STAFF_FLOOR=0` (GameConfig, tunable) → nieobsadzona = 0 urobku (celowa presja na obsadę/droidy/
+  kolonistów — dziura ekonomii droidów). Autonomiczne/outpost (jobs=0) ×1.0; gas-refinery nietknięta.
+  `_reapplyAllRates` unieważnia cache kopalń (obsada dynamiczna); `_cachedMineLevel` efektywny +
+  `_cachedMineLevelRaw` (licznik); `getMineEfficiency` = level-ważona obsada (satysfakcja górników);
+  panel „Wydobycie/rok (×0.00): +0.0 Fe" (uczciwy stan zamiast pustego „(×0)").
+- **`ef9f9a1` (Report 1) — AI zamawia androidy Build-N pod outposty (demand-driven):** reforma droidów
+  (bec2028) zabiła produkcję `android_worker` AI (setDemandBonus no-op + BRAK AI callera setDroidOrder) →
+  0 androidów → outpost (koszt android:6) nieosiągalny → 0 nowych kolonii AI. Fix
+  `EmpireStrategySystem._maybeOrderOutpostAndroids` (z `_runColonizationTree` gdy !canOutpost): Build-N na
+  macierzystej, 6×plannedOutposts, cap 24, dedup vs magazyn+w-toku, gate `_colonyCanSustainRecipe`.
+  **Relaksacja (live-gate Castor e): zamawia gdy androidShort>0 NIEZALEŻNIE od innych braków** — produkcja
+  androida (~15 civY) leci RÓWNOLEGLE do reactive, nie serializuje czekania. Obserwacja: `[AI]` logi
+  (zamówienie/ukończenie/outpost) + `debug.aiExpansion`/`aiOrders` + `explainColonization`.
+- **Werdykty live-gate:** Konsorcjum (emp_001) = wzorcowe AI, doktryna **SATUROWANA** (Xe/Nt cele osiągnięte
+  → pełne kolonie, NIE bug — werdykt S1 z probe). Pochód (emp_002) = ŻYWY dowód relaksacji (postawił +18
+  android Build-N i UKOŃCZYŁ mimo równoległego braku Ti); jego niezdolność do outpostu = **zepsuta ekonomia
+  bootstrapu, OUT OF SCOPE** (decyzja Filipa — patrz §9).
+- **Przyszła dźwignia (Report 1):** **rezerwacja ciał Xe/Nt** — jeśli fallback pełnej kolonii zjada
+  kandydatów na outpost ZANIM android gotowy (chicken-and-egg). Wygrany w zdrowej ekonomii (Xe = najniższy
+  priorytet fallbacku, przeżywa ~15 civY produkcji androida), więc lever tylko gdyby realnie dokuczał.
+- **Metoda diagnozy (utrwalona):** probe realnej ekonomii BEZ wstrzykiwania łapie to, co izolacja UKRYWA
+  (integration-test wstrzykiwał `android_worker:1e3` → maskował root-cause). `_colonyCanSustainRecipe`
+  SŁUSZNIE bramkuje kolonię raw-starved (order 0/N = stall bez sensu). [[trace-observed-behavior-over-greps]]
+
 ---
 
 ## 9. Poza zakresem (świadomie)
@@ -557,3 +589,7 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
 - Konsumpcja dóbr w satisfaction (istnieje w prosperity layers — nie duplikować).
 - Migracja międzykolonijna statkami pasażerskimi (pressure jako atraktor) — epic.
 - ai_collective_node (tier 3, ×2.5) — zreferowany, niezdefiniowany — zostaje.
+- **Ekonomia bootstrapu ubogiego AI (emp_002/Pochód) — someday:** imperium ze słabym startem nie uzbiera
+  zestawu outpostu (chroniczny brak Fe/Si/commodity), więc nie zakłada kolonii mimo działającego fixa
+  Report 1. Docelowo: mniej rozwinięte AI buduje WIĘCEJ prostych/small instalacji zamiast utykać na drogim
+  outpostcie. Poza field-fixes (decyzja Filipa) — Konsorcjum (zdrowe AI) jest wzorcem, Pochód czeka.
