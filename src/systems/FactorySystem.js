@@ -574,6 +574,8 @@ export class FactorySystem {
         produced:    alloc.produced ?? 0,
         isChain:     alloc._isChain ?? false,       // flaga auto-łańcucha
         blockedByTech: alloc._blockedByTech ?? null, // [{ingredientId, requiresTech}]
+        // Prawdziwy powód STALL-u (diagnostyka UI) — liczony tylko gdy alokacja stoi.
+        stallReason: isPaused ? this.getStallReason(id, alloc) : null,
       });
     }
     return result;
@@ -1650,6 +1652,12 @@ export class FactorySystem {
     if (!isBoosted) return recipe;
     const def = COMMODITIES[commodityId];
     if (!def || def.tier !== 1) return recipe;
+    // Droidy (isDroidUnit) mają recepturę ABSOLUTNĄ, ręcznie skalibrowaną jako
+    // strategiczna inwestycja (decyzja Filipa — patrz automation_droid ~1000/szt.).
+    // Skalowanie ×5 służy TANIM tier-1 towarom (recepty jedno-/dwucyfrowe), nie tym
+    // jednostkom — podwójne ×5 wpychało koszt ponad realny zapas gracza (Li 1000→5000)
+    // → perma-STALL „BRAK SUROWCÓW" w scenariuszu boosted. Jedna cena w obu scenariuszach.
+    if (def.isDroidUnit) return recipe;
     const scaled = {};
     for (const resId in recipe) {
       scaled[resId] = recipe[resId] * 5;
@@ -1664,6 +1672,62 @@ export class FactorySystem {
       if ((this.resourceSystem.inventory.get(resId) ?? 0) < actual[resId]) return false;
     }
     return true;
+  }
+
+  // Brakujące składniki receptury (z ilościami) — SKALOWANA receptura, spójna z
+  // _hasIngredients (ten sam gate). Zwraca [{ resId, need, have }] dla niedoborów.
+  // Diagnostyka STALL-u: bare „BRAK SUROWCÓW" na 5-składnikowej recepturze jest
+  // nieczytelny — to źródło prawdy dla UI, KTÓRY składnik i ILE brakuje.
+  _getMissingIngredients(recipe, commodityId) {
+    const inv = this.resourceSystem?.inventory;
+    if (!inv || !recipe) return [];
+    const actual = this._getScaledRecipe(recipe, commodityId);
+    const out = [];
+    for (const resId in actual) {
+      const have = inv.get(resId) ?? 0;
+      if (have < actual[resId]) out.push({ resId, need: actual[resId], have });
+    }
+    return out;
+  }
+
+  // Kredyty kolonii-właściciela (0 gdy brak systemu/kolonii).
+  _getColonyCredits() {
+    const cts = window.KOSMOS?.civilianTradeSystem;
+    const pid = this._getOwnerColony()?.planetId;
+    return (cts?.getCredits?.(pid)) ?? 0;
+  }
+
+  // Read-only odpowiednik _trySpendProductionCredits — sprawdza wypłacalność bez
+  // wydawania. Fallback true (nie blokuj) gdy brak systemu kredytów (headless/test),
+  // spójnie z _trySpendProductionCredits.
+  _canAffordProductionCredits(amount) {
+    if (!(amount > 0)) return true;
+    const cts = window.KOSMOS?.civilianTradeSystem;
+    const pid = this._getOwnerColony()?.planetId;
+    if (!cts || !pid || typeof cts.getCredits !== 'function') return true;
+    return cts.getCredits(pid) >= amount;
+  }
+
+  // Prawdziwy powód, dla którego alokacja stoi (STALL). Zwraca { kind, ... } lub null
+  // (produkuje). Kolejność = priorytet blokad: cel osiągnięty > tech sub-składnika >
+  // brak składnika (z ilościami) > niewypłacalność Kr > brak punktów produkcji.
+  // Rekonstruuje przyczynę z ŻYWEGO stanu (nie z flagi _paused, która bywa nieustawiona
+  // dla alokacji z points<=0 skipowanych w _update).
+  getStallReason(commodityId, alloc) {
+    const def = COMMODITIES[commodityId];
+    if (!def || !alloc) return null;
+    if (alloc.targetQty !== null && (alloc.produced ?? 0) >= alloc.targetQty) {
+      return { kind: 'target_done' };
+    }
+    const techBlocked = this._getTechBlockedIngredients(commodityId);
+    if (techBlocked.length > 0) return { kind: 'tech_blocked', blocked: techBlocked };
+    const missing = this._getMissingIngredients(def.recipe, commodityId);
+    if (missing.length > 0) return { kind: 'missing_ingredient', missing };
+    if ((def.creditCost ?? 0) > 0 && !this._canAffordProductionCredits(def.creditCost)) {
+      return { kind: 'insolvent', creditCost: def.creditCost, credits: this._getColonyCredits() };
+    }
+    if ((alloc.points ?? 0) <= 0) return { kind: 'no_points' };
+    return null;
   }
 
   // Czy ta kolonia może kiedykolwiek wyprodukować ten commodity lokalnie.

@@ -419,10 +419,15 @@ export class EconomyOverlay extends BaseOverlay {
     }
 
     // 3) Brakujące składniki w magazynie (receptura per szt. vs inventory).
+    // Receptura SKALOWANA (fs._getScaledRecipe) — spójna z rzeczywistą bramką
+    // _hasIngredients; bez tego tooltip czytał surową recepturę i pokazywał „wszystko
+    // OK" mimo STALL-u w scenariuszu boosted (×5 tier-1) → blocker był niewidoczny.
     const inv = checkCol?.resourceSystem?.inventory;
     if (inv && typeof inv.get === 'function') {
+      const scaledRecipe = typeof fs._getScaledRecipe === 'function'
+        ? fs._getScaledRecipe(def.recipe, commodityId) : def.recipe;
       const missing = [];
-      for (const [resId, qty] of Object.entries(def.recipe)) {
+      for (const [resId, qty] of Object.entries(scaledRecipe)) {
         const have = inv.get(resId) ?? 0;
         if (have < qty) missing.push({ resId, have, need: qty });
       }
@@ -1098,19 +1103,33 @@ export class EconomyOverlay extends BaseOverlay {
     if (isStall) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      // Gdy produkcja stoi przez brak TECHNOLOGII sub-składnika — pokaż ostrzeżenie
-      // zamiast generic "brak surowców" (Bug #4 fix).
-      if (alloc.blockedByTech && alloc.blockedByTech.length > 0) {
-        const first = alloc.blockedByTech[0];
+      // STALL musi NAZWAĆ prawdziwy blocker (bare "BRAK SUROWCÓW" na 5-składnikowej
+      // recepturze = nieczytelny). stallReason (FactorySystem) rekonstruuje przyczynę
+      // z żywego stanu; blockedByTech zachowane jako fallback (alokacja z aktywnym FP).
+      const sr = alloc.stallReason;
+      let msg;
+      if ((alloc.blockedByTech && alloc.blockedByTech.length > 0) || sr?.kind === 'tech_blocked') {
+        const first = (alloc.blockedByTech && alloc.blockedByTech[0]) || sr.blocked[0];
         const ingDef = COMMODITIES[first.ingredientId];
         const techName = first.requiresTech
           ? (t(`tech.${first.requiresTech}.name`) || first.requiresTech)
           : '?';
         const ingName = ingDef ? getName(ingDef, 'commodity') : first.ingredientId;
-        ctx.fillText(`⚠ ${ingName}: ${t('ui.requiresTech', techName)}`, barX, y + 24);
+        msg = `⚠ ${ingName}: ${t('ui.requiresTech', techName)}`;
+      } else if (sr?.kind === 'missing_ingredient') {
+        const m = sr.missing[0];
+        const rdef = ALL_RESOURCES[m.resId] ?? COMMODITIES[m.resId] ?? { id: m.resId };
+        const rn = rdef.symbol ?? getName(rdef, ALL_RESOURCES[m.resId] ? 'resource' : 'commodity');
+        const extra = sr.missing.length > 1 ? ` +${sr.missing.length - 1}` : '';
+        msg = t('econPanel.stallMissing', rn, Math.floor(m.need), Math.floor(m.have)) + extra;
+      } else if (sr?.kind === 'insolvent') {
+        msg = t('econPanel.stallInsolvent', sr.creditCost, Math.floor(sr.credits));
+      } else if (sr?.kind === 'no_points') {
+        msg = t('econPanel.stallNoPoints');
       } else {
-        ctx.fillText(t('econPanel.noResources'), barX, y + 24);
+        msg = t('econPanel.noResources');
       }
+      ctx.fillText(this._ellipsize(ctx, msg, 196), barX, y + 24);
     }
 
     // Output / rok
