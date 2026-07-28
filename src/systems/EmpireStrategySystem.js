@@ -40,6 +40,14 @@ const STRATEGY_INTERVAL_CIVYEARS = 5;
 // Sam solar bez mine nic nie wydobywa — spalone structural_alloys + androidy.
 const OUTPOST_BUILDINGS = ['autonomous_solar_farm', 'autonomous_mine'];
 
+// Report 1 (Plan 1): górny limit „rurociągu" androidów zamawianych pod outposty
+// (dobra inwestycyjne, Build-N). 6 androidów/outpost × 4 outposty = 24 — zapobiega
+// runaway przy błędnym scoringu systemu. Dedup nigdy nie stackuje ponad ten cap.
+const MAX_ANDROID_PIPELINE = 24;
+
+// Ile android_worker kosztuje JEDEN outpost (solar 3 + mine 3) — sizing zleceń Build-N.
+const ANDROIDS_PER_OUTPOST = 6;
+
 // Domyślne progi doktryny — fallback per-klucz gdy archetyp nie ma
 // strategicColonization (inne archetypy / brak bloku). Industrialist nadpisuje
 // je w EmpireArchetypeIndustrialist.js (te same wartości — decyzja Filipa).
@@ -75,9 +83,27 @@ export class EmpireStrategySystem {
 
     this._onTick = ({ civDeltaYears }) => this._tick(civDeltaYears ?? 0);
     EventBus.on('time:tick', this._onTick);
+
+    // Observability (Plan 1): log ukończenia zlecenia droida dla kolonii AI (prefix [AI],
+    // gating obserwacyjny gracza w konsoli). Player (brak ownerEmpireId) pomijany.
+    this._onDroidDone = ({ commodityId, qty, planetId }) => {
+      if (!planetId) return;
+      const col = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+      if (!col?.ownerEmpireId) return;   // tylko AI
+      console.log(`[AI] ${this._empireName(col.ownerEmpireId)} ukończył zlecenie droidów: ${qty}× ${commodityId} @ ${col.planet?.name ?? planetId}`);
+    };
+    EventBus.on('factory:droidOrderCompleted', this._onDroidDone);
   }
 
-  stop() { EventBus.off('time:tick', this._onTick); }
+  stop() {
+    EventBus.off('time:tick', this._onTick);
+    EventBus.off('factory:droidOrderCompleted', this._onDroidDone);
+  }
+
+  // Nazwa imperium z rejestru (EmpireRegistry ma listAll, nie getEmpire) — do logów [AI].
+  _empireName(empireId) {
+    return window.KOSMOS?.empireRegistry?.listAll?.().find(e => e.id === empireId)?.name ?? empireId;
+  }
 
   // ── Serializacja (#2 save/restore AI) ─────────────────────────────────────
   // _blacklist = backoff ciał-celów kolonizacji po failure (Map{planetId →
@@ -224,6 +250,12 @@ export class EmpireStrategySystem {
 
     const canOutpost = this._canAffordOutpost(mother);
     const canFull    = this._canAffordFullColony(mother, cfg);
+
+    // Report 1 (Plan 1): outpost zablokowany WYŁĄCZNIE brakiem androidów → zamów Build-N
+    // na macierzystej fabryce (demand-driven, nie reactive stockpile). Reszta zestawu
+    // (structural_alloys itd.) dochodzi z reactive; android to jedyne martwe ogniwo po
+    // reformie droidów. Dedup + cap wewnątrz helpera.
+    if (!canOutpost) this._maybeOrderOutpostAndroids(empire, mother, systemId, bodyIds, civYear, cfg);
 
     // Najlepsze ciało Nt (null gdy brak) — P5 (build) ORAZ P3 (waiver) używają.
     const ntBody = this._pickNtBody(empire, bodyIds, civYear);
@@ -403,6 +435,121 @@ export class EmpireStrategySystem {
     return mother.resourceSystem.canAfford(this._fullColonyResourceTransfer(cfg));
   }
 
+  // ── Report 1 (Plan 1): android supply pod outposty (demand-driven Build-N) ──
+  // Analiza braku: czy JEDYNYM brakiem do outpostu jest android_worker? Zwraca
+  // { androidShort, otherShort[] } — androidShort>0 && otherShort puste ⇒ android to
+  // ostatnie ogniwo (reszta zestawu dojdzie z reactive, nie zamawiamy jej tu).
+  _outpostAndroidGap(mother) {
+    const res = mother.resourceSystem;
+    const cost = this._outpostCombinedCost();
+    let androidShort = 0;
+    const otherShort = [];
+    for (const [k, v] of Object.entries(cost)) {
+      if (v <= 0) continue;
+      const have = res.getAmount(k);
+      if (have >= v) continue;
+      if (k === 'android_worker') androidShort = v - have;
+      else otherShort.push(k);
+    }
+    return { androidShort, otherShort };
+  }
+
+  // Ile outpostów doktryna JESZCZE chce w tym systemie — liczone tylko gdy istnieje
+  // wolne ciało-cel (inaczej zamawianie androidów pod nieistniejący outpost = marnotrawstwo).
+  _plannedOutpostCount(empire, systemId, bodyIds, civYear, cfg) {
+    const targetXe = cfg.targetXeOutposts ?? DEFAULTS.targetXeOutposts;
+    const targetNt = cfg.targetNtOutposts ?? DEFAULTS.targetNtOutposts;
+    const { xe, nt } = this._outpostCountsInSystem(empire, systemId);
+    let planned = 0;
+    if (this._pickXeBody(empire, bodyIds, civYear) !== null) planned += Math.max(0, targetXe - xe);
+    if (this._pickNtBody(empire, bodyIds, civYear) !== null) planned += Math.max(0, targetNt - nt);
+    return planned;
+  }
+
+  // Gdy outpost jest nieosiągalny WYŁĄCZNIE z braku androidów → złóż/uzupełnij zlecenie
+  // Build-N na macierzystej fabryce. Dobra INWESTYCYJNE (istnieje bo konkretny plan tego
+  // wymaga), NIE reactive stockpile. Dedup: dolewa tylko brakującą różnicę do docelowego
+  // rurociągu (need); nie stackuje między tickami. Chain-aware gate + cap MAX_ANDROID_PIPELINE.
+  _maybeOrderOutpostAndroids(empire, mother, systemId, bodyIds, civYear, cfg) {
+    const fs = mother.factorySystem;
+    if (!fs?.setDroidOrder) return;
+    const gap = this._outpostAndroidGap(mother);
+    // Relaksacja (obserwacja Castor e): zamawiamy gdy brakuje androidów — NIE wymagamy, by był
+    // JEDYNYM brakiem. Produkcja androida (~15 civY) rusza RÓWNOLEGLE do dochodzenia reszty
+    // składników z reactive, zamiast serializować czekanie (empire short na android I np. Ti
+    // nigdy by nie wystartował). Nadal demand-driven (planned>0) + canSustain + dedup + cap.
+    if (gap.androidShort <= 0) return;
+    // chain-aware: nie składaj zlecenia, którego kolonia NIE UTRZYMA (brak surowca łańcucha
+    // → order utknąłby 0/N). Weryfikacja probe: raw-starved kolonia = canSustain false =
+    // fix słusznie pomija; zdrowa ekonomia = true = order → produkcja → outpost (cy35).
+    if (fs._colonyCanSustainRecipe && !fs._colonyCanSustainRecipe('android_worker')) {
+      this._log(empire, 'android order pominięty — receptura niepodtrzymywalna (brak surowca łańcucha)', systemId);
+      return;
+    }
+    const planned = this._plannedOutpostCount(empire, systemId, bodyIds, civYear, cfg);
+    if (planned <= 0) return;
+    const need = Math.min(planned * ANDROIDS_PER_OUTPOST, MAX_ANDROID_PIPELINE);
+    const have = mother.resourceSystem.getAmount('android_worker');
+    const order = fs.getDroidOrder('android_worker');
+    const inPipeline = order ? Math.max(0, order.qty - order.produced) : 0;
+    const shortfall = need - have - inPipeline;
+    if (shortfall <= 0) return;   // rurociąg (magazyn + w toku) już pokrywa potrzebę → dedup
+    fs.setDroidOrder('android_worker', (order?.qty ?? 0) + shortfall);
+    this._log(empire, `android Build-N: +${shortfall} (cel ${need}, mam ${have}, w toku ${inPipeline})`, systemId);
+    console.log(`[AI] ${empire.name ?? empire.id} zamówił androidy Build-N: +${shortfall} (cel ${need}, magazyn ${have.toFixed(0)}, w toku ${inPipeline}) — pod outpost @ ${systemId}`);
+  }
+
+  // ── Diagnostyka (Plan 1): DLACZEGO imperium (nie) zakłada outpostu — debug.aiExpansion ──
+  // Mirror _runColonizationTree (home-system) w trybie RAPORTU: liczby (outposty xe/nt vs cele,
+  // wolne ciała Xe/Nt, canOutpost/canFull) + WYLICZONY powód decyzji. Odpowiada na: (1) czy
+  // imperium jest aktywne (mother≠null), (2) czemu affordable outpost NIE powstaje (cele
+  // osiągnięte? brak wolnego ciała? nie stać?).
+  explainColonization(empire, civYear = this._civYear()) {
+    if (!ARCHETYPES[empire?.archetype]) {
+      return { empire: empire?.id ?? '?', name: empire?.name, active: false, reason: 'archetyp nieznany → NIE zarządzane przez Warstwę C' };
+    }
+    const mother = this._pickMotherColony(empire);
+    if (!mother) {
+      return { empire: empire.id, name: empire.name, active: false, mother: '—',
+        reason: 'BRAK macierzystej (pełnej) kolonii → PASYWNE: _runForEmpire pomija co tick (tylko outposty/brak kolonii z resourceSystem+civSystem)' };
+    }
+    const cfg = this._config(empire);
+    const homeSystemId = empire.homeSystemId ?? mother.systemId;
+    const homeSys = window.KOSMOS?.starSystemManager?.getSystem?.(homeSystemId);
+    if (!homeSys) {
+      return { empire: empire.id, name: empire.name, active: true, mother: mother.planetId, reason: `home-system ${homeSystemId} niewygenerowany → skip` };
+    }
+    const bodyIds  = this._systemBodyIds(homeSys);
+    const targetXe = cfg.targetXeOutposts ?? DEFAULTS.targetXeOutposts;
+    const targetNt = cfg.targetNtOutposts ?? DEFAULTS.targetNtOutposts;
+    const { xe, nt } = this._outpostCountsInSystem(empire, homeSystemId);
+    const xeBody = this._pickXeBody(empire, bodyIds, civYear);
+    const ntBody = this._pickNtBody(empire, bodyIds, civYear);
+    const canOutpost = this._canAffordOutpost(mother);
+    const canFull    = this._canAffordFullColony(mother, cfg);
+
+    let decision, reason;
+    if (xe === 0 && canOutpost && xeBody)                         { decision = 'P1 outpost Xe';  reason = `wystartuje na ${xeBody}`; }
+    else if (xe >= 1 && xe < targetXe && canOutpost && xeBody)    { decision = 'P2 outpost Xe';  reason = `wystartuje na ${xeBody}`; }
+    else if (xe >= targetXe && nt < targetNt && canOutpost && ntBody) { decision = 'P5 outpost Nt'; reason = `wystartuje na ${ntBody}`; }
+    else {
+      let skip;
+      if (!canOutpost)                                    skip = 'nie stać na outpost (canAffordOutpost=false)';
+      else if (xe < targetXe && !xeBody)                  skip = `Xe ${xe}/${targetXe} lecz BRAK wolnego ciała Xe (skolonizowane/wyczerpane) → predicted fallback-consumed effect`;
+      else if (xe >= targetXe && nt >= targetNt)          skip = `WSZYSTKIE cele outpostów osiągnięte (Xe ${xe}/${targetXe}, Nt ${nt}/${targetNt}) — nie bug`;
+      else if (xe >= targetXe && nt < targetNt && !ntBody) skip = `Xe cel OK, Nt ${nt}/${targetNt} lecz BRAK wolnego ciała Nt`;
+      else                                                skip = `Xe ${xe}/${targetXe}, Nt ${nt}/${targetNt} (stan nieoczekiwany)`;
+      decision = canFull ? 'P3/fallback PEŁNA KOLONIA' : 'BRAK AKCJI';
+      reason = `outposty pominięte: ${skip}${canFull ? '' : ' + nie stać na pełną kolonię'}`;
+    }
+    return {
+      empire: empire.id, name: empire.name, active: true, mother: mother.planetId, homeSystemId,
+      xeOutposts: `${xe}/${targetXe}`, ntOutposts: `${nt}/${targetNt}`,
+      freeXeBody: xeBody ?? '—', freeNtBody: ntBody ?? '—',
+      canOutpost, canFull, decision, reason,
+    };
+  }
+
   // ── Koszty ───────────────────────────────────────────────────────────────
   // SUMA solar+mine: cost {Si,Cu,Ti,Fe} (rozłączne) + commodity (współdzielone klucze
   // → mergeCosts DODAJE). Jeden obiekt do spend()/canAfford() (commodities i surowce
@@ -570,6 +717,7 @@ export class EmpireStrategySystem {
 
     EventBus.emit('ai:strategyOutpostFounded', { empireId: empire.id, planetId, systemId, civYear });
     this._log(empire, 'outpost założony (solar + mine)', planetId);
+    console.log(`[AI] ${empire.name ?? empire.id} założył OUTPOST @ ${planetId} (${systemId}) w civYear ${civYear.toFixed?.(0) ?? civYear}`);
     return { ok: true, planetId };
   }
 

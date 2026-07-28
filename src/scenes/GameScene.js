@@ -462,6 +462,58 @@ export class GameScene {
         console.table(rows);
         return rows;
       },
+      // KOSMOS.debug.aiOrders() — obserwacja Plan 1: per kolonia AI zlecenia droidów
+      //   (commodity produced/qty), magazyn android_worker, stać-na-outpost + brakujący
+      //   składnik. Do gatingu obserwacyjnego (czy AI zamawia androidy i zapełnia je?).
+      //   Uzupełnia logi [AI] w konsoli (zamówienie / ukończenie / outpost). Zwraca wiersze.
+      aiOrders: () => {
+        const cm = window.KOSMOS?.colonyManager;
+        const strat = window.KOSMOS?.empireStrategySystem;
+        const reg = window.KOSMOS?.empireRegistry;
+        const empName = (id) => reg?.listAll?.().find(e => e.id === id)?.name ?? id;
+        const cols = (cm?.getAllColonies?.() ?? []).filter(c => c.ownerEmpireId);
+        if (!cols.length) { console.log('[aiOrders] brak kolonii AI'); return []; }
+        const rows = cols.map((c) => {
+          const orders = (c.factorySystem?.droidOrders ?? [])
+            .map(o => `${o.commodityId} ${o.produced}/${o.qty}`).join(', ') || '—';
+          let afford = '—', brakujące = '—';
+          if (strat && c.resourceSystem && !c.isOutpost) {
+            try {
+              afford = strat._canAffordOutpost(c) ? 'TAK' : 'nie';
+              const gap = strat._outpostAndroidGap(c);
+              brakujące = (gap.androidShort > 0 || gap.otherShort.length)
+                ? `android:${gap.androidShort}${gap.otherShort.length ? ' +' + gap.otherShort.join(',') : ''}`
+                : 'brak (stać)';
+            } catch { /* best-effort */ }
+          }
+          return {
+            imperium:            empName(c.ownerEmpireId),
+            kolonia:             c.planet?.name ?? c.planetId ?? '?',
+            typ:                 c.isOutpost ? 'outpost' : 'full',
+            android_mag:         Math.round(c.resourceSystem?.getAmount?.('android_worker') ?? 0),
+            'zlecenia_droidów':  orders,
+            'stać_na_outpost':   afford,
+            'brakujący_składnik': brakujące,
+          };
+        });
+        console.table(rows);
+        return rows;
+      },
+      // KOSMOS.debug.aiExpansion(empireId?) — obserwacja Plan 1 CASE A: per imperium AI
+      //   decyzja kolonizacji home-system (mirror _runColonizationTree w trybie raportu):
+      //   active? (mother≠null), outposty xe/nt vs cele, wolne ciała Xe/Nt, canOutpost/canFull,
+      //   decision + POWÓD (czemu affordable outpost nie powstaje: cele osiągnięte / brak
+      //   wolnego ciała / nie stać). Bez arg = wszystkie AI (weryfikacja pasywności emp_002).
+      aiExpansion: (empireId) => {
+        const strat = window.KOSMOS?.empireStrategySystem;
+        const reg = window.KOSMOS?.empireRegistry;
+        if (!strat?.explainColonization || !reg?.listAll) { console.warn('[aiExpansion] brak empireStrategySystem/empireRegistry'); return []; }
+        const empires = empireId ? reg.listAll().filter(e => e.id === empireId) : reg.listAll();
+        if (!empires.length) { console.log('[aiExpansion] brak imperiów' + (empireId ? ` o id=${empireId}` : '')); return []; }
+        const rows = empires.map(e => strat.explainColonization(e));
+        console.table(rows);
+        return rows;
+      },
       // KOSMOS.debug.energyChain(planetId?) — instrumentacja łańcucha energii per budynek
       //   energochłonny (Faza 3): staffing (workers/jobs) | empPenalty | energyCost | baseRates.energy |
       //   effectiveRates.energy | zarejestrowane w ResourceSystem | + sumaryczny bilans. Weryfikuje,

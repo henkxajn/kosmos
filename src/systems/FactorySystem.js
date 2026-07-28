@@ -971,7 +971,7 @@ export class FactorySystem {
     for (const [cid, order] of this._droidOrders) {
       if (order.produced >= order.qty) {
         this._droidOrders.delete(cid);
-        EventBus.emit('factory:droidOrderCompleted', { commodityId: cid, qty: order.qty });
+        EventBus.emit('factory:droidOrderCompleted', { commodityId: cid, qty: order.qty, planetId: this._getOwnerColony()?.planetId ?? null });
         droidDone = true;
       }
     }
