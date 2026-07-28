@@ -98,6 +98,13 @@ export class VesselManager {
       this._resumeMissionAfterOrder(vesselId));
     EventBus.on('vessel:orderCancelled', ({ vesselId }) =>
       this._resumeMissionAfterOrder(vesselId));
+    // Bug fix (pre-existing) — order BLOCKED (np. pursue/engage target_lost gdy cel-wróg zginął
+    // w bitwie) też musi wznowić zawieszoną misję. Bez tego _suspendedMission zostawał osierocony
+    // OBOK niewyczyszczonej vessel.mission (pursue/engage nie czyszczą jej) → oba pola set na raz.
+    // MOS._blockAndCancel emituje vessel:orderBlocked (nie Completed/Cancelled). driftIdle set jest
+    // tylko na COMPLETION (nie block) i czyszczony przy issueOrder → brak konfliktu z drift auto-return.
+    EventBus.on('vessel:orderBlocked', ({ vesselId }) =>
+      this._resumeMissionAfterOrder(vesselId));
 
     // M4 P2 — Battle history stamp. battle:resolved emit przez
     // WarSystem.recordBattle ORAZ VesselCombatSystem._applyOutcome. Stamp obie
