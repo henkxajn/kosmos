@@ -108,6 +108,13 @@ export class FactorySystem {
     // { commodityId, qty, produced } | null. Nowe zlecenie zastępuje poprzednie.
     this._oneShotJob = null;
 
+    // Zlecenia budowy DROIDÓW (isDroidUnit) — dobra INWESTYCYJNE, poza reactive/
+    // safety-stock. Map<commodityId, { qty, produced }> — osobne zlecenie per typ
+    // droida (dwa mogą lecieć równolegle). Semantyka one-shot: produkuj dokładnie N,
+    // koszt Kr per szt., ZERO auto-uzupełniania, znika po ukończeniu. NAJWYŻSZY priorytet
+    // FP (jak _oneShotJob). Min-zapas NIE dotyczy droidów (ukryty w UI, ignorowany na load).
+    this._droidOrders = new Map();
+
     // Master-switch produkcji (per kolonia). false = fabryki OFFLINE:
     // zero konsumpcji surowców (gate w _update) I zero poboru energii
     // (BuildingSystem pomija energyCost fabryk po evencie productionEnabledChanged).
@@ -327,6 +334,8 @@ export class FactorySystem {
   setOneShotJob(commodityId, qty) {
     const def = COMMODITIES[commodityId];
     if (!def) return false;
+    // Droidy mają własną ścieżkę zleceń (Build-N per typ) — deleguj, nie mieszaj z one-shot.
+    if (def.isDroidUnit) return this.setDroidOrder(commodityId, qty);
     const n = Math.max(1, Math.floor(Number(qty) || 0));
     if (!this.isRecipeAvailable(commodityId)) return false;
     this._oneShotJob = { commodityId, qty: n, produced: 0 };
@@ -339,6 +348,54 @@ export class FactorySystem {
   cancelOneShotJob() {
     if (!this._oneShotJob) return;
     this._oneShotJob = null;
+    if (this._mode === 'reactive') this._reactiveAllocate();
+    this._emitStatus();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // API publiczne — zlecenia budowy DROIDÓW (isDroidUnit, dobra inwestycyjne)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Snapshot zleceń droidów: [{ commodityId, qty, produced }]
+  get droidOrders() {
+    return [...this._droidOrders.entries()].map(([commodityId, o]) => ({ commodityId, ...o }));
+  }
+
+  getDroidOrder(commodityId) {
+    const o = this._droidOrders.get(commodityId);
+    return o ? { commodityId, ...o } : null;
+  }
+
+  // Ustaw/zastąp zlecenie budowy droida na dokładnie N szt. Zwraca bool.
+  // n<=0 → anuluj. Tylko isDroidUnit + odblokowana receptura + lokalnie sustainowalna.
+  setDroidOrder(commodityId, qty) {
+    const def = COMMODITIES[commodityId];
+    if (!def || !def.isDroidUnit) return false;
+    const n = Math.floor(Number(qty) || 0);
+    if (n <= 0) { this.cancelDroidOrder(commodityId); return true; }
+    if (!this.isRecipeAvailable(commodityId)) return false;
+    const existing = this._droidOrders.get(commodityId);
+    // Zachowaj dotychczasowy postęp gdy tylko zmieniamy N (nie liczymy od zera).
+    const produced = existing ? Math.min(existing.produced, n) : 0;
+    this._droidOrders.set(commodityId, { qty: n, produced });
+    if (this._mode === 'reactive') this._reactiveAllocate();
+    this._emitStatus();
+    return true;
+  }
+
+  // Zmień docelową ilość o delta (± z UI). Poniżej 1 → anuluj.
+  adjustDroidOrder(commodityId, delta) {
+    const cur = this._droidOrders.get(commodityId);
+    const base = cur ? cur.qty : 0;
+    return this.setDroidOrder(commodityId, base + delta);
+  }
+
+  // Anuluj zlecenie droida. Ukończone szt. ZOSTAJĄ w magazynie (już wyprodukowane),
+  // reszta znika bez kosztu (materiały nie pobrane) — spójne z anulowaniem stoczni.
+  cancelDroidOrder(commodityId) {
+    if (!this._droidOrders.has(commodityId)) return;
+    this._droidOrders.delete(commodityId);
+    this._allocations.delete(commodityId);   // zwolnij FP tego droida natychmiast
     if (this._mode === 'reactive') this._reactiveAllocate();
     this._emitStatus();
   }
@@ -429,8 +486,9 @@ export class FactorySystem {
     return this._demandBonus.get(commodityId) ?? 0;
   }
 
-  /** Zmień bonus zapasu (min 0) */
+  /** Zmień bonus zapasu (min 0). Droidy NIE mają min-zapasu (dobra inwestycyjne). */
   setDemandBonus(commodityId, value) {
+    if (COMMODITIES[commodityId]?.isDroidUnit) return;
     const clamped = Math.max(0, Math.round(value));
     if (clamped === 0) {
       this._demandBonus.delete(commodityId);
@@ -649,6 +707,7 @@ export class FactorySystem {
       allocations:          allocs,
       queue:                [...this._queue],
       oneShotJob:           this._oneShotJob ? { ...this._oneShotJob } : null,
+      droidOrders:          Object.fromEntries([...this._droidOrders].map(([id, o]) => [id, { qty: o.qty, produced: o.produced }])),
       mode:                 this._mode,
       priorityList:         this._priorityList.map(p => ({ ...p })),
       customTemplates:      this._customTemplates.map(t => ({
@@ -686,6 +745,30 @@ export class FactorySystem {
     this._oneShotJob = data.oneShotJob
       ? { commodityId: data.oneShotJob.commodityId, qty: data.oneShotJob.qty, produced: data.oneShotJob.produced ?? 0 }
       : null;
+
+    // ── Zlecenia droidów (nowe pole; stare save = {}). Soft state, BEZ bumpu wersji. ──
+    this._droidOrders = new Map();
+    for (const [cid, o] of Object.entries(data.droidOrders ?? {})) {
+      if (!COMMODITIES[cid]?.isDroidUnit) continue;
+      const qty = Math.floor(Number(o?.qty) || 0);
+      if (qty <= 0) continue;
+      this._droidOrders.set(cid, { qty, produced: Math.min(Math.floor(Number(o?.produced) || 0), qty) });
+    }
+    // MIGRACJA droidów (reforma dóbr inwestycyjnych):
+    //  1) jawne stare one-shot na droida → KONWERTUJ na zlecenie droida (zachowaj produced).
+    if (this._oneShotJob && COMMODITIES[this._oneShotJob.commodityId]?.isDroidUnit) {
+      const j = this._oneShotJob;
+      const prev = this._droidOrders.get(j.commodityId);
+      this._droidOrders.set(j.commodityId, prev ?? { qty: j.qty, produced: Math.min(j.produced, j.qty) });
+      this._oneShotJob = null;
+    }
+    //  2) in-flight reactive/safety produkcja droida → ANULUJ (drop alloc/queue) — była
+    //     to buggy auto-uzupełnianie; _reactiveAllocate odtworzy FP z _droidOrders gdy trzeba.
+    for (const cid of [...this._allocations.keys()]) {
+      if (COMMODITIES[cid]?.isDroidUnit) this._allocations.delete(cid);
+    }
+    this._queue = this._queue.filter(q => !COMMODITIES[q.commodityId]?.isDroidUnit);
+
     this._mode = data.mode ?? 'manual';
     this._priorityList = data.priorityList ?? [];
     this._customTemplates = data.customTemplates ?? [];
@@ -694,7 +777,11 @@ export class FactorySystem {
     for (const src of DEFAULT_REACTIVE_ORDER) {
       if (!this._reactiveSourceOrder.includes(src)) this._reactiveSourceOrder.push(src);
     }
-    this._demandBonus = new Map(Object.entries(data.demandBonus ?? data.safetyStockOverrides ?? {}));
+    // Min-zapas droidów IGNOROWANY na load (droidy = one-shot, bez safety) — odfiltruj.
+    this._demandBonus = new Map(
+      Object.entries(data.demandBonus ?? data.safetyStockOverrides ?? {})
+        .filter(([id]) => !COMMODITIES[id]?.isDroidUnit),
+    );
     this._everProducedHere = new Set(data.everProducedHere ?? []);
     this._exportPrefs = data.exportPrefs
       ? { enabled: !!data.exportPrefs.enabled, tiers: { ...DEFAULT_EXPORT_PREFS.tiers, ...(data.exportPrefs.tiers ?? {}) } }
@@ -839,6 +926,12 @@ export class FactorySystem {
           this._oneShotJob.produced++;
         }
 
+        // Zlecenie droida: synchronizuj licznik postępu (źródło prawdy zlecenia).
+        if (alloc._isDroidOrder) {
+          const dOrder = this._droidOrders.get(commodityId);
+          if (dOrder) dOrder.produced++;
+        }
+
         if (this.resourceSystem) {
           this.resourceSystem.receive({ [commodityId]: 1 });
         }
@@ -872,6 +965,17 @@ export class FactorySystem {
       EventBus.emit('factory:oneShotCompleted', { commodityId: done.commodityId, qty: done.qty });
       this._emitStatus();
     }
+
+    // Zlecenia droidów ukończone → wyczyść + powiadom (ZERO auto-uzupełniania).
+    let droidDone = false;
+    for (const [cid, order] of this._droidOrders) {
+      if (order.produced >= order.qty) {
+        this._droidOrders.delete(cid);
+        EventBus.emit('factory:droidOrderCompleted', { commodityId: cid, qty: order.qty });
+        droidDone = true;
+      }
+    }
+    if (droidDone) this._emitStatus();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1039,6 +1143,40 @@ export class FactorySystem {
   // Tryb reaktywny — auto-detekcja zapotrzebowania
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Alokuj FP dla zlecenia one-shot / droida (produkcja dokładnie N szt, NAJWYŻSZY
+  // priorytet, łańcuch składników). Rejestruje alokacje w _allocations, dopisuje wpisy
+  // łańcucha do chainOut, zwraca zaktualizowany remainingFP. mainFlags: {_isOneShot:true}
+  // albo {_isDroidOrder:true} — produce-loop synchronizuje właściwy licznik postępu.
+  _allocateOrderFP(commodityId, remaining, oldProgress, remainingFP, chainOut, mainFlags) {
+    if (remaining <= 0) return remainingFP;
+    if (!this.isRecipeAvailable(commodityId) || !this._colonyCanSustainRecipe(commodityId)) return remainingFP;
+    const { chain } = this._resolveChainNeeds([
+      { commodityId, deficit: remaining, stockTarget: remaining },
+    ]);
+    for (const ch of chain) {
+      if (remainingFP <= 0) break;
+      if (this._allocations.has(ch.commodityId)) continue;
+      const chStock = this._getStock(ch.commodityId);
+      if (chStock >= ch.qty) continue;
+      const chFp = Math.min(1, remainingFP);
+      this._allocations.set(ch.commodityId, {
+        points: chFp, progress: oldProgress.get(ch.commodityId)?.progress ?? 0,
+        targetQty: ch.qty - chStock, produced: 0, _isChain: true,
+      });
+      remainingFP -= chFp;
+      chainOut.push({ commodityId: ch.commodityId, qty: ch.qty - chStock, produced: chStock, forCommodityId: ch.forCommodityId });
+    }
+    if (!this._allocations.has(commodityId)) {
+      const fp = Math.min(1, Math.max(0, remainingFP));
+      this._allocations.set(commodityId, {
+        points: fp, progress: oldProgress.get(commodityId)?.progress ?? 0,
+        targetQty: remaining, produced: 0, _isChain: false, ...mainFlags,
+      });
+      remainingFP -= fp;
+    }
+    return remainingFP;
+  }
+
   _reactiveAllocate() {
     // Skanuj zapotrzebowanie z 5 źródeł — zawsze, nawet przy 0 FP,
     // żeby UI mogło pokazać katalog towarów i pozwolić graczowi
@@ -1070,37 +1208,28 @@ export class FactorySystem {
       const osRemaining = Math.max(0, j.qty - j.produced);
       if (osRemaining <= 0) {
         this._oneShotJob = null;  // defensywnie — już ukończone
-      } else if (this.isRecipeAvailable(j.commodityId) && this._colonyCanSustainRecipe(j.commodityId)) {
-        const { chain: osChain } = this._resolveChainNeeds([
-          { commodityId: j.commodityId, deficit: osRemaining, stockTarget: osRemaining },
-        ]);
-        for (const ch of osChain) {
-          if (remainingFP <= 0) break;
-          if (this._allocations.has(ch.commodityId)) continue;
-          const chStock = this._getStock(ch.commodityId);
-          if (chStock >= ch.qty) continue;
-          const chFp = Math.min(1, remainingFP);
-          this._allocations.set(ch.commodityId, {
-            points: chFp, progress: oldProgress.get(ch.commodityId)?.progress ?? 0,
-            targetQty: ch.qty - chStock, produced: 0, _isChain: true,
-          });
-          remainingFP -= chFp;
-          osChainEntries.push({ commodityId: ch.commodityId, qty: ch.qty - chStock, produced: chStock, forCommodityId: ch.forCommodityId });
-        }
-        const osFp = Math.min(1, Math.max(0, remainingFP));
-        this._allocations.set(j.commodityId, {
-          points: osFp, progress: oldProgress.get(j.commodityId)?.progress ?? 0,
-          targetQty: osRemaining, produced: 0, _isChain: false, _isOneShot: true,
-        });
-        remainingFP -= osFp;
+      } else {
+        remainingFP = this._allocateOrderFP(j.commodityId, osRemaining, oldProgress, remainingFP, osChainEntries, { _isOneShot: true });
       }
     }
 
+    // ── Zlecenia DROIDÓW (isDroidUnit) — również NAJWYŻSZY priorytet i JEDYNE źródło
+    // FP dla droidów (wyłączone z reactive/safety niżej). Każdy typ droida osobno;
+    // produce-loop synchronizuje _droidOrders[cid].produced i kończy po osiągnięciu qty.
+    const droidChainEntries = [];
+    for (const [cid, order] of this._droidOrders) {
+      const remaining = Math.max(0, order.qty - order.produced);
+      if (remaining <= 0) { this._droidOrders.delete(cid); continue; }
+      remainingFP = this._allocateOrderFP(cid, remaining, oldProgress, remainingFP, droidChainEntries, { _isDroidOrder: true });
+    }
+
     // Agreguj zapotrzebowanie po commodityId — bierz MAX qty (nie sumuj)
-    // i zachowaj najwyższy priorytet źródła
+    // i zachowaj najwyższy priorytet źródła. Droidy POMINIĘTE — mają wyłącznie
+    // ścieżkę _droidOrders (dobra inwestycyjne, bez reactive/safety demand).
     const sourceOrder = this._reactiveSourceOrder;
     const aggregated = new Map();
     for (const d of demandItems) {
+      if (COMMODITIES[d.commodityId]?.isDroidUnit) continue;
       const existing = aggregated.get(d.commodityId);
       const srcPriority = sourceOrder.indexOf(d.source);
       if (existing) {
@@ -1165,7 +1294,7 @@ export class FactorySystem {
         forCommodityId: ch.forCommodityId,
       });
     }
-    this._autoChain = [...osChainEntries, ...newAutoChain];
+    this._autoChain = [...osChainEntries, ...droidChainEntries, ...newAutoChain];
 
     // Alokuj FP — każdy główny towar z deficytem rejestruje alokację.
     // Gdy chain pochłonął cały budżet FP, rejestrujemy main z 0 FP —
@@ -1405,6 +1534,7 @@ export class FactorySystem {
     for (const id of localScope) {
       const def = COMMODITIES[id];
       if (!def) continue;
+      if (def.isDroidUnit) continue;   // droidy poza safety/min-zapas — tylko _droidOrders
       const locked = !this.isRecipeAvailable(id);
       const minStock = this.getSafetyStockTarget(id);
       items.push({

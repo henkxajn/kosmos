@@ -73,7 +73,8 @@ function runRealPath(scenario) {
   const { fs, res, colony } = makeColony({ scenario, stock: { ...FIELD_STOCK }, credits: 5000 });
   fs.setTotalPoints(8);
   fs.setMode('reactive');
-  const okOrder = fs.setOneShotJob('automation_droid', 5);   // Order 0/5 (jak w raporcie)
+  // Droidy = dobra inwestycyjne → setOneShotJob deleguje do setDroidOrder (zlecenie Build-N).
+  const okOrder = fs.setDroidOrder('automation_droid', 5);   // Order 0/5 (jak w raporcie)
   const before = res.getAmount('automation_droid');
   fs._update(1.0);   // 1 rok cyw. — pełny krok
   return { fs, res, colony, okOrder, made: res.getAmount('automation_droid') - before, liLeft: res.getAmount('Li') };
@@ -85,7 +86,7 @@ function runRealPath(scenario) {
   ok('(b) boosted REAL PATH: 2 droidy (Li-limited 2000/1000; 0 PRE-FIX)', boosted.made === 2);
   ok('(b) boosted: zużyto Li do 0 (2×1000, receptura NIE-skalowana)', boosted.liLeft === 0);
   ok('(b) boosted: Kr −1000 (2×500 creditCost)', boosted.colony.credits === 4000);
-  ok('(b) boosted: oneShotJob.produced === 2 (postęp zlecenia)', boosted.fs.oneShotJob?.produced === 2);
+  ok('(b) boosted: droidOrder.produced === 2 (postęp zlecenia Build-N)', boosted.fs.getDroidOrder('automation_droid')?.produced === 2);
 
   const dflt = runRealPath('civilization');
   ok('(b) default: droid recipe też NIE skalowana (isBoosted false)',

@@ -844,7 +844,8 @@ export class EconomyOverlay extends BaseOverlay {
   // Lista WSZYSTKICH towarów — odblokowane klikalne (→ input ilości),
   // tech-locked wyszarzone z 🔒 (niemożliwe do zlecenia), wzór jak edytor min-zapasów.
   _drawOneShotPicker(ctx, x, ry, w, fs, colId) {
-    const all = Object.values(COMMODITIES).sort(_commoditySortFn);
+    // Droidy mają dedykowaną sekcję Build-N — poza generycznym pickerem one-shot.
+    const all = Object.values(COMMODITIES).filter(d => !d.isDroidUnit).sort(_commoditySortFn);
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     for (const def of all) {
       const locked = !fs.isRecipeAvailable(def.id);
@@ -908,6 +909,149 @@ export class EconomyOverlay extends BaseOverlay {
     input.addEventListener('blur', commit);
     for (const evt of ['click', 'mousedown', 'mouseup']) input.addEventListener(evt, (e) => e.stopPropagation());
     requestAnimationFrame(() => { input.focus(); input.select(); });
+  }
+
+  // ── Sekcja DROIDY — zlecenia Build-N (dobra inwestycyjne, poza reactive/safety) ──
+  // Per typ droida: aktywne zlecenie → progress n/N + [Anuluj] + powód STALL;
+  // brak zlecenia → [−] N [+] [Zbuduj] + podgląd kosztu. Locked → 🔒 tech. Zwraca ry.
+  _drawDroidOrdersSection(ctx, x, ry, w, fs, colony) {
+    const droids = Object.values(COMMODITIES)
+      .filter(d => d.isDroidUnit)
+      .sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0));
+    if (droids.length === 0) return ry;
+    const colId = colony.planetId;
+
+    // Separator + nagłówek
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x, ry); ctx.lineTo(x + w, ry); ctx.stroke();
+    ry += 8;
+    ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('econPanel.droidHeader'), x, ry + 10);
+    ry += 16;
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.droidHint'), x, ry + 10);
+    ry += 16;
+
+    const allocs = fs.getAllocations();
+    for (const def of droids) {
+      ry = this._drawDroidRow(ctx, x, ry, w, def, fs, colId, allocs);
+    }
+    return ry;
+  }
+
+  _drawDroidRow(ctx, x, ry, w, def, fs, colId, allocs) {
+    const cid = def.id;
+    const locked = !fs.isRecipeAvailable(cid);
+
+    // Nazwa + ikona
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
+    let tx = x;
+    const iw = drawResourceIcon(ctx, cid, tx, ry + 1, 16, def.icon);
+    ctx.fillText(getName(def, 'commodity'), tx + iw + 4, ry + 11);
+
+    if (locked) {
+      const techName = def.requiresTech ? (t(`tech.${def.requiresTech}.name`) || def.requiresTech) : '?';
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'right';
+      ctx.fillText(`🔒 ${t('ui.requiresTech', techName)}`, x + w, ry + 11);
+      ctx.textAlign = 'left';
+      return ry + 20;
+    }
+
+    const order = fs.getDroidOrder?.(cid);   // { commodityId, qty, produced } | null
+
+    if (order) {
+      // Aktywne zlecenie: progress + [Anuluj]
+      const cancelW = 62, cbx = x + w - cancelW;
+      this._drawSmallBtnWide(ctx, cbx, ry, cancelW, t('econPanel.droidCancel'), 'danger');
+      this._addHit(cbx, ry, cancelW, BTN_S, 'factory_btn', {
+        action: 'droid_cancel', colonyId: colId, commodityId: cid, label: 'cancel', x: cbx,
+      });
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.floor(order.produced)}/${order.qty}`, cbx - 8, ry + 11);
+      ctx.textAlign = 'left';
+      ry += 18;
+      this._drawBar(ctx, x, ry, w, 4, Math.min(1, order.produced / Math.max(1, order.qty)), THEME.accent, THEME.bgTertiary);
+      ry += 8;
+      // Powód STALL (gdy alokacja stoi)
+      const alloc = allocs.find(a => a.commodityId === cid);
+      if (alloc && alloc.paused) {
+        const msg = this._stallReasonMsg(alloc.stallReason) ?? t('econPanel.noResources');
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.danger;
+        ctx.fillText(this._ellipsize(ctx, msg, w), x, ry + 9);
+        ry += 12;
+      }
+      return ry + 4;
+    }
+
+    // Brak zlecenia: [−] N [+] [Zbuduj] + podgląd kosztu
+    const n = this._getDroidBuildQty(colId, cid);
+    const BOX_W = 30;
+    let bx = x + w - 178;
+    this._drawSmallBtn(ctx, bx, ry, '−', n > 1 ? 'secondary' : 'disabled');
+    if (n > 1) {
+      this._addHit(bx, ry, BTN_S, BTN_S, 'factory_btn', { action: 'droid_qty_minus', colonyId: colId, commodityId: cid, label: '−', x: bx });
+    }
+    bx += BTN_S + 2;
+    this._drawBonusBox(ctx, bx, ry, BOX_W, BTN_S, n, false);
+    bx += BOX_W + 2;
+    this._drawSmallBtn(ctx, bx, ry, '+', 'primary');
+    this._addHit(bx, ry, BTN_S, BTN_S, 'factory_btn', { action: 'droid_qty_plus', colonyId: colId, commodityId: cid, label: '+', x: bx });
+    bx += BTN_S + 6;
+    const buildW = Math.max(50, x + w - bx);
+    this._drawSmallBtnWide(ctx, bx, ry, buildW, t('econPanel.droidBuild'), 'primary');
+    this._addHit(bx, ry, buildW, BTN_S, 'factory_btn', { action: 'droid_build', colonyId: colId, commodityId: cid, label: 'build', x: bx });
+    ry += 18;
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(this._ellipsize(ctx, this._droidCostPreview(def, n), w), x, ry + 9);
+    return ry + 14;
+  }
+
+  // Podgląd kosztu zlecenia droida: "Zbuduj N → N×receptura + N×Kr Kr"
+  _droidCostPreview(def, n) {
+    const scaled = {};
+    for (const [r, q] of Object.entries(def.recipe ?? {})) scaled[r] = q * n;
+    const kr = (def.creditCost ?? 0) * n;
+    return t('econPanel.droidCostPreview', n, formatRecipe(scaled), kr);
+  }
+
+  // Wspólny tekst powodu STALL (wiersz alokacji + sekcja droidów). null → brak.
+  _stallReasonMsg(sr) {
+    if (!sr) return null;
+    if (sr.kind === 'tech_blocked') {
+      const b = sr.blocked[0];
+      const ing = COMMODITIES[b.ingredientId];
+      const tn = b.requiresTech ? (t(`tech.${b.requiresTech}.name`) || b.requiresTech) : '?';
+      return `⚠ ${ing ? getName(ing, 'commodity') : b.ingredientId}: ${t('ui.requiresTech', tn)}`;
+    }
+    if (sr.kind === 'missing_ingredient') {
+      const m = sr.missing[0];
+      const rdef = ALL_RESOURCES[m.resId] ?? COMMODITIES[m.resId] ?? { id: m.resId };
+      const rn = rdef.symbol ?? getName(rdef, ALL_RESOURCES[m.resId] ? 'resource' : 'commodity');
+      const extra = sr.missing.length > 1 ? ` +${sr.missing.length - 1}` : '';
+      return t('econPanel.stallMissing', rn, Math.floor(m.need), Math.floor(m.have)) + extra;
+    }
+    if (sr.kind === 'insolvent') return t('econPanel.stallInsolvent', sr.creditCost, Math.floor(sr.credits));
+    if (sr.kind === 'no_points') return t('econPanel.stallNoPoints');
+    return null;   // target_done / inne → brak komunikatu STALL
+  }
+
+  // Lokalny stan „ile zbudować" per (kolonia, droid) — commit dopiero na [Zbuduj].
+  _getDroidBuildQty(colonyId, commodityId) {
+    if (!this._droidBuildQty) this._droidBuildQty = {};
+    return this._droidBuildQty[`${colonyId}:${commodityId}`] ?? 1;
+  }
+  _setDroidBuildQty(colonyId, commodityId, n) {
+    if (!this._droidBuildQty) this._droidBuildQty = {};
+    this._droidBuildQty[`${colonyId}:${commodityId}`] = Math.max(1, Math.min(99, Math.floor(n) || 1));
   }
 
   // ── Pasek filtra kolonii ──────────────────────────────────────────────────
@@ -1104,32 +1248,19 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
       // STALL musi NAZWAĆ prawdziwy blocker (bare "BRAK SUROWCÓW" na 5-składnikowej
-      // recepturze = nieczytelny). stallReason (FactorySystem) rekonstruuje przyczynę
-      // z żywego stanu; blockedByTech zachowane jako fallback (alokacja z aktywnym FP).
-      const sr = alloc.stallReason;
-      let msg;
-      if ((alloc.blockedByTech && alloc.blockedByTech.length > 0) || sr?.kind === 'tech_blocked') {
-        const first = (alloc.blockedByTech && alloc.blockedByTech[0]) || sr.blocked[0];
+      // recepturze = nieczytelny). _stallReasonMsg rekonstruuje przyczynę z żywego
+      // stanu (FactorySystem.getStallReason); blockedByTech = fallback (alloc z FP).
+      let msg = this._stallReasonMsg(alloc.stallReason);
+      if (!msg && alloc.blockedByTech && alloc.blockedByTech.length > 0) {
+        const first = alloc.blockedByTech[0];
         const ingDef = COMMODITIES[first.ingredientId];
         const techName = first.requiresTech
           ? (t(`tech.${first.requiresTech}.name`) || first.requiresTech)
           : '?';
         const ingName = ingDef ? getName(ingDef, 'commodity') : first.ingredientId;
         msg = `⚠ ${ingName}: ${t('ui.requiresTech', techName)}`;
-      } else if (sr?.kind === 'missing_ingredient') {
-        const m = sr.missing[0];
-        const rdef = ALL_RESOURCES[m.resId] ?? COMMODITIES[m.resId] ?? { id: m.resId };
-        const rn = rdef.symbol ?? getName(rdef, ALL_RESOURCES[m.resId] ? 'resource' : 'commodity');
-        const extra = sr.missing.length > 1 ? ` +${sr.missing.length - 1}` : '';
-        msg = t('econPanel.stallMissing', rn, Math.floor(m.need), Math.floor(m.have)) + extra;
-      } else if (sr?.kind === 'insolvent') {
-        msg = t('econPanel.stallInsolvent', sr.creditCost, Math.floor(sr.credits));
-      } else if (sr?.kind === 'no_points') {
-        msg = t('econPanel.stallNoPoints');
-      } else {
-        msg = t('econPanel.noResources');
       }
-      ctx.fillText(this._ellipsize(ctx, msg, 196), barX, y + 24);
+      ctx.fillText(this._ellipsize(ctx, msg ?? t('econPanel.noResources'), 196), barX, y + 24);
     }
 
     // Output / rok
@@ -1186,6 +1317,10 @@ export class EconomyOverlay extends BaseOverlay {
 
     // ── Jednorazowe zlecenie (one-shot) ────────────────────
     ry = this._drawOneShotBar(ctx, x + pad, ry, w - pad * 2, fs, colony);
+    ry += 6;
+
+    // ── Droidy (dobra inwestycyjne — Build-N, poza reactive/safety) ──────────
+    ry = this._drawDroidOrdersSection(ctx, x + pad, ry, w - pad * 2, fs, colony);
     ry += 6;
 
     // ── Zawartość reaktywna ────────────────────────────────
@@ -1730,8 +1865,10 @@ export class EconomyOverlay extends BaseOverlay {
     // Sekcja MINIMALNE ZAPASY (safety stock) przeniesiona do prawej połowy
     // PRODUCTION (_drawSafetyStockPanel) — „na bok" dla lepszej widoczności.
 
-    // Aktywne alokacje (read-only)
-    const allocs = fs.getAllocations();
+    // Aktywne alokacje (read-only). Droidy POMINIĘTE — mają dedykowaną sekcję
+    // z licznikiem zlecenia (Build-N); wiersz alokacji pokazywałby mylące liczniki
+    // cyklu. Sub-składniki łańcucha (np. androida) NIE są isDroidUnit → zostają.
+    const allocs = fs.getAllocations().filter(a => !COMMODITIES[a.commodityId]?.isDroidUnit);
     if (allocs.length > 0) {
       ry += 4;
       ctx.strokeStyle = THEME.border;
@@ -1898,9 +2035,9 @@ export class EconomyOverlay extends BaseOverlay {
 
     for (const g of groups) {
       const ids = Object.entries(COMMODITIES)
-        .filter(([, def]) => g.consumer
+        .filter(([, def]) => def.isDroidUnit !== true && (g.consumer
           ? def.isConsumerGood === true
-          : (def.isConsumerGood !== true && g.tiers.includes(def.tier)))
+          : (def.isConsumerGood !== true && g.tiers.includes(def.tier))))
         .map(([id]) => id);
       if (ids.length === 0) continue;
 
@@ -2490,6 +2627,20 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'oneshot_cancel':
         fs.cancelOneShotJob();
+        break;
+
+      // ── Zlecenia droidów (dobra inwestycyjne, Build-N) ──
+      case 'droid_qty_minus':
+        this._setDroidBuildQty(data.colonyId, data.commodityId, this._getDroidBuildQty(data.colonyId, data.commodityId) - 1);
+        break;
+      case 'droid_qty_plus':
+        this._setDroidBuildQty(data.colonyId, data.commodityId, this._getDroidBuildQty(data.colonyId, data.commodityId) + 1);
+        break;
+      case 'droid_build':
+        fs.setDroidOrder(data.commodityId, this._getDroidBuildQty(data.colonyId, data.commodityId));
+        break;
+      case 'droid_cancel':
+        fs.cancelDroidOrder(data.commodityId);
         break;
 
       // ── Tryb reaktywny — zlecenia eksportowe (Plan B) ─
