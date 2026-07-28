@@ -445,8 +445,8 @@ export class CivilizationSystem {
   get needsImmigrants() {
     if (this.population <= 0) return false;
     if (this.effectiveHousing <= this.population) return false; // brak mieszkań
-    // Sprawdź czy budynki mają niezaspokojony demand
-    const needed = this._employedPops + this._lockedPops;
+    // Sprawdź czy budynki mają niezaspokojony demand (etaty droidów NIE tworzą popytu na ludzi — net §3.4)
+    const needed = Math.max(0, this._employedPops - this._syntheticJobsTotal()) + this._lockedPops;
     return needed > this.population * 0.85; // >85% zatrudnionych = brakuje rąk do pracy
   }
 
@@ -588,8 +588,16 @@ export class CivilizationSystem {
   // ustalonym freePops ≈ _unemployed (test steady-state pilnuje tolerancji; rozjazd = fail).
   // Przyszły refactor hook: gdy lock/expedition przejdą na pulę bezrobotnych, ten getter
   // można zredukować do `return this._unemployed`. Do tego czasu — bez zmian.
+  //
+  // Faza 4 fix: `_employedPops` jest BRUTTO (zawiera etaty obsadzone droidami). Etat syntetyczny
+  // NIE zajmuje ludzkiego zatrudnienia — człowiek zwolniony przez droida wraca do puli bezrobotnych
+  // (liczonej w `population`). Bez netowania każdy droid drenował freePops o swój etat → „0 wolnych"
+  // mimo bezrobotnych (rekrutacja zablokowana). Netujemy syntetyki (wzór konsumenta employmentu, jak
+  // getSlotDemand-konsumenci §3.4) → przywraca inwariant freePops ≈ _unemployed. Clamp neta broni
+  // przed rzadkim desync (writer employedPops vs slot).
   get freePops() {
-    return Math.max(0, this.population - this._employedPops - this._lockedPops);
+    const netEmployed = Math.max(0, this._employedPops - this._syntheticJobsTotal());
+    return Math.max(0, this.population - netEmployed - this._lockedPops);
   }
 
   /**
@@ -613,7 +621,9 @@ export class CivilizationSystem {
   // Kara za brak siły roboczej (gdy POP zginie a budynki stoją)
   // Skaluje produkcję budynków proporcjonalnie
   get employmentPenalty() {
-    const needed = this._employedPops + this._lockedPops;
+    // Etaty obsadzone droidami netowane (nie wymagają ludzi, §3.4). Getter obecnie bez konsumentów —
+    // netowanie dla spójności i bezpieczeństwa przy ew. reaktywacji.
+    const needed = Math.max(0, this._employedPops - this._syntheticJobsTotal()) + this._lockedPops;
     if (needed <= 0 || this.population >= needed) return 1.0;
     return this.population / needed;
   }
@@ -1201,6 +1211,8 @@ export class CivilizationSystem {
   getStrataJobs(type)   { return this.buildingSystem?.getSlotDemand?.(type) ?? 0; }
   /** Etaty straty obsadzone przez syntetyki (netowane z popytu na ludzi, §3.4). */
   _syntheticJobs(type)  { return this.buildingSystem?.getSyntheticJobs?.(type) ?? 0; }
+  /** Suma etatów obsadzonych syntetykami (wszystkie straty) — do netowania w freePops/needsImmigrants. */
+  _syntheticJobsTotal() { return this.buildingSystem?.getSyntheticJobsTotal?.() ?? 0; }
   /** Realne etaty dla LUDZI = brutto − syntetyki. Alokacja obsadza tylko te. */
   _humanJobs(type)      { return Math.max(0, this.getStrataJobs(type) - this._syntheticJobs(type)); }
   /** Zatrudnieni w stracie (workers) = count (zawiera zablokowanych — spójne z produkcją). */

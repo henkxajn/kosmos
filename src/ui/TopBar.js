@@ -701,7 +701,7 @@ export class TopBar {
       const pop       = civSys.population ?? 0;
       const free      = civSys.freePops ?? 0;
       const housing   = civSys.effectiveHousing ?? 0;
-      const employed  = civSys._employedPops ?? 0;
+      const employed  = civSys.employed ?? 0;   // ludzcy pracownicy (Σstrata) — spójne z zakładką Workforce; POP = employed + free
       const locked    = civSys._lockedPops ?? 0;
       const atCap     = housing !== Infinity && pop >= housing && housing > 0;
       const dispPop   = civSys.displayPopulation ?? 0;

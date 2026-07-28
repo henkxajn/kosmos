@@ -16,11 +16,12 @@ import { ORBITAL_ROLES, getOrbitRange, computeBodyRadius } from '../data/Orbital
 import EntityManager from '../core/EntityManager.js';
 import { createStarterModules } from '../data/StationModuleData.js';
 import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
+import { BUILDINGS } from '../data/BuildingsData.js';   // v97→v98: droid-per-job (jobs×level = cap droidów)
 
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 97;
+export const CURRENT_VERSION     = 98;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -154,6 +155,7 @@ const MIGRATIONS = {
   94: _migrateV94toV95,
   95: _migrateV95toV96,
   96: _migrateV96toV97,
+  97: _migrateV97toV98,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2320,6 +2322,29 @@ function _migrateV96toV97(data) {
     if (!civ) continue;
     civ.unemployed ??= 0;
     civ.focusBonus ??= {};
+  }
+  return data;
+}
+
+// ── v97 → v98 — Population 2.0 (post-Faza 4): DROID-PER-JOB ──────────────────
+// Model whole-building automation → per-job: syntheticSlot {commodityId,tier} zyskuje pole `count`.
+// Stary slot automatyzował CAŁY budynek → konwertujemy na J = jobs×level droidów (D4 — zachowuje
+// dotychczasowe pełne pokrycie; NIE na 1 jednostkę, bo to cicho de-automatyzowałoby wysokie poziomy).
+// Iterujemy kafle gridów kolonii; J z żywej definicji budynku (jobs ×4) × buildingLevel kafla.
+function _migrateV97toV98(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (!c4x?.colonies) return data;
+  for (const col of c4x.colonies) {
+    const tiles = col.grid?.tiles;
+    if (!Array.isArray(tiles)) continue;
+    for (const tile of tiles) {
+      const slot = tile?.syntheticSlot;
+      if (slot && slot.count == null) {
+        const jobs = BUILDINGS[tile.buildingId]?.jobs ?? 1;
+        const J = jobs * (tile.buildingLevel ?? 1);
+        slot.count = Math.max(1, J);
+      }
+    }
   }
   return data;
 }

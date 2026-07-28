@@ -482,9 +482,17 @@ export class GameScene {
           const emp = bs._getBuildingLaborEfficiency?.(b, key);
           const pid = entry.producerId ?? `building_${key}`;
           const reg = res._producers?.get(pid)?.energy;
+          // Droid-per-job: liczba droidów + sumaryczny upkeep energii (perUnit × droidy).
+          const [eq, er] = key.split(',').map(Number);
+          const slot   = bs._grid?.get?.(eq, er)?.syntheticSlot;
+          const J      = (b.jobs ?? 0) * (entry.level ?? 1);
+          const droids = Math.min(slot?.count ?? 0, J);
+          const synthUp = slot ? droids * (bs.constructor.SYNTH_ENERGY_UPKEEP?.[slot.tier] ?? 2) : 0;
           rows.push({
             building:  b.id,
             staffing:  `${civ?.strata?.[popType]?.count ?? 0}/${bs.getSlotDemand?.(popType) ?? 0}`,
+            droids:    slot ? `${droids}/${J}` : '-',
+            synthUpkeep: synthUp,
             empPenalty: emp == null ? '?' : +Number(emp).toFixed(2),
             autonomous: !!b.isAutonomous || (b.jobs ?? 0) === 0,
             energyCost: b.energyCost ?? 0,

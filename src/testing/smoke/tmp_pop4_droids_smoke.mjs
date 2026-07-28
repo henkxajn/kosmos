@@ -216,9 +216,9 @@ console.log('--- (h) UI: matryca stanu przycisku + install konsumuje / remove ni
   const before = res.getAmount('automation_droid');
   bs.installSynthetic(keys[0], pA.commodityId);
   ok('(h) install KONSUMUJE 1 droida', res.getAmount('automation_droid') === before - 1);
-  // ALREADY-INSTALLED
+  // ALREADY-INSTALLED (droid-per-job: smelter jobs=1 → 1 droid wypełnia → building_full)
   const pOcc = bs.previewSyntheticInstall(keys[0]);
-  ok('(h) already-installed → reason slot_occupied', pOcc.ok === false && pOcc.reason === 'slot_occupied');
+  ok('(h) full building → reason building_full (jobs=1, 1 droid)', pOcc.ok === false && pOcc.reason === 'building_full');
   // remove NISZCZY (brak zwrotu do magazynu)
   const afterInstall = res.getAmount('automation_droid');
   bs.removeSynthetic(keys[0]);

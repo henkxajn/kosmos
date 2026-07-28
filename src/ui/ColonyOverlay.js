@@ -1385,9 +1385,11 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(this._truncateText(ctx, `${r.icon} ${name}`, nameRight - x - 4), x, my);
 
-      // Etaty (realne dla ludzi) + pracownicy (amber gdy niedobór obsady; +N🤖 = etaty na droidach).
+      // Jobs = BRUTTO (wszystkie fizyczne etaty budynków); Emp = ludzie + droidy „h+m🤖". Kolumna Jobs
+      // pokazuje pełną pojemność (np. 2× kopalnia L2 auto = 4 jobs, 0+4🤖). Amber = niedobsada LUDZKA
+      // (workers < NETTO r.jobs), math pressure/alokacji zostaje NETTO — to tylko wyświetlanie.
       ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'right';
-      ctx.fillStyle = THEME.textDim; ctx.fillText(String(r.jobs), jobsRight, my);
+      ctx.fillStyle = THEME.textDim; ctx.fillText(String(r.grossJobs), jobsRight, my);
       ctx.fillStyle = (r.workers < r.jobs) ? THEME.amber : THEME.textPrimary;
       if (r.synthetic > 0) {   // Faza 4: obsada syntetyczna widoczna per warstwa (np. 6+2🤖)
         ctx.font = `10px ${THEME.fontFamily}`;
@@ -3065,6 +3067,17 @@ export class ColonyOverlay extends BaseOverlay {
       if (b.energyCost) h += 14;
       if (b.jobs) h += 14;
       if (b.housing) h += 14;
+      // Droid-per-job (UI 3): linia energii droidów + sekcja instalacji MUSZĄ wejść w wysokość, inaczej
+      // przyciski Install/Remove wypadają pod panel i są przycinane (clip). Zgodne z blokiem rysującym.
+      if (colony?.buildingSystem && (b.jobs ?? 0) > 0 && !b.isAutonomous) {
+        const dCount = colony.buildingSystem._tileDroidCount?.(aEntry, tileKey) ?? 0;
+        const prevH = colony.buildingSystem.previewSyntheticInstall?.(tileKey) ?? { ok: false, reason: 'no_building', count: dCount };
+        if (dCount > 0) h += 14;   // „🤖 droidy: −X energy"
+        h += 14;                   // nagłówek „n🤖 / J"
+        if (prevH.ok) h += 24;
+        else if (prevH.reason && prevH.reason !== 'no_building' && prevH.reason !== 'autonomous_building') h += 24 + 12;
+        if ((prevH.count ?? dCount) > 0) h += 24 + 12;
+      }
       h += 8 + 28 + 6; // separator + buttons
       if (b.maxLevel && (tile.buildingLevel ?? 1) < b.maxLevel) h += 28;
     } else if (tile.underConstruction) {
@@ -3176,7 +3189,10 @@ export class ColonyOverlay extends BaseOverlay {
       if (rates) {
         ctx.font = `10px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText('Produkcja/rok:', x + 8, cy); cy += 13;
+        // UI 1: mnożnik obsady (D2 efficiency) w nagłówku — gracz widzi CZEMU produkcja się zmieniła.
+        const _eff = colony.buildingSystem?._getBuildingLaborEfficiency?.(b, tileKey) ?? 1.0;
+        const _effLbl = Math.abs(_eff - 1.0) > 0.005 ? ` (×${+_eff.toFixed(2)})` : '';
+        ctx.fillText(`Produkcja/rok${_effLbl}:`, x + 8, cy); cy += 13;
         ctx.font = `11px ${THEME.fontFamily}`;
 
         // Pokaż bazowe stawki (z rates budynku) — aby widać co POWINNO być produkowane
@@ -3226,10 +3242,20 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillText(`⚡ -${b.energyCost} energy/rok`, x + 8, cy); cy += 14;
       }
 
-      // POP (etaty — Population 2.0)
+      // Obsada (droid-per-job): {ludzkie etaty} POP + {droidy}🤖 / {J=jobs×level} + jawny upkeep droidów.
       if (b.jobs) {
+        const _J = (b.jobs ?? 0) * (activeEntry?.level ?? 1);
+        const _D = colony.buildingSystem?._tileDroidCount?.(activeEntry, tileKey) ?? 0;
         ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(`👤 ${b.jobs} POP`, x + 8, cy); cy += 14;
+        if (_D > 0) {
+          ctx.fillText(t('colonyPanel.staffing', _J - _D, _D, _J), x + 8, cy); cy += 14;
+          const _tier = grid.get(tile.q, tile.r)?.syntheticSlot?.tier ?? 1;
+          const _per = colony.buildingSystem?.constructor?.SYNTH_ENERGY_UPKEEP?.[_tier] ?? 2;
+          ctx.fillStyle = '#ffdd44';
+          ctx.fillText(t('colonyPanel.droidUpkeep', _per, _D, _per * _D), x + 8, cy); cy += 14;
+        } else {
+          ctx.fillText(`👤 ${_J} POP`, x + 8, cy); cy += 14;
+        }
       }
 
       // Housing
@@ -3249,30 +3275,33 @@ export class ColonyOverlay extends BaseOverlay {
       this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'demolish');
       cy += 28;
 
-      // Faza 4: droid (syntetyk) — tylko budynki z etatami (jobs>0, nie autonomiczne).
+      // Droid-per-job: „n🤖 / J" + Install (dopóki count<J) I Remove (gdy count>0) współistnieją.
       const bsSyn = colony?.buildingSystem;
       if (bsSyn && (b.jobs ?? 0) > 0 && !b.isAutonomous) {
         const tileKey = `${tile.q},${tile.r}`;
-        if (tile.syntheticSlot) {
-          // Zainstalowany → Usuń (NISZCZY jednostkę — komunikat niżej).
+        const prev = bsSyn.previewSyntheticInstall?.(tileKey) ?? { ok: false, reason: 'no_building', count: 0, jobs: 0 };
+        const dCount = prev.count ?? 0, dJobs = prev.jobs ?? 0;
+        // Nagłówek stanu automatyzacji „n🤖 / J".
+        ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = dCount > 0 ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
+        ctx.fillText(t('synthetic.count', dCount, dJobs), x + FLOAT_W / 2, cy + 2); ctx.textAlign = 'left'; cy += 14;
+        // Install — aktywny gdy jest miejsce i droid pasuje; inaczej wyszarzony + powód (poza no_building/autonomous).
+        if (prev.ok) {
+          this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#1a5a6e');
+          this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'installSynthetic', { tileKey, commodityId: prev.commodityId });
+          cy += 24;
+        } else if (prev.reason && prev.reason !== 'no_building' && prev.reason !== 'autonomous_building') {
+          this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#333');
+          cy += 24;
+          ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.amber; ctx.textAlign = 'center';
+          ctx.fillText(t('synthetic.reason.' + prev.reason), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
+        }
+        // Remove — gdy jest choć jeden droid (zdejmuje JEDNEGO, NISZCZY — komunikat niżej).
+        if (dCount > 0) {
           this._drawBtn(ctx, `🗑 ${t('colonyPanel.removeSynthetic')}`, x + 8, cy, FLOAT_W - 16, 22, '#6e4a1a');
           this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'removeSynthetic', { tileKey });
           cy += 24;
           ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
           ctx.fillText(t('synthetic.removeWarn'), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
-        } else {
-          const prev = bsSyn.previewSyntheticInstall?.(tileKey);
-          if (prev?.ok) {
-            this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#1a5a6e');
-            this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'installSynthetic', { tileKey, commodityId: prev.commodityId });
-            cy += 24;
-          } else if (prev && prev.reason !== 'no_building') {
-            // Zablokowany — przycisk wyszarzony + powód (i18n).
-            this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#333');
-            cy += 24;
-            ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.amber; ctx.textAlign = 'center';
-            ctx.fillText(t('synthetic.reason.' + prev.reason), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
-          }
         }
       }
 
@@ -4026,14 +4055,47 @@ export class ColonyOverlay extends BaseOverlay {
       case 'upgrade':
         if (tile) EventBus.emit('planet:upgradeRequest', { tile });
         break;
-      case 'demolish':
-        if (tile) EventBus.emit('planet:demolishRequest', { tile });
+      case 'demolish': {
+        if (!tile) break;
+        // Droid-per-job (D5): ostrzeż gdy rozbiórka/downgrade ZNISZCZY droidy (wzór dialogu wyparcia).
+        const dLoss = colony?.buildingSystem?.getDemolishDroidLoss?.(`${tile.q},${tile.r}`) ?? 0;
+        const doDemolish = () => EventBus.emit('planet:demolishRequest', { tile });
+        if (dLoss > 0) {
+          showConfirmModal({
+            title: t('synthetic.demolishDroidTitle'),
+            message: t('synthetic.demolishDroidWarn', dLoss),
+            danger: true,
+          }).then(okBtn => { if (okBtn) doDemolish(); });
+        } else {
+          doDemolish();
+        }
         break;
+      }
       // Faza 4: instalacja/usuwanie droida (syntetyk) w budynku.
       case 'installSynthetic': {
         const bSyn = colony?.buildingSystem;
-        const res = bSyn?.installSynthetic?.(zone.data?.tileKey, zone.data?.commodityId);
-        this._showFlash(res?.success ? t('synthetic.installedFlash') : t('synthetic.reason.' + (res?.reason ?? 'no_commodity')));
+        const tileKey = zone.data?.tileKey;
+        const commodityId = zone.data?.commodityId;
+        const doInstall = () => {
+          const res = bSyn?.installSynthetic?.(tileKey, commodityId);
+          this._showFlash(res?.success ? t('synthetic.installedFlash') : t('synthetic.reason.' + (res?.reason ?? 'no_commodity')));
+        };
+        // FIX B: świadome wyparcie — gdy budynek MA ludzkich pracowników, potwierdź (ile wyprze, ile
+        // wolnych etatów na kolonii; styl ostrzeżenia gdy nadwyżka trafi do bezrobotnych). Bez obsady = od razu.
+        const disp = bSyn?.getSyntheticDisplacement?.(tileKey) ?? { displaced: 0, freeSlots: 0, staffed: false };
+        if (disp.staffed) {
+          const warn = disp.freeSlots < disp.displaced;
+          const msg = t('synthetic.displaceMsg', disp.displaced, disp.freeSlots)
+            + (warn ? '\n\n⚠ ' + t('synthetic.displaceWarn', disp.displaced - disp.freeSlots) : '');
+          showConfirmModal({
+            title: t('synthetic.displaceTitle'),
+            message: msg,
+            confirmLabel: t('synthetic.install'),
+            danger: warn,
+          }).then(okBtn => { if (okBtn) doInstall(); });
+        } else {
+          doInstall();
+        }
         break;
       }
       case 'removeSynthetic': {

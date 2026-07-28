@@ -3067,7 +3067,7 @@ export class ThreeRenderer {
     const civ = colony.civSystem;
     const pop = civ?.population ?? 0;
     const housing = civ?.housing ?? 0;
-    const freePops = Math.max(0, pop - (civ?._employedPops ?? 0));
+    const freePops = Math.floor(civ?.freePops ?? 0);   // getter netuje syntetyki + locki (Faza 4 fix)
 
     let html = `<b>${colony.planet?.name ?? entityId}</b>`;
     html += `<br>👤 POP: ${pop}/${housing} (wolne: ${freePops})`;

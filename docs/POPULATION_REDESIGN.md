@@ -234,6 +234,17 @@ Pokrywa: kopalnia, huta, elektrownie (węgl./słon./geoterm.), farma, studnia,
 fabryka, synth food plant, rafinerie. NIE: engineer, scientist, merchant,
 bureaucrat.
 
+**Model DROID-PER-JOB (post-Faza 4, zastępuje pierwotne „jeden slot = cały budynek"):** 1 droid = 1 etat.
+Budynek pomieści do `jobs×level` droidów, mieszanych z ludźmi (efektywna obsada = ludzie + droidy, cap J).
+**Jeden tier na budynek** (mieszanie tierów odrzucone). Efektywność PROPORCJONALNA do udziału droidów:
+`(D×eff + (J−D)×humanStaff)/J` — pełny droid = ×tier (1.4/1.7), pół-droid = pół bonusu, a niedobsadzona
+ludzka reszta poprawnie ciągnie wynik w dół (understaffed-safe; przy pełnej obsadzie ludzi = `1+(eff−1)×D/J`).
+Upkeep energii **per droid** (`upkeep[tier]×D`). Install/remove operują na POJEDYNCZYCH jednostkach (cap J →
+`building_full`); downgrade/demolish niszczą nadmiar droidów (bez zwrotu, ostrzeżenie „Zniszczy N droidów").
+Save: `syntheticSlot = {commodityId, tier, count}` (migracja v97→v98: stary slot → J jednostek). Powód zmiany:
+stary model skalował korzyść z poziomem przy stałym koszcie jednostki (jeden droid automatyzujący 10 etatów =
+złamana ekonomia) i przeczył „droid = substytut POP, nie budynku".
+
 ### 4.2 AI Droid (tier 2 = istniejący android_worker — HAK, później)
 
 - Zostaje jak jest (T3, android_engineering, ×1.7). Dochodzi PÓŹNIEJ:
@@ -451,6 +462,45 @@ grida → nigdy nie łapały diverencji.
   assemblyBonus 2.0) w rozwiniętej kolonii + skala civ-vs-game-year. Źródłowa matematyka poprawna —
   NIE ruszano baseTime ani ticku. Ekonomiczny hamulec floodu = ISSUE 1 (limit składników).
 
+**Post-Faza 4 — SYNTHETIC WORKFORCE OVERHAUL (save v97→v98, live-gate PASS):**
+jeden atomowy arc łączący fixy fundamentu automatyzacji z redesignem modelu na **1 droid = 1 etat**
+(decyzja Filipa). Powód redesignu: stary model „jeden slot = cały budynek" skalował korzyść z poziomem
+przy stałym koszcie jednostki (jeden drogi droid automatyzujący 10 etatów = złamana ekonomia) i przeczył
+§4.1 („droid = substytut POP", nie budynku).
+- **Fundament (fixy w tym samym commicie, poprzedzają redesign):** (1) **freePops netuje syntetyki** —
+  `_employedPops` było BRUTTO (liczyło etaty droidów jako ludzkie zatrudnienie) → droidy drenowały
+  freePops, „0 wolnych" mimo bezrobotnych (rekrutacja zablokowana); teraz konsumenci (freePops/
+  needsImmigrants/employmentPenalty) netują `getSyntheticJobsTotal()`, a display „employed" = ludzie
+  (TopBar/drawer → `civSystem.employed`). (2) **FIX A — natychmiastowa realokacja** na install/remove
+  (`_reallocateAndRefresh`, ta sama ścieżka co roczny tick): wyparci ludzie od razu do wolnych etatów/
+  bezrobocia (koniec rocznego opóźnienia). (3) **FIX B — dialog wyparcia** przy instalacji w obsadzonym
+  budynku („wyprze N, wolne etaty M", ostrzeżenie gdy M<N). (4) **UI polish:** „Zainstalowane: N" droidów
+  w tooltipie magazynu; fix przepełnienia wiersza receptury (skrót materiałów + `💰Kr` zawsze czytelny) +
+  pełna receptura na hover.
+- **Model:** `tile.syntheticSlot` → `{commodityId, tier, count}` (count = liczba droidów, cap `jobs×level`;
+  nazwa pola legacy-singular zachowana dla stabilności serializacji). **Jeden tier na budynek** (mieszanie
+  odrzucone `tier_mismatch`). Efektywna obsada = ludzie + droidy (cap J).
+- **Efektywność (proporcjonalna, understaffed-safe):** `(D×SYNTH_EFF[tier] + (J−D)×humanStaff)/J` — pełny
+  droid = ×tier, pół-droid = pół bonusu (= `1+(eff−1)×D/J` przy pełnej obsadzie ludzi), a niedobsadzona
+  ludzka reszta poprawnie ciągnie wynik w dół (nie fałszywie pełny bonus).
+- **Energia:** upkeep PER DROID (`SYNTH_ENERGY_UPKEEP[tier] × D`), nie per budynek.
+- **Netting:** `getSyntheticJobs`/`Total` liczą JEDNOSTKI (droidy), nie etaty budynku → freePops/pressure/
+  alokacja spójne; `countInstalledSynthetics` = suma droidów.
+- **Install/remove per-unit:** install dokłada 1 droida (cap J, `building_full`), remove zdejmuje 1
+  (NISZCZY). Oba wyzwalają natychmiastową realokację (FIX A). Wyparcie per-unit: N∈{0,1}/install.
+- **Downgrade/demolish (D5):** obniżenie poziomu trimuje nadmiar droidów (zniszczone, bez zwrotu); pełna
+  rozbiórka czyści slot (naprawiony BUG: osierocony slot na pustym kaflu). UI ostrzega „Zniszczy N droidów".
+  Odczyty clampują `min(count, J)`.
+- **Migracja v97→v98** (`_migrateV97toV98`): stary whole-building slot → `count = jobs×level` (zachowuje
+  pełną automatyzację; NIE 1 jednostka — cicho de-automatyzowałoby wysokie poziomy).
+- **UI widoczności (re-gate):** panel budynku pokazuje „Obsada: {J−D} POP + {D}🤖 / J", „Produkcja (×eff)"
+  (mnożnik D2 obsady) i jawny upkeep droidów; zakładka Workforce — kolumna Jobs = BRUTTO (pełna pojemność),
+  Emp = „h+m🤖" (math pressure/alokacji zostaje NETTO — tylko wyświetlanie); panel auto-sizuje wysokość do
+  sekcji droidów (fix przycinania przycisków Install/Remove). energyChain: kolumny `droids N/J` + `synthUpkeep`.
+- Testy: `tmp_pop4_droid_per_job_smoke` (49) — install/cap/full, efficiency 1.0/1.2/1.4/0.95/1.7, per-droid
+  energy, displacement per-unit, migracja, tier-mismatch, downgrade trim, UI display-data (gross-vs-net jobs +
+  composition). Pełna regresja pop2/3/4 + brownout + auto-expander 0 nowych FAIL.
+
 **Faza 5 — Tuning i AI:** stałe na realnej rozgrywce; ColonyAutoExpander:
 habitaty przy pełnym capacity, budynki-etaty przy bezrobociu, bez bankructwa
 na płacach.
@@ -478,6 +528,10 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   creditCost 500) z uzasadnieniem „inwestycja, nie spam". Faza 5: analogiczny przegląd
   `android_worker` (też droga produkcja, ta sama zasada) + audyt pozostałych cen commodities
   (spójność `BASE_PRICE` vs realny koszt produkcji — dziś część to raw×1.3, część ręczna).
+- **Review energii automatyzacji (z droid-per-job):** budynek w pełni obsadzony droidami pobiera **1.4×
+  bazowej energii** (skalowanie zużycia efektywnością, PRE-EXISTING — świadomie ZACHOWANE) ORAZ **upkeep
+  per droid** (2/6 × D). Faza 5: ocenić czy to podwójnie wycenia energię automatyzacji (double-pricing) —
+  decyzja przy tuningu na realnej rozgrywce, nie na oko.
 
 ---
 

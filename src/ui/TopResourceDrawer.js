@@ -296,7 +296,7 @@ export class TopResourceDrawer {
     if (civSys) {
       const popTotal = civSys.population ?? 0;
       const popFree  = civSys.freePops ?? 0;
-      const popEmp   = civSys._employedPops ?? 0;
+      const popEmp   = civSys.employed ?? 0;   // ludzcy pracownicy (Σstrata) — spójne z Workforce (Faza 4)
       const popLock  = civSys._lockedPops ?? 0;
       const popBase  = `👤 ${_fmtPop(popTotal)} `;
       const popFreeS = t('resBar.freeSuffix', _fmtPopFrac(popFree));

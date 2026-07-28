@@ -332,9 +332,23 @@ export class EconomyOverlay extends BaseOverlay {
     lines.push(`<div style="font-weight:bold;color:${THEME.accent}">${_iconHtml(resourceId, icon)}${name}</div>`);
     lines.push(`<div>${t('econPanel.tooltipAmount')} ${_fmtAmt(totalAmt)}</div>`);
 
+    // Faza 4: droid/android — pokaż ile jednostek ZAINSTALOWANYCH. Install KONSUMUJE droida z magazynu,
+    // więc licznik magazynu ≠ liczba pracujących droidów; bez tego gracz nie widzi drugiej puli.
+    if (comDef?.isDroidUnit) {
+      let installed = 0;
+      for (const col of sourceColonies) installed += col.buildingSystem?.countInstalledSynthetics?.(resourceId) ?? 0;
+      lines.push(`<div style="color:${THEME.textDim}">${t('econPanel.installedSynthetic', installed)}</div>`);
+    }
+
     const rateColor = totalRate > 0 ? THEME.success : totalRate < 0 ? THEME.danger : THEME.textDim;
     const rateSign = totalRate > 0 ? '+' : '';
     lines.push(`<div style="color:${rateColor}">${t('econPanel.tooltipBalance')} ${rateSign}${totalRate.toFixed(1)}${t('econPanel.perYear')}</div>`);
+
+    // FIX C: pełna receptura (materiały + koszt Kr) — wiersz produkcji skraca ją z ellipsis, więc hover
+    // ujawnia komplet (report: cost + pełna lista materiałów zawsze dostępne na hover).
+    if (comDef?.recipe) {
+      lines.push(`<div style="color:${THEME.textSecondary};margin-top:4px">${t('econPanel.recipeLabel')} ${formatRecipe(comDef.recipe, comDef.creditCost)}</div>`);
+    }
 
     // Producenci
     const prodKeys = Object.keys(allProducers);
@@ -1018,9 +1032,21 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.restore();
   }
 
+  /** Skróć tekst do maxW z ellipsis (…). Wymaga wcześniej ustawionego ctx.font. */
+  _ellipsize(ctx, str, maxW) {
+    if (maxW <= 0) return '';
+    if (ctx.measureText(str).width <= maxW) return str;
+    let s = str;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
+  }
+
   _drawAllocRow(ctx, x, y, w, alloc, col) {
     const def = COMMODITIES[alloc.commodityId];
     if (!def) return;
+
+    // FIX C: hover na wiersz (receptura skrócona ellipsis) → tooltip z PEŁNĄ recepturą + kosztem Kr.
+    this._addHit(x, y, w, 40, 'resource_hover', { resourceId: alloc.commodityId });
 
     // Stall = FactorySystem ustawił _paused bo brak surowców (lub target osiągnięty)
     const isStall = !!alloc.paused;
@@ -1043,7 +1069,18 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(formatRecipe(def.recipe, def.creditCost), x + 24, y + 24);
+    // FIX overflow: długa receptura droida (5 surowców) + 💰Kr wchodziła w kolumnę paska/STALL i
+    // nachodziła na tekst. Materiały skracamy z ellipsis; koszt 💰Kr rezerwuje szerokość i JEST
+    // ZAWSZE czytelny (report: cost + STALL zawsze widoczne). Pełna receptura zostaje w tooltipie hover.
+    const recipeMaxW = (x + w - 200) - (x + 24) - 8;   // barX = x+w-200 (nie wchodź w kolumnę paska/STALL)
+    const costStr = (def.creditCost ?? 0) > 0 ? ` 💰${def.creditCost}Kr` : '';
+    const costW = costStr ? ctx.measureText(costStr).width : 0;
+    const matStr = this._ellipsize(ctx, formatRecipe(def.recipe), Math.max(20, recipeMaxW - costW));
+    ctx.fillText(matStr, x + 24, y + 24);
+    if (costStr) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(costStr, x + 24 + ctx.measureText(matStr).width, y + 24);
+    }
 
     // Target info
     if (alloc.targetQty !== null) {

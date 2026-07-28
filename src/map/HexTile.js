@@ -244,7 +244,9 @@ export class HexTile {
     // Oczekujące zamówienie (null | buildingId string) — czeka na surowce
     this.pendingBuild = null;
 
-    // Syntetyczna jednostka zainstalowana w budynku (null | { commodityId, tier })
+    // Droidy zainstalowane w budynku (null | { commodityId, tier, count }). Droid-per-job (§4.1):
+    // count = liczba droidów (1 droid = 1 etat, cap jobs×level); jeden tier na budynek. Nazwa pola
+    // legacy-singular ("slot") zachowana dla stabilności serializacji — realnie trzyma N jednostek.
     // tier: 1=automation_droid (×1.4), 2=android_worker (×1.7), 3=ai_collective_node (×2.5)
     this.syntheticSlot = null;
 
