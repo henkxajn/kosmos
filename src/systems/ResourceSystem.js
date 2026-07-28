@@ -327,7 +327,8 @@ export class ResourceSystem {
       if (mineOutput > 0) {
         if (!producers['mine']) producers['mine'] = { total: 0, count: 0 };
         producers['mine'].total += mineOutput;
-        producers['mine'].count = bSys._cachedMineLevel;
+        // total = efektywny (ważony obsadą przez _cachedMineLevel); count = nameplate (raw, integer)
+        producers['mine'].count = bSys._cachedMineLevelRaw ?? bSys._cachedMineLevel;
       }
     }
 

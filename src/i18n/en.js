@@ -2528,6 +2528,7 @@ export default {
   'colonyPanel.upgrade': 'UPGRADE',
   'colonyPanel.demolish': 'DEMOLISH',
   'colonyPanel.removeSynthetic': 'Remove unit',
+  'colonyPanel.mineExtraction': 'Extraction/yr{0}:',
   'colonyPanel.staffing': 'Staffing: {0} POP + {1}🤖 / {2}',
   'colonyPanel.droidUpkeep': '🤖 droids: -{0}×{1} = -{2} energy',
   // Phase 4 — droids (synthetic install)

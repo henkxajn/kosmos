@@ -3233,8 +3233,8 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillText(t('colonyPanel.mineExtraction', _mult), x + 8, cy); cy += 13;
         ctx.font = `11px ${THEME.fontFamily}`;
         for (const [res, amt] of Object.entries(_mineEst.gains)) {
-          if (amt <= 0) continue;
-          ctx.fillStyle = '#88ff88';
+          // 0.0 = uczciwy stan nieobsadzonej kopalni (twarda bramka) — muted red zamiast ukrywania
+          ctx.fillStyle = amt > 0.05 ? '#88ff88' : '#ff8888';
           ctx.fillText(`+${amt.toFixed(1)} ${res}`, x + 12, cy); cy += 14;
         }
       } else if (!_isMineB && rates) {

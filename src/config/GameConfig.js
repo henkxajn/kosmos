@@ -189,6 +189,15 @@ export const GAME_CONFIG = {
   // (opacity ≤ 0.05 = skip). Pattern z plan §P2 R4.
   RUMOR_FADE_YEARS: 10,
 
+  // ── Population 2.0 (Report 2) — kopalnie skalują wydobycie obsadą górników ──
+  // Podłoga frakcji wydobycia kopalni gdy budynek jest zbudowany ale NIEobsadzony
+  // (0 górników). Decyzja Filipa (live-gate): TWARDA BRAMKA = 0 — nieobsadzona kopalnia
+  // NIC nie wydobywa. To celowa presja: wymusza wysyłanie droidów/kolonistów na outposty
+  // (dziura, której brakowało ekonomii droidów). Kopalnie autonomiczne i outpostowe
+  // (jobs=0) zawsze ×1.0. Droidy w slocie liczą się (clamp ≤1.0; droid-bonus 1.4× =
+  // osobna dźwignia, doc §8 Faza 5). Tunable — podnieś (np. 0.2) by złagodzić.
+  MINE_STAFF_FLOOR: 0,
+
   // ── UI tuning (M3 P1.5+) ────────────────────────────────────────────────
   // Universal tooltip system (Tooltip.js + TooltipContent.js).
   // tooltipDelayMs: delay przed show po hover. Filip D5=B (configurable).

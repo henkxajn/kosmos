@@ -31,6 +31,8 @@ import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
 import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
 import { t, getName }      from '../i18n/i18n.js';
 import { envMultiplier, computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
+import { GAME_CONFIG }     from '../config/GameConfig.js';
+import { BASE_MINE_RATE }  from '../data/ResourcesData.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
 const BASE_MAX_LEVEL = 10;
@@ -308,17 +310,56 @@ export class BuildingSystem {
     return n;
   }
 
-  /** Efektywność kopalń: ratio produkcji vs max capacity (0-1) */
+  /** Frakcja obsady kopalni [0..1] — reużywa D2 labor efficiency (_getBuildingLaborEfficiency:
+   *  autonomiczne/outpost/jobs=0 → 1.0, droidy w slocie liczą się), clamp ≤1.0. Wspólne źródło
+   *  dla gate'u wydobycia (_tickMineExtraction), satysfakcji górników (getMineEfficiency) i UI
+   *  (getMineOutputEstimate). Clamp ≤1.0 — droid-bonus 1.4× poza tym cutem (doc §8 Faza 5). */
+  _mineStaffFraction(building, tileKey) {
+    return Math.min(1, this._getBuildingLaborEfficiency(building, tileKey));
+  }
+
+  /** Efektywność kopalń: level-ważona średnia frakcji obsady (0-1). Spójne z gate'em wydobycia —
+   *  napędza satysfakcję straty 'miner' (CivilizationSystem._calcStrataSatisfaction). Autonomiczne
+   *  i droid-obsadzone kopalnie ×1.0. BEZ podłogi (satysfakcja odzwierciedla realną obsadę). */
   getMineEfficiency() {
-    let total = 0, active = 0;
-    for (const entry of this._active.values()) {
-      if (entry.building?.isMine && (entry.jobs ?? 0) > 0) {
-        total++;
-        // Kopalnia jest aktywna jeśli ma pracowników (nie ma syntheticSlot i empPenalty < 1)
-        active++;
-      }
+    let lvl = 0, staffed = 0;
+    for (const [tileKey, entry] of this._active.entries()) {
+      const b = entry.building;
+      if (!(b?.isMine || b?.id === 'mine')) continue;
+      const level = entry.level ?? 1;
+      lvl += level;
+      staffed += level * this._mineStaffFraction(b, tileKey);
     }
-    return total > 0 ? active / total : 0.5;
+    return lvl > 0 ? staffed / lvl : 0.5;
+  }
+
+  /** UI (Report 2): szacowany roczny urobek POJEDYNCZEJ kopalni z obsadą + dostępnością energii —
+   *  NIE mutuje złóż (odwzorowuje wzór DepositSystem.extractFromDeposits). Zwraca { staff, gains }
+   *  albo null gdy to nie kopalnia / brak złóż. Panel budynku pokazuje „Wydobycie/rok (×staff)". */
+  getMineOutputEstimate(tileKey) {
+    const entry = this._active.get(tileKey);
+    const b = entry?.building;
+    if (!b || !(b.isMine || b.id === 'mine') || !this._deposits?.length) return null;
+    const staff = Math.max(GAME_CONFIG.MINE_STAFF_FLOOR, this._mineStaffFraction(b, tileKey));
+    const grid  = (b.energyCost ?? 0) > 0;
+    const avail = grid ? (this.resourceSystem?.getEnergyAvailability?.() ?? 1) : 1;
+    const rateMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 5 : 1;
+    // asteroid_mining ×2 dla planetoid/asteroid (parytet z _tickMineExtraction)
+    let bodyMult = 1;
+    const bodyType = this._planetId ? window.KOSMOS?.colonyManager?.getColony?.(this._planetId)?.planet?.type : null;
+    if ((bodyType === 'planetoid' || bodyType === 'asteroid') && this.techSystem?.isResearched?.('asteroid_mining')) bodyMult = 2;
+    const effLevel = (entry.level ?? 1) * staff * avail * rateMult * bodyMult;
+    const deps = b.mineResource ? this._deposits.filter(d => d.resourceId === b.mineResource) : this._deposits;
+    const gains = {};
+    for (const d of deps) {
+      if ((d.remaining ?? 0) <= 0) continue;   // złoże wyczerpane — pomiń
+      const out = effLevel * BASE_MINE_RATE * (d.richness ?? 1) * (d.remaining / d.totalAmount);
+      // BEZ skip out<=0: nieobsadzona kopalnia (staff 0 = twarda bramka) pokazuje surowce przy
+      // +0.0 — uczciwy stan „×0.00, nic nie wydobywa" zamiast pustego panelu.
+      const key = b.refineTo ? b.refineTo : d.resourceId;
+      gains[key] = (gains[key] ?? 0) + (b.refineTo ? out * (b.refineRatio ?? 1) : out);
+    }
+    return { staff, gains };
   }
 
   /** Efektywność fabryk: ratio aktywnych vs total (0-1) */
@@ -1971,6 +2012,10 @@ export class BuildingSystem {
         else this.resourceSystem.removeProducer(pid);
       }
     }
+    // Population 2.0 (Report 2): obsada mogła się zmienić (roczna realokacja siły roboczej,
+    // instalacja/usunięcie droida, tech, faction) → unieważnij cache poziomów kopalń, by
+    // wydobycie przeliczyło się z nową frakcją obsady w następnym _tickMineExtraction.
+    this._mineLevelDirty = true;
   }
 
   // Przelicz sumaryczne punkty fabryczne ze wszystkich fabryk
@@ -2000,14 +2045,21 @@ export class BuildingSystem {
     if (this._mineLevelDirty !== false) {
       let genericGrid = 0;     // kopalnie generyczne z sieci (energyCost>0) — bramkowane brownoutem
       let genericUngated = 0;  // generyczne z własnym reaktorem (energyCost==0) — poza bramką
+      let rawLevel = 0;        // suma SUROWYCH poziomów (nameplate) — do licznika kopalń w breakdown UI
       // restricted: key `${mineResource}>${refineTo||''}>${grid}` → {mineResource, refineTo, ratio, level, grid}.
       // grid W KLUCZU: grid i ungated kopalnie tego samego surowca NIGDY nie łączą się w jedną
       // grupę (inaczej own-reactor byłaby błędnie duszona przez OR). grid stały per-grupa.
+      // Population 2.0 (Report 2): poziom WAŻONY OBSADĄ górników — pełna obsada ×1, niedobsadzona
+      // <1 (podłoga MINE_STAFF_FLOOR), autonomiczna/outpost/droid ×1. Cache invalidowany też przez
+      // _reapplyAllRates (obsada dynamiczna) — nie tylko build/demolish jak dawniej.
       const restricted = new Map();
-      for (const entry of this._active.values()) {
+      for (const [tileKey, entry] of this._active.entries()) {
         const b = entry.building;
         if (!(b.isMine || b.id === 'mine')) continue;
-        const lvl = entry.level ?? 1;
+        const rawLvl = entry.level ?? 1;
+        rawLevel += rawLvl;
+        const staff = Math.max(GAME_CONFIG.MINE_STAFF_FLOOR, this._mineStaffFraction(b, tileKey));
+        const lvl = rawLvl * staff;   // poziom efektywny (ważony obsadą)
         const grid = (b.energyCost ?? 0) > 0;   // >0 = pobiera z sieci; 0 = własny reaktor
         if (b.mineResource) {
           const refineTo = b.refineTo ?? null;
@@ -2024,9 +2076,10 @@ export class BuildingSystem {
       }
       this._cachedMineLevelGrid = genericGrid;
       this._cachedMineLevelUngated = genericUngated;
-      // Suma generyczna — zachowana dla czytników breakdownu UI (ResourceSystem/EconomyOverlay);
-      // ich estymata nie odzwierciedla throttlingu brownout (poza zakresem tego slice'a).
+      // Suma EFEKTYWNA (ważona obsadą) — czytniki breakdownu UI (ResourceSystem/EconomyOverlay)
+      // pokazują dochód mineralny spójny z realnym gate'em obsady (nadal bez throttlingu brownout).
       this._cachedMineLevel = genericGrid + genericUngated;
+      this._cachedMineLevelRaw = rawLevel;   // nameplate — licznik kopalń w breakdown (integer)
       this._cachedRestrictedMines = restricted;
       this._mineLevelDirty = false;
     }

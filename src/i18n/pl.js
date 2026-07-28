@@ -2529,6 +2529,7 @@ export default {
   'colonyPanel.upgrade': 'ULEPSZ',
   'colonyPanel.demolish': 'BURZ',
   'colonyPanel.removeSynthetic': 'Usuń jednostkę',
+  'colonyPanel.mineExtraction': 'Wydobycie/rok{0}:',
   'colonyPanel.staffing': 'Obsada: {0} POP + {1}🤖 / {2}',
   'colonyPanel.droidUpkeep': '🤖 droidy: -{0}×{1} = -{2} energy',
   // Faza 4 — droidy (instalacja syntetyka)
