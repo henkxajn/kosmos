@@ -68,6 +68,13 @@ export const GAME_CONFIG = {
     // vessel:combatRangeEnter do DSCS (per-tick fire exchange zamiast instant
     // BattleSystem.resolveBattle). Gdy false: instant path z M4 P2 (rollback).
     m4DeepSpaceCombat:    true,
+    // ── Player combat mission pause/resume ────────────────────────────────
+    // Gdy player vessel/flota na misji (transport/recon/moveToPoint) wpada w combat:
+    // zamroź (nie dryfuj poza COMBAT_DISENGAGE_AU = fałszywa porażka), zawieś misję,
+    // po walce wznów (>20% max HP floty) albo wycofaj do friendly planety (≤20%).
+    // Player-only (ownerEmpireId==='player'). Domyślnie ON — kill-switch; live-gate PASS
+    // (freeze/pause/resume), gałąź abort ≤20% pokryta T2, live odroczony — docs/deferred-live-gates.md.
+    m4PlayerCombatMissionPause: true,
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).

@@ -2061,9 +2061,14 @@ export class VesselManager {
       ? (snapshot.originId ?? vessel.colonyId)
       : snapshot.targetId;
     const destEntity = this._findEntity(destId);
+    // CHANGE 3 (m4PlayerCombatMissionPause) — cel-PUNKT (moveToPoint w pustą przestrzeń): brak encji,
+    // ale snapshot ma ZAPAMIĘTANE współrzędne (mission.targetX/targetY). Wznów ku nim. Ciało → żywa/
+    // przewidziana pozycja (niżej); punkt → stałe koordy. Leg powrotny zawsze celuje w encję (originId).
+    const hasStoredPoint = !isReturning
+      && Number.isFinite(snapshot.targetX) && Number.isFinite(snapshot.targetY);
 
-    if (!destEntity) {
-      // Target lost (planeta zniszczona / outpost usunięty itp.) — anuluj mission.
+    if (!destEntity && !hasStoredPoint) {
+      // Target lost (planeta zniszczona / outpost usunięty, brak zapamiętanego punktu) — anuluj mission.
       console.warn(`[VesselManager] _resumeMissionAfterOrder: destEntity ${destId} nie istnieje — drop mission`);
       delete vessel._suspendedMission;
       vessel.mission = null;
@@ -2075,21 +2080,25 @@ export class VesselManager {
     const sy = vessel.position.y;
     const speedAU = vessel.speedAU ?? 1.0;
 
-    // Szybki estimate czasu podróży (distance z aktualnej pos do bieżącej pos celu).
-    // Dla ruchomych planet kepler'owskich ten estimate jest przybliżeniem — używamy
-    // go jako arrivalYear, potem predict ciała na ten arrivalYear dla targetX/Y/waypoints.
-    const dxEst = (destEntity.x ?? sx) - sx;
-    const dyEst = (destEntity.y ?? sy) - sy;
-    const distAUEst = Math.hypot(dxEst, dyEst) / AU_TO_PX;
+    // Punkt bazowy celu do estymaty czasu: aktualna pozycja encji LUB zapamiętany punkt.
+    const baseX = destEntity ? (destEntity.x ?? sx) : snapshot.targetX;
+    const baseY = destEntity ? (destEntity.y ?? sy) : snapshot.targetY;
+    const distAUEst = Math.hypot(baseX - sx, baseY - sy) / AU_TO_PX;
     const travelYears = distAUEst / Math.max(0.01, speedAU);
     const arrivalYear = gameYear + travelYears;
 
-    // Predict pozycji celu na moment arrival (kepler) — jak w dispatchOnMission.
-    const predicted = this._predictPosition(destId, arrivalYear);
-    const tx = predicted?.x ?? destEntity.x ?? sx;
-    const ty = predicted?.y ?? destEntity.y ?? sy;
+    // Ciało: predykuj pozycję na arrival (kepler — cel się rusza). Punkt: stałe współrzędne.
+    let tx, ty;
+    if (destEntity) {
+      const predicted = this._predictPosition(destId, arrivalYear);
+      tx = predicted?.x ?? destEntity.x ?? sx;
+      ty = predicted?.y ?? destEntity.y ?? sy;
+    } else {
+      tx = snapshot.targetX;
+      ty = snapshot.targetY;
+    }
 
-    const sysId = vessel.systemId ?? destEntity.systemId ?? 'sys_home';
+    const sysId = vessel.systemId ?? destEntity?.systemId ?? 'sys_home';
     const route = this._calcRoute(sx, sy, tx, ty, sysId);
 
     // Zaadaptuj snapshot do resume (outgoing vs returning).
@@ -2122,7 +2131,7 @@ export class VesselManager {
     delete vessel._suspendedMission;
 
     addMissionLog(vessel, gameYear,
-      `Resume mission → ${destEntity.name ?? destId}`,
+      `Resume mission → ${destEntity?.name ?? snapshot.targetName ?? destId ?? 'punkt'}`,
       'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: m });

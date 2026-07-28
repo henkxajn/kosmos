@@ -138,10 +138,12 @@ export class MovementOrderSystem {
    *   - Już suspended → no-op.
    * @returns {boolean} true gdy coś suspendowaliśmy (używane do UI log).
    */
-  _suspendMissionIfAny(vessel) {
+  _suspendMissionIfAny(vessel, { forCombat = false } = {}) {
     const m = vessel.mission;
     if (!m) return false;
-    if (m.type === 'move_to_point') return false;
+    // moveToPoint jest TERMINALNY dla movement orders (nie wznawia się po innym rozkazie).
+    // ALE combat-pause (m4PlayerCombatMissionPause) chce go wznowić po walce → dopuść przy forCombat.
+    if (m.type === 'move_to_point' && !forCombat) return false;
     if (vessel._suspendedMission) return false;  // już jest w zawieszeniu
     if (vessel.position?.state !== 'in_transit') return false;  // misja zakończona — nic do wznowienia
 
