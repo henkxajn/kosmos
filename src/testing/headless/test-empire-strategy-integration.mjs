@@ -78,7 +78,7 @@ const mother = EmpireColonyBootstrap.bootstrapColony('emp_I', 'sys_x', 'mother_p
 mother.civSystem.addPop('laborer', 30);
 const RESTOCK = {
   Si: 1e4, Cu: 1e4, Ti: 1e4, Fe: 1e4,
-  structural_alloys: 1e3, android_worker: 1e3, power_cells: 1e3,
+  structural_alloys: 1e3, automation_droid: 1e3, power_cells: 1e3,   // 5B: outpost build-cost = automation_droid
   conductor_bundles: 1e3, electronic_systems: 1e3, extraction_systems: 1e3,
   food: 1e4, water: 1e4,
 };

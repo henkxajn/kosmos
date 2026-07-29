@@ -342,7 +342,7 @@ export const BUILDINGS = {
     isSpaceport:   true,
     isAutonomous:  true,
     cost:          { Fe: 1000, Ti: 500, Cu: 300, Si: 200 },
-    commodityCost: { structural_alloys: 130, android_worker: 20, reactive_armor: 60, electronic_systems: 50 },
+    commodityCost: { structural_alloys: 130, automation_droid: 2, reactive_armor: 60, electronic_systems: 50 },   // 5B: android_worker×20 → automation_droid×2 (launch_pad jobs=2)
     energyCost:    8,
     buildTime:     2.0,      // lata gry
     rates:         {},
@@ -414,7 +414,7 @@ export const BUILDINGS = {
     icon:          '🤖',
     description:   'Wydobywa surowce bez POPów — wymaga Robotów i Wierteł.',
     cost:          { Fe: 30, Ti: 10, Cu: 5 },
-    commodityCost: { structural_alloys: 4, android_worker: 3, extraction_systems: 2, power_cells: 1 },
+    commodityCost: { structural_alloys: 4, automation_droid: 1, extraction_systems: 2, power_cells: 1 },   // 5B: android_worker×3 → automation_droid×1 (mine jobs=1)
     energyCost:    4,
     buildTime:     1.0,     // lata gry
     rates:         {},
@@ -503,7 +503,7 @@ export const BUILDINGS = {
     icon:          '🤖☀',
     description:   'Elektrownia słoneczna obsługiwana przez roboty — działa bez POPów.',
     cost:          { Si: 20, Cu: 8, Ti: 5 },
-    commodityCost: { structural_alloys: 4, android_worker: 3, power_cells: 2, conductor_bundles: 2, electronic_systems: 1 },
+    commodityCost: { structural_alloys: 4, automation_droid: 1, power_cells: 2, conductor_bundles: 2, electronic_systems: 1 },   // 5B: android_worker×3 → automation_droid×1 (solar_farm jobs=1)
     energyCost:    0,
     buildTime:     0.75,    // lata gry
     rates:         { energy: 6 },
@@ -674,7 +674,7 @@ export const BUILDINGS = {
     icon:          '🛰⛏',
     description:   'Automatyczne wydobycie z planetoidów — bez POPów, powolne ale darmowe',
     cost:          { Fe: 50, Ti: 20, Cu: 15 },
-    commodityCost: { structural_alloys: 6, android_worker: 4, extraction_systems: 3, reactive_armor: 2 },
+    commodityCost: { structural_alloys: 6, automation_droid: 1, extraction_systems: 3, reactive_armor: 2 },   // 5B: android_worker×4 → automation_droid×1 (odpowiednik mine jobs=1)
     energyCost:    6,
     buildTime:     1.5,
     rates:         {},  // produkcja obliczana dynamicznie
@@ -698,7 +698,7 @@ export const BUILDINGS = {
     icon:          '🧠',
     description:   'Sztuczna inteligencja — -30% czas budowy, auto-naprawa statków (unikalny: 1/kolonia)',
     cost:          { Ti: 30, Si: 25, Cu: 15, Hv: 5 },
-    commodityCost: { electronic_systems: 6, quantum_processors: 3, android_worker: 2 },
+    commodityCost: { electronic_systems: 6, quantum_processors: 3, automation_droid: 2 },   // 5B: android_worker×2 → automation_droid×2 (ai_core jobs=2)
     energyCost:    15,
     buildTime:     2.0,
     rates:         { research: 5 },
@@ -888,7 +888,7 @@ export const BUILDINGS = {
     icon:          '🛸🏠',
     description:   'Stacja orbitalna — housing 20, nie zajmuje hexa na planecie (limit 3)',
     cost:          { Ti: 100, Fe: 80, Si: 50, Cu: 30 },
-    commodityCost: { pressure_modules: 10, reactive_armor: 8, electronic_systems: 6, plasma_cores: 4, android_worker: 4 },
+    commodityCost: { pressure_modules: 10, reactive_armor: 8, electronic_systems: 6, plasma_cores: 4 },   // 5B: android_worker×4 USUNIĘTE (orbital_habitat jobs=0 → 0 droidów; housing bez robotniczej obsady)
     energyCost:    15,
     buildTime:     3.0,
     rates:         {},

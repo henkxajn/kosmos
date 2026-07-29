@@ -462,9 +462,9 @@ export class GameScene {
         console.table(rows);
         return rows;
       },
-      // KOSMOS.debug.aiOrders() — obserwacja Plan 1: per kolonia AI zlecenia droidów
-      //   (commodity produced/qty), magazyn android_worker, stać-na-outpost + brakujący
-      //   składnik. Do gatingu obserwacyjnego (czy AI zamawia androidy i zapełnia je?).
+      // KOSMOS.debug.aiOrders() — obserwacja Plan 1 + 5B: per kolonia AI zlecenia droidów
+      //   (commodity produced/qty), magazyn automation_droid, stać-na-outpost + brakujący
+      //   składnik. Do gatingu obserwacyjnego (czy AI zamawia droidy i zakłada outposty?).
       //   Uzupełnia logi [AI] w konsoli (zamówienie / ukończenie / outpost). Zwraca wiersze.
       aiOrders: () => {
         const cm = window.KOSMOS?.colonyManager;
@@ -480,9 +480,9 @@ export class GameScene {
           if (strat && c.resourceSystem && !c.isOutpost) {
             try {
               afford = strat._canAffordOutpost(c) ? 'TAK' : 'nie';
-              const gap = strat._outpostAndroidGap(c);
-              brakujące = (gap.androidShort > 0 || gap.otherShort.length)
-                ? `android:${gap.androidShort}${gap.otherShort.length ? ' +' + gap.otherShort.join(',') : ''}`
+              const gap = strat._outpostDroidGap(c);
+              brakujące = (gap.droidShort > 0 || gap.otherShort.length)
+                ? `droid:${gap.droidShort}${gap.otherShort.length ? ' +' + gap.otherShort.join(',') : ''}`
                 : 'brak (stać)';
             } catch { /* best-effort */ }
           }
@@ -490,7 +490,7 @@ export class GameScene {
             imperium:            empName(c.ownerEmpireId),
             kolonia:             c.planet?.name ?? c.planetId ?? '?',
             typ:                 c.isOutpost ? 'outpost' : 'full',
-            android_mag:         Math.round(c.resourceSystem?.getAmount?.('android_worker') ?? 0),
+            droid_mag:           Math.round(c.resourceSystem?.getAmount?.('automation_droid') ?? 0),
             'zlecenia_droidów':  orders,
             'stać_na_outpost':   afford,
             'brakujący_składnik': brakujące,

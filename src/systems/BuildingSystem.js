@@ -420,11 +420,14 @@ export class BuildingSystem {
     const candidates = slot
       ? BuildingSystem.DROID_INSTALL_PRIORITY.filter(cid => (COMMODITIES[cid]?.droidTier ?? 1) === slot.tier)
       : BuildingSystem.DROID_INSTALL_PRIORITY;
+    let techLocked = false;   // Slice 5B: kandydat w zapasie + strata OK, ale requiresTech niezbadany.
     for (const cid of candidates) {
       if ((this.resourceSystem?.getAmount?.(cid) ?? 0) < 1) continue;
       const tier = COMMODITIES[cid]?.droidTier ?? 1;
       const allowed = BuildingSystem.ALLOWED_SYNTH_STRATA[tier];
       if (allowed && !allowed.includes(popType)) continue;
+      const reqTech = COMMODITIES[cid]?.requiresTech;
+      if (reqTech && this.techSystem?.isResearched && !this.techSystem.isResearched(reqTech)) { techLocked = true; continue; }
       return { ok: true, commodityId: cid, tier, count, jobs };
     }
     // Żaden kandydat nie pasuje — rozróżnij powód.
@@ -433,6 +436,8 @@ export class BuildingSystem {
         (COMMODITIES[cid]?.droidTier ?? 1) !== slot.tier && (this.resourceSystem?.getAmount?.(cid) ?? 0) >= 1);
       return { ok: false, reason: otherStock ? 'tier_mismatch' : 'no_commodity', count, jobs };
     }
+    // Tech-lock ma priorytet nad strata (kandydat był w zapasie i strata-OK, tylko tech brak).
+    if (techLocked) return { ok: false, reason: 'requires_tech', count, jobs };
     const anyStock = BuildingSystem.DROID_INSTALL_PRIORITY.some(cid => (this.resourceSystem?.getAmount?.(cid) ?? 0) >= 1);
     return { ok: false, reason: anyStock ? 'strata_not_allowed' : 'no_commodity', count, jobs };
   }
@@ -482,6 +487,15 @@ export class BuildingSystem {
       return { success: false, reason: 'strata_not_allowed' };
     }
 
+    // Slice 5B (decyzja 2, live-gate point 2): tech gate na INSTALACJI — droid z `requiresTech`
+    // (android_worker → android_engineering) wymaga zbadania tech NAWET gdy jest w magazynie
+    // (nie tylko przy produkcji). tier-1 automation_droid ma requiresTech null → brak gate. Bez tego
+    // gracz z resztką android_worker (np. po swapie build-cost) instalował go w budynki tier-2 bez tech.
+    const reqTech = COMMODITIES[commodityId]?.requiresTech;
+    if (reqTech && this.techSystem?.isResearched && !this.techSystem.isResearched(reqTech)) {
+      return { success: false, reason: 'requires_tech' };
+    }
+
     // Zużyj JEDNEGO droida i dodaj do budynku (nowy slot z count=1 albo inkrementacja).
     this.resourceSystem.spend({ [commodityId]: 1 });
     if (slot) slot.count = count + 1;
@@ -515,6 +529,56 @@ export class BuildingSystem {
 
     EventBus.emit('building:syntheticRemoved', { tileKey, commodityId, count: Math.max(0, remaining) });
     return { success: true };
+  }
+
+  /**
+   * Slice 5B — bulk „Autonomizuj": wypełnij WSZYSTKIE wolne sloty budynku droidami jednym ruchem
+   * (pętla po installSynthetic — zero duplikacji logiki koszt/capacity/tier/strata/spend/realokacja).
+   * Typ droida wg straty (tier split, dec. 2): laborer/miner/worker → automation_droid (tier-1);
+   * pozostałe (engineer/scientist/merchant/bureaucrat) → android_worker (tier-2, wymaga
+   * android_engineering). Konsumuje droidy z magazynu; przy niedoborze instaluje ILE SIĘ DA (partial)
+   * i zwraca shortfall. FULL-COLONY only (outpost → reason 'outpost_not_supported', 5B.2).
+   * @returns {{ success:boolean, installed:number, shortfall:number, droidType?:string, reason?:string }}
+   */
+  autonomizeBuilding(tileKey) {
+    const entry = this._active.get(tileKey);
+    if (!entry) return { success: false, installed: 0, shortfall: 0, reason: 'no_building' };
+    if (this._isOutpost) return { success: false, installed: 0, shortfall: 0, reason: 'outpost_not_supported' };
+    if (entry.building?.isAutonomous || (entry.jobs ?? 0) === 0) {
+      return { success: false, installed: 0, shortfall: 0, reason: 'nothing_to_autonomize' };
+    }
+    const jobs = (entry.jobs ?? 0) * (entry.level ?? 1);
+    const [q, r] = tileKey.split(',').map(Number);
+    const installed0 = this._grid?.get(q, r)?.syntheticSlot?.count ?? 0;
+    const openSlots = jobs - installed0;
+    if (openSlots <= 0) return { success: false, installed: 0, shortfall: 0, reason: 'already_autonomous' };
+
+    // Typ droida wg straty budynku (tier split). ALLOWED_SYNTH_STRATA[1] = proste strata (tier-1).
+    const popType = entry.building?.popType ?? 'laborer';
+    const tier1Ok = BuildingSystem.ALLOWED_SYNTH_STRATA[1]?.includes(popType);
+    const droidType = tier1Ok ? 'automation_droid' : 'android_worker';
+
+    const available = this.resourceSystem?.getAmount?.(droidType) ?? 0;
+    // Informacyjny gate tech: tier-2 (android) bez badania android_engineering i bez droidów w magazynie
+    // → surface 'requires_tech' zamiast mylącego 'no_droids' (gracz nie może ich wyprodukować).
+    if (!tier1Ok && available < 1 && this.techSystem?.isResearched
+        && !this.techSystem.isResearched('android_engineering')) {
+      return { success: false, installed: 0, shortfall: openSlots, droidType, reason: 'requires_tech' };
+    }
+    if (available < 1) return { success: false, installed: 0, shortfall: openSlots, droidType, reason: 'no_droids' };
+
+    const toInstall = Math.min(Math.floor(available), openSlots);
+    let installed = 0, lastReason = null;
+    for (let i = 0; i < toInstall; i++) {
+      const res = this.installSynthetic(tileKey, droidType);
+      if (res.success) installed++;
+      else { lastReason = res.reason; break; }
+    }
+    const shortfall = openSlots - installed;
+    return {
+      success: installed > 0, installed, shortfall, droidType,
+      reason: installed > 0 ? undefined : (lastReason ?? 'install_failed'),
+    };
   }
 
   /** FIX A: natychmiastowa realokacja siły roboczej po zmianie slotu syntetycznego. Reużywa DOKŁADNIE

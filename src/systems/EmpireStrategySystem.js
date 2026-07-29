@@ -40,13 +40,14 @@ const STRATEGY_INTERVAL_CIVYEARS = 5;
 // Sam solar bez mine nic nie wydobywa — spalone structural_alloys + androidy.
 const OUTPOST_BUILDINGS = ['autonomous_solar_farm', 'autonomous_mine'];
 
-// Report 1 (Plan 1): górny limit „rurociągu" androidów zamawianych pod outposty
-// (dobra inwestycyjne, Build-N). 6 androidów/outpost × 4 outposty = 24 — zapobiega
-// runaway przy błędnym scoringu systemu. Dedup nigdy nie stackuje ponad ten cap.
-const MAX_ANDROID_PIPELINE = 24;
+// Report 1 (Plan 1) + Slice 5B: górny limit „rurociągu" DROIDÓW zamawianych pod outposty
+// (dobra inwestycyjne, Build-N). 2 droidy/outpost × 4 outposty = 8 — zapobiega runaway przy
+// błędnym scoringu systemu. Dedup nigdy nie stackuje ponad ten cap.
+const MAX_DROID_PIPELINE = 8;
 
-// Ile android_worker kosztuje JEDEN outpost (solar 3 + mine 3) — sizing zleceń Build-N.
-const ANDROIDS_PER_OUTPOST = 6;
+// Slice 5B: ile automation_droid kosztuje JEDEN outpost (solar 1 + mine 1) — sizing zleceń Build-N.
+// (Było ANDROIDS_PER_OUTPOST=6 na android_worker; po zamianie build-cost na automation_droid = 2.)
+const DROIDS_PER_OUTPOST = 2;
 
 // Domyślne progi doktryny — fallback per-klucz gdy archetyp nie ma
 // strategicColonization (inne archetypy / brak bloku). Industrialist nadpisuje
@@ -255,7 +256,7 @@ export class EmpireStrategySystem {
     // na macierzystej fabryce (demand-driven, nie reactive stockpile). Reszta zestawu
     // (structural_alloys itd.) dochodzi z reactive; android to jedyne martwe ogniwo po
     // reformie droidów. Dedup + cap wewnątrz helpera.
-    if (!canOutpost) this._maybeOrderOutpostAndroids(empire, mother, systemId, bodyIds, civYear, cfg);
+    if (!canOutpost) this._maybeOrderOutpostDroids(empire, mother, systemId, bodyIds, civYear, cfg);
 
     // Najlepsze ciało Nt (null gdy brak) — P5 (build) ORAZ P3 (waiver) używają.
     const ntBody = this._pickNtBody(empire, bodyIds, civYear);
@@ -435,23 +436,24 @@ export class EmpireStrategySystem {
     return mother.resourceSystem.canAfford(this._fullColonyResourceTransfer(cfg));
   }
 
-  // ── Report 1 (Plan 1): android supply pod outposty (demand-driven Build-N) ──
-  // Analiza braku: czy JEDYNYM brakiem do outpostu jest android_worker? Zwraca
-  // { androidShort, otherShort[] } — androidShort>0 && otherShort puste ⇒ android to
-  // ostatnie ogniwo (reszta zestawu dojdzie z reactive, nie zamawiamy jej tu).
-  _outpostAndroidGap(mother) {
+  // ── Report 1 (Plan 1) + Slice 5B: DROID supply pod outposty (demand-driven Build-N) ──
+  // Analiza braku: ile automation_droid brakuje do outpostu? Zwraca { droidShort, otherShort[] }
+  // — droidShort>0 ⇒ droid to brakujące ogniwo (reszta zestawu dojdzie z reactive, nie zamawiamy tu).
+  // 5B: build-cost outpostu = automation_droid (nie android_worker) → prosty łańcuch (Li/C/Fe/Cu/Si,
+  // bez electronic/semiconductor/Xe) → canSustain łatwiejszy → odblokowuje ubogie imperia (Pochód).
+  _outpostDroidGap(mother) {
     const res = mother.resourceSystem;
     const cost = this._outpostCombinedCost();
-    let androidShort = 0;
+    let droidShort = 0;
     const otherShort = [];
     for (const [k, v] of Object.entries(cost)) {
       if (v <= 0) continue;
       const have = res.getAmount(k);
       if (have >= v) continue;
-      if (k === 'android_worker') androidShort = v - have;
+      if (k === 'automation_droid') droidShort = v - have;
       else otherShort.push(k);
     }
-    return { androidShort, otherShort };
+    return { droidShort, otherShort };
   }
 
   // Ile outpostów doktryna JESZCZE chce w tym systemie — liczone tylko gdy istnieje
@@ -469,34 +471,34 @@ export class EmpireStrategySystem {
   // Gdy outpost jest nieosiągalny WYŁĄCZNIE z braku androidów → złóż/uzupełnij zlecenie
   // Build-N na macierzystej fabryce. Dobra INWESTYCYJNE (istnieje bo konkretny plan tego
   // wymaga), NIE reactive stockpile. Dedup: dolewa tylko brakującą różnicę do docelowego
-  // rurociągu (need); nie stackuje między tickami. Chain-aware gate + cap MAX_ANDROID_PIPELINE.
-  _maybeOrderOutpostAndroids(empire, mother, systemId, bodyIds, civYear, cfg) {
+  // rurociągu (need); nie stackuje między tickami. Chain-aware gate + cap MAX_DROID_PIPELINE.
+  _maybeOrderOutpostDroids(empire, mother, systemId, bodyIds, civYear, cfg) {
     const fs = mother.factorySystem;
     if (!fs?.setDroidOrder) return;
-    const gap = this._outpostAndroidGap(mother);
-    // Relaksacja (obserwacja Castor e): zamawiamy gdy brakuje androidów — NIE wymagamy, by był
-    // JEDYNYM brakiem. Produkcja androida (~15 civY) rusza RÓWNOLEGLE do dochodzenia reszty
-    // składników z reactive, zamiast serializować czekanie (empire short na android I np. Ti
-    // nigdy by nie wystartował). Nadal demand-driven (planned>0) + canSustain + dedup + cap.
-    if (gap.androidShort <= 0) return;
-    // chain-aware: nie składaj zlecenia, którego kolonia NIE UTRZYMA (brak surowca łańcucha
-    // → order utknąłby 0/N). Weryfikacja probe: raw-starved kolonia = canSustain false =
-    // fix słusznie pomija; zdrowa ekonomia = true = order → produkcja → outpost (cy35).
-    if (fs._colonyCanSustainRecipe && !fs._colonyCanSustainRecipe('android_worker')) {
-      this._log(empire, 'android order pominięty — receptura niepodtrzymywalna (brak surowca łańcucha)', systemId);
+    const gap = this._outpostDroidGap(mother);
+    // Relaksacja (obserwacja Castor e): zamawiamy gdy brakuje droidów — NIE wymagamy, by był
+    // JEDYNYM brakiem. Produkcja droida rusza RÓWNOLEGLE do dochodzenia reszty składników z reactive,
+    // zamiast serializować czekanie (empire short na droid I np. Ti nigdy by nie wystartował).
+    // Nadal demand-driven (planned>0) + canSustain + dedup + cap.
+    if (gap.droidShort <= 0) return;
+    // chain-aware: nie składaj zlecenia, którego kolonia NIE UTRZYMA (brak surowca → order 0/N).
+    // 5B: automation_droid ma PROSTY łańcuch (Li/C/Fe/Cu/Si, bez electronic/semiconductor/Xe) →
+    // canSustain przechodzi dla ubogich imperiów, które android_worker (tier-2) blokował.
+    if (fs._colonyCanSustainRecipe && !fs._colonyCanSustainRecipe('automation_droid')) {
+      this._log(empire, 'droid order pominięty — receptura niepodtrzymywalna (brak surowca)', systemId);
       return;
     }
     const planned = this._plannedOutpostCount(empire, systemId, bodyIds, civYear, cfg);
     if (planned <= 0) return;
-    const need = Math.min(planned * ANDROIDS_PER_OUTPOST, MAX_ANDROID_PIPELINE);
-    const have = mother.resourceSystem.getAmount('android_worker');
-    const order = fs.getDroidOrder('android_worker');
+    const need = Math.min(planned * DROIDS_PER_OUTPOST, MAX_DROID_PIPELINE);
+    const have = mother.resourceSystem.getAmount('automation_droid');
+    const order = fs.getDroidOrder('automation_droid');
     const inPipeline = order ? Math.max(0, order.qty - order.produced) : 0;
     const shortfall = need - have - inPipeline;
     if (shortfall <= 0) return;   // rurociąg (magazyn + w toku) już pokrywa potrzebę → dedup
-    fs.setDroidOrder('android_worker', (order?.qty ?? 0) + shortfall);
-    this._log(empire, `android Build-N: +${shortfall} (cel ${need}, mam ${have}, w toku ${inPipeline})`, systemId);
-    console.log(`[AI] ${empire.name ?? empire.id} zamówił androidy Build-N: +${shortfall} (cel ${need}, magazyn ${have.toFixed(0)}, w toku ${inPipeline}) — pod outpost @ ${systemId}`);
+    fs.setDroidOrder('automation_droid', (order?.qty ?? 0) + shortfall);
+    this._log(empire, `droid Build-N: +${shortfall} (cel ${need}, mam ${have}, w toku ${inPipeline})`, systemId);
+    console.log(`[AI] ${empire.name ?? empire.id} zamówił droidy Build-N: +${shortfall} (cel ${need}, magazyn ${have.toFixed(0)}, w toku ${inPipeline}) — pod outpost @ ${systemId}`);
   }
 
   // ── Diagnostyka (Plan 1): DLACZEGO imperium (nie) zakłada outpostu — debug.aiExpansion ──
@@ -533,11 +535,18 @@ export class EmpireStrategySystem {
     else if (xe >= 1 && xe < targetXe && canOutpost && xeBody)    { decision = 'P2 outpost Xe';  reason = `wystartuje na ${xeBody}`; }
     else if (xe >= targetXe && nt < targetNt && canOutpost && ntBody) { decision = 'P5 outpost Nt'; reason = `wystartuje na ${ntBody}`; }
     else {
+      // Priorytet powodu = kolejność FAKTYCZNEJ decyzji _runColonizationTree: outpost odpala TYLKO gdy
+      // (cel NIEosiągnięty ∧ wolne ciało ∧ canOutpost). Gdy pominięty, sprawdzaj w tej kolejności:
+      // (1) SATURACJA (wszystkie cele) — outpost NIECHCIANY, canOutpost/afford MOOT (branch targetu fałszywy
+      //     niezależnie od canOutpost); (2) brak wolnego ciała; (3) DOPIERO afford — istotne jedynie gdy cel
+      //     NIEosiągnięty I ciało istnieje. Fix live-gate 5B: po swapie build-cost saturowane imperium ma
+      //     0 droidów → canOutpost=false jako SKUTEK UBOCZNY (droidy nie zamawiane bo niepotrzebne) — NIE
+      //     mylić z prawdziwym „nie stać". Wcześniej tool short-circuitował na afford → mylący powód.
       let skip;
-      if (!canOutpost)                                    skip = 'nie stać na outpost (canAffordOutpost=false)';
+      if (xe >= targetXe && nt >= targetNt)               skip = `WSZYSTKIE cele outpostów osiągnięte (Xe ${xe}/${targetXe}, Nt ${nt}/${targetNt}) — nie bug (saturacja; canOutpost/afford nieistotne)`;
       else if (xe < targetXe && !xeBody)                  skip = `Xe ${xe}/${targetXe} lecz BRAK wolnego ciała Xe (skolonizowane/wyczerpane) → predicted fallback-consumed effect`;
-      else if (xe >= targetXe && nt >= targetNt)          skip = `WSZYSTKIE cele outpostów osiągnięte (Xe ${xe}/${targetXe}, Nt ${nt}/${targetNt}) — nie bug`;
       else if (xe >= targetXe && nt < targetNt && !ntBody) skip = `Xe cel OK, Nt ${nt}/${targetNt} lecz BRAK wolnego ciała Nt`;
+      else if (!canOutpost)                               skip = 'nie stać na outpost (canAffordOutpost=false)';
       else                                                skip = `Xe ${xe}/${targetXe}, Nt ${nt}/${targetNt} (stan nieoczekiwany)`;
       decision = canFull ? 'P3/fallback PEŁNA KOLONIA' : 'BRAK AKCJI';
       reason = `outposty pominięte: ${skip}${canFull ? '' : ' + nie stać na pełną kolonię'}`;

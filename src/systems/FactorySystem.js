@@ -1443,6 +1443,10 @@ export class FactorySystem {
    *  LUB brak systemu kredytów (headless/test → nie blokuj), false = niewypłacalność (PAUZA). */
   _trySpendProductionCredits(amount) {
     if (!(amount > 0)) return true;
+    // Slice 5B: kolonie AI zwolnione z opłaty Kr za produkcję droidów (surowce-only). Kredyty AI są
+    // kosmetyczne („AI działa na surowcach", zgodne z Fazą 3); bez tego AI — bez powtarzalnego dochodu
+    // — STALL-owałby na 500 Kr/droid (kapitał ~2 droidy, ekspansja 0). Gate surowcowy (canSustain) zostaje.
+    if (this._getOwnerColony()?.ownerEmpireId) return true;
     const cts = window.KOSMOS?.civilianTradeSystem;
     const pid = this._getOwnerColony()?.planetId;
     if (!cts || !pid || typeof cts.spendCredits !== 'function') return true;   // brak systemu → nie blokuj
@@ -1832,6 +1836,9 @@ export class FactorySystem {
   // spójnie z _trySpendProductionCredits.
   _canAffordProductionCredits(amount) {
     if (!(amount > 0)) return true;
+    // Slice 5B: AI zwolnione (symetrycznie z _trySpendProductionCredits) → getStallReason nie zgłasza
+    // fałszywie 'insolvent' dla kolonii AI produkujących droidy.
+    if (this._getOwnerColony()?.ownerEmpireId) return true;
     const cts = window.KOSMOS?.civilianTradeSystem;
     const pid = this._getOwnerColony()?.planetId;
     if (!cts || !pid || typeof cts.getCredits !== 'function') return true;

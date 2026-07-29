@@ -3335,6 +3335,13 @@ export class ColonyOverlay extends BaseOverlay {
         // Nagłówek stanu automatyzacji „n🤖 / J".
         ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = dCount > 0 ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
         ctx.fillText(t('synthetic.count', dCount, dJobs), x + FLOAT_W / 2, cy + 2); ctx.textAlign = 'left'; cy += 14;
+        // Slice 5B — „Autonomizuj": wypełnij WSZYSTKIE wolne sloty droidami jednym ruchem (bulk).
+        // Widoczny gdy są wolne sloty (dCount < J). Typ droida dobiera BuildingSystem wg straty (tier split).
+        if (dCount < dJobs) {
+          this._drawBtn(ctx, `🤖 ${t('synthetic.autonomize')}`, x + 8, cy, FLOAT_W - 16, 22, '#1a6e50');
+          if (_bVis(cy, 22)) this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'autonomizeBuilding', { tileKey });
+          cy += 24;
+        }
         // Install — aktywny gdy jest miejsce i droid pasuje; inaczej wyszarzony + powód (poza no_building/autonomous).
         if (prev.ok) {
           this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#1a5a6e');
@@ -4147,6 +4154,35 @@ export class ColonyOverlay extends BaseOverlay {
           }).then(okBtn => { if (okBtn) doInstall(); });
         } else {
           doInstall();
+        }
+        break;
+      }
+      // Slice 5B — bulk „Autonomizuj": wypełnij wszystkie wolne sloty droidami jednym ruchem.
+      case 'autonomizeBuilding': {
+        const bSyn = colony?.buildingSystem;
+        const tileKey = zone.data?.tileKey;
+        const doAuto = () => {
+          const res = bSyn?.autonomizeBuilding?.(tileKey);
+          if (res?.success) {
+            this._showFlash(res.shortfall > 0
+              ? t('synthetic.autonomizePartial', res.installed, res.shortfall)
+              : t('synthetic.autonomizeFull', res.installed));
+          } else {
+            this._showFlash(t('synthetic.reason.' + (res?.reason ?? 'no_droids')));
+          }
+        };
+        // Świadome wyparcie: gdy budynek MA ludzkich pracowników, potwierdź (pełna autonomizacja
+        // zabierze etaty wszystkim). Bez obsady = od razu.
+        const disp = bSyn?.getSyntheticDisplacement?.(tileKey) ?? { staffed: false };
+        if (disp.staffed) {
+          showConfirmModal({
+            title: t('synthetic.autonomizeTitle'),
+            message: t('synthetic.autonomizeConfirm'),
+            confirmLabel: t('synthetic.autonomize'),
+            danger: false,
+          }).then(okBtn => { if (okBtn) doAuto(); });
+        } else {
+          doAuto();
         }
         break;
       }

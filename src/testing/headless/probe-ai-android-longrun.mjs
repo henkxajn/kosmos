@@ -1,21 +1,16 @@
 // ═══════════════════════════════════════════════════════════════
-// PROBE (weryfikacja) — AI android supply pod outposty (Report 1, Plan 1)
+// PROBE (weryfikacja) — AI DROID supply pod outposty (Report 1, Plan 1 + Slice 5B)
 // Uruchom: node src/testing/headless/probe-ai-android-longrun.mjs
 // ───────────────────────────────────────────────────────────────
-// Przed fixem: reforma droidów (bec2028) wyjęła android_worker z reactive/safety
-// → setDemandBonus no-op → AI produkuje 0 androidów → outpost (koszt android:6)
-// nieosiągalny → 0 outpostów (potwierdzone wcześniej: android=0, rate=0, out=0/300cy).
+// Slice 5B: build-cost outpostu przełączony android_worker → automation_droid (DROIDS_PER_OUTPOST=2,
+// solar 1 + mine 1). AI Build-N zamawia automation_droid. Weryfikujemy LOGIKĘ: order → produkcja → outpost.
 //
-// Po fixie (EmpireStrategySystem._maybeOrderOutpostAndroids): gdy outpost jest
-// zablokowany WYŁĄCZNIE brakiem androidów, AI składa Build-N na macierzystej fabryce
-// (demand-driven, chain-aware _colonyCanSustainRecipe, dedup, cap 24). Weryfikujemy
-// LOGIKĘ fixa: order → produkcja → outpost.
+// EmpireStrategySystem._maybeOrderOutpostDroids: gdy outpost zablokowany brakiem droidów, AI składa
+// Build-N na macierzystej fabryce (demand-driven, chain-aware _colonyCanSustainRecipe, dedup, cap 8).
 //
-// ⚠ WARUNEK: fabryka musi UMIEĆ wyprodukować androida (łańcuch semiconductor/electronic/
-// polymer → raws). Dlatego karmimy zdrowy zestaw RAW co tick (surogat zbilansowanej
-// ekonomii AI z pełnym górnictwem). W kolonii RAW-STARVED (grep-diagnoza z tej sesji)
-// _colonyCanSustainRecipe SŁUSZNIE zwraca false i fix pomija (order 0/N = stall byłby
-// bez sensu). „Czy realna ekonomia AI utrzyma łańcuch" = pytanie do live-gate na save gracza.
+// ⚠ 5B UPROSZCZENIE: automation_droid ma PROSTY łańcuch (Li/C/Fe/Cu/Si — bez electronic/semiconductor/
+// polymer/Xe). canSustain przechodzi dla ubogich imperiów, które android_worker (tier-2) blokował —
+// to odblokowuje Pochód. Karmimy zestaw RAW co tick (surogat zbilansowanej ekonomii AI z górnictwem).
 // ═══════════════════════════════════════════════════════════════
 
 import './env.js'; // MUST be first
@@ -80,32 +75,32 @@ const homeOf = (e) => colonyManager.getColony(e === 'emp_a' ? 'a_home' : 'b_home
 const stats = (e) => {
   const cols = empireRegistry.getColoniesByEmpire(e);
   const home = homeOf(e); const fs = home?.factorySystem;
-  const ord = fs?.getDroidOrder?.('android_worker');
+  const ord = fs?.getDroidOrder?.('automation_droid');
   return {
     pop: home?.civSystem?.population ?? 0,
     out: cols.filter(c => c.isOutpost).length,
-    android: home?.resourceSystem?.getAmount?.('android_worker') ?? 0,
+    droid: home?.resourceSystem?.getAmount?.('automation_droid') ?? 0,
     order: ord ? `${ord.produced}/${ord.qty}` : '—',
   };
 };
 
-// Warunek precyzyjny fixa = „outpost blokuje TYLKO android". By przetestować LOGIKĘ fixa
+// Warunek precyzyjny fixa = „outpost blokuje TYLKO droid". By przetestować LOGIKĘ fixa
 // (a nie zdolność ubogiej ekonomii AI do samodzielnego uzbierania zestawu), karmimy OBA imperia
-// nie-androidowym zestawem outpostu co tick (Fe/Si/Cu/Ti + 5 commodity + Xe pod recepturę androida):
-//   emp_a — BEZ androida → fix MUSI go wyprodukować i założyć outpost.
-//   emp_b — Z androidem   → kontrola: zestaw wystarcza, outpost natychmiast.
-// Mega-kit: WSZYSTKIE raws łańcucha androida generously + nie-androidowe commodity outpostu.
-const NONANDROID_KIT = { Fe: 200, Si: 200, Cu: 200, Ti: 100, C: 200, Xe: 100, W: 100, Pt: 100, Li: 100, Nt: 100, Hv: 100, structural_alloys: 20, extraction_systems: 10, power_cells: 10, conductor_bundles: 10, electronic_systems: 10 };
+// nie-droidowym zestawem outpostu co tick (raws automation_droid Li/C/Fe/Cu/Si + commodity outpostu):
+//   emp_a — BEZ droida → fix MUSI go wyprodukować i założyć outpost.
+//   emp_b — Z droidem  → kontrola: zestaw wystarcza, outpost natychmiast.
+// Kit: raws automation_droid (Li/C/Fe/Cu/Si — bez chain/Xe) + nie-droidowe commodity outpostu.
+const NONDROID_KIT = { Fe: 200, Si: 200, Cu: 200, Ti: 100, C: 200, Li: 100, structural_alloys: 20, extraction_systems: 10, power_cells: 10, conductor_bundles: 10, electronic_systems: 10 };
 const feed = () => {
-  homeOf('emp_a').resourceSystem.receive({ ...NONANDROID_KIT });                    // bez androida → fix
-  homeOf('emp_b').resourceSystem.receive({ ...NONANDROID_KIT, android_worker: 6 }); // z androidem → kontrola
+  homeOf('emp_a').resourceSystem.receive({ ...NONDROID_KIT });                      // bez droida → fix
+  homeOf('emp_b').resourceSystem.receive({ ...NONDROID_KIT, automation_droid: 2 }); // z droidem → kontrola
 };
 
 const firstOutpost = { emp_a: null, emp_b: null };
-console.log('Zestaw nie-androidowy karmiony co tick (android to JEDYNY brak) — emp_a liczy na FIX, emp_b kontrola.\n');
-console.log('cy   | A(fix): pop out android order | B(ctrl): pop out android order');
-console.log('-----+-------------------------------+-------------------------------');
-const row = (s) => `${String(s.pop).padStart(3)} ${String(s.out).padStart(3)} ${s.android.toFixed(0).padStart(7)} ${String(s.order).padStart(6)}`;
+console.log('Zestaw nie-droidowy karmiony co tick (droid to JEDYNY brak) — emp_a liczy na FIX, emp_b kontrola.\n');
+console.log('cy   | A(fix): pop out droid order | B(ctrl): pop out droid order');
+console.log('-----+-----------------------------+-----------------------------');
+const row = (s) => `${String(s.pop).padStart(3)} ${String(s.out).padStart(3)} ${s.droid.toFixed(0).padStart(7)} ${String(s.order).padStart(6)}`;
 let cy = 0;
 for (let block = 0; block < 20; block++) {
   for (let i = 0; i < 20; i++) {
@@ -122,8 +117,8 @@ for (let block = 0; block < 20; block++) {
 const a = stats('emp_a'), b = stats('emp_b');
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log(`  PASS  ${n}`); pass++; } else { console.error(`  FAIL  ${n}`); fail++; } };
-console.log('\n═══ WERYFIKACJA (Plan 1) ═══');
-ok(`A: droid order pojawił się (produkcja androidów uruchomiona)`, a.android > 0 || a.out >= 1);
+console.log('\n═══ WERYFIKACJA (Plan 1 + Slice 5B) ═══');
+ok(`A: droid order pojawił się (produkcja automation_droid uruchomiona)`, a.droid > 0 || a.out >= 1);
 ok(`A: założył ≥1 outpost (był 0 przed fixem)`, a.out >= 1);
 ok(`B: założył ≥1 outpost`, b.out >= 1);
 ok(`A: pierwszy outpost ≤ 40 civYears (${firstOutpost.emp_a ?? '—'})`, firstOutpost.emp_a !== null && firstOutpost.emp_a <= 40);

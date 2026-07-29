@@ -555,6 +555,11 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   bazowej energii** (skalowanie zużycia efektywnością, PRE-EXISTING — świadomie ZACHOWANE) ORAZ **upkeep
   per droid** (2/6 × D). Faza 5: ocenić czy to podwójnie wycenia energię automatyzacji (double-pricing) —
   decyzja przy tuningu na realnej rozgrywce, nie na oko.
+- **Ewolucja `android_worker` → „AI Droid" (backlog z live-gate 5B — NIE implementować teraz):** rola tier-2
+  installable workera (obsada engineer/scientist/merchant/bureaucrat, gate `android_engineering`) docelowo
+  przechodzi na **„AI Droid"** — tier-2 jednostkę bramkowaną OBLICZENIAMI (epik Data Center), z przeróbką
+  receptury. `android_worker` pozostaje wtedy czystym bytem handlowym/legacy. Kolejność po 5C/5D; decyzja
+  projektowa przy epiku Data Center.
 
 **Post-Faza 4 — poprawka produkcji droidów (2 atomowe commity, save v98 bez migracji, live-gate PASS):**
 - **`3a02f37` — boosted ×5 exemption + czytelne STALL-e:** `_getScaledRecipe` ×5'owało KAŻDĄ recepturę

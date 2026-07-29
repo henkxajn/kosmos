@@ -24,7 +24,8 @@ const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { co
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Stock z raportu polowego (single-colony New Earth). Li = jedyny wąski (2× recepty; ×5 → poniżej).
-const FIELD_STOCK = { Li: 2000, C: 9000, Fe: 8600, Cu: 8300, Si: 21700 };
+// Slice 5A: recepta droida Li 1000→300, więc Li stock 2000→600 (= 2× recepty, binding constraint = 2 droidy).
+const FIELD_STOCK = { Li: 600, C: 9000, Fe: 8600, Cu: 8300, Si: 21700 };
 
 function makeColony({ scenario, credits = 5000, stock }) {
   window.KOSMOS = window.KOSMOS || {};
@@ -61,8 +62,8 @@ console.log('--- (fix) _getScaledRecipe: droid exempt, normalny tier-1 dalej ×5
     eq(fs._getScaledRecipe(COMMODITIES.structural_alloys.recipe, 'structural_alloys'), { Fe: 40, C: 20 }));
   ok('(fix) boosted: basic_supplies (tier-1) NADAL ×5 {Fe:15,Cu:5,water:5}',
     eq(fs._getScaledRecipe(COMMODITIES.basic_supplies.recipe, 'basic_supplies'), { Fe: 15, Cu: 5, water: 5 }));
-  // Dowód divergencji pre-fix: stary kod dawał Li 5000 > zapas 2000 → _hasIngredients false → STALL.
-  ok('(fix) PRE-FIX divergence: playerLi 2000 < oldScaled 5000 (root-cause STALL)', FIELD_STOCK.Li < 1000 * 5);
+  // Dowód divergencji: bez exemptu ×5 dałoby Li 1500 (300×5) > zapas 600 → _hasIngredients false → STALL.
+  ok('(fix) divergence: playerLi 600 < scaledLi 1500 (300×5 — root-cause STALL bez exemptu)', FIELD_STOCK.Li < 300 * 5);
   ok('(fix) POST-FIX: _hasIngredients(droid) === true przy zapasie gracza',
     fs._hasIngredients(dRecipe, 'automation_droid') === true);
 }
@@ -82,9 +83,9 @@ function runRealPath(scenario) {
 {
   const boosted = runRealPath('civilization_boosted');
   ok('(b) boosted: setOneShotJob zaakceptowany (isRecipeAvailable)', boosted.okOrder === true);
-  // Li 2000 / 1000 = 2 droidy — po fixie prawdziwym limitem jest zapas Li (nie fantomowe ×5).
-  ok('(b) boosted REAL PATH: 2 droidy (Li-limited 2000/1000; 0 PRE-FIX)', boosted.made === 2);
-  ok('(b) boosted: zużyto Li do 0 (2×1000, receptura NIE-skalowana)', boosted.liLeft === 0);
+  // Li 600 / 300 = 2 droidy — po fixie prawdziwym limitem jest zapas Li (nie fantomowe ×5).
+  ok('(b) boosted REAL PATH: 2 droidy (Li-limited 600/300; 0 PRE-FIX)', boosted.made === 2);
+  ok('(b) boosted: zużyto Li do 0 (2×300, receptura NIE-skalowana)', boosted.liLeft === 0);
   ok('(b) boosted: Kr −1000 (2×500 creditCost)', boosted.colony.credits === 4000);
   ok('(b) boosted: droidOrder.produced === 2 (postęp zlecenia Build-N)', boosted.fs.getDroidOrder('automation_droid')?.produced === 2);
 
@@ -102,11 +103,11 @@ console.log('--- (a) getStallReason: missing / insolvent / no_points / tech_bloc
   const setStock = (o) => { for (const k of ['Li', 'C', 'Fe', 'Cu', 'Si']) res.inventory.set(k, o[k] ?? 0); };
   const A = (over = {}) => ({ commodityId: 'automation_droid', points: 1, progress: 0, produced: 0, targetQty: null, ...over });
 
-  // missing_ingredient — Li poniżej recepty (reszta z zapasem).
-  setStock({ Li: 500, C: 9999, Fe: 9999, Cu: 9999, Si: 9999 });
+  // missing_ingredient — Li poniżej recepty (reszta z zapasem). Slice 5A: recepta Li 300 (nie 1000).
+  setStock({ Li: 200, C: 9999, Fe: 9999, Cu: 9999, Si: 9999 });
   const s1 = fs.getStallReason('automation_droid', A());
   ok('(a) missing_ingredient kind', s1?.kind === 'missing_ingredient');
-  ok('(a) missing nazywa Li need1000 have500', s1.missing.some(m => m.resId === 'Li' && m.need === 1000 && m.have === 500));
+  ok('(a) missing nazywa Li need300 have200', s1.missing.some(m => m.resId === 'Li' && m.need === 300 && m.have === 200));
 
   // insolvent — pełny zapas, kredyty < creditCost.
   setStock({ Li: 9999, C: 9999, Fe: 9999, Cu: 9999, Si: 9999 });

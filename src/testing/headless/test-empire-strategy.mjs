@@ -171,7 +171,8 @@ console.log('--- T4: mergeCosts DODAJE przy kolizji ---');
 
 console.log('--- T5: _outpostCombinedCost == suma solar+mine ---');
 {
-  const exp = { Si: 20, Cu: 13, Ti: 15, Fe: 30, structural_alloys: 8, android_worker: 6, power_cells: 3, conductor_bundles: 2, electronic_systems: 1, extraction_systems: 2 };
+  // 5B: build-cost outpostu android_worker×6 → automation_droid×2 (solar 1 + mine 1).
+  const exp = { Si: 20, Cu: 13, Ti: 15, Fe: 30, structural_alloys: 8, automation_droid: 2, power_cells: 3, conductor_bundles: 2, electronic_systems: 1, extraction_systems: 2 };
   let combOk = Object.keys(exp).length === Object.keys(combined).length;
   for (const k of Object.keys(exp)) if (combined[k] !== exp[k]) combOk = false;
   ok('combined === oczekiwana suma 10 kluczy', combOk);
