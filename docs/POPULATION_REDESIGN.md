@@ -599,6 +599,40 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   (integration-test wstrzykiwał `android_worker:1e3` → maskował root-cause). `_colonyCanSustainRecipe`
   SŁUSZNIE bramkuje kolonię raw-starved (order 0/N = stall bez sensu). [[trace-observed-behavior-over-greps]]
 
+**Faza 5C.1 — Allocation 2.0 core (`82458aa`, save v99, `FEATURES.popAllocation2` default ON, live-gate PASS):**
+Plan: `docs/plans/slice-5c-allocation-2.0.md`. Focus przestaje być int-bonusem do pressure, staje się DOCELOWYM
+UDZIAŁEM (share 0..1) struktury siły roboczej.
+- **Model:** `_focusTarget[type]` (share) + `_focusMigrationProgress` (per-`src>dst` ułamkowy akumulator friction).
+  `getStrataTarget`/`setStrataTarget`, `_hasAnyTarget`, `_mobileJobPool`, `_targetHeadcounts` (Σshare>1 →
+  normalizacja proporcjonalna, cap per-strata do `_humanJobs`). Stary `_focusBonus`/`getStrataFocus`/`_focusCap`
+  ZOSTAJĄ tylko dla ścieżki flag-OFF.
+- **Alokacja:** ekonomiczna gałąź (`_allocateStage1Economic`/`_allocateStage2Economic`) = **verbatim Faza 3** —
+  odpala się pod flag OFF ORAZ pod flag ON gdy BRAK targetu (AI i un-focused player nietknięci; `empty ≡ dziś`).
+  Target-guided: Etap-1 tuple `(targetDeficit desc, pressure desc, wage desc)` (additive overlay); Etap-2 migracja
+  z akumulatorem ku warstwom pod-targetowym, **tylko rocznie** (`advanceMigration`; mid-year `_reallocateAndRefresh`
+  = `false` → idempotencja). **Dawca guard:** warstwa targetowana i sama pod targetem NIE jest dawcą (inaczej dwie
+  wzajemnie pod-targetowe okradałyby się w kółko — limit cycle złapany review'em).
+- **F10 pressure:** pod flagą `effDemand = grossJobs` (czysty wage-scarcity, koniec double-count focus→wage). Przy
+  neutralnym focusie identyczne z Fazą 3 → kontrakt ekonomii (wage/laborCost/employed/industryShare) byte-identical.
+- **Droid rule change:** `removeSynthetic` ZWRACA droida do magazynu pod flagą; demolish/downgrade DALEJ NISZCZĄ.
+  UI: kolumna Droidy z per-strata `[±]` (auto-pick: install najsłabiej obsadzony budynek, remove zwrot), termometry
+  obsady `[████░░░░]` (zielony <70 / pomarańcz 70-90 / **czerwony ≥90 = SATUROWANA**, cue do rozbudowy budynków).
+- **Save v98→v99** (`_migrateV98toV99`: reset int-focus → `focusTarget:{}` + `focusMigrationProgress:{}`).
+- **Testy:** `tmp_pop2_5c1_smoke` 43/43 przez REALNE ścieżki (economy byte-identical, droid-net, locked-crew,
+  integer re-floor, mid-year idempotence, empty→Faza-3-exact, konwergencja+trickle, remove-returns/demolish-destroys,
+  AI 60-let no-freeze, share>100% norm, limit-cycle guard). Regr 0 nowych FAIL; legacy focus/droid-destroy testy
+  przypięte do flag OFF (guard rollbacku). 4-lens adversarial review: rollback+save-migration czyste, 1 confirmed
+  low limit-cycle (naprawiony), 1 missing i18n key (dodany).
+- **⚠ SEMANTYKA (finding z live-gate — NIE bug):** w reżimie NADWYŻKI POP (wszystkie etaty obsadzone, 0 bezrobotnych)
+  target NIE ma czego rozdzielać — F1 rankuje alokację NIEDOBORU, nie robi eviction-based redystrybucji. „Slider nic
+  nie robi przy pełnej obsadzie" = design działa jak zablokowano. Poprawny przepływ potwierdzony gdy powstał niedobór
+  (nowe budynki + miners 0% / laborers 50% → górnicy zmigrowali). **Cisza mechaniki myliła gate → 5C.2 doda wskaźniki
+  stanu suwaka** („cel nieaktywny: brak niedoboru" przy pełnej obsadzie / „cel nieosiągalny: za mało etatów <strata>"
+  przy over-jobs targecie).
+- **TUNING (obserwacja do rewizji PO 5C.2):** cap wzrostu `MAX_GROWTH_PER_YEAR=0.25` (Slice 5A) może wciąż wyprzedzać
+  tempo budowy etatów → reżim nadwyżki POP czyni alokację w większości bezczynną (patrz finding wyżej). Rewidować cap
+  vs tempo konstrukcji po wylądowaniu 5C.2.
+
 ---
 
 ## 9. Poza zakresem (świadomie)
