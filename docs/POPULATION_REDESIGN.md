@@ -633,6 +633,33 @@ UDZIAŁEM (share 0..1) struktury siły roboczej.
   tempo budowy etatów → reżim nadwyżki POP czyni alokację w większości bezczynną (patrz finding wyżej). Rewidować cap
   vs tempo konstrukcji po wylądowaniu 5C.2.
 
+**Faza 5C.2 — tri-state budynków + priorytet (`0e34b2c`, save v99 soft, `FEATURES.popAllocation2Priority` default ON,
+live-gate PASS po fixie). SLICE 5C COMPLETE.** Nadbudowa nad 5C.1.
+- **Tri-state** `entry.designation {active|paused|priority}` (serialize soft `?? 'active'`, v99 bez bumpu).
+  **PAUSED = idle produkcji I ZWOLNIENIE ETATÓW** (gate-fix): `getSlotDemand`/`getSyntheticJobs(Total)`/greedy
+  pomijają paused (gated) → pracownicy ewakuowani do bezrobocia w TYM SAMYM ticku (rekoncyliacja alokacji),
+  satysfakcja reaguje realnym bezrobociem; `changeEmployment(∓jobs)` trzyma `_employedPops`/freePops spójne;
+  wznowienie re-absorbuje. (Root: pierwsza wersja pauzowała tylko STAWKI, nie DEMAND → workers nie wracali do U.)
+- **Within-stratum GREEDY fill** (`_getBuildingLaborEfficiency`): priorytet/stabilny-tileKey napełniany do 100%
+  najpierw (zamiast uniform). Memo `_greedyStaffCache` invalidowany w `_reapplyAllRates` + activate/upgrade/demolish.
+- **Priorytet → transient bump** (PULL, stateless): `BuildingSystem.getPriorityHumanJobs / mobilePool` w
+  `_effectiveTargetShare` (cap Σ≤100%). Ściąga pracowników; greedy kieruje ich do budynku priority.
+- **Factory-pause** (priority-scoped, model epizodu): priorytet + kolejka budowy → pauza fabryk komodytowych
+  (early-Fe); gracz przejmie przełącznik → relinquish + suppression do końca epizodu; `_factoryPausedByPriority`
+  serializowany (nie „stuck OFF" po load).
+- **Tooltipy** `getGrowthBreakdown`/`getSatisfactionBreakdown` na stopce Załogi + **wskaźniki stanu suwaka**
+  (`getTargetState`: inactive-no-shortage / unreachable — domyka lukę „ciszy" z 5C.1) + **podgląd ≈N osób**
+  (`getTargetHeadcountPreview`) + reposition tooltipa (flip przy krawędzi). Fix: `THEME.amber` (undefined) →
+  `THEME.warning` (odblokowało też pomarańczowy pas termometru + amber wage z 5C.1).
+- **Kill-switch** `popAllocation2Priority` (default ON, nested pod popAllocation2 → 3-warstwowy rollback
+  Faza3←5C.1←5C.2). Save v99 bez bumpu (+ `factoryPausedByPriority` soft w ColonyManager).
+- **Testy** `tmp_pop2_5c2_smoke` **64/64** (greedy/paused-demand-gate-fix/priority-bump/factory-pause lifecycle+
+  restore+suppression/breakdowns/target-state/headcount-preview/flag-OFF=5C.1/serialize; blok O = scenariusz
+  live-gate przez REALNĄ ścieżkę przycisku). 4-lens adversarial review: 7 confirmed (greedy stale build/upgrade,
+  paused-upgrade producer leak, factory-pause stuck-off, growth-breakdown pop≤0, resume-vs-manual-OFFLINE,
+  THEME.amber, i18n) — WSZYSTKIE naprawione + regr-testowane. Regr 0 nowych FAIL.
+- **Kolejność Fazy 5:** 5A ✅ → 5B ✅ → 5C.1 ✅ → **5C.2 ✅ (SLICE 5C COMPLETE)** → 5D (housekeeping) NEXT.
+
 ---
 
 ## 9. Poza zakresem (świadomie)
