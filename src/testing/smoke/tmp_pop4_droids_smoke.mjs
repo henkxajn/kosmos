@@ -16,6 +16,10 @@ import { CivilizationSystem } from '../../systems/CivilizationSystem.js';
 import { BuildingSystem } from '../../systems/BuildingSystem.js';
 import { FactorySystem } from '../../systems/FactorySystem.js';
 import { HexGrid } from '../../map/HexGrid.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
+// Slice 5C.1: ten plik testuje kontrakt Fazy 4 (droid NISZCZONY przy remove) = ścieżka FLAG OFF.
+// Regułę „remove ZWRACA droida" (flag ON) pokrywa tmp_pop2_5c1 (blok I).
+GAME_CONFIG.FEATURES.popAllocation2 = false;
 import { HexTile } from '../../map/HexTile.js';
 import { shouldReuseColonyGrid } from '../../ui/ColonyGridResolveLogic.js';
 import { readFileSync } from 'fs';

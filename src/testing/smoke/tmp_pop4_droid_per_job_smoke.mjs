@@ -9,6 +9,10 @@ import { CivilizationSystem } from '../../systems/CivilizationSystem.js';
 import { BuildingSystem } from '../../systems/BuildingSystem.js';
 import { HexGrid } from '../../map/HexGrid.js';
 import { migrate } from '../../systems/SaveMigration.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
+// Slice 5C.1: ten plik testuje kontrakt Fazy 4 (droid NISZCZONY przy remove) = ścieżka FLAG OFF.
+// Regułę „remove ZWRACA droida" (flag ON) pokrywa tmp_pop2_5c1 (blok I).
+GAME_CONFIG.FEATURES.popAllocation2 = false;
 
 window.KOSMOS = { civMode: true, timeSystem: { gameTime: 0 } };
 let pass = 0, fail = 0;

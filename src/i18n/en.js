@@ -810,6 +810,10 @@ export default {
   'workforce.buildingsUsing': 'Buildings ({0}):',
   'workforce.noBuildings': '— no buildings —',
   'workforce.focusTooltip': 'FOCUS: virtual demand for this class — raises wage to attract workers faster (migration). Costs Credits (wages), does NOT add production jobs.',
+  // Slice 5C.1 — Allocation 2.0 (Workforce tab v2)
+  'workforce.colTarget': 'Target',
+  'workforce.targetTooltip': 'TARGET: desired share of this class in the workforce. Allocation gradually pulls workers toward it (migration with friction — small groups lag). Works within available jobs, never creates new ones. 0% = economic autopilot.',
+  'workforce.droidTooltip': 'DROIDS: [+] installs a droid in this class’s least-staffed building; [−] removes a droid and RETURNS it to storage. Demolishing/downgrading a building DESTROYS its droids.',
   'colonyInfo.physics': 'CHARACTERISTICS',
   'colonyInfo.temperature': 'Temperature',
   'colonyInfo.mass': 'Mass',
@@ -2560,6 +2564,11 @@ export default {
   'synthetic.reason.outpost_not_supported': "Outposts don't support droids yet (5B.2)",
   'synthetic.reason.nothing_to_autonomize': 'Nothing to autonomize (building has no jobs)',
   'synthetic.reason.already_autonomous': 'Already fully automated',
+  // Slice 5C.1 — removal RETURNS the droid to storage (rule change; demolish/downgrade still destroy)
+  'synthetic.removedReturnedFlash': '🔄 Droid returned to storage',
+  'synthetic.removeReturnHint': 'Returns droid to storage',
+  'synthetic.reason.no_open_slot': 'No open droid slots in this class',
+  'synthetic.reason.no_synthetic': 'No droid to remove',
   'colonyPanel.emptyHex': 'EMPTY HEX',
   'colonyPanel.categories': 'Categories',
   'colonyPanel.buildHere': 'BUILD HERE',

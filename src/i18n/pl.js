@@ -810,6 +810,10 @@ export default {
   'workforce.buildingsUsing': 'Budynki ({0}):',
   'workforce.noBuildings': '— brak budynków —',
   'workforce.focusTooltip': 'FOCUS: wirtualny popyt na tę warstwę — podnosi płacę, by szybciej ściągnąć pracowników (migracja). Kosztuje Kredyty (płace), NIE dodaje etatów produkcyjnych.',
+  // Slice 5C.1 — Allocation 2.0 (zakładka Załoga v2)
+  'workforce.colTarget': 'Cel',
+  'workforce.targetTooltip': 'CEL: docelowy udział tej warstwy w sile roboczej. Alokacja stopniowo ściąga do niej pracowników (migracja z tarciem — małe grupy z opóźnieniem). Działa w granicach dostępnych etatów, nie tworzy nowych. 0% = automat ekonomiczny.',
+  'workforce.droidTooltip': 'DROIDY: [+] instaluje droida w najsłabiej obsadzonym budynku tej warstwy; [−] usuwa droida i ZWRACA go do magazynu. Rozbiórka/downgrade budynku droidy NISZCZĄ.',
   'colonyInfo.physics': 'CHARAKTERYSTYKA',
   'colonyInfo.temperature': 'Temperatura',
   'colonyInfo.mass': 'Masa',
@@ -2561,6 +2565,11 @@ export default {
   'synthetic.reason.outpost_not_supported': 'Outposty nie wspierają droidów (wkrótce, 5B.2)',
   'synthetic.reason.nothing_to_autonomize': 'Nic do autonomizacji (budynek bez etatów)',
   'synthetic.reason.already_autonomous': 'Już w pełni zautomatyzowany',
+  // Slice 5C.1 — deinstalacja ZWRACA droida do magazynu (rule change; demolish/downgrade dalej niszczą)
+  'synthetic.removedReturnedFlash': '🔄 Droid zwrócony do magazynu',
+  'synthetic.removeReturnHint': 'Zwraca droida do magazynu',
+  'synthetic.reason.no_open_slot': 'Brak wolnych slotów na droida w tej warstwie',
+  'synthetic.reason.no_synthetic': 'Brak droida do usunięcia',
   'colonyPanel.emptyHex': 'HEX PUSTY',
   'colonyPanel.categories': 'Kategorie',
   'colonyPanel.buildHere': 'ZBUDUJ TUTAJ',

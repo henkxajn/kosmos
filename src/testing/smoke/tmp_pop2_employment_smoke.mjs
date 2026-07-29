@@ -19,6 +19,12 @@ import { FactorySystem } from '../../systems/FactorySystem.js';
 import { TechSystem } from '../../systems/TechSystem.js';
 import { HexGrid } from '../../map/HexGrid.js';
 import { BASE_WAGE } from '../../data/PopulationData.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
+
+// Slice 5C.1: ten plik testuje kontrakt Fazy 2/3 (int-focus slider, pressure-z-focusem, ekonomiczna
+// alokacja dwustopniowa) = ścieżka FLAG OFF. Pinujemy popAllocation2=false → guard rollbacku (Faza 3
+// exact). Ścieżkę FLAG ON (target-share) pokrywa tmp_pop2_5c1_smoke.
+GAME_CONFIG.FEATURES.popAllocation2 = false;
 
 window.KOSMOS = { civMode: true, timeSystem: { gameTime: 0 } };
 

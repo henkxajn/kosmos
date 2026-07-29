@@ -176,6 +176,17 @@ export const GAME_CONFIG = {
     //   ukryta, toggle puli nieaktywny. Default ON — cały sens tej wersji to
     //   hands-on ocena w praktyce (default OFF działałby przeciw temu celowi).
     transportOrders:      true,
+    // ── Population 2.0 Slice 5C.1 — Allocation 2.0 (target-share) ──────────
+    //   Focus przestaje być +bonus do pressure, staje się DOCELOWYM % struktury
+    //   siły roboczej (share). Alokacja Etap-1 = additive overlay (targeted strata
+    //   prowadzą, reszta ekonomicznie); Etap-2 = migracja z ułamkowym akumulatorem
+    //   friction (małe straty trickle) ku warstwom pod-targetowym. Pressure liczone
+    //   BEZ focusu (koniec double-count focus→wage). Deinstalacja droida ZWRACA go
+    //   do magazynu (demolish/downgrade dalej niszczą). Zakładka Załoga: suwaki
+    //   share-%, termometry obsady, kolumna Droidy z [±]. Kill-switch: OFF = DOKŁADNIE
+    //   Faza 3 (ekonomiczna alokacja + pressure z focusem + stara zakładka + droid
+    //   niszczony przy usunięciu). Default ON (live-gate). Save v98→v99 (reset focusu).
+    popAllocation2:       true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

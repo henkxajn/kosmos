@@ -44,6 +44,7 @@ import {
   BASE_WAGE, MIGRATION_FRICTION, FOCUS_BONUS_MAX,   // Population 2.0 Faza 2: zatrudnienie/płace/focus
 } from '../data/PopulationData.js';
 import { taxSatisfactionDrain } from '../data/ConsumerGoodsData.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';   // Slice 5C.1: FEATURES.popAllocation2 (kill-switch)
 
 // ── Epoki cywilizacyjne (progi POPowe) ──────────────────────────────────────
 export const CIV_EPOCHS = [
@@ -150,7 +151,13 @@ export class CivilizationSystem {
     this._growthProgress  = 0;     // Population 2.0: ułamek `humans` (floor(humans)=Σ strata + unemployed, §2.5)
     this._unemployed      = 0;     // Population 2.0 Faza 2 §3.2: pula bezrobotnych (POZA stratami; §2.3 —
                                    //   koniec nieskończonego laborera). floor(humans)=Σ strata + _unemployed.
-    this._focusBonus      = {};    // Faza 2 §2.6: slider focus per strata (demandBonus, wirtualne etaty → pressure)
+    this._focusBonus      = {};    // Faza 2 §2.6: slider focus per strata (demandBonus, wirtualne etaty → pressure).
+                                   //   Slice 5C.1: używane TYLKO gdy FEATURES.popAllocation2=OFF (rollback Faza 3).
+    // Slice 5C.1 (Allocation 2.0): focus = docelowy UDZIAŁ (share 0..1) straty w mobilnej puli
+    // human-jobs. Alokacja dąży do tej kompozycji (Etap-1 additive overlay + Etap-2 migracja
+    // z ułamkowym akumulatorem friction). Pusty target ≡ dzisiejsza alokacja ekonomiczna (AI, Faza 3).
+    this._focusTarget           = {};   // { strataType → share 0..1 }
+    this._focusMigrationProgress = {};  // { "src>dst" → akumulator friction 0..1 (małe straty trickle) }
     this.satisfaction     = 50;    // Population 2.0 §3.5: satysfakcja kolonii 0-100 → prosperity infra
     this._starvationYears = 0;     // licznik lat głodu
     this._employedPops    = 0;     // POPy zatrudnione przez budynki
@@ -719,7 +726,9 @@ export class CivilizationSystem {
       epochIndex:           this.epochIndex,
       growthProgress:       this._growthProgress,
       unemployed:           this._unemployed,           // Population 2.0 Faza 2: pula bezrobotnych
-      focusBonus:           { ...this._focusBonus },     // Faza 2: slider focus per strata
+      focusBonus:           { ...this._focusBonus },     // Faza 2: slider focus per strata (flag OFF)
+      focusTarget:          { ...this._focusTarget },     // Slice 5C.1: docelowy share per strata
+      focusMigrationProgress: { ...this._focusMigrationProgress },  // Slice 5C.1: akumulator friction
       satisfaction:         this.satisfaction,
       starvationYears:      this._starvationYears,
       employedPops:         this._employedPops,
@@ -770,6 +779,8 @@ export class CivilizationSystem {
     this._growthProgress      = data.growthProgress       ?? 0;
     this._unemployed          = data.unemployed           ?? 0;   // Population 2.0 Faza 2 (stary save → 0)
     this._focusBonus          = data.focusBonus ? { ...data.focusBonus } : {};
+    this._focusTarget           = data.focusTarget ? { ...data.focusTarget } : {};              // Slice 5C.1 (stary save → {})
+    this._focusMigrationProgress = data.focusMigrationProgress ? { ...data.focusMigrationProgress } : {};
     this.satisfaction         = data.satisfaction         ?? 50;
     this._starvationYears     = data.starvationYears      ?? 0;
     // employedPops ustawiane na 0 — zostanie ponownie obliczone przez BuildingSystem.restoreFromSave()
@@ -1230,15 +1241,42 @@ export class CivilizationSystem {
   }
   /** demandBonus (slider focus) straty — clamp do [0, cap]. */
   getStrataFocus(type)  { return Math.max(0, Math.min(this._focusCap(type), Math.round(this._focusBonus[type] ?? 0))); }
-  /** Ustaw slider focus straty (intent method z UI). Nie tworzy realnych etatów — tylko pressure. */
+  /** Ustaw slider focus straty (intent method z UI). Nie tworzy realnych etatów — tylko pressure.
+   *  Slice 5C.1: używane TYLKO gdy popAllocation2=OFF (stary slider int-focus). */
   setStrataFocus(type, value) {
     if (!this.strata[type]) return;
     this._focusBonus[type] = Math.max(0, Math.min(this._focusCap(type), Math.round(value ?? 0)));
   }
 
-  /** Pressure straty (§3.3): (effDemand − workers − syntheticJobs) / effDemand, clamp[0,1]. */
+  // ── Slice 5C.1 (Allocation 2.0): focus = docelowy UDZIAŁ (share) ────────────
+  /** Docelowy udział straty w mobilnej puli human-jobs (0..1). 0 = neutralny (bez targetu). */
+  getStrataTarget(type)  { return Math.max(0, Math.min(1, this._focusTarget[type] ?? 0)); }
+  /** Ustaw docelowy share straty (intent method z UI, suwak share-%). Clamp [0,1]; nie tworzy etatów. */
+  setStrataTarget(type, value) {
+    if (!this.strata[type]) return;
+    const v = Math.max(0, Math.min(1, value ?? 0));
+    if (v <= 0) delete this._focusTarget[type];   // pusty target = neutral (Σ ≤ 100% guard w alokacji)
+    else this._focusTarget[type] = v;
+  }
+  /** Czy gracz ustawił JAKIKOLWIEK target (>0)? Pusty ≡ dzisiejsza alokacja ekonomiczna (AI, Faza 3). */
+  _hasAnyTarget() {
+    for (const type of STRATA_TYPES) if ((this._focusTarget[type] ?? 0) > 0) return true;
+    return false;
+  }
+  /** Mobilna pula human-jobs = Σ realnych etatów dla ludzi (netto droidów; §3.4). Baza dla targetHeadcount. */
+  _mobileJobPool() {
+    let sum = 0;
+    for (const type of STRATA_TYPES) sum += this._humanJobs(type);
+    return sum;
+  }
+
+  /** Pressure straty (§3.3): (effDemand − workers − syntheticJobs) / effDemand, clamp[0,1].
+   *  Slice 5C.1 (F10): pod popAllocation2 pressure = CZYSTY sygnał wage-scarcity (effDemand=grossJobs,
+   *  BEZ focusu → koniec double-count focus→wage). Flag OFF = Faza 3 (effDemand=grossJobs+focus).
+   *  Przy neutralnym focusie (=0) obie gałęzie dają identyczną wartość → kontrakt ekonomii byte-identical. */
   getStrataPressure(type) {
-    const effDemand = this.getStrataJobs(type) + this.getStrataFocus(type);   // + demandBonus (focus)
+    const focusTerm = GAME_CONFIG.FEATURES?.popAllocation2 ? 0 : this.getStrataFocus(type);
+    const effDemand = this.getStrataJobs(type) + focusTerm;
     if (effDemand <= 0) return 0;
     const raw = (effDemand - this.getStrataWorkers(type) - this._syntheticJobs(type)) / effDemand;
     return Math.max(0, Math.min(1, raw));
@@ -1284,20 +1322,35 @@ export class CivilizationSystem {
         locked:    this._lockedPerStrata[type] ?? 0,
         pressure:  this.getStrataPressure(type),
         wage:      this.getStrataWage(type),
-        focus:     this.getStrataFocus(type),
+        focus:     this.getStrataFocus(type),         // flag OFF (int-focus slider)
         focusCap:  this._focusCap(type),
+        target:    this.getStrataTarget(type),        // Slice 5C.1: docelowy share (0..1)
+        // Termometr obsady: (POP + droidy) / etaty brutto, clamp [0,1]. Kolumna Droidy = synthetic.
+        staffing:  (() => { const g = this.getStrataJobs(type); return g > 0 ? Math.min(1, (this.getStrataWorkers(type) + this._syntheticJobs(type)) / g) : 0; })(),
       });
     }
     return rows;
   }
 
+  /** Dostępni do ruchu = całkowici odblokowani workers (floor — zablokowani ułamkowo NIE ruszają
+   *  strata.count z całkowitości; crew NIGDY nie migruje). */
+  _unlockedWorkers(type) {
+    return Math.max(0, Math.floor(this.strata[type].count - (this._lockedPerStrata[type] ?? 0)));
+  }
+
   /**
-   * Alokacja dwustopniowa siły roboczej (§3.2) — raz na rok cywilny, PRZED satysfakcją.
-   * Inwariant floor(humans) = Σ strata + _unemployed utrzymany: każdy ruch przenosi 1
-   * osobę między pulą bezrobotnych a stratą (Etap 1) lub między stratami (Etap 2) — suma
-   * zachowana. Zablokowani (załogi/ekspedycje) NIGDY nie migrują i nie stają się bezrobotni.
+   * Alokacja siły roboczej (§3.2 / Slice 5C.1) — raz na rok cywilny (advanceMigration=true), PRZED
+   * satysfakcją. Inwariant floor(humans) = Σ strata + _unemployed utrzymany: każdy ruch przenosi 1
+   * osobę między pulą bezrobotnych a stratą (Etap 1) lub między stratami (Etap 2) — suma zachowana.
+   * Zablokowani (załogi/ekspedycje) NIGDY nie migrują i nie stają się bezrobotni.
+   *
+   * @param {boolean} advanceMigration — Slice 5C.1: czy zaawansować MIGRACJĘ (Etap 2 / akumulator
+   *   friction). true = ścieżka roczna (_yearlyUpdate); false = ścieżka mid-year
+   *   (_reallocateAndRefresh przy install/remove droida) → tylko re-fill wolnych etatów (Etap 1),
+   *   bez churnu migracji → idempotencja + kadencja roczna akumulatora. Pod flagą OFF migracja
+   *   Fazy 3 działa jak dotąd (każde wywołanie).
    */
-  _allocateWorkforce() {
+  _allocateWorkforce(advanceMigration = true) {
     if (!this.buildingSystem) return;   // abstrakcyjna kolonia bez budynków — pomiń (PHASE5_TODO: AI)
 
     // 0) Normalizacja CAŁKOWITOŚCI (Faza 3 BUG 3): `_lockedPerStrata` bywa UŁAMKOWE (crew rozdzielone
@@ -1309,16 +1362,12 @@ export class CivilizationSystem {
     for (const type of STRATA_TYPES) { const c = Math.floor(this.strata[type].count); this.strata[type].count = c; assigned += c; }
     this._unemployed = Math.max(0, totalPeople - assigned);
 
-    // Dostępni do ruchu = całkowici odblokowani workers (floor — zablokowani ułamkowo NIE ruszają
-    // strata.count z całkowitości).
-    const unlocked = (type) => Math.max(0, Math.floor(this.strata[type].count - (this._lockedPerStrata[type] ?? 0)));
-
     // 1) Rekoncyliacja utraty etatów (rozbiórka/downgrade/uszkodzenie): workers ponad realny
     //    popyt (poza zablokowanymi) → bezrobotni. To spina desync-fixy Fazy 1 (ImpactDamageSystem,
     //    RandomEventSystem zdejmują etaty przez changeEmployment → tutaj nadmiar staje się U).
     for (const type of STRATA_TYPES) {
       const s = this.strata[type];
-      const evictable = Math.max(0, unlocked(type) - this._humanJobs(type));   // całkowite (floor unlocked)
+      const evictable = Math.max(0, this._unlockedWorkers(type) - this._humanJobs(type));   // całkowite (floor unlocked)
       if (evictable > 0) { s.count -= evictable; this._unemployed += evictable; }
     }
 
@@ -1326,10 +1375,25 @@ export class CivilizationSystem {
     const wage = {}, pressure = {};
     for (const type of STRATA_TYPES) { wage[type] = this.getStrataWage(type); pressure[type] = this.getStrataPressure(type); }
 
-    // 2) Etap 1 (bez tarcia) — wolne etaty zasysają bezrobotnych wg PRESSURE malejąco (tie-break: płaca).
-    //    §3.2 (Faza 3): pressure zamiast płacy — inaczej focus na warstwach o niskiej baseWage (laborer)
-    //    jest bezużyteczny (laborer focus→wage 1.6 przegrywa z workers 2.0). Pressure rośnie z focusem,
-    //    więc skupienie realnie ściąga bezrobotnych do wskazanej warstwy. Etap 2 (migracja) zostaje wg płacy.
+    // Slice 5C.1: pusty target ≡ dzisiejsza alokacja EKONOMICZNA (AI, un-focused player, flag OFF).
+    // Gdy gracz ustawił JAKIKOLWIEK target — alokacja dąży do kompozycji (Etap-1 additive overlay +
+    // Etap-2 migracja z ułamkowym akumulatorem friction ku warstwom pod-targetowym).
+    const targeted = (GAME_CONFIG.FEATURES?.popAllocation2 === true) && this._hasAnyTarget();
+    if (targeted) {
+      this._allocateStage1Targeted(wage, pressure);
+      if (advanceMigration) this._allocateStage2Targeted(wage);
+    } else {
+      this._allocateStage1Economic(wage, pressure);
+      // Flag OFF = Faza 3 dokładnie (migracja przy każdym wywołaniu); flag ON neutral = migracja roczna.
+      if (advanceMigration || GAME_CONFIG.FEATURES?.popAllocation2 !== true) this._allocateStage2Economic(wage);
+    }
+  }
+
+  // ── Etap 1/2 EKONOMICZNE (Faza 3 verbatim) — flag OFF + flag ON gdy brak targetu ────────────
+  /** Etap 1 (bez tarcia) — wolne etaty zasysają bezrobotnych wg PRESSURE malejąco (tie-break: płaca).
+   *  §3.2 (Faza 3): pressure zamiast płacy — inaczej focus na warstwach o niskiej baseWage (laborer)
+   *  jest bezużyteczny. Kontrakt „pusty target ≡ dzisiejsza alokacja" — ta metoda jest DOKŁADNIE Fazą 3. */
+  _allocateStage1Economic(wage, pressure) {
     let guard = 0;
     while (this._unemployed > 0 && guard++ < 100000) {
       let bestType = null, bestP = -Infinity, bestW = -Infinity;
@@ -1344,9 +1408,11 @@ export class CivilizationSystem {
       this.strata[bestType].count += 1;
       this._unemployed -= 1;
     }
+  }
 
-    // 3) Etap 2 (z tarciem) — migracja między stratami: max 10% straty źródłowej / rok,
-    //    tylko do ŚCIŚLE wyższej płacy z wolnym etatem. Zablokowani zostają.
+  /** Etap 2 (z tarciem) — migracja między stratami: max 10% straty źródłowej / rok, tylko do
+   *  ŚCIŚLE wyższej płacy z wolnym etatem. Zablokowani zostają. (Faza 3 verbatim.) */
+  _allocateStage2Economic(wage) {
     const cap = {}, moved = {};
     for (const type of STRATA_TYPES) cap[type] = Math.floor(MIGRATION_FRICTION * this.strata[type].count);
     for (const src of STRATA_TYPES) {
@@ -1354,12 +1420,91 @@ export class CivilizationSystem {
         if (dst === src || wage[dst] <= wage[src]) continue;           // tylko ściśle wyższa płaca
         const open = this._humanJobs(dst) - this.strata[dst].count;
         if (open <= 0) continue;
-        // n = min(budżet 10%, wolne etaty, odblokowani całkowici) — WSZYSTKO całkowite → count zostaje int.
-        const n = Math.min(cap[src] - (moved[src] ?? 0), open, unlocked(src));
+        const n = Math.min(cap[src] - (moved[src] ?? 0), open, this._unlockedWorkers(src));
         if (n <= 0) continue;
         this.strata[src].count -= n;
         this.strata[dst].count += n;
         moved[src] = (moved[src] ?? 0) + n;
+      }
+    }
+  }
+
+  // ── Etap 1/2 TARGET-GUIDED (Slice 5C.1) — gdy gracz ustawił docelowy share ──────────────────
+  /** Docelowa liczba pracowników per strata = share × mobilePool. Suwaki są niezależne → gdy
+   *  Σshare>1 skalujemy proporcjonalnie (target jako wagi względne, cap Σ≤100%). Per-strata cap do
+   *  `_humanJobs` (nie można celować w więcej etatów niż istnieje). { type → int } tylko dla targetów. */
+  _targetHeadcounts() {
+    const pool = this._mobileJobPool();
+    let sumShare = 0;
+    for (const type of STRATA_TYPES) sumShare += Math.max(0, this._focusTarget[type] ?? 0);
+    const norm = sumShare > 1 ? 1 / sumShare : 1;
+    const out = {};
+    for (const type of STRATA_TYPES) {
+      const share = Math.max(0, this._focusTarget[type] ?? 0);
+      if (share <= 0) continue;
+      out[type] = Math.min(this._humanJobs(type), Math.floor(share * norm * pool));
+    }
+    return out;
+  }
+
+  /** Etap 1 target-guided — additive overlay: wolne etaty zasysają bezrobotnych wg klucza
+   *  (targetDeficit desc, pressure desc, wage desc). Warstwy pod-targetowe prowadzą, reszta
+   *  ekonomicznie (targetDeficit=0). Przy braku targetu klucz kolapsuje do Fazy 3 (pressure/wage). */
+  _allocateStage1Targeted(wage, pressure) {
+    const target = this._targetHeadcounts();
+    let guard = 0;
+    while (this._unemployed > 0 && guard++ < 100000) {
+      let best = null; let bDef = -1, bP = -Infinity, bW = -Infinity;
+      for (const type of STRATA_TYPES) {
+        const open = this._humanJobs(type) - this.strata[type].count;
+        if (open <= 0) continue;
+        const deficit = Math.max(0, (target[type] ?? 0) - this.strata[type].count);   // 0 dla neutralnych
+        if (best === null
+            || deficit > bDef
+            || (deficit === bDef && pressure[type] > bP)
+            || (deficit === bDef && pressure[type] === bP && wage[type] > bW)) {
+          best = type; bDef = deficit; bP = pressure[type]; bW = wage[type];
+        }
+      }
+      if (best === null) break;
+      this.strata[best].count += 1;
+      this._unemployed -= 1;
+    }
+  }
+
+  /** Etap 2 target-guided — migracja ku warstwom pod-targetowym z UŁAMKOWYM akumulatorem friction
+   *  (F4): dla pary (src>dst) `_focusMigrationProgress += 0.10 × unlocked(src)`/rok; ruch = floor
+   *  akumulatora (małe straty trickle: 3 workers → 0.3/rok → ruch po ~kilku latach). Dawcy: nad-targetowe
+   *  / neutralne z mobilnymi (najniższa płaca dawcy najpierw); odbiorcy sort deficit desc, wage tie-break (F3). */
+  _allocateStage2Targeted(wage) {
+    const target = this._targetHeadcounts();
+    const deficitOf = (t) => (target[t] ?? 0) - this.strata[t].count;
+    const dsts = STRATA_TYPES
+      .filter(t => deficitOf(t) > 0 && (this._humanJobs(t) - this.strata[t].count) > 0)
+      .sort((a, b) => (deficitOf(b) - deficitOf(a)) || (wage[b] - wage[a]));   // większy deficit → wcześniej; tie: wyższa płaca (F3)
+    for (const dst of dsts) {
+      // Dawcy: nad-targetowe (surplus ponad ich target) najpierw, potem neutralne; najniższa płaca dawcy najpierw.
+      // Warstwa targetowana i SAMA pod swoim targetem (deficit>0) NIE jest dawcą — potrzebuje ludzi, nie oddaje.
+      // Bez tego dwie wzajemnie pod-targetowe warstwy okradałyby się w kółko (limit cycle, review 5C.1); przy
+      // braku dawcy nad-/neutralnego poprawnym zachowaniem jest BRAK ruchu.
+      const surplusOf = (t) => this.strata[t].count - ((target[t] ?? this.strata[t].count));
+      const donors = STRATA_TYPES
+        .filter(src => src !== dst && this._unlockedWorkers(src) > 0 && !((this._focusTarget[src] ?? 0) > 0 && deficitOf(src) > 0))
+        .sort((a, b) => (surplusOf(b) - surplusOf(a)) || (wage[a] - wage[b]));
+      for (const src of donors) {
+        const open = this._humanJobs(dst) - this.strata[dst].count;
+        const deficit = deficitOf(dst);
+        if (open <= 0 || deficit <= 0) break;
+        const key = src + '>' + dst;
+        const prog = (this._focusMigrationProgress[key] ?? 0) + MIGRATION_FRICTION * this._unlockedWorkers(src);
+        const n = Math.min(Math.floor(prog), open, deficit, this._unlockedWorkers(src));
+        if (n > 0) {
+          this.strata[src].count -= n;
+          this.strata[dst].count += n;
+          this._focusMigrationProgress[key] = prog - n;
+        } else {
+          this._focusMigrationProgress[key] = prog;   // trickle — carry akumulatora do przyszłego roku
+        }
       }
     }
   }

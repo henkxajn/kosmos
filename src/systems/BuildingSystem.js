@@ -509,7 +509,10 @@ export class BuildingSystem {
   }
 
   /**
-   * Usuń JEDNEGO droida z budynku (droid-per-job). Droid NISZCZONY (bez zwrotu). Ostatni → wyczyść slot.
+   * Usuń JEDNEGO droida z budynku (droid-per-job). Ostatni → wyczyść slot.
+   * Slice 5C.1 (RULE CHANGE, flag popAllocation2): deinstalacja ZWRACA droida do magazynu
+   * (`resourceSystem.receive`) — planowa deinstalacja ≠ katastrofa. Demolish (`_demolish`) i
+   * downgrade-trim (`_upgrade` Lv−) DALEJ NISZCZĄ (destrukcja budynku). Flag OFF = niszczenie (Faza 4).
    */
   removeSynthetic(tileKey) {
     const [q, r] = tileKey.split(',').map(Number);
@@ -519,16 +522,62 @@ export class BuildingSystem {
     const slot = tile.syntheticSlot;
     const { commodityId } = slot;
 
-    // Droid-per-job: zdejmij JEDNEGO droida (unit zniszczony, brak zwrotu — jak dotąd). count→0 = null.
+    // Droid-per-job: zdejmij JEDNEGO droida. count→0 = null.
     const remaining = (slot.count ?? 1) - 1;
     if (remaining <= 0) tile.syntheticSlot = null;
     else slot.count = remaining;
 
+    // Slice 5C.1: zwróć droida do magazynu (deinstalacja planowa). Flag OFF = niszczenie (bez zwrotu).
+    const returned = GAME_CONFIG.FEATURES?.popAllocation2 === true;
+    if (returned) this.resourceSystem?.receive?.({ [commodityId]: 1 });
+
     // FIX A: natychmiastowa realokacja + przelicz stawki (etat wraca do ludzi od razu).
     this._reallocateAndRefresh();
 
-    EventBus.emit('building:syntheticRemoved', { tileKey, commodityId, count: Math.max(0, remaining) });
-    return { success: true };
+    EventBus.emit('building:syntheticRemoved', { tileKey, commodityId, count: Math.max(0, remaining), returned });
+    return { success: true, returned };
+  }
+
+  // ── Slice 5C.1: instalacja/deinstalacja droida PER WARSTWA (auto-pick budynku, bez pickera UI) ──
+  /** Budynki straty przyjmujące droida (jobs>0, nie autonomiczne) na tej kolonii — z metadanymi obsady. */
+  _strataDroidBuildings(strataType) {
+    const out = [];
+    if (!this._grid) return out;
+    for (const [tileKey, entry] of this._active.entries()) {
+      const b = entry.building;
+      if (!b || (b.popType ?? 'laborer') !== strataType) continue;
+      if (b.isAutonomous || (entry.jobs ?? 0) === 0) continue;
+      const jobs = (entry.jobs ?? 0) * (entry.level ?? 1);
+      const droids = this._tileDroidCount(entry, tileKey);
+      out.push({ tileKey, jobs, droids, open: jobs - droids });
+    }
+    return out;
+  }
+
+  /** [+] per warstwa: zainstaluj droida w budynku tej straty z NAJNIŻSZĄ obsadą droidów (najwięcej
+   *  wolnych slotów). Reużywa installSynthetic (koszt/tier/strata/spend/realokacja). AUTO-PICK, bez pickera. */
+  installSyntheticForStrata(strataType) {
+    const cands = this._strataDroidBuildings(strataType).filter(c => c.open > 0);
+    if (!cands.length) return { success: false, reason: 'no_open_slot' };
+    // Najniższa obsada = najwięcej wolnych slotów (najbardziej potrzebny). Tie: mniej droidów.
+    cands.sort((a, b) => (b.open - a.open) || (a.droids - b.droids));
+    for (const c of cands) {
+      const prev = this.previewSyntheticInstall(c.tileKey);
+      if (!prev.ok) continue;   // np. tier_mismatch/requires_tech na tym budynku — spróbuj następny
+      return this.installSynthetic(c.tileKey, prev.commodityId);
+    }
+    // Żaden budynek nie przyjął — zwróć powód pierwszego kandydata (diagnostyka UI).
+    const first = this.previewSyntheticInstall(cands[0].tileKey);
+    return { success: false, reason: first.reason ?? 'no_commodity' };
+  }
+
+  /** [−] per warstwa: usuń droida z budynku tej straty (najwięcej droidów najpierw). Zwraca droida
+   *  do magazynu (rule change 5C.1 przez removeSynthetic). */
+  removeSyntheticForStrata(strataType) {
+    const cands = this._strataDroidBuildings(strataType).filter(c => c.droids > 0);
+    if (!cands.length) return { success: false, reason: 'no_synthetic' };
+    cands.sort((a, b) => b.droids - a.droids);   // najwięcej droidów najpierw
+    return this.removeSynthetic(cands[0].tileKey);
   }
 
   /**
@@ -586,7 +635,9 @@ export class BuildingSystem {
    *  wyparci ludzie tkwili w stracie do najbliższego rocznego ticku (gracz widział „2 ludzi + droid",
    *  bezrobocie skakało rok później). Emit civ:populationChanged tylko dla AKTYWNEJ kolonii (odśwież UI). */
   _reallocateAndRefresh() {
-    this.civSystem?._allocateWorkforce?.();
+    // Slice 5C.1: mid-year (install/remove droida) → tylko re-fill wolnych etatów, BEZ zaawansowania
+    // migracji (akumulator friction advance = roczny; idempotencja przy wielokrotnym strzale/rok).
+    this.civSystem?._allocateWorkforce?.(false);
     this._reapplyAllRates();
     if (this.civSystem && window.KOSMOS?.civSystem === this.civSystem) {
       EventBus.emit('civ:populationChanged', this.civSystem._popSnapshot());

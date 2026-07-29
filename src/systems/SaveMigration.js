@@ -21,7 +21,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';   // v97→v98: droid-per-
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 98;
+export const CURRENT_VERSION     = 99;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -156,6 +156,7 @@ const MIGRATIONS = {
   95: _migrateV95toV96,
   96: _migrateV96toV97,
   97: _migrateV97toV98,
+  98: _migrateV98toV99,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2345,6 +2346,25 @@ function _migrateV97toV98(data) {
         slot.count = Math.max(1, J);
       }
     }
+  }
+  return data;
+}
+
+// ── v98 → v99 — Population 2.0 Slice 5C.1: Allocation 2.0 (focus int → target-share) ─────────
+// Focus przestaje być int-slider (demandBonus → pressure) i staje się DOCELOWYM UDZIAŁEM struktury
+// (share 0..1). Stary int-focus (cap-int) i nowy share są NIEWSPÓŁMIERNE i stary nie kodował
+// intencji kompozycyjnej wartej zachowania → RESET (F8). Seedujemy neutralny target ({}) + pusty
+// akumulator friction. Kasujemy stary `focusBonus` (flag OFF też startuje neutralnie). Poza tym
+// format bez zmian; CivilizationSystem.restore broni `?? {}`, ale seed jawny = konwencja repo.
+function _migrateV98toV99(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (!c4x?.colonies) return data;
+  for (const col of c4x.colonies) {
+    const civ = col.civ;
+    if (!civ) continue;
+    civ.focusBonus = {};                 // reset starego int-focus (rollback flag OFF też neutralny)
+    civ.focusTarget = {};                // Slice 5C.1: docelowy share per strata (neutral)
+    civ.focusMigrationProgress = {};     // Slice 5C.1: akumulator friction (per src>dst)
   }
   return data;
 }

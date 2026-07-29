@@ -6,6 +6,7 @@
 
 import { BaseOverlay, HEADER_H }  from './BaseOverlay.js';
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';   // Slice 5C.1: FEATURES.popAllocation2 (zakładka Załoga v2)
 import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { STRATA_META } from '../systems/CivilizationSystem.js';   // Faza 3: nazwy warstw w tooltipach
@@ -1349,6 +1350,8 @@ export class ColonyOverlay extends BaseOverlay {
   // Tabela: strata | etaty | pracownicy | płaca (highlight pressure>0.25) | focus [− n +].
   // Stopka: bezrobotni (warn >10%), satysfakcja, prosperity + strzałka trendu, wzrost.
   _drawWorkforceTab(ctx, x, y, w, h, colony, civ) {
+    // Slice 5C.1: pod flagą popAllocation2 — nowa zakładka (share-% + termometry obsady + kolumna Droidy).
+    if (GAME_CONFIG.FEATURES?.popAllocation2 === true) { this._drawWorkforceTabV2(ctx, x, y, w, h, colony, civ); return; }
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
     const humans = Math.floor(civ.humans ?? civ.population ?? 0);
@@ -1465,6 +1468,132 @@ export class ColonyOverlay extends BaseOverlay {
     cy = this._drawWfRow(ctx, x, cy, w, t('workforce.net'),
       `${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, net >= 0 ? THEME.success : THEME.danger);
 
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // ── Zakładka Załoga v2 (Slice 5C.1, flag popAllocation2) ────────────────────
+  //  Wiersz 2-liniowy/warstwa: [nazwa · płaca · Focus share-stepper] / [termometr obsady ·
+  //  POP+droidy/etaty · droid-stepper]. Termometr: (POP+droidy)/etaty, zielony <70% (miejsce na
+  //  absorpcję) / pomarańcz 70-90% / czerwony ≥90% (SATUROWANA — rozbuduj budynki). Focus = docelowy
+  //  UDZIAŁ (share) tej warstwy; droid [±] auto-pick (najsłabiej obsadzony budynek / zwrot do magazynu).
+  _drawWorkforceTabV2(ctx, x, y, w, h, colony, civ) {
+    const lang = getLocale();
+    const rows = civ.getWorkforceBreakdown();
+    const humans = Math.floor(civ.humans ?? civ.population ?? 0);
+    const unemployed = civ.unemployed ?? 0;
+
+    // Anchory prawych sterowników — Focus (linia 1) i Droidy (linia 2) pionowo zestrojone.
+    const STEPW = 74;
+    const stepX0 = x + w - STEPW;
+    const stepRight = x + w;
+    const wageRight = stepX0 - 8;
+
+    // Nagłówek kolumn (kompaktowy).
+    ctx.font = `bold 9px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';   ctx.fillText(t('workforce.colStrata'), x, y + 9);
+    ctx.textAlign = 'right';  ctx.fillText(t('workforce.colWage'), wageRight, y + 9);
+    ctx.textAlign = 'center'; ctx.fillText(t('workforce.colTarget'), (stepX0 + stepRight) / 2, y + 9);
+    let cy = y + 13;
+    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + w, cy); ctx.stroke();
+    ctx.globalAlpha = 1; cy += 5;
+
+    for (const r of rows) {
+      const active = r.grossJobs > 0 || r.workers > 0 || r.synthetic > 0;
+      const name = lang === 'en' ? r.nameEN : r.namePL;
+      if (!active) {
+        // Warstwa pusta (brak budynków) — 1-linijkowy dim wpis (nadal umożliwia widok wszystkich strat).
+        ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(this._truncateText(ctx, `${r.icon} ${name}`, w - 30), x, cy + 8);
+        ctx.textAlign = 'right'; ctx.fillText('—', x + w, cy + 8);
+        cy += 16;
+        continue;
+      }
+      const ROW_H = 30, HALF = ROW_H / 2;
+      const my1 = cy + 9, my2 = cy + 22;
+      ctx.textBaseline = 'middle';
+
+      // ── Linia 1: nazwa + płaca + Focus share [− nn% +] ──
+      ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'left';
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(this._truncateText(ctx, `${r.icon} ${name}`, wageRight - x - 44), x, my1);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = (r.pressure > 0.25) ? THEME.amber : THEME.textDim;
+      ctx.fillText(r.wage.toFixed(1), wageRight, my1);
+      const tgtOff = r.grossJobs <= 0;
+      const sharePct = Math.round((r.target ?? 0) * 100);
+      ctx.textAlign = 'center'; ctx.font = `bold 13px ${THEME.fontFamily}`;
+      ctx.fillStyle = tgtOff ? THEME.textDim : THEME.accent;
+      ctx.fillText('−', stepX0 + 9, my1); ctx.fillText('+', stepRight - 9, my1);
+      ctx.font = `11px ${THEME.fontFamily}`;
+      ctx.fillStyle = sharePct > 0 ? THEME.accent : THEME.textDim;
+      ctx.fillText(`${sharePct}%`, (stepX0 + stepRight) / 2, my1);
+      if (!tgtOff) {
+        this._addHit(stepX0, cy, 20, HALF, 'targetMinus', { type: r.type, tooltip: t('workforce.targetTooltip') });
+        this._addHit(stepRight - 20, cy, 20, HALF, 'targetPlus', { type: r.type, tooltip: t('workforce.targetTooltip') });
+      }
+
+      // ── Linia 2: termometr obsady + POP+droidy/etaty + droid [− n +] ──
+      const gaugeX = x, cells = 8;
+      const cellW = Math.min(14, Math.max(4, Math.floor((wageRight - x - 60) / cells)));
+      const filled = Math.max(0, Math.min(cells, Math.round((r.staffing ?? 0) * cells)));
+      const gcol = r.staffing >= 0.9 ? THEME.danger : r.staffing >= 0.7 ? THEME.amber : THEME.success;
+      for (let i = 0; i < cells; i++) {
+        ctx.fillStyle = i < filled ? gcol : 'rgba(255,255,255,0.08)';
+        ctx.fillRect(gaugeX + i * cellW, my2 - 4, cellW - 1, 8);
+      }
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = THEME.textSecondary;
+      const capTxt = `${r.workers}${r.synthetic > 0 ? '+' + r.synthetic + '🤖' : ''}/${r.grossJobs}`;
+      ctx.fillText(capTxt, gaugeX + cells * cellW + 5, my2);
+      const canRemove = r.synthetic > 0;
+      const canInstall = r.synthetic < r.grossJobs;
+      ctx.textAlign = 'center'; ctx.font = `bold 13px ${THEME.fontFamily}`;
+      ctx.fillStyle = canRemove ? THEME.accent : THEME.textDim;  ctx.fillText('−', stepX0 + 9, my2);
+      ctx.fillStyle = canInstall ? THEME.accent : THEME.textDim; ctx.fillText('+', stepRight - 9, my2);
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = r.synthetic > 0 ? THEME.accent : THEME.textDim;
+      ctx.fillText(`🤖${r.synthetic}`, (stepX0 + stepRight) / 2, my2);
+      if (canRemove)  this._addHit(stepX0, cy + HALF, 20, HALF, 'droidRemove', { type: r.type, tooltip: t('workforce.droidTooltip') });
+      if (canInstall) this._addHit(stepRight - 20, cy + HALF, 20, HALF, 'droidInstall', { type: r.type, tooltip: t('workforce.droidTooltip') });
+
+      // Hover nazwy → lista budynków tej warstwy.
+      this._addHit(x, cy, wageRight - x - 44, ROW_H, 'strataRow', { type: r.type, tooltip: this._strataBuildingsTooltip(colony, r.type) });
+      cy += ROW_H;
+    }
+
+    // ── Stopka (bezrobotni / satysfakcja / prosperity / wzrost / bilans) ──
+    cy += 3;
+    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + w, cy); ctx.stroke();
+    ctx.globalAlpha = 1; cy += 6;
+    const unempFrac = humans > 0 ? unemployed / humans : 0;
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.unemployed'),
+      `${unemployed} (${Math.round(unempFrac * 100)}%)`, unempFrac > 0.10 ? THEME.danger : THEME.textPrimary);
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.satisfaction'),
+      `${Math.round(civ.satisfaction ?? 50)}%`, THEME.textPrimary);
+    const pros = window.KOSMOS?.prosperitySystem;
+    if (pros && window.KOSMOS?.civSystem === civ) {
+      const cur = pros.prosperity ?? 50, tgt = pros.targetProsperity ?? 50;
+      const arrow = tgt > cur + 0.5 ? '↑' : tgt < cur - 0.5 ? '↓' : '→';
+      const acol  = tgt > cur + 0.5 ? THEME.success : tgt < cur - 0.5 ? THEME.danger : THEME.textDim;
+      cy = this._drawWfRow(ctx, x, cy, w, t('workforce.prosperity'), `${Math.round(cur)} ${arrow} ${Math.round(tgt)}`, acol);
+    }
+    const growth = civ.getAnnualGrowth?.() ?? 0;
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.growth'),
+      `+${growth.toFixed(1)}/${t('workforce.perYear')}`, growth > 0 ? THEME.success : THEME.textDim);
+    const colMgr = window.KOSMOS?.colonyManager;
+    const tax    = colMgr?.calculateTaxIncome?.(colony) ?? 0;
+    const trade  = colony.creditsPerYear ?? 0;
+    const income = tax + trade;
+    const wages  = civ.getTotalLaborCost?.() ?? 0;
+    const net    = income - wages;
+    cy += 3;
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.income'), `+${income.toFixed(0)} Kr`, THEME.textPrimary);
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.wages'),  `-${wages.toFixed(0)} Kr`, THEME.danger);
+    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.net'),
+      `${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, net >= 0 ? THEME.success : THEME.danger);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
@@ -3353,13 +3482,15 @@ export class ColonyOverlay extends BaseOverlay {
           ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.amber; ctx.textAlign = 'center';
           ctx.fillText(t('synthetic.reason.' + prev.reason), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
         }
-        // Remove — gdy jest choć jeden droid (zdejmuje JEDNEGO, NISZCZY — komunikat niżej).
+        // Remove — gdy jest choć jeden droid (zdejmuje JEDNEGO). Slice 5C.1: pod flagą ZWRACA do
+        // magazynu (ikona 🔄 + komunikat „zwraca"); flag OFF = NISZCZY (🗑, Faza 4).
         if (dCount > 0) {
-          this._drawBtn(ctx, `🗑 ${t('colonyPanel.removeSynthetic')}`, x + 8, cy, FLOAT_W - 16, 22, '#6e4a1a');
+          const retRule = GAME_CONFIG.FEATURES?.popAllocation2 === true;
+          this._drawBtn(ctx, `${retRule ? '🔄' : '🗑'} ${t('colonyPanel.removeSynthetic')}`, x + 8, cy, FLOAT_W - 16, 22, '#6e4a1a');
           if (_bVis(cy, 22)) this._addHit(x + 8, cy, FLOAT_W - 16, 22, 'removeSynthetic', { tileKey });
           cy += 24;
           ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
-          ctx.fillText(t('synthetic.removeWarn'), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
+          ctx.fillText(t(retRule ? 'synthetic.removeReturnHint' : 'synthetic.removeWarn'), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
         }
       }
       ctx.restore(); // koniec clip+scroll sekcji budynku
@@ -3983,6 +4114,31 @@ export class ColonyOverlay extends BaseOverlay {
         }
         break;
       }
+      // Slice 5C.1 — suwak share-% (docelowy udział warstwy w sile roboczej). Krok 5%.
+      case 'targetMinus':
+      case 'targetPlus': {
+        const civ = colony?.civSystem;
+        const ty = zone.data?.type;
+        if (civ?.setStrataTarget && ty) {
+          civ.setStrataTarget(ty, civ.getStrataTarget(ty) + (zone.type === 'targetPlus' ? 0.05 : -0.05));
+        }
+        break;
+      }
+      // Slice 5C.1 — instaluj/usuń droida PER WARSTWA (auto-pick budynku, zwrot do magazynu przy usuwaniu).
+      case 'droidInstall': {
+        const bSyn = colony?.buildingSystem;
+        const res = bSyn?.installSyntheticForStrata?.(zone.data?.type);
+        this._showFlash(res?.success ? t('synthetic.installedFlash') : t('synthetic.reason.' + (res?.reason ?? 'no_open_slot')));
+        break;
+      }
+      case 'droidRemove': {
+        const bSyn = colony?.buildingSystem;
+        const res = bSyn?.removeSyntheticForStrata?.(zone.data?.type);
+        this._showFlash(res?.success
+          ? t(res.returned ? 'synthetic.removedReturnedFlash' : 'synthetic.removedFlash')
+          : t('synthetic.reason.' + (res?.reason ?? 'no_synthetic')));
+        break;
+      }
       case 'colonyTab':
         if (zone.data?.planetId) {
           // B1 fix: wyjście z trybu stacji MUSI nastąpić nawet gdy klikamy zakładkę TEJ SAMEJ
@@ -4189,7 +4345,9 @@ export class ColonyOverlay extends BaseOverlay {
       case 'removeSynthetic': {
         const bSyn = colony?.buildingSystem;
         const res = bSyn?.removeSynthetic?.(zone.data?.tileKey);
-        this._showFlash(res?.success ? t('synthetic.removedFlash') : t('synthetic.reason.' + (res?.reason ?? 'no_synthetic')));
+        this._showFlash(res?.success
+          ? t(res.returned ? 'synthetic.removedReturnedFlash' : 'synthetic.removedFlash')
+          : t('synthetic.reason.' + (res?.reason ?? 'no_synthetic')));
         break;
       }
       case 'cancelPending':
