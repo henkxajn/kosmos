@@ -123,8 +123,8 @@ console.log('--- (d) Focus podnosi pressure/płacę, nie obsadę produkcyjną --
   ok('pressure=0 przy pełnej obsadzie', p0 === 0);
   ok('płaca bazowa przy pressure 0', Math.abs(w0 - BASE_WAGE.worker) < 1e-9);
 
-  civ.setStrataFocus('worker', 99);   // clamp do capa = floor(0.25×4)=1
-  ok('focus clamp do 25% etatów (cap=1)', civ.getStrataFocus('worker') === 1);
+  civ.setStrataFocus('worker', 99);   // Slice 5A: clamp do capa = floor(1.0×4)=4 (FOCUS_BONUS_MAX 0.25→1.0)
+  ok('Slice 5A: focus clamp do capa (FOCUS_BONUS_MAX=1.0 → floor(1.0×4)=4)', civ.getStrataFocus('worker') === 4);
   const p1 = civ.getStrataPressure('worker'), w1 = civ.getStrataWage('worker');
   console.log(`    pressure ${p0}→${p1.toFixed(2)}  wage ${w0}→${w1.toFixed(2)}  realJobs ${jobs0}`);
   ok('focus PODNOSI pressure (>0)', p1 > p0);
@@ -248,7 +248,7 @@ console.log('--- FIX B: focus cap ≥ 1 dla każdej aktywnej straty ---');
 {
   const civ = fresh({ laborer: 1, scientist: 8 });
   ok('FIX B: 1 etat → focusCap = 1 (nie 0)', civ._focusCap('laborer') === 1);
-  ok('FIX B: 8 etatów → focusCap = 2 (floor(0.25×8))', civ._focusCap('scientist') === 2);
+  ok('Slice 5A: 8 etatów → focusCap = 8 (floor(1.0×8), FOCUS_BONUS_MAX=1.0)', civ._focusCap('scientist') === 8);
   ok('FIX B: 0 etatów → focusCap = 0 (brak budynków = brak slidera)', civ._focusCap('miner') === 0);
   civ.setStrataFocus('laborer', 1);
   ok('FIX B: 1-etatowa strata pozwala focusBonus 0..1 (set 1 → 1)', civ.getStrataFocus('laborer') === 1);

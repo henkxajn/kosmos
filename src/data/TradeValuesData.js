@@ -52,7 +52,9 @@ export const BASE_PRICE = {
 
   // ⚠ ŚWIADOME złamanie konwencji raw×1.3: receptura droida (Li1000/C1000/Fe1000/Cu500/Si2000 +
   // 500 Kr) to PRODUCTION SINK, nie cena rynkowa. raw×1.3 dałoby ~14 300 Kr (absurd vs android 160).
-  // Cena rynkowa ustawiona RĘCZNIE na 450 Kr (droid jako towar handlowy ≈ android, mimo drogiej produkcji).
+  // RĘCZNA cena-SINK 450 Kr (konwencja droida: recipe = masowy sink produkcyjny + creditCost 500 Kr/szt.,
+  // dobro INWESTYCYJNE — cena NIE raw×1.3). Li 1000→300 (Slice 5A) obniża koszt produkcji, ale cena rynkowa
+  // = premium użytkowe, nie pochodna surowców → zostaje 450.
   automation_droid:     450,
   // ── T3 commodities (bracket 80–160 Kr) ─────────────────────
   android_worker:       160,  // wymaga 5×electronic + 3×semiconductor + 2×polymer

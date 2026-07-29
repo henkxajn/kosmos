@@ -32,7 +32,7 @@ console.log('--- (a) automation_droid: definicja + recipe OD STARTU (bez tech) -
   ok('(a) tier 1 / droidTier 1 / isDroidUnit', d?.tier === 1 && d?.droidTier === 1 && d?.isDroidUnit === true);
   // ISSUE 1 (decyzja Filipa): droid = STRATEGICZNA INWESTYCJA, nie spam. Recipe DROGI w ilości
   // (basic-only, masowo) + creditCost 500 Kr/szt. Cena rynkowa RĘCZNIE 450 Kr (złamana konwencja raw×1.3).
-  ok('(a) recipe {Li1000,C1000,Fe1000,Cu500,Si2000}', JSON.stringify(d?.recipe) === JSON.stringify({ Li: 1000, C: 1000, Fe: 1000, Cu: 500, Si: 2000 }));
+  ok('(a) recipe {Li300,C1000,Fe1000,Cu500,Si2000} (Slice 5A: Li 1000→300)', JSON.stringify(d?.recipe) === JSON.stringify({ Li: 300, C: 1000, Fe: 1000, Cu: 500, Si: 2000 }));
   ok('(a) recipe TYLKO basic-mined (Li/C/Fe/Cu/Si)', Object.keys(d?.recipe ?? {}).every(k => ['C','Fe','Si','Cu','Ti','Li'].includes(k)));
   ok('(a) creditCost 500 Kr/szt (sink kredytów)', d?.creditCost === 500);
   ok('(a) baseTime 1.0 / weight 3.0 / efficiencyBonus 0.40', d?.baseTime === 1.0 && d?.weight === 3.0 && d?.efficiencyBonus === 0.40);

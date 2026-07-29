@@ -226,7 +226,7 @@ export const COMMODITIES = {
     tier:        1,
     // ⚠ WYSOKI koszt jest CELOWY (decyzja Filipa): dodatkowe ręce muszą być STRATEGICZNĄ
     // INWESTYCJĄ, nie akcją-spamem. Droga w ILOŚCI (tylko basic-mined, ale masowo) + koszt Kr:
-    recipe:      { Li: 1000, C: 1000, Fe: 1000, Cu: 500, Si: 2000 },
+    recipe:      { Li: 300, C: 1000, Fe: 1000, Cu: 500, Si: 2000 },   // Slice 5A: Li 1000→300 (Li był rzadkim wąskim gardłem — droid realnie osiągalny; nadal masowy sink)
     creditCost:  500,                                  // Kr/szt. — pobierane z kredytów kolonii
                                                        // przy ukończeniu; niewypłacalność PAUZUJE produkcję
     baseTime:    1.0,                                  // rok/szt. (×2 szybciej z robot_assembly)

@@ -39,7 +39,7 @@ import { MOVEMENT_TYPES, IDENTITY_WEIGHTS, RESOLUTION_OPTIONS } from '../data/Mo
 import { MILESTONE_DEFINITIONS, MILESTONE_BY_TYPE, CULTURAL_TRAITS } from '../data/MilestonesData.js';
 // Population 2.0 (Faza 1) — stałe wzrostu/satysfakcji + reużyty dren podatkowy
 import {
-  BASE_GROWTH_RATE, planetGrowthMod,
+  BASE_GROWTH_RATE, planetGrowthMod, MAX_GROWTH_PER_YEAR, GROWTH_TAPER_SCALE,   // Slice 5A: cap + taper
   SAT_BASE, SAT_W_EMP, SAT_K_UNEMP, SAT_W_CROWD, SAT_CROWD_START, SAT_CROWD_SPAN, SAT_W_TAX,
   BASE_WAGE, MIGRATION_FRICTION, FOCUS_BONUS_MAX,   // Population 2.0 Faza 2: zatrudnienie/płace/focus
 } from '../data/PopulationData.js';
@@ -1179,8 +1179,12 @@ export class CivilizationSystem {
 
     const prosperityMult = window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0;
     const factionMult    = window.KOSMOS?.factionSystem?.getModifier?.('popGrowth') ?? 1.0;
-    const rate = BASE_GROWTH_RATE * prosperityMult * planetGrowthMod(this.planet) * factionMult;
-    return Math.max(0, rate * humans * (1 - humans / capacity));
+    // Slice 5A: taper bazowego tempa przy dużej populacji (per-capita slowdown, głównie ogon).
+    const taper = GROWTH_TAPER_SCALE / (GROWTH_TAPER_SCALE + humans);
+    const rate = BASE_GROWTH_RATE * prosperityMult * planetGrowthMod(this.planet) * factionMult * taper;
+    const growth = rate * humans * (1 - humans / capacity);
+    // Slice 5A: ABSOLUTNY cap /civYear (0.25 → plateau ~3 POP/gameYr @×12) — usuwa runaway w peaku (h=cap/2 → ~2.3) → koniec skoku bezrobocia.
+    return Math.max(0, Math.min(MAX_GROWTH_PER_YEAR, growth));
   }
 
   /** Wzrost logistyczny — akrecja do `_growthProgress`; pełna jednostka → nowy BEZROBOTNY.
@@ -1367,7 +1371,7 @@ export class CivilizationSystem {
     const unemploymentRate = this.unemploymentRate;   // Population 2.0 Faza 2: realna pochodna (§3.2)
     const taxEffect = -taxSatisfactionDrain(window.KOSMOS?.colonyManager?.taxRate ?? 0.08) * SAT_W_TAX;
     const raw = SAT_BASE
-              + SAT_W_EMP * (1 - unemploymentRate * SAT_K_UNEMP)
+              + SAT_W_EMP * Math.max(0, 1 - unemploymentRate * SAT_K_UNEMP)   // Slice 5A: floor-at-0 (człon nie schodzi w minus przy ekstremalnym bezrobociu)
               - SAT_W_CROWD * crowding
               + taxEffect;
     this.satisfaction = Math.max(0, Math.min(100, raw));

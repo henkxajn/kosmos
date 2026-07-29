@@ -510,6 +510,24 @@ Live-gate: sesja 30+ min, bez runaway'ów, AI bez trwałego bezrobocia >20%.
   wzrost zduszony (sprzężenie bezrobocie→satysfakcja→wzrost za ostre przy skali). Cele tuningu:
   bazowe tempo wzrostu (0.04) / **ABSOLUTNY cap wzrostu (nowy)** / złagodzenie `SAT_K_UNEMP`.
   Podniesiony priorytet — nie teoretyczny, realny cykl runaway/crush obserwowany na żywym save.
+- **✅ Slice 5A POINT 2 — cap wzrostu ROZSTRZYGNIĘTY (re-gate Filip: `MAX_GROWTH_PER_YEAR 1.0→0.25`):**
+  Kadencja „1 POP/game-month" była POPRAWNA, NIE leak — `_updateLogisticGrowth` odpala DOKŁADNIE raz/civ-rok,
+  a cap /civYear × CIV_TIME_SCALE(12) = 12 POP/gameYr przy saturacji (dowód: `probe-growth-cadence.mjs` +
+  4-soczewkowy adversarial verify, 0 refutacji). Cap 0.25 → plateau **~3 POP/gameYr**.
+  **⚙ DŹWIGNIA KSZTAŁTU (świadoma decyzja Filipa): cap-plateau vs BASE_RATE-boom.** Cap PONIŻEJ naturalnego
+  szczytu logistyki (~1.34) SPŁASZCZA krzywą do stałego ~3/gameYr przez większość życia kolonii (S-kształt
+  tylko humans<~7 i przy capacity) — POŻĄDANE: płaski sufit, który gracz planuje („rosnę ~3/rok → potrzebuję
+  ~3 etatów/rok") bije rosnący boom wyprzedzający budowę etatów (przyczyna field-catastrophe). **Gdyby
+  live-play chciało boom-feel z niższą amplitudą → obniż `BASE_GROWTH_RATE` (0.04) ZAMIAST capa (zachowuje
+  rise-then-fall). NIE ruszać `BASE_GROWTH_RATE` dla samego throttle — cap wystarcza.** (`SAT_K_UNEMP 3→2` +
+  floor-at-0, `GROWTH_TAPER_SCALE=400` — reszta Slice 5A.) Regresja: growth 15 / employment 52 / droids 60,
+  0 nowych FAIL (auto-expander 74/1 = pre-existing well/waterless).
+- **⚠ ARGUMENT ZA 5C (re-diagnoza z gate'u Slice 5A, early-Fe):** wczesny „ścisk Fe" to problem
+  PRIORYTETU, nie wolumenu — reaktywny dren Fe fabryki (struct_alloys itd.) konkuruje z kolejką BUDOWY
+  o ten sam ubogi zapas Fe (1 kopalnia ~6 Fe/rok, `probe-fe-squeeze` potwierdza pin ~6). NIE recipe/BASE_DEMAND
+  (dobra konsumpcyjne zdiagnozowane jako ~0 drenu Fe). Rozwiązanie należy do **5C building tri-state**:
+  „Wstrzymaj" fabrykę podczas budowy zwalnia Fe dla kolejki; opcjonalnie **construction-reserves** (rezerwa
+  surowca na budowę) jako pod-item 5C. Hard-gate obsady kopalni (dbeab34) = świadoma trudność, zostaje.
 - **Do re-ewaluacji (obserwacja z live-gate Fazy 2):** sprzężenie
   bezrobocie → satysfakcja → prosperity → wzrost może być zbyt karzące
   (`SAT_K_UNEMP=3`, GAMMA 1.5, inercja 0.08 + gate wzrostu). Ocenić PO tym, jak
