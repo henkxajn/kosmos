@@ -355,8 +355,15 @@ export class ColonyOverlay extends BaseOverlay {
     if (!this._tooltipEl) return;
     this._tooltipEl.innerHTML = html;
     this._tooltipEl.style.display = 'block';
-    this._tooltipEl.style.left = `${Math.min(sx + 12, window.innerWidth - 330)}px`;
-    this._tooltipEl.style.top  = `${Math.min(sy - 10, window.innerHeight - 200)}px`;
+    // Slice 5C.2 UX (review): FLIP na przeciwną stronę kursora gdy przy krawędzi — nie zasłaniaj kontrolki
+    // POD kursorem (stary `min(sx+12, innerWidth-330)` przy prawej krawędzi dosuwał tooltip NA kontrolkę).
+    const TW = 320, TH = 200;
+    let left = sx + 14;
+    if (left + TW > window.innerWidth - 8) left = Math.max(8, sx - TW - 14);   // przy prawej krawędzi → w lewo od kursora
+    let top = sy - 10;
+    if (top + TH > window.innerHeight - 8) top = Math.max(8, sy - TH - 10);    // przy dolnej krawędzi → w górę
+    this._tooltipEl.style.left = `${left}px`;
+    this._tooltipEl.style.top  = `${top}px`;
   }
   _hideTooltip() { if (this._tooltipEl) this._tooltipEl.style.display = 'none'; }
 
@@ -1397,7 +1404,7 @@ export class ColonyOverlay extends BaseOverlay {
       // (workers < NETTO r.jobs), math pressure/alokacji zostaje NETTO — to tylko wyświetlanie.
       ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'right';
       ctx.fillStyle = THEME.textDim; ctx.fillText(String(r.grossJobs), jobsRight, my);
-      ctx.fillStyle = (r.workers < r.jobs) ? THEME.amber : THEME.textPrimary;
+      ctx.fillStyle = (r.workers < r.jobs) ? THEME.warning : THEME.textPrimary;
       if (r.synthetic > 0) {   // Faza 4: obsada syntetyczna widoczna per warstwa (np. 6+2🤖)
         ctx.font = `10px ${THEME.fontFamily}`;
         ctx.fillText(`${r.workers}+${r.synthetic}🤖`, workRight, my);
@@ -1407,7 +1414,7 @@ export class ColonyOverlay extends BaseOverlay {
       }
 
       // Płaca — highlight gdy pressure > 0.25.
-      ctx.fillStyle = (r.pressure > 0.25) ? THEME.amber : THEME.textDim;
+      ctx.fillStyle = (r.pressure > 0.25) ? THEME.warning : THEME.textDim;
       ctx.fillText(r.wage.toFixed(1), wageRight, my);
 
       // Focus [− n +] (wyszarzony gdy cap=0, czyli <4 etaty brutto).
@@ -1520,26 +1527,40 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(this._truncateText(ctx, `${r.icon} ${name}`, wageRight - x - 44), x, my1);
       ctx.textAlign = 'right';
-      ctx.fillStyle = (r.pressure > 0.25) ? THEME.amber : THEME.textDim;
+      ctx.fillStyle = (r.pressure > 0.25) ? THEME.warning : THEME.textDim;
       ctx.fillText(r.wage.toFixed(1), wageRight, my1);
       const tgtOff = r.grossJobs <= 0;
       const sharePct = Math.round((r.target ?? 0) * 100);
+      // Slice 5C.2: stan suwaka + podgląd docelowej liczby osób „≈N" (cisza mechaniki myliła 5C.1).
+      // active=zielony · inactive=szary+· · unreachable=amber+! (N = surowy cel przed capem).
+      const tstate = civ.getTargetState?.(r.type) ?? 'off';
+      const prevHc = civ.getTargetHeadcountPreview?.(r.type) ?? { target: 0, desired: 0, current: 0, delta: 0, capped: false };
+      const stateCol = tstate === 'unreachable' ? THEME.warning
+                     : tstate === 'active' ? THEME.success
+                     : THEME.textDim;
       ctx.textAlign = 'center'; ctx.font = `bold 13px ${THEME.fontFamily}`;
       ctx.fillStyle = tgtOff ? THEME.textDim : THEME.accent;
       ctx.fillText('−', stepX0 + 9, my1); ctx.fillText('+', stepRight - 9, my1);
-      ctx.font = `11px ${THEME.fontFamily}`;
-      ctx.fillStyle = sharePct > 0 ? THEME.accent : THEME.textDim;
-      ctx.fillText(`${sharePct}%`, (stepX0 + stepRight) / 2, my1);
+      // Środek: „nn%≈P" (P = docelowa liczba osób; ! gdy nieosiągalne). Podgląd żywy podczas regulacji.
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillStyle = sharePct > 0 ? stateCol : THEME.textDim;
+      const hcTxt = sharePct > 0
+        ? `${sharePct}%≈${tstate === 'unreachable' ? prevHc.desired + '!' : prevHc.target}`
+        : '0%';
+      ctx.fillText(hcTxt, (stepX0 + stepRight) / 2, my1);
       if (!tgtOff) {
         this._addHit(stepX0, cy, 20, HALF, 'targetMinus', { type: r.type, tooltip: t('workforce.targetTooltip') });
         this._addHit(stepRight - 20, cy, 20, HALF, 'targetPlus', { type: r.type, tooltip: t('workforce.targetTooltip') });
+        // Środkowa komórka % → tooltip: podgląd celu (≈N osób, delta) + stan (między − i +, bez nachodzenia).
+        if (sharePct > 0) this._addHit(stepX0 + 20, cy, (stepRight - stepX0) - 40, HALF, 'targetState',
+          { tooltip: this._targetStateTooltip(tstate, prevHc) });
       }
 
       // ── Linia 2: termometr obsady + POP+droidy/etaty + droid [− n +] ──
       const gaugeX = x, cells = 8;
       const cellW = Math.min(14, Math.max(4, Math.floor((wageRight - x - 60) / cells)));
       const filled = Math.max(0, Math.min(cells, Math.round((r.staffing ?? 0) * cells)));
-      const gcol = r.staffing >= 0.9 ? THEME.danger : r.staffing >= 0.7 ? THEME.amber : THEME.success;
+      const gcol = r.staffing >= 0.9 ? THEME.danger : r.staffing >= 0.7 ? THEME.warning : THEME.success;
       for (let i = 0; i < cells; i++) {
         ctx.fillStyle = i < filled ? gcol : 'rgba(255,255,255,0.08)';
         ctx.fillRect(gaugeX + i * cellW, my2 - 4, cellW - 1, 8);
@@ -1571,8 +1592,10 @@ export class ColonyOverlay extends BaseOverlay {
     const unempFrac = humans > 0 ? unemployed / humans : 0;
     cy = this._drawWfRow(ctx, x, cy, w, t('workforce.unemployed'),
       `${unemployed} (${Math.round(unempFrac * 100)}%)`, unempFrac > 0.10 ? THEME.danger : THEME.textPrimary);
+    const _satY = cy;
     cy = this._drawWfRow(ctx, x, cy, w, t('workforce.satisfaction'),
       `${Math.round(civ.satisfaction ?? 50)}%`, THEME.textPrimary);
+    this._addHit(x, _satY, w, cy - _satY, 'wfInfo', { tooltip: this._satisfactionTooltip(civ) });   // Slice 5C.2 (F9)
     const pros = window.KOSMOS?.prosperitySystem;
     if (pros && window.KOSMOS?.civSystem === civ) {
       const cur = pros.prosperity ?? 50, tgt = pros.targetProsperity ?? 50;
@@ -1581,8 +1604,10 @@ export class ColonyOverlay extends BaseOverlay {
       cy = this._drawWfRow(ctx, x, cy, w, t('workforce.prosperity'), `${Math.round(cur)} ${arrow} ${Math.round(tgt)}`, acol);
     }
     const growth = civ.getAnnualGrowth?.() ?? 0;
+    const _grY = cy;
     cy = this._drawWfRow(ctx, x, cy, w, t('workforce.growth'),
       `+${growth.toFixed(1)}/${t('workforce.perYear')}`, growth > 0 ? THEME.success : THEME.textDim);
+    this._addHit(x, _grY, w, cy - _grY, 'wfInfo', { tooltip: this._growthTooltip(civ) });   // Slice 5C.2 (F9)
     const colMgr = window.KOSMOS?.colonyManager;
     const tax    = colMgr?.calculateTaxIncome?.(colony) ?? 0;
     const trade  = colony.creditsPerYear ?? 0;
@@ -1620,6 +1645,42 @@ export class ColonyOverlay extends BaseOverlay {
       const nm = b ? (lang === 'en' ? (b.nameEN ?? b.namePL) : b.namePL) : bid;
       html += `${b?.icon ?? '▪'} ${nm}${n > 1 ? ` ×${n}` : ''}<br>`;
     }
+    return html;
+  }
+
+  // ── Slice 5C.2 (F9): tooltipy rozbicia wzrostu i satysfakcji (hover w stopce Załogi) ──
+  _growthTooltip(civ) {
+    const g = civ.getGrowthBreakdown?.();
+    if (!g) return '';
+    let html = `<b>${t('workforce.growth')}: +${g.growth.toFixed(2)}/${t('workforce.perYear')}</b><br>`;
+    if (g.blockReason) html += `<span style="color:#e08a5a">${t('workforce.growthTip.block.' + g.blockReason)}</span><br>`;
+    html += `${t('workforce.growthTip.base')} ${g.base.toFixed(2)}<br>`;
+    html += `${t('workforce.growthTip.prosperity')} ×${g.prosperityMult.toFixed(2)}<br>`;
+    html += `${t('workforce.growthTip.planet')} ×${g.planetMod.toFixed(2)}<br>`;
+    if (Math.abs(g.factionMult - 1) > 0.005) html += `${t('workforce.growthTip.faction')} ×${g.factionMult.toFixed(2)}<br>`;
+    html += `${t('workforce.growthTip.taper')} ×${g.taper.toFixed(2)}<br>`;
+    html += `${t('workforce.growthTip.capacity')} ${Math.floor(g.humans)}/${Math.floor(g.capacity)} (${Math.round(g.fillFrac * 100)}%)`;
+    if (g.capped) html += `<br><span style="opacity:.7">${t('workforce.growthTip.capped', g.cap.toFixed(2))}</span>`;
+    return html;
+  }
+  // Slice 5C.2 UX: tooltip podglądu celu — „≈N osób", delta do obecnej obsady, + wyjaśnienie stanu.
+  _targetStateTooltip(tstate, prev) {
+    const shown = tstate === 'unreachable' ? prev.desired : prev.target;
+    const dsign = prev.delta > 0 ? '+' + prev.delta : String(prev.delta);
+    let html = `<b>${t('workforce.targetPreview.title', shown, prev.current)}</b><br>`;
+    if (prev.delta !== 0) html += `${t('workforce.targetPreview.delta', dsign)}<br>`;
+    html += `<span style="opacity:.85">${t('workforce.targetState.' + tstate)}</span>`;
+    return html;
+  }
+  _satisfactionTooltip(civ) {
+    const s = civ.getSatisfactionBreakdown?.();
+    if (!s) return '';
+    const sign = (v) => (v >= 0 ? '+' : '') + v.toFixed(1);
+    let html = `<b>${t('workforce.satisfaction')}: ${Math.round(s.satisfaction)}%</b><br>`;
+    html += `${t('workforce.satTip.base')} ${s.base}<br>`;
+    html += `${t('workforce.satTip.emp')} ${sign(s.empTerm)} (${t('workforce.satTip.unemp', Math.round(s.unemploymentRate * 100))})<br>`;
+    html += `${t('workforce.satTip.crowd')} ${sign(s.crowdTerm)}<br>`;
+    html += `${t('workforce.satTip.tax')} ${sign(s.taxTerm)} (${Math.round(s.taxRate * 100)}%)`;
     return html;
   }
 
@@ -3455,6 +3516,33 @@ export class ColonyOverlay extends BaseOverlay {
       if (_bVis(cy, 24)) this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'demolish');
       cy += 28;
 
+      // ── Slice 5C.2: tri-state desygnacja {Aktywny | Pauza | Priorytet} (segmentowy przełącznik) ──
+      const _dsEntry = colony.buildingSystem?._active?.get(`${tile.q},${tile.r}`);
+      if (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && _dsEntry) {
+        const dsKey = `${tile.q},${tile.r}`;
+        const cur = _dsEntry.designation ?? 'active';
+        const segs = [
+          { id: 'active',   label: t('designation.active'),   col: '#2f6b3a' },
+          { id: 'paused',   label: t('designation.paused'),   col: '#7a6a1a' },
+          { id: 'priority', label: t('designation.priority'), col: '#7a3a1a' },
+        ];
+        const segW = Math.floor((FLOAT_W - 16 - 8) / 3);
+        ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (let i = 0; i < 3; i++) {
+          const sx = x + 8 + i * (segW + 4);
+          const on = segs[i].id === cur;
+          ctx.fillStyle = on ? segs[i].col : 'rgba(255,255,255,0.05)';
+          ctx.fillRect(sx, cy, segW, 22);
+          ctx.strokeStyle = on ? THEME.accent : THEME.borderLight; ctx.lineWidth = 1;
+          ctx.strokeRect(sx + 0.5, cy + 0.5, segW - 1, 21);
+          ctx.fillStyle = on ? '#fff' : THEME.textSecondary;
+          ctx.fillText(segs[i].label, sx + segW / 2, cy + 11);
+          if (_bVis(cy, 22)) this._addHit(sx, cy, segW, 22, 'setDesignation', { tileKey: dsKey, designation: segs[i].id, tooltip: t('designation.tooltip') });
+        }
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        cy += 26;
+      }
+
       // Droid-per-job: „n🤖 / J" + Install (dopóki count<J) I Remove (gdy count>0) współistnieją.
       const bsSyn = colony?.buildingSystem;
       if (bsSyn && (b.jobs ?? 0) > 0 && !b.isAutonomous) {
@@ -3479,7 +3567,7 @@ export class ColonyOverlay extends BaseOverlay {
         } else if (prev.reason && prev.reason !== 'no_building' && prev.reason !== 'autonomous_building') {
           this._drawBtn(ctx, `🤖 ${t('synthetic.install')}`, x + 8, cy, FLOAT_W - 16, 22, '#333');
           cy += 24;
-          ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.amber; ctx.textAlign = 'center';
+          ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.warning; ctx.textAlign = 'center';
           ctx.fillText(t('synthetic.reason.' + prev.reason), x + FLOAT_W / 2, cy); ctx.textAlign = 'left'; cy += 12;
         }
         // Remove — gdy jest choć jeden droid (zdejmuje JEDNEGO). Slice 5C.1: pod flagą ZWRACA do
@@ -4270,6 +4358,13 @@ export class ColonyOverlay extends BaseOverlay {
       case 'upgrade':
         if (tile) EventBus.emit('planet:upgradeRequest', { tile });
         break;
+      // Slice 5C.2: tri-state desygnacja budynku (active/paused/priority).
+      case 'setDesignation': {
+        const bs = colony?.buildingSystem;
+        const r = bs?.setBuildingDesignation?.(zone.data?.tileKey, zone.data?.designation);
+        if (r?.success && !r.unchanged) this._showFlash(t('designation.flash.' + zone.data.designation));
+        break;
+      }
       case 'demolish': {
         if (!tile) break;
         // Droid-per-job (D5): ostrzeż gdy rozbiórka/downgrade ZNISZCZY droidy (wzór dialogu wyparcia).

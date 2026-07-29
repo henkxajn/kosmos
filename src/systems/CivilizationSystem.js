@@ -158,6 +158,8 @@ export class CivilizationSystem {
     // z ułamkowym akumulatorem friction). Pusty target ≡ dzisiejsza alokacja ekonomiczna (AI, Faza 3).
     this._focusTarget           = {};   // { strataType → share 0..1 }
     this._focusMigrationProgress = {};  // { "src>dst" → akumulator friction 0..1 (małe straty trickle) }
+    // Slice 5C.2: transient bump target-share z budynków PRIORYTETOWYCH liczony PULL-em z BuildingSystem
+    // (stateless — bez pola/stale; budynki niosą desygnację w save → po restore automatycznie odzwierciedlone).
     this.satisfaction     = 50;    // Population 2.0 §3.5: satysfakcja kolonii 0-100 → prosperity infra
     this._starvationYears = 0;     // licznik lat głodu
     this._employedPops    = 0;     // POPy zatrudnione przez budynki
@@ -1258,9 +1260,25 @@ export class CivilizationSystem {
     if (v <= 0) delete this._focusTarget[type];   // pusty target = neutral (Σ ≤ 100% guard w alokacji)
     else this._focusTarget[type] = v;
   }
-  /** Czy gracz ustawił JAKIKOLWIEK target (>0)? Pusty ≡ dzisiejsza alokacja ekonomiczna (AI, Faza 3). */
+  // ── Slice 5C.2: transient target-bump z budynków PRIORYTETOWYCH (pull, stateless) ────────────
+  /** Efektywny docelowy share straty = player target + priorytet-bump (gated), clamp [0,1]. Priorytet-bump
+   *  = Σ ludzkich etatów budynków priority tej straty / mobilePool — świeże (bez push/stale; budynki niosą
+   *  desygnację w save → po restore automatycznie odzwierciedlone). Cap Σ w _targetHeadcounts (normalizacja). */
+  _effectiveTargetShare(type) {
+    const base = Math.max(0, this._focusTarget[type] ?? 0);
+    let bump = 0;
+    if (GAME_CONFIG.FEATURES?.popAllocation2Priority === true) {
+      const pjobs = this.buildingSystem?.getPriorityHumanJobs?.(type) ?? 0;
+      const pool = this._mobileJobPool();
+      if (pjobs > 0 && pool > 0) bump = pjobs / pool;
+    }
+    return Math.min(1, base + bump);
+  }
+
+  /** Czy gracz ustawił JAKIKOLWIEK target (>0) LUB istnieje transient bump (priorytet)? Pusty ≡
+   *  dzisiejsza alokacja ekonomiczna (AI, Faza 3). */
   _hasAnyTarget() {
-    for (const type of STRATA_TYPES) if ((this._focusTarget[type] ?? 0) > 0) return true;
+    for (const type of STRATA_TYPES) if (this._effectiveTargetShare(type) > 0) return true;
     return false;
   }
   /** Mobilna pula human-jobs = Σ realnych etatów dla ludzi (netto droidów; §3.4). Baza dla targetHeadcount. */
@@ -1268,6 +1286,33 @@ export class CivilizationSystem {
     let sum = 0;
     for (const type of STRATA_TYPES) sum += this._humanJobs(type);
     return sum;
+  }
+  /** Slice 5C.2: stan suwaka gracza (wskaźnik UI — cisza mechaniki myliła live-gate 5C.1):
+   *  'off' (suwak 0) | 'unreachable' (za mało etatów tej straty by osiągnąć share) |
+   *  'inactive_no_shortage' (osiągnięty lub PEŁNA obsada kolonii — brak niedoboru do rozdzielenia) |
+   *  'active' (jest slack, target realnie ściąga). Liczony z SUWAKA gracza (nie transient bump). */
+  /** Slice 5C.2 UX: podgląd docelowej liczby pracowników dla share GRACZA (≈N osób) + delta do obecnej
+   *  obsady. `target` = osiągalny (capped do etatów), `desired` = surowy (przed capem, dla „unreachable"). */
+  getTargetHeadcountPreview(type) {
+    const share = this._focusTarget[type] ?? 0;
+    const pool = this._mobileJobPool();
+    const humanJobs = this._humanJobs(type);
+    const desired = Math.floor(share * pool);
+    const target = Math.min(humanJobs, desired);
+    const current = this.getStrataWorkers(type);
+    return { share, target, desired, current, delta: target - current, capped: desired > humanJobs };
+  }
+  getTargetState(type) {
+    const share = this._focusTarget[type] ?? 0;
+    if (share <= 0) return 'off';
+    const humanJobs = this._humanJobs(type);
+    const desired   = Math.floor(share * this._mobileJobPool());
+    if (desired > humanJobs) return 'unreachable';
+    if (this.getStrataWorkers(type) >= Math.min(humanJobs, desired)) return 'inactive_no_shortage';
+    let openTotal = 0;
+    for (const t of STRATA_TYPES) openTotal += Math.max(0, this._humanJobs(t) - this.getStrataWorkers(t));
+    if (this._unemployed <= 0 && openTotal <= 0) return 'inactive_no_shortage';   // pełna obsada — nic do rozdzielenia
+    return 'active';
   }
 
   /** Pressure straty (§3.3): (effDemand − workers − syntheticJobs) / effDemand, clamp[0,1].
@@ -1435,12 +1480,14 @@ export class CivilizationSystem {
    *  `_humanJobs` (nie można celować w więcej etatów niż istnieje). { type → int } tylko dla targetów. */
   _targetHeadcounts() {
     const pool = this._mobileJobPool();
+    // Slice 5C.2: efektywny share = player target + transient bump (priorytet). Σ>1 → normalizacja
+    // proporcjonalna (cap Σ≤100%, obejmuje bump — nadwyżka clamp).
     let sumShare = 0;
-    for (const type of STRATA_TYPES) sumShare += Math.max(0, this._focusTarget[type] ?? 0);
+    for (const type of STRATA_TYPES) sumShare += this._effectiveTargetShare(type);
     const norm = sumShare > 1 ? 1 / sumShare : 1;
     const out = {};
     for (const type of STRATA_TYPES) {
-      const share = Math.max(0, this._focusTarget[type] ?? 0);
+      const share = this._effectiveTargetShare(type);
       if (share <= 0) continue;
       out[type] = Math.min(this._humanJobs(type), Math.floor(share * norm * pool));
     }
@@ -1489,7 +1536,7 @@ export class CivilizationSystem {
       // braku dawcy nad-/neutralnego poprawnym zachowaniem jest BRAK ruchu.
       const surplusOf = (t) => this.strata[t].count - ((target[t] ?? this.strata[t].count));
       const donors = STRATA_TYPES
-        .filter(src => src !== dst && this._unlockedWorkers(src) > 0 && !((this._focusTarget[src] ?? 0) > 0 && deficitOf(src) > 0))
+        .filter(src => src !== dst && this._unlockedWorkers(src) > 0 && !(this._effectiveTargetShare(src) > 0 && deficitOf(src) > 0))
         .sort((a, b) => (surplusOf(b) - surplusOf(a)) || (wage[a] - wage[b]));
       for (const src of donors) {
         const open = this._humanJobs(dst) - this.strata[dst].count;
@@ -1520,6 +1567,54 @@ export class CivilizationSystem {
               - SAT_W_CROWD * crowding
               + taxEffect;
     this.satisfaction = Math.max(0, Math.min(100, raw));
+  }
+
+  // ── Slice 5C.2 (F9): breakdown wzrostu i satysfakcji dla tooltipów (pure, unit-testowalne) ──
+  /** Rozbicie tempa wzrostu (§3.1) — składniki `_computeLogisticGrowth` bez mutacji. `growth` = wynik
+   *  identyczny z `getAnnualGrowth()` (przy population>0); `blockReason` wyjaśnia zero. */
+  getGrowthBreakdown() {
+    const canLiveOutside = (this.planet?.atmosphere ?? 'breathable') === 'breathable';
+    const capacity = this.housing;
+    const humans = this.humans;
+    const prosperityMult = window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0;
+    const factionMult    = window.KOSMOS?.factionSystem?.getModifier?.('popGrowth') ?? 1.0;
+    const planetMod = planetGrowthMod(this.planet);
+    const taper = GROWTH_TAPER_SCALE / (GROWTH_TAPER_SCALE + humans);
+    const rate = BASE_GROWTH_RATE * prosperityMult * planetMod * factionMult * taper;
+    const logistic = (humans > 0 && capacity > 0) ? humans * (1 - humans / capacity) : 0;
+    const raw = rate * logistic;
+    let blockReason = null;
+    if (!canLiveOutside && this.population >= this.effectiveHabitatHousing) blockReason = 'no_habitat';
+    else if (capacity <= 0) blockReason = 'no_housing';
+    else if (humans >= capacity) blockReason = 'at_capacity';
+    else if (raw > MAX_GROWTH_PER_YEAR) blockReason = 'rate_capped';
+    // Review: getAnnualGrowth() zwraca 0 przy population<=0 — tooltip musi się zgadzać z footerem.
+    const hardZero = this.population <= 0 || blockReason === 'no_habitat' || blockReason === 'no_housing' || blockReason === 'at_capacity';
+    if (this.population <= 0 && !blockReason) blockReason = 'no_pop';
+    return {
+      base: BASE_GROWTH_RATE, prosperityMult, planetMod, factionMult, taper,
+      capacity, humans, fillFrac: capacity > 0 ? Math.min(1, humans / capacity) : 1,
+      raw, cap: MAX_GROWTH_PER_YEAR, capped: raw > MAX_GROWTH_PER_YEAR,
+      growth: hardZero ? 0 : Math.max(0, Math.min(MAX_GROWTH_PER_YEAR, raw)),
+      blockReason,
+    };
+  }
+
+  /** Rozbicie satysfakcji (§3.5) — składniki `_updateSatisfaction` bez mutacji. */
+  getSatisfactionBreakdown() {
+    const capacity = Math.max(1, this.housing);
+    const crowding = Math.max(0, this.humans / capacity - SAT_CROWD_START) / SAT_CROWD_SPAN;
+    const unemploymentRate = this.unemploymentRate;
+    const taxRate = window.KOSMOS?.colonyManager?.taxRate ?? 0.08;
+    const empTerm   = SAT_W_EMP * Math.max(0, 1 - unemploymentRate * SAT_K_UNEMP);
+    const crowdTerm = -SAT_W_CROWD * crowding;
+    const taxTerm   = -taxSatisfactionDrain(taxRate) * SAT_W_TAX;
+    const raw = SAT_BASE + empTerm + crowdTerm + taxTerm;
+    return {
+      base: SAT_BASE, empTerm, crowdTerm, taxTerm,
+      unemploymentRate, crowding, taxRate,
+      satisfaction: Math.max(0, Math.min(100, raw)),
+    };
   }
 
   /** Aktualizacja satisfakcji per-strata (co rok cywilny) */

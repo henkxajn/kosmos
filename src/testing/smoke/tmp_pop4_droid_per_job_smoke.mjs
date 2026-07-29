@@ -10,9 +10,10 @@ import { BuildingSystem } from '../../systems/BuildingSystem.js';
 import { HexGrid } from '../../map/HexGrid.js';
 import { migrate } from '../../systems/SaveMigration.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
-// Slice 5C.1: ten plik testuje kontrakt Fazy 4 (droid NISZCZONY przy remove) = ścieżka FLAG OFF.
-// Regułę „remove ZWRACA droida" (flag ON) pokrywa tmp_pop2_5c1 (blok I).
+// Slice 5C.1/5C.2: ten plik testuje kontrakt Fazy 4 (droid NISZCZONY przy remove, UNIFORM efficiency)
+// = ścieżki FLAG OFF. Regułę „remove ZWRACA droida" (5C.1) i greedy fill (5C.2) pokrywa tmp_pop2_5c*.
 GAME_CONFIG.FEATURES.popAllocation2 = false;
+GAME_CONFIG.FEATURES.popAllocation2Priority = false;
 
 window.KOSMOS = { civMode: true, timeSystem: { gameTime: 0 } };
 let pass = 0, fail = 0;

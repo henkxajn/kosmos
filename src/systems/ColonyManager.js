@@ -2149,6 +2149,7 @@ export class ColonyManager {
         buildings:        col.buildingSystem?.serialize() ?? [],
         constructionQueue: col.buildingSystem?.serializeQueue() ?? [],
         pendingQueue:     col.buildingSystem?.serializePendingQueue() ?? [],
+        factoryPausedByPriority: col.buildingSystem?._factoryPausedByPriority ?? false,   // Slice 5C.2 (review): nasza pauza priorytetu (soft, ?? false)
         factorySystem:    col.factorySystem?.serialize() ?? null,
         prosperitySystem: col.prosperitySystem?.serialize() ?? null,
         allowImmigration: col.allowImmigration,
@@ -2226,6 +2227,9 @@ export class ColonyManager {
       const factSys = new FactorySystem(resSys);
       bSys.setFactorySystem(factSys);
       if (colData.factorySystem) factSys.restore(colData.factorySystem);
+      // Slice 5C.2 (review): przywróć „to była NASZA pauza priorytetu" — inaczej po wczytaniu save'a
+      // zrobionego w trakcie budowy priorytetowej fabryki zostają na trwałe OFF (nie wznawiamy, bo flaga=false).
+      bSys._factoryPausedByPriority = colData.factoryPausedByPriority ?? false;
       // Fabryki zapisane jako OFFLINE: przelicz stawki, by budynki 'factory' nie pobierały
       // energii/utrzymania po wczytaniu (restoreFromSave zarejestrował je z pełnym poborem).
       if (factSys.isProductionEnabled() === false) bSys._reapplyAllRates();

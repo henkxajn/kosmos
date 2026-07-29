@@ -187,6 +187,17 @@ export const GAME_CONFIG = {
     //   Faza 3 (ekonomiczna alokacja + pressure z focusem + stara zakładka + droid
     //   niszczony przy usunięciu). Default ON (live-gate). Save v98→v99 (reset focusu).
     popAllocation2:       true,
+    // ── Population 2.0 Slice 5C.2 — tri-state budynków + priorytet ─────────
+    //   Nadbudowa nad 5C.1 (wymaga popAllocation2). Per-budynkowa desygnacja
+    //   {active/paused/priority}: paused = produkcja idle (bez konsumpcji);
+    //   priority = TRANSIENTNY bump target-share dla straty (pociąga pracowników)
+    //   + pauza fabryk komodytowych na czas budowy priorytetowej (uwalnia surowce,
+    //   rozwiązuje 5A early-Fe). Within-stratum GREEDY fill (priorytet/najsłabiej
+    //   obsadzony budynek do 100% najpierw, zamiast uniform). Tooltipy wzrostu/
+    //   satysfakcji + wskaźniki stanu suwaka (cel nieaktywny/nieosiągalny).
+    //   Kill-switch: OFF = zachowanie 5C.1 (uniform fill, brak tri-state/pauzy).
+    //   Default ON (live-gate). Save v99 bez bumpu (designation ?? 'active').
+    popAllocation2Priority: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

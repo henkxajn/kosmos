@@ -53,8 +53,15 @@ export class BuildingSystem {
     this.techSystem     = techSystem;
 
     // Rejestr aktywnych producentów:
-    //   tileKey → { building, baseRates, effectiveRates, housing, popCost, jobs, level }
+    //   tileKey → { building, baseRates, effectiveRates, housing, popCost, jobs, level, designation }
     this._active = new Map();
+
+    // Slice 5C.2: memo greedy-fill (activeKey → frakcja obsady), unieważniane w _reapplyAllRates.
+    this._greedyStaffCache = null;
+    // Slice 5C.2: czy MY spauzowaliśmy fabryki (priorytet+budowa) — nie nadpisuj ręcznego OFFLINE gracza.
+    this._factoryPausedByPriority = false;
+    this._pausingSelf = false;             // guard: własne setProductionEnabled ≠ zewnętrzny toggle gracza (review)
+    this._factoryPauseSuppressed = false;  // gracz przejął przełącznik w bieżącym epizodzie budowy priorytetowej
 
     // Kolejka budowy:
     //   tileKey → { buildingId, progress, buildTime, tileR, tileType, isUpgrade?, targetLevel? }
@@ -143,13 +150,19 @@ export class BuildingSystem {
     // Master-switch produkcji: fabryki offline/online → przelicz stawki, by
     // budynki 'factory' przestały/wznowiły pobór energii (per kolonia).
     EventBus.on('factory:productionEnabledChanged', ({ colonyId }) => {
-      if (this._planetId && colonyId === this._planetId) this._reapplyAllRates();
+      if (this._planetId && colonyId === this._planetId) {
+        // Slice 5C.2 (review): ZEWNĘTRZNY toggle (gracz w UI, nie nasza pauza) → oddaj zarządzanie pauzą
+        // priorytetu I zsupresuj do końca epizodu (nie ruszaj fabryk, których gracz świadomie dotknął).
+        if (!this._pausingSelf) { this._factoryPausedByPriority = false; this._factoryPauseSuppressed = true; }
+        this._reapplyAllRates();
+      }
     });
 
     // Tick: budowa + wydobycie surowców z deposits przez kopalnie + pending queue
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — mechaniki 4X biegną szybciej
     this._onTick = ({ civDeltaYears: deltaYears }) => {
       this._tickConstruction(deltaYears);
+      this._updateFactoryPause();   // Slice 5C.2: pauza/wznów fabryk wg (priorytet + stan kolejki budowy)
       this._tickMineExtraction(deltaYears);
       this._tickConverters(deltaYears);
       this._tickPendingQueue();
@@ -250,9 +263,17 @@ export class BuildingSystem {
    *  a konsumenci netują syntetyki (getSyntheticJobs) SAMI: pressure/alokacja (Faza 2) ORAZ
    *  _getBuildingLaborEfficiency (Faza 4 — demand netto → budynki obsadzone droidem nie rozcieńczają
    *  ludzkiej efektywności same-strata). Kwirk PHASE4_TODO rozwiązany w Fazie 4 (net w efficiency). */
+  /** Slice 5C.2 (gate fix): budynek PAUSED zwalnia zapotrzebowanie na pracę (0 etatów) — jego pracownicy
+   *  stają się bezrobotni w tym samym ticku (rekoncyliacja alokacji), satysfakcja reaguje realnym bezrobociem.
+   *  Gated FEATURES.popAllocation2Priority (flag OFF = paused ignorowany, demand jak dotąd). */
+  _isEntryPaused(entry) {
+    return GAME_CONFIG.FEATURES?.popAllocation2Priority === true && entry?.designation === 'paused';
+  }
+
   getSlotDemand(strataType) {
     let demand = 0;
     for (const entry of this._active.values()) {
+      if (this._isEntryPaused(entry)) continue;   // paused = 0 etatów (uwalnia demand → eviction)
       const pType = entry.building?.popType ?? 'laborer';
       if (pType === strataType && (entry.jobs ?? 0) > 0) {
         demand += entry.jobs * entry.level;
@@ -268,6 +289,7 @@ export class BuildingSystem {
     if (!this._grid) return 0;
     let synth = 0;
     for (const [tileKey, entry] of this._active.entries()) {
+      if (this._isEntryPaused(entry)) continue;   // Slice 5C.2: paused = idle (droidy też nie liczą etatów)
       const pType = entry.building?.popType ?? 'laborer';
       if (pType !== strataType || (entry.jobs ?? 0) <= 0) continue;
       synth += this._tileDroidCount(entry, tileKey);
@@ -282,7 +304,7 @@ export class BuildingSystem {
     if (!this._grid) return 0;
     let synth = 0;
     for (const [tileKey, entry] of this._active.entries()) {
-      if ((entry.jobs ?? 0) <= 0) continue;
+      if ((entry.jobs ?? 0) <= 0 || this._isEntryPaused(entry)) continue;   // Slice 5C.2: paused idle
       synth += this._tileDroidCount(entry, tileKey);
     }
     return synth;
@@ -713,6 +735,7 @@ export class BuildingSystem {
       jobs,
       level,
       producerId,
+      designation: 'active',   // Slice 5C.2: tri-state {active/paused/priority}
     });
 
     // Zatrudnienie (pomiń w outpost) — obsadź stratę PRZED liczeniem stawek.
@@ -724,6 +747,7 @@ export class BuildingSystem {
     }
 
     // Teraz budynek jest w _active i strata obsadzona → POPRAWNY empPenalty (obsada per strata).
+    this._greedyStaffCache = null;   // Slice 5C.2 (review): nowy budynek zmienił _active/obsadę → świeży greedy
     const effectiveRates = this._applyTechMultipliers(baseRates, building, activeKey);
     this._active.get(activeKey).effectiveRates = effectiveRates;
     // Zarejestruj produkcję (bezpośrednio — unika cross-colony bleed)
@@ -1108,13 +1132,18 @@ export class BuildingSystem {
     entry.level = nextLevel;
     tile.buildingLevel = nextLevel;
 
-    // Przelicz stawki z nowym levelem
+    // Przelicz stawki z nowym levelem. Slice 5C.2 (review): null greedy cache (level/obsada zmienione) +
+    // przekaż tile.key do _applyTechMultipliers → paused guard działa (upgrade paused NIE wskrzesza
+    // producenta) I greedy/synth-upkeep spójne z _reapplyAllRates.
+    this._greedyStaffCache = null;
     entry.baseRates = this._calcBaseRates(building, tile, nextLevel);
-    entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building);
+    entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building, tile.key);
 
     const producerId = `building_${tile.key}`;
     if (hasKeys(entry.effectiveRates) && this.resourceSystem) {
       this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
+    } else if (this.resourceSystem) {
+      this.resourceSystem.removeProducer(producerId);   // puste (np. paused) → wyrejestruj (bez stale producenta)
     }
 
     // Housing: każdy kolejny level dodaje housing (np. habitat +3/lv)
@@ -1135,6 +1164,7 @@ export class BuildingSystem {
   // ── Rozbiórka ───────────────────────────────────────────────────────────
 
   _demolish(tile) {
+    this._greedyStaffCache = null;   // Slice 5C.2 (review): usunięcie/downgrade zmienia _active/obsadę → świeży greedy
     // Anulowanie oczekującego zamówienia (pending)
     if (tile.pendingBuild) {
       const pendingId = tile.pendingBuild;
@@ -1655,18 +1685,23 @@ export class BuildingSystem {
       const jobs       = this._isOutpost ? 0 : (building.jobs ?? 0);  // Population 2.0: z żywej definicji (stare+nowe save → ×4)
       const housing    = b.housing || 0;
 
-      if (hasKeys(effectiveRates) && this.resourceSystem) {
-        this.resourceSystem.registerProducer(producerId, effectiveRates);
+      // Slice 5C.2: paused (flag) → produkcja idle (nie rejestruj producenta). designation ?? 'active' (soft, bez migracji).
+      const designation = b.designation ?? 'active';
+      const paused = GAME_CONFIG.FEATURES?.popAllocation2Priority === true && designation === 'paused';
+      const effRates = paused ? {} : effectiveRates;
+      if (hasKeys(effRates) && this.resourceSystem) {
+        this.resourceSystem.registerProducer(producerId, effRates);
       }
       this._active.set(activeKey, {
-        building, baseRates, effectiveRates,
+        building, baseRates, effectiveRates: effRates,
         housing,
         popCost,
         jobs,
         level,
         producerId,
+        designation,
       });
-      totalJobs += jobs * level;
+      totalJobs += paused ? 0 : jobs * level;   // Slice 5C.2 (gate fix): paused nie liczy etatów (spójne z getSlotDemand)
       totalHousing += housing;  // housing już skumulowany (per-level) w serialize()
       if (building.isHabitat) totalHabitatHousing += housing;
     }
@@ -1713,6 +1748,7 @@ export class BuildingSystem {
         jobs: building.jobs ?? 0,
         level,
         producerId,
+        designation: tile.buildingDesignation ?? 'active',   // Slice 5C.2 (grid-carried, soft)
       });
     });
 
@@ -1740,6 +1776,7 @@ export class BuildingSystem {
         housing:        entry.housing || 0,
         popCost:        entry.popCost ?? 0.25,
         level:          entry.level ?? 1,
+        designation:    entry.designation ?? 'active',   // Slice 5C.2 (soft, bez migracji)
       });
     });
     return buildings;
@@ -1992,6 +2029,128 @@ export class BuildingSystem {
     }
   }
 
+  // ── Slice 5C.2: within-stratum greedy staffing (priorytet + stabilny porządek) ──────────────
+  /** Rozwiąż przekazany tileKey na klucz w _active (obsługuje prefiks capital_). null gdy brak budynku. */
+  _resolveActiveKey(tileKey) {
+    if (this._active.has(tileKey)) return tileKey;
+    const cap = `capital_${tileKey}`;
+    if (this._active.has(cap)) return cap;
+    return null;
+  }
+  /** Frakcja ludzkiej obsady budynku wg GREEDY (memo per _reapplyAllRates). 1.0 gdy nie znaleziony. */
+  _greedyStaffFor(activeKey) {
+    if (!this._greedyStaffCache) this._greedyStaffCache = this._buildGreedyStaffCache();
+    return this._greedyStaffCache.get(activeKey) ?? 1.0;
+  }
+  /** Zbuduj mapę activeKey → frakcja obsady: per strata, priorytet najpierw, potem stabilny porządek;
+   *  ludzie (strataCount, wraz z zablokowanymi — spójnie z uniform) napełniają budynki po kolei do
+   *  pojemności ludzkiej (J − droidy). Suma obsadzonych = min(strataCount, humanDemand) jak w uniform. */
+  _buildGreedyStaffCache() {
+    const cache = new Map();
+    const byStrata = {};
+    for (const [activeKey, entry] of this._active) {
+      const b = entry.building;
+      if (!b || b.isAutonomous || (entry.jobs ?? 0) === 0 || this._isEntryPaused(entry)) continue;   // Slice 5C.2: paused nie konkuruje o pracowników
+      (byStrata[b.popType ?? 'laborer'] ??= []).push(activeKey);
+    }
+    for (const st of Object.keys(byStrata)) {
+      const keys = byStrata[st].sort((a, b) => {
+        const pa = this._active.get(a).designation === 'priority' ? 1 : 0;
+        const pb = this._active.get(b).designation === 'priority' ? 1 : 0;
+        if (pa !== pb) return pb - pa;                 // priorytet najpierw
+        return a < b ? -1 : a > b ? 1 : 0;             // stabilny porządek (activeKey)
+      });
+      let remaining = this.civSystem?.strata?.[st]?.count ?? 0;
+      for (const activeKey of keys) {
+        const entry = this._active.get(activeKey);
+        const J = (entry.jobs ?? 0) * (entry.level ?? 1);
+        const plain = activeKey.startsWith('capital_') ? activeKey.slice(8) : activeKey;
+        const D = this._tileDroidCount(entry, plain);
+        const humanCap = Math.max(0, J - D);
+        const assigned = Math.min(humanCap, remaining);
+        remaining -= assigned;
+        cache.set(activeKey, humanCap > 0 ? assigned / humanCap : 1.0);
+      }
+    }
+    return cache;
+  }
+
+  // ── Slice 5C.2: tri-state designation (active/paused/priority) + factory-pause ──────────────
+  /** Σ ludzkich etatów budynków PRIORITY danej straty (netto droidów) — pull dla transient bumpu alokacji. */
+  getPriorityHumanJobs(strataType) {
+    if (GAME_CONFIG.FEATURES?.popAllocation2Priority !== true) return 0;
+    let sum = 0;
+    for (const [activeKey, entry] of this._active) {
+      if (entry.designation !== 'priority') continue;
+      const b = entry.building;
+      if (!b || (b.popType ?? 'laborer') !== strataType || b.isAutonomous || (entry.jobs ?? 0) === 0) continue;
+      const J = (entry.jobs ?? 0) * (entry.level ?? 1);
+      const plain = activeKey.startsWith('capital_') ? activeKey.slice(8) : activeKey;
+      sum += Math.max(0, J - this._tileDroidCount(entry, plain));
+    }
+    return sum;
+  }
+
+  /** Odczyt desygnacji budynku (UI). */
+  getBuildingDesignation(tileKey) {
+    return this._active.get(this._resolveActiveKey(tileKey) ?? tileKey)?.designation ?? 'active';
+  }
+
+  /** Ustaw desygnację budynku {active/paused/priority}. paused → produkcja idle; priority → transient
+   *  bump straty (pull) + pauza fabryk podczas budowy. Realokacja + przelicz stawki + factory-pause. */
+  setBuildingDesignation(tileKey, designation) {
+    if (!['active', 'paused', 'priority'].includes(designation)) return { success: false, reason: 'bad_designation' };
+    const activeKey = this._resolveActiveKey(tileKey);
+    if (!activeKey) return { success: false, reason: 'no_building' };
+    const entry = this._active.get(activeKey);
+    if (entry.designation === designation) return { success: true, designation, unchanged: true };
+    const oldDes = entry.designation;
+    entry.designation = designation;
+    // Slice 5C.2 (gate fix): paused ZWALNIA etaty (jak rozbiórka pracy) → _employedPops spójne z getSlotDemand
+    // (freePops ≈ unemployed). changeEmployment przy przejściu do/z paused; potem rekoncyliacja alokacji ewakuuje
+    // pracowników do bezrobocia (same-tick), a przy wznowieniu re-absorbuje. Gated flagą.
+    if (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && this.civSystem && (entry.jobs ?? 0) > 0) {
+      const jobs = (entry.jobs ?? 0) * (entry.level ?? 1);
+      if (oldDes === 'paused' && designation !== 'paused') this.civSystem.changeEmployment(jobs);
+      else if (oldDes !== 'paused' && designation === 'paused') this.civSystem.changeEmployment(-jobs);
+    }
+    // Priorytet/pauza zmieniają efektywny target/demand → realokuj (mid-year, bez churnu migracji) + przelicz
+    // stawki (greedy invalid + paused rates); _reallocateAndRefresh emituje też civ:populationChanged (UI).
+    this._reallocateAndRefresh();
+    this._updateFactoryPause();
+    EventBus.emit('building:designationChanged', { tileKey: activeKey, designation });
+    return { success: true, designation };
+  }
+
+  /** Pauza fabryk komodytowych gdy istnieje budynek PRIORITY I trwa budowa (uwalnia surowce — early-Fe).
+   *  Model epizodu (review): pauzujemy TYLKO gdy fabryki ON; jeśli gracz przejmie przełącznik (zewn. toggle
+   *  → subskrypcja czyści `_factoryPausedByPriority` i ustawia `_factoryPauseSuppressed`) — nie ruszamy fabryk
+   *  do KOŃCA epizodu (shouldPause→false), wtedy re-arm. Wznawiamy tylko NASZĄ pauzę. `_pausingSelf` odróżnia
+   *  własne setProductionEnabled od gracza. Wołane per-tick (_update) + na zmianę desygnacji. */
+  _updateFactoryPause() {
+    const fs = this._factorySystem;
+    if (!fs?.setProductionEnabled) return;
+    const resumeSelf = () => { this._pausingSelf = true; fs.setProductionEnabled(true); this._pausingSelf = false; this._factoryPausedByPriority = false; };
+    if (GAME_CONFIG.FEATURES?.popAllocation2Priority !== true) {
+      if (this._factoryPausedByPriority) resumeSelf();
+      this._factoryPauseSuppressed = false;
+      return;
+    }
+    let hasPriority = false;
+    for (const e of this._active.values()) if (e.designation === 'priority') { hasPriority = true; break; }
+    const shouldPause = hasPriority && this._constructionQueue.size > 0;
+    if (!shouldPause) {                                  // koniec epizodu → wznów naszą pauzę + re-arm
+      if (this._factoryPausedByPriority) resumeSelf();
+      this._factoryPauseSuppressed = false;
+      return;
+    }
+    if (this._factoryPauseSuppressed) return;            // gracz przejął przełącznik w tym epizodzie — nie ruszamy
+    if (!this._factoryPausedByPriority && fs.isProductionEnabled()) {
+      this._pausingSelf = true; fs.setProductionEnabled(false); this._pausingSelf = false;
+      this._factoryPausedByPriority = true;
+    }
+  }
+
   /** Per-budynkowe labor efficiency oparte o matching strata type lub syntheticSlot */
   _getBuildingLaborEfficiency(building, tileKey = null) {
     if (!building || !this.civSystem?.strata) return 1.0;
@@ -2005,7 +2164,12 @@ export class BuildingSystem {
     const strataType  = building.popType ?? 'laborer';
     const strataCount = this.civSystem.strata[strataType]?.count ?? 0;
     const humanDemand = this.getSlotDemand(strataType) - this.getSyntheticJobs(strataType);
-    const humanStaff  = humanDemand > 0 ? Math.min(1.0, strataCount / humanDemand) : 1.0;
+    // Slice 5C.2: within-stratum GREEDY fill (flag) — budynki tej straty napełniane po kolei do 100%
+    // (priorytet najpierw, potem stabilny porządek) zamiast UNIFORM (każdy ×strataCount/humanDemand).
+    // Suma obsadzonych etatów zachowana (tylko dystrybucja się zmienia). Flag OFF / brak tileKey = uniform (5C.1).
+    const gk = (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && tileKey) ? this._resolveActiveKey(tileKey) : null;
+    const humanStaff = gk ? this._greedyStaffFor(gk)
+                          : (humanDemand > 0 ? Math.min(1.0, strataCount / humanDemand) : 1.0);
 
     // Droid-per-job (D2): efficiency = (D×SYNTH_EFF[tier] + (J−D)×humanStaff) / J. Pełny-droid budynek
     // = ×tier, pół-droid = pół bonusu (zgodne z 1+(eff−1)×D/J przy pełnej obsadzie ludzi), a
@@ -2027,6 +2191,10 @@ export class BuildingSystem {
   }
 
   _applyTechMultipliers(baseRates, building, tileKey = null) {
+    // Slice 5C.2: budynek PAUSED (flag) → produkcja I konsumpcja idle (puste stawki → _reapplyAllRates
+    // wyrejestruje producenta; droidy też idle → brak upkeepu). Sprawdzane po activeKey w _active.
+    if (tileKey && GAME_CONFIG.FEATURES?.popAllocation2Priority === true
+        && this._active.get(tileKey)?.designation === 'paused') return {};
     // Droid-per-job (D3): upkeep energii PER DROID (2/6 × liczba droidów) — liczony NIEZALEŻNIE od
     // baseRates (budynek bez własnych stawek też obciąża energię przez droidy). Doliczany niżej.
     let synthUpkeep = 0;
@@ -2106,6 +2274,7 @@ export class BuildingSystem {
   }
 
   _reapplyAllRates() {
+    this._greedyStaffCache = null;   // Slice 5C.2: unieważnij memo greedy-fill (obsada mogła się zmienić)
     for (const [activeKey, entry] of this._active) {
       // Przelicz baseRates z tile (uwzględnia anomalyEffect)
       const tileKey = activeKey.startsWith('capital_') ? activeKey.replace('capital_', '') : activeKey;
