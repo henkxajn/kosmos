@@ -861,6 +861,7 @@ export default {
   'colonyInfo.buildings': 'BUILDINGS',
   'colonyInfo.previewTag': 'preview',
   'colonyInfo.noResources': 'No deposits detected',
+  'colonyInfo.depositEtaUnit': 'yr',   // C2 — deposit depletion ETA unit (game years)
   'colonyInfo.noBuildings': 'No buildings',
   'colonyInfo.massUnit': 'M⊕',
   'colonyInfo.radiusUnit': 'R⊕',

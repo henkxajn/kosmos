@@ -19,6 +19,8 @@ import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/Env
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
+import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
+import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -1332,8 +1334,23 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
         ctx.fillText(t('colonyInfo.noResources'), lx, cy + 10); cy += 18;
       } else {
-        // Surowce mają teraz cały panel (budynki → pasek nad mapą)
-        for (const d of deps) cy = this._drawDepositRow(ctx, lx, cy, cw, d);
+        // C2 — pozostało/początkowe + ETA wyczerpania. getDepositsSummary (reuse) + tempo
+        // wydobycia per surowiec (getResourceBreakdown.producers.mine.total — per rok CYW.).
+        const summaries = DepositSystem.getDepositsSummary(deps);
+        const resSys = colony?.resourceSystem;
+        const rateCache = {};   // resourceId → tempo/rok cyw. (dedup w obrębie klatki)
+        for (let i = 0; i < deps.length; i++) {
+          const d = deps[i];
+          let rate = rateCache[d.resourceId];
+          if (rate === undefined) {
+            let r = 0;
+            try { r = resSys?.getResourceBreakdown?.(d.resourceId)?.producers?.mine?.total ?? 0; }
+            catch { r = 0; }
+            rate = rateCache[d.resourceId] = r;
+          }
+          const readout = computeDepositReadout(summaries[i], rate, { civTimeScale: GAME_CONFIG.CIV_TIME_SCALE });
+          cy = this._drawDepositRow(ctx, lx, cy, cw, d, readout);
+        }
       }
     }
     ctx.restore();
@@ -1835,20 +1852,37 @@ export class ColonyOverlay extends BaseOverlay {
     return y + 17;
   }
 
-  _drawDepositRow(ctx, x, y, w, dep) {
+  _drawDepositRow(ctx, x, y, w, dep, readout) {
     const def = ALL_RESOURCES[dep.resourceId];
     const lang = getLocale();
     const name = def ? (lang === 'en' ? (def.nameEN ?? def.namePL) : def.namePL) : dep.resourceId;
     const icon = def?.icon ?? '•';
-    ctx.font = `11px ${THEME.fontFamily}`; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillStyle = readout?.depleted ? THEME.textDim : THEME.textPrimary;   // wyczerpane → przygaszone
     ctx.fillText(`${icon} ${name}`, x, y + 11);
-    // Bogactwo złoża → 4 kropki
-    const dots = Math.max(0, Math.min(4, Math.round((dep.richness ?? 0) * 4)));
+    // Bogactwo złoża → 4 kropki (prawy skraj)
     const dx = x + w - 4 * 9;
+    const dots = Math.max(0, Math.min(4, Math.round((dep.richness ?? 0) * 4)));
     for (let i = 0; i < 4; i++) {
       ctx.fillStyle = i < dots ? THEME.accent : 'rgba(255,255,255,0.12)';
       ctx.beginPath(); ctx.arc(dx + i * 9 + 3, y + 7, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // C2 — pozostało/początkowe + ETA wyczerpania (środek, wyrównane do prawej przed kropkami).
+    // „—" = brak aktywnego wydobycia; „~" = ETA liniowe (przybliżenie); kolor ostrzegawczy < 20 lat.
+    if (readout) {
+      const etaText = readout.etaYears == null
+        ? '—'
+        : `~${fmtCompact(Math.round(readout.etaYears))} ${t('colonyInfo.depositEtaUnit')}`;
+      ctx.font = `9px ${THEME.fontFamily}`;
+      ctx.textAlign = 'right';
+      const rightEdge = dx - 8;
+      ctx.fillStyle = readout.warn ? THEME.danger : THEME.textDim;
+      ctx.fillText(etaText, rightEdge, y + 10);
+      const etaW = ctx.measureText(etaText).width;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(readout.ratioStr, rightEdge - etaW - 8, y + 10);
+      ctx.textAlign = 'left';
     }
     return y + 17;
   }

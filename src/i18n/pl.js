@@ -861,6 +861,7 @@ export default {
   'colonyInfo.buildings': 'BUDYNKI',
   'colonyInfo.previewTag': 'podgląd',
   'colonyInfo.noResources': 'Brak wykrytych złóż',
+  'colonyInfo.depositEtaUnit': 'lat',   // C2 — jednostka ETA wyczerpania złoża (lata gry)
   'colonyInfo.noBuildings': 'Brak budynków',
   'colonyInfo.massUnit': 'M⊕',
   'colonyInfo.radiusUnit': 'R⊕',
