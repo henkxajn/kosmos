@@ -204,7 +204,13 @@ export const COMMODITIES = {
     nameEN:      'Android Worker',
     icon:        '🤖',
     tier:        3,
-    recipe:      { Fe: 8, Cu: 6, Si: 5, electronic_systems: 5, semiconductor_arrays: 3, polymer_composites: 2 },
+    // Slice 5D FIX A (decyzja Filipa): android = DROID + UMYSŁ → obie warstwy PŁATNE. Receptura =
+    // PEŁNA receptura automation_droid (Li/C/Fe/Cu/Si — warstwa „ciała/droida") + zaawansowane
+    // komponenty (electronic_systems/semiconductor_arrays/polymer_composites — warstwa „umysłu").
+    recipe:      { Li: 300, C: 1000, Fe: 1000, Cu: 500, Si: 2000, electronic_systems: 5, semiconductor_arrays: 3, polymer_composites: 2 },
+    creditCost:  1200,        // Kr/szt. (decyzja Filipa) — pobierane z kredytów kolonii przy ukończeniu,
+                              // niewypłacalność PAUZUJE produkcję. 2.4× tier-1 droid (500 Kr): premia „umysłu"
+                              // ponad koszt Kr samego droida (surowce już pokrywają pełną warstwę droida).
     baseTime:    2.5,
     weight:      5.0,
     isDroidUnit:      true,

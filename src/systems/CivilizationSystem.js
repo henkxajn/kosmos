@@ -877,55 +877,9 @@ export class CivilizationSystem {
     }
   }
 
-  // ── Wzrost populacji (akumulator) ───────────────────────────────────────
-
-  _updatePopGrowth(foodRatio) {
-    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani
-    // macierzystej). Bez breathable wzrost wymaga dedykowanych habitatów.
-    const atmo = this.planet?.atmosphere ?? 'breathable';
-    const canLiveOutside = (atmo === 'breathable');
-    if (!canLiveOutside && this.population >= this.effectiveHabitatHousing) {
-      this._lastGrowth = 0;
-      return;
-    }
-
-    const orgRatio  = foodRatio ?? (this._resourceRatio('food') || this._resourceRatio('organics'));
-    const foodMod   = this._foodGrowthModifier(orgRatio);
-    if (foodMod <= 0) { this._lastGrowth = 0; return; }
-
-    const housingMod = this._housingGrowthModifier();
-    if (housingMod <= 0) { this._lastGrowth = 0; return; }
-
-    // Faza C5: faction popGrowth modifier (kary -5% w zonach seekers/seekers_mild/seekers_max)
-    const factionPopMult = window.KOSMOS?.factionSystem?.getModifier?.('popGrowth') ?? 1.0;
-    const conditionMult = (window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0) * foodMod * housingMod * factionPopMult;
-    const techMult      = this.techSystem?.getPopGrowthMultiplier() ?? 1.0;
-
-    // Skalowanie logistyczne — im więcej POPów, tym wolniejszy wzrost
-    const popScale = 1.0 / (1 + this.population / POP_SCALING_HALF);
-
-    const effectiveInterval = BASE_GROWTH_INTERVAL / Math.max(0.01, conditionMult * techMult * popScale);
-    const clampedInterval   = Math.max(MIN_GROWTH_INTERVAL, effectiveInterval);
-    const growthRate        = 1.0 / clampedInterval;
-
-    this._growthProgress += growthRate;
-
-    if (this._growthProgress >= 1.0) {
-      this._growthProgress -= 1.0;
-      this.addPop('laborer');  // tymczasowo laborer — Faza 5 doda demand-based growth
-      this._lastGrowth = 1;
-      if (window.KOSMOS?.civSystem === this) {
-        EventBus.emit('civ:popBorn', {
-          population:  this.population,
-          strataType:  'laborer',
-          planetId:    this._colonyId,
-          colonyName:  this.planet?.name ?? 'kolonia',
-        });
-      }
-    } else {
-      this._lastGrowth = 0;
-    }
-  }
+  // ── Wzrost populacji ────────────────────────────────────────────────────
+  // (Slice 5D: martwy akumulator `_updatePopGrowth` USUNIĘTY — Population 2.0 wzrost
+  //  liczy `_computeLogisticGrowth`/`_updateLogisticGrowth` niżej. Zero produkcyjnych wołaczy.)
 
   // ── Śmierć POPa ────────────────────────────────────────────────────────
 
@@ -1146,37 +1100,8 @@ export class CivilizationSystem {
     return 0.5;
   }
 
-  /** DEAD (Population 2.0): wzrost przeniesiony do _updateLogisticGrowth. Nie wołane
-   *  z _yearlyUpdate; zostawione na wypadek rollbacku. */
-  _updateStrataGrowth() {
-    const atmo = this.planet?.atmosphere ?? 'breathable';
-    const canLiveOutside = (atmo === 'breathable');
-
-    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani
-    // macierzystej). Na planetach bez breathable wzrost wymaga DEDYKOWANYCH habitatów
-    // (effectiveHabitatHousing) — bazowe housing Stolicy/Portu daje tylko schronienie.
-    if (!canLiveOutside && this.population >= this.effectiveHabitatHousing) {
-      this._lastGrowth = 0;
-      return;
-    }
-
-    let anyBorn = false;
-    for (const type of STRATA_TYPES) {
-      const s = this.strata[type];
-      const rate = this._calcStrataGrowthRate(type);
-      s.growthProgress += rate;
-
-      if (s.growthProgress >= 1.0) {
-        s.growthProgress -= 1.0;
-        s.count += 1;
-        anyBorn = true;
-        if (window.KOSMOS?.civSystem === this) {
-          EventBus.emit('civ:popBorn', { population: this.population, strataType: type });
-        }
-      }
-    }
-    this._lastGrowth = anyBorn ? 1 : 0;
-  }
+  // (Slice 5D: martwy `_updateStrataGrowth` USUNIĘTY — zastąpiony przez _updateLogisticGrowth;
+  //  zero produkcyjnych wołaczy. Rollback = git.)
 
   // ── Population 2.0: wzrost logistyczny + satysfakcja kolonii ─────────────
 

@@ -1308,6 +1308,7 @@ export class EconomyOverlay extends BaseOverlay {
     this._addHit(swBx, ry, swW, 16, 'factory_btn', {
       action: 'toggle_production', colonyId: colony.planetId,
       label: swLabel, x: swBx,
+      tooltip: t('econPanel.factoriesToggleTip'),   // Slice 5D: semantyka vs tri-state Paused (załoga zostaje)
     });
     ry += 20;
 
@@ -3410,19 +3411,30 @@ export class EconomyOverlay extends BaseOverlay {
 
     // Sprawdź hover na wierszu surowca/towaru
     if (this._hoverZone?.type === 'resource_hover') {
-      const rid = this._hoverZone.data.resourceId;
-      if (this._hoverResourceId !== rid) {
-        this._hoverResourceId = rid;
-        this._showTooltip();
-      } else {
-        this._showTooltip();
-      }
+      this._hoverResourceId = this._hoverZone.data.resourceId;
+      this._showTooltip();
+    } else if (this._hoverZone?.data?.tooltip) {
+      // Slice 5D: generyczny tooltip tekstowy z pola zone.data.tooltip (np. master-switch fabryk).
+      this._hoverResourceId = null;
+      this._showTextTooltip(this._hoverZone.data.tooltip);
     } else {
-      if (this._hoverResourceId) {
-        this._hoverResourceId = null;
-        this._hideTooltip();
-      }
+      this._hoverResourceId = null;
+      this._hideTooltip();
     }
+  }
+
+  /** Slice 5D: generyczny tooltip tekstowy (reuse _tooltipEl + pozycjonowanie flip-off-control). */
+  _showTextTooltip(html) {
+    if (!this._tooltipEl || !html) { this._hideTooltip(); return; }
+    this._tooltipEl.innerHTML = html;
+    this._tooltipEl.style.display = 'block';
+    const rect = this._tooltipEl.getBoundingClientRect();
+    let tx = this._mouseScreenX + 16, ty = this._mouseScreenY - 8;
+    if (tx + rect.width  > window.innerWidth  - 10) tx = this._mouseScreenX - rect.width - 12;
+    if (ty + rect.height > window.innerHeight - 10) ty = window.innerHeight - rect.height - 10;
+    if (ty < 4) ty = 4; if (tx < 4) tx = 4;
+    this._tooltipEl.style.left = `${Math.round(tx)}px`;
+    this._tooltipEl.style.top  = `${Math.round(ty)}px`;
   }
 
   handleScroll(delta, x, y) {

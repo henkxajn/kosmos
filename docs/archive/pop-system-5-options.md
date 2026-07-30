@@ -1,3 +1,8 @@
+> **⚠ ZARCHIWIZOWANE (Slice 5D, 2026-07-30) — SUPERSEDED BY `docs/POPULATION_REDESIGN.md`.**
+> Dokument eksploracyjny sprzed implementacji Population 2.0 (2026-03-23). Kierunek wybrany i
+> zrealizowany w Population 2.0 (Fazy 1–5C, save v99). Trzymany jako ślad decyzyjny; NIE jest
+> źródłem prawdy dla bieżącego systemu populacji.
+
 # KOSMOS — 5 Propozycji Przeprojektowania Systemu POPów
 
 **Data**: 2026-03-23

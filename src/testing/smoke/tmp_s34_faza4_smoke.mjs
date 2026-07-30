@@ -3,7 +3,7 @@
 //
 // Zakres:
 //  1. canColonize — REGRESJA OBOWIĄZKOWA (colony ship kolonizuje, passenger NIE, legacy fallback).
-//  2. passenger_module — dane (slotType special, colonistCapacity 1).
+//  2. passenger_module — dane (slotType special, colonistCapacity 4 — Population 2.0 ×4).
 //  3. VesselModelResolver — passenger reuse GLB colony (rola 'colony').
 //  4. Misja passenger kolonia→stacja (load population-1, arrival station.pop++).
 //  5. Pełna stacja → no_housing (statek czeka) + retry dostarcza gdy zwolni się miejsce.
@@ -128,13 +128,13 @@ ms._gameYear = 0;
   const pm = SHIP_MODULES.passenger_module;
   T('2.1 passenger_module istnieje', !!pm);
   T('2.2 slotType special', pm?.slotType === 'special');
-  T('2.3 colonistCapacity 1', pm?.stats?.colonistCapacity === 1);
+  T('2.3 colonistCapacity 4 (Population 2.0 ×4, było 1)', pm?.stats?.colonistCapacity === 4);
   T('2.4 requires null (bez tech-gate)', pm?.requires === null || pm?.requires === undefined);
   T('2.5 ma cost + commodityCost', !!pm?.cost && !!pm?.commodityCost);
   T('2.6 dwujęzyczny namePL+nameEN', !!pm?.namePL && !!pm?.nameEN);
   // calcShipStats sumuje colonistCapacity z modułu.
   const stats = calcShipStats({ baseModuleSlots: 3 }, ['passenger_module']);
-  T('2.7 calcShipStats colonistCapacity=1', stats.colonistCapacity === 1);
+  T('2.7 calcShipStats colonistCapacity=4 (Population 2.0 ×4)', stats.colonistCapacity === 4);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

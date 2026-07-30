@@ -128,9 +128,11 @@ console.log('--- (d) stall reasons dla zleceń: missing / insolvent / no_points 
 // ── (e) android_worker przez tę samą ścieżkę (+ chain-aware) ──────────────────
 console.log('--- (e) android: setDroidOrder + produkcja (pre-stock) + chain-aware ---');
 {
-  // Raws dla android I jego sub-składników (semiconductor_arrays wymaga Xe/Hv) + pre-stock subów.
+  // Raws dla android — Slice 5D FIX A: receptura = pełna automation_droid (Li 300/C 1000/Fe 1000/
+  // Cu 500/Si 2000) + zaawansowane (electronic_systems/semiconductor_arrays/polymer_composites).
+  // Zapas z marginesem na 1-2 szt (semiconductor_arrays wymaga Xe/Hv w auto-chain) + pre-stock subów.
   const stock = {
-    Fe: 100, Cu: 100, Si: 100, C: 100, Hv: 100, Xe: 100,
+    Li: 700, C: 2500, Fe: 2500, Cu: 1200, Si: 4500, Hv: 100, Xe: 100,
     electronic_systems: 10, semiconductor_arrays: 10, polymer_composites: 10,
   };
   const { fs, res } = makeColony({ stock, credits: 5000, techAllTrue: true });
@@ -141,6 +143,28 @@ console.log('--- (e) android: setDroidOrder + produkcja (pre-stock) + chain-awar
   fs._update(1.0);
   ok('(e) android wyprodukowany (1), zlecenie znika', res.getAmount('android_worker') === 1 && fs.getDroidOrder('android_worker') === null);
 
+  // ── Slice 5D (item 1): creditCost 1200 Kr — realne obciążenie + insolwencja (osobne kolonie,
+  //    każda tworzona TUŻ przed _update, bo makeColony klobruje window.KOSMOS). ──
+  ok('(e) android_worker.creditCost === 1200 (decyzja Filipa 5D)', COMMODITIES.android_worker.creditCost === 1200);
+  {
+    const c = makeColony({ stock, credits: 5000, techAllTrue: true });
+    c.fs.setTotalPoints(8); c.fs.setMode('reactive');
+    c.fs.setDroidOrder('android_worker', 1);
+    c.fs._update(1.0);
+    ok('(e) produkcja android OBCIĄŻA 1200 Kr (5000→3800)',
+       c.res.getAmount('android_worker') === 1 && c.colony.credits === 3800);
+  }
+  {
+    // insolwencja: kredyty < 1200 → android NIE wyprodukowany, zlecenie zostaje, kredyty nietknięte.
+    const c = makeColony({ stock, credits: 1000, techAllTrue: true });
+    c.fs.setTotalPoints(8); c.fs.setMode('reactive');
+    c.fs.setDroidOrder('android_worker', 1);
+    c.fs._update(1.0);
+    ok('(e) insolwent (<1200 Kr): android NIE wyprodukowany, zlecenie aktywne',
+       c.res.getAmount('android_worker') === 0 && c.fs.getDroidOrder('android_worker')?.produced === 0);
+    ok('(e) insolwent: kredyty NIETKNIĘTE (1000)', c.colony.credits === 1000);
+  }
+
   // delegacja: setOneShotJob(droid) → droidOrders (osobna kolonia, po produkcji outer-fs).
   {
     const c = makeColony({ stock, credits: 5000, techAllTrue: true });
@@ -149,8 +173,9 @@ console.log('--- (e) android: setDroidOrder + produkcja (pre-stock) + chain-awar
     ok('(e) delegacja: setOneShotJob(android) idzie w droidOrders', r === true && c.fs.oneShotJob === null && c.fs.getDroidOrder('android_worker')?.qty === 2);
   }
 
-  // chain-aware: order android BEZ subów w magazynie, ale z raws subów → autoChain zawiera suby.
-  const stock2 = { Fe: 100, Cu: 100, Si: 100, C: 100, Hv: 100, Xe: 100 };
+  // chain-aware: order android BEZ subów w magazynie, ale z raws (androida I subów) → autoChain zawiera suby.
+  // Slice 5D FIX A: raws pokrywają nową (pełną) recepturę androida (Li/C/Fe/Cu/Si) — suby CELOWO nieobecne.
+  const stock2 = { Li: 700, C: 2500, Fe: 2500, Cu: 1200, Si: 4500, Hv: 100, Xe: 100 };
   const c2 = makeColony({ stock: stock2, credits: 5000, techAllTrue: true });
   c2.fs.setTotalPoints(8); c2.fs.setMode('reactive');
   c2.fs.setDroidOrder('android_worker', 1);

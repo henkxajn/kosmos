@@ -3262,7 +3262,7 @@ export class ColonyOverlay extends BaseOverlay {
         h += 13 + gainLines * 14; // nagłówek „Extraction/yr" + po linii na dodatni urobek
       } else if (!_isMineH && rates) {
         // Liczba widocznych linii: efektywne != 0 + bazowe > 0 które wypadły na 0
-        const shownCount = Object.keys(rates).filter(k => rates[k] !== 0).length;
+        const shownCount = Object.keys(rates).filter(k => k !== 'energy' && rates[k] !== 0).length;   // Slice 5D (item 2): energia poza pętlą produkcji
         const zeroedCount = Object.keys(baseRates).filter(k => baseRates[k] > 0 && !(rates[k] > 0 || rates[k] < 0)).length;
         h += 13 + (shownCount + zeroedCount) * 14;
       }
@@ -3277,13 +3277,17 @@ export class ColonyOverlay extends BaseOverlay {
         const dCount = colony.buildingSystem._tileDroidCount?.(aEntry, tileKey) ?? 0;
         const prevH = colony.buildingSystem.previewSyntheticInstall?.(tileKey) ?? { ok: false, reason: 'no_building', count: dCount };
         if (dCount > 0) h += 14;   // „🤖 droidy: −X energy"
-        h += 14;                   // nagłówek „n🤖 / J"
+        h += 20;                   // nagłówek „n🤖 / J" (Slice 5D FIX C: 14→20, baseline top + odstęp od tri-state)
+        if ((prevH.count ?? dCount) < (prevH.jobs ?? 0)) h += 24;   // Slice 5D (item 11): przycisk „Autonomizuj" (był pominięty → clip)
         if (prevH.ok) h += 24;
         else if (prevH.reason && prevH.reason !== 'no_building' && prevH.reason !== 'autonomous_building') h += 24 + 12;
         if ((prevH.count ?? dCount) > 0) h += 24 + 12;
       }
-      h += 8 + 28 + 6; // separator + buttons
-      if (b.maxLevel && (tile.buildingLevel ?? 1) < b.maxLevel) h += 28;
+      h += 8 + 28 + 6; // separator + buttons (Rozbiórka)
+      if (b.maxLevel && (tile.buildingLevel ?? 1) < b.maxLevel) h += 28;   // Ulepsz
+      // Slice 5D (item 11): tri-state desygnacja {Aktywny|Pauza|Priorytet} — rysowana po Rozbiórce, MUSI
+      // wejść w wysokość, inaczej droid-sekcja/status wypadają pod clip (ta sama klasa co synthetic-arc fix).
+      if (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && aEntry) h += 26;
     } else if (tile.underConstruction) {
       h += 36;
     } else if (tile.pendingBuild) {
@@ -3440,7 +3444,7 @@ export class ColonyOverlay extends BaseOverlay {
         const baseRates = b.rates ?? {};
         const shownKeys = new Set();
         for (const [res, rate] of Object.entries(rates)) {
-          if (rate === 0) continue;
+          if (rate === 0 || res === 'energy') continue;   // Slice 5D (item 2): energię pokazuje dedykowana linia ⚡ + linia droidów (koniec potrójnego wyświetlania)
           shownKeys.add(res);
           ctx.fillStyle = rate > 0 ? '#88ff88' : '#ff8888';
           const sign = rate > 0 ? '+' : '';
@@ -3477,10 +3481,17 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
 
-      // Energia
+      // Energia — Slice 5D (item 2, opcja A): EFEKTYWNA energia płyty (staff-scaled), NIE statyczna
+      // b.energyCost. Upkeep droidów = osobna linia niżej; obie sumują się do effectiveRates.energy
+      // (koherentne zaokrąglenie: plant = round(total)+round(droidDraw), droidLine = −round(droidDraw)).
       if (b.energyCost) {
+        const _eE = rates?.energy ?? -b.energyCost;
+        const _eTier = grid.get(tile.q, tile.r)?.syntheticSlot?.tier ?? 1;
+        const _eD = colony.buildingSystem?._tileDroidCount?.(activeEntry, tileKey) ?? 0;
+        const _eDraw = (colony.buildingSystem?.constructor?.SYNTH_ENERGY_UPKEEP?.[_eTier] ?? 2) * _eD;
+        const _ePlant = Math.round(_eE) + Math.round(_eDraw);
         ctx.fillStyle = '#ffdd44';
-        ctx.fillText(`⚡ -${b.energyCost} energy/rok`, x + 8, cy); cy += 14;
+        ctx.fillText(`⚡ ${_ePlant >= 0 ? '+' : ''}${_ePlant} energy/rok`, x + 8, cy); cy += 14;
       }
 
       // Obsada (droid-per-job): {ludzkie etaty} POP + {droidy}🤖 / {J=jobs×level} + jawny upkeep droidów.
@@ -3549,9 +3560,13 @@ export class ColonyOverlay extends BaseOverlay {
         const tileKey = `${tile.q},${tile.r}`;
         const prev = bsSyn.previewSyntheticInstall?.(tileKey) ?? { ok: false, reason: 'no_building', count: 0, jobs: 0 };
         const dCount = prev.count ?? 0, dJobs = prev.jobs ?? 0;
-        // Nagłówek stanu automatyzacji „n🤖 / J".
-        ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = dCount > 0 ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
-        ctx.fillText(t('synthetic.count', dCount, dJobs), x + FLOAT_W / 2, cy + 2); ctx.textAlign = 'left'; cy += 14;
+        // Nagłówek stanu automatyzacji „n🤖 / J". Slice 5D FIX C: baseline 'top' + odstęp, by
+        // emoji 🤖 (wyższe niż font) NIE wjeżdżało w rząd tri-state nad nim (nakładka na „Pauza",
+        // wyśrodkowany badge = środkowy segment). Linia 20 px mieści top-aligned emoji + luz.
+        ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = dCount > 0 ? THEME.accent : THEME.textDim;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(t('synthetic.count', dCount, dJobs), x + FLOAT_W / 2, cy + 3);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; cy += 20;
         // Slice 5B — „Autonomizuj": wypełnij WSZYSTKIE wolne sloty droidami jednym ruchem (bulk).
         // Widoczny gdy są wolne sloty (dCount < J). Typ droida dobiera BuildingSystem wg straty (tier split).
         if (dCount < dJobs) {

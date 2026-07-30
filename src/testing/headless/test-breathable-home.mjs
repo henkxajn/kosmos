@@ -3,8 +3,8 @@
 // Uruchom: node src/testing/headless/test-breathable-home.mjs
 // ───────────────────────────────────────────────────────────────
 //   A: SystemGenerator.makeHomeworldBreathable — unit (atmosfera + temp)
-//   B: CivilizationSystem._updatePopGrowth — wzrost ZAMROŻONY na non-breathable
-//      (pop≥housing), ODBLOKOWANY po makeHomeworldBreathable (canLiveOutside)
+//   B: CivilizationSystem._updateLogisticGrowth — wzrost ZAMROŻONY na non-breathable
+//      (pop≥effectiveHabitatHousing), ODBLOKOWANY po makeHomeworldBreathable (canLiveOutside)
 //   C: EmpireColonyBootstrap.bootstrapHomeColony — home AI założony na planecie
 //      'none' wychodzi jako breathable (parytet z sys_home gracza)
 //
@@ -79,19 +79,22 @@ ok('A7 null-safe (brak throw)', (() => {
 // ═══════════════════════════════════════════════════════════════
 // B — wzrost: non-breathable ZAMROŻONY → breathable ODBLOKOWANY
 // ═══════════════════════════════════════════════════════════════
-console.log('--- B: _updatePopGrowth — guard canLiveOutside (pop≥housing) ---');
+console.log('--- B: _updateLogisticGrowth — guard canLiveOutside (pop≥effectiveHabitatHousing) ---');
 
 globalThis.window = globalThis.window ?? {};
 window.KOSMOS = { timeSystem: { gameTime: 0 } };  // minimal — optional chaining w growth
 
+// Slice 5D: martwy `_updatePopGrowth` usunięty — test celuje w ŻYWĄ ścieżkę Population 2.0
+// (`_updateLogisticGrowth`). housing=10 daje zapas pojemności (>pop) na B3; B1-freeze keyuje się
+// z effectiveHabitatHousing (=habitatHousing 0 dla nie-macierzystej), NIEzależnie od housing.
 const planetNB = { id: 'p_nb', atmosphere: 'none', temperatureK: 250 };
-const civ = new CivilizationSystem({ population: 5, housing: 5 }, techStub, planetNB);
-ok('B0 population===5, housing===5', civ.population === 5 && civ.housing === 5);
-ok('B0b effectiveHousing===5 (nie home)', civ.effectiveHousing === 5);
+const civ = new CivilizationSystem({ population: 5, housing: 10 }, techStub, planetNB);
+ok('B0 population===5, housing===10', civ.population === 5 && civ.housing === 10);
+ok('B0b effectiveHousing===10 (nie home)', civ.effectiveHousing === 10);
 
 const gp0 = civ._growthProgress;
-civ._updatePopGrowth(1.0);  // dobry foodRatio (1.0)
-ok('B1 non-breathable + pop≥housing → wzrost ZAMROŻONY (progress bez zmian, _lastGrowth=0)',
+civ._updateLogisticGrowth();
+ok('B1 non-breathable + pop≥habitatHousing → wzrost ZAMROŻONY (progress bez zmian, _lastGrowth=0)',
    civ._growthProgress === gp0 && civ._lastGrowth === 0);
 
 SystemGenerator.makeHomeworldBreathable(planetNB);  // FIX in-place na tej samej ref
@@ -99,7 +102,7 @@ ok('B2 planeta po fixie → breathable (civ.planet ta sama ref)',
    planetNB.atmosphere === 'breathable' && civ.planet.atmosphere === 'breathable');
 
 const gp1 = civ._growthProgress;
-civ._updatePopGrowth(1.0);
+civ._updateLogisticGrowth();
 ok('B3 breathable → wzrost ODBLOKOWANY (_growthProgress rośnie)', civ._growthProgress > gp1);
 
 // ═══════════════════════════════════════════════════════════════

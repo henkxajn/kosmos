@@ -1,3 +1,8 @@
+> **⚠ ZARCHIWIZOWANE (Slice 5D, 2026-07-30) — SUPERSEDED BY `docs/POPULATION_REDESIGN.md`.**
+> Briefing eksploracyjny sprzed implementacji Population 2.0 (2026-03-23). Faktyczny system
+> strata + syntetyki (droidy) zrealizowany w Population 2.0 (Fazy 1–5C, save v99). Trzymany jako
+> ślad decyzyjny; NIE jest źródłem prawdy dla bieżącego systemu populacji.
+
 # BRIEFING DLA OPUS 4.6 — Pure Strata + Synthetic Units
 ## Specyfikacja do stworzenia planu implementacji
 

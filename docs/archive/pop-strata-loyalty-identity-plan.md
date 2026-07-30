@@ -1,3 +1,8 @@
+> **⚠ ZARCHIWIZOWANE (Slice 5D, 2026-07-30) — SUPERSEDED BY `docs/POPULATION_REDESIGN.md`.**
+> Plan projektowy sprzed implementacji Population 2.0 (2026-03-23). Warstwa lojalności/tożsamości
+> istnieje osobno (`LoyaltyIdentitySystem`), a rdzeń populacji zrealizowano w Population 2.0
+> (Fazy 1–5C, save v99). Trzymany jako ślad decyzyjny; NIE jest źródłem prawdy dla bieżącego systemu.
+
 # KOSMOS — POP Strata + Loyalty & Cultural Identity System
 ## Plan projektowy (alternatywa do social vectors)
 

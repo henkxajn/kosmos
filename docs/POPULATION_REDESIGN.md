@@ -664,7 +664,62 @@ live-gate PASS po fixie). SLICE 5C COMPLETE.** Nadbudowa nad 5C.1.
   załogi (do bezrobocia). Dwie opcje strategiczne, NIE pułapka. (Gate-„FAIL" był control mix-up — Filip wcisnął
   legacy Offline zamiast tri-state; tri-state Paused ewakuuje poprawnie.) Follow-up 5D: jednolinijkowe tooltipy na
   OBU kontrolkach ujawniające semantykę („zatrzymuje produkcję, załoga zostaje (płatna)" vs „…, zwalnia załogę").
-- **Kolejność Fazy 5:** 5A ✅ → 5B ✅ → 5C.1 ✅ → **5C.2 ✅ (SLICE 5C COMPLETE)** → 5D (housekeeping) NEXT.
+- **Kolejność Fazy 5:** 5A ✅ → 5B ✅ → 5C.1 ✅ → **5C.2 ✅ (SLICE 5C COMPLETE)** → **5D ✅ (housekeeping)**.
+
+**Faza 5D — housekeeping (save v99 bez bumpu, jeden atomowy commit + sub-commit mechaniczny).** Domknięcie
+Slice 5C: porządki bez nowej mechaniki.
+- **android_worker.creditCost = 1200 Kr + receptura (FIX A, decyzja Filipa po live-gate):** android = DROID +
+  UMYSŁ, obie warstwy płatne. Receptura = **PEŁNA receptura automation_droid** (Li 300 / C 1000 / Fe 1000 /
+  Cu 500 / Si 2000 — warstwa „ciała") **+** zaawansowane komponenty (electronic_systems 5 / semiconductor_arrays 3 /
+  polymer_composites 2 — warstwa „umysłu"). creditCost 1200 = premia „umysłu" ponad 500 Kr droida. Auto-render przez
+  `formatRecipe` (💰1200Kr); realne obciążenie + insolwencja (`_trySpendProductionCredits`). **AI = ZERO impaktu**
+  (AI buduje `automation_droid` pod outposty, NIE `android_worker` — potwierdzone `EmpireStrategySystem`). Test
+  `tmp_pop4_droid_orders` (e) +4 asercje + stock dostrojony do nowej receptury.
+- **INVESTIGATE B (podejrzenie Filipa: crew wycieka do unemployed) — UNCONFIRMED, model CZYSTY:** probe przez
+  REALNY crew-lock (pełne zatrudnienie + nadwyżka+mix-lock+eviction) potwierdza inwarianty: `population = employed +
+  unemployed` (dokładnie), `locked ⊆ employed`, `unemployed = pop − Σstrata` (crew W stratach, NIE w unemployed).
+  Eviction (`_allocateWorkforce`) bazuje na `_unlockedWorkers = floor(count − locked)` → `count − evictable ≥ locked`
+  (crew nigdy eksmitowany). **Źródło mylnego wrażenia: `freePops` (rekrutowalni) SPADA o lock (7→ freePops 11→4),
+  ale `unemployed` NIEZMIENIONY (11) — dwie różne wielkości.** Pin: `crewlock_unemployed_invariant_smoke` 23/23.
+- **FIX C — reflow badge droidów (🤖n/J) pod tri-state:** emoji 🤖 (wyższe niż font 10px) rysowane baseline
+  'alphabetic' na `cy+2` wjeżdżało w rząd tri-state nad nim (wyśrodkowany badge = nakładka na środkowy „Pauza").
+  Fix: baseline 'top' + `cy+3` + linia 14→20 px (top-aligned emoji + luz). Height-calc w lockstep (item 11).
+- **⚠ DECYZJA — energia droidów, OPCJA A (display/rounding only):** panel budynku (ColonyOverlay float) rozdziela
+  energię na DWIE linie: `⚡` = EFEKTYWNA energia płyty (staff-scaled `effectiveRates.energy` MINUS pobór droidów)
+  + osobna linia `🤖 upkeep` = pobór droidów. Zaokrąglenie koherentne: `plant = round(total) + round(droidDraw)`,
+  `droidLine = −round(droidDraw)` → obie sumują się do `effectiveRates.energy` (droid `synthUpkeep` jest FOLDOWANY
+  do `effective.energy` w `BuildingSystem:2272`, więc split NIE double-liczy). Energia wyjęta z pętli produkcji
+  (`shownCount` filter `k!=='energy'`) — koniec potrójnego wyświetlania.
+  **OPCJA B ROZWAŻONA i ODRZUCONA:** „naprawa" podwójnego kosztu (obsada pcha standby→pełny pobór ORAZ per-droid
+  upkeep) była pozorna — **to CELOWA wycena automatyzacji**: droid podnosi wykorzystanie płyty do pełnego (produkuje)
+  I ma własny koszt utrzymania. Nie ma bugu do naprawy; problemem był tylko brak czytelnego rozbicia (opcja A).
+- **Zaokrąglenie locków w UI (item 3):** TopBar tooltip + TopResourceDrawer readout/chip pokazują LICZBY CAŁKOWITE.
+  `_lockedPops` może zostać ułamkowy wewnętrznie (`_distributeLock` proporcjonalny) → `free`/`locked` zaokrąglane,
+  `pop`/`total` (= population = Σstrata + unemployed) jest autorytatywną sumą integer; locked-linia tylko gdy ≥1.
+- **Panel float — wysokość (item 11):** kalkulacja wysokości obejmuje KAŻDĄ rysowaną sekcję w lockstep z draw
+  (linia energii, obsada+upkeep droidów, Ulepsz, Rozbiórka, tri-state desygnacja `+26`, „Autonomizuj" `+24`,
+  Install/Remove) — najwyższy przypadek (upgrade+demolish+droids+tri-state+status) mieści się bez clipu.
+- **Tooltipy pauzy (item 10, follow-up 5C.2):** `designation.tooltip` (tri-state Paused = „zatrzymuje produkcję,
+  ZWALNIA załogę → bezrobocie") + nowy `econPanel.factoriesToggleTip` (Factories Offline = „stop produkcji, załoga
+  ZOSTAJE (płatna)") — semantyka obu mechanizmów jawna przy kontrolce. PL+EN. Generyczny `_showTextTooltip` w
+  EconomyOverlay (reuse `_tooltipEl`).
+- **Martwy kod (item 9):** usunięte `_updateStrataGrowth` + `_updatePopGrowth` (zero produkcyjnych wołaczy,
+  zastąpione przez `_updateLogisticGrowth`); `test-breathable-home` sekcja B przepięta na żywą ścieżkę (housing=10
+  headroom na B3, freeze B1 z habitatHousing) — 23/23. **Legacy int-focus (`_focusBonus`/`getStrataFocus`/stary
+  `_drawWorkforceTab`) NIE usunięty:** to fallback bramkowany ŻYWYM kill-switchem `popAllocation2` (nie martwy —
+  osiągalny po flipie), a API jest wplecione we WSPÓLNY `getWorkforceBreakdown` używany przez żywą zakładkę V2.
+  Retirement = decyzja o wycofaniu flagi, nie housekeeping → osobny slice po potwierdzeniu.
+- **Profiling `_reapplyAllRates` (item 7):** liniowy ~6 µs/budynek, ~108 µs/kolonia (18 budynków); 100 kolonii
+  (1800 budynków) = 10.8 ms PEŁNEGO przeglądu ROCZNEGO (1 wywołanie/kolonia/civYear + rzadkie eventy), amortyzowane
+  przez rok klatek. Brak O(N²) między koloniami. **NIE optymalizowane — nie jest zauważalnie wolne.**
+- **Sweep-crash guard (item 8):** `src/testing/smoke/run-all.mjs` (child-process runner) — suita która CRASHUJE
+  (throw przed podsumowaniem / non-zero exit) FAILUJE sweep (bash-for-loop cicho łykał crash w środku). Meta-test
+  dowodzi, że celowo-crashująca suita jest złapana.
+- **Renaming/relokacja testów (item 5) — DIVERGENCJA vs audyt:** audyt zakładał „11 keeperów + ~47 root"; realność:
+  47 TRACKED root `tmp_*.mjs` + ~50 TRACKED `tmp_*` w `src/testing/smoke/` + 58 UNTRACKED root (już gitignored
+  `/tmp_*.mjs` = scratch, potwierdzone — bez akcji). Masowy rename 100 plików łamie każdą krzyż-referencję w
+  CLAUDE.md/MEMORY.md → NIE wykonany hurtowo w tym slice; zgłoszone do decyzji Filipa (osobny sub-commit gdy
+  potwierdzi zakres). Untracked scratch = build artifacts (gitignore) potwierdzone.
 
 ---
 
@@ -683,3 +738,11 @@ live-gate PASS po fixie). SLICE 5C COMPLETE.** Nadbudowa nad 5C.1.
   zestawu outpostu (chroniczny brak Fe/Si/commodity), więc nie zakłada kolonii mimo działającego fixa
   Report 1. Docelowo: mniej rozwinięte AI buduje WIĘCEJ prostych/small instalacji zamiast utykać na drogim
   outpostcie. Poza field-fixes (decyzja Filipa) — Konsorcjum (zdrowe AI) jest wzorcem, Pochód czeka.
+
+### Zarchiwizowane plany-poprzedniki (Slice 5D)
+
+Eksploracyjne dokumenty sprzed implementacji Population 2.0 (2026-03-23) — SUPERSEDED przez TEN plik,
+przeniesione do `docs/archive/` (ślad decyzyjny, NIE źródło prawdy):
+- `docs/archive/pop-system-5-options.md` — 5 propozycji przeprojektowania POPów.
+- `docs/archive/pop-strata-synthetic-master-plan.md` — briefing „Pure Strata + Synthetic Units".
+- `docs/archive/pop-strata-loyalty-identity-plan.md` — plan strata + loyalty/identity.

@@ -422,8 +422,12 @@ export class TopBar {
     if (item._popDetails) {
       const p = item._popDetails;
       lines.push({ text: `${t('topBar.populationLabel')}: ${_fmtPop(p.dispPop)} (+${p.growthRate.toFixed(1)}/yr)`, color: C.text });   // growth: jednostki POP (bez ×100k)
-      lines.push({ text: `POP: ${p.pop} (${t('topBar.employed')} ${p.employed}, ${t('topBar.freePops')} ${p.free})`, color: C.text });
-      lines.push({ text: `${t('topBar.locked')} ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
+      // Slice 5D (item 3): czytelnik pokazuje LICZBY CAŁKOWITE. `pop`/`employed` już całkowite
+      // (population = Σstrata + unemployed). `free`/`locked` mogą być ułamkowe wewnętrznie
+      // (_distributeLock rozkłada crew-lock proporcjonalnie) — zaokrąglamy do integer, a `pop`
+      // pozostaje autorytatywną sumą. Locked-linia tylko gdy zaokrągla się do ≥1 (koniec „locked 0").
+      lines.push({ text: `POP: ${p.pop} (${t('topBar.employed')} ${p.employed}, ${t('topBar.freePops')} ${Math.round(p.free)})`, color: C.text });
+      if (Math.round(p.locked) > 0) lines.push({ text: `${t('topBar.locked')} ${Math.round(p.locked)}`, color: C.orange });
       lines.push({ text: `${t('topBar.housingLabel')} ${p.housing === Infinity ? '∞' : p.housing}`, color: (p.housing !== Infinity && p.pop >= p.housing) ? C.orange : C.text });
       // Strata breakdown
       const breakdown = window.KOSMOS?.civSystem?.getStrataBreakdown?.();

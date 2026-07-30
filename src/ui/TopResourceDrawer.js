@@ -55,7 +55,6 @@ function _fmtPop(n) {
   if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
   return String(Math.round(n));
 }
-function _fmtPopFrac(n) { return String(Math.round((n ?? 0) * 100) / 100); }
 function _fmtDelta(n) {
   const a = Math.abs(n);
   let r;
@@ -299,7 +298,7 @@ export class TopResourceDrawer {
       const popEmp   = civSys.employed ?? 0;   // ludzcy pracownicy (Σstrata) — spójne z Workforce (Faza 4)
       const popLock  = civSys._lockedPops ?? 0;
       const popBase  = `👤 ${_fmtPop(popTotal)} `;
-      const popFreeS = t('resBar.freeSuffix', _fmtPopFrac(popFree));
+      const popFreeS = t('resBar.freeSuffix', _fmtPop(popFree));   // Slice 5D (item 3): integer, nie ułamek
       const popStartX = cx;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
@@ -434,11 +433,14 @@ export class TopResourceDrawer {
     }
     if (item.kind === 'pop') {
       lines.push({ text: `👤 ${t('topBar.populationLabel')}`, color: THEME.accent, bold: true });
-      lines.push({ text: `${t('topBar.employed')} ${_fmtPopFrac(item.employed)}`, color: THEME.textPrimary });
-      lines.push({ text: `${t('topBar.freePops')} ${_fmtPopFrac(item.free)}`,
+      // Slice 5D (item 3): LICZBY CAŁKOWITE (koniec ułamków jak „locked 10.2"). `total`/`employed`
+      // już całkowite (population = Σstrata + unemployed); `free`/`locked` zaokrąglone — locks mogą
+      // zostać ułamkowe wewnętrznie (_distributeLock), `total` jest autorytatywną sumą POP.
+      lines.push({ text: `${t('topBar.employed')} ${_fmtPop(item.employed)}`, color: THEME.textPrimary });
+      lines.push({ text: `${t('topBar.freePops')} ${_fmtPop(item.free)}`,
         color: item.free > 0 ? THEME.success : THEME.textSecondary });
-      if (item.locked > 0) lines.push({ text: `${t('topBar.locked')} ${_fmtPopFrac(item.locked)}`, color: THEME.warning });
-      lines.push({ text: `${t('ui.amount', _fmtPopFrac(item.total))}`, color: THEME.textSecondary });
+      if (Math.round(item.locked) > 0) lines.push({ text: `${t('topBar.locked')} ${_fmtPop(item.locked)}`, color: THEME.warning });
+      lines.push({ text: `${t('ui.amount', _fmtPop(item.total))}`, color: THEME.textSecondary });
       return lines;
     }
     if (item.kind === 'prosperity') {
