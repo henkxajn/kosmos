@@ -1,6 +1,15 @@
 # KOSMOS — Redesign systemu populacji (Population 2.0) — v3
 
-**Status:** Dokument decyzyjny + Faza 0 (mapowanie) — do weryfikacji przez Filipa
+> ## ✅ POPULATION 2.0 — COMPLETE (2026-07-30, save v99, live-gate PASS)
+> Wszystkie fazy zrealizowane: **F1** redenominacja ×4 + wzrost logistyczny + satysfakcja + prosperity
+> (`bc87846`, v96) · **F2** zatrudnienie/płace/focus + Workforce (`d95d9b8`, v97) · **F3** ekonomia
+> (płace/podatek/handel) + staffing-energy (`6b7dc3b`, v97) · **F4** droidy tier-1 (`16b5ef3`, v97) ·
+> **F5A-C** tuning + droid autonomy + Allocation 2.0 + tri-state (`d709f6a`/`a02f070`/`82458aa`/`0e34b2c`, v98-99) ·
+> **F5D** housekeeping (`8f6f649`, v99). Świadome loose-endy (poza Pop 2.0): retirement legacy int-focus
+> (bramkowany żywym kill-switchem `popAllocation2`) + rename/relokacja starych `tmp_*.mjs` (patrz §8 5D).
+> Szczegóły faz: §8. Bieżące źródło prawdy dla systemu populacji = KOD + §8.
+
+**Status:** ✅ ZREALIZOWANE (Population 2.0 COMPLETE) — pierwotnie dokument decyzyjny + Faza 0 (mapowanie)
 **Zakres:** kolonie planetarne + stacje orbitalne
 **Zmiany v3 (po ekstrakcji configu przez CC):** plan dostosowany do
 ISTNIEJĄCYCH systemów — strata popType jako przemysły, rekalibracja
