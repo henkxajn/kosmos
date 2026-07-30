@@ -22,6 +22,7 @@ import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
+import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + per-zakładka scroll + stepper ±
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -92,6 +93,12 @@ export class ColonyOverlay extends BaseOverlay {
     // Zakładka prawej kolumny info: 'planet' (dane planety — domyślna) | 'workforce'
     // (Population 2.0 Faza 2 — załoga/etaty/płace/focus).
     this._infoTab = 'planet';
+    // C4 — per-zakładka scroll prawej kolumny (offset + zmierzona wysokość treści, keyed po tab id).
+    // Offset przenosi się między zakładkami tej samej kolonii; zerowany przy zmianie kolonii.
+    this._infoScroll = {};            // { [tabId]: offset scrolla px }
+    this._infoContentH = {};          // { [tabId]: wysokość treści zmierzona w draw (górny klamp) }
+    this._infoScrollColonyId = null;  // id kolonii dla której trzymamy offsety (reset przy zmianie)
+    this._infoView = null;            // { x, w, top, bot, tab, scrollable } — pasmo treści dla handleScroll
 
     // Poziome przewinięcie paska budynków nad mapą (px)
     this._buildBarScroll = 0;
@@ -870,6 +877,7 @@ export class ColonyOverlay extends BaseOverlay {
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
+    this._infoView = null;   // C4 — pasmo scrolla ważne tylko gdy info panel narysowany TĄ klatką (nie: tryb stacji / brak planety)
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
@@ -1284,10 +1292,18 @@ export class ColonyOverlay extends BaseOverlay {
     const civ = colony?.civSystem ?? null;
     const canWorkforce = !!civ && !colony?.isPreview && !colony?.isOutpost;
     if (!canWorkforce) this._infoTab = 'planet';
-    // Faza 3 FIX 4: w trybie Załoga globus MNIEJSZY — zwolnij pion na stopkę bilansu (przychód/
-    // płace/netto), by linia „Bilans" nie chowała się pod widżet czasu na dole panelu.
-    const wfMode = canWorkforce && this._infoTab === 'workforce';
-    let discSize = Math.min(w - pad * 2, Math.round(h * (wfMode ? 0.26 : 0.42)));
+    // C4 — konfiguracja zakładek (data-driven) + aktywna zakładka + reset scrolla przy zmianie kolonii.
+    const tabs = this._getInfoTabs();
+    const activeTab = canWorkforce ? this._infoTab : 'planet';
+    const tabCfg = tabs.find(tt => tt.id === activeTab) ?? tabs[0];
+    const colId = colony?.planetId ?? planet?.id ?? null;
+    if (this._infoScrollColonyId !== colId) {   // offset per-zakładka NIE przenosi się między koloniami
+      this._infoScrollColonyId = colId;
+      this._infoScroll = {}; this._infoContentH = {};
+    }
+    // Faza 3 FIX 4 (uogólnione C4): zakładka z compactGlobe (Załoga) → globus MNIEJSZY — zwolnij pion
+    // na treść/stopkę (config zamiast twardego sprawdzenia nazwy zakładki; C5/C6 opt-inują wpisem).
+    let discSize = Math.min(w - pad * 2, Math.round(h * (tabCfg.compactGlobe ? 0.26 : 0.42)));
     let discX = x + (w - discSize) / 2;
     if (discX + discSize > availRight) {
       discX = availRight - discSize;            // przesuń w lewo spod drawera
@@ -1303,96 +1319,168 @@ export class ColonyOverlay extends BaseOverlay {
     const lx = x + pad;
 
     let cy = discY + discSize + 10;
-    if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw);
+    if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw, tabs);
 
-    // Treść poniżej zakładek — clip do panelu
+    // ── C4: per-zakładka scroll ──────────────────────────────────────────────
+    // viewTop/viewBot = widoczne pasmo treści (pod zakładkami). Offset klampowany do wysokości
+    // treści zmierzonej w POPRZEDNIEJ klatce (górny klamp „lag 1 klatka" — niewidoczny przy ciągłym
+    // redraw); dolny klamp zawsze. Treść rysowana od (cy − scroll); hity poza pasmem przycinane
+    // PO rysowaniu (stale-click guard). contentH mierzona TEJ klatki → następny klamp + kciuk.
+    const viewTop = cy - 4;
+    // #4 — zarezerwuj dół pod pasek BottomControlBar (zegar/prędkości/data) rysowany NA WIERZCHU
+    // overlayu w prawym-dolnym rogu; nakłada się na kolumnę info → bez rezerwy ostatni wiersz
+    // SUROWCE chowa się pod paskiem. Żywy _bgRect (peek-aware, 1-klatka lag ale stabilny); klamp
+    // tylko gdy pasek FAKTYCZNIE nachodzi na X panelu (inaczej pełna wysokość, jak dotąd).
+    let viewBot = y + h;
+    const bcbRect = window.KOSMOS?.bottomControlBar?._bgRect;
+    if (bcbRect && bcbRect.y != null && bcbRect.x < x + w && bcbRect.x + bcbRect.w > x) {
+      viewBot = Math.min(viewBot, bcbRect.y - 4);   // 4px luzu nad paskiem
+    }
+    const viewportH = Math.max(0, viewBot - viewTop);
+    const scroll = clampScroll(this._infoScroll[activeTab] ?? 0, this._infoContentH[activeTab] ?? 0, viewportH);
+    this._infoScroll[activeTab] = scroll;
+
+    const hitStart = this._hitZones.length;
     ctx.save();
-    ctx.beginPath(); ctx.rect(x, cy - 4, w, y + h - cy + 4); ctx.clip();
+    ctx.beginPath(); ctx.rect(x, viewTop, w, viewBot - viewTop); ctx.clip();
 
-    if (this._infoTab === 'workforce' && canWorkforce) {
-      this._drawWorkforceTab(ctx, lx, cy, cw, y + h - cy - 4, colony, civ);
-    } else {
-      // ── Charakterystyka (domyślna zakładka: dane planety) ──
-      cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.physics'));
-      const tempC = planet.temperatureC ?? planet.surface?.temperature ?? 0;
-      const tempStr = `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)} °C`;
-      const atmKey = `colonyInfo.atm.${planet.atmosphere || 'none'}`;
-      // C3 — linie efektów środowiskowych (audyt §5). planetMod/blockReason z getGrowthBreakdown()
-      // (to samo źródło co tooltip wzrostu w Załodze → wartości zgodne). Pasmo grav/temp dopisane
-      // do wartości wiersza; wpływ warunku = przygaszona pod-linia (_drawEnvLine). Brak civ
-      // (outpost/podgląd) → linia wzrostu pominięta. Panel bez scrolla — pod-linie tylko dla
-      // warunków NIE-idealnych (ideał = zero dodatkowej wysokości).
-      const gb = civ?.getGrowthBreakdown?.() ?? null;
-      const env = computeEnvironmentEffects(planet, gb ? { planetMod: gb.planetMod, blockReason: gb.blockReason } : null);
-      const gravStr = `${(planet.surfaceGravity ?? 1).toFixed(2)} g`;
-      const bandTag = (key) => (key ? ` (${t(key)})` : '');
-      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.temperature'), tempStr + bandTag(env?.temperature.bandKey));
-      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.temperature.effects);
-      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.mass'), `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`);
-      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.gravity'), gravStr + bandTag(env?.gravity.bandKey));
-      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.gravity.effects);
-      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.radius'), `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`);
-      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.atmosphere'), t(atmKey));
-      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.atmosphere.effects);
-      // Woda (nowy wiersz — brak dotąd) + bramka Studni
-      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.water'), t(env?.water.hasWater ? 'colonyInfo.waterYes' : 'colonyInfo.waterNo'));
-      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.water.effects);
-      // Wzrost populacji (łączny planetMod / twardy cap habitatów) — osobna linia z własną etykietą
-      if (env?.growth) cy = this._drawEnvLine(ctx, lx, cy, cw, [env.growth], false);
-      cy += 8;
-
-      // ── Surowce (złoża) ──
-      cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.resources'));
-      const deps = planet.deposits || [];
-      if (!deps.length) {
-        ctx.font = `italic 10px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
-        ctx.fillText(t('colonyInfo.noResources'), lx, cy + 10); cy += 18;
-      } else {
-        // C2 — pozostało/początkowe + ETA wyczerpania. getDepositsSummary (reuse) + tempo
-        // wydobycia per surowiec (getResourceBreakdown.producers.mine.total — per rok CYW.).
-        const summaries = DepositSystem.getDepositsSummary(deps);
-        const resSys = colony?.resourceSystem;
-        const rateCache = {};   // resourceId → tempo/rok cyw. (dedup w obrębie klatki)
-        for (let i = 0; i < deps.length; i++) {
-          const d = deps[i];
-          let rate = rateCache[d.resourceId];
-          if (rate === undefined) {
-            let r = 0;
-            try { r = resSys?.getResourceBreakdown?.(d.resourceId)?.producers?.mine?.total ?? 0; }
-            catch { r = 0; }
-            rate = rateCache[d.resourceId] = r;
-          }
-          const readout = computeDepositReadout(summaries[i], rate, { civTimeScale: GAME_CONFIG.CIV_TIME_SCALE });
-          cy = this._drawDepositRow(ctx, lx, cy, cw, d, readout);
-        }
-      }
+    const startCy = cy - scroll;
+    let endCy = startCy;
+    switch (activeTab) {
+      case 'workforce':
+        endCy = this._drawWorkforceTab(ctx, lx, startCy, cw, viewBot - startCy - 4, colony, civ);
+        break;
+      case 'planet':
+      default:
+        endCy = this._drawPlanetTab(ctx, lx, startCy, cw, colony);
+        break;
     }
     ctx.restore();
+
+    const contentH = (endCy ?? startCy) - startCy;
+    this._infoContentH[activeTab] = contentH;
+
+    // Przytnij hity treści poza widocznym pasmem (wzór _bVis float panelu — cały zone musi być w środku).
+    this._pruneHitsOutside(hitStart, viewTop, viewBot);
+
+    // Kciuk paska przewijania (afordancja przewijalności) — prawy skraj panelu.
+    const thumb = scrollThumb(scroll, contentH, viewportH, viewTop);
+    if (thumb) {
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(x + w - 4, thumb.y, 3, thumb.h);
+    }
+
+    // Pasmo treści dla handleScroll (kursor nad info panelem → scroll aktywnej zakładki).
+    this._infoView = { x, w, top: viewTop, bot: viewBot, tab: activeTab, scrollable: contentH > viewportH };
+
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
-  // ── Zakładki prawej kolumny: [Planeta | Załoga] (pigułki, wzór _drawColonyTabs) ──
-  _drawInfoTabs(ctx, x, y, w) {
-    const tabs = [
-      { id: 'planet',    label: t('colonyInfo.tabPlanet') },
-      { id: 'workforce', label: t('colonyInfo.tabWorkforce') },
+  // ── C4: konfiguracja zakładek prawej kolumny — JEDNO źródło (pasek, szerokość, dispatch, layout) ──
+  // N-zakładek-ready: C5 (Populacja) / C6 (Stacja) dopną kolejne wpisy bez ruszania geometrii.
+  // compactGlobe = zakładka chce mniejszego globusa (więcej pionu na treść/stopkę).
+  _getInfoTabs() {
+    return [
+      { id: 'planet',    labelKey: 'colonyInfo.tabPlanet',    compactGlobe: false },
+      { id: 'workforce', labelKey: 'colonyInfo.tabWorkforce', compactGlobe: true  },
     ];
+  }
+
+  // ── C4: zakładka Planeta (charakterystyka + linie efektów środowiskowych C3 + złoża C2) ──
+  // Rysuje od `y`, ZWRACA dolne `cy` (wysokość treści = zwrot − y) — konsumowane przez scroll panelu.
+  _drawPlanetTab(ctx, x, y, w, colony) {
+    const planet = colony?.planet ?? null;
+    if (!planet) return y;
+    const civ = colony?.civSystem ?? null;
+    let cy = this._drawInfoSection(ctx, x, y, w, t('colonyInfo.physics'));
+    const tempC = planet.temperatureC ?? planet.surface?.temperature ?? 0;
+    const tempStr = `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)} °C`;
+    const atmKey = `colonyInfo.atm.${planet.atmosphere || 'none'}`;
+    // C3 — planetMod/blockReason z getGrowthBreakdown() (to samo źródło co tooltip wzrostu w Załodze
+    // → wartości zgodne). Pasmo grav/temp dopisane do wartości wiersza; wpływ = przygaszona pod-linia.
+    const gb = civ?.getGrowthBreakdown?.() ?? null;
+    const env = computeEnvironmentEffects(planet, gb ? { planetMod: gb.planetMod, blockReason: gb.blockReason } : null);
+    const gravStr = `${(planet.surfaceGravity ?? 1).toFixed(2)} g`;
+    const bandTag = (key) => (key ? ` (${t(key)})` : '');
+    cy = this._drawInfoRow(ctx, x, cy, w, t('colonyInfo.temperature'), tempStr + bandTag(env?.temperature.bandKey));
+    cy = this._drawEnvLine(ctx, x, cy, w, env?.temperature.effects);
+    cy = this._drawInfoRow(ctx, x, cy, w, t('colonyInfo.mass'), `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`);
+    cy = this._drawInfoRow(ctx, x, cy, w, t('colonyInfo.gravity'), gravStr + bandTag(env?.gravity.bandKey));
+    cy = this._drawEnvLine(ctx, x, cy, w, env?.gravity.effects);
+    cy = this._drawInfoRow(ctx, x, cy, w, t('colonyInfo.radius'), `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`);
+    cy = this._drawInfoRow(ctx, x, cy, w, t('colonyInfo.atmosphere'), t(atmKey));
+    cy = this._drawEnvLine(ctx, x, cy, w, env?.atmosphere.effects);
+    // Woda (nowy wiersz C3) + bramka Studni
+    cy = this._drawInfoRow(ctx, x, cy, w, t('colonyInfo.water'), t(env?.water.hasWater ? 'colonyInfo.waterYes' : 'colonyInfo.waterNo'));
+    cy = this._drawEnvLine(ctx, x, cy, w, env?.water.effects);
+    // Wzrost populacji (łączny planetMod / twardy cap habitatów) — osobna linia z własną etykietą
+    if (env?.growth) cy = this._drawEnvLine(ctx, x, cy, w, [env.growth], false);
+    cy += 8;
+
+    // ── Surowce (złoża) — C2: pozostało/początkowe + ETA wyczerpania ──
+    cy = this._drawInfoSection(ctx, x, cy, w, t('colonyInfo.resources'));
+    const deps = planet.deposits || [];
+    if (!deps.length) {
+      ctx.font = `italic 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText(t('colonyInfo.noResources'), x, cy + 10); cy += 18;
+    } else {
+      const summaries = DepositSystem.getDepositsSummary(deps);
+      const resSys = colony?.resourceSystem;
+      const rateCache = {};   // resourceId → tempo/rok cyw. (dedup w obrębie klatki)
+      for (let i = 0; i < deps.length; i++) {
+        const d = deps[i];
+        let rate = rateCache[d.resourceId];
+        if (rate === undefined) {
+          let r = 0;
+          try { r = resSys?.getResourceBreakdown?.(d.resourceId)?.producers?.mine?.total ?? 0; }
+          catch { r = 0; }
+          rate = rateCache[d.resourceId] = r;
+        }
+        const readout = computeDepositReadout(summaries[i], rate, { civTimeScale: GAME_CONFIG.CIV_TIME_SCALE });
+        cy = this._drawDepositRow(ctx, x, cy, w, d, readout);
+      }
+    }
+    return cy;
+  }
+
+  // ── C4: przytnij hity treści (indeks ≥ fromIndex) leżące poza widocznym pasmem [top, bot] ──
+  // Wzór _bVis float panelu: CAŁY zone musi się mieścić, inaczej usuwamy (scrolled-off item nie
+  // zostawia martwej strefy klikalnej nachodzącej na pasek zakładek/inne UI). first-match _hitTest
+  // → zakładki (rejestrowane PRZED treścią) wygrywają, a przycięta treść nie łapie klików.
+  _pruneHitsOutside(fromIndex, top, bot) {
+    const zones = this._hitZones;
+    if (fromIndex >= zones.length) return;
+    let write = fromIndex;
+    for (let i = fromIndex; i < zones.length; i++) {
+      const z = zones[i];
+      if (z.y >= top - 0.5 && z.y + z.h <= bot + 0.5) zones[write++] = z;
+    }
+    zones.length = write;
+  }
+
+  // ── Zakładki prawej kolumny (pigułki, wzór _drawColonyTabs) — data-driven N-zakładek (C4) ──
+  // Szerokość z computeTabRects (count=2 zachowuje historyczne (w−gap)/2); etykieta z labelKey.
+  _drawInfoTabs(ctx, x, y, w, tabs) {
     const tabH = 20, gap = 6;
-    const tw = Math.floor((w - gap) / 2);
+    const rects = computeTabRects(x, w, tabs.length, gap);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `bold 11px ${THEME.fontFamily}`;
-    let sx = x;
-    for (const tab of tabs) {
+    for (let i = 0; i < tabs.length; i++) {
+      const tab = tabs[i];
+      const { x: sx, w: tw } = rects[i];
       const active = this._infoTab === tab.id;
-      ctx.fillStyle = active ? THEME.accentDim : 'rgba(255,255,255,0.03)';
+      // #2: rects są RÓWNE (computeTabRects); dotąd nierówny wygląd = iluzja od kontrastu ramki
+      // (aktywna: accent nieprzezroczysty vs nieaktywna: borderLight 0.18α — ledwo widoczna →
+      // „mniejsza"). Oba pudełka teraz WYRAŹNE (borderActive 0.40α); aktywne odróżnia jaśniejsza
+      // ramka + mocniejsze tło + kolor tekstu (symetryczna geometria, brak iluzji rozmiaru).
+      ctx.fillStyle = active ? THEME.accentMed : 'rgba(255,255,255,0.03)';
       ctx.fillRect(sx, y, tw, tabH);
-      ctx.strokeStyle = active ? THEME.accent : THEME.borderLight;
+      ctx.strokeStyle = active ? THEME.accent : THEME.borderActive;
       ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, y + 0.5, tw - 1, tabH - 1);
       ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
-      ctx.fillText(tab.label, sx + tw / 2, y + tabH / 2);
+      ctx.fillText(t(tab.labelKey), sx + tw / 2, y + tabH / 2);
       this._addHit(sx, y, tw, tabH, 'infoTab', { tab: tab.id });
-      sx += tw + gap;
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     return y + tabH + 10;
@@ -1403,7 +1491,7 @@ export class ColonyOverlay extends BaseOverlay {
   // Stopka: bezrobotni (warn >10%), satysfakcja, prosperity + strzałka trendu, wzrost.
   _drawWorkforceTab(ctx, x, y, w, h, colony, civ) {
     // Slice 5C.1: pod flagą popAllocation2 — nowa zakładka (share-% + termometry obsady + kolumna Droidy).
-    if (GAME_CONFIG.FEATURES?.popAllocation2 === true) { this._drawWorkforceTabV2(ctx, x, y, w, h, colony, civ); return; }
+    if (GAME_CONFIG.FEATURES?.popAllocation2 === true) return this._drawWorkforceTabV2(ctx, x, y, w, h, colony, civ);   // C4 — zwróć cy (wysokość treści dla scrolla)
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
     const humans = Math.floor(civ.humans ?? civ.population ?? 0);
@@ -1521,6 +1609,7 @@ export class ColonyOverlay extends BaseOverlay {
       `${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, net >= 0 ? THEME.success : THEME.danger);
 
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return cy;   // C4 — wysokość treści dla scrolla panelu
   }
 
   // ── Zakładka Załoga v2 (Slice 5C.1, flag popAllocation2) ────────────────────
@@ -1565,6 +1654,11 @@ export class ColonyOverlay extends BaseOverlay {
       }
       const ROW_H = 30, HALF = ROW_H / 2;
       const my1 = cy + 9, my2 = cy + 22;
+      // Stepper ±: box i glif z JEDNEGO źródła (stepperButtonBand) — box wyśrodkowany na OPTYCZNYM
+      // środku glifu (my−RISE), glif rysowany na band.glyphY(=my). Fix mis-klik „pod ikoną" (poprzednio
+      // box na my wystawał pod glif). Box[top,top+h] = strefa klik; scroll-invariant (pochodne my).
+      const b1 = stepperButtonBand(my1);   // przycisk focus (linia 1)
+      const b2 = stepperButtonBand(my2);   // przycisk droid (linia 2)
       ctx.textBaseline = 'middle';
 
       // ── Linia 1: nazwa + płaca + Focus share [− nn% +] ──
@@ -1583,9 +1677,9 @@ export class ColonyOverlay extends BaseOverlay {
       const stateCol = tstate === 'unreachable' ? THEME.warning
                      : tstate === 'active' ? THEME.success
                      : THEME.textDim;
-      ctx.textAlign = 'center'; ctx.font = `bold 13px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center'; ctx.font = `bold 12px ${THEME.fontFamily}`;   // #3: 13→12 (bliżej 11px treści; waga bold odróżnia przyciski)
       ctx.fillStyle = tgtOff ? THEME.textDim : THEME.accent;
-      ctx.fillText('−', stepX0 + 9, my1); ctx.fillText('+', stepRight - 9, my1);
+      ctx.fillText('−', stepX0 + 9, b1.glyphY); ctx.fillText('+', stepRight - 9, b1.glyphY);
       // Środek: „nn%≈P" (P = docelowa liczba osób; ! gdy nieosiągalne). Podgląd żywy podczas regulacji.
       ctx.font = `10px ${THEME.fontFamily}`;
       ctx.fillStyle = sharePct > 0 ? stateCol : THEME.textDim;
@@ -1594,10 +1688,10 @@ export class ColonyOverlay extends BaseOverlay {
         : '0%';
       ctx.fillText(hcTxt, (stepX0 + stepRight) / 2, my1);
       if (!tgtOff) {
-        this._addHit(stepX0, cy, 20, HALF, 'targetMinus', { type: r.type, tooltip: t('workforce.targetTooltip') });
-        this._addHit(stepRight - 20, cy, 20, HALF, 'targetPlus', { type: r.type, tooltip: t('workforce.targetTooltip') });
+        this._addHit(stepX0, b1.top, 20, b1.h, 'targetMinus', { type: r.type, tooltip: t('workforce.targetTooltip') });
+        this._addHit(stepRight - 20, b1.top, 20, b1.h, 'targetPlus', { type: r.type, tooltip: t('workforce.targetTooltip') });
         // Środkowa komórka % → tooltip: podgląd celu (≈N osób, delta) + stan (między − i +, bez nachodzenia).
-        if (sharePct > 0) this._addHit(stepX0 + 20, cy, (stepRight - stepX0) - 40, HALF, 'targetState',
+        if (sharePct > 0) this._addHit(stepX0 + 20, b1.top, (stepRight - stepX0) - 40, b1.h, 'targetState',
           { tooltip: this._targetStateTooltip(tstate, prevHc) });
       }
 
@@ -1616,13 +1710,13 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillText(capTxt, gaugeX + cells * cellW + 5, my2);
       const canRemove = r.synthetic > 0;
       const canInstall = r.synthetic < r.grossJobs;
-      ctx.textAlign = 'center'; ctx.font = `bold 13px ${THEME.fontFamily}`;
-      ctx.fillStyle = canRemove ? THEME.accent : THEME.textDim;  ctx.fillText('−', stepX0 + 9, my2);
-      ctx.fillStyle = canInstall ? THEME.accent : THEME.textDim; ctx.fillText('+', stepRight - 9, my2);
+      ctx.textAlign = 'center'; ctx.font = `bold 12px ${THEME.fontFamily}`;   // #3: 13→12 (spójne z linią 1)
+      ctx.fillStyle = canRemove ? THEME.accent : THEME.textDim;  ctx.fillText('−', stepX0 + 9, b2.glyphY);
+      ctx.fillStyle = canInstall ? THEME.accent : THEME.textDim; ctx.fillText('+', stepRight - 9, b2.glyphY);
       ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = r.synthetic > 0 ? THEME.accent : THEME.textDim;
       ctx.fillText(`🤖${r.synthetic}`, (stepX0 + stepRight) / 2, my2);
-      if (canRemove)  this._addHit(stepX0, cy + HALF, 20, HALF, 'droidRemove', { type: r.type, tooltip: t('workforce.droidTooltip') });
-      if (canInstall) this._addHit(stepRight - 20, cy + HALF, 20, HALF, 'droidInstall', { type: r.type, tooltip: t('workforce.droidTooltip') });
+      if (canRemove)  this._addHit(stepX0, b2.top, 20, b2.h, 'droidRemove', { type: r.type, tooltip: t('workforce.droidTooltip') });
+      if (canInstall) this._addHit(stepRight - 20, b2.top, 20, b2.h, 'droidInstall', { type: r.type, tooltip: t('workforce.droidTooltip') });
 
       // Hover nazwy → lista budynków tej warstwy.
       this._addHit(x, cy, wageRight - x - 44, ROW_H, 'strataRow', { type: r.type, tooltip: this._strataBuildingsTooltip(colony, r.type) });
@@ -1665,6 +1759,7 @@ export class ColonyOverlay extends BaseOverlay {
     cy = this._drawWfRow(ctx, x, cy, w, t('workforce.net'),
       `${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, net >= 0 ? THEME.success : THEME.danger);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return cy;   // C4 — wysokość treści dla scrolla panelu
   }
 
   /** Tooltip listy budynków zatrudniających daną warstwę (hover w wierszu Załogi). */
@@ -4986,6 +5081,16 @@ export class ColonyOverlay extends BaseOverlay {
     // Scroll poziomy paska budynków (kursor nad paskiem nad mapą)
     if (mb && x >= mb.ox && x <= mb.ox + mb.ow && y >= mb.oy - BUILD_BAR_H && y <= mb.oy) {
       this._buildBarScroll = Math.max(0, (this._buildBarScroll ?? 0) + delta * 24); // górny clamp w draw
+      return true;
+    }
+
+    // C4 — scroll prawej kolumny (info panel, per-zakładka). Info panel jest NA PRAWO od mapy
+    // (x > mb.ox+mb.ow), więc MUSI być sprawdzony PRZED bramką „poza bounds" (która by go odrzuciła).
+    // Tylko gdy treść przewijalna (mieści się → przepuść bez zmian, jak dotąd). Górny klamp w draw.
+    const iv = this._infoView;
+    if (iv && iv.scrollable && x >= iv.x && x <= iv.x + iv.w && y >= iv.top && y <= iv.bot) {
+      this._infoScroll ??= {};
+      this._infoScroll[iv.tab] = Math.max(0, (this._infoScroll[iv.tab] ?? 0) + delta);
       return true;
     }
 
