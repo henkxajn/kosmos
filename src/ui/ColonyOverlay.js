@@ -21,6 +21,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
+import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -1316,14 +1317,28 @@ export class ColonyOverlay extends BaseOverlay {
       const tempC = planet.temperatureC ?? planet.surface?.temperature ?? 0;
       const tempStr = `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)} °C`;
       const atmKey = `colonyInfo.atm.${planet.atmosphere || 'none'}`;
-      const rows = [
-        [t('colonyInfo.temperature'), tempStr],
-        [t('colonyInfo.mass'),     `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`],
-        [t('colonyInfo.gravity'),  `${(planet.surfaceGravity ?? 1).toFixed(2)} g`],
-        [t('colonyInfo.radius'),   `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`],
-        [t('colonyInfo.atmosphere'), t(atmKey)],
-      ];
-      for (const [label, val] of rows) cy = this._drawInfoRow(ctx, lx, cy, cw, label, val);
+      // C3 — linie efektów środowiskowych (audyt §5). planetMod/blockReason z getGrowthBreakdown()
+      // (to samo źródło co tooltip wzrostu w Załodze → wartości zgodne). Pasmo grav/temp dopisane
+      // do wartości wiersza; wpływ warunku = przygaszona pod-linia (_drawEnvLine). Brak civ
+      // (outpost/podgląd) → linia wzrostu pominięta. Panel bez scrolla — pod-linie tylko dla
+      // warunków NIE-idealnych (ideał = zero dodatkowej wysokości).
+      const gb = civ?.getGrowthBreakdown?.() ?? null;
+      const env = computeEnvironmentEffects(planet, gb ? { planetMod: gb.planetMod, blockReason: gb.blockReason } : null);
+      const gravStr = `${(planet.surfaceGravity ?? 1).toFixed(2)} g`;
+      const bandTag = (key) => (key ? ` (${t(key)})` : '');
+      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.temperature'), tempStr + bandTag(env?.temperature.bandKey));
+      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.temperature.effects);
+      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.mass'), `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`);
+      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.gravity'), gravStr + bandTag(env?.gravity.bandKey));
+      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.gravity.effects);
+      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.radius'), `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`);
+      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.atmosphere'), t(atmKey));
+      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.atmosphere.effects);
+      // Woda (nowy wiersz — brak dotąd) + bramka Studni
+      cy = this._drawInfoRow(ctx, lx, cy, cw, t('colonyInfo.water'), t(env?.water.hasWater ? 'colonyInfo.waterYes' : 'colonyInfo.waterNo'));
+      cy = this._drawEnvLine(ctx, lx, cy, cw, env?.water.effects);
+      // Wzrost populacji (łączny planetMod / twardy cap habitatów) — osobna linia z własną etykietą
+      if (env?.growth) cy = this._drawEnvLine(ctx, lx, cy, cw, [env.growth], false);
       cy += 8;
 
       // ── Surowce (złoża) ──
@@ -1850,6 +1865,22 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillText(val, x + w, y + 11);
     ctx.textAlign = 'left';
     return y + 17;
+  }
+
+  // C3 — przygaszona pod-linia efektów środowiskowych pod wierszem charakterystyki.
+  // effects = tablica tokenów {key, params, tone} z computeEnvironmentEffects; pusta/brak → 0 wys.
+  // arrow=true prefiksuje „→" (wpływ warunku z wiersza wyżej); false = linia samodzielna (wzrost).
+  // Kolor: token 'gate' (twarda blokada) → ostrzegawczy akcent; inaczej przygaszony.
+  _drawEnvLine(ctx, x, y, w, effects, arrow = true) {
+    if (!effects || !effects.length) return y;
+    const text = effects.map(e => t(e.key, ...(e.params ?? []))).join(', ');
+    const gate = effects.some(e => e.tone === 'gate');
+    ctx.font = `9px ${THEME.fontFamily}`;
+    ctx.fillStyle = gate ? THEME.warning : THEME.textDim;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText((arrow ? '→ ' : '') + text, x + (arrow ? 6 : 0), y + 8);
+    ctx.fillStyle = THEME.textDim;
+    return y + 12;
   }
 
   _drawDepositRow(ctx, x, y, w, dep, readout) {
