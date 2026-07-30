@@ -947,7 +947,9 @@ export class BuildingSystem {
     // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
     const jobs    = this._isOutpost ? 0 : (building.jobs ?? 0);
-    const canAffordResources = !(this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost));
+    // Orbital Logistics Hub — koszt budowy może pochodzić ze WSPÓLNEJ puli (matka+księżyce); off-pool = surowy ResourceSystem.
+    const buildStore = window.KOSMOS?.systemPoolService?.getStore(this.resourceSystem) ?? this.resourceSystem;
+    const canAffordResources = !(buildStore && hasKeys(actualCost) && !buildStore.canAfford(actualCost));
     // Population 2.0 Faza 2: budowa NIE wymaga wolnych POP (§1/§3.4 — płynna obsada). Budynek
     // dodaje wolne etaty i działa understaffed (min(1, staffing)), aż alokacja przydzieli ludzi.
     // Do pending queue trafia WYŁĄCZNIE z braku surowców.
@@ -971,9 +973,9 @@ export class BuildingSystem {
       return;
     }
 
-    // Pobierz koszt
-    if (this.resourceSystem && hasKeys(actualCost)) {
-      this.resourceSystem.spend(actualCost);
+    // Pobierz koszt (z puli jeśli aktywna)
+    if (buildStore && hasKeys(actualCost)) {
+      buildStore.spend(actualCost);
     }
 
     // Czas budowy (z mnożnikiem tech — AI Core itp. + anomalia build_modifier)
@@ -1066,7 +1068,9 @@ export class BuildingSystem {
     // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (entry.popCost ?? building.popCost ?? POP_PER_BUILDING);
     const jobs    = this._isOutpost ? 0 : (entry.jobs ?? building.jobs ?? 0);
-    const canAffordUpgrade = !(this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost));
+    // Orbital Logistics Hub — koszt upgrade może pochodzić ze wspólnej puli; off-pool = surowy ResourceSystem.
+    const upgradeStore = window.KOSMOS?.systemPoolService?.getStore(this.resourceSystem) ?? this.resourceSystem;
+    const canAffordUpgrade = !(upgradeStore && hasKeys(upgradeCost) && !upgradeStore.canAfford(upgradeCost));
     // Population 2.0 Faza 2: upgrade NIE wymaga wolnych POP (§3.4 — płynna obsada). Pending
     // tylko z braku surowców; dodatkowe etaty obsadza alokacja.
     if (!canAffordUpgrade) {
@@ -1089,9 +1093,9 @@ export class BuildingSystem {
       return;
     }
 
-    // Pobierz koszt
-    if (this.resourceSystem && hasKeys(upgradeCost)) {
-      this.resourceSystem.spend(upgradeCost);
+    // Pobierz koszt (z puli jeśli aktywna)
+    if (upgradeStore && hasKeys(upgradeCost)) {
+      upgradeStore.spend(upgradeCost);
     }
 
     // Czas budowy upgrade: bazowy × 0.5
@@ -1441,8 +1445,9 @@ export class BuildingSystem {
       const order = this._pendingQueue.get(tileKey);
       if (!order) continue;
 
-      // Sprawdź środki (re-check — stan mógł się zmienić po poprzednim fulfillment)
-      if (hasKeys(order.cost) && !this.resourceSystem?.canAfford(order.cost)) continue;
+      // Sprawdź środki (re-check — stan mógł się zmienić po poprzednim fulfillment). Pula jeśli aktywna.
+      const pendingStore = window.KOSMOS?.systemPoolService?.getStore(this.resourceSystem) ?? this.resourceSystem;
+      if (hasKeys(order.cost) && !pendingStore?.canAfford(order.cost)) continue;
 
       // Population 2.0 Faza 2: pending fulfilluje się na samych surowcach — brak wolnych POP
       // NIE blokuje (§3.4 płynna obsada). Bramka POP usunięta świadomie.
@@ -1451,7 +1456,7 @@ export class BuildingSystem {
       this._pendingQueue.delete(tileKey);
 
       if (hasKeys(order.cost)) {
-        this.resourceSystem.spend(order.cost);
+        pendingStore.spend(order.cost);
       }
 
       if (order.isUpgrade) {
@@ -2447,12 +2452,14 @@ export class BuildingSystem {
     if (!pairs) return;
 
     // Per para: zużyj min(zdolność, dostępne) wejścia → wyprodukuj wyjście wg ratio.
+    // Orbital Logistics Hub — wejście ciągnie z puli (matka+księżyce); wyjście deponuje LOKALNIE.
+    const convStore = window.KOSMOS?.systemPoolService?.getStore(this.resourceSystem) ?? this.resourceSystem;
     for (const p of pairs.values()) {
       const want = p.cap * deltaYears;                      // jednostek wejścia
-      const used = Math.min(want, this.resourceSystem.getAmount(p.from));
+      const used = Math.min(want, convStore.getAmount(p.from));
       if (used <= 0) continue;
-      this.resourceSystem.spend({ [p.from]: used });
-      this.resourceSystem.receive({ [p.to]: used * p.ratio });
+      convStore.spend({ [p.from]: used });
+      this.resourceSystem.receive({ [p.to]: used * p.ratio });   // deposit LOKALNY (reguła)
     }
   }
 }

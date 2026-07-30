@@ -1896,11 +1896,14 @@ export class MissionSystem {
   // S3.3b-S3b: `store` to magazyn resourceSystem-podobny (kolonia.resourceSystem LUB station.depot),
   // rozwiązany przez resolveTransferStore u callera. loadCargo używa store.spend + store.inventory.
   _bestEffortLoad(vessel, store, spec) {
+    // Orbital Logistics Hub — ładowanie z ciała w puli ciągnie z CAŁEJ puli (matka+księżyce);
+    // off-pool / stacja-depot / brak usługi → getStore zwraca `store` bez zmian (dostawa NIE tędy).
+    const src = window.KOSMOS?.systemPoolService?.getStore(store) ?? store;
     let total = 0;
     for (const k of Object.keys(spec ?? {})) {
       const want = spec[k] ?? 0;
       if (want <= 0) continue;
-      total += loadCargo(vessel, k, want, store);
+      total += loadCargo(vessel, k, want, src);
     }
     return { total };
   }

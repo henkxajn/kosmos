@@ -243,6 +243,16 @@ export class StationSystem {
       }
     }
 
+    // Moduł unikalny (np. logistics_hub) — max 1 na stację (moduły aktywne/nieaktywne + kolejka).
+    if (def.unique) {
+      const already = station.modules.some(m => m.moduleType === moduleType)
+        || station.pendingModuleOrders.some(o => o.moduleType === moduleType);
+      if (already) {
+        EventBus.emit('station:moduleOrderRejected', { stationId, moduleType, reason: 'already_present' });
+        return { ok: false, reason: 'already_present' };
+      }
+    }
+
     // Limit slotów (zajęte moduły + zamówienia w toku)
     const maxModules = STATIONS[station.stationType]?.maxModules ?? 8;
     const used = station.modules.length + station.pendingModuleOrders.length;

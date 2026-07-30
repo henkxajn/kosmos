@@ -1799,11 +1799,18 @@ export class FactorySystem {
     return scaled;
   }
 
+  // Orbital Logistics Hub — magazyn tej kolonii: pooled (matka+księżyce) gdy w aktywnej puli, inaczej
+  // surowy ResourceSystem. `.inventory` pooled = scalona Mapa (identyczna semantyka off-pool).
+  _store() {
+    return window.KOSMOS?.systemPoolService?.getStore(this.resourceSystem) ?? this.resourceSystem;
+  }
+
   _hasIngredients(recipe, commodityId) {
     if (!this.resourceSystem) return false;
+    const inv = this._store().inventory;
     const actual = this._getScaledRecipe(recipe, commodityId);
     for (const resId in actual) {
-      if ((this.resourceSystem.inventory.get(resId) ?? 0) < actual[resId]) return false;
+      if ((inv.get(resId) ?? 0) < actual[resId]) return false;
     }
     return true;
   }
@@ -1813,8 +1820,8 @@ export class FactorySystem {
   // Diagnostyka STALL-u: bare „BRAK SUROWCÓW" na 5-składnikowej recepturze jest
   // nieczytelny — to źródło prawdy dla UI, KTÓRY składnik i ILE brakuje.
   _getMissingIngredients(recipe, commodityId) {
-    const inv = this.resourceSystem?.inventory;
-    if (!inv || !recipe) return [];
+    if (!this.resourceSystem || !recipe) return [];
+    const inv = this._store().inventory;   // pooled (matka+księżyce) gdy w puli — spójne z _hasIngredients
     const actual = this._getScaledRecipe(recipe, commodityId);
     const out = [];
     for (const resId in actual) {
@@ -1897,7 +1904,7 @@ export class FactorySystem {
   _consumeIngredients(recipe, commodityId) {
     if (!this.resourceSystem) return null;
     const actual = this._getScaledRecipe(recipe, commodityId);
-    this.resourceSystem.spend(actual);
+    this._store().spend(actual);   // Orbital Logistics Hub — draw local→matka→księżyce gdy w puli
     return actual;   // zwracane do logu konsumpcji (EconomyHistoryLog)
   }
 
