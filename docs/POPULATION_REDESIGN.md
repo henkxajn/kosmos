@@ -658,6 +658,12 @@ live-gate PASS po fixie). SLICE 5C COMPLETE.** Nadbudowa nad 5C.1.
   live-gate przez REALNĄ ścieżkę przycisku). 4-lens adversarial review: 7 confirmed (greedy stale build/upgrade,
   paused-upgrade producer leak, factory-pause stuck-off, growth-breakdown pop≤0, resume-vs-manual-OFFLINE,
   THEME.amber, i18n) — WSZYSTKIE naprawione + regr-testowane. Regr 0 nowych FAIL.
+- **⚠ DECYZJA PROJEKTOWA (Filip, post-gate) — DWA mechanizmy „pauzy" ZOSTAJĄ celowo, BEZ unifikacji:**
+  (1) legacy globalny **„Factories Offline"** (`FactorySystem.setProductionEnabled`) = stop produkcji, ZAŁOGA
+  ZOSTAJE (płatna) → natychmiastowy restart; (2) per-budynkowy tri-state **„Paused"** = stop produkcji + ZWOLNIENIE
+  załogi (do bezrobocia). Dwie opcje strategiczne, NIE pułapka. (Gate-„FAIL" był control mix-up — Filip wcisnął
+  legacy Offline zamiast tri-state; tri-state Paused ewakuuje poprawnie.) Follow-up 5D: jednolinijkowe tooltipy na
+  OBU kontrolkach ujawniające semantykę („zatrzymuje produkcję, załoga zostaje (płatna)" vs „…, zwalnia załogę").
 - **Kolejność Fazy 5:** 5A ✅ → 5B ✅ → 5C.1 ✅ → **5C.2 ✅ (SLICE 5C COMPLETE)** → 5D (housekeeping) NEXT.
 
 ---
