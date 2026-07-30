@@ -168,6 +168,17 @@ export class TopResourceDrawer {
         raw: true, color: THEME.warning, kind: 'credits' });
     }
 
+    // Orbital Logistics Hub — plakietka „pula": ▸PULA (członek aktywnej puli) / ⚠PULA (odcięty blokadą).
+    // LICZBY zasobów zostają LOKALNE (badge to tylko sygnał; tooltip pokazuje agregat puli, read-only).
+    const hub = window.KOSMOS?.systemPoolService?.getHubLinkInfo?.(col.planetId);
+    if (hub) {
+      items.push({
+        id: 'hubpool', icon: hub.status === 'linked' ? '▸' : '⚠', valText: t('topBar.hubPoolBadge'),
+        raw: true, color: hub.status === 'linked' ? THEME.warning : THEME.danger,
+        kind: 'hubpool', _hubStatus: hub.status, _anchorPlanetId: hub.anchorPlanetId, _anchorName: hub.anchorName,
+      });
+    }
+
     return { items, brownout };
   }
 
@@ -465,6 +476,24 @@ export class TopResourceDrawer {
       if (e.brownout) lines.push({ text: t('topBar.brownoutWarning'), color: THEME.danger });
       // Rozbicie per budynek (id syntetyczne 'energy' — item energii nie ma .id)
       this._appendBreakdownLines(lines, { id: 'energy', _active: item._active, _col: item._col });
+      return lines;
+    }
+    if (item.kind === 'hubpool') {
+      lines.push({ text: t('station.systemPool'), color: THEME.accent, bold: true });
+      if (item._hubStatus === 'severed') {
+        lines.push({ text: t('colony.hubLinkSevered'), color: THEME.danger });
+        return lines;
+      }
+      lines.push({ text: `${t('colony.hubLinked')} ▸ ${item._anchorName}`, color: THEME.textSecondary });
+      // Agregat + rozbicie per-ciało z ISTNIEJĄCEGO snapshotu (bez nowej agregacji — read-only).
+      const snap = window.KOSMOS?.systemPoolService?.getPoolSnapshot?.(item._anchorPlanetId);
+      if (snap) {
+        for (const { colony, inv } of snap.byBody) {
+          const nm = colony.name ?? EntityManager.get(colony.planetId)?.name ?? colony.planetId;
+          const parts = [...inv].filter(([, v]) => v > 0).slice(0, 6).map(([k, v]) => `${k} ${_fmtNum(v)}`).join('  ');
+          lines.push({ text: `▸ ${nm}: ${parts || '—'}`, color: THEME.textDim });
+        }
+      }
       return lines;
     }
     return null;
