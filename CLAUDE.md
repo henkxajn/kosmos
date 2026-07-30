@@ -20,7 +20,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v96 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v99 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -1062,6 +1062,84 @@ podwójny `expedition:arrived`/`mission:arrived`, `_drawBar` (FMO nie dziedziczy
 **POZA zakresem (backlog, po ocenie gracza):** auto-detekcja deficytu, tryby Manual/Priorytetowy/Reaktywny,
 Giełda Ładunkowa, zdarzenia logistyczne, auto-budowa statków gdy pula pusta, handel cross-empire (osobny
 `TradeOrderBoard`/S3.5b), automatyczna bramka round-trip paliwa warp.
+
+---
+
+## Orbital Logistics Hub — „system pool" surowców matka+księżyce (moduł stacji, save v99 bez migracji, live-gate PASS — ARC ZAMKNIĘTY)
+
+Moduł stacji `logistics_hub` (`StationModuleData.js` — `unique`, `motherEnergyUpkeep:6`, buildTime ~6 civY,
+koszt Ti 600 + electronic_systems 100) spina kolonię-MATKĘ (planetę stacji) i kolonie JEJ KSIĘŻYCÓW we
+WSPÓLNĄ pulę surowców MATERIALNYCH (minerały + towary). Rozszerza wzorzec runtime-poolingu z S3.4c
+(depot-jako-proxy) na księżyce: magazyn FIZYCZNIE per-kolonia, persystuje TYLKO istnienie modułu
+(`StationSystem.serialize` modules) — pula liczona w runtime. Save **v99 BEZ migracji**. Kill-switch
+`FEATURES.orbitalLogisticsHub` (default ON) — OFF = `getStore` zwraca surowy ResourceSystem (zero poolowania).
+
+**`SystemPoolService`** (`src/systems/SystemPoolService.js`, `window.KOSMOS.systemPoolService`, runtime-only —
+wzór TerritoryService): per-tick LENIWY recompute (`_dirty` na `time:tick` + station/colony eventy) →
+`_ensureFresh` (getStore/getPool zawsze świeże NIEZALEŻNIE od kolejności handlerów). Pula = stacja gracza z
+AKTYWNYM `logistics_hub` + rozwiązana matka (`resolveHomeColony`) + planeta-kotwica/stacja NIE zablokowane;
+członkowie = kolonia kotwicy + kolonie księżyców (`parentPlanetId===kotwica`), księżyc zablokowany wypada
+osobno; **≥2 członków** (sama matka bez księżyców = brak puli). Anchor = `motherBody.type==='moon' ? parentPlanetId : id`.
+- **`getStore(resSys|colonyId)`** → `PooledStore` gdy członek aktywnej puli, inaczej surowy magazyn (identyczność
+  off-pool → zero zmian zachowania). JEDYNY punkt wejścia call-sites.
+- **Blokada (per-body compose)** `_hostileWarshipInOrbit`: wrogi (`isEnemyVessel`) UZBROJONY (`hasWeapons`)
+  statek `dockedAt===body.id` (orbiter TEGO ciała) LUB free-float (`dockedAt=null`) ≤ 0.5 AU (`euclideanAU`) +
+  same-system guard. ⚠ dok przy INNYM ciele NIE liczy się przez bliskość (księżyc orbituje planetę <0.5 AU →
+  inaczej dok przy księżycu blokowałby też planetę — złapane smoke'em). Reuse: brak per-body helpera
+  (`WarSystem.playerHasOrbitalDominance` jest per-SYSTEM).
+- **Upkeep energii hubu na MATCE** (`_syncHubEnergy`, always-on): `registerProducer('logi_hub_<id>',
+  {energy:-motherEnergyUpkeep})` na `resolveHomeColony(station).resourceSystem`, DIFF (register/remove tylko
+  przy zmianie — bez churn `_recalcPerYear` co tik). NIE bramkuje linku (decyzja „always-on") — może wepchnąć
+  matkę we WŁASNY per-kolonia brownout. Energia NIGDY nie poolowana.
+- **Survival reconciliation** (`_reconcileSurvival`, food/water): POP je UJEMNĄ stawką w `ResourceSystem._update`
+  (NIE `spend()` → fasada tego nie widzi) → raz/turę dokarm niedoborowych członków z nadwyżki rodzeństwa (matka
+  najpierw). Pusta pula → członek zostaje na 0 → normalne wygłodzenie (bez zmian). ≤1-tick lag akceptowany.
+- **`poolCoversSurvival(resSys, resId)`** (reużyty przez 3 systemy — JEDNA reguła, zero forka): true gdy resSys jest
+  członkiem puli I rodzeństwo ma dany surowiec. TŁUMI FAŁSZYWĄ karę „lokalny stan ≈0" dla członka karmionego §7 w:
+  (a) `ResourceSystem._update` — flaga/flash `resource:shortage` (food/water); (b) `ProsperitySystem._calcSurvivalSatisfaction`
+  — kara survival-scarcity (ratio→1); (c) `PopulationOverlay._calcNeeds` — wiersz NEEDS („🛰 Zasilane z puli" zamiast
+  deficytu). Pula PUSTA / link ZERWANY / nie-pooled → false → kara/deficyt jak dotąd (realne wygłodzenie nietknięte).
+  Tylko food/water (energia/materiał/przemysł poza tłumieniem).
+- **Kill-switch hardening**: OFF-tick (`_onTick` gdy flag=false) czyści pule + `_dirty=true` → ponowne włączenie
+  ZAWSZE odbudowuje od zera (koniec ryzyka „cache pustego wyniku"). ⚠ resztkowy wróg z testu blokady utrzymuje pulę
+  rozpuszczoną po re-enable — to POPRAWNE (blokada), nie bug kill-switcha.
+
+**`PooledStore`** (`src/utils/PooledStore.js`): wrapper dom + rodzeństwo. `receive`→dom (deposit ZAWSZE lokalny);
+`spend`/`canAfford`/`getAmount`/`inventory` = pooled dla materiałów (draw local→matka→księżyce wg stanu),
+energia/research delegowane do domu. **all-or-nothing** gdy pula nie pokrywa (draw-now — smooth proporcjonalny
+throttle §5 ODROCZONY do follow-up).
+
+**Call-sites pool-aware (`window.KOSMOS.systemPoolService?.getStore(...) ?? raw`):** `MissionSystem._bestEffortLoad`
+(ładowanie cargo z ciała w puli; DOSTAWA zostaje lokalna — `_processTransportArrival` używa `targetCol.resourceSystem`).
+`BuildingSystem` build/upgrade/pending/konwersja (wejście z puli, WYJŚCIE konwersji lokalne). `FactorySystem`
+`_hasIngredients`/`_getMissingIngredients`/`_consumeIngredients` (bramka dostępności I konsumpcja z puli — inaczej
+moon-factory bez lokalnych surowców nigdy nie startuje → pooling byłby martwy). `resolveTransferStore` NIETKNIĘTY
+(bez niespodzianek dla refuel/innych callerów). Off-pool wszystkie te wraps = identyczność (`systemPoolService`
+undefined w smoke'ach → `?? raw`).
+
+**UI:** StationPanel + StationManagementView — gdy matka w puli, „Wspólna pula (planeta+księżyce)" + członkowie +
+suma (zamiast „Wspólny magazyn"); moduł `unique` → picker `✓` (drugi hub niebudowalny) + guard w
+`StationSystem.addPendingModuleOrder` (`already_present`). ColonyOverlay nagłówek (rząd 2, INLINE z klastrem POP/☺,
+lewa strona): `🛰 Połączona z hubem orbitalnym ▸ <planeta>` (linked) / `⚠ Łącze zerwane — blokada` (severed) via
+`getHubLinkInfo` (severed przez `_hubAnchors` — działa NAWET gdy blokada jedynego księżyca rozpuściła pulę <2).
+`PopulationOverlay` NEEDS: food/water pool-aware — pool-fed → pasek pełny + „🛰 Zasilane z puli (bez kary)" zamiast
+fałszywego deficytu. `TopResourceDrawer` plakietka `▸PULA`/`⚠PULA` per-kolonia (tooltip=`getPoolSnapshot`, liczby
+LOKALNE). EconomyOverlay bez zmian. i18n `station.systemPool` + `colony.hubLinked/hubLinkSevered` + `popPanel.fedFromPool`
++ `topBar.hubPoolBadge` PL+EN.
+
+**Decyzje (Q&A):** hub always-on (energia nie bramkuje linku, tylko kosztuje matkę); §5 draw-now-throttle-later
+(all-or-nothing gdy pula nie pokrywa; smooth `available/required` throttle = follow-up); blokada per-body compose.
+**Świadomie POZA zakresem (follow-up):** smooth proporcjonalny throttle §5; pooling paliwa/refuel; huby AI;
+pooling cross-system (warp); instalacja droida (`BuildingSystem` synthetic install) zostaje lokalna.
+
+**Pliki:** NEW `SystemPoolService.js` + `PooledStore.js` + smoke `orbital_logistics_hub_smoke.mjs` (70/70);
+edycje `StationModuleData` (logistics_hub), `GameConfig` (flaga FEATURES), `GameScene` (wiring), `MissionSystem`,
+`BuildingSystem`, `FactorySystem`, `StationSystem` (unique guard), `ResourceSystem` (shortage gate),
+`ProsperitySystem` (survival branch), `StationPanel`, `StationManagementView`, `ColonyOverlay`, `PopulationOverlay`
+(NEEDS), `TopResourceDrawer` (badge), i18n pl/en. Regresja: sweep 75/75 0 FAIL, i18n parity PASS.
+**Live-gate PASS** (§7 feed 26→94, countertest drop 95→84; blokada per-body; kill-switch toggle; NEEDS/shortage/
+prosperity suppression). Commity: C1 `ad1347f` (foundation) · C2 `3a7c321` (call-sites) · C3 `9726e5b` (UI+i18n) ·
+C4 `c1b7e0a` (TopBar badge) · C5 (docs — ten commit).
 
 ---
 
