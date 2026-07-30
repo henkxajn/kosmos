@@ -1,19 +1,23 @@
 # src/testing/smoke — headless smoke tests (promoted)
 
-Node ESM smoke tests promowane z katalogu głównego repo (były `tmp_*_smoke.mjs`),
-trackowane jako regresja. Testują REALNĄ logikę systemów (bez canvas / DOM).
+Node ESM smoke tests promowane z katalogu głównego repo, trackowane jako regresja.
+Testują REALNĄ logikę systemów (bez canvas / DOM). **Prefix `tmp_` = scratch (root, gitignored);
+promowane keepery NIE mają prefiksu** (Slice 5D zdjął `tmp_` z 49 keeperów, `cd652f9`).
 
 ## Uruchamianie
 
 ```
 node src/testing/smoke/<plik>.mjs        # pojedynczy
-for f in src/testing/smoke/*.mjs; do node "$f"; done   # wszystkie (bash)
+node src/testing/smoke/run-all.mjs        # cały sweep (crash-safe: exit≠0 gdy KTÓRAKOLWIEK suita padnie)
 ```
 
-Każdy plik drukuje własne podsumowanie `N PASS / M FAIL` i zwraca kod ≠0 przy błędzie.
+Preferuj `run-all.mjs` nad bash-for-loop — pętla `for f in *.mjs; do node "$f"; done` CICHO łyka
+crash w środku (agreguje tylko ostatni exit code). Każdy plik drukuje własne `N PASS / M FAIL` i
+zwraca kod ≠0 przy błędzie; runner agreguje exit codes.
 
 ## Konwencje
 
+- **Nazewnictwo**: keepery BEZ prefiksu (`foo_smoke.mjs`); `tmp_*` zarezerwowane dla scratchu w root.
 - **Importy**: relatywne do `src/` przez `../../` (np. `../../systems/SaveMigration.js`) —
   spójnie z `src/testing/headless/`.
 - **Piny wersji save**: NIE hardkoduj numeru bieżącej wersji. Wzorzec:
