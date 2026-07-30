@@ -19,6 +19,7 @@ import { HexGrid }  from './HexGrid.js';
 import { HexTile, BIOTIC_TERRAIN_TYPES }  from './HexTile.js';
 import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 import { getEligibleAnomalies, ANOMALIES } from '../data/AnomalyData.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 // ── Rozmiary siatek per typ planety (legacy prostokątny) ─────────────────────
 const GRID_SIZES = {
@@ -103,7 +104,13 @@ export class PlanetMapGenerator {
     let eqW  = tBase.equatorWidth;
     let rows = tBase.rows;
     if (sizeKey === 'rocky' || sizeKey === 'ice') {
-      const massScale = Math.max(0.8, Math.min(1.4, 0.8 + Math.log2(Math.max(0.3, mass)) * 0.3));
+      // Cap skalowania mapy heksowej masą planety. Default 1.15 (rocky max 28×16=300,
+      // ice 23×14=218 kafli); FEATURES.largestHexMaps=true przywraca historyczne 1.4
+      // (rocky 34×20=456 — zbyt duże do gry). Bramka działa TYLKO na świeżej generacji;
+      // zapisane gridy są reużywane (_gridFromSave → ColonyOverlay._getGrid), więc
+      // istniejące kolonie zachowują swój rozmiar (save-safe). Floor 0.8 bez zmian.
+      const capMul = GAME_CONFIG.FEATURES.largestHexMaps === true ? 1.4 : 1.15;
+      const massScale = Math.max(0.8, Math.min(capMul, 0.8 + Math.log2(Math.max(0.3, mass)) * 0.3));
       eqW  = Math.round(eqW * massScale);
       rows = Math.round(rows * massScale);
       // Zapewnij parzystość rows (symetryczne bieguny)

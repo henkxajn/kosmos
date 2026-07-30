@@ -168,6 +168,13 @@ export const GAME_CONFIG = {
     //   Kill-switch WEWNĘTRZNY (nie user-toggle — warstwa zawsze widoczna dla
     //   gracza). OFF = TerritoryField nie liczy pola, Stratcom bez tintu/izolinii.
     territoryOverlay:     true,
+    // ── Rozmiar map heksowych kolonii — cap największych map ────────────────
+    //   OFF (default) → PlanetMapGenerator.generate() capuje massScale na 1.15:
+    //   największe mapy rocky 28×16=300, ice 23×14=218 kafli (historyczne 1.4 dawało
+    //   rocky 34×20=456 — zbyt duże do gry). ON → przywraca 1.4. Save-safe: bramka
+    //   TYLKO na świeżej generacji; zapisane gridy reużywane (_gridFromSave) → istniejące
+    //   kolonie zachowują rozmiar. Floor 0.8 (małe planety 152 kafli) bez zmian. Default OFF.
+    largestHexMaps:       false,
     // ── Zlecenia Transportowe (MVP logistyki — save v95) ──────────────────
     //   Ręcznie inicjowany transport: gracz deklaruje zlecenie (ile dobra A/B,
     //   skąd→dokąd), a statki z opt-in „puli logistycznej" wożą to automatycznie
