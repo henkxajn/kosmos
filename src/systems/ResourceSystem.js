@@ -502,7 +502,14 @@ export class ResourceSystem {
 
       // Wykrywanie niedoboru
       if (isActive) {
-        const isShortage = (after <= 0 && perYear < 0);
+        let isShortage = (after <= 0 && perYear < 0);
+        // Orbital Logistics Hub — survival (food/water) członka puli: §7 dokarmia z nadwyżki rodzeństwa,
+        // więc lokalny stan ≈0 to NIE realny niedobór. Tłum flagę/flash, gdy pula pokrywa (nie gdy pula
+        // pusta = realny głód, nie gdy link zerwany = kolonia poza pulą). Materiał/przemysł nietknięte.
+        if (isShortage && (id === 'food' || id === 'water')
+            && window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(this, id)) {
+          isShortage = false;
+        }
         if (isShortage && !this._shortageFlags[id]) {
           this._shortageFlags[id] = true;
           EventBus.emit('resource:shortage', { resource: id, deficit: Math.abs(perYear) });

@@ -132,6 +132,27 @@ export const STATION_MODULES = {
     descEN:        'Orbital ship-construction dock — build fleets away from the homeworld.',
   },
 
+  logistics_hub: {
+    id:            'logistics_hub',
+    namePL:        'Hub Logistyczny',
+    nameEN:        'Logistics Hub',
+    icon:          '🛰📦',
+    category:      'industry',
+    cost:          { Ti: 600 },
+    commodityCost: { electronic_systems: 100 },
+    buildTime:     6.0,    // lata cyw. (~182 dni gry)
+    energy:        0,      // NIE obciąża wewn. bilansu energii stacji — pobór idzie na kolonię-matkę
+    popWork:       0,      // autonomiczny (AI logistyczne) — nie gaszony przy braku załogi
+    maxLevel:      1,
+    requires:      null,
+    unique:        true,   // max 1 na stację (guard w StationSystem.addPendingModuleOrder)
+    // Stały pobór energii rejestrowany na koloni-MATCE (jak upkeep budynku — SystemPoolService).
+    // Nie bramkuje linku (decyzja „always-on"), ale może wepchnąć matkę w jej własny brownout.
+    motherEnergyUpkeep: 6,
+    descPL:        'Węzeł logistyki orbitalnej — spina planetę-matkę i jej księżyce we wspólną pulę surowców (minerały i towary; energia zostaje lokalna).',
+    descEN:        'Orbital logistics node — pools the mother planet and its moons into one material stockpile (minerals & goods; energy stays local).',
+  },
+
   // ── Handel ────────────────────────────────────────────────────────────────
   trade_module: {
     id:            'trade_module',

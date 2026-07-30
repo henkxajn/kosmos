@@ -392,7 +392,12 @@ export class ProsperitySystem {
     // różnicy bez playtestu balansu — ROADMAP "rebalans prosperity threshold".
     const foodNeed = pop * 0.75;   // ÷4 redenominacja (było 3.0)
     if (foodNeed > 0) {
-      total += this._ratioToSatisfaction((foodStock + Math.max(0, foodRate)) / foodNeed);
+      // Orbital Logistics Hub — członek puli karmiony przez §7: lokalny stan ≈0 Z ZAŁOŻENIA, ale potrzeba
+      // POKRYTA co turę → traktuj jako spełnioną (ratio 1). Tłum TYLKO karę survival-scarcity (nie premia).
+      // Pula pusta / link zerwany / nie-pooled → poolCoversSurvival=false → normalna kara (identyczna reguła co ITEM 2).
+      const covered = window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(this.resourceSystem, 'food');
+      total += covered ? this._ratioToSatisfaction(1.0)
+                       : this._ratioToSatisfaction((foodStock + Math.max(0, foodRate)) / foodNeed);
       count++;
     }
 
@@ -401,7 +406,9 @@ export class ProsperitySystem {
     const waterRate = this._getPerYear('water');
     const waterNeed = pop * 0.375;  // Population 2.0: ÷4 (było 1.5; = POP_CONSUMPTION.water)
     if (waterNeed > 0) {
-      total += this._ratioToSatisfaction((waterStock + Math.max(0, waterRate)) / waterNeed);
+      const covered = window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(this.resourceSystem, 'water');
+      total += covered ? this._ratioToSatisfaction(1.0)
+                       : this._ratioToSatisfaction((waterStock + Math.max(0, waterRate)) / waterNeed);
       count++;
     }
 

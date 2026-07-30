@@ -98,6 +98,7 @@ import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
 import { TerritoryService }   from '../systems/TerritoryService.js';
 import { TerritoryField }     from '../systems/TerritoryField.js';
+import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
@@ -311,6 +312,9 @@ export class GameScene {
     // Strefy wpływów — pole wpływu + kontury (marching squares); czyta
     // territoryService/galaxyData/timeSystem przez window.KOSMOS.
     this.territoryField       = new TerritoryField();
+    // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
+    // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
+    this.systemPoolService    = new SystemPoolService();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -375,6 +379,7 @@ export class GameScene {
     window.KOSMOS.stationSystem      = this.stationSystem;
     window.KOSMOS.territoryService   = this.territoryService;
     window.KOSMOS.territoryField     = this.territoryField;
+    window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
     //   GAME_CONFIG.FEATURES.movementOrders=true lub via debug.enableMovementOrders().

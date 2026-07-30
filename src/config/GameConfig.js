@@ -176,6 +176,15 @@ export const GAME_CONFIG = {
     //   ukryta, toggle puli nieaktywny. Default ON — cały sens tej wersji to
     //   hands-on ocena w praktyce (default OFF działałby przeciw temu celowi).
     transportOrders:      true,
+    // ── Orbital Logistics Hub (moduł stacji → „system pool" surowców) ──────
+    //   Aktywny logistics_hub na stacji spina kolonię-matkę (planetę) i kolonie
+    //   jej księżyców we WSPÓLNĄ pulę surowców MATERIALNYCH (minerały+towary):
+    //   deposit lokalny, draw local→matka→księżyce. Energia/kredyty/research
+    //   zostają per-kolonia. Runtime-only (SystemPoolService — bez migracji save;
+    //   pula odtwarzana z modułów stacji). Kill-switch: OFF = getStore zwraca
+    //   surowy ResourceSystem (zero poolowania), brak upkeepu energii/dokarmiania.
+    //   Default ON.
+    orbitalLogisticsHub:  true,
     // ── Population 2.0 Slice 5C.1 — Allocation 2.0 (target-share) ──────────
     //   Focus przestaje być +bonus do pressure, staje się DOCELOWYM % struktury
     //   siły roboczej (share). Alokacja Etap-1 = additive overlay (targeted strata
