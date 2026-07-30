@@ -524,8 +524,15 @@ export class PopulationOverlay extends BaseOverlay {
 
       cy += 22;
 
-      // Alert deficytu
-      if (need.ratio < 0.5) {
+      // Orbital Logistics Hub — wiersz „zasilane z puli" (§7 pokrywa, bez kary) MA priorytet nad alertem
+      // deficytu; pooled → ratio=1 więc alert i tak by nie padł, ale komunikat pozytywny zamiast ciszy.
+      if (need.pooled) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.fillText(t('popPanel.fedFromPool'), nx + 18, cy + 2);
+        cy += 12;
+      } else if (need.ratio < 0.5) {
+        // Alert deficytu
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.danger;
         ctx.fillText(t('popPanel.deficit', need.name, need.penalty), nx + 18, cy + 2);
@@ -1103,15 +1110,21 @@ export class PopulationOverlay extends BaseOverlay {
     const waterAmt = (rs.getAmount?.('water') ?? rs.inventory?.get?.('water') ?? 0);
     const energyBal = rs.energy?.balance ?? 0;
 
+    // Orbital Logistics Hub — członek puli karmiony przez §7: lokalny stan ≈0 z założenia, potrzeba POKRYTA
+    // co turę (kara prosperity NIE aplikowana — TA SAMA reguła co ProsperitySystem/ResourceSystem). Wiersz
+    // „zasilane z puli" zamiast fałszywego deficytu. Pula pusta / link zerwany → poolCovers=false → deficyt.
+    const foodPooled  = !!window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(rs, 'food');
+    const waterPooled = !!window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(rs, 'water');
+
     // Ratio: ilość / (roczna konsumpcja × 10) — jak w CivSystem._resourceRatio
-    const foodRatio  = foodCons > 0 ? Math.min(1, foodAmt / (foodCons * 10)) : 1;
-    const waterRatio = waterCons > 0 ? Math.min(1, waterAmt / (waterCons * 10)) : 1;
-    // Energia to flow — ratio z bilansu
+    const foodRatio  = foodPooled  ? 1 : (foodCons > 0 ? Math.min(1, foodAmt / (foodCons * 10)) : 1);
+    const waterRatio = waterPooled ? 1 : (waterCons > 0 ? Math.min(1, waterAmt / (waterCons * 10)) : 1);
+    // Energia to flow — ratio z bilansu (NIE poolowana)
     const energyRatio = energyCons > 0 ? Math.min(1, Math.max(0, (energyBal + energyCons) / (energyCons * 2))) : 1;
 
     return [
-      { icon: '🍖', name: t('popPanel.needFood'), ratio: foodRatio,   penalty: '-15/rok' },
-      { icon: '💧', name: t('popPanel.needWater'),    ratio: waterRatio,  penalty: '-10/rok' },
+      { icon: '🍖', name: t('popPanel.needFood'), ratio: foodRatio,   penalty: '-15/rok', pooled: foodPooled },
+      { icon: '💧', name: t('popPanel.needWater'),    ratio: waterRatio,  penalty: '-10/rok', pooled: waterPooled },
       { icon: '⚡', name: t('popPanel.needEnergy'), ratio: energyRatio, penalty: '-15/rok' },
     ];
   }

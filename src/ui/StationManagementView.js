@@ -301,10 +301,23 @@ export function drawStationManagement(ctx, area, station, view) {
   ry += 20;
   if (motherColony) {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(t('station.sharedStorage'), rightX + 2, ry + 10); ry += 14;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(`▸ ${motherColony.name ?? motherColony.planetId}`, rightX + 10, ry + 10); ry += 14;
+    // Orbital Logistics Hub — matka w aktywnej puli → widok puli (członkowie + suma) zamiast linku.
+    const poolSnap = window.KOSMOS?.systemPoolService?.getPoolSnapshot?.(motherColony.planetId);
+    if (poolSnap) {
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(t('station.systemPool'), rightX + 2, ry + 10); ry += 14;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(poolSnap.byBody.map(b => b.colony.name ?? b.colony.planetId).join(', '), rightX + 10, ry + 10); ry += 14;
+      for (const [id, amt] of [...poolSnap.total].filter(([, v]) => v > 0).slice(0, 10)) {
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${id}: ${Math.round(amt)}`, rightX + 10, ry + 10); ry += 14;
+      }
+    } else {
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('station.sharedStorage'), rightX + 2, ry + 10); ry += 14;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(`▸ ${motherColony.name ?? motherColony.planetId}`, rightX + 10, ry + 10); ry += 14;
+    }
   } else {
     if (station.depotDetached) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -383,7 +396,11 @@ function drawModulePicker(ctx, area, station, view, maxModules) {
       if (have < amt) afford = false;
       costParts.push({ id, amt, have });
     }
-    const canBuild = !locked && !slotsFull && afford;
+    // Orbital Logistics Hub — moduł unique (np. logistics_hub) max 1 na stację → już obecny/w kolejce = niebudowalny.
+    const alreadyHas = !!def.unique && (
+      station.modules.some(m => m.moduleType === type) ||
+      station.pendingModuleOrders.some(o => o.moduleType === type));
+    const canBuild = !locked && !slotsFull && afford && !alreadyHas;
 
     // Wiersz
     ctx.fillStyle = 'rgba(255,255,255,0.02)';
@@ -418,7 +435,7 @@ function drawModulePicker(ctx, area, station, view, maxModules) {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
     ctx.textAlign = 'center';
-    const btnLabel = locked ? `🔒` : slotsFull ? t('station.mgmt.full') : t('station.mgmt.build');
+    const btnLabel = locked ? `🔒` : alreadyHas ? '✓' : slotsFull ? t('station.mgmt.full') : t('station.mgmt.build');
     ctx.fillText(btnLabel, bx + bw / 2, by + bh / 2 + 4);
     ctx.textAlign = 'left';
     if (canBuild) addHit(bx, by, bw, bh, 'station_mgmt_build', { moduleType: type });

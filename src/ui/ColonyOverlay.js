@@ -1148,7 +1148,20 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.textBaseline = 'alphabetic';
       ctx.font = `11px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
-      ctx.fillText(`POP: ${pop}/${capacity}  +${growth.toFixed(1)}/rok  ☺ ${sat}%`, ox + 14, oy + 38);
+      const popStr = `POP: ${pop}/${capacity}  +${growth.toFixed(1)}/rok  ☺ ${sat}%`;
+      ctx.fillText(popStr, ox + 14, oy + 38);
+
+      // Orbital Logistics Hub — wskaźnik linku INLINE z klastrem POP (lewa strona, rząd 2), by czytać
+      // status linku jako część witalności kolonii. font 11px (jak POP) — measureText poprawne.
+      const hubLink = window.KOSMOS?.systemPoolService?.getHubLinkInfo?.(colony.planetId);
+      if (hubLink) {
+        const txt = hubLink.status === 'linked'
+          ? (hubLink.anchorPlanetId === colony.planetId ? t('colony.hubLinked') : `${t('colony.hubLinked')} ▸ ${hubLink.anchorName}`)
+          : t('colony.hubLinkSevered');
+        const popW = ctx.measureText(popStr).width;
+        ctx.fillStyle = hubLink.status === 'linked' ? THEME.accent : THEME.danger;
+        ctx.fillText(txt, ox + 14 + popW + 16, oy + 38);   // tuż za klastrem POP/☺ (gap 16)
+      }
     }
   }
 

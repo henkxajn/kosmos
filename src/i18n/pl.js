@@ -747,6 +747,10 @@ export default {
   'station.depotEmpty': '— pusty —',
   'station.sharedStorage': 'Wspólny magazyn:',       // S3.4c (D9) — stacja z matką dzieli magazyn kolonii
   'station.cutOffFromSupply': '⚠ Odcięta od zaopatrzenia',   // S3.4c (D9) — sierota po zniszczeniu matki
+  'station.systemPool': 'Wspólna pula (planeta + księżyce):',   // Orbital Logistics Hub — hub spina magazyny matki i księżyców
+  'colony.hubLinked': '🛰 Połączona z hubem orbitalnym',        // księżyc/planeta w aktywnej puli hubu
+  'colony.hubLinkSevered': '⚠ Łącze zerwane — blokada',         // księżyc odcięty od puli blokadą orbitalną
+  'topBar.hubPoolBadge': 'PULA',                                // Orbital Logistics Hub — plakietka na pasku surowców (▸PULA / ⚠PULA)
   'station.resources': 'Surowce',
   'station.commodities': 'Towary',
   'station.traders': 'Handel',
@@ -2040,6 +2044,7 @@ export default {
   'eventLog.traitUnlocked': 'Nowa cecha kulturowa',
   'eventLog.milestoneReached': 'Kamień milowy',
   'popPanel.needsTitle': 'POTRZEBY POPULACJI',
+  'popPanel.fedFromPool': '🛰 Zasilane z puli (bez kary)',   // Orbital Logistics Hub — §7 pokrywa survival, deficyt nie obowiązuje
   'popPanel.deficit': '⚠ Deficyt {0} \u2014 prosperity {1}',
   'popPanel.unrest': '🔥 ZAMIESZKI \u2014 efektywność -30%',
   'popPanel.famine': '💀 GŁÓD \u2014 populacja umiera',

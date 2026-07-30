@@ -747,6 +747,10 @@ export default {
   'station.depotEmpty': '— empty —',
   'station.sharedStorage': 'Shared storage:',        // S3.4c (D9) — station with mother shares colony storage
   'station.cutOffFromSupply': '⚠ Cut off from supply',   // S3.4c (D9) — orphaned after mother destroyed
+  'station.systemPool': 'System pool (planet + moons):',   // Orbital Logistics Hub — hub pools mother + moon storage
+  'colony.hubLinked': '🛰 Linked to orbital hub',          // moon/planet in an active hub pool
+  'colony.hubLinkSevered': '⚠ Link severed — blockade',    // moon cut off from the pool by an orbital blockade
+  'topBar.hubPoolBadge': 'POOL',                           // Orbital Logistics Hub — top resource-bar badge (▸POOL / ⚠POOL)
   'station.resources': 'Resources',
   'station.commodities': 'Commodities',
   'station.traders': 'Trade',
@@ -2040,6 +2044,7 @@ export default {
   'eventLog.milestoneReached': 'Milestone',
   'popPanel.needsTitle': 'POPULATION NEEDS',
   'popPanel.deficit': '⚠ Deficit {0} — prosperity {1}',
+  'popPanel.fedFromPool': '🛰 Fed from pool (no penalty)',   // Orbital Logistics Hub — §7 covers survival, no deficit
   'popPanel.unrest': '🔥 UNREST — efficiency -30%',
   'popPanel.famine': '💀 FAMINE — population dying',
   'popPanel.prosperityHeader': 'PROSPERITY',

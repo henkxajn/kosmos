@@ -214,8 +214,18 @@ export class StationPanel extends BaseOverlay {
     // S3.4c (D9) — stacja z matką: linia zaopatrzenia zamiast duplikatu listy magazynu kolonii.
     const mother = resolveHomeColony(station);
     if (mother) {
-      left.push({ text: t('station.sharedStorage'), color: C.textSecondary, indent: 4 });
-      left.push({ text: `▸ ${mother.name ?? mother.planetId}`, color: C.accent, indent: 12 });
+      // Orbital Logistics Hub — matka w aktywnej puli (hub) → pokaż pulę zamiast samego linku magazynu.
+      const poolSnap = window.KOSMOS?.systemPoolService?.getPoolSnapshot?.(mother.planetId);
+      if (poolSnap) {
+        left.push({ text: t('station.systemPool'), color: C.accent, indent: 4 });
+        left.push({ text: poolSnap.byBody.map(b => b.colony.name ?? b.colony.planetId).join(', '), color: C.textDim, indent: 8 });
+        for (const [id, amt] of [...poolSnap.total].filter(([, v]) => v > 0).slice(0, 12)) {
+          left.push({ text: `${this._itemLabel(id)}: ${this._fmt(amt)}`, color: C.textSecondary, indent: 12 });
+        }
+      } else {
+        left.push({ text: t('station.sharedStorage'), color: C.textSecondary, indent: 4 });
+        left.push({ text: `▸ ${mother.name ?? mother.planetId}`, color: C.accent, indent: 12 });
+      }
     } else if (depot.resources.length === 0 && depot.commodities.length === 0) {
       if (station.depotDetached) left.push({ text: t('station.cutOffFromSupply'), color: C.danger, indent: 4 });
       left.push({ text: t('station.depotEmpty'), color: C.textDim, indent: 8 });
