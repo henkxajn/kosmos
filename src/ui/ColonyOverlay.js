@@ -14,6 +14,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { CULTURAL_TRAITS } from '../data/MilestonesData.js';   // C5 — cechy kulturowe w zakładce Populacja
 import { STATIONS } from '../data/StationData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
+import { stationGroupOf, resolveStationGroupState } from '../utils/StationGroup.js';   // C6c-1 — cap „1 stacja na grupę"
 import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES, evaluatePlacement } from '../map/HexTile.js';
 import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
@@ -4204,9 +4205,32 @@ export class ColonyOverlay extends BaseOverlay {
   // nagłówka + StationManagementView), NIETKNIĘTA przez ten slice.
   _drawStationTab(ctx, x, y, w, colony) {
     if (!colony) return y;
-    const def    = STATIONS.orbital_station;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const en     = getLocale() === 'en';
+    const colMgr     = window.KOSMOS?.colonyManager;
+    const stationSys = window.KOSMOS?.stationSystem;
+
+    // ── C6c-1: cap „1 stacja na grupę (planeta+księżyce)" ─────────────────────────────────────────
+    // Stan grupy liczony RAZ na draw z derywacji parentPlanetId (stationGroupOf — pure, DECOUPLED od
+    // SystemPoolService/HUB-gate). exists/pending → placeholder (pełna treść: C6c-2a/2b); build →
+    // formularz niżej. Formularz to JEDYNA ścieżka tworzenia zlecenia → chowając go group-wide
+    // blokujemy podwójne zakolejkowanie (Decision 2). Picker w STATE build bez filtra (grupa pusta ⇒ OK).
+    const anchorBody = colony.planet ?? EntityManager.get(colony.planetId);
+    const groupState = resolveStationGroupState(stationGroupOf(anchorBody), {
+      getStationsAt: (bid) => stationSys?.getStationsAt?.(bid) ?? [],
+      getColony:     (bid) => colMgr?.getColony?.(bid),
+    });
+    if (groupState.state === 'exists') {
+      const nm = EntityManager.get(groupState.stationBodyId)?.name ?? groupState.stationBodyId ?? '?';
+      return this._drawStationGroupState(ctx, x, y, w, 'exists', nm);
+    }
+    if (groupState.state === 'pending') {
+      const o  = groupState.order;
+      const nm = o?.targetName ?? EntityManager.get(groupState.targetBodyId)?.name ?? groupState.targetBodyId ?? '?';
+      return this._drawStationGroupState(ctx, x, y, w, 'pending', nm);
+    }
+
+    // ── STATE „build" — brak stacji/pending w grupie → formularz budowy (treść C6b, bez zmian) ──
+    const def = STATIONS.orbital_station;
+    const en  = getLocale() === 'en';
 
     // Cele: planeta macierzysta + jej księżyce (identycznie jak dawny dialog).
     const targets = [];
@@ -4290,6 +4314,22 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return cy;
+  }
+
+  // ── C6c-1: placeholder STATE exists/pending (grupa zajęta). Minimalny — pełna treść w C6c-2a/2b
+  // (isolated pending render + Option A embed). Zwraca endCy (scroll panelu). ──
+  _drawStationGroupState(ctx, x, y, w, kind, bodyName) {
+    const title = kind === 'exists' ? t('station.groupHasStation') : t('station.groupPending');
+    let cy = this._drawInfoSection(ctx, x, y, w, title);
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(this._truncateText(ctx, `${kind === 'exists' ? '🛰' : '⏳'} ▸ ${bodyName}`, w), x, cy + 11);
+    cy += 20;
+    ctx.font = `italic 10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim;
+    ctx.fillText(this._truncateText(ctx, t('station.groupManageHint'), w), x, cy + 10);
+    cy += 16;
+    ctx.textAlign = 'left';
     return cy;
   }
 

@@ -37,6 +37,7 @@ import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { canBuildHullAt } from '../data/ShipBuildRules.js';
 import { STATIONS, stationTotalCost } from '../data/StationData.js';
+import { stationGroupOf, resolveStationGroupState } from '../utils/StationGroup.js';   // C6c-1 — cap re-check
 import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkArchetypeUnlocked } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
@@ -1775,6 +1776,15 @@ export class ColonyManager {
         return null;   // zachowuje kontrakt string|null (debug helper + smoke testy)
       }
     }
+
+    // C6c-1 — defensywny re-check capa „1 stacja na grupę" (anty-double-click w tej samej klatce; UI już
+    // chowa formularz group-wide). Reużywa TEN SAM pure resolver co zakładka. Cichy no-op (bez emitu —
+    // ścieżka nieosiągalna normalnym klikiem, brak potrzeby feedbacku).
+    const _grp = resolveStationGroupState(stationGroupOf(EntityManager.get(targetBodyId)), {
+      getStationsAt: (bid) => window.KOSMOS?.stationSystem?.getStationsAt?.(bid) ?? [],
+      getColony:     (bid) => this.getColony(bid),
+    });
+    if (_grp.state !== 'build') return null;
 
     if (!colony.pendingStationOrders) colony.pendingStationOrders = [];
 
