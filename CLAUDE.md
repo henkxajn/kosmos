@@ -1232,6 +1232,62 @@ StationSystem-intent 15). Save v99 bez migracji (pure UI + grupy liczone w runti
 
 ---
 
+## End of day — 2026-07-31 — trzy fixy post-C6/C6c (save v99 bez migracji, live-gate PASS)
+
+Trzy naprawy UI wykryte podczas live-gate'u C6c, ale NIEZWiązane z tamtym arciem — osobne root-cause'y,
+osobne atomowe commity (docs close-out C6/C6c `bac0338` był już napisany, gdy te wyszły → nieudokumentowane
+razem). Każdy: headless-verify + browser live-gate PASS + explicit-path staging. Wszystkie reużywają
+ISTNIEJĄCYCH czystych helperów (zero nowej równoważnej matematyki).
+
+**a. `002a1dd` — fix(ui): scrollowalny ship-build picker.** Root-cause: `drawShipPicker`
+(`StationManagementView.js`) miał UNBOUNDED, nieprzewijaną pętlę wierszy — pudełko clampowane do `h−40`,
+ale wiersze rysowały się POZA nim bez clip/scroll → projekty za foldem NIEOSIĄGALNE + bleed-through tła.
+Pre-existing; **ujawniony (nie spowodowany) przez C6c-3** (retire pełnego ekranu → ten floating picker to
+JEDYNE wejście budowy statku na stacji). Fix: NEW lokalny `drawScrollBox(ctx, view, box, contentH, drawRows)`
+reużywa `clampScroll`+`scrollThumb` (+ `pruneZones` via `view.pruneHits`→ColonyOverlay `_pruneHitsOutside`):
+clamp → clip pasma treści (bleed-through) → prune hit-zon poza pasmem → kciuk. Wiersze rysowane
+scroll-relative (`py+HEADER_H − scroll`); hity `station_mgmt_buildship` rejestrowane na SCROLLOWANYCH
+pozycjach i prunowane poza pasmem (scroll-invariant, brak ghost-clicków — ✕ close i bg-absorber rejestrowane
+POZA zakresem prune → przeżywają). Stan `_stationShipPickerScroll` (ColonyOverlay) + wheel-capture w
+`handleScroll` (OBA pickery pochłaniają wheel, tylko ship scrolluje; górny klamp tu, dolny w draw → snap) +
+reset-on-open (`station_mgmt_addship`). **Wzorzec „internal-scroll-box"** — module picker (stała liczba
+typów, nie przekracza viewportu) może dostać to samo bez przepisywania (drawRows + contentH). Smoke
+`station_ship_picker_scroll_smoke.mjs` 19/19 (T3 ghost-click + T4 reuse-equality + T5 clip-bounds via WYKONANIE).
+
+**b. `ef0bbbb` — fix(ui): chowanie globusa 3D gdy otwarty modal pełnoekranowy.**
+⚠ Root-cause = DOM z-index, NIE draw-order 2D: globus panelu info to OSOBNY element `<canvas>`
+(`PlanetGlobeRenderer`, **z-index 3 NAD ui-canvas=2**) na WŁASNEJ pętli RAF; `_syncGlobe` tylko go
+POZYCJONUJE (`_globe._canvas.style`), NIGDY nie rysuje w 2D ctx. Backdrop pickera (rysowany w ui-canvas)
+NIE MOŻE go zasłonić — inny element DOM, wyższy z-index. Fix: NEW `src/ui/ColonyModalLogic.js` z predykatem
+`anyFullBoundsModalOpen(flags)` (station module+ship picker + draft modal) + metoda `_anyFullBoundsModalOpen()`;
+`_syncGlobe` toggluje `_globe._canvas.style.display` CO KLATKĘ z predykatu → restore po zamknięciu KAŻDĄ
+ścieżką (✕, klik-poza, zmiana zakładki/kolonii). `hide()`→`_teardownGlobe()` (usuwa canvas) → brak
+„zawieszony schowany". `#planet-canvas` (z-4, legacy nigdy nie otwierany) = nie drugi sprawca.
+
+**c. `9a57bbb` — fix(ui): reset flag modali przy zmianie kolonii przez openPanel.**
+Root-cause: WIELE wejść zmiany kolonii woła `colMgr.switchActiveColony()` BEZPOŚREDNIO — **top bar
+(`TopResourceDrawer`), Outliner, BottomContext, CivilizationOverlay, EventLogOverlay** — OMIJAJĄC
+`ColonyOverlay._switchColony` (`:1264`, jedyny dotąd resetujący flagi pickera). `switchActiveColony` nie
+emituje eventu; overlay podąża przez `openPanel`→`_showOverlay`→`show()` (bezwarunkowe, `OverlayManager:87`),
+które syncuje `_selectedColonyId` ale NIE resetowało modali → flaga zostaje true → `_anyFullBoundsModalOpen()`
+true → **globus schowany po zmianie kolonii** (a picker rysowałby dane STAREJ stacji). Fix:
+`ColonyModalLogic.closeFullBoundsModals(overlay)` (command bliźniaczy do predykatu — JEDNO źródło „które
+flagi = modal pełnoekranowy") w `show()` zaraz po sync `_selectedColonyId` → pokrywa WSZYSTKIE
+`openPanel('colony')` callery w JEDNYM chokepoincie (nie per-caller whack-a-mole). Smoke: tabela prawdy
+predykatu + symulacja resetu w `colony_modal_logic_smoke.mjs` 27/27.
+
+**⚠ ZASADA (b+c):** `ColonyModalLogic.js` = single source stanu modala pełnoekranowego (query
+`anyFullBoundsModalOpen` + command `closeFullBoundsModals`). NOWY modal pełnoekranowy w ColonyOverlay → dodaj
+flagę w OBU funkcjach, inaczej (1) globus przebije modal, (2) modal nie domknie się przy zmianie kolonii.
+
+**Kolejka arca (NIEROZPOCZĘTE, następne gdy PO wróci):** **C7** — wyłączenie `PopulationOverlay` (zwolnienie
+slotu nawigacji + hotkey `P`); zależność: zachować ~30 współdzielonych kluczy `popPanel.*` z C5. **C8** —
+ekstrakcja `ShipyardOverlay` z Command do zwolnionego slotu. Backlog polish: ship-picker `AUDIT_COLONY_OVERLAY.md`
+sekcja overflow wciąż oznaczona UNFIXED (untracked, nie aktualizowana); balans czasu budowy stacji;
+`_stationMode` field cleanup (`KOSMOS_backlog_niezrealizowane.md`).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
