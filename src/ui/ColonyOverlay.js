@@ -11,6 +11,7 @@ import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { STRATA_META } from '../systems/CivilizationSystem.js';   // Faza 3: nazwy warstw w tooltipach
 import { COMMODITIES } from '../data/CommoditiesData.js';
+import { CULTURAL_TRAITS } from '../data/MilestonesData.js';   // C5 — cechy kulturowe w zakładce Populacja
 import { STATIONS } from '../data/StationData.js';
 import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
 import EntityManager from '../core/EntityManager.js';
@@ -30,7 +31,7 @@ import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
 import { showConfirmModal } from './ConfirmModal.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
-import { t, getLocale }   from '../i18n/i18n.js';
+import { t, getLocale, getName } from '../i18n/i18n.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
@@ -1368,6 +1369,9 @@ export class ColonyOverlay extends BaseOverlay {
           ? this._drawWorkforceTableV2(ctx, lx, startCy, cw, colony, civ)                        // tylko tabela (stopka przypięta)
           : this._drawWorkforceTab(ctx, lx, startCy, cw, scrollBot - startCy - 4, colony, civ);  // legacy V1 (stopka w scrollu)
         break;
+      case 'populacja':
+        endCy = this._drawPopulationTab(ctx, lx, startCy, cw, colony, civ);
+        break;
       case 'planet':
       default:
         endCy = this._drawPlanetTab(ctx, lx, startCy, cw, colony);
@@ -1411,6 +1415,7 @@ export class ColonyOverlay extends BaseOverlay {
     return [
       { id: 'planet',    labelKey: 'colonyInfo.tabPlanet' },
       { id: 'workforce', labelKey: 'colonyInfo.tabWorkforce', summary: true },
+      { id: 'populacja', labelKey: 'colonyInfo.tabPopulation' },   // C5 — cała treść przewija się (BEZ summary: §c — brak przypiętej stopki)
     ];
   }
 
@@ -1470,6 +1475,255 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
     return cy;
+  }
+
+  // ── C5: zakładka Populacja — Stabilność · Potrzeby · Dobrobyt · Konsumpcja · Grupy · Zakwaterowanie ──
+  // Rysuje od `y`, ZWRACA dolne `cy` (wysokość treści = zwrot − y) → konsumowane przez scroll panelu (C4).
+  // Cała treść PRZEWIJA SIĘ (BEZ przypiętej stopki — §c: żadna sekcja nie jest pojedynczą always-on liczbą
+  // jak Bilans Załogi; witalia/alarmy są NA GÓRZE → widoczne przy scroll=0). Globus STAŁY (fixedGlobeSize)
+  // jak w każdej zakładce. Read-only — ZERO _addHit (brak sterowników/tooltipów) → brak kolizji hit-zone.
+  _drawPopulationTab(ctx, x, y, w, colony, civ) {
+    const lang = getLocale();
+    const rs = colony?.resourceSystem ?? null;
+    const ps = colony?.prosperitySystem ?? null;
+    const bs = colony?.buildingSystem ?? null;
+    let cy = y;
+
+    // ── SEKCJA 1: STABILNOŚĆ — lojalność/tożsamość + cechy kulturowe + zdarzenia aktywne ──
+    cy = this._drawInfoSection(ctx, x, cy, w, t('colonyInfo.popTab.stabilityTitle'));
+    const loyalty = civ?.loyalty ?? 80;
+    const loyRatio = Math.max(0, Math.min(1, loyalty / 100));
+    const loyColor = loyRatio > 0.7 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
+    cy = this._drawLabeledBar(ctx, x, cy, w, t('popPanel.loyaltyLabel'), loyRatio, `${Math.round(loyalty)}%`, loyColor);
+    const identityScore = civ?.identity?.score ?? 0;
+    const idRatio = Math.max(0, Math.min(1, identityScore / 100));
+    const idColor = idRatio > 0.5 ? '#c8a050' : idRatio > 0.2 ? '#a08040' : THEME.textDim;
+    cy = this._drawLabeledBar(ctx, x, cy, w, t('popPanel.identityLabel'), idRatio, `${Math.round(identityScore)}`, idColor);
+
+    // Cechy kulturowe (CULTURAL_TRAITS z MilestonesData — NIE martwy duplikat z MovementsData): ikona + nazwa
+    // + efekt. 0 odblokowanych → jedna dim-linia (bez pustej luki). Ruchy społeczne świadomie POMINIĘTE (C5).
+    cy += 4;
+    ctx.font = `9px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = THEME.textDim; ctx.fillText(t('popPanel.traitsLabel'), x, cy + 8); cy += 14;
+    const traits = civ?.identity?.traits ?? [];
+    if (!traits.length) {
+      ctx.font = `italic 10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('colonyInfo.popTab.noTraits'), x + 4, cy + 8); cy += 14;
+    } else {
+      for (const id of traits) {
+        const tr = CULTURAL_TRAITS[id];
+        const name = tr ? (lang === 'en' ? tr.nameEN : tr.namePL) : id;
+        const icon = tr?.icon ?? '⭐';
+        const effect = tr ? (lang === 'en' ? tr.effectEN : tr.effectPL) : '';
+        ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.accent; ctx.textAlign = 'left';
+        ctx.fillText(this._truncateText(ctx, `${icon} ${name}`, w), x, cy + 9); cy += 13;
+        if (effect) {
+          ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim;
+          ctx.fillText(this._truncateText(ctx, effect, w - 6), x + 6, cy + 7); cy += 12;
+        }
+      }
+    }
+
+    // Zdarzenia aktywne — JEDNA reprezentacja (karty: zamieszki / głód / brownout). „Brak zdarzeń" gdy spokój.
+    cy += 6;
+    ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+    ctx.fillText(t('popPanel.activeEvents'), x, cy + 8); cy += 14;
+    const events = [];
+    if (civ?.isUnrest) events.push({ icon: '🔥', name: t('popPanel.crisisUnrest'), desc: t('popPanel.crisisUnrestDesc') });
+    if (civ?.isFamine) events.push({ icon: '💀', name: t('popPanel.crisisFamine'), desc: t('popPanel.crisisFamineDesc') });
+    if (rs?.energy?.brownout) events.push({ icon: '⚡', name: t('popPanel.crisisBrownout'), desc: t('popPanel.crisisBrownoutDesc') });
+    if (!events.length) {
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
+      ctx.fillText(t('popPanel.noEvents'), x + w / 2, cy + 10); ctx.textAlign = 'left'; cy += 18;
+    } else {
+      for (const ev of events) {
+        ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+        ctx.fillText(`${ev.icon} ${ev.name}`, x, cy + 10);
+        ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.danger; ctx.textAlign = 'right';
+        ctx.fillText(t('popPanel.activeLabel'), x + w, cy + 10);
+        ctx.textAlign = 'left'; ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(this._truncateText(ctx, ev.desc, w - 6), x + 4, cy + 22); cy += 30;
+      }
+    }
+
+    // ── SEKCJA 2: POTRZEBY — pokrycie żywność/woda/energia (pool-aware zachowane 1:1) ──
+    cy += 8;
+    cy = this._drawInfoSection(ctx, x, cy, w, t('popPanel.needsTitle'));
+    const needs = this._calcPopNeeds(civ, rs, civ?.population ?? 0);
+    for (const need of needs) {
+      ctx.font = `11px ${THEME.fontFamily}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(need.icon, x, cy + 8); ctx.fillText(need.name, x + 18, cy + 8);
+      const barX = x + 96, barW = Math.max(20, w - 96 - 44);
+      const color = need.ratio > 0.8 ? THEME.success : need.ratio > 0.5 ? THEME.warning : THEME.danger;
+      this._drawBar(ctx, barX, cy + 4, barW, 6, need.ratio, color, THEME.border);
+      ctx.fillStyle = color; ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(need.ratio * 100)}%`, x + w, cy + 8);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      cy += 18;
+      if (need.pooled) {                        // Orbital Logistics Hub §7 — pokryte z puli (bez kary)
+        ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.accent;
+        ctx.fillText(t('popPanel.fedFromPool'), x + 18, cy + 4); cy += 12;
+      } else if (need.ratio < 0.5) {
+        ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.danger;
+        ctx.fillText(t('popPanel.deficit', need.name, need.penalty), x + 18, cy + 4); cy += 12;
+      }
+    }
+
+    // ── SEKCJA 3: DOBROBYT — 5 warstw + czynnik wzrostu (etykieta wyraźnie ≠ linia wzrostu Planety) ──
+    cy += 8;
+    cy = this._drawInfoSection(ctx, x, cy, w, t('colonyInfo.popTab.prosperityLayers'));
+    const layers = ps?.getLayerScores?.() ?? {};   // {survival,infrastructure,functioning,comfort,luxury} — floaty 0..1
+    const LAYER_LABELS = [
+      ['survival', t('popPanel.layerSurvival')],
+      ['infrastructure', t('popPanel.layerInfra')],   // ⚠ = civSystem.satisfaction/100 (re-display; zachowane dla pełni 5-setu)
+      ['functioning', t('popPanel.layerFunctioning')],
+      ['comfort', t('popPanel.layerComfort')],
+      ['luxury', t('popPanel.layerLuxury')],
+    ];
+    for (const [key, label] of LAYER_LABELS) {
+      const val = Math.max(0, Math.min(1, layers[key] ?? 0));   // 0..1 → ×100 w wartości
+      const color = val >= 0.7 ? THEME.success : val >= 0.3 ? THEME.warning : THEME.danger;
+      cy = this._drawLabeledBar(ctx, x, cy, w, label, val, `${Math.round(val * 100)}%`, color, { font: 10, pitch: 14, barH: 5, labelW: 108 });
+    }
+    const growthMult = ps?.getGrowthMultiplier?.() ?? 1.0;   // 0.2–1.2 — czynnik kondycjonujący dobrobyt→wzrost (≠ planetMod środowiskowy Planety)
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(t('colonyInfo.popTab.prosperityGrowthFactor', growthMult.toFixed(1)), x, cy + 9); cy += 14;
+
+    // ── SEKCJA 4: KONSUMPCJA — epoka(+score) jako nagłówek + dobra konsumpcyjne (CFP usunięte — martwy accessor) ──
+    cy += 8;
+    cy = this._drawInfoSection(ctx, x, cy, w, t('popPanel.consumerGoods'));
+    if (ps) {
+      const epoch = ps._getCurrentEpoch?.() ?? { unlockedGoods: [], key: 'early' };   // ⚠ mutuje epochScore — czytać PO tym wywołaniu
+      const epochScore = Math.round(ps.epochScore ?? 0);
+      const epochNames = { early: t('epoch.early'), developing: t('epoch.developing'), advanced: t('epoch.advanced'), cosmic: t('epoch.space') };
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText(t('popPanel.epochScoreLabel', epochNames[epoch.key] ?? epoch.key, epochScore), x, cy + 9); cy += 15;
+      const goods = ['basic_supplies', 'civilian_goods', 'neurostimulants'];
+      for (const goodId of goods) {
+        const commodity = COMMODITIES[goodId];
+        if (!commodity) continue;
+        const unlocked = epoch.unlockedGoods?.includes(goodId);
+        const nm = getName(commodity, 'commodity');
+        const icon = commodity.icon ?? '?';
+        ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left';
+        if (!unlocked) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`${icon} ${nm}  🔒`, x, cy + 9);
+        } else {
+          const demand = ps.getDemand?.(goodId) ?? 0;
+          const production = ps.getProduction?.(goodId) ?? 0;
+          const sat = ps.getSatisfaction?.(goodId) ?? 0;
+          const sColor = sat >= 0.8 ? THEME.success : sat >= 0.5 ? THEME.warning : THEME.danger;
+          ctx.fillStyle = THEME.textPrimary;
+          ctx.fillText(`${icon} ${nm}`, x, cy + 9);
+          ctx.fillStyle = sColor; ctx.textAlign = 'right';
+          ctx.fillText(t('colonyInfo.popTab.goodsRate', production.toFixed(1), demand.toFixed(1)), x + w, cy + 9);
+          ctx.textAlign = 'left';
+        }
+        cy += 14;
+      }
+    }
+
+    // ── SEKCJA 5: GRUPY SPOŁECZNE — satysfakcja warstw (BEZ kolumny liczności — dup zakładki Załoga) ──
+    cy += 8;
+    cy = this._drawInfoSection(ctx, x, cy, w, t('colonyInfo.popTab.strataSatisfaction'));
+    const breakdown = civ?.getStrataBreakdown?.() ?? [];   // {type,namePL,nameEN,icon,count,satisfaction,...}
+    const activeStrata = breakdown.filter(s => s.count > 0);
+    if (!activeStrata.length) {
+      ctx.font = `italic 10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('—', x, cy + 8); cy += 16;
+    } else {
+      for (const s of activeStrata) {
+        const name = lang === 'en' ? s.nameEN : s.namePL;
+        const ratio = Math.max(0, Math.min(1, (s.satisfaction ?? 0) / 100));
+        const color = ratio > 0.6 ? THEME.success : ratio > 0.3 ? THEME.warning : THEME.danger;
+        cy = this._drawLabeledBar(ctx, x, cy, w, `${s.icon} ${name}`, ratio, `${Math.round(s.satisfaction ?? 0)}%`, color, { font: 11, pitch: 18, barH: 6, labelW: 128 });
+      }
+    }
+
+    // ── SEKCJA 6: ZAKWATEROWANIE — sloty per budynek (FIX: entry.building/entry.housing; NIE entry.def; NIE ×level) ──
+    cy += 8;
+    cy = this._drawInfoSection(ctx, x, cy, w, t('popPanel.housingTitle'));
+    if (!bs || !bs._active) {
+      ctx.font = `italic 10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText(t('popPanel.noHousingData'), x, cy + 8); cy += 16;
+    } else {
+      const housing = [];
+      for (const [, entry] of bs._active) {   // NIE pomijamy capital_<tileKey> — tam mieszka baza (colony_base 16)
+        const b = entry.building;             // ⚠ NIE entry.def (nie istnieje — źródło buga w PopulationOverlay)
+        const h = entry.housing ?? 0;         // per-level JUŻ SKUMULOWANE — NIE mnożyć przez level
+        if (b && h > 0) housing.push({ name: getName(b, 'building'), level: entry.level ?? 1, housing: h });
+      }
+      if (!housing.length) {
+        ctx.font = `italic 10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+        ctx.fillText(t('popPanel.noHousingBuildings'), x, cy + 8); cy += 16;
+      } else {
+        let total = 0;
+        for (const b of housing) {
+          total += b.housing;
+          ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+          ctx.fillText(this._truncateText(ctx, `${b.name} Lv${b.level}`, w - 70), x, cy + 10);
+          ctx.fillStyle = THEME.accent; ctx.textAlign = 'right';
+          ctx.fillText(t('popPanel.slotsCount', b.housing), x + w, cy + 10);
+          ctx.textAlign = 'left'; cy += 18;
+        }
+        cy += 4;
+        ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, cy + 0.5); ctx.lineTo(x + w, cy + 0.5); ctx.stroke();
+        ctx.globalAlpha = 1; cy += 8;
+        ctx.font = `bold 11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+        ctx.fillText(t('popPanel.totalLabel'), x, cy + 10);
+        ctx.fillStyle = THEME.accent; ctx.textAlign = 'right';
+        ctx.fillText(t('popPanel.totalSlots', total), x + w, cy + 10);
+        ctx.textAlign = 'left'; cy += 16;
+      }
+    }
+
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return cy;
+  }
+
+  // C5 — pasek z etykietą: [label | pasek | wartość]. Wspólny dla lojalności/tożsamości, 5 warstw dobrobytu
+  // i satysfakcji warstw. opt: font/pitch/barH/labelW/valW. Etykieta przycinana (_truncateText).
+  _drawLabeledBar(ctx, x, y, w, label, ratio, valText, color, opt = {}) {
+    const font = opt.font ?? 11, pitch = opt.pitch ?? 16, barH = opt.barH ?? 8;
+    const labelW = opt.labelW ?? 96, valW = opt.valW ?? 42;
+    const mid = y + Math.round(pitch / 2);
+    ctx.textBaseline = 'middle'; ctx.font = `${font}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'left';
+    ctx.fillText(this._truncateText(ctx, label, labelW - 4), x, mid);
+    const barX = x + labelW, barW = Math.max(20, w - labelW - valW);
+    this._drawBar(ctx, barX, mid - Math.round(barH / 2), barW, barH, ratio, color, THEME.border);
+    ctx.fillStyle = color; ctx.textAlign = 'right'; ctx.fillText(valText, x + w, mid);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return y + pitch;
+  }
+
+  // C5 — port _calcNeeds z PopulationOverlay (pool-aware zachowane 1:1 — §7 Orbital Logistics Hub).
+  // Zwraca [{icon, name, ratio, penalty, pooled?}]. Energia = flow (NIE poolowana); żywność/woda = zapas/10lat.
+  _calcPopNeeds(civ, rs, pop) {
+    if (!rs || pop <= 0) {
+      return [
+        { icon: '🍖', name: t('popPanel.needFood'),   ratio: 1, penalty: '-15/rok' },
+        { icon: '💧', name: t('popPanel.needWater'),  ratio: 1, penalty: '-10/rok' },
+        { icon: '⚡', name: t('popPanel.needEnergy'), ratio: 1, penalty: '-15/rok' },
+      ];
+    }
+    const foodCons = pop * 0.75, waterCons = pop * 0.375, energyCons = pop * 0.25;   // Population 2.0: ÷4 (pop ×4)
+    const foodAmt  = (rs.getAmount?.('food')  ?? rs.inventory?.get?.('food')  ?? 0);
+    const waterAmt = (rs.getAmount?.('water') ?? rs.inventory?.get?.('water') ?? 0);
+    const energyBal = rs.energy?.balance ?? 0;
+    const foodPooled  = !!window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(rs, 'food');
+    const waterPooled = !!window.KOSMOS?.systemPoolService?.poolCoversSurvival?.(rs, 'water');
+    const foodRatio  = foodPooled  ? 1 : (foodCons  > 0 ? Math.min(1, foodAmt  / (foodCons  * 10)) : 1);
+    const waterRatio = waterPooled ? 1 : (waterCons > 0 ? Math.min(1, waterAmt / (waterCons * 10)) : 1);
+    const energyRatio = energyCons > 0 ? Math.min(1, Math.max(0, (energyBal + energyCons) / (energyCons * 2))) : 1;
+    return [
+      { icon: '🍖', name: t('popPanel.needFood'),   ratio: foodRatio,   penalty: '-15/rok', pooled: foodPooled },
+      { icon: '💧', name: t('popPanel.needWater'),  ratio: waterRatio,  penalty: '-10/rok', pooled: waterPooled },
+      { icon: '⚡', name: t('popPanel.needEnergy'), ratio: energyRatio, penalty: '-15/rok' },
+    ];
   }
 
   // ── C4: przytnij hity treści (indeks ≥ fromIndex) leżące poza widocznym pasmem [top, bot] ──

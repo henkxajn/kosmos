@@ -795,6 +795,13 @@ export default {
   // ── Panel info planety (ColonyOverlay prawa kolumna) ──
   'colonyInfo.tabPlanet': 'Planeta',
   'colonyInfo.tabWorkforce': 'Załoga',
+  'colonyInfo.tabPopulation': 'Populacja',
+  'colonyInfo.popTab.stabilityTitle': 'STABILNOŚĆ',
+  'colonyInfo.popTab.prosperityLayers': 'WARSTWY DOBROBYTU',
+  'colonyInfo.popTab.prosperityGrowthFactor': 'Czynnik dobrobytu (wzrost): ×{0}',
+  'colonyInfo.popTab.strataSatisfaction': 'SATYSFAKCJA WARSTW',
+  'colonyInfo.popTab.noTraits': 'Brak wyróżniających cech',
+  'colonyInfo.popTab.goodsRate': '{0}/rok  popyt: {1}',
   // Zakładka Załoga (Population 2.0 Faza 2)
   'workforce.colStrata': 'Warstwa',
   'workforce.colJobs': 'Etaty',

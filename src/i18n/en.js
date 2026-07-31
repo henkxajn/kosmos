@@ -795,6 +795,13 @@ export default {
   // ── Planet info panel (ColonyOverlay right column) ──
   'colonyInfo.tabPlanet': 'Planet',
   'colonyInfo.tabWorkforce': 'Workforce',
+  'colonyInfo.tabPopulation': 'Population',
+  'colonyInfo.popTab.stabilityTitle': 'STABILITY',
+  'colonyInfo.popTab.prosperityLayers': 'PROSPERITY LAYERS',
+  'colonyInfo.popTab.prosperityGrowthFactor': 'Prosperity growth factor: ×{0}',
+  'colonyInfo.popTab.strataSatisfaction': 'STRATUM SATISFACTION',
+  'colonyInfo.popTab.noTraits': 'No distinctive traits yet',
+  'colonyInfo.popTab.goodsRate': '{0}/yr  demand: {1}',
   // Workforce tab (Population 2.0 Phase 2)
   'workforce.colStrata': 'Class',
   'workforce.colJobs': 'Jobs',
