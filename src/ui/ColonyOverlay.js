@@ -1057,25 +1057,8 @@ export class ColonyOverlay extends BaseOverlay {
       this._addHit(sBtnX, sBtnY, sBtnW, sBtnH, 'station_open', { hasTech: hasStationTech });
     }
 
-    // Przycisk rekrutacji jednostek (na lewo od stacji) — SCOPED do tej kolonii.
-    // Bramka: kolonia gracza (nie podgląd/wróg) + koszary. Brak koszar → disabled + powód.
-    if (!this._stationMode && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
-      const barracksLv  = window.KOSMOS?.colonyManager?._getBarracksLevel?.(colony) ?? 0;
-      const hasBarracks = barracksLv > 0;
-      const dBtnW = 84, dBtnH = 20, dBtnY = oy + 6, dBtnX = ox + ow - 206;
-      ctx.save();
-      ctx.fillStyle = this._draftOpen ? 'rgba(40,70,90,0.92)'
-                    : (hasBarracks ? 'rgba(20,40,60,0.82)' : 'rgba(22,22,30,0.55)');
-      ctx.fillRect(dBtnX, dBtnY, dBtnW, dBtnH);
-      ctx.strokeStyle = hasBarracks ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.12)';
-      ctx.lineWidth = 1; ctx.strokeRect(dBtnX, dBtnY, dBtnW, dBtnH);
-      ctx.font = `bold 11px ${THEME.fontFamily}`;
-      ctx.fillStyle = hasBarracks ? THEME.accent : THEME.textDim;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(`${hasBarracks ? '🎖' : '🔒'} ${t('groundPanel.draftBtn')}`, dBtnX + dBtnW / 2, dBtnY + dBtnH / 2);
-      ctx.restore();
-      this._addHit(dBtnX, dBtnY, dBtnW, dBtnH, 'draft_open', { hasBarracks });
-    }
+    // C6a — Przycisk rekrutacji PRZENIESIONY do zakładki Załoga (góra tabeli strat, _drawWorkforceTableV2).
+    // Hit 'draft_open' + modal _drawDraftModal/_handleDraftClick BEZ zmian — tylko trigger zmienił miejsce.
 
     // Zamknij [X]
     const closeX = ox + ow - 24;
@@ -1902,6 +1885,27 @@ export class ColonyOverlay extends BaseOverlay {
   _drawWorkforceTableV2(ctx, x, y, w, colony, civ) {
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
+
+    // C6a — Rekrutuj (relokacja z nagłówka overlayu): przycisk na GÓRZE zakładki Załoga, NAD tabelą strat
+    // (widoczny przy scroll=0, częsta akcja). Modal/gate BEZ zmian — hit 'draft_open' toggluje _draftOpen;
+    // 🔒 gdy brak Koszar (klik → flash needBarracks, jak dawny przycisk nagłówka). W scrollu tabeli — hit
+    // pruning C4 (_pruneHitsOutside) go usunie po zjechaniu. Barwa: 2-stanowa (jest/brak koszar); stan
+    // _draftOpen nie potrzebuje podświetlenia (otwarty modal i tak zakrywa panel backdropem).
+    {
+      const hasBarracks = (window.KOSMOS?.colonyManager?._getBarracksLevel?.(colony) ?? 0) > 0;
+      const RBTN_H = 22;
+      ctx.fillStyle = hasBarracks ? 'rgba(20,40,60,0.82)' : 'rgba(22,22,30,0.55)';
+      ctx.fillRect(x, y, w, RBTN_H);
+      ctx.strokeStyle = hasBarracks ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, RBTN_H - 1);
+      ctx.font = `bold 11px ${THEME.fontFamily}`;
+      ctx.fillStyle = hasBarracks ? THEME.accent : THEME.textDim;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(`${hasBarracks ? '🎖' : '🔒'} ${t('groundPanel.draftBtn')}`, x + w / 2, y + RBTN_H / 2);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      this._addHit(x, y, w, RBTN_H, 'draft_open', { hasBarracks });
+      y += RBTN_H + 8;
+    }
 
     // Anchory prawych sterowników — Focus (linia 1) i Droidy (linia 2) pionowo zestrojone.
     const STEPW = 74;
