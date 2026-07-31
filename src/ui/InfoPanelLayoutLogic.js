@@ -21,6 +21,21 @@ export function computeTabRects(x0, totalW, count, gap = 6) {
   return rects;
 }
 
+// ── Auto-dopasowanie fontu paska zakładek (C6b — 4 zakładki mieszczą się w wąskim panelu) ──
+// Etykiety rysowane są monospace ('Space Mono' → advance 0.6em; fallback `monospace` na Windows
+// = Courier/Consolas, advance ≤0.6em), więc szerokość = liczba_znaków × px × charEm liczona TU
+// pokrywa się z ctx.measureText (dla monospace exact). Zwraca największy rozmiar z `sizes`, przy
+// którym NAJDŁUŻSZA etykieta + `padPx` mieści się w slocie `slotW`; gdy żaden — najmniejszy (i tak
+// najlepszy dostępny, nadal bez ellipsis). Deterministyczne, headless-testowalne (bez canvas).
+export function fitTabFontPx(labels, slotW, { sizes = [11, 10, 9], padPx = 8, charEm = 0.6 } = {}) {
+  const maxLen = (labels ?? []).reduce((m, s) => Math.max(m, (s ?? '').length), 0);
+  const usable = slotW - padPx;
+  for (const px of sizes) {
+    if (maxLen * px * charEm <= usable) return px;
+  }
+  return sizes[sizes.length - 1];
+}
+
 // Klamp offsetu scrolla do [0, max(0, contentH − viewportH)]. Zawartość mieści się → 0.
 // (Dolny klamp też w handleScroll; górny wymaga znanej contentH — stąd tutaj.)
 export function clampScroll(scroll, contentH, viewportH) {

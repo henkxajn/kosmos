@@ -12,7 +12,7 @@
 //        przypięta stopka mieści się BEZ przycięcia pod paskiem BottomControlBar — konkretne px.
 //   T4  no-crash / clamp: minimalna realna szerokość (w=300) daje dodatni globus; clamp szerokości działa.
 
-import { fixedGlobeSize } from '../../ui/InfoPanelLayoutLogic.js';
+import { fixedGlobeSize, fitTabFontPx, tabSlotWidth } from '../../ui/InfoPanelLayoutLogic.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
@@ -90,6 +90,32 @@ console.log('--- T4: minimalna realna szerokość (w=300) + clamp ---');
   ok(`w=300: globus dodatni i przycięty do szer. (${dNarrow}=276)`, dNarrow === 276);
   ok(`w=460: globus przycięty do 0.42·h (${dWide}=406)`, dWide === 406);
   ok('clamp: wąskie okno < 0.42·h (276 < 406)', dNarrow < dWide);
+}
+
+// ── T5: fitTabFontPx — auto-font paska zakładek (C6b, 4. zakładka Stacja) ──
+// Etykiety rysowane monospace (Space Mono advance 0.6em) → szerokość = len·px·0.6 pokrywa się z
+// ctx.measureText. Najdłuższa etykieta „Populacja" = 9 znaków. Slot = tabSlotWidth(cw, N, gap); cw =
+// infoW − 24 (pad 12 z obu stron). Chroni przed cichym ucięciem etykiety przy 4 zakładkach na wąskim panelu.
+console.log('--- T5: fitTabFontPx dobiera font paska (4 zakładki mieszczą „Populacja" bez ucięcia) ---');
+{
+  const LABELS4 = ['Planeta', 'Załoga', 'Populacja', 'Stacja'];   // 4 zakładki (Stacja odblokowana)
+  const LABELS3 = ['Planeta', 'Załoga', 'Populacja'];             // 3 zakładki (bez Stacji)
+  const slot = (infoW, n) => tabSlotWidth(infoW - 24, n, 6);
+  // 3 zakładki: nawet na najwęższym panelu (300) zostaje 11px → BRAK regresji dla istniejących zakładek.
+  ok(`3 zakładki @300: slot=${slot(300, 3)} → 11px (bez regresji)`, fitTabFontPx(LABELS3, slot(300, 3)) === 11);
+  // 4 zakładki @300: „Populacja" 59.4px > 56 usable → auto 10px (54 ≤ 56); mieści się bez ucięcia.
+  ok(`4 zakładki @300: slot=${slot(300, 4)} → 10px`, fitTabFontPx(LABELS4, slot(300, 4)) === 10);
+  // Crossover: infoW=313 jeszcze 10px, od 314 (slot≥68) „Populacja" mieści się w 11px.
+  ok(`4 zakładki @313: slot=${slot(313, 4)} → 10px`, fitTabFontPx(LABELS4, slot(313, 4)) === 10);
+  ok(`4 zakładki @314: slot=${slot(314, 4)} → 11px`, fitTabFontPx(LABELS4, slot(314, 4)) === 11);
+  ok(`4 zakładki @460: slot=${slot(460, 4)} → 11px`, fitTabFontPx(LABELS4, slot(460, 4)) === 11);
+  // Inwariant: przy WYBRANYM foncie żadna etykieta nie przekracza slotu (brak overflow na całym zakresie).
+  for (const infoW of [300, 314, 380, 460]) {
+    const sw = slot(infoW, 4);
+    const px = fitTabFontPx(LABELS4, sw);
+    const widest = Math.max(...LABELS4.map(l => l.length * px * 0.6));
+    ok(`4 zakładki @${infoW}: najszersza etykieta ${widest.toFixed(1)}px ≤ slot ${sw}px (font ${px}px)`, widest <= sw);
+  }
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);

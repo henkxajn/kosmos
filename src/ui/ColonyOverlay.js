@@ -23,7 +23,7 @@ import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
-import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus (wspólny)
+import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize, fitTabFontPx } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus (wspólny); C6b — fitTabFontPx (auto-font paska)
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -191,8 +191,8 @@ export class ColonyOverlay extends BaseOverlay {
       if (this.visible && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
     });
 
-    // Stacje orbitalne (S3.3b-S4) — dialog budowy + feedback (flash)
-    this._stationDialogOpen = false;
+    // Stacje orbitalne (S3.3b-S4 / C6b) — cel budowy dla zakładki Stacja + feedback (flash).
+    // (_stationDialogOpen usunięty w C6b — dialog budowy jest teraz zakładką info panelu, nie modalem.)
     this._stationTargetId   = null;
     EventBus.on('station:orderQueued',    (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🛰 ' + t('station.flashQueued')); });
     EventBus.on('station:built',          (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🛰 ' + t('station.flashBuilt')); });
@@ -976,10 +976,7 @@ export class ColonyOverlay extends BaseOverlay {
       this._drawBottomDrawer(ctx, ox, oy, mapW, oh);
     }
 
-    // Station build dialog (S3.3b-S4) — modal wyśrodkowany nad mapą
-    if (this._stationDialogOpen && colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
-      this._drawStationDialog(ctx, ox, oy, mapW, oh, colony);
-    }
+    // C6b — dialog budowy stacji przeniesiony do zakładki Stacja (info panel) — brak modalu nad mapą.
 
     // Landing mode indicator (pas na szczycie mapy)
     if (this._landingMode) {
@@ -1038,25 +1035,9 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.restore();
     }
 
-    // Przycisk budowy stacji (S3.3b-S4) — nagłówek, na lewo od [✕]. Bramka tech orbital_construction.
-    // W trybie stacji ukryty (dotyczy budowy NOWEJ stacji z kolonii, nie zarządzania bieżącą).
-    if (!this._stationMode && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
-      ctx.save();
-      const hasStationTech = window.KOSMOS?.techSystem?.isResearched('orbital_construction') ?? false;
-      const sBtnW = 84, sBtnH = 20, sBtnY = oy + 6, sBtnX = ox + ow - 116;
-      ctx.fillStyle = this._stationDialogOpen ? 'rgba(40,70,90,0.92)'
-                    : (hasStationTech ? 'rgba(20,40,60,0.82)' : 'rgba(22,22,30,0.55)');
-      ctx.fillRect(sBtnX, sBtnY, sBtnW, sBtnH);
-      ctx.strokeStyle = hasStationTech ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.12)';
-      ctx.lineWidth = 1; ctx.strokeRect(sBtnX, sBtnY, sBtnW, sBtnH);
-      ctx.font = `bold 11px ${THEME.fontFamily}`;
-      ctx.fillStyle = hasStationTech ? THEME.accent : THEME.textDim;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(`${hasStationTech ? '🛰' : '🔒'} ${t('station.headerBtn')}`, sBtnX + sBtnW / 2, sBtnY + sBtnH / 2);
-      ctx.restore();
-      this._addHit(sBtnX, sBtnY, sBtnW, sBtnH, 'station_open', { hasTech: hasStationTech });
-    }
-
+    // C6b — Przycisk budowy stacji PRZENIESIONY do zakładki Stacja (info panel, _drawStationTab), dołączanej
+    // warunkowo w _getInfoTabs (tech orbital_construction + kolonia gracza). Reużywa handlery station_build/
+    // station_pick_target/station_cancel_order. ZARZĄDZANIE stacją (pigułki + _stationMode) — NIETKNIĘTE.
     // C6a — Przycisk rekrutacji PRZENIESIONY do zakładki Załoga (góra tabeli strat, _drawWorkforceTableV2).
     // Hit 'draft_open' + modal _drawDraftModal/_handleDraftClick BEZ zmian — tylko trigger zmienił miejsce.
 
@@ -1248,7 +1229,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedColonyId = planetId;
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null; this._selectedUnits.clear();
-    this._buildBarScroll = 0; this._stationDialogOpen = false;
+    this._buildBarScroll = 0;
     this._stationMode = false; this._stationPickerOpen = false;   // S3.4 FAZA 3 — powrót do mapy planety
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
@@ -1283,7 +1264,11 @@ export class ColonyOverlay extends BaseOverlay {
     const canWorkforce = !!civ && !colony?.isPreview && !colony?.isOutpost;
     if (!canWorkforce) this._infoTab = 'planet';
     // C4 — konfiguracja zakładek (data-driven) + aktywna zakładka + reset scrolla przy zmianie kolonii.
-    const tabs = this._getInfoTabs();
+    const tabs = this._getInfoTabs(colony);
+    // C6b — sanitacja aktywnej zakładki: gdy bieżąca zakładka NIE istnieje w tym kontekście (np. Stacja
+    // otwarta, po czym przełączenie na kolonię bez orbital_construction / na podgląd / na outpost), reset
+    // do Planety — inaczej switch(activeTab) rysowałby zakładkę spoza paska (stale render).
+    if (canWorkforce && !tabs.some(tt => tt.id === this._infoTab)) this._infoTab = 'planet';
     const activeTab = canWorkforce ? this._infoTab : 'planet';
     const tabCfg = tabs.find(tt => tt.id === activeTab) ?? tabs[0];
     const colId = colony?.planetId ?? planet?.id ?? null;
@@ -1355,6 +1340,9 @@ export class ColonyOverlay extends BaseOverlay {
       case 'populacja':
         endCy = this._drawPopulationTab(ctx, lx, startCy, cw, colony, civ);
         break;
+      case 'stacja':
+        endCy = this._drawStationTab(ctx, lx, startCy, cw, colony);   // C6b — dialog budowy stacji (panel-relative)
+        break;
       case 'planet':
       default:
         endCy = this._drawPlanetTab(ctx, lx, startCy, cw, colony);
@@ -1394,12 +1382,27 @@ export class ColonyOverlay extends BaseOverlay {
   // N-zakładek-ready: C5 (Populacja) / C6 (Stacja) dopną kolejne wpisy bez ruszania geometrii.
   // summary:true = zakładka pinuje stopkę u dołu panelu (S4). Globus jest STAŁY dla WSZYSTKICH zakładek
   // (fixedGlobeSize) — brak per-zakładkowej frakcji globusa.
-  _getInfoTabs() {
-    return [
+  _getInfoTabs(colony) {
+    const tabs = [
       { id: 'planet',    labelKey: 'colonyInfo.tabPlanet' },
       { id: 'workforce', labelKey: 'colonyInfo.tabWorkforce', summary: true },
       { id: 'populacja', labelKey: 'colonyInfo.tabPopulation' },   // C5 — cała treść przewija się (BEZ summary: §c — brak przypiętej stopki)
     ];
+    // C6b — zakładka Stacja (dialog BUDOWY stacji). Dołączana WARUNKOWO (conditional-inclusion, jak
+    // Załoga/Populacja są chowane dla podglądu/outpostu): tech orbital_construction + PEŁNA kolonia gracza.
+    // Brak techu → zakładka NIE istnieje (hide-entirely, NIE „locked-but-visible"). Hostuje WYŁĄCZNIE dialog
+    // budowy; ZARZĄDZANIE stacją to osobna powierzchnia (pigułki nagłówka + _stationMode + StationManagementView
+    // — NIETKNIĘTE).
+    // ⚠ RÓŻNICA vs dawny przycisk nagłówka 🛰: stary guard NIE zawierał `!isOutpost`, więc pokazywał się TAKŻE
+    // na outpostach (i budowa stacji z outpostu działała). Zakładka wymaga paska zakładek (canWorkforce), który
+    // NIE rysuje się dla outpostów → utrata tej niszowej ścieżki. Decyzja świadoma (spójność z hide-outpost dla
+    // Załogi/Populacji); gdyby trzeba zachować budowę z outpostu — osobny follow-up (nie przez ten slice).
+    const hasStationTech = window.KOSMOS?.techSystem?.isResearched?.('orbital_construction') ?? false;
+    const isPlayerColony = !!colony && !colony.isPreview && !colony.isOutpost && !colony.ownerEmpireId && !colony.isTestEnemy;
+    if (hasStationTech && isPlayerColony) {
+      tabs.push({ id: 'stacja', labelKey: 'colonyInfo.tabStation' });
+    }
+    return tabs;
   }
 
   // ── C4: zakładka Planeta (charakterystyka + linie efektów środowiskowych C3 + złoża C2) ──
@@ -1729,8 +1732,12 @@ export class ColonyOverlay extends BaseOverlay {
   _drawInfoTabs(ctx, x, y, w, tabs) {
     const tabH = 20, gap = 6;
     const rects = computeTabRects(x, w, tabs.length, gap);
+    // C6b — przy 4 zakładkach etykiety („Populacja" 9zn) mogą nie mieścić się w slocie na wąskim panelu
+    // (INFO_MIN=300 → slot ~64px). fitTabFontPx dobiera największy font z {11,10,9}, który mieści NAJDŁUŻSZĄ
+    // etykietę — bez cichego ucięcia. Slot równy dla wszystkich (computeTabRects), więc jeden rozmiar dla paska.
+    const labels = tabs.map(tt => t(tt.labelKey));
+    const labelPx = fitTabFontPx(labels, rects[0]?.w ?? w);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold 11px ${THEME.fontFamily}`;
     for (let i = 0; i < tabs.length; i++) {
       const tab = tabs[i];
       const { x: sx, w: tw } = rects[i];
@@ -1743,8 +1750,9 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillRect(sx, y, tw, tabH);
       ctx.strokeStyle = active ? THEME.accent : THEME.borderActive;
       ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, y + 0.5, tw - 1, tabH - 1);
+      ctx.font = `bold ${labelPx}px ${THEME.fontFamily}`;
       ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
-      ctx.fillText(t(tab.labelKey), sx + tw / 2, y + tabH / 2);
+      ctx.fillText(labels[i], sx + tw / 2, y + tabH / 2);
       this._addHit(sx, y, tw, tabH, 'infoTab', { tab: tab.id });
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -4186,116 +4194,103 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   }
 
-  // ── Dialog budowy stacji orbitalnej (S3.3b-S4) ─────────────────────────────
-  // Modal nad mapą: wybór ciała docelowego (planeta + księżyce), koszt, kolejka.
-  _drawStationDialog(ctx, ox, oy, ow, oh, colony) {
+  // ── C6b: zakładka Stacja — treść dialogu BUDOWY stacji zaportowana do prawego panelu info ──────────
+  // Panel-relative (x,y,w); rysowana w clipowanym pasmie scrolla panelu; zwraca dolne cy (wysokość treści
+  // = zwrot − y, konsumowane przez scroll C4). RÓŻNICE vs dawny floating dialog: brak własnego pudełka tła
+  // (panel = tło), brak absorbera tła (klik w pustkę info panelu jest bezczynny — _screenToTile zwraca null
+  // poza mapą, jak w każdej innej zakładce), brak przycisku ✕ (zakładka istnieje jak każda inna). Reużywa
+  // handlery _onHit: station_pick_target / station_build / station_cancel_order (bez zmian).
+  // ⚠ To WYŁĄCZNIE dialog BUDOWY — ZARZĄDZANIE stacją to OSOBNA powierzchnia (_stationMode + pigułki
+  // nagłówka + StationManagementView), NIETKNIĘTA przez ten slice.
+  _drawStationTab(ctx, x, y, w, colony) {
+    if (!colony) return y;
     const def    = STATIONS.orbital_station;
     const colMgr = window.KOSMOS?.colonyManager;
+    const en     = getLocale() === 'en';
 
-    // Cele: planeta macierzysta + jej księżyce
+    // Cele: planeta macierzysta + jej księżyce (identycznie jak dawny dialog).
     const targets = [];
     if (colony.planet) targets.push(colony.planet);
     EntityManager.getByType('moon')
       .filter(m => m.parentPlanetId === colony.planetId)
       .forEach(m => targets.push(m));
-    // Domyślny/awaryjny cel = planeta macierzysta
     if (!this._stationTargetId || !targets.some(b => b.id === this._stationTargetId)) {
       this._stationTargetId = colony.planetId;
     }
 
     const costEntries = [...Object.entries(def.cost ?? {}), ...Object.entries(def.commodityCost ?? {})];
     const pending     = colMgr?.getPendingStationOrders?.(colony.planetId) ?? [];
+    const res         = colony.resourceSystem;
 
-    const DW = 340;
-    const DH = 138 + targets.length * 20 + costEntries.length * 14 + Math.max(1, pending.length) * 18;
-    const dx = ox + ow / 2 - DW / 2;
-    const dy = oy + Math.max(HDR_H + 8, oh / 2 - DH / 2);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(6,12,20,0.97)';
-    ctx.fillRect(dx, dy, DW, DH);
-    ctx.strokeStyle = THEME.borderActive ?? '#3a6'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(dx, dy, DW, DH);
-
-    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-    let cy = dy + 8;
-
-    // Tytuł + [✕]
-    ctx.font = `bold 13px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('🛰 ' + t('station.dialogTitle'), dx + 10, cy);
-    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'right';
-    ctx.fillText('✕', dx + DW - 10, cy);
-    this._addHit(dx + DW - 24, cy - 4, 22, 22, 'station_dialog_close');
-    ctx.textAlign = 'left';
-    cy += 24;
-
-    // Cel — jedno ciało (tylko planeta) → statyczna linia bez pickera; >1 → wybór
-    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
+    // ── Cel budowy ──
+    let cy = this._drawInfoSection(ctx, x, y, w, t('station.target'));
+    ctx.textBaseline = 'alphabetic';
     if (targets.length === 1) {
-      ctx.fillText(`${t('station.target')}: ${targets[0]?.name ?? targets[0]?.id}`, dx + 10, cy);
+      const b0 = targets[0];
+      ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+      ctx.fillText(`${b0?.type === 'moon' ? '🌑' : '🪐'} ${b0?.name ?? b0?.id}`, x, cy + 11);
       cy += 20;
     } else {
-      ctx.fillText(t('station.target') + ':', dx + 10, cy); cy += 16;
       for (const body of targets) {
         const sel = body.id === this._stationTargetId;
         ctx.fillStyle = sel ? 'rgba(0,255,180,0.12)' : 'rgba(255,255,255,0.03)';
-        ctx.fillRect(dx + 12, cy, DW - 24, 18);
+        ctx.fillRect(x, cy, w, 18);
         ctx.strokeStyle = sel ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.08)';
-        ctx.strokeRect(dx + 12, cy, DW - 24, 18);
-        ctx.fillStyle = sel ? THEME.accent : THEME.textPrimary;
-        ctx.fillText(`${sel ? '●' : '○'} ${body.type === 'moon' ? '🌑' : '🪐'} ${body.name ?? body.id}`, dx + 18, cy + 3);
-        this._addHit(dx + 12, cy, DW - 24, 18, 'station_pick_target', { bodyId: body.id });
+        ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, cy + 0.5, w - 1, 17);
+        ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = sel ? THEME.accent : THEME.textPrimary;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(`${sel ? '●' : '○'} ${body.type === 'moon' ? '🌑' : '🪐'} ${body.name ?? body.id}`, x + 6, cy + 9);
+        this._addHit(x, cy, w, 18, 'station_pick_target', { bodyId: body.id });
         cy += 20;
       }
+      ctx.textBaseline = 'alphabetic';
     }
 
-    // Koszt
+    // ── Koszt (surowce def.cost + towary def.commodityCost) — zielony=masz, czerwony=brakuje ──
     cy += 4;
-    ctx.fillStyle = THEME.textPrimary; ctx.font = `11px ${THEME.fontFamily}`;
-    ctx.fillText(t('station.cost') + ':', dx + 10, cy); cy += 18;
-    ctx.font = `10px ${THEME.fontFamily}`;
-    const res = colony.resourceSystem;
+    cy = this._drawInfoSection(ctx, x, cy, w, t('station.cost'));
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     for (const [key, amount] of costEntries) {
       const have = res?.getAmount?.(key) ?? res?.inventory?.get(key) ?? 0;
       const icon = RESOURCE_ICONS[key] ?? COMMODITIES[key]?.icon ?? '📦';
-      const nm   = COMMODITIES[key]?.namePL ?? key;
+      const nm   = en ? (COMMODITIES[key]?.nameEN ?? key) : (COMMODITIES[key]?.namePL ?? key);   // C6b — nazwa towaru wg locale (fix: dawniej zawsze PL)
       ctx.fillStyle = have >= amount ? '#8cdf9c' : '#cc7777';
-      ctx.fillText(`${icon} ${nm}: ${Math.floor(have)}/${amount}`, dx + 16, cy);
-      cy += 14;
+      ctx.fillText(`${icon} ${nm}: ${Math.floor(have)}/${amount}`, x + 2, cy + 10);
+      cy += 15;
     }
 
-    // Przycisk budowy
+    // ── Przycisk budowy ──
     cy += 6;
     const canAfford = this._canAfford(colony, def);
-    this._drawBtn(ctx, t('station.build'), dx + 12, cy, DW - 24, 26,
-      canAfford ? 'rgba(20,80,50,0.9)' : 'rgba(60,50,20,0.85)');
-    this._addHit(dx + 12, cy, DW - 24, 26, 'station_build');
+    this._drawBtn(ctx, t('station.build'), x, cy, w, 26, canAfford ? 'rgba(20,80,50,0.9)' : 'rgba(60,50,20,0.85)');
+    this._addHit(x, cy, w, 26, 'station_build');
     cy += 30;
-    ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
-    ctx.fillText(canAfford ? t('station.buildAfford') : t('station.buildWait'), dx + DW / 2, cy);
-    ctx.textAlign = 'left'; cy += 16;
+    ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(canAfford ? t('station.buildAfford') : t('station.buildWait'), x + w / 2, cy);
+    ctx.textAlign = 'left'; cy += 18;
 
-    // W kolejce
-    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(t('station.pending') + ':', dx + 10, cy); cy += 16;
-    ctx.font = `10px ${THEME.fontFamily}`;
+    // ── W kolejce (pending orders + anuluj ✕) ──
+    cy = this._drawInfoSection(ctx, x, cy, w, t('station.pending'));
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.textBaseline = 'alphabetic';
     if (pending.length === 0) {
-      ctx.fillStyle = THEME.textDim; ctx.fillText('—', dx + 16, cy);
+      ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText('—', x + 2, cy + 10); cy += 16;
     } else {
       for (const order of pending) {
-        ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(`• ${order.targetName ?? order.targetBodyId}`, dx + 16, cy);
+        ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+        ctx.fillText(`• ${order.targetName ?? order.targetBodyId}`, x + 2, cy + 10);
         ctx.fillStyle = '#cc7777'; ctx.textAlign = 'right';
-        ctx.fillText('✕', dx + DW - 14, cy); ctx.textAlign = 'left';
-        this._addHit(dx + DW - 26, cy - 3, 20, 16, 'station_cancel_order', { orderId: order.id });
+        ctx.fillText('✕', x + w - 2, cy + 10);
+        // Wys. hitu 14 (NIE 18/16): glif ✕ jest u DOŁU wiersza (baseline cy+10). Przy max scrollu ostatni
+        // wiersz siada na scrollBot−14 (endCy=scrollBot+4 dokładnie) → hit [cy, cy+14] kończy się na scrollBot
+        // i PRZEŻYWA _pruneHitsOutside (bot+0.5); wyższy hit sterczałby pod pasmo i był ucinany mimo widocznego
+        // glifu (visible-but-unclickable). Nadal pokrywa glif (cy+3..cy+10 ⊂ [cy, cy+14]).
+        this._addHit(x + w - 20, cy, 20, 14, 'station_cancel_order', { orderId: order.id });
         cy += 18;
       }
     }
-    // Tło dialogu na KOŃCU — _hitTest (Array.find) zwraca pierwszy match, więc przyciski
-    // (dodane wyżej) mają priorytet; tło tylko konsumuje kliki w pustą część panelu.
-    this._addHit(dx, dy, DW, DH, 'stationDialogBg');
-    ctx.restore();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return cy;
   }
 
   // Zwraca listę pozycji budowy: [{ id, locked, reason }]. Budynki zablokowane KLIMATEM są
@@ -4806,17 +4801,10 @@ export class ColonyOverlay extends BaseOverlay {
       case 'stationMgmtBg': break;   // konsumuj klik w tło ekranu stacji
       case 'floatPanel': break;  // konsumuj klik — nie przebijaj na mapę
       case 'headerBuilding': break;  // konsumuj klik na ikonę budynku w nagłówku
-      case 'stationDialogBg': break; // konsumuj klik w tło dialogu stacji
-      case 'station_open':
-        if (zone.data?.hasTech) this._stationDialogOpen = !this._stationDialogOpen;
-        else this._showFlash('🔒 ' + t('station.requiresTech'));
-        break;
+      // C6b — station_open/station_dialog_close/stationDialogBg USUNIĘTE (dialog budowy → zakładka Stacja).
       case 'draft_open':
         if (zone.data?.hasBarracks) this._draftOpen = !this._draftOpen;
         else this._showFlash('🔒 ' + t('groundPanel.needBarracks'));
-        break;
-      case 'station_dialog_close':
-        this._stationDialogOpen = false;
         break;
       case 'station_pick_target':
         if (zone.data?.bodyId) this._stationTargetId = zone.data.bodyId;
