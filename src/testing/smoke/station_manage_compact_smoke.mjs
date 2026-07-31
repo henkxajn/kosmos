@@ -90,5 +90,26 @@ try {
 } catch (e) { ok('pooled-depot — RZUCIŁ: ' + e.message, false); }
 delete globalThis.window.KOSMOS;
 
+// ── T5: akcje 2b-ii — view z addHit spy rejestruje 6 typów akcji; picker otwarty → bhit=noop ──
+console.log('--- T5: action hits (2b-ii) ---');
+function collect() { const types = []; return { addHit: (a, b, c, d, type) => types.push(type), techIsResearched: () => true, types }; }
+const actStation = baseStation({
+  pop: 0, popCapacity: 100,   // pop=0 → demolish NIE zablokowany (station_mgmt_demolish, nie _blocked)
+  modules: [{ id: 'm1', moduleType: 'habitat', active: true, level: 1 }],
+  pendingModuleOrders: [{ id: 'o1', moduleType: 'trade_module', status: 'queued', progress: 0, buildTime: 5 }],
+  shipQueues: [{ shipId: 'hull_small', progress: 1, buildTime: 4 }],
+});
+const spy1 = collect();
+drawStationManageCompact(mockCtx(), { x: 0, y: Y0, w: W }, actStation, { addHit: spy1.addHit, techIsResearched: spy1.techIsResearched });
+ok('compact NIE emituje station_mgmt_rename (C6c-2b-ii: pinowany nagłówek, nie body)', !spy1.types.includes('station_mgmt_rename'));
+ok('rejestruje demolish (lub _blocked)', spy1.types.includes('station_mgmt_demolish') || spy1.types.includes('station_mgmt_demolish_blocked'));
+ok('rejestruje station_mgmt_cancelmodule', spy1.types.includes('station_mgmt_cancelmodule'));
+ok('rejestruje station_mgmt_addslot', spy1.types.includes('station_mgmt_addslot'));
+ok('rejestruje station_mgmt_addship', spy1.types.includes('station_mgmt_addship'));
+ok('rejestruje station_mgmt_cancelship', spy1.types.includes('station_mgmt_cancelship'));
+const spy2 = collect();
+drawStationManageCompact(mockCtx(), { x: 0, y: Y0, w: W }, actStation, { addHit: spy2.addHit, techIsResearched: spy2.techIsResearched, pickerOpen: true });
+ok('picker otwarty → 0 hitów station_mgmt_* (bhit=noop)', spy2.types.filter(t => t?.startsWith('station_mgmt_')).length === 0);
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail === 0 ? 0 : 1);

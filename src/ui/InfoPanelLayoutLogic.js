@@ -36,6 +36,20 @@ export function fitTabFontPx(labels, slotW, { sizes = [11, 10, 9], padPx = 8, ch
   return sizes[sizes.length - 1];
 }
 
+// Przytnij hit-zony poza widocznym pasmem [top, bot] (full-containment: cały prostokąt w środku,
+// z 0.5px tolerancją). In-place kompaktacja od `fromIndex` (starsze zony nietknięte). Pure — WYCIĄGNIĘTE
+// z ColonyOverlay._pruneHitsOutside, by ta sama logika była headless-testowalna (C6c-2b-ii scroll-invariance).
+export function pruneZones(zones, fromIndex, top, bot) {
+  if (fromIndex >= zones.length) return zones;
+  let write = fromIndex;
+  for (let i = fromIndex; i < zones.length; i++) {
+    const z = zones[i];
+    if (z.y >= top - 0.5 && z.y + z.h <= bot + 0.5) zones[write++] = z;
+  }
+  zones.length = write;
+  return zones;
+}
+
 // Klamp offsetu scrolla do [0, max(0, contentH − viewportH)]. Zawartość mieści się → 0.
 // (Dolny klamp też w handleScroll; górny wymaga znanej contentH — stąd tutaj.)
 export function clampScroll(scroll, contentH, viewportH) {

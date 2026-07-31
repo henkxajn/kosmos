@@ -622,25 +622,30 @@ function drawShipPicker(ctx, area, station, view) {
 }
 
 /**
- * C6c-2b-i — READ-ONLY compact station management embedded w zakładce Stacja (wąska kolumna 300-460px).
- * Single-column stack: nazwa → statystyki (pionowo) → moduły (1-kol) → kolejka stoczni → depot. Scroll-aware:
- * rysuje od area.y, ZWRACA endCy (BEZ zakładania że wypełnia area.h — panel przewija). Reużywa czyste helpery
- * (computeBalance/moduleStatus/moduleName). AKCJE (add/demolish/rename + pickery) = 2b-ii; tu ZERO hitów.
+ * C6c-2b — compact station management embedded w zakładce Stacja (wąska kolumna 300-460px). BODY (BEZ nazwy
+ * — ta jest w pinowanym nagłówku, ColonyOverlay._drawStationHeaderPinned): statystyki (pionowo) → moduły
+ * (1-kol) → kolejka stoczni → depot. Scroll-aware: rysuje od area.y, ZWRACA endCy (panel przewija). Reużywa
+ * czyste helpery (computeBalance/moduleStatus/moduleName). AKCJE (🗑 demolish / ✕ cancel / ＋ dodaj moduł /
+ * ＋ buduj statek) przez view.addHit — hity znikają gdy picker otwarty (bhit=noop). ✏ rename = pinowany nagłówek.
  * @param {CanvasRenderingContext2D} ctx
  * @param {{x:number,y:number,w:number}} area
  * @param {import('../entities/Station.js').Station} station
- * @param {object} view — addHit/techIsResearched threaded pod 2b-ii; NIEUŻYWANE w read-only (2b-i przekazuje {}).
+ * @param {{addHit?:Function, techIsResearched?:Function, pickerOpen?:boolean, shipPickerOpen?:boolean}} view
  * @returns {number} endCy
  */
 export function drawStationManageCompact(ctx, area, station, view) {
   const { x, y, w } = area;
   const bal = computeBalance(station);
+  // C6c-2b-ii — bhit = addHit, ale NOOP gdy picker otwarty (bazowe hity nie konkurują z modalem; wzór
+  // pełnego drawStationManagement `bhit = modal ? noop : addHit`). Picker (moduł/statek) rysuje ColonyOverlay
+  // jako floating modal poza clipem scrolla (_drawStationPicker). 2b-i przekazywało {} → wszystko read-only.
+  const { addHit = () => {}, pickerOpen, shipPickerOpen } = view ?? {};
+  const bhit = (pickerOpen || shipPickerOpen) ? (() => {}) : addHit;
   let cy = y;
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
-  // Nazwa (bez ✏ — rename = akcja 2b-ii)
-  ctx.font = `bold 13px ${THEME.fontFamily}`; ctx.fillStyle = THEME.accent;
-  ctx.fillText(truncate(ctx, `🛰 ${station.name ?? station.id}`, w), x, cy + 12); cy += 20;
+  // Nazwa + ✏ rename PRZENIESIONE do pinowanego nagłówka (ColonyOverlay._drawStationHeaderPinned) — C6c-2b-ii
+  // FIX: w scrollowanym body ✏ w 1. wierszu był prunowany po przewinięciu. Compact body zaczyna od statystyk.
 
   // Statystyki (pionowo — wąska kolumna)
   const stat = (txt, color) => {
@@ -664,37 +669,76 @@ export function drawStationManageCompact(ctx, area, station, view) {
     const lv = (def?.maxLevel ?? 1) > 1 ? ` lv${m.level ?? 1}` : '';
     ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = m.active === false ? THEME.textDim : THEME.textPrimary;
-    ctx.fillText(truncate(ctx, `${def?.icon ?? '▪'} ${moduleName(def ?? {})}${lv}`, w - 34), x, cy + 11);
+    ctx.fillText(truncate(ctx, `${def?.icon ?? '▪'} ${moduleName(def ?? {})}${lv}`, w - 54), x, cy + 11);
+    ctx.font = `10px ${THEME.fontFamily}`;
     ctx.fillStyle = st.color; ctx.textAlign = 'right';
-    ctx.fillText(st.label, x + w, cy + 11); cy += 16;
+    ctx.fillText(st.label, x + w - 22, cy + 11);
+    // 🗑 demolish (K2: rozbiórka ZASIEDLONEGO habitatu zablokowana → demolish_blocked, komunikat zamiast modalu)
+    const modCap = (def?.popCapacity ?? 0) * (m.level || 1);
+    const demolishBlocked = modCap > 0 && (station.pop ?? 0) > ((station.popCapacity ?? 0) - modCap);
+    ctx.fillStyle = demolishBlocked ? THEME.textDim : THEME.danger; ctx.textAlign = 'center';
+    ctx.fillText('🗑', x + w - 8, cy + 11); ctx.textAlign = 'left';
+    bhit(x + w - 18, cy, 18, 16, demolishBlocked ? 'station_mgmt_demolish_blocked' : 'station_mgmt_demolish',
+         { moduleId: m.id, moduleType: m.moduleType });
+    cy += 16;
   }
   for (const o of station.pendingModuleOrders) {
     const def = STATION_MODULES[o.moduleType];
     const frac = o.buildTime > 0 ? Math.min(1, (o.progress ?? 0) / o.buildTime) : 0;
     ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(truncate(ctx, `${def?.icon ?? '▪'} ${moduleName(def ?? {})}`, w - 64), x, cy + 10);
+    ctx.fillText(truncate(ctx, `${def?.icon ?? '▪'} ${moduleName(def ?? {})}`, w - 82), x, cy + 10);
     ctx.fillStyle = o.status === 'building' ? THEME.mint : THEME.warning; ctx.textAlign = 'right';
-    ctx.fillText(o.status === 'building' ? `🔨 ${Math.round(frac * 100)}%` : `⏳ ${t('station.mgmt.queued')}`, x + w, cy + 10); cy += 15;
+    ctx.fillText(o.status === 'building' ? `🔨 ${Math.round(frac * 100)}%` : '⏳', x + w - 20, cy + 10);
+    ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
+    ctx.fillText('✕', x + w - 8, cy + 10); ctx.textAlign = 'left';
+    bhit(x + w - 18, cy, 18, 14, 'station_mgmt_cancelmodule', { orderId: o.id });
+    cy += 15;
+  }
+
+  // ＋ Dodaj moduł (gdy są wolne sloty) → picker modułów (station_mgmt_addslot)
+  if (station.modules.length + station.pendingModuleOrders.length < maxModules) {
+    const bh = 18;
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = THEME.borderLight ?? THEME.border; ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, cy + 0.5, w - 1, bh - 1); ctx.setLineDash([]);
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`＋ ${t('station.mgmt.addModule')}`, x + w / 2, cy + bh / 2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    bhit(x, cy, w, bh, 'station_mgmt_addslot', {});
+    cy += bh + 2;
   }
 
   // Kolejka stoczni (read-only) — tylko gdy stocznia aktywna
   if (station.hasActiveShipyard) {
     cy += 4;
     cy = sectionLine(ctx, x, cy, w, t('station.mgmt.shipQueue'));
+    // ＋ Buduj statek → picker statków (station_mgmt_addship)
+    const abH = 16;
+    ctx.fillStyle = 'rgba(0,255,180,0.08)'; ctx.fillRect(x, cy, w, abH);
+    ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, cy + 0.5, w - 1, abH - 1);
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.accent; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`＋ ${t('station.mgmt.buildShip')}`, x + w / 2, cy + abH / 2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    bhit(x, cy, w, abH, 'station_mgmt_addship', {});
+    cy += abH + 4;
     const queues = station.shipQueues ?? [];
     if (queues.length === 0) {
       ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
       ctx.fillText(t('station.mgmt.shipQueueEmpty'), x + 2, cy + 10); cy += 15;
     } else {
-      for (const q of queues) {
+      for (let i = 0; i < queues.length; i++) {
+        const q = queues[i];
         const ship = SHIPS[q.shipId] ?? HULLS[q.shipId];
         const frac = q.buildTime > 0 ? Math.min(1, (q.progress ?? 0) / q.buildTime) : 0;
         ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(truncate(ctx, `${ship?.icon ?? '🚀'} ${moduleName(ship ?? { namePL: q.shipId, nameEN: q.shipId })}`, w - 46), x, cy + 10);
+        ctx.fillText(truncate(ctx, `${ship?.icon ?? '🚀'} ${moduleName(ship ?? { namePL: q.shipId, nameEN: q.shipId })}`, w - 64), x, cy + 10);
         ctx.fillStyle = THEME.mint; ctx.textAlign = 'right';
-        ctx.fillText(`${Math.round(frac * 100)}%`, x + w, cy + 10); cy += 15;
+        ctx.fillText(`${Math.round(frac * 100)}%`, x + w - 20, cy + 10);
+        ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
+        ctx.fillText('✕', x + w - 8, cy + 10); ctx.textAlign = 'left';
+        bhit(x + w - 18, cy, 18, 14, 'station_mgmt_cancelship', { index: i });
+        cy += 15;
       }
     }
   }
@@ -742,4 +786,16 @@ export function drawStationManageCompact(ctx, area, station, view) {
 
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   return cy;
+}
+
+/**
+ * C6c-2b-ii — wrapper pickera modułów/statków dla floating-modal w zakładce Stacja. Utrzymuje
+ * drawModulePicker/drawShipPicker WEWNĘTRZNYMI (bez eksportu). ColonyOverlay woła to z _drawStationPicker
+ * (backdrop + absorber dokłada ColonyOverlay). Reużywa 1:1 istniejące pickery (te same hity station_mgmt_*).
+ * @param {'module'|'ship'} kind
+ */
+export function drawStationPickerModal(ctx, area, station, view, kind) {
+  const maxModules = STATIONS[station.stationType]?.maxModules ?? 8;
+  if (kind === 'ship') drawShipPicker(ctx, area, station, view);
+  else                 drawModulePicker(ctx, area, station, view, maxModules);
 }

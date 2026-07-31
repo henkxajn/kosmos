@@ -12,7 +12,7 @@
 //        przypięta stopka mieści się BEZ przycięcia pod paskiem BottomControlBar — konkretne px.
 //   T4  no-crash / clamp: minimalna realna szerokość (w=300) daje dodatni globus; clamp szerokości działa.
 
-import { fixedGlobeSize, fitTabFontPx, tabSlotWidth } from '../../ui/InfoPanelLayoutLogic.js';
+import { fixedGlobeSize, fitTabFontPx, tabSlotWidth, pruneZones } from '../../ui/InfoPanelLayoutLogic.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
@@ -116,6 +116,39 @@ console.log('--- T5: fitTabFontPx dobiera font paska (4 zakładki mieszczą „P
     const widest = Math.max(...LABELS4.map(l => l.length * px * 0.6));
     ok(`4 zakładki @${infoW}: najszersza etykieta ${widest.toFixed(1)}px ≤ slot ${sw}px (font ${px}px)`, widest <= sw);
   }
+}
+
+// ── T6: C6c-2b-ii — scroll-invariance pinowanego nagłówka Stacja + PRZEŻYCIE prune (przez WYKONANIE) ──
+// Model realnego _drawInfoPanel dla Stacja-exists: body-hit (scroll-relative) dodany PRZED pruneZones;
+// pinowany nagłówek (stały headerTop) dodany PO. Dowód przez URUCHOMIENIE PRAWDZIWEJ pruneZones: hit ✏
+// nagłówka ma IDENTYCZNE Y przy 2 offsetach i przeżywa prune, a stary (niepinowany) ✏ jest prunowany za
+// progiem ~4.5px — dokładnie targetuje klasę bugów hit-zone/scroll, która wracała cały dzień.
+console.log('--- T6: pinned Stacja header scroll-invariance (via REAL pruneZones) ---');
+{
+  const CY = 200, HEADER_H = 24, SCROLL_BOT = 700, HIT_H = 16;
+  // Symuluj _drawInfoPanel (fix) dla danego scrolla → zwróć finalne hit-zony.
+  const sim = (scroll) => {
+    const viewTop = CY + HEADER_H - 4;                 // fix: body clip zaczyna się POD nagłówkiem
+    const startCy = CY + HEADER_H - scroll;            // body startuje pod rezerwą
+    const zones = [];
+    const hitStart = zones.length;
+    zones.push({ y: startCy, h: HIT_H, type: 'body_first_row' });   // 1. wiersz body (scroll-relative)
+    pruneZones(zones, hitStart, viewTop, SCROLL_BOT);               // prune body — PRAWDZIWA logika
+    zones.push({ y: CY, h: HIT_H, type: 'station_mgmt_rename' });   // pinowany nagłówek PO prune, stały headerTop=CY
+    return zones;
+  };
+  const hdr0  = sim(0).find(z => z.type === 'station_mgmt_rename');
+  const hdr40 = sim(40).find(z => z.type === 'station_mgmt_rename');
+  ok('pinowany ✏ obecny przy scroll 0 i 40', !!hdr0 && !!hdr40);
+  ok(`pinowany ✏ Y IDENTYCZNE (${hdr0.y}=${hdr40.y}=${CY}) — scroll-invariant przez WYKONANIE`, hdr0.y === hdr40.y && hdr0.y === CY);
+  // KONTRAST — stary niepinowany ✏ (w body, PRZED prune, stary viewTop=CY−4): przeżywa @0, prunowany @40 (był bug).
+  const oldSurvives = (scroll) => {
+    const zones = [{ y: CY - scroll, h: HIT_H, type: 'station_mgmt_rename' }];
+    pruneZones(zones, 0, CY - 4, SCROLL_BOT);
+    return zones.some(z => z.type === 'station_mgmt_rename');
+  };
+  ok('stary niepinowany ✏ przeżywa @scroll 0', oldSurvives(0) === true);
+  ok('stary niepinowany ✏ PRUNOWANY @scroll 40 (>~4.5px próg — dokładnie ten bug)', oldSurvives(40) === false);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);

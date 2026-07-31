@@ -24,7 +24,7 @@ import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
-import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize, fitTabFontPx } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus (wspólny); C6b — fitTabFontPx (auto-font paska)
+import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize, fitTabFontPx, pruneZones } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus; C6b — fitTabFontPx; C6c-2b-ii — pruneZones
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -38,7 +38,7 @@ import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
-import { drawStationManagement, drawStationManageCompact } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji; C6c-2b-i — compact embed
+import { drawStationManagement, drawStationManageCompact, drawStationPickerModal } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji; C6c-2b — compact embed + floating picker
 import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
 import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
 
@@ -53,6 +53,9 @@ const INFO_MAX  = 460;
 
 // Pasek listy budynków nad mapą 2D (kolumna mapy, pod nagłówkiem)
 const BUILD_BAR_H = 30;
+
+// C6c-2b-ii — wys. pinowanego nagłówka Stacja-exists (nazwa + ✏ rename) NAD przewijanym body embedu.
+const STATION_HEADER_H = 24;
 
 // S4 — przypięte pasmo podsumowania Załogi (3 linie 2-kolumnowe ×18 + strefa separatora).
 // Rezerwowane u DOŁU panelu; pasmo scrolla tabeli kończy się NAD nim → bilans/zdrowie kolonii
@@ -515,6 +518,33 @@ export class ColonyOverlay extends BaseOverlay {
   _getSelectedStation() {
     const s = EntityManager.get(this._selectedStationId);
     return s?.type === 'station' ? s : null;
+  }
+
+  // C6c — stan grupy stacji dla ciała kolonii. JEDNO źródło (współdzielone: _drawStationTab body +
+  // pinowany nagłówek Stacja-exists w _drawInfoPanel). Derywacja parentPlanetId (pure, DECOUPLED od HUB-gate).
+  _resolveStationGroupState(colony) {
+    const colMgr = window.KOSMOS?.colonyManager, stationSys = window.KOSMOS?.stationSystem;
+    const anchorBody = colony?.planet ?? EntityManager.get(colony?.planetId);
+    return resolveStationGroupState(stationGroupOf(anchorBody), {
+      getStationsAt: (bid) => stationSys?.getStationsAt?.(bid) ?? [],
+      getColony:     (bid) => colMgr?.getColony?.(bid),
+    });
+  }
+
+  // C6c-2b-ii FIX — pinowany nagłówek Stacja-exists: nazwa + ✏ rename, STAŁY Y (nie przewija się; hit
+  // rejestrowany w _drawInfoPanel PO prune → nieprunowany). pickerOpen → hit pominięty (backdrop obsługuje klik).
+  _drawStationHeaderPinned(ctx, x, y, w, station, pickerOpen) {
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `bold 13px ${THEME.fontFamily}`; ctx.fillStyle = THEME.accent;
+    const nameStr = this._truncateText(ctx, `🛰 ${station.name ?? station.id}`, w - 22);
+    ctx.fillText(nameStr, x, y + 13);
+    const renX = Math.min(x + ctx.measureText(nameStr).width + 8, x + w - 18);
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'center';
+    ctx.fillText('✏', renX + 8, y + 12); ctx.textAlign = 'left';
+    if (!pickerOpen) this._addHit(renX, y, 18, 16, 'station_mgmt_rename', {});
+    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.3; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y + STATION_HEADER_H - 3.5); ctx.lineTo(x + w, y + STATION_HEADER_H - 3.5); ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   // S3.4 FAZA 3 — deleguj render ekranu stacji do StationManagementView (addHit → _hitZones overlayu).
@@ -1055,6 +1085,13 @@ export class ColonyOverlay extends BaseOverlay {
         && !colony.ownerEmpireId && !colony.isTestEnemy) {
       this._drawDraftModal(ctx, ox, oy, ow, oh);
     }
+
+    // C6c-2b-ii — floating picker stacji (moduł/statek) nad zakładką Stacja (wzór _drawDraftModal:
+    // rysowany OSTATNI, poza clipem scrolla info-panelu; klik izolowany w handleClick early-route).
+    if ((this._stationPickerOpen || this._stationShipPickerOpen) && !this._stationMode && this._infoTab === 'stacja'
+        && colony && !colony.isPreview && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      this._drawStationPicker(ctx, ox, oy, ow, oh);
+    }
   }
 
   /** Modal rekrutacji jednostek naziemnych — panel scoped do this._getColony(). */
@@ -1089,6 +1126,24 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Tło modalu na KOŃCU — absorber (wzór station dialog)
     this._addHit(dx, dy, DW, DH, 'draftDialogBg');
+    ctx.restore();
+  }
+
+  /** C6c-2b-ii — floating picker stacji (moduł/statek) nad zakładką Stacja. Backdrop na PEŁNYCH boundach
+   *  overlayu (ox,oy,ow,oh) → true modal: klik w pasek zakładek/mapę pochłonięty przez stationPickerBg
+   *  (dodany OSTATNI → hity pickera wygrywają first-match). Klik izolowany w _handleStationPickerClick. */
+  _drawStationPicker(ctx, ox, oy, ow, oh) {
+    const station = this._getSelectedStation();
+    if (!station) { this._stationPickerOpen = false; this._stationShipPickerOpen = false; return; }
+    ctx.save();
+    ctx.fillStyle = 'rgba(2,6,10,0.55)'; ctx.fillRect(ox, oy, ow, oh);   // backdrop przyciemniający
+    const view = {
+      addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
+      techIsResearched: (tech) => window.KOSMOS?.techSystem?.isResearched?.(tech) ?? false,
+    };
+    drawStationPickerModal(ctx, { x: ox, y: oy + HDR_H, w: ow, h: oh - HDR_H }, station, view,
+                           this._stationShipPickerOpen ? 'ship' : 'module');
+    this._addHit(ox, oy, ow, oh, 'stationPickerBg');   // absorber PEŁNY, OSTATNI (picker hity dodane wyżej wygrywają)
     ctx.restore();
   }
 
@@ -1271,6 +1326,12 @@ export class ColonyOverlay extends BaseOverlay {
     // do Planety — inaczej switch(activeTab) rysowałby zakładkę spoza paska (stale render).
     if (canWorkforce && !tabs.some(tt => tt.id === this._infoTab)) this._infoTab = 'planet';
     const activeTab = canWorkforce ? this._infoTab : 'planet';
+    // C6c-2b-ii — floating picker stacji żyje TYLKO na zakładce Stacja. Gdy aktywna zakładka to nie Stacja
+    // (przełączenie LUB sanitacja C6b bez _switchColony), zamknij picker TU — _drawInfoPanel biegnie PRZED
+    // hookiem rysującym picker i przed następnym handleClick, więc early-route nie połknie zbłąkanego kliku.
+    if (activeTab !== 'stacja' && (this._stationPickerOpen || this._stationShipPickerOpen)) {
+      this._stationPickerOpen = false; this._stationShipPickerOpen = false;
+    }
     const tabCfg = tabs.find(tt => tt.id === activeTab) ?? tabs[0];
     const colId = colony?.planetId ?? planet?.id ?? null;
     if (this._infoScrollColonyId !== colId) {   // offset per-zakładka NIE przenosi się między koloniami
@@ -1313,12 +1374,20 @@ export class ColonyOverlay extends BaseOverlay {
     let cy = discY + discSize + 10;
     if (canWorkforce) cy = this._drawInfoTabs(ctx, lx, cy, cw, tabs);
 
+    // C6c-2b-ii FIX — Stacja-exists PINUJE nagłówek (nazwa + ✏ rename) NAD scrollem (mirror-image stopki
+    // Załogi): bez tego ✏ w 1. wierszu body jest prunowany po przewinięciu (_pruneHitsOutside). Rezerwa u
+    // góry; nagłówek rysowany PO body+prune na STAŁYM headerTop (scroll-invariant → hit ✏ nigdy nieprunowany).
+    // Targeted (Stacja-only): brak ogólnej „pinned header" capability (jak fixedGlobeSize — bez spekulacji).
+    const stacjaHdrStation = (activeTab === 'stacja') ? this._resolveStationGroupState(colony)?.station : null;
+    const headerReserve = stacjaHdrStation ? STATION_HEADER_H : 0;
+    const headerTop = cy;
+
     // ── C4: per-zakładka scroll ──────────────────────────────────────────────
     // viewTop/viewBot = widoczne pasmo treści (pod zakładkami). Offset klampowany do wysokości
     // treści zmierzonej w POPRZEDNIEJ klatce (górny klamp „lag 1 klatka" — niewidoczny przy ciągłym
     // redraw); dolny klamp zawsze. Treść rysowana od (cy − scroll); hity poza pasmem przycinane
     // PO rysowaniu (stale-click guard). contentH mierzona TEJ klatki → następny klamp + kciuk.
-    const viewTop = cy - 4;
+    const viewTop = cy + headerReserve - 4;   // C6c-2b-ii — body scrolla zaczyna się POD pinowanym nagłówkiem (rezerwa u góry)
     // #4 — dolna rezerwa: pasek BottomControlBar policzony wyżej (viewBot). S4 — jeśli zakładka ma
     // przypięte podsumowanie, pasmo scrolla kończy się NAD nim (scrollBot); inaczej sięga viewBot.
     const scrollBot = viewBot - summaryReserve;
@@ -1330,7 +1399,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.save();
     ctx.beginPath(); ctx.rect(x, viewTop, w, scrollBot - viewTop); ctx.clip();
 
-    const startCy = cy - scroll;
+    const startCy = cy + headerReserve - scroll;   // C6c-2b-ii — body startuje pod rezerwą nagłówka
     let endCy = startCy;
     switch (activeTab) {
       case 'workforce':
@@ -1366,6 +1435,14 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Pasmo treści dla handleScroll (kursor nad info panelem → scroll aktywnej zakładki).
     this._infoView = { x, w, top: viewTop, bot: scrollBot, tab: activeTab, scrollable: contentH > viewportH };
+
+    // ── C6c-2b-ii FIX: pinowany nagłówek Stacja-exists (nazwa + ✏ rename) ──────────────────────────
+    // Rysowany PO _pruneHitsOutside → hit ✏ NIE jest prunowany (poza [hitStart, end]); na STAŁYM headerTop
+    // (nie zależy od scroll) → klikalny przy każdym przewinięciu. picker otwarty → hit pominięty (backdrop obsługuje).
+    if (stacjaHdrStation) {
+      this._drawStationHeaderPinned(ctx, lx, headerTop, cw, stacjaHdrStation,
+                                    this._stationPickerOpen || this._stationShipPickerOpen);
+    }
 
     // ── S4: przypięte podsumowanie (poza transformacją scrolla — zawsze widoczne) ──
     if (hasSummary) {
@@ -1718,14 +1795,7 @@ export class ColonyOverlay extends BaseOverlay {
   // zostawia martwej strefy klikalnej nachodzącej na pasek zakładek/inne UI). first-match _hitTest
   // → zakładki (rejestrowane PRZED treścią) wygrywają, a przycięta treść nie łapie klików.
   _pruneHitsOutside(fromIndex, top, bot) {
-    const zones = this._hitZones;
-    if (fromIndex >= zones.length) return;
-    let write = fromIndex;
-    for (let i = fromIndex; i < zones.length; i++) {
-      const z = zones[i];
-      if (z.y >= top - 0.5 && z.y + z.h <= bot + 0.5) zones[write++] = z;
-    }
-    zones.length = write;
+    pruneZones(this._hitZones, fromIndex, top, bot);   // C6c-2b-ii — logika w InfoPanelLayoutLogic.pruneZones (headless-testowalna)
   }
 
   // ── Zakładki prawej kolumny (pigułki, wzór _drawColonyTabs) — data-driven N-zakładek (C4) ──
@@ -4205,25 +4275,23 @@ export class ColonyOverlay extends BaseOverlay {
   // nagłówka + StationManagementView), NIETKNIĘTA przez ten slice.
   _drawStationTab(ctx, x, y, w, colony) {
     if (!colony) return y;
-    const colMgr     = window.KOSMOS?.colonyManager;
-    const stationSys = window.KOSMOS?.stationSystem;
+    const colMgr = window.KOSMOS?.colonyManager;
 
-    // ── C6c-1: cap „1 stacja na grupę (planeta+księżyce)" ─────────────────────────────────────────
-    // Stan grupy liczony RAZ na draw z derywacji parentPlanetId (stationGroupOf — pure, DECOUPLED od
-    // SystemPoolService/HUB-gate). exists/pending → placeholder (pełna treść: C6c-2a/2b); build →
-    // formularz niżej. Formularz to JEDYNA ścieżka tworzenia zlecenia → chowając go group-wide
-    // blokujemy podwójne zakolejkowanie (Decision 2). Picker w STATE build bez filtra (grupa pusta ⇒ OK).
-    const anchorBody = colony.planet ?? EntityManager.get(colony.planetId);
-    const groupState = resolveStationGroupState(stationGroupOf(anchorBody), {
-      getStationsAt: (bid) => stationSys?.getStationsAt?.(bid) ?? [],
-      getColony:     (bid) => colMgr?.getColony?.(bid),
-    });
+    // ── C6c-1: cap „1 stacja na grupę (planeta+księżyce)" — stan grupy RAZ na draw (derywacja parentPlanetId,
+    // pure, DECOUPLED od HUB-gate; _resolveStationGroupState = wspólne źródło z pinowanym nagłówkiem). exists →
+    // embed zarządzania; pending → „W kolejce"; build → formularz (JEDYNA ścieżka tworzenia zlecenia →
+    // chowając go group-wide blokujemy dublet, Decision 2). Picker w STATE build bez filtra (grupa pusta ⇒ OK).
+    const groupState = this._resolveStationGroupState(colony);
     if (groupState.state === 'exists') {
       // C6c-2b-i — READ-ONLY embed zarządzania stacją GRUPY (groupState.station), niezależnie od oglądanego
       // ciała. _selectedStationId ustawione pod 2b-ii (akcje/pickery; nieszkodliwe teraz). Pełny ekran
       // drawStationManagement (pigułki/_stationMode) NIETKNIĘTY — retire w C6c-3.
       this._selectedStationId = groupState.station.id;
-      return drawStationManageCompact(ctx, { x, y, w }, groupState.station, {});
+      return drawStationManageCompact(ctx, { x, y, w }, groupState.station, {
+        addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
+        techIsResearched: (tech) => window.KOSMOS?.techSystem?.isResearched?.(tech) ?? false,
+        pickerOpen: this._stationPickerOpen, shipPickerOpen: this._stationShipPickerOpen,
+      });
     }
     if (groupState.state === 'pending') {
       const o  = groupState.order;
@@ -4485,11 +4553,29 @@ export class ColonyOverlay extends BaseOverlay {
     return true;
   }
 
+  /** C6c-2b-ii — klik gdy floating picker stacji otwarty: TYLKO strefy station_mgmt_* + stationPickerBg
+   *  żyją; reszta pochłonięta (true modal, wzór _handleDraftClick). Reużywa _onHit dla akcji pickera. */
+  _handleStationPickerClick(x, y) {
+    const z = this._hitZones.find(zn =>
+      x >= zn.x && x <= zn.x + zn.w && y >= zn.y && y <= zn.y + zn.h &&
+      (zn.type?.startsWith('station_mgmt_') || zn.type === 'stationPickerBg'));
+    if (!z || z.type === 'stationPickerBg') { this._stationPickerOpen = false; this._stationShipPickerOpen = false; return true; }
+    // C6c-2b-ii FIX — tło PUDEŁKA pickera KONSUMUJ (nie zamykaj): zamyka tylko ✕ (*_close) LUB klik POZA
+    // pudełkiem (stationPickerBg). Bez tego klik w ciało pickera (nazwa/koszt/ikona/wiersz niebudowalny — brak
+    // hitu station_mgmt_build, ten jest tylko na przycisku Buduj gdy canBuild) spadał na picker_bg i ZAMYKAŁ.
+    if (z.type === 'station_mgmt_picker_bg' || z.type === 'station_mgmt_shippicker_bg') return true;
+    this._onHit(z);   // reuse station_mgmt_build/buildship/picker_close/shippicker_close/... verbatim
+    return true;
+  }
+
   handleClick(x, y) {
     if (!this.visible) return false;
 
     // Modal rekrutacji otwarty → TYLKO strefy draftu żyją; reszta pochłonięta (true modal).
     if (this._draftOpen) return this._handleDraftClick(x, y);
+
+    // C6c-2b-ii — floating picker stacji otwarty (poza trybem stacji) → izoluj klik do stref pickera.
+    if ((this._stationPickerOpen || this._stationShipPickerOpen) && !this._stationMode) return this._handleStationPickerClick(x, y);
 
     // Sprawdź czy klik jest w overlay bounds
     const canvas = document.getElementById('ui-canvas');
