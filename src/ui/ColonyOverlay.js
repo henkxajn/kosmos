@@ -22,7 +22,7 @@ import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
 import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
-import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + per-zakładka scroll + stepper ±
+import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus (wspólny)
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -51,6 +51,12 @@ const INFO_MAX  = 460;
 
 // Pasek listy budynków nad mapą 2D (kolumna mapy, pod nagłówkiem)
 const BUILD_BAR_H = 30;
+
+// S4 — przypięte pasmo podsumowania Załogi (3 linie 2-kolumnowe ×18 + strefa separatora).
+// Rezerwowane u DOŁU panelu; pasmo scrolla tabeli kończy się NAD nim → bilans/zdrowie kolonii
+// zawsze widoczne bez przewijania (odwrócenie kompromisu 0.26 z Fazy 3).
+const WF_SUMMARY_H   = 54;   // 3 × 18px  (Bezrobotni|Satysfakcja · Prosperity|Wzrost · Bilans)
+const WF_SUMMARY_GAP = 12;   // odstęp/separator między pasmem scrolla a podsumowaniem
 
 let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 window.addEventListener('resize', () => {
@@ -1301,9 +1307,25 @@ export class ColonyOverlay extends BaseOverlay {
       this._infoScrollColonyId = colId;
       this._infoScroll = {}; this._infoContentH = {};
     }
-    // Faza 3 FIX 4 (uogólnione C4): zakładka z compactGlobe (Załoga) → globus MNIEJSZY — zwolnij pion
-    // na treść/stopkę (config zamiast twardego sprawdzenia nazwy zakładki; C5/C6 opt-inują wpisem).
-    let discSize = Math.min(w - pad * 2, Math.round(h * (tabCfg.compactGlobe ? 0.26 : 0.42)));
+    // S4 — czy aktywna zakładka pinuje stopkę. DZIŚ bramkowane wyłącznie do Załogi-V2: `wfV2` chroni przed
+    // podwójną stopką na ścieżce legacy V1 (V1 ma stopkę WPISANĄ w swoją przewijaną treść). ⚠ NIE jest to
+    // jeszcze generyczne — `wfV2` twardo koduje activeTab==='workforce', więc hasSummary jest strukturalnie
+    // false dla każdej innej zakładki niezależnie od jej configu. Przyszła zakładka z summary:true (C5)
+    // będzie potrzebować WŁASNEGO odpowiednika guardu „stopka już wyłączona z body" — NIE dosłownie wfV2.
+    const wfV2 = activeTab === 'workforce' && GAME_CONFIG.FEATURES?.popAllocation2 === true;
+    const hasSummary = tabCfg.summary === true && wfV2;
+    const summaryReserve = hasSummary ? (WF_SUMMARY_H + WF_SUMMARY_GAP) : 0;
+    // viewBot — potrzebne przypiętej stopce S4 (dolna rezerwa). Klamp do paska BottomControlBar
+    // rysowanego NA WIERZCHU overlayu (zegar/prędkości/data) — tylko gdy faktycznie nachodzi na X panelu.
+    let viewBot = y + h;
+    const bcbRect = window.KOSMOS?.bottomControlBar?._bgRect;
+    if (bcbRect && bcbRect.y != null && bcbRect.x < x + w && bcbRect.x + bcbRect.w > x) {
+      viewBot = Math.min(viewBot, bcbRect.y - 4);   // 4px luzu nad paskiem
+    }
+    // Globus: STAŁY rozmiar (0.42·h clamp do szer.) WSPÓLNY dla WSZYSTKICH zakładek — Załoga liczy przez
+    // TĘ SAMĄ funkcję co Planeta → identyczne px przy każdej wysokości Z KONSTRUKCJI. (Adaptacja usunięta:
+    // scroll C4 + stopka S4 zdejmują potrzebę kurczenia globusa; tabela strat zajmuje resztę i przewija się.)
+    let discSize = fixedGlobeSize(h, w, pad);
     let discX = x + (w - discSize) / 2;
     if (discX + discSize > availRight) {
       discX = availRight - discSize;            // przesuń w lewo spod drawera
@@ -1327,28 +1349,24 @@ export class ColonyOverlay extends BaseOverlay {
     // redraw); dolny klamp zawsze. Treść rysowana od (cy − scroll); hity poza pasmem przycinane
     // PO rysowaniu (stale-click guard). contentH mierzona TEJ klatki → następny klamp + kciuk.
     const viewTop = cy - 4;
-    // #4 — zarezerwuj dół pod pasek BottomControlBar (zegar/prędkości/data) rysowany NA WIERZCHU
-    // overlayu w prawym-dolnym rogu; nakłada się na kolumnę info → bez rezerwy ostatni wiersz
-    // SUROWCE chowa się pod paskiem. Żywy _bgRect (peek-aware, 1-klatka lag ale stabilny); klamp
-    // tylko gdy pasek FAKTYCZNIE nachodzi na X panelu (inaczej pełna wysokość, jak dotąd).
-    let viewBot = y + h;
-    const bcbRect = window.KOSMOS?.bottomControlBar?._bgRect;
-    if (bcbRect && bcbRect.y != null && bcbRect.x < x + w && bcbRect.x + bcbRect.w > x) {
-      viewBot = Math.min(viewBot, bcbRect.y - 4);   // 4px luzu nad paskiem
-    }
-    const viewportH = Math.max(0, viewBot - viewTop);
+    // #4 — dolna rezerwa: pasek BottomControlBar policzony wyżej (viewBot). S4 — jeśli zakładka ma
+    // przypięte podsumowanie, pasmo scrolla kończy się NAD nim (scrollBot); inaczej sięga viewBot.
+    const scrollBot = viewBot - summaryReserve;
+    const viewportH = Math.max(0, scrollBot - viewTop);
     const scroll = clampScroll(this._infoScroll[activeTab] ?? 0, this._infoContentH[activeTab] ?? 0, viewportH);
     this._infoScroll[activeTab] = scroll;
 
     const hitStart = this._hitZones.length;
     ctx.save();
-    ctx.beginPath(); ctx.rect(x, viewTop, w, viewBot - viewTop); ctx.clip();
+    ctx.beginPath(); ctx.rect(x, viewTop, w, scrollBot - viewTop); ctx.clip();
 
     const startCy = cy - scroll;
     let endCy = startCy;
     switch (activeTab) {
       case 'workforce':
-        endCy = this._drawWorkforceTab(ctx, lx, startCy, cw, viewBot - startCy - 4, colony, civ);
+        endCy = wfV2
+          ? this._drawWorkforceTableV2(ctx, lx, startCy, cw, colony, civ)                        // tylko tabela (stopka przypięta)
+          : this._drawWorkforceTab(ctx, lx, startCy, cw, scrollBot - startCy - 4, colony, civ);  // legacy V1 (stopka w scrollu)
         break;
       case 'planet':
       default:
@@ -1361,7 +1379,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._infoContentH[activeTab] = contentH;
 
     // Przytnij hity treści poza widocznym pasmem (wzór _bVis float panelu — cały zone musi być w środku).
-    this._pruneHitsOutside(hitStart, viewTop, viewBot);
+    this._pruneHitsOutside(hitStart, viewTop, scrollBot);
 
     // Kciuk paska przewijania (afordancja przewijalności) — prawy skraj panelu.
     const thumb = scrollThumb(scroll, contentH, viewportH, viewTop);
@@ -1371,18 +1389,28 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     // Pasmo treści dla handleScroll (kursor nad info panelem → scroll aktywnej zakładki).
-    this._infoView = { x, w, top: viewTop, bot: viewBot, tab: activeTab, scrollable: contentH > viewportH };
+    this._infoView = { x, w, top: viewTop, bot: scrollBot, tab: activeTab, scrollable: contentH > viewportH };
+
+    // ── S4: przypięte podsumowanie (poza transformacją scrolla — zawsze widoczne) ──
+    if (hasSummary) {
+      const sepY = scrollBot + Math.floor(WF_SUMMARY_GAP / 2);
+      ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + pad, sepY + 0.5); ctx.lineTo(x + w - pad, sepY + 0.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+      this._drawWorkforceSummaryV2(ctx, lx, viewBot - WF_SUMMARY_H, cw, colony, civ);
+    }
 
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
   // ── C4: konfiguracja zakładek prawej kolumny — JEDNO źródło (pasek, szerokość, dispatch, layout) ──
   // N-zakładek-ready: C5 (Populacja) / C6 (Stacja) dopną kolejne wpisy bez ruszania geometrii.
-  // compactGlobe = zakładka chce mniejszego globusa (więcej pionu na treść/stopkę).
+  // summary:true = zakładka pinuje stopkę u dołu panelu (S4). Globus jest STAŁY dla WSZYSTKICH zakładek
+  // (fixedGlobeSize) — brak per-zakładkowej frakcji globusa.
   _getInfoTabs() {
     return [
-      { id: 'planet',    labelKey: 'colonyInfo.tabPlanet',    compactGlobe: false },
-      { id: 'workforce', labelKey: 'colonyInfo.tabWorkforce', compactGlobe: true  },
+      { id: 'planet',    labelKey: 'colonyInfo.tabPlanet' },
+      { id: 'workforce', labelKey: 'colonyInfo.tabWorkforce', summary: true },
     ];
   }
 
@@ -1490,8 +1518,7 @@ export class ColonyOverlay extends BaseOverlay {
   // Tabela: strata | etaty | pracownicy | płaca (highlight pressure>0.25) | focus [− n +].
   // Stopka: bezrobotni (warn >10%), satysfakcja, prosperity + strzałka trendu, wzrost.
   _drawWorkforceTab(ctx, x, y, w, h, colony, civ) {
-    // Slice 5C.1: pod flagą popAllocation2 — nowa zakładka (share-% + termometry obsady + kolumna Droidy).
-    if (GAME_CONFIG.FEATURES?.popAllocation2 === true) return this._drawWorkforceTabV2(ctx, x, y, w, h, colony, civ);   // C4 — zwróć cy (wysokość treści dla scrolla)
+    // Legacy V1 (popAllocation2=false). Żywa ścieżka = _drawWorkforceTableV2 + _drawWorkforceSummaryV2.
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
     const humans = Math.floor(civ.humans ?? civ.population ?? 0);
@@ -1612,16 +1639,15 @@ export class ColonyOverlay extends BaseOverlay {
     return cy;   // C4 — wysokość treści dla scrolla panelu
   }
 
-  // ── Zakładka Załoga v2 (Slice 5C.1, flag popAllocation2) ────────────────────
+  // ── Tabela Załogi v2 (Slice 5C.1, flag popAllocation2) — S2: sama tabela (stopka wydzielona) ──
   //  Wiersz 2-liniowy/warstwa: [nazwa · płaca · Focus share-stepper] / [termometr obsady ·
   //  POP+droidy/etaty · droid-stepper]. Termometr: (POP+droidy)/etaty, zielony <70% (miejsce na
   //  absorpcję) / pomarańcz 70-90% / czerwony ≥90% (SATUROWANA — rozbuduj budynki). Focus = docelowy
   //  UDZIAŁ (share) tej warstwy; droid [±] auto-pick (najsłabiej obsadzony budynek / zwrot do magazynu).
-  _drawWorkforceTabV2(ctx, x, y, w, h, colony, civ) {
+  //  ROW_H=30 i steppery NIETKNIĘTE (stepperButtonBand bez zmian); stopka → _drawWorkforceSummaryV2.
+  _drawWorkforceTableV2(ctx, x, y, w, colony, civ) {
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
-    const humans = Math.floor(civ.humans ?? civ.population ?? 0);
-    const unemployed = civ.unemployed ?? 0;
 
     // Anchory prawych sterowników — Focus (linia 1) i Droidy (linia 2) pionowo zestrojone.
     const STEPW = 74;
@@ -1723,43 +1749,54 @@ export class ColonyOverlay extends BaseOverlay {
       cy += ROW_H;
     }
 
-    // ── Stopka (bezrobotni / satysfakcja / prosperity / wzrost / bilans) ──
-    cy += 3;
-    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + w, cy); ctx.stroke();
-    ctx.globalAlpha = 1; cy += 6;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return cy;   // wysokość TABELI — pasmo scrolla panelu (C4); globus stały (fixedGlobeSize)
+  }
+
+  // S4 — przypięta stopka Załogi: 3 linie 2-kolumnowe. Ta sama treść/kolory/tooltipy co dawna stopka
+  // (wfInfo dla satysfakcji i wzrostu zachowane); Bilans w pełnej szerokości (Przychód − Płace = Netto).
+  _drawWorkforceSummaryV2(ctx, x, y, w, colony, civ) {
+    const humans = Math.floor(civ.humans ?? civ.population ?? 0);
+    const unemployed = civ.unemployed ?? 0;
     const unempFrac = humans > 0 ? unemployed / humans : 0;
-    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.unemployed'),
-      `${unemployed} (${Math.round(unempFrac * 100)}%)`, unempFrac > 0.10 ? THEME.danger : THEME.textPrimary);
-    const _satY = cy;
-    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.satisfaction'),
-      `${Math.round(civ.satisfaction ?? 50)}%`, THEME.textPrimary);
-    this._addHit(x, _satY, w, cy - _satY, 'wfInfo', { tooltip: this._satisfactionTooltip(civ) });   // Slice 5C.2 (F9)
+    const halfW = Math.floor((w - 10) / 2), xR = x + halfW + 10, LINE = 18;
+    let cy = y;
+    ctx.textBaseline = 'alphabetic';
+    const cell = (cx, cw, label, val, valCol) => {
+      ctx.font = `11px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;               ctx.textAlign = 'left';  ctx.fillText(label, cx, cy + 11);
+      ctx.fillStyle = valCol ?? THEME.textPrimary; ctx.textAlign = 'right'; ctx.fillText(val, cx + cw, cy + 11);
+    };
+    // L1: Bezrobotni | Satysfakcja (+wfInfo tooltip)
+    cell(x, halfW, t('workforce.unemployed'), `${unemployed} (${Math.round(unempFrac * 100)}%)`,
+      unempFrac > 0.10 ? THEME.danger : THEME.textPrimary);
+    cell(xR, halfW, t('workforce.satisfaction'), `${Math.round(civ.satisfaction ?? 50)}%`, THEME.textPrimary);
+    this._addHit(xR, cy, halfW, LINE, 'wfInfo', { tooltip: this._satisfactionTooltip(civ) });
+    cy += LINE;
+    // L2: Prosperity | Wzrost (+wfInfo tooltip)
     const pros = window.KOSMOS?.prosperitySystem;
     if (pros && window.KOSMOS?.civSystem === civ) {
       const cur = pros.prosperity ?? 50, tgt = pros.targetProsperity ?? 50;
       const arrow = tgt > cur + 0.5 ? '↑' : tgt < cur - 0.5 ? '↓' : '→';
       const acol  = tgt > cur + 0.5 ? THEME.success : tgt < cur - 0.5 ? THEME.danger : THEME.textDim;
-      cy = this._drawWfRow(ctx, x, cy, w, t('workforce.prosperity'), `${Math.round(cur)} ${arrow} ${Math.round(tgt)}`, acol);
+      cell(x, halfW, t('workforce.prosperity'), `${Math.round(cur)} ${arrow} ${Math.round(tgt)}`, acol);
     }
     const growth = civ.getAnnualGrowth?.() ?? 0;
-    const _grY = cy;
-    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.growth'),
-      `+${growth.toFixed(1)}/${t('workforce.perYear')}`, growth > 0 ? THEME.success : THEME.textDim);
-    this._addHit(x, _grY, w, cy - _grY, 'wfInfo', { tooltip: this._growthTooltip(civ) });   // Slice 5C.2 (F9)
+    cell(xR, halfW, t('workforce.growth'), `+${growth.toFixed(1)}/${t('workforce.perYear')}`,
+      growth > 0 ? THEME.success : THEME.textDim);
+    this._addHit(xR, cy, halfW, LINE, 'wfInfo', { tooltip: this._growthTooltip(civ) });
+    cy += LINE;
+    // L3: Bilans (pełna szerokość): +Przychód − Płace = Netto Kr/rok
     const colMgr = window.KOSMOS?.colonyManager;
-    const tax    = colMgr?.calculateTaxIncome?.(colony) ?? 0;
-    const trade  = colony.creditsPerYear ?? 0;
-    const income = tax + trade;
-    const wages  = civ.getTotalLaborCost?.() ?? 0;
-    const net    = income - wages;
-    cy += 3;
-    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.income'), `+${income.toFixed(0)} Kr`, THEME.textPrimary);
-    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.wages'),  `-${wages.toFixed(0)} Kr`, THEME.danger);
-    cy = this._drawWfRow(ctx, x, cy, w, t('workforce.net'),
-      `${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, net >= 0 ? THEME.success : THEME.danger);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    return cy;   // C4 — wysokość treści dla scrolla panelu
+    const income = (colMgr?.calculateTaxIncome?.(colony) ?? 0) + (colony.creditsPerYear ?? 0);
+    const wages  = civ.getTotalLaborCost?.() ?? 0, net = income - wages;
+    ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left'; ctx.fillText(t('workforce.net'), x, cy + 11);
+    ctx.fillStyle = net >= 0 ? THEME.success : THEME.danger; ctx.textAlign = 'right';
+    ctx.fillText(`+${income.toFixed(0)} − ${wages.toFixed(0)} = ${net >= 0 ? '+' : ''}${net.toFixed(0)} Kr/${t('workforce.perYear')}`, x + w, cy + 11);
+    cy += LINE;
+    ctx.textAlign = 'left';
+    return cy;
   }
 
   /** Tooltip listy budynków zatrudniających daną warstwę (hover w wierszu Załogi). */

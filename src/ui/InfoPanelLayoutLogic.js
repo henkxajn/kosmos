@@ -59,3 +59,15 @@ export function scrollThumb(scroll, contentH, viewportH, trackTop) {
   const y = trackTop + pct * (viewportH - h);
   return { y, h };
 }
+
+// ── Rozmiar globusa panelu info — STAŁY 0.42·h (clamp do szerokości), WSPÓLNY dla WSZYSTKICH zakładek ──
+// Załoga i Planeta liczą przez TĘ SAMĄ funkcję → identyczne px przy każdej wysokości Z KONSTRUKCJI
+// (nie „przez przypadek"). Historia: globus był chwilowo adaptywny (rósł w slack, floor/cap), by chronić
+// treść przed przycięciem ZANIM istniał scroll (C4) i przypięta stopka (S4). Gdy oba istnieją, tabela
+// strat po prostu zajmuje resztę pionu i przewija się — nie ma powodu, by globus Załogi różnił się od
+// Planety. Adaptacja usunięta (adaptiveGlobeSize — patrz git history, gdyby wrócił inny use case).
+// ⚠ ZASADA STAŁA (C5/C6 też): KAŻDA zakładka używa tego samego stałego globusa — żadna nie kurczy go pod
+// swoją treść. Scroll (C4) jest jedynym zaworem na wysoką treść. NIE przywracać per-zakładkowej frakcji.
+export function fixedGlobeSize(h, w, pad, frac = 0.42) {
+  return Math.min(w - 2 * pad, Math.round(h * frac));
+}
