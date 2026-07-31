@@ -2,7 +2,7 @@
 // Dowód DEKOUPLINGU: importuje TYLKO StationGroup (+ EntityManager przez nie), ZERO SystemPoolService.
 // Uruchom: node src/testing/smoke/station_group_smoke.mjs
 import EntityManager from '../../core/EntityManager.js';
-import { stationGroupAnchorId, stationGroupOf, resolveStationGroupState } from '../../utils/StationGroup.js';
+import { stationGroupAnchorId, stationGroupOf, resolveStationGroupState, resolveStationTabHost } from '../../utils/StationGroup.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
@@ -66,6 +66,23 @@ ok('exists > pending (priorytet)', rBoth.state === 'exists');
 // pending na ciało SPOZA grupy (target N ∉ {P,M1,M2}) → build (nie łapie cudzej grupy)
 const colonyPendingOther = (bid) => bid === 'P' ? { pendingStationOrders: [{ id: 'o2', targetBodyId: 'N' }] } : null;
 ok('pending na obcy target → build (nie myli grup)', resolveStationGroupState(gP, { getStationsAt: noStations, getColony: colonyPendingOther }).state === 'build');
+
+// ── T4: resolveStationTabHost (C6c-3 — kolonia-gospodarz zakładki Stacja dla „Zarządzaj") ──
+console.log('--- T4: resolveStationTabHost ---');
+{
+  const fullCol = (planetId) => ({ planetId, civSystem: {}, ownerEmpireId: null });   // pełna kolonia gracza
+  // stacja na M2 → grupa kotwica P {P,M1,M2}. anchor P ma pełną kolonię → host = P.
+  globalThis.window = { KOSMOS: { colonyManager: { getColony: (id) => id === 'P' ? fullCol('P') : null } } };
+  ok('anchor ma kolonię → host = anchor P', resolveStationTabHost({ bodyId: 'M2' })?.planetId === 'P');
+  // anchor P bez kolonii, ale członek M1 ma → host = M1 (pierwszy członek z pełną kolonią).
+  globalThis.window = { KOSMOS: { colonyManager: { getColony: (id) => id === 'M1' ? fullCol('M1') : null } } };
+  ok('anchor bez kolonii, członek M1 ma → host = M1', resolveStationTabHost({ bodyId: 'M2' })?.planetId === 'M1');
+  // tylko OUTPOST hostuje grupę → null (StationPanel robi fallback do zwykłej kolonii, bez crasha).
+  globalThis.window = { KOSMOS: { colonyManager: { getColony: (id) => id === 'P' ? { planetId: 'P', civSystem: {}, isOutpost: true } : null } } };
+  ok('tylko outpost hostuje → null (fallback)', resolveStationTabHost({ bodyId: 'M2' }) === null);
+  ok('null station → null', resolveStationTabHost(null) === null);
+  delete globalThis.window;
+}
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail === 0 ? 0 : 1);

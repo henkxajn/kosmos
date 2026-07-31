@@ -68,3 +68,21 @@ export function resolveStationGroupState(group, { getStationsAt, getColony }) {
   }
   return { state: 'build' };
 }
+
+/**
+ * C6c-3 — kolonia-GOSPODARZ zakładki Stacja dla grupy danej stacji (redirect z StationPanel „Zarządzaj").
+ * Zakładka renderuje się dla PEŁNEJ kolonii gracza; wybierz kotwicę-planetę, inaczej pierwszą kolonię-członka.
+ * Zwraca null gdy grupę hostuje wyłącznie outpost (tab się nie wyrenderuje → caller robi fallback) —
+ * spójne z zaakceptowanym limitem outpostu (C6b).
+ * @returns {object|null} kolonia gospodarz (posiada planetId) lub null
+ */
+export function resolveStationTabHost(station) {
+  const colMgr = window.KOSMOS?.colonyManager;
+  if (!station || !colMgr) return null;
+  const group = stationGroupOf(EntityManager.get(station.bodyId));
+  const isHost = (c) => c && !c.ownerEmpireId && !c.isTestEnemy && !c.isPreview && !c.isOutpost && c.civSystem;
+  const anchorCol = colMgr.getColony?.(group.anchorId);
+  if (isHost(anchorCol)) return anchorCol;
+  for (const bid of group.memberBodyIds) { const c = colMgr.getColony?.(bid); if (isHost(c)) return c; }
+  return null;
+}

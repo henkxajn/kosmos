@@ -20,6 +20,7 @@ import { COMMODITIES }            from '../data/CommoditiesData.js';
 import { STATION_MODULES }        from '../data/StationModuleData.js';
 import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
+import { resolveStationTabHost } from '../utils/StationGroup.js';   // C6c-3 — „Zarządzaj" → zakładka Stacja
 
 // Wymiary
 const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
@@ -312,13 +313,16 @@ export class StationPanel extends BaseOverlay {
       return;
     }
     if (zone.type === 'manage') {
-      // S3.4 FAZA 3 — otwórz ColonyOverlay w TRYBIE STACJI (colonyId = fallback aktywnej kolonii gracza,
-      // żeby tab bar/globus miały valid stan; render idzie ekranem stacji). Bez switchActiveColony.
+      // C6c-3 — otwórz ColonyOverlay na zakładce STACJA (embed zarządzania) zamiast dawnego pełnoekranowego
+      // trybu stacji. Gospodarz = pełna kolonia gracza z grupy stacji (resolveStationTabHost); gdy grupę
+      // hostuje tylko outpost → null → otwórz kolonię normalnie (limit outpostu z C6b, bez crasha).
       const st = this._station();
       if (!st) return;
-      const colMgr = window.KOSMOS?.colonyManager;
-      const colonyId = colMgr?.activePlanetId ?? window.KOSMOS?.homePlanet?.id ?? null;
-      window.KOSMOS?.overlayManager?.openPanel?.('colony', { colonyId, stationMode: true, stationId: st.id });
+      const host = resolveStationTabHost(st);
+      const fallback = window.KOSMOS?.colonyManager?.activePlanetId ?? window.KOSMOS?.homePlanet?.id ?? null;
+      window.KOSMOS?.overlayManager?.openPanel?.('colony', host
+        ? { colonyId: host.planetId, infoTab: 'stacja' }
+        : { colonyId: fallback });
       // B3 fix: schowaj pływający panel (nie wisi nad overlayem). Nie wróci sam — re-show tylko
       // przez station:selected (ponowny klik stacji na 3D po zamknięciu overlaya).
       this.hide();

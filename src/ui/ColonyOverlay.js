@@ -38,7 +38,7 @@ import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
-import { drawStationManagement, drawStationManageCompact, drawStationPickerModal } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji; C6c-2b — compact embed + floating picker
+import { drawStationManageCompact, drawStationPickerModal } from './StationManagementView.js';   // C6c-2b — compact embed + floating picker (C6c-3: pełnoekranowy drawStationManagement retired)
 import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
 import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
 
@@ -203,23 +203,22 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('station:buildFailed',    (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('⚠ ' + t('station.flashFailed')); });
     EventBus.on('station:orderCancelled', (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('✕ ' + t('station.flashCancelled')); });
     EventBus.on('station:orderRejected',  (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🔒 ' + t('station.flashRejected')); });
-    // S3.4 FAZA 4 — flash przy dostawie/odbiorze POP (gdy oglądamy tę stację w trybie stacji).
-    EventBus.on('station:popArrived',  (e) => { if (this._stationMode && e?.stationId === this._selectedStationId) this._showFlash('🧑‍🚀 +1 POP'); });
-    EventBus.on('station:popDeparted', (e) => { if (this._stationMode && e?.stationId === this._selectedStationId) this._showFlash('🧑‍🚀 −1 POP'); });
-
-    // S3.4 FAZA 3 — TRYB STACJI (ekran zarządzania w miejsce mapy hex). NIE woła switchActiveColony.
-    this._stationMode          = false; // czy overlay renderuje ekran stacji zamiast mapy planety
-    this._selectedStationId    = null;  // stacja pokazywana w trybie stacji
-    this._stationPickerOpen    = false; // modal wyboru modułu (pusty slot → picker)
-    this._stationShipPickerOpen = false; // modal wyboru kadłuba (kolejka stoczni → + Buduj statek)
-    // Statusy modułów/postęp budowy zmieniają się PER TICK (StationSystem._tick), nie po akcji —
-    // przy pauzie brak timeDirty, więc wymuś redraw na zdarzeniach stacji gdy jesteśmy w trybie stacji.
+    // C6c-3 — flash POP arrivedu/departed (dawny tryb stacji) USUNIĘTY: embed pokazuje załogę na żywo.
+    // S3.4 FAZA 3 — stan stacji. ⚠ C6c-3: _stationMode RETIRED (pełnoekranowy tryb stacji zdjęty; zarządzanie
+    // = zakładka Stacja). Pole ZOSTAJE jako wygaszona stała `false` (BRAK writerów po C6c-3) — kilka
+    // nieszkodliwych strażników `!_stationMode` (zawsze-true) czyta je; pełne usunięcie pola = kosmetyczny follow-up.
+    this._stationMode          = false; // RETIRED (C6c-3) — zawsze false, brak writerów
+    this._selectedStationId    = null;  // stacja pokazywana w zakładce Stacja (STATE exists) / pickerach
+    this._stationPickerOpen    = false; // floating picker modułu (zakładka Stacja)
+    this._stationShipPickerOpen = false; // floating picker kadłuba (zakładka Stacja)
+    // Statusy modułów/postęp budowy zmieniają się PER TICK (StationSystem._tick), nie po akcji — przy pauzie
+    // brak timeDirty, więc wymuś redraw na zdarzeniach stacji gdy OGLĄDAMY zakładkę Stacja (C6c-3: było _stationMode).
     for (const ev of ['station:moduleOrderQueued', 'station:moduleOrderCancelled', 'station:moduleBuildStarted',
                       'station:moduleBuilt', 'station:moduleOrderRejected', 'station:moduleDemolished',
                       'station:shipBuildStarted', 'station:shipCompleted', 'station:shipBuildCancelled',
                       'station:shipBuildRejected', 'station:rename', 'station:popArrived', 'station:popDeparted',
                       'vessel:awaitingHousing']) {
-      EventBus.on(ev, () => { if (this.visible && this._stationMode && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; });
+      EventBus.on(ev, () => { if (this.visible && this._infoTab === 'stacja' && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; });
     }
 
     // Away Team — tryb wyboru hexa lądowania
@@ -420,15 +419,10 @@ export class ColonyOverlay extends BaseOverlay {
     } else if (colMgr) {
       this._selectedColonyId = colMgr.activePlanetId;
     }
-    // S3.4 FAZA 3 — otwarcie w TRYBIE STACJI (np. z przycisku „Zarządzaj" w StationPanel).
-    // Colony pozostaje ustawiona (tab bar/globus mają valid fallback), ale render idzie ekranem stacji.
-    if (opts.stationMode && opts.stationId) {
-      this._stationMode = true;
-      this._selectedStationId = opts.stationId;
-      this._stationPickerOpen = false;
-    } else {
-      this._stationMode = false;
-    }
+    // C6c-3 — otwarcie na konkretnej zakładce info panelu (Stacja z „Zarządzaj" w StationPanel). Dawny
+    // opts.stationMode/_stationMode RETIRED — zarządzanie stacją jest zakładką (embed), nie osobnym ekranem.
+    // stationId niepotrzebny: zakładka Stacja rozwiązuje stację z grupy kolonii (_resolveStationGroupState).
+    if (opts.infoTab) this._infoTab = opts.infoTab;
     this._selectedHex = null;
     this._hoveredBuildId = null;
 
@@ -547,17 +541,8 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.globalAlpha = 1;
   }
 
-  // S3.4 FAZA 3 — deleguj render ekranu stacji do StationManagementView (addHit → _hitZones overlayu).
-  _drawStationManagement(ctx, x, y, w, h, station) {
-    drawStationManagement(ctx, { x, y, w, h }, station, {
-      addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
-      techIsResearched: (id) => window.KOSMOS?.techSystem?.isResearched?.(id) ?? false,
-      // Ship picker buduje projekty gracza (parytet ze stocznią kolonijną — S3.4 FAZA 3 R2 / decyzja #10).
-      designs: window.KOSMOS?.unitDesigns ?? [],
-      pickerOpen: this._stationPickerOpen,
-      shipPickerOpen: this._stationShipPickerOpen,
-    });
-  }
+  // C6c-3 — _drawStationManagement (delegator pełnoekranowego ekranu stacji) USUNIĘTY (tryb stacji retired;
+  // zarządzanie stacją = zakładka Stacja przez drawStationManageCompact + floating pickery).
 
   _getGrid(colony) {
     if (!colony) return null;
@@ -931,15 +916,9 @@ export class ColonyOverlay extends BaseOverlay {
     // Nagłówek z podsumowaniem kolonii (pełna szerokość — pasmo tytułu nad splitem)
     this._drawHeader(ctx, ox, oy, ow, colony);
 
-    // S3.4 FAZA 3 — TRYB STACJI: ekran zarządzania zamiast mapy hex (gate całego bloku mapy).
-    if (this._stationMode) {
-      const station = this._getSelectedStation();
-      if (station) {
-        this._drawStationManagement(ctx, ox, oy + HDR_H, ow, oh - HDR_H, station);
-      } else {
-        this._stationMode = false;   // stacja zniknęła (destroy) → powrót do mapy planety
-      }
-    } else {
+    // C6c-3 — tryb stacji (_stationMode) + pełnoekranowy drawStationManagement RETIRED. Mapa hex ZAWSZE;
+    // zarządzanie stacją = zakładka Stacja (embed). Bare block zachowuje scope treści mapy (dawny else).
+    {
 
     // Split 70/30: mapa hex po lewej (mapW), dossier planety po prawej (infoW).
     const infoW = this._infoW(ow);
@@ -1212,13 +1191,12 @@ export class ColonyOverlay extends BaseOverlay {
     if (!colonies.length) return;
 
     const activeId = this._selectedColonyId;
-    const stationMode = this._stationMode;
     const tabY = oy + 5, tabH = 20;
     const x0 = ox + 14;
-    const xRight = ox + ow - 130;          // miejsce na [🛰 Station] + [✕]
+    const xRight = ox + ow - 130;          // margines na [✕] close (dawne przyciski nagłówka zdjęte w C6b/C6c)
     const availW = Math.max(40, xRight - x0);
 
-    // Zmierz pigułki: kolonie gracza + stacje gracza (🛰). Stacje = osobny typ hitu (tryb stacji).
+    // Zmierz pigułki: kolonie gracza. (C6c-3 — pigułki STACJI usunięte; zarządzanie stacją = zakładka Stacja.)
     ctx.font = `bold 11px ${THEME.fontFamily}`;
     const tabs = [];
     let totalW = 0;
@@ -1226,17 +1204,7 @@ export class ColonyOverlay extends BaseOverlay {
       const nm = c.planet?.name ?? c.planetId ?? '?';
       const label = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
       const tw = ctx.measureText(label).width + 22;
-      tabs.push({ kind: 'colony', id: c.planetId, label, tw, active: !stationMode && c.planetId === activeId });
-      totalW += tw + 6;
-    }
-    // Stacje gracza (mgła wojny: tylko własne). Encja stacji ma name + type='station'.
-    const stations = (window.KOSMOS?.stationSystem?.getAllStations?.() ?? [])
-      .filter(s => !s.ownerEmpireId || s.ownerEmpireId === 'player');
-    for (const s of stations) {
-      const nm = `🛰 ${s.name ?? s.id}`;
-      const label = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
-      const tw = ctx.measureText(label).width + 22;
-      tabs.push({ kind: 'station', id: s.id, label, tw, active: stationMode && s.id === this._selectedStationId });
+      tabs.push({ kind: 'colony', id: c.planetId, label, tw, active: c.planetId === activeId });
       totalW += tw + 6;
     }
     totalW = Math.max(0, totalW - 6);
@@ -1261,8 +1229,7 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.font = `bold 11px ${THEME.fontFamily}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(tab.label, sx + tab.tw / 2, tabY + tabH / 2);
-        if (tab.kind === 'station') this._addHit(sx, tabY, tab.tw, tabH, 'stationTab', { stationId: tab.id });
-        else                        this._addHit(sx, tabY, tab.tw, tabH, 'colonyTab', { planetId: tab.id });
+        this._addHit(sx, tabY, tab.tw, tabH, 'colonyTab', { planetId: tab.id });   // C6c-3 — tylko kolonie (pigułki stacji zdjęte)
       }
       sx += tab.tw + 6;
     }
@@ -1286,7 +1253,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null; this._selectedUnits.clear();
     this._buildBarScroll = 0;
-    this._stationMode = false; this._stationPickerOpen = false;   // S3.4 FAZA 3 — powrót do mapy planety
+    this._stationPickerOpen = false; this._stationShipPickerOpen = false;   // C6c-3 — reset floating pickerów przy zmianie kolonii
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
     if (grid) { this._fitMapToView(grid); this._centerOnCapital(grid); }
@@ -4398,22 +4365,8 @@ export class ColonyOverlay extends BaseOverlay {
     return cy;
   }
 
-  // ── Placeholder „grupa zajęta". C6c-2a: STATE 'pending' ma już pełną treść (_drawStationPending) —
-  // ta metoda obsługuje teraz TYLKO 'exists' (minimalny placeholder do czasu Option A embed w C6c-2b).
-  // Gałąź 'pending' zachowana (martwa) do reużycia/spójności. Zwraca endCy (scroll panelu). ──
-  _drawStationGroupState(ctx, x, y, w, kind, bodyName) {
-    const title = kind === 'exists' ? t('station.groupHasStation') : t('station.groupPending');
-    let cy = this._drawInfoSection(ctx, x, y, w, title);
-    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(this._truncateText(ctx, `${kind === 'exists' ? '🛰' : '⏳'} ▸ ${bodyName}`, w), x, cy + 11);
-    cy += 20;
-    ctx.font = `italic 10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim;
-    ctx.fillText(this._truncateText(ctx, t('station.groupManageHint'), w), x, cy + 10);
-    cy += 16;
-    ctx.textAlign = 'left';
-    return cy;
-  }
+  // C6c-3 — _drawStationGroupState (martwy placeholder „grupa zajęta") USUNIĘTY: STATE exists → embed
+  // (drawStationManageCompact), STATE pending → _drawStationPending. Osierocone klucze station.group* zdjęte.
 
   // Zwraca listę pozycji budowy: [{ id, locked, reason }]. Budynki zablokowane KLIMATEM są
   // pokazywane (locked:true, z powodem), teren/tech/frakcja/prereq nadal pomijane (jak dotąd).
@@ -4847,24 +4800,13 @@ export class ColonyOverlay extends BaseOverlay {
       }
       case 'colonyTab':
         if (zone.data?.planetId) {
-          // B1 fix: wyjście z trybu stacji MUSI nastąpić nawet gdy klikamy zakładkę TEJ SAMEJ
-          // kolonii (fallback active) — _switchColony robi early-return przy planetId===selected,
-          // więc czyścimy stationMode tutaj, przed nim (inaczej mapa hex nie wraca).
-          this._stationMode = false;
+          // C6c-3 — czyścimy floating pickery stacji przy zmianie kolonii (dawny _stationMode reset RETIRED).
           this._stationPickerOpen = false;
           this._stationShipPickerOpen = false;
           this._switchColony(zone.data.planetId);
         }
         break;
-      // ── S3.4 FAZA 3 — tryb stacji ──────────────────────────────────────────
-      case 'stationTab':
-        // Wejście w tryb stacji BEZ switchActiveColony (globalny stan nietknięty).
-        if (zone.data?.stationId) {
-          this._stationMode = true;
-          this._selectedStationId = zone.data.stationId;
-          this._stationPickerOpen = false;
-        }
-        break;
+      // C6c-3 — 'stationTab' (pigułka stacji → tryb stacji) USUNIĘTE; zarządzanie stacją = zakładka Stacja.
       case 'station_mgmt_rename': {
         const st = this._getSelectedStation();
         if (st) {
@@ -4938,7 +4880,7 @@ export class ColonyOverlay extends BaseOverlay {
           window.KOSMOS?.stationSystem?.cancelStationShip(this._selectedStationId, zone.data.index);
         }
         break;
-      case 'stationMgmtBg': break;   // konsumuj klik w tło ekranu stacji
+      // C6c-3 — 'stationMgmtBg' (tło pełnoekranowego ekranu stacji) USUNIĘTE (tryb stacji retired).
       case 'floatPanel': break;  // konsumuj klik — nie przebijaj na mapę
       case 'headerBuilding': break;  // konsumuj klik na ikonę budynku w nagłówku
       // C6b — station_open/station_dialog_close/stationDialogBg USUNIĘTE (dialog budowy → zakładka Stacja).
