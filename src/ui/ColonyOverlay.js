@@ -211,6 +211,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedStationId    = null;  // stacja pokazywana w zakładce Stacja (STATE exists) / pickerach
     this._stationPickerOpen    = false; // floating picker modułu (zakładka Stacja)
     this._stationShipPickerOpen = false; // floating picker kadłuba (zakładka Stacja)
+    this._stationShipPickerScroll = 0;  // C6c-3 follow-up — offset przewijania ship pickera (klamp w draw, snap z drawShipPicker)
     // Statusy modułów/postęp budowy zmieniają się PER TICK (StationSystem._tick), nie po akcji — przy pauzie
     // brak timeDirty, więc wymuś redraw na zdarzeniach stacji gdy OGLĄDAMY zakładkę Stacja (C6c-3: było _stationMode).
     for (const ev of ['station:moduleOrderQueued', 'station:moduleOrderCancelled', 'station:moduleBuildStarted',
@@ -1119,9 +1120,15 @@ export class ColonyOverlay extends BaseOverlay {
     const view = {
       addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
       techIsResearched: (tech) => window.KOSMOS?.techSystem?.isResearched?.(tech) ?? false,
+      // C6c-3 follow-up — ship picker internal scroll: offset IN + hitCount/pruneHits (scroll-invariant hit-zony,
+      // ta sama pruneZones co _pruneHitsOutside zakładki). Module picker ignoruje (nie woła drawScrollBox).
+      scroll: this._stationShipPickerScroll ?? 0,
+      hitCount: () => this._hitZones.length,
+      pruneHits: (fromIndex, top, bot) => this._pruneHitsOutside(fromIndex, top, bot),
     };
-    drawStationPickerModal(ctx, { x: ox, y: oy + HDR_H, w: ow, h: oh - HDR_H }, station, view,
+    const ret = drawStationPickerModal(ctx, { x: ox, y: oy + HDR_H, w: ow, h: oh - HDR_H }, station, view,
                            this._stationShipPickerOpen ? 'ship' : 'module');
+    if (ret && typeof ret.scroll === 'number') this._stationShipPickerScroll = ret.scroll;   // snap do klampu tej klatki (mirror _infoScroll[tab]=scroll)
     this._addHit(ox, oy, ow, oh, 'stationPickerBg');   // absorber PEŁNY, OSTATNI (picker hity dodane wyżej wygrywają)
     ctx.restore();
   }
@@ -4847,6 +4854,7 @@ export class ColonyOverlay extends BaseOverlay {
       case 'station_mgmt_addship':
         this._stationShipPickerOpen = true;
         this._stationPickerOpen = false;
+        this._stationShipPickerScroll = 0;   // C6c-3 follow-up — reset scroll przy otwarciu pickera
         break;
       case 'station_mgmt_shippicker_close':
       case 'station_mgmt_shippicker_bg':
@@ -5439,6 +5447,16 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Modal rekrutacji → scroll rusza detal panelu (nie mapę/paski pod spodem).
     if (this._draftOpen) { this._draftPanel.handleScroll(delta, x, y); return true; }
+
+    // C6c-3 follow-up — floating picker stacji otwarty (backdrop modal): wheel CAPTURED przez picker,
+    // nie przebija do scrolla zakładki pod spodem. Tylko ship picker przewija (module picker = stała
+    // liczba typów, mieści się). Górny klamp (0) tu; dolny klamp w drawShipPicker (clampScroll aktualną
+    // wysokością → snap _stationShipPickerScroll). `+ delta` = ten sam feel co scroll info-panelu.
+    if (this._stationShipPickerOpen || this._stationPickerOpen) {
+      if (this._stationShipPickerOpen)
+        this._stationShipPickerScroll = Math.max(0, (this._stationShipPickerScroll ?? 0) + delta);
+      return true;
+    }
 
     const mb = this._getMapBounds();
     // Scroll poziomy zakładek kolonii (kursor nad pasmem nagłówka)

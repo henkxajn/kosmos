@@ -19,6 +19,7 @@ import { calcShipCost } from '../data/ShipModulesData.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import { drawResourceIcon } from './ResourceIcons.js';
+import { clampScroll, scrollThumb } from './InfoPanelLayoutLogic.js';   // C6c-3 follow-up — internal-scroll-box (drawScrollBox)
 
 // Nazwa modułu wg locale (dane są dwujęzyczne w StationModuleData — bez duplikacji w i18n).
 function moduleName(def) {
@@ -184,6 +185,33 @@ function layoutCostChips(ctx, costParts, maxW) {
   return lines;
 }
 
+// ── Reusable internal-scroll-box (StationManagementView-local) ────────────────────────────────────
+// Wspólny szkielet przewijanego pudełka modalu — CAŁOŚĆ z InfoPanelLayoutLogic (JEDNO źródło prawdy,
+// headless-proven, jak pruneZones/fitTabFontPx): clampScroll (klamp offsetu), clip pasma treści (fix
+// bleed-through — wiersze poza pudełkiem nie malują się na tło/UI pod spodem), pruneZones (via
+// view.pruneHits — hit-zony poza pasmem usuwane → off-fold nieklikalny, scroll-invariant; ta sama klasa
+// bugów co stepper/pinned-header w C6c), scrollThumb (kciuk). Wywołujący liczy contentH i rysuje wiersze
+// w callbacku przy `baseY − scroll`, REJESTRUJĄC hity na SCROLLOWANYCH pozycjach; helper domyka
+// clip → prune → thumb. Ship picker = jedyny obecny użytkownik; module picker (stała liczba typów, nie
+// przekracza viewportu) może dostać to samo bez przepisywania (podać drawRows + contentH).
+//   box = { px, py, PW, PH, headerH }; view.{scroll,hitCount,pruneHits} = plumbing z ColonyOverlay.
+// Zwraca { scroll: sklampowany, viewportH } — wywołujący raportuje scroll w górę (snap stanu, mirror _infoScroll).
+function drawScrollBox(ctx, view, box, contentH, drawRows) {
+  const { px, py, PW, PH, headerH } = box;
+  const top = py + headerH, bot = py + PH;
+  const viewportH = Math.max(0, PH - headerH);
+  const scroll = clampScroll(view.scroll ?? 0, contentH, viewportH);
+  const hitStart = view.hitCount?.() ?? 0;             // zony treści zaczynają się TU (nagłówek/✕ dodane wcześniej)
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, top, PW, viewportH); ctx.clip();
+  drawRows(scroll);                                    // wywołujący rysuje wiersze przy (baseY − scroll) + rejestruje hity
+  ctx.restore();
+  view.pruneHits?.(hitStart, top, bot);               // hit-zony poza [top,bot] → usunięte (off-fold nieklikalny)
+  const thumb = scrollThumb(scroll, contentH, viewportH, top);
+  if (thumb) { ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.fillRect(px + PW - 4, thumb.y, 3, thumb.h); }
+  return { scroll, viewportH };
+}
+
 function drawShipPicker(ctx, area, station, view) {
   const { x, y, w, h } = area;
   const { addHit, techIsResearched } = view;
@@ -247,71 +275,77 @@ function drawShipPicker(ctx, area, station, view) {
     ctx.fillText(t('station.mgmt.noDesigns'), px + PW / 2, py + HEADER_H + bodyH / 2);
     ctx.textAlign = 'left';
     addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
-    return;
+    return { scroll: 0, contentH: bodyH, viewportH: Math.max(0, PH - HEADER_H) };
   }
 
-  let ry = py + HEADER_H;
-  for (const r of rows) {
-    const { tpl, hull, mods, locked, costLines, afford, rowH } = r;
-    const canBuild = !locked && afford;
+  // ── Przewijane pudełko projektów (drawScrollBox: clampScroll → clip → pruneZones → scrollThumb) ──
+  const sb = drawScrollBox(
+    ctx, view, { px, py, PW, PH, headerH: HEADER_H }, bodyH,
+    (sc) => {
+      let ry = py + HEADER_H - sc;                          // kursor SCROLL-RELATIVE (hity rejestrowane tu → scroll-invariant przez prune)
+      for (const r of rows) {
+        const { tpl, hull, mods, locked, costLines, afford, rowH } = r;
+        const canBuild = !locked && afford;
 
-    ctx.fillStyle = 'rgba(255,255,255,0.02)';
-    ctx.fillRect(px + 8, ry + 2, PW - 16, rowH - 4);
+        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.fillRect(px + 8, ry + 2, PW - 16, rowH - 4);
 
-    // Ikona kadłuba.
-    ctx.font = `18px ${THEME.fontFamily}`;
-    ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
-    ctx.fillText(hull.icon ?? '🚀', px + 16, ry + 24);
+        // Ikona kadłuba.
+        ctx.font = `18px ${THEME.fontFamily}`;
+        ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
+        ctx.fillText(hull.icon ?? '🚀', px + 16, ry + 24);
 
-    // Nazwa PROJEKTU + kadłub·liczba modułów obok (przycięte, by nie wchodzić pod przycisk).
-    const nameX = px + 42;
-    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
-    const name = `${tpl.name ?? moduleName(hull)}`;
-    ctx.fillText(name, nameX, ry + 20);
-    const subX = nameX + ctx.measureText(name).width + 8;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    const subMaxX = px + PW - bw - 20;                     // koniec strefy tekstu przed przyciskiem
-    if (subX < subMaxX) {
-      ctx.save();
-      ctx.beginPath(); ctx.rect(subX, ry, subMaxX - subX, 26); ctx.clip();
-      ctx.fillText(`${moduleName(hull)} · ${mods.length} mod`, subX, ry + 20);
-      ctx.restore();
-    }
+        // Nazwa PROJEKTU + kadłub·liczba modułów obok (przycięte, by nie wchodzić pod przycisk).
+        const nameX = px + 42;
+        ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
+        const name = `${tpl.name ?? moduleName(hull)}`;
+        ctx.fillText(name, nameX, ry + 20);
+        const subX = nameX + ctx.measureText(name).width + 8;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        const subMaxX = px + PW - bw - 20;                     // koniec strefy tekstu przed przyciskiem
+        if (subX < subMaxX) {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(subX, ry, subMaxX - subX, 26); ctx.clip();
+          ctx.fillText(`${moduleName(hull)} · ${mods.length} mod`, subX, ry + 20);
+          ctx.restore();
+        }
 
-    // Koszty — ikona surowca/towaru + wymagana ilość; czerwony gdy brakuje. Zawinięte wiersze.
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    let cy = ry + 42;
-    for (const line of costLines) {
-      let cx = nameX;
-      for (const chip of line) {
-        const short = chip.c.have < chip.c.amt;
-        drawResourceIcon(ctx, chip.c.id, cx, cy - 6, COST_ICON, null);
-        ctx.fillStyle = short ? THEME.danger : THEME.textSecondary;
-        ctx.fillText(String(chip.c.amt), cx + COST_ICON + 3, cy);
-        cx += chip.w + COST_GAP;
+        // Koszty — ikona surowca/towaru + wymagana ilość; czerwony gdy brakuje. Zawinięte wiersze.
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        let cy = ry + 42;
+        for (const line of costLines) {
+          let cx = nameX;
+          for (const chip of line) {
+            const short = chip.c.have < chip.c.amt;
+            drawResourceIcon(ctx, chip.c.id, cx, cy - 6, COST_ICON, null);
+            ctx.fillStyle = short ? THEME.danger : THEME.textSecondary;
+            ctx.fillText(String(chip.c.amt), cx + COST_ICON + 3, cy);
+            cx += chip.w + COST_GAP;
+          }
+          cy += 19;
+        }
+
+        // Przycisk Buduj — wyśrodkowany pionowo, prawy górny obszar wiersza.
+        const bx = px + PW - bw - 12, by = ry + 8;
+        ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.10)' : 'rgba(60,60,70,0.25)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = canBuild ? THEME.accent : THEME.border; ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(locked ? '🔒' : t('station.mgmt.build'), bx + bw / 2, by + bh / 2 + 4);
+        ctx.textAlign = 'left';
+        if (canBuild) addHit(bx, by, bw, bh, 'station_mgmt_buildship', { hullId: tpl.hullId, modules: mods, name: tpl.name });
+
+        ry += rowH;
       }
-      cy += 19;
-    }
+    });
 
-    // Przycisk Buduj — wyśrodkowany pionowo, prawy górny obszar wiersza.
-    const bx = px + PW - bw - 12, by = ry + 8;
-    ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.10)' : 'rgba(60,60,70,0.25)';
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.strokeStyle = canBuild ? THEME.accent : THEME.border; ctx.lineWidth = 1;
-    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
-    ctx.textAlign = 'center';
-    ctx.fillText(locked ? '🔒' : t('station.mgmt.build'), bx + bw / 2, by + bh / 2 + 4);
-    ctx.textAlign = 'left';
-    if (canBuild) addHit(bx, by, bw, bh, 'station_mgmt_buildship', { hullId: tpl.hullId, modules: mods, name: tpl.name });
-
-    ry += rowH;
-  }
-
-  addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
+  addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});   // absorber PO drawScrollBox (po prune) → nieprunowany
+  return { scroll: sb.scroll, contentH: bodyH, viewportH: sb.viewportH };
 }
 
 /**
@@ -489,6 +523,7 @@ export function drawStationManageCompact(ctx, area, station, view) {
  */
 export function drawStationPickerModal(ctx, area, station, view, kind) {
   const maxModules = STATIONS[station.stationType]?.maxModules ?? 8;
-  if (kind === 'ship') drawShipPicker(ctx, area, station, view);
-  else                 drawModulePicker(ctx, area, station, view, maxModules);
+  if (kind === 'ship') return drawShipPicker(ctx, area, station, view);
+  drawModulePicker(ctx, area, station, view, maxModules);
+  return null;
 }
