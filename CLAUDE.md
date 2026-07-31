@@ -1143,6 +1143,40 @@ C4 `c1b7e0a` (TopBar badge) · C5 (docs — ten commit).
 
 ---
 
+## ColonyOverlay — prawy panel info: layout backbone Załogi (Option 1, save v99 bez migracji, live-gate PASS, commit `0f47498`)
+
+Rework zakładki **Załoga** przed C5 (Populacja), by nowa treść siadała na zdrowym fundamencie, nie na
+ciasnym. Problem wyjściowy: globus kurczył się do 0.26·h (flaga `compactGlobe`), a 7 strat × 2-linie tłoczyło
+się w jednej wysokiej kolumnie. **Audyt + opcje: `AUDIT_ZALOGA_LAYOUT.md`** (untracked, wzór `AUDIT_COLONY_OVERLAY.md`).
+
+**Co weszło (Option 1 „backbone"; Option 2 — kompaktowe 1-linijkowe wiersze + detal na klik — ODROCZONE):**
+- **Przypięta stopka (S1/S2/S4):** `_drawInfoPanel` rezerwuje dolne pasmo (`WF_SUMMARY_H=54 + WF_SUMMARY_GAP=12`);
+  `_drawWorkforceTableV2` rysuje TYLKO przewijaną tabelę strat (zwraca wysokość dla scrolla), a nowe
+  `_drawWorkforceSummaryV2` rysuje zdrowie+bilans (Bezrobotni/Satysfakcja · Prosperity/Wzrost · Bilans) w 2 kolumnach
+  **poza transformacją scrolla** → linia Bilans zawsze widoczna. Tabela strat przewija się (scroll C4) gdy wysoka.
+- **Zunifikowany STAŁY globus (S3):** początkowo adaptywny (`adaptiveGlobeSize`, slack/floor/cap), ale „skok" przy
+  przełączaniu zakładki lepiej rozwiązać ZNOSZĄC różnicę rozmiaru niż licząc ją sprytniej. Zastąpione jedną wspólną
+  `fixedGlobeSize(h,w,pad)=round(0.42·h)` clamp do szer. — **obie zakładki liczą globus tą samą linią** → `discSize`
+  i content-start-y IDENTYCZNE przy każdej wysokości Z KONSTRUKCJI (zweryfikowane 1080/900/720/600p).
+
+**⚠ ZASADA STAŁA (C5/C6 też):** żadna zakładka NIE dostaje mniejszego globusa niż stała frakcja 0.42 — **scroll (C4)
+jest jedynym zaworem na wysoką treść**. NIE przywracać per-zakładkowej frakcji globusa (`compactGlobe` usunięte). Zapis
+w komentarzu `fixedGlobeSize` (`InfoPanelLayoutLogic.js`).
+
+**⚠ `hasSummary` NIE jest jeszcze generyczne:** `hasSummary = tabCfg.summary === true && wfV2`; `wfV2` twardo koduje
+`activeTab==='workforce'` (chroni przed podwójną stopką na ścieżce legacy V1, która ma stopkę wpisaną we własną
+przewijaną treść). Przyszła zakładka `summary:true` (C5) potrzebuje WŁASNEGO odpowiednika guardu „stopka już
+wyłączona z body", NIE dosłownie `wfV2`.
+
+**ROW_H (30) + geometria stepperów focus/droid (`stepperButtonBand`) — NIETKNIĘTE** przez cały ten arc (bez re-tune,
+browser-verified nadal celne kliknięcia). Bez i18n, bez migracji (pure UI, v99).
+
+Pliki: `InfoPanelLayoutLogic.js` (`fixedGlobeSize` zastąpił `adaptiveGlobeSize`), `ColonyOverlay.js` (split tabela/
+stopka + pinowanie + wspólny globus), NEW keeper `src/testing/smoke/info_panel_adaptive_globe_smoke.mjs` 17/17
+(fixed-globe sanity + identyczność Planeta↔Załoga + krótkie okno room/clearance + no-crash). Sweep 76/76 0 FAIL.
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
@@ -1607,6 +1641,7 @@ Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implemen
 
 | Decyzja | Uzasadnienie |
 |---------|-------------|
+| Globus panelu info STAŁY (`fixedGlobeSize` 0.42) — wspólny dla WSZYSTKICH zakładek | Scroll (C4) + przypięta stopka (S4) = zawór na wysoką treść; brak per-zakładkowej frakcji (C5/C6 też). Załoga==Planeta z konstrukcji → koniec „skoku" przy przełączaniu zakładki |
 | Czas płynny (nie turowy) | Spójność z warstwą symulacyjną; gracz kontroluje prędkość |
 | Hex cube coordinates | Najlepsza matematyka dla algorytmów odległości/sąsiedztwa |
 | baseRates vs effectiveRates | Umożliwia retroaktywne tech-mnożniki bez restartu budynków |
