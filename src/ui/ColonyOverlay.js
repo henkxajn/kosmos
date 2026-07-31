@@ -25,6 +25,7 @@ import { DepositSystem } from '../systems/DepositSystem.js';                   /
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
 import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize, fitTabFontPx, pruneZones } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus; C6b — fitTabFontPx; C6c-2b-ii — pruneZones
+import { anyFullBoundsModalOpen } from './ColonyModalLogic.js';   // predykat modala pełnoekranowego (globe toggle — jedno źródło)
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -2363,6 +2364,18 @@ export class ColonyOverlay extends BaseOverlay {
 
   // ── Globus 3D embedded — cykl życia ─────────────────────────────────────
   // bounds w pikselach CSS = logiczne × uiScale (osobny DOM canvas).
+  /** JEDNO źródło prawdy: czy JAKIKOLWIEK modal na pełnych boundach overlayu jest otwarty (backdrop
+   *  przykrywa całość). Konsument: _syncGlobe (chowa globus z-index 3, którego backdrop 2D nie zasłoni —
+   *  osobny element canvas nad ui-canvas). Nowy modal pełnoekranowy → dodaj flagę w
+   *  ColonyModalLogic.anyFullBoundsModalOpen (nie duplikuj OR-chaina tutaj). */
+  _anyFullBoundsModalOpen() {
+    return anyFullBoundsModalOpen({
+      stationPickerOpen: this._stationPickerOpen,
+      stationShipPickerOpen: this._stationShipPickerOpen,
+      draftOpen: this._draftOpen,
+    });
+  }
+
   _syncGlobe(discX, discY, discW, discH, planet, grid) {
     if (!planet) { this._teardownGlobe(); return; }
     const scale = window.KOSMOS?.uiScale ?? _UI_SCALE;
@@ -2393,6 +2406,13 @@ export class ColonyOverlay extends BaseOverlay {
     } else if (this._globe.isOpen) {
       this._globe.updateBounds(bounds);
     }
+
+    // Full-bounds modal (picker stacji / rekrutacja) przykrywa overlay backdropem — schowaj globus.
+    // Globus to OSOBNY canvas (z-index 3 NAD ui-canvas), więc backdrop 2D go NIE zasłania (inny element
+    // DOM). Re-eval CO KLATKĘ → restore ('') po zamknięciu KAŻDĄ ścieżką (✕, klik-poza, zmiana zakładki/
+    // kolonii), nie tylko własnym close. hide() robi _teardownGlobe → brak „zawieszony schowany" po zamknięciu overlayu.
+    if (this._globe?._canvas)
+      this._globe._canvas.style.display = this._anyFullBoundsModalOpen() ? 'none' : '';
   }
 
   _teardownGlobe() {
