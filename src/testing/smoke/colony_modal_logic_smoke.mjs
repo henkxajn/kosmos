@@ -4,7 +4,7 @@
 // display 'none' gdy true (schowaj globus z-3), '' gdy false (pokaż) — mapping trywialny, w call-site.
 // Uruchom: node src/testing/smoke/colony_modal_logic_smoke.mjs
 
-import { anyFullBoundsModalOpen } from '../../ui/ColonyModalLogic.js';
+import { anyFullBoundsModalOpen, closeFullBoundsModals } from '../../ui/ColonyModalLogic.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
@@ -37,6 +37,52 @@ console.log('--- T4: tolerancja / koercja ---');
 ok('nieistotne pola ignorowane', anyFullBoundsModalOpen({ somethingElse: true, draftOpen: false }) === false);
 ok('truthy nie-bool (1) → true', anyFullBoundsModalOpen({ stationPickerOpen: 1 }) === true);
 ok('zwraca ZAWSZE boolean (nie truthy 1)', anyFullBoundsModalOpen({ stationShipPickerOpen: 1 }) === true && typeof anyFullBoundsModalOpen({ stationShipPickerOpen: 1 }) === 'boolean');
+
+// ── T5: closeFullBoundsModals — reset wszystkich flag + hide draftu (symulacja show() na zmianie kolonii) ──
+console.log('--- T5: closeFullBoundsModals resetuje flagi (show()-path fix) ---');
+{
+  let hidden = 0;
+  const ov = {
+    _stationPickerOpen: true, _stationShipPickerOpen: true, _draftOpen: true,
+    _draftPanel: { hide: () => { hidden++; } },
+  };
+  closeFullBoundsModals(ov);
+  ok('_stationPickerOpen true → false', ov._stationPickerOpen === false);
+  ok('_stationShipPickerOpen true → false', ov._stationShipPickerOpen === false);
+  ok('_draftOpen true → false', ov._draftOpen === false);
+  ok('_draftPanel.hide() wywołane raz', hidden === 1);
+  // Predykat po reset = false (spójność query↔command: to samo źródło flag).
+  ok('anyFullBoundsModalOpen po reset = false (globus wróci)', anyFullBoundsModalOpen({
+    stationPickerOpen: ov._stationPickerOpen, stationShipPickerOpen: ov._stationShipPickerOpen, draftOpen: ov._draftOpen,
+  }) === false);
+}
+
+// ── T6: idempotencja + brak zakłócenia gdy nic nie otwarte (normalne otwarcie bez modala) ──
+console.log('--- T6: idempotencja / brak modala ---');
+{
+  const ov = { _stationPickerOpen: false, _stationShipPickerOpen: false, _draftOpen: false, _draftPanel: { hide: () => {} } };
+  closeFullBoundsModals(ov);
+  ok('wszystkie false zostają false (idempotentne)', ov._stationPickerOpen === false && ov._stationShipPickerOpen === false && ov._draftOpen === false);
+  // Częściowy stan (tylko ship picker) — reset tylko go dotyka, inne bez zmian.
+  const ov2 = { _stationPickerOpen: false, _stationShipPickerOpen: true, _draftOpen: false, _draftPanel: { hide: () => {} } };
+  closeFullBoundsModals(ov2);
+  ok('częściowy: stationShipPickerOpen true → false', ov2._stationShipPickerOpen === false);
+}
+
+// ── T7: null-safety — brak _draftPanel / null overlay nie rzuca ──
+console.log('--- T7: null-safety ---');
+{
+  let threw = false;
+  try {
+    closeFullBoundsModals({ _stationPickerOpen: true, _stationShipPickerOpen: true, _draftOpen: true });   // brak _draftPanel
+    closeFullBoundsModals(null);
+    closeFullBoundsModals(undefined);
+  } catch (e) { threw = true; console.error('    RZUCIŁ: ' + e.message); }
+  ok('brak _draftPanel / null / undefined → nie rzuca', !threw);
+  const ov = { _stationShipPickerOpen: true };
+  closeFullBoundsModals(ov);
+  ok('brak _draftPanel: flaga i tak zresetowana', ov._stationShipPickerOpen === false);
+}
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail === 0 ? 0 : 1);

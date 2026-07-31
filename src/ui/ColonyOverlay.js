@@ -25,7 +25,7 @@ import { DepositSystem } from '../systems/DepositSystem.js';                   /
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
 import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlobeSize, fitTabFontPx, pruneZones } from './InfoPanelLayoutLogic.js';  // C4 — layout zakładek + scroll + stepper ± + stały globus; C6b — fitTabFontPx; C6c-2b-ii — pruneZones
-import { anyFullBoundsModalOpen } from './ColonyModalLogic.js';   // predykat modala pełnoekranowego (globe toggle — jedno źródło)
+import { anyFullBoundsModalOpen, closeFullBoundsModals } from './ColonyModalLogic.js';   // predykat modala pełnoekranowego (globe toggle) + reset na zmianę kolonii
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
@@ -421,6 +421,11 @@ export class ColonyOverlay extends BaseOverlay {
     } else if (colMgr) {
       this._selectedColonyId = colMgr.activePlanetId;
     }
+    // Domknij stale modale poprzedniej kolonii. openPanel('colony') re-woła show() dla WSZYSTKICH ścieżek
+    // zmiany kolonii, które NIE idą przez _switchColony (jedyny inny resetujący): top bar (TopResourceDrawer),
+    // Outliner, BottomContext, CivilizationOverlay, EventLogOverlay. Bez tego picker/draft zostają „otwarte"
+    // → _anyFullBoundsModalOpen()=true → globus schowany po zmianie kolonii (i picker rysuje starą stację).
+    closeFullBoundsModals(this);
     // C6c-3 — otwarcie na konkretnej zakładce info panelu (Stacja z „Zarządzaj" w StationPanel). Dawny
     // opts.stationMode/_stationMode RETIRED — zarządzanie stacją jest zakładką (embed), nie osobnym ekranem.
     // stationId niepotrzebny: zakładka Stacja rozwiązuje stację z grupy kolonii (_resolveStationGroupState).

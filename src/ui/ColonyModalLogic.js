@@ -11,3 +11,18 @@ export function anyFullBoundsModalOpen(flags) {
   if (!flags) return false;
   return !!(flags.stationPickerOpen || flags.stationShipPickerOpen || flags.draftOpen);
 }
+
+// Command bliźniaczy do predykatu: DOMKNIJ wszystkie modale pełnoekranowe overlayu (mutuje obiekt-stan:
+// zeruje flagi + hide panelu draftu). JEDNO źródło prawdy „które flagi = modal pełnoekranowy" wspólne z
+// anyFullBoundsModalOpen — nowy modal → dodaj TU i w predykacie (nie rozsypuj resetów po call-site'ach).
+// Wołane przy (re)otwarciu/przełączeniu kolonii przez openPanel (ColonyOverlay.show — top bar, Outliner,
+// BottomContext, CivilizationOverlay, EventLogOverlay), które syncują _selectedColonyId ale NIE przechodzą
+// przez _switchColony (jedyny dotąd resetujący). Bez tego flaga zostaje true po zmianie kolonii →
+// globus schowany, a picker rysowałby dane starej stacji. Idempotentne; null-safe.
+export function closeFullBoundsModals(overlay) {
+  if (!overlay) return;
+  overlay._stationPickerOpen = false;
+  overlay._stationShipPickerOpen = false;
+  overlay._draftOpen = false;
+  overlay._draftPanel?.hide?.();
+}
