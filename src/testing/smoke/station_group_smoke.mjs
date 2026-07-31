@@ -56,6 +56,7 @@ ok('stacja wroga → NIE exists (build)', resolveStationGroupState(gP, { getStat
 const colonyWithPending = (bid) => bid === 'P' ? { pendingStationOrders: [{ id: 'o1', targetBodyId: 'M1' }] } : null;
 const rPending = resolveStationGroupState(gP, { getStationsAt: noStations, getColony: colonyWithPending });
 ok('pending w grupie → pending (targetBodyId=M1)', rPending.state === 'pending' && rPending.targetBodyId === 'M1');
+ok('pending niesie issuerColonyId (=wystawca P)', rPending.issuerColonyId === 'P');
 ok('pending NIE niesie stationBodyId', rPending.stationBodyId === undefined && rPending.bodyId === undefined);
 
 // exists ma priorytet nad pending

@@ -4225,7 +4225,13 @@ export class ColonyOverlay extends BaseOverlay {
     if (groupState.state === 'pending') {
       const o  = groupState.order;
       const nm = o?.targetName ?? EntityManager.get(groupState.targetBodyId)?.name ?? groupState.targetBodyId ?? '?';
-      return this._drawStationGroupState(ctx, x, y, w, 'pending', nm);
+      // C6c-2a — mała linia kontekstu grupy NAD „W kolejce" (legibility: tab rodzeństwa pokazuje zlecenie,
+      // którego nie wystawiłeś tutaj — bez ramki czytałoby się jak glitch). Konwencja „🛰 ▸ <ciało>" z C6c-1.
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(this._truncateText(ctx, `🛰 ▸ ${nm}`, w), x, y + 10);
+      // Pełna sekcja „W kolejce" (pojedyncze zlecenie grupy — cap gwarantuje ≤1) z cancel celującym w WYSTAWCĘ.
+      return this._drawStationPending(ctx, x, y + 18, w, [groupState.order], groupState.issuerColonyId);
     }
 
     // ── STATE „build" — brak stacji/pending w grupie → formularz budowy (treść C6b, bez zmian) ──
@@ -4243,7 +4249,6 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     const costEntries = [...Object.entries(def.cost ?? {}), ...Object.entries(def.commodityCost ?? {})];
-    const pending     = colMgr?.getPendingStationOrders?.(colony.planetId) ?? [];
     const res         = colony.resourceSystem;
 
     // ── Cel budowy ──
@@ -4291,25 +4296,30 @@ export class ColonyOverlay extends BaseOverlay {
     cy += 30;
     ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.fillText(canAfford ? t('station.buildAfford') : t('station.buildWait'), x + w / 2, cy);
-    ctx.textAlign = 'left'; cy += 18;
+    ctx.textAlign = 'left'; cy += 6;
+    // C6c-2a — sekcja „W kolejce" USUNIĘTA z formularza budowy: w STATE build grupa jest z definicji
+    // pusta (brak pending), więc była martwa („—"). Pending renderuje STATE 'pending' (_drawStationPending).
+    return cy;
+  }
 
-    // ── W kolejce (pending orders + anuluj ✕) ──
-    cy = this._drawInfoSection(ctx, x, cy, w, t('station.pending'));
+  // ── C6c-2a: sekcja „W kolejce" (pending station orders) — WYCIĄGNIĘTA z formularza budowy do reużycia
+  // jako treść STATE 'pending'. Zwraca endCy. Cancel-✕ celuje w kolonię-WYSTAWCĘ (issuerColonyId), NIE w
+  // oglądaną — pending grupy może pochodzić z kolonii-rodzeństwa (wrinkle group-keyed, C6c-2a). ──
+  _drawStationPending(ctx, x, y, w, orders, issuerColonyId) {
+    let cy = this._drawInfoSection(ctx, x, y, w, t('station.pending'));
     ctx.font = `10px ${THEME.fontFamily}`; ctx.textBaseline = 'alphabetic';
-    if (pending.length === 0) {
+    if (!orders || orders.length === 0) {
       ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
       ctx.fillText('—', x + 2, cy + 10); cy += 16;
     } else {
-      for (const order of pending) {
+      for (const order of orders) {
         ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
-        ctx.fillText(`• ${order.targetName ?? order.targetBodyId}`, x + 2, cy + 10);
+        ctx.fillText(this._truncateText(ctx, `• ${order.targetName ?? order.targetBodyId}`, w - 24), x + 2, cy + 10);
         ctx.fillStyle = '#cc7777'; ctx.textAlign = 'right';
         ctx.fillText('✕', x + w - 2, cy + 10);
-        // Wys. hitu 14 (NIE 18/16): glif ✕ jest u DOŁU wiersza (baseline cy+10). Przy max scrollu ostatni
-        // wiersz siada na scrollBot−14 (endCy=scrollBot+4 dokładnie) → hit [cy, cy+14] kończy się na scrollBot
-        // i PRZEŻYWA _pruneHitsOutside (bot+0.5); wyższy hit sterczałby pod pasmo i był ucinany mimo widocznego
-        // glifu (visible-but-unclickable). Nadal pokrywa glif (cy+3..cy+10 ⊂ [cy, cy+14]).
-        this._addHit(x + w - 20, cy, 20, 14, 'station_cancel_order', { orderId: order.id });
+        // Wys. hitu 14 — patrz nota C6c-1 (glif u dołu wiersza; przeżywa max-scroll prune). planetId =
+        // issuerColonyId → cancel trafia do WŁAŚCIWEJ kolonii (group-keyed).
+        this._addHit(x + w - 20, cy, 20, 14, 'station_cancel_order', { orderId: order.id, planetId: issuerColonyId });
         cy += 18;
       }
     }
@@ -4317,8 +4327,9 @@ export class ColonyOverlay extends BaseOverlay {
     return cy;
   }
 
-  // ── C6c-1: placeholder STATE exists/pending (grupa zajęta). Minimalny — pełna treść w C6c-2a/2b
-  // (isolated pending render + Option A embed). Zwraca endCy (scroll panelu). ──
+  // ── Placeholder „grupa zajęta". C6c-2a: STATE 'pending' ma już pełną treść (_drawStationPending) —
+  // ta metoda obsługuje teraz TYLKO 'exists' (minimalny placeholder do czasu Option A embed w C6c-2b).
+  // Gałąź 'pending' zachowana (martwa) do reużycia/spójności. Zwraca endCy (scroll panelu). ──
   _drawStationGroupState(ctx, x, y, w, kind, bodyName) {
     const title = kind === 'exists' ? t('station.groupHasStation') : t('station.groupPending');
     let cy = this._drawInfoSection(ctx, x, y, w, title);
@@ -4857,8 +4868,11 @@ export class ColonyOverlay extends BaseOverlay {
         break;
       }
       case 'station_cancel_order':
-        if (colony && zone.data?.orderId) {
-          window.KOSMOS?.colonyManager?.cancelPendingStationOrder(colony.planetId, zone.data.orderId);
+        // C6c-2a — cancel celuje w kolonię-WYSTAWCĘ (zone.data.planetId z _drawStationPending), NIE w
+        // oglądaną: pending grupy może pochodzić z rodzeństwa. Fallback na oglądaną (kompat).
+        if (zone.data?.orderId) {
+          const _pid = zone.data.planetId ?? colony?.planetId;
+          if (_pid) window.KOSMOS?.colonyManager?.cancelPendingStationOrder(_pid, zone.data.orderId);
         }
         break;
       case 'build':

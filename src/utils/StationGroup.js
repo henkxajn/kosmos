@@ -40,8 +40,8 @@ const isPlayerStation = (s) => !s.ownerEmpireId || s.ownerEmpireId === 'player';
  * @param {{anchorId:string|null, memberBodyIds:string[]}} group
  * @param {{ getStationsAt:(bodyId:string)=>object[], getColony:(bodyId:string)=>object|null }} lookups
  * @returns {{ state:'build' }
- *   | { state:'exists',  station:object, stationBodyId:string }   // stationBodyId = GDZIE stoi stacja
- *   | { state:'pending', order:object,   targetBodyId:string }}   // targetBodyId  = CEL zlecenia
+ *   | { state:'exists',  station:object, stationBodyId:string }                       // stationBodyId = GDZIE stoi stacja
+ *   | { state:'pending', order:object,   targetBodyId:string, issuerColonyId:string }} // targetBodyId=CEL; issuerColonyId=WYSTAWCA (cancel target)
  *
  * ⚠ Kształt zwrotu jest ROZŁĄCZNY per-stan (brak wspólnego, przeciążonego pola `bodyId`): każdy stan
  * niesie własne, jednoznacznie nazwane odniesienie do ciała. `stationBodyId` (exists) = lokalizacja
@@ -62,7 +62,9 @@ export function resolveStationGroupState(group, { getStationsAt, getColony }) {
   for (const bid of members) {
     const col = getColony?.(bid);
     const po = (col?.pendingStationOrders ?? []).find(o => memberSet.has(o.targetBodyId));
-    if (po) return { state: 'pending', order: po, targetBodyId: po.targetBodyId };
+    // issuerColonyId = kolonia-WYSTAWCA (getColony(bid) → planetId===bid); NIE viewing colony. Cancel MUSI
+    // celować w wystawcę (C6c-2a — pending grupy może pochodzić z kolonii-rodzeństwa, nie oglądanej).
+    if (po) return { state: 'pending', order: po, targetBodyId: po.targetBodyId, issuerColonyId: bid };
   }
   return { state: 'build' };
 }
