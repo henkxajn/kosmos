@@ -1177,6 +1177,61 @@ stopka + pinowanie + wspólny globus), NEW keeper `src/testing/smoke/info_panel_
 
 ---
 
+## Stacja jako zakładka info-panelu — C6/C6c ARC ZAMKNIĘTY (save v99 bez migracji, live-gate PASS)
+
+Dwie akcje nagłówka ColonyOverlay (🎖 Rekrutuj, 🛰 Stacja) + cały pełnoekranowy „tryb stacji" przeniesione do
+zakładek prawego info-panelu; stacje orbitalne zyskały cap „1 na grupę planeta+księżyce" i PEŁNE zarządzanie w
+zakładce. Buduje na backbone Załogi (`_getInfoTabs` data-driven + per-tab scroll + `fixedGlobeSize`).
+**Commity:** C6a `e89f83c` · C6b `1e6930d` · C6c-1 `7709d0b` · C6c-2a `1dff2c9` · C6c-2b-i `9d12e40` · C6c-2b-ii
+`990c638` · C6c-3 `6704ec7`. Close-out: `AUDIT_COLONY_OVERLAY.md` (untracked).
+
+- **C6a — Rekrutuj → Załoga:** 🎖 trigger z nagłówka na GÓRĘ tabeli strat (`_drawWorkforceTableV2`), visible-locked 🔒
+  bez koszar. Modal `_drawDraftModal`/`_handleDraftClick`/`_draftPanel` + bramka koszar BEZ zmian.
+- **C6b — Stacja build dialog → zakładka:** dawny floating `_drawStationDialog` → `_drawStationTab` (panel-relative,
+  clip/scroll/prune). Dołączana WARUNKOWO w `_getInfoTabs(colony)` (tech `orbital_construction` + pełna kolonia gracza
+  — hide-entirely, NIE locked). NEW `fitTabFontPx` (InfoPanelLayoutLogic, pure) — 4-zakładkowy pasek auto-dobiera font
+  (10px@INFO_MIN 300 / 11px≥314). **activeTab sanitacja**: stale 'stacja' → 'planet' gdy kontekst bez zakładki.
+- **Cap „1 stacja na grupę" — NEW `src/utils/StationGroup.js`** (pure, DECOUPLED od HUB-gate; ⚠ NIE importuje
+  SystemPoolService — ta sama derywacja `parentPlanetId`, wyciągnięta BEZ bramki `logistics_hub`):
+  `stationGroupOf(body)` → `{anchorId, memberBodyIds}` (kotwica=planeta; księżyc→parentPlanetId) ·
+  `resolveStationGroupState(group,{getStationsAt,getColony})` → `build | exists{station,stationBodyId} |
+  pending{order,targetBodyId,issuerColonyId}` (pola ROZŁĄCZNE per-stan — brak przeciążonego `bodyId`) ·
+  `resolveStationTabHost(station)` (C6c-3 redirect) · `_resolveStationGroupState(colony)` = wspólne źródło (body
+  zakładki + pinowany nagłówek). Cap = **formularz budowy chowa się group-wide** gdy w grupie jest stacja/pending
+  (formularz = jedyna ścieżka tworzenia zlecenia) + defensywny re-check w `ColonyManager.addPendingStationOrder`.
+- **C6c-2a — pending group-aware:** „W kolejce" (`_drawStationPending`) + linia `🛰 ▸ <ciało>`. Cancel celuje w
+  kolonię-WYSTAWCĘ (`issuerColonyId`), NIE oglądaną (pending grupy może pochodzić z rodzeństwa).
+- **C6c-2b-i/ii — pełne zarządzanie (STATE exists):** `drawStationManageCompact` (StationManagementView, single-column
+  scroll-aware embed) — 2b-i read-only, 2b-ii akcje (🗑/✕/＋moduł/＋statek) przez `bhit` (noop gdy picker otwarty).
+  Dwa pickery jako **panel-floating modale** (`drawStationPickerModal` + `_drawStationPicker` backdrop na PEŁNYCH
+  boundach + `_handleStationPickerClick` early-route — wzór `_drawDraftModal`). Reużywa handlery `station_mgmt_*` +
+  `_selectedStationId` (akcja z DOWOLNEGO ciała-członka celuje w stację grupy). **2 bugfixy live-gate:** (a) picker
+  click-through — `picker_bg`/`shippicker_bg` KONSUMUJ (tylko ✕ lub klik poza pudełkiem zamyka); (b) **pinowany
+  nagłówek** nazwa+✏ (`_drawStationHeaderPinned`, stały `headerTop`, rysowany PO `_pruneHitsOutside` → scroll-invariant;
+  dawniej ✏ w scrollowanym body prunowany). `pruneZones` wyciągnięte do InfoPanelLayoutLogic (dowód scroll-invariance
+  przez WYKONANIE — keeper T6 na PRAWDZIWEJ pruneZones).
+- **C6c-3 — retirement:** pigułki stacji + `stationTab`/`stationMgmtBg` handlery + `_drawStationManagement` delegator +
+  import + `_stationMode` draw-branch (→ bare block) + `_drawStationGroupState` + 3 osierocone `station.group*` i18n
+  USUNIĘTE. Pełnoekranowy `drawStationManagement` (~300 lin) SKASOWANY (sub-helpery computeBalance/moduleStatus/pickery
+  zostają). StationPanel „Zarządzaj" → `openPanel('colony',{infoTab:'stacja'})` przez `resolveStationTabHost`.
+  `_stationMode` = wygaszone pole `false` (brak writerów; nieszkodliwe strażniki — pełne usunięcie = kosmetyczny follow-up).
+
+**⚠ Świadome limity / follow-up:**
+- **Outpost NIE hostuje zakładki Stacja** (brak `canWorkforce` → brak paska). Budowa stacji z outpostu (dawny przycisk
+  bez `!isOutpost`) UTRACONA — zaakceptowana; revisit tylko gdy blokuje realną grę.
+- **Map-click flow (d)** (klik ciała w grupie → „manage" → zakładka Stacja) — ODROCZONY follow-up.
+- **⚠ Ship picker (`drawShipPicker`) BEZ wewnętrznego scrolla** — przy wielu projektach gracza wiersze przelewają się
+  poza pudełko (`PH = min(h-40, HEADER_H+bodyH+12)`, BRAK clip/scroll) → poza-fold projekty nieosiągalne. Pre-existing
+  (ten sam brak w dawnym pełnym ekranie), ujawniony realnym użyciem. Fix = własny scroll pickera (self-contained). TODO.
+- Balans czasu budowy stacji (obserwacja C6c-1) + `_stationMode` field cleanup — w `KOSMOS_backlog_niezrealizowane.md`.
+
+Pliki: NEW `src/utils/StationGroup.js`; `ColonyOverlay.js`, `StationManagementView.js` (compact+pickery,
+`drawStationManagement` skasowany), `StationPanel.js`, `InfoPanelLayoutLogic.js` (`fitTabFontPx`+`pruneZones`), i18n,
+smokes (`station_group` 22, `station_manage_compact` 12, `info_panel` keeper 30 z T6, `s34_faza3` przepisany na
+StationSystem-intent 15). Save v99 bez migracji (pure UI + grupy liczone w runtime).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
