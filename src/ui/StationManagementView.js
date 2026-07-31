@@ -46,6 +46,23 @@ function moduleStatus(m) {
   return { label: '✗', color: THEME.danger };
 }
 
+// ── C6c-2b-i: helpery compact renderera (wąska kolumna) ──
+function truncate(ctx, text, maxW) {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s + '…';
+}
+function sectionLine(ctx, x, y, w, label) {   // mirror ColonyOverlay._drawInfoSection (spójność wizualna zakładki)
+  ctx.font = `bold 10px ${THEME.fontFamily}`;
+  ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, x, y + 10);
+  ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y + 15); ctx.lineTo(x + w, y + 15); ctx.stroke();
+  ctx.globalAlpha = 1;
+  return y + 24;
+}
+
 /**
  * Rysuj ekran zarządzania stacją.
  * @param {CanvasRenderingContext2D} ctx
@@ -602,4 +619,127 @@ function drawShipPicker(ctx, area, station, view) {
   }
 
   addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
+}
+
+/**
+ * C6c-2b-i — READ-ONLY compact station management embedded w zakładce Stacja (wąska kolumna 300-460px).
+ * Single-column stack: nazwa → statystyki (pionowo) → moduły (1-kol) → kolejka stoczni → depot. Scroll-aware:
+ * rysuje od area.y, ZWRACA endCy (BEZ zakładania że wypełnia area.h — panel przewija). Reużywa czyste helpery
+ * (computeBalance/moduleStatus/moduleName). AKCJE (add/demolish/rename + pickery) = 2b-ii; tu ZERO hitów.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{x:number,y:number,w:number}} area
+ * @param {import('../entities/Station.js').Station} station
+ * @param {object} view — addHit/techIsResearched threaded pod 2b-ii; NIEUŻYWANE w read-only (2b-i przekazuje {}).
+ * @returns {number} endCy
+ */
+export function drawStationManageCompact(ctx, area, station, view) {
+  const { x, y, w } = area;
+  const bal = computeBalance(station);
+  let cy = y;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+  // Nazwa (bez ✏ — rename = akcja 2b-ii)
+  ctx.font = `bold 13px ${THEME.fontFamily}`; ctx.fillStyle = THEME.accent;
+  ctx.fillText(truncate(ctx, `🛰 ${station.name ?? station.id}`, w), x, cy + 12); cy += 20;
+
+  // Statystyki (pionowo — wąska kolumna)
+  const stat = (txt, color) => {
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = color; ctx.textAlign = 'left';
+    ctx.fillText(truncate(ctx, txt, w), x, cy + 10); cy += 15;
+  };
+  stat(`👥 ${t('station.mgmt.crew')}: ${station.pop ?? 0}/${station.popCapacity} (${t('station.mgmt.avail')} ${station.pop ?? 0})`, THEME.textSecondary);
+  stat(`⚡ +${bal.prod} / -${bal.cons} (${t('station.mgmt.net')} ${bal.net >= 0 ? '+' : ''}${bal.net})`, bal.net >= 0 ? THEME.success : THEME.danger);
+  stat(`🛠 ${t('station.mgmt.shipyard')}: ${station.hasActiveShipyard ? t('station.mgmt.on') : t('station.mgmt.off')}`, station.hasActiveShipyard ? THEME.success : THEME.textDim);
+  stat(`💱 ${t('station.mgmt.tradeCap')}: ${station.tradeCapacity}`, THEME.textSecondary);
+  if (station.modules.some(m => m.active === false && m.inactiveReason === 'no_crew')) {
+    stat(`⚠ ${t('station.mgmt.noCrewHint')}`, THEME.warning);
+  }
+  cy += 4;
+
+  // Moduły (1-kol: zbudowane + w budowie) — read-only (bez 🗑/＋/✕)
+  const maxModules = STATIONS[station.stationType]?.maxModules ?? 8;
+  cy = sectionLine(ctx, x, cy, w, `${t('station.mgmt.slots')} (${station.modules.length + station.pendingModuleOrders.length}/${maxModules})`);
+  for (const m of station.modules) {
+    const def = STATION_MODULES[m.moduleType]; const st = moduleStatus(m);
+    const lv = (def?.maxLevel ?? 1) > 1 ? ` lv${m.level ?? 1}` : '';
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = m.active === false ? THEME.textDim : THEME.textPrimary;
+    ctx.fillText(truncate(ctx, `${def?.icon ?? '▪'} ${moduleName(def ?? {})}${lv}`, w - 34), x, cy + 11);
+    ctx.fillStyle = st.color; ctx.textAlign = 'right';
+    ctx.fillText(st.label, x + w, cy + 11); cy += 16;
+  }
+  for (const o of station.pendingModuleOrders) {
+    const def = STATION_MODULES[o.moduleType];
+    const frac = o.buildTime > 0 ? Math.min(1, (o.progress ?? 0) / o.buildTime) : 0;
+    ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(truncate(ctx, `${def?.icon ?? '▪'} ${moduleName(def ?? {})}`, w - 64), x, cy + 10);
+    ctx.fillStyle = o.status === 'building' ? THEME.mint : THEME.warning; ctx.textAlign = 'right';
+    ctx.fillText(o.status === 'building' ? `🔨 ${Math.round(frac * 100)}%` : `⏳ ${t('station.mgmt.queued')}`, x + w, cy + 10); cy += 15;
+  }
+
+  // Kolejka stoczni (read-only) — tylko gdy stocznia aktywna
+  if (station.hasActiveShipyard) {
+    cy += 4;
+    cy = sectionLine(ctx, x, cy, w, t('station.mgmt.shipQueue'));
+    const queues = station.shipQueues ?? [];
+    if (queues.length === 0) {
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText(t('station.mgmt.shipQueueEmpty'), x + 2, cy + 10); cy += 15;
+    } else {
+      for (const q of queues) {
+        const ship = SHIPS[q.shipId] ?? HULLS[q.shipId];
+        const frac = q.buildTime > 0 ? Math.min(1, (q.progress ?? 0) / q.buildTime) : 0;
+        ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(truncate(ctx, `${ship?.icon ?? '🚀'} ${moduleName(ship ?? { namePL: q.shipId, nameEN: q.shipId })}`, w - 46), x, cy + 10);
+        ctx.fillStyle = THEME.mint; ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(frac * 100)}%`, x + w, cy + 10); cy += 15;
+      }
+    }
+  }
+
+  // Depot (read-only) — pula / wspólny magazyn / własny depot (1:1 dane z pełnego ekranu)
+  cy += 4;
+  cy = sectionLine(ctx, x, cy, w, t('station.depot'));
+  const motherColony = resolveHomeColony(station);
+  if (motherColony) {
+    const poolSnap = window.KOSMOS?.systemPoolService?.getPoolSnapshot?.(motherColony.planetId);
+    if (poolSnap) {
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left';
+      ctx.fillStyle = THEME.accent;   ctx.fillText(truncate(ctx, t('station.systemPool'), w), x + 2, cy + 10); cy += 14;
+      ctx.fillStyle = THEME.textDim;  ctx.fillText(truncate(ctx, poolSnap.byBody.map(b => b.colony.name ?? b.colony.planetId).join(', '), w - 10), x + 10, cy + 10); cy += 14;
+      for (const [id, amt] of [...poolSnap.total].filter(([, v]) => v > 0).slice(0, 10)) {
+        ctx.fillStyle = THEME.textSecondary; ctx.fillText(`${id}: ${Math.round(amt)}`, x + 10, cy + 10); cy += 14;
+      }
+    } else {
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.textAlign = 'left';
+      ctx.fillStyle = THEME.textSecondary; ctx.fillText(truncate(ctx, t('station.sharedStorage'), w), x + 2, cy + 10); cy += 14;
+      ctx.fillStyle = THEME.accent;        ctx.fillText(truncate(ctx, `▸ ${motherColony.name ?? motherColony.planetId}`, w - 10), x + 10, cy + 10); cy += 14;
+    }
+  } else {
+    if (station.depotDetached) {
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.danger; ctx.textAlign = 'left';
+      ctx.fillText(truncate(ctx, t('station.cutOffFromSupply'), w), x + 2, cy + 10); cy += 16;
+    }
+    const depot = classifyStationDepot([...(station.depot?.inventory ?? [])]);
+    if (depot.resources.length === 0 && depot.commodities.length === 0) {
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText(t('station.depotEmpty'), x + 6, cy + 10); cy += 15;
+    } else {
+      const drawList = (label, entries) => {
+        if (!entries.length) return;
+        ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+        ctx.fillText(label, x + 2, cy + 10); cy += 14;
+        for (const [id, amt] of entries) {
+          ctx.fillStyle = THEME.textSecondary; ctx.fillText(`${id}: ${Math.round(amt)}`, x + 10, cy + 10); cy += 14;
+        }
+      };
+      drawList(t('station.resources'), depot.resources);
+      drawList(t('station.commodities'), depot.commodities);
+    }
+  }
+
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  return cy;
 }

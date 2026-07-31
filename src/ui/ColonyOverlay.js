@@ -38,7 +38,7 @@ import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
-import { drawStationManagement } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji
+import { drawStationManagement, drawStationManageCompact } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji; C6c-2b-i — compact embed
 import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
 import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
 
@@ -4219,8 +4219,11 @@ export class ColonyOverlay extends BaseOverlay {
       getColony:     (bid) => colMgr?.getColony?.(bid),
     });
     if (groupState.state === 'exists') {
-      const nm = EntityManager.get(groupState.stationBodyId)?.name ?? groupState.stationBodyId ?? '?';
-      return this._drawStationGroupState(ctx, x, y, w, 'exists', nm);
+      // C6c-2b-i — READ-ONLY embed zarządzania stacją GRUPY (groupState.station), niezależnie od oglądanego
+      // ciała. _selectedStationId ustawione pod 2b-ii (akcje/pickery; nieszkodliwe teraz). Pełny ekran
+      // drawStationManagement (pigułki/_stationMode) NIETKNIĘTY — retire w C6c-3.
+      this._selectedStationId = groupState.station.id;
+      return drawStationManageCompact(ctx, { x, y, w }, groupState.station, {});
     }
     if (groupState.state === 'pending') {
       const o  = groupState.order;
