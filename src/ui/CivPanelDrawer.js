@@ -21,6 +21,7 @@ export const CIV_TABS = [
   ...(GAME_CONFIG.FEATURES.populationOverlay
     ? [{ id: 'population', icon: '👤', labelKey: 'civPanel.population', key: 'P' }]
     : []),
+  { id: 'shipyard',     icon: '🛠', labelKey: 'civPanel.shipyard',     key: 'S' },   // C8 — Stocznia (nav-slot bezwarunkowy)
   { id: 'tech',         icon: '🧬', labelKey: 'civPanel.tech',         key: 'T' },
   { id: 'fleet',        icon: '🚀', labelKey: 'civPanel.fleet',        key: 'F' },
   { id: 'colony',       icon: '🏠', labelKey: 'civPanel.colonies',     key: 'C' },
@@ -156,21 +157,26 @@ export function hitTestTopNav(x, y, x0, barH) {
 // Civilization · Economy · Colony · Population · Diplomacy · Fleet · Tech (C/E/H/P/D/F/T).
 // UWAGA (Slice 2): TopBar wciąż rysuje wszystkie 14 (drawTopNav bez zmian) — subnav
 // jest addytywny. Filtr TopBaru do 7 + remap klawiszy = Slice 3.
-export const NAV_GROUPS = [
-  { primary: 'civilization', members: ['civilization', 'dyson'] },
-  // Subnav L→P: BUDGET · PRODUCTION (economy) · TRADE · FLOWS. primary='economy' →
-  // nav-slot otwiera Produkcję; budget/flows = ta sama instancja EconomyOverlay (multi-rejestracja).
-  { primary: 'economy',      members: ['budget', 'economy', 'trade', 'flows'] },
-  { primary: 'colony',       members: ['colony'] },
-  // C7 — slot nav 'population' bramkowany kill-switchem (OFF = slot zwolniony dla C8 Stocznia;
-  // BottomNavBar 7→6 slotów). ON = przywraca slot na indeksie 3 (Populacja). Zob. FEATURES.populationOverlay.
-  ...(GAME_CONFIG.FEATURES.populationOverlay
-    ? [{ primary: 'population', members: ['population'] }]
-    : []),
-  { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — Stratcom (zakładka w Dowództwie Taktycznym, klawisz G/M) zastąpił mapę galaktyki
-  { primary: 'fleet',        members: ['fleet'] },  // Designs (unit_design) wchłonięte przez zakładkę Stocznia w Dowództwie Taktycznym
-  { primary: 'tech',         members: ['tech', 'observatory'] },
-];
+// C8 — pure builder. `features` intencjonalnie IGNOROWANE: zestaw slotów nav jest
+// NIEZALEŻNY od FEATURES.populationOverlay (§3.5). Stocznia (C8) trzyma strukturalnie
+// slot zwolniony po Populacji w C7 → brak warunkowej populacji ⇒ ZERO stanu 8-slotów
+// (pułapka z clock-band). Param zostaje wyłącznie po to, by smoke keeper dowiódł
+// „OBA stany flagi = 7 slotów" (regresja re-dodania populacji → 8 zapala się tylko flag-ON).
+export function buildNavGroups(_features) {
+  return [
+    { primary: 'civilization', members: ['civilization', 'dyson'] },
+    // Subnav L→P: BUDGET · PRODUCTION (economy) · TRADE · FLOWS. primary='economy' →
+    // nav-slot otwiera Produkcję; budget/flows = ta sama instancja EconomyOverlay (multi-rejestracja).
+    { primary: 'economy',      members: ['budget', 'economy', 'trade', 'flows'] },
+    { primary: 'colony',       members: ['colony'] },
+    { primary: 'shipyard',     members: ['shipyard'] },   // C8 — zajął slot zwolniony po Populacji (C7)
+    { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — Stratcom (klawisz G/M) zastąpił mapę galaktyki
+    { primary: 'fleet',        members: ['fleet'] },
+    { primary: 'tech',         members: ['tech', 'observatory'] },
+  ];
+}
+
+export const NAV_GROUPS = buildNavGroups(GAME_CONFIG.FEATURES);
 
 // member id → grupa (mapa odwrotna, budowana raz)
 const _memberToGroup = {};

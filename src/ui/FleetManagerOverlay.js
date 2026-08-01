@@ -758,12 +758,6 @@ export class FleetManagerOverlay {
       }
     } else if (this._activeTab === 'atlas') {
       this._drawAtlasCatalog(ctx, ox, contentY, ow, contentH, allVessels);
-    } else if (this._activeTab === 'shipyard') {
-      // Stocznia = wąska kolumna wycentrowana: u góry budowa statków, poniżej
-      // (po wspólnym scrollu) osadzony edytor projektów (Designs).
-      const syW = Math.min(ow, 560);
-      const syX = ox + Math.floor((ow - syW) / 2);
-      this._drawShipyardTab(ctx, syX, contentY, syW, contentH, colMgr, activePid);
     } else if (this._activeTab === 'ground') {
       // Jednostki naziemne = prawa połowa UnitDesignOverlay (GroundUnitPanel),
       // osadzona jak edytor projektów w Stoczni. Panel ma własny scroll i layout
@@ -1318,7 +1312,7 @@ export class FleetManagerOverlay {
     const tabs = [
       { id: 'stratcom', label: t('fleet.tabStratcom') },
       { id: 'tactical', label: t('fleet.tabTactical') },
-      { id: 'shipyard', label: t('fleet.tabShipyard') },
+      // C8 — 'shipyard' wyprowadzone do osobnego overlayu (nav-slot 🛠 / klawisz S).
       { id: 'ground',   label: t('fleet.tabGround') },
       { id: 'atlas',    label: t('fleet.tabAtlas') },
       // MVP Zlecenia Transportowe — zakładka tylko gdy funkcja włączona (kill-switch).
@@ -1546,15 +1540,6 @@ export class FleetManagerOverlay {
       return true;
     }
 
-    // ── SHIPYARD — wspólny pionowy scroll (budowa + edytor projektów) ─
-    if (this._activeTab === 'shipyard') {
-      if (inRect(this._contentBounds)) {
-        const maxScroll = Math.max(0, this._shipyardContentH - this._shipyardViewH);
-        this._shipyardScrollY = Math.max(0, Math.min(maxScroll, this._shipyardScrollY + delta * 0.5));
-      }
-      return true;
-    }
-
     // ── JEDNOSTKI — scroll detalu archetypu (własny scroll panelu) ─
     if (this._activeTab === 'ground') {
       if (inRect(this._contentBounds)) {
@@ -1757,7 +1742,7 @@ export class FleetManagerOverlay {
     // Jednostki = GroundUnitPanel) — podświetlenia wierszy i tooltipy panelu
     // czytają editor._hoverZone oraz _mouseX/_mouseY (UDO.handleMouseMove nie
     // biegnie, bo overlay unit_design jest schowany).
-    if (this._activeTab === 'shipyard' || this._activeTab === 'ground') {
+    if (this._activeTab === 'ground') {
       const ed = this._getDesignEditor();
       if (ed) {
         ed._hoverZone = findHitZone(mx, my, this._hitZones) ?? null;
@@ -2006,12 +1991,12 @@ export class FleetManagerOverlay {
         break;
       }
       case 'back_to_shipyard':
-        // Stocznia ma teraz własną zakładkę — odznacz statek i przełącz na nią.
+        // C8 — Stocznia to teraz osobny overlay (nav-slot 🛠 / klawisz S); odznacz statek i otwórz go.
         this._setSelectedVesselViaUI(null);
         this._missionConfig = null;
         this._targetScrollOffset = 0;
         this._cachedTargets = null;
-        this._activeTab = 'shipyard';
+        window.KOSMOS?.overlayManager?.openPanel('shipyard');
         break;
       case 'map_station': {
         // S3.4-F2 — klik stacji na mapie taktycznej: wybór celu (gdy konfigurator) lub selekcja

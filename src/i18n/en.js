@@ -2643,6 +2643,7 @@ export default {
   'civPanel.budget': 'Budget',
   'civPanel.flows': 'Flows',
   'civPanel.population': 'Population',
+  'civPanel.shipyard': 'Shipyard',
   'civPanel.tech': 'Science',
   'civPanel.fleet': 'Command',
   'civPanel.colonies': 'Colonies',

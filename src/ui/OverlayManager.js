@@ -13,16 +13,18 @@ export class OverlayManager {
     // Konsolidacja nav 14→7 (Slice 3) — klawisze primary = przyciski TopBaru:
     //   C·civilization  E·economy  H·colony  P·population  D·diplomacy  F·fleet  T·tech
     //   (P·population degated w C7 — dodawany warunkowo niżej gdy FEATURES.populationOverlay=ON)
+    //   (S·shipyard dodane w C8 — Stocznia zajęła slot po Populacji)
     // Skróty wtórne I/W/G/U/O zostają jako bezpośrednie (dostępne też przez subnav).
     // dyson/trade — BEZ skrótu (klawisze 'd'/'h' przejęte przez primary); tylko subnav.
     this._keyMap = {
-      // primary (6 + 'p':'population' warunkowo — dodawane niżej gdy FEATURES.populationOverlay)
+      // primary (6 stałych + 's':'shipyard' C8; 'p':'population' warunkowo — niżej gdy FEATURES.populationOverlay)
       'c': 'civilization',
       'e': 'economy',
       'h': 'colony',
       'd': 'diplomacy',
       'f': 'fleet',
       't': 'tech',
+      's': 'shipyard',   // C8 — Stocznia (mnemonic 's'; slot nav po Populacji)
       // wtórne overlaye — bezpośrednie skróty
       'i': 'intel',           // Faza 2 — Wywiad (obce imperia)
       'w': 'war',             // Faza 4 — Panel wojny

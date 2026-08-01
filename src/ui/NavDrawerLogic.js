@@ -25,10 +25,13 @@ export const NAV_TILE_FILES = {
   civilization: 'civilization_symbol.png',
   economy:      'economy_symbol.png',
   colony:       'colony_symbol.png',
-  population:   'population_symbol.png',
+  shipyard:     'shipyard_symbol.png',   // C8 — brak pliku → emoji 🛠 fallback (NavDrawer/BottomNavBar)
   diplomacy:    'diplomacy_symbol.png',
   fleet:        'fleet_symbol.png',
   tech:         'tech_symbol.png',
+  // C7/C8 — 'population' zdjęte z NAV_GROUPS (slot retired) → wpis martwy (nigdy nieczytany
+  // przez [primary]); zostawiony, patrz §3.5b audytu (permanent dead, prune w follow-up chore).
+  population:   'population_symbol.png',
 };
 
 /**

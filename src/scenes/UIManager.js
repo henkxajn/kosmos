@@ -27,6 +27,7 @@ import { OverlayManager }  from '../ui/OverlayManager.js';
 import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
 import { EventLogOverlay }    from '../ui/EventLogOverlay.js';
 import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
+import { ShipyardOverlay }     from '../ui/ShipyardOverlay.js';
 import { EconomyOverlay }      from '../ui/EconomyOverlay.js';
 import { TechOverlay }         from '../ui/TechOverlay.js';
 import { ColonyOverlay }       from '../ui/ColonyOverlay.js';
@@ -276,6 +277,8 @@ export class UIManager {
     if (GAME_CONFIG.FEATURES.populationOverlay) {
       this.overlayManager.register('population', new PopulationOverlay());
     }
+    // C8 — Stocznia jako osobny overlay (nav-slot 🛠 / klawisz S; wcześniej zakładka w Command).
+    this.overlayManager.register('shipyard', new ShipyardOverlay());
     // Multi-rejestracja: jedna instancja EconomyOverlay obsługuje 3 elementy subnav
     // (BUDGET/PRODUCTION/FLOWS) — treść środka wyprowadzana z overlayManager.active.
     const _economyOverlay = new EconomyOverlay();
