@@ -1292,7 +1292,10 @@ sekcja overflow wciąż oznaczona UNFIXED (untracked, nie aktualizowana); balans
 
 Wyłączenie samodzielnego `PopulationOverlay` (treść już w zakładce „Populacja" ColonyOverlay — C5) +
 zwolnienie slotu nawigacji i hotkeya `P`. Kill-switch `FEATURES.populationOverlay` (default **OFF**, konwencja
-C1/`largestHexMaps`) — flip ON przywraca WSZYSTKO 1:1 (rejestracja + slot + P + peek). Pure UI, zero migracji
+C1/`largestHexMaps`) — flip ON przywraca WSZYSTKO 1:1 (rejestracja + slot + P + peek). **⚠ KOREKTA po C8
+(`5da2c32`): już NIE „1:1" — flip ON przywraca rejestrację + hotkey P (rollback awaryjny: P otwiera panel),
+ale NIE slot/kafel/peek; Stocznia (C8) przejęła strukturalny slot, NAV_GROUPS bez populacji ⇒ zawsze 7 slotów
+(patrz sekcja C8).** Pure UI, zero migracji
 (v99). Zwolniony slot przeznaczony dla **C8** (ekstrakcja `ShipyardOverlay`).
 
 **Bramkowane na fladze (nav 7→6 slotów):**
@@ -1333,6 +1336,62 @@ nieprzejęty; opcjonalny flip-round-trip #7 świadomie pominięty).
 **NEXT — C8:** ekstrakcja `ShipyardOverlay` z Command (FleetManagerOverlay) do zwolnionego slotu (6→7) + kafel +
 hotkey. Refresh audytu §3 (file:line stale). ⚠ pre-existing ship-picker overflow (`AUDIT_COLONY_OVERLAY.md` sekcja
 „post-C6c") wciąż UNFIXED.
+
+---
+
+## ShipyardOverlay — osobny nav-slot (C8, save v99 bez migracji, live-gate 1-9 PASS, commit `5da2c32`; docs+prune osobno)
+
+Ekstrakcja UI budowy statków z zakładki `'shipyard'` FleetManagerOverlay (Command) do samodzielnego
+`ShipyardOverlay` (BaseOverlay, `src/ui/ShipyardOverlay.js`) w **nowym slocie nav 🛠 / klawisz `S`** — zajął
+strukturalny slot zwolniony po Populacji w C7. Kolonia = GLOBALNA aktywna (`colMgr.activePlanetId`, bez zmian);
+budowa przez `fleet:buildRequest` (→ ColonyManager) + `surgeShipBuild`/`cancelPendingShip`. Osadzony edytor
+projektów = WSPÓŁDZIELONA instancja `overlays.unit_design` (ta sama co klawisz U i zakładka Jednostki) —
+`_hitZones` swap + delegacja `DESIGN_EDITOR_HIT_TYPES`. Martwa ścieżka `build_ship`/`_drawShipCostTooltip`
+(0 producentów) NIE portowana. Save v99 bez migracji.
+
+**Nav (Scenario A, §3.5 audytu — koniec ryzyka 8-slotów):** `CivPanelDrawer.buildNavGroups(_features)` czysta,
+**IGNORUJE flagę** — `shipyard` bezwarunkowo na pozycji po `colony`, `population` USUNIĘTE z NAV_GROUPS ⇒
+`NAV_GROUPS.length === 7` NIEZALEŻNIE od `FEATURES.populationOverlay` (brak warunkowej populacji = brak stanu
+8-slotów, ta sama klasa co pułapka clock-band). `export const NAV_GROUPS = buildNavGroups(GAME_CONFIG.FEATURES)`
+(konsumenci bez zmian). CIV_TABS: **nowy bezwarunkowy** `shipyard` + **zachowany warunkowy** `population` (C7).
+`NAV_TILE_FILES` +`shipyard` (brak PNG → emoji 🛠 fallback). OverlayManager `'s'→'shipyard'`. UIManager
+rejestruje `shipyard` bezwarunkowo. i18n `civPanel.shipyard` (PL „Stocznia"/EN „Shipyard").
+
+**Rola flagi po C8 (korekta C7):** `populationOverlay` bramkuje już tylko rejestrację `PopulationOverlay` +
+hotkey `'p'` (non-layout). Flip ON = rollback awaryjny (P otwiera stary panel) — **NIE** przywraca slotu nav
+(Stocznia go trzyma). Korekta wpisana w sekcji C7 wyżej.
+
+**FMO — usunięte (funkcjonalnie):** wpis zakładki (1321), dispatch (761), gałąź scrolla (1550), warunek hovera
+`|| 'shipyard'` (1760 → tylko `'ground'`), `back_to_shipyard` przekierowane na `openPanel('shipyard')` (2014).
+**⚠ `_activeTab` nie może już być `'shipyard'`** — dowód: WSZYSTKIE 8 site'ów przypisania (402/519/531/571/578/2238
+= `'tactical'`; 514 `opts.tab` — żaden caller nie podaje `tab:'shipyard'`, grep 0; 591 `_switchTab(tab)` — pasek
+zakładek bez `'shipyard'`). `back_to_shipyard` przyciski (6814/7046 vessel/enemy detail) + disband-`hasShipyard`
+(9037) ZOSTAJĄ (poprawne). `fleet.requiresOrbitalShipyard` NIETKNIĘTE (ColonyManager:858 + FleetTabPanel).
+
+**⚠ Martwy klaster w FMO (~520 lin, ZOSTAWIONY na osobny `chore` prune):** `_drawShipyardTab`/`_drawShipyard`/
+`_drawShipCostTooltip`/`_drawPendingOrderTooltip` + pola `_shipyard*` + `_hoverShipId`/`_hoverPendingOrder` +
+handlery hitów `build_ship`/`build_template`/`surge_ship`/`cancel_pending_ship`. Self-consistent, NIEOSIĄGALNY
+(`_activeTab` nigdy `'shipyard'`). Wycinanie 450-linii w krytycznym pliku 9753-lin = mniej ryzykowne jako
+IZOLOWANY commit niż wplecione w ten slice. **NEXT.** (FleetTabPanel ma WŁASNY `cancel_pending_ship` handler
+:578 — niezależny; usunięcie handlera FMO go nie dotyka.)
+
+**§3.5b — C7 „left-inert" → PERMANENTNIE martwe:** `NAV_TILE_FILES['population']` + `NavPeekProviders`
+`case 'population'`/`_population()` + `population_symbol.png` straciły uzasadnienie „needed on restore" (restore
+= rejestracja+hotkey, bez slotu) → z warunkowo-martwych stają się TRWALE martwe. Nie ruszane w C8; kandydat do
+tego samego `chore` prune. (Patrz `AUDIT_COLONY_OVERLAY.md` §3.5/§3.5b — pełny audyt refresh.)
+
+**Deliberately accepted gap (jak C7 #7):** live-gate #10 (flip `populationOverlay` ON w przeglądarce — layout
+BottomNavBar / hotkey P / lookup ikon pod flagą ON) **NIE zweryfikowany w browserze** — świadomie pominięty.
+Poziom funkcji: keeper dowodzi `NAV_GROUPS.length===7` przy fladze ON (`buildNavGroups`), ale render na żywo pod
+flagą ON zostaje niezweryfikowany. NIE traktować jako w pełni zweryfikowane.
+
+**Pliki:** NEW `ShipyardOverlay.js` + `shipyard_nav_slot_smoke.mjs`; edycje `FleetManagerOverlay`, `CivPanelDrawer`
+(`buildNavGroups`+CIV_TABS), `NavDrawerLogic`, `OverlayManager`, `UIManager`, i18n pl/en. Testy: keeper **11/11**
+(oba stany flagi = 7), `fleet_clock_band` 14/14 (7 slotów), sweep **81/81 OK 0 FAIL**, `check-i18n` PASS. Live-gate
+1-9 PASS (slot 🛠, S/klik otwiera, budowa/surge/cancel, edytor osadzony, Command bez zakładki, „← Stocznia" →
+overlay, C7 intact, brak console errors).
+
+**NEXT:** (1) `chore(ui)` prune martwego klastra FMO (+§3.5b martwe wpisy populacji). (2) opcjonalnie `shipyard_symbol.png`.
 
 ---
 
