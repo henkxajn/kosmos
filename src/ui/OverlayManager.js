@@ -4,20 +4,22 @@
 // Escape zamyka aktywny panel. Deleguje draw/click/move do aktywnego overlay.
 // Wspiera zarówno BaseOverlay (show/hide) jak i FleetManagerOverlay (open/close).
 
+import { GAME_CONFIG } from '../config/GameConfig.js';   // C7 — bramka kill-switcha PopulationOverlay
+
 export class OverlayManager {
   constructor() {
     this.overlays = {}; // id → overlay instance
     this.active = null; // aktualnie widoczny id
     // Konsolidacja nav 14→7 (Slice 3) — klawisze primary = przyciski TopBaru:
     //   C·civilization  E·economy  H·colony  P·population  D·diplomacy  F·fleet  T·tech
+    //   (P·population degated w C7 — dodawany warunkowo niżej gdy FEATURES.populationOverlay=ON)
     // Skróty wtórne I/W/G/U/O zostają jako bezpośrednie (dostępne też przez subnav).
     // dyson/trade — BEZ skrótu (klawisze 'd'/'h' przejęte przez primary); tylko subnav.
     this._keyMap = {
-      // primary (7)
+      // primary (6 + 'p':'population' warunkowo — dodawane niżej gdy FEATURES.populationOverlay)
       'c': 'civilization',
       'e': 'economy',
       'h': 'colony',
-      'p': 'population',
       'd': 'diplomacy',
       'f': 'fleet',
       't': 'tech',
@@ -35,6 +37,10 @@ export class OverlayManager {
       'm': { id: 'fleet', opts: { tab: 'stratcom' } }, // Stratcom zastąpił mini-mapę
       'k': { id: 'fleet', opts: { focusSection: 'wreck' } }, // M4 P2 — Fleet → sekcja Wraki
     };
+    // C7 — hotkey P bramkowany kill-switchem PopulationOverlay (default OFF). OFF = P
+    // całkowicie nieaktywne (handleKey → entry undefined → return false, bez console.log).
+    // ON = przywraca 'p' → 'population'. Zob. GameConfig.FEATURES.populationOverlay.
+    if (GAME_CONFIG.FEATURES.populationOverlay) this._keyMap['p'] = 'population';
   }
 
   register(id, overlay) {

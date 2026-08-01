@@ -214,6 +214,16 @@ export const GAME_CONFIG = {
     //   Kill-switch: OFF = zachowanie 5C.1 (uniform fill, brak tri-state/pauzy).
     //   Default ON (live-gate). Save v99 bez bumpu (designation ?? 'active').
     popAllocation2Priority: true,
+    // ── PopulationOverlay OFF (C7) — degate samodzielnego panelu Populacji ──
+    //   Treść panelu przeniesiona do zakładki „Populacja" w prawym info-panelu
+    //   ColonyOverlay (C5). Ten kill-switch odłącza STARY samodzielny overlay:
+    //   OFF (default) = overlay nie jest konstruowany/rejestrowany (listener
+    //   civ:populationChanged nigdy się nie rejestruje), slot nav zwolniony
+    //   (BottomNavBar 7→6), skrót P nieaktywny, kafel/NavPeek 'population' martwe
+    //   (klucze dostępowe — nieosiągalne bez slotu nav). ON = pełne przywrócenie 1:1
+    //   (rejestracja + slot + P + peek). Pure UI, bez migracji save (v99). Zwolniony
+    //   slot przeznaczony dla C8 (ekstrakcja ShipyardOverlay). Kanon: FEATURES kill-switch.
+    populationOverlay:    false,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

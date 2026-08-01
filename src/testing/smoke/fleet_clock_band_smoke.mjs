@@ -20,7 +20,8 @@ const ok = (c, m) => { if (c) { pass++; } else { fail++; console.log('  ✗ FAIL
 const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
 const { BottomControlBar } = await import('../../ui/BottomControlBar.js');
 const { COSMIC, BOTTOM_RESERVED } = await import('../../config/LayoutConfig.js');
-const { bottomNavBarRect } = await import('../../ui/BottomNavBarLogic.js');
+const { bottomNavBarRect, navSlotLayout } = await import('../../ui/BottomNavBarLogic.js');
+const { NAV_GROUPS } = await import('../../ui/CivPanelDrawer.js');
 
 const W = 1280, H = 720;
 const STRIP_H = 20;   // BottomControlBar.STRIP_H (moduł-lokalny — replika do asercji)
@@ -85,14 +86,20 @@ for (const px of [4, 320, 640, 900, 1080]) {
   ok(opaqueBg.some(r => covers(r, px, bandY)), `T3: pas zegara zamalowany tłem overlayu w x=${px}`);
 }
 
-// ── T4: zegar leży NA overlayu (jego pas mieści się w prawej kolumnie, którą oszczędziliśmy) ──
+// ── T4: pas zegara ZAKOTWICZONY DOKŁADNIE w ostatnim (prawym) slocie nawigacji ──
+// Niezależne od liczby slotów: C7 zdjął slot Populacji (7→6) → ostatni slot szerszy i zaczyna
+// się dalej w lewo (C8 przywróci 7). Liczymy realny ostatni slot tą samą funkcją co
+// BottomControlBar (navSlotLayout) — dawne proxy „bg.x >= 1080" zakładało sztywno 7 slotów.
 const bar = new BottomControlBar();
 const barCtx = mockCtx();
 bar.draw(barCtx, W, H, KOSMOS.uiManager._timeState);
 const bg = bar._bgRect;
 ok(bg.y === stripTop && bg.h === STRIP_H, `T4: pas zegara na y=[${bg.y},${bg.y + bg.h}] = dawna dziura`);
-const RIGHT_W = 200;
-ok(bg.x >= W - RIGHT_W, `T4: zegar mieści się w prawej kolumnie overlayu (x=${bg.x} >= ${W - RIGHT_W}) — tylko ona mu ustępuje`);
+const navSlots = navSlotLayout(navRect, NAV_GROUPS.length);
+const lastSlot = navSlots[navSlots.length - 1];
+const approx = (a, b) => Math.abs(a - b) < 1e-6;   // bgW = (x+w)−x w BottomControlBar → szum float ~1e-13
+ok(approx(bg.x, lastSlot.x) && approx(bg.w, lastSlot.w),
+  `T4: zegar = ostatni slot nawigacji (x=${bg.x}/${lastSlot.x}, w=${bg.w}/${lastSlot.w}) — tylko prawa kolumna mu ustępuje`);
 ok(bg.x + bg.w <= W, `T4: zegar nie wystaje poza ekran (${bg.x + bg.w} <= ${W})`);
 
 // ── T5: klik w dawną dziurę trafia w overlay, nie przelatuje na mapę 3D ─────

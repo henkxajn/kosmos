@@ -7,6 +7,7 @@
 import { THEME, bgAlpha, hexToRgb, GLASS_BORDER_SIDE, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import { t } from '../i18n/i18n.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';   // C7 — bramka kill-switcha PopulationOverlay
 
 // ── Stałe ──────────────────────────────────────────────────
 export const CIV_SIDEBAR_W    = 0;    // Slice 4 — pionowy sidebar usunięty (nav na górze); lewa krawędź = 0
@@ -16,7 +17,10 @@ export const CIV_SIDEBAR_PAD  = 2;
 
 export const CIV_TABS = [
   { id: 'economy',      icon: '⚙', labelKey: 'civPanel.economy',      key: 'E' },
-  { id: 'population',   icon: '👤', labelKey: 'civPanel.population',   key: 'P' },
+  // C7 — 'population' (ikona/etykieta) bramkowane kill-switchem PopulationOverlay (default OFF).
+  ...(GAME_CONFIG.FEATURES.populationOverlay
+    ? [{ id: 'population', icon: '👤', labelKey: 'civPanel.population', key: 'P' }]
+    : []),
   { id: 'tech',         icon: '🧬', labelKey: 'civPanel.tech',         key: 'T' },
   { id: 'fleet',        icon: '🚀', labelKey: 'civPanel.fleet',        key: 'F' },
   { id: 'colony',       icon: '🏠', labelKey: 'civPanel.colonies',     key: 'C' },
@@ -158,7 +162,11 @@ export const NAV_GROUPS = [
   // nav-slot otwiera Produkcję; budget/flows = ta sama instancja EconomyOverlay (multi-rejestracja).
   { primary: 'economy',      members: ['budget', 'economy', 'trade', 'flows'] },
   { primary: 'colony',       members: ['colony'] },
-  { primary: 'population',   members: ['population'] },
+  // C7 — slot nav 'population' bramkowany kill-switchem (OFF = slot zwolniony dla C8 Stocznia;
+  // BottomNavBar 7→6 slotów). ON = przywraca slot na indeksie 3 (Populacja). Zob. FEATURES.populationOverlay.
+  ...(GAME_CONFIG.FEATURES.populationOverlay
+    ? [{ primary: 'population', members: ['population'] }]
+    : []),
   { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — Stratcom (zakładka w Dowództwie Taktycznym, klawisz G/M) zastąpił mapę galaktyki
   { primary: 'fleet',        members: ['fleet'] },  // Designs (unit_design) wchłonięte przez zakładkę Stocznia w Dowództwie Taktycznym
   { primary: 'tech',         members: ['tech', 'observatory'] },

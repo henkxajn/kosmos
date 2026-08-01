@@ -270,7 +270,12 @@ export class UIManager {
     // ── OverlayManager (panele pełnoekranowe) ─────────────
     this.overlayManager = new OverlayManager();
     this.overlayManager.register('fleet', new FleetManagerOverlay());
-    this.overlayManager.register('population', new PopulationOverlay());
+    // C7 — PopulationOverlay degated (treść w zakładce „Populacja" ColonyOverlay, C5).
+    // Kill-switch FEATURES.populationOverlay (default OFF): nie konstruujemy overlayu →
+    // listener civ:populationChanged nigdy się nie rejestruje (audyt §2.3). ON = powrót 1:1.
+    if (GAME_CONFIG.FEATURES.populationOverlay) {
+      this.overlayManager.register('population', new PopulationOverlay());
+    }
     // Multi-rejestracja: jedna instancja EconomyOverlay obsługuje 3 elementy subnav
     // (BUDGET/PRODUCTION/FLOWS) — treść środka wyprowadzana z overlayManager.active.
     const _economyOverlay = new EconomyOverlay();
