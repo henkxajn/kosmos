@@ -1368,11 +1368,13 @@ hotkey `'p'` (non-layout). Flip ON = rollback awaryjny (P otwiera stary panel) �
 zakładek bez `'shipyard'`). `back_to_shipyard` przyciski (6814/7046 vessel/enemy detail) + disband-`hasShipyard`
 (9037) ZOSTAJĄ (poprawne). `fleet.requiresOrbitalShipyard` NIETKNIĘTE (ColonyManager:858 + FleetTabPanel).
 
-**⚠ Martwy klaster w FMO (~520 lin, ZOSTAWIONY na osobny `chore` prune):** `_drawShipyardTab`/`_drawShipyard`/
+**⚠ Martwy klaster w FMO (~545 lin) — ✅ USUNIĘTY (`chore` prune `7201670`, FMO 9753→9195):** `_drawShipyardTab`/`_drawShipyard`/
 `_drawShipCostTooltip`/`_drawPendingOrderTooltip` + pola `_shipyard*` + `_hoverShipId`/`_hoverPendingOrder` +
 handlery hitów `build_ship`/`build_template`/`surge_ship`/`cancel_pending_ship`. Self-consistent, NIEOSIĄGALNY
 (`_activeTab` nigdy `'shipyard'`). Wycinanie 450-linii w krytycznym pliku 9753-lin = mniej ryzykowne jako
-IZOLOWANY commit niż wplecione w ten slice. **NEXT.** (FleetTabPanel ma WŁASNY `cancel_pending_ship` handler
+IZOLOWANY commit niż wplecione w ten slice. **✅ ZROBIONE (`7201670`):** node --check OK, 0 tokenów klastra w FMO,
+0 refów cross-tree, sweep 81/81, live-gate PASS; `_activeTab` nigdy `'shipyard'` udowodnione raw-grepem (8 site'ów
+przypisania + 0 feederów `tab:'shipyard'` + `_switchTab` 1 prod-caller z `zone.data.tab`). (FleetTabPanel ma WŁASNY `cancel_pending_ship` handler
 :578 — niezależny; usunięcie handlera FMO go nie dotyka.)
 
 **§3.5b — C7 „left-inert" → PERMANENTNIE martwe:** `NAV_TILE_FILES['population']` + `NavPeekProviders`
@@ -1391,7 +1393,9 @@ flagą ON zostaje niezweryfikowany. NIE traktować jako w pełni zweryfikowane.
 1-9 PASS (slot 🛠, S/klik otwiera, budowa/surge/cancel, edytor osadzony, Command bez zakładki, „← Stocznia" →
 overlay, C7 intact, brak console errors).
 
-**NEXT:** (1) `chore(ui)` prune martwego klastra FMO (+§3.5b martwe wpisy populacji). (2) opcjonalnie `shipyard_symbol.png`.
+**C8 ARC ZAMKNIĘTY** (`5da2c32` code · `17f3e84` docs · `7201670` prune). **NEXT (drobne, niepilne):**
+§3.5b trwale martwe wpisy populacji (`NAV_TILE_FILES['population']` + `NavPeekProviders` `case 'population'`/
+`_population()` + `population_symbol.png`) + opcjonalnie `shipyard_symbol.png`.
 
 ---
 
