@@ -1288,6 +1288,54 @@ sekcja overflow wciąż oznaczona UNFIXED (untracked, nie aktualizowana); balans
 
 ---
 
+## PopulationOverlay OFF — C7 (kill-switch `FEATURES.populationOverlay`, save v99 bez migracji, live-gate PASS, commit `270df20`)
+
+Wyłączenie samodzielnego `PopulationOverlay` (treść już w zakładce „Populacja" ColonyOverlay — C5) +
+zwolnienie slotu nawigacji i hotkeya `P`. Kill-switch `FEATURES.populationOverlay` (default **OFF**, konwencja
+C1/`largestHexMaps`) — flip ON przywraca WSZYSTKO 1:1 (rejestracja + slot + P + peek). Pure UI, zero migracji
+(v99). Zwolniony slot przeznaczony dla **C8** (ekstrakcja `ShipyardOverlay`).
+
+**Bramkowane na fladze (nav 7→6 slotów):**
+- `UIManager` rejestracja (`if FEATURES.populationOverlay`) → overlay **nie konstruowany** → listener
+  `civ:populationChanged` (`_ensureHistoryListener`) nigdy się nie rejestruje (audyt §2.3). **Import ZOSTAJE**
+  (bramkowana konstrukcja go używa + smoke `orbital_logistics_hub` importuje klasę wprost — 70/70).
+- `OverlayManager._keyMap` — `'p'` zdjęte z literału, dodawane warunkowo PO nim. OFF ⇒ `handleKey('p')` →
+  `entry undefined` → `return false` (BEZ `console.log` „not registered"). ON ⇒ przywraca `'p':'population'`.
+- `CivPanelDrawer` `CIV_TABS` + `NAV_GROUPS` — **conditional-spread** (populacja tylko gdy flag ON); import
+  `GAME_CONFIG` dodany. NAV_GROUPS 7→6 (populacja była indeks 3) → BottomNavBar `navSlotLayout(…, NAV_GROUPS.length)`
+  = 6 slotów; ostatni slot szerszy.
+
+**Zostawione NIETKNIĘTE (celowo — dostęp KLUCZOWANY, nieosiągalne gdy OFF, potrzebne 1:1 przy restore):**
+- `NavDrawerLogic.NAV_TILE_FILES['population']` — czytane tylko `[primary]` dla primary ∈ NAV_GROUPS → martwe
+  gdy OFF; skasowanie dałoby 404→emoji przy flip ON. `NavPeekProviders` `case 'population'`+`_population()` —
+  `getPeekData(groupId)` woływane wyłącznie dla primary ∈ NAV_GROUPS (`BottomNavBar:88`) → nieosiągalne gdy OFF.
+`PopulationOverlay.js` **NIE skasowany** (reversible-via-flag, nie via-git). Zero zmian i18n → ~30 współdzielonych
+kluczy `popPanel.*` (31 żywych `t()` w `_drawPopulationTab` ColonyOverlay) ZACHOWANE (check-i18n PASS).
+
+**Bezpieczeństwo gatingu `CIV_TABS`:** jedyny iterator CAŁEGO `CIV_TABS` renderujący klikalny nav — `drawTopNav`
+— jest MARTWY (0 call-sites; `TopBar.js:18` „legacy, nieużywane"). `drawCivPanelSidebar`/`hitTestSidebar` iterują
+CIV_TABS ale `CIV_SIDEBAR_W=0` (niewidoczne, hit `x∈[0,0]`). Reszta konsumentów = keyed `.find(id===primary)`.
+Brak `openPanel('population')`/deep-linku (grep czysty).
+
+**Side-effect (nav 7→6) — `fleet_clock_band_smoke` T4:** pas zegara `BottomControlBar` ZAKOTWICZONY w OSTATNIM
+slocie nav (`bgLeft=lastSlotX`); 6 slotów → ostatni slot zaczyna się na x=1061.67 (nie ≥1080). Render OK (band ==
+ostatni slot; T1/T2/T3 pass — brak regresji przezroczystego pasa). Sztywne 7-slotowe proxy `bg.x>=1080` ZASTĄPIONE
+inwariantem slot-count-agnostic: `approx(bg.x,lastSlot.x) && approx(bg.w,lastSlot.w)`, ε=`1e-6` (szum float
+`(x+w)−x` ~8e-14). Przejdzie i przy 6 (C7), i przy 7 (C8). **Wniosek dla C8:** C8 przywraca 7. slot — T4
+(slot-agnostic) go obejmuje bez zmian.
+
+**Pliki:** `GameConfig.js` (flaga), `UIManager.js` (bramka rejestracji), `CivPanelDrawer.js` (+import, CIV_TABS/
+NAV_GROUPS spread), `OverlayManager.js` (+import, keymap gate), `testing/smoke/fleet_clock_band_smoke.mjs` (T4
+slot-agnostic). Sweep **80/80 OK 0 FAIL** (`fleet_clock_band` 14/14, info_panel keeper 30/30, `orbital_logistics_hub`
+70/70) · `check-i18n` PASS. Live-gate 1-6 PASS (slot+P gone, Populacja tab+i18n intact, brak console errors, slot
+nieprzejęty; opcjonalny flip-round-trip #7 świadomie pominięty).
+
+**NEXT — C8:** ekstrakcja `ShipyardOverlay` z Command (FleetManagerOverlay) do zwolnionego slotu (6→7) + kafel +
+hotkey. Refresh audytu §3 (file:line stale). ⚠ pre-existing ship-picker overflow (`AUDIT_COLONY_OVERLAY.md` sekcja
+„post-C6c") wciąż UNFIXED.
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
