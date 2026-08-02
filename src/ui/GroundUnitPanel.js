@@ -82,15 +82,17 @@ export class GroundUnitPanel {
     this._scrollRight         = 0;
     this._sprites             = new Map();       // archetypeId → HTMLImageElement
     this._recruitToast        = null;            // { text, success, expireAt }
-
-    this._loadSprites();
   }
 
-  _loadSprites() {
-    for (const [archetypeId, def] of Object.entries(HUMANITY_UNITS)) {
-      const img = GroundUnitFactory.loadUnitSprite(def.sprite);
-      this._sprites.set(archetypeId, img);
-    }
+  /** Leniwie załaduj sprite archetypu (humanity) — GLB dopiero gdy wiersz jest rysowany. */
+  _ensureSprite(archetypeId) {
+    const cached = this._sprites.get(archetypeId);
+    if (cached) return cached;
+    const def = HUMANITY_UNITS[archetypeId];
+    if (!def?.sprite) return null;
+    const img = GroundUnitFactory.loadUnitSprite(def.sprite);
+    this._sprites.set(archetypeId, img);
+    return img;
   }
 
   // ── Helpery języka ───────────────────────────────────────────
@@ -272,7 +274,7 @@ export class GroundUnitPanel {
       ctx.strokeRect(tx + 0.5, ty + 0.5, tileW - 1, tileH - 1);
 
       // Sprite (lub placeholder)
-      const img = this._sprites.get(archId);
+      const img = this._ensureSprite(archId);
       const spriteSize = tileH - 18;
       if (img?.complete && img.naturalWidth > 0) {
         const sx = tx + (tileW - spriteSize) / 2;
@@ -339,7 +341,7 @@ export class GroundUnitPanel {
     ctx.lineWidth = 1;
     ctx.strokeRect(spriteX + 0.5, spriteY + 0.5, SPRITE_SIZE - 1, SPRITE_SIZE - 1);
 
-    const img = this._sprites.get(archId);
+    const img = this._ensureSprite(archId);
     if (img?.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, spriteX + 2, spriteY + 2, SPRITE_SIZE - 4, SPRITE_SIZE - 4);
     }

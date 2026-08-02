@@ -2923,11 +2923,12 @@ export class ColonyOverlay extends BaseOverlay {
     roverImg.src = 'assets/units/science_rover.png';
     this._unitSprites.set('science_rover', roverImg);
 
-    // ── Ground Unit System: sprity wszystkich archetypów × frakcji ──
-    // Klucz: `${factionId}:${archetypeId}` (np. 'humanity:shock_infantry').
-    // Archetypy z supportsDeploy (garrison_unit) dodatkowo ładują dwa warianty
-    // z sufiksami `_mobile` / `_deployed` (klucz `...:mobile` / `...:deployed`).
-    // Brakujące PNG → GroundUnitFactory.loadUnitSprite() podstawia runtime placeholder.
+    // ── Ground Unit System: TYLKO dane frakcji/archetypów (BEZ ładowania GLB) ──
+    // Snapshoty GLB jednostek są ciężkie (11–48 MB) i parsują się SYNCHRONICZNIE na głównym
+    // wątku, a w widoku kosmicznym jednostki naziemne w ogóle się nie renderują. Dlatego tu
+    // cache'ujemy wyłącznie dane; realny sprite (GLB→PNG→placeholder) leci leniwie w
+    // _ensureUnitSprite, dopiero gdy _drawUnits rysuje jednostkę obecną na oglądanej kolonii.
+    // Placeholder widoczny natychmiast; cache snapshotu deduplikuje między otwarciami/panelami.
     Promise.all([
       import('../systems/GroundUnitFactory.js'),
       import('../data/factions/humanity.js'),
@@ -2941,23 +2942,11 @@ export class ColonyOverlay extends BaseOverlay {
       { SYNDYKAT_UNITS },
       { UNIT_ARCHETYPES },
     ]) => {
-      const factions = { humanity: HUMANITY_UNITS, UNE: UNE_UNITS, Syndykat: SYNDYKAT_UNITS };
-      for (const [factionId, units] of Object.entries(factions)) {
-        for (const [archetypeId, def] of Object.entries(units)) {
-          const key = `${factionId}:${archetypeId}`;
-          this._unitSprites.set(key, GroundUnitFactory.loadUnitSprite(def.sprite));
-          // Warianty deploy mode (jeśli archetyp wspiera rozkładanie)
-          if (UNIT_ARCHETYPES[archetypeId]?.supportsDeploy) {
-            const mobilePath   = this._deriveVariantPath(def.sprite, 'mobile');
-            const deployedPath = this._deriveVariantPath(def.sprite, 'deployed');
-            this._unitSprites.set(`${key}:mobile`,   GroundUnitFactory.loadUnitSprite(mobilePath));
-            this._unitSprites.set(`${key}:deployed`, GroundUnitFactory.loadUnitSprite(deployedPath));
-          }
-        }
-      }
-      // Cache archetypów dla UI (progress bar czyta deployTime/packTime).
-      this._deployArchetypes = UNIT_ARCHETYPES;
-    }).catch(err => console.warn('[ColonyOverlay] Nie udało się załadować sprite\'ów jednostek:', err));
+      this._groundUnitFactory = GroundUnitFactory;
+      this._factionUnitData   = { humanity: HUMANITY_UNITS, UNE: UNE_UNITS, Syndykat: SYNDYKAT_UNITS };
+      // Cache archetypów dla UI (progress bar czyta deployTime/packTime + supportsDeploy).
+      this._deployArchetypes  = UNIT_ARCHETYPES;
+    }).catch(err => console.warn('[ColonyOverlay] Nie udało się załadować danych jednostek:', err));
   }
 
   /**
@@ -2968,6 +2957,27 @@ export class ColonyOverlay extends BaseOverlay {
     return basePath.replace(/(\.[a-z]+)$/i, `_${variant}$1`);
   }
 
+  /**
+   * Leniwie załaduj (i zcache'uj) sprite jednostki dla frakcji×archetypu; zwróć obraz lub null.
+   * GLB ładowany DOPIERO tu — loadUnitSprite zwraca placeholder od ręki, GLB→PNG→placeholder
+   * podmienia async (ColonyOverlay przerysowuje co klatkę → podmiana widoczna sama).
+   */
+  _ensureUnitSprite(factionId, archetypeId, variant = null) {
+    const key = variant ? `${factionId}:${archetypeId}:${variant}` : `${factionId}:${archetypeId}`;
+    const cached = this._unitSprites.get(key);
+    if (cached) return cached;
+    const factions = this._factionUnitData;   // async import w konstruktorze — do czasu: placeholder
+    const GUF      = this._groundUnitFactory;
+    if (!factions || !GUF) return null;
+    const def = factions[factionId]?.[archetypeId];
+    if (!def?.sprite) return null;
+    if (variant && !this._deployArchetypes?.[archetypeId]?.supportsDeploy) return null;
+    const path = variant ? this._deriveVariantPath(def.sprite, variant) : def.sprite;
+    const img  = GUF.loadUnitSprite(path);
+    this._unitSprites.set(key, img);
+    return img;
+  }
+
   /** Zwróć obraz sprite'a dla jednostki (Ground Unit System + legacy fallback). */
   _getUnitSprite(unit) {
     if (unit.factionId && unit.archetypeId) {
@@ -2975,12 +2985,10 @@ export class ColonyOverlay extends BaseOverlay {
       if (unit.deployState) {
         const variant = (unit.deployState === 'mobile' || unit.deployState === 'deploying')
           ? 'mobile' : 'deployed';
-        const variantKey = `${unit.factionId}:${unit.archetypeId}:${variant}`;
-        const variantImg = this._unitSprites.get(variantKey);
+        const variantImg = this._ensureUnitSprite(unit.factionId, unit.archetypeId, variant);
         if (variantImg) return variantImg;
       }
-      const key = `${unit.factionId}:${unit.archetypeId}`;
-      const img = this._unitSprites.get(key);
+      const img = this._ensureUnitSprite(unit.factionId, unit.archetypeId);
       if (img) return img;
     }
     // Legacy fallback po `type`
