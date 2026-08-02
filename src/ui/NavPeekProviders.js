@@ -11,6 +11,8 @@
 
 import { t, getName, getShort, getLocale } from '../i18n/i18n.js';
 import { TECHS } from '../data/TechData.js';
+import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { fmtInt, fmtDec, fmtSigned, fmtPeople, fmtPct } from './NavPeekCardLogic.js';
@@ -75,6 +77,7 @@ export function getPeekData(groupId) {
     case 'diplomacy':    return _diplomacy();
     case 'fleet':        return _fleet();
     case 'tech':         return _tech();
+    case 'shipyard':     return _shipyard();
     default:             return null;
   }
 }
@@ -324,4 +327,31 @@ function _tech() {
 
   const alertObj = (rate > 0 && slotsUsed === 0) ? { text: t('navPeek.tech.alertWaste'), tone: 'warn' } : null;
   return { rows, alert: alertObj };
+}
+
+// ── 🛠 Stocznia — poziom stoczni aktywnej kolonii, sloty budowy, statki w kolejce + % ──
+function _shipyard() {
+  const cm = K().colonyManager;
+  const col = cm?.getActiveColony?.() ?? _fullColonies()[0] ?? null;
+  if (!col) return { rows: [kv(t('navPeek.col.none'), '', 'dim')], alert: null };
+  const level  = cm?._getShipyardLevel?.(col) ?? 0;
+  const queues = cm?.getShipQueues?.(col.planetId) ?? [];
+  const rows = [
+    kv(_cut(col.name, 14), level > 0 ? `Lv${level}` : t('navPeek.shipyard.noYard'),
+       level > 0 ? 'accent' : 'dim'),
+  ];
+  if (level > 0) {
+    rows.push(kv(t('navPeek.shipyard.slots'), `${queues.length}/${level}`, 'normal',
+      { frac: Math.min(1, queues.length / level), tone: 'accent' }));
+  }
+  if (queues.length) {
+    rows.push(head(t('navPeek.shipyard.building')));
+    for (const q of queues.slice(0, 5)) {
+      const def  = SHIPS[q.shipId] ?? HULLS[q.shipId];
+      const nm   = def ? getName(def, 'ship') : q.shipId;
+      const frac = q.buildTime > 0 ? Math.min(1, (q.progress ?? 0) / q.buildTime) : 0;
+      rows.push(kv(_cut(nm, 12), fmtPct(frac), 'normal', { frac, tone: 'accent' }));
+    }
+  }
+  return { rows, alert: null };
 }

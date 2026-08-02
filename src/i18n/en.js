@@ -2721,6 +2721,9 @@ export default {
   'navPeek.tech.scans':         'scans',
   'navPeek.tech.years':         '~{0}y',
   'navPeek.tech.alertWaste':    'Wasting research!',
+  'navPeek.shipyard.noYard':    'No shipyard',
+  'navPeek.shipyard.slots':     'Build slots',
+  'navPeek.shipyard.building':  'In production',
 
   // === DysonOverlay (Phase D3) ===
   'dyson.header':              'DYSON SPHERE',

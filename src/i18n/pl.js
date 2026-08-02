@@ -2722,6 +2722,9 @@ export default {
   'navPeek.tech.scans':         'skany',
   'navPeek.tech.years':         '~{0} lat',
   'navPeek.tech.alertWaste':    'Marnujesz naukę!',
+  'navPeek.shipyard.noYard':    'Brak stoczni',
+  'navPeek.shipyard.slots':     'Sloty budowy',
+  'navPeek.shipyard.building':  'W budowie',
 
   // === DysonOverlay (Faza D3) ===
   'dyson.header':              'SFERA DYSONA',
