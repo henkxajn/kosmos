@@ -16,6 +16,8 @@
 //   --isolated                    Fork per-gra (wolniej ale 100% izolacja)
 //   --concurrency=N               Parallel workers w --isolated (default: 1)
 //   --scenario=new-game|first-contact|war   (default: new-game)
+//   --solo                        Run referencyjny BALANS: brak obcych imperiów + RandomEventSystem off
+//   --decisions=N                 Decyzje bota / civYear (default 1; >1 = parallel front-load)
 //   --out=path/reports            Folder na raporty (default: src/testing/reports)
 //   --quiet                       Mniej logów
 //
@@ -72,6 +74,10 @@ function resolveConfig(args) {
   const quiet = !!args.quiet;
   const outDir = args.out ?? `${__dirname}/../reports`;
   const scenario = args.scenario ?? 'new-game';
+  // BALANS: solo (bez rywali AI + events off) i decisionsPerCivYear (parallel front-load).
+  // decisions=1 zachowuje historyczne zachowanie QA runnera; >1 dla runów referencyjnych.
+  const solo = !!args.solo;
+  const decisions = Math.max(1, parseInt(args.decisions ?? 1));
 
   const botSpec = { type: botType };
   if (botType === 'scripted' && args.script) {
@@ -87,7 +93,7 @@ function resolveConfig(args) {
     }
   }
 
-  return { mode, games, years, botType, seedPrefix, isolated, concurrency, quiet, outDir, scenario, botSpec };
+  return { mode, games, years, botType, seedPrefix, isolated, concurrency, quiet, outDir, scenario, solo, decisions, botSpec };
 }
 
 function createLocalBot(spec) {
@@ -116,12 +122,13 @@ async function runInProcess(cfg, reporter) {
     const rep = runSingleGame({
       bot,
       civYears: cfg.years,
-      decisionsPerCivYear: 1,
+      decisionsPerCivYear: cfg.decisions,
       gameId: `game_${i}`,
       seed,
       snapshotInterval: 100,
       detectors,
       scenario: cfg.scenario,
+      bootOptions: { solo: cfg.solo },
     });
     reporter.games.push(rep);
 
@@ -158,8 +165,9 @@ async function runWithWorkers(cfg, reporter) {
               seed,
               bot: cfg.botSpec,
               civYears: cfg.years,
-              decisionsPerCivYear: 1,
+              decisionsPerCivYear: cfg.decisions,
               scenario: cfg.scenario,
+              solo: cfg.solo,
               detectors: true,
             }});
           } else if (msg?.ok) {
@@ -198,7 +206,7 @@ async function main() {
 
   console.log(`═══ KOSMOS QA Runner ═══`);
   console.log(`Mode: ${cfg.mode}  Games: ${cfg.games}  Years: ${cfg.years}  Bot: ${cfg.botType}`);
-  console.log(`Scenario: ${cfg.scenario}  Seed prefix: ${cfg.seedPrefix}`);
+  console.log(`Scenario: ${cfg.scenario}  Seed prefix: ${cfg.seedPrefix}${cfg.solo ? '  [SOLO]' : ''}  Decisions/cy: ${cfg.decisions}`);
   console.log(`Isolated: ${cfg.isolated}${cfg.isolated ? ` (concurrency=${cfg.concurrency})` : ''}`);
   console.log('');
 

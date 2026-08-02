@@ -34,7 +34,7 @@ function createBot(spec) {
 }
 
 function runWorker(config) {
-  const { gameId, seed, bot: botSpec, civYears = 800, decisionsPerCivYear = 1, scenario = 'new-game', detectors: useDetectors = true } = config;
+  const { gameId, seed, bot: botSpec, civYears = 800, decisionsPerCivYear = 1, scenario = 'new-game', detectors: useDetectors = true, solo = false } = config;
 
   // Re-seed PRNG dla tej gry
   reseed(seed);
@@ -51,6 +51,7 @@ function runWorker(config) {
     snapshotInterval: 100,
     detectors,
     scenario,
+    bootOptions: { solo },
   });
 
   return report.toJSON();

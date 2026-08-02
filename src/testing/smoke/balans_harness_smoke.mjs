@@ -8,6 +8,8 @@
 import '../headless/env.js';           // MUST be first (mocki window/document/THREE + seeded RNG)
 import { GameCore } from '../headless/GameCore.js';
 import { Ticker } from '../headless/Ticker.js';
+import { runSingleGame } from '../runner/SingleGame.js';
+import { BaseBot } from '../bots/BaseBot.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -28,6 +30,28 @@ console.log('T1 — solo flag (neutralize AI aggression + RandomEventSystem off)
   norm.boot({ quiet: true, scenario: 'civilization', solo: false });
   assert(norm.empireRegistry.listAll().length > 0, 'normal: obce imperia spawnują się (brak regresji)');
   assert(norm.randomEventSystem !== null, 'normal: RandomEventSystem ON (brak regresji)');
+}
+
+// ── T2: parallel action budget (decisionsPerCivYear jest relaksowalnym throttle harnessu) ──
+console.log('\nT2 — parallel action budget + solo threading przez SingleGame');
+{
+  class CountBot extends BaseBot {
+    constructor() { super({ name: 'CountBot' }); this.calls = 0; }
+    decideAction() { this.calls++; return { type: 'wait' }; }
+  }
+  const CY = 6;
+  const b1 = new CountBot();
+  runSingleGame({ bot: b1, civYears: CY, decisionsPerCivYear: 1, snapshotInterval: 0,
+                  scenario: 'civilization', bootOptions: { solo: true } });
+  const b3 = new CountBot();
+  runSingleGame({ bot: b3, civYears: CY, decisionsPerCivYear: 3, snapshotInterval: 0,
+                  scenario: 'civilization', bootOptions: { solo: true } });
+
+  assert(b1.calls === CY, `decisions=1 → ${b1.calls} decyzji w ${CY} civYears (1/cy)`);
+  assert(b3.calls === CY * 3, `decisions=3 → ${b3.calls} decyzji (3/cy — throttle relaksowalny liniowo)`);
+  // solo dostarczone przez bootOptions musi zniwelować rywali także w ścieżce SingleGame
+  assert((window.KOSMOS?.empireRegistry?.listAll?.().length ?? -1) === 0,
+         'solo threading: SingleGame boot ma 0 imperiów (bootOptions honorowane)');
 }
 
 // ── Wynik ─────────────────────────────────────────────────────────
