@@ -41,10 +41,19 @@ export function execute(action) {
       EventBus.emit('planet:demolishRequest', { tile: action.tile });
       return { emitted: true, event: 'planet:demolishRequest' };
 
-    case ACTION_TYPES.RESEARCH:
+    case ACTION_TYPES.RESEARCH: {
       if (!action.techId) return { emitted: false, reason: 'missing_tech' };
-      EventBus.emit('tech:researchRequest', { techId: action.techId });
-      return { emitted: true, event: 'tech:researchRequest' };
+      // REALNA ścieżka gracza = ResearchSystem.queueTech (progresywna akumulacja punktów
+      // w slocie, dokładnie jak TechOverlay:597). Stara ścieżka `tech:researchRequest` →
+      // TechSystem._research wymaga CAŁEGO kosztu jako ryczałt w research.amount naraz —
+      // a ResourceSystem capuje bezczynny bank do perYear×RESEARCH_BANK_YEARS(2) → ryczałt
+      // NIGDY nie starcza na tech (≥50) → 0 zbadanych techów (flatline). NIE zmiana balansu:
+      // RESEARCH_BANK_YEARS i koszty techów nietknięte — tylko API path bota.
+      const rSys = window.KOSMOS?.researchSystem;
+      if (!rSys?.queueTech) return { emitted: false, reason: 'no_research_system' };
+      const queued = rSys.queueTech(action.techId);   // false = już aktywne/w kolejce (benign no-op)
+      return { emitted: true, event: 'research:queueTech', queued };
+    }
 
     case ACTION_TYPES.EXPEDITION:
       if (!action.missionType || !action.targetId) return { emitted: false, reason: 'missing_expedition_args' };
