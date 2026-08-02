@@ -231,6 +231,11 @@ export class NavPeekCard {
 
   isOver(x, y) { return this._p > 0.35 && pointInRect(this._rect, x, y); }
 
+  // Retencja hovera: czy punkt jest w KOLUMNIE karty (slot + wysunięta karta), NIEZALEŻNIE od fazy
+  // animacji _p. isOver() gated na _p>0.35 (klik/blokada kamery) migotał przy przechodzeniu _p przez
+  // próg podczas slajdu → newSlot skakał i↔-1 → cykl wysuwania/chowania. Retencja ignoruje _p.
+  covers(x, y) { return this._groupId != null && pointInRect(this._rect, x, y); }
+
   handleClick(x, y) {
     if (!this.isOver(x, y) || !this._groupId) return false;
     const om = window.KOSMOS?.overlayManager;

@@ -256,7 +256,7 @@ export class BottomNavBar {
     // Slot pod kursorem; a gdy kursor zjedzie na wysuniętą kartę — trzymaj poprzedni slot.
     let newSlot;
     if (idx >= 0) newSlot = idx;
-    else if (this._peek && this._peekSlot >= 0 && this._peek.isOver(x, y)) newSlot = this._peekSlot;
+    else if (this._peek && this._peekSlot >= 0 && this._peek.covers(x, y)) newSlot = this._peekSlot;
     else newSlot = -1;
     if (newSlot !== this._hoverSlot || newSlot !== this._peekSlot) this._markDirty();
     // Zwłoka hovera: gdy kursor przechodzi na INNY slot, restartuj timer dwell. Wjechanie na już
