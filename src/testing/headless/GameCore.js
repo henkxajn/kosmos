@@ -71,8 +71,12 @@ export class GameCore {
    * Bootstrap game state headless. Używa scenariusza "civilization" (Nowa Gra).
    * Po boot() wszystkie systemy są w window.KOSMOS, kolonia założona, budynki startowe.
    */
-  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization' } = {}) {
+  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization', solo = false } = {}) {
     this._quiet = quiet;
+    // solo (BALANS reference run): neutralizuje warstwę AI (brak spawnu obcych imperiów →
+    // brak agresji/wojny/inwazji, izolacja solo ekonomii) i wyłącza RandomEventSystem
+    // (zdarzenia losowe = confound + niedeterminizm). Toggleable — bez flagi boot = pełna gra.
+    this._solo = solo;
 
     // Czyść singletony
     EntityManager.clear();
@@ -133,7 +137,9 @@ export class GameCore {
     this.warpRouteSystem = new WarpRouteSystem(this.vesselManager);
     this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
     this.tradeLog = new TradeLog();
-    this.randomEventSystem = new RandomEventSystem();
+    // solo: pomijamy RandomEventSystem (deterministyczny run referencyjny). Wszystkie
+    // odczyty w grze są `?.`-optional → null bezpieczny (grep: brak twardych dostępów).
+    this.randomEventSystem = solo ? null : new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
     this.researchSystem = new ResearchSystem(this.techSystem);
     this.discoverySystem = new DiscoverySystem();
@@ -202,7 +208,11 @@ export class GameCore {
     // ── Galaktyka + obce imperia ──
     K.galaxyData = GalaxyGenerator.generate(star.id, star.name, star.spectralType);
     K.unitDesigns = [];
-    EmpireGenerator.generate(K.galaxyData, this.empireRegistry);
+    // solo: pomijamy spawn obcych imperiów (izolacja solo ekonomii + brak agresji AI).
+    // Poniższe initForAllEmpires to no-op przy pustym rejestrze (iterują listAll()=[]);
+    // initVesselSubdomain/initPOISubdomain NIE są per-imperium → zawsze wołane (gracz ma
+    // statki i POI). Bez flagi solo = pełny spawn rywali jak w normalnej grze.
+    if (!solo) EmpireGenerator.generate(K.galaxyData, this.empireRegistry);
     this.intelSystem.initForAllEmpires();
     this.intelSystem.initVesselSubdomain();
     this.poiRegistry.initPOISubdomain();
@@ -246,8 +256,8 @@ export class GameCore {
     this.colonyManager.switchActiveColony(civPlanet.id);
 
     if (!this._quiet) {
-      console.log(`[GameCore] Boot OK. star=${star.name} (${star.spectralType}), planets=${planets.length}, civPlanet=${civPlanet.name} (${civPlanet.planetType}, T=${Math.round(civPlanet.temperatureC ?? 0)}°C)`);
-      console.log(`[GameCore] Empires spawned: ${this.empireRegistry.listAll().length}`);
+      console.log(`[GameCore] Boot OK${solo ? ' [SOLO]' : ''}. star=${star.name} (${star.spectralType}), planets=${planets.length}, civPlanet=${civPlanet.name} (${civPlanet.planetType}, T=${Math.round(civPlanet.temperatureC ?? 0)}°C)`);
+      console.log(`[GameCore] Empires spawned: ${this.empireRegistry.listAll().length}  RandomEvents: ${this.randomEventSystem ? 'ON' : 'OFF'}`);
     }
 
     return {
