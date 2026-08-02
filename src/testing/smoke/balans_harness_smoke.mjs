@@ -12,6 +12,7 @@ import { runSingleGame } from '../runner/SingleGame.js';
 import { BaseBot } from '../bots/BaseBot.js';
 import ActionAdapter, { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
+import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -109,6 +110,46 @@ console.log('\nT4 — ActionCatalog respektuje pendingBuild (koniec storm „Pol
   target.pendingBuild = null;
   const restored = cat.listBuildActions({ limit: 999, buildingId: 'well' });
   assert(restored.some(a => a.tile === target), 'po zwolnieniu pendingBuild kafel wraca do oferty');
+}
+
+// ── T5: start-state parity — GameCore boosted MUSI odzwierciedlać StarterLoadout ──
+console.log('\nT5 — start-state parity (real new game = civilization_boosted, źródło = StarterLoadout)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true });
+  const K = window.KOSMOS;
+  const home = c.colonyManager.getColony(K.homePlanet.id);
+  const civ = home.civSystem, res = home.resourceSystem;
+
+  // (a) starter techy = dokładnie autorytatywna lista (nie stary dryf basic_computing/automation)
+  const got = Array.from(K.techSystem._researched).sort();
+  const exp = [...BOOSTED_STARTER_TECHS].sort();
+  assert(JSON.stringify(got) === JSON.stringify(exp),
+         `boosted starter techs === StarterLoadout [${exp.join(',')}]`);
+  assert(K.techSystem.isResearched('metallurgy'), 'metallurgy zbadana @t=0 (Fabryka dostępna od startu)');
+  assert(!K.techSystem.isResearched('basic_computing') && !K.techSystem.isResearched('automation'),
+         'brak starego dryfu: basic_computing/automation NIE zbadane @t=0');
+
+  // (b) pop startowy = StarterLoadout
+  assert(civ.population === BOOSTED_STARTER_POP, `pop startowy === StarterLoadout (${BOOSTED_STARTER_POP})`);
+
+  // (c) zasoby startowe = StarterLoadout (fuel:50 obecne — reforma S3.0a, wcześniej brak w harnessie)
+  assert(Math.round(res.getAmount('fuel')) === STARTER_RESOURCES.fuel,
+         `fuel startowe === StarterLoadout (${STARTER_RESOURCES.fuel})`);
+  assert(Math.round(res.getAmount('Fe')) === STARTER_RESOURCES.Fe, `Fe startowe === StarterLoadout (${STARTER_RESOURCES.Fe})`);
+
+  // (d) planeta domowa = pełna wiedza (parytet analyzed/explored)
+  assert(K.homePlanet.explored === true && K.homePlanet.analyzed === true,
+         'planeta domowa explored+analyzed (parytet GameScene._setupColony)');
+
+  // (e) factory kolejkowalna @t=0 (metallurgy gotowa → build nie odbija się o tech-gate)
+  const cat = new ActionCatalog({
+    colonyManager: c.colonyManager, techSystem: c.techSystem, resourceSystem: c.resourceSystem,
+    buildingSystem: c.buildingSystem, vesselManager: c.vesselManager, civSystem: c.civSystem,
+    starSystemManager: c.starSystemManager,
+  });
+  const factoryActions = cat.listBuildActions({ limit: 50, buildingId: 'factory' });
+  assert(factoryActions.length > 0, 'factory build kolejkowalny @t=0 (bez czekania na research)');
 }
 
 // ── Wynik ─────────────────────────────────────────────────────────

@@ -130,6 +130,7 @@ import { PlanetScene }       from './PlanetScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
 import { TECHS }             from '../data/TechData.js';          // POWER TEST
+import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_BUILD_PLAN, BOOSTED_STARTER_POP } from '../data/StarterLoadout.js';
 import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
 import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
 import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
@@ -3060,8 +3061,8 @@ export class GameScene {
           if (colony) colony.name = capitalName;
           // Zbadaj technologie wymagane dla dodatkowych budynków
           this._setupBoostedTechs();
-          // 16 POPów (Population 2.0: ×4 redenominacja, było 4)
-          this.civSystem.setPopulation(16);
+          // Populacja startowa boosted — jedno źródło: StarterLoadout.
+          this.civSystem.setPopulation(BOOSTED_STARTER_POP);
           // Generuj grid i postaw budynki (standardowe + boosted)
           const grid = PlanetMapGenerator.generate(civPlanet, true);
           if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
@@ -3356,17 +3357,8 @@ export class GameScene {
     // Podłącz referencję planety do CivSystem (potrzebne do sprawdzania atmosfery)
     this.civSystem.planet = planet;
     // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
-    // Startowe zasoby (surowce + commodities T1/T2)
-    this.resourceSystem.receive({
-      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Hv: 4,
-      food: 100, water: 100, research: 100,
-      structural_alloys: 15, polymer_composites: 10, conductor_bundles: 8,
-      power_cells: 12, electronic_systems: 6, extraction_systems: 5,
-      pressure_modules: 4, reactive_armor: 4, compact_bioreactor: 3,
-      automation_droid: 0, semiconductor_arrays: 2, propulsion_systems: 0,
-      plasma_cores: 0, metamaterials: 0, quantum_processors: 0, warp_cores: 0,
-      fuel: 50,   // S3.0a: paliwo konwencjonalne (spłaszczenie power_cells/plasma_cores → fuel)
-    });
+    // Startowe zasoby (surowce + commodities T1/T2 + fuel) — jedno źródło: StarterLoadout.
+    this.resourceSystem.receive({ ...STARTER_RESOURCES });
     // Gwarantuj małe złoże Xe na planecie domowej (paliwo jonowe)
     if (!planet.deposits) planet.deposits = [];
     const hasXe = planet.deposits.some(d => d.resourceId === 'Xe');
@@ -3739,16 +3731,8 @@ export class GameScene {
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 
-    // Standardowe + dodatkowe budynki dla boosted
-    const buildPlan = [
-      { id: 'farm',          level: 1, count: 1 },
-      { id: 'well',          level: 1, count: 1 },
-      { id: 'solar_farm',    level: 1, count: 1 },
-      { id: 'habitat',       level: 1, count: 1 },
-      { id: 'launch_pad',    level: 1, count: 1 },
-      { id: 'shipyard',      level: 1, count: 1 },
-      { id: 'solar_farm',    level: 3, count: 1 },
-    ];
+    // Standardowe + dodatkowe budynki dla boosted — jedno źródło: StarterLoadout.
+    const buildPlan = BOOSTED_BUILD_PLAN;
 
     const entries = [];
     const usedTiles = new Set();
@@ -3797,13 +3781,8 @@ export class GameScene {
   // ── Zbadaj technologie wymagane dla budynków boosted ──────────
   _setupBoostedTechs() {
     // Tech wymagane: orbital_survey → rocketry (launch_pad), exploration (shipyard)
-    // metallurgy — odblokowuje Fabrykę; gracz startuje z nią gotową (tier 1, bez prereqów)
-    // Odblokowane od startu — gracz nie musi ich badać
-    // Nuclear power NIE odblokowany — gracz musi sam zbadać
-    // basic_computing + automation USUNIĘTE — gracz musi je sam zbadać (drugi slot
-    // badawczy i budynki autonomiczne nie są darmowe na starcie).
-    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'metallurgy'];
-    this.techSystem.restore({ researched: techIds });
+    // Lista startowa (metallurgy IN; basic_computing/automation OUT) — jedno źródło: StarterLoadout.
+    this.techSystem.restore({ researched: [...BOOSTED_STARTER_TECHS] });
   }
 
   // ── Generowanie / przywracanie układu ─────────────────────────

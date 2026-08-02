@@ -65,6 +65,7 @@ import { EmpireGenerator }   from '../../generators/EmpireGenerator.js';
 import { BUILDINGS }         from '../../data/BuildingsData.js';
 import { TERRAIN_TYPES }     from '../../map/HexTile.js';
 import { PlanetMapGenerator } from '../../map/PlanetMapGenerator.js';
+import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_BUILD_PLAN, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 
 export class GameCore {
   /**
@@ -244,9 +245,10 @@ export class GameCore {
     this._placeCapital(grid);
 
     if (this._scenario === 'civilization_boosted') {
-      // Nowa Gra 2 — boosted start: odblokuj techy + postaw dodatkowe budynki
+      // Nowa Gra 2 — boosted start: odblokuj techy + postaw dodatkowe budynki.
+      // Wszystkie wartości z StarterLoadout (parytet z GameScene).
       this._setupBoostedTechs();
-      this.civSystem.setPopulation(16);   // Population 2.0: ×4 redenominacja (było 4)
+      this.civSystem.setPopulation(BOOSTED_STARTER_POP);
       this._autoPlaceBoostedBuildings(grid);
     } else {
       this._autoPlaceStarterBuildings(grid);
@@ -277,18 +279,11 @@ export class GameCore {
     K.civMode = true;
     K.homePlanet = planet;
     planet.explored = true;
+    planet.analyzed = true;   // parytet z GameScene._setupColony (planeta domowa = pełna wiedza)
     this.civSystem.planet = planet;
 
-    // Startowe zasoby (identyczne z GameScene._setupColony)
-    this.resourceSystem.receive({
-      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Hv: 4,
-      food: 100, water: 100, research: 100,
-      structural_alloys: 15, polymer_composites: 10, conductor_bundles: 8,
-      power_cells: 12, electronic_systems: 6, extraction_systems: 5,
-      pressure_modules: 4, reactive_armor: 4, compact_bioreactor: 3,
-      automation_droid: 0, semiconductor_arrays: 2, propulsion_systems: 0,
-      plasma_cores: 0, metamaterials: 0, quantum_processors: 0, warp_cores: 0,
-    });
+    // Startowe zasoby — jedno źródło prawdy (StarterLoadout), spójne z GameScene._setupColony.
+    this.resourceSystem.receive({ ...STARTER_RESOURCES });
 
     // Gwarantuj Xe (paliwo jonowe)
     if (!planet.deposits) planet.deposits = [];
@@ -389,16 +384,8 @@ export class GameCore {
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 
-    // Standard + dodatkowe budynki dla boosted (identyczna kolejność jak GameScene)
-    const buildPlan = [
-      { id: 'farm',       level: 1, count: 1 },
-      { id: 'well',       level: 1, count: 1 },
-      { id: 'solar_farm', level: 1, count: 1 },
-      { id: 'habitat',    level: 1, count: 1 },
-      { id: 'launch_pad', level: 1, count: 1 },
-      { id: 'shipyard',   level: 1, count: 1 },
-      { id: 'solar_farm', level: 3, count: 1 },
-    ];
+    // Standard + dodatkowe budynki dla boosted — jedno źródło: StarterLoadout (parytet z GameScene).
+    const buildPlan = BOOSTED_BUILD_PLAN;
 
     const entries = [];
     const usedTiles = new Set();
@@ -441,9 +428,10 @@ export class GameCore {
   }
 
   _setupBoostedTechs() {
-    // Tech pre-researched w Nowej Grze 2: space chain + automation
-    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
-    this.techSystem.restore({ researched: techIds });
+    // Lista startowa boosted — jedno źródło prawdy (StarterLoadout), spójne z GameScene.
+    // (Wcześniej DRYF: harness miał basic_computing+automation zamiast metallurgy → Fabryka
+    //  niedostępna od startu → krzywa referencyjna liczona na złym stanie startowym.)
+    this.techSystem.restore({ researched: [...BOOSTED_STARTER_TECHS] });
   }
 
   // ── Auto-place capital (colony_base) — replika ColonyOverlay logic ──
