@@ -11,6 +11,7 @@ import { Ticker } from '../headless/Ticker.js';
 import { runSingleGame } from '../runner/SingleGame.js';
 import { BaseBot } from '../bots/BaseBot.js';
 import ActionAdapter, { ACTION_TYPES } from '../actions/ActionAdapter.js';
+import { ActionCatalog } from '../actions/ActionCatalog.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -80,6 +81,34 @@ console.log('\nT3 — research via queueTech (flatline-breaker)');
   // (c) Idempotencja: ponowny RESEARCH tego samego (już zbadanego) techu = benign no-op.
   const r3 = ActionAdapter.execute({ type: ACTION_TYPES.RESEARCH, techId: 'metallurgy' });
   assert(r3.emitted === true && r3.queued === false, 'ponowny RESEARCH zbadanego techu = no-op (queued=false)');
+}
+
+// ── T4: catalog occupancy — listBuildActions musi respektować pendingBuild (mirror _build) ──
+console.log('\nT4 — ActionCatalog respektuje pendingBuild (koniec storm „Pole zajęte")');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization', solo: true });
+  const home = c.colonyManager.getColony(window.KOSMOS.homePlanet.id);
+  const cat = new ActionCatalog({
+    colonyManager: c.colonyManager, techSystem: c.techSystem, resourceSystem: c.resourceSystem,
+    buildingSystem: c.buildingSystem, vesselManager: c.vesselManager, civSystem: c.civSystem,
+    starSystemManager: c.starSystemManager,
+  });
+  const before = cat.listBuildActions({ limit: 999, buildingId: 'well' });
+  const target = before[0]?.tile;
+  assert(!!target, 'katalog oferuje wolny kafel dla well (baseline)');
+
+  // Symuluj budynek z buildTime>0 zakolejkowany na tym kaflu: pendingBuild → isOccupied,
+  // ale buildingId nadal null (dokładnie pułapka, która robiła storm).
+  target.pendingBuild = { buildingId: 'well' };
+  assert(target.isOccupied === true && !target.buildingId,
+         'pendingBuild → isOccupied=true przy buildingId=null (stan pułapki)');
+  const after = cat.listBuildActions({ limit: 999, buildingId: 'well' });
+  assert(!after.some(a => a.tile === target),
+         'katalog NIE oferuje kafla pending (mirror _build.isOccupied → brak „Pole zajęte")');
+  target.pendingBuild = null;
+  const restored = cat.listBuildActions({ limit: 999, buildingId: 'well' });
+  assert(restored.some(a => a.tile === target), 'po zwolnieniu pendingBuild kafel wraca do oferty');
 }
 
 // ── Wynik ─────────────────────────────────────────────────────────

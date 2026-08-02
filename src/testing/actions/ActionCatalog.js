@@ -59,10 +59,15 @@ export class ActionCatalog {
 
     const actions = [];
     const tiles = active.grid.toArray();
-    // Priorytetyzuj wolne hexy
+    // Priorytetyzuj wolne hexy. Używamy AUTORYTATYWNEGO gettera `isOccupied`
+    // (buildingId || underConstruction || pendingBuild) — dokładnie tego, co sprawdza
+    // BuildingSystem._build. Ręczne `!buildingId && !underConstruction` POMIJAŁO
+    // `pendingBuild`: budynek z buildTime>0 (np. factory) trafia najpierw do pendingBuild
+    // (isOccupied=true, buildingId=null) → katalog oferował ten sam kafel co decyzję →
+    // _build odrzucał „Pole zajęte" w nieskończoność (factory nigdy nie powstawała).
     const freeTiles = tiles.filter(t => {
       const terrain = TERRAIN_TYPES[t.type];
-      return terrain?.buildable && !t.buildingId && !t.damaged && !t.underConstruction;
+      return terrain?.buildable && !t.isOccupied && !t.damaged;
     });
 
     // Przegląd budynków z techami
