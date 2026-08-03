@@ -253,11 +253,18 @@ export class BottomNavBar {
   handleMouseMove(x, y) {
     if (!this._rect) return;
     const idx = hitNavSlot(this._rect, NAV_GROUPS.length, x, y);
-    // Slot pod kursorem; a gdy kursor zjedzie na wysuniętą kartę — trzymaj poprzedni slot.
+    // Slot pod kursorem; a gdy kursor zjedzie na wysuniętą kartę — trzymaj slot TEJ karty.
+    // Retencja NIEZALEŻNA od _peekSlot: po chwilowym wyjściu poza kartę _peekSlot spadał na -1,
+    // przez co brama `_peekSlot >= 0` na trwałe wyłączała covers() — powrót na wciąż-widoczne
+    // ciało karty (w oknie PEEK_HIDE_DELAY) już jej nie łapał → cykl wysuwa/znika/wysuwa (najostrzej
+    // przy Stoczni: krótka karta = mały cel, overshoot nieunikniony). Slot odtwarzamy z aktywnej
+    // grupy karty; covers() już potwierdza, że kursor jest nad JEJ _rect (brak fałszywej retencji).
     let newSlot;
     if (idx >= 0) newSlot = idx;
-    else if (this._peek && this._peekSlot >= 0 && this._peek.covers(x, y)) newSlot = this._peekSlot;
-    else newSlot = -1;
+    else if (this._peek && this._peek.covers(x, y)) {
+      const g = this._peek.activeGroup();
+      newSlot = g ? NAV_GROUPS.findIndex(gr => gr.primary === g) : -1;
+    } else newSlot = -1;
     if (newSlot !== this._hoverSlot || newSlot !== this._peekSlot) this._markDirty();
     // Zwłoka hovera: gdy kursor przechodzi na INNY slot, restartuj timer dwell. Wjechanie na już
     // wysuniętą kartę nie zmienia _peekSlot (isOver-branch) → timer nie jest restartowany.
