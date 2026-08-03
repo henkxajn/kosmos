@@ -2,7 +2,8 @@
 // Inicjalizuje TitleScene (animowany ekran tytułowy), potem uruchamia GameScene z Three.js
 
 import { TitleScene } from './scenes/TitleScene.js';
-import { GameScene } from './scenes/GameScene.js';
+// GameScene NIE jest importowany statycznie — ładowany dynamicznie w _startMainGame (patrz niżej),
+// żeby jego graf (~300 modułów + Three.js) nie blokował pierwszego renderu ekranu tytułowego.
 import { AudioSystem } from './systems/AudioSystem.js';
 import { loadTheme, THEME } from './config/ThemeConfig.js';
 import { initCrt } from './ui/CrtOverlay.js';
@@ -147,8 +148,16 @@ window._hideLoadingScreen = function () {
   setTimeout(() => { _loadingEl?.remove(); _loadingEl = null; }, 600);
 };
 
-// Wywoływane przez TitleScene po wyborze gracza
-window._startMainGame = function () {
-  const scene = new GameScene();
-  scene.start(threeCanvas, uiCanvas, eventLayer);
+// Wywoływane przez TitleScene po wyborze gracza (fire-and-forget; _launchGame pokazuje ekran
+// ładowania PRZED tym wywołaniem). GameScene importowany DYNAMICZNIE — fetch jego grafu (~300
+// modułów + Three.js) leci pod widocznym ekranem ładowania, a nie przed ekranem tytułowym.
+window._startMainGame = async function () {
+  try {
+    const { GameScene } = await import('./scenes/GameScene.js');
+    const scene = new GameScene();
+    scene.start(threeCanvas, uiCanvas, eventLayer);
+  } catch (err) {
+    console.error('[KOSMOS] Nie udało się załadować gry:', err);
+    window._updateLoading?.(100, 'Błąd ładowania gry — odśwież stronę (F5)');
+  }
 };
