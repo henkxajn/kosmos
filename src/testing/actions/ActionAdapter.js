@@ -66,15 +66,21 @@ export function execute(action) {
       return { emitted: true, event: 'research:queueTech', queued };
     }
 
-    case ACTION_TYPES.EXPEDITION:
+    case ACTION_TYPES.EXPEDITION: {
       if (!action.missionType || !action.targetId) return { emitted: false, reason: 'missing_expedition_args' };
+      // ⚠ Alias 'colonize'→'colony': handler expedition:sendRequest woła _launch(type) BEZPOŚREDNIO,
+      // a _launch zakłada kolonizację TYLKO dla type==='colony' (mapowanie 'colonize'→'colony' żyje
+      // wyłącznie w createMission, którego ta ścieżka NIE używa). Bez tego 'colonize' spada do
+      // generycznej misji (missionReport, kolonia NIE powstaje). Mirror createMission:131.
+      const missionType = action.missionType === 'colonize' ? 'colony' : action.missionType;
       EventBus.emit('expedition:sendRequest', {
-        type: action.missionType,
+        type: missionType,
         targetId: action.targetId,
         vesselId: action.vesselId ?? null,
         cargo: action.cargo ?? null,
       });
-      return { emitted: true, event: 'expedition:sendRequest' };
+      return { emitted: true, event: 'expedition:sendRequest', type: missionType };
+    }
 
     case ACTION_TYPES.BUILD_SHIP:
       if (!action.shipId) return { emitted: false, reason: 'missing_ship' };

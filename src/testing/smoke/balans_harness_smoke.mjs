@@ -13,7 +13,8 @@ import { BaseBot } from '../bots/BaseBot.js';
 import ActionAdapter, { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
-import { canColonize } from '../../entities/Vessel.js';
+import { canColonize, canDoRecon } from '../../entities/Vessel.js';
+import EventBus from '../../core/EventBus.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -211,6 +212,34 @@ console.log('\nT7 — real colonizer (hull+habitat) + load-POP z realnej pojemno
   K.vesselManager._vessels.set('v_colo2', colo2);
   ActionAdapter.execute({ type: ACTION_TYPES.LOAD_COLONISTS, vesselId: 'v_colo2', count: 2 });
   assert(colo2.colonists === 2, 'jawny count=2 respektowany (parametr, nie sufit)');
+}
+
+// ── T8: real ship-build/colonize paths (groundBuildable hull, colonize→colony alias) ──
+console.log('\nT8 — groundBuildable recon/kolonizator (hull+moduły) + alias colonize→colony');
+{
+  // (a) recon = hull_small + science_lab → canDoRecon; kolonizator = hull_small + habitat_pod → canColonize.
+  //     Legacy science_vessel/cargo_ship: NIE groundBuildable → orbital-only (nie da się z naziemnej).
+  assert(canDoRecon({ shipId: 'hull_small', modules: ['engine_chemical', 'science_lab'] }) === true,
+         'hull_small + science_lab → canDoRecon (survey)');
+  assert(canColonize({ shipId: 'hull_small', modules: ['engine_chemical', 'habitat_pod'], colonistCapacity: 4 }) === true,
+         'hull_small + habitat_pod → canColonize');
+
+  // (b) alias colonize→colony: EXPEDITION missionType='colonize' MUSI emitować type='colony'
+  //     (handler expedition:sendRequest woła _launch(type) bezpośrednio; _launch zakłada 'colony').
+  let seen = null;
+  const h = ({ type }) => { seen = type; };
+  EventBus.on('expedition:sendRequest', h);
+  const r = ActionAdapter.execute({ type: ACTION_TYPES.EXPEDITION, missionType: 'colonize', targetId: 'x', vesselId: 'v' });
+  EventBus.off('expedition:sendRequest', h);
+  assert(r.type === 'colony' && seen === 'colony', `colonize→colony (emitted type='${seen}', nie 'colonize')`);
+
+  // (c) inne typy misji przechodzą bez zmian (recon zostaje recon)
+  let seen2 = null;
+  const h2 = ({ type }) => { seen2 = type; };
+  EventBus.on('expedition:sendRequest', h2);
+  ActionAdapter.execute({ type: ACTION_TYPES.EXPEDITION, missionType: 'recon', targetId: 'x', vesselId: 'v' });
+  EventBus.off('expedition:sendRequest', h2);
+  assert(seen2 === 'recon', 'recon NIE aliasowany (tylko colonize→colony)');
 }
 
 // ── Wynik ─────────────────────────────────────────────────────────

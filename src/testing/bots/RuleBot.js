@@ -15,12 +15,16 @@ import { BaseBot } from './BaseBot.js';
 import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TECHS } from '../../data/TechData.js';
-import { canColonize } from '../../entities/Vessel.js';
+import { canColonize, canDoRecon } from '../../entities/Vessel.js';
 
-// Realny kolonizator (Task 4b): kadłub small + moduły napęd + habitat. hull_small jest
-// groundBuildable (stocznia naziemna) i self-launch (bez launch_pad); habitat_pod (slotType
-// 'habitat') daje canColonize=true + colonistCapacity. Gate: tech 'colonization' (habitat_pod)
-// + stocznia. NIE cargo_ship (brak modułu habitat → canColonize=false = ślepa uliczka).
+// ⚠ S3.4d hull-gating: stocznia NAZIEMNA (kolonijna) buduje TYLKO hull_small (groundBuildable).
+// Legacy science_vessel / cargo_ship NIE są groundBuildable → startShipBuild odrzuca je dla
+// kolonii GRACZA (requiresOrbitalShipyard). Więc realny wczesny statek = hull_small + moduły
+// (self-launch, bez launch_pad). To ten sam wzorzec, co kolonizator.
+//   • Recon:      hull_small + [engine_chemical, science_lab]   → canDoRecon (survey).
+//   • Kolonizator: hull_small + [engine_chemical, habitat_pod]  → canColonize + colonistCapacity.
+const RECON_HULL        = 'hull_small';
+const RECON_MODULES     = ['engine_chemical', 'science_lab'];
 const COLONIZER_HULL    = 'hull_small';
 const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod'];
 
@@ -109,6 +113,11 @@ export class RuleBot extends BaseBot {
     // pressure (nie stała) — knoby to bot-policy (jak factory_per_pop), nie stałe balansu gry.
     this._lastSliderYear = -999;
     this._sliderCooldown = 8;   // civYears
+    // Colonize: retry-friendly. NIE pre-markuj celu (transient „Brak surowców startowych" =
+    // food/water dip → permanentna blokada). Zamiast tego cooldown między próbami + realny check
+    // „czy cel już ma kolonię" (getColony). Statek z kolonistami czeka aż home ma zapas food/water.
+    this._lastColonizeAttempt = -999;
+    this._colonizeCooldown = 3;   // civYears między próbami tego samego statku
   }
 
   _ESSENTIAL_COMMODITIES = [
@@ -303,29 +312,30 @@ export class RuleBot extends BaseBot {
       const vm = window.KOSMOS?.vesselManager;
       const allVessels = vm?.getAllVessels?.() ?? [];
       const myVessels = allVessels.filter(v => v.colonyId === ctx.active.planetId);
-      const hasScience = myVessels.some(v => v.shipId === 'science_vessel');
+      const hasRecon = myVessels.some(v => canDoRecon(v));
 
-      if (!hasScience) {
-        const ships = catalog.listBuildShipActions();
-        const science = ships.find(a => a.shipId === 'science_vessel');
-        if (science) { science._tag = 'ship_science'; return science; }
+      if (!hasRecon) {
+        const sci = this._maybeBuildRecon(ctx, myVessels);
+        if (sci) return sci;
       }
       // Realny kolonizator (hull_small + [engine_chemical, habitat_pod]) — gdy colonization tech.
-      if (hasScience && ctx.hasTech('colonization')) {
+      if (hasRecon && ctx.hasTech('colonization')) {
         const colo = this._maybeBuildColonizer(ctx, myVessels);
         if (colo) return colo;
       }
     }
 
     // ── P13: RECON — eksploracja najbliższych niezbadanych ciał ──
+    // Statek recon = dowolny docked z canDoRecon (hull_small+science_lab). BEZ gate'u launch_pad —
+    // hull_small self-launch (size 'small' → _needsSpaceportForVessel=false).
     const vm = window.KOSMOS?.vesselManager;
     const allVessels = vm?.getAllVessels?.() ?? [];
-    const dockedScience = allVessels.find(v =>
+    const dockedRecon = allVessels.find(v =>
       v.colonyId === ctx.active.planetId &&
-      v.status === 'docked' &&
-      v.shipId === 'science_vessel'
+      v.position?.state === 'docked' && v.status === 'idle' &&   // docked+idle (status nigdy nie === 'docked')
+      canDoRecon(v)
     );
-    if (dockedScience && ctx.countBuilding('launch_pad') > 0) {
+    if (dockedRecon) {
       const unexploredBody = this._findNearestUnexplored(ctx.active.planet);
       if (unexploredBody && !this._reconnedTargets.has(unexploredBody.id)) {
         this._reconnedTargets.add(unexploredBody.id);
@@ -333,7 +343,7 @@ export class RuleBot extends BaseBot {
           type: ACTION_TYPES.EXPEDITION,
           missionType: 'recon',
           targetId: unexploredBody.id,
-          vesselId: dockedScience.id,
+          vesselId: dockedRecon.id,
           _tag: `recon_${unexploredBody.id}`,
         };
       }
@@ -345,7 +355,7 @@ export class RuleBot extends BaseBot {
     if (ctx.hasTech('colonization') && allVessels.length > 0) {
       const dockedColonizer = allVessels.find(v =>
         v.colonyId === ctx.active.planetId &&
-        v.status === 'docked' &&
+        v.position?.state === 'docked' && v.status === 'idle' &&   // docked+idle (status nigdy nie === 'docked')
         canColonize(v)
       );
       if (dockedColonizer) {
@@ -358,10 +368,11 @@ export class RuleBot extends BaseBot {
           return { type: ACTION_TYPES.LOAD_COLONISTS, vesselId: dockedColonizer.id, _tag: 'load_colonists' };
         }
         // Krok 2: koloniści na pokładzie → colonize na explored rocky/ice.
-        if (aboard > 0) {
+        // Cooldown między próbami (transient food/water) — bez pre-marku (retry aż home ma zapas).
+        if (aboard > 0 && (civYear - this._lastColonizeAttempt) >= this._colonizeCooldown) {
           const rockyTarget = this._findExploredRockyForColony(ctx.active.planet);
-          if (rockyTarget && !this._colonizedTargets.has(rockyTarget.id)) {
-            this._colonizedTargets.add(rockyTarget.id);
+          if (rockyTarget) {
+            this._lastColonizeAttempt = civYear;
             return {
               type: ACTION_TYPES.EXPEDITION,
               missionType: 'colonize',
@@ -433,6 +444,28 @@ export class RuleBot extends BaseBot {
     // Share z OBSERWOWANEJ pressure (reaktywne): 0.2 baza + 0.3×pressure, cap 0.5. Knoby = bot-policy.
     const share = Math.min(0.5, 0.2 + 0.3 * best.pressure);
     return { type: ACTION_TYPES.SET_STRATA_TARGET, strataType: best.type, share, _tag: `slider_${best.type}` };
+  }
+
+  /**
+   * Zbuduj recon (hull_small + [engine_chemical, science_lab]) — groundBuildable, self-launch.
+   * SELF-QUEUING BUILD_SHIP (jak kolonizator): startShipBuild dorzuca do pendingShipOrders i
+   * realizuje gdy surowce dopłyną — zrywa deadlock „commodity zjadane przez rozbudowę zanim
+   * uzbiera się na statek" (katalog listBuildShipActions bramkuje affordability z góry → nigdy
+   * nie kolejkuje). NIE science_vessel (legacy, nie-groundBuildable → orbital-only). Guard duplikatów.
+   */
+  _maybeBuildRecon(ctx, myVessels) {
+    if (myVessels.some(v => canDoRecon(v))) return null;
+    const queues  = ctx.active.shipQueues ?? [];
+    const pending = ctx.active.pendingShipOrders ?? [];
+    // Rozpoznaj recon-w-budowie po module science_lab (kadłub = hull_small współdzielony z kolonizatorem).
+    if ([...queues, ...pending].some(q => (q.modules ?? []).includes('science_lab'))) return null;
+    return {
+      type: ACTION_TYPES.BUILD_SHIP,
+      shipId: RECON_HULL,
+      modules: [...RECON_MODULES],
+      planetId: ctx.active.planetId,
+      _tag: 'ship_recon',
+    };
   }
 
   /**
