@@ -38,6 +38,8 @@ window.KOSMOS.audioSystem = new AudioSystem();
 
 const title = new TitleScene();
 title.show();
+// Zdejmij statyczny placeholder bootu (index.html) — ekran tytułowy jest już widoczny.
+document.getElementById('boot-placeholder')?.remove();
 
 // ── Loading screen (stylistyka KOSMOS) ──────────────────────────────────────
 let _loadingEl = null;
