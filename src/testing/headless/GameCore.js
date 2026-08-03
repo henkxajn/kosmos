@@ -72,7 +72,7 @@ export class GameCore {
    * Bootstrap game state headless. Używa scenariusza "civilization" (Nowa Gra).
    * Po boot() wszystkie systemy są w window.KOSMOS, kolonia założona, budynki startowe.
    */
-  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization', solo = false } = {}) {
+  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization', solo = false, planetClass = null } = {}) {
     this._quiet = quiet;
     // solo (BALANS reference run): neutralizuje warstwę AI (brak spawnu obcych imperiów →
     // brak agresji/wojny/inwazji, izolacja solo ekonomii) i wyłącza RandomEventSystem
@@ -228,6 +228,11 @@ export class GameCore {
     if (!civPlanet) {
       throw new Error('[GameCore] Nie znaleziono planety cywilizacyjnej po generateCivScenario()');
     }
+    // Seed panel (BALANS) — nadpisz KLASĘ planety (złoża/atmosfera/temp) PRZED _setupColony.setDeposits.
+    // Kontroluje ekonomię startową (GOOD_FE/MEDIAN/POOR) niezależnie od losowego seeda; null = losowa
+    // planeta z generateCivScenario (dotychczasowe zachowanie). Wzorzec dep() z probe.
+    this._planetClass = planetClass;
+    if (planetClass) this._applyPlanetClass(civPlanet, planetClass);
     this._setupColony(civPlanet);
     K.civName = civName;
     civPlanet.name = capitalName;
@@ -271,6 +276,23 @@ export class GameCore {
       colony,
       grid,
     };
+  }
+
+  // ── Seed panel: nadpisanie klasy planety (BALANS) ──────────────────────────
+  // Deterministyczne złoża/atmosfera per klasa — izoluje ekonomię startową od losowego seeda.
+  // GOOD_FE = replika dobrej-Fe sesji (target: gracz koloniza wcześnie); MEDIAN = pasma docelowe;
+  // POOR = cienkie złoża, thin atmosphere (lags but survives). Xe gwarantowany osobno w _setupColony.
+  _applyPlanetClass(planet, className) {
+    const cls = GameCore.PLANET_CLASSES[className];
+    if (!cls) {
+      if (!this._quiet) console.warn(`[GameCore] Nieznana klasa planety '${className}' — pomijam injekcję`);
+      return;
+    }
+    planet.deposits = cls.deposits.map(d => ({ ...d }));   // świeża kopia (per-gra mutowalne)
+    planet.atmosphere = cls.atmosphere;
+    planet.temperatureK = cls.temperatureK;
+    planet.temperatureC = cls.temperatureK - 273.15;
+    planet.planetType = 'rocky';   // klasa ekonomiczna zakłada skalistą (kolonizowalna)
   }
 
   // ── Kopia _setupColony z GameScene (bez rover spawn, bez UI) ──
@@ -451,3 +473,33 @@ export class GameCore {
     }
   }
 }
+
+// ── Seed panel klas planet (BALANS) — deterministyczne złoża per klasa ekonomiczna ──
+// dep(id, richness, remaining) — kształt z probe (richness 0.1..1.0; remaining = zapas złoża).
+const _dep = (resourceId, richness, remaining) => ({ resourceId, richness, totalAmount: remaining, remaining });
+GameCore.PLANET_CLASSES = {
+  // GOOD_FE — replika dobrej-Fe sesji: Fe-rich, pełny suite mineralny, breathable, temperate.
+  GOOD_FE: {
+    atmosphere: 'breathable', temperatureK: 288,
+    deposits: [
+      _dep('Fe', 1.0, 150000), _dep('Si', 0.9, 120000), _dep('Cu', 0.7, 90000),
+      _dep('Ti', 0.5, 50000),  _dep('C', 0.9, 120000),  _dep('Li', 0.4, 30000), _dep('Hv', 0.3, 20000),
+    ],
+  },
+  // MEDIAN — pasma docelowe: umiarkowane złoża, breathable.
+  MEDIAN: {
+    atmosphere: 'breathable', temperatureK: 288,
+    deposits: [
+      _dep('Fe', 0.6, 80000), _dep('Si', 0.6, 70000), _dep('Cu', 0.4, 40000),
+      _dep('Ti', 0.3, 20000), _dep('C', 0.6, 70000),  _dep('Li', 0.2, 12000),
+    ],
+  },
+  // POOR — cienkie złoża, thin atmosphere: lags but survives.
+  POOR: {
+    atmosphere: 'thin', temperatureK: 270,
+    deposits: [
+      _dep('Fe', 0.3, 40000), _dep('Si', 0.3, 35000), _dep('Cu', 0.2, 15000),
+      _dep('C', 0.4, 40000),  _dep('Ti', 0.15, 6000),
+    ],
+  },
+};

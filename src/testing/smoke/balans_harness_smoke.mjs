@@ -264,6 +264,28 @@ console.log('\nT9 — producenci rejestrują się na NIE-aktywnej kolonii (direc
   rs2.dispose?.();
 }
 
+// ── T10: seed panel — planetClass injection (GOOD_FE/MEDIAN/POOR) — Task 7 ──
+console.log('\nT10 — seed panel (klasy planet: złoża/atmosfera deterministyczne)');
+{
+  const feRich = (c) => {
+    const g = new GameCore();
+    g.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: c });
+    const p = window.KOSMOS.homePlanet;
+    const fe = (p.deposits ?? []).find(d => d.resourceId === 'Fe');
+    const xe = (p.deposits ?? []).find(d => d.resourceId === 'Xe');
+    return { feRichness: fe?.richness ?? 0, atmo: p.atmosphere, hasXe: !!xe };
+  };
+  const good = feRich('GOOD_FE'), med = feRich('MEDIAN'), poor = feRich('POOR');
+  assert(good.feRichness > med.feRichness && med.feRichness > poor.feRichness,
+         `Fe richness GOOD_FE(${good.feRichness}) > MEDIAN(${med.feRichness}) > POOR(${poor.feRichness})`);
+  assert(good.atmo === 'breathable' && poor.atmo === 'thin', 'GOOD_FE breathable / POOR thin (klasa steruje atmosferą)');
+  assert(good.hasXe && med.hasXe && poor.hasXe, 'Xe gwarantowane w każdej klasie (_setupColony)');
+  // null (domyślne) = losowa planeta z generateCivScenario (bez injekcji)
+  const rnd = new GameCore();
+  rnd.boot({ quiet: true, scenario: 'civilization_boosted', solo: true });   // planetClass null
+  assert((window.KOSMOS.homePlanet.deposits?.length ?? 0) > 0, 'planetClass=null → losowa planeta (bez override, deposits istnieją)');
+}
+
 // ── Wynik ─────────────────────────────────────────────────────────
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);
