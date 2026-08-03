@@ -225,23 +225,34 @@ export class RuleBot extends BaseBot {
       if (up) { up._tag = 'housing_upgrade'; return up; }
     }
 
-    // ── P5: RESEARCH — priority na space chain ──
-    if (Math.random() < this.personality.science * this.weights.research_prob * 2) {
-      const availableTechs = catalog.listResearchActions();
-      if (availableTechs.length > 0) {
-        let pick = null;
-        for (const priority of TECH_PRIORITY) {
-          const found = availableTechs.find(a => a.techId === priority);
-          if (found) { pick = found; break; }
+    // ── P5: RESEARCH — NON-BLOCKING (fix A) ──
+    // queueTech jest PROGRESYWNE: raz zakolejkowany tech sam się posuwa co tick. Re-issue na
+    // ~połowie tur (stary losowy gate 0.54) = no-op zjadający budżet decyzji i głodzący P13+.
+    // Zasada realnego gracza: kolejkuj tech TYLKO gdy slot badawczy jest WOLNY i istnieje
+    // queuable tech; inaczej NIE zwracaj — pozwól decyzji spaść niżej (statki/expand/...).
+    {
+      const rSys = window.KOSMOS?.researchSystem;
+      const activeCount = rSys?.getActiveResearch?.()?.length ?? 0;
+      const maxSlots = rSys?.getMaxSlots?.() ?? 1;
+      if (rSys && activeCount < maxSlots) {   // wolny slot badawczy
+        const queue = rSys.researchQueue ?? [];
+        const queuable = catalog.listResearchActions()
+          .filter(a => !rSys.isActive?.(a.techId) && !queue.includes(a.techId));
+        if (queuable.length > 0) {
+          let pick = null;
+          for (const priority of TECH_PRIORITY) {
+            const found = queuable.find(a => a.techId === priority);
+            if (found) { pick = found; break; }
+          }
+          if (!pick) {
+            const sorted = queuable
+              .map(a => ({ a, cost: TECHS[a.techId]?.cost?.research ?? 1000 }))
+              .sort((x, y) => x.cost - y.cost);
+            pick = sorted[0].a;
+          }
+          pick._tag = 'research';
+          return pick;
         }
-        if (!pick) {
-          const sorted = availableTechs
-            .map(a => ({ a, cost: TECHS[a.techId]?.cost?.research ?? 1000 }))
-            .sort((x, y) => x.cost - y.cost);
-          pick = sorted[0].a;
-        }
-        pick._tag = 'research';
-        return pick;
       }
     }
 
@@ -568,13 +579,15 @@ export class RuleBot extends BaseBot {
     const housing = active.civSystem?.housing ?? 0;
 
     const bSys = active.buildingSystem;
+    // countBuilding MUSI liczyć budynki AKTYWNE + W BUDOWIE (buildTime) + PENDING (brak surowców).
+    // Inaczej bot nie widzi in-progress budynków (planet:buildResult success fires PRZY KOLEJCE,
+    // nie ukończeniu) i RE-ISSUE'uje je co decyzję w oknie buildTime → masowe over-building
+    // (95 kopalń, 22 farmy) → drenaż Fe → statki głodują. Analogia do fix A (research slot).
     const buildingCounts = new Map();
-    if (bSys?._active) {
-      for (const [, entry] of bSys._active) {
-        const id = entry.building?.id ?? entry.buildingId;
-        buildingCounts.set(id, (buildingCounts.get(id) ?? 0) + 1);
-      }
-    }
+    const bump = (id) => { if (id) buildingCounts.set(id, (buildingCounts.get(id) ?? 0) + 1); };
+    if (bSys?._active) for (const [, entry] of bSys._active) bump(entry.building?.id ?? entry.buildingId);
+    if (bSys?._constructionQueue) for (const [, c] of bSys._constructionQueue) bump(c.buildingId);   // w budowie
+    if (bSys?._pendingQueue) for (const [, p] of bSys._pendingQueue) bump(p.buildingId);              // czeka na surowce
     const techSys = K.techSystem;
 
     return {
