@@ -15,7 +15,11 @@ import { BaseBot } from './BaseBot.js';
 import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TECHS } from '../../data/TechData.js';
+import { COMMODITIES } from '../../data/CommoditiesData.js';
 import { canColonize, canDoRecon } from '../../entities/Vessel.js';
+
+// Droidy tier-1 obsadzają TYLKO prostą pracę (laborer/miner/worker) — Pop 2.0 Faza 4.
+const DROID_TIER1_STRATA = ['laborer', 'miner', 'worker'];
 
 // ⚠ S3.4d hull-gating: stocznia NAZIEMNA (kolonijna) buduje TYLKO hull_small (groundBuildable).
 // Legacy science_vessel / cargo_ship NIE są groundBuildable → startShipBuild odrzuca je dla
@@ -422,11 +426,51 @@ export class RuleBot extends BaseBot {
       }
     }
 
-    // ── P18: 5C slider nudge (reaktywny — INV-2 lever) ──
+    // ── P18: Droid install (Fix B — reaktywny: labor scarcity → droid substytuuje pracę) ──
+    const droid = this._maybeDroidAction(ctx, civYear);
+    if (droid) return droid;
+
+    // ── P19: 5C slider nudge (reaktywny — INV-2 lever) ──
     const slider = this._maybeSliderAction(ctx, civYear);
     if (slider) return slider;
 
     return { type: ACTION_TYPES.WAIT };
+  }
+
+  /**
+   * Reaktywna instalacja droida (Pop 2.0 Faza 4). Zasada uczciwości: reaguje na REALNY sygnał
+   * niedoboru pracy — strata tier-1 (laborer/miner/worker) z NIEobsadzonymi etatami PRZY zerowym
+   * bezrobociu (brak POP do obsady) — dokładnie decyzja gracza „droid zastępuje brakującego
+   * pracownika". NIE tunowane pod „~3 do yr6" (to cel walidacji ceny droida, nie bota) — liczbę
+   * droidów MIERZYMY jako output. Affordability = recipe (minerały) + Kr (creditCost), inaczej
+   * produkcja jałowo wisi. Mając droida w magazynie → instaluj; inaczej → produkuj (jeśli stać).
+   */
+  _maybeDroidAction(ctx, civYear) {
+    const civ = ctx.active?.civSystem;
+    if (!civ?.getWorkforceBreakdown) return null;
+    if ((civ._unemployed ?? 0) >= 1) return null;   // jest wolny POP → obsadź POP-em, nie droidem
+
+    let scarce = null;
+    for (const r of civ.getWorkforceBreakdown()) {
+      if (!DROID_TIER1_STRATA.includes(r.type)) continue;
+      const unfilled = (r.jobs ?? 0) - (r.workers ?? 0) - (r.synthetic ?? 0);
+      if (unfilled >= 1 && (!scarce || unfilled > scarce.unfilled)) scarce = { type: r.type, unfilled };
+    }
+    if (!scarce) return null;
+
+    // Mam droida w magazynie → instaluj (realna ścieżka installSyntheticForStrata).
+    if (ctx.getAmount('automation_droid') >= 1) {
+      return { type: ACTION_TYPES.INSTALL_DROID, strataType: scarce.type, _tag: `droid_install_${scarce.type}` };
+    }
+    // Brak droida → produkuj, ale TYLKO jeśli stać (recipe + Kr) — droid jest CELOWO drogi.
+    const recipe = COMMODITIES.automation_droid?.recipe ?? {};
+    for (const [k, v] of Object.entries(recipe)) if (ctx.getAmount(k) < v) return null;
+    if ((ctx.active.credits ?? 0) < (COMMODITIES.automation_droid?.creditCost ?? 0)) return null;
+    if (this._canEnqueue('automation_droid', civYear)) {
+      this._recentEnqueues.set('automation_droid', civYear);
+      return { type: ACTION_TYPES.FACTORY_ENQUEUE, commodityId: 'automation_droid', qty: 1, _tag: 'droid_produce' };
+    }
+    return null;
   }
 
   /**

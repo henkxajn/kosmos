@@ -286,6 +286,27 @@ console.log('\nT10 — seed panel (klasy planet: złoża/atmosfera deterministyc
   assert((window.KOSMOS.homePlanet.deposits?.length ?? 0) > 0, 'planetClass=null → losowa planeta (bez override, deposits istnieją)');
 }
 
+// ── T11: droid install action (INSTALL_DROID → installSyntheticForStrata) — Gate 2 fix B ──
+console.log('\nT11 — droid install action (real intent installSyntheticForStrata)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: 'GOOD_FE' });
+  const home = c.colonyManager.getColony(window.KOSMOS.homePlanet.id);
+  // Bez droida w magazynie → install zwraca success=false (no_commodity), ale routuje do realnej metody.
+  const r0 = ActionAdapter.execute({ type: ACTION_TYPES.INSTALL_DROID, strataType: 'laborer' });
+  assert(r0.event === 'building:installDroid', 'INSTALL_DROID routuje do installSyntheticForStrata (nie EventBus)');
+  assert(r0.success === false, 'bez automation_droid w magazynie → install nieudany (real gate no_commodity)');
+  // Z droidem w magazynie → install się udaje (substytuuje POP na budynku laborer).
+  home.resourceSystem.receive({ automation_droid: 2 });
+  const synthBefore = home.buildingSystem.getSyntheticJobs('laborer');
+  const r1 = ActionAdapter.execute({ type: ACTION_TYPES.INSTALL_DROID, strataType: 'laborer' });
+  assert(r1.success === true, 'z automation_droid w magazynie → install udany');
+  assert(home.buildingSystem.getSyntheticJobs('laborer') > synthBefore, 'synthetic jobs laborer wzrosło (droid obsadził etat)');
+  assert(Math.round(home.resourceSystem.getAmount('automation_droid')) === 1, 'zużyto 1 automation_droid z magazynu');
+  // walidacja: brak strataType odrzucony
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.INSTALL_DROID }).emitted === false, 'brak strataType odrzucony');
+}
+
 // ── Wynik ─────────────────────────────────────────────────────────
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);

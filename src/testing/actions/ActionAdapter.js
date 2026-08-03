@@ -29,8 +29,17 @@ export const ACTION_TYPES = {
   FACTORY_SET_MODE: 'factorySetMode',
   SET_STRATA_TARGET: 'setStrataTarget',   // 5C slider (Allocation 2.0) — intent-method, nie EventBus
   LOAD_COLONISTS:  'loadColonists',        // realny „Załaduj POP" przed kolonizacją
+  INSTALL_DROID:   'installDroid',         // Pop 2.0 Faza 4 — droid substytuuje pracę (labor scarcity)
   WAIT:          'wait',
 };
+
+/** Aktywna kolonia gracza → jej BuildingSystem (per-kolonia). */
+function _activeBuildingSystem() {
+  const K = window.KOSMOS;
+  const cm = K?.colonyManager;
+  const active = cm?._activePlanetId ?? K?.homePlanet?.id;
+  return active ? (cm?.getColony(active)?.buildingSystem ?? null) : null;
+}
 
 /** Emit akcję jako EventBus event. Zwraca metadane. */
 export function execute(action) {
@@ -137,6 +146,17 @@ export function execute(action) {
       const want = action.count != null ? action.count : freeCabins;   // domyślnie pełna pojemność
       const loaded = loadColonists(vessel, want, civ);                  // realna metoda, drenuje POP
       return { emitted: true, event: 'vessel:loadColonists', loaded };
+    }
+
+    case ACTION_TYPES.INSTALL_DROID: {
+      // REALNA ścieżka gracza = BuildingSystem.installSyntheticForStrata (ColonyOverlay droidInstall
+      // stepper woła DOKŁADNIE to — intent-method, NIE EventBus). Auto-pick budynku danej straty,
+      // spend 1 automation_droid z inventory. Droid = substytut pracy (Pop 2.0 Faza 4).
+      if (!action.strataType) return { emitted: false, reason: 'missing_strata_type' };
+      const bSys = _activeBuildingSystem();
+      if (!bSys?.installSyntheticForStrata) return { emitted: false, reason: 'no_building_system' };
+      const res = bSys.installSyntheticForStrata(action.strataType);
+      return { emitted: true, event: 'building:installDroid', strataType: action.strataType, success: !!res?.success, reason: res?.reason };
     }
 
     case ACTION_TYPES.WAIT:

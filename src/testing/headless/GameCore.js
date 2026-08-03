@@ -241,7 +241,8 @@ export class GameCore {
 
     // ── Grid + starter buildings ──
     const grid = PlanetMapGenerator.generate(civPlanet, true);
-    this.buildingSystem._gridHeight = grid.height;
+    this.buildingSystem._grid = grid;   // parytet z ColonyManager:2359 — BEZ tego droid-install
+    this.buildingSystem._gridHeight = grid.height;   // (_strataDroidBuildings) i inne grid-ops padają
     colony.grid = grid;
 
     // KRITICAL: auto-place capital (colony_base) — w normalnej grze robi to
