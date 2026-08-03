@@ -358,26 +358,30 @@ export class RuleBot extends BaseBot {
       }
     }
 
-    // ── P13: RECON — eksploracja najbliższych niezbadanych ciał ──
-    // Statek recon = dowolny docked z canDoRecon (hull_small+science_lab). BEZ gate'u launch_pad —
-    // hull_small self-launch (size 'small' → _needsSpaceportForVessel=false).
+    // ── P13: RECON — eksploracja (colonizable-first + REDISPATCH z orbity) ──
+    // Statek recon = KAŻDY idle z canDoRecon (docked LUB orbiting) — po recon scout orbituje
+    // (arriveAtTarget→'orbiting'), więc REDISPATCH z orbity kontynuuje eksplorację jednym statkiem
+    // (usuwa single-ship bottleneck). hull_small self-launch (bez launch_pad).
     const vm = window.KOSMOS?.vesselManager;
     const allVessels = vm?.getAllVessels?.() ?? [];
-    const dockedRecon = allVessels.find(v =>
+    const idleScout = allVessels.find(v =>
       v.colonyId === ctx.active.planetId &&
-      v.position?.state === 'docked' && v.status === 'idle' &&   // docked+idle (status nigdy nie === 'docked')
+      v.status === 'idle' &&
+      (v.position?.state === 'docked' || v.position?.state === 'orbiting') &&
       canDoRecon(v)
     );
-    if (dockedRecon) {
+    if (idleScout) {
+      // full_system deep_scan — jeden scout SEKWENCYJNIE zwiedza WSZYSTKIE ciała (greedy NN w
+      // MissionSystem), w tym wszystkie kolonizowalne rocky/ice. Usuwa single-ship bottleneck
+      // (statek jeździ dalej sam) i nie utyka po 1 recon jak single-target. Deep_scanner = deep_scan.
       const unexploredBody = this._findNearestUnexplored(ctx.active.planet);
-      if (unexploredBody && !this._reconnedTargets.has(unexploredBody.id)) {
-        this._reconnedTargets.add(unexploredBody.id);
+      if (unexploredBody) {
         return {
           type: ACTION_TYPES.EXPEDITION,
           missionType: 'recon',
-          targetId: unexploredBody.id,
-          vesselId: dockedRecon.id,
-          _tag: `recon_${unexploredBody.id}`,
+          targetId: 'full_system',
+          vesselId: idleScout.id,
+          _tag: `recon_full_system`,
         };
       }
     }
@@ -585,20 +589,20 @@ export class RuleBot extends BaseBot {
       if (e.id === homePlanet.id) return false;
       if (e.explored) return false;
       if (this._reconnedTargets.has(e.id)) return false;
-      // Mamy pozycję
       return e.physics?.x != null || e.orbital?.a != null;
     });
-    // Najbliższe — Euclid po position
-    const hx = homePlanet.physics?.x ?? 0;
-    const hy = homePlanet.physics?.y ?? 0;
-    let best = null, bestDist = Infinity;
-    for (const e of candidates) {
-      const ex = e.physics?.x ?? 0;
-      const ey = e.physics?.y ?? 0;
-      const d = Math.hypot(ex - hx, ey - hy);
-      if (d < bestDist) { best = e; bestDist = d; }
-    }
-    return best;
+    if (candidates.length === 0) return null;
+    const hx = homePlanet.physics?.x ?? 0, hy = homePlanet.physics?.y ?? 0;
+    const dist = (e) => Math.hypot((e.physics?.x ?? 0) - hx, (e.physics?.y ?? 0) - hy);
+    // PREFERENCJA (doktryna): scout colonizable worlds FIRST. Ciała kolonizowalne (rocky/ice
+    // planety = cele POP-kolonizacji) przed resztą (moons/planetoidy/gas). W grupie — najbliższe.
+    const colonizable = (e) => e.type === 'planet' && (e.planetType === 'rocky' || e.planetType === 'ice');
+    candidates.sort((a, b) => {
+      const ca = colonizable(a) ? 0 : 1, cb = colonizable(b) ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return dist(a) - dist(b);
+    });
+    return candidates[0];
   }
 
   /** Znajdź explored rocky planetę, która nie jest już zasiedlona */
