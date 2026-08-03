@@ -27,3 +27,6 @@ src/testing/reports/*.json
 src/testing/reports/*.md
 src/testing/reports/evo_weights.json
 !src/testing/reports/.gitkeep
+
+# Balance-tester dev reports (regenerowalne dev-artefakty, NIE deployować — psuły deploy Pages)
+tools/balance-tester/reports/
