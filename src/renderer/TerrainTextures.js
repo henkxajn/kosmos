@@ -71,7 +71,7 @@ export function loadAllTerrainTextures() {
       for (let i = 1; i <= count; i++) {
         const key = `${terrainType}_${subtype}_${i}`;
         tasks.push({
-          src: `assets/textures/terrain/${prefix}_${subtype}_${i}.png`,
+          src: `assets/textures/terrain/${prefix}_${subtype}_${i}.webp`,
           onLoad: (img) => _cache.set(key, img), // brak pliku → cichy fallback (brak onError)
         });
       }
@@ -82,7 +82,7 @@ export function loadAllTerrainTextures() {
   for (const [pairKey, { prefix: filePrefix, count: varCount }] of Object.entries(TRANSITION_PAIRS)) {
     for (let i = 1; i <= varCount; i++) {
       const key  = `trans_${filePrefix}_${i}`;
-      const path = `assets/textures/terrain/transitions/${filePrefix}_${i}.png`;
+      const path = `assets/textures/terrain/transitions/${filePrefix}_${i}.webp`;
       tasks.push({
         src: path,
         onLoad: (img) => _transCache.set(key, img),
