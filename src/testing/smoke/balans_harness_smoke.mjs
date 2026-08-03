@@ -13,6 +13,7 @@ import { BaseBot } from '../bots/BaseBot.js';
 import ActionAdapter, { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
+import { canColonize } from '../../entities/Vessel.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -174,6 +175,42 @@ console.log('\nT6 — 5C slider action (real intent-method setStrataTarget, Task
          'nieznana strata odrzucona');
   assert(ActionAdapter.execute({ type: ACTION_TYPES.SET_STRATA_TARGET, share: 0.5 }).emitted === false,
          'brak strataType odrzucony');
+}
+
+// ── T7: colonizer path + load-POP (real capacity, NIE hardcoded 2) — Task 4b ──
+console.log('\nT7 — real colonizer (hull+habitat) + load-POP z realnej pojemności');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true });
+  const K = window.KOSMOS;
+  const home = c.colonyManager.getColony(K.homePlanet.id);
+  const civ = home.civSystem;
+
+  // (a) capability gate: hull+habitat → canColonize; cargo_ship → NIE (ślepa uliczka RuleBota v4)
+  const colo = { id: 'v_colo', shipId: 'hull_small', colonyId: home.planetId,
+    modules: ['engine_chemical', 'habitat_pod'], colonistCapacity: 4, colonists: 0,
+    position: { state: 'docked', dockedAt: home.planetId } };
+  assert(canColonize(colo) === true, 'hull_small + habitat_pod → canColonize=true');
+  assert(canColonize({ shipId: 'cargo_ship', modules: [] }) === false,
+         'cargo_ship (brak modułu habitat) → canColonize=false');
+
+  // (b) load-POP: ładuje do REALNEJ pojemności modułu (4), NIE stałej 2; fizycznie drenuje home POP
+  civ.setPopulation(40);   // gwarantuj nadwyżkę freePops > pojemności (4), by rozróżnić „4" od „2"
+  K.vesselManager._vessels.set('v_colo', colo);
+  const freeBefore = Math.floor(civ.freePops);
+  assert(freeBefore >= 5, `home ma nadwyżkę POP (freePops=${freeBefore} ≥ 5, pozwala rozróżnić 4 vs 2)`);
+  const r = ActionAdapter.execute({ type: ACTION_TYPES.LOAD_COLONISTS, vesselId: 'v_colo' });
+  assert(r.event === 'vessel:loadColonists', 'LOAD_COLONISTS routuje do loadColonists (real path)');
+  assert(colo.colonists === 4, `załadowano REALNĄ pojemność modułu (4), NIE hardcoded 2 (było ${colo.colonists})`);
+  assert(Math.floor(civ.freePops) === freeBefore - 4, 'POP fizycznie zdrenowany z home (POP-drain measurement)');
+
+  // (c) count override respektowany (gdy bot poda mniej niż pojemność)
+  const colo2 = { id: 'v_colo2', shipId: 'hull_small', colonyId: home.planetId,
+    modules: ['habitat_pod'], colonistCapacity: 4, colonists: 0,
+    position: { state: 'docked', dockedAt: home.planetId } };
+  K.vesselManager._vessels.set('v_colo2', colo2);
+  ActionAdapter.execute({ type: ACTION_TYPES.LOAD_COLONISTS, vesselId: 'v_colo2', count: 2 });
+  assert(colo2.colonists === 2, 'jawny count=2 respektowany (parametr, nie sufit)');
 }
 
 // ── Wynik ─────────────────────────────────────────────────────────

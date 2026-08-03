@@ -15,6 +15,14 @@ import { BaseBot } from './BaseBot.js';
 import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TECHS } from '../../data/TechData.js';
+import { canColonize } from '../../entities/Vessel.js';
+
+// Realny kolonizator (Task 4b): kadłub small + moduły napęd + habitat. hull_small jest
+// groundBuildable (stocznia naziemna) i self-launch (bez launch_pad); habitat_pod (slotType
+// 'habitat') daje canColonize=true + colonistCapacity. Gate: tech 'colonization' (habitat_pod)
+// + stocznia. NIE cargo_ship (brak modułu habitat → canColonize=false = ślepa uliczka).
+const COLONIZER_HULL    = 'hull_small';
+const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod'];
 
 const DEFAULT_PERSONALITY = {
   aggression: 0.5, expansion: 0.7, science: 0.6, trade: 0.5, defense: 0.5,
@@ -281,24 +289,22 @@ export class RuleBot extends BaseBot {
       if (a) { a._tag = `factory_${factoryCount+1}`; return a; }
     }
 
-    // ── P13: Build ship (science_vessel najpierw, potem cargo_ship dla kolonizacji) ──
+    // ── P13: Build ship (science_vessel dla recon, potem realny KOLONIZATOR) ──
     if (ctx.countBuilding('shipyard') > 0 && ctx.pop >= 4) {
       const vm = window.KOSMOS?.vesselManager;
       const allVessels = vm?.getAllVessels?.() ?? [];
       const myVessels = allVessels.filter(v => v.colonyId === ctx.active.planetId);
       const hasScience = myVessels.some(v => v.shipId === 'science_vessel');
-      const hasCargo   = myVessels.some(v => v.shipId === 'cargo_ship');
 
       if (!hasScience) {
         const ships = catalog.listBuildShipActions();
         const science = ships.find(a => a.shipId === 'science_vessel');
         if (science) { science._tag = 'ship_science'; return science; }
       }
-      // Po science_vessel — cargo_ship (dla colonization gdy tech zbadane)
-      if (hasScience && !hasCargo && ctx.hasTech('colonization')) {
-        const ships = catalog.listBuildShipActions();
-        const cargo = ships.find(a => a.shipId === 'cargo_ship');
-        if (cargo) { cargo._tag = 'ship_cargo'; return cargo; }
+      // Realny kolonizator (hull_small + [engine_chemical, habitat_pod]) — gdy colonization tech.
+      if (hasScience && ctx.hasTech('colonization')) {
+        const colo = this._maybeBuildColonizer(ctx, myVessels);
+        if (colo) return colo;
       }
     }
 
@@ -324,24 +330,37 @@ export class RuleBot extends BaseBot {
       }
     }
 
-    // ── P14: COLONIZE — po rekonesansie rocky planet, wysłanie colonize ──
+    // ── P14: COLONIZE — realny 2-krok: załaduj POP → wyślij colonize ──
+    // Statek MUSI mieć moduł habitat (canColonize) + kolonistów na pokładzie. To odzwierciedla
+    // pełną sekwencję gracza (buduje kolonizator → ładuje POP → koloniazuje), bez obchodzenia bramek.
     if (ctx.hasTech('colonization') && allVessels.length > 0) {
-      const dockedCargo = allVessels.find(v =>
+      const dockedColonizer = allVessels.find(v =>
         v.colonyId === ctx.active.planetId &&
         v.status === 'docked' &&
-        v.shipId === 'cargo_ship'
+        canColonize(v)
       );
-      if (dockedCargo) {
-        const rockyTarget = this._findExploredRockyForColony(ctx.active.planet);
-        if (rockyTarget && !this._colonizedTargets.has(rockyTarget.id)) {
-          this._colonizedTargets.add(rockyTarget.id);
-          return {
-            type: ACTION_TYPES.EXPEDITION,
-            missionType: 'colonize',
-            targetId: rockyTarget.id,
-            vesselId: dockedCargo.id,
-            _tag: `colonize_${rockyTarget.id}`,
-          };
+      if (dockedColonizer) {
+        const aboard = dockedColonizer.colonists ?? 0;
+        const cabins = (dockedColonizer.colonistCapacity ?? 0) - aboard;
+        const homeFree = ctx.active.civSystem?.freePops ?? 0;
+        // Krok 1: brak kolonistów + wolne kabiny + nadwyżka POP w domu (glut) → załaduj do pojemności.
+        // loadColonists sam capuje do min(kabiny, freePops); gate homeFree≥2 = nie drenuj ostatnich POP.
+        if (aboard <= 0 && cabins > 0 && homeFree >= 2) {
+          return { type: ACTION_TYPES.LOAD_COLONISTS, vesselId: dockedColonizer.id, _tag: 'load_colonists' };
+        }
+        // Krok 2: koloniści na pokładzie → colonize na explored rocky/ice.
+        if (aboard > 0) {
+          const rockyTarget = this._findExploredRockyForColony(ctx.active.planet);
+          if (rockyTarget && !this._colonizedTargets.has(rockyTarget.id)) {
+            this._colonizedTargets.add(rockyTarget.id);
+            return {
+              type: ACTION_TYPES.EXPEDITION,
+              missionType: 'colonize',
+              targetId: rockyTarget.id,
+              vesselId: dockedColonizer.id,
+              _tag: `colonize_${rockyTarget.id}`,
+            };
+          }
         }
       }
     }
@@ -405,6 +424,28 @@ export class RuleBot extends BaseBot {
     // Share z OBSERWOWANEJ pressure (reaktywne): 0.2 baza + 0.3×pressure, cap 0.5. Knoby = bot-policy.
     const share = Math.min(0.5, 0.2 + 0.3 * best.pressure);
     return { type: ACTION_TYPES.SET_STRATA_TARGET, strataType: best.type, share, _tag: `slider_${best.type}` };
+  }
+
+  /**
+   * Zbuduj realny kolonizator (hull_small + [engine_chemical, habitat_pod]) — chyba że już
+   * istnieje/jest w budowie. startShipBuild sam kolejkuje przy braku surowców (real behavior),
+   * więc nie sprawdzamy tu affordability; guard tylko przeciw duplikatom (drugi kolonizator).
+   */
+  _maybeBuildColonizer(ctx, myVessels) {
+    // Już zbudowany kolonizator (moduł habitat)?
+    if (myVessels.some(v => canColonize(v))) return null;
+    // Już w kolejce stoczni lub w pending (rozpoznajemy po module habitat_pod)?
+    const queues  = ctx.active.shipQueues ?? [];
+    const pending = ctx.active.pendingShipOrders ?? [];
+    const inBuild = [...queues, ...pending].some(q => (q.modules ?? []).includes('habitat_pod'));
+    if (inBuild) return null;
+    return {
+      type: ACTION_TYPES.BUILD_SHIP,
+      shipId: COLONIZER_HULL,
+      modules: [...COLONIZER_MODULES],
+      planetId: ctx.active.planetId,
+      _tag: 'ship_colonizer',
+    };
   }
 
   _canEnqueue(commodityId, civYear) {
