@@ -26,10 +26,11 @@ const DROID_TIER1_STRATA = ['laborer', 'miner', 'worker'];
 // Legacy science_vessel / cargo_ship NIE są groundBuildable → startShipBuild odrzuca je dla
 // kolonii GRACZA (requiresOrbitalShipyard). Więc realny wczesny statek = hull_small + moduły
 // (self-launch, bez launch_pad). To ten sam wzorzec, co kolonizator.
-//   • Recon:      hull_small + [engine_chemical, science_lab]   → canDoRecon (survey).
+//   • Scout:      hull_small + [engine_chemical, deep_scanner]  → canDoRecon (deep_scan; doktryna Filipa).
 //   • Kolonizator: hull_small + [engine_chemical, habitat_pod]  → canColonize + colonistCapacity.
+// deep_scanner requires 'orbital_survey' (boosted-starter) — Scout = statek eksploracyjny gracza.
 const RECON_HULL        = 'hull_small';
-const RECON_MODULES     = ['engine_chemical', 'science_lab'];
+const RECON_MODULES     = ['engine_chemical', 'deep_scanner'];
 const COLONIZER_HULL    = 'hull_small';
 const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod'];
 
@@ -63,21 +64,16 @@ const TECH_PRIORITY = [
   'colonization',       // T3 — dla kolonizacji
 ];
 
-// Opening build order — starter daje 3 budynki (farm, well, solar_farm) + colony_base
-// Strategia:
-//   mine (free tech) → factory (metallurgy) → observatory (orbital_survey) → lab → habitat
-// Observatory w opening bo: tanie (4 SA + 3 ES + 2 PC), +6 research/year przyspiesza space chain,
-// auto-discovery ciał. Gated przez orbital_survey tech — opening zapauzuje się tutaj
-// dopóki research nie skończy, potem odpala build.
+// Opening build order — BAZA PRODUKCYJNA + survival (builder+explorer doctrine).
+// Trim do farm/well/solar/mine/factory: habitat/observatory/research_station USUNIĘTE z beeline
+// (pokrywają je P4 housing / P6 observatory / P7 lab PÓŹNIEJ). Powód: krótki opening → wczesny
+// SCOUT BEELINE (P3.5) zamiast czekać na pełny opening. Explorer eksploruje zaraz po bazie produkcji.
 const OPENING_ORDER = [
   { id: 'farm',        target: 1 },
   { id: 'well',        target: 1 },
   { id: 'solar_farm',  target: 1 },
   { id: 'mine',        target: 1 },
   { id: 'factory',     target: 1 },
-  { id: 'habitat',     target: 1 },  // housing przed research — pop dorośnie
-  { id: 'observatory', target: 1 },
-  { id: 'research_station',         target: 1 },
 ];
 
 export class RuleBot extends BaseBot {
@@ -220,6 +216,19 @@ export class RuleBot extends BaseBot {
       }
     }
 
+    // ── P3.5: EARLY SCOUT BEELINE (builder+explorer — Filip buduje statek ~yr1) ──
+    // PO zabezpieczeniu survival (P1-P3) i bazy produkcyjnej (opening mine/factory), PRZED
+    // ekspansją/housing. POP-gated (crew) — akceptuje wczesną presję POP (wejście w works-forward).
+    // Scout = hull_small + deep_scanner (home+small hull). NIE tunowane pod rok — mierzymy wynik.
+    if (ctx.hasTech('exploration') && ctx.countBuilding('shipyard') > 0) {
+      const vmScout = window.KOSMOS?.vesselManager;
+      const myV = (vmScout?.getAllVessels?.() ?? []).filter(v => v.colonyId === ctx.active.planetId);
+      if (!myV.some(v => canDoRecon(v))) {
+        const scout = this._maybeBuildRecon(ctx, myV);
+        if (scout) { scout._tag = 'ship_scout_beeline'; return scout; }
+      }
+    }
+
     // ── P4: Housing (anticipate pop growth) ──
     if (ctx.pop >= ctx.housing - this.weights.housing_buffer) {
       if (ctx.canBuild('habitat')) {
@@ -245,7 +254,15 @@ export class RuleBot extends BaseBot {
           .filter(a => !rSys.isActive?.(a.techId) && !queue.includes(a.techId));
         if (queuable.length > 0) {
           let pick = null;
-          for (const priority of TECH_PRIORITY) {
+          // Stage A.3 — REAKTYWNA priorytetyzacja energii (doktryna): gdy bilans energii ujemny,
+          // energy tech (efficient_solar/battery_tech) NA PRZÓD kolejki badań (boost energy balance).
+          if (ctx.energyBalance < 0) {
+            for (const et of ['efficient_solar', 'battery_tech']) {
+              const f = queuable.find(a => a.techId === et);
+              if (f) { pick = f; break; }
+            }
+          }
+          if (!pick) for (const priority of TECH_PRIORITY) {
             const found = queuable.find(a => a.techId === priority);
             if (found) { pick = found; break; }
           }
@@ -513,8 +530,10 @@ export class RuleBot extends BaseBot {
     if (myVessels.some(v => canDoRecon(v))) return null;
     const queues  = ctx.active.shipQueues ?? [];
     const pending = ctx.active.pendingShipOrders ?? [];
-    // Rozpoznaj recon-w-budowie po module science_lab (kadłub = hull_small współdzielony z kolonizatorem).
-    if ([...queues, ...pending].some(q => (q.modules ?? []).includes('science_lab'))) return null;
+    // Rozpoznaj scout-w-budowie po DOWOLNYM module recon (deep_scanner LUB science_lab) — inaczej
+    // zmiana RECON_MODULES rozjeżdża guard i bot spamuje pending (958 zleceń — złapane w POOR).
+    const RECON_SCIENCE_MODS = ['deep_scanner', 'science_lab'];
+    if ([...queues, ...pending].some(q => (q.modules ?? []).some(m => RECON_SCIENCE_MODS.includes(m)))) return null;
     return {
       type: ACTION_TYPES.BUILD_SHIP,
       shipId: RECON_HULL,
