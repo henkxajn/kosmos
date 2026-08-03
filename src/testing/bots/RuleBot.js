@@ -16,6 +16,7 @@ import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TECHS } from '../../data/TechData.js';
 import { COMMODITIES } from '../../data/CommoditiesData.js';
+import { TERRAIN_TYPES } from '../../map/HexTile.js';
 import { canColonize, canDoRecon } from '../../entities/Vessel.js';
 
 // Droidy tier-1 obsadzają TYLKO prostą pracę (laborer/miner/worker) — Pop 2.0 Faza 4.
@@ -672,10 +673,21 @@ export class RuleBot extends BaseBot {
   }
 
   _findBuild(catalog, buildingId) {
-    // Użyj filtra po buildingId — pomija wcześniejsze budynki w iteracji BUILDINGS,
-    // dzięki czemu zawsze znajdziemy factory/shipyard/itp. niezależnie od `limit`.
-    const actions = catalog.listBuildActions({ limit: 10, buildingId });
-    return actions[0] ?? null;
+    // BEST-OUTPUT PLACEMENT (doktryna gracza) — wybierz kafel o najwyższym yieldBonus[category]
+    // budynku z ŻYWYCH danych kafli (mine→crater 1.8/mountains 1.6, solar→volcano 2.0/desert 1.5,
+    // farm→plains 1.4). Adaptacyjne, NIE stały kafel. Zastępuje arbitralne actions[0] (pierwszy
+    // kafel w kolejności siatki) — to była przyczyna Fe-starvation (kopalnie na słabym terenie).
+    // limit=100 by ocenić WSZYSTKIE zdatne kafle, nie pierwsze 10.
+    const actions = catalog.listBuildActions({ limit: 100, buildingId });
+    if (actions.length === 0) return null;
+    const cat = BUILDINGS[buildingId]?.category ?? 'default';
+    let best = actions[0], bestScore = -Infinity;
+    for (const a of actions) {
+      const yb = TERRAIN_TYPES[a.tile?.type]?.yieldBonus ?? {};
+      const score = yb[cat] ?? yb.default ?? 1.0;
+      if (score > bestScore) { bestScore = score; best = a; }
+    }
+    return best;
   }
 
   _findUpgrade(ctx, catalog, buildingIdFilter) {
