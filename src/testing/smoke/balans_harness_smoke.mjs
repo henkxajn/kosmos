@@ -242,6 +242,28 @@ console.log('\nT8 — groundBuildable recon/kolonizator (hull+moduły) + alias c
   assert(seen2 === 'recon', 'recon NIE aliasowany (tylko colonize→colony)');
 }
 
+// ── T9: multi-colony producer registration (Task 6 de-risk) — direct bypasses active-guard ──
+console.log('\nT9 — producenci rejestrują się na NIE-aktywnej kolonii (direct ≠ event guard)');
+{
+  const { ResourceSystem } = await import('../../systems/ResourceSystem.js');
+  // rs2 = świeży ResourceSystem, NIE ustawiony jako aktywny (window.KOSMOS.resourceSystem).
+  const rs2 = new ResourceSystem();
+  const activeRs = window.KOSMOS.resourceSystem;
+  assert(activeRs !== rs2, 'rs2 nie jest aktywnym ResourceSystem (symuluje 2. kolonię)');
+
+  // (a) DIRECT registerProducer (ścieżka _reapplyAllRates) — BEZ guardu → rejestruje.
+  rs2.registerProducer('mine_test', { Fe: 5 });
+  assert(rs2._producers.has('mine_test'), 'direct registerProducer działa na nie-aktywnej kolonii (Fe:5)');
+  assert((rs2.getPerYear?.('Fe') ?? 0) > 0, 'produkcja nie-aktywnej kolonii liczy się (rate>0, nie 0)');
+
+  // (b) EVENT resource:registerProducer — GUARD (tylko aktywna) → NIE rejestruje na rs2.
+  EventBus.emit('resource:registerProducer', { id: 'ghost', rates: { Fe: 99 } });
+  assert(!rs2._producers.has('ghost'),
+         'event resource:registerProducer NIE rejestruje na nie-aktywnej (guard aktywnej kolonii)');
+  // ⚠ To dlaczego BuildingSystem używa DIRECT (_reapplyAllRates), nie eventu — inaczej 2. kolonia = 0 produkcji.
+  rs2.dispose?.();
+}
+
 // ── Wynik ─────────────────────────────────────────────────────────
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);
