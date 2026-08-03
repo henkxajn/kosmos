@@ -87,6 +87,11 @@ export class RuleBot extends BaseBot {
     this._factoryModeSetReactive = false;  // flag — raz ustawione
     this._reconnedTargets = new Set();      // ciała na które wysłano recon
     this._colonizedTargets = new Set();
+    // 5C slider (Task 4a) — reaktywny, NIE predykcyjny: nudge tylko przy realnym niedoborze
+    // (unemployed>0 I pressure straty wysokie). Cooldown przeciw thrashowi. Share z OBSERWOWANEJ
+    // pressure (nie stała) — knoby to bot-policy (jak factory_per_pop), nie stałe balansu gry.
+    this._lastSliderYear = -999;
+    this._sliderCooldown = 8;   // civYears
   }
 
   _ESSENTIAL_COMMODITIES = [
@@ -367,7 +372,39 @@ export class RuleBot extends BaseBot {
       }
     }
 
+    // ── P18: 5C slider nudge (reaktywny — INV-2 lever) ──
+    const slider = this._maybeSliderAction(ctx, civYear);
+    if (slider) return slider;
+
     return { type: ACTION_TYPES.WAIT };
+  }
+
+  /**
+   * Reaktywny nudge suwaka 5C (Allocation 2.0). Zasada uczciwości: reaguje na OBSERWOWANY stan
+   * (unemployed + pressure straty), NIE predykcyjnie. Ustawia docelowy share na straty o najwyższej
+   * pressure, gdy jest realny slack do rozdzielenia (unemployed>0) i strata nie ma jeszcze targetu.
+   * Share pochodzi z pressure (nie stała). Cel: eksponować lever INV-2 dla telemetrii (Phase 2),
+   * nie „optymalnie zagrać". Full recalibration progów = Task 5.
+   */
+  _maybeSliderAction(ctx, civYear) {
+    const civ = ctx.active?.civSystem;
+    if (!civ?.getWorkforceBreakdown || !civ?.setStrataTarget) return null;
+    if ((civYear - this._lastSliderYear) < this._sliderCooldown) return null;
+    if ((civ._unemployed ?? 0) <= 0) return null;   // brak slacku → suwak inertny, nie ruszaj
+
+    const rows = civ.getWorkforceBreakdown();
+    let best = null;
+    for (const r of rows) {
+      if (r.jobs > 0 && r.pressure > 0.4 && (r.target ?? 0) <= 0) {
+        if (!best || r.pressure > best.pressure) best = r;
+      }
+    }
+    if (!best) return null;
+
+    this._lastSliderYear = civYear;
+    // Share z OBSERWOWANEJ pressure (reaktywne): 0.2 baza + 0.3×pressure, cap 0.5. Knoby = bot-policy.
+    const share = Math.min(0.5, 0.2 + 0.3 * best.pressure);
+    return { type: ACTION_TYPES.SET_STRATA_TARGET, strataType: best.type, share, _tag: `slider_${best.type}` };
   }
 
   _canEnqueue(commodityId, civYear) {

@@ -152,6 +152,30 @@ console.log('\nT5 — start-state parity (real new game = civilization_boosted, 
   assert(factoryActions.length > 0, 'factory build kolejkowalny @t=0 (bez czekania na research)');
 }
 
+// ── T6: 5C slider action — SET_STRATA_TARGET → CivilizationSystem.setStrataTarget (intent-method) ──
+console.log('\nT6 — 5C slider action (real intent-method setStrataTarget, Task 4a)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true });
+  const civ = c.colonyManager.getColony(window.KOSMOS.homePlanet.id).civSystem;
+
+  assert(civ.getStrataTarget('laborer') === 0, 'baseline: brak targetu laborer (share 0)');
+  const r = ActionAdapter.execute({ type: ACTION_TYPES.SET_STRATA_TARGET, strataType: 'laborer', share: 0.35 });
+  assert(r.event === 'civ:setStrataTarget', 'SET_STRATA_TARGET routuje do setStrataTarget (nie EventBus)');
+  assert(Math.abs(civ.getStrataTarget('laborer') - 0.35) < 1e-9, 'share zapisany przez REALNĄ metodę (0.35)');
+  assert(civ.getTargetState('laborer') !== 'off', 'getTargetState odzwierciedla ustawiony target (nie off)');
+
+  // neutralizacja: share ≤ 0 czyści target (kontrakt metody)
+  ActionAdapter.execute({ type: ACTION_TYPES.SET_STRATA_TARGET, strataType: 'laborer', share: 0 });
+  assert(civ.getStrataTarget('laborer') === 0, 'share 0 czyści target (neutralny)');
+
+  // walidacja: nieznana strata / brak typu odrzucone
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.SET_STRATA_TARGET, strataType: 'nonsense', share: 0.5 }).emitted === false,
+         'nieznana strata odrzucona');
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.SET_STRATA_TARGET, share: 0.5 }).emitted === false,
+         'brak strataType odrzucony');
+}
+
 // ── Wynik ─────────────────────────────────────────────────────────
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);

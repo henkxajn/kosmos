@@ -7,6 +7,15 @@
 // ═══════════════════════════════════════════════════════════════
 
 import EventBus from '../../core/EventBus.js';
+import { loadColonists } from '../../entities/Vessel.js';
+
+/** Aktywna kolonia gracza → jej CivilizationSystem (per-kolonia). Wzorzec z ActionCatalog._getActive. */
+function _activeCivSystem() {
+  const K = window.KOSMOS;
+  const cm = K?.colonyManager;
+  const active = cm?._activePlanetId ?? K?.homePlanet?.id;
+  return active ? (cm?.getColony(active)?.civSystem ?? null) : null;
+}
 
 export const ACTION_TYPES = {
   BUILD:         'build',
@@ -18,6 +27,8 @@ export const ACTION_TYPES = {
   FACTORY_ENQUEUE: 'factoryEnqueue',
   FACTORY_DEQUEUE: 'factoryDequeue',
   FACTORY_SET_MODE: 'factorySetMode',
+  SET_STRATA_TARGET: 'setStrataTarget',   // 5C slider (Allocation 2.0) — intent-method, nie EventBus
+  LOAD_COLONISTS:  'loadColonists',        // realny „Załaduj POP" przed kolonizacją
   WAIT:          'wait',
 };
 
@@ -90,6 +101,37 @@ export function execute(action) {
       if (!action.mode) return { emitted: false, reason: 'missing_mode' };
       EventBus.emit('factory:setMode', { mode: action.mode });
       return { emitted: true, event: 'factory:setMode' };
+
+    case ACTION_TYPES.SET_STRATA_TARGET: {
+      // REALNA ścieżka gracza 5C = CivilizationSystem.setStrataTarget (intent-method, NIE EventBus;
+      // stepper targetPlus/targetMinus w ColonyOverlay woła DOKŁADNIE to — Allocation 2.0,
+      // FEATURES.popAllocation2). Absolutny share [0..1]; clamp + neutralizacja (share≤0) w metodzie.
+      if (!action.strataType) return { emitted: false, reason: 'missing_strata_type' };
+      const civ = _activeCivSystem();
+      if (!civ?.setStrataTarget) return { emitted: false, reason: 'no_civ_system' };
+      if (!civ.strata?.[action.strataType]) return { emitted: false, reason: 'unknown_strata' };
+      civ.setStrataTarget(action.strataType, action.share ?? 0);
+      return { emitted: true, event: 'civ:setStrataTarget', strataType: action.strataType, share: action.share ?? 0 };
+    }
+
+    case ACTION_TYPES.LOAD_COLONISTS: {
+      // REALNA ścieżka gracza „Załaduj POP" = Vessel.loadColonists (FleetManagerOverlay load-and-hold).
+      // Fizycznie drenuje POP z kolonii-źródła. Ilość = REALNA pojemność kabin z modułu (NIE stała) —
+      // domyślnie wszystkie wolne kabiny (colonistCapacity − colonists); early-game hull_small+habitat_pod
+      // = 4 kabiny, a loadColonists sam dokłada cap min(count, kabiny, freePops).
+      if (!action.vesselId) return { emitted: false, reason: 'missing_vessel' };
+      const K = window.KOSMOS;
+      const vessel = K?.vesselManager?.getVessel?.(action.vesselId);
+      if (!vessel) return { emitted: false, reason: 'vessel_not_found' };
+      const originId = vessel.position?.dockedAt ?? vessel.colonyId;
+      const originCol = K?.colonyManager?.getColony?.(originId);
+      const civ = originCol?.civSystem;
+      if (!civ) return { emitted: false, reason: 'no_source_colony' };
+      const freeCabins = Math.max(0, (vessel.colonistCapacity ?? 0) - (vessel.colonists ?? 0));
+      const want = action.count != null ? action.count : freeCabins;   // domyślnie pełna pojemność
+      const loaded = loadColonists(vessel, want, civ);                  // realna metoda, drenuje POP
+      return { emitted: true, event: 'vessel:loadColonists', loaded };
+    }
 
     case ACTION_TYPES.WAIT:
       return { emitted: true, event: null, noop: true };
