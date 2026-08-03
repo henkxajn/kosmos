@@ -39,6 +39,14 @@ export const GAME_CONFIG = {
   // gdy flag=true (zob. GameScene._ensureMovementOrderSystem / ...Materializer).
   // Toggle z devtools: KOSMOS.debug.enableMovementOrders() / disable...().
   FEATURES: {
+    // ── Małe ciała dekoracyjne (asteroidy + komety + planetezymale) ────────
+    // Nieteksturowane THREE.Points (szare/niebieskie piksele) — czysta dekoracja
+    // bez gameplayu: recon je pomija, NIE są serializowane. OFF = kill-switch:
+    // asteroidy/komety nie trafiają do EntityManager, planetezymale wracają [].
+    // Renderery (_syncSmallBodies / _updateDiskPoints) robią early-return same.
+    // Planetoidy (teksturowane, grywalne) zostają. Flip true → pełna generacja.
+    // Zero migracji save (i tak nie zapisywane). RNG generatorów nietknięty.
+    smallBodies:          false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
     fleetMaterialization: true,   // EmpireFleetMaterializer (M1 Commit 7)

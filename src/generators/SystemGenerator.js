@@ -68,15 +68,25 @@ export class SystemGenerator {
     EntityManager.add(star);
     planets.forEach(p => EntityManager.add(p));
     moons.forEach(m => EntityManager.add(m));
-    asteroids.forEach(a => EntityManager.add(a));
-    comets.forEach(c => EntityManager.add(c));
+    // Małe ciała dekoracyjne — tylko gdy flaga włączona. RNG generatorów wyżej
+    // zużyty niezależnie (determinizm zachowany) — tu wyłącznie gate świata.
+    if (GAME_CONFIG.FEATURES.smallBodies) {
+      asteroids.forEach(a => EntityManager.add(a));
+      comets.forEach(c => EntityManager.add(c));
+    }
     planetoids.forEach(p => EntityManager.add(p));
     // Planetezymale NIE trafiają do EntityManager — lightweight array
 
     // Generuj złoża surowców z composition (Etap 26)
     this._generateDepositsForAll(planets, moons, planetoids, asteroids);
 
-    return { star, planets, moons, planetesimals, asteroids, comets, planetoids };
+    const sb = GAME_CONFIG.FEATURES.smallBodies;
+    return {
+      star, planets, moons, planetoids,
+      planetesimals: sb ? planetesimals : [],
+      asteroids:     sb ? asteroids     : [],
+      comets:        sb ? comets        : [],
+    };
   }
 
   // ── Generacja złóż surowców z composition ─────────────────────────────────
@@ -836,14 +846,22 @@ export class SystemGenerator {
       EntityManager.add(star);
       planets.forEach(p => EntityManager.add(p));
       moons.forEach(m => EntityManager.add(m));
-      asteroids.forEach(a => EntityManager.add(a));
-      comets.forEach(c => EntityManager.add(c));
+      if (GAME_CONFIG.FEATURES.smallBodies) {
+        asteroids.forEach(a => EntityManager.add(a));
+        comets.forEach(c => EntityManager.add(c));
+      }
       planetoids.forEach(p => EntityManager.add(p));
 
       // Generuj złoża surowców
       this._generateDepositsForAll(planets, moons, planetoids, asteroids);
 
-      return { star, planets, moons, planetesimals, asteroids, comets, planetoids };
+      const sb = GAME_CONFIG.FEATURES.smallBodies;
+      return {
+        star, planets, moons, planetoids,
+        planetesimals: sb ? planetesimals : [],
+        asteroids:     sb ? asteroids     : [],
+        comets:        sb ? comets        : [],
+      };
     } finally {
       // Przywróć oryginalne Math.random
       Math.random = origRandom;
@@ -885,12 +903,13 @@ export class SystemGenerator {
       const comets        = this._generateComets(star);
       const planetoids    = this._generatePlanetoids(star, planets);
 
+      const sb = GAME_CONFIG.FEATURES.smallBodies;
       const counts = {
         planets:    planets.length,
         moons:      moons.length,
         planetoids: planetoids.length,
-        asteroids:  asteroids.length,
-        comets:     comets.length,
+        asteroids:  sb ? asteroids.length : 0,
+        comets:     sb ? comets.length    : 0,
       };
       counts.total = counts.planets + counts.moons + counts.planetoids + counts.asteroids + counts.comets;
       return counts;
