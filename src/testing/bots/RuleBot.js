@@ -75,19 +75,28 @@ export class RuleBot extends BaseBot {
   constructor({ personality = DEFAULT_PERSONALITY, weights = {} } = {}) {
     super({ name: 'RuleBot' });
     this.personality = { ...DEFAULT_PERSONALITY, ...personality };
+    // ── Rekalibracja Population 2.0 (Task 5) — MECHANICZNA, nie tuningowa ──
+    // Redenominacja: POP ×4, konsumpcja per-POP ÷4, housing ×4 (CLAUDE.md). Zasada uczciwości:
+    // przywróć ORYGINALNĄ intencję heurystyki pod nową skalą, NIE dostrajaj „by ładnie wyglądało".
+    //   • progi porównywane z populacją (pop>=N, klucze factory_per_pop) → ×4 (pop jest ×4).
+    //   • współczynniki per-POP (farm/well/solar_per_pop, food/water rate/POP) → ÷4
+    //     (pop ×4 × per-POP ÷4 = ta sama ABSOLUTNA liczba budynków/rate — net bez zmian).
+    //   • progi stocku absolutnego (food_min/water_min/energy_min) i prawdopodobieństwa → BEZ zmian
+    //     (nie są pochodną POP; to zapasy surowca / knoby polityki).
+    //   • housing_buffer w JEDNOSTKACH POP → ×4.
     this.weights = {
-      food_min: 40, water_min: 40,
-      energy_min: -1,
-      housing_buffer: 1,
-      research_prob: 0.45,
+      food_min: 40, water_min: 40,      // stock absolutny — bez zmian
+      energy_min: -1,                   // bilans energii — bez zmian
+      housing_buffer: 4,                // ×4 (było 1; bufor w jednostkach POP)
+      research_prob: 0.45,              // probability — bez zmian
       expedition_prob: 0.5,
       upgrade_prob: 0.2,
       factory_prob: 0.15,
       ship_prob: 0.35,
-      farm_per_pop: 1.0,
-      well_per_pop: 1.0,
-      solar_per_pop: 0.7,
-      factory_per_pop: { 6: 2, 10: 3, 15: 4 },  // docelowa liczba factory per POP threshold
+      farm_per_pop: 0.25,               // ÷4 (było 1.0)
+      well_per_pop: 0.25,               // ÷4 (było 1.0)
+      solar_per_pop: 0.175,             // ÷4 (było 0.7)
+      factory_per_pop: { 24: 2, 40: 3, 60: 4 },  // klucze ×4 (było {6,10,15}); wartości = cel liczby factory
       ...weights,
     };
     this._recentEnqueues = new Map();
@@ -172,7 +181,7 @@ export class RuleBot extends BaseBot {
     }
 
     // ── P1-P3: KRYTYCZNE food/water/energy ──
-    if (ctx.food < this.weights.food_min || ctx.foodRate < ctx.pop * 0.6) {
+    if (ctx.food < this.weights.food_min || ctx.foodRate < ctx.pop * 0.15) {   // rate/POP ÷4 (było 0.6)
       const up = this._findUpgrade(ctx, catalog, 'farm');
       if (up) { up._tag = 'food_upgrade'; return up; }
       if (ctx.canBuild('farm')) {
@@ -180,7 +189,7 @@ export class RuleBot extends BaseBot {
         if (a) { a._tag = 'food_build'; return a; }
       }
     }
-    if (ctx.water < this.weights.water_min || ctx.waterRate < ctx.pop * 0.4) {
+    if (ctx.water < this.weights.water_min || ctx.waterRate < ctx.pop * 0.1) {   // rate/POP ÷4 (było 0.4)
       const up = this._findUpgrade(ctx, catalog, 'well');
       if (up) { up._tag = 'water_upgrade'; return up; }
       if (ctx.canBuild('well')) {
@@ -229,20 +238,20 @@ export class RuleBot extends BaseBot {
 
     // ── P6: Observatory — tanie, odblokowuje skanowanie. Wcześnie, PRZED expand. ──
     // Obserwatorium kosztuje tylko Fe 25, Si 15, Cu 10 + 4 SA + 3 ES + 2 PC — łatwe do wybudowania.
-    if (ctx.pop >= 3 && ctx.countBuilding('observatory') === 0 && ctx.canBuild('observatory')) {
+    if (ctx.pop >= 12 && ctx.countBuilding('observatory') === 0 && ctx.canBuild('observatory')) {   // ×4 (było 3)
       const a = this._findBuild(catalog, 'observatory');
       if (a) { a._tag = 'observatory'; return a; }
     }
 
     // ── P7: Lab — wcześnie żeby przyspieszyć research (space chain wymaga techów) ──
-    if (ctx.pop >= 4 && ctx.countBuilding('research_station') === 0 && ctx.canBuild('research_station')) {
+    if (ctx.pop >= 16 && ctx.countBuilding('research_station') === 0 && ctx.canBuild('research_station')) {   // ×4 (było 4)
       const a = this._findBuild(catalog, 'research_station');
       if (a) { a._tag = 'research_station'; return a; }
     }
 
     // ── P8: Shipyard po exploration (lekki, Fe 80 Ti 30 — osiągalne z produkcji) ──
     if (ctx.hasTech('exploration')) {
-      if (ctx.countBuilding('shipyard') === 0 && ctx.pop >= 4 && ctx.canBuild('shipyard')) {
+      if (ctx.countBuilding('shipyard') === 0 && ctx.pop >= 16 && ctx.canBuild('shipyard')) {   // ×4 (było 4)
         const a = this._findBuild(catalog, 'shipyard');
         if (a) { a._tag = 'shipyard'; return a; }
       }
@@ -273,7 +282,7 @@ export class RuleBot extends BaseBot {
     }
 
     // ── P11: 2nd mine ──
-    if (ctx.countBuilding('mine') < 2 && ctx.pop >= 5 && ctx.canBuild('mine')) {
+    if (ctx.countBuilding('mine') < 2 && ctx.pop >= 20 && ctx.canBuild('mine')) {   // ×4 (było 5)
       const a = this._findBuild(catalog, 'mine');
       if (a) { a._tag = 'mine_second'; return a; }
     }
@@ -290,7 +299,7 @@ export class RuleBot extends BaseBot {
     }
 
     // ── P13: Build ship (science_vessel dla recon, potem realny KOLONIZATOR) ──
-    if (ctx.countBuilding('shipyard') > 0 && ctx.pop >= 4) {
+    if (ctx.countBuilding('shipyard') > 0 && ctx.pop >= 16) {   // ×4 (było 4)
       const vm = window.KOSMOS?.vesselManager;
       const allVessels = vm?.getAllVessels?.() ?? [];
       const myVessels = allVessels.filter(v => v.colonyId === ctx.active.planetId);
