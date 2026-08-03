@@ -5,6 +5,7 @@
 // Dobór podtypu na podstawie cech planety (temperatureC, lifeScore, atmosphere, composition).
 
 import EventBus from '../core/EventBus.js';
+import { loadImagesWithLimit } from './ImageLoadPool.js';
 
 // Prefix pliku per typ terenu (większość = identyczny z kluczem)
 const FILE_PREFIX = {
@@ -59,42 +60,38 @@ let _loadPromise = null;
 export function loadAllTerrainTextures() {
   if (_loadPromise) return _loadPromise;
 
-  const promises = [];
+  // Zbierz WSZYSTKIE zadania (base + transition) jako deskryptory — NIE odpalaj naraz.
+  // Odpalenie ~124 `img.src` jednocześnie zabijało HTTP/2 na GitHub Pages (ERR_HTTP2_PROTOCOL_ERROR).
+  const tasks = [];
+  const _transFailed = [];
 
   for (const [terrainType, subtypes] of Object.entries(VARIANTS)) {
     const prefix = FILE_PREFIX[terrainType] ?? terrainType;
     for (const [subtype, count] of Object.entries(subtypes)) {
       for (let i = 1; i <= count; i++) {
-        const key  = `${terrainType}_${subtype}_${i}`;
-        const path = `assets/textures/terrain/${prefix}_${subtype}_${i}.png`;
-        const p = new Promise((resolve) => {
-          const img = new Image();
-          img.onload  = () => { _cache.set(key, img); resolve(); };
-          img.onerror = () => resolve(); // brak pliku → cichy fallback
-          img.src = path;
+        const key = `${terrainType}_${subtype}_${i}`;
+        tasks.push({
+          src: `assets/textures/terrain/${prefix}_${subtype}_${i}.png`,
+          onLoad: (img) => _cache.set(key, img), // brak pliku → cichy fallback (brak onError)
         });
-        promises.push(p);
       }
     }
   }
 
-  // Ładuj transition textures
-  const _transFailed = [];
+  // Transition textures — te same reguły puli
   for (const [pairKey, { prefix: filePrefix, count: varCount }] of Object.entries(TRANSITION_PAIRS)) {
     for (let i = 1; i <= varCount; i++) {
       const key  = `trans_${filePrefix}_${i}`;
       const path = `assets/textures/terrain/transitions/${filePrefix}_${i}.png`;
-      const p = new Promise((resolve) => {
-        const img = new Image();
-        img.onload  = () => { _transCache.set(key, img); resolve(); };
-        img.onerror = () => { _transFailed.push(path); resolve(); };
-        img.src = path;
+      tasks.push({
+        src: path,
+        onLoad: (img) => _transCache.set(key, img),
+        onError: () => _transFailed.push(path),
       });
-      promises.push(p);
     }
   }
 
-  _loadPromise = Promise.all(promises).then(() => {
+  _loadPromise = loadImagesWithLimit(tasks).then(() => {
     _loaded = true;
     console.log(`[TerrainTextures] Załadowano ${_cache.size} base + ${_transCache.size} transition tekstur`);
     if (_transFailed.length) console.warn('[TerrainTextures] Brak plików transition:', _transFailed);

@@ -7,6 +7,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
+import { loadImagesWithLimit } from './ImageLoadPool.js';
 
 const BASE_PATH = 'assets/buildings/';
 
@@ -31,14 +32,10 @@ export function loadBuildingTextures() {
   }
 
   const ids = Object.keys(BUILDINGS);
-  const promises = ids.map((id) => new Promise((resolve) => {
-    const img = new Image();
-    img.onload  = () => { _cache.set(id, img); resolve(); };
-    img.onerror = () => resolve(); // brak pliku → cichy fallback do emoji
-    img.src = `${BASE_PATH}${id}.png`;
-  }));
+  // Pula równoległości — brak pliku (~30/61 budynków bez PNG) → cichy fallback do emoji (brak onError).
+  const tasks = ids.map((id) => ({ src: `${BASE_PATH}${id}.png`, onLoad: (img) => _cache.set(id, img) }));
 
-  _loadPromise = Promise.all(promises).then(() => {
+  _loadPromise = loadImagesWithLimit(tasks).then(() => {
     _loaded = true;
     console.log(`[BuildingTextures] Załadowano ${_cache.size}/${ids.length} tekstur budynków`);
     EventBus.emit('buildings:texturesLoaded');
