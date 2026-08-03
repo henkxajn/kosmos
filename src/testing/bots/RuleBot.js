@@ -17,7 +17,7 @@ import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TECHS } from '../../data/TechData.js';
 import { COMMODITIES } from '../../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../../map/HexTile.js';
-import { canColonize, canDoRecon } from '../../entities/Vessel.js';
+import { canColonize, canDoRecon, canHaulCargo } from '../../entities/Vessel.js';
 
 // Droidy tier-1 obsadzają TYLKO prostą pracę (laborer/miner/worker) — Pop 2.0 Faza 4.
 const DROID_TIER1_STRATA = ['laborer', 'miner', 'worker'];
@@ -31,8 +31,16 @@ const DROID_TIER1_STRATA = ['laborer', 'miner', 'worker'];
 // deep_scanner requires 'orbital_survey' (boosted-starter) — Scout = statek eksploracyjny gracza.
 const RECON_HULL        = 'hull_small';
 const RECON_MODULES     = ['engine_chemical', 'deep_scanner'];
+// POP-colonizer: habitat (POP) + cargo (goods bundle) — B0 caveat: pure cargo nie wozi POP.
 const COLONIZER_HULL    = 'hull_small';
-const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod'];
+const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod', 'cargo_large'];
+// Cargo (autonomous outpost): pure cargo (bez POP) — wozi materiały autonomous_mine na planetoid.
+const CARGO_HULL        = 'hull_small';
+const CARGO_MODULES     = ['engine_chemical', 'cargo_large', 'cargo_large'];
+// Bundle startowy POP-kolonizacji (doktryna Filipa — behavior, nie stała balansu; suplement do
+// COLONY_START_RESOURCES). ⚠ Phase-2 M4.3: mierz kolonię Z bundlem (intended play), nie bare-start.
+const COLONY_BUNDLE = { structural_alloys: 40, electronic_systems: 30, power_cells: 20,
+                        conductor_bundles: 20, extraction_systems: 20, food: 200, water: 200 };
 
 const DEFAULT_PERSONALITY = {
   aggression: 0.5, expansion: 0.7, science: 0.6, trade: 0.5, defense: 0.5,
@@ -119,6 +127,11 @@ export class RuleBot extends BaseBot {
     // „czy cel już ma kolonię" (getColony). Statek z kolonistami czeka aż home ma zapas food/water.
     this._lastColonizeAttempt = -999;
     this._colonizeCooldown = 3;   // civYears między próbami tego samego statku
+    // Stage B — autonomous outpost loop (expansion-driven droid economy).
+    this._outpostTargets = new Set();     // planetoidy z założoną/planowaną placówką
+    this._lastOutpostAttempt = -999;
+    this._outpostCooldown = 3;            // civYears między próbami found_outpost
+    this._shippedOutposts = new Set();    // outposty z uruchomioną pętlą transportu surowców→home
   }
 
   _ESSENTIAL_COMMODITIES = [
@@ -138,16 +151,9 @@ export class RuleBot extends BaseBot {
 
     const civYear = Math.floor((window.KOSMOS?.timeSystem?.gameTime ?? 0) * 12);
 
-    // ── P-2: Factory reactive mode — PO zbudowaniu observatory + shipyard + launch_pad.
-    // Reactive blokuje enqueue strategic commodities (electronic_systems, reactive_armor etc.)
-    // które są wymagane dla observatory/launch_pad. Przełączamy w reactive dopiero gdy
-    // kluczowe budynki kosmosowe stoją — wtedy factory może skupić się na POP prosperity.
-    const hasSpaceInfra = ctx.countBuilding('observatory') > 0 &&
-                          ctx.countBuilding('launch_pad') > 0;
-    if (!this._factoryModeSetReactive && hasSpaceInfra && ctx.countBuilding('factory') >= 1) {
-      this._factoryModeSetReactive = true;
-      return { type: ACTION_TYPES.FACTORY_SET_MODE, mode: 'reactive', _tag: 'factory_reactive' };
-    }
+    // ── P-2: factory ZOSTAJE REACTIVE (auto-balansuje wszystkie commodities — manual serializuje
+    // produkcję i głodzi je → kolonizacja spadła 5/5→1/5). Droidy: setDroidOrder (poza mode).
+    // Bufor commodities placówki (SA/extraction_systems) → one-shot burst w _maybeOutpostPath.
 
     // ── P-1: Pre-enqueue essential commodities ──
     if (ctx.countBuilding('factory') > 0) {
@@ -401,6 +407,17 @@ export class RuleBot extends BaseBot {
         const homeFree = ctx.active.civSystem?.freePops ?? 0;
         // Krok 1: brak kolonistów + wolne kabiny + nadwyżka POP w domu (glut) → załaduj do pojemności.
         // loadColonists sam capuje do min(kabiny, freePops); gate homeFree≥2 = nie drenuj ostatnich POP.
+        // Krok 0: załaduj goods bundle (doktryna) na kolonizator (cargo slot) — suplement do
+        // COLONY_START_RESOURCES. Ładuj co stać z bundle, PRZED POP (jednorazowo per statek).
+        if (aboard <= 0 && !dockedColonizer._bundleLoaded && (dockedColonizer.cargoMax ?? 0) > 0) {
+          for (const [cid, qty] of Object.entries(COLONY_BUNDLE)) {
+            const have = ctx.getAmount(cid);
+            if (have >= qty && (dockedColonizer.cargo?.[cid] ?? 0) < qty) {
+              return { type: ACTION_TYPES.LOAD_CARGO, vesselId: dockedColonizer.id, commodityId: cid, qty, _tag: `bundle_${cid}` };
+            }
+          }
+          dockedColonizer._bundleLoaded = true;   // bundle skompletowany (co było stać) → dalej POP
+        }
         if (aboard <= 0 && cabins > 0 && homeFree >= 2) {
           return { type: ACTION_TYPES.LOAD_COLONISTS, vesselId: dockedColonizer.id, _tag: 'load_colonists' };
         }
@@ -421,6 +438,14 @@ export class RuleBot extends BaseBot {
         }
       }
     }
+
+    // ── P14.5: AUTONOMOUS OUTPOST LOOP (Stage B — expansion-driven droid economy) ──
+    const outpost = this._maybeOutpostPath(ctx, civYear);
+    if (outpost) return outpost;
+
+    // ── P14.6: SHIP RARE RESOURCES outpost→home (accelerates droids) ──
+    const shipRare = this._maybeShipRareResources(ctx);
+    if (shipRare) return shipRare;
 
     // ── P15: MINING — jeśli mamy explored bodies z deposits ──
     if (allVessels.length > 0 && Math.random() < 0.3) {
@@ -484,13 +509,123 @@ export class RuleBot extends BaseBot {
     if (ctx.getAmount('automation_droid') >= 1) {
       return { type: ACTION_TYPES.INSTALL_DROID, strataType: scarce.type, _tag: `droid_install_${scarce.type}` };
     }
-    // Brak droida → produkuj, ale TYLKO jeśli stać (recipe + Kr) — droid jest CELOWO drogi.
+    // Brak droida → produkuj (droid = _droidOrders, dowolny tryb fabryki; NIE _canEnqueue).
+    return this._maybeProduceDroid(ctx, civYear);
+  }
+
+  // ── Stage B: autonomous outpost loop ────────────────────────────────────────
+  /**
+   * Ścieżka autonomicznej placówki (works-forward): cargo ship → found outpost na planetoid z
+   * rzadkim surowcem → autonomous_mine (samo-wydobywa, KONSUMUJE droida = expansion-driven droid
+   * demand). Gated na tech 'automation' (autonomous_mine) — świadoma inwestycja techowa (doktryna).
+   */
+  _maybeOutpostPath(ctx, civYear) {
+    if (!ctx.hasTech('automation') || !ctx.hasTech('exploration')) return null;
+    if (ctx.countBuilding('shipyard') === 0) return null;
+    if ((civYear - this._lastOutpostAttempt) < this._outpostCooldown) return null;
+
+    const target = this._findOutpostTarget(ctx.active.planet);
+    if (!target) return null;
+
+    const vm = window.KOSMOS?.vesselManager;
+    const myVessels = (vm?.getAllVessels?.() ?? []).filter(v => v.colonyId === ctx.active.planetId);
+    // Cargo ship = idle+docked, wozi cargo, NIE kolonizator (pure cargo dla outpostu).
+    const cargoShip = myVessels.find(v =>
+      v.status === 'idle' && v.position?.state === 'docked' && canHaulCargo(v) && !canColonize(v));
+    if (!cargoShip) return this._maybeBuildCargo(ctx, myVessels);
+
+    // Droid w magazynie = input autonomous_mine → produkuj jeśli brak (expansion-driven).
+    if (ctx.getAmount('automation_droid') < 1) return this._maybeProduceDroid(ctx, civYear);
+
+    // Bufor commodities placówki: reactive trzyma SA/extraction_systems na niskim equilibrium (3/1),
+    // a autonomous_mine potrzebuje 4/2 → one-shot burst (najwyższy FP, działa w reactive) gdy short.
+    const amCost = BUILDINGS.autonomous_mine?.commodityCost ?? {};
+    const fs = window.KOSMOS?.factorySystem;
+    for (const [cid, need] of Object.entries(amCost)) {
+      if (cid === 'automation_droid') continue;   // droid już wyżej
+      if (ctx.getAmount(cid) < need) {
+        if (fs?.oneShotJob?.commodityId === cid) return null;   // burst w toku — czekaj
+        return { type: ACTION_TYPES.SET_ONESHOT, commodityId: cid, qty: need + 2, _tag: `oneshot_${cid}` };
+      }
+    }
+
+    // Cargo ship + droid + commodities + cel → załóż placówkę z autonomous_mine. NIE pre-markuj celu
+    // (transient shortage → permanentna blokada); cooldown + existing-colony check obsługują retry.
+    this._lastOutpostAttempt = civYear;
+    return { type: ACTION_TYPES.FOUND_OUTPOST, targetId: target.id, buildingId: 'autonomous_mine',
+             vesselId: cargoShip.id, _tag: `outpost_${target.id}` };
+  }
+
+  /** Zbuduj pure-cargo ship (hull_small + 2× cargo) — chyba że już jest/w budowie. Self-queue. */
+  _maybeBuildCargo(ctx, myVessels) {
+    if (myVessels.some(v => canHaulCargo(v) && !canColonize(v))) return null;
+    const queues = ctx.active.shipQueues ?? [], pending = ctx.active.pendingShipOrders ?? [];
+    if ([...queues, ...pending].some(q => (q.modules ?? []).includes('cargo_large') &&
+        !(q.modules ?? []).includes('habitat_pod'))) return null;
+    return { type: ACTION_TYPES.BUILD_SHIP, shipId: CARGO_HULL, modules: [...CARGO_MODULES],
+             planetId: ctx.active.planetId, _tag: 'ship_cargo' };
+  }
+
+  /** Produkuj automation_droid (factory) jeśli stać (recipe + Kr) — droid CELOWO drogi.
+   *  ⚠ Droidy = INWESTYCYJNE (isDroidUnit → _droidOrders, POZA reactive/queue) → działają w KAŻDYM
+   *  trybie fabryki. NIE używamy _canEnqueue (blokuje reactive) — sprawdzamy tylko duplikat zlecenia. */
+  _maybeProduceDroid(ctx, civYear) {
     const recipe = COMMODITIES.automation_droid?.recipe ?? {};
     for (const [k, v] of Object.entries(recipe)) if (ctx.getAmount(k) < v) return null;
     if ((ctx.active.credits ?? 0) < (COMMODITIES.automation_droid?.creditCost ?? 0)) return null;
-    if (this._canEnqueue('automation_droid', civYear)) {
-      this._recentEnqueues.set('automation_droid', civYear);
-      return { type: ACTION_TYPES.FACTORY_ENQUEUE, commodityId: 'automation_droid', qty: 1, _tag: 'droid_produce' };
+    if (this._droidOrderActive(ctx)) return null;   // już w produkcji
+    // SET_DROID_ORDER (direct setDroidOrder) — factory:enqueue no-opuje w reactive; droid = _droidOrders.
+    return { type: ACTION_TYPES.SET_DROID_ORDER, commodityId: 'automation_droid', qty: 1, _tag: 'droid_produce' };
+  }
+
+  /** Czy istnieje aktywne zlecenie droida? Sprawdza fabrykę AKTYWNĄ (tam ląduje factory:enqueue). */
+  _droidOrderActive(ctx) {
+    const fs = window.KOSMOS?.factorySystem ?? ctx.active?.factorySystem;
+    const o = fs?.getDroidOrder?.('automation_droid');
+    return !!o && (o.qty ?? 0) > (o.produced ?? 0);
+  }
+
+  /** Nearest explored planetoid z rzadkim surowcem (Xe/Hv/Nt/Li), bez placówki/kolonii. */
+  _findOutpostTarget(homePlanet) {
+    if (!homePlanet) return null;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const existing = new Set(colMgr?.getAllColonies?.()?.map(c => c.planetId) ?? []);
+    const RARE = ['Xe', 'Hv', 'Nt', 'Li'];
+    const cand = (EntityManager.getAll?.() ?? []).filter(e => {
+      if (e.type !== 'planetoid') return false;
+      if (!e.explored) return false;
+      if (existing.has(e.id) || this._outpostTargets.has(e.id)) return false;
+      return (e.deposits ?? []).some(d => RARE.includes(d.resourceId) && (d.remaining ?? 0) > 0);
+    });
+    const hx = homePlanet.physics?.x ?? 0, hy = homePlanet.physics?.y ?? 0;
+    let best = null, bd = Infinity;
+    for (const e of cand) {
+      const d = Math.hypot((e.physics?.x ?? 0) - hx, (e.physics?.y ?? 0) - hy);
+      if (d < bd) { best = e; bd = d; }
+    }
+    return best;
+  }
+
+  /** Wyślij surowce z placówki → home (transport). Uruchamia pętlę raz per placówka. */
+  _maybeShipRareResources(ctx) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vm = window.KOSMOS?.vesselManager;
+    if (!colMgr || !vm) return null;
+    // Placówki gracza (outposty) z zapasem rzadkiego surowca, bez uruchomionej pętli.
+    const outposts = (colMgr.getAllColonies?.() ?? []).filter(c =>
+      c.isOutpost && !c.ownerEmpireId && !this._shippedOutposts.has(c.planetId));
+    for (const op of outposts) {
+      const rs = op.resourceSystem;
+      const have = {};
+      for (const r of ['Li', 'Xe', 'Hv', 'Ti']) { const a = rs?.getAmount?.(r) ?? 0; if (a > 20) have[r] = Math.floor(a); }
+      if (Object.keys(have).length === 0) continue;
+      // Cargo ship idle+docked (dowolna kolonia gracza) do transportu.
+      const cargoShip = (vm.getAllVessels?.() ?? []).find(v =>
+        v.status === 'idle' && v.position?.state === 'docked' && canHaulCargo(v) && !canColonize(v));
+      if (!cargoShip) return null;
+      this._shippedOutposts.add(op.planetId);
+      return { type: ACTION_TYPES.TRANSPORT, targetId: window.KOSMOS.homePlanet.id,
+               vesselId: cargoShip.id, cargo: have, sourceColonyId: op.planetId, _tag: `ship_rare_${op.planetId}` };
     }
     return null;
   }

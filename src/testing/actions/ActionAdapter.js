@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import EventBus from '../../core/EventBus.js';
-import { loadColonists } from '../../entities/Vessel.js';
+import { loadColonists, loadCargo } from '../../entities/Vessel.js';
 
 /** Aktywna kolonia gracza → jej CivilizationSystem (per-kolonia). Wzorzec z ActionCatalog._getActive. */
 function _activeCivSystem() {
@@ -30,6 +30,11 @@ export const ACTION_TYPES = {
   SET_STRATA_TARGET: 'setStrataTarget',   // 5C slider (Allocation 2.0) — intent-method, nie EventBus
   LOAD_COLONISTS:  'loadColonists',        // realny „Załaduj POP" przed kolonizacją
   INSTALL_DROID:   'installDroid',         // Pop 2.0 Faza 4 — droid substytuuje pracę (labor scarcity)
+  FOUND_OUTPOST:   'foundOutpost',         // autonomiczna placówka (cargo ship + budynek autonomiczny)
+  LOAD_CARGO:      'loadCargo',            // załaduj towar na statek (goods bundle POP-kolonizacji)
+  TRANSPORT:       'transport',            // transport towarów kolonia→kolonia (outpost→home shipping)
+  SET_DROID_ORDER: 'setDroidOrder',        // zlecenie budowy droida (Build-N) — direct, dowolny tryb
+  SET_ONESHOT:     'setOneShot',           // jednorazowa produkcja towaru (burst bufor) — direct, dowolny tryb
   WAIT:          'wait',
 };
 
@@ -39,6 +44,14 @@ function _activeBuildingSystem() {
   const cm = K?.colonyManager;
   const active = cm?._activePlanetId ?? K?.homePlanet?.id;
   return active ? (cm?.getColony(active)?.buildingSystem ?? null) : null;
+}
+
+/** Aktywna kolonia gracza → jej FactorySystem (per-kolonia). */
+function _activeFactorySystem() {
+  const K = window.KOSMOS;
+  const cm = K?.colonyManager;
+  const active = cm?._activePlanetId ?? K?.homePlanet?.id;
+  return active ? (cm?.getColony(active)?.factorySystem ?? K?.factorySystem ?? null) : null;
 }
 
 /** Emit akcję jako EventBus event. Zwraca metadane. */
@@ -146,6 +159,68 @@ export function execute(action) {
       const want = action.count != null ? action.count : freeCabins;   // domyślnie pełna pojemność
       const loaded = loadColonists(vessel, want, civ);                  // realna metoda, drenuje POP
       return { emitted: true, event: 'vessel:loadColonists', loaded };
+    }
+
+    case ACTION_TYPES.SET_DROID_ORDER: {
+      // REALNA ścieżka gracza (EconomyOverlay:2641): fs.setDroidOrder(commodityId, qty) — DIRECT
+      // na fabryce kolonii. Droid = _droidOrders (poza reactive/queue) → działa w KAŻDYM trybie
+      // (factory:enqueue→enqueue no-opuje w reactive, dlatego direct). Zwraca bool.
+      if (!action.commodityId) return { emitted: false, reason: 'missing_commodity' };
+      const fs = _activeFactorySystem();
+      if (!fs?.setDroidOrder) return { emitted: false, reason: 'no_factory_system' };
+      const ok = fs.setDroidOrder(action.commodityId, action.qty ?? 1);
+      return { emitted: true, event: 'factory:setDroidOrder', ok };
+    }
+
+    case ACTION_TYPES.SET_ONESHOT: {
+      // REALNA ścieżka gracza (EconomyOverlay:900): fs.setOneShotJob(commodityId, qty) — burst
+      // produkcji jednego towaru, NAJWYŻSZY priorytet FP, działa w reactive. Bufor commodities placówki.
+      if (!action.commodityId) return { emitted: false, reason: 'missing_commodity' };
+      const fs = _activeFactorySystem();
+      if (!fs?.setOneShotJob) return { emitted: false, reason: 'no_factory_system' };
+      const ok = fs.setOneShotJob(action.commodityId, action.qty ?? 1);
+      return { emitted: true, event: 'factory:setOneShot', ok };
+    }
+
+    case ACTION_TYPES.LOAD_CARGO: {
+      // REALNA ścieżka „Załaduj towar" = Vessel.loadCargo (goods bundle POP-kolonizacji). Bierze
+      // towar z magazynu kolonii-doku statku. Zwraca faktycznie załadowaną ilość.
+      if (!action.vesselId || !action.commodityId) return { emitted: false, reason: 'missing_cargo_args' };
+      const K = window.KOSMOS;
+      const vessel = K?.vesselManager?.getVessel?.(action.vesselId);
+      if (!vessel) return { emitted: false, reason: 'vessel_not_found' };
+      const originId = vessel.position?.dockedAt ?? vessel.colonyId;
+      const originCol = K?.colonyManager?.getColony?.(originId);
+      const rs = originCol?.resourceSystem;
+      if (!rs) return { emitted: false, reason: 'no_source_colony' };
+      const loaded = loadCargo(vessel, action.commodityId, action.qty ?? 1, rs);
+      return { emitted: true, event: 'vessel:loadCargo', loaded };
+    }
+
+    case ACTION_TYPES.TRANSPORT: {
+      // REALNA ścieżka transportu towarów = expedition:transportRequest → _launchTransport (osobne
+      // zdarzenie; _launch NIE obsługuje 'transport' → spadłoby do mining). Source = dok statku.
+      if (!action.targetId || !action.vesselId) return { emitted: false, reason: 'missing_transport_args' };
+      EventBus.emit('expedition:transportRequest', {
+        targetId: action.targetId,
+        cargo: action.cargo ?? null,
+        vesselId: action.vesselId,
+        sourceColonyId: action.sourceColonyId ?? null,
+      });
+      return { emitted: true, event: 'expedition:transportRequest' };
+    }
+
+    case ACTION_TYPES.FOUND_OUTPOST: {
+      // REALNA ścieżka gracza „Załóż placówkę" = expedition:foundOutpostRequest → _launchFoundOutpost
+      // (cargo ship + buildingId autonomiczny; koszt budynku płacony z home przy starcie). Osobne
+      // zdarzenie (NIE expedition:sendRequest — tamto woła _launch, które nie obsługuje found_outpost).
+      if (!action.targetId || !action.buildingId) return { emitted: false, reason: 'missing_outpost_args' };
+      EventBus.emit('expedition:foundOutpostRequest', {
+        targetId: action.targetId,
+        buildingId: action.buildingId,
+        vesselId: action.vesselId ?? null,
+      });
+      return { emitted: true, event: 'expedition:foundOutpostRequest' };
     }
 
     case ACTION_TYPES.INSTALL_DROID: {
