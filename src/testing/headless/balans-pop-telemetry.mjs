@@ -29,6 +29,7 @@ import { ActionCatalog } from '../actions/ActionCatalog.js';
 import ActionAdapter from '../actions/ActionAdapter.js';
 import { RuleBot } from '../bots/RuleBot.js';
 import { PopTelemetry, POP_TELEMETRY_DEFAULTS } from './PopTelemetry.js';
+import { renderPopReport } from '../report/PopReport.js';
 
 function arg(name, def) {
   const a = process.argv.find(s => s.startsWith(`--${name}=`));
@@ -180,5 +181,15 @@ const payload = {
 };
 const jsonPath = join(OUT_DIR, `pop-telemetry-${PLANET_CLASS}.json`);
 writeFileSync(jsonPath, JSON.stringify(payload, null, 2));
-console.log(`\n  JSON: ${jsonPath}`);
+
+// HTML raport (samodzielny, otwieralny w przeglądarce — artefakt do oceny).
+const html = `<!doctype html><html lang="pl"><head><meta charset="utf-8">` +
+  `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+  `<title>BALANS Phase 2 — POP telemetry (${PLANET_CLASS})</title>` +
+  `<style>html,body{margin:0}</style></head><body>${renderPopReport(payload)}</body></html>`;
+const htmlPath = join(OUT_DIR, `pop-report-${PLANET_CLASS}.html`);
+writeFileSync(htmlPath, html);
+
+console.log(`\n  JSON:   ${jsonPath}`);
+console.log(`  RAPORT: ${htmlPath}`);
 console.log(`  crashes: ${seeds.filter(s => s.crashed).length}/${seeds.length}\n`);
