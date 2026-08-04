@@ -238,7 +238,11 @@ export class RuleBot extends BaseBot {
     if (ctx.hasTech('exploration') && ctx.countBuilding('shipyard') > 0) {
       const vmScout = window.KOSMOS?.vesselManager;
       const myV = (vmScout?.getAllVessels?.() ?? []).filter(v => v.colonyId === ctx.active.planetId);
-      if (!this._hasUsableScout(myV)) {   // brak ZDATNEGO skauta (stranded się nie liczy → buduj następcę)
+      // ⚠ Buduj skauta gdy NIE MA ŻADNEGO (stranded się LICZY). NIE _hasUsableScout: rebuild
+      // stranded-scauta tutaj (wysoki priorytet, przed kolonizatorem) GŁODZIŁ budowę kolonizatora
+      // (5/5→3/5 GOOD_FE) — statek utknięty raz na ~40gy nie może blokować kolonizacji. Servicing
+      // loop obsługuje ŻYWEGO skauta; stranded siedzi (rzadki), martwy skaut → some(canDoRecon)=false → rebuild.
+      if (!myV.some(v => canDoRecon(v))) {
         const scout = this._maybeBuildRecon(ctx, myV);
         if (scout) { scout._tag = 'ship_scout_beeline'; return scout; }
       }
@@ -360,7 +364,7 @@ export class RuleBot extends BaseBot {
       const vm = window.KOSMOS?.vesselManager;
       const allVessels = vm?.getAllVessels?.() ?? [];
       const myVessels = allVessels.filter(v => v.colonyId === ctx.active.planetId);
-      const hasRecon = this._hasUsableScout(myVessels);   // stranded skaut → buduj następcę
+      const hasRecon = myVessels.some(v => canDoRecon(v));   // dowolny skaut (stranded też) → kolonizator może się budować
 
       if (!hasRecon) {
         const sci = this._maybeBuildRecon(ctx, myVessels);
@@ -775,7 +779,8 @@ export class RuleBot extends BaseBot {
     //     Rozpoznanie po ŻYWEJ misji: recon/full_system/status='orbiting' + vessel faktycznie orbituje.
     //     ANTY-SPAM + STRAND: ORDER_RETURN wydany JEDEN raz per misja (_orderReturn synchroniczne). Jeśli
     //     misja NADAL 'orbiting' po wydaniu rozkazu → startReturn odrzucony (za mało paliwa na powrót) →
-    //     skaut stranded (oznacz, przestań ponawiać; bot zbuduje nowego — patrz _hasUsableScout).
+    //     skaut stranded → oznacz i przestań ponawiać ORDER_RETURN (anty-spam). Stranded siedzi (rzadki);
+    //     NIE wymusza rebuildu (blokowałby kolonizator) — bot buduje następcę dopiero gdy skaut ZGINIE.
     for (const m of (ms._missions ?? [])) {
       if (m.type !== 'recon' || m.scope !== 'full_system' || m.status !== 'orbiting') continue;
       const v = vm.getVessel(m.vesselId);
@@ -811,12 +816,6 @@ export class RuleBot extends BaseBot {
     return null;
   }
 
-  /** Czy jest ZDATNY skaut (recon-capable I NIE stranded)? Stranded = utknął w kosmosie bez paliwa
-   *  na powrót → nie liczy się jako „mam skauta", by bramki budowy (P3.5/P13) zbudowały następcę. */
-  _hasUsableScout(vessels) {
-    return (vessels ?? []).some(v => canDoRecon(v) && !this._strandedScouts.has(v.id));
-  }
-
   /**
    * Zbuduj recon (hull_small + [engine_chemical, science_lab]) — groundBuildable, self-launch.
    * SELF-QUEUING BUILD_SHIP (jak kolonizator): startShipBuild dorzuca do pendingShipOrders i
@@ -825,7 +824,7 @@ export class RuleBot extends BaseBot {
    * nie kolejkuje). NIE science_vessel (legacy, nie-groundBuildable → orbital-only). Guard duplikatów.
    */
   _maybeBuildRecon(ctx, myVessels) {
-    if (this._hasUsableScout(myVessels)) return null;   // stranded skaut nie blokuje budowy następcy
+    if (myVessels.some(v => canDoRecon(v))) return null;   // jest skaut (stranded też) → nie buduj następcy
     const queues  = ctx.active.shipQueues ?? [];
     const pending = ctx.active.pendingShipOrders ?? [];
     // Rozpoznaj scout-w-budowie po DOWOLNYM module recon (deep_scanner LUB science_lab) — inaczej
