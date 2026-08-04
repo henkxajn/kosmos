@@ -132,6 +132,11 @@ export class RuleBot extends BaseBot {
     this._lastOutpostAttempt = -999;
     this._outpostCooldown = 3;            // civYears między próbami found_outpost
     this._shippedOutposts = new Set();    // outposty z uruchomioną pętlą transportu surowców→home
+    // Task 1 — scout servicing loop: śledź misje którym wydano powrót (anty-spam ORDER_RETURN) i
+    // skauty które STRANDNĘŁY (fuel-stop za daleko na powrót → startReturn odrzucony). Stranded scout
+    // = niezdatny (nie liczy się jako „mam skauta" → bot buduje nowego). Reset per-misja przy dokowaniu.
+    this._scoutReturnOrdered = new Set();  // exp.id którym już wydano ORDER_RETURN
+    this._strandedScouts = new Set();      // vessel.id skautów utkniętych w kosmosie (nie do odzysku)
   }
 
   _ESSENTIAL_COMMODITIES = [
@@ -229,7 +234,7 @@ export class RuleBot extends BaseBot {
     if (ctx.hasTech('exploration') && ctx.countBuilding('shipyard') > 0) {
       const vmScout = window.KOSMOS?.vesselManager;
       const myV = (vmScout?.getAllVessels?.() ?? []).filter(v => v.colonyId === ctx.active.planetId);
-      if (!myV.some(v => canDoRecon(v))) {
+      if (!this._hasUsableScout(myV)) {   // brak ZDATNEGO skauta (stranded się nie liczy → buduj następcę)
         const scout = this._maybeBuildRecon(ctx, myV);
         if (scout) { scout._tag = 'ship_scout_beeline'; return scout; }
       }
@@ -351,7 +356,7 @@ export class RuleBot extends BaseBot {
       const vm = window.KOSMOS?.vesselManager;
       const allVessels = vm?.getAllVessels?.() ?? [];
       const myVessels = allVessels.filter(v => v.colonyId === ctx.active.planetId);
-      const hasRecon = myVessels.some(v => canDoRecon(v));
+      const hasRecon = this._hasUsableScout(myVessels);   // stranded skaut → buduj następcę
 
       if (!hasRecon) {
         const sci = this._maybeBuildRecon(ctx, myVessels);
@@ -364,33 +369,16 @@ export class RuleBot extends BaseBot {
       }
     }
 
-    // ── P13: RECON — eksploracja (colonizable-first + REDISPATCH z orbity) ──
-    // Statek recon = KAŻDY idle z canDoRecon (docked LUB orbiting) — po recon scout orbituje
-    // (arriveAtTarget→'orbiting'), więc REDISPATCH z orbity kontynuuje eksplorację jednym statkiem
-    // (usuwa single-ship bottleneck). hull_small self-launch (bez launch_pad).
+    // ── P13: RECON servicing loop (Task 1) — dispatch → fuel-stop → return → refuel → re-dispatch ──
+    // full_system NIE zwiedza układu jednym lotem: fuel-stopuje po kilku ciałach (round-trip
+    // affordability gate) i PARKUJE się na ostatnim ciele ze status='on_mission'/orbiting — dotąd
+    // NIEWIDOCZNY dla findera idle → nigdy nie wracał, nie tankował, nie wznawiał (dziesiątki ciał
+    // zostawały nieodkryte). Pełna obsługa w _maybeServiceScout (czyta ŻYWY stan: getUnexploredCount,
+    // status misji, paliwo — NIE stała liczba cykli). vm/allVessels reużyte przez P14 colonize.
     const vm = window.KOSMOS?.vesselManager;
     const allVessels = vm?.getAllVessels?.() ?? [];
-    const idleScout = allVessels.find(v =>
-      v.colonyId === ctx.active.planetId &&
-      v.status === 'idle' &&
-      (v.position?.state === 'docked' || v.position?.state === 'orbiting') &&
-      canDoRecon(v)
-    );
-    if (idleScout) {
-      // full_system deep_scan — jeden scout SEKWENCYJNIE zwiedza WSZYSTKIE ciała (greedy NN w
-      // MissionSystem), w tym wszystkie kolonizowalne rocky/ice. Usuwa single-ship bottleneck
-      // (statek jeździ dalej sam) i nie utyka po 1 recon jak single-target. Deep_scanner = deep_scan.
-      const unexploredBody = this._findNearestUnexplored(ctx.active.planet);
-      if (unexploredBody) {
-        return {
-          type: ACTION_TYPES.EXPEDITION,
-          missionType: 'recon',
-          targetId: 'full_system',
-          vesselId: idleScout.id,
-          _tag: `recon_full_system`,
-        };
-      }
-    }
+    const scoutAction = this._maybeServiceScout(ctx);
+    if (scoutAction) return scoutAction;
 
     // ── P14: COLONIZE — realny 2-krok: załaduj POP → wyślij colonize ──
     // Statek MUSI mieć moduł habitat (canColonize) + kolonistów na pokładzie. To odzwierciedla
@@ -659,6 +647,71 @@ export class RuleBot extends BaseBot {
   }
 
   /**
+   * Task 1 — pętla obsługi skauta full_system: dispatch → fuel-stop → return → refuel → re-dispatch,
+   * aż WSZYSTKIE kolonizowalne cele w układzie są zbadane. Rozszerza istniejącą zdolność skauta;
+   * driven heurystyką czytającą ŻYWY stan (liczba nieodkrytych ciał, status misji, paliwo) — NIE stała
+   * liczba cykli, NIE strojone pod kotwicę roku. Dodatkowe skauty = opcjonalne przyspieszenie (nie tu).
+   *
+   * Mechanika (z mapy MissionSystem/VesselManager): full_system leci greedy-NN od ciała do ciała;
+   * na każdym przylocie gate paliwowy `fuel.current ≥ (distNext+distReturn)×consumption`. Gdy nie
+   * starczy → skaut ZATRZYMUJE skan i orbituje OSTATNIE ciało (exp.status='orbiting', vessel
+   * position.state='orbiting', status STAJE 'on_mission'); NIE wraca, NIE tankuje (auto-refuel wymaga
+   * docked), NIE wznawia sam. Re-dispatch full_system POMIJA ciała już explored → kontynuuje sweep.
+   */
+  _maybeServiceScout(ctx) {
+    const vm = window.KOSMOS?.vesselManager;
+    const ms = window.KOSMOS?.missionSystem;
+    if (!vm || !ms) return null;
+    const unexplored = ms.getUnexploredCount?.() ?? { total: 0 };
+    if ((unexplored.total ?? 0) <= 0) return null;   // cały układ zbadany — nic do obsługi
+
+    // (1) Zaparkowany (fuel-stop) skaut full_system → sprowadź do domu (dok → refuel → re-dispatch).
+    //     Rozpoznanie po ŻYWEJ misji: recon/full_system/status='orbiting' + vessel faktycznie orbituje.
+    //     ANTY-SPAM + STRAND: ORDER_RETURN wydany JEDEN raz per misja (_orderReturn synchroniczne). Jeśli
+    //     misja NADAL 'orbiting' po wydaniu rozkazu → startReturn odrzucony (za mało paliwa na powrót) →
+    //     skaut stranded (oznacz, przestań ponawiać; bot zbuduje nowego — patrz _hasUsableScout).
+    for (const m of (ms._missions ?? [])) {
+      if (m.type !== 'recon' || m.scope !== 'full_system' || m.status !== 'orbiting') continue;
+      const v = vm.getVessel(m.vesselId);
+      if (!v || v.colonyId !== ctx.active.planetId) continue;   // tylko własny skaut
+      if (v.position?.state !== 'orbiting' || !canDoRecon(v)) continue;
+      if (this._strandedScouts.has(v.id)) continue;             // już spisany na straty
+      if (this._scoutReturnOrdered.has(m.id)) {                 // wydano powrót, a on wciąż orbituje →
+        this._strandedScouts.add(v.id);                        // startReturn odrzucony → stranded
+        continue;
+      }
+      this._scoutReturnOrdered.add(m.id);
+      return { type: ACTION_TYPES.ORDER_RETURN, expeditionId: m.id, _tag: 'scout_return' };
+    }
+
+    // (2) Zadokowany idle/refueling skaut + niezbadane ciała → dotankuj (jeśli niepełny), potem
+    //     re-dispatch full_system. hull_small self-launch (bez launch_pad); re-dispatch pomija
+    //     explored → wznawia sweep. manualRefuel = natychmiast (bez czekania ~2-3 civY na auto-refuel).
+    //     Dok → wyczyść stranded flag (skaut wrócił = znów zdatny).
+    const scout = (vm.getAllVessels?.() ?? []).find(v =>
+      v.colonyId === ctx.active.planetId &&
+      (v.status === 'idle' || v.status === 'refueling') &&
+      v.position?.state === 'docked' && canDoRecon(v));
+    if (scout) this._strandedScouts.delete(scout.id);
+    if (scout) {
+      const cur = scout.fuel?.current ?? 0;
+      const max = scout.fuel?.max ?? scout.fuel?.capacity ?? 0;
+      if (max > 0 && cur < max - 0.01) {
+        return { type: ACTION_TYPES.REFUEL, vesselId: scout.id, _tag: 'scout_refuel' };
+      }
+      return { type: ACTION_TYPES.EXPEDITION, missionType: 'recon', targetId: 'full_system',
+               vesselId: scout.id, _tag: 'scout_dispatch' };
+    }
+    return null;
+  }
+
+  /** Czy jest ZDATNY skaut (recon-capable I NIE stranded)? Stranded = utknął w kosmosie bez paliwa
+   *  na powrót → nie liczy się jako „mam skauta", by bramki budowy (P3.5/P13) zbudowały następcę. */
+  _hasUsableScout(vessels) {
+    return (vessels ?? []).some(v => canDoRecon(v) && !this._strandedScouts.has(v.id));
+  }
+
+  /**
    * Zbuduj recon (hull_small + [engine_chemical, science_lab]) — groundBuildable, self-launch.
    * SELF-QUEUING BUILD_SHIP (jak kolonizator): startShipBuild dorzuca do pendingShipOrders i
    * realizuje gdy surowce dopłyną — zrywa deadlock „commodity zjadane przez rozbudowę zanim
@@ -666,7 +719,7 @@ export class RuleBot extends BaseBot {
    * nie kolejkuje). NIE science_vessel (legacy, nie-groundBuildable → orbital-only). Guard duplikatów.
    */
   _maybeBuildRecon(ctx, myVessels) {
-    if (myVessels.some(v => canDoRecon(v))) return null;
+    if (this._hasUsableScout(myVessels)) return null;   // stranded skaut nie blokuje budowy następcy
     const queues  = ctx.active.shipQueues ?? [];
     const pending = ctx.active.pendingShipOrders ?? [];
     // Rozpoznaj scout-w-budowie po DOWOLNYM module recon (deep_scanner LUB science_lab) — inaczej
