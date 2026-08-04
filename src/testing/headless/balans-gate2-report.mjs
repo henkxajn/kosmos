@@ -11,6 +11,7 @@
 import './env.js';
 import { reseed } from './env.js';
 import EventBus from '../../core/EventBus.js';
+import EntityManager from '../../core/EntityManager.js';
 import { GameCore } from './GameCore.js';
 import { Ticker } from './Ticker.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
@@ -94,6 +95,10 @@ function runOne(seed) {
   });
   ticker.run(TARGET_GY * 12, { tickSize: 1.0 });
 
+  // Scout reach: ile ciał układu zbadano (vs ~7-11 przed Task A/B) + zapas Fe (kolaps mid-game blokuje
+  // recon dispatch [RECON_COST Fe:10] I budowę cargo → downstream gate outpost formation).
+  const unex = core.missionSystem.getUnexploredCount?.() ?? { total: 0 };
+  const totalBodies = EntityManager.getAll().filter(e => ['planet','moon','planetoid'].includes(e.type) && e !== home.planet).length;
   return {
     seed, M, droidsByGy6, droidsProduced, droidsProducedByGy6, shipRareCount,
     finalColonies: core.colonyManager.getPlayerColonies().length,
@@ -101,6 +106,9 @@ function runOne(seed) {
     finalProductiveOutposts: productiveOutposts().length,
     finalPop: home.civSystem.population,
     finalCredits: Math.floor(home.credits ?? 0),
+    finalFe: Math.floor(home.resourceSystem.getAmount('Fe') ?? 0),
+    explored: Math.max(0, totalBodies - (unex.total ?? 0)),
+    totalBodies,
     finalGy: gy(),
     crashed: ticker._crashed,
   };
@@ -115,11 +123,11 @@ for (let i = 1; i <= N_SEEDS; i++) {
 }
 
 const fmt = (v) => v == null ? '  —  ' : `${v.toFixed(1)}`.padStart(5);
-console.log('seed        | sciShip | 1stOutp | prodOut | 1stShip | shipN | outp | prodO | droid⨉6 | droidMade | colon | pop  | Kr   | crash');
-console.log('------------+---------+---------+---------+---------+-------+------+-------+---------+-----------+-------+------+------+------');
+console.log('seed        | sciShip | 1stOutp | prodOut | 1stShip | shipN | outp | prodO | reach   | droidMade | colon | pop  | Kr   | Fe   | crash');
+console.log('------------+---------+---------+---------+---------+-------+------+-------+---------+-----------+-------+------+------+------+------');
 for (const r of results) {
   console.log(
-    `${String(r.seed).padEnd(11)} | ${fmt(r.M.scienceShip)}   | ${fmt(r.M.firstOutpost)}   | ${fmt(r.M.firstProductiveOutpost)}   | ${fmt(r.M.firstShipRare)}   | ${String(r.shipRareCount).padStart(5)} | ${String(r.finalOutposts).padStart(4)} | ${String(r.finalProductiveOutposts).padStart(5)} | ${String(r.droidsByGy6).padStart(7)} | ${String(r.droidsProduced).padStart(9)} | ${String(r.finalColonies).padStart(5)} | ${String(r.finalPop).padStart(4)} | ${String(r.finalCredits).padStart(4)} | ${r.crashed ? 'YES' : 'no'}`);
+    `${String(r.seed).padEnd(11)} | ${fmt(r.M.scienceShip)}   | ${fmt(r.M.firstOutpost)}   | ${fmt(r.M.firstProductiveOutpost)}   | ${fmt(r.M.firstShipRare)}   | ${String(r.shipRareCount).padStart(5)} | ${String(r.finalOutposts).padStart(4)} | ${String(r.finalProductiveOutposts).padStart(5)} | ${String(r.explored+'/'+r.totalBodies).padStart(7)} | ${String(r.droidsProduced).padStart(9)} | ${String(r.finalColonies).padStart(5)} | ${String(r.finalPop).padStart(4)} | ${String(r.finalCredits).padStart(4)} | ${String(r.finalFe).padStart(4)} | ${r.crashed ? 'YES' : 'no'}`);
 }
 
 const median = (arr) => { const v = arr.filter(x => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
@@ -137,8 +145,10 @@ console.log(`  founded ≥1 outpost:            ${cnt(r => r.finalOutposts >= 1)
 console.log(`  ≥1 PRODUCTIVE outpost (solar): ${cnt(r => r.finalProductiveOutposts >= 1)}/${results.length}`);
 console.log(`  shipping leg fired (≥1 run):   ${cnt(r => r.shipRareCount > 0)}/${results.length}`);
 console.log(`  founded a 2nd (POP) colony:    ${cnt(r => r.finalColonies >= 2)}/${results.length}`);
-console.log('\n── DROIDS (measured, untuned) ──');
-console.log(`  installed by yr6 (median):  ${median(results.map(r => r.droidsByGy6))}   (anchor ≈ 3)`);
-console.log(`  produced by yr6 (median):   ${median(results.map(r => r.droidsProducedByGy6))}`);
+console.log('\n── SCOUT REACH + RESOURCES (Task A/B target + downstream gate) ──');
+console.log(`  bodies explored (median):   ${median(results.map(r => r.explored))} / ${median(results.map(r => r.totalBodies))}   (vs ~7-11 pre-A/B)`);
+console.log(`  final Fe (median):          ${median(results.map(r => r.finalFe))}   (⚠ Fe collapse → recon dispatch Fe:10 + cargo build blocked)`);
+console.log('\n── DROIDS (measured, untuned — POP-glut carried finding) ──');
+console.log(`  installed by yr6 (median):  ${median(results.map(r => r.droidsByGy6))}   (anchor ≈ 3; expected 0 while POP-glut holds)`);
 console.log(`  produced total (median):    ${median(results.map(r => r.droidsProduced))}`);
 console.log(`\n  crashes: ${cnt(r => r.crashed)}/${results.length}   final Kr (median): ${median(results.map(r => r.finalCredits))}`);
