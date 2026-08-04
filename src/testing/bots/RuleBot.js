@@ -131,7 +131,11 @@ export class RuleBot extends BaseBot {
     this._outpostTargets = new Set();     // planetoidy z założoną/planowaną placówką
     this._lastOutpostAttempt = -999;
     this._outpostCooldown = 3;            // civYears między próbami found_outpost
-    this._shippedOutposts = new Set();    // outposty z uruchomioną pętlą transportu surowców→home
+    this._shippedOutposts = new Set();    // (legacy) — zastąpione przez _outpostShuttle (bot-managed shuttle)
+    // Task 2 shipping — bot-managed shuttle: PRZYPISANY statek per placówka wozi rzadkie surowce
+    // outpost↔home jednorazowymi transportami (loop mechanic zatrzymuje się po ~1 cyklu → zamiast
+    // pętli sam kieruję statkiem: at-outpost=load+ship home, at-home=deadhead back). outpostId→shipId.
+    this._outpostShuttle = new Map();
     // Task 1 — scout servicing loop: śledź misje którym wydano powrót (anty-spam ORDER_RETURN) i
     // skauty które STRANDNĘŁY (fuel-stop za daleko na powrót → startReturn odrzucony). Stranded scout
     // = niezdatny (nie liczy się jako „mam skauta" → bot buduje nowego). Reset per-misja przy dokowaniu.
@@ -524,38 +528,43 @@ export class RuleBot extends BaseBot {
   // ── Stage B: autonomous outpost loop ────────────────────────────────────────
   /**
    * Ścieżka autonomicznej placówki (works-forward): cargo ship → found outpost na planetoid z
-   * rzadkim surowcem → autonomous_mine (samo-wydobywa, KONSUMUJE droida = expansion-driven droid
-   * demand). Gated na tech 'automation' (autonomous_mine) — świadoma inwestycja techowa (doktryna).
+   * rzadkim surowcem. Task 2 (decyzja Filipa: mine+solar) — placówka PRODUKTYWNA wymaga OBU
+   * budynków: autonomous_mine (wydobycie) + autonomous_solar_farm (energia). Sama mine jest
+   * brownout-zerowana (energyCost 4, brak źródła energii → availability 0 → produkcja 0 —
+   * potwierdzone pomiarowo). KAŻDY budynek konsumuje 1 automation_droid (2 droidy/placówkę).
+   * _nextOutpostStep: DOKOŃCZ półzbudowaną (ma mine, brak solar) PRZED założeniem nowej.
+   * Gated na tech 'automation' (oba budynki wymagają) — świadoma inwestycja techowa (doktryna).
    */
   _maybeOutpostPath(ctx, civYear) {
     if (!ctx.hasTech('automation') || !ctx.hasTech('exploration')) return null;
     if (ctx.countBuilding('shipyard') === 0) return null;
     if ((civYear - this._lastOutpostAttempt) < this._outpostCooldown) return null;
 
-    const target = this._findOutpostTarget(ctx.active.planet);
-    if (!target) return null;
+    const step = this._nextOutpostStep(ctx);   // { buildingId, targetId } | null
+    if (!step) return null;
 
     const vm = window.KOSMOS?.vesselManager;
     const myVessels = (vm?.getAllVessels?.() ?? []).filter(v => v.colonyId === ctx.active.planetId);
-    // Cargo ship = idle+docked, wozi cargo, NIE kolonizator (pure cargo dla outpostu).
+    // Cargo ship = idle+docked w DOMU (pure cargo). ⚠ Statek po foundzie utyka w placówce jako
+    // 'refueling' (placówka nie ma paliwa → auto-refuel nie kończy → status nigdy 'idle'), więc
+    // opuszcza pulę HOME (colonyId=placówka) → KAŻDY found bierze ŚWIEŻY statek z domu (2/placówkę).
     const cargoShip = myVessels.find(v =>
       v.status === 'idle' && v.position?.state === 'docked' && canHaulCargo(v) && !canColonize(v));
     if (!cargoShip) return this._maybeBuildCargo(ctx, myVessels);
 
-    // Droid w magazynie = input autonomous_mine. TWO-WAY JUGGLE (Task 3): najpierw ZWOLNIJ
-    // zainstalowanego droida (→ +1 magazyn, etat wraca do POP) — „release when worth more on the
-    // outpost mission"; dopiero gdy nie ma co zwolnić → produkuj świeżego (expansion-driven).
+    // Każdy budynek autonomiczny (mine I solar) KONSUMUJE 1 automation_droid. Two-way juggle (Task 3):
+    // zwolnij zainstalowanego (→ +1 magazyn) zanim produkujesz świeżego (expansion-driven demand).
     if (ctx.getAmount('automation_droid') < 1) {
       const released = this._maybeReleaseDroid(ctx);
       if (released) return released;
       return this._maybeProduceDroid(ctx, civYear);
     }
 
-    // Bufor commodities placówki: reactive trzyma SA/extraction_systems na niskim equilibrium (3/1),
-    // a autonomous_mine potrzebuje 4/2 → one-shot burst (najwyższy FP, działa w reactive) gdy short.
-    const amCost = BUILDINGS.autonomous_mine?.commodityCost ?? {};
+    // Bufor commodities BIEŻĄCEGO budynku (mine: SA/extraction/PC; solar: SA/PC/conductor/electronic).
+    // reactive trzyma je na niskim equilibrium → one-shot burst (najwyższy FP, działa w reactive) gdy short.
+    const bCost = BUILDINGS[step.buildingId]?.commodityCost ?? {};
     const fs = window.KOSMOS?.factorySystem;
-    for (const [cid, need] of Object.entries(amCost)) {
+    for (const [cid, need] of Object.entries(bCost)) {
       if (cid === 'automation_droid') continue;   // droid już wyżej
       if (ctx.getAmount(cid) < need) {
         if (fs?.oneShotJob?.commodityId === cid) return null;   // burst w toku — czekaj
@@ -563,16 +572,45 @@ export class RuleBot extends BaseBot {
       }
     }
 
-    // Cargo ship + droid + commodities + cel → załóż placówkę z autonomous_mine. NIE pre-markuj celu
-    // (transient shortage → permanentna blokada); cooldown + existing-colony check obsługują retry.
+    // Załóż/rozbuduj placówkę bieżącym budynkiem. NIE pre-markuj celu (transient shortage →
+    // permanentna blokada); cooldown + existing-colony check + step-recompute obsługują retry.
     this._lastOutpostAttempt = civYear;
-    return { type: ACTION_TYPES.FOUND_OUTPOST, targetId: target.id, buildingId: 'autonomous_mine',
-             vesselId: cargoShip.id, _tag: `outpost_${target.id}` };
+    return { type: ACTION_TYPES.FOUND_OUTPOST, targetId: step.targetId, buildingId: step.buildingId,
+             vesselId: cargoShip.id, _tag: `outpost_${step.buildingId.replace('autonomous_','')}_${step.targetId}` };
   }
 
-  /** Zbuduj pure-cargo ship (hull_small + 2× cargo) — chyba że już jest/w budowie. Self-queue. */
+  /** Task 2 — następny krok placówki: (1) DOKOŃCZ półzbudowaną gracza (ma mine, brak solar) → solar
+   *  (energia → produkcja); (2) inaczej NOWA na świeżym planetoidzie z rzadkim złożem → mine. */
+  _nextOutpostStep(ctx) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    for (const c of (colMgr?.getAllColonies?.() ?? [])) {
+      if (!c.isOutpost || c.ownerEmpireId) continue;   // tylko placówki GRACZA
+      const bl = this._outpostBuildings(c);
+      if (bl.includes('autonomous_mine') && !bl.includes('autonomous_solar_farm')) {
+        return { buildingId: 'autonomous_solar_farm', targetId: c.planetId };
+      }
+    }
+    const target = this._findOutpostTarget(ctx.active.planet);
+    if (target) return { buildingId: 'autonomous_mine', targetId: target.id };
+    return null;
+  }
+
+  /** Lista id budynków AKTYWNYCH na placówce (buildingSystem._active). */
+  _outpostBuildings(colony) {
+    const bs = colony?.buildingSystem;
+    if (!bs?._active) return [];
+    return [...bs._active.values()].map(e => e.building?.id ?? e.buildingId);
+  }
+
+  /** Zbuduj pure-cargo ship (hull_small + 2× cargo) — gdy brak idle+docked HOME cargo (statki po
+   *  foundzie utykają w placówkach). Cap pacingu (bot-policy, NIE stała balansu): skalowany do liczby
+   *  placówek (2 statki/placówkę: found mine+solar → potem shuttle) + bufor — chroni przed runaway. */
   _maybeBuildCargo(ctx, myVessels) {
-    if (myVessels.some(v => canHaulCargo(v) && !canColonize(v))) return null;
+    if (myVessels.some(v => canHaulCargo(v) && !canColonize(v))) return null;   // jest HOME cargo → czekaj
+    const vm = window.KOSMOS?.vesselManager, colMgr = window.KOSMOS?.colonyManager;
+    const totalCargo = (vm?.getAllVessels?.() ?? []).filter(v => canHaulCargo(v) && !canColonize(v)).length;
+    const outposts = (colMgr?.getAllColonies?.() ?? []).filter(c => c.isOutpost && !c.ownerEmpireId).length;
+    if (totalCargo >= 2 * outposts + 2) return null;   // safety cap (runaway guard)
     const queues = ctx.active.shipQueues ?? [], pending = ctx.active.pendingShipOrders ?? [];
     if ([...queues, ...pending].some(q => (q.modules ?? []).includes('cargo_large') &&
         !(q.modules ?? []).includes('habitat_pod'))) return null;
@@ -620,26 +658,68 @@ export class RuleBot extends BaseBot {
     return best;
   }
 
-  /** Wyślij surowce z placówki → home (transport). Uruchamia pętlę raz per placówka. */
+  /**
+   * Task 2 — „ship rare resources (Li/Xe/Hv) home → accelerates droids". Bot-managed shuttle:
+   * PRZYPISANY statek (ten co utknął w placówce po foundzie) wozi rzadkie surowce outpost↔home
+   * jednorazowymi transportami. ⚠ Dwie korekty odkryte POMIAROWO (surface): (1) one-shot TRANSPORT
+   * z domu NIE ładuje ze źródła (sourceColonyId = martwy param → spend z HOME → fail; a dostawa
+   * `receive`uje manifest bez spendu = PHANTOM skażający pomiar) → ładujemy FIZYCZNIE przez LOAD_CARGO
+   * (spend ze store placówki), statek AT-OUTPOST = redispatch (bez portu/home-spend), dostawa
+   * zbalansowana. (2) LOOP transport zatrzymuje się po ~1 cyklu → zamiast pętli SAM kieruję statkiem
+   * (at-outpost: załaduj każdy rzadki raz → ship home; at-home po dostawie: deadhead z powrotem).
+   * Founding (HOME ships) i shipping (OUTPOST ships) = RÓŻNE statki → koniec kontencji z briefu
+   * („statek busy founding") BEZ zmiany kolejności drabiny.
+   */
   _maybeShipRareResources(ctx) {
     const colMgr = window.KOSMOS?.colonyManager;
     const vm = window.KOSMOS?.vesselManager;
-    if (!colMgr || !vm) return null;
-    // Placówki gracza (outposty) z zapasem rzadkiego surowca, bez uruchomionej pętli.
-    const outposts = (colMgr.getAllColonies?.() ?? []).filter(c =>
-      c.isOutpost && !c.ownerEmpireId && !this._shippedOutposts.has(c.planetId));
-    for (const op of outposts) {
+    const home = window.KOSMOS?.homePlanet;
+    if (!colMgr || !vm || !home) return null;
+    const RARE = ['Li', 'Xe', 'Hv', 'Nt'];   // Li kluczowe (recipe droida); reszta bonus
+    const assigned = new Set(this._outpostShuttle.values());
+
+    for (const op of (colMgr.getAllColonies?.() ?? [])) {
+      if (!op.isOutpost || op.ownerEmpireId) continue;
       const rs = op.resourceSystem;
-      const have = {};
-      for (const r of ['Li', 'Xe', 'Hv', 'Ti']) { const a = rs?.getAmount?.(r) ?? 0; if (a > 20) have[r] = Math.floor(a); }
-      if (Object.keys(have).length === 0) continue;
-      // Cargo ship idle+docked (dowolna kolonia gracza) do transportu.
-      const cargoShip = (vm.getAllVessels?.() ?? []).find(v =>
-        v.status === 'idle' && v.position?.state === 'docked' && canHaulCargo(v) && !canColonize(v));
-      if (!cargoShip) return null;
-      this._shippedOutposts.add(op.planetId);
-      return { type: ACTION_TYPES.TRANSPORT, targetId: window.KOSMOS.homePlanet.id,
-               vesselId: cargoShip.id, cargo: have, sourceColonyId: op.planetId, _tag: `ship_rare_${op.planetId}` };
+
+      // Rozwiąż/przypisz shuttle placówki (statek z foundu, docked w placówce, jeszcze nieprzypisany).
+      let ship = this._outpostShuttle.has(op.planetId) ? vm.getVessel(this._outpostShuttle.get(op.planetId)) : null;
+      if (ship && ship.isWreck) { this._outpostShuttle.delete(op.planetId); assigned.delete(ship.id); ship = null; }
+      if (!ship) {
+        ship = (vm.getAllVessels?.() ?? []).find(v =>
+          v.colonyId === op.planetId && v.position?.state === 'docked' &&
+          (v.status === 'idle' || v.status === 'refueling') && canHaulCargo(v) && !canColonize(v) && !assigned.has(v.id));
+        if (ship) { this._outpostShuttle.set(op.planetId, ship.id); assigned.add(ship.id); }
+      }
+      if (!ship || ship.status === 'on_mission') continue;   // brak shuttle lub w locie → czekaj
+
+      const atOutpost = ship.colonyId === op.planetId && ship.position?.state === 'docked';
+      const atHome    = ship.colonyId === home.id     && ship.position?.state === 'docked';
+
+      if (atOutpost) {
+        // Załaduj FIZYCZNIE każdy dostępny rzadki RAZ (starter batch; loadCargo clamp wagą), potem ship.
+        const rareAvail = RARE.filter(r => (rs?.getAmount?.(r) ?? 0) > 20);
+        const perTarget = Math.max(20, Math.floor((ship.cargoMax ?? 0) / (RARE.length || 1)));
+        for (const r of rareAvail) {
+          if ((ship.cargo?.[r] ?? 0) === 0 && (ship.cargoMax ?? 0) - (ship.cargoUsed ?? 0) > 1) {
+            return { type: ACTION_TYPES.LOAD_CARGO, vesselId: ship.id, commodityId: r,
+                     qty: Math.min(perTarget, Math.floor(rs.getAmount(r))), _tag: `load_rare_${r}` };
+          }
+        }
+        // Wszystko co było załadowane → jednorazowy transport do domu (source-loaded fizycznie).
+        const total = Object.values(ship.cargo ?? {}).reduce((s, v) => s + (v ?? 0), 0);
+        if (total > 0) {
+          return { type: ACTION_TYPES.TRANSPORT, targetId: home.id, vesselId: ship.id,
+                   cargo: { ...ship.cargo }, _tag: `ship_rare_${op.planetId}` };
+        }
+        continue;   // pusty + nic do załadowania (placówka poniżej progu) → czekaj aż mine dorobi
+      }
+      if (atHome) {
+        // Dostarczono → deadhead z powrotem do placówki (pusty jednorazowy transport) na kolejny kurs.
+        return { type: ACTION_TYPES.TRANSPORT, targetId: op.planetId, vesselId: ship.id,
+                 cargo: {}, _tag: `shuttle_return_${op.planetId}` };
+      }
+      // inny stan (orbiting/tranzyt) — czekaj
     }
     return null;
   }
