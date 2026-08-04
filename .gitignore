@@ -30,3 +30,6 @@ src/testing/reports/evo_weights.json
 
 # Balance-tester dev reports (regenerowalne dev-artefakty, NIE deployować — psuły deploy Pages)
 tools/balance-tester/reports/
+
+# BALANS 1.0 Phase 2 — POP telemetry generated output (JSON + HTML report, regenerowalne per run)
+src/testing/reports/balans/
