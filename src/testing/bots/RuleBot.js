@@ -31,6 +31,18 @@ const DROID_TIER1_STRATA = ['laborer', 'miner', 'worker'];
 // deep_scanner requires 'orbital_survey' (boosted-starter) — Scout = statek eksploracyjny gracza.
 const RECON_HULL        = 'hull_small';
 const RECON_MODULES     = ['engine_chemical', 'deep_scanner'];
+// Task A — recall scout PROACTYWNIE przy ~46% paliwa (obserwowane zachowanie gracza, Filip): wraca z
+// zapasem na powrót, NIE stranduje (koniec attrition „7-11 ciał → stranduje/ginie"). Knob = bot-policy
+// (jak factory_per_pop), czyta ŻYWE paliwo — NIE strojone pod kotwicę metryki.
+const RECALL_FUEL_FRAC  = 0.46;
+// Task B — engine-upgrade: zasięg skauta ROŚNIE z techem silnika. Najlepszy dostępny silnik → dłuższy
+// zasięg (engine_ion rangeMult 2.5 wymaga ion_drives; engine_fusion 4.0 wymaga fusion_drives). Bot
+// SAM bramkuje na hasTech (build path NIE waliduje modułów tech-gate → nie „fake'ujemy" bez techu).
+const SCOUT_ENGINE_TIERS = [
+  { engine: 'engine_fusion', tech: 'fusion_drives' },
+  { engine: 'engine_ion',    tech: 'ion_drives' },
+  { engine: 'engine_chemical', tech: null },   // fallback (starter, bez techu)
+];
 // POP-colonizer: habitat (POP) + cargo (goods bundle) — B0 caveat: pure cargo nie wozi POP.
 const COLONIZER_HULL    = 'hull_small';
 const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod', 'cargo_large'];
@@ -65,11 +77,14 @@ const TECH_PRIORITY = [
   'rocketry',           // T2 — unlock launch_pad
   'exploration',        // T2 — unlock shipyard + science_vessel
   'advanced_mining',    // 90 — +20% minerals + nowe tereny
-  'efficient_solar',    // energy
+  'efficient_solar',    // energy (Filip: energia PRZED silnikami)
   'battery_tech',       // energy storage
+  'ion_drives',         // Task B — engine Gen II (engine_ion, ×2.5 rangeMult → skaut dosięga planetoid); requires rocketry
   'urban_planning',     // housing
   'automation',         // efficiency
   'colonization',       // T3 — dla kolonizacji
+  'fusion_power',       // energy (prereq fusion_drives; researchuje się tylko gdy osiągalny)
+  'fusion_drives',      // Task B — engine Gen III (engine_fusion, ×4 rangeMult); requires ion/plasma + fusion_power
 ];
 
 // Opening build order — BAZA PRODUKCYJNA + survival (builder+explorer doctrine).
@@ -375,6 +390,10 @@ export class RuleBot extends BaseBot {
         const colo = this._maybeBuildColonizer(ctx, myVessels);
         if (colo) return colo;
       }
+      // Task B — engine-upgrade scout replacement (buduj upgraded / rozbierz stary). PO kolonizatorze
+      // (kolonizacja ma priorytet), ale bounded (raz per tier) → nie głodzi niższych priorytetów.
+      const upgrade = this._maybeUpgradeScout(ctx, myVessels);
+      if (upgrade) return upgrade;
     }
 
     // ── P13: RECON servicing loop (Task 1) — dispatch → fuel-stop → return → refuel → re-dispatch ──
@@ -775,20 +794,23 @@ export class RuleBot extends BaseBot {
     const unexplored = ms.getUnexploredCount?.() ?? { total: 0 };
     if ((unexplored.total ?? 0) <= 0) return null;   // cały układ zbadany — nic do obsługi
 
-    // (1) Zaparkowany (fuel-stop) skaut full_system → sprowadź do domu (dok → refuel → re-dispatch).
-    //     Rozpoznanie po ŻYWEJ misji: recon/full_system/status='orbiting' + vessel faktycznie orbituje.
-    //     ANTY-SPAM + STRAND: ORDER_RETURN wydany JEDEN raz per misja (_orderReturn synchroniczne). Jeśli
-    //     misja NADAL 'orbiting' po wydaniu rozkazu → startReturn odrzucony (za mało paliwa na powrót) →
-    //     skaut stranded → oznacz i przestań ponawiać ORDER_RETURN (anty-spam). Stranded siedzi (rzadki);
-    //     NIE wymusza rebuildu (blokowałby kolonizator) — bot buduje następcę dopiero gdy skaut ZGINIE.
+    // (1) Task A — RECALL PROAKTYWNIE przy ~46% paliwa (ZANIM skaut stranduje), lub gdy już fuel-stopował.
+    //     Misja full_system aktywna ('en_route' skan) LUB zaparkowana ('orbiting'). ORDER_RETURN działa na
+    //     obu (`_orderReturn` przyjmuje en_route+orbiting). Recall przy 46% → wraca z zapasem, startReturn
+    //     się udaje → status→'returning' → pętla go pomija (koniec attrition/strandu). ANTY-SPAM: ordered
+    //     JEDEN raz per misja; jeśli misja NADAL aktywna po rozkazie (startReturn odrzucony — edge, za mało
+    //     na powrót) → stranded (oznacz, przestań ponawiać; NIE wymusza rebuildu — blokowałby kolonizator).
     for (const m of (ms._missions ?? [])) {
-      if (m.type !== 'recon' || m.scope !== 'full_system' || m.status !== 'orbiting') continue;
+      if (m.type !== 'recon' || m.scope !== 'full_system') continue;
+      if (m.status !== 'en_route' && m.status !== 'orbiting') continue;   // aktywny sweep lub zaparkowany
       const v = vm.getVessel(m.vesselId);
-      if (!v || v.colonyId !== ctx.active.planetId) continue;   // tylko własny skaut
-      if (v.position?.state !== 'orbiting' || !canDoRecon(v)) continue;
+      if (!v || v.colonyId !== ctx.active.planetId || !canDoRecon(v)) continue;   // tylko własny skaut
       if (this._strandedScouts.has(v.id)) continue;             // już spisany na straty
-      if (this._scoutReturnOrdered.has(m.id)) {                 // wydano powrót, a on wciąż orbituje →
-        this._strandedScouts.add(v.id);                        // startReturn odrzucony → stranded
+      const parked   = m.status === 'orbiting' && v.position?.state === 'orbiting';
+      const lowFuel  = (v.fuel?.max ?? 0) > 0 && (v.fuel.current ?? 0) <= RECALL_FUEL_FRAC * v.fuel.max;
+      if (!parked && !lowFuel) continue;                        // jeszcze ma paliwo i leci — nie ruszaj
+      if (this._scoutReturnOrdered.has(m.id)) {                 // wydano powrót, a misja wciąż aktywna →
+        if (parked) this._strandedScouts.add(v.id);            // startReturn odrzucony → stranded
         continue;
       }
       this._scoutReturnOrdered.add(m.id);
@@ -798,11 +820,14 @@ export class RuleBot extends BaseBot {
     // (2) Zadokowany idle/refueling skaut + niezbadane ciała → dotankuj (jeśli niepełny), potem
     //     re-dispatch full_system. hull_small self-launch (bez launch_pad); re-dispatch pomija
     //     explored → wznawia sweep. manualRefuel = natychmiast (bez czekania ~2-3 civY na auto-refuel).
-    //     Dok → wyczyść stranded flag (skaut wrócił = znów zdatny).
-    const scout = (vm.getAllVessels?.() ?? []).find(v =>
-      v.colonyId === ctx.active.planetId &&
-      (v.status === 'idle' || v.status === 'refueling') &&
-      v.position?.state === 'docked' && canDoRecon(v));
+    //     ⚠ Task B: gdy istnieje UPGRADED skaut (najlepszy silnik), dispatchuj TYLKO jego — stare-silnikowe
+    //     zostają zadokowane do rozbiórki (_maybeUpgradeScout je disbanduje). Bez upgraded → dispatch dowolny.
+    const best = this._bestScoutEngine(ctx);
+    const myScouts = (vm.getAllVessels?.() ?? []).filter(v =>
+      v.colonyId === ctx.active.planetId && canDoRecon(v) && !canColonize(v));
+    const hasUpgraded = best !== 'engine_chemical' && myScouts.some(v => (v.modules ?? []).includes(best));
+    const docked = myScouts.filter(v => (v.status === 'idle' || v.status === 'refueling') && v.position?.state === 'docked');
+    const scout = hasUpgraded ? docked.find(v => (v.modules ?? []).includes(best)) : docked[0];
     if (scout) this._strandedScouts.delete(scout.id);
     if (scout) {
       const cur = scout.fuel?.current ?? 0;
@@ -814,6 +839,46 @@ export class RuleBot extends BaseBot {
                vesselId: scout.id, _tag: 'scout_dispatch' };
     }
     return null;
+  }
+
+  /** Task B — najlepszy dostępny silnik skauta wg ZBADANEGO techu (bot self-gate; build path nie
+   *  waliduje modułów tech-gate → bez hasTech byłby „fake" range bump). fusion>ion>chemical. */
+  _bestScoutEngine(ctx) {
+    for (const t of SCOUT_ENGINE_TIERS) {
+      if (t.tech == null || ctx.hasTech(t.tech)) return t.engine;
+    }
+    return 'engine_chemical';
+  }
+
+  _bestScoutModules(ctx) {
+    return [this._bestScoutEngine(ctx), 'deep_scanner'];
+  }
+
+  /**
+   * Task B — engine-upgrade scout replacement. Gdy lepszy silnik dostępny (ion/fusion tech) I skaut
+   * ma słabszy → zbuduj nowego z najlepszym silnikiem (dłuższy zasięg → dosięga dalekich planetoid),
+   * potem ROZBIERZ starego (disband: zwrot 75% + załoga) — „replace", nie akumuluj skautów. Bounded:
+   * buduje RAZ per tier (guard: brak upgraded w kolejce/istnieniu); disband gdy stary zadokowany+idle.
+   * Progresywne (ion→fusion). Behavior/heurystyka czytająca ŻYWY tech+stan skauta, NIE strojone.
+   */
+  _maybeUpgradeScout(ctx, myVessels) {
+    const best = this._bestScoutEngine(ctx);
+    if (best === 'engine_chemical') return null;   // brak lepszego silnika → nic do upgrade
+    const scouts = myVessels.filter(v => canDoRecon(v) && !canColonize(v));
+    if (scouts.length === 0) return null;          // brak skauta w ogóle → beeline go zbuduje
+    const hasUpgraded = scouts.some(v => (v.modules ?? []).includes(best));
+    if (hasUpgraded) {
+      // Upgrade istnieje → rozbierz stary (gorszy silnik) skaut zadokowany+idle w domu (replace).
+      const old = scouts.find(v => !(v.modules ?? []).includes(best) &&
+        (v.status === 'idle' || v.status === 'refueling') && v.position?.state === 'docked');
+      if (old) return { type: ACTION_TYPES.DISBAND, vesselId: old.id, _tag: 'scout_disband_old' };
+      return null;   // stary jeszcze w locie → recall (servicing loop) sprowadzi, potem disband
+    }
+    // Brak upgraded — zbuduj (jeśli nie w kolejce). Rozpoznaj upgraded-w-budowie po najlepszym silniku.
+    const queues = ctx.active.shipQueues ?? [], pending = ctx.active.pendingShipOrders ?? [];
+    if ([...queues, ...pending].some(q => (q.modules ?? []).includes(best))) return null;
+    return { type: ACTION_TYPES.BUILD_SHIP, shipId: RECON_HULL, modules: this._bestScoutModules(ctx),
+             planetId: ctx.active.planetId, _tag: `scout_upgrade_${best.replace('engine_', '')}` };
   }
 
   /**
@@ -834,7 +899,7 @@ export class RuleBot extends BaseBot {
     return {
       type: ACTION_TYPES.BUILD_SHIP,
       shipId: RECON_HULL,
-      modules: [...RECON_MODULES],
+      modules: this._bestScoutModules(ctx),   // Task B: najlepszy dostępny silnik od razu (ion/fusion gdy tech)
       planetId: ctx.active.planetId,
       _tag: 'ship_recon',
     };
