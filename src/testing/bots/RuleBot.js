@@ -125,6 +125,10 @@ export class RuleBot extends BaseBot {
       well_per_pop: 0.25,               // ÷4 (było 1.0)
       solar_per_pop: 0.175,             // ÷4 (było 0.7)
       factory_per_pop: { 24: 2, 40: 3, 60: 4 },  // klucze ×4 (było {6,10,15}); wartości = cel liczby factory
+      // Take-3 — Fe operational headroom (bot-policy reserve jak food_min): Fe wystarczające na NASTĘPNY
+      // krok ekspansji (found outpost: droid recipe Fe 1000 + budynek + cargo ship). Poniżej + drenaż →
+      // dołóż kopalnię (Faza 3). NIE „tuned to survive": to próg operacyjności pętli, nie przetrwania.
+      fe_working_buffer: 1500,
       ...weights,
     };
     this._recentEnqueues = new Map();
@@ -151,6 +155,10 @@ export class RuleBot extends BaseBot {
     // outpost↔home jednorazowymi transportami (loop mechanic zatrzymuje się po ~1 cyklu → zamiast
     // pętli sam kieruję statkiem: at-outpost=load+ship home, at-home=deadhead back). outpostId→shipId.
     this._outpostShuttle = new Map();
+    // Take-3 — Fe-demand-aware mine scaling: próbka Fe raz/civYear do detekcji drenażu (demand>supply).
+    this._feTrendYear = -1; this._fePrev = null; this._feSample = null;
+    this._lastMineExpand = -999;   // cooldown Fazy 3 (demand override) — paced do build+ramp lag kopalni
+    this._mineExpandCooldown = 4;  // civYears między dodatkowymi kopalniami przy drenażu (anti-runaway)
     // Task 1 — scout servicing loop: śledź misje którym wydano powrót (anty-spam ORDER_RETURN) i
     // skauty które STRANDNĘŁY (fuel-stop za daleko na powrót → startReturn odrzucony). Stranded scout
     // = niezdatny (nie liczy się jako „mam skauta" → bot buduje nowego). Reset per-misja przy dokowaniu.
@@ -244,6 +252,14 @@ export class RuleBot extends BaseBot {
         const a = this._findBuild(catalog, 'solar_farm');
         if (a) { a._tag = 'energy_build'; return a; }
       }
+    }
+
+    // ── P3.4: Fe-DEMAND-AWARE MINE SCALING (take-3 fix, ⚠ REORDER: było P11 mine<2 cap) ──
+    // Filip: kopalnie WCZEŚNIE, gdy life-support stabilny — TU (po P1-P3), PRZED scout/housing/expand.
+    // Liczba kopalń = output bilansu Fe (skaluje z sinkiem + drenażem), NIE stała. Zastępuje cap mine<2.
+    {
+      const mineAction = this._maybeScaleMines(ctx, civYear, catalog);
+      if (mineAction) return mineAction;
     }
 
     // ── P3.5: EARLY SCOUT BEELINE (builder+explorer — Filip buduje statek ~yr1) ──
@@ -357,11 +373,7 @@ export class RuleBot extends BaseBot {
       if (a) { a._tag = 'expand_solar'; return a; }
     }
 
-    // ── P11: 2nd mine ──
-    if (ctx.countBuilding('mine') < 2 && ctx.pop >= 20 && ctx.canBuild('mine')) {   // ×4 (było 5)
-      const a = this._findBuild(catalog, 'mine');
-      if (a) { a._tag = 'mine_second'; return a; }
-    }
+    // ── P11: mine scaling — PRZENIESIONE do P3.4 (_maybeScaleMines, Fe-demand-aware) ──
 
     // ── P12: Multiple factories (kluczowe dla expansion commodities) ──
     const factoryCount = ctx.countBuilding('factory');
@@ -1078,5 +1090,59 @@ export class RuleBot extends BaseBot {
       const id = entry?.building?.id ?? entry?.buildingId;
       return id === buildingIdFilter;
     }) ?? null;
+  }
+
+  /**
+   * Take-3 fix — Fe-demand-aware mine scaling (zastępuje cap `mine<2`). Reguła Filipa: stawiaj kopalnie
+   * WCZEŚNIE gdy life-support stabilny (food/water OK + rezerwa energii); skaluj LICZBĘ do zapotrzebowania
+   * na Fe programu budowy. Baseline rośnie z liczbą fabryk (główny sink Fe→commodities, ~90% przepływu);
+   * gdy Fe DRENUJE (demand>supply, wykryte z trendu inwentarza) dokładaj kolejne, aż Fe się ustabilizuje.
+   * Liczba kopalń = OBSERWOWANY WYNIK bilansu Fe (NIE stała 2→4, NIE strojone pod „przetrwanie" kolapsu).
+   * Filip: ~4×Lv2 to jego typowa równowaga, wyższa gdy program żąda więcej I złoże wspiera (richness 1.0,
+   * 116-128k zostało — ekstrakcja nie jest limitem). Home mining = wystarczające-ze-wsparciem-shippingu
+   * (import Fe z placówek), nie pełna samowystarczalność. Gdy złoże wyczerpane → nie kop (return null).
+   */
+  _maybeScaleMines(ctx, civYear, catalog) {
+    // Life-support PRZED kopalniami (Filip: kopalnie gdy well+farm dają komfort). STOCK + rezerwa energii
+    // (rate obsługuje P1-P3 wyżej — ich deficyt zbudowałby farm/well ZANIM tu dojdziemy; rate-gate tutaj
+    // blokował skalowanie przy chwilowym deficycie tempa → seed_1 utykał na 2 kopalniach).
+    const lifeOK = ctx.food >= this.weights.food_min && ctx.water >= this.weights.water_min && ctx.energyBalance >= 0;
+    if (!lifeOK) return null;
+    // Złoże Fe musi mieć rudę (nie kop na wyczerpanym — ekstrakcja nie jest limitem, ale wyczerpane złoże jest).
+    const deposits = ctx.active.planet?.deposits ?? window.KOSMOS?.homePlanet?.deposits ?? [];
+    const feDep = deposits.find(d => d.resourceId === 'Fe');
+    if (!feDep || (feDep.remaining ?? 0) <= 0) return null;
+
+    // Trend Fe (próbka raz/civYear; RÓŻNICA znacząca ≥20/civYear, nie szum): drenaż = demand > supply.
+    if (this._feTrendYear !== civYear) { this._fePrev = this._feSample; this._feSample = ctx.getAmount('Fe'); this._feTrendYear = civYear; }
+    const feDraining = this._fePrev != null && this._feSample < this._fePrev - 20;
+    const feLow = ctx.getAmount('Fe') < this.weights.fe_working_buffer;   // za mało na następny krok ekspansji
+
+    const mines = ctx.countBuilding('mine');   // liczy AKTYWNE + w budowie + pending (bez re-build storm)
+    const factories = ctx.countBuilding('factory');
+    // Baseline PROAKTYWNY (Filip stawia kopalnie WCZEŚNIE obok fabryk; ~4 przy jego skali). Skaluje z
+    // sinkiem Fe (fabryki = ~90% przepływu Fe→commodities). Lv2 (Faza 2) redukuje ile kopalń trzeba.
+    const baseline = Math.max(2, factories);
+
+    // FAZA 1 — dobuduj do baseline (proaktywnie, gdy life-support stabilny).
+    if (mines < baseline && ctx.canBuild('mine')) {
+      const a = this._findBuild(catalog, 'mine');
+      if (a) { a._tag = 'mine_base'; return a; }
+    }
+    // ⚠ Lv2 upgrade ODRZUCONE — headless upgrade NIE DZIAŁA (catalog.listUpgradeActions=0 przez zły
+    // akcesor grid.getByKey/_map; a bezpośredni planet:upgradeRequest też nie podnosi poziomu kopalni
+    // — osobny gap ścieżki upgrade BuildingSystem headless, spamował 927× i głodził pętlę). Skalujemy
+    // Fe LICZBĄ kopalń (equivalent output, więcej Lv1 zamiast mniej Lv2). Filipowy kształt „~4×Lv2"
+    // = te same Fe co ~8×Lv1; kształt Lv2 wymaga naprawy ścieżki upgrade (osobny harness issue). LOG.
+    // FAZA 3 — Fe pod REALNĄ presją (drenuje I poniżej progu operacyjności pętli) → dołóż JEDNĄ kopalnię
+    // co cooldown (paced do build+ramp lag). ⚠ Cooldown + feLow + stop-on-not-draining = klucz przeciw
+    // runaway (bez feLow Faza 3 odpalała przy 57k Fe → 100+ kopalń). Zbieżne: gdy supply dogoni demand →
+    // drenaż ustaje I Fe > buffer → stop.
+    if (feDraining && feLow && (civYear - this._lastMineExpand) >= this._mineExpandCooldown && ctx.canBuild('mine')) {
+      this._lastMineExpand = civYear;
+      const a = this._findBuild(catalog, 'mine');
+      if (a) { a._tag = 'mine_demand'; return a; }
+    }
+    return null;
   }
 }
