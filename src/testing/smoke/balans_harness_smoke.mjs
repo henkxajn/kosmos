@@ -307,6 +307,65 @@ console.log('\nT11 — droid install action (real intent installSyntheticForStra
   assert(ActionAdapter.execute({ type: ACTION_TYPES.INSTALL_DROID }).emitted === false, 'brak strataType odrzucony');
 }
 
+// ── T12: droid RELEASE action (RELEASE_DROID → removeSyntheticForStrata) — two-way juggle ──
+console.log('\nT12 — droid release action (real intent removeSyntheticForStrata, +1 do magazynu)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: 'GOOD_FE' });
+  const home = c.colonyManager.getColony(window.KOSMOS.homePlanet.id);
+  // Zainstaluj droida (setup), potem zwolnij — sprawdź round-trip magazynu.
+  home.resourceSystem.receive({ automation_droid: 1 });
+  const inst = ActionAdapter.execute({ type: ACTION_TYPES.INSTALL_DROID, strataType: 'laborer' });
+  assert(inst.success === true, 'setup: droid zainstalowany na laborer');
+  assert(Math.round(home.resourceSystem.getAmount('automation_droid')) === 0, 'setup: magazyn 0 po instalacji');
+  const synBefore = home.buildingSystem.getSyntheticJobs('laborer');
+  assert(synBefore >= 1, 'setup: getSyntheticJobs laborer ≥ 1');
+
+  const r = ActionAdapter.execute({ type: ACTION_TYPES.RELEASE_DROID, strataType: 'laborer' });
+  assert(r.event === 'building:releaseDroid', 'RELEASE_DROID routuje do removeSyntheticForStrata (nie EventBus)');
+  assert(r.success === true, 'release udany (był droid do zwolnienia)');
+  assert(r.returned === true, 'droid ZWRÓCONY do magazynu (FEATURES.popAllocation2=true)');
+  assert(home.buildingSystem.getSyntheticJobs('laborer') < synBefore, 'synthetic jobs laborer spadło (etat wraca do POP)');
+  assert(Math.round(home.resourceSystem.getAmount('automation_droid')) === 1, 'magazyn +1 automation_droid (release → inwentarz)');
+
+  // release bez zainstalowanego droida = benign fail (no_synthetic), ale routuje do realnej metody
+  const r2 = ActionAdapter.execute({ type: ACTION_TYPES.RELEASE_DROID, strataType: 'miner' });
+  assert(r2.event === 'building:releaseDroid' && r2.success === false, 'release bez droida = success=false (real gate)');
+  // walidacja: brak strataType odrzucony
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.RELEASE_DROID }).emitted === false, 'brak strataType odrzucony');
+}
+
+// ── T13: scout servicing actions (ORDER_RETURN → event; REFUEL → manualRefuel) — Task 1 ──
+console.log('\nT13 — scout servicing actions (orderReturn event + manualRefuel intent)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: 'GOOD_FE' });
+  const K = window.KOSMOS;
+
+  // (a) ORDER_RETURN emituje expedition:orderReturn z expeditionId
+  let seenExpId = null;
+  const h = ({ expeditionId }) => { seenExpId = expeditionId; };
+  EventBus.on('expedition:orderReturn', h);
+  const r = ActionAdapter.execute({ type: ACTION_TYPES.ORDER_RETURN, expeditionId: 'exp_42' });
+  EventBus.off('expedition:orderReturn', h);
+  assert(r.event === 'expedition:orderReturn' && seenExpId === 'exp_42', 'ORDER_RETURN emituje expedition:orderReturn{expeditionId}');
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.ORDER_RETURN }).emitted === false, 'ORDER_RETURN bez expeditionId odrzucony');
+
+  // (b) REFUEL routuje do VesselManager.manualRefuel (real intent). Zadokowany statek z niepełnym bakiem → pełny.
+  const colo = { id: 'v_ref', shipId: 'hull_small', colonyId: K.homePlanet.id,
+    modules: ['engine_chemical', 'deep_scanner'],
+    fuel: { current: 1, max: 8, capacity: 8, consumption: 0.4 },
+    warpFuel: { current: 0, max: 0 },
+    position: { state: 'docked', dockedAt: K.homePlanet.id }, status: 'idle', refuelAutomatically: true };
+  K.vesselManager._vessels.set('v_ref', colo);
+  const home = c.colonyManager.getColony(K.homePlanet.id);
+  home.resourceSystem.receive({ fuel: 50 });   // magazyn ma paliwo do tankowania
+  const rr = ActionAdapter.execute({ type: ACTION_TYPES.REFUEL, vesselId: 'v_ref' });
+  assert(rr.event === 'vessel:manualRefuel', 'REFUEL routuje do manualRefuel (nie EventBus)');
+  assert(colo.fuel.current > 1, `manualRefuel dotankował bak (${colo.fuel.current} > 1, natychmiast z magazynu)`);
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.REFUEL }).emitted === false, 'REFUEL bez vesselId odrzucony');
+}
+
 // ── Wynik ─────────────────────────────────────────────────────────
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);

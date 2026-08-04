@@ -35,6 +35,9 @@ export const ACTION_TYPES = {
   TRANSPORT:       'transport',            // transport towarów kolonia→kolonia (outpost→home shipping)
   SET_DROID_ORDER: 'setDroidOrder',        // zlecenie budowy droida (Build-N) — direct, dowolny tryb
   SET_ONESHOT:     'setOneShot',           // jednorazowa produkcja towaru (burst bufor) — direct, dowolny tryb
+  ORDER_RETURN:    'orderReturn',          // rozkaz powrotu misji do bazy (scout servicing loop — recon full_system)
+  REFUEL:          'refuel',               // natychmiastowe tankowanie zadokowanego statku (manualRefuel)
+  RELEASE_DROID:   'releaseDroid',         // Pop 2.0 Faza 4 — zwolnij zainstalowanego droida (→ magazyn), etat wraca do POP
   WAIT:          'wait',
 };
 
@@ -232,6 +235,39 @@ export function execute(action) {
       if (!bSys?.installSyntheticForStrata) return { emitted: false, reason: 'no_building_system' };
       const res = bSys.installSyntheticForStrata(action.strataType);
       return { emitted: true, event: 'building:installDroid', strataType: action.strataType, success: !!res?.success, reason: res?.reason };
+    }
+
+    case ACTION_TYPES.ORDER_RETURN: {
+      // REALNA ścieżka gracza „Powrót do bazy" = EventBus 'expedition:orderReturn' → MissionSystem._orderReturn
+      // (FleetManagerOverlay przycisk powrotu woła DOKŁADNIE ten event). Scout servicing loop: sprowadza
+      // zaparkowanego (fuel-stop) skauta full_system do domu → dok → auto/manual refuel → re-dispatch.
+      if (!action.expeditionId) return { emitted: false, reason: 'missing_expedition' };
+      EventBus.emit('expedition:orderReturn', { expeditionId: action.expeditionId });
+      return { emitted: true, event: 'expedition:orderReturn' };
+    }
+
+    case ACTION_TYPES.REFUEL: {
+      // REALNA ścieżka gracza „Tankuj" = VesselManager.manualRefuel (przycisk Refuel w panelu statku —
+      // intent-method, NIE EventBus). Natychmiastowe pełne tankowanie zadokowanego statku z magazynu
+      // kolonii/depotu. Bez tego re-dispatch skauta odpalałby z niepełnym bakiem → natychmiastowy fuel-stop.
+      if (!action.vesselId) return { emitted: false, reason: 'missing_vessel' };
+      const vMgr = window.KOSMOS?.vesselManager;
+      if (!vMgr?.manualRefuel) return { emitted: false, reason: 'no_vessel_manager' };
+      const ok = vMgr.manualRefuel(action.vesselId);
+      return { emitted: true, event: 'vessel:manualRefuel', ok };
+    }
+
+    case ACTION_TYPES.RELEASE_DROID: {
+      // REALNA ścieżka gracza = BuildingSystem.removeSyntheticForStrata (ColonyOverlay droidRelease
+      // stepper woła DOKŁADNIE to — intent-method, NIE EventBus). Auto-pick budynku danej straty z
+      // NAJWIĘCEJ droidami, zdejmuje 1 droida, zwraca go do magazynu (+1 automation_droid) przy
+      // FEATURES.popAllocation2=true; etat wraca do POP. Two-way juggle: install (praca) ↔ release (misja).
+      if (!action.strataType) return { emitted: false, reason: 'missing_strata_type' };
+      const bSys = _activeBuildingSystem();
+      if (!bSys?.removeSyntheticForStrata) return { emitted: false, reason: 'no_building_system' };
+      const res = bSys.removeSyntheticForStrata(action.strataType);
+      return { emitted: true, event: 'building:releaseDroid', strataType: action.strataType,
+               success: !!res?.success, returned: !!res?.returned, reason: res?.reason };
     }
 
     case ACTION_TYPES.WAIT:
