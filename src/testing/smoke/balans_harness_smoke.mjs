@@ -366,6 +366,28 @@ console.log('\nT13 — scout servicing actions (orderReturn event + manualRefuel
   assert(ActionAdapter.execute({ type: ACTION_TYPES.REFUEL }).emitted === false, 'REFUEL bez vesselId odrzucony');
 }
 
+// ── T14: DISBAND action (fleet:disbandRequest → _disbandVessel) — engine-upgrade retire ──
+console.log('\nT14 — disband action (real fleet:disbandRequest, retire scout + refund + crew)');
+{
+  const { createVessel } = await import('../../entities/Vessel.js');
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: 'GOOD_FE' });
+  const K = window.KOSMOS;
+  const home = c.colonyManager.getColony(K.homePlanet.id);
+  const v = createVessel('hull_small', home.planetId, { modules: ['engine_chemical', 'deep_scanner'] });
+  v.id = 'scout_disb';
+  v.position = { state: 'docked', dockedAt: home.planetId, x: home.planet.physics.x, y: home.planet.physics.y };
+  v.status = 'idle';
+  K.vesselManager._vessels.set('scout_disb', v);
+  home.fleet.push('scout_disb');
+  const feBefore = home.resourceSystem.getAmount('Fe');
+  const r = ActionAdapter.execute({ type: ACTION_TYPES.DISBAND, vesselId: 'scout_disb' });
+  assert(r.event === 'fleet:disbandRequest', 'DISBAND routuje do fleet:disbandRequest (real path)');
+  assert(!K.vesselManager.getVessel('scout_disb'), 'statek usunięty po disband (zadokowany + stocznia)');
+  assert(home.resourceSystem.getAmount('Fe') > feBefore, 'zwrot surowców (75% kadłuba+modułów) po disband');
+  assert(ActionAdapter.execute({ type: ACTION_TYPES.DISBAND }).emitted === false, 'brak vesselId odrzucony');
+}
+
 // ── Wynik ─────────────────────────────────────────────────────────
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);

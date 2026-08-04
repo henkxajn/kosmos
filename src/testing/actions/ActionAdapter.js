@@ -38,6 +38,7 @@ export const ACTION_TYPES = {
   ORDER_RETURN:    'orderReturn',          // rozkaz powrotu misji do bazy (scout servicing loop — recon full_system)
   REFUEL:          'refuel',               // natychmiastowe tankowanie zadokowanego statku (manualRefuel)
   RELEASE_DROID:   'releaseDroid',         // Pop 2.0 Faza 4 — zwolnij zainstalowanego droida (→ magazyn), etat wraca do POP
+  DISBAND:         'disband',              // rozbiórka statku (zwrot 75% + załoga) — engine-upgrade scout replacement
   WAIT:          'wait',
 };
 
@@ -268,6 +269,16 @@ export function execute(action) {
       const res = bSys.removeSyntheticForStrata(action.strataType);
       return { emitted: true, event: 'building:releaseDroid', strataType: action.strataType,
                success: !!res?.success, returned: !!res?.returned, reason: res?.reason };
+    }
+
+    case ACTION_TYPES.DISBAND: {
+      // REALNA ścieżka gracza „Rozbierz statek" = EventBus 'fleet:disbandRequest' → ColonyManager._disbandVessel
+      // (FleetManagerOverlay przycisk disband woła ten event). Wymaga statku ZADOKOWANEGO + stoczni;
+      // zwraca 75% surowców/modułów + 100% cargo, odblokowuje załogę. Engine-upgrade: retire stary
+      // (chemical) skaut po zbudowaniu nowego (ion/fusion) — „replace", nie akumuluj skautów.
+      if (!action.vesselId) return { emitted: false, reason: 'missing_vessel' };
+      EventBus.emit('fleet:disbandRequest', { vesselId: action.vesselId });
+      return { emitted: true, event: 'fleet:disbandRequest' };
     }
 
     case ACTION_TYPES.WAIT:
