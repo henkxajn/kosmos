@@ -42,27 +42,46 @@ function runOne(seed) {
   const mark = (k) => { if (M[k] == null) M[k] = gy(); };
   const countB = (id) => { let n = 0; for (const [, e] of home.buildingSystem._active) if ((e.building?.id ?? e.buildingId) === id) n++; return n; };
   const syntheticTotal = () => {
-    // droidy = syntetyczne etaty na macierzystej (Population 2.0 Faza 4 automation_droid)
+    // droidy ZAINSTALOWANE = syntetyczne etaty na macierzystej (Population 2.0 Faza 4 automation_droid)
     let n = 0;
     for (const t of (home.civSystem?.constructor?.STRATA_TYPES ?? ['laborer','miner','worker','scientist','merchant','engineer','bureaucrat'])) {
       n += home.buildingSystem?.getSyntheticJobs?.(t) ?? 0;
     }
     return n;
   };
+  // Placówki GRACZA (nie AI). productive = ma dodatni bilans energii (dostała autonomous_solar → mine
+  // produkuje; sama mine = brownout -4.5, produkuje 0). Liczone z żywych kolonii-placówek.
+  const playerOutposts = () => (core.colonyManager.getAllColonies?.() ?? []).filter(c => c.isOutpost && !c.ownerEmpireId);
+  const productiveOutposts = () => playerOutposts().filter(op => (op.resourceSystem?.energy?.balance ?? 0) > 0);
 
   EventBus.on('vessel:created', ({ vessel }) => {
     if (canDoRecon(vessel)) mark('scienceShip');
     if (canColonize(vessel)) mark('colonizer');
   });
   EventBus.on('colony:founded', ({ colony }) => { if (colony?.planetId !== home.planetId) mark('secondColony'); });
+  EventBus.on('outpost:founded', ({ colony }) => { if (colony && !colony.ownerEmpireId) mark('firstOutpost'); });
+  // Droidy WYPRODUKOWANE (factory:droidOrderCompleted) — honest droid count (doktryna: droid konsumowany
+  // przez placówkę, NIE instalowany → syntheticTotal=0; produkcja to prawdziwy sygnał popytu na droidy).
+  let droidsProduced = 0, droidsProducedByGy6 = 0;
+  EventBus.on('factory:droidOrderCompleted', ({ commodityId, qty }) => {
+    if (commodityId === 'automation_droid') { droidsProduced += (qty ?? 1); if (gy() <= 6.0) droidsProducedByGy6 = droidsProduced; }
+  });
 
-  let droidsByGy6 = 0;
+  let droidsByGy6 = 0;          // ZAINSTALOWANE do yr6
+  let shipRareCount = 0;        // liczba jednorazowych transportów rzadkich surowców outpost→home
   const ticker = new Ticker(core.timeSystem);
   ticker.onCivYear(() => {
-    for (let d = 0; d < 4; d++) { let a; try { a = bot.decideAction({ homeAlive: true }, catalog); } catch { continue; } if (a) { try { ActionAdapter.execute(a); } catch {} } }
+    for (let d = 0; d < 4; d++) {
+      let a; try { a = bot.decideAction({ homeAlive: true }, catalog); } catch { continue; }
+      if (a) {
+        if (typeof a._tag === 'string' && a._tag.startsWith('ship_rare')) { shipRareCount++; mark('firstShipRare'); }
+        try { ActionAdapter.execute(a); } catch {}
+      }
+    }
   });
   ticker.onTick(() => {
     if (M.firstFactory == null && countB('factory') > 0) mark('firstFactory');
+    if (M.firstProductiveOutpost == null && productiveOutposts().length > 0) mark('firstProductiveOutpost');
     // POP deficit = pierwszy rok, gdy home ma NIEobsadzone etaty przy zerowym bezrobociu (POP-limited).
     if (M.popDeficit == null) {
       const civ = home.civSystem;
@@ -76,9 +95,12 @@ function runOne(seed) {
   ticker.run(TARGET_GY * 12, { tickSize: 1.0 });
 
   return {
-    seed, M, droidsByGy6,
+    seed, M, droidsByGy6, droidsProduced, droidsProducedByGy6, shipRareCount,
     finalColonies: core.colonyManager.getPlayerColonies().length,
+    finalOutposts: playerOutposts().length,
+    finalProductiveOutposts: productiveOutposts().length,
     finalPop: home.civSystem.population,
+    finalCredits: Math.floor(home.credits ?? 0),
     finalGy: gy(),
     crashed: ticker._crashed,
   };
@@ -93,19 +115,30 @@ for (let i = 1; i <= N_SEEDS; i++) {
 }
 
 const fmt = (v) => v == null ? '  —  ' : `${v.toFixed(1)}`.padStart(5);
-console.log('seed        | sciShip | colonizr | 2ndCol | factory | popDefic | droids≤6 | colonies | pop  | crash');
-console.log('------------+---------+----------+--------+---------+----------+----------+----------+------+------');
+console.log('seed        | sciShip | 1stOutp | prodOut | 1stShip | shipN | outp | prodO | droid⨉6 | droidMade | colon | pop  | Kr   | crash');
+console.log('------------+---------+---------+---------+---------+-------+------+-------+---------+-----------+-------+------+------+------');
 for (const r of results) {
-  console.log(`${String(r.seed).padEnd(11)} | ${fmt(r.M.scienceShip)}   | ${fmt(r.M.colonizer)}    | ${fmt(r.M.secondColony)}  | ${fmt(r.M.firstFactory)}   | ${fmt(r.M.popDeficit)}    | ${String(r.droidsByGy6).padStart(6)}   | ${String(r.finalColonies).padStart(6)}   | ${String(r.finalPop).padStart(4)} | ${r.crashed ? 'YES' : 'no'}`);
+  console.log(
+    `${String(r.seed).padEnd(11)} | ${fmt(r.M.scienceShip)}   | ${fmt(r.M.firstOutpost)}   | ${fmt(r.M.firstProductiveOutpost)}   | ${fmt(r.M.firstShipRare)}   | ${String(r.shipRareCount).padStart(5)} | ${String(r.finalOutposts).padStart(4)} | ${String(r.finalProductiveOutposts).padStart(5)} | ${String(r.droidsByGy6).padStart(7)} | ${String(r.droidsProduced).padStart(9)} | ${String(r.finalColonies).padStart(5)} | ${String(r.finalPop).padStart(4)} | ${String(r.finalCredits).padStart(4)} | ${r.crashed ? 'YES' : 'no'}`);
 }
 
 const median = (arr) => { const v = arr.filter(x => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
+const cnt = (pred) => results.filter(pred).length;
 console.log('\n── MEDIAN game-year first-occurrence ──');
-console.log(`  science ship:  ${fmt(median(results.map(r => r.M.scienceShip)))} gy   (anchor ≈ yr 1)`);
-console.log(`  POP deficit:   ${fmt(median(results.map(r => r.M.popDeficit)))} gy   (anchor ≈ yr 2)`);
-console.log(`  colonizer:     ${fmt(median(results.map(r => r.M.colonizer)))} gy`);
-console.log(`  2nd colony:    ${fmt(median(results.map(r => r.M.secondColony)))} gy`);
-console.log(`  first factory: ${fmt(median(results.map(r => r.M.firstFactory)))} gy`);
-console.log(`  droids by gy6: ${median(results.map(r => r.droidsByGy6))}   (anchor ≈ 3)`);
-console.log(`  crashes:       ${results.filter(r => r.crashed).length}/${results.length}`);
-console.log(`  colonized:     ${results.filter(r => r.finalColonies >= 2).length}/${results.length} runs founded a 2nd colony`);
+console.log(`  science ship:        ${fmt(median(results.map(r => r.M.scienceShip)))} gy   (anchor ≈ yr 1)`);
+console.log(`  first outpost:       ${fmt(median(results.map(r => r.M.firstOutpost)))} gy`);
+console.log(`  first PRODUCTIVE outpost (has solar → mining): ${fmt(median(results.map(r => r.M.firstProductiveOutpost)))} gy`);
+console.log(`  first shipping run:  ${fmt(median(results.map(r => r.M.firstShipRare)))} gy`);
+console.log(`  colonizer:           ${fmt(median(results.map(r => r.M.colonizer)))} gy`);
+console.log(`  2nd colony:          ${fmt(median(results.map(r => r.M.secondColony)))} gy`);
+console.log(`  POP deficit:         ${fmt(median(results.map(r => r.M.popDeficit)))} gy   (anchor ≈ yr 2)`);
+console.log('\n── LOOP RELIABILITY across seeds ──');
+console.log(`  founded ≥1 outpost:            ${cnt(r => r.finalOutposts >= 1)}/${results.length}`);
+console.log(`  ≥1 PRODUCTIVE outpost (solar): ${cnt(r => r.finalProductiveOutposts >= 1)}/${results.length}`);
+console.log(`  shipping leg fired (≥1 run):   ${cnt(r => r.shipRareCount > 0)}/${results.length}`);
+console.log(`  founded a 2nd (POP) colony:    ${cnt(r => r.finalColonies >= 2)}/${results.length}`);
+console.log('\n── DROIDS (measured, untuned) ──');
+console.log(`  installed by yr6 (median):  ${median(results.map(r => r.droidsByGy6))}   (anchor ≈ 3)`);
+console.log(`  produced by yr6 (median):   ${median(results.map(r => r.droidsProducedByGy6))}`);
+console.log(`  produced total (median):    ${median(results.map(r => r.droidsProduced))}`);
+console.log(`\n  crashes: ${cnt(r => r.crashed)}/${results.length}   final Kr (median): ${median(results.map(r => r.finalCredits))}`);
