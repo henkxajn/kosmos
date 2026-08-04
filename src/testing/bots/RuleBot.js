@@ -501,6 +501,26 @@ export class RuleBot extends BaseBot {
     return this._maybeProduceDroid(ctx, civYear);
   }
 
+  /**
+   * Two-way juggle (Task 3) — RELEASE zainstalowanego droida tier-1 → +1 automation_droid w magazynie
+   * (etat wraca do POP). Odwrotność _maybeDroidAction (install). „Release when it's worth more on a
+   * found-outpost mission": droid pracujący w kolonii → materiał wejściowy autonomous_mine placówki.
+   * removeSyntheticForStrata sam wybiera budynek z NAJWIĘCEJ droidami danej straty. Zwraca null gdy
+   * NIC nie jest zainstalowane (na obecnym panelu install-for-employment nie odpala — patrz raport
+   * Gate-2: uniwersalna nadwyżka pracy → brak niedoboru → droidy tylko ścieżką outpostu). Reużywalne
+   * dla WSZYSTKICH strat tier-1; preferuj pierwszą z zainstalowanym droidem (kolejność = laborer→miner→worker).
+   */
+  _maybeReleaseDroid(ctx) {
+    const bs = ctx.active?.buildingSystem;
+    if (!bs?.removeSyntheticForStrata || !bs?.getSyntheticJobs) return null;
+    for (const strata of DROID_TIER1_STRATA) {
+      if ((bs.getSyntheticJobs(strata) ?? 0) >= 1) {
+        return { type: ACTION_TYPES.RELEASE_DROID, strataType: strata, _tag: `droid_release_${strata}` };
+      }
+    }
+    return null;
+  }
+
   // ── Stage B: autonomous outpost loop ────────────────────────────────────────
   /**
    * Ścieżka autonomicznej placówki (works-forward): cargo ship → found outpost na planetoid z
@@ -522,8 +542,14 @@ export class RuleBot extends BaseBot {
       v.status === 'idle' && v.position?.state === 'docked' && canHaulCargo(v) && !canColonize(v));
     if (!cargoShip) return this._maybeBuildCargo(ctx, myVessels);
 
-    // Droid w magazynie = input autonomous_mine → produkuj jeśli brak (expansion-driven).
-    if (ctx.getAmount('automation_droid') < 1) return this._maybeProduceDroid(ctx, civYear);
+    // Droid w magazynie = input autonomous_mine. TWO-WAY JUGGLE (Task 3): najpierw ZWOLNIJ
+    // zainstalowanego droida (→ +1 magazyn, etat wraca do POP) — „release when worth more on the
+    // outpost mission"; dopiero gdy nie ma co zwolnić → produkuj świeżego (expansion-driven).
+    if (ctx.getAmount('automation_droid') < 1) {
+      const released = this._maybeReleaseDroid(ctx);
+      if (released) return released;
+      return this._maybeProduceDroid(ctx, civYear);
+    }
 
     // Bufor commodities placówki: reactive trzyma SA/extraction_systems na niskim equilibrium (3/1),
     // a autonomous_mine potrzebuje 4/2 → one-shot burst (najwyższy FP, działa w reactive) gdy short.
