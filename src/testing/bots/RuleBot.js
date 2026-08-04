@@ -44,6 +44,9 @@ const SCOUT_ENGINE_TIERS = [
   { engine: 'engine_chemical', tech: null },   // fallback (starter, bez techu)
 ];
 // POP-colonizer: habitat (POP) + cargo (goods bundle) — B0 caveat: pure cargo nie wozi POP.
+// ⚠ Take-4 Task B: slot [0] (silnik) jest PODMIENIANY na _bestScoutEngine(ctx) przy budowie (ion/fusion
+// gdy tech) — te stałe trzymają tylko NIE-silnikowe moduły ([1..], przez .slice(1)); engine_chemical to
+// fallback-nazwa dla czytelności. Cargo/kolonizator dostają ten sam upgrade zasięgu co skaut.
 const COLONIZER_HULL    = 'hull_small';
 const COLONIZER_MODULES = ['engine_chemical', 'habitat_pod', 'cargo_large'];
 // Cargo (autonomous outpost): pure cargo (bez POP) — wozi materiały autonomous_mine na planetoid.
@@ -129,6 +132,12 @@ export class RuleBot extends BaseBot {
       // krok ekspansji (found outpost: droid recipe Fe 1000 + budynek + cargo ship). Poniżej + drenaż →
       // dołóż kopalnię (Faza 3). NIE „tuned to survive": to próg operacyjności pętli, nie przetrwania.
       fe_working_buffer: 1500,
+      // Take-4 — energy operational headroom (bot-policy reserve, ta sama klasa co fe_working_buffer/
+      // food_min): utrzymuj bilans energii ≥ reserve, by (a) dodanie NASTĘPNEGO konsumenta (mine 2⚡,
+      // farm/well 1⚡) nie wpychało w brownout, (b) bramka life-support kopalń (energyBalance≥0) była
+      // otwarta. Demand-aware energy scaling celuje w ten próg. NIE strojone pod kotwicę roku — próg
+      // operacyjności (headroom ~2-3 budynków), analogicznie do rezerwy Fe.
+      energy_reserve: 5,
       ...weights,
     };
     this._recentEnqueues = new Map();
@@ -245,13 +254,14 @@ export class RuleBot extends BaseBot {
         if (a) { a._tag = 'water_build'; return a; }
       }
     }
-    if (ctx.energyBalance < this.weights.energy_min) {
-      const up = this._findUpgrade(ctx, catalog, 'solar_farm');
-      if (up) { up._tag = 'energy_upgrade'; return up; }
-      if (ctx.canBuild('solar_farm')) {
-        const a = this._findBuild(catalog, 'solar_farm');
-        if (a) { a._tag = 'energy_build'; return a; }
-      }
+    // ── P3-energy: DEMAND-AWARE ENERGY SCALING (take-4, generalizacja wzorca z _maybeScaleMines) ──
+    // Stary branch „balance<-1 → buduj solar" CICHO padał: reactive factory trzyma commodities solara
+    // (SA:4/PC:3/CB:2) na niskim equilibrium → canBuild('solar_farm')=false → _findBuild=null → fall-
+    // through (probe: solar stuck 2/2 mimo Fe 9887, energyBalance −72). ROOT = starvation COMMODITY, nie
+    // Fe/kafel. Fix = skaluj energię do popytu Z burstem commodity (jak robi to gracz i outpost path).
+    {
+      const energyAction = this._maybeScaleEnergy(ctx, civYear, catalog);
+      if (energyAction) return energyAction;
     }
 
     // ── P3.4: Fe-DEMAND-AWARE MINE SCALING (take-3 fix, ⚠ REORDER: było P11 mine<2 cap) ──
@@ -368,10 +378,10 @@ export class RuleBot extends BaseBot {
       const a = this._findBuild(catalog, 'well');
       if (a) { a._tag = 'expand_well'; return a; }
     }
-    if (ctx.countBuilding('solar_farm') < Math.ceil(pop * this.weights.solar_per_pop / 1.5) && ctx.canBuild('solar_farm')) {
-      const a = this._findBuild(catalog, 'solar_farm');
-      if (a) { a._tag = 'expand_solar'; return a; }
-    }
+    // ── P10-solar RETIRED (take-4): energia = JEDNA reguła demand-aware (P3 _maybeScaleEnergy), nie
+    // proaktywny special-case pop×solar_per_pop. Stary expand_solar przebudowywał do pop-ratio (seed_4:
+    // 16 solarów → +488 bilansu, daleko ponad reserve) drenując commodities/decyzje z ekspansji. Reguła
+    // P3 trzyma bilans ≥ reserve i STOP (zbieżna). solar_per_pop zostaje w weights (nieużywane, historyczne).
 
     // ── P11: mine scaling — PRZENIESIONE do P3.4 (_maybeScaleMines, Fe-demand-aware) ──
 
@@ -649,7 +659,11 @@ export class RuleBot extends BaseBot {
     const queues = ctx.active.shipQueues ?? [], pending = ctx.active.pendingShipOrders ?? [];
     if ([...queues, ...pending].some(q => (q.modules ?? []).includes('cargo_large') &&
         !(q.modules ?? []).includes('habitat_pod'))) return null;
-    return { type: ACTION_TYPES.BUILD_SHIP, shipId: CARGO_HULL, modules: [...CARGO_MODULES],
+    // Task B (take-4) — buduj cargo z NAJLEPSZYM dostępnym silnikiem (ion/fusion gdy tech), ta sama
+    // linia co skaut (_bestScoutEngine self-gate na hasTech). engine_chemical (range 20) NIE dosięgał
+    // dalekich planetoid które ion-skaut ODKRYŁ (seed_5: Fe zdrowe 24k, 0 outpost — cargo nie dolatywał).
+    return { type: ACTION_TYPES.BUILD_SHIP, shipId: CARGO_HULL,
+             modules: [this._bestScoutEngine(ctx), ...CARGO_MODULES.slice(1)],
              planetId: ctx.active.planetId, _tag: 'ship_cargo' };
   }
 
@@ -933,7 +947,8 @@ export class RuleBot extends BaseBot {
     return {
       type: ACTION_TYPES.BUILD_SHIP,
       shipId: COLONIZER_HULL,
-      modules: [...COLONIZER_MODULES],
+      // Task B (take-4) — kolonizator też z najlepszym silnikiem (dosięga dalszych rocky/ice do POP-kolonizacji).
+      modules: [this._bestScoutEngine(ctx), ...COLONIZER_MODULES.slice(1)],
       planetId: ctx.active.planetId,
       _tag: 'ship_colonizer',
     };
@@ -1125,9 +1140,17 @@ export class RuleBot extends BaseBot {
     const baseline = Math.max(2, factories);
 
     // FAZA 1 — dobuduj do baseline (proaktywnie, gdy life-support stabilny).
-    if (mines < baseline && ctx.canBuild('mine')) {
-      const a = this._findBuild(catalog, 'mine');
-      if (a) { a._tag = 'mine_base'; return a; }
+    if (mines < baseline) {
+      if (ctx.canBuild('mine')) {
+        const a = this._findBuild(catalog, 'mine');
+        if (a) { a._tag = 'mine_base'; return a; }
+      } else {
+        // Take-4 — kopalnia nieosiągalna przez BRAK COMMODITY (SA:3/extraction:2/PC:1), nie Fe → burst
+        // (ta sama generalizacja co energy). MEDIAN: po otwarciu bramki life-support (energia trzyma)
+        // kopalnie DALEJ stały na commodity (probe: SA stuck 0) → Fe kaskada nie zeszłaby bez burstu.
+        const burst = this._burstMissingCommodity(ctx, 'mine');
+        if (burst) return burst;
+      }
     }
     // ⚠ Lv2 upgrade ODRZUCONE — headless upgrade NIE DZIAŁA (catalog.listUpgradeActions=0 przez zły
     // akcesor grid.getByKey/_map; a bezpośredni planet:upgradeRequest też nie podnosi poziomu kopalni
@@ -1138,11 +1161,144 @@ export class RuleBot extends BaseBot {
     // co cooldown (paced do build+ramp lag). ⚠ Cooldown + feLow + stop-on-not-draining = klucz przeciw
     // runaway (bez feLow Faza 3 odpalała przy 57k Fe → 100+ kopalń). Zbieżne: gdy supply dogoni demand →
     // drenaż ustaje I Fe > buffer → stop.
-    if (feDraining && feLow && (civYear - this._lastMineExpand) >= this._mineExpandCooldown && ctx.canBuild('mine')) {
-      this._lastMineExpand = civYear;
-      const a = this._findBuild(catalog, 'mine');
-      if (a) { a._tag = 'mine_demand'; return a; }
+    if (feDraining && feLow && (civYear - this._lastMineExpand) >= this._mineExpandCooldown) {
+      if (ctx.canBuild('mine')) {
+        this._lastMineExpand = civYear;
+        const a = this._findBuild(catalog, 'mine');
+        if (a) { a._tag = 'mine_demand'; return a; }
+      } else {
+        // Take-4 — j.w.: brak commodity blokuje demand-override → burst (NIE konsumuje cooldown; kopalnia
+        // jeszcze nie zbudowana, więc nie startujemy pacing timera dopóki realnie nie postawimy).
+        const burst = this._burstMissingCommodity(ctx, 'mine');
+        if (burst) return burst;
+      }
     }
     return null;
+  }
+
+  // ── Take-4: demand-aware ENERGY scaling + shared build-or-burst primitive ────────────────────
+  /**
+   * Demand-aware energy scaling (generalizacja wzorca „skaluj proaktywny producent P do sygnału popytu"
+   * z _maybeScaleMines). Sygnał popytu energii = ŻYWY `energyBalance` (production − consumption; RATE, nie
+   * stock — prostszy niż inventory-trend Fe: bilans wprost koduje popyt-vs-podaż). Utrzymuj bilans ≥
+   * `energy_reserve` (headroom operacyjny). Gdy poniżej → dołóż producenta energii przy najlepszym
+   * placemencie (solar na desert; coal na high-C fallback), Z BURSTEM commodity gdy build zablokowany.
+   * Zbieżny: gdy produkcja przekroczy konsumpcję+reserve → stop. Overshoot podczas buildTime tłumiony
+   * przez `_pendingEnergySupply` (in-progress producenci liczą się do bilansu). Heurystyka czyta ŻYWY
+   * bilans — NIE stała liczba solarów, NIE strojona pod przetrwanie konkretnego seeda.
+   *
+   * ⚠ Dlaczego DUPLIKAT metody (parallel do _maybeScaleMines), nie jedna generyczna: sygnały popytu
+   * genuinnie się różnią (Fe = inventory-trend + buffer; energia = rate). Wspólny jest tylko PRIMITYW
+   * budowania-lub-burstu → wyekstrahowany do `_burstMissingCommodity`, używany przez OBIE reguły
+   * (mine + energy). To jest generalizacja (współdzielony primitive), a demand-signal zostaje per-zasób.
+   */
+  _maybeScaleEnergy(ctx, civYear, catalog) {
+    const reserve = this.weights.energy_reserve;
+    // Projected balance = żywy bilans + energia budujących się producentów (nie widoczna w balance zanim
+    // aktywni). Bez tego bot dołożyłby 4 solary/civYear zanim pierwszy wystartuje → overshoot.
+    const proj = ctx.energyBalance + this._pendingEnergySupply(ctx);
+    if (proj >= reserve) return null;   // popyt pokryty (z budującymi się) → stop (zbieżność)
+
+    const building = this._bestEnergyBuilding(ctx);   // solar (desert) | coal (terrainAny, high-C fallback)
+    if (ctx.canBuild(building)) {
+      const a = this._findBuild(catalog, building);
+      if (a) { a._tag = building === 'coal_plant' ? 'energy_coal' : 'energy_solar'; return a; }
+      // Stać, ale brak legalnego kafla dla wybranego (np. solar bez desert) → coal (terrainAny) jako
+      // fallback placement gdy C zdrowe. (Zwykle _bestEnergyBuilding już to wychwyci; belt-and-suspenders.)
+      if (building === 'solar_farm' && ctx.getAmount('C') > 60 && ctx.canBuild('coal_plant')) {
+        const coalA = this._findBuild(catalog, 'coal_plant');
+        if (coalA) { coalA._tag = 'energy_coal'; return coalA; }
+      }
+      return null;   // brak kafla nigdzie — czekaj (nie da się zbudować)
+    }
+    // Nieosiągalny przez BRAK COMMODITY → burst (unblock next build). Raw (Fe/Si/Cu) short → null (czeka na kopalnie).
+    return this._burstMissingCommodity(ctx, building);
+  }
+
+  /**
+   * Wybór budynku energetycznego (doktryna Filipa: „solar na desert; coal na high-C"). Solar = domyślny
+   * (yieldBonus energy 1.5 na desert, brak ciągłego wejścia = odporny). Coal = fallback gdy BRAK wolnego
+   * kafla desert (coal terrainAny — buduje gdziekolwiek) I C zdrowe (stock > buffer + rate ≥ 0 → coal
+   * 6C/rok nie zagłodzi się). Czyta ŻYWY stan (wolne kafle desert, stock/rate C) — NIE stała. Na klasach
+   * harnessu (wszystkie high-C, desert nie wysycha w 45gy) coal głównie uśpiony-ale-osiągalny (raport).
+   */
+  _bestEnergyBuilding(ctx) {
+    if (this._countFreeTiles(ctx, 'desert') > 0) return 'solar_farm';
+    if (ctx.getAmount('C') > 60 && ctx.getRate('C') >= 0) return 'coal_plant';   // desert wyczerpany + C zdrowe
+    return 'solar_farm';   // brak desert I brak C → solar gdziekolwiek (degraded placement)
+  }
+
+  /** Energia budujących się producentów (in-progress solar/coal) — overshoot guard podczas buildTime.
+   *  Estimate = bazowa stawka energii z DANYCH (solar 8, coal 18), NIE magic number. Liczy tylko
+   *  in-progress (construction+pending); aktywni są już w energyBalance. */
+  _pendingEnergySupply(ctx) {
+    const bs = ctx.active?.buildingSystem;
+    if (!bs) return 0;
+    const est = (id) => BUILDINGS[id]?.rates?.energy ?? 0;
+    const isEnergy = (id) => id === 'solar_farm' || id === 'coal_plant' || id === 'geothermal';
+    let supply = 0;
+    if (bs._constructionQueue) for (const [, c] of bs._constructionQueue) if (isEnergy(c.buildingId)) supply += est(c.buildingId);
+    if (bs._pendingQueue)      for (const [, p] of bs._pendingQueue)      if (isEnergy(p.buildingId)) supply += est(p.buildingId);
+    return supply;
+  }
+
+  /** Liczba WOLNYCH (buildable, nie zajęte, nie damaged) kafli danego terenu. */
+  _countFreeTiles(ctx, terrainType) {
+    const tiles = ctx.active?.grid?.toArray?.() ?? [];
+    let n = 0;
+    for (const t of tiles) {
+      if (t.type !== terrainType) continue;
+      const terr = TERRAIN_TYPES[t.type];
+      if (terr?.buildable && !t.isOccupied && !t.damaged) n++;
+    }
+    return n;
+  }
+
+  /**
+   * SHARED PRIMITIVE (generalizacja budowania-lub-burstu, używany przez mine + energy scaling): gdy budynek
+   * NIEosiągalny przez BRAK COMMODITY (nie raw Fe/Si/Cu), odpal one-shot burst brakującego towaru
+   * (setOneShotJob — najwyższy priorytet FP, działa w reactive; DOKŁADNIE co robi gracz gdy brakuje
+   * power_cells na solar, i co już robi outpost path dla budynków autonomicznych). Reactive factory trzyma
+   * commodities na NISKIM equilibrium (~0-3) → koszt solar (SA:4,PC:3,CB:2) / mine (SA:3) bywa NIEosiągalny
+   * bez burstu (probe). Raw surowce (Fe/Si/Cu) NIE burstowalne (produkują je kopalnie) → null (build czeka).
+   * Zwraca burst action | null (brak brakującego commodity / burst tego towaru już w toku / tylko raw short).
+   */
+  _burstMissingCommodity(ctx, buildingId) {
+    const def = BUILDINGS[buildingId];
+    const fs = window.KOSMOS?.factorySystem;
+    // (1) HONEST — jeśli budynek ma short RAW (Fe/Si/Cu w `cost`), burst commodity go NIE odblokuje
+    //     (raw robią kopalnie) → yield (niech niższa drabina/kopalnie dorobią; NIE monopolizuj decyzji).
+    //     ⚠ To wyprowadza bota z Fe-bootstrap-trap: MEDIAN low-Fe seed miał Fe=8 < solar Fe:15 → dawniej
+    //     bot futilnie burstował SA (recepta Fe:8, drenując resztkę Fe) w kółko; teraz oddaje decyzję.
+    for (const [k, v] of Object.entries(def?.cost ?? {})) {
+      if (ctx.getAmount(k) < v) return null;
+    }
+    // (2) Zbierz short commodities. Jeśli KTÓRYKOLWIEK jest teraz NIEwytwarzalny (jego recepta ma raw za
+    //     niski), cały budynek i tak zablokowany → yield (burst innych = marnotrawstwo; kopalnie dorobią raw).
+    const bCost = def?.commodityCost ?? {};
+    const short = [];
+    for (const [cid, need] of Object.entries(bCost)) {
+      if (cid === 'automation_droid') continue;   // droid = osobna ścieżka (nie factory burst)
+      if (ctx.getAmount(cid) >= need) continue;
+      if (!this._commodityMakeableNow(ctx, cid)) return null;   // nieodblokowywalny blocker → yield cały budynek
+      short.push([cid, need]);
+    }
+    // (3) Wszystkie brakujące commodities SĄ wytwarzalne → burst pierwszy (odblokowuje budynek krok po kroku).
+    for (const [cid, need] of short) {
+      if (fs?.oneShotJob?.commodityId === cid) return null;   // burst tego towaru w toku — czekaj
+      return { type: ACTION_TYPES.SET_ONESHOT, commodityId: cid, qty: need + 2, _tag: `oneshot_${cid}` };
+    }
+    return null;   // nic short (albo raw-blocked wyżej) → nic do burstu
+  }
+
+  /** Czy towar da się TERAZ wytworzyć: wszystkie RAW składniki recepty (Fe/Si/Cu/Li/C…) dostępne. Składniki
+   *  będące commodity (tier-2 recepty) pomijamy — factory sama je zrobi. Blokujemy tylko na raw (kopalnie). */
+  _commodityMakeableNow(ctx, cid) {
+    const recipe = COMMODITIES[cid]?.recipe ?? {};
+    for (const [ing, iq] of Object.entries(recipe)) {
+      if (COMMODITIES[ing]) continue;         // składnik = commodity → factory zrobi, nie blokuj
+      if (ctx.getAmount(ing) < iq) return false;   // raw surowiec za niski → nieopłacalne teraz
+    }
+    return true;
   }
 }

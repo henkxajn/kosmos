@@ -15,6 +15,8 @@ import { ActionCatalog } from '../actions/ActionCatalog.js';
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 import { canColonize, canDoRecon } from '../../entities/Vessel.js';
 import EventBus from '../../core/EventBus.js';
+import { RuleBot } from '../bots/RuleBot.js';
+import { BUILDINGS } from '../../data/BuildingsData.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -386,6 +388,117 @@ console.log('\nT14 — disband action (real fleet:disbandRequest, retire scout +
   assert(!K.vesselManager.getVessel('scout_disb'), 'statek usunięty po disband (zadokowany + stocznia)');
   assert(home.resourceSystem.getAmount('Fe') > feBefore, 'zwrot surowców (75% kadłuba+modułów) po disband');
   assert(ActionAdapter.execute({ type: ACTION_TYPES.DISBAND }).emitted === false, 'brak vesselId odrzucony');
+}
+
+// ── T15: demand-aware energy scaling (take-4 Task 1) — _maybeScaleEnergy + shared burst primitive ──
+console.log('\nT15 — demand-aware energy scaling (solar/coal, burst commodity, honest yield)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: 'GOOD_FE' });
+  const K = window.KOSMOS;
+  const home = c.colonyManager.getColony(K.homePlanet.id);
+  const rs = home.resourceSystem;
+  const bot = new RuleBot();
+  const cat = new ActionCatalog({
+    colonyManager: c.colonyManager, techSystem: c.techSystem, resourceSystem: c.resourceSystem,
+    buildingSystem: c.buildingSystem, vesselManager: c.vesselManager, civSystem: c.civSystem,
+    starSystemManager: c.starSystemManager,
+  });
+  if (K.factorySystem) K.factorySystem._oneShotJob = null;   // brak zaległego burstu z bootu (getter oneShotJob read-only)
+
+  // (a) energyBalance < reserve I solar w pełni na stać → BUILD solar_farm (demand-driven).
+  rs.inventory.set('Fe', 200); rs.inventory.set('Si', 200); rs.inventory.set('Cu', 200); rs.inventory.set('C', 200);
+  rs.inventory.set('structural_alloys', 30); rs.inventory.set('power_cells', 30); rs.inventory.set('conductor_bundles', 30);
+  rs.energy.balance = -10;
+  let ctx = bot._buildContext();
+  const aBuild = bot._maybeScaleEnergy(ctx, 5, cat);
+  assert(aBuild && aBuild.type === ACTION_TYPES.BUILD && aBuild.buildingId === 'solar_farm',
+         'energy<reserve + stać na solar → BUILD solar_farm (demand-aware)');
+
+  // (b) energyBalance ≥ reserve → null (popyt pokryty, reguła zbieżna — nie over-builduje).
+  rs.energy.balance = 50;
+  ctx = bot._buildContext();
+  assert(bot._maybeScaleEnergy(ctx, 5, cat) === null, 'energy≥reserve → null (zbieżność, brak over-buildu)');
+
+  // (c) commodity krótki ALE wytwarzalny (SA=0, Fe/C wysokie) → BURST (SET_ONESHOT), nie build.
+  rs.energy.balance = -10;
+  rs.inventory.set('structural_alloys', 0);   // solar SA:4 niespełnione → canBuild=false
+  ctx = bot._buildContext();
+  const burst = bot._maybeScaleEnergy(ctx, 5, cat);
+  assert(burst && burst.type === ACTION_TYPES.SET_ONESHOT && burst.commodityId === 'structural_alloys',
+         'commodity krótki+wytwarzalny → burst SET_ONESHOT (nie czeka biernie)');
+
+  // (d) HONEST — raw budynku (Fe) krótki → null (yield; NIE futilny burst commodity). Fe-bootstrap-trap escape.
+  rs.inventory.set('Fe', 5);   // solar raw Fe:15 niespełnione
+  rs.inventory.set('structural_alloys', 0);
+  ctx = bot._buildContext();
+  assert(bot._maybeScaleEnergy(ctx, 5, cat) === null, 'raw budynku (Fe) krótki → yield (honest, brak futile burst)');
+
+  // (e) _bestEnergyBuilding: wolny desert → solar; brak desert + C zdrowe → coal (terrainAny fallback).
+  const ctxDesert = { active: { grid: { toArray: () => [{ type: 'desert', isOccupied: false, damaged: false }] } },
+                      getAmount: () => 100, getRate: () => 0 };
+  assert(bot._bestEnergyBuilding(ctxDesert) === 'solar_farm', 'wolny desert → solar_farm');
+  const ctxNoDesert = { active: { grid: { toArray: () => [] } },
+                        getAmount: (id) => id === 'C' ? 100 : 0, getRate: () => 0 };
+  assert(bot._bestEnergyBuilding(ctxNoDesert) === 'coal_plant', 'brak desert + C zdrowe → coal_plant (high-C fallback)');
+
+  // (f) _pendingEnergySupply: solar w budowie liczy się jako nadchodząca podaż (overshoot guard).
+  home.buildingSystem._constructionQueue = new Map([['k_solar', { buildingId: 'solar_farm' }]]);
+  rs.inventory.set('Fe', 200); rs.inventory.set('structural_alloys', 30);
+  ctx = bot._buildContext();
+  assert(bot._pendingEnergySupply(ctx) === (BUILDINGS.solar_farm.rates.energy ?? 0),
+         `_pendingEnergySupply liczy solar w budowie (${BUILDINGS.solar_farm.rates.energy})`);
+  rs.energy.balance = 0;   // 0 + pending(8) = 8 ≥ reserve(5) → nie buduj więcej (overshoot guard)
+  ctx = bot._buildContext();
+  assert(bot._maybeScaleEnergy(ctx, 5, cat) === null, 'proj = balance + pending ≥ reserve → brak overshootu podczas buildTime');
+  home.buildingSystem._constructionQueue = new Map();
+
+  // (g) _burstMissingCommodity HONEST — commodity z NIEwytwarzalną receptą (extraction needs Hv=0) → yield CAŁY budynek.
+  rs.inventory.set('Fe', 200); rs.inventory.set('C', 200); rs.inventory.set('Hv', 0);
+  rs.inventory.set('structural_alloys', 0); rs.inventory.set('extraction_systems', 0); rs.inventory.set('power_cells', 10);
+  ctx = bot._buildContext();
+  assert(bot._burstMissingCommodity(ctx, 'mine') === null,
+         'niewytwarzalny blocker (extraction: Hv=0) → yield cały budynek (nie burstuj innych na darmo)');
+  rs.inventory.set('Hv', 100);   // teraz extraction wytwarzalne → burst pierwszy short (SA)
+  ctx = bot._buildContext();
+  const mBurst = bot._burstMissingCommodity(ctx, 'mine');
+  assert(mBurst && mBurst.type === ACTION_TYPES.SET_ONESHOT && mBurst.commodityId === 'structural_alloys',
+         'wszystkie short wytwarzalne → burst pierwszy (SA)');
+}
+
+// ── T16: engine-upgrade extended to cargo/colonizer (take-4 Task 2) — best available engine at build ──
+console.log('\nT16 — cargo/kolonizator budują z najlepszym silnikiem (Task B, ta sama linia co skaut)');
+{
+  const c = new GameCore();
+  c.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: 'GOOD_FE' });
+  const K = window.KOSMOS;
+  const bot = new RuleBot();
+
+  // (a) bez ion tech → cargo/kolonizator na engine_chemical (fallback), moduły NIE-silnikowe zachowane.
+  let ctx = bot._buildContext();
+  const cargoA = bot._maybeBuildCargo(ctx, []);
+  assert(cargoA && cargoA.modules[0] === 'engine_chemical', 'bez ion tech → cargo engine_chemical (fallback)');
+  assert(cargoA.modules.slice(1).join(',') === 'cargo_large,cargo_large', 'cargo zachowuje 2× cargo_large');
+  const coloA = bot._maybeBuildColonizer(ctx, []);
+  assert(coloA && coloA.modules[0] === 'engine_chemical' && coloA.modules.includes('habitat_pod'),
+         'bez ion tech → kolonizator engine_chemical + habitat_pod');
+
+  // (b) po zbadaniu ion_drives → cargo I kolonizator budują z engine_ion (zasięg ↑ do dalekich planetoid).
+  K.techSystem._researched.add('ion_drives');
+  ctx = bot._buildContext();
+  assert(bot._bestScoutEngine(ctx) === 'engine_ion', 'ion_drives zbadane → _bestScoutEngine = engine_ion');
+  const cargoB = bot._maybeBuildCargo(ctx, []);
+  assert(cargoB && cargoB.modules[0] === 'engine_ion' && cargoB.modules.filter(m => m === 'cargo_large').length === 2,
+         'ion tech → cargo engine_ion (Task B — dosięga dalekich planetoid)');
+  const coloB = bot._maybeBuildColonizer(ctx, []);
+  assert(coloB && coloB.modules[0] === 'engine_ion' && coloB.modules.includes('habitat_pod'),
+         'ion tech → kolonizator engine_ion (dalsze rocky/ice do POP-kolonizacji)');
+
+  // (c) fusion_drives > ion_drives (najlepszy dostępny wygrywa) — cargo bierze engine_fusion.
+  K.techSystem._researched.add('fusion_drives');
+  ctx = bot._buildContext();
+  const cargoC = bot._maybeBuildCargo(ctx, []);
+  assert(cargoC && cargoC.modules[0] === 'engine_fusion', 'fusion_drives zbadane → cargo engine_fusion (najlepszy wygrywa)');
 }
 
 // ── Wynik ─────────────────────────────────────────────────────────

@@ -70,6 +70,7 @@ function runOne(seed) {
 
   let droidsByGy6 = 0;          // ZAINSTALOWANE do yr6
   let shipRareCount = 0;        // liczba jednorazowych transportów rzadkich surowców outpost→home
+  let minEnergyMid = Infinity;  // najgłębszy dołek bilansu energii PO wczesnym rozruchu (gy≥5) — czy energia „trzyma"
   const ticker = new Ticker(core.timeSystem);
   ticker.onCivYear(() => {
     for (let d = 0; d < 4; d++) {
@@ -92,6 +93,8 @@ function runOne(seed) {
       if (unemp < 1 && unfilled > 0.5) mark('popDeficit');
     }
     if (gy() <= 6.0) droidsByGy6 = syntheticTotal();
+    // Energia: najgłębszy dołek bilansu PO rozruchu (gy≥5 pomija startowy dip zanim solar dojdzie).
+    if (gy() >= 5.0) minEnergyMid = Math.min(minEnergyMid, home.resourceSystem.energy?.balance ?? 0);
   });
   ticker.run(TARGET_GY * 12, { tickSize: 1.0 });
 
@@ -107,6 +110,10 @@ function runOne(seed) {
     finalPop: home.civSystem.population,
     finalCredits: Math.floor(home.credits ?? 0),
     finalFe: Math.floor(home.resourceSystem.getAmount('Fe') ?? 0),
+    finalEnergy: Math.round(home.resourceSystem.energy?.balance ?? 0),
+    minEnergyMid: Number.isFinite(minEnergyMid) ? Math.round(minEnergyMid) : null,
+    finalSolar: countB('solar_farm'),
+    finalCoal: countB('coal_plant'),
     explored: Math.max(0, totalBodies - (unex.total ?? 0)),
     totalBodies,
     finalGy: gy(),
@@ -123,16 +130,16 @@ for (let i = 1; i <= N_SEEDS; i++) {
 }
 
 const fmt = (v) => v == null ? '  —  ' : `${v.toFixed(1)}`.padStart(5);
-console.log('seed        | sciShip | 1stOutp | prodOut | 1stShip | shipN | outp | prodO | reach   | droidMade | colon | pop  | Kr   | Fe   | crash');
-console.log('------------+---------+---------+---------+---------+-------+------+-------+---------+-----------+-------+------+------+------+------');
+console.log('seed        | sciShip | 1stOutp | prodOut | 1stShip | shipN | outp | prodO | reach   | droidMade | colon | pop  | Kr   | Fe   | eBal | minE | slr | crash');
+console.log('------------+---------+---------+---------+---------+-------+------+-------+---------+-----------+-------+------+------+------+------+------+-----+------');
 for (const r of results) {
   console.log(
-    `${String(r.seed).padEnd(11)} | ${fmt(r.M.scienceShip)}   | ${fmt(r.M.firstOutpost)}   | ${fmt(r.M.firstProductiveOutpost)}   | ${fmt(r.M.firstShipRare)}   | ${String(r.shipRareCount).padStart(5)} | ${String(r.finalOutposts).padStart(4)} | ${String(r.finalProductiveOutposts).padStart(5)} | ${String(r.explored+'/'+r.totalBodies).padStart(7)} | ${String(r.droidsProduced).padStart(9)} | ${String(r.finalColonies).padStart(5)} | ${String(r.finalPop).padStart(4)} | ${String(r.finalCredits).padStart(4)} | ${String(r.finalFe).padStart(4)} | ${r.crashed ? 'YES' : 'no'}`);
+    `${String(r.seed).padEnd(11)} | ${fmt(r.M.scienceShip)}   | ${fmt(r.M.firstOutpost)}   | ${fmt(r.M.firstProductiveOutpost)}   | ${fmt(r.M.firstShipRare)}   | ${String(r.shipRareCount).padStart(5)} | ${String(r.finalOutposts).padStart(4)} | ${String(r.finalProductiveOutposts).padStart(5)} | ${String(r.explored+'/'+r.totalBodies).padStart(7)} | ${String(r.droidsProduced).padStart(9)} | ${String(r.finalColonies).padStart(5)} | ${String(r.finalPop).padStart(4)} | ${String(r.finalCredits).padStart(4)} | ${String(r.finalFe).padStart(4)} | ${String(r.finalEnergy).padStart(4)} | ${String(r.minEnergyMid).padStart(4)} | ${String(r.finalSolar + (r.finalCoal ? '+'+r.finalCoal : '')).padStart(3)} | ${r.crashed ? 'YES' : 'no'}`);
 }
 
 const median = (arr) => { const v = arr.filter(x => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
 const cnt = (pred) => results.filter(pred).length;
-console.log('\n── MEDIAN game-year first-occurrence ──');
+console.log(`\n── ${PLANET_CLASS} game-year first-occurrence ──`);
 console.log(`  science ship:        ${fmt(median(results.map(r => r.M.scienceShip)))} gy   (anchor ≈ yr 1)`);
 console.log(`  first outpost:       ${fmt(median(results.map(r => r.M.firstOutpost)))} gy`);
 console.log(`  first PRODUCTIVE outpost (has solar → mining): ${fmt(median(results.map(r => r.M.firstProductiveOutpost)))} gy`);
@@ -145,6 +152,12 @@ console.log(`  founded ≥1 outpost:            ${cnt(r => r.finalOutposts >= 1)
 console.log(`  ≥1 PRODUCTIVE outpost (solar): ${cnt(r => r.finalProductiveOutposts >= 1)}/${results.length}`);
 console.log(`  shipping leg fired (≥1 run):   ${cnt(r => r.shipRareCount > 0)}/${results.length}`);
 console.log(`  founded a 2nd (POP) colony:    ${cnt(r => r.finalColonies >= 2)}/${results.length}`);
+console.log('\n── ENERGY (take-4 Task 1 — demand-aware energy scaling) ──');
+console.log(`  final energyBalance (median):  ${median(results.map(r => r.finalEnergy))}   (cel: trzyma ≥ 0, nie głęboko ujemny)`);
+console.log(`  min energyBalance mid-run (median gy≥5): ${median(results.map(r => r.minEnergyMid))}   (najgłębszy dołek po rozruchu)`);
+console.log(`  energy HELD (final ≥ 0):       ${cnt(r => r.finalEnergy >= 0)}/${results.length}`);
+console.log(`  never deeply negative (min ≥ -10): ${cnt(r => (r.minEnergyMid ?? -999) >= -10)}/${results.length}`);
+console.log(`  solar built (median):          ${median(results.map(r => r.finalSolar))}   coal (median): ${median(results.map(r => r.finalCoal))}`);
 console.log('\n── SCOUT REACH + RESOURCES (Task A/B target + downstream gate) ──');
 console.log(`  bodies explored (median):   ${median(results.map(r => r.explored))} / ${median(results.map(r => r.totalBodies))}   (vs ~7-11 pre-A/B)`);
 console.log(`  final Fe (median):          ${median(results.map(r => r.finalFe))}   (⚠ Fe collapse → recon dispatch Fe:10 + cargo build blocked)`);
