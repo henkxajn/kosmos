@@ -29,6 +29,7 @@ import {
   buildCostTable, summarizeSeed, aggregatePanel, panelVerdict, factoryTimeGy, commodityPriceVsOre,
 } from './RoiTelemetry.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
+import { renderRoiReport } from '../report/RoiReport.js';
 
 function arg(name, def) {
   const a = process.argv.find(s => s.startsWith(`--${name}=`));
@@ -183,8 +184,10 @@ if (agg.medMineNameplateRatio != null) {
   console.log(`    ⚠ kopalnie: tooltip gry pokazuje ×${fmt(agg.medMineNameplateRatio, 2)} realnego urobku (obsada + brownout nie są w rozbiciu)`);
 }
 
-// ── Zapis JSON ────────────────────────────────────────────────────
+// ── Zapis JSON + HTML ─────────────────────────────────────────────
 mkdirSync(OUT_DIR, { recursive: true });
+// `series` niesie migawkę per typ budynku na każdy game-rok — raport go NIE potrzebuje
+// (czyta podsumowania), ale zostaje w JSON-ie jako surowe dane do dalszych analiz.
 const payload = {
   meta: {
     tool: 'BALANS 1.0 Phase 2 — ROI telemetry (building cost↔value vertical slice)',
@@ -209,7 +212,15 @@ const payload = {
 const jsonPath = join(OUT_DIR, `roi-telemetry-${PLANET_CLASS}.json`);
 writeFileSync(jsonPath, JSON.stringify(payload));
 
+const html = `<!doctype html><html lang="pl"><head><meta charset="utf-8">` +
+  `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+  `<title>BALANS Phase 2 — ROI telemetry (${PLANET_CLASS})</title>` +
+  `<style>html,body{margin:0}</style></head><body>${renderRoiReport(payload)}</body></html>`;
+const htmlPath = join(OUT_DIR, `roi-report-${PLANET_CLASS}.html`);
+writeFileSync(htmlPath, html);
+
 console.log(`\n  JSON:   ${jsonPath}`);
+console.log(`  RAPORT: ${htmlPath}`);
 console.log(`  crashes: ${seeds.filter(s => s.crashed).length}/${seeds.length}\n`);
 
 function round1(n) { return Math.round((n ?? 0) * 10) / 10; }
