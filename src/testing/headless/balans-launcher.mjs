@@ -58,6 +58,11 @@ export const METRICS = {
     prefix: 'price-report',
     label:  'CENY — audyt cennika + osiągalność (co bramkuje)',
   },
+  ai: {
+    runner: join(__dirname, 'balans-ai-telemetry.mjs'),
+    prefix: 'ai-report',
+    label:  'AI — imperia: czy nadążają za graczem (diagnoza regresji)',
+  },
 };
 export const DEFAULT_METRIC = 'pop';   // domyślna metryka API (kompatybilność wstecz)
 

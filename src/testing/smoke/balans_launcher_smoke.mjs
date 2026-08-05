@@ -13,6 +13,7 @@
 //        wybór metryki i „Zasoby" odpalały runner POP)
 //   T6  end-to-end ROI: metric=roi odpala runner ROI (ta sama regresja, trzecia metryka)
 //   T7  end-to-end CENY: metric=prices odpala runner CEN (czwarta metryka tą samą trasą)
+//   T8  end-to-end AI: metric=ai odpala runner IMPERIÓW AI (piąta i ostatnia metryka Phase 2)
 //
 // Uruchom: node src/testing/smoke/balans_launcher_smoke.mjs
 
@@ -37,9 +38,11 @@ const SMOKE_ROI_HTML = join(REPORTS_DIR, `roi-report-${SMOKE_CLASS}.html`);
 const SMOKE_ROI_JSON = join(REPORTS_DIR, `roi-telemetry-${SMOKE_CLASS}.json`);
 const SMOKE_PRC_HTML = join(REPORTS_DIR, `price-report-${SMOKE_CLASS}.html`);
 const SMOKE_PRC_JSON = join(REPORTS_DIR, `price-telemetry-${SMOKE_CLASS}.json`);
+const SMOKE_AI_HTML  = join(REPORTS_DIR, `ai-report-${SMOKE_CLASS}.html`);
+const SMOKE_AI_JSON  = join(REPORTS_DIR, `ai-telemetry-${SMOKE_CLASS}.json`);
 const cleanup = () => {
   for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON, SMOKE_ROI_HTML, SMOKE_ROI_JSON,
-    SMOKE_PRC_HTML, SMOKE_PRC_JSON]) {
+    SMOKE_PRC_HTML, SMOKE_PRC_JSON, SMOKE_AI_HTML, SMOKE_AI_JSON]) {
     try { rmSync(f, { force: true }); } catch {}
   }
 };
@@ -261,6 +264,36 @@ try {
     assert(rep.status === 200, 'GET linku do raportu CEN → 200');
     assert(html.includes('Warstwa A — audyt tabeli') && html.includes('Warstwa B — jak cennik gra'),
       'serwowany plik to raport CEN — i niesie OBIE warstwy (renderPriceReport)');
+  }
+
+  // ── T8: end-to-end AI (piąta metryka — domyka Phase 2) ──────────
+  console.log('\nT8 — end-to-end AI: metric=ai odpala runner IMPERIÓW (nie POP / ZASOBY / ROI / CENY)');
+  {
+    cleanup();
+    assert(!existsSync(SMOKE_AI_HTML), 'przed runem brak raportu AI (pre-clean)');
+
+    const t0 = Date.now();
+    const res = await fetch(`${base}/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metric: 'ai', class: SMOKE_CLASS, seeds: 1, gy: 2 }),
+    });
+    const d = await res.json();
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+    assert(res.status === 200 && d.ok === true, `POST /run (ai) → 200 ok (${secs}s, kod ${d.exitCode})`);
+    assert(d.metric === 'ai' && d.reportFile === `ai-report-${SMOKE_CLASS}.html`,
+      'zwrócona metryka i nazwa raportu = kontrakt runnera AI');
+    assert(existsSync(SMOKE_AI_HTML) && existsSync(SMOKE_AI_JSON), 'artefakty AI powstały na dysku');
+    assert(!existsSync(SMOKE_HTML) && !existsSync(SMOKE_RES_HTML) && !existsSync(SMOKE_ROI_HTML) && !existsSync(SMOKE_PRC_HTML),
+      'runnery POP / ZASOBÓW / ROI / CEN NIE zostały odpalone (rejestr wybiera właściwy proces)');
+    assert(Array.isArray(d.tail) && d.tail.some(l => /SONDA ZALEŻNOŚCI|PORÓWNANIE BAZOWE|WERDYKT/.test(l)),
+      'ogon stdout niesie wynik runnera AI (dowód: właściwy proces)');
+
+    const rep = await fetch(`${base}${d.reportUrl}`);
+    const html = await rep.text();
+    assert(rep.status === 200, 'GET linku do raportu AI → 200');
+    assert(html.includes('IMPERIA AI') && html.includes('Granice tego pomiaru'),
+      'serwowany plik to raport AI — z sekcją GRANIC pomiaru (bez niej diagnoza kłamie)');
   }
 } finally {
   cleanup();
