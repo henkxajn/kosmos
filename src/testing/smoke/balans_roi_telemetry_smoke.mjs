@@ -230,6 +230,26 @@ console.log('T6 — snapshot(): housing bez ×level, jobs ×level, urobek kopaln
   assert(row.energyAvail === 0.5 && row.brownout === true, 'dostępność energii i brownout w migawce (kontekst urobku)');
   assert(row.activeIsHome === true, 'flaga „aktywna kolonia = macierzysta" (spójność odczytów globalnych)');
   assert(row.factory.points === 3, 'punkty produkcji fabryki w migawce');
+
+  // ── Kontrfaktyczna kolumna „×1 wydobycie" ────────────────────────
+  // Scenariusz boosted mnoży urobek kopalń ×5 (BuildingSystem:368 / DepositSystem:134 /
+  // ResourceSystem:320). Bez tej kolumny werdykt panelu jest artefaktem scenariusza.
+  const prevK = (typeof window !== 'undefined') ? window.KOSMOS : undefined;
+  if (typeof window !== 'undefined') window.KOSMOS = { scenario: 'civilization_boosted' };
+  assert(RoiTelemetry.mineRateMult() === 5, 'mnożnik wydobycia scenariusza boosted = ×5 (lustro stałej gry)');
+  const boosted = RoiTelemetry.snapshot(7, { home, colonyManager: { _activePlanetId: 'p1' } });
+  const gainsKr = (100 * 1 + 10 * 4) * CIV_PER_GY;          // Fe 100 + Ti 10 wg tabeli cen gry
+  const dropped = (gainsKr - (100 / 5 * 1 + 10 / 5 * 4) * CIV_PER_GY);
+  assert(near(boosted.perType.mine.krPerGyPerLevel - boosted.perType.mine.krPerGyPerLevelUnboosted, dropped, 1),
+    'kontrfaktycznie dzielony jest TYLKO urobek (utrzymanie i energia bez zmian)');
+  assert(boosted.perType.farm.krPerGyPerLevelUnboosted === boosted.perType.farm.krPerGyPerLevel,
+    'budynek bez wydobycia ma kolumnę ×1 IDENTYCZNĄ (mnożnik dotyka wyłącznie kopalń)');
+  if (typeof window !== 'undefined') window.KOSMOS = { scenario: 'civilization' };
+  assert(RoiTelemetry.mineRateMult() === 1, 'scenariusz standardowy → mnożnik ×1');
+  const plain = RoiTelemetry.snapshot(7, { home, colonyManager: { _activePlanetId: 'p1' } });
+  assert(plain.perType.mine.krPerGyPerLevelUnboosted === plain.perType.mine.krPerGyPerLevel,
+    'poza scenariuszem boosted kolumna ×1 = kolumna zmierzona (brak podwójnego dzielenia)');
+  if (typeof window !== 'undefined') window.KOSMOS = prevK;
 }
 
 // ── T7: podsumowania (czyste) ─────────────────────────────────────
@@ -276,6 +296,9 @@ console.log('T7 — summarizeSeed / aggregatePanel / panelVerdict');
 
   const v = panelVerdict(agg, table);
   assert([0, 1, 2].includes(v.outcome), 'werdykt zwraca outcome 0/1/2');
+  // Werdykt kontrfaktyczny liczony z INNEGO pola tego samego agregatu (bez drugiego przebiegu).
+  const vUn = panelVerdict(agg, table, undefined, 'medPaybackUnboostedGy');
+  assert(vUn.n === v.n, 'werdykt kontrfaktyczny bierze ten sam zbiór budynków, inne pole zwrotu');
   assert(v.best === 'mine' && v.worst === 'solar_farm' && v.n === 2,
     'ranking bierze TYLKO tor produkcyjny (habitat/observatory poza nim), od najszybszego zwrotu');
   assert(near(v.spread, Math.round(v.worstPaybackGy / v.bestPaybackGy * 100) / 100, 0.02),

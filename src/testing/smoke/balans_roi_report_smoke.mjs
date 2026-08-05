@@ -50,7 +50,7 @@ const CATALOG = {
 const mkType = (over = {}) => ({
   seeds: 8, years: 40, maxCount: 6, medKrPerGyPerLevel: 500, medPaybackGy: 0.32,
   medPaybackWithWagesGy: 0.34, minPaybackGy: 0.2, maxPaybackGy: 0.5, medWageKrPerGyPerLevel: 12,
-  medHousingPerLevel: 0, medResearchPerGyPerLevel: 0, medMineStaff: null,
+  medHousingPerLevel: 0, medResearchPerGyPerLevel: 0, medMineStaff: null, medPaybackUnboostedGy: 0.35,
   krLoaded: 160, embeddedShare: 0.81, measuredOn: 8, unpricedOut: [], ...over,
 });
 const PANEL = {
@@ -68,6 +68,9 @@ const PANEL = {
   },
   verdict: { outcome: 1, label: 'SKEWED — 33.3× rozrzutu zwrotu (solar_farm vs mine)', spread: 33.3,
     best: 'mine', bestPaybackGy: 0.07, worst: 'solar_farm', worstPaybackGy: 2.33, n: 2 },
+  verdictUnboosted: { outcome: 0, label: 'PROPORTIONATE', spread: 6.7,
+    best: 'mine', bestPaybackGy: 0.35, worst: 'solar_farm', worstPaybackGy: 2.33, n: 2 },
+  mineRateMult: 5,
 };
 const PAYLOAD = {
   meta: {
@@ -167,6 +170,15 @@ console.log('T4 — outcome → klasa werdyktu');
 console.log('T5 — wierność danym: ranking, skala log, skład kosztu, tory');
 {
   assert(html.includes('logarytmiczna'), 'skala osi zadeklarowana (zwroty przez kilka rzędów wielkości)');
+  // ⚠ Werdykt SKEWED może być artefaktem scenariusza — raport MUSI pokazać kontrfaktyk
+  assert(html.includes('×1 wydob.'), 'kolumna kontrfaktyczna „bez mnożnika wydobycia scenariusza"');
+  assert(html.includes('rr-callout') && html.includes('Kontrfaktycznie'),
+    'wyróżniona notka: ile z rozrzutu jest własnością scenariusza, a ile cennika');
+  assert(html.includes('6.7×') && html.includes('33.3×'), 'obie liczby rozrzutu (zmierzona i kontrfaktyczna) widoczne');
+  // ⚠ `rr-callout` żyje też w bloku <style>, więc negatywna asercja MUSI szukać TREŚCI notki
+  const noUn = renderRoiReport({ ...PAYLOAD, panel: { ...PANEL, verdictUnboosted: null } });
+  assert(!noUn.includes('Kontrfaktycznie'), 'brak danych kontrfaktycznych ⇒ brak notki (nie zmyślamy)');
+  assert(!noUn.includes('6.7×'), 'i brak liczby kontrfaktycznej');
   const iMine = html.indexOf('>mine<'), iSolar = html.indexOf('>solar_farm<');
   assert(iMine > 0 && iSolar > 0 && iMine < iSolar, 'ranking od najszybszego zwrotu (mine przed solar_farm)');
   assert(html.includes('0.07') && html.includes('2.33'), 'zmierzone zwroty w tabeli');

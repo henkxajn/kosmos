@@ -411,11 +411,23 @@ export class RoiTelemetry {
     }
 
     // Netto per typ = stawki efektywne + urobek kopalń; wycena wg tabeli gry.
+    const mineMult = RoiTelemetry.mineRateMult();
     const perType = {};
     for (const [id, t] of Object.entries(types)) {
       const net = { ...t.rates };
       for (const [r, v] of Object.entries(t.mineGains)) net[r] = (net[r] ?? 0) + v;
       const val = flowValueKrPerGy(net, cfg);
+      // KONTRFAKTYCZNIE: ten sam przebieg BEZ mnożnika wydobycia scenariusza boosted.
+      // Mnożnik ×5 dotyka WYŁĄCZNIE urobku kopalń (`rateMult` w BuildingSystem/DepositSystem/
+      // ResourceSystem) — utrzymanie i energia są bez zmian, więc dzielimy TYLKO urobek.
+      // Czysta arytmetyka na ZMIERZONYCH danych: żadnego drugiego przebiegu i żadnego
+      // innego scenariusza (który zmieniałby też techy, POP i budynki startowe).
+      let valUn = val;
+      if (mineMult !== 1 && Object.keys(t.mineGains).length) {
+        const netUn = { ...t.rates };
+        for (const [r, v] of Object.entries(t.mineGains)) netUn[r] = (netUn[r] ?? 0) + v / mineMult;
+        valUn = flowValueKrPerGy(netUn, cfg);
+      }
       const lv = Math.max(1, t.levels);
       const popType = BUILDINGS[id]?.popType ?? 'laborer';
       const wage = civSys?.getStrataWage?.(popType) ?? 0;
@@ -425,6 +437,7 @@ export class RoiTelemetry {
         net: roundMap(net, 3),
         krPerGy: val.krPerGy,
         krPerGyPerLevel: round(val.krPerGy / lv, 2),
+        krPerGyPerLevelUnboosted: round(valUn.krPerGy / lv, 2),
         // Płace (Kr/gy) — realny wydatek Fazy 3 (`getStrataWage` × etaty). Raportowane
         // OSOBNO i jako drugi wariant zwrotu: to inna pula (kredyty, nie magazyn surowców),
         // ale ta sama waluta, więc czytelnik ma prawo zobaczyć obie liczby.
@@ -462,6 +475,15 @@ export class RoiTelemetry {
       colonies: colonyManager?.getPlayerColonies?.().length ?? 0,
       activeIsHome: (colonyManager?._activePlanetId ?? null) === (home?.planetId ?? null),
     };
+  }
+
+  /** Mnożnik wydobycia scenariusza — LUSTRO `BuildingSystem:368` / `DepositSystem:134`
+   *  / `ResourceSystem:320` (`civilization_boosted` → ×5). Potrzebny do kontrfaktycznej
+   *  kolumny „przy ×1 wydobyciu": zwrot kopalń w przebiegu referencyjnym jest o tyle
+   *  szybszy, a to jedyny mnożnik scenariusza dotykający toru produkcyjnego. */
+  static mineRateMult() {
+    const scenario = (typeof window !== 'undefined' ? window.KOSMOS?.scenario : null);
+    return scenario === 'civilization_boosted' ? 5 : 1;
   }
 
   /** Mnożnik prędkości fabryki (scenariusz × tech) — ta sama formuła co FactorySystem. */
@@ -503,12 +525,13 @@ export function summarizeSeed(series, costTable, cfg = ROI_TELEMETRY_DEFAULTS) {
   for (const r of rows) {
     for (const [id, t] of Object.entries(r.perType ?? {})) {
       const e = byType[id] ?? (byType[id] = {
-        years: 0, firstGy: r.gy, sumKrPerLevel: 0, sumKr: 0, sumWage: 0, sumWagePerLevel: 0,
+        years: 0, firstGy: r.gy, sumKrPerLevel: 0, sumKrPerLevelUn: 0, sumKr: 0, sumWage: 0, sumWagePerLevel: 0,
         sumLevels: 0, maxCount: 0, sumHousingPerLevel: 0, sumResearchPerLevel: 0,
         mineStaffSum: 0, mineStaffN: 0, unpricedOut: [],
       });
       e.years++;
       e.sumKrPerLevel += t.krPerGyPerLevel ?? 0;
+      e.sumKrPerLevelUn += t.krPerGyPerLevelUnboosted ?? t.krPerGyPerLevel ?? 0;
       e.sumKr += t.krPerGy ?? 0;
       e.sumWage += t.wageKrPerGy ?? 0;
       e.sumWagePerLevel += t.wageKrPerGyPerLevel ?? 0;
@@ -527,10 +550,12 @@ export function summarizeSeed(series, costTable, cfg = ROI_TELEMETRY_DEFAULTS) {
     const c = costTable?.[id];
     const krPerGyPerLevel = e.years ? round(e.sumKrPerLevel / e.years, 2) : 0;
     const wagePerLevel    = e.years ? round(e.sumWagePerLevel / e.years, 2) : 0;
+    const krPerGyPerLevelUn = e.years ? round(e.sumKrPerLevelUn / e.years, 2) : 0;
     measured[id] = {
       years: e.years, firstGy: e.firstGy, maxCount: e.maxCount,
       meanLevels: e.years ? round(e.sumLevels / e.years, 2) : 0,
       krPerGyPerLevel,
+      krPerGyPerLevelUnboosted: krPerGyPerLevelUn,
       krPerGyTotal: e.years ? round(e.sumKr / e.years, 2) : 0,
       wageKrPerGy:  e.years ? round(e.sumWage / e.years, 2) : 0,
       wageKrPerGyPerLevel: wagePerLevel,
@@ -542,6 +567,8 @@ export function summarizeSeed(series, costTable, cfg = ROI_TELEMETRY_DEFAULTS) {
       paybackGy: c ? paybackGy(c.cost.krLoaded, krPerGyPerLevel) : null,
       // Drugi wariant: przepływ pomniejszony o płace obsady (ta sama waluta, inna pula).
       paybackWithWagesGy: c ? paybackGy(c.cost.krLoaded, krPerGyPerLevel - wagePerLevel) : null,
+      // Kontrfaktyczny zwrot bez mnożnika wydobycia scenariusza (dla nie-kopalń identyczny).
+      paybackUnboostedGy: c ? paybackGy(c.cost.krLoaded, krPerGyPerLevelUn) : null,
       enoughYears: e.years >= cfg.MIN_YEARS,
       unpricedOut: e.unpricedOut,
     };
@@ -597,7 +624,7 @@ export function aggregatePanel(summaries, costTables, cfg = ROI_TELEMETRY_DEFAUL
   for (const s of summaries) {
     for (const [id, m] of Object.entries(s.measured ?? {})) {
       const e = byType[id] ?? (byType[id] = {
-        seeds: 0, years: 0, kr: [], payback: [], paybackW: [], wage: [], housing: [], research: [],
+        seeds: 0, years: 0, kr: [], payback: [], paybackW: [], paybackUn: [], wage: [], housing: [], research: [],
         mineStaff: [], maxCount: 0, unpricedOut: [],
       });
       e.seeds++;
@@ -607,6 +634,7 @@ export function aggregatePanel(summaries, costTables, cfg = ROI_TELEMETRY_DEFAUL
         e.kr.push(m.krPerGyPerLevel);
         if (m.paybackGy != null) e.payback.push(m.paybackGy);
         if (m.paybackWithWagesGy != null) e.paybackW.push(m.paybackWithWagesGy);
+        if (m.paybackUnboostedGy != null) e.paybackUn.push(m.paybackUnboostedGy);
       }
       e.wage.push(m.wageKrPerGyPerLevel);
       e.housing.push(m.housingPerLevel);
@@ -623,6 +651,7 @@ export function aggregatePanel(summaries, costTables, cfg = ROI_TELEMETRY_DEFAUL
       medKrPerGyPerLevel: median(e.kr),
       medPaybackGy: median(e.payback),
       medPaybackWithWagesGy: median(e.paybackW),
+      medPaybackUnboostedGy: median(e.paybackUn),
       minPaybackGy: e.payback.length ? round(Math.min(...e.payback), 3) : null,
       maxPaybackGy: e.payback.length ? round(Math.max(...e.payback), 3) : null,
       medWageKrPerGyPerLevel: median(e.wage),
@@ -668,15 +697,15 @@ export function aggregatePanel(summaries, costTables, cfg = ROI_TELEMETRY_DEFAUL
  *   1 SKEWED        — rozrzut > SPREAD_FLAT (są budynki wyraźnie „drogie za to, co dają")
  *   2 NO_DATA       — mniej niż 2 zmierzone budynki produkcyjne
  */
-export function panelVerdict(agg, costTable, cfg = ROI_TELEMETRY_DEFAULTS) {
+export function panelVerdict(agg, costTable, cfg = ROI_TELEMETRY_DEFAULTS, field = 'medPaybackGy') {
   // Stolica NIE wchodzi do rankingu: jest stawiana automatycznie i ma koszt 0
   // (`colony_base.cost = {}` — decyzja projektowa gry), więc jej „zwrot 0 gy" nie jest
   // wyborem gracza i zafałszowałby rozrzut.
   const rows = Object.entries(agg.byType ?? {})
-    .filter(([id, v]) => v.medPaybackGy != null && v.medPaybackGy > 0
+    .filter(([id, v]) => v[field] != null && v[field] > 0
       && !costTable?.[id]?.isCapital
       && (costTable?.[id]?.tracks ?? []).includes(TRACK.PRODUCTIVE))
-    .map(([id, v]) => [id, v.medPaybackGy])
+    .map(([id, v]) => [id, v[field]])
     .sort((a, b) => a[1] - b[1]);
 
   if (rows.length < 2) {

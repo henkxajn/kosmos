@@ -69,6 +69,9 @@ const catalog = costTables[0] ?? {};
 const priceVsOre = commodityPriceVsOre();
 const agg = aggregatePanel(seeds.map(s => s.summary), costTables);
 const verdict = panelVerdict(agg, catalog);
+// Werdykt KONTRFAKTYCZNY: ten sam pomiar bez mnożnika wydobycia scenariusza boosted (×5).
+// Nie zastępuje werdyktu — pokazuje, ile z rozrzutu jest własnością CENNIKA, a ile scenariusza.
+const verdictUnboosted = panelVerdict(agg, catalog, undefined, 'medPaybackUnboostedGy');
 
 const shortSeed = (s) => String(s).replace(new RegExp(`^${SEED_PREFIX}_`), 'seed_');
 const fmt = (n, d = 1) => (n == null ? '—' : (Math.round(n * 10 ** d) / 10 ** d).toString());
@@ -95,14 +98,14 @@ const prodRows = measuredIds
   .sort((a, b) => agg.byType[a].medPaybackGy - agg.byType[b].medPaybackGy);
 
 console.log(`\n── TOR (a) BUDYNKI PRODUKCYJNE — zwrot w GAME-LATACH (mierzone, ${prodRows.length} typów) ──`);
-console.log('budynek              | koszt Kr | komp. | Kr/gy/lv | ZWROT gy | +płace gy | płace% | seedy | nominal gy');
-console.log('---------------------+----------+-------+----------+----------+-----------+--------+-------+-----------');
+console.log('budynek              | koszt Kr | komp. | Kr/gy/lv | ZWROT gy | ×1 wydob. | +płace gy | płace% | seedy | nominal gy');
+console.log('---------------------+----------+-------+----------+----------+-----------+-----------+--------+-------+-----------');
 for (const id of prodRows) {
   const a = agg.byType[id], c = catalog[id];
   console.log(
     `${id.padEnd(20)} | ${fmt(a.krLoaded, 0).padStart(8)} | ` +
     `${pct(a.embeddedShare).padStart(5)} | ${fmt(a.medKrPerGyPerLevel, 0).padStart(8)} | ${fmt(a.medPaybackGy, 2).padStart(8)} | ` +
-    `${fmt(a.medPaybackWithWagesGy, 2).padStart(9)} | ` +
+    `${fmt(a.medPaybackUnboostedGy, 2).padStart(9)} | ${fmt(a.medPaybackWithWagesGy, 2).padStart(9)} | ` +
     `${pct(a.medKrPerGyPerLevel > 0 ? a.medWageKrPerGyPerLevel / a.medKrPerGyPerLevel : null).padStart(6)} | ` +
     `${String(a.seeds).padStart(5)} | ${fmt(c?.nominalPaybackGy, 2).padStart(10)}`);
 }
@@ -180,6 +183,10 @@ console.log(`\n  ► WERDYKT (outcome ${verdict.outcome}): ${verdict.label}`);
 if (verdict.best) {
   console.log(`    najszybszy zwrot: ${verdict.best} (${fmt(verdict.bestPaybackGy, 2)} gy) · najwolniejszy: ${verdict.worst} (${fmt(verdict.worstPaybackGy, 2)} gy)`);
 }
+if (verdictUnboosted.spread != null && verdict.spread != null) {
+  console.log(`    kontrfaktycznie BEZ mnożnika wydobycia scenariusza (×${RoiTelemetry.mineRateMult()}): rozrzut ${fmt(verdictUnboosted.spread, 2)}× ` +
+    `(outcome ${verdictUnboosted.outcome}) — ${verdictUnboosted.best} ${fmt(verdictUnboosted.bestPaybackGy, 2)} gy … ${verdictUnboosted.worst} ${fmt(verdictUnboosted.worstPaybackGy, 2)} gy`);
+}
 if (agg.medMineNameplateRatio != null) {
   console.log(`    ⚠ kopalnie: tooltip gry pokazuje ×${fmt(agg.medMineNameplateRatio, 2)} realnego urobku (obsada + brownout nie są w rozbiciu)`);
 }
@@ -207,7 +214,7 @@ const payload = {
   seeds: seeds.map(s => ({
     seed: s.seed, crashed: s.crashed, planet: s.planet, summary: s.summary, series: s.series,
   })),
-  panel: { ...agg, verdict },
+  panel: { ...agg, verdict, verdictUnboosted, mineRateMult: RoiTelemetry.mineRateMult() },
 };
 const jsonPath = join(OUT_DIR, `roi-telemetry-${PLANET_CLASS}.json`);
 writeFileSync(jsonPath, JSON.stringify(payload));

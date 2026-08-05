@@ -102,7 +102,7 @@ ${renderHonesty(meta, panel, catalog, priceVsOre)}
 
 ${renderLegend()}
 
-${renderProductive(prod, never, byType, catalog, thr)}
+${renderProductive(prod, never, byType, catalog, thr, panel.verdictUnboosted, verdict.spread, panel.mineRateMult ?? 1)}
 
 ${renderCostSplit(catalog, panel)}
 
@@ -215,7 +215,7 @@ function renderLegend() {
 }
 
 // ── 3. Tor (a): budynki produkcyjne ──────────────────────────────
-function renderProductive(prod, never, byType, catalog, thr) {
+function renderProductive(prod, never, byType, catalog, thr, vUn = null, spread = null, mineMult = 1) {
   if (prod.length === 0 && never.length === 0) return '';
 
   // Skala LOGARYTMICZNA — zwroty rozciągają się przez ~3 rzędy wielkości.
@@ -253,6 +253,7 @@ function renderProductive(prod, never, byType, catalog, thr) {
       <td class="num">${pct(a.embeddedShare)}</td>
       <td class="num">${num(a.medKrPerGyPerLevel, 0)}</td>
       <td class="num rr-ink-${st}">${STATE_ICON[st]} ${num(a.medPaybackGy, 2)}</td>
+      <td class="num rr-mut">${orDash(a.medPaybackUnboostedGy, 2)}</td>
       <td class="num">${orDash(a.medPaybackWithWagesGy, 2)}</td>
       <td class="num">${pct(wageShare)}</td>
       <td class="num">${a.measuredOn ?? 0}/${a.seeds ?? 0}</td>
@@ -267,7 +268,7 @@ function renderProductive(prod, never, byType, catalog, thr) {
       <td class="num">${num(a.krLoaded, 0)}</td>
       <td class="num">${pct(a.embeddedShare)}</td>
       <td class="num rr-ink-never">${num(a.medKrPerGyPerLevel, 0)}</td>
-      <td class="num rr-ink-never" colspan="4">${STATE_ICON.never} nie zwraca się — przepływ netto ujemny</td>
+      <td class="num rr-ink-never" colspan="5">${STATE_ICON.never} nie zwraca się — przepływ netto ujemny</td>
       <td class="num rr-mut">${c.nominalPaybackGy != null ? num(c.nominalPaybackGy, 2) : '—'}</td>
     </tr>`;
   }).join('\n');
@@ -279,11 +280,17 @@ function renderProductive(prod, never, byType, catalog, thr) {
   <table class="rr-table">
     <thead><tr>
       <th>budynek</th><th class="num">koszt&nbsp;Kr</th><th class="num">w&nbsp;komponentach</th>
-      <th class="num">Kr/gy&nbsp;na&nbsp;poziom</th><th class="num">ZWROT&nbsp;gy</th><th class="num">+płace&nbsp;gy</th>
+      <th class="num">Kr/gy&nbsp;na&nbsp;poziom</th><th class="num">ZWROT&nbsp;gy</th><th class="num">×1&nbsp;wydob.</th><th class="num">+płace&nbsp;gy</th>
       <th class="num">płace&nbsp;%</th><th class="num">seedy</th><th class="num">nominalnie&nbsp;gy</th>
     </tr></thead>
     <tbody>${rows}${neverRows}</tbody>
   </table>
+  ${vUn && vUn.spread != null ? `<p class="rr-note rr-callout">⚖ <b>Kontrfaktycznie, bez mnożnika wydobycia scenariusza (×${num(mineMult, 0)}):</b>
+    rozrzut zwrotu spada z <b>${num(spread, 2)}×</b> do <b>${num(vUn.spread, 2)}×</b>
+    (${esc(vUn.best)} ${num(vUn.bestPaybackGy, 2)} gy … ${esc(vUn.worst)} ${num(vUn.worstPaybackGy, 2)} gy).
+    Kolumna „×1 wydob." to ta sama ZMIERZONA seria z urobkiem kopalń podzielonym przez mnożnik scenariusza —
+    czysta arytmetyka, nie drugi przebieg. Różnica między tymi dwiema liczbami to <b>udział scenariusza</b>
+    w werdykcie; reszta jest własnością cennika.</p>` : ''}
   <p class="rr-note">„nominalnie" = ten sam rachunek na surowych danych (poziom 1, bez terenu/tech/obsady) —
     różnica mierzone↔nominalne to wpływ bonusów terenu i technologii. Kopalnie nie mają nominalnej stawki
     (<code>rates: {}</code> — urobek liczy się dynamicznie ze złóż), stąd „—”.</p>`;
@@ -529,6 +536,8 @@ code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;
 .rr-method h3{margin:0 0 8px;font-size:14.5px;font-weight:640}
 .rr-method ul{margin:0;padding-left:18px;font-size:13px;color:var(--ink2)}
 .rr-method li{margin-bottom:5px}
+.rr-callout{margin:6px 0 10px;padding:8px 11px;border-radius:8px;background:var(--surface);
+  border-left:3px solid #2a78d6}
 .rr-defect{margin:10px 0 0;padding:10px 12px;border-radius:8px;font-size:13px;color:var(--ink);
   background:rgba(250,178,25,.12);border:1px solid rgba(250,178,25,.55)}
 .rr-legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 4px;font-size:12.5px;color:var(--ink2)}
