@@ -10,6 +10,7 @@
 
 import EventBus from '../../core/EventBus.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
+import { flushZeroDelayTimers } from './env.js';
 
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12
 
@@ -67,6 +68,10 @@ export class Ticker {
     let tick = 0;
     let lastError = null;
 
+    // Granica „zadania": callbacki `setTimeout(…, 0)` zakolejkowane podczas bootu
+    // (przed pętlą) wykonują się PRZED pierwszym tickiem — jak w przeglądarce.
+    flushZeroDelayTimers();
+
     for (; tick < totalTicks; tick++) {
       // Force unpause — nawet jeśli popupy/zdarzenia emitowały time:pause
       this.timeSystem.isPaused = false;
@@ -105,6 +110,12 @@ export class Ticker {
         }
         civYearFloor = newFloor;
       }
+
+      // Koniec „zadania" ticku — drenaż odroczonych `setTimeout(…, 0)` (np. konstruktor
+      // CivilizationSystem nowej kolonii/placówki założonej w tym ticku). Po pełnym
+      // bloku synchronicznym `civSys.resourceSystem` jest już przypisany, więc
+      // `_syncConsumption` trafia do WŁASNEGO magazynu, nie do aktywnej kolonii.
+      flushZeroDelayTimers();
 
       // Wczesne zakończenie
       if (shouldStop && shouldStop({ civYears: this._civYearsElapsed, tick })) break;

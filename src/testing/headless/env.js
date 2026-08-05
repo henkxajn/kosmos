@@ -219,17 +219,51 @@ globalThis._updateLoading = () => {};
 globalThis._hideLoadingScreen = () => {};
 globalThis._startMainGame = () => {};
 
-// setTimeout: dla ms==0 wykonaj synchronicznie (niektóre ścieżki gry używają setTimeout(0) dla kolejkowania)
+// ── setTimeout(cb, 0): ODROCZONE, nie synchroniczne ────────────────
+// Gra używa `setTimeout(…, 0)` do KOLEJKOWANIA — „wykonaj PO bieżącym bloku
+// synchronicznym" (jedyne takie miejsce w ścieżce headless: CivilizationSystem.js:201
+// → `_syncConsumption`). Wykonanie takiego callbacku SYNCHRONICZNIE (poprzednie
+// zachowanie) łamie ten kontrakt: callback konstruktora biegł ZANIM ColonyManager
+// zdążył przypisać `civSys.resourceSystem` (`ColonyManager.js:390/468`), więc
+// `_syncConsumption` schodził na fallback EventBusa, a ten rejestruje producenta w
+// AKTYWNEJ kolonii (`ResourceSystem.js:122`) → każda nowa kolonia/placówka nadpisywała
+// konsumpcję POP kolonii MACIERZYSTEJ (placówka: `{food:0, water:0, energy:0}`).
+// To była wada POMIARU, nie gry — przeglądarka ma setTimeout asynchroniczny, więc
+// tam callback zawsze widzi przypisany `resourceSystem` (patrz docs/BALANS_PHASE2_RESOURCES.md §7).
+//
+// Emulacja makrozadania: callbacki lądują w kolejce FIFO, drenowanej na granicy
+// „zadania" harnessu = tick pętli (`Ticker.run` woła `flushZeroDelayTimers`).
+// Callback zakolejkowany PODCZAS drenażu czeka na NASTĘPNY flush (jak w przeglądarce
+// — nowe makrozadanie; zapobiega też pętli nieskończonej).
 globalThis.__origSetTimeout = globalThis.setTimeout;
 globalThis.__origClearTimeout = globalThis.clearTimeout;
+let _zeroDelayQueue = [];
 globalThis.setTimeout = (cb, ms, ...args) => {
   if (!ms || ms === 0) {
-    try { cb(...args); } catch (e) { console.error('[setTimeout-sync]', e); }
-    return 0;
+    if (typeof cb === 'function') _zeroDelayQueue.push(() => cb(...args));
+    return 0;   // id=0 → clearTimeout(0) pozostaje no-opem (jak dotąd)
   }
   return globalThis.__origSetTimeout(cb, ms, ...args);
 };
 globalThis.clearTimeout = (id) => { if (id) globalThis.__origClearTimeout(id); };
+
+/**
+ * Wykonaj callbacki `setTimeout(…, 0)` zakolejkowane od ostatniego flusha.
+ * Wołane przez `Ticker` (granica ticku) — jedna „generacja" na wywołanie.
+ * @returns {number} ile callbacków wykonano (diagnostyka/keeper)
+ */
+export function flushZeroDelayTimers() {
+  if (_zeroDelayQueue.length === 0) return 0;
+  const batch = _zeroDelayQueue;
+  _zeroDelayQueue = [];
+  for (const fn of batch) {
+    try { fn(); } catch (e) { console.error('[setTimeout-deferred]', e); }
+  }
+  return batch.length;
+}
+
+/** Ile callbacków czeka na flush (diagnostyka/keeper). */
+export function pendingZeroDelayTimers() { return _zeroDelayQueue.length; }
 
 // ── THREE mock — proxy zwracający klasy-stubby ─────────────────────
 class ThreeStub {

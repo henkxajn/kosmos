@@ -1,5 +1,6 @@
 // Smoke test Step 1 — verify env.js + EventBus import działa w Node.js
 import './env.js';
+import { flushZeroDelayTimers } from './env.js';
 import EventBus from '../../core/EventBus.js';
 
 console.log('─── Smoke Test Step 1 ───');
@@ -36,16 +37,21 @@ console.log(`Test 4 DOM stubs: ${test4 ? '✅ PASS' : '❌ FAIL'}`);
 const test5 = window.KOSMOS && window.KOSMOS.scenario === 'civilization';
 console.log(`Test 5 window.KOSMOS: ${test5 ? '✅ PASS' : '❌ FAIL'}`);
 
-// Test 6: setTimeout(cb, 0) wykonuje się synchronicznie
-let syncCalled = false;
-setTimeout(() => { syncCalled = true; }, 0);
-console.log(`Test 6 setTimeout(0) sync: ${syncCalled ? '✅ PASS' : '❌ FAIL'}`);
+// Test 6: setTimeout(cb, 0) jest ODROCZONY (kolejka), a nie synchroniczny —
+// wykonuje się dopiero na granicy ticku (`flushZeroDelayTimers`, woła Ticker).
+let deferredCalled = false;
+setTimeout(() => { deferredCalled = true; }, 0);
+const notYet = !deferredCalled;
+const flushed = flushZeroDelayTimers();
+const test6 = notYet && deferredCalled && flushed === 1;
+console.log(`Test 6 setTimeout(0) deferred+flush: ${test6 ? '✅ PASS' : '❌ FAIL'}` +
+            ` (przed flushem: ${notYet ? 'nie wywołany' : 'WYWOŁANY (regresja!)'}, po flushu: ${deferredCalled})`);
 
 // Test 7: THREE proxy działa
 const mat = new THREE.Mesh();
 const test7 = mat !== null;
 console.log(`Test 7 THREE mock: ${test7 ? '✅ PASS' : '❌ FAIL'}`);
 
-const allPass = test1 && test3 && test4 && test5 && syncCalled && test7;
+const allPass = test1 && test3 && test4 && test5 && test6 && test7;
 console.log(`\n${allPass ? '✅ STEP 1 SUCCESS' : '❌ STEP 1 FAIL'}`);
 process.exit(allPass ? 0 : 1);
