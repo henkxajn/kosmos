@@ -50,6 +50,14 @@ import { DysonSystem }       from '../../systems/DysonSystem.js';
 import { AutoPauseSystem }   from '../../systems/AutoPauseSystem.js';
 import { ScheduledEventSystem } from '../../systems/ScheduledEventSystem.js';
 import { EmpireRegistry }    from '../../systems/EmpireRegistry.js';
+// Warstwa DECYZYJNA AI (parytet z GameScene:296-304) — instancjonowana tylko przy
+// boot({ aiEmpires: true }). Bez niej imperia AI istnieją, ale NIC nie decydują.
+import { EmpireColonyBootstrap }  from '../../systems/EmpireColonyBootstrap.js';
+import { EmpireColonyMaintenance } from '../../systems/EmpireColonyMaintenance.js';
+import { ColonyAutoExpander }     from '../../systems/ColonyAutoExpander.js';
+import { EmpireStrategySystem }   from '../../systems/EmpireStrategySystem.js';
+import { EmpireLogisticsSystem }  from '../../systems/EmpireLogisticsSystem.js';
+import { EmpireResearchSystem }   from '../../systems/EmpireResearchSystem.js';
 import { IntelSystem }       from '../../systems/IntelSystem.js';
 import { POIRegistry }       from '../../systems/POIRegistry.js';
 import { DiplomacySystem }   from '../../systems/DiplomacySystem.js';
@@ -72,12 +80,18 @@ export class GameCore {
    * Bootstrap game state headless. Używa scenariusza "civilization" (Nowa Gra).
    * Po boot() wszystkie systemy są w window.KOSMOS, kolonia założona, budynki startowe.
    */
-  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization', solo = false, planetClass = null } = {}) {
+  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization',
+         solo = false, aiEmpires = !solo, planetClass = null } = {}) {
     this._quiet = quiet;
     // solo (BALANS reference run): neutralizuje warstwę AI (brak spawnu obcych imperiów →
     // brak agresji/wojny/inwazji, izolacja solo ekonomii) i wyłącza RandomEventSystem
     // (zdarzenia losowe = confound + niedeterminizm). Toggleable — bez flagi boot = pełna gra.
     this._solo = solo;
+    // aiEmpires: spawn obcych imperiów + WARSTWA DECYZYJNA AI, ROZPRZĘGNIĘTE od `solo`.
+    //   Domyślnie `!solo` ⇒ dotychczasowe zachowanie obu trybów bez zmian. Slice AI (BALANS
+    //   Phase 2) używa `{ solo: true, aiEmpires: true }`: imperia ŻYJĄ, ale zdarzenia losowe
+    //   zostają WYŁĄCZONE — jedna zmienna naraz względem panelu referencyjnego POP/ZASOBY/ROI/CENY.
+    this._aiEmpires = aiEmpires;
 
     // Czyść singletony
     EntityManager.clear();
@@ -213,7 +227,7 @@ export class GameCore {
     // Poniższe initForAllEmpires to no-op przy pustym rejestrze (iterują listAll()=[]);
     // initVesselSubdomain/initPOISubdomain NIE są per-imperium → zawsze wołane (gracz ma
     // statki i POI). Bez flagi solo = pełny spawn rywali jak w normalnej grze.
-    if (!solo) EmpireGenerator.generate(K.galaxyData, this.empireRegistry);
+    if (aiEmpires) EmpireGenerator.generate(K.galaxyData, this.empireRegistry);
     this.intelSystem.initForAllEmpires();
     this.intelSystem.initVesselSubdomain();
     this.poiRegistry.initPOISubdomain();
@@ -263,9 +277,13 @@ export class GameCore {
     // Aktywna kolonia = home planet
     this.colonyManager.switchActiveColony(civPlanet.id);
 
+    // Warstwa decyzyjna AI — PO utworzeniu kolonii gracza (systemy czytają KOSMOS leniwie
+    // w ticku; subskrypcja time:tick w konstruktorze wystarczy przed pierwszym tickiem).
+    if (aiEmpires) this._wireAiDecisionLayer();
+
     if (!this._quiet) {
       console.log(`[GameCore] Boot OK${solo ? ' [SOLO]' : ''}. star=${star.name} (${star.spectralType}), planets=${planets.length}, civPlanet=${civPlanet.name} (${civPlanet.planetType}, T=${Math.round(civPlanet.temperatureC ?? 0)}°C)`);
-      console.log(`[GameCore] Empires spawned: ${this.empireRegistry.listAll().length}  RandomEvents: ${this.randomEventSystem ? 'ON' : 'OFF'}`);
+      console.log(`[GameCore] Empires spawned: ${this.empireRegistry.listAll().length}  RandomEvents: ${this.randomEventSystem ? 'ON' : 'OFF'}  AI decision layer: ${aiEmpires ? 'ON' : 'OFF'}`);
     }
 
     return {
@@ -277,6 +295,25 @@ export class GameCore {
       colony,
       grid,
     };
+  }
+
+  // ── Warstwa decyzyjna AI (parytet z GameScene:296-304 + ekspozycje KOSMOS) ──
+  // Headless dotąd spawnował imperia (przy solo=false), ale NIE tworzył warstw B/C —
+  // AI stało bezczynnie, a `window.KOSMOS.empireColonyBootstrap` był `undefined`, przez co
+  // `EmpireStrategySystem._runForEmpire` wychodziłby CICHO w pierwszej linii. Bez tej metody
+  // każdy pomiar AI mierzyłby artefakt harnessu, nie zachowanie gry.
+  _wireAiDecisionLayer() {
+    const K = window.KOSMOS;
+    K.empireColonyBootstrap = EmpireColonyBootstrap;   // klasa statyczna (jak w GameScene)
+    this.empireColonyMaintenance = new EmpireColonyMaintenance();
+    this.colonyAutoExpander      = new ColonyAutoExpander();      // Warstwa B — rozbudowa kolonii
+    this.empireStrategySystem    = new EmpireStrategySystem();    // Warstwa C — kolonizacja
+    this.empireLogisticsSystem   = new EmpireLogisticsSystem();   // kurierzy outpost↔stolica
+    this.empireResearchSystem    = new EmpireResearchSystem();    // kolejka badań AI
+    K.colonyAutoExpander    = this.colonyAutoExpander;
+    K.empireStrategySystem  = this.empireStrategySystem;
+    K.empireLogisticsSystem = this.empireLogisticsSystem;
+    K.empireResearchSystem  = this.empireResearchSystem;
   }
 
   // ── Seed panel: nadpisanie klasy planety (BALANS) ──────────────────────────

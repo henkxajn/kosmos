@@ -31,6 +31,9 @@ export const CIV_PER_GY = GAME_CONFIG.CIV_TIME_SCALE;   // 1 gy = 12 civ-yr
 export const DRIVER_DEFAULTS = {
   scenario:          'civilization_boosted',
   solo:              true,
+  // Slice AI: imperia + warstwa decyzyjna AI. Domyślnie OFF — panel referencyjny
+  // (POP/ZASOBY/ROI/CENY) mierzy solo ekonomię gracza i ma zostać nietknięty.
+  aiEmpires:         false,
   actionsPerCivYear: 4,
   tickSize:          1.0,
 };
@@ -50,7 +53,7 @@ export function runOneGame({ seed, planetClass, targetGy, telemetry, opts = {} }
 
   reseed(seed);
   const core = new GameCore();
-  core.boot({ quiet: true, scenario: cfg.scenario, solo: cfg.solo, planetClass });
+  core.boot({ quiet: true, scenario: cfg.scenario, solo: cfg.solo, aiEmpires: cfg.aiEmpires, planetClass });
   const K = window.KOSMOS;
   const home = core.colonyManager.getColony(K.homePlanet.id);
 
@@ -91,7 +94,9 @@ export function runOneGame({ seed, planetClass, targetGy, telemetry, opts = {} }
   });
   ticker.run(targetGy * CIV_PER_GY, { tickSize: cfg.tickSize });
 
-  return { seed, series: telemetry.getSeries(), crashed: ticker._crashed, core, home };
+  // `telemetry` zwracane dla czujników, które oprócz szeregu niosą stan boczny
+  // (slice AI: dziennik decyzji) — istniejące metryki po prostu tego pola nie czytają.
+  return { seed, series: telemetry.getSeries(), crashed: ticker._crashed, core, home, telemetry };
 }
 
 /**
