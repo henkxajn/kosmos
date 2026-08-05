@@ -290,6 +290,10 @@ function _onColonyFounded({ expedition: exp, planetId, startResources, startPop,
   const body = _findBody(planetId);
   const planetName = body?.name ?? planetId;
 
+  // Fallback: część ścieżek kolonizacji nie przekazuje mnożnika (stały zestaw
+  // zasobów = warunki normalne) → domyślnie ×1, nigdy „×undefined".
+  if (typeof resourceMult !== 'number') resourceMult = 1.0;
+
   let qualityText, qualityClass;
   if (resourceMult <= 0.5) {
     qualityText = t('missionPopup.harsh');

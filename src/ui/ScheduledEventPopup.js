@@ -403,6 +403,19 @@ function _rgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// Ustawia tekst z realnym łamaniem linii. Callery (MissionEventModal, GameScene)
+// robią `.replace(/\n/g, '<br>')` na nagłówkach — tu renderujemy `<br>` (oraz
+// surowe `\n`) jako prawdziwe łamanie, a nie dosłowny znacznik. Segmenty przez
+// textContent → bezpieczne (nazwy planet nie są interpretowane jako HTML).
+function _setMultilineText(el, str) {
+  el.textContent = '';
+  const parts = String(str ?? '').split(/<br\s*\/?>|\n/i);
+  parts.forEach((part, i) => {
+    if (i > 0) el.appendChild(document.createElement('br'));
+    el.appendChild(document.createTextNode(part));
+  });
+}
+
 // ── Builder DOM ─────────────────────────────────────────────────────
 
 /**
@@ -515,7 +528,7 @@ export function buildScheduledEventPopup(config) {
   const headline = document.createElement('h1');
   headline.className = 'se-headline';
   headline.style.color = sev.accentColor;
-  headline.textContent = config.headline ?? '';
+  _setMultilineText(headline, config.headline ?? '');
   body.appendChild(headline);
 
   content.appendChild(body);

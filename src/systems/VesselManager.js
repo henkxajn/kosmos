@@ -2865,6 +2865,7 @@ export class VesselManager {
         planetId:      targetId,
         startResources,
         startPop,
+        resourceMult:  1.0,  // stały zestaw zasobów (bez rzutu) = warunki normalne ×1
         autoSpaceport: true,
       });
     } else {
