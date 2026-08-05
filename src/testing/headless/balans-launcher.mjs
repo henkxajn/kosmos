@@ -3,18 +3,24 @@
 // Uruchom: node src/testing/headless/balans-launcher.mjs [--port=7333]
 // ───────────────────────────────────────────────────────────────
 // CIENKA nakładka na istniejącą ścieżkę uruchomienia: zamiast komendy
-// w terminalu — formularz w przeglądarce (seedy / game-lata / klasa
-// planety), przycisk Uruchom, a po zakończeniu link do wygenerowanego
-// `pop-report-<class>.html`. Ten sam ekran co raport → jedna powierzchnia.
+// w terminalu — formularz w przeglądarce (metryka / seedy / game-lata / klasa
+// planety), przycisk Uruchom, a po zakończeniu link do wygenerowanego raportu
+// (`<prefix>-report-<class>.html`). Ten sam ekran co raport → jedna powierzchnia.
 //
 // ŚWIADOMIE POZA ZAKRESEM (brief): kont, bazy danych, historii uruchomień,
 // streamingu postępu na żywo, frameworków. Run → czekaj → otwórz raport.
 //
 // Nie liczy NICZEGO sam: `spawn` odpala TEN SAM runner co terminal
-// (`balans-pop-telemetry.mjs`), z tymi samymi flagami. Zero stałych balansu,
-// zero wpływu na logikę gry/bota. Wszystko w GAME-YEARS (HARD #3).
+// (`balans-pop-telemetry.mjs` / `balans-resource-telemetry.mjs`), z tymi samymi
+// flagami. Zero stałych balansu, zero wpływu na logikę gry/bota.
+// Wszystko w GAME-YEARS (HARD #3).
 //
-// Eksporty (dla keepera): parseRunParams / reportFileFor / isSafeReportName /
+// METRYKI: panel obsługuje każdą metrykę Phase 2 (POP, zasoby, kolejne) — jeden
+// rejestr `METRICS` mapuje metrykę na runner i nazwę pliku raportu. Dodanie metryki
+// = jeden wpis (runner musi przyjmować --class/--seeds/--gy i zapisywać
+// `<prefix>-report-<CLASS>.html` do REPORTS_DIR).
+//
+// Eksporty (dla keepera): METRICS / parseRunParams / reportFileFor / isSafeReportName /
 // runHarness / createLauncherServer. Serwer startuje TYLKO gdy plik jest
 // uruchomiony bezpośrednio (import w teście nie nasłuchuje).
 // ═══════════════════════════════════════════════════════════════
@@ -27,9 +33,26 @@ import { dirname, join, basename } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const RUNNER_PATH  = join(__dirname, 'balans-pop-telemetry.mjs');
 export const REPORTS_DIR  = join(__dirname, '..', 'reports', 'balans');
 export const DEFAULT_PORT = 7333;
+
+// Rejestr metryk. `prefix` jest KONTRAKTEM nazwy pliku runnera (patrz isSafeReportName).
+export const METRICS = {
+  pop: {
+    runner: join(__dirname, 'balans-pop-telemetry.mjs'),
+    prefix: 'pop-report',
+    label:  'POP — populacja (zdrowa rezerwa vs glut)',
+  },
+  resources: {
+    runner: join(__dirname, 'balans-resource-telemetry.mjs'),
+    prefix: 'resource-report',
+    label:  'ZASOBY — produkcja / konsumpcja / co wiąże gospodarkę',
+  },
+};
+export const DEFAULT_METRIC = 'pop';   // domyślna metryka API (kompatybilność wstecz)
+
+// Kompatybilność wstecz: ścieżka runnera POP (pierwsza metryka slice'u).
+export const RUNNER_PATH = METRICS.pop.runner;
 
 // Limity wejścia panelu (ochrona przed pomyłką „45000 seedów", nie balans).
 export const RUN_LIMITS = {
@@ -50,6 +73,10 @@ export const PLANET_CLASS_CHOICES = [
 
 // ── Walidacja parametrów (czysta — keeper testuje ją wprost) ─────
 export function parseRunParams(raw = {}) {
+  const metric = String(raw.metric ?? DEFAULT_METRIC).trim();
+  if (!Object.prototype.hasOwnProperty.call(METRICS, metric))
+    return { ok: false, error: `metryka: ${Object.keys(METRICS).join(' | ')}` };
+
   const cls = String(raw.class ?? raw.planetClass ?? 'REAL').trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9_]{0,15}$/.test(cls))
     return { ok: false, error: 'klasa planety: A-Z, 0-9, _ (1-16 znaków, zaczyna literą)' };
@@ -62,20 +89,27 @@ export function parseRunParams(raw = {}) {
   if (!Number.isFinite(gy) || gy < 1 || gy > RUN_LIMITS.GY_MAX)
     return { ok: false, error: `game-lata: 1..${RUN_LIMITS.GY_MAX}` };
 
-  return { ok: true, params: { planetClass: cls, seeds, gy } };
+  return { ok: true, params: { metric, planetClass: cls, seeds, gy } };
 }
 
-/** Nazwa pliku raportu dla klasy (kontrakt runnera: `pop-report-<class>.html`). */
-export function reportFileFor(planetClass) { return `pop-report-${planetClass}.html`; }
+/** Nazwa pliku raportu (kontrakt runnera: `<prefix>-report-<class>.html`). */
+export function reportFileFor(planetClass, metric = DEFAULT_METRIC) {
+  const m = METRICS[metric] ?? METRICS[DEFAULT_METRIC];
+  return `${m.prefix}-${planetClass}.html`;
+}
 
-/** Whitelist nazw serwowanych z katalogu raportów (anty path-traversal). */
+/** Whitelist nazw serwowanych z katalogu raportów (anty path-traversal).
+ *  Wzorzec budowany z rejestru METRICS — nowa metryka NIE wymaga edycji regexpu. */
+const REPORT_NAME_RE = new RegExp(
+  `^(?:${Object.values(METRICS).map(m => m.prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})-[A-Z][A-Z0-9_]{0,15}\\.html$`);
 export function isSafeReportName(name) {
-  return typeof name === 'string' && /^pop-report-[A-Z][A-Z0-9_]{0,15}\.html$/.test(name);
+  return typeof name === 'string' && REPORT_NAME_RE.test(name);
 }
 
 // ── Uruchomienie runnera (spawn bez shella — argumenty jako tablica) ──
 export function runHarness(params, opts = {}) {
-  const runner     = opts.runner ?? RUNNER_PATH;
+  const metric     = params.metric ?? DEFAULT_METRIC;
+  const runner     = opts.runner ?? (METRICS[metric] ?? METRICS[DEFAULT_METRIC]).runner;
   const reportsDir = opts.reportsDir ?? REPORTS_DIR;
   const timeoutMs  = opts.timeoutMs ?? RUN_LIMITS.TIMEOUT_MS;
 
@@ -96,13 +130,13 @@ export function runHarness(params, opts = {}) {
     const finish = (exitCode, errorMsg) => {
       if (done) return; done = true;
       clearTimeout(killer);
-      const reportFile = reportFileFor(params.planetClass);
+      const reportFile = reportFileFor(params.planetClass, metric);
       const reportExists = existsSync(join(reportsDir, reportFile));
       resolve({
         ok: exitCode === 0 && reportExists && !timedOut,
         exitCode, timedOut, error: errorMsg ?? null,
         durationMs: Date.now() - started,
-        params, reportFile, reportExists,
+        metric, params, reportFile, reportExists,
         reportUrl: reportExists ? `/report/${reportFile}` : null,
         tail: lines.slice(-RUN_LIMITS.TAIL_LINES),
       });
@@ -127,7 +161,10 @@ export function runHarness(params, opts = {}) {
 // ── Serwer (nie nasłuchuje — caller robi .listen) ────────────────
 export function createLauncherServer(opts = {}) {
   const reportsDir = opts.reportsDir ?? REPORTS_DIR;
-  const runner     = opts.runner ?? RUNNER_PATH;
+  // ⚠ CELOWO bez domyślnej wartości: `undefined` pozwala `runHarness` wybrać runner
+  // z rejestru METRICS wg metryki. Domyślka (np. RUNNER_PATH) nadpisywałaby wybór
+  // metryki i panel „Zasoby" odpalałby runner POP.
+  const runner     = opts.runner;
   const timeoutMs  = opts.timeoutMs ?? RUN_LIMITS.TIMEOUT_MS;
   let running = false;   // jeden run naraz (harness i tak jest CPU-bound)
 
@@ -193,6 +230,10 @@ export function createLauncherServer(opts = {}) {
 export function renderPanel() {
   const options = PLANET_CLASS_CHOICES
     .map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
+  // Panel preselekcjonuje NAJNOWSZĄ metrykę (zasoby); domyślna metryka API to nadal
+  // `pop` (kompatybilność wstecz) — panel zawsze wysyła `metric` jawnie, więc bez dwuznaczności.
+  const metricOptions = Object.entries(METRICS)
+    .map(([v, m]) => `<option value="${v}"${v === 'resources' ? ' selected' : ''}>${m.label}</option>`).join('');
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BALANS 1.0 — launcher</title>
@@ -228,16 +269,19 @@ pre{margin-top:14px;padding:10px 12px;background:var(--surface);border:1px solid
 footer{margin-top:26px;padding-top:12px;border-top:1px solid var(--grid);color:var(--muted);font-size:11.5px}
 </style></head><body>
 <h1>BALANS 1.0 — launcher</h1>
-<p class="sub">Cienka nakładka na <code>balans-pop-telemetry.mjs</code>. Uruchom harness, potem otwórz raport.
+<p class="sub">Cienka nakładka na runnery telemetrii Phase 2. Wybierz metrykę, uruchom harness, otwórz raport.
   Jednostka: <b>game-years</b> (1 gy = 12 civ-yr). Instrument read-only — <b>zero stałych balansu</b>.</p>
 
 <div class="card">
+  <div class="row">
+    <div class="f" style="flex:1 1 100%"><label for="metric">metryka</label><select id="metric">${metricOptions}</select></div>
+  </div>
   <div class="row">
     <div class="f"><label for="cls">klasa planety</label><select id="cls">${options}</select></div>
     <div class="f"><label for="seeds">seedy</label><input id="seeds" type="number" min="1" max="${RUN_LIMITS.SEEDS_MAX}" step="1" value="8"></div>
     <div class="f"><label for="gy">game-lata</label><input id="gy" type="number" min="1" max="${RUN_LIMITS.GY_MAX}" step="1" value="45"></div>
   </div>
-  <p class="hint">Panel Phase 1/2 = REAL · 8 seedów · 45 gy (~1–2 min). Krótki test: 1 seed · 5 gy.</p>
+  <p class="hint">Panel Phase 1/2 = REAL · 8 seedów · 45 gy (kilka minut). Krótki test: 1 seed · 5 gy.</p>
   <button id="run">▶ Uruchom</button>
   <div id="status"></div>
   <div id="out"></div>
@@ -256,7 +300,7 @@ $('run').addEventListener('click', async () => {
   try {
     const res = await fetch('/run', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ class: $('cls').value, seeds: Number($('seeds').value), gy: Number($('gy').value) }),
+      body: JSON.stringify({ metric: $('metric').value, class: $('cls').value, seeds: Number($('seeds').value), gy: Number($('gy').value) }),
     });
     const d = await res.json();
     clearInterval(timer);
@@ -290,7 +334,7 @@ if (isMain) {
   server.listen(port, () => {
     console.log('\n═══ BALANS 1.0 — launcher ═══');
     console.log(`  panel:   http://localhost:${port}`);
-    console.log(`  runner:  ${RUNNER_PATH}`);
+    for (const [k, m] of Object.entries(METRICS)) console.log(`  runner ${k.padEnd(9)} ${m.runner}`);
     console.log(`  raporty: ${REPORTS_DIR}`);
     console.log('  (Ctrl+C kończy)\n');
   });

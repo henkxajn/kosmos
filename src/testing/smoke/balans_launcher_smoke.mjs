@@ -3,11 +3,14 @@
 // jedyną siatką bezpieczeństwa: waliduje wejście, trasy, sandbox plików
 // raportu ORAZ realne uruchomienie runnera end-to-end (nie stub).
 //
-//   T1  parseRunParams — domyślne / poprawne / odrzucone (klasa, seedy, gy)
-//   T2  isSafeReportName + reportFileFor — whitelist nazw (anty path-traversal)
+//   T1  parseRunParams — domyślne / poprawne / odrzucone (metryka, klasa, seedy, gy)
+//   T2  isSafeReportName + reportFileFor — whitelist nazw per metryka (anty traversal)
 //   T3  serwer: panel 200 + self-contained + błędne trasy/JSON/parametry/raport
-//   T4  end-to-end: POST /run odpala PRAWDZIWY runner → powstaje plik raportu,
+//   T4  end-to-end POP: POST /run odpala PRAWDZIWY runner → powstaje plik raportu,
 //       a GET /report/<plik> go serwuje (uruchomienie minimalne: 1 seed, 2 gy)
+//   T5  end-to-end ZASOBY: ta sama trasa z metric=resources odpala runner ZASOBÓW
+//       (regresja realnego buga: domyślka `runner` w createLauncherServer nadpisywała
+//        wybór metryki i „Zasoby" odpalały runner POP)
 //
 // Uruchom: node src/testing/smoke/balans_launcher_smoke.mjs
 
@@ -15,7 +18,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   parseRunParams, isSafeReportName, reportFileFor, createLauncherServer,
-  RUN_LIMITS, REPORTS_DIR, RUNNER_PATH,
+  RUN_LIMITS, REPORTS_DIR, RUNNER_PATH, METRICS, DEFAULT_METRIC,
 } from '../headless/balans-launcher.mjs';
 
 let pass = 0, fail = 0;
@@ -26,7 +29,13 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 const SMOKE_CLASS = 'SMOKE';
 const SMOKE_HTML  = join(REPORTS_DIR, `pop-report-${SMOKE_CLASS}.html`);
 const SMOKE_JSON  = join(REPORTS_DIR, `pop-telemetry-${SMOKE_CLASS}.json`);
-const cleanup = () => { for (const f of [SMOKE_HTML, SMOKE_JSON]) { try { rmSync(f, { force: true }); } catch {} } };
+const SMOKE_RES_HTML = join(REPORTS_DIR, `resource-report-${SMOKE_CLASS}.html`);
+const SMOKE_RES_JSON = join(REPORTS_DIR, `resource-telemetry-${SMOKE_CLASS}.json`);
+const cleanup = () => {
+  for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON]) {
+    try { rmSync(f, { force: true }); } catch {}
+  }
+};
 
 // ── T1: walidacja parametrów ──────────────────────────────────────
 console.log('T1 — parseRunParams (domyślne / poprawne / odrzucone)');
@@ -51,18 +60,30 @@ console.log('T1 — parseRunParams (domyślne / poprawne / odrzucone)');
   assert(parseRunParams({ gy: 0 }).ok === false, 'gy=0 odrzucone');
   assert(parseRunParams({ gy: RUN_LIMITS.GY_MAX + 1 }).ok === false, `gy>${RUN_LIMITS.GY_MAX} odrzucone`);
   assert(parseRunParams({ seeds: RUN_LIMITS.SEEDS_MAX, gy: RUN_LIMITS.GY_MAX }).ok === true, 'górne granice przechodzą');
+
+  // metryka (rejestr METRICS)
+  assert(def.params.metric === DEFAULT_METRIC, `brak metryki → domyślna '${DEFAULT_METRIC}' (kompatybilność wstecz)`);
+  assert(parseRunParams({ metric: 'resources' }).params.metric === 'resources', 'metric=resources przechodzi');
+  assert(parseRunParams({ metric: 'roi' }).ok === false, 'nieznana metryka odrzucona (runner nie zgadywany)');
+  assert(parseRunParams({ metric: '../pop' }).ok === false, 'metryka ze ścieżką odrzucona');
+  assert(parseRunParams({ metric: 'constructor' }).ok === false, 'metryka z prototypu Object odrzucona (hasOwnProperty)');
 }
 
 // ── T2: whitelist nazw raportu ────────────────────────────────────
 console.log('\nT2 — isSafeReportName / reportFileFor (sandbox plików)');
 {
   assert(reportFileFor('REAL') === 'pop-report-REAL.html', 'reportFileFor = kontrakt nazwy runnera');
+  assert(reportFileFor('REAL', 'resources') === 'resource-report-REAL.html', 'nazwa raportu per metryka');
   assert(isSafeReportName('pop-report-REAL.html'), 'REAL przechodzi');
   assert(isSafeReportName('pop-report-GOOD_FE.html'), 'GOOD_FE (podkreślenie) przechodzi');
+  assert(isSafeReportName('resource-report-GOOD_FE.html'), 'raport zasobów przechodzi (whitelist z METRICS)');
   assert(!isSafeReportName('../../../package.json'), 'traversal odrzucony');
   assert(!isSafeReportName('pop-telemetry-REAL.json'), 'inny artefakt niż raport odrzucony');
+  assert(!isSafeReportName('resource-telemetry-REAL.json'), 'JSON zasobów też nie jest serwowany');
   assert(!isSafeReportName('pop-report-REAL.html.bak'), 'doklejone rozszerzenie odrzucone');
   assert(!isSafeReportName(''), 'pusta nazwa odrzucona');
+  assert(Object.values(METRICS).every(m => existsSync(m.runner)),
+    `każda metryka w rejestrze wskazuje ISTNIEJĄCY runner (${Object.keys(METRICS).join(', ')})`);
 }
 
 // ── Serwer na porcie efemerycznym (T3+T4) ─────────────────────────
@@ -80,6 +101,8 @@ try {
     assert(/text\/html/.test(res.headers.get('content-type') ?? ''), 'panel serwowany jako text/html');
     assert(html.includes('id="seeds"') && html.includes('id="gy"') && html.includes('id="cls"'),
       'panel ma pola: seedy / game-lata / klasa');
+    assert(html.includes('id="metric"') && Object.keys(METRICS).every(k => html.includes(`value="${k}"`)),
+      `panel ma wybór metryki ze WSZYSTKIMI metrykami rejestru (${Object.keys(METRICS).join(', ')})`);
     assert(html.includes('id="run"'), 'panel ma przycisk Uruchom');
     assert(/game-years/.test(html), 'panel nazywa jednostkę game-years (HARD #3)');
     assert(!/https?:\/\//.test(html.replace(/http:\/\/localhost/g, '')), 'zero zewnętrznych URL (self-contained)');
@@ -102,8 +125,8 @@ try {
     assert(missing.status === 404, 'GET /report nieistniejącego pliku → 404');
   }
 
-  // ── T4: end-to-end — PRAWDZIWY runner ───────────────────────────
-  console.log('\nT4 — end-to-end: /run odpala prawdziwy runner → raport na dysku');
+  // ── T4: end-to-end — PRAWDZIWY runner (POP) ─────────────────────
+  console.log('\nT4 — end-to-end POP: /run odpala prawdziwy runner → raport na dysku');
   {
     assert(existsSync(RUNNER_PATH), 'runner istnieje pod ścieżką z launchera');
     cleanup();   // pre-clean: istnienie po runie = plik POWSTAŁ w tym runie
@@ -130,6 +153,37 @@ try {
     const html = await rep.text();
     assert(rep.status === 200, 'GET zwróconego linku → 200');
     assert(html.includes('BALANS') && html.includes('rp-verdict'), 'serwowany plik to raport POP (renderPopReport)');
+  }
+
+  // ── T5: end-to-end ZASOBY (regresja: metryka wybiera runner) ────
+  console.log('\nT5 — end-to-end ZASOBY: metric=resources odpala runner ZASOBÓW (nie POP)');
+  {
+    cleanup();
+    assert(!existsSync(SMOKE_RES_HTML) && !existsSync(SMOKE_HTML), 'przed runem brak obu raportów (pre-clean)');
+
+    const t0 = Date.now();
+    const res = await fetch(`${base}/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metric: 'resources', class: SMOKE_CLASS, seeds: 1, gy: 2 }),
+    });
+    const d = await res.json();
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+    assert(res.status === 200 && d.ok === true, `POST /run (resources) → 200 ok (${secs}s, kod ${d.exitCode})`);
+    assert(d.metric === 'resources' && d.reportFile === `resource-report-${SMOKE_CLASS}.html`,
+      'zwrócona metryka i nazwa raportu = kontrakt runnera zasobów');
+    assert(existsSync(SMOKE_RES_HTML) && existsSync(SMOKE_RES_JSON), 'artefakty ZASOBÓW powstały na dysku');
+    // ⚠ REGRESJA REALNEGO BUGA: domyślka `runner` w createLauncherServer nadpisywała
+    //   wybór metryki → „Zasoby" po cichu odpalały runner POP i podmieniały jego artefakt.
+    assert(!existsSync(SMOKE_HTML), 'runner POP NIE został odpalony (brak artefaktu POP)');
+    assert(Array.isArray(d.tail) && d.tail.some(l => /WERDYKT|PANEL per zasób/.test(l)),
+      'ogon stdout niesie wynik runnera ZASOBÓW (dowód: właściwy proces)');
+
+    const rep = await fetch(`${base}${d.reportUrl}`);
+    const html = await rep.text();
+    assert(rep.status === 200, 'GET linku do raportu zasobów → 200');
+    assert(html.includes('telemetria ZASOBÓW') && html.includes('rr-verdict'),
+      'serwowany plik to raport ZASOBÓW (renderResourceReport)');
   }
 } finally {
   cleanup();
