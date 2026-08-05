@@ -13,6 +13,8 @@
 //   T7  summarizeSeed / aggregatePanel / verdict
 //   T8  realny boot z aiEmpires (guard dryfu API + parytet: aiEmpires=false NIE spawnuje AI)
 //   T9  progi zdrowia — każdy próg osobno + „wojna to KONTEKST, nie wyciszenie warna"
+//   T10 PARYTET Population 2.0 dla startowej populacji AI (Phase 3 / eksperyment #1) —
+//       pin reguły ×4, nie liczby „na oko"; chroni przed cichym cofnięciem do starej jednostki
 
 import '../headless/env.js';           // MUST be first
 import { reseed } from '../headless/env.js';
@@ -30,6 +32,9 @@ import {
   MAX_PENDING_BUILDS_PER_COLONY, MAX_PENDING_UPGRADES_PER_COLONY,
 } from '../../systems/ColonyAutoExpander.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
+import { INDUSTRIALIST } from '../../data/EmpireArchetypeIndustrialist.js';
+import { EXPANSIONIST } from '../../data/EmpireArchetypeExpansionist.js';
+import { BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -374,6 +379,43 @@ console.log('T9 — evaluateThresholds / rollupWarns (progi zdrowia imperium)');
   const noOutpost = roll.find(r => r.code === WARN_CODES.NO_FIRST_OUTPOST);
   assert(noOutpost.count === 2 && noOutpost.seeds === 2, 'rollup liczy naruszenia i SEEDY osobno');
   assert(/^⚠ WARN {2}AI_/.test(formatWarn(never.warns[0])), 'formatWarn daje stabilną linię WARN');
+}
+
+// ── T10: parytet Population 2.0 dla startowej populacji AI ────────
+console.log('T10 — startingPops AI trzyma redenominację Population 2.0 (×4 per strata)');
+{
+  // Jednostka SPRZED Population 2.0 (stan z commita bc87846 — historyczny snapshot, jak progi
+  // w migracjach: NIE wolno mu dryfować za żywą stałą, bo wtedy test przestaje cokolwiek pilnować).
+  const PRE_POP2 = { laborer: 3, worker: 1, scientist: 1, merchant: 1 };
+  const S = 4;   // ten sam mnożnik co SaveMigration._migrateV95toV96
+
+  const sp = INDUSTRIALIST.startingPops ?? {};
+  assert(Object.keys(sp).sort().join(',') === Object.keys(PRE_POP2).sort().join(','),
+    'zestaw strat bez zmian (reskalowanie ≠ przeprojektowanie składu społecznego)');
+  const perStrata = Object.entries(PRE_POP2).every(([k, v]) => sp[k] === v * S);
+  assert(perStrata, `każda strata ×${S}: ${JSON.stringify(sp)} (oczekiwane ${JSON.stringify(
+    Object.fromEntries(Object.entries(PRE_POP2).map(([k, v]) => [k, v * S])))})`);
+  const total = Object.values(sp).reduce((a, b) => a + b, 0);
+  assert(total === 24, `suma startowa = 24 POP (było 6 przed parytetem), jest ${total}`);
+
+  // Reguła, nie liczba: ten sam mnożnik co gracz (BOOSTED_STARTER_POP 4→16).
+  assert(BOOSTED_STARTER_POP === 16,
+    'kotwica reguły: start gracza też jest ×4 (4→16) — gdyby to się zmieniło, parytet AI wymaga rewizji');
+
+  // Ekspansjonista dziedziczy przez structuredClone — nie może się rozjechać.
+  assert(JSON.stringify(EXPANSIONIST.startingPops) === JSON.stringify(sp),
+    'EXPANSIONIST dziedziczy startingPops z INDUSTRIALIST (klon, nie druga kopia wartości)');
+
+  // Sens gry: housing startowy musi POMIEŚCIĆ nową populację, inaczej kolonia rodzi się w capie
+  // wzrostu (Population 2.0: capacity = Σ housing) i „naprawa" zamieniłaby jeden zastój na drugi.
+  const startHousing = (INDUSTRIALIST.startingBuildings ?? []).reduce((sum, b) => {
+    const def = BUILDINGS[b.buildingId];
+    return sum + ((def?.housing ?? 0) * (b.count ?? 1));
+  }, 0);
+  assert(startHousing >= total,
+    `housing budynków startowych (${startHousing}) mieści startową populację (${total})`);
+  assert(startHousing > total,
+    `…i zostawia zapas na wzrost logistyczny (${startHousing} > ${total})`);
 }
 
 console.log(`\n═══ ${pass} PASS / ${fail} FAIL ═══`);

@@ -110,12 +110,25 @@ export const INDUSTRIALIST = {
     { buildingId: 'research_station', count: 2 },                                       // S3.2 S2: gate produkcji research (model badań AI)
   ],
 
-  // Startowa populacja — rozkład per strata (suma 6 POP — lekki handicap vs gracz ~4)
+  // Startowa populacja — rozkład per strata (suma 24 POP).
+  // ⚠ BALANS Phase 3 / eksperyment #1 — PARYTET z redenominacją Population 2.0.
+  //   Population 2.0 Faza 1 przedefiniowała jednostkę POP: WSZYSTKIE liczności per strata
+  //   ×4 (`SaveMigration._migrateV95toV96`: `S = 4`, `strata[*].count *= S`), a etaty
+  //   budynków przeszły na `jobs = popCost × 4`. W tym pliku przeskalowano wtedy JEDNO pole
+  //   (`popTransferSize` 2→8, commit bc87846) — `startingPops` zostało w starej jednostce.
+  //   Skutek zmierzony w slice AI (docs/BALANS_PHASE2_AI.md): imperium startowało z 19
+  //   etatami na 6 POP (32% obsady), gdy gracz ma 10 etatów na 16 POP (160%) — 18 darmowych
+  //   budynków startowych, czyli PRZEWAGA z projektu, stawało się nieobsadzalnym balastem.
+  //   Tu stosujemy TĘ SAMĄ regułę migracji per strata (×4), nie wartość dobraną „na oko":
+  //     laborer 3→12 · worker 1→4 · scientist 1→4 · merchant 1→4  (suma 6→24)
+  //   Housing startowy (colony_base 16 + habitat 12 + launch_pad 4 = 32) mieści 24 POP,
+  //   więc wzrost logistyczny zachowuje zapas — kolonia nie startuje w capie.
+  //   EXPANSIONIST dziedziczy to przez `structuredClone(INDUSTRIALIST)`.
   startingPops: {
-    laborer:    3,
-    worker:     1,
-    scientist:  1,
-    merchant:   1,
+    laborer:    12,
+    worker:     4,
+    scientist:  4,
+    merchant:   4,
   },
 
   // Startowe technologie — odblokowane "od razu", jakby imperium je już zbadało.
