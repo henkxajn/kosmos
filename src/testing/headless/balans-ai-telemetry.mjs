@@ -21,6 +21,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 import './env.js';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { runSeedPanel, CIV_PER_GY } from './balans-driver.mjs';
 import {
   AiTelemetry, AI_TELEMETRY_DEFAULTS, AI_DROID_ID,
@@ -29,6 +32,7 @@ import {
 import {
   AI_HEALTH_THRESHOLDS, evaluateThresholds, rollupWarns, formatWarn,
 } from './AiThresholds.js';
+import { renderAiReport } from '../report/AiReport.js';
 
 function arg(name, def) {
   const a = process.argv.find(s => s.startsWith(`--${name}=`));
@@ -38,6 +42,9 @@ const PLANET_CLASS = arg('class', 'REAL');
 const N_SEEDS      = parseInt(arg('seeds', '8'));
 const TARGET_GY    = parseFloat(arg('gy', '45'));
 const SEED_PREFIX  = arg('seed', 'balans-gate1');
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const OUT_DIR   = join(__dirname, '..', 'reports', 'balans');
 
 const fmt = (n, d = 1) => (n == null ? '—' : (Math.round(n * 10 ** d) / 10 ** d).toString());
 const pct = (x) => (x == null ? '—' : Math.round(x * 100) + '%');
@@ -187,4 +194,38 @@ for (const s of seeds) {
 // ── 7. Werdykt ────────────────────────────────────────────────────
 console.log(`\n  ► WERDYKT (outcome ${v.outcome}): ${v.label}`);
 console.log(`  crashes: ${seeds.filter(s => s.crashed).length}/${seeds.length}` +
-  `  · knoby pomiaru: ${JSON.stringify(AI_TELEMETRY_DEFAULTS)}  · 1 gy = ${CIV_PER_GY} civ-lat\n`);
+  `  · knoby pomiaru: ${JSON.stringify(AI_TELEMETRY_DEFAULTS)}  · 1 gy = ${CIV_PER_GY} civ-lat`);
+
+// ── 8. Zapis JSON + HTML (kontrakt launchera: `<prefix>-report-<CLASS>.html`) ──
+mkdirSync(OUT_DIR, { recursive: true });
+const payload = {
+  meta: {
+    tool: 'BALANS 1.0 Phase 2 — AI empire telemetry (diagnoza podejrzewanej regresji warstwy decyzyjnej AI)',
+    planetClass: PLANET_CLASS, seeds: N_SEEDS, targetGy: TARGET_GY, seedPrefix: SEED_PREFIX,
+    civPerGy: CIV_PER_GY,
+    knobs: { ...AI_TELEMETRY_DEFAULTS },
+    unit: 'game-years (1 gy = 12 civ-yr)',
+    run: 'wspólny balans-driver + aiEmpires=true (imperia AI + warstwy decyzyjne B/C); zdarzenia losowe WYŁĄCZONE',
+    scope: 'imperia AI (EmpireStrategySystem + ColonyAutoExpander) vs bot referencyjny gracza w TYM SAMYM przebiegu',
+    outpostKit: outpostKitCost(),
+    note: 'read-only instrument — zero stałych balansu, zero zmian w logice AI; opakowania metod zwracają oryginalne wyniki',
+  },
+  thresholds: { ...AI_HEALTH_THRESHOLDS },
+  seeds: seeds.map(s => ({
+    seed: s.seed, crashed: s.crashed, summary: s.summary, health: s.health,
+    decisions: s.decisions, series: s.series,
+  })),
+  panel: { ...agg, verdict: v, thresholdFirstOutpostGy: AI_HEALTH_THRESHOLDS.FIRST_OUTPOST_GY },
+};
+const jsonPath = join(OUT_DIR, `ai-telemetry-${PLANET_CLASS}.json`);
+writeFileSync(jsonPath, JSON.stringify(payload));
+
+const html = `<!doctype html><html lang="pl"><head><meta charset="utf-8">` +
+  `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+  `<title>BALANS Phase 2 — IMPERIA AI (${PLANET_CLASS})</title>` +
+  `<style>html,body{margin:0}</style></head><body>${renderAiReport(payload)}</body></html>`;
+const htmlPath = join(OUT_DIR, `ai-report-${PLANET_CLASS}.html`);
+writeFileSync(htmlPath, html);
+
+console.log(`\n  JSON:   ${jsonPath}`);
+console.log(`  RAPORT: ${htmlPath}\n`);
