@@ -158,6 +158,11 @@ close session, not a fix cycle).
 
 ## 5. Phase-2 findings queue (candidates surfaced by the instrument — NOT adjudicated, do NOT fix)
 
+> **Update (Phase 2, POP slice):** finding **#1 was adjudicated and DROPPED** — 88% of surplus-years are a healthy
+> buffer, the raw signal was counting buffered POP as glut. A **new** candidate ("ballooning" regime, 2/8 seeds)
+> took its place, and seed_7 (§3) turned out to be finding #2 seen from the POP side. Record + numbers:
+> **`docs/BALANS_PHASE2_POP.md`**. The list below is left as written for Phase 1's historical record.
+
 1. **POP-glut.** Every class/year shows unfilled-jobs = 0 with a growing labor surplus; POP never binds. Matches
    Filip's lived observation ("POP grows too fast, nothing to do with them"). **Top candidate.** Also why
    droids-by-yr6 = 0 — there is no labor scarcity to fire the droid-install signal, so the droid economy is dormant
