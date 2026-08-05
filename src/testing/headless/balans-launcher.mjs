@@ -48,8 +48,18 @@ export const METRICS = {
     prefix: 'resource-report',
     label:  'ZASOBY — produkcja / konsumpcja / co wiąże gospodarkę',
   },
+  roi: {
+    runner: join(__dirname, 'balans-roi-telemetry.mjs'),
+    prefix: 'roi-report',
+    label:  'ROI — koszt budynku vs to, co budynek daje',
+  },
 };
 export const DEFAULT_METRIC = 'pop';   // domyślna metryka API (kompatybilność wstecz)
+
+// Metryka preselekcjonowana w panelu = NAJNOWSZA (ostatni wpis rejestru). Panel zawsze
+// wysyła `metric` jawnie, więc domyślka API (`pop`) zostaje nietknięta — bez dwuznaczności.
+// Wyliczane z rejestru, nie wpisane na sztywno: nowa metryka nie wymaga edycji panelu.
+export const PANEL_DEFAULT_METRIC = Object.keys(METRICS)[Object.keys(METRICS).length - 1];
 
 // Kompatybilność wstecz: ścieżka runnera POP (pierwsza metryka slice'u).
 export const RUNNER_PATH = METRICS.pop.runner;
@@ -230,10 +240,10 @@ export function createLauncherServer(opts = {}) {
 export function renderPanel() {
   const options = PLANET_CLASS_CHOICES
     .map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
-  // Panel preselekcjonuje NAJNOWSZĄ metrykę (zasoby); domyślna metryka API to nadal
-  // `pop` (kompatybilność wstecz) — panel zawsze wysyła `metric` jawnie, więc bez dwuznaczności.
+  // Panel preselekcjonuje NAJNOWSZĄ metrykę (PANEL_DEFAULT_METRIC); domyślna metryka API
+  // to nadal `pop` (kompatybilność wstecz) — panel zawsze wysyła `metric` jawnie.
   const metricOptions = Object.entries(METRICS)
-    .map(([v, m]) => `<option value="${v}"${v === 'resources' ? ' selected' : ''}>${m.label}</option>`).join('');
+    .map(([v, m]) => `<option value="${v}"${v === PANEL_DEFAULT_METRIC ? ' selected' : ''}>${m.label}</option>`).join('');
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BALANS 1.0 — launcher</title>

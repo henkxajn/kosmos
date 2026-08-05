@@ -11,6 +11,7 @@
 //   T5  end-to-end ZASOBY: ta sama trasa z metric=resources odpala runner ZASOBÓW
 //       (regresja realnego buga: domyślka `runner` w createLauncherServer nadpisywała
 //        wybór metryki i „Zasoby" odpalały runner POP)
+//   T6  end-to-end ROI: metric=roi odpala runner ROI (ta sama regresja, trzecia metryka)
 //
 // Uruchom: node src/testing/smoke/balans_launcher_smoke.mjs
 
@@ -18,7 +19,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   parseRunParams, isSafeReportName, reportFileFor, createLauncherServer,
-  RUN_LIMITS, REPORTS_DIR, RUNNER_PATH, METRICS, DEFAULT_METRIC,
+  RUN_LIMITS, REPORTS_DIR, RUNNER_PATH, METRICS, DEFAULT_METRIC, PANEL_DEFAULT_METRIC,
 } from '../headless/balans-launcher.mjs';
 
 let pass = 0, fail = 0;
@@ -31,8 +32,10 @@ const SMOKE_HTML  = join(REPORTS_DIR, `pop-report-${SMOKE_CLASS}.html`);
 const SMOKE_JSON  = join(REPORTS_DIR, `pop-telemetry-${SMOKE_CLASS}.json`);
 const SMOKE_RES_HTML = join(REPORTS_DIR, `resource-report-${SMOKE_CLASS}.html`);
 const SMOKE_RES_JSON = join(REPORTS_DIR, `resource-telemetry-${SMOKE_CLASS}.json`);
+const SMOKE_ROI_HTML = join(REPORTS_DIR, `roi-report-${SMOKE_CLASS}.html`);
+const SMOKE_ROI_JSON = join(REPORTS_DIR, `roi-telemetry-${SMOKE_CLASS}.json`);
 const cleanup = () => {
-  for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON]) {
+  for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON, SMOKE_ROI_HTML, SMOKE_ROI_JSON]) {
     try { rmSync(f, { force: true }); } catch {}
   }
 };
@@ -64,7 +67,8 @@ console.log('T1 — parseRunParams (domyślne / poprawne / odrzucone)');
   // metryka (rejestr METRICS)
   assert(def.params.metric === DEFAULT_METRIC, `brak metryki → domyślna '${DEFAULT_METRIC}' (kompatybilność wstecz)`);
   assert(parseRunParams({ metric: 'resources' }).params.metric === 'resources', 'metric=resources przechodzi');
-  assert(parseRunParams({ metric: 'roi' }).ok === false, 'nieznana metryka odrzucona (runner nie zgadywany)');
+  assert(parseRunParams({ metric: 'roi' }).params.metric === 'roi', 'metric=roi przechodzi (trzecia metryka slice\'u)');
+  assert(parseRunParams({ metric: 'nie_ma_takiej' }).ok === false, 'nieznana metryka odrzucona (runner nie zgadywany)');
   assert(parseRunParams({ metric: '../pop' }).ok === false, 'metryka ze ścieżką odrzucona');
   assert(parseRunParams({ metric: 'constructor' }).ok === false, 'metryka z prototypu Object odrzucona (hasOwnProperty)');
 }
@@ -76,7 +80,10 @@ console.log('\nT2 — isSafeReportName / reportFileFor (sandbox plików)');
   assert(reportFileFor('REAL', 'resources') === 'resource-report-REAL.html', 'nazwa raportu per metryka');
   assert(isSafeReportName('pop-report-REAL.html'), 'REAL przechodzi');
   assert(isSafeReportName('pop-report-GOOD_FE.html'), 'GOOD_FE (podkreślenie) przechodzi');
+  assert(reportFileFor('REAL', 'roi') === 'roi-report-REAL.html', 'nazwa raportu ROI = kontrakt runnera');
   assert(isSafeReportName('resource-report-GOOD_FE.html'), 'raport zasobów przechodzi (whitelist z METRICS)');
+  assert(isSafeReportName('roi-report-REAL.html'), 'raport ROI przechodzi (whitelist budowana z rejestru, nie z ręcznego regexpu)');
+  assert(!isSafeReportName('roi-telemetry-REAL.json'), 'JSON ROI nie jest serwowany');
   assert(!isSafeReportName('../../../package.json'), 'traversal odrzucony');
   assert(!isSafeReportName('pop-telemetry-REAL.json'), 'inny artefakt niż raport odrzucony');
   assert(!isSafeReportName('resource-telemetry-REAL.json'), 'JSON zasobów też nie jest serwowany');
@@ -104,6 +111,10 @@ try {
     assert(html.includes('id="metric"') && Object.keys(METRICS).every(k => html.includes(`value="${k}"`)),
       `panel ma wybór metryki ze WSZYSTKIMI metrykami rejestru (${Object.keys(METRICS).join(', ')})`);
     assert(html.includes('id="run"'), 'panel ma przycisk Uruchom');
+    assert(PANEL_DEFAULT_METRIC === Object.keys(METRICS)[Object.keys(METRICS).length - 1],
+      `panel preselekcjonuje NAJNOWSZĄ metrykę rejestru ('${PANEL_DEFAULT_METRIC}') — wyliczane, nie wpisane na sztywno`);
+    assert(html.includes(`value="${PANEL_DEFAULT_METRIC}" selected`), 'preselekcja widoczna w HTML panelu');
+    assert(DEFAULT_METRIC === 'pop', 'domyślka API zostaje `pop` (kompatybilność wstecz) mimo nowej metryki');
     assert(/game-years/.test(html), 'panel nazywa jednostkę game-years (HARD #3)');
     assert(!/https?:\/\//.test(html.replace(/http:\/\/localhost/g, '')), 'zero zewnętrznych URL (self-contained)');
     assert(!/\ssrc=/.test(html), 'zero zewnętrznych src= (CSS i JS inline)');
@@ -184,6 +195,37 @@ try {
     assert(rep.status === 200, 'GET linku do raportu zasobów → 200');
     assert(html.includes('telemetria ZASOBÓW') && html.includes('rr-verdict'),
       'serwowany plik to raport ZASOBÓW (renderResourceReport)');
+  }
+
+  // ── T6: end-to-end ROI (trzecia metryka tą samą trasą) ──────────
+  console.log('\nT6 — end-to-end ROI: metric=roi odpala runner ROI (nie POP, nie ZASOBY)');
+  {
+    cleanup();
+    assert(!existsSync(SMOKE_ROI_HTML) && !existsSync(SMOKE_HTML) && !existsSync(SMOKE_RES_HTML),
+      'przed runem brak raportów wszystkich trzech metryk (pre-clean)');
+
+    const t0 = Date.now();
+    const res = await fetch(`${base}/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metric: 'roi', class: SMOKE_CLASS, seeds: 1, gy: 2 }),
+    });
+    const d = await res.json();
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+    assert(res.status === 200 && d.ok === true, `POST /run (roi) → 200 ok (${secs}s, kod ${d.exitCode})`);
+    assert(d.metric === 'roi' && d.reportFile === `roi-report-${SMOKE_CLASS}.html`,
+      'zwrócona metryka i nazwa raportu = kontrakt runnera ROI');
+    assert(existsSync(SMOKE_ROI_HTML) && existsSync(SMOKE_ROI_JSON), 'artefakty ROI powstały na dysku');
+    assert(!existsSync(SMOKE_HTML) && !existsSync(SMOKE_RES_HTML),
+      'runnery POP i ZASOBÓW NIE zostały odpalone (rejestr wybiera właściwy proces)');
+    assert(Array.isArray(d.tail) && d.tail.some(l => /WERDYKT|TOR \(a\)/.test(l)),
+      'ogon stdout niesie wynik runnera ROI (dowód: właściwy proces)');
+
+    const rep = await fetch(`${base}${d.reportUrl}`);
+    const html = await rep.text();
+    assert(rep.status === 200, 'GET linku do raportu ROI → 200');
+    assert(html.includes('KOSZT ↔ WARTOŚĆ') && html.includes('rr-verdict'),
+      'serwowany plik to raport ROI (renderRoiReport)');
   }
 } finally {
   cleanup();
