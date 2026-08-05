@@ -4,6 +4,15 @@
 > **Zero game-balance constants were changed.** This is a measurement record: findings are *logged*,
 > not fixed. Tuning is Phase 3.
 
+> ⚙ **RE-BASELINED 2026-08-05 on the fixed harness (commit `3fe634e`).** §7 of this document reported an
+> instrument defect that made the home colony's food/water/energy unmeasurable on 4 of 8 seeds from gy13–29,
+> and deliberately did **not** fix it. It has since been fixed (harness only — see §7 "Resolution" and §11).
+> **The numbers in §2–§6 and §8 below are the pre-fix measurement and are kept as written**; every figure the
+> defect touched is corrected alongside it, marked ⚙, and the full before/after lives in §11. Headline: the
+> panel verdict, the binding counts, the 97% component-gated conclusion and the seed_7 deadlock are
+> **unchanged**; food/water/energy consumption is now measurable on all 8 seeds and finding #9 (the grid is
+> never comfortable) gets **stronger**.
+
 All figures are **game-years** (`gameTime`); **1 gy = 12 civ-years**. Production/consumption rates in this
 document and in the report are **per game-year** (the game's own per-civ-year rates × 12), so they are
 directly comparable to the year-over-year change of a stockpile.
@@ -73,7 +82,8 @@ refactor and `pop-telemetry-REAL.json` is **byte-identical**. The POP slice's nu
 
 ## 2. The measured panel — REAL generator, 8 seeds, 45 gy
 
-360 seed-years, 0 crashes.
+360 seed-years, 0 crashes. **⚙ Measured on the pre-fix harness** (food/water/energy corrupted on seeds 1, 3,
+5, 6 from the game-year in the last column — see §7); the post-fix values follow each table.
 
 | seed | years stalled (from) | binding resources (years) | top blocker (years) | final Fe (cover) | POP-cons defect |
 |---|---|---|---|---|---|
@@ -87,6 +97,11 @@ refactor and `pop-telemetry-REAL.json` is **byte-identical**. The POP slice's nu
 | **8** | 0 | energy 1 | electronic_systems 36 | 15 091 (9 gy) | — |
 
 "Stalled" = a year in which **not one** building was affordable anywhere on the home colony.
+
+> ⚙ **Post-fix (`3fe634e`): this table reproduces exactly, with two changes.** The last column is now **`—`
+> on all 8 seeds** (the defect is gone), and seed_2's final Fe reads **34 341 (32 gy)** instead of 35 341
+> (33 gy) — its factory converted ~1 000 Fe into components two game-years earlier (see §11). Stalled years,
+> binding resources and top blockers are identical on every seed, seed_7 included.
 
 Per resource across the whole panel (mean rates per game-year):
 
@@ -109,6 +124,20 @@ Per resource across the whole panel (mean rates per game-year):
 
 Panel verdict emitted by the runner: **outcome 2 — MIXED** (Fe leads with 30% of all binding seed-years;
 no single resource dominates ≥60%).
+
+> ⚙ **Post-fix (`3fe634e`) — the rows the defect was falsifying, corrected.** Everything not listed here is
+> unchanged, including every `binding` count, every `seeds binding`, every `first bind`, and the whole
+> top-blocker table below:
+>
+> | resource | mean cons (pre → post) | tight (pre → post) | glut (pre → post) |
+> |---|---|---|---|
+> | **food** | 252 → **313** | 8 → 8 | 270 → 269 |
+> | **water** | 198 → **248** | 4 → 4 | 141 → **124** |
+> | **energy** | 1 088 → **1 122** | 215 → **250** | — |
+> | Fe / Ti / Li | unchanged | unchanged | 140 → 139 / 148 → 146 / 274 → 273 |
+>
+> Panel verdict, `stalled` (59/360 on 5/8 seeds) and the top-blocker counts are **byte-identical**. The
+> ±1–2 glut-year moves on Fe/Ti/Li are the seed_2 trajectory of §11, not a change in the ores' behaviour.
 
 ---
 
@@ -153,6 +182,10 @@ and 60 are outright deficit, on 7 of 8 seeds. But that number describes the *ref
 game — its doctrine scales generators toward a fixed `energy_reserve = 5`, so a permanently thin margin is
 what it is *aiming for*. Read it as "the grid is never comfortable", not as a balance verdict.
 
+> ⚙ **Post-fix: TIGHT rises to 250 of 360 seed-years** (deficit years unchanged at 60). Once home actually
+> pays its POP energy draw again, the grid is thin in **69%** of all seed-years rather than 60%. The bot-doctrine
+> caveat still applies — but the pre-fix figure was flattering the grid on top of it.
+
 ---
 
 ## 5. Cross-check (a) — seed_7, the known Fe-contention deadlock
@@ -189,6 +222,11 @@ it, and neither Fe nor the components ever accumulate enough at one instant to p
 
 Finding **#2 (factory-pacing / Fe-contention) is confirmed and sharpened. Not fixed.**
 
+> ⚙ **Post-fix: this whole table reproduces cell for cell.** seed_7 never founds a colony or an outpost, so
+> it never took the constructor path that caused the defect — it is the panel's natural control seed, and its
+> run is bit-for-bit identical before and after the fix (including `energyBalance` −25 and `energyAvail`
+> 0.48–0.55). Finding #2 is untouched by the re-baseline.
+
 ---
 
 ## 6. Cross-check (b) — the ballooning regime (seeds 4 & 8)
@@ -216,9 +254,29 @@ rest on corrupted data.
 
 Finding **#5 (ballooning) stays open, unchanged, bot-vs-balance still unresolved.**
 
+> ⚙ **Post-fix: unchanged, and the caveat above is now moot** — every seed's food/water/energy is trustworthy,
+> not just 4 and 8. Both seeds reproduce exactly (stalled 2 / 0, 14 / 23 affordable buildings at gy45, 8
+> resources in GLUT, pop 133 / 130, 5 colonies each), and the POP-side series behind this finding is
+> byte-identical (`docs/BALANS_PHASE2_POP.md` §8). The argument no longer needs the "these two happen to be
+> clean" defence: it now rests on clean data everywhere.
+
 ---
 
-## 7. ⛔ INSTRUMENT DEFECT — home POP consumption is silently zeroed (found, logged, NOT fixed)
+## 7. ⛔→✅ INSTRUMENT DEFECT — home POP consumption silently zeroed (found here, **fixed in `3fe634e`**)
+
+> **Resolution (2026-08-05, commit `3fe634e`).** Fixed in the harness, exactly as recommended at the bottom of
+> this section — though by the *first* of the three candidate routes, not the game-code ones: `env.js` no
+> longer runs zero-delay timers synchronously. `setTimeout(…, 0)` now queues its callback and `Ticker` drains
+> the queue at each tick boundary (once before the first tick, then after every tick), which is what a browser
+> macrotask does. By the time the callback runs, `ColonyManager` has assigned `civSys.resourceSystem`, so
+> `_syncConsumption` registers in the colony's **own** store and the EventBus fallback is never taken. The two
+> game-code candidates (a `pop <= 0` guard; assigning `resourceSystem` before construction) were **not** used —
+> this session changed the instrument only: zero balance constants, zero game logic, zero bot policy.
+> `seedsPopConsZeroed` is now **0/8**, the report's red box is gone, and the defect is protected against
+> regression by `src/testing/smoke/balans_env_timer_isolation_smoke.mjs` (21/21, including a sentinel that
+> restores the old synchronous semantics and asserts the defect comes back). Re-baseline: §11.
+>
+> The description below is kept as written — it is the record of what the defect was and what it affected.
 
 This is the most important thing the slice found, and it is a defect in the **harness environment**, not in
 the game's balance and not (in practice) in the shipped game.
@@ -270,6 +328,14 @@ be trusted.
 owning store), then re-run Phase 1 gate2 + the POP panel + this panel and record the deltas. Cost is one
 re-baseline; the benefit is that food/water/energy become measurable at all.
 
+> ✅ **Done** — that later session happened (`3fe634e` + this re-baseline). The prediction that "any of the
+> three candidate fixes changes the measured curve" turned out to be true only for the corrupted quantities
+> and their propagation: the Phase-1 verdict, the POP panel and the seed_7 deadlock all reproduce exactly.
+> The residual latent trap in game code is unchanged and still worth knowing about: `_syncConsumption` has no
+> `pop <= 0` guard (unlike `forceConsumptionSync`), so the EventBus fallback would still write into the active
+> colony if a future call path ever reached it with `resourceSystem` unset. It does not fire in play, and it
+> is now unreachable in the harness too.
+
 ---
 
 ## 8. NEW candidate findings (observations — NOT adjudicated, NOT fixed)
@@ -289,6 +355,10 @@ re-baseline; the benefit is that food/water/energy become measurable at all.
    seeds. ⚠ Read with the bot caveat in §4 — the reference bot targets a fixed +5 reserve, so this measures
    the doctrine as much as the balance. Worth re-measuring against a different energy doctrine before
    drawing a balance conclusion.
+   > ⚙ **Post-fix this finding STRENGTHENS: TIGHT 215 → 250 of 360 seed-years (60% → 69%)**, deficit years
+   > unchanged at 60. The pre-fix panel was under-counting home's POP energy draw by `pop × 0.25`/civ-yr on
+   > the affected seeds (−19.75 on seeds 1 and 3, −10.75 on seed 6 at gy45). The bot-doctrine caveat is
+   > unaffected and still gates any balance conclusion.
 10. **Xe is a one-way sink** (§3): the only resource whose production never covers consumption. A fixed
     50-unit home deposit, then nothing. Not urgent (never binds in 45 gy), but it is a slow leak by design.
 11. **Two resources never appear in play at all:** Nt is INERT on 6 of 8 seeds, H on 7 of 8 (H exists only on
@@ -322,6 +392,8 @@ Deliberately **not** built yet (next slices, after sign-off): building-ROI telem
 commodity/factory flow telemetry. Deliberately untouched (fence): outpost droid slots (5B.2), AI economy,
 Time 1.0, AI Droid/Data Center epic. Deliberately unchanged: every game-balance constant, the bot's decision
 policy, and — as argued in §7 — the harness environment itself.
+> ⚙ The last clause held for *this slice only*: the harness environment was changed in the separate,
+> deliberate session that fixed §7 (`3fe634e`, §11). Balance constants and bot policy remain untouched.
 
 **Phase-2 findings queue after this slice:**
 
@@ -340,3 +412,71 @@ policy, and — as argued in §7 — the harness environment itself.
 
 **Instrument item (not a balance finding):** the POP-consumption zeroing of §7 — decide deliberately whether
 to fix + re-baseline, before any Phase-3 tuning that touches food, water, energy or prosperity.
+> ✅ **CLOSED** — decided, fixed (`3fe634e`) and re-baselined (§11). Phase-3 tuning of food/water/energy/
+> prosperity is no longer blocked on it.
+
+---
+
+## 11. Re-baseline on the fixed harness (2026-08-05, commit `3fe634e`)
+
+The §7 defect was fixed in the harness (`env.js` zero-delay timers deferred, drained by `Ticker`) and all
+three panels were re-run: Phase-1 close validation, the POP slice, and this one. **Zero game-balance
+constants, zero game logic, zero bot policy** — measurement plumbing only. Deltas, plainly:
+
+**Unchanged (the conclusions all stand):**
+
+| | |
+|---|---|
+| Phase-1 close verdict | **7/8** real-home rate, every milestone median identical (`docs/BALANS_PHASE1.md` §7) |
+| POP slice | **byte-identical** — 309 BUFFER / 40 WASTED / 1 BOUND, findings #1 / #5 unchanged (`…_POP.md` §8) |
+| seed_7 / finding #2 | bit-for-bit the same run (§5) |
+| this panel's verdict | outcome 2 — MIXED, Fe leads; stalled **59/360** on 5/8 seeds |
+| §8.6 component-gated economy | **97%** of seed-years, `structural_alloys` 242 / `electronic_systems` 99 — top-blocker table byte-identical |
+| §8.7 ore glut, §8.8 Ti bimodality, §8.10 Xe, §8.11 Nt/H | unchanged |
+
+**Corrected (what the defect had been falsifying):**
+
+| | pre-fix | post-fix |
+|---|---|---|
+| seeds with zeroed home POP consumption | **4 / 8** (gy13–29) | **0 / 8** |
+| mean food / water / energy consumption per gy | 252 / 198 / 1 088 | **313 / 248 / 1 122** |
+| energy TIGHT seed-years (finding #9) | 215 / 360 | **250 / 360** |
+| final `energyBalance`, seeds 1 / 3 / 6 | 165.7 / 211.7 / 135.1 | **145.9 / 191.9 / 124.4** (= −`pop × 0.25`) |
+| final home food stock, seeds 1 / 3 / 6 | 79 904 / 86 877 / 56 879 | **72 925 / 79 215 / 50 959** |
+
+**Propagated (secondary quantities — the corrected values feeding back into the simulation):** the bot reads
+live `energyBalance` and trade prices read years-of-cover from consumption, so a corrected consumption
+legitimately changes downstream decisions. Everything that moved:
+
+- **credits** — 6/8 seeds, +10…+41 Kr at gy45 (panel median 10 015 → 10 050).
+- **one bot research decision** on seeds 2 / 4 / 5 / 8 (gy11–36): a decision slot that pre-fix went to
+  `research` post-fix did not. seed_2 ends with **60 techs instead of 61**.
+- **one seed trajectory (seed_2)** — its factory converted ~1 000 Fe into components ~2 gy earlier: home Fe
+  34 341 instead of 35 341 at gy45, and for **two mid-run years (gy22–23) it can afford 17 buildings instead
+  of 6** (blocked 19 instead of 30). *This is the largest single movement in the whole re-baseline.*
+  Final-year affordability is unchanged on every seed (8 / 6 / 11 / 14 / 14 / 24 / 0 / 23); seeds 5 and 8
+  move by exactly one blocked-build in isolated years (gy38, gy45).
+- Panel-level residue of the above: ±1–2 GLUT seed-years on Fe / Ti / Li.
+
+**Isolation — what was actually proven.** "Only food/water/energy may move" is *unsatisfiable* by any real
+fix, because those quantities are simulation **inputs**. The testable criterion is whether the fix changed the
+**structure** of the game or only the propagation of a corrected value:
+
+- `t = 0` identical on all 8 seeds → initialization order untouched;
+- POP metric byte-identical (8 seeds × 46 gy × 26 fields), all milestones identical, building/colony/outpost
+  counts and final populations identical;
+- seed_7 — which never founds anything and therefore never takes the defective code path — identical in
+  everything except its food/water stockpile;
+- causal order measured by replaying seed_2 under both timer semantics in one process:
+  food/water gy0.08 → `energyBalance` gy7.25 → bot decision gy11.4 → credits gy17.5 → Fe gy21.9, with
+  buildings (36) and prosperity identical throughout. The corrupted quantities move **first**; everything
+  else is downstream of them.
+
+**Reproducibility.** The post-fix panels were generated twice on the committed tree and are byte-identical.
+Pre-fix artifacts are kept next to the new ones for comparison
+(`src/testing/reports/balans/*-REAL_PREFIX.*`, plus `HARNESS_FIX_REVIEW_NOTE.md`).
+
+**Debt (recorded, not fixed):** ⚠ the injected **`GOOD_FE` and `POOR` panels were not re-run** — only REAL
+was, and the records rest on REAL. Their artifacts in `src/testing/reports/balans/` are still pre-fix
+numbers. Re-run both on the fixed harness before using them for anything (they are stress scenarios for
+secondary-colony economics, §4 of `docs/BALANS_PHASE1.md`). Not blocking.

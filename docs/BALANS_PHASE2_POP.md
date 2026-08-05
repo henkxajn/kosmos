@@ -4,6 +4,13 @@
 > **Zero game-balance constants were changed.** This is a measurement record: findings are *logged*,
 > not fixed. Tuning is Phase 3.
 
+> ⚙ **RE-BASELINED 2026-08-05 on the fixed harness (commit `3fe634e`) — and it changed nothing.** This panel
+> was originally measured on the **pre-fix** harness, which zeroed the home colony's POP food/water/energy
+> consumption on 4 of 8 seeds from gy13–29 (`docs/BALANS_PHASE2_RESOURCES.md` §7). Re-run after the fix, the
+> POP panel is **byte-identical** — the generated `pop-report-REAL.html` files compare equal, and every one of
+> the 8 seeds × 46 game-years × 26 sampled fields matches. **Every number and every finding below stands
+> unchanged.** Details in §8.
+
 All figures are **game-years** (`gameTime`); **1 gy = 12 civ-years**. Two clocks: Kr/upkeep run on the
 game clock, production/population/energy on the civ clock (×12) — every number below is converted to gy.
 
@@ -148,6 +155,33 @@ system. The trade-off is stated here so the 88% BUFFER headline is read with the
 Deliberately **not** built yet (next slice, after sign-off): per-resource telemetry, building-ROI, price
 telemetry. Deliberately untouched (fence): outpost droid slots (5B.2), AI economy, Time 1.0, AI Droid/Data
 Center epic. Deliberately unchanged: every game-balance constant, and the bot's decision policy.
+
+---
+
+## 8. Re-baseline on the fixed harness (2026-08-05, commit `3fe634e`)
+
+The measurement defect found by the *next* slice (`docs/BALANS_PHASE2_RESOURCES.md` §7) was fixed after this
+record was written, which put every pre-fix number in the project up for re-validation. For POP the answer is
+as clean as it gets:
+
+| check | result |
+|---|---|
+| `pop-report-REAL.html` pre-fix vs post-fix | **byte-identical** (`cmp` equal) |
+| per-year series, all 8 seeds × 46 gy × 26 fields | **identical** — pop, employed, unemployed, humans, growth, satisfaction, housing, jobs, workers, synthetic, unfilledJobs, buildOutFrac, occupiedTiles, colonies, outposts, colonizers, class, bufferPop, wastedPop |
+| panel totals | **350/360 surplus · 309 BUFFER · 40 WASTED · 1 BOUND**, verdict *outcome 1 — BUFFER* |
+| per-seed table (§2) | every row identical, including the two ballooning seeds and seed_7 |
+
+**Why it is identical even on the 4 affected seeds:** the defect corrupted the home colony's *stockpile-side*
+food/water and its energy *balance*. POP growth in this régime is logistic against **capacity = Σ housing**
+(Population 2.0 Phase 1, Decision 1), and none of the seeds ever ran short enough of food or water for the
+survival gate to bite — so the corrupted numbers never reached the population model. The POP metric was
+measuring something the defect could not touch.
+
+**Consequences for the findings:** #1 (POP-glut = false alarm, 88% BUFFER) — **unchanged**. #2 seen from the
+POP side on seed_7 — **unchanged, bit-for-bit the same run**. #5 (ballooning on seeds 4 and 8) —
+**unchanged**; §6's metric limitation likewise stands. Nothing in this document was rewritten.
+
+---
 
 **Phase-2 findings queue after this slice:**
 

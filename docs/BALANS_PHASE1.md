@@ -4,6 +4,14 @@
 > competent reference bot) is built and validated. **Zero game-balance constants were changed across Phase 1.**
 > This document lets Phase 2 start cold without reconstructing nine sessions. **Phase 2 is not started here.**
 
+> ⚙ **RE-BASELINED 2026-08-05 on the fixed harness (commit `3fe634e`).** Everything below was originally
+> measured on the **pre-fix** harness, which silently zeroed the home colony's POP food/water/energy
+> consumption on 4 of 8 seeds from ~gy13–29 (measurement defect, never present in the shipped game —
+> mechanism in `docs/BALANS_PHASE2_RESOURCES.md` §7). The REAL panel was re-run after the fix:
+> **the close verdict and every milestone reproduce exactly** — full before/after in §7 below. The old
+> numbers are kept as written; nothing here was overwritten. ⚠ The injected `GOOD_FE` / `POOR` panels
+> have **not** been re-run and are still pre-fix numbers.
+
 All timings in this document are **game-years** (`gameTime`); 1 game-year = 12 civ-years. Reproduce the panels with:
 
 ```
@@ -104,6 +112,10 @@ possible real home — they model **secondary/colony-grade worlds** (see §4).
 | final Fe (median) | ~32,000 |
 | crashes | 0/8 |
 
+**Re-measured on the fixed harness (post-`3fe634e`): every row of this table reproduces exactly** — same
+7/8, same medians, same reach, same crash count. The only movements in the whole panel are the two
+credit/energy readouts named in §7.
+
 **The earlier "GOOD_FE 5/5" was a 5-seed undersample.** Re-run at 8 seeds, injected **GOOD_FE is also 7/8** — it fails
 the *same* seed (seed_7) with the *same* deadlock. So the true real-home rate is **7/8, confirmed on both the injected
 GOOD_FE panel and the real-generator panel**; injection never masked the failure. This 7/8 is the honest instrument
@@ -183,6 +195,60 @@ close session, not a fix cycle).
 - **Ships are gated by POP, not Fe** — the earlier "Fe-starve blocks ships" reading was a placement/POP artifact.
 - **Droid pricing is healthy** — no desired→attainable gap when the loop runs; droids are dormant only because of the
   POP-glut (finding #1), not because they are mispriced.
+
+---
+
+---
+
+## 7. Re-baseline on the fixed harness (2026-08-05, commit `3fe634e`)
+
+**Why.** Phase 1 was closed on a harness whose `env.js` ran zero-delay timers **synchronously**. That made
+`CivilizationSystem`'s constructor callback (`_syncConsumption`) fire *before* `ColonyManager` assigned the
+new colony's `resourceSystem`, so the EventBus fallback wrote the newcomer's POP consumption into whichever
+colony was **active** — the home colony. A fresh outpost wrote `{food:0, water:0, energy:0}` over home's
+own consumption; on seeds where home's population later plateaued, the zeros stuck. 4 of 8 seeds, from
+gy13–29. Full mechanism + blast radius: `docs/BALANS_PHASE2_RESOURCES.md` §7. **The shipped game was never
+affected** (browser `setTimeout` is asynchronous; `env.js` is headless-only). The fix is harness-only:
+zero-delay timers are queued and drained by `Ticker` at each tick boundary. Zero balance constants, zero
+game logic, zero bot policy.
+
+**Method.** The REAL panel (`--class=REAL --seeds=8 --gy=45`) was run before and after the fix and diffed
+field-by-field, then re-run once more on the committed tree (byte-identical — the panel is deterministic).
+
+**Verdict: the Phase-1 close record stands.**
+
+| Phase-1 claim | pre-fix | post-fix |
+|---|---|---|
+| founded ≥1 outpost | 7/8 | **7/8** |
+| founded a 2nd (POP) colony | 7/8 | **7/8** |
+| energy holds (final ≥ 0) | 7/8 | **7/8** |
+| ≥1 productive outpost / shipping leg fired | 3/8 · 6/8 | **3/8 · 6/8** |
+| science ship · colonizer · 2nd colony · POP deficit (median gy) | 3.0 · 7.1 · 9.5 · 4.6 | **identical** |
+| first outpost · productive outpost · first shipping run (median gy) | 13.7 · 15.0 · 22.1 | **identical** |
+| bodies explored (median) · final Fe (median) · crashes | 29/48 · 32 049 · 0/8 | **identical** |
+| seed_7 deadlock (§3) | hard-deadlock, `energyBalance` −25 | **bit-for-bit the same run** |
+
+What did move, and why:
+
+- **final `energyBalance` (median) 135 → 124** and, per seed, −19.75 / −19.75 / −10.75 on seeds 1 / 3 / 6.
+  That is *exactly* `pop × POP_CONSUMPTION.energy` — the home POP energy draw the defect had deleted. The
+  post-fix number is the true one; the pre-fix figure flattered the grid.
+- **final Kr (median) 10 015 → 10 050** (+10…+41 on 6/8 seeds). Trade prices read years-of-cover from
+  consumption, so a corrected consumption legitimately reprices civilian trade.
+- Nothing else. `t = 0` is identical on all 8 seeds (initialization order untouched), building counts,
+  colony/outpost counts and final populations are identical, and the POP metric is byte-identical
+  (`docs/BALANS_PHASE2_POP.md`).
+
+**Isolation criterion, stated honestly.** "Only food/water/energy may move" is *unsatisfiable* by any real
+fix: the corrupted quantities are simulation **inputs** (the reference bot reads live `energyBalance`; trade
+prices read coverage-years), so correcting them necessarily propagates. The criterion that *can* be tested —
+and that passed — is whether the fix changed the **structure** of the game or only the propagation of a
+corrected value: t=0 identical, milestones identical, POP metric byte-identical, and the one seed that never
+expands (seed_7, zero constructor-path writes) identical in everything but its food/water stockpile.
+
+**Debt (not blocking, not fixed):** the injected `GOOD_FE` and `POOR` panels were **not** re-run — the
+Phase-1 record rests on the REAL panel, and §2 already establishes that `GOOD_FE` is a real home. Re-run both
+on the fixed harness the next time they are used for anything.
 
 ---
 
