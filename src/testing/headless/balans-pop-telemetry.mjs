@@ -18,16 +18,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 import './env.js';
-import { reseed } from './env.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import EventBus from '../../core/EventBus.js';
-import { GameCore } from './GameCore.js';
-import { Ticker } from './Ticker.js';
-import { ActionCatalog } from '../actions/ActionCatalog.js';
-import ActionAdapter from '../actions/ActionAdapter.js';
-import { RuleBot } from '../bots/RuleBot.js';
+import { runSeedPanel } from './balans-driver.mjs';
 import { PopTelemetry, POP_TELEMETRY_DEFAULTS } from './PopTelemetry.js';
 import { renderPopReport } from '../report/PopReport.js';
 
@@ -43,39 +37,9 @@ const SEED_PREFIX  = arg('seed', 'balans-gate1');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR   = join(__dirname, '..', 'reports', 'balans');
 
-// ── Jedna gra: identyczny driver co gate2-report + próbkowanie POP/game-year ──
-function runOne(seed) {
-  reseed(seed);
-  const core = new GameCore();
-  core.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: PLANET_CLASS });
-  const K = window.KOSMOS;
-  const home = core.colonyManager.getColony(K.homePlanet.id);
-  const catalog = new ActionCatalog({ colonyManager: core.colonyManager, techSystem: core.techSystem, resourceSystem: core.resourceSystem, buildingSystem: core.buildingSystem, vesselManager: core.vesselManager, civSystem: core.civSystem, starSystemManager: core.starSystemManager });
-  const bot = new RuleBot();
-  const gy = () => K.timeSystem.gameTime;
-
-  const tel = new PopTelemetry();
-  const ctx = { home, colonyManager: core.colonyManager, vesselManager: core.vesselManager };
-  tel.sample(0, ctx);          // baseline t=0
-  let lastGy = 0;
-
-  // Bot: 4 akcje na civYear (identyczny budżet co gate2-report — ta sama krzywa).
-  const ticker = new Ticker(core.timeSystem);
-  ticker.onCivYear(() => {
-    for (let d = 0; d < 4; d++) {
-      let a; try { a = bot.decideAction({ homeAlive: true }, catalog); } catch { continue; }
-      if (a) { try { ActionAdapter.execute(a); } catch {} }
-    }
-  });
-  // Próbkuj POP raz na pełny GAME-YEAR (12 civYear ticków = 1 gy).
-  ticker.onTick(() => {
-    const g = Math.floor(gy());
-    if (g > lastGy) { lastGy = g; tel.sample(g, ctx); }
-  });
-  ticker.run(TARGET_GY * 12, { tickSize: 1.0 });
-
-  return { seed, series: tel.getSeries(), crashed: ticker._crashed };
-}
+// Pętla „boot → bot → tick → próbkuj raz na game-year" mieszka we WSPÓLNYM
+// `balans-driver.mjs` (ten sam driver napędza slice zasobów) — parytet krzywej
+// z gate2-report zweryfikowany różnicą bajtową artefaktu JSON przy migracji.
 
 // ── Podsumowanie per seed (lata z gy≥1) ──────────────────────────
 function summarize(series) {
@@ -122,12 +86,14 @@ function panelVerdict(panel) {
 console.log(`\n═══ BALANS Phase 2 — POP telemetry — class=${PLANET_CLASS}, seeds=${N_SEEDS}, target=${TARGET_GY}gy ═══`);
 console.log(`    (class=REAL ⇒ realny generator, bez injekcji złóż — panel Phase 1)\n`);
 
-const seeds = [];
+const seeds = runSeedPanel({
+  seeds: N_SEEDS, seedPrefix: SEED_PREFIX, planetClass: PLANET_CLASS, targetGy: TARGET_GY,
+  makeTelemetry: () => new PopTelemetry(),
+});
 const agg = { totalYears: 0, surplusYears: 0, bufferYears: 0, wastedYears: 0, boundYears: 0 };
-for (let i = 1; i <= N_SEEDS; i++) {
-  const r = runOne(`${SEED_PREFIX}_${i}`);
-  const summary = summarize(r.series);
-  seeds.push({ seed: r.seed, crashed: r.crashed, series: r.series, summary });
+for (const s of seeds) {
+  const summary = summarize(s.series);
+  s.summary = summary;
   agg.totalYears  += summary.years;
   agg.surplusYears += summary.surplusYears;
   agg.bufferYears += summary.bufferYears;
