@@ -53,6 +53,11 @@ export const METRICS = {
     prefix: 'roi-report',
     label:  'ROI — koszt budynku vs to, co budynek daje',
   },
+  prices: {
+    runner: join(__dirname, 'balans-price-telemetry.mjs'),
+    prefix: 'price-report',
+    label:  'CENY — audyt cennika + osiągalność (co bramkuje)',
+  },
 };
 export const DEFAULT_METRIC = 'pop';   // domyślna metryka API (kompatybilność wstecz)
 

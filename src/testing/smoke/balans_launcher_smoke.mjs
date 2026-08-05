@@ -12,6 +12,7 @@
 //       (regresja realnego buga: domyślka `runner` w createLauncherServer nadpisywała
 //        wybór metryki i „Zasoby" odpalały runner POP)
 //   T6  end-to-end ROI: metric=roi odpala runner ROI (ta sama regresja, trzecia metryka)
+//   T7  end-to-end CENY: metric=prices odpala runner CEN (czwarta metryka tą samą trasą)
 //
 // Uruchom: node src/testing/smoke/balans_launcher_smoke.mjs
 
@@ -34,8 +35,11 @@ const SMOKE_RES_HTML = join(REPORTS_DIR, `resource-report-${SMOKE_CLASS}.html`);
 const SMOKE_RES_JSON = join(REPORTS_DIR, `resource-telemetry-${SMOKE_CLASS}.json`);
 const SMOKE_ROI_HTML = join(REPORTS_DIR, `roi-report-${SMOKE_CLASS}.html`);
 const SMOKE_ROI_JSON = join(REPORTS_DIR, `roi-telemetry-${SMOKE_CLASS}.json`);
+const SMOKE_PRC_HTML = join(REPORTS_DIR, `price-report-${SMOKE_CLASS}.html`);
+const SMOKE_PRC_JSON = join(REPORTS_DIR, `price-telemetry-${SMOKE_CLASS}.json`);
 const cleanup = () => {
-  for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON, SMOKE_ROI_HTML, SMOKE_ROI_JSON]) {
+  for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON, SMOKE_ROI_HTML, SMOKE_ROI_JSON,
+    SMOKE_PRC_HTML, SMOKE_PRC_JSON]) {
     try { rmSync(f, { force: true }); } catch {}
   }
 };
@@ -226,6 +230,37 @@ try {
     assert(rep.status === 200, 'GET linku do raportu ROI → 200');
     assert(html.includes('KOSZT ↔ WARTOŚĆ') && html.includes('rr-verdict'),
       'serwowany plik to raport ROI (renderRoiReport)');
+  }
+
+  // ── T7: end-to-end CENY (czwarta metryka tą samą trasą) ─────────
+  console.log('\nT7 — end-to-end CENY: metric=prices odpala runner CEN (nie POP / ZASOBY / ROI)');
+  {
+    cleanup();
+    assert(!existsSync(SMOKE_PRC_HTML) && !existsSync(SMOKE_ROI_HTML) && !existsSync(SMOKE_HTML) && !existsSync(SMOKE_RES_HTML),
+      'przed runem brak raportów wszystkich czterech metryk (pre-clean)');
+
+    const t0 = Date.now();
+    const res = await fetch(`${base}/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metric: 'prices', class: SMOKE_CLASS, seeds: 1, gy: 2 }),
+    });
+    const d = await res.json();
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+    assert(res.status === 200 && d.ok === true, `POST /run (prices) → 200 ok (${secs}s, kod ${d.exitCode})`);
+    assert(d.metric === 'prices' && d.reportFile === `price-report-${SMOKE_CLASS}.html`,
+      'zwrócona metryka i nazwa raportu = kontrakt runnera CEN');
+    assert(existsSync(SMOKE_PRC_HTML) && existsSync(SMOKE_PRC_JSON), 'artefakty CEN powstały na dysku');
+    assert(!existsSync(SMOKE_HTML) && !existsSync(SMOKE_RES_HTML) && !existsSync(SMOKE_ROI_HTML),
+      'runnery POP / ZASOBÓW / ROI NIE zostały odpalone (rejestr wybiera właściwy proces)');
+    assert(Array.isArray(d.tail) && d.tail.some(l => /WERDYKT B|OSIĄGALNOŚĆ/.test(l)),
+      'ogon stdout niesie wynik runnera CEN (dowód: właściwy proces)');
+
+    const rep = await fetch(`${base}${d.reportUrl}`);
+    const html = await rep.text();
+    assert(rep.status === 200, 'GET linku do raportu CEN → 200');
+    assert(html.includes('Warstwa A — audyt tabeli') && html.includes('Warstwa B — jak cennik gra'),
+      'serwowany plik to raport CEN — i niesie OBIE warstwy (renderPriceReport)');
   }
 } finally {
   cleanup();
