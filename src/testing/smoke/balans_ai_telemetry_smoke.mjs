@@ -12,6 +12,7 @@
 //   T6  probeDependencies — undefined = ZNALEZISKO (nie skip)
 //   T7  summarizeSeed / aggregatePanel / verdict
 //   T8  realny boot z aiEmpires (guard dryfu API + parytet: aiEmpires=false NIE spawnuje AI)
+//   T9  progi zdrowia — każdy próg osobno + „wojna to KONTEKST, nie wyciszenie warna"
 
 import '../headless/env.js';           // MUST be first
 import { reseed } from '../headless/env.js';
@@ -22,6 +23,9 @@ import {
   attachDecisionHooks, explainExpander, normalizeStrategyReason, probeDependencies,
   summarizeSeed, aggregatePanel, verdict, DEP_LOOKUPS, AI_DROID_ID,
 } from '../headless/AiTelemetry.js';
+import {
+  AI_HEALTH_THRESHOLDS, WARN_CODES, evaluateThresholds, rollupWarns, formatWarn,
+} from '../headless/AiThresholds.js';
 import {
   MAX_PENDING_BUILDS_PER_COLONY, MAX_PENDING_UPGRADES_PER_COLONY,
 } from '../../systems/ColonyAutoExpander.js';
@@ -288,6 +292,88 @@ console.log('T8 — realny GameCore boot z aiEmpires + próbkowanie');
   assert(core2.empireRegistry.listAll().length === 0,
     'domyślny boot solo BEZ zmian — panel POP/ZASOBY/ROI/CENY nietknięty');
   assert(window.KOSMOS.empireStrategySystem == null, 'i bez warstwy decyzyjnej AI');
+}
+
+// ── T9: progi zdrowia ─────────────────────────────────────────────
+console.log('T9 — evaluateThresholds / rollupWarns (progi zdrowia imperium)');
+{
+  const TH = AI_HEALTH_THRESHOLDS;
+  // Szereg-fabryka: gy 0..n, jedno imperium, sterowane parametrami.
+  const mkSeries = (n, f) => Array.from({ length: n + 1 }, (_, gy) => ({
+    gy, player: { coloniesFull: 1, outposts: 0, home: { pop: 16 } },
+    empires: [{ empireId: 'e1', name: 'E1', archetype: 'industrialist', ...f(gy) }],
+  }));
+  const healthy = (gy) => ({
+    coloniesFull: 1, outposts: gy >= 2 ? 2 : 0, atWar: false,
+    mother: { pop: 10 + gy, stock: { food: 500, water: 500 }, energyBalance: 20, brownout: false },
+  });
+
+  const okRun = evaluateThresholds(mkSeries(12, healthy));
+  assert(okRun.warns.length === 0, 'zdrowe imperium → ZERO warnów');
+  assert(okRun.checks.some(c => c.code === WARN_CODES.FEW_COLONIES && c.status === 'ok'),
+    'zdane sprawdzenia też są raportowane (nie tylko naruszenia)');
+
+  const never = evaluateThresholds(mkSeries(12, (gy) => ({ ...healthy(gy), outposts: 0, coloniesFull: 1 })));
+  assert(never.warns.some(w => w.code === WARN_CODES.NO_FIRST_OUTPOST), 'brak placówki przez cały przebieg → WARN');
+  assert(never.warns.some(w => w.code === WARN_CODES.FEW_COLONIES), 'i osobno: za mało ciał w punkcie kontrolnym');
+
+  const slow = evaluateThresholds(mkSeries(12, (gy) => ({ ...healthy(gy), outposts: gy >= 9 ? 1 : 0 })));
+  const slowW = slow.warns.find(w => w.code === WARN_CODES.SLOW_FIRST_OUTPOST);
+  assert(!!slowW && slowW.gy === 9, `placówka po progu (${TH.FIRST_OUTPOST_GY} gy) → WARN z ROKIEM zdarzenia`);
+  assert(/× za późno/.test(slowW.detail), 'WARN podaje KROTNOŚĆ przekroczenia progu, nie samą flagę');
+
+  const shortRun = evaluateThresholds(mkSeries(4, healthy));
+  assert(shortRun.checks.some(c => c.code === WARN_CODES.FEW_COLONIES && c.status === 'n/a'),
+    'przebieg krótszy niż punkt kontrolny → n/a, NIE fałszywy WARN');
+
+  // Spadek populacji: 3 lata z rzędu; wojna = KONTEKST (warn zostaje, z flagą).
+  const decl = evaluateThresholds(mkSeries(8, (gy) => ({
+    ...healthy(gy), mother: { pop: gy >= 2 && gy <= 5 ? 20 - gy : 20, stock: { food: 5, water: 5 }, energyBalance: 20, brownout: false },
+  })));
+  const dw = decl.warns.find(w => w.code === WARN_CODES.POP_DECLINE);
+  assert(!!dw && dw.years >= TH.POP_DECLINE_YEARS, 'trwały spadek populacji → WARN');
+  assert(dw.duringWar === false && /BEZ wojny/.test(dw.detail), 'bez wojny → warn to mówi wprost');
+  const declWar = evaluateThresholds(mkSeries(8, (gy) => ({
+    ...healthy(gy), atWar: true, mother: { pop: gy >= 2 && gy <= 5 ? 20 - gy : 20, stock: { food: 5, water: 5 }, energyBalance: 20, brownout: false },
+  })));
+  const dwWar = declWar.warns.find(w => w.code === WARN_CODES.POP_DECLINE);
+  assert(!!dwWar && dwWar.duringWar === true,
+    'spadek W WOJNIE → warn NADAL raportowany, tylko oznaczony (wojna to kontekst, nie wyciszenie)');
+
+  const dry = evaluateThresholds(mkSeries(8, (gy) => ({
+    ...healthy(gy), mother: { ...healthy(gy).mother, stock: { food: gy >= 3 ? 0 : 500, water: 500 } },
+  })));
+  const dryW = dry.warns.find(w => w.code === WARN_CODES.RESOURCE_ZERO);
+  assert(!!dryW && dryW.resource === 'food' && dryW.years > TH.DEFICIT_GY, 'zasób przetrwania na zerze > próg → WARN z NAZWĄ zasobu');
+  const blip = evaluateThresholds(mkSeries(8, (gy) => ({
+    ...healthy(gy), mother: { ...healthy(gy).mother, stock: { food: gy === 3 ? 0 : 500, water: 500 } },
+  })));
+  assert(!blip.warns.some(w => w.code === WARN_CODES.RESOURCE_ZERO), 'jednoroczne zero (blip) NIE jest warnem');
+
+  // Energia: mierzona BILANSEM/brownoutem, nie magazynem (energia nie ma magazynu w grze).
+  assert(!TH.SURVIVAL_RESOURCES.includes('energy'),
+    'energia CELOWO poza kontrolą magazynową (getAmount(energy)=bilans → „0" znaczyłoby „sieć wysycona")');
+  assert(!okRun.warns.some(w => w.code === WARN_CODES.ENERGY_DEFICIT), 'dodatni bilans energii → brak warna');
+  const brown = evaluateThresholds(mkSeries(8, (gy) => ({
+    ...healthy(gy), mother: { ...healthy(gy).mother, brownout: gy >= 2, energyBalance: gy >= 2 ? -5 : 20 },
+  })));
+  const bw = brown.warns.find(w => w.code === WARN_CODES.ENERGY_DEFICIT);
+  assert(!!bw && bw.years > TH.DEFICIT_GY, 'trwały brownout / ujemny bilans → WARN energetyczny');
+  const zeroBalance = evaluateThresholds(mkSeries(8, (gy) => ({
+    ...healthy(gy), mother: { ...healthy(gy).mother, energyBalance: 0 },
+  })));
+  assert(!zeroBalance.warns.some(w => w.code === WARN_CODES.ENERGY_DEFICIT),
+    'bilans DOKŁADNIE 0 (sieć wysycona) to NIE deficyt — kluczowa różnica vs stara kontrola magazynowa');
+
+  const passive = evaluateThresholds(mkSeries(12, (gy) => ({ ...healthy(gy), mother: null })));
+  assert(passive.warns.some(w => w.code === WARN_CODES.NO_MOTHER), 'brak macierzystej → WARN (imperium pasywne)');
+
+  assert(evaluateThresholds([]).warns.length === 0, 'pusty szereg → brak warnów (bez rzutu)');
+
+  const roll = rollupWarns([never.warns, never.warns]);
+  const noOutpost = roll.find(r => r.code === WARN_CODES.NO_FIRST_OUTPOST);
+  assert(noOutpost.count === 2 && noOutpost.seeds === 2, 'rollup liczy naruszenia i SEEDY osobno');
+  assert(/^⚠ WARN {2}AI_/.test(formatWarn(never.warns[0])), 'formatWarn daje stabilną linię WARN');
 }
 
 console.log(`\n═══ ${pass} PASS / ${fail} FAIL ═══`);

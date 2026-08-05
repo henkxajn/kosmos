@@ -26,6 +26,9 @@ import {
   AiTelemetry, AI_TELEMETRY_DEFAULTS, AI_DROID_ID,
   outpostKitCost, summarizeSeed, aggregatePanel, verdict,
 } from './AiTelemetry.js';
+import {
+  AI_HEALTH_THRESHOLDS, evaluateThresholds, rollupWarns, formatWarn,
+} from './AiThresholds.js';
 
 function arg(name, def) {
   const a = process.argv.find(s => s.startsWith(`--${name}=`));
@@ -55,6 +58,7 @@ const seeds = runSeedPanel({
 });
 for (const s of seeds) {
   s.summary = summarizeSeed(s.series, s.decisions);
+  s.health  = evaluateThresholds(s.series);
 }
 
 const agg = aggregatePanel(seeds.map(s => s.summary));
@@ -165,7 +169,22 @@ if (Object.keys(droidStalls).length) {
     Object.entries(droidStalls).map(([k, n]) => `${k}=${n}`).join(', '));
 }
 
-// ── 6. Werdykt ────────────────────────────────────────────────────
+// ── 6. Progi zdrowia (WARN) ──────────────────────────────────────
+console.log('\n── PROGI ZDROWIA IMPERIUM (wstępne, do przestrojenia — kryteria POMIARU, nie stałe gry) ──');
+console.log(`  ${JSON.stringify(AI_HEALTH_THRESHOLDS)}`);
+const warnRoll = rollupWarns(seeds.map(s => s.health.warns));
+const totalChecks = seeds.reduce((a, s) => a + s.health.checks.filter(c => c.status !== 'n/a').length, 0);
+const totalWarns  = seeds.reduce((a, s) => a + s.health.warns.length, 0);
+console.log(`  naruszenia: ${totalWarns} / ${totalChecks} sprawdzeń (panel ${N_SEEDS} seedów × ${agg.empiresObserved / N_SEEDS} imperiów)`);
+for (const r of warnRoll) {
+  console.log(`  ${String(r.count).padStart(4)} × ${r.code.padEnd(22)} (imperiów: ${r.empires}, seedów: ${r.seeds})  np. ${r.sample}`);
+}
+console.log('\n  pierwsze naruszenia w szczegółach (per seed, do 3 na seed):');
+for (const s of seeds) {
+  for (const w of s.health.warns.slice(0, 3)) console.log(`  ${shortSeed(s.seed)}  ${formatWarn(w)}`);
+}
+
+// ── 7. Werdykt ────────────────────────────────────────────────────
 console.log(`\n  ► WERDYKT (outcome ${v.outcome}): ${v.label}`);
 console.log(`  crashes: ${seeds.filter(s => s.crashed).length}/${seeds.length}` +
   `  · knoby pomiaru: ${JSON.stringify(AI_TELEMETRY_DEFAULTS)}  · 1 gy = ${CIV_PER_GY} civ-lat\n`);
