@@ -21,7 +21,12 @@ function createDefaultState() {
   return {
     empires:    {},  // empireId → { id, name, archetype, personality, homeSystemId, colonies, tech, military, resources, hostility }
     intel:      {},  // empireId → { level, knownTech, knownMilitary, knownColonies }
-    diplomacy:  { relations: {} }, // `${a}_${b}` → { state, hostility, trust, treaties, lastIncidents }
+    // D1 (WOJNA I POKÓJ): relations[`${idA}__${idB}`] (id sortowane, gracz = 'player') →
+    //   { a, b, opinionModifiers[], tension, status, truceUntilYear, bordersOpen, treaties, memory, ultimatumStartYear }
+    // reputation[id] → { aggression, decayPerYear } — globalna reputacja (też gracza).
+    // ⚠ restore() merguje TYLKO klucze najwyższego poziomu, więc `diplomacy` wraca z zapisu
+    // w CAŁOŚCI: nowe pod-klucze wymagają migracji albo zasiewu (ReputationLedger.initForIds).
+    diplomacy:  { relations: {}, reputation: {} },
     wars:       {},  // warId → { participants, casusBelli, goals, fronts, exhaustion, startYear }
     battles:    {},  // battleId → { location, fleets, result, timeline }
     invasions:  {},  // invasionId → { planetId, aggressor, defender, landedTroops, battlesOnHex }

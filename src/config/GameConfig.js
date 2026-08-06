@@ -95,6 +95,15 @@ export const GAME_CONFIG = {
     // czasu live-gate (Stage 9 flip ON). Bramkuje: subskrypcję vessel:arrived,
     // tick traktatów (_tickTreaties), AI envoy (AlienCivSystem) i akcje w DiplomacyOverlay.
     lightDiplomacy:       true,
+    // ── D1 (WOJNA I POKÓJ 1.0) — zanikanie modyfikatorów opinii + reputacji ─
+    // Stary `trust` NIE zanikał w ogóle, więc włączenie decayu w D1 zmieniłoby
+    // balans (emisariusze przestają wystarczać do sojuszu; wczytany zapis
+    // neutralizuje się w kilkanaście lat cyw.), a D1 ma być bez zmian zachowania.
+    // Silnik zanikania jest zbudowany i przetestowany — flaga zapala się w D2
+    // razem z Acceptance Engine, jako osobny live-gate.
+    // ⚠ NIE bramkuje: decayu NAPIĘCIA (−5/rok, stara mechanika) ani rampu
+    // trade_partner (+1/rok, odpowiednik starego _tickTreaties).
+    diplomacyDecay:       false,
     // ── Fleet Command Console — reforma wizualna statków na mapie 3D ───────
     // Master + sub-gate per slice (rollback per-feature bez restartu). Render/
     // runtime-only — brak migracji save. Selekcja LPM, walka na żywej mapie,
