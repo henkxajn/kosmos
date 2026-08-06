@@ -281,11 +281,13 @@ without them H3 flooded the console with exceptions swallowed by `AlienCivSystem
 
 ---
 
-## 8. Propozycja: automatyczna kopia przedmigracyjna (DO DECYZJI — nie zaimplementowana)
+## 8. Kopia przedmigracyjna — propozycja ZATWIERDZONA i WDROŻONA (`0b9328d`)
 
-> Odpowiedź na propozycję Filipa. ⚠ Nie mam pełnej treści oryginalnego postulatu, więc odpowiadam na
-> to, co wynika z kontekstu: **automatyczny backup zapisu PRZED migracją, do PLIKU** (bo zapisy są
-> teraz plikami). Jeśli propozycja miała inny kształt — poniższe i tak wyznacza szwy.
+> Propozycja poniżej została zatwierdzona i **wdrożona przed live-gate'em** w commicie `0b9328d`
+> (szew w `TitleScene._prepareContinue`, `confirm()`, reuse `downloadSave`+`buildSaveFileName`,
+> bramkowana realnym bumpem; predykat `needsPreMigrationBackup` czysty i pokryty w `save_file_smoke`
+> 113/113). Ścieżka **zweryfikowana na live-gate**: confirm → pobrany `…_v92_przed_migracja.json`,
+> sprawdzony jednolinijkowcem jako v92. Sekcja zostaje jako zapis uzasadnienia i odrzuconych wariantów.
 
 ### Stan faktyczny (zweryfikowany w kodzie)
 
@@ -337,7 +339,73 @@ starym buildzie, i to jest właściwe zachowanie.
 
 ---
 
-## 9. Commands
+## 9. Ustalenia z live-gate'u D1 (gate PASSED)
+
+### 9.1 DEFEKT — degeneracja rzutu `objective` · NAPRAWIONY (`0b15d95`)
+
+**Objaw:** trzy nowe gry, oba imperia, zawsze `ecologist`.
+
+**Warstwa mojego kodu (naprawiona).** Świeży `mulberry32` zasiewany per imperium prawie KOLEJNYMI
+liczbami i odczytywany PIERWSZYM rzutem. Seedy galaktyk są strukturalne (`hashString('entity_N')`
+różni się o 1 między kolejnymi id gwiazd), a pierwsze wyjście mulberry32 jest dla takich wejść
+najsłabiej rozrzucone. Pomiar na realnych id: kolizja obu imperiów w **3 z 8** przypadków, a przy
+`entity_1` → `ecologist`/`ecologist`. Fix: `mixSeed` (finalizer splitmix32) + JEDEN strumień na
+galaktykę, rozgrzany, kolejne rzuty per imperium. Po fixie: 6/6 wartości, najczęstsza 20%,
+imperia różnią się w 85% seedów (oczekiwane ~83%), przy `entity_1` → technologist/militarist.
+Nowy blok testów **G3** (5 asercji) pinuje wariancję — w tym realny, stały seed nowej gry.
+
+### 9.2 ⚠ DEFEKT POZA ZAKRESEM D1 — stały seed galaktyki (DO DECYZJI, nie naprawiony)
+
+`EntityManager.generateId()` to licznik (`_nextId = 1`), więc gwiazda gracza dostaje **to samo id
+w każdej nowej grze**; `GalaxyGenerator.generate(star.id)` liczy `seed = hashString(star.id)`, więc
+**`galaxyData.seed` jest STAŁY dla każdej nowej gry**.
+
+Konsekwencje wykraczają daleko poza `objective`: wspólny strumień (`mulberry32(seed ^ 0xEE01)`) daje
+**identyczne nazwy, kolory i home-systemy imperiów w każdej nowej grze**. Nikt tego nie zauważył, bo
+nikt nie porównywał dwóch nowych gier obok siebie.
+
+Dopóki to stoi, **żadna deterministyczna derywacja nie może różnić się MIĘDZY partiami** — jedyną
+alternatywą byłoby wstrzyknięcie niedeterminizmu (`Date.now`/`Math.random`), co złamałoby kontrakt
+determinizmu chroniony pinami G1 i wymagany przez plan. Dlatego rzut `objective` po fixie różnicuje
+imperia **w obrębie partii**, ale nie między nowymi grami.
+
+Naprawa = decyzja projektowa (co ma być źródłem seeda: losowy seed przy „Nowa gra" zapisywany do
+save'a? nazwa cywilizacji? jawne pole w UI?), z szerokim promieniem rażenia. **Poza zakresem D1.**
+
+### 9.3 `kosmos_save_backup_v{N}` — brak klucza to NIE defekt (bez zmian w kodzie)
+
+Odtworzone headless (mock localStorage z `length`/`key`): `importSave(v92)` → `migrate()` **zapisuje**
+klucz i przeżywa on przebieg, a nazwa używa wersji **ŹRÓDŁOWEJ** (`kosmos_save_backup_v92`). Dwa
+z trzech podejrzeń odpadają: **nie ma** rozbieżności nazewnictwa, a prune leci **przed** zapisem.
+
+Zostają dwie ścieżki quoty, obie **z założenia** wolno poświęcić kopię, obie logujące `console.warn`
+łatwy do przeoczenia wśród logów migracji:
+- `migrate()` — `try/catch` → `[SaveMigration] Nie udało się zapisać backupu:`
+- autozapis `save()` — self-heal → `[SaveSystem] Brak miejsca — zwolniono N backup(ów) migracji…`,
+  który kasuje backupy migracji **przed** `preimport` (a `preimport` u Filipa nadal istniał, co jest
+  z tym spójne).
+
+Kod mówi to wprost: żywy zapis ma pierwszeństwo przed KAŻDĄ kopią (komentarz cytuje realny przypadek
+`preimport` 4,19 MiB przy zapisie 1,11 MiB). **Wniosek:** to nie kod wymaga zmiany, tylko checklista —
+§1.7 przestała traktować ten klucz jako kryterium PASS, wskazuje `KOSMOS.debug.storageReport()` jako
+diagnostykę i podkreśla, że gwarantowaną ścieżką jest PLIK. Wzmacnia to wycofanie kluczy
+(`D2_PLAN_SKELETON` §9): są nie tylko nieczytane, ale i nieprzewidywalne.
+
+### 9.4 Decyzja projektowa: unifikacja jednostek czasu → D2
+
+Live-gate obnażył mieszankę jednostek — `truceUntilYear`, `PEACE_QUIET_YEARS` i `ULTIMATUM_GRACE_YEARS`
+liczą lata **wyświetlane**, a `PEACE_DECAY` i `decayPerYear` działają na lata **cywilizacyjne**
+(×12), przy czym dwie pierwsze i `PEACE_DECAY` siedzą w **tej samej funkcji** `_tickTensionDecay`.
+Stąd zmierzone 3,48 roku wyświetlanego na spadek 30 → 0: ~2 lata blokady „ciszy" + ~0,5 roku
+właściwego spadku (6 lat cyw. po −5), plus przesunięcia od nowych wpisów pamięci.
+
+Decyzja Filipa: **D2 ujednolica wszystko do lat wyświetlanych, z przestrojeniem wartości w tym samym
+przebiegu** (naiwna konwersja daje −60/rok wyświetlany — za szybko), i poprawia etykietę UI, żeby
+podawała jednostkę. Ląduje razem z flipem flagi zanikania. Szczegóły: `D2_PLAN_SKELETON` §5a.
+
+---
+
+## 10. Commands
 
 ```
 node src/testing/smoke/run-all.mjs          # 103/103 OK, 0 FAIL
