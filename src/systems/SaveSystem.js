@@ -185,6 +185,11 @@ export class SaveSystem {
       tradeRoutes:     coloniesData.tradeRoutes ?? [],
       lastTradeYear:   coloniesData.lastTradeYear ?? 0,
       lastMigrationYear: coloniesData.lastMigrationYear ?? 0,
+      // Ustawienia budżetu — ColonyManager.serialize() je zwraca, ale były gubione przy
+      // ręcznym przepisywaniu pól → po wczytaniu stawka wracała do domyślnych 8%.
+      taxRate:         coloniesData.taxRate ?? 0.08,
+      taxAccum:        coloniesData.taxAccum ?? 0,
+      taxProtestAccum: coloniesData.taxProtestAccum ?? 0,
       // Globalne
       techs:          tSys?.serialize()    ?? null,
       researchSystem: window.KOSMOS?.researchSystem?.serialize() ?? null,
