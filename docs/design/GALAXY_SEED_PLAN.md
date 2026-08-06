@@ -150,28 +150,33 @@ różnicuje partie — dziś byłby stały tak samo jak `objective`.
 
 ---
 
-## Decyzje otwarte — wymagają Twojego podpisu
+## Decisions taken — wszystkie siedem PODPISANE
 
-1. **Źródło entropii: `Math.random` czy `crypto.getRandomValues`?** To rozstrzyga R1. `Math.random`
-   zachowuje sterowalność headless (jest patchowany w `env.js`); `crypto` **nie ma w repo żadnego
-   precedensu** (grep: 0 trafień) i ucieka `reseed`. **Rekomendacja: `Math.random`** — sterowalność
-   harnessu jest tu warta więcej niż jakość losowości, a to i tak tylko seed świata.
-2. **Bump `CURRENT_VERSION` 100 → 101, czy udokumentowany wyjątek?** Format się nie zmienia (pole
-   istnieje i round-trippuje), zmienia się źródło wartości. **Rekomendacja: BEZ bumpu**, z jawną notą
-   w `SaveMigration` — bump kosztuje przejście przez `TitleScene` confirm, backup przedmigracyjny
-   i dwa keepery, nie dając nic w zamian.
-3. **Czy `GameCore.boot()` dostaje parametr seeda i jaki ma być default?** Reprodukowalność chce
-   stałej, parytet z prawdziwą nową grą chce losowej. **Rekomendacja: parametr z domyślną wartością
-   STAŁĄ w harnessie** (reprodukowalność wygrywa; parytet i tak jest niepełny, bo bot ≠ gracz).
-4. **Czy seed ma być widoczny/wpisywalny dla gracza?** (pole „seed świata" przy nowej grze).
-   **Rekomendacja: poza zakresem tego mini-streamu** — najpierw niech działa, potem ewentualnie UI.
-5. **Pin G3: przepisać etykietę na „seed zapisów legacy" czy usunąć jako redundantny?**
-   **Rekomendacja: przepisać** — to nadal żywy seed każdego istniejącego zapisu.
-6. **Czy dwie ścieżki „istniejący save, ale `isNewGame`" (§Save R2) liczą się jako nowa gra?**
-   **Rekomendacja: tak, ale z zapisem wyniku** — czyli dostają świeżą galaktykę RAZ, a potem jest
-   ona stabilna. Alternatywa (wieczna stałość dla nich) wymagałaby dodatkowej gałęzi.
-7. **Czy w ślad idą pozostałe stałe z licznika?** Po tym fixie gracz nadal dostanie **identyczną
-   teksturę gwiazdy** (`ThreeRenderer.js:1245`), identyczne mapy hex (`PlanetMapGenerator.js:92`)
-   i identyczne złoża (`DepositSystem.js:54-57`) w każdej nowej grze — bo one derywują z `entity_N`,
-   nie z seeda galaktyki. **Rekomendacja: świadomie POZA zakresem**, ale odnotować jako osobny
-   backlog — to decyzja o oczekiwaniach gracza, nie fakt techniczny.
+1. **Źródło entropii: `Math.random`.** Sterowalność harnessu wygrywa z jakością losowości — to i tak
+   tylko seed świata, a `env.js:34-36` patchuje `Math.random`, więc `KOSMOS_SEED`/`reseed` dalej
+   rządzą. `crypto.getRandomValues` odpada: **zero precedensu w repo** i ucieka `reseed`.
+   ⇒ zamyka **R1** po stronie produkcyjnej.
+2. **BEZ bumpu `CURRENT_VERSION`** (zostaje 100). Format się nie zmienia — pole `seed` istnieje
+   i round-trippuje od zawsze; zmienia się wyłącznie ŹRÓDŁO jego wartości. **Wymóg:** jawna nota
+   wyjątku w `SaveMigration` obok no-opa `:775-778`, którego komentarz i tak trzeba poprawić.
+3. **`GameCore.boot(seed)` z parametrem, default STAŁY w harnessie.** Dodatkowo **panele BALANS
+   pinują seed galaktyki JAWNYM argumentem** — to jedno pociągnięcie zamyka **R1 i R3 razem**:
+   headless zostaje reprodukowalny, a baseline'y AI przestają zależeć od przypadku.
+   **Wymóg:** odnotować pin w `docs/BALANS_STATE.md`.
+4. **Widoczny/wpisywalny seed dla gracza — POZA zakresem**, na backlog. Najpierw niech działa.
+5. **Pin G3 (`empire_objective_smoke.mjs:142-151`): przepisać etykietę na „seed zapisów legacy",
+   asercję ZACHOWAĆ.** −2102099243 pozostaje żywym seedem każdego istniejącego zapisu, więc to nie
+   jest przypadkowa liczba spośród 120.
+6. **Dwie ścieżki „istniejący save, ale `isNewGame`" (zapis spoza trybu 4X, zapis sprzed v20):
+   mint RAZ, wynik utrwalony, potem stabilnie.** Czyli taki plik dostaje świeżą galaktykę przy
+   pierwszym wczytaniu po fixie i od tego momentu jest już powtarzalny. To jest bezpośrednia
+   mitygacja **R2** — bez utrwalenia ten sam plik dawałby inną galaktykę za każdym razem.
+7. **Pozostałe stałe z licznika — POZA zakresem**, zapisane jako backlog „różnorodność świata"
+   (master plan, sekcja Deferred). ⚠ Z trzech pozycji **złoża mają realny wpływ na rozgrywkę**:
+   `DepositSystem.js:54-57` derywuje z `entity.id`, więc **każda nowa gra startuje z identyczną
+   ekonomią**. Tekstura gwiazdy (`ThreeRenderer.js:1245`) i mapy hex (`PlanetMapGenerator.js:92`) to
+   kosmetyka. Kandydat do sparowania z przyszłą reformą mapy 2D.
+
+**Nota do E6 w D2** (zapisana, decyzja zapada tam): rozjazd ~12× między liczbą w UI („zanika za 5 l.")
+a czasem odczuwalnym (0,42 roku wyświetlanego) wchodzi na stół razem z tabelą bazową — wybór między
+podroczną precyzją w UI a świadomym zwolnieniem decayu podejmujemy w E6, na liczbach.
