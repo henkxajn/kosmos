@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { reseed } from './env.js';
-import { GameCore } from './GameCore.js';
+import { GameCore, HEADLESS_GALAXY_SEED } from './GameCore.js';
 import { Ticker } from './Ticker.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
 import ActionAdapter from '../actions/ActionAdapter.js';
@@ -53,7 +53,10 @@ export function runOneGame({ seed, planetClass, targetGy, telemetry, opts = {} }
 
   reseed(seed);
   const core = new GameCore();
-  core.boot({ quiet: true, scenario: cfg.scenario, solo: cfg.solo, aiEmpires: cfg.aiEmpires, planetClass });
+  // GALAXY_SEED (Decyzja 3): galaktyka PRZYPIĘTA JAWNIE — home-systemy AI i ich złoża
+  // są zmienną kontrolną panelu, nie przypadkiem. Nie polegamy na domyślce GameCore.
+  core.boot({ quiet: true, scenario: cfg.scenario, solo: cfg.solo, aiEmpires: cfg.aiEmpires, planetClass,
+              galaxySeed: HEADLESS_GALAXY_SEED });
   const K = window.KOSMOS;
   const home = core.colonyManager.getColony(K.homePlanet.id);
 

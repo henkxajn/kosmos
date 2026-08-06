@@ -43,7 +43,10 @@ const techStub = new Proxy({}, {
 });
 
 // ── Realna galaktyka + realny StarSystemManager ────────────────────
-const galaxyData     = GalaxyGenerator.generate('sys_home', 'Sol', 'G');
+// GALAXY_SEED: generator przyjmuje JAWNY seed (int32), nie id gwiazdy. 1956783889 =
+// hashString('sys_home') — dokładnie ten seed, który ten test dostawał wcześniej,
+// więc galaktyka i wszystkie asercje niżej zostają BEZ ZMIAN.
+const galaxyData     = GalaxyGenerator.generate(1956783889, 'Sol', 'G');
 const colonyManager  = new ColonyManager(techStub);
 const empireRegistry = new EmpireRegistry();
 const starSystemManager = new StarSystemManager();   // REALNY (generateAndRegister → SystemGenerator)

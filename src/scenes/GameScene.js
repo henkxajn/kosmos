@@ -1608,9 +1608,40 @@ export class GameScene {
     window.KOSMOS.debugLog   = debugLog;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
+    // GALAXY_SEED: entropia wchodzi RAZ — przy tworzeniu świata. Nowa gra mintuje
+    // losowy seed; `galaxyData` (RAZEM z polem `seed`) jedzie do zapisu w całości
+    // (`SaveSystem`: `galaxyData: window.KOSMOS.galaxyData ?? null`), więc wczytanie
+    // odtwarza tę samą galaktykę bez ponownej derywacji.
+    //
+    // ⚠ R2 — gałęzie MUSZĄ zostać rozłączne. Mint wolno wywołać wyłącznie w gałęzi
+    // `isNewGame`; wczytanie bierze galaktykę z pliku i NIE dotyka generatora. Gdyby
+    // mint biegł przy KAŻDYM odczycie, ten sam plik dawałby inną galaktykę za każdym
+    // razem. Normalna gra (nowa lub wczytana w trybie 4X) jest tym w pełni domknięta:
+    // zmintowany seed wraca do `galaxyData`, a `SaveSystem._serializeCiv4x` zapisuje
+    // `galaxyData` w całości (razem z polem `seed`).
+    //
+    // ⚠ ZNANE OGRANICZENIE (węższe niż Decyzja 6 w GALAXY_SEED_PLAN). Są dwie ścieżki,
+    // na których `isNewGame` jest true mimo ISTNIEJĄCEGO pliku zapisu: zapis sprzed v20
+    // (`_migrateV19toV20` zeruje `civ4x`) i zapis zrobiony POZA trybem 4X. Na obu
+    // utrwalenie zależy od `civMode`, bo `galaxyData` mieszka WEWNĄTRZ `civ4x`, a
+    // `_serializeCiv4x()` zwraca `null` przy `civMode === false` (`SaveSystem.js:158`).
+    // Skutek: dopóki gracz NIE wejdzie w tryb 4X, taki plik dostaje świeżą galaktykę
+    // przy KAŻDYM wczytaniu (przed GALAXY_SEED dostawał zawsze tę samą, bo derywowaną
+    // ze stałego `star.id`). Od momentu wejścia w 4X pierwszy zapis utrwala seed i plik
+    // jest już powtarzalny. Galaktyka i imperia (`gameState`) siedzą w tym samym bloku
+    // `civ4x`, więc regenerują się RAZEM — nie ma rozjazdu „stare imperia, nowa mapa".
+    // Domknięcie tego (przeniesienie `galaxyData` poza bramkę `civMode`) zmienia format
+    // zapisu, czyli dotyka Decyzji 2 (bez bumpu wersji) — świadomie POZA zakresem G1.
     const isNewGame = !savedData?.civ4x?.galaxyData;
-    window.KOSMOS.galaxyData = savedData?.civ4x?.galaxyData
-      ?? GalaxyGenerator.generate(star.id, star.name, star.spectralType);
+    if (isNewGame) {
+      window.KOSMOS.galaxyData = GalaxyGenerator.generate(
+        GalaxyGenerator.mintSeed(), star.name, star.spectralType
+      );
+      console.log(`[GALAXY_SEED] Nowa galaktyka — seed ${window.KOSMOS.galaxyData.seed}`);
+    } else {
+      // Zapis: seed i cała galaktyka przychodzą z pliku — ZERO re-derywacji.
+      window.KOSMOS.galaxyData = savedData.civ4x.galaxyData;
+    }
 
     // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,

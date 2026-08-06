@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import EventBus from '../../core/EventBus.js';
-import { GameCore } from '../headless/GameCore.js';
+import { GameCore, HEADLESS_GALAXY_SEED } from '../headless/GameCore.js';
 import { Ticker } from '../headless/Ticker.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
 import ActionAdapter from '../actions/ActionAdapter.js';
@@ -72,7 +72,13 @@ export function runSingleGame({
     const bootScenario = ['civilization_boosted', 'boosted', 'nowa-gra-2'].includes(scenario)
       ? 'civilization_boosted'
       : 'civilization';
-    core.boot({ quiet: true, scenario: bootScenario, ...bootOptions });
+    // GALAXY_SEED (Decyzja 3): seed galaktyki PRZYPIĘTY JAWNIE, a nie odziedziczony
+    // po domyślce GameCore. Panele BALANS i turnieje botów porównują przebiegi między
+    // sobą — galaktyka (a więc home-systemy AI i ich złoża) musi być tą samą zmienną
+    // kontrolną w każdym z nich (R1 + R3). `seed` w tej funkcji steruje `Math.random`
+    // przez `reseed()` i jest CZYM INNYM niż seed galaktyki.
+    // Spread na KOŃCU — panel może pin nadpisać, jeśli świadomie chce innej galaktyki.
+    core.boot({ quiet: true, scenario: bootScenario, galaxySeed: HEADLESS_GALAXY_SEED, ...bootOptions });
     ticker = new Ticker(core.timeSystem);
     catalog = new ActionCatalog({
       colonyManager: core.colonyManager,

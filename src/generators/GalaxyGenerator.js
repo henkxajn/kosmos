@@ -1,8 +1,15 @@
 // GalaxyGenerator — generator danych galaktycznych (okoliczne układy gwiezdne)
 //
 // Generuje ~42 układów wokół macierzystego systemu gracza.
-// Seeded PRNG (Mulberry32) z star.id → determinizm.
+// Seeded PRNG (Mulberry32) z JAWNEGO seeda → determinizm.
 // Rozkład Poisson-disk w sferze 3-18 LY z rozłożonym Z (grubość dysku).
+//
+// ⚠ GALAXY_SEED (docs/design/GALAXY_SEED_PLAN.md): seed jest ARGUMENTEM, nie
+// pochodną `star.id`. Wcześniej generator liczył `hashString(star.id)`, a `star.id`
+// to licznik `EntityManager` od 1 — gwiazda gracza jest PIERWSZĄ mintowaną encją,
+// więc każda nowa gra dostawała ten sam seed (−2102099243) i tę samą galaktykę.
+// Kontrakt determinizmu brzmi „deterministyczne PRZY DANYM seedzie", NIE
+// „identyczne między nowymi grami".
 
 import { STAR_TYPES } from '../config/GameConfig.js';
 
@@ -52,28 +59,62 @@ function mulberry32(seed) {
   };
 }
 
-// Hash string → number (deterministyczny seed)
-function hashString(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
-  }
-  return h;
-}
-
 // ── Generator ─────────────────────────────────────────────────────────────────
 
 export class GalaxyGenerator {
   /**
+   * Mintuje NOWY seed galaktyki. Entropia wchodzi RAZ — przy tworzeniu świata.
+   *
+   * Źródło entropii to `Math.random` (Decyzja 1 w GALAXY_SEED_PLAN): headless
+   * podmienia je na seedowany PRNG (`src/testing/headless/env.js:34-36`), więc
+   * `KOSMOS_SEED` / `reseed()` dalej rządzą reprodukowalnością testów.
+   * `crypto.getRandomValues` odpada — zero precedensu w repo i ucieka spod `reseed`.
+   *
+   * R4: zwracamy JAWNIE 32-bitową liczbę ZE ZNAKIEM. `mulberry32` i tak robi
+   * `seed | 0`, a `EmpireGenerator` miesza `^ 0xEE01` — seed UJEMNY jest poprawny
+   * i normalny (dotychczasowy seed nowej gry też był ujemny).
+   *
+   * @returns {number} seed int32 (może być ujemny)
+   */
+  static mintSeed() {
+    return Math.floor(Math.random() * 4294967296) | 0;
+  }
+
+  /**
    * Generuje dane galaktyczne (okoliczne układy gwiezdne).
-   * @param {string} starId — ID gwiazdy gracza (seed PRNG)
+   *
+   * ⚠ KONTRAKT WYWOŁUJĄCEGO (GALAXY_SEED, ryzyko R2). Seed wolno zmintować
+   * WYŁĄCZNIE przy tworzeniu świata (`isNewGame`), a zwrócone `galaxyData` — razem
+   * z polem `seed` — MUSI zostać utrwalone (leci do zapisu w całości przez
+   * `SaveSystem`). Przy wczytaniu bierzemy galaktykę z pliku i NIE derywujemy nic
+   * ponownie. Są dwie ścieżki, na których `isNewGame` jest true mimo ISTNIEJĄCEGO
+   * pliku (zapis spoza trybu 4X → `civ4x: null`; zapis sprzed v20 → `_migrateV19toV20`
+   * zeruje `civ4x`) — bez utrwalenia zmintowanego seeda taki plik dawałby INNĄ
+   * galaktykę przy każdym wczytaniu.
+   *
+   * @param {number} seed — JAWNY seed PRNG (int32; ujemny jest poprawny). Nowa gra:
+   *   `GalaxyGenerator.mintSeed()`. Wczytanie: seed z zapisanego `galaxyData`.
    * @param {string} [starName] — nazwa gwiazdy gracza (dla home system)
    * @param {string} [spectralType] — typ spektralny gwiazdy gracza
-   * @returns {GalaxyData}
+   * @returns {{seed: number, systems: Array}} GalaxyData — `seed` DO UTRWALENIA
    */
-  static generate(starId, starName = 'Sol', spectralType = 'G') {
-    const seed = hashString(starId);
-    const rng = mulberry32(seed);
+  static generate(seed, starName = 'Sol', spectralType = 'G') {
+    // Loud-fail zamiast cichego fallbacku: seed nie-liczbowy dałby albo stałą
+    // galaktykę (dokładnie ten defekt, który GALAXY_SEED naprawia), albo galaktykę
+    // bez utrwalonego seeda (R2). Wołających jest dokładnie trzech i wszyscy podają
+    // liczbę, więc ten guard jest w praktyce nieosiągalny — i taki ma być.
+    if (typeof seed !== 'number' || !Number.isFinite(seed)) {
+      throw new TypeError(
+        `[GalaxyGenerator] generate(seed, …) wymaga liczby — dostał ${typeof seed} (${String(seed)}). `
+        + 'Kontrakt zmieniony w GALAXY_SEED: pierwszy argument to JAWNY seed, NIE star.id. '
+        + 'Nowa gra → GalaxyGenerator.mintSeed(); wczytanie → seed z zapisanego galaxyData.'
+      );
+    }
+    // Normalizacja do int32 PRZED użyciem i przed zwrotką: utrwalamy DOKŁADNIE tę
+    // wartość, którą zjadł PRNG, więc ponowne wczytanie odtwarza galaktykę bit w bit
+    // nawet gdyby ktoś podał float albo liczbę spoza zakresu int32 (R4).
+    const seedI32 = seed | 0;
+    const rng = mulberry32(seedI32);
 
     const systems = [];
 
@@ -159,6 +200,8 @@ export class GalaxyGenerator {
       });
     }
 
-    return { seed, systems };
+    // `seed` w zwrotce = wartość UŻYTA przez PRNG (znormalizowana), nie surowy argument.
+    // To ona jedzie do zapisu i to z niej odtwarzamy galaktykę przy wczytaniu.
+    return { seed: seedI32, systems };
   }
 }

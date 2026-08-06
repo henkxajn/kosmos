@@ -75,13 +75,34 @@ import { TERRAIN_TYPES }     from '../../map/HexTile.js';
 import { PlanetMapGenerator } from '../../map/PlanetMapGenerator.js';
 import { STARTER_RESOURCES, BOOSTED_STARTER_TECHS, BOOSTED_BUILD_PLAN, BOOSTED_STARTER_POP } from '../../data/StarterLoadout.js';
 
+/**
+ * Stały seed galaktyki dla harnessu headless (Decyzja 3 w GALAXY_SEED_PLAN).
+ *
+ * R1 — reprodukowalność: `boot()` domyślnie spawnuje imperia AI (`aiEmpires = !solo`),
+ *   więc KAŻDY non-solo boot konsumuje seed galaktyki. Gdyby harness mintował losowo
+ *   (jak robi to nowa gra w przeglądarce), baseline'y BALANS i turnieje botów
+ *   przestałyby być powtarzalne. Headless NIE mintuje — nigdy.
+ * R3 — stabilność baseline'ów: wartość to DOKŁADNIE ten seed, który headless dostawał
+ *   przed GALAXY_SEED (`hashString('entity_1')` — `star.id` to pierwsza encja licznika
+ *   `EntityManager`), więc wszystkie istniejące baseline'y zostają BIT W BIT.
+ *
+ * Test chcący INNEJ galaktyki podaje własną liczbę: `boot({ galaxySeed: 12345 })`.
+ * Panele BALANS / runner podają ten pin JAWNIE (`SingleGame.js`), żeby był widoczny
+ * w kodzie, a nie ukryty w domyślce.
+ */
+export const HEADLESS_GALAXY_SEED = -2102099243;
+
 export class GameCore {
   /**
    * Bootstrap game state headless. Używa scenariusza "civilization" (Nowa Gra).
    * Po boot() wszystkie systemy są w window.KOSMOS, kolonia założona, budynki startowe.
+   *
+   * @param {number} [galaxySeed] — jawny seed galaktyki; domyślnie stały
+   *   `HEADLESS_GALAXY_SEED` (reprodukowalność harnessu — patrz wyżej).
    */
   boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization',
-         solo = false, aiEmpires = !solo, planetClass = null } = {}) {
+         solo = false, aiEmpires = !solo, planetClass = null,
+         galaxySeed = HEADLESS_GALAXY_SEED } = {}) {
     this._quiet = quiet;
     // solo (BALANS reference run): neutralizuje warstwę AI (brak spawnu obcych imperiów →
     // brak agresji/wojny/inwazji, izolacja solo ekonomii) i wyłącza RandomEventSystem
@@ -221,7 +242,10 @@ export class GameCore {
     K.debugLog = debugLog;
 
     // ── Galaktyka + obce imperia ──
-    K.galaxyData = GalaxyGenerator.generate(star.id, star.name, star.spectralType);
+    // GALAXY_SEED: seed wchodzi JAWNYM parametrem `boot({ galaxySeed })`, domyślnie
+    // stałym (HEADLESS_GALAXY_SEED). W harnessie NIE MA ścieżki mintowania losowego —
+    // to jest cała mitygacja R1 (reprodukowalność BALANS / turniejów botów).
+    K.galaxyData = GalaxyGenerator.generate(galaxySeed, star.name, star.spectralType);
     K.unitDesigns = [];
     // solo: pomijamy spawn obcych imperiów (izolacja solo ekonomii + brak agresji AI).
     // Poniższe initForAllEmpires to no-op przy pustym rejestrze (iterują listAll()=[]);

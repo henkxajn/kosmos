@@ -12,7 +12,7 @@ import './env.js';
 import { reseed } from './env.js';
 import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
-import { GameCore } from './GameCore.js';
+import { GameCore, HEADLESS_GALAXY_SEED } from './GameCore.js';
 import { Ticker } from './Ticker.js';
 import { ActionCatalog } from '../actions/ActionCatalog.js';
 import ActionAdapter from '../actions/ActionAdapter.js';
@@ -32,7 +32,9 @@ const SEED_PREFIX = arg('seed', 'balans-gate1');
 function runOne(seed) {
   reseed(seed);
   const core = new GameCore();
-  core.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: PLANET_CLASS });
+  // GALAXY_SEED (Decyzja 3): galaktyka przypięta jawnie — patrz balans-driver.mjs.
+  core.boot({ quiet: true, scenario: 'civilization_boosted', solo: true, planetClass: PLANET_CLASS,
+              galaxySeed: HEADLESS_GALAXY_SEED });
   const K = window.KOSMOS;
   const home = core.colonyManager.getColony(K.homePlanet.id);
   const catalog = new ActionCatalog({ colonyManager: core.colonyManager, techSystem: core.techSystem, resourceSystem: core.resourceSystem, buildingSystem: core.buildingSystem, vesselManager: core.vesselManager, civSystem: core.civSystem, starSystemManager: core.starSystemManager });
