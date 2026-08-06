@@ -186,7 +186,7 @@ function renderHonesty(meta, audit, baseUnit, panel) {
       nie instrumentu.</li>
     <li><b>Dwie miary wsadu, świadomie nie zlane w jedną.</b> „Ruda" = rekurencyjne rozwinięcie receptury do
       surowców (co gospodarka naprawdę oddaje). „Wsad rynkowy" = półprodukty po ICH cenie (co płaci kupujący).
-      Dla <code>warp_cores</code> te liczby dają ×0.80 i ×0.46 — inny obraz tej samej ceny.</li>
+      Dla <code>warp_cores</code> te liczby dają ×2.27 i ×1.30 — inny obraz tej samej ceny.</li>
     ${pair.a ? `<li><b>Jednostka bazowa a scenariusz.</b> Panel referencyjny to <code>civilization_boosted</code>
       (<b>wydobycie ×${num(mm, 0)}</b>). Mnożnik dotyka WYŁĄCZNIE kopalń, więc nakład na 1 Kr rudy jest w tym
       przebiegu ${num(mm, 0)}× tańszy, a nakład na 1 Kr energii bez zmian. Raport pokazuje <b>obie</b> liczby:

@@ -3,7 +3,8 @@
 //
 // Chroni cztery rzeczy, których zepsucie byłoby CICHE i zmieniłoby wnioski slice'u:
 //   1. rozróżnienie DWÓCH miar wsadu — pełna ruda (rekurencyjnie) vs bezpośrednie wejście
-//      po cenach rynkowych. Zlanie ich w jedno zmienia werdykt `warp_cores` (×0.80 vs ×0.46).
+//      po cenach rynkowych. Dla `warp_cores` dają różne liczby (po fixie Fazy 3: ×2.27 rudy
+//      vs ×1.30 rynku) — zlanie ich w jedno zaciera, którą miarę widzi kupujący, a którą gospodarka.
 //   2. split DESIGN vs SUSPECT liczony z DANYCH (`isDroidUnit` / `creditCost`), a nie
 //      z listy id „na oko" — inaczej instrument zaczyna adjudykować (łamie HARD #1).
 //   3. konwencję tabeli (×1.3) jako KRYTERIUM AUDYTU odczytane z dokumentacji cennika,
@@ -107,11 +108,17 @@ console.log('T3 — split design/suspect z DANYCH, nie z listy id (HARD #1)');
     'ten sam towar BEZ markera w danych → suspect_below_cost (reguła czyta dane, nie id)');
   assert(auditCommodity('automation_droid').cls === PRICE_CLASS.DESIGN_SINK, 'dane przywrócone po teście');
 
+  // Faza 3 (fix cennika): warp_cores przeliczone z receptury wg reguły tabeli (1092 × 1.3 = 1420).
+  // Pin ODWRÓCONY świadomie — asercja „suspect" byłaby po fixie ZIELONYM KŁAMSTWEM. Teraz strażnik
+  // pilnuje kierunku odwrotnego: cena nie ma wrócić pod wsad (regresja = stan sprzed Fazy 3).
   const wc = auditCommodity('warp_cores');
-  assert(wc.belowOre && !wc.sinkMarked && wc.cls === PRICE_CLASS.SUSPECT,
-    `warp_cores: poniżej rudy BEZ markera → suspect (×${wc.ratioOre} rudy, ×${wc.ratioDirect} rynku)`);
+  assert(!wc.belowOre && !wc.belowDirect && wc.cls === PRICE_CLASS.CONFORMS,
+    `warp_cores: cena ≥ wsad i w konwencji tabeli (×${wc.conformance} konwencji, ×${wc.ratioOre} rudy)`);
+  // ŻYWY przykład „poniżej wsadu BEZ markera" zostaje — T3 nadal dowodzi, że split czyta DANE,
+  // a nie listę id (gdyby został sam warp_cores, ta gałąź reguły przestałaby być testowana).
   const ps = auditCommodity('propulsion_systems');
-  assert(ps.belowOre && ps.cls === PRICE_CLASS.SUSPECT, `propulsion_systems: suspect (×${ps.ratioOre})`);
+  assert(ps.belowOre && !ps.sinkMarked && ps.cls === PRICE_CLASS.SUSPECT,
+    `propulsion_systems: poniżej rudy BEZ markera → suspect (×${ps.ratioOre})`);
 }
 
 // ── T4: auditPriceTable ───────────────────────────────────────────

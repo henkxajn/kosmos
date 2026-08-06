@@ -69,7 +69,9 @@ export const BASE_PRICE = {
   antimatter_cells:     280,  // Nt + Xe + Hv + Li → surowe 142 + ekstremalny czas
 
   // ── T5 commodities ──────────────────────────────────────────
-  warp_cores:           500,  // 2×quantum_cores + 2×antimatter + Ti:8 → endgame
+  // BALANS 1.0 / Faza 3: cena 500 łamała regułę SAMEJ tabeli (robust z = −5.4) — części
+  // kosztowały 1092 Kr, złożony rdzeń 500. Przeliczone z receptury wg deklarowanej formuły.
+  warp_cores:          1420,  // 2×quantum_cores(500) + 2×antimatter_cells(560) + Ti:8(32) = 1092 → ×1.3 = 1420
 };
 
 // ── Mnożnik niedoboru — HYBRYDOWY ─────────────────────────────────────────
