@@ -53,8 +53,11 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
 
 - **D1** Relations model + migration + opinion-breakdown UI — ✅ **DONE** (gate passed 2026-08-06)
-- **GALAXY_SEED** (standalone mini-stream, **between D1 and D2 implementation**) — ✅ **code done
-  (G1 `e0615bd`, G2 docs), live gate pending.** Entropy enters once at world creation: a new game
+- **GALAXY_SEED** (standalone mini-stream, **between D1 and D2 implementation**) — ✅ **IMPLEMENTED,
+  GATE PENDING.** Commits `e0615bd` (code + keeper, 65 assertions) and `615eb63` (docs); G3 resolved
+  without running (Decision 2 → no version bump). **Gate script: `GALAXY_SEED_GATE_CHECKLIST.md`,
+  4 points, scheduled next session — D2 stays blocked until it passes.**
+  Entropy enters once at world creation: a new game
   rolls a random galaxy seed, **stores it in the save**, and everything downstream derives from the
   stored seed exactly as today. The determinism contract is *"deterministic given a seed"*, not
   *"identical across new games"*. Golden pins are unaffected — tests pass explicit seeds. Save stays
@@ -66,8 +69,10 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   ⚠ Hard constraint, held: an existing player's galaxy does NOT change on load. Headless
   reproducibility preserved by an explicit pin (`HEADLESS_GALAXY_SEED` = the old constant), so
   BALANS baselines are bit-identical.
-- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **next up,
-  skeleton ready (`D2_PLAN_SKELETON.md`), plan doc in draft**. Scope now also carries: unit
+- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **next up, but
+  GATED behind the GALAXY_SEED live gate above**; skeleton ready (`D2_PLAN_SKELETON.md`), plan doc
+  in draft. A fresh session bootstraps **D2 E1** from the repo docs once the gate is confirmed.
+  Scope now also carries: unit
   unification (§5a), DiplomacyTelemetry+Report, the `threatened_by_you` wire-or-delete decision,
   the `_onColonyFounded` `ownerEmpireId` check, `kosmos_save_backup_v{N}` retirement, and the decay
   flag flip as its own commit + gate.
@@ -143,9 +148,12 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED → D2 → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc → D3/D4 ⇄ W1..Wn
-                        → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
+D1 ✅ → GALAXY_SEED (code ✅, gate ⏳) → D2 → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
+                        → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
+
+**Where we are right now:** GALAXY_SEED code is on `main`; the only open item in the whole arc is its
+**live gate** (`GALAXY_SEED_GATE_CHECKLIST.md`, 4 points). D2 does not start until that is confirmed.
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships

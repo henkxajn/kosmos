@@ -1,9 +1,15 @@
 # GALAXY_SEED — losowy seed galaktyki przy „Nowa gra" · plan doc
 
-**Status:** ✅ **G1 zaimplementowany (`e0615bd`) · G2 dokumentacja (ten commit) · G3 NIE biegnie**
-(był warunkowy na bump wersji, a Decyzja 2 rozstrzygnęła na BRAK bumpu — zamiast tego jawna nota
-wyjątku w `SaveMigration`, którą pokrywa G2). **Live gate: DO WYKONANIA** — 4 punkty niżej.
-Nowy keeper: `src/testing/smoke/galaxy_seed_smoke.mjs` (65 asercji).
+**Status:** ✅ **G1 + G2 SHIPPED** — `e0615bd` (kod + keeper) i `615eb63` (dokumenty), oba na `main`.
+**G3: ROZSTRZYGNIĘTY, NIE URUCHAMIANY** — był warunkowy na bump `CURRENT_VERSION`, a Decyzja 2
+rozstrzygnęła na **BRAK bumpu** (save zostaje **v100**); zamiast bumpu weszła jawna nota wyjątku przy
+`_migrateV18toV19` w `SaveMigration` (pokryte przez G2). G3 nie ma już czego zrobić — **zamknięty**.
+
+⏳ **LIVE GATE: PENDING — 4 punkty, zaplanowany na następną sesję.**
+Skrypt do wykonania: **`docs/design/GALAXY_SEED_GATE_CHECKLIST.md`** (jeden przebieg, ~15 min).
+Do czasu przejścia gate'u **D2 pozostaje zablokowany**.
+Keeper: `src/testing/smoke/galaxy_seed_smoke.mjs` (65 asercji; piny zweryfikowane mutacyjnie — 4 z 4
+wstrzyknięte regresje złapane).
 
 ⚠ **Odchylenia od planu wykryte przy implementacji — patrz §Odchylenia na końcu.**
 
@@ -216,7 +222,19 @@ widoczna (STRATCOM/dyplomacja to UI 4X). Normalna nowa gra scenariusza `civiliza
 automatycznie w `start()`, więc `civMode` jest `true` przed pierwszym autozapisem — **ścieżka główna
 jest w pełni domknięta.**
 Domknięcie reszty = przeniesienie `galaxyData` poza bramkę `civMode`, czyli **zmiana formatu zapisu**,
-czyli ponowne otwarcie Decyzji 2 (brak bumpu). Świadomie **poza zakresem G1/G2** — do rozstrzygnięcia
-przez gracza. Ograniczenie jest udokumentowane w komentarzu `GameScene` i **spinowane asercją**
+czyli ponowne otwarcie Decyzji 2 (brak bumpu). Świadomie **poza zakresem G1/G2**.
+
+> ✅ **ROZSTRZYGNIĘTE — PRZYJĘTE W POSTACI DOSTARCZONEJ (gracz, 2026-08-06).**
+> Resztkowa ścieżka re-mintu dotyczy wyłącznie zapisów, które **nie mają jeszcze galaktyki widocznej
+> dla gracza** (nigdy nie weszły w tryb 4X), więc mintowanie przy każdym wczytaniu **nie niszczy
+> niczego, co gracz widział**. Asercja + dokumentacja są wystarczające; nie robimy nic więcej.
+>
+> ⚠ **Warunek powrotu do sprawy:** rewidować **WYŁĄCZNIE wtedy, gdy i tak dochodzi do zmiany formatu
+> zapisu** (spodziewane najwcześniej przy **D3+**). Wtedy przeniesienie `galaxyData` poza bramkę
+> `civMode` jedzie „przy okazji", bez osobnego bumpu wersji tylko dla tej poprawki. Poza tym
+> warunkiem — **temat zamknięty, nie otwierać.**
+
+Ograniczenie jest udokumentowane w komentarzu `GameScene` i **spinowane asercją**
 w `galaxy_seed_smoke` (T9), więc nie jest cichym założeniem: gdy pin padnie, znaczy to, że
-ograniczenie zniknęło i trzeba zaktualizować ten akapit.
+ograniczenie zniknęło i trzeba zaktualizować ten akapit. Gate świadomie go **nie sprawdza** —
+`GALAXY_SEED_GATE_CHECKLIST` wprost mówi, których zapisów NIE brać i dlaczego.
