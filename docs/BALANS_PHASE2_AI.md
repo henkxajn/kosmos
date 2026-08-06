@@ -162,7 +162,8 @@ need Ti.** There is no fallback: no alternative recipe, no cross-empire purchase
 (`EmpireLogisticsSystem`) only moves goods between colonies the empire already owns.
 
 This is not bad luck in one seed — the AI home systems are fixed by the galaxy layout, so it reproduces
-identically every run (see §7 on what that does and does not prove). The gap it exposes is real and
+identically every run (see §7 on what that does and does not prove — and on why "every run" meant
+something narrower than it sounds). The gap it exposes is real and
 documented in the code itself: `EmpireColonyBootstrap` guarantees the AI a breathable homeworld
 (`makeHomeworldBreathable`) but the **Ti guarantee was deliberately deferred** in S3.1b. This slice
 measures what that deferral costs: for half the empire slots, the entire expansion doctrine is dead on
@@ -320,6 +321,18 @@ Two calibration notes for whoever tunes them:
   *reproducible* ("not a fluke") but **not** *general* ("this happens for any AI start"). In particular,
   "8/16 empires never expand" should be read as "**one of the two AI starting situations is unwinnable**",
   which is the more useful statement anyway.
+
+  ⚠ **Root cause identified and fixed after this slice — the reading above still stands, but for a new
+  reason.** The 8 seeds shared one galaxy because the galaxy seed itself was a constant: `star.id` came
+  from a counter, so `galaxyData.seed = hashString('entity_1')` in *every* new game. **GALAXY_SEED**
+  (`e0615bd`) replaced that with a random seed minted per new game — so a *game* no longer has fixed AI
+  home systems, and `sys_040`'s missing Ti is no longer something the world reproduces on its own.
+  The **panel** is unaffected and stays comparable: the harness never mints, and `SingleGame` /
+  `balans-driver` / `balans-gate2-report` now pin `galaxySeed: HEADLESS_GALAXY_SEED` **explicitly**,
+  a constant equal to the old `hashString('entity_1')`. Verified after the change: still `sys_061` /
+  `sys_040`, i.e. these numbers are bit-identical, now by design rather than by accident.
+  ⚠ Consequence for future work: **varying the galaxy is now a deliberate knob** (pass a different
+  `galaxySeed`), and any re-baseline that uses one is *not* comparable to the records here.
 * **The player curve here is not the reference panel's curve.** Enabling empires perturbs PRNG draws and
   adds ticking colonies, so the player is only comparable **inside this run** — which is how every
   comparison above is drawn.

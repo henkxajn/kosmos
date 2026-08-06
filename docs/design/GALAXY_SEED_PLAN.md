@@ -1,4 +1,11 @@
-# GALAXY_SEED — losowy seed galaktyki przy „Nowa gra" · plan doc (DRAFT do recenzji)
+# GALAXY_SEED — losowy seed galaktyki przy „Nowa gra" · plan doc
+
+**Status:** ✅ **G1 zaimplementowany (`e0615bd`) · G2 dokumentacja (ten commit) · G3 NIE biegnie**
+(był warunkowy na bump wersji, a Decyzja 2 rozstrzygnęła na BRAK bumpu — zamiast tego jawna nota
+wyjątku w `SaveMigration`, którą pokrywa G2). **Live gate: DO WYKONANIA** — 4 punkty niżej.
+Nowy keeper: `src/testing/smoke/galaxy_seed_smoke.mjs` (65 asercji).
+
+⚠ **Odchylenia od planu wykryte przy implementacji — patrz §Odchylenia na końcu.**
 
 **Arc:** WOJNA I POKÓJ 1.0 · mini-stream **między D1 (✅) a implementacją D2**
 **Podstawa:** audyt zakresowy (4 audytorów + 4 weryfikacje adwersarialne, workflow `w5jemv7ov`)
@@ -180,3 +187,36 @@ różnicuje partie — dziś byłby stały tak samo jak `objective`.
 **Nota do E6 w D2** (zapisana, decyzja zapada tam): rozjazd ~12× między liczbą w UI („zanika za 5 l.")
 a czasem odczuwalnym (0,42 roku wyświetlanego) wchodzi na stół razem z tabelą bazową — wybór między
 podroczną precyzją w UI a świadomym zwolnieniem decayu podejmujemy w E6, na liczbach.
+
+---
+
+## Odchylenia od planu — wykryte przy implementacji G1
+
+Zapisane, bo plan twierdził inaczej i następny czytelnik miałby prawo mu zaufać.
+
+**1. „Zmieniają się dokładnie trzy miejsca" — było ich sześć.** Tabela §Promień rażenia pominęła
+`src/testing/headless/test-cross-system-integration.mjs:46`, które woła generator z `'sys_home'`
+(przepięte na `1956783889` = `hashString('sys_home')`, czyli ten sam seed → asercje bez zmian), oraz
+gitignorowany scratch `tmp_obs_stratcom_scan_smoke.mjs` w rootcie (poprawiony w drzewie roboczym, ale
+**nieśledzony przez gita** — świeży klon dalej ma tam stare wywołanie i ta suita by rzuciła).
+Dodatkowo Decyzja 3 („panele BALANS pinują seed JAWNYM argumentem") wymagała pinu w **trzech**
+wejściach, nie w jednym: `SingleGame.js` (boty), `balans-driver.mjs` i `balans-gate2-report.mjs`
+(dwa realne panele BALANS bootują `GameCore` bezpośrednio, z pominięciem `SingleGame`).
+
+**2. Decyzja 6 jest w praktyce WĘŻSZA, niż brzmi.** Zapisano: „mint RAZ, wynik utrwalony, potem
+stabilnie". Utrwalenie zależy jednak od `civMode`, bo `galaxyData` mieszka WEWNĄTRZ bloku `civ4x`,
+a `SaveSystem._serializeCiv4x()` zwraca `null` przy `civMode === false` (`SaveSystem.js:158`).
+Skutek dla dwóch wymienionych ścieżek (zapis sprzed v20; zapis spoza trybu 4X): **dopóki gracz nie
+wejdzie w tryb 4X, taki plik mintuje świeżą galaktykę przy KAŻDYM wczytaniu** — wcześniej dostawał
+zawsze tę samą, bo derywowaną ze stałego `star.id`. Od wejścia w 4X pierwszy zapis utrwala seed
+i plik jest już powtarzalny.
+Łagodzące: galaktyka i imperia (`gameState`) siedzą w tym samym bloku `civ4x`, więc regenerują się
+**razem** — nie ma stanu „stare imperia, nowa mapa"; a poza trybem 4X galaktyka nie jest dla gracza
+widoczna (STRATCOM/dyplomacja to UI 4X). Normalna nowa gra scenariusza `civilization` kolonizuje
+automatycznie w `start()`, więc `civMode` jest `true` przed pierwszym autozapisem — **ścieżka główna
+jest w pełni domknięta.**
+Domknięcie reszty = przeniesienie `galaxyData` poza bramkę `civMode`, czyli **zmiana formatu zapisu**,
+czyli ponowne otwarcie Decyzji 2 (brak bumpu). Świadomie **poza zakresem G1/G2** — do rozstrzygnięcia
+przez gracza. Ograniczenie jest udokumentowane w komentarzu `GameScene` i **spinowane asercją**
+w `galaxy_seed_smoke` (T9), więc nie jest cichym założeniem: gdy pin padnie, znaczy to, że
+ograniczenie zniknęło i trzeba zaktualizować ten akapit.

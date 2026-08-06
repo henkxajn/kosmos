@@ -48,13 +48,19 @@ function mulberry32(seed) {
 /**
  * Finalizer splitmix32 — rozprasza STRUKTURALNE seedy.
  *
- * ⚠ Powód istnienia: seedy galaktyk są prawie kolejnymi liczbami
+ * ⚠ Powód istnienia: seedy galaktyk BYWAJĄ strukturalne — prawie kolejne liczby
  * (`hashString('entity_N')` różni się o 1 między kolejnymi id gwiazd), a mulberry32
  * dla takich wejść ma słabo rozrzucony PIERWSZY rzut. Zasianie świeżego strumienia
  * per imperium i wzięcie jego pierwszej liczby dawało kolizje znacznie częściej niż
  * losowo (pomiar: 3 z 8 realnych id gwiazd → oba imperia to samo objective).
  * Dlatego: seed przez finalizer, JEDEN strumień na galaktykę, rozgrzany, i kolejne
  * rzuty per imperium — czyli tak, jak używa się PRNG poprawnie.
+ *
+ * ⚠ Po GALAXY_SEED (`e0615bd`) NOWA gra mintuje seed losowo, więc strukturalne wejścia
+ * przestały być regułą — ale finalizer ZOSTAJE i nadal jest potrzebny: strukturalne seedy
+ * wciąż wchodzą tu z zapisów sprzed tamtego commita (wszystkie niosą `hashString('entity_1')`),
+ * ze stałego pinu harnessu (`HEADLESS_GALAXY_SEED`) i z fixture'ów testowych podających
+ * małe, sąsiadujące liczby. Poprawność nie może zależeć od tego, czy wejście jest ładne.
  */
 function mixSeed(n) {
   let z = n >>> 0;

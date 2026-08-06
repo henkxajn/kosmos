@@ -139,14 +139,17 @@ console.log('--- G1: REGRESJA DETERMINIZMU (złote wartości sprzed C3) ---');
   ok(`odsetek różnic w rozsądnym pasmie (${(differRate * 100).toFixed(0)}%, oczekiwane ~83%)`,
     differRate > 0.60 && differRate <= 1.0);
 
-  // Pin na REALNY seed nowej gry: EntityManager.generateId() to licznik od 1, więc
-  // star.id jest ten sam w każdej nowej grze, a galaxyData.seed = hashString(star.id)
-  // jest STAŁY (osobny defekt, poza zakresem D1 — patrz D1_AUTONOMOUS_REPORT).
-  // Tu pilnujemy tylko tego, co należy do rzutu: przy tym seedzie imperia NIE kolidują.
+  // Pin na SEED ZAPISÓW LEGACY. −2102099243 = hashString('entity_1') — do czasu
+  // GALAXY_SEED (`e0615bd`) był to seed KAŻDEJ nowej gry (EntityManager.generateId() to
+  // licznik od 1, więc star.id był stały, a galaxyData.seed = hashString(star.id) też).
+  // Nowe gry mintują dziś seed losowo, ale ta wartość NIE jest przypadkową liczbą spośród
+  // 120 wyżej: siedzi w KAŻDYM zapisie sprzed tamtego commita i wciąż z niej derywują się
+  // imperia po wczytaniu. Dlatego asercja zostaje (Decyzja 5 w GALAXY_SEED_PLAN).
+  // Pilnujemy tylko tego, co należy do rzutu: przy tym seedzie imperia NIE kolidują.
   const hashString = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0; return h; };
-  const realSeed = hashString('entity_1');
-  const real = runSeed(realSeed);
-  ok(`realny (stały) seed nowej gry ${realSeed}: imperia mają RÓŻNE objective — `
+  const legacySaveSeed = hashString('entity_1');
+  const real = runSeed(legacySaveSeed);
+  ok(`seed zapisów legacy ${legacySaveSeed}: imperia mają RÓŻNE objective — `
     + `${real[0].objective}/${real[1].objective} (przed fixem: ecologist/ecologist)`,
     real[0].objective !== real[1].objective);
 }

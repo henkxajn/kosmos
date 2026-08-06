@@ -773,7 +773,19 @@ function _migrateV17toV18(data) {
 }
 
 // v18 → v19: mapa galaktyczna (galaxyData) — no-op
-// Brak galaxyData w starym save = generator odtworzy ze starego seed gwiazdy
+//
+// ⚠ Brak `galaxyData` w starym zapisie = przy wczytaniu `GameScene` idzie gałęzią
+// `isNewGame` i tworzy ŚWIEŻĄ galaktykę z nowo zmintowanego seeda. NIE odtwarza jej już
+// „ze starego seeda gwiazdy" — ta derywacja (`hashString(star.id)`) zniknęła razem
+// z GALAXY_SEED (`e0615bd`), bo to ona sprawiała, że KAŻDA nowa gra dostawała tę samą
+// galaktykę. Kontrakt: `GalaxyGenerator.generate` przyjmuje JAWNY seed.
+//
+// ⚠ WYJĄTEK OD PROTOKOŁU MIGRACJI (Decyzja 2 w `docs/design/GALAXY_SEED_PLAN.md`):
+// GALAXY_SEED świadomie NIE bumpuje `CURRENT_VERSION`. Protokół w CLAUDE.md nakazuje bump
+// przy zmianie FORMATU zapisu — tu format się nie zmienia: pole `civ4x.galaxyData.seed`
+// istnieje i round-trippuje od zawsze (`SaveSystem` serializuje `galaxyData` w całości,
+// bez whitelisty pól). Zmieniło się wyłącznie ŹRÓDŁO jego wartości, a stare zapisy niosą
+// własny, poprawny seed i są wczytywane bez żadnej konwersji. Dlatego zapis został na v100.
 function _migrateV18toV19(data) {
   return data;
 }

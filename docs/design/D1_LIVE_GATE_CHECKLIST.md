@@ -265,11 +265,15 @@ więc porównywanie zrzutów ekranu nie jest wymagane. Zostaje potwierdzenie, ż
 - [ ] **Dwa imperia w JEDNEJ nowej grze mają RÓŻNE objective** (kolizja 1 na 6 jest normalna,
       więc przy trafieniu tej samej wartości powtórz na kolejnej nowej grze).
       To jest kryterium mini-gate'u po fixie `0b15d95`.
-- [ ] ⚠ **NIE oczekuj różnic MIĘDZY nowymi grami.** `EntityManager.generateId()` to licznik od 1, więc
-      gwiazda gracza dostaje to samo id w każdej nowej grze, a `galaxyData.seed = hashString(star.id)`
-      jest **STAŁY** — objective (a także nazwy, kolory i home-systemy imperiów) będą IDENTYCZNE w każdej
-      nowej grze. To ODDZIELNY, wcześniejszy defekt **poza zakresem D1**, opisany w
-      `D1_AUTONOMOUS_REPORT` §9.2; wymaga decyzji projektowej.
+- [ ] ⚠ **Różnice MIĘDZY nowymi grami — zależy od wersji.** Do commita `e0615bd` (mini-stream
+      **GALAXY_SEED**, po D1) seed galaktyki był STAŁY, więc objective, nazwy i home-systemy imperiów
+      były IDENTYCZNE w każdej nowej grze — i tego wtedy NIE należało zgłaszać.
+      **Od `e0615bd` jest odwrotnie: każda nowa gra mintuje losowy seed**, więc RÓŻNIĆ SIĘ mają
+      `objective`, nazwy imperiów, home-systemy AI oraz nazwy/pozycje/typy spektralne gwiazd.
+      ⚠ **Kolory i archetypy imperiów zostają IDENTYCZNE także po fixie** (kolor bierze się
+      z archetypu, archetyp z indeksu pętli — żadne nie pochodzi z seeda), tak samo id `emp_001`/
+      `emp_002` i `sys_NNN`. **To NIE jest defekt** — patrz Korekta 1 w `GALAXY_SEED_PLAN.md`.
+      Galaktyka zapisana w ISTNIEJĄCYM zapisie nie zmienia się przy wczytaniu (tak ma być).
 - [ ] Nazwy i kolory imperiów wyglądają normalnie (paleta bez duplikatów, każde imperium inny kolor).
 
 ---
@@ -366,10 +370,13 @@ To NIE są błędy — to zaprojektowane zmiany. Gate polega na tym, żeby je zo
 
 ## Znane, POZA zakresem D1 (nie zgłaszaj jako defekty gate'u)
 
-- **Stały seed galaktyki.** `EntityManager.generateId()` to licznik od 1 → gwiazda gracza ma to samo id
-  w każdej nowej grze → `galaxyData.seed = hashString(star.id)` jest stały → nazwy, kolory, home-systemy
-  i `objective` imperiów są IDENTYCZNE w każdej nowej grze. Wcześniejszy defekt, wymaga decyzji
-  projektowej. Opis i dowody: `D1_AUTONOMOUS_REPORT` §9.2.
+- **Stały seed galaktyki — ✅ NAPRAWIONE PO D1** (`e0615bd`, mini-stream GALAXY_SEED).
+  Było: `EntityManager.generateId()` to licznik od 1 → gwiazda gracza ma to samo id w każdej nowej grze
+  → `galaxyData.seed = hashString(star.id)` stały → nazwy, home-systemy i `objective` imperiów
+  IDENTYCZNE w każdej nowej grze. Jest: nowa gra mintuje losowy seed i utrwala go w zapisie.
+  ⚠ **Kolory i archetypy imperiów NIE pochodziły z seeda i po fixie zostają identyczne — nadal nie
+  zgłaszaj tego jako defektu** (Korekta 1). Opis i dowody: `D1_AUTONOMOUS_REPORT` §9.2 +
+  `GALAXY_SEED_PLAN.md`.
 - **404 `assets/event-videos/cultural_festival.mp4`** — brakujący plik zasobu, sprzed D1.
   `ScheduledEventPopup.tryNext` obsługuje brak wideo, więc gra działa; do wpisania na backlog.
 - **`emp_002` w starych zapisach** niesie stan AI sprzed napraw z Phase 0a — dziwne zachowania tego

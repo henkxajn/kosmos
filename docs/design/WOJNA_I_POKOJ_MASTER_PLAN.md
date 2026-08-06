@@ -39,9 +39,10 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   1. **`objective` PRNG degeneracy — fixed** (`0b15d95`): a fresh mulberry32 seeded per empire from
      near-consecutive integers, read on its first draw, collided for both empires. Fixed with a
      splitmix32 finalizer + one warmed stream per galaxy; variance now pinned by tests.
-  2. **Constant galaxy seed — carried out as a separate task** (see GALAXY_SEED below). Root cause of
-     the symptom that surfaced (1), and wider: every new game currently gets an identical galaxy —
-     identical star names/positions/spectral types, identical AI home systems and empire names.
+  2. **Constant galaxy seed — carried out as a separate task, now fixed** (`e0615bd`; see
+     GALAXY_SEED below). Root cause of the symptom that surfaced (1), and wider: before the fix
+     every new game got an identical galaxy — identical star names/positions/spectral types,
+     identical AI home systems and empire names.
      ⚠ Corrected after the scoping audit: empire **colours and archetypes are NOT seed-derived**
      (colour comes from the archetype, id from the loop index), so the fix will not change them.
      The player's own home system is **already** fully random today — only the galaxy around it is
@@ -52,13 +53,19 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
 
 - **D1** Relations model + migration + opinion-breakdown UI — ✅ **DONE** (gate passed 2026-08-06)
-- **GALAXY_SEED** (standalone mini-stream, **between D1 and D2 implementation**) — entropy enters
-  once at world creation: a new game rolls a random galaxy seed, **stores it in the save**, and
-  everything downstream derives from the stored seed exactly as today. The determinism contract is
-  *"deterministic given a seed"*, not *"identical across new games"*. Golden pins are unaffected —
-  tests pass explicit seeds. Sequence: audit pass → short plan doc → implement with its own gate
-  (two fresh games ⇒ different empire names/colours/objectives; the same stored seed reloaded ⇒
-  identical galaxy). ⚠ Hard constraint: an existing player's galaxy must NOT change on load.
+- **GALAXY_SEED** (standalone mini-stream, **between D1 and D2 implementation**) — ✅ **code done
+  (G1 `e0615bd`, G2 docs), live gate pending.** Entropy enters once at world creation: a new game
+  rolls a random galaxy seed, **stores it in the save**, and everything downstream derives from the
+  stored seed exactly as today. The determinism contract is *"deterministic given a seed"*, not
+  *"identical across new games"*. Golden pins are unaffected — tests pass explicit seeds. Save stays
+  **v100** (no bump: the `seed` field always round-tripped; only its *source* changed — exception
+  note recorded in `SaveMigration`). Gate: two fresh games ⇒ different empire **names, AI home
+  systems and objectives**; the same stored seed reloaded ⇒ identical galaxy.
+  ⚠ **Colours and archetypes stay identical and that is NOT a defect** — colour comes from the
+  archetype, archetype from the loop index; neither is seed-derived (Korekta 1 in the plan doc).
+  ⚠ Hard constraint, held: an existing player's galaxy does NOT change on load. Headless
+  reproducibility preserved by an explicit pin (`HEADLESS_GALAXY_SEED` = the old constant), so
+  BALANS baselines are bit-identical.
 - **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **next up,
   skeleton ready (`D2_PLAN_SKELETON.md`), plan doc in draft**. Scope now also carries: unit
   unification (§5a), DiplomacyTelemetry+Report, the `threatened_by_you` wire-or-delete decision,

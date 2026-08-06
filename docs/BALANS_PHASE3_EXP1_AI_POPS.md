@@ -101,6 +101,12 @@ outpost kit hard-requires 15 Ti, and no amount of labour creates ore. This is pr
 experiment was designed to produce: one root cause fixed, the second root cause still standing, visibly
 unmoved.
 
+⚠ **Read "in any seed" narrowly.** All 8 seeds of this panel shared **one galaxy**, so "any seed" means
+"any *player*-side draw" — the expansionist's home (`sys_040`) was the same planet in all 8 runs. That was
+not a panel choice: the galaxy seed itself was a constant until **GALAXY_SEED** (`e0615bd`). The panel is
+still comparable (the harness pins that same galaxy explicitly now — see `BALANS_PHASE2_AI.md` §7), but
+the deadlock is a property of **one specific AI start**, not of AI starts in general.
+
 Two second-order effects on this still-broken archetype, worth logging honestly:
 
 * `AI_POP_DECLINE` went **1 → 3**, and **all three are expansionists** (31 → 27/25, no war). Starting at
@@ -148,6 +154,11 @@ from inside the decision layer.
    needs 15 Ti, its home has none, and the 35 Ti-bearing bodies in its own system are unreachable without
    an outpost. `Ti` is still the top blocker at 8/16 empires. **This is now the single largest remaining
    cause** and the obvious next experiment.
+   ⚠ The 8/8 is **8 repetitions of one AI start**, not 8 independent starts — all runs shared one galaxy
+   (see §3). Since **GALAXY_SEED** (`e0615bd`) a real game varies AI homes per new game, so the obvious
+   next experiment is now cheap to run properly: sweep `galaxySeed` and ask how often *any* AI home is
+   Ti-less. (Note `BALANS_STATE.md` later reclassified this item as an artifact of frozen pop, resolved
+   by the housing fix — this record predates that reading.)
 2. **The rate limiter still counts `queued` as success — untouched.** The expansionist's pending queue
    still fills with unfundable orders, which still switches its own survival module off; its housing stays
    frozen at 32 from gy 0 to gy 45. Combined with (1) this is why that archetype gained nothing.

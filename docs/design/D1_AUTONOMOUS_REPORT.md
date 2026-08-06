@@ -354,7 +354,17 @@ galaktykę, rozgrzany, kolejne rzuty per imperium. Po fixie: 6/6 wartości, najc
 imperia różnią się w 85% seedów (oczekiwane ~83%), przy `entity_1` → technologist/militarist.
 Nowy blok testów **G3** (5 asercji) pinuje wariancję — w tym realny, stały seed nowej gry.
 
-### 9.2 ⚠ DEFEKT POZA ZAKRESEM D1 — stały seed galaktyki (DO DECYZJI, nie naprawiony)
+### 9.2 DEFEKT POZA ZAKRESEM D1 — stały seed galaktyki (✅ NAPRAWIONY osobnym mini-streamem)
+
+> **STATUS (aktualizacja po D1):** naprawione w commicie **`e0615bd`** — mini-stream **GALAXY_SEED**,
+> wpięty między D1 a implementację D2. Plan i siedem podpisanych decyzji:
+> `docs/design/GALAXY_SEED_PLAN.md`. Nowa gra mintuje losowy seed 32-bitowy
+> (`GalaxyGenerator.mintSeed()`, źródło entropii `Math.random`) i **utrwala go w zapisie**;
+> wszystko poniżej derywuje z ZAPISANEGO seeda dokładnie jak dotąd. Kontrakt determinizmu brzmi
+> teraz „deterministyczne PRZY DANYM seedzie", nie „identyczne między nowymi grami" — złote piny
+> G1/G2/G3 (jawne seedy) przeżyły fix bez zmian. Bez migracji: `galaxyData` round-trippowało od
+> zawsze, zmieniło się wyłącznie ŹRÓDŁO wartości (save zostaje v100). Opis poniżej opisuje stan
+> SPRZED naprawy i zostaje jako zapis dowodowy.
 
 `EntityManager.generateId()` to licznik (`_nextId = 1`), więc gwiazda gracza dostaje **to samo id
 w każdej nowej grze**; `GalaxyGenerator.generate(star.id)` liczy `seed = hashString(star.id)`, więc
@@ -380,6 +390,15 @@ imperia **w obrębie partii**, ale nie między nowymi grami.
 
 Naprawa = decyzja projektowa (co ma być źródłem seeda: losowy seed przy „Nowa gra" zapisywany do
 save'a? nazwa cywilizacji? jawne pole w UI?), z szerokim promieniem rażenia. **Poza zakresem D1.**
+
+⚠ **ROZSTRZYGNIĘTE (GALAXY_SEED, `e0615bd`).** Wybrano pierwszy wariant: losowy seed przy „Nowa gra",
+zapisywany do save'a. Powyższy akapit o „wstrzyknięciu niedeterminizmu łamiącym kontrakt" okazał się
+fałszywą alternatywą — entropia wchodzi **RAZ, przy tworzeniu świata**, a nie przy każdym odczycie,
+więc determinizm zostaje nienaruszony (piny G1/G2/G3 podają jawne seedy i przeszły bez zmian).
+Po fixie `objective` różnicuje imperia I w obrębie partii, I między nowymi grami.
+Seed widoczny w konsoli: `KOSMOS.galaxyData.seed`. Reprodukowalność headless zabezpieczona stałym
+pinem `HEADLESS_GALAXY_SEED` (= dawny `hashString('entity_1')`), więc baseline'y BALANS zostały
+bit w bit — patrz `GALAXY_SEED_PLAN.md` §Ryzyka R1/R3.
 
 ### 9.3 `kosmos_save_backup_v{N}` — brak klucza to NIE defekt (bez zmian w kodzie)
 

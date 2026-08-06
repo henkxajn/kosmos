@@ -46,6 +46,18 @@ synthetic MEDIAN/POOR classes model **secondary-colony worlds, not starts**.
 ⚠ A harness **measurement defect** (synchronous zero-delay timers zeroing outpost food/water/energy) was
 found, fixed and the records **re-baselined**, with the old numbers kept visible rather than overwritten.
 
+⚠ **The galaxy is a pinned control variable, not a varied one — and since `e0615bd` it is pinned
+deliberately.** Every panel run so far shared **one galaxy**: the seed the game derived was a constant
+(`hashString('entity_1')`), so the 8 seeds varied only the *player's* system while AI empires always
+spawned in `sys_061` / `sys_040`. **GALAXY_SEED** (`e0615bd`, arc WOJNA I POKÓJ) made a *new game* mint
+a random galaxy seed, so the harness now pins the old constant **explicitly** —
+`SingleGame.js`, `balans-driver.mjs` and `balans-gate2-report.mjs` all pass
+`galaxySeed: HEADLESS_GALAXY_SEED` (= the old value). **All existing baselines are therefore
+bit-identical and remain comparable** (verified: still `sys_061` / `sys_040`).
+Two consequences: (a) any AI result phrased as "in every seed" means "in this one galaxy, 8× over" —
+notably the `sys_040` Ti finding; (b) varying the galaxy is now a **deliberate knob** (pass a different
+`galaxySeed`), and a re-baseline taken with one is **not** comparable to anything recorded here.
+
 | slice | headline | doc |
 |---|---|---|
 | **POP** | Raw "POP-glut" is a **false alarm** (88% buffer). New signal: **ballooning** on 2/8 seeds — housing drives growth, jobs don't keep up. | `docs/BALANS_PHASE2_POP.md` |
