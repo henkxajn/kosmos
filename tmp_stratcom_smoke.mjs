@@ -82,7 +82,7 @@ const baseKOSMOS = {
   colonyManager: { getAllColonies: () => [], activePlanetId: 'p1', getColony: () => null },
   empireRegistry: { listAll: () => [{ id: 'emp_1', archetype: 'expansionist', homeSystemId: 'sys_002', colonies: [] }], get: (id) => id === 'emp_1' ? { id: 'emp_1', name: 'Obcy', archetype: 'expansionist', homeSystemId: 'sys_002' } : null },
   intelSystem: { isAtLeast: (eid) => eid === 'emp_1' },
-  diplomacySystem: { getHostility: () => 55 },
+  diplomacySystem: { getTension: () => 55 },
   territoryService: { getSystemOwner: (id) => id === 'sys_002' ? 'emp_1' : null, getEmpireColor: () => '#B03030', getOwnedSystems: () => [] },
   uiManager: { _dirty: false },
 };
