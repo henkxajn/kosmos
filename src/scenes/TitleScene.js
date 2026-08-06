@@ -3,12 +3,14 @@
 // Interfejs: show() / destroy() / _handleChoice(action)
 
 import { SaveSystem } from '../systems/SaveSystem.js';
-import { migrate }    from '../systems/SaveMigration.js';
+import { migrate, CURRENT_VERSION } from '../systems/SaveMigration.js';
 import { PRESET_THEMES, applyPreset, saveTheme } from '../config/ThemeConfig.js';
 import { updateCrt } from '../ui/CrtOverlay.js';
 import { t, getLocale, setLocale } from '../i18n/i18n.js';
 import { FactionSelectScene } from './FactionSelectScene.js';
-import { pickSaveFile, consumePendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
+import { pickSaveFile, consumePendingLoad, IMPORT_REASON_KEYS,
+         downloadSave, buildSaveFileName, needsPreMigrationBackup,
+         PRE_MIGRATION_SUFFIX } from '../utils/SaveFile.js';
 
 // ── 4 warianty kolorystyczne ekranu startowego ────────────────
 const SS_THEMES = [
@@ -382,9 +384,32 @@ export class TitleScene {
    * Wspólne dla „Kontynuuj" i dla auto-startu po imporcie pliku.
    * @returns {boolean} czy można startować (false = błąd migracji, ścieżka sama się posprząta)
    */
+  /**
+   * Kopia zapisu PRZED migracją — pobranie pliku .json po potwierdzeniu przez gracza.
+   *
+   * ⚠ Szew jest TUTAJ, a nie w migrate(): migrate() wołają też BootScene i testy headless,
+   * więc pobieranie pliku jako efekt uboczny funkcji migracyjnej odpalałoby się w harnessie.
+   * Predykat bramkujący (needsPreMigrationBackup) jest czysty i przetestowany osobno.
+   *
+   * Nigdy nie blokuje wczytania: odmowa gracza albo błąd pobrania są ignorowane.
+   */
+  _offerPreMigrationBackup(saveData) {
+    try {
+      if (!window.confirm(t('saveFile.preMigrationConfirm', saveData.version, CURRENT_VERSION))) return;
+      const raw = JSON.stringify(saveData);
+      downloadSave(raw, buildSaveFileName(saveData, PRE_MIGRATION_SUFFIX));
+    } catch (e) {
+      console.warn('[TitleScene] kopia przedmigracyjna nieudana:', e?.message);
+    }
+  }
+
   _prepareContinue() {
     let saveData = SaveSystem.loadData();
     if (saveData) {
+      // Migracja jest jednokierunkowa → zaproponuj kopię, ale TYLKO przy realnym bumpie wersji.
+      if (needsPreMigrationBackup(saveData.version, CURRENT_VERSION)) {
+        this._offerPreMigrationBackup(saveData);
+      }
       saveData = migrate(saveData);
       if (saveData.error) {
         console.error('[TitleScene] Migracja save:', saveData.message);

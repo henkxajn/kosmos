@@ -73,6 +73,43 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
   T('T2 zawsze .json',               buildSaveFileName({ version: 90, gameTime: 1 }).endsWith('.json'));
   T('T2 nazwa bez znaków nielegalnych',
     /^[A-Za-z0-9_.]+$/.test(buildSaveFileName({ version: 90, gameTime: 1, civ4x: { civName: 'Zły/Cel: "X"' } })));
+
+  // D1 — dopisek dla kopii przedmigracyjnej
+  const { PRE_MIGRATION_SUFFIX } = await import('../../utils/SaveFile.js');
+  T('T2 dopisek na KOŃCU, po wersji',
+    buildSaveFileName({ version: 99, gameTime: 39, civ4x: { civName: 'Federacja' } }, PRE_MIGRATION_SUFFIX)
+    === 'kosmos_Federacja_r39_v99_przed_migracja.json');
+  T('T2 dopisek slugowany (myślnik → podkreślnik, bez znaków nielegalnych)',
+    /^[A-Za-z0-9_.]+$/.test(buildSaveFileName({ version: 99, gameTime: 1 }, PRE_MIGRATION_SUFFIX)));
+  T('T2 pusty dopisek = zachowanie jak dotąd (kompatybilność wywołań 1-argumentowych)',
+    buildSaveFileName({ version: 90, gameTime: 5, civ4x: null }, '') === buildSaveFileName({ version: 90, gameTime: 5, civ4x: null }));
+  T('T2 dopisek niesie wersję ŹRÓDŁOWĄ, nie docelową (v99 w nazwie kopii)',
+    buildSaveFileName({ version: 99, gameTime: 1 }, PRE_MIGRATION_SUFFIX).includes('_v99_'));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T2b — needsPreMigrationBackup: predykat bramkujący kopię przedmigracyjną
+// Czysty, więc testowalny BEZ DOM — sam confirm()/download żyje w TitleScene
+// (_offerPreMigrationBackup) i pokrywa go live-gate.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { needsPreMigrationBackup } = await import('../../utils/SaveFile.js');
+  const { CURRENT_VERSION } = await import('../../systems/SaveMigration.js');
+  T('T2b realny bump (v99 < CURRENT) → pytamy',
+    needsPreMigrationBackup(CURRENT_VERSION - 1, CURRENT_VERSION) === true);
+  T('T2b zapis w bieżącej wersji → NIE pytamy (zwykłe wczytanie bez dialogu)',
+    needsPreMigrationBackup(CURRENT_VERSION, CURRENT_VERSION) === false);
+  T('T2b zapis z przyszłości → NIE pytamy (importSave odrzuci go wcześniej)',
+    needsPreMigrationBackup(CURRENT_VERSION + 1, CURRENT_VERSION) === false);
+  T('T2b bardzo stary zapis też kwalifikuje się do kopii',
+    needsPreMigrationBackup(4, CURRENT_VERSION) === true);
+  T('T2b brak/niepoprawna wersja → NIE pytamy',
+    needsPreMigrationBackup(undefined, CURRENT_VERSION) === false
+    && needsPreMigrationBackup(null, CURRENT_VERSION) === false
+    && needsPreMigrationBackup(NaN, CURRENT_VERSION) === false
+    && needsPreMigrationBackup('99', CURRENT_VERSION) === false);
+  T('T2b niepoprawny CURRENT_VERSION → NIE pytamy (fail-safe)',
+    needsPreMigrationBackup(99, undefined) === false);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

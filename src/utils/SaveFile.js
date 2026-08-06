@@ -75,9 +75,10 @@ export function slugify(raw) {
  * Nazwa cywilizacji jest serializowana w civ4x.civName (SaveSystem._serializeCiv4x).
  * W scenariuszu 'generator' civ4x === null → segment nazwy pomijany.
  * @param {object} data — sparsowany obiekt zapisu
+ * @param {string} [suffix] — dopisek na końcu nazwy (np. 'przed-migracja'); slugowany
  * @returns {string} np. 'kosmos_Zjednoczona_Federacja_r39_v90.json' albo 'kosmos_r5_v90.json'
  */
-export function buildSaveFileName(data) {
+export function buildSaveFileName(data, suffix = '') {
   const slug    = slugify(data?.civ4x?.civName);
   const year    = Math.round(Number(data?.gameTime) || 0);
   const version = Number.isFinite(data?.version) ? data.version : '0';
@@ -85,8 +86,34 @@ export function buildSaveFileName(data) {
   const parts = ['kosmos'];
   if (slug) parts.push(slug);
   parts.push(`r${year}`, `v${version}`);
+  const tail = slugify(suffix);
+  if (tail) parts.push(tail);
   return `${parts.join('_')}.json`;
 }
+
+/**
+ * Czy zaproponować kopię zapisu PRZED migracją.
+ *
+ * Migracja jest JEDNOKIERUNKOWA (nie ma ścieżki vN → vN−1), a plik .json jest jedynym
+ * trwałym magazynem zapisów gracza — więc jedyny moment, w którym da się jeszcze uratować
+ * stan sprzed bumpu, jest przed wywołaniem migrate(). Pytamy WYŁĄCZNIE przy realnym bumpie:
+ * zwykłe wczytanie zapisu w bieżącej wersji nie może zawracać gracza dialogiem.
+ *
+ * Czysta funkcja — cały efekt (confirm + pobranie pliku) należy do wywołującego, żeby dało
+ * się to przetestować bez DOM.
+ *
+ * @param {number} saveVersion    — wersja z wczytanego zapisu
+ * @param {number} currentVersion — SaveMigration.CURRENT_VERSION
+ * @returns {boolean}
+ */
+export function needsPreMigrationBackup(saveVersion, currentVersion) {
+  return Number.isFinite(saveVersion)
+      && Number.isFinite(currentVersion)
+      && saveVersion < currentVersion;
+}
+
+/** Dopisek nazwy pliku dla kopii przedmigracyjnej — jedno źródło dla kodu i checklisty gate'u. */
+export const PRE_MIGRATION_SUFFIX = 'przed-migracja';
 
 /**
  * Pobiera surowy JSON jako plik (Blob + <a download>).

@@ -60,17 +60,27 @@ To tylko CZYTA plik (nie importuje), więc można je odpalić bezpiecznie przed 
 ### 1.0 — import i migracja: jedno kliknięcie, dwie fazy
 
 Faktyczny przepływ w kodzie (`TitleScene._loadFromFile` → `SaveSystem.importSave` →
-`_handleChoice('continue')` → `_prepareContinue` → `migrate`):
+`_handleChoice('continue')` → `_prepareContinue` → **confirm kopii** → `migrate`):
 
 1. **`WCZYTAJ Z PLIKU`** w menu ekranu tytułowego (EN: `LOAD FROM FILE`) → otwiera się **systemowy
    dialog wyboru pliku**.
 2. Po wybraniu pliku `importSave` sprawdza wersję (v99 mieści się w zakresie) i **wpisuje surowy blob
    do slotu** — jeszcze BEZ migracji.
-3. Natychmiast, automatycznie, gra przechodzi w „kontynuuj" i **wtedy uruchamia się migracja**.
-   Nie ma osobnego kliknięcia „Kontynuuj" — wszystko dzieje się po zamknięciu dialogu.
+3. Natychmiast, automatycznie, gra przechodzi w „kontynuuj". Ponieważ zapis jest w starszej wersji,
+   **najpierw pojawia się okno z propozycją kopii przedmigracyjnej**, a dopiero po nim rusza migracja.
+   Nie ma osobnego kliknięcia „Kontynuuj" — wszystko dzieje się po zamknięciu dialogu wyboru pliku.
 
 - [ ] Otwórz konsolę (F12) **przed** kliknięciem, żeby złapać logi.
 - [ ] Kliknij **`WCZYTAJ Z PLIKU`** → wybierz plik z §0.
+- [ ] Pojawia się **okno potwierdzenia**: *„Ten zapis jest w wersji v99 i zostanie zmigrowany do v100.
+      Migracja jest jednokierunkowa — nie da się wrócić do v99. Zapisać kopię pliku PRZED migracją?"*
+      → kliknij **OK**
+- [ ] Przeglądarka pobiera plik o nazwie w formacie
+      **`kosmos_<Nazwa_Cywilizacji>_r<rok>_v99_przed_migracja.json`**
+      (bez nazwy cywilizacji, np. w scenariuszu generatora: `kosmos_r<rok>_v99_przed_migracja.json`)
+- [ ] Sprawdź pobrany plik tym samym jednolinijkowcem co w §0:
+      `$ node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log('wersja:', d.version, '| relacji:', Object.keys(d.civ4x?.gameState?.diplomacy?.relations ?? {}).length);" "SCIEZKA/DO/POBRANEGO/pliku.json"`
+      → **`wersja: 99`** i **ta sama liczba relacji** co w §0 (to jest niezmigrowany stan sprzed bumpu)
 - [ ] W konsoli, w tej kolejności:
       → **`[SaveMigration] Backup save v99 → kosmos_save_backup_v99`**
       → **`[SaveMigration] Migracja v99 → v100...`**
@@ -250,9 +260,11 @@ To NIE są błędy — to zaprojektowane zmiany. Gate polega na tym, żeby je zo
 
 ### Rollback
 
-1. **Podstawowa ścieżka: plik `.json` ze §0.** Import go nie zmienił — wystarczy `git revert` kodu
-   i ponowny `WCZYTAJ Z PLIKU`.
-   `git revert 70a3a16 5cd6f47 48cf431 36af8cf 78c94f1 ae223c7` (w tej kolejności)
+1. **Podstawowa ścieżka: plik `.json` ze §0** — albo pobrana w §1.0 **kopia przedmigracyjna**
+   (`…_v99_przed_migracja.json`, ten sam stan). Import ich nie zmienił, więc wystarczy `git revert`
+   kodu i ponowny `WCZYTAJ Z PLIKU`.
+   `git revert <hash kopii przedmigracyjnej> 70a3a16 5cd6f47 48cf431 36af8cf 78c94f1 ae223c7`
+   (w tej kolejności)
 2. **Wtórna: `kosmos_save_backup_v99`** w localStorage — blob v99 taki, jaki wszedł do migracji.
    ▸ `copy(localStorage.getItem('kosmos_save_backup_v99'))` i wklej do pliku `.json`.
 3. ⚠ **`kosmos_save_backup_preimport` to NIE kopia Twojego pliku** — zawiera poprzednią treść slotu

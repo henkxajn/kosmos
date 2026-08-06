@@ -3402,6 +3402,7 @@ export default {
   'saveFile.noSave':           'No save to export — save the game first.',
   'saveFile.saved':            'Saved to file: {0}',
   'saveFile.loadFailed':       'Load failed: {0}',
+  'saveFile.preMigrationConfirm': 'This save is version v{0} and will be migrated to v{1}.\n\nMigration is one-way — there is no going back to v{0}.\n\nSave a copy of the file BEFORE migrating?',
   'saveFile.reasonParseError':    'not a valid JSON file',
   'saveFile.reasonNotObject':     'the file contains no save data',
   'saveFile.reasonNoVersion':     'no save version — this is not a KOSMOS save',

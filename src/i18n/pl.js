@@ -3403,6 +3403,7 @@ export default {
   'saveFile.noSave':           'Brak zapisu do wyeksportowania — zapisz grę najpierw.',
   'saveFile.saved':            'Zapisano do pliku: {0}',
   'saveFile.loadFailed':       'Wczytywanie nieudane: {0}',
+  'saveFile.preMigrationConfirm': 'Ten zapis jest w wersji v{0} i zostanie zmigrowany do v{1}.\n\nMigracja jest jednokierunkowa — nie da się wrócić do v{0}.\n\nZapisać kopię pliku PRZED migracją?',
   'saveFile.reasonParseError':    'to nie jest poprawny plik JSON',
   'saveFile.reasonNotObject':     'plik nie zawiera danych zapisu',
   'saveFile.reasonNoVersion':     'brak wersji zapisu — to nie jest zapis KOSMOS',
