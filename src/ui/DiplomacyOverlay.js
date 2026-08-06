@@ -14,17 +14,18 @@ const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 
 // S3.4 — klucze i18n stanu relacji (peace/truce/war/alliance)
+// D1: status relacji to WYŁĄCZNIE peace | truce | war. Gałąź 'alliance' została
+// usunięta — żadna ścieżka kodu nigdy jej nie zapisywała (sojusz to TRAKTAT,
+// widoczny w sekcji traktatów i w pasmie statusu 'ally').
 const STATE_KEY = {
-  peace:    'diplo.state.peace',
-  truce:    'diplo.state.truce',
-  war:      'diplo.state.war',
-  alliance: 'diplo.state.alliance',
+  peace: 'diplo.state.peace',
+  truce: 'diplo.state.truce',
+  war:   'diplo.state.war',
 };
 const STATE_COLOR = {
-  peace:    '#60B090',
-  truce:    '#B0A050',
-  war:      '#D85A30',
-  alliance: '#50C0E0',
+  peace: '#60B090',
+  truce: '#B0A050',
+  war:   '#D85A30',
 };
 const FSM_COLOR = {
   IDLE:        '#777',
@@ -44,6 +45,29 @@ const TRUST_STATUS_COLOR = {
   friendly: '#60B090',
   ally:     '#50C0E0',
 };
+
+// ── D1 — budżet pionowy prawej kolumny ──────────────────────────────────────
+// Prawa kolumna NIE MA scrolla (handleScroll obsługuje tylko listę imperiów po lewej),
+// a treść potrafi urosnąć: rozbicie opinii + ultimatum + traktaty + pamięć. Limity
+// poniżej trzymają panel w ~550 px dostępnych przy 1280×720; pasmo akcji jest dodatkowo
+// PRZYPIĘTE do dołu, więc nawet przepełnienie nie wypchnie przycisków za panel.
+const MAX_BREAKDOWN_ROWS = 5;    // dalsze pozycje zwijane w wiersz „+ N więcej"
+const MEMORY_ROWS        = 3;    // pierścień ma 20 wpisów, panel pokazuje 3 najnowsze
+const BREAKDOWN_ROW_H    = 13;
+const FADE_COL_W         = 58;   // szerokość kolumny „(zanika za N l.)" od prawej krawędzi
+
+// Kolor liczby opinii: −100 czerwony → 0 amber → +100 zielony (lerp po kanałach RGB).
+const OPINION_NEG = [0xD8, 0x5A, 0x30];
+const OPINION_MID = [0xB0, 0xA0, 0x50];
+const OPINION_POS = [0x60, 0xB0, 0x90];
+function opinionColor(op) {
+  const v = Math.max(-100, Math.min(100, Number(op) || 0));
+  const [from, to, tt] = v < 0
+    ? [OPINION_NEG, OPINION_MID, 1 + v / 100]   // −100 → 0
+    : [OPINION_MID, OPINION_POS, v / 100];      //    0 → +100
+  const ch = (i) => Math.round(from[i] + (to[i] - from[i]) * tt);
+  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
+}
 
 export class DiplomacyOverlay extends BaseOverlay {
   constructor() {
@@ -213,7 +237,7 @@ export class DiplomacyOverlay extends BaseOverlay {
       // Etykieta "Hostility" + FSM (stan AI)
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('diplo.hostility'), x + pad, barY + 16);
+      ctx.fillText(t('diplo.tension'), x + pad, barY + 16);
       const fsmState = emp?.fsm?.state ?? 'IDLE';
       if (isContact) {
         ctx.fillStyle = FSM_COLOR[fsmState] ?? THEME.textDim;
@@ -261,19 +285,92 @@ export class DiplomacyOverlay extends BaseOverlay {
     ctx.fillStyle = isContact ? (arch?.color ?? THEME.textPrimary) : THEME.textDim;
     ctx.fillText(`⚑ ${isContact ? emp.name : MASK}`, x + pad, y + 22);
 
-    // Badge stanu
+    // Chip statusu — rozejm pokazuje ILE LAT jeszcze trwa (dawniej nie było czego pokazać:
+    // rozejm był stanem terminalnym bez licznika).
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = STATE_COLOR[rel.status ?? 'peace'];
     ctx.textAlign = 'right';
-    ctx.fillText(`[${t(STATE_KEY[rel.status ?? 'peace'])}]`, x + w - pad, y + 22);
+    const truceLeft = rel.truceYearsLeft ?? 0;
+    const statusChip = (rel.status === 'truce' && truceLeft > 0)
+      ? t('diplo.truceYearsLeft', truceLeft.toFixed(0))
+      : t(STATE_KEY[rel.status ?? 'peace']);
+    ctx.fillText(`[${statusChip}]`, x + w - pad, y + 22);
     ctx.textAlign = 'left';
 
-    let iy = y + TAB_H + 20;
+    // Pasmo akcji PRZYPIĘTE do dołu panelu + clip treści nad nim. Prawa kolumna NIE MA
+    // scrolla (handleScroll obsługuje tylko listę po lewej), a treść potrafi urosnąć
+    // (ultimatum + 3 traktaty + pełne rozbiechnie) — bez przypięcia przyciski akcji
+    // wypadały poza panel przy 720p i stawały się nieklikalne.
+    const btnH = 28;
+    const ACTIONS_H = 3 * (btnH + 6) + 8;
+    const contentBottom = y + h - ACTIONS_H - 4;
 
-    // Pasek hostility (duży)
+    let iy = y + TAB_H + 20;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y + TAB_H, w, contentBottom - (y + TAB_H));
+    ctx.clip();
+
+    // ── Opinia: co ONI myślą o NAS (kierunek, który bramkuje akceptacje) ──
+    const opinion = dipl.getOpinionOfPlayer(this._selectedId);
+    const band    = dipl.getOpinionBand(this._selectedId);
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('diplo.hostilityFull'), x + pad, iy);
+    ctx.fillText(t('diplo.opinionLabel'), x + pad, iy);
+    ctx.font = `bold ${THEME.fontSizeMedium + 6}px ${THEME.fontFamily}`;
+    ctx.fillStyle = isContact ? opinionColor(opinion) : THEME.textDim;
+    ctx.textAlign = 'right';
+    ctx.fillText(isContact ? `${opinion > 0 ? '+' : ''}${Math.round(opinion)}` : MASK, x + w - pad, iy + 6);
+    ctx.textAlign = 'left';
+    iy += 17;
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = isContact ? (TRUST_STATUS_COLOR[band] ?? THEME.textDim) : THEME.textDim;
+    ctx.fillText(isContact ? t(`diplo.status.${band}`) : MASK, x + pad, iy);
+    iy += 15;
+
+    // ── Rozbicie opinii — TOP N po |wartości|, ogon zwinięty w jeden wiersz ──
+    ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText(t('diplo.opinionBreakdown'), x + pad, iy);
+    iy += 14;
+    const breakdown = isContact ? dipl.getOpinionBreakdown(this._selectedId, 'player') : [];
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    if (breakdown.length === 0) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('diplo.none'), x + pad + 4, iy);
+      iy += BREAKDOWN_ROW_H;
+    } else {
+      for (const e of breakdown.slice(0, MAX_BREAKDOWN_ROWS)) {
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(e.label, x + pad + 4, iy);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = e.value >= 0 ? '#60B090' : '#D85A30';
+        ctx.fillText(`${e.value > 0 ? '+' : ''}${Math.round(e.value)}`, x + w - pad - FADE_COL_W, iy);
+        ctx.fillStyle = THEME.textDim;
+        // Trwałe (stan wojny, aktywny traktat) żyją tak długo jak ich źródło → ∞.
+        ctx.fillText(e.yearsLeft === Infinity ? '∞' : t('diplo.fadesIn', Math.max(1, e.yearsLeft).toFixed(0)),
+          x + w - pad, iy);
+        ctx.textAlign = 'left';
+        iy += BREAKDOWN_ROW_H;
+      }
+      const rest = breakdown.length - MAX_BREAKDOWN_ROWS;
+      if (rest > 0) {
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('diplo.breakdownMore', String(rest)), x + pad + 4, iy);
+        iy += BREAKDOWN_ROW_H;
+      }
+    }
+
+    // Separator
+    iy += 6;
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, iy); ctx.lineTo(x + w - pad, iy); ctx.stroke();
+    iy += 14;
+
+    // Pasek napięcia (dawna „wrogość") — drabina 40/60/80 na kreskach paska
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText(t('diplo.tensionFull'), x + pad, iy);
     iy += 14;
 
     const barW = w - pad * 2;
@@ -296,52 +393,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     ctx.textAlign = 'center';
     ctx.fillText(`${Math.round(rel.tension ?? 0)} / 100`, x + pad + barW / 2, iy + 13);
     ctx.textAlign = 'left';
-    iy += barH + 6;
-
-    // Legenda progów
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('diplo.thresholdLegend'), x + pad, iy + 10);
-    iy += 20;
-
-    // ── S3.4 — Pasek zaufania (Trust, display −10..+10) ──
-    // D1/C2: pasek nadal rysuje SKALĘ dawnego trustu przez mostek D2, żeby panel
-    // wyglądał identycznie jak przed D1. Liczba opinii + rozbicie modyfikatorów
-    // zastąpią ten blok w C4.
-    const trust  = dipl.getTrustEquivalent(this._selectedId);
-    const status = dipl.getOpinionBand(this._selectedId);
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('diplo.trustLabel'), x + pad, iy);
-    ctx.fillStyle = TRUST_STATUS_COLOR[status] ?? THEME.textDim;
-    ctx.textAlign = 'right';
-    ctx.fillText(t(`diplo.status.${status}`), x + w - pad, iy);
-    ctx.textAlign = 'left';
-    iy += 14;
-    const tBarW = w - pad * 2;
-    const tBarH = 16;
-    const midX = x + pad + tBarW / 2;
-    ctx.fillStyle = 'rgba(60,60,60,0.4)';
-    ctx.fillRect(x + pad, iy, tBarW, tBarH);
-    // wypełnienie od środka: w prawo (pozytyw) lub w lewo (negatyw)
-    const trustPct = Math.max(0, Math.min(1, trust / 100));
-    ctx.fillStyle = TRUST_STATUS_COLOR[status] ?? '#888';
-    if (trust >= 50) {
-      ctx.fillRect(midX, iy, Math.round(tBarW * (trustPct - 0.5)), tBarH);
-    } else {
-      const wNeg = Math.round(tBarW * (0.5 - trustPct));
-      ctx.fillRect(midX - wNeg, iy, wNeg, tBarH);
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(midX, iy); ctx.lineTo(midX, iy + tBarH); ctx.stroke();
-    const disp = (trust - 50) / 5;
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textPrimary;
-    ctx.textAlign = 'center';
-    ctx.fillText(`${disp > 0 ? '+' : ''}${disp.toFixed(1)}`, midX, iy + 12);
-    ctx.textAlign = 'left';
-    iy += tBarH + 10;
+    iy += barH + 10;
 
     // Ultimatum active?
     if (rel.ultimatumStartYear != null) {
@@ -406,10 +458,11 @@ export class DiplomacyOverlay extends BaseOverlay {
     ctx.beginPath(); ctx.moveTo(x + pad, iy); ctx.lineTo(x + w - pad, iy); ctx.stroke();
     iy += 14;
 
-    // Ostatnie incydenty
+    // Pamięć relacji (dowody: casus belli, historia dla gracza). Pierścień ma 20 wpisów,
+    // panel pokazuje MEMORY_ROWS najnowszych — budżet pionowy prawej kolumny.
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('diplo.recentIncidents'), x + pad, iy);
+    ctx.fillText(t('diplo.memory'), x + pad, iy);
     iy += 16;
     const inc = rel.memory ?? [];
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -418,16 +471,17 @@ export class DiplomacyOverlay extends BaseOverlay {
       ctx.fillText(t('diplo.none'), x + pad + 4, iy);
       iy += 14;
     } else {
-      for (const ev of inc.slice(-4).reverse()) {
+      for (const ev of inc.slice(-MEMORY_ROWS).reverse()) {
         ctx.fillStyle = THEME.textSecondary;
         ctx.fillText(`  [${(ev.year ?? 0).toFixed(0)}] ${ev.type}`, x + pad + 4, iy);
         iy += 14;
       }
     }
 
-    // Akcje — 3 wiersze po 2 (BUG5c: czytelne etykiety, 4. przycisk = sojusz)
-    iy += 8;
-    const btnH = 28;
+    ctx.restore();   // koniec clipu treści — akcje rysujemy POZA nim
+
+    // Akcje — 3 wiersze po 2, PRZYPIĘTE do dołu panelu (patrz ACTIONS_H wyżej)
+    iy = y + h - ACTIONS_H + 8;
     const btnW2 = Math.floor((w - pad * 3) / 2);
     const colL = x + pad;
     const colR = x + pad + btnW2 + pad;
@@ -437,9 +491,12 @@ export class DiplomacyOverlay extends BaseOverlay {
     const canWar   = notWar && isContact;
     const canPeace = rel.status === 'war' && isContact;
     const canEnvoy = isContact && hasEnvoyVessel;
-    const canTrade = isContact && notWar && trust >= 65 && !dipl.hasTreaty(this._selectedId, 'trade_agreement');
-    const canPact  = isContact && notWar && trust >= 80 && !dipl.hasTreaty(this._selectedId, 'non_aggression');
-    const canAlly  = isContact && notWar && trust >= 80 && !dipl.hasTreaty(this._selectedId, 'alliance');
+    // ── MOSTEK D2 — progi dostępności 65/80/80 w skali dawnego trustu, żeby przycisk
+    // odblokowywał się dokładnie tam, gdzie przed D1. Usunąć razem z Acceptance Engine.
+    const trustEq  = dipl.getTrustEquivalent(this._selectedId);
+    const canTrade = isContact && notWar && trustEq >= 65 && !dipl.hasTreaty(this._selectedId, 'trade_agreement');
+    const canPact  = isContact && notWar && trustEq >= 80 && !dipl.hasTreaty(this._selectedId, 'non_aggression');
+    const canAlly  = isContact && notWar && trustEq >= 80 && !dipl.hasTreaty(this._selectedId, 'alliance');
 
     // Wiersz 1: wojna / pokój
     this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.declareWar'), canWar, 'danger');

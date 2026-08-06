@@ -380,8 +380,10 @@ console.log('--- D7: brak starych kluczy ---');
 // ── i18n parytet ────────────────────────────────────────────────────────────
 console.log('--- i18n: parytet pl + en ---');
 {
+  // ⚠ C4 skasował 'diplo.trustLabel' (pasek zaufania zastąpiony liczbą opinii) —
+  // pełne pokrycie nowych kluczy UI ma diplomacy_overlay_breakdown_smoke.
   const keys = [
-    'diplo.trustLabel', 'diplo.status.hostile', 'diplo.status.neutral', 'diplo.status.friendly', 'diplo.status.ally',
+    'diplo.opinionLabel', 'diplo.status.hostile', 'diplo.status.neutral', 'diplo.status.friendly', 'diplo.status.ally',
     'diplo.btn.envoy', 'diplo.btn.trade', 'diplo.btn.pact', 'diplo.btn.alliance', 'diplo.treatyAccepted', 'diplo.treatyRejected',
     'mission.envoyNoContact', 'mission.envoyNoVessel', 'vessel.envoyDeparted', 'vessel.envoyReturned',
     'log.diplo.aiEnvoy', 'log.diplo.treatyAccepted',
