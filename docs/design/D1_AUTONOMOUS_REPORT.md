@@ -361,8 +361,17 @@ w każdej nowej grze**; `GalaxyGenerator.generate(star.id)` liczy `seed = hashSt
 **`galaxyData.seed` jest STAŁY dla każdej nowej gry**.
 
 Konsekwencje wykraczają daleko poza `objective`: wspólny strumień (`mulberry32(seed ^ 0xEE01)`) daje
-**identyczne nazwy, kolory i home-systemy imperiów w każdej nowej grze**. Nikt tego nie zauważył, bo
-nikt nie porównywał dwóch nowych gier obok siebie.
+**identyczne nazwy imperiów i identyczne home-systemy AI w każdej nowej grze**, a sam
+`GalaxyGenerator` — identyczne nazwy, pozycje i typy spektralne gwiazd. Nikt tego nie zauważył, bo
+nikt nie porównywał dwóch nowych gier obok siebie — i bo układ MACIERZYSTY gracza jest już dziś
+w pełni losowy (`SystemGenerator` używa gołego `Math.random`), co maskowało stałość galaktyki wokół.
+
+⚠ **KOREKTA (audyt zakresowy GALAXY_SEED, po napisaniu tej sekcji):** pierwotnie napisałem tu, że
+identyczne są także **kolory** imperiów i że fix je zróżnicuje. To nieprawda — kolor pochodzi
+z ARCHETYPU (`EmpireGenerator.js:185-187` czyta `ARCHETYPES[archetypeId].color`, archetyp z
+`AI_ARCHETYPE_SEQUENCE[i]`, id z indeksu pętli), a nie z seeda. Kolory i archetypy **pozostaną
+identyczne również po naprawie** i nie należy tego zgłaszać jako defekt.
+Pełny zakres i korekty: `docs/design/GALAXY_SEED_PLAN.md`.
 
 Dopóki to stoi, **żadna deterministyczna derywacja nie może różnić się MIĘDZY partiami** — jedyną
 alternatywą byłoby wstrzyknięcie niedeterminizmu (`Date.now`/`Math.random`), co złamałoby kontrakt

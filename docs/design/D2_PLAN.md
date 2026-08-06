@@ -155,21 +155,58 @@ emitowany, nic go nie konsumuje) — poza 1.0 · reforma mapy galaktyki 2D — n
 
 ---
 
-## Decyzje otwarte — wymagają Twojego podpisu przed implementacją
+## Decyzje — PODPISANE (wszystkie pięć)
 
-1. **`threatened_by_you`: term czy modyfikator?** (§5 skeletonu). Rekomendacja: **term `tension`**
-   (czysto, bez sprzężenia zwrotnego), a wpis `threatened_by_you` + jego dwa klucze i18n **skasować**
-   jako martwe. Wariant kompromisowy: term liczy wynik, a panel dorysowuje wiersz informacyjny
-   w rozbiciu AKCEPTACJI (nie opinii). Trzymanie obu = podwójne liczenie.
-2. **`relative_power`: stub w D2 czy naprawa R2 teraz?** (K-1). Rekomendacja: **stub**, naprawa
-   w WAR_BACKBONE.
-3. **Flip decayu: „jak w katalogu" i strojenie po pomiarze, czy od razu z rekalibracją?**
-   Rekomendacja: **zapalić bez zmian tempa, zmierzyć E7, potem stroić** — katalog jest jednym
-   miejscem, więc korekta jest tania. ⚠ Ale unifikacja jednostek wchodzi w tym samym commicie, więc
-   „bez zmian" oznacza tu „bez zmian ODCZUWALNEGO tempa po przeliczeniu na lata wyświetlane".
-4. **Odmowa emisariusza — co widzi gracz?** Statek wraca bez efektu, czy jest odsyłany szybciej?
-   Wpis w Dzienniku, czy pauzujący modal? Rekomendacja: **wraca normalnie, wpis w Dzienniku** (envoy
-   jest abstrakcyjny, bez lotu — pauzujący modal byłby nieproporcjonalny).
-5. **`_onColonyFounded`: pominąć kolonie AI, czy od razu przygotować ścieżkę napięcia AI↔AI?**
-   Rekomendacja: **pominąć w D2** (jedna bramka `ownerEmpireId`), ścieżka AI↔AI razem z D5, gdzie
+1. **`threatened_by_you`: wygrywa TERM `tension`.** Wpis w `OPINION_MODIFIERS` **i jego dwa klucze
+   i18n** (`diplo.mod.threatenedByYou` w pl i en) **kasujemy** — bez tego zostałyby martwym wpisem
+   udającym funkcję (R9). Wariant kompromisowy (term liczy wynik, panel dorysowuje wiersz
+   informacyjny w rozbiciu AKCEPTACJI) **pozostaje dostępny jako opcja UI w E4**, gdyby zrozumiałość
+   odmowy okazała się słaba — to decyzja o UI, nie o modelu, więc nie wraca do silnika.
+2. **`relative_power`: STUB w D2, naprawa w WAR_BACKBONE.**
+   ⚠ **Wymóg dołączony:** artefakt macierzy z E7 musi **JAWNIE oznaczać kolumnę siły jako BEZCZYNNĄ**
+   (np. nagłówek `relative_power (INERT — R2)` + nota pod tabelą), żeby nikt nie stroił wag względem
+   termu, który zwraca zero. To samo dotyczy `reputation` (K-2) i `third_party` (K-5).
+3. **Flip decayu: zapalić BEZ zmiany ODCZUWALNEGO tempa, zmierzyć, potem stroić.**
+   ⚠ **Wymóg dołączony:** tabela bazowa poniżej (§Baseline) musi być w planie **przed E6** — inaczej
+   „bez odczuwalnej zmiany" jest niesprawdzalne na gate'cie.
+4. **Odmowa emisariusza: statek wraca normalnie + wpis w Dzienniku.**
+   ⚠ **Wymóg dołączony:** przy budowie kanału odmowy w E4 klasa zdarzeń ostrzeżeń/odmów dyplomacji
+   dostaje **swojego PIERWSZEGO realnego subskrybenta Dziennika**. Dziś `diplomacy:warning` nie ma
+   ani jednego (dlatego checklista D1 §1.3 musiała usunąć oczekiwanie wpisu) — E4 to zamyka.
+5. **`_onColonyFounded`: sama bramka `ownerEmpireId`.** Ścieżka napięcia AI↔AI ląduje w D5, gdzie
    pary AI↔AI w ogóle powstają.
+
+**Zmiana kolejności (zatwierdzona):** **E7 wchodzi PRZED E2/E3**. Macierze akceptacji są instrumentem
+strojenia konwersji progów w E2 — stroimy z przyrządem, nie na wyczucie. Nowa kolejność:
+**E1 → E7 → E2 → E3 → E4 → E5 → E6 → E8 → E9.**
+
+---
+
+## Baseline jednostek — tabela DO WYPEŁNIENIA POMIAREM przed E6
+
+Stan dzisiejszy policzony z katalogu (`decayPerYear` działa na rok CYWILIZACYJNY,
+`CIV_TIME_SCALE = 12`, wpis znika przy `|value| < MODIFIER_EPSILON = 0.5`):
+
+| modyfikator | wartość | decay/rok cyw. | zanika po (lata cyw.) | zanika po (lata WYŚWIETLANE) | UI pokazuje dziś |
+|---|---|---|---|---|---|
+| `envoy_goodwill` | +5 | 1 | 5,0 | **0,42** | „zanika za 5 l." |
+| `military_presence` | −5 | 2 | 2,5 | **0,21** | „zanika za 3 l." |
+| `recent_war` | −15 | 2 | 7,5 | **0,63** | „zanika za 8 l." |
+| `legacy_relations` (trust 80 ⇒ +30) | +30 | 2 | 15,0 | **1,25** | „zanika za 15 l." |
+| napięcie (`PEACE_DECAY`) | 30 | 5 | 6,0 | **0,50** | — (pasek bez licznika) |
+
+⚠ **Co ta tabela od razu pokazuje:** liczba w UI („zanika za 5 l.") jest **~12× większa** niż czas,
+który gracz faktycznie przeżywa (0,42 roku wyświetlanego). Etykieta nie kłamie o jednostce — ona jej
+w ogóle nie podaje.
+
+To stawia realny problem przy E6: **utrzymanie odczuwalnego tempa 1:1** wymaga pomnożenia
+`decayPerYear` przez 12 (na rok wyświetlany), a wtedy wyświetlane „zanika za N lat" spada do 0–1 dla
+większości modyfikatorów i staje się bezużyteczne (`ceil(5/12) = 1`). Czyli po unifikacji trzeba
+wybrać JEDNO:
+
+- **(a) zachować odczuwalne tempo** → UI potrzebuje podrocznej precyzji („zanika za 5 miesięcy"), albo
+- **(b) zwolnić decay** tak, by liczby w latach wyświetlanych były sensowne (np. dobra wola
+  z emisariuszy żyje ~3 lata wyświetlane) — to jest realna zmiana balansu, świadoma i mierzona.
+
+Ta decyzja zapada **po pomiarze z E7**, nie teraz. Kolumna „po unifikacji" tabeli zostaje pusta do
+tego momentu — wypełnia ją commit E6 i ona jest dowodem na gate'cie.
