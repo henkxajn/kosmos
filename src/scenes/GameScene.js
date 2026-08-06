@@ -11,6 +11,7 @@ import { worldToGameplay } from '../utils/CoordTransform.js';
 import { tacticalToWorld } from '../utils/TacticalRaycaster.js';
 import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } from '../ui/POIModal.js';
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
+import { systemDisplayName }  from '../ui/MapLabelLogic.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -136,6 +137,10 @@ import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
 import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
 import { t, getLocale } from '../i18n/i18n.js';
+
+// Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
+// ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
+const INTRO_SETTLE_MS = 2500;
 
 export class GameScene {
   // canvas3D — element #three-canvas
@@ -4344,6 +4349,7 @@ export class GameScene {
     // 2b — lockdown
     const prevIsOverUI = cam._isOverUI;
     let blackLayer = null;
+    let captionEl  = null;   // plakietka nazwy układu (pierwsze ~2 s lotu) — zdejmowana w finally
     // Mysz CAŁKOWICIE martwa na czas lotu: capture-listenery na window pochłaniają WSZYSTKIE
     // zdarzenia myszy PRZED handlerami gry (kamera, hover UI → paski/tooltips, box-select) →
     // nic się nie rusza ani nie pojawia. Deklaracja PRZED try → dostępne w finally do zdjęcia.
@@ -4357,6 +4363,9 @@ export class GameScene {
       cam._isOverUI = () => true;            // blokuj drag + wheel (redundancja do swallow)
       this._introLockActive = true;          // keydown/keyup/blur guard (klawisze bezczynne; ESC przerywa; clean-view chroniony)
       blackLayer = this._createIntroBlackLayer();
+      // Plakietka nazwy układu — widoczna OD PIERWSZEJ klatki (nad czernią), gaśnie po ~2 s;
+      // kamera rusza dopiero po T_OPEN (otwarcie trzyma szeroki widok), więc napis idzie PRZED lotem.
+      captionEl = this._createIntroSystemCaption();
 
       // ── Geometria (próbka RAZ — sim spauzowany, ciała zamrożone) ──
       // Świat: 1 AU = 11 j. (AU_TO_PX 110 / WORLD_SCALE 10). Środek = gwiazda
@@ -4435,7 +4444,9 @@ export class GameScene {
 
       // ── Fazy czasu (s). Spokojne, WOLNE tempo: dłuższe otwarcie, wolny dolot, wolny przelot.
       //    To główne pokrętła tempa — zwiększ, by lot był dłuższy/spokojniejszy. ──
-      const T_OPEN   = 4.5;                               // szeroki widok układu + słońce (fade + hold)
+      // T_OPEN musi zmieścić CAŁĄ plakietkę nazwy układu (_createIntroSystemCaption:
+      // wjazd @2 s → wygaszenie @4,5 s → zdjęcie @5,2 s) + oddech, zanim kamera ruszy.
+      const T_OPEN   = 6.5;                               // szeroki widok układu + słońce (fade + plakietka + hold)
       const BLEND    = 6.5;                               // WOLNY dolot z szerokiego ujęcia do 1. ciała
       const SEG_TIME = 9.0;                               // s na segment przelotu (wolno, spokojnie)
       const TOTAL    = T_OPEN + BLEND + Math.max(1, segCount) * SEG_TIME;
@@ -4536,6 +4547,7 @@ export class GameScene {
       console.error('[GameScene] Intro cinematic — błąd:', err);
     } finally {
       MOUSE_EVENTS.forEach((t) => window.removeEventListener(t, swallowMouse, true));  // przywróć mysz
+      captionEl?.remove();                   // ESC/abort nie zostawia plakietki na ekranie
       renderer.setCinematicDriver?.(null);
       this._introLockActive = false;
       this._abortIntroFlight = null;
@@ -4558,6 +4570,54 @@ export class GameScene {
     return el;
   }
 
+  // Plakietka „nazwa układu" na starcie lotu kinowego — DOM na dole-środku, nad czarną
+  // warstwą (z501 > 500), w kolorze motywu. Pojawia się z niczego, trzyma ~2 s, gaśnie —
+  // kamera rusza dopiero po T_OPEN, więc napis leci PRZED podróżą przez układ.
+  // Cykl życia sam się domyka (setTimeout → remove), ale finally lotu też woła remove()
+  // (idempotentne) — ESC w trakcie nie zostawia napisu.
+  // Zwraca element (lub null, gdy nazwa układu nieznana — wtedy nic nie pokazujemy).
+  _createIntroSystemCaption() {
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    let name = systemDisplayName(sysId, {
+      systems:  this.starSystemManager?.getAllSystems?.() ?? [],
+      starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
+    });
+    if (!name || name === sysId) name = this.star?.name ?? null;   // home nie ma wpisu galaxy
+    if (!name || name === sysId) return null;                      // brak nazwy → bez plakietki
+
+    const acc  = THEME.accent ?? '#d8a050';
+    // Poświata tylko dla accentu w zapisie #rrggbb (presety motywów bywają rgba() — wtedy bez glow).
+    const isHex6 = /^#[0-9a-f]{6}$/i.test(acc);
+    const glow = isHex6
+      ? `text-shadow:0 0 24px ${acc}55, 0 0 60px ${acc}22;`
+      : '';
+    const el = document.createElement('div');
+    el.id = 'intro-system-caption';
+    Object.assign(el.style, {
+      position: 'fixed', left: '0', right: '0', bottom: '13%',
+      zIndex: '501', opacity: '0', pointerEvents: 'none',
+      textAlign: 'center', userSelect: 'none',
+      fontFamily: THEME.fontFamily ?? 'monospace',
+      transition: 'opacity 600ms ease',
+    });
+    el.innerHTML = `
+      <div style="font-size:11px;letter-spacing:7px;color:${THEME.textDim ?? acc};margin-bottom:10px;">
+        ${t('intro.systemLabel')}
+      </div>
+      <div style="font-size:30px;letter-spacing:12px;color:${acc};${glow}">
+        ${name}
+      </div>
+    `;
+    document.body.appendChild(el);
+
+    // Harmonogram (od startu lotu): 2 s ciszy na szerokim ujęciu → wjazd → 2,5 s trzymania →
+    // wygaszenie. Całość mieści się w T_OPEN, więc kamera rusza dopiero PO zniknięciu napisu.
+    setTimeout(() => { el.style.opacity = '1'; }, 2000);               // wjazd z niczego (~0,6 s)
+    setTimeout(() => { el.style.opacity = '0'; }, 4500);               // znika po 2,5 s trzymania
+    setTimeout(() => { el.remove(); }, 5200);                          // sprzątanie po wygaszeniu
+    return el;
+  }
+
   // Fade UI z powrotem (~800 ms) po locie: clean-view off, CRT wraca, input odblokowany,
   // toasty odciszone. #ui-canvas wjeżdża opacity 0→1 nad żywą sceną 3D (bez migu pełnego UI).
   async _fadeIntroUIBackIn(blackLayer) {
@@ -4576,6 +4636,10 @@ export class GameScene {
       uiCanvas.style.opacity = '';
     }
     this.toastSystem?.setSuppressed?.(false);
+    // Oddech po wjeździe UI — gra ma się „zagnieździć", zanim wejdzie komunikat startowy
+    // (showIntroSequence). Await propaguje do callera (_runIntroCinematic czeka w finally),
+    // więc przesuwa KAŻDĄ ścieżkę po locie: nową grę i KOSMOS.debug.replayIntro(true).
+    await new Promise((r) => setTimeout(r, INTRO_SETTLE_MS));
   }
 
   // ── M3 P1.3 — Picker mode HUD banner ─────────────────────────────

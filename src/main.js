@@ -68,7 +68,7 @@ window._showLoadingScreen = function () {
     <div class="ld-vignette"></div>
     <div class="ld-content">
       <div class="ld-logo">KOSMOS</div>
-      <div class="ld-sub">PLANETARY SIMULATION ENGINE</div>
+      <div class="ld-sub">BEYOND THE CELESTIAL SPHERE</div>
       <div class="ld-bar-wrap">
         <div class="ld-bar-track"><div class="ld-bar-fill" id="loading-fill"></div></div>
         <div class="ld-pct" id="loading-pct">0%</div>

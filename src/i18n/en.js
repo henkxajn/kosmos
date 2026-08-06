@@ -1952,6 +1952,9 @@ export default {
   'bodyDetail.status': 'Status',
 
   // === IntroModal ===
+  // Plakietka nazwy układu na starcie lotu kinowego (GameScene._createIntroSystemCaption)
+  'intro.systemLabel': 'SYSTEM',
+
   // LOG screen (shipboard archive) — chrome + paragraphs + duty officer signoff.
   'intro.barTitle': 'SHIPBOARD ARCHIVE',
   'intro.svgLabel': 'EMERGENCY RECORD',
