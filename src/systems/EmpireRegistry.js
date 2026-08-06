@@ -22,7 +22,7 @@
 
 import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
-import { ARCHETYPES } from '../data/EmpireData.js';
+import { ARCHETYPES, OBJECTIVE_BY_ARCHETYPE } from '../data/EmpireData.js';
 
 export class EmpireRegistry {
   constructor() {
@@ -81,6 +81,13 @@ export class EmpireRegistry {
       // EmpireGenerator bez duplikatów; fallback = kolor archetypu.
       color:        p.color ?? arch.color ?? null,
       personality:  { ...arch.personality },
+      // D1 — druga oś: archetyp = KULTURA, objective = AGENDA. Rzut robi
+      // EmpireGenerator (własny strumień PRNG per imperium, żeby nie przesunąć
+      // wspólnego). Fallback z archetypu tylko dla wywołań bez `objective`
+      // (debug/scenariusze/test-boty) — nie jest regułą gry.
+      objective:    p.objective ?? OBJECTIVE_BY_ARCHETYPE[p.archetype] ?? 'expansionist',
+      // D1 — cechy modyfikujące zachowanie ('erratic' dojdzie w D2 z konsumentem).
+      traits:       Array.isArray(p.traits) ? [...p.traits] : [],
       homeSystemId: p.homeSystemId ?? null,
       // Slice 1: colonies to array colonyId stringów (planetId z ColonyManager).
       colonies:     Array.isArray(p.colonies) ? [...p.colonies] : [],

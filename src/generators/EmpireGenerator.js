@@ -8,7 +8,7 @@
 // Wywoływany JEDEN raz przy starcie nowej gry (po GalaxyGenerator.generate).
 // Deterministyczny (Mulberry32 z seeda galaktyki) — ten sam układ → ten sam wynik.
 
-import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
+import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES, EMPIRE_COLOR_PALETTE, EMPIRE_OBJECTIVES } from '../data/EmpireData.js';
 import { EmpireColonyBootstrap } from '../systems/EmpireColonyBootstrap.js';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
@@ -154,6 +154,15 @@ export class EmpireGenerator {
       if (!color) color = EMPIRE_COLOR_PALETTE.find(c => !usedColors.has(c.toLowerCase())) ?? archColor ?? '#888888';
       usedColors.add(color.toLowerCase());
 
+      // D1 — oś „objective" (agenda) rzucana NIEZALEŻNIE od archetypu (kultury):
+      // ten sam xenofag gra inaczej w każdej partii (import z MOO).
+      // ⚠ WŁASNY strumień per imperium — ani jednego pobrania ze współdzielonego
+      // rng(), inaczej przesunąłby się cały strumień i nazwy oraz kolory imperiów
+      // zmieniłyby się dla tego samego seeda galaktyki (regresja w fazie „bez zmian").
+      // Mnożnik 0x9E3779B1 (odwrotność złotego podziału) rozprasza kolejne indeksy.
+      const objRng    = mulberry32(((galaxyData.seed ^ 0x0B1EC7) + i * 0x9E3779B1) >>> 0);
+      const objective = EMPIRE_OBJECTIVES[Math.floor(objRng() * EMPIRE_OBJECTIVES.length)];
+
       // Utwórz imperium — Slice 1: BEZ abstract scalars (military/tech/resources)
       empireRegistry.createEmpire({
         id:           empireId,
@@ -162,6 +171,8 @@ export class EmpireGenerator {
         nameEN,
         archetype:    archetypeId,
         color,
+        objective,
+        traits:       [],   // D2 doda rzut 'erratic' razem ze swoim konsumentem
         homeSystemId: homeSys.id,
         // colonies puste — EmpireColonyBootstrap doda przez addColony
         colonies:     [],
