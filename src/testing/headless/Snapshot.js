@@ -149,15 +149,22 @@ export function capture(core) {
   const empiresList = [];
   if (core.empireRegistry?.listAll) {
     for (const emp of core.empireRegistry.listAll()) {
-      const hostility = core.diplomacySystem?.getTension(emp.id) ?? 0;
+      // D1: `hostility` → `tension` (ta sama skala 0-100, nowa nazwa domeny) +
+      // DWIE nowe metryki: `opinion` (co imperium myśli o graczu, −100..+100) i
+      // `status` (peace|truce|war). Konsumenci klucza: BottleneckDetector
+      // (DIPLOMACY_DEAD / DIPLOMACY_FROZEN) i ConclusionsEngine.
+      const dipl = core.diplomacySystem;
       empiresList.push({
         id: emp.id,
         name: emp.name ?? emp.id,
         archetype: emp.archetype,
+        objective: emp.objective ?? null,   // D1 C3 — druga oś (agenda); konsumenci w D2
         tech: emp.tech?.level ?? 0,
         military: Math.round(emp.military?.power ?? 0),
         colonies: emp.colonies?.length ?? 0,
-        hostility: Math.round(hostility),
+        tension: Math.round(dipl?.getTension(emp.id) ?? 0),
+        opinion: Math.round(dipl?.getOpinionOfPlayer(emp.id) ?? 0),
+        status: dipl?.getStatus(emp.id) ?? 'peace',
         fsmState: core.alienCivSystem?.getState?.(emp.id) ?? 'unknown',
       });
     }

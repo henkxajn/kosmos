@@ -586,17 +586,24 @@ function renderFinalStateDetails(fs) {
 
   if (fs.empires?.length > 0) {
     html += `<h3 class="section-title">── OBCE IMPERIA</h3>`;
-    html += `<table class="games-table"><thead><tr><th>Nazwa</th><th>Archetype</th><th>FSM</th><th>Tech</th><th>Military</th><th>Colonies</th><th>Hostility</th></tr></thead><tbody>`;
+    // D1: snapshot niesie `tension` (dawne `hostility`) + nowe `opinion`/`status`.
+    html += `<table class="games-table"><thead><tr><th>Nazwa</th><th>Archetype</th><th>Objective</th><th>FSM</th><th>Tech</th><th>Military</th><th>Colonies</th><th>Napięcie</th><th>Opinia</th><th>Status</th></tr></thead><tbody>`;
     for (const e of fs.empires) {
-      const hostColor = e.hostility >= 70 ? 'danger' : e.hostility >= 40 ? 'warn' : 'ok';
+      const tension = e.tension ?? 0;
+      const hostColor = tension >= 70 ? 'danger' : tension >= 40 ? 'warn' : 'ok';
+      const opinion = e.opinion ?? 0;
+      const opColor = opinion <= -21 ? 'fail' : opinion >= 15 ? 'ok' : 'warn';
       html += `<tr>
         <td>${e.name}</td>
         <td>${e.archetype ?? '?'}</td>
+        <td style="color:var(--text-dim)">${e.objective ?? '?'}</td>
         <td style="color:var(--text-dim)">${e.fsmState}</td>
         <td>${e.tech}</td>
         <td>${e.military}</td>
         <td>${e.colonies}</td>
-        <td class="status-${hostColor === 'ok' ? 'ok' : hostColor === 'warn' ? 'warn' : 'fail'}">${e.hostility}</td>
+        <td class="status-${hostColor === 'ok' ? 'ok' : hostColor === 'warn' ? 'warn' : 'fail'}">${tension}</td>
+        <td class="status-${opColor}">${opinion > 0 ? '+' : ''}${opinion}</td>
+        <td style="color:var(--text-dim)">${e.status ?? 'peace'}</td>
       </tr>`;
     }
     html += `</tbody></table>`;

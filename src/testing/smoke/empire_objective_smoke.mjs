@@ -135,14 +135,19 @@ console.log('--- D3: zero konsumentów w D1 ---');
       if (!/\.(js|mjs)$/.test(e.name)) continue;
       const txt = fs.readFileSync(p, 'utf8');
       // Czytanie pola (nie definicja/przypisanie) — heurystyka: `.objective` poza
-      // EmpireData/EmpireRegistry/EmpireGenerator/SaveMigration/testami.
+      // miejscami, które je USTAWIAJĄ, oraz poza warstwą pomiarową.
+      //
+      // ⚠ `src/testing/` wyłączone świadomie: telemetria OBSERWUJE pole (Snapshot
+      // zapisuje je w wierszu imperium, żeby raporty BALANS widziały drugą oś), a to
+      // nie to samo co KONSUMENT — czyli logika gry rozgałęziająca się na objective.
+      // Tego drugiego w D1 nie ma i ta asercja tego pilnuje aż do D2.
       if (/\.objective\b/.test(txt)
         && !/EmpireData|EmpireRegistry|EmpireGenerator|SaveMigration/.test(p)
-        && !p.includes(path.join('testing', 'smoke'))) hits.push(path.relative(SRC, p));
+        && !p.includes(`testing${path.sep}`)) hits.push(path.relative(SRC, p));
     }
   };
   walk(SRC);
-  ok(`objective nie ma jeszcze konsumentów (D2 je doda)${hits.length ? ' — znaleziono: ' + hits.join(', ') : ''}`,
+  ok(`objective nie ma jeszcze KONSUMENTÓW w logice gry (D2 je doda)${hits.length ? ' — znaleziono: ' + hits.join(', ') : ''}`,
     hits.length === 0);
 }
 

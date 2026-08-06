@@ -246,8 +246,8 @@ export function generateConclusions(aggregate, games) {
       severity: 'info',
       category: 'game',
       title: 'Zero interakcji dyplomatycznych z obcymi imperiami',
-      evidence: `DIPLOMACY_DEAD w 100% gier. Mimo że obce imperia istnieją (${games?.[0]?.finalState?.empires?.length ?? 0}/grę), hostility = 0.`,
-      suggestion: `Albo: (1) gra wymaga że gracz pierwszy kontaktuje obcych przez recon/colonization — boty tego nie robią. (2) Gra powinna generować więcej incydentów (automatyczne spotkania z flotą obcych). Sprawdź czy AlienCivSystem ma trigger zwiększający hostility z czasem lub granicę ekspansji.`,
+      evidence: `DIPLOMACY_DEAD w 100% gier. Mimo że obce imperia istnieją (${games?.[0]?.finalState?.empires?.length ?? 0}/grę), napięcie = 0.`,
+      suggestion: `Albo: (1) gra wymaga że gracz pierwszy kontaktuje obcych przez recon/colonization — boty tego nie robią. (2) Gra powinna generować więcej incydentów (automatyczne spotkania z flotą obcych). Sprawdź czy AlienCivSystem ma trigger zwiększający napięcie z czasem lub granicę ekspansji.`,
       data: { empires: games?.[0]?.finalState?.empires?.length ?? 0 },
     });
   }

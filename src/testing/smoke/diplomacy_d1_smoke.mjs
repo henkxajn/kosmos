@@ -61,7 +61,16 @@ const vMgrStub = {
 
 window.KOSMOS = window.KOSMOS ?? {};
 window.KOSMOS.timeSystem = timeSys;
-window.KOSMOS.empireRegistry = { get: (id) => empires.get(id) ?? null, listAll: () => [...empires.values()] };
+window.KOSMOS.empireRegistry = {
+  get: (id) => empires.get(id) ?? null,
+  listAll: () => [...empires.values()],
+  // Lustro udokumentowanych NO-OPów prawdziwego EmpireRegistry (Slice 1 usunął
+  // abstrakcyjne skalary; EconAI/MilitaryAI wołają je i tak — audyt §3.2a).
+  // Bez nich H3 zalewa konsolę wyjątkami z try/catch w AlienCivSystem.
+  updateResource: () => {},
+  updateMilitaryPower: () => {},
+  changeTechLevel: () => {},
+};
 window.KOSMOS.intelSystem = { isAtLeast: (id) => contacted.has(id) };
 window.KOSMOS.galaxyData = { systems: galaxySystems };
 window.KOSMOS.vesselManager = vMgrStub;
@@ -375,6 +384,86 @@ console.log('--- D7: brak starych kluczy ---');
   const rec = gameState.get('diplomacy.relations')[keys[0]];
   assert(rec.trust === undefined && rec.hostility === undefined && rec.state === undefined && rec.lastIncidents === undefined,
     'D7c: rekordy nie niosą martwych pól');
+}
+
+// ── C5: harness — Snapshot + detektory ──────────────────────────────────────
+console.log('--- H1: Snapshot (klucz tension + opinion/status) ---');
+{
+  const { capture } = await import('../headless/Snapshot.js');
+  addEmpire('emp_snap');
+  seedOpinion('emp_snap', +25);
+  dipl.changeTension('emp_snap', +33, 'test');
+  const core = {
+    empireRegistry: window.KOSMOS.empireRegistry,
+    diplomacySystem: dipl,
+    alienCivSystem: { getState: () => 'IDLE' },
+  };
+  const snap2 = capture(core);
+  const row = (snap2.empires ?? []).find(e => e.id === 'emp_snap');
+  assert(!!row, 'H1a: snapshot zawiera wiersz imperium');
+  assert(row?.tension === 33, 'H1b: pole `tension` (dawne `hostility`) = 33');
+  assert(row?.hostility === undefined, 'H1c: stare pole `hostility` USUNIĘTE');
+  assert(row?.opinion === 25, 'H1d: nowe pole `opinion` = +25');
+  assert(row?.status === 'peace', 'H1e: nowe pole `status`');
+  assert('objective' in (row ?? {}), 'H1f: pole `objective` obecne (C3, konsumenci w D2)');
+}
+
+console.log('--- H2: DIPLOMACY_FROZEN bramkowany flagą ---');
+{
+  const { createStandardDetectors } = await import('../analytics/BottleneckDetector.js');
+  const core = {
+    empireRegistry: window.KOSMOS.empireRegistry,
+    diplomacySystem: dipl,
+    alienCivSystem: { getState: () => 'IDLE' },
+  };
+  const frozenOf = (dets) => dets.detectors.find(d => d.name === 'DIPLOMACY_FROZEN')
+    ?? dets.find?.(d => d.name === 'DIPLOMACY_FROZEN');
+  const mk = () => { const r = createStandardDetectors(); return Array.isArray(r) ? { detectors: r } : r; };
+
+  // Flaga OFF (domyślnie w D1) — detektor MUSI milczeć niezależnie od danych.
+  GAME_CONFIG.FEATURES.diplomacyDecay = false;
+  const dOff = frozenOf(mk());
+  assert(!!dOff, 'H2a: detektor DIPLOMACY_FROZEN istnieje');
+  let firedOff = false;
+  for (let y = 0; y <= 420; y += 20) if (dOff.check(core, y)) firedOff = true;
+  assert(firedOff === false, 'H2b: flaga OFF → detektor NIE flaguje (zerowa wariancja jest legalna w D1)');
+
+  // Flaga ON + zamrożona opinia → detektor łapie.
+  GAME_CONFIG.FEATURES.diplomacyDecay = true;
+  const dOn = frozenOf(mk());
+  let firedOn = null;
+  for (let y = 0; y <= 420; y += 20) { const f = dOn.check(core, y); if (f) firedOn = f; }
+  assert(firedOn === 'DIPLOMACY_FROZEN', 'H2c: flaga ON + brak ruchu opinii → DIPLOMACY_FROZEN');
+  GAME_CONFIG.FEATURES.diplomacyDecay = false;
+}
+
+console.log('--- H3: przebieg długodystansowy (stabilność ticku) ---');
+{
+  addEmpire('emp_long');
+  seedOpinion('emp_long', +40);
+  dipl.signTreaty('emp_long', { id: 'trade_agreement' });
+  dipl.changeTension('emp_long', +35, 'test');
+  const startYear = 1000;
+  timeSys.gameTime = startYear;
+  let threwLong = null;
+  try {
+    // 300 lat cyw. po jednym roku — decay napięcia, ramp, wygasanie rozejmów,
+    // ultimatum. Sprawdzamy, że pętla nie rzuca i nie rozjeżdża inwariantów.
+    for (let y = 1; y <= 300; y++) {
+      timeSys.gameTime = startYear + y;
+      EventBus.emit('time:tick', { civDeltaYears: 1 });
+    }
+  } catch (e) { threwLong = e; }
+  assert(threwLong === null, 'H3a: 300 lat cyw. ticku bez wyjątku' + (threwLong ? ` (${threwLong.message})` : ''));
+  assert(dipl.getTension('emp_long') === 0, 'H3b: napięcie zdecayowało do 0 podczas pokoju');
+  assert(dipl.relations.hasModifier('emp_long', 'player', 'trade_partner'), 'H3c: trwały modyfikator traktatu przeżył');
+  assert(dipl.getOpinionOfPlayer('emp_long') === 40 + 50,
+    'H3d: ramp umowy handlowej dobił do rampMax (+50) i tam został');
+  {
+    const keys = Object.keys(gameState.get('diplomacy.relations') ?? {});
+    assert(keys.every(k => k.includes('__')), 'H3e: po 300 latach ticku nadal wyłącznie klucze par');
+  }
+  assert(dipl.getMemory('emp_long', 999).length <= 20, 'H3f: pierścień pamięci nie przekroczył limitu');
 }
 
 // ── i18n parytet ────────────────────────────────────────────────────────────
