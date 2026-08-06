@@ -5,6 +5,12 @@
 **Spec:** `PLAN_D1_RELATIONS_MODEL.md` + `DIPLOMACY_BACKBONE.md` §1 · **Audit:** `docs/audit/COMBAT_DIPLO_AUDIT.md`
 **Status:** all five commits landed · **live gate: NOT YET RUN** → `docs/design/D1_LIVE_GATE_CHECKLIST.md`
 
+> **Uwaga o workflow zapisów (potwierdzone przez Filipa).** Zapisy żyją jako **pliki `.json`**;
+> localStorage trzyma tylko ustawienia i klucze pomocnicze. Checklista live-gate'u została przepisana
+> pod ten model: §0 czyta liczby „przed" WPROST Z PLIKU (jednolinijkowiec Node), plik jest kopią
+> zapasową, a §1 odwzorowuje realną sekwencję `WCZYTAJ Z PLIKU` → `importSave` → automatyczne
+> „kontynuuj" → `migrate()`. Kopia przedmigracyjna: patrz §8.
+
 ---
 
 ## 0. Headline
@@ -275,7 +281,63 @@ without them H3 flooded the console with exceptions swallowed by `AlienCivSystem
 
 ---
 
-## 8. Commands
+## 8. Propozycja: automatyczna kopia przedmigracyjna (DO DECYZJI — nie zaimplementowana)
+
+> Odpowiedź na propozycję Filipa. ⚠ Nie mam pełnej treści oryginalnego postulatu, więc odpowiadam na
+> to, co wynika z kontekstu: **automatyczny backup zapisu PRZED migracją, do PLIKU** (bo zapisy są
+> teraz plikami). Jeśli propozycja miała inny kształt — poniższe i tak wyznacza szwy.
+
+### Stan faktyczny (zweryfikowany w kodzie)
+
+| mechanizm | co realnie robi | wartość jako backup przedmigracyjny |
+|---|---|---|
+| plik `.json` gracza | nietknięty przez import (tylko czytany) | **pełna** — to jest dziś prawdziwy backup |
+| `kosmos_save_backup_v{N}` | `migrate()` zapisuje blob PRZED łańcuchem (`SaveMigration.js:221-226`), po uprzednim `pruneMigrationBackups()` | **dobra, ale krucha**: `try/catch` na quocie, brak ścieżki odczytu w grze (odzysk = DevTools), ginie przy następnym bumpie |
+| `kosmos_save_backup_preimport` | `importSave` zapisuje **poprzednią treść slotu**, po fakcie, best-effort (`SaveSystem.js`) | **żadna** — to zawartość slotu z wcześniejszej sesji, nie importowany plik; może być już zmigrowana |
+
+Czyli: przedmigracyjna kopia *istnieje* (`kosmos_save_backup_v99`), ale mieszka w localStorage, którego
+Filip świadomie nie używa już na zapisy, nikt jej nie czyta z UI, i cicho nie powstaje przy ciasnej quocie.
+
+### Propozycja
+
+**Zapisywać kopię przedmigracyjną jako PLIK, przy okazji jedynej chwili, gdy migracja faktycznie zachodzi.**
+
+- **Miejsce: `TitleScene._prepareContinue`** (`:385-400`), NIE wnętrze `migrate()`. `migrate()` jest
+  wołane też z `BootScene` i z testów headless; pobranie pliku jako efekt uboczny funkcji migracyjnej
+  byłoby zaskoczeniem i odpaliłoby się w harnessie. Szew jest dokładnie jeden: `_prepareContinue` widzi
+  `saveData.version` **przed** wywołaniem `migrate`.
+- **Reuse, zero nowego modułu**: `downloadSave` + `buildSaveFileName` z `src/utils/SaveFile.js` już
+  liczą nazwę Z TREŚCI zapisu (`kosmos_<civName>_r<rok>_v<wersja>.json`) — wystarczy sufiks, np.
+  `…_v99_przed-migracja.json`.
+- **Warunek**: tylko gdy `saveData.version < CURRENT_VERSION` (realny bump), nigdy przy zwykłym wczytaniu.
+- **Jednokrotność**: znacznik w localStorage (`kosmos_migbackup_v99`) albo — czyściej — decyzja
+  „raz na sesję", żeby ten sam zapis nie generował pliku przy każdym wczytaniu.
+- **UX — do wyboru**:
+  - (a) **ciche pobranie** — zero klików, ale przeglądarka pokaże pasek pobierania „skąd to się wzięło";
+  - (b) **`confirm()`**: *„Zapis jest w wersji v99 i zostanie zmigrowany do v100. Zapisać kopię przed
+    migracją?"* — jedno kliknięcie, jawne, i **pasuje do plikowego modelu myślenia** gracza.
+    **Rekomendacja: (b).**
+- **Gest użytkownika**: `downloadSave` w części przeglądarek wymaga user gesture — „Kontynuuj" /
+  „Wczytaj z pliku" JEST kliknięciem, więc ścieżka jest bezpieczna.
+- **Koszt**: ~15 linii, bez nowego modułu, bez migracji, bez zmiany formatu.
+
+### Osobna, powiązana decyzja (celowo NIE wciągana w tę propozycję)
+
+Skoro plik staje się kopią przedmigracyjną, **`kosmos_save_backup_v{N}` w localStorage traci rację bytu**:
+zero czytelników, waga równa całemu zapisowi, a sekcja o quocie w `CLAUDE.md` wprost wskazuje te klucze
+jako to, co zjada headroom (gracz miał kiedyś 9 backupów = 4,4 MB). Kandydat do wycofania —
+ale to zmiana w ścieżce ratunkowej, więc powinna iść **po**, nie razem z wprowadzeniem backupu plikowego.
+
+### Czego ta propozycja NIE rozwiązuje
+
+Migracja jest **jednokierunkowa**: nie ma ścieżki v100 → v99. Kopia chroni przed „migracja zepsuła mi
+zapis", ale nie przed „chcę wrócić do starej wersji gry z nowym zapisem" — tam jedyną drogą jest
+`git revert` + stary plik. Bramka zakresu w `importSave` (`future_version`) celowo odrzuci v100 na
+starym buildzie, i to jest właściwe zachowanie.
+
+---
+
+## 9. Commands
 
 ```
 node src/testing/smoke/run-all.mjs          # 103/103 OK, 0 FAIL
