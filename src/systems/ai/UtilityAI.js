@@ -10,7 +10,7 @@
 //   if (decision?.score > 0) decision.action.execute(ctx);
 //
 // Wszystkie akcje dostają ten sam ctx:
-//   { empireId, empire, personality, relation, war, diplSys, empireReg, galaxyData, homePlanet, year }
+//   { empireId, empire, personality, tension, war, diplSys, empireReg, galaxyData, homePlanet, year }
 
 import EventBus from '../../core/EventBus.js';
 
@@ -51,7 +51,8 @@ export class UtilityAI {
       empireId,
       empire,
       personality: empire.personality ?? {},
-      relation:    diplSys?.getRelation(empireId),
+      // D1: kształt rekordu relacji jest prywatny — AI dostaje samo napięcie.
+      tension:     diplSys?.getTension(empireId) ?? 0,
       war:         warSys?.getWarWith(empireId),
       diplSys,
       empireReg,

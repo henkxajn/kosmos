@@ -83,7 +83,8 @@ Po załadowaniu wykonuj z konsoli przeglądarki (F12):
 KOSMOS.debug.sandboxInfo();
 // Expected: 1 player empire + 'emp_sandbox_enemy', 7 vesseli, flagi M1 ON.
 
-KOSMOS.diplomacySystem.getRelation('emp_sandbox_enemy')?.state;  // 'war'
+// (API po D1 — historyczne odpowiedniki: getHostility/getRelation, patrz COMBAT_DIPLO_AUDIT.md)
+KOSMOS.diplomacySystem.getStatus('emp_sandbox_enemy');           // 'war'
 GAME_CONFIG.FEATURES.movementOrders;                             // true
 GAME_CONFIG.FEATURES.fleetMaterialization;                       // true
 ```

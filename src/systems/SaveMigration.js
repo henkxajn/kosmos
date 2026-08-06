@@ -15,13 +15,13 @@
 import { ORBITAL_ROLES, getOrbitRange, computeBodyRadius } from '../data/OrbitalRolesData.js';
 import EntityManager from '../core/EntityManager.js';
 import { createStarterModules } from '../data/StationModuleData.js';
-import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
+import { ARCHETYPES, EMPIRE_COLOR_PALETTE, OBJECTIVE_BY_ARCHETYPE } from '../data/EmpireData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';   // v97→v98: droid-per-job (jobs×level = cap droidów)
 
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 99;
+export const CURRENT_VERSION     = 100;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -157,6 +157,7 @@ const MIGRATIONS = {
   96: _migrateV96toV97,
   97: _migrateV97toV98,
   98: _migrateV98toV99,
+  99: _migrateV99toV100,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2529,5 +2530,106 @@ function _migrateV59toV60(data) {
     }
   }
 
+  return data;
+}
+
+// ── v99 → v100 — Diplomacy D1: pary + modyfikatory opinii + reputacja ────────
+// Klucz 'player_<empId>' → '<a>__<b>' (id sortowane leksykalnie, gracz = 'player').
+// trust (0-100, 50 = neutral, BEZ decay) → JEDEN modyfikator 'legacy_relations'
+//   o wartości trust−50, po stronie IMPERIUM (to ONI mają opinię o graczu).
+//   Skala 1:1 — mostek D2 czyta clamp(0,100, 50+opinia), więc progi traktatów
+//   (60/75/80) wypadają dokładnie tam, gdzie wypadały przed D1.
+// hostility → tension 1:1 (ta sama drabina 40/60/80). state → status.
+//   'truce' dostaje truceUntilYear = rok + 10 (audyt R7 — rozejm przestaje być
+//   stanem terminalnym blokującym decay napięcia na zawsze).
+// lastIncidents[] → memory[] ({year,type,data} → {id,type,year,payload}, cap 20).
+// MARTWE, kasowane (zapisywane, NIGDY nie czytane): trust, lastChangeYear, warStartYear.
+// ZACHOWANE: ultimatumStartYear (czytane w _tickUltimatumExpiry / overlay / NavPeek),
+//   treaties[] kopiowane VERBATIM (rampValue/expiresYear dojdą z konsumentami w D4/D5).
+// trade_partner startuje od 0: dotychczasowa akumulacja +1/rok siedzi już w trust,
+//   czyli w legacy_relations — inaczej policzylibyśmy ją dwa razy.
+// Idempotentna: klucze zawierające '__' są już w nowym formacie (skip), przy kolizji
+//   wygrywa rekord nowy. Powtórne przejście nie tworzy duplikatów id pamięci.
+function _migrateV99toV100(data) {
+  const gs = data.civ4x?.gameState ?? data.gameState;
+  if (!gs) return data;
+  const year = Number(data.gameTime) || 0;
+  const TRUCE_YEARS = 10;
+
+  gs.diplomacy ??= {};
+  gs.diplomacy.relations  ??= {};
+  gs.diplomacy.reputation ??= {};
+  const rels = gs.diplomacy.relations;
+
+  let railSaturated = 0, memSeq = 0;
+  for (const oldKey of Object.keys(rels)) {
+    if (oldKey.includes('__')) continue;                       // już nowy format
+    const legacy = rels[oldKey];
+    delete rels[oldKey];
+    if (!legacy || typeof legacy !== 'object') continue;
+    const empId = legacy.empireId
+      ?? (oldKey.startsWith('player_') ? oldKey.slice(7) : null);
+    if (!empId) continue;                                      // nierozpoznany klucz → drop
+
+    const [a, b]  = ['player', empId].sort();
+    const newKey  = `${a}__${b}`;
+    if (rels[newKey]) continue;                                // kolizja → nowy wygrywa
+    const empSide = (a === empId) ? 'a' : 'b';
+
+    const trust  = Number.isFinite(legacy.trust) ? legacy.trust : 50;
+    const status = legacy.state === 'war' ? 'war'
+                 : legacy.state === 'truce' ? 'truce' : 'peace';
+    // Stary trust clampował się na KAŻDYM kroku (0/100), nowy model sumuje i clampuje
+    // dopiero na końcu — relacje, które dotknęły krańca, rozjadą się z dawną trajektorią.
+    if (trust <= 0 || trust >= 100) railSaturated++;
+
+    const mods = [];
+    const legacyValue = Math.round(trust - 50);
+    if (legacyValue !== 0) {
+      mods.push({ id: 'legacy_relations', owner: empSide, value: legacyValue,
+                  decayPerYear: 2, persistent: false, year, source: 'migration_v100' });
+    }
+    if (status === 'war') {
+      mods.push({ id: 'at_war', owner: empSide, value: -40,
+                  decayPerYear: 0, persistent: true, year, source: 'migration_v100' });
+    }
+    const treaties = Array.isArray(legacy.treaties) ? legacy.treaties : [];
+    if (status !== 'war' && treaties.some(t => t?.id === 'trade_agreement')) {
+      mods.push({ id: 'trade_partner', owner: empSide, value: 0,
+                  decayPerYear: 0, persistent: true, year, source: 'migration_v100' });
+    }
+
+    rels[newKey] = {
+      a, b,
+      opinionModifiers: mods,
+      tension: Math.max(0, Math.min(100, Number(legacy.hostility) || 0)),
+      status,
+      truceUntilYear: status === 'truce' ? year + TRUCE_YEARS : null,
+      bordersOpen: { a: true, b: true },                       // konsument w D3
+      treaties,
+      memory: (Array.isArray(legacy.lastIncidents) ? legacy.lastIncidents : [])
+        .slice(-20)
+        .map(i => ({ id: `mig_${memSeq++}`, type: i.type,
+                     year: i.year ?? year, payload: i.data ?? {} })),
+      ultimatumStartYear: legacy.ultimatumStartYear ?? null,
+    };
+    gs.diplomacy.reputation[empId] ??= { aggression: 0, decayPerYear: 1 };
+  }
+  gs.diplomacy.reputation.player ??= { aggression: 0, decayPerYear: 1 };
+
+  // Model imperium (D1: DANE, zero konsumentów). objective wyprowadzony z archetypu —
+  // migracja nie ma seeda do rzutu i musi być powtarzalna. Nowe imperia LOSUJĄ
+  // objective niezależnie (EmpireGenerator, własny strumień PRNG). traits pusta;
+  // rzut 'erratic' przychodzi w D2 razem ze swoim konsumentem.
+  for (const emp of Object.values(gs.empires ?? {})) {
+    if (!emp || typeof emp !== 'object') continue;
+    emp.objective ??= OBJECTIVE_BY_ARCHETYPE[emp.archetype] ?? 'expansionist';
+    if (!Array.isArray(emp.traits)) emp.traits = [];
+  }
+
+  if (railSaturated > 0) {
+    console.info(`[SaveMigration v100] ${railSaturated} relacji miało trust na krańcu (0/100) — `
+      + 'model modyfikatorów zachowuje nadwyżkę, stary ją odrzucał (rozjazd oczekiwany).');
+  }
   return data;
 }

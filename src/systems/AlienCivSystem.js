@@ -33,9 +33,10 @@ const H_COOLDOWN   = 25;   // poniżej → RETREAT może wrócić do IDLE
 const MIL_RATIO_WAR = 0.7;  // musi mieć co najmniej 70% siły gracza
 
 // ── S3.4 — AI envoy (abstrakcyjny gest dyplomatyczny obcych) ──
-const AI_ENVOY_TRUST_GAIN = 3;     // +3 trust gdy AI wysyła emisariusza
+// D1: wartość gestu (+3) mieszka w katalogu (OPINION_MODIFIERS.their_envoy) —
+// dawna stała AI_ENVOY_TRUST_GAIN skasowana, żeby nie było dwóch źródeł liczby.
 const AI_ENVOY_COOLDOWN   = 15;    // civYears między emisariuszami (BUG2b — było 12)
-const AI_ENVOY_TRUST_MAX  = 60;    // wysyła tylko gdy trust < 60 (chce poprawić relacje)
+const AI_ENVOY_TRUST_MAX  = 60;    // wysyła tylko gdy relacje słabe (mostek D2 < 60)
 const AI_ENVOY_SKIP_ARCHETYPES = new Set(['xenophage', 'hegemon']);
 
 export class AlienCivSystem {
@@ -94,8 +95,8 @@ export class AlienCivSystem {
     for (const emp of reg.listAll()) {
       const personality = emp.personality ?? {};
       const aggression = personality.aggression ?? 0.5;
-      const hostility  = dipl.getHostility(emp.id);
-      const relState   = dipl.getState(emp.id);
+      const hostility  = dipl.getTension(emp.id);    // D1: napięcie = dawne hostility 1:1
+      const relState   = dipl.getStatus(emp.id);     // ⚠ dipl.getStatus, NIE this.getState (FSM)
       const milRatio   = playerMilEstimate > 0 ? (emp.military?.power ?? 0) / playerMilEstimate : 1.0;
 
       const cur = this.getState(emp.id);
@@ -128,10 +129,11 @@ export class AlienCivSystem {
     if (!GAME_CONFIG.FEATURES?.lightDiplomacy) return;
     if (!emp || !dipl) return;
     if (AI_ENVOY_SKIP_ARCHETYPES.has(emp.archetype)) return;
-    if (dipl.getTrust(emp.id) >= AI_ENVOY_TRUST_MAX) return;
+    // D1: mostek D2 — opinia w skali dawnego trustu, więc próg 60 działa jak dotąd.
+    if (dipl.getTrustEquivalent(emp.id) >= AI_ENVOY_TRUST_MAX) return;
     // BUG A — imperium w stanie wojny z graczem NIE wysyła emisariuszy (inaczej
-    // +3/envoy maskuje spadek trust -20 z wojny, zwłaszcza przy dużej prędkości czasu).
-    if (dipl.getState(emp.id) === 'war') return;
+    // +3/envoy maskuje karę za wojnę, zwłaszcza przy dużej prędkości czasu).
+    if (dipl.getStatus(emp.id) === 'war') return;
     // tylko gdy gracz zna imperium (intel >= rumor)
     const intelSys = window.KOSMOS?.intelSystem;
     if (intelSys && !intelSys.isAtLeast(emp.id, 'rumor')) return;
@@ -139,7 +141,7 @@ export class AlienCivSystem {
     const last = this._aiEnvoyCooldown.get(emp.id);
     if (last != null && (year - last) < AI_ENVOY_COOLDOWN) return;
     this._aiEnvoyCooldown.set(emp.id, year);
-    dipl.changeTrust(emp.id, AI_ENVOY_TRUST_GAIN, 'ai_envoy');
+    dipl.addOpinionModifier(emp.id, 'player', 'their_envoy', { source: 'ai_envoy' });
     EventBus.emit('diplomacy:aiEnvoy', { empireId: emp.id });
   }
 

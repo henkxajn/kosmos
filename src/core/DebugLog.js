@@ -23,6 +23,7 @@ const TRACKED_EVENTS = [
   'intel:contactEstablished',
   'intel:reportGenerated',
   'diplomacy:relationChanged',
+  'diplomacy:opinionChanged',
   'diplomacy:treatyOffered',
   'diplomacy:ultimatum',
   'diplomacy:warDeclared',

@@ -48,8 +48,9 @@ const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
 const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, water: 100, research: 50 };
 
 // ── S3.4 — misja dyplomatyczna (envoy) ──
-const ENVOY_TRUST_ARRIVAL = 5;  // +5 trust w połowie misji (arrival @1.5y)
-const ENVOY_TRUST_RETURN  = 5;  // +5 trust po powrocie (return @3.0y) → +10/misję
+// D1: wartość (+5) i tempo zanikania mieszkają teraz w katalogu modyfikatorów
+// (OPINION_MODIFIERS.envoy_goodwill) — tam się je stroi. Misja dokłada modyfikator
+// dwa razy (dotarcie + powrót), a tryb `accumulate` sumuje je do +10, jak dotąd.
 
 // ── Mapowanie starych typów → nowe ──────────────────────────────────────────
 // recon(target/nearest) → survey
@@ -1527,18 +1528,18 @@ export class MissionSystem {
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
   }
 
-  /** S3.4 — emisariusz dotarł (połowa misji): +5 trust, status → returning. */
+  /** S3.4 — emisariusz dotarł (połowa misji): +5 opinii, status → returning. */
   _processEnvoyArrival(exp) {
     const dipl = window.KOSMOS?.diplomacySystem;
-    dipl?.changeTrust(exp.targetEmpireId, ENVOY_TRUST_ARRIVAL, 'envoy_arrival');
+    dipl?.addOpinionModifier(exp.targetEmpireId, 'player', 'envoy_goodwill', { source: 'envoy_arrival' });
     exp.status = 'returning';
     EventBus.emit('diplomacy:envoyArrived', { empireId: exp.targetEmpireId });
   }
 
-  /** S3.4 — emisariusz wrócił: +5 trust, zwolnij abstrakcyjną blokadę statku. */
+  /** S3.4 — emisariusz wrócił: +5 opinii, zwolnij abstrakcyjną blokadę statku. */
   _completeEnvoy(exp) {
     const dipl = window.KOSMOS?.diplomacySystem;
-    dipl?.changeTrust(exp.targetEmpireId, ENVOY_TRUST_RETURN, 'envoy_return');
+    dipl?.addOpinionModifier(exp.targetEmpireId, 'player', 'envoy_goodwill', { source: 'envoy_return' });
     window.KOSMOS?.vesselManager?.releaseFromAbstractMission?.(exp.vesselId);
     EventBus.emit('diplomacy:envoyReturned', { empireId: exp.targetEmpireId });
   }

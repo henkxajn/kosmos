@@ -31,11 +31,11 @@ const ACTIONS = [
   {
     id: 'attack_player',
     score(ctx) {
-      const { empire, personality, relation, war, galaxyData, homePlanet } = ctx;
+      const { empire, personality, tension, war, galaxyData, homePlanet } = ctx;
       if (!homePlanet) return 0;
       if (!galaxyData?.systems) return 0;
 
-      const hostility = relation?.hostility ?? 0;
+      const hostility = tension ?? 0;   // D1: napięcie = dawne hostility 1:1
       const aggression = personality.aggression ?? 0.5;
       const isAtWar = !!war?.active;
       const playerMil = estimatePlayerMilitary();

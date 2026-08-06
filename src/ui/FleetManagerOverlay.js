@@ -6044,7 +6044,7 @@ export class FleetManagerOverlay {
         this._drawStarGlyph(ctx, sx, sy, r, s, dim);
       }
       if (empKnown) {
-        const host = dipl?.getHostility?.(s.empireId) ?? 0;
+        const host = dipl?.getTension(s.empireId) ?? 0;
         ctx.strokeStyle = host <= 30 ? (THEME.success ?? '#44cc66') : host <= 70 ? (THEME.warning ?? '#ffcc44') : (THEME.danger ?? '#ff4466');
         ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx, sy, r + 3, 0, Math.PI * 2); ctx.stroke();
       }
@@ -6237,7 +6237,7 @@ export class FleetManagerOverlay {
       const emp = empReg?.get(empId);
       ctx.fillStyle = ARCHETYPES[emp?.archetype]?.color ?? THEME.textPrimary;
       ctx.fillText(t('fleet.stratcomEmpire', emp?.name ?? '?'), px + PAD, iy + 10); iy += 14;
-      const host = dipl?.getHostility?.(empId) ?? 0;
+      const host = dipl?.getTension(empId) ?? 0;
       ctx.fillStyle = host <= 30 ? THEME.success : host <= 70 ? THEME.warning : THEME.danger;
       ctx.fillText(t('fleet.stratcomHostility', Math.round(host)), px + PAD, iy + 10); iy += 14;
     } else {

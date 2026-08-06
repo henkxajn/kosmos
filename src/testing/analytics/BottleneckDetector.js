@@ -78,7 +78,7 @@ export function createStandardDetectors() {
         if (empires.length === 0) return null;
         let maxHostility = 0;
         for (const emp of empires) {
-          const h = dipl?.getHostility?.(emp.id) ?? 0;
+          const h = dipl?.getTension(emp.id) ?? 0;
           if (h > maxHostility) maxHostility = h;
         }
         metrics.record(civYear, 'maxHostility', maxHostility);

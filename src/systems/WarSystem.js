@@ -28,6 +28,7 @@ import gameState from '../core/GameState.js';
 import { resolveBattle, empireFleetToBattleUnit, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
+import { CB_MEMORY_WINDOW } from '../data/OpinionModifierData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
@@ -250,9 +251,11 @@ export class WarSystem {
     const defender  = isPlayerAction ? empireId  : 'player';
 
     // Inferuj casus belli z relacji
-    const rel = window.KOSMOS?.diplomacySystem?.getRelation(empireId);
+    // D1: casus belli liczy się z OKNA ostatnich 10 wpisów pamięci relacji
+    // (pierścień ma 20 — pełny zmieniłby dobór CB, patrz inferCasusBelli).
+    const memory = window.KOSMOS?.diplomacySystem?.getMemory(empireId, CB_MEMORY_WINDOW) ?? [];
     const emp = window.KOSMOS?.empireRegistry?.get(empireId);
-    const cbId = inferCasusBelli(rel, emp?.archetype);
+    const cbId = inferCasusBelli(memory, emp?.archetype);
 
     this.createWar(aggressor, defender, cbId);
   }

@@ -64,9 +64,19 @@ export const CASUS_BELLI = {
 
 export const CASUS_BELLI_IDS = Object.keys(CASUS_BELLI);
 
-/** Dobierz casus belli odpowiadający aktywnym incydentom relacji. */
-export function inferCasusBelli(relation, empireArchetype) {
-  const incidents = relation?.lastIncidents ?? [];
+/**
+ * Dobierz casus belli odpowiadający incydentom w pamięci relacji.
+ *
+ * ⚠ D1: przyjmuje TABLICĘ wpisów pamięci, nie cały rekord relacji (kształt rekordu
+ * jest prywatny dla DiplomacySystem + RelationsModel). Wołający MUSI podać OKNO
+ * ostatnich CB_MEMORY_WINDOW (=10) wpisów — `dipl.getMemory(empireId, 10)`.
+ * Pierścień pamięci urósł w D1 z 10 do 20; liczenie po pełnych 20 zmieniłoby
+ * dobierane CB (a wraz z nim exhaustionRate / peaceCost / moralePenalty).
+ *
+ * @param {Array<{type:string}>} memoryEntries — okno ostatnich wpisów pamięci
+ */
+export function inferCasusBelli(memoryEntries, empireArchetype) {
+  const incidents = memoryEntries ?? [];
   // Priorytet: eksterminacja dla xenofag/swarm
   if (empireArchetype === 'xenophage' || empireArchetype === 'swarm') return 'extermination';
   // Dużo territorial_violation → roszczenie

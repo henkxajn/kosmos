@@ -73,7 +73,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     const dipl = window.KOSMOS?.diplomacySystem;
     const intelSys = window.KOSMOS?.intelSystem;
     if (!this._selectedId && dipl && intelSys) {
-      const visible = dipl.listAll().find(r => intelSys.isAtLeast(r.empireId, 'rumor'));
+      const visible = dipl.listPlayerRelations().find(r => intelSys.isAtLeast(r.empireId, 'rumor'));
       if (visible) this._selectedId = visible.empireId;
     }
   }
@@ -122,9 +122,9 @@ export class DiplomacyOverlay extends BaseOverlay {
     if (!dipl || !reg) return;
 
     // Tylko imperia o intel >= rumor
-    const entries = dipl.listAll()
+    const entries = dipl.listPlayerRelations()
       .filter(r => !intelSys || intelSys.isAtLeast(r.empireId, 'rumor'))
-      .sort((a, b) => (b.hostility ?? 0) - (a.hostility ?? 0));
+      .sort((a, b) => (b.tension ?? 0) - (a.tension ?? 0));
 
     const listY = y + TAB_H;
     const listH = h - TAB_H;
@@ -184,10 +184,10 @@ export class DiplomacyOverlay extends BaseOverlay {
       ctx.fillText(name, x + pad + 14, ry + 16);
 
       // Stan (peace/war/etc)
-      const skey = STATE_KEY[rel.state ?? 'peace'];
+      const skey = STATE_KEY[rel.status ?? 'peace'];
       const stateLabel = skey ? t(skey) : '?';
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = STATE_COLOR[rel.state ?? 'peace'];
+      ctx.fillStyle = STATE_COLOR[rel.status ?? 'peace'];
       ctx.textAlign = 'right';
       ctx.fillText(stateLabel, x + w - pad, ry + 16);
       ctx.textAlign = 'left';
@@ -198,8 +198,8 @@ export class DiplomacyOverlay extends BaseOverlay {
       const barH = 5;
       ctx.fillStyle = 'rgba(60,60,60,0.5)';
       ctx.fillRect(x + pad, barY, barW, barH);
-      const hostPct = Math.max(0, Math.min(1, (rel.hostility ?? 0) / 100));
-      const hColor = rel.hostility >= 60 ? '#D85A30' : rel.hostility >= 40 ? '#D8A030' : '#60B090';
+      const hostPct = Math.max(0, Math.min(1, (rel.tension ?? 0) / 100));
+      const hColor = rel.tension >= 60 ? '#D85A30' : rel.tension >= 40 ? '#D8A030' : '#60B090';
       ctx.fillStyle = hColor;
       ctx.fillRect(x + pad, barY, Math.round(barW * hostPct), barH);
 
@@ -207,7 +207,7 @@ export class DiplomacyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'right';
-      ctx.fillText(`${Math.round(rel.hostility ?? 0)}`, x + w - pad, barY + 5);
+      ctx.fillText(`${Math.round(rel.tension ?? 0)}`, x + w - pad, barY + 5);
       ctx.textAlign = 'left';
 
       // Etykieta "Hostility" + FSM (stan AI)
@@ -248,7 +248,7 @@ export class DiplomacyOverlay extends BaseOverlay {
       return;
     }
 
-    const rel = dipl.getRelation(this._selectedId);
+    const rel = dipl.listPlayerRelations().find(r => r.empireId === this._selectedId);
     const emp = reg?.get(this._selectedId);
     if (!rel || !emp) return;
 
@@ -263,9 +263,9 @@ export class DiplomacyOverlay extends BaseOverlay {
 
     // Badge stanu
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = STATE_COLOR[rel.state ?? 'peace'];
+    ctx.fillStyle = STATE_COLOR[rel.status ?? 'peace'];
     ctx.textAlign = 'right';
-    ctx.fillText(`[${t(STATE_KEY[rel.state ?? 'peace'])}]`, x + w - pad, y + 22);
+    ctx.fillText(`[${t(STATE_KEY[rel.status ?? 'peace'])}]`, x + w - pad, y + 22);
     ctx.textAlign = 'left';
 
     let iy = y + TAB_H + 20;
@@ -280,8 +280,8 @@ export class DiplomacyOverlay extends BaseOverlay {
     const barH = 18;
     ctx.fillStyle = 'rgba(60,60,60,0.4)';
     ctx.fillRect(x + pad, iy, barW, barH);
-    const hostPct = Math.max(0, Math.min(1, (rel.hostility ?? 0) / 100));
-    const hColor = rel.hostility >= 60 ? '#D85A30' : rel.hostility >= 40 ? '#D8A030' : '#60B090';
+    const hostPct = Math.max(0, Math.min(1, (rel.tension ?? 0) / 100));
+    const hColor = rel.tension >= 60 ? '#D85A30' : rel.tension >= 40 ? '#D8A030' : '#60B090';
     ctx.fillStyle = hColor;
     ctx.fillRect(x + pad, iy, Math.round(barW * hostPct), barH);
     // Progi (kreski)
@@ -294,7 +294,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
     ctx.textAlign = 'center';
-    ctx.fillText(`${Math.round(rel.hostility ?? 0)} / 100`, x + pad + barW / 2, iy + 13);
+    ctx.fillText(`${Math.round(rel.tension ?? 0)} / 100`, x + pad + barW / 2, iy + 13);
     ctx.textAlign = 'left';
     iy += barH + 6;
 
@@ -305,8 +305,11 @@ export class DiplomacyOverlay extends BaseOverlay {
     iy += 20;
 
     // ── S3.4 — Pasek zaufania (Trust, display −10..+10) ──
-    const trust  = dipl.getTrust(this._selectedId);
-    const status = dipl.getTrustStatus(this._selectedId);
+    // D1/C2: pasek nadal rysuje SKALĘ dawnego trustu przez mostek D2, żeby panel
+    // wyglądał identycznie jak przed D1. Liczba opinii + rozbicie modyfikatorów
+    // zastąpią ten blok w C4.
+    const trust  = dipl.getTrustEquivalent(this._selectedId);
+    const status = dipl.getOpinionBand(this._selectedId);
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
     ctx.fillText(t('diplo.trustLabel'), x + pad, iy);
@@ -408,7 +411,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.textHeader;
     ctx.fillText(t('diplo.recentIncidents'), x + pad, iy);
     iy += 16;
-    const inc = rel.lastIncidents ?? [];
+    const inc = rel.memory ?? [];
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     if (inc.length === 0) {
       ctx.fillStyle = THEME.textDim;
@@ -430,9 +433,9 @@ export class DiplomacyOverlay extends BaseOverlay {
     const colR = x + pad + btnW2 + pad;
     const vMgr = window.KOSMOS?.vesselManager;
     const hasEnvoyVessel = !!vMgr?.getAllVessels?.().find(v => v.status === 'idle' && canDoEnvoy(v));
-    const notWar   = rel.state !== 'war';
+    const notWar   = rel.status !== 'war';
     const canWar   = notWar && isContact;
-    const canPeace = rel.state === 'war' && isContact;
+    const canPeace = rel.status === 'war' && isContact;
     const canEnvoy = isContact && hasEnvoyVessel;
     const canTrade = isContact && notWar && trust >= 65 && !dipl.hasTreaty(this._selectedId, 'trade_agreement');
     const canPact  = isContact && notWar && trust >= 80 && !dipl.hasTreaty(this._selectedId, 'non_aggression');

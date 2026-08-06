@@ -149,7 +149,7 @@ export function capture(core) {
   const empiresList = [];
   if (core.empireRegistry?.listAll) {
     for (const emp of core.empireRegistry.listAll()) {
-      const hostility = core.diplomacySystem?.getHostility?.(emp.id) ?? 0;
+      const hostility = core.diplomacySystem?.getTension(emp.id) ?? 0;
       empiresList.push({
         id: emp.id,
         name: emp.name ?? emp.id,

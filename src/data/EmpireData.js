@@ -72,6 +72,30 @@ export const ARCHETYPES = {
 // Lista ID w stabilnej kolejności (do losowania deterministycznego)
 export const ARCHETYPE_IDS = Object.keys(ARCHETYPES);
 
+// ── D1 (WOJNA I POKÓJ) — druga oś imperium: „objective" ─────────────────────
+// Archetyp = KULTURA (kim są), objective = AGENDA (czego chcą teraz). Osie są
+// NIEZALEŻNE: ten sam xenofag gra inaczej w każdej partii (import z MOO).
+// D1 wprowadza samo pole; konsumenci (wagi Acceptance Engine) przychodzą w D2.
+export const EMPIRE_OBJECTIVES = [
+  'militarist', 'technologist', 'expansionist', 'diplomat', 'merchant', 'ecologist',
+];
+
+// ⚠ TO NIE JEST REGUŁA GRY — to WYŁĄCZNIE fallback migracji save'ów.
+// Nowe imperia LOSUJĄ objective niezależnie od archetypu (EmpireGenerator, własny
+// strumień PRNG per imperium). Stary zapis nie ma z czego rzucić — nie zna seeda
+// użytego przy generacji — więc migracja v99→v100 wyprowadza sensowną wartość
+// startową z archetypu. Nie awansować tej tabeli z powrotem na regułę: derywacja
+// objective z archetypu kasuje sens dwuosiowego projektu.
+export const OBJECTIVE_BY_ARCHETYPE = {
+  industrialist: 'merchant',
+  expansionist:  'expansionist',
+  xenophage:     'militarist',
+  isolationist:  'ecologist',
+  trader:        'merchant',
+  hegemon:       'militarist',
+  swarm:         'expansionist',
+};
+
 // Paleta kolorów tożsamości imperiów (warstwa polityczna / strefy wpływów).
 // ~8 rozróżnialnych barw; pierwsza (#33ccff cyjan) = domyślny kolor gracza.
 // EmpireGenerator przydziela AI bez duplikatów i z wykluczeniem koloru gracza

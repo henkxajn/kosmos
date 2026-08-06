@@ -317,11 +317,12 @@ Wymuś deklarację wojny:
 window.KOSMOS.empireRegistry.listAll()
 // Zwróci tablicę obiektów empire — skopiuj pole `id` jednego z nich, np. 'empire_1'
 
-// 2. Wymuś hostility ≥ 80 (próg WAR_THRESHOLD) — auto-war powinno się uruchomić
-window.KOSMOS.diplomacySystem.changeHostility('empire_1', 100, 'manual_test')
+// 2. Wymuś napięcie ≥ 80 (próg WAR_THRESHOLD) — auto-war powinno się uruchomić
+//    (API po D1 — historyczne odpowiedniki: getHostility/getRelation, patrz COMBAT_DIPLO_AUDIT.md)
+window.KOSMOS.diplomacySystem.changeTension('empire_1', 100, 'manual_test')
 
 // Sprawdź czy relacja zmieniła się na 'war'
-window.KOSMOS.diplomacySystem.getRelation('empire_1')
+window.KOSMOS.debug.dumpRelation('empire_1')
 ```
 
 **Oczekiwane:**

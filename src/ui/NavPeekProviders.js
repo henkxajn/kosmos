@@ -212,10 +212,10 @@ function _consumerCoverage(ps) {
 function _diplomacy() {
   const dip = K().diplomacySystem, intel = K().intelSystem, war = K().warSystem;
   const wars = war?.listActive?.() ?? [];
-  const visible = dip?.listVisible?.() ?? [];
+  const visible = dip?.listVisiblePlayerRelations?.() ?? [];
   const known = intel?.listKnown?.() ?? [];
   const contactCount = intel?.isAtLeast ? known.filter(e => intel.isAtLeast(e.empireId, 'contact')).length : 0;
-  const maxHost = visible.length ? Math.round(Math.max(0, ...visible.map(r => r.hostility ?? 0))) : 0;
+  const maxHost = visible.length ? Math.round(Math.max(0, ...visible.map(r => r.tension ?? 0))) : 0;
   const treaties = visible.reduce((n, r) => n + (r.treaties?.length ?? 0), 0);
   const alliances = visible.filter(r => (r.treaties ?? []).some(tr => tr.id === 'alliance')).length;
   const ultimatum = visible.some(r => r.ultimatumStartYear != null);

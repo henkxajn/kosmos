@@ -93,7 +93,8 @@ export const GAME_CONFIG = {
     // Oś trust + misje emisariuszy + efekty traktatów + bramkowe triggery
     // vessel:arrived (military_presence/research_intrusion/trespassing). OFF do
     // czasu live-gate (Stage 9 flip ON). Bramkuje: subskrypcję vessel:arrived,
-    // tick traktatów (_tickTreaties), AI envoy (AlienCivSystem) i akcje w DiplomacyOverlay.
+    // AI envoy (AlienCivSystem) i akcje w DiplomacyOverlay. (D1: tick traktatów
+    // zastąpiony narastającym modyfikatorem trade_partner — nie jest tą flagą bramkowany.)
     lightDiplomacy:       true,
     // ── D1 (WOJNA I POKÓJ 1.0) — zanikanie modyfikatorów opinii + reputacji ─
     // Stary `trust` NIE zanikał w ogóle, więc włączenie decayu w D1 zmieniłoby

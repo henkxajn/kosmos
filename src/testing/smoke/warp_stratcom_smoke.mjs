@@ -69,7 +69,7 @@ const baseKOSMOS = {
   colonyManager: { getAllColonies: () => [], activePlanetId: 'p1', getColony: () => null },
   empireRegistry: { listAll: () => [], get: () => null },
   intelSystem: { isAtLeast: () => false },
-  diplomacySystem: { getHostility: () => 0 },
+  diplomacySystem: { getTension: () => 0 },
   timeSystem: { gameTime: 0 },
   eventLogSystem: { push() {} },
   uiManager: { _dirty: false },

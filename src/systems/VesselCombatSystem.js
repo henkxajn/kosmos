@@ -242,10 +242,11 @@ export class VesselCombatSystem {
     let bestHostility = -1;
     let bestGroup = null;
     const dipl = window.KOSMOS?.diplomacySystem;
+    // ⚠ D1: wywołanie BEZ `?.` na metodzie — patrz komentarz w DeepSpaceCombatSystem.
     for (const [ownerId, group] of groups) {
       if (ownerId === 'player') continue;
       if (!group || group.length === 0) continue;
-      const hostility = dipl?.getHostility?.(ownerId) ?? 50;
+      const hostility = dipl ? dipl.getTension(ownerId) : 50;
       if (hostility > bestHostility) {
         bestHostility = hostility;
         bestEmpireId = ownerId;

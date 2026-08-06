@@ -728,7 +728,7 @@ export class GameScene {
         const dipl = window.KOSMOS?.diplomacySystem;
         const emp  = reg?.get(empireId);
         if (!emp || !dipl) { console.warn('[debug] simulateVesselArrival: brak imperium/diplomacy'); return; }
-        const before = dipl.getTrust(empireId);
+        const before = dipl.getOpinionOfPlayer(empireId);
         const modules = kind === 'research' ? ['science_lab'] : ['weapon_laser'];
         const fakeVessel = {
           id: `dbg_${Date.now()}`,
@@ -738,16 +738,37 @@ export class GameScene {
           position: { state: 'orbiting' },
         };
         dipl._onVesselArrived(fakeVessel, { targetId: null });
-        console.log(`[debug] simulateVesselArrival(${empireId}, ${kind}): trust ${before} → ${dipl.getTrust(empireId)}`);
+        console.log(`[debug] simulateVesselArrival(${empireId}, ${kind}): opinia ${before} → ${dipl.getOpinionOfPlayer(empireId)}`);
       },
       // S3.4 BUG6 — wymuś AI envoy (pomija cooldown/gate) do testu Test 5.
       triggerAIEnvoy: (empireId) => {
         const dipl = window.KOSMOS?.diplomacySystem;
         if (!dipl) { console.warn('[debug] triggerAIEnvoy: brak diplomacy'); return; }
-        const before = dipl.getTrust(empireId);
-        dipl.changeTrust(empireId, 3, 'ai_envoy');
+        const before = dipl.getOpinionOfPlayer(empireId);
+        dipl.addOpinionModifier(empireId, 'player', 'their_envoy', { source: 'ai_envoy' });
         EventBus.emit('diplomacy:aiEnvoy', { empireId });
-        console.log(`[debug] triggerAIEnvoy(${empireId}): trust ${before} → ${dipl.getTrust(empireId)}`);
+        console.log(`[debug] triggerAIEnvoy(${empireId}): opinia ${before} → ${dipl.getOpinionOfPlayer(empireId)}`);
+      },
+      // D1 — konsolowy podgląd relacji. Zastępuje dawne getRelation(id) (kształt
+      // rekordu jest teraz prywatny dla DiplomacySystem + RelationsModel).
+      dumpRelation: (empireId) => {
+        const dipl = window.KOSMOS?.diplomacySystem;
+        if (!dipl) { console.warn('[debug] dumpRelation: brak diplomacy'); return null; }
+        const info = {
+          empireId,
+          opinia:        dipl.getOpinionOfPlayer(empireId),
+          trustEqD2:     dipl.getTrustEquivalent(empireId),
+          pasmo:         dipl.getOpinionBand(empireId),
+          napiecie:      dipl.getTension(empireId),
+          status:        dipl.getStatus(empireId),
+          rozejmLat:     dipl.getTruceYearsLeft(empireId),
+          traktaty:      dipl.relations.getTreaties('player', empireId).map(t => t.id),
+          reputacja:     dipl.getReputation(empireId),
+        };
+        console.log('[debug] relacja', info);
+        console.table(dipl.getOpinionBreakdown(empireId, 'player'));
+        console.table(dipl.getMemory(empireId, 20));
+        return info;
       },
       spawnTestEnemy,
       spawnEnemyFleet,
