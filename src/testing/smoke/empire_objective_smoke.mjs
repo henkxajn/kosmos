@@ -113,12 +113,42 @@ console.log('--- G1: REGRESJA DETERMINIZMU (złote wartości sprzed C3) ---');
   ok(`…i choć raz INNY niż fallback z tabeli (tabela to nie reguła)`,
     [...objsForArch0].some(o => o !== OBJECTIVE_BY_ARCHETYPE[arch0]));
 
-  // Dwa imperia w tej samej partii mają własne strumienie (indeks i wchodzi w seed).
-  const differing = [12345, 777, 20260806, 1, 999999, 42].filter(seed => {
-    const r = runSeed(seed);
-    return r[0].objective !== r[1].objective;
-  });
-  ok('imperia w jednej partii mogą mieć różne objective (osobny strumień per indeks)', differing.length > 0);
+  // ── G3: WARIANCJA RZUTU (regresja defektu z live-gate'u D1) ──────────────
+  // Piny G1 pilnują, że rzut nie rusza współdzielonego strumienia, ale NIC nie pilnowało
+  // jakości samego rzutu. Live-gate złapał degenerację: trzy nowe gry, oba imperia,
+  // zawsze 'ecologist'. Powód: świeży mulberry32 per imperium, zasiany prawie kolejnymi
+  // liczbami (hashString('entity_N') różni się o 1), miał słabo rozrzucony PIERWSZY rzut.
+  console.log('--- G3: wariancja rzutu (regresja live-gate) ---');
+  const SEEDS = Array.from({ length: 120 }, (_, k) => k * 7919);   // rozstrzelone, deterministyczne
+
+  const firstObjs = SEEDS.map(s => runSeed(s)[0].objective);
+  const uniqFirst = new Set(firstObjs);
+  ok(`rozkład NIE jest stały — emp_001 przyjmuje ${uniqFirst.size} różnych wartości na ${SEEDS.length} seedów`,
+    uniqFirst.size > 1);
+  ok('…i pokrywa WSZYSTKIE 6 wartości (rzut nie jest zawężony do podzbioru)',
+    uniqFirst.size === EMPIRE_OBJECTIVES.length);
+  // Żadna wartość nie może dominować — przy 6 opcjach i 120 próbach ~20 na wartość.
+  const maxShare = Math.max(...EMPIRE_OBJECTIVES.map(o => firstObjs.filter(x => x === o).length)) / SEEDS.length;
+  ok(`żadna wartość nie dominuje (najczęstsza ma ${(maxShare * 100).toFixed(0)}% < 40%)`, maxShare < 0.40);
+
+  const differCount = SEEDS.filter(s => { const r = runSeed(s); return r[0].objective !== r[1].objective; }).length;
+  const differRate  = differCount / SEEDS.length;
+  ok(`dwa imperia w JEDNEJ galaktyce mogą się różnić (${differCount}/${SEEDS.length})`, differCount > 0);
+  // Dwa niezależne rzuty z 6 wartości kolidują 1/6 czasu → oczekiwane ~83% różnic.
+  // Pasmo 0.6-1.0 łapie i degenerację (0 = zawsze to samo), i pozorną zależność.
+  ok(`odsetek różnic w rozsądnym pasmie (${(differRate * 100).toFixed(0)}%, oczekiwane ~83%)`,
+    differRate > 0.60 && differRate <= 1.0);
+
+  // Pin na REALNY seed nowej gry: EntityManager.generateId() to licznik od 1, więc
+  // star.id jest ten sam w każdej nowej grze, a galaxyData.seed = hashString(star.id)
+  // jest STAŁY (osobny defekt, poza zakresem D1 — patrz D1_AUTONOMOUS_REPORT).
+  // Tu pilnujemy tylko tego, co należy do rzutu: przy tym seedzie imperia NIE kolidują.
+  const hashString = (str) => { let h = 0; for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0; return h; };
+  const realSeed = hashString('entity_1');
+  const real = runSeed(realSeed);
+  ok(`realny (stały) seed nowej gry ${realSeed}: imperia mają RÓŻNE objective — `
+    + `${real[0].objective}/${real[1].objective} (przed fixem: ecologist/ecologist)`,
+    real[0].objective !== real[1].objective);
 }
 
 // ── Brak konsumentów w D1 ───────────────────────────────────────────────────

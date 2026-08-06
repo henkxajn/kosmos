@@ -45,6 +45,35 @@ function mulberry32(seed) {
   };
 }
 
+/**
+ * Finalizer splitmix32 — rozprasza STRUKTURALNE seedy.
+ *
+ * ⚠ Powód istnienia: seedy galaktyk są prawie kolejnymi liczbami
+ * (`hashString('entity_N')` różni się o 1 między kolejnymi id gwiazd), a mulberry32
+ * dla takich wejść ma słabo rozrzucony PIERWSZY rzut. Zasianie świeżego strumienia
+ * per imperium i wzięcie jego pierwszej liczby dawało kolizje znacznie częściej niż
+ * losowo (pomiar: 3 z 8 realnych id gwiazd → oba imperia to samo objective).
+ * Dlatego: seed przez finalizer, JEDEN strumień na galaktykę, rozgrzany, i kolejne
+ * rzuty per imperium — czyli tak, jak używa się PRNG poprawnie.
+ */
+function mixSeed(n) {
+  let z = n >>> 0;
+  z = Math.imul(z ^ (z >>> 16), 0x21f0aaad) >>> 0;
+  z = Math.imul(z ^ (z >>> 15), 0x735a2d97) >>> 0;
+  return (z ^ (z >>> 15)) >>> 0;
+}
+
+/**
+ * Strumień PRNG osi `objective` — ODDZIELNY od współdzielonego strumienia nazw/kolorów,
+ * więc nie przesuwa go ani o jeden rzut (piny G1 w empire_objective_smoke tego pilnują).
+ * Rozgrzany trzema rzutami: pierwsze wyjścia mulberry32 są najsłabsze.
+ */
+function makeObjectiveRng(galaxySeed) {
+  const rng = mulberry32(mixSeed((Number(galaxySeed) || 0) ^ 0x0B1EC7));
+  rng(); rng(); rng();
+  return rng;
+}
+
 function dist3D(a, b) {
   const dx = (a.x ?? 0) - (b.x ?? 0);
   const dy = (a.y ?? 0) - (b.y ?? 0);
@@ -120,6 +149,10 @@ export class EmpireGenerator {
     const playerColor = String(globalThis.KOSMOS?.gameState?.get?.('player.empireColor') ?? '#33ccff').toLowerCase();
     const usedColors  = new Set([playerColor]);
 
+    // Oś „objective" (agenda) — JEDEN strumień na galaktykę, rzut per imperium w pętli.
+    // Zero pobrań ze współdzielonego rng() (nazwy/kolory zostają identyczne dla seeda).
+    const objRng = makeObjectiveRng(galaxyData.seed);
+
     for (let i = 0; i < homesChosen.length; i++) {
       const homeSys = homesChosen[i];
       // Slice 3.1a: archetyp per-imperium wg sekwencji (po indeksie). Fallback
@@ -154,13 +187,8 @@ export class EmpireGenerator {
       if (!color) color = EMPIRE_COLOR_PALETTE.find(c => !usedColors.has(c.toLowerCase())) ?? archColor ?? '#888888';
       usedColors.add(color.toLowerCase());
 
-      // D1 — oś „objective" (agenda) rzucana NIEZALEŻNIE od archetypu (kultury):
-      // ten sam xenofag gra inaczej w każdej partii (import z MOO).
-      // ⚠ WŁASNY strumień per imperium — ani jednego pobrania ze współdzielonego
-      // rng(), inaczej przesunąłby się cały strumień i nazwy oraz kolory imperiów
-      // zmieniłyby się dla tego samego seeda galaktyki (regresja w fazie „bez zmian").
-      // Mnożnik 0x9E3779B1 (odwrotność złotego podziału) rozprasza kolejne indeksy.
-      const objRng    = mulberry32(((galaxyData.seed ^ 0x0B1EC7) + i * 0x9E3779B1) >>> 0);
+      // D1 — oś „objective" (agenda) rzucana NIEZALEŻNIE od archetypu (kultury).
+      // Kolejny rzut ze strumienia utworzonego przed pętlą (patrz makeObjectiveRng).
       const objective = EMPIRE_OBJECTIVES[Math.floor(objRng() * EMPIRE_OBJECTIVES.length)];
 
       // Utwórz imperium — Slice 1: BEZ abstract scalars (military/tech/resources)
