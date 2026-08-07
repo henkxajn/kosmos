@@ -90,6 +90,18 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
 - **D3** Borders, trespass incidents, influence map (claimed + 1-jump border zone)
 - **D4** Verb batch 1: gift, denounce, threaten, NAP duration, alliance mechanics,
   war CB + reputation, peace terms (consumes `peaceCost`)
+
+  **Ruling carried in from D2/E2 — `personalityFloor`: absolute vs priced.** E2 proved that a
+  weighted `personality` term cannot reproduce the old acceptance conjunction (parity forces
+  `O ≥ 8·P` — scale-invariant — which crushes every other term into noise), so archetype
+  disposition became a *hard floor* precondition on the three treaties. That makes it binary:
+  no sweetener can move it, which collides with `gift`/`offer` landing in D4. **The decision is
+  PER-ARCHETYPE, not global.** Default direction: floors become **expensive negative terms**
+  when `gift`/`offer` arrive — CK/Victoria spirit, everything has a price, sometimes an absurd
+  one. Exception: **`xenophage` and `swarm` MAY keep absolute floors** as cultural identity
+  ("nature forbids"), which no sweetener overrides. Mechanism to implement:
+  `personalityFloor: absolute | priced(weight)`; the per-archetype values are decided at D4
+  implementation time **with the acceptance matrices in hand** (E7's `diplomacy` metric), not now.
 - **D5** Verb batch 2 (tech_exchange, tribute, embargo, trade ramping) + AI↔AI activation
 
 ### B. War backbone (doc after D2, phases W1–Wn interleave with D3/D4)
