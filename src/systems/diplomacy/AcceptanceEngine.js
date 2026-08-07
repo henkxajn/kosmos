@@ -167,6 +167,22 @@ const PRECONDITION_CHECKS = {
   at_war:             (ctx) => ctx.status === 'war',
   not_already_signed: (ctx, verbCfg) =>
     !verbCfg?.treatyId || !(ctx.treaties ?? []).some(t => t?.id === verbCfg.treatyId),
+  /**
+   * „Nasza natura na to nie pozwala" — podłoga osobowości (E2).
+   * Odtwarza PIERWSZĄ bramkę dawnej koniunkcji (`pers.trade >= 0.5` itd.) jako twardy
+   * warunek, a nie jako składnik punktacji. Powód w AcceptanceWeightData: osobowość
+   * jako TERM wymagałaby wagi opinii ≥ 8× większej, co zgniata resztę termów do szumu.
+   * Brak osi w wektorze → środek skali (0.5), więc nieznane imperium nie jest karane.
+   */
+  personality_floor: (ctx, verbCfg) => {
+    const floor = verbCfg?.personalityFloor;
+    if (!floor) return true;
+    const raw = Number(ctx.personality?.[floor.axis]);
+    const v = Number.isFinite(raw) ? raw : PERSONALITY_NEUTRAL;
+    if (floor.min != null && v < floor.min) return false;
+    if (floor.max != null && v > floor.max) return false;
+    return true;
+  },
 };
 
 /**

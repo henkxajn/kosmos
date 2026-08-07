@@ -207,7 +207,11 @@ console.log('--- P10: katalog ---');
     OPINION_MODIFIERS.trade_partner.rampPerYear === 1 && OPINION_MODIFIERS.trade_partner.rampMax === 50
     && OPINION_MODIFIERS.trade_partner.persistent === true
     && OPINION_MODIFIERS.trade_partner.treatyId === 'trade_agreement');
-  ok('threatened_by_you ISTNIEJE w katalogu (wpięcie dopiero w D2)', !!OPINION_MODIFIERS.threatened_by_you);
+  // D2/E2 — Decyzja 1 fazy WYKONANA: wpis usunięty, bo napięcie wchodzi do decyzji
+  // jako TERM silnika. Trzymanie obu = podwójne liczenie (napięcie raz wprost, raz
+  // przez opinię, która sama jest termem). Ten pin pilnuje, że nie wróci tylnymi drzwiami.
+  ok('threatened_by_you USUNIĘTY z katalogu (napięcie liczy TERM, nie modyfikator)',
+    OPINION_MODIFIERS.threatened_by_you === undefined);
   // Skala: opinia 0 = stary trust 50, więc pasma statusu przesuwają się o −50.
   ok('pasmo wrogie ↔ stary trust ≤ 29', OPINION_HOSTILE_MAX === 29 - 50);
   ok('pasmo przyjazne ↔ stary trust ≥ 65', OPINION_FRIENDLY_MIN === 65 - 50);

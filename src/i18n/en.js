@@ -3351,7 +3351,6 @@ export default {
   'diplo.mod.atWar':             'State of war',
   'diplo.mod.recentWar':         'Fresh memory of war',
   'diplo.mod.tradePartner':      'Trade partner',
-  'diplo.mod.threatenedByYou':   'They feel threatened',
 
   // D2 (E1) — Acceptance Engine: DECISION breakdown rows (≠ the OPINION breakdown above).
   // Keys land with the term catalog (mirrors D1's diplo.mod.*); consumer arrives in E4.
@@ -3370,6 +3369,7 @@ export default {
   'diplo.reject.atWar':         'A war is under way',
   'diplo.reject.notAtWar':      'We are not at war',
   'diplo.reject.alreadySigned': 'That treaty is already in force',
+  'diplo.reject.natureForbids': 'Our nature does not allow it',
 
   'diplo.btn.declareWar':   '⚔ DECLARE WAR',
   'diplo.btn.offerPeace':   '☮ OFFER PEACE',

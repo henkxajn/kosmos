@@ -33,6 +33,7 @@ import { TREATY_TYPES } from '../data/TreatyData.js';
 import { t } from '../i18n/i18n.js';
 import { RelationsModel } from './diplomacy/RelationsModel.js';
 import { ReputationLedger } from './diplomacy/ReputationLedger.js';
+import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
@@ -141,11 +142,16 @@ export class DiplomacySystem {
   }
 
   /**
-   * ── MOSTEK D2 — USUŃ razem z Acceptance Engine ──
-   * Opinia wyrażona w skali dawnego trustu (0-100, 50 = neutralnie), żeby progi
-   * akceptacji traktatów i bramka AI-envoy dawały PRZED i PO D1 ten sam wynik.
-   * Dokładnie trzy wywołania: proposeTreaty, AlienCivSystem._maybeLaunchAIEnvoy,
-   * DiplomacyOverlay (dostępność przycisków).
+   * ── MOSTEK D2 — DOGASA, usunąć razem z ostatnim wołającym ──
+   * Opinia wyrażona w skali dawnego trustu (0-100, 50 = neutralnie).
+   *
+   * Stan po E2: `proposeTreaty` i `DiplomacyOverlay` już go NIE wołają (decyduje silnik).
+   * Zostaje JEDEN realny konsument — bramka AI-envoy w `AlienCivSystem` — który znika
+   * w E3 razem z retrofitem emisariusza. Warunek zamknięcia D2:
+   * `grep -rn "getTrustEquivalent" src/` puste.
+   *
+   * ⚠ Plan mówił o „dokładnie trzech wywołaniach"; realnie były CZTERY — czwarte
+   * to zrzut diagnostyczny `trustEqD2` w `GameScene.debug`, zdjęty w E2.
    */
   getTrustEquivalent(empireId) {
     return Math.max(0, Math.min(100, 50 + this.getOpinionOfPlayer(empireId)));
@@ -328,38 +334,69 @@ export class DiplomacySystem {
   }
 
   /**
-   * Gracz proponuje traktat. AI ocenia wg personality × opinii (przez mostek D2,
-   * więc progi 60/75/80 wypadają tam, gdzie przed D1).
+   * Silnik akceptacji — JEDEN na system, tworzony leniwie.
+   *
+   * ⚠ Kolaboratorzy wstrzykiwani PROXY, nie odczytem `window.KOSMOS.diplomacySystem`:
+   * ten system JEST systemem dyplomacji, więc szukanie siebie w globalu byłoby
+   * niepotrzebnym punktem awarii (kolejność wpięcia, testy z własnym stubem).
+   * Reszta kolaboratorów leci przez getter, więc nadal jest leniwa.
+   */
+  _acceptance() {
+    if (!this._acceptanceEngine) {
+      const self = this;
+      this._acceptanceEngine = new AcceptanceEngine({
+        get diplomacySystem() { return self; },
+        get empireRegistry()  { return window.KOSMOS?.empireRegistry; },
+        get warSystem()       { return window.KOSMOS?.warSystem; },
+        get timeSystem()      { return window.KOSMOS?.timeSystem; },
+        get galaxyData()      { return window.KOSMOS?.galaxyData; },
+      });
+    }
+    return this._acceptanceEngine;
+  }
+
+  /**
+   * Ocena propozycji BEZ jej składania — dla UI (dostępność przycisku) i dla AI.
+   * Zwraca pełny wynik silnika razem z rozbiciem; nic nie zmienia.
+   */
+  evaluateTreaty(empireId, treatyId) {
+    return this._acceptance().evaluateProposal(PLAYER, empireId, { verb: treatyId });
+  }
+
+  /**
+   * Gracz proponuje traktat — D2/E2: decyzję podejmuje Acceptance Engine.
+   *
+   * Zniknęły stąd inline'owe progi 60/75/80 ORAZ mostek `getTrustEquivalent`; twarde
+   * bramki (wojna, traktat już podpisany) są teraz PRE-WARUNKAMI czasownika, więc
+   * istnieje jedno miejsce, w którym „nie" ma powód. Powody odmowy zachowują dawne
+   * stringi (`at_war` / `already_signed` / `declined`), bo słuchacze ich używają;
+   * NOWE jest `breakdown` w zdarzeniu odmowy — E4 rysuje z niego modal.
+   *
+   * ⚠ PARYTET: dla obu archetypów, które gra faktycznie generuje (industrialist i jego
+   * klon expansionist), granice decyzji wypadają DOKŁADNIE na dawnych progach —
+   * opinia 10 / 25 / 30. Rozbieżności dla innych wektorów osobowości są zmierzone
+   * i opisane w raporcie E2 (macierz z E7); w skrócie: sumy ważonej nie da się
+   * dopasować do dawnej KONIUNKCJI dwóch bramek bez zgniecenia wszystkich pozostałych
+   * termów do szumu.
    */
   proposeTreaty(empireId, treatyId) {
     const def = TREATY_TYPES[treatyId];
     if (!def) return false;
-    // Dawniej nieosiągalne (wojna zerowała trust, więc każdy próg padał). Przy modelu
-    // modyfikatorów at_war −40 już tego nie gwarantuje → jawna bramka.
-    if (this.getStatus(empireId) === 'war') {
-      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'at_war' });
+
+    const result = this.evaluateTreaty(empireId, treatyId);
+
+    if (result.blocked) {
+      // Mapowanie klucza pre-warunku na dawny string powodu (kontrakt słuchaczy).
+      const reason = result.reasonKey === 'diplo.reject.alreadySigned' ? 'already_signed' : 'at_war';
+      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason, result });
       return false;
     }
-    if (this.hasTreaty(empireId, treatyId)) {
-      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'already_signed' });
-      return false;
-    }
-    const pers  = window.KOSMOS?.empireRegistry?.get(empireId)?.personality ?? {};
-    const trust = this.getTrustEquivalent(empireId);
-    let accept = false;
-    if (treatyId === 'trade_agreement') {
-      accept = (pers.trade ?? 0) >= 0.5 && trust >= 60;
-    } else if (treatyId === 'non_aggression') {
-      accept = (pers.aggression ?? 1) <= 0.4 && trust >= 75;
-    } else if (treatyId === 'alliance') {
-      accept = (pers.aggression ?? 1) <= 0.3 && trust >= 80;
-    }
-    if (accept) {
+    if (result.decision) {
       this.signTreaty(empireId, { id: treatyId });
-      EventBus.emit('diplomacy:treatyAccepted', { empireId, treatyId });
+      EventBus.emit('diplomacy:treatyAccepted', { empireId, treatyId, result });
       return true;
     }
-    EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined' });
+    EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined', result });
     return false;
   }
 

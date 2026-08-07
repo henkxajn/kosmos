@@ -130,30 +130,44 @@ export const PRECONDITIONS = {
   not_at_war:         { id: 'not_at_war',         reasonKey: 'diplo.reject.atWar' },
   at_war:             { id: 'at_war',             reasonKey: 'diplo.reject.notAtWar' },
   not_already_signed: { id: 'not_already_signed', reasonKey: 'diplo.reject.alreadySigned' },
+  // ⚠ E2 — „nasza natura na to nie pozwala". Patrz `personalityFloor` przy czasownikach.
+  personality_floor:  { id: 'personality_floor',  reasonKey: 'diplo.reject.natureForbids' },
 };
 
 // ── Czasowniki ──────────────────────────────────────────────────────────────
 //
-// PROGI — skąd te liczby (kotwica parytetu dla E2):
+// PROGI I OSOBOWOŚĆ — dlaczego akurat tak (rozstrzygnięte POMIAREM w E2):
 //
-// Dzisiejszy `proposeTreaty` to KONIUNKCJA dwóch bramek (osobowość ORAZ zaufanie). Suma
-// ważona NIE odtworzy koniunkcji dla dowolnego wektora osobowości — wysoka opinia zawsze
-// skompensuje słabą osobowość. Odtwarza ją natomiast DOKŁADNIE dla rosteru, który w grze
-// faktycznie istnieje: oba imperia AI (industrialist i jego klon expansionist) mają
-// aggression 0.3 / trade 0.9, więc obie bramki osobowości i tak przechodzą i jedyną realną
-// bramką jest opinia (trust 60/75/80 ⇒ opinia 10/25/30).
+// Dawny `proposeTreaty` to KONIUNKCJA dwóch bramek: `pers.trade ≥ 0.5` ORAZ `trust ≥ 60`.
+// Suma ważona nie odtwarza koniunkcji — wysoka opinia zawsze skompensuje słabą osobowość
+// (albo odwrotnie). E2 policzył, ILE to kosztuje: żeby zachować dawne wyniki przy osobowości
+// jako TERMIE, waga opinii musi być ≥ 8× waga osobowości — i to niezależnie od skali. Przy
+// osobowości 30 oznacza to opinię 240, czyli napięcie, pamięć i reputacja (10-25) spadają
+// do ~10% jej wagi i przestają cokolwiek znaczyć. Granica tego rachunku to waga osobowości
+// ZERO — a to jest po prostu opis tego, czym osobowość w dawnym kodzie BYŁA:
 //
-// Stąd wzór progu:  próg = wkład osobowości TEGO rosteru + dawny próg opinii × waga/100.
-//   trade_agreement:  0.8 × 30 = 24   +  10 × 40/100 =  4   ⇒ 28
-//   non_aggression:   0.4 × 35 = 14   +  25 × 40/100 = 10   ⇒ 24
-//   alliance:         0.8 × 35 = 28   +  30 × 50/100 = 15   ⇒ 43
+//   ⇒ OSOBOWOŚĆ NIE JEST TERMEM DLA TRAKTATÓW, TYLKO TWARDĄ PODŁOGĄ (`personalityFloor`).
+//
+// Modelujemy dawną regułę wiernie: najpierw „czy nasza natura w ogóle na to pozwala",
+// potem GRADACJA po pozostałych siedmiu termach (opinia, napięcie, pamięć, reputacja,
+// świeża odmowa, układ sojuszy, oferta). Xenofag nie podpisze umowy handlowej przy żadnej
+// opinii — dokładnie jak dziś — a pakt dalej wygrywa lub przegrywa punktami.
+//
+// Po zdjęciu osobowości próg jest wprost dawnym progiem opinii:
+//   trade_agreement:  10 × 40/100 =  4      (dawny trust 60 ⇒ opinia 10)
+//   non_aggression:   25 × 40/100 = 10      (dawny trust 75 ⇒ opinia 25)
+//   alliance:         30 × 50/100 = 15      (dawny trust 80 ⇒ opinia 30)
 // Wagi opinii dobrane tak, by granica wypadła MIĘDZY dawnym progiem a progiem minus jeden
 // punkt opinii — inaczej „parytet" byłby przypadkiem, a nie własnością.
+//
+// ⚠ `offer_peace` i `improve_relations` ZACHOWUJĄ osobowość jako term: nie mają dawnej
+// reguły do odtworzenia (nie miały ŻADNEJ oceny), więc gradacja jest tam wolnym wyborem.
 //
 // ⚠ PARYTET OBOWIĄZUJE PRZY NAPIĘCIU 0 i pustych pozostałych termach. Dawny kod IGNOROWAŁ
 // napięcie; tutaj ono waży (sprzyja paktowi, szkodzi sojuszowi i umowie). To jest ZAMIERZONA
 // zmiana z backbone §2.1 — jej rozmiar mierzy macierz z E7, nie zgadujemy go tutaj.
-// Rozbieżności dla archetypów spoza rosteru są równie zamierzone (i też mierzone).
+// Rozbieżności dla archetypów SPOZA rosteru gry (isolationist, hegemon) pochodzą z
+// `thresholdDelta` w nadpisaniach kultury i też są zamierzone oraz mierzone.
 //
 // Pola czasownika:
 //   threshold       — wynik ≥ próg ⇒ akceptacja
@@ -162,47 +176,45 @@ export const PRECONDITIONS = {
 //   preconditions   — twarde blokady sprawdzane PRZED liczeniem
 //   treatyId        — dla czasowników traktatowych (bramka not_already_signed)
 export const VERB_ACCEPTANCE = {
-  // Umowa handlowa. Dziś: pers.trade ≥ 0.5 && trust ≥ 60 (⇒ opinia ≥ 10).
-  // Parytet rosteru: osobowość 24 pkt + opinia 10 × 0,40 = 4 pkt ⇒ próg 28.
+  // Umowa handlowa. Dawniej: pers.trade ≥ 0.5 && trust ≥ 60 (⇒ opinia ≥ 10).
+  // Podłoga odtwarza pierwszą bramkę, próg 4 = druga (10 × waga opinii 40/100).
   trade_agreement: {
     id: 'trade_agreement',
     treatyId: 'trade_agreement',
-    threshold: 28,
-    preconditions: ['not_at_war', 'not_already_signed'],
-    personalityAxes: { trade: +1 },
+    threshold: 4,
+    preconditions: ['not_at_war', 'not_already_signed', 'personality_floor'],
+    personalityFloor: { axis: 'trade', min: 0.5 },
     terms: {
-      opinion: 40, personality: 30, tension: -10, memory: 20, reputation: 15,
+      opinion: 40, tension: -10, memory: 20, reputation: 15,
       third_party: 10, recent_refusal: 25, offer: 20, relative_power: 10, erratic_noise: 15,
     },
   },
 
-  // Pakt o nieagresji. Dziś: pers.aggression ≤ 0.4 && trust ≥ 75 (⇒ opinia ≥ 25).
-  // Parytet rosteru: osobowość 14 pkt + opinia 25 × 0,40 = 10 pkt ⇒ próg 24.
+  // Pakt o nieagresji. Dawniej: pers.aggression ≤ 0.4 && trust ≥ 75 (⇒ opinia ≥ 25).
   // ⚠ ZAMIERZONA ZMIANA: napięcie ma znak DODATNI — imperium na krawędzi wojny CHĘTNIEJ
-  // podpisze pakt (backbone §2.1). Przy wysokim napięciu pakt bywa więc łatwiejszy niż dziś.
+  // podpisze pakt (backbone §2.1). Przy wysokim napięciu pakt bywa więc łatwiejszy niż dawniej.
   non_aggression: {
     id: 'non_aggression',
     treatyId: 'non_aggression',
-    threshold: 24,
-    preconditions: ['not_at_war', 'not_already_signed'],
-    personalityAxes: { aggression: -1 },
+    threshold: 10,
+    preconditions: ['not_at_war', 'not_already_signed', 'personality_floor'],
+    personalityFloor: { axis: 'aggression', max: 0.4 },
     terms: {
-      opinion: 40, personality: 35, tension: +20, memory: 20, reputation: 15,
+      opinion: 40, tension: +20, memory: 20, reputation: 15,
       third_party: 10, recent_refusal: 25, offer: 20, relative_power: 20, erratic_noise: 15,
     },
   },
 
-  // Sojusz. Dziś: pers.aggression ≤ 0.3 && trust ≥ 80 (⇒ opinia ≥ 30).
-  // Parytet rosteru: osobowość (0,4 + 0,4) × 35 = 28 pkt + opinia 30 × 0,50 = 15 pkt ⇒ próg 43.
+  // Sojusz. Dawniej: pers.aggression ≤ 0.3 && trust ≥ 80 (⇒ opinia ≥ 30).
   // Napięcie ze znakiem UJEMNYM — sojusz to zaufanie, nie desperacja.
   alliance: {
     id: 'alliance',
     treatyId: 'alliance',
-    threshold: 43,
-    preconditions: ['not_at_war', 'not_already_signed'],
-    personalityAxes: { aggression: -1, trade: +0.5 },
+    threshold: 15,
+    preconditions: ['not_at_war', 'not_already_signed', 'personality_floor'],
+    personalityFloor: { axis: 'aggression', max: 0.3 },
     terms: {
-      opinion: 50, personality: 35, tension: -25, memory: 25, reputation: 20,
+      opinion: 50, tension: -25, memory: 25, reputation: 20,
       third_party: 20, recent_refusal: 25, offer: 15, relative_power: 20, erratic_noise: 15,
     },
   },
@@ -252,7 +264,12 @@ export const ARCHETYPE_WEIGHT_OVERRIDES = {
   xenophage:    { terms: { opinion: 0.7, tension: 1.4 },              thresholdDelta: +20 },
   swarm:        { terms: { opinion: 0.5 },                            thresholdDelta: +35 },
   isolationist: { terms: { tension: 1.3, third_party: 0.5 },          thresholdDelta: +10 },
-  trader:       { terms: { offer: 1.5 },                              thresholdDelta:  -8 },
+  // ⚠ BEZ `thresholdDelta` — świadomie, po pomiarze w E2. Zniżka progu dla kupca
+  // sprawiała, że sama wysoka skłonność do handlu (trade 0.9) wystarczała do podpisania
+  // umowy przy opinii ZERO. Dawna reguła tego nie robiła (wymagała trust ≥ 60), a
+  // „nie lubimy was, ale podpiszemy" jest złym zachowaniem niezależnie od parytetu.
+  // Kupiec zostaje wyróżniony tam, gdzie to nic nie psuje: mocniej reaguje na ofertę.
+  trader:       { terms: { offer: 1.5 } },
   hegemon:      { terms: { relative_power: 1.5, opinion: 0.9 },       thresholdDelta:  +5 },
 };
 

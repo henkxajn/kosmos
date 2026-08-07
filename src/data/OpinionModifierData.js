@@ -99,13 +99,20 @@ export const OPINION_MODIFIERS = {
     rampPerYear: +1, rampMax: +50, treatyId: 'trade_agreement',
   },
 
-  // D2 — wpis ISTNIEJE, ale NIE jest wpinany w tick (decyzja fazy D1: sprzężenie
-  // napięcie→opinia zmienia wyniki traktatów, a D1 ma być bez zmian zachowania).
-  threatened_by_you: {
-    id: 'threatened_by_you', labelKey: 'diplo.mod.threatenedByYou',
-    defaultValue: -10, decayPerYear: 3, combine: COMBINE.REFRESH, persistent: false,
-  },
 };
+
+// ⚠ `threatened_by_you` USUNIĘTY w D2/E2 — to jest Decyzja 1 fazy, wykonana.
+// Wpis miał sprzęgać napięcie z opinią (−10 przy napięciu > 60). D2 rozstrzygnął ten
+// wybór na korzyść TERMU `tension` w Acceptance Engine: napięcie wchodzi do decyzji
+// wprost, ze znakiem zależnym od czasownika (sprzyja paktowi i pokojowi, szkodzi
+// sojuszowi). Trzymanie obu naraz byłoby PODWÓJNYM LICZENIEM — napięcie wpływałoby na
+// wynik raz jako term, a drugi raz przez opinię, która sama jest termem.
+// Wpis nigdy nie był wpinany w tick, więc usunięcie nie zmienia żadnego zachowania;
+// zostawienie go byłoby martwą daną udającą funkcję (audyt R9). Razem z nim znikają
+// dwa klucze i18n `diplo.mod.threatenedByYou` (pl + en).
+// Wariant kompromisowy (panel dorysowuje wiersz „Czują się zagrożeni" w rozbiciu
+// AKCEPTACJI, nie opinii) pozostaje dostępny jako decyzja o UI w E4 — nie wymaga
+// powrotu tego wpisu.
 
 // ── Skala opinii ────────────────────────────────────────────────────────────
 // 1 punkt opinii = 1 punkt starego trustu; 0 = dawne neutralne 50. Zakres jest

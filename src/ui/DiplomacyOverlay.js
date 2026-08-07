@@ -491,12 +491,24 @@ export class DiplomacyOverlay extends BaseOverlay {
     const canWar   = notWar && isContact;
     const canPeace = rel.status === 'war' && isContact;
     const canEnvoy = isContact && hasEnvoyVessel;
-    // ── MOSTEK D2 — progi dostępności 65/80/80 w skali dawnego trustu, żeby przycisk
-    // odblokowywał się dokładnie tam, gdzie przed D1. Usunąć razem z Acceptance Engine.
-    const trustEq  = dipl.getTrustEquivalent(this._selectedId);
-    const canTrade = isContact && notWar && trustEq >= 65 && !dipl.hasTreaty(this._selectedId, 'trade_agreement');
-    const canPact  = isContact && notWar && trustEq >= 80 && !dipl.hasTreaty(this._selectedId, 'non_aggression');
-    const canAlly  = isContact && notWar && trustEq >= 80 && !dipl.hasTreaty(this._selectedId, 'alliance');
+    // ── D2/E2 — dostępność przycisku pyta SILNIK, nie własną kopię progów ──
+    // Dotąd panel trzymał drugi komplet liczb (65/80/80) obok systemowych 60/75/80 —
+    // dwie kopie tej samej gałki, już rozjechane: przycisk umowy handlowej bywał
+    // wyszarzony przy opinii, którą `proposeTreaty` przyjmował. To był defekt UI
+    // (przycisk MYLNIE opisywał stan), nie reguła gry — dlatego prawdą jest 60/75/80
+    // z systemu, a panel przestaje mieć własne zdanie.
+    //
+    // ⚠ E2 zachowuje dzisiejszy UX: przycisk jest aktywny dopiero wtedy, gdy propozycja
+    // PRZESZŁABY. Odblokowanie go zawsze (i pokazanie modala odmowy z rozbiciem) to E4 —
+    // wcześniej klik kończyłby się ciszą. Ocena jest czysta i liczy się tylko przy
+    // otwartym panelu, więc wywołanie w rysowaniu jest tanie.
+    const wouldAccept = (treatyId) => {
+      if (!isContact || !notWar || dipl.hasTreaty(this._selectedId, treatyId)) return false;
+      return dipl.evaluateTreaty?.(this._selectedId, treatyId)?.decision === true;
+    };
+    const canTrade = wouldAccept('trade_agreement');
+    const canPact  = wouldAccept('non_aggression');
+    const canAlly  = wouldAccept('alliance');
 
     // Wiersz 1: wojna / pokój
     this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.declareWar'), canWar, 'danger');

@@ -3352,7 +3352,6 @@ export default {
   'diplo.mod.atWar':             'Stan wojny',
   'diplo.mod.recentWar':         'Świeża pamięć wojny',
   'diplo.mod.tradePartner':      'Partner handlowy',
-  'diplo.mod.threatenedByYou':   'Czują się zagrożeni',
 
   // D2 (E1) — Acceptance Engine: wiersze rozbicia DECYZJI (≠ rozbicie OPINII wyżej).
   // Klucze wchodzą razem z katalogiem termów (wzór diplo.mod.* z D1); konsument — E4.
@@ -3371,6 +3370,7 @@ export default {
   'diplo.reject.atWar':         'Trwa wojna',
   'diplo.reject.notAtWar':      'Nie jesteśmy w stanie wojny',
   'diplo.reject.alreadySigned': 'Taki traktat już obowiązuje',
+  'diplo.reject.natureForbids': 'Nasza natura na to nie pozwala',
 
   'diplo.btn.declareWar':   '⚔ WYPOWIEDZ WOJNĘ',
   'diplo.btn.offerPeace':   '☮ ZAPROPONUJ POKÓJ',

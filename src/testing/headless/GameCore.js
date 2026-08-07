@@ -228,6 +228,8 @@ export class GameCore {
     K.intelSystem = this.intelSystem;
     K.poiRegistry = this.poiRegistry;
     K.diplomacySystem = this.diplomacySystem;
+    // D2/E2 — skrót dostępu do silnika akceptacji (instancję trzyma DiplomacySystem).
+    K.acceptanceEngine = this.diplomacySystem._acceptance();
     K.alienCivSystem = this.alienCivSystem;
     K.warSystem = this.warSystem;
     K.invasionSystem = this.invasionSystem;

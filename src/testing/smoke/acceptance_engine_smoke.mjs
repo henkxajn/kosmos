@@ -238,17 +238,22 @@ console.log('--- P4: termy pojedynczo (wejście → raw) ---');
 
   ok('personality: oś w środku skali → 0',
     T.personality(mkCtx({ personality: { trade: 0.5 } }), cfg) === 0);
-  ok('personality: oś maksymalna → +1, minimalna → −1',
-    T.personality(mkCtx({ personality: { trade: 1 } }), cfg) === 1
-    && T.personality(mkCtx({ personality: { trade: 0 } }), cfg) === -1);
+  // ⚠ E2 przeniósł osobowość dla TRAKTATÓW z termu na twardą PODŁOGĘ (patrz P6b) —
+  // gradacja osobowości została tam, gdzie nie ma dawnej reguły do odtworzenia:
+  // przy pokoju i emisariuszu. Term testujemy więc na ICH konfiguracji.
+  const peaceCfg = VERB_ACCEPTANCE.offer_peace;      // oś: aggression −1
+  const envoyCfg = VERB_ACCEPTANCE.improve_relations; // osie: secrecy −1, trade +0.5
+  ok('personality: oś maksymalna → −1, minimalna → +1 (ujemny współczynnik odwraca kierunek)',
+    T.personality(mkCtx({ personality: { aggression: 1 } }), peaceCfg) === -1
+    && T.personality(mkCtx({ personality: { aggression: 0 } }), peaceCfg) === 1);
   ok('personality: BRAK osi / brak imperium → 0 (degradacja bez kary)',
     T.personality(mkCtx({ personality: {} }), cfg) === 0
     && T.personality(mkCtx({ personality: null }), cfg) === 0);
-  ok('personality: ujemny współczynnik odwraca kierunek (agresja szkodzi paktowi)',
-    T.personality(mkCtx({ personality: { aggression: 1 } }), VERB_ACCEPTANCE.non_aggression) === -1
-    && T.personality(mkCtx({ personality: { aggression: 0 } }), VERB_ACCEPTANCE.non_aggression) === 1);
   ok('personality: dwie osie się sumują i są przycinane do ±1',
-    T.personality(mkCtx({ personality: { aggression: 0, trade: 1 } }), VERB_ACCEPTANCE.alliance) === 1);
+    T.personality(mkCtx({ personality: { secrecy: 0, trade: 1 } }), envoyCfg) === 1);
+  ok('personality NIE jest już termem trzech traktatów (jest podłogą — parytet E2)',
+    ['trade_agreement', 'non_aggression', 'alliance']
+      .every(v => VERB_ACCEPTANCE[v].terms.personality == null && !!VERB_ACCEPTANCE[v].personalityFloor));
 
   ok('reputation: agresor 100 → −1, czysty → 0',
     T.reputation(mkCtx({ proposerAggression: 100 })) === -1 && T.reputation(mkCtx()) === 0);
@@ -632,11 +637,13 @@ console.log('--- P13: buildContext (kolaboratorzy WSTRZYKNIĘCI, bez atrapy prze
     () => new AcceptanceEngine().buildContext('player', 'emp_001', { verb: 'alliance' }));
 }
 
-// ── P14: E1 STOI SAMODZIELNIE — zero wpięć ──────────────────────────────────
-console.log('--- P14: brak wpięć (E1 jak C1 w D1) ---');
+// ── P14: KTO importuje silnik (E1: nikt → E2: wyłącznie DiplomacySystem) ────
+console.log('--- P14: kontrolowana lista importerów ---');
 {
-  // Warunek zamknięcia E1 z planu: nic w grze jeszcze tego nie importuje. Sprawdzamy
-  // wykonaniem, a nie obietnicą w opisie commita — retrofit to E2 (traktaty) i E3 (pokój/envoy).
+  // W E1 ta asercja pilnowała, że silnik STOI SAMODZIELNIE. E2 wpina go — więc zamiast
+  // kasować pin, ZWĘŻAMY go do allowlisty. Import silnika przez jakikolwiek inny system
+  // oznaczałby drugą ścieżkę decyzyjną obok `DiplomacySystem`, czyli dokładnie to
+  // rozdwojenie, które D2 likwiduje (panel miał własne progi 65/80/80).
   const { readdirSync, readFileSync, statSync } = await import('node:fs');
   const { join, resolve, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
@@ -650,12 +657,16 @@ console.log('--- P14: brak wpięć (E1 jak C1 w D1) ---');
       if (full.includes('testing')) continue;                    // testy MAJĄ importować
       if (/Acceptance(WeightData|Math|Engine)\.js$/.test(name)) continue;   // moduły fazy same siebie
       const src = readFileSync(full, 'utf8');
-      if (/AcceptanceEngine|AcceptanceMath|AcceptanceWeightData/.test(src)) hits.push(full.slice(SRC.length + 1));
+      if (/from\s+'[^']*Acceptance(Engine|Math|WeightData)\.js'/.test(src)) hits.push(full.slice(SRC.length + 1));
     }
   };
   walk(SRC);
-  ok(`silnik nie jest jeszcze przez nic importowany${hits.length ? ' — ZNALEZIONO: ' + hits.join(', ') : ''}`,
-    hits.length === 0);
+  const ALLOWED = ['systems\\DiplomacySystem.js', 'systems/DiplomacySystem.js'];
+  const unexpected = hits.filter(h => !ALLOWED.includes(h));
+  ok(`silnik importowany WYŁĄCZNIE przez DiplomacySystem${unexpected.length ? ' — nieoczekiwane: ' + unexpected.join(', ') : ''}`,
+    unexpected.length === 0);
+  ok('DiplomacySystem JEST importerem (E2 — retrofit wykonany)',
+    hits.some(h => ALLOWED.includes(h)));
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);

@@ -374,6 +374,10 @@ export class GameScene {
     window.KOSMOS.poiRegistry      = this.poiRegistry;
     window.KOSMOS.poiRuntimeSystem = this.poiRuntimeSystem;
     window.KOSMOS.diplomacySystem  = this.diplomacySystem;
+    // D2/E2 — Acceptance Engine wystawiony do odczytu (UI, telemetria, debug).
+    // ⚠ Instancję TWORZY i TRZYMA DiplomacySystem (kolaboratorzy wstrzyknięci proxy),
+    // więc to jest wyłącznie skrót dostępu, a nie drugie źródło prawdy.
+    window.KOSMOS.acceptanceEngine = this.diplomacySystem._acceptance();
     window.KOSMOS.alienCivSystem   = this.alienCivSystem;
     window.KOSMOS.colonyAutoExpander = this.colonyAutoExpander;
     window.KOSMOS.empireStrategySystem = this.empireStrategySystem;
@@ -757,7 +761,8 @@ export class GameScene {
         const info = {
           empireId,
           opinia:        dipl.getOpinionOfPlayer(empireId),
-          trustEqD2:     dipl.getTrustEquivalent(empireId),
+          // D2/E2: `trustEqD2` zdjęte — mostek dogasa, a zrzut diagnostyczny nie ma
+          // powodu przedłużać mu życia. Decyzje pokazuje `akceptacja` niżej.
           pasmo:         dipl.getOpinionBand(empireId),
           napiecie:      dipl.getTension(empireId),
           status:        dipl.getStatus(empireId),
@@ -768,6 +773,16 @@ export class GameScene {
         console.log('[debug] relacja', info);
         console.table(dipl.getOpinionBreakdown(empireId, 'player'));
         console.table(dipl.getMemory(empireId, 20));
+        // D2/E2 — dlaczego traktat przechodzi albo nie: wynik, próg i pełne rozbicie
+        // wprost z Acceptance Engine (to samo, co zobaczy gracz w modalu odmowy z E4).
+        for (const treatyId of ['trade_agreement', 'non_aggression', 'alliance']) {
+          const r = dipl.evaluateTreaty?.(empireId, treatyId);
+          if (!r) continue;
+          console.log(`[debug] akceptacja ${treatyId}: ` +
+            (r.blocked ? `ZABLOKOWANE (${r.reasonKey})`
+                       : `${r.decision ? 'TAK' : 'NIE'} — wynik ${r.score} / próg ${r.threshold}`));
+          if (!r.blocked) console.table(r.breakdown);
+        }
         return info;
       },
       spawnTestEnemy,
