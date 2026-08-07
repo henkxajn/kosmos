@@ -5,9 +5,12 @@
 rozstrzygnęła na **BRAK bumpu** (save zostaje **v100**); zamiast bumpu weszła jawna nota wyjątku przy
 `_migrateV18toV19` w `SaveMigration` (pokryte przez G2). G3 nie ma już czego zrobić — **zamknięty**.
 
-⏳ **LIVE GATE: PENDING — 4 punkty, zaplanowany na następną sesję.**
-Skrypt do wykonania: **`docs/design/GALAXY_SEED_GATE_CHECKLIST.md`** (jeden przebieg, ~15 min).
-Do czasu przejścia gate'u **D2 pozostaje zablokowany**.
+✅ **LIVE GATE: PASSED 2026-08-07 — wszystkie 4 punkty. MINI-STREAM ZAMKNIĘTY, D2 ODBLOKOWANY.**
+Skrypt: **`docs/design/GALAXY_SEED_GATE_CHECKLIST.md`** (wynik zapisany na końcu tamtego pliku).
+Zmierzone: dwie świeże gry ⇒ seedy **−1652911923** i **131797258**, różne ODCISK-i, różne nazwy
+imperiów, home-systemy AI i `objective`; ten sam plik wczytany ponownie ⇒ galaktyka bit-w-bit
+identyczna; zapis legacy zachował swój seed **−2102099243**. Kolory i archetypy identyczne w obu
+partiach — **zgodnie z projektem** (Korekta 1 niżej), potwierdzone i zaakceptowane na gate'cie.
 Keeper: `src/testing/smoke/galaxy_seed_smoke.mjs` (65 asercji; piny zweryfikowane mutacyjnie — 4 z 4
 wstrzyknięte regresje złapane).
 

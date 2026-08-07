@@ -1,7 +1,9 @@
-# PHASE D2 — Acceptance Engine + retrofit · plan doc (DRAFT do recenzji)
+# PHASE D2 — Acceptance Engine + retrofit · plan doc (ZATWIERDZONY — pięć decyzji podpisanych)
 
+**Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
+E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 **Arc:** WOJNA I POKÓJ 1.0 · **Parent:** `DIPLOMACY_BACKBONE.md` §2 + §5 · **Skeleton:** `D2_PLAN_SKELETON.md`
-**Zależy od:** D1 ✅ (gate 2026-08-06) · **GALAXY_SEED** (mini-stream przed implementacją D2)
+**Zależy od:** D1 ✅ (gate 2026-08-06) · **GALAXY_SEED ✅** (gate 2026-08-07 — mini-stream zamknięty)
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` §4.5, R2, R5, R9
 
 ---

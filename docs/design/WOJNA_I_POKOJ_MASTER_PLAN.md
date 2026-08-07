@@ -1,6 +1,6 @@
 # WOJNA I POKÓJ 1.0 — master plan
 
-**Status:** living roadmap · **Last update:** 2026-08-06
+**Status:** living roadmap · **Last update:** 2026-08-07
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
 `WAR_BACKBONE.md` (pending), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
 **Phase docs in repo:** `docs/design/D1_AUTONOMOUS_REPORT.md` · `docs/design/D1_LIVE_GATE_CHECKLIST.md` ·
@@ -39,7 +39,7 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   1. **`objective` PRNG degeneracy — fixed** (`0b15d95`): a fresh mulberry32 seeded per empire from
      near-consecutive integers, read on its first draw, collided for both empires. Fixed with a
      splitmix32 finalizer + one warmed stream per galaxy; variance now pinned by tests.
-  2. **Constant galaxy seed — carried out as a separate task, now fixed** (`e0615bd`; see
+  2. **Constant galaxy seed — carried out as a separate task, now fixed and gated** (`e0615bd`; see
      GALAXY_SEED below). Root cause of the symptom that surfaced (1), and wider: before the fix
      every new game got an identical galaxy — identical star names/positions/spectral types,
      identical AI home systems and empire names.
@@ -47,16 +47,26 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
      (colour comes from the archetype, id from the loop index), so the fix will not change them.
      The player's own home system is **already** fully random today — only the galaxy around it is
      constant, which is why nobody spotted this.
+- **GALAXY_SEED — DONE, live gate PASSED 2026-08-07.** Entropy now enters once at world creation:
+  a new game rolls a random galaxy seed and **stores it in the save**; everything downstream derives
+  from the stored seed exactly as before. Gate evidence: two fresh games ⇒ seeds **−1652911923** and
+  **131797258** with different galaxy fingerprints, empire names, AI home systems and objectives;
+  the same file reloaded ⇒ bit-identical galaxy; a legacy save kept its seed **−2102099243**.
+  Colours and archetypes identical across runs — **by design, not a defect** (they are derived from
+  the archetype sequence, never from the seed). Save stays **v100** (no bump: the `seed` field always
+  round-tripped, only its *source* changed). Commits `e0615bd` (code + 65-assertion keeper),
+  `615eb63` and `b5fea08` (docs). Headless reproducibility preserved by the explicit
+  `HEADLESS_GALAXY_SEED` pin, so BALANS baselines are bit-identical.
 
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
 
 - **D1** Relations model + migration + opinion-breakdown UI — ✅ **DONE** (gate passed 2026-08-06)
-- **GALAXY_SEED** (standalone mini-stream, **between D1 and D2 implementation**) — ✅ **IMPLEMENTED,
-  GATE PENDING.** Commits `e0615bd` (code + keeper, 65 assertions) and `615eb63` (docs); G3 resolved
-  without running (Decision 2 → no version bump). **Gate script: `GALAXY_SEED_GATE_CHECKLIST.md`,
-  4 points, scheduled next session — D2 stays blocked until it passes.**
+- **GALAXY_SEED** (standalone mini-stream, **between D1 and D2 implementation**) — ✅ **DONE, gate
+  PASSED 2026-08-07 (4/4).** Commits `e0615bd` (code + keeper, 65 assertions), `615eb63` and
+  `b5fea08` (docs); G3 resolved without running (Decision 2 → no version bump). Gate result recorded
+  at the end of `GALAXY_SEED_GATE_CHECKLIST.md`. **D2 is unblocked.**
   Entropy enters once at world creation: a new game
   rolls a random galaxy seed, **stores it in the save**, and everything downstream derives from the
   stored seed exactly as today. The determinism contract is *"deterministic given a seed"*, not
@@ -69,10 +79,11 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   ⚠ Hard constraint, held: an existing player's galaxy does NOT change on load. Headless
   reproducibility preserved by an explicit pin (`HEADLESS_GALAXY_SEED` = the old constant), so
   BALANS baselines are bit-identical.
-- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **next up, but
-  GATED behind the GALAXY_SEED live gate above**; skeleton ready (`D2_PLAN_SKELETON.md`), plan doc
-  in draft. A fresh session bootstraps **D2 E1** from the repo docs once the gate is confirmed.
-  Scope now also carries: unit
+- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **IN PROGRESS
+  (started 2026-08-07, GALAXY_SEED gate cleared)**; plan doc `D2_PLAN.md` with all five decisions
+  signed, skeleton `D2_PLAN_SKELETON.md`. Commit order **E1 → E7 → E2 → E3 → E4 → E5 → E6 → E8 → E9**
+  (E7 pulled ahead: the acceptance matrices are the tuning instrument for E2's parity conversion).
+  Live gates at E3, E5, E6. Scope now also carries: unit
   unification (§5a), DiplomacyTelemetry+Report, the `threatened_by_you` wire-or-delete decision,
   the `_onColonyFounded` `ownerEmpireId` check, `kosmos_save_backup_v{N}` retirement, and the decay
   flag flip as its own commit + gate.
@@ -148,12 +159,12 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED (code ✅, gate ⏳) → D2 → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
+D1 ✅ → GALAXY_SEED ✅ → D2 ⟵ HERE → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** GALAXY_SEED code is on `main`; the only open item in the whole arc is its
-**live gate** (`GALAXY_SEED_GATE_CHECKLIST.md`, 4 points). D2 does not start until that is confirmed.
+**Where we are right now:** GALAXY_SEED closed (gate passed 2026-08-07) — **D2 implementation is
+underway**, commit order E1 → E7 → E2 → E3 → E4 → E5 → E6 → E8 → E9 per `D2_PLAN.md`.
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships

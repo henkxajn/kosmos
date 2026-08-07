@@ -151,3 +151,17 @@ kolejna świeża sesja bootstrapuje D2 E1 z dokumentów w repo.
 
 **Gdy coś FAIL:** zanotuj punkt, seed i ODCISK z obu porównywanych kroków oraz treść konsoli.
 Świeża sesja naprawcza; `GALAXY_SEED_PLAN` §Ryzyka R1-R6 mapuje objaw na prawdopodobną przyczynę.
+
+---
+
+## ✅ WYNIK — przebieg 2026-08-07: **PASS (4/4)**
+
+| punkt | wynik | dowód |
+|---|---|---|
+| §1 — dwie świeże gry ⇒ różne galaktyki | **PASS** | seed **A = −1652911923**, seed **B = 131797258**; różne ODCISK-i, różne nazwy imperiów, różne home-systemy AI, różne `objective` |
+| §2 — zapis → wczytanie ⇒ galaktyka identyczna | **PASS** | ten sam plik wczytany ponownie ⇒ seed i ODCISK bit-w-bit identyczne |
+| §3 — stary zapis ⇒ galaktyka niezmieniona | **PASS** | zapis legacy zachował seed **−2102099243** |
+| §4 — harness zielony | **PASS** | sweep + `galaxy_seed_smoke` + `empire_objective_smoke` + `check-i18n` |
+| §5 — świadome NIE-defekty | **przejrzane i zaakceptowane** | kolory i archetypy identyczne w A i B — zgodnie z projektem (Korekta 1) |
+
+**Skutek:** mini-stream **GALAXY_SEED ZAMKNIĘTY**; pozycja w sekwencji arca przechodzi na **D2**.
