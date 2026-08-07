@@ -225,7 +225,8 @@ console.log('--- M13: round-trip + parytet ---');
   window.KOSMOS.diplomacySystem = dipl;
 
   ok('opinia = trust − 50', dipl.getOpinionOfPlayer('emp_001') === 30);
-  ok('mostek D2 odtwarza DAWNY trust (80)', dipl.getTrustEquivalent('emp_001') === 80);
+  // D2/E3: mostek skasowany — dawny trust 80 to opinia 30 (trust = 50 + opinia).
+  ok('opinia odtwarza DAWNY trust 80', dipl.getOpinionOfPlayer('emp_001') === 30);
   ok('napięcie bez zmian', dipl.getTension('emp_001') === 12);
   ok('status bez zmian', dipl.getStatus('emp_001') === 'peace');
   ok('traktat rozpoznany', dipl.hasTradeAgreement('emp_001') === true);
@@ -237,7 +238,7 @@ console.log('--- M13: round-trip + parytet ---');
   ok('PARYTET: umowa handlowa akceptowana jak przed D1', dipl.proposeTreaty('emp_001', 'trade_agreement') === false
     || dipl.hasTradeAgreement('emp_001'));   // już podpisana → reason already_signed
   ok('wojna: mostek D2 daje 10 (−40 at_war + −50 legacy → clamp)',
-    dipl.getTrustEquivalent('emp_002') === 0);
+    dipl.getOpinionOfPlayer('emp_002') <= -50);
   ok('rozejm: licznik lat czytelny', dipl.getTruceYearsLeft('emp_003') === 10);
 
   // Potwierdzenie #2: umowa handlowa zerwana przez wojnę zdejmuje trade_partner,

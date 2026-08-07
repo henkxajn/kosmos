@@ -120,7 +120,15 @@ export class WarSystem {
     if (!war) return;
     const oldV = war.exhaustion?.[side] ?? 0;
     const newV = Math.max(0, Math.min(100, oldV + delta));
-    if (newV === oldV) return;
+    if (newV === oldV) {
+      // ⚠ D2/E3: wyczerpanie jest CLAMPOWANE do 100, więc po dobiciu do sufitu ten
+      // wczesny return zjadał każdą kolejną próbę auto-pokoju. Dopóki auto-pokój był
+      // BEZWARUNKOWY, nie miało to znaczenia — pierwsza próba zawsze kończyła wojnę.
+      // Odkąd decyduje silnik (i może ODMÓWIĆ), jednorazowy strzał zamykałby wojnę
+      // na zawsze w stanie „nie da się zakończyć". Każda kolejna bitwa próbuje ponownie.
+      if (delta > 0 && oldV >= AUTO_PEACE_EXHAUSTION) this._triggerAutoPeace(warId, side);
+      return;
+    }
     const next = { ...war, exhaustion: { ...war.exhaustion, [side]: newV } };
     gameState.set(`wars.${warId}`, next, `exhaustion_${side}_${delta}_${reason}`);
 
@@ -274,8 +282,17 @@ export class WarSystem {
     const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
     const dipl = window.KOSMOS?.diplomacySystem;
     if (!dipl) return;
-    // Wymuszenie pokoju — exhaustion >= 100 oznacza, że strona już nie może walczyć
-    dipl.offerPeace(empireId, `exhaustion_${exhaustedSide}`);
+    // ⚠ D2/E3: to NIE JEST już wymuszenie. Dawniej „exhaustion >= 100 ⇒ pokój" omijało
+    // jakąkolwiek ocenę; teraz `offerPeace` przechodzi przez Acceptance Engine, w którym
+    // wyczerpanie jest WIELKIM TERMEM (55 pkt) mierzonym względem `casusBelli.peaceCost`.
+    // Skutek zamierzony: wojna eksterminacyjna (peaceCost 100) nie kończy się sama —
+    // katalog casus belli od zawsze to obiecywał, a nikt tego nie egzekwował.
+    const accepted = dipl.offerPeace(empireId, `exhaustion_${exhaustedSide}`);
+    if (!accepted) {
+      EventBus.emit('war:autoPeaceRefused', {
+        warId, empireId, exhaustedSide, casusBelli: war.casusBelli ?? null,
+      });
+    }
   }
 
   // ── Ticker ───────────────────────────────────────────────────

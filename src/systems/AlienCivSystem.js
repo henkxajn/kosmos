@@ -36,7 +36,9 @@ const MIL_RATIO_WAR = 0.7;  // musi mieć co najmniej 70% siły gracza
 // D1: wartość gestu (+3) mieszka w katalogu (OPINION_MODIFIERS.their_envoy) —
 // dawna stała AI_ENVOY_TRUST_GAIN skasowana, żeby nie było dwóch źródeł liczby.
 const AI_ENVOY_COOLDOWN   = 15;    // civYears między emisariuszami (BUG2b — było 12)
-const AI_ENVOY_TRUST_MAX  = 60;    // wysyła tylko gdy relacje słabe (mostek D2 < 60)
+// Wysyła tylko gdy relacje są słabe. D2/E3: wyrażone w OPINII (skala D1), nie w dawnym
+// truście — 10 punktów opinii to dokładnie dawny próg trustu 60 (trust = 50 + opinia).
+const AI_ENVOY_OPINION_MAX = 10;
 const AI_ENVOY_SKIP_ARCHETYPES = new Set(['xenophage', 'hegemon']);
 
 export class AlienCivSystem {
@@ -129,8 +131,9 @@ export class AlienCivSystem {
     if (!GAME_CONFIG.FEATURES?.lightDiplomacy) return;
     if (!emp || !dipl) return;
     if (AI_ENVOY_SKIP_ARCHETYPES.has(emp.archetype)) return;
-    // D1: mostek D2 — opinia w skali dawnego trustu, więc próg 60 działa jak dotąd.
-    if (dipl.getTrustEquivalent(emp.id) >= AI_ENVOY_TRUST_MAX) return;
+    // D2/E3: ostatni konsument mostka `getTrustEquivalent` — czytamy opinię WPROST.
+    // Skala jest przesunięta o 50 (trust 60 ⇒ opinia 10), więc próg jest ten sam co dotąd.
+    if (dipl.getOpinionOfPlayer(emp.id) >= AI_ENVOY_OPINION_MAX) return;
     // BUG A — imperium w stanie wojny z graczem NIE wysyła emisariuszy (inaczej
     // +3/envoy maskuje karę za wojnę, zwłaszcza przy dużej prędkości czasu).
     if (dipl.getStatus(emp.id) === 'war') return;

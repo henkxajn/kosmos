@@ -3,7 +3,8 @@
 //
 // PORT tmp_s3_4_smoke.mjs (S3.4 Light Diplomacy) na model relacji z D1. Zachowuje
 // DOKŁADNE progi akceptacji traktatów (65/50/80/85) — zasiewane teraz przez
-// modyfikator legacy_relations i czytane przez mostek D2 getTrustEquivalent —
+// modyfikator legacy_relations i czytane przez OPINIE (mostek getTrustEquivalent
+// skasowany w D2/E3 — progi wyrażamy w skali D1: trust 60 = opinia 10) —
 // bo to jest asercja PARYTETU: te same wejścia mają dawać te same decyzje AI.
 //
 // Wycofane z oryginału: T4a/T4b (clamp trustu — teraz clamp opinii w
@@ -130,7 +131,7 @@ if (typeof offOp === 'function') offOp();
 
 EventBus.emit('intel:contactEstablished', { empireId: 'emp_contact' });
 assert(dipl.relations.has('player', 'emp_contact') && dipl.getOpinionOfPlayer('emp_contact') === 0
-  && dipl.getTrustEquivalent('emp_contact') === 50,
+  && dipl.getOpinionOfPlayer('emp_contact') === 0,
   'T7: pierwszy kontakt → relacja istnieje, opinia 0 (= dawny trust 50)');
 
 // ── Stage 3: envoy (abstrakcyjny) ───────────────────────────────────────────
@@ -168,9 +169,9 @@ console.log('--- Stage 4: vessel:arrived + trespassing ---');
 addEmpire('emp_mil'); addEmpire('emp_res'); addEmpire('emp_env'); addEmpire('emp_cargo');
 
 dipl._onVesselArrived({ id: 'a1', ownerEmpireId: 'player', systemId: 'sys_emp_mil', modules: ['weapon_laser'], position: { state: 'orbiting' } }, { targetId: null });
-assert(dipl.getOpinionOfPlayer('emp_mil') === -5 && dipl.getTrustEquivalent('emp_mil') === 45, 'T12: zbrojny przylot → −5 (mostek: 45)');
+assert(dipl.getOpinionOfPlayer('emp_mil') === -5, 'T12: zbrojny przylot → −5 (dawny trust 45)');
 dipl._onVesselArrived({ id: 'a2', ownerEmpireId: 'player', systemId: 'sys_emp_res', modules: ['science_lab'], position: { state: 'orbiting' } }, { targetId: null });
-assert(dipl.getOpinionOfPlayer('emp_res') === -3 && dipl.getTrustEquivalent('emp_res') === 47, 'T13: przylot badawczy → −3 (mostek: 47)');
+assert(dipl.getOpinionOfPlayer('emp_res') === -3, 'T13: przylot badawczy → −3 (dawny trust 47)');
 dipl._onVesselArrived({ id: 'a3', ownerEmpireId: 'player', systemId: 'sys_emp_env', modules: ['diplomatic_module'], position: { state: 'orbiting' } }, { targetId: null });
 assert(dipl.getOpinionOfPlayer('emp_env') === 0, 'T14: emisariusz → brak kary');
 dipl._onVesselArrived({ id: 'a4', ownerEmpireId: 'player', systemId: 'sys_emp_cargo', modules: ['cargo_small'], position: { state: 'orbiting' } }, { targetId: null });
@@ -230,7 +231,7 @@ assert(dipl.declareWar('emp_pact', 'ultimatum_expired') === false && dipl.getSta
   'T21a: pakt blokuje auto-wojnę');
 assert(dipl.declareWar('emp_pact', 'player_action') === true && dipl.getStatus('emp_pact') === 'war'
   && !dipl.hasTreaty('emp_pact', 'non_aggression')
-  && dipl.relations.hasModifier('emp_pact', 'player', 'at_war') && dipl.getTrustEquivalent('emp_pact') < 60,
+  && dipl.relations.hasModifier('emp_pact', 'player', 'at_war') && dipl.getOpinionOfPlayer('emp_pact') < 10,
   'T21b: gracz wypowiada wojnę mimo paktu → war + pakt zerwany + at_war');
 
 addEmpire('emp_war4', { trade: 0.8 });
@@ -281,7 +282,7 @@ dipl.signTreaty('emp_save', { id: 'trade_agreement' });
 const snap = JSON.parse(JSON.stringify(gameState.serialize()));
 seedOpinion('emp_save', -30);                        // mostek 20
 gameState.restore(snap);
-assert(dipl.getTrustEquivalent('emp_save') === 70 && dipl.hasTradeAgreement('emp_save'),
+assert(dipl.getOpinionOfPlayer('emp_save') === 20 && dipl.hasTradeAgreement('emp_save'),
   'T23: opinia + traktaty przeżywają serialize/restore');
 assert(CURRENT_VERSION >= 100, 'T24: CURRENT_VERSION >= 100 (D1 bump za rename kluczy par)');
 

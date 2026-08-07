@@ -1326,7 +1326,34 @@ export class UIManager {
       EventBus.emit('ui:toast', { text: t('log.diplo.aiEnvoy', nm), color: '#50B0A0' });   // BUG6 — widoczny toast
     });
     EventBus.on('diplomacy:envoyArrived',   ({ empireId }) => this._log(t('log.diplo.envoyArrived', _empName(empireId)), 'diplomacy'));
-    EventBus.on('diplomacy:envoyReturned',  ({ empireId }) => this._log(t('log.diplo.envoyReturned', _empName(empireId)), 'diplomacy'));
+    EventBus.on('diplomacy:envoyReturned',  ({ empireId, refused }) => {
+      // Odrzucona delegacja i tak WRACA (Decyzja 4 fazy) — powrót bez efektu ma inny
+      // komunikat niż powrót z sukcesem, inaczej gracz nie odróżniłby jednego od drugiego.
+      if (refused) return;   // wpis o odmowie poszedł już przy dotarciu
+      this._log(t('log.diplo.envoyReturned', _empName(empireId)), 'diplomacy');
+    });
+
+    // ── D2/E3 — ODMOWY: pierwsi realni subskrybenci Dziennika dla tej klasy zdarzeń ──
+    // Do tej pory dyplomacja potrafiła odmówić tylko traktatu; pokój i emisariusz nie
+    // miały ŻADNEJ oceny, więc nie było czego logować (checklista D1 §1.3 musiała
+    // usunąć oczekiwanie wpisu). E3 domyka to razem z samym mechanizmem odmowy.
+    // ⚠ Trzeci argument `_log` to `entityRef`, NIE severity — kanał i wagę wpisu wybiera
+    // `pushLegacy` na podstawie `type`. Odmowy jadą więc typem, a nie dopisanym poziomem.
+    EventBus.on('diplomacy:peaceRejected',  ({ empireId }) => {
+      const nm = _empName(empireId);
+      this._log(t('log.diplo.peaceRejected', nm), 'diplomacy');
+      EventBus.emit('ui:toast', { text: t('log.diplo.peaceRejected', nm), color: '#D8A030' });
+    });
+    EventBus.on('diplomacy:envoyRefused',   ({ empireId }) => {
+      const nm = _empName(empireId);
+      this._log(t('log.diplo.envoyRefused', nm), 'diplomacy');
+      EventBus.emit('ui:toast', { text: t('log.diplo.envoyRefused', nm), color: '#D8A030' });
+    });
+    EventBus.on('war:autoPeaceRefused',     ({ empireId, casusBelli }) => {
+      // Wojna doszła do sufitu wyczerpania i NIE zakończyła się sama — to jest nowość
+      // w grze i gracz musi o tym wiedzieć, inaczej wygląda jak zawieszony system.
+      this._log(t('log.diplo.autoPeaceRefused', _empName(empireId), String(casusBelli ?? '?')), 'diplomacy');
+    });
     EventBus.on('diplomacy:treatyAccepted', ({ empireId }) => this._log(t('log.diplo.treatyAccepted', _empName(empireId)), 'diplomacy'));
     EventBus.on('diplomacy:treatyRejected', ({ empireId, reason }) => {
       if (reason === 'already_signed') return;

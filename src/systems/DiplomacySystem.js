@@ -141,21 +141,13 @@ export class DiplomacySystem {
     return 'neutral';
   }
 
-  /**
-   * ── MOSTEK D2 — DOGASA, usunąć razem z ostatnim wołającym ──
-   * Opinia wyrażona w skali dawnego trustu (0-100, 50 = neutralnie).
-   *
-   * Stan po E2: `proposeTreaty` i `DiplomacyOverlay` już go NIE wołają (decyduje silnik).
-   * Zostaje JEDEN realny konsument — bramka AI-envoy w `AlienCivSystem` — który znika
-   * w E3 razem z retrofitem emisariusza. Warunek zamknięcia D2:
-   * `grep -rn "getTrustEquivalent" src/` puste.
-   *
-   * ⚠ Plan mówił o „dokładnie trzech wywołaniach"; realnie były CZTERY — czwarte
-   * to zrzut diagnostyczny `trustEqD2` w `GameScene.debug`, zdjęty w E2.
-   */
-  getTrustEquivalent(empireId) {
-    return Math.max(0, Math.min(100, 50 + this.getOpinionOfPlayer(empireId)));
-  }
+  // ── MOSTEK D2 `getTrustEquivalent` — USUNIĘTY w E3 ──
+  // Tłumaczył opinię na skalę dawnego trustu (0-100, 50 = neutralnie), żeby progi
+  // akceptacji dawały przed i po D1 ten sam wynik. Konsumentów ubywało kolejno:
+  // E2 zdjął `proposeTreaty`, `DiplomacyOverlay` i zrzut `GameScene.debug` (czwarte
+  // wywołanie, o którym plan nie wiedział — mówił o trzech), E3 zdejmuje ostatni:
+  // bramkę AI-envoy w `AlienCivSystem`, która czyta teraz opinię wprost.
+  // Warunek zamknięcia D2 (`grep -rn "getTrustEquivalent" src/` puste) — spełniony.
 
   // ── Odczyt: napięcie / status / pamięć ────────────────────────────────────
 
@@ -294,8 +286,45 @@ export class DiplomacySystem {
     return true;
   }
 
+  /**
+   * Ocena propozycji pokoju BEZ jej składania. Główny term to `war_status`:
+   * wyczerpanie obu stron kontra `casusBelli.peaceCost` — pole, które do D2 nie miało
+   * w kodzie ANI JEDNEGO czytelnika. Casus belli wybrał `inferCasusBelli` z okna
+   * CB_MEMORY_WINDOW pamięci relacji (D1/C-3), więc cena pokoju wynika z tego,
+   * co się między nami DZIAŁO, a nie z parametru wojny wziętego znikąd.
+   */
+  evaluatePeace(empireId) {
+    return this._acceptance().evaluateProposal(PLAYER, empireId, { verb: 'offer_peace' });
+  }
+
+  /** Ocena przyjęcia delegacji. Cel MOŻE odmówić — pierwszy raz w historii gry. */
+  evaluateEnvoy(empireId) {
+    return this._acceptance().evaluateProposal(PLAYER, empireId, { verb: 'improve_relations' });
+  }
+
+  /**
+   * Propozycja pokoju — D2/E3: PIERWSZE W HISTORII sprawdzenie (audyt R5).
+   *
+   * Do tej pory `offerPeace` ustawiał rozejm bezwarunkowo: jedyną bramką było „trwa wojna".
+   * Teraz decyduje silnik, a `casusBelli.peaceCost` wreszcie coś kosztuje — wojna
+   * eksterminacyjna (peaceCost 100) jest praktycznie nie do zakończenia rozmową, dokładnie
+   * jak opisuje ją katalog.
+   *
+   * ⚠ Ta sama ścieżka obsługuje AUTO-POKÓJ z `WarSystem._triggerAutoPeace`. To było obejście
+   * („exhaustion 100 ⇒ pokój"), teraz jest propozycją jak każda inna — wyczerpanie jest
+   * WIELKIM TERMEM, nie bypassem. Konsekwencja jest zamierzona: przy drogim casus belli
+   * wojna potrafi NIE zakończyć się sama.
+   */
   offerPeace(empireId, reason = '') {
     if (this.getStatus(empireId) !== 'war') return false;
+
+    const result = this.evaluatePeace(empireId);
+    if (!result.decision) {
+      this.addMemory(empireId, 'peace_refused', { reason });
+      EventBus.emit('diplomacy:peaceRejected', { empireId, reason, result });
+      return false;
+    }
+
     const until = this._year() + TRUCE_YEARS;
     this.relations.setStatus(PLAYER, empireId, 'truce', { truceUntilYear: until }, `peace_${reason}`);
     this.relations.setTension(PLAYER, empireId, Math.min(this.getTension(empireId), TRUCE_TENSION_CAP), 'peace');
@@ -303,7 +332,7 @@ export class DiplomacySystem {
     this.removeOpinionModifier(empireId, PLAYER, 'at_war');
     this.addOpinionModifier(empireId, PLAYER, 'recent_war', { source: `peace_${reason}` });
     this.addMemory(empireId, 'peace_offered', { reason });
-    EventBus.emit('diplomacy:peaceSigned', { empireId, reason });
+    EventBus.emit('diplomacy:peaceSigned', { empireId, reason, result });
     EventBus.emit('diplomacy:relationChanged', { empireId, tension: this.getTension(empireId), status: 'truce', reason });
     return true;
   }

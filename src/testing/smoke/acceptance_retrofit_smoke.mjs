@@ -176,12 +176,19 @@ console.log('--- R4/R5: panel bez własnych progów, mostek zdjęty ze ścieżek
   const sceneSrc = readFileSync(resolve(SRC, 'scenes/GameScene.js'), 'utf8');
   ok('zrzut diagnostyczny GameScene NIE woła już mostka', !/getTrustEquivalent/.test(sceneSrc));
 
-  // Mostek nadal ISTNIEJE — ma dokładnie jednego konsumenta (bramka AI-envoy), znika w E3.
-  ok('mostek wciąż istnieje jako metoda (ostatni konsument = AlienCivSystem, E3)',
-    typeof dipl.getTrustEquivalent === 'function');
-  const alienSrc = readFileSync(resolve(SRC, 'systems/AlienCivSystem.js'), 'utf8');
-  ok('JEDYNY pozostały wołający mostka to AlienCivSystem (do zdjęcia w E3)',
-    /getTrustEquivalent/.test(alienSrc));
+  // ── WARUNEK ZAMKNIĘCIA D2 (E3): mostka NIE MA. Sprawdzane wykonaniem, nie greppem
+  // z pamięci — plik po pliku, z pominięciem KOMENTARZY (te opisują, dlaczego zniknął).
+  ok('metoda getTrustEquivalent USUNIĘTA z DiplomacySystem',
+    dipl.getTrustEquivalent === undefined);
+  ok('bramka AI-envoy czyta opinię WPROST (ostatni konsument zdjęty w E3)', (() => {
+    const alienSrc = readFileSync(resolve(SRC, 'systems/AlienCivSystem.js'), 'utf8');
+    const code = alienSrc.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+    return !/getTrustEquivalent/.test(code) && /getOpinionOfPlayer\(emp\.id\)\s*>=\s*AI_ENVOY_OPINION_MAX/.test(code);
+  })());
+  ok('próg AI-envoy przeliczony 1:1 (dawny trust 60 ⇒ opinia 10)', (() => {
+    const alienSrc = readFileSync(resolve(SRC, 'systems/AlienCivSystem.js'), 'utf8');
+    return /AI_ENVOY_OPINION_MAX\s*=\s*10\b/.test(alienSrc);
+  })());
 }
 
 // ── R6: Decyzja 1 wykonana ──────────────────────────────────────────────────

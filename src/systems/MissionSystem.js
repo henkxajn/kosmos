@@ -1528,20 +1528,42 @@ export class MissionSystem {
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
   }
 
-  /** S3.4 — emisariusz dotarł (połowa misji): +5 opinii, status → returning. */
+  /**
+   * Emisariusz dotarł. D2/E3: PIERWSZE W HISTORII sprawdzenie po stronie CELU (audyt R5) —
+   * do tej pory `_launchEnvoy` walidował wyłącznie stronę gracza, a +5 opinii było pewne.
+   *
+   * ⚠ Ocena zapada przy DOTARCIU, nie przy starcie — bo misja jest abstrakcyjna i fikcja
+   * musi się zgadzać: delegacja leci, a odmowa brzmi „nie została przyjęta". Odmowa przy
+   * starcie oszczędzałaby graczowi lat blokady statku, ale znaczyłaby „wiedzieliśmy z góry",
+   * czego gracz wiedzieć nie może. Statek wraca normalnie (Decyzja 4 fazy).
+   */
   _processEnvoyArrival(exp) {
     const dipl = window.KOSMOS?.diplomacySystem;
+    const result = dipl?.evaluateEnvoy?.(exp.targetEmpireId) ?? null;
+
+    if (result && !result.decision) {
+      // Znacznik jedzie na rekordzie misji, więc noga powrotna też NIE dopisze dobrej woli.
+      // Rekordy misji serializują się przez spread (`{ ...e }`), więc pole przeżywa
+      // zapis/odczyt bez bumpu wersji — wzór `bordersOpen` z D1.
+      exp.refused = true;
+      exp.status  = 'returning';
+      EventBus.emit('diplomacy:envoyRefused', { empireId: exp.targetEmpireId, result });
+      return;
+    }
+
     dipl?.addOpinionModifier(exp.targetEmpireId, 'player', 'envoy_goodwill', { source: 'envoy_arrival' });
     exp.status = 'returning';
     EventBus.emit('diplomacy:envoyArrived', { empireId: exp.targetEmpireId });
   }
 
-  /** S3.4 — emisariusz wrócił: +5 opinii, zwolnij abstrakcyjną blokadę statku. */
+  /** Emisariusz wrócił: +5 opinii (o ile delegację PRZYJĘTO), zwolnij blokadę statku. */
   _completeEnvoy(exp) {
     const dipl = window.KOSMOS?.diplomacySystem;
-    dipl?.addOpinionModifier(exp.targetEmpireId, 'player', 'envoy_goodwill', { source: 'envoy_return' });
+    if (!exp.refused) {
+      dipl?.addOpinionModifier(exp.targetEmpireId, 'player', 'envoy_goodwill', { source: 'envoy_return' });
+    }
     window.KOSMOS?.vesselManager?.releaseFromAbstractMission?.(exp.vesselId);
-    EventBus.emit('diplomacy:envoyReturned', { empireId: exp.targetEmpireId });
+    EventBus.emit('diplomacy:envoyReturned', { empireId: exp.targetEmpireId, refused: !!exp.refused });
   }
 
   // ── Przetwarzanie przybycia ───────────────────────────────────────────────
