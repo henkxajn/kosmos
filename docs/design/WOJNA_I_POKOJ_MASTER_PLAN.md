@@ -79,11 +79,18 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   ⚠ Hard constraint, held: an existing player's galaxy does NOT change on load. Headless
   reproducibility preserved by an explicit pin (`HEADLESS_GALAXY_SEED` = the old constant), so
   BALANS baselines are bit-identical.
-- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **IN PROGRESS
-  (started 2026-08-07, GALAXY_SEED gate cleared)**; plan doc `D2_PLAN.md` with all five decisions
-  signed, skeleton `D2_PLAN_SKELETON.md`. Commit order **E1 → E7 → E2 → E3 → E4 → E5 → E6 → E8 → E9**
-  (E7 pulled ahead: the acceptance matrices are the tuning instrument for E2's parity conversion).
-  Live gates at E3, E5, E6. Scope now also carries: unit
+- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **IN PROGRESS.**
+  Plan doc `D2_PLAN.md` (per-commit status table there). Commit order **E1 → E7 → E2 → E3 → E4 →
+  E5 → E6 → E8 → E9** (E7 pulled ahead: the acceptance matrices are the tuning instrument for E2's
+  parity conversion). Live gates at E3, E5, E6.
+  **Done: E1 `ef35af7` · E7 `27dd7a6` · E2 `b8b3e08` · E3 `e011017` (⏳ gate pending —
+  `D2_E3_GATE_CHECKLIST.md`).** Remaining: E4, E5, E6, E8, E9. Save stays **v100**, no migration.
+  Headline results so far: `"always yes"` is over — peace and the envoy can be refused,
+  `casusBelli.peaceCost` got its first reader in the codebase, and the `getTrustEquivalent`
+  bridge is deleted. Parity for the three treaties is exact, proven by `diplomacy_d1_smoke`
+  passing **83/83 unedited** — personality turned out to be a *hard gate*, not a weighted term
+  (parity forces `O ≥ 8·P`, scale-invariant), so it became a `personalityFloor` precondition.
+  Scope now also carries: unit
   unification (§5a), DiplomacyTelemetry+Report, the `threatened_by_you` wire-or-delete decision,
   the `_onColonyFounded` `ownerEmpireId` check, `kosmos_save_backup_v{N}` retirement, and the decay
   flag flip as its own commit + gate.
@@ -171,12 +178,15 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED ✅ → D2 ⟵ HERE → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
+D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3⏳gate | E4 E5 E6 E8 E9) ⟵ HERE
+                        → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** GALAXY_SEED closed (gate passed 2026-08-07) — **D2 implementation is
-underway**, commit order E1 → E7 → E2 → E3 → E4 → E5 → E6 → E8 → E9 per `D2_PLAN.md`.
+**Where we are right now:** D2 is four commits in. **The only open item is the E3 live gate** —
+`docs/design/D2_E3_GATE_CHECKLIST.md`, 10 sections, ~20 min, every console one-liner validated
+against a live boot. It scripts **the first refused peace in the game's history**. E4 starts in a
+fresh session once the gate passes (or a repair session if it does not).
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships
