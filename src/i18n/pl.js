@@ -3353,6 +3353,25 @@ export default {
   'diplo.mod.recentWar':         'Świeża pamięć wojny',
   'diplo.mod.tradePartner':      'Partner handlowy',
   'diplo.mod.threatenedByYou':   'Czują się zagrożeni',
+
+  // D2 (E1) — Acceptance Engine: wiersze rozbicia DECYZJI (≠ rozbicie OPINII wyżej).
+  // Klucze wchodzą razem z katalogiem termów (wzór diplo.mod.* z D1); konsument — E4.
+  'diplo.term.opinion':       'Co o nas myślą',
+  'diplo.term.tension':       'Napięcie między nami',
+  'diplo.term.relativePower': 'Układ sił',
+  'diplo.term.warStatus':     'Zmęczenie wojną',
+  'diplo.term.personality':   'Ich natura',
+  'diplo.term.reputation':    'Nasza reputacja w galaktyce',
+  'diplo.term.offer':         'Dołączona oferta',
+  'diplo.term.memory':        'Co pamiętają',
+  'diplo.term.recentRefusal': 'Niedawna odmowa',
+  'diplo.term.thirdParty':    'Układ sojuszy',
+  'diplo.term.erraticNoise':  'Nieobliczalność',
+  // Powody TWARDEJ blokady (propozycja nie doszła nawet do oceny).
+  'diplo.reject.atWar':         'Trwa wojna',
+  'diplo.reject.notAtWar':      'Nie jesteśmy w stanie wojny',
+  'diplo.reject.alreadySigned': 'Taki traktat już obowiązuje',
+
   'diplo.btn.declareWar':   '⚔ WYPOWIEDZ WOJNĘ',
   'diplo.btn.offerPeace':   '☮ ZAPROPONUJ POKÓJ',
 

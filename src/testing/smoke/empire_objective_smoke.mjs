@@ -155,7 +155,7 @@ console.log('--- G1: REGRESJA DETERMINIZMU (złote wartości sprzed C3) ---');
 }
 
 // ── Brak konsumentów w D1 ───────────────────────────────────────────────────
-console.log('--- D3: zero konsumentów w D1 ---');
+console.log('--- D3: konsumenci osi objective (D1: zero → D2/E1: wyłącznie silnik) ---');
 {
   const fs = await import('node:fs');
   const path = await import('node:path');
@@ -173,15 +173,26 @@ console.log('--- D3: zero konsumentów w D1 ---');
       // ⚠ `src/testing/` wyłączone świadomie: telemetria OBSERWUJE pole (Snapshot
       // zapisuje je w wierszu imperium, żeby raporty BALANS widziały drugą oś), a to
       // nie to samo co KONSUMENT — czyli logika gry rozgałęziająca się na objective.
-      // Tego drugiego w D1 nie ma i ta asercja tego pilnuje aż do D2.
+      //
+      // ⚠ AKTUALIZACJA D2/E1 (świadoma, nie obejście): ta asercja z założenia miała PAŚĆ,
+      // gdy oś dostanie pierwszego konsumenta — i właśnie dostała. Acceptance Engine czyta
+      // `empire.objective` do kontekstu oceny i szuka nadpisań wag w OBJECTIVE_WEIGHT_OVERRIDES.
+      // Zamiast kasować pin, ZWĘŻAMY go do listy dozwolonych konsumentów: dopóki lista ma
+      // dokładnie jedną pozycję, wiadomo, że oś nie rozlała się po systemach bocznymi drzwiami.
+      // E5 (wartości nadpisań + rzut cechy `erratic`) tej listy NIE poszerza — dopisuje liczby
+      // do katalogu danych, a nie nowe rozgałęzienia w logice.
       if (/\.objective\b/.test(txt)
         && !/EmpireData|EmpireRegistry|EmpireGenerator|SaveMigration/.test(p)
         && !p.includes(`testing${path.sep}`)) hits.push(path.relative(SRC, p));
     }
   };
   walk(SRC);
-  ok(`objective nie ma jeszcze KONSUMENTÓW w logice gry (D2 je doda)${hits.length ? ' — znaleziono: ' + hits.join(', ') : ''}`,
-    hits.length === 0);
+  const ALLOWED = [`systems${path.sep}diplomacy${path.sep}AcceptanceEngine.js`];
+  const unexpected = hits.filter(h => !ALLOWED.includes(h));
+  ok(`objective czytany WYŁĄCZNIE przez Acceptance Engine${unexpected.length ? ' — nieoczekiwane: ' + unexpected.join(', ') : ''}`,
+    unexpected.length === 0);
+  ok('Acceptance Engine JEST konsumentem osi (D2/E1 — pierwszy w historii)',
+    hits.includes(ALLOWED[0]));
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);

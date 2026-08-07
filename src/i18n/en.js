@@ -3352,6 +3352,25 @@ export default {
   'diplo.mod.recentWar':         'Fresh memory of war',
   'diplo.mod.tradePartner':      'Trade partner',
   'diplo.mod.threatenedByYou':   'They feel threatened',
+
+  // D2 (E1) — Acceptance Engine: DECISION breakdown rows (≠ the OPINION breakdown above).
+  // Keys land with the term catalog (mirrors D1's diplo.mod.*); consumer arrives in E4.
+  'diplo.term.opinion':       'What they think of us',
+  'diplo.term.tension':       'Tension between us',
+  'diplo.term.relativePower': 'Balance of power',
+  'diplo.term.warStatus':     'War weariness',
+  'diplo.term.personality':   'Their nature',
+  'diplo.term.reputation':    'Our reputation in the galaxy',
+  'diplo.term.offer':         'Attached offer',
+  'diplo.term.memory':        'What they remember',
+  'diplo.term.recentRefusal': 'Recent refusal',
+  'diplo.term.thirdParty':    'Web of alliances',
+  'diplo.term.erraticNoise':  'Unpredictability',
+  // Reasons for a HARD block (the proposal never reached evaluation).
+  'diplo.reject.atWar':         'A war is under way',
+  'diplo.reject.notAtWar':      'We are not at war',
+  'diplo.reject.alreadySigned': 'That treaty is already in force',
+
   'diplo.btn.declareWar':   '⚔ DECLARE WAR',
   'diplo.btn.offerPeace':   '☮ OFFER PEACE',
 
