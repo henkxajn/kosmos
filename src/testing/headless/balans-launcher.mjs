@@ -63,6 +63,13 @@ export const METRICS = {
     prefix: 'ai-report',
     label:  'AI — imperia: czy nadążają za graczem (diagnoza regresji)',
   },
+  // WOJNA I POKÓJ 1.0 — D2/E7. Nie waliduje stałej: dostarcza MACIERZE AKCEPTACJI,
+  // czyli przyrząd, którym E2 przelicza dawne progi traktatów na wagi silnika.
+  diplomacy: {
+    runner: join(__dirname, 'balans-diplomacy-telemetry.mjs'),
+    prefix: 'diplomacy-report',
+    label:  'DYPLOMACJA — macierze akceptacji (przyrząd strojenia wag D2)',
+  },
 };
 export const DEFAULT_METRIC = 'pop';   // domyślna metryka API (kompatybilność wstecz)
 

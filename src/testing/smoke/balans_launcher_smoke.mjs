@@ -40,9 +40,12 @@ const SMOKE_PRC_HTML = join(REPORTS_DIR, `price-report-${SMOKE_CLASS}.html`);
 const SMOKE_PRC_JSON = join(REPORTS_DIR, `price-telemetry-${SMOKE_CLASS}.json`);
 const SMOKE_AI_HTML  = join(REPORTS_DIR, `ai-report-${SMOKE_CLASS}.html`);
 const SMOKE_AI_JSON  = join(REPORTS_DIR, `ai-telemetry-${SMOKE_CLASS}.json`);
+// D2/E7 — szósta metryka (macierze akceptacji dyplomacji).
+const SMOKE_DIP_HTML = join(REPORTS_DIR, `diplomacy-report-${SMOKE_CLASS}.html`);
+const SMOKE_DIP_JSON = join(REPORTS_DIR, `diplomacy-telemetry-${SMOKE_CLASS}.json`);
 const cleanup = () => {
   for (const f of [SMOKE_HTML, SMOKE_JSON, SMOKE_RES_HTML, SMOKE_RES_JSON, SMOKE_ROI_HTML, SMOKE_ROI_JSON,
-    SMOKE_PRC_HTML, SMOKE_PRC_JSON, SMOKE_AI_HTML, SMOKE_AI_JSON]) {
+    SMOKE_PRC_HTML, SMOKE_PRC_JSON, SMOKE_AI_HTML, SMOKE_AI_JSON, SMOKE_DIP_HTML, SMOKE_DIP_JSON]) {
     try { rmSync(f, { force: true }); } catch {}
   }
 };
@@ -294,6 +297,39 @@ try {
     assert(rep.status === 200, 'GET linku do raportu AI → 200');
     assert(html.includes('IMPERIA AI') && html.includes('Granice tego pomiaru'),
       'serwowany plik to raport AI — z sekcją GRANIC pomiaru (bez niej diagnoza kłamie)');
+  }
+
+  // ── T9: end-to-end DYPLOMACJA (szósta metryka — przyrząd strojenia D2) ──
+  console.log('\nT9 — end-to-end DYPLOMACJA: metric=diplomacy odpala runner MACIERZY AKCEPTACJI');
+  {
+    cleanup();
+    assert(!existsSync(SMOKE_DIP_HTML), 'przed runem brak raportu DYPLOMACJI (pre-clean)');
+
+    const t0 = Date.now();
+    const res = await fetch(`${base}/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metric: 'diplomacy', class: SMOKE_CLASS, seeds: 1, gy: 2 }),
+    });
+    const d = await res.json();
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+    assert(res.status === 200 && d.ok === true, `POST /run (diplomacy) → 200 ok (${secs}s, kod ${d.exitCode})`);
+    assert(d.metric === 'diplomacy' && d.reportFile === `diplomacy-report-${SMOKE_CLASS}.html`,
+      'zwrócona metryka i nazwa raportu = kontrakt runnera DYPLOMACJI');
+    assert(existsSync(SMOKE_DIP_HTML) && existsSync(SMOKE_DIP_JSON), 'artefakty DYPLOMACJI powstały na dysku');
+    assert(!existsSync(SMOKE_HTML) && !existsSync(SMOKE_RES_HTML) && !existsSync(SMOKE_ROI_HTML)
+      && !existsSync(SMOKE_PRC_HTML) && !existsSync(SMOKE_AI_HTML),
+      'runnery POP / ZASOBÓW / ROI / CEN / AI NIE zostały odpalone (rejestr wybiera właściwy proces)');
+    assert(Array.isArray(d.tail) && d.tail.some(l => /MACIERZ AKCEPTACJI|KOTWICE PARYTETU|WERDYKT/.test(l)),
+      'ogon stdout niesie wynik runnera DYPLOMACJI (dowód: właściwy proces)');
+
+    const rep = await fetch(`${base}${d.reportUrl}`);
+    const html = await rep.text();
+    assert(rep.status === 200, 'GET linku do raportu DYPLOMACJI → 200');
+    assert(html.includes('MACIERZE AKCEPTACJI') && html.includes('Granice tego pomiaru'),
+      'serwowany plik to raport DYPLOMACJI — z sekcją GRANIC pomiaru');
+    assert(html.includes('BEZCZYNNY') && html.includes('relative_power'),
+      'raport JAWNIE oznacza term bezczynny (Decyzja 2: nikt nie stroi wag względem zera)');
   }
 } finally {
   cleanup();
