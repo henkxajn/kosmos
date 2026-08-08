@@ -123,7 +123,7 @@ export const TERM_EVALUATORS = {
   /**
    * „Właśnie powiedzieliśmy nie" — koniec spamowania przyciskiem.
    * Liniowo od −1 tuż po odmowie do 0 po RECENT_REFUSAL_YEARS. Stan (`verbCooldowns`
-   * na rekordzie pary) zapisuje E4; do tego czasu kontekst niesie pusty obiekt.
+   * na rekordzie pary) pisze od E4 `RelationsModel.noteVerbRefusal` — jedyny pisarz.
    */
   recent_refusal: (ctx) => {
     const refusedYear = Number(ctx.verbCooldowns?.[ctx.verb]);
@@ -318,8 +318,9 @@ export class AcceptanceEngine {
       war:         this._buildWarContext(K, fromId, toId),
       thirdParty:  this._buildThirdPartyContext(rel, fromId, toId),
 
-      // E4 dopisze `verbCooldowns` do rekordu pary; do tego czasu pusty obiekt
-      // (wzór `bordersOpen` z D1 — odczyt z `?? {}` nie wymaga bumpu zapisu).
+      // Od E4 zapisywane przez `RelationsModel.noteVerbRefusal`. `?? {}` zostaje: stare
+      // zapisy (i pary sprzed pierwszej odmowy) nie mają tego pola, a pusta mapa jest
+      // poprawną wartością domyślną — dlatego pole NIE potrzebowało bumpu wersji zapisu.
       verbCooldowns: pairRel?.verbCooldowns ?? {},
 
       offer: proposal.offer ?? null,

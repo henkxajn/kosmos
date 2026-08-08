@@ -1547,6 +1547,10 @@ export class MissionSystem {
       // zapis/odczyt bez bumpu wersji — wzór `bordersOpen` z D1.
       exp.refused = true;
       exp.status  = 'returning';
+      // D2/E4 — stempel `recent_refusal`: kolejna delegacja wysłana zaraz po odprawionej
+      // ma pod górkę. Liczy się od DOTARCIA (czyli od chwili, w której padło „nie"),
+      // a nie od startu misji — gracz dowiaduje się wtedy i wtedy zaczyna karencja.
+      dipl?.noteRefusal?.(exp.targetEmpireId, 'improve_relations');
       EventBus.emit('diplomacy:envoyRefused', { empireId: exp.targetEmpireId, result });
       return;
     }

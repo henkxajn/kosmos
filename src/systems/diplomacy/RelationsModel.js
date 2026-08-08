@@ -90,6 +90,11 @@ export class RelationsModel {
       treaties:           [],
       memory:             [],
       ultimatumStartYear: null,
+      // E4 — { verbId: rok ostatniej odmowy }; karmi term `recent_refusal`.
+      // ⚠ W ODRÓŻNIENIU od bordersOpen NIE trafia do migracji: pusta mapa jest
+      // bezpieczną wartością domyślną, którą da się dopowiedzieć przy odczycie
+      // (`?? {}`), więc stare zapisy nie potrzebują bumpu wersji.
+      verbCooldowns:      {},
     };
     this._write(key, rel, 'relation_init');
     return rel;
@@ -262,6 +267,38 @@ export class RelationsModel {
     if (flags[side] === !!open) return;
     flags[side] = !!open;
     this._write(this.key(ofId, aboutId), { ...rel, bordersOpen: flags }, 'borders');
+  }
+
+  // ── Świeże odmowy (jedyne źródło termu `recent_refusal`) ─────────────────
+  //
+  // ⚠ NIE-KIERUNKOWE, i to jest KONTRAKT E1, nie przeoczenie: silnik czyta
+  // `pairRel.verbCooldowns[verb]` wprost z rekordu pary, bez rozróżniania stron
+  // (`AcceptanceEngine.buildContext`). W D2 istnieją wyłącznie pary z graczem i tylko
+  // gracz proponuje, więc „kto komu dał kosza" jest jednoznaczne. D5 (pary AI↔AI, obie
+  // strony proponują) będzie musiał dołożyć wymiar proponującego — i wtedy zmienia się
+  // OBOK tego zapisu również odczyt w silniku. Zmiana jednej strony bez drugiej = cichy błąd.
+
+  /** Mapa { verbId: rok ostatniej odmowy }. Brak pary / brak pola → pusty obiekt. */
+  getVerbCooldowns(a, b) { return this.getOrNull(a, b)?.verbCooldowns ?? {}; }
+
+  /** Rok ostatniej odmowy danego czasownika albo null (brak odmowy w historii pary). */
+  getVerbRefusedYear(a, b, verb) {
+    const year = this.getVerbCooldowns(a, b)[verb];
+    return Number.isFinite(year) ? year : null;
+  }
+
+  /**
+   * Stempluje świeżą odmowę czasownika. ZAWSZE nadpisuje — kolejne „nie" liczy się od
+   * nowa, bo term wygasza liniowo od OSTATNIEJ odmowy. Nie kumuluje: dwie odmowy pod rząd
+   * nie mają boleć podwójnie, mają boleć dłużej.
+   * @returns {number|null} zapisany rok albo null gdy brak czasownika
+   */
+  noteVerbRefusal(a, b, verb, year = this._year()) {
+    if (!verb) return null;
+    const rel  = this.ensure(a, b);
+    const next = { ...(rel.verbCooldowns ?? {}), [verb]: Number(year) || 0 };
+    this._write(this.key(a, b), { ...rel, verbCooldowns: next }, `refusal_${verb}`);
+    return next[verb];
   }
 
   // ── Tick (sama matematyka stanu; polityka i eventy w DiplomacySystem) ─────

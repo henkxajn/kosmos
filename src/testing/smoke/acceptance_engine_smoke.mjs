@@ -475,11 +475,15 @@ console.log('--- P10: termy bezczynne (K-1..K-5) ---');
     TERM_EVALUATORS.reputation(mkCtx({ proposerAggression: 50 })) === -0.5);
   ok('third_party ma status PARTIAL (pary AI↔AI dopiero w D5)',
     ACCEPTANCE_TERMS.third_party.status === TERM_STATUS.PARTIAL);
-  ok('offer / memory / recent_refusal / erratic_noise oznaczone jako UNFED',
-    ['offer', 'memory', 'recent_refusal', 'erratic_noise']
+  // ⚠ E4 ZDJĄŁ `recent_refusal` z tej listy — to zmiana ZAMIERZONA, nie regresja pinu:
+  // term dostał pisarza (`RelationsModel.noteVerbRefusal`), więc przeszedł UNFED → LIVE.
+  // Lista zostaje pinem dla RESZTY: `offer` odblokuje D4 (czasownik `gift`), `memory`
+  // D4 (dowody zdrady), `erratic_noise` E5 (rzut cechy przy generacji imperium).
+  ok('offer / memory / erratic_noise wciąż oznaczone jako UNFED (paliwo dopiero w D4/E5)',
+    ['offer', 'memory', 'erratic_noise']
       .every(id => ACCEPTANCE_TERMS[id].status === TERM_STATUS.UNFED));
-  ok('termy z realnym źródłem w D2 oznaczone jako LIVE',
-    ['opinion', 'tension', 'personality', 'war_status']
+  ok('termy z realnym źródłem w D2 oznaczone jako LIVE (E4 dołożył recent_refusal)',
+    ['opinion', 'tension', 'personality', 'war_status', 'recent_refusal']
       .every(id => ACCEPTANCE_TERMS[id].status === TERM_STATUS.LIVE));
 }
 

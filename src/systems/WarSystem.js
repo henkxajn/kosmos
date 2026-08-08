@@ -287,7 +287,12 @@ export class WarSystem {
     // wyczerpanie jest WIELKIM TERMEM (55 pkt) mierzonym względem `casusBelli.peaceCost`.
     // Skutek zamierzony: wojna eksterminacyjna (peaceCost 100) nie kończy się sama —
     // katalog casus belli od zawsze to obiecywał, a nikt tego nie egzekwował.
-    const accepted = dipl.offerPeace(empireId, `exhaustion_${exhaustedSide}`);
+    // ⚠ `playerInitiated: false` — patrz DiplomacySystem.offerPeace. Ta ścieżka PONAWIA
+    // się przy każdej kolejnej bitwie (bo wyczerpanie stoi na suficie i samo nic nie ruszy),
+    // więc stemplowanie `recent_refusal` dałoby parze w praktyce stałe −20 i zakleszczyło
+    // wojnę dokładnie tak, jak przed dołożeniem tego retry. Ta sama flaga trzyma modal
+    // odmowy (E4) z dala od serii bitew — gracz niczego tu nie klikał.
+    const accepted = dipl.offerPeace(empireId, `exhaustion_${exhaustedSide}`, { playerInitiated: false });
     if (!accepted) {
       EventBus.emit('war:autoPeaceRefused', {
         warId, empireId, exhaustedSide, casusBelli: war.casusBelli ?? null,

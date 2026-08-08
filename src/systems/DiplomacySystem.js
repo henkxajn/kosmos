@@ -303,6 +303,28 @@ export class DiplomacySystem {
   }
 
   /**
+   * D2/E4 — stempluje świeżą odmowę, przez co term `recent_refusal` przechodzi
+   * UNFED → LIVE. To JEDYNY pisarz `verbCooldowns`; ewaluator i wagi stoją od E1
+   * i do tej pory czytały pusty obiekt.
+   *
+   * Wołane WYŁĄCZNIE po odmowie OCENIONEJ. Blokada pre-warunku (trwa wojna, traktat
+   * już podpisany) świadomie NIE stempluje: nikt nas nie odrzucił, propozycja w ogóle
+   * nie doszła do oceny, a karanie za nią kaskadowałoby absurdem (nie można prosić
+   * o sojusz w czasie wojny ⇒ kara za próbę ⇒ trudniej o sojusz po wojnie).
+   *
+   * @param {string} empireId
+   * @param {string} verb — id czasownika z VERB_ACCEPTANCE (traktaty = ich własne id)
+   */
+  noteRefusal(empireId, verb) {
+    return this.relations.noteVerbRefusal(PLAYER, empireId, verb);
+  }
+
+  /** Rok ostatniej odmowy czasownika albo null — dla UI („spróbuj ponownie za…"). */
+  getRefusedYear(empireId, verb) {
+    return this.relations.getVerbRefusedYear(PLAYER, empireId, verb);
+  }
+
+  /**
    * Propozycja pokoju — D2/E3: PIERWSZE W HISTORII sprawdzenie (audyt R5).
    *
    * Do tej pory `offerPeace` ustawiał rozejm bezwarunkowo: jedyną bramką było „trwa wojna".
@@ -314,14 +336,30 @@ export class DiplomacySystem {
    * („exhaustion 100 ⇒ pokój"), teraz jest propozycją jak każda inna — wyczerpanie jest
    * WIELKIM TERMEM, nie bypassem. Konsekwencja jest zamierzona: przy drogim casus belli
    * wojna potrafi NIE zakończyć się sama.
+   *
+   * @param {Object} [opts]
+   * @param {boolean} [opts.playerInitiated=true] — czy to ŚWIADOMA propozycja gracza.
+   *   Jedna flaga, dwie konsekwencje (bo obie wynikają z tego samego faktu):
+   *     1. tylko świadoma propozycja STEMPLUJE `recent_refusal`,
+   *     2. tylko świadoma propozycja zasługuje na modal odmowy (E4 czyta to z payloadu).
+   *
+   *   ⚠ AUTO-POKÓJ PODAJE `false` I TO JEST WARUNEK BRAKU ZAKLESZCZENIA. E3 dołożył
+   *   ponawianie auto-pokoju przy KAŻDEJ kolejnej bitwie, bo wyczerpanie stoi na suficie
+   *   i samo nic już nie ruszy. Gdyby każde takie ponowienie stemplowało odmowę, para
+   *   dostałaby w praktyce STAŁE −20 na `offer_peace` (term wygasa przez 2 lata, a bitwy
+   *   odświeżają go szybciej) — czyli E4 zatrzasnąłby dokładnie tę pułapkę, którą E3
+   *   właśnie otworzył. `recent_refusal` ma kończyć SPAMOWANIE PRZYCISKIEM; auto-pokój
+   *   nie jest niczyim klikaniem, tylko konsekwencją wyczerpania. Z tego samego powodu
+   *   nie pauzuje gry modalem w środku serii bitew.
    */
-  offerPeace(empireId, reason = '') {
+  offerPeace(empireId, reason = '', { playerInitiated = true } = {}) {
     if (this.getStatus(empireId) !== 'war') return false;
 
     const result = this.evaluatePeace(empireId);
     if (!result.decision) {
       this.addMemory(empireId, 'peace_refused', { reason });
-      EventBus.emit('diplomacy:peaceRejected', { empireId, reason, result });
+      if (playerInitiated) this.noteRefusal(empireId, 'offer_peace');
+      EventBus.emit('diplomacy:peaceRejected', { empireId, reason, result, playerInitiated });
       return false;
     }
 
@@ -425,6 +463,8 @@ export class DiplomacySystem {
       EventBus.emit('diplomacy:treatyAccepted', { empireId, treatyId, result });
       return true;
     }
+    // Odmowa OCENIONA (nie blokada pre-warunku wyżej) → stempel na `recent_refusal`.
+    this.noteRefusal(empireId, treatyId);
     EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined', result });
     return false;
   }

@@ -100,10 +100,14 @@ export const ACCEPTANCE_TERMS = {
           'zdrada sojuszu) zapisuje dopiero D4 i wtedy MEMORY_EVIDENCE_WEIGHTS się zapełni.',
   },
   recent_refusal: {
-    id: 'recent_refusal', labelKey: 'diplo.term.recentRefusal', status: TERM_STATUS.UNFED,
+    id: 'recent_refusal', labelKey: 'diplo.term.recentRefusal', status: TERM_STATUS.LIVE,
     unit: '−1 = odmowa dosłownie przed chwilą (liniowo do 0 przez RECENT_REFUSAL_YEARS)',
-    note: 'Stan (`verbCooldowns` na rekordzie pary) zapisuje dopiero E4 — do tego czasu ' +
-          'kontekst niesie pusty obiekt i term zwraca 0. To on kończy spamowanie przyciskiem.',
+    note: 'E4 dołożył PISARZA (`RelationsModel.noteVerbRefusal`, stan na rekordzie pary), ' +
+          'więc term przeszedł UNFED → LIVE: ewaluator i wagi stały od E1 i czytały pusty ' +
+          'obiekt. Stempluje WYŁĄCZNIE odmowa OCENIONA i ŚWIADOMIE ZAPROPONOWANA — blokada ' +
+          'pre-warunku nie (nikt nas nie odrzucił), auto-pokój z wyczerpania też nie ' +
+          '(ponawia się przy każdej bitwie, więc stemplowanie dałoby parze stałe −20 ' +
+          'i zakleszczyło wojnę — patrz DiplomacySystem.offerPeace).',
   },
   third_party: {
     id: 'third_party', labelKey: 'diplo.term.thirdParty', status: TERM_STATUS.PARTIAL,
