@@ -1718,6 +1718,7 @@ export default {
   'log.diplo.envoyArrived': '🕊 Our envoy reached {0}',
   'log.diplo.envoyReturned': '🕊 Envoy returned from {0}',
   'log.diplo.envoyRefused': '🚫 {0} would not receive our delegation',
+  'log.diplo.peaceSigned': '☮ Peace with {0} — {1}-year truce',
   'log.diplo.peaceRejected': '🚫 {0} rejected the peace offer',
   'log.diplo.autoPeaceRefused': '⚠ The war with {0} drags on despite exhaustion — casus belli: {1}',
   'log.diplo.treatyAccepted': '✔ {0} accepted the treaty',

@@ -1719,6 +1719,7 @@ export default {
   'log.diplo.envoyArrived': '🕊 Nasz emisariusz dotarł do {0}',
   'log.diplo.envoyReturned': '🕊 Emisariusz wrócił od {0}',
   'log.diplo.envoyRefused': '🚫 {0} nie przyjęli naszej delegacji',
+  'log.diplo.peaceSigned': '☮ Pokój z {0} — rozejm na {1} l.',
   'log.diplo.peaceRejected': '🚫 {0} odrzucili propozycję pokoju',
   'log.diplo.autoPeaceRefused': '⚠ Wojna z {0} trwa mimo wyczerpania — casus belli: {1}',
   'log.diplo.treatyAccepted': '✔ {0} zaakceptował traktat',

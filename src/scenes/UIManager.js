@@ -1333,6 +1333,25 @@ export class UIManager {
       this._log(t('log.diplo.envoyReturned', _empName(empireId)), 'diplomacy');
     });
 
+    // ── D2/E4 — POKÓJ ZAWARTY: dług sprzed fazy, znaleziony przez live-gate E3 ──
+    // `diplomacy:peaceSigned` jest emitowane od PIERWSZEGO commita dyplomacji, ale miało
+    // wyłącznie subskrybentów STANU (WarSystem zamyka wojnę, AlienCivSystem przełącza FSM) —
+    // Dziennik nie dostał ani jednego w żadnym commicie (`git log --all -S` po tym pliku
+    // był pusty). Nie bolało, dopóki dyplomacja mówiła „tak" na wszystko. E3 dał głos
+    // ODMOWOM i pokój został JEDYNYM sukcesem bez wpisu — traktat i emisariusz mają swoje.
+    //
+    // Toast (a traktat go nie ma) ma powód, nie symetrię: pokój bywa zawierany AUTOMATYCZNIE
+    // przy wyczerpaniu, gdy gracz nie patrzy w żaden panel — koniec wojny nie może przejść
+    // niezauważony. Długość rozejmu jest w komunikacie, bo to realna mechanika: przez tyle
+    // lat nie da się wypowiedzieć wojny ponownie.
+    EventBus.on('diplomacy:peaceSigned', ({ empireId }) => {
+      const nm    = _empName(empireId);
+      const years = window.KOSMOS?.diplomacySystem?.getTruceYearsLeft?.(empireId) ?? 0;
+      const text  = t('log.diplo.peaceSigned', nm, String(Math.round(years)));
+      this._log(text, 'diplomacy');
+      EventBus.emit('ui:toast', { text, color: '#60B090' });
+    });
+
     // ── D2/E3 — ODMOWY: pierwsi realni subskrybenci Dziennika dla tej klasy zdarzeń ──
     // Do tej pory dyplomacja potrafiła odmówić tylko traktatu; pokój i emisariusz nie
     // miały ŻADNEJ oceny, więc nie było czego logować (checklista D1 §1.3 musiała

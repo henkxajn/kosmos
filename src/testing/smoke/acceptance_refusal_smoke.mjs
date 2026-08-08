@@ -404,5 +404,53 @@ console.log('--- R9: przycisk mówi „da się złożyć", a powód blokady nie 
     !/evaluateTreaty/.test(overlay) && !/\.decision/.test(overlay));
 }
 
+// ── R10: Dziennik — skoro odmowy mówią, sukcesy też muszą ───────────────────
+console.log('--- R10: komplet wpisów Dziennika dla wyników dyplomatycznych ---');
+{
+  const { readFileSync } = await import('node:fs');
+  const { dirname, resolve, join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+  const uiSrc  = readFileSync(join(SRC, 'scenes', 'UIManager.js'), 'utf8');
+  const plDict = (await import('../../i18n/pl.js')).default;
+  const enDict = (await import('../../i18n/en.js')).default;
+
+  // Macierz z gate'u E3: każdy WYNIK dyplomatyczny ma zdarzenie, subskrybenta Dziennika
+  // i klucz w obu językach. Do E4 brakowało tu DOKŁADNIE jednego wiersza — pokoju
+  // ZAWARTEGO, jedynego sukcesu bez głosu (`diplomacy:peaceSigned` miał wyłącznie
+  // subskrybentów STANU: WarSystem zamyka wojnę, AlienCivSystem przełącza FSM).
+  const OUTCOMES = [
+    { event: 'diplomacy:peaceSigned',    key: 'log.diplo.peaceSigned',    kind: 'sukces' },
+    { event: 'diplomacy:treatyAccepted', key: 'log.diplo.treatyAccepted', kind: 'sukces' },
+    { event: 'diplomacy:envoyArrived',   key: 'log.diplo.envoyArrived',   kind: 'sukces' },
+    { event: 'diplomacy:envoyReturned',  key: 'log.diplo.envoyReturned',  kind: 'sukces' },
+    { event: 'diplomacy:peaceRejected',  key: 'log.diplo.peaceRejected',  kind: 'odmowa' },
+    { event: 'diplomacy:treatyRejected', key: 'log.diplo.treatyRejected', kind: 'odmowa' },
+    { event: 'diplomacy:envoyRefused',   key: 'log.diplo.envoyRefused',   kind: 'odmowa' },
+    { event: 'war:autoPeaceRefused',     key: 'log.diplo.autoPeaceRefused', kind: 'odmowa' },
+  ];
+
+  for (const o of OUTCOMES) {
+    ok(`[${o.kind}] '${o.event}' MA subskrybenta Dziennika`,
+      uiSrc.includes(`EventBus.on('${o.event}'`));
+    ok(`[${o.kind}] '${o.event}' ma komunikat w PL i EN`,
+      typeof plDict[o.key] === 'string' && typeof enDict[o.key] === 'string');
+  }
+
+  ok('ŻADEN sukces nie jest już cichszy od odmowy (to była JEDYNA rozbieżność gate\'u E3)',
+    OUTCOMES.filter(o => o.kind === 'sukces')
+      .every(o => uiSrc.includes(`EventBus.on('${o.event}'`) && plDict[o.key] && enDict[o.key]));
+
+  // Placeholdery muszą się zgadzać w OBU językach — inaczej gracz EN zobaczy „{1}".
+  const { t: translate, setLocale } = await import('../../i18n/i18n.js');
+  for (const loc of ['pl', 'en']) {
+    setLocale(loc);
+    const msg = translate('log.diplo.peaceSigned', 'Wolna Liga', '10');
+    ok(`komunikat o pokoju podstawia nazwę I długość rozejmu (${loc})`,
+      msg.includes('Wolna Liga') && msg.includes('10') && !/\{\d\}/.test(msg));
+  }
+  setLocale('pl');
+}
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);
