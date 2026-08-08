@@ -2,14 +2,15 @@
 
 **Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
+**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · E4 🔨 ← TU · E5/E6/E8/E9 ⬜
 
 | commit | stan | hash | uwagi |
 |---|---|---|---|
 | **E1** silnik + katalog termów i wag | ✅ **DONE** | `ef35af7` | 197 asercji, zero wpięć; `INCIDENT_CHANNELS` zaostrzyły regułę anty-podwójnego-liczenia |
 | **E7** telemetria + raport + `METRICS` | ✅ **DONE** | `27dd7a6` | macierze akceptacji jako TABELA; sonda wrażliwości termów oddzielona od macierzy |
 | **E2** retrofit trzech traktatów | ✅ **DONE** | `b8b3e08` | osobowość → **podłoga** (dowód `O ≥ 8·P`); `diplomacy_d1_smoke` 83/83 BEZ poprawek |
-| **E3** pokój + emisariusz + auto-peace | ✅ kod **DONE**, ⏳ **GATE PENDING** | `e011017` | skrypt: `docs/design/D2_E3_GATE_CHECKLIST.md` · mostek `getTrustEquivalent` USUNIĘTY |
-| **E4** UI odmowy + `recent_refusal` | ⬜ do zrobienia | — | pierwszy konsument `breakdown`; kanał `ScheduledEventPopup` |
+| **E3** pokój + emisariusz + auto-peace | ✅ **DONE — GATE PASSED 2026-08-08** | `e011017` | 10/10 sekcji; skrypt+wynik: `docs/design/D2_E3_GATE_CHECKLIST.md` · mostek `getTrustEquivalent` USUNIĘTY · jedna rozbieżność → naprawa w E4 (ustalenie 6 niżej) |
+| **E4** UI odmowy + `recent_refusal` | 🔨 **W REALIZACJI** | — | pierwszy konsument `breakdown`; kanał `ScheduledEventPopup`; **+ wpis o ZAWARTYM pokoju** (dług z gate'u E3) |
 | **E5** konsumenci `objective` + rzut `erratic` | ⬜ do zrobienia | — | własny gate; `OBJECTIVE_WEIGHT_OVERRIDES` jest DZIŚ pusty (obraz „przed" w macierzy) |
 | **E6** flip `diplomacyDecay` + unifikacja jednostek | ⬜ do zrobienia | — | własny gate; tabela §Baseline do wypełnienia pomiarem |
 | **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
@@ -29,6 +30,12 @@ E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
    cena × natura.
 5. Odmawialny auto-pokój mógł **zakleszczyć wojnę** (wyczerpanie clampowane do 100 + wczesny
    return) — dołożony retry przy każdej kolejnej bitwie + `war:autoPeaceRefused` w Dzienniku.
+6. **Gate E3 (PASSED) odsłonił dług sprzed fazy: pokój ZAWARTY nie ma wpisu w Dzienniku
+   i nigdy nie miał** — `diplomacy:peaceSigned` ma wyłącznie subskrybentów STANU
+   (`WarSystem:46` zamyka wojnę, `AlienCivSystem:66` przełącza FSM), a `git log --all -S`
+   po `UIManager` jest pusty. To over-promise checklisty, nie regresja E3 (klasa D1 §1.3).
+   Uwiera dopiero teraz, bo E3 dał głos ODMOWOM — pokój został jedynym sukcesem bez wpisu
+   (traktat i emisariusz mają swoje). **Naprawa w E4** razem z resztą kanału odmów.
 **Arc:** WOJNA I POKÓJ 1.0 · **Parent:** `DIPLOMACY_BACKBONE.md` §2 + §5 · **Skeleton:** `D2_PLAN_SKELETON.md`
 **Zależy od:** D1 ✅ (gate 2026-08-06) · **GALAXY_SEED ✅** (gate 2026-08-07 — mini-stream zamknięty)
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` §4.5, R2, R5, R9

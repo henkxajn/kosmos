@@ -83,8 +83,15 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   Plan doc `D2_PLAN.md` (per-commit status table there). Commit order **E1 → E7 → E2 → E3 → E4 →
   E5 → E6 → E8 → E9** (E7 pulled ahead: the acceptance matrices are the tuning instrument for E2's
   parity conversion). Live gates at E3, E5, E6.
-  **Done: E1 `ef35af7` · E7 `27dd7a6` · E2 `b8b3e08` · E3 `e011017` (⏳ gate pending —
-  `D2_E3_GATE_CHECKLIST.md`).** Remaining: E4, E5, E6, E8, E9. Save stays **v100**, no migration.
+  **Done: E1 `ef35af7` · E7 `27dd7a6` · E2 `b8b3e08` · E3 `e011017` — E3 live gate PASSED
+  2026-08-08, 10/10 sections (`D2_E3_GATE_CHECKLIST.md` carries the recorded result).**
+  In progress: **E4**. Remaining: E5, E6, E8, E9. Save stays **v100**, no migration.
+  The gate's one discrepancy was a **checklist over-promise, not a regression**: a concluded
+  peace has no Journal entry and never had one — `diplomacy:peaceSigned` only ever had *state*
+  subscribers (WarSystem closes the war, AlienCivSystem flips the FSM), and
+  `git log --all -S` over `UIManager` is empty. Same class as D1 §1.3. It only started to
+  chafe because E3 gave refusals a voice, leaving peace as the sole *success* without one
+  (treaty and envoy both have theirs). **Fixed in E4.**
   Headline results so far: `"always yes"` is over — peace and the envoy can be refused,
   `casusBelli.peaceCost` got its first reader in the codebase, and the `getTrustEquivalent`
   bridge is deleted. Parity for the three treaties is exact, proven by `diplomacy_d1_smoke`
@@ -178,15 +185,19 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3⏳gate | E4 E5 E6 E8 E9) ⟵ HERE
+D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate | E4🔨 E5 E6 E8 E9) ⟵ HERE
                         → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** D2 is four commits in. **The only open item is the E3 live gate** —
-`docs/design/D2_E3_GATE_CHECKLIST.md`, 10 sections, ~20 min, every console one-liner validated
-against a live boot. It scripts **the first refused peace in the game's history**. E4 starts in a
-fresh session once the gate passes (or a repair session if it does not).
+**Where we are right now:** D2 is four commits in and **past its first live gate**. E3 passed on
+2026-08-08 — the game now has a refusable peace: the first refusal scored **−6.5** against a
+threshold of 0 (war exhaustion 0 against a `border_incident` peace price of 30), the same war
+concluded at exhaustion 70, and an extermination war survived exhaustion 100 without ending
+itself. **E4 is in progress**: the refusal modal that renders the breakdown verbatim, the
+`recent_refusal` term going UNFED → LIVE, and the E2-deferred flip of treaty/peace buttons to
+always-clickable. Next gates are **E5** and **E6** (E4 ships without one — it adds a modal and a
+cooldown, neither of which moves the acceptance maths).
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships

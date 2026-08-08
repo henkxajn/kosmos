@@ -1,5 +1,8 @@
 # D2 / E3 — live gate · skrypt jednej sesji
 
+**Status: ✅ PASSED 2026-08-08** — 10/10 sekcji, jedna rozbieżność (brak wpisu o ZAWARTYM
+pokoju) rozstrzygnięta jako over-promise checklisty, naprawa w E4. Pełny zapis: §Wynik gate'u.
+
 **Arc:** WOJNA I POKÓJ 1.0 · faza **D2** (Acceptance Engine) · commit **E3** `e011017`
 **Zakres:** WYŁĄCZNIE E3 — pokój i emisariusz dostają pierwsze w historii sprawdzenie.
 E1/E7/E2 przeszły bramki headless; E4-E6 i E8-E9 jeszcze nie istnieją.
@@ -121,8 +124,10 @@ const w=KOSMOS.warSystem.getWarWith('emp_001'); KOSMOS.warSystem.changeExhaustio
 console.log('offerPeace →',KOSMOS.diplomacySystem.offerPeace('emp_001','player_action'),'| status:',KOSMOS.diplomacySystem.getStatus('emp_001'),'| rozejm lat:',KOSMOS.diplomacySystem.getTruceYearsLeft('emp_001'));
 ```
 
-- [ ] **true** · `status:` → **`truce`** · `rozejm lat:` → **10**
-- [ ] Dziennik: normalny wpis o zawarciu pokoju (bez 🚫)
+- [x] **true** · `status:` → **`truce`** · `rozejm lat:` → **10**
+- [~] ~~Dziennik: normalny wpis o zawarciu pokoju (bez 🚫)~~ ← **JEDYNA ROZBIEŻNOŚĆ GATE'U.**
+      Wpisu NIE MA i **nigdy nie było** — to over-promise tej checklisty, nie regresja E3.
+      Werdykt ze śledztwa i naprawa: patrz **§Wynik gate'u → Rozbieżność**.
 
 **Co właśnie zobaczyłeś:** ta sama propozycja, raz odrzucona, raz przyjęta — różnica jest
 w wyczerpaniu wojną mierzonym względem **ceny pokoju z casus belli**. To pole
@@ -292,19 +297,53 @@ To NIE są błędy. Gate polega na tym, żeby je zobaczyć i **nie zgłosić**.
 
 ---
 
-## Wynik gate'u
+## Wynik gate'u — ✅ **PASSED 2026-08-08**
 
-- [ ] **§1-§2 PASS** — pierwsza odmowa pokoju + wpis w Dzienniku
-- [ ] **§3 PASS** — pokój przyjęty po wzroście wyczerpania
-- [ ] **§4 PASS** — auto-pokój odmówiony, wojna trwa, retry przy kolejnej bitwie
-- [ ] **§5 PASS** — delegacja odrzucona, statek wrócił pusty, zero opinii
-- [ ] **§6 PASS** — delegacja przyjęta, +5/+5 jak dotąd
-- [ ] **§7-§8 PASS** — traktat przez silnik, granica na dawnym progu, diagnostyka czytelna
-- [ ] **§9 PASS** — harness zielony
-- [ ] **§10** — przejrzane i zaakceptowane
+- [x] **§1-§2 PASS** — pierwsza odmowa pokoju w historii gry; rozbicie **−6.5** co do cyfry
+      jak przewidziane (war_status −16.5 · personality +10 · tension +8 · opinion −8);
+      wpis w Dzienniku + toast
+- [x] **§3 PASS** — pokój przyjęty po wzroście wyczerpania do 70 → `truce`, rozejm **10 lat**
+      *(z JEDNĄ rozbieżnością — patrz niżej)*
+- [x] **§4 PASS** — auto-pokój odmówiony przy wyczerpaniu **100**, wojna eksterminacyjna trwa,
+      druga linia „trwa mimo wyczerpania" po ponowieniu przy kolejnej bitwie
+- [x] **§5 PASS** — delegacja odrzucona, statek wrócił pusty (`idle`), opinia **bez zmian**
+      (ani +5 przy dotarciu, ani +5 przy powrocie)
+- [x] **§6 PASS** — delegacja przyjęta, parytet **+5/+5** zachowany
+- [x] **§7-§8 PASS** — traktat przez silnik, granica **dokładnie na opinii 10** (dawny trust 60),
+      diagnostyka `dumpRelation` czytelna
+- [x] **§9 PASS** — harness zielony
+- [x] **§10** — przejrzane i zaakceptowane (sześć świadomych nie-defektów)
 
-**Gdy wszystko PASS:** E3 zamknięty → **E4** (UI odmowy z rozbiciem + term `recent_refusal`)
-w świeżej sesji, bootstrap z dokumentów w repo.
+### Rozbieżność — JEDNA, w §3: brak wpisu w Dzienniku o ZAWARTYM pokoju
 
-**Gdy coś FAIL:** zanotuj numer paragrafu, WKLEJONE polecenie i CAŁY wynik z konsoli
-(łącznie z tabelą rozbicia — to ona mówi, który term poszedł nie tak). Świeża sesja naprawcza.
+**Werdykt: over-promise CHECKLISTY, nie regresja E3.** Klasa dokładnie ta sama co
+**D1 §1.3** („NIE oczekuj wpisu w Dzienniku — `diplomacy:warning` nie ma ani jednego
+subskrybenta"), z tą różnicą, że tam złapaliśmy to przy pisaniu skryptu, a tu przeszło
+do gate'u. Dowody ze śledztwa:
+
+| pytanie | ustalenie |
+|---|---|
+| Czy `offerPeace` kiedykolwiek logował sukces? | **Nie.** Zdarzenie `diplomacy:peaceSigned` jest emitowane od pierwszego commita dyplomacji (`347a64d`), a jego postać sprzed D2 (`78c94f1`) emituje je identycznie. |
+| Kto go słucha? | Wyłącznie `WarSystem.js:46` (`_onPeaceSigned` — zamyka wojnę) i `AlienCivSystem.js:66` (przejście FSM → `NEGOTIATING`). **Żaden nie pisze do Dziennika.** |
+| Czy subskrybent Dziennika kiedyś istniał i zginął? | `git log --all -S"peaceSigned" -- src/scenes/UIManager.js` → **pusto**. Nie istniał w ŻADNYM commicie. |
+| A bliźniacze `war:peaceSigned`? | `WarSystem.js:276` emituje, subskrybentów **zero** poza whitelistą `DebugLog.js:34`. |
+| Co zmienił E3 w tej linii? | Dołożył `result` do payloadu. Emit i (brakujące) wpięcie Dziennika są nietknięte od D1. |
+
+**Dlaczego to teraz uwiera:** E3 dał głos ODMOWOM (`peaceRejected`, `envoyRefused`,
+`autoPeaceRefused`), więc asymetria stała się widoczna — pokój jest jedynym SUKCESEM
+dyplomatycznym bez wpisu:
+
+| wynik | wpis w Dzienniku | stan |
+|---|---|---|
+| pokój ZAWARTY | — | ❌ **BRAK** |
+| traktat ZAWARTY | `log.diplo.treatyAccepted` (`UIManager.js:1357`) | ✅ |
+| emisariusz dotarł | `log.diplo.envoyArrived` (`UIManager.js:1328`) | ✅ |
+| emisariusz wrócił | `log.diplo.envoyReturned` (`UIManager.js:1329`) | ✅ |
+| pokój ODRZUCONY | `log.diplo.peaceRejected` (`UIManager.js:1342`) | ✅ (E3) |
+
+**Naprawa ląduje w E4** (ta sama, niezależnie od werdyktu): wpis o zawartym pokoju +
+przegląd spójności wpisów sukcesu — skoro odmowy mówią, sukcesy muszą mówić też.
+
+---
+
+**E3 ZAMKNIĘTY.** → **E4** (UI odmowy z rozbiciem + term `recent_refusal` + flip przycisków).
