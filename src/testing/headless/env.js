@@ -110,6 +110,17 @@ function _createElement(tag) {
     removeAttribute: () => {},
     hasAttribute: () => false,
     appendChild: (child) => { el.children.push(child); el.childNodes.push(child); if (child) child.parentNode = el; return child; },
+    // ParentNode.append — wariadyczne, przyjmuje też stringi (stają się węzłami tekstowymi).
+    // ⚠ Brakowało go, a UI go UŻYWA (ScheduledEventPopup, BattleIntroModal, BattleView3D):
+    // każdy headless test dotykający tych ścieżek wywalał się na „append is not a function",
+    // co wyglądało jak błąd testowanego kodu, a było luką atrapy.
+    append: (...nodes) => {
+      for (const n of nodes) {
+        const node = (n && typeof n === 'object') ? n : { textContent: String(n), nodeType: 3 };
+        el.children.push(node); el.childNodes.push(node);
+        if (node && typeof node === 'object') node.parentNode = el;
+      }
+    },
     removeChild: (child) => {
       const i = el.children.indexOf(child);
       if (i >= 0) el.children.splice(i, 1);

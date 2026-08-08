@@ -263,5 +263,102 @@ console.log('--- R7: term jest LIVE, a pisarz dokładnie jeden ---');
     hits.some(h => WRITER.includes(h)) && hits.some(h => READER.includes(h)));
 }
 
+// ── R8: modal odmowy — rozbicie DOSŁOWNIE ───────────────────────────────────
+console.log('--- R8: treść modala „dlaczego NIE" ---');
+{
+  const { buildRefusalContent, initDiplomacyRefusals } =
+    await import('../../ui/DiplomacyRefusalModal.js');
+  const plDict = (await import('../../i18n/pl.js')).default;
+  const enDict = (await import('../../i18n/en.js')).default;
+
+  // Tłumacz-atrapa: zwraca sam klucz, więc asercje patrzą na STRUKTURĘ, nie na polski.
+  const raw = (k, ...p) => (p.length ? `${k}(${p.join('|')})` : k);
+
+  const mkRows = (n) => Array.from({ length: n }, (_, i) => ({
+    term: `t${i}`, labelKey: `diplo.term.t${i}`, status: 'live',
+    raw: 1, weight: 10 - i, value: (i % 2 === 0 ? 1 : -1) * (10 - i),
+  }));
+
+  {
+    const html = buildRefusalContent(
+      { score: -6.5, threshold: 0, blocked: false, breakdown: mkRows(3) },
+      { translate: raw });
+    ok('każdy widoczny term dostaje własny wiersz', mkRows(3).every(r => html.includes(r.labelKey)));
+    ok('dodatni wkład jest zielony, ujemny czerwony',
+      html.includes('at-stat-pos') && html.includes('at-stat-neg'));
+    ok('wkłady mają JAWNY znak (gracz musi widzieć kierunek, nie samą liczbę)',
+      html.includes('+10') && html.includes('−9'));
+    ok('werdykt podaje wynik I próg — bez progu liczba nic nie znaczy',
+      html.includes('diploRefusal.score') && html.includes('diploRefusal.threshold') && html.includes('−6.5'));
+  }
+
+  {
+    const html = buildRefusalContent(
+      { score: -1, threshold: 0, blocked: false, breakdown: mkRows(11) },
+      { translate: raw });
+    const shown = mkRows(11).filter(r => html.includes(r.labelKey)).length;
+    ok('długie rozbicie jest OBCINANE (karta popupu nie ma przewijania)', shown === 6);
+    ok('…i mówi WPROST, ile wierszy schowano — cichy limit udawałby komplet',
+      html.includes('diploRefusal.moreFactors(5)') || html.includes('diploRefusal.moreFactors'));
+    ok('obcięcie zabiera NAJSŁABSZE wkłady (wiersze przychodzą posortowane)',
+      html.includes('diplo.term.t0') && !html.includes('diplo.term.t10'));
+  }
+
+  {
+    const html = buildRefusalContent(
+      { score: 0, threshold: 0, blocked: true, reasonKey: 'diplo.reject.natureForbids', breakdown: [] },
+      { translate: raw });
+    ok('blokada pre-warunku pokazuje POWÓD, nie pustą tabelę',
+      html.includes('diplo.reject.natureForbids') && !html.includes('diploRefusal.whyTitle'));
+  }
+
+  {
+    const html = buildRefusalContent(
+      { score: -30, threshold: 0, blocked: false, breakdown: mkRows(2) },
+      { translate: raw, cooldownYearsLeft: 2 });
+    ok('gdy świeża odmowa obciąża — modal MÓWI, jak długo',
+      html.includes('diploRefusal.cooldownYears(2)'));
+  }
+  {
+    const html = buildRefusalContent(
+      { score: -30, threshold: 0, blocked: false, breakdown: mkRows(2) },
+      { translate: raw, cooldownYearsLeft: 0 });
+    ok('bez obciążenia nie ma linii o karencji (zero-wiersz udawałby mechanikę)',
+      !html.includes('diploRefusal.cooldown'));
+  }
+
+  // ── Bramka `playerInitiated` na żywej ścieżce zdarzeń ──
+  initDiplomacyRefusals();
+  const mounted = () => document.body.children.length;
+
+  timeSys.gameTime = 600;
+  const E = addEmpire('emp_r8', 'xenophage');
+  seedOpinion(E, -60);
+  dipl.declareWar(E, 'player_action');
+  setWar(E, { exhaustion: 0, casusBelli: 'extermination' });
+
+  const beforeAuto = mounted();
+  dipl.offerPeace(E, 'exhaustion_player', { playerInitiated: false });
+  ok('auto-pokój NIE otwiera modala (inaczej pauzuje grę w środku serii bitew)',
+    mounted() === beforeAuto);
+
+  const beforePlayer = mounted();
+  dipl.offerPeace(E, 'player_action');
+  ok('świadoma propozycja gracza OTWIERA modal', mounted() === beforePlayer + 1);
+
+  // i18n — komplet w OBU słownikach (check-i18n nie pilnuje parytetu, tylko braków).
+  const KEYS = [
+    'barTitle', 'headlineTreaty', 'headlinePeace', 'headlineEnvoy',
+    'descTreaty', 'descPeace', 'descEnvoy', 'whyTitle', 'verdictTitle',
+    'score', 'threshold', 'moreFactors', 'blockedTitle', 'reason',
+    'unknownReason', 'cooldown', 'cooldownYears', 'ok',
+  ].map(k => `diploRefusal.${k}`);
+  ok('wszystkie klucze modala są w PL', KEYS.every(k => typeof plDict[k] === 'string'));
+  ok('…i w EN (parytet, którego check-i18n NIE egzekwuje)', KEYS.every(k => typeof enDict[k] === 'string'));
+  ok('klucze powodów blokady mają tłumaczenia w obu językach',
+    ['diplo.reject.atWar', 'diplo.reject.notAtWar', 'diplo.reject.alreadySigned', 'diplo.reject.natureForbids']
+      .every(k => typeof plDict[k] === 'string' && typeof enDict[k] === 'string'));
+}
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

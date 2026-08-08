@@ -34,6 +34,8 @@ import { t } from '../i18n/i18n.js';
 import { RelationsModel } from './diplomacy/RelationsModel.js';
 import { ReputationLedger } from './diplomacy/ReputationLedger.js';
 import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
+import { visibleBreakdown } from '../utils/AcceptanceMath.js';
+import { RECENT_REFUSAL_YEARS } from '../data/AcceptanceWeightData.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
@@ -322,6 +324,31 @@ export class DiplomacySystem {
   /** Rok ostatniej odmowy czasownika albo null — dla UI („spróbuj ponownie za…"). */
   getRefusedYear(empireId, verb) {
     return this.relations.getVerbRefusedYear(PLAYER, empireId, verb);
+  }
+
+  /**
+   * Ile lat GRY świeża odmowa jeszcze obciąża ten czasownik (0 = już nie).
+   * Liczone TUTAJ, bo stała okna mieszka w katalogu wag, którego UI nie importuje
+   * (pin P14). Modal odmowy zamienia to na „spróbuj ponownie za N lat" — bez tego
+   * `recent_refusal` karze gracza, nie mówiąc mu, jak długo.
+   */
+  getRefusalYearsLeft(empireId, verb) {
+    const year = this.getRefusedYear(empireId, verb);
+    if (year == null) return 0;
+    return Math.max(0, (year + RECENT_REFUSAL_YEARS) - this._year());
+  }
+
+  /**
+   * Wiersze rozbicia warte pokazania graczowi (bez zerowych wkładów) — projekcja dla UI.
+   *
+   * ⚠ ISTNIEJE PO TO, ŻEBY UI NIE IMPORTOWAŁO `AcceptanceMath`. Pin P14 w
+   * `acceptance_engine_smoke` trzyma import silnika WYŁĄCZNIE w tym pliku, a modal
+   * odmowy (E4) potrzebuje dokładnie tego jednego filtra. Skopiowanie predykatu do UI
+   * dałoby drugą definicję „co warto pokazać" — a to jest decyzja modelu (K-2/K-5:
+   * wiersz o wartości 0 udaje działającą mechanikę), nie decyzja panelu.
+   */
+  getVisibleBreakdown(result) {
+    return visibleBreakdown(result?.breakdown ?? []);
   }
 
   /**
