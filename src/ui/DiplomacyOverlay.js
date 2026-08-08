@@ -498,17 +498,26 @@ export class DiplomacyOverlay extends BaseOverlay {
     // (przycisk MYLNIE opisywał stan), nie reguła gry — dlatego prawdą jest 60/75/80
     // z systemu, a panel przestaje mieć własne zdanie.
     //
-    // ⚠ E2 zachowuje dzisiejszy UX: przycisk jest aktywny dopiero wtedy, gdy propozycja
-    // PRZESZŁABY. Odblokowanie go zawsze (i pokazanie modala odmowy z rozbiciem) to E4 —
-    // wcześniej klik kończyłby się ciszą. Ocena jest czysta i liczy się tylko przy
-    // otwartym panelu, więc wywołanie w rysowaniu jest tanie.
-    const wouldAccept = (treatyId) => {
-      if (!isContact || !notWar || dipl.hasTreaty(this._selectedId, treatyId)) return false;
-      return dipl.evaluateTreaty?.(this._selectedId, treatyId)?.decision === true;
-    };
-    const canTrade = wouldAccept('trade_agreement');
-    const canPact  = wouldAccept('non_aggression');
-    const canAlly  = wouldAccept('alliance');
+    // ── D2/E4 — FLIP ODROCZONY W E2: przycisk mówi „da się ZŁOŻYĆ", nie „na pewno przejdzie" ──
+    // E2 świadomie zostawił dawny UX (aktywny dopiero, gdy propozycja PRZESZŁABY), bo bez
+    // modala odmowy klik kończyłby się ciszą. Modal jest (E4b), więc znika ocena z bramki:
+    // klik, który TŁUMACZY (rozbicie: czego zabrakło, o ile, na jak długo obciąża odmowa),
+    // uczy gracza dyplomacji — wyszarzony przycisk milczy i wygląda na zepsuty.
+    //
+    // Szare zostaje WYŁĄCZNIE to, co strukturalnie niemożliwe, nigdy „powiedzieliby nie":
+    //   isContact  — nieznanego imperium nie ma do czego zagadnąć (panel i tak maskuje dane),
+    //   notWar     — lustro bramki pokoju (`canPeace` wymaga wojny); w czasie wojny trzy
+    //                przyciski traktatów tłumaczyłyby to samo („Trwa wojna"), a stan wojny
+    //                panel pokazuje jako fakt pierwszej kategorii,
+    //   hasTreaty  — traktat już obowiązuje, klik byłby MARTWY (modal pomija `already_signed`).
+    //
+    // Efekt uboczny, zamierzony: podłoga osobowości (`personality_floor`) staje się PIERWSZY
+    // RAZ osiągalna klikiem — xenofag odmawia sojuszu przez naturę i wreszcie to mówi.
+    const canPropose = (treatyId) =>
+      isContact && notWar && !dipl.hasTreaty(this._selectedId, treatyId);
+    const canTrade = canPropose('trade_agreement');
+    const canPact  = canPropose('non_aggression');
+    const canAlly  = canPropose('alliance');
 
     // Wiersz 1: wojna / pokój
     this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.declareWar'), canWar, 'danger');

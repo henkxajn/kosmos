@@ -165,7 +165,14 @@ console.log('--- R4/R5: panel bez własnych progów, mostek zdjęty ze ścieżek
   const overlaySrc = readFileSync(resolve(SRC, 'ui/DiplomacyOverlay.js'), 'utf8');
   ok('panel NIE trzyma już progów 65/80/80', !/trustEq\s*>=\s*(65|80)/.test(overlaySrc));
   ok('panel NIE woła mostka getTrustEquivalent', !/getTrustEquivalent/.test(overlaySrc));
-  ok('panel pyta o dostępność SILNIK (evaluateTreaty)', /evaluateTreaty/.test(overlaySrc));
+  // ⚠ E4 ODWRÓCIŁ TEN PIN — zamierzenie, nie regresja. E2 wymagał, żeby panel PYTAŁ silnik
+  // o decyzję (`evaluateTreaty`), bo dopóki nie było modala odmowy, klik w przycisk skazany
+  // na „nie" kończył się ciszą. Modal jest (E4b), więc ocena znika z bramki: szare zostaje
+  // wyłącznie to, co strukturalnie niemożliwe (brak kontaktu / wojna / traktat już zawarty),
+  // a „powiedzieliby nie" TŁUMACZY SIĘ klikiem. Intencja obu faz jest ta sama i to jej
+  // pilnujemy dalej: panel NIE MA WŁASNEGO ZDANIA o wyniku propozycji.
+  ok('panel NIE ocenia już propozycji sam (E4: klik, który tłumaczy, zamiast szarego przycisku)',
+    !/evaluateTreaty/.test(overlaySrc) && !/\.decision/.test(overlaySrc));
 
   const systemSrc = readFileSync(resolve(SRC, 'systems/DiplomacySystem.js'), 'utf8');
   const proposeBody = systemSrc.slice(systemSrc.indexOf('proposeTreaty(empireId, treatyId)'));

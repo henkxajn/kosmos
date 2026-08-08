@@ -360,5 +360,49 @@ console.log('--- R8: treść modala „dlaczego NIE" ---');
       .every(k => typeof plDict[k] === 'string' && typeof enDict[k] === 'string'));
 }
 
+// ── R9: flip przycisków + diagnostyka blokad ────────────────────────────────
+console.log('--- R9: przycisk mówi „da się złożyć", a powód blokady nie kłamie ---');
+{
+  timeSys.gameTime = 700;
+  const E = addEmpire('emp_r9', 'xenophage');   // trade 0.1, aggression 0.9 — łamie WSZYSTKIE trzy podłogi
+  seedOpinion(E, 90);                            // opinia maksymalna: blokuje WYŁĄCZNIE natura
+
+  let rejected = null;
+  EventBus.on('diplomacy:treatyRejected', (e) => { rejected = e; });
+
+  const r = dipl.evaluateTreaty(E, 'trade_agreement');
+  ok('podłoga osobowości BLOKUJE mimo świetnej opinii (kontrakt E2)',
+    r.blocked === true && r.reasonKey === 'diplo.reject.natureForbids');
+
+  dipl.proposeTreaty(E, 'trade_agreement');
+  ok('powód w zdarzeniu to `nature_forbids`, a NIE zwinięte „at_war" (diagnostyka = realna ścieżka)',
+    rejected?.reason === 'nature_forbids');
+  ok('blokada natury nadal NIE stempluje karencji', cooldowns(E).trade_agreement === undefined);
+
+  // Parytet dawnych wartości — słuchacze na nich stoją.
+  const W = addEmpire('emp_r9war');
+  dipl.declareWar(W, 'player_action');
+  rejected = null;
+  dipl.proposeTreaty(W, 'trade_agreement');
+  ok('blokada wojną nadal melduje dawne `at_war`', rejected?.reason === 'at_war');
+
+  const S = addEmpire('emp_r9signed');
+  seedOpinion(S, 60);
+  dipl.proposeTreaty(S, 'trade_agreement');
+  rejected = null;
+  dipl.proposeTreaty(S, 'trade_agreement');
+  ok('powtórka na podpisanym nadal melduje dawne `already_signed`',
+    rejected?.reason === 'already_signed');
+
+  // Pin źródłowy: panel NIE MA już własnego zdania o tym, czy propozycja przejdzie.
+  const { readFileSync } = await import('node:fs');
+  const { dirname, resolve, join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const overlay = readFileSync(
+    join(resolve(dirname(fileURLToPath(import.meta.url)), '../..'), 'ui', 'DiplomacyOverlay.js'), 'utf8');
+  ok('DiplomacyOverlay nie pyta silnika o DECYZJĘ przy wyszarzaniu przycisków',
+    !/evaluateTreaty/.test(overlay) && !/\.decision/.test(overlay));
+}
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

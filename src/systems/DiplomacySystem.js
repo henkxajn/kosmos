@@ -69,6 +69,17 @@ const TREATY_TO_MODIFIER = Object.fromEntries(
   Object.values(OPINION_MODIFIERS).filter(m => m.treatyId).map(m => [m.treatyId, m.id]),
 );
 
+// Klucz i18n pre-warunku → string powodu w zdarzeniu `diplomacy:treatyRejected`.
+// Dwie pierwsze wartości są DAWNE i słuchacze na nich stoją (UIManager pomija log dla
+// `already_signed`, DiplomacyOverlay pomija flash). Pozostałe dwa powody istniały
+// w silniku od E1/E2, ale nie miały jak wyjść — mapowanie zwijało je do `at_war`.
+const REJECT_REASON_BY_KEY = {
+  'diplo.reject.alreadySigned': 'already_signed',
+  'diplo.reject.atWar':         'at_war',
+  'diplo.reject.notAtWar':      'not_at_war',
+  'diplo.reject.natureForbids': 'nature_forbids',
+};
+
 export class DiplomacySystem {
   constructor() {
     this._tickAccum = 0;
@@ -480,8 +491,16 @@ export class DiplomacySystem {
     const result = this.evaluateTreaty(empireId, treatyId);
 
     if (result.blocked) {
-      // Mapowanie klucza pre-warunku na dawny string powodu (kontrakt słuchaczy).
-      const reason = result.reasonKey === 'diplo.reject.alreadySigned' ? 'already_signed' : 'at_war';
+      // Mapowanie klucza pre-warunku na string powodu (kontrakt słuchaczy).
+      //
+      // ⚠ E4: było `reasonKey === alreadySigned ? 'already_signed' : 'at_war'` — ternary
+      // bez trzeciej gałęzi, więc KAŻDA inna blokada meldowała się jako „trwa wojna".
+      // Dotąd niewidoczne: podłoga osobowości była nieosiągalna klikiem (przycisk wyszarzony,
+      // bo bramka pytała silnik o decyzję). Flip przycisków z tego commitu ją odsłania,
+      // więc diagnostyka musi odtwarzać REALNĄ ścieżkę decyzyjną, a nie jej skrót.
+      // Dawne wartości (`already_signed`, `at_war`) zachowane co do znaku — słuchacze
+      // rozpoznają je bez zmian.
+      const reason = REJECT_REASON_BY_KEY[result.reasonKey] ?? 'blocked';
       EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason, result });
       return false;
     }
