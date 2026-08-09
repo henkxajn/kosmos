@@ -2,7 +2,8 @@
 
 **Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
-**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · E4 🔨 ← TU · E5/E6/E8/E9 ⬜
+**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e 🔨 ← TU**
+(dwa fixy uczciwości z audytu recovery, niżej) · E5 ⬜ (własny gate) · E6/E8/E9 ⬜
 
 | commit | stan | hash | uwagi |
 |---|---|---|---|
@@ -10,7 +11,8 @@ E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 | **E7** telemetria + raport + `METRICS` | ✅ **DONE** | `27dd7a6` | macierze akceptacji jako TABELA; sonda wrażliwości termów oddzielona od macierzy |
 | **E2** retrofit trzech traktatów | ✅ **DONE** | `b8b3e08` | osobowość → **podłoga** (dowód `O ≥ 8·P`); `diplomacy_d1_smoke` 83/83 BEZ poprawek |
 | **E3** pokój + emisariusz + auto-peace | ✅ **DONE — GATE PASSED 2026-08-08** | `e011017` | 10/10 sekcji; skrypt+wynik: `docs/design/D2_E3_GATE_CHECKLIST.md` · mostek `getTrustEquivalent` USUNIĘTY · jedna rozbieżność → naprawa w E4 (ustalenie 6 niżej) |
-| **E4** UI odmowy + `recent_refusal` | 🔨 **W REALIZACJI** | — | pierwszy konsument `breakdown`; kanał `ScheduledEventPopup`; **+ wpis o ZAWARTYM pokoju** (dług z gate'u E3) |
+| **E4** UI odmowy + `recent_refusal` | ✅ **DONE** (bez gate'u) | `9f166a4` `10175c3` `d473bcd` `56de88d` | 4 podkroki: a=pisarz karencji (UNFED→LIVE) · b=modal z rozbiciem · c=flip przycisków + powód blokady · d=wpis o ZAWARTYM pokoju (dług z gate'u E3). Save v100 bez migracji |
+| **E4e** dwa fixy uczciwości modala | 🔨 **W REALIZACJI** | — | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B). Oba w §Ustalenia 11 |
 | **E5** konsumenci `objective` + rzut `erratic` | ⬜ do zrobienia | — | własny gate; `OBJECTIVE_WEIGHT_OVERRIDES` jest DZIŚ pusty (obraz „przed" w macierzy) |
 | **E6** flip `diplomacyDecay` + unifikacja jednostek | ⬜ do zrobienia | — | własny gate; tabela §Baseline do wypełnienia pomiarem |
 | **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
@@ -35,7 +37,40 @@ E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
    (`WarSystem:46` zamyka wojnę, `AlienCivSystem:66` przełącza FSM), a `git log --all -S`
    po `UIManager` jest pusty. To over-promise checklisty, nie regresja E3 (klasa D1 §1.3).
    Uwiera dopiero teraz, bo E3 dał głos ODMOWOM — pokój został jedynym sukcesem bez wpisu
-   (traktat i emisariusz mają swoje). **Naprawa w E4** razem z resztą kanału odmów.
+   (traktat i emisariusz mają swoje). **Naprawiono w E4d**; macierz ośmiu wyników jest
+   teraz PINEM w smoke, więc kolejna taka luka padnie w harnessie, nie na gate'cie.
+7. **`recent_refusal` był gotowy w 90% od E1** — ewaluator, wagi we wszystkich pięciu
+   czasownikach, plumbing `ctx` i sześć asercji. Brakowało wyłącznie PISARZA, więc E4
+   nie dodawał termu, tylko go nakarmił (`RelationsModel.noteVerbRefusal`).
+8. **Karencja MUSI omijać auto-pokój, inaczej E4 zatrzaskuje pułapkę, którą otworzył E3.**
+   Auto-pokój ponawia się przy każdej bitwie; stemplowanie dałoby parze w praktyce stałe
+   −20 na `offer_peace`. Rozwiązane JEDNĄ flagą `playerInitiated`, bo z tego samego faktu
+   wynika i brak stempla, i brak modala (który pauzowałby grę w środku serii starć).
+9. **Flip przycisków odsłonił kłamiącą diagnostykę.** Mapowanie powodu blokady było
+   ternary bez trzeciej gałęzi (`alreadySigned ? … : 'at_war'`), więc podłoga osobowości
+   meldowała się jako „trwa wojna". Dotąd nieosiągalne klikiem — bramka przycisku pytała
+   silnik o decyzję, więc xenofag miał sojusz po prostu wyszarzony. Naprawione tabelą
+   `REJECT_REASON_BY_KEY` w tym samym commicie, który to odsłonił.
+10. **Atrapa headless nie miała `ParentNode.append`**, choć UI używa go w **sześciu miejscach
+   w trzech plikach** (ScheduledEventPopup ×2, BattleIntroModal ×3, BattleView3D ×1). Każdy
+   headless test dotykający tych ścieżek wywalał się komunikatem wyglądającym na błąd
+   testowanego kodu. ⚠ Opis commita `10175c3` mówi „w czterech plikach" i wylicza trzy —
+   liczba plików jest tam błędna (pomyłka opisu, nie kodu); poprawny stan jest tutaj.
+
+⚠ **Znalezione PO E4, audytem recovery — NIE naprawione w E4** (kolejka na E4e; oba dotyczą
+UCZCIWOŚCI kanału odmowy, czyli tego, co E4 miało załatwić):
+- **A. `−0` w każdym modalu odmowy pokoju.** `_sign = v > 0 ? '+' : '−'` (`DiplomacyRefusalModal.js:45`)
+  wpycha ZERO do gałęzi minusa, a `offer_peace` ma `threshold: 0` — i żaden archetyp, który gra
+  faktycznie generuje, nie ma `thresholdDelta`. Skutek: linia „Wymagany próg" czyta się jako
+  **−0** w KAŻDEJ odmowie pokoju w realnej partii. Zły znak na jedynej liczbie, dla której ten
+  modal istnieje. Trafia też w linię wyniku, gdy `score` wypada dokładnie 0.
+- **B. Auto-pokój melduje odmowę, której gracz nigdy nie zaproponował.** `offerPeace` emituje
+  `diplomacy:peaceRejected` BEZWARUNKOWO (`DiplomacySystem.js:400`) — z `playerInitiated`
+  w payloadzie. Modal ten flag HONORUJE (`DiplomacyRefusalModal.js:141`, bramka dodatnia),
+  ale subskrybent Dziennika **nie** (`UIManager.js:1361` destrukturyzuje samo `{ empireId }`),
+  więc każde ponowienie auto-pokoju dokłada wpis „🚫 {0} odrzucili propozycję pokoju" **i toast**.
+  Gracz niczego nie proponował, a `war:autoPeaceRefused` mówi to samo uczciwie tuż obok.
+  Kod jest E3, ale flagę rozstrzygającą dołożyło E4a — to niedokończony konsument, nie nowy projekt.
 **Arc:** WOJNA I POKÓJ 1.0 · **Parent:** `DIPLOMACY_BACKBONE.md` §2 + §5 · **Skeleton:** `D2_PLAN_SKELETON.md`
 **Zależy od:** D1 ✅ (gate 2026-08-06) · **GALAXY_SEED ✅** (gate 2026-08-07 — mini-stream zamknięty)
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` §4.5, R2, R5, R9
