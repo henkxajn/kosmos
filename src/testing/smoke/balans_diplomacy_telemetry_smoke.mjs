@@ -71,16 +71,43 @@ console.log('--- T1: kształt macierzy ---');
 // ── T2: KOTWICE PARYTETU — to jest cel E2 ───────────────────────────────────
 console.log('--- T2: kotwice parytetu (dawne progi 60/75/80 dla rosteru gry) ---');
 {
+  // ⚠ E5 ZAWĘZIŁ TĘ KOTWICĘ: dawniej „granica X dla KAŻDEJ agendy", dziś „dla agendy
+  // REFERENCYJNEJ". To świadome przebazowanie podpisanej własności E2, nie poluzowanie
+  // testu — oś agendy z definicji przestała być no-opem, więc parytet „dla każdej agendy"
+  // był od E5 nie do utrzymania. Kotwica przetrwała w mocniejszej formie: `merchant` NIE MA
+  // nadpisania (AcceptanceWeightData), więc dawne progi 60/75/80 są nadal odtwarzane CO DO
+  // PUNKTU, a nie „mniej więcej". Parytet ma punkt odniesienia; agenda ma rozrzut wokół niego.
+  const REFERENCE_OBJECTIVE = 'merchant';
   const EXPECT = { trade_agreement: 10, non_aggression: 25, alliance: 30 };
   for (const archetype of ['industrialist', 'expansionist']) {
     for (const [verb, want] of Object.entries(EXPECT)) {
-      const got = [...new Set(EMPIRE_OBJECTIVES.map(o => cell(archetype, o, verb)?.minOpinion))];
-      ok(`${archetype} / ${verb}: granica ${want} dla KAŻDEJ agendy`, got.length === 1 && got[0] === want);
+      ok(`${archetype} / ${verb}: granica ${want} dla agendy referencyjnej (parytet E2)`,
+        cell(archetype, REFERENCE_OBJECTIVE, verb)?.minOpinion === want);
     }
   }
-  ok('agenda NIE rusza jeszcze wyniku (OBJECTIVE_WEIGHT_OVERRIDES puste — E5 to zmieni)',
-    ACCEPTANCE_VERB_IDS.every(v => ARCHETYPE_IDS.every(a =>
-      new Set(EMPIRE_OBJECTIVES.map(o => cell(a, o, v)?.acceptPct)).size === 1)));
+  // Odwrócony pin: dawniej „agenda NIE rusza jeszcze wyniku (E5 to zmieni)".
+  // To jest headless'owy odpowiednik tezy live-gate'u E5.
+  //
+  // ⚠ Komórki ZABLOKOWANE (`acceptPct === null`) są z tego wyłączone i to NIE jest
+  // ustępstwo: podłoga osobowości to pre-warunek sprawdzany PRZED liczeniem wag (ruling
+  // E2 — osobowość jest PODŁOGĄ, nie termem, dowód `O ≥ 8·P`). Natura xenofaga zabrania
+  // umowy handlowej niezależnie od tego, czego imperium akurat chce; gdyby agenda ruszała
+  // te komórki, znaczyłoby to, że podłoga przestała być podłogą. Teza brzmi więc:
+  // wszędzie tam, gdzie propozycja jest w ogóle OCENIANA, agenda zmienia wynik.
+  const scored = (a, v) => EMPIRE_OBJECTIVES
+    .map(o => cell(a, o, v))
+    .filter(c => c && !c.blocked && c.acceptPct !== null);
+  ok('agenda RUSZA wynik wszędzie, gdzie propozycja jest OCENIANA (teza gate\'u E5)',
+    ARCHETYPE_IDS.every(a => ['trade_agreement', 'non_aggression', 'alliance'].every(v => {
+      const cs = scored(a, v);
+      return cs.length === 0 || new Set(cs.map(c => c.acceptPct)).size > 1;
+    })));
+  ok('…i dotyczy to ROSTERU gry, nie tylko archetypów egzotycznych',
+    ['industrialist', 'expansionist'].every(a => ['trade_agreement', 'non_aggression', 'alliance']
+      .every(v => new Set(scored(a, v).map(c => c.acceptPct)).size > 1)));
+  ok('…a rozrzut jest UPORZĄDKOWANY: militarist nigdy nie jest łatwiejszy niż diplomat',
+    ARCHETYPE_IDS.every(a => ACCEPTANCE_VERB_IDS.every(v =>
+      (cell(a, 'militarist', v)?.threshold ?? 0) > (cell(a, 'diplomat', v)?.threshold ?? 0))));
   ok('akceptacja jest MONOTONICZNA po opinii (wyższa opinia nigdy nie szkodzi traktatowi)', (() => {
     const c = cell('industrialist', 'merchant', 'trade_agreement');
     // odsetek = udział siatki powyżej granicy ⇒ przy granicy 10 i siatce 16 pozycji: 9 pozycji ≥ 10

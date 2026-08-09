@@ -96,10 +96,26 @@ console.log('--- P1: integralność katalogu termów i czasowników ---');
     Object.values(ARCHETYPE_WEIGHT_OVERRIDES).every(ov => Object.keys(ov.terms ?? {}).every(t => !!ACCEPTANCE_TERMS[t])));
   ok('industrialist i expansionist BEZ nadpisań (kotwica parytetu E2)',
     !ARCHETYPE_WEIGHT_OVERRIDES.industrialist && !ARCHETYPE_WEIGHT_OVERRIDES.expansionist);
-  ok('nadpisania objective PUSTE w E1 (wypełnia E5 — ten pin ma wtedy PAŚĆ)',
-    Object.keys(OBJECTIVE_WEIGHT_OVERRIDES).length === 0);
-  ok('katalog objective z D1 nadal ma 6 pozycji (E5 będzie je nadpisywał)',
-    EMPIRE_OBJECTIVES.length === 6);
+  // E5 wypełnił tabelę — dawny pin („PUSTE w E1") PADŁ zgodnie z zapowiedzią i został
+  // zastąpiony pinami na KSZTAŁT nadpisań. Reguły są te same co dla archetypów.
+  ok('nadpisania objective wskazują ISTNIEJĄCE agendy',
+    Object.keys(OBJECTIVE_WEIGHT_OVERRIDES).every(o => EMPIRE_OBJECTIVES.includes(o)));
+  ok('nadpisania objective mnożą wyłącznie znane termy',
+    Object.values(OBJECTIVE_WEIGHT_OVERRIDES).every(ov => Object.keys(ov.terms ?? {}).every(t => !!ACCEPTANCE_TERMS[t])));
+  ok('`merchant` BEZ nadpisania (agenda referencyjna — kotwica parytetu E2 na osi agendy)',
+    !OBJECTIVE_WEIGHT_OVERRIDES.merchant);
+  ok('pozostałych PIĘĆ agend MA nadpisanie (oś przestała być no-opem)',
+    EMPIRE_OBJECTIVES.filter(o => o !== 'merchant').every(o => !!OBJECTIVE_WEIGHT_OVERRIDES[o]));
+  // Podpisana decyzja 2: nie stroimy wag względem termów, które zwracają zero. `offer`,
+  // `reputation`, `third_party` i `relative_power` są BEZCZYNNE do D4/D5/WAR_BACKBONE —
+  // nadpisanie ich udawałoby strojenie i było NIEWIDOCZNE w macierzy E7.
+  ok('agenda stroi WYŁĄCZNIE termy z paliwem (zakaz strojenia wobec bezczynnych)',
+    Object.values(OBJECTIVE_WEIGHT_OVERRIDES).every(ov =>
+      Object.keys(ov.terms ?? {}).every(t => ACCEPTANCE_TERMS[t].status === TERM_STATUS.LIVE)));
+  ok('agenda jest gałką SŁABSZĄ niż archetyp (kultura > agenda)',
+    Math.max(...Object.values(OBJECTIVE_WEIGHT_OVERRIDES).map(o => Math.abs(o.thresholdDelta ?? 0)))
+    < Math.max(...Object.values(ARCHETYPE_WEIGHT_OVERRIDES).map(a => Math.abs(a.thresholdDelta ?? 0))));
+  ok('katalog objective z D1 nadal ma 6 pozycji', EMPIRE_OBJECTIVES.length === 6);
 }
 
 // ── P2: REGUŁA ANTY-PODWÓJNEGO-LICZENIA ─────────────────────────────────────

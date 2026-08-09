@@ -278,11 +278,45 @@ export const ARCHETYPE_WEIGHT_OVERRIDES = {
 };
 
 // ── Nadpisania wag: objective (agenda) ──────────────────────────────────────
-// ⚠ PUSTE W E1 I TO NIE JEST PLACEHOLDER FUNKCJI, tylko brak strojenia: mechanizm
-// nadpisań działa i jest przetestowany, ale wartości wypełnia E5 razem ze swoim
-// live-gate'em („ten sam archetyp z różnym objective akceptuje MIERZALNIE inaczej").
-// Pusta tabela jest w smoke przypięta jako no-op, żeby diff E5 był widoczny co do punktu.
-export const OBJECTIVE_WEIGHT_OVERRIDES = {};
+// WYPEŁNIONE W E5. Archetyp = KULTURA (kim są), agenda = CZEGO CHCĄ TERAZ — więc
+// agenda jest CELOWO SŁABSZĄ gałką niż archetyp (tam `thresholdDelta` sięga +35;
+// tu mieści się w ±8). Ten sam xenofag ma grać inaczej w zależności od agendy,
+// ale nie ma przestać być xenofagiem.
+//
+// ⚠ `merchant` NIE MA WPISU I TO JEST DECYZJA, nie przeoczenie — to AGENDA REFERENCYJNA.
+// Dokładnie ten sam chwyt, którym o jedną tabelę wyżej industrialist i expansionist
+// zostały bez wpisu: parytet E2 musi mieć kotwicę, której nowa oś nie rusza. Parytet
+// zmierzono pod `merchant` (i pod tą agendą stoją fixture'y retrofit/peace/refusal),
+// więc pozostawienie jej nietkniętej daje DOWÓD, że E5 nie przestawił punktu odniesienia,
+// tylko dołożył wokół niego rozrzut. Kotwica T2 w `balans_diplomacy_telemetry_smoke`
+// jest w E5 ZAWĘŻONA z „każdej agendy" do agendy referencyjnej — świadome przebazowanie
+// podpisanej własności E2, nie ciche poluzowanie testu.
+//
+// ⚠ STROIMY WYŁĄCZNIE `opinion` I `thresholdDelta`, i to też jest decyzja. Podpisana
+// decyzja 2 zakazuje strojenia wag względem termów, które zwracają zero — a `offer`,
+// `reputation`, `third_party` i `relative_power` są dziś BEZCZYNNE (K-2/K-4/K-5/R2).
+// Nadpisanie ich wyglądałoby na strojenie, a nie robiłoby nic — i do tego byłoby
+// NIEWIDOCZNE w macierzy E7 (jej kontekst bazowy trzyma te wejścia na zerze), więc
+// artefakt raportowałby „agenda nic nie zmienia", gdy gra zachowuje się inaczej.
+// Kiedy te termy dostaną paliwo (D4/D5), agenda dostanie drugą warstwę strojenia.
+//
+// ⚠ Mnożnik `opinion` jest OBOSIECZNY, nie „bardziej ugodowy": wzmacnia też UJEMNĄ
+// połowę osi, więc dyplomata z ×1.2 chętniej podpisze przy dobrej opinii i OPORNIEJ
+// przy złej. To jest zamierzone (agenda relacyjna przeżywa i sympatię, i urazę mocniej),
+// a kierunek monotoniczny niesie `thresholdDelta`.
+export const OBJECTIVE_WEIGHT_OVERRIDES = {
+  // Agenda wojenna — dyplomacja jest środkiem, nie celem. Sympatia waży mniej.
+  militarist:   { terms: { opinion: 0.8 }, thresholdDelta: +8 },
+  // Ekspansja — każdy traktat to zobowiązanie, które ogranicza ruch.
+  expansionist: { terms: { opinion: 0.9 }, thresholdDelta: +5 },
+  // Nauka — chcą świętego spokoju do pracy; bez zdania o samej relacji.
+  technologist: {                          thresholdDelta: -3 },
+  // Ekologia — stabilność jest celem samym w sobie.
+  ecologist:    { terms: { opinion: 1.1 }, thresholdDelta: -4 },
+  // Dyplomacja — relacja JEST agendą, więc waży najmocniej w obie strony.
+  diplomat:     { terms: { opinion: 1.2 }, thresholdDelta: -6 },
+  // merchant — AGENDA REFERENCYJNA, świadomie BEZ WPISU (patrz nagłówek).
+};
 
 // ── Skala i stałe strojenia ─────────────────────────────────────────────────
 
