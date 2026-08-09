@@ -116,12 +116,16 @@ export const ACCEPTANCE_TERMS = {
           'gracz↔AI plus wojny z WarSystem — `ally_of_our_enemy` będzie prawie zawsze zerem.',
   },
   erratic_noise: {
-    id: 'erratic_noise', labelKey: 'diplo.term.erraticNoise', status: TERM_STATUS.UNFED,
+    id: 'erratic_noise', labelKey: 'diplo.term.erraticNoise', status: TERM_STATUS.LIVE,
     unit: '±1 = pełne wychylenie szumu (waga 15 ⇒ deklarowane w backbone ±15 punktów)',
-    note: 'Rzut cechy `erratic` przy generacji imperium dokłada E5 — do tego czasu traits[] jest ' +
-          'puste i term zwraca 0. Szum jest DETERMINISTYCZNY (para × czasownik × epoka ' +
-          'ERRATIC_EPOCH_YEARS), nie losowany przy każdym kliknięciu: inaczej gracz klikałby ' +
-          'ten sam przycisk aż trafi.',
+    note: 'E5 dołożył RZUT cechy w generatorze (`EmpireGenerator.makeTraitsRng`, własny strumień, ' +
+          'szansa ERRATIC_TRAIT_CHANCE), więc term przeszedł UNFED → LIVE. Wnosi 0 dla imperiów ' +
+          'BEZ cechy — czyli dla większości — i to jest poprawne, nie bezczynne. Szum jest ' +
+          'DETERMINISTYCZNY (para × czasownik × epoka ERRATIC_EPOCH_YEARS), nie losowany przy ' +
+          'każdym kliknięciu: inaczej gracz klikałby ten sam przycisk aż trafi. ' +
+          '⚠ Cecha rodzi się WYŁĄCZNIE przy generacji galaktyki — migracja v99→v100 ustawia ' +
+          'traits[] na puste i E5 tego NIE cofa, więc zapisy sprzed E5 nie mają nieobliczalnych ' +
+          'imperiów. Świadome: backfill wymagałby rzutu z seeda, którego stary zapis nie zna.',
   },
 };
 

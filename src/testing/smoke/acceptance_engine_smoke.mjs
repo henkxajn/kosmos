@@ -491,16 +491,23 @@ console.log('--- P10: termy bezczynne (K-1..K-5) ---');
     TERM_EVALUATORS.reputation(mkCtx({ proposerAggression: 50 })) === -0.5);
   ok('third_party ma status PARTIAL (pary AI↔AI dopiero w D5)',
     ACCEPTANCE_TERMS.third_party.status === TERM_STATUS.PARTIAL);
-  // ⚠ E4 ZDJĄŁ `recent_refusal` z tej listy — to zmiana ZAMIERZONA, nie regresja pinu:
-  // term dostał pisarza (`RelationsModel.noteVerbRefusal`), więc przeszedł UNFED → LIVE.
-  // Lista zostaje pinem dla RESZTY: `offer` odblokuje D4 (czasownik `gift`), `memory`
-  // D4 (dowody zdrady), `erratic_noise` E5 (rzut cechy przy generacji imperium).
-  ok('offer / memory / erratic_noise wciąż oznaczone jako UNFED (paliwo dopiero w D4/E5)',
-    ['offer', 'memory', 'erratic_noise']
-      .every(id => ACCEPTANCE_TERMS[id].status === TERM_STATUS.UNFED));
-  ok('termy z realnym źródłem w D2 oznaczone jako LIVE (E4 dołożył recent_refusal)',
-    ['opinion', 'tension', 'personality', 'war_status', 'recent_refusal']
+  // ⚠ E4 ZDJĄŁ z tej listy `recent_refusal`, E5 ZDJĄŁ `erratic_noise` — obie zmiany
+  // ZAMIERZONE, nie regresje pinu: każdy term dostał wtedy swojego PISARZA
+  // (`RelationsModel.noteVerbRefusal` w E4, rzut cechy w `EmpireGenerator` w E5).
+  // Lista zostaje pinem dla RESZTY, a odblokuje ją D4: `offer` czasownikiem `gift`,
+  // `memory` dowodami zdrady.
+  ok('offer / memory wciąż oznaczone jako UNFED (paliwo dopiero w D4)',
+    ['offer', 'memory'].every(id => ACCEPTANCE_TERMS[id].status === TERM_STATUS.UNFED));
+  ok('termy z realnym źródłem w D2 oznaczone jako LIVE (E4: recent_refusal, E5: erratic_noise)',
+    ['opinion', 'tension', 'personality', 'war_status', 'recent_refusal', 'erratic_noise']
       .every(id => ACCEPTANCE_TERMS[id].status === TERM_STATUS.LIVE));
+  // ⚠ LIVE nie znaczy „zawsze niezerowy". `erratic_noise` wnosi 0 dla imperium BEZ cechy
+  // (czyli dla większości) i to jest poprawny wynik, nie brak paliwa — w odróżnieniu od
+  // termów UNFED, które zwracają 0 dla KAŻDEGO wejścia, jakie gra dziś potrafi wytworzyć.
+  ok('erratic_noise RUSZA się, gdy imperium ma cechę (dowód, że LIVE jest zasłużone)',
+    TERM_EVALUATORS.erratic_noise(mkCtx({ traits: ['erratic'], erraticSeed: 'x|y|z|1|42' })) !== 0);
+  ok('…i wnosi DOKŁADNIE 0 dla imperium bez cechy',
+    TERM_EVALUATORS.erratic_noise(mkCtx({ traits: [], erraticSeed: 'x|y|z|1|42' })) === 0);
 }
 
 // ── P11: counterHint ────────────────────────────────────────────────────────

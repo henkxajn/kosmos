@@ -80,6 +80,19 @@ export const EMPIRE_OBJECTIVES = [
   'militarist', 'technologist', 'expansionist', 'diplomat', 'merchant', 'ecologist',
 ];
 
+// ── D2/E5 — cechy imperium (traits) ─────────────────────────────────────────
+// Trzecia, NAJSŁABSZA warstwa tożsamości: archetyp = kultura, objective = agenda,
+// trait = idiosynkrazja. Backbone §2.1 przewiduje jedną: `erratic` (import z MOO) —
+// imperium z ukrytym, powoli dryfującym nastawieniem, przez które ta sama propozycja
+// bywa przyjmowana i odrzucana bez widocznego powodu. Konsument: term `erratic_noise`.
+export const EMPIRE_TRAITS = ['erratic'];
+
+// Szansa, że imperium wylosuje `erratic` przy generacji galaktyki.
+// ⚠ Gra spawnuje DWA imperia AI, więc 0.25 znaczy „mniej więcej co druga partia ma
+// jednego nieobliczalnego sąsiada" — przyprawa, nie domyślny stan świata. Rzut idzie
+// z WŁASNEGO strumienia PRNG (EmpireGenerator.makeTraitsRng), nie ze wspólnego.
+export const ERRATIC_TRAIT_CHANCE = 0.25;
+
 // ⚠ TO NIE JEST REGUŁA GRY — to WYŁĄCZNIE fallback migracji save'ów.
 // Nowe imperia LOSUJĄ objective niezależnie od archetypu (EmpireGenerator, własny
 // strumień PRNG per imperium). Stary zapis nie ma z czego rzucić — nie zna seeda

@@ -194,8 +194,12 @@ function renderTerms(terms) {
       zapisuje, wchodzi do wyniku innym kanałem (opinia albo napięcie), a wyłączne dowody zdrady
       dopisuje dopiero D4.</li>
     <li>termy z wkładem &gt; 0 przy statusie innym niż DZIAŁA <b>liczą poprawnie — po prostu nikt ich
-      w grze nie zasila</b> (reputacja rośnie dopiero od D4, oferty nie ma UI, cechę erratic rzuca E5).
-      To rozróżnienie jest całą treścią oznaczeń K-2 / K-4 / K-5.</li>
+      w grze nie zasila</b> (reputacja rośnie dopiero od D4, oferty nie ma UI). To rozróżnienie jest
+      całą treścią oznaczeń K-2 / K-4 / K-5.</li>
+    <li><b>DZIAŁA nie znaczy „zawsze niezerowy".</b> <code>erratic_noise</code> (od E5) wnosi 0 dla
+      imperium BEZ cechy <code>erratic</code>, czyli dla większości — i to jest poprawny wynik, nie brak paliwa.
+      Różnica wobec termów bez paliwa: te zwracają 0 dla KAŻDEGO wejścia, jakie gra dziś potrafi
+      wytworzyć.</li>
   </ul>
   <p class="dp-note">Term oznaczony <b>DZIAŁA</b> z wkładem 0 dostaje ⚠ — wtedy oznaczenie kłamie
     albo kod jest martwy.</p>

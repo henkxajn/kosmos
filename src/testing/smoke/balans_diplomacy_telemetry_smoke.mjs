@@ -157,10 +157,11 @@ console.log('--- T4: sonda wrażliwości termów (Decyzja 2 fazy) ---');
   ok('termy DZIAŁAJĄCE dają się ruszyć (żadnego ⚠ NIESPÓJNY)',
     TERMS.filter(t => t.status === TERM_STATUS.LIVE).every(t => t.probeMaxAbs > 0)
     && TERMS.every(t => t.inertUnexpected === false));
-  // ⚠ `recent_refusal` ZDJĘTY z listy w E4: dostał pisarza (`noteVerbRefusal`) i jest LIVE.
-  // Sonda dalej go rusza — teraz pilnuje go asercja wyżej („termy DZIAŁAJĄCE dają się ruszyć").
+  // ⚠ `recent_refusal` ZDJĘTY z listy w E4 (pisarz `noteVerbRefusal`), `erratic_noise`
+  // ZDJĘTY w E5 (rzut cechy w EmpireGenerator) — oba są LIVE. Sonda dalej je rusza; pilnuje
+  // ich asercja wyżej („termy DZIAŁAJĄCE dają się ruszyć"). Lista trzyma już tylko K-2/K-4/K-5.
   ok('termy bez paliwa LICZĄ poprawnie — to jest treść markerów K-2/K-4/K-5',
-    ['reputation', 'offer', 'third_party', 'erratic_noise']
+    ['reputation', 'offer', 'third_party']
       .every(id => PROBE[id].maxAbs > 0 && ACCEPTANCE_TERMS[id].status !== TERM_STATUS.LIVE));
   ok('rozróżnienie „nie da się ruszyć" vs „brak paliwa" jest wystawione osobnymi flagami',
     TERMS.find(t => t.id === 'relative_power').cannotMove === true

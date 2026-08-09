@@ -8,7 +8,8 @@
 // Wywoływany JEDEN raz przy starcie nowej gry (po GalaxyGenerator.generate).
 // Deterministyczny (Mulberry32 z seeda galaktyki) — ten sam układ → ten sam wynik.
 
-import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES, EMPIRE_COLOR_PALETTE, EMPIRE_OBJECTIVES } from '../data/EmpireData.js';
+import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES, EMPIRE_COLOR_PALETTE, EMPIRE_OBJECTIVES,
+         ERRATIC_TRAIT_CHANCE } from '../data/EmpireData.js';
 import { EmpireColonyBootstrap } from '../systems/EmpireColonyBootstrap.js';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
@@ -76,6 +77,22 @@ function mixSeed(n) {
  */
 function makeObjectiveRng(galaxySeed) {
   const rng = mulberry32(mixSeed((Number(galaxySeed) || 0) ^ 0x0B1EC7));
+  rng(); rng(); rng();
+  return rng;
+}
+
+/**
+ * Strumień PRNG cech (`traits`) — D2/E5. Ta sama dyscyplina co `makeObjectiveRng`:
+ * własny strumień, finalizer na seedzie, trzy rzuty rozgrzewki, kolejne rzuty per
+ * imperium w pętli. Dzięki temu dołożenie cech nie przesuwa ani strumienia wspólnego
+ * (nazwy/kolory/home — piny G1), ani strumienia agend (piny G2).
+ *
+ * ⚠ SÓL MUSI BYĆ INNA NIŻ W `makeObjectiveRng`. Ta sama sól dałaby IDENTYCZNY strumień,
+ * więc `erratic` korelowałby 1:1 z agendą — imperia nieobliczalne miałyby zawsze tę samą
+ * agendę, a rzut wyglądałby na losowy tylko dlatego, że nikt nie porównał obu kolumn.
+ */
+function makeTraitsRng(galaxySeed) {
+  const rng = mulberry32(mixSeed((Number(galaxySeed) || 0) ^ 0x7A17C5));
   rng(); rng(); rng();
   return rng;
 }
@@ -157,7 +174,9 @@ export class EmpireGenerator {
 
     // Oś „objective" (agenda) — JEDEN strumień na galaktykę, rzut per imperium w pętli.
     // Zero pobrań ze współdzielonego rng() (nazwy/kolory zostają identyczne dla seeda).
-    const objRng = makeObjectiveRng(galaxyData.seed);
+    const objRng   = makeObjectiveRng(galaxyData.seed);
+    // D2/E5 — cechy. Osobny strumień od agend (inna sól), żeby obie osie były niezależne.
+    const traitRng = makeTraitsRng(galaxyData.seed);
 
     for (let i = 0; i < homesChosen.length; i++) {
       const homeSys = homesChosen[i];
@@ -197,6 +216,11 @@ export class EmpireGenerator {
       // Kolejny rzut ze strumienia utworzonego przed pętlą (patrz makeObjectiveRng).
       const objective = EMPIRE_OBJECTIVES[Math.floor(objRng() * EMPIRE_OBJECTIVES.length)];
 
+      // D2/E5 — cecha `erratic` (trzecia, najsłabsza warstwa tożsamości). Rzut ZAWSZE
+      // pobierany, także gdy wypada „brak cechy": inaczej strumień przesuwałby się
+      // zależnie od wyników poprzednich imperiów i determinizm per seed byłby pozorny.
+      const traits = traitRng() < ERRATIC_TRAIT_CHANCE ? ['erratic'] : [];
+
       // Utwórz imperium — Slice 1: BEZ abstract scalars (military/tech/resources)
       empireRegistry.createEmpire({
         id:           empireId,
@@ -206,7 +230,7 @@ export class EmpireGenerator {
         archetype:    archetypeId,
         color,
         objective,
-        traits:       [],   // D2 doda rzut 'erratic' razem ze swoim konsumentem
+        traits,             // D2/E5 — rzut 'erratic' razem ze swoim konsumentem (erratic_noise)
         homeSystemId: homeSys.id,
         // colonies puste — EmpireColonyBootstrap doda przez addColony
         colonies:     [],

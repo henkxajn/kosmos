@@ -16,7 +16,7 @@ import '../headless/env.js';
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { console.log('  PASS  ' + n); pass++; } else { console.error('  FAIL  ' + n); fail++; } };
 
-const { EMPIRE_OBJECTIVES, OBJECTIVE_BY_ARCHETYPE, ARCHETYPE_IDS, ARCHETYPES } =
+const { EMPIRE_OBJECTIVES, OBJECTIVE_BY_ARCHETYPE, ARCHETYPE_IDS, ARCHETYPES, EMPIRE_TRAITS } =
   await import('../../data/EmpireData.js');
 const { EmpireGenerator, AI_ARCHETYPE_SEQUENCE } = await import('../../generators/EmpireGenerator.js');
 const { EmpireColonyBootstrap } = await import('../../systems/EmpireColonyBootstrap.js');
@@ -96,7 +96,33 @@ console.log('--- G1: REGRESJA DETERMINIZMU (złote wartości sprzed C3) ---');
   console.log('--- G2: rzut objective ---');
   const s12345 = runSeed(12345);
   ok('każde imperium dostaje legalny objective', s12345.every(e => EMPIRE_OBJECTIVES.includes(e.objective)));
-  ok('traits = pusta tablica (erratic dopiero w D2)', s12345.every(e => Array.isArray(e.traits) && e.traits.length === 0));
+  // ⚠ E5 ODWRÓCIŁ ten pin: dawniej „traits = pusta tablica (erratic dopiero w D2)".
+  // Rzut istnieje, więc pilnujemy KSZTAŁTU i DYSCYPLINY STRUMIENIA, nie pustki.
+  // Golden pins G1 wyżej (nazwy/kolory/home bit w bit) są tu drugą połową dowodu:
+  // przechodzą, więc rzut cech NIE pobrał ani jednej liczby ze wspólnego strumienia.
+  ok('traits to tablica z legalnymi cechami', s12345.every(e =>
+    Array.isArray(e.traits) && e.traits.every(t => EMPIRE_TRAITS.includes(t))));
+  {
+    // Cecha musi być NIEZALEŻNA od agendy. Ta sama sól w obu strumieniach dałaby
+    // identyczny ciąg i `erratic` korelowałby 1:1 z objective — rzut wyglądałby na
+    // losowy tylko dlatego, że nikt nie zestawił obu kolumn.
+    const SEEDS = Array.from({ length: 60 }, (_, i) => 1000 + i * 7);
+    const rows  = SEEDS.flatMap(s => runSeed(s).map(e => ({
+      obj: e.objective, err: e.traits.includes('erratic'),
+    })));
+    const erratic = rows.filter(r => r.err);
+    ok('rzut cechy w ogóle pada w rozsądnej części partii (nie martwy, nie wszędzie)',
+      erratic.length > 0 && erratic.length < rows.length);
+    ok('cecha NIE koreluje 1:1 z agendą (osobna sól strumienia)',
+      new Set(erratic.map(r => r.obj)).size > 1);
+    // Najmocniejsza forma: istnieje agenda, pod którą wypadły OBIE wartości cechy.
+    // Gdyby cecha była funkcją agendy, każda agenda miałaby jednorodną kolumnę.
+    ok('…a w obrębie JEDNEJ agendy trafiają się i nieobliczalni, i zwyczajni',
+      EMPIRE_OBJECTIVES.some(o => {
+        const same = rows.filter(r => r.obj === o);
+        return same.some(r => r.err) && same.some(r => !r.err);
+      }));
+  }
   const again = runSeed(12345);
   ok('ten sam seed → ten sam objective (deterministyczny)',
     again.map(e => e.objective).join() === s12345.map(e => e.objective).join());
