@@ -13,6 +13,12 @@
 //   R5 emisariusz odprawiony stempluje — i to od DOTARCIA, nie od startu misji
 //   R6 pole przeżywa zapis/odczyt BEZ bumpu wersji (round-trip przez gameState)
 //   R7 status termu = LIVE, a pisarz jest dokładnie JEDEN
+//
+// Dołożone później, w tej samej fazie:
+//   R8  treść modala odmowy (wiersze, znaki, werdykt, obcięcie) — E4b
+//   R9  podłoga osobowości blokuje mimo wysokiej opinii i raportuje WŁASNY powód — E4c
+//   R10 macierz OŚMIU wyników dyplomatycznych ma komplet wpisów Dziennika — E4d
+//   R11 zero renderuje się bez znaku, a auto-pokój nie melduje cudzej odmowy — E4e
 
 import '../headless/env.js';   // shim window/localStorage/document/THREE (pierwszy!)
 
@@ -450,6 +456,60 @@ console.log('--- R10: komplet wpisów Dziennika dla wyników dyplomatycznych ---
       msg.includes('Wolna Liga') && msg.includes('10') && !/\{\d\}/.test(msg));
   }
   setLocale('pl');
+}
+
+// ── R11: E4e — dwa fixy UCZCIWOŚCI znalezione audytem recovery ──────────────
+// Oba dotyczą tego, po co E4 powstało: odmowa ma mówić PRAWDĘ. A: próg renderował się
+// jako „−0" w każdej odmowie pokoju. B: auto-pokój meldował odmowę propozycji, której
+// gracz nigdy nie złożył. Żaden test tego nie łapał, bo brakującej funkcji nie widać
+// w zielonym sweepie — stąd te piny.
+console.log('--- R11: E4e — zero bez znaku (A) + cudza odmowa bez wpisu (B) ---');
+{
+  const { buildRefusalContent } = await import('../../ui/DiplomacyRefusalModal.js');
+  const raw = (k, ...p) => (p.length ? `${k}(${p.join('|')})` : k);
+
+  // (A) `offer_peace` ma threshold 0, a żaden generowany archetyp nie ma `thresholdDelta`,
+  // więc TA linia stoi w KAŻDEJ odmowie pokoju w realnej partii.
+  {
+    const html = buildRefusalContent(
+      { score: -6.5, threshold: 0, blocked: false,
+        breakdown: [{ term: 'war_status', labelKey: 'diplo.term.warStatus', value: -6.5 }] },
+      { translate: raw });
+    ok('linia progu w ogóle się renderuje (inaczej reszta asercji jest pusta)',
+      html.includes('diploRefusal.threshold'));
+    ok('próg 0 NIE ma znaku — było „−0" w każdej odmowie pokoju', !html.includes('−0'));
+    ok('znak UJEMNY nietknięty', html.includes('−6.5'));
+  }
+  {
+    // Wynik dokładnie 0 (rozbicie, w którym nic nie zaważyło) szedł tą samą ścieżką.
+    const html = buildRefusalContent(
+      { score: 0, threshold: 0, blocked: false,
+        breakdown: [{ term: 'x', labelKey: 'diplo.term.x', value: 12 }] },
+      { translate: raw });
+    ok('wynik dokładnie 0 też jest bez znaku', !html.includes('−0'));
+    ok('znak DODATNI nietknięty', html.includes('+12'));
+  }
+
+  // (B) STRONA EMITENTA JEST JUŻ POKRYTA — R4 asertuje, że to samo zdarzenie niesie
+  // `playerInitiated: false` dla auto-pokoju i `true` dla świadomej propozycji gracza
+  // (:164 i :171). Powielanie tego tutaj dawałoby drugi, słabszy dowód tego samego faktu.
+  // R11 dokłada BRAKUJĄCĄ połowę: że słuchacz tę flagę faktycznie CZYTA.
+  // Pin ŹRÓDŁOWY, wzorem R9/R10 — UIManager nie da się w tym harnessie wykonać.
+  {
+    const { readFileSync } = await import('node:fs');
+    const { dirname, resolve, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+    const uiSrc = readFileSync(join(SRC, 'scenes', 'UIManager.js'), 'utf8');
+    const at = uiSrc.indexOf("EventBus.on('diplomacy:peaceRejected'");
+    const handler = at >= 0 ? uiSrc.slice(at, at + 1200) : '';
+    ok('subskrybent `peaceRejected` CZYTA `playerInitiated`, nie samo `empireId`',
+      /\{\s*empireId\s*,\s*playerInitiated\s*\}/.test(handler));
+    ok('bramka jest DODATNIA (brak pola ⇒ cisza — lustro bramki modala)',
+      /playerInitiated\s*!==\s*true\s*\)\s*return/.test(handler));
+    ok('`war:autoPeaceRefused` zostaje JEDYNYM głosem o wojnie, która się nie skończyła',
+      uiSrc.includes("EventBus.on('war:autoPeaceRefused'"));
+  }
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
