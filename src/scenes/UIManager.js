@@ -1358,7 +1358,15 @@ export class UIManager {
     // usunąć oczekiwanie wpisu). E3 domyka to razem z samym mechanizmem odmowy.
     // ⚠ Trzeci argument `_log` to `entityRef`, NIE severity — kanał i wagę wpisu wybiera
     // `pushLegacy` na podstawie `type`. Odmowy jadą więc typem, a nie dopisanym poziomem.
-    EventBus.on('diplomacy:peaceRejected',  ({ empireId }) => {
+    EventBus.on('diplomacy:peaceRejected',  ({ empireId, playerInitiated }) => {
+      // ⚠ E4e/B — BRAMKA DODATNIA, lustro bramki modala (DiplomacyRefusalModal: brak pola ⇒
+      // cisza, bo cisza jest bezpieczniejsza niż spam). `offerPeace` emituje to zdarzenie
+      // BEZWARUNKOWO i niesie flagę w payloadzie; modal ją honorował od E4b, Dziennik NIE —
+      // destrukturyzował samo `{ empireId }`. Skutek: auto-pokój z wyczerpania (ponawiany
+      // przy KAŻDEJ bitwie, bo wyczerpanie stoi na suficie) dokładał wpis „odrzucili
+      // propozycję pokoju" PLUS toast za ofertę, której gracz nigdy nie złożył.
+      // Ten sam fakt mówi uczciwie `war:autoPeaceRefused` kilka linii niżej — i tylko on ma prawo.
+      if (playerInitiated !== true) return;
       const nm = _empName(empireId);
       this._log(t('log.diplo.peaceRejected', nm), 'diplomacy');
       EventBus.emit('ui:toast', { text: t('log.diplo.peaceRejected', nm), color: '#D8A030' });
