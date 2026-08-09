@@ -1,10 +1,14 @@
-# PHASE D2 — Acceptance Engine + retrofit · plan doc (ZATWIERDZONY — pięć decyzji podpisanych)
+# PHASE D2 — Acceptance Engine + retrofit · plan doc (ZATWIERDZONY — sześć decyzji podpisanych)
 
 **Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 **Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e ✅**
-(dwa fixy uczciwości z audytu recovery) · **E5 ✅ — GATE DO PRZEPROWADZENIA ← TU**
-(`D2_E5_GATE_CHECKLIST.md`) · E6/E8/E9 ⬜
+(dwa fixy uczciwości z audytu recovery) · **E5 ✅ ZACOMMITOWANY — GATE PENDING (jutro) ← TU**
+(skrypt: `D2_E5_GATE_CHECKLIST.md`) · E6/E8/E9 ⬜ do zrobienia
+
+⚠ **E6 jest następny i jest NAJWIĘKSZYM ryzykiem fazy** (flip `diplomacyDecay` + unifikacja
+jednostek + przestrojenie). Warunek podpisany (decyzja 3): **tabela §Baseline musi być wypełniona
+POMIAREM PRZED commitem E6** — inaczej „bez odczuwalnej zmiany tempa" jest niesprawdzalne na gate'cie.
 
 | commit | stan | hash | uwagi |
 |---|---|---|---|
@@ -272,6 +276,14 @@ emitowany, nic go nie konsumuje) — poza 1.0 · reforma mapy galaktyki 2D — n
    ani jednego (dlatego checklista D1 §1.3 musiała usunąć oczekiwanie wpisu) — E4 to zamyka.
 5. **`_onColonyFounded`: sama bramka `ownerEmpireId`.** Ścieżka napięcia AI↔AI ląduje w D5, gdzie
    pary AI↔AI w ogóle powstają.
+6. **Decision 1 (zawężenie kotwicy parytetu E5 do agendy referencyjnej) — RATYFIKOWANA przez
+   orkiestratora 2026-08-09.** Sprzeczność była realna i nie do usunięcia w dawnym brzmieniu:
+   „każda agenda odtwarza dawne progi" (E2) i „agenda mierzalnie rusza akceptację" (E5) nie mogą
+   obowiązywać naraz. Rozwiązanie przez agendę referencyjną (`merchant` bez nadpisania ⇒ progi
+   dawne CO DO PUNKTU; pięć agend odchyla się) powiela własny ruch E2 na osi archetypów, trzyma
+   OBIE tezy przypięte JEDNOCZEŚNIE w telemetrii i zostało zrobione jawnie, z nazwanym zawężeniem.
+   ⚠ To jest wzorzec przenoszenia PODPISANEJ własności: nie poluzować pinu, tylko zawęzić go do
+   punktu odniesienia, który nadal dowodzi pierwotnej tezy — i podpisać zmianę w tym rejestrze.
 
 **Zmiana kolejności (zatwierdzona):** **E7 wchodzi PRZED E2/E3**. Macierze akceptacji są instrumentem
 strojenia konwersji progów w E2 — stroimy z przyrządem, nie na wyczucie. Nowa kolejność:
