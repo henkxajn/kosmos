@@ -197,7 +197,7 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ | E4e E5 E6 E8 E9) ⟵ HERE
+D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ E4e✅ E5✅gate-pending | E6 E8 E9) ⟵ HERE
                         → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
@@ -217,11 +217,20 @@ threshold renders as **−0** in every peace refusal (zero falls into the minus 
 rejected our peace offer"* — an offer the player never made, because the one flag that separates
 the two cases reached the modal but not the Journal subscriber. **E4e** closes both before E5.
 
-**Next: E5** — the first real consumers of the `objective` axis plus the `erratic` trait roll.
-It carries its own live gate (two empires of the same archetype with different objectives must
-accept *measurably* differently), and it will fill `OBJECTIVE_WEIGHT_OVERRIDES`, which is
-deliberately empty today so the E7 matrix holds a clean "before" picture. **E6** (decay flip +
-time-unit unification) follows with the phase's largest risk and its own gate.
+**E5 then made the second axis real.** `objective` had existed since D1 and the engine had read it
+since E1, but the override table was empty — six agendas scored identically to the point. E5 filled
+it, and rolled the `erratic` trait the backbone had promised, taking the last unfed term LIVE.
+Two things fell out. E5's gate thesis ("same archetype, different agenda ⇒ measurably different
+acceptance") is the *direct negation* of E2's signed parity anchor ("boundary 10/25/30 for **every**
+agenda") — resolved with a **reference agenda**: `merchant` gets no override, the same move that
+left industrialist and expansionist without an archetype override. Parity now has an anchor that
+reproduces the old thresholds exactly, and the agenda spreads around it. And the gate itself cannot
+be staged on two empires — the roster is one industrialist and one expansionist, always — so it
+changes the agenda of a *single* empire, holding culture, opinion and history fixed. One variable.
+
+**Next: the E5 live gate** (`D2_E5_GATE_CHECKLIST.md`, every number measured on the live engine),
+run by Filip. Then **E6** — decay flip + time-unit unification — the phase's largest risk, with its
+own gate and a `§Baseline` table that must be filled by measurement *before* the commit.
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships

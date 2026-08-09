@@ -2,8 +2,9 @@
 
 **Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
-**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e 🔨 ← TU**
-(dwa fixy uczciwości z audytu recovery, niżej) · E5 ⬜ (własny gate) · E6/E8/E9 ⬜
+**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e ✅**
+(dwa fixy uczciwości z audytu recovery) · **E5 ✅ — GATE DO PRZEPROWADZENIA ← TU**
+(`D2_E5_GATE_CHECKLIST.md`) · E6/E8/E9 ⬜
 
 | commit | stan | hash | uwagi |
 |---|---|---|---|
@@ -12,8 +13,8 @@ E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 | **E2** retrofit trzech traktatów | ✅ **DONE** | `b8b3e08` | osobowość → **podłoga** (dowód `O ≥ 8·P`); `diplomacy_d1_smoke` 83/83 BEZ poprawek |
 | **E3** pokój + emisariusz + auto-peace | ✅ **DONE — GATE PASSED 2026-08-08** | `e011017` | 10/10 sekcji; skrypt+wynik: `docs/design/D2_E3_GATE_CHECKLIST.md` · mostek `getTrustEquivalent` USUNIĘTY · jedna rozbieżność → naprawa w E4 (ustalenie 6 niżej) |
 | **E4** UI odmowy + `recent_refusal` | ✅ **DONE** (bez gate'u) | `9f166a4` `10175c3` `d473bcd` `56de88d` | 4 podkroki: a=pisarz karencji (UNFED→LIVE) · b=modal z rozbiciem · c=flip przycisków + powód blokady · d=wpis o ZAWARTYM pokoju (dług z gate'u E3). Save v100 bez migracji |
-| **E4e** dwa fixy uczciwości modala | 🔨 **W REALIZACJI** | — | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B). Oba w §Ustalenia 11 |
-| **E5** konsumenci `objective` + rzut `erratic` | ⬜ do zrobienia | — | własny gate; `OBJECTIVE_WEIGHT_OVERRIDES` jest DZIŚ pusty (obraz „przed" w macierzy) |
+| **E4e** dwa fixy uczciwości modala | ✅ **DONE** | `fc284c2` `b75fe3e` `db22a80` | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B) + piny R11. Oba w §Ustalenia 11 |
+| **E5** konsumenci `objective` + rzut `erratic` | ✅ **DONE — GATE DO PRZEPROWADZENIA** | `6c7ea3d` `d7ff7b5` | a=liczby agendy + `merchant` jako agenda REFERENCYJNA (kotwica parytetu E2) · b=rzut `erratic` z własnego strumienia + term UNFED→LIVE. Skrypt gate'u: `D2_E5_GATE_CHECKLIST.md`. Save v100 bez migracji |
 | **E6** flip `diplomacyDecay` + unifikacja jednostek | ⬜ do zrobienia | — | własny gate; tabela §Baseline do wypełnienia pomiarem |
 | **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
 | **E9** wycofanie `kosmos_save_backup_v{N}` | ⬜ do zrobienia | — | osobno, ścieżka ratunkowa |
@@ -71,6 +72,31 @@ UCZCIWOŚCI kanału odmowy, czyli tego, co E4 miało załatwić):
   więc każde ponowienie auto-pokoju dokłada wpis „🚫 {0} odrzucili propozycję pokoju" **i toast**.
   Gracz niczego nie proponował, a `war:autoPeaceRefused` mówi to samo uczciwie tuż obok.
   Kod jest E3, ale flagę rozstrzygającą dołożyło E4a — to niedokończony konsument, nie nowy projekt.
+11. **Teza gate'u E5 była WPROST SPRZECZNA z podpisaną kotwicą parytetu E2.** Gate wymaga
+   „ten sam archetyp z różną agendą akceptuje mierzalnie inaczej"; kotwica E2 wymagała granicy
+   10/25/30 **dla KAŻDEJ agendy**, i to dla obu archetypów, które gra faktycznie generuje.
+   Rozwiązane **agendą REFERENCYJNĄ**: `merchant` zostaje BEZ nadpisania — dokładnie tym samym
+   chwytem, którym industrialist i expansionist zostały bez nadpisania archetypu. Parytet
+   zmierzono pod `merchant` i pod tą agendą stoją fixture'y (154 asercje), więc kotwica
+   przetrwała w formie mocniejszej: dawne progi są odtwarzane CO DO PUNKTU, a agenda daje
+   rozrzut wokół nich. Kotwica zawężona z „każdej agendy" do referencyjnej — świadome
+   przebazowanie, nie ciche poluzowanie testu.
+12. **Gate E5 nie jest wykonalny na dwóch imperiach.** `AI_ARCHETYPE_SEQUENCE` ma dwa wpisy,
+   więc partia ZAWSZE daje jednego industrialistę i jednego expansionistę — dwa imperia tej
+   samej kultury nie mogą wystąpić. Gate zmienia agendę JEDNEMU imperium (precedens: §4 gate'u
+   E3 podmieniał archetyp), co jest dowodem mocniejszym: zmienia się dokładnie jedna zmienna.
+13. **Agenda mogła być strojona wyłącznie przez `opinion` i `thresholdDelta`.** Podpisana
+   decyzja 2 zabrania stroić wagi wobec termów zwracających zero, a kontekst bazowy macierzy E7
+   trzyma `offer`/`reputation`/`third_party` na zerze — nadpisanie ich NIC by nie zrobiło
+   i było NIEWIDOCZNE w artefakcie, więc raport mówiłby „agenda nic nie zmienia" wbrew grze.
+14. **Sól strumienia cech musi się różnić od soli agend.** Ta sama sól = ten sam ciąg, więc
+   `erratic` korelowałby 1:1 z `objective`, a rzut wyglądałby na losowy dopóki ktoś nie zestawi
+   obu kolumn. Zmierzone po naprawie: 25.4% na 1000 imperiów, rozkład 20–30% we WSZYSTKICH
+   sześciu agendach.
+15. **`LIVE` nie znaczy „zawsze niezerowy" i trzeba to było powiedzieć testom ORAZ raportowi.**
+   `erratic_noise` wnosi 0 dla imperium bez cechy (czyli dla większości) — to poprawny WYNIK.
+   Termy `UNFED` zwracają 0 dla KAŻDEGO wejścia, jakie gra potrafi wytworzyć; to jest ta różnica.
+
 **Arc:** WOJNA I POKÓJ 1.0 · **Parent:** `DIPLOMACY_BACKBONE.md` §2 + §5 · **Skeleton:** `D2_PLAN_SKELETON.md`
 **Zależy od:** D1 ✅ (gate 2026-08-06) · **GALAXY_SEED ✅** (gate 2026-08-07 — mini-stream zamknięty)
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` §4.5, R2, R5, R9
