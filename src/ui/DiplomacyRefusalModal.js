@@ -42,7 +42,11 @@ function _empName(empireId) {
 }
 
 // Znak U+2212 (MINUS SIGN), nie dywiz — w monospace czyta się jak liczba ujemna, nie łącznik.
-const _sign = (v) => (v > 0 ? '+' : '−');
+// ⚠ ZERO NIE MA ZNAKU i musi mieć WŁASNĄ gałąź. Bez niej `offer_peace` (threshold 0, a żaden
+// generowany archetyp nie ma `thresholdDelta`) renderował „Wymagany próg: −0" w KAŻDEJ odmowie
+// pokoju — zły znak na jedynej liczbie, dla której ten modal istnieje. Ta sama gałąź chroni
+// linię wyniku, gdy `score` wypadnie dokładnie 0 (rozbicie z samych zer).
+const _sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '');
 const _mag  = (v) => { const a = Math.abs(Number(v) || 0); return Number.isInteger(a) ? String(a) : a.toFixed(1); };
 const _fmt  = (v) => `${_sign(v)}${_mag(v)}`;
 
