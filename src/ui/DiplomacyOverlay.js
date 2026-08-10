@@ -58,6 +58,12 @@ const BREAKDOWN_ROW_H    = 13;
 // etykieta zaczęła PODAWAĆ JEDNOSTKĘ („l. gry"). Sama liczba była poprawna od D1 —
 // kłamała jednostka: to były lata CYWILIZACYJNE, a gracz czyta zegar wyświetlany.
 const FADE_COL_W         = 82;
+// Kalibracja z live-gate'u E6 §4: przy 82 px etykieta wciąż OCIERAŁA SIĘ o wartość
+// modyfikatora. Etykieta jest wyrównana do PRAWEJ, więc dosunięcie jej o 2 px w stronę
+// krawędzi panelu odsuwa jej LEWY koniec od liczby — bez ruszania pozycji samej liczby
+// (którą wyznacza FADE_COL_W) i bez zwężania kolumny. Prawy margines panelu to 18 px,
+// więc te 2 px są bezkosztowe wizualnie.
+const FADE_NUDGE_R       = 2;
 
 // Kolor liczby opinii: −100 czerwony → 0 amber → +100 zielony (lerp po kanałach RGB).
 const OPINION_NEG = [0xD8, 0x5A, 0x30];
@@ -352,7 +358,7 @@ export class DiplomacyOverlay extends BaseOverlay {
         ctx.fillStyle = THEME.textDim;
         // Trwałe (stan wojny, aktywny traktat) żyją tak długo jak ich źródło → ∞.
         ctx.fillText(e.yearsLeft === Infinity ? '∞' : t('diplo.fadesIn', Math.max(1, e.yearsLeft).toFixed(0)),
-          x + w - pad, iy);
+          x + w - pad + FADE_NUDGE_R, iy);
         ctx.textAlign = 'left';
         iy += BREAKDOWN_ROW_H;
       }

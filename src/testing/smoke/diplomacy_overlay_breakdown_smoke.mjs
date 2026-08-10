@@ -130,6 +130,18 @@ console.log('--- U2: rozbicie modyfikatorów ---');
   ok(`zanikające mają „${fadeFrag} N l."`, said(ctx, fadeFrag));
   ok('sortowanie malejąco po |wartości| — najmocniejszy modyfikator jest widoczny',
     said(ctx, bd[0].label));
+
+  // D2/E6 kalibracja (§4 gate'u): etykieta zanikania musi być NA PRAWO od wartości.
+  // ⚠ CZEGO TEN PIN NIE ROBI: nie wykrywa nachodzenia w pikselach. Oba teksty są
+  // wyrównane do PRAWEJ, więc realne nakładanie zależy od SZEROKOŚCI napisu, a atrapa
+  // ctx nie ma metryk czcionki (`measureText` zwraca length×6, gra rysuje 8 px).
+  // Właśnie dlatego ciasnota kolumny jest do wyłapania OKIEM (i była — na gate'cie),
+  // a nie tutaj. Ten pin łapie węższą, ale realną klasę regresji: zamianę albo zjechanie
+  // kotwic kolumn (np. ktoś zeruje FADE_COL_W i etykieta ląduje na liczbie).
+  const fadeFragTxt = ctx.texts.find(t => t.s.includes(fadeFrag));
+  const valueTxt    = ctx.texts.find(t => /^[+-]?\d+$/.test(t.s) && t.y === fadeFragTxt?.y);
+  ok('kotwica etykiety zanikania jest NA PRAWO od kotwicy wartości (kolejność kolumn)',
+    !!fadeFragTxt && !!valueTxt && fadeFragTxt.x > valueTxt.x);
 }
 
 // ── Napięcie ────────────────────────────────────────────────────────────────
