@@ -87,7 +87,9 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   2026-08-08, 10/10 — `D2_E3_GATE_CHECKLIST.md` carries the recorded result) ·
   E4 `9f166a4`+`10175c3`+`d473bcd`+`56de88d` · E4e `fc284c2`+`b75fe3e`+`db22a80` ·
   E5 `6c7ea3d`+`d7ff7b5` (live gate PASSED 2026-08-10, 10/10 —
-  `D2_E5_GATE_CHECKLIST.md`).** Remaining: **E6, E8, E9**. Save stays **v100**, no migration.
+  `D2_E5_GATE_CHECKLIST.md`) · **E6 committed, gate pending** (`38c1450` measured baseline; code `b075221` → `00484a5` →
+  `2ca7d0c` → `7a8427e`; script `D2_E6_GATE_CHECKLIST.md`).** Remaining: **E8, E9**. Save stays
+  **v100**, no migration.
   E4 in one line: refusals now *explain themselves*. The modal renders the acceptance
   breakdown verbatim (first consumer of `breakdown`, which had been emitted since E1 with
   nobody reading it), `recent_refusal` went **UNFED → LIVE** (E1 had built the evaluator and
@@ -148,6 +150,11 @@ Owns everything between war declaration and the peace table. Doc must cover:
    should be tech-aware (better modules as empire tech grows) and archetype-flavored.
 4. **Threat assessment** — one shared module read by both war and diplomacy
    (fix of audit R2 lives here).
+   - *Carried in from D2/E6 (dead-code deletion, not a conversion):* `WarSystem:39
+     FLEET_AGGRO_INTERVAL = 5` ("co ile lat AI wysyła flotę") is dead — that declaration is its
+     only occurrence in `src/`, the logic having moved to `MilitaryAI`. E6's unit sweep found it
+     while inventorying every `*_YEARS` constant and deliberately left it alone: there is nothing
+     to unify in a constant nobody reads. Delete it when `MilitaryAI` is rebuilt here.
 5. **Fleet model reconciliation** — abstract `strength` ⇄ concrete vessels, two-way
    (audit R10): DSCS losses write back as strength percentage.
 6. **War accounting unification** — DSCS battles feed WarSystem (`warId`, exhaustion —
@@ -198,7 +205,7 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ E4e✅ E5✅gate | E6 ⟵ HERE, E8 E9)
+D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ E4e✅ E5✅gate E6✅gate-pending ⟵ HERE | E8 E9)
                         → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
@@ -242,10 +249,36 @@ That confirms in the field the separation the checklist only *claimed*: **the th
 of the catalog, the score a property of the campaign.** Standing lesson for the rest of the phase —
 pin thresholds and ordering, never absolute scores.
 
-**Next: E6** — decay flip + time-unit unification + retune. The phase's largest risk, with its own
-gate and a `§Baseline` table that must be filled *by measurement* before the commit; the measured
-table also forces one signed decision (sub-year UI precision vs a deliberate slowdown), because the
-UI's "fades in 5 y." is ~12× longer than the time a player actually lives through.
+**E6 then lit the decay — and the measurement it was gated on rewrote the question.** The `§Baseline`
+table was filled *by execution* (`38c1450`, a standing probe that pushes the real tick through the real
+cadence, kept in the repo for D4/D5 tuning). It corrected two rows of the plan's own arithmetic — the
+tick steps in *whole* civ years, so 2.5 is really 3 — and then produced the finding that dissolved the
+(a)-vs-(b) dilemma the plan had framed: **with the shipped flag off, modifier and reputation decay never
+ran at all.** Their felt tempo was ∞, not "0.42 displayed years"; that figure described a hypothesis the
+build never executed. So "light it without changing the felt tempo" was *empty* for exactly the rates
+the flip turns on.
+
+Decision 3 was therefore **narrowed, not loosened** (Decision 6's precedent, ratified 2026-08-10): the
+invariant now binds mechanisms *observable in the shipped build*, with two reference points reproduced
+to the digit — the trade-agreement ramp 0→+50 (**4.167** displayed years) and tension 30→0 (**0.5**).
+Those two are live today and got `×12`, which is the same speed re-expressed, not an acceleration; the
+plan's own worry about "−60/displayed year" turned out to be an artifact of the unit it was warning
+about. The flag-dark rates kept their digits and changed unit, a deliberate 12× slowdown that lands
+every modifier lifetime in the **same 2–15 displayed-year band** as every constant anyone in this phase
+wrote on purpose (truce 10, erratic epoch 10, AI envoy 15, ultimatum grace 3, refusal cooldown 2).
+
+The decider was the envoy. Its mission spans 5.0 displayed years with legs at +2.5 and +5.0 and an
+`accumulate` mode documented to sum them to +10. Measured: under the global-`×12` variant the first
+leg **expires before the second lands** — the mode has nothing to sum, which is precisely the fear that
+kept the flag off in D1. Under the shipped choice the legs compound (5 → 2.5 → 7.5; the shortfall from
+10 is decay taking its toll on the way home, and correct). Three comments that had been lying about
+their unit for a long time were fixed without touching their values — `ULTIMATUM_GRACE_YEARS`,
+`TRESPASS_YEARS` and `AI_ENVOY_COOLDOWN` were all *already* in displayed years, i.e. the code had been
+running 12× longer than it documented. `DIPLOMACY_FROZEN` armed with the flag, and the panel's fade
+label finally states its unit. Sweep **111/111**, `check-i18n` PASS, save stays **v100**.
+
+**Next: the E6 live gate** (`D2_E6_GATE_CHECKLIST.md` — every one-liner executed against the real
+engine before being written down). Then **E8** and **E9**, both small, and D2 closes.
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships

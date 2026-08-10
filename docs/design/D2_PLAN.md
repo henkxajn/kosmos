@@ -4,11 +4,13 @@
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 **Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e ✅**
 (dwa fixy uczciwości z audytu recovery) · **E5 ✅ ZAMKNIĘTY (gate PASSED 2026-08-10, 10/10)** ·
-**E6 ⬜ ← TU** · E8/E9 ⬜ do zrobienia
+**E6 ✅ ZACOMMITOWANY — GATE DO PRZEPROWADZENIA ← TU** · E8/E9 ⬜ do zrobienia
 
-⚠ **E6 jest następny i jest NAJWIĘKSZYM ryzykiem fazy** (flip `diplomacyDecay` + unifikacja
-jednostek + przestrojenie). Warunek podpisany (decyzja 3): **tabela §Baseline musi być wypełniona
-POMIAREM PRZED commitem E6** — inaczej „bez odczuwalnej zmiany tempa" jest niesprawdzalne na gate'cie.
+✅ **Warunek wejścia E6 (podpisana decyzja 3) SPEŁNIONY:** tabela §Baseline wypełniona POMIAREM
+przed commitem (`38c1450`, sonda `probe-diplomacy-time-units.mjs`). Pomiar zmienił samo PYTANIE
+(§B0: przy zaszytej fladze zanikanie NIE działało wcale, więc dla temp bramkowanych nie było
+odczuwalnego tempa do zachowania) i wymusił **zawężenie decyzji 3** — ratyfikowane, ustalenie 7.
+Skrypt gate'u: `D2_E6_GATE_CHECKLIST.md`.
 
 | commit | stan | hash | uwagi |
 |---|---|---|---|
@@ -19,7 +21,7 @@ POMIAREM PRZED commitem E6** — inaczej „bez odczuwalnej zmiany tempa" jest n
 | **E4** UI odmowy + `recent_refusal` | ✅ **DONE** (bez gate'u) | `9f166a4` `10175c3` `d473bcd` `56de88d` | 4 podkroki: a=pisarz karencji (UNFED→LIVE) · b=modal z rozbiciem · c=flip przycisków + powód blokady · d=wpis o ZAWARTYM pokoju (dług z gate'u E3). Save v100 bez migracji |
 | **E4e** dwa fixy uczciwości modala | ✅ **DONE** | `fc284c2` `b75fe3e` `db22a80` | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B) + piny R11. Oba w §Ustalenia 11 |
 | **E5** konsumenci `objective` + rzut `erratic` | ✅ **ZAMKNIĘTY — GATE PASSED 2026-08-10 (10/10)** | `6c7ea3d` `d7ff7b5` | a=liczby agendy + `merchant` jako agenda REFERENCYJNA (kotwica parytetu E2) · b=rzut `erratic` z własnego strumienia + term UNFED→LIVE. Wynik gate'u w `D2_E5_GATE_CHECKLIST.md` · przebieg na zapisie **po wojnie, w rozejmie** — progi zgodziły się co do punktu MIMO realnego stosu modyfikatorów, czyli potwierdzona przenośność skryptu (ustalenie 16). Save v100 bez migracji |
-| **E6** flip `diplomacyDecay` + unifikacja jednostek | ⬜ do zrobienia | — | własny gate; tabela §Baseline do wypełnienia pomiarem |
+| **E6** flip `diplomacyDecay` + unifikacja jednostek | ✅ **ZACOMMITOWANY — GATE DO PRZEPROWADZENIA** | `b075221` `00484a5` `2ca7d0c` `7a8427e` | tabela §Baseline wypełniona pomiarem `38c1450` · polityka tempa = podpisany podział „żywe ×12 / martwe cyfry-bez-zmian" (ustalenie 7) · NEW `diplomacy_time_units_smoke` 32 pinuje §Baseline + oba punkty odniesienia CO DO CYFRY · skrypt gate'u: `D2_E6_GATE_CHECKLIST.md`. Save v100 bez migracji |
 | **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
 | **E9** wycofanie `kosmos_save_backup_v{N}` | ⬜ do zrobienia | — | osobno, ścieżka ratunkowa |
 
@@ -292,6 +294,20 @@ emitowany, nic go nie konsumuje) — poza 1.0 · reforma mapy galaktyki 2D — n
    OBIE tezy przypięte JEDNOCZEŚNIE w telemetrii i zostało zrobione jawnie, z nazwanym zawężeniem.
    ⚠ To jest wzorzec przenoszenia PODPISANEJ własności: nie poluzować pinu, tylko zawęzić go do
    punktu odniesienia, który nadal dowodzi pierwotnej tezy — i podpisać zmianę w tym rejestrze.
+7. **Decyzja 3 (ZAWĘŻONA) — RATYFIKOWANA przez orkiestratora 2026-08-10, precedens decyzji 6.**
+   Brzmienie wpisu do rejestru:
+   > „Flip nie może zmienić odczuwalnego tempa żadnego mechanizmu **OBSERWOWALNEGO W ZASZYTYM
+   > BUILDZIE**; punkty odniesienia: ramp 0→+50 = **4,167** i napięcie 30→0 = **0,5** roku
+   > wyświetlanego, odtworzone CO DO CYFRY. Mechanizmy trzymane przez flagę w ciemności nie mają
+   > odczuwalnego tempa do zachowania; ich tempo jest ustalane RAZ, świadomie, tutaj, i pinowane
+   > pomiarem. Uzasadnienie materialne: §B5 — przy globalnym ×12 tryb `accumulate` emisariusza jest
+   > arytmetycznie martwy, co ratyfikowałoby dokładnie tę obawę, która kazała D1 trzymać flagę
+   > wyłączoną."
+   **Polityka tempa (PODPISANA):** żywe → ×12 (`rampPerYear` 1→12, `PEACE_DECAY` 5→60, odczuwalnie
+   identyczne) · martwe za flagą → cyfry bez zmian, jednostką rok wyświetlany (7× `decayPerYear`
+   + `DEFAULT_AGGRESSION_DECAY`) · `ERRATIC_EPOCH_YEARS` zostaje 10 · klasa 3 — wartości nietknięte,
+   kłamiące komentarze naprawione. Punkty odniesienia pinowane wykonaniem:
+   `diplomacy_time_units_smoke` §R.
 
 **Zmiana kolejności (zatwierdzona):** **E7 wchodzi PRZED E2/E3**. Macierze akceptacji są instrumentem
 strojenia konwersji progów w E2 — stroimy z przyrządem, nie na wyczucie. Nowa kolejność:
@@ -393,10 +409,20 @@ Trzy klasy. Tylko klasa 1 wymaga PRZELICZENIA; klasy 2 i 3 są już w latach wy�
 
 ⚠ **Dwie kopie stałych bez linku** (rozjadą się przy każdym strojeniu, w zakresie E6 jako higiena):
 `DiplomacyOverlay:402` liczy licznik ultimatum z **literału `3`** zamiast importować
-`ULTIMATUM_GRACE_YEARS`; `SaveMigration:2628` i `:2630` wpisują reputacyjne `decayPerYear: 1` drugi
-raz, niepowiązane z `DEFAULT_AGGRESSION_DECAY`.
+`ULTIMATUM_GRACE_YEARS` — **naprawione w E6** (`getUltimatumYearsLeft`, panel czyta z fasady);
+`SaveMigration:2628` i `:2630` wpisują reputacyjne `decayPerYear: 1` drugi raz, niepowiązane
+z `DEFAULT_AGGRESSION_DECAY` — **ŚWIADOMIE ZOSTAJE**.
+
+📌 **DŁUG PRZENIESIONY (D3+): zlinkować `SaveMigration:2628/2630` z katalogiem.** `SaveMigration`
+jest na liście plików krytycznych (`CLAUDE.md`: „centralny punkt, nie rozpraszaj"), a cyfra `1` jest
+POPRAWNA także po unifikacji (tempo reputacji nie zmieniło wartości, tylko jednostkę), więc E6
+nie miał powodu jej dotykać. Link do `DEFAULT_AGGRESSION_DECAY` zrobić **przy najbliższej REALNEJ
+migracji save'a** (D3 lub później) — wtedy plik i tak jest otwierany i testowany, a ryzyko dodania
+importu jest zerowe. Do tego czasu: przestrojenie tempa reputacji wymaga edycji w DWÓCH miejscach.
+
 ℹ Poza zakresem, ale zauważone: `WarSystem:39 FLEET_AGGRO_INTERVAL = 5` jest MARTWE (jedyne
-wystąpienie w `src/`; logika poszła do `MilitaryAI`) — kandydat do usunięcia, nie do konwersji.
+wystąpienie w `src/`; logika poszła do `MilitaryAI`) — nie do konwersji, do USUNIĘCIA.
+**Przeniesione do backlogu WAR_BACKBONE**, gdzie `MilitaryAI` jest i tak przebudowywany.
 
 ### §B4 — pasmo czasów w zegarze GRACZA (zmierzone) i skala partii
 
