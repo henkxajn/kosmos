@@ -299,31 +299,218 @@ strojenia konwersji progów w E2 — stroimy z przyrządem, nie na wyczucie. Now
 
 ---
 
-## Baseline jednostek — tabela DO WYPEŁNIENIA POMIAREM przed E6
+## Baseline jednostek — ✅ WYPEŁNIONA POMIAREM 2026-08-10 (warunek wejścia E6 spełniony)
 
-Stan dzisiejszy policzony z katalogu (`decayPerYear` działa na rok CYWILIZACYJNY,
-`CIV_TIME_SCALE = 12`, wpis znika przy `|value| < MODIFIER_EPSILON = 0.5`):
+**Instrument:** `src/testing/headless/probe-diplomacy-time-units.mjs` — sonda READ-ONLY, która NIE
+liczy nic sama: przepuszcza prawdziwe `RelationsModel.tickModifiers` / `OpinionMath.decayModifiers` /
+`rampModifiers` przez dokładnie tę kadencję, którą stosuje `DiplomacySystem` (`_tickAccum` →
+`Math.floor` → CAŁE kroki), i mierzy, po ilu krokach wpis znika. Reprodukcja: `node
+src/testing/headless/probe-diplomacy-time-units.mjs`.
 
-| modyfikator | wartość | decay/rok cyw. | zanika po (lata cyw.) | zanika po (lata WYŚWIETLANE) | UI pokazuje dziś |
-|---|---|---|---|---|---|
-| `envoy_goodwill` | +5 | 1 | 5,0 | **0,42** | „zanika za 5 l." |
-| `military_presence` | −5 | 2 | 2,5 | **0,21** | „zanika za 3 l." |
-| `recent_war` | −15 | 2 | 7,5 | **0,63** | „zanika za 8 l." |
-| `legacy_relations` (trust 80 ⇒ +30) | +30 | 2 | 15,0 | **1,25** | „zanika za 15 l." |
-| napięcie (`PEACE_DECAY`) | 30 | 5 | 6,0 | **0,50** | — (pasek bez licznika) |
+**Dlaczego POMIAR, a nie dzielenie wartości przez tempo** — dwie rzeczy niewidoczne na kartce:
+1. tick leci CAŁYMI latami cyw. (`Math.floor(_tickAccum)`), więc `5/2 = 2,5` daje w praktyce **3**;
+2. wpis znika przy `|value| < MODIFIER_EPSILON = 0,5`, nie przy zerze — przy drobnym kroku
+   (dt = 1/12 roku wyświetlanego) obcięcie epsilonem zjada nawet pół roku.
 
-⚠ **Co ta tabela od razu pokazuje:** liczba w UI („zanika za 5 l.") jest **~12× większa** niż czas,
-który gracz faktycznie przeżywa (0,42 roku wyświetlanego). Etykieta nie kłamie o jednostce — ona jej
-w ogóle nie podaje.
+⚠ **Dwa wiersze poprzedniej (policzonej) wersji tej tabeli były BŁĘDNE** — dzieliła wartość przez
+tempo, ignorując punkt 1: `military_presence` 2,5 → w rzeczywistości **3** lata cyw. (0,21 → **0,25**
+wyświetlanego), `recent_war` 7,5 → **8** (0,63 → **0,667**). Pozostałe trzy wiersze zgadzały się.
+Zbieżność wtórna, ale użyteczna: zmierzone życie w latach cyw. jest RÓWNE liczbie, którą UI już
+pokazuje — `modifierYearsLeft` = `ceil(|value| / rate)` trafia co do punktu. **Etykieta nie kłamie
+o liczbie, kłamie tylko o jednostce.**
 
-To stawia realny problem przy E6: **utrzymanie odczuwalnego tempa 1:1** wymaga pomnożenia
-`decayPerYear` przez 12 (na rok wyświetlany), a wtedy wyświetlane „zanika za N lat" spada do 0–1 dla
-większości modyfikatorów i staje się bezużyteczne (`ceil(5/12) = 1`). Czyli po unifikacji trzeba
-wybrać JEDNO:
+### §B0 — pomiar, który zmienia PYTANIE (najważniejszy wynik)
 
-- **(a) zachować odczuwalne tempo** → UI potrzebuje podrocznej precyzji („zanika za 5 miesięcy"), albo
-- **(b) zwolnić decay** tak, by liczby w latach wyświetlanych były sensowne (np. dobra wola
-  z emisariuszy żyje ~3 lata wyświetlane) — to jest realna zmiana balansu, świadoma i mierzona.
+```
+flaga=false → envoy_goodwill NIE ZANIKA NIGDY (∞)
+flaga=true  → envoy_goodwill zanika po 5 lat cyw.
+```
 
-Ta decyzja zapada **po pomiarze z E7**, nie teraz. Kolumna „po unifikacji" tabeli zostaje pusta do
-tego momentu — wypełnia ją commit E6 i ona jest dowodem na gate'cie.
+W zaszytym stanie repo (`FEATURES.diplomacyDecay: false`) **decay modyfikatorów i decay reputacji
+NIE DZIAŁAJĄ WCALE.** Ich dzisiejsze odczuwalne tempo to **∞ (nigdy nie zanika)**, a nie „0,42 roku
+wyświetlanego" — ta liczba opisywała HIPOTEZĘ („co by robiły te tempa, gdyby flaga była włączona"),
+nie zachowanie, które gracz kiedykolwiek widział. Konsekwencja dla decyzji 3 jest w §Rekomendacji.
+
+### §B1 — życie modyfikatora: DZIŚ vs dwa warianty po unifikacji (zmierzone)
+
+Warianty: **(a)** tempo ×12 ⇒ „na rok wyświetlany", odczuwalne tempo IDENTYCZNE jak dziś ·
+**(b)** cyfry BEZ zmiany, reinterpretowane jako „na rok wyświetlany" ⇒ 12× wolniej.
+Kadencja w obu wariantach zostaje 1 rok cyw. (dt = 1/12 roku wyświetlanego na wywołanie).
+
+| modyfikator | wart. | tempo | DZIŚ (lata cyw.) | DZIŚ (wyświetlane) | UI dziś | **(a)** wyśw. | **(b)** wyśw. | UI po (b) |
+|---|---|---|---|---|---|---|---|---|
+| `envoy_goodwill` | +5 | 1 | 5 | 0,417 | „5 l." | 0,417 | **4,583** | „5 l." |
+| `military_presence` | −5 | 2 | 3 | 0,25 | „3 l." | 0,25 | **2,333** | „3 l." |
+| `recent_war` | −15 | 2 | 8 | 0,667 | „8 l." | 0,667 | **7,333** | „8 l." |
+| `legacy_relations` (trust 80 ⇒ +30) | +30 | 2 | 15 | 1,25 | „15 l." | 1,25 | **14,75** | „15 l." |
+| `their_envoy` | +3 | 1 | 3 | 0,25 | „3 l." | 0,25 | **2,5** | „3 l." |
+| `research_intrusion` | −3 | 2 | 2 | 0,167 | „2 l." | 0,167 | **1,333** | „2 l." |
+| `trespassing` | −5 | 2 | 3 | 0,25 | „3 l." | 0,25 | **2,333** | „3 l." |
+
+⚠ **Wariant (a) zabija etykietę:** wszystkie życia mieszczą się w 0,17–1,25 roku wyświetlanego, więc
+`ceil` daje **1 dla każdego wpisu** — „zanika za 1 rok" przy siedmiu różnych modyfikatorach. Ratunek
+tylko przez podroczną precyzję („za 5 miesięcy"). W (b) liczby wychodzą całkowite i sensowne, a UI
+zawyża o obcięcie epsilonem (pokazuje 5, faktycznie 4,58) — dokładnie tak samo jak dziś (3 vs 2,5).
+
+### §B2 — mechanizmy ŻYWE dziś (NIE bramkowane flagą): (a) to TOŻSAMOŚĆ, nie zmiana
+
+| mechanizm | DZIŚ | **(a)** ×12 | **(b)** bez zmian |
+|---|---|---|---|
+| `trade_partner` ramp 0→+50 (`rampPerYear` 1) | 50 lat cyw. = **4,167** wyśw. | **4,167** ← IDENTYCZNE | 50 wyśw. (12× dłużej) |
+| napięcie 30→0 (`PEACE_DECAY` 5) | 6 lat cyw. = **0,5** wyśw. | **0,5** ← IDENTYCZNE | 6 wyśw. (12× dłużej) |
+
+⚠ **Obawa z poprzedniej wersji planu („−60/rok wyświetlany — prawie na pewno za szybko") była
+artefaktem jednostki, przed którą sama ostrzegała.** `PEACE_DECAY = 60` na rok wyświetlany to
+DOKŁADNIE ta sama prędkość co dzisiejsze `5` na rok cyw. — zmierzone: 0,5 = 0,5 roku wyświetlanego.
+Nowa cyfra wygląda drastycznie; zachowanie jest bitowo to samo.
+
+### §B3 — pełna inwentaryzacja stałych czasowych dyplomacji (zakres E6)
+
+Trzy klasy. Tylko klasa 1 wymaga PRZELICZENIA; klasy 2 i 3 są już w latach wyświetlanych.
+
+**Klasa 1 — tempa na rok CYWILIZACYJNY (realna konwersja):**
+
+| stała | wartość | gdzie | żywa dziś? |
+|---|---|---|---|
+| `OPINION_MODIFIERS[*].decayPerYear` (7 niezerowych) | 1–2 | `OpinionModifierData` | **NIE** — flaga OFF |
+| `trade_partner.rampPerYear` (+1, `rampMax` +50) | 1 | `OpinionModifierData` | **TAK** — ramp nie jest bramkowany |
+| `PEACE_DECAY` | 5,0 | `DiplomacySystem:54` | **TAK** — jawnie nie bramkowany |
+| `DEFAULT_AGGRESSION_DECAY` (reputacja) | 1 | `ReputationLedger:22` | **NIE** — ta sama flaga |
+
+**Klasa 2 — już lata wyświetlane, komentarz ZGODNY (tylko dokumentacja):**
+`TRUCE_YEARS` 10 · `RECENT_REFUSAL_YEARS` 2 · `ERRATIC_EPOCH_YEARS` 10.
+
+**Klasa 3 — już lata wyświetlane, ale komentarz KŁAMIE albo milczy (naprawa opisu, wartość bez zmian):**
+
+| stała | wartość | komentarz mówi | jest naprawdę |
+|---|---|---|---|
+| `ULTIMATUM_GRACE_YEARS` | 3,0 | „lata cyw." | **3 lata wyświetlane = 36 cyw.** |
+| `TRESPASS_YEARS` | 1,0 | „co ile lat cyw." | **1 rok wyświetlany = 12 cyw.** |
+| `PEACE_QUIET_YEARS` | 2,0 | (nie podaje jednostki) | **2 lata wyświetlane = 24 cyw.** |
+| `AI_ENVOY_COOLDOWN` (`AlienCivSystem:38`) | 15 | „civYears" | **15 lat wyświetlanych = 180 cyw.** |
+| `modifierYearsLeft` (docstring) | — | „lat cyw." | zgodny DZIŚ; po klasie 1 staje się wyświetlanymi |
+| `getTruceYearsLeft` (docstring) | — | „lat cyw." | **lata wyświetlane** (czyta `_year()`) |
+
+⚠ **Dwie kopie stałych bez linku** (rozjadą się przy każdym strojeniu, w zakresie E6 jako higiena):
+`DiplomacyOverlay:402` liczy licznik ultimatum z **literału `3`** zamiast importować
+`ULTIMATUM_GRACE_YEARS`; `SaveMigration:2628` i `:2630` wpisują reputacyjne `decayPerYear: 1` drugi
+raz, niepowiązane z `DEFAULT_AGGRESSION_DECAY`.
+ℹ Poza zakresem, ale zauważone: `WarSystem:39 FLEET_AGGRO_INTERVAL = 5` jest MARTWE (jedyne
+wystąpienie w `src/`; logika poszła do `MilitaryAI`) — kandydat do usunięcia, nie do konwersji.
+
+### §B4 — pasmo czasów w zegarze GRACZA (zmierzone) i skala partii
+
+| lata wyświetlane | co | stan |
+|---|---|---|
+| 15 | `AI_ENVOY_COOLDOWN` (odstęp delegacji AI) | żywe |
+| 10 | `TRUCE_YEARS` (rozejm) · `ERRATIC_EPOCH_YEARS` (epoka humoru) | żywe |
+| **7,33** | ślad po wojnie `recent_war` — **wariant (b)** | po E6 |
+| **4,58** | dobra wola z emisariusza — **wariant (b)** | po E6 |
+| 3 | `ULTIMATUM_GRACE_YEARS` | żywe |
+| 2 | `RECENT_REFUSAL_YEARS` · `PEACE_QUIET_YEARS` | żywe |
+| **0,67** | ślad po wojnie `recent_war` — **DZIŚ / wariant (a)** | dziś MARTWE (flaga OFF) |
+| **0,42** | dobra wola z emisariusza — **DZIŚ / wariant (a)** | dziś MARTWE (flaga OFF) |
+
+**Skala partii:** przebiegi botów w BALANS to **400 lat cyw. = 33 lata wyświetlane**
+(`test-rule-bot` / `test-mcts-bot` / `test-detectors`; `test-random-bot` 200 = 16,7), a realny zapis
+gracza z tego repo stoi na **roku 39** (`kosmos_..._r39_v90.json`). Czyli partia = **~30–40 lat
+wyświetlanych**. W tej skali wariant (a) daje modyfikatorom 0,5–4% partii, wariant (b) 4–44% —
+a KAŻDA stała, którą ktoś w tej fazie napisał świadomie, siedzi w pasmie 2–15 lat wyświetlanych.
+
+### §B5 — test spójności, który rozstrzyga: dwie nogi emisariusza (zmierzone)
+
+Misja emisariusza jest abstrakcyjna i trwa **5,0 lat wyświetlanych**: dotarcie w +2,5 (+5 opinii),
+powrót w +5,0 (kolejne +5, tryb `accumulate`). `MissionSystem:52` obiecuje „tryb accumulate sumuje
+je do +10". Odstęp między nogami: **2,5 roku wyświetlanego**.
+
+| tempo | noga 1 w chwili powrotu | suma po obu nogach |
+|---|---|---|
+| DZIŚ (flaga ON) | **WYGASŁA** | **+5** — obietnica +10 niedowieziona |
+| **(a)** tempo ×12 | **WYGASŁA** | **+5** — obietnica +10 niedowieziona |
+| **(b)** bez zmian | **ŻYJE (+2,5)** | **+7,5** — nogi się SUMUJĄ, decay bierze swoje |
+
+⚠ **Przy tempie (a) tryb `accumulate` jest arytmetycznie martwy dla emisariusza:** wkład każdej nogi
+wygasa przed przybyciem następnej, więc „sumowanie" nie ma czego sumować — i to samo dotyczy dwóch
+kolejnych MISJI (5 lat wyświetlanych odstępu przy życiu 0,42). Dokładnie ta obawa kazała D1 trzymać
+flagę wyłączoną („emisariusze przestają wystarczać do sojuszu"); (b) ją usuwa, (a) zatwierdza.
+ℹ Nawet (b) nie dowozi literalnych +10 (decay zjada 2,5 w czasie drogi powrotnej) — to jest POPRAWNE
+zachowanie, ale komentarz `MissionSystem:52` („jak dotąd") przestaje być prawdziwy z chwilą zapalenia
+flagi i w E6 wymaga sprostowania.
+
+---
+
+## Rekomendacja E6 — DO PODPISU (jedna decyzja)
+
+**Mechanika unifikacji (bez wariantów):** kadencja ticku dyplomacji ZOSTAJE 1 rok cyw. — zmienia się
+tylko JEDNOSTKA `dy` podawana konsumentom temp: `steps / CIV_TIME_SCALE` zamiast `steps`. Dzięki temu
+rozdzielczość zostaje drobna (dt = 1/12 roku wyświetlanego), a `_tickTrespassing` / `_tickUltimatumExpiry`
+/ `_tickTruces` (już na zegarze wyświetlanym) nie tracą reaktywności. Wzór z repo:
+`DepositReadoutLogic` — dzielenie przez `CIV_TIME_SCALE` w czystym module ze skalą wstrzykniętą
+przez `opts` (nie w widoku).
+
+**Rekomendacja tempa — PODZIAŁ wzdłuż linii „żywe vs martwe", bo tak wypadł pomiar:**
+
+1. **Mechanizmy ŻYWE dziś → tempo ×12 (odczuwalne tempo IDENTYCZNE).** `trade_partner.rampPerYear`
+   1 → 12, `PEACE_DECAY` 5 → 60. Zmierzona tożsamość: 4,167 = 4,167 i 0,5 = 0,5 roku wyświetlanego
+   (§B2). Klasa 3 (już wyświetlane, żywe) — **wartości nietknięte**, poprawiamy wyłącznie kłamiące
+   komentarze.
+2. **Mechanizmy MARTWE dziś (za flagą) → cyfry zostają, jednostką staje się rok wyświetlany.**
+   Siedem `decayPerYear` w `OPINION_MODIFIERS` + `DEFAULT_AGGRESSION_DECAY`. Efekt zmierzony:
+   życia 1,33–14,75 roku wyświetlanego (§B1), czyli **to samo pasmo, w którym siedzi każda świadomie
+   napisana stała tej fazy** (2–15, §B4), plus działający `accumulate` emisariusza (§B5).
+3. **`ERRATIC_EPOCH_YEARS` zostaje 10** — jest już w latach wyświetlanych, jest ŻYWA, a E5 przeszło
+   gate z tą wartością. Zmierzone: przy epoce 10 partia 33–40 lat daje 3–4 zmiany humoru; liczba
+   referencyjna z gate'u E5 (rok 0) przeżyłaby każdą zmianę epoki (`floor(0/10) = floor(0/3) = 0`),
+   więc strojenie tej gałki jest bezpieczne — ale należy do BALANS/D4, nie do E6, żeby gate E6 miał
+   jedną zmienną mniej.
+4. **UI:** `diplo.fadesIn` podaje jednostkę w obu językach, z zachowanym `{0}` (pinowane przez
+   `diplomacy_overlay_breakdown_smoke:195`; `check-i18n` sprawdza WYŁĄCZNIE istnienie klucza, nie
+   placeholdery — więc pin w smoke jest tu jedyną realną bramką). Wzór nazewnictwa:
+   `colonyInfo.depositEtaUnit` (komentarz przy kluczu nazywa zegar).
+
+**Dlaczego nie (a) w całości:** bo (a) opisuje tempo, którego gra nigdy nie pokazała (§B0 — dziś nic
+nie zanika), zabija etykietę (`ceil` = 1 dla wszystkich siedmiu wpisów, §B1), rozjeżdża decay z każdą
+świadomie napisaną stałą o rząd wielkości (§B4) i zatwierdza arytmetycznie martwy `accumulate` (§B5).
+**Dlaczego nie (b) w całości:** bo (b) na `PEACE_DECAY` i rampie to REALNE 12× zwolnienie mechanizmów,
+które dziś żyją i których tempa nikt nie zgłosił jako problem — czyli dokładnie ta niejawna zmiana
+balansu, przed którą decyzja 3 miała chronić.
+
+### ⚠ Kolizja z podpisaną decyzją 3 i jej ZAWĘŻENIE (precedens: decyzja 6)
+
+Decyzja 3 brzmi: „zapalić BEZ zmiany ODCZUWALNEGO tempa, zmierzyć, potem stroić". Czytana globalnie
+nakazuje (a) dla wszystkiego. Pomiar §B0 pokazuje, że dla temp bramkowanych flagą ta lektura jest
+**pusta**: ich dzisiejsze odczuwalne tempo to ∞, więc (a) też go NIE zachowuje — zachowuje tempo,
+którego zaszyty build nigdy nie wykonał. Zgodnie z precedensem z decyzji 6 (kotwica parytetu E5)
+własność nie zostaje poluzowana, tylko **zawężona do punktu odniesienia, który nadal jej dowodzi**:
+
+> **Decyzja 3 (ZAWĘŻONA — do podpisu):** flip nie może zmienić odczuwalnego tempa żadnego mechanizmu
+> dyplomacji **OBSERWOWALNEGO w zaszytym buildzie**. Punkty odniesienia, oba zmierzone jako identyczne
+> przed i po: `trade_partner` ramp 0→+50 (**4,167** roku wyświetlanego) i decay napięcia 30→0
+> (**0,5** roku wyświetlanego). Mechanizmy, które flaga trzyma dziś w ciemności, nie mają
+> odczuwalnego tempa do zachowania — ich tempo jest ustalane RAZ, świadomie, w tym commicie, i pinowane
+> pomiarem (tabela §B1 wchodzi do smoke jako oczekiwanie).
+
+Zakaz, po który decyzja 3 była pisana, zostaje w mocy: żadna cicha zmiana tempa nie przechodzi pod
+przykrywką konwersji jednostek — a to, co się zmienia, jest wymienione z liczbą przed i po.
+
+### Konsekwencje dla testów (ZMIERZONE, nie przewidziane)
+
+Różnicowy przebieg wszystkich **110** suite'ów, każdy dwa razy (flaga wstrzyknięta false vs true):
+**dokładnie DWA** zmieniają wynik. Reszta 108 jest obojętna — w tym `diplomacy_d1_smoke` **83/83
+w obie strony** (blok D4 ustawia flagę jawnie, więc kontrakt „obie gałęzie" przeżywa flip domyślnej
+wartości — dokładnie jak wymaga plan), `acceptance_engine` 206/206, `diplomacy_opinion` 85/85,
+`balans_diplomacy_telemetry` 54/54, `diplomacy_migration_v100` 57/57, `empire_objective` 30/30.
+
+1. **`diplomacy_model_smoke` M10** czyta ZASZYTĄ domyślną (plik nie ustawia flagi przed linią 232)
+   i asertuje `false`; po flipie ta asercja pada, a dwie linie dalej suite **twardo się wywala**
+   (`TypeError` na `.find(...).value` po wygasłym wpisie, bez linii podsumowania ⇒ w sweepie
+   „exit 1 (crash przed podsumowaniem)"). Naprawa: gałąź OFF ustawia flagę jawnie (wzór D4), a pin
+   zaszytej domyślnej mówi prawdę o nowej wartości.
+2. **`diplomacy_overlay_breakdown_smoke`** (36 asercji, NIE było na liście siedmiu w §Tests) nigdzie
+   nie wspomina o `FEATURES`; jego fixture robi `tickModifiers(12)` po ramp, co przy decayu ON kasuje
+   pięć krótkich modyfikatorów i zwija stos 7 → 2, wywracając trzy asercje layoutu („limit 5 +
+   «+2 więcej»"). Naprawa: test layoutu UI pinuje flagę, której potrzebuje (precedens: trzy suite'y
+   `acceptance_*` już to robią w nagłówku).
+
+§Tests fazy trzeba więc rozszerzyć o `diplomacy_overlay_breakdown_smoke` — plan go nie wymieniał,
+a jest flip-czuły.
