@@ -142,7 +142,16 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   recorded in `D2_E3_GATE_CHECKLIST.md`, `D2_E5_GATE_CHECKLIST.md`, `D2_E6_GATE_CHECKLIST.md`;
   per-commit table and all 16 implementation findings in `D2_PLAN.md`. Save **v100, no migration**.
   Full summary under Completed above.
-- **D3** Borders, trespass incidents, influence map (claimed + 1-jump border zone)
+- **D3** Borders, trespass incidents, influence map (claimed space + border zone)
+  ⚠ **CORRECTED 2026-08-10 — ruling R-2 (Filip).** This line used to say *"claimed + 1-jump border
+  zone"*. **"One jump" has no galaxy-side definition in this codebase:** `WarpRoutePlanner` builds
+  edges on the fly from `warpDist3D(a,b) ≤ maxHopLY`, where `maxHopLY = warpFuel.max /
+  warpFuel.consumption` — a property of *the vessel*, so two ships see two different graphs.
+  The border zone is therefore a **radius in light years: 5 LY** around AI territory; claimed space
+  keeps the existing `TERRITORY.R_MIN_LY 1.5 → R_MAX_LY 4.0` radii. The map is built in Director
+  Slice 1 (S2) and D3 consumes it. ⚠ The 5 LY constant is **provisional pending a coverage
+  measurement** on the real 72-system galaxy across several seeds — see `DIRECTOR_SLICE1_PLAN.md`
+  §Rulings R-2.
 - **D4** Verb batch 1: gift, denounce, threaten, NAP duration, alliance mechanics,
   war CB + reputation, peace terms (consumes `peaceCost`)
 
@@ -169,11 +178,21 @@ Owns everything between war declaration and the peace table. Doc must cover:
 2. **AI military economy** — production share for shipyards, buildup triggers (arms
    race), defense buildings + ground units in AI build priorities (audit R11).
 3. **Ship construction & templates** — which hulls with which modules. AI ships are
-   REAL vessels built from modules, spawned instantly when resources + criteria are met
-   (no physical build queue). Template format + catalog per hull class and role
+   REAL vessels built from modules. Template format + catalog per hull class and role
    (Filip authors templates; example: frigate = hull_frigate + warp drive + warp core
    cell + standard armor + 2× kinetic, fallback 1× kinetic on capacity). Templates
    should be tech-aware (better modules as empire tech grows) and archetype-flavored.
+   ⚠ **SUPERSEDED 2026-08-10 — ruling R-1 (Filip).** This bullet used to read *"spawned instantly
+   when resources + criteria are met (no physical build queue)"*, which contradicted this same
+   workstream's *"scripts order, economy executes"* (§B.3 intent, restated in §C Slice 1): an instant
+   spawn leaves **no queue for intel to observe**. The original ruling was motivated by avoiding new
+   queue machinery; the Director Slice 1 audit found the machinery already exists and works
+   (`ColonyManager.startShipBuild` → `shipQueues` / `pendingShipOrders`). **The economy executes.**
+   ⚠ Second-order finding worth carrying into this workstream: the AI-side caller that "proves" the
+   path (`EmpireLogisticsSystem:209`) **never fires in practice** — measured over 4 seeds × 400 civYears,
+   zero courier builds, because courier routes require outposts and the AI founds none. The path works;
+   it simply has no live consumer today. Rationale, the measurement table and the three hard requirements
+   this imposes on Director S4 are in `DIRECTOR_SLICE1_PLAN.md` §Rulings + §Wyniki weryfikacji.
 4. **Threat assessment** — one shared module read by both war and diplomacy
    (fix of audit R2 lives here).
    - *Carried in from D2/E6 (dead-code deletion, not a conversion):* `WarSystem:39

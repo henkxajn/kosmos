@@ -190,7 +190,7 @@ Adding a diplomatic mechanic = adding a verb file + modifier types. Zero engine 
 | `denounce` | −opinion at target, small + at target's enemies; feeds proposer↔target tension slightly; cheap signal |
 | `threaten` (MOO) | coercion: vs weaker/pacifist → concession or −tension "generosity"; **backfires** vs aggressive/honorable (+tension, −opinion, memory `threatened_us`) |
 | `open_borders` / `close_borders` | flips `bordersOpen[side]`; closed borders turn claimed-space entry into trespass incidents; military vessels always require explicit access regardless |
-| *(border violation)* | **not a verb — an incident generator**: claimed/border-zone entry events (from ReactionDirector's influence map, 1 jump) write tension + memory; the diplomatic response ("withdraw your forces") is a verb the AI initiates |
+| *(border violation)* | **not a verb — an incident generator**: claimed/border-zone entry events (from ReactionDirector's influence map — **border zone = 5 LY radius**, ruling R-2; *not* "1 jump", which has no galaxy-side definition here) write tension + memory; the diplomatic response ("withdraw your forces") is a verb the AI initiates |
 | `non_aggression` | blocks war declaration; **has duration + renewal** — renewal is evaluated fresh (a natural diplomatic beat); breaking it: heavy modifier + reputation + memory |
 | `alliance` | finally mechanical: war call (ally evaluates the call **through the same engine**), shared intel vision, −tension between allies |
 | `declare_war` | requires casus belli from `memory` (existing `inferCasusBelli` retargeted); no-CB war = big reputation hit; unilateral (no acceptance) |
@@ -251,7 +251,8 @@ as regression artifact.
 
 **Phase D3 — Borders + incident pipeline.**
 `bordersOpen`, trespass incidents, "withdraw forces" AI-initiated verb. Depends on the
-influence map (claimed + 1-jump border zone) — **shared prerequisite with
+influence map (claimed space + **5 LY border zone**; ruling R-2 replaced the original
+"1-jump" wording — adjacency in this codebase is per-vessel, not per-galaxy) — **shared prerequisite with
 ReactionDirector Slice 1**; build it here, Director consumes it.
 Harness: violation → tension → ladder escalation traces.
 
