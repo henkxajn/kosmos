@@ -72,14 +72,22 @@ const dipl = new DiplomacySystem();
 window.KOSMOS.diplomacySystem = dipl;
 
 // Stos modyfikatorów: 7 pozycji → limit 5 + wiersz „+2 więcej"; trwały (traktat) + zanikające.
+//
+// ⚠ KOLEJNOŚĆ JEST CZĘŚCIĄ FIXTURE'U, nie stylem: ramp jedzie PRZED dołożeniem
+// modyfikatorów zanikających. Dawniej tick szedł na końcu, więc przy WŁĄCZONYM zanikaniu
+// (domyślna po E6) ten sam tick kasował pięć krótkich wpisów i zwijał stos 7 → 2,
+// wywracając trzy asercje LAYOUTU. To jest test layoutu — ma mierzyć limit wierszy
+// i ogon „+N", a nie tempo zanikania. Odwrócenie kolejności powtarza zresztą inwariant
+// produkcyjny z DiplomacySystem: „modyfikatory starzeją się PRZED handlerami, które je
+// dodają — świeży wpis nie może zanikać w ticku, w którym powstał".
+dipl.signTreaty('emp_a', { id: 'trade_agreement' });          // trwały trade_partner
+dipl.relations.tickModifiers(12);                             // ramp → +12
 dipl.addOpinionModifier('emp_a', 'player', 'legacy_relations', { value: +30, source: 'test' });
 dipl.addOpinionModifier('emp_a', 'player', 'envoy_goodwill', { source: 'test' });
 dipl.addOpinionModifier('emp_a', 'player', 'their_envoy', { source: 'test' });
 dipl.addOpinionModifier('emp_a', 'player', 'military_presence', { source: 'test' });
 dipl.addOpinionModifier('emp_a', 'player', 'research_intrusion', { source: 'test' });
 dipl.addOpinionModifier('emp_a', 'player', 'trespassing', { source: 'test' });
-dipl.signTreaty('emp_a', { id: 'trade_agreement' });          // trwały trade_partner
-dipl.relations.tickModifiers(12);                             // ramp → +12
 dipl.changeTension('emp_a', +45, 'test');
 for (let i = 0; i < 6; i++) dipl.addMemory('emp_a', 'territorial_violation', { i });
 

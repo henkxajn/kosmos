@@ -229,14 +229,21 @@ console.log('--- M9: granice ---');
 // ── M10: tick — ramp zawsze, decay tylko za flagą ──────────────────────────
 console.log('--- M10: tickModifiers ---');
 {
+  // ⚠ OBIE gałęzie flagi ustawiane JAWNIE (wzór bloku D4 w diplomacy_d1_smoke).
+  // Dawniej gałąź OFF jechała na ZASZYTEJ domyślnej, więc E6 (flip domyślnej na ON)
+  // wywracał tu asercję, a dwie linie dalej suite twardo się wywalał (`.find(...).value`
+  // po wpisie skasowanym przez decay — bez linii podsumowania). Kontrakt „obie gałęzie"
+  // jest ten sam; zmienia się tylko to, że test nie zależy już od wartości domyślnej.
   const flagBefore = GAME_CONFIG.FEATURES.diplomacyDecay;
-  ok('domyślnie decay WYŁĄCZONY (D1 = bez zmian zachowania)', flagBefore === false);
 
   const { s, m } = mkModel();
   m.addModifier('emp_003', 'player', 'envoy_goodwill');
   m.addModifier('emp_003', 'player', 'trade_partner');
   const writesBefore = s.writes;
 
+  GAME_CONFIG.FEATURES.diplomacyDecay = false;
+  ok('gałąź OFF ustawiona JAWNIE (test nie zależy od zaszytej domyślnej)',
+    GAME_CONFIG.FEATURES.diplomacyDecay === false);
   m.tickModifiers(20);
   ok('decay OFF: envoy +5 przeżywa 20 lat cyw.',
     m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'envoy_goodwill').value === 5);
@@ -251,6 +258,8 @@ console.log('--- M10: tickModifiers ---');
   ok('persistent trade_partner nietknięty decayem (i doszedł do 40)',
     m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'trade_partner').value === 40);
   GAME_CONFIG.FEATURES.diplomacyDecay = flagBefore;
+  ok('flaga PRZYWRÓCONA po bloku (kolejne bloki nie są zanieczyszczone)',
+    GAME_CONFIG.FEATURES.diplomacyDecay === flagBefore);
 
   const idle = mkModel();
   idle.m.ensure('player', 'emp_003');
@@ -299,6 +308,9 @@ console.log('--- M12: reputacja ---');
 
   led.addAggression('emp_003', 10);
   const flagBefore = GAME_CONFIG.FEATURES.diplomacyDecay;
+  // Gałąź OFF ustawiana JAWNIE — ta sama poprawka co w M10. Decay reputacji siedzi za
+  // TĄ SAMĄ flagą co decay opinii, więc flip E6 zapala go razem z nią.
+  GAME_CONFIG.FEATURES.diplomacyDecay = false;
   led.tick(5);
   ok('decay OFF → reputacja stoi', led.getAggression('emp_003') === 10);
   GAME_CONFIG.FEATURES.diplomacyDecay = true;
