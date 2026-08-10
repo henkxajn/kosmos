@@ -221,9 +221,13 @@ if (typeof offAcc === 'function') offAcc();
 if (typeof offRej === 'function') offRej();
 
 // Ramp zastąpił _tickTreaties (+1 trust/rok) — DZIAŁA mimo wyłączonego decayu.
+// ⚠ D2/E6: tick dostaje lata WYŚWIETLANE, a kadencja produkcyjna to 1 rok CYWILIZACYJNY,
+// czyli dy = 1/CIV_TIME_SCALE. Parytet jest więc nadal +1 NA KROK KADENCJI (rate 12/rok
+// wyświetlany × 1/12) — ta sama liczba co przed unifikacją, wyrażona w nowej jednostce.
 const opBefore = dipl.getOpinionOfPlayer('emp_trade');
-dipl.relations.tickModifiers(1);
-assert(dipl.getOpinionOfPlayer('emp_trade') === opBefore + 1, 'T20 PARYTET: umowa handlowa narasta +1/rok cyw.');
+dipl.relations.tickModifiers(1 / GAME_CONFIG.CIV_TIME_SCALE);
+assert(dipl.getOpinionOfPlayer('emp_trade') === opBefore + 1,
+  'T20 PARYTET: umowa handlowa narasta +1 na krok kadencji (= dawne +1/rok cyw.)');
 dipl.relations.tickModifiers(200);
 assert(dipl.getOpinionOfPlayer('emp_trade') === opBefore + 50, 'T20b: narastanie saturuje na rampMax (+50)');
 

@@ -50,7 +50,14 @@ const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, wa
 // ── S3.4 — misja dyplomatyczna (envoy) ──
 // D1: wartość (+5) i tempo zanikania mieszkają teraz w katalogu modyfikatorów
 // (OPINION_MODIFIERS.envoy_goodwill) — tam się je stroi. Misja dokłada modyfikator
-// dwa razy (dotarcie + powrót), a tryb `accumulate` sumuje je do +10, jak dotąd.
+// dwa razy (dotarcie w +2,5 roku wyświetlanego, powrót w +5,0), a tryb `accumulate`
+// je SUMUJE.
+// ⚠ D2/E6 — „do +10" przestało być prawdą i było nią tylko dlatego, że zanikanie
+// stało wyłączone. Z zapaloną flagą pierwsza noga zanika w czasie drogi powrotnej,
+// więc realna suma to ~+7,5 i to jest zachowanie POPRAWNE. Kluczowe jest natomiast,
+// że nogi w ogóle mają się na czym zsumować: przy tempie 12× szybszym (wariant
+// odrzucony w E6) noga 1 wygasała PRZED powrotem i `accumulate` nie miał czego
+// sumować. Pinowane wykonaniem: `diplomacy_time_units_smoke` §B5.
 
 // ── Mapowanie starych typów → nowe ──────────────────────────────────────────
 // recon(target/nearest) → survey

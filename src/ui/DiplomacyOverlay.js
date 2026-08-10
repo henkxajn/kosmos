@@ -397,9 +397,10 @@ export class DiplomacyOverlay extends BaseOverlay {
 
     // Ultimatum active?
     if (rel.ultimatumStartYear != null) {
-      const year = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-      const elapsed = year - rel.ultimatumStartYear;
-      const remaining = Math.max(0, 3 - elapsed);
+      // D2/E6: licznik z fasady (`getUltimatumYearsLeft`), nie z wklejonego literału `3`.
+      // Panel trzymał DRUGĄ, niepowiązaną kopię ULTIMATUM_GRACE_YEARS — przestrojenie
+      // łaski rozjeżdżało UI z silnikiem bez żadnego sygnału.
+      const remaining = dipl.getUltimatumYearsLeft?.(this._selectedId) ?? 0;
       ctx.fillStyle = '#D8A030';
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillText(t('diplo.ultimatumWarn', remaining.toFixed(1)), x + pad, iy + 10);

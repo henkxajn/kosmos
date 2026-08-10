@@ -32,7 +32,8 @@ export const COMBINE = {
  *   id           — musi równać się kluczowi (pilnuje tego smoke)
  *   labelKey     — klucz i18n etykiety w rozbiciu opinii
  *   defaultValue — wartość użyta gdy wywołanie nie poda własnej (punkty opinii)
- *   decayPerYear — punkty opinii na 1 rok cywilizacyjny; 0 = nie zanika
+ *   decayPerYear — punkty opinii na 1 rok WYŚWIETLANY; 0 = nie zanika
+ *                  (D2/E6 — patrz nota „JEDNOSTKA CZASU" pod katalogiem)
  *   combine      — COMBINE.REFRESH | COMBINE.ACCUMULATE
  *   persistent   — żyje tak długo jak jego źródło (traktat, stan wojny); nie zanika
  *   rampPerYear / rampMax / treatyId — tylko modyfikatory narastające (patrz trade_partner)
@@ -89,17 +90,42 @@ export const OPINION_MODIFIERS = {
     defaultValue: -15, decayPerYear: 2, combine: COMBINE.REFRESH, persistent: false,
   },
 
-  // Aktywna umowa handlowa. NARASTAJĄCY: +1 na rok cyw. do rampMax — to jest
+  // Aktywna umowa handlowa. NARASTAJĄCY: +12 na rok WYŚWIETLANY do rampMax — to jest
   // odpowiednik starego `TREATY_TYPES.trade_agreement.yearlyTrust = 1`, czyli jedyna
   // poza-emisariuszami droga do wysokiego zaufania. Wartość naliczona trzymana jest
   // na TYM wpisie (jedno źródło prawdy) i znika razem z traktatem.
+  //
+  // ⚠ D2/E6: `rampPerYear` 1 → 12 to NIE przyspieszenie, a TA SAMA prędkość w nowej
+  // jednostce — ramp NIGDY nie był bramkowany flagą zanikania, więc jest mechanizmem
+  // ŻYWYM i zawężona decyzja 3 wymaga zachowania odczuwalnego tempa CO DO CYFRY.
+  // Zmierzone: 0 → +50 zajmuje 4,167 roku wyświetlanego przed i po zmianie.
   trade_partner: {
     id: 'trade_partner', labelKey: 'diplo.mod.tradePartner',
     defaultValue: 0, decayPerYear: 0, combine: COMBINE.REFRESH, persistent: true,
-    rampPerYear: +1, rampMax: +50, treatyId: 'trade_agreement',
+    rampPerYear: +12, rampMax: +50, treatyId: 'trade_agreement',
   },
 
 };
+
+// ── JEDNOSTKA CZASU CAŁEJ DYPLOMACJI (D2/E6) ────────────────────────────────
+//
+// WSZYSTKIE tempa i okresy dyplomacji liczą się w latach WYŚWIETLANYCH — tych samych,
+// które gracz widzi na pasku czasu (`timeSystem.gameTime`) i którymi od zawsze mierzyły
+// TRUCE_YEARS, RECENT_REFUSAL_YEARS i ERRATIC_EPOCH_YEARS. Przelicznik: 1 rok
+// wyświetlany = CIV_TIME_SCALE (12) lat cywilizacyjnych. Konwersja siedzi w JEDNYM
+// miejscu — w ticku `DiplomacySystem` (`dy = steps / CIV_TIME_SCALE`); katalog, model
+// i matematyka nie znają już roku cywilizacyjnego.
+//
+// Dlaczego `decayPerYear` zostało przy TYCH SAMYCH cyfrach (a ramp dostał ×12):
+// zanikanie modyfikatorów jest za flagą `FEATURES.diplomacyDecay`, która do E6 była
+// WYŁĄCZONA — w zaszytym buildzie te tempa NIGDY nie działały, więc nie ma
+// odczuwalnego tempa do zachowania (pomiar: probe-diplomacy-time-units §B0). Ich tempo
+// jest ustalane RAZ, tutaj, świadomie: cyfry zostają, jednostka staje się rokiem
+// wyświetlanym. Efekt zmierzony — dobra wola z emisariusza żyje 4,58 roku wyświetlanego,
+// ślad po wojnie 7,33, osad po starym zaufaniu 14,75 — czyli to samo pasmo, w którym
+// siedzą rozejm (10), epoka humoru (10), łaska po ultimatum (3) i karencja odmowy (2).
+// Alternatywa (×12 także tutaj) dawała 0,17–1,25 roku i czyniła tryb `accumulate`
+// emisariusza arytmetycznie martwym (§B5). Podpisane: zawężona decyzja 3, 2026-08-10.
 
 // ⚠ `threatened_by_you` USUNIĘTY w D2/E2 — to jest Decyzja 1 fazy, wykonana.
 // Wpis miał sprzęgać napięcie z opinią (−10 przy napięciu > 60). D2 rozstrzygnął ten

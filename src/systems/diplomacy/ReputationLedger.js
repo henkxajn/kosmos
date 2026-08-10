@@ -19,7 +19,12 @@ import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 const REPUTATION_PATH = 'diplomacy.reputation';
 
-const DEFAULT_AGGRESSION_DECAY = 1;   // punkty na rok cywilizacyjny
+// Punkty agresji na rok WYŚWIETLANY (D2/E6 — jedna jednostka dla całej dyplomacji).
+// ⚠ Cyfra NIETKNIĘTA przy unifikacji: decay reputacji jest za `FEATURES.diplomacyDecay`,
+// która do E6 była WYŁĄCZONA, więc w zaszytym buildzie NIGDY nie działał i nie ma
+// odczuwalnego tempa do zachowania (zawężona decyzja 3). Zmiana jednostki = świadome
+// 12× zwolnienie mechanizmu, który dotąd stał.
+const DEFAULT_AGGRESSION_DECAY = 1;
 const AGGRESSION_MIN = 0;
 const AGGRESSION_MAX = 100;
 
@@ -67,15 +72,15 @@ export class ReputationLedger {
    * na cały silnik zanikania, żeby D2 zapalał go w jednym miejscu.
    * Zapis tylko przy realnej zmianie.
    */
-  tick(civDy) {
-    if (!(civDy > 0)) return;
+  tick(dy) {
+    if (!(dy > 0)) return;
     if (!GAME_CONFIG.FEATURES?.diplomacyDecay) return;
     for (const [id, rec] of Object.entries(this._all())) {
       const value = Number(rec?.aggression) || 0;
       if (value <= 0) continue;
       const rate = Number(rec?.decayPerYear) || 0;
       if (rate <= 0) continue;
-      const next = Math.max(AGGRESSION_MIN, value - rate * civDy);
+      const next = Math.max(AGGRESSION_MIN, value - rate * dy);
       if (next === value) continue;
       this._write(id, { ...rec, aggression: next }, 'reputation_decay');
     }

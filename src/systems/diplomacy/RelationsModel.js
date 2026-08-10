@@ -304,25 +304,30 @@ export class RelationsModel {
   // ── Tick (sama matematyka stanu; polityka i eventy w DiplomacySystem) ─────
 
   /**
-   * Narastanie + zanikanie modyfikatorów, raz na rok cywilizacyjny.
+   * Narastanie + zanikanie modyfikatorów.
+   *
+   * @param {number} dy — upływ czasu w latach WYŚWIETLANYCH (D2/E6). Wołający
+   *   (`DiplomacySystem`) tyka co 1 rok CYWILIZACYJNY, więc typowe `dy` = 1/12;
+   *   konwersja siedzi wyłącznie tam, model nie zna już roku cywilizacyjnego.
    *
    * Ramp działa ZAWSZE (zastępuje stare `_tickTreaties` +1/rok — zachowanie, które
-   * parytet D1 ma utrzymać). Decay jest za flagą FEATURES.diplomacyDecay, domyślnie
-   * WYŁĄCZONĄ: stary `trust` nie zanikał w ogóle, więc włączenie zanikania w D1
+   * parytet D1 ma utrzymać). Decay jest za flagą FEATURES.diplomacyDecay: do E6 była
+   * WYŁĄCZONA, bo stary `trust` nie zanikał w ogóle i włączenie zanikania w D1
    * zmieniłoby balans (emisariusze przestają wystarczać do sojuszu, wczytany zapis
-   * neutralizuje się w kilkanaście lat). Flaga zapala się w D2 razem z Acceptance Engine.
+   * neutralizuje się w kilkanaście lat). E6 ją zapala — razem z unifikacją jednostek,
+   * która ustawia tempo tak, że dobra wola emisariuszy ŻYJE dłużej niż jedna misja.
    *
    * Zapis TYLKO gdy tablica faktycznie się zmieniła — inaczej co rok leciałby
    * gameState:changed na każdą parę.
    */
-  tickModifiers(civDy) {
-    if (!(civDy > 0)) return;
+  tickModifiers(dy) {
+    if (!(dy > 0)) return;
     const decayOn = !!GAME_CONFIG.FEATURES?.diplomacyDecay;
     for (const rel of this.listPairs()) {
       const mods = rel.opinionModifiers ?? [];
       if (mods.length === 0) continue;
-      let next = rampModifiers(mods, civDy, OPINION_MODIFIERS);
-      if (decayOn) next = decayModifiers(next, civDy);
+      let next = rampModifiers(mods, dy, OPINION_MODIFIERS);
+      if (decayOn) next = decayModifiers(next, dy);
       if (next === mods) continue;
       const { key, ...rec } = rel;
       this._write(key, { ...rec, opinionModifiers: next }, 'opinion_tick');

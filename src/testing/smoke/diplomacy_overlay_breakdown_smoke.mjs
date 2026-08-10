@@ -205,6 +205,26 @@ console.log('--- U8: i18n ---');
     && plDict['diplo.truceYearsLeft'].includes('{0}') && enDict['diplo.truceYearsLeft'].includes('{0}'));
 }
 
+// ── Licznik ultimatum bez wklejonego literału (D2/E6) ───────────────────────
+// Panel liczył „N lat do wojny" z literału `3`, czyli z DRUGIEJ, niepowiązanej kopii
+// ULTIMATUM_GRACE_YEARS — przestrojenie łaski rozjeżdżało UI z silnikiem po cichu.
+// Teraz liczbę podaje fasada (`getUltimatumYearsLeft`); ten blok pinuje, że panel
+// rysuje DOKŁADNIE to, co zwraca silnik (i że gałąź ultimatum w ogóle się rysuje).
+console.log('--- U8b: licznik ultimatum czytany z fasady ---');
+{
+  const YEAR = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+  dipl.relations.setUltimatumStart('player', 'emp_a', YEAR - 1, 'test');
+  const left = dipl.getUltimatumYearsLeft('emp_a');
+  ok(`getUltimatumYearsLeft zwraca resztę łaski (${left})`, left > 0 && left < 3.001);
+  const cU = makeCtx();
+  let eU = null;
+  try { overlay.draw(cU, W, H); } catch (e) { eU = e; }
+  ok('draw() nie rzuca przy aktywnym ultimatum', eU === null);
+  ok(`panel pokazuje liczbę Z FASADY (${left.toFixed(1)}), nie z literału`,
+    said(cU, left.toFixed(1)));
+  dipl.relations.setUltimatumStart('player', 'emp_a', null, 'test_cleanup');
+}
+
 // ── Render w EN (ta sama ścieżka, inny słownik) ─────────────────────────────
 console.log('--- U9: render EN ---');
 {

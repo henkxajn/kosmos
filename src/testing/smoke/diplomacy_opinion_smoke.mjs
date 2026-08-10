@@ -130,14 +130,17 @@ console.log('--- P5: decayModifiers ---');
 console.log('--- P6: rampModifiers ---');
 {
   const tp = (v) => [mod({ id: 'trade_partner', owner: 'a', value: v, persistent: true })];
-  ok('+1 na rok cyw. (odpowiednik starego yearlyTrust)', rampModifiers(tp(0), 1, OPINION_MODIFIERS)[0].value === 1);
-  ok('po 25 latach = 25 (stara droga do wysokiego zaufania)', rampModifiers(tp(0), 25, OPINION_MODIFIERS)[0].value === 25);
+  // ⚠ D2/E6 — `dy` jest w latach WYŚWIETLANYCH, a `rampPerYear` to 12/rok wyświetlany
+  // (= dawne +1/rok cyw.). Odczuwalne tempo bez zmian; zmieniła się jednostka obu liczb.
+  ok('+12 na rok wyświetlany (= dawne +1/rok cyw., parytet yearlyTrust)', rampModifiers(tp(0), 1, OPINION_MODIFIERS)[0].value === 12);
+  ok('+1 na KROK KADENCJI (1 rok cyw. = 1/12 roku wyśw.) — parytet co do punktu', rampModifiers(tp(0), 1 / 12, OPINION_MODIFIERS)[0].value === 1);
+  ok('po 2 latach wyświetlanych = 24 (droga do wysokiego zaufania)', rampModifiers(tp(0), 2, OPINION_MODIFIERS)[0].value === 24);
   ok('saturacja na rampMax', rampModifiers(tp(0), 999, OPINION_MODIFIERS)[0].value === OPINION_MODIFIERS.trade_partner.rampMax);
   ok('na rampMax → TA SAMA referencja', (() => { const l = tp(50); return rampModifiers(l, 5, OPINION_MODIFIERS) === l; })());
   const notRamp = [mod({ id: 'envoy_goodwill', owner: 'a', value: 5, decayPerYear: 1 })];
   ok('modyfikator bez rampPerYear nietknięty', rampModifiers(notRamp, 10, OPINION_MODIFIERS) === notRamp);
   ok('ramp NIE zależy od flagi decayu (czysta funkcja, bez GAME_CONFIG)',
-    rampModifiers(tp(0), 3, OPINION_MODIFIERS)[0].value === 3);
+    rampModifiers(tp(0), 3, OPINION_MODIFIERS)[0].value === 36);
 }
 
 // ── P7: rozbicie do UI ─────────────────────────────────────────────────────
@@ -203,8 +206,8 @@ console.log('--- P10: katalog ---');
   ok('powtarzalne źródła kumulują się (parytet)',
     ['envoy_goodwill', 'their_envoy', 'military_presence', 'research_intrusion', 'trespassing']
       .every(id => OPINION_MODIFIERS[id].combine === COMBINE.ACCUMULATE));
-  ok('trade_partner narasta +1/rok do +50 i jest persistent',
-    OPINION_MODIFIERS.trade_partner.rampPerYear === 1 && OPINION_MODIFIERS.trade_partner.rampMax === 50
+  ok('trade_partner narasta +12/rok WYŚWIETLANY do +50 i jest persistent (E6: 1 → 12, to samo tempo)',
+    OPINION_MODIFIERS.trade_partner.rampPerYear === 12 && OPINION_MODIFIERS.trade_partner.rampMax === 50
     && OPINION_MODIFIERS.trade_partner.persistent === true
     && OPINION_MODIFIERS.trade_partner.treatyId === 'trade_agreement');
   // D2/E2 — Decyzja 1 fazy WYKONANA: wpis usunięty, bo napięcie wchodzi do decyzji

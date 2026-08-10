@@ -241,22 +241,23 @@ console.log('--- M10: tickModifiers ---');
   m.addModifier('emp_003', 'player', 'trade_partner');
   const writesBefore = s.writes;
 
+  // ⚠ D2/E6 — horyzonty podawane w latach WYŚWIETLANYCH (tick nie zna już roku cyw.).
   GAME_CONFIG.FEATURES.diplomacyDecay = false;
   ok('gałąź OFF ustawiona JAWNIE (test nie zależy od zaszytej domyślnej)',
     GAME_CONFIG.FEATURES.diplomacyDecay === false);
-  m.tickModifiers(20);
-  ok('decay OFF: envoy +5 przeżywa 20 lat cyw.',
+  m.tickModifiers(2);
+  ok('decay OFF: envoy +5 przeżywa 2 lata wyświetlane (24 cyw.)',
     m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'envoy_goodwill').value === 5);
-  ok('ramp DZIAŁA mimo wyłączonego decayu (odpowiednik _tickTreaties)',
-    m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'trade_partner').value === 20);
+  ok('ramp DZIAŁA mimo wyłączonego decayu (odpowiednik _tickTreaties): 12/rok wyśw. × 2',
+    m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'trade_partner').value === 24);
   ok('tick zapisał (ramp zmienił stan)', s.writes > writesBefore);
 
   GAME_CONFIG.FEATURES.diplomacyDecay = true;
-  m.tickModifiers(20);
-  ok('decay ON: envoy +5 (1/rok) po 20 latach zniknął',
+  m.tickModifiers(6);
+  ok('decay ON: envoy +5 (1/rok wyśw.) po 6 latach wyświetlanych zniknął',
     !m.get('emp_003', 'player').opinionModifiers.some(x => x.id === 'envoy_goodwill'));
-  ok('persistent trade_partner nietknięty decayem (i doszedł do 40)',
-    m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'trade_partner').value === 40);
+  ok('persistent trade_partner nietknięty decayem (i dobił do rampMax +50)',
+    m.get('emp_003', 'player').opinionModifiers.find(x => x.id === 'trade_partner').value === 50);
   GAME_CONFIG.FEATURES.diplomacyDecay = flagBefore;
   ok('flaga PRZYWRÓCONA po bloku (kolejne bloki nie są zanieczyszczone)',
     GAME_CONFIG.FEATURES.diplomacyDecay === flagBefore);

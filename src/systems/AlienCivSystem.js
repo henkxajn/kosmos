@@ -35,7 +35,11 @@ const MIL_RATIO_WAR = 0.7;  // musi mieć co najmniej 70% siły gracza
 // ── S3.4 — AI envoy (abstrakcyjny gest dyplomatyczny obcych) ──
 // D1: wartość gestu (+3) mieszka w katalogu (OPINION_MODIFIERS.their_envoy) —
 // dawna stała AI_ENVOY_TRUST_GAIN skasowana, żeby nie było dwóch źródeł liczby.
-const AI_ENVOY_COOLDOWN   = 15;    // civYears między emisariuszami (BUG2b — było 12)
+// Odstęp między delegacjami AI. ⚠ D2/E6: komentarz mówił „civYears" i KŁAMAŁ —
+// porównanie jedzie przez `timeSystem.gameTime`, więc to od zawsze było 15 lat
+// WYŚWIETLANYCH (= 180 cyw.), czyli 2-3 delegacje na partię. Opis poprawiony,
+// wartość nietknięta (mechanizm żywy — zawężona decyzja 3). (BUG2b — było 12.)
+const AI_ENVOY_COOLDOWN   = 15;
 // Wysyła tylko gdy relacje są słabe. D2/E3: wyrażone w OPINII (skala D1), nie w dawnym
 // truście — 10 punktów opinii to dokładnie dawny próg trustu 60 (trust = 50 + opinia).
 const AI_ENVOY_OPINION_MAX = 10;

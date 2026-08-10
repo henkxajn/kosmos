@@ -95,7 +95,16 @@ export function opinionOf(rel, ofId) {
   return clampOpinion(sum);
 }
 
-/** Ile lat cyw. zostało modyfikatorowi do zaniknięcia (Infinity = nie zanika). */
+/**
+ * Ile lat WYŚWIETLANYCH zostało modyfikatorowi do zaniknięcia (Infinity = nie zanika).
+ *
+ * ⚠ D2/E6 — TU MIESZKAŁA JEDYNA REALNA WADA ETYKIETY „(zanika za N l.)". Liczba była
+ * poprawna, ale w latach CYWILIZACYJNYCH, więc panel obiecywał 5 lat czegoś, co gracz
+ * przeżywał w 5 miesiącach swojego zegara. Po unifikacji `decayPerYear` jest „na rok
+ * wyświetlany", więc ta sama arytmetyka zwraca lata, w których gracz myśli.
+ * Zaokrąglenie W GÓRĘ zostaje: `ceil` zawyża o obcięcie epsilonem (envoy pokazuje 5,
+ * faktycznie gaśnie po 4,58) — tak samo jak przed E6 (pokazywał 3 przy 2,5).
+ */
 export function modifierYearsLeft(m) {
   if (!m) return 0;
   const rate = Number(m.decayPerYear) || 0;
@@ -166,6 +175,10 @@ export function removeModifier(mods, id, owner) {
  * Starzenie: wartości nietrwałych modyfikatorów pełzną KU ZERU o decayPerYear × dy,
  * a wpisy poniżej epsilon znikają. Trwałe (persistent) i decayPerYear ≤ 0 nietknięte.
  *
+ * @param {number} dy — upływ czasu w latach WYŚWIETLANYCH (D2/E6; przed E6 były to lata
+ *   cywilizacyjne). Funkcja jest jednostkowo-agnostyczna: liczy `rate × dy`, a jednostkę
+ *   ustala wołający — dlatego jedyna konwersja siedzi w ticku `DiplomacySystem`.
+ *
  * Zwraca TĘ SAMĄ referencję gdy nic się nie zmieniło — dzięki temu warstwa stanu
  * testuje zmianę przez `!==` i nie zapisuje do gameState co tik dla każdej pary.
  */
@@ -190,6 +203,7 @@ export function decayModifiers(mods, dy) {
 /**
  * Narastanie (obecnie: trade_partner). Wartość pełznie KU rampMax o rampPerYear × dy,
  * bez przestrzelenia. Modyfikatory bez rampPerYear w katalogu nietknięte.
+ * `dy` w latach WYŚWIETLANYCH (D2/E6) — jak w decayModifiers.
  * Tak samo jak decayModifiers: ta sama referencja gdy bez zmian.
  *
  * ⚠ Ramp NIE jest bramkowany flagą decayu — zastępuje istniejące
@@ -219,7 +233,7 @@ export function rampModifiers(mods, dy, catalog = {}) {
 
 // ── Napięcie / rozejm ───────────────────────────────────────────────────────
 
-/** Napięcie po decayu (nigdy poniżej 0). */
+/** Napięcie po decayu (nigdy poniżej 0). `dy`/`ratePerYear` w latach WYŚWIETLANYCH (E6). */
 export function tensionAfterDecay(tension, dy, ratePerYear) {
   const t = Number(tension) || 0;
   if (!(dy > 0)) return t;

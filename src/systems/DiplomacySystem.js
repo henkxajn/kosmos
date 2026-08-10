@@ -49,18 +49,30 @@ const WARNING_THRESHOLD   = TENSION_THRESHOLDS.warning;
 const ULTIMATUM_THRESHOLD = TENSION_THRESHOLDS.ultimatum;
 const WAR_THRESHOLD       = TENSION_THRESHOLDS.war;
 
-// Decay napięcia podczas pokoju (na rok cyw.) + ile lat ciszy go odblokowuje.
-// ⚠ NIE bramkowane flagą diplomacyDecay — to stara mechanika, nie nowy silnik.
-const PEACE_DECAY       = 5.0;
+// Decay napięcia podczas pokoju + ile lat ciszy go odblokowuje. OBA w latach
+// WYŚWIETLANYCH (D2/E6 — jedna jednostka dla całej dyplomacji).
+// ⚠ NIE bramkowane flagą diplomacyDecay — to stara mechanika, nie nowy silnik, więc
+// tempo jest tu ŻYWE i musi zostać odczuwalnie NIETKNIĘTE (zawężona decyzja 3).
+// Dlatego 5,0/rok cyw. → 60,0/rok wyświetlany: to nie przyspieszenie, to TA SAMA
+// prędkość w nowej jednostce (60 × 1/12 = 5 na krok kadencji). Zmierzone: napięcie
+// 30 → 0 zajmuje 0,5 roku wyświetlanego przed i po (probe-diplomacy-time-units §C).
+const PEACE_DECAY       = 60.0;
+// Cisza wymagana przed wznowieniem decayu — od zawsze porównywana z `_year()`, czyli
+// od zawsze w latach WYŚWIETLANYCH (komentarz milczał o jednostce). Wartość bez zmian.
 const PEACE_QUIET_YEARS = 2.0;
 
-// Czas na reakcję po ultimatum (lata cyw.).
+// Czas na reakcję po ultimatum. ⚠ Komentarz mówił „lata cyw." i KŁAMAŁ: porównanie
+// jedzie przez `_year()` = `gameTime`, więc to od zawsze były lata WYŚWIETLANE
+// (3 wyświetlane = 36 cyw.). E6 poprawia opis, wartości NIE rusza — mechanizm jest żywy.
 const ULTIMATUM_GRACE_YEARS = 3.0;
 
 // Napięcie, do którego schodzi relacja po zawarciu rozejmu.
 const TRUCE_TENSION_CAP = 30;
 
-// Kara za zaleganie statku badawczego w obcym układzie — co ile lat cyw. naliczana.
+// Kara za zaleganie statku badawczego w obcym układzie — co ile lat naliczana.
+// ⚠ Komentarz mówił „lat cyw." i KŁAMAŁ: i stempel (`entry.year`), i porównanie jadą
+// przez `_year()`, więc to od zawsze był 1 rok WYŚWIETLANY (= 12 cyw.). Opis poprawiony,
+// wartość nietknięta (mechanizm żywy).
 const TRESPASS_YEARS = 1.0;
 
 // Traktat → modyfikator opinii, który z nim żyje i z nim ginie. Wyprowadzone
@@ -99,13 +111,23 @@ export class DiplomacySystem {
       if (this._tickAccum < 1.0) return;
       const steps = Math.floor(this._tickAccum);
       this._tickAccum -= steps;
+      // ── D2/E6 — JEDYNY punkt konwersji jednostek w całej dyplomacji ──────────
+      // KADENCJA zostaje 1 rok CYWILIZACYJNY (12× na rok wyświetlany) — dzięki temu
+      // rozdzielczość jest drobna, a `_tickTrespassing`/`_tickUltimatumExpiry`/
+      // `_tickTruces` (od zawsze na zegarze WYŚWIETLANYM) nie tracą reaktywności.
+      // Zmienia się wyłącznie JEDNOSTKA `dy` podawanej konsumentom TEMP: od E6 wszystkie
+      // tempa dyplomacji są „na rok WYŚWIETLANY" — ten sam zegar, który widzi gracz
+      // (`timeSystem.gameTime`) i którym mierzą TRUCE_YEARS / RECENT_REFUSAL_YEARS /
+      // ERRATIC_EPOCH_YEARS. Wzór konwersji: `DepositReadoutLogic` (dzielenie przez
+      // CIV_TIME_SCALE poza widokiem).
+      const dy = steps / GAME_CONFIG.CIV_TIME_SCALE;   // lata WYŚWIETLANE
       // Modyfikatory starzeją się PRZED handlerami, które je dodają — świeży wpis
       // nie może zanikać w tym samym ticku, w którym powstał.
-      this.relations.tickModifiers(steps);
-      this.reputation.tick(steps);
+      this.relations.tickModifiers(dy);
+      this.reputation.tick(dy);
       this._tickTruces();
       // Kolejność decay → ultimatum → zaleganie zachowana ze stanu sprzed D1.
-      this._tickTensionDecay(steps);
+      this._tickTensionDecay(dy);
       this._tickUltimatumExpiry();
       this._tickTrespassing();
     });
@@ -167,11 +189,26 @@ export class DiplomacySystem {
   getTension(empireId) { return this.relations.getTension(PLAYER, empireId); }
   getStatus(empireId)  { return this.relations.getStatus(PLAYER, empireId); }
 
-  /** Ile lat cyw. zostało rozejmu (0 = brak rozejmu / już wygasł). */
+  /**
+   * Ile lat WYŚWIETLANYCH zostało rozejmu (0 = brak rozejmu / już wygasł).
+   * ⚠ Docstring mówił „lat cyw." i kłamał od D1 — liczy się z `_year()` = `gameTime`.
+   */
   getTruceYearsLeft(empireId) {
     const until = this.relations.getTruceUntilYear(PLAYER, empireId);
     if (until == null) return 0;
     return Math.max(0, until - this._year());
+  }
+
+  /**
+   * Ile lat WYŚWIETLANYCH zostało z łaski po ultimatum (0 = brak ultimatum / już minęła).
+   * Istnieje, żeby `ULTIMATUM_GRACE_YEARS` miało JEDNEGO właściciela: panel liczył ten
+   * licznik z wklejonego literału `3`, czyli z drugiej, niepowiązanej kopii stałej —
+   * przestrojenie łaski rozjechałoby UI z silnikiem po cichu.
+   */
+  getUltimatumYearsLeft(empireId) {
+    const rel = this.relations.getOrNull(PLAYER, empireId);
+    if (rel?.ultimatumStartYear == null) return 0;
+    return Math.max(0, (rel.ultimatumStartYear + ULTIMATUM_GRACE_YEARS) - this._year());
   }
 
   /** Ostatnie `limit` wpisów pamięci relacji (dowody dla casus belli i UI). */
@@ -623,7 +660,8 @@ export class DiplomacySystem {
     }
   }
 
-  _tickTensionDecay(years) {
+  /** @param {number} dy — lata WYŚWIETLANE od ostatniego wywołania (D2/E6). */
+  _tickTensionDecay(dy) {
     const currentYear = this._year();
     for (const rel of this.relations.listPairsWith(PLAYER)) {
       if (rel.status !== 'peace') continue;
@@ -631,7 +669,7 @@ export class DiplomacySystem {
       if (lastMemoryYear != null && (currentYear - lastMemoryYear) < PEACE_QUIET_YEARS) continue;
       if ((rel.tension ?? 0) <= 0) continue;
       const empireId = rel.a === PLAYER ? rel.b : rel.a;
-      this.changeTension(empireId, -PEACE_DECAY * years, 'peace_decay');
+      this.changeTension(empireId, -PEACE_DECAY * dy, 'peace_decay');
     }
   }
 
