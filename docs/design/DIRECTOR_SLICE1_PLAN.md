@@ -1,9 +1,36 @@
-# DIRECTOR SLICE 1 — szkielet reguł, mapa wpływów, produkcja statków AI · plan doc (DRAFT — DO PRZEGLĄDU)
+# DIRECTOR SLICE 1 — szkielet reguł, mapa wpływów, produkcja statków AI · plan doc
 
 **Status:** 🟢 **ZATWIERDZONY — wszystkie osiem decyzji PODPISANE 2026-08-10**, w tym dwa **orzeczenia
 właścicielskie Filipa** (R-1, R-2) nadpisujące jego własne wcześniejsze ustalenia (§Rulings).
-**Postęp:** **S0 ✅** (commit weryfikacyjny — instrument + pomiar; **jedno twierdzenie PADŁO**, patrz
-§Wyniki weryfikacji) · S1–S7 nierozpoczęte.
+
+**Postęp:** **S0 ✅** `e9f1853` (weryfikacja szwów WYKONANIEM — 11 potwierdzonych, **V4 ZŁAMANE**;
+stąd dwa orzeczenia i trzy wymagania dla S4) · **S1 ✅** `31bd81b` (szkielet reguł + rejestry + stan
+bez migracji; wymusił wydzielenie `SeedMath.js` z `AcceptanceMath.js` — pin **P14 przeszedł BEZ
+EDYCJI**, 206/206) · **S2 ⏭ NASTĘPNY** (mapa wpływów — **niesie pomiar pokrycia R-2**) ·
+S3–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
+
+---
+
+## RESUME — start świeżej sesji (czytaj to PIERWSZE)
+
+1. **Gdzie jesteśmy:** szkielet Directora stoi samodzielnie — katalog reguł PUSTY, nic go jeszcze nie
+   instancjonuje. Save **v100, zero migracji**, i to jest własność KONSTRUKCYJNA (wszystkie domyślne
+   wartości puste), nie szczęśliwy zbieg okoliczności.
+2. **S2 zaczyna od POMIARU, nie od kodu.** Zanim stała 5 LY (orzeczenie R-2) się utwardzi: zmierz
+   pokrycie na prawdziwych 72 układach × kilka seedów — jaki ułamek galaktyki wpada w strefę graniczną
+   ≥ jednego imperium, **na starcie partii i na rozwiniętym mid-game**. **Zbliża się do połowy
+   galaktyki ⇒ STOP i przynieś tabelę** (przed Gate 3, nie po).
+3. **Dwa ustalenia wiążące S4** (wprost z pomiaru S0): (a) **kolejność OD FUNDAMENTU W GÓRĘ** — stempel
+   własności + trzy guardy (załoga, stocznia, komodyty) z fail-first PIERWSZE, zamówienia z szablonów
+   dopiero NA NICH; (b) **komodyty = guard ze SPRZĘŻENIEM EKONOMICZNYM**, nie ślepe czekanie i nie
+   twarde odcięcie — brakujące komodyty wchodzą w priorytety produkcji tej kolonii (fabryki się
+   przezbrajają, potem stocznia dowozi, intel widzi OBIE fazy). Fallback, gdyby sprzężenie okazało się
+   za drogie w S4: zlecenie czeka z **TTL ~3 lat wyświetlanych** + wpis w `DebugLog` przy wygaśnięciu —
+   **nigdy wiecznie wisząca zjawa**. W commicie napisać, który wariant poszedł i dlaczego.
+4. **Stała: `ShipTemplateData.js` musi przyjąć katalog Filipa BEZ ZMIAN W KODZIE.** Jego szablony
+   przychodzą w późniejszej sesji; format + resolver (§Template format spec) są kontraktem, nie szkicem.
+5. **Nie relitygujemy podpisanych decyzji** (osiem + R-1 + R-2). Sprzeczność z kodem → korekta
+   w §Corrections, z pomiarem i podpisem — nigdy cicha zmiana.
 **Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** C (ReactionDirector) · **Parent:** `WOJNA_I_POKOJ_MASTER_PLAN.md` §C + `DIPLOMACY_BACKBONE.md` §5
 **Zależy od:** D1 ✅ (relacje parowe) · D2 ✅ (Acceptance Engine, faza ZAMKNIĘTA 2026-08-10, save v100) · GALAXY_SEED ✅
 **Basis:** audyt ośmiu szwów przeprowadzony na potrzeby tego planu (§Audit) + `docs/audit/COMBAT_DIPLO_AUDIT.md`

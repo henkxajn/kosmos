@@ -217,7 +217,16 @@ BattleSystem; ground combat RNG gets seeded (audit R13) when touched.
 Declarative trigger→response rules, personality-parameterized, with cooldowns and
 escalation. Gives the game *dramaturgy* on top of systemic AI.
 
-- **Slice 1** (can start after D1): Director skeleton + AI ship production from
+- **Slice 1 — 🟢 IN PROGRESS.** Plan doc: `DIRECTOR_SLICE1_PLAN.md` (approved 2026-08-10; eight
+  decisions signed + owner rulings **R-1** and **R-2**). Progress: **S0 ✅** `e9f1853` (seam
+  verification by execution — 11 claims confirmed, **V4 broken**: the AI-side caller that
+  "proves" `startShipBuild` has never fired in 4 seeds × 400 civYears; the mechanism itself was
+  proven directly instead) · **S1 ✅** `31bd81b` (rule skeleton + registries + `gameState.director`
+  at v100 with no migration; forced the `SeedMath.js` extraction out of `AcceptanceMath.js` so pin
+  P14 kept its full strength, 206/206 unedited) · **S2 next** — influence map, and it carries R-2's
+  coverage measurement (stop-with-table if the 5 LY shell approaches half the galaxy) ·
+  S3–S7 pending · **Gates 1–3 all pending.**
+  Scope (can start after D1): Director skeleton + AI ship production from
   templates (pulls B.3 forward as a minimal version) + influence map (pulls D3's map
   forward if Director goes first) + two rule chains:
   - **First contact**: observatory L5 → yearly cumulative spawn roll 10%/20%/30%…→100%
@@ -251,8 +260,9 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 
 ```
 D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 2026-08-10)
-                             ⟵ WE ARE HERE
-                        → [Director Slice 1 ∥ D3] → WAR_BACKBONE doc
+                        → Director Slice 1 🟢 IN PROGRESS  (S0 ✅ e9f1853 · S1 ✅ 31bd81b)
+                                                ⟵ WE ARE HERE — S2 next (carries R-2 measurement)
+                        → [Director S2..S7 + Gates 1-3] ∥ D3 → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
@@ -263,10 +273,15 @@ foundation is in place.** D1 gave relations a real model; D2 gave them a real *d
 D2** above and in `D2_PLAN.md` (per-commit table + 16 implementation findings); the three gate scripts
 carry their recorded results.
 
-**Next horizon — three candidates, none started, order to be decided with the orchestrator:**
-1. **ReactionDirector Slice 1** (workstream C) — Director skeleton + AI ship production from templates
-   + influence map + the two rule chains (first contact, military pressure L1–L2). Can run in parallel
-   with D3 and pulls B.3 forward in a minimal form.
+**Next horizon — the order was decided: Director Slice 1 went first and is UNDER WAY.**
+1. **ReactionDirector Slice 1** (workstream C) — 🟢 **IN PROGRESS**, plan `DIRECTOR_SLICE1_PLAN.md`
+   (read its **RESUME** block first). S0 ✅ + S1 ✅; **S2 next**, and S2 opens with R-2's coverage
+   measurement before the 5 LY constant hardens. Still runs in parallel with D3 and still pulls B.3
+   forward in a minimal form.
+   ⚠ Two findings from S0 that bind later work: the AI-side `startShipBuild` caller has **never fired
+   in a real game** (courier routes need outposts; the AI founds none — filed to WAR_BACKBONE/BALANS
+   as an AI-economy diagnosis), and an AI-built warship currently leaves the yard with **no owner**
+   (the only stamp filters `hull_small`), which Director S4 fixes for itself.
 2. **WAR_BACKBONE doc** (workstream B) — the design pass that owns everything between a war
    declaration and the peace table. It is also where audit **R2** finally gets fixed (both player-military
    estimators are broken identically), which is what un-stubs D2's `relative_power` term, and where
