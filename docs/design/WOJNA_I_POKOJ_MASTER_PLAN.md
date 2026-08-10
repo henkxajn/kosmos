@@ -3,8 +3,8 @@
 **Status:** living roadmap · **Last update:** 2026-08-10
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
 `WAR_BACKBONE.md` (pending), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
-**Phase docs in repo:** `docs/design/D1_AUTONOMOUS_REPORT.md` · `docs/design/D1_LIVE_GATE_CHECKLIST.md` ·
-`docs/design/D2_PLAN_SKELETON.md` · `docs/design/GALAXY_SEED_PLAN.md`.
+**Phase docs in repo:** `D1_AUTONOMOUS_REPORT.md` · `D1_LIVE_GATE_CHECKLIST.md` · `D2_PLAN_SKELETON.md` ·
+`D2_PLAN.md` (+ `D2_E3/E5/E6_GATE_CHECKLIST.md`) · `GALAXY_SEED_PLAN.md` (+ its gate checklist) — all in `docs/design/`.
 
 ## Vision
 
@@ -58,6 +58,61 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   `615eb63` and `b5fea08` (docs). Headless reproducibility preserved by the explicit
   `HEADLESS_GALAXY_SEED` pin, so BALANS baselines are bit-identical.
 
+- **D2 — Acceptance Engine + retrofit of all six player actions. DONE, phase CLOSED 2026-08-10.**
+  Three live gates, all PASSED (E3 08-08 10/10 · E5 08-10 10/10 · E6 08-10 11/11). Nine commits
+  `ef35af7` → `c0d89e5`; save stays **v100 with no migration for the entire phase** — nothing the
+  engine needed turned out to require new persistent state (`verbCooldowns` rode `?? {}`, the
+  `bordersOpen` pattern from D1).
+  **What shipped:** one evaluator (`AcceptanceEngine`) behind every proposal in both directions,
+  with a breakdown the player can read. `"always yes"` is over — **peace and the envoy can be
+  refused**, which is the audit's R5 (they had no decision point at all, not even a hardcoded
+  `true`), and `casusBelli.peaceCost` got its first reader in the codebase. Refusals now *explain
+  themselves and cost something*: the modal renders the acceptance breakdown verbatim and
+  `recent_refusal` ends button-spamming. The `objective` axis became real — six agendas move both
+  the threshold and the weight of sympathy — and the `erratic` trait finally gets rolled, from its
+  own per-empire stream. Modifier decay was lit, with every diplomacy time constant unified to
+  **displayed game years**, so the panel's "fades in N" is finally a number in the player's own clock.
+  The `getTrustEquivalent` bridge D1 left behind is deleted (it had **four** callers, not the three
+  the plan predicted).
+  **Four findings worth carrying forward.**
+  1. **Parity impossibility (E2).** Converting the old 60/75/80 thresholds into weights is
+     *impossible* while personality is a weighted term: parity forces `O ≥ 8·P`, scale-invariantly,
+     which crushes every other term into noise. Personality was therefore never a weight — it was a
+     **hard gate**, and became a `personalityFloor` precondition. `diplomacy_d1_smoke` passing
+     **83/83 unedited** is the proof. The D4 consequence (`gift`/`offer` vs absolute floors) is
+     recorded under D4 below.
+  2. **Two signed properties collided, twice — and both times the property was NARROWED to a
+     reference point rather than loosened.** E5's gate thesis ("same archetype, different agenda ⇒
+     measurably different acceptance") directly negates E2's parity anchor ("boundary 10/25/30 for
+     *every* agenda"); resolved with a **reference agenda** (`merchant` gets no override, so the old
+     thresholds are reproduced *to the point* while five agendas spread around them). E6 hit the same
+     shape: "light the decay without changing the felt tempo" turned out to be **empty** for the
+     flag-gated rates, because measurement showed they had never run at all — their felt tempo was ∞,
+     not the "0.42 displayed years" the plan had computed. Narrowed to *mechanisms observable in the
+     shipped build*, with two reference points reproduced to the digit (ramp 0→+50 = **4.167**
+     displayed years, tension 30→0 = **0.5**). **This is now the house move for moving a signed
+     property: narrow it to something that still proves the original thesis, and sign the narrowing.**
+  3. **The envoy decided E6's balance (§B5).** Its mission spans 5.0 displayed years with goodwill
+     legs at +2.5 and +5.0 and an `accumulate` mode documented to sum them. Measured: under the
+     naive "preserve felt tempo everywhere" variant the first leg **expires before the second lands**
+     — the mode has nothing to sum, which is precisely the fear that kept the flag off in D1. Under
+     the shipped choice the legs compound (5 → 2.5 → **7.5**; the shortfall from 10 is decay taking
+     its toll on the way home, and correct). Measurement beat arithmetic here in general: the tick
+     steps in *whole* civ years and entries vanish below an epsilon, so two rows of the plan's own
+     computed table were wrong.
+  4. **Gates keep finding pre-existing debt rather than regressions.** E3 revealed that a *concluded*
+     peace had never had a Journal entry (only state subscribers), fixed in E4; a recovery audit after
+     a lost session found the required threshold rendering as **−0** in every peace refusal and
+     auto-peace reporting an offer the player never made, both fixed in E4e; E6's unit sweep found
+     **three comments lying about their unit** (`ULTIMATUM_GRACE_YEARS`, `TRESPASS_YEARS`,
+     `AI_ENVOY_COOLDOWN` were all *already* in displayed years — the code had been running 12× longer
+     than it documented) and one panel counter reading a pasted literal `3` instead of the engine.
+  **Closing items:** E8 gated `_onColonyFounded` on `ownerEmpireId` — AI colonisation had been
+  charging *the player* with tension and a `territorial_violation`, even when an AI colonised its own
+  system. E9 retired the `kosmos_save_backup_v{N}` write: a key with no read path in the game, the
+  weight of a whole save, and deleted *first* under quota pressure — the guaranteed recovery path is
+  the `.json` file on disk. Both shipped with fail-first-proven pins.
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
@@ -79,43 +134,14 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   ⚠ Hard constraint, held: an existing player's galaxy does NOT change on load. Headless
   reproducibility preserved by an explicit pin (`HEADLESS_GALAXY_SEED` = the old constant), so
   BALANS baselines are bit-identical.
-- **D2** Acceptance Engine + retrofit of 6 existing actions (ends "always yes") ← **IN PROGRESS.**
-  Plan doc `D2_PLAN.md` (per-commit status table there). Commit order **E1 → E7 → E2 → E3 → E4 →
-  E5 → E6 → E8 → E9** (E7 pulled ahead: the acceptance matrices are the tuning instrument for E2's
-  parity conversion). Live gates at E3, E5, E6.
-  **Done: E1 `ef35af7` · E7 `27dd7a6` · E2 `b8b3e08` · E3 `e011017` (live gate PASSED
-  2026-08-08, 10/10 — `D2_E3_GATE_CHECKLIST.md` carries the recorded result) ·
-  E4 `9f166a4`+`10175c3`+`d473bcd`+`56de88d` · E4e `fc284c2`+`b75fe3e`+`db22a80` ·
-  E5 `6c7ea3d`+`d7ff7b5` (live gate PASSED 2026-08-10, 10/10 —
-  `D2_E5_GATE_CHECKLIST.md`) · **E6 committed, gate pending** (`38c1450` measured baseline; code `b075221` → `00484a5` →
-  `2ca7d0c` → `7a8427e`; script `D2_E6_GATE_CHECKLIST.md`).** Remaining: **E8, E9**. Save stays
-  **v100**, no migration.
-  E4 in one line: refusals now *explain themselves*. The modal renders the acceptance
-  breakdown verbatim (first consumer of `breakdown`, which had been emitted since E1 with
-  nobody reading it), `recent_refusal` went **UNFED → LIVE** (E1 had built the evaluator and
-  handed it weights on all five verbs — only the *writer* was missing), and treaty buttons
-  stopped pre-judging: grey now means structurally impossible, never "they would say no".
-  Two things fell out of that. **Auto-peace must not stamp the cooldown** — it retries on
-  every battle, so stamping would hand the pair a permanent −20 and re-open exactly the
-  deadlock E3 had just closed; one `playerInitiated` flag suppresses both the stamp and the
-  modal (which would otherwise pause the game mid-battle-series). And the button flip made
-  the personality floor reachable by click for the first time, which exposed a blocked-reason
-  mapping that reported *every* non-`already_signed` block as "a war is under way".
-  The gate's one discrepancy was a **checklist over-promise, not a regression**: a concluded
-  peace has no Journal entry and never had one — `diplomacy:peaceSigned` only ever had *state*
-  subscribers (WarSystem closes the war, AlienCivSystem flips the FSM), and
-  `git log --all -S` over `UIManager` is empty. Same class as D1 §1.3. It only started to
-  chafe because E3 gave refusals a voice, leaving peace as the sole *success* without one
-  (treaty and envoy both have theirs). **Fixed in E4.**
-  Headline results so far: `"always yes"` is over — peace and the envoy can be refused,
-  `casusBelli.peaceCost` got its first reader in the codebase, and the `getTrustEquivalent`
-  bridge is deleted. Parity for the three treaties is exact, proven by `diplomacy_d1_smoke`
-  passing **83/83 unedited** — personality turned out to be a *hard gate*, not a weighted term
-  (parity forces `O ≥ 8·P`, scale-invariant), so it became a `personalityFloor` precondition.
-  Scope now also carries: unit
-  unification (§5a), DiplomacyTelemetry+Report, the `threatened_by_you` wire-or-delete decision,
-  the `_onColonyFounded` `ownerEmpireId` check, `kosmos_save_backup_v{N}` retirement, and the decay
-  flag flip as its own commit + gate.
+- **D2** Acceptance Engine + retrofit of all 6 player actions (ends "always yes") — ✅ **DONE,
+  phase CLOSED 2026-08-10.** Three gates PASSED (E3 · E5 · E6). Commits `ef35af7` (E1) · `27dd7a6`
+  (E7) · `b8b3e08` (E2) · `e011017` (E3) · `9f166a4`+`10175c3`+`d473bcd`+`56de88d` (E4) ·
+  `fc284c2`+`b75fe3e`+`db22a80` (E4e) · `6c7ea3d`+`d7ff7b5` (E5) · `38c1450`+`b075221`+`00484a5`+
+  `2ca7d0c`+`7a8427e`+`894a161` (E6 + calibration) · `7d78da5` (E8) · `c0d89e5` (E9). Gate results
+  recorded in `D2_E3_GATE_CHECKLIST.md`, `D2_E5_GATE_CHECKLIST.md`, `D2_E6_GATE_CHECKLIST.md`;
+  per-commit table and all 16 implementation findings in `D2_PLAN.md`. Save **v100, no migration**.
+  Full summary under Completed above.
 - **D3** Borders, trespass incidents, influence map (claimed + 1-jump border zone)
 - **D4** Verb batch 1: gift, denounce, threaten, NAP duration, alliance mechanics,
   war CB + reputation, peace terms (consumes `peaceCost`)
@@ -205,80 +231,33 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ E4e✅ E5✅gate E6✅gate-pending ⟵ HERE | E8 E9)
-                        → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
+D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 2026-08-10)
+                             ⟵ WE ARE HERE
+                        → [Director Slice 1 ∥ D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** D2 is thirteen commits in, past **both** of its first two live gates
-(E3 and E5), and the retrofit is complete — every one of the six actions now goes through the engine.
-Only E6 (decay flip + unit unification), E8 and E9 remain.
-E3 passed on 2026-08-08 — the game has a refusable peace: the first refusal
-scored **−6.5** against a threshold of 0 (war exhaustion 0 against a `border_incident` peace
-price of 30), the same war concluded at exhaustion 70, and an extermination war survived
-exhaustion 100 without ending itself. E4 then gave refusal a *voice and a cost*: the breakdown
-is on screen verbatim, saying no twice in two years is measurably harder than saying it once,
-and no button is grey because the answer would be no.
+**Where we are right now:** **the diplomacy backbone's first two phases are done and the arc's
+foundation is in place.** D1 gave relations a real model; D2 gave them a real *decision* — closed
+2026-08-10 after nine commits and three passed live gates, with the save format untouched throughout
+(v100, no migration). AI can now say no, and say *why*. The blow-by-blow lives under **Completed →
+D2** above and in `D2_PLAN.md` (per-commit table + 16 implementation findings); the three gate scripts
+carry their recorded results.
 
-A recovery audit after the E4 session was lost then re-read the shipped code against the plan,
-and found two places where the refusal channel is not yet as honest as E4 claims: the required
-threshold renders as **−0** in every peace refusal (zero falls into the minus branch, and
-`offer_peace` has threshold 0), and an auto-peace retry still tells the Journal that *"they
-rejected our peace offer"* — an offer the player never made, because the one flag that separates
-the two cases reached the modal but not the Journal subscriber. **E4e** closes both before E5.
+**Next horizon — three candidates, none started, order to be decided with the orchestrator:**
+1. **ReactionDirector Slice 1** (workstream C) — Director skeleton + AI ship production from templates
+   + influence map + the two rule chains (first contact, military pressure L1–L2). Can run in parallel
+   with D3 and pulls B.3 forward in a minimal form.
+2. **WAR_BACKBONE doc** (workstream B) — the design pass that owns everything between a war
+   declaration and the peace table. It is also where audit **R2** finally gets fixed (both player-military
+   estimators are broken identically), which is what un-stubs D2's `relative_power` term, and where
+   `FLEET_AGGRO_INTERVAL` gets deleted.
+3. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation
+   record, unread, since D1, and D3 is its consumer.
 
-**E5 then made the second axis real.** `objective` had existed since D1 and the engine had read it
-since E1, but the override table was empty — six agendas scored identically to the point. E5 filled
-it, and rolled the `erratic` trait the backbone had promised, taking the last unfed term LIVE.
-Two things fell out. E5's gate thesis ("same archetype, different agenda ⇒ measurably different
-acceptance") is the *direct negation* of E2's signed parity anchor ("boundary 10/25/30 for **every**
-agenda") — resolved with a **reference agenda**: `merchant` gets no override, the same move that
-left industrialist and expansionist without an archetype override. Parity now has an anchor that
-reproduces the old thresholds exactly, and the agenda spreads around it. And the gate itself cannot
-be staged on two empires — the roster is one industrialist and one expansionist, always — so it
-changes the agenda of a *single* empire, holding culture, opinion and history fixed. One variable.
-
-**E5's live gate PASSED on 2026-08-10, 10/10, zero discrepancies — and it passed on a harder stage
-than the script assumes.** The session ran on a *post-war, mid-truce* save, so the player↔`emp_001`
-pair carried a real modifier stack (`recent_war` among others) and leftover tension instead of the
-clean board the numbers were measured on headlessly. Every **threshold matched to the point** — §1's
-six agendas (−2 / 0 / 1 / 4 / 9 / 12, monotone), §3's `merchant` parity anchor (4 / 10 / 15), §4's
-peace and envoy (8 / 0 / −6 and −2 / −10 / −16) — and §2's decision *ordering* held at a different
-base opinion than the scripted +20: two agendas refuse, four accept, culture and history unchanged.
-That confirms in the field the separation the checklist only *claimed*: **the threshold is a property
-of the catalog, the score a property of the campaign.** Standing lesson for the rest of the phase —
-pin thresholds and ordering, never absolute scores.
-
-**E6 then lit the decay — and the measurement it was gated on rewrote the question.** The `§Baseline`
-table was filled *by execution* (`38c1450`, a standing probe that pushes the real tick through the real
-cadence, kept in the repo for D4/D5 tuning). It corrected two rows of the plan's own arithmetic — the
-tick steps in *whole* civ years, so 2.5 is really 3 — and then produced the finding that dissolved the
-(a)-vs-(b) dilemma the plan had framed: **with the shipped flag off, modifier and reputation decay never
-ran at all.** Their felt tempo was ∞, not "0.42 displayed years"; that figure described a hypothesis the
-build never executed. So "light it without changing the felt tempo" was *empty* for exactly the rates
-the flip turns on.
-
-Decision 3 was therefore **narrowed, not loosened** (Decision 6's precedent, ratified 2026-08-10): the
-invariant now binds mechanisms *observable in the shipped build*, with two reference points reproduced
-to the digit — the trade-agreement ramp 0→+50 (**4.167** displayed years) and tension 30→0 (**0.5**).
-Those two are live today and got `×12`, which is the same speed re-expressed, not an acceleration; the
-plan's own worry about "−60/displayed year" turned out to be an artifact of the unit it was warning
-about. The flag-dark rates kept their digits and changed unit, a deliberate 12× slowdown that lands
-every modifier lifetime in the **same 2–15 displayed-year band** as every constant anyone in this phase
-wrote on purpose (truce 10, erratic epoch 10, AI envoy 15, ultimatum grace 3, refusal cooldown 2).
-
-The decider was the envoy. Its mission spans 5.0 displayed years with legs at +2.5 and +5.0 and an
-`accumulate` mode documented to sum them to +10. Measured: under the global-`×12` variant the first
-leg **expires before the second lands** — the mode has nothing to sum, which is precisely the fear that
-kept the flag off in D1. Under the shipped choice the legs compound (5 → 2.5 → 7.5; the shortfall from
-10 is decay taking its toll on the way home, and correct). Three comments that had been lying about
-their unit for a long time were fixed without touching their values — `ULTIMATUM_GRACE_YEARS`,
-`TRESPASS_YEARS` and `AI_ENVOY_COOLDOWN` were all *already* in displayed years, i.e. the code had been
-running 12× longer than it documented. `DIPLOMACY_FROZEN` armed with the flag, and the panel's fade
-label finally states its unit. Sweep **111/111**, `check-i18n` PASS, save stays **v100**.
-
-**Next: the E6 live gate** (`D2_E6_GATE_CHECKLIST.md` — every one-liner executed against the real
-engine before being written down). Then **E8** and **E9**, both small, and D2 closes.
+⚠ Two D2 terms stay deliberately inert until those land: `relative_power` (needs R2 →
+WAR_BACKBONE) and `third_party` (needs AI↔AI pairs → D5). Both are marked INERT in E7's acceptance
+matrices so nobody tunes weights against a term that returns zero.
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships

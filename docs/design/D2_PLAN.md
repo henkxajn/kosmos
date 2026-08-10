@@ -1,10 +1,15 @@
 # PHASE D2 — Acceptance Engine + retrofit · plan doc (ZATWIERDZONY — sześć decyzji podpisanych)
 
-**Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
-E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
-**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e ✅**
-(dwa fixy uczciwości z audytu recovery) · **E5 ✅ ZAMKNIĘTY (gate PASSED 2026-08-10, 10/10)** ·
-**E6 ✅ ZAMKNIĘTY (gate PASSED 2026-08-10, 11/11)** · **E8/E9 ⬜ ← TU** (małe, bez gate'ów — po nich faza ZAMKNIĘTA)
+**Status:** ✅ **FAZA ZAMKNIĘTA 2026-08-10.** Wszystkie dziewięć commitów zrealizowane w kolejności
+**E1 → E7 → E2 → E3 → E4 → E5 → E6 → E8 → E9**; trzy live-gate'y (**E3, E5, E6**) — wszystkie PASSED.
+Zapis przez CAŁĄ fazę: **v100, zero migracji** (żaden commit nie dołożył stanu persystentnego).
+**Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅** (gate PASSED 2026-08-08, 10/10) · **E4 ✅** · **E4e ✅**
+(dwa fixy uczciwości z audytu recovery) · **E5 ✅** (gate PASSED 2026-08-10, 10/10) · **E6 ✅**
+(gate PASSED 2026-08-10, 11/11 + kalibracja layoutu) · **E8 ✅** · **E9 ✅** — **WSZYSTKO ZAMKNIĘTE.**
+
+**Wynik fazy w jednym zdaniu:** dyplomacja przestała mówić „tak" na wszystko — pokój i emisariusz
+mogą zostać ODRZUCONE (pierwsze sprawdzenie w historii tej gry), odmowa POKAZUJE rozbicie i KOSZTUJE,
+agenda imperium rusza decyzje obok kultury, a relacje wreszcie STYGNĄ w zegarze, który gracz czyta.
 
 ✅ **Warunek wejścia E6 (podpisana decyzja 3) SPEŁNIONY:** tabela §Baseline wypełniona POMIAREM
 przed commitem (`38c1450`, sonda `probe-diplomacy-time-units.mjs`). Pomiar zmienił samo PYTANIE
@@ -22,8 +27,8 @@ Skrypt gate'u: `D2_E6_GATE_CHECKLIST.md`.
 | **E4e** dwa fixy uczciwości modala | ✅ **DONE** | `fc284c2` `b75fe3e` `db22a80` | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B) + piny R11. Oba w §Ustalenia 11 |
 | **E5** konsumenci `objective` + rzut `erratic` | ✅ **ZAMKNIĘTY — GATE PASSED 2026-08-10 (10/10)** | `6c7ea3d` `d7ff7b5` | a=liczby agendy + `merchant` jako agenda REFERENCYJNA (kotwica parytetu E2) · b=rzut `erratic` z własnego strumienia + term UNFED→LIVE. Wynik gate'u w `D2_E5_GATE_CHECKLIST.md` · przebieg na zapisie **po wojnie, w rozejmie** — progi zgodziły się co do punktu MIMO realnego stosu modyfikatorów, czyli potwierdzona przenośność skryptu (ustalenie 16). Save v100 bez migracji |
 | **E6** flip `diplomacyDecay` + unifikacja jednostek | ✅ **ZAMKNIĘTY — GATE PASSED 2026-08-10 (11/11)** | `b075221` `00484a5` `2ca7d0c` `7a8427e` | tabela §Baseline wypełniona pomiarem `38c1450` · polityka tempa = podpisany podział „żywe ×12 / martwe cyfry-bez-zmian" (ustalenie 7) · NEW `diplomacy_time_units_smoke` 32 pinuje §Baseline + oba punkty odniesienia CO DO CYFRY · wynik gate'u w `D2_E6_GATE_CHECKLIST.md` · jedna rozbieżność KALIBRACYJNA (§4: etykieta ociera się o wartość → przesunięcie 2 px, osobny commit) — logika/jednostki/liczby nietknięte. Save v100 bez migracji |
-| **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
-| **E9** wycofanie `kosmos_save_backup_v{N}` | ⬜ do zrobienia | — | osobno, ścieżka ratunkowa |
+| **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ✅ **DONE** | `7d78da5` | kolonizacja AI obciążała GRACZA (+30 napięcia i `territorial_violation` na parze gracz↔właściciel układu), także gdy AI kolonizowało U SIEBIE. NEW keeper `diplomacy_colony_gate_smoke` 10 asercji, **fail-first udowodniony** (bez bramki 6/4). Ścieżka AI↔AI → D5 (decyzja 5) |
+| **E9** wycofanie `kosmos_save_backup_v{N}` | ✅ **DONE** | `c0d89e5` | ZAPIS wycofany (klucz bez ścieżki odczytu, wagi całego save'a, kasowany PIERWSZY pod ciśnieniem quoty). `pruneMigrationBackups()` zostaje jako SPRZĄTACZ pozostałości; T8 bez zmian (113/113); nowy pin nieobecności zapisu w `diplomacy_migration_v100_smoke` (57 → 60), **fail-first udowodniony** |
 
 **Save przez całą fazę dotąd: v100 bez migracji** (żaden commit nie dołożył stanu persystentnego).
 
