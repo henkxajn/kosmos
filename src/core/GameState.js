@@ -42,6 +42,17 @@ function createDefaultState() {
     // Warstwa polityczna (strefy wpływów) — kolor tożsamości gracza. Wybór na
     // starcie (B2); domyślnie cyjan. Klucz MUSI tu być, inaczej restore() go pominie.
     player:           { empireColor: '#33ccff', introSeen: false },
+    // ReactionDirector (workstream C, Slice 1). `rules[ruleId|empireId]` = liczniki
+    // rzutu/cooldownu/eskalacji; `pending[ruleId|empireId]` = odpowiedź odroczona,
+    // która jeszcze nie wystrzeliła (precedens: RandomEventSystem._warningQueue JEST
+    // serializowany — oczekujący skutek to stan warty zapisu).
+    // ⚠ Save zostaje v100 BEZ migracji i to jest własność KONSTRUKCYJNA, nie szczęście:
+    // wszystkie wartości domyślne są puste, więc „brak w zapisie" jest nieodróżnialny
+    // od poprawnego defaultu (test z `verbCooldowns`, nie z `bordersOpen`).
+    // ⚠ Klucz MUSI tu być — restore() iteruje po Object.keys(default), więc domena
+    // NIEzadeklarowana jest po cichu WYRZUCANA przy wczytaniu (dziś dzieje się to
+    // z `orbitalDominance`: pisany i czytany w runtime, kasowany przy każdym load).
+    director:         { rules: {}, pending: {} },
   };
 }
 

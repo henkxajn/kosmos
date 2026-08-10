@@ -85,6 +85,7 @@ import { EmpireRegistry }    from '../systems/EmpireRegistry.js';
 import { EmpireColonyBootstrap } from '../systems/EmpireColonyBootstrap.js';
 import { IntelSystem }       from '../systems/IntelSystem.js';
 import { POIRegistry }       from '../systems/POIRegistry.js';
+import { DirectorSystem }    from '../systems/director/DirectorSystem.js';
 import { POIRuntimeSystem }  from '../systems/POIRuntimeSystem.js';
 import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
@@ -1715,6 +1716,12 @@ export class GameScene {
       this.intelSystem.initVesselSubdomain();
       // M2b Commit 5: zapewnij gameState.pois + reconstruct _nextId po load
       this.poiRegistry.initPOISubdomain();
+      // Director Slice 1 (S1): zapewnij gameState.director.{rules,pending}.
+      // ⚠ Wołane od PIERWSZEGO commita workstreamu C, choć S1 nie ma jeszcze ani jednej
+      // reguły — `restore()` podmienia domenę najwyższego poziomu W CAŁOŚCI, więc
+      // pod-klucz dodany w Slice 2/3 nie uzupełniłby się w starym zapisie. Ten hook
+      // sprawia, że przyszłe pod-klucze NIE będą wymagać bumpu wersji save'a.
+      DirectorSystem.initSubdomain();
       // M2b Commit 7: po restore POI sprites — gameState.restore nie emituje
       // poi:created dla zsynchronizowanych POI, więc ThreeRenderer trzeba
       // zsiać explicit. Idempotent: skanuje gameState.pois i tworzy sprites.

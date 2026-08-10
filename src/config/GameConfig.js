@@ -253,6 +253,17 @@ export const GAME_CONFIG = {
     //   (rejestracja + slot + P + peek). Pure UI, bez migracji save (v99). Zwolniony
     //   slot przeznaczony dla C8 (ekstrakcja ShipyardOverlay). Kanon: FEATURES kill-switch.
     populationOverlay:    false,
+    // ── ReactionDirector (WOJNA I POKÓJ 1.0, workstream C, Slice 1) ─────────
+    //   Warstwa zachowań SKRYPTOWANYCH nad systemową AI: deklaratywne reguły
+    //   trigger→guard→roll→delay→response z cooldownem i eskalacją (dane w
+    //   DirectorRuleData.js, matematyka w DirectorRuleMath.js). Slice 1 dowozi
+    //   szkielet + mapę wpływów + produkcję okrętów AI z szablonów + dwa łańcuchy
+    //   (pierwszy kontakt, nacisk militarny L1-L2).
+    //   Kill-switch: OFF = DirectorSystem.tickEmpire wraca natychmiast (zero reguł,
+    //   zero spawnów, zero incydentów); stan w gameState.director zostaje nietknięty,
+    //   więc ponowne włączenie podejmuje grę tam, gdzie ją zostawiła.
+    //   Default ON — cały sens tej fazy to ocena w praktyce (wzór transportOrders).
+    reactionDirector:     true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

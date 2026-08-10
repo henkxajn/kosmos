@@ -64,42 +64,15 @@ export function inverseDiminishing(y, halfScale = OFFER_HALF_KR) {
 }
 
 // ── PRNG dla szumu `erratic` ────────────────────────────────────────────────
-
-/**
- * Finalizer splitmix32 — rozprasza STRUKTURALNE wejścia.
- *
- * ⚠ BLIŹNIAK: identyczna funkcja żyje prywatnie w `src/generators/EmpireGenerator.js`
- * (tam `mixSeed`, dodana w `0b15d95`). Świadomie NIE wyciągamy jej teraz do wspólnego
- * modułu: EmpireGenerator jest plikiem, na którym stoją piny GALAXY_SEED, a E1 ma stać
- * samodzielnie. Ekstrakcja należy do E5 — to ten commit i tak dotknie EmpireGeneratora
- * (rzut cechy `erratic`), więc scali oba wystąpienia jednym ruchem.
- *
- * Powód istnienia (lekcja z `0b15d95`): seedy bywają prawie kolejnymi liczbami, a
- * pierwszy rzut świeżego mulberry32 dla takich wejść jest słabo rozrzucony — kolizje
- * zdarzały się częściej niż losowo. Nigdy nie czytamy pierwszego rzutu surowego seeda.
- */
-export function mixSeed(n) {
-  let z = (Number(n) || 0) >>> 0;
-  z = Math.imul(z ^ (z >>> 16), 0x21f0aaad) >>> 0;
-  z = Math.imul(z ^ (z >>> 15), 0x735a2d97) >>> 0;
-  return (z ^ (z >>> 15)) >>> 0;
-}
-
-/** Hash stringa do int32 — ten sam wariant, którego używa reszta projektu (djb2-ish). */
-export function hashStringToInt(str) {
-  const s = String(str ?? '');
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return h;
-}
-
-/**
- * Deterministyczny szum −1..+1 z ziarna. Rozgrzany: bierzemy WYJŚCIE finalizera,
- * a nie pierwszy rzut generatora zasianego surową liczbą (patrz mixSeed).
- */
-export function noiseUnit(seed) {
-  return (mixSeed(seed) / 4294967296) * 2 - 1;
-}
+//
+// ⚠ PRZENIESIONE do `src/utils/SeedMath.js` (Director Slice 1, commit S1) i tutaj
+// RE-EKSPORTOWANE, żeby żaden dotychczasowy import nie musiał się zmieniać.
+// Powód przenosin: pin **P14** trzyma import modułów `Acceptance*` wyłącznie w
+// `DiplomacySystem` (jedna ścieżka decyzyjna dla balansu akceptacji). `DirectorRuleMath`
+// potrzebuje tych samych prymitywów seedowania, a NIE jest — i nie ma być — konsumentem
+// silnika akceptacji, więc zamiast poluzować pin albo zrobić TRZECIĄ kopię funkcji,
+// wspólny prymityw dostał własny moduł. Zachowanie i wartości bez zmian.
+export { mixSeed, hashStringToInt, noiseUnit } from './SeedMath.js';
 
 // ── Wagi ────────────────────────────────────────────────────────────────────
 
