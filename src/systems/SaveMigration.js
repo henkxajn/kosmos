@@ -4,9 +4,13 @@
 //   v4 → v5 → v6 → v7 → ...
 //
 // Przy ładowaniu save'a:
-//   1. Backup starego save do localStorage (kosmos_save_backup_v{N})
+//   1. SPRZĄTANIE starych backupów migracji (D2/E9 — patrz pruneMigrationBackups)
 //   2. Łańcuchowa migracja: data.version → CURRENT_VERSION
 //   3. Zapis zmigrowanego save'a do localStorage
+//
+// ⚠ D2/E9: backup starego save'a do localStorage (`kosmos_save_backup_v{N}`) NIE JEST
+// już zapisywany. Gwarantowaną ścieżką ratunkową jest PLIK `.json` na dysku (`0b9328d`
+// robi kopię przed migracją, `src/utils/SaveFile.js` obsługuje eksport/import).
 //
 // Obsługa błędów:
 //   - Save z przyszłości (version > CURRENT) → { error: 'future_version' }
@@ -33,8 +37,16 @@ export const MIN_SUPPORTED_VERSION = 4;
  * razem — więc kilka kopii save'a wystarczyło, by zablokować zapis. Trwały backup gracza to
  * dziś plik `.json` na dysku (`src/utils/SaveFile.js`), nie localStorage.
  *
+ * ⚠ **D2/E9 — ta funkcja jest teraz CZYSTYM SPRZĄTACZEM.** Od E9 nikt tych kluczy nie
+ * ZAPISUJE (migracja przestała), więc jedyne, co usuwa, to POZOSTAŁOŚCI u graczy, którzy
+ * przeszli przez starsze wersje gry. Zostaje w kodzie właśnie dlatego: takie klucze siedzą
+ * dziś w realnych przeglądarkach i same nie znikną.
+ *
  * @param {object} [opts]
- * @param {number|null} [opts.keepVersion] — wersja, której backup zostawić (null = usuń wszystkie)
+ * @param {number|null} [opts.keepVersion] — wersja, której backup zostawić (null = usuń wszystkie).
+ *   ⚠ Po E9 **bez ani jednego wywołania produkcyjnego**: istniał wyłącznie po to, by ocalić
+ *   backup, który migracja właśnie zamierzała zapisać. Zachowany jako opcja narzędzia (pinuje
+ *   go `save_file_smoke` T8) i kandydat do usunięcia, gdy ktoś będzie tu i tak sprzątał.
  * @returns {number} ile kluczy usunięto
  */
 export function pruneMigrationBackups({ keepVersion = null } = {}) {
@@ -214,17 +226,22 @@ export function migrate(data) {
     return data;
   }
 
-  // ── Backup starego save'a ──────────────────────────────────────────────
-  // Sprzątamy PRZED zapisem: backupy z poprzednich bumpów są bezużyteczne (zero czytelników),
-  // a każdy zajmuje tyle co cały save — bez tego kolejny backup często nie miałby się gdzie zmieścić.
+  // ── D2/E9 — WYCOFANY backup do localStorage; zostaje SPRZĄTANIE ────────
+  // Do E9 migracja zapisywała tu `kosmos_save_backup_v{N}` = pełną kopię save'a.
+  // Klucz był NIEPRZYDATNY i SZKODLIWY jednocześnie:
+  //   · nieprzydatny — gra nie ma ŻADNEJ ścieżki odczytu tych kluczy (odzysk wymagał
+  //     ręcznego grzebania w DevTools), więc „backup", którego nikt nie potrafi wczytać;
+  //   · szkodliwy — waży tyle co cały save, a localStorage to ~5,2 mln ZNAKÓW na wszystkie
+  //     klucze razem, więc kopia zjadała headroom dokładnie w chwili, gdy migracja musi
+  //     jeszcze zmieścić zmigrowany save. Live-gate D1 pokazał gorsze: pod ciśnieniem quoty
+  //     autozapis kasuje te klucze PIERWSZE, czyli backup bywał nieprzewidywalny.
+  // Gwarantowaną ścieżką ratunkową jest PLIK na dysku (`0b9328d` — kopia przed migracją),
+  // a nie klucz w localStorage.
+  //
+  // `pruneMigrationBackups()` ZOSTAJE i zmienia rolę: z „zrób miejsce na nowy backup"
+  // na czyste USUWANIE POZOSTAŁOŚCI po starych wersjach gry. Wywołanie jest tu, bo migracja
+  // to jedyny moment, w którym wiemy, że gracz właśnie przyszedł ze starszej wersji.
   pruneMigrationBackups();
-  try {
-    const backupKey = `${BACKUP_PREFIX}${fromVersion}`;
-    localStorage.setItem(backupKey, JSON.stringify(data));
-    console.log(`[SaveMigration] Backup save v${fromVersion} → ${backupKey}`);
-  } catch (e) {
-    console.warn('[SaveMigration] Nie udało się zapisać backupu:', e.message);
-  }
 
   // ── Łańcuchowa migracja ────────────────────────────────────────────────
   let migrated = data;

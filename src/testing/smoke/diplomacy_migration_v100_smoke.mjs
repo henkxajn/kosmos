@@ -260,5 +260,29 @@ console.log('--- M13: round-trip + parytet ---');
   })());
 }
 
+// ── E9: migracja NIE ZAPISUJE backupu do localStorage ───────────────────────
+// Ten plik jest jedynym miejscem, które goni PEŁNE `migrate()` na zapisie v99, więc tu
+// najuczciwiej pinuje się kontrakt E9. Do E9 migracja zapisywała `kosmos_save_backup_v99`
+// = pełną kopię save'a: klucz bez ŻADNEJ ścieżki odczytu w grze, a wagi całego zapisu,
+// zjadający headroom quoty dokładnie wtedy, gdy migracja musi jeszcze zmieścić WYNIK.
+// Gwarantowaną ścieżką ratunkową jest plik `.json` na dysku (`0b9328d`).
+console.log('--- E9: brak backupu w localStorage ---');
+{
+  for (let i = (localStorage.length ?? 0) - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k?.startsWith('kosmos_save_backup_v')) localStorage.removeItem(k);
+  }
+  const out = migrateV100(makeV99Save());
+  ok('migracja przeszła (v100)', out.version === CURRENT_VERSION);
+  ok('ZERO kluczy kosmos_save_backup_v* po migracji (E9 — zapis wycofany)', (() => {
+    for (let i = 0; i < (localStorage.length ?? 0); i++) {
+      if (localStorage.key(i)?.startsWith('kosmos_save_backup_v')) return false;
+    }
+    return true;
+  })());
+  ok('zmigrowany save TRAFIŁ do slotu (persist nietknięty przez E9)',
+    JSON.parse(localStorage.getItem('kosmos_save_v1') ?? '{}').version === CURRENT_VERSION);
+}
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail === 0 ? 0 : 1);

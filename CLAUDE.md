@@ -1428,7 +1428,8 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 
 **Architektura:**
 - `migrate(data)` — backup → łańcuch v4→v5→v6→v7→... → persist
-- Backup: `kosmos_save_backup_v{N}` w localStorage
+- Backup migracji do localStorage: **WYCOFANY w D2/E9** (był `kosmos_save_backup_v{N}`) — gwarantowaną
+  ścieżką ratunkową jest plik `.json` na dysku; `pruneMigrationBackups()` został jako SPRZĄTACZ pozostałości
 - Wywołanie: `BootScene._handleBtn('yes')` po `SaveSystem.loadData()`
 - `SaveSystem.save()` używa `CURRENT_VERSION` (import z SaveMigration)
 - Migracje entity-level (Moon T, deposits) pozostają w `GameScene._restoreSystem()` (wymagają żywych instancji)
@@ -1485,7 +1486,9 @@ nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed cras
   `setItem` jest atomowy → nieudany zapis nie rusza slotu (poprzedni save żyje).
 - **`pruneMigrationBackups({keepVersion})`** (`SaveMigration.js`, tam bo `SaveSystem`→`SaveMigration` jest
   jednokierunkowe — odwrotny import = cykl). `kosmos_save_backup_v{N}` powstawały przy każdym bumpie
-  i NIGDY nie były sprzątane (commit `77740c2`: gracz miał 9 backupów = 4,4 MB). **Ani one, ani
+  i NIGDY nie były sprzątane (commit `77740c2`: gracz miał 9 backupów = 4,4 MB). **⚠ D2/E9: ZAPIS
+  tych kluczy WYCOFANY** — prune jest teraz czystym sprzątaczem pozostałości u graczy ze starszych
+  wersji, a `keepVersion` nie ma już wywołania produkcyjnego. **Ani one, ani
   `kosmos_save_backup_preimport` NIE MAJĄ ścieżki odczytu w grze** (odzysk = ręcznie w DevTools) —
   trwały backup to plik `.json`. Prune: przy imporcie (wszystkie) + w `migrate()` przed backupem
   (`keepVersion=fromVersion`). Używa Storage API `length`/`key(i)`, NIE `Object.keys` (mockowalne;
