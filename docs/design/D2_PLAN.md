@@ -4,7 +4,7 @@
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 **Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e ✅**
 (dwa fixy uczciwości z audytu recovery) · **E5 ✅ ZAMKNIĘTY (gate PASSED 2026-08-10, 10/10)** ·
-**E6 ✅ ZACOMMITOWANY — GATE DO PRZEPROWADZENIA ← TU** · E8/E9 ⬜ do zrobienia
+**E6 ✅ ZAMKNIĘTY (gate PASSED 2026-08-10, 11/11)** · **E8/E9 ⬜ ← TU** (małe, bez gate'ów — po nich faza ZAMKNIĘTA)
 
 ✅ **Warunek wejścia E6 (podpisana decyzja 3) SPEŁNIONY:** tabela §Baseline wypełniona POMIAREM
 przed commitem (`38c1450`, sonda `probe-diplomacy-time-units.mjs`). Pomiar zmienił samo PYTANIE
@@ -21,7 +21,7 @@ Skrypt gate'u: `D2_E6_GATE_CHECKLIST.md`.
 | **E4** UI odmowy + `recent_refusal` | ✅ **DONE** (bez gate'u) | `9f166a4` `10175c3` `d473bcd` `56de88d` | 4 podkroki: a=pisarz karencji (UNFED→LIVE) · b=modal z rozbiciem · c=flip przycisków + powód blokady · d=wpis o ZAWARTYM pokoju (dług z gate'u E3). Save v100 bez migracji |
 | **E4e** dwa fixy uczciwości modala | ✅ **DONE** | `fc284c2` `b75fe3e` `db22a80` | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B) + piny R11. Oba w §Ustalenia 11 |
 | **E5** konsumenci `objective` + rzut `erratic` | ✅ **ZAMKNIĘTY — GATE PASSED 2026-08-10 (10/10)** | `6c7ea3d` `d7ff7b5` | a=liczby agendy + `merchant` jako agenda REFERENCYJNA (kotwica parytetu E2) · b=rzut `erratic` z własnego strumienia + term UNFED→LIVE. Wynik gate'u w `D2_E5_GATE_CHECKLIST.md` · przebieg na zapisie **po wojnie, w rozejmie** — progi zgodziły się co do punktu MIMO realnego stosu modyfikatorów, czyli potwierdzona przenośność skryptu (ustalenie 16). Save v100 bez migracji |
-| **E6** flip `diplomacyDecay` + unifikacja jednostek | ✅ **ZACOMMITOWANY — GATE DO PRZEPROWADZENIA** | `b075221` `00484a5` `2ca7d0c` `7a8427e` | tabela §Baseline wypełniona pomiarem `38c1450` · polityka tempa = podpisany podział „żywe ×12 / martwe cyfry-bez-zmian" (ustalenie 7) · NEW `diplomacy_time_units_smoke` 32 pinuje §Baseline + oba punkty odniesienia CO DO CYFRY · skrypt gate'u: `D2_E6_GATE_CHECKLIST.md`. Save v100 bez migracji |
+| **E6** flip `diplomacyDecay` + unifikacja jednostek | ✅ **ZAMKNIĘTY — GATE PASSED 2026-08-10 (11/11)** | `b075221` `00484a5` `2ca7d0c` `7a8427e` | tabela §Baseline wypełniona pomiarem `38c1450` · polityka tempa = podpisany podział „żywe ×12 / martwe cyfry-bez-zmian" (ustalenie 7) · NEW `diplomacy_time_units_smoke` 32 pinuje §Baseline + oba punkty odniesienia CO DO CYFRY · wynik gate'u w `D2_E6_GATE_CHECKLIST.md` · jedna rozbieżność KALIBRACYJNA (§4: etykieta ociera się o wartość → przesunięcie 2 px, osobny commit) — logika/jednostki/liczby nietknięte. Save v100 bez migracji |
 | **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
 | **E9** wycofanie `kosmos_save_backup_v{N}` | ⬜ do zrobienia | — | osobno, ścieżka ratunkowa |
 

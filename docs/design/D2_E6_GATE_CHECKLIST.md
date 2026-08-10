@@ -1,6 +1,7 @@
 # D2 / E6 — live gate · skrypt jednej sesji
 
-**Status: ⬜ DO PRZEPROWADZENIA** — wypełnia go osoba uruchamiająca (§Wynik gate'u na końcu).
+**Status: ✅ PASSED 2026-08-10** — 11/11 sekcji, jedna rozbieżność KALIBRACYJNA (§4, layout).
+Wynik na końcu (§Wynik gate'u).
 
 **Arc:** WOJNA I POKÓJ 1.0 · faza **D2** (Acceptance Engine) · commity **E6** (cztery: testy ·
 unifikacja jednostek + przestrojenie · flip flagi · etykieta)
@@ -283,20 +284,43 @@ console.log('zanikanie po wczytaniu:',KOSMOS.gameConfig.FEATURES.diplomacyDecay)
 
 ---
 
-## Wynik gate'u — ⬜ DO WYPEŁNIENIA
+## Wynik gate'u — ✅ PASSED z jedną rozbieżnością kalibracyjną (2026-08-10)
 
-- [ ] §0 · [ ] §1 · [ ] §2 · [ ] §3 ⭐ · [ ] §4 · [ ] §5 ⭐ · [ ] §6 · [ ] §7 · [ ] §8 · [ ] §9 ·
-      [ ] §10
+- [x] §0 · [x] §1 · [x] §2 · [x] §3 ⭐ · [x] §4 · [x] §5 ⭐ · [x] §6 · [x] §7 · [x] §8 · [x] §9 ·
+      [x] §10
 
-**Werdykt:** ⬜ PASSED / ⬜ PASSED z rozbieżnościami / ⬜ FAILED
+**Werdykt:** ✅ **PASSED** — wszystkie jedenaście sekcji; jedna rozbieżność, KALIBRACYJNA, dokładnie
+w miejscu, o które §4 prosiła.
 
-**Rozbieżności (jeśli są):** każdą opisz jak w E3/E5 — czym jest (regresja / over-promise checklisty /
-świadoma decyzja), z dowodem, i gdzie ląduje naprawa.
+**Sekcje liczbowe potwierdzone CO DO CYFRY na żywym zapisie po wojnie:**
+- **§3 ⭐** — zanikanie ŻYJE i liczy w latach WYŚWIETLANYCH: **5 → 4 → 1 → WYGASŁ** (start, po 1,
+  po 4, po 5 latach wyświetlanych), etykieta obiecuje **5 l. gry**. Pierwszy raz w historii tej gry
+  relacje stygną.
+- **§5 ⭐** — dwie nogi emisariusza: **+5 → 2,50 → SUMA 7,50**. Noga 1 ŻYJE w chwili powrotu, więc
+  tryb `accumulate` ma co sumować. To jest własność, która rozstrzygnęła politykę tempa.
+- **§6** — punkt odniesienia 1: ramp do +50 po **4,167** roku wyświetlanego, **50 kroków kadencji**
+  = dawne „+1 na rok cywilizacyjny" co do punktu. Odczuwalne tempo NIETKNIĘTE.
+- **§7** — punkt odniesienia 2: spadek **5,0** napięcia na krok kadencji = dawne −5/rok cywilizacyjny;
+  po odblokowaniu bramki ciszy napięcie schodzi w ~pół roku wyświetlanego, czyli od incydentu do zera
+  ~2,5 roku. **Kryterium planu („nie 6 miesięcy, nie 60 lat") spełnione.**
+- §2 flaga `true` · §8 licznik ultimatum z fasady (2 lata, panel = ta sama liczba) · §9 round-trip
+  `_v100.json` bez migracji, zanikanie aktywne po wczytaniu, zero czerwonych błędów w konsoli ·
+  §1 harness zgodny · §10 wszystkie świadome nie-defekty potwierdzone.
 
-**Szczególnie proszę o ocenę WZROKOWĄ (§4):** dłuższa etykieta „(zanika za N l. gry)" i szersza
-kolumna (58 → 82 px) to jedyna zmiana layoutu w E6. Jeśli wygląda ciasno albo nachodzi — to jest
-kalibracja do poprawy, nie defekt logiki.
+**Rozbieżność 1/1 — KALIBRACJA LAYOUTU (nie defekt logiki).** Etykieta „(zanika za N l. gry)" lekko
+**ociera się o wartość** modyfikatora po lewej. Klasa: dokładnie ta, na którą §4 wystawiła pytanie
+(„jeśli wygląda ciasno albo nachodzi — to jest kalibracja do poprawy"), czyli **przewidziana**, a nie
+znaleziona wbrew skryptowi. Rozszerzenie kolumny 58 → 82 px pokryło większość przyrostu długości
+tekstu, ale nie cały. **Naprawa:** przesunięcie etykiety ~2 px w prawo, osobnym commitem
+kalibracyjnym; BEZ własnego gate'u — Filip ocenia wzrokowo przy następnym otwarciu panelu.
+⚠ Nic w logice zanikania, jednostkach ani liczbach nie jest tą rozbieżnością dotknięte.
 
-**Następny krok po PASSED:** **E8** (bramka `ownerEmpireId` w `_onColonyFounded` — przeniesione z D1)
-i **E9** (wycofanie kluczy `kosmos_save_backup_v{N}` z localStorage). Oba małe i niezależne; po nich
-faza D2 jest zamknięta.
+**Uwaga metodyczna na przyszłe gate'y:** dwie pułapki wyłapane PRZED sesją, przez wykonanie każdego
+one-linera na żywym silniku — (a) §7 nie pokazuje spadku przy pierwszej wklejce, bo `changeTension`
+powyżej progu 40 dopisuje `warning_issued` i RESETUJE 2-letnią bramkę ciszy (stąd diagnostyka
+„STYGNIĘCIE AKTYWNE", zamiast fałszywego FAIL-a), (b) przy 1 d/s nic w tym gate'cie nie jest
+obserwowalne w ludzkim czasie (stąd jawne polecenie 1 m/s / 1 r/s w §0).
+
+**Następny krok:** **E8** (bramka `ownerEmpireId` w `_onColonyFounded` — przeniesione z D1) i **E9**
+(wycofanie zapisu kluczy `kosmos_save_backup_v{N}`). Oba małe, bez własnych gate'ów; po nich
+**faza D2 jest ZAMKNIĘTA**.
