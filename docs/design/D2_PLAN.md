@@ -3,8 +3,8 @@
 **Status:** 🔨 **W REALIZACJI od 2026-08-07.** Kolejność commitów: **E1 → E7 → E2 → E3 → E4 → E5 →
 E6 → E8 → E9** · live-gate'y przy **E3, E5, E6**.
 **Postęp:** E1 ✅ · E7 ✅ · E2 ✅ · **E3 ✅ (gate PASSED 2026-08-08)** · **E4 ✅** · **E4e ✅**
-(dwa fixy uczciwości z audytu recovery) · **E5 ✅ ZACOMMITOWANY — GATE PENDING (jutro) ← TU**
-(skrypt: `D2_E5_GATE_CHECKLIST.md`) · E6/E8/E9 ⬜ do zrobienia
+(dwa fixy uczciwości z audytu recovery) · **E5 ✅ ZAMKNIĘTY (gate PASSED 2026-08-10, 10/10)** ·
+**E6 ⬜ ← TU** · E8/E9 ⬜ do zrobienia
 
 ⚠ **E6 jest następny i jest NAJWIĘKSZYM ryzykiem fazy** (flip `diplomacyDecay` + unifikacja
 jednostek + przestrojenie). Warunek podpisany (decyzja 3): **tabela §Baseline musi być wypełniona
@@ -18,7 +18,7 @@ POMIAREM PRZED commitem E6** — inaczej „bez odczuwalnej zmiany tempa" jest n
 | **E3** pokój + emisariusz + auto-peace | ✅ **DONE — GATE PASSED 2026-08-08** | `e011017` | 10/10 sekcji; skrypt+wynik: `docs/design/D2_E3_GATE_CHECKLIST.md` · mostek `getTrustEquivalent` USUNIĘTY · jedna rozbieżność → naprawa w E4 (ustalenie 6 niżej) |
 | **E4** UI odmowy + `recent_refusal` | ✅ **DONE** (bez gate'u) | `9f166a4` `10175c3` `d473bcd` `56de88d` | 4 podkroki: a=pisarz karencji (UNFED→LIVE) · b=modal z rozbiciem · c=flip przycisków + powód blokady · d=wpis o ZAWARTYM pokoju (dług z gate'u E3). Save v100 bez migracji |
 | **E4e** dwa fixy uczciwości modala | ✅ **DONE** | `fc284c2` `b75fe3e` `db22a80` | z audytu recovery po utraconej sesji: `−0` w progu odmowy pokoju (A) + auto-pokój logujący cudzą odmowę (B) + piny R11. Oba w §Ustalenia 11 |
-| **E5** konsumenci `objective` + rzut `erratic` | ✅ **DONE — GATE DO PRZEPROWADZENIA** | `6c7ea3d` `d7ff7b5` | a=liczby agendy + `merchant` jako agenda REFERENCYJNA (kotwica parytetu E2) · b=rzut `erratic` z własnego strumienia + term UNFED→LIVE. Skrypt gate'u: `D2_E5_GATE_CHECKLIST.md`. Save v100 bez migracji |
+| **E5** konsumenci `objective` + rzut `erratic` | ✅ **ZAMKNIĘTY — GATE PASSED 2026-08-10 (10/10)** | `6c7ea3d` `d7ff7b5` | a=liczby agendy + `merchant` jako agenda REFERENCYJNA (kotwica parytetu E2) · b=rzut `erratic` z własnego strumienia + term UNFED→LIVE. Wynik gate'u w `D2_E5_GATE_CHECKLIST.md` · przebieg na zapisie **po wojnie, w rozejmie** — progi zgodziły się co do punktu MIMO realnego stosu modyfikatorów, czyli potwierdzona przenośność skryptu (ustalenie 16). Save v100 bez migracji |
 | **E6** flip `diplomacyDecay` + unifikacja jednostek | ⬜ do zrobienia | — | własny gate; tabela §Baseline do wypełnienia pomiarem |
 | **E8** bramka `ownerEmpireId` w `_onColonyFounded` | ⬜ do zrobienia | — | przeniesione z D1 |
 | **E9** wycofanie `kosmos_save_backup_v{N}` | ⬜ do zrobienia | — | osobno, ścieżka ratunkowa |
@@ -100,6 +100,14 @@ UCZCIWOŚCI kanału odmowy, czyli tego, co E4 miało załatwić):
 15. **`LIVE` nie znaczy „zawsze niezerowy" i trzeba to było powiedzieć testom ORAZ raportowi.**
    `erratic_noise` wnosi 0 dla imperium bez cechy (czyli dla większości) — to poprawny WYNIK.
    Termy `UNFED` zwracają 0 dla KAŻDEGO wejścia, jakie gra potrafi wytworzyć; to jest ta różnica.
+16. **Gate E5 (PASSED) poszedł na zapisie TRUDNIEJSZYM niż skrypt zakłada — i przez to udowodnił
+   więcej.** Przebieg odbył się po wojnie, w trakcie rozejmu, więc para gracz↔`emp_001` miała realny
+   stos modyfikatorów (`recent_war` i reszta) oraz napięcie po walkach, a nie czystą planszę, na
+   której liczby mierzono headlessowo. **Wszystkie progi zgodziły się CO DO PUNKTU** (§1 sześć agend,
+   §3 kotwica `merchant` 4/10/15, §4 pokój i emisariusz), a układ decyzji z §2 utrzymał się przy
+   innej opinii bazowej niż +20. To potwierdza w warunkach polowych rozdział, który skrypt tylko
+   deklarował: **próg jest własnością katalogu, wynik własnością partii.** Wniosek na przyszłe
+   gate'y fazy: pinować PROGI (przenośne) i UKŁAD (monotoniczność), nigdy bezwzględnych `score`.
 
 **Arc:** WOJNA I POKÓJ 1.0 · **Parent:** `DIPLOMACY_BACKBONE.md` §2 + §5 · **Skeleton:** `D2_PLAN_SKELETON.md`
 **Zależy od:** D1 ✅ (gate 2026-08-06) · **GALAXY_SEED ✅** (gate 2026-08-07 — mini-stream zamknięty)

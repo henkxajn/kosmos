@@ -1,6 +1,6 @@
 # D2 / E5 — live gate · skrypt jednej sesji
 
-**Status: ⬜ DO PRZEPROWADZENIA** — wypełnia go osoba uruchamiająca (§Wynik gate'u na końcu).
+**Status: ✅ PASSED 2026-08-10** — 10/10 sekcji, jeden przebieg. Wynik na końcu (§Wynik gate'u).
 
 **Arc:** WOJNA I POKÓJ 1.0 · faza **D2** (Acceptance Engine) · commity **E5a** `6c7ea3d` + **E5b** `d7ff7b5`
 **Zakres:** WYŁĄCZNIE E5 — oś `objective` (agenda) dostaje LICZBY, a cecha `erratic` dostaje RZUT.
@@ -278,16 +278,38 @@ node src/testing/smoke/empire_objective_smoke.mjs && node src/testing/smoke/acce
 
 ---
 
-## Wynik gate'u — ⬜ DO WYPEŁNIENIA
+## Wynik gate'u — ✅ PASSED (2026-08-10)
 
-- [ ] §0 · [ ] §1 · [ ] §2 ⭐ · [ ] §3 · [ ] §4 · [ ] §5 · [ ] §6 · [ ] §7 · [ ] §8 (opcjonalny) ·
-      [ ] §9 · [ ] §10
+- [x] §0 · [x] §1 · [x] §2 ⭐ · [x] §3 · [x] §4 · [x] §5 · [x] §6 · [x] §7 · [x] §8 (opcjonalny) ·
+      [x] §9 · [x] §10
 
-**Werdykt:** ⬜ PASSED / ⬜ PASSED z rozbieżnościami / ⬜ FAILED
+**Werdykt:** ✅ **PASSED** — wszystkie dziesięć sekcji, zero rozbieżności.
 
-**Rozbieżności (jeśli są):** każdą opisz jak w E3 — czym jest (regresja / over-promise checklisty /
-świadoma decyzja), z dowodem, i gdzie ląduje naprawa.
+**Rozbieżności:** brak.
 
-**Następny krok po PASSED:** **E6** — flip `FEATURES.diplomacyDecay` → true + unifikacja jednostek
-czasu + przestrojenie. Największe ryzyko fazy, własny gate, tabela §Baseline w `D2_PLAN.md`
-do wypełnienia pomiarem PRZED commitem.
+⭐ **Warunki przebiegu były TRUDNIEJSZE niż skrypt zakłada — i to jest najmocniejszy wynik tego
+gate'u.** Sesja poszła na zapisie **po wojnie, w trakcie rozejmu**, więc para gracz↔`emp_001` miała
+realny stos modyfikatorów (m.in. `recent_war`) i napięcie z niedawnych walk, a nie czystą planszę,
+pod którą liczby były mierzone headlessowo. Skrypt sam przewidział ten rozjazd dwa razy: w nagłówku
+(„**PROGI są niezależne od Twojej opinii i muszą się zgadzać CO DO PUNKTU**; wyniki zależą od stanu
+Twojej partii — dla nich liczy się UKŁAD") i w nocie pod §2 („jeśli imperium ma inne modyfikatory,
+np. `recent_war`, opinia może wyjść inna niż 20"). W przebiegu:
+
+- **Progi zgodziły się CO DO PUNKTU** we wszystkich sekcjach, które je pinują — §1 (sześć agend:
+  −2 / 0 / 1 / 4 / 9 / 12, rosnąco), §3 (kotwica parytetu `merchant`: 4 / 10 / 15) i §4 (pokój
+  8 / 0 / −6, emisariusz −2 / −10 / −16). Próg nie zależy od historii pary — i przeżył kontakt
+  z historią pary.
+- **Układ decyzji z §2 utrzymał się** przy innej opinii bazowej niż +20: militarist i expansionist
+  odmawiają, cztery pozostałe agendy akceptują. Odwrócenie decyzji SAMĄ agendą — teza E5 — zostało
+  zobaczone na parze z bagażem wojennym.
+- **§5–§7 (`erratic`)** bez zmian: zero szumu bez cechy, wychylenie z cechą, pięć identycznych
+  odczytów (§6), własny szum drugiego imperium, wiersz „Nieobliczalność" w modalu odmowy i próg
+  **4** bez `−0` (pin E4e/A).
+
+Czyli **potwierdzona została przenośność skryptu, którą sam deklaruje**: rozdział „próg = własność
+katalogu, wynik = własność partii" nie jest wygodnym założeniem headlessu, tylko realną granicą
+w silniku. Zapis po wojnie był w tej roli lepszym stanowiskiem pomiarowym niż świeża partia.
+
+**Następny krok:** **E6** — flip `FEATURES.diplomacyDecay` → true + unifikacja jednostek czasu +
+przestrojenie. Największe ryzyko fazy, własny gate, tabela §Baseline w `D2_PLAN.md` do wypełnienia
+pomiarem PRZED commitem.

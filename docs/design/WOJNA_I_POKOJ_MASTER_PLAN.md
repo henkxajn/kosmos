@@ -1,6 +1,6 @@
 # WOJNA I POKÓJ 1.0 — master plan
 
-**Status:** living roadmap · **Last update:** 2026-08-07
+**Status:** living roadmap · **Last update:** 2026-08-10
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
 `WAR_BACKBONE.md` (pending), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
 **Phase docs in repo:** `docs/design/D1_AUTONOMOUS_REPORT.md` · `docs/design/D1_LIVE_GATE_CHECKLIST.md` ·
@@ -85,8 +85,9 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   parity conversion). Live gates at E3, E5, E6.
   **Done: E1 `ef35af7` · E7 `27dd7a6` · E2 `b8b3e08` · E3 `e011017` (live gate PASSED
   2026-08-08, 10/10 — `D2_E3_GATE_CHECKLIST.md` carries the recorded result) ·
-  E4 `9f166a4`+`10175c3`+`d473bcd`+`56de88d`.** Remaining: E5, E6, E8, E9. Save stays
-  **v100**, no migration.
+  E4 `9f166a4`+`10175c3`+`d473bcd`+`56de88d` · E4e `fc284c2`+`b75fe3e`+`db22a80` ·
+  E5 `6c7ea3d`+`d7ff7b5` (live gate PASSED 2026-08-10, 10/10 —
+  `D2_E5_GATE_CHECKLIST.md`).** Remaining: **E6, E8, E9**. Save stays **v100**, no migration.
   E4 in one line: refusals now *explain themselves*. The modal renders the acceptance
   breakdown verbatim (first consumer of `breakdown`, which had been emitted since E1 with
   nobody reading it), `recent_refusal` went **UNFED → LIVE** (E1 had built the evaluator and
@@ -197,13 +198,15 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ## Sequence
 
 ```
-D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ E4e✅ E5✅gate-pending | E6 E8 E9) ⟵ HERE
+D1 ✅ → GALAXY_SEED ✅ → D2 (E1✅ E7✅ E2✅ E3✅gate E4✅ E4e✅ E5✅gate | E6 ⟵ HERE, E8 E9)
                         → [Director Slice 1 ∥ D2/D3] → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** D2 is eight commits in, past its first live gate, and half the
-retrofit is done. E3 passed on 2026-08-08 — the game has a refusable peace: the first refusal
+**Where we are right now:** D2 is thirteen commits in, past **both** of its first two live gates
+(E3 and E5), and the retrofit is complete — every one of the six actions now goes through the engine.
+Only E6 (decay flip + unit unification), E8 and E9 remain.
+E3 passed on 2026-08-08 — the game has a refusable peace: the first refusal
 scored **−6.5** against a threshold of 0 (war exhaustion 0 against a `border_incident` peace
 price of 30), the same war concluded at exhaustion 70, and an extermination war survived
 exhaustion 100 without ending itself. E4 then gave refusal a *voice and a cost*: the breakdown
@@ -228,9 +231,21 @@ reproduces the old thresholds exactly, and the agenda spreads around it. And the
 be staged on two empires — the roster is one industrialist and one expansionist, always — so it
 changes the agenda of a *single* empire, holding culture, opinion and history fixed. One variable.
 
-**Next: the E5 live gate** (`D2_E5_GATE_CHECKLIST.md`, every number measured on the live engine),
-run by Filip. Then **E6** — decay flip + time-unit unification — the phase's largest risk, with its
-own gate and a `§Baseline` table that must be filled by measurement *before* the commit.
+**E5's live gate PASSED on 2026-08-10, 10/10, zero discrepancies — and it passed on a harder stage
+than the script assumes.** The session ran on a *post-war, mid-truce* save, so the player↔`emp_001`
+pair carried a real modifier stack (`recent_war` among others) and leftover tension instead of the
+clean board the numbers were measured on headlessly. Every **threshold matched to the point** — §1's
+six agendas (−2 / 0 / 1 / 4 / 9 / 12, monotone), §3's `merchant` parity anchor (4 / 10 / 15), §4's
+peace and envoy (8 / 0 / −6 and −2 / −10 / −16) — and §2's decision *ordering* held at a different
+base opinion than the scripted +20: two agendas refuse, four accept, culture and history unchanged.
+That confirms in the field the separation the checklist only *claimed*: **the threshold is a property
+of the catalog, the score a property of the campaign.** Standing lesson for the rest of the phase —
+pin thresholds and ordering, never absolute scores.
+
+**Next: E6** — decay flip + time-unit unification + retune. The phase's largest risk, with its own
+gate and a `§Baseline` table that must be filled *by measurement* before the commit; the measured
+table also forces one signed decision (sub-year UI precision vs a deliberate slowdown), because the
+UI's "fades in 5 y." is ~12× longer than the time a player actually lives through.
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships
