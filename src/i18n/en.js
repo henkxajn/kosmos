@@ -3343,7 +3343,7 @@ export default {
   // D1 — opinion (modifier stack) + "why" breakdown
   'diplo.opinionLabel':     'Their opinion of us',
   'diplo.opinionBreakdown': 'Why',
-  'diplo.fadesIn':          '(fades in {0} y)',
+  'diplo.fadesIn':          '(fades in {0} game y)',   // D2/E6 — unit: GAME (displayed) years
   'diplo.breakdownMore':    '  + {0} more…',
   'diplo.truceYearsLeft':   'TRUCE — {0} y',
   'diplo.mod.legacyRelations':   'Standing relations',

@@ -3344,7 +3344,7 @@ export default {
   // D1 — opinia (stos modyfikatorów) + rozbicie „dlaczego"
   'diplo.opinionLabel':     'Opinia o nas',
   'diplo.opinionBreakdown': 'Dlaczego',
-  'diplo.fadesIn':          '(zanika za {0} l.)',
+  'diplo.fadesIn':          '(zanika za {0} l. gry)',   // D2/E6 — jednostka: lata GRY (wyświetlane)
   'diplo.breakdownMore':    '  + {0} więcej…',
   'diplo.truceYearsLeft':   'ROZEJM — {0} lat',
   'diplo.mod.legacyRelations':   'Dotychczasowe stosunki',

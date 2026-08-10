@@ -54,7 +54,10 @@ const TRUST_STATUS_COLOR = {
 const MAX_BREAKDOWN_ROWS = 5;    // dalsze pozycje zwijane w wiersz „+ N więcej"
 const MEMORY_ROWS        = 3;    // pierścień ma 20 wpisów, panel pokazuje 3 najnowsze
 const BREAKDOWN_ROW_H    = 13;
-const FADE_COL_W         = 58;   // szerokość kolumny „(zanika za N l.)" od prawej krawędzi
+// Szerokość kolumny „(zanika za N l. gry)" od prawej krawędzi. D2/E6: 58 → 82, bo
+// etykieta zaczęła PODAWAĆ JEDNOSTKĘ („l. gry"). Sama liczba była poprawna od D1 —
+// kłamała jednostka: to były lata CYWILIZACYJNE, a gracz czyta zegar wyświetlany.
+const FADE_COL_W         = 82;
 
 // Kolor liczby opinii: −100 czerwony → 0 amber → +100 zielony (lerp po kanałach RGB).
 const OPINION_NEG = [0xD8, 0x5A, 0x30];
