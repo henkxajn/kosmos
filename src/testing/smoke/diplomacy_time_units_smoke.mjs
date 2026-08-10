@@ -181,8 +181,38 @@ console.log('--- §U: stałe, które JUŻ były w latach wyświetlanych (bez zmi
     && OPINION_MODIFIERS.recent_war.decayPerYear === 2
     && OPINION_MODIFIERS.military_presence.decayPerYear === 2
     && OPINION_MODIFIERS.legacy_relations.decayPerYear === 2);
+  // Zaszyta domyślna flagi — JEDYNE miejsce, które ją pinuje. Ta jedna linia jest
+  // widocznym zapisem flipu E6 (kontrakt „obie gałęzie" mieszka w diplomacy_d1_smoke
+  // D4/H2 i jest NIETKNIĘTY — tam każda gałąź ustawia flagę jawnie).
+  ok('U6: zaszyta domyślna FEATURES.diplomacyDecay = true (flip E6, 2026-08-10)',
+    GAME_CONFIG.FEATURES.diplomacyDecay === true);
 }
 
+// ── §F — DIPLOMACY_FROZEN uzbraja się RAZEM z flagą ─────────────────────────
+// Detektor był bramkowany flagą od D1 i do E6 MILCZAŁ przy każdym przebiegu: przy
+// wyłączonym zanikaniu zerowa wariancja opinii jest stanem legalnym. Od E6 zamrożony
+// stos modyfikatorów to regresja silnika — i harness ma o niej krzyczeć. Ten blok
+// sprawdza uzbrojenie NA ZASZYTEJ DOMYŚLNEJ (bez ustawiania flagi), czego H2
+// w diplomacy_d1_smoke z definicji nie robi.
+console.log('--- §F: DIPLOMACY_FROZEN uzbrojony na zaszytej domyślnej ---');
+{
+  const { createStandardDetectors } = await import('../analytics/BottleneckDetector.js');
+  const res = createStandardDetectors();
+  const dets = Array.isArray(res) ? { detectors: res } : res;
+  const frozen = dets.detectors.find(d => d.name === 'DIPLOMACY_FROZEN');
+  ok('F1: detektor DIPLOMACY_FROZEN istnieje', !!frozen);
+
+  // Imperium z opinią przyklejoną do zera — dokładnie sygnatura „stos nie żyje".
+  const core = {
+    empireRegistry: { listAll: () => [{ id: 'emp_frozen' }] },
+    diplomacySystem: { getOpinionOfPlayer: () => 0 },
+    alienCivSystem: { getState: () => 'IDLE' },
+  };
+  let fired = null;
+  for (let y = 0; y <= 420; y += 20) { const f = frozen.check(core, y); if (f) fired = f; }
+  ok('F2: zaszyta domyślna UZBRAJA detektor — zamrożona opinia zgłoszona jako DIPLOMACY_FROZEN',
+    fired === 'DIPLOMACY_FROZEN');
+}
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail > 0 ? 1 : 0);

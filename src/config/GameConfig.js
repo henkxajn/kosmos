@@ -100,11 +100,22 @@ export const GAME_CONFIG = {
     // Stary `trust` NIE zanikał w ogóle, więc włączenie decayu w D1 zmieniłoby
     // balans (emisariusze przestają wystarczać do sojuszu; wczytany zapis
     // neutralizuje się w kilkanaście lat cyw.), a D1 ma być bez zmian zachowania.
-    // Silnik zanikania jest zbudowany i przetestowany — flaga zapala się w D2
-    // razem z Acceptance Engine, jako osobny live-gate.
-    // ⚠ NIE bramkuje: decayu NAPIĘCIA (−5/rok, stara mechanika) ani rampu
-    // trade_partner (+1/rok, odpowiednik starego _tickTreaties).
-    diplomacyDecay:       false,
+    // ⚠ NIE bramkuje: decayu NAPIĘCIA (60/rok wyśw., stara mechanika) ani rampu
+    // trade_partner (+12/rok wyśw., odpowiednik starego _tickTreaties).
+    //
+    // ── D2/E6: ZAPALONE (2026-08-10) ──────────────────────────────────────
+    // Zapalone RAZEM z unifikacją jednostek czasu, bo obie rzeczy ruszają to samo
+    // tempo i jeden gate ocenia je łącznie. Zapalenie tej flagi jest JEDYNĄ realną
+    // zmianą zachowania E6 — mechanizmy, które dotąd żyły (ramp, decay napięcia),
+    // mają tempo odczuwalnie NIETKNIĘTE i są pinowane co do cyfry
+    // (`diplomacy_time_units_smoke` §R: 4,167 i 0,5 roku wyświetlanego).
+    // Tempo zanikania ustalone RAZ: cyfry z katalogu, jednostka = rok WYŚWIETLANY
+    // (dobra wola emisariusza żyje 4,58 roku wyśw., ślad po wojnie 7,33) — patrz
+    // nota „JEDNOSTKA CZASU" w OpinionModifierData i §Baseline w docs/design/D2_PLAN.md.
+    // Razem z flagą UZBRAJA SIĘ detektor `DIPLOMACY_FROZEN` (BottleneckDetector):
+    // do teraz milczał, bo przy wyłączonym zanikaniu zerowa wariancja opinii była
+    // stanem legalnym. Od E6 zamrożony stos modyfikatorów to REGRESJA i ma być głośna.
+    diplomacyDecay:       true,
     // ── Fleet Command Console — reforma wizualna statków na mapie 3D ───────
     // Master + sub-gate per slice (rollback per-feature bez restartu). Render/
     // runtime-only — brak migracji save. Selekcja LPM, walka na żywej mapie,
