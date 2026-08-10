@@ -554,8 +554,31 @@ export class DiplomacySystem {
 
   // ── Automatyczne handlery ─────────────────────────────────────────────────
 
+  /**
+   * Kolonia/placówka założona w cudzym układzie → +30 napięcia i wpis pamięci.
+   *
+   * ⚠ D2/E8 — BRAMKA WŁAŚCICIELA (przeniesione z D1, gdzie było poza zakresem jako zmiana
+   * zachowania). `colony:founded` / `outpost:founded` lecą dla KAŻDEJ kolonii, także dla
+   * kolonii imperiów AI — a ten handler przypisywał każde takie założenie GRACZOWI
+   * (`reason: player_${kind}_in_their_space`) i podbijał napięcie na parze gracz↔właściciel
+   * układu. Skutki były dwa, oba bezpodstawne: kolonizacja AI w cudzym układzie podnosiła
+   * napięcie GRACZA wobec właściciela, a kolonizacja AI we WŁASNYM układzie podnosiła
+   * napięcie gracza wobec tego samego imperium (bo `empireId` wychodził na samego siebie).
+   * Gracz nie zrobił nic w obu przypadkach.
+   *
+   * Predykat jest lustrem `ColonyManager.isPlayerColony` (kolonie gracza mają
+   * `ownerEmpireId` null/undefined albo jawnie 'player'). Świadomie NIE importujemy
+   * `ColonyManager` — systemy komunikują się przez EventBus/`window.KOSMOS`, a to jest
+   * dwuwierszowy warunek, nie logika warta cross-importu.
+   *
+   * Ścieżka AI↔AI (napięcie MIĘDZY imperiami po kolonizacji) należy do **D5**, gdzie pary
+   * AI↔AI w ogóle powstają — tutaj byłaby zapisem do relacji, której nikt nie tworzy
+   * (podpisana decyzja 5 fazy).
+   */
   _onColonyFounded(colony, kind) {
     if (!colony?.planetId) return;
+    const owner = colony.ownerEmpireId;
+    if (owner && owner !== PLAYER) return;
     const body = EntityManager.get(colony.planetId);
     if (!body?.systemId) return;
     const empireId = window.KOSMOS?.galaxyData?.systems?.find(s => s.id === body.systemId)?.empireId;
