@@ -152,6 +152,22 @@ export const INDUSTRIALIST = {
     'robotics',          // Robotyka — odblokowuje recepturę android_worker (wymaga metallurgy).
                          //   Bez tego AI nigdy nie produkuje androidów → P1/P2 (outposty Xe)
                          //   martwe (autonomous_solar/mine wymagają android_worker). Slice 2 S2 fix.
+    // ── Director S4 / orzeczenie właścicielskie R-3 ──────────────────────────
+    // Bez `point_defense` łańcuch nacisku militarnego nie dowozi ANI JEDNEGO okrętu:
+    // tech bramkuje JEDNOCZEŚNIE wszystkie trzy kadłuby wojenne (hull_frigate/destroyer/
+    // cruiser) I **każdy moduł broni w grze**. Zmierzone przed wpisem: `point_defense`
+    // nie występował w żadnym archetypie ani w żadnej kolejce badań (0 trafień), a
+    // `EmpireResearchSystem` nie potrafi przyznać techu spoza kolejki — więc bramka bez
+    // trasy była cichym no-opem klasy R12: reguła „odpalałaby" i nie robiła nic.
+    // Przyznanie z góry jest spójne z filozofią fory startowej AI (darmowe budynki,
+    // darmowe techy, teraz stacja-żeton), a NIE z symulacją wyboru badawczego.
+    // ⚠ REJESTR: gdy WAR_BACKBONE da AI realną ekonomię badań, przeniesienie
+    // `point_defense` z powrotem do `researchQueue` JAKO WYBORU można rozważyć ponownie —
+    // dziś taki wybór byłby fikcją, bo AI nie ma czym go dokonać.
+    'basic_shielding',   // Osłony Radiacyjne — jedyny prereq point_defense (tier 1, requires []).
+                         //   `grantTechs` omija prereqy, ale drzewo bez niego byłoby wewnętrznie
+                         //   niespójne (checkPrerequisites w innych ścieżkach widziałby dziurę).
+    'point_defense',     // Obrona Punktowa — kadłuby wojenne + KAŻDY moduł broni.
   ],
 
   // S3.2 S2 — kolejka badań (EmpireResearchSystem). Techy badane W CZASIE z research

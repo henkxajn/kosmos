@@ -38,7 +38,8 @@ export class StationSystem {
    * ColonyManager._tickPendingStationOrders (po spend) oraz debug.spawnStation.
    * Bez limitu stacji per ciało/system. @returns {Station|null} (null gdy brak ciała)
    */
-  createStation(bodyId, { ownerEmpireId = 'player', stationType = 'orbital_station', tier = 1, name = null, ownerColonyId = null } = {}) {
+  createStation(bodyId, { ownerEmpireId = 'player', stationType = 'orbital_station', tier = 1, name = null, ownerColonyId = null,
+                          starterModules = true } = {}) {
     const body = EntityManager.get(bodyId);
     if (!body) {
       console.warn(`[StationSystem] createStation: brak ciała ${bodyId}`);
@@ -62,7 +63,12 @@ export class StationSystem {
       systemId:      body.systemId ?? 'sys_home',
       x:             body.x,
       y:             body.y,
-      modules:       createStarterModules(),   // S3.4 FAZA 1.3 — 1× habitat + 1× power_atom (w cenie bazy)
+      // S3.4 FAZA 1.3 — 1× habitat + 1× power_atom (w cenie bazy).
+      // ⚠ `starterModules: false` (Director S4 / R-3) daje stację GOŁĄ. Stacja-żeton
+      // imperium AI ma być BEZ modułów: audyt pokazał, że moduł funkcjonalny wypuszcza
+      // wycieki do gracza (laboratorium → badania gracza `:486`; stocznia → okręt do
+      // floty gracza `:512/:521`). Domyślna wartość `true` zachowuje ścieżkę gracza 1:1.
+      modules:       starterModules ? createStarterModules() : [],
     });
     EntityManager.add(station);
 

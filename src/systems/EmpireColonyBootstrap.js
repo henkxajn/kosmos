@@ -190,6 +190,38 @@ export class EmpireColonyBootstrap {
     // 10. Zarejestruj kolonię w imperium (EmpireRegistry.addColony nowy signature).
     empireRegistry.addColony(empireId, homePlanet.id);
 
+    // 10b. Director S4 / orzeczenie właścicielskie R-3 — STACJA ORBITALNA jako ŻETON
+    //      uprawnienia do produkcji okrętów wojennych. Część fory startowej AI, tym samym
+    //      mechanizmem co darmowe budynki i darmowe techy — świadomie NIE budujemy
+    //      maszynerii „AI stawia stacje" (audyt: to osobny, dużo większy projekt).
+    //
+    //      ⚠ GOŁA, bez modułów. Stacja jest WARUNKIEM, nie fabryką: okręt dalej powstaje
+    //      w stoczni naziemnej przez `startShipBuild`. Moduł funkcjonalny odpaliłby dwa
+    //      zmierzone wycieki do gracza (laboratorium → badania GRACZA; stocznia → okręt do
+    //      floty GRACZA), dziś uśpione wyłącznie dlatego, że starter set ich nie zawiera.
+    //
+    //      ⚠ GŁOŚNO, ale NIE fatalnie. Brak `stationSystem` (headless `GameCore` go nie
+    //      wpina) nie może wywrócić generacji świata, ale nie może też zniknąć bez śladu:
+    //      bez żetonu guard `empireHasOrbitalStation` blokowałby produkcję na zawsze,
+    //      z powodu, którego nikt by nie zobaczył. Stąd ostrzeżenie + zdarzenie.
+    //      Druga połowa bezpiecznika siedzi w guardzie: tam brak systemu RZUCA.
+    const stationSys = window.KOSMOS?.stationSystem;
+    if (stationSys?.createStation) {
+      const station = stationSys.createStation(homePlanet.id, {
+        ownerEmpireId:  empireId,            // MUSI być jawnie — default createStation to 'player'
+        ownerColonyId:  colony.planetId,
+        starterModules: false,
+        name:           `Stocznia orbitalna ${homePlanet.name}`,
+      });
+      EventBus.emit('ai:empireStationSeeded', {
+        empireId, colonyId: colony.planetId, bodyId: homePlanet.id, stationId: station?.id ?? null,
+      });
+    } else {
+      console.warn(`[EmpireBootstrap] ${empireId}: brak window.KOSMOS.stationSystem — `
+        + 'żeton stacji NIE zasiany, produkcja okrętów wojennych pozostanie zablokowana (R-3)');
+      EventBus.emit('ai:empireStationSeedFailed', { empireId, reason: 'no_station_system' });
+    }
+
     // 11. Log audit trail (DebugLog auto-subskrybuje ai:empireBootstrap).
     EventBus.emit('ai:empireBootstrap', {
       empireId,
