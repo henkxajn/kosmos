@@ -27,11 +27,17 @@ fail-first: powrót do starego kontraktu wywraca 8 asercji). **Do ponownego prze
 i §6–§8.** Szczegóły: §Wyniki GATE 1.
 
 📌 **Do WAR_BACKBONE (zapisane, NIE naprawiane tutaj) — dwa znaleziska ekonomiczne:**
-1. **Popyt na niewytwarzalne.** Sprzężenie ekonomiczne ustawia popyt na `warp_cores`, których
-   fabryka kolonii najpewniej **nie umie wytworzyć** — ta sama klasa teatru, którą Ruling 2
-   wykluczył dla rud, tylko wykryta na komodycie. Docelowo `_feedCommodityDemand` potrzebuje
-   filtra **„wytwarzalne TUTAJ"** (receptura dostępna w TEJ kolonii), a nie tylko „to komodyta".
-   Dziś skutek ograniczony: TTL zamknie zlecenie po 3 latach.
+1. **Popyt na niewytwarzalne — i odwrotnie: pominięte RUDY, które realnie blokują.**
+   Sprzężenie ustawia popyt na `warp_cores`, których fabryka kolonii najpewniej **nie umie
+   wytworzyć** — ta sama klasa teatru, którą Ruling 2 wykluczył dla rud, tylko wykryta na
+   komodycie. Docelowo `_feedCommodityDemand` potrzebuje filtra **„wytwarzalne TUTAJ"**
+   (receptura dostępna w TEJ kolonii), a nie tylko „to komodyta".
+   ⚠ **Druga strona tego samego problemu, zmierzona w przebiegu 3:** lista braków przy zamówieniu
+   zawierała **RUDY** (`Ti` luka 155, `Hv` 30) obok komodytów. Ruling 2 wykluczył rudy z popytu
+   „bo fabryka ich nie produkuje" — ale to właśnie one bywają wąskim gardłem, a dziś **nie
+   uruchamiają żadnej reakcji gospodarczej**; zostaje im wyłącznie TTL. Wykluczenie rud wymaga
+   więc **ponownego rozpatrzenia razem z filtrem wytwarzalności** (rudy → wydobycie/import,
+   nie fabryka). Dziś skutek ograniczony: TTL zamknie zlecenie po 3 latach.
 2. 🔴 **ZAŁOGA JEST STAŁYM OGRANICZENIEM produkcji okrętów AI** (czwarte znalezisko ekonomiczne).
    `freePops = population − (employedPops − syntheticJobs) − lockedPops`, a `_employedPops` liczy
    **ETATY zarejestrowane przez budynki**, nie pracowników. Autorozbudowa AI stawia budynki, aż
@@ -159,6 +165,16 @@ prawdziwa co do OBSERWACJI, ale jej brzmienie było za mocne:
 przekracza połowę galaktyki**. Zwężenie warunku („zmierzone na dzisiejszej ekonomii AI") **zostaje
 w mocy, ale jego termin ważności właśnie się skrócił**: pomiar trzeba powtórzyć **na horyzoncie
 obejmującym ekspansję** (≥ 60 lat wyświetlanych), a nie dopiero „gdy WAR_BACKBONE odblokuje AI".
+**🔴 TRZECIA KOREKTA (przebieg 3 gate'u, PASS) — OUTPOSTY SĄ LICZNE, NIE POJEDYNCZE.**
+Zmierzone w jednym przebiegu, na obu imperiach: outposty w latach **CYWILIZACYJNYCH
+85 / 140 / 155 / 160 / 185**. To już nie jest „jeden wyjątek późno" — to **regularny, gęsty
+harmonogram zaczynający się ~7 lat wyświetlanych**, podczas gdy pełne kolonie pozostają rzadkie.
+Ponieważ `TerritoryService` liczy outposty do stref (`R_MIN_LY 1.5`), **pokrycie rośnie od
+wczesnej gry**, a pomiar S2 (17,7 % na 400 civY, zero outpostów) jest tym bardziej
+niereprezentatywny — najpewniej trafił w seedy/przebieg bez ekspansji.
+📌 Ponowny pomiar `BORDER_LY` **musi** liczyć outposty osobno od kolonii i biec ≥ 60 lat
+wyświetlanych na kilku seedach.
+
 **🔴 DRUGA KOREKTA (przebieg 2 gate'u) — OUTPOSTY MAJĄ WŁASNY, DUŻO WCZEŚNIEJSZY HARMONOGRAM.**
 Filip zaobserwował `bootstrapAutonomousOutpost` (`entity_144`) już w **85. roku CYWILIZACYJNYM**
 — czyli ~7 lat wyświetlanych, **pięciokrotnie wcześniej** niż pełna kolonia z przebiegu 1 (~456

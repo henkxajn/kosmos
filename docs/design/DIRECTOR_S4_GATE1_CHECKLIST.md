@@ -22,6 +22,14 @@
 
 ## 0. Przygotowanie (1 min)
 
+> 🔴 **NIE URUCHAMIAJ GATE'U RÓWNOLEGLE Z PRACĄ CC.** Każdy commit CC przeładowuje Live Server,
+> co **restartuje grę i kasuje przebieg**. Zasada: **zapisz grę do pliku, ZANIM wkleisz cokolwiek
+> do CC.** (Jeden przebieg już tak przepadł.)
+>
+> 🔴 **DebugLog to pierścień W PAMIĘCI, czyszczony przy przeładowaniu.** Żaden krok po
+> wczytaniu gry (§8) nie może odpytywać wpisów sprzed przeładowania — po prostu ich nie ma.
+> Odrzucenia dowodzi **wartość zwracana** przez `aiWarships`, nie historia DebugLoga.
+
 **NOWA GRA jest wymagana.** Zasiew stacji-żetonu (R-3) dzieje się przy generacji imperiów,
 a ta leci **wyłącznie przy nowej grze** (`GameScene.js` — `isNewGame = !savedData?.civ4x?.galaxyData`).
 Stary zapis NIE dostanie żetonu i całą produkcję zobaczysz jako `no_orbital_station` — to
