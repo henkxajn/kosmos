@@ -37,6 +37,14 @@ const TRACKED_EVENTS = [
   'invasion:launched',
   'invasion:troopsLanded',
   'colony:captured',
+  // ReactionDirector (workstream C) — ścieżka audytu decyzji AI, którą Director ma
+  // WZMACNIAĆ. Odrzucenie guardu jest tu równie ważne jak sukces: „reguła nie odpaliła"
+  // musi dać się odróżnić od „reguły nikt nie podłączył" (audyt R12).
+  'director:shipQueued',
+  'director:shipRejected',
+  'director:shipCompleted',
+  'director:commodityDemand',
+  'director:orderExpired',
 ];
 
 class DebugLog {
