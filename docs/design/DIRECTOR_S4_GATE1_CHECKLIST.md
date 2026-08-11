@@ -85,14 +85,33 @@ KOSMOS.debug.aiWarships()
 > łańcuch. Szczebel **L0 (odpowiedź czysto dyplomatyczna, „protest")** na to okno jest
 > kandydatem **Slice 2** — nie zmianą teraz.
 >
-> Sprawdź, na którym etapie jest partia, zanim uznasz `no_module` za awarię:
-> ```js
-> KOSMOS.empireRegistry.listAll().map(e => {
->   const c = KOSMOS.directorProduction.capitalOf(e.id);
->   return { imp: e.id, ion_drives: c?.techSystem?.isResearched('ion_drives'),
->            warp_drive: c?.techSystem?.isResearched('warp_drive') };
-> })
-> ```
+Sprawdź, na którym etapie jest partia, **zanim** uznasz `no_module` za awarię:
+
+```js
+KOSMOS.empireRegistry.listAll().map(e => ({ imp: e.id, ion: KOSMOS.directorProduction.capitalOf(e.id)?.techSystem?.isResearched('ion_drives'), warp: KOSMOS.directorProduction.capitalOf(e.id)?.techSystem?.isResearched('warp_drive') }))
+```
+
+### 1b. MOSTEK: doprowadź partię do stanu, w którym §2 może przejść
+
+Na świeżej grze §2 **nie ma prawa przejść** — `ion_drives` jeszcze nie ma. Wybierz jedną drogę:
+
+* **Droga A (empiryczna, przebyta przez Filipa):** przewiń czas do **~roku 29 wyświetlanego**,
+  aż powyższy one-liner pokaże `ion: true` dla obu imperiów. `warp: true` przychodzi później i
+  jest potrzebne dopiero dla FRG-1/FRG-2 — **FRG-3 (domyślny szablon §2) wymaga samego `ion`.**
+* **Droga B (szybsza, ⚠ MUTACJA JAKO NARZĘDZIE GATE'U):** przyznaj techy z konsoli. To zmienia
+  stan gry — używać tylko na partii testowej, nigdy na zapisie, który ma żyć dalej:
+
+```js
+KOSMOS.empireRegistry.listAll().forEach(e => KOSMOS.directorProduction.capitalOf(e.id)?.techSystem?.grantTechs(['ion_drives','warp_drive']))
+```
+
+☐ **G1.1b** — po wybranej drodze `KOSMOS.debug.aiWarships()` pokazuje `szablon: OK hull_frigate`.
+
+> **Stan techu w moim boocie walidacyjnym (dla porządku):** `point_defense` = **true** (z
+> `startingTechs`, ruling 3 działa), `ion_drives` i `warp_drive` = **false**. Dlatego walidacja
+> zwróciła `no_module` — i dlatego ten mostek musiał tu trafić. Ścieżkę „z techami" sprawdziłem
+> osobno, przyznając je jawnie (droga B): zamówienie przechodzi, okręt powstaje, dostaje
+> właściciela.
 
 ---
 
@@ -102,8 +121,19 @@ KOSMOS.debug.aiWarships()
 KOSMOS.debug.aiWarships('emp_001')                      // 2 × frigate_system_defender
 ```
 
-☐ **G1.2** — zwraca `{ ok: true, started: N, queued: M, hullId: 'hull_frigate' }`, gdzie `N + M === 2`.
+☐ **G1.2** — zwraca `{ ok: true, started: N, queued: M, hullId: 'hull_frigate' }`, gdzie `N + M ≥ 1`.
   `started` = poszło od razu do stoczni, `queued` = czeka na surowce. **Oba są sukcesem.**
+  ⚠ `N + M` bywa **mniejsze niż 2** i to jest poprawne: stocznia lv1 ma jeden slot, więc drugi
+  build dostaje odmowę, a akcja raportuje częściowe powodzenie zamiast odrzucać całość.
+
+> ⚠ **Jeśli dostaniesz `reason: 'no_crew'`** — to nie jest awaria S4, tylko zmierzona bolączka
+> ekonomii AI (V3z; potwierdzona już trzykrotnie: S0, BALANS, ten gate). Dwa wyjścia: spróbuj
+> **drugiego imperium** (`aiWarships('emp_002')`) albo zastosuj mutację z §5a **w drugą stronę**
+> — patrz jednolinijkowiec zaraz pod tym akapitem. Mutacja jest narzędziem gate'u, nie naprawą.
+
+```js
+KOSMOS.directorProduction.capitalOf('emp_001').civSystem._unemployed = 20;
+```
 
 ```js
 const cap = KOSMOS.empireRegistry.getColoniesByEmpire('emp_001').find(c => !c.isOutpost);
@@ -196,9 +226,23 @@ Przywróć POPy, opróżnij magazyn stolicy AI z komodytów fregaty:
 
 ```js
 cap.civSystem._unemployed = 20;
-for (const k of ['structural_alloys', 'reactive_armor', 'electronic_systems']) cap.resourceSystem.inventory.set(k, 0);
-cap.resourceSystem.getAmount('structural_alloys')       // → 0 (potwierdzenie)
+cap.resourceSystem.inventory.forEach((v, k) => cap.resourceSystem.inventory.set(k, 0));
 KOSMOS.debug.aiWarships('emp_001')
+```
+
+⚠ **NIE opróżniaj listy „czterech znanych komodytów"** — pierwszy przebieg gate'u pokazał, że
+realne braki obejmowały też **`warp_cores`** (ciągnie je `engine_warp`) i **`metamaterials`**
+(ciągnie `armor_heavy`), których na żadnej ręcznej liście nie było. Dlatego zerujemy **cały
+magazyn** i **odczytujemy braki z silnika**, zamiast je zgadywać:
+
+```js
+KOSMOS.debugLog.query(e => e.kind === 'director:commodityDemand').slice(-1)[0]?.data?.missing
+```
+
+To jest lista, którą trzeba potem uzupełnić, żeby dojść do §G1.14 — bierz ją stąd, nie z pamięci:
+
+```js
+KOSMOS.debugLog.query(e => e.kind === 'director:commodityDemand').slice(-1)[0].data.missing.forEach(m => cap.resourceSystem.inventory.set(m.commodityId, 9999));
 ```
 
 > ⚠ `inventory` to **`Map`**, a magazyn NIE ma metody `spendAll` ani pola `_resources` — obie nazwy

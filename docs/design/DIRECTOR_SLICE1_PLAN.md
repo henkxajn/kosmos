@@ -20,6 +20,18 @@ dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** 
 do `startingTechs` wszystkich spawnowanych archetypów · prerekwizyt 3D wykonany · **R-4**
 (drabinka technologiczna zostaje) podpisane.
 
+🔴 **GATE 1 — PRZEBIEG 1: FAIL** na G1.5 + G1.6 (oba nienegocjowalne). Okręty AI wychodziły ze
+stoczni **bez właściciela** i trafiały do floty GRACZA. Root-cause zreprodukowany wykonaniem,
+naprawiony (własność STRUKTURALNA z kolonii-budowniczego), pokryty regresją T10 (6 dróg,
+fail-first: powrót do starego kontraktu wywraca 8 asercji). **Do ponownego przebiegu §2–§3
+i §6–§8.** Szczegóły: §Wyniki GATE 1.
+
+📌 **Do WAR_BACKBONE (zapisane, NIE naprawiane tutaj):** sprzężenie ekonomiczne ustawia popyt na
+`warp_cores`, których fabryka kolonii najpewniej **nie umie wytworzyć** — to ta sama klasa teatru,
+którą Ruling 2 wykluczył dla rud, tylko wykryta na komodycie. Docelowo `_feedCommodityDemand`
+potrzebuje filtra „wytwarzalne TUTAJ" (receptura dostępna w tej kolonii), a nie tylko „to jest
+komodyta". Dziś skutek jest ograniczony: TTL i tak zamknie zlecenie po 3 latach.
+
 🔴 **HOLD — nie zaczynamy S5.** Następny ruch należy do przebiegu Gate 1 na ŚWIEŻEJ grze
 (zasiew żetonu leci wyłącznie przy generacji imperiów, więc stary zapis pokaże
 `no_orbital_station` — to poprawne). Po wyniku: triaż albo S5.
@@ -119,6 +131,25 @@ bezużyteczny, więc „eskorta zdolna do skoku" przestałaby nią być.
 (ta fregata z założenia nie skacze). Naturalny przyszły szczebel katalogu: **„silnik układowy"** —
 tani, lekki napęd bez zdolności warp. To rozszerzenie danych, nie kodu.
 
+**🔴 KOREKTA R-2 PO GATE 1 (2026-08-11) — HORYZONT POMIARU BYŁ ZA KRÓTKI.** Gate ujawnił, że
+w roku **~38 wyświetlanym** imperium AI **założyło nową kolonię** (`bootstrapColony`,
+`Cursa l` @ `sys_015`). Mój pomiar S2 biegł **400 lat CYWILIZACYJNYCH ≈ 33 lata wyświetlane**,
+czyli **urwał się tuż przed** progiem ekspansji. Diagnoza „martwa ekspansja AI" była więc
+prawdziwa co do OBSERWACJI, ale jej brzmienie było za mocne:
+
+| brzmienie | status |
+|---|---|
+| ~~„AI nie zakłada kolonii"~~ | **OBALONE** — zakłada, tylko później niż mierzyłem |
+| „AI nie zakłada kolonii **przez pierwsze ~400 lat cyw. (~33 wyśw.)**" | ✅ stoi (3 potwierdzenia: S0/V4, BALANS Phase 2, S2) |
+
+**Co to zmienia dla stałej 5 LY:** projekcja z tabeli 4 sondy **przestaje być hipotetyczna** —
+`k > 1` jest osiągalne w normalnej partii, a przy **k = 6 pokrycie sięga 46 %**, przy **k = 8
+przekracza połowę galaktyki**. Zwężenie warunku („zmierzone na dzisiejszej ekonomii AI") **zostaje
+w mocy, ale jego termin ważności właśnie się skrócił**: pomiar trzeba powtórzyć **na horyzoncie
+obejmującym ekspansję** (≥ 60 lat wyświetlanych), a nie dopiero „gdy WAR_BACKBONE odblokuje AI".
+📌 **Zadanie dla WAR_BACKBONE/BALANS:** ustalić, którą ścieżką poszła ta kolonizacja i po ilu
+latach zaczyna się systematycznie — dopiero wtedy `BORDER_LY` da się utwardzić na dobre.
+
 **⚠ WYNIK POMIARU R-2 (2026-08-11) — warunek SPEŁNIONY dla dzisiejszej gry, ale połowa warunku
 okazała się NIEMIERZALNA.** Instrument: `src/testing/headless/probe-border-zone-coverage.mjs`
 (4 seedy × 72 układy, `TerritoryService` + prawdziwe promienie `TERRITORY.R_*`).
@@ -163,6 +194,45 @@ Sposób powstania stacji: **ZASIEW przy generacji imperium**, tym samym mechaniz
 startowa (POPy + darmowe budynki + darmowe techy). **Świadomie NIE budujemy maszynerii „AI stawia
 stacje"** — audyt niżej pokazuje, ile by to kosztowało.
 Zakres audytu, wynik i trzy rzeczy, które to wymaganie wnosi do S4 — §Audyt stacji AI.
+
+---
+
+## Wyniki GATE 1 — przebieg 1 (FAIL) i naprawa
+
+**Objaw:** dwa `hull_frigate` z `owner`/`ownerEmpireId`/`isEnemy`/`directorOrigin` = `undefined`,
+widoczne **we flocie GRACZA**. Powód, dla którego objaw jest właśnie taki:
+`isEnemyVessel` (`Vessel.js:385-391`) to trzy testy PRAWDZIWOŚCIOWE (`if (v.owner && …)`), więc
+**brak pól = statek gracza**. Bezpański okręt AI nie jest „niczyj" — jest NASZ.
+
+**Root-cause (zreprodukowany wykonaniem, nie wywnioskowany):** stempel wyprowadzał WŁASNOŚĆ
+z rejestru oczekiwań kluczowanego po kolonii i otwieranego w chwili zamówienia. Trzy niezależne
+dziury, każda wystarczająca sama:
+
+| # | dziura | przebieg |
+|---|---|---|
+| 1 | **nadpisanie** — jeden slot na kolonię, zamówienie na N okrętów | drugie `expectVessel` kasowało pierwsze |
+| 2 | **kasowanie sąsiada** — odmowa N-tego builda robiła `delete` okna | `count:2` + stocznia lv1 → drugi build odrzucony → okno zniknęło, zanim pierwszy okręt powstał |
+| 3 | **brak okna na ścieżce pending→queue** | `_tickPendingShipOrders` promuje zlecenie SAM; okręt czekający na surowce był bezpański Z KONSTRUKCJI |
+
+(+ rejestr nie był serializowany, więc zapis/wczytanie gubiło go bezpowrotnie.)
+Dziura **2** to dokładnie przebieg z gate'u; dziura **3** wyprodukowała drugi okręt.
+
+**Naprawa — własność STRUKTURALNA.** Wyprowadzamy ją z KOLONII-BUDOWNICZEGO
+(`vessel.colonyId` → `colonyManager.getColony` → `ownerEmpireId`). Nie ma okna, czasu życia ani
+stanu do zgubienia; działa dla kolonii założonych PÓŹNIEJ i po round-tripie zapisu. Rejestr
+zostaje wyłącznie jako **adnotacja szablonu** i jego brak nigdy nie wpływa na własność.
+Zakres jest szerszy niż zamówienia Directora — **i to jest poprawne**: okręt zbudowany przez
+kolonię imperium należy do tego imperium. Stan zastany był defektem, nie funkcją.
+
+⚠ **Dwie asercje keepera ZMIENIŁY KONTRAKT**, bo kodowały błąd: „okno jednorazowe ⇒ drugi statek
+bez stempla" i „bez okna brak właściciela". Obie opisywały to, co gate wywrócił.
+
+**Odpowiedzi na anomalie ze zgłoszenia:** (a) okręty stoją przy kolonii-budowniczym — w repro
+`colonyId` = stolica, zgodnie; (b) **kolonizacja AI w roku ~38 jest realna i obala zbyt mocne
+brzmienie diagnozy — patrz KOREKTA R-2 wyżej**; (c) `v_1`/`v_2` to licznik per-partia
+(`getNextVesselId`), a nie recykling — w repro pierwszy okręt AI dostał `v_1` w świeżej grze,
+w której gracz nie zbudował żadnego statku; (d) tak — stempel keyed-at-order-time był dziurą,
+i dlatego został zastąpiony strukturalnym.
 
 ---
 
