@@ -34,6 +34,7 @@
 import EventBus from '../../core/EventBus.js';
 import { DirectorGuards, DirectorActions } from './DirectorRegistry.js';
 import { resolveTemplate } from '../../utils/ShipTemplateResolver.js';
+import { SHIP_TEMPLATES } from '../../data/ShipTemplateData.js';
 import { unitFromKey } from '../../utils/DirectorRuleMath.js';
 import { HULLS } from '../../data/HullsData.js';
 
@@ -45,6 +46,44 @@ const TTL_FIELD = 'directorExpiryYear';
 
 /** Znacznik na statku — dowód, że to Director go zamówił (diagnostyka, nie logika). */
 const ORIGIN_FIELD = 'directorOrigin';
+
+/**
+ * Odwrócenie resolvera: z (kadłub, moduły) na identyfikator szablonu.
+ *
+ * Czysta funkcja porównująca WIELOZBIÓR modułów — kolejność slotów nie ma znaczenia,
+ * a duplikaty (FRG-3 nosi dwie wyrzutnie) muszą się zgadzać co do liczby. Dopasowanie
+ * jest jednoznaczne, dopóki żadne dwa szablony nie dają tego samego ładunku na tym samym
+ * kadłubie; keeper pinuje tę rozłączność, więc kolidujący wpis w katalogu wywali test,
+ * a nie po cichu przekłamie adnotację.
+ *
+ * ⚠ Dlaczego wyprowadzamy, zamiast wieźć w zleceniu: ładunek JEST już wieziony —
+ * `modules` przechodzi całą drogę `startShipBuild` → `shipQueues`/`pendingShipOrders` →
+ * `fleet:shipCompleted` → `createVessel`. Dokładanie drugiego, równoległego kanału na tę
+ * samą informację oznaczałoby kolejny stan do zgubienia.
+ */
+export function matchTemplateId(hullId, modules, catalog = SHIP_TEMPLATES) {
+  if (!hullId || !Array.isArray(modules)) return null;
+  const key = (arr) => [...arr].sort().join('|');
+  const want = key(modules);
+  for (const [id, tpl] of Object.entries(catalog ?? {})) {
+    if (!tpl?.hullTiers?.includes(hullId)) continue;
+    // Szablon o stałych ładunkach: pierwsza pozycja każdego slotu to jego jedyny wybór
+    // przy pełnym techu. Porównujemy z KAŻDYM wariantem drabinki, żeby dopasowanie
+    // działało też dla okrętu zbudowanego na niższym szczeblu technologicznym.
+    const slots = tpl.slots ?? [];
+    const variants = slots.reduce(
+      (acc, s) => acc.flatMap((prefix) => (s.tiers ?? []).map((m) => [...prefix, m])),
+      [[]],
+    );
+    for (const v of variants) {
+      if (key(v) === want) return id;
+      // slot `required:false` mógł wypaść przy braku pojemności/techu
+      const trimmed = v.filter((_, i) => slots[i]?.required !== false);
+      if (key(trimmed) === want) return id;
+    }
+  }
+  return null;
+}
 
 export class DirectorProduction {
   constructor() {
@@ -182,16 +221,25 @@ export class DirectorProduction {
     vessel.owner         = empireId;
     vessel.isEnemy       = true;                         // `isEnemyVessel` czyta te trzy pola
 
-    // Adnotacja szablonu — best-effort. Jej brak NIE wpływa na własność (to jest cała
-    // lekcja z gate'u: identyczność nie może zależeć od pamięci podręcznej).
+    // ── Adnotacja szablonu ──────────────────────────────────────────────────
+    // 🔴 GATE 1, rozbieżność 2: adnotacja ginęła na OBU trasach, bo brała się z rejestru
+    // w pamięci — a ten nie przeżywa ani przeładowania strony, ani promocji pending→queue
+    // (`_tickPendingShipOrders` nie wie o Directorze). Dokładnie ta sama wada, którą przy
+    // WŁASNOŚCI naprawiliśmy strukturalnie; tu naprawiamy ją tą samą zasadą.
+    //
+    // ⇒ Adnotacja jest teraz WYPROWADZANA z tego, co statek NIESIE (kadłub + moduły),
+    // przez odwrócenie resolvera. Nie ma czego zgubić: działa po przeładowaniu, na obu
+    // trasach i dla okrętów zamówionych przed restartem. Rejestr zostaje wyłącznie jako
+    // szybka ścieżka (i sprzątanie kolejki), ale wynik NIE zależy od jego obecności.
     const queue = this._awaitingClaim.get(vessel.colonyId);
     const note = queue?.shift() ?? null;
     if (queue && queue.length === 0) this._awaitingClaim.delete(vessel.colonyId);
-    if (note) vessel[ORIGIN_FIELD] = note.templateId;
+
+    const templateId = note?.templateId ?? matchTemplateId(vessel.shipId, vessel.modules);
+    if (templateId) vessel[ORIGIN_FIELD] = templateId;
 
     EventBus.emit('director:shipCompleted', {
-      empireId, vesselId: vessel.id, shipId: vessel.shipId,
-      templateId: note?.templateId ?? null,
+      empireId, vesselId: vessel.id, shipId: vessel.shipId, templateId: templateId ?? null,
     });
   }
 

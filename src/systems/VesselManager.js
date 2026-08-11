@@ -1137,6 +1137,7 @@ export class VesselManager {
         isEnemy:       v.isEnemy ?? false,
         owner:         v.owner ?? null,
         ownerEmpireId: v.ownerEmpireId ?? null,
+        directorOrigin: v.directorOrigin ?? null,   // GATE 1 — adnotacja szablonu Directora
         isWreck:       v.isWreck ?? false,
         wreckedAt:     v.wreckedAt ?? null,
         // M2a: pozycja wraku w deep-space (gdy dockedAt===null). null dla wraków orbitujących ciała.
@@ -1265,6 +1266,7 @@ export class VesselManager {
         owner:          vd.owner ?? null,
         ownerEmpireId:  vd.ownerEmpireId ?? null,
         isWreck:        vd.isWreck ?? false,
+        directorOrigin: vd.directorOrigin ?? null,
         wreckedAt:      vd.wreckedAt ?? null,
         // M2a: deep-space wrak pozycja (null dla żywych i wraków orbitujących ciała)
         wreckLocation:  vd.wreckLocation ?? null,

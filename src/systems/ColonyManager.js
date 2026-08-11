@@ -23,7 +23,7 @@
 //               'fleet:buildStarted'  { planetId, shipId }
 //               'fleet:shipCompleted' { planetId, shipId }
 //               'fleet:shipConsumed'  { planetId, shipId }
-//               'fleet:buildFailed'   { reason }
+//               'fleet:buildFailed'   { planetId, reason }
 
 import EventBus     from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
@@ -830,13 +830,13 @@ export class ColonyManager {
   startShipBuild(planetId, shipId, moduleIds = []) {
     const colony = this.getColony(planetId);
     if (!colony) {
-      EventBus.emit('fleet:buildFailed', { reason: t('fleet.colonyNotFound') });
+      EventBus.emit('fleet:buildFailed', { planetId, reason: t('fleet.colonyNotFound') });
       return { ok: false, reason: t('fleet.colonyNotFound') };
     }
 
     const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship) {
-      EventBus.emit('fleet:buildFailed', { reason: t('fleet.unknownShip') });
+      EventBus.emit('fleet:buildFailed', { planetId, reason: t('fleet.unknownShip') });
       return { ok: false, reason: t('fleet.unknownShip') };
     }
 
@@ -847,7 +847,7 @@ export class ColonyManager {
     const buildTech = colony.techSystem ?? this.techSystem;
     if (ship.requires && !buildTech?.isResearched(ship.requires)) {
       const reason = t('fleet.requiresTech', ship.requires);
-      EventBus.emit('fleet:buildFailed', { reason });
+      EventBus.emit('fleet:buildFailed', { planetId, reason });
       return { ok: false, reason };
     }
 
@@ -856,7 +856,7 @@ export class ColonyManager {
     // AI zwolnione z gatingu (buduje po staremu; kurier hull_small i tak przechodzi).
     if (ColonyManager.isPlayerColony(colony) && !canBuildHullAt(ship.id, 'ground')) {
       const reason = t('fleet.requiresOrbitalShipyard');
-      EventBus.emit('fleet:buildFailed', { reason });
+      EventBus.emit('fleet:buildFailed', { planetId, reason });
       return { ok: false, reason };
     }
 
@@ -864,7 +864,7 @@ export class ColonyManager {
     const shipyardLevel = this._getShipyardLevel(colony);
     if (shipyardLevel === 0) {
       const reason = t('fleet.noShipyard');
-      EventBus.emit('fleet:buildFailed', { reason });
+      EventBus.emit('fleet:buildFailed', { planetId, reason });
       return { ok: false, reason };
     }
 
@@ -872,7 +872,7 @@ export class ColonyManager {
     if (!colony.shipQueues) colony.shipQueues = [];
     if (colony.shipQueues.length >= shipyardLevel) {
       const reason = t('fleet.shipyardFull', colony.shipQueues.length, shipyardLevel);
-      EventBus.emit('fleet:buildFailed', { reason });
+      EventBus.emit('fleet:buildFailed', { planetId, reason });
       return { ok: false, reason };
     }
 
@@ -884,7 +884,7 @@ export class ColonyManager {
       const freePops = civSys?.freePops ?? 0;
       if (freePops < crewCost) {
         const reason = t('fleet.noCrewPops', crewCost);
-        EventBus.emit('fleet:buildFailed', { reason });
+        EventBus.emit('fleet:buildFailed', { planetId, reason });
         return { ok: false, reason };
       }
       // Konwertuj wolnych POPów do wymaganej strata (jeśli brakuje)

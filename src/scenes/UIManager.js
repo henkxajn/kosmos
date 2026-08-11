@@ -753,16 +753,26 @@ export class UIManager {
       this._addNotification(`⚠ Zmiana celu: ${reason}`);
     });
 
-    // Flota — kanał 'fleet', severity info/warn zależnie od zdarzenia
-    EventBus.on('fleet:buildStarted', ({ shipId }) => {
+    // Flota — kanał 'fleet', severity info/warn zależnie od zdarzenia.
+    //
+    // 🔴 BRAMKA WŁAŚCICIELA (GATE 1, rozbieżność 1). Te zdarzenia emituje KAŻDA stocznia
+    // w grze, także kolonii AI. Bez filtra Dziennik gracza wypisywał „Stocznia: budowa
+    // hull_frigate" i „Statek gotowy" dla zbrojeń OBCEGO imperium — a fregaty buduje
+    // wyłącznie AI. To nie był szum, tylko **darmowy wywiad**: gracz widział rozbudowę
+    // floty przeciwnika bez skanu, co wywraca projekt warstwy intelu („intel widzi kolejkę"
+    // miał wymagać skanu). DebugLog zostaje NIEFILTROWANY — to kanał deweloperski.
+    EventBus.on('fleet:buildStarted', ({ planetId, shipId }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const ship = SHIPS[shipId];
       this._addNotification(`⚓ Stocznia: budowa ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
-    EventBus.on('fleet:shipCompleted', ({ shipId }) => {
+    EventBus.on('fleet:shipCompleted', ({ planetId, shipId }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const ship = SHIPS[shipId];
       this._addNotification(`✅ Statek gotowy: ${ship?.icon ?? '🚀'} ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
-    EventBus.on('fleet:buildFailed', ({ reason }) => {
+    EventBus.on('fleet:buildFailed', ({ planetId, reason }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       this._addNotification(`⚠ Stocznia: ${reason}`, 'fleet', 'warn');
     });
     EventBus.on('fleet:disbandFailed', ({ reason, details }) => {
@@ -778,7 +788,8 @@ export class UIManager {
       const ship = SHIPS[shipId] ?? null;
       this._addNotification(`🗑 Statek rozformowany: ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
-    EventBus.on('fleet:buildQueued', ({ shipId }) => {
+    EventBus.on('fleet:buildQueued', ({ planetId, shipId }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const ship = SHIPS[shipId];
       this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`, 'fleet', 'info');
     });
@@ -834,8 +845,11 @@ export class UIManager {
       this._triggerAutoSlowIfTime(t('log.autoSlowFleetRetreat'));
     });
 
-    // Vessel events
+    // Vessel events — również za bramką właściciela (GATE 1, rozbieżność 1).
+    // Kurierzy AI („Karawana", „Handlarz") lecący do OBCYCH outpostów meldowali się
+    // w Dzienniku gracza jak jego własne statki.
     EventBus.on('vessel:launched', ({ vessel, mission }) => {
+      if (isEnemyVessel(vessel)) return;
       const sd = SHIPS[vessel.shipId];
       const icon = sd?.icon ?? '🚀';
       const mIcon = mission?.type === 'colony' ? '🚢'
@@ -843,6 +857,7 @@ export class UIManager {
       this._addNotification(`${icon} ${vessel.name} → ${mission?.targetName ?? '?'} (${mIcon} ${mission?.type})`, 'fleet', 'info');
     });
     EventBus.on('vessel:docked', ({ vessel }) => {
+      if (isEnemyVessel(vessel)) return;
       this._addNotification(`↩ ${vessel.name} powrócił`, 'fleet', 'info');
     });
 
@@ -1121,7 +1136,7 @@ export class UIManager {
 
     // Lądowanie statku + raport cargo
     EventBus.on('vessel:docked', ({ vessel }) => {
-      if (!vessel) return;
+      if (!vessel || isEnemyVessel(vessel)) return;   // GATE 1 — bramka właściciela
       this._log(`↩ ${vessel.name} ${t('log.vesselDocked')}`, 'fleet');
     });
     EventBus.on('trade:imported', ({ vesselName, colonyId, items, orderBoard }) => {
@@ -1436,6 +1451,24 @@ export class UIManager {
    * Wszystkie historyczne wywołania zachowane — channel='system' to bezpieczny default.
    * Nowe callsite'y powinny podać channel+severity (np. fleet/warn dla porażki budowy).
    */
+  /**
+   * Czy zdarzenie stoczni dotyczy kolonii GRACZA — bramka Dziennika (GATE 1, rozbieżność 1).
+   *
+   * ⚠ `fleet:*` emituje KAŻDA stocznia w grze. Bez tej bramki gracz czytał w Dzienniku,
+   * że obce imperium buduje fregaty — czyli dostawał **darmowy wywiad** o zbrojeniach,
+   * omijając warstwę intelu, która miała tego wymagać po skanie.
+   *
+   * Fail-closed: nieznane `planetId` (brak kolonii w rejestrze) NIE trafia do Dziennika.
+   * Jedyny wyjątek to `planetId === undefined` — stare emisje bez pola; wtedy przepuszczamy,
+   * żeby nie wyciszyć zdarzeń gracza, których jeszcze nie otagowano.
+   */
+  _isPlayerColonyEvent(planetId) {
+    if (planetId === undefined || planetId === null) return true;   // emisja bez tagu — nie wyciszamy
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+    if (!colony) return false;
+    return !colony.ownerEmpireId;                                   // kolonia gracza nie ma właściciela
+  }
+
   _addNotification(text, channel = 'system', severity = 'info') {
     this._dirty = true;
     const logSys = window.KOSMOS?.eventLogSystem;
