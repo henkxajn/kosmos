@@ -328,6 +328,14 @@ export const GAME_CONFIG = {
     R_MAX_LY: 4.0,       // rozwinięta kolonia (cap)
     R_STATION_LY: 1.0,   // posterunek: sama stacja bez kolonii
     BEACON_LY: 0.5,      // HOOK — beacony jeszcze nie istnieją w grze; nie używać
+    // ── Strefa GRANICZNA (orzeczenie R-2, Director S2) — lata świetlne ────────
+    // Powłoka NA ZEWNĄTRZ przestrzeni roszczonej: outer = r_roszczony + BORDER_LY
+    // (odczyt A, decyzja 9). Czyta ją WYŁĄCZNIE InfluenceMap (dane dla reguł),
+    // NIE render — TerritoryField rysuje samą przestrzeń roszczoną i jest nietknięty.
+    // ⚠ Wartość ZMIERZONA, nie wybrana: probe-border-zone-coverage.mjs daje przy 5 LY
+    // pokrycie 17,7% galaktyki (4 seedy). PROJEKCJA przebija 50% przy 8 układach na
+    // imperium — gdy WAR_BACKBONE odblokuje ekspansję AI, PRZEMIERZYĆ PONOWNIE.
+    BORDER_LY: 5.0,
     DEV_FULL: 20,        // devScore (pop+budynki) dający R_MAX
     FILL_ALPHA: 0.07,    // tint wypełnienia (B4/B5)
     CONTESTED_T: 0.35,   // próg pola drugiego imperium → segment sporny

@@ -101,6 +101,7 @@ import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
 import { TerritoryService }   from '../systems/TerritoryService.js';
 import { TerritoryField }     from '../systems/TerritoryField.js';
+import { InfluenceMap }       from '../systems/InfluenceMap.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
@@ -320,6 +321,12 @@ export class GameScene {
     // Strefy wpływów — pole wpływu + kontury (marching squares); czyta
     // territoryService/galaxyData/timeSystem przez window.KOSMOS.
     this.territoryField       = new TerritoryField();
+    // Mapa wpływów (Director S2, orzeczenie R-2) — przestrzeń ROSZCZONA + strefa
+    // GRANICZNA (powłoka BORDER_LY) per imperium, jako DANE dla reguł Directora i D3.
+    // Runtime-only (zero serializacji), leniwa przebudowa, czyta territoryService
+    // + galaxyData przez window.KOSMOS. ⚠ Nie ma nic wspólnego z renderem —
+    // TerritoryField/Stratcom pozostają nietknięte (decyzja 3 planu).
+    this.influenceMap         = new InfluenceMap();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
     this.systemPoolService    = new SystemPoolService();
@@ -391,6 +398,7 @@ export class GameScene {
     window.KOSMOS.stationSystem      = this.stationSystem;
     window.KOSMOS.territoryService   = this.territoryService;
     window.KOSMOS.territoryField     = this.territoryField;
+    window.KOSMOS.influenceMap       = this.influenceMap;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
@@ -454,6 +462,26 @@ export class GameScene {
           .then(() => (withText ? showIntroSequence() : null))
           .then(() => console.log('[intro] replay zakończony'))
           .catch((e) => console.error('[intro] replay błąd:', e));
+      },
+      // KOSMOS.debug.influenceMap(ownerId?) — mapa wpływów (Director S2, orzeczenie R-2):
+      //   ile układów każde imperium ROŚCI, ilu dotyka STREFĄ GRANICZNĄ (powłoka
+      //   TERRITORY.BORDER_LY na zewnątrz roszczenia) i jaki to procent galaktyki.
+      //   Z argumentem wypisuje też listy identyfikatorów tego właściciela.
+      //   ⚠ To DANE dla reguł, nie warstwa rysunku — Stratcom pokazuje samo roszczenie.
+      //   Pokrycie zmierzone przy 5 LY: 17,7% (src/testing/headless/probe-border-zone-coverage.mjs).
+      influenceMap: (ownerId = null) => {
+        const im = window.KOSMOS?.influenceMap;
+        if (!im) { console.warn('[influenceMap] brak window.KOSMOS.influenceMap'); return null; }
+        im.refresh();                       // devScore rośnie bez eventu — wymuś świeży odczyt
+        const snap = im.snapshot();
+        console.log(`[influenceMap] układów w galaktyce: ${snap.totalSystems} · `
+                  + `powłoka graniczna: ${snap.borderLY} LY (odczyt A: r_roszczony + ${snap.borderLY})`);
+        console.table(snap.owners);
+        if (ownerId) {
+          console.log(`  ${ownerId} — roszczone:`, im.getClaimedSystems(ownerId));
+          console.log(`  ${ownerId} — graniczne:`, im.getBorderSystems(ownerId));
+        }
+        return snap;
       },
       // KOSMOS.debug.colonies() — tabela WSZYSTKICH skolonizowanych ciał (gracz + AI):
       //   nazwa, właściciel, pop (humans/capacity), bezrobotni, satysfakcja, prosperity,
@@ -1749,6 +1777,7 @@ export class GameScene {
       // emp.homeSystemId — nowy sync dopisuje pozostałe kolonie.
       this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
       this.territoryService?.reindex();   // strefy wpływów — przebuduj indeks własności po restore
+      this.influenceMap?.refresh();       // mapa wpływów czyta ten indeks — musi pójść za nim
       // Ustaw homePlanet i aktywne systemy
       const homePlanetId = c4x.homePlanetId ?? c4x.colonies?.find(c => c.isHomePlanet)?.planetId;
       if (homePlanetId) {
