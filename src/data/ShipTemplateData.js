@@ -123,6 +123,15 @@ export const SHIP_TEMPLATES = {
     role:   'warship',
     namePL: 'Fregata obrony układu',
     nameEN: 'System Defence Frigate',
+    // 📌 NOTATKA KATALOGOWA (orzeczenie R-4) — PRZYSZŁY SZCZEBEL, nie do zmiany teraz:
+    // `engine_warp` waży 30 t i jest tu **martwym balastem**, bo ta fregata z założenia nie
+    // skacze (patrz niżej). Naturalne rozszerzenie katalogu to **„silnik układowy"**: tani,
+    // lekki napęd BEZ zdolności warp, który uwolniłby ~25 t masy i poprawił prędkość oraz
+    // zasięg FRG-3. To rozszerzenie DANYCH (nowy moduł + wpis w `tiers`), nie kodu.
+    // ⚠ Świadomie NIE rozwiązujemy tego drabinką `['engine_warp','engine_ion','engine_chemical']`
+    // na wspólnym slocie: pomogłaby FRG-3, ale ODEBRAŁABY ROLĘ FRG-1/FRG-2 — bez silnika warp
+    // ich `warp_tank` jest bezużyteczny, więc „eskorta zdolna do skoku" przestałaby nią być.
+    //
     // ⚠ CELOWY BRAK `warp_tank` — ten okręt NIE MOŻE opuścić swojego układu.
     // Zweryfikowane w kodzie, nie założone: `warpFuel.max` pochodzi wyłącznie
     // z `warpCapacityAdd` modułów (`Vessel.js:122-124`, komentarz wprost:

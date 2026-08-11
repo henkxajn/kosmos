@@ -9,13 +9,20 @@ bez migracji; wymusił wydzielenie `SeedMath.js` z `AcceptanceMath.js` — pin *
 EDYCJI**, 206/206) · **audyt stacji AI ✅** (pod **R-3**, §Audyt stacji AI — premisa potwierdzona,
 zasiew MAŁY pod warunkiem prerekwizytu 3D i dwóch decyzji właścicielskich) · **S3 ✅** (katalog
 szablonów Filipa + resolver, 52/52) · **S2 ✅** (pomiar R-2 → **17,7 %**, warunek spełniony dla
-dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **S4 ⏭ NASTĘPNY — to jest GATE 1** ·
-S5–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
+dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** `3596c0c` ·
+**S4 ✅ KOD KOMPLETNY** (`8006ceb` fundament + `499ff7b` zasiew/tech + `9bebe0d` akcja; keepery
+41 + 25 + 30) · **⏸ GATE 1 — CZEKA NA PRZEBIEG W PRZEGLĄDARCE** (`DIRECTOR_S4_GATE1_CHECKLIST.md`,
+24 punkty) · S5–S7 nierozpoczęte · **Gate 2 / Gate 3 przed nami.**
 
-🔴 **S4 NIE RUSZA BEZ TRZECH PODPISÓW:** (1) zwężenie warunku R-2 (mid-game niemierzalny —
-§Rulings R-2); (2) decyzje 9 i 10 (odczyt A, metryka 3D — zaimplementowane wg rekomendacji,
-flip = jedna stała); (3) **R-3**: decyzja o `point_defense` dla AI (bez niej łańcuch nacisku nie
-dowozi ani jednego okrętu) + prerekwizyt `docs/plans/fix-stacje-3d-bramka-ukladu.md`.
+✅ **Wszystkie podpisy dostarczone 2026-08-11:** zwężenie R-2 ratyfikowane · decyzje 9/10
+(odczyt A, metryka 3D) ratyfikowane · **R-3** podpisane (żeton bez modułów + predykat
+`empireHasOrbitalStation`, zwolnienie AI w `startShipBuild` NIETKNIĘTE) · `point_defense`
+do `startingTechs` wszystkich spawnowanych archetypów · prerekwizyt 3D wykonany · **R-4**
+(drabinka technologiczna zostaje) podpisane.
+
+🔴 **HOLD — nie zaczynamy S5.** Następny ruch należy do przebiegu Gate 1 na ŚWIEŻEJ grze
+(zasiew żetonu leci wyłącznie przy generacji imperiów, więc stary zapis pokaże
+`no_orbital_station` — to poprawne). Po wyniku: triaż albo S5.
 
 ⚠ **Kolejność S3 ↔ S2 ZAMIENIONA** (decyzja właściciela, 2026-08-11): katalog szablonów wszedł przed
 mapą wpływów, bo szablony były gotowe do wpisania, a S2 zaczyna się od pomiaru. Zależności to nie
@@ -81,6 +88,36 @@ strefa graniczna to **powłoka 5 LY** wokół terytorium AI. Język D3 do skoryg
 seedach — jaki UŁAMEK układów wpada w strefę graniczną ≥ jednego imperium przy 5 LY, **na starcie partii
 i na rozwiniętym zapisie mid-game**. Jeśli zbliża się do połowy galaktyki → zgłosić do strojenia
 **PRZED Gate 3**, z tabelą pomiarową. Pomiar należy do S2 (mapa wpływów).
+
+**R-4 — drabinka technologiczna katalogu ZOSTAJE bez zmian (2026-08-11).** Orzeczenie po pomiarze
+z S4: `point_defense` był bramką **BEZ TRASY** (klasa R12 — AI nie miało jak go zdobyć), dlatego
+wszedł do `startingTechs`. `ion_drives` i `warp_drive` **mają trasę** — siedzą w kolejce badań obu
+archetypów — więc **nie dostają tego samego traktowania**. Katalog zostaje, drabinka zostaje.
+
+| moduł | wymaga | industrialist | expansionist |
+|---|---|---|---|
+| `armor_heavy` · `weapon_missile` · `weapon_laser` | `point_defense` | **START** | **START** |
+| `engine_warp` (napęd wszystkich trzech fregat) | `ion_drives` | kolejka 6/9 | kolejka 1/10 |
+| `warp_tank` (tylko FRG-1/FRG-2) | `warp_drive` | kolejka 9/9 | kolejka 9/10 |
+
+Wynikająca z tego progresja jest **darmowym uzasadnieniem technologicznym eskalacji**:
+incydent bez odpowiedzi → `ion_drives` → **FRG-3** (obrona układu, bez skoku) = **L1** →
+`warp_drive` → **FRG-1/FRG-2** (eskorty zdolne do skoku) = **L2 „możemy przyjść do was"**.
+
+🔴 **ŚWIADOMA KONSEKWENCJA DO PRZYJĘCIA:** w oknie przed `ion_drives` nacisk militarny produkuje
+**incydent BEZ odpowiedzi zbrojnej**. Jest to uczciwe technologicznie (AI naprawdę nie ma czym
+odpowiedzieć) i **nie jest ciche** — `director:shipRejected` z powodem `no_module` mówi wprost,
+czego zabrakło. **Do przeglądu przy Gate 3** (tam nacisk jest oceniany jako łańcuch).
+📌 **Kandydat Slice 2, NIE zmiana teraz:** szczebel **L0 — odpowiedź czysto dyplomatyczna**
+(czasownik „protest") na to okno. Wymaga czasowników D4 i naprawy kanału (§Kolizje), więc
+z definicji nie mieści się w Slice 1.
+
+**Odrzucone:** drabinka zapasowa slotu napędu (`['engine_warp','engine_ion','engine_chemical']`).
+Pomogłaby FRG-3, ale **odebrałaby rolę FRG-1/FRG-2** — bez silnika warp `warp_tank` jest
+bezużyteczny, więc „eskorta zdolna do skoku" przestałaby nią być.
+📌 **Notatka katalogowa dla autora:** `engine_warp` w **FRG-3** to 30 ton martwego balastu
+(ta fregata z założenia nie skacze). Naturalny przyszły szczebel katalogu: **„silnik układowy"** —
+tani, lekki napęd bez zdolności warp. To rozszerzenie danych, nie kodu.
 
 **⚠ WYNIK POMIARU R-2 (2026-08-11) — warunek SPEŁNIONY dla dzisiejszej gry, ale połowa warunku
 okazała się NIEMIERZALNA.** Instrument: `src/testing/headless/probe-border-zone-coverage.mjs`

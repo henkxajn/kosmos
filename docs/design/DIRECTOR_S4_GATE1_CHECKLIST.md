@@ -72,15 +72,18 @@ KOSMOS.debug.aiWarships()
 > * po `ion_drives` → **FRG-3** (obrona układu, bez skoku) = **L1**,
 > * po `warp_drive` → **FRG-1/FRG-2** (eskorty zdolne do skoku) = **L2 „możemy przyjść do was"**.
 >
-> **Do rozstrzygnięcia przez właściciela — trzy warianty, żaden nie jest pilny:**
-> 1. **Zostawić** (rekomendacja): nacisk militarny wyzwala się mid-game, gdy gracz ma uzbrojone
->    statki w strefie AI; do tego czasu `ion_drives` zwykle jest zbadane. Eskalacja L1→L2 dostaje
->    darmowe uzasadnienie technologiczne.
-> 2. Dopisać `ion_drives` do `startingTechs` — druga decyzja balansowa tej samej klasy co ruling 3.
-> 3. Dać slotowi napędu drabinkę `['engine_warp', 'engine_ion', 'engine_chemical']`. ⚠ Zmienia
->    ładunek autorski i dla FRG-1/FRG-2 **odbierałoby rolę** (bez silnika warp bak jest bezużyteczny).
->    Dla FRG-3 byłoby wręcz ulepszeniem — ona i tak nie skacze, więc `engine_warp` jest tam
->    30-tonowym martwym balastem.
+> **✅ ROZSTRZYGNIĘTE — orzeczenie R-4 (2026-08-11): ZOSTAWIAMY.** `point_defense` był bramką
+> BEZ TRASY (klasa R12), dlatego wszedł do `startingTechs`; `ion_drives` i `warp_drive` **mają
+> trasę** i dlatego nie dostają tego samego traktowania. Drabinka zapasowa slotu napędu
+> **ODRZUCONA** — pomogłaby FRG-3, ale odebrałaby rolę FRG-1/FRG-2 (bez silnika warp bak jest
+> bezużyteczny). Pełne brzmienie: `DIRECTOR_SLICE1_PLAN.md` §Rulings R-4.
+>
+> 🔴 **Świadoma konsekwencja, którą ten gate ma ZOBACZYĆ, a nie zgłosić jako usterkę:**
+> w oknie przed `ion_drives` nacisk militarny produkuje **incydent BEZ odpowiedzi zbrojnej**.
+> Jest to uczciwe technologicznie i **nie jest ciche** — `director:shipRejected` z powodem
+> `no_module` mówi, czego zabrakło. **Do przeglądu przy Gate 3**, gdzie nacisk ocenia się jako
+> łańcuch. Szczebel **L0 (odpowiedź czysto dyplomatyczna, „protest")** na to okno jest
+> kandydatem **Slice 2** — nie zmianą teraz.
 >
 > Sprawdź, na którym etapie jest partia, zanim uznasz `no_module` za awarię:
 > ```js
