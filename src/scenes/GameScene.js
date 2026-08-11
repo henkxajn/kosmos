@@ -102,6 +102,8 @@ import { StationSystem }      from '../systems/StationSystem.js';
 import { TerritoryService }   from '../systems/TerritoryService.js';
 import { TerritoryField }     from '../systems/TerritoryField.js';
 import { InfluenceMap }       from '../systems/InfluenceMap.js';
+import { DirectorProduction, registerProductionGuards } from '../systems/director/DirectorProduction.js';
+import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
@@ -327,6 +329,11 @@ export class GameScene {
     // + galaxyData przez window.KOSMOS. ⚠ Nie ma nic wspólnego z renderem —
     // TerritoryField/Stratcom pozostają nietknięte (decyzja 3 planu).
     this.influenceMap         = new InfluenceMap();
+    // Director S4 — produkcja okrętów wojennych AI (stempel własności + guardy + akcja
+    // `queueWarships`). Rejestruje nazwane zachowania w rejestrach Directora; katalog
+    // reguł jest wciąż PUSTY, więc nic tego samo nie odpala — konsumentem jest S6.
+    this.directorProduction   = new DirectorProduction();
+    registerProductionGuards(this.directorProduction, { allowOverride: true });
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
     this.systemPoolService    = new SystemPoolService();
@@ -399,6 +406,7 @@ export class GameScene {
     window.KOSMOS.territoryService   = this.territoryService;
     window.KOSMOS.territoryField     = this.territoryField;
     window.KOSMOS.influenceMap       = this.influenceMap;
+    window.KOSMOS.directorProduction = this.directorProduction;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
@@ -462,6 +470,44 @@ export class GameScene {
           .then(() => (withText ? showIntroSequence() : null))
           .then(() => console.log('[intro] replay zakończony'))
           .catch((e) => console.error('[intro] replay błąd:', e));
+      },
+      // KOSMOS.debug.aiWarships(empireId?, templateId?) — Director S4 / GATE 1.
+      //   Bez argumentów: RAPORT gotowości każdego imperium AI (stolica, stocznia, wolne
+      //   POPy, żeton stacji R-3, tech point_defense) + wynik SUCHEGO rozwiązania szablonu.
+      //   Z empireId: WYSTAWIA realne zamówienie przez tę samą ścieżkę, którą pójdzie S6.
+      //   Wszystko, co się wydarzy, ląduje w DebugLogu (director:*).
+      aiWarships: (empireId = null, templateId = 'frigate_system_defender') => {
+        const dp = window.KOSMOS?.directorProduction;
+        if (!dp) { console.warn('[aiWarships] brak window.KOSMOS.directorProduction'); return null; }
+        const reg = window.KOSMOS?.empireRegistry;
+        if (empireId) {
+          const empire = reg?.get?.(empireId) ?? null;
+          const res = dp.queueWarships({ empireId, empire, ruleId: 'debug' }, { template: templateId, count: 2 });
+          console.log(`[aiWarships] ${empireId} × ${templateId} →`, res);
+          return res;
+        }
+        const rows = (reg?.listAll?.() ?? []).map((e) => {
+          const cap = dp.capitalOf(e.id);
+          let dry = '—';
+          try {
+            const r = cap?.techSystem
+              ? resolveTemplate(templateId, { techSystem: cap.techSystem, archetype: e.archetype })
+              : null;
+            dry = r ? (r.ok ? `OK ${r.hullId}` : `✗ ${r.reason}`) : 'brak techSystem';
+          } catch (err) { dry = `błąd: ${err.message}`; }
+          return {
+            imperium:   e.id,
+            archetyp:   e.archetype ?? '?',
+            stolica:    cap?.planetId ?? '— BRAK',
+            stocznia:   cap ? (window.KOSMOS.colonyManager._getShipyardLevel?.(cap) ?? 0) : 0,
+            wolnePOPy:  Math.floor(cap?.civSystem?.freePops ?? 0),
+            'żeton R-3': dp.hasOrbitalStation(e.id) ? 'TAK' : '— NIE',
+            point_defense: cap?.techSystem?.isResearched?.('point_defense') ? 'TAK' : '— NIE',
+            szablon:    dry,
+          };
+        });
+        console.table(rows);
+        return rows;
       },
       // KOSMOS.debug.influenceMap(ownerId?) — mapa wpływów (Director S2, orzeczenie R-2):
       //   ile układów każde imperium ROŚCI, ilu dotyka STREFĄ GRANICZNĄ (powłoka

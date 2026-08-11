@@ -33,6 +33,9 @@
 
 import EventBus from '../../core/EventBus.js';
 import { DirectorGuards, DirectorActions } from './DirectorRegistry.js';
+import { resolveTemplate } from '../../utils/ShipTemplateResolver.js';
+import { unitFromKey } from '../../utils/DirectorRuleMath.js';
+import { HULLS } from '../../data/HullsData.js';
 
 /** Ile lat WYŚWIETLANYCH zlecenie może czekać na surowce, zanim wygaśnie (Ruling 2, fallback). */
 export const ORDER_TTL_DISPLAYED_YEARS = 3.0;
@@ -229,6 +232,107 @@ export class DirectorProduction {
     }
     return missing;
   }
+
+  // ── AKCJA: zamówienie okrętów z szablonu (NA fundamencie) ─────────────────
+
+  /**
+   * `queueWarships` — zamów N okrętów z szablonu w stoczni stolicy imperium.
+   *
+   * @param {{empireId:string, empire?:object, ruleId?:string, year?:number}} ctx
+   * @param {{template:string, count?:number|[number,number]}} params
+   * @returns {{ok:boolean, queued?:number, reason?:string, detail?:object}}
+   *
+   * ⚠ „ECONOMY EXECUTES" (orzeczenie R-1): NIE spawnujemy statku. Wołamy tę samą
+   * `startShipBuild`, której używa gracz i logistyka — dzięki temu powstaje KOLEJKA,
+   * w którą intel może zajrzeć, a `buildTime` fregaty (5.0) daje darmowe napięcie
+   * dramaturgiczne. Natychmiastowy spawn nie zostawiłby po sobie nic do obejrzenia.
+   */
+  queueWarships(ctx, params = {}) {
+    const empireId = ctx?.empireId;
+    const templateId = params.template;
+    const reject = (reason, detail) => {
+      EventBus.emit('director:shipRejected', { empireId, templateId, reason, detail: detail ?? null });
+      return { ok: false, reason, detail };
+    };
+    if (!empireId || !templateId) return reject('bad_params');
+
+    // ⚠ KOLEJNOŚĆ SPRAWDZEŃ = KOLEJNOŚĆ DIAGNOZY. Najpierw braki STRUKTURALNE (imperium
+    // nie ma gdzie budować), potem bramka POLITYCZNA (R-3). Odwrotna kolejność mówiłaby
+    // o imperium bez stolicy „brak stacji orbitalnej", co jest prawdą bezużyteczną —
+    // reason ma odtwarzać realną ścieżkę decyzyjną, nie kolejność dopisywania guardów.
+    const capital = this.capitalOf(empireId);
+    if (!capital) return reject('no_capital');
+    const cm = this._require('colonyManager');
+    if ((cm._getShipyardLevel?.(capital) ?? 0) <= 0) return reject('no_shipyard');
+
+    // R-3: żeton uprawnienia. Guard reguły już to sprawdził, ale akcja jest publiczna
+    // (devtools, przyszłe reguły) — bramka musi obowiązywać także wtedy.
+    if (!this.hasOrbitalStation(empireId)) return reject('no_orbital_station');
+
+    // Szablon rozwiązywany DRZEWEM TECHU IMPERIUM, nigdy gracza (Slice 2 S3 dało
+    // koloniom AI własny `techSystem`; fallback na globalny byłby cichym kłamstwem).
+    const techSystem = capital.techSystem;
+    if (!techSystem?.isResearched) return reject('no_empire_tech');
+    const resolved = resolveTemplate(templateId, {
+      techSystem,
+      archetype: ctx.empire?.archetype ?? null,
+    });
+    if (!resolved.ok) return reject(resolved.reason, resolved.detail);
+
+    const hull = HULLS[resolved.hullId];
+    const crewCost = hull?.crewCost ?? 0;                 // ŻYWA wartość (×4 przy imporcie)
+    const wanted = this._pickCount(params.count, ctx, templateId);
+
+    let queued = 0, started = 0;
+    for (let i = 0; i < wanted; i++) {
+      // Załoga: twarda bramka `startShipBuild` (odmowa, nie kolejka) — sprawdzamy PRZED,
+      // żeby odmowa miała nasz powód i wpis, a nie ginęła w `fleet:buildFailed`.
+      if (!this.hasFreeCrew(empireId, crewCost)) {
+        if (queued + started === 0) return reject('no_crew', { crewCost, hullId: resolved.hullId });
+        break;                                            // część floty zamówiona — to nie porażka
+      }
+
+      this.expectVessel(capital.planetId, empireId, templateId);
+      const res = cm.startShipBuild(capital.planetId, resolved.hullId, resolved.modules);
+
+      if (!res?.ok) {
+        this._awaitingClaim.delete(capital.planetId);     // okno nie może przeżyć odmowy
+        if (queued + started === 0) return reject('build_refused', { reason: res?.reason ?? null });
+        break;
+      }
+      if (res.queued) {
+        queued++;
+        const order = this._stampTtl(capital, templateId);
+        // Sprzężenie ekonomiczne — brakujące komodyty w priorytety produkcji kolonii.
+        this._feedCommodityDemand(capital, order?.cost ?? {}, empireId);
+      } else {
+        started++;
+      }
+    }
+
+    EventBus.emit('director:shipQueued', {
+      empireId, colonyId: capital.planetId, templateId,
+      hullId: resolved.hullId, modules: resolved.modules,
+      started, queued, requested: wanted,
+    });
+    return { ok: true, started, queued, hullId: resolved.hullId };
+  }
+
+  /**
+   * Ile sztuk zamówić. Zakres `[min,max]` rozstrzygany DETERMINISTYCZNIE z klucza
+   * (reguła:imperium:szablon) — nie `Math.random`, bo wynik musi być ten sam po zapisie
+   * i wczytaniu gry, inaczej gracz przeładowaniem przewija los.
+   */
+  _pickCount(count, ctx, templateId) {
+    if (Array.isArray(count)) {
+      const [lo, hi] = count;
+      const min = Math.max(1, Math.floor(lo ?? 1));
+      const max = Math.max(min, Math.floor(hi ?? min));
+      const u = unitFromKey(`${ctx?.ruleId ?? 'director'}:${ctx?.empireId}:${templateId}:count`);
+      return min + Math.floor(u * (max - min + 1));
+    }
+    return Math.max(1, Math.floor(Number(count) || 1));
+  }
 }
 
 // ── Rejestracja nazwanych zachowań ──────────────────────────────────────────
@@ -248,6 +352,8 @@ export function registerProductionGuards(production, { allowOverride = false } =
   // (jeden POP). Twardy próg per kadłub liczy dopiero akcja, gdy zna wynik resolvera.
   DirectorGuards.register('empireHasFreeCrew',
     (ctx) => production.hasFreeCrew(ctx.empireId, 1), opts);
+  DirectorActions.register('queueWarships',
+    (ctx, params) => production.queueWarships(ctx, params), opts);
 }
 
 export { TTL_FIELD, ORIGIN_FIELD };
