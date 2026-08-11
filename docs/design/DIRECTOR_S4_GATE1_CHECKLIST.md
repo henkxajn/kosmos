@@ -126,17 +126,26 @@ KOSMOS.debug.aiWarships('emp_001')                      // 2 × frigate_system_d
   ⚠ `N + M` bywa **mniejsze niż 2** i to jest poprawne: stocznia lv1 ma jeden slot, więc drugi
   build dostaje odmowę, a akcja raportuje częściowe powodzenie zamiast odrzucać całość.
 
-> ⚠ **Jeśli dostaniesz `reason: 'no_crew'`** — to nie jest awaria S4, tylko zmierzona bolączka
-> ekonomii AI (V3z; potwierdzona już trzykrotnie: S0, BALANS, ten gate). Dwa wyjścia: spróbuj
-> **drugiego imperium** (`aiWarships('emp_002')`) albo zastosuj mutację z §5a **w drugą stronę**
-> — patrz jednolinijkowiec zaraz pod tym akapitem. Mutacja jest narzędziem gate'u, nie naprawą.
+⚠ **Jeśli dostaniesz `reason: 'no_crew'`** — to nie jest awaria S4, tylko zmierzona bolączka
+ekonomii AI (V3z; potwierdzona już **czterokrotnie**: S0, BALANS, przebieg 1, przebieg 2).
+Odblokuj załogę narzędziem gate'u i powtórz:
 
 ```js
-KOSMOS.directorProduction.capitalOf('emp_001').civSystem._unemployed = 20;
+KOSMOS.debug.grantFreePops('emp_001', 20); KOSMOS.debug.aiWarships('emp_001')
 ```
 
+> 🔴 **NIE używaj `civSystem._unemployed = 20`** — ten przepis (z pierwszego wydania skryptu)
+> jest **MARTWY** i przebieg 2 to udowodnił: `freePops` = `population − (employedPops −
+> syntheticJobs) − lockedPops`, a `_employedPops` liczy **ETATY zarejestrowane przez budynki**,
+> nie pracowników. W kolonii, w której autorozbudowa postawiła więcej etatów niż jest POPów
+> w stratach, dosypanie 20 bezrobotnych podnosi `population` i **`freePops` dalej wynosi 0**.
+> Odtworzone wykonaniem: etaty 39 > strata 19 ⇒ `_unemployed = 20` → `freePops = 0`;
+> `grantFreePops(…, 5)` → `_unemployed = 25` → `freePops = 5`. Płaska liczba działała
+> wcześniej **przez przypadek** (tamta kolonia miała etaty = strata).
+> To ta sama klasa co `spendAll`/`_resources`: nazwa naturalna, skutek fałszywy.
+
 ```js
-const cap = KOSMOS.empireRegistry.getColoniesByEmpire('emp_001').find(c => !c.isOutpost);
+const cap = KOSMOS.directorProduction.capitalOf('emp_001');
 ({ kolejka: cap.shipQueues.map(q => q.shipId), czeka: cap.pendingShipOrders.length })
 ```
 
@@ -198,10 +207,14 @@ gdy zamówienie się NIE udaje. Cisza w którymkolwiek z tych miejsc jest awari�
 ### 5a. Brak wolnych POPów (bramka TWARDA — odmowa, nie kolejka)
 
 ```js
-cap.civSystem._unemployed = 0;                          // wyzeruj pulę bezrobotnych
-cap.civSystem.freePops                                  // sprawdź, że jest 0
-KOSMOS.debug.aiWarships('emp_001')
+KOSMOS.debug.grantFreePops('emp_001', 0); KOSMOS.debug.aiWarships('emp_001')
 ```
+
+⚠ Zerowanie też idzie przez to narzędzie, i z tego samego powodu co podnoszenie: `_lockedPops`
+jest **getterem** (sumą po stratach), więc nie da się go podstawić, a samo `_unemployed = 0`
+zostawia wolne POPy wszędzie tam, gdzie POPów jest **więcej niż etatów**. Narzędzie dobija
+nadmiar legalnym `lockPops()`. Sprawdź, że naprawdę zeszło do zera — wypis pokazuje
+`freePops N → 0`.
 
 ☐ **G1.8** — zwraca `{ ok: false, reason: 'no_crew', detail: { crewCost: 0.4, hullId: 'hull_frigate' } }`.
   ⚠ `crewCost` **0.4**, nie 0.1 — kadłuby są mnożone ×4 przy imporcie (`HullsData.js:287`).
@@ -225,7 +238,7 @@ KOSMOS.debugLog.query(e => e.kind.startsWith('director:')).slice(-5)
 Przywróć POPy, opróżnij magazyn stolicy AI z komodytów fregaty:
 
 ```js
-cap.civSystem._unemployed = 20;
+KOSMOS.debug.grantFreePops('emp_001', 20);
 cap.resourceSystem.inventory.forEach((v, k) => cap.resourceSystem.inventory.set(k, 0));
 KOSMOS.debug.aiWarships('emp_001')
 ```

@@ -471,6 +471,38 @@ export class GameScene {
           .then(() => console.log('[intro] replay zakończony'))
           .catch((e) => console.error('[intro] replay błąd:', e));
       },
+      // KOSMOS.debug.grantFreePops(empireId, n) — NARZĘDZIE GATE'U (mutacja stanu gry!).
+      //   Ustawia wolne POPy stolicy imperium na DOKŁADNIE n, w obie strony (n=0 = test
+      //   twardej bramki załogowej). Zwraca { before, after } i wypisuje obie migawki.
+      //
+      //   ⚠ DLACZEGO NIE `civSystem._unemployed = 20`: `freePops` to
+      //   `population − (employedPops − syntheticJobs) − lockedPops`, a `_employedPops`
+      //   liczy ETATY zarejestrowane przez budynki, NIE pracowników. W koloniach, gdzie
+      //   autorozbudowa postawiła więcej etatów niż jest POPów w stratach, dosypanie 20
+      //   bezrobotnych podnosi `population` i `freePops` NADAL wychodzi 0. Płaska liczba
+      //   działa tylko przypadkiem; ta funkcja liczy potrzebną wartość z bilansu.
+      //   `_lockedPops` jest GETTEREM (suma po stratach) — nie da się go podstawić,
+      //   dlatego zbijanie nadmiaru idzie przez `lockPops()`.
+      grantFreePops: (empireId, n = 5) => {
+        const cap = window.KOSMOS?.directorProduction?.capitalOf?.(empireId);
+        const c = cap?.civSystem;
+        if (!c) { console.warn(`[grantFreePops] brak stolicy/civSystem dla ${empireId}`); return null; }
+        const snap = () => ({
+          freePops: c.freePops, pop: c.population, unemployed: c._unemployed,
+          employedJobs: c._employedPops, locked: c._lockedPops,
+        });
+        const before = snap();
+        const want = Math.max(0, Number(n) || 0);
+        const netEmployed = Math.max(0, c._employedPops - (c._syntheticJobsTotal?.() ?? 0));
+        const strataSum = c.population - c._unemployed;
+        c._unemployed = Math.max(0, want + netEmployed + c._lockedPops - strataSum);
+        const over = c.freePops - want;                 // zostaje tylko gdy POPów > etatów
+        if (over > 0 && typeof c.lockPops === 'function') c.lockPops(over, 'mix');
+        const after = snap();
+        console.log(`[grantFreePops] ${empireId} @ ${cap.planetId}: freePops `
+          + `${before.freePops} → ${after.freePops} (cel ${want})`, { before, after });
+        return { before, after };
+      },
       // KOSMOS.debug.aiWarships(empireId?, templateId?) — Director S4 / GATE 1.
       //   Bez argumentów: RAPORT gotowości każdego imperium AI (stolica, stocznia, wolne
       //   POPy, żeton stacji R-3, tech point_defense) + wynik SUCHEGO rozwiązania szablonu.

@@ -26,11 +26,23 @@ naprawiony (własność STRUKTURALNA z kolonii-budowniczego), pokryty regresją 
 fail-first: powrót do starego kontraktu wywraca 8 asercji). **Do ponownego przebiegu §2–§3
 i §6–§8.** Szczegóły: §Wyniki GATE 1.
 
-📌 **Do WAR_BACKBONE (zapisane, NIE naprawiane tutaj):** sprzężenie ekonomiczne ustawia popyt na
-`warp_cores`, których fabryka kolonii najpewniej **nie umie wytworzyć** — to ta sama klasa teatru,
-którą Ruling 2 wykluczył dla rud, tylko wykryta na komodycie. Docelowo `_feedCommodityDemand`
-potrzebuje filtra „wytwarzalne TUTAJ" (receptura dostępna w tej kolonii), a nie tylko „to jest
-komodyta". Dziś skutek jest ograniczony: TTL i tak zamknie zlecenie po 3 latach.
+📌 **Do WAR_BACKBONE (zapisane, NIE naprawiane tutaj) — dwa znaleziska ekonomiczne:**
+1. **Popyt na niewytwarzalne.** Sprzężenie ekonomiczne ustawia popyt na `warp_cores`, których
+   fabryka kolonii najpewniej **nie umie wytworzyć** — ta sama klasa teatru, którą Ruling 2
+   wykluczył dla rud, tylko wykryta na komodycie. Docelowo `_feedCommodityDemand` potrzebuje
+   filtra **„wytwarzalne TUTAJ"** (receptura dostępna w TEJ kolonii), a nie tylko „to komodyta".
+   Dziś skutek ograniczony: TTL zamknie zlecenie po 3 latach.
+2. 🔴 **ZAŁOGA JEST STAŁYM OGRANICZENIEM produkcji okrętów AI** (czwarte znalezisko ekonomiczne).
+   `freePops = population − (employedPops − syntheticJobs) − lockedPops`, a `_employedPops` liczy
+   **ETATY zarejestrowane przez budynki**, nie pracowników. Autorozbudowa AI stawia budynki, aż
+   etatów jest **tyle samo lub więcej** niż POPów w stratach — czyli **pełne zatrudnienie jest
+   zaprojektowanym stanem ustalonym kolonii AI**, a pula wolnych POPów zbiega do zera.
+   Zmierzone trzykrotnie: S0 (`freePops = 0` przy pop 47 przez 400 civY), przebieg 1 gate'u
+   (naturalne `no_crew`), przebieg 2 (pop 51, etaty ≥ 51 ⇒ `freePops = 0`).
+   **Konsekwencja dla łańcucha nacisku:** `startShipBuild` bramkuje załogę TWARDO (odmowa, nie
+   kolejka), więc rozwinięta kolonia AI może być trwale niezdolna do zbudowania okrętu mimo
+   stoczni, techu, surowców i żetonu. To **nie jest** usterka S4 — Director poprawnie raportuje
+   `no_crew` — ale przesądza o realnej grywalności nacisku i należy do reformy ekonomii AI.
 
 🔴 **HOLD — nie zaczynamy S5.** Następny ruch należy do przebiegu Gate 1 na ŚWIEŻEJ grze
 (zasiew żetonu leci wyłącznie przy generacji imperiów, więc stary zapis pokaże
@@ -147,8 +159,19 @@ prawdziwa co do OBSERWACJI, ale jej brzmienie było za mocne:
 przekracza połowę galaktyki**. Zwężenie warunku („zmierzone na dzisiejszej ekonomii AI") **zostaje
 w mocy, ale jego termin ważności właśnie się skrócił**: pomiar trzeba powtórzyć **na horyzoncie
 obejmującym ekspansję** (≥ 60 lat wyświetlanych), a nie dopiero „gdy WAR_BACKBONE odblokuje AI".
-📌 **Zadanie dla WAR_BACKBONE/BALANS:** ustalić, którą ścieżką poszła ta kolonizacja i po ilu
-latach zaczyna się systematycznie — dopiero wtedy `BORDER_LY` da się utwardzić na dobre.
+**🔴 DRUGA KOREKTA (przebieg 2 gate'u) — OUTPOSTY MAJĄ WŁASNY, DUŻO WCZEŚNIEJSZY HARMONOGRAM.**
+Filip zaobserwował `bootstrapAutonomousOutpost` (`entity_144`) już w **85. roku CYWILIZACYJNYM**
+— czyli ~7 lat wyświetlanych, **pięciokrotnie wcześniej** niż pełna kolonia z przebiegu 1 (~456
+civY). Ekspansja AI nie jest więc jednym zjawiskiem z jednym progiem: **outposty i pełne kolonie
+biegną osobno**, a mój pomiar S2 (400 civY) mieścił w sobie okno outpostów i mimo to naliczył
+ZERO. Dwa wnioski: (a) brzmienie „AI nie zakłada ani jednego outpostu" z S0/V4 jest **słabsze,
+niż wyglądało** — to zależy od seeda i przebiegu, nie jest własnością silnika; (b) `TerritoryService`
+liczy outposty do stref (`R_MIN_LY 1.5`), więc pokrycie może rosnąć **od ~7 roku wyświetlanego**,
+a nie dopiero po pierwszej pełnej kolonii.
+📌 **Zadanie dla WAR_BACKBONE/BALANS:** ustalić OSOBNO harmonogram outpostów i pełnych kolonii
+(po ilu latach, jak często, od czego zależy) — dopiero wtedy `BORDER_LY` da się utwardzić na
+dobre. Ponowny pomiar musi objąć OBA zjawiska, więc horyzont ≥ 60 lat wyświetlanych i kilka
+seedów; sonda `probe-border-zone-coverage.mjs` już to potrafi, brakuje jej tylko dłuższego biegu.
 
 **⚠ WYNIK POMIARU R-2 (2026-08-11) — warunek SPEŁNIONY dla dzisiejszej gry, ale połowa warunku
 okazała się NIEMIERZALNA.** Instrument: `src/testing/headless/probe-border-zone-coverage.mjs`
