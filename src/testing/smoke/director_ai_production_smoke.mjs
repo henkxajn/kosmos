@@ -53,6 +53,10 @@ function stand({ techs = ['point_defense', 'ion_drives', 'warp_drive'], shipyard
     colonyManager: {
       _getShipyardLevel: () => shipyard,
       getAllColonies: () => [capital],
+      // ⚠ Własność okrętu wyprowadzana jest STĄD (poprawka po GATE 1: stempel strukturalny
+      // z kolonii-budowniczego, nie z rejestru oczekiwań). Bez tego stanowisko badałoby
+      // świat, w którym kolonie nie mają właścicieli — czyli nie ten, w którym gra działa.
+      getColony: (id) => (id === capital.planetId ? capital : null),
       // Wierna imitacja kontraktu startShipBuild: kolejkuje przy braku surowców.
       startShipBuild(planetId, shipId, modules) {
         if (!canAfford) {

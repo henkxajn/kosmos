@@ -125,34 +125,73 @@ export class DirectorProduction {
   }
 
   // ── Stempel własności (fundament 1) ───────────────────────────────────────
+  //
+  // 🔴 PRZEPISANE PO GATE 1 (FAIL na G1.5/G1.6). Pierwsza wersja wyprowadzała WŁASNOŚĆ
+  // z rejestru oczekiwań kluczowanego po kolonii i otwieranego W CHWILI ZAMÓWIENIA.
+  // Reprodukcja wykonaniem pokazała TRZY niezależne dziury w tym pomyśle — każda sama
+  // wystarczała, żeby okręt AI wyszedł ze stoczni bez właściciela, a `isEnemyVessel`
+  // (`Vessel.js:385-391`, same testy prawdziwościowe) uznaje BRAK pól za statek GRACZA:
+  //
+  //   (1) NADPISANIE — jeden slot na kolonię, a zamówienie opiewa na N okrętów.
+  //       Drugie `expectVessel` kasowało pierwsze; co najwyżej jeden statek dostawał stempel.
+  //   (2) KASOWANIE SĄSIADA — nieudane N-te zamówienie w tej samej pętli robiło
+  //       `delete` na oknie, którego wciąż potrzebowało UDANE zamówienie 1. To był
+  //       zmierzony przebieg z gate'u: `count:2`, stocznia lv1 → drugi build odrzucony
+  //       przez brak slotu → okno skasowane, zanim pierwszy okręt w ogóle powstał.
+  //   (3) BRAK OKNA NA ŚCIEŻCE pending→queue — `_tickPendingShipOrders` przenosi zlecenie
+  //       do stoczni SAMO, bez udziału Directora, więc każdy okręt, który czekał na
+  //       surowce, był bez stempla Z KONSTRUKCJI.
+  //   (+) i tak nieserializowany: zapis/wczytanie między zamówieniem a ukończeniem
+  //       gubiło okno bezpowrotnie.
+  //
+  // ⇒ WŁASNOŚĆ JEST TERAZ STRUKTURALNA: wyprowadzamy ją z KOLONII-BUDOWNICZEGO, którą
+  // statek niesie w sobie (`vessel.colonyId`, ustawiane w `createVessel` i przekazywane
+  // przez całą ścieżkę `fleet:shipCompleted` → `_onShipCompleted`). Nie ma okna, nie ma
+  // czasu życia, nie ma czego zgubić — kolonia AI z definicji buduje okręty imperium,
+  // które ją posiada. Rejestr zostaje WYŁĄCZNIE jako adnotacja „z którego szablonu",
+  // i jego brak nigdy nie wpływa na własność.
 
-  /** Otwórz okno oczekiwania — wołane TUŻ PRZED `startShipBuild`. */
+  /**
+   * Zanotuj, z jakiego szablonu poszło zamówienie — WYŁĄCZNIE adnotacja diagnostyczna.
+   * ⚠ Wołane PO udanym `startShipBuild`, nigdy przed: notowanie z góry było źródłem
+   * dziur (1) i (2). Kolejka, nie pojedynczy slot — jedna kolonia może budować N okrętów.
+   */
   expectVessel(colonyId, empireId, templateId) {
-    this._awaitingClaim.set(colonyId, { empireId, templateId, openedYear: this._year() });
+    if (!this._awaitingClaim.has(colonyId)) this._awaitingClaim.set(colonyId, []);
+    this._awaitingClaim.get(colonyId).push({ empireId, templateId, openedYear: this._year() });
   }
 
   /**
-   * Nadaj właściciela świeżo zbudowanemu okrętowi.
+   * Nadaj właściciela świeżo zbudowanemu okrętowi — Z KOLONII, która go zbudowała.
    *
-   * ⚠ BEZ filtra po `shipId` — to jest wprost poprawka luki V3c, przez którą stempel
-   * logistyki przepuszcza wyłącznie `hull_small`. Rozstrzygamy po KOLONII-BUDOWNICZYM,
-   * bo to jedyne, co statek o sobie wie w chwili `vessel:created`.
+   * ⚠ BEZ filtra po `shipId` (luka V3c: stempel logistyki przepuszcza tylko `hull_small`)
+   * i BEZ zależności od tego, czy Director akurat pamięta to zamówienie. Obejmuje więc
+   * także okręty, których Director nie zamawiał — i to jest POPRAWNE: statek zbudowany
+   * przez kolonię imperium należy do tego imperium, kropka. Stan zastany (brak pól =
+   * „statek gracza") był defektem, nie funkcją.
    */
   _claimVessel(vessel) {
     if (!vessel?.id) return;
     if (vessel.ownerEmpireId) return;                    // ktoś już ostemplował (np. logistyka)
-    const pending = this._awaitingClaim.get(vessel.colonyId);
-    if (!pending) return;                                // nie nasz build — nie dotykamy
 
-    vessel.ownerEmpireId  = pending.empireId;
-    vessel.owner          = pending.empireId;
-    vessel.isEnemy        = true;                        // `isEnemyVessel` czyta te trzy pola
-    vessel[ORIGIN_FIELD]  = pending.templateId;
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(vessel.colonyId);
+    const empireId = colony?.ownerEmpireId;
+    if (!empireId || empireId === 'player') return;      // kolonia GRACZA — nie nasza sprawa
 
-    this._awaitingClaim.delete(vessel.colonyId);
+    vessel.ownerEmpireId = empireId;
+    vessel.owner         = empireId;
+    vessel.isEnemy       = true;                         // `isEnemyVessel` czyta te trzy pola
+
+    // Adnotacja szablonu — best-effort. Jej brak NIE wpływa na własność (to jest cała
+    // lekcja z gate'u: identyczność nie może zależeć od pamięci podręcznej).
+    const queue = this._awaitingClaim.get(vessel.colonyId);
+    const note = queue?.shift() ?? null;
+    if (queue && queue.length === 0) this._awaitingClaim.delete(vessel.colonyId);
+    if (note) vessel[ORIGIN_FIELD] = note.templateId;
+
     EventBus.emit('director:shipCompleted', {
-      empireId: pending.empireId, vesselId: vessel.id,
-      shipId: vessel.shipId, templateId: pending.templateId,
+      empireId, vesselId: vessel.id, shipId: vessel.shipId,
+      templateId: note?.templateId ?? null,
     });
   }
 
@@ -292,14 +331,17 @@ export class DirectorProduction {
         break;                                            // część floty zamówiona — to nie porażka
       }
 
-      this.expectVessel(capital.planetId, empireId, templateId);
       const res = cm.startShipBuild(capital.planetId, resolved.hullId, resolved.modules);
 
       if (!res?.ok) {
-        this._awaitingClaim.delete(capital.planetId);     // okno nie może przeżyć odmowy
+        // ⚠ NIC nie sprzątamy — adnotacje sąsiednich, UDANYCH zamówień z tej samej pętli
+        // muszą przeżyć. Kasowanie tu było dziurą (2) z gate'u: `count:2` przy stoczni lv1
+        // odrzucało drugi build i zabierało adnotację pierwszemu.
         if (queued + started === 0) return reject('build_refused', { reason: res?.reason ?? null });
         break;
       }
+      // Adnotacja PO sukcesie — notowanie z góry było źródłem dziur (1) i (2).
+      this.expectVessel(capital.planetId, empireId, templateId);
       if (res.queued) {
         queued++;
         const order = this._stampTtl(capital, templateId);

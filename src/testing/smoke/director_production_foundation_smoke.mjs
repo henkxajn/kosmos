@@ -21,17 +21,21 @@ import { readFileSync } from 'node:fs';
 import { DirectorProduction, ORDER_TTL_DISPLAYED_YEARS, registerProductionGuards }
   from '../../systems/director/DirectorProduction.js';
 import { DirectorGuards, _resetDirectorRegistries } from '../../systems/director/DirectorRegistry.js';
+import { isEnemyVessel } from '../../entities/Vessel.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
 
 /** Minimalny świat — tylko to, czego dotykają fundamenty. Zero prawdziwego bootu. */
-function mkWorld({ year = 100, shipyard = 1, freePops = 10, stations = [], colonies = null } = {}) {
+function mkWorld({ year = 100, shipyard = 1, freePops = 10, stations = [], colonies = null, canAffordFlag = true } = {}) {
   const capital = {
     planetId: 'p_cap', isOutpost: false,
     resourceSystem: { getAmount: (id) => (capital._res[id] ?? 0) },
     _res: {},
     civSystem: { freePops },
+    // Drzewo techu IMPERIUM — resolver szablonu czyta stąd, nigdy z drzewa gracza.
+    techSystem: { isResearched: () => true },
+    shipQueues: [],
     pendingShipOrders: [],
     factorySystem: {
       _bonus: new Map(), _mode: 'manual',
@@ -48,6 +52,12 @@ function mkWorld({ year = 100, shipyard = 1, freePops = 10, stations = [], colon
     colonyManager: {
       _getShipyardLevel: () => shipyard,
       getAllColonies: () => colonies ?? [capital],
+      // ⚠ Własność jest wyprowadzana STĄD (poprawka po GATE 1) — stanowisko musi
+      // odwzorować prawdziwy rejestr kolonii, nie tylko listę stolic.
+      getColony: (id) => (id === 'p_cap' ? capital
+        : id === 'p_player' ? { planetId: 'p_player' }                    // kolonia GRACZA
+        : id === 'p_new' ? { planetId: 'p_new', ownerEmpireId: 'emp_001' } // założona PÓŹNIEJ
+        : null),
     },
     stationSystem: { getAllStations: () => stations },
   };
@@ -72,23 +82,42 @@ console.log('\nT1: stempel własności bez filtra po shipId');
   assert(completed?.vesselId === 'v_1' && completed?.templateId === 'frigate_laser_escort',
     'T1c: emituje director:shipCompleted z szablonem (ślad w DebugLogu)');
 
-  // Okno jest jednorazowe — drugi statek z tej samej kolonii już nie jest nasz.
+  // ⚠ ZMIENIONY KONTRAKT PO GATE 1. Dawniej asertowaliśmy tu, że okno jest JEDNORAZOWE
+  // i drugi statek NIE dostaje stempla. To był zapis BŁĘDU, nie własności: przy zamówieniu
+  // na N okrętów drugi wychodził ze stoczni bezpański, a `isEnemyVessel` uznaje brak pól
+  // za statek GRACZA. Własność jest teraz strukturalna (z kolonii), więc KAŻDY okręt
+  // kolonii AI dostaje stempel.
   const v2 = { id: 'v_2', shipId: 'hull_frigate', colonyId: 'p_cap' };
   EventBus.emit('vessel:created', { vessel: v2 });
-  assert(v2.ownerEmpireId === undefined, 'T1d: okno zużyte — kolejny statek NIE jest stemplowany');
+  assert(v2.ownerEmpireId === 'emp_001',
+    'T1d: DRUGI statek z tej samej kolonii też jest stemplowany (dziura (1) z GATE 1 — nadpisanie okna)');
+  assert(v2.directorOrigin === undefined,
+    'T1e: …ale bez adnotacji szablonu, bo Director zamówił tylko jeden — adnotacja jest '
+    + 'diagnostyką, własność nie może od niej zależeć');
   prod.dispose(); EventBus.clear();
 }
 
-// ── T2 — PIN LUKI V3c ───────────────────────────────────────────────────────
-console.log('\nT2: PIN V3c — bez okna oczekiwania okręt zostaje BEZ właściciela');
+// ── T2 — własność jest STRUKTURALNA ─────────────────────────────────────────
+console.log('\nT2: własność wynika z kolonii-budowniczego, nie z pamięci Directora');
 {
   mkWorld();
   const prod = new DirectorProduction();
+  // Zero zamówień, zero okien — statek i tak jest własnością imperium, bo zbudowała go
+  // JEGO kolonia. To pokrywa ścieżkę pending→queue (dziura (3)): `_tickPendingShipOrders`
+  // przenosi zlecenie do stoczni SAM, bez udziału Directora.
   const v = { id: 'v_x', shipId: 'hull_frigate', colonyId: 'p_cap' };
   EventBus.emit('vessel:created', { vessel: v });
-  assert(v.ownerEmpireId === undefined,
-    'T2a: statek zbudowany bez zamówienia Directora nie dostaje właściciela — Director nie '
-    + 'stempluje niczego, o co nie prosił (to jest zakres poprawki, nie łatka na wszystko)');
+  assert(v.ownerEmpireId === 'emp_001' && v.isEnemy === true,
+    'T2a: statek kolonii AI dostaje stempel BEZ jakiegokolwiek okna — to zamyka ścieżkę '
+    + 'pending→queue, na której zginął okręt z gate\'u');
+  assert(isEnemyVessel(v) === true,
+    'T2b: …i jest widziany jako WROGI. ⚠ isEnemyVessel to same testy prawdziwościowe: '
+    + 'brak pól = statek GRACZA, dlatego bezpański okręt AI trafiał do floty gracza (G1.6)');
+
+  const player = { id: 'v_p', shipId: 'hull_small', colonyId: 'p_player' };
+  EventBus.emit('vessel:created', { vessel: player });
+  assert(player.ownerEmpireId === undefined,
+    'T2c: statek kolonii GRACZA nietknięty (getColony zwraca kolonię bez ownerEmpireId)');
   prod.dispose(); EventBus.clear();
 }
 
@@ -247,6 +276,104 @@ console.log('\nT9: zdarzenia Directora w whiteliście DebugLoga');
   for (const ev of ['director:shipQueued', 'director:shipRejected', 'director:shipCompleted',
                     'director:commodityDemand', 'director:orderExpired']) {
     assert(dl.includes(`'${ev}'`), `T9a/${ev}: w TRACKED_EVENTS`);
+  }
+}
+
+// ── T10 — REGRESJA GATE 1 (FAIL na G1.5/G1.6) ───────────────────────────────
+console.log('\nT10: REGRESJA GATE 1 — trzy zmierzone drogi utraty właściciela');
+{
+  // (1) NADPISANIE OKNA: zamówienie na N okrętów, jedna kolonia.
+  {
+    mkWorld();
+    const prod = new DirectorProduction();
+    const vs = [1, 2, 3].map((i) => ({ id: `v_${i}`, shipId: 'hull_frigate', colonyId: 'p_cap' }));
+    for (const v of vs) EventBus.emit('vessel:created', { vessel: v });
+    assert(vs.every((v) => v.ownerEmpireId === 'emp_001'),
+      'T10a: (1) WSZYSTKIE trzy okręty jednej kolonii mają właściciela — dawniej najwyżej jeden');
+    assert(vs.every((v) => isEnemyVessel(v)), 'T10b: …i żaden nie trafia do floty gracza');
+    prod.dispose(); EventBus.clear();
+  }
+
+  // (2) KASOWANIE SĄSIADA — dokładny przebieg z gate'u: count:2 przy stoczni na 1 slot.
+  //     Pierwszy build przechodzi, drugi jest odrzucany; okręt z pierwszego MUSI przeżyć.
+  {
+    const { capital } = mkWorld({ shipyard: 1, stations: [{ id: 'st', ownerEmpireId: 'emp_001' }] });
+    const prod = new DirectorProduction();
+    let calls = 0;
+    window.KOSMOS.colonyManager.startShipBuild = () => {
+      calls++;
+      if (calls === 1) { capital.shipQueues.push({ shipId: 'hull_frigate' }); return { ok: true }; }
+      return { ok: false, reason: 'brak wolnego slotu stoczni' };   // realny wynik przy lv1
+    };
+    const res = prod.queueWarships(
+      { empireId: 'emp_001', empire: { archetype: 'industrialist' }, ruleId: 'r' },
+      { template: 'frigate_system_defender', count: 2 });
+    assert(res.ok === true && res.started === 1,
+      `T10c: (2) częściowe powodzenie NIE jest porażką (started=${res.started})`);
+
+    const v = { id: 'v_1', shipId: 'hull_frigate', colonyId: 'p_cap' };
+    EventBus.emit('vessel:created', { vessel: v });
+    assert(v.ownerEmpireId === 'emp_001',
+      'T10d: (2) okręt z UDANEGO zamówienia ma właściciela mimo odrzucenia sąsiada — '
+      + 'to jest DOKŁADNIE przebieg, na którym padł GATE 1');
+    assert(v.directorOrigin === 'frigate_system_defender',
+      'T10e: (2) …i zachowuje adnotację szablonu (sprzątanie po odmowie jej nie zabrało)');
+    prod.dispose(); EventBus.clear();
+  }
+
+  // (3) ŚCIEŻKA pending→queue: zlecenie czeka na surowce, potem ColonyManager sam je
+  //     promuje do stoczni. Director nie bierze w tym udziału — nie ma gdzie otworzyć okna.
+  {
+    const { capital } = mkWorld({ canAffordFlag: false });
+    const prod = new DirectorProduction();
+    capital.pendingShipOrders.push({ id: 'pso_1', shipId: 'hull_frigate', cost: {} });
+    // …mija czas, ColonyManager promuje zlecenie, statek powstaje. ZERO wiedzy Directora:
+    prod._awaitingClaim.clear();
+    const v = { id: 'v_late', shipId: 'hull_frigate', colonyId: 'p_cap' };
+    EventBus.emit('vessel:created', { vessel: v });
+    assert(v.ownerEmpireId === 'emp_001',
+      'T10f: (3) okręt z promocji pending→queue ma właściciela — dawniej bezpański Z KONSTRUKCJI');
+    prod.dispose(); EventBus.clear();
+  }
+
+  // (4) KOLONIA ZAŁOŻONA PÓŹNIEJ niż rejestracja Directora (anomalia (d) ze zgłoszenia).
+  {
+    mkWorld();
+    const prod = new DirectorProduction();
+    const v = { id: 'v_new', shipId: 'hull_small', colonyId: 'p_new' };   // p_new nie istniała przy starcie
+    EventBus.emit('vessel:created', { vessel: v });
+    assert(v.ownerEmpireId === 'emp_001',
+      'T10g: (4) kolonia założona PO rejestracji też stempluje — własność czyta rejestr kolonii '
+      + 'na żywo, więc nie ma pojęcia „kolonia znana przy starcie"');
+    prod.dispose(); EventBus.clear();
+  }
+
+  // (5) UTRATA STANU W PAMIĘCI (zapis/wczytanie między zamówieniem a ukończeniem).
+  {
+    mkWorld();
+    const prod = new DirectorProduction();
+    prod.expectVessel('p_cap', 'emp_001', 'frigate_system_defender');
+    prod._awaitingClaim.clear();                       // ≈ świeża instancja po wczytaniu gry
+    const v = { id: 'v_reload', shipId: 'hull_frigate', colonyId: 'p_cap' };
+    EventBus.emit('vessel:created', { vessel: v });
+    assert(v.ownerEmpireId === 'emp_001',
+      'T10h: (5) własność przeżywa utratę CAŁEGO stanu w pamięci — bo nigdy z niego nie wynikała');
+    prod.dispose(); EventBus.clear();
+  }
+
+  // (6) Kontrola zakresu: nie stemplujemy niczego, co nie należy do imperium.
+  {
+    mkWorld();
+    const prod = new DirectorProduction();
+    const orphan = { id: 'v_o', shipId: 'hull_small', colonyId: 'p_nieznana' };
+    EventBus.emit('vessel:created', { vessel: orphan });
+    assert(orphan.ownerEmpireId === undefined,
+      'T10i: (6) statek z kolonii spoza rejestru NIE dostaje stempla (getColony → null)');
+    const already = { id: 'v_a', shipId: 'hull_small', colonyId: 'p_cap', ownerEmpireId: 'emp_002' };
+    EventBus.emit('vessel:created', { vessel: already });
+    assert(already.ownerEmpireId === 'emp_002',
+      'T10j: (6) już ostemplowany (np. przez logistykę) nie jest nadpisywany');
+    prod.dispose(); EventBus.clear();
   }
 }
 
