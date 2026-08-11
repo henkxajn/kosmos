@@ -10,9 +10,11 @@ EDYCJI**, 206/206) · **audyt stacji AI ✅** (pod **R-3**, §Audyt stacji AI �
 zasiew MAŁY pod warunkiem prerekwizytu 3D i dwóch decyzji właścicielskich) · **S3 ✅** (katalog
 szablonów Filipa + resolver, 52/52) · **S2 ✅** (pomiar R-2 → **17,7 %**, warunek spełniony dla
 dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** `3596c0c` ·
-**S4 ✅ KOD KOMPLETNY** (`8006ceb` fundament + `499ff7b` zasiew/tech + `9bebe0d` akcja; keepery
-41 + 25 + 30) · **⏸ GATE 1 — CZEKA NA PRZEBIEG W PRZEGLĄDARCE** (`DIRECTOR_S4_GATE1_CHECKLIST.md`,
-24 punkty) · S5–S7 nierozpoczęte · **Gate 2 / Gate 3 przed nami.**
+**S4 ✅ + GATE 1 PASSED** (`8006ceb` fundament + `499ff7b` zasiew/tech + `9bebe0d` akcja +
+`0ff5b50` fix własności + `1ee9a99` lewar załogi + `831a3e7` izolacja Dziennika; keepery
+54 + 25 + 30 + 32) — **zamknięty WARUNKOWO: wyciek zdarzeń KOLONII AI do Dziennika OTWARTY**
+(pierwsze zadanie następnej sesji) · **S5 ⏭ NASTĘPNY = GATE 2** (łańcuch pierwszego kontaktu) ·
+S6–S7 nierozpoczęte · **Gate 3 przed nami.**
 
 ✅ **Wszystkie podpisy dostarczone 2026-08-11:** zwężenie R-2 ratyfikowane · decyzje 9/10
 (odczyt A, metryka 3D) ratyfikowane · **R-3** podpisane (żeton bez modułów + predykat
@@ -20,11 +22,24 @@ dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** 
 do `startingTechs` wszystkich spawnowanych archetypów · prerekwizyt 3D wykonany · **R-4**
 (drabinka technologiczna zostaje) podpisane.
 
-🔴 **GATE 1 — PRZEBIEG 1: FAIL** na G1.5 + G1.6 (oba nienegocjowalne). Okręty AI wychodziły ze
-stoczni **bez właściciela** i trafiały do floty GRACZA. Root-cause zreprodukowany wykonaniem,
-naprawiony (własność STRUKTURALNA z kolonii-budowniczego), pokryty regresją T10 (6 dróg,
-fail-first: powrót do starego kontraktu wywraca 8 asercji). **Do ponownego przebiegu §2–§3
-i §6–§8.** Szczegóły: §Wyniki GATE 1.
+✅ **GATE 1 — PRZEBIEG 3: PASSED** (2026-08-11). Cztery punkty nienegocjowalne zielone: **G1.5**
+własność na OBU trasach (bezpośredni start `v_1` + promocja `pending→queue` `v_2` — dokładnie ta,
+na której padł przebieg 1), **G1.10** wpis `shipRejected` przy `no_crew`, **G1.15** naturalne
+wygaśnięcie TTL bez zjawy, **G1.18/G1.19** żeton bramkujący per-imperium. Round-trip zapisu
+(liczba stacji, właściciele, v100) przeszedł; `grantFreePops` zadziałał (0→20, po budowie 19,6 —
+zużycie załogi widoczne).
+**Przebiegi 1–2 i ich naprawy:** §Wyniki GATE 1 (trzy dziury stempla) + `1ee9a99` (martwy lewar
+załogi w skrypcie).
+**Dwie rozbieżności zgłoszone przy PASS, obie naprawione w `831a3e7`:** wyciek zdarzeń stoczni
+i statków AI do Dziennika gracza (**darmowy wywiad** — omijał warstwę intelu) oraz zgubiona
+adnotacja `directorOrigin` (naprawiona tą samą zasadą co własność: wyprowadzana z ładunku, nie
+z pamięci).
+
+🔴 **JEDNA RZECZ OTWARTA — S4 zamknięty WARUNKOWO.** Spot-check ujawnił **trzecią warstwę tego
+samego defektu**: zdarzenia ŻYCIA KOLONII AI (głód, niepokoje, populacja, niedobory) nadal
+przechodzą do Dziennika gracza bez filtra właściciela. To pierwsze zadanie następnej sesji —
+razem z PEŁNYM audytem i tabelą klasyfikacji subskrybentów (szczegóły i rozmiar: blok
+§PLAN NA JUTRO na górze).
 
 📌 **Do WAR_BACKBONE (zapisane, NIE naprawiane tutaj) — dwa znaleziska ekonomiczne:**
 1. **Popyt na niewytwarzalne — i odwrotnie: pominięte RUDY, które realnie blokują.**
@@ -61,6 +76,64 @@ narusza — S3 jest czysty (zero wywołań produkcyjnych), a S4 konsumuje OBA.
 ---
 
 ## RESUME — start świeżej sesji (czytaj to PIERWSZE)
+
+### ⏭ PLAN NA JUTRO — kolejność wiążąca (stan na koniec sesji 2026-08-11)
+
+**Gdzie jesteśmy:** **GATE 1 PASSED** (przebieg 3). Wszystkie cztery punkty nienegocjowalne
+zielone: własność na OBU trasach (bezpośredni start + promocja `pending→queue` — dokładnie ta,
+na której gate padł za pierwszym razem), wpis `shipRejected` przy `no_crew`, naturalne wygaśnięcie
+TTL bez zjawy, żeton bramkujący per-imperium. Round-trip zapisu (stacje, właściciele, v100) też
+przeszedł. **S4 jest ZAMKNIĘTY warunkowo** — czeka na jedną naprawę niżej.
+
+**(a) NAJPIERW: wyciek zdarzeń KOLONII AI do Dziennika gracza** — trzecia warstwa tego samego
+defektu. Poprzednia naprawa (`831a3e7`) objęła stocznię i statki; zdarzenia ŻYCIA KOLONII
+(głód, niepokoje społeczne, populacja, niedobory) **nadal przechodzą bez filtra właściciela**,
+więc gracz czyta o głodzie w koloniach AI.
+⚠ **TYM RAZEM PEŁNY AUDYT, nie łatanie po jednym objawie** — trzecia niespodzianka z rzędu robi
+się droga. Rozmiar zmierzony: **113 subskrypcji `EventBus.on` w `UIManager`, z czego 44 pisze do
+Dziennika** (`_log`/`_addNotification`); do tego emitenci spoza UIManagera
+(`ColonyAutoExpander`, `EmpireLogisticsSystem`, `EmpireResearchSystem`, `EmpireStrategySystem`,
+`WarpRouteSystem`). Kandydaci warstwy kolonii są zlokalizowani i **niosą już `planetId`**:
+`civ:unrest` (`:970`), `civ:unrestLifted` (`:974`), `civ:famine` (`:978`), `civ:famineLifted`
+(`:982`), `civ:popBorn` (`:987`), `civ:popDied`, `resource:shortage` (`:682`), brownout (`:645`).
+**Produkt audytu = TABELA KLASYFIKACJI** każdego z 44 subskrybentów jako
+`player-scoped | AI-scoped | global-by-design` (zmiany epoki i zdarzenia galaktyczne mogą być
+globalne CELOWO) — do commit message albo do tego planu, żeby gate miał z czym porównywać.
+Bramka: `_isPlayerColonyEvent(planetId)`, **fail-closed**, DebugLog NIETKNIĘTY.
+Keeper: rozszerzyć `director_feed_isolation_smoke` o warstwę kolonii, **fail-first** — głód
+kolonii AI ⇒ ZERO wpisów w Dzienniku, głód kolonii gracza ⇒ wpis obecny.
+
+**(b) POTEM: pełny spot-check Filipa** (konsola, bez pełnego przebiegu gate'u): build gracza →
+wpis; build AI → cisza; fregaty niosą `szablon` (`directorOrigin`); głód kolonii AI → cisza.
+⚠ **Pozycja OTWARTA z poprzedniego spot-checku, do domknięcia przy okazji:** po
+`grantFreePops` + `aiWarships` zlecenie stanęło na `queued` i nie potwierdzono ukończenia budowy.
+To **jeszcze nie jest defekt** — najpewniej braki komodytów. Domknąć jednolinijkowcem z §5b
+skryptu (odczyt braków z `director:commodityDemand`, NIE z pamięci), uzupełnić i doczekać do
+`shipQueues`.
+
+**(c) DOPIERO WTEDY: S5 — łańcuch pierwszego kontaktu (GATE 2).** Zakres bez zmian względem
+tabeli commitów: wyzwalacz „obserwatorium L5" (sonda `playerObservatoryLevel`), rzut kumulatywny
+w latach **WYŚWIETLANYCH** (decyzja 2), akcja `scienceFlyby` (spawn wzorem
+`EmpireFleetMaterializer` + kurs przez układ gracza + despawn na wyjściu), **Director PRZEJMUJE
+beat** `vessel:firstSighting` (decyzja 5) — a przy okazji **trzeba naprawić nieserializowany
+`_reportedVesselSightings`**, inaczej przeładowanie odpali beat drugi raz. Narracja przez
+`queueMissionEvent`/`ScheduledEventPopup` (kanał bez przycisku, który coś robi — Slice 1 się
+mieści, bo beat jest czysto narracyjny), intel imperium → `rumor`, oraz
+**`first_contact_kill`** (modyfikator opinii + wpis pamięci) na zestrzelenie przelotu (decyzja 4).
+i18n PL+EN.
+
+**(d) NA KONIEC: checklist GATE 2** w formacie skryptu sesji, z one-linerami **WYKONANYMI na
+żywym silniku** przed wpisaniem. Obowiązują WSZYSTKIE stałe reguły skryptów, każda kupiona
+błędem: **zero wieloliniowego kodu w cytatach blokowych** (kopiuje się z `> ` → SyntaxError) ·
+stolica **wyłącznie** przez `KOSMOS.directorProduction.capitalOf(empireId)` (kolonie nie mają
+`.id`, „pierwsza pełna" pęka przy wielu) · braki **odczytywać z silnika**, nigdy z listy
+w pamięci · **DebugLog to pierścień czyszczony przy przeładowaniu** — kroki po wczytaniu gry
+nie mogą odpytywać wpisów sprzed reloadu · **nie uruchamiać gate'u równolegle z pracą CC**
+(commit przeładowuje Live Server i kasuje przebieg; zapis do pliku PRZED wklejeniem promptu) ·
+lewary stanu tylko przez zwalidowane narzędzia (`grantFreePops`), nigdy przez „naturalnie
+wyglądające" pole.
+
+---
 
 1. **Gdzie jesteśmy:** szkielet Directora stoi samodzielnie — katalog reguł PUSTY, nic go jeszcze nie
    instancjonuje. Save **v100, zero migracji**, i to jest własność KONSTRUKCYJNA (wszystkie domyślne

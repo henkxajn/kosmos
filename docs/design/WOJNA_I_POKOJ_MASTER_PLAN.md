@@ -149,9 +149,15 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   warpFuel.consumption` — a property of *the vessel*, so two ships see two different graphs.
   The border zone is therefore a **radius in light years: 5 LY** around AI territory; claimed space
   keeps the existing `TERRITORY.R_MIN_LY 1.5 → R_MAX_LY 4.0` radii. The map is built in Director
-  Slice 1 (S2) and D3 consumes it. ⚠ The 5 LY constant is **provisional pending a coverage
-  measurement** on the real 72-system galaxy across several seeds — see `DIRECTOR_SLICE1_PLAN.md`
-  §Rulings R-2.
+  Slice 1 (**S2 ✅** — `InfluenceMap` + `InfluenceMath`, runtime-only) and D3 consumes it.
+  ⚠ **The 5 LY constant was measured (17.7 % coverage across 4 seeds) and hardened — but its
+  shelf life is short.** Three corrections landed after the measurement: the probe's 400-civY
+  horizon stopped just short of AI expansion; full colonies appear around ~456 civY; and
+  **outposts — which `TerritoryService` counts toward zones at `R_MIN_LY 1.5` — start as early as
+  civYear 85** and recur (85/140/155/160/185 in one run). The projection reaches **46 % at 6
+  systems per empire and 58.7 % at 8**, so `BORDER_LY` **must be re-measured over ≥60 displayed
+  years**, counting outposts separately from colonies, before D3 leans on it. Details:
+  `DIRECTOR_SLICE1_PLAN.md` §Rulings R-2.
 - **D4** Verb batch 1: gift, denounce, threaten, NAP duration, alliance mechanics,
   war CB + reputation, peace terms (consumes `peaceCost`)
 
@@ -217,15 +223,28 @@ BattleSystem; ground combat RNG gets seeded (audit R13) when touched.
 Declarative trigger→response rules, personality-parameterized, with cooldowns and
 escalation. Gives the game *dramaturgy* on top of systemic AI.
 
-- **Slice 1 — 🟢 IN PROGRESS.** Plan doc: `DIRECTOR_SLICE1_PLAN.md` (approved 2026-08-10; eight
-  decisions signed + owner rulings **R-1** and **R-2**). Progress: **S0 ✅** `e9f1853` (seam
-  verification by execution — 11 claims confirmed, **V4 broken**: the AI-side caller that
-  "proves" `startShipBuild` has never fired in 4 seeds × 400 civYears; the mechanism itself was
-  proven directly instead) · **S1 ✅** `31bd81b` (rule skeleton + registries + `gameState.director`
-  at v100 with no migration; forced the `SeedMath.js` extraction out of `AcceptanceMath.js` so pin
-  P14 kept its full strength, 206/206 unedited) · **S2 next** — influence map, and it carries R-2's
-  coverage measurement (stop-with-table if the 5 LY shell approaches half the galaxy) ·
-  S3–S7 pending · **Gates 1–3 all pending.**
+- **Slice 1 — 🟢 IN PROGRESS, GATE 1 PASSED 2026-08-11.** Plan doc: `DIRECTOR_SLICE1_PLAN.md`
+  (approved 2026-08-10; eight decisions signed + owner rulings **R-1**…**R-4**). **Read its
+  §PLAN NA JUTRO block first** — it carries the binding order for the next session.
+  Progress: **S0 ✅** `e9f1853` · **S1 ✅** `31bd81b` · **S3 ✅** `4755f19` (Filip's frigate
+  catalog + resolver with the capacity validator nobody else in the repo performs) ·
+  **S2 ✅** `365ac53`+`aee8218` (R-2 measurement = **17.7 %**, then the influence map) ·
+  **3D prerequisite ✅** `3596c0c` · **S4 ✅ + GATE 1 PASSED** (`8006ceb` foundation ·
+  `499ff7b` station-token seed + AI combat tech · `9bebe0d` `queueWarships` · `0ff5b50`
+  ownership fix · `1ee9a99` crew lever · `831a3e7` Journal isolation) ·
+  **S5 next = GATE 2** · S6–S7 pending · **Gate 3 pending.**
+  ⚠ **S4 is closed CONDITIONALLY** — a third layer of the same defect is open: AI **colony**
+  events (famine, unrest, population) still reach the player's Journal unfiltered. First task
+  of the next session, together with a full classification table of all 44 Journal-writing
+  subscribers.
+  **Three owner rulings were added during the slice.** **R-3**: AI warship production requires
+  an orbital station, seeded **module-less** at empire generation as part of the starting
+  handicap — the station is a *permission token*, not a factory (an audit showed a functional
+  module would leak AI research and AI-built ships into the **player's** colony and fleet).
+  **R-4**: the catalog's tech ladder stays — `point_defense` was granted because it was a gate
+  with *no route*, whereas `ion_drives`/`warp_drive` have one; the accepted consequence is that
+  early-game pressure produces an incident with **no armed response**, deferred to Gate 3 review.
+  Plus the `no_crew`/`no_module` reasons the gate exercised.
   Scope (can start after D1): Director skeleton + AI ship production from
   templates (pulls B.3 forward as a minimal version) + influence map (pulls D3's map
   forward if Director goes first) + two rule chains:
@@ -260,9 +279,9 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 
 ```
 D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 2026-08-10)
-                        → Director Slice 1 🟢 IN PROGRESS  (S0 ✅ e9f1853 · S1 ✅ 31bd81b)
-                                                ⟵ WE ARE HERE — S2 next (carries R-2 measurement)
-                        → [Director S2..S7 + Gates 1-3] ∥ D3 → WAR_BACKBONE doc
+                        → Director Slice 1 🟢 S0..S4 ✅ + GATE 1 PASSED 2026-08-11
+                                                ⟵ WE ARE HERE — colony-layer Journal fix, then S5 = GATE 2
+                        → [Director S5..S7 + Gates 2-3] ∥ D3 → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
@@ -273,15 +292,22 @@ foundation is in place.** D1 gave relations a real model; D2 gave them a real *d
 D2** above and in `D2_PLAN.md` (per-commit table + 16 implementation findings); the three gate scripts
 carry their recorded results.
 
-**Next horizon — the order was decided: Director Slice 1 went first and is UNDER WAY.**
+**Next horizon — Director Slice 1 went first; S0–S4 are done and GATE 1 has PASSED.**
 1. **ReactionDirector Slice 1** (workstream C) — 🟢 **IN PROGRESS**, plan `DIRECTOR_SLICE1_PLAN.md`
-   (read its **RESUME** block first). S0 ✅ + S1 ✅; **S2 next**, and S2 opens with R-2's coverage
-   measurement before the 5 LY constant hardens. Still runs in parallel with D3 and still pulls B.3
-   forward in a minimal form.
-   ⚠ Two findings from S0 that bind later work: the AI-side `startShipBuild` caller has **never fired
-   in a real game** (courier routes need outposts; the AI founds none — filed to WAR_BACKBONE/BALANS
-   as an AI-economy diagnosis), and an AI-built warship currently leaves the yard with **no owner**
-   (the only stamp filters `hull_small`), which Director S4 fixes for itself.
+   (read its **§PLAN NA JUTRO** block first — binding order). S0–S4 ✅, **GATE 1 PASSED**;
+   **next: colony-layer Journal fix, then S5 = GATE 2** (first-contact chain). Still runs in
+   parallel with D3 and still pulls B.3 forward in a minimal form.
+   ⚠ **Four findings now bind later work**, all measured rather than assumed:
+   (i) an AI-built warship left the yard with **no owner**, and because `isEnemyVessel` is a
+   truthiness test, "no owner" reads as **the player's ship** — fixed structurally in S4;
+   (ii) AI shipyard/vessel events reached the player's Journal, i.e. **free intel** bypassing the
+   intel layer — fixed; the **colony-event layer is still open**;
+   (iii) **crew is a standing constraint on AI warship production** — full employment is the
+   designed steady state for AI colonies, so `freePops` converges to 0 and `startShipBuild`
+   refuses hard (fourth AI-economy finding, → WAR_BACKBONE);
+   (iv) the "AI founds nothing" diagnosis is **overturned in its strong form** — outposts appear
+   at civYears 85/140/155/160/185, full colonies around ~456, and my S2 probe simply stopped
+   short at 400 civY. This shortens the shelf life of R-2's 5 LY constant (see below).
 2. **WAR_BACKBONE doc** (workstream B) — the design pass that owns everything between a war
    declaration and the peace table. It is also where audit **R2** finally gets fixed (both player-military
    estimators are broken identically), which is what un-stubs D2's `relative_power` term, and where
