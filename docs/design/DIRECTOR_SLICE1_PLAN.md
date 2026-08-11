@@ -6,8 +6,14 @@ właścicielskie Filipa** (R-1, R-2) nadpisujące jego własne wcześniejsze ust
 **Postęp:** **S0 ✅** `e9f1853` (weryfikacja szwów WYKONANIEM — 11 potwierdzonych, **V4 ZŁAMANE**;
 stąd dwa orzeczenia i trzy wymagania dla S4) · **S1 ✅** `31bd81b` (szkielet reguł + rejestry + stan
 bez migracji; wymusił wydzielenie `SeedMath.js` z `AcceptanceMath.js` — pin **P14 przeszedł BEZ
-EDYCJI**, 206/206) · **S2 ⏭ NASTĘPNY** (mapa wpływów — **niesie pomiar pokrycia R-2**) ·
-S3–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
+EDYCJI**, 206/206) · **audyt stacji AI ✅** (pod **R-3**, §Audyt stacji AI — premisa potwierdzona,
+zasiew MAŁY pod warunkiem prerekwizytu 3D i dwóch decyzji właścicielskich) · **S3 ✅** (katalog
+szablonów Filipa + resolver) · **S2 ⏭ NASTĘPNY** (mapa wpływów — **niesie pomiar pokrycia R-2**) ·
+S4–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
+
+⚠ **Kolejność S3 ↔ S2 ZAMIENIONA** (decyzja właściciela, 2026-08-11): katalog szablonów wszedł przed
+mapą wpływów, bo szablony były gotowe do wpisania, a S2 zaczyna się od pomiaru. Zależności to nie
+narusza — S3 jest czysty (zero wywołań produkcyjnych), a S4 konsumuje OBA.
 
 ---
 
@@ -27,10 +33,14 @@ S3–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
    przezbrajają, potem stocznia dowozi, intel widzi OBIE fazy). Fallback, gdyby sprzężenie okazało się
    za drogie w S4: zlecenie czeka z **TTL ~3 lat wyświetlanych** + wpis w `DebugLog` przy wygaśnięciu —
    **nigdy wiecznie wisząca zjawa**. W commicie napisać, który wariant poszedł i dlaczego.
-4. **Stała: `ShipTemplateData.js` musi przyjąć katalog Filipa BEZ ZMIAN W KODZIE.** Jego szablony
-   przychodzą w późniejszej sesji; format + resolver (§Template format spec) są kontraktem, nie szkicem.
-5. **Nie relitygujemy podpisanych decyzji** (osiem + R-1 + R-2). Sprzeczność z kodem → korekta
+4. ~~**Stała: `ShipTemplateData.js` musi przyjąć katalog Filipa BEZ ZMIAN W KODZIE.**~~ **SPEŁNIONE
+   w S3** — katalog v1 (trzy fregaty) wpisany, resolver + walidator pojemności stoją. Kolejny wpis
+   nadal = wiersz w mapie i nic więcej.
+5. **Nie relitygujemy podpisanych decyzji** (osiem + R-1 + R-2 + **R-3**). Sprzeczność z kodem → korekta
    w §Corrections, z pomiarem i podpisem — nigdy cicha zmiana.
+6. **S4 ma teraz PREREKWIZYT poza tym planem:** `docs/plans/fix-stacje-3d-bramka-ukladu.md` (bramka
+   `systemId` w `_addStationMesh`) musi wejść PRZED zasiewem stacji AI, inaczej każda nowa partia
+   dostaje fantom przy gwieździe gracza. Szczegóły: §Audyt stacji AI, punkt 1.
 **Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** C (ReactionDirector) · **Parent:** `WOJNA_I_POKOJ_MASTER_PLAN.md` §C + `DIPLOMACY_BACKBONE.md` §5
 **Zależy od:** D1 ✅ (relacje parowe) · D2 ✅ (Acceptance Engine, faza ZAMKNIĘTA 2026-08-10, save v100) · GALAXY_SEED ✅
 **Basis:** audyt ośmiu szwów przeprowadzony na potrzeby tego planu (§Audit) + `docs/audit/COMBAT_DIPLO_AUDIT.md`
@@ -65,6 +75,96 @@ strefa graniczna to **powłoka 5 LY** wokół terytorium AI. Język D3 do skoryg
 seedach — jaki UŁAMEK układów wpada w strefę graniczną ≥ jednego imperium przy 5 LY, **na starcie partii
 i na rozwiniętym zapisie mid-game**. Jeśli zbliża się do połowy galaktyki → zgłosić do strojenia
 **PRZED Gate 3**, z tabelą pomiarową. Pomiar należy do S2 (mapa wpływów).
+
+**R-3 — produkcja okrętów wojennych AI WYMAGA stacji orbitalnej nad planetą macierzystą imperium
+(2026-08-11).** Nowe wymaganie właścicielskie, wchodzi do zakresu **S4**. Stacja jest **ŻETONEM
+uprawnienia**, nie fabryką: okręty dalej powstają w stoczni naziemnej AI przez `startShipBuild`, a
+stacja jest warunkiem, bez którego Director nie wystawi zamówienia. To brzmienie wprost z intencji
+właściciela („stacja staje się widocznym w intelu znacznikiem potencjału militarnego, a WAR_BACKBONE
+może później sprawić, że jej zniszczenie wyłącza produkcję") — żeton daje się zniszczyć, fabryka
+wymagałaby przeniesienia całej produkcji.
+Sposób powstania stacji: **ZASIEW przy generacji imperium**, tym samym mechanizmem co istniejąca fora
+startowa (POPy + darmowe budynki + darmowe techy). **Świadomie NIE budujemy maszynerii „AI stawia
+stacje"** — audyt niżej pokazuje, ile by to kosztowało.
+Zakres audytu, wynik i trzy rzeczy, które to wymaganie wnosi do S4 — §Audyt stacji AI.
+
+---
+
+## Audyt stacji AI (read-only, 2026-08-11, pod R-3)
+
+**Metoda:** sześć równoległych przebiegów po `src/` + **adwersaryjna weryfikacja każdego twierdzenia
+nośnego** (obalaj, nie potwierdzaj) — czyli przebieg, którego zabrakło audytowi ośmiu szwów (§Audit,
+„limit budżetu ubił 8 z 9 agentów"). Twierdzenia poniżej z cytatem `plik:linia`; cztery kluczowe
+przeczytałem powtórnie sam.
+
+**Premisa Filipa POTWIERDZONA: dziś żadne imperium AI nie ma stacji i nie ma jak jej zdobyć.**
+Jedyny produkcyjny materializator (`ColonyManager._tickPendingStationOrders`) opróżnia kolejkę, do
+której pisze **wyłącznie** zakładka „stacja" gracza, bramkowana `isPlayerColony`
+(`ColonyOverlay.js:1459-1460`). `grep -rni station` po `EmpireGenerator` / `EmpireColonyBootstrap` /
+`EmpireStrategySystem` / `EmpireRegistry` / `EmpireData` / `EmpireArchetype*` zwraca wyłącznie
+budynek heksowy `research_station`. Pozostałe dwa miejsca tworzące encję to helpery debugowe.
+
+**Zapis: BEZ migracji.** `Station.ownerEmpireId` istnieje od pierwszego commitu stacji
+(`Station.js:26`, default `'player'`) i jest serializowane od v84 (`StationSystem.js:113`). v100 stoi.
+
+### Dwa produkty pod jednym zdaniem — i to one decydują o rozmiarze
+
+| wariant | rozmiar |
+|---|---|
+| **Stacja jako ŻETON** (zasiana, posiadana, bezczynna; okręty z naziemnej stoczni, ale tylko gdy imperium ma stację) | **MAŁY, OGRANICZONY — robimy** |
+| **AI faktycznie BUDUJE okręty NA stacji** | **WIĘKSZY NIŻ OGRANICZONY — nie robimy** |
+
+R-3 wybiera żeton. Wariant drugi wymaga czterech nowych maszynerii i **wyciekłby do gracza**:
+`StationSystem._resolveHomeColony` (`:486`) kieruje badania stacji do kolonii **gracza**; okręt
+zbudowany na stacji dostaje `colonyId` gracza i ląduje w **jego** flocie (`:512`, `:521`);
+`TransferStore.js:68` odmawia łącza matczynego każdej stacji nie-gracza, więc depot AI to zapieczętowana
+pusta `Map`, której nic w grze nie napełnia; bramki techu stacji czytają `window.KOSMOS.techSystem`,
+czyli drzewo **człowieka** (`:240`, `:348`).
+⚠ Te dwa wycieki są **śmiertelne, ale dziś UŚPIONE**: `createStarterModules()` daje wyłącznie habitat
++ power_atom, więc nie ma ani laboratorium, ani stoczni, przez które mogłyby przeciec. Odpalą w chwili,
+gdy zasiew doda funkcjonalny moduł. **Zasiew NIE dodaje modułów.**
+
+### Trzy rzeczy, które R-3 wnosi do S4 (żadnej nie było w planie)
+
+1. 🔴 **PREREKWIZYT: bramka układu dla meshu stacji.** `_addStationMesh` nie ma filtra `systemId`
+   (`ThreeRenderer.js:4012-4013`), więc stacja zasiana w układzie AI dostaje **prawdziwy mesh w origin
+   sceny — czyli przy gwieździe GRACZA**: niewidoczny, ale wygrywający raycast, z nazwą w kolorze
+   stacji gracza pod CTRL i jednym pobraniem ~16 MB GLB na imperium. Odpala na **nowej grze** i przy
+   każdym wczytaniu. Naprawa jest już **zatwierdzona i rozpisana co do linii**
+   (`docs/plans/fix-stacje-3d-bramka-ukladu.md`) i **w 100% NIEWYKONANA** (`StationRenderLogic.js` nie
+   istnieje, 0 odwołań do `isStationInActiveSystem`). **Musi wejść PRZED zasiewem**, inaczej regresja
+   dotyka każdej nowej partii.
+2. 🔴 **`point_defense` — bez tego łańcuch nacisku nie dowozi ANI JEDNEGO okrętu.** Techu nie ma ani
+   w `startingTechs`, ani w `researchQueue` żadnego archetypu (grep po `src/data/EmpireArchetype*.js`,
+   `EmpireData.js`, `src/systems/Empire*.js` → **0 trafień**), a `EmpireResearchSystem` nie potrafi
+   przyznać techu spoza kolejki. Wymagają go **wszystkie trzy kadłuby wojenne ORAZ każdy moduł broni
+   w grze**. Bramka techu jest per-imperium naprawdę (`ColonyManager.js:846` —
+   `colony.techSystem ?? this.techSystem`, kolonie AI mają własny), więc fallback na drzewo gracza nas
+   NIE uratuje. **Decyzja balansowa właściciela, nie usterka.**
+3. **Mechanizm bramki: predykat po stronie Directora, NIE odwrócenie zwolnienia AI.** Wariant
+   „skasuj `ColonyManager.isPlayerColony(colony) &&` w `:857`" odrzucony z trzech powodów:
+   (a) odwraca dwa **zacommitowane piny**, które dokumentują decyzję S3.4d
+   (`s34d_hull_gating_smoke.mjs:91`, `director_seams_smoke.mjs:136-137`); (b) `fleet:buildFailed` ma
+   subskrybenta bez filtra właściciela (`UIManager.js:765-766`), więc każda odmowa dla AI wyskoczyłaby
+   w powiadomieniach **gracza**; (c) to bramka **bez trasy** — nie istnieje ścieżka AI do
+   `queueStationShip`, więc zamieniłaby „AI potrzebuje stacji" w „AI nigdy nie zbuduje okrętu".
+   Zamiast tego: `empireHasOrbitalStation(empireId)` w rejestrze `DirectorGuards` (S4). Zero wspólnych
+   plików, zero odwróconych pinów, `EmpireFleetMaterializer` i spawnery testowe nietknięte.
+
+### Miejsce zasiewu (ustalone, do wykonania w S4)
+
+`EmpireColonyBootstrap.bootstrapHomeColony`, zaraz po `empireRegistry.addColony(...)` (`:191`) —
+`homePlanet`, `colony`, `empireId` są w zasięgu, `StationSystem` jest już opublikowany
+(`GameScene.js:391`), a generacja imperiów leci wyłącznie przy nowej grze (`GameScene.js:1652`).
+`ownerEmpireId` **MUSI być podane jawnie** — default to `'player'`, a wtedy odwracają się WSZYSTKIE
+filtry własności naraz (EconomyOverlay, Outliner, plakietki mapy, cele transportu, SystemPool, proxy
+depotu). Świadomie **nie** przez `ColonyManager.addPendingStationOrder`: jego bramka techu jest
+fail-closed wobec drzewa **gracza** (`:1773-1774`).
+
+**Do backlogu (NIE budujemy tutaj):** cykl życia stacji AI (nic jej nie niszczy przy śmierci imperium
+ani podboju — jedyny caller `destroyStation` to debug), stacja jako znacznik potencjału w intelu,
+„zniszczenie stacji wyłącza produkcję" (WAR_BACKBONE), rzutowanie terytorium przez stacje AI
+(`TerritoryService.js:98` świadomie je pomija).
 
 ---
 
@@ -468,8 +568,8 @@ mogą się zepsuć niezależnie i regresji nie da się inaczej przypisać.
 | **S0** ✅ | `test(director): weryfikacja szwów przed szkieletem` | NEW `src/testing/headless/probe-director-seams.mjs` (pomiar V1–V4) + keeper `src/testing/smoke/director_seams_smoke.mjs` (16 asercji, fail-first na V1a/V3b). **Wynik: 11 potwierdzonych, 1 ZŁAMANE (V4)** — §Wyniki weryfikacji. Zero kodu produkcyjnego. | — |
 | **S1** | `feat(director): szkielet reguł + rejestry` | NEW `src/data/DirectorRuleData.js` (katalog, ZERO reguł aktywnych) · `src/utils/DirectorRuleMath.js` (czysta: rzut kumulatywny, `personalityMod`, cooldown, okno eskalacji) · `src/systems/director/DirectorSystem.js` (+ rejestry `DirectorGuards`/`DirectorActions`, puste) · flaga `FEATURES.reactionDirector` · `gameState.director` w `createDefaultState` + `initDirectorSubdomain`. **Stoi samodzielnie — nic tego nie importuje** (wzór E1 z D2). | — |
 | **S2** | `feat(director): mapa wpływów (claimed + strefa graniczna w LY)` | NEW `src/systems/InfluenceMap.js` + `src/utils/InfluenceMath.js` (czysta: `systemsWithinLY`, promień z `devScore`) · wpięcie w `GameScene` po `territoryService` · `KOSMOS.debug.influenceMap()`. Data-only. | — |
-| **S3** | `feat(director): szablony statków + resolver` | NEW `src/data/ShipTemplateData.js` (placeholder `frigate_line` + `science_probe`) · `src/utils/ShipTemplateResolver.js` · **walidator pojemności** (§Template §3). Bez wywołań produkcyjnych. | — |
-| **S4** | `feat(director): produkcja okrętów AI przez startShipBuild` | Akcja `queueWarships`: `resolveTemplate` → `cm.startShipBuild(capital.planetId, hullId, modules)` · **własny stempel własności** na `vessel:created` (klucz inny niż `logi.pendingBuildRoute`, BEZ filtra `hull_small` — V3c) · **guard `empireHasFreeCrew`** (V3z — połowa kolonii AI stoi na `freePops=0`, a bramka jest twarda) · **obsługa braku komodytów** (V3y — decyzja: guard czy świadome czekanie w `pendingShipOrders`) · `director:shipQueued`. | **GATE 1** |
+| **S3** ✅ | `feat(director): szablony statków + resolver` | NEW `src/data/ShipTemplateData.js` (**katalog v1 Filipa: `frigate_laser_escort` / `frigate_missile_escort` / `frigate_system_defender`** + `science_probe`) · `src/utils/ShipTemplateResolver.js` · **walidator pojemności** (§Template §3). Bez wywołań produkcyjnych. | — |
+| **S4** | `feat(director): produkcja okrętów AI przez startShipBuild` | Akcja `queueWarships`: `resolveTemplate` → `cm.startShipBuild(capital.planetId, hullId, modules)` · **własny stempel własności** na `vessel:created` (klucz inny niż `logi.pendingBuildRoute`, BEZ filtra `hull_small` — V3c) · **guard `empireHasFreeCrew`** (V3z — połowa kolonii AI stoi na `freePops=0`, a bramka jest twarda) · **obsługa braku komodytów** (V3y — decyzja: guard czy świadome czekanie w `pendingShipOrders`) · `director:shipQueued`. **+R-3:** zasiew stacji w `EmpireColonyBootstrap` (po prerekwizycie 3D) · guard `empireHasOrbitalStation` · decyzja o `point_defense`. | **GATE 1** |
 | **S5** | `feat(director): łańcuch pierwszego kontaktu` | Reguła `first_contact` (rzut w latach **wyświetlanych**) · akcja `scienceFlyby` (spawn wzorem `EmpireFleetMaterializer` + kurs przez układ gracza + despawn na wyjściu) · beat narracyjny przez `queueMissionEvent` · i18n PL+EN · uzgodnienie z `vessel:firstSighting` (decyzja 5). | **GATE 2** |
 | **S6** | `feat(director): nacisk militarny L1-L2` | `director:borderPresence` z `InfluenceMap` · reguły L1/L2 + eskalacja w oknie · **nowy typ incydentu z zadeklarowanym kanałem w `INCIDENT_CHANNELS`** (§Audit H) · „postawa obronna stolicy" · i18n. | **GATE 3** |
 | **S7** | `docs(director): domknięcie + wynik gate'ów` | `CLAUDE.md` + `MEMORY.md` + ten plan (wyniki), `REACTION_DIRECTOR.md` jeśli orkiestrator zdecyduje, że Slice 1 ma go otworzyć. | — |
