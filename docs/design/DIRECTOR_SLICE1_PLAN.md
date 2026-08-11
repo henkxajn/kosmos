@@ -8,8 +8,14 @@ stąd dwa orzeczenia i trzy wymagania dla S4) · **S1 ✅** `31bd81b` (szkielet 
 bez migracji; wymusił wydzielenie `SeedMath.js` z `AcceptanceMath.js` — pin **P14 przeszedł BEZ
 EDYCJI**, 206/206) · **audyt stacji AI ✅** (pod **R-3**, §Audyt stacji AI — premisa potwierdzona,
 zasiew MAŁY pod warunkiem prerekwizytu 3D i dwóch decyzji właścicielskich) · **S3 ✅** (katalog
-szablonów Filipa + resolver) · **S2 ⏭ NASTĘPNY** (mapa wpływów — **niesie pomiar pokrycia R-2**) ·
-S4–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
+szablonów Filipa + resolver, 52/52) · **S2 ✅** (pomiar R-2 → **17,7 %**, warunek spełniony dla
+dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **S4 ⏭ NASTĘPNY — to jest GATE 1** ·
+S5–S7 nierozpoczęte · **Gate 1 / Gate 2 / Gate 3 — wszystkie przed nami.**
+
+🔴 **S4 NIE RUSZA BEZ TRZECH PODPISÓW:** (1) zwężenie warunku R-2 (mid-game niemierzalny —
+§Rulings R-2); (2) decyzje 9 i 10 (odczyt A, metryka 3D — zaimplementowane wg rekomendacji,
+flip = jedna stała); (3) **R-3**: decyzja o `point_defense` dla AI (bez niej łańcuch nacisku nie
+dowozi ani jednego okrętu) + prerekwizyt `docs/plans/fix-stacje-3d-bramka-ukladu.md`.
 
 ⚠ **Kolejność S3 ↔ S2 ZAMIENIONA** (decyzja właściciela, 2026-08-11): katalog szablonów wszedł przed
 mapą wpływów, bo szablony były gotowe do wpisania, a S2 zaczyna się od pomiaru. Zależności to nie
