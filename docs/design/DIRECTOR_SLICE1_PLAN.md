@@ -76,6 +76,39 @@ seedach — jaki UŁAMEK układów wpada w strefę graniczną ≥ jednego imperi
 i na rozwiniętym zapisie mid-game**. Jeśli zbliża się do połowy galaktyki → zgłosić do strojenia
 **PRZED Gate 3**, z tabelą pomiarową. Pomiar należy do S2 (mapa wpływów).
 
+**⚠ WYNIK POMIARU R-2 (2026-08-11) — warunek SPEŁNIONY dla dzisiejszej gry, ale połowa warunku
+okazała się NIEMIERZALNA.** Instrument: `src/testing/headless/probe-border-zone-coverage.mjs`
+(4 seedy × 72 układy, `TerritoryService` + prawdziwe promienie `TERRITORY.R_*`).
+
+| co | wynik |
+|---|---|
+| **ZMIERZONE dziś** (5 LY, odczyt A, 3D, średnia 4 seedów) | **17,7 %** galaktyki w strefie granicznej (rozrzut 11,1–30,6 %) |
+| próg STOP z orzeczenia („zbliża się do połowy") | **nieosiągnięty** — margines 17,7 % wobec 50 % |
+| krzywa strojenia | 2 LY → 8,3 % · 4 → 14,9 % · **5 → 17,7 %** · 8 → 29,9 % · 10 → 40,3 % |
+| rzut 2D (jak `TerritoryField`) vs 3D (jak `warpDist3D`) | 2D **zawyża o 1,4–5,6 pkt proc.** |
+| **PROJEKCJA** przy ekspansji AI (k układów/imperium) | k=2 → 25,0 % · k=3 → 31,9 % · k=4 → 35,8 % · k=6 → 46,2 % · **k=8 → 58,7 %** |
+
+🔴 **Połowa warunku była niemierzalna i to jest osobne znalezisko.** Orzeczenie żądało pomiaru
+„na starcie partii **i na rozwiniętym mid-game**". Mid-game nie istnieje jako drugi punkt pomiarowy,
+z dwóch niezależnych, zmierzonych powodów: **(a)** fora startowa AI (24 POPy + 18 budynków) daje
+`devScore ≈ 42` przy `DEV_FULL = 20`, więc promień roszczony jest **nasycony na `R_MAX` od sekundy
+zero** — rozwój nie ma go już czym poszerzyć; **(b)** w 400 latach cyw. × 4 seedy AI **nie zajęło ani
+jednego nowego układu** (zero `bootstrapColony`/`bootstrapOutpost`; zamawia droidy „pod outpost"
+i staje). Pokrycie w 400. roku jest **co do bitu** równe pokryciu w roku zerowym.
+To ta sama martwa ekspansja, którą zmierzył **S0/V4** i BALANS Phase 2 — należy do **WAR_BACKBONE/
+BALANS**, nie do Directora.
+
+**Zwężenie warunku DO PODPISU** (wzór D2/E6: podpisaną własność zwęża się do czegoś, co wciąż
+dowodzi tezy, i podpisuje się zwężenie): *„zmierzone na ekonomii AI, którą się dziś uruchamia,
++ projekcja obwiedni po `k`"* zamiast *„start i mid-game"*. Teza oryginalna — „5 LY nie zabiera
+połowy galaktyki" — zostaje dowiedziona; **z zastrzeżeniem, że projekcja przebija 50 % przy k = 8
+i jest przy 46,2 % już przy k = 6**, więc odblokowanie ekspansji AI w WAR_BACKBONE **wymusza
+ponowny pomiar**. To nie jest stała „na zawsze", tylko stała na dzisiejsze AI.
+
+**Dwie decyzje geometryczne, których orzeczenie nie rozstrzygało** (ujawnione pomiarem, patrz
+§Decisions taken 9–10): odczyt **A** (`outer = r_roszczony + 5`) vs **B** (`outer = max(r, 5)`)
+oraz metryka **3D** vs rzut **2D**.
+
 **R-3 — produkcja okrętów wojennych AI WYMAGA stacji orbitalnej nad planetą macierzystą imperium
 (2026-08-11).** Nowe wymaganie właścicielskie, wchodzi do zakresu **S4**. Stacja jest **ŻETONEM
 uprawnienia**, nie fabryką: okręty dalej powstają w stoczni naziemnej AI przez `startShipBuild`, a
@@ -556,6 +589,23 @@ resolver, testy i wywołania zostają bez zmian.
    Precedens: `IntelSystem.initVesselSubdomain`, `POIRegistry.initPOISubdomain`.
 8. **Zapisy do `gameState` są wsadowe, tylko przy zmianie** — nigdy per tick per imperium (ring `DebugLog`
    ma 10 000 wpisów i to jest ścieżka audytu AI, którą Director ma wzmacniać, a nie wypłukiwać).
+
+### Dwie decyzje dołożone przez pomiar R-2 (S2) — DO PODPISU
+
+9. **Kształt strefy: ODCZYT A — `outer = r_roszczony + BORDER_LY`.** *Rekomendacja: TAK.*
+   Wariant B (`outer = max(r_roszczony, BORDER_LY)`) ma własność, która przeczy sensowi mechaniki:
+   przy `R_MAX_LY 4.0` i stałej 5 LY powłoka rozwiniętego imperium ma **1 LY grubości**, czyli
+   **im potężniejsze imperium, tym CIEŃSZA jego strefa nacisku**. Pomiar pokazuje też, jak wąski
+   jest wtedy efekt: odczyt B daje dziś 2,8–12,5 % pokrycia wobec 11,1–30,6 % dla A — nacisk
+   militarny praktycznie przestałby się wyzwalać. **Konsekwencja do przyjęcia:** dla dzisiejszego
+   AI (devScore nasycony) A znaczy po prostu „9 LY od stolicy".
+10. **Metryka: 3D (`x/y/z`), nie rzut 2D.** *Rekomendacja: TAK.* Mapa wpływów jest **danymi dla
+    reguł**, a nie rysunkiem, więc powinna mierzyć to, co realnie rządzi osiągalnością — a to jest
+    `warpDist3D` (`WarpRoutePlanner.js:32-37`), 3D. `TerritoryField` liczy 2D (`:81`), ale to
+    warstwa RENDERU i jej uproszczenie nie jest kontraktem. Rzut 2D **zawyża pokrycie o 1,4–5,6 pkt
+    proc.** (zmierzone), bo rzutowanie zawsze skraca odległości. **Świadoma niespójność do
+    przyjęcia:** obraz na Stratcomie (2D) będzie odrobinę hojniejszy niż strefa, którą liczą reguły
+    — to jest tańsze niż zmiana renderu, którego ten slice ma nie dotykać (decyzja 3).
 
 ---
 
