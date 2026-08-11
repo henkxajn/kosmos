@@ -27,6 +27,7 @@ import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
   from './VesselModelResolver.js';
+import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -1060,14 +1061,11 @@ export class ThreeRenderer {
   // przełączeniu na inny układ (chip) i powrocie. Mirror _restoreActiveSystemVesselSprites:
   // po przebudowie sceny re-dodaj stacje aktywnego układu. Idempotentne (_addStationMesh
   // guard na _stations.has), więc bezpieczne przy wielokrotnym wywołaniu / spójne z reszcie.
+  // Filtr układu siedzi w _addStationMesh (JEDNO źródło reguły) — tu tylko iterujemy rejestr.
   _restoreActiveSystemStations() {
     const ss = window.KOSMOS?.stationSystem;
     if (!ss?.getAllStations) return;
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    for (const st of ss.getAllStations()) {
-      if ((st.systemId ?? 'sys_home') !== sysId) continue;
-      this._addStationMesh(st);
-    }
+    for (const st of ss.getAllStations()) this._addStationMesh(st);
   }
 
   // Usuń wszystkie meshe z bieżącej sceny (planety, księżyce, gwiazda, orbity, itp.)
@@ -4008,9 +4006,15 @@ export class ThreeRenderer {
    * się NATYCHMIAST, a model GLB (S3.3b-S4a) doładowuje się async i podmienia placeholder — 16 MB
    * ładuje się kilka s, bez placeholdera stacja „znika". NIE w _clickable (selekcja = S3.3b-S4).
    * Pozycja co klatkę w _tickOrbitingStations (anchored, bez rotacji).
+   *
+   * BRAMKA UKŁADU: mesh powstaje TYLKO dla stacji z aktywnego układu (mirror vessel:launched).
+   * Siedzi TU, a nie przy subskrypcji, bo obie ścieżki (station:created — w tym batch z restore,
+   * gdzie gra zawsze wraca do sys_home — oraz _restoreActiveSystemStations po switchSystem)
+   * są nią wtedy objęte automatycznie, a przyszły trzeci caller nie może jej obejść.
    */
   _addStationMesh(station) {
     if (!station?.id || this._stations.has(station.id)) return;
+    if (!isStationInActiveSystem(station, window.KOSMOS?.activeSystemId)) return;
     const col = station.visual?.color ?? 0x44aaff;
 
     // 1) Proceduralny placeholder NATYCHMIAST — pokrywa ~kilkusekundowe ładowanie GLB
@@ -4138,8 +4142,11 @@ export class ThreeRenderer {
     if (!orbital || this._stations.size === 0) return;
     const tSec = performance.now() * 0.001;
     for (const [id, entry] of this._stations) {
+      if (!entry.mesh) continue;
       const orb = orbital.getOrbit(id);
-      if (!orb) continue;
+      // INWARIANT: brak orbity / brak ciała kotwiczącego w scenie ⇒ nie ma jak spozycjonować meshu,
+      // więc go NIE rysujemy (dawniej zostawał w origin = fałszywa ikonka przy gwieździe).
+      if (!orb) { entry.mesh.visible = false; continue; }
       const pEntry = this._planets.get(orb.planetId);
       const planetPos = pEntry
         ? { x: pEntry.group.position.x, z: pEntry.group.position.z }
@@ -4148,10 +4155,11 @@ export class ThreeRenderer {
           : this._planetoids.get(orb.planetId)
             ? { x: this._planetoids.get(orb.planetId).mesh.position.x, z: this._planetoids.get(orb.planetId).mesh.position.z }
             : null;
-      if (!planetPos) continue;
+      if (!planetPos) { entry.mesh.visible = false; continue; }
       const pos = orbital.getPosition(id, planetPos, tSec);
-      if (!pos) continue;
+      if (!pos) { entry.mesh.visible = false; continue; }
       entry.mesh.position.set(pos.x, pos.y, pos.z);
+      entry.mesh.visible = true;
       // Anchored — brak rotacji wokół planety i brak self-spin (stacja statyczna).
     }
   }
