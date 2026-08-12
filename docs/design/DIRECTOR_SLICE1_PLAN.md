@@ -15,8 +15,22 @@ dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** 
 54 + 25 + 30 + 32) — warunek ZDJĘTY: wyciek zdarzeń kolonii AI naprawiony `11abd0c` (pełny audyt,
 78 subskrybentów, tabela klasyfikacji niżej) · **S5 ✅ + GATE 2 PASSED** (`2bd9dc2` łańcuch
 pierwszego kontaktu + egzekwowanie jednostki rzutu; `c3aae2c` mesh po wczytaniu + lewary
-zestrzelenia; keeper 50/50) · **S6 ⏭ NASTĘPNY = GATE 3** (nacisk militarny L1–L2, FINAŁ slice'u) ·
-S7 nierozpoczęty.
+zestrzelenia; keeper 50/50) · **S6 ✅ + GATE 3 CONDITIONAL PASS 2026-08-12** (nacisk militarny L1–L2, FINAŁ slice'u; checklist
+`DIRECTOR_S6_GATE3_CHECKLIST.md`, keeper `director_pressure_smoke` 48/48) · S7 nierozpoczęty.
+Trzy punkty nienegocjowalne ZIELONE na żywo na obu imperiach (G3.4 jeden wiersz · G3.10 napięcie
+0/0 · G3.12 dwa razy naturalnie: `no_orbital_station` i `no_crew`), ścieżka sukcesu udowodniona
+(3× `hull_frigate` = ładunek L2). **Warunek: defekt semantyki eskalacji — NAPRAWIONY, czeka na
+re-check Filipa** (§RE-CHECK w checkliście).
+🔴 **Znalezione przy S6, wiąże przyszłe reguły:** `DirectorSystem` ocenia KAŻDĄ regułę katalogu
+w KAŻDYM ticku — także tę, która istnieje głównie jako cel `escalatesTo`. Dlatego
+`military_pressure_l2` ma WŁASNY, cięższy próg (≥3 statki); bez niego odpalałaby się samodzielnie
+na warunkach L1. **GATE 3 pokazał, że sam próg NIE WYSTARCZY:** dwie niezależne reguły rzucają
+NIEZALEŻNIE, więc szczebel wyższy potrafił trafić PIERWSZY (zmierzone: seedy `emp_D`/`emp_G`
+otwierały na L2) i obie potrafiły paść w tym samym roku. Reguła-szczebel MUSI mieć guard
+wymagający poprzednika (`pressureEscalationReady`) — inaczej „drabina" nie jest drabiną.
+**Wzorzec dla każdej przyszłej pary L(n)→L(n+1).** Druga rzecz: rozłączność z `military_presence` jest GEOGRAFICZNA (powłoka vs
+przestrzeń roszczona, zbiory rozłączne w `InfluenceMap`), a nie umowna — to jest mechanizm, który
+gwarantuje JEDEN wiersz w panelu dyplomacji.
 
 ✅ **GATE 2 — PASSED 2026-08-12** (przebieg 1 + spot-check domykający). Pięć punktów
 nienegocjowalnych zielone: **G2.10** despawn na wyjściu z układu · **G2.11** JEDEN popup
@@ -1044,7 +1058,7 @@ mogą się zepsuć niezależnie i regresji nie da się inaczej przypisać.
 | **S3** ✅ | `feat(director): szablony statków + resolver` | NEW `src/data/ShipTemplateData.js` (**katalog v1 Filipa: `frigate_laser_escort` / `frigate_missile_escort` / `frigate_system_defender`** + `science_probe`) · `src/utils/ShipTemplateResolver.js` · **walidator pojemności** (§Template §3). Bez wywołań produkcyjnych. | — |
 | **S4** | `feat(director): produkcja okrętów AI przez startShipBuild` | Akcja `queueWarships`: `resolveTemplate` → `cm.startShipBuild(capital.planetId, hullId, modules)` · **własny stempel własności** na `vessel:created` (klucz inny niż `logi.pendingBuildRoute`, BEZ filtra `hull_small` — V3c) · **guard `empireHasFreeCrew`** (V3z — połowa kolonii AI stoi na `freePops=0`, a bramka jest twarda) · **obsługa braku komodytów** (V3y — decyzja: guard czy świadome czekanie w `pendingShipOrders`) · `director:shipQueued`. **+R-3:** zasiew stacji w `EmpireColonyBootstrap` (po prerekwizycie 3D) · guard `empireHasOrbitalStation` · decyzja o `point_defense`. | **GATE 1** |
 | **S5 ✅** | `feat(director): łańcuch pierwszego kontaktu` | Reguła `first_contact` (rzut w latach **wyświetlanych**) · akcja `scienceFlyby` (spawn wzorem `EmpireFleetMaterializer` + kurs przez układ gracza + despawn na wyjściu) · beat narracyjny przez `queueMissionEvent` · i18n PL+EN · uzgodnienie z `vessel:firstSighting` (decyzja 5). | **GATE 2** |
-| **S6** | `feat(director): nacisk militarny L1-L2` | `director:borderPresence` z `InfluenceMap` · reguły L1/L2 + eskalacja w oknie · **nowy typ incydentu z zadeklarowanym kanałem w `INCIDENT_CHANNELS`** (§Audit H) · „postawa obronna stolicy" · i18n. | **GATE 3** |
+| **S6 ✅** | `feat(director): nacisk militarny L1-L2` | `director:borderPresence` z `InfluenceMap` · reguły L1/L2 + eskalacja w oknie · **nowy typ incydentu z zadeklarowanym kanałem w `INCIDENT_CHANNELS`** (§Audit H) · „postawa obronna stolicy" · i18n. | **GATE 3** |
 | **S7** | `docs(director): domknięcie + wynik gate'ów` | `CLAUDE.md` + `MEMORY.md` + ten plan (wyniki), `REACTION_DIRECTOR.md` jeśli orkiestrator zdecyduje, że Slice 1 ma go otworzyć. | — |
 
 **Bramki per commit:** `node src/testing/smoke/run-all.mjs` 0 FAIL · `node tools/check-i18n.mjs` PASS ·

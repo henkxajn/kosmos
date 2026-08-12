@@ -79,6 +79,17 @@ export const OPINION_MODIFIERS = {
     defaultValue: -25, decayPerYear: 1, combine: COMBINE.ACCUMULATE, persistent: false,
   },
 
+  // Nacisk militarny w POWŁOCE GRANICZNEJ (Director S6, decyzja 7).
+  //
+  // ⚠ ŚWIADOMIE OSOBNY TYP, nie reużycie `military_presence`. Tamten nalicza się przy wejściu
+  // do przestrzeni ROSZCZONEJ; ten dotyczy wyłącznie powłoki granicznej. Zbiory są rozłączne
+  // (`InfluenceMap`), więc jeden czyn daje JEDEN wiersz w rozbiciu opinii — to jest punkt
+  // nienegocjowalny GATE 3. Kanał: `opinion` (NIGDY `tension` — L1-L2 grożą, nie wypowiadają).
+  border_pressure: {
+    id: 'border_pressure', labelKey: 'diplo.mod.borderPressure',
+    defaultValue: -8, decayPerYear: 2, combine: COMBINE.ACCUMULATE, persistent: false,
+  },
+
   // Statek badawczy wszedł do ich układu.
   research_intrusion: {
     id: 'research_intrusion', labelKey: 'diplo.mod.researchIntrusion',

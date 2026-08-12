@@ -3359,6 +3359,7 @@ export default {
   'diplo.mod.militaryPresence':  'Obecność wojskowa',
   'diplo.mod.researchIntrusion': 'Statki badawcze w ich układach',
   'diplo.mod.firstContactKill': 'Zestrzelenie sondy pierwszego kontaktu',
+  'diplo.mod.borderPressure': 'Okręty wojenne przy naszej granicy',
   'diplo.mod.trespassing':       'Zaleganie w ich przestrzeni',
   'diplo.mod.atWar':             'Stan wojny',
   'diplo.mod.recentWar':         'Świeża pamięć wojny',

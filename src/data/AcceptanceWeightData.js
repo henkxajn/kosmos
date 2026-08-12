@@ -370,6 +370,8 @@ export const COUNTER_HINT_KR_STEP = 50;
 // To nie jest podwójne liczenie: CB wybiera CENĘ pokoju (peaceCost), nie dokłada punktów.
 export const INCIDENT_CHANNELS = {
   military_presence:     'opinion',
+  border_pressure:       'opinion',   // Director S6 — nacisk L1-L2 (decyzja 7: NIGDY 'tension')
+  first_contact_kill:    'opinion',   // Director S5 — zestrzelenie sondy pierwszego kontaktu
   research_intrusion:    'opinion',
   trespassing:           'opinion',
   territorial_violation: 'tension',

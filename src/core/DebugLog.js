@@ -52,6 +52,7 @@ const TRACKED_EVENTS = [
   'director:flybyEnded',
   'director:firstContactBeat',
   'director:firstContactKill',
+  'director:pressureIncident',   // S6 — nacisk L1-L2 (poziom, liczba statków, odmowy produkcji)
 ];
 
 class DebugLog {

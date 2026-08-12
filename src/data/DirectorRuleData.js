@@ -6,11 +6,15 @@
 // Wzór pliku: `OpinionModifierData.js` (płaska mapa `id → obiekt`, `id` równy kluczowi,
 // pilnowane smoke'iem).
 //
-// ⚠ S1 CELOWO NIE DODAJE ŻADNEJ REGUŁY. Katalog jest pusty, a poniżej stoi KONTRAKT
-// (kształt + przykład), przez który muszą przejść wpisy S5 (pierwszy kontakt) i S6
-// (nacisk militarny). Kształt waliduje `validateRule` — czysto, więc test łapie wadliwy
-// wpis zanim ten dojdzie do silnika. To jest ta sama dyscyplina, co „E1 stoi samodzielnie"
-// w D2: najpierw kontrakt i testy, potem konsumenci.
+// ⚠ HISTORIA KATALOGU: S1 celowo zostawił go PUSTYM (najpierw kontrakt i testy, potem
+// konsumenci — ta sama dyscyplina co „E1 stoi samodzielnie" w D2). Wpisy dołożyły S5
+// (`first_contact`) i S6 (`military_pressure_l1/l2`). Kształt każdego waliduje `validateRule`,
+// więc wadliwy wpis pada w teście, zanim dojdzie do silnika.
+//
+// ⚠ KAŻDA reguła katalogu jest oceniana w KAŻDYM ticku dla KAŻDEGO imperium — także ta, która
+// istnieje głównie jako cel eskalacji. Dlatego `military_pressure_l2` ma WŁASNY, cięższy próg
+// wyzwalacza (≥3 statki), a nie tylko wejście przez `escalatesTo`: bez tego odpalałaby się
+// samodzielnie na tych samych warunkach co L1.
 //
 // ⚠ JEDNOSTKA CZASU: każde pole `*Years`, `delay` i `roll.unit` mówi o latach
 // WYŚWIETLANYCH (zegar gracza). `roll.unit` musi być wpisane DOSŁOWNIE — walidator tego
@@ -82,6 +86,57 @@ export const DIRECTOR_RULES = {
     // Imperia „naukowe" wysyłają sondę chętniej. JEDNA oś — Slice 1 nie robi tabel krzyżowych.
     personalityMod: { axis: 'science', at0: 0.5, at1: 1.5 },
     cooldown: { once: true },
+  },
+
+  /**
+   * NACISK MILITARNY L1 — uzbrojony statek gracza stoi w POWŁOCE GRANICZNEJ imperium.
+   *
+   * ⚠ Powłoka graniczna, a NIE przestrzeń roszczona. Wejście w przestrzeń roszczoną ma już
+   * własny, automatycznie naliczany modyfikator (`military_presence` w `DiplomacySystem`),
+   * więc reagowanie tu i tam podwoiłoby karę za jeden czyn (decyzja 7). Zbiory są rozłączne
+   * z konstrukcji (`InfluenceMap.classifyGalaxy`) — „wszedł mi na podwórko" i „stoi tuż za
+   * płotem" to w tej mechanice różne zdarzenia.
+   *
+   * Odpowiedź: incydent na kanale OPINII + 2 fregaty obrony układu. Napięcia NIE rusza —
+   * L1–L2 mają grozić, nie wypowiadać wojnę (drabina 40/60/80 należy do L3 w Slice 2).
+   */
+  military_pressure_l1: {
+    id:       'military_pressure_l1',
+    trigger:  { kind: 'poll', probe: 'armedPlayerVesselsInBorderZone', gte: 1 },
+    guard:    ['empireNotAtWarWithPlayer'],
+    roll:     { startPct: 40, stepPct: 30, capPct: 100, unit: 'displayedYear' },
+    delay:    0,
+    response: { action: 'pressureResponse', params: { level: 1, count: 2 } },
+    // Agresywne imperia reagują szybciej; ostrożne dają graczowi więcej czasu.
+    personalityMod: { axis: 'aggression', at0: 0.6, at1: 1.4 },
+    cooldown: { years: 5.0 },
+    escalatesTo: 'military_pressure_l2',
+    escalationWindowYears: 10.0,
+  },
+
+  /**
+   * NACISK MILITARNY L2 — „możemy przyjść do was".
+   *
+   * Dwie drogi wejścia, obie zamierzone: (a) ESKALACJA — powtórka nacisku w oknie 10 lat od L1
+   * przełącza odpowiedź na ten szczebel; (b) SAMODZIELNIE, gdy nacisk jest wyraźnie cięższy
+   * (≥ 3 uzbrojone statki). Bez (b) reguła w katalogu byłaby oceniana co tik i nie miałaby
+   * własnego warunku — a `DirectorSystem` ocenia KAŻDĄ regułę katalogu, nie tylko te wskazane
+   * przez eskalację.
+   *
+   * Dokłada JEDEN okręt zdolny do skoku (dobór z osobowości) do fregat obrony układu.
+   */
+  military_pressure_l2: {
+    id:       'military_pressure_l2',
+    trigger:  { kind: 'poll', probe: 'armedPlayerVesselsInBorderZone', gte: 3 },
+    // 🔴 `pressureEscalationReady` dołożony po GATE 3: L1 i L2 rzucają NIEZALEŻNIE, więc bez
+    // tej bramki pierwszy incydent imperium potrafił być L2 (zmierzone: seedy `emp_D`, `emp_G`),
+    // a obie reguły potrafiły paść w tym samym roku. Inwariant: pierwszy incydent = ZAWSZE L1.
+    guard:    ['empireNotAtWarWithPlayer', 'pressureEscalationReady'],
+    roll:     { startPct: 50, stepPct: 30, capPct: 100, unit: 'displayedYear' },
+    delay:    0,
+    response: { action: 'pressureResponse', params: { level: 2, count: 2 } },
+    personalityMod: { axis: 'aggression', at0: 0.6, at1: 1.4 },
+    cooldown: { years: 5.0 },
   },
 };
 

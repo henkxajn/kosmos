@@ -104,6 +104,7 @@ import { TerritoryField }     from '../systems/TerritoryField.js';
 import { InfluenceMap }       from '../systems/InfluenceMap.js';
 import { DirectorProduction, registerProductionGuards } from '../systems/director/DirectorProduction.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/director/DirectorFirstContact.js';
+import { DirectorPressure, registerPressureBehaviors } from '../systems/director/DirectorPressure.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
@@ -342,6 +343,10 @@ export class GameScene {
     // zwaliduje katalog, bo nieznana nazwa RZUCA (audyt R12, i to jest zamierzone).
     this.directorFirstContact = new DirectorFirstContact();
     registerFirstContactBehaviors(this.directorFirstContact, { allowOverride: true });
+    // Director S6 — nacisk militarny L1-L2 (finał Slice'u 1). Rejestracja PRZED
+    // konstrukcją silnika, bo katalog waliduje nazwy i rzuca na nieznanej (audyt R12).
+    this.directorPressure     = new DirectorPressure();
+    registerPressureBehaviors(this.directorPressure, { allowOverride: true });
     this.directorSystem       = new DirectorSystem();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
@@ -417,6 +422,7 @@ export class GameScene {
     window.KOSMOS.influenceMap       = this.influenceMap;
     window.KOSMOS.directorProduction = this.directorProduction;
     window.KOSMOS.directorFirstContact = this.directorFirstContact;
+    window.KOSMOS.directorPressure   = this.directorPressure;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
@@ -631,10 +637,23 @@ export class GameScene {
         console.log(`[influenceMap] układów w galaktyce: ${snap.totalSystems} · `
                   + `powłoka graniczna: ${snap.borderLY} LY (odczyt A: r_roszczony + ${snap.borderLY})`);
         console.table(snap.owners);
-        if (ownerId) {
-          console.log(`  ${ownerId} — roszczone:`, im.getClaimedSystems(ownerId));
-          console.log(`  ${ownerId} — graniczne:`, im.getBorderSystems(ownerId));
+
+        // ⚠ Same LICZBY nie wystarczają — GATE 3 utknął na tym dwa razy. Gate potrzebuje
+        // KONKRETNYCH układów (żeby wysłać tam okręt), a gracz nie zna identyfikatorów
+        // `sys_031`, tylko nazwy z mapy. Wypisujemy więc jedno i drugie, dla KAŻDEGO
+        // właściciela (nie tylko po podaniu `ownerId`).
+        const gal  = window.KOSMOS?.galaxyData?.systems ?? [];
+        const name = (id) => {
+          const sys = gal.find((x) => x.id === id);
+          return sys?.name ? `${sys.name} (${id})` : id;
+        };
+        for (const ownerId2 of im.listOwners()) {
+          if (ownerId && ownerId2 !== ownerId) continue;
+          console.log(`  ${ownerId2} — ROSZCZONE:`, im.getClaimedSystems(ownerId2).map(name));
+          console.log(`  ${ownerId2} — GRANICZNE:`, im.getBorderSystems(ownerId2).map(name));
         }
+        console.log('  ⓘ nacisk (S6) wyzwalają WYŁĄCZNIE układy GRANICZNE — w roszczonych '
+                  + 'działa osobna mechanika (military_presence).');
         return snap;
       },
       // KOSMOS.debug.colonies() — tabela WSZYSTKICH skolonizowanych ciał (gracz + AI):
@@ -1905,6 +1924,7 @@ export class GameScene {
       // sprawia, że przyszłe pod-klucze NIE będą wymagać bumpu wersji save'a.
       DirectorSystem.initSubdomain();
       DirectorFirstContact.initSubdomain();   // director.flybys — kurs przelotu przeżywa zapis
+      DirectorPressure.initSubdomain();       // director.posture — postawa obronna imperium
       // M2b Commit 7: po restore POI sprites — gameState.restore nie emituje
       // poi:created dla zsynchronizowanych POI, więc ThreeRenderer trzeba
       // zsiać explicit. Idempotent: skanuje gameState.pois i tworzy sprites.

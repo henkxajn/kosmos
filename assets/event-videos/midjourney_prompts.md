@@ -232,11 +232,28 @@ Prompty do WSZYSTKICH juz sa w tym pliku — brakuje wylacznie renderow.
 | 3 | `new_alloy_discovered.mp4` | sekcja 13 |
 | 4 | `xenobiology_find.mp4` | sekcja 14 |
 | 5 | `political_tension_resolved.mp4` | sekcja 15 |
-| 6 | `scout_report.mp4` | sekcja 16 |
+| 6 | `scout_report.mp4` ⚠ zgloszony 404 z gry | sekcja 16 |
 | 7 | `shipyard_efficiency.mp4` | sekcja 17 |
 | 8 | `archival_data_recovered.mp4` | sekcja 18 |
 | 9 | `volunteer_expedition.mp4` | sekcja 19 |
-| 10 | `veteran_engineer_retires.mp4` | jest w tym pliku |
+| 10 | `veteran_engineer_retires.mp4` ⚠ zgloszony 404 z gry | jest w tym pliku |
 
 **Priorytet:** `first_contact.mp4` (flagowy beat) → `population_milestone` + `cultural_festival`
-(zgloszone z gry) → reszta w dowolnej kolejnosci.
++ `scout_report` + `veteran_engineer_retires` (zgloszone z gry jako 404) → reszta w dowolnej kolejnosci.
+
+---
+
+## 🧱 INNA KLASA ASSETU — tekstura planety (NIE video)
+
+`rocky_02_biome.png` — zgloszony jako 404 w przebiegu GATE 3. To **tekstura planety**, nie video
+zdarzenia, wiec NIE idzie sciezka Midjourney → Runway z tego pliku. Tekstury planet powstaja
+**generatorem CLI** (`generate-planets.js`), nie recznie:
+
+```
+node generate-planets.js --type rocky --count 3 --resolution 1024 --quality high --output ./assets/planet-textures --name rocky
+```
+
+⚠ Sprawdzic najpierw, czy brak dotyczy `assets/planet-textures/` (wtedy regeneracja jak wyzej),
+czy jakiegos innego katalogu biomow — nazwa `_biome` nie pasuje do konwencji generatora
+(`{typ}_{wariant}_{mapa}.png`), wiec moze to byc odwolanie do pliku, ktorego nigdy nie bylo.
+**Do zdiagnozowania przy okazji, nie w tej sesji.**

@@ -26,6 +26,7 @@ import {
   DirectorProbes, DirectorGuards, DirectorActions, _resetDirectorRegistries,
 } from '../../systems/director/DirectorRegistry.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
+import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
 import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
 
 let pass = 0, fail = 0;
@@ -223,6 +224,7 @@ console.log('T8 — DirectorSystem: kill-switch, walidacja przy starcie, katalog
   assert(throws(() => new DirectorSystem()),
     'katalog produkcyjny BEZ zarejestrowanych zachowań → rzuca (kolejność: rejestracja przed silnikiem)');
   registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
+  registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
   assert(!throws(() => new DirectorSystem()),
     '…a PO rejestracji katalog produkcyjny konstruuje się normalnie');
 

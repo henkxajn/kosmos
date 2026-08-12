@@ -3358,6 +3358,7 @@ export default {
   'diplo.mod.militaryPresence':  'Military presence',
   'diplo.mod.researchIntrusion': 'Science ships in their systems',
   'diplo.mod.firstContactKill': 'Shot down a first-contact probe',
+  'diplo.mod.borderPressure': 'Warships on our border',
   'diplo.mod.trespassing':       'Loitering in their space',
   'diplo.mod.atWar':             'State of war',
   'diplo.mod.recentWar':         'Fresh memory of war',

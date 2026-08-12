@@ -18,11 +18,15 @@ import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
 import { DirectorProbes, DirectorGuards, DirectorActions } from '../../systems/director/DirectorRegistry.js';
 import { OPINION_MODIFIERS } from '../../data/OpinionModifierData.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
+import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
 
 // ⚠ Rejestracja MUSI poprzedzać konstrukcję `DirectorSystem` — walidacja katalogu rozwiązuje
 // nazwy i RZUCA na nieznanej (audyt R12). Ta sama kolejność obowiązuje w `GameScene`; test
 // złapał ją pierwszy, bo pierwotnie miał ją odwrotnie.
 registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
+// Katalog niesie TAKZE reguly S6 (nacisk L1/L2) — silnik waliduje CALY katalog, wiec ich nazwy
+// tez musza byc w rejestrach, inaczej konstrukcja `DirectorSystem` rzuca (audyt R12).
+registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
 
 let pass = 0, fail = 0;
 const A = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };

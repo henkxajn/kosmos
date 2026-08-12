@@ -233,7 +233,17 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
   `499ff7b` station-token seed + AI combat tech · `9bebe0d` `queueWarships` · `0ff5b50`
   ownership fix · `1ee9a99` crew lever · `831a3e7` Journal isolation) ·
   **S5 ✅ + GATE 2 PASSED** (`2bd9dc2` first-contact chain · `c3aae2c` mesh-after-load + kill levers) ·
-  **S6 next = GATE 3** (military pressure L1-L2, the slice finale) · S7 pending.
+  **S6 ✅ + GATE 3 CONDITIONAL PASS 2026-08-12** (military pressure L1-L2, the slice finale) —
+  three non-negotiables green live on both empires, success path proven (3× `hull_frigate` = the
+  exact L2 loadout); the one condition was an **escalation-semantics defect, now fixed and awaiting
+  Filip's re-check**. S7 pending.
+  ⚠ **A ladder rung needs a guard, not just a higher threshold.** L1 and L2 are independent rules
+  that roll independently, and `DirectorSystem` evaluates every catalog rule every tick — so under
+  heavy pressure L2 was eligible from the first tick and could win its roll *before* L1 ever fired
+  (measured: seeds `emp_D`/`emp_G` opened at L2, and both rules could fire in the same year).
+  Neither working hypothesis held: the state key is already per-(rule, empire) and the escalation
+  window correctly rejects a null `lastFiredYear`. Every future L(n)→L(n+1) pair needs a
+  predecessor guard.
   ✅ **S4's condition is LIFTED** — the third layer of the Journal leak (AI **colony** events:
   famine, unrest, population) is fixed in `11abd0c`. The audit that closed it **overturned the
   sizing**: 78 Journal-writing subscribers, not 44; three of the six named suspects were not
