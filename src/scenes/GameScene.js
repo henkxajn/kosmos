@@ -563,6 +563,40 @@ export class GameScene {
         console.log(`[firstContact] ${empireId} → sonda`, id ?? '— ODRZUCONA (patrz director:flybyRejected)');
         return id;
       },
+      // KOSMOS.debug.teleportVessel(vesselId, x, y) — przenosi DOWOLNY statek w px sceny.
+      //   Lewar do gate'u G2.16/G2.17: statki gracza są wolniejsze od sondy, więc bez tego
+      //   zestrzelenia przelotu NIE DA SIĘ przetestować na żywo.
+      //   ⚠ Dla sondy przelotu przesuwa TAKŻE kurs — inaczej `_tickFlybys` cofnąłby teleport
+      //   przy najbliższym tiku (pozycja jest liczona z kursu, nie trzymana na statku).
+      //   ⚠ Zdejmuje dokowanie (dockedAt=null, state='orbiting'), inaczej `_tickOrbitingVessels`
+      //   przypiąłby statek z powrotem do orbity macierzystej.
+      teleportVessel: (vesselId, x, y) => {
+        const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+        if (!v) { console.warn(`[teleportVessel] nieznany statek ${vesselId}`); return null; }
+        const dx = Number(x) - (v.position?.x ?? 0);
+        const dy = Number(y) - (v.position?.y ?? 0);
+        const wasFlyby = window.KOSMOS?.directorFirstContact?.shiftFlybyCourse?.(vesselId, dx, dy) === true;
+        v.position.x = Number(x);
+        v.position.y = Number(y);
+        v.position.dockedAt = null;
+        v.position.state = 'orbiting';
+        EventBus.emit('vessel:positionUpdate', { vessels: [v] });
+        const out = { statek: v.name, x: Math.round(v.position.x), y: Math.round(v.position.y), kursPrzesuniety: wasFlyby };
+        console.log('[teleportVessel]', out);
+        return out;
+      },
+      // KOSMOS.debug.flybyNearHome(empireId?, durationYears?) — przelot WOLNY i BLISKI domu.
+      //   Druga (wygodniejsza) droga do G2.16: sonda zamiast przelatywać, dryfuje obok
+      //   planety macierzystej przez ~60 lat, więc zdąży ją dogonić nawet powolny okręt.
+      flybyNearHome: (empireId = 'emp_001', durationYears = 60) => {
+        const fc = window.KOSMOS?.directorFirstContact;
+        if (!fc) { console.warn('[flybyNearHome] brak directorFirstContact'); return null; }
+        const empire = window.KOSMOS?.empireRegistry?.get?.(empireId) ?? null;
+        if (!empire) { console.warn(`[flybyNearHome] nieznane imperium ${empireId}`); return null; }
+        const id = fc.scienceFlyby({ empireId, empire, ruleId: 'debug' }, { durationYears, radiusPx: 220 });
+        console.log(`[flybyNearHome] ${empireId} → sonda`, id ?? '— ODRZUCONA (patrz director:flybyRejected)');
+        return id;
+      },
       // KOSMOS.debug.directorRules(empireId?) — stan reguł Directora: ile prób, czy odpaliła,
       //   w którym roku WYŚWIETLANYM. Bez tego „czemu nic się nie dzieje" jest nieodróżnialne
       //   od „reguła odpaliła i przegapiłem".
@@ -1875,6 +1909,13 @@ export class GameScene {
       // poi:created dla zsynchronizowanych POI, więc ThreeRenderer trzeba
       // zsiać explicit. Idempotent: skanuje gameState.pois i tworzy sprites.
       this.threeRenderer?.initPOISpritesFromState?.();
+      // Rozbieżność 1 z GATE 2 — ta sama klasa co POI wyżej i co `fix-stacje-3d-bramka-ukladu`:
+      // restore odtwarza STAN, ale nie MESH. Sprite'y statków wracały dotąd wyłącznie leniwie,
+      // przez `vessel:positionUpdate`, więc statek, którego `VesselManager` NIE rusza (sonda
+      // przelotu, statek dryfujący), po wczytaniu zapisu nie miał czego odtworzyć na mapie.
+      // `_restoreActiveSystemVesselSprites` jest idempotentne (guard na istniejący entry)
+      // i było już używane przy `switchSystem` — tu domykamy drugą ścieżkę wejścia.
+      this.threeRenderer?._restoreActiveSystemVesselSprites?.();
       // Faza 3: zapewnij relacje diplomacy + FSM (save sprzed Fazy 3)
       this.diplomacySystem.initForAllEmpires();
       this.alienCivSystem.initForAllEmpires();

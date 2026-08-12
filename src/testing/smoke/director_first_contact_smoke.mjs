@@ -160,6 +160,60 @@ console.log('\nT4: przelot — spawn, kurs przez układ, despawn na wyjściu');
   fc.dispose(); EventBus.clear();
 }
 
+// ── T8 — MESH PO WCZYTANIU + lewary gate'u (rozbieżność 1 i punkt 3 z GATE 2) ──
+console.log('\nT8: sonda ogłasza ruch kanałem vessel:positionUpdate + lewary');
+{
+  gameState.set('director', { rules: {}, pending: {}, flybys: {} }, 'test');
+  stubWorld({ obsLevel: 5, year: 500 });
+  const fc = new DirectorFirstContact();
+
+  // (a) ROOT CAUSE rozbieżności 1: sonda to jedyny statek, którego NIE rusza
+  // `VesselManager._updatePositions`, więc nie trafiała do `moving[]`. A `vessel:positionUpdate`
+  // jest JEDYNYM kanałem, którym `ThreeRenderer._syncVesselPositions` leniwie odtwarza sprite
+  // (`if (!entry) _addVesselSprite`). Bez tej emisji po wczytaniu zapisu mapa była pusta.
+  const id = fc.scienceFlyby({ empireId: 'emp_001', empire: {} }, {});
+  const seen = [];
+  const h = ({ vessels }) => seen.push(...(vessels ?? []).map((v) => v.id));
+  EventBus.on('vessel:positionUpdate', h);
+  window.KOSMOS.timeSystem.gameTime = 502;
+  EventBus.emit('time:tick', { deltaYears: 2 });
+  A(seen.includes(id), 'T8a: ruch sondy jest OGŁASZANY przez vessel:positionUpdate (kanal sprite-ow)');
+  EventBus.off('vessel:positionUpdate', h);
+
+  // (b) Ścieżka restore w GameScene — druga połowa naprawy (klasa „restore odtwarza stan, nie mesh").
+  const GS2 = codeOnly('src/scenes/GameScene.js');
+  A(/_restoreActiveSystemVesselSprites\?\.\(\)/.test(GS2),
+    'T8b: po wczytaniu zapisu GameScene zasiewa sprite-y statkow aktywnego ukladu');
+  const TR = codeOnly('src/renderer/ThreeRenderer.js');
+  A(/_restoreActiveSystemVesselSprites\(\)\s*\{/.test(TR),
+    'T8c: …a seeder istnieje i jest idempotentny (guard w _addVesselSprite)');
+
+  // (c) Lewar: teleport MUSI przesuwać też kurs, inaczej tick cofnie go przy najbliższym tiku.
+  const fb0 = fc.getFlyby(id);
+  const ok = fc.shiftFlybyCourse(id, 1000, -500);
+  const fb1 = fc.getFlyby(id);
+  A(ok === true && fb1.fromX === fb0.fromX + 1000 && fb1.toY === fb0.toY - 500,
+    'T8d: shiftFlybyCourse przesuwa OBA końce kursu');
+  const v = window.KOSMOS.vesselManager.getVessel(id);
+  v.position.x += 1000; v.position.y -= 500;
+  const px = v.position.x;
+  window.KOSMOS.timeSystem.gameTime = 503;
+  EventBus.emit('time:tick', { deltaYears: 1 });
+  A(Math.abs(v.position.x - px) < 900,
+    'T8e: po przesunięciu kursu tick NIE cofa teleportu (sonda leci dalej z nowego miejsca)');
+  A(fc.shiftFlybyCourse('nie_ma_takiego', 1, 1) === false, 'T8f: nie-przelot → false, bez rzutu');
+
+  // (d) Wolny/bliski przelot — bez tego zestrzelenie jest nietestowalne na żywo.
+  const id2 = fc.scienceFlyby({ empireId: 'emp_009', empire: {} }, { durationYears: 60, radiusPx: 220 });
+  const fb2 = fc.getFlyby(id2);
+  A(fb2.endYear - fb2.startYear === 60, 'T8g: durationYears honorowane (wolny przelot)');
+  A(Math.hypot(fb2.fromX, fb2.fromY) < 400, 'T8h: radiusPx honorowane (sonda blisko domu)');
+  const REG = codeOnly('src/scenes/GameScene.js');
+  A(/teleportVessel:/.test(REG) && /flybyNearHome:/.test(REG),
+    'T8i: oba lewary wystawione w KOSMOS.debug');
+  fc.dispose(); EventBus.clear();
+}
+
 // ── T5 — jeden beat, nie dwa ────────────────────────────────────────────────
 console.log('\nT5: Director przejmuje beat (decyzja 5) + sightingi w round-tripie');
 {

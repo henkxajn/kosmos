@@ -96,6 +96,11 @@ export class DirectorFirstContact {
   scienceFlyby(ctx, params = {}) {
     const { empireId, empire } = ctx;
     const templateId = params.template ?? 'science_probe';
+    // Lewary gate'u (NIE dla reguły — ta nie podaje żadnego z nich): wolniejszy przelot daje
+    // graczowi czas na przechwycenie, mniejszy promień stawia sondę bliżej domu. Bez tego
+    // zestrzelenie jest praktycznie nietestowalne — statki gracza są wolniejsze od sondy.
+    const durationYears = Number(params.durationYears) > 0 ? Number(params.durationYears) : FLYBY_DURATION_YEARS;
+    const radiusPx      = Number(params.radiusPx)      > 0 ? Number(params.radiusPx)      : FLYBY_RADIUS_PX;
 
     const reg = this._require('empireRegistry');
     const vm  = this._require('vesselManager');
@@ -117,10 +122,10 @@ export class DirectorFirstContact {
     // Kurs deterministyczny per imperium — ten sam seed daje ten sam przelot (bez Math.random,
     // żeby przebieg gate'u był powtarzalny).
     const ang = this._courseAngle(empireId);
-    const fromX = hx + Math.cos(ang) * FLYBY_RADIUS_PX;
-    const fromY = hy + Math.sin(ang) * FLYBY_RADIUS_PX;
-    const toX   = hx - Math.cos(ang) * FLYBY_RADIUS_PX;
-    const toY   = hy - Math.sin(ang) * FLYBY_RADIUS_PX;
+    const fromX = hx + Math.cos(ang) * radiusPx;
+    const fromY = hy + Math.sin(ang) * radiusPx;
+    const toX   = hx - Math.cos(ang) * radiusPx;
+    const toY   = hy - Math.sin(ang) * radiusPx;
 
     let vessel;
     try {
@@ -152,7 +157,7 @@ export class DirectorFirstContact {
       empireId, templateId,
       fromX, fromY, toX, toY,
       startYear: year,
-      endYear:   year + FLYBY_DURATION_YEARS,
+      endYear:   year + durationYears,
       beatFired: false,
     }, 'director_flyby_started');
 
@@ -161,6 +166,26 @@ export class DirectorFirstContact {
 
     EventBus.emit('director:flybyStarted', { empireId, vesselId: vessel.id, templateId });
     return vessel.id;
+  }
+
+  /**
+   * Przesuwa AKTYWNY przelot o wektor (dx, dy) — razem z kursem.
+   *
+   * ⚠ Bez rebasowania kursu teleport sondy jest BEZUŻYTECZNY: `_tickFlybys` liczy pozycję
+   * z `fromX/fromY → toX/toY` co tik, więc nadpisałby ją przy najbliższym tiku. Lewar do
+   * gate'u (G2.16/G2.17) musi przesunąć JEDNO I DRUGIE.
+   *
+   * @returns {boolean} czy statek był przelotem (i został przesunięty)
+   */
+  shiftFlybyCourse(vesselId, dx, dy) {
+    const fb = this.getFlyby(vesselId);
+    if (!fb) return false;
+    gameState.set(`director.flybys.${vesselId}`, {
+      ...fb,
+      fromX: fb.fromX + dx, fromY: fb.fromY + dy,
+      toX:   fb.toX   + dx, toY:   fb.toY   + dy,
+    }, 'director_flyby_shift');
+    return true;
   }
 
   /** Kąt kursu wyprowadzony z id imperium — deterministyczny, bez Math.random. */
@@ -180,6 +205,7 @@ export class DirectorFirstContact {
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) return;
     const year = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const moved = [];
 
     for (const id of ids) {
       const fb = all[id];
@@ -197,9 +223,21 @@ export class DirectorFirstContact {
 
       vessel.position.x = fb.fromX + (fb.toX - fb.fromX) * tt;
       vessel.position.y = fb.fromY + (fb.toY - fb.fromY) * tt;
+      moved.push(vessel);
 
       if (tRaw >= 1) this._despawn(id, fb, 'exited_system');
     }
+
+    // ⚠ MESH PO WCZYTANIU ZAPISU (rozbieżność 1 z GATE 2). Sonda jest jedynym statkiem, którego
+    // NIE rusza `VesselManager._updatePositions`, więc nigdy nie trafiała do `moving[]` w
+    // `vessel:positionUpdate`. A to jest JEDYNY kanał, którym `ThreeRenderer._syncVesselPositions`
+    // leniwie ODTWARZA brakujący sprite (`if (!entry) _addVesselSprite`). Skutek: po wczytaniu
+    // zapisu stan żył (kurs, rejestr, panel floty), ale na mapie 3D nie było nic — ta sama klasa
+    // wady co `fix-stacje-3d-bramka-ukladu` (restore odtwarza STAN, nie MESH).
+    //
+    // System, który rusza statkami, ma obowiązek ogłaszać ruch tym samym kanałem co wszyscy
+    // pozostali — inaczej każdy konsument pozycji (sprite, radar, stożki) musi znać wyjątek.
+    if (moved.length) EventBus.emit('vessel:positionUpdate', { vessels: moved });
   }
 
   _despawn(vesselId, fb, reason) {

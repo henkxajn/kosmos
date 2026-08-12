@@ -150,6 +150,12 @@ KOSMOS.debugLog.query(e => e.kind === 'director:firstContactBeat').slice(-1)
   pojawia się drugi raz** dla tej samej sondy. Przed S5 `_reportedVesselSightings` nie było
   serializowane i beat wracał po każdym wczytaniu. **[~ŹRÓDŁO — keeper T5c/T5d pinuje round-trip pola]**
 
+☐ **G2.15a** — po wczytaniu **sonda JEST WIDOCZNA NA MAPIE 3D** (nie tylko w Command).
+  🔴 To była **rozbieżność 1 z przebiegu 1**: stan przeżywał, mesh nie. Sonda była jedynym statkiem,
+  którego nie rusza `VesselManager`, więc nie trafiała do `vessel:positionUpdate` — a to JEDYNY kanał
+  leniwego odtwarzania sprite'a. Naprawione dwutorowo (system ogłasza ruch + GameScene zasiewa
+  sprite'y po restore). **[✔KEEPER — T8a/T8b/T8c]**
+
 ☐ **G2.15** — po wczytaniu **sonda dalej leci** (kurs przeżył zapis). Kurs mieszka w
   `gameState.director.flybys`, bo `VesselManager.serialize` ma białą listę pól i pole dopisane na
   statku zginęłoby po cichu. Sprawdź `KOSMOS.debug.directorRules()` → „aktywne przeloty".
@@ -158,12 +164,24 @@ KOSMOS.debugLog.query(e => e.kind === 'director:firstContactBeat').slice(-1)
 
 ## 5. Zestrzelenie przelotu (decyzja 4)
 
-Wymaga uzbrojonego statku gracza w pobliżu sondy (`COMBAT_ENGAGEMENT_AU = 0.15`). Najprościej:
-wymuś nowy przelot, podeślij fregatę rozkazem „Zaangażuj".
+> 🔴 **Przebieg 1 GATE 2: NIETESTOWALNE — statki gracza są WOLNIEJSZE od sondy i nie dogoniły jej.**
+> Dlatego doszły dwa lewary. Wybierz JEDEN:
+
+**Wariant A (prostszy) — sonda wolna i tuż obok domu:**
 
 ```js
-KOSMOS.debug.firstContact('emp_001')
+KOSMOS.debug.flybyNearHome('emp_001', 60)
 ```
+Sonda dryfuje przy planecie macierzystej przez ~60 lat wyświetlanych — zdąży ją dogonić nawet
+powolny okręt. Potem: zaznacz uzbrojony statek → PPM na sondę → „Zaangażuj".
+
+**Wariant B — przenieś okręt gracza wprost na sondę:**
+
+```js
+KOSMOS.debug.teleportVessel('ID_TWOJEJ_FREGATY', KOSMOS.vesselManager.getVessel('ID_SONDY').position.x, KOSMOS.vesselManager.getVessel('ID_SONDY').position.y)
+```
+⚠ `teleportVessel` zdejmuje dokowanie i — gdy celem jest SONDA — przesuwa też jej kurs
+(inaczej `_tickFlybys` cofnąłby teleport przy najbliższym tiku).
 
 Po zestrzeleniu:
 
