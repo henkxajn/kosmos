@@ -12,9 +12,26 @@ szablonów Filipa + resolver, 52/52) · **S2 ✅** (pomiar R-2 → **17,7 %**, w
 dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** `3596c0c` ·
 **S4 ✅ + GATE 1 PASSED** (`8006ceb` fundament + `499ff7b` zasiew/tech + `9bebe0d` akcja +
 `0ff5b50` fix własności + `1ee9a99` lewar załogi + `831a3e7` izolacja Dziennika; keepery
-54 + 25 + 30 + 32) — **zamknięty WARUNKOWO: wyciek zdarzeń KOLONII AI do Dziennika OTWARTY**
-(pierwsze zadanie następnej sesji) · **S5 ⏭ NASTĘPNY = GATE 2** (łańcuch pierwszego kontaktu) ·
-S6–S7 nierozpoczęte · **Gate 3 przed nami.**
+54 + 25 + 30 + 32) — warunek ZDJĘTY: wyciek zdarzeń kolonii AI naprawiony `11abd0c` (pełny audyt,
+78 subskrybentów, tabela klasyfikacji niżej) · **S5 ✅ + GATE 2 PASSED** (`2bd9dc2` łańcuch
+pierwszego kontaktu + egzekwowanie jednostki rzutu; `c3aae2c` mesh po wczytaniu + lewary
+zestrzelenia; keeper 50/50) · **S6 ⏭ NASTĘPNY = GATE 3** (nacisk militarny L1–L2, FINAŁ slice'u) ·
+S7 nierozpoczęty.
+
+✅ **GATE 2 — PASSED 2026-08-12** (przebieg 1 + spot-check domykający). Pięć punktów
+nienegocjowalnych zielone: **G2.10** despawn na wyjściu z układu · **G2.11** JEDEN popup
+(Director przejął beat) · **G2.14** brak zjawy po przeładowaniu · **G2.3** jednostka rzutu
+(keeper T2a/T2b — w przebiegu nie było obserwatorium L5, punkt legalnie pominięty) ·
+**G2.16/G2.17** kara za zestrzelenie na żywo. Sonda z pełną tożsamością („Fundacja Milczącego
+Pulsaru — sonda badawcza", właściciel `emp_001`, `isEnemy`), izolacja Dziennika trzyma (G2.21),
+konsola czysta. **Dwie rozbieżności NAPRAWIONE** (`c3aae2c`): mesh nie wracał po `save/load`
+(klasa „restore odtwarza STAN, nie MESH" — dotyczyła KAŻDEGO statku, którego nie rusza
+`VesselManager`) oraz brak lewara do przetestowania zestrzelenia (statki gracza wolniejsze od
+sondy). **Trzecia pozycja — oprawa beatu — świadomie ROZDZIELONA**: specyfikacja assetów teraz
+(`midjourney_prompts.md`, generowanie równolegle z S6), wpięcie wariantu popupu później.
+Ustalenie z audytu: beat JUŻ jedzie kanałem kinowym (`buildScheduledEventPopup` — DATASHEET,
+tło MP4, auto-pauza); czyta się jak zwykły, bo `svgKey:'report'` mapuje na współdzielone
+`science.mp4`. Zakres = „własna klasa w istniejącym systemie", nie nowy system.
 
 ✅ **Wszystkie podpisy dostarczone 2026-08-11:** zwężenie R-2 ratyfikowane · decyzje 9/10
 (odczyt A, metryka 3D) ratyfikowane · **R-3** podpisane (żeton bez modułów + predykat

@@ -223,7 +223,7 @@ BattleSystem; ground combat RNG gets seeded (audit R13) when touched.
 Declarative trigger→response rules, personality-parameterized, with cooldowns and
 escalation. Gives the game *dramaturgy* on top of systemic AI.
 
-- **Slice 1 — 🟢 IN PROGRESS, GATE 1 PASSED 2026-08-11.** Plan doc: `DIRECTOR_SLICE1_PLAN.md`
+- **Slice 1 — 🟢 IN PROGRESS, GATES 1-2 PASSED (2026-08-11 / 2026-08-12). S6 = GATE 3 is the finale.** Plan doc: `DIRECTOR_SLICE1_PLAN.md`
   (approved 2026-08-10; eight decisions signed + owner rulings **R-1**…**R-4**). **Read its
   §PLAN NA JUTRO block first** — it carries the binding order for the next session.
   Progress: **S0 ✅** `e9f1853` · **S1 ✅** `31bd81b` · **S3 ✅** `4755f19` (Filip's frigate
@@ -232,11 +232,20 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
   **3D prerequisite ✅** `3596c0c` · **S4 ✅ + GATE 1 PASSED** (`8006ceb` foundation ·
   `499ff7b` station-token seed + AI combat tech · `9bebe0d` `queueWarships` · `0ff5b50`
   ownership fix · `1ee9a99` crew lever · `831a3e7` Journal isolation) ·
-  **S5 next = GATE 2** · S6–S7 pending · **Gate 3 pending.**
-  ⚠ **S4 is closed CONDITIONALLY** — a third layer of the same defect is open: AI **colony**
-  events (famine, unrest, population) still reach the player's Journal unfiltered. First task
-  of the next session, together with a full classification table of all 44 Journal-writing
-  subscribers.
+  **S5 ✅ + GATE 2 PASSED** (`2bd9dc2` first-contact chain · `c3aae2c` mesh-after-load + kill levers) ·
+  **S6 next = GATE 3** (military pressure L1-L2, the slice finale) · S7 pending.
+  ✅ **S4's condition is LIFTED** — the third layer of the Journal leak (AI **colony** events:
+  famine, unrest, population) is fixed in `11abd0c`. The audit that closed it **overturned the
+  sizing**: 78 Journal-writing subscribers, not 44; three of the six named suspects were not
+  leaking at all (already source-gated), while three unlisted ones were — including
+  `civ:epochChanged`, which carried no `planetId` and so rendered an **AI empire's epoch advance
+  as the player's own**. Full classification table (18 gated / 36 player-scoped by construction /
+  24 global-by-design, zero unclassified) lives in `DIRECTOR_SLICE1_PLAN.md`.
+  ⚠ **S5 surfaced an engine-level defect that binds every future rule:** `roll.unit:'displayedYear'`
+  was validated *to the letter* but never honored — `rollFires` counts attempts and `tickEmpire`
+  runs per **civ** year, so a 10 %/+10 pt curve saturated in 0.83 displayed years instead of ~3.7,
+  which would have made signed Decision 2 dead on arrival. The engine now gates one roll attempt
+  per displayed year; every rolled rule inherits it.
   **Three owner rulings were added during the slice.** **R-3**: AI warship production requires
   an orbital station, seeded **module-less** at empire generation as part of the starting
   handicap — the station is a *permission token*, not a factory (an audit showed a functional
@@ -279,9 +288,9 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 
 ```
 D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 2026-08-10)
-                        → Director Slice 1 🟢 S0..S4 ✅ + GATE 1 PASSED 2026-08-11
-                                                ⟵ WE ARE HERE — colony-layer Journal fix, then S5 = GATE 2
-                        → [Director S5..S7 + Gates 2-3] ∥ D3 → WAR_BACKBONE doc
+                        → Director Slice 1 🟢 S0..S5 ✅ + GATES 1-2 PASSED (2026-08-11/12)
+                                                ⟵ WE ARE HERE — S6 = GATE 3, the slice finale
+                        → [Director S6..S7 + Gate 3] ∥ D3 → WAR_BACKBONE doc
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
