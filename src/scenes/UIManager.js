@@ -18,6 +18,7 @@ import { TECHS } from '../data/TechData.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { isPlayerColonyEvent } from '../utils/JournalScope.js';   // zasięg właścicielski Dziennika
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
@@ -933,7 +934,11 @@ export class UIManager {
     });
 
     // Uderzenia kosmiczne na kolonie
-    EventBus.on('impact:colonyDamage', ({ message, severity, popLost, buildingsDestroyed }) => {
+    EventBus.on('impact:colonyDamage', ({ planetId, message, severity, popLost, buildingsDestroyed }) => {
+      // Bramka właściciela — uderzenie w kolonię AI to nie jest wiadomość dla gracza.
+      // Bezpieczne: `_applyDamage` emituje ZANIM kolonia zniknie z rejestru (game-over
+      // sprawdzany dopiero po emisji), więc fail-closed nie wycisza katastrofy gracza.
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const type = severity === 'extinction' || severity === 'heavy' ? 'collision_destroy' : 'collision_absorb';
       let detail = message;
       if (popLost > 0 || buildingsDestroyed > 0) {
@@ -964,27 +969,38 @@ export class UIManager {
     });
 
 
-    EventBus.on('civ:epochChanged', ({ epoch, message }) => {
+    // 🔴 BRAMKA WŁAŚCICIELA — WARSTWA KOLONII (trzecia warstwa tego samego defektu).
+    // `CivilizationSystem` jest per-kolonia i tyka RÓWNIEŻ dla kolonii AI, więc bez filtra
+    // gracz czytał w Dzienniku o głodzie, niepokojach i przyroście populacji OBCEGO imperium.
+    // To ta sama klasa wycieku co stocznie w `831a3e7`: darmowy wywiad z pominięciem intelu.
+    // DebugLog zostaje NIEFILTROWANY — to kanał deweloperski i ma widzieć wszystko.
+    EventBus.on('civ:epochChanged', ({ planetId, epoch, message }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       this._log(message || t('log.epochChanged', epoch?.key ? t(epoch.key) : (epoch?.namePL ?? epoch)), 'civ_epoch');
     });
     EventBus.on('civ:unrest', ({ planetId, colonyName }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const name = colonyName ?? t('log.colonyUnknown');
       this._log(t('log.socialUnrest', name), 'civ_unrest', planetId);
     });
     EventBus.on('civ:unrestLifted', ({ planetId, colonyName }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       if (!colonyName) return; // legacy event bez context — pomiń żeby nie spamować
       this._log(t('log.colonyUnrestLifted', colonyName), 'expedition_ok', planetId);
     });
     EventBus.on('civ:famine', ({ planetId, colonyName }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const name = colonyName ?? 'kolonia';
       this._log(t('log.colonyFamine', name), 'civ_famine', planetId);
     });
     EventBus.on('civ:famineLifted', ({ planetId, colonyName }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       if (!colonyName) return;
       this._log(t('log.colonyFamineLifted', colonyName), 'expedition_ok', planetId);
     });
 
     EventBus.on('civ:popBorn', ({ population, planetId, colonyName }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const name = colonyName ?? '—';
       this._log(t('log.popBorn', name, population), 'pop_born', planetId);
     });
@@ -1000,6 +1016,7 @@ export class UIManager {
       this._log(t('log.awaitingHousing', vesselName ?? '—', stationName ?? stationId ?? '—'), 'fleet');
     });
     EventBus.on('civ:popDied', ({ cause, population, planetId, colonyName }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
       const name = colonyName ?? '—';
       const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';
       this._log(t(key, name, population), 'pop_died', planetId);
@@ -1141,6 +1158,9 @@ export class UIManager {
     });
     EventBus.on('trade:imported', ({ vesselName, colonyId, items, orderBoard }) => {
       if (orderBoard) return; // S3.5b — Order Board loguje własny wpis „🤝" (bez duplikatu 📦)
+      // Bramka właściciela — dostawy kurierów AI do kolonii AI (CivilianTradeSystem
+      // i MissionSystem emitują bez filtra) meldowały się w Dzienniku gracza.
+      if (!this._isPlayerColonyEvent(colonyId)) return;
       if (!items || Object.keys(items).length === 0) return;
       const colName = window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.name ?? colonyId;
       const summary = Object.entries(items)
@@ -1452,21 +1472,20 @@ export class UIManager {
    * Nowe callsite'y powinny podać channel+severity (np. fleet/warn dla porażki budowy).
    */
   /**
-   * Czy zdarzenie stoczni dotyczy kolonii GRACZA — bramka Dziennika (GATE 1, rozbieżność 1).
+   * Czy zdarzenie kolonii dotyczy kolonii GRACZA — bramka Dziennika.
    *
-   * ⚠ `fleet:*` emituje KAŻDA stocznia w grze. Bez tej bramki gracz czytał w Dzienniku,
-   * że obce imperium buduje fregaty — czyli dostawał **darmowy wywiad** o zbrojeniach,
-   * omijając warstwę intelu, która miała tego wymagać po skanie.
+   * ⚠ Zdarzenia `fleet:*` emituje KAŻDA stocznia w grze, a zdarzenia ŻYCIA KOLONII
+   * (`civ:famine`, `civ:unrest`, `civ:popBorn/popDied`, `civ:epochChanged`) emituje KAŻDY
+   * per-koloniowy `CivilizationSystem` — także kolonii AI. Bez tej bramki gracz czytał
+   * w Dzienniku o zbrojeniach i o głodzie OBCEGO imperium, czyli dostawał **darmowy wywiad**
+   * z pominięciem warstwy intelu, która miała tego wymagać po skanie.
    *
-   * Fail-closed: nieznane `planetId` (brak kolonii w rejestrze) NIE trafia do Dziennika.
-   * Jedyny wyjątek to `planetId === undefined` — stare emisje bez pola; wtedy przepuszczamy,
-   * żeby nie wyciszyć zdarzeń gracza, których jeszcze nie otagowano.
+   * Reguła (fail-closed + wyjątek na emisje bez tagu) mieszka w `utils/JournalScope.js`,
+   * żeby keeper mógł ją WYKONAĆ — UIManagera nie da się zaimportować headless (THREE/canvas),
+   * więc test trzymał wcześniej kopię predykatu, a kopia rozjechała się z oryginałem.
    */
   _isPlayerColonyEvent(planetId) {
-    if (planetId === undefined || planetId === null) return true;   // emisja bez tagu — nie wyciszamy
-    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
-    if (!colony) return false;
-    return !colony.ownerEmpireId;                                   // kolonia gracza nie ma właściciela
+    return isPlayerColonyEvent(planetId);
   }
 
   _addNotification(text, channel = 'system', severity = 'info') {

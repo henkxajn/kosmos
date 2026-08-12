@@ -85,7 +85,13 @@ na której gate padł za pierwszym razem), wpis `shipRejected` przy `no_crew`, n
 TTL bez zjawy, żeton bramkujący per-imperium. Round-trip zapisu (stacje, właściciele, v100) też
 przeszedł. **S4 jest ZAMKNIĘTY warunkowo** — czeka na jedną naprawę niżej.
 
-**(a) NAJPIERW: wyciek zdarzeń KOLONII AI do Dziennika gracza** — trzecia warstwa tego samego
+**(a) ✅ ZROBIONE 2026-08-12 — wyciek zdarzeń KOLONII AI do Dziennika gracza.** Produkt audytu:
+§Audyt Dziennika — TABELA KLASYFIKACJI (niżej). Zmierzono **78** subskrybentów (nie 44), trzy
+pozycje ze spisu poniżej okazały się NIE-wyciekami, a dwie realne dziury (`trade:imported`,
+`impact:colonyDamage`) plus trzecia (`civ:epochChanged`) doszły z audytu. Opis pierwotny zostaje
+niżej jako kontekst zgłoszenia.
+
+**(a) [oryginalne zgłoszenie] wyciek zdarzeń KOLONII AI do Dziennika gracza** — trzecia warstwa tego samego
 defektu. Poprzednia naprawa (`831a3e7`) objęła stocznię i statki; zdarzenia ŻYCIA KOLONII
 (głód, niepokoje społeczne, populacja, niedobory) **nadal przechodzą bez filtra właściciela**,
 więc gracz czyta o głodzie w koloniach AI.
@@ -132,6 +138,163 @@ nie mogą odpytywać wpisów sprzed reloadu · **nie uruchamiać gate'u równole
 (commit przeładowuje Live Server i kasuje przebieg; zapis do pliku PRZED wklejeniem promptu) ·
 lewary stanu tylko przez zwalidowane narzędzia (`grantFreePops`), nigdy przez „naturalnie
 wyglądające" pole.
+
+
+---
+
+## Audyt Dziennika — TABELA KLASYFIKACJI (produkt zadania (a), 2026-08-12)
+
+Wykonany zamiast łatania po objawie. Metoda: parser `EventBus.on(...)` po **domknięciu nawiasu**
+na źródle **ze zdjętymi komentarzami** (polskie komentarze niosą apostrofy i nawiasy — licznik
+głębokości na surowym źródle rozjeżdża się i skleja sąsiednie subskrypcje; pierwszy przebieg dał
+przez to fałszywe wiersze).
+
+🔴 **KOREKTA ROZMIARU.** Plan mówił o **44** subskrybentach piszących do Dziennika. Zmierzone:
+**78** (na 113 `EventBus.on` w `UIManager`; 69 wywołań `_log` + 20 `_addNotification`). Liczba 44
+nie odpowiada żadnej mierzalnej wielkości — traktować jako oszacowanie poprzedniej sesji, nie fakt.
+
+🔴 **KOREKTA SPISU KANDYDATÓW.** Trzy z sześciu pozycji wskazanych w planie **nie były wyciekiem**,
+a dwa realne wycieki w tej samej warstwie **nie były w spisie**:
+
+| pozycja z planu | werdykt audytu |
+|---|---|
+| `resource:shortage` (`:682`) | **NIE wycieka** — nie pisze do Dziennika w ogóle (miga ikoną zasobu), a emitent i tak stoi za `isActive` |
+| brownout (`:645`) | **NIE wycieka** — to nie osobny subskrybent, tylko helper `_applyResources`; już scope'owany do kolonii AKTYWNEJ |
+| `prosperity:changed` | **NIE wycieka** — emit pod `KOSMOS.prosperitySystem === this` (tak samo `epoch:changed`, `consumer:shortage`) |
+| — | **`trade:imported` WYCIEKA** — dostawy kurierów AI (2 emitentów bez filtra) |
+| — | **`impact:colonyDamage` WYCIEKA** — uderzenie w kolonię AI |
+| — | **`civ:epochChanged` WYCIEKA** — i to najgorzej: bez `planetId` i bez nazwy kolonii gracz czytał awans epoki AI **jako własny** |
+
+🔴 **BRAMKA BEZ DANYCH JEST ŚLEPA — potwierdzone drugi raz.** `civ:popDied` ma **dziewięciu**
+emitentów, a `planetId` niosło **dwóch**. Predykat przepuszcza nieotagowane (żeby nie wyciszyć
+zdarzeń gracza), więc sama bramka zostawiłaby siedem tras otwartych. Dotagowane: `MissionSystem`
+×3, `ImpactDamageSystem` (przez `_killPops`), `RandomEventSystem` ×2 (player-scoped, tag defensywny),
+`CivilizationSystem` (`civ:epochChanged`). `ExpeditionSystem.js` **pominięty świadomie — to martwy
+kod** (zero importów poza testami).
+
+**Kanon własności.** Predykat powielał regułę (`!colony.ownerEmpireId`) i **rozjeżdżał się z kanonem**
+`ColonyManager.isPlayerColony`, który dopuszcza także jawne `ownerEmpireId === 'player'`. Teraz
+deleguje. Reguła wyprowadzona do `src/utils/JournalScope.js`, bo `UIManager` nie importuje się
+headless (THREE/canvas) — keeper trzymał KOPIĘ predykatu i ta kopia zdążyła się zestarzeć.
+
+**Legenda:** `player-scoped (BRAMKA)` = filtr właściciela w kodzie · `player-scoped (z konstrukcji)`
+= emitent fizycznie nie odpala się dla AI (guard `isActive`, `getPlayerColonies`, wywołanie tylko
+z UI gracza) · `global-by-design` = zdarzenie bez właściciela-kolonii (symulacja układu, dyplomacja,
+stan aplikacji) albo świadomie pokazywane wg intelu.
+
+#### player-scoped (BRAMKA) — 18
+
+| linia | zdarzenie | podstawa |
+|---|---|---|
+| 765 | `fleet:buildStarted` | 831a3e7 |
+| 770 | `fleet:shipCompleted` | 831a3e7 |
+| 775 | `fleet:buildFailed` | 831a3e7 |
+| 792 | `fleet:buildQueued` | 831a3e7 |
+| 852 | `vessel:launched` | 831a3e7 — isEnemyVessel |
+| 860 | `vessel:docked` | 831a3e7 — isEnemyVessel (2 subskrybentów) |
+| 937 | `impact:colonyDamage` | uderzenie w kolonię AI; planetId już był w payloadzie |
+| 977 | `civ:epochChanged` | epoka kolonii AI czytana jako epoka gracza; dodany planetId |
+| 981 | `civ:unrest` | CivilizationSystem per-kolonia tyka też dla AI |
+| 986 | `civ:unrestLifted` | j.w. |
+| 991 | `civ:famine` | j.w. — objaw zgłoszony przez Filipa |
+| 996 | `civ:famineLifted` | j.w. |
+| 1002 | `civ:popBorn` | j.w. |
+| 1018 | `civ:popDied` | j.w. + 9 emitentów, 7 nieotagowanych → dotagowane |
+| 1080 | `colony:founded` | bramka INLINE (ownerEmpireId) — sprzed audytu |
+| 1122 | `trade:migrationExecuted` | bramka INLINE (getColony(toId)) — sprzed audytu |
+| 1155 | `vessel:docked` | 831a3e7 — isEnemyVessel (2 subskrybentów) |
+| 1159 | `trade:imported` | kurierzy AI / routing AI↔AI (2 emitentów bez filtra) |
+
+#### player-scoped (z konstrukcji) — 36
+
+| linia | zdarzenie | podstawa |
+|---|---|---|
+| 753 | `expedition:redirectFailed` | j.w. |
+| 779 | `fleet:disbandFailed` | j.w. |
+| 783 | `fleet:disbanded` | j.w. |
+| 799 | `fleet:created` | grupy flot tworzy gracz |
+| 802 | `fleet:disbanded` | j.w. |
+| 809 | `fleet:orderIssued` | rozkazy wydaje gracz |
+| 832 | `fleet:orderCompleted` | j.w. |
+| 836 | `fleet:orderCancelled` | j.w. |
+| 841 | `fleet:retreatTriggered` | doktryna floty gracza |
+| 1008 | `station:popArrived` | transport pasażerski gracza (MissionSystem) |
+| 1011 | `station:popDeparted` | j.w. |
+| 1015 | `vessel:awaitingHousing` | transport pasażerski gracza |
+| 1025 | `expedition:reconProgress` | misje tworzy gracz; AI (EmpireLogisticsSystem) NIE używa MissionSystem |
+| 1030 | `expedition:reconComplete` | j.w. |
+| 1035 | `expedition:arrived` | j.w. |
+| 1045 | `expedition:missionReport` | j.w. |
+| 1049 | `expedition:disaster` | j.w. |
+| 1052 | `expedition:launchFailed` | j.w. |
+| 1062 | `vessel:strandedNoFuel` | j.w. |
+| 1068 | `vessel:returnBlocked` | j.w. |
+| 1073 | `outpost:orderQueued` | jedyny caller: FleetManagerOverlay (UI gracza) |
+| 1110 | `colony:capturedByPlayer` | zdarzenie z definicji o graczu |
+| 1116 | `colony:tradeExecuted` | trasy handlowe zakładane wyłącznie z UI gracza |
+| 1119 | `colony:migration` | _checkMigration filtruje `!c.ownerEmpireId` |
+| 1131 | `epoch:changed` | ten sam guard co wyżej |
+| 1143 | `consumer:shortage` | ten sam guard co wyżej |
+| 1173 | `tradeOrder:delivered` | Order Board jest panelem gracza |
+| 1180 | `tradeOrder:cancelled` | j.w. |
+| 1191 | `prosperity:changed` | emit pod `KOSMOS.prosperitySystem === this` (kolonia aktywna) |
+| 1204 | `poi:alertTriggered` | POI należą do gracza |
+| 1208 | `poi:rallyComplete` | j.w. |
+| 1287 | `vessel:retreatIssued` | rozkaz gracza |
+| 1315 | `vessel:autoRetreatFailed` | AutoRetreat pomija stronę gracza tylko przy rozkazach; wpis dotyczy statku gracza |
+| 1322 | `vessel:autoRetreatLowFuel` | j.w. |
+| 1331 | `vessel:driftIdle` | j.w. |
+| 1337 | `vessel:driftAutoReturn` | j.w. |
+
+#### global-by-design — 24
+
+| linia | zdarzenie | podstawa |
+|---|---|---|
+| 866 | `game:saved` | stan aplikacji |
+| 877 | `game:saveFailed` | stan aplikacji |
+| 887 | `game:saveLargeWarning` | stan aplikacji |
+| 920 | `body:collision` | symulacja układu |
+| 932 | `planet:ejected` | symulacja układu |
+| 953 | `accretion:newPlanet` | symulacja układu |
+| 957 | `life:emerged` | symulacja układu |
+| 960 | `life:evolved` | symulacja układu |
+| 963 | `life:extinct` | symulacja układu |
+| 967 | `time:autoSlowTriggered` | sterowanie czasem |
+| 1230 | `empire:fleetMoved` | ruch flot AI pokazywany świadomie wg intelu (M4 P1) |
+| 1246 | `empire:fleetMaterialized` | j.w. |
+| 1256 | `vessel:proximityEnter` | wykrycie przez sensory GRACZA — to jest wywiad, nie wyciek |
+| 1293 | `battle:resolved` | bitwa z udziałem gracza (CombatHUD/EventLog) |
+| 1346 | `diplomacy:warDeclared` | dyplomacja dotyczy gracza z definicji |
+| 1358 | `diplomacy:aiEnvoy` | j.w. |
+| 1363 | `diplomacy:envoyArrived` | j.w. |
+| 1364 | `diplomacy:envoyReturned` | j.w. |
+| 1382 | `diplomacy:peaceSigned` | j.w. |
+| 1396 | `diplomacy:peaceRejected` | j.w. |
+| 1409 | `diplomacy:envoyRefused` | j.w. |
+| 1414 | `war:autoPeaceRefused` | j.w. |
+| 1419 | `diplomacy:treatyAccepted` | j.w. |
+| 1420 | `diplomacy:treatyRejected` | j.w. |
+
+
+**Adnotacja `directorOrigin` — semantyka RETRO (doprecyzowanie po spot-checku 2026-08-12).**
+Spot-check pokazał `directorOrigin: BRAK` na `v_1`/`v_2` (emp_001, zbudowane PRZED naprawą) i pytanie,
+czy retro-adnotacja działa dopiero przy zapisie/wczytaniu. **Nie działa wcale — i tak ma być.**
+Odwrócenie resolvera odpala się WYŁĄCZNIE w `_claimVessel`, a to wisi na `vessel:created`, które
+`VesselManager` emituje TYLKO w `createVessel` (`:181`) — `restore()` go NIE re-emituje. Do tego
+`_claimVessel` ma wczesny powrót `if (vessel.ownerEmpireId) return;`, więc nawet re-emisja
+ominęłaby statek już ostemplowany.
+
+⇒ Statek **zbudowany** przed naprawą nie dostanie adnotacji nigdy: ani na żywo, ani po `save/load`.
+Zdanie z commita `831a3e7` mówiło o okrętach **ZAMÓWIONYCH** przed restartem (zlecenie `pending`,
+które promuje się do `vessel:created` już po przeładowaniu) — te są adnotowane poprawnie i pilnuje
+tego T6 keepera. To NIE jest defekt: dane (kadłub + moduły) wciąż są, więc jednorazowy przemiat
+retro byłby wykonalny, ale to osobna decyzja zakresowa, nie naprawa. Praktycznie: liczniki „ile
+fregat nacisku stoi" pomijają okręty sprzed naprawy — dotyczy to wyłącznie sesji debugowych z GATE 1.
+
+⚠ **Granica dowodu.** Klasa `BRAMKA` jest sprawdzana wykonaniem i pinami keepera. Klasa
+`z konstrukcji` opiera się na zbadaniu emitenta (guard / jedyny caller) — **nie** na przebiegu
+w żywej grze; jeśli któryś system kiedyś zacznie tykać dla AI, wpis trzeba przeklasyfikować.
+`global-by-design` to decyzja projektowa, nie pomiar.
 
 ---
 

@@ -384,12 +384,15 @@ export class RandomEventSystem {
 
         case 'pop':
           if (civSys) {
+            // planetId: zdarzenia losowe biorą kolonie z `getPlayerColonies()` (:209), więc
+            // są player-scoped z konstrukcji — tag jest defensywny i utrzymuje inwariant
+            // lokalnie, gdyby zakres kiedyś objął kolonie AI.
             if (fx.delta > 0) {
               civSys.addPop('laborer', fx.delta);
-              EventBus.emit('civ:popBorn', { population: civSys.population });
+              EventBus.emit('civ:popBorn', { population: civSys.population, planetId: colony.planetId });
             } else if (fx.delta < 0 && civSys.population > 1) {
               civSys.removePop(null, Math.min(Math.abs(fx.delta), civSys.population - 1));
-              EventBus.emit('civ:popDied', { cause: event.id, population: civSys.population });
+              EventBus.emit('civ:popDied', { cause: event.id, population: civSys.population, planetId: colony.planetId });
             }
           }
           break;

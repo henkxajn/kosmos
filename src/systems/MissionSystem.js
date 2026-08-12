@@ -1630,7 +1630,7 @@ export class MissionSystem {
       if (originCol1?.civSystem) {
         originCol1.civSystem.unlockPops(crew1, exp.crewStrata);
         originCol1.civSystem.removePop(null, crew1);
-        EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originCol1.civSystem.population });
+        EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originCol1.civSystem.population, planetId: exp.originColonyId });
       }
       if (exp.vesselId && vMgr) {
         addMissionLog(vMgr.getVessel(exp.vesselId), this._gameYear, 'KATASTROFA — statek utracony!', 'danger');
@@ -1826,7 +1826,7 @@ export class MissionSystem {
       if (originColDisaster?.civSystem) {
         originColDisaster.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
         originColDisaster.civSystem.removePop(null, exp.crewCost);
-        EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: originColDisaster.civSystem.population });
+        EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: originColDisaster.civSystem.population, planetId: exp.originColonyId });
       }
       this._emit('mission:disaster', 'expedition:disaster', { expedition: exp });
       return;
@@ -2416,7 +2416,7 @@ export class MissionSystem {
       if (originColRecon?.civSystem) {
         originColRecon.civSystem.unlockPops(crewRecon, exp.crewStrata);
         originColRecon.civSystem.removePop(null, crewRecon);
-        EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originColRecon.civSystem.population });
+        EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originColRecon.civSystem.population, planetId: exp.originColonyId });
       }
       if (exp.vesselId && vMgr) {
         vMgr.destroyVessel(exp.vesselId);

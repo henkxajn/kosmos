@@ -150,7 +150,7 @@ export class ImpactDamageSystem {
 
       case SEVERITY.MODERATE:
         // 1 POP, 2-4 budynki, 15% zasobów
-        popLost = this._killPops(civSystem, 1);
+        popLost = this._killPops(civSystem, 1, planetId);
         buildingsDestroyed = this._destroyBuildings(buildingSystem, resourceSystem, civSystem, 2 + Math.floor(Math.random() * 3));
         this._deductResources(resourceSystem, 0.15);
         break;
@@ -159,7 +159,7 @@ export class ImpactDamageSystem {
         // 50-75% POP, 50-70% budynków, 50% zasobów
         const popFrac = 0.5 + Math.random() * 0.25;
         const killCount = Math.max(1, Math.floor(civSystem.population * popFrac));
-        popLost = this._killPops(civSystem, killCount);
+        popLost = this._killPops(civSystem, killCount, planetId);
         const bldgFrac = 0.5 + Math.random() * 0.2;
         const bldgCount = Math.max(1, Math.floor(buildingSystem._active.size * bldgFrac));
         buildingsDestroyed = this._destroyBuildings(buildingSystem, resourceSystem, civSystem, bldgCount);
@@ -169,7 +169,7 @@ export class ImpactDamageSystem {
 
       case SEVERITY.EXTINCTION:
         // Wszystko zniszczone
-        popLost = this._killPops(civSystem, civSystem.population);
+        popLost = this._killPops(civSystem, civSystem.population, planetId);
         buildingsDestroyed = this._destroyBuildings(buildingSystem, resourceSystem, civSystem, buildingSystem._active.size);
         this._deductResources(resourceSystem, 1.0);
         break;
@@ -204,11 +204,13 @@ export class ImpactDamageSystem {
   }
 
   // ── Zabijanie POPów ──────────────────────────────────────────────
-  _killPops(civSystem, killCount) {
+  _killPops(civSystem, killCount, planetId = null) {
     if (killCount <= 0 || civSystem.population <= 0) return 0;
     const killed = Math.min(civSystem.population, killCount);
     civSystem.removePop(null, killed);
-    EventBus.emit('civ:popDied', { cause: 'impact', population: civSystem.population });
+    // planetId przekazany z `_applyDamage` — bez tagu bramka Dziennika jest ślepa
+    // (przepuszcza nieotagowane), więc śmierć POPów w kolonii AI trafiałaby do gracza.
+    EventBus.emit('civ:popDied', { cause: 'impact', population: civSystem.population, planetId });
     EventBus.emit('civ:populationChanged', civSystem._popSnapshot());
     return killed;
   }

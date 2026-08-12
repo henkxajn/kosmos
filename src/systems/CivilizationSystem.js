@@ -1016,6 +1016,7 @@ export class CivilizationSystem {
         EventBus.emit('civ:epochChanged', {
           epoch:   epochObj,
           message: t('epoch.entered', epochName),
+          planetId: this._colonyId,   // bramka Dziennika — epoka kolonii AI nie jest epoką gracza
         });
         break;
       }
