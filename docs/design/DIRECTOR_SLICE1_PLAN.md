@@ -1,7 +1,23 @@
 # DIRECTOR SLICE 1 — szkielet reguł, mapa wpływów, produkcja statków AI · plan doc
 
-**Status:** 🟢 **ZATWIERDZONY — wszystkie osiem decyzji PODPISANE 2026-08-10**, w tym dwa **orzeczenia
-właścicielskie Filipa** (R-1, R-2) nadpisujące jego własne wcześniejsze ustalenia (§Rulings).
+**Status:** ✅ **SLICE 1 COMPLETE — 2026-08-12.** S0–S6 wdrożone, **GATE 1 / GATE 2 / GATE 3
+PASSED** (2026-08-11 · 2026-08-12 · 2026-08-12). Osiem decyzji podpisanych 2026-08-10 + cztery
+orzeczenia właścicielskie (R-1…R-4). Save **v100, zero migracji** przez cały slice — i to była
+własność KONSTRUKCYJNA (wszystkie domyślne kształty puste), nie szczęśliwy zbieg okoliczności.
+
+**Gate'y:** `DIRECTOR_S4_GATE1_CHECKLIST.md` (produkcja, przebieg 3) ·
+`DIRECTOR_S5_GATE2_CHECKLIST.md` (pierwszy kontakt, przebieg 1 + spot-check) ·
+`DIRECTOR_S6_GATE3_CHECKLIST.md` (nacisk, przebieg 1 warunkowy → re-check FULL PASS).
+
+**Rejestr decyzji ZAMKNIĘTY.** Osiem decyzji (§Decisions taken / §Open decisions) + R-1 (economy
+executes), R-2 (powłoka 5 LY, zmierzona na 17,7 %), R-3 (stacja AI = żeton uprawnienia, nie
+fabryka), R-4 (drabinka technologiczna zostaje; świadoma konsekwencja: przed `ion_drives` nacisk
+daje incydent BEZ odpowiedzi zbrojnej — i to nie jest ciche). Żadna decyzja nie została w trakcie
+slice'u cicho zmieniona; dwie zostały SKORYGOWANE pomiarem i korekta jest zapisana przy nich
+(R-2 horyzont pomiaru, decyzja 2 egzekwowanie jednostki rzutu).
+
+<sub>Poprzedni status: 🟢 ZATWIERDZONY — wszystkie osiem decyzji PODPISANE 2026-08-10, w tym dwa
+orzeczenia właścicielskie Filipa (R-1, R-2) nadpisujące jego własne wcześniejsze ustalenia.</sub>
 
 **Postęp:** **S0 ✅** `e9f1853` (weryfikacja szwów WYKONANIEM — 11 potwierdzonych, **V4 ZŁAMANE**;
 stąd dwa orzeczenia i trzy wymagania dla S4) · **S1 ✅** `31bd81b` (szkielet reguł + rejestry + stan
@@ -15,12 +31,14 @@ dzisiejszej gry; mapa wpływów + `BORDER_LY`, 45/45) · **prerekwizyt 3D ✅** 
 54 + 25 + 30 + 32) — warunek ZDJĘTY: wyciek zdarzeń kolonii AI naprawiony `11abd0c` (pełny audyt,
 78 subskrybentów, tabela klasyfikacji niżej) · **S5 ✅ + GATE 2 PASSED** (`2bd9dc2` łańcuch
 pierwszego kontaktu + egzekwowanie jednostki rzutu; `c3aae2c` mesh po wczytaniu + lewary
-zestrzelenia; keeper 50/50) · **S6 ✅ + GATE 3 CONDITIONAL PASS 2026-08-12** (nacisk militarny L1–L2, FINAŁ slice'u; checklist
-`DIRECTOR_S6_GATE3_CHECKLIST.md`, keeper `director_pressure_smoke` 48/48) · S7 nierozpoczęty.
+zestrzelenia; keeper 50/50) · **S6 ✅ + GATE 3 FULL PASS 2026-08-12** (nacisk militarny L1–L2, FINAŁ slice'u; checklist
+`DIRECTOR_S6_GATE3_CHECKLIST.md`, keeper `director_pressure_smoke` 48/48). **SLICE 1 COMPLETE.**
 Trzy punkty nienegocjowalne ZIELONE na żywo na obu imperiach (G3.4 jeden wiersz · G3.10 napięcie
 0/0 · G3.12 dwa razy naturalnie: `no_orbital_station` i `no_crew`), ścieżka sukcesu udowodniona
-(3× `hull_frigate` = ładunek L2). **Warunek: defekt semantyki eskalacji — NAPRAWIONY, czeka na
-re-check Filipa** (§RE-CHECK w checkliście).
+(3× `hull_frigate` = ładunek L2). Defekt semantyki eskalacji naprawiony (`e22a85e`) i potwierdzony
+re-checkiem: pierwszy incydent = L1, izolacja per-imperium widoczna na żywo (postawa tylko u tego,
+który odpalił), round-trip zapisu bit-identyczny. ⚠ Drabina L1→L2 przyjęta na **pokryciu keepera**
+(T6d/T6e + T8) — przebieg skończył się przed upływem cooldownu, więc eskalacji nie widziano w grze.
 🔴 **Znalezione przy S6, wiąże przyszłe reguły:** `DirectorSystem` ocenia KAŻDĄ regułę katalogu
 w KAŻDYM ticku — także tę, która istnieje głównie jako cel `escalatesTo`. Dlatego
 `military_pressure_l2` ma WŁASNY, cięższy próg (≥3 statki); bez niego odpalałaby się samodzielnie
@@ -108,7 +126,35 @@ narusza — S3 jest czysty (zero wywołań produkcyjnych), a S4 konsumuje OBA.
 
 ## RESUME — start świeżej sesji (czytaj to PIERWSZE)
 
-### ⏭ PLAN NA JUTRO — kolejność wiążąca (stan na koniec sesji 2026-08-11)
+### ✅ SLICE 1 ZAMKNIĘTY — 2026-08-12. Co dalej (stan na koniec sesji)
+
+**Ten plan jest ZAMKNIĘTY.** S0–S6 wdrożone, wszystkie trzy gate'y PASSED, rejestr decyzji
+zamknięty (nagłówek na górze pliku). Nic w tym dokumencie nie czeka na wykonanie.
+
+🔴 **NASTĘPNY STRUMIEŃ — decyzja podjęta (Filip + orkiestrator): dokument `WAR_BACKBONE`.**
+Powstaje **w workflow orkiestratora** (pytania audytowe → dyskusja projektowa → dokument),
+**NIE jest to jeszcze strumień implementacyjny CC.** Kolejna sesja CC zostanie zabootstrapowana
+**dopiero, gdy dokument będzie istniał** — do tego czasu nie ma tu zadania do podjęcia.
+
+⚠ **Nie zaczynaj Slice 2 Directora ani D3 z tego pliku.** Slice'y 2–3 pozostają niezakresowane;
+kolejność całego arca trzyma `WOJNA_I_POKOJ_MASTER_PLAN.md` §Sequence.
+
+**Wejście do WAR_BACKBONE z tego slice'u** — cztery znaleziska ekonomii AI, żadne nie było do
+naprawy przez Directora (opisane w master planie §Completed, punkt 5): `freePops` w stanie
+ustalonym zero · popyt na komodyty niewytwarzalne przy pominiętych rudach · uśpieni kurierzy
+(jedyny wcześniejszy konsument `startShipBuild` nie odpalił ani razu) · ekspansja na dwóch
+harmonogramach (outposty od ~85 lat cyw., pełne kolonie ~456).
+
+**Zadanie równoległe Filipa (niezależne od CC):** generowanie grafiki i audio pierwszego kontaktu
+wg `assets/event-videos/midjourney_prompts.md` — sekcja „⭐ PIERWSZY KONTAKT" (rekomendacja:
+wariant A, sylwetka sondy) + backlog 10 brakujących video. Kod działa na `default.mp4`, więc
+**nic nie jest tym zablokowane**; wpięcie wariantu popupu i audio to osobny, późniejszy commit.
+
+---
+
+<sub>Poniżej: historyczny blok „PLAN NA JUTRO" z sesji 2026-08-11, zachowany jako zapis przebiegu.</sub>
+
+### ⏭ PLAN NA JUTRO — kolejność wiążąca (stan na koniec sesji 2026-08-11) — ✅ WYKONANE
 
 **Gdzie jesteśmy:** **GATE 1 PASSED** (przebieg 3). Wszystkie cztery punkty nienegocjowalne
 zielone: własność na OBU trasach (bezpośredni start + promocja `pending→queue` — dokładnie ta,

@@ -177,7 +177,7 @@ KOSMOS.debug.grantFreePops('emp_001', 0)
 | pole | wartość |
 |---|---|
 | Data / przebieg | **2026-08-12, przebieg 1** |
-| Wynik | ✅ **CONDITIONAL PASS** — trzy nienegocjowalne ZIELONE, ścieżka sukcesu udowodniona, jeden defekt warunkujący pełne zamknięcie |
+| Wynik | ✅ **FULL PASS** (re-check 2026-08-12) — warunek zdjęty, gate zamknięty bezwarunkowo. **Slice 1 COMPLETE.** |
 | Punkty nienegocjowalne (**G3.4** jeden wiersz · **G3.10** napięcie nietknięte · **G3.12** cisza zbrojna z podanym powodem) | |
 | Rozbieżności | |
 
@@ -248,6 +248,29 @@ KOSMOS.gameState.get('director.posture')
 ```
 ☐ **R4** — zapisz grę, **F5**, wczytaj, i powtórz to zapytanie: postawa (`level`, `sinceYear`)
   **przeżywa round-trip**. Punkt nieprzećwiczony w przebiegu 1.
+
+---
+
+---
+
+## ✅ RE-CHECK PO NAPRAWIE (2026-08-12) — FULL PASS, warunek zdjęty
+
+- **R1/R2** — pierwszy w historii incydent `emp_002` ma **`level: 1`**. To dokładnie ten objaw,
+  który przed naprawą wychodził jako `level: 2`.
+- **R3 (izolacja) — WIDOCZNA NA ŻYWO:** postawa obronna powstała **wyłącznie** dla imperium,
+  które odpaliło. `emp_001` rzucił, chybił i **nie ma wpisu** — czyli stan reguły naprawdę żyje
+  per (reguła, imperium), a nie globalnie.
+- **R4 (round-trip) — ZWERYFIKOWANY NA ŻYWO:** `posture` i `odpalenieRok` dla OBU imperiów
+  **bit-identyczne** po `save → F5 → load`. Punkt nieprzećwiczony w przebiegu 1.
+- Kolejne naturalne `refused-with-reason` (`no_crew`) — R-4 działa dalej.
+- Konsola czysta.
+
+⚠ **GRANICA DOWODU — drabina L1→L2 przyjęta NA POKRYCIU KEEPERA, nie na obserwacji live.**
+Przebieg zakończył się, zanim upłynął cooldown 5 lat wyświetlanych, więc eskalacji nie
+zaobserwowano w grze. Pokrywają ją **T6d/T6e** (eskalacja w oknie, wykonanie) i **T8a–T8g**
+(pierwszy incydent zawsze L1, izolacja na ośmiu seedach). Traktować jako *keeper-verified*,
+nie *live-verified* — gdyby przyszła zmiana ruszyła cooldowny albo okno, to jest pierwszy punkt
+do obejrzenia na żywo.
 
 ---
 

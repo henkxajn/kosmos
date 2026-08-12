@@ -113,6 +113,52 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   weight of a whole save, and deleted *first* under quota pressure — the guaranteed recovery path is
   the `.json` file on disk. Both shipped with fail-first-proven pins.
 
+- **ReactionDirector Slice 1 — DONE, GATES 1-3 PASSED (2026-08-11 / 2026-08-12 / 2026-08-12).**
+  Plan `DIRECTOR_SLICE1_PLAN.md`; gate scripts `DIRECTOR_S4_GATE1` / `S5_GATE2` / `S6_GATE3`.
+  Shipped: **rule skeleton** (declarative `trigger → guard → roll → delay → response`, three name
+  registries, state per `(rule, empire)` in `gameState.director`) · **influence map** (runtime-only,
+  claimed vs 5 LY border shell, disjoint by construction) with R-2's coverage measurement
+  (**17.7 %** across 4 seeds) · **template catalog v1** (Filip's three frigates + probe) with a
+  resolver and its **inversion** (`matchTemplateId`) · **AI warship production** through the real
+  economic path (`startShipBuild` → `shipQueues`/`pendingShipOrders`), gated by an orbital-station
+  **permission token** (R-3), with a 3-year TTL so an order can never become a ghost ·
+  **first-contact chain** (observatory L5 → cumulative roll → probe flyby across the player's
+  system → the Director takes over the narrative beat → `first_contact_kill` if shot down) ·
+  **military pressure L1-L2** on the **opinion** channel with escalation window and a defensive
+  posture. Save **v100 with zero migrations across the whole slice** — a structural property
+  (every new default shape is empty), not luck. Sweep 114 → **123** keepers.
+  Five findings that outlived the slice:
+  1. **"An unstamped ship is the player's" (V3c).** An AI-built warship left the yard with no owner,
+     and because `isEnemyVessel` is a truthiness test, *no owner* reads as **the player's ship** —
+     it showed up in the player's fleet and upkeep. Fixed structurally (own stamp on `vessel:created`,
+     no `hull_small` filter), and the class is worth remembering: ownership must be stamped at
+     creation, never inferred from absence.
+  2. **A declared unit the engine never enforced.** `roll.unit: 'displayedYear'` was validated *to
+     the letter* while `rollFires` counted only attempts and `tickEmpire` runs per **civ** year —
+     so a 10 %/+10 pt curve saturated in **0.83** displayed years instead of ~3.7. Signed Decision 2
+     would have been **dead on arrival, silently**. The engine now gates one attempt per displayed
+     year; every rolled rule inherits it.
+  3. **Feed isolation — three layers of one defect.** AI shipyard, AI vessel and finally AI *colony*
+     events reached the player's Journal unfiltered: free intel bypassing the intel layer. The audit
+     that closed it overturned its own sizing — **78** Journal-writing subscribers, not 44; three of
+     six named suspects were not leaking, while three unlisted ones were, including `civ:epochChanged`
+     which rendered **an AI empire's epoch advance as the player's own**. Product: a classification
+     table of all 78 (18 gated / 36 player-scoped by construction / 24 global-by-design).
+  4. **A ladder rung needs a predecessor guard, not just a higher threshold.** L1 and L2 roll
+     independently and the engine evaluates every rule every tick, so under heavy pressure L2 could
+     win its roll *before* L1 ever fired — an empire's first-ever incident came in at L2. Both
+     working hypotheses (state keyed per-rule; escalation ticking independently) were **wrong**;
+     the cause was found by reproducing it headless. Every future L(n)→L(n+1) pair needs the guard.
+  5. **Four AI-economy findings, filed to WAR_BACKBONE/BALANS** — none of them Director's to fix:
+     **freePops steady-state zero** (full employment is the designed state for AI colonies, so the
+     hard crew gate refuses warships indefinitely) · **demand for non-manufacturable commodities**
+     (the economic coupling asks for `warp_cores`/`metamaterials` a colony factory cannot make,
+     while the *ores* that actually block are skipped) · **dormant couriers** (the only pre-existing
+     AI caller of `startShipBuild` never fired once in 4 seeds × 400 civYears — Director is its
+     first real user) · **expansion runs on two schedules** (outposts from civYear ~85 and recurring,
+     full colonies only around ~456 — the "AI founds nothing" diagnosis was overturned in its strong
+     form once the probe horizon was extended).
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
@@ -223,7 +269,8 @@ BattleSystem; ground combat RNG gets seeded (audit R13) when touched.
 Declarative trigger→response rules, personality-parameterized, with cooldowns and
 escalation. Gives the game *dramaturgy* on top of systemic AI.
 
-- **Slice 1 — 🟢 IN PROGRESS, GATES 1-2 PASSED (2026-08-11 / 2026-08-12). S6 = GATE 3 is the finale.** Plan doc: `DIRECTOR_SLICE1_PLAN.md`
+- **Slice 1 — ✅ DONE. All three gates PASSED (2026-08-11 / 2026-08-12 / 2026-08-12).**
+  Retrospective + the five findings: see §Completed. Slices 2–3 remain unscoped. Plan doc: `DIRECTOR_SLICE1_PLAN.md`
   (approved 2026-08-10; eight decisions signed + owner rulings **R-1**…**R-4**). **Read its
   §PLAN NA JUTRO block first** — it carries the binding order for the next session.
   Progress: **S0 ✅** `e9f1853` · **S1 ✅** `31bd81b` · **S3 ✅** `4755f19` (Filip's frigate
@@ -282,6 +329,11 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 
 1. Galaxy map 2D reform (readability) — explicitly last; D3's influence map is
    data-only and does not depend on it.
+   ⚠ **Now carries a concrete correctness item, surfaced by GATE 3:** the map draws
+   `TerritoryField` isolines at **1.5–4.0 LY** (metaball contours over colony devScore) while
+   military pressure actually triggers off the influence map's **5 LY border shell** — so a player
+   reading the map misjudges where an incident will fire, and there is no drawn cue for the shell
+   at all. Either render the shell or state plainly that the isoline is not it.
 1b. **World variety — the remaining counter-derived constants.** GALAXY_SEED fixes the galaxy seed
    only. Everything keyed off `entity_N` ids stays identical in every new game: star texture variant
    (`ThreeRenderer.js:1245`), planet hex maps (`PlanetMapGenerator.js:92`), region layout
@@ -298,9 +350,9 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 
 ```
 D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 2026-08-10)
-                        → Director Slice 1 🟢 S0..S5 ✅ + GATES 1-2 PASSED (2026-08-11/12)
-                                                ⟵ WE ARE HERE — S6 = GATE 3, the slice finale
-                        → [Director S6..S7 + Gate 3] ∥ D3 → WAR_BACKBONE doc
+                        → Director Slice 1 ✅ COMPLETE (S0..S6, Gates 1-3 PASSED 2026-08-11/12)
+                                                ⟵ WE ARE HERE — next stream: WAR_BACKBONE doc
+                                                   (orchestrator workflow, NOT a CC stream yet)
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
