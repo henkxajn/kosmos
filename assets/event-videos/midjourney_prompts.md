@@ -155,3 +155,88 @@ Small group of volunteer colonists preparing for dangerous expedition, loading s
    `Slow cinematic camera movement, subtle atmospheric particles, gentle lighting shift`
 4. Eksportuj jako MP4 (720p wystarczy, 3-5 sekund loop)
 5. Zapisz jako `assets/event-videos/{nazwa}.mp4`
+
+---
+
+# ⭐ PIERWSZY KONTAKT — najwazniejszy beat narracyjny w grze (Director S5)
+
+> Kontekst: obce imperium przysyla sonde badawcza przez uklad gracza. Sonda NIE odpowiada na
+> wezwania, przelatuje i znika. To moment „nie jestesmy sami" — flagowy beat calej gry, wiec ma
+> WYGLADAC inaczej niz rutynowy raport misji.
+>
+> ⚠ **Nic nie jest zablokowane brakiem grafiki.** Popup ma lancuch fallbackow
+> (`{nazwa}.mp4` → `{kategoria}.mp4` → `default.mp4`), wiec kod dziala na `default.mp4`,
+> dopoki plik nie powstanie. Generuj bez posiepu.
+>
+> Dlaczego to w ogole trzeba robic: beat JUZ jedzie kanalem kinowym (DATASHEET z tlem MP4,
+> auto-pauza gry), ale `svgKey:'report'` mapuje go na WSPOLDZIELONE `science.mp4` — to samo
+> video, co kazdy rutynowy raport. Stad wrazenie „zwyklego popupu".
+
+**Plik docelowy:** `assets/event-videos/first_contact.mp4`
+**Format:** jak reszta — `--ar 16:9 --s 400 --v 6.1`, MP4 720p, **loop 4–6 s** (dluzszy niz
+standardowe 3–5 s, bo gracz ma sie zatrzymac i patrzec).
+
+## Menu kierunkow — wybierz JEDEN (rekomendacja: A)
+
+### A. Sylwetka sondy na tle gwiazdy ⭐ REKOMENDOWANE
+Czytelne natychmiast, pokazuje OBCOSC konstrukcji (gracz widzi, ze to nie jego technologia),
+i jako jedyne dziala tez jako miniatura. Nie wymaga od widza domyslania sie, co widzi.
+```
+Alien probe silhouette drifting past a distant star, unfamiliar asymmetric hull geometry unlike any human ship, no visible engines or windows, cold starlight rimming its edges, vast empty space around it, sense of being observed by something indifferent, hard sci-fi, dark palette with cyan accent rim light, cinematic wide shot, The Expanse meets Arrival --ar 16:9 --s 400 --v 6.1
+```
+
+### B. Wizualizacja sygnalu radiowego
+Bardziej „naukowe", mniej dosadne — dobre, jesli chcesz, zeby gracz najpierw USLYSZAL obcych,
+a dopiero potem ich zobaczyl. Slabsze jako miniatura.
+```
+Radio telescope array receiving an unknown signal, waveform visualization of a non-human transmission pattern rendered as glowing oscilloscope traces, operators frozen watching the display, signal structure clearly artificial but alien, dark control room lit only by screens, cyan and amber instrument glow, tense cinematic atmosphere --ar 16:9 --s 400 --v 6.1
+```
+
+### C. Abstrakcyjne „jestesmy obserwowani"
+Najbardziej nastrojowe, najmniej doslowne. Ryzyko: gracz moze nie zrozumiec, co sie stalo.
+```
+Abstract sense of alien observation, colony habitat seen from an unnatural distant vantage point as if through unknown optics, faint scan-grid overlay across the image, cold geometric interference patterns, feeling of being watched by something patient and unknowable, dark minimal composition, cyan scan lines over deep black, cinematic --ar 16:9 --s 400 --v 6.1
+```
+
+## SUNO — brief audio
+
+**Plik docelowy:** `assets/sounds/first_contact.mp3`
+⚠ **Wpiecie audio to OSOBNY commit** (trwa ustalenie, czy `AudioSystem` ma sciezke jednorazowego
+SFX z pliku, czy tylko sciezke muzyki) — plik moze poczekac, generuj razem z grafika.
+
+- **Dlugosc:** 12–18 s (popup pauzuje gre, wiec gracz siedzi na nim tyle, ile zechce — utwor ma
+  wybrzmiec i ucichnac, NIE zapetlac sie w nieskonczonosc).
+- **Struktura:** 0–2 s **hook** (pojedyncze uderzenie/dron wchodzacy razem z pauza gry — to jest
+  moment, w ktorym ekran zamiera) · 2–10 s narastajacy dron z obcym, nieregularnym pulsem ·
+  10–18 s rozplyniecie w cisze.
+- **Instrumentarium:** niskie drony syntetyczne, metaliczne rezonanse, brak perkusji rytmicznej,
+  brak melodii wokalnej. Ma byc NIEPOKOJACE, nie epickie — kosmos jest obojetny, nie wrogi.
+- **Referencje nastroju:** Arrival (Johannsson), Solaris, Blade Runner 2049 — sekcje „ambient dread".
+
+---
+
+# 📋 BACKLOG GENEROWANIA — 10 promptow BEZ pliku MP4
+
+Sprawdzone porownaniem promptow w tym pliku z zawartoscia katalogu (2026-08-12). Kazdy z tych
+plikow jest **realnie odpytywany** przez kod (`assets/event-videos/{event.id}.mp4` to pierwsze
+ogniwo lancucha), wiec kazdy dzis po cichu spada na `default.mp4`. Nic sie nie psuje — ale
+kazdy wygenerowany plik to jedno zdarzenie mniej wygladajace generycznie.
+
+⚠ Filip wskazal dwa (`cultural_festival`, `population_milestone`); pomiar pokazal **dziesiec**.
+Prompty do WSZYSTKICH juz sa w tym pliku — brakuje wylacznie renderow.
+
+| # | plik do wygenerowania | prompt |
+|---|---|---|
+| 1 | `population_milestone.mp4` | jest w tym pliku (sekcja 10) |
+| 2 | `cultural_festival.mp4` | jest w tym pliku (sekcja 12) |
+| 3 | `new_alloy_discovered.mp4` | sekcja 13 |
+| 4 | `xenobiology_find.mp4` | sekcja 14 |
+| 5 | `political_tension_resolved.mp4` | sekcja 15 |
+| 6 | `scout_report.mp4` | sekcja 16 |
+| 7 | `shipyard_efficiency.mp4` | sekcja 17 |
+| 8 | `archival_data_recovered.mp4` | sekcja 18 |
+| 9 | `volunteer_expedition.mp4` | sekcja 19 |
+| 10 | `veteran_engineer_retires.mp4` | jest w tym pliku |
+
+**Priorytet:** `first_contact.mp4` (flagowy beat) → `population_milestone` + `cultural_festival`
+(zgloszone z gry) → reszta w dowolnej kolejnosci.
