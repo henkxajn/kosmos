@@ -1,8 +1,9 @@
 # WOJNA I POKÓJ 1.0 — master plan
 
-**Status:** living roadmap · **Last update:** 2026-08-10
-**Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
-`WAR_BACKBONE.md` (pending), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
+**Status:** living roadmap · **Last update:** 2026-08-14
+**Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` (2026-08-05 — **partly superseded**, see `W1_PLAN.md`
+§Corrections K-1/K-2/K-5/K-6) · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
+`WAR_BACKBONE.md` (**signed 2026-08-13**), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
 **Phase docs in repo:** `D1_AUTONOMOUS_REPORT.md` · `D1_LIVE_GATE_CHECKLIST.md` · `D2_PLAN_SKELETON.md` ·
 `D2_PLAN.md` (+ `D2_E3/E5/E6_GATE_CHECKLIST.md`) · `GALAXY_SEED_PLAN.md` (+ its gate checklist) — all in `docs/design/`.
 
@@ -220,9 +221,27 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   implementation time **with the acceptance matrices in hand** (E7's `diplomacy` metric), not now.
 - **D5** Verb batch 2 (tech_exchange, tribute, embargo, trade ramping) + AI↔AI activation
 
-### B. War backbone (doc after D2, phases W1–Wn interleave with D3/D4)
+### B. War backbone — ✅ **doc SIGNED 2026-08-13** (`WAR_BACKBONE.md`), phases W1–Wn interleave with D3/D4
 
-Owns everything between war declaration and the peace table. Doc must cover:
+Owns everything between war declaration and the peace table.
+
+- **W1 — repairs & foundations. ✅ plan APPROVED 2026-08-14** (`W1_PLAN.md`), implementation pending,
+  starts at commit **W1-0** of nine. R2 fix → derived-strength read-model → shared ThreatAssessment →
+  un-stub `relative_power` → skirmish category + EAH accounting → two doctrines on posture → courier
+  latch fix → `FLEET_AGGRO_INTERVAL` deletion. Save **v100, no save-model changes** (P7). Three gates.
+  Fourteen decisions signed; **no re-litigation**.
+  ⚠ **Two audit refutations bind every later reader** (`W1_PLAN.md` §Corrections, and folded into
+  `WAR_BACKBONE.md` §2 P2): **K-1** — repairing R2 does **NOT** move `milRatio` and cannot push empires
+  into AGGRESSIVE/WAR; the *numerator* `empire.military.power` was deleted by the Slice-1 refactor and
+  `createEmpire` silently drops it, so `milRatio ≡ 0` before **and** after. The warning repeated in this
+  file, in `COMBAT_DIPLO_AUDIT` R2, in `D2_PLAN` K-1 and in `DIRECTOR_SLICE1_PLAN` decision 5 is **wrong**;
+  two in-repo comments carry the same error and are corrected in W1-1. **K-2** — P2's transition is
+  **void**: `empire.fleets` is always empty in normal play, while AI already owns real ownership-stamped
+  warships since Director S4/S6 — live military assets with no abstract representation at all.
+- **W2 — the deploy model (P4)**, own plan doc, own gate, likely the first save bump since v100.
+- **W3+ — offensive AI & territorial peace** (§6a, signed 2026-08-13).
+
+The doc covers:
 
 1. **MilitaryBrain** — AI fleet decision layer: target selection, defend vs raid vs
    invade, retreat logic, defensive postures (e.g. homeworld orbital garrison as a
@@ -351,44 +370,41 @@ escalation. Gives the game *dramaturgy* on top of systemic AI.
 ```
 D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 2026-08-10)
                         → Director Slice 1 ✅ COMPLETE (S0..S6, Gates 1-3 PASSED 2026-08-11/12)
-                                                ⟵ WE ARE HERE — next stream: WAR_BACKBONE doc
-                                                   (orchestrator workflow, NOT a CC stream yet)
+                        → WAR_BACKBONE doc ✅ SIGNED (P1-P7 + §6a, owner 2026-08-13)
+                        → W1 plan ✅ APPROVED (14 decisions signed, orchestrator 2026-08-14)
+                                                ⟵ WE ARE HERE — next: W1 IMPLEMENTATION,
+                                                   a CC stream, starting at commit W1-0
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** **the diplomacy backbone's first two phases are done and the arc's
-foundation is in place.** D1 gave relations a real model; D2 gave them a real *decision* — closed
-2026-08-10 after nine commits and three passed live gates, with the save format untouched throughout
-(v100, no migration). AI can now say no, and say *why*. The blow-by-blow lives under **Completed →
-D2** above and in `D2_PLAN.md` (per-commit table + 16 implementation findings); the three gate scripts
-carry their recorded results.
+**Where we are right now:** **the arc's foundation is complete and the war backbone has its first
+executable plan.** D1 gave relations a real model; D2 gave them a real *decision* (closed 2026-08-10,
+nine commits, three passed gates, save untouched at v100); Director Slice 1 gave the galaxy a
+*dramaturgy* layer and — decisively for workstream B — the first AI empires that build real warships
+through the real economy. `WAR_BACKBONE.md` is **signed** (P1–P7 plus §6a territorial peace), and
+`W1_PLAN.md` is **approved** with fourteen signed decisions. **The next action is code, not design.**
 
-**Next horizon — Director Slice 1 went first; S0–S4 are done and GATE 1 has PASSED.**
-1. **ReactionDirector Slice 1** (workstream C) — 🟢 **IN PROGRESS**, plan `DIRECTOR_SLICE1_PLAN.md`
-   (read its **§PLAN NA JUTRO** block first — binding order). S0–S4 ✅, **GATE 1 PASSED**;
-   **next: colony-layer Journal fix, then S5 = GATE 2** (first-contact chain). Still runs in
-   parallel with D3 and still pulls B.3 forward in a minimal form.
-   ⚠ **Four findings now bind later work**, all measured rather than assumed:
-   (i) an AI-built warship left the yard with **no owner**, and because `isEnemyVessel` is a
-   truthiness test, "no owner" reads as **the player's ship** — fixed structurally in S4;
-   (ii) AI shipyard/vessel events reached the player's Journal, i.e. **free intel** bypassing the
-   intel layer — fixed; the **colony-event layer is still open**;
-   (iii) **crew is a standing constraint on AI warship production** — full employment is the
-   designed steady state for AI colonies, so `freePops` converges to 0 and `startShipBuild`
-   refuses hard (fourth AI-economy finding, → WAR_BACKBONE);
-   (iv) the "AI founds nothing" diagnosis is **overturned in its strong form** — outposts appear
-   at civYears 85/140/155/160/185, full colonies around ~456, and my S2 probe simply stopped
-   short at 400 civY. This shortens the shelf life of R-2's 5 LY constant (see below).
-2. **WAR_BACKBONE doc** (workstream B) — the design pass that owns everything between a war
-   declaration and the peace table. It is also where audit **R2** finally gets fixed (both player-military
-   estimators are broken identically), which is what un-stubs D2's `relative_power` term, and where
-   `FLEET_AGGRO_INTERVAL` gets deleted.
+**Next horizon — W1 implementation (a CC stream), starting at commit W1-0.**
+1. **W1 — repairs & foundations** (workstream B) — 🟢 **NEXT**, plan `W1_PLAN.md` (**read its §RESUME
+   block first** — binding order). Nine atomic commits, three live gates, no save-model change.
+   Clears R2, R10, the R6/R14 residue and `FLEET_AGGRO_INTERVAL`; ships the shared ThreatAssessment
+   module; **un-stubs `relative_power`**. First report due after the K-1/R2 commit family.
+2. **W2 — the deploy model** (P4): build → storage → deploy, crew at deploy, production upgrades for
+   war commodities, mobilization as an intel-visible event. Own plan doc, own gate, likely the first
+   save bump since v100.
 3. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation
-   record, unread, since D1, and D3 is its consumer.
+   record, unread, since D1, and D3 is its consumer. The influence map is already built (Director S2).
 
-⚠ Two D2 terms stay deliberately inert until those land: `relative_power` (needs R2 →
-WAR_BACKBONE) and `third_party` (needs AI↔AI pairs → D5). Both are marked INERT in E7's acceptance
-matrices so nobody tunes weights against a term that returns zero.
+⚠ **`relative_power` stops being inert in W1** (commit W1-3, GATE 1) — the E7 acceptance matrices must
+be re-run with before/after attached, and the untracked BALANS baseline copied aside **before** the first
+run (`W1_PLAN.md` §V19). `third_party` stays inert until **D5** brings AI↔AI pairs; it remains marked
+INERT in the matrices so nobody tunes weights against a term that returns zero.
+
+⚠ **The four Director Slice 1 AI-economy findings** (freePops steady-state zero · demand for
+non-manufacturable commodities · dormant couriers · expansion on two schedules) are now **triaged**:
+the courier latch is a W1 commit, the rest are filed to BALANS with scope estimates in
+`W1_PLAN.md` §Findings filed. The "dormant couriers = mis-keyed to outposts" diagnosis was **overturned**
+— there is no keying mismatch; the path simply had no outposts in the measured window (§K-5).
 
 Balancing note: full military tuning in BALANS waits until AI military economy exists
 (workstream B); civilian-economy validation proceeds independently. Every phase ships
