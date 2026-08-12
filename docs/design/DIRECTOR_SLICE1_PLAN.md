@@ -117,7 +117,19 @@ To **jeszcze nie jest defekt** — najpewniej braki komodytów. Domknąć jednol
 skryptu (odczyt braków z `director:commodityDemand`, NIE z pamięci), uzupełnić i doczekać do
 `shipQueues`.
 
-**(c) DOPIERO WTEDY: S5 — łańcuch pierwszego kontaktu (GATE 2).** Zakres bez zmian względem
+**(c) ✅ ZAIMPLEMENTOWANE 2026-08-12 — S5, czeka na GATE 2.** Checklist:
+`DIRECTOR_S5_GATE2_CHECKLIST.md`. Keeper `director_first_contact_smoke` 41/41, sweep 122/122.
+🔴 **Znalezione przy implementacji, wiąże dalsze reguły:** `roll.unit: 'displayedYear'` był
+**zadeklarowany, ale nieegzekwowany** — `rollFires` liczy wyłącznie PRÓBY, a `tickEmpire` chodzi
+raz na rok CYWILIZACYJNY, więc „10 % +10 pkt/rok" osiągało 100 % po 0,83 roku wyświetlanego zamiast
+~3,7 (decyzja 2 byłaby martwa). `DirectorSystem._evaluate` ma teraz bramkę „jedna próba na rok
+wyświetlany" (`lastAttemptYear` w stanie reguły, pusty default = bez migracji). **Każda przyszła
+reguła z `roll` dziedziczy tę semantykę.** Druga rzecz: S5 jest pierwszą realną regułą, więc dopiero
+teraz `DirectorSystem` jest w ogóle instancjonowany i tickowany z `AlienCivSystem._tickAll`;
+kolejność „rejestracja zachowań PRZED konstrukcją silnika" jest wymuszona (walidacja katalogu rzuca
+na nieznanej nazwie) i pinowana w `director_skeleton_smoke`.
+
+**(c) [oryginalny zakres] S5 — łańcuch pierwszego kontaktu (GATE 2).** Zakres bez zmian względem
 tabeli commitów: wyzwalacz „obserwatorium L5" (sonda `playerObservatoryLevel`), rzut kumulatywny
 w latach **WYŚWIETLANYCH** (decyzja 2), akcja `scienceFlyby` (spawn wzorem
 `EmpireFleetMaterializer` + kurs przez układ gracza + despawn na wyjściu), **Director PRZEJMUJE
@@ -283,6 +295,11 @@ Odwrócenie resolvera odpala się WYŁĄCZNIE w `_claimVessel`, a to wisi na `ve
 `VesselManager` emituje TYLKO w `createVessel` (`:181`) — `restore()` go NIE re-emituje. Do tego
 `_claimVessel` ma wczesny powrót `if (vessel.ownerEmpireId) return;`, więc nawet re-emisja
 ominęłaby statek już ostemplowany.
+
+🔴 **ORZECZENIE (Filip, 2026-08-12): ŻADNEGO przemiatu retro dla `v_1`/`v_2` — to relikty testowe.**
+Notatka o wykonalności zostaje jako WARUNKOWA: jednorazowy przemiat wraca na stół **tylko wtedy, gdy
+liczenie eskalacji („ile fregat nacisku już stoi") zetknie się z okrętami sprzed naprawy** — dopóki
+te liczniki widzą wyłącznie okręty zamówione po `831a3e7`, problemu nie ma.
 
 ⇒ Statek **zbudowany** przed naprawą nie dostanie adnotacji nigdy: ani na żywo, ani po `save/load`.
 Zdanie z commita `831a3e7` mówiło o okrętach **ZAMÓWIONYCH** przed restartem (zlecenie `pending`,
@@ -1009,7 +1026,7 @@ mogą się zepsuć niezależnie i regresji nie da się inaczej przypisać.
 | **S2** | `feat(director): mapa wpływów (claimed + strefa graniczna w LY)` | NEW `src/systems/InfluenceMap.js` + `src/utils/InfluenceMath.js` (czysta: `systemsWithinLY`, promień z `devScore`) · wpięcie w `GameScene` po `territoryService` · `KOSMOS.debug.influenceMap()`. Data-only. | — |
 | **S3** ✅ | `feat(director): szablony statków + resolver` | NEW `src/data/ShipTemplateData.js` (**katalog v1 Filipa: `frigate_laser_escort` / `frigate_missile_escort` / `frigate_system_defender`** + `science_probe`) · `src/utils/ShipTemplateResolver.js` · **walidator pojemności** (§Template §3). Bez wywołań produkcyjnych. | — |
 | **S4** | `feat(director): produkcja okrętów AI przez startShipBuild` | Akcja `queueWarships`: `resolveTemplate` → `cm.startShipBuild(capital.planetId, hullId, modules)` · **własny stempel własności** na `vessel:created` (klucz inny niż `logi.pendingBuildRoute`, BEZ filtra `hull_small` — V3c) · **guard `empireHasFreeCrew`** (V3z — połowa kolonii AI stoi na `freePops=0`, a bramka jest twarda) · **obsługa braku komodytów** (V3y — decyzja: guard czy świadome czekanie w `pendingShipOrders`) · `director:shipQueued`. **+R-3:** zasiew stacji w `EmpireColonyBootstrap` (po prerekwizycie 3D) · guard `empireHasOrbitalStation` · decyzja o `point_defense`. | **GATE 1** |
-| **S5** | `feat(director): łańcuch pierwszego kontaktu` | Reguła `first_contact` (rzut w latach **wyświetlanych**) · akcja `scienceFlyby` (spawn wzorem `EmpireFleetMaterializer` + kurs przez układ gracza + despawn na wyjściu) · beat narracyjny przez `queueMissionEvent` · i18n PL+EN · uzgodnienie z `vessel:firstSighting` (decyzja 5). | **GATE 2** |
+| **S5 ✅** | `feat(director): łańcuch pierwszego kontaktu` | Reguła `first_contact` (rzut w latach **wyświetlanych**) · akcja `scienceFlyby` (spawn wzorem `EmpireFleetMaterializer` + kurs przez układ gracza + despawn na wyjściu) · beat narracyjny przez `queueMissionEvent` · i18n PL+EN · uzgodnienie z `vessel:firstSighting` (decyzja 5). | **GATE 2** |
 | **S6** | `feat(director): nacisk militarny L1-L2` | `director:borderPresence` z `InfluenceMap` · reguły L1/L2 + eskalacja w oknie · **nowy typ incydentu z zadeklarowanym kanałem w `INCIDENT_CHANNELS`** (§Audit H) · „postawa obronna stolicy" · i18n. | **GATE 3** |
 | **S7** | `docs(director): domknięcie + wynik gate'ów` | `CLAUDE.md` + `MEMORY.md` + ten plan (wyniki), `REACTION_DIRECTOR.md` jeśli orkiestrator zdecyduje, że Slice 1 ma go otworzyć. | — |
 

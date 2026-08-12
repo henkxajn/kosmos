@@ -43,6 +43,9 @@ const stateKey = (ruleId, empireId) => `${ruleId}|${empireId}`;
 const emptyRuleState = () => ({
   attempts: 0, lastFiredYear: null, firedOnce: false,
   escalations: 0, lastEscalationYear: null,
+  // Rok WYŚWIETLANY ostatniej próby rzutu — bramka „jedna próba na rok" (patrz `_evaluate`).
+  // `null` = jeszcze nie próbowano; stary zapis bez tego pola czyta się tak samo (brak migracji).
+  lastAttemptYear: null,
 });
 
 export class DirectorSystem {
@@ -199,9 +202,19 @@ export class DirectorSystem {
       : 1;
 
     if (rule.roll) {
+      // ⚠ JEDNOSTKA RZUTU. `roll.unit` jest walidowane DOSŁOWNIE jako 'displayedYear', ale
+      // `rollFires` liczy wyłącznie PRÓBY — sam z siebie nie wie nic o latach. Tymczasem
+      // `tickEmpire` woła się raz na rok CYWILIZACYJNY (1/12 roku wyświetlanego), więc bez
+      // tej bramki „10 % + 10 pkt/rok" osiągałoby 100 % po 10 tikach = 0,83 roku
+      // wyświetlanego zamiast ~3,7 (decyzja 2). Zadeklarowana jednostka, której silnik nie
+      // honoruje, to dokładnie ta klasa błędu, przez którą przegląd D2/E6 znalazł trzy
+      // komentarze kłamiące o własnej jednostce — dlatego próba liczy się RAZ NA ROK.
+      const last = st.lastAttemptYear;
+      if (last != null && (year - last) < 1.0) return;
+
       const attempts = (st.attempts ?? 0) + 1;
       const fired = rollFires(rule.id, empireId, attempts, rule.roll ?? DEFAULT_ROLL, mult);
-      this._writeRuleState(rule.id, empireId, { ...st, attempts }, 'director_roll');
+      this._writeRuleState(rule.id, empireId, { ...st, attempts, lastAttemptYear: year }, 'director_roll');
       if (!fired) return;
     }
 

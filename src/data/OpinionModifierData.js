@@ -65,6 +65,20 @@ export const OPINION_MODIFIERS = {
     defaultValue: -5, decayPerYear: 2, combine: COMBINE.ACCUMULATE, persistent: false,
   },
 
+  // Gracz zestrzelił sondę pierwszego kontaktu (Director S5, decyzja 4).
+  //
+  // ⚠ Przelot jest zestrzeliwalny Z KONSTRUKCJI: nie ma pojęcia „neutralny obcy statek",
+  // więc uzbrojony statek gracza wykona na bezbronnej sondzie jednostronną egzekucję.
+  // Slice 1 dowozi MINIMUM — duży minus opinii + wpis pamięci. Raiser reputacji
+  // `aggression +20` z `DIPLOMACY_BACKBONE.md` §1.2 zostaje D4, bo dziś ŻADEN raiser
+  // reputacji nie istnieje (korekta K-2 z D2) i pojedynczy wyjątek byłby niespójny.
+  //
+  // ACCUMULATE, nie REFRESH: drugi zestrzelony przelot ma boleć bardziej niż pierwszy.
+  first_contact_kill: {
+    id: 'first_contact_kill', labelKey: 'diplo.mod.firstContactKill',
+    defaultValue: -25, decayPerYear: 1, combine: COMBINE.ACCUMULATE, persistent: false,
+  },
+
   // Statek badawczy wszedł do ich układu.
   research_intrusion: {
     id: 'research_intrusion', labelKey: 'diplo.mod.researchIntrusion',

@@ -651,20 +651,25 @@ export class ObservatorySystem {
       // EventLog + popup alert — tylko PIERWSZE wykrycie w sesji.
       if (!this._reportedVesselSightings.has(id)) {
         this._reportedVesselSightings.add(id);
-        const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : 'nieznane imperium';
+        const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : t('director.unknownEmpire');
         // Fog-of-war tożsamości: detekcja obserwatorium = rumor (pozycja bez identyfikacji).
         // Log NIE ujawnia nazwy statku — tylko fakt wykrycia kontaktu. Pełne dane = proximity.
         evtLog?.push({
-          text:      `🔭 Wykryto niezidentyfikowany kontakt w układzie.`,
+          text:      t('log.unidentifiedContact'),
           channel:   'intel',
           severity:  'warn',
           entityRef: id,
         });
-        // Dedykowany event dla GameScene — popup z pauzą gry
+        // Dedykowany event dla GameScene — popup z pauzą gry.
+        //
+        // ⚠ `firstContactFlyby` (decyzja 5): dla sondy przelotu pierwszego kontaktu generyczny
+        // popup jest TŁUMIONY (GameScene wychodzi na tej fladze), a beat narracyjny „Nie jesteśmy
+        // sami" wystawia `DirectorFirstContact`. Jeden fakt = jeden popup; wcześniej groziły dwa.
         EventBus.emit('vessel:firstSighting', {
           vessel: v,
           empireId: empId,
           empireName: empName,
+          firstContactFlyby: window.KOSMOS?.directorFirstContact?.isFlyby?.(id) === true,
         });
       }
     }
@@ -701,6 +706,9 @@ export class ObservatorySystem {
       bodyScans,
       systemScans,
       systemScanResults,
+      // ⚠ Bez tego pola „pierwsze wykrycie" NIE przeżywało przeładowania i popup potrafił
+      // wystrzelić drugi raz dla tego samego statku (wada zdiagnozowana w §Audit D).
+      reportedSightings: [...this._reportedVesselSightings],
     };
   }
 
@@ -718,6 +726,11 @@ export class ObservatorySystem {
     if (Array.isArray(data.discoveries)) {
       this._discoveries = data.discoveries;
     }
+
+    // Pierwsze wykrycia — bez tego beat pierwszego kontaktu odpalał się ponownie po wczytaniu.
+    // Defensywny default: brak pola w starym zapisie = pusty zbiór (zachowanie jak dotąd),
+    // więc round-trip nie potrzebuje migracji.
+    for (const id of data.reportedSightings ?? []) this._reportedVesselSightings.add(id);
 
     // Reforma detekcji — aktywne skany (defensywny default = brak; bez migracji save v88).
     for (const [key, val] of Object.entries(data.vesselScans ?? {})) {

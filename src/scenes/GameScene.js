@@ -103,6 +103,7 @@ import { TerritoryService }   from '../systems/TerritoryService.js';
 import { TerritoryField }     from '../systems/TerritoryField.js';
 import { InfluenceMap }       from '../systems/InfluenceMap.js';
 import { DirectorProduction, registerProductionGuards } from '../systems/director/DirectorProduction.js';
+import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/director/DirectorFirstContact.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
@@ -334,6 +335,14 @@ export class GameScene {
     // reguł jest wciąż PUSTY, więc nic tego samo nie odpala — konsumentem jest S6.
     this.directorProduction   = new DirectorProduction();
     registerProductionGuards(this.directorProduction, { allowOverride: true });
+    // Director S5 — łańcuch pierwszego kontaktu. To PIERWSZA realna reguła w katalogu,
+    // więc dopiero tutaj silnik regul (`DirectorSystem`) dostaje instancję i tick:
+    // S1 zostawił go stojącego samodzielnie („wpięcie w tick dochodzi razem z pierwszą regułą").
+    // Kolejność jest istotna — zachowania muszą być w rejestrach ZANIM `DirectorSystem`
+    // zwaliduje katalog, bo nieznana nazwa RZUCA (audyt R12, i to jest zamierzone).
+    this.directorFirstContact = new DirectorFirstContact();
+    registerFirstContactBehaviors(this.directorFirstContact, { allowOverride: true });
+    this.directorSystem       = new DirectorSystem();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
     this.systemPoolService    = new SystemPoolService();
@@ -407,6 +416,8 @@ export class GameScene {
     window.KOSMOS.territoryField     = this.territoryField;
     window.KOSMOS.influenceMap       = this.influenceMap;
     window.KOSMOS.directorProduction = this.directorProduction;
+    window.KOSMOS.directorFirstContact = this.directorFirstContact;
+    window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
@@ -539,6 +550,37 @@ export class GameScene {
           };
         });
         console.table(rows);
+        return rows;
+      },
+      // KOSMOS.debug.firstContact(empireId) — WYMUSZA przelot pierwszego kontaktu (Director S5).
+      //   Omija rzut i próg L5 — służy do gate'u, nie do gry. Zwraca id sondy albo null.
+      firstContact: (empireId = 'emp_001') => {
+        const fc = window.KOSMOS?.directorFirstContact;
+        if (!fc) { console.warn('[firstContact] brak window.KOSMOS.directorFirstContact'); return null; }
+        const empire = window.KOSMOS?.empireRegistry?.get?.(empireId) ?? null;
+        if (!empire) { console.warn(`[firstContact] nieznane imperium ${empireId}`); return null; }
+        const id = fc.scienceFlyby({ empireId, empire, ruleId: 'debug' }, {});
+        console.log(`[firstContact] ${empireId} → sonda`, id ?? '— ODRZUCONA (patrz director:flybyRejected)');
+        return id;
+      },
+      // KOSMOS.debug.directorRules(empireId?) — stan reguł Directora: ile prób, czy odpaliła,
+      //   w którym roku WYŚWIETLANYM. Bez tego „czemu nic się nie dzieje" jest nieodróżnialne
+      //   od „reguła odpaliła i przegapiłem".
+      directorRules: (empireId = null) => {
+        const rules = gameState.get('director.rules') ?? {};
+        const rows = Object.entries(rules)
+          .filter(([k]) => !empireId || k.endsWith(`|${empireId}`))
+          .map(([k, v]) => ({
+            regula: k.slice(0, k.lastIndexOf('|')),
+            imperium: k.slice(k.lastIndexOf('|') + 1),
+            proby: v?.attempts ?? 0,
+            odpalila: v?.firedOnce ? 'TAK' : '— nie',
+            ostatniaProba: v?.lastAttemptYear ?? '—',
+            odpalenieRok: v?.lastFiredYear ?? '—',
+          }));
+        console.table(rows);
+        const flybys = gameState.get('director.flybys') ?? {};
+        console.log('[directorRules] aktywne przeloty:', Object.keys(flybys).filter(k => flybys[k]));
         return rows;
       },
       // KOSMOS.debug.influenceMap(ownerId?) — mapa wpływów (Director S2, orzeczenie R-2):
@@ -1828,6 +1870,7 @@ export class GameScene {
       // pod-klucz dodany w Slice 2/3 nie uzupełniłby się w starym zapisie. Ten hook
       // sprawia, że przyszłe pod-klucze NIE będą wymagać bumpu wersji save'a.
       DirectorSystem.initSubdomain();
+      DirectorFirstContact.initSubdomain();   // director.flybys — kurs przelotu przeżywa zapis
       // M2b Commit 7: po restore POI sprites — gameState.restore nie emituje
       // poi:created dla zsynchronizowanych POI, więc ThreeRenderer trzeba
       // zsiać explicit. Idempotent: skanuje gameState.pois i tworzy sprites.
@@ -2432,8 +2475,12 @@ export class GameScene {
     });
 
     // Pierwsze wykrycie wrogiej jednostki — popup DATASHEET z pauzą
-    EventBus.on('vessel:firstSighting', ({ vessel, empireId, empireName }) => {
+    EventBus.on('vessel:firstSighting', ({ vessel, empireId, empireName, firstContactFlyby }) => {
       if (!vessel) return;
+      // Decyzja 5 — Director PRZEJMUJE beat dla sondy pierwszego kontaktu. Bez tego gracz
+      // dostawałby DWA popupy o tym samym fakcie: generyczny „wykryto obcy statek" i narracyjny
+      // „Nie jesteśmy sami". Popup narracyjny wystawia `DirectorFirstContact`.
+      if (firstContactFlyby) return;
       const isPL = getLocale() !== 'en';
       const mission = vessel.mission;
       const currentYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;

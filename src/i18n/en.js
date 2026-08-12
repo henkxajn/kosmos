@@ -3299,6 +3299,12 @@ export default {
   'log.autoSlowFleetRetreat':      'fleet auto-retreat',
   // M4 P1.5 — first sighting + weapons warning
   'log.m4.firstSighting':          'First sighting of alien vessel: "{0}" (Empire {1})',
+  'log.unidentifiedContact':       '🔭 Unidentified contact detected in the system.',
+  'director.unknownEmpire':        'an unknown empire',
+  'director.flybyProbeName':       'science probe',
+  'director.firstContactBar':      'FIRST CONTACT',
+  'director.firstContactTitle':    'We are not alone',
+  'director.firstContactBody':     'An alien vessel crossed our system and did not answer our hails. Its drive signature points to {0}. This was no chance encounter — someone is watching us.',
   'tooltip.menu.noWeapons':        'No weapons — vessel will be destroyed',
   // P3 — fleet retreat + doctrine descriptions
   'log.fleetRetreatTriggered':     '⚑ {0}: AUTO-RETREAT ({1}% HP, {2} ships)',
@@ -3351,6 +3357,7 @@ export default {
   'diplo.mod.theirEnvoy':        'Their delegation',
   'diplo.mod.militaryPresence':  'Military presence',
   'diplo.mod.researchIntrusion': 'Science ships in their systems',
+  'diplo.mod.firstContactKill': 'Shot down a first-contact probe',
   'diplo.mod.trespassing':       'Loitering in their space',
   'diplo.mod.atWar':             'State of war',
   'diplo.mod.recentWar':         'Fresh memory of war',

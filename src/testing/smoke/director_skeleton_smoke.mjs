@@ -25,6 +25,7 @@ import {
 import {
   DirectorProbes, DirectorGuards, DirectorActions, _resetDirectorRegistries,
 } from '../../systems/director/DirectorRegistry.js';
+import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
 import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
 
 let pass = 0, fail = 0;
@@ -106,9 +107,15 @@ console.log('T5 — walidator: kształt reguły i JAWNA jednostka czasu');
   assert(validateRule(EXAMPLE_RULE, EXAMPLE_RULE.id).length === 0,
     'przykład referencyjny z katalogu PRZECHODZI walidator (kontrakt jest sprawdzalny wykonaniem)');
   assert(Object.keys(validateCatalog(DIRECTOR_RULES)).length === 0,
-    'katalog produkcyjny jest poprawny (S1: pusty)');
-  assert(Object.keys(DIRECTOR_RULES).length === 0,
-    'S1 NIE dodaje żadnej aktywnej reguły (kontrakt najpierw, konsumenci potem)');
+    'katalog produkcyjny w CAŁOŚCI przechodzi walidator');
+  // S1 pinował tu „katalog jest pusty" — to była własność ZAKRESU S1 („kontrakt najpierw,
+  // konsumenci potem"), a nie inwariant produktu. S5 świadomie dokłada pierwszą regułę,
+  // więc pin zmienia się w mocniejszy: KAŻDY wpis katalogu musi być poprawny i mieć `id`
+  // równe kluczowi (to jest ta własność, która realnie chroni przed literówką).
+  for (const [key, rule] of Object.entries(DIRECTOR_RULES)) {
+    assert(rule.id === key, `reguła "${key}" ma id równe kluczowi`);
+    assert(validateRule(rule, key).length === 0, `reguła "${key}" przechodzi walidator`);
+  }
 
   const bad = (patch) => validateRule({ ...EXAMPLE_RULE, ...patch }, EXAMPLE_RULE.id);
   assert(bad({ id: 'inne' }).some(p => p.includes('klucz')), 'id ≠ klucz → problem');
@@ -180,13 +187,16 @@ console.log('T7 — gameState.director: round-trip bez migracji');
 }
 
 // ── T8 — DirectorSystem ─────────────────────────────────────────────────────
-console.log('T8 — DirectorSystem: pusty katalog, kill-switch, walidacja przy starcie');
+console.log('T8 — DirectorSystem: kill-switch, walidacja przy starcie, katalog produkcyjny');
 {
   _resetDirectorRegistries();
   gameState.reset();
 
-  const sys = new DirectorSystem();
-  assert(!!sys, 'konstruuje się na pustym katalogu produkcyjnym');
+  // ⚠ Katalog produkcyjny NIE jest już pusty — S5 dołożył `first_contact`. Właściwości
+  // SILNIKA testujemy więc na jawnie pustym katalogu, żeby test nie zależał od tego, co
+  // akurat wiezie katalog; osobna asercja niżej pilnuje samego katalogu produkcyjnego.
+  const sys = new DirectorSystem({ catalog: {} });
+  assert(!!sys, 'konstruuje się na pustym katalogu');
 
   // Walidacja katalogu przy STARCIE, nie przy pierwszym odpaleniu reguły.
   assert(throws(() => new DirectorSystem({ catalog: { zly: { id: 'zly' } } })),
@@ -206,6 +216,15 @@ console.log('T8 — DirectorSystem: pusty katalog, kill-switch, walidacja przy s
   try { sys.tickEmpire('emp_001', {}); } catch { threw = true; }
   assert(!threw, 'kill-switch OFF → tickEmpire jest natychmiastowym no-opem');
   GAME_CONFIG.FEATURES.reactionDirector = orig;
+
+  // Katalog PRODUKCYJNY: od S5 niesie regułę, więc konstrukcja WYMAGA wcześniejszej
+  // rejestracji jej nazw. To nie jest niedogodność testu, tylko kontrakt (audyt R12):
+  // reguła wskazująca niezarejestrowaną nazwę ma wywalić start, a nie zamienić się w teatr.
+  assert(throws(() => new DirectorSystem()),
+    'katalog produkcyjny BEZ zarejestrowanych zachowań → rzuca (kolejność: rejestracja przed silnikiem)');
+  registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
+  assert(!throws(() => new DirectorSystem()),
+    '…a PO rejestracji katalog produkcyjny konstruuje się normalnie');
 
   // ...a przy ON brak kolaboratora ma być GŁOŚNY, nie cichy (audyt R12).
   const prevKosmos = globalThis.window.KOSMOS;

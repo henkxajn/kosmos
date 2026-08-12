@@ -45,6 +45,13 @@ const TRACKED_EVENTS = [
   'director:shipCompleted',
   'director:commodityDemand',
   'director:orderExpired',
+  // S5 — łańcuch pierwszego kontaktu. `flybyRejected` jest tu tak samo ważny jak `flybyStarted`:
+  // „przelot nie wystartował" musi dać się odróżnić od „reguły nikt nie podłączył".
+  'director:flybyStarted',
+  'director:flybyRejected',
+  'director:flybyEnded',
+  'director:firstContactBeat',
+  'director:firstContactKill',
 ];
 
 class DebugLog {

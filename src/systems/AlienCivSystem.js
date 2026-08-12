@@ -115,6 +115,11 @@ export class AlienCivSystem {
       // S3.4 — abstrakcyjny AI envoy (poprawa relacji gdy trust niski)
       this._maybeLaunchAIEnvoy(emp, dipl);
 
+      // Director (workstream C) — JEDNO wywołanie na imperium na krok (decyzja 1: zdarzenia
+      // zbierają fakty, tick podejmuje decyzje). Reguła nie może zabić ticku całego AI,
+      // ale ma krzyczeć — `tickEmpire` łapie wyjątki per reguła i loguje je do konsoli.
+      window.KOSMOS?.directorSystem?.tickEmpire?.(emp.id, emp);
+
       // Faza 7: AI decyzje — najpierw ekonomia, potem militaria
       // (ekonomia wcześniej, żeby zbudowana flota/produkcja była widoczna dla MilitaryAI)
       try {

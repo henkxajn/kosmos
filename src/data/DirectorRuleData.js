@@ -56,8 +56,34 @@
  * dokładnie mechanizm, którym martwe `EconAI`/`MilitaryAI` przetrwały niezauważone).
  */
 
-/** Katalog reguł. S1: PUSTY — wpisy dokładają S5 (pierwszy kontakt) i S6 (nacisk L1-L2). */
-export const DIRECTOR_RULES = {};
+/** Katalog reguł. S5 dokłada `first_contact`; nacisk L1-L2 dochodzi w S6. */
+export const DIRECTOR_RULES = {
+  /**
+   * PIERWSZY KONTAKT — obce imperium wysyła sondę badawczą przez układ gracza.
+   *
+   * Próg L5 jest bramką **progresji narracyjnej**, nie sensorycznej (decyzja 3): radar
+   * obserwatorium nasyca się już na L4 (`VESSEL_DETECTION_RANGE[4] = Infinity`), więc
+   * przelotu NIE DA SIĘ przegapić i jest to przyjęte świadomie.
+   *
+   * Rzut jest kumulatywny w latach WYŚWIETLANYCH (decyzja 2): 10 % w pierwszym roku,
+   * +10 pkt proc. rocznie — wartość oczekiwana ~3,7 roku, czyli beat wypada w środku
+   * typowej partii 30–40 lat. W latach cywilizacyjnych (1/12 roku) wystrzeliłby ~10 miesięcy
+   * po L5, czyli praktycznie natychmiast — dlatego silnik liczy próbę RAZ NA ROK WYŚWIETLANY.
+   *
+   * `once: true` — pierwszy kontakt z danym imperium zdarza się raz na partię.
+   */
+  first_contact: {
+    id:       'first_contact',
+    trigger:  { kind: 'poll', probe: 'playerObservatoryLevel', gte: 5 },
+    guard:    ['empireNotAtWarWithPlayer'],
+    roll:     { startPct: 10, stepPct: 10, capPct: 100, unit: 'displayedYear' },
+    delay:    0,
+    response: { action: 'scienceFlyby', params: { template: 'science_probe' } },
+    // Imperia „naukowe" wysyłają sondę chętniej. JEDNA oś — Slice 1 nie robi tabel krzyżowych.
+    personalityMod: { axis: 'science', at0: 0.5, at1: 1.5 },
+    cooldown: { once: true },
+  },
+};
 
 /**
  * Przykład referencyjny — NIE jest częścią katalogu i NIGDY nie zostanie wykonany.

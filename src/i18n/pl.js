@@ -3300,6 +3300,12 @@ export default {
   'log.autoSlowFleetRetreat':      'auto-wycofanie floty',
   // M4 P1.5 — first sighting + weapons warning
   'log.m4.firstSighting':          'Pierwsze wykrycie statku obcego: "{0}" (Imperium {1})',
+  'log.unidentifiedContact':       '🔭 Wykryto niezidentyfikowany kontakt w układzie.',
+  'director.unknownEmpire':        'nieznane imperium',
+  'director.flybyProbeName':       'sonda badawcza',
+  'director.firstContactBar':      'PIERWSZY KONTAKT',
+  'director.firstContactTitle':    'Nie jesteśmy sami',
+  'director.firstContactBody':     'Obcy statek przeszedł przez nasz układ i nie odpowiedział na wezwania. Sygnatura napędu wskazuje na {0}. Nie było to spotkanie przypadkowe — ktoś nas obserwuje.',
   'tooltip.menu.noWeapons':        'Brak broni — statek zostanie zniszczony',
   // P3 — fleet retreat + doctrine descriptions
   'log.fleetRetreatTriggered':     '⚑ {0}: AUTO-WYCOFANIE ({1}% HP, {2} statków)',
@@ -3352,6 +3358,7 @@ export default {
   'diplo.mod.theirEnvoy':        'Ich delegacja',
   'diplo.mod.militaryPresence':  'Obecność wojskowa',
   'diplo.mod.researchIntrusion': 'Statki badawcze w ich układach',
+  'diplo.mod.firstContactKill': 'Zestrzelenie sondy pierwszego kontaktu',
   'diplo.mod.trespassing':       'Zaleganie w ich przestrzeni',
   'diplo.mod.atWar':             'Stan wojny',
   'diplo.mod.recentWar':         'Świeża pamięć wojny',
