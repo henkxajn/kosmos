@@ -57,11 +57,16 @@ export const ACCEPTANCE_TERMS = {
   },
   relative_power: {
     id: 'relative_power', labelKey: 'diplo.term.relativePower', status: TERM_STATUS.LIVE,
-    unit: '+1 = oceniający miażdżąco silniejszy militarnie od proponującego',
-    note: 'ŻYWY od W1-3. Siła obu stron pochodzi z `ThreatAssessment` — wyprowadzana z REALNYCH ' +
-          'kadłubów i modułów (cennik: CombatValueData), nie z osobnej księgi. `buildContext` ' +
-          'wstrzykuje ją jako `ctx.strength`; term zostaje CZYSTY i degraduje do 0, gdy pola brak ' +
-          '(tak działa macierz E7 — kotwice parytetu mierzą się bez tego termu). ' +
+    unit: '+1 = OCENIAJĄCY miażdżąco SŁABSZY („słabsza strona bardziej ugodowa")',
+    note: 'ŻYWY od W1-3; KIERUNEK naprawiony w W1-3b. Siła obu stron pochodzi z `ThreatAssessment` ' +
+          '— wyprowadzana z REALNYCH kadłubów i modułów (cennik: CombatValueData), nie z osobnej ' +
+          'księgi. `buildContext` wstrzykuje ją jako `ctx.strength`; term zostaje CZYSTY i degraduje ' +
+          'do 0, gdy pola brak (tak działa macierz E7 — kotwice parytetu mierzą się bez tego termu). ' +
+          '⚠ ZNAK jest podpisany w DIPLOMACY_BACKBONE §2.1 („weaker side more agreeable") i to on ' +
+          'jest autorytetem. W1-3 wypuścił kierunek ODWROTNY: dominujące AI podpisywało wszystko, ' +
+          'słabe odmawiało, a przy offer_peace WYGRYWAJĄCY chętniej godził się na pokój. Wagi z D2 ' +
+          'powstały PRZECIW STUBOWI zwracającemu 0 — kierunku nikt nie zwalidował, bo nie było czego. ' +
+          'MAGNITUDY wag nietknięte (domena D4); odwrócona wyłącznie semantyka znaku. ' +
           '⚠ HISTORIA, żeby nikt nie wyprowadził tego wniosku po raz trzeci: audyt R2 trafnie ' +
           'opisał defekt estymatorów, ale WNIOSEK „naprawa wepchnie imperia w WAR" był FAŁSZYWY ' +
           '(refutacja K-1) — naprawa ruszała MIANOWNIK, a milRatio nie miało LICZNIKA. Termu nie ' +

@@ -272,6 +272,26 @@ modules from the S3 template catalog. R3 is therefore not a live defect — it d
     three-field shape, and V12 shows `level` is not even monotonic (L1 can overwrite an L2 stamp after its
     5-year cooldown) — a poor state source for a doctrine. Both options were migration-free; this one does not
     fight an existing pin.
+15. **`relative_power` direction fixed to the signed backbone intent (W1-3b, orchestrator ruling,
+    2026-08-14) — register entry, verbatim:**
+
+    > **`relative_power` direction fixed to signed backbone intent; D2 weights were stub-era, never
+    > direction-validated.**
+
+    W1-3 shipped the sign as *"+1 = evaluator STRONGER"* with positive weights, which inverts
+    `DIPLOMACY_BACKBONE §2.1` (*"relative_power — weaker side more agreeable"*). The observable
+    consequence was backwards: a militarily dominant AI signed everything and a weak one refused,
+    and on `offer_peace` (weight 30) a **winning** empire became more willing to settle — whereas
+    winners press an advantage and losers seek the table. This is a **spec contradiction, not a
+    balance knob**: the D2 weights were authored against a stub returning a literal 0, so the
+    *direction* was never validated because there was nothing to validate. The backbone is the
+    authority. **Weight magnitudes are untouched (that remains D4);** only the sign semantics move.
+    Implementation: the term calls `relativePowerRaw(other, self)` — the shared formula in
+    `ThreatMath` keeps its natural meaning (*"how much does A dominate B"*, which W1-5's doctrines
+    read), and the inversion lives in the term where the semantic belongs.
+    ⚠ The 0/210 E7 diff from W1-3 was measured on the **inverted** direction and does **not** carry
+    forward; a fresh before/after pair is attached to the W1-3b commit and to `W1_GATE1_CHECKLIST.md`.
+
 
 ---
 

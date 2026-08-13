@@ -494,13 +494,18 @@ console.log('--- P10: termy bezczynne (K-1..K-5) ---');
 
     // KONTROLA PINU: ten sam term Z podaną siłą MUSI ruszyć wynik — inaczej „0 bez pola"
     // byłoby nieodróżnialne od dawnego stubu, a odblokowanie termu tylko deklaracją.
-    const powered = evaluateWithContext({
-      ...rich, verb, status: verb === 'offer_peace' ? 'war' : 'peace',
-      strength: { self: 10000, other: 1 },
+    // ⚠ ZNAK po W1-3b: `+` = OCENIAJĄCY SŁABSZY (backbone §2.1 „weaker side more agreeable").
+    //   Sprawdzamy OBA kierunki, żeby pin łapał zarówno zanik termu, jak i regresję znaku.
+    const mkPowered = (self, other) => evaluateWithContext({
+      ...rich, verb, status: verb === 'offer_peace' ? 'war' : 'peace', strength: { self, other },
     });
-    const poweredRow = powered.breakdown.find(x => x.term === 'relative_power');
+    const weakEval   = mkPowered(1, 10000);    // oceniający słabszy ⇒ ugodowy ⇒ wkład DODATNI
+    const strongEval = mkPowered(10000, 1);    // oceniający silniejszy ⇒ twardszy ⇒ wkład UJEMNY
+    const wRow = weakEval.breakdown.find(x => x.term === 'relative_power');
+    const sRow = strongEval.breakdown.find(x => x.term === 'relative_power');
     ok(`relative_power Z ctx.strength JUŻ rusza wynik w '${verb}' (kontrola pinu)`,
-      poweredRow && poweredRow.value > 0 && powered.score !== r.score);
+      wRow && sRow && wRow.value > 0 && sRow.value < 0
+      && weakEval.score > r.score && strongEval.score < r.score);
   }
   ok('reputation ma status UNFED (raisery agresji dopiero w D4)',
     ACCEPTANCE_TERMS.reputation.status === TERM_STATUS.UNFED);

@@ -54,22 +54,36 @@ export const TERM_EVALUATORS = {
   tension: (ctx) => clampUnit((Number(ctx.tension) || 0) / 100),
 
   /**
-   * Przewaga siły OCENIAJĄCEGO nad PROPONUJĄCYM ∈ ⟨−1, +1⟩. Żywy od W1-3.
+   * Układ sił między stronami ∈ ⟨−1, +1⟩. Żywy od W1-3, kierunek naprawiony w W1-3b.
    *
-   * Do W1-3 był twardym `() => 0`. Odblokowała go nie naprawa estymatora (R2/W1-1 — ta
-   * niczego nie przesunęła, refutacja K-1), tylko ŹRÓDŁO SIŁY PO OBU STRONACH:
-   * `ThreatAssessment` liczy ją z realnych kadłubów, a `buildContext` wstrzykuje wynik
-   * jako `ctx.strength`.
+   * ⚠ ZNAK: **+1 = OCENIAJĄCY jest SŁABSZY** („słabsza strona bardziej ugodowa").
+   * To jest intencja podpisana w `DIPLOMACY_BACKBONE §2.1` i to ona jest autorytetem.
+   * W1-3 wypuścił kierunek ODWROTNY (+1 = oceniający silniejszy), przez co dominujące
+   * militarnie imperium podpisywało wszystko, słabe odmawiało, a przy `offer_peace`
+   * (waga 30) WYGRYWAJĄCY chętniej siadał do stołu — czyli na odwrót niż w rzeczywistości,
+   * gdzie wygrywający naciska przewagę, a przegrywający szuka pokoju.
+   * Wagi z D2 były autorskie, ale powstały PRZECIW STUBOWI zwracającemu 0 — kierunku nikt
+   * wtedy nie zwalidował, bo nie było czego walidować. MAGNITUDY wag zostają nietknięte
+   * (to jest domena D4); zmienia się wyłącznie semantyka znaku.
+   *
+   * Stąd argumenty podane ODWROTNIE: `relativePowerRaw(other, self)` daje wartość dodatnią,
+   * gdy PROPONUJĄCY jest silniejszy, czyli gdy oceniający jest słabszy. Sama formuła
+   * w `ThreatMath` zachowuje naturalne znaczenie („o ile A dominuje nad B") — używają jej
+   * też doktryny (W1-5) i tam odwrócenie byłoby mylące. Inwersja należy do TEGO termu.
+   *
+   * Odblokowała ten term nie naprawa estymatora (R2/W1-1 niczego nie przesunęła, refutacja
+   * K-1), tylko ŹRÓDŁO SIŁY PO OBU STRONACH: `ThreatAssessment` liczy ją z realnych kadłubów,
+   * a `buildContext` wstrzykuje wynik jako `ctx.strength`.
    *
    * ⚠ Term zostaje CZYSTY — czyta WYŁĄCZNIE ctx, nigdy kolaboratora (decyzja 5). Brak pola
    * `strength` ⇒ surowe 0, bo tak wygląda kontekst przyrządu strojenia wag
    * (`DiplomacyTelemetry.matrixBaseContext` nie podaje siły) i tak chronimy kotwice
-   * parytetu z E2. Formuła (a−b)/(a+b) jest wspólna z doktrynami — `ThreatMath`.
+   * parytetu z E2.
    */
   relative_power: (ctx) => {
     const s = ctx.strength;
     if (!s || s.self == null || s.other == null) return 0;
-    return clampUnit(relativePowerRaw(s.self, s.other));
+    return clampUnit(relativePowerRaw(s.other, s.self));
   },
 
   /**

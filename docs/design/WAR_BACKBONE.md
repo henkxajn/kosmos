@@ -163,6 +163,13 @@ The contract is written now so no intermediate design closes the door (P1 note).
 4. **Threat assessment** → W1: one shared module reading derived strength (P2);
    consumed by acceptance (`relative_power`), doctrines, and future Director rules.
    Includes the R2 fix.
+   > ⚠ **Direction correction (W1-3b, orchestrator ruling 2026-08-14).** `relative_power` first
+   > shipped as *"+1 = evaluator STRONGER"*, which inverts `DIPLOMACY_BACKBONE §2.1`
+   > (*"weaker side more agreeable"*) — a dominant AI signed everything and, on `offer_peace`,
+   > a **winning** empire became more willing to settle. Treated as a **spec contradiction, not a
+   > balance knob**: the D2 weights were authored against a stub returning 0, so the direction was
+   > never validated. Sign inverted to match the backbone; **weight magnitudes untouched (D4)**.
+   > Full register entry: `W1_PLAN.md` §Decisions taken 15.
 5. **Fleet reconciliation** → §2 P2 (transition plan in W1/W2 plan docs).
 6. **War accounting** → §2 P3. Skirmish category lands W1.
 7. **Space combat depth** (repair, salvage, capture, DSCS tactics) → W3+, after

@@ -5,7 +5,7 @@
 // danych. Ten keeper pilnuje trzech rzeczy naraz: że term LICZY, że zachowuje CZYSTOŚĆ, i — co
 // najważniejsze — że jego odblokowanie NIE ruszyło kotwic parytetu z E2.
 //
-//   T1  kontrakt wartości: raw ∈ ⟨−1, +1⟩, znak „+1 = OCENIAJĄCY silniejszy"
+//   T1  kontrakt wartości: raw ∈ ⟨−1, +1⟩, znak „+1 = OCENIAJĄCY SŁABSZY" (backbone §2.1)
 //   T2  ⚠ DEGRADACJA do 0 bez `ctx.strength` — zabezpieczenie kotwic parytetu E2 (decyzja 5)
 //   T3  term jest CZYSTY: czyta wyłącznie ctx, nie sięga po kolaboratora
 //   T4  wszystkie CZTERY czasowniki z niezerową wagą faktycznie ruszają wynik
@@ -31,13 +31,20 @@ const approx = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 const term = TERM_EVALUATORS.relative_power;
 
 // ── T1 — kontrakt wartości i znaku ──────────────────────────────────────────
-console.log('T1 — raw ∈ ⟨−1, +1⟩, znak: +1 = OCENIAJĄCY silniejszy');
+// ⚠ ODWRÓCONE W W1-3b — orzeczenie orkiestratora. W1-3 wypuścił znak przeciwny
+//   (+1 = oceniający SILNIEJSZY), co przeczy DIPLOMACY_BACKBONE §2.1 („weaker side more
+//   agreeable"): dominujące AI podpisywało wszystko, a przy `offer_peace` WYGRYWAJĄCY
+//   chętniej godził się na pokój. Backbone jest autorytetem; magnitudy wag nietknięte.
+//   Ten blok jest pinem KIERUNKU — regresja znaku ma go zaczerwienić natychmiast.
+console.log('T1 — raw ∈ ⟨−1, +1⟩, znak: +1 = OCENIAJĄCY SŁABSZY (backbone §2.1)');
 {
   assert(term({ strength: { self: 100, other: 100 } }) === 0, 'T1: siły równe ⇒ 0');
-  assert(term({ strength: { self: 1000, other: 0 } }) === 1,
-    'T1: proponujący bez floty ⇒ +1 (oceniający miażdżąco silniejszy)');
-  assert(term({ strength: { self: 0, other: 1000 } }) === -1, 'T1: oceniający bez floty ⇒ −1');
-  assert(approx(term({ strength: { self: 300, other: 100 } }), 0.5), 'T1: przewaga 3:1 ⇒ +0.5');
+  assert(term({ strength: { self: 0, other: 1000 } }) === 1,
+    'T1: OCENIAJĄCY bez floty ⇒ +1 (słabsza strona bardziej ugodowa)');
+  assert(term({ strength: { self: 1000, other: 0 } }) === -1,
+    'T1: PROPONUJĄCY bez floty ⇒ −1 (silny oceniający mniej ugodowy — naciska przewagę)');
+  assert(approx(term({ strength: { self: 100, other: 300 } }), 0.5),
+    'T1: oceniający słabszy 1:3 ⇒ +0.5');
   assert(approx(term({ strength: { self: 300, other: 100 } }),
                 -term({ strength: { self: 100, other: 300 } })),
     'T1: antysymetria — zamiana stron odwraca znak');
@@ -78,8 +85,8 @@ console.log('T3 — term jest CZYSTY (czyta wyłącznie ctx)');
   const savedKosmos = window.KOSMOS;
   try {
     window.KOSMOS = undefined;
-    assert(term({ strength: { self: 900, other: 100 } }) === 0.8,
-      'T3: liczy poprawnie przy CAŁKOWICIE odciętym window.KOSMOS (0.8 dla 9:1)');
+    assert(term({ strength: { self: 100, other: 900 } }) === 0.8,
+      'T3: liczy poprawnie przy CAŁKOWICIE odciętym window.KOSMOS (0.8 gdy oceniający słabszy 1:9)');
     assert(term({}) === 0, 'T3: degraduje poprawnie przy odciętym window.KOSMOS');
   } finally {
     window.KOSMOS = savedKosmos;
@@ -110,12 +117,13 @@ console.log('T4 — cztery czasowniki z niezerową wagą REALNIE zmieniają wyni
     assert(w > 0, `T4: '${verb}' ma niezerową wagę relative_power (${w})`);
 
     const base   = { ...matrixBaseContext(verb), archetype: 'trader', personality: PASSING_PERSONALITY };
-    const strong = { ...base, strength: { self: 10000, other: 0 } };
-    const weak   = { ...base, strength: { self: 0, other: 10000 } };
+    // `weakEval` = oceniający miażdżąco SŁABSZY ⇒ raw +1 ⇒ WYŻSZY wynik (backbone §2.1).
+    const weakEval   = { ...base, strength: { self: 0, other: 10000 } };
+    const strongEval = { ...base, strength: { self: 10000, other: 0 } };
 
-    const rBase   = evaluateWithContext(base);
-    const rStrong = evaluateWithContext(strong);
-    const rWeak   = evaluateWithContext(weak);
+    const rBase       = evaluateWithContext(base);
+    const rWeakEval   = evaluateWithContext(weakEval);     // słaby oceniający ⇒ wynik W GÓRĘ
+    const rStrongEval = evaluateWithContext(strongEval);   // silny oceniający ⇒ wynik W DÓŁ
 
     // Bez tej asercji trzy poniższe przechodziłyby na zablokowanej propozycji (score 0 = 0 = 0).
     assert(rBase.blocked !== true && rBase.breakdown.length > 0,
@@ -123,11 +131,11 @@ console.log('T4 — cztery czasowniki z niezerową wagą REALNIE zmieniają wyni
     const rowBase = rBase.breakdown.find(x => x.term === 'relative_power');
     assert(rowBase && rowBase.value === 0,
       `T4: '${verb}' — przy siłach równych wkład to DOKŁADNIE 0`);
-    assert(rStrong.score > rBase.score && rWeak.score < rBase.score,
-      `T4: '${verb}' — przewaga PODNOSI, słabość OBNIŻA wynik ` +
-      `(${rWeak.score.toFixed(2)} < ${rBase.score.toFixed(2)} < ${rStrong.score.toFixed(2)})`);
-    assert(approx(rStrong.score - rBase.score, w) && approx(rBase.score - rWeak.score, w),
-      `T4: '${verb}' — pełna przewaga przesuwa wynik DOKŁADNIE o wagę (${w} pkt)`);
+    assert(rWeakEval.score > rBase.score && rStrongEval.score < rBase.score,
+      `T4: '${verb}' — SŁABOŚĆ oceniającego PODNOSI, jego PRZEWAGA obniża wynik ` +
+      `(${rStrongEval.score.toFixed(2)} < ${rBase.score.toFixed(2)} < ${rWeakEval.score.toFixed(2)})`);
+    assert(approx(rWeakEval.score - rBase.score, w) && approx(rBase.score - rStrongEval.score, w),
+      `T4: '${verb}' — skrajny układ sił przesuwa wynik DOKŁADNIE o wagę (${w} pkt)`);
   }
 }
 
@@ -161,8 +169,9 @@ console.log('T5 — buildContext: `self` = OCENIAJĄCY (toId), `other` = PROPONU
   assert(ctx.strength.self > ctx.strength.other,
     `T5: imperium z krążownikiem jest silniejsze od bezflotowego gracza ` +
     `(${ctx.strength.self} > ${ctx.strength.other})`);
-  assert(term(ctx) > 0,
-    `T5: …więc term daje DODATNI wkład (${term(ctx).toFixed(3)}) — oceniający patrzy na proszącego z góry`);
+  assert(term(ctx) < 0,
+    `T5: …więc term daje UJEMNY wkład (${term(ctx).toFixed(3)}) — silny oceniający jest MNIEJ ugodowy ` +
+    '(backbone §2.1: to SŁABSZA strona szuka porozumienia)');
 
   // Perspektywa ODWROTNA — te same dwie strony, zamienione role.
   const rev = eng.buildContext(empireId, 'player', { verb: 'trade_agreement' });

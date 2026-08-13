@@ -128,16 +128,29 @@ Najpierw odczyt z silnika (bez UI):
 ```
 KOSMOS.acceptanceEngine.evaluateProposal('player', KOSMOS.empireRegistry.listAll()[0].id, { verb: 'trade_agreement' }).breakdown.find(r => r.term === 'relative_power')
 ```
-**Oczekiwane:** obiekt z **niezerowym** `value` (np. `{ term: 'relative_power', raw: 1, weight: 10, value: 10 }`).
-Znak: **dodatni = OCENIAJĄCE IMPERIUM silniejsze od gracza**, ujemny = gracz silniejszy.
+**Oczekiwane:** obiekt z **niezerowym** `value`.
+
+⚠ **ZNAK — semantyka poprawiona w W1-3b** (orzeczenie orkiestratora; `DIPLOMACY_BACKBONE §2.1`
+„słabsza strona bardziej ugodowa"):
+**`+` = OCENIAJĄCE IMPERIUM jest SŁABSZE** (i przez to bardziej ugodowe) · **`−` = imperium jest
+SILNIEJSZE** (naciska przewagę, mniej skłonne do układu).
+W1-3 wypuścił znak odwrotny; jeśli zobaczysz odwrotność poniższych wartości — to REGRESJA, STOP.
+
+Zmierzone na żywym silniku (etykieta wiersza: **„Układ sił"**):
+
+| sytuacja | siła AI | siła gracza | `raw` | `value` (waga 10) | decyzja |
+|---|---|---|---|---|---|
+| AI ma 3 fregaty, gracz **bez floty** | 744 | 0 | **−1** | **−10** | **odmowa** |
+| gracz dobudował 4 krążowniki | 744 | 2276 | **+0.507** | **+5.07** | **zgoda** |
 
 Potem to samo w UI: klawisz **Y** (dyplomacja) → wybierz imperium → złóż propozycję (Umowa handlowa /
 Pakt o nieagresji / Sojusz) → przeczytaj modal.
 
 - [ ] `breakdown` zawiera wiersz `relative_power` z wartością ≠ 0
-- [ ] modal po **złożeniu** propozycji pokazuje ten wiersz (etykieta „Przewaga militarna" lub odpowiednik i18n)
-- [ ] znak zgadza się z sytuacją: AI z flotą, gracz bez → **dodatni**
-- [ ] po zbudowaniu własnej floty i ponownym złożeniu — wartość **maleje / zmienia znak**
+- [ ] modal po **złożeniu** propozycji pokazuje wiersz **„Układ sił"**
+- [ ] AI z flotą, gracz bez → wartość **UJEMNA**, propozycja **odrzucona**
+- [ ] po zbudowaniu własnej floty i ponownym złożeniu — wartość **rośnie ku dodatniej**, AI staje się ugodowsze
+- [ ] kolor wiersza w modalu zgadza się ze znakiem (ujemny = negatywny, dodatni = pozytywny)
 
 ---
 
@@ -160,12 +173,11 @@ KOSMOS.empireRegistry.listAll().map(e => [e.id, e.fsm && e.fsm.state, KOSMOS.dip
    w mianowniku `milRatio`. Weszła z konieczności strukturalnej (bez niej gracz bez floty daje mianownik 0
    ⇒ `milRatio = 1.0` ⇒ powyżej progu wojny), ale **wartość jest gałką balansu**, nie pomiarem.
    Pełne uzasadnienie w commicie `9342aa3` i w komentarzu przy stałej.
-2. **Kierunek wpływu termu.** Wagi są dodatnie na `trade_agreement`/`non_aggression`/`alliance`/`offer_peace`,
-   a znak to „+1 = OCENIAJĄCY silniejszy" — czyli **militarnie dominujące AI jest BARDZIEJ skłonne**
-   podpisać traktat i pokój z graczem, słabe **mniej**. Zmierzone: przy dominującym AI wszystkie trzy
-   traktaty przechodzą (`decision: true`) samym wkładem tego termu. Czy to zamierzony kierunek — zwłaszcza
-   dla `offer_peace` (waga 30: wygrywające imperium chętniej godzi się na pokój) — jest **decyzją balansową
-   D4**, teraz po raz pierwszy widoczną w macierzach. Wagi są AUTORSKIE z D2 i nie były tu ruszane.
+2. ~~**Kierunek wpływu termu.**~~ **ROZSTRZYGNIĘTE — orzeczenie orkiestratora 2026-08-14, wdrożone
+   w W1-3b.** To nie była gałka balansu, tylko **sprzeczność ze specyfikacją**: `DIPLOMACY_BACKBONE §2.1`
+   definiuje term jako „weaker side more agreeable", a W1-3 wypuścił znak odwrotny. Wagi z D2 powstały
+   przeciw stubowi zwracającemu 0, więc kierunku nikt nigdy nie zwalidował. Znak odwrócony, **magnitudy
+   wag nietknięte** (pozostają domeną D4). Oczekiwania G4 wyżej opisują JUŻ poprawioną semantykę.
 
 ---
 
@@ -173,14 +185,27 @@ KOSMOS.empireRegistry.listAll().map(e => [e.id, e.fsm && e.fsm.state, KOSMOS.dip
 
 | plik | co pokazuje |
 |---|---|
-| `src/testing/reports/balans/diplomacy-telemetry-W1BEFORE.keep.json` | macierz E7 **przed** odblokowaniem (8 seedów × 45 gy) |
-| `src/testing/reports/balans/diplomacy-telemetry-W1AFTER.json` | macierz E7 **po** |
-| `src/testing/reports/balans/diplomacy-report-W1AFTER.html` | raport HTML z tabelą termów |
-| `src/testing/reports/balans/diplomacy-telemetry-W1_PRE_BASELINE.json` | nieśledzony baseline sprzed W1, odłożony na bok (reguła V19) |
+| `…/diplomacy-telemetry-W1BEFORE.keep.json` | macierz E7 **przed** odblokowaniem — term jako STUB (8 seedów × 45 gy) |
+| `…/diplomacy-telemetry-W1AFTER.json` | po odblokowaniu, **przed** odwróceniem znaku (W1-3) |
+| `…/diplomacy-telemetry-W1FLIP.json` | **stan finalny** — po odwróceniu znaku (W1-3b) |
+| `…/diplomacy-report-W1FLIP.html` | raport HTML z tabelą termów (stan finalny) |
+| `…/diplomacy-telemetry-W1_PRE_BASELINE.json` | nieśledzony baseline sprzed W1, odłożony na bok (reguła V19) |
 
-**Diff `payload.matrix.cells`: 0 / 210 zmienionych.** `nearThreshold` identyczny (392/2496).
-Term: `stub → live`, `probeMaxAbs` 0 → 29.994, `cannotMove` true → false,
-`probeByVerb` 9.998 / 19.996 / 19.996 / 29.994 (= wagi 10/20/20/30).
+**Diff `payload.matrix.cells`:**
+- STUB → FINAŁ: **0 / 210** zmienionych · `nearThreshold` identyczny (392/2496) — kotwice parytetu E2
+  nietknięte **na finalnej semantyce**, nie tylko na tej z W1-3.
+- przed-odwróceniem → po-odwróceniu: **0 / 210**.
+
+Term: `stub → live` · `probeMaxAbs` 0 → **29.994** · `cannotMove` true → false ·
+`probeByVerb` **9.998 / 19.996 / 19.996 / 29.994** (= wagi 10/20/20/30).
+
+⚠ **OGRANICZENIE PRZYRZĄDU, warte zapisania.** Drugi diff (0/210) **nie jest dowodem poprawności
+odwrócenia** — macierz E7 **nie widzi znaku tego termu w ogóle**. Kontekst bazowy trzyma siły RÓWNE
+(raw = 0 w obie strony), a `probeByVerb` przechowuje wartość BEZWZGLĘDNĄ. Macierz jest więc
+ślepa na kierunek i nie wykryłaby ponownej regresji znaku. Kierunku pilnują wyłącznie:
+`acceptance_relpower_smoke` T1/T4/T5 (piny kierunku) oraz tabela pomiarowa w G4 wyżej.
+Jeśli kierunek ma być bronion także przez BALANS, macierz potrzebuje kolumny z asymetrycznym
+układem sił — pozycja do rozważenia przy D4.
 
 ---
 
