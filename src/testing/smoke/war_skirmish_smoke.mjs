@@ -13,6 +13,7 @@
 //   T4  potyczka NIE jest zaspokajalna przez sąsiada (`border_pressure` z Directora)
 //   T5  rejestr kanałów: `skirmish` zadeklarowany i NIE dubluje kanałów
 //   T6  ⚠ W1-4b: wyczerpanie ASYMETRYCZNE po WYNIKU bitwy (nigdy po lossesA/B)
+//   T7  W1-7: pin źródłowy — martwa stała FLEET_AGGRO_INTERVAL skasowana
 //
 // ⚠ Harness NIE montuje `stationSystem`, więc wrogie kadłuby stawiamy RĘCZNIE (war_seams).
 
@@ -284,6 +285,50 @@ console.log('T6 — wyczerpanie asymetryczne: przegrany starcia płaci WIĘCEJ')
     'T6: extermination zachowuje rate 0.4 i peaceCost 100 — W1-4b NIE tknął tabeli CB');
   assert(CASUS_BELLI.border_incident.exhaustionRate === 1.0,
     'T6: border_incident nadal rate 1.0 (odniesienie dla liczb wyżej)');
+}
+
+// ── T7 — PIN ŹRÓDŁOWY: `FLEET_AGGRO_INTERVAL` nie istnieje w `src/` (W1-7) ──
+console.log('T7 — martwa stała FLEET_AGGRO_INTERVAL skasowana (pin źródłowy)');
+{
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+
+  // ⚠ KOMENTARZE ZDEJMOWANE PRZED SZUKANIEM (memory `source-pin-strip-comments`).
+  //   Bez tego pin łapałby WŁASNE wyjaśnienie w tym pliku albo notatkę w kodzie i świeciłby
+  //   na czerwono mimo poprawnie skasowanej stałej.
+  const stripComments = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')       // blokowe
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');  // liniowe (`$1` chroni `https://`)
+
+  const walk = (dir, out = []) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (name.endsWith('.js') || name.endsWith('.mjs')) out.push(full);
+    }
+    return out;
+  };
+
+  const SRC = new URL('../../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  // ⚠ Pomijamy `src/testing/` — TEN keeper niesie nazwę stałej we WŁASNYCH łańcuchach
+  //   asercji, a te NIE są komentarzem, więc `stripComments` ich nie zdejmie. Pin dotyczy
+  //   KODU PRODUKCYJNEGO; szukanie samego siebie byłoby fałszywym alarmem.
+  const files = walk(SRC).filter(f => !f.split(/[\\/]/).includes('testing'));
+  assert(files.length > 100, `T7: skan objął realny zbiór plików PRODUKCYJNYCH (${files.length})`);
+
+  const hits = files.filter(f => /FLEET_AGGRO_INTERVAL/.test(stripComments(readFileSync(f, 'utf8'))));
+  assert(hits.length === 0,
+    `T7: ZERO wystąpień `.trim() + '`FLEET_AGGRO_INTERVAL` w kodzie (po zdjęciu komentarzy). ' +
+    `Znalezione: ${hits.map(h => h.replace(SRC, '')).join(', ') || '—'}`);
+
+  // ⚠ KONTROLA PINU — bez niej literówka w regeksie albo pusta lista plików dałaby
+  //   ciche „przeszło". Sąsiednie stałe z tego samego bloku MUSZĄ być nadal znajdowane.
+  const warSrc = stripComments(readFileSync(join(SRC, 'systems', 'WarSystem.js'), 'utf8'));
+  assert(/AUTO_PEACE_EXHAUSTION/.test(warSrc) && /EXHAUSTION_BASE/.test(warSrc),
+    'T7 KONTROLA PINU: sąsiednie stałe (AUTO_PEACE_EXHAUSTION, EXHAUSTION_BASE) NADAL są ' +
+    'znajdowane tym samym mechanizmem — czyli pin naprawdę czyta źródło');
+  assert(!/FLEET_AGGRO/.test(warSrc),
+    'T7: …a po samej `FLEET_AGGRO` nie ma śladu nawet w kawałku nazwy');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

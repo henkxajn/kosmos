@@ -52,7 +52,6 @@ const EXHAUSTION_LOSER_SHARE  = 7;   // DODATKOWO dla przegranego starcia (⇒ p
 // ale NIGDY nie dotyka exhaustion (to jest waluta wojny, a wojny nie ma).
 const SKIRMISH_TENSION = 12;
 const AUTO_PEACE_EXHAUSTION = 100;  // próg auto-peace
-const FLEET_AGGRO_INTERVAL  = 5;    // co ile lat AI wysyła flotę w stronę gracza
 
 export class WarSystem {
   constructor() {
