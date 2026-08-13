@@ -63,6 +63,7 @@ import { POIRegistry }       from '../../systems/POIRegistry.js';
 import { DiplomacySystem }   from '../../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../../systems/AlienCivSystem.js';
 import { WarSystem }         from '../../systems/WarSystem.js';
+import { ThreatAssessment }  from '../../systems/ThreatAssessment.js';
 import { InvasionSystem }    from '../../systems/InvasionSystem.js';
 import { StarSystemManager } from '../../systems/StarSystemManager.js';
 
@@ -195,6 +196,10 @@ export class GameCore {
     this.alienCivSystem = new AlienCivSystem();
     this.warSystem = new WarSystem();
     this.invasionSystem = new InvasionSystem();
+    // W1-2 — wspólny odczyt siły z realnych kadłubów. MUSI być też w harnessie: jego
+    // konsumenci (estymatory, milRatio, intel) biegają headless, a brak instancji dałby
+    // ciche zero zamiast liczby — dokładnie ten rodzaj no-opu, który zakazuje R12.
+    this.threatAssessment = new ThreatAssessment();
 
     // Zapełnij window.KOSMOS
     const K = window.KOSMOS;
@@ -233,6 +238,7 @@ export class GameCore {
     K.alienCivSystem = this.alienCivSystem;
     K.warSystem = this.warSystem;
     K.invasionSystem = this.invasionSystem;
+    K.threatAssessment = this.threatAssessment;
     K.overlayManager = null; // brak UI w headless
     K.threeRenderer = null;  // brak renderera w headless
 

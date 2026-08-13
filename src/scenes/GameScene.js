@@ -100,6 +100,7 @@ import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
 import { TerritoryService }   from '../systems/TerritoryService.js';
+import { ThreatAssessment }   from '../systems/ThreatAssessment.js';
 import { TerritoryField }     from '../systems/TerritoryField.js';
 import { InfluenceMap }       from '../systems/InfluenceMap.js';
 import { DirectorProduction, registerProductionGuards } from '../systems/director/DirectorProduction.js';
@@ -319,6 +320,11 @@ export class GameScene {
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
     this.stationSystem        = new StationSystem();
     this.enemyAttackHandler   = new EnemyAttackHandler();
+    // W1-2 — wspólny odczyt siły militarnej, wyprowadzony z REALNYCH kadłubów.
+    // Czysty read-model (zero stanu, zero serializacji), pamięć podręczna z unieważnianiem
+    // na vessel:created / vessel:wrecked / time:tick. Czytają go: akceptacja dyplomatyczna
+    // (`relative_power`), FSM obcych, intel i dominacja orbitalna.
+    this.threatAssessment     = new ThreatAssessment();
     // Strefy wpływów — indeks własności układów (czyta colonyManager/stationSystem/
     // empireRegistry/gameState przez window.KOSMOS; event-invalidowany).
     this.territoryService     = new TerritoryService();
@@ -417,6 +423,7 @@ export class GameScene {
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
     window.KOSMOS.stationSystem      = this.stationSystem;
+    window.KOSMOS.threatAssessment   = this.threatAssessment;
     window.KOSMOS.territoryService   = this.territoryService;
     window.KOSMOS.territoryField     = this.territoryField;
     window.KOSMOS.influenceMap       = this.influenceMap;
