@@ -93,11 +93,12 @@ console.log('T1/T2 — garnizon: bezczynny okręt dostaje doktrynę i TRZYMA poz
     `T2: okręt nadal zadokowany przy stolicy (${v.position.dockedAt}) — orbita NIE zwolniona ` +
     '(zwolnienie wywołałoby desync sprite\'a znany z Engage)');
 
-  // Sonda przestaje go widzieć jako „bezczynnego": ma już rolę.
+  // Sonda przestaje go widzieć jako „bezczynnego": MA JUŻ ROLĘ. To jest istotne, bo garnizon
+  // z założenia stoi zadokowany i bez tego filtra wyglądałby wiecznie na wolnego — a wtedy
+  // reguła patrolu (inny cooldown) zabierałaby go z posterunku (patrz T7).
   const stillIdle = doctrine.countIdleArmedAtCapital(empireId);
-  assert(stillIdle === 1,
-    `T2: sonda nadal liczy go jako stojącego przy stolicy (${stillIdle}) — garnizon Z DEFINICJI ` +
-    'nie odlatuje, więc pozostaje w puli (to jest poprawne, nie przeoczenie)');
+  assert(stillIdle === 0,
+    `T2: sonda NIE liczy go już jako bezczynnego (${stillIdle}) — ma rolę, więc nie jest wolnym zasobem`);
 }
 
 // ── T3/T4 — patrol: RUSZA, i to NIE jest zasługa sąsiada ────────────────────
@@ -195,6 +196,31 @@ console.log('T6 — `director.doctrine`: serialize→restore + ścieżka NOWEJ G
   DirectorDoctrine.initSubdomain();
   assert(!!gameState.get('director.doctrine'),
     'T6: initSubdomain tworzy pustą domenę na żądanie');
+}
+
+
+// ── T7 — role są ROZŁĄCZNE (znalezisko z walidacji GATE 3) ──────────────────
+console.log('T7 — okręt nie może być JEDNOCZEŚNIE garnizonem i patrolem');
+{
+  const { core, doctrine } = boot();
+  const empireId = core.empireRegistry.listAll()[0]?.id;
+  const cap = setupCapital(core, empireId);
+  for (let i = 0; i < 4; i++) spawnAiWarship(core, empireId, cap.planetId, `AI ${i}`);
+
+  doctrine.assignDoctrine({ empireId, year: 5 }, { doctrine: 'defend_home',   count: 2 });
+  doctrine.assignDoctrine({ empireId, year: 5 }, { doctrine: 'patrol_border', count: 1 });
+
+  const rec = DirectorDoctrine.get(empireId) ?? {};
+  const garrison = rec.defend_home ?? [];
+  const patrol   = rec.patrol_border ?? [];
+  const overlap  = garrison.filter(id => patrol.includes(id));
+
+  assert(garrison.length === 2 && patrol.length === 1,
+    `T7: obie doktryny obsadzone (garnizon ${garrison.length}, patrol ${patrol.length})`);
+  assert(overlap.length === 0,
+    `T7: ZERO okrętów w OBU rosterach (${JSON.stringify(overlap)}) — garnizon z założenia nie ` +
+    'dostaje rozkazu ruchu i stoi zadokowany, więc bez filtra „ma już doktrynę" wyglądał dalej ' +
+    'na bezczynnego i patrol zabierał go z posterunku (zmierzone przy walidacji GATE 3)');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

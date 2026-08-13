@@ -167,6 +167,16 @@ export class DirectorDoctrine {
 
   // ── Pomocnicze ────────────────────────────────────────────────────────────────────────────
 
+  /** Czy okręt ma już JAKĄKOLWIEK rolę w doktrynach tego imperium. */
+  _hasAnyDoctrine(empireId, vesselId) {
+    const rec = DirectorDoctrine.get(empireId);
+    if (!rec) return false;
+    for (const key of ['defend_home', 'patrol_border']) {
+      if (Array.isArray(rec[key]) && rec[key].includes(vesselId)) return true;
+    }
+    return false;
+  }
+
   /** Stolica WYŁĄCZNIE przez kanoniczny akcesor — reguła skryptów gate'ów. */
   _capitalBodyId(empireId) {
     const cap = window.KOSMOS?.directorProduction?.capitalOf?.(empireId);
@@ -195,7 +205,12 @@ export class DirectorDoctrine {
       if (!hasWeapons(v)) continue;                          // doktryny są dla okrętów BOJOWYCH
       if (v.position?.dockedAt !== capitalId) continue;      // stan z V15: zadokowany przy stolicy
       if (v.mission) continue;                               // ma zajęcie
-      if (v.movementOrder) continue;                         // już pod doktryną albo rozkazem
+      if (v.movementOrder) continue;                         // już pod rozkazem
+      // ⚠ …i już przypisany do JAKIEJKOLWIEK doktryny. Garnizon Z ZAŁOŻENIA nie dostaje
+      // rozkazu ruchu i stoi zadokowany, więc bez tego filtra wygląda dalej na „bezczynny"
+      // i druga reguła (patrol, inny cooldown) zabierała go z posterunku. Zmierzone:
+      // ten sam `v_1` lądował JEDNOCZEŚNIE w rosterze `defend_home` i `patrol_border`.
+      if (this._hasAnyDoctrine(empireId, v.id)) continue;
       out.push(v);
     }
     return out;
