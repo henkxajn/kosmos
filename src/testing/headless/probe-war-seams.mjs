@@ -131,13 +131,23 @@ hdr('W1 (K-1, REFUTED) — milRatio ≡ 0, bo LICZNIK `empire.military.power` ni
   line(`  modules statku (kształt): ${JSON.stringify(armed.modules)}`);
   line(`  estymator UtilityAI:   ${before.utility} → ${after.utility}  (Δ ${after.utility - before.utility})`);
   line(`  estymator AlienCiv:    ${before.alien} → ${after.alien}  (Δ ${after.alien - before.alien})`);
+  // ⚠ Ta sekcja mierzy stan, KTÓRY W1-1 ZMIENIA. Pomiar PRZED naprawą (commit W1-0):
+  //   Δutility = 0, Δalien = 0 — uzbrojony kadłub nie ruszał niczym. Po W1-1 oba mają dać +30.
+  //   Sonda nie zakłada odpowiedzi — RAPORTUJE zmierzoną i mówi, po której stronie naprawy stoi.
   const blindUtility = after.utility - before.utility === 0;
   const blindAlien   = after.alien   - before.alien   === 0;
-  record('W1f', (blindUtility && blindAlien) ? 'POTWIERDZONE (defekt R2 realny)' : 'NIEOCZEKIWANE',
+  const reactsBoth   = (after.utility - before.utility) === 30 && (after.alien - before.alien) === 30;
+  record('W1f',
+    (blindUtility && blindAlien) ? 'POTWIERDZONE (defekt R2 — stan PRZED W1-1)'
+      : reactsBoth ? 'POTWIERDZONE (R2 naprawione — stan PO W1-1)' : 'NIEOCZEKIWANE',
     (blindUtility && blindAlien)
       ? 'UZBROJONY statek NIE rusza ŻADNYM estymatorem — `m?.id` na tablicy stringów zwraca `undefined`, ' +
         'regex nie ma czego dopasować; to jest R2 zmierzone, nie odczytane'
-      : `estymator zareagował na uzbrojony statek (Δutility=${after.utility - before.utility}, Δalien=${after.alien - before.alien})`);
+      : reactsBoth
+        ? 'oba estymatory reagują na uzbrojony kadłub gracza po +30 — naprawa R2 (W1-1) jest na miejscu ' +
+          'i bliźniaki zgadzają się co do wyniku'
+        : `estymatory rozjechane po naprawie (Δutility=${after.utility - before.utility}, ` +
+          `Δalien=${after.alien - before.alien}) — spodziewane 0/0 przed W1-1 albo 30/30 po`);
 
   // ── (g) V5 — po naprawie predykatu wpadnie WROGI kadłub, bo filtru właściciela NIE MA ──
   const enemyId = empires[0]?.id ?? 'emp_001';
@@ -154,18 +164,26 @@ hdr('W1 (K-1, REFUTED) — milRatio ≡ 0, bo LICZNIK `empire.military.power` ni
   wreck.isWreck = true;
   vMgr._vessels.set(wreck.id, wreck);
 
-  // Symulacja NAPRAWIONEGO predykatu bez filtru właściciela — ile kadłubów by policzył?
+  // Ile kadłubów policzyłby SAM naprawiony predykat, gdyby nie było filtru właściciela/wraku…
   const all = [...vMgr._vessels.values()];
   const armedByFixedPredicate = all.filter(v => (v.modules ?? []).some(m => /^weapon_/.test(String(m))));
   const enemyOrWreck = armedByFixedPredicate.filter(v => v.isWreck || (v.ownerEmpireId && v.ownerEmpireId !== 'player'));
+  // …a ile NAPRAWDĘ liczy dzisiejszy estymator. Różnica = wartość filtru z V5.
+  const estWithForeign = estimatePlayerMilitary();
+  const filteredOut = estWithForeign === after.utility;
   line();
-  line(`  po naprawie predykatu policzyłoby: ${armedByFixedPredicate.length} kadłubów`);
-  line(`  z tego CUDZYCH lub WRAKÓW:         ${enemyOrWreck.length} (${enemyOrWreck.map(v => v.name).join(', ')})`);
-  record('W1g', enemyOrWreck.length > 0 ? 'POTWIERDZONE (pułapka V5 realna)' : 'NIEROZSTRZYGNIĘTE',
-    enemyOrWreck.length > 0
-      ? `sama naprawa predykatu wpuściłaby ${enemyOrWreck.length} CUDZYCH/martwych kadłubów do „siły gracza" — ` +
-        `filtr właściciela i wraku MUSI wejść tym samym commitem (V5)`
-      : 'nie udało się postawić wrogiego/martwego kadłuba — pułapki V5 nie zmierzono');
+  line(`  sam predykat (bez filtru) policzyłby: ${armedByFixedPredicate.length} kadłubów`);
+  line(`  z tego CUDZYCH lub WRAKÓW:            ${enemyOrWreck.length} (${enemyOrWreck.map(v => v.name).join(', ')})`);
+  line(`  estymator PRZED dostawieniem cudzych: ${after.utility}   PO: ${estWithForeign}`);
+  record('W1g', enemyOrWreck.length === 0 ? 'NIEROZSTRZYGNIĘTE'
+      : filteredOut ? 'POTWIERDZONE (filtr V5 działa — stan PO W1-1)' : 'POTWIERDZONE (pułapka V5 realna — stan PRZED W1-1)',
+    enemyOrWreck.length === 0
+      ? 'nie udało się postawić wrogiego/martwego kadłuba — pułapki V5 nie zmierzono'
+      : filteredOut
+        ? `${enemyOrWreck.length} CUDZYCH/martwych kadłubów NIE podniosło estymatora (${after.utility} → ` +
+          `${estWithForeign}) — filtr właściciela i wraku z V5 jest na miejscu`
+        : `sama naprawa predykatu wpuściłaby ${enemyOrWreck.length} CUDZYCH/martwych kadłubów do „siły gracza" ` +
+          `(${after.utility} → ${estWithForeign}) — filtr MUSI wejść tym samym commitem (V5)`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════

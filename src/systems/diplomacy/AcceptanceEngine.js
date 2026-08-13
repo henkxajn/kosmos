@@ -52,11 +52,21 @@ export const TERM_EVALUATORS = {
   tension: (ctx) => clampUnit((Number(ctx.tension) || 0) / 100),
 
   /**
-   * STUB — patrz K-1 / audyt R2. ZAWSZE 0, świadomie i widocznie.
-   * Naprawa estymatorów siły idzie do WAR_BACKBONE (jeden wspólny threat assessment
-   * dla wojny i dyplomacji), bo przesuwa `milRatio` z ~0 na realne wartości i potrafi
-   * natychmiast wepchnąć imperia w AGGRESSIVE/WAR. Wciągnięcie tego do D2 zamieniłoby
-   * fazę o dyplomacji w reformę AI militarnego.
+   * STUB — ZAWSZE 0, świadomie i widocznie. Znika w W1-3.
+   *
+   * ⚠ SPROSTOWANIE (W1-1, 2026-08-14). Ten komentarz do niedawna twierdził, że naprawa
+   * estymatorów „przesuwa `milRatio` z ~0 na realne wartości i potrafi natychmiast wepchnąć
+   * imperia w AGGRESSIVE/WAR". To jest NIEPRAWDA i było nieprawdą, gdy to pisano — refutacja
+   * K-1 w `docs/design/W1_PLAN.md`, zmierzona w `war_seams_smoke` T1/T2.
+   * Powód: naprawa rusza MIANOWNIK, a `milRatio` nie ma LICZNIKA. `empire.military.power`
+   * nie istnieje — `EmpireRegistry.createEmpire` wycina `military` z whitelisty (nawet gdy
+   * wywołujący jawnie je poda), a `updateMilitaryPower` jest udokumentowanym no-opem.
+   * `milRatio ≡ 0` przed naprawą R2 i `milRatio ≡ 0` po niej; `_decideNextState` porównuje
+   * go wyłącznie ze stałymi, więc przejścia FSM są bajt w bajt identyczne.
+   *
+   * Prawdziwym warunkiem odblokowania tego termu nie jest naprawa estymatora (to zrobiono
+   * w W1-1), tylko ŹRÓDŁO SIŁY PO STRONIE AI — dostarcza je `ThreatAssessment` (W1-2),
+   * a W1-3 wstrzykuje wynik do ctx i podmienia ten stub.
    */
   relative_power: () => 0,
 

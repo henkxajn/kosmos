@@ -58,11 +58,14 @@ export const ACCEPTANCE_TERMS = {
   relative_power: {
     id: 'relative_power', labelKey: 'diplo.term.relativePower', status: TERM_STATUS.STUB,
     unit: '+1 = oceniający miażdżąco silniejszy (docelowo; DZIŚ ZAWSZE 0)',
-    note: 'K-1 / audyt R2: oba estymatory siły gracza są zepsute identycznie ' +
-          '(`v.modules.some(m => /weapon_/.test(m?.id ?? \'\'))` na tablicy STRINGÓW → zawsze false). ' +
-          'Naprawa przesuwa milRatio z ~0 na realne wartości i może natychmiast wepchnąć imperia w WAR, ' +
-          'więc idzie do WAR_BACKBONE razem ze wspólnym threat assessment. Wagi zostawiamy AUTORSKIE ' +
-          '(nie zerowe), żeby WAR_BACKBONE miał od czego zacząć — ale wkład jest pinowany na 0.',
+    note: '⚠ SPROSTOWANIE (W1-1): audyt R2 opisywał defekt trafnie (`m?.id` na tablicy STRINGÓW → ' +
+          'zawsze false), ale WNIOSEK „naprawa przesuwa milRatio z ~0 na realne wartości i może ' +
+          'natychmiast wepchnąć imperia w WAR" był FAŁSZYWY — refutacja K-1 w W1_PLAN.md. Naprawa ' +
+          'rusza MIANOWNIK, a milRatio nie ma LICZNIKA: `empire.military.power` nie istnieje ' +
+          '(createEmpire wycina `military` z whitelisty, updateMilitaryPower to no-op), więc ' +
+          'milRatio ≡ 0 przed naprawą i po niej. Estymatory NAPRAWIONE w W1-1 bez zmiany zachowania. ' +
+          'Term odblokowuje ŹRÓDŁO SIŁY AI (ThreatAssessment, W1-2) + wstrzyknięcie do ctx (W1-3). ' +
+          'Wagi zostają AUTORSKIE (nie zerowe) — do strojenia z macierzami E7 w ręku.',
   },
   war_status: {
     id: 'war_status', labelKey: 'diplo.term.warStatus', status: TERM_STATUS.LIVE,

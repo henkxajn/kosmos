@@ -21,6 +21,8 @@ import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { MilitaryAI } from './ai/MilitaryAI.js';
 import { EconAI } from './ai/EconAI.js';
+// W1/R2 — jedno źródło prawdy o uzbrojeniu i o własności kadłuba (nota przy _estimatePlayerMilitary).
+import { hasWeapons, isEnemyVessel } from '../entities/Vessel.js';
 
 const STATES = ['IDLE', 'EXPANDING', 'REARMING', 'AGGRESSIVE', 'WAR', 'RETREAT', 'NEGOTIATING'];
 
@@ -244,20 +246,37 @@ export class AlienCivSystem {
 
   _year() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
 
+  /**
+   * Proxy siły wojskowej gracza — MIANOWNIK `milRatio` (`:106`).
+   *
+   * W1 / audyt R2 — ten estymator był zepsuty IDENTYCZNIE jak bliźniak w `UtilityAI.js`
+   * (`m?.id` na tablicy STRINGÓW ⇒ warunek zawsze fałszywy) i naprawiamy go tak samo:
+   * `hasWeapons` jako jedyny predykat uzbrojenia + filtr WŁAŚCICIELA i WRAKU, którego nie
+   * miał (V5). Pełne uzasadnienie i zawężenie znaczenia (`armor_`/`shield_` przestają się
+   * liczyć) — przy `estimatePlayerMilitary` w `src/systems/ai/UtilityAI.js`.
+   *
+   * ⚠ CELOWO zostaje osobną, drobnie różniącą się funkcją (bez członu kolonii, z try/catch):
+   * V2 odnotował dryf między nią a bliźniakiem jako FAKT do naprawy w ThreatAssessment (W1-2),
+   * nie tutaj — ujednolicenie obu w jedno źródło to zadanie modułu, nie tej łatki.
+   *
+   * Obserwowalna zmiana zachowania DZIŚ: ŻADNA. `milRatio` = (LICZNIK ≡ brak) / (ten mianownik),
+   * a licznika `empire.military.power` nie ma i nie ma jak powstać — `createEmpire` wycina go
+   * z whitelisty, `updateMilitaryPower` jest no-opem (K-1, zmierzone w `war_seams_smoke` T1/T2).
+   * FSM w `_decideNextState` porównuje milRatio wyłącznie ze stałymi, więc przejścia są
+   * bajt w bajt takie same przed i po tej naprawie.
+   */
   _estimatePlayerMilitary() {
-    // Proxy: jeśli gracz ma VesselManager, policz statki z modułami weapon/hull HP.
-    // Brak prawdziwej metryki militarnej w KOSMOS (będzie w Fazie 4) — użyj placeholder'a.
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return 100;
     try {
       const vessels = vMgr._vessels ? Array.from(vMgr._vessels.values()) : [];
-      // Każdy statek z modułami bojowymi liczy się jako ~30 jednostek mocy
+      // Każdy UZBROJONY statek GRACZA liczy się jako ~30 jednostek mocy.
       let total = 100; // bazowa siła obronna kolonii
       for (const v of vessels) {
-        if (v?.modules && Array.isArray(v.modules)) {
-          const hasWeapon = v.modules.some(m => /weapon_|armor_|shield_/.test(m?.id ?? ''));
-          if (hasWeapon) total += 30;
-        }
+        if (!v || v.isWreck) continue;              // wrak nie jest siłą bojową
+        if (isEnemyVessel(v)) continue;             // cudzy kadłub to nie siła GRACZA
+        if (!Array.isArray(v.modules)) continue;    // null-safe wobec starych/niepełnych rekordów
+        if (hasWeapons(v)) total += 30;
       }
       return total;
     } catch {

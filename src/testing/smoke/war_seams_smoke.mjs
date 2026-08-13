@@ -10,13 +10,14 @@
 //
 //   T1  K-1: LICZNIKA nie ma — `createEmpire` wycina `military`, `updateMilitaryPower` to no-op
 //   T2  K-1: milRatio ≡ 0 dla każdego imperium + KONTROLA PINU (z licznikiem wychodzi ≠ 0)
-//   T3  R2:  uzbrojony kadłub NIE rusza żadnym estymatorem (defekt, który naprawia W1-1)
-//   T4  V5:  po naprawie predykatu wpadłyby CUDZE kadłuby i WRAKI — filtr musi wejść razem
+//   T3  R2:  uzbrojony kadłub GRACZA rusza OBOMA estymatorami; sam pancerz/tarcza — NIE (V4)
+//   T4  V5:  CUDZY kadłub i WRAK nie podnoszą „siły gracza"; kolonie liczone tylko GRACZA (V1)
 //   T5  K-2: `empire.fleets` zostaje puste bez cheatu debugowego
 //   T6  K-3: bitwa EAH z PRAWDZIWYM warId omija recordBattle (zero exhaustion, brak w war.battles[])
 //
-// ⚠ T3 i T4 to PINY DEFEKTU, nie poprawności. W1-1 je NAPRAWIA — wtedy obie asercje mają
-//    paść i zostać świadomie odwrócone (wzór: T6 „pin luki" z `director_seams_smoke`).
+// ⚠ T3 i T4 były w W1-0 PINAMI DEFEKTU (estymator NIE reagował, filtru NIE było). W1-1 to
+//    naprawił, więc obie zostały ŚWIADOMIE ODWRÓCONE — wzór „pin luki" z `director_seams_smoke` T6.
+//    T2 (milRatio ≡ 0) celowo NIE ruszone: to jest dowód, że naprawa R2 niczego nie przesunęła.
 // ⚠ Harness NIE montuje `stationSystem`, więc żeton stacji z R-3 nigdy nie jest zasiany
 //    i AI nie produkuje okrętów wojennych samo. Każdy wrogi kadłub stawiamy tu RĘCZNIE.
 
@@ -27,6 +28,7 @@ import EventBus from '../../core/EventBus.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { estimatePlayerMilitary } from '../../systems/ai/UtilityAI.js';
+import { MilitaryAI } from '../../systems/ai/MilitaryAI.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -99,10 +101,22 @@ console.log('T2 — K-1: milRatio ≡ 0 dla każdego imperium (i pin NIE jest ma
   assert(milRatioOf({ military: { power: 300 } }, estimate) > 0,
     'T2 KONTROLA PINU: ta sama formuła z licznikiem 300 daje wartość > 0 — zero powyżej pochodzi ' +
     'z BRAKU DANYCH, nie z martwego pinu');
+
+  // ⚠ „Brak obserwowalnej zmiany" to OBIETNICA commitu W1-1 — pinujemy ją WYKONANIEM, nie
+  //   argumentem. Oba czasowniki MilitaryAI czytające estymator mają wcześniejsze bramki:
+  //   `build_fleet` wychodzi na bramce `production` (empire.resources wycięte whitelistą, T1),
+  //   `attack_player` na pustej liście flot (K-2, T5). Naprawiony estymator NIE MOŻE więc
+  //   wyprodukować decyzji, której wcześniej nie było — nawet uzbrojony po zęby.
+  for (let i = 0; i < 3; i++) spawnHull(core, { name: `Fregata gracza ${i}` });
+  const decisions = empires.map(e => MilitaryAI.tick(e.id)).filter(d => d && d.score > 0);
+  assert(decisions.length === 0,
+    `T2: MilitaryAI nie podejmuje ŻADNEJ akcji (score > 0) mimo 3 uzbrojonych kadłubów gracza ` +
+    `i naprawionego estymatora (${estimate} → ${core.alienCivSystem._estimatePlayerMilitary()}) — ` +
+    'obietnica „naprawa R2 niczego nie przesuwa" dowiedziona wykonaniem');
 }
 
-// ── T3 — R2: uzbrojony kadłub nie rusza estymatorami (PIN DEFEKTU) ──────────
-console.log('T3 — R2 PIN DEFEKTU: uzbrojony kadłub nie rusza ŻADNYM estymatorem');
+// ── T3 — R2: uzbrojony kadłub GRACZA rusza oboma estymatorami (NAPRAWIONE w W1-1) ──
+console.log('T3 — R2: uzbrojony kadłub GRACZA rusza OBOMA estymatorami');
 {
   const core = boot();
   const acs = core.alienCivSystem;
@@ -112,35 +126,57 @@ console.log('T3 — R2 PIN DEFEKTU: uzbrojony kadłub nie rusza ŻADNYM estymato
   const armed = spawnHull(core, { name: 'Fregata gracza' });
 
   assert(Array.isArray(armed.modules) && armed.modules.every(m => typeof m === 'string'),
-    'T3: `vessel.modules` to płaska tablica STRINGÓW (grunt, na którym stoi cały defekt R2)');
+    'T3: `vessel.modules` to płaska tablica STRINGÓW (grunt, na którym stał cały defekt R2)');
 
-  // ⚠ W1-1 NAPRAWIA ten defekt — wtedy obie asercje mają paść i zostać odwrócone.
-  assert(estimatePlayerMilitary() - beforeUtility === 0,
-    'T3: UtilityAI.estimatePlayerMilitary NIE reaguje na uzbrojony kadłub (W1-1 to odwraca)');
-  assert(acs._estimatePlayerMilitary() - beforeAlien === 0,
-    'T3: AlienCivSystem._estimatePlayerMilitary też NIE reaguje — oba zepsute identycznie');
+  // ⚠ Do W1-0 włącznie te dwie asercje pinowały DEFEKT (Δ === 0). W1-1 naprawił predykat,
+  //   więc zostały ŚWIADOMIE ODWRÓCONE — wzór „pin luki" z `director_seams_smoke` T6.
+  assert(estimatePlayerMilitary() - beforeUtility === 30,
+    `T3: UtilityAI.estimatePlayerMilitary REAGUJE na uzbrojony kadłub (+30, było +0 przed W1-1)`);
+  assert(acs._estimatePlayerMilitary() - beforeAlien === 30,
+    'T3: AlienCivSystem._estimatePlayerMilitary reaguje TAK SAMO — bliźniaki naprawione zgodnie');
+
+  // Zawężenie znaczenia z V4, podpisane: sam pancerz/tarcza to NIE jest uzbrojenie.
+  // Stary (zepsuty) regex łapał `armor_|shield_`; gdyby kiedyś wrócił, ta asercja to złapie.
+  const beforeArmorOnly = estimatePlayerMilitary();
+  const armorOnly = createVessel('hull_frigate', window.KOSMOS.homePlanet.id, {
+    name: 'Kadłub bez broni', modules: ['engine_ion', 'armor_standard', 'shield_basic'],
+    x: 0, y: 0, systemId: 'sys_home',
+  });
+  core.vesselManager._vessels.set(armorOnly.id, armorOnly);
+  assert(estimatePlayerMilitary() - beforeArmorOnly === 0,
+    'T3: kadłub z SAMYM pancerzem i tarczą NIE liczy się jako bojowy (zawężenie V4, podpisane)');
 }
 
-// ── T4 — V5: brak filtru właściciela i wraku (PIN PUŁAPKI) ──────────────────
-console.log('T4 — V5 PIN PUŁAPKI: sama naprawa predykatu wpuściłaby CUDZE kadłuby i WRAKI');
+// ── T4 — V5: filtr właściciela i wraku DZIAŁA (NAPRAWIONE w W1-1) ───────────
+console.log('T4 — V5: estymator NIE liczy cudzych kadłubów ani wraków');
 {
   const core = boot();
   const enemyId = core.empireRegistry.listAll()[0]?.id ?? 'emp_001';
 
+  const baseline = estimatePlayerMilitary();
   spawnHull(core, { name: 'Fregata gracza' });
+  const afterOwn = estimatePlayerMilitary();
+
   spawnHull(core, { name: 'Fregata wroga', owner: enemyId });
   spawnHull(core, { name: 'Wrak', wreck: true });
+  const afterForeign = estimatePlayerMilitary();
 
-  // Symulacja NAPRAWIONEGO predykatu BEZ filtru — tyle kadłubów policzyłby W1-1 bez V5.
-  const all = core.vesselManager.getAllVessels();
-  const armedNoFilter = all.filter(v => (v.modules ?? []).some(m => /^weapon_/.test(String(m))));
-  const foreignOrDead = armedNoFilter.filter(v => v.isWreck || (v.ownerEmpireId && v.ownerEmpireId !== 'player'));
+  // KONTROLA PINU: najpierw dowodzimy, że licznik W OGÓLE reaguje (inaczej „nie wzrósł"
+  // po wrogu przechodziłoby dlatego, że nic nigdy nie rośnie).
+  assert(afterOwn - baseline === 30,
+    `T4 KONTROLA PINU: WŁASNY uzbrojony kadłub podnosi estymator o 30 (${baseline} → ${afterOwn})`);
+  assert(afterForeign === afterOwn,
+    `T4: CUDZY kadłub i WRAK nie podnoszą go ani o jotę (${afterOwn} → ${afterForeign}) — ` +
+    'filtr z V5 wszedł tym samym commitem co naprawa predykatu');
 
-  assert(armedNoFilter.length >= 3,
-    `T4: naprawiony predykat widzi uzbrojone kadłuby (${armedNoFilter.length}) — sam predykat DZIAŁA`);
-  assert(foreignOrDead.length === 2,
-    `T4: z tego ${foreignOrDead.length} to CUDZE lub MARTWE — filtr właściciela i wraku MUSI wejść ` +
-    'w tym samym commicie co naprawa predykatu (V5), inaczej „siła gracza" liczy flotę wroga');
+  // V1 — drugi wyciek w tej samej funkcji: człon kolonii liczył WSZYSTKIE, także AI.
+  const aiColonies = core.colonyManager.getAllColonies().filter(c => c.ownerEmpireId && c.ownerEmpireId !== 'player');
+  const playerColonies = core.colonyManager.getPlayerColonies();
+  assert(playerColonies.length < core.colonyManager.getAllColonies().length || aiColonies.length === 0,
+    `T4: rozróżnienie kolonii istnieje (gracz ${playerColonies.length} / AI ${aiColonies.length})`);
+  assert(estimatePlayerMilitary() === 100 + 30 + playerColonies.length * 40,
+    `T4: estymator = baza 100 + 30 za własny kadłub + 40 × kolonie GRACZA (${playerColonies.length}) — ` +
+    'kolonie AI NIE podnoszą już „siły gracza" (V1)');
 }
 
 // ── T5 — K-2: abstrakcyjna księga flot zostaje pusta ────────────────────────
