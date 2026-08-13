@@ -1,6 +1,6 @@
 # W1 — repairs & foundations · plan doc (APPROVED)
 
-**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W1 · **Status:** ✅ **APPROVED 2026-08-14** — fourteen decisions signed, implementation pending (starts at W1-0)
+**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W1 · **Status:** ✅ **COMPLETE 2026-08-14** — all three gates PASSED, eleven commits, fifteen decisions signed
 **Parent:** `WAR_BACKBONE.md` §6 (P1–P7 signed 2026-08-13) · **Siblings:** `DIPLOMACY_BACKBONE.md`, `DIRECTOR_SLICE1_PLAN.md`
 **Basis:** read-only seam audit 2026-08-14 (this doc §Audit) + `docs/audit/COMBAT_DIPLO_AUDIT.md` §1/§3 (2026-08-05, superseded in parts)
 **Save:** v100, **no save-model changes** (hard constraint, P7)
@@ -464,6 +464,36 @@ ground-combat RNG seeding (audit R13) · reconciling the three divergent weapon 
 6. **Stale test fixture:** `src/testing/headless/test-empire-strategy-integration.mjs:102` still asserts
    that outposts are *not* in `empireRegistry` — contradicted by `EmpireColonyBootstrap.js:452`. Anyone
    validating W1 against that fixture draws the opposite conclusion about K-5.
+
+---
+
+## Results — W1 COMPLETE
+
+| gate | zakres | wynik |
+|---|---|---|
+| **GATE 1** (W1-3) | liczby zagrożenia, intel, dominacja orbitalna, żywy `relative_power` | ✅ PASSED 2026-08-14 |
+| **GATE 2** (W1-4) | potyczka vs wyczerpanie, EAH przez `recordBattle` | ✅ PASSED 2026-08-14 |
+| **GATE 3** (W1-5) | doktryny: garnizon trzyma, patrol na posterunku | ✅ PASSED 2026-08-14 |
+
+Keepery W1: `war_seams` 24 · `threat_assessment` 50 · `acceptance_relpower` 51 · `war_skirmish` 32 ·
+`war_doctrine` 34 · `empire_logistics_courier` 10. Sweep 123 → **129**.
+
+**Trzy commity, których w planie NIE BYŁO** — wszystkie z orzeczeń właściciela po gate'ach:
+**W1-3b** (kierunek `relative_power` sprzeczny z backbone §2.1 — sprzeczność SPECYFIKACJI, nie
+gałka balansu; wagi z D2 powstały przeciw stubowi, więc kierunku nikt nigdy nie zwalidował),
+**W1-3c** (ciągły odczyt „Układ sił" w panelu intelu — kanał rozbicia akceptacji jest reaktywny
+i milczy przy ZGODZIE), **W1-4b** (wyczerpanie asymetryczne wg WYNIKU bitwy — wygrywający naciska,
+przegrywający szuka stołu).
+
+**Pomiar do pliku R-2 (ponowny pomiar `BORDER_LY`):** AI zakłada PEŁNE KOLONIE ok. **civYear
+303–353** (`bootstrapColony`: Ankaa e/g/h, Cor Caroli c/d/e, Rasalhague b) — oś czasu ekspansji
+przesuwa się w DÓŁ kolejny raz (było ~456). Osobno: **0 outpostów przez 400 civY × 3 seedy**
+(`probe-war-seams` W4), zero prób `cannot_afford_outpost` — te dwie liczby razem zmieniają
+przesłanki i dla `BORDER_LY`, i dla P6.
+
+**Przypadek testowy dla W2 (ekonomia):** zapis właściciela wszedł w spiralę śmierci utrzymania
+floty (za dużo okrętów, ujemne kredyty). W2 dotyka kosztów magazynowania i rozmieszczenia —
+to jest gotowy scenariusz regresyjny.
 
 ---
 

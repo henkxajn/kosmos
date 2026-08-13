@@ -160,6 +160,58 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
      full colonies only around ~456 — the "AI founds nothing" diagnosis was overturned in its strong
      form once the probe horizon was extended).
 
+- **W1 — repairs & foundations. DONE, all three gates PASSED 2026-08-14.** Eleven commits
+  `ee189ba` → `3b07e27`; save stays **v100 with no migration across the entire slice** — the same
+  structural property Director Slice 1 had, and for the same reason: nothing W1 needed turned out to
+  require new persistent state.
+  **What shipped:** the R2 estimator repair · `ThreatAssessment` as a **pure read-model** computing
+  strength from real hulls (`CombatValueData` prices FIELDS, never module ids, so a third armour type
+  needs no code) · four blind consumers wired · `relative_power` **un-stubbed after sitting at a
+  literal zero since D2/E1** · a **skirmish** category making the accounting fork exhaustive ·
+  EAH redirected through `recordBattle` · two doctrines on posture · the courier latch given an exit ·
+  `FLEET_AGGRO_INTERVAL` deleted. Sweep 123 → **129** keepers.
+  **Six findings worth carrying forward.**
+  1. **K-1 held, and the danger came in by a different door.** The warning copied through four
+     documents — "repairing R2 pushes empires into AGGRESSIVE/WAR" — is false, and W1-0 proved it by
+     execution: `milRatio ≡ 0` before *and* after, because the **numerator never existed**. But wiring
+     the numerator alone would have caused exactly that catastrophe by a route nobody predicted: a
+     **unit mismatch** (HP-scale numerator over a heuristic denominator), and then, once both sides
+     used one unit, a **zero denominator** (`playerMil > 0 ? … : 1.0` puts an empty player fleet
+     *above* the war threshold). Hence `PLAYER_DEFENSE_BASELINE_HP` — a balance knob that exists for
+     a structural reason. *A refuted warning is not the same as a safe change.*
+  2. **A signed term shipped pointing the wrong way, and the matrix could not see it.**
+     `relative_power` went live as "+1 = evaluator STRONGER", inverting `DIPLOMACY_BACKBONE §2.1`
+     ("weaker side more agreeable"): a dominant AI signed everything and, on `offer_peace`, a
+     **winning** empire grew more willing to settle. Ruled a **spec contradiction, not a balance
+     knob** — the D2 weights were authored against a stub returning 0, so the *direction* had never
+     been validated. Fixed in W1-3b, magnitudes untouched.
+     ⚠ **The E7 matrix is structurally blind to this class of error**: it holds strengths equal in
+     the base context and stores probe impact as an **absolute** value. It returned 0/210 before and
+     after the flip. Direction is pinned by keepers only.
+  3. **E7 measures weights, not dynamics.** The same 0/210 came back for W1-4 and W1-4b, and was
+     equally correct: those commits change how fast exhaustion *accrues*, while the matrix pins
+     exhaustion at 45/45 by construction. Three separate times the instrument was the wrong lens and
+     the runtime measurement was the right one. Worth knowing before D4 tunes anything with it.
+  4. **The accounting fork had a third, silent path — and closing it changed the game.** EAH emitted
+     `battle:resolved` with a real `warId` yet bypassed `recordBattle`, so orbital attacks in a
+     declared war credited **zero** exhaustion and never appeared in `war.battles[]` — which meant D2
+     systematically **underpriced peace in exactly the wars being fought**. Gate 2 saw exhaustion go
+     0 → 100 on screen where it had been permanently zero. A fourth path nobody listed (EAH's
+     "could not declare war" branch, which persisted nothing) was closed in the same commit.
+  5. **Winning and losing must not cost the same.** Gate 2 measured the player winning every battle
+     80:5 and fatiguing identically to the empire being destroyed — the same inversion as finding 2,
+     one layer down. W1-4b split exhaustion into a small base for both plus a larger share for the
+     **battle loser**, classified strictly by `winner` and never by `lossesA/B` (those carry the
+     HP-delta vs vessel-count unit collision).
+  6. **Idle-by-design looks identical to unassigned.** A garrison holds position by *not* receiving
+     an order, so it still read as "idle" — the patrol rule kept poaching it, and the roster was
+     *overwritten* rather than merged, producing permanent churn and orphaned veterans. Both found by
+     running the gate one-liners on the live engine before writing them into the checklist.
+  **Two constraints discovered about the harness itself**, both now binding on later slices: the
+  headless harness never mounts `stationSystem`, so AI warship production is structurally blocked
+  there (every W1 keeper spawns enemies by hand); and the courier premise remains **unmeasurable** —
+  0 outposts over 400 civY × 3 seeds, with not even a `cannot_afford_outpost` attempt.
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
@@ -230,6 +282,7 @@ Owns everything between war declaration and the peace table.
   un-stub `relative_power` → skirmish category + EAH accounting → two doctrines on posture → courier
   latch fix → `FLEET_AGGRO_INTERVAL` deletion. Save **v100, no save-model changes** (P7). Three gates.
   Fourteen decisions signed; **no re-litigation**.
+  </details>
   ⚠ **Two audit refutations bind every later reader** (`W1_PLAN.md` §Corrections, and folded into
   `WAR_BACKBONE.md` §2 P2): **K-1** — repairing R2 does **NOT** move `milRatio` and cannot push empires
   into AGGRESSIVE/WAR; the *numerator* `empire.military.power` was deleted by the Slice-1 refactor and

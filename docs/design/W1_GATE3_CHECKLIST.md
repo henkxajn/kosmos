@@ -12,8 +12,8 @@
 Okręty z nacisku L1/L2 lądowały zadokowane przy stolicy AI i **nic ich nigdy nie ruszało** (V15).
 Doktryny nadają im rolę:
 
-> **garnizon TRZYMA** pozycję przy stolicy · **patrol RUSZA** po zewnętrznych orbitach własnego
-> układu AI · i przeżywa to **wczytanie zapisu**.
+> **garnizon TRZYMA** pozycję przy stolicy · **patrol WYCHODZI NA POSTERUNEK** przy zewnętrznej
+> planecie własnego układu AI **i tam orbituje** · i przeżywa to **wczytanie zapisu**.
 
 ---
 
@@ -77,7 +77,21 @@ i wywołało desync sprite'a znany z Engage.
 KOSMOS.vesselManager.getAllVessels().filter(v => v.movementOrder?.issuedBy?.startsWith('doctrine_')).map(v => [v.name, v.movementOrder.issuedBy, v.position.state])
 ```
 **Oczekiwane:** co najmniej jeden wiersz z `doctrine_patrol_border`. Stan przechodzi z `orbiting`
-w `in_transit`, a na mapie 3D okręt **widocznie się przemieszcza**.
+w `in_transit`, okręt **przelatuje jeden odcinek** do zewnętrznej planety i **tam zostaje, orbitując**.
+
+⚠ **SEMANTYKA PATROLU — potwierdzone po GATE 3.** To jest **posterunek stały**, nie ciągły objazd:
+JEDEN odcinek na zewnętrzne ciało, potem trzymanie pozycji i orbitowanie. Tak czyta się podpisane
+orzeczenie K-4 („station-keeping loop on the outer orbits") — *station-keeping* to utrzymywanie
+POZYCJI, nie krążenie po trasie. Wcześniejsze brzmienie tego punktu („okręt widocznie się
+przemieszcza") sugerowało ciągły tranzyt i było mylące. Wielopunktowy objazd byłby INNĄ mechaniką
+i wymagałby osobnego orzeczenia — dziś go NIE MA i to nie jest usterka.
+Zmierzone w GATE 3: `entity_63` (daleka planeta układu AI, nie stolica), pozycje
+(−1031,−408) → (−919,−607) → (−761,−809) przez 2.3 lat wyświetlanych, rozkaz żywy.
+
+⚠ **MGŁA WOJNY — patrol orbituje WEWNĄTRZ WŁASNEGO układu AI.** Bez obecności gracza w tym
+układzie **nie zobaczysz go na mapie 3D** i to jest poprawne, nie brak renderu. Weryfikacja
+przez konsolę (powyżej) działa zawsze; widok 3D wymaga obecności. Widoczność sprite'a w obcych
+układach przyjęta na pokryciu keeperem, nie na oglądzie.
 
 ⚠ **Gdzie ma lecieć:** na jedną z **najdalszych PLANET własnego układu AI** — czyli po stronie,
 z której nadlatuje gracz (K-4). **Nie** poza układ. Jeśli zobaczysz kurs na dziesiątki AU od
@@ -87,7 +101,7 @@ i patrol dostawał kurs na 102 AU).
 ⚠ **Paliwo:** rozkaz idzie z `bypassFuelCheck` (decyzja 12) — kolonie AI nie trzymają paliwa, więc
 bez tego patrol zostałby prędzej czy później odrzucony. To konsekwencja **zadeklarowana**, nie ukryta.
 
-- [ ] okręt z `issuedBy = doctrine_patrol_border` faktycznie **się przemieszcza**
+- [ ] okręt z `issuedBy = doctrine_patrol_border` **dolatuje na posterunek i tam orbituje**
 - [ ] cel leży **wewnątrz układu planetarnego**, nie na peryferiach
 - [ ] w konsoli **nie ma** ostrzeżeń `[DirectorDoctrine] rozkaz odrzucony`
 
@@ -138,5 +152,22 @@ runtime w checklistach GATE 2/3 i keepery.
 
 ## Wynik
 
-- [ ] **GATE 3 PASSED — W1 ZAMKNIĘTY** — data, podpis:
-- [ ] uwagi / rozbieżności:
+- [x] **GATE 3 PASSED — W1 ZAMKNIĘTY** — 2026-08-14, właściciel (Filip)
+
+**Dowody z przebiegu:** obsadzenie doktryn z ROZŁĄCZNYMI rosterami (`defend_home` [v_32, v_33]
++ `patrol_border` [v_29]) · garnizon TRZYMA (zadokowany przy stolicy, bez rozkazu ruchu — poprawne
+trzymanie-przez-nieobecność-rozkazu) · patrol dotarł na DALEKĄ planetę własnego układu AI
+(`entity_63` — nie stolica, nie kometa na 102 AU) i ją ORBITUJE: (−1031,−408) → (−919,−607) →
+(−761,−809) przez 2.3 lat wyświetlanych, rozkaz `doctrine_patrol_border` żywy · zapis/F5/wczytanie
+zachowało rostery i stan sprite'a, bez ponownego dokowania do stolicy · rejestr wojen zdrowy ·
+zero błędów w konsoli.
+
+**Dwa doprecyzowania z przebiegu, oba zamknięte:**
+1. **Semantyka patrolu** — potwierdzona jako posterunek stały (patrz ⚠ przy G3.3). Brzmienie
+   checklisty poprawione; KODU nie ruszano.
+2. **„Osierocony weteran"** (`v_28` „Sztylet": bezczynny, uzbrojony, przy stolicy, bez roli) —
+   to był REALNY WYCIEK, naprawiony. Roster był NADPISYWANY przy każdym obsadzeniu, więc
+   poprzedni posiadacze ról tracili je na rzecz nowych; ponieważ garnizon stoi zadokowany
+   i bez roli znów wygląda na bezczynny, powstawał WIECZNY CHURN (tik 1 obsadza a,b → tik 2
+   obsadza c,d i porzuca a,b → tik 3 obsadza a,b…). Teraz roster SIĘ SUMUJE i jest czyszczony
+   z wraków/utraconych okrętów — także wtedy, gdy nie ma kogo dobrać. Pinowane `war_doctrine` T8.

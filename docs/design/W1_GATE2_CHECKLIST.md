@@ -215,5 +215,19 @@ oraz keeper `war_skirmish_smoke`. To ta sama klasa ograniczenia, którą odnotow
 
 ## Wynik
 
-- [ ] **GATE 2 PASSED** — data, podpis:
-- [ ] uwagi / rozbieżności / decyzja o przestrojeniu tempa wyczerpania:
+- [x] **GATE 2 PASSED** — 2026-08-14, właściciel (Filip)
+
+**Dowody:** ścieżka potyczki (+12 napięcia, wpis pamięci typu `skirmish`, ZERO wpływu na wojnę,
+wpis w Dzienniku) · ataki orbitalne w zadeklarowanej wojnie produkują bitwy i wyczerpanie
+**0 → 100 na ekranie** (19 bitew, widoczne w panelu **W** — przed W1-4 było TRWALE zero) ·
+`war_status` monotoniczny z wyczerpaniem w pięciu zmierzonych punktach (−45.1 → −41.8 → … → 0),
+spójnie z wagą 55 · widelec czysty na żywych danych (bitwy wojenne + dwa wpisy POTYCZKA obok
+siebie — bez trzeciej ścieżki) · brak błędów w konsoli.
+
+**„Brakujący" auto-pokój przy 100 to działający projekt E3:** wojny ze `spawnEnemyAttack` niosą
+casus belli `extermination` (peaceCost 100 ⇒ `war_status` zatrzymuje się na 0, auto-pokój
+ODRZUCONY z wpisem w Dzienniku). Gate spotkał funkcję E3 w naturze. `recent_refusal` poprawnie
+ukarał powtarzane oferty pokoju (−20, 2 lata) — anty-spam z E4 zadziałał na GRACZU.
+
+**Orzeczenie z przebiegu → W1-4b:** wyczerpanie ASYMETRYCZNE wg WYNIKU bitwy (gracz wygrywał
+każde starcie 80:5 i męczył się tak samo jak przegrywający). Wdrożone, liczby w G2.2 wyżej.

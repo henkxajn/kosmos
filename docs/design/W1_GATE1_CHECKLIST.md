@@ -259,5 +259,18 @@ układem sił — pozycja do rozważenia przy D4.
 
 ## Wynik
 
-- [ ] **GATE 1 PASSED** — data, podpis:
-- [ ] uwagi / rozbieżności:
+- [x] **GATE 1 PASSED** — 2026-08-14, właściciel (Filip)
+
+**Dowody:** liczby zagrożenia niezerowe i sensowne (`emp_test_enemy` 522 w skali HP) · potok intelu
+żywy (`knownMilitary` 522 po `advanceIntel`; zera dla imperiów bez floty rozpoznane jako POPRAWNE,
+nie regresja) · pełna sekwencja dominacji orbitalnej (true → przylot uzbrojonego → false →
+zniszczony → true) z zablokowanym UI desantu · `relative_power` żywy z POPRAWIONĄ semantyką
+na prawdziwych danych: gracz z kadłubami vs oceniające imperium BEZ floty → `raw: 1`, wkład **+10**
+(słabszy oceniający bardziej ugodowy) — cały łańcuch realne kadłuby → siła wyprowadzona →
+naprawiony estymator → term → rozbicie działa. G5 czysty.
+
+**Dwa znaleziska z przebiegu, oba zamknięte:** (1) `emp_test_enemy` jest w stanie wojny z definicji,
+więc `evaluateProposal` zwraca `blocked: diplo.reject.atWar` z pustym rozbiciem — poprawne
+zachowanie D2; checklista wysyłała tam do G4 i dlatego dostała sekcję „WYBÓR IMPERIUM".
+(2) Luka UI kanału rozbicia (widoczny tylko przy ODMOWIE) — odpowiedź w **W1-3c**: ciągły odczyt
+„Układ sił" w panelu intelu.

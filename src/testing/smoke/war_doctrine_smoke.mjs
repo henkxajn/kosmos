@@ -223,5 +223,43 @@ console.log('T7 — okręt nie może być JEDNOCZEŚNIE garnizonem i patrolem');
     'na bezczynnego i patrol zabierał go z posterunku (zmierzone przy walidacji GATE 3)');
 }
 
+// ── T8 — roster SIĘ SUMUJE; brak „osieroconego weterana" (znalezisko GATE 3) ─
+console.log('T8 — powtórne obsadzenie NIE porzuca wcześniej przypisanych okrętów');
+{
+  const { core, doctrine } = boot();
+  const empireId = core.empireRegistry.listAll()[0]?.id;
+  const cap = setupCapital(core, empireId);
+  const ships = [];
+  for (let i = 0; i < 4; i++) ships.push(spawnAiWarship(core, empireId, cap.planetId, `Weteran ${i}`));
+
+  // Tik 1 — obsadza dwa pierwsze.
+  doctrine.assignDoctrine({ empireId, year: 5 }, { doctrine: 'defend_home', count: 2 });
+  const first = [...(DirectorDoctrine.get(empireId)?.defend_home ?? [])];
+  assert(first.length === 2, `T8: pierwsze obsadzenie daje 2 okręty (${first.length})`);
+
+  // Tik 2 — obsadza kolejne dwa. ⚠ POPRZEDNI MAJĄ ZOSTAĆ.
+  doctrine.assignDoctrine({ empireId, year: 8 }, { doctrine: 'defend_home', count: 2 });
+  const second = DirectorDoctrine.get(empireId)?.defend_home ?? [];
+
+  assert(first.every(id => second.includes(id)),
+    `T8: okręty z pierwszego obsadzenia NADAL są w rosterze (${JSON.stringify(second)}) — ` +
+    'to jest „osierocony weteran" z GATE 3: przed naprawą roster był NADPISYWANY, więc ' +
+    'v_28 tracił rolę, gdy v_32/v_33 ją dostawały');
+  assert(second.length === 4,
+    `T8: roster zsumował wszystkie cztery (${second.length}) — brak wiecznego churnu`);
+
+  // Po obsadzeniu wszystkich sonda nie widzi już kandydatów — pula wyczerpana, nie porzucona.
+  assert(doctrine.countIdleArmedAtCapital(empireId) === 0,
+    'T8: ZERO bezczynnych kandydatów po obsadzeniu wszystkich — nikt nie został osierocony');
+
+  // ⚠ PRUNE: wrak wypada z rosteru, żeby `_hasAnyDoctrine` nie blokował miejsca po martwym.
+  ships[0].isWreck = true;
+  doctrine.assignDoctrine({ empireId, year: 11 }, { doctrine: 'defend_home', count: 1 });
+  const afterWreck = DirectorDoctrine.get(empireId)?.defend_home ?? [];
+  assert(!afterWreck.includes(ships[0].id),
+    `T8: WRAK usunięty z rosteru (${JSON.stringify(afterWreck)}) — inaczej lista rosłaby ` +
+    'w nieskończoność, a miejsce po martwym okręcie byłoby wiecznie zajęte');
+}
+
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail > 0 ? 1 : 0);

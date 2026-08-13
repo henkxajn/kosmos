@@ -87,7 +87,13 @@ export class DirectorDoctrine {
     }
     const wanted = Math.max(1, params.count ?? 2);
     const pool = this._idleArmedAtCapital(empireId);
-    if (pool.length === 0) return { assigned: 0, doctrine };
+    // ⚠ Brak kandydatów NIE zwalnia z porządków: wraki i utracone okręty muszą wypaść
+    // z rosterów TAKŻE wtedy, gdy nie ma kogo dobrać. Inaczej miejsce po martwym okręcie
+    // zostaje zajęte na zawsze (`_hasAnyDoctrine` dalej je widzi), a lista rośnie.
+    if (pool.length === 0) {
+      this._pruneAllRosters(empireId);
+      return { assigned: 0, doctrine };
+    }
 
     const chosen = pool.slice(0, wanted);
     const assignedIds = [];
@@ -98,10 +104,21 @@ export class DirectorDoctrine {
       if (ok) assignedIds.push(v.id);
     }
 
+    // ⚠ ROSTER SIĘ SUMUJE, nie nadpisuje. Pierwsza wersja wpisywała `[doctrine]: assignedIds`
+    // — czyli KAŻDE odpalenie reguły podmieniało roster na świeżo przypisane okręty, a
+    // poprzedni tracili rolę. Ponieważ garnizon stoi zadokowany i bez roli znów wygląda na
+    // bezczynny, powstawał WIECZNY CHURN: tik 1 obsadza a,b → tik 2 obsadza c,d i porzuca a,b
+    // → tik 3 obsadza a,b i porzuca c,d… Przy każdym pomiarze część okrętów była „osierocona".
+    // Zmierzone w GATE 3 na żywym zapisie: `v_28` stracił rolę, gdy `v_32`/`v_33` ją dostały.
     const prev = DirectorDoctrine.get(empireId) ?? {};
+    const kept = this._pruneRoster(empireId, prev[doctrine]);
+    const merged = [...new Set([...kept, ...assignedIds])];
     gameState.set(`director.doctrine.${empireId}`, {
       ...prev,
-      [doctrine]: assignedIds,
+      // Rostery obu doktryn czyszczone z okrętów, których już nie ma — inaczej rosłyby
+      // w nieskończoność o wraki i statki utracone w bitwach.
+      defend_home:   doctrine === 'defend_home'   ? merged : this._pruneRoster(empireId, prev.defend_home),
+      patrol_border: doctrine === 'patrol_border' ? merged : this._pruneRoster(empireId, prev.patrol_border),
       lastAssignedYear: year ?? 0,
     }, `director_doctrine_${doctrine}`);
 
@@ -166,6 +183,35 @@ export class DirectorDoctrine {
   }
 
   // ── Pomocnicze ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Roster oczyszczony z okrętów, które przestały istnieć albo przestały należeć do imperium
+   * (wraki, straty bojowe, przejęcia). Bez tego lista rosłaby w nieskończoność, a `_hasAnyDoctrine`
+   * blokowałby ponowne obsadzenie miejsca po martwym okręcie.
+   */
+  _pruneRoster(empireId, list) {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return [...list];         // brak rejestru = brak podstaw do kasowania
+    return list.filter((id) => {
+      const v = vMgr.getVessel?.(id) ?? vMgr._vessels?.get?.(id);
+      if (!v || v.isWreck) return false;
+      return (v.ownerEmpireId ?? v.owner) === empireId;
+    });
+  }
+
+  /** Czyści oba rostery imperium z okrętów, których już nie ma. Zapis tylko przy realnej zmianie. */
+  _pruneAllRosters(empireId) {
+    const prev = DirectorDoctrine.get(empireId);
+    if (!prev) return;
+    const defend = this._pruneRoster(empireId, prev.defend_home);
+    const patrol = this._pruneRoster(empireId, prev.patrol_border);
+    const changed = defend.length !== (prev.defend_home ?? []).length
+                 || patrol.length !== (prev.patrol_border ?? []).length;
+    if (!changed) return;                       // bez churnu w gameState
+    gameState.set(`director.doctrine.${empireId}`,
+      { ...prev, defend_home: defend, patrol_border: patrol }, 'director_doctrine_prune');
+  }
 
   /** Czy okręt ma już JAKĄKOLWIEK rolę w doktrynach tego imperium. */
   _hasAnyDoctrine(empireId, vesselId) {
