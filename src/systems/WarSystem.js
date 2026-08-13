@@ -34,7 +34,20 @@ import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
-const EXHAUSTION_PER_BATTLE = 15;   // ile exhaustion rośnie za pojedynczą bitwę
+// W1-4b — WYCZERPANIE JEST ASYMETRYCZNE, zależnie od WYNIKU bitwy (orzeczenie właściciela).
+//
+// Do W1-4 obie strony dostawały tyle samo (15 × rate), więc gracz wygrywający każde starcie
+// 80:5 męczył się DOKŁADNIE tak samo jak rozbijany przeciwnik. To odwraca sens termu `war_status`
+// — ta sama logika, która kazała odwrócić znak `relative_power`: wygrywający NACISKA przewagę,
+// przegrywający szuka stołu. Wojna wyczerpuje przez SAMO TRWANIE (baza dla obu) i DODATKOWO
+// przez przegrywanie (udział przegranego).
+//
+// ⚠ KLASYFIKACJA WYŁĄCZNIE PO `result.winner`. NIGDY po `lossesA/B` — te pola niosą KOLIZJĘ
+// JEDNOSTEK (audyt, §Findings filed 3): w BattleSystem to delta HP, w DSCS liczba statków, przy
+// tej samej nazwie pola i tym samym zdarzeniu. Oparcie o nie asymetrii wyczerpania przeniosłoby
+// tę kolizję prosto do księgowania wojny.
+const EXHAUSTION_BASE         = 2;   // obie strony — cena samego trwania wojny
+const EXHAUSTION_LOSER_SHARE  = 7;   // DODATKOWO dla przegranego starcia (⇒ przegrany 9, wygrany 2)
 // W1-4 — POTYCZKA (P3): starcie BEZ stanu wojny. Podnosi napięcie i zostawia ślad w pamięci,
 // ale NIGDY nie dotyka exhaustion (to jest waluta wojny, a wojny nie ma).
 const SKIRMISH_TENSION = 12;
@@ -189,6 +202,29 @@ export class WarSystem {
     return null;
   }
 
+  /**
+   * Która STRONA WOJNY przegrała to starcie (W1-4b). `null` = remis albo nie da się przypisać.
+   *
+   * ⚠ Czyta WYŁĄCZNIE `result.winner` ('A' | 'B' | 'draw') i `empireId`/`type` zwycięskiego
+   * uczestnika — dokładnie tę samą drogę, którą chodzi `_updateOrbitalDominance`. NIGDY
+   * `lossesA/B`: te pola mają kolizję jednostek (HP-delta w BattleSystem vs liczba statków
+   * w DSCS) i nie mogą nieść żadnej decyzji księgowej.
+   *
+   * Gdy zwycięzcy nie da się zmapować na `aggressor`/`defender` — zwracamy `null` i naliczamy
+   * SAMĄ BAZĘ. Zgadywanie strony byłoby gorsze niż symetria: przypisałoby karę losowo.
+   */
+  _battleLoserSide(war, battleRec) {
+    const w = battleRec?.winner;
+    if (w !== 'A' && w !== 'B') return null;                 // remis / brak wyniku
+    const part = w === 'A' ? battleRec.participantA : battleRec.participantB;
+    if (!part) return null;
+    const winnerId = part.empireId ?? (part.type === 'player' ? 'player' : null);
+    if (!winnerId) return null;
+    if (winnerId === war.aggressor) return war.defender;
+    if (winnerId === war.defender)  return war.aggressor;
+    return null;                                             // uczestnik spoza tej wojny
+  }
+
   /** Rekord wyniku bitwy — przypisuje do wojny + zapisuje w gameState.battles. */
   recordBattle(warId, result) {
     const war = this.getWar(warId);
@@ -213,11 +249,16 @@ export class WarSystem {
     const nextWar = { ...war, battles: [...war.battles, battleId] };
     gameState.set(`wars.${warId}`, nextWar, 'war_battle_appended');
 
-    // Exhaustion +X obu stron, skalowany przez casusBelli.exhaustionRate
+    // Exhaustion — BAZA dla obu (wojna kosztuje przez samo trwanie) + UDZIAŁ PRZEGRANEGO.
+    // Wszystko skalowane przez `casusBelli.exhaustionRate` (extermination 0.4 „walczą aż do
+    // końca", territorial_claim 1.2 „krótkie wojny o cel").
     const cb = CASUS_BELLI[war.casusBelli] ?? CASUS_BELLI.border_incident;
     const rate = cb.exhaustionRate ?? 1.0;
-    this.changeExhaustion(warId, war.aggressor, EXHAUSTION_PER_BATTLE * rate, 'battle');
-    this.changeExhaustion(warId, war.defender, EXHAUSTION_PER_BATTLE * rate, 'battle');
+    this.changeExhaustion(warId, war.aggressor, EXHAUSTION_BASE * rate, 'battle');
+    this.changeExhaustion(warId, war.defender,  EXHAUSTION_BASE * rate, 'battle');
+
+    const loserId = this._battleLoserSide(war, battleRec);
+    if (loserId) this.changeExhaustion(warId, loserId, EXHAUSTION_LOSER_SHARE * rate, 'battle_lost');
 
     EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
 

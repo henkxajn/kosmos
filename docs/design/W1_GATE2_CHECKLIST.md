@@ -3,7 +3,11 @@
 **Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W1 · **Commit:** W1-4
 **Poprzedzają:** `ee189ba` W1-0 · `1e67adf` W1-1 · `aad2f99` W1-2 · `9342aa3` W1-3 · `8f7be70` W1-3b · `6adec47` W1-3c
 **Zapis:** v100, **bez zmian modelu zapisu** · **Sweep:** 127/127 OK, 0 FAIL · **check-i18n:** PASS
-**GATE 1:** ✅ PASSED 2026-08-14
+**GATE 1:** ✅ PASSED 2026-08-14 · **GATE 2:** ✅ PASSED 2026-08-14
+
+> ⚠ **DOKUMENT ZAKTUALIZOWANY PO ZDANYM GATE 2** — o poprawki zgłoszone w przebiegu (batchowanie
+> przylotów, odniesienie do E3 przy G2.3) oraz o **W1-4b**, który zmienił LICZBY: wyczerpanie jest
+> teraz ASYMETRYCZNE (przegrany starcia płaci więcej). Kto powtarza ten gate — czyta tę wersję.
 
 ---
 
@@ -84,6 +88,12 @@ To jest **rdzeń tego gate'u**. Wypuść wrogi atak i **poczekaj, aż doleci**:
 KOSMOS.debug.spawnEnemyAttack({ etaYears: 20 })
 ```
 
+⚠ **PUŁAPKA POMIARU: przyloty JEDNOCZESNE SKLEJAJĄ SIĘ W JEDNĄ BITWĘ.** `EnemyAttackHandler`
+zbiera wrogów przybyłych w oknie `BATTLE_BATCH_WINDOW_MS = 500 ms` i rozstrzyga je jako JEDNO
+starcie (zagregowane stats). Jeśli wypuścisz kilka ataków z tym samym ETA, dostaniesz **jedną**
+bitwę zamiast kilku i policzysz wyczerpanie źle. **Spawnuj z odstępami** (różne `etaYears`, np.
+20 / 24 / 28) albo czekaj na rozstrzygnięcie poprzedniej bitwy przed kolejnym spawnem.
+
 Przed bitwą zanotuj stan wojny:
 
 ```
@@ -92,17 +102,31 @@ Object.values(KOSMOS.gameState.get('wars') ?? {}).filter(w => w.active).map(w =>
 
 Po bitwie powtórz to samo.
 
-**Zmierzone na żywym silniku (4 kolejne ataki orbitalne w zadeklarowanej wojnie):**
+**Zmierzone na żywym silniku PO W1-4b** (8 ataków orbitalnych, wojna `border_incident` rate 1.0,
+WSZYSTKIE bitwy wygrane przez imperium):
 
 | stan | `war.battles[]` | `exhaustion` | `offer_peace` |
 |---|---|---|---|
-| przed | 0 | `{emp:0, player:0}` | **odmowa** (wynik −6.5, `war_status` −16.5) |
-| po 4 atakach | **4** | `{emp:60, player:60}` | **ZGODA** (wynik +26.5, `war_status` **+16.5**) |
+| przed | 0 | `{emp:0, player:0}` | **odmowa** |
+| po 8 bitwach | **8** | `{emp:16, **player:72**}` | **ZGODA** (wynik +2.3) |
 
-Każda bitwa to **+15** wyczerpania dla OBU stron (skalowane `casusBelli.exhaustionRate`).
+⚠ **W1-4b — WYCZERPANIE JEST ASYMETRYCZNE.** Za bitwę: **baza +2 dla OBU** stron (wojna kosztuje
+przez samo trwanie) **plus +7 dla PRZEGRANEGO** starcia ⇒ **zwycięzca +2, przegrany +9**, całość
+skalowana `casusBelli.exhaustionRate`. Klasyfikacja idzie po polu `winner`, **NIGDY** po `lossesA/B`
+(te niosą kolizję jednostek: delta HP w BattleSystem vs liczba statków w DSCS). Remis ⇒ obie strony
+płacą samą bazę.
+
+To bezpośrednia odpowiedź na obserwację z przebiegu 1: gracz wygrywał każde starcie 80:5 i męczył
+się DOKŁADNIE tak samo jak rozbijany przeciwnik, co odwracało sens termu `war_status`. Teraz
+wygrywający naciska przewagę, przegrywający szuka stołu — ta sama logika, co przy odwróceniu znaku
+`relative_power` (W1-3b).
+
+*(Pomiar sprzed W1-4b, dla porównania: 4 ataki ⇒ `{emp:60, player:60}`, symetrycznie po +15.)*
 
 - [ ] licznik `war.battles[]` **rośnie** po każdym ataku orbitalnym (przed W1-4 stał w miejscu)
-- [ ] `exhaustion` **rośnie** obu stronom (przed W1-4 zostawało 0)
+- [ ] `exhaustion` **rośnie** (przed W1-4 zostawało 0)
+- [ ] ⚠ **przegrywający starcia męczy się WYRAŹNIE szybciej** — patrz OBIE liczby w `exhaustion`,
+      nie tylko suma; to jest cała treść W1-4b
 - [ ] bitwa jest **widoczna w panelu wojny** (klawisz **W**) — to ta sama tablica `war.battles[]`
 - [ ] Dziennik pokazuje bitwę
 
@@ -119,11 +143,35 @@ Czytaj `decision`, `score` oraz wiersz `war_status` w `breakdown`.
 
 **Oczekiwane:** `war_status` przechodzi z **ujemnego** (wojna tańsza niż jej cena → pokój
 przedwczesny) na **dodatni** (wyczerpanie przekroczyło cenę pokoju z casus belli), a `decision`
-potrafi się odwrócić z `false` na `true`. Zmierzone: **−16.5 → +16.5**, `false` → `true`.
+potrafi się odwrócić z `false` na `true`. Zmierzone (przebieg z W1-4b, `border_incident`):
+`offer_peace` `false` → **`true`** po 8 przegranych przez gracza starciach.
+Przebieg 1 (jeszcze symetryczny) dawał `war_status` **−16.5 → +16.5** — kierunek ten sam,
+tempo inne, bo teraz zależy od tego, KTO przegrywa.
 
-⚠ **Knock-on do sprawdzenia w tym samym przebiegu** (plan wymienia to wprost): przy intensywnej
-walce orbitalnej **auto-pokój** może przyjść WCZEŚNIEJ niż dotąd. Próg to `AUTO_PEACE_EXHAUSTION = 100`,
-a każda bitwa daje +15 — czyli **~7 ataków orbitalnych** wystarcza, żeby wojna sama się skończyła.
+⚠ **Knock-on**: przy intensywnej walce orbitalnej **auto-pokój** może przyjść wcześniej niż dotąd.
+Próg to `AUTO_PEACE_EXHAUSTION = 100`. Po W1-4b liczy się, KTO przegrywa: strona regularnie bita
+dobija do 100 po ~11 przegranych starciach (9/bitwę przy rate 1.0), a strona wygrywająca — po ~50
+(2/bitwę). Wojna kończy się więc, gdy PRZEGRYWAJĄCY ma dość, a nie gdy obaj zmęczą się równo.
+
+⚠ **ODNIESIENIE DO E3 — przeczytaj, zanim uznasz brak auto-pokoju za błąd.** Wojny ze
+`spawnEnemyAttack` niosą casus belli **`extermination`** (archetyp xenophage/swarm ⇒
+`inferCasusBelli`), a ten ma `exhaustionRate 0.4` („walczą aż do końca") i **`peaceCost 100`**
+(„praktycznie brak pokoju"). Konsekwencje, wszystkie ZAMIERZONE:
+- wyczerpanie rośnie 2,5× wolniej (baza 0.8 / przegrany 3.6 za bitwę),
+- `war_status = (min(exhaustion) − peaceCost) / 100` **nigdy nie wychodzi powyżej 0**,
+- auto-pokój przy 100 zostaje **ODRZUCONY** przez silnik akceptacji, z wpisem w Dzienniku.
+To jest funkcja z D2/E3 (pokój MOŻE zostać odmówiony), nie regresja W1. Chcąc zobaczyć normalną
+dynamikę pokoju, użyj wojny o innym CB (`border_incident`, rate 1.0, peaceCost 30).
+
+**Pełna tabela kursów** (`CasusBelliData.js`) — wyczerpanie za bitwę = wartość × `exhaustionRate`:
+
+| casus belli | `exhaustionRate` | `peaceCost` | zwycięzca / przegrany za bitwę |
+|---|---|---|---|
+| `territorial_claim` | 1.2 | 50 | 2.4 / 10.8 |
+| `border_incident` | 1.0 | 30 | 2 / 9 |
+| `tech_theft` | 0.8 | 40 | 1.6 / 7.2 |
+| `ideology` | 0.6 | 70 | 1.2 / 5.4 |
+| `extermination` | 0.4 | 100 | 0.8 / 3.6 |
 
 - [ ] `war_status` rośnie wraz z wyczerpaniem
 - [ ] `offer_peace` potrafi zmienić decyzję z odmowy na zgodę

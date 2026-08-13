@@ -12,6 +12,7 @@
 //   T3  widelec WYCZERPUJĄCY — żadna ścieżka nie jest „ani zaksięgowana, ani potyczką"
 //   T4  potyczka NIE jest zaspokajalna przez sąsiada (`border_pressure` z Directora)
 //   T5  rejestr kanałów: `skirmish` zadeklarowany i NIE dubluje kanałów
+//   T6  ⚠ W1-4b: wyczerpanie ASYMETRYCZNE po WYNIKU bitwy (nigdy po lossesA/B)
 //
 // ⚠ Harness NIE montuje `stationSystem`, więc wrogie kadłuby stawiamy RĘCZNIE (war_seams).
 
@@ -22,6 +23,7 @@ import gameState from '../../core/GameState.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { INCIDENT_CHANNELS } from '../../data/AcceptanceWeightData.js';
+import * as CB from '../../data/CasusBelliData.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -221,6 +223,67 @@ console.log('T5 — `skirmish` w rejestrze kanałów (anty-double-count)');
   // asercja w acceptance_engine_smoke; tu tylko utrwalamy, dlaczego go NIE dodaliśmy.
   assert(INCIDENT_CHANNELS.skirmish !== 'opinion',
     'T5: …a NIE na `opinion` — dlatego świadomie bez wpisu w OPINION_MODIFIERS');
+}
+
+// ── T6 — ASYMETRIA WYCZERPANIA po WYNIKU bitwy (W1-4b) ──────────────────────
+console.log('T6 — wyczerpanie asymetryczne: przegrany starcia płaci WIĘCEJ');
+{
+  const core = boot();
+  const empireId = core.empireRegistry.listAll()[0]?.id;
+  const warSys = core.warSystem;
+  core.diplomacySystem.declareWar(empireId, 'keeper_asym');
+  const war = warSys.getWarWith(empireId);
+  const rate = 1.0;   // border_incident — CB wnioskowane dla tej deklaracji
+
+  const exh = () => ({ ...warSys.getWarWith(empireId).exhaustion });
+  const mkRec = (winner) => ({
+    winner, location: { systemId: 'sys_home', planetId: null, point: null },
+    participantA: { type: 'vessel_group', empireId, vesselIds: ['v_a'], count: 1 },
+    participantB: { type: 'player', systemId: 'sys_home' },
+    // ⚠ CELOWO NIEZGODNE Z WYNIKIEM: gdyby księgowanie czytało `lossesA/B` zamiast `winner`,
+    //   te liczby wskazałyby DRUGĄ stronę. Pin łapie taką pomyłkę (twardy warunek orzeczenia).
+    lossesA: 1, lossesB: 999,
+  });
+
+  // (a) wygrywa IMPERIUM (A) ⇒ przegranym jest GRACZ
+  const before1 = exh();
+  warSys.recordBattle(war.id, mkRec('A'));
+  const after1 = exh();
+  const dEmp1 = after1[empireId] - before1[empireId];
+  const dPly1 = after1.player   - before1.player;
+  assert(dEmp1 === 2 * rate, `T6: ZWYCIĘZCA (imperium) płaci samą bazę +${2 * rate} (zmierzone ${dEmp1})`);
+  assert(dPly1 === 9 * rate, `T6: PRZEGRANY (gracz) płaci bazę + udział = +${9 * rate} (zmierzone ${dPly1})`);
+  assert(dPly1 > dEmp1, 'T6: przegrany męczy się BARDZIEJ niż zwycięzca — sedno orzeczenia W1-4b');
+
+  // (b) wygrywa GRACZ (B) ⇒ asymetria odwraca się
+  const before2 = exh();
+  warSys.recordBattle(war.id, mkRec('B'));
+  const after2 = exh();
+  const dEmp2 = after2[empireId] - before2[empireId];
+  const dPly2 = after2.player   - before2.player;
+  assert(dPly2 === 2 * rate && dEmp2 === 9 * rate,
+    `T6: przy zwycięstwie GRACZA proporcje się odwracają (gracz +${dPly2}, imperium +${dEmp2})`);
+
+  // ⚠ TWARDY WARUNEK ORZECZENIA: klasyfikacja po `winner`, NIE po `lossesA/B`.
+  //   W obu bitwach `lossesA/B` były IDENTYCZNE (1 / 999), a wynik asymetrii się ODWRÓCIŁ —
+  //   czyli decyzja NIE MOGŁA pochodzić z tych pól (kolizja jednostek, §Findings filed 3).
+  assert(dPly1 !== dPly2 && dEmp1 !== dEmp2,
+    'T6: te same lossesA/B, PRZECIWNE wyniki ⇒ księgowanie czyta `winner`, nie `lossesA/B` ' +
+    '(pola z kolizją jednostek HP-delta vs liczba statków)');
+
+  // (c) REMIS ⇒ sama baza dla obu, bez udziału przegranego
+  const before3 = exh();
+  warSys.recordBattle(war.id, mkRec('draw'));
+  const after3 = exh();
+  assert(after3[empireId] - before3[empireId] === 2 * rate && after3.player - before3.player === 2 * rate,
+    'T6: REMIS ⇒ obie strony płacą SAMĄ bazę (nikt nie przegrał, nie ma komu doliczyć udziału)');
+
+  // (d) kurs casus belli nadal skaluje CAŁOŚĆ — extermination 0.4 („walczą aż do końca")
+  const { CASUS_BELLI } = CB;
+  assert(CASUS_BELLI.extermination.exhaustionRate === 0.4 && CASUS_BELLI.extermination.peaceCost === 100,
+    'T6: extermination zachowuje rate 0.4 i peaceCost 100 — W1-4b NIE tknął tabeli CB');
+  assert(CASUS_BELLI.border_incident.exhaustionRate === 1.0,
+    'T6: border_incident nadal rate 1.0 (odniesienie dla liczb wyżej)');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
