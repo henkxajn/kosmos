@@ -106,6 +106,7 @@ import { InfluenceMap }       from '../systems/InfluenceMap.js';
 import { DirectorProduction, registerProductionGuards } from '../systems/director/DirectorProduction.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/director/DirectorFirstContact.js';
 import { DirectorPressure, registerPressureBehaviors } from '../systems/director/DirectorPressure.js';
+import { DirectorDoctrine, registerDoctrineBehaviors } from '../systems/director/DirectorDoctrine.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
@@ -353,6 +354,12 @@ export class GameScene {
     // konstrukcją silnika, bo katalog waliduje nazwy i rzuca na nieznanej (audyt R12).
     this.directorPressure     = new DirectorPressure();
     registerPressureBehaviors(this.directorPressure, { allowOverride: true });
+    // W1-5 — dwie doktryny operacyjne na postawie (defend_home / patrol_border). Ta sama
+    // zasada kolejności: rejestracja PRZED konstrukcją silnika, bo katalog waliduje nazwy
+    // i rzuca na nieznanej. Konsumentem są okręty z nacisku L1/L2, które do tej pory stały
+    // bezczynnie przy stolicy AI (V15).
+    this.directorDoctrine     = new DirectorDoctrine();
+    registerDoctrineBehaviors(this.directorDoctrine, { allowOverride: true });
     this.directorSystem       = new DirectorSystem();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
@@ -430,6 +437,7 @@ export class GameScene {
     window.KOSMOS.directorProduction = this.directorProduction;
     window.KOSMOS.directorFirstContact = this.directorFirstContact;
     window.KOSMOS.directorPressure   = this.directorPressure;
+    window.KOSMOS.directorDoctrine   = this.directorDoctrine;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
@@ -1932,6 +1940,7 @@ export class GameScene {
       DirectorSystem.initSubdomain();
       DirectorFirstContact.initSubdomain();   // director.flybys — kurs przelotu przeżywa zapis
       DirectorPressure.initSubdomain();       // director.posture — postawa obronna imperium
+      DirectorDoctrine.initSubdomain();       // director.doctrine — SIOSTRZANY klucz (decyzja 14)
       // M2b Commit 7: po restore POI sprites — gameState.restore nie emituje
       // poi:created dla zsynchronizowanych POI, więc ThreeRenderer trzeba
       // zsiać explicit. Idempotent: skanuje gameState.pois i tworzy sprites.

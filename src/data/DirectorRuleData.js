@@ -138,6 +138,46 @@ export const DIRECTOR_RULES = {
     personalityMod: { axis: 'aggression', at0: 0.6, at1: 1.4 },
     cooldown: { years: 5.0 },
   },
+
+  /**
+   * DOKTRYNA: GARNIZON MACIERZYSTY (W1-5) — „to zostaje w domu".
+   *
+   * Okręty z nacisku L1/L2 lądują zadokowane przy stolicy i NIC ich nigdy nie rusza (V15).
+   * Ta reguła nadaje im rolę: stoją jako garnizon. Przy braku zagrożenia NIE dostają rozkazu
+   * ruchu — trzymanie pozycji to brak ruchu, nie rozkaz „stój".
+   *
+   * ⚠ BEZ `roll`, więc MUSI mieć `cooldown` (decyzja 11). Przepustnica „jeden rzut na rok
+   * wyświetlany" siedzi WEWNĄTRZ `if (rule.roll)`, a `tickEmpire` biegnie co rok CYWILIZACYJNY
+   * — reguła bez obu odpalałaby 12× na rok wyświetlany.
+   */
+  doctrine_defend_home: {
+    id:       'doctrine_defend_home',
+    trigger:  { kind: 'poll', probe: 'idleArmedVesselsAtCapital', gte: 1 },
+    guard:    ['empireHasIdleWarships'],
+    delay:    0,
+    response: { action: 'assignDoctrine', params: { doctrine: 'defend_home', count: 2 } },
+    cooldown: { years: 3.0 },
+  },
+
+  /**
+   * DOKTRYNA: PATROL (W1-5) — „pilnujemy podejścia do własnego układu".
+   *
+   * ⚠ K-4: patrol jest WEWNĄTRZSYSTEMOWY, po ZEWNĘTRZNYCH orbitach WŁASNEGO układu AI —
+   * czyli po stronie, z której nadlatuje gracz. Pierwotne „patrolowanie strefy granicznej"
+   * w latach świetlnych jest NIEWYRAŻALNE dzisiejszą maszynerią (InfluenceMap mówi o układach
+   * w LY, rozkazy MOS są w współrzędnych wewnątrz układu, mostka nie ma). Patrol
+   * międzysystemowy czeka na model rozmieszczenia z W2.
+   *
+   * Próg wyższy niż garnizon: patrolujemy dopiero, gdy jest KIM (garnizon ma pierwszeństwo).
+   */
+  doctrine_patrol_border: {
+    id:       'doctrine_patrol_border',
+    trigger:  { kind: 'poll', probe: 'idleArmedVesselsAtCapital', gte: 3 },
+    guard:    ['empireHasIdleWarships'],
+    delay:    0,
+    response: { action: 'assignDoctrine', params: { doctrine: 'patrol_border', count: 1 } },
+    cooldown: { years: 4.0 },
+  },
 };
 
 /**

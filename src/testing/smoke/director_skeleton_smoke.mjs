@@ -27,6 +27,7 @@ import {
 } from '../../systems/director/DirectorRegistry.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
 import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
+import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
 
 let pass = 0, fail = 0;
@@ -225,6 +226,10 @@ console.log('T8 — DirectorSystem: kill-switch, walidacja przy starcie, katalog
     'katalog produkcyjny BEZ zarejestrowanych zachowań → rzuca (kolejność: rejestracja przed silnikiem)');
   registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
   registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
+    // W1-5 — katalog ma teraz reguły doktryn, a konstruktor DirectorSystem waliduje KAŻDĄ
+  // nazwę i RZUCA na nieznanej (decyzja 7). Bez tej rejestracji keeper wywala się na starcie —
+  // i to jest zachowanie ZAMIERZONE, nie kruchość testu.
+  registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
   assert(!throws(() => new DirectorSystem()),
     '…a PO rejestracji katalog produkcyjny konstruuje się normalnie');
 

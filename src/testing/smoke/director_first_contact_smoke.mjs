@@ -19,6 +19,7 @@ import { DirectorProbes, DirectorGuards, DirectorActions } from '../../systems/d
 import { OPINION_MODIFIERS } from '../../data/OpinionModifierData.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
 import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
+import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 
 // ⚠ Rejestracja MUSI poprzedzać konstrukcję `DirectorSystem` — walidacja katalogu rozwiązuje
 // nazwy i RZUCA na nieznanej (audyt R12). Ta sama kolejność obowiązuje w `GameScene`; test
@@ -27,6 +28,10 @@ registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true 
 // Katalog niesie TAKZE reguly S6 (nacisk L1/L2) — silnik waliduje CALY katalog, wiec ich nazwy
 // tez musza byc w rejestrach, inaczej konstrukcja `DirectorSystem` rzuca (audyt R12).
 registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
+// W1-5 — katalog ma teraz reguły doktryn, a konstruktor DirectorSystem waliduje KAŻDĄ nazwę
+// i RZUCA na nieznanej (decyzja 7). Bez tej rejestracji keeper wywala się na starcie — i to
+// jest zachowanie ZAMIERZONE, nie kruchość testu.
+registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
 
 let pass = 0, fail = 0;
 const A = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };

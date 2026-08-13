@@ -27,9 +27,14 @@ import { OPINION_MODIFIERS } from '../../data/OpinionModifierData.js';
 import { INCIDENT_CHANNELS } from '../../data/AcceptanceWeightData.js';
 import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
+import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 
 registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
 registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
+// W1-5 — katalog ma teraz reguły doktryn, a konstruktor DirectorSystem waliduje KAŻDĄ
+// nazwę i RZUCA na nieznanej (decyzja 7). Bez tej rejestracji keeper wywala się na starcie —
+// i to jest zachowanie ZAMIERZONE, nie kruchość testu.
+registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
 
 let pass = 0, fail = 0;
 const A = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
