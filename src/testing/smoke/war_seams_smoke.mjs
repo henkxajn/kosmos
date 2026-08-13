@@ -128,12 +128,27 @@ console.log('T3 — R2: uzbrojony kadłub GRACZA rusza OBOMA estymatorami');
   assert(Array.isArray(armed.modules) && armed.modules.every(m => typeof m === 'string'),
     'T3: `vessel.modules` to płaska tablica STRINGÓW (grunt, na którym stał cały defekt R2)');
 
-  // ⚠ Do W1-0 włącznie te dwie asercje pinowały DEFEKT (Δ === 0). W1-1 naprawił predykat,
+  // ⚠ Do W1-0 włącznie te asercje pinowały DEFEKT (Δ === 0). W1-1 naprawił predykat,
   //   więc zostały ŚWIADOMIE ODWRÓCONE — wzór „pin luki" z `director_seams_smoke` T6.
   assert(estimatePlayerMilitary() - beforeUtility === 30,
     `T3: UtilityAI.estimatePlayerMilitary REAGUJE na uzbrojony kadłub (+30, było +0 przed W1-1)`);
-  assert(acs._estimatePlayerMilitary() - beforeAlien === 30,
-    'T3: AlienCivSystem._estimatePlayerMilitary reaguje TAK SAMO — bliźniaki naprawione zgodnie');
+
+  // ⚠ DRUGA AKTUALIZACJA, tym razem z W1-3: bliźniak z AlienCivSystem NIE liczy już heurystyki
+  //   „+30 za kadłub" — czyta `ThreatAssessment` (skala HP) z podłogą obrony planetarnej.
+  //   Pierwszy kadłub bywa więc niewidoczny (chowa się pod podłogą), ale flota już nie.
+  //   Pinujemy WŁAŚCIWĄ własność: estymator jest MONOTONICZNY względem realnej floty.
+  // `spawnHull` wstawia wprost do rejestru, bez zdarzenia — pamięć podręczna
+  // ThreatAssessment musi więc zostać unieważniona ręcznie (jej kontrakt, patrz T5 tam).
+  core.threatAssessment.invalidate();
+  const alienWithOne = acs._estimatePlayerMilitary();
+  assert(alienWithOne >= beforeAlien,
+    `T3: AlienCivSystem._estimatePlayerMilitary nigdy nie MALEJE po dodaniu kadłuba ` +
+    `(${beforeAlien} → ${alienWithOne})`);
+  for (let i = 0; i < 3; i++) spawnHull(core, { name: `Fregata gracza ${i}` });
+  core.threatAssessment.invalidate();
+  assert(acs._estimatePlayerMilitary() > alienWithOne,
+    `T3: …i ROŚNIE, gdy flota przekroczy podłogę obrony planetarnej ` +
+    `(${alienWithOne} → ${acs._estimatePlayerMilitary()}) — źródłem jest ThreatAssessment (W1-3)`);
 
   // Zawężenie znaczenia z V4, podpisane: sam pancerz/tarcza to NIE jest uzbrojenie.
   // Stary (zepsuty) regex łapał `armor_|shield_`; gdyby kiedyś wrócił, ta asercja to złapie.

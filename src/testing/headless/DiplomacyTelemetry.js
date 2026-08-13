@@ -55,6 +55,12 @@ export function matrixBaseContext(verb) {
     personality: {}, archetype: null, objective: null, traits: [],
     proposerAggression: 0, war: null,
     thirdParty: { isOurAlly: false, alliesOfOurEnemies: 0, atWarWithOurEnemy: 0 },
+    // W1-3 — siła obu stron RÓWNA, czyli term `relative_power` daje dokładnie 0.
+    // ⚠ NEUTRALNA, nie brakująca (V19): pole MUSI istnieć, żeby probe mógł nim poruszyć,
+    // ale musi być zrównoważone, żeby KOTWICE PARYTETU z E2 (progi 10/25/30 dla agendy
+    // referencyjnej) mierzyły się w świecie, w którym ten term nic nie wnosi. Wartość jest
+    // umowna — liczy się WYŁĄCZNIE to, że self === other.
+    strength: { self: 1000, other: 1000 },
     verbCooldowns: {}, offer: null, erraticSeed: 0,
   };
   if (verb === 'offer_peace') {
@@ -160,10 +166,21 @@ export function buildAcceptanceMatrix(opts = {}) {
 // Rozróżnienie, które z tego wychodzi, jest dokładnie tym, czego wymaga Decyzja 2 fazy:
 //   probeMaxAbs = 0  ⇒ term NIE JEST W STANIE ruszyć wyniku niczym (stub albo pusty katalog)
 //   probeMaxAbs > 0 przy statusie ≠ live ⇒ term liczy, ale w GRZE nikt go nie zasila
+/**
+ * Osobowość gołębia dla SONDY (nie dla macierzy) — `aggression: 0` przechodzi wszystkie
+ * podłogi osobowości z E2. Pozostałe osie w środku skali, żeby nie faworyzować żadnego termu.
+ * Term `personality` i tak nadpisuje to pole własnymi łatkami, więc jego pomiar jest nietknięty.
+ */
+const PROBE_PERSONALITY = { aggression: 0, expansion: 0.5, secrecy: 0.5, trade: 0.5, science: 0.5 };
+
 const TERM_PROBES = {
   opinion:        [{ opinion: 100 }, { opinion: -100 }],
   tension:        [{ tension: 100 }],
-  relative_power: [{ tension: 100, opinion: 100 }],   // nic nie może go ruszyć — o to chodzi
+  // W1-3 — term ŻYJE. Do W1-3 sonda podawała mu `{tension, opinion}`, czyli cudze wejścia,
+  // i mierzyła 0: „nic nie może go ruszyć" było wtedy TEZĄ, nie zaniedbaniem. Teraz podajemy
+  // jego WŁASNE skrajne wejście — miażdżąca przewaga w obie strony.
+  relative_power: [{ strength: { self: 10000, other: 1 } },
+                   { strength: { self: 1, other: 10000 } }],
   war_status:     [{ status: 'war', war: { exhaustionSelf: 100, exhaustionOther: 100, peaceCost: 0 } },
                    { status: 'war', war: { exhaustionSelf: 0,   exhaustionOther: 0,   peaceCost: 100 } }],
   personality:    [{ personality: { aggression: 0, expansion: 0, secrecy: 0, trade: 0, science: 0 } },
@@ -190,7 +207,18 @@ export function probeTermImpact(opts = {}) {
   }]));
 
   for (const verb of verbs) {
-    const base = matrixBaseContext(verb);
+    // ⚠ Sonda MUSI startować z kontekstu, który przechodzi PRE-WARUNKI — inaczej mierzy
+    // blokadę zamiast wrażliwości termu. Wykryte przy odblokowaniu `relative_power` (W1-3):
+    // `matrixBaseContext` podaje `personality: {}`, co OBLEWA `personalityFloor` z E2
+    // (`non_aggression` wymaga aggression ≤ 0.4, `alliance` ≤ 0.3), więc `r.blocked` ucinał
+    // KAŻDY pomiar na tych dwóch czasownikach — kolumny stały zerami dla WSZYSTKICH termów,
+    // łącznie z `opinion`. To jest DOKŁADNIE ta pułapka, którą opisuje nagłówek TERM_PROBES
+    // („term DZIAŁAJĄCY wyglądał na martwy przez konstrukcję pomiaru"), tyle że o piętro wyżej:
+    // nie na termie, lecz na całej kolumnie czasownika. Defekt PRE-ISTNIEJĄCY od E2 — nie
+    // wprowadza go W1-3, tylko ujawnia.
+    // Pomiar pre-warunków należy do MACIERZY (tam archetypy mają się blokować i to jest treść
+    // odczytu); sonda odpowiada na inne pytanie: „czy term W OGÓLE potrafi ruszyć wynik".
+    const base = { ...matrixBaseContext(verb), personality: PROBE_PERSONALITY };
     for (const termId of ACCEPTANCE_TERM_IDS) {
       if (VERB_ACCEPTANCE[verb].terms[termId] == null) continue;   // czasownik nie używa termu
       const patches = (TERM_PROBES[termId] ?? [{}]).map(p =>

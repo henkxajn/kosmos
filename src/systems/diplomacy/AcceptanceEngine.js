@@ -35,6 +35,8 @@ import {
 // Czyste dane (plik bez importów) — statyczny import NIE psuje czystości modułu.
 // To jest miejsce, w którym `peaceCost` dostaje swojego PIERWSZEGO czytelnika w kodzie.
 import { CASUS_BELLI } from '../../data/CasusBelliData.js';
+// W1-3 — JEDNA formuła przewagi siły, wspólna z doktrynami (czysty util, nie system).
+import { relativePowerRaw } from '../../utils/ThreatMath.js';
 
 // Środek skali osi osobowości — brak osi / brak imperium ma dawać wkład 0, nie karę.
 const PERSONALITY_NEUTRAL = 0.5;
@@ -52,23 +54,23 @@ export const TERM_EVALUATORS = {
   tension: (ctx) => clampUnit((Number(ctx.tension) || 0) / 100),
 
   /**
-   * STUB — ZAWSZE 0, świadomie i widocznie. Znika w W1-3.
+   * Przewaga siły OCENIAJĄCEGO nad PROPONUJĄCYM ∈ ⟨−1, +1⟩. Żywy od W1-3.
    *
-   * ⚠ SPROSTOWANIE (W1-1, 2026-08-14). Ten komentarz do niedawna twierdził, że naprawa
-   * estymatorów „przesuwa `milRatio` z ~0 na realne wartości i potrafi natychmiast wepchnąć
-   * imperia w AGGRESSIVE/WAR". To jest NIEPRAWDA i było nieprawdą, gdy to pisano — refutacja
-   * K-1 w `docs/design/W1_PLAN.md`, zmierzona w `war_seams_smoke` T1/T2.
-   * Powód: naprawa rusza MIANOWNIK, a `milRatio` nie ma LICZNIKA. `empire.military.power`
-   * nie istnieje — `EmpireRegistry.createEmpire` wycina `military` z whitelisty (nawet gdy
-   * wywołujący jawnie je poda), a `updateMilitaryPower` jest udokumentowanym no-opem.
-   * `milRatio ≡ 0` przed naprawą R2 i `milRatio ≡ 0` po niej; `_decideNextState` porównuje
-   * go wyłącznie ze stałymi, więc przejścia FSM są bajt w bajt identyczne.
+   * Do W1-3 był twardym `() => 0`. Odblokowała go nie naprawa estymatora (R2/W1-1 — ta
+   * niczego nie przesunęła, refutacja K-1), tylko ŹRÓDŁO SIŁY PO OBU STRONACH:
+   * `ThreatAssessment` liczy ją z realnych kadłubów, a `buildContext` wstrzykuje wynik
+   * jako `ctx.strength`.
    *
-   * Prawdziwym warunkiem odblokowania tego termu nie jest naprawa estymatora (to zrobiono
-   * w W1-1), tylko ŹRÓDŁO SIŁY PO STRONIE AI — dostarcza je `ThreatAssessment` (W1-2),
-   * a W1-3 wstrzykuje wynik do ctx i podmienia ten stub.
+   * ⚠ Term zostaje CZYSTY — czyta WYŁĄCZNIE ctx, nigdy kolaboratora (decyzja 5). Brak pola
+   * `strength` ⇒ surowe 0, bo tak wygląda kontekst przyrządu strojenia wag
+   * (`DiplomacyTelemetry.matrixBaseContext` nie podaje siły) i tak chronimy kotwice
+   * parytetu z E2. Formuła (a−b)/(a+b) jest wspólna z doktrynami — `ThreatMath`.
    */
-  relative_power: () => 0,
+  relative_power: (ctx) => {
+    const s = ctx.strength;
+    if (!s || s.self == null || s.other == null) return 0;
+    return clampUnit(relativePowerRaw(s.self, s.other));
+  },
 
   /**
    * Wyczerpanie wojną kontra cena pokoju z casus belli — jedyny konsument `peaceCost`,
@@ -327,6 +329,7 @@ export class AcceptanceEngine {
 
       war:         this._buildWarContext(K, fromId, toId),
       thirdParty:  this._buildThirdPartyContext(rel, fromId, toId),
+      strength:    this._buildStrengthContext(K, fromId, toId),
 
       // Od E4 zapisywane przez `RelationsModel.noteVerbRefusal`. `?? {}` zostaje: stare
       // zapisy (i pary sprzed pierwszej odmowy) nie mają tego pola, a pusta mapa jest
@@ -341,6 +344,23 @@ export class AcceptanceEngine {
         `${fromId}|${toId}|${verb}|${Math.floor(year / ERRATIC_EPOCH_YEARS)}|${K?.galaxyData?.seed ?? 0}`,
       ),
     };
+  }
+
+  /**
+   * Kontekst siły dla termu `relative_power` (W1-3). Perspektywa OCENIAJĄCEGO:
+   * `self` = siła `toId` (ten, kto decyduje), `other` = siła `fromId` (ten, kto prosi).
+   *
+   * ⚠ Brak `ThreatAssessment` → `null`, NIE wyjątek — i to jest decyzja, nie niedbalstwo
+   * (decyzja 5). Term ma się wtedy zdegradować do surowego 0, bo dokładnie tak działa
+   * `DiplomacyTelemetry.matrixBaseContext`: buduje kontekst literałem, BEZ pola siły,
+   * żeby kotwice parytetu z E2 (progi 10/25/30) mierzyły się w świecie bez tego termu.
+   * Gdyby brak modułu rzucał, przyrząd strojenia wag przestałby się uruchamiać.
+   * Degradacja jest PINOWANA (`acceptance_relpower_smoke`), więc nie jest cichym no-opem.
+   */
+  _buildStrengthContext(K, fromId, toId) {
+    const ta = K?.threatAssessment;
+    if (!ta) return null;
+    return { self: ta.getStrength(toId), other: ta.getStrength(fromId) };
   }
 
   /**

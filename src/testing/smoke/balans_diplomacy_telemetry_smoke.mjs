@@ -147,11 +147,18 @@ console.log('--- T3: czy wagi są gałką (różnicowanie) ---');
 console.log('--- T4: sonda wrażliwości termów (Decyzja 2 fazy) ---');
 {
   ok('sonda pokrywa każdy term katalogu', ACCEPTANCE_TERM_IDS.every(id => !!PROBE[id]));
-  ok('relative_power: NIE DA SIĘ RUSZYĆ niczym (STUB — audyt R2)',
-    PROBE.relative_power.maxAbs === 0 && ACCEPTANCE_TERMS.relative_power.status === TERM_STATUS.STUB);
-  ok('relative_power ma mimo to NIEZEROWE wagi (WAR_BACKBONE dostaje od czego zacząć)',
+  // ⚠ ODWRÓCONE W W1-3 — do W1-2 ten pin trzymał BEZCZYNNOŚĆ termu („nic go nie ruszy —
+  //   o to chodzi"). ThreatAssessment dał mu źródło danych, więc teraz pinujemy odwrotność:
+  //   term MUSI dać się ruszyć własnym wejściem. Zmiana jest ŚWIADOMA, nie przypadkowa —
+  //   `relative_power` był JEDYNYM STUB-em w katalogu, więc znika też etykieta BEZCZYNNY
+  //   z raportu HTML (patrz `balans_launcher_smoke`).
+  ok('relative_power: DAJE SIĘ ruszyć własnym wejściem (LIVE od W1-3)',
+    PROBE.relative_power.maxAbs > 0 && ACCEPTANCE_TERMS.relative_power.status === TERM_STATUS.LIVE);
+  ok('relative_power ma NIEZEROWE wagi na czasownikach (jest czym stroić)',
     Object.values(PROBE.relative_power.byVerb).length > 0
     && ACCEPTANCE_VERB_IDS.some(v => (VERB_ACCEPTANCE[v].terms.relative_power ?? 0) > 0));
+  ok('katalog nie ma już ŻADNEGO termu STUB — bezczynność zniknęła, nie została przemianowana',
+    TERMS.every(t => t.status !== TERM_STATUS.STUB));
   ok('memory: NIE DA SIĘ RUSZYĆ, bo katalog dowodów jest pusty (znalezisko R9)',
     PROBE.memory.maxAbs === 0);
   ok('termy DZIAŁAJĄCE dają się ruszyć (żadnego ⚠ NIESPÓJNY)',
@@ -163,11 +170,17 @@ console.log('--- T4: sonda wrażliwości termów (Decyzja 2 fazy) ---');
   ok('termy bez paliwa LICZĄ poprawnie — to jest treść markerów K-2/K-4/K-5',
     ['reputation', 'offer', 'third_party']
       .every(id => PROBE[id].maxAbs > 0 && ACCEPTANCE_TERMS[id].status !== TERM_STATUS.LIVE));
+  // Rozróżnienie „nie da się ruszyć" vs „brak paliwa" pozostaje sednem przyrządu — zmienia się
+  // tylko OKAZ. Po W1-3 `relative_power` nie jest już przykładem pierwszej kategorii (rusza się
+  // I ma paliwo), a `memory` jest: liczy, ale katalog dowodów `MEMORY_EVIDENCE_WEIGHTS` jest
+  // pusty do D4, więc nic nim nie poruszy.
   ok('rozróżnienie „nie da się ruszyć" vs „brak paliwa" jest wystawione osobnymi flagami',
-    TERMS.find(t => t.id === 'relative_power').cannotMove === true
-    && TERMS.find(t => t.id === 'relative_power').worksButUnfed === false
+    TERMS.find(t => t.id === 'memory').cannotMove === true
     && TERMS.find(t => t.id === 'reputation').cannotMove === false
     && TERMS.find(t => t.id === 'reputation').worksButUnfed === true);
+  ok('relative_power nie jest już ani bezczynny, ani bez paliwa (W1-3)',
+    TERMS.find(t => t.id === 'relative_power').cannotMove === false
+    && TERMS.find(t => t.id === 'relative_power').worksButUnfed === false);
   ok('⚠ NIESPÓJNY zapala się, gdy term DZIAŁAJĄCY okaże się nieruchomy', (() => {
     // Symulacja: podstawiamy sondę, w której `opinion` (status live) ma wkład 0.
     const fake = { ...PROBE, opinion: { maxAbs: 0, byVerb: {}, declaredStatus: TERM_STATUS.LIVE } };

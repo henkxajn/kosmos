@@ -328,8 +328,18 @@ try {
     assert(rep.status === 200, 'GET linku do raportu DYPLOMACJI → 200');
     assert(html.includes('MACIERZE AKCEPTACJI') && html.includes('Granice tego pomiaru'),
       'serwowany plik to raport DYPLOMACJI — z sekcją GRANIC pomiaru');
-    assert(html.includes('BEZCZYNNY') && html.includes('relative_power'),
-      'raport JAWNIE oznacza term bezczynny (Decyzja 2: nikt nie stroi wag względem zera)');
+    // ⚠ PRZEPISANE ŚWIADOMIE W W1-3, nie mimochodem. Ta asercja sprawdzała dosłownie string
+    //   „BEZCZYNNY", a `relative_power` był JEDYNYM STUB-em w katalogu — jego odblokowanie
+    //   usuwa tę etykietę z raportu w całości. INTENCJA pinu (Decyzja 2: nikt nie stroi wag
+    //   względem termu, który zwraca zero) jest jednak szersza niż jedna etykieta, więc
+    //   trzymamy ją dalej — na termach, które NADAL nie mają pełnego paliwa.
+    assert(html.includes('relative_power') && html.includes('DZIAŁA'),
+      'raport pokazuje relative_power jako DZIAŁAJĄCY (odblokowany w W1-3)');
+    assert(!html.includes('BEZCZYNNY'),
+      'etykieta BEZCZYNNY zniknęła — bo zniknął ostatni term STUB, a nie dlatego, że przestaliśmy ją drukować');
+    assert(html.includes('BEZ ŹRÓDŁA') && html.includes('CZĘŚCIOWY'),
+      'raport NADAL jawnie oznacza termy bez pełnego paliwa (reputation → D4, third_party → D5) ' +
+      '— intencja Decyzji 2 przeżywa odblokowanie relative_power');
   }
 } finally {
   cleanup();

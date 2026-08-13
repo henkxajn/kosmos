@@ -31,7 +31,7 @@ import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { CB_MEMORY_WINDOW } from '../data/OpinionModifierData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { isEnemyVessel } from '../entities/Vessel.js';
+import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
 const EXHAUSTION_PER_BATTLE = 15;   // ile exhaustion rośnie za pojedynczą bitwę
@@ -517,8 +517,36 @@ export class WarSystem {
    * @param {string} systemId
    * @returns {boolean}
    */
+  /**
+   * Czy w układzie stoi wroga siła zdolna odmówić graczowi dominacji orbitalnej?
+   *
+   * W1-3 (audyt V22) — do tej pory funkcja skanowała WYŁĄCZNIE `emp.fleets[].strength`,
+   * czyli księgę, która w normalnej grze jest PUSTA (K-2, zmierzone w `war_seams_smoke` T5).
+   * Skutek: prawdziwy okręt wojenny AI zaparkowany na orbicie NIE odbierał graczowi dominacji,
+   * a UI desantu zostawało odblokowane mimo wrogiej eskadry nad głową. Teraz najpierw pytamy
+   * o REALNE kadłuby, a księga abstrakcyjna zostaje jako druga ścieżka dla flot debugowych.
+   *
+   * Runtime-only — nic tu nie jest serializowane (mapa `orbitalDominance` i tak jest
+   * czyszczona przy każdym wczytaniu, bo nie ma jej w `createDefaultState`; naprawa TEGO
+   * wymaga zmiany kształtu zapisu, czego W1 zabrania — pozycja odłożona).
+   */
   _hasHostileFleetInSystem(systemId) {
     if (!systemId) return false;
+
+    // 1) REALNE kadłuby — wrogi, UZBROJONY, żywy statek w tym układzie.
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr?._vessels) {
+      for (const v of vMgr._vessels.values()) {
+        if (!v || v.isWreck) continue;
+        if (!isEnemyVessel(v)) continue;
+        if ((v.systemId ?? 'sys_home') !== systemId) continue;
+        // Bezbronny transportowiec nie „trzyma" orbity — ten sam próg, co bramka walki DSCS.
+        if (!hasWeapons(v)) continue;
+        return true;
+      }
+    }
+
+    // 2) Księga abstrakcyjna — pusta w normalnej grze, żywa dla flot debugowych/legacy.
     const reg = window.KOSMOS?.empireRegistry;
     if (!reg) return false;
     const empires = reg.listAll?.() ?? [];

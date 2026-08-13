@@ -23,6 +23,7 @@ import { MilitaryAI } from './ai/MilitaryAI.js';
 import { EconAI } from './ai/EconAI.js';
 // W1/R2 — jedno źródło prawdy o uzbrojeniu i o własności kadłuba (nota przy _estimatePlayerMilitary).
 import { hasWeapons, isEnemyVessel } from '../entities/Vessel.js';
+import { PLAYER_DEFENSE_BASELINE_HP } from '../data/CombatValueData.js';
 
 const STATES = ['IDLE', 'EXPANDING', 'REARMING', 'AGGRESSIVE', 'WAR', 'RETREAT', 'NEGOTIATING'];
 
@@ -105,7 +106,13 @@ export class AlienCivSystem {
       const aggression = personality.aggression ?? 0.5;
       const hostility  = dipl.getTension(emp.id);    // D1: napięcie = dawne hostility 1:1
       const relState   = dipl.getStatus(emp.id);     // ⚠ dipl.getStatus, NIE this.getState (FSM)
-      const milRatio   = playerMilEstimate > 0 ? (emp.military?.power ?? 0) / playerMilEstimate : 1.0;
+      // W1-3 — LICZNIK wreszcie istnieje. Do tej pory `emp.military?.power` było stałym
+      // `undefined` (whitelist `createEmpire` wycina klucz, `updateMilitaryPower` to no-op),
+      // więc milRatio ≡ 0 i cała gałąź militarna FSM była martwa (K-1). Teraz siła imperium
+      // pochodzi z REALNYCH kadłubów przez ThreatAssessment; `emp.military?.power` zostaje
+      // jako fallback dla flot debugowych/legacy, które jeszcze mogą je nieść.
+      const empMil     = this._empireMilitary(emp);
+      const milRatio   = playerMilEstimate > 0 ? empMil / playerMilEstimate : 1.0;
 
       const cur = this.getState(emp.id);
       const next = this._decideNextState(cur, { aggression, hostility, relState, milRatio, personality });
@@ -265,7 +272,38 @@ export class AlienCivSystem {
    * FSM w `_decideNextState` porównuje milRatio wyłącznie ze stałymi, więc przejścia są
    * bajt w bajt takie same przed i po tej naprawie.
    */
+  /**
+   * Siła militarna IMPERIUM — LICZNIK `milRatio` (W1-3).
+   *
+   * Źródłem jest `ThreatAssessment` (realne kadłuby). Fallback na `emp.military?.power`
+   * zostaje wyłącznie dla flot debugowych i starych zapisów, które jeszcze mogą nieść to
+   * pole — w normalnej grze nikt go nie zapisuje.
+   *
+   * ⚠ Skala. `_estimatePlayerMilitary` (mianownik) liczy w jednostkach „100 bazy + 30 za
+   * uzbrojony kadłub + 40 za kolonię", a ThreatAssessment w EKWIWALENCIE HP (fregata ≈ 248).
+   * Mieszanie ich wprost dałoby milRatio zawyżone o rząd wielkości i wepchnęło FSM w WAR
+   * natychmiast — czyli dokładnie tę katastrofę, którą K-1 wykluczył jako niemożliwą.
+   * Dlatego OBIE strony liczymy w JEDNEJ skali: siłę gracza też bierzemy z ThreatAssessment,
+   * a stary estymator zostaje jako fallback, gdy modułu nie ma (harness bez wpięcia).
+   */
+  _empireMilitary(emp) {
+    const ta = window.KOSMOS?.threatAssessment;
+    if (ta) return ta.getStrength(emp.id);
+    return emp?.military?.power ?? 0;
+  }
+
   _estimatePlayerMilitary() {
+    // W1-3 — gdy ThreatAssessment jest wpięty, mianownik MUSI pochodzić z tego samego
+    // źródła co licznik (patrz nota o skali w `_empireMilitary`). Bez modułu wracamy do
+    // heurystyki proxy niżej — nadal poprawnej po naprawie R2, tylko w innej skali.
+    //
+    // ⚠ PODŁOGA jest konieczna, nie kosmetyczna: stary estymator startował od 100 („bazowa
+    // siła obronna kolonii") i nigdy nie zwracał zera, a ThreatAssessment liczy same kadłuby,
+    // więc gracz bez floty dałby 0 → ternary w `_tickAll` wpadłby w `milRatio = 1.0`, czyli
+    // POWYŻEJ progu wojny. Uzasadnienie i wartość: `PLAYER_DEFENSE_BASELINE_HP`.
+    const ta = window.KOSMOS?.threatAssessment;
+    if (ta) return Math.max(PLAYER_DEFENSE_BASELINE_HP, ta.getPlayerStrength());
+
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return 100;
     try {

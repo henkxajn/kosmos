@@ -188,8 +188,11 @@ function renderTerms(terms) {
     wnieść, gdy poda mu się SKRAJNE wejście. Zero oznacza, że termu <b>nie da się ruszyć niczym</b>.
     To jest dowód statusu, a nie jego powtórzenie:</p>
   <ul class="dp-note dp-ul">
-    <li><code>relative_power</code> — 0 przy niezerowych wagach. Tak ma być: to STUB, dopóki audyt R2
-      nie zostanie naprawiony w WAR_BACKBONE. <b>Nie stroić wag pozostałych termów pod tę kolumnę.</b></li>
+    <li><code>relative_power</code> — <b>ŻYWY od W1-3</b> (wcześniej twardy STUB z zerowym wkładem).
+      Siłę obu stron liczy <code>ThreatAssessment</code> z REALNYCH kadłubów i modułów. W tej macierzy
+      wkład jest mimo to bliski zeru w kolumnach scenariuszowych, bo kontekst bazowy trzyma
+      <b>siły RÓWNE</b> — inaczej term przesunąłby kotwice parytetu z E2. Sonda podaje mu przewagę
+      jawnie, więc kolumna <b>sonda |wkład|</b> pokazuje jego prawdziwy zasięg.</li>
     <li><code>memory</code> — 0, bo katalog dowodów jest PUSTY: każdy typ incydentu, który gra dziś
       zapisuje, wchodzi do wyniku innym kanałem (opinia albo napięcie), a wyłączne dowody zdrady
       dopisuje dopiero D4.</li>

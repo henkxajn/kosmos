@@ -65,6 +65,23 @@ export const HULL_FALLBACKS = {
 };
 
 /**
+ * Podłoga obrony planetarnej w MIANOWNIKU `milRatio` — w tych samych jednostkach HP.
+ *
+ * ⚠ TO JEST GAŁKA BALANSU, nie stała techniczna, i wchodzi z konieczności strukturalnej.
+ * Stary estymator miał wpisane `let total = 100 // bazowa siła obronna kolonii` i NIGDY nie
+ * zwracał zera — dzięki temu `milRatio = playerMil > 0 ? … : 1.0` zawsze wchodziło w gałąź
+ * dzielenia. `ThreatAssessment` liczy WYŁĄCZNIE kadłuby, więc gracz bez ani jednego okrętu
+ * daje 0 — a wtedy ternary wpada w **`milRatio = 1.0`**, czyli powyżej `MIL_RATIO_WAR = 0.7`.
+ * Bez tej podłogi samo wpięcie licznika wywołałoby dokładnie tę eskalację, którą K-1 wykluczył
+ * jako niemożliwą — tyle że INNĄ DROGĄ (przez zerowy mianownik, nie przez pojawienie się licznika).
+ *
+ * Wartość: ~jedna fregata (goły kadłub 156, bojowa 248). Czyta się to jako „zasiedlony świat
+ * jest wart mniej więcej jednego okrętu obrony". Pierwsze przybliżenie do przestrojenia w BALANS,
+ * gdy istnieje już ekonomia militarna AI — nie wynik pomiaru.
+ */
+export const PLAYER_DEFENSE_BASELINE_HP = 250;
+
+/**
  * Pola, które ŚWIADOMIE nie mają ceny — zapis decyzji, nie przeoczenie.
  *
  * `tracking`, `rangeAU`, `fireCooldownYears`, `category`, `armorPierce`:

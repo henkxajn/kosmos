@@ -474,7 +474,13 @@ console.log('--- P9: degradacja (brak danych ≠ wyjątek) ---');
 // ── P10: pin bezczynności — nie stroić wag względem zera ────────────────────
 console.log('--- P10: termy bezczynne (K-1..K-5) ---');
 {
-  ok('relative_power ma status STUB', ACCEPTANCE_TERMS.relative_power.status === TERM_STATUS.STUB);
+  // ⚠ ODWRÓCONE W W1-3. Do W1-2 `relative_power` był STUB-em i te piny trzymały jego
+  //   BEZCZYNNOŚĆ. Teraz jest LIVE — ale kontrakt, którego pilnowały, przeżył w mocniejszej
+  //   postaci: term nadal wnosi DOKŁADNIE 0, o ile kontekst nie niesie pola `strength`.
+  //   To jest właśnie zabezpieczenie kotwic parytetu z E2 (decyzja 5) i powód, dla którego
+  //   `diplomacy_d1_smoke` przechodzi 83/83 BEZ EDYCJI po odblokowaniu termu.
+  ok('relative_power ma status LIVE (odblokowany w W1-3 przez ThreatAssessment)',
+    ACCEPTANCE_TERMS.relative_power.status === TERM_STATUS.LIVE);
   const rich = mkCtx({
     opinion: 50, tension: 50, personality: ROSTER_PERSONALITY, archetype: 'industrialist',
     proposerAggression: 80, war: { exhaustionSelf: 50, exhaustionOther: 50, peaceCost: 30 }, status: 'war',
@@ -483,7 +489,18 @@ console.log('--- P10: termy bezczynne (K-1..K-5) ---');
     if (!VERB_ACCEPTANCE[verb].terms.relative_power) continue;
     const r = evaluateWithContext({ ...rich, verb, status: verb === 'offer_peace' ? 'war' : 'peace' });
     const row = r.breakdown.find(x => x.term === 'relative_power');
-    ok(`relative_power wnosi DOKŁADNIE 0 w '${verb}' (mimo niezerowej wagi)`, row && row.value === 0 && row.weight !== 0);
+    ok(`relative_power BEZ ctx.strength wnosi DOKŁADNIE 0 w '${verb}' (kotwica parytetu E2)`,
+      row && row.value === 0 && row.weight !== 0);
+
+    // KONTROLA PINU: ten sam term Z podaną siłą MUSI ruszyć wynik — inaczej „0 bez pola"
+    // byłoby nieodróżnialne od dawnego stubu, a odblokowanie termu tylko deklaracją.
+    const powered = evaluateWithContext({
+      ...rich, verb, status: verb === 'offer_peace' ? 'war' : 'peace',
+      strength: { self: 10000, other: 1 },
+    });
+    const poweredRow = powered.breakdown.find(x => x.term === 'relative_power');
+    ok(`relative_power Z ctx.strength JUŻ rusza wynik w '${verb}' (kontrola pinu)`,
+      poweredRow && poweredRow.value > 0 && powered.score !== r.score);
   }
   ok('reputation ma status UNFED (raisery agresji dopiero w D4)',
     ACCEPTANCE_TERMS.reputation.status === TERM_STATUS.UNFED);

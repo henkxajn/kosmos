@@ -492,6 +492,12 @@ export class DiplomacySystem {
         get warSystem()       { return window.KOSMOS?.warSystem; },
         get timeSystem()      { return window.KOSMOS?.timeSystem; },
         get galaxyData()      { return window.KOSMOS?.galaxyData; },
+        // W1-3 — źródło siły dla termu `relative_power`. ⚠ Ta lista jest BIAŁĄ LISTĄ, nie
+        // przezroczystym proxy na window.KOSMOS: pominięcie klucza NIE rzuca, tylko sprawia,
+        // że `buildContext` widzi `undefined` i wstrzykuje `strength: null` — term degraduje
+        // do zera i całe odblokowanie z W1-3 jest martwe, po cichu. Dokładnie tak się stało
+        // przy pierwszym podejściu; złapał to `acceptance_relpower_smoke` T5.
+        get threatAssessment(){ return window.KOSMOS?.threatAssessment; },
       });
     }
     return this._acceptanceEngine;

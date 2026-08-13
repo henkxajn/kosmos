@@ -45,7 +45,12 @@ const fixture = {
   terms: [
     { id: 'opinion', labelKey: 'diplo.term.opinion', status: 'live', note: 'Koń roboczy. Reuse D1.',
       weights: { trade_agreement: 40, offer_peace: 20 }, probeMaxAbs: 50, cannotMove: false, inertUnexpected: false, worksButUnfed: false },
-    { id: 'relative_power', labelKey: 'diplo.term.relativePower', status: 'stub', note: 'K-1 / audyt R2: estymatory zepsute. Naprawa w WAR_BACKBONE.',
+    // ⚠ Fixture SYNTETYCZNY — nie odwzorowuje katalogu gry, tylko ćwiczy renderer na WSZYSTKICH
+    //   czterech statusach. Po W1-3 `relative_power` jest LIVE, więc wiersz STUB nosi tu odtąd
+    //   nazwę zmyśloną: gdyby zostawić prawdziwe id, fixture twierdziłby nieprawdę o katalogu.
+    //   Sam wiersz ZOSTAJE — renderer musi umieć narysować STUB-a, jeśli kiedyś wróci, a
+    //   skasowanie go zmniejszyłoby pokrycie zamiast poprawić spójność.
+    { id: 'przyklad_stub', labelKey: 'diplo.term.relativePower', status: 'stub', note: 'Syntetyczny wiersz — pokrycie etykiety BEZCZYNNY.',
       weights: { trade_agreement: 10, offer_peace: 30 }, probeMaxAbs: 0, cannotMove: true, inertUnexpected: false, worksButUnfed: false },
     { id: 'reputation', labelKey: 'diplo.term.reputation', status: 'unfed', note: 'K-2: nic nie podnosi agresji do D4.',
       weights: { trade_agreement: 15 }, probeMaxAbs: 20, cannotMove: false, inertUnexpected: false, worksButUnfed: true },
@@ -121,8 +126,14 @@ console.log('--- T4: termy bezczynne JAWNIE oznaczone ---');
   ok('relative_power oznaczony jako BEZCZYNNY', /relative_power/.test(html) && html.includes('BEZCZYNNY'));
   ok('kolumna sondy jest DOWODEM statusu, a nie jego powtórzeniem', html.includes('sonda |wkład|'));
   ok('zero w sondzie jest wyróżnione wizualnie', html.includes('dp-cell-no'));
-  ok('raport tłumaczy, dlaczego relative_power ma zero (audyt R2 → WAR_BACKBONE)',
-    html.includes('R2') && html.includes('WAR_BACKBONE'));
+  // ⚠ ODWRÓCONE W W1-3. Do W1-2 raport tłumaczył, DLACZEGO term ma zero (audyt R2 → WAR_BACKBONE).
+  //   Teraz term ŻYJE, więc raport musi tłumaczyć co innego: skąd bierze dane i dlaczego mimo to
+  //   jego wkład w TEJ macierzy jest bliski zeru (kontekst bazowy trzyma siły RÓWNE — inaczej
+  //   przesunęłyby się kotwice parytetu z E2). Pin trzyma OBIE połowy tego wyjaśnienia.
+  ok('raport tłumaczy, skąd relative_power bierze dane (ThreatAssessment)',
+    html.includes('ThreatAssessment'));
+  ok('…i dlaczego jego wkład w macierzy jest mimo to zerowy (siły RÓWNE w kontekście bazowym)',
+    html.includes('ŻYWY od W1-3') && /siły\s+RÓWNE/.test(html));
   ok('raport tłumaczy, dlaczego memory ma zero (pusty katalog dowodów, D4)',
     html.includes('katalog dowodów') && html.includes('D4'));
   ok('rozróżnia „nie da się ruszyć" od „brak paliwa w grze"',

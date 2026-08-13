@@ -138,9 +138,16 @@ export class IntelSystem {
         }
       }
     }
-    // Przy detailed: ujawnij przybliżoną siłę wojskową
+    // Przy detailed: ujawnij przybliżoną siłę wojskową.
+    // W1-3 — źródłem jest ThreatAssessment (realne kadłuby). Wcześniej czytaliśmy
+    // `emp.military?.power`, które NIE ISTNIEJE (whitelist `createEmpire` wycina klucz),
+    // więc panel intelu pokazywał „Siła wojskowa ≈ 0" dla KAŻDEGO imperium, także takiego
+    // z realną flotą — to był defekt widoczny dla gracza, nie tylko dla AI.
+    // Fallback na stare pole zostaje dla flot debugowych/legacy.
     if (newRank >= LEVEL_RANK.detailed) {
-      updated.knownMilitary = Math.round(emp.military?.power ?? 0);
+      const ta = window.KOSMOS?.threatAssessment;
+      const power = ta ? ta.getStrength(empireId) : (emp.military?.power ?? 0);
+      updated.knownMilitary = Math.round(power);
     }
 
     gameState.set(`intel.${empireId}`, updated, reason);
