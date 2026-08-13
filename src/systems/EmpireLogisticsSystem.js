@@ -66,6 +66,12 @@ const DEFAULT_LOGISTICS_CONFIG = {
 };
 
 const EPS = 1e-6;
+/**
+ * W1-6 — po ilu latach GRY zatrzask `pendingBuildRoute` przestaje blokować kolejne zlecenia.
+ * Dobrane z zapasem ponad realny czas budowy `hull_small`: TTL ma łapać zlecenia MARTWE
+ * (brak surowców, wieczna kolejka), a nie przerywać te, które po prostu trwają.
+ */
+const PENDING_BUILD_TTL_YEARS = 15;
 
 export class EmpireLogisticsSystem {
   constructor() {
@@ -80,6 +86,10 @@ export class EmpireLogisticsSystem {
     EventBus.on('time:tick',        this._onTick);
     EventBus.on('vessel:created',   this._onVesselCreated);
     EventBus.on('colony:destroyed', this._onColonyDestroyed);
+    // W1-6 (V20): odmowa budowy zwalnia zatrzask NATYCHMIAST. Do tej pory `fleet:buildFailed`
+    // nie miał po stronie logistyki ŻADNEGO słuchacza.
+    this._onBuildFailed = (p) => this._onFleetBuildFailed(p ?? {});
+    EventBus.on('fleet:buildFailed', this._onBuildFailed);
     EventBus.on('vessel:wrecked',   this._onVesselWrecked);
   }
 
@@ -87,6 +97,7 @@ export class EmpireLogisticsSystem {
     EventBus.off('time:tick',        this._onTick);
     EventBus.off('vessel:created',   this._onVesselCreated);
     EventBus.off('colony:destroyed', this._onColonyDestroyed);
+    EventBus.off('fleet:buildFailed', this._onBuildFailed);
     EventBus.off('vessel:wrecked',   this._onVesselWrecked);
   }
 
@@ -100,6 +111,48 @@ export class EmpireLogisticsSystem {
   _cm()       { return window.KOSMOS?.colonyManager; }
   _reg()      { return window.KOSMOS?.empireRegistry; }
   _gameTime() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
+
+  /**
+   * W1-6 — zwalnia zatrzask `pendingBuildRoute`, gdy wisi dłużej niż `PENDING_BUILD_TTL_YEARS`.
+   * Zwraca `true`, jeśli zatrzask został zwolniony.
+   *
+   * ⚠ To NIE anuluje zlecenia w stoczni — tylko przestaje blokować KOLEJNE. Gdyby zlecenie
+   * mimo wszystko się dokończyło, `_onVesselCreatedClaim` i tak przejmie statek na trasę.
+   * Odwrotna kolejność (anulowanie) byłaby gorsza: skasowałaby opłacony już build.
+   */
+  _expirePendingBuild(logi, empireId) {
+    if (!logi || logi.pendingBuildRoute == null) return false;
+    const since = logi.pendingBuildSince;
+    if (since == null) { logi.pendingBuildSince = this._gameTime(); return false; }
+    if (this._gameTime() - since < PENDING_BUILD_TTL_YEARS) return false;
+    const routeId = logi.pendingBuildRoute;
+    logi.pendingBuildRoute = null;
+    logi.pendingBuildSince = null;
+    EventBus.emit('logistics:pendingBuildExpired', { empireId, routeId });
+    this._log('zatrzask buildu wygasł', `${routeId} (TTL ${PENDING_BUILD_TTL_YEARS} lat)`);
+    return true;
+  }
+
+  /**
+   * W1-6 — odmowa budowy zdejmuje zatrzask NATYCHMIAST, bez czekania na TTL.
+   * `fleet:buildFailed` nie miał dotąd ŻADNEGO słuchacza po stronie logistyki (V20), więc
+   * odrzucone zlecenie zostawiało zatrzask zamknięty aż do końca partii.
+   */
+  _onFleetBuildFailed({ planetId, reason } = {}) {
+    const reg = this._reg();
+    for (const empire of this._managedEmpires()) {
+      const logi = this._ensureLogistics(empire);
+      if (!logi || logi.pendingBuildRoute == null) continue;
+      const route = logi.routes.find(r => r.routeId === logi.pendingBuildRoute);
+      // Bez `planetId` (starsze emisje) zwalniamy zachowawczo — zatrzask i tak ma TTL.
+      if (planetId && route && route.motherId !== planetId) continue;
+      const routeId = logi.pendingBuildRoute;
+      logi.pendingBuildRoute = null;
+      logi.pendingBuildSince = null;
+      EventBus.emit('logistics:pendingBuildReleased', { empireId: empire.id, routeId, reason: reason ?? null });
+      this._log('zatrzask buildu zwolniony po fleet:buildFailed', `${routeId} (${reason ?? '—'})`);
+    }
+  }
 
   // Imperia obsługiwane (mają znany archetyp; gracz NIE jest w EmpireRegistry).
   _managedEmpires() {
@@ -129,6 +182,10 @@ export class EmpireLogisticsSystem {
     if (!Array.isArray(l.routes))  l.routes = [];
     if (!Array.isArray(l.reserve)) l.reserve = [];
     if (l.pendingBuildRoute === undefined) l.pendingBuildRoute = null;
+    // W1-6 — stempel czasu zatrzasku. Znaczenie ma WYŁĄCZNIE gdy `pendingBuildRoute != null`,
+    // więc nie trzeba go zerować w każdym miejscu zdejmującym zatrzask: przy kolejnym
+    // ustawieniu i tak jest nadpisywany, a przy zdjętym zatrzasku nikt go nie czyta.
+    if (l.pendingBuildSince === undefined) l.pendingBuildSince = null;
     if (!l.stats) l.stats = { built: 0, dispatched: 0, delivered: 0 };
     return l;
   }
@@ -201,6 +258,15 @@ export class EmpireLogisticsSystem {
         }
       }
 
+      // W1-6 — WYGAŚNIĘCIE ZATRZASKU. `pendingBuildRoute` był zatrzaskiem jednokierunkowym:
+      // ustawianym przy zleceniu, zdejmowanym WYŁĄCZNIE gdy kurier się urodzi albo gdy trasa
+      // /stolica zginie. Zlecenie, które ugrzęźnie w kolejce (brak surowców, stocznia zajęta
+      // — a od Director S6 okręty wojenne konkurują o TĘ SAMĄ stocznię poziomu 1 stolicy),
+      // blokowało produkcję kurierów tego imperium NA ZAWSZE. Audyt V20: brak TTL i brak
+      // nasłuchu na `fleet:buildFailed`. TTL zwalnia zatrzask, a nie anuluje zlecenia —
+      // jeśli okręt w końcu powstanie, `_onVesselCreatedClaim` i tak go przejmie.
+      this._expirePendingBuild(logi, empire.id);
+
       // Budowa nowego kuriera — gdy nadal za mało I brak pending buildu (1 na raz/empire).
       if (route.courierIds.length < couriersPerRoute && logi.pendingBuildRoute == null) {
         if (this._shipyardSlotFree(capital) && this._enoughFreePops(capital, cfg)) {
@@ -211,6 +277,11 @@ export class EmpireLogisticsSystem {
             // {ok:true} (build natychmiastowy) LUB {ok:true,queued:true} (brak surowców →
             // kolejka). Oba ustawiają pendingBuildRoute do vessel:created/fail (U3).
             logi.pendingBuildRoute = route.routeId;
+            // W1-6 — STEMPEL CZASU zatrzasku. Bez niego `pendingBuildRoute` jest zatrzaskiem
+            // JEDNOKIERUNKOWYM: ustawianym tutaj, zdejmowanym WYŁĄCZNIE gdy kurier się urodzi
+            // albo gdy trasa/stolica zginie. Zlecenie, które ugrzęźnie w kolejce (brak surowców,
+            // zajęta stocznia), blokuje wtedy produkcję kurierów tego imperium NA ZAWSZE.
+            logi.pendingBuildSince = this._gameTime();
             logi.stats.built++;
             EventBus.emit('logistics:shipBuildRequested', {
               empireId: empire.id, routeId: route.routeId, queued: !!res.queued,
