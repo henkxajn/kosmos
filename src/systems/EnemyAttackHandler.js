@@ -13,7 +13,8 @@
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
-import gameState from '../core/GameState.js';
+// ⚠ Import `gameState` USUNIĘTY w W1-4: po przepięciu na `recordBattle` ten plik nie pisze
+// już nic do stanu gry bezpośrednio — całe księgowanie należy do WarSystem (P3).
 import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
@@ -164,18 +165,27 @@ export class EnemyAttackHandler {
     };
 
     if (war) {
-      const battleId = `battle_${year.toFixed(2)}_${empireId}_batch_${firstArrivedId}`.replace(/\./g, '_');
-      battleRec.id = battleId;
-      battleRec.warId = war.id;
-      battleRec.year = year;
-      gameState.set(`battles.${battleId}`, battleRec, 'enemy_attack_arrived');
-
-      if (result.winner === 'A') {
-        gameState.set(`orbitalDominance.${systemId}`, { controllerId: empireId, year }, 'enemy_attack_win');
-      } else if (result.winner === 'B') {
-        gameState.set(`orbitalDominance.${systemId}`, { controllerId: 'player', year }, 'enemy_attack_loss');
+      // ⚠ W1-4 (K-3, podpisane) — ZMIANA ZACHOWANIA, świadoma i widoczna.
+      // Do W1-3 ta gałąź omijała `recordBattle`: pisała `gameState.battles` wprost, sama
+      // ustawiała dominację orbitalną i sama emitowała `battle:resolved` — z PRAWDZIWYM
+      // `warId`. Skutek: atak orbitalny w trakcie ZADEKLAROWANEJ wojny naliczał ZERO
+      // exhaustion i nie dopisywał się do `war.battles[]`, więc był niewidoczny nawet
+      // w WarOverlay, który tę tablicę czyta. A exhaustion jest NOŚNYM wejściem akceptacji
+      // pokoju (waga 55 na `offer_peace`), więc D2 systematycznie ZANIŻAŁO cenę pokoju
+      // dokładnie w tych wojnach, które realnie się toczyły.
+      // Teraz `recordBattle` jest JEDYNYM wejściem księgowania: nadaje id, dopisuje do
+      // `war.battles[]`, nalicza exhaustion obu stronom (skalowane `casusBelli.exhaustionRate`),
+      // emituje `battle:resolved` i ustawia dominację orbitalną przez `_updateOrbitalDominance`.
+      // KONSEKWENCJA DO ZOBACZENIA NA GATE 2: wojny zaczynają się wyczerpywać od ataków
+      // orbitalnych, więc auto-pokój i akceptacja pokoju mogą przychodzić WCZEŚNIEJ.
+      const rec = warSys?.recordBattle?.(war.id, battleRec);
+      if (!rec) {
+        // Głośno (R12): wojna istnieje, a księgowanie nie przyjęło bitwy — to błąd wpięcia,
+        // nie stan gry. Nie emitujemy nic po cichu, bo cichy brak wpisu jest właśnie tym
+        // defektem, który ten commit likwiduje.
+        console.error('[EnemyAttackHandler] recordBattle ODRZUCIŁ bitwę mimo aktywnej wojny',
+          { warId: war.id, empireId, systemId });
       }
-      EventBus.emit('battle:resolved', { warId: war.id, battleId, result: battleRec });
     } else {
       evtLog?.push({
         text: `⚔ Bitwa w ${systemId}: ${enemyUnit.label} vs Gracz. Zwycięzca: ${result.winner === 'A' ? 'wróg' : result.winner === 'B' ? 'gracz' : 'remis'}.`,
@@ -183,6 +193,15 @@ export class EnemyAttackHandler {
         severity: result.winner === 'A' ? 'alert' : 'info',
         entityRef: systemId,
       });
+
+      // ⚠ W1-4 — domknięcie widelca. Ta gałąź (wojny NIE udało się zadeklarować) do tej pory
+      // NIE emitowała nic i NIE zapisywała nic: bitwa nie była ani zaksięgowana na wojnę, ani
+      // potyczką — czyli była właśnie tą TRZECIĄ, CICHĄ ścieżką, której P3 zabrania. Teraz
+      // emitujemy BEZ `warId`, więc klasyfikator WarSystem policzy ją jako POTYCZKĘ
+      // (napięcie + pamięć, zero exhaustion).
+      battleRec.id = `skirmish_${year.toFixed(2)}_${empireId}_${firstArrivedId}`.replace(/\./g, '_');
+      battleRec.year = year;
+      EventBus.emit('battle:resolved', { warId: null, battleId: battleRec.id, result: battleRec });
     }
 
     // Skutki — dotyczą wszystkich wrogów biorących udział

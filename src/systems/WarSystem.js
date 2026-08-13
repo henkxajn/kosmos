@@ -35,6 +35,9 @@ import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
 const EXHAUSTION_PER_BATTLE = 15;   // ile exhaustion rośnie za pojedynczą bitwę
+// W1-4 — POTYCZKA (P3): starcie BEZ stanu wojny. Podnosi napięcie i zostawia ślad w pamięci,
+// ale NIGDY nie dotyka exhaustion (to jest waluta wojny, a wojny nie ma).
+const SKIRMISH_TENSION = 12;
 const AUTO_PEACE_EXHAUSTION = 100;  // próg auto-peace
 const FLEET_AGGRO_INTERVAL  = 5;    // co ile lat AI wysyła flotę w stronę gracza
 
@@ -44,6 +47,10 @@ export class WarSystem {
 
     EventBus.on('diplomacy:warDeclared', ({ empireId, reason }) => this._onWarDeclared(empireId, reason));
     EventBus.on('diplomacy:peaceSigned', ({ empireId }) => this._onPeaceSigned(empireId));
+    // W1-4 — KLASYFIKACJA przy szwie księgowania (decyzja 10). Widelec jest WYCZERPUJĄCY
+    // z konstrukcji: bitwa albo przeszła przez `recordBattle` (niesie `warId`), albo jest
+    // POTYCZKĄ. Trzeciej, cichej ścieżki nie ma.
+    EventBus.on('battle:resolved', (p) => this._classifyBattle(p));
 
     EventBus.on('time:tick', ({ civDeltaYears }) => {
       if (!civDeltaYears) return;
@@ -136,6 +143,50 @@ export class WarSystem {
     if (newV >= AUTO_PEACE_EXHAUSTION) {
       this._triggerAutoPeace(warId, side);
     }
+  }
+
+  /**
+   * W1-4 — klasyfikacja bitwy przy szwie księgowania (P3, decyzja 10).
+   *
+   * ⚠ Widelec jest KOMPLEMENTEM, nie drugim wyzwalaczem: potyczka to DOKŁADNIE ta bitwa,
+   * która NIE została zaksięgowana na wojnę. Dzięki temu jest wyczerpujący z konstrukcji —
+   * nie da się dodać trzeciej, cichej ścieżki, bo każde `battle:resolved` przechodzi tędy.
+   * Osobna bramka „czy uzbrojeni" byłaby DRUGĄ polityką i jest zbędna: DSCS odmawia starcia,
+   * gdy OBIE strony są bezbronne, więc taka para nigdy nie wyprodukuje zdarzenia.
+   *
+   * Potyczka zasila NAPIĘCIE i PAMIĘĆ — nigdy exhaustion (to waluta wojny, a wojny nie ma).
+   */
+  _classifyBattle({ warId, battleId, result } = {}) {
+    if (warId) return;                       // zaksięgowane na wojnę — nie potyczka
+    const empireId = this._empireSideOf(result);
+    if (!empireId) return;                   // nie ma komu przypisać incydentu
+
+    const dipl = window.KOSMOS?.diplomacySystem;
+    if (!dipl) return;
+    // Wojna mogła zostać zadeklarowana MIĘDZY starciem a tym handlerem — wtedy to już nie
+    // jest „walka bez stanu wojny" i księgowanie należy do `recordBattle`.
+    if (dipl.getStatus?.(empireId) === 'war') return;
+
+    dipl.changeTension(empireId, SKIRMISH_TENSION, 'skirmish');
+    dipl.addMemory(empireId, 'skirmish', {
+      battleId: battleId ?? null,
+      year: this._year(),
+      systemId: normalizeLocation(result?.location).systemId ?? null,
+      winner: result?.winner ?? null,
+    });
+    EventBus.emit('war:skirmish', { empireId, battleId: battleId ?? null, result });
+  }
+
+  /**
+   * Które imperium brało udział w bitwie (strona NIE-gracza). Uczestnik ma trzy kształty
+   * (`empire` / `vessel_group` / `player`) o różnych polach — czytamy `empireId` z tej strony,
+   * która go niesie.
+   */
+  _empireSideOf(result) {
+    for (const p of [result?.participantA, result?.participantB]) {
+      if (p?.empireId && p.empireId !== 'player') return p.empireId;
+    }
+    return null;
   }
 
   /** Rekord wyniku bitwy — przypisuje do wojny + zapisuje w gameState.battles. */

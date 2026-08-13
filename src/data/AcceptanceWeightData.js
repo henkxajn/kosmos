@@ -383,6 +383,10 @@ export const INCIDENT_CHANNELS = {
   research_intrusion:    'opinion',
   trespassing:           'opinion',
   territorial_violation: 'tension',
+  // W1-4 — POTYCZKA: walka BEZ stanu wojny. P3: „feeding tension + incident memory, NEVER
+  // exhaustion". Kanał `tension`, więc ŚWIADOMIE bez wpisu w OPINION_MODIFIERS (ten jest
+  // wymagany tylko dla kanału `opinion` — pilnuje tego asercja w acceptance_engine_smoke).
+  skirmish:              'tension',
   surveillance_scan:     'tension',
   warning_issued:        'tension',
   ultimatum_issued:      'tension',

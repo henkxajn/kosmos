@@ -1047,6 +1047,7 @@ export default {
   'log.arrivalDisaster': 'Katastrofa: {0}!',
   // Kolonia i handel
   'log.colonyFounded': '🏙 Nowa kolonia: {0}',
+  'log.skirmish': '⚔ Potyczka z {0} — bez stanu wojny (napięcie rośnie, wyczerpanie bez zmian)',
   'log.colonyCaptured': '⚔ Przejęto kolonię: {0}',
   'log.outpostCaptured': '⚔ Przejęto placówkę: {0}',
   'log.tradeExecuted': '📦 Droga handlowa: transfer wykonany',

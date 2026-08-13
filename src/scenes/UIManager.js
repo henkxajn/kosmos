@@ -1350,6 +1350,15 @@ export class UIManager {
       this._log(t('log.m4.warDeclared', empName), 'diplomacy');
     });
 
+    // W1-4 — POTYCZKA: starcie BEZ stanu wojny. Osobny wpis, bo dla gracza to zupełnie inne
+    // zdarzenie niż bitwa wojenna: podnosi napięcie i zostaje w pamięci relacji, ale NIE
+    // wyczerpuje nikogo (wojny nie ma). Bez tego wpisu gracz widziałby skutek (rosnące
+    // napięcie) bez przyczyny.
+    EventBus.on('war:skirmish', ({ empireId }) => {
+      const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
+      this._log(t('log.skirmish', emp?.namePL ?? emp?.name ?? empireId ?? '?'), 'combat');
+    });
+
     // S3.4 — log dyplomacji: AI envoy, emisariusz gracza, odpowiedź na traktat.
     const _empName = (empireId) => {
       const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);

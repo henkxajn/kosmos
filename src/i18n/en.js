@@ -1046,6 +1046,7 @@ export default {
   'log.arrivalDisaster': 'Disaster: {0}!',
   // Colony and trade
   'log.colonyFounded': '🏙 New colony: {0}',
+  'log.skirmish': '⚔ Skirmish with {0} — no state of war (tension rises, exhaustion unchanged)',
   'log.colonyCaptured': '⚔ Colony captured: {0}',
   'log.outpostCaptured': '⚔ Outpost captured: {0}',
   'log.tradeExecuted': '📦 Trade route: transfer completed',

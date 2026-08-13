@@ -13,7 +13,7 @@
 //   T3  R2:  uzbrojony kadłub GRACZA rusza OBOMA estymatorami; sam pancerz/tarcza — NIE (V4)
 //   T4  V5:  CUDZY kadłub i WRAK nie podnoszą „siły gracza"; kolonie liczone tylko GRACZA (V1)
 //   T5  K-2: `empire.fleets` zostaje puste bez cheatu debugowego
-//   T6  K-3: bitwa EAH z PRAWDZIWYM warId omija recordBattle (zero exhaustion, brak w war.battles[])
+//   T6  K-3 NAPRAWIONE (W1-4): bitwa EAH z warId PRZECHODZI przez recordBattle
 //
 // ⚠ T3 i T4 były w W1-0 PINAMI DEFEKTU (estymator NIE reagował, filtru NIE było). W1-1 to
 //    naprawił, więc obie zostały ŚWIADOMIE ODWRÓCONE — wzór „pin luki" z `director_seams_smoke` T6.
@@ -208,7 +208,13 @@ console.log('T5 — K-2: `empire.fleets` puste przez całą partię bez cheatu d
 }
 
 // ── T6 — K-3: bitwa EAH z warId omija recordBattle ──────────────────────────
-console.log('T6 — K-3: bitwa EnemyAttackHandler niesie warId i OMIJA recordBattle');
+// ⚠ ODWRÓCONE W W1-4 — trzeci pin defektu w tym pliku, który doczekał się naprawy
+//   (po T3 i T4 w W1-1). Do W1-3 włącznie T6 pinował LUKĘ: EAH niósł prawdziwy `warId`
+//   i mimo to omijał `recordBattle`, więc atak orbitalny w trakcie wojny nie naliczał
+//   exhaustion. W1-4 przepiął go na jedyne wejście księgowania. Szczegółowe pokrycie
+//   tej ścieżki (fail-first, obie strony exhaustion, dominacja orbitalna) mieszka teraz
+//   w `war_skirmish_smoke` T2; tutaj zostaje krótki pin STANU SZWU.
+console.log('T6 — K-3 naprawione: bitwa EnemyAttackHandler PRZECHODZI przez recordBattle');
 {
   const core = boot(12);
   const K = window.KOSMOS;
@@ -260,21 +266,15 @@ console.log('T6 — K-3: bitwa EnemyAttackHandler niesie warId i OMIJA recordBat
   assert(withWarId.length > 0,
     `T6: EAH wyemitował battle:resolved z PRAWDZIWYM warId (${withWarId[0]?.warId ?? '—'}) ` +
     '— wojnę deklaruje SAM, jeśli jej nie ma');
-  assert(recordBattleCalls === 0,
-    'T6: …i ani razu nie dotknął recordBattle — JEDYNEGO producenta exhaustion (K-3)');
-  assert(!!warAfter && warAfter.battles.length === battlesBefore,
-    `T6: bitwa NIE dopisała się do war.battles[] (${battlesBefore} → ${warAfter?.battles.length}) ` +
-    '— jest niewidoczna nawet w WarOverlay, który czyta tę tablicę');
-  assert(!!warAfter && JSON.stringify(warAfter.exhaustion) === exhaustBefore,
-    'T6: exhaustion bajt w bajt bez zmian — akceptacja pokoju (waga 55) systematycznie ZANIŻA ' +
-    'cenę pokoju dokładnie w wojnach realnie toczonych');
-
-  // KONTROLA PINU — porównanie exhaustion MUSI umieć wykryć zmianę, inaczej „bez zmian"
-  // jest tautologią (np. gdyby obiekt wojny był zamrożony albo getWarWith zwracał kopię).
-  warSys.changeExhaustion(warAfter.id, warAfter.aggressor, 15, 'pin_control');
-  assert(JSON.stringify(warSys.getWarWith(empireId)?.exhaustion) !== exhaustBefore,
-    'T6 KONTROLA PINU: jawny changeExhaustion(+15) JEST wykrywany tym samym porównaniem — ' +
-    'zero powyżej pochodzi z braku księgowania, nie z martwej asercji');
+  assert(recordBattleCalls === 1,
+    `T6: …i przeszedł przez recordBattle DOKŁADNIE raz (${recordBattleCalls}) — przed W1-4 było tu ZERO`);
+  assert(!!warAfter && warAfter.battles.length === battlesBefore + 1,
+    `T6: bitwa DOPISANA do war.battles[] (${battlesBefore} → ${warAfter?.battles.length}) ` +
+    '— widoczna w WarOverlay, który czyta tę tablicę');
+  assert(!!warAfter && JSON.stringify(warAfter.exhaustion) !== exhaustBefore,
+    `T6: exhaustion WZROSŁO ${exhaustBefore} → ${JSON.stringify(warAfter?.exhaustion)} — ZAMIERZONA ` +
+    'zmiana zachowania z W1-4: wojny wyczerpują się od ataków orbitalnych, więc akceptacja pokoju ' +
+    'przestaje zaniżać cenę w wojnach realnie toczonych');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
