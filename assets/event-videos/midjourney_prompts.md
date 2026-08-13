@@ -245,9 +245,11 @@ Prompty do WSZYSTKICH juz sa w tym pliku — brakuje wylacznie renderow.
 
 ## 🧱 INNA KLASA ASSETU — tekstura planety (NIE video)
 
-`rocky_02_biome.png` — zgloszony jako 404 w przebiegu GATE 3. To **tekstura planety**, nie video
-zdarzenia, wiec NIE idzie sciezka Midjourney → Runway z tego pliku. Tekstury planet powstaja
-**generatorem CLI** (`generate-planets.js`), nie recznie:
+`rocky_02_biome.png` — zgloszony jako 404 w przebiegu GATE 3.
+`ocean_02_biome.png` — zgloszony jako 404 w przebiegu **W1 / GATE 1** (2026-08-14). **TA SAMA KLASA.**
+
+To **tekstury planet**, nie video zdarzen, wiec NIE ida sciezka Midjourney → Runway z tego pliku.
+Tekstury planet powstaja **generatorem CLI** (`generate-planets.js`), nie recznie:
 
 ```
 node generate-planets.js --type rocky --count 3 --resolution 1024 --quality high --output ./assets/planet-textures --name rocky
@@ -256,4 +258,12 @@ node generate-planets.js --type rocky --count 3 --resolution 1024 --quality high
 ⚠ Sprawdzic najpierw, czy brak dotyczy `assets/planet-textures/` (wtedy regeneracja jak wyzej),
 czy jakiegos innego katalogu biomow — nazwa `_biome` nie pasuje do konwencji generatora
 (`{typ}_{wariant}_{mapa}.png`), wiec moze to byc odwolanie do pliku, ktorego nigdy nie bylo.
-**Do zdiagnozowania przy okazji, nie w tej sesji.**
+
+⚠ **DRUGIE WYSTAPIENIE ZMIENIA DIAGNOZE.** Po `ocean_02` juz nie jest to pojedynczy brakujacy
+plik, tylko **wzorzec**: `{typ}_02_biome.png` dla co najmniej dwoch roznych typow planet. Sprawdzone
+w W1/GATE 1: w `assets/planet-textures/` NIE MA ANI JEDNEGO pliku z `_biome` w nazwie — czyli nie
+jest to „brakujacy wariant 02", tylko **cala kategoria mapy, ktorej generator nie produkuje**.
+Szukac wiec KONSUMENTA (kto zada `_biome`) zamiast regenerowac tekstury: albo konsument odwoluje sie
+do konwencji, ktora nigdy nie istniala (wtedy poprawka jest po stronie kodu, jedna linia), albo
+generator ma tryb biomow, ktorego nikt nie uruchomil. **Do zdiagnozowania przy okazji, nie w tej
+sesji** — 404 tekstury jest kosmetyczne (fallback dziala), wiec nie blokuje zadnego gate'u.

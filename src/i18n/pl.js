@@ -3423,6 +3423,14 @@ export default {
   'intel.capital':          'stolica',
   'intel.militaryStrength': 'Siła wojskowa',
   'intel.combatUnits':      '{0} jednostek bojowych',
+  // W1-3c — ciągły odczyt układu sił w panelu intelu (odpowiedź PRZED decyzją, nie po).
+  'intel.powerBalance':           'Układ sił',
+  'intel.powerBalanceDominant':   'miażdżysz ich (+{0}%)',
+  'intel.powerBalanceStronger':   'jesteś silniejszy (+{0}%)',
+  'intel.powerBalanceBalanced':   'równowaga',
+  'intel.powerBalanceWeaker':     'są silniejsi (+{0}%)',
+  'intel.powerBalanceOutmatched': 'miażdżą cię (+{0}%)',
+  'intel.powerBalanceYours':      'twoja siła: {0}',
 
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WOJNY',

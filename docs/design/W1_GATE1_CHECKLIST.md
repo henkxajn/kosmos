@@ -19,6 +19,24 @@
 
 ---
 
+## ⚠ WYBÓR IMPERIUM — przeczytaj PRZED G2 i G4 (poprawka po przebiegu 2026-08-14)
+
+`KOSMOS.debug.spawnEnemyAttack(...)` tworzy `emp_test_enemy`, które **jest W STANIE WOJNY z definicji**.
+To imperium nadaje się do **G1 i G3** (ma flotę, leci na gracza) i **NIE nadaje się do G4**:
+`evaluateProposal` zwróci wtedy `blocked: diplo.reject.atWar` z **pustym `breakdown`** — poprawne
+zachowanie D2 (podczas wojny nie negocjuje się traktatów), ale wygląda jak brak wiersza `relative_power`.
+Pierwszy przebieg gate'u stracił na tym czas.
+
+**Zawsze zacznij G2 i G4 od wskazania imperium, które (a) ma siłę > 0 i (b) NIE jest w stanie wojny:**
+
+```
+KOSMOS.empireRegistry.listAll().map(e => [e.id, KOSMOS.threatAssessment.getStrength(e.id), KOSMOS.diplomacySystem.getStatus(e.id)])
+```
+Wybierz wpis z **siłą > 0** i statusem **`peace`**. Jeśli takiego nie ma — najpierw doprowadź do kontaktu
+z imperium, które ma flotę (albo poczekaj, aż AI zbuduje okręty), i dopiero wtedy rób G2/G4.
+
+---
+
 ## Przygotowanie
 
 1. Odpal grę (Live Server), **Nowa gra**, scenariusz „Cywilizacja". Poczekaj, aż wejdziesz w tryb 4X.
@@ -69,6 +87,10 @@ KOSMOS.empireRegistry.listAll().map(e => [e.id, KOSMOS.threatAssessment.getStren
 
 ## G2 — panel intelu przestaje pokazywać „Siła wojskowa ≈ 0"
 
+⚠ **Najpierw wybierz imperium wg sekcji „WYBÓR IMPERIUM" wyżej** (siła > 0, status `peace`).
+Poniższe jednolinijkowce biorą pierwsze imperium z rejestru — jeśli to `emp_test_enemy`, podstaw
+ręcznie właściwe id zamiast `KOSMOS.empireRegistry.listAll()[0].id`.
+
 Podnieś intel do `detailed` (poziom, na którym gra ujawnia siłę):
 
 ```
@@ -86,6 +108,16 @@ Następnie otwórz panel intelu (klawisz **I**) i znajdź to imperium.
 - [ ] `knownMilitary` w stanie gry to liczba > 0
 - [ ] panel **I** pokazuje pasek/liczbę siły, a nie „≈ 0"
 - [ ] imperium BEZ okrętów nadal pokazuje 0 (to poprawne, nie regresja)
+
+**W1-3c — nowy wiersz w tym samym bloku:** pod paskiem siły panel pokazuje teraz **„Układ sił"**
+(np. `są silniejsi (+200%)` / `równowaga` / `miażdżysz ich (+300%)`) oraz `twoja siła: N`.
+To jest CIĄGŁY odczyt strategiczny — odpowiada na pytanie „czy mam z czym prosić" **przed** decyzją,
+a nie dopiero w rozbiciu odmowy. Ta sama bramka intelu (`detailed`), te same dane.
+
+- [ ] wiersz „Układ sił" widoczny przy intel `detailed`
+- [ ] kolor zgadza się z sensem (zielony = przewaga gracza, czerwony = przewaga AI, szary = równowaga)
+- [ ] po zbudowaniu własnej floty odczyt **przesuwa się na korzyść gracza** (bez przeładowania gry)
+- [ ] imperium BEZ rozpoznania `detailed` nadal nie pokazuje ani siły, ani układu sił
 
 ---
 
@@ -116,7 +148,12 @@ Zweryfikowane headless — pełna sekwencja: `true` → (wrogi **bezbronny** tra
 
 ## G4 — wiersz `relative_power` w rozbiciu akceptacji
 
-⚠ **Dwie pułapki, które inaczej zmarnują przebieg:**
+⚠ **ZERO: wybierz imperium NIE-W-WOJNIE** (sekcja „WYBÓR IMPERIUM" wyżej). Na imperium w stanie
+wojny — a takim JEST `emp_test_enemy` z `spawnEnemyAttack` — `evaluateProposal` zwraca
+`blocked: diplo.reject.atWar` z PUSTYM `breakdown`. To poprawne zachowanie D2, nie regresja W1;
+po prostu ten test na tym imperium nie ma sensu.
+
+⚠ **Dwie kolejne pułapki, które inaczej zmarnują przebieg:**
 1. Przyciski w panelu dyplomacji są bramkowane przez `canPropose` (kontakt / nie-wojna / brak traktatu)
    i **wyglądają identycznie przed i po** tej zmianie. Weryfikacja wymaga **faktycznego złożenia**
    propozycji i przeczytania modala.
@@ -178,6 +215,17 @@ KOSMOS.empireRegistry.listAll().map(e => [e.id, e.fsm && e.fsm.state, KOSMOS.dip
    definiuje term jako „weaker side more agreeable", a W1-3 wypuścił znak odwrotny. Wagi z D2 powstały
    przeciw stubowi zwracającemu 0, więc kierunku nikt nigdy nie zwalidował. Znak odwrócony, **magnitudy
    wag nietknięte** (pozostają domeną D4). Oczekiwania G4 wyżej opisują JUŻ poprawioną semantykę.
+
+---
+
+## ⚠ ZNANE OGRANICZENIE KANAŁU ROZBICIA (zgłoszone przez właściciela w przebiegu 1)
+
+Rozbicie akceptacji (E4) jest **REAKTYWNE i jednostronne** — modal pokazuje się WYŁĄCZNIE przy
+ODMOWIE. Gdy propozycja przechodzi (a przy odblokowanym `relative_power` przechodzi częściej),
+gracz nie dowiaduje się NIC o tym, dlaczego. W1-3c odpowiada na to **poza modalem**: ciągły odczyt
+„Układ sił" w panelu intelu (patrz G2), bo pytanie „czy warto prosić" pada PRZED kliknięciem,
+a nie po nim. Symetryczny jednowierszowy „dlaczego tak" w modalu akceptacji pozostaje **opcją
+odłożoną** (kandydat do prac UI przy W2) — nie wchodził do W1, żeby nie ruszać kanału E4.
 
 ---
 

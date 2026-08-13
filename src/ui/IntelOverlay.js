@@ -9,6 +9,8 @@ import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES }     from '../data/EmpireData.js';
 import EventBus           from '../core/EventBus.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
+// W1-3c — czysty opis układu sił (pasmo + procent); logika poza widokiem, żeby dała się testować.
+import { describePowerBalance } from '../utils/ThreatMath.js';
 
 const LEFT_W = 280;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -280,6 +282,30 @@ export class IntelOverlay extends BaseOverlay {
       iy += 14;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(`  ${'█'.repeat(bars)}${'░'.repeat(10 - bars)}`, x + pad + 4, iy);
+      iy += 14;
+
+      // W1-3c — CIĄGŁY odczyt układu sił. Odpowiada na pytanie, które gracz zadaje PRZED
+      // decyzją dyplomatyczną („czy w ogóle mam z czym prosić"), a nie po odmowie. Kanał
+      // rozbicia akceptacji (E4) jest z natury REAKTYWNY i pokazuje się wyłącznie przy
+      // odmowie — przy zgodzie gracz nie dowiaduje się niczego. Ta linia to naprawia,
+      // BEZ dotykania modala: ta sama bramka intelu (`detailed`), te same dane.
+      const mine = window.KOSMOS?.threatAssessment?.getPlayerStrength?.() ?? 0;
+      const bal  = describePowerBalance(mine, intel.knownMilitary);
+      const BAND_KEY = {
+        dominant:   'intel.powerBalanceDominant',
+        stronger:   'intel.powerBalanceStronger',
+        balanced:   'intel.powerBalanceBalanced',
+        weaker:     'intel.powerBalanceWeaker',
+        outmatched: 'intel.powerBalanceOutmatched',
+      };
+      // Kolor niesie OCENĘ, nie samą liczbę: zielony gdy przewaga po naszej stronie.
+      ctx.fillStyle = bal.leader === 'mine' ? THEME.success
+                    : bal.band === 'balanced' ? THEME.textDim
+                    : THEME.danger;
+      ctx.fillText(`  ${t('intel.powerBalance')}: ${t(BAND_KEY[bal.band], bal.pct)}`, x + pad + 4, iy);
+      iy += 14;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`  ${t('intel.powerBalanceYours', Math.round(mine))}`, x + pad + 4, iy);
       iy += 14;
     } else {
       ctx.fillStyle = THEME.textDim;

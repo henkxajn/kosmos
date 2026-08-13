@@ -219,7 +219,37 @@ export class IntelSystem {
 
   // ── Pasywny tick — obserwatorium nasłuchuje ─────────────────
 
+  /**
+   * Odświeża `knownMilitary` dla imperiów, o których gracz MA pełne rozpoznanie (W1-3c).
+   *
+   * ⚠ Dlaczego to musiało powstać: `advanceIntel` wychodzi na `if (newRank <= oldRank) return false`,
+   * więc `knownMilitary` jest polem **zapisywanym RAZ** — w chwili wejścia na `detailed` — i potem
+   * ZAMROŻONYM na zawsze. Panel intelu pokazywał więc siłę imperium sprzed dziesiątek lat, niezależnie
+   * od tego, ile okrętów AI w międzyczasie zbudowało. Dopóki term `relative_power` był stubem, nikt
+   * tego nie zauważył; przy „ciągłym odczycie strategicznym" (W1-3c) zamrożona liczba byłaby po prostu
+   * kłamstwem odświeżanym co klatkę.
+   *
+   * Bramka intelu zostaje NIETKNIĘTA: odświeżamy WYŁĄCZNIE imperia już na `detailed`. Kto nie ma
+   * rozpoznania, nadal nie widzi nic — to nie jest wyciek mgły wojny, tylko aktualizacja tego, co
+   * gracz i tak ma prawo widzieć. Bez zmian modelu zapisu (pole istnieje i już się serializuje).
+   */
+  _refreshKnownMilitary() {
+    const ta = window.KOSMOS?.threatAssessment;
+    if (!ta) return;
+    const reg = window.KOSMOS?.empireRegistry;
+    if (!reg) return;
+    for (const emp of reg.listAll()) {
+      const rec = gameState.get(`intel.${emp.id}`);
+      if (!rec || LEVEL_RANK[rec.level ?? 'unknown'] < LEVEL_RANK.detailed) continue;
+      const fresh = Math.round(ta.getStrength(emp.id));
+      if (fresh === rec.knownMilitary) continue;          // bez churnu w gameState
+      gameState.set(`intel.${emp.id}`, { ...rec, knownMilitary: fresh }, 'intel_military_refresh');
+    }
+  }
+
   _passiveTick(yearsPassed) {
+    this._refreshKnownMilitary();
+
     // Obserwatorium macierzystej kolonii — posłuch pobliskich imperiów
     const homePlanet = window.KOSMOS?.homePlanet;
     if (!homePlanet) return;

@@ -3422,6 +3422,14 @@ export default {
   'intel.capital':          'capital',
   'intel.militaryStrength': 'Military strength',
   'intel.combatUnits':      '{0} combat units',
+  // W1-3c — continuous balance-of-power readout in the intel panel (answers BEFORE the decision).
+  'intel.powerBalance':           'Balance of power',
+  'intel.powerBalanceDominant':   'you dominate (+{0}%)',
+  'intel.powerBalanceStronger':   'you are stronger (+{0}%)',
+  'intel.powerBalanceBalanced':   'balanced',
+  'intel.powerBalanceWeaker':     'they are stronger (+{0}%)',
+  'intel.powerBalanceOutmatched': 'they dominate (+{0}%)',
+  'intel.powerBalanceYours':      'your strength: {0}',
 
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WARS',

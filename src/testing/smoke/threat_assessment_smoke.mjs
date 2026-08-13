@@ -11,6 +11,8 @@
 //   T5  UNIEWAŻNIANIE pamięci podręcznej: nowy statek zmienia wynik; nieświeży odczyt CZERWIENI SIĘ
 //   T6  nieznany właściciel ⇒ 0; wraki i cudze kadłuby trafiają do WŁAŚCIWYCH kubełków
 //   T7  `relativePowerRaw` — znak, granice, symetria, skalo-niezmienniczość
+//   T8  `describePowerBalance` (W1-3c) — pasma, procenty, brzegi z zerem
+//   T9  ⚠ `knownMilitary` ODŚWIEŻA się (W1-3c) — pole było ZAPISYWANE RAZ i zamrożone
 //
 // ⚠ Harness NIE montuje `stationSystem` (żeton R-3), więc AI nie produkuje okrętów samo —
 //   każdy wrogi kadłub stawiamy tu RĘCZNIE (ustalone w `war_seams_smoke`).
@@ -22,8 +24,10 @@ import { createVessel } from '../../entities/Vessel.js';
 import { HULLS } from '../../data/HullsData.js';
 import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 import { COMBAT_VALUE_WEIGHTS } from '../../data/CombatValueData.js';
-import { hullCombatValue, vesselCombatValue, aggregateCombatValue, relativePowerRaw } from '../../utils/ThreatMath.js';
+import { hullCombatValue, vesselCombatValue, aggregateCombatValue, relativePowerRaw,
+         describePowerBalance } from '../../utils/ThreatMath.js';
 import { PLAYER_OWNER_ID } from '../../systems/ThreatAssessment.js';
+import gameState from '../../core/GameState.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -228,6 +232,79 @@ console.log('T7 — relativePowerRaw: kontrakt znaku i granic');
     'T7: antysymetria — zamiana stron odwraca znak');
   const vals = [relativePowerRaw(1, 1e9), relativePowerRaw(1e9, 1), relativePowerRaw(-5, 10)];
   assert(vals.every(v => v >= -1 && v <= 1), `T7: zawsze w ⟨−1, +1⟩ nawet na skrajnych wejściach [${vals}]`);
+}
+
+// ── T8 — describePowerBalance: pasma i procenty (W1-3c) ─────────────────────
+console.log('T8 — describePowerBalance: pasma, procenty, brzegi z zerem');
+{
+  const b = (a, c) => describePowerBalance(a, c);
+  assert(b(100, 100).band === 'balanced' && b(100, 100).pct === 0,
+    'T8: równe siły ⇒ pasmo `balanced`, 0%');
+  assert(b(400, 100).band === 'dominant' && b(400, 100).pct === 300,
+    `T8: 4:1 ⇒ dominant, +300% (zmierzone ${b(400, 100).pct})`);
+  assert(b(100, 400).band === 'outmatched' && b(100, 400).leader === 'theirs',
+    'T8: 1:4 ⇒ outmatched, przewaga po ICH stronie');
+  assert(b(140, 100).band === 'stronger' && b(140, 100).pct === 40,
+    'T8: 1.4:1 ⇒ stronger, +40% (przykład wprost z orzeczenia właściciela)');
+  assert(b(100, 140).band === 'weaker' && b(100, 140).pct === 40,
+    'T8: odwrotnie ⇒ weaker, TEN SAM procent (liczony zawsze do SŁABSZEJ strony)');
+
+  // Brzegi z zerem — bez dzielenia przez zero i bez „nieskończonej przewagi" w procentach.
+  assert(b(0, 0).band === 'balanced' && b(0, 0).ratio === null && b(0, 0).leader === 'none',
+    'T8: obie strony puste ⇒ balanced, ratio null (nie NaN)');
+  assert(b(500, 0).band === 'dominant' && Number.isFinite(b(500, 0).pct),
+    'T8: przeciwnik bez floty ⇒ dominant, procent SKOŃCZONY');
+  assert(b(0, 500).band === 'outmatched' && Number.isFinite(b(0, 500).pct),
+    'T8: my bez floty ⇒ outmatched, procent skończony');
+  assert([b(-5, 100), b(NaN, 100), b(100, undefined)].every(r => Number.isFinite(r.pct)),
+    'T8: wejścia bez sensu nie produkują NaN w procencie');
+
+  // Monotoniczność pasm — na niej wisi kolor wiersza w panelu intelu.
+  const order = ['outmatched', 'weaker', 'balanced', 'stronger', 'dominant'];
+  const seq = [b(10, 1000), b(60, 100), b(100, 100), b(150, 100), b(1000, 10)].map(r => r.band);
+  assert(JSON.stringify(seq) === JSON.stringify(order),
+    `T8: pasma rosną monotonicznie z przewagą [${seq.join(' → ')}]`);
+}
+
+// ── T9 — knownMilitary ODŚWIEŻA się (W1-3c) ─────────────────────────────────
+console.log('T9 — knownMilitary nie jest już polem „zapisz raz i zamroź"');
+{
+  const core = boot();
+  const empireId = core.empireRegistry.listAll()[0]?.id;
+
+  spawn(core, { modules: WARSHIP, owner: empireId, name: 'AI 1' });
+  core.threatAssessment.invalidate();
+  assert(core.intelSystem.advanceIntel(empireId, 'detailed', 'keeper') === true,
+    'T9: intel podniesiony do `detailed`');
+  const first = gameState.get(`intel.${empireId}`)?.knownMilitary;
+  assert(first > 0, `T9: knownMilitary zapisane przy wejściu na detailed (${first})`);
+
+  // ⚠ KONTROLA PINU: `advanceIntel` wychodzi na `newRank <= oldRank`, więc PONOWNE wywołanie
+  //   NIE odświeży pola. To jest dokładnie defekt, dla którego powstał `_refreshKnownMilitary`
+  //   — bez niego „ciągły odczyt" pokazywałby zamrożoną liczbę sprzed dziesiątek lat.
+  spawn(core, { modules: WARSHIP, owner: empireId, name: 'AI 2' });
+  spawn(core, { modules: WARSHIP, owner: empireId, name: 'AI 3' });
+  core.threatAssessment.invalidate();
+  assert(core.intelSystem.advanceIntel(empireId, 'detailed', 'keeper2') === false,
+    'T9 KONTROLA: advanceIntel na tym samym poziomie zwraca false — sam nigdy nie odświeży');
+  assert(gameState.get(`intel.${empireId}`)?.knownMilitary === first,
+    'T9 KONTROLA: …i faktycznie zostawia STARĄ wartość (dowód, że pole było zamrożone)');
+
+  core.intelSystem._refreshKnownMilitary();
+  const after = gameState.get(`intel.${empireId}`)?.knownMilitary;
+  assert(after > first,
+    `T9: _refreshKnownMilitary aktualizuje do stanu bieżącego (${first} → ${after})`);
+
+  // Bramka intelu NIETKNIĘTA — imperium bez rozpoznania nie dostaje nic.
+  const other = core.empireRegistry.listAll()[1]?.id;
+  if (other) {
+    spawn(core, { modules: WARSHIP, owner: other, name: 'Inne AI' });
+    core.threatAssessment.invalidate();
+    core.intelSystem._refreshKnownMilitary();
+    const rec = gameState.get(`intel.${other}`);
+    assert(!rec || rec.knownMilitary == null,
+      'T9: imperium BEZ rozpoznania `detailed` NIE dostaje siły — mgła wojny nietknięta');
+  }
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

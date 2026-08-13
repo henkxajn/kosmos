@@ -91,6 +91,44 @@ export function aggregateCombatValue(vessels, hullsData, modulesData, weights = 
  *
  * Kontrakt znaku jest ten sam, którego oczekuje term `relative_power`: +1 = OCENIAJĄCY silniejszy.
  */
+/**
+ * Opis układu sił dla CZŁOWIEKA (W1-3c) — panel intelu, „ciągły odczyt strategiczny".
+ *
+ * Odpowiada na pytanie, które gracz zadaje PRZED decyzją („czy dam radę / czy warto prosić"),
+ * a nie po niej. Osobno od `relativePowerRaw`, bo tamten jest wejściem SILNIKA w ⟨−1,+1⟩,
+ * a to jest komunikat: pasmo + procent przewagi silniejszej strony.
+ *
+ * @param {number} mine   siła gracza
+ * @param {number} theirs siła ocenianego imperium
+ * @returns {{ band: string, pct: number, ratio: number|null, leader: 'mine'|'theirs'|'none' }}
+ *   `band` ∈ dominant | stronger | balanced | weaker | outmatched (z perspektywy GRACZA)
+ *   `pct`  — o ile procent silniejsza strona przewyższa słabszą (0 przy równowadze)
+ *   `ratio` — mine/theirs; `null` gdy obie strony zerowe (nie ma czego dzielić)
+ */
+export function describePowerBalance(mine, theirs) {
+  const a = Math.max(0, Number(mine)   || 0);
+  const b = Math.max(0, Number(theirs) || 0);
+
+  if (a === 0 && b === 0) return { band: 'balanced', pct: 0, ratio: null, leader: 'none' };
+  // Zero po jednej stronie to nie „nieskończona przewaga" tylko skrajne pasmo — bez dzielenia przez 0.
+  if (b === 0) return { band: 'dominant',   pct: 100, ratio: Infinity, leader: 'mine' };
+  if (a === 0) return { band: 'outmatched', pct: 100, ratio: 0,        leader: 'theirs' };
+
+  const ratio  = a / b;
+  const leader = a >= b ? 'mine' : 'theirs';
+  // Procent liczony ZAWSZE względem słabszej strony — „o tyle silniejsi są ci z przodu".
+  const pct = Math.round(((Math.max(a, b) / Math.min(a, b)) - 1) * 100);
+
+  let band;
+  if      (ratio >= 3.0)  band = 'dominant';
+  else if (ratio >= 1.25) band = 'stronger';
+  else if (ratio >  0.8)  band = 'balanced';
+  else if (ratio >  0.33) band = 'weaker';
+  else                    band = 'outmatched';
+
+  return { band, pct, ratio, leader };
+}
+
 export function relativePowerRaw(selfStrength, otherStrength) {
   const a = Number(selfStrength)  || 0;
   const b = Number(otherStrength) || 0;
