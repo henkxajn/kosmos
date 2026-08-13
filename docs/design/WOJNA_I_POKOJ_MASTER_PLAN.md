@@ -425,8 +425,9 @@ D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 
                         → Director Slice 1 ✅ COMPLETE (S0..S6, Gates 1-3 PASSED 2026-08-11/12)
                         → WAR_BACKBONE doc ✅ SIGNED (P1-P7 + §6a, owner 2026-08-13)
                         → W1 plan ✅ APPROVED (14 decisions signed, orchestrator 2026-08-14)
-                                                ⟵ WE ARE HERE — next: W1 IMPLEMENTATION,
-                                                   a CC stream, starting at commit W1-0
+                        → W1 ✅ COMPLETE (13 commits, Gates 1-3 PASSED 2026-08-14, v100 no migration)
+                                                ⟵ WE ARE HERE — next: **W2 PLAN DOC**, not code.
+                                                   Three P4 rulings pending from the owner.
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
@@ -437,14 +438,18 @@ nine commits, three passed gates, save untouched at v100); Director Slice 1 gave
 through the real economy. `WAR_BACKBONE.md` is **signed** (P1–P7 plus §6a territorial peace), and
 `W1_PLAN.md` is **approved** with fourteen signed decisions. **The next action is code, not design.**
 
-**Next horizon — W1 implementation (a CC stream), starting at commit W1-0.**
-1. **W1 — repairs & foundations** (workstream B) — 🟢 **NEXT**, plan `W1_PLAN.md` (**read its §RESUME
-   block first** — binding order). Nine atomic commits, three live gates, no save-model change.
-   Clears R2, R10, the R6/R14 residue and `FLEET_AGGRO_INTERVAL`; ships the shared ThreatAssessment
-   module; **un-stubs `relative_power`**. First report due after the K-1/R2 commit family.
-2. **W2 — the deploy model** (P4): build → storage → deploy, crew at deploy, production upgrades for
-   war commodities, mobilization as an intel-visible event. Own plan doc, own gate, likely the first
-   save bump since v100.
+**Next horizon — W2, and the next artefact is a PLAN DOC, not code.**
+1. **W2 — the deploy model** (P4) — 🟢 **NEXT**. Build → storage → deploy, crew at deploy, production
+   upgrades for war commodities, mobilization as an intel-visible event. **Read the HANDOVER note at
+   the head of `WAR_BACKBONE.md` §6-W2 first** — it carries the binding order for the fresh session.
+   **Three P4 questions await owner rulings before the plan can close**: maintenance cost of stored
+   ships (proposal: fractional upkeep) · deploy duration (proposal: short but nonzero — an
+   intel-visible mobilization window) · crew fate on ship loss (proposal: crew dies, so POP becomes a
+   real war cost). Own gate; **likely the first save bump since v100** — plan the migration explicitly.
+   W1 hands it: a live `relative_power` (direction corrected), a shared threat number from real hulls,
+   an accounting fork with no silent third path, and doctrines with something to command.
+   ⚠ A ready-made regression scenario exists: the owner's Gate-3 save entered a **fleet-upkeep death
+   spiral** (too many ships, negative credits). W2 touches exactly those costs.
 3. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation
    record, unread, since D1, and D3 is its consumer. The influence map is already built (Director S2).
 

@@ -12,10 +12,21 @@
 
 ---
 
-## RESUME — start świeżej sesji (czytaj to PIERWSZE)
+## RESUME — W1 ZAMKNIĘTY. Następny strumień to W2 (czytaj to PIERWSZE)
 
-**Stan:** dokument `WAR_BACKBONE.md` **PODPISANY**, ten plan **ZATWIERDZONY** — wszystkie decyzje
-(1–14) podpisane przez orkiestratora 2026-08-14. **Wdrożenie NIE rozpoczęte.**
+**Stan:** ✅ **W1 COMPLETE 2026-08-14.** Trzy gate'y ZDANE — **GATE 1** 2026-08-14 · **GATE 2**
+2026-08-14 · **GATE 3** 2026-08-14. Trzynaście commitów `ee189ba` → `566de0c`, zapis **v100 BEZ
+MIGRACJI przez cały slice**. Sweep **129/129, 0 FAIL** · check-i18n PASS. Wyniki: §Results niżej;
+checklisty `W1_GATE1/2/3_CHECKLIST.md` mają wypełnione pola wyniku z dowodami z przebiegów.
+
+**NASTĘPNY KROK TO DOKUMENT PLANU W2, NIE KOD.** Sekwencja i trzy pytania P4 czekające na
+orzeczenia właściciela: `WAR_BACKBONE.md` §6 → **HANDOVER W2** (notatka na górze wiersza W2).
+
+**Co W1 zostawia W2 gotowego do użycia:** żywy `relative_power` (kierunek poprawiony w W1-3b) ·
+wspólny `ThreatAssessment` (siła z realnych kadłubów) · widelec księgowania bez trzeciej cichej
+ścieżki · doktryny, które mają czym dysponować.
+
+<details><summary>archiwum: oryginalny blok startowy W1 (wykonany)</summary>
 
 **Start:** od **W1-0** wg dziewięciu commitów z §Commit plan. Kolejność wiążąca, decyzje podpisane —
 **bez ponownej dyskusji**. Zatrzymanie na każdym etapie gotowym do gate'u.
@@ -32,6 +43,12 @@ i diffuj `payload.matrix.cells`, nie plik (`seeds[].series`/`panel` są zależne
 **Stałe reguły skryptów gate'ów** — §Verification (live gates) niżej; obowiązują wszystkie, każda
 kupiona błędem. W szczególności: one-linery **WYKONANE na żywym silniku** przed wpisaniem do
 checklisty, i **nigdy** gate równolegle z pracą CC.
+
+</details>
+
+⚠ **Reguły z powyższego archiwum ZOSTAJĄ WIĄŻĄCE dla W2** — V19 (baseline BALANS na bok przed
+pierwszym przebiegiem), one-linery wykonane na żywym silniku przed wpisaniem do checklisty, gate
+nigdy równolegle z pracą CC. Każda z nich została w W1 kupiona błędem po raz kolejny.
 
 ---
 

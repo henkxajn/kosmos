@@ -192,10 +192,37 @@ deletion. Gate: threat numbers visible and sane in a live game; a border skirmis
 produces tension not exhaustion; doctrines observable (home garrison holds, border
 patrol moves).
 
+> ## ⟶ HANDOVER W2 — czytaj to PIERWSZE w świeżej sesji (2026-08-14)
+>
+> **W1 ZAMKNIĘTY** (trzy gate'y zdane, 13 commitów `ee189ba` → `566de0c`, v100 bez migracji).
+> **W2 = model rozmieszczenia wg P4. Następny artefakt to DOKUMENT PLANU, NIE KOD.** Kolejność:
+> **(a)** odbierz **trzy orzeczenia właściciela** (przychodzą w prompcie startowym) — utrzymanie
+> okrętów w magazynie · czas rozmieszczenia · los załogi przy stracie okrętu; **(b)** audyt szwów
+> modelu rozmieszczenia: stan okrętu (magazyn/rozmieszczony) · ścieżka wyjścia ze stoczni · haki
+> utrzymania · księgowanie załogi · szew decyzji mobilizacyjnej AI (`ThreatAssessment` **żyje** od
+> W1) · widoczność floty magazynowej dla intelu · **BUMP ZAPISU** — W2 to prawdopodobnie pierwszy
+> bump od v100, obowiązuje playbook migracji z D1 (ścieżka kopii przedmigracyjnej istnieje od
+> `0b9328d`); **bump zaplanuj JAWNIE, żadnych zmian schematu przy okazji**; **(c)** szkic
+> `W2_PLAN.md` w stylu domu (**po angielsku** — konwencja językowa łańcucha war-backbone), potem
+> **STOP do przeglądu**. Wiążące dalej: V19 (baseline BALANS na bok przed pierwszym przebiegiem),
+> one-linery wykonane na żywym silniku przed wpisaniem do checklisty, gate nigdy równolegle z CC.
+> ⚠ **Przesłanki, które się przesunęły:** pełne kolonie AI ok. **civYear 303–353** (było ~456) oraz
+> **0 outpostów** w oknie sondy S2 — obie liczby do pliku ponownego pomiaru R-2. ⚠ Zapis właściciela
+> ze spiralą śmierci utrzymania floty (za dużo okrętów, ujemne kredyty) jest **zgłoszonym przypadkiem
+> regresyjnym ekonomii dla W2**.
+
 **W2 — the deploy model (P4).** Build/storage/deploy for player and AI, crew at
 deploy, production upgrades for war commodities, mobilization visibility for
-intel. Own plan doc with the three open P4 questions; own gate; likely save
-version bump (stored-fleet state) — first bump since v100, plan the migration.
+intel. Own plan doc; own gate; likely save version bump (stored-fleet state) —
+first bump since v100, plan the migration.
+
+**⚠ The three P4 questions, unresolved and blocking the W2 plan** (proposals attached
+at §2 P4; the owner rules on each before the plan can close):
+1. **Maintenance cost of stored ships** — proposal: fractional upkeep.
+2. **Deploy duration** — proposal: short but nonzero, giving an intel-visible
+   mobilization window.
+3. **Crew fate on ship loss** — proposal: crew dies, making POP a real war cost
+   and tying the deploy model into Population 2.0.
 
 **W3+ — offensive AI & territorial peace (recorded P1 intent + owner ruling
 2026-08-13):** target selection, capital strikes, invasion; space-combat depth;
