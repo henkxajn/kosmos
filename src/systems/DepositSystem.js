@@ -115,6 +115,49 @@ export class DepositSystem {
     return true;
   }
 
+  // ── Gwarantowane złoże startowe (W2-1b, orzeczenie właściciela 2026-08-15) ───────────────
+  //
+  // NADAJE złoże NIEZALEŻNIE od `composition` — i to jest cała różnica wobec
+  // `ensureResourceDeposit`, które respektuje próg rarity i dlatego NIE POMOŻE ciału, które
+  // po prostu nie ma danego pierwiastka. To nie jest backfill, tylko HANDICAP STARTOWY tej
+  // samej klasy co żeton stacji (R-3), darmowe budynki i `startingTechs`: warunki, których
+  // AI nie umie sobie samo zapewnić, przyznane przy narodzinach.
+  //
+  // Idempotentne (drugie wywołanie nic nie zmienia) i w PEŁNI deterministyczne — zero PRNG,
+  // więc GALAXY_SEED nie jest konsumowany i baseline'y BALANS zostają bit w bit.
+  // Podnosi ISTNIEJĄCE złoże do minimum zamiast dokładać drugie: `mineDeposits` kopie
+  // wszystkie złoża ciała proporcjonalnie, więc duplikat rozjechałby stawkę wydobycia.
+  //
+  // @returns {'created'|'raised'|'unchanged'}
+  ensureMinimumDeposit(entity, resourceId, minTotal, minRichness) {
+    if (!entity || !resourceId || !(minTotal > 0)) return 'unchanged';
+    if (!Array.isArray(entity.deposits)) entity.deposits = [];
+
+    const existing = entity.deposits.find(d => d.resourceId === resourceId);
+    if (!existing) {
+      entity.deposits.push({
+        resourceId,
+        richness:    minRichness,
+        totalAmount: minTotal,
+        remaining:   minTotal,
+      });
+      return 'created';
+    }
+
+    // Złoże jest, ale ubogie — podnieś OBA wymiary. `remaining` rośnie o dokładnie tyle,
+    // o ile rośnie `totalAmount`, żeby zachować stosunek wyczerpania (mnożnik `remaining/total`
+    // w `mineDeposits` opisuje ZUŻYCIE złoża — dosypanie nie może udawać, że go nie było).
+    let changed = false;
+    if (existing.totalAmount < minTotal) {
+      const delta = minTotal - existing.totalAmount;
+      existing.totalAmount = minTotal;
+      existing.remaining   = (existing.remaining ?? 0) + delta;
+      changed = true;
+    }
+    if ((existing.richness ?? 0) < minRichness) { existing.richness = minRichness; changed = true; }
+    return changed ? 'raised' : 'unchanged';
+  }
+
   // ── Wydobycie z jednej kopalni (wywoływane per tick) ──────────────────────
   // deposits: tablica złóż ciała niebieskiego
   // mineLevel: poziom kopalni (1–10)

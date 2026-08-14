@@ -25,6 +25,7 @@ import { TechSystem } from './TechSystem.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
+import { DepositSystem } from './DepositSystem.js';
 
 // Bazowy próg safety stock per tier (musi pasować do FactorySystem.getSafetyStockTarget).
 // Bonus = target - base, aplikowany przez setDemandBonus.
@@ -32,6 +33,11 @@ const SAFETY_STOCK_BASE_TIER12 = 3;
 const SAFETY_STOCK_BASE_TIER35 = 1;
 
 export class EmpireColonyBootstrap {
+
+  // W2-1b — gwarantowane złoże Ti na ciele macierzystym AI. Pełne uzasadnienie i rachunek
+  // przy wywołaniu (`ensureMinimumDeposit`, krok 2c). Balans TYLKO tutaj.
+  static GUARANTEED_TI_TOTAL    = 8000;   // jednostek surowca (zmierzone spalanie + ~20 kadłubów)
+  static GUARANTEED_TI_RICHNESS = 0.5;    // 0.1 = podłoga formuły; richness skaluje WYDOBYCIE
 
   /**
    * Tworzy realną kolonię (typu Colony) dla imperium AI.
@@ -96,8 +102,49 @@ export class EmpireColonyBootstrap {
     //     _pickHomePlanet bierze pierwszą rocky DOWOLNEJ atmosfery; na non-breathable
     //     home AI utykał — CivilizationSystem._updatePopGrowth hard-stopuje wzrost gdy
     //     !canLiveOutside i pop≥housing → freeze 8→8→8. Reuse mechanizmu gracza.
-    //     Gwarancja Ti (composition) celowo POMINIĘTA — osobna decyzja (raport S3.1b).
     SystemGenerator.makeHomeworldBreathable(homePlanet);
+
+    // 2c. W2-1b — GWARANTOWANE ZŁOŻE Ti (orzeczenie właściciela 2026-08-15).
+    //     Domyka decyzję odłożoną w S3.1b („Gwarancja Ti celowo POMINIĘTA — osobna decyzja").
+    //     Ta sama klasa co żeton stacji R-3: warunek, którego AI nie zapewni sobie samo.
+    //
+    //     PO CO: bez Ti łańcuch towarów wojennych (W2-1) kończy się ślepo. Zmierzone
+    //     na 1200 civY (= 100 lat wyświetlanych, oba imperia): emp_001 dostał złoże Ti
+    //     total=1399 przy richness 0.1 (podłoga formuły) i ZJADŁ 1397 na zwykły rozwój
+    //     cywilny — na okręty nie zostało nic; emp_002 NIE MIAŁ złoża Ti W OGÓLE.
+    //     Trasa kurierska Ti istnieje od S3.3b-S1, ale głoduje na niedoborze outpostów
+    //     (`W1_PLAN.md` §Findings filed 1) — więc dane same nie wystarczą.
+    //
+    //     SKĄD LICZBY (rachunek w commicie W2-1b):
+    //       • 211 Ti na fregatę wg szablonu AI (kadłub+moduły 75 + reactive_armor 16×7=112
+    //         + propulsion_systems 2×6=12 + metamaterials 2×6=12),
+    //       • ~20 kadłubów na kampanię (flota stała + odtwarzanie) = 4220 Ti,
+    //       • zmierzone spalanie cywilne 1397 Ti / 100 lat wyświetlanych → ~2800 Ti na 200 lat,
+    //       • razem ≈ 7000 → 8000 z zapasem.
+    //     richness 0.5 (nie 0.1): `mineDeposits` skaluje WYDOBYCIE richnessem, więc przy
+    //     podłodze AI wydobywa ~14 Ti/rok = 15 lat na jeden okręt. Przy 0.5 to ~3 lata.
+    //     Skala jest w granicach generatora (richness 1.0 daje 10000–15000) — to bogaty
+    //     świat tytanowy, nie fantazja.
+    //
+    //     ⚠ To kupuje HORYZONT PEŁNEJ KAMPANII, nie wieczność: gwarantowane złoże też się
+    //       wyczerpuje (emp_001 zjadł swoje w 100 lat). Odnawianie podaży przez outposty
+    //       i ekspansję ZOSTAJE pozycją BALANS — patrz `W1_PLAN.md` §Findings filed 1.
+    //     ⚠ TYLKO NOWE GRY i TYLKO ciała AI: bootstrap nie biegnie przy wczytaniu zapisu
+    //       (precedens R-3 i jego znana konsekwencja), a ciała gracza nie są tu dotykane —
+    //       bilans startowy gracza to osobny, zaprojektowany byt.
+    //     ⚠ `DepositSystem` NIE JEST usługą na `window.KOSMOS` — w całym repo powstaje
+    //       LOKALNIE (`new DepositSystem()` w SystemGenerator ×3 i GameScene). Pierwsza wersja
+    //       tego kroku sięgała po `window.KOSMOS?.depositSystem` i przez `?.` MILCZĄCO nic nie
+    //       robiła: pomiar wyszedł identyczny jak przed zmianą. Dokładnie ta klasa cichego
+    //       no-opa, którą zakazuje reguła głośnej awarii (audyt R12) — stąd konstrukcja lokalna
+    //       i brak `?.` na wywołaniu.
+    const how = new DepositSystem().ensureMinimumDeposit(
+      homePlanet, 'Ti', EmpireColonyBootstrap.GUARANTEED_TI_TOTAL, EmpireColonyBootstrap.GUARANTEED_TI_RICHNESS,
+    );
+    if (how !== 'unchanged') {
+      console.log(`[EmpireBootstrap] gwarancja Ti (${how}) na ${homePlanet.name}: `
+        + `total=${EmpireColonyBootstrap.GUARANTEED_TI_TOTAL}, richness=${EmpireColonyBootstrap.GUARANTEED_TI_RICHNESS}`);
+    }
 
     // 3. Utwórz kolonię na REALNEJ planecie (positional signature ColonyManager).
     //    startPop=0 — POPy dodamy ręcznie per stratum poniżej.
