@@ -282,7 +282,40 @@ export function createVessel(shipId, colonyId, opts = {}) {
     // Reactive mirror — authoritative: Fleet.memberIds[]. Ustawiane wyłącznie
     // przez FleetSystem.addMember/removeMember; ZAKAZ ręcznej mutacji.
     fleetId: null,
+
+    // ── W2 — model rozmieszczenia (deploy model, WOJNA I POKÓJ 1.0 P4) ────
+    // Kadłub istnieje przemysłowo od chwili zejścia ze stoczni, ale W SŁUŻBIE jest
+    // dopiero po obsadzeniu załogą. Trzy stany, jedna oś:
+    //   'active'     — w służbie (JEDYNY stan, w którym okręt walczy/patroluje/leci na misję)
+    //   'stored'     — rezerwa: istnieje, kosztuje ułamek utrzymania, nie robi NIC
+    //   'mobilizing' — w trakcie obsadzania (R-B: jeden miesiąc wyświetlany = 1.0 civYear)
+    // ⚠ DOMYŚLNIE 'active': każdy statek powstały poza stocznią (materializer, sonda
+    //   pierwszego kontaktu, spawnery debugowe, migracja legacy fleet) zachowuje się
+    //   dokładnie jak przed W2. Magazyn nadają WYŁĄCZNIE dwa szwy stoczni.
+    // ⚠ `opts.serviceState` czytane JAWNIE: fabryka buduje literał pole po polu, więc opcja
+    //   nieprzepisana tutaj zostałaby po cichu zignorowana — dokładnie tak zachowały się
+    //   oba szwy stoczni, zanim ta linia powstała (keeper T1 złapał to na czerwono).
+    serviceState:     opts.serviceState ?? 'active',
+    mobilizeProgress: 0,      // civYears; liczone tylko w 'mobilizing'
+    // Ile POP trzyma TEN kadłub. Autorytatywny zapis załogi — `_lockedPerStrata` kolonii
+    // jest anonimowym workiem bez odnośnika do statku, więc nie da się z niego odtworzyć,
+    // czyja to załoga (audyt W2 §C-4). Wypełniane dopiero w W2-4 (deploy).
+    crewLocked:       0,
   };
+}
+
+/**
+ * Czy kadłub jest W SŁUŻBIE (W2). Jedno źródło prawdy dla ~10 konsumentów rejestru —
+ * inaczej każdy z nich testowałby `serviceState` po swojemu i rozjechałyby się tak,
+ * jak rozjechały się trzy predykaty uzbrojenia (W1 §Findings filed 2).
+ *
+ * `mobilizing` NIE jest służbą: okręt w trakcie obsadzania nie walczy, nie patroluje
+ * i nie przyjmuje misji — dopiero ukończona mobilizacja przełącza go na 'active'.
+ * Brak pola (stary save, statek spoza stoczni) czyta się jako SŁUŻBĘ — zachowanie
+ * sprzed W2, ta sama konwencja co `?? 'active'` w restore.
+ */
+export function isInService(vessel) {
+  return (vessel?.serviceState ?? 'active') === 'active';
 }
 
 // ── Metody operujące na instancji vessel ─────────────────────────────────────

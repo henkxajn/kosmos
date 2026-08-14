@@ -31,7 +31,7 @@ import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { CB_MEMORY_WINDOW } from '../data/OpinionModifierData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
+import { isEnemyVessel, hasWeapons, isInService } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
 // W1-4b — WYCZERPANIE JEST ASYMETRYCZNE, zależnie od WYNIKU bitwy (orzeczenie właściciela).
@@ -514,7 +514,10 @@ export class WarSystem {
     // obrony gracza. Wraki też wykluczone (nie walczą — są zniszczone).
     const vessels = vMgr?._vessels
       ? Array.from(vMgr._vessels.values()).filter(v =>
-          v.systemId === systemId && !isEnemyVessel(v) && !v.isWreck
+          // W2 — okręt w REZERWIE nie broni układu. Bez tego filtra magazyn nie kosztuje
+          // NIC (sześć fregat w rezerwie broniłoby układu tak samo jak sześć w służbie)
+          // i cały slice byłby kosmetyczny — audyt W2 §C-6.
+          v.systemId === systemId && !isEnemyVessel(v) && !v.isWreck && isInService(v)
         )
       : [];
 

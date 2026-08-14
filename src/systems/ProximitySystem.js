@@ -28,6 +28,7 @@
 // IntelSystem) sam decyduje co z tym zrobić. Rozdzielenie odpowiedzialności
 // ułatwia przyszłe use-cases (rally accumulation, escort hand-off).
 
+import { isInService } from '../entities/Vessel.js';
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
@@ -70,6 +71,10 @@ export function pairKey(idA, idB) {
  */
 function _isValidForProximity(v) {
   if (!v || v.isWreck) return false;
+  // W2 — kadłub w REZERWIE nie uczestniczy w detekcji: nie wykrywa i nie jest wykrywany.
+  // Poza oszczędnością budżetu par (500/tik) to jest wymóg PROJEKTU: magazyn ma być
+  // widoczny jako POTENCJAŁ przez wywiad, a nie jako kontakt sensoryczny.
+  if (!isInService(v)) return false;
   const p = v.position;
   if (!p) return false;
   if (typeof p.x !== 'number' || typeof p.y !== 'number') return false;

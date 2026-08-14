@@ -36,7 +36,7 @@ import EventBus from '../../core/EventBus.js';
 import gameState from '../../core/GameState.js';
 import EntityManager from '../../core/EntityManager.js';
 import { DirectorProbes, DirectorGuards, DirectorActions } from './DirectorRegistry.js';
-import { isEnemyVessel, hasWeapons } from '../../entities/Vessel.js';
+import { isEnemyVessel, hasWeapons, isInService } from '../../entities/Vessel.js';
 
 /** Ile promienia orbity zewnętrznej bierzemy na pierścień patrolu (1.0 = po orbicie skrajnej). */
 const PATROL_RING_FACTOR = 0.9;
@@ -249,6 +249,12 @@ export class DirectorDoctrine {
       if (!isEnemyVessel(v)) continue;                       // tylko okręty AI
       if ((v.ownerEmpireId ?? v.owner) !== empireId) continue;
       if (!hasWeapons(v)) continue;                          // doktryny są dla okrętów BOJOWYCH
+      // W2 — okręt w REZERWIE nie dostaje doktryny. Bez tego filtra świeżo zbudowany
+      // kadłub byłby wcielany do garnizonu/patrolu w tym samym roku, w którym zszedł
+      // ze stoczni — a magazyn ma być WYBOREM gracza/AI, nie stanem przejściowym.
+      // ⚠ Ta sama funkcja jest sondą TRIGGERA reguły (`countIdleArmedAtCapital`), więc
+      //   filtr działa jednocześnie na „ile jest gotowych" i „kogo wcielić" (audyt §C-2).
+      if (!isInService(v)) continue;
       if (v.position?.dockedAt !== capitalId) continue;      // stan z V15: zadokowany przy stolicy
       if (v.mission) continue;                               // ma zajęcie
       if (v.movementOrder) continue;                         // już pod rozkazem

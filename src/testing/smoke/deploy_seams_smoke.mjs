@@ -16,12 +16,19 @@
 //    i zostać ŚWIADOMIE ODWRÓCONE w kolejnych commitach — to jest dowód fail-first, nie regresja:
 //      T1 → W2-4 (budowa przestaje pobierać POP; koszt przenosi się na rozmieszczenie)
 //      T2 → W2-4 (znika asymetria `StationSystem.js:331` — gracz PIERWSZY RAZ płaci POP)
-//      T3 → W2-2 (okręt w magazynie wypada z puli doktryn)
-//      T5 → W2-2 (okręt w magazynie nie trafia do jednostki bitwy)
+//      T3 → W2-2 ROZSZERZONE, nie odwrócone (patrz niżej)
+//      T5 → W2-2 ROZSZERZONE, nie odwrócone (patrz niżej)
 //    T4 zostaje jako pin PRZECIEKU do W2-4, gdzie R-C zamienia go w jawne obciążenie.
 //    T6 zostaje NIETKNIĘTY przez cały slice — to scenariusz regresyjny zgłoszony przez
 //    właściciela (`W1_PLAN.md` §Results), a W2-5 dokłada do niego tylko stawkę rezerwy.
 //    Wzór „pin luki z instrukcją, kiedy go odwrócić": `director_seams_smoke` T6.
+//
+// ⚠ KOREKTA PO W2-2: T3 i T5 przewidywano jako ODWRÓCENIA — i to była nieścisłość.
+//    Oba pinują kadłuby stawiane RĘCZNIE (`createVessel`), a te mają `serviceState:'active'`
+//    z domysłu, więc po W2-2 dalej (słusznie!) walczą i dalej kwalifikują się do doktryn.
+//    Zmienia się co innego: kadłub w REZERWIE jest z obu pul wykluczony. Zamiast udawać
+//    odwrócenie, oba testy zostały ROZSZERZONE o przypadek `serviceState:'stored'` —
+//    stara asercja jest teraz KONTROLĄ PINU dla nowej.
 //
 // ⚠ Harness NIE montuje ani `stationSystem`, ani Directora (`GameCore` konstruuje 46 systemów,
 //    żadnego z tych dwóch), więc obie powierzchnie stawiamy tu RĘCZNIE — wzór wpięcia stacji
@@ -191,6 +198,17 @@ console.log('T3 — C-2: pula doktryn NIE zna pojęcia „magazyn" (dziś bierze
       `T3: doktryna WIDZI świeżo zbudowany kadłub jako gotowy do służby ` +
       `(${doctrine.countIdleArmedAtCapital(empireId)}) — W2-2 MA to odwrócić`);
 
+    // W2-2 — TEN SAM kadłub przełożony do REZERWY wypada z puli doktryn.
+    v.serviceState = 'stored';
+    assert(doctrine.countIdleArmedAtCapital(empireId) === 0,
+      'T3/W2-2: kadłub w REZERWIE NIE kwalifikuje się do doktryny (nie patroluje)');
+    v.serviceState = 'mobilizing';
+    assert(doctrine.countIdleArmedAtCapital(empireId) === 0,
+      'T3/W2-2: kadłub W TRAKCIE MOBILIZACJI też nie — służbą jest dopiero `active`');
+    v.serviceState = 'active';
+    assert(doctrine.countIdleArmedAtCapital(empireId) === 1,
+      'T3/W2-2: powrót do służby przywraca kwalifikację (filtr jest odwracalny, nie jednokierunkowy)');
+
     // KONTROLA PINU: bez uzbrojenia pula jest pusta ⇒ pin mierzy pulę doktryn,
     // a nie samą obecność statku w rejestrze.
     v.modules = ['engine_ion', 'armor_standard'];
@@ -257,6 +275,13 @@ console.log('T5 — C-6: `_buildPlayerBattleUnit` nie filtruje stanu — zadokow
   assert((after?.hp ?? 0) > hpBefore,
     `T5: ZADOKOWANY kadłub podniósł siłę obrony gracza (${hpBefore} → ${after?.hp ?? 0}) — ` +
     'W2-2 MA to odwrócić, inaczej magazyn nic nie kosztuje i cały slice jest kosmetyczny');
+
+  // W2-2 — TEN SAM kadłub w REZERWIE nie wzmacnia obrony układu.
+  v.serviceState = 'stored';
+  const stored = war._buildPlayerBattleUnit(sysId);
+  assert((stored?.hp ?? 0) === hpBefore,
+    `T5/W2-2: kadłub w REZERWIE NIE broni układu (${stored?.hp ?? 0} = stan bez niego ${hpBefore})`);
+  v.serviceState = 'active';
 
   // KONTROLA PINU: wrak w tym samym stanie NIE liczy się ⇒ pin mierzy filtr, nie samą sumę.
   v.isWreck = true;

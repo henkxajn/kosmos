@@ -521,6 +521,7 @@ export class StationSystem {
       x: body?.x ?? station.x,
       y: body?.y ?? station.y,
       modules,   // moduły projektu → colonistCapacity/staty (parytet ze stocznią kolonijną)
+      serviceState: 'stored',   // W2 — SZEW MAGAZYNU 2/2 (patrz VesselManager._onShipCompleted)
     });
     if (!vessel) return;
     vMgr.dockAtStation?.(vessel.id, station.id);   // port uniwersalny (nie zmienia vessel.colonyId)

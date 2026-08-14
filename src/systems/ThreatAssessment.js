@@ -29,7 +29,7 @@ import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { COMBAT_VALUE_WEIGHTS } from '../data/CombatValueData.js';
 import { aggregateCombatValue, vesselCombatValue, relativePowerRaw } from '../utils/ThreatMath.js';
-import { isEnemyVessel } from '../entities/Vessel.js';
+import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 
 /** Klucz gracza w indeksie. Statki gracza NIE mają stempla właściciela (`ownerEmpireId`
  *  undefined) — `isEnemyVessel` jest testem STEMPLA, więc brak stempla = gracz. */
@@ -37,8 +37,10 @@ export const PLAYER_OWNER_ID = 'player';
 
 export class ThreatAssessment {
   constructor() {
-    /** @type {Map<string, number>} ownerId → wartość bojowa (jednostka HP) */
+    /** @type {Map<string, number>} ownerId → SIŁA: wartość bojowa kadłubów W SŁUŻBIE (jednostka HP) */
     this._values = new Map();
+    /** @type {Map<string, number>} ownerId → POTENCJAŁ: wszystkie kadłuby, także rezerwa */
+    this._potential = new Map();
     this._dirty = true;
 
     this._onInvalidate = () => { this._dirty = true; };
@@ -54,6 +56,7 @@ export class ThreatAssessment {
   dispose() {
     for (const ev of this._events) EventBus.off(ev, this._onInvalidate);
     this._values.clear();
+    this._potential.clear();
   }
 
   // ── Odczyt ────────────────────────────────────────────────────────────────────────────────
@@ -65,6 +68,30 @@ export class ThreatAssessment {
   getStrength(ownerId) {
     this._ensure();
     return this._values.get(ownerId) ?? 0;
+  }
+
+  /**
+   * POTENCJAŁ — wartość bojowa WSZYSTKICH kadłubów właściciela, także tych w rezerwie (W2).
+   *
+   * Rozdział `siła` / `potencjał` jest mechaniczną formą zdania projektowego: **magazyn to
+   * potencjał, nie siła**. `getStrength` (tylko służba) karmi DECYZJE — milRatio obcych,
+   * `relative_power` w akceptacji dyplomatycznej, doktryny. `getPotentialStrength` karmi
+   * OBRAZ — wywiad i UI, gdzie „mają sześć fregat, załogę na trzy" jest właśnie tą różnicą.
+   *
+   * ⚠ Zmiana `getStrength` na „tylko służba" NIE jest neutralną księgowością: mianownik
+   *   milRatio ma podłogę (`PLAYER_DEFENSE_BASELINE_HP`), a licznik nie, więc wykluczenie
+   *   rezerwy działa ASYMETRYCZNIE — studzi agresję AI (audyt W2 §S11). Ciągłość na wczytaniu
+   *   zapewnia domyślne `serviceState:'active'`: stary save nie ma rezerwy, więc obie liczby
+   *   startują RÓWNE i rozjeżdżają się dopiero, gdy nowe kadłuby trafiają do magazynu.
+   */
+  getPotentialStrength(ownerId) {
+    this._ensure();
+    return this._potential.get(ownerId) ?? 0;
+  }
+
+  /** Sama REZERWA (potencjał − siła) — czytelne wprost dla wywiadu/UI. */
+  getReserveStrength(ownerId) {
+    return Math.max(0, this.getPotentialStrength(ownerId) - this.getStrength(ownerId));
   }
 
   /** Skrót — siła gracza. */
@@ -100,21 +127,30 @@ export class ThreatAssessment {
 
   _recompute() {
     this._values.clear();
+    this._potential.clear();
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr?._vessels) return;      // brak rejestru = brak floty; 0 dla każdego pytającego
 
-    /** @type {Map<string, object[]>} */
-    const byOwner = new Map();
+    /** @type {Map<string, object[]>} kadłuby W SŁUŻBIE */
+    const inService = new Map();
+    /** @type {Map<string, object[]>} WSZYSTKIE kadłuby (służba + rezerwa) */
+    const allHulls  = new Map();
     for (const v of vMgr._vessels.values()) {
       if (!v || v.isWreck) continue;                 // wrak nie jest siłą bojową
       const owner = this._ownerOf(v);
       if (!owner) continue;
-      if (!byOwner.has(owner)) byOwner.set(owner, []);
-      byOwner.get(owner).push(v);
+      if (!allHulls.has(owner)) allHulls.set(owner, []);
+      allHulls.get(owner).push(v);
+      if (!isInService(v)) continue;                 // W2 — rezerwa liczy się tylko do POTENCJAŁU
+      if (!inService.has(owner)) inService.set(owner, []);
+      inService.get(owner).push(v);
     }
 
-    for (const [owner, vessels] of byOwner) {
+    for (const [owner, vessels] of inService) {
       this._values.set(owner, aggregateCombatValue(vessels, HULLS, SHIP_MODULES, COMBAT_VALUE_WEIGHTS));
+    }
+    for (const [owner, vessels] of allHulls) {
+      this._potential.set(owner, aggregateCombatValue(vessels, HULLS, SHIP_MODULES, COMBAT_VALUE_WEIGHTS));
     }
   }
 

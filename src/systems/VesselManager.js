@@ -35,7 +35,7 @@ import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
   addMissionLog, getEnduranceDefaults, isEnemyVessel,
-  consumeWarpFuel, needsWarpRefuel, refuelWarp, canJump, canColonize,
+  consumeWarpFuel, needsWarpRefuel, refuelWarp, canJump, canColonize, isInService,
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -261,6 +261,10 @@ export class VesselManager {
   getAvailable(colonyId, shipId = null) {
     const docked = this.getVesselsAt(colonyId);
     return docked.filter(v => {
+      // W2 — kadłub w REZERWIE jest zadokowany i bezczynny, więc bez tego filtra
+      // KAŻDA ścieżka doboru statku (misje, ekspedycje, kolonizacja, warp) wciągałaby
+      // go tak samo jak okręt w służbie. Magazyn musi być niewidoczny dla doboru.
+      if (!isInService(v)) return false;
       if (v.status !== 'idle') return false;
       if (shipId && v.shipId !== shipId) return false;
       return true;
@@ -359,6 +363,7 @@ export class VesselManager {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
     // Pozwól statkom tankującym na misję (przerwij tankowanie)
+    if (!isInService(vessel)) return false;   // W2 — rezerwa nie wychodzi na misję
     if ((vessel.status !== 'idle' && vessel.status !== 'refueling') || vessel.position.state !== 'docked') return false;
 
     // Zastosuj fuel efficiency z tech (np. plasma_drives -30% zużycie)
@@ -1197,6 +1202,11 @@ export class VesselManager {
         // Slice C — pendingOrder: druga noga rozkazu composite (dostawa po warp).
         //   OrderService._maybeDeliver odczytuje to po warpRoute:completed/interstellar:arrived.
         pendingOrder:   v.pendingOrder ? { ...v.pendingOrder } : null,
+        // W2 (v101) — model rozmieszczenia. Ta lista jest BIAŁĄ LISTĄ: pole pominięte tutaj
+        //   albo w `restore` znika po cichu, bez ostrzeżenia (audyt W2 §S3).
+        serviceState:     v.serviceState ?? 'active',
+        mobilizeProgress: v.mobilizeProgress ?? 0,
+        crewLocked:       v.crewLocked ?? 0,
       });
     }
     return {
@@ -1324,6 +1334,11 @@ export class VesselManager {
         } : null,
         // Slice C — pendingOrder (druga noga composite); null gdy brak/stary save.
         pendingOrder:   vd.pendingOrder ? { ...vd.pendingOrder } : null,
+        // W2 (v101) — `?? 'active'` NIE jest tylko defensywą: to kontrakt zgodności.
+        //   Zapis sprzed v101 nie ma tych pól, a każdy jego statek BYŁ w służbie.
+        serviceState:     vd.serviceState ?? 'active',
+        mobilizeProgress: vd.mobilizeProgress ?? 0,
+        crewLocked:       vd.crewLocked ?? 0,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {
@@ -1423,7 +1438,11 @@ export class VesselManager {
    * Statek ukończony w Stoczni — stwórz vessel instance.
    */
   _onShipCompleted(planetId, shipId, modules = []) {
-    const vessel = this.createAndRegister(shipId, planetId, { modules });
+    // W2 — SZEW MAGAZYNU 1/2 (stocznia kolonijna). Kadłub schodzi z pochylni do REZERWY,
+    // nie do służby: `serviceState:'stored'`. Drugi szew to `StationSystem._spawnStationShip`
+    // (stocznia orbitalna) — obu potrzeba, bo okręty wojenne GRACZA nie przechodzą tędy
+    // w ogóle (gating kadłubów S3.4d), a okręty AI przechodzą TYLKO tędy.
+    const vessel = this.createAndRegister(shipId, planetId, { modules, serviceState: 'stored' });
     // Dodaj vessel ID do colony.fleet (przez ColonyManager)
     const colMgr = window.KOSMOS?.colonyManager;
     const colony = colMgr?.getColony(planetId);

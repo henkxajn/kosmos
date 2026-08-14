@@ -18,7 +18,7 @@ import EntityManager from '../core/EntityManager.js';
 import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { isEnemyVessel } from '../entities/Vessel.js';
+import { isEnemyVessel, isInService } from '../entities/Vessel.js';
 
 // Okno czasu (ms realnych) na dołączenie kolejnych wrogów do tej samej bitwy.
 // Jeśli wrogi vessel #A przyleci, a w ciągu BATTLE_BATCH_WINDOW_MS dotrze #B
@@ -328,6 +328,10 @@ export class EnemyAttackHandler {
     for (const v of vMgr._vessels.values()) {
       if (isEnemyVessel(v)) continue;
       if (v.isWreck)         continue;
+      // W2 — okręt w REZERWIE nie ginie razem z flotą operacyjną. Pod R-C (załoga ginie
+      // ze statkiem) brak tego filtra zamieniłby upadek układu w masową śmierć załóg,
+      // których tam nie było — magazyn z definicji nie jest obsadzony.
+      if (!isInService(v)) continue;
       if ((v.systemId ?? 'sys_home') !== systemId) continue;
       this._turnIntoWreck(v, v.position?.dockedAt ?? null, year);
     }

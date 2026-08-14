@@ -27,7 +27,7 @@
 
 import EventBus                       from '../core/EventBus.js';
 import { GAME_CONFIG }                from '../config/GameConfig.js';
-import { isEnemyVessel, loadCargo }   from '../entities/Vessel.js';
+import { isEnemyVessel, loadCargo, isInService } from '../entities/Vessel.js';
 import { COMMODITIES }                from '../data/CommoditiesData.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 
@@ -506,6 +506,7 @@ export class TransportOrderSystem {
       if (assigned.has(id)) continue;
       const v = vm.getVessel(id);
       if (!v || isEnemyVessel(v) || v.isWreck) continue;
+      if (!isInService(v)) continue;                    // W2 — rezerwa nie wozi ładunku
       if (v.position?.state !== 'docked') continue;
       if (v.status !== 'idle' && v.status !== 'refueling') continue;   // 'refueling' = dostępny (mirror dispatchOnMission)
       if (v.mission) continue;
