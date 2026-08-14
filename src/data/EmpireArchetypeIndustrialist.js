@@ -191,6 +191,23 @@ export const INDUSTRIALIST = {
     'quantum_physics',       // Fizyka Kwantowa (req nuclear_power ✓ + data_networks ✓)
     'warp_theory',           // Teoria Osnowy (req ion_drives + quantum_physics)
     'warp_drive',            // Napęd Skokowy (req warp_theory) — odblokowuje hasWarp
+    // ── W2-1: łańcuch TOWARÓW WOJENNYCH (WOJNA I POKÓJ 1.0, workstream B) ────────
+    // PO CO: `metamaterials` (requiresTech `exotic_materials`) siedzi w `commodityCost`
+    // modułu `armor_heavy`, a ten jest w KAŻDYM z trzech szablonów okrętów wojennych
+    // (ShipTemplateData). Bez tego techu żadne imperium AI nie kończy ŻADNEGO okrętu:
+    // resolver moduł WYBIERA (jego `requires` to `point_defense`, nie `exotic_materials`),
+    // więc zlecenie nie pada głośno — po cichu parkuje w `pendingShipOrders` aż zmiecie
+    // je TTL Directora. Zmierzone wykonaniem, audyt W2 §C-5.
+    // ⚠ DOKLEJONE NA KOŃCU, nie wstawione przed blok warp — świadomie. Przesunięcie
+    //   `warp_*` w dół opóźniłoby ekspansję cross-system, a oś czasu ekspansji AI jest
+    //   PRZESŁANKĄ ponownego pomiaru R-2 (`WAR_BACKBONE` §6 HANDOVER). Towary wojenne
+    //   przychodzą więc PÓŹNO — i to jest cena, którą świadomie płacimy za nietykanie
+    //   liczby, na której stoi inny otwarty pomiar.
+    'advanced_mining',       // Zaawansowane Górnictwo (root, requires []) — prereq deep_drilling
+    'deep_drilling',         // Głębokie Wiercenia (req advanced_mining)
+    'space_mining',          // Górnictwo Kosmiczne (req rocketry ✓ + deep_drilling)
+    'exotic_materials',      // Materiały Egzotyczne (req advanced_materials ✓ idx3 + space_mining)
+                             //   → odblokowuje recepturę `metamaterials` (Ti 6, Hv 5, Xe 2, Si 4)
   ],
 
   // Startowe surowce — deponowane do colony.resourceSystem.inventory.

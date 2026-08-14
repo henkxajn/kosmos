@@ -62,7 +62,16 @@ const DEFAULT_LOGISTICS_CONFIG = {
   couriersPerRoute:      2,
   cargoModule:           'cargo_small',
   minFreePopsForCourier: 0.05,
-  strategicDeposits:     ['Xe', 'Nt', 'Ti'],   // S3.3b-S1: Ti dodany — outposty Ti dostają trasę (Ti i tak wożony rare-first)
+  // S3.3b-S1: Ti dodany — outposty Ti dostają trasę (Ti i tak wożony rare-first).
+  // W2-1 (orzeczenie właściciela 2026-08-15): Hv dodany TYM SAMYM wzorcem. `metamaterials`
+  //   (Ti 6, Hv 5, Xe 2, Si 4) to jedyny towar wojenny, który W2 czyni realnym dla AI —
+  //   a Hv NIE MIAŁO ŻADNEJ ścieżki pozyskania: brak w `startingResources` OBU archetypów
+  //   i brak w tej liście, więc nawet nie-bramkowany technologicznie `reactive_armor`
+  //   (Ti 7, Fe 5, Hv 3) był zablokowany surowcowo. Zmierzone wykonaniem, audyt W2 §S15.
+  //   Wybrane spośród trzech opcji, bo JEDYNE odnawialne i nietykające niczego po stronie
+  //   gracza (zasianie startowe wysycha, edycja receptury rusza liczbę balansową gracza),
+  //   a przy okazji daje naprawie zatrzasku kuriera (P6/W1-6) pierwsze realne obciążenie.
+  strategicDeposits:     ['Xe', 'Nt', 'Ti', 'Hv'],
 };
 
 const EPS = 1e-6;

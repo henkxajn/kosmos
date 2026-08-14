@@ -59,5 +59,14 @@ export const EXPANSIONIST = {
     'warp_theory',           // Teoria Osnowy (req ion_drives + quantum_physics; bramki pominięte)
     'warp_drive',            // Napęd Skokowy (req warp_theory)
     'warp_drive_mk2',        // Zaawansowany Napęd Skokowy (req warp_drive)
+    // ── W2-1: łańcuch TOWARÓW WOJENNYCH — lustro industrialisty (patrz tam po pełne PO CO).
+    // Ekspansjonista potrzebuje DODATKOWO `advanced_materials` (industrialista ma go w
+    // kolejce od S3.2), bo `exotic_materials` wymaga OBU: advanced_materials + space_mining.
+    // Doklejone na końcu z tego samego powodu: blok warp to jego oś ekspansji.
+    'advanced_mining',       // Zaawansowane Górnictwo (root, requires [])
+    'deep_drilling',         // Głębokie Wiercenia (req advanced_mining)
+    'space_mining',          // Górnictwo Kosmiczne (req rocketry ✓ + deep_drilling)
+    'advanced_materials',    // Zaawansowane Materiały (req metallurgy ✓ startingTechs)
+    'exotic_materials',      // Materiały Egzotyczne (req advanced_materials + space_mining)
   ],
 };

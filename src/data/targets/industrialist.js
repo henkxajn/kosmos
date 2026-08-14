@@ -172,6 +172,16 @@ export const INDUSTRIALIST_TARGETS = {
       basic_supplies: 27, civilian_goods: 27,
       semiconductor_arrays: 19, propulsion_systems: 4, android_worker: 19,
       pressure_modules: 7, reactive_armor: 57, neurostimulants: 27,
+      // W2-1 — pierwszy TOWAR WOJENNY w tej tabeli. Bez wpisu w `safetyStocks` fabryka
+      // AI nie ma POWODU produkować metamateriałów: jedyny inny popyt to koszt zlecenia
+      // okrętowego w `pendingShipOrders`, a ten pojawia się dopiero, gdy Director złoży
+      // zamówienie (headless Directora nie montuje). Ilość celowo MAŁA — jeden komplet
+      // `armor_heavy` to 2 sztuki, więc 6 = trzy okręty w zapasie, nie magazyn na skład.
+      // ⚠ Ta pozycja jest BEZUŻYTECZNA bez techu `exotic_materials` i bez Hv: alokator
+      //   odsiewa popyt nieprodukowalny (`FactorySystem._allocate` filtr isRecipeAvailable
+      //   + _colonyCanSustainRecipe), więc wpis sam w sobie byłby teatrem. Działa dopiero
+      //   w komplecie z resztą W2-1 (kolejka badań + Hv w `strategicDeposits`).
+      metamaterials: 6,
     },
     vessels_total: 6,
   },
