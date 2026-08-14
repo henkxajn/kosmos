@@ -25,7 +25,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';   // v97→v98: droid-per-
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 100;
+export const CURRENT_VERSION     = 101;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -170,6 +170,7 @@ const MIGRATIONS = {
   97: _migrateV97toV98,
   98: _migrateV98toV99,
   99: _migrateV99toV100,
+  100: _migrateV100toV101,
 };
 
 // ── v92 → v93 — Stage 2: hasWater sterowane composition.H2O ──────────────────
@@ -2376,6 +2377,39 @@ function _migrateV97toV98(data) {
         slot.count = Math.max(1, J);
       }
     }
+  }
+  return data;
+}
+
+// ── v100 → v101 — W2: model rozmieszczenia (WOJNA I POKÓJ 1.0, workstream B) ─────────────────
+// Kadłub przestaje wchodzić do służby w chwili zejścia ze stoczni: dostaje oś `serviceState`
+// ('active' | 'stored' | 'mobilizing'), licznik mobilizacji i własny zapis załogi.
+//
+// SEED: KAŻDY statek ze starego zapisu BYŁ w służbie — inaczej nie mógłby latać, walczyć ani
+// wozić. Dlatego 'active' nie jest „bezpiecznym domyślnym", tylko WIERNYM odwzorowaniem stanu
+// sprzed migracji: zapis wczytany po bumpie zachowuje się identycznie jak przed nim.
+//
+// crewLocked = 0 — GRANDFATHERING (decyzja 8 planu, świadomy). Przedbumpowej księgi załóg NIE DA
+// SIĘ odtworzyć: kadłuby AI ze stoczni kolonijnej naprawdę blokowały POP, kadłuby gracza ze
+// stoczni orbitalnej nie blokowały NIC (`StationSystem.js:331`), a `_lockedPerStrata` miesza
+// załogi statków z jednostkami naziemnymi, Surge i martwą ścieżką ekspedycji. Każda zasiana
+// liczba byłaby błędna dla połowy floty — i to w stronę, która KRADNIE POP innym statkom
+// (`_distributeUnlock` zdejmuje proporcjonalnie). Stare kadłuby nie oddają więc i nie zabijają
+// załogi; nowe, budowane po bumpie, mają pełną księgę.
+//
+// Idempotentne (`??=` — drugi przebieg nic nie zmienia), deterministyczne (zero PRNG).
+// ⚠ Idempotencja to tu wymóg BEZPIECZEŃSTWA DANYCH, nie higieny: zapis migrowanego stanu jest
+//   best-effort (`try/catch` niżej), a `TitleScene` przy `saveData.error` woła `clearSave()` —
+//   migracja, która rzuci, KASUJE ZAPIS GRACZA.
+function _migrateV100toV101(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  const vessels = c4x?.vesselManager?.vessels;
+  if (!Array.isArray(vessels)) return data;   // brak floty (nie-4X / uszkodzony blob) — nic do zrobienia
+  for (const v of vessels) {
+    if (!v || typeof v !== 'object') continue;
+    v.serviceState     ??= 'active';
+    v.mobilizeProgress ??= 0;
+    v.crewLocked       ??= 0;
   }
   return data;
 }
