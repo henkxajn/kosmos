@@ -13,16 +13,44 @@ and read at the console under time pressure.
 
 ## RESUME — czytaj to PIERWSZE (PL, wzór W1)
 
-**Stan:** plan **ZATWIERDZONY 2026-08-15**, dziesięć decyzji podpisanych, **bez ponownej dyskusji**.
-Start od **W2-0** wg §Commit plan. Trzy orzeczenia właściciela (R-A/R-B/R-C) + dwa dodatkowe orzeczenia
-właściciela (D1, D5) wpisane verbatim w §Decisions taken. Audyt szwów wykonany (9 szwów; dwa szwy — intel
-i war-commodities — **jednoprzebiegowe**, patrz §Audit method).
+**Stan (2026-08-15, koniec sesji):** **W2-0…W2-3 ZACOMMITOWANE** — `7f606b7` (piny szwów) ·
+`7db3043` (łańcuch towarów wojennych) · `3f35c36` (gwarancja Ti, próg jakości OSIĄGNIĘTY) ·
+`c4526b6` (model rezerwy: `serviceState` + oba szwy stoczni + zbiór wykluczeń + rozdział
+siła/potencjał) · `c9f728e` (**bump v100 → v101**) · `f93ccdf` (checklista GATE 1).
+Sweep **132/132 OK, 0 FAIL**, `check-i18n` PASS, zapis jest teraz **v101**.
+
+🟡 **GATE 1 W TOKU — NIE ZDANY I NIE OBLANY.** Ścieżka „Kontynuuj" już zmigrowała żywy zapis
+Filipa (potwierdzone: `localStorage` version = **101**); przerwane na harmonogramie, nie na błędzie.
+Filip kończy `W2_GATE1_CHECKLIST.md` od kroku **[1]** (obecność kopii przedmigracyjnej) do **[4]**
+(round-trip v101), używając **swojej ręcznej kopii `.json` w v100** do podwójnego importu
+(idempotencja). **Do jego werdyktu ZERO pracy w kodzie — W2-4 nierozpoczęte.**
+
+**Po werdykcie PASS sekwencja leci dalej:** W2-4 (załoga przy rozmieszczeniu — R-B: jeden miesiąc
+wyświetlany = **1.0 civYear**; R-C: załoga ginie ze statkiem) → W2-5 (utrzymanie rezerwy 10 %,
+**tylko gracz** wg decyzji 14) → W2-6 (UI: „Rezerwa" + Wycofaj) → W2-7 (mobilizacja AI + wywiad:
+potencjał vs siła) → W2-8 (docs, w tym **nieaktualny nagłówek `CLAUDE.md` mówiący v99**).
+Potem **GATE 2** (rozmieszczanie/rezerwa na żywo) i **GATE 3** (AI end-to-end — wpis wiążący
+z rejestru: niemierzalne headless, więc wyłącznie na żywej grze).
+
+**Dwie lekcje sesyjne, obie wiążące dalej:**
+- **„Diff nie jest dowodem — dowodem jest ponowne uruchomienie instrumentu."** Zapłacone DWA razy
+  w jednej sesji: `?.` na nieistniejącej usłudze `window.KOSMOS.depositSystem` (W2-1b) i
+  `createVessel`, które nie czytało `opts.serviceState` (W2-2). Za każdym razem zmiana wyglądała
+  na zrobioną w dwóch plikach, a pomiar mówił, że nic się nie stało.
+- **Jeden predykat, nie dziesięć testów pola.** `isInService()` mieszka w `Vessel.js` obok
+  `isEnemyVessel`/`hasWeapons` i jest JEDYNYM źródłem prawdy o służbie — wprost przeciw klasie
+  „trzy niezgodne predykaty uzbrojenia" (W1 §Findings filed 2).
+
+Trzy orzeczenia właściciela (R-A/R-B/R-C) + dwa dodatkowe (D1, D5) wpisane verbatim w
+§Decisions taken. Audyt szwów: 9 szwów; dwa — intel i war-commodities — **jednoprzebiegowe**
+(§Audit method), przy czym war-commodities **zweryfikowany wykonaniem** przed W2-1.
 
 **Zanim ruszy pierwszy commit:** (1) skopiuj na bok nieśledzony baseline `src/testing/reports/balans/`
 (reguła V19 — runner nadpisuje ten sam plik); (2) one-linery gate'ów **wykonać na żywym silniku** przed
 wpisaniem do checklisty; (3) **nigdy** gate równolegle z pracą CC. Wszystkie trzy kupione błędem w W1.
 
 ⚠ **GATE 1 (migracja v101) idzie do Filipa PIERWSZY i SAM** — nie łączyć z żadnym innym gate'em.
+(Stan: W TOKU — patrz blok wyżej.)
 Idempotencja migracji to wymóg **bezpieczeństwa danych**, nie higieny: `TitleScene.js:413-420` woła
 `SaveSystem.clearSave()` przy `saveData.error`, więc migracja, która rzuci, **KASUJE ZAPIS GRACZA**.
 
