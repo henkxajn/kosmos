@@ -19,13 +19,23 @@ and read at the console under time pressure.
 siła/potencjał) · `c9f728e` (**bump v100 → v101**) · `f93ccdf` (checklista GATE 1).
 Sweep **132/132 OK, 0 FAIL**, `check-i18n` PASS, zapis jest teraz **v101**.
 
-🟡 **GATE 1 W TOKU — NIE ZDANY I NIE OBLANY.** Ścieżka „Kontynuuj" już zmigrowała żywy zapis
-Filipa (potwierdzone: `localStorage` version = **101**); przerwane na harmonogramie, nie na błędzie.
-Filip kończy `W2_GATE1_CHECKLIST.md` od kroku **[1]** (obecność kopii przedmigracyjnej) do **[4]**
-(round-trip v101), używając **swojej ręcznej kopii `.json` w v100** do podwójnego importu
-(idempotencja). **Do jego werdyktu ZERO pracy w kodzie — W2-4 nierozpoczęte.**
+✅ **GATE 1 ZDANY (2026-08-16).** Okno przedmigracyjne uzbrojone na **OBU** ścieżkach (żywy zapis
+v100 przez „Kontynuuj" **oraz** import ręcznej kopii `.json`), pobrany plik kopii ma w środku
+`"version": 100`, **idempotencja udowodniona podwójnym importem tej samej kopii v100** (identyczny
+przebieg, zero błędów — mina `clearSave()` rozbrojona dowodem, nie założeniem), round-trip v101
+bez ponownej migracji, konsola czysta, `localStorage` version = **101**.
+Pełny wynik + ustalenie o kluczu `kosmos_save_backup_preimport`: `W2_GATE1_CHECKLIST.md`.
 
-**Po werdykcie PASS sekwencja leci dalej:** W2-4 (załoga przy rozmieszczeniu — R-B: jeden miesiąc
+⚠ **`kosmos_save_backup_preimport` NIE jest pozostałością po D2/E9** i nie wolno go skasować przy
+następnym sprzątaniu tej klasy. To osobna, żywa siatka bezpieczeństwa **ścieżki importu**: pisana
+wyłącznie przez `SaveSystem.importSave:462`, **po** udanym zapisie slotu (best-effort — kopia
+zapisywana PRZED importem kradła headroom i wywalała import na quocie), nadpisywana przy każdym
+imporcie, poświęcana przy ciasnej quocie (`save()` stopień 2 `:113-118`, `importSave:451`), a
+`pruneMigrationBackups()` **jej nie dotyka** (chodzi po prefiksie `kosmos_save_backup_v`).
+Jedyna ścieżka odczytu: `KOSMOS.debug.exportBackup()` (`GameScene.js:828`). Pokrycie:
+`save_file_smoke` T5/T7/T10. Tabela cyklu życia — w checkliście GATE 1.
+
+**Sekwencja leci dalej:** W2-4 (załoga przy rozmieszczeniu — R-B: jeden miesiąc
 wyświetlany = **1.0 civYear**; R-C: załoga ginie ze statkiem) → W2-5 (utrzymanie rezerwy 10 %,
 **tylko gracz** wg decyzji 14) → W2-6 (UI: „Rezerwa" + Wycofaj) → W2-7 (mobilizacja AI + wywiad:
 potencjał vs siła) → W2-8 (docs, w tym **nieaktualny nagłówek `CLAUDE.md` mówiący v99**).
@@ -50,7 +60,7 @@ Trzy orzeczenia właściciela (R-A/R-B/R-C) + dwa dodatkowe (D1, D5) wpisane ver
 wpisaniem do checklisty; (3) **nigdy** gate równolegle z pracą CC. Wszystkie trzy kupione błędem w W1.
 
 ⚠ **GATE 1 (migracja v101) idzie do Filipa PIERWSZY i SAM** — nie łączyć z żadnym innym gate'em.
-(Stan: W TOKU — patrz blok wyżej.)
+(Stan: ✅ **ZDANY 2026-08-16** — patrz blok wyżej.)
 Idempotencja migracji to wymóg **bezpieczeństwa danych**, nie higieny: `TitleScene.js:413-420` woła
 `SaveSystem.clearSave()` przy `saveData.error`, więc migracja, która rzuci, **KASUJE ZAPIS GRACZA**.
 

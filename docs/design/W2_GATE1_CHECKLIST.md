@@ -147,13 +147,39 @@ do **GATE 3** i jest tam warunkiem zaliczenia. Do odhaczenia tutaj tylko jedno:
 
 | pozycja | wynik |
 |---|---|
-| 1. Kopia przedmigracyjna (Kontynuuj + import) | ⬜ |
-| 2. Podwójne wczytanie, zapis żyje, v101 | ⬜ |
-| 3. Cała flota `active`, `crewLocked` 0 | ⬜ |
-| 4. Brak zmian w rozgrywce, konsola czysta | ⬜ |
-| 5. Wpis rejestru przyjęty | ⬜ |
+| 1. Kopia przedmigracyjna (Kontynuuj + import) | ✅ |
+| 2. Podwójne wczytanie, zapis żyje, v101 | ✅ |
+| 3. Cała flota `active`, `crewLocked` 0 | ✅ |
+| 4. Brak zmian w rozgrywce, konsola czysta | ✅ |
+| 5. Wpis rejestru przyjęty | ✅ |
 
-**GATE 1:** ⬜ ZDANY / ⬜ NIEZDANY — uwagi:
+**GATE 1:** ✅ **ZDANY** (2026-08-16, Filip) — uwagi:
+
+Okno przedmigracyjne uzbrojone na **OBU** ścieżkach (żywy zapis v100 przez „Kontynuuj" **oraz**
+import ręcznej kopii `.json`); pobrany plik kopii ma w środku `"version": 100`. **Idempotencja
+udowodniona na żywym zapisie:** ta sama kopia v100 zaimportowana DWA razy → identyczny przebieg,
+zero błędów. To zdejmuje minę `clearSave()` z §nagłówka — dowodem, nie założeniem. Round-trip v101
+bez ponownej migracji, konsola czysta, `localStorage` version = **101**.
+
+**Ustalenie poboczne z gate'u — klucz `kosmos_save_backup_preimport`.** Po imporcie w
+`localStorage` zostaje ten klucz. **To NIE jest wycofana rodzina `kosmos_save_backup_v{N}` z D2/E9** —
+to osobna, żywa siatka bezpieczeństwa ścieżki importu. Zamierzona, opisana w `CLAUDE.md`
+(sekcja o zapisie do pliku), cykl życia w §Cykl życia niżej. **Nie kasować przy następnym
+sprzątaniu w stylu E9.**
+
+---
+
+## Cykl życia `kosmos_save_backup_preimport` (ustalone przy GATE 1)
+
+| pytanie | odpowiedź (zweryfikowana w kodzie) |
+|---|---|
+| Kto zapisuje | **wyłącznie** `SaveSystem.importSave` (`:462`) — kopia stanu SPRZED importu |
+| Kiedy | **PO** udanym `setItem` slotu, best-effort. Nigdy przed — kopia przed importem kradła headroom i wywalała import na quocie (regresja z live-gate'u) |
+| Nadpisywanie | tak, każdy import nadpisuje ten sam klucz (jedna kopia, zawsze ostatniego importu) |
+| Kiedy ginie | (a) `save()` stopień 2 self-healingu przy quocie (`:113-118`) — żywy zapis ma pierwszeństwo · (b) `importSave` przy quocie zwalnia go, by import przeszedł (`:451`) · (c) gdy własny zapis się nie zmieści — klucz jest czyszczony, żeby stara kopia nie udawała kopii TEGO importu (`:463`) |
+| Czy `pruneMigrationBackups()` go rusza | **NIE.** Prune chodzi po prefiksie `kosmos_save_backup_v` (`SaveMigration.js:26`) — `preimport` nie pasuje |
+| Ścieżka odczytu w grze | brak automatycznej; **jedyne** wyjście to `KOSMOS.debug.exportBackup()` (`GameScene.js:828`) → plik `_przed-importem.json` → menu ☰ „Wczytaj z pliku" |
+| Pokrycie testowe | `save_file_smoke.mjs` T5/T7/T10 (jest po imporcie · pomijany gdy się nie mieści · poświęcany w stopniu 2) |
 
 ---
 
