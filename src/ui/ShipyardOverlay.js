@@ -23,6 +23,8 @@ import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { TECHS }          from '../data/TechData.js';
 import { t, getName }     from '../i18n/i18n.js';
 import EventBus           from '../core/EventBus.js';
+import { pruneZones }     from './InfoPanelLayoutLogic.js';
+import { isEnemyVessel }  from '../entities/Vessel.js';
 
 // Typy hitów osadzonego edytora projektów (UnitDesignOverlay._drawShipDesigner) —
 // delegowane do instancji edytora w _onHit. Lustro DESIGN_EDITOR_HIT_TYPES z
@@ -94,9 +96,20 @@ export class ShipyardOverlay extends BaseOverlay {
 
     const BIG = 100000;                  // duża „wysokość" → sekcje renderują pełną treść (clip+scroll obcina)
     const top = y - this._shipyardScrollY;
+    // ⚠ W2-6 — DŁUG GHOST-CLICK. Strefy klik rejestrują się na współrzędnych PRZESUNIĘTYCH
+    //    scrollem, a ten panel nigdy ich nie przycinał: przycisk wypchnięty poza widoczne
+    //    pasmo zostawał klikalny „w powietrzu" (audyt W2 §S18). ColonyOverlay i
+    //    StationManagementView robią to od dawna przez `pruneZones`. Wprowadzamy nowe
+    //    przyciski (Rozmieść) — więc dług spłacamy TERAZ, a nie dokładamy do niego.
+    //    `hitsBefore` to indeks graniczny: strefy zarejestrowane PRZED clipem (nagłówek, ✕)
+    //    są w stałych współrzędnych i NIE podlegają przycinaniu.
+    const hitsBefore = this._hitZones.length;
 
     // 1) Sekcja budowy — zwraca dolną krawędź
     let cy = this._drawShipyard(ctx, x, top, w, BIG, colMgr, activePid);
+
+    // 1b) Sekcja REZERWY (W2-6) — kadłuby czekające na załogę
+    cy = this._drawReserve(ctx, x, cy + 10, w, colMgr, activePid);
 
     // 2) Separator + osadzony edytor projektów
     cy += 12;
@@ -116,6 +129,11 @@ export class ShipyardOverlay extends BaseOverlay {
     }
 
     ctx.restore();
+
+    // 2b) Przytnij strefy klik do widocznego pasma (patrz komentarz przy `hitsBefore`).
+    //     Robione PO `restore`, na tym samym prostokącie, którym clipowaliśmy rysowanie —
+    //     inaczej „widoczne" i „klikalne" mogłyby się rozjechać.
+    pruneZones(this._hitZones, hitsBefore, y, y + h);
 
     // 3) Clamp wspólnego scrolla wg łącznej wysokości treści
     const contentH = bottom - top;
@@ -413,6 +431,120 @@ export class ShipyardOverlay extends BaseOverlay {
     return cy;
   }
 
+  // ── W2-6 — REZERWA: kadłuby gotowe przemysłowo, czekające na załogę ────────
+  //
+  // Sedno modelu rozmieszczenia widziane oczami gracza: stocznia oddaje KADŁUB, nie okręt.
+  // Sekcja pokazuje, co stoi w magazynie, ile to kosztuje (stawka ulgowa R-A) i pozwala
+  // obsadzić załogą. Kadłub w trakcie przejścia dostaje pasek z jednostką W ETYKIECIE —
+  // „miesiąc" jest tu informacją, a nie ozdobnikiem (R-B).
+  //
+  // ⚠ Zakres listy: kadłuby zadokowane w AKTYWNEJ kolonii albo przy jej stacji. Rezerwa
+  //   z drugiego końca układu nie należy do tej stoczni — inaczej gracz klikałby „Rozmieść"
+  //   na okręcie, którego załogę wystawi zupełnie inna kolonia.
+  _drawReserve(ctx, x, y, w, colMgr, activePid) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?.getAllVessels) return y;
+
+    const PAD = 10, LH = 16;
+    const rows = [];
+    for (const v of vMgr.getAllVessels()) {
+      if (v.isWreck || isEnemyVessel(v)) continue;
+      if ((v.serviceState ?? 'active') === 'active') continue;
+      // Kadłuby „tej stoczni": zadokowane w aktywnej kolonii lub przypisane do niej domem.
+      const dock = v.position?.dockedAt ?? null;
+      if (dock !== activePid && v.homeColonyId !== activePid && v.colonyId !== activePid) continue;
+      rows.push(v);
+    }
+
+    let cy = y;
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.textAlign = 'left';
+    ctx.fillText(`📦 ${t('fleet.reserveHeader')}`, x + PAD, cy + 12);
+
+    if (rows.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.reserveEmpty'), x + PAD, cy + 30);
+      return cy + 38;
+    }
+
+    // Podsumowanie rachunku — „tania, ale liczona" ma być widoczne bez otwierania ekonomii.
+    let bill = 0;
+    for (const v of rows) bill += vMgr.getVesselUpkeepCredits?.(v) ?? 0;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.textAlign = 'right';
+    ctx.fillText(t('fleet.reserveBill', rows.length, Math.round(bill)), x + w - PAD, cy + 12);
+    ctx.textAlign = 'left';
+    cy += LH + 8;
+
+    const arrears = vMgr.colonyInArrears?.(activePid) ?? false;
+
+    for (const v of rows) {
+      const rowH = 40;
+      const def = SHIPS[v.shipId] ?? HULLS[v.shipId];
+      const mobilizing = (v.serviceState ?? 'active') === 'mobilizing';
+
+      ctx.fillStyle = 'rgba(20,32,44,0.55)';
+      ctx.fillRect(x + PAD, cy, w - PAD * 2, rowH);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + PAD, cy, w - PAD * 2, rowH);
+
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(`${def?.icon ?? '🚀'} ${v.name ?? v.shipId}`, x + PAD + 6, cy + 14);
+
+      const crew = def?.crewCost ?? 0;
+      const up   = Math.round(vMgr.getVesselUpkeepCredits?.(v) ?? 0);
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.reserveRowInfo', crew.toFixed(1), up), x + PAD + 6, cy + 30);
+
+      const btnW = 96, btnH = 24;
+      const bx = x + w - PAD - btnW - 6;
+      const by = cy + (rowH - btnH) / 2;
+
+      if (mobilizing) {
+        // Pasek postępu + JEDNOSTKA W ETYKIECIE (R-B: „jeden wyświetlany miesiąc").
+        const prog = Math.max(0, Math.min(1, (v.mobilizeProgress ?? 0) / 1.0));
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(bx, by + 4, btnW, 8);
+        ctx.fillStyle = THEME.accent;
+        ctx.fillRect(bx, by + 4, btnW * prog, 8);
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        const label = v.mobilizeTarget === 'stored' ? t('fleet.withdrawing') : t('fleet.mobilizing');
+        ctx.fillText(label, bx, by + 24);
+      } else {
+        const can = !arrears;
+        ctx.fillStyle = can ? 'rgba(40,90,60,0.8)' : 'rgba(40,40,50,0.6)';
+        ctx.fillRect(bx, by, btnW, btnH);
+        ctx.strokeStyle = can ? THEME.success : THEME.border;
+        ctx.strokeRect(bx + 0.5, by + 0.5, btnW - 1, btnH - 1);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = can ? THEME.textPrimary : THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(`⚓ ${t('fleet.deployAction')}`, bx + btnW / 2, by + 16);
+        ctx.textAlign = 'left';
+        // Hit-zone TYLKO gdy klikalna — wyszarzony przycisk nie może cicho nic nie robić.
+        if (can) {
+          this._hitZones.push({ x: bx, y: by, w: btnW, h: btnH, type: 'deploy_vessel', data: { vesselId: v.id } });
+        }
+      }
+      cy += rowH + 3;
+    }
+
+    if (arrears) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.fillText(`⚠ ${t('fleet.deployBlockedArrears')}`, x + PAD, cy + 12);
+      cy += LH + 4;
+    }
+    return cy;
+  }
+
   // ── Tooltip oczekującego zamówienia (brakujące zasoby) ─────────────────────
   _drawPendingOrderTooltip(ctx, panelX, panelY, panelW, panelH, order, inv) {
     const ship = SHIPS[order.shipId] ?? HULLS[order.shipId];
@@ -485,6 +617,21 @@ export class ShipyardOverlay extends BaseOverlay {
       case 'cancel_pending_ship':
         if (colMgr) colMgr.cancelPendingShip(zone.data.planetId, zone.data.orderId);
         break;
+      // W2-6 — rozmieszczenie kadłuba z rezerwy. Odmowa NIE jest cicha: kod powodu
+      // idzie do Dziennika przez `vessel:deployRejected` (UIManager), bo jedyną gorszą
+      // rzeczą od zablokowanego przycisku jest przycisk, który po kliknięciu milczy.
+      case 'deploy_vessel': {
+        const vMgr = window.KOSMOS?.vesselManager;
+        const res = vMgr?.deployVessel?.(zone.data.vesselId);
+        if (res && res.ok !== true) {
+          EventBus.emit('vessel:deployRejected', {
+            vesselId: zone.data.vesselId,
+            vessel: vMgr?.getVessel?.(zone.data.vesselId) ?? null,
+            reason: res.reason ?? 'unknown',
+          });
+        }
+        break;
+      }
       // 'pending_ship_hover' / 'bg' — brak akcji
     }
   }

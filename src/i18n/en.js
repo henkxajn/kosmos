@@ -1126,6 +1126,23 @@ export default {
   'fleet.immobilized': 'Immobilized (unpaid upkeep)',
   // W2-5 — reserve upkeep (R-A). {0} = full rate in Kr per game year.
   'fleet.reserveUpkeepRow':     'of which reserve',
+  // W2-6 — the "Reserve" section in the Shipyard + the service axis in the Registry. Units are
+  // spelled out in the strings ({0} POP, {1} Kr/yr, "month") — R-B requires naming them from day one.
+  'fleet.reserveHeader':        'RESERVE — hulls without a crew',
+  'fleet.reserveEmpty':         'Empty. A hull leaving the yard lands here and waits for a crew.',
+  'fleet.reserveBill':          '{0} hulls · {1} Kr/yr',
+  'fleet.reserveRowInfo':       'crew {0} POP · upkeep {1} Kr/yr (10% rate)',
+  'fleet.deployAction':         'Deploy',
+  'fleet.withdrawAction':       'Withdraw to reserve',
+  'fleet.mobilizing':           'Mobilizing — 1 month',
+  'fleet.withdrawing':          'Withdrawing — 1 month',
+  'fleet.deployNoColony':       'No colony available to provide a crew',
+  'fleet.withdrawInTransit':    'Ship is in transit — it must return first',
+  'fleet.alreadyMobilizing':    'Transition already under way',
+  'fleet.alreadyInService':     'Ship is already in service',
+  'fleet.alreadyStored':        'Hull is already in reserve',
+  'fleet.vesselIsWreck':        'This is a wreck',
+  'fleet.vesselNotFound':       'Ship not found',
   'fleet.reserveRateNote':      '📦 reserve rate — 10% of {0} Kr/yr',
   'fleet.deployBlockedArrears': 'Colony is behind on fleet upkeep — clear the debt first',
   'fleet.unpaidYears': 'Unpaid: {0} yr',

@@ -2170,6 +2170,23 @@ export class FleetManagerOverlay {
       case 'toggle_logistics_pool':
         window.KOSMOS?.transportOrderSystem?.togglePool?.(zone.data.vesselId);
         break;
+      // W2-6 — oś służby. Odmowa idzie zdarzeniem do Dziennika (kod → i18n w UIManagerze);
+      // przycisk, który po kliknięciu milczy, jest gorszy od przycisku wyszarzonego.
+      case 'deploy_vessel':
+      case 'withdraw_vessel': {
+        const vMgr = window.KOSMOS?.vesselManager;
+        const res = zone.type === 'deploy_vessel'
+          ? vMgr?.deployVessel?.(zone.data.vesselId)
+          : vMgr?.withdrawVessel?.(zone.data.vesselId);
+        if (res && res.ok !== true) {
+          EventBus.emit('vessel:deployRejected', {
+            vesselId: zone.data.vesselId,
+            vessel: vMgr?.getVessel?.(zone.data.vesselId) ?? null,
+            reason: res.reason ?? 'unknown',
+          });
+        }
+        break;
+      }
       case 'stratcom_detail_bg':
         break;   // absorber klików tła panelu detalu (nie przepuszcza do gwiazd pod spodem)
       case 'stratcom_lens_toggle':
@@ -8414,6 +8431,53 @@ export class FleetManagerOverlay {
 
   // ── Akcje ─────────────────────────────────────────────────────────────────
 
+  /**
+   * W2-6 — jeden przycisk osi służby: Wycofaj (służba → rezerwa) / Rozmieść (rezerwa → służba),
+   * albo pasek postępu, gdy przejście już trwa. Rysowany PRZED `getAvailableActions`, patrz
+   * komentarz w `_drawActions`.
+   * @returns {number} nowe `cy`
+   */
+  _drawServiceStateAction(ctx, x, cy, w, pad, vessel) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?.deployVessel || !vessel || vessel.isWreck) return cy;
+
+    const state = vessel.serviceState ?? 'active';
+    const btnW = Math.min(160, w - pad * 2);
+    const btnH = 26;
+
+    if (state === 'mobilizing') {
+      const prog = Math.max(0, Math.min(1, (vessel.mobilizeProgress ?? 0) / 1.0));
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      const label = vessel.mobilizeTarget === 'stored' ? t('fleet.withdrawing') : t('fleet.mobilizing');
+      ctx.fillText(label, x + pad, cy + 10);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(x + pad, cy + 16, btnW, 8);
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(x + pad, cy + 16, btnW * prog, 8);
+      return cy + 32;
+    }
+
+    const toReserve = state === 'active';
+    const label = toReserve ? `📦 ${t('fleet.withdrawAction')}` : `⚓ ${t('fleet.deployAction')}`;
+    ctx.fillStyle = toReserve ? 'rgba(50,50,70,0.75)' : 'rgba(40,90,60,0.8)';
+    ctx.fillRect(x + pad, cy, btnW, btnH);
+    ctx.strokeStyle = toReserve ? THEME.border : THEME.success;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + pad + 0.5, cy + 0.5, btnW - 1, btnH - 1);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + pad + btnW / 2, cy + 17);
+    ctx.textAlign = 'left';
+    this._hitZones.push({
+      x: x + pad, y: cy, w: btnW, h: btnH,
+      type: toReserve ? 'withdraw_vessel' : 'deploy_vessel',
+      data: { vesselId: vessel.id },
+    });
+    return cy + btnH + 6;
+  }
+
   _drawActions(ctx, x, cy, w, pad, vessel, ms, colMgr, activePid) {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
@@ -8427,6 +8491,12 @@ export class FleetManagerOverlay {
       techSystem: window.KOSMOS?.techSystem,
       activePlanetId: activePid,
     };
+
+    // ⚠ W2-6 (audyt §S19) — PRZED early returnem. `getAvailableActions` bywa pusta dokładnie
+    //    wtedy, gdy okręt jest bezczynny — czyli ZAWSZE dla kadłuba w rezerwie. Przycisk
+    //    dopisany na końcu tej metody byłby niedostępny w jedynym stanie, w którym jest
+    //    potrzebny. Ta sama pułapka zjadała już Rozbiórkę, Tankowanie i pulę logistyczną.
+    cy = this._drawServiceStateAction(ctx, x, cy, w, pad, vessel);
 
     const actions = getAvailableActions(vessel, state);
     if (actions.length === 0) {

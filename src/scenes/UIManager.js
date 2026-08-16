@@ -1048,6 +1048,28 @@ export class UIManager {
       this._log(t(key, vessel.name ?? vessel.shipId), 'fleet');
     });
 
+    // W2-6 — odmowa rozmieszczenia/wycofania. Kody są snake_case i tłumaczone TUTAJ, przez
+    // JAWNĄ mapę: rodzina `vessel.reason<Pascal>` buduje klucz interpolacją, więc `check-i18n`
+    // jej NIE widzi i literówka schodzi na produkcję jako surowy kod wypisany graczowi.
+    EventBus.on('vessel:deployRejected', ({ vessel, reason }) => {
+      if (vessel && isEnemyVessel(vessel)) return;
+      const KEYS = {
+        colony_in_arrears:  'fleet.deployBlockedArrears',
+        no_crew_pops:       'fleet.noCrewPops',
+        no_crew_colony:     'fleet.deployNoColony',
+        vessel_in_transit:  'fleet.withdrawInTransit',
+        already_mobilizing: 'fleet.alreadyMobilizing',
+        already_in_service: 'fleet.alreadyInService',
+        already_stored:     'fleet.alreadyStored',
+        vessel_is_wreck:    'fleet.vesselIsWreck',
+        vessel_not_found:   'fleet.vesselNotFound',
+      };
+      const key = KEYS[reason] ?? null;
+      const msg = key ? t(key, vessel?.crewLocked ?? '') : String(reason ?? '');
+      this._log(`⚠ ${vessel?.name ?? '—'}: ${msg}`, 'fleet');
+      EventBus.emit('ui:toast', { text: msg, color: THEME.warning ?? '#ffcc44', durationMs: 3000 });
+    });
+
     EventBus.on('expedition:reconProgress', ({ body, discovered }) => {
       // Postęp sekwencyjnego recon — odkryto kolejne ciało
       const name = body?.name ?? '???';

@@ -1127,6 +1127,23 @@ export default {
   'fleet.immobilized': 'Unieruchomiony (brak opłat)',
   // W2-5 — utrzymanie rezerwy (R-A). {0} = pełna stawka Kr/rok gry.
   'fleet.reserveUpkeepRow':     'w tym rezerwa',
+  // W2-6 — sekcja „Rezerwa" w Stoczni + oś służby w Rejestrze. Jednostki podane WPROST
+  // w tekstach ({0} POP, {1} Kr/rok, „miesiąc") — R-B każe je nazywać od pierwszego dnia.
+  'fleet.reserveHeader':        'REZERWA — kadłuby bez załogi',
+  'fleet.reserveEmpty':         'Pusto. Kadłub schodzący ze stoczni trafia tutaj i czeka na załogę.',
+  'fleet.reserveBill':          '{0} kadł. · {1} Kr/rok',
+  'fleet.reserveRowInfo':       'załoga {0} POP · utrzymanie {1} Kr/rok (10% stawki)',
+  'fleet.deployAction':         'Rozmieść',
+  'fleet.withdrawAction':       'Wycofaj do rezerwy',
+  'fleet.mobilizing':           'Mobilizacja — 1 miesiąc',
+  'fleet.withdrawing':          'Wycofanie — 1 miesiąc',
+  'fleet.deployNoColony':       'Brak kolonii, która wystawiłaby załogę',
+  'fleet.withdrawInTransit':    'Statek w locie — najpierw musi wrócić',
+  'fleet.alreadyMobilizing':    'Przejście już trwa',
+  'fleet.alreadyInService':     'Okręt jest już w służbie',
+  'fleet.alreadyStored':        'Kadłub jest już w rezerwie',
+  'fleet.vesselIsWreck':        'To wrak',
+  'fleet.vesselNotFound':       'Nie znaleziono statku',
   'fleet.reserveRateNote':      '📦 stawka rezerwy — 10% z {0} Kr/rok',
   'fleet.deployBlockedArrears': 'Kolonia zalega z utrzymaniem floty — najpierw spłać dług',
   'fleet.unpaidYears': 'Nieopłacone: {0} lat',
