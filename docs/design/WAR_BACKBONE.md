@@ -211,18 +211,46 @@ patrol moves).
 > ze spiralą śmierci utrzymania floty (za dużo okrętów, ujemne kredyty) jest **zgłoszonym przypadkiem
 > regresyjnym ekonomii dla W2**.
 
-**W2 — the deploy model (P4).** Build/storage/deploy for player and AI, crew at
-deploy, production upgrades for war commodities, mobilization visibility for
-intel. Own plan doc; own gate; likely save version bump (stored-fleet state) —
-first bump since v100, plan the migration.
+**W2 — the deploy model (P4). ✅ BUILT, GATE 1 + GATE 2 PASSED, GATE 3 PENDING** (save **v101**;
+`W2_PLAN.md` carries the full decision register). Eight commits `7f606b7` → `adc0fbd`.
 
-**⚠ The three P4 questions, unresolved and blocking the W2 plan** (proposals attached
-at §2 P4; the owner rules on each before the plan can close):
-1. **Maintenance cost of stored ships** — proposal: fractional upkeep.
-2. **Deploy duration** — proposal: short but nonzero, giving an intel-visible
-   mobilization window.
-3. **Crew fate on ship loss** — proposal: crew dies, making POP a real war cost
-   and tying the deploy model into Population 2.0.
+**⚠ The three P4 questions are ANSWERED** — owner rulings 2026-08-15, recorded verbatim in
+`W2_PLAN.md` §Decisions taken and implemented as stated:
+1. **R-A — stored-ship upkeep: 10 % of full** ("cheap reserve, but a counted one — hoarding costs
+   at scale"). Shipped as `RESERVE_UPKEEP_FACTOR`, with the settlement sort changed to
+   **deployed-first** so a credit shortage strands the *warehouse*, not the defender.
+2. **R-B — deploy duration: ONE MONTH OF GAME TIME**, displayed-time units. Resolved
+   arithmetically to `DEPLOY_DURATION_CIVYEARS = 1.0` (`CIV_TIME_SCALE = 12`) and pinned by
+   execution through the real tick chain, not by reading the constant.
+3. **R-C — crew DIES on ship loss**; POP returns only on a deliberate withdrawal. Shipped with a
+   fractional-aware debit (the naive path over-killed by 2.5×) and a per-vessel ledger.
+
+**⚠ Corrections this slice made to the text above and to §2 P4** (each measured, each recorded in
+`W2_PLAN.md` §Corrections C-1…C-7 with the evidence):
+
+- **C-1 — "build = industry only, no POP" was a NO-OP for the player and a real removal for the AI.**
+  The baseline was never symmetric: player warships come out of the *orbital* yard, which charged no
+  crew at all, while AI warships came out of the colony yard and paid POP three times over. The owner
+  ruled the symmetrisation **upward** (decision 13): nobody pays at build, **both** pay at deploy —
+  so the player's warship economy gained a cost it had never had.
+- **C-2 — doctrines did NOT consume only deployed ships.** A stored hull matched every condition of
+  `_idleArmedAtCapital`, and the same function is the rule's own trigger probe — a reserve would have
+  tripped `doctrine_defend_home` *and* been conscripted by it. Made true, not assumed.
+- **C-3 — crew-on-loss was not new machinery; it was a save-persisted LEAK.** No ship-loss path
+  touched POP, so every ship ever lost had permanently sterilised its crew from `freePops` in every
+  v100 save. The composite R-C needs existed already — three times, in `MissionSystem`.
+- **C-4 — the withdrawal precedent was already wrong**: disband released the *definition's* crew cost
+  from the wrong colony, proportionally, out of *other* ships' locks.
+- **C-5 — the AI reserve the intel story is about was EMPTY**, by two independent mechanisms; the
+  war-commodity chain therefore moved earlier (W2-1), before the reserve mechanics.
+- **C-6 — "docked ⇒ combat-safe for free" was false** on two of three combat surfaces.
+- **C-7 — a Director `delay > 0` is a live crash**, not a style question; the mobilization rule ships
+  `delay: 0` and a keeper pins the whole catalog.
+
+**⚠ Two findings this slice hands to W3:** materialized shadow fleets (`EmpireFleetMaterializer`) bypass
+the crew model entirely — they cost the AI no POP and their loss kills nobody, which is a *balance*
+decision, not hygiene; and AI fleet upkeep is still not charged (decision 14, deliberate, `PHASE5_TODO`
+at the guard).
 
 **W3+ — offensive AI & territorial peace (recorded P1 intent + owner ruling
 2026-08-13):** target selection, capital strikes, invasion; space-combat depth;

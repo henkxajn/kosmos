@@ -426,8 +426,11 @@ D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 
                         → WAR_BACKBONE doc ✅ SIGNED (P1-P7 + §6a, owner 2026-08-13)
                         → W1 plan ✅ APPROVED (14 decisions signed, orchestrator 2026-08-14)
                         → W1 ✅ COMPLETE (13 commits, Gates 1-3 PASSED 2026-08-14, v100 no migration)
-                                                ⟵ WE ARE HERE — next: **W2 PLAN DOC**, not code.
-                                                   Three P4 rulings pending from the owner.
+                        → W2 plan ✅ APPROVED (22 decisions signed, 3 owner rulings, 2026-08-15)
+                        → W2 🟡 BUILT — 8 commits, **GATE 1 + GATE 2 PASSED**, save bumped v100 → v101
+                                                ⟵ WE ARE HERE — **GATE 3 is the only thing left**:
+                                                   AI warship end-to-end, LIVE ONLY (binding register
+                                                   line: unmeasurable headless, GameCore mounts no Director)
                         → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
@@ -438,18 +441,21 @@ nine commits, three passed gates, save untouched at v100); Director Slice 1 gave
 through the real economy. `WAR_BACKBONE.md` is **signed** (P1–P7 plus §6a territorial peace), and
 `W1_PLAN.md` is **approved** with fourteen signed decisions. **The next action is code, not design.**
 
-**Next horizon — W2, and the next artefact is a PLAN DOC, not code.**
-1. **W2 — the deploy model** (P4) — 🟢 **NEXT**. Build → storage → deploy, crew at deploy, production
-   upgrades for war commodities, mobilization as an intel-visible event. **Read the HANDOVER note at
-   the head of `WAR_BACKBONE.md` §6-W2 first** — it carries the binding order for the fresh session.
-   **Three P4 questions await owner rulings before the plan can close**: maintenance cost of stored
-   ships (proposal: fractional upkeep) · deploy duration (proposal: short but nonzero — an
-   intel-visible mobilization window) · crew fate on ship loss (proposal: crew dies, so POP becomes a
-   real war cost). Own gate; **likely the first save bump since v100** — plan the migration explicitly.
-   W1 hands it: a live `relative_power` (direction corrected), a shared threat number from real hulls,
-   an accounting fork with no silent third path, and doctrines with something to command.
-   ⚠ A ready-made regression scenario exists: the owner's Gate-3 save entered a **fleet-upkeep death
-   spiral** (too many ships, negative credits). W2 touches exactly those costs.
+**Next horizon — finish W2 at GATE 3, then W3.**
+1. **W2 — the deploy model** (P4) — 🟡 **BUILT, ONE GATE LEFT**. Build → storage → deploy is live for
+   both sides: a hull leaves the yard into **reserve**, crewing it costs POP and takes one displayed
+   month, losing it kills that crew, and the AI now decides when to mobilize. All three P4 questions
+   were ruled on 2026-08-15 and are implemented as stated (R-A 10 % reserve upkeep · R-B one month ·
+   R-C crew dies). Save **v101**. Full register: `W2_PLAN.md`; corrections it forced on this backbone:
+   `WAR_BACKBONE.md` §6-W2 (C-1…C-7).
+   **Remaining: GATE 3** — AI warship end-to-end on a live game, plus the R-2 shell-coverage
+   re-measure. It is live-only by binding register ruling: `GameCore` mounts no Director, so
+   "an AI warship comes into being end-to-end" cannot be measured headless.
+   ⚠ The owner's Gate-3 regression scenario (**fleet-upkeep death spiral** — too many ships, negative
+   credits) is now pinned as `deploy_seams` T6 and left deliberately untouched by W2; the reserve rate
+   only adds to it.
+   ⚠ Two things W2 deliberately did **not** price, handed to W3: materialized shadow fleets bypass the
+   crew model entirely, and AI fleet upkeep is still not charged.
 3. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation
    record, unread, since D1, and D3 is its consumer. The influence map is already built (Director S2).
 

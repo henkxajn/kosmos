@@ -569,6 +569,43 @@ proceeds **without re-litigation**.
 
 ---
 
+## Results — what actually shipped (2026-08-16)
+
+Osiem commitów, `7f606b7` → `adc0fbd`. **GATE 1 ✅ · GATE 2 ✅ · GATE 3 pending** (live-only).
+Sweep **136/136 0 FAIL** · `check-i18n` PASS (pl=en=3240, 0 rozbieżności) · zapis **v101**.
+
+| commit | slice | co weszło |
+|---|---|---|
+| `7f606b7` | W2-0 | `deploy_seams` — pięć przesłanek audytu pinowanych WYKONANIEM |
+| `7db3043` `3f35c36` | W2-1 | łańcuch towarów wojennych AI (prerekwizyt C-5) |
+| `c4526b6` | W2-2 | `serviceState` + `isInService` + zbiór wykluczeń + rozdział siła/potencjał |
+| `c9f728e` | W2-3 | **bump v100 → v101** (trzy zasiewy per statek, nic więcej) — **GATE 1** |
+| `496067c` | W2-4 | załoga przy rozmieszczeniu (R-B/R-C), trzy bramki budowy skasowane |
+| `e84bb72` | W2-5 | utrzymanie rezerwy 10 % (R-A), sort deployed-first, bramka zaległości |
+| `c9062a1` | W2-6 | UI: sekcja Rezerwa + oś służby w Rejestrze + spłata długu ghost-click — **GATE 2** |
+| `adc0fbd` | W2-7 | mobilizacja AI + rezerwa w intelu + powiadomienie za bramką kontaktu |
+
+**Dowody fail-first WYKONANIEM** (nie diffem) — każdy odwracany i sprawdzany na czerwono:
+ułamkowa śmierć załogi (surowe `removePop` → „spadło 1.0000 zamiast 0.4") · zegar mobilizacji
+(podmiana na zegar GRY → mobilizacja nigdy się nie kończy) · sort utrzymania (naiwny
+cheapest-first → obrońca nieopłacony) · `pruneZones` (→ ghost-click wraca) · kolejność
+`_drawServiceStateAction` (→ przycisk znika przy pustej liście akcji) · bramka mgły wojny
+(→ wpis powstaje na `rumor`) · `delay > 0` w katalogu Directora.
+⚠ Jeden z tych dowodów był **NIEWAŻNY za pierwszym razem**: sonda wstawiła `delay` jako drugi
+klucz literału, a późniejszy `delay: 0` wygrywa w JS — pin „przeszedł", bo sonda nic nie zmieniła.
+Powtórzone na właściwej linii. Reguła „diff nie jest dowodem" ma więc młodszą siostrę:
+**samo URUCHOMIENIE też nie wystarczy, dopóki nie sprawdzisz, że sonda naprawdę zmieniła zachowanie.**
+
+**Trzy rzeczy znalezione po drodze, których nikt nie szukał:**
+1. `EventLogSystem.TYPE_MAP` nie miał kluczy `intel`/`combat`/`diplomacy`, choć `CHANNELS` je ma →
+   18 wywołań M4 P1 (bitwy, odwroty, wojny) lądowało na kanale **system** z poprawnym KOLOREM.
+   Naprawione w W2-7, bo powiadomienie mobilizacyjne musiało trafić na kanał wywiadu.
+2. `_tickRepair` czyta `entry.buildingId`, a wpisy `_active` mają `entry.building.id` → **naprawa
+   statków nigdy nie działała, u nikogo**. Pinowane jako luka (`w2_crew_ledger` T11b), świadomie
+   NIE naprawione: jednolinijkowa poprawka włączyłaby naprawę floty w całej grze.
+3. Reguła `mobilize_reserve` spina DWIE rodziny rejestratorów (własną + guard z produkcji), a żaden
+   keeper Directora nie wołał `registerProductionGuards` — katalog nie zwalidował się bez obu.
+
 ## Where this leaves the arc
 
 W2 turns a hull into two different things — an industrial artefact and a crewed warship — and puts a month

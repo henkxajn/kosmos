@@ -20,7 +20,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v99 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: **v101** (patrz `SaveMigration.CURRENT_VERSION` — **to jest jedyne źródło prawdy**; ten nagłówek stał na v99 przez trzy bumpy, więc przy każdej migracji sprawdź stałą, nie ten wiersz)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -1396,6 +1396,83 @@ overlay, C7 intact, brak console errors).
 **C8 ARC ZAMKNIĘTY** (`5da2c32` code · `17f3e84` docs · `7201670` prune). **NEXT (drobne, niepilne):**
 §3.5b trwale martwe wpisy populacji (`NAV_TILE_FILES['population']` + `NavPeekProviders` `case 'population'`/
 `_population()` + `population_symbol.png`) + opcjonalnie `shipyard_symbol.png`.
+
+---
+
+## W2 — MODEL ROZMIESZCZENIA: budowa to przemysł, rozmieszczenie to ludzie (save **v101**, GATE 1+2 PASS, GATE 3 pending)
+
+Slice W2 arca WOJNA I POKÓJ 1.0 (workstream B). Plan + rejestr decyzji: `docs/design/W2_PLAN.md`.
+Kadłub schodzi ze stoczni **do REZERWY**; dopiero obsadzenie załogą (POP) czyni z niego okręt
+w służbie. Commity: `7f606b7` (W2-0 piny szwów) · `7db3043`+`3f35c36` (W2-1 towary wojenne AI) ·
+`c4526b6` (W2-2 `serviceState`) · `c9f728e` (W2-3 **bump v100→v101**) · `496067c` (W2-4 załoga) ·
+`e84bb72` (W2-5 utrzymanie rezerwy) · `c9062a1` (W2-6 UI) · `adc0fbd` (W2-7 mobilizacja AI).
+
+**Model (jedna oś, jeden predykat).** `vessel.serviceState` ∈ `'active' | 'stored' | 'mobilizing'`
++ `isInService(vessel)` w `Vessel.js` — **JEDYNE** źródło prawdy o służbie (obok `isEnemyVessel`/
+`hasWeapons`). `mobilizing` NIE jest służbą. Brak pola = służba (stary zapis, spawn spoza stoczni).
+Pola per statek: `mobilizeProgress` (civYears) · `mobilizeTarget` (`'active'|'stored'|null` — stan
+`mobilizing` obsługuje OBA kierunki) · `crewLocked` (POP) · `crewStrataLocked` (rozkład po warstwach)
+· `crewColonyId` (kolonia-PŁATNIK). Wszystkie przez obie białe listy `VesselManager` serialize/restore.
+
+**Szwy magazynu — DWA i tylko dwa:** `VesselManager._onShipCompleted` (stocznia kolonijna, jedyna
+ścieżka AI) i `StationSystem._spawnStationShip` (stocznia orbitalna, jedyna ścieżka okrętów wojennych
+GRACZA). ⚠ `EmpireFleetMaterializer` i sonda pierwszego kontaktu tworzą kadłuby `'active'` z pominięciem
+obu szwów — **flota zmaterializowana omija model załogi w całości** (filed, W3).
+
+**Zbiór wykluczeń rezerwy** (każdy pinowany osobno): doktryny · `WarSystem._buildPlayerBattleUnit` ·
+`EnemyAttackHandler._wreckPlayerVesselsInSystem` · `dispatchOnMission`/`getAvailable` ·
+`ProximitySystem` · `TransportOrderSystem` · `_tickRefueling` · `_tickRepair`.
+
+**Załoga (R-B/R-C, decyzje 7-9, 18-19).** `deployVessel`/`withdrawVessel` + `_tickMobilization` w
+`VesselManager`; `DEPLOY_DURATION_CIVYEARS = 1.0` (**1.0 civYear = 1 WYŚWIETLANY MIESIĄC**, pinowane
+WYKONANIEM przez prawdziwy łańcuch `time:tick`). Płacimy przy ROZKAZIE, oddajemy przy UKOŃCZENIU
+wycofania. `CivilizationSystem.commitCrew/releaseCrew/killCrew`:
+- ⚠ `removePop(type, count)` iteruje `for (i=0; i<count; i++)`, więc dla 0.4 zabija CAŁEGO człowieka
+  (2.5× za dużo). Śmierć załogi jest **akumulatorowa** — nośnikiem ułamka jest `_growthProgress`, więc
+  `humans` spada dokładnie o załogę, a inwariant `floor(humans) = Σ strata + bezrobotni` trzyma.
+- ⚠ Zwolnienie jest **TYPOWANE** (`crewStrataLocked`). `_lockedPerStrata` dzieli worek z jednostkami
+  naziemnymi, a `_distributeUnlock` zdejmuje proporcjonalnie do AKTUALNYCH blokad — nietypowany zwrot
+  zjadałby lock garnizonu, którego własne zwolnienie klamruje się do zera (POPy zablokowane NA ZAWSZE).
+- ⚠ Płaci **`crewColonyId`**, nie `colonyId`/`homeColonyId` — te są przy śmierci kolonii przepisywane
+  na macierzystą GRACZA bez filtru imperium (`_onColonyDestroyed`).
+- R-C: `vessel:wrecked` → `killCrew` (przemoc), `destroyVessel` → `releaseCrew` (rozbiórka/zużycie).
+  OBA **zerują księgę na wejściu** — to cały mechanizm anty-podwójnego-naliczenia (`MissionSystem` ma
+  obie kolejności: załoga-przed-kadłubem `:1631`/`:2417`, kadłub-przed-załogą `:1817`).
+- Decyzja 18: `commitCrew` bierze **bezrobotnych, potem EKSMITUJE z najtańszej warstwy** — bez tego
+  deploy byłby niewykonalny przy projektowanej równowadze AI `freePops ≈ 0`.
+
+**Utrzymanie (R-A).** `RESERVE_UPKEEP_FACTOR = 0.10`; `getVesselUpkeepCredits` zwraca stawkę
+**EFEKTYWNĄ** (5 konsumentów — rabat liczony u każdego z osobna gwarantowałby, że któryś kłamie),
+`getVesselBaseUpkeepCredits` = pełna. Sortowanie naliczania: **SŁUŻBA PIERWSZA, potem najtańszy**
+(rabat w kluczu odwróciłby ranking i magazyn płaciłby przed obrońcą). ⚠ **Rezerwa NIE zalega**
+(decyzja 17); zamiast tego **DEPLOY jest odmawiany, gdy kolonia zalega** — a „zaległość" to
+**ZATRZASK po nieopłaconym rozliczeniu, zdejmowany przy najbliższym UDANYM**, przy kadencji raz na
+ROK GRY (dosypanie kredytów NIE odblokowuje natychmiast; zmierzone na GATE 2). AI **nie płaci**
+utrzymania (decyzja 14, `PHASE5_TODO` przy guardzie `isEnemyVessel`).
+
+**Mobilizacja AI (W2-7).** `DirectorMobilization` + reguła `mobilize_reserve`: trigger
+`storedWarshipsAtCapital gte 1`, guardy `empireHasFreeCrew` (pierwszy konsument guardu ze Slice 1)
++ `empireOutgunnedByPlayer` (`getStrength(player) > getStrength(empire)` — **zero autorskich progów**,
+parytet zatrzymuje wyścig sam), `roll` 40/30/100 displayedYear, **`delay: 0` OBOWIĄZKOWO**, porcja 2.
+⚠ Kurier AI (`hull_small` z ładownią) NIE przechodzi przez tę regułę — budzi go
+`EmpireLogisticsSystem._advanceRouteCourier`, w miejscu, gdzie stall był dotąd CAŁKOWICIE cichy.
+Intel: `knownReserve` + `knownCrewCapacity` obok `knownMilitary` (bramka `detailed`, odświeżane tą
+samą ścieżką co `knownMilitary` — inaczej zamarzłyby). Powiadomienie `NotificationCenter._handleMobilized`
+bramkowane na `contact`, nazwa imperium dopiero na `detailed` — **dwa szczeble ujawnienia są zamierzone**.
+
+**⚠ TRZY PUŁAPKI ODKRYTE PRZY OKAZJI (nie zakładaj, że ich nie ma):**
+1. `EventLogSystem.TYPE_MAP` NIE miał kluczy `intel`/`combat`/`diplomacy`, choć `CHANNELS` je ma →
+   `_log(text, 'combat')` lądował na kanale **system** z poprawnym KOLOREM (18 wywołań M4 P1). Naprawione.
+2. `_tickRepair` szuka stoczni po `entry.buildingId === 'shipyard'`, a wpisy `BuildingSystem._active`
+   mają `entry.building.id` → **naprawa statków jest martwa u wszystkich**. Pinowane jako luka, NIE
+   naprawione (włączenie naprawy floty w całej grze = zmiana balansu, własny commit i pomiar).
+3. `_firePending` dereferencuje wpis, który `GameState.set(..., null)` zostawia jako `null` → pierwsza
+   reguła z `delay > 0` zabija tik wszystkich kolejnych imperiów. Keeper pinuje `delay: 0` dla CAŁEGO
+   katalogu.
+
+Keepery: `deploy_seams` (T1/T2/T4 świadomie odwrócone) · `w2_deploy_model` · `w2_migration_v101` ·
+`w2_crew_ledger` 65 · `w2_reserve_upkeep` 27 · `w2_deploy_ui` 23 · `w2_ai_mobilization` 39.
+Sweep **136/136 0 FAIL** · `check-i18n` PASS (pl=en=3240).
 
 ---
 
