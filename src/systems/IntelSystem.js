@@ -148,6 +148,11 @@ export class IntelSystem {
       const ta = window.KOSMOS?.threatAssessment;
       const power = ta ? ta.getStrength(empireId) : (emp.military?.power ?? 0);
       updated.knownMilitary = Math.round(power);
+      // W2-7 — SIŁA to nie POTENCJAŁ. `knownMilitary` mówi, ile imperium ma OBSADZONYCH
+      // okrętów; `knownReserve` — ile trzyma w magazynie, a `knownCrewCapacity` — ilu ludzi
+      // ma jeszcze do oddania. Dopiero te trzy liczby razem odpowiadają na pytanie „co on
+      // może wystawić, jeśli zechce", czyli na to, po co w ogóle powstał rozdział z W2-2.
+      Object.assign(updated, this._reserveReadout(empireId, ta));
     }
 
     gameState.set(`intel.${empireId}`, updated, reason);
@@ -242,9 +247,42 @@ export class IntelSystem {
       const rec = gameState.get(`intel.${emp.id}`);
       if (!rec || LEVEL_RANK[rec.level ?? 'unknown'] < LEVEL_RANK.detailed) continue;
       const fresh = Math.round(ta.getStrength(emp.id));
-      if (fresh === rec.knownMilitary) continue;          // bez churnu w gameState
-      gameState.set(`intel.${emp.id}`, { ...rec, knownMilitary: fresh }, 'intel_military_refresh');
+      // ⚠ W2-7: rezerwa MUSI odświeżać się tą samą ścieżką. Gdyby została tylko w
+      //   `advanceIntel`, odziedziczyłaby dokładnie ten defekt, który ten refresh naprawiał
+      //   dla `knownMilitary` — zapis RAZ, przy wejściu na `detailed`, i zamrożenie na zawsze.
+      //   Mobilizacja zmienia rezerwę co kilka lat, więc zamrożona byłaby kłamstwem szybciej
+      //   niż zamrożona siła.
+      const res = this._reserveReadout(emp.id, ta);
+      if (fresh === rec.knownMilitary
+          && res.knownReserve === rec.knownReserve
+          && res.knownCrewCapacity === rec.knownCrewCapacity) continue;   // bez churnu w gameState
+      gameState.set(`intel.${emp.id}`, { ...rec, knownMilitary: fresh, ...res }, 'intel_military_refresh');
     }
+  }
+
+  /**
+   * W2-7 — odczyt REZERWY imperium: ile kadłubów czeka na załogę i ilu ludzi imperium ma
+   * jeszcze wolnych. JEDNO źródło dla obu ścieżek zapisu (`advanceIntel` + `_refreshKnownMilitary`),
+   * żeby nie rozjechały się jak rozjechały się dwa liczniki `knownMilitary` przed W1-3c.
+   *
+   * ⚠ To jest odczyt WYWIADU, więc świadomie zgrubny: siła rezerwy w tych samych jednostkach
+   *   co `knownMilitary` (HP), a zdolność załogowa w POP wolnych w stolicy — dokładnie to, co
+   *   ogranicza mobilizację (`empireHasFreeCrew`). Nie udajemy, że gracz zna listę kadłubów.
+   */
+  _reserveReadout(empireId, ta = window.KOSMOS?.threatAssessment) {
+    // ⚠ BRAK KOLABORATORA ⇒ `null`, NIGDY 0. „Nie wiem" i „wiem, że zero" to dla gracza dwie
+    //   różne informacje, a pewne zero jest gorsze od pustego pola: dokładnie tak wyglądał
+    //   defekt „Siła wojskowa ≈ 0 dla KAŻDEGO imperium" opisany kilkadziesiąt linii wyżej.
+    //   Ma to praktyczne znaczenie — headless `GameCore` NIE montuje Directora w ogóle.
+    const reserve = ta?.getReserveStrength ? Math.round(ta.getReserveStrength(empireId)) : null;
+    // ⚠ To jest zdolność załogowa STOLICY, nie całego imperium — ta sama kolonia, którą czyta
+    //   guard `empireHasFreeCrew`, więc liczba odpowiada na pytanie „ilu ludzi realnie bramkuje
+    //   mobilizację". Brak Directora ⇒ null (patrz wyżej), nie zero.
+    const dp = window.KOSMOS?.directorProduction;
+    const capital = dp?.capitalOf?.(empireId) ?? null;
+    const freePops = capital?.civSystem?.freePops;
+    const crew = (dp && typeof freePops === 'number') ? Math.round(freePops * 10) / 10 : null;
+    return { knownReserve: reserve, knownCrewCapacity: crew };
   }
 
   _passiveTick(yearsPassed) {
@@ -561,6 +599,11 @@ export class IntelSystem {
       level:          'unknown',
       knownTech:      [],
       knownMilitary:  null,
+      // W2-7 — rozdział siła/potencjał po stronie WYWIADU. `null` (nie 0) jak `knownMilitary`:
+      // „nie wiem" i „wiem, że zero" to dla gracza dwie różne informacje. Stary zapis bez tych
+      // pól czyta się jako `undefined` → panel pokazuje „?", nie fałszywe zero. Bez migracji.
+      knownReserve:      null,
+      knownCrewCapacity: null,
       knownColonies:  [],
       lastIncidents:  [],
     };

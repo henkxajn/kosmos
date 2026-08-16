@@ -178,6 +178,48 @@ export const DIRECTOR_RULES = {
     response: { action: 'assignDoctrine', params: { doctrine: 'patrol_border', count: 1 } },
     cooldown: { years: 4.0 },
   },
+
+  /**
+   * MOBILIZACJA REZERWY (W2-7) — „obsadzamy okręty, bo sami przestaliśmy być silniejsi".
+   *
+   * Po W2-2 każdy kadłub AI schodzi ze stoczni do REZERWY, a po W2-4 wyjście z niej kosztuje
+   * POP i trwa miesiąc. Bez tej reguły floty obcych stałyby w magazynie do końca partii —
+   * i tak było między W2-2 a tym commitem (świadomy stan przejściowy, opisany w §0b GATE 2).
+   *
+   * ⚠ ZERO AUTORSKICH PROGÓW (decyzja 22). Nie ma tu liczby „mobilizuj przy sile 0.8×", bo
+   * nie umiemy jej dziś uzasadnić — strojenie należy do E7/BALANS. Decyzję niosą DWA warunki
+   * bez stałych: jest KOGO obsadzić (`gte: 1` — obecność, nie próg) oraz gracz ma w SŁUŻBIE
+   * więcej siły niż my (`empireOutgunnedByPlayer` — czyste porównanie). Parytet zatrzymuje
+   * wyścig SAM, bo przestaje być prawdą — punkt równowagi jest własnością modelu, nie
+   * wartością do wystrojenia.
+   *
+   * ⚠ `empireHasFreeCrew` — pierwszy konsument guardu zarejestrowanego w Slice 1 i do dziś
+   * nieużywanego. Hamuje mobilizację w imperium, które nie ma ludzi do oddania. Zmierzone na
+   * czystym boocie: z dwóch imperiów jedno trzyma 8-12 wolnych POP przez 400 lat cyw., drugie
+   * siedzi na zerze przez lata 50-200 i odbija do 5 — guard realnie bramkuje mniej więcej
+   * połowę czasu, więc NIE jest teatrem.
+   *
+   * ⚠ `delay: 0` — OBOWIĄZKOWO. `_firePending` biegnie POZA per-regułowym try/catch, a
+   * `AlienCivSystem` woła `tickEmpire` poza własnym: odroczona odpowiedź, która rzuci, zabija
+   * tik KAŻDEGO imperium ustawionego dalej w pętli. Jeden tik Directora to i tak jeden
+   * wyświetlany miesiąc, więc `delay` nie miałby czym wyrazić „miesiąca mobilizacji" — ten
+   * miesiąc odmierza `DEPLOY_DURATION_CIVYEARS` w `VesselManager`.
+   *
+   * Porcja `count: 2` (jak doktryny): mobilizacja podnosi `getStrength`, a to LICZNIK
+   * `milRatio` — opróżnienie magazynu w jednym kroku potrafiłoby przeskoczyć próg wojny
+   * w ciągu jednego roku cywilizacyjnego.
+   */
+  mobilize_reserve: {
+    id:       'mobilize_reserve',
+    trigger:  { kind: 'poll', probe: 'storedWarshipsAtCapital', gte: 1 },
+    guard:    ['empireHasFreeCrew', 'empireOutgunnedByPlayer'],
+    roll:     { startPct: 40, stepPct: 30, capPct: 100, unit: 'displayedYear' },
+    delay:    0,
+    response: { action: 'mobilizeVessels', params: { count: 2 } },
+    // Agresywne imperia sięgają po ludzi chętniej; ostrożne dłużej trzymają ich przy pracy.
+    personalityMod: { axis: 'aggression', at0: 0.6, at1: 1.4 },
+    cooldown: { years: 3.0 },
+  },
 };
 
 /**

@@ -26,6 +26,10 @@ export class NotificationCenter {
     EventBus.on('expedition:reconComplete',  e => this._handleReconComplete(e));
     EventBus.on('observatory:discovered',    e => this._handleObservatoryDiscovered(e));
     EventBus.on('observatory:vesselScanComplete', e => this._handleVesselScanComplete(e));
+    // W2-7 — mobilizacja rezerwy obcego imperium. Bramka jakości kontaktu SIEDZI W HANDLERZE
+    // (patrz `_handleMobilized`): `add()` dubluje wszystko do Dziennika, więc filtrować trzeba
+    // PRZED nim, a nie po.
+    EventBus.on('director:mobilized', e => this._handleMobilized(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -251,6 +255,47 @@ export class NotificationCenter {
       logChannel: 'intel',
       logText: t('notif.vesselScanTitle', vName),
       payload: { vesselId, empireId: empId },
+    });
+  }
+
+  /**
+   * W2-7 — obce imperium OBSADZA okręty z rezerwy.
+   *
+   * ⚠ TO JEST BRAMKA MGŁY WOJNY, NIE FILTR HAŁASU. `add()` bezwarunkowo dubluje każdą
+   *   notyfikację do Dziennika gracza na kanale `intel`, więc niebramkowany wpis oznaczałby,
+   *   że gracz czyta mobilizację obcych BEZ ŻADNEGO rozpoznania — dokładnie ta klasa, którą
+   *   Slice 1 zamykał dwa razy (stocznie AI, potem życie kolonii AI). Wymagamy `contact`:
+   *   na `rumor` wiadomo, że ktoś tam jest, ale nie co robi.
+   * ⚠ Gate stoi TUTAJ, u odbiorcy, a nie u producenta — `director:mobilized` jest też ścieżką
+   *   audytu (`DebugLog`), a ta ma widzieć wszystko (kanał deweloperski jest celowo niebramkowany).
+   * ⚠ Bez nazwy imperium przy braku `detailed`: `add()` nie ma dedupe dla naszego payloadu
+   *   (dedupe działa wyłącznie po `payload.bodyId`), więc jedynym hamulcem częstotliwości jest
+   *   rzut raz na rok wyświetlany po stronie reguły.
+   *
+   * ⚠ DWA SZCZEBLE UJAWNIENIA — to jest ROZBIEŻNOŚĆ ZAMIERZONA, nie przeoczenie. Ten wpis
+   *   wymaga `contact`, a liczby rezerwy w panelu wywiadu (`knownReserve`/`knownCrewCapacity`)
+   *   piszą się dopiero na `detailed`. Na `contact` gracz wie WIĘC, ŻE przeciwnik obsadza
+   *   okręty — bo to jest zdarzenie, które da się zaobserwować — ale nie wie ILE ich ma
+   *   w magazynie, bo to wynik rozpoznania, nie obserwacji. Wyrównanie obu do jednego szczebla
+   *   albo odebrałoby graczowi widoczne zdarzenie, albo rozdało pełną kolejność bojową za darmo.
+   */
+  _handleMobilized({ empireId, count }) {
+    if (!empireId || !(count > 0)) return;
+    const intel = window.KOSMOS?.intelSystem;
+    if (!intel?.isAtLeast?.(empireId, 'contact')) return;      // fail-closed: brak modułu ⇒ brak wpisu
+
+    const reg = window.KOSMOS?.empireRegistry;
+    const named = intel.isAtLeast(empireId, 'detailed');
+    const empName = (named && reg?.get?.(empireId)?.name) ? reg.get(empireId).name : t('intel.unknownEmpire');
+    this.add({
+      type: 'mobilization',
+      severity: 'warn',
+      source: 'directorMobilization',
+      title: t('notif.mobilizationTitle', empName),
+      subtitle: t('notif.mobilizationSubtitle', count),
+      logChannel: 'intel',
+      logText: t('notif.mobilizationTitle', empName),
+      payload: { empireId, count },
     });
   }
 

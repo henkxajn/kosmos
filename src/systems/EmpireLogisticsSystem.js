@@ -356,6 +356,34 @@ export class EmpireLogisticsSystem {
     // kurier ma krążyć niezależnie od stanu paliwa.
     if ((v.status === 'idle' || v.status === 'refueling') && v.position?.state === 'docked') {
       if (!outpost || !outEnt) return;  // outpost zniknął — cleanup przeniesie do reserve
+
+      // ── W2-7: KURIER W REZERWIE ────────────────────────────────────────────────────────
+      // Po W2-2 każdy kadłub ze stoczni kolonijnej — także kurier — schodzi do REZERWY, a
+      // `dispatchOnMission` odrzuca rezerwę PRZED sprawdzeniem statusu i doku, zwracając goły
+      // `false`. Poniższy `if (ok)` nie ma gałęzi `else`, `_log` jest domyślnie wyłączony,
+      // a kurier ZOSTAJE na etacie trasy — więc trasa raportuje się jako obsadzona, kolejny
+      // kurier nie powstaje i przez zero ton ładunku nie przechodzi ANI JEDNO zdarzenie.
+      // To jest najcichsza możliwa awaria i dlatego naprawiamy ją TUTAJ, w miejscu, gdzie
+      // stan „utknął" jest już wykryty i mamy ID statku.
+      //
+      // ⚠ Mobilizacja trwa miesiąc (wyświetlany), więc `deployVessel` NIE dispatchuje od razu:
+      //   kurier przechodzi w `mobilizing`, a wysyłka złapie go przy którymś z kolejnych
+      //   przebiegów dyspozytora (biegnie co LOGISTICS_INTERVAL_CIVYEARS). Logistyka AI płaci
+      //   więc za kuriera tę samą cenę co gracz — POP i czas — zamiast dostawać zwolnienie.
+      if (v.serviceState && v.serviceState !== 'active') {
+        if (v.serviceState === 'mobilizing') return;             // już w drodze do służby
+        const dep = vm.deployVessel?.(cid);
+        this._log('kurier w rezerwie → mobilizacja', `${cid} (${dep?.ok ? 'ok' : dep?.reason ?? 'brak deployVessel'})`);
+        if (!dep?.ok) {
+          // Odmowa MUSI być słyszalna — inaczej „kurier nie lata" wygląda identycznie
+          // przed naprawą i po niej (ścieżka audytu, nie Dziennik gracza).
+          EventBus.emit('director:mobilizeRejected', {
+            empireId: empire?.id ?? null, reason: 'courier_deploy_refused',
+            detail: `${cid}:${dep?.reason ?? 'unknown'}`,
+          });
+        }
+        return;
+      }
       const distAU = this._distAU(capEnt, outEnt);
       const travel = distAU / speedAU;
       const fuelCost = distAU * (v.fuel?.consumption ?? v._baseFuelPerAU ?? 0.35);

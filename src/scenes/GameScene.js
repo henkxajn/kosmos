@@ -107,6 +107,7 @@ import { DirectorProduction, registerProductionGuards } from '../systems/directo
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/director/DirectorFirstContact.js';
 import { DirectorPressure, registerPressureBehaviors } from '../systems/director/DirectorPressure.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../systems/director/DirectorDoctrine.js';
+import { DirectorMobilization, registerMobilizationBehaviors } from '../systems/director/DirectorMobilization.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
@@ -360,6 +361,14 @@ export class GameScene {
     // bezczynnie przy stolicy AI (V15).
     this.directorDoctrine     = new DirectorDoctrine();
     registerDoctrineBehaviors(this.directorDoctrine, { allowOverride: true });
+    // W2-7 — decyzja mobilizacyjna: KIEDY imperium zdejmuje ludzi z hali fabrycznej i obsadza
+    // kadłuby z rezerwy. Ta sama zasada kolejności co wyżej: rejestracja PRZED konstrukcją
+    // silnika, bo katalog waliduje nazwy i rzuca na nieznanej (audyt R12).
+    // ⚠ Stolicę czyta przez `window.KOSMOS.directorProduction`, ale LENIWIE — dopiero w tiku,
+    //   nie przy rejestracji. Dlatego kolejność względem wpisu do lokatora niżej nie ma
+    //   znaczenia (tak samo działa `DirectorDoctrine._capitalBodyId`).
+    this.directorMobilization = new DirectorMobilization();
+    registerMobilizationBehaviors(this.directorMobilization, { allowOverride: true });
     this.directorSystem       = new DirectorSystem();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
@@ -438,6 +447,7 @@ export class GameScene {
     window.KOSMOS.directorFirstContact = this.directorFirstContact;
     window.KOSMOS.directorPressure   = this.directorPressure;
     window.KOSMOS.directorDoctrine   = this.directorDoctrine;
+    window.KOSMOS.directorMobilization = this.directorMobilization;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;

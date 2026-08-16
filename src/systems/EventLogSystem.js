@@ -42,6 +42,17 @@ const TYPE_MAP = {
   expedition_fail:    { channel: 'fleet',  severity: 'warn'  },
   fleet:              { channel: 'fleet',  severity: 'info'  },
 
+  // Wojna, wywiad, dyplomacja (M4 P1 — kanały istniały w `CHANNELS`, ale NIE tutaj).
+  // ⚠ To była CICHA usterka, nie brak funkcji: `_log(text, 'combat')` trafiał na
+  //   `TYPE_MAP[type] || TYPE_MAP.info`, czyli na kanał **system**, mimo że `LOG_COLORS`
+  //   w UIManagerze definiuje `intel`/`combat`/`diplomacy` — wpis miał więc poprawny KOLOR
+  //   i mylnie wyglądał na poprawnie skierowany. 18 wywołań (bitwy, odwroty, ruchy wrogich
+  //   flot, wypowiedzenia wojny, strata załogi z W2-4) lądowało poza swoimi filtrami.
+  //   Znalezione przy W2-7, bo powiadomienie o mobilizacji AI MUSI trafić na kanał wywiadu.
+  intel:              { channel: 'intel',  severity: 'info'  },
+  combat:             { channel: 'combat', severity: 'warn'  },
+  diplomacy:          { channel: 'system', severity: 'warn'  },
+
   // System
   auto_slow:          { channel: 'system', severity: 'info'  },
   info:               { channel: 'system', severity: 'info'  },

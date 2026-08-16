@@ -681,6 +681,11 @@ export default {
   'notif.vesselScanTitle': '🔭 Zidentyfikowano kontakt: {0}',
   'notif.group.discoveryBody': 'Odkrycia',
   'notif.group.vesselScan': 'Zidentyfikowane kontakty',
+  // W2-7 — mobilizacja rezerwy obcych. Wpis powstaje TYLKO od jakości kontaktu 'contact'
+  //   w górę; nazwa imperium dochodzi dopiero na 'detailed' (niżej: „Nieznane imperium").
+  'notif.mobilizationTitle':    '⚓ {0} obsadza okręty załogami',
+  'notif.mobilizationSubtitle': 'Rezerwa wchodzi do służby: {0}',
+  'notif.group.mobilization':   'Mobilizacje obcych',
   'fleet.battleHeader': 'Bitwa, rok {0}',
   'fleet.battleResult': 'Wynik',
   'fleet.battleNoRecord': 'Brak rekordu bitwy',
@@ -3458,6 +3463,10 @@ export default {
   'intel.capital':          'stolica',
   'intel.militaryStrength': 'Siła wojskowa',
   'intel.combatUnits':      '{0} jednostek bojowych',
+  // W2-7 — potencjał obok siły. {0} rezerwy w tych samych jednostkach co siła; zdolność
+  //   załogowa w POP wolnych w stolicy (to ona bramkuje mobilizację).
+  'intel.reserveHulls':     '+ {0} w rezerwie (bez załóg)',
+  'intel.crewCapacity':     'wolna załoga: {0} POP',
   // W1-3c — ciągły odczyt układu sił w panelu intelu (odpowiedź PRZED decyzją, nie po).
   'intel.powerBalance':           'Układ sił',
   'intel.powerBalanceDominant':   'miażdżysz ich (+{0}%)',

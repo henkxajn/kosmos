@@ -28,6 +28,8 @@ import {
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
 import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
+import { DirectorMobilization, registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
+import { DirectorProduction, registerProductionGuards } from '../../systems/director/DirectorProduction.js';
 import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
 
 let pass = 0, fail = 0;
@@ -230,6 +232,12 @@ console.log('T8 — DirectorSystem: kill-switch, walidacja przy starcie, katalog
   // nazwę i RZUCA na nieznanej (decyzja 7). Bez tej rejestracji keeper wywala się na starcie —
   // i to jest zachowanie ZAMIERZONE, nie kruchość testu.
   registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
+  // W2-7 — reguła `mobilize_reserve` dokłada DWIE rodziny naraz: własną (sonda rezerwy +
+  // akcja) ORAZ guard `empireHasFreeCrew`, który mieszka w rejestratorze PRODUKCJI. Katalog
+  // nie zwaliduje się bez obu — i to też jest kontrakt, nie kruchość: reguła sięgająca po
+  // cudzy guard musi go mieć naprawdę, a nie „gdzieś w produkcji".
+  registerMobilizationBehaviors(new DirectorMobilization(), { allowOverride: true });
+  registerProductionGuards(new DirectorProduction(), { allowOverride: true });
   assert(!throws(() => new DirectorSystem()),
     '…a PO rejestracji katalog produkcyjny konstruuje się normalnie');
 

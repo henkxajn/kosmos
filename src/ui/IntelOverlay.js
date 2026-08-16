@@ -284,6 +284,21 @@ export class IntelOverlay extends BaseOverlay {
       ctx.fillText(`  ${'█'.repeat(bars)}${'░'.repeat(10 - bars)}`, x + pad + 4, iy);
       iy += 14;
 
+      // W2-7 — POTENCJAŁ obok SIŁY. Linia wyżej mówi, ile imperium ma OBSADZONYCH okrętów;
+      // ta mówi, ile trzyma w magazynie i ilu ludzi ma jeszcze do oddania. Bez niej gracz
+      // czytałby spadek `knownMilitary` po W2-2 jako rozbrojenie przeciwnika, a nie jako
+      // flotę czekającą na rozkaz — czyli dokładnie odwrotnie niż jest.
+      if (intel.knownReserve != null && intel.knownReserve > 0) {
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`  ${t('intel.reserveHulls', intel.knownReserve)}`, x + pad + 4, iy);
+        iy += 14;
+      }
+      if (intel.knownCrewCapacity != null) {
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`  ${t('intel.crewCapacity', intel.knownCrewCapacity.toFixed(1))}`, x + pad + 4, iy);
+        iy += 14;
+      }
+
       // W1-3c — CIĄGŁY odczyt układu sił. Odpowiada na pytanie, które gracz zadaje PRZED
       // decyzją dyplomatyczną („czy w ogóle mam z czym prosić"), a nie po odmowie. Kanał
       // rozbicia akceptacji (E4) jest z natury REAKTYWNY i pokazuje się wyłącznie przy

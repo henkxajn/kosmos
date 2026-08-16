@@ -28,6 +28,8 @@ import { INCIDENT_CHANNELS } from '../../data/AcceptanceWeightData.js';
 import { DirectorPressure, registerPressureBehaviors } from '../../systems/director/DirectorPressure.js';
 import { DirectorFirstContact, registerFirstContactBehaviors } from '../../systems/director/DirectorFirstContact.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
+import { DirectorProduction, registerProductionGuards } from '../../systems/director/DirectorProduction.js';
+import { DirectorMobilization, registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
 
 registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
 registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
@@ -35,6 +37,10 @@ registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true 
 // nazwę i RZUCA na nieznanej (decyzja 7). Bez tej rejestracji keeper wywala się na starcie —
 // i to jest zachowanie ZAMIERZONE, nie kruchość testu.
 registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
+registerMobilizationBehaviors(new DirectorMobilization(), { allowOverride: true });
+// W2-7: reguła mobilizacji używa guardu `empireHasFreeCrew` z rejestratora PRODUKCJI,
+// więc katalog nie zwaliduje się bez obu rodzin naraz.
+registerProductionGuards(new DirectorProduction(), { allowOverride: true });
 
 let pass = 0, fail = 0;
 const A = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };

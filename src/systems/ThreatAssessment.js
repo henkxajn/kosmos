@@ -46,7 +46,13 @@ export class ThreatAssessment {
     this._onInvalidate = () => { this._dirty = true; };
     // Zdarzenia zmieniające zbiór kadłubów + tik jako siatka bezpieczeństwa dla WSZYSTKIEGO,
     // czego te dwa nie łapią (dokowanie modułów, przejęcia, restore save'a).
-    this._events = ['vessel:created', 'vessel:wrecked', 'time:tick'];
+    // ⚠ W2-7: `vessel:mobilization*` MUSZĄ tu być. To jedyne zdarzenia, które przenoszą kadłub
+    //   między SIŁĄ a POTENCJAŁEM bez tworzenia ani niszczenia statku — czyli zmieniają obie
+    //   liczby, nie ruszając zbioru. Bez nich mobilizacja byłaby widoczna dopiero przy
+    //   następnym `time:tick`, a guard `empireOutgunnedByPlayer` czytałby w tym samym tiku
+    //   stan sprzed własnej decyzji i mobilizował drugi raz na nieaktualnych danych.
+    this._events = ['vessel:created', 'vessel:wrecked',
+                    'vessel:mobilizationStarted', 'vessel:mobilizationComplete', 'time:tick'];
     for (const ev of this._events) EventBus.on(ev, this._onInvalidate);
   }
 

@@ -53,6 +53,12 @@ const TRACKED_EVENTS = [
   'director:firstContactBeat',
   'director:firstContactKill',
   'director:pressureIncident',   // S6 — nacisk L1-L2 (poziom, liczba statków, odmowy produkcji)
+  // W2-7 — mobilizacja rezerwy. `mobilizeRejected` jest tu tak samo ważny jak `mobilized`:
+  // AI nie ma ŻADNEJ innej powierzchni, na której widać, że rozmieszczenie odmówiło, więc bez
+  // tej pary „reguła odpaliła i nic się nie stało" byłoby nie do odróżnienia od „reguły nikt
+  // nie podłączył". `mobilized` NIE niesie nazwy imperium do Dziennika — to kanał audytu.
+  'director:mobilized',
+  'director:mobilizeRejected',
 ];
 
 class DebugLog {

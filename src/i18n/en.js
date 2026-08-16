@@ -680,6 +680,11 @@ export default {
   'notif.vesselScanTitle': '🔭 Contact identified: {0}',
   'notif.group.discoveryBody': 'Discoveries',
   'notif.group.vesselScan': 'Identified contacts',
+  // W2-7 — alien reserve mobilization. The entry appears ONLY from contact quality upwards;
+  //   the empire name is withheld until 'detailed' (below that: "Unknown empire").
+  'notif.mobilizationTitle':    '⚓ {0} is crewing warships',
+  'notif.mobilizationSubtitle': 'Reserve entering service: {0}',
+  'notif.group.mobilization':   'Alien mobilizations',
   'fleet.battleHeader': 'Battle, year {0}',
   'fleet.battleResult': 'Result',
   'fleet.battleNoRecord': 'No battle record',
@@ -3456,6 +3461,10 @@ export default {
   'intel.capital':          'capital',
   'intel.militaryStrength': 'Military strength',
   'intel.combatUnits':      '{0} combat units',
+  // W2-7 — potential beside force. {0} reserve in the same units as strength; crew capacity
+  //   in POP free at the capital (that is what gates mobilization).
+  'intel.reserveHulls':     '+ {0} in reserve (uncrewed)',
+  'intel.crewCapacity':     'free crew: {0} POP',
   // W1-3c — continuous balance-of-power readout in the intel panel (answers BEFORE the decision).
   'intel.powerBalance':           'Balance of power',
   'intel.powerBalanceDominant':   'you dominate (+{0}%)',

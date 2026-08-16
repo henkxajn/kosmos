@@ -20,12 +20,14 @@ let _listeners = false;
 const GROUP_ICONS = {
   discovery_body: '🔭',
   vessel_scan:    '🛰',
+  mobilization:   '⚓',   // W2-7 — obce imperium obsadza okręty z rezerwy
 };
 
 function _groupTitle(type) {
   switch (type) {
     case 'discovery_body': return t('notif.group.discoveryBody');
     case 'vessel_scan':    return t('notif.group.vesselScan');
+    case 'mobilization':   return t('notif.group.mobilization');
     default:               return type;
   }
 }
