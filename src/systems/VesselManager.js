@@ -43,7 +43,7 @@ import {
 } from '../data/VesselNames.js';
 import { t } from '../i18n/i18n.js';
 import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
-import { isStationId, resolveTransferStore } from '../utils/TransferStore.js';
+import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -51,6 +51,15 @@ const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 const SUN_EXCLUSION_AU = 0.3;                           // AU
 const SUN_EXCLUSION    = SUN_EXCLUSION_AU * AU_TO_PX;   // px — promień strefy
 const SUN_MARGIN       = 0.1 * AU_TO_PX;                // margines ominięcia
+
+// W2 (R-B) — ile trwa przejście REZERWA ↔ SŁUŻBA. Orzeczenie właściciela: „krótko, ale
+// niezerowo — JEDEN MIESIĄC CZASU GRY". `CIV_TIME_SCALE = 12`, więc jeden wyświetlany
+// miesiąc = 1.0 civYear = 1/12 roku wyświetlanego. Jednostka siedzi w NAZWIE i w komentarzu
+// (konwencja E6, 11 istniejących `*_CIVYEARS`), bo obie strony tej zamiany są wiarygodne.
+// ⚠ Ta stała jest odmierzana PIERWSZYM parametrem `_tick` — tym, który nazywa się
+//   `deltaYears`, a niesie civDeltaYears (subskrypcja :80-81 świadomie zamienia nazwy).
+//   Skopiowanie tu linii `_tickVesselMaintenance(physDeltaYears)` dałoby cichy błąd ×12.
+const DEPLOY_DURATION_CIVYEARS = 1.0;   // 1.0 civYear = 1 WYŚWIETLANY MIESIĄC (CIV_TIME_SCALE = 12)
 
 // Tankowanie: ile jednostek paliwa/rok docked vessel ładuje (z inventory kolonii)
 const REFUEL_RATES = {
@@ -82,6 +91,13 @@ export class VesselManager {
 
     EventBus.on('vessel:rename', ({ vesselId, name }) =>
       this._renameVessel(vesselId, name));
+
+    // W2-4 (R-C) — załoga GINIE ze statkiem. Wrak zostaje w rejestrze (isWreck), więc nie
+    // przechodzi przez `destroyVessel` w chwili straty; to jedyny szew, który łapie przemoc.
+    // Realny producent w grze to `EnemyAttackHandler._turnIntoWreck` (VCS/DSCS/AutoRetreat
+    // emitują tylko w gałęzi fallbacku, gdy EAH nie ma) — jeden subskrybent pokrywa wszystkie.
+    EventBus.on('vessel:wrecked', ({ vesselId, vessel }) =>
+      this._settleCrewOnLoss(vessel ?? this._vessels.get(vesselId), 'killed'));
 
     // Cleanup statków przy zniszczeniu kolonii
     EventBus.on('colony:destroyed', ({ planetId, destroyedVesselIds }) =>
@@ -821,6 +837,182 @@ export class VesselManager {
     return true;
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // W2-4 — rozmieszczenie i wycofanie (R-B / R-C, decyzje 7-9, 18-19)
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // BUDOWA TO PRZEMYSŁ, ROZMIESZCZENIE TO LUDZIE. Kadłub schodzi ze stoczni do rezerwy;
+  // dopiero obsadzenie załogą (POP) czyni z niego okręt w służbie. Oba przejścia trwają
+  // `DEPLOY_DURATION_CIVYEARS` i przechodzą przez stan `mobilizing`, w którym okręt NIE
+  // jest w służbie (nie walczy, nie patroluje, nie bierze misji) — `isInService` decyduje.
+  //
+  // KIEDY PŁACIMY: przy ROZKAZIE (ludzie od razu schodzą z hali fabrycznej i spędzają
+  // miesiąc na szkoleniu/zaokrętowaniu). KIEDY ODDAJEMY: przy UKOŃCZENIU wycofania
+  // (decyzja 19 — „POP wraca przy zakończeniu, nie przy decyzji"). Asymetria jest celowa
+  // i w obie strony niekorzystna dla gracza — mobilizacja ma boleć od razu.
+
+  /** Kolonia, która płaci załogą za TEN kadłub. Kolejność: port zacumowania (kolonia albo
+   *  stacja → jej kolonia-matka) → dom → kolonia budująca. JEDEN resolver dla obu kierunków —
+   *  inaczej powtórzylibyśmy §C-4 („trzy różne kolonie na trzy fazy życia jednego statku"). */
+  _resolveCrewColony(vessel) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return null;
+    const dock = vessel?.position?.dockedAt ?? null;
+    if (dock) {
+      const direct = colMgr.getColony(dock);
+      if (direct?.civSystem) return direct;
+      const st = EntityManager.get(dock);
+      if (st?.type === 'station') {
+        const mother = resolveHomeColony(st);
+        if (mother?.civSystem) return mother;
+      }
+    }
+    for (const id of [vessel?.homeColonyId, vessel?.colonyId]) {
+      const col = id ? colMgr.getColony(id) : null;
+      if (col?.civSystem) return col;
+    }
+    return null;
+  }
+
+  /**
+   * Rozmieść okręt: rezerwa → służba. Załoga (POP) pobierana NATYCHMIAST, stan przechodzi
+   * w `mobilizing` na jeden wyświetlany miesiąc.
+   * @returns {{ ok: boolean, reason?: string, crew?: number, colonyId?: string }}
+   *   `reason` to KOD (snake_case), nie tekst — tłumaczy dopiero warstwa UI.
+   */
+  deployVessel(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel)          return { ok: false, reason: 'vessel_not_found' };
+    if (vessel.isWreck)   return { ok: false, reason: 'vessel_is_wreck' };
+    if (vessel.serviceState === 'active')     return { ok: false, reason: 'already_in_service' };
+    if (vessel.serviceState === 'mobilizing') return { ok: false, reason: 'already_mobilizing' };
+
+    const colony = this._resolveCrewColony(vessel);
+    if (!colony?.civSystem) return { ok: false, reason: 'no_crew_colony' };
+
+    const crewCost = _getHullDef(vessel.shipId)?.crewCost ?? 0;
+    if (crewCost > 0) {
+      const res = colony.civSystem.commitCrew(crewCost);
+      if (!res.ok) return { ok: false, reason: 'no_crew_pops', crew: crewCost };
+      vessel.crewLocked       = res.taken;
+      vessel.crewStrataLocked = res.byStrata;
+      vessel.crewColonyId     = colony.planetId;
+    }
+
+    vessel.serviceState     = 'mobilizing';
+    vessel.mobilizeTarget   = 'active';
+    vessel.mobilizeProgress = 0;
+    EventBus.emit('vessel:mobilizationStarted', {
+      vesselId: vessel.id, vessel, target: 'active',
+      crew: vessel.crewLocked ?? 0, colonyId: colony.planetId,
+      durationCivYears: DEPLOY_DURATION_CIVYEARS,
+    });
+    return { ok: true, crew: vessel.crewLocked ?? 0, colonyId: colony.planetId };
+  }
+
+  /**
+   * Wycofaj okręt: służba → rezerwa. Załoga zostaje zablokowana do KOŃCA przejścia
+   * (decyzja 19) i dopiero wtedy wraca do puli kolonii, która ją oddała.
+   * @returns {{ ok: boolean, reason?: string }}
+   */
+  withdrawVessel(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel)         return { ok: false, reason: 'vessel_not_found' };
+    if (vessel.isWreck)  return { ok: false, reason: 'vessel_is_wreck' };
+    if (vessel.serviceState === 'stored')     return { ok: false, reason: 'already_stored' };
+    if (vessel.serviceState === 'mobilizing') return { ok: false, reason: 'already_mobilizing' };
+    // Okręt w locie/na misji nie da się odstawić do rezerwy — najpierw musi wrócić.
+    if (vessel.position?.state === 'in_transit') return { ok: false, reason: 'vessel_in_transit' };
+
+    vessel.serviceState     = 'mobilizing';
+    vessel.mobilizeTarget   = 'stored';
+    vessel.mobilizeProgress = 0;
+    EventBus.emit('vessel:mobilizationStarted', {
+      vesselId: vessel.id, vessel, target: 'stored',
+      crew: vessel.crewLocked ?? 0, colonyId: vessel.crewColonyId ?? null,
+      durationCivYears: DEPLOY_DURATION_CIVYEARS,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Tick przejścia rezerwa ↔ służba.
+   * ⚠ `civDy` to civDeltaYears — pierwszy parametr `_tick` (patrz komentarz przy
+   *   `DEPLOY_DURATION_CIVYEARS`). Wzór akumulatora zerżnięty z `_tickRepair`.
+   * ⚠ BEZSTANOWY z rozmysłem: iteruje rejestr zamiast trzymać własny indeks. Indeks
+   *   zbudowany w konstruktorze byłby PUSTY po `restore` (dokładnie ta usterka, którą
+   *   `MovementOrderSystem` musiał załatać re-indeksem w `GameScene`), a zapis zrobiony
+   *   w połowie mobilizacji utknąłby na zawsze.
+   * @param {number} civDy — civDeltaYears
+   */
+  _tickMobilization(civDy) {
+    if (!civDy || civDy <= 0) return;
+    for (const vessel of this._vessels.values()) {
+      if (vessel.serviceState !== 'mobilizing') continue;
+      vessel.mobilizeProgress = (vessel.mobilizeProgress ?? 0) + civDy;
+      if (vessel.mobilizeProgress < DEPLOY_DURATION_CIVYEARS) continue;
+
+      const target = vessel.mobilizeTarget === 'stored' ? 'stored' : 'active';
+      vessel.mobilizeProgress = 0;
+      vessel.mobilizeTarget   = null;
+      vessel.serviceState     = target;
+
+      if (target === 'stored') this._settleCrewOnLoss(vessel, 'released');   // POP wraca DOPIERO teraz
+
+      addMissionLog(vessel, window.KOSMOS?.timeSystem?.gameTime ?? 0,
+        target === 'active' ? 'Deployed to service' : 'Withdrawn to reserve', 'info');
+      EventBus.emit('vessel:mobilizationComplete', { vesselId: vessel.id, vessel, serviceState: target });
+    }
+  }
+
+  /**
+   * Rozlicz załogę kadłuba, który przestaje istnieć albo schodzi do rezerwy.
+   *
+   * ⚠ IDEMPOTENTNE I ODPORNE NA PODWÓJNY STRZAŁ: czyta `crewLocked`, ZERUJE księgę
+   *   NAJPIERW, dopiero potem dotyka kolonii. Kolejność „kadłub przed załogą" vs „załoga
+   *   przed kadłubem" różni się w `MissionSystem` per miejsce (§C-3), a wrak sprzątany
+   *   później przechodzi przez `destroyVessel` — bez wyzerowania na wejściu każde z tych
+   *   miejsc naliczyłoby drugi raz.
+   * ⚠ Płaci WYŁĄCZNIE `crewColonyId` — kolonia, która tę załogę oddała. `colonyId`/
+   *   `homeColonyId` są przy śmierci kolonii przepisywane na macierzystą GRACZA, bez filtru
+   *   imperium (`_onColonyDestroyed`), więc oparcie się o nie drukowałoby POP gracza
+   *   z wrogiego kadłuba.
+   * @param {object} vessel
+   * @param {'released'|'killed'} mode
+   */
+  _settleCrewOnLoss(vessel, mode) {
+    if (!vessel) return;
+    const crew = vessel.crewLocked ?? 0;
+    const byStrata = vessel.crewStrataLocked ?? null;
+    if (crew <= 0 && !byStrata) return;
+
+    vessel.crewLocked       = 0;
+    vessel.crewStrataLocked = null;
+    const colonyId = vessel.crewColonyId ?? null;
+    vessel.crewColonyId     = null;
+
+    const colony = colonyId ? window.KOSMOS?.colonyManager?.getColony(colonyId) : null;
+    const civSys = colony?.civSystem ?? null;
+    if (!civSys) return;              // kolonia-płatnik już nie żyje — załoga zginęła razem z nią
+
+    // Stary save / kadłub sprzed W2-4 ma skalar bez rozkładu — wtedy typujemy na najtańszą
+    // warstwę, żeby zwolnienie w ogóle miało adres (a nie rozjechało cudzych blokad).
+    const bag = byStrata ?? { laborer: crew };
+
+    if (mode === 'killed') {
+      const { crew: dead, wholeDied } = civSys.killCrew(bag);
+      if (dead > 0) {
+        EventBus.emit('civ:crewLost', {
+          vesselId: vessel.id, vesselName: vessel.name ?? vessel.shipId,
+          planetId: colonyId, colonyName: colony?.name ?? null,
+          crew: dead, wholeDied,
+        });
+      }
+    } else {
+      civSys.releaseCrew(bag);
+    }
+  }
+
   /**
    * Oznacz statek jako zużyty/zniszczony (colony_ship, katastrofa, walka orbitalna).
    * Usuwa z rejestru + z colony.fleet. Jednostki naziemne w troop bay GINĄ razem
@@ -829,6 +1021,13 @@ export class VesselManager {
   destroyVessel(vesselId) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return;
+
+    // W2-4 — kadłub znika ŚWIADOMIE (rozbiórka, zużycie przez misję, sprzątanie wraku):
+    // załoga schodzi na ląd i wraca do puli. Przemoc idzie osobną ścieżką (`vessel:wrecked`
+    // → `_settleCrewOnLoss(…, 'killed')`), a że obie ZERUJĄ `crewLocked`, wrak sprzątany
+    // później przez `_tickWreckCleanup` przechodzi tędy jako no-op. To jest cały mechanizm
+    // odporności na podwójne naliczenie (audyt W2 §C-3).
+    this._settleCrewOnLoss(vessel, 'released');
 
     // Jednostki naziemne w ładowni giną razem ze statkiem (dramaturgia desantu)
     if (vessel.groundUnits?.length > 0) {
@@ -1206,7 +1405,12 @@ export class VesselManager {
         //   albo w `restore` znika po cichu, bez ostrzeżenia (audyt W2 §S3).
         serviceState:     v.serviceState ?? 'active',
         mobilizeProgress: v.mobilizeProgress ?? 0,
+        mobilizeTarget:   v.mobilizeTarget ?? null,
         crewLocked:       v.crewLocked ?? 0,
+        // W2-4 — księga załogi: rozkład po warstwach + kolonia-płatnik. Bez OBU tych pól
+        //   wycofanie oddaje POP w złe miejsce (patrz komentarze przy polach w `Vessel.js`).
+        crewStrataLocked: v.crewStrataLocked ? { ...v.crewStrataLocked } : null,
+        crewColonyId:     v.crewColonyId ?? null,
       });
     }
     return {
@@ -1338,7 +1542,10 @@ export class VesselManager {
         //   Zapis sprzed v101 nie ma tych pól, a każdy jego statek BYŁ w służbie.
         serviceState:     vd.serviceState ?? 'active',
         mobilizeProgress: vd.mobilizeProgress ?? 0,
+        mobilizeTarget:   vd.mobilizeTarget ?? null,
         crewLocked:       vd.crewLocked ?? 0,
+        crewStrataLocked: vd.crewStrataLocked ? { ...vd.crewStrataLocked } : null,
+        crewColonyId:     vd.crewColonyId ?? null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {
@@ -1458,6 +1665,7 @@ export class VesselManager {
     this._tickRefueling(deltaYears);
     this._tickVesselMaintenance(physDeltaYears);   // S3.5a-1 — utrzymanie per ROK GRY (nie civYear)
     this._tickRepair(deltaYears);
+    this._tickMobilization(deltaYears);            // W2-4 — rezerwa ↔ służba, per civYear (NIE physDt!)
     this._tickFullScans(deltaYears);
     this._tickEndurance(deltaYears);
     // M2a ProximitySystem PRZED MOS — combat (event-driven po proximityEnter)
@@ -1593,6 +1801,10 @@ export class VesselManager {
 
     for (const vessel of this._vessels.values()) {
       if (!vessel.damaged) continue;
+      // W2 — kadłub w rezerwie jest ZAKONSERWOWANY, nie remontowany. Domknięcie zbioru
+      // wykluczeń zadeklarowanego w W2-2 (te dwa ticki wypadły z tamtego commitu).
+      // Skutek dla gracza: naprawa wymaga trzymania okrętu w służbie (pełne utrzymanie).
+      if (!isInService(vessel)) continue;
       if (vessel.position.state !== 'docked') continue;
 
       // Sprawdź czy kolonia ma stocznię
@@ -1663,6 +1875,9 @@ export class VesselManager {
 
     for (const vessel of this._vessels.values()) {
       if (!vessel.position) continue;   // statek bez pozycji (transient/malformed) — pomiń, nie zrywaj tick-loop
+      // W2 — rezerwa NIE tankuje: inaczej magazyn pobierałby drugie, nieopisane utrzymanie
+      // (paliwo + warp_cores) obok stawki R-A. Paliwo dolewa się po rozmieszczeniu.
+      if (!isInService(vessel)) continue;
       if (vessel.position.state !== 'docked') continue;
 
       // S3.3b-S3b — auto-tankowanie respektuje flagę gracza (default-true). Wyłączone → pomiń

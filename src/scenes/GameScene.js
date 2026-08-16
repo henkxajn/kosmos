@@ -1150,6 +1150,51 @@ export class GameScene {
         }
         console.warn(`[debug] Spawn nieudany — sprawdź archetypeId (dostępne: shock_infantry, rocket_artillery, garrison_unit, aa_platform, medic_unit, recon_drone, ground_supply_unit)`);
       },
+      // ── W2-4 — model rozmieszczenia (rezerwa ↔ służba) ──────────────────────────
+      // Jedyne wejście do deploy/withdraw DO CZASU W2-6 (UI „Rezerwa" w Stoczni + „Wycofaj"
+      // w Rejestrze). Bez tych trzech helperów kadłub schodzący ze stoczni byłby po W2-2
+      // trwale bezużyteczny, a GATE 2 nie miałby czym poruszyć modelu.
+      deployVessel: (vesselId) => {
+        const res = window.KOSMOS?.vesselManager?.deployVessel?.(vesselId);
+        if (res?.ok) console.log(`[debug] ⚓ ${vesselId} → mobilizacja (załoga ${res.crew} POP z ${res.colonyId}); 1.0 civYear = 1 miesiąc wyświetlany`);
+        else         console.warn(`[debug] deploy odrzucony: ${res?.reason ?? 'brak VesselManagera'}`);
+        return res;
+      },
+      withdrawVessel: (vesselId) => {
+        const res = window.KOSMOS?.vesselManager?.withdrawVessel?.(vesselId);
+        if (res?.ok) console.log(`[debug] 📦 ${vesselId} → wycofanie do rezerwy (POP wraca DOPIERO po ukończeniu — decyzja 19)`);
+        else         console.warn(`[debug] wycofanie odrzucone: ${res?.reason ?? 'brak VesselManagera'}`);
+        return res;
+      },
+      // Przegląd modelu: stan służby + księga załóg + blokady kolonii (obie strony rachunku).
+      reserveInfo: () => {
+        const vMgr = window.KOSMOS?.vesselManager;
+        if (!vMgr) { console.warn('[debug] Brak VesselManagera'); return null; }
+        const rows = vMgr.getAllVessels()
+          .filter(v => !v.isWreck)
+          .map(v => ({
+            id: v.id, nazwa: v.name ?? v.shipId, kadlub: v.shipId,
+            stan: v.serviceState ?? 'active',
+            postep: +(v.mobilizeProgress ?? 0).toFixed(3), cel: v.mobilizeTarget ?? '—',
+            zaloga: +(v.crewLocked ?? 0).toFixed(3),
+            warstwy: v.crewStrataLocked ? JSON.stringify(v.crewStrataLocked) : '—',
+            placi: v.crewColonyId ?? '—',
+            wrogi: isEnemyVessel(v) ? 'tak' : '',
+          }));
+        console.table(rows);
+        const cm = window.KOSMOS?.colonyManager;
+        const locks = (cm?.getAllColonies?.() ?? [])
+          .filter(c => c.civSystem)
+          .map(c => ({
+            kolonia: c.name ?? c.planetId,
+            zablokowane: +(c.civSystem._lockedPops ?? 0).toFixed(3),
+            wolne: +(c.civSystem.freePops ?? 0).toFixed(3),
+            bezrobotni: c.civSystem.unemployed ?? 0,
+            ludzie: +(c.civSystem.humans ?? 0).toFixed(3),
+          }));
+        console.table(locks);
+        return { statki: rows, kolonie: locks };
+      },
       // KOSMOS.debug.spawnMyVessel('hull_frigate', { modules: [...] }) — instant spawn
       // własnego militarnego statku w hangarze homePlanet. Auto-unlock point_defense.
       // M4 P1.5 — żeby testowanie pursue/engage nie wymagało godzinnego ramp-up

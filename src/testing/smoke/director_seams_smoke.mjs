@@ -154,22 +154,41 @@ console.log('T3-T6 — startShipBuild na kolonii AI: kadłub wojenny, kolejka, z
         'T6: PIN LUKI — okręt AI wychodzi BEZ ownerEmpireId (S4 musi dołożyć stempel; wtedy ten pin odwrócić)');
     }
 
-    // T5 — bramka załogi jest TWARDA: odmowa, nie kolejka.
-    const starved = ai.find(c => (c.civSystem?.freePops ?? 0) < crew);
-    if (starved) {
-      if (cm._getShipyardLevel(starved) === 0) {
-        starved.resourceSystem.receive({ Fe: 5000, Si: 5000, Cu: 5000, Ti: 2000, C: 2000 });
-        starved.buildingSystem.autoPlaceBuilding('shipyard');
-        new Ticker(core.timeSystem).run(40, { tickSize: 1.0, stopOnCrash: true });
-        starved._shipyardLevelDirty = true;
+    // T5 — ⚠ ODWRÓCONE W W2-4. Do W2-3 ten test pinował TWARDĄ odmowę `startShipBuild` przy
+    // `freePops < crewCost` („reguła nacisku potrzebuje guardu załogowego"). P4 przeniósł koszt
+    // załogi z BUDOWY na ROZMIESZCZENIE (decyzja 13), więc pusta kolonia ma teraz prawo
+    // postawić kadłub — zapłaci POP dopiero, gdy go obsadzi (`VesselManager.deployVessel`).
+    //
+    // ⚠ Fixture WYMUSZONY, nie wyszukiwany. Stara wersja robiła `ai.find(freePops < crew)`
+    // i przy braku trafienia wypisywała „T5 pominięty" — czyli na szczęśliwym seedzie
+    // kasowanie bramki przeszłoby NIEZAUWAŻONE (zielony sweep bez asercji). Teraz głodzimy
+    // kolonię sami i najpierw pinujemy, że warunek naprawdę zachodzi.
+    {
+      const starved = ai[0] ?? null;
+      assert(!!starved?.civSystem, 'T5-kontrola: jest kolonia AI z żywym civSystem (fixture istnieje)');
+      if (starved?.civSystem) {
+        // Zablokuj WSZYSTKO, co wolne — najprostsze wymuszenie `freePops = 0` bez zabijania POPów.
+        const free = starved.civSystem.freePops ?? 0;
+        if (free > 0) starved.civSystem.lockPops(free, 'mix');
+        assert((starved.civSystem.freePops ?? 0) < crew,
+          `T5-kontrola: kolonia realnie zagłodzona z POPów (freePops=${(starved.civSystem.freePops ?? 0).toFixed(2)} < crewCost=${crew})`);
+
+        if (cm._getShipyardLevel(starved) === 0) {
+          starved.resourceSystem.receive({ Fe: 5000, Si: 5000, Cu: 5000, Ti: 2000, C: 2000 });
+          starved.buildingSystem.autoPlaceBuilding('shipyard');
+          new Ticker(core.timeSystem).run(40, { tickSize: 1.0, stopOnCrash: true });
+          starved._shipyardLevelDirty = true;
+        }
+        (starved.techSystem ?? cm.techSystem)?.grantTechs?.([HULLS.hull_frigate.requires].filter(Boolean));
+        starved.resourceSystem.receive(grant);
+
+        const lockedBefore = starved.civSystem._lockedPops ?? 0;
+        const res = cm.startShipBuild(starved.planetId, 'hull_frigate', MODULES);
+        assert(res?.ok === true,
+          `T5: brak wolnych POPów NIE blokuje już budowy — budowa to przemysł (ok=${res?.ok}, reason=${res?.reason ?? '—'})`);
+        assert(Math.abs((starved.civSystem._lockedPops ?? 0) - lockedBefore) < 1e-9,
+          'T5: budowa nie zablokowała ANI JEDNEGO POPa — koszt załogi przeniesiony na rozmieszczenie');
       }
-      (starved.techSystem ?? cm.techSystem)?.grantTechs?.([HULLS.hull_frigate.requires].filter(Boolean));
-      starved.resourceSystem.receive(grant);
-      const res = cm.startShipBuild(starved.planetId, 'hull_frigate', MODULES);
-      assert(res?.ok === false,
-        'T5: brak wolnych POPów ⇒ TWARDA odmowa (nie kolejka) — reguła nacisku potrzebuje guardu załogowego');
-    } else {
-      console.log('  … T5 pominięty: w tym boocie każda kolonia AI ma wolne POPy (patrz sonda)');
     }
   }
 }

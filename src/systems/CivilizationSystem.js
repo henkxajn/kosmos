@@ -332,6 +332,174 @@ export class CivilizationSystem {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // W2 — księga załóg okrętów (R-B / R-C, decyzja 18)
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // Trzy operacje na jednej osi: załoga schodzi z rynku pracy przy ROZMIESZCZENIU,
+  // wraca przy WYCOFANIU, GINIE przy stracie okrętu. Mechanizmem jest istniejąca blokada
+  // (`_lockedPerStrata`) — załoga wciąż JEST ludźmi kolonii (liczy się do populacji, je,
+  // mieszka), przestaje tylko być dostępna do pracy.
+  //
+  // ⚠ TRZY PUŁAPKI, KTÓRE TE METODY ZAMYKAJĄ (audyt W2 §C-3/§C-4 + krytyk kompletności):
+  //
+  //  1. `removePop(type, count)` iteruje `for (i = 0; i < count; i++)`, więc dla count=0.4
+  //     wykonuje pętlę RAZ i zabija CAŁEGO człowieka — 2.5× za dużo (5× dla hull_small).
+  //     Załogi kadłubów są UŁAMKOWE z definicji (0.2 / 0.4 / 0.6 / 1.0 po redenominacji ×4),
+  //     więc śmierć musi być akumulatorowa. Nośnikiem ułamka jest `_growthProgress` — ta sama
+  //     część ułamkowa `humans`, która akumuluje wzrost. Dzięki temu `humans` spada DOKŁADNIE
+  //     o załogę w tej samej chwili, a inwariant floor(humans) = Σ strata + _unemployed trzyma
+  //     (pętla nie pozwala `_growthProgress` zejść poniżej zera).
+  //
+  //  2. Zwolnienie NIETYPOWANE (`_distributeUnlock`) zdejmuje proporcjonalnie do AKTUALNYCH
+  //     blokad, a nie do tego, co ta załoga wzięła. Ponieważ `_lockedPerStrata` dzieli worek
+  //     z jednostkami naziemnymi (lock TYPOWANY na `laborer`), wycofanie okrętu zjadałoby lock
+  //     garnizonu — a jego własne, typowane zwolnienie klamruje się potem do zera (`:288`)
+  //     i te POPy zostają zablokowane NA ZAWSZE. Dlatego `commitCrew` ZWRACA rozkład, a
+  //     `releaseCrew`/`killCrew` przyjmują go z powrotem i zdejmują TYPOWANIE, wpis po wpisie.
+  //
+  //  3. `removePop(null, …)` wybiera warstwę o NAJNIŻSZEJ SATYSFAKCJI i jest ŚLEPY NA BLOKADY —
+  //     potrafi zbić `strata.count` poniżej `_lockedPerStrata` tej warstwy, łamiąc inwariant
+  //     `locked ⊆ employed`. Śmierć załogi używa więc `_removeUnlockedPop`, który zabiera
+  //     człowieka spoza blokad (bezrobotny → najtańsza warstwa z wolnym człowiekiem).
+
+  /** Warstwy posortowane po płacy bazowej ROSNĄCO; remis rozstrzyga kolejność STRATA_TYPES
+   *  (deterministycznie — miner/worker i merchant/bureaucrat mają równe stawki). */
+  _strataByWageAsc() {
+    return [...STRATA_TYPES].sort((a, b) =>
+      ((BASE_WAGE[a] ?? 0) - (BASE_WAGE[b] ?? 0)) || (STRATA_TYPES.indexOf(a) - STRATA_TYPES.indexOf(b)));
+  }
+
+  /** Ile blokady warstwa jest w stanie UNIEŚĆ realnymi ludźmi (count − to, co już zablokowane). */
+  _hostableIn(type) {
+    return Math.max(0, (this.strata[type]?.count ?? 0) - (this._lockedPerStrata[type] ?? 0));
+  }
+
+  /**
+   * W2 (R-B, decyzja 18) — zabierz `amount` POP na załogę okrętu.
+   * Źródło w kolejności: (1) BEZROBOTNI, (2) EKSMISJA z warstwy o NAJNIŻSZEJ płacy —
+   * mobilizacja ściąga ludzi z hali fabrycznej. Bez (2) rozmieszczenie byłoby niewykonalne
+   * przy projektowanej równowadze AI `freePops ≈ 0`, więc NIE bramkujemy na `freePops`.
+   *
+   * ALL-OR-NOTHING: pół załogi nie obsadza okrętu, więc przy braku ludzi nic się nie dzieje.
+   * ⚠ Własny pre-check jest KONIECZNY — `lockPops` nie ma kanału odmowy i na kolonii z zerową
+   *   populacją (outpost) zapisałby całą blokadę na `laborer` bez pokrycia (`:302-305`).
+   *
+   * @param {number} amount — POP (ułamkowe)
+   * @returns {{ ok: boolean, taken: number, byStrata: Object<string,number> }}
+   */
+  commitCrew(amount) {
+    const want = Number(amount) || 0;
+    if (want <= 0) return { ok: false, taken: 0, byStrata: {} };
+
+    // Pojemność = ludzie zdolni ponieść blokadę: nieobciążeni pracownicy + bezrobotni.
+    let capacity = this._unemployed;
+    for (const type of STRATA_TYPES) capacity += this._hostableIn(type);
+    if (capacity < want - 1e-9) return { ok: false, taken: 0, byStrata: {} };
+
+    const order = this._strataByWageAsc();
+    const host  = order[0];                       // najtańsza praca ustępuje pierwsza
+
+    // (1) Bezrobotni najpierw. Blokada mieszka na WARSTWIE, a bezrobotni w żadnej nie siedzą —
+    //     przenosimy więc CAŁE osoby do najtańszej warstwy, żeby miały co unieść. Ułamek 0.4
+    //     też wymaga jednej całej osoby (strata.count jest całkowite); nadwyżka wróci do puli
+    //     przy najbliższej alokacji (`_allocateWorkforce` krok 1 — blokada ją tam ochroni).
+    const needHosts = Math.max(0, Math.ceil(want - 1e-9) - this._hostableIn(host));
+    if (needHosts > 0 && this._unemployed > 0) {
+      const take = Math.min(needHosts, this._unemployed);
+      this.strata[host].count += take;
+      this._unemployed        -= take;
+    }
+
+    // (2) Rozłóż blokadę po warstwach wg płacy ROSNĄCO.
+    const byStrata = {};
+    let remaining = want;
+    for (const type of order) {
+      if (remaining <= 1e-9) break;
+      const hostable = this._hostableIn(type);
+      if (hostable <= 0) continue;
+      const chunk = Math.min(remaining, hostable);
+      this._lockedPerStrata[type] = (this._lockedPerStrata[type] ?? 0) + chunk;
+      byStrata[type] = (byStrata[type] ?? 0) + chunk;
+      remaining -= chunk;
+    }
+
+    this._registeredPop = -1;                     // wymuś przeliczenie konsumpcji/etatów
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+    return { ok: true, taken: want - remaining, byStrata };
+  }
+
+  /**
+   * W2 (decyzja 19) — załoga wraca do puli. Zdejmuje DOKŁADNIE to, co `commitCrew` wzięło,
+   * warstwa po warstwie (patrz pułapka 2 wyżej). Populacja się nie zmienia — ludzie żyją.
+   * @param {Object<string,number>} byStrata — rozkład z `commitCrew`
+   * @returns {number} suma zwolnionych POP
+   */
+  releaseCrew(byStrata) {
+    let sum = 0;
+    for (const [type, amt] of Object.entries(byStrata ?? {})) {
+      const n = Number(amt) || 0;
+      if (n <= 0) continue;
+      this._lockedPerStrata[type] = Math.max(0, (this._lockedPerStrata[type] ?? 0) - n);
+      sum += n;
+    }
+    if (sum > 0) {
+      this._registeredPop = -1;
+      EventBus.emit('civ:populationChanged', this._popSnapshot());
+    }
+    return sum;
+  }
+
+  /**
+   * W2 (R-C) — załoga GINIE razem z okrętem. Zwalnia blokadę (etat wraca na rynek) i zabija
+   * dokładnie tylu ludzi, ilu było w załodze — z ułamkiem włącznie (pułapka 1 wyżej).
+   * @param {Object<string,number>} byStrata — rozkład z `commitCrew`
+   * @returns {{ crew: number, wholeDied: number }} crew = ubytek `humans`, wholeDied = pełne osoby
+   */
+  killCrew(byStrata) {
+    const crew = this.releaseCrew(byStrata);
+    if (crew <= 0) return { crew: 0, wholeDied: 0 };
+
+    this._growthProgress -= crew;
+    let wholeDied = 0, guard = 0;
+    while (this._growthProgress < -1e-9 && guard++ < 10000) {
+      if (!this._removeUnlockedPop()) { this._growthProgress = 0; break; }   // kolonia wymarła
+      this._growthProgress += 1;
+      wholeDied++;
+    }
+    if (this._growthProgress < 0) this._growthProgress = 0;                  // szum float
+
+    if (wholeDied > 0) {
+      // Zdarzenie potrzebne mechanice, nie Dziennikowi: pilnuje warunku końca gry
+      // (`GameScene`) i wymusza przeliczenie stawek (`BuildingSystem`). Wpis do Dziennika
+      // robi `civ:crewLost` z nazwą okrętu — inaczej gracz dostałby dwie linie o jednym zdarzeniu.
+      EventBus.emit('civ:popDied', {
+        cause: 'ship_crew_lost', population: this.population, planetId: this.planet?.id ?? null,
+      });
+    }
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+    return { crew, wholeDied };
+  }
+
+  /** Zabierz jednego CAŁEGO człowieka spoza blokad: bezrobotny → najtańsza warstwa z wolnym
+   *  człowiekiem → (ostatecznie) ktokolwiek, przycinając przy tym jego blokadę, żeby
+   *  `locked ⊆ employed` nie pękło. @returns {boolean} czy kogoś zabrano */
+  _removeUnlockedPop() {
+    if (this._unemployed > 0) { this._unemployed -= 1; return true; }
+    for (const type of this._strataByWageAsc()) {
+      if (this._hostableIn(type) >= 1) { this.strata[type].count -= 1; return true; }
+    }
+    // Kolonia złożona wyłącznie z zablokowanych (same załogi/garnizony).
+    for (const type of this._strataByWageAsc()) {
+      const s = this.strata[type];
+      if ((s?.count ?? 0) <= 0) continue;
+      s.count -= 1;
+      if ((this._lockedPerStrata[type] ?? 0) > s.count) this._lockedPerStrata[type] = s.count;
+      return true;
+    }
+    return false;
+  }
+
   // ── Konwersja strata (rekrutacja do innego zawodu) ──────────────────────
 
   /**

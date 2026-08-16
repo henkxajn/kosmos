@@ -15,9 +15,12 @@
 //     build na imperium (`logi.pendingBuildRoute`). Director ma własne okno oczekiwania,
 //     kluczowane inaczej, i **nie dotyka** pola logistyki — oba mogą budować równolegle.
 //
-//  2. GUARD ZAŁOGOWY (V3z). `startShipBuild` odmawia TWARDO przy braku wolnych POPów
-//     (nie kolejkuje), a zmierzona połowa kolonii AI stoi na `freePops = 0` przez 400 lat.
-//     Bez tego guardu reguła nacisku „odpalałaby" i cicho nie robiła nic.
+//  2. GUARD ZAŁOGOWY (V3z) — ⚠ PRZESUNIĘTY W W2-4, NIE SKASOWANY. Przesłanka („`startShipBuild`
+//     odmawia TWARDO przy braku wolnych POPów") przestała obowiązywać: P4 przeniósł koszt
+//     załogi z BUDOWY na ROZMIESZCZENIE, więc budowa nie może już cicho nic nie zrobić z powodu
+//     POPów. Sam `hasFreeCrew` żyje jako bramka MOBILIZACYJNA (guard `empireHasFreeCrew`,
+//     regułę dostaje w W2-7) — pomiar „połowa kolonii AI stoi na `freePops = 0`" jest tam
+//     równie wiążący, tylko na innym szczeblu.
 //
 //  3. GUARD STOCZNI (decyzja 6). Brak stoczni = brak produkcji, odsiewane **cicho, ale
 //     z wpisem w DebugLogu** — nigdy po cichu-po cichu.
@@ -36,7 +39,6 @@ import { DirectorGuards, DirectorActions } from './DirectorRegistry.js';
 import { resolveTemplate } from '../../utils/ShipTemplateResolver.js';
 import { SHIP_TEMPLATES } from '../../data/ShipTemplateData.js';
 import { unitFromKey } from '../../utils/DirectorRuleMath.js';
-import { HULLS } from '../../data/HullsData.js';
 
 /** Ile lat WYŚWIETLANYCH zlecenie może czekać na surowce, zanim wygaśnie (Ruling 2, fallback). */
 export const ORDER_TTL_DISPLAYED_YEARS = 3.0;
@@ -366,19 +368,17 @@ export class DirectorProduction {
     });
     if (!resolved.ok) return reject(resolved.reason, resolved.detail);
 
-    const hull = HULLS[resolved.hullId];
-    const crewCost = hull?.crewCost ?? 0;                 // ŻYWA wartość (×4 przy imporcie)
     const wanted = this._pickCount(params.count, ctx, templateId);
 
+    // ⚠ W2-4: TU BYŁA TRZECIA (I OSTATNIA) BRAMKA ZAŁOGOWA PRZY BUDOWIE — pre-check
+    //   `hasFreeCrew(empireId, hull.crewCost)` z powodem `no_crew`. USUNIĘTA: budowa to
+    //   przemysł, załoga płacona przy ROZMIESZCZENIU (P4, decyzja 13). Sam `hasFreeCrew`
+    //   ZOSTAJE — to jest odtąd bramka MOBILIZACYJNA, wołana przez zarejestrowany (i wciąż
+    //   nieużywany) guard `empireHasFreeCrew`, który dostanie regułę w W2-7.
+    //   ⚠ Kod `'no_crew'` jest PRZECIĄŻONY: `StationSystem` używa tego samego literału jako
+    //   `inactiveReason` modułu (z własnym i18n i plakietką 👥). Zniknął TYLKO ten producent.
     let queued = 0, started = 0;
     for (let i = 0; i < wanted; i++) {
-      // Załoga: twarda bramka `startShipBuild` (odmowa, nie kolejka) — sprawdzamy PRZED,
-      // żeby odmowa miała nasz powód i wpis, a nie ginęła w `fleet:buildFailed`.
-      if (!this.hasFreeCrew(empireId, crewCost)) {
-        if (queued + started === 0) return reject('no_crew', { crewCost, hullId: resolved.hullId });
-        break;                                            // część floty zamówiona — to nie porażka
-      }
-
       const res = cm.startShipBuild(capital.planetId, resolved.hullId, resolved.modules);
 
       if (!res?.ok) {

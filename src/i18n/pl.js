@@ -1014,6 +1014,12 @@ export default {
   'log.popBorn':            'Nowy POP w {0}. Populacja: {1}',
   'log.popDied':            'Strata POPa w {0}. Populacja: {1}',
   'log.popDiedStarvation':  'Strata POPa (głód) w {0}. Populacja: {1}',
+  // W2 — model rozmieszczenia (załoga przy deploy). {1} to POP, jednostka w tekście.
+  'log.crewLost':           '⚰ Załoga „{0}" zginęła razem z okrętem ({1} POP)',
+  'log.deployStarted':      '⚓ „{0}" — rozpoczęto rozmieszczenie (1 miesiąc, załoga {1} POP)',
+  'log.deployComplete':     '⚓ „{0}" wszedł do służby',
+  'log.withdrawStarted':    '📦 „{0}" — rozpoczęto wycofanie do rezerwy (1 miesiąc)',
+  'log.withdrawComplete':   '📦 „{0}" odstawiony do rezerwy — załoga wróciła do puli',
   'log.socialUnrest':       'Niepokoje społeczne w {0}',
   'log.colonyUnknown':      'Nieznana kolonia',
   'log.colonyUnrestLifted': '✓ Niepokoje w {0} zażegnane',
@@ -1109,6 +1115,8 @@ export default {
   'fleet.buildQueued': 'Statek w kolejce — oczekuje na surowce',
   'fleet.pendingCancelled': 'Zamówienie statku anulowane',
   'fleet.pendingOrders': 'Oczekujące',
+  // W2-4: klucz PRZENIESIONY z bramki BUDOWY na odmowę ROZMIESZCZENIA (kod 'no_crew_pops'
+  //   z `VesselManager.deployVessel`). Konsument wraca w W2-6 razem z przyciskiem Rozmieść.
   'fleet.noCrewPops': 'Brak wolnych POPów (potrzeba {0})',
   'fleet.buildTime': '⏱ Budowa: {0} lat',
   'fleet.surgeMax': '⚡ Max Surge osiągnięty',

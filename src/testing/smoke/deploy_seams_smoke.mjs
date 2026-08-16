@@ -5,20 +5,22 @@
 // W2 — więc zanim padnie pierwsza linijka kodu produkcyjnego, dowodzimy ich WYKONANIEM na
 // żywym boocie, nie odczytem źródła.
 //
-//   T1  C-1a: kolonijna stocznia AI BLOKUJE POP przy budowie okrętu wojennego
-//   T2  C-1b: orbitalna stocznia GRACZA nie blokuje NICZEGO — te same kadłuby, zero POP
+//   T1  C-1a: budowa okrętu wojennego na kolonii AI — koszt załogi (ODWRÓCONY w W2-4)
+//   T2  C-1b: stocznia orbitalna GRACZA — koszt załogi (ROZSZERZONY w W2-4)
 //   T3  C-2:  doktryna BIERZE zadokowany, uzbrojony okręt AI (dziś nie ma pojęcia „magazyn")
-//   T4  C-3:  strata okrętu ZOSTAWIA blokadę załogi — dzisiejszy PRZECIEK, pinowany jako stan
+//   T4  C-3:  strata okrętu a księga załogi (PRZECIEK → JAWNE OBCIĄŻENIE w W2-4)
 //   T5  C-6:  `_buildPlayerBattleUnit` wciąga zadokowany kadłub gracza do bitwy
 //   T6  S9:   spirala śmierci utrzymania — 6 krążowników, unieruchomione po GRACE latach
 //
-// ⚠ WSZYSTKIE SZEŚĆ TO PINY STANU SPRZED W2, NIE PINY POPRAWNOŚCI. Cztery z nich MAJĄ PAŚĆ
-//    i zostać ŚWIADOMIE ODWRÓCONE w kolejnych commitach — to jest dowód fail-first, nie regresja:
-//      T1 → W2-4 (budowa przestaje pobierać POP; koszt przenosi się na rozmieszczenie)
-//      T2 → W2-4 (znika asymetria `StationSystem.js:331` — gracz PIERWSZY RAZ płaci POP)
-//      T3 → W2-2 ROZSZERZONE, nie odwrócone (patrz niżej)
-//      T5 → W2-2 ROZSZERZONE, nie odwrócone (patrz niżej)
-//    T4 zostaje jako pin PRZECIEKU do W2-4, gdzie R-C zamienia go w jawne obciążenie.
+// ⚠ WSZYSTKIE SZEŚĆ POWSTAŁY JAKO PINY STANU SPRZED W2, NIE PINY POPRAWNOŚCI — cztery miały
+//    paść i zostać świadomie odwrócone. Stan wykonania planu:
+//      T1 → ✅ ODWRÓCONE w W2-4: budowa NIE pobiera POP (koszt przeniesiony na rozmieszczenie)
+//      T2 → ✅ ROZSZERZONE w W2-4: budowa nadal zero POP (kontrola pinu), ale ROZMIESZCZENIE
+//            gracza kosztuje — znika asymetria `StationSystem.js:331`, gracz PIERWSZY RAZ płaci
+//      T3 → ✅ ROZSZERZONE w W2-2 (nie odwrócone — patrz korekta niżej)
+//      T4 → ✅ PRZEKUTE w W2-4: przeciek („blokada przeżywa stratę, populacja bez zmian") stał
+//            się jawnym obciążeniem R-C („załoga ginie, `humans` spada dokładnie o załogę")
+//      T5 → ✅ ROZSZERZONE w W2-2 (nie odwrócone — patrz korekta niżej)
 //    T6 zostaje NIETKNIĘTY przez cały slice — to scenariusz regresyjny zgłoszony przez
 //    właściciela (`W1_PLAN.md` §Results), a W2-5 dokłada do niego tylko stawkę rezerwy.
 //    Wzór „pin luki z instrukcją, kiedy go odwrócić": `director_seams_smoke` T6.
@@ -38,6 +40,7 @@ import '../headless/env.js';           // MUSI być pierwszy (window/document/TH
 import { GameCore } from '../headless/GameCore.js';
 import { Ticker } from '../headless/Ticker.js';
 import EntityManager from '../../core/EntityManager.js';
+import EventBus from '../../core/EventBus.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { HULLS } from '../../data/HullsData.js';
 import { SHIPS } from '../../data/ShipsData.js';
@@ -93,8 +96,8 @@ function equipYard(core, colony) {
   colony.resourceSystem.receive({ ...GRANT });
 }
 
-// ── T1 — C-1a: kolonijna stocznia AI BLOKUJE POP ────────────────────────────────────────────
-console.log('T1 — C-1a: budowa okrętu wojennego na kolonii AI blokuje POP (dziś)');
+// ── T1 — C-1a: kolonijna stocznia AI NIE blokuje już POP (W2-4) ─────────────────────────────
+console.log('T1 — C-1a: budowa okrętu wojennego na kolonii AI NIE kosztuje POP (W2-4)');
 {
   const core = boot();
   const cm = core.colonyManager;
@@ -117,12 +120,14 @@ console.log('T1 — C-1a: budowa okrętu wojennego na kolonii AI blokuje POP (dz
     assert(res?.ok === true, `T1: AI buduje fregatę w stoczni KOLONIJNEJ (ok=${res?.ok}, reason=${res?.reason ?? '—'})`);
     assert(res?.pending !== true && (col.shipQueues?.length ?? 0) > 0,
       'T1: budowa RUSZYŁA (kolejka stoczni), nie wylądowała w `pendingShipOrders` — ' +
-      'tylko realny start zakłada blokadę załogi');
-    assert(after > before,
-      `T1: budowa ZABLOKOWAŁA POP — księga załóg urosła ${before.toFixed(3)} → ${after.toFixed(3)} ` +
-      '(W2-4 MA to odwrócić: build = przemysł, koszt POP przenosi się na deploy)');
-    assert(Math.abs((after - before) - crew) < 1e-6,
-      `T1: zablokowano DOKŁADNIE crewCost kadłuba (${(after - before).toFixed(3)} vs ${crew})`);
+      'gdyby wylądowała, pin mierzyłby nie tę ścieżkę');
+    // ⚠ ODWRÓCENIE W2-4. Do W2-3 tu stało `after > before` + „zablokowano DOKŁADNIE crewCost".
+    assert(Math.abs(after - before) < 1e-9,
+      `T1/W2-4: budowa NIE zablokowała ANI JEDNEGO POPa (${before.toFixed(3)} → ${after.toFixed(3)}) — ` +
+      'build = przemysł, koszt załogi przeniesiony na rozmieszczenie (decyzja 13)');
+    // KONTROLA PINU: kadłub NAPRAWDĘ ma niezerową załogę w definicji, więc zero powyżej jest
+    // skutkiem usunięcia bramki, a nie tego, że mierzymy kadłub bezzałogowy.
+    assert(crew > 0, `T1/W2-4 KONTROLA PINU: hull_frigate wciąż ma crewCost > 0 (${crew}) — zero mierzy BRAMKĘ, nie dane`);
   }
 }
 
@@ -169,8 +174,24 @@ console.log('T2 — C-1b: budowa w stoczni ORBITALNEJ gracza nie kosztuje ani je
   const built = core.vesselManager.getAllVessels().find(v => v.shipId === shipId);
   assert(!!built, 'T2: okręt wojenny gracza faktycznie powstał w stoczni orbitalnej');
   assert(Math.abs(after - before) < 1e-9,
-    `T2: ZERO POP zablokowane (${before.toFixed(3)} → ${after.toFixed(3)}) — asymetria ` +
-    'StationSystem.js:331; W2-4 MA to odwrócić (gracz zacznie płacić przy deploy)');
+    `T2: ZERO POP zablokowane przy BUDOWIE (${before.toFixed(3)} → ${after.toFixed(3)}) — ` +
+    'po W2-4 to nie asymetria, tylko reguła obowiązująca OBIE stocznie');
+
+  // ── W2-4 — druga połowa: to ROZMIESZCZENIE kosztuje, i to po raz pierwszy w historii gry
+  //    kosztuje GRACZA. Bez tej asercji zielone T2 znaczyłoby dziś to samo, co przed slice'em.
+  if (built) {
+    assert(built.serviceState === 'stored', 'T2/W2-4: kadłub ze stoczni orbitalnej ląduje w REZERWIE');
+    const dep = core.vesselManager.deployVessel(built.id);
+    const afterDeploy = lockedSum(home);
+    assert(dep?.ok === true, `T2/W2-4: rozmieszczenie przyjęte (ok=${dep?.ok}, reason=${dep?.reason ?? '—'})`);
+    assert(Math.abs((afterDeploy - after) - (def.crewCost ?? 0)) < 1e-6,
+      `T2/W2-4: GRACZ PŁACI POP przy rozmieszczeniu — dokładnie crewCost kadłuba ` +
+      `(${(afterDeploy - after).toFixed(3)} vs ${def.crewCost}); asymetria StationSystem.js:331 zamknięta`);
+    assert(Math.abs((built.crewLocked ?? 0) - (def.crewCost ?? 0)) < 1e-6,
+      `T2/W2-4: księga STATKU zgadza się z księgą kolonii (crewLocked=${built.crewLocked})`);
+    assert(built.crewColonyId === home?.planetId,
+      `T2/W2-4: zapamiętany PŁATNIK to kolonia-matka stacji (${built.crewColonyId}) — nie „gdziekolwiek wskazuje colonyId"`);
+  }
 }
 
 // ── T3 — C-2: doktryna bierze zadokowany, uzbrojony okręt AI ────────────────────────────────
@@ -217,8 +238,8 @@ console.log('T3 — C-2: pula doktryn NIE zna pojęcia „magazyn" (dziś bierze
   }
 }
 
-// ── T4 — C-3: strata okrętu zostawia blokadę załogi (PRZECIEK) ──────────────────────────────
-console.log('T4 — C-3: zniszczenie okrętu NIE zwalnia i NIE zabija załogi — dzisiejszy przeciek');
+// ── T4 — C-3: strata okrętu ROZLICZA załogę (przeciek przekuty w obciążenie, W2-4) ──────────
+console.log('T4 — C-3/R-C: strata okrętu ZWALNIA blokadę i ZABIJA załogę (przeciek zamknięty)');
 {
   const core = boot();
   const cm = core.colonyManager;
@@ -228,27 +249,48 @@ console.log('T4 — C-3: zniszczenie okrętu NIE zwalnia i NIE zabija załogi �
 
   if (col) {
     equipYard(core, col);
-    if ((col.civSystem.freePops ?? 0) < crew) col.civSystem._unemployed += Math.ceil(crew) + 2;
     const res = cm.startShipBuild(col.planetId, 'hull_frigate', [...WARSHIP]);
-    assert(res?.ok === true, 'T4: fregata zamówiona (blokada załogi założona)');
+    assert(res?.ok === true, 'T4: fregata zamówiona');
 
-    const lockedAfterBuild = lockedSum(col);
-
-    // Doprowadź budowę do końca, potem zniszcz kadłub — dokładnie tak, jak robi to walka.
+    // Doprowadź budowę do końca.
     new Ticker(core.timeSystem).run(200, { tickSize: 1.0, stopOnCrash: true });
     const hull = core.vesselManager.getAllVessels().find(v => v.shipId === 'hull_frigate');
     assert(!!hull, 'T4: fregata zeszła ze stoczni');
+
     if (hull) {
-      // ⚠ Populację próbkujemy TUŻ PRZED stratą, nie przed tickerem: przez 200 civY kolonia
-      //    rośnie, więc porównanie sprzed budowy mierzyłoby wzrost, a nie skutek zniszczenia.
-      const popBeforeLoss = col.civSystem.population;
-      core.vesselManager.destroyVessel(hull.id);
+      // Kadłub schodzi ze stoczni do REZERWY i nie ma jeszcze żadnej załogi — dopiero
+      // rozmieszczenie zakłada księgę, którą strata ma potem rozliczyć.
+      const lockedBeforeDeploy = lockedSum(col);
+      const dep = core.vesselManager.deployVessel(hull.id);
+      assert(dep?.ok === true, `T4: rozmieszczenie przyjęte (ok=${dep?.ok}, reason=${dep?.reason ?? '—'})`);
+      const lockedAfterDeploy = lockedSum(col);
+      assert(Math.abs((lockedAfterDeploy - lockedBeforeDeploy) - crew) < 1e-6,
+        `T4: rozmieszczenie zablokowało DOKŁADNIE crewCost (${(lockedAfterDeploy - lockedBeforeDeploy).toFixed(3)} vs ${crew})`);
+
+      // ⚠ Próbki TUŻ PRZED stratą, nie sprzed budowy: przez 200 civY kolonia rośnie, więc
+      //    porównanie sprzed tickera mierzyłoby wzrost, a nie skutek zniszczenia.
+      const humansBefore = col.civSystem.humans;
+      EventBus.emit('vessel:wrecked', { vesselId: hull.id, vessel: hull });
       const lockedAfterLoss = lockedSum(col);
-      assert(Math.abs(lockedAfterLoss - lockedAfterBuild) < 1e-9,
-        `T4: blokada załogi PRZEŻYŁA zniszczenie okrętu (${lockedAfterBuild.toFixed(3)} → ` +
-        `${lockedAfterLoss.toFixed(3)}) — POP jest na zawsze niedostępny, a populacja bez zmian`);
-      assert(col.civSystem.population === popBeforeLoss,
-        'T4: populacja NIE spadła — dziś załoga nie ginie, tylko znika z rynku pracy (R-C to zmienia)');
+
+      assert(Math.abs(lockedAfterLoss - lockedBeforeDeploy) < 1e-6,
+        `T4/W2-4: blokada ZWOLNIONA przy stracie (${lockedAfterDeploy.toFixed(3)} → ${lockedAfterLoss.toFixed(3)}) — ` +
+        'koniec przecieku „POP zablokowany na zawsze"');
+      assert(Math.abs((humansBefore - col.civSystem.humans) - crew) < 1e-6,
+        `T4/W2-4: humans spadło DOKŁADNIE o załogę (${(humansBefore - col.civSystem.humans).toFixed(3)} vs ${crew}) — ` +
+        'ułamkowo, bez zaokrąglenia w górę do całego człowieka (pułapka `removePop`)');
+      assert((hull.crewLocked ?? 0) === 0 && hull.crewStrataLocked == null,
+        'T4/W2-4: księga statku WYZEROWANA — to jest cały mechanizm odporności na drugi strzał');
+
+      // Drugi strzał w ten sam kadłub (np. sprzątanie wraku przez `destroyVessel`) NIE MOŻE
+      // naliczyć po raz drugi — inaczej `MissionSystem` (raz kadłub-przed-załogą, raz odwrotnie)
+      // obciążałby kolonię dwukrotnie.
+      const humansAfterFirst = col.civSystem.humans;
+      EventBus.emit('vessel:wrecked', { vesselId: hull.id, vessel: hull });
+      core.vesselManager.destroyVessel(hull.id);
+      assert(Math.abs(col.civSystem.humans - humansAfterFirst) < 1e-9 &&
+             Math.abs(lockedSum(col) - lockedAfterLoss) < 1e-6,
+        'T4/W2-4: powtórne rozliczenie tego samego kadłuba jest NO-OPEM (idempotencja)');
     }
   }
 }

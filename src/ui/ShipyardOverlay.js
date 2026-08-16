@@ -283,14 +283,14 @@ export class ShipyardOverlay extends BaseOverlay {
         const { cost: rawC, commodityCost: comC } = calcShipCost(hull, mods);
         const allCosts = { ...rawC, ...comC };
         const allAfford = Object.entries(allCosts).every(([k, need]) => (inv[k] ?? 0) >= need);
-        const crewCost = hull.crewCost ?? 0;
-        const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
-
-        const canBuildNow = hasTech && canBuildFacility && canBuildAny && allAfford && hasCrew;
-        const canQueue = hasTech && canBuildFacility && hasCrew && !allAfford;
+        // ⚠ W2-4: `hasCrew` USUNIĘTE ze WSZYSTKICH trzech miejsc (klikalność, kolejkowanie,
+        //   łańcuch powodów). Budowa nie kosztuje POP — koszt płaci ROZMIESZCZENIE. Zostawienie
+        //   tego członu wyszarzałoby przycisk według reguły, której silnik już nie egzekwuje.
+        const canBuildNow = hasTech && canBuildFacility && canBuildAny && allAfford;
+        const canQueue = hasTech && canBuildFacility && !allAfford;
         const canClick = canBuildNow || canQueue;
 
-        // Powód blokady — priorytet: tech kadłuba → stocznia orbitalna → załoga → slot.
+        // Powód blokady — priorytet: tech kadłuba → stocznia orbitalna → slot.
         let blockReason = null;
         let blockColor = THEME.warning;
         if (!hasTech) {
@@ -300,8 +300,6 @@ export class ShipyardOverlay extends BaseOverlay {
         } else if (!canBuildFacility) {
           blockReason = `🛰 ${t('fleet.requiresOrbitalShipyard')}`;
           blockColor = THEME.textDim;
-        } else if (!hasCrew) {
-          blockReason = `👥 ${t('fleet.noCrewPops', crewCost)}`;
         } else if (!canClick) {
           blockReason = `⏳ ${t('fleet.shipyardFull', queues.length, shipyardLevel)}`;
         }
@@ -431,10 +429,9 @@ export class ShipyardOverlay extends BaseOverlay {
       const name = COMMODITY_SHORT[k] ?? k;
       lines.push({ text: `${icon} ${name}: ${have}/${need}`, ok });
     }
-    if (order.crewCost > 0) {
-      const freePops = window.KOSMOS?.civSystem?.freePops ?? 0;
-      lines.push({ text: `👤 ${freePops.toFixed(1)}/${order.crewCost} POP`, ok: freePops >= order.crewCost });
-    }
+    // ⚠ W2-4: odczyt „👤 freePops/crewCost" USUNIĘTY — zlecenie nie czeka już na POPy, tylko
+    //   na surowce. (Ten wiersz i tak czytał GLOBALNY `KOSMOS.civSystem`, nie aktywną kolonię
+    //   jak reszta pliku — Findings filed 4.) Załoga pokazuje się przy rozmieszczeniu (W2-6).
 
     const tipW = 200;
     const tipH = 22 + lines.length * LH + 8;

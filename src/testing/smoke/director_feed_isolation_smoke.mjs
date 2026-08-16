@@ -85,8 +85,18 @@ console.log('\nT1/T2/T3: bramka właściciela w Dzienniku gracza');
   // Emitent MUSI dokładać planetId, inaczej bramka jest ślepa (fail-closed → cisza wszędzie).
   A(!/fleet:buildFailed', \{ reason/.test(CM),
     'T2e: ŻADNA emisja fleet:buildFailed nie jest już bez planetId');
-  A((CM.match(/fleet:buildFailed', \{ planetId/g) ?? []).length >= 7,
-    'T2f: wszystkie emisje buildFailed niosą planetId (7 miejsc w startShipBuild)');
+  // ⚠ W2-4: liczba miejsc SPADŁA z 7 na 6 (bramka załogowa `fleet.noCrewPops` usunięta —
+  //    budowa nie kosztuje POP, koszt płaci rozmieszczenie). Sztywna liczba pinowała nie tę
+  //    własność, o którą chodzi: pin ma mówić „KAŻDA emisja niesie planetId", nie „jest ich
+  //    dokładnie N". Liczymy więc z KODU i porównujemy ze sobą, a stała 5 zostaje wyłącznie
+  //    jako zabezpieczenie przed pustym pinem (gdyby ktoś skasował wszystkie emisje naraz).
+  // `CM` przechodzi przez `codeOnly` (komentarze zdjęte), więc nagłówkowa lista zdarzeń
+  // NIE liczy się do sumy — liczymy same emisje.
+  const bfAll  = (CM.match(/fleet:buildFailed'/g) ?? []).length;
+  const bfWith = (CM.match(/fleet:buildFailed', \{ planetId/g) ?? []).length;
+  A(bfAll >= 5, `T2f-kontrola: pin nie jest pusty — emisji buildFailed w kodzie: ${bfAll}`);
+  A(bfWith === bfAll,
+    `T2f: KAŻDA emisja buildFailed niesie planetId (${bfWith}/${bfAll} w startShipBuild)`);
 
   // Kurierzy AI — KAŻDY subskrybent z osobna (vessel:docked ma dwóch).
   for (const ev of ['vessel:launched', 'vessel:docked']) {

@@ -153,7 +153,6 @@ console.log('\nT4: każda odmowa ma powód');
 {
   const cases = [
     ['no_shipyard',   { shipyard: 0 }],
-    ['no_crew',       { freePops: 0 }],
     ['no_hull',       { techs: ['ion_drives'] }],          // brak point_defense ⇒ kadłub niedostępny
   ];
   for (const [expected, opts] of cases) {
@@ -162,6 +161,24 @@ console.log('\nT4: każda odmowa ma powód');
     const res = prod.queueWarships(ctx, { template: 'frigate_system_defender', count: 1 });
     A(res.ok === false && res.reason === expected,
       `T4/${expected}: odmowa z właściwym powodem (jest ${res.reason})`);
+    prod.dispose(); EventBus.clear();
+  }
+
+  // ⚠ W2-4 — ŚWIADOME ODWRÓCENIE. `no_crew` PRZESTAŁ być powodem odmowy przy BUDOWIE:
+  //    P4 przeniósł koszt załogi z budowy na ROZMIESZCZENIE (decyzja 13), więc stolica
+  //    z zerem wolnych POPów ma prawo postawić kadłub — zapłaci dopiero, gdy go obsadzi.
+  {
+    const { capital } = stand({ freePops: 0 });
+    const prod = new DirectorProduction();
+    const res = prod.queueWarships(ctx, { template: 'frigate_system_defender', count: 1 });
+    A(res.ok === true,
+      `T4/no_crew ODWRÓCONE: stolica z freePops=0 BUDUJE (ok=${res.ok}, reason=${res.reason ?? '—'})`);
+    A((capital.shipQueues.length + capital.pendingShipOrders.length) === 1,
+      'T4/no_crew: zlecenie realnie weszło do produkcji — odmowa nie przeniosła się cicho gdzie indziej');
+    // KONTROLA PINU: sam predykat NIE zniknął — zmienił szczebel. To on bramkuje mobilizację
+    // (guard `empireHasFreeCrew`, regułę dostaje w W2-7); gdyby go skasowano, W2-7 nie miałby czym bramkować.
+    A(prod.hasFreeCrew('emp_001', 1) === false,
+      'T4/no_crew KONTROLA: `hasFreeCrew` żyje dalej i nadal widzi brak POPów — jako bramka MOBILIZACYJNA');
     prod.dispose(); EventBus.clear();
   }
   stand();

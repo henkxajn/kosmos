@@ -32,6 +32,9 @@ import { ThreatAssessment, PLAYER_OWNER_ID } from '../../systems/ThreatAssessmen
 import { DirectorDoctrine } from '../../systems/director/DirectorDoctrine.js';
 import { WarSystem } from '../../systems/WarSystem.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
+import { ProximitySystem } from '../../systems/ProximitySystem.js';
+import { TransportOrderSystem } from '../../systems/TransportOrderSystem.js';
+import EventBus from '../../core/EventBus.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -140,6 +143,67 @@ console.log('T3 — zbiór wykluczeń: rezerwa nie walczy, nie ginie, nie patrol
     'T3c: `dispatchOnMission` odmawia kadłubowi w rezerwie');
   assert(vMgr.getAvailable(home).every(v => v.id !== stored.id),
     'T3c: `getAvailable` (pula doboru misji/ekspedycji/kolonizacji) pomija rezerwę');
+
+  // ⚠ (d) i (e) DOŁOŻONE W W2-4. Nagłówek tego pliku obiecuje „każdy konsument z osobna",
+  //    a dwa z siedmiu wykluczeń W2-2 nie miały ŻADNEJ asercji — regresja w nich byłaby cicha.
+  //    Oba pinujemy WYKONANIEM predykatu, nie odczytem źródła.
+
+  // (d) nie wykrywa i nie jest wykrywany (ProximitySystem) — pinowane ZACHOWANIEM systemu,
+  //     bo `_isValidForProximity` jest funkcją prywatną modułu; pin na zdarzeniu jest i tak
+  //     mocniejszy: mierzy to, co naprawdę widzi reszta gry.
+  {
+    const near1 = mk('Blisko A', 'active');
+    const near2 = mk('Blisko B', 'active');
+    near1.position.x = 0;   near1.position.y = 0;
+    near2.position.x = 1;   near2.position.y = 0;      // ~0.01 AU (AU_TO_PX = 110)
+    near1.position.state = 'orbiting'; near2.position.state = 'orbiting';
+
+    const prox = new ProximitySystem(vMgr);
+    let seen = 0;
+    const onEnter = () => { seen++; };
+    EventBus.on('vessel:proximityEnter', onEnter);
+    prox._tick(1.0);
+    assert(seen > 0, 'T3d KONTROLA PINU: dwa kadłuby W SŁUŻBIE obok siebie DAJĄ kontakt (pin mierzy detekcję, nie nic)');
+
+    near2.serviceState = 'stored';
+    prox._activePairs.clear(); prox._activeCombatPairs?.clear?.(); prox._activeSensorLockPairs?.clear?.();
+    seen = 0;
+    prox._tick(1.0);
+    assert(seen === 0, 'T3d: gdy jeden kadłub jest w REZERWIE, kontakt NIE powstaje — magazyn nie jest celem sensorycznym');
+    EventBus.off('vessel:proximityEnter', onEnter);
+  }
+
+  // (e) nie wozi ładunku (pula logistyczna zleceń transportowych)
+  {
+    const tos = new TransportOrderSystem();
+    const gs = window.KOSMOS?.gameState;
+    const hasStore = !!gs?.get?.('transportOrders');
+    assert(hasStore, 'T3e KONTROLA FIXTURE: harness ma store `transportOrders` (bez niego pula jest zawsze pusta i pin nic nie mierzy)');
+    if (hasStore) {
+      // ⚠ ŚWIEŻE kadłuby, i to TRANSPORTOWE: (1) `active` z góry jest już WRAKIEM po (b),
+      //    a wrak wypada z puli z innego powodu; (2) pula wymaga `cargoMax > 0`, więc fregata
+      //    bojowa odpadłaby na braku ładowni — pin mierzyłby wtedy uzbrojenie, nie stan służby.
+      const mkHauler = (name, state) => {
+        const v = createVessel('hull_medium', home, {
+          name, modules: ['engine_ion', 'cargo_large'], x: 0, y: 0, systemId: sysId,
+        });
+        v.position.state = 'docked'; v.position.dockedAt = home;
+        v.homeColonyId = home; v.serviceState = state; v.unpaidYears = 0;
+        vMgr._vessels.set(v.id, v);
+        return v;
+      };
+      const hauler = mkHauler('Wozi', 'active');
+      const idle   = mkHauler('W rezerwie 2', 'stored');
+      assert(hauler.cargoMax > 0, `T3e KONTROLA FIXTURE: kadłub transportowy ma ładownię (cargoMax=${hauler.cargoMax})`);
+      tos.addToPool(hauler.id);
+      tos.addToPool(idle.id);
+      const free = tos._freePoolVessels();
+      assert(free.some(v => v.id === hauler.id),
+        'T3e KONTROLA PINU: kadłub W SŁUŻBIE jest w wolnej puli logistycznej');
+      assert(free.every(v => v.id !== idle.id),
+        'T3e: kadłub w REZERWIE nie wchodzi do puli wożącej ładunek');
+    }
+  }
 }
 
 // ── T4 — rozdział siła / potencjał ──────────────────────────────────────────────────────────

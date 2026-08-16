@@ -1017,9 +1017,35 @@ export class UIManager {
     });
     EventBus.on('civ:popDied', ({ cause, population, planetId, colonyName }) => {
       if (!this._isPlayerColonyEvent(planetId)) return;
+      // W2-4: strata załogi ma WŁASNY wpis (z nazwą okrętu, `civ:crewLost` niżej) — ten
+      // event leci wtedy tylko dla mechaniki (koniec gry, przeliczenie stawek). Bez tego
+      // pominięcia gracz dostawałby dwie linie o jednym zdarzeniu.
+      if (cause === 'ship_crew_lost') return;
       const name = colonyName ?? '—';
       const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';
       this._log(t(key, name, population), 'pop_died', planetId);
+    });
+
+    // W2-4 (R-C) — załoga zginęła razem z okrętem. Wojna ma cenę demograficzną i musi ją
+    // widać po nazwisku okrętu, nawet gdy ubytek jest ułamkowy (0.4 POP nie zbija licznika
+    // populacji o całego człowieka, ale JEST realną stratą — `humans` spada dokładnie o tyle).
+    EventBus.on('civ:crewLost', ({ vesselName, planetId, crew }) => {
+      if (!this._isPlayerColonyEvent(planetId)) return;
+      this._log(t('log.crewLost', vesselName ?? '—', (crew ?? 0).toFixed(1)), 'combat', planetId);
+    });
+
+    // W2-4 (R-B) — mobilizacja ma być ZDARZENIEM, nie cichym przełącznikiem stanu. Filtr
+    // `isEnemyVessel` bo `vessel:mobilization*` jest owner-agnostyczne: rozkaz mobilizacji AI
+    // (W2-7) trafia do wywiadu, nie do Dziennika gracza.
+    EventBus.on('vessel:mobilizationStarted', ({ vessel, target, crew }) => {
+      if (!vessel || isEnemyVessel(vessel)) return;
+      const key = target === 'stored' ? 'log.withdrawStarted' : 'log.deployStarted';
+      this._log(t(key, vessel.name ?? vessel.shipId, (crew ?? 0).toFixed(1)), 'fleet');
+    });
+    EventBus.on('vessel:mobilizationComplete', ({ vessel, serviceState }) => {
+      if (!vessel || isEnemyVessel(vessel)) return;
+      const key = serviceState === 'stored' ? 'log.withdrawComplete' : 'log.deployComplete';
+      this._log(t(key, vessel.name ?? vessel.shipId), 'fleet');
     });
 
     EventBus.on('expedition:reconProgress', ({ body, discovered }) => {

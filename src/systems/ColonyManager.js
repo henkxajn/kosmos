@@ -876,22 +876,13 @@ export class ColonyManager {
       return { ok: false, reason };
     }
 
-    // Sprawdź POPy (załoga blokowana przy budowie) — hard fail
-    const crewCost = ship.crewCost ?? 0;
-    let crewStrata = ship.crewStrata ?? null;
-    if (crewCost > 0) {
-      const civSys = colony.civSystem;
-      const freePops = civSys?.freePops ?? 0;
-      if (freePops < crewCost) {
-        const reason = t('fleet.noCrewPops', crewCost);
-        EventBus.emit('fleet:buildFailed', { planetId, reason });
-        return { ok: false, reason };
-      }
-      // Konwertuj wolnych POPów do wymaganej strata (jeśli brakuje)
-      if (crewStrata && crewStrata !== 'mix' && civSys) {
-        civSys.convertToStrata(crewStrata, crewCost);
-      }
-    }
+    // ⚠ W2-4: TU BYŁA BRAMKA ZAŁOGOWA (twarda odmowa `freePops < crewCost` + konwersja warstwy).
+    //   USUNIĘTA ŚWIADOMIE — P4: BUDOWA TO PRZEMYSŁ, ZAŁOGA PŁACONA PRZY ROZMIESZCZENIU
+    //   (`VesselManager.deployVessel`). Symetryzacja W GÓRĘ (decyzja 13): dotąd AI płaciło POP
+    //   za każdy okręt, a gracz — budujący wojenne kadłuby w stoczni ORBITALNEJ, która nigdy
+    //   nie liczyła załogi (`StationSystem.js:331`) — nie płacił nic. Teraz nie płaci nikt
+    //   przy budowie i płacą OBAJ przy rozmieszczeniu. Klucz `fleet.noCrewPops` żyje dalej —
+    //   przeniesiony na odmowę rozmieszczenia.
 
     // Sprawdź czy stać na koszt (surowce + commodities + moduły)
     const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };
@@ -909,7 +900,9 @@ export class ColonyManager {
         id: orderId,
         shipId: ship.id,
         cost: { ...allCosts },
-        crewCost,
+        // W2-4: `crewCost` NIE jest już zapisywane w zleceniu — budowa nie kosztuje POP.
+        //   Stare zapisy niosą to pole dalej; jest martwe (jedyny czytelnik zniknął
+        //   razem z re-checkiem w `_tickPendingShipOrders`).
         modules: moduleIds,
         queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
       });
@@ -920,10 +913,9 @@ export class ColonyManager {
     // Pobierz zasoby
     colony.resourceSystem.spend(allCosts);
 
-    // Zablokuj POPy — załoga przydzielona do statku (bezpośrednio na kolonii)
-    if (crewCost > 0 && colony.civSystem) {
-      colony.civSystem.lockPops(crewCost, crewStrata);
-    }
+    // ⚠ W2-4: TU BYŁO `lockPops(crewCost, crewStrata)`. Blokada przeniesiona na
+    //   `VesselManager.deployVessel` — i jest teraz TYPOWANA per statek (`crewStrataLocked`),
+    //   żeby wycofanie oddawało dokładnie to, co wzięło, i nie zjadało locka garnizonu.
 
     // Dodaj do kolejki budowy
     colony.shipQueues.push({
@@ -1605,26 +1597,17 @@ export class ColonyManager {
         // Sprawdź wolne sloty stoczni
         if (colony.shipQueues.length >= shipyardLevel) break;
 
-        // Sprawdź POPy (re-check — stan zmienia się po lockPops)
-        const orderStrata = (SHIPS[order.shipId] ?? HULLS[order.shipId])?.crewStrata ?? null;
-        if (order.crewCost > 0) {
-          const freePops = colony.civSystem?.freePops ?? 0;
-          if (freePops < order.crewCost) continue;
-        }
+        // ⚠ W2-4: TU BYŁA TRZECIA BRAMKA ZAŁOGOWA (miękka — `continue` bez eventu i bez i18n)
+        //   wraz z konwersją warstwy i drugim `lockPops`. USUNIĘTE razem z bramką w
+        //   `startShipBuild`: zostawienie jej blokowałoby budowę na dokładnie tej ścieżce,
+        //   którą gracz trafia przy niedoborze surowców. `order.crewCost` ze STARYCH zapisów
+        //   jest od tej chwili polem martwym — nikt go nie czyta.
 
         // Sprawdź surowce (re-check — stan zmienia się po spend)
         if (!colony.resourceSystem.canAfford(order.cost)) continue;
 
         // Wszystko OK — uruchom budowę
         colony.resourceSystem.spend(order.cost);
-
-        if (order.crewCost > 0 && colony.civSystem) {
-          // Konwertuj wolnych do wymaganej strata
-          if (orderStrata && orderStrata !== 'mix') {
-            colony.civSystem.convertToStrata(orderStrata, order.crewCost);
-          }
-          colony.civSystem.lockPops(order.crewCost, orderStrata);
-        }
 
         const ship = SHIPS[order.shipId] ?? HULLS[order.shipId];
         colony.shipQueues.push({
@@ -1976,12 +1959,15 @@ export class ColonyManager {
     }
     colony.resourceSystem.receive(refund);
 
-    // Odblokuj POPy (załoga wraca) — bezpośrednio na kolonii właściciela
-    const crewCost = shipDef.crewCost ?? 0;
-    const crewStrata = shipDef.crewStrata ?? null;
-    if (crewCost > 0 && colony.civSystem) {
-      colony.civSystem.unlockPops(crewCost, crewStrata);
-    }
+    // ⚠ W2-4 (decyzja 9): TU BYŁO `unlockPops(shipDef.crewCost, shipDef.crewStrata)` —
+    //   BEZWARUNKOWO, z DEFINICJI kadłuba, na kolonii z `vessel.colonyId`. Trzy błędy naraz
+    //   (audyt §C-4): zwracało załogę, której ten kadłub nigdy nie zablokował (okręt gracza
+    //   ze stoczni orbitalnej nie blokował NIC), a `_distributeUnlock` zdejmowało to
+    //   PROPORCJONALNIE z blokad INNYCH statków. Po W2-4 rozbiórka kadłuba, który nigdy nie
+    //   był rozmieszczony, drukowałaby POP z powietrza.
+    //   Teraz załogę rozlicza `VesselManager.destroyVessel` → `_settleCrewOnLoss(…, 'released')`
+    //   z KSIĘGI STATKU (`crewLocked` + `crewStrataLocked` + `crewColonyId`) — a że księga jest
+    //   zerowana na wejściu, jest to też jedyne naliczenie.
 
     // Usuń statek
     const fleetIdx = colony.fleet.indexOf(vesselId);

@@ -296,11 +296,30 @@ export function createVessel(shipId, colonyId, opts = {}) {
     //   nieprzepisana tutaj zostałaby po cichu zignorowana — dokładnie tak zachowały się
     //   oba szwy stoczni, zanim ta linia powstała (keeper T1 złapał to na czerwono).
     serviceState:     opts.serviceState ?? 'active',
-    mobilizeProgress: 0,      // civYears; liczone tylko w 'mobilizing'
+    // ⚠ W2-4: `?? ` zamiast twardego literału — `crewLocked`/`mobilizeProgress` były
+    //   hardkodowane na 0 i cicho zjadały `opts`. To ta sama pułapka, która zjadła
+    //   `opts.serviceState` w W2-2; zamykamy ją raz, dla całej trójki.
+    mobilizeProgress: opts.mobilizeProgress ?? 0,   // civYears; liczone tylko w 'mobilizing'
+    // Dokąd zmierza przejście: 'active' (rozmieszczenie) | 'stored' (wycofanie) | null.
+    // Stan `mobilizing` obsługuje OBA kierunki — bez tego pola nie da się ich odróżnić,
+    // a czwarta wartość `serviceState` rozjechałaby podpisany trójwartościowy enum.
+    mobilizeTarget:   opts.mobilizeTarget ?? null,
     // Ile POP trzyma TEN kadłub. Autorytatywny zapis załogi — `_lockedPerStrata` kolonii
     // jest anonimowym workiem bez odnośnika do statku, więc nie da się z niego odtworzyć,
-    // czyja to załoga (audyt W2 §C-4). Wypełniane dopiero w W2-4 (deploy).
-    crewLocked:       0,
+    // czyja to załoga (audyt W2 §C-4).
+    crewLocked:       opts.crewLocked ?? 0,
+    // GDZIE ta załoga siedzi: { laborer: 0.4 } — dokładny rozkład blokady po warstwach.
+    // ⚠ To NIE jest ozdobnik. `_lockedPerStrata` dzieli jeden worek z jednostkami naziemnymi
+    //   (lock TYPOWANY, `ColonyManager:1153`), a `_distributeUnlock` zdejmuje PROPORCJONALNIE
+    //   do aktualnych blokad — więc nietypowane zwolnienie załogi zjadałoby lock garnizonu,
+    //   którego własne, typowane zwolnienie klamruje się potem do zera (`CivilizationSystem:288`)
+    //   i te POPy zostają zablokowane NA ZAWSZE. Zwracamy dokładnie to, co wzięliśmy.
+    crewStrataLocked: opts.crewStrataLocked ?? null,
+    // Kolonia, która ODDAŁA załogę — i jedyna, która ma ją odzyskać. Bez tego pola załoga
+    // wracałaby tam, gdzie akurat wskazuje `colonyId`/`homeColonyId`, a te są przepisywane
+    // przy śmierci kolonii NA MACIERZYSTĄ GRACZA, bez filtra imperium
+    // (`VesselManager._onColonyDestroyed`) — wrogi kadłub drukowałby POP w gospodarce gracza.
+    crewColonyId:     opts.crewColonyId ?? null,
   };
 }
 

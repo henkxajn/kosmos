@@ -1013,6 +1013,12 @@ export default {
   'log.popBorn':            'New POP in {0}. Population: {1}',
   'log.popDied':            'POP lost in {0}. Population: {1}',
   'log.popDiedStarvation':  'POP lost (starvation) in {0}. Population: {1}',
+  // W2 — deploy model (crew charged at deploy). {1} is POP; the unit is stated in the text.
+  'log.crewLost':           '⚰ Crew of "{0}" died with the ship ({1} POP)',
+  'log.deployStarted':      '⚓ "{0}" — deployment started (1 month, crew {1} POP)',
+  'log.deployComplete':     '⚓ "{0}" entered service',
+  'log.withdrawStarted':    '📦 "{0}" — withdrawal to reserve started (1 month)',
+  'log.withdrawComplete':   '📦 "{0}" withdrawn to reserve — crew returned to the pool',
   'log.socialUnrest':       'Social unrest in {0}',
   'log.colonyUnknown':      'Unknown colony',
   'log.colonyUnrestLifted': '✓ Unrest in {0} ended',
@@ -1108,6 +1114,8 @@ export default {
   'fleet.buildQueued': 'Ship queued — awaiting resources',
   'fleet.pendingCancelled': 'Ship order cancelled',
   'fleet.pendingOrders': 'Pending',
+  // W2-4: key MOVED from the BUILD gate to the DEPLOY refusal (code 'no_crew_pops' from
+  //   `VesselManager.deployVessel`). Its consumer returns in W2-6 with the Deploy button.
   'fleet.noCrewPops': 'Not enough free POPs (need {0})',
   'fleet.buildTime': '⏱ Build: {0} years',
   'fleet.surgeMax': '⚡ Max Surge reached',
