@@ -61,6 +61,12 @@ const SUN_MARGIN       = 0.1 * AU_TO_PX;                // margines ominięcia
 //   Skopiowanie tu linii `_tickVesselMaintenance(physDeltaYears)` dałoby cichy błąd ×12.
 const DEPLOY_DURATION_CIVYEARS = 1.0;   // 1.0 civYear = 1 WYŚWIETLANY MIESIĄC (CIV_TIME_SCALE = 12)
 
+// W2 (R-A) — ile pełnego utrzymania kosztuje kadłub W REZERWIE. Orzeczenie właściciela:
+// „10% pełnego utrzymania (konserwacja/dok/wachta). Tania rezerwa, ale LICZONA — gromadzenie
+// kosztuje przy skali". Mnożnik stawki ROCZNEJ w Kr, ta sama kadencja co utrzymanie floty
+// (raz na ROK GRY, nie civYear). Bezwymiarowy — jednostkę niesie mnożona stawka.
+const RESERVE_UPKEEP_FACTOR = 0.10;     // × stawki rocznej Kr; kadłub poza służbą
+
 // Tankowanie: ile jednostek paliwa/rok docked vessel ładuje (z inventory kolonii)
 const REFUEL_RATES = {
   fuel:       3,    // jednostek/rok (zastępuje power_cells + plasma_cores — spłaszczenie 3→2)
@@ -889,6 +895,15 @@ export class VesselManager {
 
     const colony = this._resolveCrewColony(vessel);
     if (!colony?.civSystem) return { ok: false, reason: 'no_crew_colony' };
+
+    // W2-5 (decyzja 17) — kolonia z długiem utrzymania NIE rozmieszcza. Rezerwa nie zalega,
+    // więc bez tej bramki gracz obchodziłby spiralę utrzymania, wypuszczając ze schowka
+    // kolejne okręty, których i tak nie stać mu opłacić. Odmowa jest UCZCIWA: lepiej nie
+    // wypuścić okrętu, niż oddać sparaliżowany.
+    const payHomeId = this._resolvePayHomeId(vessel, window.KOSMOS?.colonyManager ?? { getColony: () => null });
+    if (this.colonyInArrears(payHomeId)) {
+      return { ok: false, reason: 'colony_in_arrears', colonyId: payHomeId };
+    }
 
     const crewCost = _getHullDef(vessel.shipId)?.crewCost ?? 0;
     if (crewCost > 0) {
@@ -1944,6 +1959,13 @@ export class VesselManager {
     // grupuj statki GRACZA po pay-home (homeColonyId → fallback homePlanet)
     const byHome = new Map();
     for (const v of this._vessels.values()) {
+      // PHASE5_TODO (ekonomia AI) — ⚠ TA LINIA ZOSTAJE ŚWIADOMIE, orzeczenie właściciela
+      //   (W2 decyzja 14): utrzymanie floty AI NIE jest naliczane, bo AI nie ma dochodu
+      //   podatkowego ani budżetu imperium, a zdjęcie guardu obciążyłoby GRACZA — `homeColonyId`
+      //   okrętów AI bywa rozwiązywane na jego macierzystą (`_onColonyDestroyed` przepisuje je
+      //   bez filtru imperium). ⇒ R-A (10 % rezerwy) obowiązuje w tym slice TYLKO gracza.
+      //   Hamulce na gromadzenie floty przez AI: bramka załogowa + przepustowość stoczni.
+      //   Zdjąć dopiero razem z pełną ekonomią AI (dochód + budżet), nie wcześniej.
       if (v.isWreck || isEnemyVessel(v)) continue;        // tylko player, bez wraków
       const homeId = this._resolvePayHomeId(v, colMgr);
       if (!homeId) continue;
@@ -1952,15 +1974,58 @@ export class VesselManager {
     }
 
     for (const [homeId, vessels] of byHome) {
-      vessels.sort((a, b) => this.getVesselUpkeepCredits(a) - this.getVesselUpkeepCredits(b)); // cheapest-first
+      // W2-5 (decyzja 16) — SŁUŻBA PIERWSZA, potem najtańszy. Przy niedoborze kredytów bez
+      // opłaty zostaje REZERWA, nie okręt, który właśnie broni układu. Drugi klucz liczy się
+      // ze stawki PEŁNEJ — rabat rezerwy w kluczu odwróciłby cały ranking.
+      vessels.sort((a, b) =>
+        (isInService(b) ? 1 : 0) - (isInService(a) ? 1 : 0)
+        || this.getVesselBaseUpkeepCredits(a) - this.getVesselBaseUpkeepCredits(b));
       for (const v of vessels) {
         const cost = this.getVesselUpkeepCredits(v);
         if (cost <= 0) { v.unpaidYears = 0; continue; }
         const paid = civTrade.spendCredits(homeId, cost, 'fleet_upkeep'); // 1 deduct + trade:creditsChanged + bool
-        if (paid) v.unpaidYears = 0;                       // resume → un-immobilize
-        else      v.unpaidYears = (v.unpaidYears ?? 0) + 1; // narasta; >=2 → immobilized (pochodna)
+        if (paid) { v.unpaidYears = 0; continue; }          // resume → un-immobilize
+        // W2-5 (decyzja 17) — REZERWA NIE ZALEGA. Nieopłacony magazyn nie ma czego
+        // unieruchamiać (i tak nie lata), a narastające zaległości robiłyby z niego pułapkę:
+        // kadłub wychodziłby z rezerwy od razu sparaliżowany. Zamiast tego bramkujemy
+        // ROZMIESZCZENIE, dopóki kolonia ma długi (`deployVessel` → `colony_in_arrears`).
+        if (!isInService(v)) continue;
+        v.unpaidYears = (v.unpaidYears ?? 0) + 1;           // narasta; >=2 → immobilized (pochodna)
       }
     }
+  }
+
+  /**
+   * W2-5 — czy kolonia zalega z utrzymaniem floty. Pochodna, bez nowego stanu: zaległość
+   * NOSZĄ statki (`unpaidYears`), a kolonia „zalega", jeśli którykolwiek z jej okrętów
+   * w służbie ma nieopłacony rok. Bramkuje rozmieszczenie (decyzja 17).
+   */
+  colonyInArrears(colonyId) {
+    if (!colonyId) return false;
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return false;
+    for (const v of this._vessels.values()) {
+      if (v.isWreck || isEnemyVessel(v)) continue;
+      if ((v.unpaidYears ?? 0) <= 0) continue;
+      if (this._resolvePayHomeId(v, colMgr) === colonyId) return true;
+    }
+    return false;
+  }
+
+  /**
+   * W2-5 — rozbicie utrzymania floty na SŁUŻBĘ i REZERWĘ (Kr/rok gry). Jeden licznik dla
+   * wszystkich paneli, żeby „utrzymanie floty" znaczyło wszędzie to samo.
+   * @returns {{deployed:number, reserve:number, total:number, deployedCount:number, reserveCount:number}}
+   */
+  getFleetUpkeepBreakdown() {
+    let deployed = 0, reserve = 0, deployedCount = 0, reserveCount = 0;
+    for (const v of this._vessels.values()) {
+      if (v.isWreck || isEnemyVessel(v)) continue;
+      const cost = this.getVesselUpkeepCredits(v);
+      if (isInService(v)) { deployed += cost; deployedCount++; }
+      else                { reserve  += cost; reserveCount++; }
+    }
+    return { deployed, reserve, total: deployed + reserve, deployedCount, reserveCount };
   }
 
   /** S3.5a-1 — id kolonii płacącej utrzymanie: homeColonyId (gdy pełna kolonia) → fallback homePlanet. */
@@ -1971,9 +2036,27 @@ export class VesselManager {
     return hp ? hp.id : null;
   }
 
-  /** S3.5a-1 — roczne utrzymanie statku w Kr (data-driven upkeepCredits; fallback 50 dla nieznanego). */
+  /**
+   * S3.5a-1 — roczne utrzymanie statku w Kr, stawka EFEKTYWNA (data-driven `upkeepCredits`;
+   * fallback 50 dla nieznanego kadłuba).
+   *
+   * W2-5 (R-A): kadłub poza służbą płaci `RESERVE_UPKEEP_FACTOR` pełnej stawki. Rabat siedzi
+   * TUTAJ, a nie u wołających, bo ta funkcja ma PIĘĆ konsumentów (bilans imperium, panel
+   * ekonomii, panel cywilizacji, panel grupy floty, detal statku) — policzenie go u każdego
+   * z osobna gwarantowałoby, że któryś odczyt kłamie.
+   * ⚠ `mobilizing` liczy się jako REZERWA: `isInService` jest jedynym predykatem służby
+   *   (W2-2), a rozgałęzienie „w połowie drogi płaci pełną" byłoby drugim, niezgodnym.
+   */
   getVesselUpkeepCredits(vessel) {
-    return _getHullDef(vessel.shipId)?.upkeepCredits ?? VesselManager.DEFAULT_VESSEL_UPKEEP;
+    const base = this.getVesselBaseUpkeepCredits(vessel);
+    return isInService(vessel) ? base : base * RESERVE_UPKEEP_FACTOR;
+  }
+
+  /** Stawka PEŁNA (bez rabatu rezerwy) — klucz sortowania „najtańszy pierwszy" i odczyt
+   *  „ile kosztowałby w służbie". ⚠ Rabat świadomie NIE wchodzi do klucza sortowania
+   *  (decyzja 16): inaczej rezerwa wygrywałaby ranking taniości i płaciłaby PIERWSZA. */
+  getVesselBaseUpkeepCredits(vessel) {
+    return _getHullDef(vessel?.shipId)?.upkeepCredits ?? VesselManager.DEFAULT_VESSEL_UPKEEP;
   }
 
   /**

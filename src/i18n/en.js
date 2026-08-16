@@ -1124,6 +1124,10 @@ export default {
   'fleet.maintenance': 'Maintenance',
   'fleet.upkeepPerYear': '{0} Kr/yr',
   'fleet.immobilized': 'Immobilized (unpaid upkeep)',
+  // W2-5 — reserve upkeep (R-A). {0} = full rate in Kr per game year.
+  'fleet.reserveUpkeepRow':     'of which reserve',
+  'fleet.reserveRateNote':      '📦 reserve rate — 10% of {0} Kr/yr',
+  'fleet.deployBlockedArrears': 'Colony is behind on fleet upkeep — clear the debt first',
   'fleet.unpaidYears': 'Unpaid: {0} yr',
 
   // Slice 8b — FleetGroupPanel (selected vessel group panel)

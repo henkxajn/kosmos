@@ -20,19 +20,27 @@ function _hasWeapons(vessel) {
  * @param {Array<object>} vessels — żywe statki gracza (już przefiltrowane przez widok).
  * @param {{ vesselManager? }} deps
  * @returns {{ count:number, totalCount:number, fuelCur:number, fuelMax:number,
- *            fuelPct:number, totalUpkeep:number, immobilizedCount:number,
- *            weaponsCount:number, dockedCount:number, transitCount:number,
- *            orbitingCount:number }}
+ *            fuelPct:number, totalUpkeep:number, reserveCount:number, reserveUpkeep:number,
+ *            immobilizedCount:number, weaponsCount:number, dockedCount:number,
+ *            transitCount:number, orbitingCount:number }}
  */
 export function summarizeFleetGroup(vessels, { vesselManager } = {}) {
   const list = vessels ?? [];
   let fuelCur = 0, fuelMax = 0, totalUpkeep = 0;
   let immobilizedCount = 0, weaponsCount = 0;
   let dockedCount = 0, transitCount = 0, orbitingCount = 0;
+  let reserveCount = 0, reserveUpkeep = 0;
   for (const v of list) {
     fuelCur     += v?.fuel?.current ?? 0;
     fuelMax     += v?.fuel?.max ?? 0;
-    totalUpkeep += vesselManager?.getVesselUpkeepCredits?.(v) ?? 0;
+    // W2-5: stawka z `getVesselUpkeepCredits` jest EFEKTYWNA (rezerwa 10 %), więc suma
+    // nie kłamie bez żadnego rozgałęzienia tutaj. Rozbicie liczymy osobno, bo „ile z tego
+    // to magazyn" jest inną informacją niż „ile płacę razem".
+    const up = vesselManager?.getVesselUpkeepCredits?.(v) ?? 0;
+    totalUpkeep += up;
+    // ⚠ Predykat inline (mirror `isInService`) — ten moduł jest czysty i nie ciągnie
+    //   łańcucha i18n z `Vessel.js`; ta sama konwencja co `_hasWeapons` wyżej.
+    if ((v?.serviceState ?? 'active') !== 'active') { reserveCount++; reserveUpkeep += up; }
     if (vesselManager?.isImmobilized?.(v)) immobilizedCount++;
     if (_hasWeapons(v)) weaponsCount++;
     const st = v?.position?.state;
@@ -46,6 +54,7 @@ export function summarizeFleetGroup(vessels, { vesselManager } = {}) {
     fuelCur, fuelMax,
     fuelPct: fuelMax > 0 ? fuelCur / fuelMax : 0,
     totalUpkeep,
+    reserveCount, reserveUpkeep,
     immobilizedCount,
     weaponsCount,
     dockedCount, transitCount, orbitingCount,

@@ -208,6 +208,14 @@ export class FleetGroupPanel extends BaseOverlay {
       { text: `${t('fleetGroup.upkeep')} ${t('fleetGroup.upkeepPerYear', Math.round(summary.totalUpkeep))}`, color: C.textSecondary },
       { text: t('fleetGroup.weapons', summary.weaponsCount, summary.totalCount), color: C.textDim },
     ];
+    // W2-5 — ile z zaznaczenia siedzi w REZERWIE (i ile z rachunku na nią przypada).
+    // Bez tego gracz widziałby podejrzanie niską sumę utrzymania i nie wiedział dlaczego.
+    if (summary.reserveCount > 0) {
+      segs.push({
+        text: `📦${summary.reserveCount} (${Math.round(summary.reserveUpkeep)} Kr)`,
+        color: C.textDim,
+      });
+    }
     if (summary.immobilizedCount > 0) {
       segs.push({ text: `⚠${summary.immobilizedCount}`, color: C.danger });
     }

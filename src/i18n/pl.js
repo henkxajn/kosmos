@@ -1125,6 +1125,10 @@ export default {
   'fleet.maintenance': 'Utrzymanie',
   'fleet.upkeepPerYear': '{0} Kr/rok',
   'fleet.immobilized': 'Unieruchomiony (brak opłat)',
+  // W2-5 — utrzymanie rezerwy (R-A). {0} = pełna stawka Kr/rok gry.
+  'fleet.reserveUpkeepRow':     'w tym rezerwa',
+  'fleet.reserveRateNote':      '📦 stawka rezerwy — 10% z {0} Kr/rok',
+  'fleet.deployBlockedArrears': 'Kolonia zalega z utrzymaniem floty — najpierw spłać dług',
   'fleet.unpaidYears': 'Nieopłacone: {0} lat',
 
   // Slice 8b — FleetGroupPanel (panel zaznaczonej grupy statków)

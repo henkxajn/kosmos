@@ -179,6 +179,9 @@ export class CivilizationOverlay extends BaseOverlay {
         totalUnitUpkeep += upTable[u.archetypeId]?.credits ?? 0;
       }
     }
+    // W2-5: stawka jest już EFEKTYWNA (kadłub w rezerwie płaci 10 %), więc NETTO poniżej
+    // nie wymaga tu żadnego rozgałęzienia. Rozbicie służba/rezerwa pokazuje BUDŻET
+    // w EconomyOverlay — zgodnie z komentarzem wyżej ten panel trzyma same sumy.
     const totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
     // Faza 3 §3.7: NETTO = handel + podatki − utrzymanie jednostek − utrzymanie floty − PŁACE
     const netCreditsPerYear = totalCreditsPerYear + taxIncome - totalUnitUpkeep - totalFleetUpkeep - totalLaborCost;

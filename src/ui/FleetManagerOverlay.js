@@ -7168,14 +7168,23 @@ export class FleetManagerOverlay {
       const vMgr        = window.KOSMOS?.vesselManager;
       const upkeep      = vMgr?.getVesselUpkeepCredits?.(vessel) ?? 0;
       const immobilized = vMgr?.isImmobilized?.(vessel) ?? false;
+      // W2-5 — stawka jest EFEKTYWNA. Dla kadłuba w rezerwie dopisujemy, że to 10 % pełnej,
+      // inaczej gracz czytałby dziesięciokrotnie zaniżoną liczbę bez wyjaśnienia.
+      const inReserve = (vessel?.serviceState ?? 'active') !== 'active';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(t('fleet.maintenance'), x + pad, cy + 10);
       ctx.fillStyle = immobilized ? THEME.danger : THEME.textPrimary;
       ctx.textAlign = 'right';
-      ctx.fillText(`-${t('fleet.upkeepPerYear', upkeep)}`, x + w - pad, cy + 10);
+      ctx.fillText(`-${t('fleet.upkeepPerYear', Math.round(upkeep))}`, x + w - pad, cy + 10);
       ctx.textAlign = 'left';
       cy += 18;
+      if (inReserve) {
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('fleet.reserveRateNote',
+          Math.round((vMgr?.getVesselBaseUpkeepCredits?.(vessel) ?? 0))), x + pad, cy + 10);
+        cy += 16;
+      }
       if (immobilized) {
         ctx.fillStyle = THEME.danger;
         ctx.fillText(`⚠ ${t('fleet.immobilized')}`, x + pad, cy + 10);

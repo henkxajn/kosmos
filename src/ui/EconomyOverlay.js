@@ -2924,8 +2924,11 @@ export class EconomyOverlay extends BaseOverlay {
       }
     }
 
-    // Utrzymanie floty (Kr/rok) — getTotalFleetUpkeep filtruje wraki + statki AI
+    // Utrzymanie floty (Kr/rok) — getTotalFleetUpkeep filtruje wraki + statki AI.
+    // W2-5: stawka jest już EFEKTYWNA (rezerwa płaci 10 %), a rozbicie służba/rezerwa idzie
+    // z jednego licznika, żeby panele nie liczyły tego samego na dwa sposoby.
     const totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
+    const fleetUpkeep = vMgr?.getFleetUpkeepBreakdown?.() ?? null;
     let fleetUpkeepCount = 0;
     for (const v of (vMgr?.getAllVessels?.() ?? [])) {
       if (v.isWreck) continue;
@@ -2941,7 +2944,7 @@ export class EconomyOverlay extends BaseOverlay {
       totalCredits, totalCreditsPerYear, totalResearch,
       globalResources, taxIncome, taxRate, taxEffect,
       totalUnitUpkeep, unitUpkeepCount,
-      totalFleetUpkeep, fleetUpkeepCount,
+      totalFleetUpkeep, fleetUpkeepCount, fleetUpkeep,
       totalLaborCost,
     };
   }
@@ -2990,8 +2993,17 @@ export class EconomyOverlay extends BaseOverlay {
     if (data.fleetUpkeepCount > 0) {
       this._statRow(ctx, x + pad, ry, PANEL_W,
         `${t('civOverlay.fleetUpkeep')} (${data.fleetUpkeepCount})`,
-        `-${data.totalFleetUpkeep} Kr/${t('tradePanel.perYear')}`, THEME.danger);
+        `-${Math.round(data.totalFleetUpkeep)} Kr/${t('tradePanel.perYear')}`, THEME.danger);
       ry += RH;
+      // W2-5 — rezerwa jako OSOBNY wiersz: „tania, ale liczona" jest widoczne tylko wtedy,
+      // gdy gracz widzi, ile go kosztuje magazyn (stawka już z rabatem 10 %).
+      const fu = data.fleetUpkeep;
+      if (fu && fu.reserveCount > 0) {
+        this._statRow(ctx, x + pad, ry, PANEL_W,
+          `   ${t('fleet.reserveUpkeepRow')} (${fu.reserveCount})`,
+          `-${Math.round(fu.reserve)} Kr/${t('tradePanel.perYear')}`, THEME.textDim);
+        ry += RH;
+      }
     }
     this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.research'),
       `${data.totalResearch.toFixed(1)}/${t('tradePanel.perYear')}`, THEME.info);
