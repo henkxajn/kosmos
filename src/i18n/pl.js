@@ -1145,7 +1145,12 @@ export default {
   'fleet.vesselIsWreck':        'To wrak',
   'fleet.vesselNotFound':       'Nie znaleziono statku',
   'fleet.reserveRateNote':      '📦 stawka rezerwy — 10% z {0} Kr/rok',
-  'fleet.deployBlockedArrears': 'Kolonia zalega z utrzymaniem floty — najpierw spłać dług',
+  // ⚠ GATE 2 follow-up: NIE pisać „spłać dług". Blokada NIE jest testem stanu konta —
+  //   to ZATRZASK po nieopłaconym rozliczeniu, zdejmowany przy najbliższym UDANYM.
+  //   Rozliczenie utrzymania floty biegnie raz na ROK GRY, więc samo dosypanie kredytów
+  //   niczego nie odblokowuje natychmiast (zmierzone). Tekst musi mówić o BUDŻECIE i o tym,
+  //   KIEDY blokada zniknie — inaczej gracz szuka guzika „zapłać", którego nie ma.
+  'fleet.deployBlockedArrears': 'Budżet nie utrzymał floty — blokada zniknie po najbliższym udanym rozliczeniu (rocznym)',
   'fleet.unpaidYears': 'Nieopłacone: {0} lat',
 
   // Slice 8b — FleetGroupPanel (panel zaznaczonej grupy statków)

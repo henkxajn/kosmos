@@ -183,9 +183,78 @@ stan służby i księga załóg per statek + blokady/wolne POPy per kolonia.
 | 4. Wycofanie oddaje dokładnie tyle, ile wzięło (po miesiącu) | ⬜ |
 | 5. Strata okrętu zabija załogę ułamkowo, Dziennik notuje | ⬜ |
 | 6. Zaległości blokują rozmieszczenie; rezerwa nie zalega | ⬜ |
-| 7. Brak regresji + ghost-click zamknięty + konsola czysta | ⬜ |
+| 7. Brak regresji + ghost-click zamknięty + konsola czysta | ✅ |
 
-**GATE 2:** ⬜ ZDANY / ⬜ NIEZDANY — uwagi:
+**GATE 2:** ✅ **ZDANY** (2026-08-16, Filip) — wszystkie siedem sekcji.
+
+Dowody z żywej gry: rozmieszczenie pobrało **dokładnie 0.4** (wolne 10 → 9.6, blokada 0 → 0.4,
+typowane `{laborer: 0.4}`, płatnik `entity_3`) przy **nietkniętej** populacji na pauzie ·
+wycofanie oddało dokładnie ten sam ułamek · **R-C udowodnione end-to-end**: wpis w Dzienniku
+„Crew of 'Furia' died with the ship (0.4 POP)", a blokada zeszła przez ŚMIERĆ, nie przez zwrot
+(ułamkowa śmierć przez `_growthProgress` działa) · utrzymanie rezerwy 10 % widoczne w BUDŻECIE
+z poprawnym rozbiciem `{deployed: 650, reserve: 30}` · rozdział siła/potencjał na żywo
+(669 / 981 / 312) · bramka zaległości blokuje rozmieszczenie z czytelnym powodem, a rezerwa
+nie zbiera `unpaidYears` · ghost-click zamknięty · konsola czysta.
+
+---
+
+## Domknięcie po GATE 2 — trzy odpowiedzi (żadna nie otwiera gate'u ponownie)
+
+### 1. Czym NAPRAWDĘ jest „zaległość" (zmierzone, nie wywnioskowane)
+
+Filip zauważył, że dosypanie 10 000 Kr z konsoli **nie odblokowuje** uziemionej floty, i postawił
+hipotezę „liczone z PRZEPŁYWU budżetu, nie ze stanu konta". Pomiar na żywym silniku mówi, że
+mechanizm jest **trzecią rzeczą** — ani przepływem, ani saldem:
+
+> **Zaległość to ZATRZASK po nieopłaconym rozliczeniu, zdejmowany przy najbliższym UDANYM.**
+> Rozliczenie utrzymania floty biegnie **raz na ROK GRY**.
+
+Przebieg pomiaru (stawka krążownika 1000 Kr/rok gry): rok bez opłaty → `unpaidYears = 1`,
+`arrears = true` · **dosypanie 10 000 Kr → `arrears` DALEJ `true`**, deploy dalej odmawia ·
+po najbliższym naliczeniu (kredyty 10 000 → 8 900) → `unpaidYears = 0`, `arrears = false`,
+deploy przechodzi · pół roku gry nie odpala naliczenia w ogóle (akumulator).
+
+**Definicja jest ZAMIERZONA** i wpisana do planu (decyzja 17): kolonia, której budżet nie
+UTRZYMA floty, nie ma prawa obsadzać kolejnych okrętów. **Opóźnienie do roku gry między
+zapłatą a odblokowaniem — nie było przemyślane** i zostało ZGŁOSZONE (§Findings filed 9),
+nie naprawione drive-by: to predykat odmowy, który ten gate właśnie zatwierdził.
+
+Naprawiony został natomiast **tekst**, bo poprzedni („najpierw spłać dług") kazał graczowi
+szukać nieistniejącego guzika „zapłać":
+`Budżet nie utrzymał floty — blokada zniknie po najbliższym udanym rozliczeniu (rocznym)`.
+
+### 2. Pięć kadłubów AI `active` / 0 załogi — czego DA SIĘ dowieść, a czego nie
+
+**Statki nie mają znacznika czasu utworzenia** (`grep` po `createdYear|createdAt|spawnYear`
+w `Vessel.js` — zero trafień), więc pytanie „czy wszystkie pięć powstało przed W2-2" jest
+**nierozstrzygalne z samego zapisu**. Da się natomiast dowieść przez **wyczerpanie zapisujących**:
+
+- ŻADEN z nich nie zszedł ze stoczni po `c4526b6`. Oba szwy stoczni stemplują `'stored'`
+  (`VesselManager.js:1667`, `StationSystem.js:524`), a `'active'` pisze wyłącznie: domyślna
+  wartość w `createVessel` (`Vessel.js:298`), `restore` (`:1558`), migracja v101 i domknięcie
+  mobilizacji — to ostatnie ustawia `crewLocked > 0`, więc odpada. Kadłub `active` z zerową
+  załogą **nie może** pochodzić ze stoczni po bumpie. ✅
+- ⚠ **NIE wolno stąd wnosić, że wszystkie pięć jest sprzed W2-2.**
+  `EmpireFleetMaterializer.js:105` woła `createVessel` **BEZ** `serviceState` → jego kadłuby
+  rodzą się `'active'` z `crewLocked: 0` i ta ścieżka **działa dziś**. Tak samo sonda
+  pierwszego kontaktu (`DirectorFirstContact.js:132`) i spawnery debug/sandbox.
+  Flota zmaterializowana **omija model załogi w całości**: nie kosztuje AI ani jednego POP
+  i jej strata nikogo nie zabija (§Findings filed 10 — pytanie na **W3**, bo to główne
+  źródło floty AI i jego wycena jest decyzją balansową).
+
+**Rozstrzygające zapytanie na żywym zapisie Filipa** (materializacja zostawia ślad na flocie
+imperium, więc da się je rozdzielić):
+
+`(()=>{const mat=new Set();for(const e of (KOSMOS.empireRegistry?.listAll?.()??[]))for(const f of (e.fleets??[]))for(const id of (f.materializedVesselIds??[]))mat.add(id);return KOSMOS.vesselManager.getAllVessels().filter(v=>v.ownerEmpireId&&!v.isWreck).map(v=>({id:v.id,hull:v.shipId,stan:v.serviceState??'active',zaloga:v.crewLocked??0,zrodlo:mat.has(v.id)?'MATERIALIZACJA (po W2-2 możliwe)':'zapis/stocznia'}))})()`
+
+### 3. Filtry Dziennika muszą być NIEZALEŻNE OD JĘZYKA
+
+Filip gra z **angielskim** Dziennikiem; grep po polskim słowie kluczowym zwrócił pustkę, mimo że
+wpis był na ekranie. Reguła dopisana do **stałych zasad gate'ów** (`W2_PLAN.md` §Verification)
+i obowiązuje wszystkie przyszłe checklisty:
+
+> **Nigdy nie filtruj wpisów Dziennika po TEKŚCIE WYŚWIETLANYM.** Filtruj po rodzaju zdarzenia,
+> kanale albo `type` wpisu. Dopasowanie obu lokalizacji naraz jest awaryjne, nie domyślne.
 
 ---
 

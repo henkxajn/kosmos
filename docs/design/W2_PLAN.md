@@ -217,6 +217,15 @@ ratifications** of this plan's recommendations. Nothing in W2 awaits a ruling.
     `getVesselUpkeepCredits` keeps returning the *effective* rate so all five readouts stay honest.
 17. **No arrears in storage.** A stored ship does not accrue `unpaidYears`; instead **DEPLOY is refused
     while the colony is in arrears**, with its own i18n reason.
+    **Definition, fixed after GATE 2 (measured, not inferred):** *a colony is in arrears when any of its
+    in-service ships carries an unpaid settlement year — a **latch** set by a failed annual settlement and
+    released by the next successful one, not a test of the current cash balance.* Consequence, verified by
+    execution: granting credits does **not** unblock deploy immediately; the block lifts at the next
+    settlement (fleet upkeep settles once per **game** year). This is the intended definition — a colony
+    whose budget cannot *sustain* the fleet should not commit more crew — and the i18n string was rewritten
+    to say so rather than implying a cash shortage. **Filed, not fixed:** the up-to-one-game-year lag between
+    paying and unblocking is a UX cost nobody examined at design time; a future slice may clear the latch
+    early when the colony can afford the outstanding bill (§Findings filed 9).
 18. **`commitCrew` draws unemployed first, then EVICTS the lowest-wage strata** — mobilization pulls
     people off the factory floor. This is what makes deploy work at the AI's designed `freePops ≈ 0`
     equilibrium, symmetrically, without an AI-only crew source.
@@ -484,7 +493,10 @@ Journal-leak class).
 quotes · capital **only** via `KOSMOS.directorProduction.capitalOf(empireId)` · read shortages **from the
 engine**, never from a list in memory · `DebugLog` is a ring **cleared on reload** · **never run a gate in
 parallel with CC work** · state levers only through validated tools · **every one-liner EXECUTED on the
-live engine before it is written into the checklist**.
+live engine before it is written into the checklist** · **never filter Journal or log entries by DISPLAY
+TEXT** — filter by event kind, channel or entry `type`; a Polish-keyword grep returns empty for a player
+running an English Journal while the entry is plainly on screen (bought at GATE 2), and matching both
+locales is the fallback, not the default.
 
 ---
 
@@ -532,6 +544,17 @@ factory state — its own commit, its own before/after).
    `shipyard { count: 1, avgLevel: 2.0 }` at gameYear 40 — two concurrent builds, contended with
    couriers. "Hoarding at scale" is currently unreachable for the AI; the cap question is a *player*
    question (decision 15).
+9. **The arrears latch lags by up to one game year.** Paying does not unblock deploy until the next
+   annual settlement (decision 17, measured at GATE 2). Defensible as designed, poor as feedback. Candidate
+   fix: clear the latch early when the colony can currently afford the outstanding bill. Deliberately **not**
+   done drive-by — it changes a refusal predicate that GATE 2 just certified.
+10. **Materialized AI fleets bypass the crew model entirely.** `EmpireFleetMaterializer.js:105` calls
+    `createVessel` **without** `serviceState`, so its hulls are born `'active'` with `crewLocked: 0` — they
+    never pass through deploy, so they never cost the AI a single POP and their loss kills nobody. Same for
+    `DirectorFirstContact.js:132` (the probe) and the debug/sandbox spawners. This is why an `active` +
+    zero-crew AI hull in a save **cannot** be assumed to predate v101 (see the GATE 2 answer below). Whether
+    shadow-fleet materialization should charge crew is a **W3** question — it is the AI's principal fleet
+    source, and pricing it is a balance decision, not hygiene.
 
 ---
 

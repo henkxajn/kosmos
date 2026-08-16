@@ -1144,7 +1144,11 @@ export default {
   'fleet.vesselIsWreck':        'This is a wreck',
   'fleet.vesselNotFound':       'Ship not found',
   'fleet.reserveRateNote':      '📦 reserve rate — 10% of {0} Kr/yr',
-  'fleet.deployBlockedArrears': 'Colony is behind on fleet upkeep — clear the debt first',
+  // ⚠ GATE 2 follow-up: do NOT say "pay the debt". The block is not a cash test — it is a
+  //   LATCH set by a failed settlement and released by the next successful one. Fleet upkeep
+  //   settles once per GAME year, so granting credits changes nothing immediately (measured).
+  //   The string must name the BUDGET and say WHEN the block lifts.
+  'fleet.deployBlockedArrears': 'Budget did not cover fleet upkeep — clears at the next successful settlement (annual)',
   'fleet.unpaidYears': 'Unpaid: {0} yr',
 
   // Slice 8b — FleetGroupPanel (selected vessel group panel)
