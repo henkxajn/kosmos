@@ -13,61 +13,40 @@ and read at the console under time pressure.
 
 ## RESUME — czytaj to PIERWSZE (PL, wzór W1)
 
-**Stan (2026-08-15, koniec sesji):** **W2-0…W2-3 ZACOMMITOWANE** — `7f606b7` (piny szwów) ·
-`7db3043` (łańcuch towarów wojennych) · `3f35c36` (gwarancja Ti, próg jakości OSIĄGNIĘTY) ·
-`c4526b6` (model rezerwy: `serviceState` + oba szwy stoczni + zbiór wykluczeń + rozdział
-siła/potencjał) · `c9f728e` (**bump v100 → v101**) · `f93ccdf` (checklista GATE 1).
-Sweep **132/132 OK, 0 FAIL**, `check-i18n` PASS, zapis jest teraz **v101**.
+**Stan (2026-08-16, koniec sesji):** **W2-0…W2-8 ZACOMMITOWANE**, ostatni `3f8601d` (docs).
+Sweep **136/136 OK, 0 FAIL** · `check-i18n` PASS (pl=en=3240) · zapis **v101**. Tabela ośmiu
+commitów i dowody fail-first: §Results niżej. **GATE 1 ✅ · GATE 2 ✅ · GATE 3 ⏳ PENDING** —
+nic nie padło, to kwestia harmonogramu.
 
-✅ **GATE 1 ZDANY (2026-08-16).** Okno przedmigracyjne uzbrojone na **OBU** ścieżkach (żywy zapis
-v100 przez „Kontynuuj" **oraz** import ręcznej kopii `.json`), pobrany plik kopii ma w środku
-`"version": 100`, **idempotencja udowodniona podwójnym importem tej samej kopii v100** (identyczny
-przebieg, zero błędów — mina `clearSave()` rozbrojona dowodem, nie założeniem), round-trip v101
-bez ponownej migracji, konsola czysta, `localStorage` version = **101**.
-Pełny wynik + ustalenie o kluczu `kosmos_save_backup_preimport`: `W2_GATE1_CHECKLIST.md`.
+**Jutro Filip prowadzi `W2_GATE3_CHECKLIST.md`** (pętla AI, osiem sekcji). Dwa warunki wstępne,
+bez których gate nie ma czego pokazać: **(a)** zapis musi być ROZWINIĘTY — imperium AI potrzebuje
+stoczni, stacji orbitalnej (żeton R-3) i techów okrętowych; **(b) gracz musi mieć ROZMIESZCZONE
+okręty wojenne w służbie** — guard `empireOutgunnedByPlayer` porównuje SIŁY, więc flota w garażu
+nie prowokuje nikogo i `slabszy: false` u wszystkich imperiów jest wtedy zachowaniem ZAMIERZONYM,
+nie usterką.
 
-⚠ **`kosmos_save_backup_preimport` NIE jest pozostałością po D2/E9** i nie wolno go skasować przy
-następnym sprzątaniu tej klasy. To osobna, żywa siatka bezpieczeństwa **ścieżki importu**: pisana
-wyłącznie przez `SaveSystem.importSave:462`, **po** udanym zapisie slotu (best-effort — kopia
-zapisywana PRZED importem kradła headroom i wywalała import na quocie), nadpisywana przy każdym
-imporcie, poświęcana przy ciasnej quocie (`save()` stopień 2 `:113-118`, `importSave:451`), a
-`pruneMigrationBackups()` **jej nie dotyka** (chodzi po prefiksie `kosmos_save_backup_v`).
-Jedyna ścieżka odczytu: `KOSMOS.debug.exportBackup()` (`GameScene.js:828`). Pokrycie:
-`save_file_smoke` T5/T7/T10. Tabela cyklu życia — w checkliście GATE 1.
+**Po werdykcie PASS slice W2 się ZAMYKA** i rusza sekwencja domknięcia: ramki wyników w
+checklistach → status planu → retrospektywa w `WOJNA_I_POKOJ_MASTER_PLAN.md`. ⚠ **Wybór następnego
+horyzontu należy do Filipa i orkiestratora — NIE uprzedzać go w kodzie ani w planie:** W3 (ofensywne
+AI + pokój terytorialny) vs Director Slice 2 vs BALANS z urosłą listą długów.
 
-**Sekwencja leci dalej:** W2-4 (załoga przy rozmieszczeniu — R-B: jeden miesiąc
-wyświetlany = **1.0 civYear**; R-C: załoga ginie ze statkiem) → W2-5 (utrzymanie rezerwy 10 %,
-**tylko gracz** wg decyzji 14) → W2-6 (UI: „Rezerwa" + Wycofaj) → W2-7 (mobilizacja AI + wywiad:
-potencjał vs siła) → W2-8 (docs, w tym **nieaktualny nagłówek `CLAUDE.md` mówiący v99**).
-Potem **GATE 2** (rozmieszczanie/rezerwa na żywo) i **GATE 3** (AI end-to-end — wpis wiążący
-z rejestru: niemierzalne headless, więc wyłącznie na żywej grze).
+**Cztery długi niesione świadomie dalej (żaden nie blokuje zamknięcia W2):**
+1. **Flota zmaterializowana omija model załogi** — `EmpireFleetMaterializer` tworzy kadłuby `active`
+   z pominięciem obu szwów stoczni: nie kosztują AI ani jednego POP, a ich strata nikogo nie zabija.
+   Wycena należy do **W3** (to główne źródło floty AI, więc to decyzja balansowa, nie higiena).
+2. **Utrzymanie floty AI nienaliczane** — decyzja 14, świadoma asymetria, `PHASE5_TODO` przy guardzie.
+3. **Opóźnienie zatrzasku zaległości** — §Findings filed 9: zapłata odblokowuje rozmieszczenie
+   dopiero przy najbliższym rocznym rozliczeniu.
+4. **Martwa naprawa statków** — `_tickRepair` czyta `entry.buildingId`, a wpisy mają `entry.building.id`;
+   pinowane jako luka (`w2_crew_ledger` T11b), NIE naprawione (włączenie = zmiana balansu, własny commit).
 
-**Dwie lekcje sesyjne, obie wiążące dalej:**
-- **„Diff nie jest dowodem — dowodem jest ponowne uruchomienie instrumentu."** Zapłacone DWA razy
-  w jednej sesji: `?.` na nieistniejącej usłudze `window.KOSMOS.depositSystem` (W2-1b) i
-  `createVessel`, które nie czytało `opts.serviceState` (W2-2). Za każdym razem zmiana wyglądała
-  na zrobioną w dwóch plikach, a pomiar mówił, że nic się nie stało.
-- **Jeden predykat, nie dziesięć testów pola.** `isInService()` mieszka w `Vessel.js` obok
-  `isEnemyVessel`/`hasWeapons` i jest JEDYNYM źródłem prawdy o służbie — wprost przeciw klasie
-  „trzy niezgodne predykaty uzbrojenia" (W1 §Findings filed 2).
+**Trzy lekcje instrumentu, wiążące dalej:** „diff nie jest dowodem — dowodem jest ponowne uruchomienie
+instrumentu" · **samo uruchomienie też nie wystarczy, dopóki nie sprawdzisz, że SONDA naprawdę zmieniła
+zachowanie** (dowód na `delay` był NIEWAŻNY: duplikat klucza w literale, późniejszy `delay: 0` wygrywał) ·
+jeden predykat (`isInService`), nie dziesięć testów pola.
 
-Trzy orzeczenia właściciela (R-A/R-B/R-C) + dwa dodatkowe (D1, D5) wpisane verbatim w
-§Decisions taken. Audyt szwów: 9 szwów; dwa — intel i war-commodities — **jednoprzebiegowe**
-(§Audit method), przy czym war-commodities **zweryfikowany wykonaniem** przed W2-1.
-
-**Zanim ruszy pierwszy commit:** (1) skopiuj na bok nieśledzony baseline `src/testing/reports/balans/`
-(reguła V19 — runner nadpisuje ten sam plik); (2) one-linery gate'ów **wykonać na żywym silniku** przed
-wpisaniem do checklisty; (3) **nigdy** gate równolegle z pracą CC. Wszystkie trzy kupione błędem w W1.
-
-⚠ **GATE 1 (migracja v101) idzie do Filipa PIERWSZY i SAM** — nie łączyć z żadnym innym gate'em.
-(Stan: ✅ **ZDANY 2026-08-16** — patrz blok wyżej.)
-Idempotencja migracji to wymóg **bezpieczeństwa danych**, nie higieny: `TitleScene.js:413-420` woła
-`SaveSystem.clearSave()` przy `saveData.error`, więc migracja, która rzuci, **KASUJE ZAPIS GRACZA**.
-
-⚠ **Audyt OBALIŁ przesłankę zakresu i właściciel rozstrzygnął W GÓRĘ.** „Build = industry only, no POP"
-było **no-opem dla GRACZA** — dziś AI płaci POP za okręty, a gracz nie płaci nic. Decyzja 13: symetryzacja
-w GÓRĘ — **gracz po raz pierwszy w historii gry płaci POP za obsadzenie okrętu**, a zerowo-POP-owa
-asymetria stoczni orbitalnej (`StationSystem.js:331`) ginie.
+⚠ **Zasady stałe gate'ów** (§Verification) obowiązują bez zmian, z dopiskiem z GATE 2: **nigdy nie
+filtruj wpisów Dziennika po TEKŚCIE WYŚWIETLANYM** — Filip gra po angielsku, filtruj po rodzaju zdarzenia.
 
 ---
 
