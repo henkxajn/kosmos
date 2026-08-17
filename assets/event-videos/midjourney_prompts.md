@@ -230,7 +230,7 @@ to jest opis tego, co dziala w grze:
 | czas trwania | **~5,2 s** (petla w tle karty) | dluzsze nie zaszkodzi, ale nikt tego nie doczeka |
 | audio | **BRAK sciezki audio** | popup gra bez dzwieku; sciezka audio to tylko wieksze MB |
 | faststart | **TAK** — `moov` PRZED `mdat` | bez tego przeglądarka czeka na caly plik |
-| rozmiar | 2,5–8,5 MB | caly katalog to ~95 MB; trzymajmy to w ryzach |
+| rozmiar | 2,2–8,5 MB | caly katalog to ~95 MB; trzymajmy to w ryzach |
 
 **Przepis (jedna linia) — bierze cokolwiek wyszlo z MJ/Runway i robi z tego plik zgodny:**
 
