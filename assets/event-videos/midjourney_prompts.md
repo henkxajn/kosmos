@@ -215,6 +215,62 @@ SFX z pliku, czy tylko sciezke muzyki) — plik moze poczekac, generuj razem z g
 
 ---
 
+# 🔧 WYMAGANIA TECHNICZNE PLIKU — czytaj PRZED eksportem
+
+Konwencja **ZMIERZONA na wszystkich 19 plikach** katalogu (2026-08-17, czytnik ISO-BMFF).
+Wszystkie sa identyczne co do bitu w kazdej z tych wlasciwosci — to nie jest zalecenie,
+to jest opis tego, co dziala w grze:
+
+| wlasciwosc | wartosc | dlaczego wazne |
+|---|---|---|
+| kontener | MP4, `ftyp` = `isom` (compatible: `isom,iso2,avc1,mp41`) | najszersza zgodnosc `<video>` |
+| kodek | **H.264** (`avc1`), profile **High (100)**, level **3.0** | HEVC/H.265 (`hvc1`/`hev1`) Chrome zwykle NIE zagra |
+| pix_fmt | **yuv420p** | `yuv444p`/`yuv422p` = czarny obraz albo brak dekodera |
+| rozdzielczosc | **832x464** | ramka popupu jest pod ten kadr; inne proporcje przytnie |
+| czas trwania | **~5,2 s** (petla w tle karty) | dluzsze nie zaszkodzi, ale nikt tego nie doczeka |
+| audio | **BRAK sciezki audio** | popup gra bez dzwieku; sciezka audio to tylko wieksze MB |
+| faststart | **TAK** — `moov` PRZED `mdat` | bez tego przeglądarka czeka na caly plik |
+| rozmiar | 2,5–8,5 MB | caly katalog to ~95 MB; trzymajmy to w ryzach |
+
+**Przepis (jedna linia) — bierze cokolwiek wyszlo z MJ/Runway i robi z tego plik zgodny:**
+
+```
+ffmpeg -i wejscie.mp4 -c:v libx264 -profile:v high -level 3.0 -pix_fmt yuv420p -vf scale=832:464 -an -movflags +faststart -crf 20 wyjscie.mp4
+```
+
+`-an` usuwa audio · `-movflags +faststart` przenosi `moov` na przod · `-crf 20` trafia w widelki MB.
+
+**Weryfikacja przed wrzuceniem do repo:**
+
+```
+ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,profile,level,pix_fmt,width,height -show_entries format=duration -of default=noprint_wrappers=1 plik.mp4
+```
+
+⚠ **Na tej maszynie NIE MA `ffmpeg`/`ffprobe`** (sprawdzone: brak w PATH, brak w Program Files,
+LocalAppData\Programs i ProgramData). Instalacja: `winget install Gyan.FFmpeg`. Bez tego pomiar
+robi sie czytnikiem kontenera w Node — i tak powstala tabela wyzej.
+
+## ⚠ ZGODNY PLIK TO POLOWA ROBOTY — DRUGA POLOWA TO PODLACZENIE
+
+Plik moze byc idealnie zakodowany i **nadal sie nie odtworzy, jesli zaden kod go nie zada.**
+Zdarzylo sie to `first_contact.mp4` (W2/GATE 3, 2026-08-17): plik byl zgodny w 100 %, a mimo to
+na beacie leciala generyczna `science.mp4`. Sa **DWA** lancuchy wyboru wideo i trzeba wiedziec,
+w ktorym siedzi Twoje zdarzenie:
+
+1. **Zdarzenie harmonogramowe** (`ScheduledEventsData`) — `GameScene.js:3030-3034` sklada
+   `<event.id>.mp4` → `<videoCategory>.mp4` → `default.mp4`. Tu nazwa pliku = **id zdarzenia**
+   i wystarczy wrzucic plik. Tak dziala cala tabela backlogu nizej.
+2. **Beat narracyjny / popup misji** (`queueMissionEvent` → `buildScheduledEventPopup`) — gdy
+   config nie podaje `videoSrc`, `ScheduledEventPopup.js:443-446` wybiera z **`svgKey`** przez
+   mape `SVG_TO_VIDEO` (`alert`/`colony`/`discovery`/`science`/`mining`), a nazwa Twojego pliku
+   NIE ma tam wstepu. Zeby zagral wlasny plik, config musi podac `videoSrc` jawnie — wzorzec
+   jest wspierany (`DiplomacyRefusalModal.js:107` uzywa `videoSrc: []`, zeby wideo WYLACZYC).
+
+Brakujacy plik nie psuje niczego: `_loadVideo` (`ScheduledEventPopup.js:378-398`) sprawdza kazdy
+src zapytaniem HEAD i schodzi nizej po lancuchu. Dlatego 404 w konsoli = hałas, nie awaria.
+
+---
+
 # 📋 BACKLOG GENEROWANIA — 10 promptow BEZ pliku MP4
 
 Sprawdzone porownaniem promptow w tym pliku z zawartoscia katalogu (2026-08-12). Kazdy z tych
@@ -238,8 +294,14 @@ Prompty do WSZYSTKICH juz sa w tym pliku — brakuje wylacznie renderow.
 | 9 | `volunteer_expedition.mp4` | sekcja 19 |
 | 10 | `veteran_engineer_retires.mp4` ⚠ zgloszony 404 z gry | jest w tym pliku |
 
-**Priorytet:** `first_contact.mp4` (flagowy beat) → `population_milestone` + `cultural_festival`
-+ `scout_report` + `veteran_engineer_retires` (zgloszone z gry jako 404) → reszta w dowolnej kolejnosci.
+**Priorytet:** `population_milestone` + `cultural_festival` + `scout_report`
++ `veteran_engineer_retires` (zgloszone z gry jako 404) → reszta w dowolnej kolejnosci.
+
+⚠ **`first_contact.mp4` — WYGENEROWANY (2026-08-17), plik zgodny, w repo.** Zdjety z priorytetu,
+ale **jeszcze nie gra**: beat pierwszego kontaktu to reguła Directora, a NIE zdarzenie
+harmonogramowe, wiec nie jest na lancuchu `<event.id>.mp4` — patrz sekcja „ZGODNY PLIK TO POLOWA
+ROBOTY" wyzej (lancuch 2). Zostaje do zrobienia jedna linia w `DirectorFirstContact.js`
+(jawny `videoSrc`), nie render. To wlasnie ten przypadek, dla ktorego ta sekcja powstala.
 
 ---
 
