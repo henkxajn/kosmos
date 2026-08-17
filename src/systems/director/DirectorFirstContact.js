@@ -274,6 +274,14 @@ export class DirectorFirstContact {
       barRight:    '',
       svgKey:      'report',
       svgLabel:    '🛸',
+      // ⚠ WIDEO WPROST. Bez `videoSrc` `buildScheduledEventPopup` wybiera plik z `svgKey` przez
+      //   `SVG_TO_VIDEO` (`ScheduledEventPopup.js:443-446`), a 'report' → 'science' — czyli flagowy
+      //   beat pierwszego kontaktu leciał na generyku, mimo że `first_contact.mp4` leżał w repo.
+      //   Nazwa pliku wystarcza WYŁĄCZNIE na łańcuchu zdarzeń harmonogramowych (`<event.id>.mp4`,
+      //   `GameScene.js:3030`), a ta reguła nim nie jest. Jawny `videoSrc` to wzorzec wspierany
+      //   (`DiplomacyRefusalModal.js:107` podaje `videoSrc: []`, żeby wideo WYŁĄCZYĆ), a `_loadVideo`
+      //   sprawdza każdy src zapytaniem HEAD, więc ogniwa zapasowe są bezpieczne.
+      videoSrc:    ['assets/event-videos/first_contact.mp4', 'assets/event-videos/science.mp4', 'assets/event-videos/default.mp4'],
       prompt:      '> OBSERVE_',
       headline:    t('director.firstContactTitle'),
       description: t('director.firstContactBody', empName),
