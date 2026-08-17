@@ -16,6 +16,42 @@ already-declared `gameState` domain, and the one item that would need a backfill
 
 ---
 
+## RESUME — czytaj to PIERWSZE (PL, wzór W1/W2)
+
+**Stan na 2026-08-17.** Zrobione i scommitowane: **W3-0** `ea05d8f` (keeper szwów, 6 faktów
+pinowanych wykonaniem) · **W3-1** `efa8f85` (odwracalny przerzut własności kolonii) · **W3-2**
+`d5a9b8d` (DSCS/VCS księgowane przez `recordBattle`) · `536fd51` (checklista GATE 1).
+Sweep **139/139 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji**.
+
+⏳ **GATE 1 JEST W TRAKCIE — PRZERWANY HARMONOGRAMEM na §7[5], NIE OBLANY.** Wszystko przed tym
+punktem przeszło NA ŻYWO: §2 (rdzeń) bitwa w przestrzeni głębokiej **księguje się** — wyczerpanie
+0/0 → **3,6/0,8**, `battles` +1, `orbitalDominance` ustawione dla `sys_home`, ślad audytu 2 wpisy /
+1 z `warId` · §3 asymetria potwierdzona **8×** od strony wygrywającego (**28,8/6,4** po 8 bitwach =
+dokładnie przegrany 9 / wygrany 2 × `exhaustionRate` 0,4 dla eksterminacji); odwrotny kierunek
+pokryty keeperami T5/T6 — przyjęte wg precedensu L1→L2 (jednostronna obserwacja live × N + keeper
+na inwersji) · §4 `war_status` **monotoniczny**: raw **−0,936 → −0,928** (krzywa eksterminacji jest
+z założenia płaska — sygnałem jest monotoniczność, nie amplituda) · §7 **4 z 5**: `transferColony`
+= true, **Nihal c ŻYJE na liście wroga jako pełny obiekt z nazwą** (o to w W3-1 chodziło), lista
+gracza się skurczyła, gra ogłosiła utratę.
+
+**DO DOKOŃCZENIA GATE 1 (od tego zacznij):** §7[5] zapis → F5 → wczytanie: lista kolonii wroga
+**nadal** niesie Nihal c, Stratcom **nadal** maluje ją barwą wroga, konsola czysta · sprawdzenie
+własności **trzech kolonii Propus** (`entity_157/158/159` — na żadnej z trzech list nie mają
+właściciela; czy jest czwarty?) · §8 (bitwy na kanale **Walka** w Dzienniku + brak `TypeError`).
+
+**Po PASS:** **W3-3** (`orbitalDominance` przeżywa wczytanie — jeden klucz w `createDefaultState`)
+→ **W3-4** (producent misji `attack` + naprawa `_holdAtHome` + bramka `isInService`; **D4
+zweryfikowane** — eskorty warp żyją i są produkowane na L2, **do ZASTOSOWANIA** w doborze: filtr
+`warpFuel.max > 0`, nigdy po id szablonu) → **GATE 2**.
+
+⚠ Pięć obserwacji z gate'u trafiło do §Findings filed **17-21** (rejestr, nie poprawki) — w tym
+dwie, które zmieniają sposób pisania checklist: `getAllColonies` zwraca kolonie WSZYSTKICH
+właścicieli, a jedynym rozróżnieniem jest sufiks w nazwie UI (**wybieraj po stemplu własności,
+nigdy po nazwie**), oraz `spawnEnemyFleet` w Sandboksie stawia flotę ABSTRAKCYJNĄ dla złego
+imperium.
+
+---
+
 ## Audit method and confidence
 
 Seven read-only seam audits, each followed by an adversarial pass instructed to **refute** the first pass's
@@ -476,6 +512,38 @@ first-contact seed (standing parallel item, its own before/after).
     `DirectorFirstContact._courseAngle`) and `DirectorDoctrine._hash:327-331`. It decides which escort an
     empire builds only when `aggression` is strictly between 0.4 and 0.6, so the blast radius is small — but
     it is a third site of the class the project has already been bitten by twice. Found while verifying D4.
+
+### Added at GATE 1 (2026-08-17, owner-witnessed live)
+
+17. **`spawnEnemyFleet` is the wrong lever for the Combat Sandbox, twice over.** In the sandbox it
+    spawns an **abstract** fleet for `emp_test_enemy` — but the sandbox's war is declared against
+    `emp_sandbox_enemy` (`CombatSandbox.js:29`, `_declareSandboxWar:411-419`), so the fleet belongs
+    to the **wrong empire**; and the abstract path is precisely what **W3-8 retires** (decision D2).
+    The lever therefore needs a ruling rather than a patch: **rewrite it on real hulls, or let it
+    die with W3-8.** Until then §6 of the GATE 1 checklist ("orbital path still books") cannot be
+    driven from the sandbox. Note the control it was meant to provide is already covered offline by
+    `war_seams_smoke` T6.
+18. **S18 confirmed LIVE by the owner, not just by reading.** Over eight battles the loser's counter
+    reached **28.8** while the winner's crawled to **6.4** — and the peace curve tracked the **6.4**.
+    `war_status` uses `min(exhaustionSelf, exhaustionOther)`, so **the price of peace reads the
+    WINNER's counter** and cannot tell who is winning. The formula's own justification
+    (`AcceptanceEngine.js:93-96`) says both sides "grow symmetrically", which W1-4b made false.
+    **W4 prices territory with this same term** — it must be resolved there, not inherited.
+19. **S25 confirmed live TWICE, and it is worse in the hand than on paper.** Battles resolve as
+    **background toasts** the player can miss entirely, and losing a colony arrives as a **native
+    Windows alert** (`GameScene.js:2276`). This is exactly W3-7's mandate — now owner-witnessed
+    rather than inferred from a grep, which raises its priority within the slice.
+20. ⚠ **`getAllColonies` returns colonies of EVERY owner, and the only visible distinction is a
+    UI-name suffix.** The gate stalled on ownership ambiguity because of this. **Binding rule for
+    every future checklist and probe: select the player's colonies by the ownership stamp
+    (`ColonyManager.getPlayerColonies()` / `isPlayerColony`), NEVER by name or by eyeballing a
+    list.** This is the same canon `ai-empire-hidden-from-player` already records for UI code; it
+    now applies to gate scripts too. Open sub-question carried into the next session: the three
+    Propus bodies (`entity_157/158/159`) show **no owner on any of the three lists** — either a
+    fourth owner exists or an ownership stamp is missing.
+21. **The Combat Sandbox seeds a player colony outside the home system that the Outliner never
+    showed** (Nihal c). Minor, but it means the sandbox's notion of "your colonies" and the
+    Outliner's disagree — worth one look before anyone uses the sandbox to reason about ownership.
 
 ---
 
