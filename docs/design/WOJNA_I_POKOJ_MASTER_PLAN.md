@@ -1,6 +1,6 @@
 # WOJNA I POKÓJ 1.0 — master plan
 
-**Status:** living roadmap · **Last update:** 2026-08-14
+**Status:** living roadmap · **Last update:** 2026-08-17 (W2 closed — all three gates passed)
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` (2026-08-05 — **partly superseded**, see `W1_PLAN.md`
 §Corrections K-1/K-2/K-5/K-6) · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
 `WAR_BACKBONE.md` (**signed 2026-08-13**), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
@@ -212,6 +212,79 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   there (every W1 keeper spawns enemies by hand); and the courier premise remains **unmeasurable** —
   0 outposts over 400 civY × 3 seeds, with not even a `cannot_afford_outpost` attempt.
 
+- **W2 — the deploy model (P4). DONE, all three gates PASSED (GATE 1 · 2026-08-16 · GATE 2 ·
+  2026-08-16 · GATE 3 · 2026-08-17, full pass, all eight sections).** Eight commits `7f606b7` →
+  `adc0fbd` (+ `3f8601d` / `8e9f6e5` docs); **the first save bump since v100 — v100 → v101** — and,
+  unlike D2/W1/Director Slice 1, this one *had* to carry state, so it got its own commit and its own
+  gate by owner instruction. Sweep 129 → **136** keepers.
+  **What shipped:** *build is industry, deploy is people.* A finished hull now leaves the yard into
+  **reserve** and only crew turns it into a warship — one axis, one predicate (`isInService`), three
+  states (`active` / `stored` / `mobilizing`, where mobilizing is deliberately **not** service). The
+  baseline was symmetrised **upward** (owner ruling): the AI's three build-time POP gates were deleted
+  and the player pays POP for crewing **for the first time in the game's history**, so the station's
+  zero-POP MVP asymmetry died. Crew became a **per-vessel, typed, payer-stamped ledger**
+  (`crewLocked` / `crewStrataLocked` / `crewColonyId`) that dies with the ship and returns only on a
+  deliberate withdrawal — **fractionally**, through the population accumulator, because the ledger's
+  natural primitive kills whole citizens. Reserve costs **10 %** upkeep at an *effective* rate all
+  five readouts share, sorted **service-first-then-cheapest** so the discount can never reorder who
+  goes unpaid, and arrears block *deploying more crew* rather than accruing debt on a parked hull. The
+  AI got a **mobilization decision** with no authored thresholds — a Director rule guarded by free
+  crew and by `getStrength(player) > getStrength(empire)`, so **parity brakes the arms race by
+  itself**; intel learned to separate **force from potential** (`getStrength` vs
+  `getPotentialStrength` + `knownReserve` / `knownCrewCapacity` behind `detailed`); and the courier
+  latch that had been silently stalling on reserve hulls was woken where the stall was previously
+  *completely* invisible.
+  **What the gates proved that the harness cannot.** `GameCore` mounts no Director, so "an AI warship
+  comes into being end to end" was unmeasurable headless — a binding register ruling, and the reason
+  GATE 3 existed at all. Live: the hull landed in reserve, **mobilization fired naturally twice**
+  (year 25.35 on `emp_001`, then `emp_002` the moment its first hull hit storage), the AI **paid POP**
+  for the crew, and the rule then **silenced itself on parity** once those ships entered service.
+  GATE 1 proved migration idempotence **on a live save** rather than assuming it — which matters more
+  than it sounds, because `TitleScene.js:413-420` calls `clearSave()` on a migration error, so a
+  throwing migration deletes the player's save.
+  **Five findings worth carrying forward.**
+  1. **Three defects of the class "declared but not enforced", found while building on them.**
+     `removePop(type, count)` loops `for (i = 0; i < count; i++)`, so a 0.4-POP crew killed a **whole**
+     citizen — a 2.5× over-debit already live in two `MissionSystem` paths. `EventLogSystem.TYPE_MAP`
+     had no `intel` / `combat` / `diplomacy` keys although `CHANNELS` did, so **18 M4-P1 call sites**
+     (battles, retreats, wars) had been landing on the *system* channel — with the correct colour,
+     which is why nobody saw it. And `_tickRepair` matches `entry.buildingId` while `_active` entries
+     carry `entry.building.id`, so **ship repair has never worked, for anybody**; pinned as a gap and
+     deliberately *not* fixed, because the one-line fix switches fleet repair on across the whole game.
+  2. **"Diff is not proof" grew a younger sibling: running the instrument is not proof either, until
+     you check the PROBE changed behaviour.** The fail-first evidence for `delay: 0` was **invalid on
+     the first pass** — the probe inserted `delay` as a second key in the same object literal and the
+     later `delay: 0` wins in JS, so the pin "passed" because nothing had changed. Repeated on the
+     right line. Seven other fail-first proofs were taken by execution and each verified red.
+  3. **Arrears turned out to be a third thing — neither a flow nor a balance, but a LATCH.** Measured
+     at GATE 2 against the owner's hypothesis: granting 10 000 Kr does **not** unblock deploy; the
+     block lifts at the next *successful* annual settlement. Ruled intended (a budget that cannot
+     sustain the fleet should not commit more crew) and the i18n string rewritten to say so — but the
+     up-to-one-game-year lag between paying and unblocking was never designed and is filed, not fixed.
+  4. **A ladder of revelation, deliberately uneven.** The mobilization notification needs `contact`
+     (it is an *observable event*), while the reserve numbers in the intel panel need `detailed` (they
+     are a *reconnaissance result*). Levelling the two would either remove a visible event or hand out
+     a full order of battle for free. GATE 3 confirmed the anonymous variant live — and produced the
+     question that closes this slice's UX loop: *"how do we know, if we don't know them?"* (answer
+     filed, with the measured 250 px reason it is not a one-line string edit).
+  5. **A structural seed needs dispersion at EVERY site — not just where the lesson was learned.**
+     Found while explaining a gate observation nobody had asked about (two AI ships transiting the
+     player's system at ~year 25 — the Director Slice 1 first-contact probes, one per empire, working
+     exactly as designed): the first-contact roll key carries **no galaxy salt** and `_courseAngle` is
+     a raw `h*31` hash **never passed through `mixSeed`**, so both empires fire on attempt 3 in the
+     same displayed year and enter on bearings **226° / 227°** — measured, every playthrough, a
+     synchronized parallel pair. `DirectorRuleMath.js:71-74` warns about this exact class in writing
+     and the fix had been applied to one of the three sites. Filed as a narrative/balance commit
+     (it moves when and where first contact happens in every future game), not a drive-by.
+  **Four debts carried forward deliberately, each named:** (a) **materialized shadow fleets bypass the
+  crew model entirely** — born `active` with `crewLocked: 0`, they cost the AI no POP and their loss
+  kills nobody; pricing the AI's *principal* fleet source is a **W3** balance decision, not hygiene.
+  (b) **AI fleet upkeep is still not charged** (owner ruling, decision 14) — removing the
+  `isEnemyVessel` guard would bill the *player* through `homeColonyId` resolution, and the AI has no
+  tax income; `PHASE5_TODO` sits at the guard, not in a doc. (c) **the arrears latch lags by up to one
+  game year** (finding 3 above). (d) **ship repair is dead for everyone** (`_tickRepair`, finding 1).
+  Five further findings from the GATE 3 close-out are recorded as `W2_PLAN.md` §Findings filed 11-15.
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
@@ -257,6 +330,11 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   systems per empire and 58.7 % at 8**, so `BORDER_LY` **must be re-measured over ≥60 displayed
   years**, counting outposts separately from colonies, before D3 leans on it. Details:
   `DIRECTOR_SLICE1_PLAN.md` §Rulings R-2.
+  ⚠ **Premises moved a third time at W2/GATE 3 (2026-08-17):** one empire founded its first outposts at
+  civY **~460-465** while its sibling in the *same run* had none, and its commodity gap list contained
+  raw ores the sibling's did not. So the expansion clock is a property of the individual empire and
+  seed, not an engine threshold — **17.7 % is a per-seed, per-empire sample, and so is every number
+  derived from it.** `W2_PLAN.md` §Findings filed 11.
 - **D4** Verb batch 1: gift, denounce, threaten, NAP duration, alliance mechanics,
   war CB + reputation, peace terms (consumes `peaceCost`)
 
@@ -291,8 +369,17 @@ Owns everything between war declaration and the peace table.
   two in-repo comments carry the same error and are corrected in W1-1. **K-2** — P2's transition is
   **void**: `empire.fleets` is always empty in normal play, while AI already owns real ownership-stamped
   warships since Director S4/S6 — live military assets with no abstract representation at all.
-- **W2 — the deploy model (P4)**, own plan doc, own gate, likely the first save bump since v100.
-- **W3+ — offensive AI & territorial peace** (§6a, signed 2026-08-13).
+- **W2 — the deploy model (P4). ✅ DONE, all three gates PASSED 2026-08-16 / 08-16 / 08-17.** Eight
+  commits `7f606b7` → `adc0fbd`; save **v100 → v101** (the first bump since v100 — its own commit, its
+  own gate, idempotence proven on a live save). Plan + the full decision register, all 22 signed:
+  `W2_PLAN.md`; the corrections it forced on the backbone: `WAR_BACKBONE.md` §6-W2 (C-1…C-7); gate
+  results and their close-out answers: `W2_GATE{1,2,3}_CHECKLIST.md`. Retrospective under §Completed.
+  **What W2 hands W3:** a fleet with a working distinction between *force* and *potential* — exactly
+  what an offensive AI has to reason about before it picks a target — and a mobilization decision that
+  already brakes on parity without a single authored threshold.
+- **W3+ — offensive AI & territorial peace** (§6a, signed 2026-08-13). Inherits two W2 debts by
+  name: materialized shadow fleets bypass the crew model entirely (the AI's principal fleet source,
+  so pricing it is a balance call), and AI fleet upkeep is still uncharged (decision 14).
 
 The doc covers:
 
@@ -427,37 +514,43 @@ D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 
                         → W1 plan ✅ APPROVED (14 decisions signed, orchestrator 2026-08-14)
                         → W1 ✅ COMPLETE (13 commits, Gates 1-3 PASSED 2026-08-14, v100 no migration)
                         → W2 plan ✅ APPROVED (22 decisions signed, 3 owner rulings, 2026-08-15)
-                        → W2 🟡 BUILT — 8 commits, **GATE 1 + GATE 2 PASSED**, save bumped v100 → v101
-                                                ⟵ WE ARE HERE — **GATE 3 is the only thing left**:
-                                                   AI warship end-to-end, LIVE ONLY (binding register
-                                                   line: unmeasurable headless, GameCore mounts no Director)
-                        → D3/D4 ⇄ W1..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
+                        → W2 ✅ COMPLETE — 8 commits, Gates 1-3 PASSED 2026-08-16/16/17, save v100 → v101
+                                                ⟵ WE ARE HERE — **at a horizon DECISION, not on a path.**
+                                                   The three candidates are W3 (offensive AI + territorial
+                                                   peace) · Director Slice 2 (demand-based rules) · BALANS
+                                                   (the debt list grew again). **The choice is Filip's and
+                                                   the orchestrator's — this document deliberately does
+                                                   not make it.**
+                        → then: D3/D4 ⇄ W3..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
 ```
 
-**Where we are right now:** **the arc's foundation is complete and the war backbone has its first
-executable plan.** D1 gave relations a real model; D2 gave them a real *decision* (closed 2026-08-10,
-nine commits, three passed gates, save untouched at v100); Director Slice 1 gave the galaxy a
-*dramaturgy* layer and — decisively for workstream B — the first AI empires that build real warships
-through the real economy. `WAR_BACKBONE.md` is **signed** (P1–P7 plus §6a territorial peace), and
-`W1_PLAN.md` is **approved** with fourteen signed decisions. **The next action is code, not design.**
+**Where we are right now:** **the war backbone has shipped its first two executed slices, and the arc
+is standing at a horizon decision.** D1 gave relations a real model; D2 gave them a real *decision*
+(closed 2026-08-10); Director Slice 1 gave the galaxy a *dramaturgy* layer and the first AI empires
+that build real warships through the real economy; W1 made military strength a derived, shared,
+honestly-accounted number; **W2 split that number in two** — *force* (crewed, in service) versus
+*potential* (a hull in storage) — and put a month and a demographic cost between them, for **both**
+sides. Save is at **v101**, sweep at **136 keepers, 0 FAIL**, `check-i18n` PASS with pl = en = 3240.
 
-**Next horizon — finish W2 at GATE 3, then W3.**
-1. **W2 — the deploy model** (P4) — 🟡 **BUILT, ONE GATE LEFT**. Build → storage → deploy is live for
-   both sides: a hull leaves the yard into **reserve**, crewing it costs POP and takes one displayed
-   month, losing it kills that crew, and the AI now decides when to mobilize. All three P4 questions
-   were ruled on 2026-08-15 and are implemented as stated (R-A 10 % reserve upkeep · R-B one month ·
-   R-C crew dies). Save **v101**. Full register: `W2_PLAN.md`; corrections it forced on this backbone:
-   `WAR_BACKBONE.md` §6-W2 (C-1…C-7).
-   **Remaining: GATE 3** — AI warship end-to-end on a live game, plus the R-2 shell-coverage
-   re-measure. It is live-only by binding register ruling: `GameCore` mounts no Director, so
-   "an AI warship comes into being end-to-end" cannot be measured headless.
-   ⚠ The owner's Gate-3 regression scenario (**fleet-upkeep death spiral** — too many ships, negative
-   credits) is now pinned as `deploy_seams` T6 and left deliberately untouched by W2; the reserve rate
-   only adds to it.
-   ⚠ Two things W2 deliberately did **not** price, handed to W3: materialized shadow fleets bypass the
-   crew model entirely, and AI fleet upkeep is still not charged.
-3. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation
-   record, unread, since D1, and D3 is its consumer. The influence map is already built (Director S2).
+**Next horizon — NOT CHOSEN HERE.** W2 closed cleanly, so nothing forces the order. Three candidates,
+listed without a ranking, because the call belongs to Filip and the orchestrator:
+1. **W3 — offensive AI & territorial peace** (§6a). The natural continuation: W2 handed it the
+   force/potential distinction an attacker needs, and it inherits W2's two unpriced items by name
+   (materialized shadow fleets bypass the crew model; AI fleet upkeep uncharged).
+2. **Director Slice 2 — demand-based rules** (pressure L3 ultimatum, tribute demands, counter-intel
+   expulsion). Slices 2–3 remain unscoped; Slice 1's five findings are all still binding on them.
+3. **BALANS — the debt list grew again.** W2 alone filed five new items (`W2_PLAN.md` §Findings filed
+   11-15), on top of the four AI-economy findings from Director Slice 1 and the standing R-2
+   re-measurement obligation, whose premises **moved a third time** during GATE 3 (an empire founded
+   its first outposts at civY ~460-465, inside a window an earlier probe measured as empty).
+
+**D3 — borders, trespass incidents, influence map** stays queued behind whichever is chosen:
+`bordersOpen` has been sitting in the relation record, unread, since D1, and D3 is its consumer; the
+influence map itself is already built (Director S2).
+
+⚠ **Before D3 leans on `BORDER_LY` = 5 LY:** the 17.7 % coverage figure is now known to be a per-seed,
+**per-empire** sample rather than a constant — see the finding above. Re-measure over ≥60 displayed
+years, counting outposts separately from colonies.
 
 ⚠ **`relative_power` stops being inert in W1** (commit W1-3, GATE 1) — the E7 acceptance matrices must
 be re-run with before/after attached, and the untracked BALANS baseline copied aside **before** the first

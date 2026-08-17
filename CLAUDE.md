@@ -1399,7 +1399,7 @@ overlay, C7 intact, brak console errors).
 
 ---
 
-## W2 — MODEL ROZMIESZCZENIA: budowa to przemysł, rozmieszczenie to ludzie (save **v101**, GATE 1+2 PASS, GATE 3 pending)
+## W2 — MODEL ROZMIESZCZENIA: budowa to przemysł, rozmieszczenie to ludzie (save **v101**, GATE 1+2+3 PASS — SLICE ZAMKNIĘTY 2026-08-17)
 
 Slice W2 arca WOJNA I POKÓJ 1.0 (workstream B). Plan + rejestr decyzji: `docs/design/W2_PLAN.md`.
 Kadłub schodzi ze stoczni **do REZERWY**; dopiero obsadzenie załogą (POP) czyni z niego okręt
@@ -1473,6 +1473,19 @@ bramkowane na `contact`, nazwa imperium dopiero na `detailed` — **dwa szczeble
 Keepery: `deploy_seams` (T1/T2/T4 świadomie odwrócone) · `w2_deploy_model` · `w2_migration_v101` ·
 `w2_crew_ledger` 65 · `w2_reserve_upkeep` 27 · `w2_deploy_ui` 23 · `w2_ai_mobilization` 39.
 Sweep **136/136 0 FAIL** · `check-i18n` PASS (pl=en=3240).
+
+**GATE 3 (2026-08-17) — pętla AI, live-only, FULL PASS.** Mobilizacja odpaliła SAMA dwa razy (rok
+25,35 na `emp_001`, potem `emp_002` w chwili, gdy jego pierwszy kadłub trafił do magazynu), AI
+zapłaciło POP za załogę, a potem **parytet uciszył regułę** (`slabszy` → `false`). Rozdział siła /
+potencjał / rezerwa widoczny w liczbach i w panelu wywiadu; powiadomienie anonimowe na `contact`
+zgodnie ze specyfikacją; kurierzy `dispatched` 4 → 8. Cztery odpowiedzi domknięcia (klauzula źródła,
+zagadka przelotu, symetria Rozmieść/Wycofaj, dane do rejestru): `docs/design/W2_GATE3_CHECKLIST.md`
+§Domknięcie. **Pięć nowych wpisów rejestru** (`W2_PLAN.md` §Findings filed 11-15), w tym realny
+defekt: **pierwszy kontakt jest w KAŻDEJ partii zsynchronizowaną parą sond z tego samego namiaru** —
+klucz rzutu bez soli galaktyki (`DirectorRuleMath.js:105`) i `_courseAngle` bez `mixSeed`
+(`DirectorFirstContact.js:191-196`) ⇒ oba imperia odpalają na próbie 3 i wchodzą pod 226°/227°
+(ZMIERZONE). ⚠ Lekcja wiążąca dalej: **seed strukturalny wymaga rozproszenia w KAŻDYM miejscu, nie
+tylko tam, gdzie się o tym nauczyliśmy** — `DirectorRuleMath.js:71-74` ostrzega przed tą klasą wprost.
 
 ---
 

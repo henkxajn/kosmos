@@ -1,5 +1,8 @@
 # W2 — GATE 3: pętla AI (rezerwa · mobilizacja · wywiad) — checklista live · FINAŁ SLICE'U
 
+**Status: ✅ ZDANY 2026-08-17 — wszystkie osiem sekcji, SLICE W2 ZAMKNIĘTY.** Ramka wyniku, dowody
+z żywej gry i cztery odpowiedzi domknięcia: §Wynik + §Domknięcie na końcu pliku.
+
 **Slice:** W2 (model rozmieszczenia) · **Commit:** `adc0fbd` (W2-7) + `3f8601d` (docs)
 **Plan:** `docs/design/W2_PLAN.md` · **Poprzednie gate'y:** GATE 1 ✅ · GATE 2 ✅
 **Stan przed gate'em:** sweep **136/136 OK, 0 FAIL** · `check-i18n` PASS (pl=en=3240,
@@ -203,8 +206,15 @@ AI (24 POPy, 18 budynków) sadza promień roszczony na `R_MAX = 4 LY` od pierwsz
 ekspansji AI (WAR_BACKBONE/BALANS) **wymaga ponownego pomiaru** — projekcja przebija połowę przy
 8 układach na imperium.
 
-- [ ] Przyjąłem do wiadomości: R-2 przemierzone, 17,7 %, warunek spełniony **warunkowo** —
+- [x] Przyjąłem do wiadomości: R-2 przemierzone, 17,7 %, warunek spełniony **warunkowo** —
       do przemierzenia ponownie, gdy ekspansja AI ruszy.
+
+⚠ **DOPISEK Z TEGO PRZEBIEGU (2026-08-17) — przesłanka „AI stoi w miejscu" jest ZALEŻNA OD SEEDA.**
+W tej partii `emp_002` założyło **pierwsze outposty w civYear ~460-465** — czyli WEWNĄTRZ okna, które
+pomiar §8 nazwał pustym („zero wywołań `bootstrapColony`/`bootstrapOutpost`"). Diagnoza „liczba jest
+stabilna z NIEWŁAŚCIWEGO powodu" **zostaje w mocy**, ale jej druga noga (martwa ekspansja) jest
+własnością przebiegu, nie silnika: 17,7 % to próbka per seed × per imperium, nie stała. Sama liczba
+i zobowiązanie do ponownego pomiaru — bez zmian. Zapisane jako `W2_PLAN.md` §Findings filed 11.
 
 ---
 
@@ -212,20 +222,174 @@ ekspansji AI (WAR_BACKBONE/BALANS) **wymaga ponownego pomiaru** — projekcja pr
 
 | pozycja | wynik |
 |---|---|
-| 1. Kadłub AI kończy w REZERWIE | ⬜ |
-| 2. Doktryny nie wcielają rezerwy | ⬜ |
-| 3. **Mobilizacja: rezerwa → `mobilizing` → służba, POPy stolicy spadają** | ⬜ |
-| 4. Wywiad rozdziela siłę od potencjału (panel + liczby) | ⬜ |
-| 5. Powiadomienie za bramką kontaktu; `rumor` nie widzi nic | ⬜ |
-| 6. Kurierzy AI znowu jeżdżą | ⬜ |
-| 7. Brak regresji po stronie gracza, konsola czysta | ⬜ |
-| 8. Ponowny pomiar R-2 przyjęty | ⬜ |
+| 1. Kadłub AI kończy w REZERWIE | ✅ |
+| 2. Doktryny nie wcielają rezerwy | ✅ |
+| 3. **Mobilizacja: rezerwa → `mobilizing` → służba, POPy stolicy spadają** | ✅ |
+| 4. Wywiad rozdziela siłę od potencjału (panel + liczby) | ✅ |
+| 5. Powiadomienie za bramką kontaktu; `rumor` nie widzi nic | ✅ |
+| 6. Kurierzy AI znowu jeżdżą | ✅ |
+| 7. Brak regresji po stronie gracza, konsola czysta | ✅ |
+| 8. Ponowny pomiar R-2 przyjęty | ✅ |
 
-**GATE 3:** ⬜ ZDANY / ⬜ NIEZDANY — uwagi:
+**GATE 3:** ✅ **ZDANY — SLICE W2 ZAMKNIĘTY** (2026-08-17, Filip) — wszystkie osiem sekcji.
 
-**Po ZDANIU: SLICE W2 ZAMKNIĘTY.** Otwarte, świadomie przekazane dalej: flota zmaterializowana
-omija model załogi (W3) · utrzymanie floty AI nienaliczane (decyzja 14) · opóźnienie zatrzasku
-zaległości (§Findings filed 9) · martwa naprawa statków (`_tickRepair`, pinowana jako luka).
+**Dowody z żywej gry:** kadłub AI schodzi ze stoczni **do rezerwy** (dowód pośredni, ale
+rozstrzygający: wpis mobilizacyjny + `rez 864` w `ThreatAssessment` + linia rezerwy w panelu
+wywiadu — magazyn musiał istnieć, żeby było co obsadzać) · **mobilizacja odpaliła SAMA, dwa razy**:
+rok **25,35** na `emp_001`, potem `emp_002` w momencie, w którym jego pierwszy kadłub trafił do
+magazynu — tak szybko, że odczyty `rezerwa` między stanami pokazywały 0 · **parytet następnie
+UCISZYŁ regułę**: `slabszy` przeskoczyło na `false`, gdy okręty zostały obsadzone — hamulec wyścigu
+zbrojeń z decyzji 22 działa i widać go w danych · **AI ZAPŁACIŁO POP** za obsadzenie (wolna załoga
+18,4 po dosypaniu 20) · rozdział **siła / potencjał / rezerwa** na żywo w liczbach ORAZ w panelu
+wywiadu („≈1009 combat units · +864 in reserve (uncrewed) · free crew: 18.4 POP · Balance of power:
+they are stronger (+55 %)") · §5 domknięte **świeżym** zdarzeniem: dzwonek pokazał „⚓ Unknown empire
+is crewing warships · Reserve entering service: 2" przy rozpoznaniu `contact` BEZ `detailed` — czyli
+wariant anonimowy dokładnie zgodnie ze specyfikacją · kurierzy `dispatched` **4 → 8** (`emp_002` na 0,
+bo nie ma outpostów — osobny, znany dług) · pętla gracza z GATE 2 bez regresji, bitwy na kanale
+**Walka**, konsola czysta.
+
+**Otwarte, świadomie przekazane dalej:** flota zmaterializowana omija model załogi (W3) ·
+utrzymanie floty AI nienaliczane (decyzja 14) · opóźnienie zatrzasku zaległości (§Findings filed 9) ·
+martwa naprawa statków (`_tickRepair`, pinowana jako luka).
+
+---
+
+## Domknięcie po GATE 3 — cztery odpowiedzi (żadna nie otwiera gate'u ponownie)
+
+### 1. Skąd wiemy, jeśli ich nie znamy — klauzula źródła ZGŁOSZONA, nie wdrożona
+
+Filip zapytał wprost: skoro wpis mówi „**Nieznane** imperium obsadza okręty", to **skąd o tym wiemy?**
+Odpowiedź modelowa jest dobra i warta pokazania w grze: `contact` znaczy „już ich kiedyś
+obserwowaliśmy", więc ruch przy stoczniach jest rozpoznaniem WZORCA, nie odczytem tożsamości. Jedna
+klauzula („ruch przy stoczniach") czyni to czytelnym.
+
+**Nie wdrożone, bo nie jest to zmiana trywialna — i przyczyna jest ZMIERZONA, nie przypuszczana.**
+Podtytuł ma DOKŁADNIE JEDNĄ powierzchnię renderującą: wiersz dzwonka. `NotificationDropdown.js:76`
+ustawia panel na sztywne **320 px**, a `:216-217` dają OBU liniom (tytuł i podtytuł)
+`white-space:nowrap; overflow:hidden; text-overflow:ellipsis`. Po odjęciu paddingów (`:208`
+`6px 12px 6px 28px`) i przycisku ✕ (`:220`) zostaje **~250 px**, przy czym `· yr NN` jest doklejone
+do linii PODTYTUŁU (`:204`, `:217`), więc zjada z tego budżetu kolejne ~8 znaków. Obecny angielski
+podtytuł zużywa ~35 znaków z ~52 dostępnych; klauzula „movement observed near shipyards" to +32 znaki,
+czyli **dwukrotne przepełnienie** — wynikiem byłoby „…" i **zniknięcie roku**. Gdy lista przekroczy
+`max-height: 320px` (`:178`), pasek przewijania zabiera z tej samej szerokości jeszcze ~8-17 px.
+
+**Trzy fakty, które kształtują poprawkę** (wszystkie sprawdzone w kodzie):
+1. **Nie ma osobnego klucza wariantu anonimowego.** Rozgałęzienie anonim/nazwa siedzi w WARTOŚCI
+   `empName` (`NotificationCenter.js:288-289`) wstrzykiwanej w ten sam `notif.mobilizationTitle` /
+   `notif.mobilizationSubtitle`. Ograniczenie klauzuli do anonimu wymaga **gałęzi w kodzie** plus
+   jednego NOWEGO klucza w obu słownikach — nie jest to edycja wartości i18n.
+2. **Podtytuł nigdy nie dociera do Dziennika** — kopia do EventLogu bierze `logText ?? title`
+   (`NotificationCenter.js:119-124`), a `logText` to TYTUŁ. Klauzula w podtytule byłaby widoczna
+   wyłącznie w przyciętym wierszu dzwonka.
+3. **Klik w ten wiersz nie otwiera NICZEGO.** `_openNotificationDetail` (`MissionEventModal.js:396-409`)
+   rozgałęzia się po `notif.source` i kończy `default: return;` — `'directorMobilization'` nie ma
+   przypadku. Mobilizacja jest jedyną notyfikacją bez detalu, a **właśnie tam** dłuższa proza wywiadu
+   należy. To jest zapisane jako §Findings filed 13 i jest to właściwa poprawka, nie łatanie stringa.
+
+⚠ Tytułów NIE wolno ruszać bez ostrożności: `w2_ai_mobilization_smoke` (`:236-237`, `:242`) asercjuje
+na **zinterpolowanym TYTULE** („na `contact` nazwa imperium jest ZATRZYMANA" / „dopiero pełne
+rozpoznanie ujawnia nazwę"), więc usunięcie `{0}` z któregokolwiek tytułu wywala T6.
+⚠ `NotificationCenter.serialize` (`:144`) utrwala **już przetłumaczony** podtytuł w zapisie, więc
+jakakolwiek zmiana treści dotyczy tylko NOWYCH wpisów — weryfikacja w przeglądarce musi patrzeć na
+ŚWIEŻO odpaloną mobilizację, nie na wpis wczytany z zapisu.
+
+Do wyboru, gdy ktoś to podejmie: **(A)** przepisać podtytuł zwięźle zamiast dopisywać
+(`Ruch przy stoczniach · rezerwa: {0}` / `Movement near shipyards · reserve: {0}` — ~197-211 px z ~250,
+czysta edycja i18n, ale klauzula pojawia się też przy `detailed`); **(B)** wierne życzeniu — gałąź
+`t(named ? 'notif.mobilizationSubtitle' : 'notif.mobilizationSubtitleAnon', count)` w
+`NotificationCenter.js:295` (`named` już istnieje w zasięgu) + nowy klucz w `pl.js`/`en.js`
+(3240 → 3241 w obu, parytet i `check-i18n` bez zmian). **(C)** — właściwa: dopisać
+`'directorMobilization'` do `_openNotificationDetail` i tam umieścić prozę.
+Każda z nich wymaga **jednego spojrzenia w przeglądarce na wiersz dzwonka po ANGIELSKU** — a tego nie
+robi się przy zamykaniu gate'u.
+
+### 2. Zagadka: dwa statki AI PRZELECIAŁY przez układ gracza w okolicy roku 25 — WYJAŚNIONE
+
+**To nie jest zachowanie W2 i nie jest to usterka.** To reguła `first_contact` z **Director Slice 1**
+(strumień C) — mechanizm trzeci, którego rozumowanie Filipa („doktryny celują we WŁASNE układy,
+kurierzy latają punkt-punkt") słusznie nie obejmowało, bo dotyczyło strumienia B.
+
+`scienceFlyby` (`DirectorFirstContact.js:96-169`) tworzy **JEDNĄ** nieuzbrojoną sondę na obwodzie
+układu gracza (`FLYBY_RADIUS_PX = 2600` = **23,6 AU** przy `AU_TO_PX = 110`) i prowadzi ją prostym
+kursem **przez** pozycję planety macierzystej na drugą stronę, gdzie despawnuje z powodem
+`exited_system` (`:200-250`) — czyli dosłownie przelot, nie przylot. Reguła ma
+`cooldown: { once: true }` (`DirectorRuleData.js:79-89`), a normalna galaktyka ma **dokładnie dwa**
+imperia (`EmpireGenerator.js:19-20`, `emp_001`/`emp_002`) ⇒ **maksymalnie dwie sondy w całej partii.
+Dwa statki to pełna, zamknięta liczba, nie próbka.**
+
+Wszystkie pozostałe drogi, którymi kadłub AI mógłby znaleźć się w `sys_home`, są albo debugowe, albo
+martwe w normalnej grze: materializator floty jest nieosiągalny, bo `empire.fleets` nigdy nie ma
+wpisów (`ThreatAssessment.js:10-13`, pinowane `war_seams_smoke` T5), a jego dwaj producenci to martwa
+gałąź `MilitaryAI.build_fleet` (`MilitaryAI.js:121-124` — czyta `empire.resources.production`, którego
+`createEmpire` już nie zapisuje) i cheat testowy · doktryny są wewnątrzukładowe i zakotwiczone na
+WŁASNEJ stolicy (`DirectorDoctrine.js:136-171`, `:275-300`) · kurierzy jeżdżą do WŁASNYCH outpostów
+(`EmpireLogisticsSystem.js:240-247`), a budzik z W2-7 (`:360-386`) zmienia tylko STAN statku, nie cel ·
+mobilizacja jest czysto stanowa (`VesselManager.js:889-926`, `:963-981` — zero zapisu pozycji) ·
+kolonizacja AI jawnie pomija układ gracza (`EmpireStrategySystem.js:367-370` `if (s.isHome) continue;`) ·
+emisariusz AI nie ma statku (`AlienCivSystem.js:148-166`).
+
+**Zapytania potwierdzające** (rodzaj, nie tekst — Filip gra po angielsku). ⚠ Sprawdzone
+STRUKTURALNIE (nazwy istnieją: `DebugLog.js:48-54`, `GameScene.js:634-650`), **nie wykonane na żywym
+silniku** — ten sam wyjątek, który §L tej checklisty zgłosił dla dzwonka:
+
+`KOSMOS.debug.directorRules()` → wiersze `first_contact|emp_001` i `first_contact|emp_002` z `odpalila: TAK`, `proby: 3`
+
+`KOSMOS.debugLog.query({ kind: 'director:flybyStarted' })` → dwa wpisy (`director:flybyEnded` z `reason:'exited_system'` ~6 lat później)
+
+⚠ Kind `director:flyby` **nie istnieje** (są `flybyStarted`/`flybyRejected`/`flybyEnded`/
+`firstContactBeat`/`firstContactKill`), a `director:ruleFired` **nie jest śledzony** — stan reguł
+czyta się przez `gameState.get('director.rules')`.
+
+**Dwie korekty do samego mechanizmu, wyłapane przy okazji:** (a) sonda startuje **~2 lata
+wyświetlane** po osiągnięciu obserwatorium Lv5, nie 3 — `DirectorSystem.js:213` ma
+`if (last != null && …)`, więc PIERWSZA próba nie jest ograniczana i próby padają na Y0, ~Y0+1,
+~Y0+2; rok 25 znaczy więc Lv5 około roku **23**; (b) kurs zapamiętuje pozycję domu **z chwili
+startu** (`:118-120` → `:125-128`, zamrożone w `gameState.director.flybys`), a planeta krąży dalej
+przez te 6 lat — sonda przelatuje tam, gdzie dom BYŁ, nie gdzie jest.
+
+**A przy okazji wyszedł realny defekt, którego nikt nie szukał — patrz §Findings filed 12:
+„pierwszy kontakt" jest w KAŻDEJ partii zsynchronizowaną parą sond lecących z tego samego namiaru.**
+
+### 3. Rezerwa z przyciskiem ROZMIEŚĆ w Rejestrze — ZAMIERZONA symetria W2-6
+
+Tak, zamierzona i **pinowana**. `_drawServiceStateAction` (`FleetManagerOverlay.js:8440-8479`) to
+**jeden przycisk na jednej osi służby**: `toReserve = state === 'active'` wybiera `📦 Wycofaj`
+(`withdraw_vessel`) dla okrętu w służbie i `⚓ Rozmieść` (`deploy_vessel`) dla kadłuba w rezerwie, a w
+stanie `mobilizing` rysuje pasek postępu i **nie rejestruje żadnej strefy klikalnej**. Wołany
+`:8499`, czyli PRZED early returnem `getAvailableActions` (`:8501-8506`) — dokładnie tą pułapką z
+audytu §S19, która zjadałaby przycisk zawsze, bo lista akcji bezczynnego kadłuba jest pusta.
+Keeper `w2_deploy_ui_smoke` (`:167-192`) pinuje oba kierunki **i kontrolę pinu** („NIE dostaje przy
+tym Rozmieść — jeden przycisk, nie dwa").
+
+⇒ Rozmieszczenie żyje **w dwóch miejscach, świadomie o różnym zasięgu**: Stocznia jest lokalna dla
+stoczni (`ShipyardOverlay.js:455` pomija kadłuby nieprzypisane do czynnej kolonii), Rejestr jest
+ogólnoimperialny (brak filtra kolonii). **Każda przyszła zmiana bramkowania rozmieszczenia musi
+wejść w OBA miejsca, inaczej się rozjadą.**
+
+Jedna prawdziwa rozbieżność, zgłoszona jako §Findings filed 14: **odmowa z powodu zaległości ma dwie
+różne konwencje**. Stocznia wyszarza przycisk i **nie rejestruje** strefy (`:521-534`, komentarz:
+„wyszarzony przycisk nie może cicho nic nie robić"), Rejestr rejestruje ją zawsze i odmawia wpisem do
+Dziennika (`:8473` + `:2175-2187`, komentarz: „przycisk, który po kliknięciu milczy, jest gorszy od
+przycisku wyszarzonego"). Oba komentarze powstały w tym samym commicie i **argumentują przeciwnie**.
+To polish UX, nie defekt W2 — ale jedna konwencja powinna wygrać.
+
+### 4. Dane do rejestru — dwa wpisy, żaden nie jest usterką W2
+
+**(a) Zmienność ekspansji AI.** Lista braków `emp_002` zawierała **SUROWE RUDY** (Fe 125, Hv 30, Cu),
+czego lista `emp_001` nie miała — jego gospodarka jest po prostu PŁYTSZA — a pierwsze outposty
+postawiło w civYear **~460-465**. Zestaw z historią: outposty w civY 85/140/155/160/185 (Director
+GATE 3), zero outpostów w oknie 400 civY × 3 seedy (sonda W1), pełne kolonie 303-353 (było ~456).
+Wniosek, który z tego wychodzi: **zegar ekspansji jest własnością konkretnego imperium i seeda, nie
+progiem silnika**. Zapisane jako §Findings filed 11 + dopisek w §8 wyżej.
+
+**(b) `population_milestone.mp4` 404.** Znany, **już zgłoszony dwukrotnie**
+(`KOSMOS_backlog_niezrealizowane.md:200` — „zauważone w przebiegu 3 GATE 1 (2026-08-11)";
+`assets/event-videos/midjourney_prompts.md:230` — wiersz 1 backlogu generowania, z priorytetem
+oznaczonym „zgloszone z gry jako 404"). To **kosmetyczny hałas w konsoli, nie awaria**: łańcuch
+fallbacku (`GameScene.js:3028-3034`) próbuje `<id>.mp4` → `<videoCategory>.mp4` → `default.mp4`, a
+`colony.mp4` istnieje, więc popup gra. **Nie należy do wiersza 7** („konsola bez czerwonych błędów"),
+który jest zawężony do `TypeError … reading 'action'`. Zadanie = wygenerować plik (równoległe zadanie
+Filipa wg `midjourney_prompts.md`), nie kod.
 
 ---
 

@@ -1,6 +1,6 @@
 # W2 — the deploy model · plan doc (APPROVED)
 
-**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W2 · **Status:** ✅ **APPROVED 2026-08-15** — all ten open decisions resolved (two owner rulings + eight orchestrator ratifications). Implementation proceeds without re-litigation.
+**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W2 · **Status:** ✅ **SLICE COMPLETE 2026-08-17** — eight commits, **all three gates PASSED** (GATE 1 · 2026-08-16 · GATE 2 · 2026-08-16 · GATE 3 · 2026-08-17, full pass, all eight sections). Plan APPROVED 2026-08-15 with all ten open decisions resolved (two owner rulings + eight orchestrator ratifications); implementation ran without re-litigation. ⚠ **The next horizon is Filip's and the orchestrator's call — this document does not name it.**
 **Parent:** `WAR_BACKBONE.md` §2 P4 + §6 (signed 2026-08-13; HANDOVER note 2026-08-14) · **Predecessor:** `W1_PLAN.md` (COMPLETE, three gates PASSED 2026-08-14)
 **Basis:** read-only seam audit 2026-08-15 (this doc §Audit) · `docs/audit/COMBAT_DIPLO_AUDIT.md` (superseded in parts) · `DIRECTOR_SLICE1_PLAN.md`, `D2_PLAN.md`
 **Save:** v100 → **v101** (first bump since v100; own commit, own gate)
@@ -13,22 +13,45 @@ and read at the console under time pressure.
 
 ## RESUME — czytaj to PIERWSZE (PL, wzór W1)
 
-**Stan (2026-08-16, koniec sesji):** **W2-0…W2-8 ZACOMMITOWANE**, ostatni `3f8601d` (docs).
-Sweep **136/136 OK, 0 FAIL** · `check-i18n` PASS (pl=en=3240) · zapis **v101**. Tabela ośmiu
-commitów i dowody fail-first: §Results niżej. **GATE 1 ✅ · GATE 2 ✅ · GATE 3 ⏳ PENDING** —
-nic nie padło, to kwestia harmonogramu.
+**SLICE ZAMKNIĘTY 2026-08-17.** Osiem commitów `7f606b7` → `adc0fbd` (+ `3f8601d`/`8e9f6e5` docs).
+**GATE 1 ✅ (08-16) · GATE 2 ✅ (08-16) · GATE 3 ✅ (08-17, FULL PASS, wszystkie osiem sekcji).**
+Sweep **136/136 OK, 0 FAIL** · `check-i18n` PASS (pl=en=3240, 0 rozbieżności) · zapis **v101**.
+Tabela commitów i dowody fail-first: §Results. Wyniki gate'ów: `W2_GATE{1,2,3}_CHECKLIST.md`
+(GATE 2 i GATE 3 mają własne sekcje „Domknięcie po gate'cie" z odpowiedziami, których gate nie
+otwiera ponownie). Retrospektywa: `WOJNA_I_POKOJ_MASTER_PLAN.md` §Completed.
 
-**Jutro Filip prowadzi `W2_GATE3_CHECKLIST.md`** (pętla AI, osiem sekcji). Dwa warunki wstępne,
-bez których gate nie ma czego pokazać: **(a)** zapis musi być ROZWINIĘTY — imperium AI potrzebuje
-stoczni, stacji orbitalnej (żeton R-3) i techów okrętowych; **(b) gracz musi mieć ROZMIESZCZONE
-okręty wojenne w służbie** — guard `empireOutgunnedByPlayer` porównuje SIŁY, więc flota w garażu
-nie prowokuje nikogo i `slabszy: false` u wszystkich imperiów jest wtedy zachowaniem ZAMIERZONYM,
-nie usterką.
+⚠ **Wybór następnego horyzontu należy do Filipa i orkiestratora — NIE jest zapisany ani tutaj, ani
+w master planie:** W3 (ofensywne AI + pokój terytorialny) vs Director Slice 2 vs BALANS z urosłą
+listą długów.
 
-**Po werdykcie PASS slice W2 się ZAMYKA** i rusza sekwencja domknięcia: ramki wyników w
-checklistach → status planu → retrospektywa w `WOJNA_I_POKOJ_MASTER_PLAN.md`. ⚠ **Wybór następnego
-horyzontu należy do Filipa i orkiestratora — NIE uprzedzać go w kodzie ani w planie:** W3 (ofensywne
-AI + pokój terytorialny) vs Director Slice 2 vs BALANS z urosłą listą długów.
+**Co GATE 3 pokazał na żywo, a czego harness nie umie zmierzyć** (wpis wiążący z rejestru:
+`GameCore` nie montuje Directora): kadłub AI ląduje w rezerwie, mobilizacja odpaliła **sama, dwa
+razy** (rok 25,35 na `emp_001`, potem `emp_002` w chwili, gdy jego pierwszy kadłub trafił do
+magazynu), AI **zapłaciło POP** za załogę, a potem **parytet uciszył regułę** — `slabszy` przeskoczyło
+na `false`, gdy okręty weszły do służby. Hamulec wyścigu zbrojeń z decyzji 22 nie jest teorią.
+
+**Pięć długów niesionych świadomie dalej (żaden nie blokował zamknięcia W2):**
+1. **Flota zmaterializowana omija model załogi** — `EmpireFleetMaterializer` tworzy kadłuby `active`
+   z pominięciem obu szwów stoczni: nie kosztują AI ani jednego POP, a ich strata nikogo nie zabija.
+   Wycena należy do **W3** (to główne źródło floty AI, więc to decyzja balansowa, nie higiena).
+2. **Utrzymanie floty AI nienaliczane** — decyzja 14, świadoma asymetria, `PHASE5_TODO` przy guardzie.
+3. **Opóźnienie zatrzasku zaległości** — §Findings filed 9: zapłata odblokowuje rozmieszczenie
+   dopiero przy najbliższym rocznym rozliczeniu.
+4. **Martwa naprawa statków** — `_tickRepair` czyta `entry.buildingId`, a wpisy mają `entry.building.id`;
+   pinowane jako luka (`w2_crew_ledger` T11b), NIE naprawione (włączenie = zmiana balansu, własny commit).
+5. **Pięć nowych wpisów z domknięcia GATE 3** — §Findings filed 11-15, w tym jeden realny defekt
+   znaleziony przy okazji zagadki „dwa statki AI w układzie gracza": **pierwszy kontakt jest w KAŻDEJ
+   partii zsynchronizowaną parą sond lecących z tego samego namiaru** (12).
+
+**Trzy lekcje instrumentu, wiążące dalej:** „diff nie jest dowodem — dowodem jest ponowne uruchomienie
+instrumentu" · **samo uruchomienie też nie wystarczy, dopóki nie sprawdzisz, że SONDA naprawdę zmieniła
+zachowanie** (dowód na `delay` był NIEWAŻNY: duplikat klucza w literale, późniejszy `delay: 0` wygrywał) ·
+jeden predykat (`isInService`), nie dziesięć testów pola.
+
+⚠ **Czwarta lekcja, dopisana przy domknięciu GATE 3:** **seed strukturalny wymaga rozproszenia w
+KAŻDYM miejscu, nie tylko tam, gdzie się o tym nauczyliśmy.** `DirectorRuleMath.js:71-74` ostrzega
+przed tą klasą wprost i stosuje `mixSeed` w `unitFromKey` — a `_courseAngle` (`DirectorFirstContact.js:191-196`)
+i klucz rzutu bez soli galaktyki przeszły obok tego ostrzeżenia (§Findings filed 12).
 
 **Cztery długi niesione świadomie dalej (żaden nie blokuje zamknięcia W2):**
 1. **Flota zmaterializowana omija model załogi** — `EmpireFleetMaterializer` tworzy kadłuby `active`
@@ -535,6 +558,65 @@ factory state — its own commit, its own before/after).
     shadow-fleet materialization should charge crew is a **W3** question — it is the AI's principal fleet
     source, and pricing it is a balance decision, not hygiene.
 
+### Added at the GATE 3 close-out (2026-08-17)
+
+11. **AI expansion variance widened again — every R-2 coverage number is a per-seed, per-EMPIRE sample.**
+    In the GATE 3 run `emp_002` founded its **first outposts at civYear ~460-465** and its commodity-gap
+    list contained **raw ores** (Fe 125, Hv 30, Cu) where `emp_001`'s did not — a shallower economy on the
+    same engine, same run. Set against the history: outposts at civY 85/140/155/160/185 (Director GATE 3),
+    **0** outposts over 400 civY × 3 seeds (the W1 probe window), full colonies 303-353 (was ~456). ⇒ the
+    expansion clock belongs to the individual empire and seed, **not to an engine threshold**, so §8 of
+    `W2_GATE3_CHECKLIST.md` keeps its "stable for the WRONG reason" diagnosis but loses its "the AI stands
+    still" premise (dopisek recorded there). Item 7's obligation stands unchanged: **re-measure `BORDER_LY`
+    over ≥60 displayed years, counting outposts separately from colonies**, before D3 leans on 17.7 %.
+12. **First contact is a SYNCHRONIZED PARALLEL PAIR in every single playthrough — two structural seeds,
+    neither dispersed.** Measured by execution against the live modules, not argued:
+    (a) `rollFires` builds its key as `dir:<ruleId>:<empireId>:<attempt>` and calls `rollKey` **without the
+    optional salt** (`DirectorRuleMath.js:87-89`, `:105`; `DirectorSystem.js:216` passes none), and both
+    archetypes inherit `science: 0.6` unjittered (Expansionist is a `structuredClone` of Industrialist
+    overriding only identity/colour/researchQueue) ⇒ mult 1.1 for both ⇒ **`emp_001` and `emp_002` both
+    first fire on attempt 3**, in the same displayed year, in every galaxy — the galaxy seed cannot reach
+    the roll. (b) `_courseAngle` (`DirectorFirstContact.js:191-196`) is a raw `h = h*31 + charCode` folded
+    with `h % 360` and **never passed through `mixSeed`**; the ids differ only in the last character, so the
+    bearings are **226° and 227° — exactly 1° apart, entry points 0.413 AU apart** (measured), on the same
+    7.88 AU/displayed-year course through a 6.0-year window. The narrative beat therefore always arrives as
+    two near-parallel probes from one bearing, never as two independent contacts.
+    ⚠ This is precisely the class `DirectorRuleMath.js:71-74` warns about in writing ("seedy Directora są
+    STRUKTURALNE … sąsiednie próby dają prawie kolejne hashe … bez rozproszenia kolidują częściej niż
+    losowo") — the lesson was applied to `unitFromKey` and to **neither** of these two sites. Fix is small
+    and in two places (mix `GALAXY_SEED` into `rollKey`; run `_courseAngle` through `mixSeed`), but it
+    **changes when and where first contact happens in every future game**, so it is a balance/narrative
+    commit with its own before/after, not a drive-by.
+    **Instrument shipped with the finding:** `node src/testing/headless/probe-firstcontact-seed.mjs`
+    prints both measurements off the live catalog — a probe, not a keeper (it asserts nothing), so
+    whoever fixes this has a before/after without rebuilding the arithmetic. Its own output carries the
+    tell: the bearings come out **226 / 227 / 228 / 229** for `emp_001…004`, i.e. `h % 360` walking one
+    step per id character — sequential, not random.
+13. **The mobilization bell row is the one notification that opens NOTHING on click — and that, not the
+    string, is where intel prose belongs.** `_openNotificationDetail` (`MissionEventModal.js:396-409`)
+    switches on `notif.source` and ends `default: return;`; `'directorMobilization'`
+    (`NotificationCenter.js:293`) has no case, so the row only dismisses. Combined with the subtitle's only
+    renderer being a fixed **320 px**, `nowrap`/`ellipsis` row (`NotificationDropdown.js:76`, `:216-217`,
+    ~250 px of text box with `· yr NN` glued onto the same line at `:204`), the requested source clause
+    ("movement observed near shipyards", +32 chars against ~17 of slack) **cannot be read anywhere today**.
+    Also worth knowing before touching it: `serialize` (`:144`) persists the already-translated subtitle, so
+    a wording change affects only newly created notifications; and `w2_ai_mobilization_smoke` (`:236-237`,
+    `:242`) asserts on the interpolated **title**, so no title may lose its `{0}`. Three candidate fixes
+    recorded in `W2_GATE3_CHECKLIST.md` §Domknięcie 1.
+14. **Deploy-under-arrears has two opposite conventions for one refusal, and both comments were written in
+    the same commit.** `ShipyardOverlay.js:521-534` greys the button and **withholds the hit-zone**
+    ("wyszarzony przycisk nie może cicho nic nie robić"); `FleetManagerOverlay.js:8473` + `:2175-2187`
+    registers it unconditionally and refuses into the Journal ("przycisk, który po kliknięciu milczy, jest
+    gorszy od przycisku wyszarzonego"). UX polish, not a W2 defect — but one convention should win. Related
+    structural note, not a defect: Deploy deliberately lives on **two surfaces with different scope** —
+    yard-local (`ShipyardOverlay.js:455`) vs empire-wide (no colony filter) — so any future change to deploy
+    gating must land in both or they diverge.
+15. **The flyby probe's name is half-localised, violating the standing bilingual rule.**
+    `DirectorFirstContact.js:136` composes `${emp?.namePL ?? emp?.name ?? 'Obcy'} — ${t('director.flybyProbeName')}`,
+    and `namePL` is always the Polish composition (`EmpireGenerator.js:195`), so an English player reads a
+    mixed label ("Manufaktura Pustki — science probe"). Same hardcode at `EmpireFleetMaterializer.js:109`.
+    Until fixed, any gate signature check must match the **suffix only**, never the empire name.
+
 ---
 
 ## Open decisions — NONE (all ten signed 2026-08-15)
@@ -548,9 +630,10 @@ proceeds **without re-litigation**.
 
 ---
 
-## Results — what actually shipped (2026-08-16)
+## Results — what actually shipped (2026-08-16, gate'y domknięte 2026-08-17)
 
-Osiem commitów, `7f606b7` → `adc0fbd`. **GATE 1 ✅ · GATE 2 ✅ · GATE 3 pending** (live-only).
+Osiem commitów, `7f606b7` → `adc0fbd`. **GATE 1 ✅ (08-16) · GATE 2 ✅ (08-16) · GATE 3 ✅ (08-17)**
+— trzeci był live-only z orzeczenia rejestru i przeszedł w całości (osiem sekcji).
 Sweep **136/136 0 FAIL** · `check-i18n` PASS (pl=en=3240, 0 rozbieżności) · zapis **v101**.
 
 | commit | slice | co weszło |

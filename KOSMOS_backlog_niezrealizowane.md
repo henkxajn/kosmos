@@ -197,8 +197,14 @@ Równolegle/kiedykolwiek: M4 P4 (endurance/fuel) · reforma POP/strata · reform
 Dwa zdarzenia odwołują się do plików, których nie ma w `assets/event-videos/`
 (18 mp4 obecnych). Ta sama klasa usterki, oba sprzed workstreamu C:
 
-- `population_milestone.mp4` — zauważone w przebiegu 3 GATE 1 (2026-08-11)
+- `population_milestone.mp4` — zauważone w przebiegu 3 GATE 1 (2026-08-11), **zgłoszone ponownie
+  w przebiegu W2 / GATE 3 (2026-08-17)** — wciąż 404
 - `cultural_festival.mp4` — zauważone już przy live-gate D1 (`D1_LIVE_GATE_CHECKLIST.md:380`)
 
 Prompty do wygenerowania obu istnieją: `assets/event-videos/midjourney_prompts.md`
 (poz. 10 i 12). Zadanie = wygenerować pliki albo zdjąć odwołania, nie kod.
+
+⚠ **To hałas w konsoli, nie awaria — i nie należy do wiersza „konsola czysta" w żadnym gate'cie.**
+Łańcuch fallbacku (`GameScene.js:3028-3034`) próbuje `<id>.mp4` → `<videoCategory>.mp4` → `default.mp4`,
+a dla `population_milestone` kategoria to `colony` (`ScheduledEventsData.js:329`) i `colony.mp4`
+**istnieje** — popup gra normalnie, 404 dotyczy tylko pierwszego ogniwa.
