@@ -1,10 +1,29 @@
-// S3.4c Z9 (S-BACKLOG) — smoke: transferColony disposuje 5 per-kolonijnych tickerów.
+// S3.4c Z9 — smoke: `transferColony` nie zostawia OSIEROCONYCH tickerów.
 // Uruchom: node src/testing/smoke/s34c_z9_transfer_dispose_smoke.mjs
-// Dowodzi: bliźniaczy leak do removeColony (Z4/Z5) domknięty — przejęcie kolonii przez AI
-// (InvasionSystem → transferColony) zdejmuje listener time:tick z WSZYSTKICH 5 subsystemów
-// (factory/resource/civ/building/prosperity), zamiast zostawić je tykające w tle (jałowa
-// praca + leak subskrypcji, dziś tylko wyciszone orphan-guardem w FactorySystem).
-// Wzorzec setupu: s34c_z4_dispose_orphan_smoke.mjs + s34d_hull_gating_smoke.mjs.
+//
+// ⚠ PRZEPISANY W W3-1 — ŚWIADOMIE, nie przy okazji (zapowiedziane w `W3_PLAN.md` §Tests).
+//
+// Z9 powstał, żeby domknąć bliźniaczy leak do `removeColony` (Z4/Z5): przejęta kolonia
+// opuszczała `_colonies`, a jej pięć subsystemów tykało dalej w próżni. Lekarstwem był
+// wtedy `dispose() × 5`.
+//
+// W3-1 (orzeczenie właściciela D7 „PRZEGRANA JEST ODWRACALNA") zmienił PRZESŁANKĘ, a nie
+// tylko implementację: kolonia NIE opuszcza już `_colonies` — zmienia właściciela w miejscu
+// i żyje dalej jako zwykła kolonia AI. Skoro nie jest osierocona, to nie ma czego rozłączać;
+// `dispose × 5` wycięłoby produkcję, którą zdobywca ma właśnie przejąć.
+//
+// DLATEGO TEN KEEPER PILNUJE TEJ SAMEJ WŁASNOŚCI, WYRAŻONEJ WPROST:
+//   „żaden subsystem subskrybujący `time:tick` nie należy do kolonii spoza `_colonies`".
+// Stary zapis („dispose został wywołany") był PROXY tej własności, prawdziwym tylko dopóki
+// przejęcie oznaczało kasowanie. Nowy zapis mierzy ją bezpośrednio, więc przeżyje kolejną
+// zmianę modelu własności.
+//
+//   1  pięć subsystemów subskrybuje time:tick
+//   2  przejęcie: kolonia ZOSTAJE, dostaje ownerEmpireId (INWERSJA vs pre-W3-1)
+//   3  ŻADEN dispose nie został wywołany (INWERSJA)
+//   4  listenery zostają — i to NIE jest leak: właściciel każdego z nich jest w `_colonies`
+//   5  payload `colony:captured` nadal niesie poprawny snapshot (BEZ ZMIAN)
+//   6  KONTROLA: `removeColony` (prawdziwe zniszczenie) NADAL disposuje wszystkie pięć
 
 globalThis.window = globalThis.window ?? { KOSMOS: {} };
 globalThis.window.KOSMOS = globalThis.window.KOSMOS ?? {};
@@ -37,7 +56,7 @@ function makeRichColony(planetId) {
   const fs = new FactorySystem(makeStore());
   const bs = new BuildingSystem(rs, cs, null);
   const ps = new ProsperitySystem(rs, cs, null, { id: planetId });
-  cs.population = 42;   // do weryfikacji snapshotu payloadu (kolejność dispose vs emit)
+  cs.population = 42;   // do weryfikacji snapshotu payloadu (kolejność mutacji vs emit)
   const colony = {
     name: 'TestColony', planetId, isHomePlanet: false, isOutpost: false, fleet: [],
     resourceSystem: rs, civSystem: cs, factorySystem: fs, buildingSystem: bs, prosperitySystem: ps,
@@ -51,13 +70,14 @@ function makeRichColony(planetId) {
 }
 
 // ── Setup: minimalne mocki KOSMOS których dotyka transferColony ──
-// empireRegistry.addColony (abstrakcyjny wpis); vesselManager/homePlanet/galaxyData nieobecne
-// (fleet pusty → brak niszczenia statków; activePlanetId=null → brak switchActiveColony).
+// `addColony` (abstrakcyjny wpis); brak `getColoniesByEmpire` ⇒ resolver tech imperium
+// (`_findEmpireTechSystem`) zwraca null swoim własnym guardem — świadomie, bo ten keeper
+// mierzy CYKL ŻYCIA subsystemów, nie przepięcie drzewa tech (to robi w3_conquest_persists).
 window.KOSMOS.empireRegistry = { addColony: () => true };
 
 const techMock = { isResearched: () => true };
 const cm = new ColonyManager(techMock);
-const base = tickCount();   // baseline PO konstrukcji ColonyManager (jego własny listener time:tick wliczony)
+const base = tickCount();   // baseline PO konstrukcji ColonyManager (jego własny listener wliczony)
 
 const { colony, disposed } = makeRichColony('p_capture');
 cm._colonies.set('p_capture', colony);
@@ -66,36 +86,47 @@ cm._colonies.set('p_capture', colony);
 T('1.1 5 subsystemów dodało 5 listenerów time:tick', tickCount() === base + 5);
 T('1.2 kolonia jest w _colonies', cm._colonies.has('p_capture'));
 
-// ══ 2. Akt: przejęcie kolonii przez AI (ścieżka InvasionSystem._captureColony) ═════════════════════
+// ══ 2. Akt: przejęcie kolonii przez AI (ścieżka InvasionSystem → transferColony) ═══════════════════
 let captured = null;
 const offCap = EventBus.on('colony:captured', (e) => { captured = e; });
 const ok = cm.transferColony('p_capture', 'empire_ai', 'invasion');
 EventBus.off('colony:captured', offCap);
 
 T('2.1 transferColony zwróciło true', ok === true);
-T('2.2 kolonia usunięta z _colonies', !cm._colonies.has('p_capture'));
+T('2.2 kolonia ZOSTAJE w _colonies (INWERSJA W3-1 — dawniej była kasowana)',
+  cm._colonies.has('p_capture'));
+T('2.3 …i ma nowego właściciela — to jest cały transfer', colony.ownerEmpireId === 'empire_ai');
+T('2.4 …więc znika z listy GRACZA', !cm.getPlayerColonies().some(c => c.planetId === 'p_capture'));
 
-// ══ 3. Wszystkie 5 dispose() wywołane przez transferColony ═════════════════════════════════════════
-T('3.1 factorySystem.dispose() wywołany', disposed.fs === true);
-T('3.2 resourceSystem.dispose() wywołany', disposed.rs === true);
-T('3.3 civSystem.dispose() wywołany', disposed.cs === true);
-T('3.4 buildingSystem.dispose() wywołany', disposed.bs === true);
-T('3.5 prosperitySystem.dispose() wywołany', disposed.ps === true);
+// ══ 3. Żaden dispose NIE został wywołany (INWERSJA) ════════════════════════════════════════════════
+T('3.1 factorySystem.dispose() NIE wywołany', disposed.fs === false);
+T('3.2 resourceSystem.dispose() NIE wywołany', disposed.rs === false);
+T('3.3 civSystem.dispose() NIE wywołany', disposed.cs === false);
+T('3.4 buildingSystem.dispose() NIE wywołany', disposed.bs === false);
+T('3.5 prosperitySystem.dispose() NIE wywołany', disposed.ps === false);
 
-// ══ 4. Licznik time:tick zamrożony — 5 listenerów zdjętych, leak zamknięty ═════════════════════════
-T('4.1 powrót do baseline (5 listenerów time:tick usuniętych)', tickCount() === base);
-T('4.2 dokładnie 5 usunięto (dowód że to fix, nie no-op)', (base + 5) - tickCount() === 5);
-T('4.3 własny listener ColonyManager NIENARUSZONY (nie przedozowano dispose)', tickCount() === base && base >= 1);
+// ══ 4. Listenery zostają — i to NIE jest leak (właściwa własność Z9) ═══════════════════════════════
+T('4.1 5 listenerów time:tick dalej działa (produkcja zdobyczy ma tykać)', tickCount() === base + 5);
+T('4.2 ⚠ ISTOTA Z9: właściciel tych listenerów JEST w _colonies — nie ma sieroty',
+  cm._colonies.has(colony.planetId) && cm.getColony('p_capture') === colony);
+T('4.3 orphan-guard FactorySystem nie ma się o co zaczepić (kolonia rozwiązywalna po id)',
+  cm.getColony('p_capture')?.factorySystem === colony.factorySystem);
 
-// ══ 5. Kolejność bezpieczna (pkt 2 audytu): payload emitu ma poprawny snapshot mimo dispose ═════════
-T('5.1 colony:captured.population = 42 (snapshot przed dispose)', captured?.population === 42);
-T('5.2 colony:captured.colonyName = TestColony (snapshot przed dispose)', captured?.colonyName === 'TestColony');
+// ══ 5. Kolejność bezpieczna: payload emitu ma poprawny snapshot ════════════════════════════════════
+T('5.1 colony:captured.population = 42 (snapshot sprzed mutacji)', captured?.population === 42);
+T('5.2 colony:captured.colonyName = TestColony', captured?.colonyName === 'TestColony');
 T('5.3 colony:captured.newOwner = empire_ai', captured?.newOwner === 'empire_ai');
 
-// ══ 6. Idempotencja: dispose 2× (gdyby transfer trafił na już-rozłączony subsystem) nie psuje ══════
-colony.factorySystem.dispose();
-colony.resourceSystem.dispose();
-T('6.1 podwójny dispose nie schodzi poniżej baseline', tickCount() === base);
+// ══ 6. KONTROLA PINU: prawdziwe ZNISZCZENIE nadal disposuje wszystkie pięć ═════════════════════════
+// Bez tego „dispose nie został wywołany" w §3 byłoby nieodróżnialne od zepsutej ścieżki dispose.
+const { colony: doomed, disposed: dDisposed } = makeRichColony('p_doomed');
+cm._colonies.set('p_doomed', doomed);
+const beforeDoom = tickCount();
+cm.removeColony('p_doomed', 'test');
+T('6.1 removeColony usuwa kolonię z _colonies', !cm._colonies.has('p_doomed'));
+T('6.2 …i disposuje WSZYSTKIE pięć subsystemów (ścieżka Z4/Z5 nietknięta)',
+  dDisposed.fs && dDisposed.rs && dDisposed.cs && dDisposed.bs && dDisposed.ps);
+T('6.3 …a licznik listenerów wraca dokładnie o 5 w dół', tickCount() === beforeDoom - 5);
 
-console.log(`\nS3.4c Z9 transferColony dispose smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
+console.log(`\nS3.4c Z9 (W3-1) transferColony lifecycle smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
 process.exit(fail ? 1 : 0);

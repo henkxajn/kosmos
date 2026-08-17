@@ -49,6 +49,8 @@ export class TransportOrderSystem {
     EventBus.on('expedition:arrived', this._onArrivedBound);
     EventBus.on('vessel:wrecked',     this._onWreckedBound);
     EventBus.on('colony:destroyed',   this._onColonyDestroyedBound);
+    // ⚠ W3-1: przejęte ciało przestaje być prawidłowym końcem zlecenia (żyje, ale jest wrogie).
+    EventBus.on('colony:captured',    this._onColonyDestroyedBound);
     EventBus.on('time:tick',          this._onTickBound);
   }
 
@@ -56,6 +58,7 @@ export class TransportOrderSystem {
     EventBus.off('expedition:arrived', this._onArrivedBound);
     EventBus.off('vessel:wrecked',     this._onWreckedBound);
     EventBus.off('colony:destroyed',   this._onColonyDestroyedBound);
+    EventBus.off('colony:captured',    this._onColonyDestroyedBound);
     EventBus.off('time:tick',          this._onTickBound);
   }
 

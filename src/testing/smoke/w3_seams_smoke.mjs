@@ -15,8 +15,11 @@
 //              W1-4 zamknął WYŁĄCZNIE EAH. Odwraca W3-2.
 //   T3  S6:    `orbitalDominance` NIE przeżywa serialize→restore (klucz spoza `createDefaultState`).
 //              Odwraca W3-3.
-//   T4  C-5:   po `transferColony` imperium TRZYMA id kolonii, ale `getColoniesByEmpire` jej nie
-//              widzi ⇒ AI nie czerpie z podboju NIC. Odwraca W3-1.
+//   T4  C-5:   ⚠ ODWRÓCONE W W3-1 — pierwszy pin luki z tego pliku, który doczekał się naprawy.
+//              Do W3-1 pinował DEFEKT: imperium trzymało id kolonii, a `getColoniesByEmpire`
+//              jej nie widziało ⇒ AI nie czerpało z podboju NIC. Teraz pinuje STAN SZWU:
+//              podbój zostaje. Szczegółowe pokrycie (tech, galaxyData, ostatnia kolonia,
+//              sprzątanie) mieszka w `w3_conquest_persists_smoke`.
 //   T5  C-2:   `_holdAtHome` wydaje `moveToPoint` BEZ `targetPoint` ⇒ silnik odrzuca rozkaz
 //              powodem `missing_target_point`. Odwraca W3-4.
 //   T6  S12:   jednostka legacy ginie od PIERWSZEGO trafienia (brak pola `morale`), a po
@@ -216,8 +219,8 @@ console.log('T3 — S6: `orbitalDominance` ginie na serialize→restore (klucz s
     'serializację — więc strata dominacji to brak DEKLARACJI, nie zepsuty round-trip');
 }
 
-// ── T4 — C-5: podbój nie daje AI niczego ────────────────────────────────────
-console.log('T4 — C-5: po `transferColony` imperium ma ID kolonii, ale nie ma KOLONII');
+// ── T4 — C-5: podbój ZOSTAJE (ODWRÓCONE w W3-1) ─────────────────────────────
+console.log('T4 — C-5 naprawione: po `transferColony` imperium ma ID i ŻYWĄ kolonię');
 {
   const core = boot();
   const empireId = empireOf(core);
@@ -241,12 +244,16 @@ console.log('T4 — C-5: po `transferColony` imperium ma ID kolonii, ale nie ma 
 
   assert(idsAfter.includes(victim.planetId),
     'T4: imperium DOSTAŁO id zdobytej kolonii do `empires[].colonies`');
-  assert(!resolvedAfter.some(c => c?.planetId === victim.planetId),
-    'T4: …ale `getColoniesByEmpire` jej NIE ZWRACA — `transferColony` skasował obiekt z ' +
-    '`_colonies` (ColonyManager.js:685), a resolver odfiltrowuje pudło (EmpireRegistry.js:51-53)');
-  assert(resolvedAfter.length === idsAfter.length - 1,
-    `T4: dokładnie JEDNO id wisi w próżni (${resolvedAfter.length} kolonii / ${idsAfter.length} id) — ` +
-    'produkcja, badania i logistyka AI nie zobaczą zdobyczy NIGDY, a martwe id zostaje w każdym zapisie');
+  // ⚠ ODWRÓCONE W W3-1. Do W3-1 obie asercje niżej pinowały DEFEKT (resolver zwracał pudło,
+  //   jedno id wisiało w próżni). Teraz pinują naprawę — a `w3_conquest_persists_smoke`
+  //   dowodzi, co z tego wynika: zdobycz produkuje, stempel przeżywa wczytanie zapisu,
+  //   a pokonane imperium dotrwa do stołu.
+  assert(resolvedAfter.some(c => c?.planetId === victim.planetId),
+    'T4: …i `getColoniesByEmpire` ZWRACA ją jako żywy obiekt — `transferColony` przerzuca ' +
+    'własność W MIEJSCU (D7), zamiast kasować kolonię');
+  assert(resolvedAfter.length === idsAfter.length,
+    `T4: żadne id nie wisi w próżni (${resolvedAfter.length} kolonii / ${idsAfter.length} id) — ` +
+    'produkcja, badania i logistyka AI widzą zdobycz; przed W3-1 było tu 1 na 2');
 }
 
 // ── T5 — C-2: garnizon nie potrafi wrócić do stolicy ────────────────────────

@@ -119,6 +119,12 @@ export class MissionSystem {
     // Cleanup misji przy zniszczeniu kolonii
     EventBus.on('colony:destroyed', ({ planetId }) =>
       this._onColonyDestroyed(planetId));
+    // ⚠ W3-1: UTRATA kolonii przez PRZEJĘCIE wymaga tego samego sprzątania co jej zniszczenie.
+    //   Do W3-1 `transferColony` kasowało kolonię i mimo to NIE emitowało `colony:destroyed`,
+    //   więc misje w drodze do utraconego ciała leciały dalej. Teraz ciało ŻYJE pod obcą flagą —
+    //   tym bardziej nie wolno tam lecieć. Ten sam `planetId`, ten sam handler.
+    EventBus.on('colony:captured', ({ planetId }) =>
+      this._onColonyDestroyed(planetId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────

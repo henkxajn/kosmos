@@ -108,6 +108,11 @@ export class VesselManager {
     // Cleanup statków przy zniszczeniu kolonii
     EventBus.on('colony:destroyed', ({ planetId, destroyedVesselIds }) =>
       this._onColonyDestroyed(planetId, destroyedVesselIds ?? []));
+    // ⚠ W3-1: statki przypisane do UTRACONEJ kolonii muszą przenieść port macierzysty tak samo
+    //   jak przy jej zniszczeniu — inaczej zostają zapisane na ciele, które należy do wroga.
+    //   `colony:captured` niesie ten sam `destroyedVesselIds` (zniszczony hangar).
+    EventBus.on('colony:captured', ({ planetId, destroyedVesselIds }) =>
+      this._onColonyDestroyed(planetId, destroyedVesselIds ?? []));
 
     // Redirect statku po przylecie międzygwiezdnym (do planety w nowym układzie)
     EventBus.on('vessel:interstellarRedirect', ({ vesselId, targetId }) =>

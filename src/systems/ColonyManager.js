@@ -42,6 +42,7 @@ import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkA
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { EmpireColonyBootstrap } from './EmpireColonyBootstrap.js';   // W3-1 — reuse resolvera tech imperium
 import { t } from '../i18n/i18n.js';
 
 // Rozmiary siatek hex per typ/masa ciała
@@ -621,14 +622,34 @@ export class ColonyManager {
     EventBus.emit('colony:listChanged', {});
   }
 
-  // ── Faza 6: Przejęcie kolonii przez obce imperium ─────────────────
+  // ── Faza 6 / W3-1: Przejęcie kolonii przez obce imperium ──────────
   //
-  // Zwraca true jeśli transfer się udał. Obowiązujące reguły:
-  //   - Kolonia znika z listy gracza (_colonies.delete)
-  //   - Statki w hangarze zniszczone (analogicznie do removeColony)
-  //   - Empire dostaje nową kolonię w swoim .colonies[] (przez EmpireRegistry)
-  //   - Event colony:captured dla UI/narracji
-  //   - HomePlanet → game over jest obsługiwany w GameScene przez colony:captured
+  // ⚠ PRZEPISANE W W3-1 (orzeczenie właściciela D7: „PRZEGRANA JEST ODWRACALNA").
+  //   DO W3-1 ta metoda NISZCZYŁA kolonię: dispose ×5 + `_colonies.delete`, a imperium
+  //   dostawało goły `planetId`. Skutki zmierzone w `w3_seams_smoke` T4:
+  //     • `getColoniesByEmpire` odfiltrowywał pudło (EmpireRegistry.js:51-53) ⇒ produkcja,
+  //       badania i logistyka AI NIE WIDZIAŁY zdobyczy NIGDY — ofensywne AI nie czerpało
+  //       z wygranej niczego, co jest przesłanką całego W3;
+  //     • `syncToGalaxyData` odtwarza `systemId` przez `getColony(colonyId)`, więc po
+  //       zapisie i wczytaniu podbój znikał też z mapy politycznej;
+  //     • martwe id zostawało w `empires[].colonies` w KAŻDYM kolejnym zapisie.
+  //
+  //   Teraz transfer jest ODWRACALNYM PRZERZUTEM WŁASNOŚCI W MIEJSCU — dokładne lustro
+  //   `captureColonyForPlayer`. Kolonia ZOSTAJE w `_colonies`, subsystemy ŻYJĄ i tykają
+  //   (staje się zwykłą kolonią AI, nieodróżnialną od założonej przez `bootstrapColony`),
+  //   a odzyskanie jej w późniejszej wojnie to po prostu wywołanie metody odwrotnej.
+  //
+  // ⚠ DISPOSE ×5 CELOWO USUNIĘTY. Uzasadnienie Z4/Z5 brzmiało „AI NIE adoptuje tych
+  //   subsystemów, więc tykałyby jałowo" — po tej zmianie AI je adoptuje, więc przesłanka
+  //   znika. Kolonia nie jest osierocona: `FactorySystem._update` szuka właściciela przez
+  //   `_getOwnerColony()` i ZNAJDUJE ją w `_colonies`. Keeper `s34c_z9_transfer_dispose`
+  //   pinował stare zachowanie i został przepisany ŚWIADOMIE, nie przy okazji.
+  //
+  // Co ZOSTAJE bez zmian (realne koszty utraty kolonii, nie artefakty kasowania):
+  //   - statki w hangarze zniszczone, drogi handlowe wyczyszczone, przełączenie aktywnej
+  //   - `colony:captured` dla UI/narracji; HomePlanet → game over w GameScene
+  //   - `ownerEmpireId` załatwia stronę gracza SAM: wszystkie agregaty gracza (podatek
+  //     `:1531`, migracja `:2101`, trasy `:2377`, `getPlayerColonies`) filtrują po tym polu.
 
   transferColony(planetId, newOwnerEmpireId, reason = 'invasion') {
     const colony = this._colonies.get(planetId);
@@ -670,33 +691,46 @@ export class ColonyManager {
     const population = colony.civSystem?.population ?? 0;
     const wasHomePlanet = !!colony.isHomePlanet;
 
-    // S-BACKLOG: rozłącz per-kolonijne tickery (time:tick) — bliźniaczy leak do removeColony (Z4/Z5).
-    // Przejęta kolonia opuszcza _colonies i staje się abstrakcyjnym wpisem imperium (goły planetId
-    // w EmpireRegistry); AI NIE adoptuje tych subsystemów, więc bez dispose tykałyby w nieskończoność
-    // (jałowa praca + leak subskrypcji EventBus). Locale colonyName/population/wasHomePlanet są już
-    // zsnapshotowane wyżej, a addColony/galaxyData/emit ich nie czytają → kolejność bezpieczna.
-    colony.factorySystem?.dispose?.();
-    colony.resourceSystem?.dispose?.();
-    colony.civSystem?.dispose?.();
-    colony.buildingSystem?.dispose?.();
-    colony.prosperitySystem?.dispose?.();
+    // ⚠ KOLEJNOŚĆ: tech imperium USTALAMY PRZED `addColony`. `_findEmpireTechSystem`
+    //   iteruje `getColoniesByEmpire(empireId)`, więc po dopisaniu tej kolonii do imperium
+    //   zwróciłby jej WŁASNY (czyli GRACZA) TechSystem i zdobycz „uczyłaby" AI drzewa gracza.
+    const empireTech = EmpireColonyBootstrap._findEmpireTechSystem(newOwnerEmpireId);
 
-    // Usuń z gracza
-    this._colonies.delete(planetId);
+    // ── Przerzut własności W MIEJSCU (lustro captureColonyForPlayer) ──
+    colony.ownerEmpireId = newOwnerEmpireId;
+
+    // Hexy → nowy właściciel (dokładne lustro :752-757)
+    if (colony.grid?.toArray) {
+      for (const tile of colony.grid.toArray()) {
+        if (tile) tile.owner = newOwnerEmpireId;
+      }
+    }
+
+    // Drzewo technologiczne zdobywcy — inaczej zdobycz produkuje dalej na mnożnikach GRACZA
+    // (ten sam krok co `bootstrapColony` :384-391; `startShipBuild:847` czyta `colony.techSystem`,
+    // a BuildingSystem swój własny `this.techSystem`, więc trzeba przestawić OBA).
+    if (empireTech) {
+      colony.techSystem = empireTech;
+      if (colony.buildingSystem) colony.buildingSystem.techSystem = empireTech;
+    }
+    colony.buildingSystem?._reapplyAllRates?.();
 
     // Rozpoznaj systemId planety (via EntityManager)
     const planetEntity = EntityManager.get(planetId);
-    const systemId = planetEntity?.systemId ?? null;
+    const systemId = planetEntity?.systemId ?? colony.systemId ?? null;
 
     // Dopisz do imperium — zaznacz w gameState (Slice 1: addColony(empireId, colonyId))
     if (empireReg?.addColony) {
       empireReg.addColony(newOwnerEmpireId, planetId);
     }
-    // Oznacz system na galaxyData (dla rendering GalaxyMap)
+    // Oznacz system na galaxyData (dla rendering GalaxyMap).
+    // ⚠ W3-1: warunek `&& !gs.empireId` USUNIĘTY. Układ zdobyty graczowi ma `empireId = null`
+    //   tylko dopóki nikt go nie odbił — po pierwszej zmianie rąk stary stempel blokował każdą
+    //   następną, więc podbój bywał niewidoczny na mapie politycznej. Zdobywca stempluje zawsze.
     const gd = window.KOSMOS?.galaxyData;
     if (gd?.systems && systemId) {
       const gs = gd.systems.find(s => s.id === systemId);
-      if (gs && !gs.empireId) gs.empireId = newOwnerEmpireId;
+      if (gs) gs.empireId = newOwnerEmpireId;
     }
 
     EventBus.emit('colony:captured', {
@@ -755,6 +789,14 @@ export class ColonyManager {
         if (tile) tile.owner = 'player';
       }
     }
+
+    // ⚠ W3-1 (symetria D7): oddaj ciało na drzewo tech GRACZA. Do W3-1 ta metoda nie ruszała
+    //   ŻADNEJ z dwóch referencji, więc zdobyte ciało produkowało dalej na mnożnikach WROGA,
+    //   a badania gracza go nie dotyczyły. `startShipBuild:847` czyta `colony.techSystem ?? this.techSystem`,
+    //   więc `null` jest tu poprawnym „wróć do globalnego"; BuildingSystem trzyma własną
+    //   referencję i musi dostać ją wprost.
+    colony.techSystem = null;
+    if (colony.buildingSystem) colony.buildingSystem.techSystem = this.techSystem;
 
     // Odśwież stawki produkcji (flaga outpost bez zmian)
     colony.buildingSystem?._reapplyAllRates?.();

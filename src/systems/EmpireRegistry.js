@@ -143,7 +143,21 @@ export class EmpireRegistry {
     gameState.set(`empires.${empireId}.colonies`, next, 'empire_colony_removed');
     EventBus.emit('empire:colonyRemoved', { empireId, colonyId });
 
-    if (next.length === 0) this.destroyEmpire(empireId, 'no_colonies_left');
+    // ⚠ W3-1: imperium bez kolonii, z którym TRWA WOJNA, NIE jest kasowane.
+    //   `destroyEmpire` usuwa wpis z `gameState.empires`, a `gameState.wars.*` i relacje
+    //   dyplomatyczne kluczowane tym id ZOSTAJĄ — po zdobyciu ostatniego ciała przeciwnika
+    //   wojna wskazywała więc na nieistniejące imperium (na `empire:destroyed` reagują tylko
+    //   `IntelSystem.js:89` i `TerritoryService.js:32`). Pokonany przeciwnik musi dotrwać do
+    //   stołu: bez kontrahenta nie ma czego podpisać, a W4 (pokój terytorialny) potrzebuje
+    //   go tym bardziej. Puste imperium wraca do kasowania, gdy wojna się skończy.
+    if (next.length === 0) {
+      const atWar = !!window.KOSMOS?.warSystem?.getWarWith?.(empireId)?.active;
+      if (atWar) {
+        EventBus.emit('empire:lastColonyLost', { empireId, colonyId });
+      } else {
+        this.destroyEmpire(empireId, 'no_colonies_left');
+      }
+    }
     return true;
   }
 

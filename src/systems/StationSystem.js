@@ -24,6 +24,10 @@ export class StationSystem {
     EventBus.on('station:rename', ({ stationId, name }) => this._renameStation(stationId, name));
     // S3.4c (D5) — osierocenie stacji po zniszczeniu kolonii-matki: przełącz na własny depot (nie niszcz).
     EventBus.on('colony:destroyed', ({ planetId }) => this._onColonyDestroyed(planetId));
+    // ⚠ W3-1: kolonia-matka UTRACONA NA RZECZ WROGA osierocą stację tak samo jak zniszczona.
+    //   `resolveHomeColony` i tak odrzuca matkę z `ownerEmpireId` (guard AI), więc bez tego
+    //   stacja gracza wisiałaby na stemplu `ownerColonyId` wskazującym wrogie ciało.
+    EventBus.on('colony:captured', ({ planetId }) => this._onColonyDestroyed(planetId));
     // S3.4c (Z8) — adopcja osieroconej stacji przez nowo założoną/przywróconą kolonię-matkę na żywo
     // (symetryczne do _onColonyDestroyed). Gracz NIE musi robić F5. outpost:founded też (outpost = matka).
     EventBus.on('colony:founded', ({ colony }) => this._onColonyFounded(colony));
