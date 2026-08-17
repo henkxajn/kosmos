@@ -59,9 +59,9 @@ export class WarSystem {
 
     EventBus.on('diplomacy:warDeclared', ({ empireId, reason }) => this._onWarDeclared(empireId, reason));
     EventBus.on('diplomacy:peaceSigned', ({ empireId }) => this._onPeaceSigned(empireId));
-    // W1-4 — KLASYFIKACJA przy szwie księgowania (decyzja 10). Widelec jest WYCZERPUJĄCY
-    // z konstrukcji: bitwa albo przeszła przez `recordBattle` (niesie `warId`), albo jest
-    // POTYCZKĄ. Trzeciej, cichej ścieżki nie ma.
+    // W1-4 / W3-2 — KLASYFIKACJA przy szwie księgowania (decyzja 10). Widelec ma TRZY gałęzie
+    // (zaksięgowana / w stanie wojny → księguj / potyczka) i dopiero po W3-2 jest naprawdę
+    // wyczerpujący. Do W3-2 środkowa gałąź była cichym `return` — patrz `_classifyBattle`.
     EventBus.on('battle:resolved', (p) => this._classifyBattle(p));
 
     EventBus.on('time:tick', ({ civDeltaYears }) => {
@@ -159,25 +159,51 @@ export class WarSystem {
 
   /**
    * W1-4 — klasyfikacja bitwy przy szwie księgowania (P3, decyzja 10).
+   * W3-2 — TU domknięta TRZECIA, CICHA ŚCIEŻKA, o której ten komentarz twierdził, że nie istnieje.
    *
-   * ⚠ Widelec jest KOMPLEMENTEM, nie drugim wyzwalaczem: potyczka to DOKŁADNIE ta bitwa,
-   * która NIE została zaksięgowana na wojnę. Dzięki temu jest wyczerpujący z konstrukcji —
-   * nie da się dodać trzeciej, cichej ścieżki, bo każde `battle:resolved` przechodzi tędy.
-   * Osobna bramka „czy uzbrojeni" byłaby DRUGĄ polityką i jest zbędna: DSCS odmawia starcia,
-   * gdy OBIE strony są bezbronne, więc taka para nigdy nie wyprodukuje zdarzenia.
+   * ⚠ Widelec MA TRZY GAŁĘZIE i dopiero teraz jest wyczerpujący:
+   *     (a) `warId` już jest        → zaksięgowane, nic do roboty
+   *     (b) strony są W STANIE WOJNY → KSIĘGUJ (`recordBattle`)   ← DOPISANE W W3-2
+   *     (c) reszta                   → POTYCZKA (napięcie + pamięć, nigdy exhaustion)
    *
-   * Potyczka zasila NAPIĘCIE i PAMIĘĆ — nigdy exhaustion (to waluta wojny, a wojny nie ma).
+   * Do W3-2 gałąź (b) była `return` — i to była luka, nie optymalizacja. `DeepSpaceCombatSystem`
+   * wpisuje `warId: null` NA SZTYWNO (`:1006-1007`) i nie pyta, czy strony walczą w wojnie, więc
+   * bitwa w przestrzeni głębokiej w trakcie ZADEKLAROWANEJ wojny wypadała między (a) i (c):
+   * zero exhaustion, zero wpisu w `war.battles[]`, zero dominacji orbitalnej. Zmierzone
+   * WYKONANIEM w `w3_seams_smoke` T2 (przed tą zmianą: `recordBattle` 0 wywołań).
+   * Konsekwencja była gorsza niż brak liczby: `war_status` to 55-punktowy człon akceptacji
+   * pokoju, więc wojny toczonej TAM, GDZIE GRACZ NAPRAWDĘ WALCZY, nie dało się zakończyć
+   * wyczerpaniem. W1-4 domknął ten sam fork wyłącznie dla `EnemyAttackHandler`.
+   *
+   * ⚠ Księgujemy TUTAJ, a nie w DSCS/VCS — `WarSystem` jest jedynym księgowym (backbone P3),
+   * a producenci bitew mają zostać czystymi dostawcami wyniku. Jeden szew pokrywa DSCS, VCS
+   * i każdego przyszłego producenta; dwa wywołania w dwóch systemach rozjechałyby się.
+   *
+   * ⚠ Re-entrancja jest ograniczona z konstrukcji: `recordBattle` emituje `battle:resolved`
+   * PONOWNIE, ale już z `warId`, więc drugi przebieg wychodzi natychmiast gałęzią (a).
+   *
+   * ⚠ Asymetria wyczerpania (W1-4b) przychodzi ZA DARMO — `recordBattle` liczy ją z
+   * `result.winner` przez `_battleLoserSide`. Nowa gałąź nie dotyka `lossesA/B` (kolizja
+   * jednostek, §Findings filed 3) ani nie powiela arytmetyki.
    */
   _classifyBattle({ warId, battleId, result } = {}) {
-    if (warId) return;                       // zaksięgowane na wojnę — nie potyczka
+    if (warId) return;                       // (a) zaksięgowane na wojnę — nie potyczka
     const empireId = this._empireSideOf(result);
     if (!empireId) return;                   // nie ma komu przypisać incydentu
 
     const dipl = window.KOSMOS?.diplomacySystem;
     if (!dipl) return;
-    // Wojna mogła zostać zadeklarowana MIĘDZY starciem a tym handlerem — wtedy to już nie
-    // jest „walka bez stanu wojny" i księgowanie należy do `recordBattle`.
-    if (dipl.getStatus?.(empireId) === 'war') return;
+    // (b) Strony są w stanie wojny ⇒ to nie „walka bez stanu wojny", tylko starcie tej wojny.
+    // Wojna mogła też zostać zadeklarowana MIĘDZY starciem a tym handlerem — ta sama gałąź.
+    if (dipl.getStatus?.(empireId) === 'war') {
+      // ⚠ Tylko starcia z udziałem GRACZA: `getWarWith` zwraca wojnę gracz↔imperium, więc bez
+      // tej bramki potyczka AI↔AI zostałaby doksięgowana do CUDZEJ wojny. Dziś DSCS jest
+      // player-only, ale D5 (pary AI↔AI) to zmieni — guard ma być na miejscu WCZEŚNIEJ.
+      if (!this._hasPlayerSide(result)) return;
+      const war = this.getWarWith(empireId);
+      if (war) this.recordBattle(war.id, result);
+      return;
+    }
 
     dipl.changeTension(empireId, SKIRMISH_TENSION, 'skirmish');
     dipl.addMemory(empireId, 'skirmish', {
@@ -199,6 +225,20 @@ export class WarSystem {
       if (p?.empireId && p.empireId !== 'player') return p.empireId;
     }
     return null;
+  }
+
+  /**
+   * Czy w tym starciu brał udział GRACZ (W3-2). Uczestnik ma trzy kształty i gracz jest
+   * w nich oznaczony NIEJEDNOLICIE: DSCS/VCS dają `{type:'vessel_group', empireId:'player'}`,
+   * a `EnemyAttackHandler` `{type:'player'}` BEZ `empireId` (`:161-164`). Czytamy oba —
+   * to jest ta sama rozbieżność kształtów, która każe trzem konsumentom filtrować inaczej
+   * (`W3_PLAN.md` §Audit S25) i której nie wolno tu powtórzyć jednym testem.
+   */
+  _hasPlayerSide(result) {
+    for (const p of [result?.participantA, result?.participantB]) {
+      if (p?.empireId === 'player' || p?.type === 'player') return true;
+    }
+    return false;
   }
 
   /**

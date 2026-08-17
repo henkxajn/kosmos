@@ -10,9 +10,10 @@
 //   T1  S2+S3: rozkaz AI na ciało GRACZA rodzi misję `move_to_point`, a EnemyAttackHandler
 //              bramkuje `attack` ⇒ PRZYLOT NIE WYWOŁUJE BITWY. Brakujące ogniwo uderzenia
 //              w stolicę — odwraca W3-4.
-//   T2  S5:    bitwa DSCS w trakcie ZADEKLAROWANEJ wojny omija `recordBattle`: zero exhaustion,
-//              zero wpisu w `war.battles[]`, `warId: null` w evencie. Dziura księgowa —
-//              W1-4 zamknął WYŁĄCZNIE EAH. Odwraca W3-2.
+//   T2  S5:    ⚠ ODWRÓCONE W W3-2. Do W3-2 pinował DZIURĘ KSIĘGOWĄ: bitwa DSCS w trakcie
+//              ZADEKLAROWANEJ wojny omijała `recordBattle` (zero exhaustion, zero wpisu).
+//              Teraz pinuje STAN SZWU: surowy emit dalej niesie `warId: null` (producent NIE
+//              księguje — P3), a księguje WarSystem. Szczegóły: `w3_battle_booking_smoke`.
 //   T3  S6:    `orbitalDominance` NIE przeżywa serialize→restore (klucz spoza `createDefaultState`).
 //              Odwraca W3-3.
 //   T4  C-5:   ⚠ ODWRÓCONE W W3-1 — pierwszy pin luki z tego pliku, który doczekał się naprawy.
@@ -168,29 +169,25 @@ console.log('T2 — S5: bitwa DSCS w trakcie wojny omija `recordBattle` (zero ex
 
   const warAfter = warSys.getWarWith?.(empireId);
   assert(resolved.length > 0, `T2: DSCS wyemitował battle:resolved (${resolved.length})`);
-  assert(resolved.every(p => p?.warId === null),
-    'T2: …z `warId: null` — DSCS wpisuje NULL NA SZTYWNO (DeepSpaceCombatSystem.js:1007), ' +
-    'nie sprawdzając, czy strony są w stanie wojny');
-  assert(recordBattleCalls === 0,
-    `T2: `.trim() + `\`recordBattle\` NIE został wywołany ani razu (${recordBattleCalls}) — ` +
-    'trzecia cicha ścieżka księgowania, której W1-4 nie zamknął');
-  assert(JSON.stringify(warAfter?.exhaustion) === exhaustBefore,
-    `T2: exhaustion BEZ ZMIAN (${exhaustBefore}) — wojna toczona w przestrzeni głębokiej ` +
-    'NIE MOŻE zostać zakończona wyczerpaniem, a to 55-punktowy człon akceptacji pokoju');
-  assert(warAfter?.battles.length === battlesBefore,
-    `T2: `.trim() + `\`war.battles[]\` bez zmian (${battlesBefore} → ${warAfter?.battles.length}) — ` +
-    'WarOverlay czyta tę tablicę, więc bitwa jest niewidoczna też dla gracza');
-
-  // KONTROLA PINU: ta sama wojna REAGUJE, gdy księgowanie zostanie wywołane.
-  origRecord(warBefore.id, {
-    participantA: { type: 'vessel_group', empireId: 'player', vesselIds: [mine.id] },
-    participantB: { type: 'vessel_group', empireId, vesselIds: [their.id] },
-    winner: 'A', location: { systemId: 'sys_home', planetId: null, point: { x: 0, y: 0 } },
-  });
-  const warProbe = warSys.getWarWith?.(empireId);
-  assert(JSON.stringify(warProbe?.exhaustion) !== exhaustBefore,
-    `T2 KONTROLA PINU: ta sama wojna PORUSZA exhaustion po jawnym `.trim() +
-    '`recordBattle` — „bez zmian" powyżej pochodzi z OMINIĘCIA księgowania, nie z martwego pinu');
+  // ⚠ ODWRÓCONE W W3-2 — drugi pin luki z tego pliku, który doczekał się naprawy (po T4).
+  //   DSCS DALEJ wpisuje `warId: null` na sztywno — i to jest w porządku, bo producent bitwy
+  //   ma być czystym dostawcą wyniku (backbone P3). Zmieniło się to, że `WarSystem` przestał
+  //   takie starcie ODSYŁAĆ Z NICZYM, gdy strony są w stanie wojny.
+  assert(resolved.some(p => p?.warId == null),
+    'T2: surowy emit DSCS nadal niesie `warId: null` (DeepSpaceCombatSystem.js:1007) — ' +
+    'producent nie księguje, od tego jest WarSystem');
+  assert(recordBattleCalls === 1,
+    `T2: …ale `.trim() + `\`recordBattle\` przechodzi DOKŁADNIE raz (${recordBattleCalls}) — ` +
+    'przed W3-2 było tu ZERO (trzecia cicha ścieżka)');
+  assert(JSON.stringify(warAfter?.exhaustion) !== exhaustBefore,
+    `T2: exhaustion RUSZYŁO ${exhaustBefore} → ${JSON.stringify(warAfter?.exhaustion)} — wojnę ` +
+    'toczoną w przestrzeni głębokiej da się wreszcie zakończyć wyczerpaniem (55-punktowy człon ' +
+    'akceptacji pokoju przestał być ślepy na tę walkę)');
+  assert(warAfter?.battles.length === battlesBefore + 1,
+    `T2: `.trim() + `\`war.battles[]\` urosło (${battlesBefore} → ${warAfter?.battles.length}) — ` +
+    'WarOverlay czyta tę tablicę, więc bitwa jest widoczna też dla gracza');
+  // Szczegóły (asymetria po wyniku, wyczerpujący widelec, brak re-entrancji, bramka D5,
+  // obojętność na `lossesA/B`) mieszkają w `w3_battle_booking_smoke`.
 }
 
 // ── T3 — S6: dominacja orbitalna nie przeżywa wczytania ─────────────────────
