@@ -328,6 +328,12 @@ function _onColonyFounded({ expedition: exp, planetId, startResources, startPop,
     barTitle: t('missionPopup.colonyFounded'),
     barRight: _gameYear(),
     svgKey: 'colony',
+    // ⚠ WIDEO WPROST. `colony.mp4` to klip ŻYCIA kolonii (zdarzenia bieżące), a ZAŁOŻENIE ma
+    //   inny rejestr emocjonalny — bez `videoSrc` wybór idzie z `svgKey` przez `SVG_TO_VIDEO`
+    //   (`ScheduledEventPopup.js:443-446`, 'colony' → 'colony'), więc oba momenty grały to samo.
+    //   Ogniwo zapasowe = DAWNE zachowanie: `_loadVideo` sprawdza każdy src zapytaniem HEAD, więc
+    //   dopóki `colony_founded.mp4` nie leży w repo, popup gra `colony.mp4` dokładnie jak dotąd.
+    videoSrc: ['assets/event-videos/colony_founded.mp4', 'assets/event-videos/colony.mp4', 'assets/event-videos/default.mp4'],
     svgLabel: t('missionPopup.colonyFoundedLabel').replace(/\n/g, '<br>'),
     prompt: '> COLONY_INIT.EXE_',
     headline: t('missionPopup.newColony', planetName.toUpperCase()).replace(/\n/g, '<br>'),

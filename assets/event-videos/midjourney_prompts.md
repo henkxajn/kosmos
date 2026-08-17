@@ -281,18 +281,33 @@ kazdy wygenerowany plik to jedno zdarzenie mniej wygladajace generycznie.
 ⚠ Filip wskazal dwa (`cultural_festival`, `population_milestone`); pomiar pokazal **dziesiec**.
 Prompty do WSZYSTKICH juz sa w tym pliku — brakuje wylacznie renderow.
 
-| # | plik do wygenerowania | prompt |
-|---|---|---|
-| 1 | `population_milestone.mp4` | jest w tym pliku (sekcja 10) |
-| 2 | `cultural_festival.mp4` | jest w tym pliku (sekcja 12) |
-| 3 | `new_alloy_discovered.mp4` | sekcja 13 |
-| 4 | `xenobiology_find.mp4` | sekcja 14 |
-| 5 | `political_tension_resolved.mp4` | sekcja 15 |
-| 6 | `scout_report.mp4` ⚠ zgloszony 404 z gry | sekcja 16 |
-| 7 | `shipyard_efficiency.mp4` | sekcja 17 |
-| 8 | `archival_data_recovered.mp4` | sekcja 18 |
-| 9 | `volunteer_expedition.mp4` | sekcja 19 |
-| 10 | `veteran_engineer_retires.mp4` ⚠ zgloszony 404 z gry | jest w tym pliku |
+| # | plik do wygenerowania | prompt | status podlaczenia |
+|---|---|---|---|
+| 1 | `population_milestone.mp4` | jest w tym pliku (sekcja 10) | ZERO-CODE (id zdarzenia) ⚠ 404 z gry |
+| 2 | `cultural_festival.mp4` | jest w tym pliku (sekcja 12) | ZERO-CODE (id zdarzenia) |
+| 3 | `new_alloy_discovered.mp4` | sekcja 13 | ZERO-CODE (id zdarzenia) |
+| 4 | `xenobiology_find.mp4` | sekcja 14 | ZERO-CODE (id zdarzenia) |
+| 5 | `political_tension_resolved.mp4` | sekcja 15 | ZERO-CODE (id zdarzenia) |
+| 6 | `scout_report.mp4` | sekcja 16 | ZERO-CODE (id zdarzenia) ⚠ 404 z gry |
+| 7 | `shipyard_efficiency.mp4` | sekcja 17 | ZERO-CODE (id zdarzenia) |
+| 8 | `archival_data_recovered.mp4` | sekcja 18 | ZERO-CODE (id zdarzenia) |
+| 9 | `volunteer_expedition.mp4` | sekcja 19 | ZERO-CODE (id zdarzenia) |
+| 10 | `veteran_engineer_retires.mp4` | jest w tym pliku | ZERO-CODE (id zdarzenia) ⚠ 404 z gry |
+| 11 | **`colony_founded.mp4`** | plik gotowy u Filipa (2026-08-17) | ✅ **JUZ PODLACZONE** — czeka na plik |
+| 12 | **`outpost_founded.mp4`** | kandydat: wariant industrialny | ⚠ **WYMAGA MALEGO SLICE'U** — brak wlasnego popupu |
+
+**Kolumna „status podlaczenia" — jak czytac:**
+- **ZERO-CODE (id zdarzenia)** — zdarzenie harmonogramowe; nazwa pliku = `event.id`, wrzucasz plik
+  i dziala. Cala pierwsza dziesiatka jest tej klasy.
+- **JUZ PODLACZONE** — popup misji z jawnym `videoSrc`; kod czeka na plik, a do tego czasu gra
+  ogniwo zapasowe (dawne zachowanie). `colony_founded` = `MissionEventModal._onColonyFounded`,
+  fallback `colony.mp4` → `default.mp4`.
+- **WYMAGA SLICE'U** — moment nie ma wlasnego popupu, wiec sam plik nic nie zmieni. Zalozenie
+  PLACOWKI leci dzis przez GENERYCZNY raport misji (`MissionSystem.js:2394` →
+  `expedition:missionReport` → `_onMissionReport`, `svgKey: 'report'` → `science.mp4`), a jego
+  etykieta mowi „badania zakonczone" (`MissionEventModal.js:378` rozgalezia sie tylko na
+  `mining`). Wlasny klip placowki wymaga wiec galezi dla `exp.type === 'found_outpost'`
+  (jawny `videoSrc` + poprawna etykieta + i18n), nie jednej linii.
 
 **Priorytet:** `population_milestone` + `cultural_festival` + `scout_report`
 + `veteran_engineer_retires` (zgloszone z gry jako 404) → reszta w dowolnej kolejnosci.
