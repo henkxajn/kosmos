@@ -377,9 +377,24 @@ Owns everything between war declaration and the peace table.
   **What W2 hands W3:** a fleet with a working distinction between *force* and *potential* — exactly
   what an offensive AI has to reason about before it picks a target — and a mobilization decision that
   already brakes on parity without a single authored threshold.
-- **W3+ — offensive AI & territorial peace** (§6a, signed 2026-08-13). Inherits two W2 debts by
-  name: materialized shadow fleets bypass the crew model entirely (the AI's principal fleet source,
-  so pricing it is a balance call), and AI fleet upkeep is still uncharged (decision 14).
+- **W3 — offensive AI & territorial peace. 🔵 NEXT STREAM, decided 2026-08-17** (owner + orchestrator;
+  §6a + §6 W3+ signed 2026-08-13, §2 P1 recorded intent). **Opens design-first: read-only seam audit →
+  `W3_PLAN.md` draft → orchestrator review. No code until the plan is approved.**
+  Scope on the table (each to be narrowed by the audit, not by the plan's optimism):
+  **AI target selection** — extending doctrines past `defend_home` / `patrol_border` into choosing a
+  target · **capital strikes** · **the ground-invasion path** — the audit's §2 assessment stands
+  (functional, but the ground RNG is unseeded — audit **R13**) · **occupation ≠ annexation** as a
+  distinct state (`CAPTURE_GRACE_YEARS` hook) · **`offer_peace` TERM SLOTS for celestial bodies in
+  both directions**, priced by the Acceptance Engine (exhaustion × territory value × CB `peaceCost`
+  × personality floor) · **war goals reaching back into `declare_war`** (the D4 flag) ·
+  and the **W2-carried debt: materialized-fleet crew pricing** — shadow fleets bypass the crew model
+  entirely, and they are the AI's principal fleet source, so this is a balance decision, not hygiene.
+  AI fleet upkeep also remains uncharged (W2 decision 14).
+  **Instrument base W3 inherits, already built and gated:** `ThreatAssessment` force/potential split ·
+  the exhaustion asymmetry (winner and loser no longer cost the same) · the deploy model (reserve,
+  crew ledger, mobilization) · E7 acceptance matrices · 136 keepers · the headless probes ·
+  and the three instrument lessons (a diff is not evidence · nor is running the instrument, until you
+  check the probe changed behaviour · one predicate, not ten field tests).
 
 The doc covers:
 
@@ -515,13 +530,12 @@ D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 
                         → W1 ✅ COMPLETE (13 commits, Gates 1-3 PASSED 2026-08-14, v100 no migration)
                         → W2 plan ✅ APPROVED (22 decisions signed, 3 owner rulings, 2026-08-15)
                         → W2 ✅ COMPLETE — 8 commits, Gates 1-3 PASSED 2026-08-16/16/17, save v100 → v101
-                                                ⟵ WE ARE HERE — **at a horizon DECISION, not on a path.**
-                                                   The three candidates are W3 (offensive AI + territorial
-                                                   peace) · Director Slice 2 (demand-based rules) · BALANS
-                                                   (the debt list grew again). **The choice is Filip's and
-                                                   the orchestrator's — this document deliberately does
-                                                   not make it.**
-                        → then: D3/D4 ⇄ W3..Wn → D5 (AI↔AI live) → Director Slices 2–3 → deferred list
+                        → **W3 🔵 DECIDED 2026-08-17 (owner + orchestrator) — OFFENSIVE AI &
+                           TERRITORIAL PEACE** (WAR_BACKBONE §2 P1 recorded intent + §6a + §6 W3+)
+                                                ⟵ WE ARE HERE — **design-first: the next artefact is a
+                                                   read-only seam AUDIT + `W3_PLAN.md` draft, NOT code.**
+                        → then: D3/D4 ⇄ W4..Wn → D5 (AI↔AI live) → Director Slices 2–3 → BALANS (parked
+                           LAST by owner ruling) → deferred list
 ```
 
 **Where we are right now:** **the war backbone has shipped its first two executed slices, and the arc
@@ -532,21 +546,55 @@ honestly-accounted number; **W2 split that number in two** — *force* (crewed, 
 *potential* (a hull in storage) — and put a month and a demographic cost between them, for **both**
 sides. Save is at **v101**, sweep at **136 keepers, 0 FAIL**, `check-i18n` PASS with pl = en = 3240.
 
-**Next horizon — NOT CHOSEN HERE.** W2 closed cleanly, so nothing forces the order. Three candidates,
-listed without a ranking, because the call belongs to Filip and the orchestrator:
-1. **W3 — offensive AI & territorial peace** (§6a). The natural continuation: W2 handed it the
-   force/potential distinction an attacker needs, and it inherits W2's two unpriced items by name
-   (materialized shadow fleets bypass the crew model; AI fleet upkeep uncharged).
-2. **Director Slice 2 — demand-based rules** (pressure L3 ultimatum, tribute demands, counter-intel
-   expulsion). Slices 2–3 remain unscoped; Slice 1's five findings are all still binding on them.
-3. **BALANS — the debt list grew again.** W2 alone filed five new items (`W2_PLAN.md` §Findings filed
-   11-15), on top of the four AI-economy findings from Director Slice 1 and the standing R-2
-   re-measurement obligation, whose premises **moved a third time** during GATE 3 (an empire founded
-   its first outposts at civY ~460-465, inside a window an earlier probe measured as empty).
+**Next horizon — DECIDED 2026-08-17 (owner + orchestrator): W3 — OFFENSIVE AI & TERRITORIAL PEACE.**
 
-**D3 — borders, trespass incidents, influence map** stays queued behind whichever is chosen:
-`bordersOpen` has been sitting in the relation record, unread, since D1, and D3 is its consumer; the
-influence map itself is already built (Director S2).
+W3 is the natural continuation: W2 handed it the **force vs potential** distinction an attacker has to
+reason about before it picks a target, and it inherits W2's unpriced items by name. Scope is
+`WAR_BACKBONE.md` §2 P1 (recorded intent) + §6a + §6 W3+ — AI target selection beyond
+defend/patrol, capital strikes, the ground-invasion path, occupation as a state distinct from
+annexation, and peace **term slots** for celestial bodies priced by the Acceptance Engine.
+
+⚠ **W3 opens DESIGN-FIRST.** The next artefact is a read-only **seam audit** plus a `W3_PLAN.md`
+draft with a commit plan, gates and open decisions — **not code**. Same order that made D2, Director
+Slice 1, W1 and W2 land without re-litigation. The handover script is in `W2_PLAN.md` §RESUME.
+
+**Ordering of the rest, unchanged except where noted:**
+1. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation
+   record, unread, since D1, and D3 is its consumer; the influence map is already built (Director S2).
+2. **D4 / D5**, then **Director Slices 2–3** (demand-based and strategic rules; Slice 1's five
+   findings remain binding on both).
+3. **BALANS — deliberately parked LAST (owner ruling 2026-08-17).** Rationale, recorded because it
+   inverts the intuition that debt should be paid early: **the more mechanics are live, the richer the
+   telemetry each harness run yields.** Tuning against a half-built war layer would calibrate against
+   a system that is about to change shape. The debt list is therefore allowed to grow on purpose —
+   W2 alone filed five items (`W2_PLAN.md` §Findings filed 11-15) on top of Director Slice 1's four
+   AI-economy findings and the R-2 re-measurement obligation, whose premises **moved a third time**
+   during W2/GATE 3 (an empire founded its first outposts at civY ~460-465, inside a window an earlier
+   probe had measured as empty).
+
+### Standing parallel items — small, independent, none of them blocking W3
+
+Recorded here so they do not dissolve between streams. Each is self-contained and can be picked up in
+any session without touching W3.
+
+- **`outpost_founded` mini-slice.** Outpost founding has no popup of its own — it rides the generic
+  mission report (`MissionSystem.js:2394` → `_onMissionReport`), so `svgKey: 'report'` → `science.mp4`
+  and the card is captioned *"badania zakończone"* (`MissionEventModal.js:378` branches only on
+  `mining`). Needs a `found_outpost` branch: explicit `videoSrc` + correct label + i18n. Clip name
+  reserved as `outpost_founded.mp4`; Filip has an industrial-variant candidate.
+- **Synchronized first contact** (`W2_PLAN.md` §Findings filed 12). The first-contact roll key carries
+  no galaxy salt and `_courseAngle` skips `mixSeed`, so both empires fire on attempt 3 in the same
+  displayed year on bearings 226°/227° — every playthrough. Fix is two sites; it changes when and where
+  first contact happens in every future game, so it needs its own before/after. Instrument:
+  `src/testing/headless/probe-firstcontact-seed.mjs`.
+- **Mobilization detail modal** (flavor option C, `W2_GATE3_CHECKLIST.md` §Domknięcie 1). The
+  mobilization bell row is the one notification that opens nothing on click
+  (`MissionEventModal.js:407-408`, `default: return`), which is why the "movement observed near
+  shipyards" source clause has nowhere to be read; the ~250 px `nowrap` subtitle cannot carry it.
+- **Asset backlog** — ten scheduled-event clips still missing, tracked with a wiring-status column in
+  `assets/event-videos/midjourney_prompts.md`. All ten are ZERO-CODE (filename = event id).
+- **⚠ `ExpeditionSystem.js` is a dead twin of `MissionSystem.js`** — same `_launchFoundOutpost`, same
+  emits, zero live callers. Edit `MissionSystem` only. Worth knowing before any W3 work near missions.
 
 ⚠ **Before D3 leans on `BORDER_LY` = 5 LY:** the 17.7 % coverage figure is now known to be a per-seed,
 **per-empire** sample rather than a constant — see the finding above. Re-measure over ≥60 displayed

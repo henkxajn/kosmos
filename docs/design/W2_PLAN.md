@@ -1,6 +1,6 @@
 # W2 — the deploy model · plan doc (APPROVED)
 
-**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W2 · **Status:** ✅ **SLICE COMPLETE 2026-08-17** — eight commits, **all three gates PASSED** (GATE 1 · 2026-08-16 · GATE 2 · 2026-08-16 · GATE 3 · 2026-08-17, full pass, all eight sections). Plan APPROVED 2026-08-15 with all ten open decisions resolved (two owner rulings + eight orchestrator ratifications); implementation ran without re-litigation. ⚠ **The next horizon is Filip's and the orchestrator's call — this document does not name it.**
+**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** W2 · **Status:** ✅ **SLICE COMPLETE 2026-08-17** — eight commits, **all three gates PASSED** (GATE 1 · 2026-08-16 · GATE 2 · 2026-08-16 · GATE 3 · 2026-08-17, full pass, all eight sections). Plan APPROVED 2026-08-15 with all ten open decisions resolved (two owner rulings + eight orchestrator ratifications); implementation ran without re-litigation. **Next horizon decided 2026-08-17: W3 — offensive AI & territorial peace, opening design-first (seam audit → `W3_PLAN.md`). Handover script: §HANDOVER below.**
 **Parent:** `WAR_BACKBONE.md` §2 P4 + §6 (signed 2026-08-13; HANDOVER note 2026-08-14) · **Predecessor:** `W1_PLAN.md` (COMPLETE, three gates PASSED 2026-08-14)
 **Basis:** read-only seam audit 2026-08-15 (this doc §Audit) · `docs/audit/COMBAT_DIPLO_AUDIT.md` (superseded in parts) · `DIRECTOR_SLICE1_PLAN.md`, `D2_PLAN.md`
 **Save:** v100 → **v101** (first bump since v100; own commit, own gate)
@@ -20,9 +20,40 @@ Tabela commitów i dowody fail-first: §Results. Wyniki gate'ów: `W2_GATE{1,2,3
 (GATE 2 i GATE 3 mają własne sekcje „Domknięcie po gate'cie" z odpowiedziami, których gate nie
 otwiera ponownie). Retrospektywa: `WOJNA_I_POKOJ_MASTER_PLAN.md` §Completed.
 
-⚠ **Wybór następnego horyzontu należy do Filipa i orkiestratora — NIE jest zapisany ani tutaj, ani
-w master planie:** W3 (ofensywne AI + pokój terytorialny) vs Director Slice 2 vs BALANS z urosłą
-listą długów.
+---
+
+## HANDOVER — NASTĘPNA SESJA ZACZYNA W3 (zdecydowane 2026-08-17)
+
+**Horyzont WYBRANY** (właściciel + orkiestrator): **W3 — OFENSYWNE AI I POKÓJ TERYTORIALNY**
+(`WAR_BACKBONE.md` §2 P1 + §6a + §6 W3+). BALANS **świadomie parkowany NA KOŃCU** — orzeczenie
+właściciela: im więcej mechanik żyje, tym bogatsza telemetria z każdego przebiegu, a strojenie
+połowy warstwy wojennej kalibrowałoby system, który zaraz zmieni kształt. D3/D4/D5 i Director
+Slice 2-3 zostają w kolejce wg master planu.
+
+⚠ **W3 OTWIERA SIĘ PROJEKTOWO, NIE KODEM.** Następny artefakt to **audyt szwów (read-only) +
+szkic `W3_PLAN.md`** z planem commitów, gate'ami i decyzjami otwartymi — dopiero po zatwierdzeniu
+leci kod. Ten porządek dał D2, Director Slice 1, W1 i W2 bez ani jednej re-litygacji.
+
+**Zakres do zawężenia audytem** (nie optymizmem planu): wybór celu przez AI (rozszerzenie doktryn
+poza `defend_home`/`patrol_border`) · uderzenia w stolicę · ścieżka desantu — ocena §2 audytu
+STOI (działa, ale RNG naziemne jest niezasiane, **R13**) · **okupacja ≠ aneksja** jako osobny stan
+(zaczep `CAPTURE_GRACE_YEARS`) · **sloty warunków pokoju na CIAŁA NIEBIESKIE w OBIE strony**,
+wycenione Acceptance Engine (wyczerpanie × wartość terytorium × `peaceCost` casus belli × podłoga
+osobowości) · cele wojenne sięgające wstecz do `declare_war` (flaga D4) · dług przeniesiony z W2:
+**wycena floty zmaterializowanej** (omija model załogi, a jest GŁÓWNYM źródłem floty AI — decyzja
+balansowa, nie higiena).
+
+**Instrument, który W3 dziedziczy gotowy:** rozdział siła/potencjał w `ThreatAssessment` ·
+asymetria wyczerpania (zwycięstwo i przegrana nie kosztują tyle samo) · model rozmieszczenia
+(rezerwa, księga załogi, mobilizacja) · macierze akceptacji E7 · **136 keeperów** · sondy headless ·
+oraz trzy lekcje instrumentu (diff nie jest dowodem · samo uruchomienie też nie, dopóki nie
+sprawdzisz, że sonda zmieniła zachowanie · jeden predykat, nie dziesięć testów pola) + czwarta
+z domknięcia W2 (seed strukturalny wymaga rozproszenia w KAŻDYM miejscu).
+
+**Sprawy poboczne, żywe i niezależne od W3** (pełna lista w master planie §Standing parallel items):
+mini-slice `outpost_founded` · zsynchronizowany pierwszy kontakt (sól galaktyki, §Findings filed 12) ·
+modal detalu mobilizacji (wariant C) · backlog assetów · ⚠ `ExpeditionSystem.js` = martwy bliźniak
+`MissionSystem.js`, nie edytować.
 
 **Co GATE 3 pokazał na żywo, a czego harness nie umie zmierzyć** (wpis wiążący z rejestru:
 `GameCore` nie montuje Directora): kadłub AI ląduje w rezerwie, mobilizacja odpaliła **sama, dwa
