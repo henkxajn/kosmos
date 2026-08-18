@@ -18,63 +18,43 @@ already-declared `gameState` domain, and the one item that would need a backfill
 
 ## RESUME — czytaj to PIERWSZE (PL, wzór W1/W2)
 
-**Stan na 2026-08-18 (wieczór).** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2** `d5a9b8d` ·
-`536fd51` + `d19777b` + `b630c55` (GATE 1: checklista, rejestr, werdykt) · **W3-3** `1e57d1b` ·
-**W3-4** `4724e46` · `7a43c3a` (checklista GATE 2 wyd. 1) · **W3-4b-1** `369adfc` ·
-**W3-4b-2** `cb815cd` · `4514df4` (GATE 2 wyd. 2) · **W3-4c** `a7b84bd` (dźwignia rajdera).
-Sweep **143/143 OK, 0 FAIL** · `check-i18n` **PASS** (pl = en = 3242) · zapis **v101 bez migracji**.
+**Stan na 2026-08-18 (noc).** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2**
+`d5a9b8d` · GATE 1 (`536fd51`/`d19777b`/`b630c55`) · **W3-3** `1e57d1b` · **W3-4** `4724e46` ·
+`7a43c3a` · **W3-4b** `369adfc`+`cb815cd` · `4514df4` · **W3-4c** `a7b84bd`+`9a96382` ·
+**W3-5** `07c1087` · **W3-5b** `61bdffe`.
+Sweep **145/145 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji przez CAŁY slice**.
 
-✅ **GATE 1 ZDANY 2026-08-17** — osiem na osiem (`W3_GATE1_CHECKLIST.md` §Wynik).
+✅ **GATE 1 ZDANY 2026-08-17** · ✅ **GATE 2 (§§1-7) ZDANY 2026-08-18** — łańcuch uderzenia
+międzygwiezdnego udowodniony NA ŻYWO od początku do końca (`W3_GATE2_CHECKLIST.md` §Wynik).
+Trzy pytania z przebiegu domknięte POMIAREM (§A1-A3): kształt `location` mówi, KTÓRA ścieżka
+walczyła · eviction pierścienia WYKLUCZONY (10 000 pojemności vs ~48 wpisów/rok gry) · **rundy
+NIE księgują się osobno** (jedno starcie = jedna bitwa) ⇒ wycena pokoju w W4 bezpieczna.
 
-⏸ **GATE 2 PRZERWANY NA REALNYM DEFEKCIE (wyd. 1) — NAPRAWIONY, CZEKA NA WZNOWIENIE OD §2.**
-Łańcuch mechanizmu działał (rozkaz → misja `attack` → lot → bitwa → księga → dominacja), ale
-uderzenie **międzygwiezdne** było zepsute. Trzy wzajemnie sprzeczne fakty z żywej gry doprowadziły
-do sedna, a reprodukcja headless odtworzyła je 1:1.
+⏳ **GATE 2 §8 (AUTONOMIA) CZEKA NA CIEBIE** — dopisana do tej samej checklisty. To jest ta
+sekcja, w której AI wybiera cel SAMO. ⚠ Najdłuższa w czasie: reguła próbuje raz na rok
+wyświetlany (20 % + 15 pkt), ma 5 lat cooldownu i wymaga jednocześnie wojny, celu w zasięgu
+i okrętu zdolnego do skoku. L18 daje dźwignię, jeśli nie chcesz czekać.
 
-**Sedno (§Findings 25):** rozkazy ruchu są z konstrukcji **wewnątrzukładowe** — gwiazda każdego
-układu stoi w (0,0), więc `x/y` ciała znaczy coś tylko w JEGO układzie — a identyfikatory są
-**globalne**. Okręt z `sys_061` z rozkazem na planetę gracza w `sys_home` leciał więc do JEJ
-współrzędnych odmierzonych od SWOJEJ gwiazdy, lądował w losowym miejscu `sys_061` i meldował się
-jako **zadokowany przy ciele, którego w jego układzie nie ma**. **Identyfikator to nie jest
-położenie** — trzecie wystąpienie tej klasy w arcu.
+**Co dowiózł W3-5:** `DirectorOffensive` + reguła katalogowa `strike_player_target` — REGUŁA
+z własną akcją, nie trzecia doktryna (model doktryny nie potrafi wyrazić CELU, korekta C-2).
+Cztery ograniczenia, każde kupione pomiarem: **zasięg stawia reguła** (powłoka `InfluenceMap`,
+§Findings 27 — transport dałby skok przez pół galaktyki) · **eskadra 2+ przeciw obronie**
+(§Findings 34) · **sól galaktyki w kluczu rzutu, OPT-IN** (§Findings 24 — globalna przesunęłaby
+losy pierwszego kontaktu, nacisku i mobilizacji) · **wojna jest warunkiem wstępnym, nie skutkiem**
+(korekta C-4). Dobór okrętów po `warpFuel.max > 0` (D4). W3-5b domknął §Findings 32 (obcy przylot
+nie ogłasza się jako Twój — modal PAUZOWAŁ grę, więc bez tego W3-5 dowoziłby regresję).
 
-**Odpowiedź na pytanie „czemu obrona Bastionu biła się w cudzym układzie" (§Findings 26): NIE
-BIŁA SIĘ.** `playerVesselsToBattleUnit` na pustej liście fabrykuje obrońcę-widmo `{hp:100,
-weapons:[]}` — sto wytrzymałości, zero broni. AI wygrało z workiem treningowym, a księga obciążyła
-gracza udziałem przegranego. Defekt NIE był tylko cross-systemowy: każde uderzenie w ciało, przy
-którym gracza nie ma, farmiło wyczerpanie przeciw nikomu.
+**Zmierzone sondą `probe-w3-targets.mjs`** (zasiewa żeton stacji R-3 i DOWODZI, że się przyjął):
+gracz wpada w zasięg imperium w **2 z 8 par** (4 ziarna × 2 imperia) — reszta czeka na ekspansję;
+pełna drabina odmów (`no_warp_capable_hull` → `insufficient_squadron` → WYSŁANO); **4 różne
+układy** pierwszej odpalającej próby na 4 ziarnach (reguła bez soli: 1 układ na 4 ziarna).
 
-**Naprawa (rodzina W3-4b):** `369adfc` — NEW `src/utils/SystemScope.js` (jedno źródło prawdy
-„ten sam układ", z kontraktem `undefined` = stary zapis vs `null` = tranzyt) + bramka układu
-w `_issueMoveToPoint`/`_issueAttack`/`_issuePursueOrIntercept`/`_issueEngage` +
-**`OrderService.issueAttack`** (skok warp → po przylocie sam wydaje uderzenie; zamiar czeka
-w `pendingOrder`) + szew przylotu nie dokuje do obcego ciała. `cb815cd` — księga bierze układ
-**CELU** (jedna zmiana naprawia obrońcę, `location`, wraki i dominację) + **bramka obecności
-gracza** (bez gracza w układzie nie ma bitwy).
-
-⚠ **Do zastosowania w W3-5 (§Findings 27):** `WarpRouteSystem.canOrder` odrzuca każdy statek AI
-(`not_player`) — to bramka INTERFEJSU, nie reguła świata; regułą jest `dispatchInterstellar`
-z jawnym widelcem właściciela. Skutkiem jest **skok POJEDYNCZY i BEZ limitu długości** dla AI ⇒
-**zasięg uderzenia musi ograniczyć REGUŁA WYBORU CELU** (sąsiedztwo z `InfluenceMap`), inaczej
-imperium uderzy przez pół galaktyki za jeden bak oparów.
-
-⏸ **GATE 2 wyd. 2 ZABLOKOWANY NA LUCE NARZĘDZIOWEJ (2026-08-18) — ODBLOKOWANY.** Sceny
-międzygwiezdnej nie dało się postawić ŻADNĄ zwalidowaną dźwignią: Sandbox stawia wyłącznie FRG-3
-(`warpFuel.max: 0` — CELOWY brak baku, poprawnie), a `spawnEnemyAttack` dobiera kadłub po SILE
-i ląduje na `hull_medium`, też bez baku. Właściciel słusznie odmówił ręcznej edycji paliwa.
-**W3-4c** (`a7b84bd`) dokłada `spawnEnemyRaider` — jedno wywołanie stawia rajdera z katalogu,
-z pełnym bakiem, w najbliższym NIE-swoim układzie, właściciel z AKTYWNEJ wojny, a rozkaz idzie
-PRAWDZIWĄ ścieżką (`OrderService.issueAttack`). Kontrakt sprawdzany po fakcie (`warpCapable`
-w zwrotce). Przy okazji: `issueWarp` do własnego układu zwraca kanoniczny `same_system`
-(nie `dispatch_failed`) — bez nowego klucza i18n, bo stała i tekst PL/EN już istniały.
-**§Findings 29-31.**
-
-**CO DALEJ:** **GATE 2 wydanie 2** (`W3_GATE2_CHECKLIST.md`) — scena międzygwiezdna jest teraz
-WYMAGANA, nie przypadkowa; wznawiasz od **§1 L3** (nowa dźwignia), potem §2; sekcje 4-7 bez zmian
-(§4 powtórzyć, bo sprawdza też WŁAŚCIWY układ dominacji) → **W3-5** (wybór celu jako REGUŁA Directora: `delay: 0`, klucz rzutu
-mieszający `GALAXY_SEED`, sonda MUSI zasiać żeton stacji, dobór sił po `warpFuel.max > 0`) →
-**W3-6** (desant z bitew `vessel_group`) → **W3-7** (widoczność + bramka WŁASNOŚCI, §Findings 19
-i 22) → **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`) → **W3-9**.
+**PO GATE 2 §8:** **W3-6** (desant AI z bitew `vessel_group` — `MIN_SURVIVING_STRENGTH_TO_LAND`
+liczone na abstrakcyjnej sile potrzebuje zamiennika liczonego z kadłubów) → **W3-7** (widoczność:
+§Findings 19, 22 i reszta 32 — bramka WŁASNOŚCI na WSZYSTKICH powierzchniach inwazji/utraty)
+→ **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`) → **W3-9** (docs).
+⚠ Niezależnie: §Findings 33 (nawigacja w obcych układach — asymetria WARSTWY WIDOKU,
+`switchActiveSystem` ma JEDEN caller keyowany na kolonię) czeka na własny slice.
 
 ---
 
@@ -375,7 +355,7 @@ failure modes: the repairs, the offensive loop, the conquest aftermath.
 | **W3-3 ✅** `1e57d1b` | `fix(save): orbitalDominance przeżywa wczytanie` | One key in `createDefaultState` + a keeper + defensive reads (S27's no-deep-merge rule). Removes the dead seed at `SaveMigration:1643-1645`. Behaviour change — post-load invasions become possible again — so it carries its own before/after and does **not** ride another commit. | — |
 | **W3-4 ✅** `4724e46` | `feat(ai): rozkaz uderzenia — producent misji \`attack\`` | The join the audit found (S2+S3): an AI hull sent at a player body arrives with `mission.type='attack'` and the **existing** EAH pipeline does the rest (batching, auto war declaration, booking, dominance, wrecks). Fix `_holdAtHome`'s `missing_target_point` in the same commit (C-2) — same order channel. **D6: close the `isInService` hole** in `MovementOrderSystem.issueOrder` here (one gate, reason `vessel_in_reserve`, i18n PL+EN) so the new order path does not inherit it (§Findings 1). ⚠ Check the **spaceport gate** (`MovementOrderSystem:489-494` → `SpaceportCheck:55-63`) is not silently refusing AI departures — it is **not** bypassed by `DirectorDoctrine`. | — |
 | **W3-4b ✅** `369adfc` + `cb815cd` | `fix(war): uderzenie międzygwiezdne leci przez SKOK` + `fix(war): księga bierze układ CELU` | **Repair family forced by GATE 2 edition 1** (§Findings 25-28). Movement orders are intra-system by construction while ids are global, so `attack` on a body in another system flew to its coordinates *inside the attacker's own system* and reported docking at a body that is not there; the battle and dominance booked for the **attacker's** system, and the defender was a fabricated phantom `{hp:100, weapons:[]}`. NEW `src/utils/SystemScope.js` + system gates on `moveToPoint`/`attack`/`pursue`/`intercept`/`engage` + **`OrderService.issueAttack`** (warp → strike via `pendingOrder`) + arrival-seam repair + `WarSystem.hasPlayerPresenceInSystem`. Keeper `w3_cross_system_attack_smoke` 42/42. | **GATE 2 ed. 2** |
-| **W3-5** | `feat(ai): wybór celu — reguła Directora, nie doktryna` | Target selection as a **catalog rule + its own action** (C-2), reading `ThreatAssessment.getStrength` for force (**D3: global truth, signed**), `TerritoryService.getSystemDevScore` for value and `InfluenceMap` for adjacency (S19/S20 — reuse, do not write a second scorer). **D4 (verified): strike composition selects hulls on `warpFuel.max > 0`, never on template id**, so the escorts fly and FRG-3 stays home by its own design; "no warp-capable hull in reserve" is a **first-class refusal reason**, since roamers arrive only at L2, one per incident. ⚠ **`delay: 0` mandatory** (`_firePending` dereferences the null left by `gameState.set(key,null)` **outside** both try/catch layers — `DirectorSystem:252-262`, `:161`; pinned catalog-wide by `w2_ai_mobilization` T4). ⚠ Roll key must mix `GALAXY_SEED` — the first-contact defect is precisely this class and `DirectorRuleMath:71-74` warns about it in writing. ⚠ Roll-less rules are throttled only by cooldown; the once-per-displayed-year gate lives inside `if (rule.roll)`. **⚠ CARRIES THE W3-0 PROBE** (scope ruling 2026-08-17: folded here, where its measurement is consumed and the Director must be wired anyway — building it in W3-0 would be harness work done twice). NEW `src/testing/headless/probe-w3-targets.mjs`, multi-seed, longitudinal. **⚠ IT MUST SEED THE R-3 STATION TOKEN** — `GameCore` mounts no `stationSystem`, so `EmpireColonyBootstrap:255-270` skips the token, `DirectorProduction:359` refuses every warship with `no_orbital_station`, and **an unseeded probe measures SILENCE, not restraint** (S21). Replicate the bootstrap's seed after boot (`new StationSystem()` → `createStation(capitalBodyId, { ownerEmpireId, starterModules: false })`, the `director_station_seed_smoke` shape) and **assert the token took** before measuring anything. | **GATE 2** |
+| **W3-5 ✅** `07c1087` + `61bdffe` | `feat(ai): wybór celu — reguła Directora, nie doktryna` | Target selection as a **catalog rule + its own action** (C-2), reading `ThreatAssessment.getStrength` for force (**D3: global truth, signed**), `TerritoryService.getSystemDevScore` for value and `InfluenceMap` for adjacency (S19/S20 — reuse, do not write a second scorer). **D4 (verified): strike composition selects hulls on `warpFuel.max > 0`, never on template id**, so the escorts fly and FRG-3 stays home by its own design; "no warp-capable hull in reserve" is a **first-class refusal reason**, since roamers arrive only at L2, one per incident. ⚠ **`delay: 0` mandatory** (`_firePending` dereferences the null left by `gameState.set(key,null)` **outside** both try/catch layers — `DirectorSystem:252-262`, `:161`; pinned catalog-wide by `w2_ai_mobilization` T4). ⚠ Roll key must mix `GALAXY_SEED` — the first-contact defect is precisely this class and `DirectorRuleMath:71-74` warns about it in writing. ⚠ Roll-less rules are throttled only by cooldown; the once-per-displayed-year gate lives inside `if (rule.roll)`. **⚠ CARRIES THE W3-0 PROBE** (scope ruling 2026-08-17: folded here, where its measurement is consumed and the Director must be wired anyway — building it in W3-0 would be harness work done twice). NEW `src/testing/headless/probe-w3-targets.mjs`, multi-seed, longitudinal. **⚠ IT MUST SEED THE R-3 STATION TOKEN** — `GameCore` mounts no `stationSystem`, so `EmpireColonyBootstrap:255-270` skips the token, `DirectorProduction:359` refuses every warship with `no_orbital_station`, and **an unseeded probe measures SILENCE, not restraint** (S21). Replicate the bootstrap's seed after boot (`new StationSystem()` → `createStation(capitalBodyId, { ownerEmpireId, starterModules: false })`, the `director_station_seed_smoke` shape) and **assert the token took** before measuring anything. | **GATE 2 §8** |
 | **W3-6** | `feat(ai): desant AI z bitew vessel_group` | New entry point into the live `launchInvasion` intent from `battle:resolved` with `participantA.type==='vessel_group'` + orbital dominance, reading `vessel.troopCapacity`/`canDropTroops` off the winning side's real hulls (C-1). Reuses the whole landing/capture half unchanged. ⚠ `MIN_SURVIVING_STRENGTH_TO_LAND = 30` is evaluated against abstract `pA.strength` — a unit with no meaning on the real-vessel path; it needs a hull-derived replacement, not a copy. | — |
 | **W3-7** | `feat(ui): gracz widzi, że jest atakowany` | S25, the cheapest large win in the slice: `invasion:*` gains a real consumer through `NotificationCenter` with the W2-7 contact gate (anonymous at `contact`, named at `detailed`) · the `{type:'player'}` participant gains `empireId:'player'`, which repairs **three** filtered consumers at once (`UIManager:1344` and both `GameScene` branches) · an EventLog line on the enemy-wins branch (`EAH:208-216`) · colony loss stops being a native `alert()`. i18n PL+EN, and the desant strings of S26 come with it. | **GATE 3** |
 | **W3-8** | `chore(ai): wycofanie martwej warstwy abstrakcyjnej floty` | C-3/C-4: retire `MilitaryAI`/`EconAI`/`EmpireFleetMaterializer`/`spawnFleet`/`moveFleet` and the `unifiedAggregator` branch behind an explicit dead-code notice, deleting `FLEET_AGGRO_INTERVAL` with them. **Isolated commit, after the live gates** — the point is that nothing above depends on it. | — |
@@ -692,6 +672,76 @@ first-contact seed (standing parallel item, its own before/after).
     (`fleet.warpErrSame`) already existed — a second name would have forked the vocabulary for one
     event. Worth watching for: `OrderService` wraps two dispatch paths with different reason
     vocabularies, and this was the first place they visibly disagreed.
+
+---
+
+### Added at GATE 2 PASS (2026-08-18, owner-witnessed live) — three clarifications answered by measurement
+
+**A1 — `planetId: null` + `point` is the DEEP-SPACE signature, and the checklist promise was wrong,
+not the recorder.** Measured headless on the same chain: the orbital path
+(`EnemyAttackHandler._resolveBatchedBattle`) writes `{ systemId: 'sys_home', planetId: 'entity_3',
+point: null }` — planetId **is** set, exactly as edition 2's L10 promised. `{ planetId: null,
+point: {x,y} }` is written **only** by `DeepSpaceCombatSystem:336` and `VesselCombatSystem`.
+⇒ The engagement resolved as **vessel↔vessel deep-space combat**, not as planetary defense: the
+raider was intercepted on approach rather than fought by the colony's guns. Both records are
+correct for their producer. **The checklist is fixed, the recorder is not touched** — L10 now
+reads the shape as *evidence of which path fought*, which is more informative than the promise it
+replaces.
+
+**A2 — ring eviction is RULED OUT by measurement; the ring is either cleared or detached.**
+`DebugLog._max = 10000` and the measured volume is **~48 entries per game year** with two AI
+empires (767 entries over 16 game years). Three displayed years ≈ 36 game years ≈ **1 700
+entries** — nowhere near the cap, and `battle:resolved` survived every measured run. So the
+"~3 years of AI activity evicted it" hypothesis is **false**. Remaining candidates, in order:
+(a) the ring is **cleared on reload** (documented standing property, and §4 of the gate does
+save→F5→load — if L9 ran after §4, the ring was legitimately empty); (b) `DebugLog.attach()` lost
+its subscription. **Not** a missing emit: the orbital path books through `WarSystem.recordBattle`,
+which emits `battle:resolved`, and the measurement caught it in the ring. ⇒ Checklist gains a
+disambiguating one-liner (`query({}).length` first). If it ever reproduces with a **non-empty**
+ring and zero `battle:resolved`, that IS an audit hole and gets its own commit.
+
+**A3 — rounds do NOT book separately; two battles means two ENCOUNTERS.** Verified in source:
+`_finalizeBattle` is the single booking site and ends with `encounter.isActive = false`
+(`DeepSpaceCombatSystem:1009`), so one encounter → exactly one `recordBattle`, however many rounds
+it ran. **W4's peace pricing is safe from round-inflation.** The two loser-shares therefore come
+from two engagements of one raider, and the mechanism the code supports is
+**retreat-then-re-engage**: enemy AI auto-retreats at ≤20 % HP while clearly losing (M4 P3 polish),
+retreat is booked as a **LOSS** with the ship alive, and `ENGAGEMENT_COOLDOWN_YEARS = 1` allows a
+fresh `combatRangeEnter` well inside a ~2.7-year approach. ⚠ **Measured only in part:** the
+one-encounter-one-battle invariant is proven; the retreat→re-entry sequence is inferred from the
+code and was **not** reproduced headless (the harness resolved the approach through the orbital
+path instead). Next live run can settle it in one read — the first record should carry
+`retreated` set and a surviving raider.
+
+### Added at GATE 2 PASS — findings from the run
+
+32. ⚠ **An AI interstellar arrival announces itself to the player as if it were his own — with a
+    free survey of the destination.** `MissionEventModal._onInterstellarArrived` (`:609`,
+    subscribed `:658`) has **no owner filter**: it fires the full arrival popup — vessel name, star
+    type, planet and moon counts, habitable-zone tally — for **any** vessel emitting
+    `interstellar:arrived`. Same family as §Findings 22 (a consumer that never asks *whose* state
+    it is), and it is simultaneously an **intel leak** of the Director Slice 1 Journal class.
+    ⚠ It also **pauses the game** (the modal is a pausing popup), so from W3-5 onward — when AI
+    raiders warp on their own initiative — this fires repeatedly with a false claim. Foreign
+    arrivals should be at most a **sensor contact behind detection**, never a player-arrival modal.
+33. **OWNER UX REQUEST — full orders/navigation in foreign systems. Assessment: VIEW-LAYER
+    asymmetry, not a world constraint.** Measured: `StarSystemManager.switchActiveSystem` is
+    complete (rebuilds the 3D scene, emits `system:switched`) and has **exactly one caller in the
+    tree** — `Outliner.js:699`, keyed on a **colony's** system. A system where the player has a
+    *ship* but no *colony* therefore has **no entry point**, which is why after arrival he picks a
+    body from a list instead of navigating. The world does not forbid it: a ship in a foreign
+    system passes the W3-4b same-system gate for bodies in that system, so right-click orders
+    would work the moment the view followed the ship.
+    **Cost:** the entry point is small (a "enter this system" action from the fleet registry or
+    Stratcom for any system with a player presence). The real cost is the **audit of consumers
+    that assume `activeSystemId === 'sys_home'`** — station restore, sensor overlays, colony
+    overlay, minimap — plus on-demand generation for a system never visited, and a defined return
+    path. Scope it as its own slice after GATE 3 or beside W3-7; **not** a drive-by.
+34. **DESIGN NOTE FOR W3-5 — a lone raider cannot crack a defended colony** (proven twice live,
+    the AI feeding the player two free victories and 7.2 exhaustion of its own). The target rule
+    must **prefer squadrons (2+) against targets with planetary defense or a defending fleet**,
+    otherwise the offensive AI is a exhaustion pump pointed at itself. This is the first
+    *balance* constraint the offensive layer imposes on its own trigger.
 
 ---
 

@@ -187,12 +187,21 @@ Zachowanie POPRAWNE (§5); weź okręt ze stanem `active`.
 
 - [ ] Bitwa **wybucha sama** po dotarciu — bez żadnej dalszej akcji z Twojej strony.
 
-**L9 — ślad audytowy, filtrowany po RODZAJU (nigdy po tekście):**
+**L9 — ślad audytowy, filtrowany po RODZAJU (nigdy po tekście) — NAJPIERW CAŁY pierścień:**
 
-`KOSMOS.debugLog.query({ kind: 'battle:resolved' }).length`
+`[KOSMOS.debugLog.query({}).length, KOSMOS.debugLog.query({ kind: 'battle:resolved' }).length]`
 
-- [ ] Licznik **wzrósł**. (Ścieżka orbitalna, jak w GATE 1, daje **jeden** wpis na bitwę —
-      podwójny wpis był właściwością DSCS, nie tej ścieżki.)
+- [ ] Drugi licznik **wzrósł**. (Ścieżka orbitalna daje **jeden** wpis na bitwę; podwójny wpis
+      to właściwość DSCS — surowy emit + zaksięgowany, patrz GATE 1 L4.)
+
+⚠ **Pierwszy licznik jest tu po to, żeby odróżnić dwie różne rzeczy** (zmierzone: pierścień mieści
+**10 000** wpisów, a gra generuje ~48/rok gry, czyli ~1 700 przez trzy lata wyświetlane — **wyparcie
+starych wpisów jest WYKLUCZONE** w sesji tej długości):
+- pierwszy licznik **mały/zerowy** → pierścień został **wyczyszczony** (robi to KAŻDY reload —
+  jeśli robiłeś już §4 z F5, to jest poprawne i nie ma czego szukać) albo `DebugLog` stracił
+  subskrypcję;
+- pierwszy licznik **duży**, a drugi **zero** → to **dziura w śladzie audytowym**, nie eviction.
+  Zapisz obie liczby — to wtedy osobny commit.
 
 **L10 — i że to poszło do KSIĘGI, a nie obok niej:**
 
@@ -201,13 +210,30 @@ Zachowanie POPRAWNE (§5); weź okręt ze stanem `active`.
 - [ ] `battles.length` urosło, `exhaustion` się ruszyło. To jest W1-4 + W3-2 pracujące pod
       spodem — uderzenie AI od pierwszego dnia jest **księgowane**, nie jest osobną, cichą ścieżką.
 
+⚠ **Jeśli z JEDNEGO przylotu wypadną DWIE bitwy — to nie są dwie rundy.** Zweryfikowane w kodzie:
+jedno starcie księguje się **dokładnie raz** (`_finalizeBattle` zamyka je flagą `isActive=false`),
+więc rundy NIE napędzają wyczerpania. Dwie bitwy = dwa STARCIA, a mechanizm to
+**odwrót-i-ponowne-podejście**: AI wycofuje się przy ≤20 % HP, odwrót księguje się jako
+**PRZEGRANA z żywym okrętem**, a cooldown starcia (1 rok) mieści się w kilkuletnim podejściu.
+Potwierdzisz to jednym odczytem — w PIERWSZYM rekordzie:
+
+`(w => KOSMOS.gameState.get('battles.' + w.battles[0])?.result?.retreated ?? KOSMOS.gameState.get('battles.' + w.battles[0])?.retreated)(KOSMOS.warSystem.getWarWith('emp_sandbox_enemy'))`
+
+- [ ] Jeśli wyjdzie `'A'` (albo `'B'`) — potwierdzone, to był odwrót, nie osobna runda.
+
 **L11 — ⚠ NAPRAWA Z WYDANIA 1: w KTÓRYM układzie zapisała się bitwa:**
 
 `(w => KOSMOS.gameState.get('battles.' + w.battles[w.battles.length - 1])?.location)(KOSMOS.warSystem.getWarWith('emp_sandbox_enemy'))`
 
-- [ ] `systemId` to **układ CELU** (`sys_home`), a `planetId` to Bastion — **jeden układ
-      odniesienia w całym rekordzie**. W wydaniu 1 było tu `systemId` NAPASTNIKA obok
-      `planetId` z Twojego układu: rekord wewnętrznie sprzeczny.
+- [ ] `systemId` to **układ CELU** (`sys_home`). W wydaniu 1 był tu `systemId` NAPASTNIKA obok
+      `planetId` z Twojego układu — rekord wewnętrznie sprzeczny.
+
+⚠ **Kształt reszty rekordu MÓWI, KTÓRA ŚCIEŻKA walczyła** — obie są poprawne (zmierzone):
+- `planetId: '<Bastion>'`, `point: null` → **bitwa orbitalna nad planetą**
+  (`EnemyAttackHandler`): rajder doleciał nad kolonię i zmierzył się z jej obroną.
+- `planetId: null`, `point: {x,y}` → **starcie w przestrzeni** (`DeepSpaceCombatSystem`):
+  rajder został **przechwycony w drodze** przez Twoje okręty i nie dotarł nad planetę.
+  To NIE jest usterka zapisu — to inna, równie prawdziwa historia tego samego przylotu.
 
 **L12 — i kto naprawdę bronił:**
 
@@ -303,11 +329,127 @@ nie łapał, bo spawnował garnizon już zadokowany przy stolicy.
 | 6. Garnizon AI potrafi wrócić do stolicy | |
 | 7. Brak regresji, konsola czysta | |
 
-**GATE 2:** ☐ ZDANY ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+**GATE 2:** ☑ **ZDANY 2026-08-18** (wyd. 2, prowadzony przez Filipa) ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+
+Łańcuch uderzenia miedzygwiezdnego udowodniony NA ŻYWO od poczatku do konca: gola odmowa
+(`target_other_system`) → fasada sklada (`composite: true`) → `interstellar_jump` z zamiarem
+w `pendingOrder` (`awaiting_warp`) → przylot konsumuje zamiar (`null`) → podejscie ~2.7 roku
+(zmierzone deltami pozycji) → bitwa → ksiega bierze uklad CELU (`sys_home`) → asymetria co do
+cyfry (7,2/1,6 = dwie przegrane rajdera po 9/2 x 0,4) → obecnosc gracza `[true, false]`, zero
+obronmcy-widmo → wrak w ukladzie bitwy → dominacja TYLKO dla `sys_home` (`controllerId: player`)
+i **bit w bit identyczna po zapisie/F5/wczytaniu**. §5 pokryte keeperami (brak kadlubow gracza
+w Sandboksie), §6/§7 czysto.
+
+Trzy pytania domkniete POMIAREM — `W3_PLAN.md` §A1-A3: ksztalt `location` mowi, KTORA sciezka
+walczyla (obie poprawne) · eviction pierscienia WYKLUCZONY (10 000 pojemnosci vs ~48 wpisow/rok
+gry) · rundy NIE ksieguja sie osobno (jedno starcie = jedna bitwa), wiec wycena pokoju w W4 jest
+bezpieczna. Trzy znaleziska z przebiegu: §Findings 32 (przylot AI oglaszany jako wlasny), 33
+(nawigacja w obcych ukladach — asymetria WARSTWY WIDOKU), 34 (samotny rajder nie skruszy bronionej
+kolonii → regula W3-5 ma preferowac eskadry).
 
 ⚠ **Wznów od §1 L3** (nowa dźwignia stawia scenę), dalej §2. Sekcje 4-7 są niezmienione
 względem wydania 1; jeśli przeszły Ci wtedy, odhacz je bez powtarzania — poza §4, która
 **musi** zostać powtórzona, bo teraz sprawdza także, że dominacja siedzi we WŁAŚCIWYM układzie.
+
+---
+
+---
+
+## 8. AUTONOMIA — AI wybiera cel SAMO (W3-5, `07c1087`)
+
+> **CO TU SPRAWDZAMY, w jednym zdaniu:** czy obce imperium potrafi **SAMO** wskazać Twoją
+> kolonię, zebrać eskadrę i posłać ją przez pół galaktyki — bez jednej dźwigni z Twojej strony.
+>
+> §§2-7 dowiodły, że silnik UMIE wykonać uderzenie, gdy cel wskażesz Ty. To jest ta sama scena
+> bez Ciebie: reguła `strike_player_target` w katalogu Directora, z własnym rzutem, cooldownem
+> i trzema powodami odmowy, które widać w audycie.
+
+⚠ **To jest sekcja NAJDŁUŻSZA W CZASIE.** Reguła próbuje **raz na rok wyświetlany** (20 % + 15 pkt),
+ma **5 lat cooldownu** i wymaga jednocześnie: wojny, celu w zasięgu i okrętu zdolnego do skoku.
+Puść grę na szybkim tempie i wracaj do L15/L16 — albo użyj dźwigni z L18, jeśli chcesz zobaczyć
+sam skutek bez czekania.
+
+**L15 — czy reguła ma dziś z czego wybierać (zanim zaczniesz czekać):**
+
+`KOSMOS.directorOffensive.countReachableTargets('emp_sandbox_enemy')`
+
+- [ ] Liczba **≥ 1**. Zero **NIE jest usterką** — znaczy, że Twoja kolonia leży poza przestrzenią
+      roszczoną i poza powłoką graniczną tego imperium, więc reguła słusznie milczy (zasięg
+      stawia REGUŁA, nie bak — §Findings 27). Zmierzone w sondzie: przy 4 ziarnach gracz wpadał
+      w zasięg w **2 z 8** par (ziarno × imperium).
+
+**L16 — co reguła by wybrała i czy uzna cel za broniony:**
+
+`(t => t && ({ ciało: t.body.id, układ: t.systemId, wartość: t.value, bronione: t.defended }))(KOSMOS.directorOffensive.pickTarget('emp_sandbox_enemy'))`
+
+- [ ] Wskazuje **Bastion**. `bronione: true` gdy masz wieżę/siatkę obronną **albo** uzbrojony
+      okręt w układzie — wtedy AI **musi** zebrać 2+ okręty (§Findings 34: samotny rajder
+      przegrał u Ciebie dwa razy i oddał 7,2 własnego wyczerpania).
+
+**L17 — czym imperium dysponuje (dobór po WŁASNOŚCI, nie po nazwie szablonu):**
+
+`KOSMOS.directorOffensive.strikeReadyVessels('emp_sandbox_enemy').map(v => [v.name, v.warpFuel?.max])`
+
+- [ ] Lista **pusta na starcie Sandboxu** — i to jest poprawne: trzy Łowcy to FRG-3 bez baku warp.
+      Reguła nie ma czym uderzyć, dopóki imperium nie zbuduje eskorty (L2 nacisku) albo dopóki
+      nie dołożysz jej dźwignią.
+
+**L18 — DŹWIGNIA (opcjonalna): daj imperium eskadrę i zobacz decyzję bez czekania**
+
+`KOSMOS.debug.spawnEnemyRaider({ autoOrder: false }); KOSMOS.debug.spawnEnemyRaider({ autoOrder: false })`
+
+⚠ Dwa wywołania, bo cel broniony wymaga eskadry. Rajder ląduje w INNYM układzie — a reguła i tak
+sama sprawdzi, czy Twoja kolonia jest w jej zasięgu.
+
+**L19 — czy reguła odpaliła (ślad audytu, filtr po RODZAJU):**
+
+`[KOSMOS.debugLog.query({ kind: 'director:strikeLaunched' }).length, KOSMOS.debugLog.query({ kind: 'director:strikeRefused' }).map(e => e.data.reason)]`
+
+- [ ] Pierwsza liczba **≥ 1** = uderzenie ruszyło z decyzji AI.
+- [ ] Druga lista pokazuje, **dlaczego reguła milczała** wcześniej. Trzy powody, wszystkie
+      normalne: `no_target_in_reach` (gracz poza strefą) · `no_warp_capable_hull` (imperium ma
+      tylko FRG-3) · `insufficient_squadron` (cel broniony, a okręt jeden).
+      ⚠ **Pusta lista + zero uderzeń = reguła w ogóle nie doszła do akcji** — wtedy sprawdź L15
+      (zasięg) i to, czy trwa wojna: `KOSMOS.warSystem.listActive().length`.
+
+**L20 — rzut jest zasolony ziarnem galaktyki (pin, którego zabrakło przy pierwszym kontakcie):**
+
+`(s => [s, KOSMOS.gameState.get('director.rules')])(KOSMOS.galaxyData.seed)`
+
+- [ ] Widać ziarno i stan reguł (`attempts`, `lastAttemptYear`, `lastFiredYear` per imperium).
+- [ ] ⚠ **Dowód rozjazdu między partiami** wymaga DRUGIEJ gry: zacznij nową (inne ziarno) i
+      porównaj rok pierwszego `director:strikeLaunched`. Zmierzone offline na 4 ziarnach:
+      **4 różne układy** pierwszej odpalającej próby (`emp_001`/`emp_002`), przy regułach BEZ
+      soli — **1 układ na 4 ziarna**. To jest różnica, której pierwszy kontakt nie miał.
+
+**L21 — uderzenie AI leci PRAWDZIWĄ ścieżką (a nie fabrykowaną misją):**
+
+`Array.from(KOSMOS.vesselManager._vessels.values()).filter(v => v.ownerEmpireId === 'emp_sandbox_enemy').map(v => [v.name, v.systemId, v.mission?.type, v.pendingOrder?.kind])`
+
+- [ ] Okręty w drodze mają `interstellar_jump` + `pendingOrder.kind: 'attack'`, a po skoku
+      `attack`. To ta sama ścieżka, którą sprawdziłeś ręcznie w §2/§3.
+
+**L22 — i kończy się bitwą zaksięgowaną tam, gdzie trzeba:**
+
+- [ ] Powtórz **L10** (układ bitwy = układ CELU) i **L13** (dominacja dla `sys_home`).
+- [ ] W Dzienniku **NIE MA** modala „dotarłeś do nowego układu" przy przylocie wroga
+      (to była §Findings 32 — naprawione w `61bdffe`; obcy przylot ma być kontaktem sensorowym,
+      nie Twoim popupem, a widoczność dowozi W3-7).
+
+---
+
+## Wynik §8
+
+| pozycja | wynik |
+|---|---|
+| 8a. Reguła ma cel w zasięgu (albo milczy z podanego powodu) | |
+| 8b. **Uderzenie ruszyło Z DECYZJI AI** (`director:strikeLaunched` ≥ 1) | |
+| 8c. Odmowy są czytelne w audycie (`director:strikeRefused` z powodem) | |
+| 8d. Eskadra przeciw celowi bronionemu (2+), nie samotny rajder | |
+| 8e. Lot prawdziwą ścieżką (skok → uderzenie → bitwa w układzie celu) | |
+| 8f. Brak fałszywego modala „twojego" przylotu przy przylocie wroga | |
+
+**GATE 2 §8 (autonomia):** ☐ ZDANY ☐ ZDANY WARUNKOWO ☐ NIEZDANY
 
 ---
 

@@ -59,6 +59,12 @@ const TRACKED_EVENTS = [
   // nie podłączył". `mobilized` NIE niesie nazwy imperium do Dziennika — to kanał audytu.
   'director:mobilized',
   'director:mobilizeRejected',
+  // W3-5 — wybór celu i uderzenie. Ta sama zasada co wyżej, i tu waży NAJWIĘCEJ: odmowa
+  // („brak celu w zasięgu", „za mało okrętów na eskadrę", „nie ma czym skoczyć") jest JEDYNĄ
+  // powierzchnią, na której widać, dlaczego ofensywa AI stoi. Bez `strikeRefused` gate
+  // musiałby zgadywać, czy reguła nie odpaliła, czy nikt jej nie podłączył.
+  'director:strikeLaunched',
+  'director:strikeRefused',
 ];
 
 class DebugLog {
