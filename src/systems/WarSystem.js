@@ -547,19 +547,46 @@ export class WarSystem {
     return body?.systemId ?? null;
   }
 
-  _buildPlayerBattleUnit(systemId) {
+  /**
+   * Statki GRACZA zdolne bronić układu. Wrogie nie wzmacniają obrony, wraki nie walczą,
+   * a okręt w REZERWIE nie broni niczego (W2 §C-6 — bez tego filtra magazyn nie kosztuje NIC).
+   */
+  _playerVesselsInSystem(systemId) {
     const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?._vessels) return [];
+    return Array.from(vMgr._vessels.values()).filter(v =>
+      v.systemId === systemId && !isEnemyVessel(v) && !v.isWreck && isInService(v)
+    );
+  }
+
+  /** Kolonie GRACZA w układzie (brak stempla właściciela = gracz — kanon „nieostemplowane"). */
+  _playerColoniesInSystem(systemId) {
     const colMgr = window.KOSMOS?.colonyManager;
-    // Bierz TYLKO statki gracza w tym systemie — wrogie vessele nie mogą wzmacniać
-    // obrony gracza. Wraki też wykluczone (nie walczą — są zniszczone).
-    const vessels = vMgr?._vessels
-      ? Array.from(vMgr._vessels.values()).filter(v =>
-          // W2 — okręt w REZERWIE nie broni układu. Bez tego filtra magazyn nie kosztuje
-          // NIC (sześć fregat w rezerwie broniłoby układu tak samo jak sześć w służbie)
-          // i cały slice byłby kosmetyczny — audyt W2 §C-6.
-          v.systemId === systemId && !isEnemyVessel(v) && !v.isWreck && isInService(v)
-        )
-      : [];
+    return (colMgr?.getAllColonies() ?? []).filter(c =>
+      this._getBodySystemId(c.planetId) === systemId &&
+      (!c.ownerEmpireId || c.ownerEmpireId === 'player')
+    );
+  }
+
+  /**
+   * Czy gracz JEST w tym układzie — cokolwiek, co mogłoby stanąć do bitwy?
+   *
+   * ⚠ W3-4b — pytanie brzmi trywialnie, a nie było zadawane NIGDZIE. `_buildPlayerBattleUnit`
+   * dla układu, w którym gracz nie ma nic, zwracał JEDNOSTKĘ WIDMO: `playerVesselsToBattleUnit`
+   * na pustej liście oddaje `{ hp: 100, weapons: [] }` — sto punktów wytrzymałości i ZERO broni.
+   * Zmierzone na GATE 2: AI „wygrało bitwę" z tym workiem treningowym w układzie, w którym gracz
+   * nie posiada niczego, a księga wojny obciążyła gracza udziałem przegranego (+3.6).
+   * Ten predykat czyta DOKŁADNIE te same dwa wejścia co `_buildPlayerBattleUnit` — jedno źródło,
+   * inaczej „kto broni" i „czy jest kogo bronić" mogłyby się rozjechać.
+   */
+  hasPlayerPresenceInSystem(systemId) {
+    if (!systemId) return false;
+    return this._playerVesselsInSystem(systemId).length > 0
+        || this._playerColoniesInSystem(systemId).length > 0;
+  }
+
+  _buildPlayerBattleUnit(systemId) {
+    const vessels = this._playerVesselsInSystem(systemId);
 
     // Zbierz statki gracza — baza jednostki bitwy
     let unit = playerVesselsToBattleUnit(vessels, HULLS, SHIP_MODULES, 'Gracz');
@@ -569,10 +596,7 @@ export class WarSystem {
     // defense_grid (level):  +100 HP, +10 dmg, +2 armor per level.
     // Bez żadnego z tych budynków gracz polega tylko na flocie; brak floty +
     // brak obrony → symboliczna obrona pasywna planety (30 HP / 2 dmg).
-    const colonies = (colMgr?.getAllColonies() ?? []).filter(c =>
-      this._getBodySystemId(c.planetId) === systemId &&
-      (!c.ownerEmpireId || c.ownerEmpireId === 'player')
-    );
+    const colonies = this._playerColoniesInSystem(systemId);
 
     let defHP = 0, defDmg = 0, defArmor = 0;
     for (const col of colonies) {

@@ -104,8 +104,27 @@ export class EnemyAttackHandler {
     const firstVessel    = vMgr.getVessel(firstArrivedId) ?? allEnemies[0];
     const empireId       = firstVessel.ownerEmpireId ?? firstVessel.owner;
     const empire         = empireId ? reg?.get?.(empireId) : null;
-    const systemId       = firstVessel.systemId ?? K.activeSystemId ?? 'sys_home';
+    // ⚠ W3-4b — UKŁAD BIERZEMY Z CELU, NIE Z NAPASTNIKA. Bitwa toczy się nad ATAKOWANYM
+    // ciałem, więc to ono wyznacza układ dla: obrońcy (`_buildPlayerBattleUnit`), zapisu
+    // `location`, wraków (`_wreckPlayerVesselsInSystem`) i dominacji orbitalnej. Wcześniej
+    // brany był `systemId` NAPASTNIKA, co przy uderzeniu międzygwiezdnym dawało rekord
+    // wewnętrznie sprzeczny (planeta z `sys_home` „położona" w `sys_061`) i księgowało
+    // dominację w układzie, w którym nikt nie walczył. Fallback na statek zostaje dla
+    // ciał bez stempla układu.
+    const systemId       = EntityManager.get(planetId)?.systemId
+                          ?? firstVessel.systemId ?? K.activeSystemId ?? 'sys_home';
     const year           = K.timeSystem?.gameTime ?? pending.firstVesselYear;
+
+    // ⚠ W3-4b — CZY JEST Z KIM WALCZYĆ. Bez tej bramki `_buildPlayerBattleUnit` fabrykował
+    // obrońcę-widmo (`{ hp: 100, weapons: [] }` — sto wytrzymałości, zero broni) dla układu,
+    // w którym gracz nie ma NICZEGO, AI „wygrywało" z workiem treningowym, a księga wojny
+    // obciążała gracza udziałem przegranego. Zmierzone na GATE 2. Brak `warSystem` (harness)
+    // NIE blokuje — wtedy jedziemy starą ścieżką z jawnym fallbackiem niżej.
+    if (warSys?.hasPlayerPresenceInSystem && !warSys.hasPlayerPresenceInSystem(systemId)) {
+      console.warn('[EnemyAttackHandler] uderzenie w układ BEZ obecności gracza — bitwy nie ma ' +
+        '(nie fabrykujemy obrońcy, nie księgujemy strat)', { planetId, systemId, empireId });
+      return;
+    }
 
     // Wojna — zadeklaruj jeśli brak
     let war = warSys?.getWarWith?.(empireId);

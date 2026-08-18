@@ -31,7 +31,9 @@
 import '../headless/env.js';           // MUSI być pierwszy
 import { GameCore } from '../headless/GameCore.js';
 import EntityManager from '../../core/EntityManager.js';
+import gameState from '../../core/GameState.js';
 import { createVessel } from '../../entities/Vessel.js';
+import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { OrderService } from '../../systems/OrderService.js';
 import { systemIdOf, isSameSystem } from '../../utils/SystemScope.js';
@@ -252,6 +254,106 @@ console.log('T6 — klucz powodu w OBU słownikach (budowany interpolacją, chec
   assert(typeof EN[k] === 'string' && EN[k].length > 0, `T6: EN ma \`${k}\``);
   assert(PL['vessel.reasonNieMaTakiego'] === undefined,
     'T6 KONTROLA PINU: nieistniejący klucz jest `undefined` — słownik naprawdę jest sprawdzany');
+}
+
+// ── T7 — księga bierze układ CELU, nie napastnika ───────────────────────────
+console.log('T7 — ⚠ bitwa i dominacja księgują układ CELU (nie napastnika)');
+{
+  const core = boot();
+  const { empireId, body: aiBody } = foreignBody(core);
+  const home = window.KOSMOS.homePlanet;
+  const eah = new EnemyAttackHandler();
+
+  window.KOSMOS.diplomacySystem?.declareWar?.(empireId, 'w3_4b_probe');
+  const warId = core.warSystem.getWarWith(empireId)?.id;
+  assert(!!warId, 'T7: wojna zadeklarowana — jest do czego księgować');
+
+  // ⚠ Scena to stan NIESPÓJNY: statek stoi w swoim układzie, a jest zadokowany przy ciele
+  //   gracza. Od W3-4b-1 nie da się go już WYTWORZYĆ rozkazem — ale MOŻNA go WCZYTAĆ
+  //   z zapisu zrobionego przed poprawką (dokładnie taki zapis powstał na GATE 2).
+  //   Dlatego księgowanie musi być odporne SAMO Z SIEBIE, a nie polegać na bramce wyżej.
+  const v = spawnAt(core, aiBody, { owner: empireId, name: 'Zabłąkany napastnik' });
+  v.position.dockedAt = home.id;               // dok przy ciele z sys_home…
+  v.systemId = aiBody.systemId;                // …stojąc w układzie AI
+
+  eah._pendingBattles.set(home.id, {
+    arrivedVesselIds: new Set([v.id]),
+    firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
+    timerId: null,
+  });
+  eah._resolveBatchedBattle(home.id);
+
+  const war = core.warSystem.getWar(warId);
+  const lastBattleId = war?.battles?.[war.battles.length - 1];
+  const rec = lastBattleId ? gameState.get(`battles.${lastBattleId}`) : null;
+
+  assert(rec?.location?.systemId === home.systemId,
+    `T7 SEDNO: bitwa zapisana w układzie CELU (${rec?.location?.systemId}), nie napastnika ` +
+    `(${aiBody.systemId}). Przed W3-4b rekord był wewnętrznie sprzeczny: planeta z ` +
+    `${home.systemId} „położona" w ${aiBody.systemId}`);
+  assert(gameState.get(`orbitalDominance.${home.systemId}`) != null,
+    'T7: dominacja orbitalna zapisana dla układu CELU — bo tam właśnie ktoś trzyma orbitę');
+  assert(gameState.get(`orbitalDominance.${aiBody.systemId}`) == null,
+    `T7 SEDNO: …i NIE dla ${aiBody.systemId}, gdzie nikt nie walczył. To jest ta liczba, ` +
+    'która na GATE 2 wskazywała zwycięzcę w układzie bez jednej strony');
+  assert(rec?.participantB?.systemId === home.systemId,
+    'T7: uczestnik-gracz też opisany układem celu (jeden układ odniesienia w całym rekordzie)');
+}
+
+// ── T8 — nie ma gracza, nie ma bitwy ────────────────────────────────────────
+console.log('T8 — ⚠ uderzenie w układ BEZ gracza nie fabrykuje obrońcy i nie księguje strat');
+{
+  const core = boot();
+  const { empireId, body: aiBody } = foreignBody(core);
+  const eah = new EnemyAttackHandler();
+
+  window.KOSMOS.diplomacySystem?.declareWar?.(empireId, 'w3_4b_probe');
+  const warId = core.warSystem.getWarWith(empireId)?.id;
+
+  // KONTROLA PINU NAJPIERW: obrońca-widmo NAPRAWDĘ istnieje w silniku — to on był
+  // przeciwnikiem AI na GATE 2. Bez tego „brak bitwy" byłby nieodróżnialny od atrapy.
+  const phantom = core.warSystem._buildPlayerBattleUnit(aiBody.systemId);
+  assert(phantom?.hp === 100 && (phantom?.weapons?.length ?? 0) === 0,
+    `T8 KONTROLA PINU: \`_buildPlayerBattleUnit\` dla obcego układu DALEJ oddaje widmo ` +
+    `(hp=${phantom?.hp}, broni=${phantom?.weapons?.length}) — sto wytrzymałości i ZERO broni. ` +
+    'Nie zmieniamy tej funkcji (ma innych konsumentów); odcinamy DROGĘ do niej.');
+  assert(core.warSystem.hasPlayerPresenceInSystem?.(aiBody.systemId) === false,
+    'T8: predykat obecności mówi wprost — gracza tam NIE MA');
+
+  const exhaustBefore = JSON.stringify(core.warSystem.getWar(warId)?.exhaustion);
+  const battlesBefore = core.warSystem.getWar(warId)?.battles?.length ?? 0;
+
+  const v = spawnAt(core, aiBody, { owner: empireId, name: 'Napastnik donikąd' });
+  eah._pendingBattles.set(aiBody.id, {
+    arrivedVesselIds: new Set([v.id]),
+    firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
+    timerId: null,
+  });
+  eah._resolveBatchedBattle(aiBody.id);
+
+  const warAfter = core.warSystem.getWar(warId);
+  assert(JSON.stringify(warAfter?.exhaustion) === exhaustBefore,
+    `T8 SEDNO: wyczerpanie BEZ ZMIAN (${exhaustBefore}). Przed W3-4b gracz dostawał tu udział ` +
+    'przegranego za bitwę, w której nie miał ani jednego statku ani jednej kolonii');
+  assert((warAfter?.battles?.length ?? 0) === battlesBefore,
+    'T8: żaden wpis nie trafił do rejestru bitew — nie było bitwy');
+  assert(gameState.get(`orbitalDominance.${aiBody.systemId}`) == null,
+    'T8: i nikt nie „zdobył" dominacji nad układem, w którym nie było z kim walczyć');
+
+  // KONTROLA PINU: gdy gracz JEST obecny, bitwa dochodzi do skutku normalnie.
+  const guard = spawnAt(core, aiBody, { name: 'Strażnik gracza' });
+  guard.position.dockedAt = null;
+  assert(core.warSystem.hasPlayerPresenceInSystem?.(aiBody.systemId) === true,
+    'T8 KONTROLA PINU: jeden statek gracza wystarczy, by obecność była prawdziwa…');
+  eah._pendingBattles.set(aiBody.id, {
+    arrivedVesselIds: new Set([v.id]),
+    firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
+    timerId: null,
+  });
+  eah._resolveBatchedBattle(aiBody.id);
+  assert((core.warSystem.getWar(warId)?.battles?.length ?? 0) === battlesBefore + 1,
+    'T8 KONTROLA PINU: …i wtedy bitwa JEST księgowana — bramka odcina brak przeciwnika, ' +
+    'a nie bitwy w ogóle');
 }
 
 console.log(`\n═══ ${pass} PASS, ${fail} FAIL ═══`);
