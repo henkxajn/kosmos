@@ -137,8 +137,18 @@ export class DirectorDoctrine {
     const capitalId = this._capitalBodyId(empireId);
     if (!capitalId) return false;
     if (vessel.position?.dockedAt === capitalId) return true;      // już na miejscu — HOLD
+    // ⚠ NAPRAWIONE W W3-4. Do W3-4 ten rozkaz szedł BEZ `targetPoint`, a `validateOrder`
+    // trzyma `moveToPoint` w `TYPES_WITH_POINT_TARGET` i odsyła `missing_target_point` —
+    // więc KAŻDY okręt garnizonu, który nie stał już przy stolicy, dostawał odmowę, `_issue`
+    // wypisywał warna i statek wypadał z doboru. Bliźniak `_sendOnPatrol` podaje punkt i
+    // ma ten wymóg opisany W KOMENTARZU tuż obok — defekt przeżył, bo keeper doktryny
+    // spawnował garnizon JUŻ ZADOKOWANY przy stolicy i sprawdzał wyłącznie gałąź HOLD,
+    // czyli tę jedną, która nie wchodzi w kanał rozkazów.
+    const capital = EntityManager.get(capitalId);
+    if (!capital) return false;
     return this._issue(vessel, {
       type: 'moveToPoint', targetBodyId: capitalId,
+      targetPoint: { x: capital.x ?? 0, y: capital.y ?? 0 },
       issuedBy: 'doctrine_defend_home', bypassFuelCheck: true,
     });
   }

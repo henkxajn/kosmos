@@ -16,7 +16,7 @@ import EventBus              from '../core/EventBus.js';
 import EntityManager         from '../core/EntityManager.js';
 import { ORDER_TYPES, validateOrder } from '../data/MovementOrderTypes.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
-import { addMissionLog }     from '../entities/Vessel.js';
+import { addMissionLog, isInService } from '../entities/Vessel.js';
 import { PredictionConeMath } from '../utils/PredictionConeMath.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { SHIP_MODULES }      from '../data/ShipModulesData.js';
@@ -191,6 +191,19 @@ export class MovementOrderSystem {
     if (this._vm.isImmobilized?.(vessel))
       return { ok: false, reason: 'vessel_immobilized' };
 
+    // W3-4 / decyzja D6 — kadłub w REZERWIE nie przyjmuje ŻADNEGO rozkazu ruchu.
+    // To była dziura w zbiorze wykluczeń W2 (audyt W3 §S24): `issueOrder` nie miało testu
+    // `isInService`, a `_issuePursueOrIntercept` startuje z pominięciem bramkowanego
+    // `dispatchOnMission` — więc pościg/przechwyt/engage z menu PPM latał magazynem:
+    // darmowy okręt wojenny, zero załogi, 10 % utrzymania. Rozstrzygnięte jako DZIURA,
+    // nie mechanika: „poderwać rezerwę" ma już swoją cenę i nazywa się `deployVessel`.
+    // ⚠ Bramka stoi PRZED mutacją stanu (drift marker, zawieszenie misji) i PRZED
+    // rozgałęzieniem na typy, więc nowy rozkaz W3 (`attack`) dziedziczy ją z urzędu.
+    // Powrót do bazy idzie przez `VesselManager.startReturn` (poza `issueOrder`) i pozostaje
+    // dozwolony — dokładnie jak przy `vessel_immobilized` wyżej.
+    if (!isInService(vessel))
+      return { ok: false, reason: 'vessel_in_reserve' };
+
     // Propaguj opts.fromFleet do spec (forwarded do order factory).
     if (opts.fromFleet) spec._fromFleet = opts.fromFleet;
 
@@ -224,8 +237,56 @@ export class MovementOrderSystem {
     if (spec.type === ORDER_TYPES.dock) {
       return this._issueDock(vessel, spec);
     }
+    if (spec.type === ORDER_TYPES.attack) {
+      return this._issueAttack(vessel, spec);
+    }
 
     return { ok: false, reason: 'unhandled_type' };
+  }
+
+  /**
+   * W3-4 — UDERZENIE NA CIAŁO. Jedyny produkcyjny producent misji `mission.type='attack'`.
+   *
+   * Audyt W3 (szwy S2+S3) znalazł tu brakujące ogniwo, nie brakujący system: cały potok
+   * uderzenia orbitalnego ISTNIEJE i jest poprawny — batchowanie, automatyczne wypowiedzenie
+   * wojny, księgowanie przez `recordBattle`, dominacja orbitalna, wraki — tylko że
+   * `EnemyAttackHandler` bramkuje go na `mission.type === 'attack'`, a JEDYNYM producentem
+   * tej misji w całym drzewie był debugowy `SpawnTestEnemy`. Równolegle jedyny żywy kanał
+   * rozkazów AI budował `mission.type='move_to_point'`. Skutek: nawet POPRAWNY rozkaz AI na
+   * planetę gracza kończył się przylotem, po którym NIC się nie działo.
+   *
+   * Dlatego to jest DELEGAT do `_issueMoveToPoint`, a nie druga implementacja lotu (wzór
+   * `goToPOI`): lot, predykcja pozycji ciała, trasa, paliwo i wykrycie przylotu mają zostać
+   * DOKŁADNIE TE SAME. Zmieniamy wyłącznie ZAMIAR — typ misji i typ rozkazu.
+   *
+   * ⚠ Punkt zapasowy dokładamy TU, bo `validateOrder` wymaga dla `attack` ciała, a
+   *   `_issueMoveToPoint` potrzebuje punktu startowego do policzenia trasy (ta sama pułapka,
+   *   która zabiła `_holdAtHome` — patrz `DirectorDoctrine`).
+   * ⚠ Bramka na wrogość NIE jest tutaj: `EnemyAttackHandler` i tak reaguje wyłącznie na
+   *   `isEnemyVessel`, a rozkaz ma pozostać symetryczny (W4 może go dać graczowi).
+   */
+  _issueAttack(vessel, spec) {
+    const bodyId = spec.targetBodyId;
+    const body = this._vm._findEntity?.(bodyId) ?? EntityManager.get(bodyId);
+    if (!body) return { ok: false, reason: 'target_not_found' };
+
+    const res = this._issueMoveToPoint(vessel, {
+      ...spec,
+      type:        ORDER_TYPES.moveToPoint,
+      targetBodyId: bodyId,
+      targetPoint: spec.targetPoint ?? { x: body.x ?? 0, y: body.y ?? 0 },
+      targetName:  spec.targetName ?? body.name ?? null,
+      issuedBy:    spec.issuedBy ?? 'attack_order',
+    });
+    if (!res?.ok) return res;
+
+    // Przepnij ZAMIAR. `mission.targetId` jest już ciałem (ustawia je `_issueMoveToPoint`),
+    // a tego właśnie czyta `EnemyAttackHandler._onVesselArrived` jako `targetPlanetId`.
+    if (vessel.mission) vessel.mission.type = 'attack';
+    if (vessel.movementOrder) vessel.movementOrder.type = ORDER_TYPES.attack;
+
+    _trace(`issue attack ${res.orderId} vessel=${vessel.id} → body=${bodyId}`);
+    return res;
   }
 
   /**
@@ -1587,9 +1648,11 @@ export class MovementOrderSystem {
         } else if (order.type === ORDER_TYPES.engage) {
           this._tickEngageOrder(vessel, order, dPhysicsYear, civDy, gameYear);
         }
-        // moveToPoint, goToPOI — ruch zarządzany przez _updatePositions
-        //   (mission interpolation, mission.type='move_to_point'); completion przez
+        // moveToPoint, goToPOI, attack — ruch zarządzany przez _updatePositions
+        //   (mission interpolation, mission.type='move_to_point'/'attack'); completion przez
         //   _onVesselArrived (rozszerzone o goToPOI → emit vesselReachedPOI).
+        //   `attack` (W3-4) świadomie NIE ma własnego ticka: to `moveToPoint` z innym
+        //   ZAMIAREM, a bitwę otwiera EnemyAttackHandler przy przylocie.
       }
     }
 
@@ -1747,8 +1810,15 @@ export class MovementOrderSystem {
 
     // M2b C6: goToPOI delegate'uje do moveToPoint mission, więc completion path jest
     //   identyczny — różnica to dodatkowy emit `poi:vesselReached` (przez registry).
-    const isMoveLike = (order.type === ORDER_TYPES.moveToPoint || order.type === ORDER_TYPES.goToPOI);
-    if (isMoveLike && mission.type === 'move_to_point') {
+    // W3-4: `attack` to `moveToPoint` z innym ZAMIAREM — ta sama ścieżka domknięcia. Nie ma
+    //   tu żadnej logiki bitwy: bitwę otwiera `EnemyAttackHandler` z TEGO SAMEGO zdarzenia
+    //   `vessel:arrived`. ⚠ Kolejność subskrybentów jest bez znaczenia i to jest własność, nie
+    //   przypadek: EAH czyta `mission` z PARAMETRU zdarzenia (nie `vessel.mission`), więc
+    //   wyzerowanie misji niżej go nie okrada — a stan, którego potrzebuje 500 ms później
+    //   (`position.dockedAt`), ustawia `VesselManager` przy przylocie.
+    const isMoveLike = (order.type === ORDER_TYPES.moveToPoint || order.type === ORDER_TYPES.goToPOI
+                        || order.type === ORDER_TYPES.attack);
+    if (isMoveLike && (mission.type === 'move_to_point' || mission.type === 'attack')) {
       const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
       order.status        = 'completed';
       order.completedYear = gameYear;

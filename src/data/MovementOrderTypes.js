@@ -22,11 +22,17 @@ export const ORDER_TYPES = Object.freeze({
   engage:      'engage',     // M4 P3 C5: tactical kiting na enemy vessel (utrzymuje optimal range)
   retreat:     'retreat',    // M4 P3 polish: manualne wycofanie z bitwy (auto-pick friendly planet)
   dock:        'dock',       // Slice 8b: lecisz do ciała + dokujesz (moveToPoint + marker _pendingDock)
+  attack:      'attack',     // W3-4: uderzenie na CIAŁO — jedyny producent misji `mission.type='attack'`
 });
 
 const TYPES_WITH_ENTITY_TARGET = new Set([ORDER_TYPES.pursue, ORDER_TYPES.intercept, ORDER_TYPES.escort, ORDER_TYPES.engage]);
 const TYPES_WITH_POINT_TARGET  = new Set([ORDER_TYPES.moveToPoint, ORDER_TYPES.dock]);
 export const TYPES_WITH_POI_TARGET = new Set([ORDER_TYPES.goToPOI]);
+// W3-4 — `attack` celuje w CIAŁO, nie w punkt: cel jest planetą/księżycem, a punkt jest tylko
+// zapasem na wypadek braku predykcji orbity. Dlatego wymagamy `targetBodyId`, a punkt
+// dolicza sobie `_issueAttack` (ten sam wzór co `DirectorDoctrine._sendOnPatrol`, gdzie brak
+// punktu przy podanym ciele kosztował całą doktrynę garnizonu — patrz `_holdAtHome`).
+export const TYPES_WITH_BODY_TARGET = new Set([ORDER_TYPES.attack]);
 
 /**
  * Waliduje specyfikację orderu przekazaną do MovementOrderSystem.issueOrder.
@@ -54,6 +60,12 @@ export function validateOrder(spec) {
     if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' ||
         !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
       return { valid: false, reason: 'missing_target_point' };
+    }
+  }
+
+  if (TYPES_WITH_BODY_TARGET.has(type)) {
+    if (!spec.targetBodyId || typeof spec.targetBodyId !== 'string') {
+      return { valid: false, reason: 'missing_target_body' };
     }
   }
 

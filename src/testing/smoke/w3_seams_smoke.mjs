@@ -7,9 +7,12 @@
 // więc kolejne commity W3 MUSZĄ ją świadomie odwrócić. Pin, którego nikt nie odwraca, jest
 // pinem luki (wzór `director_seams_smoke` T6 / `war_seams_smoke` T3-T4-T6).
 //
-//   T1  S2+S3: rozkaz AI na ciało GRACZA rodzi misję `move_to_point`, a EnemyAttackHandler
-//              bramkuje `attack` ⇒ PRZYLOT NIE WYWOŁUJE BITWY. Brakujące ogniwo uderzenia
-//              w stolicę — odwraca W3-4.
+//   T1  S2+S3: ⚠ CZĘŚCIOWO ODWRÓCONE W W3-4 — asercje zostają PRAWDZIWE, zmienia się ich sens.
+//              Do W3-4 pinowały LUKĘ: rozkaz RUCHU rodzi `move_to_point`, EAH bramkuje `attack`,
+//              a producenta `attack` w drzewie NIE BYŁO (poza debugiem) ⇒ flota AI mogła dolecieć
+//              nad planetę gracza i nic się nie działo. Od W3-4 producent istnieje
+//              (`ORDER_TYPES.attack`), więc ten test pinuje już WIDELEC: to ZAMIAR otwiera bitwę,
+//              nie sam przylot. Ścieżkę uderzenia end-to-end trzyma `w3_attack_dispatch_smoke`.
 //   T2  S5:    ⚠ ODWRÓCONE W W3-2. Do W3-2 pinował DZIURĘ KSIĘGOWĄ: bitwa DSCS w trakcie
 //              ZADEKLAROWANEJ wojny omijała `recordBattle` (zero exhaustion, zero wpisu).
 //              Teraz pinuje STAN SZWU: surowy emit dalej niesie `warId: null` (producent NIE
@@ -106,13 +109,14 @@ console.log('T1 — S2+S3: przylot AI nad ciało GRACZA nie wywołuje bitwy (mis
 
   assert(v.mission?.type === 'move_to_point',
     `T1: MOS zbudował misję typu \`${v.mission?.type}\` — a EnemyAttackHandler bramkuje \`attack\` ` +
-    '(EnemyAttackHandler.js:41). To jest CAŁE brakujące ogniwo uderzenia w stolicę.');
+    '(EnemyAttackHandler.js:41). Rozkaz RUCHU nie jest uderzeniem — od W3-4 uderza ' +
+    '`ORDER_TYPES.attack` i to on buduje właściwą misję.');
 
   const eah = new EnemyAttackHandler();
   eah._onVesselArrived(v, v.mission);
   assert(eah._pendingBattles.size === 0,
-    'T1: przylot z misją `move_to_point` NIE otwiera bitwy (0 oczekujących) — flota AI może ' +
-    'dolecieć nad planetę gracza i NIC się nie dzieje');
+    'T1: przylot z misją `move_to_point` NIE otwiera bitwy (0 oczekujących) — bitwę otwiera ' +
+    'ZAMIAR, a nie sam fakt, że wrogi kadłub dotarł nad planetę gracza');
 
   // KONTROLA PINU — bez niej „0 bitew" jest nieodróżnialne od atrapy, która nigdy nic nie otwiera.
   const attacker = spawnHull(core, { owner: empireId, name: 'Napastnik z misją ataku', x: 10, y: 10 });
@@ -261,8 +265,8 @@ console.log('T4 — C-5 naprawione: po `transferColony` imperium ma ID i ŻYWĄ 
     'produkcja, badania i logistyka AI widzą zdobycz; przed W3-1 było tu 1 na 2');
 }
 
-// ── T5 — C-2: garnizon nie potrafi wrócić do stolicy ────────────────────────
-console.log('T5 — C-2: `_holdAtHome` wydaje rozkaz BEZ `targetPoint` → `missing_target_point`');
+// ── T5 — C-2: garnizon WRACA do stolicy (ODWRÓCONE w W3-4) ──────────────────
+console.log('T5 — C-2 naprawione: `_holdAtHome` niesie `targetPoint` i rozkaz przechodzi');
 {
   const core = boot();
   const empireId = empireOf(core);
@@ -290,26 +294,27 @@ console.log('T5 — C-2: `_holdAtHome` wydaje rozkaz BEZ `targetPoint` → `miss
 
   mos.issueOrder = origIssue;
 
-  assert(held === false,
-    'T5: `_holdAtHome` ZAWIÓDŁ — garnizon, który odszedł od stolicy, nie potrafi do niej wrócić');
-  assert(seen.length === 1 && seen[0].spec.targetPoint === undefined,
-    'T5: …bo spec nie niesie `targetPoint` (DirectorDoctrine.js:140-143), choć komentarz przy ' +
-    'bliźniaczym `_sendOnPatrol` (:162-165) wymienia ten wymóg wprost');
-  assert(seen[0]?.r?.reason === 'missing_target_point',
-    `T5: silnik odrzuca go powodem \`${seen[0]?.r?.reason}\` — walidator wymaga punktu dla ` +
-    '`moveToPoint` (MovementOrderTypes.js:52-58)');
-  assert(!v.movementOrder,
-    'T5: okręt zostaje BEZ rozkazu i wypada z rostera — „doktryna obrony domu" nie broni niczego');
+  assert(held === true,
+    'T5: `_holdAtHome` PRZECHODZI — garnizon, który odszedł od stolicy, potrafi do niej wrócić. ' +
+    'Do W3-4 wracał tu `false`: doktryna obrony domu działała TYLKO dla okrętów już w domu');
+  assert(seen.length === 1 && typeof seen[0].spec.targetPoint?.x === 'number',
+    'T5: …bo spec NIESIE `targetPoint` — dokładnie to jedno pole, którego brakowało, i o którym ' +
+    'komentarz przy bliźniaczym `_sendOnPatrol` mówił wprost przez cały czas');
+  assert(seen[0]?.r?.ok === true,
+    `T5: silnik przyjmuje rozkaz (${seen[0]?.r?.reason ?? 'ok'}) — walidator dostał punkt, ` +
+    'którego wymaga dla `moveToPoint`');
+  assert(!!v.movementOrder && v.mission?.targetId === cap.planetId,
+    'T5: okręt MA rozkaz i celuje w CIAŁO stolicy (czyli po dotarciu ją orbituje)');
 
-  // KONTROLA PINU: TEN SAM rozkaz z punktem PRZECHODZI — wina jest w brakującym polu,
-  // nie w kanale, nie w kadłubie, nie w bramce paliwa.
-  const withPoint = origIssue(v.id, {
+  // KONTROLA PINU: walidator DALEJ odrzuca `moveToPoint` bez punktu — naprawiliśmy WYWOŁUJĄCEGO,
+  // nie rozluźniliśmy walidatora (to byłaby ta sama usterka schowana o piętro niżej).
+  const noPoint = origIssue(v.id, {
     type: 'moveToPoint', targetBodyId: cap.planetId,
-    targetPoint: { x: 0, y: 0 }, issuedBy: 'w3_seams_probe', bypassFuelCheck: true,
+    issuedBy: 'w3_seams_probe', bypassFuelCheck: true,
   });
-  assert(withPoint?.ok === true,
-    `T5 KONTROLA PINU: ten sam rozkaz Z punktem przechodzi (${withPoint?.reason ?? 'ok'}) — ` +
-    'defekt to JEDNO brakujące pole, nie zepsuty kanał');
+  assert(noPoint?.ok === false && noPoint?.reason === 'missing_target_point',
+    `T5 KONTROLA PINU: rozkaz BEZ punktu dalej leci na \`${noPoint?.reason}\` — poprawka ` +
+    'siedzi w `DirectorDoctrine`, a walidator został tak samo surowy');
 }
 
 // ── T6 — S12: jednostka legacy ginie od pierwszego trafienia; po wczytaniu nie ──
