@@ -299,10 +299,19 @@ export class WarSystem {
     const loserId = this._battleLoserSide(war, battleRec);
     if (loserId) this.changeExhaustion(warId, loserId, EXHAUSTION_LOSER_SHARE * rate, 'battle_lost');
 
-    EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
-
-    // Faza desantu: ustaw dominację orbitalną nad systemem bitwy
+    // ⚠ W3-6b — DOMINACJA USTAWIANA PRZED EMISJĄ. Kolejność była odwrotna i to była CAŁA luka
+    // integracyjna między W3-4 a W3-6, złapana na GATE 3 §2: rajder wygrywał orbitę nad kolonią
+    // gracza, a ocena desantu (subskrybent `battle:resolved`) czytała dominację SPRZED tej
+    // właśnie bitwy — czyli `undefined` — i odmawiała z powodem `no_orbital_dominance`.
+    // Zdarzenie ma nieść ŚWIAT SPÓJNY z faktem, który ogłasza. Zmierzone: przed poprawką
+    // handler dostawał `dominacja = undefined` w chwili, gdy bitwa właśnie ją rozstrzygnęła.
+    // ⚠ Sprawdzone przed przestawieniem: JEDYNYM konsumentem `getOrbitalController` w ścieżce
+    // `battle:resolved` jest bramka desantu (`InvasionSystem:189`); pozostali czytelnicy
+    // dominacji to bramki UI (FleetActions/ColonyOverlay), które pytają na żądanie, nie
+    // w zdarzeniu. Nikt nie zależał od odczytu stanu SPRZED bitwy.
     this._updateOrbitalDominance(battleRec);
+
+    EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
 
     return battleRec;
   }

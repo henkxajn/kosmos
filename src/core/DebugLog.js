@@ -36,6 +36,13 @@ const TRACKED_EVENTS = [
   'battle:resolved',
   'invasion:launched',
   'invasion:troopsLanded',
+  // ⚠ W3-6b — ODMOWA DESANTU jest tu tak samo ważna jak sam desant, i jej brak kosztował
+  // GATE 3 §2 jedną sesję: `invasion:blocked` NIE był śledzony, więc gracz zmierzył „zero
+  // odmów" i odczytał to jako CISZĘ, podczas gdy odmowa padała za każdym razem. Kontrakt W3-6
+  // brzmi „desant albo uzasadniona odmowa, nigdy cisza" — a kontrakt bez śladu audytu jest
+  // nieodróżnialny od jego złamania.
+  'invasion:blocked',
+  'invasion:repelled',
   'colony:captured',
   // ReactionDirector (workstream C) — ścieżka audytu decyzji AI, którą Director ma
   // WZMACNIAĆ. Odrzucenie guardu jest tu równie ważne jak sukces: „reguła nie odpaliła"

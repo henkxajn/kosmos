@@ -27,6 +27,7 @@ import gameState from '../../core/GameState.js';
 import EntityManager from '../../core/EntityManager.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { InvasionSystem } from '../../systems/InvasionSystem.js';
+import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { GroundUnitFactory } from '../../systems/GroundUnitFactory.js';
 
 let pass = 0, fail = 0;
@@ -203,6 +204,78 @@ console.log('T6 — obce imperium ląduje frakcją NIE-ludzką, deterministyczni
   assert(GroundUnitFactory.factionIdFor('literowka') === 'humanity',
     'T6 KONTROLA PINU: literówka DALEJ spada na humanity (i dalej ostrzega) — nie zamiataliśmy ' +
     'prawdziwych pomyłek pod dywan');
+}
+
+// ── T7 — ŚCIEŻKA PRODUKTU: uderzenie AI → bitwa EAH → ocena desantu ─────────
+console.log('T7 — ⚠ PEŁNY ŁAŃCUCH PRODUKTU (EnemyAttackHandler → recordBattle → ocena desantu)');
+{
+  // ⚠ TO JEST LEKARSTWO NA CZWARTĄ ŚLEPĄ PLAMKĘ TEGO SLICE'U. T1-T6 wołają handler WPROST
+  //   z ręcznie zbudowanym rekordem bitwy — czyli budują scenę, której produkt sam nie buduje.
+  //   GATE 3 §2 pokazał, do czego to prowadzi: uderzenie z W3-4 kończy się bitwą EAH, ta idzie
+  //   przez `recordBattle`, a `recordBattle` emitował `battle:resolved` ZANIM ustawił dominację
+  //   orbitalną — więc bramka desantu czytała świat SPRZED bitwy i odmawiała
+  //   `no_orbital_dominance` dokładnie w chwili, gdy orbita właśnie została zdobyta.
+  //   Ten test przechodzi CAŁĄ drogę produktu i niczego nie podstawia.
+  const core = new GameCore();
+  core.boot({ quiet: true, scenario: 'civilization' });
+  const inv = core.invasionSystem;                     // ⚠ TA, którą montuje boot — nie druga
+  assert(!!inv, 'T7: `InvasionSystem` jest montowany przez boot (nie stawiamy własnego)');
+
+  const empireId = core.empireRegistry.listAll()[0]?.id;
+  const home = window.KOSMOS.homePlanet;
+  window.KOSMOS.diplomacySystem?.declareWar?.(empireId, 'w3_6b_probe');
+  core.colonyManager.getColony(home.id)?.buildingSystem?._active
+    ?.set('def_t7', { building: { id: 'defense_tower' }, level: 1, jobs: 0 });
+
+  const eah = new EnemyAttackHandler();
+  const seen = { blocked: [], landed: 0, domInEvent: undefined };
+  EventBus.on('invasion:blocked', (d) => seen.blocked.push(d.reason));
+  EventBus.on('invasion:troopsLanded', () => seen.landed++);
+  EventBus.on('battle:resolved', () => {
+    seen.domInEvent = gameState.get('orbitalDominance.sys_home')?.controllerId;
+  });
+
+  // Scena Filipa co do joty: dwie ESKORTY (uzbrojone, BEZ ładowni i kapsuł).
+  const r1 = spawnHull(core, empireId, ['engine_warp', 'warp_tank', 'armor_heavy', 'weapon_laser'], 'Rajder A');
+  const r2 = spawnHull(core, empireId, ['engine_warp', 'warp_tank', 'armor_heavy', 'weapon_laser'], 'Rajder B');
+
+  eah._pendingBattles.set(home.id, {
+    arrivedVesselIds: new Set([r1.id, r2.id]),
+    firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
+    timerId: null,
+  });
+  eah._resolveBatchedBattle(home.id);
+
+  assert(seen.domInEvent === empireId,
+    `T7 SEDNO: w CHWILI zdarzenia dominacja jest już rozstrzygnięta (\`${seen.domInEvent}\`). ` +
+    'Przed W3-6b było tu `undefined` — `recordBattle` ogłaszał wynik, zanim dopisał jego skutek, ' +
+    'więc każdy subskrybent czytał świat SPRZED bitwy, którą właśnie ogłaszano');
+
+  assert(seen.blocked.includes('no_drop_capable_hull'),
+    `T7 SEDNO: łańcuch MÓWI (\`${seen.blocked.join(',') || 'CISZA'}\`) — i mówi rzecz właściwą: ` +
+    'eskorty wygrały orbitę, ale nie mają czym zejść na dół. Kontrakt W3-6 brzmi „desant albo ' +
+    'uzasadniona odmowa, NIGDY cisza"; na GATE 3 §2 padła cisza');
+  assert(!seen.blocked.includes('no_orbital_dominance'),
+    'T7: …i NIE jest to odmowa „brak dominacji" — bo tę właśnie orbitę AI przed chwilą wygrało');
+  assert(seen.landed === 0, 'T7: bez zrzutowca nic nie ląduje (odmowa to nie półśrodek)');
+
+  // KONTROLA PINU: dołóż TRANSPORTOWIEC i ta sama, produktowa ścieżka DESANTUJE.
+  const carrier = spawnHull(core, empireId, DROPPER, 'Transportowiec');
+  eah._pendingBattles.set(home.id, {
+    arrivedVesselIds: new Set([r1.id, r2.id, carrier.id]),
+    firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
+    timerId: null,
+  });
+  eah._resolveBatchedBattle(home.id);
+  assert(seen.landed >= 1,
+    `T7 KONTROLA PINU: z transportowcem w składzie TA SAMA ścieżka produktu ląduje wojsko ` +
+    `(${seen.landed}) — czyli różnicę robi kadłub, a nie kształt testu`);
+
+  // Ślad audytu — to jest odczyt, który gate wykonuje w §2 L5.
+  assert(window.KOSMOS.debugLog.query({ kind: 'invasion:blocked' }).length > 0,
+    'T7: odmowa JEST w pierścieniu audytu. Brak `invasion:blocked` w `TRACKED_EVENTS` sprawił, ' +
+    'że gracz zmierzył „zero odmów" i odczytał to jako ciszę — kontrakt bez śladu audytu jest ' +
+    'nieodróżnialny od jego złamania');
 }
 
 console.log(`\n═══ ${pass} PASS, ${fail} FAIL ═══`);
