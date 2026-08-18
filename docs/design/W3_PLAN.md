@@ -65,12 +65,20 @@ gracz wpada w zasięg imperium w **2 z 8 par** (4 ziarna × 2 imperia) — reszt
 pełna drabina odmów (`no_warp_capable_hull` → `insufficient_squadron` → WYSŁANO); **4 różne
 układy** pierwszej odpalającej próby na 4 ziarnach (reguła bez soli: 1 układ na 4 ziarna).
 
-**PO GATE 2 §8:** **W3-6** (desant AI z bitew `vessel_group` — `MIN_SURVIVING_STRENGTH_TO_LAND`
-liczone na abstrakcyjnej sile potrzebuje zamiennika liczonego z kadłubów) → **W3-7** (widoczność:
-§Findings 19, 22 i reszta 32 — bramka WŁASNOŚCI na WSZYSTKICH powierzchniach inwazji/utraty)
-→ **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`) → **W3-9** (docs).
-⚠ Niezależnie: §Findings 33 (nawigacja w obcych układach — asymetria WARSTWY WIDOKU,
-`switchActiveSystem` ma JEDEN caller keyowany na kolonię) czeka na własny slice.
+✅ **W3-6** `0eae716` (desant AI z bitew `vessel_group` — próg WYPROWADZONY Z KADŁUBÓW zamiast
+abstrakcyjnej siły; przy okazji frakcja naziemna najeźdźcy przestała być ludzka) ·
+✅ **W3-7** `cced9df` (gracz dowiaduje się, że jest atakowany: `invasion:*` → dzwonek, stempel
+`empireId: 'player'` naprawiający TRZECH filtrujących konsumentów, natywny `alert()` skasowany,
+§Findings 22 naprawione U ŹRÓDŁA, i18n S26).
+
+⏳ **GATE 3 CZEKA NA CIEBIE** (`W3_GATE3_CHECKLIST.md`) — finał slice'u: **tracisz kolonię,
+WIDZISZ to, imperium z niej KORZYSTA, a Ty możesz ją ODBIĆ.** Sandbox wystarcza w całości (cel
+desantu wskazuje BITWA, nie zasięg terytorialny — inaczej niż w §8 GATE 2).
+
+**PO GATE 3:** **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`) →
+**W3-9** (domknięcie dokumentacji). ⚠ Poza W3: §Findings 33 (nawigacja w obcych układach —
+asymetria WARSTWY WIDOKU) i slice **GROUND** (S12 morale → R13 RNG → pule desantu na archetypy,
+§Findings 42).
 
 ---
 
@@ -372,8 +380,8 @@ failure modes: the repairs, the offensive loop, the conquest aftermath.
 | **W3-4 ✅** `4724e46` | `feat(ai): rozkaz uderzenia — producent misji \`attack\`` | The join the audit found (S2+S3): an AI hull sent at a player body arrives with `mission.type='attack'` and the **existing** EAH pipeline does the rest (batching, auto war declaration, booking, dominance, wrecks). Fix `_holdAtHome`'s `missing_target_point` in the same commit (C-2) — same order channel. **D6: close the `isInService` hole** in `MovementOrderSystem.issueOrder` here (one gate, reason `vessel_in_reserve`, i18n PL+EN) so the new order path does not inherit it (§Findings 1). ⚠ Check the **spaceport gate** (`MovementOrderSystem:489-494` → `SpaceportCheck:55-63`) is not silently refusing AI departures — it is **not** bypassed by `DirectorDoctrine`. | — |
 | **W3-4b ✅** `369adfc` + `cb815cd` | `fix(war): uderzenie międzygwiezdne leci przez SKOK` + `fix(war): księga bierze układ CELU` | **Repair family forced by GATE 2 edition 1** (§Findings 25-28). Movement orders are intra-system by construction while ids are global, so `attack` on a body in another system flew to its coordinates *inside the attacker's own system* and reported docking at a body that is not there; the battle and dominance booked for the **attacker's** system, and the defender was a fabricated phantom `{hp:100, weapons:[]}`. NEW `src/utils/SystemScope.js` + system gates on `moveToPoint`/`attack`/`pursue`/`intercept`/`engage` + **`OrderService.issueAttack`** (warp → strike via `pendingOrder`) + arrival-seam repair + `WarSystem.hasPlayerPresenceInSystem`. Keeper `w3_cross_system_attack_smoke` 42/42. | **GATE 2 ed. 2** |
 | **W3-5 ✅** `07c1087` + `61bdffe` | `feat(ai): wybór celu — reguła Directora, nie doktryna` | Target selection as a **catalog rule + its own action** (C-2), reading `ThreatAssessment.getStrength` for force (**D3: global truth, signed**), `TerritoryService.getSystemDevScore` for value and `InfluenceMap` for adjacency (S19/S20 — reuse, do not write a second scorer). **D4 (verified): strike composition selects hulls on `warpFuel.max > 0`, never on template id**, so the escorts fly and FRG-3 stays home by its own design; "no warp-capable hull in reserve" is a **first-class refusal reason**, since roamers arrive only at L2, one per incident. ⚠ **`delay: 0` mandatory** (`_firePending` dereferences the null left by `gameState.set(key,null)` **outside** both try/catch layers — `DirectorSystem:252-262`, `:161`; pinned catalog-wide by `w2_ai_mobilization` T4). ⚠ Roll key must mix `GALAXY_SEED` — the first-contact defect is precisely this class and `DirectorRuleMath:71-74` warns about it in writing. ⚠ Roll-less rules are throttled only by cooldown; the once-per-displayed-year gate lives inside `if (rule.roll)`. **⚠ CARRIES THE W3-0 PROBE** (scope ruling 2026-08-17: folded here, where its measurement is consumed and the Director must be wired anyway — building it in W3-0 would be harness work done twice). NEW `src/testing/headless/probe-w3-targets.mjs`, multi-seed, longitudinal. **⚠ IT MUST SEED THE R-3 STATION TOKEN** — `GameCore` mounts no `stationSystem`, so `EmpireColonyBootstrap:255-270` skips the token, `DirectorProduction:359` refuses every warship with `no_orbital_station`, and **an unseeded probe measures SILENCE, not restraint** (S21). Replicate the bootstrap's seed after boot (`new StationSystem()` → `createStation(capitalBodyId, { ownerEmpireId, starterModules: false })`, the `director_station_seed_smoke` shape) and **assert the token took** before measuring anything. | **GATE 2 §8** |
-| **W3-6** | `feat(ai): desant AI z bitew vessel_group` | New entry point into the live `launchInvasion` intent from `battle:resolved` with `participantA.type==='vessel_group'` + orbital dominance, reading `vessel.troopCapacity`/`canDropTroops` off the winning side's real hulls (C-1). Reuses the whole landing/capture half unchanged. ⚠ `MIN_SURVIVING_STRENGTH_TO_LAND = 30` is evaluated against abstract `pA.strength` — a unit with no meaning on the real-vessel path; it needs a hull-derived replacement, not a copy. | — |
-| **W3-7** | `feat(ui): gracz widzi, że jest atakowany` | S25, the cheapest large win in the slice: `invasion:*` gains a real consumer through `NotificationCenter` with the W2-7 contact gate (anonymous at `contact`, named at `detailed`) · the `{type:'player'}` participant gains `empireId:'player'`, which repairs **three** filtered consumers at once (`UIManager:1344` and both `GameScene` branches) · an EventLog line on the enemy-wins branch (`EAH:208-216`) · colony loss stops being a native `alert()`. i18n PL+EN, and the desant strings of S26 come with it. | **GATE 3** |
+| **W3-6 ✅** `0eae716` | `feat(ai): desant AI z bitew vessel_group` | New entry point into the live `launchInvasion` intent from `battle:resolved` with `participantA.type==='vessel_group'` + orbital dominance, reading `vessel.troopCapacity`/`canDropTroops` off the winning side's real hulls (C-1). Reuses the whole landing/capture half unchanged. ⚠ `MIN_SURVIVING_STRENGTH_TO_LAND = 30` is evaluated against abstract `pA.strength` — a unit with no meaning on the real-vessel path; it needs a hull-derived replacement, not a copy. | — |
+| **W3-7 ✅** `cced9df` | `feat(ui): gracz widzi, że jest atakowany` | S25, the cheapest large win in the slice: `invasion:*` gains a real consumer through `NotificationCenter` with the W2-7 contact gate (anonymous at `contact`, named at `detailed`) · the `{type:'player'}` participant gains `empireId:'player'`, which repairs **three** filtered consumers at once (`UIManager:1344` and both `GameScene` branches) · an EventLog line on the enemy-wins branch (`EAH:208-216`) · colony loss stops being a native `alert()`. i18n PL+EN, and the desant strings of S26 come with it. | **GATE 3** (checklista gotowa) |
 | **W3-8** | `chore(ai): wycofanie martwej warstwy abstrakcyjnej floty` | C-3/C-4: retire `MilitaryAI`/`EconAI`/`EmpireFleetMaterializer`/`spawnFleet`/`moveFleet` and the `unifiedAggregator` branch behind an explicit dead-code notice, deleting `FLEET_AGGRO_INTERVAL` with them. **Isolated commit, after the live gates** — the point is that nothing above depends on it. | — |
 | **W3-9** | `docs(war): domknięcie W3` | `WAR_BACKBONE.md` C-1…C-6 · master plan · `CLAUDE.md` · `MEMORY.md` + memory file · this plan's results. | — |
 
@@ -799,6 +807,49 @@ path instead). Next live run can settle it in one read — the first record shou
     ⇒ §8 belongs in a **normal game**; the sandbox stays a defensive fixture (§Findings 30) and now
     serves §8 only for KROK 0 (the mounting check). ⚠ Second-order note for W4/BALANS: *any* rule
     keyed on `InfluenceMap` reach is blind in the sandbox for the same reason.
+
+---
+
+### Added at W3-6 / W3-7 (2026-08-18, measured during implementation)
+
+39. ⚠ **`transferColony` announced every ownership change as the PLAYER's loss — the literal in
+    the payload.** `previousOwner: 'player'` was hardcoded (`ColonyManager.js`), while the same
+    method also performs AI→AI transfers (proven live at GATE 1 §7[5]). That is the root cause of
+    §Findings 22, and it sat one line away from the event that carried it. Fixed at **both** ends:
+    the emitter now reports the owner read **before** the overwrite, and the consumers gate on
+    `previousOwner === 'player'`. ⚠ One layer alone would have left the next consumer on the same
+    mine — the notification centre and the scene handler each subscribe independently.
+40. **The AI invasion path was dead at BOTH ends, and the live end was the cheaper fix.**
+    `_onBattleResolved` returned unless `participantA.type === 'empire'` — a shape only abstract
+    fleets emit, and those have no producer. Every real battle emits `vessel_group`. The landing,
+    ground-combat and capture machinery was complete the whole time (the player uses it daily);
+    W3-6 is an **entry point**, not a system. Same shape as W3-4's mission producer: *the
+    mechanism is smaller than it looks and the precondition is larger.*
+41. **`MIN_SURVIVING_STRENGTH_TO_LAND` has no meaning on the hull path, and converting it would
+    have been worse than replacing it.** `pA.strength` is an abstract-fleet unit and `lossesA`
+    counts **ships** in DSCS but HP in BattleSystem (W1 §Findings 3 — one field name, two units).
+    Any arithmetic bridging them would have encoded that collision into the invasion gate. The
+    replacement asks a question with physical meaning and mirrors the **player's own** requirement:
+    *did a hull with `drop_pods` and a troop bay survive?* Landing size then follows from the
+    summed bays of survivors, capped at one wave per won orbit.
+42. **An empire id is not an unknown faction — and treating it as one made every alien invader
+    look human.** `GroundUnitFactory.resolveFaction` fell back to `humanity` with a warning **per
+    unit created**, so AI landings both spammed the console and produced human infantry stepping
+    off alien transports. Empires now map deterministically onto a non-human faction (same empire
+    ⇒ same faction, across saves), hashed through `mixSeed` rather than a bare `h*31` — the
+    fourth site of that class in this codebase. Genuine typos still fall back **and still warn**.
+    ⚠ **Known limit, filed not fixed:** `INVASION_UNIT_POOLS` currently yields **legacy** unit
+    types (`infantry`), which have no faction at all — so the mapping only reaches archetype-based
+    units. Switching the pools is a **ground-combat balance change** (different stats, different
+    counters) and belongs to the **GROUND** slice beside S12 (morale) and R13 (RNG), not to a
+    visibility commit.
+43. **Three consumers were filtering on a stamp the producer never wrote.** `UIManager`'s
+    `battle:resolved` handler and both `GameScene` branches test `p.empireId === 'player'`, while
+    `EnemyAttackHandler` and `WarSystem` built `{ type: 'player' }` without it. Net effect: on the
+    EAH path the player got **no auto-slow, no Journal entry, and — on the losing branch — no
+    word at all** that his fleet had been destroyed. One field, three repairs. ⚠ The keeper pins
+    the *producer/consumer pair*, not either half: a stamp with no consumer, or a consumer with no
+    stamp, is the same silent failure.
 
 ---
 
