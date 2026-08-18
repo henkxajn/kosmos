@@ -30,6 +30,14 @@ function createDefaultState() {
     wars:       {},  // warId → { participants, casusBelli, goals, fronts, exhaustion, startYear }
     battles:    {},  // battleId → { location, fleets, result, timeline }
     invasions:  {},  // invasionId → { planetId, aggressor, defender, landedTroops, battlesOnHex }
+    // W3-3 (szew S6). systemId → { controllerId, year } — kto trzyma orbitę po ostatniej bitwie.
+    // Pisane przez `WarSystem._updateOrbitalDominance`, czytane przez bramkę desantu
+    // (`playerHasOrbitalDominance` → FleetActions/ColonyOverlay). Do W3-3 klucza TU NIE BYŁO,
+    // więc `restore()` wyrzucał go przy każdym wczytaniu: po reloadzie wroga eskadra „znikała"
+    // z księgi i bramka desantu wracała do „pusta orbita = wolna droga". Pusty default jest
+    // POPRAWNĄ wartością dla starego zapisu (brak historii bitew) — dlatego zero migracji.
+    // Pinowane: `w3_dominance_persist_smoke`.
+    orbitalDominance: {},
     minefields: {},  // planetId → { `${q}_${r}` → { ownerId, damage, laidBy, q, r } } — Ground Unit System
     pois:       {},  // M2b — POIRegistry (poiId → poi object); init w createDefaultState żeby restore() nie pomijał klucza
     tradeOrders:      [],  // S3.5b — Order Board: kolejka zleceń kupna/sprzedaży z AI (init by restore() nie pominął klucza)
@@ -50,8 +58,9 @@ function createDefaultState() {
     // wszystkie wartości domyślne są puste, więc „brak w zapisie" jest nieodróżnialny
     // od poprawnego defaultu (test z `verbCooldowns`, nie z `bordersOpen`).
     // ⚠ Klucz MUSI tu być — restore() iteruje po Object.keys(default), więc domena
-    // NIEzadeklarowana jest po cichu WYRZUCANA przy wczytaniu (dziś dzieje się to
-    // z `orbitalDominance`: pisany i czytany w runtime, kasowany przy każdym load).
+    // NIEzadeklarowana jest po cichu WYRZUCANA przy wczytaniu. Kosztowało to grę jeden
+    // realny defekt: `orbitalDominance` był pisany i czytany w runtime, a kasowany przy
+    // każdym load — do W3-3, które po prostu dopisało go wyżej (patrz tam).
     director:         { rules: {}, pending: {} },
   };
 }

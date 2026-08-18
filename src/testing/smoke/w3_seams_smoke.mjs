@@ -14,8 +14,10 @@
 //              ZADEKLAROWANEJ wojny omijała `recordBattle` (zero exhaustion, zero wpisu).
 //              Teraz pinuje STAN SZWU: surowy emit dalej niesie `warId: null` (producent NIE
 //              księguje — P3), a księguje WarSystem. Szczegóły: `w3_battle_booking_smoke`.
-//   T3  S6:    `orbitalDominance` NIE przeżywa serialize→restore (klucz spoza `createDefaultState`).
-//              Odwraca W3-3.
+//   T3  S6:    ⚠ ODWRÓCONE W W3-3. Do W3-3 pinował LUKĘ: `orbitalDominance` nie przeżywał
+//              serialize→restore (klucz spoza `createDefaultState`), więc po reloadzie bramka
+//              desantu oddawała orbitę, której nikt nie odbił. Teraz pinuje STAN SZWU: klucz
+//              jest zadeklarowany i przeżywa. Skutek dla bramki: `w3_dominance_persist_smoke`.
 //   T4  C-5:   ⚠ ODWRÓCONE W W3-1 — pierwszy pin luki z tego pliku, który doczekał się naprawy.
 //              Do W3-1 pinował DEFEKT: imperium trzymało id kolonii, a `getColoniesByEmpire`
 //              jej nie widziało ⇒ AI nie czerpało z podboju NIC. Teraz pinuje STAN SZWU:
@@ -190,8 +192,8 @@ console.log('T2 — S5: bitwa DSCS w trakcie wojny omija `recordBattle` (zero ex
   // obojętność na `lossesA/B`) mieszkają w `w3_battle_booking_smoke`.
 }
 
-// ── T3 — S6: dominacja orbitalna nie przeżywa wczytania ─────────────────────
-console.log('T3 — S6: `orbitalDominance` ginie na serialize→restore (klucz spoza createDefaultState)');
+// ── T3 — S6: dominacja orbitalna przeżywa wczytanie (ODWRÓCONE w W3-3) ──────
+console.log('T3 — S6 naprawione: `orbitalDominance` przeżywa serialize→restore');
 {
   boot();
   gameState.set('orbitalDominance.sys_home', { controllerId: 'player', year: 5 }, 'w3_seams_probe');
@@ -202,18 +204,24 @@ console.log('T3 — S6: `orbitalDominance` ginie na serialize→restore (klucz s
 
   const blob = gameState.serialize();
   assert(!!blob?.orbitalDominance?.sys_home,
-    'T3: …i trafia do zapisu (serialize nie gubi jej) — strata jest po stronie ODCZYTU');
+    'T3: …i trafia do zapisu (serialize nigdy jej nie gubił — strata była po stronie ODCZYTU)');
 
   gameState.restore(blob);
 
-  assert(gameState.get('orbitalDominance.sys_home') == null,
-    'T3: po restore dominacji NIE MA — `GameState.restore` scala WYŁĄCZNIE klucze najwyższego ' +
-    'poziomu z `createDefaultState`, a `orbitalDominance` tam nie figuruje (GameState.js:52-54)');
+  assert(gameState.get('orbitalDominance.sys_home')?.controllerId === 'player',
+    'T3: po restore dominacja JEST. Do W3-3 znikała, bo `GameState.restore` scala WYŁĄCZNIE ' +
+    'klucze najwyższego poziomu z `createDefaultState`, a tego tam nie było — teraz jest. ' +
+    'Konsekwencja gameplayowa (bramka desantu po reloadzie): `w3_dominance_persist_smoke` T3');
 
-  // KONTROLA PINU: klucz ZADEKLAROWANY przeżywa tę samą podróż.
+  // KONTROLA PINU: mechanizm dalej działa NA DEKLARACJI, nie na deep-merge — domena
+  // NIEzadeklarowana ma dalej ginąć, inaczej pin wyżej niczego nie dowodzi.
   assert(gameState.get('invasions.inv_probe')?.id === 'inv_probe',
-    'T3 KONTROLA PINU: `invasions` (zadeklarowane w createDefaultState) przeżywa TĘ SAMĄ ' +
-    'serializację — więc strata dominacji to brak DEKLARACJI, nie zepsuty round-trip');
+    'T3 KONTROLA PINU: `invasions` przeżywa TĘ SAMĄ podróż…');
+  gameState.set('nieZadeklarowanaDomena.x', 1, 'w3_seams_probe');
+  gameState.restore(gameState.serialize());
+  assert(gameState.get('nieZadeklarowanaDomena') == null,
+    'T3 KONTROLA PINU: …a domena NIEzadeklarowana dalej jest wyrzucana — czyli dominację ' +
+    'trzyma przy życiu DEKLARACJA, i skasowanie jej wróciłoby prosto do defektu S6');
 }
 
 // ── T4 — C-5: podbój ZOSTAJE (ODWRÓCONE w W3-1) ─────────────────────────────

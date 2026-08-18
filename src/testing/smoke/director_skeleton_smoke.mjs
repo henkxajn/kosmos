@@ -179,7 +179,7 @@ console.log('T7 — gameState.director: round-trip bez migracji');
   assert(Object.keys(d.rules ?? {}).length === 0 && Object.keys(d.pending ?? {}).length === 0,
     'domyślne wartości są PUSTE — „brak w zapisie" nieodróżnialny od poprawnego defaultu');
 
-  // ⚠ FAIL-FIRST na klasie błędu, która DZIŚ zjada `orbitalDominance`: domena spoza
+  // ⚠ FAIL-FIRST na klasie błędu, która zjadała `orbitalDominance` aż do W3-3: domena spoza
   // createDefaultState jest przy wczytaniu po cichu WYRZUCANA. Ten test dowodzi
   // mechanizmu WYKONANIEM, żeby nikt nie skasował deklaracji `director` jako zbędnej.
   const withGhost = { ...dumped, nieZadeklarowanaDomena: { x: 1 } };

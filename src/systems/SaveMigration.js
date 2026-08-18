@@ -1615,7 +1615,8 @@ function _migrateV57toV58(data) {
 
 // ── Migracja v58 → v59 ──────────────────────────────────────────────────────
 // Faza desantu: pola na vessel (troopBay/canDropTroops/orbitalStrike), fleet
-// (hasTroopTransport/troopCapacity), gameState.orbitalDominance.
+// (hasTroopTransport/troopCapacity). Mapa dominacji orbitalnej BYŁA tu zasiewana —
+// zasiew zdjęty w W3-3 jako martwy (szczegóły niżej, przy `return`).
 function _migrateV58toV59(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (c4x?.vesselManager?.vessels) {
@@ -1640,10 +1641,11 @@ function _migrateV58toV59(data) {
     }
   }
 
-  // orbitalDominance — pusty obiekt (stary save = brak historii bitew)
-  if (data.gameState && !data.gameState.orbitalDominance) {
-    data.gameState.orbitalDominance = {};
-  }
+  // ⚠ Zasiew mapy dominacji orbitalnej SKASOWANY w W3-3 — był martwy od dnia napisania:
+  // `GameState.restore` scala wyłącznie klucze zadeklarowane w `createDefaultState`, a tej
+  // domeny tam nie było, więc zasiane `{}` i tak lądowało w koszu przy wczytaniu. Klucz jest
+  // teraz zadeklarowany u źródła (`GameState.js`), co daje pusty default BEZ migracji.
+  // Pinowane wykonaniem: `w3_dominance_persist_smoke` T5. NIE przywracać tutaj.
 
   return data;
 }

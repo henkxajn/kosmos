@@ -660,9 +660,12 @@ export class WarSystem {
    * a UI desantu zostawało odblokowane mimo wrogiej eskadry nad głową. Teraz najpierw pytamy
    * o REALNE kadłuby, a księga abstrakcyjna zostaje jako druga ścieżka dla flot debugowych.
    *
-   * Runtime-only — nic tu nie jest serializowane (mapa `orbitalDominance` i tak jest
-   * czyszczona przy każdym wczytaniu, bo nie ma jej w `createDefaultState`; naprawa TEGO
-   * wymaga zmiany kształtu zapisu, czego W1 zabrania — pozycja odłożona).
+   * Runtime-only — sam skan niczego nie serializuje. ⚠ Nota historyczna: do W3-3 mapa
+   * `orbitalDominance` była czyszczona przy KAŻDYM wczytaniu (brak klucza w
+   * `createDefaultState`), więc ta gałąź „brak kontrolera → sprawdź, czy ktoś stoi na orbicie"
+   * po reloadzie przejmowała decyzję za wynik bitwy. Klucz jest już zadeklarowany i przeżywa
+   * zapis (`w3_dominance_persist_smoke`), więc gałąź wraca do swojej właściwej roli:
+   * rozstrzyga tylko układy, w których bitwy NIGDY nie było.
    */
   _hasHostileFleetInSystem(systemId) {
     if (!systemId) return false;
