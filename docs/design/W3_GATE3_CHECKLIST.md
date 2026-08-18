@@ -59,9 +59,16 @@ przejdź do L5 (odmowa) i wróć tu po zbudowaniu transportowca.
 
 **L3 — doprowadź do bitwy, którą AI WYGRA nad Twoją planetą**, i sprawdź dominację:
 
-`KOSMOS.warSystem.getOrbitalController('sys_home')`
+`KOSMOS.warSystem.getOrbitalController('<systemId Twojej kolonii>')`
 
 - [ ] Zwraca **id imperium**, nie `'player'`. Bez tego desantu NIE BĘDZIE (§2 L5).
+
+⚠ **Wojna pojawia się przy PIERWSZEJ BITWIE, nie przy spawnie — i tak ma być.** Jeśli
+`spawnEnemyAttack`/`spawnEnemyRaider` nie utworzyły wojny, to nie usterka: wypowiedzenie robi
+`EnemyAttackHandler` w chwili rozstrzygania starcia (`enemy_attack_arrived`), bo dopiero wtedy
+jest zdarzenie, które da się uzasadnić. Zobaczysz to w Dzienniku jako „… declared war".
+⚠ **Jeśli walka toczyła się w INNYM układzie niż Twoja kolonia** — dominacja i bitwa księgują
+się w układzie **CELU** (W3-4b), więc pytaj o ten układ, nie o `sys_home` z automatu.
 
 ---
 
@@ -86,6 +93,24 @@ przejdź do L5 (odmowa) i wróć tu po zbudowaniu transportowca.
       ≠ flota desantowa, dokładnie ta sama presja, którą czujesz Ty) · brak wpisu = desant poszedł.
 - [ ] ⚠ Zauważ, czego tu **NIE MA**: progu „siły floty". Na ścieżce prawdziwych kadłubów
       `strength` nie ma znaczenia — liczy się, czy **ocalał** kadłub ze zrzutem.
+
+> ### ⚠ TO POLECENIE ZMIENIŁO SIĘ PO TWOJEJ PRÓBIE z 2026-08-18 — przeczytaj
+>
+> Zatrzymałeś się tu na ciszy i miałeś rację, że to zgłosiłeś. Były **dwa** defekty, oba
+> naprawione w `6e14b34`:
+> 1. **`recordBattle` ogłaszał wynik, ZANIM dopisał jego skutek** — `battle:resolved` szło przed
+>    `_updateOrbitalDominance`, więc bramka desantu czytała dominację **sprzed** tej właśnie
+>    bitwy i odmawiała `no_orbital_dominance` w chwili, gdy orbita została zdobyta.
+>    Naprawa siedzi w KSIĘGOWYM, nie u producentów — tak jak przy W3-2.
+> 2. **`invasion:blocked` nie był śledzony w `DebugLog`** — odmowa padała za każdym razem,
+>    tylko nikt jej nie zapisywał. Twoje „zero odmów" było artefaktem instrumentu, nie ciszą
+>    systemu. Teraz to polecenie **naprawdę czyta** odmowy.
+>
+> ⚠ **Hipoteza ze zgłoszenia była błędna w jednym punkcie i warto to wiedzieć:** `EnemyAttackHandler`
+> **też** emituje `participantA.type = 'vessel_group'`. Połówki slice'u spotykały się co do typu —
+> rozjeżdżały się w CZASIE, nie w kształcie.
+>
+> **Na Twojej scenie (dwie eskorty bez ładowni) oczekiwana odpowiedź to `no_drop_capable_hull`.**
 
 **L6 — jednostki naprawdę stoją na hexach:**
 

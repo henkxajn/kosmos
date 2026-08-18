@@ -71,6 +71,16 @@ abstrakcyjnej siły; przy okazji frakcja naziemna najeźdźcy przestała być lu
 `empireId: 'player'` naprawiający TRZECH filtrujących konsumentów, natywny `alert()` skasowany,
 §Findings 22 naprawione U ŹRÓDŁA, i18n S26).
 
+⏸ **GATE 3 ZATRZYMANY NA §2 (2026-08-18) — NAPRAWIONE w `6e14b34` (W3-6b).** Rajdery wygrały
+orbitę, a WSZYSTKIE trzy liczniki `invasion:*` pokazały zero. Dwa defekty, oba w INSTRUMENCIE
+i w KSIĘGOWYM, żaden w desancie: (1) `recordBattle` emitował `battle:resolved` ZANIM ustawił
+dominację, więc bramka desantu czytała świat SPRZED bitwy i odmawiała `no_orbital_dominance`
+dokładnie wtedy, gdy orbita została zdobyta; (2) `invasion:blocked` NIE był śledzony w `DebugLog`,
+więc odmowa padała za każdym razem, a pomiar pokazywał ciszę. ⚠ Hipoteza ze zgłoszenia była
+BŁĘDNA w jednym punkcie: EAH **też** emituje `vessel_group` — połówki spotykały się co do typu,
+rozjeżdżały w CZASIE. Pójście za hipotezą dołożyłoby drugą ścieżkę i zostawiło błąd kolejności
+żywy pod obiema. §Findings 44-48; §2 checklisty ma zaktualizowane polecenia.
+
 ⏳ **GATE 3 CZEKA NA CIEBIE** (`W3_GATE3_CHECKLIST.md`) — finał slice'u: **tracisz kolonię,
 WIDZISZ to, imperium z niej KORZYSTA, a Ty możesz ją ODBIĆ.** Sandbox wystarcza w całości (cel
 desantu wskazuje BITWA, nie zasięg terytorialny — inaczej niż w §8 GATE 2).
@@ -731,9 +741,12 @@ it ran. **W4's peace pricing is safe from round-inflation.** The two loser-share
 from two engagements of one raider, and the mechanism the code supports is
 **retreat-then-re-engage**: enemy AI auto-retreats at ≤20 % HP while clearly losing (M4 P3 polish),
 retreat is booked as a **LOSS** with the ship alive, and `ENGAGEMENT_COOLDOWN_YEARS = 1` allows a
-fresh `combatRangeEnter` well inside a ~2.7-year approach. ⚠ **Measured only in part:** the
-one-encounter-one-battle invariant is proven; the retreat→re-entry sequence is inferred from the
-code and was **not** reproduced headless (the harness resolved the approach through the orbital
+fresh `combatRangeEnter` well inside a ~2.7-year approach. ✅ **CONFIRMED BY A LIVE READ 2026-08-18** (GATE 3 §2, §Findings 47): the battle record carried
+`retreated: 'B'` with the player's planetary defence alive (10/50 losses, 21 rounds) — so
+*retreat books as a LOSS with forces surviving* is now **measured, not inferred**, and with the
+one-encounter-one-battle invariant it closes the question. Earlier note, kept for the record: the
+invariant was proven while the retreat→re-entry sequence was inferred from source and **not**
+reproduced headless (the harness resolved the approach through the orbital
 path instead). Next live run can settle it in one read — the first record should carry
 `retreated` set and a surviving raider.
 
@@ -850,6 +863,47 @@ path instead). Next live run can settle it in one read — the first record shou
     word at all** that his fleet had been destroyed. One field, three repairs. ⚠ The keeper pins
     the *producer/consumer pair*, not either half: a stamp with no consumer, or a consumer with no
     stamp, is the same silent failure.
+
+---
+
+### Added at GATE 3 §2 (2026-08-18, owner-witnessed live — STOPPED on an integration gap)
+
+44. ⚠ **The accountant announced the result BEFORE it wrote the consequence.**
+    `WarSystem.recordBattle` emitted `battle:resolved` and only then called
+    `_updateOrbitalDominance`, so every subscriber read the world **as it was before the battle
+    being announced**. W3-6's landing gate is such a subscriber: it refused with
+    `no_orbital_dominance` at the exact moment the orbit had been won. Fixed by ordering — the
+    event now carries a world consistent with the fact it reports. ⚠ Checked before moving it:
+    the **only** consumer of `getOrbitalController` inside the `battle:resolved` path is that
+    gate; the other readers are UI gates that ask on demand. **Same lesson as W3-2, one layer
+    deeper: fix in the accountant, and make sure the accountant finishes its own books before
+    it speaks.**
+45. ⚠ **"Not even a refusal" was an instrument artifact — the refusal fired every time.**
+    `invasion:blocked` was missing from `DebugLog.TRACKED_EVENTS`, so the very read the gate
+    performs (`query({kind:'invasion:blocked'})`) returned 0 whether or not the system spoke.
+    A contract that says *"landing or a reasoned refusal, never silence"* is **indistinguishable
+    from its own violation** without an audit trail for the refusal. Added with
+    `invasion:repelled`. ⚠ Generalisation worth keeping: whenever a commit introduces a refusal
+    reason, the refusal joins the tracked events **in the same commit** — otherwise the next gate
+    measures silence and reports a false defect (this is the second time in W3: `strikeRefused`
+    was added for the same reason in W3-5b).
+46. **The reported diagnosis was wrong in one load-bearing detail, and measuring beat reasoning.**
+    The hypothesis was "W3-6 listens to `vessel_group` (DSCS) while W3-4 terminates in an EAH
+    orbital battle" — but `EnemyAttackHandler` **also** emits `participantA.type = 'vessel_group'`
+    (`:168`). The two halves met on type and diverged in **time**, not in shape. Had the fix
+    followed the hypothesis (a second, EAH-specific entry point), it would have added a duplicate
+    path and left the ordering bug live under both.
+47. ✅ **GATE 2 clarification 3 is now ANSWERED BY A LIVE READ, not inference.** The live battle
+    record carried `retreated: 'B'` with the player's planetary defence surviving (10/50 losses,
+    21 rounds) — confirming the mechanism GATE 2 could only infer from source: **a retreat books
+    as a LOSS while the retreating force stays alive**, which is how one arrival produces two
+    booked battles without any round-level inflation. The one-encounter-one-battle invariant
+    (§A3) and this observation together close the question.
+48. **War is declared at the first BATTLE, not at spawn — and that is the intended design.**
+    Measured: `spawnEnemyAttack` created no war; the war appeared when the engagement resolved,
+    via `EnemyAttackHandler`'s auto-declaration (`enemy_attack_arrived`). This is the pipeline the
+    audit called correct at S2 — the declaration attaches to an event that can justify it rather
+    than to a debug spawn. Recorded so no future gate reads the gap between spawn and war as a bug.
 
 ---
 
