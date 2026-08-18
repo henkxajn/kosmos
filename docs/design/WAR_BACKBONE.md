@@ -211,8 +211,9 @@ patrol moves).
 > ze spiralą śmierci utrzymania floty (za dużo okrętów, ujemne kredyty) jest **zgłoszonym przypadkiem
 > regresyjnym ekonomii dla W2**.
 
-**W2 — the deploy model (P4). ✅ BUILT, GATE 1 + GATE 2 PASSED, GATE 3 PENDING** (save **v101**;
-`W2_PLAN.md` carries the full decision register). Eight commits `7f606b7` → `adc0fbd`.
+**W2 — the deploy model (P4). ✅ DONE — ALL THREE GATES PASSED** (GATE 1 · 2026-08-16 · GATE 2 ·
+2026-08-16 · GATE 3 · 2026-08-17, owner-witnessed live; save **v101**; `W2_PLAN.md` carries the
+full decision register). Eight commits `7f606b7` → `adc0fbd`.
 
 **⚠ The three P4 questions are ANSWERED** — owner rulings 2026-08-15, recorded verbatim in
 `W2_PLAN.md` §Decisions taken and implemented as stated:
@@ -252,12 +253,67 @@ the crew model entirely — they cost the AI no POP and their loss kills nobody,
 decision, not hygiene; and AI fleet upkeep is still not charged (decision 14, deliberate, `PHASE5_TODO`
 at the guard).
 
-**W3+ — offensive AI & territorial peace (recorded P1 intent + owner ruling
-2026-08-13):** target selection, capital strikes, invasion; space-combat depth;
-and the defined core of post-conquest — **wars end at a table with celestial
-bodies on it** (§6a). Scoped after W1/W2 land.
+**W3 — offensive AI. ✅ DONE, GATE 1 · GATE 2 · GATE 3 (conditional) PASSED** (2026-08-17 /
+08-18 / 08-18, owner-witnessed live; save **v101, no migration across the whole slice**).
+Commits `ea05d8f` → `814fb38` + docs. `W3_PLAN.md` carries the decision register (D1-D7),
+51 findings and the gate checklists (`W3_GATE1/2/3_CHECKLIST.md`).
+
+**⚠ D1 SPLIT, signed:** W3 = **offensive AI only**; **territorial peace moved to W4**. Building
+the peace table before conquest existed would have priced a transaction whose goods do not exist.
+**§6a is not abandoned — it gained its foundation** (a conquest that sticks, and is reversible).
+
+**⚠ Corrections this slice made to §2/§6 and to its own audit** (each measured, each recorded in
+`W3_PLAN.md` §Corrections C-1…C-6 with the evidence) — **all six now CLOSED**:
+
+- **C-1 — "the ground-invasion path is functional" was REFUTED for the AI direction**: it was dead
+  at *both* ends (no producer of an invasion, no producer of a landing force). W3-6 built the live
+  end; the catalog end survives as a filed condition of GATE 3 (§Findings 49).
+- **C-2 — doctrines CANNOT express a target**, and one of the two branches was broken
+  (`_holdAtHome` → `missing_target_point`). Target selection therefore shipped as a **catalog rule
+  with its own action** (`strike_player_target`), not as a third doctrine; the broken branch was
+  fixed in the same order channel (W3-4).
+- **C-3 — "price the materialized-fleet crew" was REFUTED as work**: the layer has **zero input**.
+  Pricing it would have been dead work; it was **retired instead** (W3-8, decision D2) — with it
+  went `MilitaryAI`, `EconAI`, `EmpireFleetMaterializer`, `spawnFleet`/`moveFleet`, the
+  `unifiedAggregator` branch and `spawnEnemyFleet`.
+- **C-4 — the AI already selects the player as a target, in the DIPLOMACY dimension** — which is
+  where war goals must attach. Confirmed live on the gate: with no war, the strike rule is silent
+  **by definition**, for every empire. War is a *precondition*, not a consequence.
+- **C-5 — conquest did not stick, in three independent ways.** The precondition of the whole
+  slice; fixed by W3-1's **reversible in-place ownership flip** (decision D7: losing is
+  recoverable, symmetrically).
+- **C-6 — "`CAPTURE_GRACE_YEARS` was waiting in the code for exactly this" was REFUTED.** It was
+  consumer-less and the grace that existed was a clock artefact. The line dies with this slice.
+
+**⚠ Three conditions carried out of GATE 3, each with its own assigned future work** (`W3_PLAN.md`
+§Findings 49-51): the AI catalog has **no transport role**, so `no_drop_capable_hull` is the only
+reachable answer of the battle→invasion join · the AI's landing force runs on the **legacy** ground
+model, not archetypes (different balance, no morale/supply, contradictory morale defaults) · **an
+AI landing never ends in the colony changing hands** — `_tryPlayerCapture` has no mirror on the AI
+side, so GATE 3 §4/§5 were verified through the `transferColony` mechanism W3-1 built.
+
+**W4 — territorial peace (recorded P1 intent + owner ruling 2026-08-13):** the defined core of
+post-conquest — **wars end at a table with celestial bodies on it** (§6a). Now buildable: the goods
+exist, and they are returnable.
 
 ### 6a. Territorial peace — signed direction for W3 (owner, 2026-08-13)
+
+> ## ⟶ ADDENDUM after W3 (2026-08-18) — READ BEFORE PLANNING W4
+>
+> **This section is now W4's charter** (D1 split: W3 = offensive AI, W4 = the peace table).
+> Three things changed under it while W3 ran, and each moves the starting point:
+> - **Ownership transfer is REVERSIBLE and SYMMETRIC** (W3-1 + owner ruling D7): a lost colony
+>   lives and functions under its new owner and can be retaken. A ceded body is therefore a real,
+>   returnable good — which is exactly what a peace term needs.
+> - **`CAPTURE_GRACE_YEARS` is NOT the occupation layer waiting in the code** (correction C-6): it
+>   is consumer-less, and the "grace" observed was a clock artefact. Occupation-as-distinct-state
+>   must be **built**, not switched on. The sentence above that says otherwise is superseded here.
+> - **SCOPE NARROWING signed with D7:** W3 delivered **mechanical** reversibility only.
+>   *Occupation sociology* — population loyalty, resistance, assimilation, productivity under
+>   foreign rule — is a **NAMED future stream**, deliberately out of scope, **not a silent gap**.
+> - ⚠ And one gap W4 must not assume away: **an AI landing does not yet take the colony**
+>   (`W3_PLAN.md` §Findings 51). Until that gate is passed, the AI cannot produce the *fait
+>   accompli* half of path 1 on its own.
 
 Two paths for celestial bodies to change owners:
 

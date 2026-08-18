@@ -1,6 +1,6 @@
 # WOJNA I POKÓJ 1.0 — master plan
 
-**Status:** living roadmap · **Last update:** 2026-08-17 (W2 closed — all three gates passed)
+**Status:** living roadmap · **Last update:** 2026-08-18 (W3 closed — offensive AI; Gate 3 conditional)
 **Basis:** `docs/audit/COMBAT_DIPLO_AUDIT.md` (2026-08-05 — **partly superseded**, see `W1_PLAN.md`
 §Corrections K-1/K-2/K-5/K-6) · **Companion docs:** `DIPLOMACY_BACKBONE.md` (done),
 `WAR_BACKBONE.md` (**signed 2026-08-13**), `REACTION_DIRECTOR.md` (pending), per-phase plan docs.
@@ -377,24 +377,36 @@ Owns everything between war declaration and the peace table.
   **What W2 hands W3:** a fleet with a working distinction between *force* and *potential* — exactly
   what an offensive AI has to reason about before it picks a target — and a mobilization decision that
   already brakes on parity without a single authored threshold.
-- **W3 — offensive AI & territorial peace. 🔵 NEXT STREAM, decided 2026-08-17** (owner + orchestrator;
-  §6a + §6 W3+ signed 2026-08-13, §2 P1 recorded intent). **Opens design-first: read-only seam audit →
-  `W3_PLAN.md` draft → orchestrator review. No code until the plan is approved.**
-  Scope on the table (each to be narrowed by the audit, not by the plan's optimism):
-  **AI target selection** — extending doctrines past `defend_home` / `patrol_border` into choosing a
-  target · **capital strikes** · **the ground-invasion path** — the audit's §2 assessment stands
-  (functional, but the ground RNG is unseeded — audit **R13**) · **occupation ≠ annexation** as a
-  distinct state (`CAPTURE_GRACE_YEARS` hook) · **`offer_peace` TERM SLOTS for celestial bodies in
-  both directions**, priced by the Acceptance Engine (exhaustion × territory value × CB `peaceCost`
-  × personality floor) · **war goals reaching back into `declare_war`** (the D4 flag) ·
-  and the **W2-carried debt: materialized-fleet crew pricing** — shadow fleets bypass the crew model
-  entirely, and they are the AI's principal fleet source, so this is a balance decision, not hygiene.
-  AI fleet upkeep also remains uncharged (W2 decision 14).
-  **Instrument base W3 inherits, already built and gated:** `ThreatAssessment` force/potential split ·
-  the exhaustion asymmetry (winner and loser no longer cost the same) · the deploy model (reserve,
-  crew ledger, mobilization) · E7 acceptance matrices · 136 keepers · the headless probes ·
-  and the three instrument lessons (a diff is not evidence · nor is running the instrument, until you
-  check the probe changed behaviour · one predicate, not ten field tests).
+- **W3 — offensive AI. ✅ DONE — GATE 1 · GATE 2 · GATE 3 (CONDITIONAL) PASSED** 2026-08-17 /
+  08-18 / 08-18, owner-witnessed live. Save **v101, no migration across the whole slice**; commits
+  `ea05d8f` → `814fb38` + docs. Decision register, 51 findings and the three gate checklists:
+  `W3_PLAN.md`, `W3_GATE{1,2,3}_CHECKLIST.md`.
+  **⚠ D1 SPLIT signed at plan time:** W3 = **offensive AI only**; **territorial peace moved to W4** —
+  building the peace table first would have priced a transaction whose goods did not exist.
+  **What W3 delivered:** conquest that STICKS and is REVERSIBLE (`transferColony` reworked into a
+  symmetric in-place ownership flip, owner ruling D7) · DSCS/VCS battles finally BOOKED (a third,
+  silent path closed) · `orbitalDominance` surviving a load · **`ORDER_TYPES.attack`** — the mission
+  producer the whole orbital pipeline was missing · **cross-system strikes through the real
+  interstellar journey** (W3-4b, after GATE 2 ed. 1 was interrupted on a genuine frame defect:
+  a global id is not a location) · **`strike_player_target`** — the AI picks its own target from the
+  Director catalog, bounded by `InfluenceMap` reach, sized against defence, salted with `GALAXY_SEED`
+  · AI invasion from `vessel_group` battles · and **the player SEES it coming** (bell, log, auto-slow,
+  and the native `alert()` finally dead).
+  **⚠ Three CONDITIONS carried out of GATE 3** (`W3_PLAN.md` §Findings 49-51), each with its own
+  assigned future work, none blocking the close: the AI catalog has **no transport role** ⇒
+  `no_drop_capable_hull` is the only reachable answer of the battle→invasion join · the AI's landing
+  force runs on the **legacy** ground model, not archetypes · **an AI landing never ends in the colony
+  changing hands** (no mirror of `_tryPlayerCapture`) — §4/§5 were verified through W3-1's transfer.
+  **Retired with W3-8:** the whole abstract-fleet stack — `MilitaryAI`, `EconAI`,
+  `EmpireFleetMaterializer`, `spawnFleet`/`moveFleet`, the `unifiedAggregator` branch,
+  `spawnEnemyFleet`. It had **zero input** in a shipped game (correction C-3), so the W2-carried
+  "price the materialized-fleet crew" debt was **dissolved, not paid**. AI fleet upkeep remains
+  uncharged (W2 decision 14, `PHASE5_TODO`).
+- **W4 — territorial peace. 🔵 NEXT IN THE BACKBONE** (charter: `WAR_BACKBONE.md` §6a + its post-W3
+  addendum). Now buildable, because the goods exist and are returnable. ⚠ Two things the addendum
+  fixes before planning: `CAPTURE_GRACE_YEARS` is **not** a waiting occupation layer (it is
+  consumer-less — correction C-6), and occupation *sociology* is a named future stream, not part of
+  the mechanical reversibility W3 shipped.
 
 The doc covers:
 
@@ -530,10 +542,13 @@ D1 ✅ → GALAXY_SEED ✅ → D2 ✅ (E1..E9, three gates PASSED, phase CLOSED 
                         → W1 ✅ COMPLETE (13 commits, Gates 1-3 PASSED 2026-08-14, v100 no migration)
                         → W2 plan ✅ APPROVED (22 decisions signed, 3 owner rulings, 2026-08-15)
                         → W2 ✅ COMPLETE — 8 commits, Gates 1-3 PASSED 2026-08-16/16/17, save v100 → v101
-                        → **W3 🔵 DECIDED 2026-08-17 (owner + orchestrator) — OFFENSIVE AI &
-                           TERRITORIAL PEACE** (WAR_BACKBONE §2 P1 recorded intent + §6a + §6 W3+)
-                                                ⟵ WE ARE HERE — **design-first: the next artefact is a
-                                                   read-only seam AUDIT + `W3_PLAN.md` draft, NOT code.**
+                        → W3 plan ✅ APPROVED (7 decisions, 2 owner rulings, 2026-08-17)
+                        → **W3 ✅ COMPLETE — offensive AI; Gates 1-2 PASSED, Gate 3 PASSED
+                           CONDITIONALLY 2026-08-17/18/18, v101 no migration**
+                           (⚠ D1 split: territorial peace → W4)
+                                                ⟵ WE ARE HERE — **next: W4 (territorial peace),
+                                                   design-first, charter = WAR_BACKBONE §6a + addendum.
+                                                   Three W3 conditions ride as their own future gates.**
                         → then: D3/D4 ⇄ W4..Wn → D5 (AI↔AI live) → Director Slices 2–3 → BALANS (parked
                            LAST by owner ruling) → deferred list
 ```
@@ -544,19 +559,27 @@ is standing at a horizon decision.** D1 gave relations a real model; D2 gave the
 that build real warships through the real economy; W1 made military strength a derived, shared,
 honestly-accounted number; **W2 split that number in two** — *force* (crewed, in service) versus
 *potential* (a hull in storage) — and put a month and a demographic cost between them, for **both**
-sides. Save is at **v101**, sweep at **136 keepers, 0 FAIL**, `check-i18n` PASS with pl = en = 3240.
+sides. **W3 gave that fleet somewhere to go** — a target it picks itself, a journey it really flies, and a
+conquest that stays conquered and can still be undone. Save is at **v101**, sweep at **148 keepers,
+0 FAIL**, `check-i18n` PASS.
 
-**Next horizon — DECIDED 2026-08-17 (owner + orchestrator): W3 — OFFENSIVE AI & TERRITORIAL PEACE.**
+**Next horizon — W4: TERRITORIAL PEACE** (the half D1 split out of W3, charter `WAR_BACKBONE.md` §6a
+plus its post-W3 addendum). W3 built what the table needs: a conquest that sticks, is visible, and is
+**returnable** — a ceded body is now a real good with a real owner and a real way back.
 
-W3 is the natural continuation: W2 handed it the **force vs potential** distinction an attacker has to
-reason about before it picks a target, and it inherits W2's unpriced items by name. Scope is
-`WAR_BACKBONE.md` §2 P1 (recorded intent) + §6a + §6 W3+ — AI target selection beyond
-defend/patrol, capital strikes, the ground-invasion path, occupation as a state distinct from
-annexation, and peace **term slots** for celestial bodies priced by the Acceptance Engine.
+⚠ **W4 opens DESIGN-FIRST**, same order that made D2, Director Slice 1, W1, W2 and W3 land without
+re-litigation: read-only seam audit → `W4_PLAN.md` draft → review → code. The handover script is in
+`W3_PLAN.md` §RESUME.
 
-⚠ **W3 opens DESIGN-FIRST.** The next artefact is a read-only **seam audit** plus a `W3_PLAN.md`
-draft with a commit plan, gates and open decisions — **not code**. Same order that made D2, Director
-Slice 1, W1 and W2 land without re-litigation. The handover script is in `W2_PLAN.md` §RESUME.
+⚠ **Three W3 conditions ride as their OWN future gates, not as W4 scope** (`W3_PLAN.md` §Findings
+49-51): **AI takes the colony** (the missing mirror of `_tryPlayerCapture` — and the one W4 most
+depends on, because without it the AI cannot produce a *fait accompli*) · **an AI transport template**
+(the catalog has no drop-capable hull, so the invasion join can only refuse) · the **GROUND** slice
+(legacy morale S12 → RNG seeding R13 → landing pools onto archetypes).
+
+⚠ **STANDING LESSON recorded at W3 close:** CC writing any file — including a read-only audit's own
+report — makes **Live Server reload the owner's live tab and drop the game to the last save**. Audits
+run when no tab is open, or the owner is warned first; **CC never writes during a gate.**
 
 **Ordering of the rest, unchanged except where noted:**
 1. **D3** — borders, trespass incidents, influence map. `bordersOpen` has been sitting in the relation

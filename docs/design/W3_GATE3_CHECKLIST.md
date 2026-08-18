@@ -193,17 +193,27 @@ się w układzie **CELU** (W3-4b), więc pytaj o ten układ, nie o `sys_home` z 
 
 | pozycja | wynik |
 |---|---|
-| 1. Wróg wygrywa orbitę nad Twoją kolonią | |
-| 2. **Wojsko SCHODZI na planetę** (albo odmawia z sensownym powodem) | |
-| 3. Próg desantu z KADŁUBÓW (`no_drop_capable_hull`), nie z abstrakcyjnej siły | |
-| 4. **WIDZISZ to**: dzwonek + Dziennik (kanał Walka) + auto-slow, ZERO natywnego `alert()` | |
-| 5. Najeźdźca anonimowy bez rozpoznania, nazwany przy `detailed` | |
-| 6. Przerzut AI→AI **nie** ogłasza Ci Twojej straty (§Findings 22) | |
-| 7. Imperium KORZYSTA ze zdobyczy i przeżywa ona zapis | |
-| 8. **Kolonię da się ODBIĆ** — przegrana jest odwracalna | |
-| 9. Brak regresji, komunikaty w Twoim języku, konsola czysta | |
+| 1. Wróg wygrywa orbitę nad Twoją kolonią | ✅ PASS (na żywo) |
+| 2. **Wojsko SCHODZI na planetę** (albo odmawia z sensownym powodem) | ✅ PASS — wojsko zeszło (`gu_42` na Nekkar d) |
+| 3. Próg desantu z KADŁUBÓW (`no_drop_capable_hull`), nie z abstrakcyjnej siły | ✅ PASS — ⚠ i to jest DZIŚ jedyna osiągalna odpowiedź katalogu AI (Finding 49) |
+| 4. **WIDZISZ to**: dzwonek + Dziennik (kanał Walka) + auto-slow, ZERO natywnego `alert()` | ✅ PASS |
+| 5. Najeźdźca anonimowy bez rozpoznania, nazwany przy `detailed` | ⊘ nie testowane osobno (nieblokujące) |
+| 6. Przerzut AI→AI **nie** ogłasza Ci Twojej straty (§Findings 22) | ⊘ nie testowane osobno (nieblokujące) |
+| 7. Imperium KORZYSTA ze zdobyczy i przeżywa ona zapis | ✅ PASS — ⚠ zweryfikowane OBEJŚCIEM przez `transferColony` (Finding 51) |
+| 8. **Kolonię da się ODBIĆ** — przegrana jest odwracalna | ✅ PASS — tą samą drogą co §7 |
+| 9. Brak regresji, komunikaty w Twoim języku, konsola czysta | ✅ PASS |
 
-**GATE 3:** ☐ ZDANY ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+**GATE 3:** ☐ ZDANY ☑ **ZDANY WARUNKOWO** ☐ NIEZDANY
+
+> **GATE 3: ZDANY WARUNKOWO, 2026-08-18** (owner-witnessed live). §1-4, 7-9 PASS na żywo.
+> §5-6 nie testowane osobno (nieblokujące). **Trzy warunki = `W3_PLAN.md` §Findings 49-51**
+> (numeracja orkiestratora: 42-44 — rejestr stał już na 48, mapowanie zapisane przy wpisach),
+> każdy z osobną, przypisaną przyszłą pracą; żaden nie blokuje zamknięcia slice'u:
+> **49** katalog AI nie ma roli transportowej ⇒ `no_drop_capable_hull` jest jedyną osiągalną
+> odpowiedzią bitwy→desant · **50** desant AI używa modelu LEGACY, nie archetypów (inny balans,
+> brak morale/zaopatrzenia, sprzeczne domyślne morale) · **51** desant AI NIGDY nie kończy się
+> przejęciem kolonii — po stronie AI nie ma wymogu zdobycia stolicy; §4/§5 zweryfikowane
+> obejściem przez `transferColony` (ten sam mechanizm co W3-1).
 
 ---
 

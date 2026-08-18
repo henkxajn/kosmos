@@ -109,12 +109,13 @@ KOSMOS.debug.issueOrder(playerWarship, {
 });
 ```
 
-### Test 3: materialized fleet (M1 Fleet Materialization)
-Wróg spawnuje flotę abstrakcyjną (strength), leci na gracza; gdy ETA < 2 civYears
-→ EmpireFleetMaterializer robi strength → vessels. Użyj `spawnEnemyFleet`:
+### Test 3: ⚠ USUNIĘTY (W3-8) — flota abstrakcyjna nie istnieje
+Cała warstwa (`EmpireFleetMaterializer` + `spawnEnemyFleet` + `empire.fleets` jako producent)
+została **wycofana** w `814fb38`: miała ZERO wejść w normalnej grze, a w Sandboksie stawiała flotę
+dla złego imperium. Scenę wrogich sił stawiaj REALNYMI kadłubami:
 ```js
-KOSMOS.debug.spawnEnemyFleet({ strength: 500, etaYears: 1.5 });
-// Flota materializuje się po osiągnięciu thresholdu.
+KOSMOS.debug.spawnEnemyAttack();                       // realny lot na gracza, przechwytywalny
+KOSMOS.debug.spawnEnemyRaider({ autoOrder: false });   // kadłub Z BAKIEM WARP w INNYM układzie
 ```
 
 ### Test 4: endurance drain
@@ -144,12 +145,14 @@ Wszystkie żyją pod `KOSMOS.debug.*` i sprawdzają `scenarioMode === 'combat_sa
 | `KOSMOS.debug.sandboxResetPositions()` | Wszystkie vessele → orbit home (gracz: Bastion, wróg: enemy home). Anuluje aktywne ordery, czyści mission. |
 | `KOSMOS.debug.sandboxSpawnMoreEnemies(count=1)` | Spawnuje N dodatkowych wrogich hull_small na orbicie enemy home. |
 
-⚠ **`spawnEnemyFleet` WYCOFANE (ginie z W3-8, `W3_PLAN.md` §Findings 17):** ścieżka abstrakcyjna,
-w Sandboksie stawia flotę dla **złego imperium** (`emp_test_enemy` zamiast `emp_sandbox_enemy`) —
-używaj **`spawnEnemyAttack`** (realny lot, przechwytywalna, ta sama ścieżka bitwy).
+⚠ **`spawnEnemyFleet` USUNIĘTY** (W3-8, `814fb38`; §Findings 17): ścieżka abstrakcyjna, w Sandboksie
+stawiała flotę dla **złego imperium** (`emp_test_enemy` zamiast `emp_sandbox_enemy`). Zastępniki:
+**`spawnEnemyAttack`** (realny lot, przechwytywalny, ta sama ścieżka bitwy) i **`spawnEnemyRaider`**
+(kadłub z bakiem warp w innym układzie — scena międzygwiezdna jednym wywołaniem). Razem z nim odeszły
+`materializeFleet`, `enableFleetMaterialization` i flagi `fleetMaterialization`/`unifiedAggregator`.
 
-Ogólne (działają też poza sandboxem): `spawnEnemyFleet`, `spawnEnemyAttack`,
-`issueOrder`, `cancelOrder`, `listOrders`, `materializeFleet`, `giveAll`, itd.
+Ogólne (działają też poza sandboxem): `spawnEnemyAttack`, `spawnEnemyRaider`, `launchInvasion`,
+`aiWarships`, `issueOrder`, `cancelOrder`, `listOrders`, `giveAll`, itd.
 
 ---
 

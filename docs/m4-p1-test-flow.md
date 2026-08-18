@@ -496,7 +496,7 @@ KOSMOS.debug.unlockTech('rocketry', 'shipyard_construction', 'interplanetary_log
 
 // Spawn wrogów
 KOSMOS.debug.spawnTestEnemy()       // wrog imperium + kolonia na najbliższym wolnym ciele
-KOSMOS.debug.spawnEnemyFleet()      // wroga flota (BRUTALNE — materializuje natychmiast 80 px od home)
+// (spawnEnemyFleet USUNIĘTY w W3-8 — warstwa abstrakcyjnej floty wycofana)
 KOSMOS.debug.spawnEnemyAttack()     // wrogi atak (M4 P1.5: friendly defaults — etaYears=2.0, spawnDistanceAU=30)
 KOSMOS.debug.spawnEnemyAttack({ etaYears: 0.5, spawnDistanceAU: 10 })  // agresywne (stare defaults)
 

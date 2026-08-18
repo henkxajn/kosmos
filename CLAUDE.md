@@ -1489,6 +1489,93 @@ tylko tam, gdzie się o tym nauczyliśmy** — `DirectorRuleMath.js:71-74` ostrz
 
 ---
 
+## W3 — OFENSYWNE AI: podbój, który się trzyma i który da się odwrócić (save **v101 bez migracji**, GATE 1+2 PASS, GATE 3 **ZDANY WARUNKOWO** — SLICE ZAMKNIĘTY 2026-08-18)
+
+Slice W3 arca WOJNA I POKÓJ 1.0. Plan + rejestr decyzji (D1-D7) + **51 findings**:
+`docs/design/W3_PLAN.md`; checklisty `W3_GATE{1,2,3}_CHECKLIST.md`. ⚠ **D1 SPLIT: pokój terytorialny
+ODSZEDŁ do W4** — stół pokojowy przed podbojem wyceniałby transakcję, której towar nie istnieje.
+Commity: `ea05d8f` (W3-0 keeper szwów) · `efa8f85` (W3-1 odwracalny przerzut własności) · `d5a9b8d`
+(W3-2 DSCS/VCS księgowane) · `1e57d1b` (W3-3 dominacja przeżywa wczytanie) · `4724e46` (W3-4
+`ORDER_TYPES.attack`) · `369adfc`+`cb815cd` (W3-4b cross-system) · `a7b84bd`+`9a96382` (W3-4c
+dźwignia rajdera) · `07c1087`+`61bdffe`+`807bd85`+`994935e` (W3-5/5b wybór celu + naprawa montażu) ·
+`0eae716` (W3-6 desant AI) · `cced9df` (W3-7 widoczność) · `6e14b34`+`2eb9bf5` (W3-6b) ·
+**`814fb38` (W3-8 retirement)** · W3-9 (docs).
+
+**Co dowiózł (mechanizm jest MNIEJSZY niż wygląda, warunki wstępne WIĘKSZE — ten sam kształt co W2):**
+- **Podbój ZOSTAJE** — `ColonyManager.transferColony` przerobiony na **odwracalny przerzut własności
+  w miejscu** (lustro `captureColonyForPlayer`: kolonia zostaje w `_colonies` z pięcioma podsystemami,
+  zmienia się `ownerEmpireId` + hexy). Owner ruling **D7: przegrana jest ODWRACALNA, SYMETRYCZNIE**.
+- **Bitwy DSCS/VCS wreszcie księgowane** (`WarSystem.recordBattle` = jedyny księgowy) — trzecia,
+  cicha ścieżka zamknięta.
+- **`ORDER_TYPES.attack`** (`MovementOrderSystem._issueAttack` + `OrderService.issueAttack`) — producent
+  misji, którego brakowało CAŁEMU istniejącemu potokowi orbitalnemu (`EnemyAttackHandler` bramkuje na
+  `mission.type='attack'`, a jedynym producentem był cheat). Bramka **`isInService`** (D6, reason
+  `vessel_in_reserve`) + bramka układu (`target_other_system`).
+- **Uderzenia CROSS-SYSTEM przez PRAWDZIWĄ podróż** (W3-4b) — po tym, jak GATE 2 wyd. 1 został
+  PRZERWANY na realnym defekcie klasy **„globalne id ≠ położenie"**. NEW `src/utils/SystemScope.js`
+  (`systemIdOf`/`isSameSystem`, fail-open) + `WarSystem.hasPlayerPresenceInSystem` (koniec
+  obrońcy-widma walczącego rok świetlny dalej).
+- **`strike_player_target`** (`src/systems/director/DirectorOffensive.js` + katalog
+  `DirectorRuleData`) — **AI wybiera cel SAMO**: zasięg z `InfluenceMap` (powłoka), wartość z
+  `TerritoryService.getSystemDevScore`, siła z `ThreatAssessment`, eskadra 2+ przeciw obronie, dobór
+  kadłubów po **`warpFuel.max > 0`** (D4 — NIGDY po id szablonu), rzut solony `GALAXY_SEED`,
+  **`delay: 0` obowiązkowo**. Drabina odmów jest PRAWDOMÓWNA (`no_target_in_reach` /
+  `no_warp_capable_hull` / `insufficient_squadron` / `all_orders_rejected`).
+- **Desant AI z bitew `vessel_group`** (`InvasionSystem._onVesselGroupVictory`) — próg wyprowadzony
+  z KADŁUBÓW zamiast abstrakcyjnej siły; frakcja naziemna najeźdźcy przestała być ludzka
+  (`GroundUnitFactory` mapuje id imperium → frakcja nie-ludzka przez `mixSeed`).
+- **Gracz WIDZI atak** (W3-7): `invasion:*` → `NotificationCenter` (dzwonek + Dziennik kanał Walka +
+  auto-slow), stempel `empireId: 'player'` naprawiający TRZECH filtrujących konsumentów, **natywny
+  `alert()` skasowany**, i18n S26 PL+EN.
+
+**W3-8 — RETIREMENT (`814fb38`).** Wycofana CAŁA warstwa abstrakcyjnej floty: `MilitaryAI`, `EconAI`,
+`EmpireFleetMaterializer`, `EmpireRegistry.spawnFleet`/`moveFleet`, gałąź `unifiedAggregator`
+(+ flagi `FEATURES.fleetMaterialization`/`unifiedAggregator`), `spawnEnemyFleet`, martwe nasłuchy
+`empire:fleetMoved`/`empire:fleetMaterialized`. Powód (korekta C-3): **zero wejść w normalnej grze** —
+`MilitaryAI`/`EconAI` scorowały 0 od zawsze (`createEmpire` wycina `resources`, `updateMilitaryPower`
+to no-op), więc dług z W2 („wycenić załogę floty zmaterializowanej") **rozpuścił się, nie został
+spłacony**. ZOSTAJĄ: czytelniki `empire.fleets` (stary zapis musi się wczytać), `spawnEnemyRaider`,
+`spawnEnemyAttack`, `launchInvasion`, `KOSMOS.debug.aiWarships`. `war_seams_smoke` T2 mierzyło CISZĘ
+martwej pętli → przeniesione na **pin źródłowy T2b** (pętli NIE MA + kontrola pinu: Director dalej
+tika).
+
+**⚠ TRZY WARUNKI GATE 3 — każdy z osobną, przypisaną PRZYSZŁĄ pracą** (`W3_PLAN.md` §Findings 49-51;
+numeracja orkiestratora 42-44): **(49)** katalog AI (`SHIP_TEMPLATES`) NIE MA roli transportowej ⇒
+`no_drop_capable_hull` to jedyna osiągalna odpowiedź złącza bitwa→desant (`docs/audit/AI_DROP_HULL_AUDIT.md`)
+· **(50)** desant AI biegnie na modelu **LEGACY** (`GROUND_UNITS`), nie archetypach — inny balans
+(60 HP/12 atak vs 15 HP/7), brak morale/zaopatrzenia, sprzeczne domyślne morale ⇒ jednostka rozpada
+się po pierwszym trafieniu, chyba że grę przeładowano (`docs/audit/GROUND_UNITS_AUDIT.md`) ·
+**(51)** **desant AI NIGDY nie kończy się przejęciem kolonii** — `_tryPlayerCapture` nie ma lustra po
+stronie AI; §4/§5 gate'u zweryfikowane OBEJŚCIEM przez `transferColony`.
+
+**⚠ Trzy lekcje wiążące dalej** (poza tymi z W2): **globalne id ≠ położenie** — encja ma jedno id
+w całej galaktyce, ale współrzędne są WEWNĄTRZ układu (gwiazda w (0,0)); porównuj układy, nie id ·
+**„skonstruowany ≠ zamontowany"** — reguła żyła i była oceniana, ale brak wiersza w bloku lokatora
+`GameScene` czynił ją NIEWIDZIALNĄ dla gate'u (wszyscy konsumenci czytają przez `?.`, więc **nic nie
+krzyczy**); keeper musi pinować **SPOSÓB SKŁADANIA SCENY**, nie zachowanie przy gotowej scenie ·
+**księgowy musi domknąć własne księgi, ZANIM przemówi** — `recordBattle` emitował `battle:resolved`
+przed `_updateOrbitalDominance`, więc bramka desantu czytała świat SPRZED ogłaszanej bitwy.
+⚠ I reguła instrumentu: **NOWY POWÓD ODMOWY DOŁĄCZA DO `DebugLog.TRACKED_EVENTS` W TYM SAMYM
+COMMICIE** — dwa razy w W3 gate zmierzył CISZĘ tam, gdzie system mówił.
+
+**⚠ STANDING LESSON (proces, nie kod):** pisanie plików przez CC — **także raportu z audytu
+read-only** — przeładowuje kartę gracza przez **Live Server** i **resetuje stan runtime do ostatniego
+zapisu**. Audyty uruchamiamy, gdy gracz nie ma otwartej karty (albo gracz wie z góry, że karta
+się przeładuje); **CC nie pisze w trakcie gate'u** (to ta sama reguła co „gate nigdy równolegle z CC",
+teraz z zapisanym mechanizmem: konflikt to file watcher, nie uwaga).
+
+Keepery W3: `w3_dominance_persist` 16 · `w3_attack_dispatch` 35 · `w3_cross_system_attack` 42 ·
+`w3_raider_lever` 24 · `w3_target_selection` 30 · `w3_foreign_arrival_gate` 5 · `w3_director_mounting`
+17 · `w3_ai_invasion` 23 · `w3_attack_visibility` 42 · `w3_battle_booking` 19 · sondy
+`probe-w3-seams`/`probe-w3-targets`. Sweep **148/148 0 FAIL** · `check-i18n` PASS.
+
+**NASTĘPNE (osobne, nowe sesje — NIE w tym wątku):** **W4 — pokój terytorialny** (charter
+`WAR_BACKBONE.md` §6a + addendum po W3) · nowy gate **„AI przejmuje kolonię"** (Finding 51) ·
+**katalog transportowca AI** (Finding 49) · slice **GROUND** (S12 morale → R13 RNG → pule desantu na
+archetypy, Finding 50).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

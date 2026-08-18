@@ -21,8 +21,10 @@ already-declared `gameState` domain, and the one item that would need a backfill
 **Stan na 2026-08-18 (noc).** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2**
 `d5a9b8d` · GATE 1 (`536fd51`/`d19777b`/`b630c55`) · **W3-3** `1e57d1b` · **W3-4** `4724e46` ·
 `7a43c3a` · **W3-4b** `369adfc`+`cb815cd` · `4514df4` · **W3-4c** `a7b84bd`+`9a96382` ·
-**W3-5** `07c1087` · **W3-5b** `61bdffe` + `807bd85` + **`994935e`** (naprawa montażu).
-Sweep **146/146 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji przez CAŁY slice**.
+**W3-5** `07c1087` · **W3-5b** `61bdffe` + `807bd85` + **`994935e`** (naprawa montażu) · `d6356d3` ·
+**W3-6** `0eae716` · **W3-7** `cced9df` · `13cc5c0` · **W3-6b** `6e14b34`+`2eb9bf5` · **W3-8**
+`814fb38` · **W3-9** (ten commit).
+Sweep **148/148 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji przez CAŁY slice**.
 
 ✅ **GATE 1 ZDANY 2026-08-17** · ✅ **GATE 2 (§§1-7) ZDANY 2026-08-18** — łańcuch uderzenia
 międzygwiezdnego udowodniony NA ŻYWO od początku do końca (`W3_GATE2_CHECKLIST.md` §Wynik).
@@ -81,14 +83,26 @@ BŁĘDNA w jednym punkcie: EAH **też** emituje `vessel_group` — połówki spo
 rozjeżdżały w CZASIE. Pójście za hipotezą dołożyłoby drugą ścieżkę i zostawiło błąd kolejności
 żywy pod obiema. §Findings 44-48; §2 checklisty ma zaktualizowane polecenia.
 
-⏳ **GATE 3 CZEKA NA CIEBIE** (`W3_GATE3_CHECKLIST.md`) — finał slice'u: **tracisz kolonię,
-WIDZISZ to, imperium z niej KORZYSTA, a Ty możesz ją ODBIĆ.** Sandbox wystarcza w całości (cel
-desantu wskazuje BITWA, nie zasięg terytorialny — inaczej niż w §8 GATE 2).
+✅ **GATE 3 ZDANY WARUNKOWO 2026-08-18** (`W3_GATE3_CHECKLIST.md` §Wynik) — §1-4, 7-9 PASS na
+żywo; §5-6 nie testowane osobno (nieblokujące). **Trzy warunki = §Findings 49-51** (numeracja
+orkiestratora 42-44), każdy z osobną przyszłą pracą: katalog AI nie ma roli transportowej ⇒
+`no_drop_capable_hull` to jedyna osiągalna odpowiedź · desant AI biegnie na modelu LEGACY, nie
+archetypach · **desant AI nigdy nie kończy się przejęciem kolonii** (brak lustra
+`_tryPlayerCapture` po stronie AI; §4/§5 zweryfikowane obejściem przez `transferColony`).
 
-**PO GATE 3:** **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`) →
-**W3-9** (domknięcie dokumentacji). ⚠ Poza W3: §Findings 33 (nawigacja w obcych układach —
-asymetria WARSTWY WIDOKU) i slice **GROUND** (S12 morale → R13 RNG → pule desantu na archetypy,
-§Findings 42).
+✅ **W3-8** `814fb38` (wycofanie martwej warstwy abstrakcyjnej floty — `MilitaryAI`, `EconAI`,
+`EmpireFleetMaterializer`, `spawnFleet`/`moveFleet`, gałąź `unifiedAggregator`, `spawnEnemyFleet`;
+`war_seams_smoke` T2 przeniesione na **pin źródłowy T2b**, bo stary pin mierzył ciszę martwej
+pętli, a ta pętla właśnie zniknęła) · ✅ **W3-9** (ten commit — domknięcie dokumentacji).
+
+# 🏁 **SLICE W3 ZAMKNIĘTY.** Zapis **v101 bez migracji przez CAŁY slice**; sweep **148/148 0 FAIL**;
+`check-i18n` PASS.
+
+**Co dalej — trzy OSOBNE, nowe sesje** (nic z tego nie należy do W3): **nowy gate „AI przejmuje
+kolonię"** (§Findings 51) · **katalog transportowca AI** (§Findings 49) · slice **GROUND**
+(S12 morale → R13 RNG → pule desantu na archetypy, §Findings 50). ⚠ Poza tym wciąż otwarte:
+§Findings 33 (nawigacja w obcych układach — asymetria WARSTWY WIDOKU) oraz punkt **8e** wyżej
+(„reguła odpaliła SAMA" — przyjdzie sam w normalnej rozgrywce, dopisz rok i imperium).
 
 ---
 
@@ -392,8 +406,8 @@ failure modes: the repairs, the offensive loop, the conquest aftermath.
 | **W3-5 ✅** `07c1087` + `61bdffe` | `feat(ai): wybór celu — reguła Directora, nie doktryna` | Target selection as a **catalog rule + its own action** (C-2), reading `ThreatAssessment.getStrength` for force (**D3: global truth, signed**), `TerritoryService.getSystemDevScore` for value and `InfluenceMap` for adjacency (S19/S20 — reuse, do not write a second scorer). **D4 (verified): strike composition selects hulls on `warpFuel.max > 0`, never on template id**, so the escorts fly and FRG-3 stays home by its own design; "no warp-capable hull in reserve" is a **first-class refusal reason**, since roamers arrive only at L2, one per incident. ⚠ **`delay: 0` mandatory** (`_firePending` dereferences the null left by `gameState.set(key,null)` **outside** both try/catch layers — `DirectorSystem:252-262`, `:161`; pinned catalog-wide by `w2_ai_mobilization` T4). ⚠ Roll key must mix `GALAXY_SEED` — the first-contact defect is precisely this class and `DirectorRuleMath:71-74` warns about it in writing. ⚠ Roll-less rules are throttled only by cooldown; the once-per-displayed-year gate lives inside `if (rule.roll)`. **⚠ CARRIES THE W3-0 PROBE** (scope ruling 2026-08-17: folded here, where its measurement is consumed and the Director must be wired anyway — building it in W3-0 would be harness work done twice). NEW `src/testing/headless/probe-w3-targets.mjs`, multi-seed, longitudinal. **⚠ IT MUST SEED THE R-3 STATION TOKEN** — `GameCore` mounts no `stationSystem`, so `EmpireColonyBootstrap:255-270` skips the token, `DirectorProduction:359` refuses every warship with `no_orbital_station`, and **an unseeded probe measures SILENCE, not restraint** (S21). Replicate the bootstrap's seed after boot (`new StationSystem()` → `createStation(capitalBodyId, { ownerEmpireId, starterModules: false })`, the `director_station_seed_smoke` shape) and **assert the token took** before measuring anything. | **GATE 2 §8** |
 | **W3-6 ✅** `0eae716` | `feat(ai): desant AI z bitew vessel_group` | New entry point into the live `launchInvasion` intent from `battle:resolved` with `participantA.type==='vessel_group'` + orbital dominance, reading `vessel.troopCapacity`/`canDropTroops` off the winning side's real hulls (C-1). Reuses the whole landing/capture half unchanged. ⚠ `MIN_SURVIVING_STRENGTH_TO_LAND = 30` is evaluated against abstract `pA.strength` — a unit with no meaning on the real-vessel path; it needs a hull-derived replacement, not a copy. | — |
 | **W3-7 ✅** `cced9df` | `feat(ui): gracz widzi, że jest atakowany` | S25, the cheapest large win in the slice: `invasion:*` gains a real consumer through `NotificationCenter` with the W2-7 contact gate (anonymous at `contact`, named at `detailed`) · the `{type:'player'}` participant gains `empireId:'player'`, which repairs **three** filtered consumers at once (`UIManager:1344` and both `GameScene` branches) · an EventLog line on the enemy-wins branch (`EAH:208-216`) · colony loss stops being a native `alert()`. i18n PL+EN, and the desant strings of S26 come with it. | **GATE 3** (checklista gotowa) |
-| **W3-8** | `chore(ai): wycofanie martwej warstwy abstrakcyjnej floty` | C-3/C-4: retire `MilitaryAI`/`EconAI`/`EmpireFleetMaterializer`/`spawnFleet`/`moveFleet` and the `unifiedAggregator` branch behind an explicit dead-code notice, deleting `FLEET_AGGRO_INTERVAL` with them. **Isolated commit, after the live gates** — the point is that nothing above depends on it. | — |
-| **W3-9** | `docs(war): domknięcie W3` | `WAR_BACKBONE.md` C-1…C-6 · master plan · `CLAUDE.md` · `MEMORY.md` + memory file · this plan's results. | — |
+| **W3-8 ✅** `814fb38` | `chore(ai): wycofanie martwej warstwy abstrakcyjnej floty` | C-3/C-4: retire `MilitaryAI`/`EconAI`/`EmpireFleetMaterializer`/`spawnFleet`/`moveFleet` and the `unifiedAggregator` branch behind an explicit dead-code notice, deleting `FLEET_AGGRO_INTERVAL` with them. **Isolated commit, after the live gates** — the point is that nothing above depends on it. | — |
+| **W3-9 ✅** | `docs(war): domknięcie W3` | `WAR_BACKBONE.md` C-1…C-6 · master plan · `CLAUDE.md` · `MEMORY.md` + memory file · this plan's results. | — |
 
 **Per-commit gates:** `node src/testing/smoke/run-all.mjs` **0 FAIL** · `node tools/check-i18n.mjs` **PASS**
 with pl↔en divergence **0 both ways** · no `window.KOSMOS?.` silent no-op in any new decision path (audit R12).
@@ -905,6 +919,39 @@ path instead). Next live run can settle it in one read — the first record shou
     audit called correct at S2 — the declaration attaches to an event that can justify it rather
     than to a debug spawn. Recorded so no future gate reads the gap between spawn and war as a bug.
 
+### Added at GATE 3 (2026-08-18, owner-witnessed live) — the three CONDITIONS of the conditional pass
+
+> ⚠ **Numbering note.** The orchestrator filed these as 42-44; this register already stood at 48
+> when they arrived, so they land as **49-51** and the mapping is written here rather than
+> silently renumbering anything: **orchestrator 42 = 49 · 43 = 50 · 44 = 51.**
+
+49. **The AI ship catalog has no TRANSPORT role — so `no_drop_capable_hull` is the only reachable
+    answer of the battle→invasion join, by construction, not by chance.** Every template in
+    `SHIP_TEMPLATES` is a warship or a courier; none mounts `troop_bay_*` + `drop_pods`, and there
+    is no rule that would ever queue one. The W3-6 entry point is therefore *correct and unused*:
+    it reads real hulls, finds no drop-capable survivor, and refuses with a truthful reason. The
+    live landing on this gate was produced by a debug lever, not by the AI's own production.
+    ⇒ **The missing piece is a CATALOG entry plus a rule that wants it**, not code in the invasion
+    path. Full data: `docs/audit/AI_DROP_HULL_AUDIT.md`. Assigned to its own future slice.
+50. **The AI's landing force runs on the LEGACY ground model, not on archetypes — a different
+    game with a different balance.** `INVASION_UNIT_POOLS` points exclusively at legacy
+    `GROUND_UNITS` types (60 HP / 12 attack) while the player's archetype units are a separate,
+    later model (15 HP / 7 attack, with morale and supply). Legacy units have **no** morale or
+    supply layer at all, and legacy morale carries contradictory defaults (0 on being hit vs 100
+    on sweep and on save/load) ⇒ **a legacy unit falls apart on its first hit unless the game has
+    been reloaded since the landing.** Switching the pool to archetypes is a ground-combat balance
+    change, so it belongs to the **GROUND** slice next to the S12 morale defect and R13 RNG
+    seeding — not to a visibility commit. Full data: `docs/audit/GROUND_UNITS_AUDIT.md`.
+51. ⚠ **An AI landing NEVER ends in the colony changing hands — the capture requirement exists
+    only on the player's side.** Verified live: the invader's unit (`gu_42`) stood on Nekkar d and
+    `getColoniesByEmpire` never listed that colony under the enemy. `InvasionSystem` has
+    `_tryPlayerCapture` (the player takes an AI body) with **no** mirror for the AI direction, so
+    the last step of the conquest loop — *hold the capital, own the colony* — is missing on the
+    side W3 just taught to attack. GATE 3 §4/§5 were therefore verified through a
+    **`transferColony` workaround** (the same reversible mechanism W3-1 built), which proves the
+    OWNERSHIP half works end to end; what is unproven is the AI's route to triggering it.
+    ⇒ Its own future gate: **AI takes the colony.** This is the reason GATE 3 is *conditional*.
+
 ---
 
 ## Decisions taken — SEVEN, all resolved 2026-08-17 (owner + orchestrator)
@@ -971,6 +1018,28 @@ colonies under the player.
 **Absorbed with the same review:** all 15 findings accepted as filed; corrections **C-1…C-6** fold into
 `WAR_BACKBONE.md` with an audit-correction note. ⚠ **The `CAPTURE_GRACE_YEARS` "has been waiting in the code
 for exactly this" line dies** — it was consumer-less, the fourth instrument lesson's purest case.
+
+---
+
+## STANDING LESSON (process, not code) — CC writing files RELOADS the owner's live tab
+
+**Filed at W3 close, 2026-08-18. Applies to every future slice, every session.**
+
+The game is served by **Live Server**, which watches the working tree. Every file CC writes —
+including a file written during a *read-only audit*, such as a report under `docs/audit/` — makes
+Live Server reload the owner's open tab. **A reload throws away runtime state and drops the game
+back to the last save**: a mid-gate scene the owner spent ten minutes assembling (spawned raiders,
+a won orbit, troops on the ground) is simply gone, and nothing announces why.
+
+⚠ The trap is that this hits precisely the tasks that *look* harmless. "Zero changes to code" does
+not mean zero writes; an audit that produces a report is a write. Two rules follow, and both are
+binding:
+
+1. **Read-only audits run when the owner has NO tab open** — or the owner is told, before the work
+   starts, that the tab will reload.
+2. **CC never writes during a gate.** This is the same rule as *"gate never runs in parallel with
+   CC"* (recorded in W1), now with its mechanism written down: the conflict is not attention, it is
+   the file watcher.
 
 ---
 
