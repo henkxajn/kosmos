@@ -22,6 +22,8 @@ import gameState from '../core/GameState.js';
 import EventBus from '../core/EventBus.js';
 import { createVessel } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { resolveTemplate } from '../utils/ShipTemplateResolver.js';
+import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 
 export const TEST_ENEMY_ID = 'emp_test_enemy';
 
@@ -532,6 +534,12 @@ export function spawnEnemyAttack(opts = {}) {
     return { success: false, reason: 'no_deps' };
   }
 
+  // ⚠ W3-4c — atak MIĘDZYGWIEZDNY to inna scena i inna maszyneria: rajder musi stać poza
+  // układem gracza, mieć bak warp i polecieć PRAWDZIWĄ ścieżką (skok → uderzenie), a nie
+  // dostać ręcznie sklejoną misję `attack` jak niżej. Delegujemy więc do dedykowanej
+  // dźwigni zamiast rozdwajać tę funkcję na dwa produkty pod jedną nazwą.
+  if (opts.warpCapable) return spawnEnemyRaider(opts);
+
   // 1) Upewnij się że wróg istnieje
   if (!K.empireRegistry?.get(TEST_ENEMY_ID)) {
     const res = spawnTestEnemy();
@@ -646,6 +654,166 @@ export function spawnEnemyAttack(opts = {}) {
     hint: `Statek leci z ${spawnDistAU} AU. Zbuduj/ulepsz obserwatorium by wykryć wcześniej. Bitwa odpali się po dotarciu.`,
   };
   console.log('[spawnEnemyAttack] 🚀 Wrogi atak w drodze:', report);
+  return report;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// spawnEnemyRaider — WROGI OKRĘT ZDOLNY DO SKOKU, postawiony W INNYM UKŁADZIE.
+//
+// PO CO (luka narzędziowa złapana na GATE 2 wyd. 2): scena międzygwiezdna była
+// NIEMOŻLIWA DO POSTAWIENIA żadną zwalidowaną dźwignią. Sandbox stawia wyłącznie
+// `frigate_system_defender` (`warpFuel.max: 0` — CELOWY brak baku, patrz katalog),
+// a `spawnEnemyAttack` dobiera kadłub po sile i lądował na `hull_medium`, też bez baku.
+// Jedynym wyjściem byłaby ręczna edycja stanu paliwa — czyli dokładnie to, czego
+// zasady gate'u zabraniają. Ta dźwignia zamyka lukę: JEDNO wywołanie stawia rajdera
+// tam, gdzie trzeba, i (domyślnie) wydaje mu uderzenie PRAWDZIWĄ ścieżką produkcyjną.
+//
+// ⚠ Kadłub bierzemy z KATALOGU (`resolveTemplate`), nie z ręcznej listy modułów —
+//    gdy właściciel zmieni szablon, dźwignia idzie za nim. Kontrakt („rajder MA bak
+//    warp") jest weryfikowany po fakcie i raportowany, a nie zakładany.
+// ⚠ Właściciel: `opts.empireId` → przeciwnik PIERWSZEJ aktywnej wojny → `TEST_ENEMY_ID`.
+//    Domyślka po wojnie jest tu istotna: w Sandboksie wojna toczy się z
+//    `emp_sandbox_enemy`, a nie z `emp_test_enemy` (§Findings 17 — dźwignia stawiająca
+//    flotę dla ZŁEGO imperium była już raz przyczyną fałszywego wyniku).
+// ⚠ Układ: `opts.systemId` → najbliższy układ INNY niż macierzysty gracza (jeden skok,
+//    deterministycznie). Nigdy układ gracza — o to w tej dźwigni chodzi.
+//
+// opts: { empireId?, systemId?, templateId='frigate_laser_escort', autoOrder=true,
+//         targetBodyId?, distanceAU=5, vesselName? }
+// ─────────────────────────────────────────────────────────────────────────────
+export function spawnEnemyRaider(opts = {}) {
+  const K = window.KOSMOS;
+  if (!K?.civMode) {
+    console.warn('[spawnEnemyRaider] Gracz jeszcze nie przejął cywilizacji');
+    return { success: false, reason: 'no_civ_mode' };
+  }
+  const vMgr = K.vesselManager;
+  const home = K.homePlanet;
+  if (!vMgr || !home) {
+    console.warn('[spawnEnemyRaider] Brak VesselManager lub homePlanet');
+    return { success: false, reason: 'no_deps' };
+  }
+
+  // 1) WŁAŚCICIEL — jawny, potem przeciwnik aktywnej wojny, na końcu imperium testowe.
+  const reg = K.empireRegistry;
+  let empireId = opts.empireId ?? null;
+  if (!empireId) {
+    const war = K.warSystem?.listActive?.()?.[0] ?? null;
+    if (war) empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
+  }
+  if (empireId && !reg?.get?.(empireId)) {
+    console.warn(`[spawnEnemyRaider] Imperium "${empireId}" nie istnieje w rejestrze`);
+    return { success: false, reason: 'unknown_empire', empireId };
+  }
+  if (!empireId) {
+    if (!reg?.get?.(TEST_ENEMY_ID)) {
+      const res = spawnTestEnemy();
+      if (!res?.success) return res;
+    }
+    empireId = TEST_ENEMY_ID;
+  }
+
+  // 2) UKŁAD — jawny albo NAJBLIŻSZY inny niż macierzysty (jeden skok, deterministycznie).
+  const homeSystemId = home.systemId ?? K.activeSystemId ?? 'sys_home';
+  const systems = K.galaxyData?.systems ?? [];
+  let systemId = opts.systemId ?? null;
+  if (!systemId) {
+    const from = systems.find(s => s.id === homeSystemId);
+    const others = systems.filter(s => s.id !== homeSystemId);
+    if (!from || others.length === 0) {
+      console.warn('[spawnEnemyRaider] Galaktyka nie ma innego układu niż macierzysty');
+      return { success: false, reason: 'no_other_system' };
+    }
+    // `warpDist3D` — ta sama miara, której używa planer trasy (bez drugiej arytmetyki).
+    systemId = others
+      .map(s => ({ id: s.id, d: warpDist3D(from, s) }))
+      .sort((a, b) => a.d - b.d)[0].id;
+  }
+  if (systemId === homeSystemId) {
+    console.warn('[spawnEnemyRaider] Rajder MA stać poza układem gracza — o to w tej dźwigni chodzi');
+    return { success: false, reason: 'system_is_player_home' };
+  }
+
+  // 3) KADŁUB Z KATALOGU — nie z ręcznej listy modułów.
+  const templateId = opts.templateId ?? 'frigate_laser_escort';
+  const resolved = resolveTemplate(templateId, { isResearched: () => true });
+  if (!resolved?.ok) {
+    console.warn(`[spawnEnemyRaider] Szablon "${templateId}" nierozwiązany:`, resolved?.reason);
+    return { success: false, reason: 'template_unresolved', templateId, detail: resolved?.reason };
+  }
+
+  const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+  const distAU = opts.distanceAU ?? 5;
+  const angle = Math.random() * Math.PI * 2;
+
+  const vessel = createVessel(resolved.hullId, home.id, {
+    name: opts.vesselName ?? 'Rajder',
+    modules: [...resolved.modules],
+    x: Math.cos(angle) * distAU * AU_TO_PX,
+    y: Math.sin(angle) * distAU * AU_TO_PX,
+    systemId,
+  });
+  // Bak warp PEŁNY — inaczej scena zależałaby od clampa „AI leci na oparach" i gate
+  // mierzyłby co innego, niż opisuje.
+  if (vessel.warpFuel) vessel.warpFuel.current = vessel.warpFuel.max;
+
+  vessel.ownerEmpireId = empireId;
+  vessel.owner         = empireId;
+  vessel.isEnemy       = true;
+  vessel.position.state    = 'orbiting';
+  vessel.position.dockedAt = null;      // wolna przestrzeń — statek nie orbituje ciała
+  vessel.mission           = null;
+  vessel.movementOrder     = null;
+
+  vMgr._vessels.set(vessel.id, vessel);
+  EventBus.emit('vessel:created', { vessel });
+  EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
+
+  // 4) KONTRAKT DŹWIGNI — sprawdzony WYKONANIEM, nie założony. Rajder bez baku warp jest
+  //    bezużyteczny dla sceny międzygwiezdnej, więc mówimy o tym GŁOŚNO zamiast oddawać
+  //    „sukces", po którym gate utyka tak samo jak przedtem.
+  const warpCapable = (vessel.warpFuel?.max ?? 0) > 0;
+  if (!warpCapable) {
+    console.error('[spawnEnemyRaider] ⚠ SZABLON BEZ BAKU WARP — ten rajder NIE doleci do gracza', {
+      templateId, hullId: resolved.hullId, modules: resolved.modules,
+    });
+  }
+
+  // 5) ROZKAZ — PRAWDZIWĄ ścieżką produkcyjną (`OrderService`), nie ręcznie sklejoną misją.
+  //    `autoOrder: false` zostawia rajdera bezczynnego, gdy gate chce sam przejść kroki.
+  const targetBodyId = opts.targetBodyId ?? home.id;
+  const autoOrder = opts.autoOrder !== false;
+  let orderResult = null;
+  if (autoOrder) {
+    const os = K.orderService;
+    if (!os?.issueAttack) {
+      console.warn('[spawnEnemyRaider] Brak KOSMOS.orderService — rajder stoi bez rozkazu');
+    } else {
+      orderResult = os.issueAttack(vessel.id, { targetBodyId });
+      if (!orderResult?.ok) {
+        console.warn('[spawnEnemyRaider] Rozkaz uderzenia odrzucony:', orderResult);
+      }
+    }
+  }
+
+  const report = {
+    success: true,
+    vesselId: vessel.id,
+    name: vessel.name,
+    empireId,
+    systemId,
+    templateId,
+    hullId: resolved.hullId,
+    modules: resolved.modules,
+    warpFuel: { current: vessel.warpFuel?.current ?? 0, max: vessel.warpFuel?.max ?? 0 },
+    warpCapable,
+    targetBodyId,
+    orderResult,
+    nextStep: autoOrder
+      ? 'Rozkaz już wydany — obserwuj mission.type: interstellar_jump → attack'
+      : `KOSMOS.orderService.issueAttack('${vessel.id}', { targetBodyId: '${targetBodyId}' })`,
+  };
+  console.log('[spawnEnemyRaider] 🚀 Rajder gotowy:', report);
   return report;
 }
 

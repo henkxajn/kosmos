@@ -75,7 +75,7 @@ import { initDiplomacyRefusals } from '../ui/DiplomacyRefusalModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
-import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
+import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyRaider, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
 import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -1017,6 +1017,14 @@ export class GameScene {
       spawnEnemyFleet,
       spawnEnemyCiv,
       spawnEnemyAttack,
+      // KOSMOS.debug.spawnEnemyRaider({ empireId?, systemId?, templateId?, autoOrder?, targetBodyId? })
+      //   — wrogi okręt ZDOLNY DO SKOKU, postawiony w INNYM układzie (domyślnie najbliższym),
+      //   z pełnym bakiem warp, kadłub z KATALOGU szablonów. Domyślnie od razu dostaje
+      //   uderzenie przez `OrderService.issueAttack` (skok → uderzenie); `autoOrder: false`
+      //   zostawia go bezczynnego, gdy chcesz przejść kroki ręcznie. Właściciel domyślnie =
+      //   przeciwnik aktywnej wojny (w Sandboksie `emp_sandbox_enemy`, NIE `emp_test_enemy`).
+      //   Równoważne wejście: `spawnEnemyAttack({ warpCapable: true })`.
+      spawnEnemyRaider,
       // KOSMOS.debug.spawnEnemyWarpGhost({ offsetLY?, name? }) — wrogi statek w tranzycie
       // warp (pełna instancja Vessel) do testu ghost „?" na radarze/galaktyce Stratcom.
       // Zastępuje kruchy ręczny `_vessels.set('ghost_test', {...})` (surowy obiekt → crashe).

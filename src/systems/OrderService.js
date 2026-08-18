@@ -24,6 +24,7 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { t }         from '../i18n/i18n.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 
 export class OrderService {
   constructor() {
@@ -103,6 +104,19 @@ export class OrderService {
    */
   issueWarp(vesselId, targetSystemId) {
     if (!targetSystemId) return { ok: false, reason: 'no_target' };
+
+    // ⚠ W3-4c — skok do układu, w którym statek JUŻ JEST, to nie awaria dyspozytora.
+    // Ścieżka gracza mówiła tu `same_system` (planer, `WarpRoutePlanner:57`), a ścieżka AI
+    // wracała `dispatch_failed` — jeden stan, dwie różne odpowiedzi zależnie od tego, KTO pyta.
+    // Zwracamy kanoniczny `same_system`: stała już istnieje (`WARP_ROUTE_REASONS.SAME_SYSTEM`),
+    // ma mapowanie w UI (`FleetManagerOverlay:6623`) i tekst w OBU językach
+    // (`fleet.warpErrSame` — „Statek już tu jest"). Nowa nazwa byłaby DRUGIM słownikiem
+    // na to samo zdarzenie.
+    const v0 = this._vm?.getVessel?.(vesselId);
+    if (v0 && this._sameSystem(v0, targetSystemId)) {
+      return { ok: false, reason: WARP_ROUTE_REASONS.SAME_SYSTEM };
+    }
+
     const wrs = this._wrs;
     // ⚠ W3-4b — okręt AI NIE przechodzi przez planer wielo-skokowy. `WarpRouteSystem.canOrder`
     // odrzuca każdy `isEnemyVessel` powodem `not_player` — to bramka INTERFEJSU (planer liczy
