@@ -220,6 +220,39 @@ export const DIRECTOR_RULES = {
     personalityMod: { axis: 'aggression', at0: 0.6, at1: 1.4 },
     cooldown: { years: 3.0 },
   },
+
+  /**
+   * W3-5 — UDERZENIE NA CEL GRACZA. Pierwsza reguła, w której AI wybiera cel SAMO.
+   *
+   * Trigger to OBECNOŚĆ CELU W ZASIĘGU, nie siła: zasięg wyznacza powłoka graniczna
+   * `InfluenceMap` (§Findings 27 — warstwa transportu dałaby AI skok przez pół galaktyki
+   * za jeden bak oparów, więc granicę stawia reguła).
+   *
+   * Guardy w kolejności rosnącego kosztu: wojna (warunek wstępny, nie skutek — korekta C-4)
+   * → posiadanie okrętu zdolnego do skoku. Dobór eskadry i odmowa „za mało okrętów"
+   * mieszkają w akcji, bo zależą od TEGO celu (§Findings 34).
+   *
+   * ⚠ `saltGalaxySeed: true` — TA JEDNA reguła miesza ziarno galaktyki do klucza rzutu.
+   * Bez tego każda partia dawałaby ten sam rok pierwszego uderzenia (dokładnie defekt
+   * zsynchronizowanego pierwszego kontaktu). Sól jest opt-in, bo globalna zmiana `rollFires`
+   * przesunęłaby losy WSZYSTKICH istniejących reguł — zmiana balansu przemycona w cudzym slice.
+   *
+   * ⚠ `delay: 0` OBOWIĄZKOWO — `_firePending` dereferencuje wpis, który `gameState.set(key, null)`
+   * zostawia jako `null`, POZA oboma try/catch (pinowane katalogowo przez `w2_ai_mobilization` T4).
+   *
+   * Krzywa celowo WOLNIEJSZA niż mobilizacja (20 %, +15 pkt/rok wyświetlany): uderzenie
+   * międzygwiezdne to najgłośniejsza rzecz, jaką AI robi graczowi, i ma być decyzją, nie tikiem.
+   */
+  strike_player_target: {
+    id:       'strike_player_target',
+    trigger:  { kind: 'poll', probe: 'reachablePlayerTargets', gte: 1 },
+    guard:    ['empireAtWarWithPlayer', 'empireHasStrikeForce'],
+    roll:     { startPct: 20, stepPct: 15, capPct: 100, unit: 'displayedYear', saltGalaxySeed: true },
+    delay:    0,
+    response: { action: 'launchStrike', params: { maxShips: 3 } },
+    personalityMod: { axis: 'aggression', at0: 0.5, at1: 1.5 },
+    cooldown: { years: 5.0 },
+  },
 };
 
 /**

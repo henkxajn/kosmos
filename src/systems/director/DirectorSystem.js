@@ -213,7 +213,16 @@ export class DirectorSystem {
       if (last != null && (year - last) < 1.0) return;
 
       const attempts = (st.attempts ?? 0) + 1;
-      const fired = rollFires(rule.id, empireId, attempts, rule.roll ?? DEFAULT_ROLL, mult);
+      // ⚠ W3-5 — SÓL GALAKTYKI, opt-in per reguła (`roll.saltGalaxySeed`). Klucz rzutu jest
+      // STRUKTURALNY (`reguła:imperium:próba`), więc bez soli KAŻDA nowa partia odtwarza ten
+      // sam rok odpalenia — dokładnie defekt zsynchronizowanego pierwszego kontaktu
+      // (`DirectorRuleMath.js:71-74` ostrzega przed tą klasą wprost). Sól jest OPT-IN, a nie
+      // globalna, bo dosypanie jej wszystkim regułom przesunęłoby losy pierwszego kontaktu,
+      // nacisku i mobilizacji — czyli byłaby to zmiana balansu przemycona w cudzym slice.
+      const salt = rule.roll?.saltGalaxySeed
+        ? String(window.KOSMOS?.galaxyData?.seed ?? '')
+        : '';
+      const fired = rollFires(rule.id, empireId, attempts, rule.roll ?? DEFAULT_ROLL, mult, salt);
       this._writeRuleState(rule.id, empireId, { ...st, attempts, lastAttemptYear: year }, 'director_roll');
       if (!fired) return;
     }

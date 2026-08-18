@@ -98,11 +98,15 @@ export function rollKey(ruleId, empireId, attempt, salt = '') {
  * @param {number} [chanceMult] — mnożnik z osobowości (patrz personalityMultiplier)
  * @returns {boolean}
  */
-export function rollFires(ruleId, empireId, attempt, cfg = DEFAULT_ROLL, chanceMult = 1) {
+export function rollFires(ruleId, empireId, attempt, cfg = DEFAULT_ROLL, chanceMult = 1, salt = '') {
   const pct = rollChancePct(attempt, cfg) * (Number(chanceMult) || 0);
   if (pct <= 0) return false;
   if (pct >= 100) return true;
-  return unitFromKey(rollKey(ruleId, empireId, attempt)) < pct / 100;
+  // ⚠ `salt` (W3-5) — sól galaktyki dla reguł, które o nią proszą (`roll.saltGalaxySeed`).
+  // Domyślnie PUSTA, więc klucze wszystkich dotychczasowych reguł są BIT W BIT te same:
+  // dosypanie soli globalnie byłoby zmianą balansu (inne lata pierwszego kontaktu, nacisku,
+  // mobilizacji) przemyconą w slice o czym innym.
+  return unitFromKey(rollKey(ruleId, empireId, attempt, salt)) < pct / 100;
 }
 
 // ── Osobowość ───────────────────────────────────────────────────────────────

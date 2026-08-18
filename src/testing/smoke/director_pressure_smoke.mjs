@@ -30,6 +30,7 @@ import { DirectorFirstContact, registerFirstContactBehaviors } from '../../syste
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 import { DirectorProduction, registerProductionGuards } from '../../systems/director/DirectorProduction.js';
 import { DirectorMobilization, registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
+import { DirectorOffensive, registerOffensiveBehaviors } from '../../systems/director/DirectorOffensive.js';
 
 registerPressureBehaviors(new DirectorPressure(), { allowOverride: true });
 registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true });
@@ -38,6 +39,9 @@ registerFirstContactBehaviors(new DirectorFirstContact(), { allowOverride: true 
 // i to jest zachowanie ZAMIERZONE, nie kruchość testu.
 registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
 registerMobilizationBehaviors(new DirectorMobilization(), { allowOverride: true });
+// W3-5: katalog niesie regule wyboru celu (`strike_player_target`), wiec jej nazwy TEZ musza
+// byc w rejestrach — konstruktor DirectorSystem waliduje CALY katalog i rzuca na nieznanej.
+registerOffensiveBehaviors(new DirectorOffensive(), { allowOverride: true });
 // W2-7: reguła mobilizacji używa guardu `empireHasFreeCrew` z rejestratora PRODUKCJI,
 // więc katalog nie zwaliduje się bez obu rodzin naraz.
 registerProductionGuards(new DirectorProduction(), { allowOverride: true });

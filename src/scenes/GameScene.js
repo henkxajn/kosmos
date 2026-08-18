@@ -108,6 +108,7 @@ import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/
 import { DirectorPressure, registerPressureBehaviors } from '../systems/director/DirectorPressure.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../systems/director/DirectorDoctrine.js';
 import { DirectorMobilization, registerMobilizationBehaviors } from '../systems/director/DirectorMobilization.js';
+import { DirectorOffensive, registerOffensiveBehaviors } from '../systems/director/DirectorOffensive.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
@@ -369,6 +370,12 @@ export class GameScene {
     //   znaczenia (tak samo działa `DirectorDoctrine._capitalBodyId`).
     this.directorMobilization = new DirectorMobilization();
     registerMobilizationBehaviors(this.directorMobilization, { allowOverride: true });
+    // W3-5 — wybór celu i uderzenie: pierwsza reguła, w której AI wybiera cel SAMO.
+    // Ta sama zasada kolejności: rejestracja PRZED konstrukcją silnika (katalog waliduje nazwy
+    // i rzuca na nieznanej). Uderzenie idzie wyłącznie przez `OrderService.issueAttack`,
+    // rozwiązywany LENIWIE w tiku — więc kolejność względem jego wpięcia nie ma znaczenia.
+    this.directorOffensive    = new DirectorOffensive();
+    registerOffensiveBehaviors(this.directorOffensive, { allowOverride: true });
     this.directorSystem       = new DirectorSystem();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
