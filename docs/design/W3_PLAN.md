@@ -39,10 +39,17 @@ w `994935e` + keeper czytający PRAWDZIWĄ ścieżkę bootu (§Findings 35-36). 
 kolonii (gracza), więc wróg roszczy 0 układów (§Findings 38). §8 przepisana: KROK 0 montaż →
 KROK 1 diagnoza (`strikeReport`) → KROK 2 decyzja (`forceStrike`) → KROK 3 autonomia w NORMALNEJ grze.
 
-⏳ **GATE 2 §8 (AUTONOMIA) CZEKA NA CIEBIE** — dopisana do tej samej checklisty. To jest ta
-sekcja, w której AI wybiera cel SAMO. ⚠ Najdłuższa w czasie: reguła próbuje raz na rok
-wyświetlany (20 % + 15 pkt), ma 5 lat cooldownu i wymaga jednocześnie wojny, celu w zasięgu
-i okrętu zdolnego do skoku. L18 daje dźwignię, jeśli nie chcesz czekać.
+✅ **GATE 2 ZDANY W CAŁOŚCI 2026-08-18** — mechanizm (§§1-7, wyd. 2) ORAZ autonomia (§8).
+Drabina odmów okazała się PRAWDOMÓWNA w TRZECH różnych stanach świata, każdy z inną przyczyną:
+`no_target_in_reach` w Sandboxie (geometria terytorium) · **„brak wojny — reguła milczy z definicji"**
+na rozwiniętym zapisie dla OBU imperiów (**korekta C-4 trzyma: AI nie obchodzi dyplomacji**) ·
+`no_target_in_reach` przy `forceStrike(emp_002)` mimo powłoki 7 (układ gracza poza powłoką — geografia
+tej galaktyki).
+
+⏳ **JEDEN PUNKT ZOSTAJE OTWARTY I ZAMKNIE SIĘ SAM: 8e — „reguła odpaliła SAMA".** Wymaga pary
+**wojna × zasięg** naraz, a w tej galaktyce taka para nie istnieje (sonda: 2 z 8 par). ⚠ **PRZY
+PIERWSZYM `director:strikeLaunched` W PRAWDZIWEJ WOJNIE — dopisz tu rok i imperium.** To jedyna
+obserwacja, której ten slice jeszcze nie ma, i przyjdzie sama w normalnej rozgrywce.
 
 **Co dowiózł W3-5:** `DirectorOffensive` + reguła katalogowa `strike_player_target` — REGUŁA
 z własną akcją, nie trzecia doktryna (model doktryny nie potrafi wyrazić CELU, korekta C-2).

@@ -329,7 +329,7 @@ nie łapał, bo spawnował garnizon już zadokowany przy stolicy.
 | 6. Garnizon AI potrafi wrócić do stolicy | |
 | 7. Brak regresji, konsola czysta | |
 
-**GATE 2:** ☑ **ZDANY 2026-08-18** (wyd. 2, prowadzony przez Filipa) ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+**GATE 2:** ☑ **ZDANY W CAŁOŚCI 2026-08-18** — mechanizm (§§1-7, wyd. 2) ORAZ autonomia (§8, przepisana po naprawie montażu). Prowadzony przez Filipa.
 
 Łańcuch uderzenia miedzygwiezdnego udowodniony NA ŻYWO od poczatku do konca: gola odmowa
 (`target_other_system`) → fasada sklada (`composite: true`) → `interstellar_jump` z zamiarem
@@ -388,6 +388,13 @@ względem wydania 1; jeśli przeszły Ci wtedy, odhacz je bez powtarzania — po
 
 - [ ] **`[true, 'function', 'function']`**. Gdyby pierwsze było `false` — to jest dokładnie ta
       awaria z poprzedniej próby i dalej nie ma po co iść.
+
+⚠ **NIE diagnozuj `Object.keys(KOSMOS.directorOffensive)` → `[]` jako braku montażu.** To jest
+artefakt pól klasy: `DirectorOffensive` nie trzyma stanu we własnych polach (cała wiedza jest
+liczona na żądanie z `vesselManager`/`influenceMap`/`colonyManager`), więc instancja **z założenia**
+nie ma własnych kluczy wyliczalnych. Dowodem montażu jest **działający `strikeReport`**, nie
+zawartość obiektu. (Zmierzone na GATE 2 §8 — jedna sesja poszła na tę pomyłkę, więc zostaje
+zapisana tutaj.)
 
 ---
 
@@ -489,7 +496,33 @@ jednocześnie: wojny, celu w zasięgu i okrętu zdolnego do skoku. Puść grę n
 | 8f. Lot prawdziwą ścieżką → bitwa w układzie CELU → dominacja tam, gdzie trzeba | |
 | 8g. Brak fałszywego modala „twojego" przylotu przy przylocie wroga | |
 
-**GATE 2 §8 (autonomia):** ☐ ZDANY ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+**GATE 2 §8 (autonomia):** ☑ **ZDANY 2026-08-18** ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+**GATE 2 W CAŁOŚCI: ZDANY** — mechanizm (§1-§7, wyd. 2) + autonomia (§8).
+
+| pozycja | wynik |
+|---|---|
+| 8a. Warstwa ZAMONTOWANA | ✅ po `994935e` (⚠ `Object.keys` → `[]` to artefakt pól klasy, nie brak montażu — patrz nota w KROKU 0) |
+| 8b. `strikeReport` daje jednoznaczny werdykt | ✅ i to on jest dowodem montażu |
+| 8c. Decyzja poprawna, odmowy z powodem | ✅ **drabina odmów PRAWDOMÓWNA w TRZECH różnych stanach świata** |
+| 8d. Ślad audytu (`strikeRefused`/`Launched`) | ✅ |
+| 8e. **Reguła odpaliła SAMA** | ⏳ **OTWARTE** — w tej galaktyce nie istnieje para (wojna × zasięg); patrz niżej |
+| 8f. Lot prawdziwą ścieżką → bitwa w układzie CELU | ✅ (§§2-3 wyd. 2) |
+| 8g. Brak fałszywego modala „twojego" przylotu | ✅ |
+
+**Trzy stany świata, w których drabina odmów powiedziała PRAWDĘ** — i to jest właściwy wynik §8,
+bo każdy z nich ma inną przyczynę i każdy został nazwany poprawnie:
+1. **`no_target_in_reach` w Sandboxie** — geometria terytorium (układ sporny przypada pierwszej
+   kolonii, więc wróg roszczy zero; zmierzone, §Findings 38).
+2. **„brak wojny — reguła milczy z definicji"** na rozwiniętym zapisie, dla OBU imperiów —
+   **korekta C-4 trzyma**: AI nie potrafi obejść warstwy dyplomacji, żeby zacząć strzelać.
+3. **`no_target_in_reach` przy `forceStrike('emp_002')` mimo powłoki 7 układów** — geografia tej
+   galaktyki: układ gracza leży poza powłoką. Zasięg stawia REGUŁA i widać, że naprawdę stawia.
+
+⏳ **8e zostaje OTWARTE jako uczciwy warunek środowiskowy, nie porażka.** Reguła wymaga pary
+**wojna × zasięg** naraz, a w tej galaktyce taka para nie istnieje (sonda: gracz w zasięgu w
+**2 z 8** par ziarno × imperium). Punkt zamknie się **sam**, przy pierwszej prawdziwej wojnie
+z imperium mającym zasięg — sygnałem jest wpis `director:strikeLaunched`. Gdy to zobaczysz,
+dopisz rok i imperium tutaj; nie trzeba w tym celu wracać do całej sekcji.
 
 ⚠ **8e wymaga normalnej gry** (patrz nota na górze sekcji). Jeśli ta galaktyka nie daje żadnemu
 imperium zasięgu na Twój układ, 8a-8d i 8f-8g są w pełni sprawdzalne, a 8e zostaje **otwarte** —

@@ -15,12 +15,26 @@ import { HUMANITY_UNITS }                   from '../data/factions/humanity.js';
 import { UNE_UNITS }                        from '../data/factions/UNE.js';
 import { SYNDYKAT_UNITS }                   from '../data/factions/Syndykat.js';
 import { glbSnapshotRenderer }              from '../renderer/GlbSnapshotRenderer.js';
+import { mixSeed, hashStringToInt }        from '../utils/SeedMath.js';
 
 const FACTION_UNITS = {
   humanity: HUMANITY_UNITS,
   UNE:      UNE_UNITS,
   Syndykat: SYNDYKAT_UNITS,
 };
+
+/** Frakcje NIE-ludzkie — pula, z której obce imperia dostają swoją (deterministycznie). */
+const ALIEN_FACTION_IDS = ['UNE', 'Syndykat'];
+
+/**
+ * Czy ten identyfikator wygląda na imperium (a nie na literówkę w nazwie frakcji)?
+ * Rozpoznajemy po rejestrze imperiów, a gdy go nie ma — po konwencji `emp_*`
+ * (headless/testy startują bez pełnego lokatora).
+ */
+function _looksLikeEmpireId(id) {
+  if (window.KOSMOS?.empireRegistry?.get?.(id)) return true;
+  return /^emp[_-]/.test(id);
+}
 
 const FACTION_DEFAULT_COLOR = {
   humanity: '#94A3B8',
@@ -156,11 +170,34 @@ export const GroundUnitFactory = {
    */
   resolveFaction(factionId) {
     const units = FACTION_UNITS[factionId];
-    if (!units) {
-      console.warn(`[GroundUnitFactory] Unknown factionId: ${factionId} — fallback to humanity`);
-      return HUMANITY_UNITS;
+    if (units) return units;
+
+    // ⚠ W3-6 — IMPERIUM TO NIE JEST „nieznana frakcja". Katalog ma trzy frakcje naziemne
+    // (humanity/UNE/Syndykat), a desant AI woła się identyfikatorem IMPERIUM (`emp_001`),
+    // więc każda obca jednostka lądowała jako HUMANITY, z ostrzeżeniem na wpis. Dwa skutki,
+    // oba złe: konsola zalewana przy każdym desancie, a gracz widzi **ludzką piechotę
+    // schodzącą z obcych transportowców** — czyli nie odróżnia najeźdźcy od własnych wojsk.
+    // Mapujemy więc imperium DETERMINISTYCZNIE na frakcję NIE-ludzką: to samo imperium zawsze
+    // ląduje tą samą frakcją, także po zapisie i wczytaniu.
+    // ⚠ Hash przez `mixSeed`, nie gołe `h*31`: identyfikatory imperiów są STRUKTURALNE
+    // (`emp_001`, `emp_002`, …), więc bez finalizera sąsiednie id wpadałyby w ten sam kubełek —
+    // ta gra ma już trzy takie miejsca w rejestrze znalezisk.
+    if (typeof factionId === 'string' && ALIEN_FACTION_IDS.length > 0 && _looksLikeEmpireId(factionId)) {
+      const pick = mixSeed(hashStringToInt(factionId)) % ALIEN_FACTION_IDS.length;
+      return FACTION_UNITS[ALIEN_FACTION_IDS[pick]];
     }
-    return units;
+
+    console.warn(`[GroundUnitFactory] Unknown factionId: ${factionId} — fallback to humanity`);
+    return HUMANITY_UNITS;
+  },
+
+  /** Frakcja, którą DOSTANIE dany identyfikator (dla UI i testów — bez tworzenia jednostki). */
+  factionIdFor(factionId) {
+    if (FACTION_UNITS[factionId]) return factionId;
+    if (typeof factionId === 'string' && _looksLikeEmpireId(factionId)) {
+      return ALIEN_FACTION_IDS[mixSeed(hashStringToInt(factionId)) % ALIEN_FACTION_IDS.length];
+    }
+    return 'humanity';
   },
 
   /**

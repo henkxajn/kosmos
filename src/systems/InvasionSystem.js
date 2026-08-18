@@ -24,8 +24,16 @@ import { INVASION_UNIT_POOLS } from '../data/GroundUnitData.js';
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 
 const CAPTURE_GRACE_YEARS = 3.0;
-const MIN_SURVIVING_STRENGTH_TO_LAND = 30; // flota musi mieć min. siły
+const MIN_SURVIVING_STRENGTH_TO_LAND = 30; // flota ABSTRAKCYJNA musi mieć min. siły
 const TROOPS_PER_LANDING = 3;               // ile jednostek desantuje
+/**
+ * W3-6 — górna klamra desantu z REALNYCH kadłubów (jedna wygrana orbita = jedna fala).
+ * ⚠ Świadomie NIE jest to odpowiednik `MIN_SURVIVING_STRENGTH_TO_LAND`: tamten próg mierzy
+ * abstrakcyjną siłę floty i na ścieżce kadłubowej nie ma sensu (`lossesA` liczy tam STATKI,
+ * nie HP — kolizja jednostek z W1 §Findings 3). Próg kadłubowy brzmi „czy ktokolwiek ocalały
+ * potrafi zrzucić wojsko" i mieszka w `_onVesselGroupVictory`; ta stała ogranicza tylko ROZMIAR.
+ */
+const MAX_TROOPS_PER_VESSEL_LANDING = 6;
 
 export class InvasionSystem {
   constructor() {
@@ -144,10 +152,97 @@ export class InvasionSystem {
 
   // ── Event handlers ───────────────────────────────────────────
 
+  /**
+   * W3-6 — DESANT Z BITWY PRAWDZIWYCH KADŁUBÓW.
+   *
+   * Ścieżka `participantA.type === 'empire'` niżej obsługuje WYŁĄCZNIE floty abstrakcyjne
+   * (`empire.fleets[]`), a te w normalnej grze nie istnieją (audyt C-1/C-3: zero producentów).
+   * Każda realna bitwa emituje `'vessel_group'` — DSCS i EnemyAttackHandler. Skutek: kierunek
+   * AI→gracz był MARTWY na obu końcach, mimo że cała maszyneria lądowania i przejęcia działa
+   * (używa jej gracz). To jest brakujące wejście, nie nowa maszyneria.
+   *
+   * ⚠ PRÓG DESANTU JEST WYPROWADZONY Z KADŁUBÓW, nie z abstrakcyjnej siły.
+   * `MIN_SURVIVING_STRENGTH_TO_LAND = 30` nie ma znaczenia na tej ścieżce: `pA.strength` to
+   * jednostka floty abstrakcyjnej, a `lossesA` w DSCS liczy STATKI, nie HP (W1 §Findings 3 —
+   * kolizja jednostek pod tą samą nazwą pola). Zamiast przeliczać jedno na drugie pytamy
+   * o rzecz, która ma sens fizyczny i jest lustrem wymagań GRACZA (`drop_pods` + ładownia):
+   * **czy wśród OCALAŁYCH jest kadłub, który potrafi zrzucić wojsko**. Brak → brak desantu.
+   *
+   * ⚠ DOMINACJA ORBITALNA — ta sama bramka co u gracza (`playerHasOrbitalDominance` w UI
+   * desantu). Wygrana bitwa nie wystarczy: trzeba TRZYMAĆ orbitę celu.
+   */
+  _onVesselGroupVictory({ result }) {
+    const pA = result?.participantA;
+    const pB = result?.participantB;
+    if (pA?.type !== 'vessel_group') return;
+    // Obrońcą musi być gracz. `{type:'player'}` bez `empireId` to kształt z EAH — W3-7 doda
+    // tam stempel, więc akceptujemy oba zapisy, byle nie było to imperium.
+    if (pB?.type !== 'player') return;
+    if (result.winner !== 'A') return;                       // desantuje tylko zwycięzca
+
+    const empireId = pA.empireId;
+    if (!empireId) return;                                   // bez stempla właściciela — nie nasze
+    const systemId = normalizeLocation(result.location).systemId;
+    if (!systemId) return;
+
+    // 1) DOMINACJA ORBITALNA nad układem celu.
+    const controller = window.KOSMOS?.warSystem?.getOrbitalController?.(systemId);
+    if (controller !== empireId) {
+      EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'no_orbital_dominance' });
+      return;
+    }
+
+    // 2) OCALAŁE kadłuby zdolne do zrzutu — próg wyprowadzony z kadłubów.
+    const vMgr = window.KOSMOS?.vesselManager;
+    const ids = Array.isArray(pA.vesselIds) ? pA.vesselIds : [];
+    const droppers = [];
+    for (const vid of ids) {
+      const v = vMgr?.getVessel?.(vid);
+      if (!v || v.isWreck) continue;                         // poległ w tej właśnie bitwie
+      if ((v.ownerEmpireId ?? v.owner) !== empireId) continue;
+      if (!v.canDropTroops) continue;                        // brak modułu drop_pods
+      if ((v.troopCapacity ?? 0) <= 0) continue;             // brak ładowni
+      droppers.push(v);
+    }
+    if (droppers.length === 0) {
+      // Wygrali orbitę, ale nie mają czym zejść na dół. To ta sama presja projektowa, co
+      // u gracza: flota bojowa ≠ flota desantowa.
+      EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'no_drop_capable_hull' });
+      return;
+    }
+
+    // 3) CEL — kolonia GRACZA w tym układzie, po STEMPLU WŁASNOŚCI (§Findings 20:
+    //    `getAllColonies` zwraca kolonie wszystkich właścicieli).
+    const colMgr = window.KOSMOS?.colonyManager;
+    const targets = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
+      EntityManager.get(c.planetId)?.systemId === systemId);
+    if (targets.length === 0) return;
+    const target = targets.find(c => c.isHomePlanet) ?? targets[0];
+
+    // 4) SIŁA DESANTU = suma ładowni ocalałych zrzutowców (klamra, żeby jedna wygrana
+    //    nie wysypywała armii; druga fala wymaga kolejnej wygranej orbity).
+    const capacity = droppers.reduce((sum, v) => sum + (v.troopCapacity ?? 0), 0);
+    const troopCount = Math.max(1, Math.min(MAX_TROOPS_PER_VESSEL_LANDING, Math.floor(capacity)));
+
+    // Konkretne jednostki w ładowniach mają pierwszeństwo (parity z graczem); gdy pusto —
+    // `launchInvasion` dobiera archetypy z puli imperium.
+    const embarked = [];
+    for (const v of droppers) {
+      for (const uid of (v.groundUnits ?? [])) {
+        const u = window.KOSMOS?.groundUnitManager?.getUnit?.(uid);
+        if (u?.archetypeId ?? u?.type) embarked.push(u.archetypeId ?? u.type);
+      }
+    }
+
+    this.launchInvasion(empireId, target.planetId, troopCount, embarked.length > 0 ? embarked : null);
+  }
+
   _onBattleResolved({ warId, battleId, result }) {
     if (!result) return;
     const pA = result.participantA;
     const pB = result.participantB;
+    // W3-6 — realne kadłuby mają WŁASNE wejście (abstrakcyjna gałąź niżej nie ma producenta).
+    if (pA?.type === 'vessel_group') { this._onVesselGroupVictory({ result }); return; }
     if (pA?.type !== 'empire' || pB?.type !== 'player') return;
     // v66: location jest objectem {systemId, planetId, point}; normalize pokrywa
     // też legacy string.
