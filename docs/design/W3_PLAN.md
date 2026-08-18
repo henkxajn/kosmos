@@ -21,14 +21,23 @@ already-declared `gameState` domain, and the one item that would need a backfill
 **Stan na 2026-08-18 (noc).** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2**
 `d5a9b8d` · GATE 1 (`536fd51`/`d19777b`/`b630c55`) · **W3-3** `1e57d1b` · **W3-4** `4724e46` ·
 `7a43c3a` · **W3-4b** `369adfc`+`cb815cd` · `4514df4` · **W3-4c** `a7b84bd`+`9a96382` ·
-**W3-5** `07c1087` · **W3-5b** `61bdffe`.
-Sweep **145/145 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji przez CAŁY slice**.
+**W3-5** `07c1087` · **W3-5b** `61bdffe` + `807bd85` + **`994935e`** (naprawa montażu).
+Sweep **146/146 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji przez CAŁY slice**.
 
 ✅ **GATE 1 ZDANY 2026-08-17** · ✅ **GATE 2 (§§1-7) ZDANY 2026-08-18** — łańcuch uderzenia
 międzygwiezdnego udowodniony NA ŻYWO od początku do końca (`W3_GATE2_CHECKLIST.md` §Wynik).
 Trzy pytania z przebiegu domknięte POMIAREM (§A1-A3): kształt `location` mówi, KTÓRA ścieżka
 walczyła · eviction pierścienia WYKLUCZONY (10 000 pojemności vs ~48 wpisów/rok gry) · **rundy
 NIE księgują się osobno** (jedno starcie = jedna bitwa) ⇒ wycena pokoju w W4 bezpieczna.
+
+⏸ **GATE 2 §8 — PIERWSZA PRÓBA ZABLOKOWANA NA AWARII MONTAŻU (2026-08-18), NAPRAWIONE.**
+`KOSMOS.directorOffensive` było `undefined`: reguła ŻYŁA w katalogu i była oceniana co tik, ale
+w bloku lokatora `GameScene` zabrakło jednego wiersza — więc gate nie miał czym jej oglądać.
+Defekt GAME-WIDE (blok lokatora biegnie dla każdego scenariusza), nie sandbox-only. Naprawione
+w `994935e` + keeper czytający PRAWDZIWĄ ścieżkę bootu (§Findings 35-36). Przy okazji zmierzone:
+**w Combat Sandboxie ta reguła nie może odpalić NIGDY** — układ sporny przypada pierwszej
+kolonii (gracza), więc wróg roszczy 0 układów (§Findings 38). §8 przepisana: KROK 0 montaż →
+KROK 1 diagnoza (`strikeReport`) → KROK 2 decyzja (`forceStrike`) → KROK 3 autonomia w NORMALNEJ grze.
 
 ⏳ **GATE 2 §8 (AUTONOMIA) CZEKA NA CIEBIE** — dopisana do tej samej checklisty. To jest ta
 sekcja, w której AI wybiera cel SAMO. ⚠ Najdłuższa w czasie: reguła próbuje raz na rok
@@ -742,6 +751,47 @@ path instead). Next live run can settle it in one read — the first record shou
     must **prefer squadrons (2+) against targets with planetary defense or a defending fleet**,
     otherwise the offensive AI is a exhaustion pump pointed at itself. This is the first
     *balance* constraint the offensive layer imposes on its own trigger.
+
+---
+
+### Added at GATE 2 §8 attempt 1 (2026-08-18, owner-witnessed live — BLOCKED on mounting)
+
+35. ⚠ **Constructed, registered, and invisible: the locator line that was never written.**
+    W3-5 shipped `strike_player_target` alive — `DirectorSystem` imports `DIRECTOR_RULES` directly
+    and evaluates the catalog every tick — but `GameScene`'s service-locator block was missing
+    `window.KOSMOS.directorOffensive`. Every §8 one-liner therefore died on `undefined`, and the
+    autonomy layer ran only where the *probe* had hand-mounted it. **Inverted S21:** the harness
+    had MORE than the game, which is the opposite of the failure mode the audit taught us to fear.
+    ⇒ The defect is **game-wide, not sandbox-only** — the locator block runs for every scenario.
+    Fixed in W3-5b. ⚠ The class is nasty because nothing complains: every consumer reads through
+    `?.`, so a missing locator entry is indistinguishable from "the feature is quiet".
+36. ⚠ **THIRD MEMBER OF THE BLIND-SPOT FAMILY, and the one that forced a different kind of test.**
+    `war_doctrine_smoke` spawned its garrison **already docked** (so it never entered the order
+    channel and missed `missing_target_point`); `w3_attack_dispatch_smoke` spawned its hull **in
+    the same system** (so it missed the whole cross-system defect); and the offensive probe
+    **mounts the system itself** (so it could not notice that the game does not). Shared shape:
+    **the test builds a scene the product never builds.** 145 green keepers proved the rule works
+    *when mounted*; nothing proved it mounts.
+    ⇒ The cure is to pin **how the game assembles the scene**, not the behaviour of a ready-made
+    one. `w3_director_mounting_smoke` reads the **real boot source** and asserts a manifest
+    (`this.directorX = new …` ⟹ `window.KOSMOS.directorX = …`), that every catalog name resolves
+    under exactly the registrars the boot imports, and that `new DirectorSystem()` survives that
+    set. Fail-first proven against the parked `GameScene`: it reports `Brakujące: directorOffensive`.
+37. **A silent rule and an unmounted rule look identical from the console — by construction.**
+    `DirectorSystem.tickEmpire` returns **before** `_writeRuleState` when a poll trigger returns 0,
+    so a rule with no reachable target leaves **no row** in `director.rules` and emits **no
+    refusal**. That is exactly what the owner measured, and it cost a session to diagnose.
+    ⇒ `KOSMOS.debug.strikeReport(empireId)` now renders the difference in one read (war / claimed /
+    border / targets / chosen target / ready hulls / verdict), and `forceStrike(empireId)` exercises
+    the decision itself when the trigger is legitimately quiet. Both are read/intent, never state edits.
+38. ⚠ **The Combat Sandbox can NEVER satisfy this rule's trigger — measured, not assumed.** The
+    sandbox seeds the enemy colony on the farthest planet of the **player's own** system, and
+    `TerritoryService._rebuild` awards a contested system to the **first** colony indexed (the
+    player's home), skipping colonies of any other owner. So `emp_sandbox_enemy` claims **0
+    systems**, has a **0-system border shell**, and `reachablePlayerTargets` is structurally **0**.
+    ⇒ §8 belongs in a **normal game**; the sandbox stays a defensive fixture (§Findings 30) and now
+    serves §8 only for KROK 0 (the mounting check). ⚠ Second-order note for W4/BALANS: *any* rule
+    keyed on `InfluenceMap` reach is blind in the sandbox for the same reason.
 
 ---
 

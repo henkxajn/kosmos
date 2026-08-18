@@ -355,86 +355,125 @@ względem wydania 1; jeśli przeszły Ci wtedy, odhacz je bez powtarzania — po
 
 ---
 
-## 8. AUTONOMIA — AI wybiera cel SAMO (W3-5, `07c1087`)
+## 8. AUTONOMIA — AI wybiera cel SAMO (W3-5 `07c1087`, montaż naprawiony w W3-5b `994935e`)
 
-> **CO TU SPRAWDZAMY, w jednym zdaniu:** czy obce imperium potrafi **SAMO** wskazać Twoją
-> kolonię, zebrać eskadrę i posłać ją przez pół galaktyki — bez jednej dźwigni z Twojej strony.
+> **CO TU SPRAWDZAMY:** czy obce imperium potrafi **SAMO** wskazać Twoją kolonię, zebrać eskadrę
+> i posłać ją przez pół galaktyki — bez jednej dźwigni z Twojej strony.
+
+> ### ⚠ CZEGO NAUCZYŁA NAS TWOJA PIERWSZA PRÓBA §8 (2026-08-18) — przeczytaj, to skraca robotę
 >
-> §§2-7 dowiodły, że silnik UMIE wykonać uderzenie, gdy cel wskażesz Ty. To jest ta sama scena
-> bez Ciebie: reguła `strike_player_target` w katalogu Directora, z własnym rzutem, cooldownem
-> i trzema powodami odmowy, które widać w audycie.
+> Zablokowałeś się na **awarii montażu** i miałeś rację: `KOSMOS.directorOffensive` było
+> `undefined`. Reguła przez cały czas **żyła** w grze (silnik importuje katalog wprost i ocenia go
+> co tik) — brakowało JEDNEGO wiersza w lokatorze `GameScene`, więc gate nie miał czym jej
+> oglądać. Naprawione w `994935e`, a pilnuje tego keeper, który czyta **prawdziwą ścieżkę bootu**.
+>
+> Drugi wniosek, ważniejszy na dziś: **brak wiersza w `directorRules` i zero odmów NIE znaczyły,
+> że reguły nie ma.** `tickEmpire` wychodzi PRZED zapisem stanu, gdy sonda triggera zwróci 0 —
+> więc „cisza" wygląda identycznie jak „nikt nie podłączył". Rozróżnia je nowy `strikeReport`.
+>
+> Trzeci wniosek, i to on decyduje, GDZIE robisz §8: **w Combat Sandboxie ta reguła nie może
+> odpalić — nigdy.** Zmierzone wykonaniem: Sandbox stawia kolonię wroga na najdalszej planecie
+> **Twojego** układu, a układ sporny przypada **pierwszej** kolonii (Twojej), więc
+> `emp_sandbox_enemy` roszczy **0 układów**, ma **0-elementową powłokę graniczną** i nie widzi
+> żadnego celu. To nie usterka reguły ani Sandboxu — Sandbox jest fiksturą **obronną** i taki
+> zostaje. §8 robisz w **normalnej grze**; Sandbox wystarczy do KROKU 0.
 
-⚠ **To jest sekcja NAJDŁUŻSZA W CZASIE.** Reguła próbuje **raz na rok wyświetlany** (20 % + 15 pkt),
-ma **5 lat cooldownu** i wymaga jednocześnie: wojny, celu w zasięgu i okrętu zdolnego do skoku.
-Puść grę na szybkim tempie i wracaj do L15/L16 — albo użyj dźwigni z L18, jeśli chcesz zobaczyć
-sam skutek bez czekania.
+---
 
-**L15 — czy reguła ma dziś z czego wybierać (zanim zaczniesz czekać):**
+### KROK 0 — czy warstwa w ogóle jest zamontowana (30 sekund, dowolna gra)
 
-`KOSMOS.directorOffensive.countReachableTargets('emp_sandbox_enemy')`
+**L15:**
 
-- [ ] Liczba **≥ 1**. Zero **NIE jest usterką** — znaczy, że Twoja kolonia leży poza przestrzenią
-      roszczoną i poza powłoką graniczną tego imperium, więc reguła słusznie milczy (zasięg
-      stawia REGUŁA, nie bak — §Findings 27). Zmierzone w sondzie: przy 4 ziarnach gracz wpadał
-      w zasięg w **2 z 8** par (ziarno × imperium).
+`[!!KOSMOS.directorOffensive, typeof KOSMOS.debug.strikeReport, typeof KOSMOS.debug.forceStrike]`
 
-**L16 — co reguła by wybrała i czy uzna cel za broniony:**
+- [ ] **`[true, 'function', 'function']`**. Gdyby pierwsze było `false` — to jest dokładnie ta
+      awaria z poprzedniej próby i dalej nie ma po co iść.
 
-`(t => t && ({ ciało: t.body.id, układ: t.systemId, wartość: t.value, bronione: t.defended }))(KOSMOS.directorOffensive.pickTarget('emp_sandbox_enemy'))`
+---
 
-- [ ] Wskazuje **Bastion**. `bronione: true` gdy masz wieżę/siatkę obronną **albo** uzbrojony
-      okręt w układzie — wtedy AI **musi** zebrać 2+ okręty (§Findings 34: samotny rajder
-      przegrał u Ciebie dwa razy i oddał 7,2 własnego wyczerpania).
+### KROK 1 — DIAGNOZA: dlaczego ofensywa stoi (albo dlaczego zaraz ruszy)
 
-**L17 — czym imperium dysponuje (dobór po WŁASNOŚCI, nie po nazwie szablonu):**
+**L16 — jeden odczyt zamiast zgadywania:**
 
-`KOSMOS.directorOffensive.strikeReadyVessels('emp_sandbox_enemy').map(v => [v.name, v.warpFuel?.max])`
+`KOSMOS.debug.strikeReport('<empireId>')`
 
-- [ ] Lista **pusta na starcie Sandboxu** — i to jest poprawne: trzy Łowcy to FRG-3 bez baku warp.
-      Reguła nie ma czym uderzyć, dopóki imperium nie zbuduje eskorty (L2 nacisku) albo dopóki
-      nie dołożysz jej dźwignią.
+Id imperium weź po stemplu: `KOSMOS.empireRegistry.listAll().map(e => e.id)`.
 
-**L18 — DŹWIGNIA (opcjonalna): daj imperium eskadrę i zobacz decyzję bez czekania**
+- [ ] Zwrotka niesie `wojna`, `ukladyRoszczone`, `powlokaGraniczna`, `celeWZasiegu`, `cel`,
+      `okretyGotowe` i **`werdykt`** jednym zdaniem.
+- [ ] ⚠ **`werdykt` jest treścią tego kroku, nie ozdobą.** Pięć możliwych odpowiedzi, wszystkie
+      normalne: *brak wojny* · *ZERO celów w zasięgu* (Twój układ leży poza przestrzenią i powłoką
+      tego imperium — zasięg stawia REGUŁA, nie bak) · *brak okrętu zdolnego do skoku* (imperium
+      ma same FRG-3) · *cel broniony, a okręt jeden* (potrzeba eskadry) · *warunki spełnione*.
 
-`KOSMOS.debug.spawnEnemyRaider({ autoOrder: false }); KOSMOS.debug.spawnEnemyRaider({ autoOrder: false })`
+**L17 — jeśli `celeWZasiegu` = 0 u WSZYSTKICH imperiów:** to nie jest awaria, to ta galaktyka.
+Zmierzone offline na 4 ziarnach: gracz wpadał w zasięg w **2 z 8** par (ziarno × imperium).
+Masz dwie uczciwe drogi: grać dalej (imperia się rozrastają) albo zacząć nową grę i wrócić
+do L16. **Nie edytuj mapy wpływów ręcznie** — mierzylibyśmy wtedy co innego.
 
-⚠ Dwa wywołania, bo cel broniony wymaga eskadry. Rajder ląduje w INNYM układzie — a reguła i tak
-sama sprawdzi, czy Twoja kolonia jest w jej zasięgu.
+---
 
-**L19 — czy reguła odpaliła (ślad audytu, filtr po RODZAJU):**
+### KROK 2 — DECYZJA: czy AI wybiera dobrze (działa nawet przy cichym triggerze)
+
+**L18 — wywołaj samą decyzję, z pominięciem rzutu:**
+
+`KOSMOS.debug.forceStrike('<empireId>')`
+
+To **intent method systemu**, nie edycja stanu: dobór celu, próg eskadry i powody odmowy są
+dokładnie te, które reguła podejmie sama z siebie.
+
+- [ ] Przy zerowym zasięgu: `{ launched: 0, reason: 'no_target_in_reach' }`.
+- [ ] Przy celu w zasięgu i braku okrętów: `no_warp_capable_hull`.
+- [ ] Daj imperium eskadrę i powtórz:
+      `KOSMOS.debug.spawnEnemyRaider({ empireId: '<empireId>', autoOrder: false })`
+      (dwa razy, jeśli Twoja kolonia jest broniona).
+- [ ] ⚠ **Przy jednym okręcie na cel BRONIONY musi wyjść `insufficient_squadron`** — to jest
+      wynik Twojego GATE 2: samotny rajder oddał Ci dwa darmowe zwycięstwa i 7,2 własnego
+      wyczerpania, więc reguła ma teraz obowiązek odmówić.
+- [ ] Przy pełnej eskadrze: `launched: 2` i okręty ruszają.
+
+**L19 — ślad audytu (filtr po RODZAJU, nigdy po tekście):**
 
 `[KOSMOS.debugLog.query({ kind: 'director:strikeLaunched' }).length, KOSMOS.debugLog.query({ kind: 'director:strikeRefused' }).map(e => e.data.reason)]`
 
-- [ ] Pierwsza liczba **≥ 1** = uderzenie ruszyło z decyzji AI.
-- [ ] Druga lista pokazuje, **dlaczego reguła milczała** wcześniej. Trzy powody, wszystkie
-      normalne: `no_target_in_reach` (gracz poza strefą) · `no_warp_capable_hull` (imperium ma
-      tylko FRG-3) · `insufficient_squadron` (cel broniony, a okręt jeden).
-      ⚠ **Pusta lista + zero uderzeń = reguła w ogóle nie doszła do akcji** — wtedy sprawdź L15
-      (zasięg) i to, czy trwa wojna: `KOSMOS.warSystem.listActive().length`.
+- [ ] Każda decyzja z L18 zostawiła ślad — **odmowy też**. To jedyna powierzchnia, na której
+      widać, dlaczego ofensywa AI stoi.
 
-**L20 — rzut jest zasolony ziarnem galaktyki (pin, którego zabrakło przy pierwszym kontakcie):**
+---
 
-`(s => [s, KOSMOS.gameState.get('director.rules')])(KOSMOS.galaxyData.seed)`
+### KROK 3 — AUTONOMIA: reguła odpala SAMA (to jest właściwy dowód §8)
 
-- [ ] Widać ziarno i stan reguł (`attempts`, `lastAttemptYear`, `lastFiredYear` per imperium).
-- [ ] ⚠ **Dowód rozjazdu między partiami** wymaga DRUGIEJ gry: zacznij nową (inne ziarno) i
-      porównaj rok pierwszego `director:strikeLaunched`. Zmierzone offline na 4 ziarnach:
-      **4 różne układy** pierwszej odpalającej próby (`emp_001`/`emp_002`), przy regułach BEZ
-      soli — **1 układ na 4 ziarna**. To jest różnica, której pierwszy kontakt nie miał.
+⚠ Reguła próbuje **raz na rok wyświetlany** (20 % + 15 pkt/próba), ma **5 lat cooldownu** i wymaga
+jednocześnie: wojny, celu w zasięgu i okrętu zdolnego do skoku. Puść grę na szybkim tempie.
 
-**L21 — uderzenie AI leci PRAWDZIWĄ ścieżką (a nie fabrykowaną misją):**
+- [ ] Doprowadź do stanu, w którym L16 mówi **„warunki spełnione"** (wojna + zasięg + eskadra).
+- [ ] Graj i wracaj do L20.
 
-`Array.from(KOSMOS.vesselManager._vessels.values()).filter(v => v.ownerEmpireId === 'emp_sandbox_enemy').map(v => [v.name, v.systemId, v.mission?.type, v.pendingOrder?.kind])`
+**L20 — czy reguła zaczęła rzucać (a potem odpaliła):**
 
-- [ ] Okręty w drodze mają `interstellar_jump` + `pendingOrder.kind: 'attack'`, a po skoku
-      `attack`. To ta sama ścieżka, którą sprawdziłeś ręcznie w §2/§3.
+`KOSMOS.debug.directorRules('<empireId>')`
 
-**L22 — i kończy się bitwą zaksięgowaną tam, gdzie trzeba:**
+- [ ] Pojawia się wiersz **`strike_player_target`** z rosnącym `proby` — **to jest moment, w którym
+      warstwa autonomii ożywa** (przed spełnieniem triggera wiersza NIE MA i to poprawne).
+- [ ] Po odpaleniu: `odpalila: TAK` + wpis w `director:strikeLaunched` z L19.
 
-- [ ] Powtórz **L10** (układ bitwy = układ CELU) i **L13** (dominacja dla `sys_home`).
-- [ ] W Dzienniku **NIE MA** modala „dotarłeś do nowego układu" przy przylocie wroga
-      (to była §Findings 32 — naprawione w `61bdffe`; obcy przylot ma być kontaktem sensorowym,
-      nie Twoim popupem, a widoczność dowozi W3-7).
+**L21 — lot idzie PRAWDZIWĄ ścieżką (tą samą, którą sprawdziłeś w §2/§3):**
+
+`Array.from(KOSMOS.vesselManager._vessels.values()).filter(v => v.ownerEmpireId === '<empireId>').map(v => [v.name, v.systemId, v.mission?.type, v.pendingOrder?.kind])`
+
+- [ ] W drodze: `interstellar_jump` + `pendingOrder.kind: 'attack'`; po skoku `attack`.
+- [ ] Bitwa księguje się w układzie CELU (powtórz **L10**), dominacja dla `sys_home` (**L13**).
+- [ ] ⚠ Przy przylocie wroga **NIE MA** modala „dotarłeś do nowego układu" (§Findings 32,
+      naprawione w `61bdffe`) — obcy przylot ma być kontaktem sensorowym, a widoczność dowozi W3-7.
+
+**L22 — ziarno galaktyki rozjeżdża moment uderzenia między partiami:**
+
+`KOSMOS.galaxyData.seed`
+
+- [ ] Dowód wymaga DRUGIEJ gry: zanotuj rok pierwszego `director:strikeLaunched`, zacznij nową
+      grę (inne ziarno) i porównaj. Zmierzone offline na 4 ziarnach: **4 różne** układy pierwszej
+      odpalającej próby; reguły BEZ soli dają **1 układ na 4 ziarna**. To jest instrument,
+      którego zabrakło przy pierwszym kontakcie.
 
 ---
 
@@ -442,14 +481,19 @@ sama sprawdzi, czy Twoja kolonia jest w jej zasięgu.
 
 | pozycja | wynik |
 |---|---|
-| 8a. Reguła ma cel w zasięgu (albo milczy z podanego powodu) | |
-| 8b. **Uderzenie ruszyło Z DECYZJI AI** (`director:strikeLaunched` ≥ 1) | |
-| 8c. Odmowy są czytelne w audycie (`director:strikeRefused` z powodem) | |
-| 8d. Eskadra przeciw celowi bronionemu (2+), nie samotny rajder | |
-| 8e. Lot prawdziwą ścieżką (skok → uderzenie → bitwa w układzie celu) | |
-| 8f. Brak fałszywego modala „twojego" przylotu przy przylocie wroga | |
+| 8a. **Warstwa ZAMONTOWANA** (`directorOffensive` + obie dźwignie) | |
+| 8b. `strikeReport` daje jednoznaczny werdykt, dlaczego ofensywa stoi/rusza | |
+| 8c. **Decyzja jest poprawna**: cel wybrany, eskadra wymagana przy obronie, odmowy z powodem | |
+| 8d. Odmowy i uderzenia widać w audycie (`director:strikeRefused` / `Launched`) | |
+| 8e. **Reguła odpaliła SAMA** (wiersz w `directorRules`, rosnące `proby`, `odpalila: TAK`) | |
+| 8f. Lot prawdziwą ścieżką → bitwa w układzie CELU → dominacja tam, gdzie trzeba | |
+| 8g. Brak fałszywego modala „twojego" przylotu przy przylocie wroga | |
 
 **GATE 2 §8 (autonomia):** ☐ ZDANY ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+
+⚠ **8e wymaga normalnej gry** (patrz nota na górze sekcji). Jeśli ta galaktyka nie daje żadnemu
+imperium zasięgu na Twój układ, 8a-8d i 8f-8g są w pełni sprawdzalne, a 8e zostaje **otwarte** —
+i to jest uczciwy wynik warunkowy, nie porażka.
 
 ---
 
