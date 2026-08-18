@@ -455,6 +455,13 @@ export class GameScene {
     window.KOSMOS.directorPressure   = this.directorPressure;
     window.KOSMOS.directorDoctrine   = this.directorDoctrine;
     window.KOSMOS.directorMobilization = this.directorMobilization;
+    // ⚠ W3-5b — TEN WIERSZ BYŁ POMINIĘTY i to była CAŁA awaria montażu z GATE 2 §8.
+    // Reguła `strike_player_target` żyła w katalogu i była oceniana co tik (DirectorSystem
+    // importuje `DIRECTOR_RULES` wprost), ale system, przez który gate ją ogląda, nie istniał
+    // pod `window.KOSMOS` — więc KAŻDY one-liner sekcji 8 wywracał się na `undefined`.
+    // Konstrukcja bez wystawienia w lokatorze jest tu NIEWIDOCZNA: nic nie krzyczy, bo
+    // wszystkie odczyty są opcjonalne (`?.`). Pinowane strukturalnie: `w3_director_mounting_smoke`.
+    window.KOSMOS.directorOffensive  = this.directorOffensive;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
@@ -634,6 +641,47 @@ export class GameScene {
         const id = fc.scienceFlyby({ empireId, empire, ruleId: 'debug' }, { durationYears, radiusPx: 220 });
         console.log(`[flybyNearHome] ${empireId} → sonda`, id ?? '— ODRZUCONA (patrz director:flybyRejected)');
         return id;
+      },
+      // KOSMOS.debug.strikeReport(empireId) — DLACZEGO ofensywa AI stoi (czysty ODCZYT).
+      //   ⚠ Reguła `strike_player_target` zwraca do stanu wpis DOPIERO po przejściu triggera
+      //   (`DirectorSystem.tickEmpire` wychodzi przed `_writeRuleState`, gdy sonda zwróci 0).
+      //   Brak wiersza w `directorRules` i zero `director:strikeRefused` to więc POPRAWNY
+      //   podpis „nie ma celu w zasięgu", nieodróżnialny gołym okiem od „nikt nie podłączył
+      //   reguły". Ten raport tę różnicę pokazuje — i o to w nim chodzi.
+      strikeReport: (empireId) => {
+        const off = window.KOSMOS?.directorOffensive;
+        if (!off) { console.warn('[strikeReport] brak window.KOSMOS.directorOffensive — AWARIA MONTAŻU'); return null; }
+        const im = window.KOSMOS?.influenceMap;
+        const t  = off.pickTarget(empireId);
+        const ready = off.strikeReadyVessels(empireId);
+        const rep = {
+          imperium: empireId,
+          wojna: !!window.KOSMOS?.warSystem?.getWarWith?.(empireId)?.active,
+          ukladyRoszczone: im?.getClaimedSystems?.(empireId)?.length ?? '—',
+          powlokaGraniczna: im?.getBorderSystems?.(empireId)?.length ?? '—',
+          celeWZasiegu: off.countReachableTargets(empireId),
+          cel: t ? { cialo: t.body.id, uklad: t.systemId, wartosc: t.value, bronione: t.defended } : null,
+          okretyGotowe: ready.map(v => `${v.name}(warp ${v.warpFuel?.max})`),
+          werdykt: null,
+        };
+        rep.werdykt = !rep.wojna ? 'brak wojny — reguła milczy z definicji'
+          : rep.celeWZasiegu === 0 ? 'ZERO celów w zasięgu (uklad gracza poza przestrzenia/powloka imperium)'
+          : ready.length === 0 ? 'brak okrętu zdolnego do skoku'
+          : (t?.defended && ready.length < 2) ? 'cel broniony, a okręt jeden — potrzeba eskadry'
+          : 'wszystkie warunki spełnione — czeka na rzut reguły';
+        console.log('[strikeReport]', rep);
+        return rep;
+      },
+      // KOSMOS.debug.forceStrike(empireId) — wywołaj DECYZJĘ z pominięciem triggera i rzutu.
+      //   To intent method systemu, nie edycja stanu: dobór celu, próg eskadry i powody odmowy
+      //   są dokładnie te, które podejmie reguła sama z siebie.
+      forceStrike: (empireId) => {
+        const off = window.KOSMOS?.directorOffensive;
+        if (!off) { console.warn('[forceStrike] brak window.KOSMOS.directorOffensive — AWARIA MONTAŻU'); return null; }
+        const year = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        const res = off.launchStrike({ empireId, year, ruleId: 'debug_force' });
+        console.log('[forceStrike]', res);
+        return res;
       },
       // KOSMOS.debug.directorRules(empireId?) — stan reguł Directora: ile prób, czy odpaliła,
       //   w którym roku WYŚWIETLANYM. Bez tego „czemu nic się nie dzieje" jest nieodróżnialne
