@@ -12,6 +12,7 @@ import { TECH_BRANCHES } from '../data/TechData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 import { THEME }     from '../config/ThemeConfig.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 import {
   formatStatLine,
   formatStatLineWithCursor,
@@ -607,6 +608,17 @@ function _formatTechEffect(eff, isEN) {
 // ── Popup: przylot międzygwiezdny ────────────────────────────────────────
 
 function _onInterstellarArrived({ vessel, systemId, star, targetName }) {
+  // ⚠ W3-5 (§Findings 32) — BRAMKA WŁASNOŚCI. Ten popup mówi „DOTARŁEŚ do nowego układu"
+  // i dokłada darmowy przegląd celu (typ gwiazdy, liczba planet i księżyców, ile w strefie
+  // zamieszkiwalnej). Nie miał ŻADNEGO filtru właściciela, więc odpalał się także dla statku
+  // WROGA — z fałszywą treścią i z wyciekiem wywiadowczym, obchodzącym całą warstwę intelu.
+  // Rodzina §Findings 22: konsument, który nigdy nie pyta, CZYJ jest ten stan.
+  // ⚠ Do W3-5 było to prawie nieosiągalne (żaden AI nie skakał z własnej inicjatywy). Od tego
+  // slice'u rajder AI skacze SAM, a ten modal PAUZUJE grę — więc bez tej bramki każde
+  // uderzenie zatrzymywałoby graczowi rozgrywkę kłamliwym komunikatem.
+  // Widoczność obcych przylotów należy do W3-7 i ma iść przez detekcję (kontakt sensorowy),
+  // nigdy przez modal „twojego" przylotu.
+  if (!vessel || isEnemyVessel(vessel)) return;
   const vesselName = vessel?.name ?? t('vessel.unknown');
   const sysName = targetName ?? systemId;
 
