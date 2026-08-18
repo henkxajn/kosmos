@@ -310,8 +310,8 @@ export class ColonyOverlay extends BaseOverlay {
       const warSys = window.KOSMOS?.warSystem;
       const vessel = vMgr?.getVessel?.(vesselId);
       if (!vessel) return;
-      if (!vessel.canDropTroops) { this._showFlash('Brak Kapsuł Desantowych'); return; }
-      if ((vessel.groundUnits ?? []).length === 0) { this._showFlash('Ładownia pusta'); return; }
+      if (!vessel.canDropTroops) { this._showFlash(t('drop.noPods')); return; }
+      if ((vessel.groundUnits ?? []).length === 0) { this._showFlash(t('drop.bayEmpty')); return; }
 
       // Dominacja orbitalna: wymagana dla wrogich celów (własne kolonie OK).
       // Wroga kolonia = ta która ma ownerEmpireId lub isTestEnemy (debug spawn).
@@ -321,7 +321,7 @@ export class ColonyOverlay extends BaseOverlay {
         || !!targetColony.ownerEmpireId
         || !!targetColony.isTestEnemy;
       if (isHostileTarget && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
-        this._showFlash('Brak dominacji orbitalnej — wygraj bitwę najpierw');
+        this._showFlash(t('drop.noDominance'));
         return;
       }
 
@@ -4644,7 +4644,7 @@ export class ColonyOverlay extends BaseOverlay {
       if (this._dropMode && tile) {
         // Blokady (hard — gracz wybiera inny hex):
         if (tile.type === 'ocean') {
-          this._showFlash('Nie można zrzucić wojsk na ocean');
+          this._showFlash(t('drop.notOnOcean'));
           return true;
         }
         const vMgr = window.KOSMOS?.vesselManager;
@@ -4669,7 +4669,7 @@ export class ColonyOverlay extends BaseOverlay {
         if (unit) {
           const res = dropTroop(vessel, unit, this._dropPlanetId, tile.q, tile.r);
           if (!res?.ok) {
-            this._showFlash(`Błąd zrzutu: ${res?.reason ?? 'unknown'}`);
+            this._showFlash(t('drop.failed', res?.reason ?? 'unknown'));
             this._dropQueue = [];
           } else if (hasHostile) {
             // Penalty HP za wrogi hex — jednostka wchodzi w bitwę osłabiona
@@ -4682,9 +4682,9 @@ export class ColonyOverlay extends BaseOverlay {
               targetHP: unit.hp, targetHPMax: unit.hpMax ?? unit.maxHp,
               planetId: this._dropPlanetId, q: tile.q, r: tile.r,
             });
-            this._showFlash(`🔥 Chaotyczne lądowanie (${tile.q},${tile.r}) — -25% HP`);
+            this._showFlash(t('drop.chaotic', tile.q, tile.r));
           } else {
-            this._showFlash(`🪖 Zrzucono na (${tile.q},${tile.r})`);
+            this._showFlash(t('drop.ok', tile.q, tile.r));
           }
         }
         if (this._dropQueue.length > 0) {

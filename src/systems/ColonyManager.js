@@ -655,6 +655,10 @@ export class ColonyManager {
     const colony = this._colonies.get(planetId);
     if (!colony) return false;
 
+    // ⚠ W3-7 — kto tracił kolonię, USTALAMY PRZED nadpisaniem właściciela (niżej `:700`).
+    // Kanon „nieostemplowane = gracza" (`isPlayerColony`), więc brak stempla czytamy jako 'player'.
+    const prevOwnerId = colony.ownerEmpireId ?? 'player';
+
     const vMgr = window.KOSMOS?.vesselManager;
     const empireReg = window.KOSMOS?.empireRegistry;
     const destroyedVesselIds = [];
@@ -737,7 +741,14 @@ export class ColonyManager {
       planetId,
       colonyName,
       newOwner: newOwnerEmpireId,
-      previousOwner: 'player',
+      // ⚠ W3-7 (§Findings 22) — PRAWDZIWY poprzedni właściciel, nie stała.
+      // Do W3-7 stało tu `'player'` NA SZTYWNO, a `transferColony` obsługuje TAKŻE przerzuty
+      // AI→AI (dowiedzione na żywo w GATE 1 §7[5]: `emp_001` → `emp_sandbox_enemy`). Skutek:
+      // gra ogłaszała graczowi utratę kolonii, która NIGDY nie była jego. To ta sama klasa co
+      // §Findings 32 — stan dociera do konsumenta, który nie pyta, CZYJ jest. Naprawiamy
+      // U ŹRÓDŁA (tu) i przy ODBIORCY (bramka `previousOwner === 'player'`), bo jedno bez
+      // drugiego zostawia następnego konsumenta na tej samej minie.
+      previousOwner: prevOwnerId,
       reason,
       population,
       wasHomePlanet,

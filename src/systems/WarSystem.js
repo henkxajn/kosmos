@@ -374,7 +374,7 @@ export class WarSystem {
     const recordedResult = {
       ...result,
       participantA: { type: 'empire', empireId, fleetId: fleet.id, strength: fleet.strength },
-      participantB: { type: 'player', systemId: playerSystemId },
+      participantB: { type: 'player', empireId: 'player', systemId: playerSystemId },   // W3-7: stempel dla filtrow UI
     };
     const rec = this.recordBattle(warId, recordedResult);
     return { success: true, battle: rec, result };
@@ -527,7 +527,7 @@ export class WarSystem {
     const recordedResult = {
       ...result,
       participantA: { type: 'empire', empireId: empire.id, fleetId: fleet.id, strength: fleet.strength },
-      participantB: { type: 'player', systemId: destSystemId },
+      participantB: { type: 'player', empireId: 'player', systemId: destSystemId },   // W3-7: stempel dla filtrow UI
     };
     this.recordBattle(war.id, recordedResult);
   }

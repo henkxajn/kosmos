@@ -686,6 +686,20 @@ export default {
   'notif.group.vesselScan': 'Identified contacts',
   // W2-7 — alien reserve mobilization. The entry appears ONLY from contact quality upwards;
   //   the empire name is withheld until 'detailed' (below that: "Unknown empire").
+  // W3-7 — gracz dowiaduje sie, ze jest atakowany (S25) + stringi desantu (S26)
+  "notif.invasionTitle": "⚔ Troops landing on {0}!",
+  "notif.invasionSubtitle": "{0} — units landed: {1}",
+  "notif.colonyLostTitle": "⚠ Colony lost: {0}",
+  "notif.capitalLostTitle": "⚠ CAPITAL TAKEN: {0}",
+  "notif.colonyLostSubtitle": "Now controlled by: {0}",
+  "log.autoSlowColonyLost": "colony lost",
+  "drop.noPods": "No drop pods",
+  "drop.bayEmpty": "Troop bay empty",
+  "drop.noDominance": "No orbital dominance — win the battle first",
+  "drop.notOnOcean": "Cannot drop troops into the ocean",
+  "drop.failed": "Drop failed: {0}",
+  "drop.chaotic": "🔥 Chaotic landing ({0},{1}) — -25% HP",
+  "drop.ok": "🪖 Dropped at ({0},{1})",
   'notif.mobilizationTitle':    '⚓ {0} is crewing warships',
   'notif.mobilizationSubtitle': 'Reserve entering service: {0}',
   'notif.group.mobilization':   'Alien mobilizations',

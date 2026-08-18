@@ -687,6 +687,20 @@ export default {
   'notif.group.vesselScan': 'Zidentyfikowane kontakty',
   // W2-7 — mobilizacja rezerwy obcych. Wpis powstaje TYLKO od jakości kontaktu 'contact'
   //   w górę; nazwa imperium dochodzi dopiero na 'detailed' (niżej: „Nieznane imperium").
+  // W3-7 — gracz dowiaduje sie, ze jest atakowany (S25) + stringi desantu (S26)
+  "notif.invasionTitle": "⚔ Desant na {0}!",
+  "notif.invasionSubtitle": "{0} — wylądowało jednostek: {1}",
+  "notif.colonyLostTitle": "⚠ Kolonia utracona: {0}",
+  "notif.capitalLostTitle": "⚠ STOLICA ZDOBYTA: {0}",
+  "notif.colonyLostSubtitle": "Przeszła pod kontrolę: {0}",
+  "log.autoSlowColonyLost": "utrata kolonii",
+  "drop.noPods": "Brak Kapsł Desantowych",
+  "drop.bayEmpty": "Ładownia pusta",
+  "drop.noDominance": "Brak dominacji orbitalnej — wygraj bitwę najpierw",
+  "drop.notOnOcean": "Nie można zrzucić wojsk na ocean",
+  "drop.failed": "Błąd zrzutu: {0}",
+  "drop.chaotic": "🔥 Chaotyczne lądowanie ({0},{1}) — -25% HP",
+  "drop.ok": "🪖 Zrzucono na ({0},{1})",
   'notif.mobilizationTitle':    '⚓ {0} obsadza okręty załogami',
   'notif.mobilizationSubtitle': 'Rezerwa wchodzi do służby: {0}',
   'notif.group.mobilization':   'Mobilizacje obcych',

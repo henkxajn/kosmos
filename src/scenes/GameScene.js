@@ -2327,17 +2327,22 @@ export class GameScene {
     this._battleShowing = false;
 
     // Faza 6: powiadomienie o utracie kolonii (inwazja zakończona sukcesem obcego)
-    EventBus.on('colony:captured', ({ planetId, colonyName, newOwner, wasHomePlanet }) => {
+    // ⚠ W3-7 — NATYWNY `alert()` USUNIĘTY. Blokował całą przeglądarkę, wyglądał jak błąd
+    // systemu, nie jak zdarzenie w grze, i — przez zaszyte `previousOwner: 'player'` —
+    // odpalał się TAKŻE przy przerzutach AI→AI (§Findings 22: gracz dowiadywał się, że
+    // stracił kolonię, która nigdy nie była jego). Teraz: bramka WŁASNOŚCI + auto-slow
+    // + powiadomienie z dzwonka (`NotificationCenter._handleColonyCaptured`, kanał Walka).
+    EventBus.on('colony:captured', ({ colonyName, newOwner, previousOwner, wasHomePlanet }) => {
       if (!window.KOSMOS?.civMode) return;
-      const emp = window.KOSMOS?.empireRegistry?.get(newOwner);
-      const empName = emp?.name ?? newOwner;
-      const msg = wasHomePlanet
-        ? `⚠ STOLICA ZDOBYTA!\nPlaneta "${colonyName}" przeszła pod kontrolę imperium ${empName}.\n\nZnajdź jakąś drogę powrotu…`
-        : `⚠ Kolonia utracona!\nPlaneta "${colonyName}" zajęta przez ${empName}.`;
-      // Simple DOM alert przez MessageQueue później; na razie popup
-      setTimeout(() => {
-        try { alert(msg); } catch { /* ignore */ }
-      }, 100);
+      if ((previousOwner ?? 'player') !== 'player') return;    // cudza kolonia — nie nasza sprawa
+      // Utrata kolonii to jedno z najgłośniejszych zdarzeń w grze — zwolnij czas, żeby gracz
+      // zdążył zareagować (ten sam mechanizm co przy pierwszym kontakcie i bitwie).
+      this.uiManager?._triggerAutoSlowIfTime?.(t('log.autoSlowColonyLost'));
+      EventBus.emit('ui:toast', {
+        text: t(wasHomePlanet ? 'notif.capitalLostTitle' : 'notif.colonyLostTitle',
+                colonyName ?? '?'),
+        color: '#ff4466', durationMs: 6000,
+      });
     });
 
     // Faza 6: przejęcie kolonii/placówki AI przez gracza (desant zakończony sukcesem)

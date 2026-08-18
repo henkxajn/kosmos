@@ -30,6 +30,9 @@ export class NotificationCenter {
     // (patrz `_handleMobilized`): `add()` dubluje wszystko do Dziennika, więc filtrować trzeba
     // PRZED nim, a nie po.
     EventBus.on('director:mobilized', e => this._handleMobilized(e));
+    // W3-7 (S25) — desant i utrata kolonii miały ZERO subskrybentów UI w całym drzewie.
+    EventBus.on('invasion:launched',  e => this._handleInvasionLaunched(e));
+    EventBus.on('colony:captured',    e => this._handleColonyCaptured(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -299,7 +302,70 @@ export class NotificationCenter {
     });
   }
 
+  /**
+   * W3-7 — DESANT NA TWOJĄ KOLONIĘ. Do tego commitu `invasion:launched` /
+   * `invasion:troopsLanded` docierały WYŁĄCZNIE do `DebugLog` — zero subskrybentów UI
+   * w całym drzewie (audyt S25). Gracz mógł stracić kolonię, nie zobaczywszy ani jednego
+   * komunikatu o tym, że ktokolwiek wylądował.
+   *
+   * ⚠ ŚWIADOME ODSTĘPSTWO OD WZORCA `_handleMobilized`: tam bramka `contact` zamyka CAŁE
+   * powiadomienie, bo mobilizacja dzieje się w CUDZYM układzie i jest wynikiem obserwacji.
+   * Desant dzieje się NA TWOJEJ PLANECIE — nie da się go „nie zauważyć", więc zdarzenie
+   * pokazujemy ZAWSZE, a stopniujemy TOŻSAMOŚĆ najeźdźcy (nazwa dopiero przy `detailed`,
+   * ta sama drabina ujawnienia co w W2-7). Zamknięcie całego wpisu za `contact` znaczyłoby,
+   * że nieznane imperium zajmuje kolonię w ciszy — to nie jest mgła wojny, to ślepota.
+   */
+  _handleInvasionLaunched({ empireId, planetId, troops }) {
+    if (!planetId) return;
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+    const colonyName = colony?.name ?? planetId;
+    this.add({
+      type: 'invasion',
+      severity: 'alert',
+      source: 'invasionSystem',
+      title: t('notif.invasionTitle', colonyName),
+      subtitle: t('notif.invasionSubtitle', this._empireLabel(empireId), troops ?? 0),
+      logChannel: 'combat',
+      logText: t('notif.invasionTitle', colonyName),
+      payload: { empireId, planetId, troops },
+    });
+  }
+
+  /**
+   * W3-7 — UTRATA KOLONII. Zastępuje natywny `alert()` (blokujące okno przeglądarki,
+   * `GameScene.js:2339`), które przy okazji odpalało się TAKŻE dla przerzutów AI→AI
+   * (§Findings 22). Bramka własności siedzi u nadawcy i tutaj — jedno bez drugiego
+   * zostawia następnego konsumenta na tej samej minie.
+   */
+  _handleColonyCaptured({ colonyName, planetId, newOwner, previousOwner, wasHomePlanet }) {
+    if ((previousOwner ?? 'player') !== 'player') return;      // nie nasza strata — cisza
+    this.add({
+      type: 'colonyLost',
+      severity: 'alert',
+      source: 'colonyManager',
+      title: t(wasHomePlanet ? 'notif.capitalLostTitle' : 'notif.colonyLostTitle',
+               colonyName ?? planetId),
+      subtitle: t('notif.colonyLostSubtitle', this._empireLabel(newOwner)),
+      logChannel: 'combat',
+      logText: t(wasHomePlanet ? 'notif.capitalLostTitle' : 'notif.colonyLostTitle',
+                 colonyName ?? planetId),
+      payload: { planetId, newOwner, wasHomePlanet },
+    });
+  }
+
   // ── Helpery ──────────────────────────────────────────────────────────────
+
+  /**
+   * Nazwa imperium wg drabiny ujawnienia: pełna dopiero przy `detailed`, wcześniej anonim.
+   * Fail-closed przy braku `IntelSystem` — nie rozdajemy tożsamości, gdy nie ma czym mierzyć.
+   */
+  _empireLabel(empireId) {
+    if (!empireId) return t('intel.unknownEmpire');
+    const intel = window.KOSMOS?.intelSystem;
+    const named = intel?.isAtLeast?.(empireId, 'detailed');
+    const name = window.KOSMOS?.empireRegistry?.get?.(empireId)?.name;
+    return (named && name) ? name : t('intel.unknownEmpire');
+  }
 
   _bodySubtitle(body) {
     if (!body) return '';

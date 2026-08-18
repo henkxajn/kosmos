@@ -179,6 +179,11 @@ export class EnemyAttackHandler {
       },
       participantB: {
         type: 'player',
+        // ⚠ W3-7 — STEMPEL WŁAŚCICIELA. Bez niego trzej konsumenci filtrujący po
+        // `p.empireId === 'player'` (UIManager `battle:resolved` i obie gałęzie GameScene)
+        // po cichu POMIJALI bitwy z tej ścieżki: brak auto-slow, brak wpisu w Dzienniku,
+        // a przy przegranej gracza — brak JAKIEJKOLWIEK informacji, że stracił flotę (S25).
+        empireId: 'player',
         systemId,
       },
     };
