@@ -651,6 +651,8 @@ export default {
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',
   'vessel.reasonVesselImmobilized': 'Vessel immobilized — fleet upkeep in arrears (fund the colony)',
+  // W3-4b — target in another system: movement orders are intra-system, the jump is OrderService's
+  'vessel.reasonTargetOtherSystem': 'Target is in another system — warp jump first',
   // W3-4 (D6) — a hull in reserve takes no movement orders (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Hull in reserve — crew it first (Deploy)',
   // Attack-order (engage/pursue) rejection reasons — shown per skipped vessel

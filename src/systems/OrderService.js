@@ -23,6 +23,7 @@
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { t }         from '../i18n/i18n.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 
 export class OrderService {
   constructor() {
@@ -103,9 +104,55 @@ export class OrderService {
   issueWarp(vesselId, targetSystemId) {
     if (!targetSystemId) return { ok: false, reason: 'no_target' };
     const wrs = this._wrs;
-    if (wrs) return wrs.beginJourney(vesselId, targetSystemId);
+    // ⚠ W3-4b — okręt AI NIE przechodzi przez planer wielo-skokowy. `WarpRouteSystem.canOrder`
+    // odrzuca każdy `isEnemyVessel` powodem `not_player` — to bramka INTERFEJSU (planer liczy
+    // trasę dla panelu gracza), nie reguła świata. Regułą świata jest `dispatchInterstellar`,
+    // które ma WŁASNY, jawny widelec właściciela (S3.0a): gracz ma twardą bramkę paliwa przez
+    // `canJump`, a AI leci „na oparach" z clampem zużycia. Kierujemy więc AI wprost tam.
+    // KONSEKWENCJA, ZADEKLAROWANA: AI dostaje skok POJEDYNCZY (bez łańcuchowania przez układy
+    // pośrednie) i bez limitu długości skoku — zasięg uderzenia AI jest więc sprawą REGUŁY
+    // wyboru celu (W3-5, sąsiedztwo z `InfluenceMap`), nie tej warstwy transportu.
+    const vessel = this._vm?.getVessel?.(vesselId);
+    const aiVessel = !!vessel && isEnemyVessel(vessel);
+    if (wrs && !aiVessel) return wrs.beginJourney(vesselId, targetSystemId);
     const ok = this._vm?.dispatchInterstellar?.(vesselId, targetSystemId);
     return { ok: !!ok, reason: ok ? undefined : 'dispatch_failed' };
+  }
+
+  /**
+   * W3-4b — UDERZENIE NA CIAŁO, także MIĘDZYGWIEZDNE. Jedyne wejście, przez które wolno wysłać
+   * okręt na cel: rozwiązuje układ celu i sam decyduje, czy wystarczy podejście wewnątrz układu,
+   * czy trzeba najpierw skoczyć.
+   *
+   * Dlaczego TU, a nie w `MovementOrderSystem`: rozkazy ruchu są z konstrukcji wewnątrzukładowe
+   * (współrzędne liczone od gwiazdy, która w każdym układzie stoi w (0,0)), a orkiestracja
+   * wielu układów należy do tej fasady. Bez tego rozdziału „atak" na planetę z innego układu
+   * leciał do jej współrzędnych WEWNĄTRZ własnego układu napastnika — defekt z GATE 2.
+   *
+   * D4 (orzeczenie właściciela): PRAWDZIWA PODRÓŻ z macierzystego układu AI, bo gracz ma
+   * zobaczyć nadlatujące okręty sensorami. Stąd `bypassFuelCheck` na odcinku wewnątrzukładowym
+   * (sankcjonowany wzór — kolonie AI nie trzymają paliwa in-system).
+   *
+   * @param {string} vesselId
+   * @param {{ targetBodyId: string, targetSystemId?: string }} spec
+   * @returns {{ok:boolean, reason?:string, composite?:boolean, orderId?:string}}
+   */
+  issueAttack(vesselId, { targetBodyId, targetSystemId = null } = {}) {
+    const vessel = this._vm?.getVessel?.(vesselId);
+    if (!vessel) return { ok: false, reason: 'no_vessel' };
+    if (!targetBodyId) return { ok: false, reason: 'no_target' };
+
+    const body = EntityManager.get(targetBodyId);
+    if (!body) return { ok: false, reason: 'target_not_found' };
+    const sysId = targetSystemId ?? this._resolveTargetSystemId(targetBodyId);
+
+    if (this._sameSystem(vessel, sysId)) {
+      return this.issueMove(vesselId, {
+        type: 'attack', targetBodyId,
+        issuedBy: 'order_service_attack', bypassFuelCheck: true,
+      });
+    }
+    return this._beginComposite(vessel, 'attack', { targetId: targetBodyId, targetSystemId: sysId });
   }
 
   /**
@@ -173,6 +220,30 @@ export class OrderService {
     if (!po) return;
     if (v.warpRoute) return;                          // multi-hop w toku
     if (v.systemId !== po.targetSystemId) return;     // nie w układzie docelowym
+
+    // W3-4b — uderzenie: celem jest CIAŁO, nie kolonia/stacja gracza, więc re-walidacja
+    // i dostawa są inne. Wydajemy dopiero TERAZ, gdy statek jest już w układzie celu —
+    // wtedy bramka układu w `MovementOrderSystem` przepuszcza rozkaz.
+    if (po.kind === 'attack') {
+      const body = EntityManager.get(po.targetId);
+      v.pendingOrder = null;
+      if (!body) {
+        EventBus.emit('order:compositeFailed', { vesselId, reason: 'target_lost' });
+        return;
+      }
+      const r = this._mos?.issueOrder?.(vesselId, {
+        type: 'attack', targetBodyId: po.targetId,
+        issuedBy: 'order_service_attack', bypassFuelCheck: true,
+      });
+      if (!r?.ok) {
+        // Głośno (R12): statek doleciał, a rozkaz odpadł — to błąd wpięcia, nie stan gry.
+        console.error('[OrderService] uderzenie po skoku ODRZUCONE', { vesselId, targetId: po.targetId, reason: r?.reason });
+        EventBus.emit('order:compositeFailed', { vesselId, reason: r?.reason ?? 'attack_rejected' });
+        return;
+      }
+      EventBus.emit('order:compositeDelivering', { vesselId, kind: po.kind, targetId: po.targetId });
+      return;
+    }
 
     // Re-walidacja: cel przeżył podróż (kolonia lub stacja gracza)?
     const targetAlive = !!this._colMgr?.hasColony?.(po.targetId) || !!this._stations?.getStation?.(po.targetId);

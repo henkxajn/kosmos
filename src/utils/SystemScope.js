@@ -1,0 +1,44 @@
+// SystemScope — JEDNO źródło prawdy dla pytania „czy te dwie rzeczy są w TYM SAMYM układzie?".
+//
+// PO CO TO ISTNIEJE (W3-4b, defekt złapany na GATE 2): rozkazy ruchu operują we
+// współrzędnych WEWNĄTRZ układu — gwiazda każdego układu stoi w (0,0) — ale identyfikatory ciał
+// i statków są GLOBALNE (`EntityManager.get` przeszukuje całą galaktykę). Kto rozwiąże cel po
+// samym id i poleci do jego `x/y`, ten poleci do współrzędnych CUDZEGO układu odmierzonych od
+// SWOJEJ gwiazdy — i wyląduje w losowym miejscu własnego układu, „zadokowany" przy ciele, które
+// tam nie istnieje. Zmierzone: wrogi okręt z `sys_061` dostał rozkaz uderzenia na planetę gracza
+// w `sys_home`, doleciał do (−219.6, 12.2) WEWNĄTRZ `sys_061` i zameldował się jako zadokowany
+// przy `entity_3`. Bitwa i dominacja orbitalna zaksięgowały się dla `sys_061`.
+//
+// Porównanie jest dwuliniowe, ale ma DWIE pułapki, i właśnie dlatego mieszka w jednym miejscu
+// zamiast być wklejane przy każdej bramce:
+//   1. `undefined` znaczy „stary zapis / statek sprzed multi-system" ⇒ `sys_home`.
+//   2. `null` znaczy coś INNEGO niż brak: statek jest W TRANZYCIE międzygwiezdnym, czyli
+//      pomiędzy układami (`VesselManager._resolveSystemId`, W3-slice A). Sklejenie obu na
+//      `?? 'sys_home'` twierdziłoby, że statek w warpie jest w domu.
+//
+// Bramki są FAIL-OPEN: gdy którejkolwiek strony nie da się rozstrzygnąć, `isSameSystem` mówi
+// „tak". Blokowanie rozkazu na podstawie niewiedzy zamieniłoby ten defekt na cichy paraliż floty.
+
+/**
+ * Układ, w którym „jest" encja (ciało / statek / kolonia).
+ * @param {object|null|undefined} x
+ * @returns {string|null} id układu · `null` gdy nieznany albo tranzyt międzygwiezdny
+ */
+export function systemIdOf(x) {
+  if (!x) return null;
+  // ⚠ `undefined` (brak pola) ≠ `null` (świadome „między układami") — patrz nagłówek.
+  return x.systemId === undefined ? 'sys_home' : x.systemId;
+}
+
+/**
+ * Czy obie rzeczy są w tym samym układzie? Fail-open przy nieznanym układzie po którejś stronie.
+ * @param {object} a
+ * @param {object} b
+ * @returns {boolean}
+ */
+export function isSameSystem(a, b) {
+  const sa = systemIdOf(a);
+  const sb = systemIdOf(b);
+  if (sa == null || sb == null) return true;   // nie wiemy → nie blokujemy
+  return sa === sb;
+}

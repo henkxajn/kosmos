@@ -43,6 +43,7 @@ import {
 } from '../data/VesselNames.js';
 import { t } from '../i18n/i18n.js';
 import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
+import { isSameSystem } from '../utils/SystemScope.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
@@ -2330,10 +2331,24 @@ export class VesselManager {
         // ── Detekcja przylotu — statek dotarł do celu ──
         if (!m.phase?.startsWith('return') && gameYear >= m.arrivalYear) {
           const target = this._findEntity(m.targetId);
+          // ⚠ W3-4b — SZEW SPÓJNOŚCI UKŁADU. Przylot rozpoznawany był po samym ID celu, a id
+          // są GLOBALNE: statek meldował się jako zadokowany przy ciele, którego w jego układzie
+          // NIE MA (zmierzone na GATE 2). Bramki wydania rozkazu (`MovementOrderSystem`) mają
+          // to już nie dopuszczać; ten guard jest drugą linią — dla misji z zapisu i ścieżek,
+          // które powstaną później. Nie dokujemy do obcego ciała: statek dryfuje w punkcie.
+          const foreignBody = !!target && !isSameSystem(vessel, target);
+          if (foreignBody) {
+            console.error('[VesselManager] przylot do ciała spoza układu statku — NIE dokuję ' +
+              '(spójność układu, W3-4b)', {
+                vesselId: vessel.id, targetId: m.targetId,
+                vesselSystemId: vessel.systemId, targetSystemId: target.systemId,
+                missionType: m.type,
+              });
+          }
           vessel.position.state = 'orbiting';
-          vessel.position.dockedAt = m.targetId;
-          vessel.position.x = target?.x ?? m.targetX;
-          vessel.position.y = target?.y ?? m.targetY;
+          vessel.position.dockedAt = foreignBody ? null : m.targetId;
+          vessel.position.x = foreignBody ? (m.targetX ?? vessel.position.x) : (target?.x ?? m.targetX);
+          vessel.position.y = foreignBody ? (m.targetY ?? vessel.position.y) : (target?.y ?? m.targetY);
           vessel.status = 'on_mission';
           m.phase = 'orbiting_body';
 

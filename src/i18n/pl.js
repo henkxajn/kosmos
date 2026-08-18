@@ -652,6 +652,8 @@ export default {
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',
   'vessel.reasonVesselImmobilized': 'Statek unieruchomiony — zaległe utrzymanie floty (opłać kolonię)',
+  // W3-4b — cel w innym układzie: rozkazy ruchu są wewnątrzukładowe, skok orkiestruje OrderService
+  'vessel.reasonTargetOtherSystem': 'Cel jest w innym układzie — najpierw skok warp',
   // W3-4 (D6) — kadłub w rezerwie nie przyjmuje rozkazów ruchu (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Kadłub w rezerwie — najpierw obsadź go załogą (Rozmieść)',
   // Powody odrzucenia rozkazu ataku (engage/pursue) — pokazywane per pominięty statek

@@ -26,8 +26,13 @@
 //              jej nie widziało ⇒ AI nie czerpało z podboju NIC. Teraz pinuje STAN SZWU:
 //              podbój zostaje. Szczegółowe pokrycie (tech, galaxyData, ostatnia kolonia,
 //              sprzątanie) mieszka w `w3_conquest_persists_smoke`.
-//   T5  C-2:   `_holdAtHome` wydaje `moveToPoint` BEZ `targetPoint` ⇒ silnik odrzuca rozkaz
-//              powodem `missing_target_point`. Odwraca W3-4.
+//   T5  C-2:   ⚠ ODWRÓCONE W W3-4. Do W3-4 pinował DEFEKT: `_holdAtHome` wydawał `moveToPoint`
+//              BEZ `targetPoint`, więc silnik odrzucał rozkaz (`missing_target_point`) i garnizon
+//              z dala od stolicy wypadał z doboru. Teraz pinuje STAN SZWU: rozkaz niesie punkt
+//              i przechodzi, a walidator został TAK SAMO surowy (kontrola pinu).
+//              ⚠ Scena od W3-4b stoi w układzie WŁASNEJ stolicy — powrót garnizonu jest
+//              rozkazem wewnątrzukładowym i wersja „okręt AI w `sys_home`" była fizycznie
+//              niemożliwa (przechodziła tylko dzięki defektowi, który złapał GATE 2).
 //   T6  S12:   jednostka legacy ginie od PIERWSZEGO trafienia (brak pola `morale`), a po
 //              serialize→restore dostaje `morale: 100` i już nie ginie. Dziura determinizmu
 //              WIĘKSZA niż R13. ⚠ NIE odwraca jej żaden commit W3 — to pin przekazany
@@ -46,6 +51,7 @@ import '../headless/env.js';           // MUSI być pierwszy
 import { GameCore } from '../headless/GameCore.js';
 import EventBus from '../../core/EventBus.js';
 import gameState from '../../core/GameState.js';
+import EntityManager from '../../core/EntityManager.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { DeepSpaceCombatSystem } from '../../systems/DeepSpaceCombatSystem.js';
@@ -68,10 +74,13 @@ function boot() {
 }
 
 /** Kadłub wstawiony wprost do rejestru — patrz nota o żetonie stacji w nagłówku. */
-function spawnHull(core, { owner = null, name = 'Kadłub', x = 0, y = 0, dockedAt = null } = {}) {
+// ⚠ `systemId` PARAMETREM (W3-4b): rozkazy ruchu bramkują układ, więc okręt AI postawiony
+//    „na siłę" w `sys_home` z celem w układzie AI to scena fizycznie niemożliwa.
+function spawnHull(core, { owner = null, name = 'Kadłub', x = 0, y = 0, dockedAt = null,
+                           systemId = 'sys_home' } = {}) {
   const home = window.KOSMOS.homePlanet;
   const v = createVessel('hull_frigate', home.id, {
-    name, modules: [...WARSHIP], x, y, systemId: 'sys_home',
+    name, modules: [...WARSHIP], x, y, systemId,
   });
   if (owner) { v.ownerEmpireId = owner; v.owner = owner; v.isEnemy = true; }
   v.position.state = 'orbiting';
@@ -282,7 +291,9 @@ console.log('T5 — C-2 naprawione: `_holdAtHome` niesie `targetPoint` i rozkaz 
 
   // Okręt POZA stolicą — dokładnie ten przypadek, w którym `_holdAtHome` przestaje być
   // wczesnym returnem „już na miejscu" i musi WYDAĆ rozkaz.
-  const v = spawnHull(core, { owner: empireId, name: 'Garnizon w drodze', x: 900, y: 900 });
+  // ⚠ W układzie WŁASNEJ stolicy — powrót garnizonu jest rozkazem wewnątrzukładowym (W3-4b).
+  const capSys = EntityManager.get(cap.planetId)?.systemId;
+  const v = spawnHull(core, { owner: empireId, name: 'Garnizon w drodze', x: 900, y: 900, systemId: capSys });
   assert(v.position.dockedAt !== cap.planetId,
     'T5: okręt NIE jest zadokowany przy stolicy — więc doktryna musi wydać rozkaz, a nie trzymać pozycję');
 

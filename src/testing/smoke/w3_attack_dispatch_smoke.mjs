@@ -30,6 +30,7 @@
 import '../headless/env.js';           // MUSI być pierwszy
 import { GameCore } from '../headless/GameCore.js';
 import EventBus from '../../core/EventBus.js';
+import EntityManager from '../../core/EntityManager.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
@@ -56,10 +57,14 @@ function boot() {
   return core;
 }
 
-function spawnHull(core, { owner = null, name = 'Kadłub', x = 0, y = 0, dockedAt = null } = {}) {
+// ⚠ `systemId` jest PARAMETREM, nie stałą: od W3-4b rozkazy ruchu bramkują układ, więc statek
+//    postawiony „na siłę" w `sys_home` z celem w układzie AI to scena FIZYCZNIE NIEMOŻLIWA
+//    i silnik ma prawo ją odrzucić. Garnizon AI stoi w układzie SWOJEJ stolicy.
+function spawnHull(core, { owner = null, name = 'Kadłub', x = 0, y = 0, dockedAt = null,
+                           systemId = 'sys_home' } = {}) {
   const home = window.KOSMOS.homePlanet;
   const v = createVessel('hull_frigate', home.id, {
-    name, modules: [...WARSHIP], x, y, systemId: 'sys_home',
+    name, modules: [...WARSHIP], x, y, systemId,
   });
   if (owner) { v.ownerEmpireId = owner; v.owner = owner; v.isEnemy = true; }
   v.position.state = 'orbiting';
@@ -191,7 +196,12 @@ console.log('T3 — ⚠ ODWRÓCONE: `_holdAtHome` z dala od stolicy PRZECHODZI')
   const capitalId = cap?.planetId;
   assert(!!capitalId, `T3: stolica AI rozwiązana przez kanoniczny resolver (${capitalId})`);
 
-  const far = spawnHull(core, { owner: empireId, name: 'Wracający', x: 9000, y: 9000 });
+  // ⚠ Garnizon zabłądził W SWOIM układzie — to jedyna scena mająca sens fizyczny, bo rozkaz
+  //   powrotu jest wewnątrzukładowy (W3-4b). Wersja z okrętem AI postawionym w `sys_home`
+  //   „przechodziła" tylko dlatego, że silnik pozwalał wtedy lecieć do współrzędnych z cudzego
+  //   układu — czyli testowała dokładnie ten defekt, który GATE 2 złapał.
+  const capSys = EntityManager.get(capitalId)?.systemId;
+  const far = spawnHull(core, { owner: empireId, name: 'Wracający', x: 9000, y: 9000, systemId: capSys });
   const ok = doctrine._holdAtHome(far, empireId);
   assert(ok === true,
     'T3 SEDNO: garnizon Z DALA od stolicy DOSTAJE rozkaz powrotu. Przed W3-4 leciało tu ' +
@@ -203,14 +213,14 @@ console.log('T3 — ⚠ ODWRÓCONE: `_holdAtHome` z dala od stolicy PRZECHODZI')
     'T3: …i celuje w CIAŁO stolicy, więc statek ją ORBITUJE po dotarciu');
 
   // KONTROLA PINU: gałąź HOLD (już na miejscu) nadal NIE wydaje rozkazu.
-  const athome = spawnHull(core, { owner: empireId, name: 'Na miejscu', dockedAt: capitalId });
+  const athome = spawnHull(core, { owner: empireId, name: 'Na miejscu', dockedAt: capitalId, systemId: capSys });
   const okHold = doctrine._holdAtHome(athome, empireId);
   assert(okHold === true && athome.movementOrder == null,
     'T3 KONTROLA PINU: okręt JUŻ przy stolicy dalej trzyma pozycję BEZ rozkazu (trzymanie to ' +
     'brak ruchu; rozkaz na własną orbitę zwolniłby ją w OrbitalSpaceSystem — desync z Engage)');
 
   // KONTROLA PINU: patrol, druga gałąź tej samej akcji, niezmieniony.
-  const patroller = spawnHull(core, { owner: empireId, name: 'Patrol', dockedAt: capitalId });
+  const patroller = spawnHull(core, { owner: empireId, name: 'Patrol', dockedAt: capitalId, systemId: capSys });
   const okPatrol = doctrine._sendOnPatrol(patroller, empireId, 10);
   assert(okPatrol === true && patroller.movementOrder?.type === ORDER_TYPES.moveToPoint,
     'T3 KONTROLA PINU: patrol dalej przechodzi tą samą drogą (naprawa nie ruszyła bliźniaka)');

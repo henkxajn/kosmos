@@ -21,6 +21,7 @@ import { PredictionConeMath } from '../utils/PredictionConeMath.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { SHIP_MODULES }      from '../data/ShipModulesData.js';
 import { canLaunchFromCurrent, launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
+import { isSameSystem } from '../utils/SystemScope.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -269,6 +270,14 @@ export class MovementOrderSystem {
     const bodyId = spec.targetBodyId;
     const body = this._vm._findEntity?.(bodyId) ?? EntityManager.get(bodyId);
     if (!body) return { ok: false, reason: 'target_not_found' };
+
+    // ⚠ W3-4b — CEL Z INNEGO UKŁADU NIE JEST TU OBSŁUGIWANY I NIE MOŻE BYĆ. Uderzenie
+    // międzygwiezdne to złożenie: skok warp → dopiero potem to podejście wewnątrz układu.
+    // Orkiestruje je `OrderService.issueAttack` (jedyny dozwolony orkiestrator multi-system);
+    // ta bramka jest tu po to, żeby zejście do gołego `issueOrder` NIE dawało cichego bezsensu.
+    // ⚠ To NIE jest zwężenie zakresu do „tylko własny układ": to jest jedyne miejsce, w którym
+    // rozkaz może uczciwie powiedzieć, że nie umie przenieść statku między układami.
+    if (!isSameSystem(vessel, body)) return { ok: false, reason: 'target_other_system' };
 
     const res = this._issueMoveToPoint(vessel, {
       ...spec,
@@ -524,6 +533,20 @@ export class MovementOrderSystem {
       const near = this._vm._findBodyNearPoint?.(p.x, p.y);
       if (near) bodyId = near.id;
     }
+    // ⚠ W3-4b — BRAMKA UKŁADU. `MovementOrderSystem` jest z konstrukcji WEWNĄTRZUKŁADOWY:
+    // liczy trasę we współrzędnych mierzonych od gwiazdy, która w każdym układzie stoi w (0,0).
+    // Identyfikatory są za to GLOBALNE, więc bez tej bramki rozkaz na ciało z innego układu
+    // leciał do jego `x/y` odmierzonych od WŁASNEJ gwiazdy i meldował „dotarłem" przy ciele,
+    // którego w tym układzie nie ma (zmierzone na GATE 2: `sys_061` → planeta z `sys_home`).
+    // Podróż międzygwiezdną orkiestruje WYŁĄCZNIE `OrderService` (skok warp → dopiero potem
+    // ten rozkaz) — to jedyny dozwolony orkiestrator multi-system.
+    if (bodyId) {
+      const bodyEnt = this._vm._findEntity?.(bodyId) ?? EntityManager.get(bodyId);
+      if (bodyEnt && !isSameSystem(vessel, bodyEnt)) {
+        return { ok: false, reason: 'target_other_system' };
+      }
+    }
+
     if (bodyId) {
       const bodyNow = this._vm._findEntity?.(bodyId);
       const nowX = bodyNow?.x ?? p?.x;
@@ -680,6 +703,10 @@ export class MovementOrderSystem {
     if (!target) return { ok: false, reason: 'target_not_found' };
     if (target.isWreck) return { ok: false, reason: 'target_is_wreck' };
     if (target === vessel) return { ok: false, reason: 'target_self' };
+    // ⚠ W3-4b — ta sama klasa co bramka w `_issueMoveToPoint`: `_resolveTarget` szuka po
+    // GLOBALNYM id, więc bez tego pościg za statkiem z innego układu goniłby jego `x/y`
+    // odmierzone od CUDZEJ gwiazdy — czyli dryf w losowe miejsce własnego układu.
+    if (!isSameSystem(vessel, target)) return { ok: false, reason: 'target_other_system' };
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const orderId = `mo_${_nextOrderId++}`;
@@ -794,6 +821,9 @@ export class MovementOrderSystem {
     if (!this._vm.getVessel?.(spec.targetEntityId)) {
       return { ok: false, reason: 'target_not_vessel' };
     }
+    // ⚠ W3-4b — kiting liczy dystans w AU wewnątrz układu; cel z innego układu dałby
+    // dystans bez znaczenia fizycznego (dwa różne środki współrzędnych).
+    if (!isSameSystem(vessel, target)) return { ok: false, reason: 'target_other_system' };
 
     // Sprawdź czy vessel ma broń — bez broni engage nie ma sensu.
     const maxRangeAU = _computeMaxWeaponRangeAU(vessel);
