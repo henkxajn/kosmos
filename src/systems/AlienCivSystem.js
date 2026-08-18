@@ -19,8 +19,6 @@
 import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
-import { MilitaryAI } from './ai/MilitaryAI.js';
-import { EconAI } from './ai/EconAI.js';
 // W1/R2 — jedno źródło prawdy o uzbrojeniu i o własności kadłuba (nota przy _estimatePlayerMilitary).
 import { hasWeapons, isEnemyVessel } from '../entities/Vessel.js';
 import { PLAYER_DEFENSE_BASELINE_HP } from '../data/CombatValueData.js';
@@ -129,14 +127,14 @@ export class AlienCivSystem {
       // ale ma krzyczeć — `tickEmpire` łapie wyjątki per reguła i loguje je do konsoli.
       window.KOSMOS?.directorSystem?.tickEmpire?.(emp.id, emp);
 
-      // Faza 7: AI decyzje — najpierw ekonomia, potem militaria
-      // (ekonomia wcześniej, żeby zbudowana flota/produkcja była widoczna dla MilitaryAI)
-      try {
-        EconAI.tick(emp.id);
-        MilitaryAI.tick(emp.id);
-      } catch (err) {
-        console.error('[AlienCivSystem] AI tick error for', emp.id, err);
-      }
+      // ⚠ W3-8 — TU BYŁ TIK `EconAI` I `MilitaryAI` (Faza 7). Oba WYCOFANE, bo obie warstwy
+      // były martwe: `EmpireRegistry.updateResource`/`updateMilitaryPower` to jawne no-opy,
+      // a `createEmpire` nie ma klucza `resources`, więc wszystkie trzy akcje `MilitaryAI`
+      // scorowały **0** przy każdym tiku, przez cały czas życia projektu (korekta C-4 audytu W3).
+      // Decyzje wojenne AI podejmuje dziś ReactionDirector (`tickEmpire` wyżej): produkcja
+      // okrętów, mobilizacja rezerwy, doktryny i — od W3-5 — WYBÓR CELU I UDERZENIE.
+      // ⚠ To nie jest luka do zapełnienia z powrotem: gdyby wróciła potrzeba scoringu
+      // użytkowego, wraca jako REGUŁA katalogu Directora, nie jako druga, równoległa pętla AI.
     }
   }
 

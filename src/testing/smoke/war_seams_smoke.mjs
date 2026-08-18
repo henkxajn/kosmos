@@ -10,6 +10,7 @@
 //
 //   T1  K-1: LICZNIKA nie ma — `createEmpire` wycina `military`, `updateMilitaryPower` to no-op
 //   T2  K-1: milRatio ≡ 0 dla każdego imperium + KONTROLA PINU (z licznikiem wychodzi ≠ 0)
+//   T2b W3-8: pin źródłowy — `MilitaryAI`/`EconAI` skasowane, decyzje ma WYŁĄCZNIE Director
 //   T3  R2:  uzbrojony kadłub GRACZA rusza OBOMA estymatorami; sam pancerz/tarcza — NIE (V4)
 //   T4  V5:  CUDZY kadłub i WRAK nie podnoszą „siły gracza"; kolonie liczone tylko GRACZA (V1)
 //   T5  K-2: `empire.fleets` zostaje puste bez cheatu debugowego
@@ -28,7 +29,6 @@ import EventBus from '../../core/EventBus.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { estimatePlayerMilitary } from '../../systems/ai/UtilityAI.js';
-import { MilitaryAI } from '../../systems/ai/MilitaryAI.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -102,17 +102,59 @@ console.log('T2 — K-1: milRatio ≡ 0 dla każdego imperium (i pin NIE jest ma
     'T2 KONTROLA PINU: ta sama formuła z licznikiem 300 daje wartość > 0 — zero powyżej pochodzi ' +
     'z BRAKU DANYCH, nie z martwego pinu');
 
-  // ⚠ „Brak obserwowalnej zmiany" to OBIETNICA commitu W1-1 — pinujemy ją WYKONANIEM, nie
-  //   argumentem. Oba czasowniki MilitaryAI czytające estymator mają wcześniejsze bramki:
-  //   `build_fleet` wychodzi na bramce `production` (empire.resources wycięte whitelistą, T1),
-  //   `attack_player` na pustej liście flot (K-2, T5). Naprawiony estymator NIE MOŻE więc
-  //   wyprodukować decyzji, której wcześniej nie było — nawet uzbrojony po zęby.
+  // ⚠ W3-8 — TU STAŁA ASERCJA „MilitaryAI nie podejmuje ŻADNEJ akcji". Jej treść pochłonęła
+  //   samą warstwę: `MilitaryAI`/`EconAI` zostały WYCOFANE (obie scorowały 0 na zawsze, bo
+  //   `createEmpire` wycina `resources`, a `empire.fleets` zostaje puste — dokładnie T1 i T5
+  //   tego pliku). Pin przeniósł się o piętro wyżej: zamiast mierzyć ciszę martwej pętli,
+  //   pilnujemy, że pętli NIE MA — i że nikt jej nie przywrócił obok Directora.
   for (let i = 0; i < 3; i++) spawnHull(core, { name: `Fregata gracza ${i}` });
-  const decisions = empires.map(e => MilitaryAI.tick(e.id)).filter(d => d && d.score > 0);
-  assert(decisions.length === 0,
-    `T2: MilitaryAI nie podejmuje ŻADNEJ akcji (score > 0) mimo 3 uzbrojonych kadłubów gracza ` +
-    `i naprawionego estymatora (${estimate} → ${core.alienCivSystem._estimatePlayerMilitary()}) — ` +
-    'obietnica „naprawa R2 niczego nie przesuwa" dowiedziona wykonaniem');
+  assert(core.alienCivSystem._estimatePlayerMilitary() >= estimate,
+    `T2: estymator gracza nie maleje po trzech uzbrojonych kadłubach ` +
+    `(${estimate} → ${core.alienCivSystem._estimatePlayerMilitary()}) — mianownik milRatio żyje`);
+}
+
+// ── T2b — W3-8: PIN ŹRÓDŁOWY — druga pętla decyzyjna AI już nie istnieje ────
+console.log('T2b — W3-8: `MilitaryAI`/`EconAI` skasowane; decyzje wojenne AI ma WYŁĄCZNIE Director');
+{
+  const { readFileSync, readdirSync, statSync, existsSync } = await import('node:fs');
+  const { join } = await import('node:path');
+
+  // ⚠ KOMENTARZE ZDEJMOWANE PRZED SZUKANIEM (memory `source-pin-strip-comments`) — kod
+  //   produkcyjny WOLNO opisywać wycofaną warstwę słowem, nie wolno jej importować.
+  const stripComments = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  const walk = (dir, out = []) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (name.endsWith('.js') || name.endsWith('.mjs')) out.push(full);
+    }
+    return out;
+  };
+
+  const SRC = new URL('../../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const files = walk(SRC).filter(f => !f.split(/[\\/]/).includes('testing'));
+  assert(files.length > 100, `T2b: skan objął realny zbiór plików PRODUKCYJNYCH (${files.length})`);
+
+  assert(!existsSync(join(SRC, 'systems', 'ai', 'MilitaryAI.js')) &&
+         !existsSync(join(SRC, 'systems', 'ai', 'EconAI.js')),
+    'T2b: pliki `MilitaryAI.js` i `EconAI.js` NIE ISTNIEJĄ');
+
+  const importers = files.filter(f => /(MilitaryAI|EconAI|EmpireFleetMaterializer)\.js/.test(stripComments(readFileSync(f, 'utf8'))));
+  assert(importers.length === 0,
+    `T2b: ZERO importów wycofanej warstwy w kodzie produkcyjnym. Znalezione: ` +
+    `${importers.map(h => h.replace(SRC, '')).join(', ') || '—'}`);
+
+  // ⚠ KONTROLA PINU — bez niej literówka w regeksie dałaby ciche „przeszło". Warstwa, która
+  //   PRZEJĘŁA te decyzje, MUSI być tym samym mechanizmem znajdowana.
+  const acs = stripComments(readFileSync(join(SRC, 'systems', 'AlienCivSystem.js'), 'utf8'));
+  assert(/directorSystem\?\.tickEmpire/.test(acs),
+    'T2b KONTROLA PINU: `AlienCivSystem` NADAL tika ReactionDirectora (`tickEmpire`) — pin czyta ' +
+    'żywe źródło, a decyzje mają następcę, nie dziurę');
+  assert(!/EconAI\.tick|MilitaryAI\.tick/.test(acs),
+    'T2b: …i NIE tika już żadnej z wycofanych pętli');
 }
 
 // ── T3 — R2: uzbrojony kadłub GRACZA rusza oboma estymatorami (NAPRAWIONE w W1-1) ──

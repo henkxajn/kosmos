@@ -3,8 +3,8 @@
 // Zastępuje instant resolve VesselCombatSystem._resolveEngagement (BattleSystem)
 // dla starć w przestrzeni między vessel'ami. BattleSystem zostaje używany dla:
 //   - orbital combat (EnemyAttackHandler.planet defense)
-//   - abstract empire fleet combat (WarSystem._fleetArrived gdy
-//     unifiedAggregator skipuje materialized fleet)
+//   - abstract empire fleet combat (WarSystem._fleetArrived — od W3-8 tylko ze STARYCH
+//     zapisów; w normalnej grze nikt już nie tworzy floty abstrakcyjnej)
 //
 // Wpięcie:
 //   VesselCombatSystem._handleCombatRangeEnter → gdy FEATURES.m4DeepSpaceCombat

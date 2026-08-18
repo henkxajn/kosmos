@@ -1273,31 +1273,9 @@ export class UIManager {
     this._lastProximityLog = new Map();   // pairKey → gameYear
     this._PROXIMITY_LOG_COOLDOWN_YEARS = 10;
 
-    // Ruch wrogiej floty (intel-gated — pełen szczegół tylko gdy contact level).
-    // Bez gated info wciąż logujemy ogólny komunikat — bo gracz powinien wiedzieć.
-    EventBus.on('empire:fleetMoved', ({ empireId, destSystemId, etaYear }) => {
-      if (!empireId) return;
-      const empire = window.KOSMOS?.empireRegistry?.get?.(empireId);
-      const empName = empire?.namePL ?? empire?.name ?? empireId;
-      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-      const eta = (typeof etaYear === 'number')
-        ? Math.max(0, etaYear - gameYear).toFixed(1)
-        : '?';
-      // Auto-slow tylko gdy flota leci na home (kluczowa informacja dla gracza).
-      if (destSystemId === 'sys_home') {
-        this._triggerAutoSlowIfTime(t('log.autoSlowEnemyFleet'));
-      }
-      this._log(t('log.m4.enemyFleetMoving', empName, eta), 'intel');
-    });
-
-    // Materializacja wrogiej floty przy home — krytyczne, auto-slow + log.
-    EventBus.on('empire:fleetMaterialized', ({ empireId, vesselIds }) => {
-      const empire = window.KOSMOS?.empireRegistry?.get?.(empireId);
-      const empName = empire?.namePL ?? empire?.name ?? empireId ?? '?';
-      const count = Array.isArray(vesselIds) ? vesselIds.length : 0;
-      this._triggerAutoSlowIfTime(t('log.autoSlowEnemyMaterialize'));
-      this._log(t('log.m4.enemyFleetArrival', empName, count), 'combat');
-    });
+    // ⚠ W3-8 — TU BYŁY NASŁUCHY `empire:fleetMoved` i `empire:fleetMaterialized`.
+    // Oba zdarzenia straciły producentów razem z warstwą abstrakcyjnej floty; ruch wrogich
+    // sił widać dziś po PRAWDZIWYCH kadłubach (kontakt sensorowy niżej + `invasion:*`).
 
     // Sensor proximity contact (wróg <0.5 AU od naszego statku).
     // Anti-spam: cooldown per para 10 game-years.

@@ -463,13 +463,15 @@ export class WarSystem {
       }
     }
 
-    // Faza 7: agresję AI przejął MilitaryAI (tick w AlienCivSystem).
-    // WarSystem ogranicza się do przetwarzania dotarłych flot i rozstrzygania bitew.
+    // ⚠ W3-8: agresję AI prowadzi ReactionDirector (reguła `strike_player_target` wysyła
+    // PRAWDZIWE okręty przez `OrderService.issueAttack`). WarSystem ogranicza się do
+    // przetwarzania dotarłych flot ze STARYCH zapisów i do księgowania bitew.
   }
 
   _aiSendFleet_deprecated(war) {
-    // DEPRECATED: Faza 7 przeniosła tę logikę do MilitaryAI.attack_player.
-    // Pozostawione puste na wypadek referencji w starych save.
+    // DEPRECATED (pusty od Fazy 7, martwy od W3-8): agresja AI to dziś reguła
+    // `strike_player_target` w katalogu ReactionDirectora. Zostawione puste,
+    // bo stary zapis może jeszcze nieść referencję.
     return;
   }
 
@@ -478,30 +480,9 @@ export class WarSystem {
     // Flota doleciała do destSystemId — czy jest tam gracz?
     const destSystemId = fleet.destSystemId;
 
-    // M2a Unified Aggregator — flagi FEATURES.unifiedAggregator.
-    // Gdy fleet.materializationState === 'full' i są materializedVesselIds[],
-    // konkretne vessele walczą swoją ścieżką (EnemyAttackHandler przy arrival
-    // nad planetą lub VesselCombatSystem w deep-space). Abstract battle tu
-    // zduplikowałoby combat — strength=0 → bezsensowna minibitwa (§P2/P3
-    // m2-reconnaissance.md).
-    //
-    // Akcja: zeruj destSystemId/etaYear (flota "zaparkowana" w systemie jako
-    // materialized), skip abstract battle. MilitaryAI znajdzie flotę z
-    // destSystemId=null jako "idle" — pozwoli na nowe action, ale materialized
-    // strength=0 → score=0 → AI nie wyśle tej floty (R4).
-    if (GAME_CONFIG.FEATURES?.unifiedAggregator) {
-      if (fleet.materializationState === 'full' &&
-          Array.isArray(fleet.materializedVesselIds) &&
-          fleet.materializedVesselIds.length > 0) {
-        const fleets = [...(empire.fleets ?? [])];
-        const idx = fleets.findIndex(f => f.id === fleet.id);
-        if (idx >= 0) {
-          fleets[idx] = { ...fleets[idx], systemId: destSystemId, destSystemId: null, etaYear: null };
-          gameState.set(`empires.${empire.id}.fleets`, fleets, 'fleet_arrived_skipped_materialized');
-        }
-        return;
-      }
-    }
+    // ⚠ W3-8 — TU BYŁA GAŁĄŹ `unifiedAggregator` (pomijała bitwę abstrakcyjną, gdy flota
+    // była „zmaterializowana" w kadłuby). Odeszła razem z `EmpireFleetMaterializer`: nic już
+    // nie ustawia `materializationState`, więc warunek nie mógł być prawdziwy.
 
     const playerPresent = this._isPlayerInSystem(destSystemId);
 

@@ -49,11 +49,12 @@ export const GAME_CONFIG = {
     smallBodies:          false,
     // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
     movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
-    fleetMaterialization: true,   // EmpireFleetMaterializer (M1 Commit 7)
+    // ⚠ W3-8 — `fleetMaterialization` i `unifiedAggregator` USUNIĘTE razem z warstwą
+    // abstrakcyjnej floty (EmpireFleetMaterializer). Nie przywracać jako flagi: floty AI
+    // to dziś prawdziwe kadłuby, a reguła uderzenia mieszka w katalogu ReactionDirectora.
     // M2a — Combat Core (save v66) — M4 P1: flip ON
     proximitySystem:      true,   // ProximitySystem — per-tick detection + events
     vesselCombat:         true,   // VesselCombatSystem — deep-space battles (wymaga proximitySystem)
-    unifiedAggregator:    true,   // WarSystem._fleetArrived skip gdy materializationState='full'
     // M2a post-playtest freeze: drain zamrożony do M4 P4 reformy fuel/power cells.
     // Kod drain + PURSUE_DRAIN_MULT zostaje w VesselManager._tickEndurance — unfreeze
     // przez flip flagi w P4 gdy M4 wprowadzi pełny model fuel/endurance z hard-stop semantyką.

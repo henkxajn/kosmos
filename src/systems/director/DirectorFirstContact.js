@@ -1,8 +1,8 @@
 // DirectorFirstContact — łańcuch pierwszego kontaktu (workstream C, Slice 1, commit S5).
 //
-// Sondy/guardy/akcje reguły `first_contact` + cykl życia PRZELOTU: spawn wzorem
-// `EmpireFleetMaterializer`, kurs przez układ gracza, despawn na wyjściu, przejęcie beatu
-// narracyjnego i konsekwencja zestrzelenia.
+// Sondy/guardy/akcje reguły `first_contact` + cykl życia PRZELOTU: spawn (createVessel →
+// stempel własności → rejestr → `vessel:created`/`vessel:launched`), kurs przez układ gracza,
+// despawn na wyjściu, przejęcie beatu narracyjnego i konsekwencja zestrzelenia.
 //
 // ⚠ TRZY RZECZY, KTÓRE POCHODZĄ Z AUDYTU (§Audit C/D), NIE Z GUSTU:
 //
@@ -87,8 +87,9 @@ export class DirectorFirstContact {
 
   /**
    * Spawnuje sondę obcych na krawędzi układu gracza i wysyła ją kursem NA WYLOT.
-   * Wzór spawnu 1:1 z `EmpireFleetMaterializer:104-126` (createVessel → stempel własności →
-   * rejestr → `vessel:created` + `vessel:launched`).
+   * Wzór spawnu: createVessel → stempel własności → rejestr → `vessel:created` +
+   * `vessel:launched`. (⚠ W3-8: pierwowzór `EmpireFleetMaterializer` już nie istnieje —
+   * to jest dziś jedyne żywe miejsce z tym wzorem.)
    *
    * ⚠ `colonyId` przekazywany do `createVessel` to POZYCJA (planeta gracza), nie właściciel —
    * ta sama pułapka, którą `CLAUDE.md` opisuje przy S3.4d. Właściciel idzie stemplem niżej.

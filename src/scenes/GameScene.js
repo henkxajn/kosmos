@@ -75,7 +75,7 @@ import { initDiplomacyRefusals } from '../ui/DiplomacyRefusalModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
-import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyRaider, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
+import { spawnTestEnemy, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyRaider, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
 import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -112,7 +112,6 @@ import { DirectorOffensive, registerOffensiveBehaviors } from '../systems/direct
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
-import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
 import { VesselCombatSystem } from '../systems/VesselCombatSystem.js';
 import { DeepSpaceCombatSystem } from '../systems/DeepSpaceCombatSystem.js';
@@ -120,8 +119,6 @@ import { AutoRetreatSystem } from '../systems/AutoRetreatSystem.js';
 import { FleetSystem }         from '../systems/FleetSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIPS } from '../data/ShipsData.js';
-import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
-import { EconAI }            from '../systems/ai/EconAI.js';
 import { THEME }             from '../config/ThemeConfig.js';
 import { BattleView3D }      from './BattleView3D.js';
 import { showBattleIntro, showBattleOutcome, getBattleViewPreference } from '../ui/BattleIntroModal.js';
@@ -470,10 +467,6 @@ export class GameScene {
     this.movementOrderSystem      = null;
     window.KOSMOS.movementOrderSystem = null;
     if (GAME_CONFIG.FEATURES?.movementOrders) this._ensureMovementOrderSystem();
-    // M1 Fleet Materialization — lazy init, feature flag.
-    this.empireFleetMaterializer = null;
-    window.KOSMOS.empireFleetMaterializer = null;
-    if (GAME_CONFIG.FEATURES?.fleetMaterialization) this._ensureEmpireFleetMaterializer();
     // M2a ProximitySystem — lazy init, feature flag. Per-tick detection zbliżeń
     //   vessel↔vessel. Hook w VesselManager._tick (PRZED MOS). Commit 2 — scaffold.
     this.proximitySystem          = null;
@@ -498,9 +491,6 @@ export class GameScene {
     this.autoRetreatSystem          = null;
     window.KOSMOS.autoRetreatSystem = null;
     if (GAME_CONFIG.FEATURES?.vesselCombat) this._ensureAutoRetreatSystem();
-    // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
-    window.KOSMOS.militaryAI       = MilitaryAI;
-    window.KOSMOS.econAI           = EconAI;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
     // M4 P1 post-playtest — EventBus exposed dla debug konsoli (off-spec M3 #9).
     window.KOSMOS.eventBus         = EventBus;
@@ -1069,7 +1059,6 @@ export class GameScene {
         return info;
       },
       spawnTestEnemy,
-      spawnEnemyFleet,
       spawnEnemyCiv,
       spawnEnemyAttack,
       // KOSMOS.debug.spawnEnemyRaider({ empireId?, systemId?, templateId?, autoOrder?, targetBodyId? })
@@ -1425,25 +1414,6 @@ export class GameScene {
         })));
         return orders;
       },
-      // ── M1 Targeting (Commit 7) — EmpireFleetMaterializer ─────────────
-      enableFleetMaterialization: () => {
-        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
-        GAME_CONFIG.FEATURES.fleetMaterialization = true;
-        this._ensureEmpireFleetMaterializer();
-      },
-      disableFleetMaterialization: () => {
-        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
-        GAME_CONFIG.FEATURES.fleetMaterialization = false;
-        this._disableEmpireFleetMaterializer();
-      },
-      // KOSMOS.debug.materializeFleet(empireId, fleetId) — force materializacja (bypass ETA/trigger).
-      materializeFleet: (empireId, fleetId) => {
-        const efm = window.KOSMOS?.empireFleetMaterializer;
-        if (!efm) { console.warn('[debug] EmpireFleetMaterializer wyłączony — użyj enableFleetMaterialization()'); return null; }
-        const result = efm.materializeFleet(empireId, fleetId);
-        console.log(`[debug] materializeFleet(${empireId},${fleetId}):`, result);
-        return result;
-      },
       // ── S3.3b-S2 Stacje orbitalne ─────────────────────────────────────
       // KOSMOS.debug.spawnStation(bodyId?, opts?) — instant stacja na orbicie ciała
       //   (domyślnie homePlanet). Pomija pending order — do live-gate wizualnego.
@@ -1710,18 +1680,6 @@ export class GameScene {
         GAME_CONFIG.FEATURES.m4DeepSpaceCombat = false;
         this._disableDeepSpaceCombatSystem();
         console.log('[debug] m4DeepSpaceCombat = false (VCS instant resolve)');
-      },
-      // KOSMOS.debug.enableUnifiedAggregator() — WarSystem._fleetArrived skip
-      // dla materialized. Pomiędzy abstract fleet battle a vessel-level combat.
-      enableUnifiedAggregator: () => {
-        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
-        GAME_CONFIG.FEATURES.unifiedAggregator = true;
-        console.log('[debug] unifiedAggregator = true (WarSystem._fleetArrived skip dla materialized)');
-      },
-      disableUnifiedAggregator: () => {
-        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
-        GAME_CONFIG.FEATURES.unifiedAggregator = false;
-        console.log('[debug] unifiedAggregator = false');
       },
       // ── Combat Sandbox (scenarioMode === 'combat_sandbox') ────────────
       // KOSMOS.debug.sandboxInfo() — dump stanu: empires + vessele + aktywne flagi.
@@ -4264,29 +4222,6 @@ export class GameScene {
     this.movementOrderSystem = null;
     window.KOSMOS.movementOrderSystem = null;
     console.log('[GameScene] MovementOrderSystem deaktywowany');
-  }
-
-  /**
-   * M1 Fleet Materialization — idempotentne init.
-   */
-  _ensureEmpireFleetMaterializer() {
-    if (this.empireFleetMaterializer) return this.empireFleetMaterializer;
-    if (!this.vesselManager) {
-      console.warn('[GameScene] vesselManager jeszcze nieinicjalizowany — odrocz enable');
-      return null;
-    }
-    this.empireFleetMaterializer = new EmpireFleetMaterializer(this.vesselManager, this.empireRegistry);
-    window.KOSMOS.empireFleetMaterializer = this.empireFleetMaterializer;
-    console.log('[GameScene] EmpireFleetMaterializer aktywowany');
-    return this.empireFleetMaterializer;
-  }
-
-  _disableEmpireFleetMaterializer() {
-    if (!this.empireFleetMaterializer) return;
-    this.empireFleetMaterializer.destroy();
-    this.empireFleetMaterializer = null;
-    window.KOSMOS.empireFleetMaterializer = null;
-    console.log('[GameScene] EmpireFleetMaterializer deaktywowany (istniejące mater. floty pozostają)');
   }
 
   /**

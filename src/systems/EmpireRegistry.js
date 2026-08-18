@@ -195,48 +195,12 @@ export class EmpireRegistry {
     return emp?.fleets ?? [];
   }
 
-  /** Spawnuje flotę w domyślnie home-system imperium (lub podanym). */
-  spawnFleet(empireId, params = {}) {
-    const emp = this.get(empireId);
-    if (!emp) return null;
-    const fleets = [...(emp.fleets ?? [])];
-    const fleetId = params.id ?? `fleet_${empireId}_${fleets.length + 1}`;
-    const systemId = params.systemId ?? emp.homeSystemId;
-    const fleet = {
-      id:           fleetId,
-      strength:     params.strength ?? 100,
-      systemId,
-      destSystemId: null,
-      etaYear:      null,
-      morale:       params.morale ?? 1.0,
-      createdYear:  window.KOSMOS?.timeSystem?.gameTime ?? 0,
-      hasTroopTransport: params.hasTroopTransport ?? false,
-      troopCapacity:     params.troopCapacity ?? 0,
-      embarkedTroops:    params.embarkedTroops ?? [],
-    };
-    fleets.push(fleet);
-    gameState.set(`empires.${empireId}.fleets`, fleets, 'fleet_spawned');
-    EventBus.emit('empire:fleetSpawned', { empireId, fleet });
-    return fleet;
-  }
-
-  /** Uruchom flotę w drogę do systemu docelowego (ETA w civYears). */
-  moveFleet(empireId, fleetId, destSystemId, etaYears) {
-    const emp = this.get(empireId);
-    if (!emp) return false;
-    const fleets = [...(emp.fleets ?? [])];
-    const idx = fleets.findIndex(f => f.id === fleetId);
-    if (idx < 0) return false;
-    const currentYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    fleets[idx] = {
-      ...fleets[idx],
-      destSystemId,
-      etaYear: currentYear + etaYears,
-    };
-    gameState.set(`empires.${empireId}.fleets`, fleets, 'fleet_moved');
-    EventBus.emit('empire:fleetMoved', { empireId, fleetId, destSystemId, etaYear: fleets[idx].etaYear });
-    return true;
-  }
+  // ⚠ W3-8 — `spawnFleet` i `moveFleet` WYCOFANE. Abstrakcyjna flota nie ma dziś
+  // żadnego producenta w grze: jedynym wejściem był cheat `spawnEnemyFleet`, a warstwa,
+  // która miała ją zamieniać w kadłuby (`EmpireFleetMaterializer`), też odeszła. AI wysyła
+  // dziś PRAWDZIWE okręty przez `OrderService.issueAttack` (reguła `strike_player_target`).
+  // Czytelniki (`listFleets`, `updateFleetStrength`, `destroyFleet`, `WarSystem._fleetArrived`)
+  // zostają — stary zapis może jeszcze nieść wpisy i musi się wczytać bez wyjątku.
 
   /** Aktualizuje siłę floty (straty/wzmocnienia). */
   updateFleetStrength(empireId, fleetId, newStrength, reason = '') {

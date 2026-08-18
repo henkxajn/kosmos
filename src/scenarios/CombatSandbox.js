@@ -124,11 +124,10 @@ const ENEMY_WARSHIPS = [
 const SANDBOX_FEATURE_FLAGS = [
   // M1 (save v65) — zarejestrowane
   'movementOrders',
-  'fleetMaterialization',
-  // M2a (save v66, planowane) — proximity + vessel combat + unified aggregator
+  // M2a (save v66) — proximity + vessel combat
+  // (⚠ W3-8: `fleetMaterialization` i `unifiedAggregator` odeszły z warstwą abstrakcyjnej floty)
   'proximitySystem',
   'vesselCombat',
-  'unifiedAggregator',
   // M2b (save v67, planowane) — intel + POI + prediction cone
   'intelContactState',
   'predictionCone',
@@ -430,13 +429,11 @@ function _activateFeatureFlags(scene) {
   }
   // Instancjonuj systemy M1 jeśli jeszcze nie powstały
   scene._ensureMovementOrderSystem?.();
-  scene._ensureEmpireFleetMaterializer?.();
   // M2a/M2b systemy będą miały analogiczne _ensure*; scenariusz włącza flagi
   // — systemy startują gdy milestone zostanie zaimplementowany (idempotent call OK).
   scene._ensureProximitySystem?.();
   scene._ensureVesselCombatSystem?.();
   scene._ensureAutoRetreatSystem?.();
-  scene._ensureUnifiedAggregator?.();
 }
 
 function _listActiveFlags() {
