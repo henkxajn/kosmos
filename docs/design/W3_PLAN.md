@@ -18,11 +18,11 @@ already-declared `gameState` domain, and the one item that would need a backfill
 
 ## RESUME — czytaj to PIERWSZE (PL, wzór W1/W2)
 
-**Stan na 2026-08-18.** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2** `d5a9b8d` ·
+**Stan na 2026-08-18 (wieczór).** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2** `d5a9b8d` ·
 `536fd51` + `d19777b` + `b630c55` (GATE 1: checklista, rejestr, werdykt) · **W3-3** `1e57d1b` ·
 **W3-4** `4724e46` · `7a43c3a` (checklista GATE 2 wyd. 1) · **W3-4b-1** `369adfc` ·
-**W3-4b-2** `cb815cd`.
-Sweep **142/142 OK, 0 FAIL** · `check-i18n` **PASS** (pl = en = 3242) · zapis **v101 bez migracji**.
+**W3-4b-2** `cb815cd` · `4514df4` (GATE 2 wyd. 2) · **W3-4c** `a7b84bd` (dźwignia rajdera).
+Sweep **143/143 OK, 0 FAIL** · `check-i18n` **PASS** (pl = en = 3242) · zapis **v101 bez migracji**.
 
 ✅ **GATE 1 ZDANY 2026-08-17** — osiem na osiem (`W3_GATE1_CHECKLIST.md` §Wynik).
 
@@ -58,9 +58,20 @@ z jawnym widelcem właściciela. Skutkiem jest **skok POJEDYNCZY i BEZ limitu d�
 **zasięg uderzenia musi ograniczyć REGUŁA WYBORU CELU** (sąsiedztwo z `InfluenceMap`), inaczej
 imperium uderzy przez pół galaktyki za jeden bak oparów.
 
+⏸ **GATE 2 wyd. 2 ZABLOKOWANY NA LUCE NARZĘDZIOWEJ (2026-08-18) — ODBLOKOWANY.** Sceny
+międzygwiezdnej nie dało się postawić ŻADNĄ zwalidowaną dźwignią: Sandbox stawia wyłącznie FRG-3
+(`warpFuel.max: 0` — CELOWY brak baku, poprawnie), a `spawnEnemyAttack` dobiera kadłub po SILE
+i ląduje na `hull_medium`, też bez baku. Właściciel słusznie odmówił ręcznej edycji paliwa.
+**W3-4c** (`a7b84bd`) dokłada `spawnEnemyRaider` — jedno wywołanie stawia rajdera z katalogu,
+z pełnym bakiem, w najbliższym NIE-swoim układzie, właściciel z AKTYWNEJ wojny, a rozkaz idzie
+PRAWDZIWĄ ścieżką (`OrderService.issueAttack`). Kontrakt sprawdzany po fakcie (`warpCapable`
+w zwrotce). Przy okazji: `issueWarp` do własnego układu zwraca kanoniczny `same_system`
+(nie `dispatch_failed`) — bez nowego klucza i18n, bo stała i tekst PL/EN już istniały.
+**§Findings 29-31.**
+
 **CO DALEJ:** **GATE 2 wydanie 2** (`W3_GATE2_CHECKLIST.md`) — scena międzygwiezdna jest teraz
-WYMAGANA, nie przypadkowa; wznawiasz od §2, sekcje 4-7 bez zmian (§4 powtórzyć, bo sprawdza też
-WŁAŚCIWY układ dominacji) → **W3-5** (wybór celu jako REGUŁA Directora: `delay: 0`, klucz rzutu
+WYMAGANA, nie przypadkowa; wznawiasz od **§1 L3** (nowa dźwignia), potem §2; sekcje 4-7 bez zmian
+(§4 powtórzyć, bo sprawdza też WŁAŚCIWY układ dominacji) → **W3-5** (wybór celu jako REGUŁA Directora: `delay: 0`, klucz rzutu
 mieszający `GALAXY_SEED`, sonda MUSI zasiać żeton stacji, dobór sił po `warpFuel.max > 0`) →
 **W3-6** (desant z bitew `vessel_group`) → **W3-7** (widoczność + bramka WŁASNOŚCI, §Findings 19
 i 22) → **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`) → **W3-9**.
@@ -646,6 +657,41 @@ first-contact seed (standing parallel item, its own before/after).
     engine allowed flying to another system's coordinates. Both scenes moved into the capital's
     own system in W3-4b-1. **When a fix makes an old test red, check whether the test's scene was
     ever possible** — here the red was the fix working, not a regression.
+
+---
+
+### Added at GATE 2 edition 2 (2026-08-18, owner-witnessed live — gate BLOCKED on tooling)
+
+29. ⚠ **The interstellar scene could not be staged by any validated lever — a tooling gap that
+    looked like a defect.** Measured on a fresh Combat Sandbox boot: all three Łowcy are
+    `frigate_system_defender` with `warpFuel.max: 0` (**correct** — the catalog gives FRG-3 a
+    deliberate `CELOWY BRAK warp_tank`), and `spawnEnemyAttack` picks its hull by *strength*, so
+    the default 500 lands on `hull_medium` — also no warp tank. The only remaining route was
+    hand-editing fuel state, which the standing gate rules forbid; the owner correctly refused.
+    ⇒ W3-4c adds `spawnEnemyRaider` (also reachable as `spawnEnemyAttack({ warpCapable: true })`):
+    hull resolved **from the catalog**, placed in the nearest **non-player** system, warp tank
+    full, owner defaulting to **the opponent of the active war** (§Findings 17's lesson made a
+    default), and — unless `autoOrder: false` — the strike issued through the **real production
+    path** (`OrderService.issueAttack`), not a hand-assembled mission like the legacy spawner.
+    **The lever verifies its own contract after the fact** (`warpCapable` in the report + a loud
+    error) — a silent success that leaves the gate stuck exactly as before would be worse than no
+    lever at all.
+    ⚠ Filed as a standing property, not a one-off: **a gate that cannot be staged is a gap in the
+    instruments, and the instrument is the deliverable.** The keeper pins both the lever *and the
+    gap* (`spawnEnemyAttack` default still yields `warpFuel.max === 0`), so nobody "simplifies"
+    the lever back into the hole it was dug out of.
+30. **The Combat Sandbox is a DEFENSIVE fixture and stays one.** It seeds only FRG-3, which is the
+    right ship for "hold the line at home" and structurally blind for "leave home and strike".
+    Not changed: adding an escort wave would make every sandbox session an offensive scenario.
+    The offensive scene now comes from a lever that also works **outside** the sandbox.
+31. **One world-state, two answers depending on who asked.** `issueWarp` to the vessel's current
+    system returned `same_system` on the player path (the planner, `WarpRoutePlanner:57`) and
+    `dispatch_failed` on the AI path (which never reaches the planner — §Findings 27). Unified on
+    the **canonical** `same_system`; deliberately **not** a new `already_in_system` string, because
+    the constant, the UI mapping (`FleetManagerOverlay:6623`) and the PL/EN text
+    (`fleet.warpErrSame`) already existed — a second name would have forked the vocabulary for one
+    event. Worth watching for: `OrderService` wraps two dispatch paths with different reason
+    vocabularies, and this was the first place they visibly disagreed.
 
 ---
 
