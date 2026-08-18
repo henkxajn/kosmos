@@ -18,39 +18,47 @@ already-declared `gameState` domain, and the one item that would need a backfill
 
 ## RESUME — czytaj to PIERWSZE (PL, wzór W1/W2)
 
-**Stan na 2026-08-17.** Zrobione i scommitowane: **W3-0** `ea05d8f` (keeper szwów, 6 faktów
-pinowanych wykonaniem) · **W3-1** `efa8f85` (odwracalny przerzut własności kolonii) · **W3-2**
-`d5a9b8d` (DSCS/VCS księgowane przez `recordBattle`) · `536fd51` (checklista GATE 1) ·
-`d19777b` (RESUME + findings 17-21).
-Sweep **139/139 OK, 0 FAIL** · `check-i18n` **PASS** · zapis **v101 bez migracji**.
+**Stan na 2026-08-18.** Scommitowane: **W3-0** `ea05d8f` · **W3-1** `efa8f85` · **W3-2** `d5a9b8d` ·
+`536fd51` + `d19777b` (GATE 1: checklista + rejestr) · `b630c55` (werdykt GATE 1 + rozstrzygnięcia) ·
+**W3-3** `1e57d1b` · **W3-4** `4724e46`.
+Sweep **141/141 OK, 0 FAIL** · `check-i18n` **PASS** (pl = en = 3241) · zapis **v101 bez migracji**.
 
-✅ **GATE 1 ZDANY 2026-08-17 — WSZYSTKIE OSIEM POZYCJI.** Wynik, liczby i dowody:
-`W3_GATE1_CHECKLIST.md` §Wynik. W skrócie: bitwa w przestrzeni głębokiej **księguje się**
-(wyczerpanie **0/0 → 3,6/0,8**, `battles` +1, dominacja ustawiona dla `sys_home`, ślad audytu
-2 wpisy / 1 z `warId`) · asymetria potwierdzona **8×** od strony wygrywającego (**28,8/6,4** =
-dokładnie przegrany 9 / wygrany 2 × `exhaustionRate` 0,4; kierunek odwrotny na keeperach T5/T6) ·
-`war_status.raw` **monotoniczny** (−0,936 → −0,928; krzywa eksterminacji jest z założenia płaska) ·
-ścieżka orbitalna nietknięta · **podbój przeżywa zapis → F5 → wczytanie**.
+✅ **GATE 1 ZDANY 2026-08-17 — wszystkie osiem pozycji** (`W3_GATE1_CHECKLIST.md` §Wynik).
+§7[5] domknięty wariantem **AI→AI** (`emp_001` → `emp_sandbox_enemy`): podbój żyje i przeżywa
+zapis/F5/wczytanie. Propus (`entity_157/158/159`) = `emp_002` — zagadka własności zamknięta.
 
-**§7[5] domknięty — i wyszło lepiej, niż zakładała checklista.** Nihal c należała do **`emp_001`**
-(gracz w Sandboksie ma wyłącznie Bastion), więc test wykonał wariant **AI→AI**
-(`emp_001` → `emp_sandbox_enemy`): legalny i **cenniejszy** wobec symetrii z D7. Wariant
-gracz→wróg jedzie na keeperze `w3_conquest_persists_smoke` (25/25). Zagadka Propus rozwiązana:
-`entity_157/158/159` należą do **`emp_002`** — Sandbox stoi na żywym szkielecie galaktyki.
+⏳ **GATE 2 CZEKA NA CIEBIE — `W3_GATE2_CHECKLIST.md`.** ⚠ **Zakres tego gate'u to MECHANIZM
+uderzenia**, nie wybór celu: rozkaz `attack` → lot → bitwa, plus dwie naprawy, które jadą razem
+(dominacja przeżywająca wczytanie, bramka rezerwy). **Kogo i kiedy AI wybierze — dowozi W3-5**
+i dokłada §8 (autonomia) do tej samej listy. Dziś cel wskazujesz Ty, dźwignią debugową; silnik
+ma udowodnić, że **umie go wykonać**.
 
-⚠ **Jeden nowy defekt z domknięcia — §Findings 22, naprawa w rodzinie commitów W3-7:** natywny
-alert o utracie kolonii odpalił przy transferze **NIE-GRACZA** (konsument utraty nie filtruje po
-właścicielu). ⚠ **§Findings 21 SKORYGOWANE** — „Sandbox zasiewa kolonię gracza poza domem" było
-błędne. ⚠ **§Findings 17 ROZSTRZYGNIĘTE:** `spawnEnemyFleet` **ginie z W3-8**, nie przepisujemy
-jej na realne kadłuby (duplikowałaby `spawnEnemyAttack`) — dźwignia oznaczona jako wycofana
-w `CHEATS.md` i `combat-sandbox-scenario.md`.
+**Co dowiozły W3-3 i W3-4:**
+- **W3-3** — `orbitalDominance` był PISANY przy każdej bitwie i CZYTANY przez bramkę desantu, ale
+  nie był ZADEKLAROWANY w `createDefaultState`, więc `restore` wyrzucał go przy każdym wczytaniu.
+  Skutek w grze: wróg trzymał orbitę, a po reloadzie bramka wracała do „pusta orbita = wolna droga".
+  Naprawa to DEKLARACJA, nie backfill — pusty default jest poprawny dla starego zapisu, więc
+  **v101 bez migracji**. Martwy zasiew w `_migrateV58toV59` skasowany (pin źródłowy).
+- **W3-4** — `ORDER_TYPES.attack`: pierwszy produkcyjny producent misji `attack`. **Delegat** do
+  `_issueMoveToPoint` (wzór `goToPOI`), nie druga implementacja lotu — pinowane RÓWNOŚCIĄ ETA
+  i kosztu paliwa. Do tego **D6** (rezerwa nie przyjmuje rozkazów — `pursue` latał magazynem)
+  i naprawa **`_holdAtHome`** (garnizon poza stolicą nie potrafił wrócić).
 
-**CO DALEJ (kolejność wiążąca):** **W3-3** (`orbitalDominance` przeżywa wczytanie — jeden klucz
-w `createDefaultState`) → **W3-4** (producent misji `attack` + naprawa `_holdAtHome` + bramka
-`isInService` wg podpisanego D6 + kontrola bramki portu; **D4 zweryfikowane WYKONANIEM przed
-budową doboru sił** — eskorty warp żyją i są produkowane na L2, **do ZASTOSOWANIA** w doborze:
-filtr `warpFuel.max > 0`, nigdy po id szablonu) → **GATE 2** (pierwszy raz w historii gry okręty
-AI wychodzą z domu z celem).
+**Zweryfikowane WYKONANIEM w tej sesji (nie z lektury):**
+- **D4** — `frigate_laser_escort` i `frigate_missile_escort` dają `warpFuel.max = 5`,
+  `frigate_system_defender` **0**. Filtr **`warpFuel.max > 0`** wybiera dokładnie obie eskorty
+  i wyklucza FRG-3 JEGO WŁASNYM projektem, bez znajomości id szablonów. **Do ZASTOSOWANIA w W3-5.**
+- **Bramka portu kosmicznego** — nie odrzuca dziś startów AI, ale **tylko dlatego, że cały katalog
+  to kadłuby `small`**. `hull_destroyer`/`hull_cruiser` portu WYMAGAJĄ, a stolica AI dostaje stację
+  BEZ modułów (żeton R-3), nie port ⇒ cięższy szablon = ciche `no_spaceport_at_origin`, które
+  będzie wyglądać jak „reguła nie odpala". §Findings 23, pinowane w obie strony.
+
+**PO GATE 2 (kolejność wiążąca):** **W3-5** (wybór celu jako REGUŁA Directora z własną akcją,
+nigdy trzecia doktryna; `delay: 0` obowiązkowo; klucz rzutu MUSI mieszać `GALAXY_SEED`; sonda
+MUSI zasiać żeton stacji, inaczej mierzy CISZĘ) → **W3-6** (desant AI z bitew `vessel_group`) →
+**W3-7** (gracz widzi, że jest atakowany — §Findings 19 i **22**: bramka WŁASNOŚCI na wszystkich
+powierzchniach utraty) → **W3-8** (wycofanie warstwy abstrakcyjnej; ginie z nią `spawnEnemyFleet`)
+→ **W3-9** (domknięcie dokumentacji).
 
 ---
 
@@ -348,8 +356,8 @@ failure modes: the repairs, the offensive loop, the conquest aftermath.
 | **W3-0** | `test(war): weryfikacja szwów przed W3` | NEW `src/testing/headless/probe-w3-seams.mjs` + keeper `w3_seams_smoke` — pins the load-bearing facts **by execution**, each asserted against CURRENT behaviour so later commits must deliberately invert them: S2 (an AI hull ordered to a player body arrives with **no** battle) · S5 (a DSCS battle during a declared war leaves `exhaustion` and `war.battles[]` untouched) · S6 (dominance written, save/load, dominance gone) · C-5 (after `transferColony`, `getColoniesByEmpire` returns one fewer colony than `empires[].colonies` has ids) · C-2 (`_holdAtHome` on a ship not at the capital returns `missing_target_point`) · S12 (a legacy unit disbands on its first hit; the same unit reloaded does not). ⚠ Must seed the **R-3 station token** (S21) or the AI half measures silence. **Zero production code.** | — |
 | **W3-1** | `fix(war): podbój zostaje — odwracalny transfer własności` | **PREREQUISITE.** `transferColony` reworked into a reversible in-place ownership flip mirroring `captureColonyForPlayer` (keep the colony in `_colonies`, keep its five subsystems, rewrite `ownerEmpireId` + hexes) — this is what makes the AI able to profit from a conquest at all, and what makes a W4 cession returnable · emit `colony:destroyed`-equivalent teardown for the seven subscribers that currently never fire, or route the existing event (C-5) · `syncToGalaxyData` re-derivation fixed · guard `destroyEmpire`-on-last-colony while a war or relation references the empire. ⚠ Touches the `s34c_z9_transfer_dispose` contract — that keeper is rewritten deliberately, not incidentally. | — |
 | **W3-2** | `fix(war): DSCS i VCS księgują bitwy przez recordBattle` | The third silent path (S5), closed the way W1-4 closed EAH: DSCS/VCS route through `WarSystem.recordBattle` so a deep-space war accrues exhaustion, appends `war.battles[]` and sets orbital dominance. ⚠ **Own gate** — it changes when wars end; E7 acceptance matrices re-run with before/after attached, and the untracked BALANS baseline copied aside first (V19). ⚠ Do **not** read `lossesA/B` in any new consumer (W1 §Findings 3: HP-delta in BattleSystem, vessel count in DSCS, same field name). | **GATE 1 ✅ PASSED 2026-08-17** |
-| **W3-3** | `fix(save): orbitalDominance przeżywa wczytanie` | One key in `createDefaultState` + a keeper + defensive reads (S27's no-deep-merge rule). Removes the dead seed at `SaveMigration:1643-1645`. Behaviour change — post-load invasions become possible again — so it carries its own before/after and does **not** ride another commit. | — |
-| **W3-4** | `feat(ai): rozkaz uderzenia — producent misji \`attack\`` | The join the audit found (S2+S3): an AI hull sent at a player body arrives with `mission.type='attack'` and the **existing** EAH pipeline does the rest (batching, auto war declaration, booking, dominance, wrecks). Fix `_holdAtHome`'s `missing_target_point` in the same commit (C-2) — same order channel. **D6: close the `isInService` hole** in `MovementOrderSystem.issueOrder` here (one gate, reason `vessel_in_reserve`, i18n PL+EN) so the new order path does not inherit it (§Findings 1). ⚠ Check the **spaceport gate** (`MovementOrderSystem:489-494` → `SpaceportCheck:55-63`) is not silently refusing AI departures — it is **not** bypassed by `DirectorDoctrine`. | — |
+| **W3-3 ✅** `1e57d1b` | `fix(save): orbitalDominance przeżywa wczytanie` | One key in `createDefaultState` + a keeper + defensive reads (S27's no-deep-merge rule). Removes the dead seed at `SaveMigration:1643-1645`. Behaviour change — post-load invasions become possible again — so it carries its own before/after and does **not** ride another commit. | — |
+| **W3-4 ✅** `4724e46` | `feat(ai): rozkaz uderzenia — producent misji \`attack\`` | The join the audit found (S2+S3): an AI hull sent at a player body arrives with `mission.type='attack'` and the **existing** EAH pipeline does the rest (batching, auto war declaration, booking, dominance, wrecks). Fix `_holdAtHome`'s `missing_target_point` in the same commit (C-2) — same order channel. **D6: close the `isInService` hole** in `MovementOrderSystem.issueOrder` here (one gate, reason `vessel_in_reserve`, i18n PL+EN) so the new order path does not inherit it (§Findings 1). ⚠ Check the **spaceport gate** (`MovementOrderSystem:489-494` → `SpaceportCheck:55-63`) is not silently refusing AI departures — it is **not** bypassed by `DirectorDoctrine`. | — |
 | **W3-5** | `feat(ai): wybór celu — reguła Directora, nie doktryna` | Target selection as a **catalog rule + its own action** (C-2), reading `ThreatAssessment.getStrength` for force (**D3: global truth, signed**), `TerritoryService.getSystemDevScore` for value and `InfluenceMap` for adjacency (S19/S20 — reuse, do not write a second scorer). **D4 (verified): strike composition selects hulls on `warpFuel.max > 0`, never on template id**, so the escorts fly and FRG-3 stays home by its own design; "no warp-capable hull in reserve" is a **first-class refusal reason**, since roamers arrive only at L2, one per incident. ⚠ **`delay: 0` mandatory** (`_firePending` dereferences the null left by `gameState.set(key,null)` **outside** both try/catch layers — `DirectorSystem:252-262`, `:161`; pinned catalog-wide by `w2_ai_mobilization` T4). ⚠ Roll key must mix `GALAXY_SEED` — the first-contact defect is precisely this class and `DirectorRuleMath:71-74` warns about it in writing. ⚠ Roll-less rules are throttled only by cooldown; the once-per-displayed-year gate lives inside `if (rule.roll)`. **⚠ CARRIES THE W3-0 PROBE** (scope ruling 2026-08-17: folded here, where its measurement is consumed and the Director must be wired anyway — building it in W3-0 would be harness work done twice). NEW `src/testing/headless/probe-w3-targets.mjs`, multi-seed, longitudinal. **⚠ IT MUST SEED THE R-3 STATION TOKEN** — `GameCore` mounts no `stationSystem`, so `EmpireColonyBootstrap:255-270` skips the token, `DirectorProduction:359` refuses every warship with `no_orbital_station`, and **an unseeded probe measures SILENCE, not restraint** (S21). Replicate the bootstrap's seed after boot (`new StationSystem()` → `createStation(capitalBodyId, { ownerEmpireId, starterModules: false })`, the `director_station_seed_smoke` shape) and **assert the token took** before measuring anything. | **GATE 2** |
 | **W3-6** | `feat(ai): desant AI z bitew vessel_group` | New entry point into the live `launchInvasion` intent from `battle:resolved` with `participantA.type==='vessel_group'` + orbital dominance, reading `vessel.troopCapacity`/`canDropTroops` off the winning side's real hulls (C-1). Reuses the whole landing/capture half unchanged. ⚠ `MIN_SURVIVING_STRENGTH_TO_LAND = 30` is evaluated against abstract `pA.strength` — a unit with no meaning on the real-vessel path; it needs a hull-derived replacement, not a copy. | — |
 | **W3-7** | `feat(ui): gracz widzi, że jest atakowany` | S25, the cheapest large win in the slice: `invasion:*` gains a real consumer through `NotificationCenter` with the W2-7 contact gate (anonymous at `contact`, named at `detailed`) · the `{type:'player'}` participant gains `empireId:'player'`, which repairs **three** filtered consumers at once (`UIManager:1344` and both `GameScene` branches) · an EventLog line on the enemy-wins branch (`EAH:208-216`) · colony loss stops being a native `alert()`. i18n PL+EN, and the desant strings of S26 come with it. | **GATE 3** |
@@ -398,7 +406,12 @@ a green pin proves nothing on its own.
 
 **Keepers EXPECTED to fail, to be rewritten deliberately and not incidentally fixed:**
 - `s34c_z9_transfer_dispose_smoke` — W3-1 changes the dispose contract it exists to pin.
-- `war_doctrine_smoke:64,:78,:90` — asserts the early-return HOLD path; W3-4 makes the order path real.
+- ~~`war_doctrine_smoke:64,:78,:90` — asserts the early-return HOLD path; W3-4 makes the order path
+  real.~~ **PREDICTION WRONG (W3-4, measured):** the keeper passes **34/34 unedited**. It spawns the
+  garrison *already docked at the capital*, so it only ever exercised the early-return HOLD branch —
+  which W3-4 does not touch. That is precisely **why** the `missing_target_point` defect survived:
+  the keeper's blind spot and the defect's location are the same place. The order path is now
+  covered by `w3_attack_dispatch_smoke` T3 and by the inverted `w3_seams_smoke` T5.
 
 **BALANS.** Copy the untracked baseline in `src/testing/reports/balans/` aside **before** the first W3-2 run
 (V19 — the runner overwrites the same filename) and diff the payload, not the file.
@@ -413,7 +426,9 @@ Then a battle with **no** war: tension moves, exhaustion does not. ⚠ Check the
 after — this commit changes the price of peace, and the E7 matrices must be attached to the gate, not
 promised after it.
 
-**GATE 2 (W3-5) — the offensive loop.** On a live save with an AI past the war-commodity gate and holding an
+**GATE 2 — split in two by the commit order.** ⏳ The MECHANISM half (W3-3 + W3-4) is written up and awaiting the owner: `W3_GATE2_CHECKLIST.md` (strike order → flight → battle · dominance across a reload · the reserve gate · the garrison fix). The AUTONOMY half below is appended to that same checklist when W3-5 lands.
+
+**GATE 2 autonomy half (W3-5) — the offensive loop.** On a live save with an AI past the war-commodity gate and holding an
 orbital-station token: the AI picks a target, hulls leave its home system (the first time in the game's
 history), arrive over a player body, and a battle resolves through the normal pipeline. The player sees it
 coming through sensors and hears about it in the Journal. ⚠ Verify the rule fires **once**, that a second
@@ -562,6 +577,24 @@ first-contact seed (standing parallel item, its own before/after).
     on ownership** — the native `alert()` at `GameScene.js:2276` dies there anyway under S25, but
     the ownership filter is the actual defect and must not ride along as a side effect of replacing
     the widget.
+
+### Added at W3-3 / W3-4 (2026-08-18, measured during implementation)
+
+23. **The spaceport gate is inactive for the AI only by accident of the catalog.**
+    `MovementOrderSystem` runs every departure through `canLaunchFromCurrent`, and
+    `DirectorDoctrine` does **not** bypass it. Measured: all four resolvable templates
+    (`frigate_laser_escort` / `frigate_missile_escort` / `frigate_system_defender` /
+    `science_probe`) land on hulls of `size: 'small'`, which need no port — so the gate refuses
+    nothing today. But `hull_destroyer` (medium) and `hull_cruiser` (large) **do** require one, and
+    the AI capital is seeded with a **module-less** station as a permission token (R-3), not with a
+    spaceport. ⇒ The day the catalog gains a heavier template, **AI departures start being refused
+    silently** with `no_spaceport_at_origin`, and it will look like the target-selection rule is
+    "not firing". Pinned in both directions by `w3_attack_dispatch_smoke` T6.
+24. **`_pruneRoster` is the only thing that returns a doctrine'd ship to the pool — and W3-4 made
+    the garrison branch reachable for the first time.** Nothing is broken today, but the roster
+    logic has never run against a garrison that actually *travels*: until now `defend_home` either
+    early-returned (ship at home) or silently failed (ship away). W3-5's target rule will pull from
+    the same pool, so if churn appears there, this is the first place to look — not the new rule.
 
 ---
 
