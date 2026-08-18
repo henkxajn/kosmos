@@ -144,6 +144,10 @@ Wszystkie żyją pod `KOSMOS.debug.*` i sprawdzają `scenarioMode === 'combat_sa
 | `KOSMOS.debug.sandboxResetPositions()` | Wszystkie vessele → orbit home (gracz: Bastion, wróg: enemy home). Anuluje aktywne ordery, czyści mission. |
 | `KOSMOS.debug.sandboxSpawnMoreEnemies(count=1)` | Spawnuje N dodatkowych wrogich hull_small na orbicie enemy home. |
 
+⚠ **`spawnEnemyFleet` WYCOFANE (ginie z W3-8, `W3_PLAN.md` §Findings 17):** ścieżka abstrakcyjna,
+w Sandboksie stawia flotę dla **złego imperium** (`emp_test_enemy` zamiast `emp_sandbox_enemy`) —
+używaj **`spawnEnemyAttack`** (realny lot, przechwytywalna, ta sama ścieżka bitwy).
+
 Ogólne (działają też poza sandboxem): `spawnEnemyFleet`, `spawnEnemyAttack`,
 `issueOrder`, `cancelOrder`, `listOrders`, `materializeFleet`, `giveAll`, itd.
 

@@ -143,6 +143,13 @@ napięcie i nie ruszać wyczerpania (to waluta wojny, a wojny nie ma).
 
 To jest ścieżka, która działała już przed W3-2 — sprawdzamy, że dokładanie DSCS jej nie ruszyło.
 
+> ⚠ **DŹWIGNIA WYCOFANA (§Findings 17, rozstrzygnięte 2026-08-17).** `spawnEnemyFleet` stawia
+> flotę **abstrakcyjną** i w Sandboksie dla **złego imperium** (`emp_test_enemy` zamiast
+> `emp_sandbox_enemy`). **Nie przepisujemy jej na realne kadłuby — ginie razem z W3-8**
+> (wycofanie warstwy abstrakcyjnej). Do tego czasu: **`spawnEnemyAttack`**, która robi to samo
+> lepiej, na prawdziwym locie. Kontrola tego punktu jest i tak pokryta offline przez
+> `w3_battle_booking_smoke` (widelec EAH) i `war_seams_smoke` T6.
+
 ---
 
 ## 7. W3-1 jedzie na tym samym gate — PODBÓJ ZOSTAJE
@@ -174,20 +181,46 @@ Commit `efa8f85` nie dostał własnego gate'u, a ma jedną własność, której 
 
 ---
 
-## Wynik
+## Wynik — **ZDANY 2026-08-17** (wszystkie osiem pozycji, gate prowadzony przez Filipa)
 
 | pozycja | wynik |
 |---|---|
-| 1. Sandbox: wojna + okręty obu stron | |
-| 2. **Bitwa w przestrzeni głębokiej księguje się** (wyczerpanie, rejestr, dominacja) | |
-| 3. Asymetria po wyniku (wygrany 2 / przegrany 9) | |
-| 4. **`war_status.raw` rośnie po każdej bitwie** | |
-| 5. Potyczka bez wojny nadal nie księguje | |
-| 6. Ścieżka orbitalna (W1-4) nietknięta | |
-| 7. W3-1: podbój zostaje i przeżywa zapis | |
-| 8. Brak regresji, konsola czysta | |
+| 1. Sandbox: wojna + okręty obu stron | ✅ jedna aktywna wojna z `emp_sandbox_enemy`, punkt zerowy 0/0 |
+| 2. **Bitwa w przestrzeni głębokiej księguje się** (wyczerpanie, rejestr, dominacja) | ✅ wyczerpanie **0/0 → 3,6/0,8**, `battles` +1, dominacja ustawiona dla `sys_home`, ślad audytu **2 wpisy / 1 z `warId`** |
+| 3. Asymetria po wyniku (wygrany 2 / przegrany 9) | ✅ 8 bitew od strony wygrywającego: **28,8/6,4** = dokładnie 9 / 2 × `exhaustionRate` 0,4; kierunek odwrotny pokryty keeperami T5/T6 (precedens L1→L2) |
+| 4. **`war_status.raw` rośnie po każdej bitwie** | ✅ monotonicznie **−0,936 → −0,928** (krzywa eksterminacji jest z założenia płaska — sygnałem jest monotoniczność, nie amplituda) |
+| 5. Potyczka bez wojny nadal nie księguje | ✅ widelec pozostał wyczerpujący |
+| 6. Ścieżka orbitalna (W1-4) nietknięta | ✅ (dźwignia `spawnEnemyFleet` wycofana — patrz nota w §6; kontrola przez keepery) |
+| 7. W3-1: podbój zostaje i przeżywa zapis | ✅ `transferColony` → true, zdobycz **żyje jako pełny obiekt z nazwą** na liście zdobywcy i **przeżywa zapis → F5 → wczytanie** |
+| 8. Brak regresji, konsola czysta | ✅ bitwy na kanale **Walka**, zero `TypeError` |
 
-**GATE 1:** ☐ ZDANY ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+**GATE 1:** ☑ **ZDANY** ☐ ZDANY WARUNKOWO ☐ NIEZDANY
+
+### §7[5] — domknięcie, i wyszło LEPIEJ niż zakładała checklista
+
+Punkt, na którym gate został przerwany harmonogramem, rozstrzygnął się razem z zagadką własności:
+**Nihal c należała do `emp_001`**, nie do gracza (gracz w Sandboksie ma wyłącznie Bastion). Test
+wykonał więc wariant **AI→AI** (`emp_001` → `emp_sandbox_enemy`) — legalny i **cenniejszy** wobec
+symetrii z decyzji D7: `transferColony` = `true`, kolonia żyje na liście zdobywcy jako pełny obiekt
+z nazwą i **przeżywa zapis/F5/wczytanie** (lista po przeładowaniu: TRAPPIST j + Nihal c). Wariant
+**gracz→wróg** jedzie na keeperze `w3_conquest_persists_smoke` (25/25).
+
+Zagadka Propus rozwiązana: `entity_157/158/159` należą do **`emp_002`** — Sandbox buduje na żywym
+szkielecie galaktyki, więc „nie ma właściciela na żadnej z trzech list" znaczyło tylko tyle, że
+patrzyliśmy na trzy listy z czterech. **Trzecie uzasadnienie zasady z §Findings 20: kolonie wybiera
+się po STEMPLU WŁASNOŚCI, nigdy po nazwie.**
+
+### Defekt znaleziony przy domknięciu (ZAREJESTROWANY, naprawa w rodzinie commitów W3-7)
+
+**Natywny alert o utracie kolonii odpalił przy transferze NIE-GRACZA.** Konsument zdarzenia utraty
+nie filtruje po właścicielu, więc gra ogłosiła graczowi utratę kolonii, która **nigdy nie była
+jego** (należała do `emp_001`). Klasa: *czwarta lekcja instrumentu* — stan dociera do konsumenta,
+który nie sprawdza, **CZYJ** to stan. **W3-7 bramkuje po własności WSZYSTKIE powierzchnie
+inwazji/utraty** (natywny `alert()` i tak tam ginie — S25). Zapisane jako `W3_PLAN.md`
+§Findings 22.
+
+⚠ **Korekta §Findings 21:** „Sandbox zasiewa kolonię GRACZA poza układem domowym" było **błędne** —
+Nihal c przez cały czas należała do `emp_001`. Wpis skorygowany w planie.
 
 ---
 
