@@ -439,31 +439,15 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (opts.originX !== undefined) this._animateOpen(opts.originX, opts.originY);
 
-    // Auto-spawn rovera tylko na własnej planecie macierzystej — nie na obcym celu desantu
-    if (!opts.colonyId) this._autoSpawnRover(colony);
-  }
-
-  _autoSpawnRover(colony) {
-    if (!colony) return;
-    // Tylko planeta macierzysta — nowe kolonie/outposty nie dostają darmowego rovera
-    if (!colony.isHomePlanet) return;
-    const mgr = window.KOSMOS?.groundUnitManager;
-    if (!mgr) return;
-    if (mgr.getUnitsOnPlanet(colony.planetId).length > 0) return;
-
-    // Znajdź hex stolicy
-    const bSys = colony.buildingSystem;
-    let startQ = 0, startR = 0;
-    if (bSys) {
-      for (const [key] of bSys._active) {
-        if (key.startsWith('capital_')) {
-          const coords = key.replace('capital_', '').split(',').map(Number);
-          startQ = coords[0]; startR = coords[1];
-          break;
-        }
-      }
-    }
-    mgr.createUnit('science_rover', colony.planetId, startQ, startR);
+    // ⚠ D8 (AI_CAPTURE AC-3): USUNIĘTY `_autoSpawnRover(colony)`.
+    // Metoda stawiała graczowi darmowego `science_rover` na kaflu stolicy przy KAŻDYM otwarciu
+    // panelu kolonii, gdy na planecie nie było ŻADNEJ jednostki. Dopóki żyły spawny startowe
+    // z `GameScene`, była zamaskowana (widziała `units > 0` i milczała) — po ich usunięciu
+    // stałaby się JEDYNYM producentem startowym, a przy symetrycznym predykacie „armia wybita"
+    // (AC-5) także SAMONAPRAWIAJĄCYM SIĘ BLOKATOREM PODBOJU: planeta pustoszeje w końcówce
+    // inwazji, gracz otwiera mapę, na stolicy pojawia się świeży rover i podbój zamarza NA ZAWSZE,
+    // choć gracz nigdy tej jednostki nie zbudował.
+    // ⚠ NIE PRZYWRACAĆ. Keeper: `src/testing/smoke/startup_units_zero_smoke.mjs`.
   }
 
   hide() {

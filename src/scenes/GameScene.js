@@ -2236,8 +2236,13 @@ export class GameScene {
       this.leaderSystem.setLeaderNoFaction(window.KOSMOS.selectedLeader, 0);
     }
 
-    // ── Spawn rovera po postawieniu stolicy (nowa gra) ─────────
-    this._initRoverSpawnListener();
+    // ── D8 (AI_CAPTURE AC-3): ŻADNYCH JEDNOSTEK STARTOWYCH ─────
+    // Był tu `_initRoverSpawnListener()` — jednorazowy nasłuch `planet:buildResult`/`colony_base`,
+    // który dawał graczowi darmowego `science_rover` NA KAFLU STOLICY i legacy `infantry` obok.
+    // Usunięty razem z metodą: partia zaczyna się PUSTA, a każda jednostka naziemna jest odtąd
+    // czyimś wydatkiem (koszary + POP u gracza, wygrana orbita u AI). To warunek, przy którym
+    // symetryczny predykat „armia wybita" (AC-5) w ogóle ma sens.
+    // ⚠ NIE PRZYWRACAĆ. Keeper: `src/testing/smoke/startup_units_zero_smoke.mjs`.
 
     // ── PlanetScene (mapa hex) ─────────────────────────────────
     const planetCanvas = document.getElementById('planet-canvas');
@@ -3765,7 +3770,9 @@ export class GameScene {
     this.buildingSystem.setDeposits(planet.deposits ?? []);
     this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
 
-    // Rover spawni się przy pierwszym buildResult colony_base (patrz _initRoverSpawnListener)
+    // ⚠ D8 (AC-3): kolonia startuje BEZ jednostek naziemnych. Nic ich tu nie stawia i nie ma
+    // stawiać — pierwsza jednostka gracza powstaje z rekrutacji (koszary + POP), zrzutu
+    // z ładowni albo grupy badawczej, czyli z decyzji gracza.
   }
 
   // ── Faza 5: pipeline BattleView3D ──────────────────────────
@@ -3825,54 +3832,6 @@ export class GameScene {
     this._battleShowing = false;
     // Kolejna w kolejce, jeśli jest
     if (this._battleQueue.length > 0) this._tryShowNextBattle();
-  }
-
-  _initRoverSpawnListener() {
-    const onBuild = ({ success, buildingId }) => {
-      if (!success || buildingId !== 'colony_base') return;
-      const mgr = this.groundUnitManager;
-      const hp = window.KOSMOS?.homePlanet;
-      if (!mgr || !hp) return;
-      // Tylko jeśli nie ma jeszcze żadnej jednostki na planecie domowej
-      if (mgr.getUnitsOnPlanet(hp.id).length > 0) return;
-
-      // Znajdź hex stolicy
-      const bSys = window.KOSMOS?.buildingSystem;
-      let startQ = 0, startR = 0;
-      if (bSys) {
-        for (const [key] of bSys._active) {
-          if (key.startsWith('capital_')) {
-            const coords = key.replace('capital_', '').split(',').map(Number);
-            startQ = coords[0]; startR = coords[1];
-            break;
-          }
-        }
-      }
-      mgr.createUnit('science_rover', hp.id, startQ, startR);
-
-      // Faza 6: auto-spawn pierwszej jednostki obrony — infantry na sąsiednim hexie
-      const grid = this.colonyManager?.getColony(hp.id)?.grid;
-      if (grid) {
-        // Sąsiad kapitoły — cube offsets {q,r}
-        const neighbors = [
-          { dq: +1, dr:  0 }, { dq: -1, dr:  0 },
-          { dq:  0, dr: +1 }, { dq:  0, dr: -1 },
-          { dq: +1, dr: -1 }, { dq: -1, dr: +1 },
-        ];
-        for (const n of neighbors) {
-          const nq = startQ + n.dq, nr = startR + n.dr;
-          const tile = grid.get(nq, nr);
-          if (!tile || tile.type === 'ocean') continue;
-          if (mgr.getUnitAt(hp.id, nq, nr)) continue;
-          mgr.createUnit('infantry', hp.id, nq, nr, { owner: 'player' });
-          break;
-        }
-      }
-
-      // Jednorazowy listener
-      EventBus.off('planet:buildResult', onBuild);
-    };
-    EventBus.on('planet:buildResult', onBuild);
   }
 
   // ── Migracja starych save: fleet[] ze stringami → vessel instances ──

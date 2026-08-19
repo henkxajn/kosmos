@@ -17,14 +17,15 @@
 //   T5 (e) A7 — przejęcie domyka rekord `endReason:'colony_captured'`.
 //              KONTROLA PINU: śmierć najeźdźców daje `defenders_repelled` — gałąź repel biegnie
 //              PRZED testem stolicy, więc to ONA gasi kampanię, gdy zginie ostatni najeźdźca.
-//   T6 (f) A13 — TRZEJ producenci darmowych jednostek startowych gracza ISTNIEJĄ.
+//   T6 (f) A13 — ✅ ODWRÓCONE W AC-3: trzej producenci darmowych jednostek startowych gracza
+//              NIE ISTNIEJĄ. Pełny dowód (kontrole pinu + część wykonaniowa): `startup_units_zero_smoke`.
 //
 // ⚠ TO SĄ PINY STANU SPRZED SLICE'U, NIE PINY POPRAWNOŚCI. Cztery z sześciu mają PAŚĆ i zostać
 //    świadomie odwrócone — wzór `deploy_seams_smoke` (W2-0) i `war_seams_smoke` (W1-0):
-//      (a) → AC-4  (intencja terytorialna: najeźdźca RUSZY bez żywego celu)
-//      (b) → AC-6  (lustro warunku budynkowego: placówka stanie się zdobywalna)
-//      (c) → AC-5  (symetryczny predykat: KAŻDA żywa jednostka zablokuje)
-//      (f) → AC-3  (D8: trzej producenci znikają)
+//      (a) → AC-4  (intencja terytorialna: najeźdźca RUSZY bez żywego celu)        [czeka]
+//      (b) → AC-6  (lustro warunku budynkowego: placówka stanie się zdobywalna)    [czeka]
+//      (c) → AC-5  (symetryczny predykat: KAŻDA żywa jednostka zablokuje)          [czeka]
+//      (f) → AC-3  (D8: trzej producenci znikają)                                  ✅ ZROBIONE
 //    Przetrwać bez edycji mają WYŁĄCZNIE (d) timer i (e) księga. ⚠ Sprostowanie do §Testy planu,
 //    który zapowiadał JEDNO odwrócenie (f): pozostałe trzy wynikają wprost z treści AC-4/AC-5/AC-6
 //    i nie są niespodzianką — są planem. Kto odwraca pin, PRZEPISUJE tę listę, nie kasuje testu.
@@ -274,8 +275,13 @@ console.log('T5 (e) — A7: przejęcie domyka rekord `colony_captured`; repel bi
     'zmierzone, a nie odczytane');
 }
 
-// ── T6 (f) — A13: trzej producenci darmowych jednostek startowych ───────────────────────────
-console.log('T6 (f) — A13: TRZEJ producenci jednostek startowych gracza istnieją (→ odwrócone w AC-3)');
+// ── T6 (f) — A13: ⚠ PIN ODWRÓCONY W AC-3 (D8) ───────────────────────────────────────────────
+// Do AC-2 włącznie ten blok pinował ISTNIENIE trzech producentów darmowych jednostek startowych.
+// AC-3 usunął wszystkich trzech, więc pin został **przepisany na odwrotny** — zgodnie z instrukcją
+// z nagłówka („kto odwraca pin, PRZEPISUJE tę listę, nie kasuje testu"). Tutaj zostaje tylko
+// domknięcie listy szwów; PEŁNY dowód (kontrole pinu, ścieżki, które mają przeżyć, część
+// wykonaniowa) mieszka w dedykowanym keeperze `startup_units_zero_smoke.mjs`.
+console.log('T6 (f) — A13/D8: trzej producenci jednostek startowych NIE ISTNIEJĄ (odwrócone w AC-3)');
 {
   const { readFileSync } = await import('node:fs');
   const { join } = await import('node:path');
@@ -293,21 +299,16 @@ console.log('T6 (f) — A13: TRZEJ producenci jednostek startowych gracza istnie
   const overlay = read('ui', 'ColonyOverlay.js');
   const vessels = read('systems', 'VesselManager.js');
 
-  assert(/_initRoverSpawnListener\s*\(/.test(scene) && /EventBus\.on\('planet:buildResult'/.test(scene),
-    'T6 poz. 1+2: `GameScene._initRoverSpawnListener` istnieje i wisi na `planet:buildResult` — ' +
-    'rejestracja NIE jest bramkowana `savedData`, więc listener czeka uzbrojony także po wczytaniu zapisu');
-  assert(/createUnit\('science_rover',\s*hp\.id/.test(scene),
-    'T6 poz. 1: …i stawia `science_rover` NA KAFLU STOLICY planety macierzystej');
-  assert(/createUnit\('infantry',\s*hp\.id/.test(scene),
-    'T6 poz. 2: …oraz legacy `infantry` na kaflu sąsiednim — jedyna jednostka `military`, jaką ' +
-    'gracz ma od t=0, i ta, która dziś jako JEDYNA blokuje przejęcie');
-  assert(/_autoSpawnRover\s*\(colony\)/.test(overlay),
-    'T6 poz. 3: `ColonyOverlay._autoSpawnRover` jest WOŁANE z `show()` — trzeci producent, ' +
-    'znaleziony dopiero w cross-checku D8');
-  assert(/createUnit\('science_rover',\s*colony\.planetId/.test(overlay),
-    'T6 poz. 3 SEDNO: …i stawia rovera przy KAŻDYM otwarciu panelu kolonii, gdy planeta jest pusta. ' +
-    'Dziś zamaskowany cudzym spawnem; po usunięciu poz. 1-2 stałby się JEDYNYM producentem ' +
-    'startowym, a przy D3=W3 — samonaprawiającym się blokatorem podboju');
+  assert(!/_initRoverSpawnListener\s*\(\s*\)\s*\{/.test(scene) && !/this\._initRoverSpawnListener\s*\(/.test(scene),
+    'T6 poz. 1+2 (ODWRÓCONE): `GameScene._initRoverSpawnListener` NIE ISTNIEJE — usunięta metoda ' +
+    'ORAZ jej rejestracja. Pusta skorupa zostawiłaby uzbrojony nasłuch `planet:buildResult` ' +
+    'bez ładunku, gotowy do przypadkowego ponownego podłączenia');
+  assert(!/createUnit\('science_rover'/.test(scene) && !/createUnit\('infantry'/.test(scene),
+    'T6 poz. 1+2 (ODWRÓCONE): …i nic w `GameScene` nie tworzy już startowego łazika ani piechoty');
+  assert(!/_autoSpawnRover/.test(overlay) && !/createUnit\('science_rover'/.test(overlay),
+    'T6 poz. 3 (ODWRÓCONE): `ColonyOverlay._autoSpawnRover` zniknął w całości — wywołanie z `show()` ' +
+    'i metoda. To był samonaprawiający się blokator: stawiał rovera dokładnie wtedy, gdy planeta ' +
+    'pustoszała (końcówka inwazji), a przy symetrycznym predykacie z AC-5 zamrażałby podbój na zawsze');
 
   // KONTROLA PINU nr 1: ten sam skaner MUSI dalej widzieć producenta, który D8 zostawia.
   assert(/createUnit\('science_rover',\s*planetId/.test(vessels),
@@ -321,10 +322,9 @@ console.log('T6 (f) — A13: TRZEJ producenci jednostek startowych gracza istnie
   // Część WYKONANIOWA — jedyna dostępna w tym harnessie (ograniczenie 4 z nagłówka):
   const { home, gum } = boot();
   assert(gum.getUnitsOnPlanet(home.id).length === 0,
-    'T6 WYKONANIE: świeży boot headless ma ZERO jednostek na koloni gracza — żaden z trzech ' +
-    'producentów nie odpala się w tym harnessie (brak GameScene, brak UI). Skutek uboczny, ' +
-    'który liczy się dla D8: bramka `_autoSpawnRover` („na planecie nie ma ŻADNEJ jednostki") ' +
-    'byłaby tu OTWARTA — czyli w produkcie pierwsze otwarcie mapy postawiłoby rovera');
+    'T6 WYKONANIE: świeży boot ma ZERO jednostek na koloni gracza. ⚠ To NIE jest dowód D8 — ' +
+    'headless i tak nie odpalał tych producentów (ograniczenie 4). Pełny dowód: ' +
+    '`startup_units_zero_smoke.mjs`');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
