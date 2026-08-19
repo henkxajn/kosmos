@@ -3,6 +3,22 @@
 **Po commitach:** AC-0 … AC-6 (`9af5f13` … `b854463`) · **Zapis:** v101, **bez migracji** ·
 **Wykonuje:** właściciel, w przeglądarce. CC nie dotyka repo w trakcie gate'u.
 
+---
+
+## ✅ WYNIK: ZDANY — 2026-08-19 (właściciel, live)
+
+**§0 (D8 — partia zaczyna się pusta), §1 (pętla się domyka), §2 (kontrola pozytywna D3=W3) —
+POTWIERDZONE NA ŻYWO.**
+
+**§3 (odwracalność) — ŚWIADOMIE ODŁOŻONE, nie blokuje.** Uzasadnienie właściciela: to regresja
+mechanizmu **już dowiedzionego** (W3 GATE 3 §5 — odbicie Nekkar d), a nie nowy dowód tego slice'u.
+Do zweryfikowania przy naturalnej okazji albo na starym zapisie z GATE 3.
+
+**Poprawka wniesiona PO gate'cie:** §1/L8b podawał `own_colony` jako jedyny „oczekiwany" powód —
+żywy silnik przez większość biegu zwraca `holding`. **Dokument poprawiony do kodu**, nie odwrotnie
+(pełna tabela faz przy L8b). Sekwencja przemierzona sondą: `INTENT→capital` → `holding` →
+*przejęcie* → `own_colony`.
+
 > ⚠ **CC NIE PISZE PLIKÓW, DOPÓKI GATE TRWA.** Każdy zapis w repo przeładowuje kartę przez Live
 > Server i cofa grę do ostatniego zapisu — czyli kasuje mierzony stan. Jeśli w trakcie gate'u
 > potrzebna jest zmiana w kodzie: **najpierw zapisz grę do pliku**, potem zgłoś.
@@ -105,8 +121,22 @@ KOSMOS.debugLog.query({ kind: 'groundUnit:territorialIntent' }).length
 
 // L8b — ostatnie POWODY, dla których ktoś nie maszeruje
 KOSMOS.debugLog.query({ kind: 'groundUnit:territorialBlocked' }).slice(-5).map(e => e.data?.reason)
-// OCZEKIWANE po przejęciu: ['own_colony', …] — najeźdźcy stoją, bo kolonia jest JUŻ ich (R-1)
 ```
+
+⚠ **L8b zwraca RÓŻNE powody w różnych fazach — i to jest poprawne.** Sekwencja zmierzona na żywym
+silniku (GATE 1, 2026-08-19; wcześniejsza wersja tej checklisty podawała tylko ostatni stan jako
+„oczekiwany" i było to mylące):
+
+| faza | powód w L8b | znaczenie |
+|---|---|---|
+| jednostka jeszcze idzie | **żadnego** (leci `groundUnit:territorialIntent`, nie `…Blocked`) | maszeruje — pętla pomija jednostki w stanie `moving` |
+| **dotarła na stolicę, stoi** | **`holding`** | ⚠ **to jest stan, który widzisz przez WIĘKSZOŚĆ biegu** — stanie JEST okupacją, timer 6 wyświetlanych miesięcy właśnie tyka |
+| po przejęciu kolonii | **`own_colony`** | R-1: kolonia jest już jego, nie ma po co iść. Pojawia się **tik PO** zmianie właściciela |
+| jednostka stacjonarna | `unit_immobile` | legacy `garrison` ma `speedHex: 0` — patrz §4 |
+
+Przykładowy przebieg: `INTENT→capital ×3` → `holding` → *przejęcie* → `own_colony`.
+⚠ Jednostka, która w chwili przejęcia była **w drodze**, nie zgłosi `own_colony` aż dojdzie
+i stanie — to nie jest defekt, tylko ta sama bramka `moving`.
 
 ---
 
