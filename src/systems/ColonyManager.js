@@ -654,6 +654,14 @@ export class ColonyManager {
   transferColony(planetId, newOwnerEmpireId, reason = 'invasion') {
     const colony = this._colonies.get(planetId);
     if (!colony) return false;
+    // ⚠ IDEMPOTENCJA (D4/AC-7) — lustro guardu z `captureColonyForPlayer:772`.
+    //   Zmierzone przed tą zmianą: dwie fale desantu na to samo ciało tworzyły DWA aktywne
+    //   rekordy inwazji (id zawierało ułamkowy `gameTime`), oba przechodziły warunek przejęcia
+    //   i `transferColony` wykonywało się DWA RAZY — drugi raz ogłaszając przerzut **AI→AI**
+    //   na koloni, którą agresor już miał (`previousOwner` = [player, emp_001]). Gracz tego nie
+    //   widział WYŁĄCZNIE dzięki bramce u odbiorcy (`GameScene`: `previousOwner === 'player'`),
+    //   a nie u źródła — czyli zdarzenie było fałszywe, tylko dobrze schowane.
+    if (colony.ownerEmpireId === newOwnerEmpireId) return false;   // już jego — nie ma czego przerzucać
 
     // ⚠ W3-7 — kto tracił kolonię, USTALAMY PRZED nadpisaniem właściciela (niżej `:700`).
     // Kanon „nieostemplowane = gracza" (`isPlayerColony`), więc brak stempla czytamy jako 'player'.

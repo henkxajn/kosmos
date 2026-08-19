@@ -131,11 +131,22 @@ export class InvasionSystem {
       landed.push(unit.id);
     }
 
-    // Zarejestruj w gameState.invasions
+    // ── Zarejestruj w gameState.invasions — JEDNA KAMPANIA NA (CIAŁO, AGRESOR) (D4/AC-7) ──
+    //
+    // ⚠ Do AC-7 identyfikator rekordu zawierał UŁAMKOWY `gameTime`, więc druga fala na to samo
+    //   ciało praktycznie zawsze trafiała w INNY `invId` i zakładała DRUGI aktywny rekord.
+    //   Zmierzone skutki: oba rekordy przechodziły warunek przejęcia, `transferColony` leciało
+    //   dwa razy (drugi raz jako fałszywy przerzut AI→AI), a `colony:captured` ogłaszane było
+    //   podwójnie. Teraz kampanię wyszukujemy po (planetId, aggressor) — rok zostaje wyłącznie
+    //   w id NOWEJ kampanii, jako etykieta jej początku.
+    // ⚠ Rekord INNEGO agresora na tym samym ciele NIE jest tu reużywany — dwa imperia lądujące
+    //   na jednym ciele to dwie osobne kampanie i tak je liczymy (warunek przejęcia i tak pyta
+    //   o kafel stolicy KONKRETNEGO agresora).
     const year = this._year();
-    const invId = `inv_${empireId}_${planetId}_${year}`.replace(/\./g, '_');
-    let inv = gameState.get(`invasions.${invId}`);
+    let inv = this.listAll().find(i => i.planetId === planetId && i.aggressor === empireId);
+    let invId = inv?.id;
     if (!inv) {
+      invId = `inv_${empireId}_${planetId}_${year}`.replace(/\./g, '_');
       inv = {
         id:          invId,
         planetId,
@@ -146,6 +157,11 @@ export class InvasionSystem {
         active:      true,
         playerEmptySince: null,
       };
+    } else if (!inv.active) {
+      // ⚠ REAKTYWACJA. Reuse istniejącego rekordu NIE przywracał `active`, więc druga fala po
+      //   zgaśnięciu kampanii (`defenders_repelled`) dawała desant, którego NIKT nigdy nie
+      //   rozliczał: `_tickCaptureChecks` iteruje wyłącznie `listActive()`.
+      inv = { ...inv, active: true, endYear: null, endReason: null, reactivatedYear: year };
     }
     inv.landedTroops = [...(inv.landedTroops ?? []), ...landed];
     gameState.set(`invasions.${invId}`, inv, 'invasion_launched');
