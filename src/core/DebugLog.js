@@ -44,6 +44,12 @@ const TRACKED_EVENTS = [
   'invasion:blocked',
   'invasion:repelled',
   'colony:captured',
+  // AI_CAPTURE AC-4 — intencja terytorialna desantu. Ta sama zasada, co wyżej i ta sama cena
+  // za jej złamanie: „najeźdźca stoi" musi dać się odróżnić od „reguły nikt nie podłączył".
+  // `territorialBlocked` niesie POWÓD (`no_colony`/`own_colony`/`no_goal`/`holding`/
+  // `unit_immobile`/`no_path`) i jest emitowany raz na ZMIANĘ powodu, nie co tik.
+  'groundUnit:territorialIntent',
+  'groundUnit:territorialBlocked',
   // ReactionDirector (workstream C) — ścieżka audytu decyzji AI, którą Director ma
   // WZMACNIAĆ. Odrzucenie guardu jest tu równie ważne jak sukces: „reguła nie odpaliła"
   // musi dać się odróżnić od „reguły nikt nie podłączył" (audyt R12).

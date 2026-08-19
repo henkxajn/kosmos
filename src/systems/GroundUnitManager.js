@@ -1012,7 +1012,57 @@ export class GroundUnitManager {
         const d = this._hexDistance(atk.q, atk.r, u.q, u.r);
         if (d < bestDist) { bestDist = d; best = u; }
       }
-      if (!best) continue;
+
+      // ── D1/D1b (AI_CAPTURE AC-4) — INTENCJA TERYTORIALNA ────────────────────────────────
+      // Do AC-4 stało tu `if (!best) continue;` — i to był CAŁY Finding 51: warunek przejęcia
+      // wymaga, żeby gracz NIE MIAŁ wojska, a wojsko gracza było JEDYNYM magnesem ruchu AI.
+      // Te dwa warunki wykluczały się wzajemnie, więc najeźdźca stał w punkcie zrzutu na zawsze.
+      // Teraz brak żywego celu znaczy: MASZERUJ NA STOLICĘ (fallback: najbliższy kafel
+      // z budynkiem), a po dojściu STÓJ — stanie jest okupacją, timer robi resztę.
+      //
+      // ⚠ ZMIANA MIESZKA W CIELE PĘTLI (decyzja D1b=W1b). Guard na POCZĄTKU funkcji byłby
+      //   pułapką: `:985-986` to JEDYNE produkcyjne wejście do `CombatSystem.tick`, więc
+      //   wyłączyłby walkę naziemną CAŁEJ gry, w tym gracza, i nic by nie krzyknęło (R-2).
+      //
+      // ⚠ PREDYKAT „OBCE CIAŁO" PO WŁAŚCICIELU KOLONII, NIE PO REKORDZIE INWAZJI (R-1).
+      //   Po udanym przejęciu rekord gaśnie, a najeźdźców NIKT nie usuwa — zostają na koloni.
+      //   Naiwne „brak celu ⇒ idź na stolicę" wysłałoby ich na WŁASNĄ stolicę w kółko.
+      if (!best) {
+        const colony = window.KOSMOS?.colonyManager?.getColony(atk.planetId);
+        if (!colony) { this._noteTerritorialBlock(atk, 'no_colony'); continue; }
+        if ((colony.ownerEmpireId ?? 'player') === atk.owner) {
+          this._noteTerritorialBlock(atk, 'own_colony');       // R-1 — już nasze, nie ma po co iść
+          continue;
+        }
+
+        const goal = this._findTerritorialGoal(atk, colony);
+        if (!goal) { this._noteTerritorialBlock(atk, 'no_goal'); continue; }
+        if (atk.q === goal.q && atk.r === goal.r) {
+          this._noteTerritorialBlock(atk, 'holding');          // dotarł — stanie JEST celem
+          continue;
+        }
+
+        // ⚠ ŚWIADOMIE BEZ bramek `role === 'military'` i `hp > 30%`, które ma gałąź pościgu
+        //   niżej. Tamte znaczą „nie szarżuj ranny na wroga"; tutaj NIE MA wroga do szarży.
+        //   Zablokowanie rannych albo `defensive` zamroziłoby połowę fali dwóch archetypów
+        //   (`trader`/`isolationist` desantują `garrison`). Jedyny realny warunek to mobilność.
+        const stats = getUnitStats(atk.type);
+        if ((stats.speedHex ?? 0) <= 0) {
+          this._noteTerritorialBlock(atk, 'unit_immobile');    // legacy `garrison` ma speedHex 0
+          continue;
+        }
+
+        if (this.moveUnit(atk.id, goal.q, goal.r)) {
+          atk._terrIntentReason = null;
+          EventBus.emit('groundUnit:territorialIntent', {
+            unitId: atk.id, planetId: atk.planetId, owner: atk.owner,
+            goalQ: goal.q, goalR: goal.r, goalKind: goal.kind,
+          });
+        } else {
+          this._noteTerritorialBlock(atk, 'no_path');
+        }
+        continue;
+      }
 
       // Blisko wroga → wejdź na jego hex (rozpocznij bitwę). Daleko → krok w jego stronę.
       if (bestDist > 0 && (atk.role === 'military') && (atk.hp / (atk.hpMax ?? atk.maxHp ?? 100)) > 0.3) {
@@ -1022,6 +1072,53 @@ export class GroundUnitManager {
         }
       }
     }
+  }
+
+  /**
+   * D1 (AC-4) — dokąd idzie jednostka desantowa, gdy nie ma kogo bić.
+   * Kolejność DOSŁOWNIE wg podpisanej decyzji D1: kafel `capitalBase` → **fallback** (ciało BEZ
+   * stolicy, czyli placówka): najbliższy kafel z `buildingId` → nic (jednostka stoi).
+   *
+   * ⚠ CEL NIE ZALEŻY OD WŁAŚCICIELA KAFLA — i to jest cały mechanizm „hold". Po dojściu na
+   *   stolicę jednostka widzi ten sam cel pod sobą, więc STOI (ciało pętli robi wtedy
+   *   `holding`), a stanie JEST okupacją: timer robi resztę. Pierwsza wersja tej metody
+   *   pomijała kafle już nasze — skutek był taki, że po przewróceniu stolicy najeźdźca RUSZAŁ
+   *   DALEJ po kolejnych budynkach zamiast trzymać kafel, który decyduje o własności kolonii.
+   *   To było rozszerzenie decyzji, a nie decyzja — cofnięte.
+   *
+   * ⚠ To CZYSTA geometria po kaflach — świadomie NIE iteruje po `this._units` i NIE jest wołana
+   *   z `tick()`. Reguła i bramki zostają w ciele `_tickCombatAI` (D1b=W1b); tu mieszka tylko
+   *   wybór kafla, żeby dało się go pinować osobno.
+   * @returns {{q:number, r:number, kind:'capital'|'building'}|null}
+   */
+  _findTerritorialGoal(unit, colony) {
+    const tiles = colony?.grid?.toArray?.() ?? [];
+
+    const capital = tiles.find(t => t?.capitalBase);
+    if (capital) return { q: capital.q, r: capital.r, kind: 'capital' };
+
+    // Fallback — ciało BEZ stolicy (placówka). To jedyna droga do warunku zwycięstwa z AC-6,
+    // który pyta o kafel z BUDYNKIEM, nie o stolicę.
+    let bestTile = null, bestDist = Infinity;
+    for (const t of tiles) {
+      if (!t || !t.buildingId) continue;
+      const d = this._hexDistance(unit.q, unit.r, t.q, t.r);
+      if (d < bestDist) { bestDist = d; bestTile = t; }
+    }
+    return bestTile ? { q: bestTile.q, r: bestTile.r, kind: 'building' } : null;
+  }
+
+  /**
+   * Powód, dla którego jednostka NIE maszeruje — emitowany raz na ZMIANĘ powodu, nie co tik.
+   * ⚠ Bez tego gate mierzyłby CISZĘ tam, gdzie system podjął decyzję (W3 spalił się na tym
+   *   dwa razy). Bez dedupe zalałby ring buffer `DebugLog` przy każdym stojącym najeźdźcy.
+   */
+  _noteTerritorialBlock(unit, reason) {
+    if (unit._terrIntentReason === reason) return;
+    unit._terrIntentReason = reason;
+    EventBus.emit('groundUnit:territorialBlocked', {
+      unitId: unit.id, planetId: unit.planetId, owner: unit.owner, reason,
+    });
   }
 
   _tickMovement(unit, dt) {

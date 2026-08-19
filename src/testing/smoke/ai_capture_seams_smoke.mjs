@@ -5,8 +5,8 @@
 // `docs/design/AI_CAPTURE_PLAN.md` zmienia zachowanie sześciu szwów w commitach AC-2..AC-7. Bez
 // pinu ZMIERZONEGO PRZED zmianą nikt nie odróżni „naprawiliśmy szew" od „przestawiliśmy coś obok".
 //
-//   T1 (a) A5 — DEADLOCK: najeźdźca bez ŻYWEGO celu nie rusza się przez 30 civYears.
-//              KONTROLA PINU: postaw jednostkę gracza — TEN SAM najeźdźca rusza.
+//   T1 (a) A5 — ✅ ODWRÓCONE W AC-4: najeźdźca bez żywego celu MASZERUJE na stolicę i ją bierze.
+//              KONTROLA PINU (R-1): na WŁASNEJ koloni stoi. Pełny dowód: `ai_capture_intent_smoke`.
 //   T2 (b) A6 — `if (!capital) continue`: placówka NIE PADA, choć agresor trzyma WSZYSTKIE kafle.
 //              KONTROLA PINU: dostaw `capitalBase` do tej samej siatki — ta sama scena PADA.
 //   T3 (c) A3 — `garrison_unit` (rola `defensive`) NIE blokuje przejęcia.
@@ -22,7 +22,7 @@
 //
 // ⚠ TO SĄ PINY STANU SPRZED SLICE'U, NIE PINY POPRAWNOŚCI. Cztery z sześciu mają PAŚĆ i zostać
 //    świadomie odwrócone — wzór `deploy_seams_smoke` (W2-0) i `war_seams_smoke` (W1-0):
-//      (a) → AC-4  (intencja terytorialna: najeźdźca RUSZY bez żywego celu)        [czeka]
+//      (a) → AC-4  (intencja terytorialna: najeźdźca RUSZY bez żywego celu)        ✅ ZROBIONE
 //      (b) → AC-6  (lustro warunku budynkowego: placówka stanie się zdobywalna)    [czeka]
 //      (c) → AC-5  (symetryczny predykat: KAŻDA żywa jednostka zablokuje)          [czeka]
 //      (f) → AC-3  (D8: trzej producenci znikają)                                  ✅ ZROBIONE
@@ -90,8 +90,12 @@ const capitalOf = (colony) => tiles(colony).find(t => t.capitalBase);
 const recordFor = (planetId) =>
   Object.values(gameState.get('invasions') ?? {}).find(i => i.planetId === planetId) ?? null;
 
-// ── T1 (a) — A5: najeźdźca bez celu STOI ────────────────────────────────────────────────────
-console.log('T1 (a) — A5 DEADLOCK: najeźdźca bez żywego celu nie rusza się (→ odwrócone w AC-4)');
+// ── T1 (a) — A5: ⚠ PIN ODWRÓCONY W AC-4 (D1/D1b) ────────────────────────────────────────────
+// Do AC-3 włącznie ten blok pinował DEADLOCK: najeźdźca bez żywego celu stał w punkcie zrzutu
+// przez 30 civYears, bo jedyny mover celował wyłącznie w jednostki gracza (`if (!best) continue`).
+// AC-4 dał mu intencję terytorialną, więc pin został PRZEPISANY na odwrotny. Pełny dowód
+// (kontrole pinu, jednostki gracza, `CombatSystem.tick`) mieszka w `ai_capture_intent_smoke`.
+console.log('T1 (a) — A5/D1: najeźdźca bez żywego celu MASZERUJE NA STOLICĘ (odwrócone w AC-4)');
 {
   const { colony, home, gum, tick } = boot();
   const cap = capitalOf(colony);
@@ -100,29 +104,32 @@ console.log('T1 (a) — A5 DEADLOCK: najeźdźca bez żywego celu nie rusza się
 
   const enemy = gum.createUnit('infantry', home.id, start.q, start.r, { owner: EMP });
   assert(enemy?.role === 'military' && (enemy.hp ?? 0) > 0,
-    `T1: najeźdźca jest jednostką BOJOWĄ (rola=${enemy?.role}, hp=${enemy?.hp}) — gdyby był ` +
-    '`civilian`, bezruch dowodziłby filtra ról z pętli, a nie deadlocku celowania');
+    `T1: najeźdźca jest jednostką BOJOWĄ (rola=${enemy?.role}, hp=${enemy?.hp})`);
   assert(gum.getUnitsOnPlanet(home.id).filter(u => (u.owner ?? 'player') === 'player').length === 0,
     'T1: na planecie NIE MA ani jednej jednostki gracza — to jest cała przesłanka pinu');
 
   tick(30);
 
-  assert(enemy.q === start.q && enemy.r === start.r,
-    `T1 SEDNO: po 30 civYears najeźdźca STOI w punkcie zrzutu (${enemy.q},${enemy.r}). Jedyny mover ` +
-    'jednostek naziemnych (`GroundUnitManager._tickCombatAI`) celuje w najbliższą ŻYWĄ jednostkę ' +
-    'gracza i przy jej braku robi `if (!best) continue`. To jest Finding 51 w jednej asercji: ' +
-    'warunek „armia wybita" i warunek „stolica zdobyta" wykluczają się wzajemnie');
-  assert(cap.owner === 'player',
-    'T1: stolica pozostaje gracza — bo nikt do niej nie idzie (skutek tego samego deadlocku)');
+  assert(enemy.q !== start.q || enemy.r !== start.r,
+    `T1 SEDNO: po 30 civYears najeźdźca NIE STOI już w punkcie zrzutu (${start.q},${start.r} → ` +
+    `${enemy.q},${enemy.r}). Do AC-3 stał tu na zawsze — warunek „armia wybita" i warunek ` +
+    '„stolica zdobyta" wykluczały się wzajemnie (Finding 51). Teraz brak celu znaczy „idź na stolicę"');
+  assert(cap.owner === EMP,
+    `T1 SEDNO 2: …i stolica ZMIENIŁA RĘCE (${cap.owner}). Marsz + timer okupacji domykają pętlę ` +
+    'bez udziału walki — dokładnie to, co GATE 1 ma zobaczyć na żywo');
 
-  // KONTROLA PINU — bez niej „stoi" mogłoby znaczyć „mover w ogóle nie działa w headless".
-  const target = land[0];
-  const before = { q: enemy.q, r: enemy.r };
-  gum.createUnit('infantry', home.id, target.q, target.r, { owner: 'player' });
-  tick(10);
-  assert(enemy.q !== before.q || enemy.r !== before.r,
-    `T1 KONTROLA PINU: gdy pojawia się ŻYWY cel, ten sam najeźdźca RUSZA (${before.q},${before.r} → ` +
-    `${enemy.q},${enemy.r}). Mover działa — brakuje mu wyłącznie intencji terytorialnej`);
+  // KONTROLA PINU (R-1) — najeźdźca na WŁASNEJ koloni NIE maszeruje.
+  // ⚠ Kolonię przepisujemy RĘCZNIE, bo w tym bloku nie ma rekordu inwazji (`_tickCaptureChecks`
+  //   iteruje `listActive()`), a pinujemy właśnie to, że predykat patrzy na WŁAŚCICIELA KOLONII,
+  //   a nie na rekord: po udanym przejęciu rekord gaśnie, a jednostek nikt nie usuwa — naiwna
+  //   wersja wysyłałaby je w kółko na WŁASNĄ stolicę.
+  colony.ownerEmpireId = EMP;
+  const held = { q: enemy.q, r: enemy.r };
+  tick(20);
+  assert(enemy.q === held.q && enemy.r === held.r,
+    `T1 KONTROLA PINU (R-1): gdy kolonia JEST JUŻ jego, najeźdźca STOI (${held.q},${held.r} → ` +
+    `${enemy.q},${enemy.r}) — predykat porównuje `+
+    '`colony.ownerEmpireId` z `unit.owner`, a nie ogląda rekordu inwazji');
 }
 
 // ── T2 (b) — A6: placówka niezdobywalna ─────────────────────────────────────────────────────
@@ -205,19 +212,23 @@ console.log('T3 (c) — A3: `garrison_unit` (rola `defensive`) NIE blokuje przej
 console.log('T4 (d) — A4: timer okupacji liczony w latach WYŚWIETLANYCH, nie w civYears');
 {
   const { core, colony, home, gum, tick } = boot();
-  const b = tiles(colony).find(t => t.buildingId && !t.capitalBase);
-  assert(!!b && b.owner === 'player',
-    `T4: kafel Z BUDYNKIEM (${b?.buildingId}) należy do gracza — pusty kafel flipuje NATYCHMIAST ` +
-    '(`_captureHexOnEntry`), więc timer da się zmierzyć wyłącznie na kaflu zabudowanym');
+  // ⚠ Od AC-4 najeźdźca MASZERUJE, więc pomiar musi się odbyć tam, gdzie i tak chce stać:
+  //   na kaflu `capitalBase` (jego cel terytorialny). Postawiony gdzie indziej odszedłby,
+  //   a `_cleanupStaleOccupations` wyzerowałby licznik — test mierzyłby wtedy artefakt.
+  const b = capitalOf(colony);
+  assert(!!b && b.owner === 'player' && (b.buildingId !== null || b.capitalBase === true),
+    `T4: kafel STOLICY należy do gracza i liczy się jako „z budynkiem" — pusty kafel flipuje ` +
+    'NATYCHMIAST (`_captureHexOnEntry`), więc timer da się zmierzyć wyłącznie na zabudowanym');
 
   const enemy = gum.createUnit('infantry', home.id, b.q, b.r, { owner: EMP });
 
   // ⚠ Pętla chodzi do końca NAWET po flipie — gdyby urywała się na pierwszej zmianie rąk, mutacja
   //   przyspieszająca timer (R-3) cicho POMIJAŁABY kontrolę pinu z i===5 i liczba asercji spadłaby
   //   bez śladu. Flip zapisujemy przy PIERWSZYM zaobserwowaniu.
-  let flipCivYears = null, flipGameTime = null;
+  let flipCivYears = null, flipGameTime = null, stayedUntilFlip = true;
   for (let i = 1; i <= 12; i++) {
     tick(1);
+    if (flipCivYears === null && (enemy.q !== b.q || enemy.r !== b.r)) stayedUntilFlip = false;
     if (i === 5) {
       assert(b.owner === 'player',
         'T4 KONTROLA PINU: po 5 civYears kafel WCIĄŻ jest gracza. Gdyby próg był „0.5 civYear" ' +
@@ -230,9 +241,10 @@ console.log('T4 (d) — A4: timer okupacji liczony w latach WYŚWIETLANYCH, nie 
     if (b.owner === EMP && flipCivYears === null) { flipCivYears = i; flipGameTime = core.timeSystem.gameTime; }
   }
 
-  assert(enemy.q === b.q && enemy.r === b.r,
-    'T4: najeźdźca przez cały pomiar STAŁ na kaflu (deadlock z T1 działa tu na naszą korzyść — ' +
-    'gdyby odszedł, `_cleanupStaleOccupations` wyzerowałby licznik i pin mierzyłby artefakt)');
+  assert(stayedUntilFlip,
+    'T4: najeźdźca STAŁ na kaflu aż do zmiany rąk — stolica jest jego celem terytorialnym (AC-4), ' +
+    'więc „stanie" jest tu ZACHOWANIEM PRODUKTU, nie brakiem ruchu. Gdyby odszedł, ' +
+    '`_cleanupStaleOccupations` wyzerowałby licznik i pin mierzyłby artefakt');
   assert(flipCivYears !== null && flipCivYears >= CIV_PER_GAME_YEAR / 2,
     `T4 SEDNO: kafel zmienia ręce po ${flipCivYears} civYears — czyli po ≥ ${CIV_PER_GAME_YEAR / 2} ` +
     '(6 WYŚWIETLANYCH miesięcy), bo `elapsed = timeSystem.gameTime − tile.occupyStart` jest liczone ' +
