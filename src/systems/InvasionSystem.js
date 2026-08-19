@@ -219,10 +219,32 @@ export class InvasionSystem {
 
     // 3) CEL — kolonia GRACZA w tym układzie, po STEMPLU WŁASNOŚCI (§Findings 20:
     //    `getAllColonies` zwraca kolonie wszystkich właścicieli).
+    //
+    // ⚠ POMOST AC-2 (D2 załącznik i) — PLACÓWKI SĄ WYKLUCZONE JAKO CEL DESANTU.
+    //    Powód: placówka nie ma kafla `capitalBase`, a `_tickCaptureChecks` robi na tym
+    //    `if (!capital) continue`, więc kampania na placówkę NIE MA JAK się skończyć:
+    //    `defenders_repelled` blokuje żywy najeźdźca, przejęcie blokuje brak stolicy, a ruch
+    //    blokuje deadlock movera. Rekord zostaje `active: true` NA ZAWSZE i trafia do KAŻDEGO
+    //    zapisu (Finding 53). Lepiej nie zaczynać kampanii, której nie da się rozstrzygnąć.
+    //    ⚠ FILTR MUSI SIEDZIEĆ TUTAJ, LOKALNIE. `ColonyManager.getPlayerColonies` to wspólny
+    //      helper ~40 konsumentów UI/ekonomii — odsianie placówek u źródła zmieniłoby handel,
+    //      listy kolonii i podatki.
+    //    ⚠ `launchInvasion` ZOSTAJE NIEBRAMKOWANE — to metoda intencji, z której korzysta
+    //      dźwignia `WarOverlay → force_invasion` (GATE 1 tego slice'u stoi na niej wprost).
+    //    ⚠ POMOST ZDEJMUJE AC-6, w tym samym commicie, w którym placówka dostaje warunek
+    //      zwycięstwa (lustro warunku budynkowego). Nie zdejmować wcześniej.
     const colMgr = window.KOSMOS?.colonyManager;
-    const targets = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
+    const inSystem = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
       EntityManager.get(c.planetId)?.systemId === systemId);
-    if (targets.length === 0) return;
+    const targets = inSystem.filter(c => !c.isOutpost);
+    if (targets.length === 0) {
+      // Nazwany powód odmowy — inaczej gate mierzy CISZĘ tam, gdzie system podjął decyzję
+      // (W3 spalił się na tym dwa razy). `invasion:blocked` jest w `DebugLog.TRACKED_EVENTS`.
+      if (inSystem.length > 0) {
+        EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'only_outposts_in_system' });
+      }
+      return;
+    }
     const target = targets.find(c => c.isHomePlanet) ?? targets[0];
 
     // 4) SIŁA DESANTU = suma ładowni ocalałych zrzutowców (klamra, żeby jedna wygrana
