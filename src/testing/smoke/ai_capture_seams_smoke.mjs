@@ -7,8 +7,8 @@
 //
 //   T1 (a) A5 — ✅ ODWRÓCONE W AC-4: najeźdźca bez żywego celu MASZERUJE na stolicę i ją bierze.
 //              KONTROLA PINU (R-1): na WŁASNEJ koloni stoi. Pełny dowód: `ai_capture_intent_smoke`.
-//   T2 (b) A6 — `if (!capital) continue`: placówka NIE PADA, choć agresor trzyma WSZYSTKIE kafle.
-//              KONTROLA PINU: dostaw `capitalBase` do tej samej siatki — ta sama scena PADA.
+//   T2 (b) A6 — ✅ ODWRÓCONE W AC-6: placówka Z BUDYNKIEM jest zdobywalna (lustro budynkowe).
+//              KONTROLA PINU: placówka PUSTA nie pada. Pełny dowód: `ai_capture_outpost_smoke`.
 //   T3 (c) A3 — ✅ ODWRÓCONE W AC-5: `garrison_unit` (rola `defensive`) BLOKUJE przejęcie.
 //              KONTROLA PINU: bez obrońcy kolonia pada. Pełny dowód: `ai_capture_army_smoke`.
 //   T4 (d) A4 — timer okupacji liczony w latach WYŚWIETLANYCH (`OCCUPY_DURATION = 6/12` mierzone
@@ -23,7 +23,7 @@
 // ⚠ TO SĄ PINY STANU SPRZED SLICE'U, NIE PINY POPRAWNOŚCI. Cztery z sześciu mają PAŚĆ i zostać
 //    świadomie odwrócone — wzór `deploy_seams_smoke` (W2-0) i `war_seams_smoke` (W1-0):
 //      (a) → AC-4  (intencja terytorialna: najeźdźca RUSZY bez żywego celu)        ✅ ZROBIONE
-//      (b) → AC-6  (lustro warunku budynkowego: placówka stanie się zdobywalna)    [czeka]
+//      (b) → AC-6  (lustro warunku budynkowego: placówka stanie się zdobywalna)    ✅ ZROBIONE
 //      (c) → AC-5  (symetryczny predykat: KAŻDA żywa jednostka zablokuje)          ✅ ZROBIONE
 //      (f) → AC-3  (D8: trzej producenci znikają)                                  ✅ ZROBIONE
 //    Przetrwać bez edycji mają WYŁĄCZNIE (d) timer i (e) księga. ⚠ Sprostowanie do §Testy planu,
@@ -132,8 +132,14 @@ console.log('T1 (a) — A5/D1: najeźdźca bez żywego celu MASZERUJE NA STOLIC�
     '`colony.ownerEmpireId` z `unit.owner`, a nie ogląda rekordu inwazji');
 }
 
-// ── T2 (b) — A6: placówka niezdobywalna ─────────────────────────────────────────────────────
-console.log('T2 (b) — A6: `if (!capital) continue` — placówka NIE PADA (→ odwrócone w AC-6)');
+// ── T2 (b) — A6: ⚠ PIN ODWRÓCONY W AC-6 (D2=W2) ─────────────────────────────────────────────
+// Do AC-5 włącznie ten blok pinował niezdobywalność placówki (`if (!capital) continue`).
+// AC-6 dał jej lustro warunku budynkowego, więc pin został przepisany: placówka Z BUDYNKIEM
+// PADA, placówka PUSTA nie — i to drugie jest symetryczne, bo ta sama funkcja odpowiada tak
+// samo graczowi. ⚠ Uwaga na pułapkę: `createOutpost` daje siatkę BEZ budynków, więc stara
+// asercja („nie pada") przechodziłaby dalej — ale z ZUPEŁNIE INNEGO powodu niż pinowała.
+// Dlatego test stawia budynek jawnie. Pełny dowód: `ai_capture_outpost_smoke`.
+console.log('T2 (b) — A6/D2: placówka Z BUDYNKIEM jest zdobywalna (odwrócone w AC-6)');
 {
   const { home, cm, inv, tick } = boot();
   const free = EntityManager.getAll().filter(e =>
@@ -149,29 +155,39 @@ console.log('T2 (b) — A6: `if (!capital) continue` — placówka NIE PADA (→
 
   const res = inv.launchInvasion(EMP, outpost.planetId, 2);
   assert(res?.success === true,
-    `T2: desant na placówkę PRZECHODZI (${res?.reason ?? 'ok'}) — to jest wyciek „wiecznej inwazji" ` +
-    '(Finding 53), który AC-2 zamyka pomostem po stronie WYBORU CELU');
+    `T2: desant na placówkę PRZECHODZI (${res?.reason ?? 'ok'}) — od AC-6 ta kampania ma jak ` +
+    'się skończyć, więc pomost z AC-2 przestał być potrzebny');
 
+  // ⚠ Placówka z `createOutpost` NIE MA budynków. Stawiamy JEDEN jawnie — inaczej pin
+  //   przechodziłby „bo nie ma czego trzymać", czyli mierzyłby coś innego, niż mówi.
+  const land = outpost.grid.toArray().filter(t => t && t.type !== 'ocean');
+  land[0].buildingId = 'autonomous_mine';
   for (const t of outpost.grid.toArray()) if (t) t.owner = EMP;   // agresor trzyma DOSŁOWNIE wszystko
   tick(5);
 
-  assert(!outpost.ownerEmpireId,
-    `T2 SEDNO: placówka NIE zmieniła właściciela (${outpost.ownerEmpireId ?? 'gracz'}) mimo że agresor ` +
-    'trzyma WSZYSTKIE kafle i nie ma żadnego obrońcy. Jedyny powód: `_tickCaptureChecks` robi ' +
-    '`if (!capital) continue` — pętla wychodzi, zanim cokolwiek policzy');
-  const rec = recordFor(outpost.planetId);
-  assert(rec?.active === true && !rec?.endReason,
-    'T2: a rekord kampanii zostaje AKTYWNY bez końca (`active=true`, brak `endReason`) — ' +
-    'dokładnie ten stan trafia do KAŻDEGO zapisu (Finding 53)');
-
-  // KONTROLA PINU — jedna flaga na tej samej siatce przewraca wynik.
-  const anyLand = outpost.grid.toArray().find(t => t && t.type !== 'ocean');
-  anyLand.capitalBase = true; anyLand.owner = EMP;
-  tick(3);
   assert(outpost.ownerEmpireId === EMP,
-    `T2 KONTROLA PINU: po dostawieniu JEDNEJ flagi \`capitalBase\` ta sama scena kończy się ` +
-    `przejęciem (właściciel=${outpost.ownerEmpireId}). Pin mierzy więc TĘ bramkę, a nie brak ` +
-    'jednostek, brak rekordu ani martwy tick');
+    `T2 SEDNO: placówka ZMIENIŁA WŁAŚCICIELA (${outpost.ownerEmpireId}) — lustro warunku ` +
+    'budynkowego. Do AC-5 włącznie `if (!capital) continue` wychodziło z pętli, zanim cokolwiek ' +
+    'policzyło, i placówki gracza były nie do zdobycia NA ZAWSZE — choć gracz placówki AI brał');
+  const rec = recordFor(outpost.planetId);
+  assert(rec?.active === false && rec?.endReason === 'colony_captured',
+    `T2: …a kampania jest ZAMKNIĘTA (\`${rec?.endReason}\`) zamiast wisieć \`active:true\` ` +
+    'w każdym zapisie (Finding 53)');
+}
+{
+  // KONTROLA PINU — ta sama scena BEZ budynku nie kończy się przejęciem (i tak samo odpowiada
+  // graczowi). Bez tego T2 nie odróżniałby „lustro działa" od „przejęcie zawsze przechodzi".
+  const { home, cm, inv, tick } = boot();
+  const free = EntityManager.getAll().filter(e =>
+    e.systemId === home.systemId && e.id !== home.id &&
+    (e.type === 'planet' || e.type === 'moon') && !cm.getColony(e.id));
+  const empty = cm.createOutpost(free[0].id, { Fe: 100 }, 0);
+  inv.launchInvasion(EMP, empty.planetId, 2);
+  for (const t of empty.grid.toArray()) if (t) t.owner = EMP;
+  tick(5);
+  assert(!empty.ownerEmpireId,
+    'T2 KONTROLA PINU: placówka BEZ ŻADNEGO budynku nie pada — nie ma czego trzymać. ' +
+    'Symetrycznie: ta sama funkcja mówi to samo graczowi');
 }
 
 // ── T3 (c) — A3: ⚠ PIN ODWRÓCONY W AC-5 (D3=W3) ─────────────────────────────────────────────

@@ -220,31 +220,19 @@ export class InvasionSystem {
     // 3) CEL — kolonia GRACZA w tym układzie, po STEMPLU WŁASNOŚCI (§Findings 20:
     //    `getAllColonies` zwraca kolonie wszystkich właścicieli).
     //
-    // ⚠ POMOST AC-2 (D2 załącznik i) — PLACÓWKI SĄ WYKLUCZONE JAKO CEL DESANTU.
-    //    Powód: placówka nie ma kafla `capitalBase`, a `_tickCaptureChecks` robi na tym
-    //    `if (!capital) continue`, więc kampania na placówkę NIE MA JAK się skończyć:
-    //    `defenders_repelled` blokuje żywy najeźdźca, przejęcie blokuje brak stolicy, a ruch
-    //    blokuje deadlock movera. Rekord zostaje `active: true` NA ZAWSZE i trafia do KAŻDEGO
-    //    zapisu (Finding 53). Lepiej nie zaczynać kampanii, której nie da się rozstrzygnąć.
-    //    ⚠ FILTR MUSI SIEDZIEĆ TUTAJ, LOKALNIE. `ColonyManager.getPlayerColonies` to wspólny
-    //      helper ~40 konsumentów UI/ekonomii — odsianie placówek u źródła zmieniłoby handel,
-    //      listy kolonii i podatki.
+    // ⚠ POMOST AC-2 ZDJĘTY W AC-6 — i to jest ten sam commit, w którym placówka dostała warunek
+    //    zwycięstwa (`holdsDecisiveGround`). Między AC-2 a AC-6 placówki były WYŁĄCZONE jako cel
+    //    desantu, bo kampanii na nie NIE DAŁO SIĘ rozstrzygnąć: rekord `active:true` nie mógł
+    //    wygasnąć i trafiał do każdego zapisu (Finding 53). Od AC-6 placówka jest normalnym
+    //    celem — pomost byłby już tylko blokadą mechaniki, którą właśnie odblokowaliśmy.
+    //    ⚠ Gdyby ktoś kiedyś przywracał filtr: MUSI siedzieć TUTAJ, lokalnie.
+    //      `ColonyManager.getPlayerColonies` to wspólny helper ~40 konsumentów UI/ekonomii.
     //    ⚠ `launchInvasion` ZOSTAJE NIEBRAMKOWANE — to metoda intencji, z której korzysta
     //      dźwignia `WarOverlay → force_invasion` (GATE 1 tego slice'u stoi na niej wprost).
-    //    ⚠ POMOST ZDEJMUJE AC-6, w tym samym commicie, w którym placówka dostaje warunek
-    //      zwycięstwa (lustro warunku budynkowego). Nie zdejmować wcześniej.
     const colMgr = window.KOSMOS?.colonyManager;
-    const inSystem = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
+    const targets = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
       EntityManager.get(c.planetId)?.systemId === systemId);
-    const targets = inSystem.filter(c => !c.isOutpost);
-    if (targets.length === 0) {
-      // Nazwany powód odmowy — inaczej gate mierzy CISZĘ tam, gdzie system podjął decyzję
-      // (W3 spalił się na tym dwa razy). `invasion:blocked` jest w `DebugLog.TRACKED_EVENTS`.
-      if (inSystem.length > 0) {
-        EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'only_outposts_in_system' });
-      }
-      return;
-    }
+    if (targets.length === 0) return;
     const target = targets.find(c => c.isHomePlanet) ?? targets[0];
 
     // 4) SIŁA DESANTU = suma ładowni ocalałych zrzutowców (klamra, żeby jedna wygrana
@@ -356,16 +344,8 @@ export class InvasionSystem {
     // Muszą zginąć wszyscy wrodzy obrońcy naziemni — JEDEN predykat dla obu kierunków (D3=W3).
     if (InvasionSystem.hasLivingDefender(gum.getUnitsOnPlanet(planetId), 'player')) return false;
 
-    const tiles = colony.grid?.toArray?.() ?? [];
-    const capital = tiles.find(t => t?.capitalBase);
-    if (capital) {
-      // Pełna kolonia: wymagana stolica gracza
-      if (capital.owner !== 'player') return false;
-    } else {
-      // Outpost bez stolicy: wymagany ≥1 przejęty hex z budynkiem
-      const ownsBuilding = tiles.some(t => t && t.owner === 'player' && (t.buildingId || t.capitalBase));
-      if (!ownsBuilding) return false;
-    }
+    // Warunek terenowy — JEDEN predykat dla obu kierunków (D2=W2, AC-6).
+    if (!InvasionSystem.holdsDecisiveGround(colony.grid?.toArray?.(), 'player')) return false;
 
     return colMgr.captureColonyForPlayer?.(planetId, 'ground_invasion') === true;
   }
@@ -390,6 +370,30 @@ export class InvasionSystem {
   //   3. `in_cargo` odsiewa już `getUnitsOnPlanet` — jednostka w ładowni statku na orbicie nie
   //      broni powierzchni. Zgodne z intencją i zostawione tam, gdzie było.
   //
+  // ── D2=W2 (AC-6) — WARUNEK TERENOWY: też JEDEN predykat dla obu kierunków ────
+  //
+  // Do AC-6 strona AI miała `if (!capital) continue`, czyli ciało BEZ kafla `capitalBase`
+  // (placówka) było dla niej niezdobywalne NA ZAWSZE — podczas gdy gracz miał gałąź zapasową
+  // („kontroluję ≥1 kafel z budynkiem") i placówki AI SPOKOJNIE zdobywał. Asymetria działała
+  // jednostronnie na korzyść gracza. Teraz reguła brzmi tak samo w obie strony.
+  //
+  // ⚠ Brak stolicy na placówce jest UTRWALONĄ decyzją projektową (nie stawia jej `createOutpost`,
+  //   picker ją wyklucza, heal-up przy wczytaniu zapisu jawnie pomija placówki) — dlatego lustrem
+  //   nie jest „dodaj placówce stolicę", tylko „pytaj o to, co placówka MA": kafel z budynkiem.
+  // ⚠ Placówka bez ŻADNEGO budynku nie da się zdobyć żadnej ze stron — nie ma czego trzymać.
+  //   To jest symetryczne i zamierzone, a nie luka: ta sama funkcja odpowiada `false` obu stronom.
+  //
+  // @param {Array} tiles — kafle siatki ciała
+  // @param {string} conquerorId — 'player' albo id imperium
+  static holdsDecisiveGround(tiles, conquerorId) {
+    const list = tiles ?? [];
+    const capital = list.find(t => t?.capitalBase);
+    // Pełna kolonia: decyduje WYŁĄCZNIE kafel stolicy.
+    if (capital) return capital.owner === conquerorId;
+    // Ciało bez stolicy (placówka): wystarczy ≥1 własny kafel z budynkiem.
+    return list.some(t => t && t.owner === conquerorId && (t.buildingId || t.capitalBase));
+  }
+
   // @param {Array} units — jednostki NA ciele (z `getUnitsOnPlanet`, więc bez `in_cargo`)
   // @param {string} conquerorId — 'player' albo id imperium, które próbuje przejąć
   static hasLivingDefender(units, conquerorId) {
@@ -430,13 +434,18 @@ export class InvasionSystem {
       //       `military`, więc kolonia padała z żywym garnizonem, medykiem albo dronem.
       //       Symetria jest darmowa, bo predykat jest jeden — i obejmuje też jednostki
       //       TRZECIEGO imperium, dokładnie jak po stronie gracza.
+      //
+      // ⚠ AC-6 (D2=W2): warunek (1) też przeszedł na WSPÓLNY predykat. Stało tu
+      //   `if (!capital) continue;`, czyli ciało bez stolicy (PLACÓWKA) było dla AI
+      //   niezdobywalne na zawsze — a gracz placówki AI zdobywał, bo miał gałąź zapasową.
+      //   Teraz `holdsDecisiveGround` odpowiada obu stronom tak samo: stolica, gdy jest,
+      //   inaczej ≥1 własny kafel z budynkiem.
       const colony = colMgr.getColony(inv.planetId);
       const grid = colony?.grid;
       if (!grid) continue;
-      const capital = grid.toArray().find(t => t?.capitalBase);
-      if (!capital) continue;
 
-      if (capital.owner === inv.aggressor && !InvasionSystem.hasLivingDefender(units, inv.aggressor)) {
+      if (InvasionSystem.holdsDecisiveGround(grid.toArray(), inv.aggressor)
+          && !InvasionSystem.hasLivingDefender(units, inv.aggressor)) {
         this._captureColony(inv);
       }
     }
