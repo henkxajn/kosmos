@@ -17,9 +17,21 @@ import { t } from '../i18n/i18n.js';
 const MAX_ITEMS = 50;
 
 export class NotificationCenter {
+  /**
+   * AC-9 — okno zbiorcze meldunków o utracie kafli, w latach WYŚWIETLANYCH.
+   * 0.5 roku = tyle, ile trwa okupacja JEDNEGO kafla z budynkiem (`OCCUPY_DURATION`), więc
+   * pierwsza salwa pustych kafli mieści się w jednym meldunku, a każdy kolejny budynek
+   * doczekuje się własnego.
+   */
+  static TILE_LOSS_COOLDOWN_YEARS = 0.5;
+
   constructor() {
     this._items = [];        // {id, type, severity, source, timestamp, year, title, subtitle, payload, dismissed}
     this._nextId = 1;
+    // AC-9 — agregacja utraty kafli. `tile:ownerChanged` leci PER KAFEL, a maszerujący najeźdźca
+    // przewraca kilka pustych kafli w kilka tików: bez agregacji dzwonek dostałby serię wpisów
+    // o jednym wydarzeniu. Klucz: planetId → { pending, lastNotifiedYear }.
+    this._tileLoss = new Map();
 
     // Subskrypcje — silent events (NIE pauzują gry)
     EventBus.on('expedition:reconProgress',  e => this._handleReconProgress(e));
@@ -33,6 +45,12 @@ export class NotificationCenter {
     // W3-7 (S25) — desant i utrata kolonii miały ZERO subskrybentów UI w całym drzewie.
     EventBus.on('invasion:launched',  e => this._handleInvasionLaunched(e));
     EventBus.on('colony:captured',    e => this._handleColonyCaptured(e));
+    // AC-9 — dwa zdarzenia, które do tej pory NIE MIAŁY ANI JEDNEGO konsumenta w całym drzewie:
+    // `tile:ownerChanged` (gracz tracił teren i nie dostawał o tym ani słowa) oraz
+    // `invasion:repelled` (odparcie desantu szło wyłącznie do `DebugLog`). Pierwsze jest
+    // dokładnie tym sygnałem, którego brak sprawiał, że marsz najeźdźcy wyglądał jak cisza.
+    EventBus.on('tile:ownerChanged',  e => this._handleTileOwnerChanged(e));
+    EventBus.on('invasion:repelled',  e => this._handleInvasionRepelled(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -350,6 +368,74 @@ export class NotificationCenter {
       logText: t(wasHomePlanet ? 'notif.capitalLostTitle' : 'notif.colonyLostTitle',
                  colonyName ?? planetId),
       payload: { planetId, newOwner, wasHomePlanet },
+    });
+  }
+
+  /**
+   * AC-9 — GRACZ WIDZI, ŻE TRACI KAFLE.
+   *
+   * `tile:ownerChanged` (`GroundUnitManager:619`) miał **zero subskrybentów** — okupacja była
+   * całkowicie niema, więc marsz najeźdźcy przez kolonię wyglądał dla gracza jak nic. To była
+   * biała plama dokładnie w miejscu, o które chodzi w tym slice.
+   *
+   * ⚠ AGREGACJA, NIE JEDEN WPIS NA KAFEL. Pusty kafel przewraca się NATYCHMIAST przy wejściu
+   *   jednostki (`_captureHexOnEntry`), a maszerujący oddział przechodzi ich kilka w kilku
+   *   tikach — bez okna zbiorczego dzwonek dostałby serię notyfikacji o jednym wydarzeniu.
+   *   Liczymy straty per ciało i meldujemy nie częściej niż raz na `TILE_LOSS_COOLDOWN_YEARS`
+   *   roku WYŚWIETLANEGO, podając ILE kafli przepadło od poprzedniego meldunku.
+   * ⚠ „Strata" znaczy: kafel NALEŻĄCEJ DO GRACZA kolonii przeszedł w NIE-gracza. Po przejęciu
+   *   kolonii dalsze flipy dzieją się już na ciele AI — i wtedy milczymy, bo to nie jest
+   *   strata gracza, tylko porządki u nowego właściciela.
+   */
+  _handleTileOwnerChanged({ planetId, newOwner }) {
+    if (!planetId) return;
+    if ((newOwner ?? 'player') === 'player') return;              // odzysk, nie strata
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+    if (!colony || colony.ownerEmpireId) return;                  // nie nasze ciało — cisza
+
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const agg = this._tileLoss.get(planetId) ?? { pending: 0, lastNotifiedYear: -Infinity };
+    agg.pending += 1;
+    this._tileLoss.set(planetId, agg);
+
+    if (now - agg.lastNotifiedYear < NotificationCenter.TILE_LOSS_COOLDOWN_YEARS) return;
+
+    const lost = agg.pending;
+    agg.pending = 0;
+    agg.lastNotifiedYear = now;
+
+    this.add({
+      type: 'tileLost',
+      severity: 'warn',
+      source: 'groundUnitManager',
+      title: t('notif.tileLostTitle', colony.name ?? planetId),
+      subtitle: t('notif.tileLostSubtitle', lost, this._empireLabel(newOwner)),
+      logChannel: 'combat',
+      logText: t('notif.tileLostTitle', colony.name ?? planetId),
+      payload: { planetId, newOwner, lost },
+    });
+  }
+
+  /**
+   * AC-9 — ODPARCIE DESANTU. `invasion:repelled` szło dotąd wyłącznie do `DebugLog`, więc
+   * gracz, który właśnie wybił najeźdźców, nie dostawał o tym ani słowa. To jest domknięcie
+   * pary: skoro meldujemy stratę terenu, meldujemy też jej koniec.
+   */
+  _handleInvasionRepelled({ planetId }) {
+    if (!planetId) return;
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+    if (!colony || colony.ownerEmpireId) return;                  // odparcie na cudzym ciele nas nie dotyczy
+    this._tileLoss.delete(planetId);                              // kampania skończona — licznik zeruje się
+
+    this.add({
+      type: 'invasionRepelled',
+      severity: 'info',
+      source: 'invasionSystem',
+      title: t('notif.invasionRepelledTitle', colony.name ?? planetId),
+      subtitle: t('notif.invasionRepelledSubtitle'),
+      logChannel: 'combat',
+      logText: t('notif.invasionRepelledTitle', colony.name ?? planetId),
+      payload: { planetId },
     });
   }
 
