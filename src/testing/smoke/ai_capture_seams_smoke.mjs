@@ -9,8 +9,8 @@
 //              KONTROLA PINU (R-1): na WŁASNEJ koloni stoi. Pełny dowód: `ai_capture_intent_smoke`.
 //   T2 (b) A6 — `if (!capital) continue`: placówka NIE PADA, choć agresor trzyma WSZYSTKIE kafle.
 //              KONTROLA PINU: dostaw `capitalBase` do tej samej siatki — ta sama scena PADA.
-//   T3 (c) A3 — `garrison_unit` (rola `defensive`) NIE blokuje przejęcia.
-//              KONTROLA PINU: `infantry` (rola `military`) blokuje.
+//   T3 (c) A3 — ✅ ODWRÓCONE W AC-5: `garrison_unit` (rola `defensive`) BLOKUJE przejęcie.
+//              KONTROLA PINU: bez obrońcy kolonia pada. Pełny dowód: `ai_capture_army_smoke`.
 //   T4 (d) A4 — timer okupacji liczony w latach WYŚWIETLANYCH (`OCCUPY_DURATION = 6/12` mierzone
 //              przez `timeSystem.gameTime`), NIE w civYears. KONTROLA PINU: po 5 civYears — czyli
 //              DZIESIĘCIOKROTNIE dłużej niż „0.5 civYear" z komentarza — kafel wciąż jest gracza.
@@ -24,7 +24,7 @@
 //    świadomie odwrócone — wzór `deploy_seams_smoke` (W2-0) i `war_seams_smoke` (W1-0):
 //      (a) → AC-4  (intencja terytorialna: najeźdźca RUSZY bez żywego celu)        ✅ ZROBIONE
 //      (b) → AC-6  (lustro warunku budynkowego: placówka stanie się zdobywalna)    [czeka]
-//      (c) → AC-5  (symetryczny predykat: KAŻDA żywa jednostka zablokuje)          [czeka]
+//      (c) → AC-5  (symetryczny predykat: KAŻDA żywa jednostka zablokuje)          ✅ ZROBIONE
 //      (f) → AC-3  (D8: trzej producenci znikają)                                  ✅ ZROBIONE
 //    Przetrwać bez edycji mają WYŁĄCZNIE (d) timer i (e) księga. ⚠ Sprostowanie do §Testy planu,
 //    który zapowiadał JEDNO odwrócenie (f): pozostałe trzy wynikają wprost z treści AC-4/AC-5/AC-6
@@ -174,8 +174,11 @@ console.log('T2 (b) — A6: `if (!capital) continue` — placówka NIE PADA (→
     'jednostek, brak rekordu ani martwy tick');
 }
 
-// ── T3 (c) — A3: „armia wybita" znaczy dziś „zero jednostek o roli military" ─────────────────
-console.log('T3 (c) — A3: `garrison_unit` (rola `defensive`) NIE blokuje przejęcia (→ odwrócone w AC-5)');
+// ── T3 (c) — A3: ⚠ PIN ODWRÓCONY W AC-5 (D3=W3) ─────────────────────────────────────────────
+// Do AC-4 włącznie ten blok pinował ASYMETRIĘ: kolonia gracza padała z żywym `garrison_unit`,
+// bo strona AI liczyła wyłącznie rolę `military`. AC-5 przepiął ją na ten sam predykat, którego
+// używa strona gracza, więc pin został przepisany. Pełny dowód: `ai_capture_army_smoke`.
+console.log('T3 (c) — A3/D3: `garrison_unit` (rola `defensive`) BLOKUJE przejęcie (odwrócone w AC-5)');
 {
   const { colony, home, gum, inv, tick } = boot();
   const cap = capitalOf(colony);
@@ -189,23 +192,20 @@ console.log('T3 (c) — A3: `garrison_unit` (rola `defensive`) NIE blokuje przej
 
   tick(4);
 
-  assert(colony.ownerEmpireId === EMP,
-    `T3 SEDNO: kolonia PADA (właściciel=${colony.ownerEmpireId}) MIMO żywego garnizonu na sąsiednim ` +
-    'kaflu. `_tickCaptureChecks` filtruje `u.role === "military"`, więc `defensive`/`support`/' +
-    '`drone`/`civilian` nie są dla niego armią. Predykat GRACZA blokuje na KAŻDEJ żywej jednostce — ' +
-    'ta asymetria jest przedmiotem D3');
+  assert(!colony.ownerEmpireId,
+    `T3 SEDNO: kolonia NIE PADA (właściciel=${colony.ownerEmpireId ?? 'gracz'}) — bo żyje na niej ` +
+    'obrońca. Do AC-4 padała: strona AI liczyła tylko rolę `military`, więc garnizon, medyk i dron ' +
+    'były dekoracją. Teraz obie strony pytają tym samym predykatem `hasLivingDefender`');
 }
 {
-  const { colony, home, gum, inv, tick } = boot();
+  const { colony, home, inv, tick } = boot();
   const cap = capitalOf(colony);
   inv.launchInvasion(EMP, home.id, 2);
   cap.owner = EMP;
-  const inf = gum.createUnit('infantry', home.id, cap.q + 1, cap.r, { owner: 'player' });
-  assert(inf?.role === 'military', `T3 KONTROLA PINU: piechota ma rolę \`${inf?.role}\``);
   tick(4);
-  assert(!colony.ownerEmpireId,
-    'T3 KONTROLA PINU: ta sama scena z PIECHOTĄ (rola `military`) NIE kończy się przejęciem — ' +
-    'czyli T3 mierzy filtr ROLI, a nie „przejęcie zawsze przechodzi"');
+  assert(colony.ownerEmpireId === EMP,
+    'T3 KONTROLA PINU: ta sama scena BEZ obrońcy kończy się przejęciem — czyli T3 mierzy ' +
+    'obecność obrońcy, a nie „przejęcie nigdy nie przechodzi"');
 }
 
 // ── T4 (d) — A4: timer okupacji w latach WYŚWIETLANYCH ──────────────────────────────────────

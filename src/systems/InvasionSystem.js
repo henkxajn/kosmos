@@ -353,10 +353,8 @@ export class InvasionSystem {
     // Już nasza (lub nie należy do imperium) — nic do przejęcia
     if (!colony.ownerEmpireId || colony.ownerEmpireId === 'player') return false;
 
-    // Muszą zginąć wszyscy wrodzy obrońcy naziemni
-    const enemyAlive = gum.getUnitsOnPlanet(planetId)
-      .some(u => u.owner && u.owner !== 'player' && (u.hp ?? 0) > 0);
-    if (enemyAlive) return false;
+    // Muszą zginąć wszyscy wrodzy obrońcy naziemni — JEDEN predykat dla obu kierunków (D3=W3).
+    if (InvasionSystem.hasLivingDefender(gum.getUnitsOnPlanet(planetId), 'player')) return false;
 
     const tiles = colony.grid?.toArray?.() ?? [];
     const capital = tiles.find(t => t?.capitalBase);
@@ -372,6 +370,38 @@ export class InvasionSystem {
     return colMgr.captureColonyForPlayer?.(planetId, 'ground_invasion') === true;
   }
 
+  // ── D3=W3 (AC-5) — „armia wybita": JEDNO ŹRÓDŁO PRAWDY DLA OBU KIERUNKÓW ─────
+  //
+  // Do AC-5 strony były niesymetryczne: gracz blokował na KAŻDEJ żywej jednostce obcego
+  // (`_tryPlayerCapture`), a AI tylko na jednostkach o roli `military` (`_tickCaptureChecks`)
+  // — więc kolonia gracza padała z żywym garnizonem, medykiem czy dronem na sąsiednim kaflu.
+  // Teraz reguła brzmi tak samo w obie strony: **żyje cokolwiek, co nie należy do zdobywcy ⇒
+  // nie ma przejęcia**. Lustro jest darmowe, bo predykat jest jeden.
+  //
+  // ⚠ TRZY ROZSTRZYGNIĘCIA W TEJ FUNKCJI, każde kupione konkretnym defektem:
+  //   1. `u.owner ?? 'player'` — kanon „nieostemplowane = gracza" (`isPlayerColony`). Stempel
+  //      `owner` jest ustawiany jawnie u WSZYSTKICH producentów i przy restore, ale domyślną
+  //      wartością jest gracz, więc brak stempla NIE może znaczyć „niczyj".
+  //   2. `status === 'offline'` NIE liczy się jako obrońca (R-8). Jednostka nieopłacona jest
+  //      wykluczona z walki przez `CombatSystem` (`:155`, `:173`, `:271`, `:367`), więc jako
+  //      obrońca byłaby NIEZABIJALNYM BLOKATOREM: nie da się jej zabić, a blokuje podbój na
+  //      zawsze. Jednostka bez żołdu nie trzyma terenu. ⚠ Dotyczy WYŁĄCZNIE jednostek gracza —
+  //      `_tickGroundUnitUpkeep` zbiera tylko `owner === 'player' || factionId === 'humanity'`.
+  //   3. `in_cargo` odsiewa już `getUnitsOnPlanet` — jednostka w ładowni statku na orbicie nie
+  //      broni powierzchni. Zgodne z intencją i zostawione tam, gdzie było.
+  //
+  // @param {Array} units — jednostki NA ciele (z `getUnitsOnPlanet`, więc bez `in_cargo`)
+  // @param {string} conquerorId — 'player' albo id imperium, które próbuje przejąć
+  static hasLivingDefender(units, conquerorId) {
+    return (units ?? []).some(u => {
+      if (!u) return false;
+      if ((u.owner ?? 'player') === conquerorId) return false;   // to NASZA jednostka
+      if ((u.hp ?? 0) <= 0) return false;                        // martwa nie broni
+      if (u.status === 'offline') return false;                  // nieopłacona nie broni (R-8)
+      return true;
+    });
+  }
+
   // ── Tick: capture checks ─────────────────────────────────────
 
   _tickCaptureChecks(years) {
@@ -383,11 +413,6 @@ export class InvasionSystem {
     for (const inv of this.listActive()) {
       const units = gum.getUnitsOnPlanet(inv.planetId);
       const enemyUnits = units.filter(u => u.owner && u.owner !== 'player' && (u.hp ?? 0) > 0);
-      const playerMilitary = units.filter(u =>
-        (u.owner === 'player' || !u.owner) &&
-        u.role === 'military' &&
-        (u.hp ?? 0) > 0
-      );
 
       // Brak obcych → inwazja wygasa
       if (enemyUnits.length === 0) {
@@ -397,17 +422,21 @@ export class InvasionSystem {
         continue;
       }
 
-      // Faza 6.5: capture wymaga DWÓCH warunków naraz:
-      //   (1) capital hex owned by aggressor
-      //   (2) player nie ma żywych jednostek wojskowych na planecie
-      // Gdy choćby jedna military żyje — gracz ma szansę odbić kapitał.
+      // Capture wymaga DWÓCH warunków naraz:
+      //   (1) kafel `capitalBase` należy do agresora
+      //   (2) na ciele NIE MA żywego obrońcy — czyli żadnej żywej jednostki, która nie jest
+      //       agresora. ⚠ Od AC-5 (D3=W3) jest to DOKŁADNIE ten sam predykat, co po stronie
+      //       gracza (`hasLivingDefender`): do AC-4 włącznie blokowała tu wyłącznie rola
+      //       `military`, więc kolonia padała z żywym garnizonem, medykiem albo dronem.
+      //       Symetria jest darmowa, bo predykat jest jeden — i obejmuje też jednostki
+      //       TRZECIEGO imperium, dokładnie jak po stronie gracza.
       const colony = colMgr.getColony(inv.planetId);
       const grid = colony?.grid;
       if (!grid) continue;
       const capital = grid.toArray().find(t => t?.capitalBase);
       if (!capital) continue;
 
-      if (capital.owner === inv.aggressor && playerMilitary.length === 0) {
+      if (capital.owner === inv.aggressor && !InvasionSystem.hasLivingDefender(units, inv.aggressor)) {
         this._captureColony(inv);
       }
     }
