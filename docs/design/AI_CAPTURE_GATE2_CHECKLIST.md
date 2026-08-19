@@ -17,6 +17,48 @@
 
 ---
 
+## 🔶 RESUME — GATE 2 PRZERWANY W POŁOWIE (2026-08-19). Czytaj to PIERWSZE.
+
+**Sesja właściciela przerwana w trakcie §3.** Stan gry **zabezpieczony do pliku `.json`** przed
+zamknięciem karty — nie trzeba odtwarzać scenariusza od zera, wystarczy wczytać tamten zapis.
+**W repo nic się nie zmieniło od rozpoczęcia gate'u**, więc ta checklista opisuje dokładnie ten kod,
+na którym gate biegł (AC-7 `990255f` · AC-8 `bb614ed` · AC-9 `105b873`).
+
+| § | zakres | status |
+|---|---|---|
+| **§1** | księga kampanii (AC-7) | ✅ **PASS** |
+| **§2** | widoczność utraty terenu (AC-9) | ✅ **PASS** |
+| **§3** | higiena po utracie kolonii (AC-8) | 🔶 **W TOKU — dwa punkty zostały** |
+| **§4** | D9=W3, koniec gry przy braku odwrotu | ⬜ **NIE ZACZĘTE** |
+| **§5** | regresja odbicia (D7 z W3) | ⬜ **NIE ZACZĘTE** |
+
+**§1 — zmierzone:** `K1` → jeden rekord (`entity_7`, `emp_001`, `active:false`,
+`end:'colony_captured'`); `K2` → `colony:captured` = **1**.
+⚠ **Obserwacja MOCNIEJSZA niż keeper:** druga fala dostała **TEN SAM `invasionId`** co pierwsza —
+czyli guard idempotencji potwierdzony na żywym silniku od strony IDENTYFIKATORA, a nie tylko po
+liczbie ogłoszeń. Keeper `ai_capture_ledger_smoke` sprawdzał liczbę rekordów i emisji; ta obserwacja
+domyka to od drugiej strony i warto ją przenieść do rejestru przy close-oucie.
+
+**§2 — potwierdzone wizualnie w trakcie marszu:** dzwonek, wpis w Dzienniku (kanał **Walka**), ikona
+sekcji. Zgodnie z checklistą.
+
+**§3 — co JUŻ potwierdzone:** `K4` → `{ aktywna: null, magazyn: 'ODPIĘTY', kolonieGracza: 0 }`;
+kolonia zniknęła z górnego paska i z całego UI; brak widocznego crasha.
+**§3 — co ZOSTAŁO do domknięcia (od tego zacznij):**
+1. **Systematyczne przeklikanie UI z otwartą konsolą** — Outliner, Ekonomia, Populacja, mapa
+   strategiczna. Kryterium nie brzmi „kolonia zniknęła", tylko **„nic nie rzuca wyjątkiem"**.
+   ⚠ To jest najostrzejszy punkt całego gate'u: `resourceSystem` i `civSystem` są tam po raz
+   pierwszy `null`, a headless nie rysuje paneli, więc tego ryzyka nie da się zamknąć testem.
+2. **Próba wysłania NOWEJ misji kolonizacyjnej** → oczekiwana **ODMOWA** („brak zasobów
+   startowych"), nie darmowy start. To jest bezpośredni sprawdzian rozstrzygnięcia „magazyn nie
+   zostaje z graczem" — i zarazem pułapki, w której miękkie `if (this.resourceSystem)` czyniło
+   misje darmowymi zamiast blokować.
+
+Potem normalnie **§4** (scenariusz A: kolonizator w locie wstrzymuje koniec gry i daje 0 → 1;
+scenariusz B: brak odwrotu ⇒ `game:over` `conquered` po **12 civYears** karencji) i **§5**.
+
+---
+
 ## §1 — KSIĘGA: jedna kampania na ciało, jedno ogłoszenie (AC-7)
 
 Wywołaj desant **DWA RAZY** na to samo ciało, w odstępie kilku miesięcy gry
