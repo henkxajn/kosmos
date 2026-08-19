@@ -1,37 +1,23 @@
-# AI CAPTURE — podbój, który AI potrafi domknąć · plan doc (**SZKIC — NIE PODPISANY**)
+# AI CAPTURE — podbój, który AI potrafi domknąć · plan doc (**✅ PODPISANY 2026-08-19**)
 
-> # 📝 SZKIC — NIE PODPISANY
-> **Implementacja NIE zaczyna się, dopóki właściciel nie podpisze tego dokumentu — ani AC-0.**
+> # ✅ PODPISANY 2026-08-19
+> **Właściciel podpisał całość 2026-08-19. Implementacja rusza od AC-0 (keeper szwów).**
 > D1, D1b, D2 (+ załącznik wariant i), D3 — zatwierdzone 2026-08-19. D4, D5, D6, D7 — potwierdzone
 > 2026-08-19 w wariantach domyślnych zapisanych w ich sekcjach. D8 (jednostki startowe do zera) —
 > dopisana na życzenie właściciela, **z zakresem rozszerzonym z dwóch miejsc do trzech** po cross-checku
 > (`ColonyOverlay._autoSpawnRover`; §D8 Cross-check). **D3=W3 jest wykonalne dopiero po D8 w tym
 > rozszerzonym zakresie.**
-> ⚠ **Sprostowanie do polecenia zamykającego sesję:** trzeci, adwersarialny pas **NIE jest brakujący —
-> został wykonany 2026-08-19**, werdykt **ODRZUCONA** dla zakresu z zamówienia (to on wymusił trzecią
-> pozycję D8), **POTWIERDZONA** dla zakresu rozszerzonego. Wynik jest w §D8 Cross-check. Do pełnej
-> gotowości brakuje **wyłącznie prawdziwego podpisu właściciela pod całością**.
+> Trzeci, adwersarialny pas cross-checku D8 wykonano 2026-08-19 — werdykt **ODRZUCONA** dla zakresu
+> z zamówienia (to on wymusił trzecią pozycję D8), **POTWIERDZONA** dla zakresu rozszerzonego (§D8
+> Cross-check).
+> **Kolejność prac jest wiążąca:** AC-0 → AC-1 → AC-2 → AC-3 (D8) → AC-4 → AC-5 → AC-6 (**GATE 1**) →
+> AC-7 → AC-8 → AC-9 (**GATE 2**). Zmiana kolejności wymaga pytania do właściciela.
 
 ---
 
-## RESUME — dla następnej sesji (czytaj to PIERWSZE)
-
-**Stan na 2026-08-19, koniec sesji.** Dokument kompletny w treści, **zero kodu**, zapis v101 bez migracji.
-- **Zrobione:** audyt (`AI_CAPTURE_AUDIT.md`) → osiem decyzji → plan commitów AC-0..AC-9 → keepery →
-  gate'y → rejestr znalezisk 52-68 → Załącznik A (sprzątanie dziewięciu miejsc w repo).
-  Cross-check D8 domknięty **trzema niezależnymi odczytami + pasem adwersarialnym**.
-- **Czego brakuje:** **podpisu właściciela pod całością.** Dopóki go nie ma, **nie zaczyna się nawet AC-0**
-  (keeper szwów).
-- **Gdyby ktoś chciał jeszcze jeden pas weryfikacji:** jego zakres to „znajdź producenta jednostki
-  naziemnej pominiętego w cross-checku" — pełna lista producentów, klasyfikacja „dzieje się samo" vs
-  „decyzja gracza" oraz lista rzeczy sprawdzonych i uznanych za czyste jest w **§D8 Cross-check**.
-  Poprzedni pas czwartej ścieżki **nie znalazł**.
-- **Plik siostrzany:** `docs/design/AI_CAPTURE_AUDIT.md` — podstawa tego planu, **wciąż untracked**
-  (świadomie poza tym commitem).
-
 **Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** B · **Slice:** AI_CAPTURE (gate „AI przejmuje kolonię"
-z W3 §Findings 51) · **Status:** 📝 **SZKIC — NIE PODPISANY. Osiem decyzji rozstrzygniętych, ZERO linii
-kodu napisanych, czeka na podpis właściciela.**
+z W3 §Findings 51) · **Status:** ✅ **PODPISANY 2026-08-19. Osiem decyzji rozstrzygniętych; implementacja
+w toku, kolejność AC-0..AC-9 wiążąca.**
 **Parent:** `W3_PLAN.md` §Findings 49-51 (GATE 3 zdany WARUNKOWO) · `WAR_BACKBONE.md` §6 W3+
 **Predecessor:** `W3_PLAN.md` (SLICE ZAMKNIĘTY 2026-08-18)
 **Basis:** `docs/design/AI_CAPTURE_AUDIT.md` (2026-08-19 — 12 agentów, dwie sondy headless, pięć pasów
@@ -41,19 +27,21 @@ konkretne warianty tych decyzji)
 **Zakres kodu w tym dokumencie:** ŻADEN. Plan nie zawiera kodu ani gotowych migracji; każde miejsce, gdzie
 decyzja pociągnęłaby zmianę formatu zapisu, jest **jawnie oznaczone** jako taka.
 
-**Konwencja językowa — świadome odstępstwo do zatwierdzenia.** Podpisana konwencja (`W1_PLAN.md`,
+**Konwencja językowa — świadome odstępstwo, PRZYJĘTE przy podpisie.** Podpisana konwencja (`W1_PLAN.md`,
 2026-08-14) mówi, że plan-doce łańcucha war-backbone są po **angielsku** (`W1/W2/W3_PLAN.md`), a po polsku
 tylko RESUME i checklisty gate'ów. Ten plan jest **po polsku w całości**, bo (a) stoi na polskim audycie
 `AI_CAPTURE_AUDIT.md`, (b) plany workstreamów C/D tego samego arca są polskie (`DIRECTOR_SLICE1_PLAN.md`,
-`D2_PLAN.md`), (c) decyzje do podpisu czyta właściciel, nie orkiestrator. Jeśli ten slice ma być
-formalnie W-slice'em (W5?), przepisanie nagłówków i sekcji analitycznych na angielski jest tanie i zrobimy
-je **przed** zatwierdzeniem — to jedna decyzja redakcyjna, nie techniczna.
+`D2_PLAN.md`), (c) decyzje do podpisu czyta właściciel, nie orkiestrator. **Właściciel podpisał dokument
+w tej formie 2026-08-19 — plan zostaje polski.** Jeśli slice ma być formalnie W-slice'em (W5?),
+przepisanie nagłówków i sekcji analitycznych na angielski jest tanie i należy do osobnej decyzji
+redakcyjnej, nie technicznej.
 
 ---
 
 ## RESUME — czytaj to PIERWSZE (PL)
 
-**Stan na 2026-08-19.** Nic nie zaimplementowane. Scommitowane: nic. Zapis: **v101 bez zmian.**
+**Stan na 2026-08-19.** Dokument **PODPISANY**. Kodu jeszcze nie ma — pierwszy commit to **AC-0** (keeper
+szwów). Zapis: **v101 bez zmian.**
 Wejście: audyt read-only `AI_CAPTURE_AUDIT.md` + druga tura weryfikacji pod warianty decyzji.
 
 **Jedno zdanie, z którego wynika cały ten plan:**
