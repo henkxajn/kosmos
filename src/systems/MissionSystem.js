@@ -541,13 +541,15 @@ export class MissionSystem {
       }
     }
 
-    if (this.resourceSystem) {
-      if (!this.resourceSystem.canAfford(LAUNCH_COST)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
-        return;
-      }
-      this.resourceSystem.spend(LAUNCH_COST);
+    // ⚠ AC-8 (D9=W3) — BRAK MAGAZYNU ⇒ ODMOWA, a nie „za darmo".
+    //   Do AC-8 stało tu `if (this.resourceSystem) { …canAfford… }`, więc odpięcie magazynu
+    //   (gracz stracił ostatnią kolonię) czyniłoby misje DARMOWYMI — dokładna odwrotność
+    //   rozstrzygnięcia „magazyn nie zostaje z graczem". Bramka jest teraz twarda.
+    if (!this.resourceSystem || !this.resourceSystem.canAfford(LAUNCH_COST)) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
+      return;
     }
+    this.resourceSystem.spend(LAUNCH_COST);
 
     const shipSpeed  = this._getShipSpeed(assignedVesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -638,13 +640,16 @@ export class MissionSystem {
       return;
     }
 
-    if (this.resourceSystem) {
-      if (!this.resourceSystem.canAfford(COLONY_LAUNCH_COST)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
-        return;
-      }
-      this.resourceSystem.spend(COLONY_LAUNCH_COST);
+    // ⚠ AC-8 (D9=W3) — j.w., i tu waży NAJWIĘCEJ: to jest ścieżka REKOLONIZACJI. Właściciel
+    //   rozstrzygnął, że po utracie ostatniej kolonii magazyn NIE zostaje z graczem, więc nowej
+    //   misji kolonizacyjnej nie da się wysłać z zera; zostaje statek JUŻ W LOCIE, z zasobami
+    //   JUŻ załadowanymi. Miękkie `if (this.resourceSystem)` dawałoby darmowy start i cicho
+    //   odwracało tę decyzję.
+    if (!this.resourceSystem || !this.resourceSystem.canAfford(COLONY_LAUNCH_COST)) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
+      return;
     }
+    this.resourceSystem.spend(COLONY_LAUNCH_COST);
 
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
     const colonySpeed = (SHIPS.cargo_ship?.baseSpeedAU ?? 0.9) * techMult;

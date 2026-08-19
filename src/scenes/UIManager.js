@@ -2441,6 +2441,9 @@ export class UIManager {
     let reasonKey = 'dialog.civDestroyedExtinction';
     if (d.reason === 'collision') reasonKey = 'dialog.civDestroyedCollision';
     else if (d.reason === 'ejected') reasonKey = 'dialog.civDestroyedEjected';
+    // AI_CAPTURE AC-8 (D9=W3) — podbój. Bez tej gałęzi koniec z rąk obcych opisywałby się
+    // domyślnym tekstem o WYMARCIU, czyli mówiłby graczowi nieprawdę o tym, co go spotkało.
+    else if (d.reason === 'conquered') reasonKey = 'dialog.civDestroyedConquered';
     else if (['extinction_impact','colony_destroyed','colony_disaster','expedition_disaster','starvation','exposure','population_extinct','epidemic'].includes(d.reason))
       reasonKey = 'dialog.civDestroyedPopulation';
     const reasonText = t(reasonKey, d.planetName);

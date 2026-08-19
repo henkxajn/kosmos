@@ -997,6 +997,7 @@ export default {
   'dialog.civDestroyed': 'CYWILIZACJA ZNISZCZONA',
   'dialog.civDestroyedCollision': 'Kolizja planetarna zniszczyła planetę {0}.',
   'dialog.civDestroyedEjected': 'Planeta {0} została wyrzucona z układu.',
+  'dialog.civDestroyedConquered': 'Twoje światy przeszły w obce ręce. Nie została ani jedna kolonia, ani nic, czym można by je odzyskać.',
   'dialog.civDestroyedExtinction': 'Życie na planecie {0} wymarło.',
   'dialog.civDestroyedPopulation': 'Populacja na planecie {0} wyginęła.',
   'dialog.systemFormed': 'Układ planetarny uformowany',

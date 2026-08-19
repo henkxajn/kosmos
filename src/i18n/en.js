@@ -996,6 +996,7 @@ export default {
   'dialog.civDestroyed': 'CIVILIZATION DESTROYED',
   'dialog.civDestroyedCollision': 'Planetary collision destroyed planet {0}.',
   'dialog.civDestroyedEjected': 'Planet {0} was ejected from the system.',
+  'dialog.civDestroyedConquered': 'Your worlds have passed into foreign hands. Not one colony remains, nor any means to take them back.',
   'dialog.civDestroyedExtinction': 'Life on planet {0} went extinct.',
   'dialog.civDestroyedPopulation': 'Population on planet {0} has perished.',
   'dialog.systemFormed': 'Planetary system formed',

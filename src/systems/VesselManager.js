@@ -1089,8 +1089,32 @@ export class VesselManager {
    * Obsługa zniszczenia kolonii — przekieruj/reassign statki w locie.
    * Statki w hangarze (docked) już zniszczone przez ColonyManager.removeColony().
    */
+  /**
+   * Port zastępczy dla statków po utracie kolonii — WYŁĄCZNIE kolonia GRACZA (AC-8/D5).
+   * Preferencja: planeta macierzysta, o ile nadal jest gracza; inaczej dowolna inna kolonia
+   * gracza; `null` = gracz nie ma dokąd ich przypisać (wtedy nie re-homujemy wcale).
+   * ⚠ Bez importu `ColonyManager` — kanon własności czytamy przez `getPlayerColonies()`,
+   *   które sam ColonyManager filtruje (`isPlayerColony`).
+   */
+  _resolvePlayerHomePort(excludePlanetId) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const mine = colMgr?.getPlayerColonies?.() ?? [];
+    const homeId = window.KOSMOS?.homePlanet?.id;
+    if (homeId && homeId !== excludePlanetId && mine.some(c => c.planetId === homeId)) return homeId;
+    return mine.find(c => c.planetId !== excludePlanetId)?.planetId ?? null;
+  }
+
   _onColonyDestroyed(planetId, destroyedVesselIds) {
-    const homePlanetId = window.KOSMOS?.homePlanet?.id;
+    // ⚠ AC-8 (D5) — PORT ZASTĘPCZY MUSI NALEŻEĆ DO GRACZA.
+    //   Do AC-8 stało tu `window.KOSMOS.homePlanet.id` BEZ SPRAWDZENIA, czyja to dziś kolonia.
+    //   `transferColony` nie rusza `homePlanet`, więc po utracie macierzystej ten identyfikator
+    //   wskazywał ciało należące JUŻ DO WROGA — a niżej leci `startReturn(force: true)`, czyli
+    //   przymusowy powrót w ręce przeciwnika (zmierzone w audycie D5: dwa statki zostały
+    //   w `fleet[]` kolonii wroga, jeden dostał wymuszony powrót na zajętą planetę).
+    //   Teraz port zastępczy wybieramy z KOLONII GRACZA; gdy takich nie ma, statek zostaje tam,
+    //   gdzie jest — bezdomny, ale WOLNY. To jest ta sama zasada, co „magazyn nie zostaje
+    //   z graczem" (D9=W3): nie korzystamy z cudzego i nie oddajemy się w cudze ręce.
+    const homePlanetId = this._resolvePlayerHomePort(planetId);
     if (!homePlanetId) return;
 
     const alreadyDestroyed = new Set(destroyedVesselIds);

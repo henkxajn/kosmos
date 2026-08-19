@@ -43,6 +43,7 @@ import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { EmpireColonyBootstrap } from './EmpireColonyBootstrap.js';   // W3-1 — reuse resolvera tech imperium
+import { canReverseFate, describeNoReversal } from '../utils/PlayerViability.js';   // D9=W3 (AC-8)
 import { t } from '../i18n/i18n.js';
 
 // Rozmiary siatek hex per typ/masa ciała
@@ -147,6 +148,7 @@ export class ColonyManager {
       this._tickPendingOutpostOrders();
       this._tickPendingStationOrders();
       this._tickTaxCollection(physDt);
+      this._tickPlayerViability(civDt);         // D9=W3 (AC-8)
     });
 
     // Opcja C v3: subscribe groundUnit:destroyed → kolejka reintegracji POPów
@@ -274,6 +276,81 @@ export class ColonyManager {
     if (window.KOSMOS.techSystem)       window.KOSMOS.techSystem.resourceSystem       = colony.resourceSystem;
     // Wymuś odświeżenie UI zasobów nowej kolonii (usuwa stale dane z poprzedniej)
     EventBus.emit('resource:requestSnapshot');
+    return true;
+  }
+
+  /**
+   * D9=W3 (AC-8) — KONIEC GRY DOPIERO PRZY BRAKU ZDOLNOŚCI ODWRÓCENIA.
+   *
+   * D5 rozstrzygnęło, że utrata stolicy nie kończy gry („przegrana jest odwracalna", D7 z W3).
+   * D9 dopowiada warunek graniczny: to zdanie zakłada, że odwrócenie jest WYKONALNE. Gdy gracz
+   * nie ma ani kolonii, ani czym ją odzyskać, gra nie ma dokąd biec.
+   *
+   * ⚠ KADENCJA, NIE MIGAWKA (doprecyzowanie 1 z §D9). Test wykonany W CHWILI utraty zabiłby
+   *   gracza, któremu kolonizator dolatuje za trzy lata. Warunek musi UTRZYMAĆ SIĘ przez
+   *   `VIABILITY_GRACE_CIVYEARS` — cokolwiek, co pojawi się w międzyczasie (statek z warpu,
+   *   jednostka odbita), zeruje licznik.
+   * ⚠ Predykat mieszka w `src/utils/PlayerViability.js` (czysty, bez `window`), a kadencja tutaj —
+   *   w systemie, który ma tick i który harness naprawdę montuje. Reguła w scenie (`GameScene`)
+   *   byłaby NIETESTOWALNA: `GameScene.js` nie importuje się pod node.
+   * ⚠ Istniejące `game:over` z `GameScene.checkHomeDestroyed` reaguje WYŁĄCZNIE na fizyczne
+   *   zniszczenie ciała i pop=0 — nigdy na zmianę właściciela. To jest NOWA gałąź, nie parametr.
+   */
+  _tickPlayerViability(civDeltaYears) {
+    if (!civDeltaYears || civDeltaYears <= 0) return;
+    if (!window.KOSMOS?.civMode) return;          // tryb generatora/tytułowy — nie nasza sprawa
+    if (this._gameOverEmitted) return;            // jednokrotność: koniec gry ogłaszamy RAZ
+
+    if (this.getPlayerColonies().length > 0) { this._viabilityLostFor = 0; return; }
+
+    const state = canReverseFate({
+      vessels:     [...(window.KOSMOS?.vesselManager?._vessels?.values?.() ?? [])],
+      groundUnits: [...(window.KOSMOS?.groundUnitManager?._units?.values?.() ?? [])],
+    });
+    if (state.ok) { this._viabilityLostFor = 0; return; }
+
+    this._viabilityLostFor = (this._viabilityLostFor ?? 0) + civDeltaYears;
+    if (this._viabilityLostFor < ColonyManager.VIABILITY_GRACE_CIVYEARS) return;
+
+    this._gameOverEmitted = true;
+    const reasonDetail = describeNoReversal(state);
+    EventBus.emit('player:noReversalPossible', { reason: reasonDetail, state });
+    EventBus.emit('time:pause');
+    EventBus.emit('game:over', {
+      reason: 'conquered',
+      planetName: window.KOSMOS?.homePlanet?.name ?? '',
+      detail: reasonDetail,
+    });
+  }
+
+  /**
+   * D9=W3 (AC-8) — gracz nie ma ŻADNEJ kolonii: odpinamy aktywny kontekst gospodarczy.
+   *
+   * ⚠ ROZSTRZYGNIĘCIE WŁAŚCICIELA (2026-08-19): **magazyn NIE zostaje z graczem.** Dziś gracz
+   *   po utracie ostatniej kolonii korzystał z magazynu ciała, które już do niego nie należy —
+   *   to dziura, nie projekt. Konsekwencja przyjęta świadomie: rekolonizacja zawęża się do
+   *   statku JUŻ W LOCIE, z zasobami JUŻ załadowanymi; nowej misji z zera wysłać się nie da.
+   *
+   * ⚠ NULL NIE WYSTARCZA SAM Z SIEBIE — i to jest pułapka, którą trzeba było zamknąć osobno:
+   *   `MissionSystem` bramkuje koszt startu wzorem `if (this.resourceSystem) { …canAfford… }`,
+   *   więc magazyn ustawiony na `null` czyniłby misje **DARMOWYMI**, czyli dawał odwrotność tego
+   *   rozstrzygnięcia. Bramki w `_launch`/`_launchColony` zostały w tym samym commicie zaostrzone
+   *   do „brak magazynu ⇒ ODMOWA".
+   *
+   * Lustro `switchActiveColony` co do pola — ta sama piątka wskaźników, ta sama zasada
+   * „NIGDY stale-inna-kolonia", tylko celem jest brak kolonii, a nie inna kolonia.
+   */
+  _detachActiveColony() {
+    this._activePlanetId = null;
+    window.KOSMOS.resourceSystem   = null;
+    window.KOSMOS.civSystem        = null;
+    window.KOSMOS.buildingSystem   = null;
+    window.KOSMOS.factorySystem    = null;
+    window.KOSMOS.prosperitySystem = null;
+    if (window.KOSMOS.expeditionSystem) window.KOSMOS.expeditionSystem.resourceSystem = null;
+    if (window.KOSMOS.techSystem)       window.KOSMOS.techSystem.resourceSystem       = null;
+    EventBus.emit('resource:requestSnapshot');
+    EventBus.emit('colony:listChanged', {});
     return true;
   }
 
@@ -601,8 +678,12 @@ export class ColonyManager {
 
     // Z4/Z5: rozłącz per-kolonijne tickery (time:tick) — inaczej zniszczona kolonia tyka
     // w nieskończoność (FactorySystem warn per-frame w isRecipeAvailable → zalew konsoli +
-    // spadek FPS; leak subskrypcji EventBus). Bliźniaczy dispose w transferColony (przejęcie
-    // kolonii przez AI) — ten sam wzorzec.
+    // spadek FPS; leak subskrypcji EventBus).
+    // ⚠ Sprostowanie (AI_CAPTURE AC-8): od W3-1 `removeColony` jest **JEDYNYM** miejscem
+    //   z dispose ×5 — `transferColony` celowo NIE disposuje (przerzut własności w miejscu,
+    //   kolonia zostaje w `_colonies` i tyka dalej u nowego właściciela). Zdanie o „bliźniaczym
+    //   dispose w transferColony" było prawdziwe PRZED W3-1 i zapraszało do „naprawy", która
+    //   przywróciłaby kasowanie zdobyczy. Keeper pinuje odwrócenie: `s34c_z9_transfer_dispose`.
     colony.factorySystem?.dispose?.();
     colony.resourceSystem?.dispose?.();
     colony.civSystem?.dispose?.();
@@ -647,7 +728,15 @@ export class ColonyManager {
   //
   // Co ZOSTAJE bez zmian (realne koszty utraty kolonii, nie artefakty kasowania):
   //   - statki w hangarze zniszczone, drogi handlowe wyczyszczone, przełączenie aktywnej
-  //   - `colony:captured` dla UI/narracji; HomePlanet → game over w GameScene
+  //   - `colony:captured` dla UI/narracji.
+  //     ⚠ Sprostowanie (AI_CAPTURE AC-8): **utrata macierzystej sama w sobie NIE kończy gry.**
+  //     `GameScene.checkHomeDestroyed` reaguje wyłącznie na fizyczne zniszczenie ciała i pop=0,
+  //     nigdy na zmianę właściciela — `wasHomePlanet` w payloadzie ma konsumentów wyłącznie
+  //     narracyjnych (toast + auto-slow). Koniec gry z powodu podboju ma OSOBNĄ ścieżkę,
+  //     dopisaną w tym samym commicie: `_tickPlayerViability` (D9=W3) ogłasza `game:over`
+  //     dopiero, gdy gracz nie ma kolonii ANI czym je odzyskać, i to utrzymane przez rok
+  //     wyświetlany. Komentarz obiecujący „HomePlanet → game over" był fałszywy od dawna
+  //     i raz już wyprodukował błędne założenie w audycie.
   //   - `ownerEmpireId` załatwia stronę gracza SAM: wszystkie agregaty gracza (podatek
   //     `:1531`, migracja `:2101`, trasy `:2377`, `getPlayerColonies`) filtrują po tym polu.
 
@@ -686,17 +775,23 @@ export class ColonyManager {
       r => r.colonyA !== planetId && r.colonyB !== planetId
     );
 
-    // Jeśli to aktywna kolonia → przełącz na inną (priorytetowo homePlanet)
+    // Jeśli to aktywna kolonia → przełącz na inną KOLONIĘ GRACZA (priorytetowo macierzysta).
+    //
+    // ⚠ AC-8 (D5) — FILTR WŁAŚCICIELA. Do AC-8 obie gałęzie brały DOWOLNY wpis z `_colonies`,
+    //   a ta mapa trzyma też kolonie AI (i od W3-1 także tę właśnie utraconą). Zmierzone:
+    //   po utracie jedynej kolonii `_activePlanetId` wskazywał na kolonię AGRESORA
+    //   (`entity_94`, `ownerEmpireId: emp_001`), a `switchActiveColony` przepinał na jej magazyn
+    //   `window.KOSMOS.resourceSystem` i `MissionSystem.resourceSystem`. Gracz, który stracił
+    //   wszystko, „gospodarował" więc magazynem przeciwnika.
     const wasActive = this._activePlanetId === planetId;
     if (wasActive) {
       const homePlanetId = window.KOSMOS?.homePlanet?.id;
-      if (homePlanetId && homePlanetId !== planetId && this._colonies.has(homePlanetId)) {
-        this.switchActiveColony(homePlanetId);
-      } else {
-        // Wybierz dowolną inną kolonię
-        const any = [...this._colonies.keys()].find(id => id !== planetId);
-        if (any) this.switchActiveColony(any);
-      }
+      const mine = (id) => id !== planetId && ColonyManager.isPlayerColony(this._colonies.get(id));
+      const next = (homePlanetId && mine(homePlanetId))
+        ? homePlanetId
+        : ([...this._colonies.keys()].find(mine) ?? null);
+      if (next) this.switchActiveColony(next);
+      else this._detachActiveColony();   // ⚠ D9=W3 — gracz nie ma już ŻADNEJ kolonii
     }
 
     const colonyName = colony.name ?? planetId;
@@ -1092,6 +1187,15 @@ export class ColonyManager {
   };
 
   static UPKEEP_GRACE_CIVYEARS = 5;  // offline → disband po tylu civYears bez utrzymania
+
+  /**
+   * D9=W3 — ile czasu stan „zero kolonii I zero zdolności odwrócenia" musi się UTRZYMAĆ,
+   * zanim padnie `game:over`. 12 civYears = **jeden rok WYŚWIETLANY** (CIV_TIME_SCALE=12):
+   * dość długo, żeby przelot, wrak-który-nie-był-wrakiem albo desant w toku zdążyły zmienić
+   * odpowiedź, i dość krótko, żeby gracz nie siedział w martwej grze bez końca.
+   * ⚠ To jest doprecyzowanie 1 z §D9 („kadencja, nie migawka") wyrażone liczbą.
+   */
+  static VIABILITY_GRACE_CIVYEARS = 12;
 
   // ── Helpery Barracks ─────────────────────────────────────────────────────
 
