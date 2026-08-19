@@ -10,12 +10,18 @@
 //   battle:resolved (wygrana obcego lub draw) z location=systemId gracza
 //     → wyladuj troops na planecie gracza w tym systemie
 //
-// Capture:
-//   Tick co 1 civYear — jeśli na planecie:
-//     • są wrogie jednostki (owner != player)
-//     • są 0 player ground units (militarne lub civilne)
-//     • trwa już 3+ civYears
+// Capture (STAN FAKTYCZNY — opis poprawiony 2026-08-19, AI_CAPTURE AC-1):
+//   Raz na 1 civYear, dla każdego AKTYWNEGO rekordu inwazji (`listActive()`), jeśli:
+//     • kafel `capitalBase` należy do agresora (`:379-382`), ORAZ
+//     • na planecie NIE MA żywej jednostki gracza o roli `military` (`:358-362`)
+//       ⚠ `defensive`/`support`/`drone`/`civilian` NIE blokują — predykat GRACZA
+//         (`_tryPlayerCapture:329-331`) blokuje na KAŻDEJ żywej jednostce. Asymetria jest realna.
 //   → ColonyManager.transferColony(planetId, aggressor)
+//   ⚠ BRAK JAKIEJKOLWIEK KARENCJI CZASOWEJ. `CAPTURE_GRACE_YEARS` (`:26`) i `playerEmptySince`
+//     (`:141`) są MARTWE — zero odczytów w całym drzewie. Nie ma „trwa już 3+ civYears".
+//   ⚠ Gałąź `defenders_repelled` (`:365-370`) wygasza rekord, gdy zginie ostatni najeźdźca —
+//     i wykonuje się PRZED testem stolicy, więc to ONA rozstrzyga koniec kampanii.
+//   Piny wykonaniowe tych czterech zdań: `src/testing/smoke/ai_capture_seams_smoke.mjs`.
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';

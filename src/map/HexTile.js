@@ -254,7 +254,9 @@ export class HexTile {
     // null → neutralne (planety nieskolonizowane); 'player' → gracz; 'emp_XXX' → obcy
     this.owner = null;
     // Progres okupacji: jednostka innego ownera stoi na budynkowym hexie
-    // occupyEmpireId = kto przejmuje; occupyStart = civYear gdy zaczęło się liczyć
+    // occupyEmpireId = kto przejmuje; occupyStart = `timeSystem.gameTime` (rok WYŚWIETLANY,
+    // NIE civYear) w chwili startu licznika — próg to `OCCUPY_DURATION = 6/12` roku
+    // WYŚWIETLANEGO (`GroundUnitManager._tickOccupation`), czyli 6 civYears
     this.occupyEmpireId = null;
     this.occupyStart = null;
   }
@@ -318,7 +320,10 @@ export class HexTile {
     tile.anomalyEffect     = data.anomalyEffect     ?? null;
     tile.underConstruction = data.underConstruction ?? null;
     tile.syntheticSlot     = data.syntheticSlot     ?? null;
-    // Faza 6.5: własność — legacy save brak pól, tile.owner null (inicjalizowany przez InvasionSystem)
+    // Faza 6.5: własność — legacy save brak pól, `tile.owner` null. ⚠ Sprostowanie (AI_CAPTURE AC-1,
+    // Finding 64): `InvasionSystem` tego pola NIGDY NIE PISZE — wyłącznie je CZYTA (`:337`, `:340`,
+    // `:382`). Piszą je `GroundUnitManager._changeTileOwner:615-620` (okupacja), oba egzekutory
+    // przejęcia (hurtowy przepis kafli) i gałąź REGENERACJI siatki w `ColonyOverlay`.
     tile.owner             = data.owner             ?? null;
     tile.occupyEmpireId    = data.occupyEmpireId    ?? null;
     tile.occupyStart       = data.occupyStart       ?? null;

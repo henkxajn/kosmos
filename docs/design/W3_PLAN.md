@@ -148,12 +148,15 @@ extend.** Measured, not argued:
   deliberate **`CELOWY BRAK warp_tank`** (`ShipTemplateData.js:121-148`). **AI ships never leave home.** The
   only AI hull that ever reaches player space is the scripted first-contact probe — unarmed, `once: true`,
   two per galaxy.
-- **The AI cannot profit from winning.** `transferColony` disposes five subsystems and deletes the colony
-  from `_colonies` (`ColonyManager.js:678-685`), handing the empire **only an id** (`:693`).
-  `getColoniesByEmpire` maps ids through `ColonyManager.getColony` and filters the miss
-  (`EmpireRegistry.js:46-53`), so `DirectorProduction`, `EmpireResearchSystem`, `EmpireStrategySystem`,
-  `EmpireLogisticsSystem` and `relinkColoniesAfterRestore` all see nothing. A conquered world yields the AI
-  **zero production, zero research, zero logistics**, and the dead id persists in every future save.
+- **The AI cannot profit from winning.** ⚠ **STATE AS FOUND BEFORE W3-1 — FIXED BY THIS SLICE. Do not read
+  as current.** *As found:* `transferColony` disposed five subsystems and deleted the colony from
+  `_colonies`, handing the empire **only an id**; `getColoniesByEmpire` maps ids through
+  `ColonyManager.getColony` and filters the miss (`EmpireRegistry.js:46-53`), so `DirectorProduction`,
+  `EmpireResearchSystem`, `EmpireStrategySystem`, `EmpireLogisticsSystem` and `relinkColoniesAfterRestore`
+  all saw nothing — zero production, zero research, zero logistics, and a dead id in every future save.
+  **Since W3-1 (`ColonyManager.js:654-759`, no `dispose()`, no `_colonies.delete`) the AI DOES profit:
+  measured — `ColonyAutoExpander` grows a captured world 4 → 7 buildings in ~5 civYears** (AI_CAPTURE
+  audit, 2026-08-19). This bullet is kept because it is the reason W3-1 exists, not because it still holds.
 - **The reserve of W3's own headline debt is empty.** `EmpireFleetMaterializer` is not "the AI's principal
   fleet source" — it is a system with **zero input**. Its only trigger is `empire:fleetMoved`, emitted only
   by `EmpireRegistry.moveFleet:223`, reachable only from `empire.fleets[]`, whose two producers are an
@@ -281,8 +284,9 @@ line reading *"MilitaryAI never runs"* would look for the wrong fix.
    record** while `gameState.wars.*` and the diplomacy relations keyed on that id survive as dangling
    references (only `IntelSystem.js:89` and `TerritoryService.js:32` react to `empire:destroyed`).
 
-Plus the event half: `transferColony` hand-rolls a partial teardown (docked vessels `:641-648`, trade routes
-`:652-654`, five `dispose()` `:678-682`) but **never emits `colony:destroyed`**, so `MissionSystem:120`,
+Plus the event half: `transferColony` hand-rolls a partial teardown (docked vessels, trade routes —
+⚠ the third item, „five `dispose()`", was removed by W3-1 and **must not** be read as current;
+`removeColony:596-622` is now the only place with dispose ×5) but **never emits `colony:destroyed`**, so `MissionSystem:120`,
 `StationSystem:213`, `TransportOrderSystem:51`, `VesselManager:109`, `EmpireLogisticsSystem:97`,
 `SystemPoolService:53` and `GameScene:3204` never fire. Missions keep flying to a body that changed hands; a
 player station silently re-mothers onto an unrelated colony (`TransferStore.js:79-82`).
@@ -315,9 +319,9 @@ route is a *different* clock again — `_tickCaptures` runs on civ (`:804`, 2 ci
 | S4 | `DirectorDoctrine` | **5 hardcoded sites; `_holdAtHome` broken; one-shot** | C-2. Keeper never exercises the order path. |
 | S5 | Battle booking | **third silent path still open** | `recordBattle` callers: `WarSystem.js:339`, `:492`, `EAH:181`. DSCS emits `warId:null` (`:1006-1007`); VCS likewise. W1-4 closed EAH only. |
 | S6 | `orbitalDominance` | **wiped on every load** | Producer `WarSystem.js:288`; absent from `createDefaultState`; four live consumers via `playerHasOrbitalDominance:671`. ⚠ `FleetTabPanel.js:2132` is a **dead file** — do not count it. |
-| S7 | Ownership executors | **asymmetric by construction** | `transferColony` deletes (dispose ×5 + `_colonies.delete`); `captureColonyForPlayer` keeps everything and rewrites in place. A returnable body has **no data to return** on the delete side. |
+| S7 | Ownership executors | **symmetric since W3-1** (row corrected in AC-1) | Both executors rewrite ownership **in place**: `transferColony` (`ColonyManager.js:654-759`) contains **no `dispose()` and no `_colonies.delete`** — removal is a third method (`removeColony:596-622`), not used by conquest. A body taken by the AI keeps its full colony state, so it **can** be returned. Keeper pins the inversion: `s34c_z9_transfer_dispose_smoke` (20/20). |
 | S8 | Conquest aftermath | **AI gains nothing; empire can vanish** | C-5, three ways. |
-| S9 | Occupation representation | **exists per-HEX only** | `tile.owner` + `tile.occupyEmpireId`/`occupyStart` are real, serialized, with reset-on-abandon (`HexTile.js:255-259`; `GroundUnitManager:564-613`). ⚠ `tile:ownerChanged` (`:619`) has **zero subscribers**. No colony-level state, and none possible for a body the player LOST. |
+| S9 | Occupation representation | **exists per-HEX only** | `tile.owner` + `tile.occupyEmpireId`/`occupyStart` are real, serialized, with reset-on-abandon (`HexTile.js:255-259`; `GroundUnitManager:564-613`). ⚠ `tile:ownerChanged` (`:619`) has **zero subscribers**. No colony-level *occupation* state; the closest carrier is the invasion record (`gameState.invasions`, keyed by `planetId`, declared in `createDefaultState` and serialized). ⚠ Last clause corrected in AC-1: **since W3-1 a body the player LOST keeps its full colony state in place** (`transferColony` rewrites ownership without dispose), so colony-level state on such a body **is** possible today. |
 | S10 | `CAPTURE_GRACE_YEARS` | **dead; grace is a clock artefact** | C-6. |
 | S11 | Ground combat AI | **exists — first pass was wrong** | `GroundUnitManager._tickCombatAI:984-1014` drives every non-player unit (nearest foreign unit → `moveUnit` onto its hex). W3 inherits a tactical AI with a role-name bug at `:1010` (`role === 'military'`), it does not build one. |
 | S12 | Ground unit morale | **legacy units die on the first hit, and a reload changes it** | No `morale`/`noMorale` on legacy archetypes ⇒ `CombatSystem:302-303` sets 0 ⇒ the same round's sweep `:232-241` disbands. Applies to AI landing troops **and** the player's starting infantry (`GameScene:3841`). ⚠ `serialize` writes `morale: u.morale ?? 100` (`:1281`) and legacy restore spreads (`:1380-1398`) ⇒ **ground outcomes differ before vs after a save/load — a determinism hole larger than R13.** |
@@ -942,15 +946,24 @@ path instead). Next live run can settle it in one read — the first record shou
     been reloaded since the landing.** Switching the pool to archetypes is a ground-combat balance
     change, so it belongs to the **GROUND** slice next to the S12 morale defect and R13 RNG
     seeding — not to a visibility commit. Full data: `docs/audit/GROUND_UNITS_AUDIT.md`.
-51. ⚠ **An AI landing NEVER ends in the colony changing hands — the capture requirement exists
-    only on the player's side.** Verified live: the invader's unit (`gu_42`) stood on Nekkar d and
-    `getColoniesByEmpire` never listed that colony under the enemy. `InvasionSystem` has
-    `_tryPlayerCapture` (the player takes an AI body) with **no** mirror for the AI direction, so
-    the last step of the conquest loop — *hold the capital, own the colony* — is missing on the
-    side W3 just taught to attack. GATE 3 §4/§5 were therefore verified through a
-    **`transferColony` workaround** (the same reversible mechanism W3-1 built), which proves the
-    OWNERSHIP half works end to end; what is unproven is the AI's route to triggering it.
-    ⇒ Its own future gate: **AI takes the colony.** This is the reason GATE 3 is *conditional*.
+51. ⚠ **CORRECTED 2026-08-19 (AI_CAPTURE AC-1) — the original wording named the wrong cause.**
+    *Stood here:* „`InvasionSystem` has `_tryPlayerCapture` … with **no** mirror for the AI
+    direction, so the last step of the conquest loop … is missing."
+    **The mirror EXISTS, is mounted, and was measured on a live engine** —
+    `_tickCaptureChecks` (`InvasionSystem.js:349-386`) → `_captureColony` (`:388`) →
+    `ColonyManager.transferColony` (`:654`), the only production caller of `transferColony`, run
+    end to end up to `colony:captured previousOwner:"player"`. **An AI landing never ends in the
+    colony changing hands because the invader never reaches the capital.** The single mover of
+    ground units (`GroundUnitManager._tickCombatAI:984-1016`) targets the nearest LIVING player
+    unit and, when there is none, executes `if (!best) continue` (`:1007`) — so the „army wiped
+    out" condition and the „capital taken" condition are **mutually exclusive**. The gate
+    observation („`gu_42` **stood** on Nekkar d") was a description of that deadlock, not of a
+    missing executor. Two narrower gates are real and stay: `:380` `if (!capital) continue` makes
+    a body without a capital (outpost) unconquerable, and `:360` counts only `role === 'military'`
+    as defenders. GATE 3 §4/§5 were still verified through the **`transferColony` workaround**,
+    which proves the OWNERSHIP half works; what was unproven is the AI's route to triggering it.
+    ⇒ Full analysis: `docs/design/AI_CAPTURE_AUDIT.md`; unblocking plan (signed 2026-08-19):
+    `docs/design/AI_CAPTURE_PLAN.md`. Its own gate — **AI takes the colony** — is that plan's GATE 1.
 
 ---
 

@@ -402,7 +402,7 @@ export class GroundUnitManager {
       this._combatAccum -= steps;
       for (let i = 0; i < steps; i++) this._tickCombatAI(1.0);
     }
-    // Faza 6.5: tick okupacji (co klatka — 2-mo timer to dużo civYears)
+    // Faza 6.5: tick okupacji (co klatka — timer 6 WYŚWIETLANYCH miesięcy to dużo civYears)
     this._tickOccupation(civDeltaYears);
 
     // ── Ground Unit System: passive abilities (co 1.0 civYear = jedna tura) ──
@@ -556,13 +556,21 @@ export class GroundUnitManager {
   //
   // Reguły (docs/plan):
   //   - Jednostka innego ownera na pustym hexie → instant owner change
-  //   - Jednostka na hexie z budynkiem → 2 miesiące (2/12 civYears) progresji
+  //   - Jednostka na hexie z budynkiem → progresja **6 WYŚWIETLANYCH miesięcy** (patrz niżej)
   //   - Jednostka odchodzi przed ukończeniem → reset timera
+  //
+  // ⚠ JEDNOSTKA CZASU — jedno brzmienie, powtórzone spójnie w całym pliku (sprostowanie
+  //   AI_CAPTURE AC-1; wcześniej sześć deklaracji mówiło trzy różne rzeczy):
+  //   `OCCUPY_DURATION = 6/12` to **pół roku WYŚWIETLANEGO**, bo mierzy je
+  //   `elapsed = timeSystem.gameTime − tile.occupyStart`, a `gameTime` jest w latach
+  //   WYŚWIETLANYCH. Przy `CIV_TIME_SCALE = 12` daje to **6 civYears**.
+  //   ⚠ NIE „0.5 civYear" — ta „naprawa" dałaby przejęcia **12× szybsze** (R-3 planu).
+  //   Pin wykonaniowy: `src/testing/smoke/ai_capture_seams_smoke.mjs` T4.
   //
   // Emituje: tile:ownerChanged { planetId, q, r, oldOwner, newOwner }
 
   _tickOccupation(dt) {
-    const OCCUPY_DURATION = 6 / 12; // 6 miesięcy = 0.5 civYear
+    const OCCUPY_DURATION = 6 / 12; // 6 WYŚWIETLANYCH miesięcy = 6 civYears (CIV_TIME_SCALE 12)
 
     // Indeks: planetId → Set 'q,r' zajętych przez jednostkę nie-właściciela
     const occupiedByForeigner = new Map();
@@ -590,7 +598,7 @@ export class GroundUnitManager {
         // Pusty hex — instant przejęcie
         this._changeTileOwner(tile, unit.planetId, owner);
       } else {
-        // Budynek — progres 2/12 civYears
+        // Budynek — progres 6 WYŚWIETLANYCH miesięcy (nota jednostki nad `_tickOccupation`)
         if (tile.occupyEmpireId !== owner) {
           // Inny okupant — reset i start
           tile.occupyEmpireId = owner;
@@ -621,7 +629,7 @@ export class GroundUnitManager {
 
   // Przejęcie terytorium podczas ruchu: jednostka przechodząca przez pusty
   // obcy hex natychmiast go przejmuje. Hex z budynkiem wymaga zatrzymania
-  // (obsługuje _tickOccupation z timerem 0.5 civYear).
+  // (obsługuje _tickOccupation z timerem 6 WYŚWIETLANYCH miesięcy — NIE 0.5 civYear).
   _captureHexOnEntry(unit) {
     const owner = unit.owner ?? 'player';
     const grid = this._getGrid(unit.planetId);

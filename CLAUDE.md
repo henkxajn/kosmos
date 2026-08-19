@@ -393,10 +393,15 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `randomEvent:warning { event, planetId, colonyName, yearsUntil }` | RandomEventSystem | EventLog, GameScene |
 | `observatory:collisionAlert { bodyA, bodyB, yearsUntil, margin }` | CollisionForecast | EventLog, GameScene |
 | `observatory:alertCleared { alertId }` | CollisionForecast | UIManager |
-| `groundUnit:capturingBuilding { unitId, planetId, q, r, progress }` | GroundUnitManager | ColonyOverlay |
-| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | InvasionSystem (podbój gracza — `_tryPlayerCapture`) |
+| `groundUnit:capturingBuilding { unitId, planetId, q, r, progress }` | GroundUnitManager | ⛔ **MARTWY — producent bez wywołań; ZERO subskrybentów** (ColonyOverlay go NIE słucha) |
+| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | ⛔ **MARTWY U ŹRÓDŁA** — InvasionSystem subskrybuje (`:57-59`), ale event nigdy nie leci |
 | `colony:capturedByPlayer { planetId, colonyName, previousOwner, isOutpost, reason }` | ColonyManager (`captureColonyForPlayer`) | GameScene (switchActiveColony), UIManager (EventLog + odśwież listę) |
-| `groundUnit:captureInterrupted { unitId, planetId, q, r }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:captureInterrupted { unitId, planetId, q, r }` | GroundUnitManager | ⛔ **MARTWY — producent bez wywołań; ZERO subskrybentów** |
+| ⚠ **Dlaczego te trzy są martwe** (raz, dla wszystkich): `GroundUnitManager.capture()` jest wołane WYŁĄCZNIE z `GROUND_ABILITIES.capture_building.execute` (`groundAbilities.js:28`), a `.execute` żadnej zdolności naziemnej nie jest w `src/` wywoływane. **Realna okupacja emituje `tile:ownerChanged`** (wiersz niżej), nie te trzy. Zmierzone: 600 civYears pełnej autonomii ⇒ `buildingCaptured = 0`, `capturingBuilding = 0`, przy `tileOwnerChanged = 26`. ||
+| `tile:ownerChanged { planetId, q, r, oldOwner, newOwner }` | GroundUnitManager (`:619` — okupacja kafla) | ⛔ **ZERO konsumentów** — gracz NIE dostaje sygnału, że traci kafle (AC-9 to zmienia) |
+| `station:orphaned { stationId, … }` | StationSystem (`:223`) | ⛔ **ZERO konsumentów** |
+| `empire:colonyAdded { empireId, colonyId }` | EmpireRegistry (`:127`) | TerritoryService, DebugLog |
+| `empire:colonyRemoved { empireId, colonyId }` | EmpireRegistry (`:144`) | TerritoryService; ⚠ **BRAK w `DebugLog.TRACKED_EVENTS`** (asymetria wobec `colonyAdded` — utrata kolonii przez imperium jest w audycie AI niewidoczna) |
 | `groundUnit:orbitalStrike { unitId, planetId, q, r, hits, friendlyFireHits, placeholder }` | GroundAbilities (orbital_support) | BattleSystem (placeholder) |
 | `groundUnit:minefieldLaid { planetId, q, r, ownerId }` | GroundAbilities (lay_minefield) | ColonyOverlay, GameState |
 | `groundUnit:mineTrigger { planetId, q, r, unitId, damage }` | GroundUnitManager | ColonyOverlay, EventLog |
@@ -598,10 +603,13 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
   `BuildingSystem`/`ProsperitySystem`) dostało `dispose()` (off `time:tick`); `ColonyManager.removeColony` woła je →
   koniec leaku tickerów po `destroyColony` (był warn per-frame `FactorySystem.isRecipeAvailable` → zalew konsoli +
   spadek FPS). `FactorySystem._update` orphan-guard (`!_getOwnerColony()`→return) jako defense-in-depth.
-  **Z9 (bliźniaczy leak DOMKNIĘTY, `ac572f6`):** `transferColony` (przejęcie kolonii przez AI) woła te same 5×
-  `dispose()` przed `_colonies.delete` — czysty dispose (przejęta kolonia = abstrakcyjny wpis imperium, AI nie
-  adoptuje subsystemów). Orphan-guard `FactorySystem._update` zostaje jako defense-in-depth. Smoke
-  `s34c_z9_transfer_dispose` 16/16 + live-gate PASS.
+  **Z9 — ⚠ STAN PO W3-1, ODWRÓCONY (sprostowanie AI_CAPTURE AC-1):** `transferColony` **NIE disposuje i NIE
+  kasuje** — to przerzut własności W MIEJSCU (kolonia zostaje w `_colonies`, pięć subsystemów żyje i tyka —
+  zmierzone). Przesłanka Z9 („przejęta kolonia = abstrakcyjny wpis imperium, AI nie adoptuje subsystemów")
+  została odwrócona: **AI je adoptuje i na zdobyczy PROFITUJE** (`ColonyAutoExpander` 4 → 7 budynków w ~5
+  civYears). Dispose ×5 został **wyłącznie** w `removeColony:596-622`. Orphan-guard `FactorySystem._update`
+  zostaje jako defense-in-depth. Keeper przepisany i pinuje odwróconą własność: `s34c_z9_transfer_dispose`
+  **20/20** (dawniej 16/16 przy starym zachowaniu) + live-gate PASS.
 - **`getTradeCapacity` LIVE (Z7)** — `CivilianTradeSystem.getTradeCapacity` liczy `_allocateTC` (pure) zamiast stale
   echo `col.tradeCapacity` → single-colony widzi bonus stacji natychmiast (echo aktualizowany tylko w `_halfYearlyTick`).
 - Commity: C1 `2b4c6fc` · C2 `cbfaeb9` · C3 `97e882e` · C4 `9bf3d4c` · C5 `b5e2ab0` · Z2/Z3 `7b91f71` · Z4-Z8 (ten arc).
@@ -1738,7 +1746,7 @@ nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed cras
 - [x] **Etap 27** — Generator tekstur: modularny pipeline (noise→terrain→craters→erosion→color→maps), 9 typów planet, PBR (diffuse+normal+roughness+height), integracja z ThreeRenderer (MeshStandardMaterial)
 
 ### Scenariusze i architektura
-- [x] **Etap 28** — Scenariusz "Cywilizacja": losowy układ z gwarancją cywilizacji, wyłączone perturbacje/kolizje, auto-kolonizacja; zamrożony "Generator"; usunięty Eden
+- [x] **Etap 28** — Scenariusz "Cywilizacja": losowy układ z gwarancją cywilizacji, auto-kolonizacja; zamrożony "Generator"; usunięty Eden. ⚠ **Sprostowanie (AI_CAPTURE AC-1, ZMIERZONE w źródle): ani kolizje, ani perturbacje NIE są wyłączone w tym scenariuszu.** Kolizje biegną zawsze w aktywnym układzie (`PhysicsSystem.js:64-68` — brak bramki scenariusza, Finding 62); perturbacje pomijane są **wyłącznie w `power_test`** (`:71`), więc w „Cywilizacji" DZIAŁAJĄ (rozszerzenie Finding 62 o drugi mechanizm). Kolizje to m.in. jedyna realna ścieżka śmierci placówki (ciała małe: księżyce, planetoidy)
 - [x] **Etap 29** — Planetoidy: 3 typy (metallic/carbonaceous/silicate), wzbogacone składy (Cu/Ti/W/Pt/Li), widoczne orbity, save/restore
 - [x] **Etap 30** — System Transportowy: VesselManager (rejestr floty), Vessel entity (pozycja/paliwo/misja), VesselNames (auto-nazwy PL), paliwo Tier 1 (power_cells, fuelPerAU), statki jako 3D sprites na mapie, UI floty z panelem akcji, integracja z ExpeditionSystem (vesselId), save v6 z migracją string fleet → vessel instances
 - [x] **Etap 31** — Katalog ciał + fizyka lotów: katalog WSZYSTKICH ciał (explored+unexplored), recon na konkretne ciało, sekwencyjny full_system recon (greedy NN), unikanie Słońca (strefa wykluczenia 0.3 AU + waypoints), dynamiczny powrót do ruchomej planety, wielopunktowe linie trasy w 3D
@@ -1781,15 +1789,20 @@ nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed cras
       w `_colonies` (inventory/budynki/produkcja liczą się na gracza), zdejmuje `ownerEmpireId`+`isTestEnemy`,
       czyści „[WRÓG]", hexy→`player`, wypina z EmpireRegistry+galaxyData; emituje `colony:capturedByPlayer`
       (NIE `colony:captured` — ten wyzwala alert „utracono") + `colony:listChanged`.
-      **Trigger `InvasionSystem`** dwutorowo: event `groundUnit:buildingCaptured` (feedback) + **skan
-      okresowy `_tickPlayerConquestChecks`** (1 civYear) — skan KONIECZNY na starym save (event nie wraca
-      po load) i gdy ostatni wróg ginie PO przejęciu stolicy. Wspólny `_tryPlayerCapture`: brak żywych
+      **Trigger `InvasionSystem`** — ⚠ **sprostowanie (AI_CAPTURE AC-1): „dwutorowo" było FAŁSZEM.**
+      Subskrypcja `groundUnit:buildingCaptured` istnieje (`:57-59`), ale ten event NIGDY nie leci
+      (producent bez wywołań — patrz tabela zdarzeń), więc **żywa jest JEDNA tora: skan okresowy
+      `_tickPlayerConquestChecks`** (1 civYear). Skan jest konieczny także na starym save i gdy ostatni
+      wróg ginie PO przejęciu stolicy. Wspólny `_tryPlayerCapture`: brak żywych
       wrogich jednostek naziemnych ORAZ (kolonia MA stolicę→gracz właściciel `capitalBase` | outpost bez
       stolicy→gracz kontroluje ≥1 przejęty hex z budynkiem). GameScene switchActiveColony, UIManager
       EventLog+odświeżenie belki/drawera, i18n `log.colonyCaptured`/`log.outpostCaptured`.
       Smoke `invasion_player_capture_smoke.mjs` 25/25. Poza zakresem: przejmowanie wrogich jednostek
       naziemnych, stacje AI, konwersja POP.
-- [~] **Faza 7** — MilitaryAI + EconAI (GOAP + Utility) — ongoing, równolegle do balansu
+- [⛔] **Faza 7** — MilitaryAI + EconAI (GOAP + Utility) — ⚠ **WYCOFANE w W3-8 (`814fb38`)**, nie „ongoing":
+      obie pętle scorowały 0 od zawsze (`createEmpire` wycina `resources`, `updateMilitaryPower` to no-op),
+      więc miały ZERO wejść w normalnej grze. Decyzje wojenne AI ma dziś WYŁĄCZNIE Director
+      (`AlienCivSystem` → `directorSystem.tickEmpire`). Pin źródłowy: `war_seams_smoke` T2b.
 
 ### S3.4 — Light Diplomacy (✅ ukończony, save v85 bez migracji, live-gate PASS)
 Oś trust + emisariusze + traktaty nad istniejącym DiplomacySystem (Faza 3). `FEATURES.lightDiplomacy=true`.
