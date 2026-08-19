@@ -693,12 +693,25 @@ nie robi nic, przechodzi sweep i niczego nie chroni.
 | `ai_capture_ledger_smoke` | AC-7 | jedna kampania na ciało; **jedno** `colony:captured` przy dwóch falach |
 | `startup_units_zero_smoke` | AC-3 | ⚠ **ODWRÓCENIE pinu z AC-0(f):** świeży boot → **zero** jednostek naziemnych na koloni gracza; **otwarcie panelu kolonii nie tworzy jednostki** (pin dokładnie na `_autoSpawnRover`); rekrutacja nadal działa (kontrola pinu — inaczej keeper przechodziłby przy zepsutej rekrutacji) |
 
-**⚠ Jeden keeper w tym slice ma PAŚĆ i zostać przepisany świadomie:** `ai_capture_seams_smoke` pin (f)
-(„trzy miejsca spawnu istnieją") przewraca się na AC-3. To jest zamierzone i **jedyny** taki przypadek —
-zapisane tu, żeby nikt go nie „naprawił" przywracając spawn. Wszystkie pozostałe piny mają przetrwać slice
-bez edycji.
+**⚠ CZTERY z sześciu pinów `ai_capture_seams_smoke` mają PAŚĆ i zostać świadomie odwrócone**
+(sprostowanie wpisane przy AC-0 — pierwotnie stało tu „jeden, pin (f)"; to było nieprawdziwe, bo pozostałe
+trzy odwrócenia wynikają wprost z treści AC-4/AC-5/AC-6, więc nie są niespodzianką, tylko planem):
 
-**⚠ Trzy ograniczenia harnessu, które trzeba obejść JAWNIE w keeperach** (inaczej mierzą ciszę):
+| pin | co pinuje dziś | odwraca | dlaczego to nie jest regresja |
+|---|---|---|---|
+| (a) | najeźdźca bez celu STOI | **AC-4** | intencja terytorialna — właśnie po to ten commit istnieje |
+| (b) | placówka NIE pada | **AC-6** | lustro warunku budynkowego czyni ją zdobywalną |
+| (c) | `garrison_unit` nie blokuje | **AC-5** | symetryczny predykat: blokuje KAŻDA żywa jednostka |
+| (f) | trzej producenci spawnu istnieją | **AC-3** | D8 usuwa wszystkich trzech |
+
+**Bez edycji mają przetrwać cały slice WYŁĄCZNIE (d) timer okupacji i (e) księga kampanii.** Kto odwraca
+pin, **przepisuje tę tabelę i nagłówek keepera** — nie kasuje testu i nie „naprawia" kodu z powrotem.
+Dowód, że keeper naprawdę pilnuje tych szwów, jest wykonaniowy: trzy mutacje źródła (timer w civYears ⇒
+4 czerwone asercje; filtr roli → predykat symetryczny ⇒ czerwone dokładnie (c), przy zielonej kontroli
+pinu) sprawdzone i wycofane przy AC-0.
+
+**⚠ Ograniczenia harnessu, które trzeba obejść JAWNIE w keeperach** (inaczej mierzą ciszę) — **było trzy,
+jest CZTERY** (czwarte odkryte przy pisaniu AC-0):
 1. **`GameCore` nie montuje `CombatSystem`** — walka naziemna się nie rozstrzyga. Keeper mierzący „AI dobija
    ostatniego obrońcę" musi go zamontować ręcznie.
 2. **Headless nie stempluje `tile.owner`** (kafle zostają `null`), a wtedy jednostka gracza jest „obcym
@@ -706,6 +719,14 @@ bez edycji.
    kafle jawnie — inaczej mierzy artefakt harnessu.
 3. **`GameCore` nie montuje `stationSystem`** — nieistotne dla tych keeperów, ale zaśmieca log ostrzeżeniem;
    nie interpretować go jako defektu.
+4. ⚠ **`src/scenes/GameScene.js` i `src/ui/ColonyOverlay.js` NIE IMPORTUJĄ SIĘ pod node** (zmierzone przy
+   AC-0): GameScene ciągnie `three/addons/postprocessing/EffectComposer.js` — ścieżkę spoza `exports`
+   pakietu `three`; ColonyOverlay wywraca się na `THREE.TextureLoader is not a constructor`. **Skutek dla
+   D8: żadnego z trzech producentów jednostek startowych NIE DA SIĘ w tym harnessie uruchomić**, więc pin
+   (f) w AC-0 i jego odwrócenie w AC-3 (`startup_units_zero_smoke`) muszą być **pinami ŹRÓDŁOWYMI**
+   (komentarze zdejmowane przed szukaniem + kontrola pinu — wzór `war_seams_smoke` T2b), a nie
+   wykonaniowymi. Kto zaplanuje „wykonaniowy dowód zera jednostek na świeżej grze", ten albo pisze shim
+   THREE, albo mierzy to w przeglądarce w GATE 1.
 
 **Regresja, która musi przejść bez edycji:** `w3_ai_invasion` · `w3_attack_visibility` ·
 `w3_battle_booking` · `invasion_player_capture` · `s34c_z9_transfer_dispose` (**20/20** — pinuje brak
