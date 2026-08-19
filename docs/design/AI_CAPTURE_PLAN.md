@@ -64,7 +64,7 @@ Wejście: audyt read-only `AI_CAPTURE_AUDIT.md` + druga tura weryfikacji pod war
 | **D5** — utrata stolicy | **W1 — świadomie zostawione** + naprawa dwóch defektów towarzyszących | ✅ POTWIERDZONA (wariant domyślny) |
 | **D6** — sprzątanie dokumentacji | **W1 — własny commit `docs:` przed kodem** | ✅ POTWIERDZONA (wariant domyślny) |
 | **D7** — kolejność wobec GROUND | **W1/W3 — ten slice pierwszy; po D8 oba warianty się zlewają** (patrz D7) | ✅ POTWIERDZONA (wariant domyślny) |
-| **D9** — gracz stracił wszystko i nie ma czym odwrócić | cztery warianty (status quo / koniec przy zerze kolonii / koniec przy braku ZDOLNOŚCI ODWRÓCENIA / jawne wygnanie) | 📝 **OTWARTA — blokuje AC-8** |
+| **D9** — gracz stracił wszystko i nie ma czym odwrócić | **W3 — koniec gry dopiero przy braku ZDOLNOŚCI ODWRÓCENIA** (+ rozstrzygnięcie: magazyn NIE zostaje z graczem) | ✅ PODPISANA, wdrożona w AC-8 |
 
 **⚠ Cztery rzeczy, o których trzeba wiedzieć przy podpisie** (pierwsze trzy zmierzone,
 czwarta z lektury źródła — każda zmienia sens wariantów):
@@ -606,7 +606,19 @@ zapisów) i nie znalazł czwartej. Zbiór producentów zamknięty niezależnie p
 
 ---
 
-### D9 — Gracz stracił WSZYSTKO i nie ma czym tego odwrócić: co wtedy? — 📝 **OTWARTA, do podpisu**
+### D9 — Gracz stracił WSZYSTKO i nie ma czym tego odwrócić: co wtedy? — ✅ **PODPISANA: W3** (2026-08-19)
+
+> **✅ PODPISANE 2026-08-19: W3** — koniec gry dopiero przy braku ZDOLNOŚCI odwrócenia, z czterema
+> doprecyzowaniami z tej sekcji.
+> **Rozstrzygnięcie towarzyszące (właściciel):** **magazyn NIE zostaje z graczem** po utracie
+> ostatniej kolonii. *„Dziś gracz nielegalnie korzysta z magazynu kolonii, która już nie jest jego —
+> to dziura, nie projekt."* Konsekwencja przyjęta świadomie: **rekolonizacja zawęża się do statku
+> JUŻ W LOCIE, z zasobami już załadowanymi**; nowej misji z zera wysłać się nie da. To nadal
+> prawdziwa ścieżka odwrócenia (zmierzona, działająca), tylko węższa niż dzisiejsza przypadkowa.
+> **Wdrożone w AC-8** (`bb614ed`) jako jedna zmiana z D5 — patrz §Zakres, wiersz AC-8.
+> ⚠ **Pułapka zamknięta przy okazji:** `MissionSystem` bramkował koszt startu wzorem
+> `if (this.resourceSystem) {…}`, więc samo ODPIĘCIE magazynu czyniłoby misje **darmowymi** —
+> odwrotność tego rozstrzygnięcia. Obie bramki zaostrzone do „brak magazynu ⇒ ODMOWA".
 
 **Pytanie właściciela (2026-08-19, po GATE 1).** D5 rozstrzygnęło, że utrata stolicy NIE kończy gry,
 bo „przegrana jest odwracalna" (D7 z W3: *LOSING IS RECOVERABLE*). Ale to założenie milcząco
@@ -691,7 +703,7 @@ commicie, w którym placówka staje się realnie zdobywalna.
 | **AC-5** | `feat(ai): symetryczny warunek „armia wybita"` | **D3=W3**: `:358-362` przechodzi na predykat z `:329-331` (jedno źródło prawdy dla obu kierunków) + rozstrzygnięcie `offline`. **MUSI być po AC-3** | **D3** (po D8) | — |
 | **AC-6** | `feat(ai): ciało bez stolicy jako cel podboju` | **D2=W2**: `:380` ustępuje lustru warunku budynkowego `:338-342` **ORAZ ZDJĘCIE pomostu z AC-2** — od tego commitu placówka jest normalnym celem. To jest moment, w którym D1+D2 są „spójną ścieżką" | **D2** | **GATE 1** |
 | **AC-7** | `fix(ai): jedna kampania na ciało (koniec podwójnych fal)` | **D4**: guard idempotencji w `transferColony` (lustro `:772`) + `getInvasionForPlanet` przed nowym rekordem + reaktywacja zgaszonego rekordu | D4 | GATE 2 |
-| **AC-8** | `fix(ui): higiena po utracie kolonii` | **D5**: filtr właściciela w fallbacku aktywnej kolonii (`ColonyManager.js:689`) + re-homing floty + dwa komentarze z §Załącznika A (`ColonyManager.js:604`, `:650`) | D5 | GATE 2 |
+| **AC-8** ✅ `bb614ed` | `feat(game): higiena po utracie kolonii + koniec gry przy braku odwrotu` | **D5 + D9=W3 jako JEDNA zmiana** (właściciel: „to jedna decyzja, nie dwie"): filtr właściciela w fallbacku aktywnej kolonii · `_detachActiveColony` (magazyn NIE zostaje) · **zaostrzone bramki kosztu w `MissionSystem`** (bez tego odpięcie magazynu czyniłoby misje darmowymi) · re-homing floty wyłącznie do kolonii GRACZA · NEW `utils/PlayerViability.js` + `_tickPlayerViability` (karencja 12 civY) · `game:over` `conquered` + i18n · dwa komentarze z §Załącznika A | D5, **D9** | GATE 2 |
 | **AC-9** | `feat(ui): gracz widzi, że traci kafle` | konsument `tile:ownerChanged` (dziś 0 subskrybentów) → Dziennik/dzwonek; konsument `invasion:repelled`; ⚠ i18n PL+EN dla każdego nowego tekstu | — | GATE 2 |
 
 **Per-commit gates (bez wyjątków):** `node src/testing/smoke/run-all.mjs` **0 FAIL** ·
