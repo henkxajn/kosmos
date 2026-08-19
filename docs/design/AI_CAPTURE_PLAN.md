@@ -64,6 +64,7 @@ Wejście: audyt read-only `AI_CAPTURE_AUDIT.md` + druga tura weryfikacji pod war
 | **D5** — utrata stolicy | **W1 — świadomie zostawione** + naprawa dwóch defektów towarzyszących | ✅ POTWIERDZONA (wariant domyślny) |
 | **D6** — sprzątanie dokumentacji | **W1 — własny commit `docs:` przed kodem** | ✅ POTWIERDZONA (wariant domyślny) |
 | **D7** — kolejność wobec GROUND | **W1/W3 — ten slice pierwszy; po D8 oba warianty się zlewają** (patrz D7) | ✅ POTWIERDZONA (wariant domyślny) |
+| **D9** — gracz stracił wszystko i nie ma czym odwrócić | cztery warianty (status quo / koniec przy zerze kolonii / koniec przy braku ZDOLNOŚCI ODWRÓCENIA / jawne wygnanie) | 📝 **OTWARTA — blokuje AC-8** |
 
 **⚠ Cztery rzeczy, o których trzeba wiedzieć przy podpisie** (pierwsze trzy zmierzone,
 czwarta z lektury źródła — każda zmienia sens wariantów):
@@ -602,6 +603,74 @@ zapisów) i nie znalazł czwartej. Zbiór producentów zamknięty niezależnie p
 - **pełne skasowanie `infantry` + redesign `INVASION_UNIT_POOLS` na identyfikatory archetypów** —
   ⚠ **nie jest to podmiana 1:1**, tylko realny dobór miksu jednostek per archetyp imperium (kto zrzuca
   szturm, kto artylerię, kto garnizon) ⇒ GROUND, obok S12 (morale) i R13 (RNG). Findings 67-68.
+
+---
+
+### D9 — Gracz stracił WSZYSTKO i nie ma czym tego odwrócić: co wtedy? — 📝 **OTWARTA, do podpisu**
+
+**Pytanie właściciela (2026-08-19, po GATE 1).** D5 rozstrzygnęło, że utrata stolicy NIE kończy gry,
+bo „przegrana jest odwracalna" (D7 z W3: *LOSING IS RECOVERABLE*). Ale to założenie milcząco
+zakłada, że **odwrócenie jest WYKONALNE**. Scenariusz dotąd nieprzetestowany: gracz traci JEDYNĄ
+kolonię **i** nie ma żadnych środków, żeby ją odbić ani założyć nową. Czy to ma wyzwalać istniejące
+`game:over`, czy coś innego?
+
+**⚠ Wymóg właściciela do KAŻDEGO wariantu, który liczy „zdolność do odbicia":** test musi sprawdzać
+**DWIE rzeczy naraz**, a nie jedną —
+1. **statek zdolny do desantu** (`canDropTroops` = moduł `drop_pods` + `troop_bay_*`), gdziekolwiek
+   we flocie gracza, **ORAZ**
+2. **jednostki naziemne gracza gdziekolwiek w grze** — na pokładzie tego statku LUB czekające do
+   załadowania (w porcie, w kolejce) — cokolwiek, co faktycznie da się przewieźć.
+
+> Sam punkt 1 bez punktu 2 to **pusty transportowiec: potencjał bez zdolności**. Warunek końca gry
+> ma się spełnić, gdy **BRAKUJE KTÓREGOKOLWIEK Z DWÓCH**, nie dopiero gdy brakuje obu naraz —
+> bo bez każdego z osobna odbicie i tak jest niewykonalne.
+
+#### Co ZMIERZONO na potrzeby tej decyzji (2026-08-19, headless na kodzie po AC-7)
+
+| # | fakt | znacznik |
+|---|---|---|
+| 1 | **Rekolonizacja BEZ ŻADNEJ kolonii DZIAŁA.** `canLaunchColony` zwraca `ok:true` przy zerze kolonii gracza (wszystkie sub-flagi true), a `_processColonyArrival` zakłada kolonię, choć kolonii-matki nie ma (odwołania do niej są przez `?.`). Zmierzone: `getPlayerColonies()` **0 → 1**. ⇒ **Odwrócenie losu ma TRZECIĄ ścieżkę** obok desantu: statek `canColonize` (moduł `habitat_pod`/`cryo_pod`) w locie albo zdatny do startu. | `[ZMIERZONE]` |
+| 2 | …ale bramka wyrzutni przechodzi **tylko dzięki bypassowi dla kadłuba `medium`/`large`** (`_colonyShipBypassPad` czyta `hull.size`). Kolonizator na MAŁYM kadłubie wymaga spaceportu — czyli kolonii albo stacji. | `[ZMIERZONE]` + `[V]` |
+| 3 | **Koszt startu misji kolonizacyjnej (`COLONY_LAUNCH_COST` = Fe 150 / C 50 / Ti 20 / food 100 / water 50) płacony jest z magazynu AKTYWNEJ kolonii — a ta po utracie jest kolonią WROGA.** Zmierzone: po `transferColony` `activePlanetId = entity_94`, `ownerEmpireId = emp_001`, a `MissionSystem.resourceSystem` zostaje na nią przepięty. ⇒ dziś gracza „stać" na rekolonizację **z magazynu przeciwnika**. | `[ZMIERZONE]` |
+| 4 | ⚠ **Sprzężenie z AC-8:** naprawa fallbacku aktywnej kolonii (filtr właściciela) **ZAMKNIE tę ścieżkę finansowania**. Po AC-8 gracz z zerem kolonii nie będzie miał magazynu, z którego opłaci start — czyli ścieżka 1 zadziała tylko dla statku **JUŻ W LOCIE**. To jest dokładnie ten sam pusty `else`, który AC-8 tworzy i który D9 ma wypełnić. | `[Z KODU]` |
+| 5 | Kolejka rekrutacji jako źródło „wojska czekającego do załadowania" jest przy zerze kolonii **pusta z konstrukcji** — kolejki żyją na koloniach. Zostają: jednostki w ładowni (`status:'in_cargo'`) i jednostki stojące na powierzchni. | `[V]` |
+
+#### Warianty
+
+| | **W1 — status quo** | **W2 — zero kolonii = koniec gry** | **W3 — koniec gry dopiero przy braku ZDOLNOŚCI ODWRÓCENIA** (kierunek właściciela) | **W4 — brak końca gry, ale jawny STAN WYGNANIA** |
+|---|---|---|---|---|
+| istota | nic się nie zmienia; gra tyka dalej, gracz bez kolonii siedzi w interfejsie bez treści | `game:over` w chwili, gdy `getPlayerColonies().length === 0` | `game:over` dopiero gdy zero kolonii **I** żadna ścieżka odwrócenia nie jest wykonalna: **(a) desant** — statek `canDropTroops` **I** jakakolwiek jednostka naziemna gracza (brak KTÓREGOKOLWIEK ⇒ ścieżka martwa); **(b) rekolonizacja** — statek `canColonize` zdatny do startu albo już w locie | gra się nie kończy, ale stan jest NAZWANY: ekran/panel „nie masz nic i nie masz czym odzyskać", z jawnym warunkiem powrotu; `game:over` zostaje wyłącznie dla fizycznej śmierci ciała |
+| spójność z D7 („LOSING IS RECOVERABLE") | ✅ dosłowna — ale doprowadzona do absurdu (gra bez możliwości działania) | ⛔ łamie ją wprost | ✅ **precyzuje ją**: przegrana jest odwracalna dopóki JEST czym odwracać | ✅ zachowuje, przenosi ciężar na komunikat |
+| co gracz widzi | pusty interfejs, brak sygnału | natychmiastowy ekran końca | ekran końca dopiero, gdy naprawdę nie ma ruchu | jasny komunikat + dalsza gra (obserwacja) |
+| koszt | zero | mały (jedna bramka) | **średni** — predykat z dwóch/trzech ścieżek + decyzja o kadencji (niżej) | średni (UI + i18n PL/EN) |
+| ryzyko | „gra, w której nie da się nic zrobić" czyta się jak zawieszenie, nie jak decyzja projektowa | zabija statek kolonizacyjny w locie, który ZMIERZALNIE potrafi odbudować imperium (fakt 1) | ⚠ **snapshot vs trwałość** — patrz niżej | brak końca gry może nie dać domknięcia narracyjnego |
+
+#### ⚠ Cztery rzeczy, które W3 musi rozstrzygnąć, żeby nie był pułapką
+
+1. **Kadencja, nie migawka.** Test „nie ma czym odwrócić" wykonany W CHWILI utraty zabiłby gracza,
+   któremu statek kolonizacyjny dolatuje za trzy lata. Predykat musi być **trwały**: sprawdzany
+   cyklicznie i wymagający utrzymania stanu przez N lat, a nie jednorazowy.
+2. **Istnienie vs osiągalność.** Po utracie jedynej kolonii jednostki naziemne gracza stoją na
+   ciele należącym **już do wroga**. „Da się przewieźć" jest w praktyce nierozstrzygalne (zależy od
+   walki, orbity, paliwa). Proponuję liczyć **ISTNIENIE**, nie osiągalność — inaczej predykat
+   będzie zgadywał.
+3. **Statek w locie liczy się tak samo jak zadokowany** — inaczej wariant przeczy faktowi 1.
+4. **Interakcja z AC-8 (fakt 4).** Jeśli AC-8 zamknie finansowanie startu, ścieżka „rekolonizacja"
+   zawęża się do statku JUŻ W LOCIE. Wtedy albo D9 przyjmuje to świadomie, albo AC-8 musi zostawić
+   graczowi bez kolonii jakiś magazyn (np. ładownię statku) — **to jest ta sama decyzja, nie dwie**.
+
+#### Co ta decyzja przesądza dalej
+
+**W1/W4** nie dotykają reguł końca gry — AC-8 wypełnia swój pusty `else` samym brakiem przełączenia
+(+ komunikat w W4). **W2/W3** dokładają ścieżkę `game:over` do `GameScene.checkHomeDestroyed`, która
+dziś reaguje **wyłącznie** na fizyczne zniszczenie ciała i pop=0, nigdy na zmianę właściciela — więc
+to jest **nowa gałąź**, nie parametr istniejącej. W3 dodatkowo wymaga predykatu, który sam w sobie
+jest kandydatem na wspólną funkcję obok `hasLivingDefender` / `holdsDecisiveGround`.
+
+**Kryterium (pytanie projektowe, nie techniczne):** *czy „przegrana jest odwracalna" ma być
+obietnicą BEZWARUNKOWĄ (W1/W4 — gra nigdy się nie kończy z powodu polityki), czy obietnicą
+WARUNKOWĄ (W3 — trwa dopóki gracz ma czym odwracać), a jeśli warunkową, to czy gracz ma dostać
+ekran końca (W3), czy nazwane wygnanie z otwartą furtką (W4)?*
 
 ---
 
