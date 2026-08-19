@@ -167,6 +167,78 @@ export const SHIP_TEMPLATES = {
       { tiers: ['science_lab'],                                    required: true },
     ],
   },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Rola TRANSPORTOWA — TRP-1, dopisana 2026-08-19 (W3 §Finding 49).
+  //
+  // POWÓD: audyt `docs/audit/AI_DROP_HULL_AUDIT.md` ZMIERZYŁ, że katalog nie ma ANI JEDNEGO
+  // wpisu z `troop_bay_*` / `drop_pods`, więc `no_drop_capable_hull` było JEDYNĄ osiągalną
+  // odpowiedzią złącza bitwa→desant (`InvasionSystem._onVesselGroupVictory:203-210`). Moduły,
+  // kadłuby i pojemności były na miejscu — brakowało WYŁĄCZNIE wpisu katalogowego.
+  //
+  // ⚠ NIKT TEGO DZIŚ NIE ZAMAWIA. `DirectorProduction` i drabina nacisku L1/L2 są NIETKNIĘTE:
+  // AI samo z siebie transportowca nie zbuduje ani nie wyśle. Jedyne wejście to dźwignia
+  // debugowa `spawnEnemyRaider({ templateId: 'transport_assault' })` — audyt §3 zmierzył, że
+  // nie ma tam białej listy. Doktryna produkcji i wysyłki = OSOBNY slice z własnym gate'em
+  // (analog W3-5), świadomie POZA tym wpisem.
+  //
+  // ── DLACZEGO hull_large, skoro hull_medium jest tańszy I szybszy (POMIAR) ─────────────
+  //  • hull_medium (2P+4U) NIE MIEŚCI ładunku właściciela w całości — resolver po cichu
+  //    zrzuca DRUGIE kapsuły (`dropped: ['drop_pods']`). hull_large (3P+6U) niesie komplet,
+  //    z jednym gniazdem zapasu.
+  //  • PRZEŻYWALNOŚĆ JEST TU MECHANIKĄ, NIE OZDOBĄ: bramka desantu liczy wyłącznie kadłuby,
+  //    które PRZEŻYŁY bitwę (`!v.isWreck`). baseHP 180 vs 80 rozstrzyga, czy po wygranej
+  //    orbicie w ogóle ma kto zejść na dół.
+  //  • Masa: ×4.18 na hull_large vs ×6.48 na hull_medium — ten drugi jest przeciążony daleko
+  //    poza zakres, dla którego opisano krzywą ∛ („×3 = ~44% kary", `ShipModulesData:706`).
+  //  Cena tej decyzji, uczciwie: wolniej (3.91 vs 4.83 AU/rok przy jednym silniku) i drożej
+  //  (Fe 530 vs 425).
+  //
+  // ── BEZ KADŁUBA ZAPASOWEGO (świadomie) ───────────────────────────────────────────────
+  // `hull_medium` bramkuje ten SAM tech co `hull_large` (`exploration`), więc drabinka
+  // kadłubów nie mogłaby się nigdy odpalić — byłaby dokładnie tą klasą martwych danych,
+  // przed którą ostrzega notatka R9 wyżej. Wzór jednoszczeblowy: `science_probe`.
+  //
+  // ⚠ PIERWSZY WPIS KATALOGU, KTÓRY POTRZEBUJE PORTU KOSMICZNEGO. `hull_large` ma
+  // `size: 'large'`, więc `needsSpaceportForVessel` = true (`SpaceportCheck.js:21-27`).
+  // Dziś to NIE boli: bramka działa wyłącznie na statku `docked` (`canLaunchFromCurrent`),
+  // a dźwignia stawia okręt od razu w przestrzeni. Zaboli w dniu, w którym transportowiec
+  // zacznie schodzić ze stoczni stolicy BEZ portu — start pójdzie wtedy w
+  // `no_spaceport_at_origin` (`VesselManager:615`). To jest warunek wstępny doktrynalnego
+  // slice'u, nie tego wpisu; `w3_attack_dispatch_smoke` T6 pinuje ten fakt POMIAREM.
+  //
+  // ⚠ PRĘDKOŚĆ — ZMIERZONA, do rozstrzygnięcia przy doktrynie: `speedMult` silników MNOŻY SIĘ
+  // (`ShipModulesData:682`) i dokłada +25% redundancji za każdy kolejny, więc DWA `engine_warp`
+  // dają 42.9 AU/rok — sześć razy szybciej niż eskorta, która ma go osłaniać (FRG-1: 6.6).
+  // Zostają dwa (wzór właściciela „Troop Transport Warp I": ×2-3), bo trzeci mnoży JESZCZE RAZ
+  // (452 AU/rok — absurd). Zejście do jednego silnika = skreślenie JEDNEJ linii niżej i
+  // 3.9 AU/rok, czyli tempo wolniejsze od eskorty.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  transport_assault: {
+    id:     'transport_assault',
+    role:   'transport',
+    namePL: 'Transportowiec desantowy',
+    nameEN: 'Assault Transport',
+    // Bramki techu przychodzą Z MODUŁÓW, nie z szablonu: troop_bay_l → fleet_logistics,
+    // drop_pods → ground_warfare, warp_tank → warp_drive, engine_warp → ion_drives.
+    // Imperium bez `fleet_logistics` albo `ground_warfare` dostaje `no_module` — to jest
+    // poprawna odmowa, nie luka do obejścia na poziomie szablonu.
+    hullTiers: ['hull_large'],
+    slots: [
+      { tiers: ['engine_warp'], required: true  },   // propulsion · requires ion_drives
+      { tiers: ['engine_warp'], required: false },   // propulsion · drugi silnik = TEMPO, nie rola
+      { tiers: ['warp_tank'],   required: true  },   // fuel    · ROLA: bez baku nie dowiezie desantu
+                                                     //           do innego układu (jak FRG-1)
+      { tiers: ['troop_bay_l'], required: true  },   // troop   · requires fleet_logistics · +16 ładowności
+      { tiers: ['drop_pods'],   required: true  },   // special · requires ground_warfare · canDropTroops
+      { tiers: ['troop_bay_l'], required: false },   // druga ładownia = SKALA desantu (16 → 32)
+      { tiers: ['drop_pods'],   required: false },   // ⚠ mechanicznie NADMIAROWE: `enablesPlanetLanding`
+                                                     // to flaga boolean (`ShipModulesData:691`), więc druga
+                                                     // sztuka nie dodaje nic poza 12 t zapasu na wypadek
+                                                     // utraty gniazda — i dlatego pada PIERWSZA przy degradacji.
+    ],
+  },
 };
 
 /** Dozwolone role. Nowa rola = wpis TUTAJ (walidator jej pilnuje). */

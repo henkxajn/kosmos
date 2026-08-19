@@ -21,8 +21,9 @@
 //   T5  i18n obu powodów w OBU słownikach — klucz `vessel.reason<Pascal>` jest budowany
 //       INTERPOLACJĄ (`UIManager:824`, `RightClickMenu:330`), więc `check-i18n` go NIE widzi
 //       i literówka zeszłaby do gracza jako surowy kod (precedens `w2_deploy_ui` T6).
-//   T6  bramka portu kosmicznego NIE odrzuca po cichu startów AI — i pomiar mówi DLACZEGO
-//       (cały katalog AI to kadłuby `small`), więc pin łapie dzień, w którym przestanie.
+//   T6  bramka portu kosmicznego dzieli dziś katalog na dwie połowy: bojowo-naukowa (`small`)
+//       startów AI nie dotyka, a rola transportowa (`hull_large`, W3 Finding 49) portu WYMAGA —
+//       pin trzyma OBIE strony, bo od tego zależy, czy przyszła doktryna produkcji ruszy z miejsca.
 //
 // ⚠ Harness NIE montuje `MovementOrderSystem`, `EnemyAttackHandler` ani Directora — stawiamy je
 //    tu ręcznie (wzór `w3_seams_smoke`).
@@ -303,25 +304,49 @@ console.log('T5 — klucze powodów w OBU słownikach (klucz budowany interpolac
     'T5 KONTROLA PINU: nieistniejący klucz jest `undefined` — słownik naprawdę jest sprawdzany');
 }
 
-// ── T6 — bramka portu nie odrzuca po cichu startów AI ───────────────────────
+// ── T6 — bramka portu a starty AI: dziś DZIELI katalog na dwie połowy ───────
 console.log('T6 — bramka portu kosmicznego a starty AI (pomiar, nie założenie)');
 {
-  const aiHulls = Object.keys(SHIP_TEMPLATES)
-    .map(id => resolveTemplate(id, { isResearched: () => true }))
-    .filter(r => r?.ok)
-    .map(r => r.hullId);
-  assert(aiHulls.length >= 3, `T6: katalog AI rozwiązuje się na kadłuby (${aiHulls.join(', ')})`);
-  assert(aiHulls.every(h => needsSpaceportForVessel({ shipId: h }) === false),
-    'T6: ŻADEN kadłub z katalogu AI nie wymaga portu (wszystkie `size: small`) — dlatego bramka ' +
-    'portu NIE odrzuca dziś startów AI i `DirectorDoctrine` nie musi jej omijać');
+  const rows = Object.keys(SHIP_TEMPLATES)
+    .map(id => ({ id, r: resolveTemplate(id, { isResearched: () => true }) }))
+    .filter(x => x.r?.ok)
+    .map(x => ({
+      id: x.id,
+      role: SHIP_TEMPLATES[x.id].role,
+      hullId: x.r.hullId,
+      needsPort: needsSpaceportForVessel({ shipId: x.r.hullId }),
+    }));
+  assert(rows.length >= 4,
+    `T6: katalog AI rozwiązuje się na kadłuby (${rows.map(x => `${x.id}→${x.hullId}`).join(', ')})`);
 
-  // ⚠ KONTROLA PINU **i jednocześnie ostrzeżenie na przyszłość**: bramka ŻYJE. Dzień, w którym
-  //   katalog dostanie niszczyciel (`hull_destroyer`, `size: medium`), jest dniem, w którym
-  //   starty AI ze stolicy BEZ portu zaczną być odrzucane po cichu jako `no_spaceport_at_origin`.
-  assert(needsSpaceportForVessel({ shipId: 'hull_destroyer' }) === true &&
+  // Połowa BOJOWO-NAUKOWA — bez zmian od W3-4: same kadłuby `small`, więc bramka portu
+  // nie dotyka ani jednego startu, którym dziś steruje `DirectorDoctrine`.
+  const combat = rows.filter(x => x.role === 'warship' || x.role === 'science');
+  assert(combat.length >= 4 && combat.every(x => x.needsPort === false),
+    'T6a: ŻADEN kadłub BOJOWY/NAUKOWY z katalogu AI nie wymaga portu (wszystkie `size: small`) — ' +
+    'dlatego bramka portu NIE odrzuca dziś startów AI i `DirectorDoctrine` nie musi jej omijać');
+
+  // ⚠ OSTRZEŻENIE Z W3-4 ZISZCZYŁO SIĘ (Finding 49, `docs/audit/AI_TRANSPORT_TEMPLATE.md`):
+  //   katalog dostał rolę transportową na `hull_large`, bo desantu NIE DA SIĘ zmieścić na
+  //   kadłubie `small` (2 ładownie + kapsuły + bak warp = 5 gniazd `utility`, `hull_frigate`
+  //   ma 3). Bramka portu jest więc od dziś ŻYWA — dla dokładnie jednego wpisu.
+  //   Konsekwencja, którą przejmuje przyszły slice doktrynalny: transportowiec zamówiony
+  //   w stolicy BEZ portu NIE WYSTARTUJE (`no_spaceport_at_origin`, `VesselManager:615`).
+  //   Dziś nie boli, bo nikt go nie zamawia, a dźwignia `spawnEnemyRaider` stawia okręt od
+  //   razu w przestrzeni (bramka działa wyłącznie na statku `docked`, `canLaunchFromCurrent`).
+  const trp = rows.find(x => x.id === 'transport_assault');
+  assert(trp?.hullId === 'hull_large' && trp?.needsPort === true,
+    'T6b: rola transportowa siedzi na `hull_large` i portu WYMAGA — pierwszy wpis katalogu, ' +
+    'dla którego bramka przestała być nieaktywna (warunek wstępny doktryny produkcji)');
+
+  // KONTROLA PINU: asercja nie jest trywialnie prawdziwa w ŻADNĄ stronę — ten sam predykat
+  // na kadłubie `small` daje false, na `medium` true. Bramka rozróżnia, nie stempluje.
+  assert(needsSpaceportForVessel({ shipId: 'hull_small' }) === false &&
+         HULLS.hull_small?.size === 'small' &&
+         needsSpaceportForVessel({ shipId: 'hull_destroyer' }) === true &&
          HULLS.hull_destroyer?.size === 'medium',
-    'T6 KONTROLA PINU: `hull_destroyer` (medium) portu WYMAGA — bramka nie jest atrapą, ' +
-    'jest po prostu nieaktywna dla dzisiejszego katalogu AI');
+    'T6 KONTROLA PINU: `hull_small` portu NIE wymaga, `hull_destroyer` (medium) WYMAGA — ' +
+    'predykat naprawdę rozróżnia rozmiary, obie asercje wyżej mają treść');
 }
 
 console.log(`\n═══ ${pass} PASS, ${fail} FAIL ═══`);
