@@ -14,11 +14,25 @@
 //       darmowymi — odwrotność rozstrzygnięcia.)
 //   T3  Flota nie jest re-homowana na ciało wroga ani tam odsyłana.
 //       KONTROLA PINU: gdy gracz ma inną kolonię, re-homing DZIAŁA (to nie jest wyłączenie mechaniki).
-//   T4  Predykat D9 (czysty): desant wymaga DWÓCH rzeczy naraz, rekolonizacja jednej.
+//   T4  Predykat (czysty): desant wymaga DWÓCH rzeczy naraz, rekolonizacja — ŻYWEJ TRASY.
 //   T5  Kadencja, nie migawka: `game:over` NIE pada przed upływem karencji, pada PO.
-//       KONTROLA PINU ×2: statek kolonizacyjny (trzecia ścieżka) ORAZ para desantowa
+//       KONTROLA PINU ×2: kolonizator W MISJI `colony` ORAZ para desantowa
 //       (statek + wojsko) wstrzymują koniec gry BEZTERMINOWO.
 //   T6  Koniec gry ogłaszany JEDEN raz, nie co tik.
+//   T7  Finding 111: KTÓRA trasa się liczy — pełna tabela + pomiar „zwiad wisi bezterminowo".
+//   T8  Finding 111 / D-111: start PLACÓWKI od zera jest ODMAWIANY (bliźniak T2).
+//       KONTROLA PINU: przy żywej koloni placówka nadal się zakłada.
+//
+// ⚠⚠ DWIE ASERCJE ZOSTAŁY ŚWIADOMIE ODWRÓCONE (2026-08-20, Finding 111 / decyzja D-111 = W1;
+//    plan: `docs/design/PLAYER_VIABILITY_PREDICATE_PLAN.md`). NIE „naprawiać" ich z powrotem —
+//    w poprzednim kształcie **pinowały defekt**:
+//      • T4 twierdziło, że „sam kolonizator wystarcza". Wystarczał SAM KADŁUB, w dowolnym stanie.
+//      • T5 KONTROLA PINU A twierdziła, że zaparkowany kolonizator wstrzymuje koniec gry
+//        „BEZTERMINOWO" — i to było dosłownie zdanie z Findingu 111: gra nigdy się nie kończyła.
+//    Obie stały na przesłance zapisanej wtedy w `PlayerViability` (*„przy ZERZE kolonii
+//    `canLaunchColony` przechodzi, a przylot zakłada kolonię"*), która okazała się PÓŁPRAWDĄ:
+//    bramka przechodzi, **start nie** (Finding 106). Dziś kontrolą pinu jest TEN SAM statek
+//    z żywą misją — i tam „bezterminowo" jest prawdą, zmierzoną skutkiem (0 → 1 koloni).
 //
 // ⚠ Ten keeper mierzy też rzecz, której nie widać w asercjach: czy silnik w ogóle PRZEŻYWA stan
 //    „gracz bez kolonii" (odpięte `resourceSystem`/`civSystem`). Wszystkie przebiegi używają
@@ -41,6 +55,8 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 const EMP = 'emp_001';
 const DROPPER  = ['engine_ion', 'armor_standard', 'troop_bay_s', 'drop_pods'];
 const COLONIZER = ['engine_ion', 'habitat_pod'];
+// ⚠ Frachtowiec BEZ habitatu — placówkę wozi ładownia, nie moduł mieszkalny (T7/T8, Finding 111).
+const HAULER    = ['engine_ion', 'cargo_small'];
 
 function boot() {
   const core = new GameCore();
@@ -156,11 +172,12 @@ console.log('T3 — flota NIE jest re-homowana na ciało wroga ani tam odsyłana
 }
 
 // ── T4 — predykat D9 (czysty) ───────────────────────────────────────────────────────────────
-console.log('T4 — D9: desant wymaga DWÓCH rzeczy naraz, rekolonizacja jednej');
+console.log('T4 — desant wymaga DWÓCH rzeczy naraz, rekolonizacja — ŻYWEJ TRASY');
 {
   const drop  = { canDropTroops: true, troopCapacity: 3, modules: [] };
   const plain = { canDropTroops: false, troopCapacity: 0, modules: [] };
   const colo  = { canDropTroops: false, troopCapacity: 0, modules: ['habitat_pod'] };
+  const coloEnRoute = { ...colo, mission: { type: 'colony', targetId: 'entity_x' } };
   const unit  = { owner: 'player', hp: 10 };
 
   assert(canReverseFate({ vessels: [drop], groundUnits: [] }).ok === false,
@@ -170,9 +187,13 @@ console.log('T4 — D9: desant wymaga DWÓCH rzeczy naraz, rekolonizacja jednej'
     'T4: samo wojsko bez czym je przewieźć — tak samo martwe');
   assert(canReverseFate({ vessels: [drop], groundUnits: [unit] }).ok === true,
     'T4: statek + wojsko = ścieżka odbicia ŻYWA');
-  assert(canReverseFate({ vessels: [colo], groundUnits: [] }).ok === true,
-    'T4: sam kolonizator wystarcza — rekolonizacja to DRUGA, niezależna ścieżka (zmierzona: ' +
-    'przy zerze kolonii przylot zakłada kolonię, 0 → 1)');
+  assert(canReverseFate({ vessels: [coloEnRoute], groundUnits: [] }).ok === true,
+    'T4: kolonizator W MISJI `colony` wystarcza — rekolonizacja to DRUGA, niezależna ścieżka ' +
+    '(zmierzone skutkiem: przy zerze kolonii sam przylot daje kolonię, 0 → 1)');
+  assert(canReverseFate({ vessels: [colo], groundUnits: [] }).ok === false,
+    '⚠ T4 ODWRÓCONE (Finding 111): sam KADŁUB z habitatem, bez żywej misji, NIE jest odwrotem. ' +
+    'Poprzednia wersja mówiła tu `true` i przez to `game:over` nie padał nigdy — zaparkowany ' +
+    'kolonizator nie ma jak nic zacząć, bo start od zera jest odmawiany (Finding 106)');
   assert(canReverseFate({ vessels: [{ ...drop, isWreck: true }], groundUnits: [unit] }).ok === false,
     'T4: WRAK nie jest statkiem');
   assert(canReverseFate({ vessels: [{ ...drop, ownerEmpireId: EMP }], groundUnits: [unit] }).ok === false,
@@ -206,15 +227,48 @@ console.log('T5 — `game:over` dopiero po karencji; statek zdolny do odwrotu ws
     `T5: …i niesie POWÓD (\`${over[0]?.detail}\`), a nie samo „koniec"`);
 }
 {
+  // ⚠ ODWRÓCONE (Finding 111) — patrz nagłówek pliku. Tu stało „statek kolonizacyjny wstrzymuje
+  //   koniec gry BEZTERMINOWO", na statku ZAPARKOWANYM. To był opis defektu, nie pinu.
   const { core, cm, home, tick } = boot();
   const over = [];
   EventBus.on('game:over', (d) => over.push(d));
-  playerShip(core, COLONIZER, 'Ostatnia nadzieja');       // trzecia ścieżka: rekolonizacja
+  playerShip(core, COLONIZER, 'Zaparkowana nadzieja');
   cm.transferColony(home.id, EMP, 'probe');
   tick(ColonyManager.VIABILITY_GRACE_CIVYEARS * 3);
+  assert(over.length === 1,
+    '⚠ T5 ODWRÓCONE: sam ZAPARKOWANY kolonizator NIE wstrzymuje końca gry. Kadłub bez żywej ' +
+    'trasy nie ma jak nic zacząć, więc partia, w której gracz stracił wszystko, ma się skończyć');
+  assert(String(over[0]?.detail ?? '').includes('colony_ship_no_route'),
+    `T5: …a POWÓD mówi, że kadłub BYŁ, tylko zaparkowany (\`${over[0]?.detail}\`) — nie ` +
+    '„brak statku". Gate ma widzieć różnicę między tymi dwoma światami');
+}
+{
+  // KONTROLA PINU A — ten sam statek, ale w PRAWDZIWEJ misji `colony` wystawionej przez silnik.
+  const { core, cm, home, tick } = boot();
+  const ms = window.KOSMOS.missionSystem ?? window.KOSMOS.expeditionSystem;
+  const over = [];
+  EventBus.on('game:over', (d) => over.push(d));
+  window.KOSMOS.techSystem?.grantTechs?.(['colonization']);
+  const target = freeBody(cm, home.systemId, home.id);
+  target.explored = true;
+  const ship = playerShip(core, COLONIZER, 'Nadzieja w drodze');
+  ship.position.dockedAt = home.id;
+  ship.colonists = 8;
+  ms._launchColony(target.id, ship.id);
+  assert(core.vesselManager.getVessel(ship.id)?.mission?.type === 'colony',
+    'T5 KONTROLA PINU A: przesłanka — misja WYSTAWIONA przez silnik, nie wpisana ręcznie');
+
+  cm.transferColony(home.id, EMP, 'probe');      // …i dopiero teraz gracz traci wszystko
+  tick(ColonyManager.VIABILITY_GRACE_CIVYEARS * 3);
   assert(over.length === 0,
-    'T5 KONTROLA PINU A: statek kolonizacyjny wstrzymuje koniec gry BEZTERMINOWO (3× karencja) — ' +
-    'bo rekolonizacja bez kolonii-matki jest ZMIERZALNIE wykonalna');
+    'T5 KONTROLA PINU A: kolonizator W MISJI wstrzymuje koniec gry BEZTERMINOWO (3× karencja) — ' +
+    'zawężenie z Findingu 111 odsiewa zaparkowane kadłuby, a NIE wyłącza trzeciej ścieżki');
+
+  tick(12 * 40);                                  // ⚠ Ticker liczy civYears; misja lata w LATACH GRY
+  assert(cm.getPlayerColonies().length === 1 && over.length === 0,
+    'T5 KONTROLA PINU A — SKUTEK, nie bramka: przylot faktycznie oddaje graczowi kolonię ' +
+    `(${cm.getPlayerColonies().length}), a \`game:over\` nadal nie padł. To jest dowód, dla ` +
+    'którego misja `colony` w ogóle liczy się jako odwrót');
 }
 {
   const { core, cm, gum, home, tick } = boot();
@@ -242,6 +296,93 @@ console.log('T6 — koniec gry ogłaszany RAZ, nie co tik');
   assert(over.length === 1,
     `T6: przez czterokrotność karencji \`game:over\` poleciał ${over.length}× — ekran końca gry ` +
     'nie ma migotać ani zalewać Dziennika');
+}
+
+// ── T7 — Finding 111: KTÓRA trasa się liczy ─────────────────────────────────────────────────
+console.log('T7 — Finding 111: trasa liczy się po TYPIE MISJI, nie po kadłubie i nie po stanie');
+{
+  const V = (modules, mission, suspended) => ({ modules, mission, _suspendedMission: suspended });
+  const okFor = (v) => canReverseFate({ vessels: [v], groundUnits: [] }).recolonization.ok;
+
+  assert(okFor(V([], { type: 'found_outpost', targetId: 'x' })) === true,
+    'T7: misja `found_outpost` liczy się BEZ modułu habitacyjnego — placówkę wozi FRACHTOWIEC, ' +
+    'a placówka jest pełnoprawną kolonią gracza. Stary predykat pytał o habitat i tę trasę GUBIŁ');
+  assert(okFor(V(['habitat_pod'], { type: 'recon', phase: 'orbiting_body' })) === false,
+    'T7 SEDNO: zwiad na orbicie ma `status=on_mission` i żywą misję, a mimo to NIE jest odwrotem — ' +
+    'dlatego predykat pyta o TYP misji, a nie o to, czy jakakolwiek misja istnieje');
+  assert(okFor(V(['habitat_pod'], { type: 'move_to_point' }, { type: 'colony' })) === true,
+    '⚠ T7 PIN NA `??`: rozkaz ruchu PODMIENIA `mission`, a prawdziwą chowa w `_suspendedMission`. ' +
+    'Zapis `mission ?? _suspendedMission` nigdy nie sięgnąłby po zawieszoną — fałszywy negatyw ' +
+    'złapany dopiero pomiarem, bo pierwsze pole jest prawdziwe');
+  assert(okFor(V([], { type: 'interstellar_jump', phase: 'warp_transit' })) === false
+      && okFor(V(['habitat_pod'], { type: 'interstellar_jump', phase: 'warp_transit' })) === true,
+    'T7: przepływ obcego układu liczy się TYLKO z habitatem — tam kolonizuje przycisk przez ' +
+    '`canColonize`, a nie sam przylot (inaczej niż przy `colony`/`found_outpost`)');
+
+  const parked = canReverseFate({ vessels: [V(['habitat_pod'], null)], groundUnits: [] });
+  assert(parked.recolonization.hull === true && parked.recolonization.ship === false
+      && describeNoReversal(parked) === 'no_drop_ship+no_ground_troops+colony_ship_no_route',
+    'T7 KONTROLA PINU: powód rozróżnia „kadłub jest, ale zaparkowany" od „nie ma żadnego" — ' +
+    `bez tego gate mierzyłby ciszę (\`${describeNoReversal(parked)}\`)`);
+}
+{
+  // Pomiar, na którym stoi asercja o zwiadzie: misja PRZEŻYWA przylot i wisi BEZTERMINOWO.
+  const { core, cm, home, tick } = boot();
+  const ms = window.KOSMOS.missionSystem ?? window.KOSMOS.expeditionSystem;
+  window.KOSMOS.techSystem?.grantTechs?.(['exploration', 'rocketry', 'basic_science']);
+  const target = freeBody(cm, home.systemId, home.id);
+  const scout = playerShip(core, ['engine_ion', 'habitat_pod', 'science_lab'], 'Zwiadowca');
+  scout.position.dockedAt = home.id;
+  ms._launchReconTarget(target.id, scout.id);
+  tick(12 * 60);
+  const after = core.vesselManager.getVessel(scout.id);
+  assert(after?.mission?.type === 'recon' && after?.status === 'on_mission',
+    `T7 PRZESŁANKA (zmierzona): po przylocie zwiad NADAL trzyma misję (\`${after?.mission?.type}\`, ` +
+    `\`${after?.status}\`) i wisi tak bezterminowo — 60 lat gry później. Gdyby predykat pytał ` +
+    'wyłącznie „czy jest jakaś misja", limbo z Findingu 111 zostałoby otwarte w innym kształcie');
+  assert(canReverseFate({ vessels: [after], groundUnits: [] }).recolonization.ok === false,
+    'T7: …i ten sam statek, mimo habitatu i żywej misji, nie jest odwrotem');
+}
+
+// ── T8 — D-111 = W1: start PLACÓWKI od zera jest ODMAWIANY ──────────────────────────────────
+console.log('T8 — ⚠ bliźniak T2: start PLACÓWKI przy odpiętym magazynie też jest ODMAWIANY');
+{
+  const { core, cm, home, tick } = boot();
+  const ms = window.KOSMOS.missionSystem ?? window.KOSMOS.expeditionSystem;
+  window.KOSMOS.techSystem?.grantTechs?.(['exploration']);
+  const target = freeBody(cm, home.systemId, home.id);
+  target.explored = true;
+  const hauler = playerShip(core, HAULER, 'Frachtowiec');
+  hauler.position.dockedAt = home.id;
+
+  cm.transferColony(home.id, EMP, 'probe');
+  const failures = [];
+  EventBus.on('expedition:launchFailed', (d) => failures.push(d));
+  ms._launchFoundOutpost(target.id, 'farm', hauler.id);
+
+  assert(failures.length === 1 && core.vesselManager.getVessel(hauler.id)?.mission == null,
+    'T8 SEDNO: przed D-111 stało tu miękkie `if (this.resourceSystem) { spend… }`, a `canFoundOutpost` ' +
+    'liczy `canAfford` równie miękko — więc bez magazynu CAŁA bramka przechodziła i placówka ' +
+    'zakładała się ZA DARMO. To była odwrotność rozstrzygnięcia „magazyn nie zostaje z graczem"');
+  tick(12 * 40);
+  assert(cm.getPlayerColonies().length === 0,
+    'T8 SKUTEK, nie bramka: po tickach gracz NADAL ma zero kolonii. Zmierzone przed poprawką: 0 → 1');
+}
+{
+  // KONTROLA PINU — utwardzenie dotyka WYŁĄCZNIE stanu bez magazynu; zwykła gra bez zmian.
+  const { core, cm, home, tick } = boot();
+  const ms = window.KOSMOS.missionSystem ?? window.KOSMOS.expeditionSystem;
+  window.KOSMOS.techSystem?.grantTechs?.(['exploration']);
+  const target = freeBody(cm, home.systemId, home.id);
+  target.explored = true;
+  const hauler = playerShip(core, HAULER, 'Frachtowiec sprawny');
+  hauler.position.dockedAt = home.id;
+  const before = cm.getPlayerColonies().length;
+  ms._launchFoundOutpost(target.id, 'farm', hauler.id);
+  tick(12 * 40);
+  assert(cm.getPlayerColonies().length === before + 1,
+    `T8 KONTROLA PINU: przy ŻYWEJ koloni placówka nadal się zakłada (${before} → ` +
+    `${cm.getPlayerColonies().length}) — bramka odmawia TYLKO przy odpiętym magazynie`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
