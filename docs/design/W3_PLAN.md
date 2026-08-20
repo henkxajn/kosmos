@@ -965,6 +965,30 @@ path instead). Next live run can settle it in one read — the first record shou
     ⇒ Full analysis: `docs/design/AI_CAPTURE_AUDIT.md`; unblocking plan (signed 2026-08-19):
     `docs/design/AI_CAPTURE_PLAN.md`. Its own gate — **AI takes the colony** — is that plan's GATE 1.
 
+    ✅ **CLOSED 2026-08-20 — the AI_CAPTURE slice shipped and both of its gates PASSED live.**
+    The deadlock described above is **fixed and measured end to end**: AC-4 gave landed AI units a
+    **territorial objective** (march on `capitalBase`, fallback: nearest tile with a building), so the
+    „army wiped out" and „capital taken" conditions stopped being mutually exclusive; AC-5 replaced the
+    `role === 'military'` defender filter with a **symmetric predicate** (any living unit blocks); AC-6
+    made a body without a capital conquerable (outpost mirror), retiring the `:380` gate. Both narrower
+    gates named above are therefore **no longer real**. AC-7 made it **one campaign per body** (no double
+    waves), AC-8 added post-loss hygiene + `game:over` `reason:'conquered'` (D5 + D9=W3), AC-9 made the
+    loss **visible** to the player.
+    **GATE 1 PASS** (AI reaches and takes the colony, live). **GATE 2 PASS in full** (2026-08-20):
+    §1 campaign ledger · §2 loss visibility · §3 post-loss hygiene · §4-A recolonization is genuinely
+    reachable (measured end to end via the warp route) · **§4-B the end screen really fires** —
+    „CIVILIZATION DESTROYED", conquest wording (not extinction), survival time shown · §5 recapture
+    regression (already proven twice: W3 GATE 3 §5 and GATE P0 §7).
+    ⚠ **Two things this finding's closure does NOT cover, both filed separately, neither blocking:**
+    Findings 49 (AI has no transport hull in its catalogue) and 50 (AI landings run on the LEGACY
+    ground model) — the AI's *production* route to launching an invasion is still the open half.
+    🔴 ⚠ **And one thing discovered while proving §4-A, which is heavier than this finding ever was:**
+    `canReverseFate` counts a colony ship's **existence**, not its **ability to colonize**, so a player
+    whose last colony falls while the colonizer sits docked elsewhere (or drifts after a `moveToPoint`)
+    enters a **permanent limbo in which `game:over` never fires**. ⇒ Finding **111** in
+    `docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`, ranked **P1**. D9's premise is sound in two of three
+    configurations and cracked in the third.
+
 ---
 
 ## Decisions taken — SEVEN, all resolved 2026-08-17 (owner + orchestrator)

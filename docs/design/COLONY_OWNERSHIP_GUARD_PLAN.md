@@ -873,6 +873,59 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
 
 ---
 
+## Findings z domknięcia AI_CAPTURE GATE 2 (2026-08-20)
+
+112. 🟠 **Ekran „CIVILIZATION DESTROYED" NIE MA POJĘCIA ZAWIJANIA TEKSTU — tekst wychodzi poza ramkę.**
+     Zgłoszone przez właściciela ze zrzutu ekranu przy GATE 2 §4-B. Komponent:
+     **`UIManager._drawGameOver()`** (`src/scenes/UIManager.js:2412-2475`) — pojedyncza funkcja
+     rysująca, **nie** `EndgameScene` i **nie** overlay.
+     ⚠ **ZAKRES: to nie jest „ten jeden string" — to CAŁE OKNO.** Wszystkie **pięć** napisów idzie
+     gołym, centrowanym `ctx.fillText` do ramki o **zaszytych** wymiarach `const DW = 420, DH = 180`
+     (`:2425`): nagłówek (`:2438`), **powód (`:2452` — ten przepełniony)**, `civDead` (`:2453`), czas
+     przetrwania (`:2460`), etykieta przycisku (`:2472`). **Zero `measureText`, zero `clip`, zero
+     skracania.**
+     ⚠ **Dlaczego ugryzło DOPIERO TERAZ:** nowy `dialog.civDestroyedConquered` (AC-8) ma **100 znaków
+     EN / 101 PL** — ponad **dwukrotnie** więcej niż najdłuższy dotychczasowy powód (49 zn., kolizja).
+     Każdy wcześniejszy powód **mieści się** w 420 px; ten potrzebuje ~720 px. **Okno nigdy nie
+     dostało tak długiego napisu.**
+     ⚠ Ramka **nie reaguje na rozdzielczość** — `W`/`H` są normalizowane do 1280×720 przez `UI_SCALE`,
+     więc proporcja przepełnienia (~1,7×) jest **identyczna na każdej rozdzielczości**, a przy presetach
+     motywu z większym `fontSizeNormal` rośnie do ~2,1×.
+     ⚠ Tekst jest **centrowany**, więc przepełnienie jest **symetryczne** — właściciel zobaczył prawą
+     krawędź, ale lewa jest przekroczona tak samo.
+     ✅ **Helper JUŻ ISTNIEJE w tej samej klasie:** `UIManager._wrapText(text, maxChars)` (`:2800`,
+     używany do tooltipów przez `TOOLTIP_WRAP`), a warianty szerokościowe są w pięciu innych plikach UI
+     (m.in. `FleetManagerOverlay._wrapTextWidth`). ⇒ zawijanie jest w tym kodzie **problemem
+     rozwiązanym, tylko nigdy niepodłączonym do tego ekranu**.
+     ⚠ **Dodatkowa ciasnota, którą trzeba znać przy wycenie:** `DH = 180` przy offsetach `+64` / `+84`
+     zostawia **~20 px** zapasu w pionie — zawinięty powód **zderzy się** z linią `civDead`.
+     ⚠ **NIEZWERYFIKOWANE ADWERSARIALNIE** (weryfikator padł na limicie); wszystkie cytowane linie
+     sprawdziłem osobiście, ale **szerokości są LICZONE, nie mierzone** — node nie ma metryk czcionki.
+113. 🟠 **Ten sam ekran ma ZAHARDKODOWANY POLSKI — gracz EN widzi polskie napisy.**
+     Znalezione przy okazji 112, **nie było przedmiotem zlecenia**. `UIManager.js:2460`
+     `` ctx.fillText(`Czas przetrwania: ${years} lat`, …) `` z `toLocaleString('pl-PL')` (`:2457`)
+     oraz `:2472` `ctx.fillText('NOWA GRA', …)` — **żadnego `t()`, żadnego klucza i18n**.
+     ⚠ `tools/check-i18n.mjs` tego **nie złapie**, bo skaner szuka wywołań funkcji tłumaczącej,
+     a tu ich po prostu nie ma. Klasa błędu niewidoczna dla istniejącej bramki.
+114. **`debugLog.query` zwrócił puste tablice mimo działającego ekranu końca gry — MECHANIZM JEST
+     SPRAWNY, przyczyna jest ŚRODOWISKOWA.** (Niski priorytet, zgodnie ze zgłoszeniem.)
+     Sprawdzone i **wykluczone** jako przyczyny: kształt zapytania jest poprawny — `_push` zapisuje
+     `{t, year, kind, data}` (`DebugLog.js:108`), a `query({kind})` porównuje `e.kind !== kind`
+     (`:126`) · oba zdarzenia **SĄ** w `TRACKED_EVENTS` (`:58-59`) · `clear()` **nie leży** na ścieżce
+     końca gry — jedyne wywołania to `GameScene.js:1914` (start sceny) oraz harness/smoke
+     (`UIManager:905` tylko ustawia `_gameOverData`, `:2485` czyści je przy „NOWA GRA").
+     ⇒ Najprawdopodobniejsza przyczyna: **bufor został wyczyszczony przez (re)start sceny** albo
+     zdarzenia poleciały **zanim** bieżąca instancja `debugLog` się podpięła.
+     ⚠ **REGUŁA DLA PRZYSZŁYCH LIVE-GATE'ÓW** (to jest realna wartość tego findingu): **`debugLog`
+     NIE przeżywa restartu sceny** — odczyty `K` zbieraj w **tej samej karcie i tej samej partii**,
+     w której gate biegł, a po „NOWA GRA" licznik startuje od zera. Nie opierać kryterium PASS na
+     odczycie, który może być pusty z powodu cyklu życia sceny.
+     ⚠ **NIEDOKOŃCZONE:** agent mierzący padł na limicie wydatków; powyższe zrobiłem sam odczytem.
+     **Rozstrzygnięcie wymaga sesji właściciela** — jednowierszowy dyskryminator na przyszłość:
+     `KOSMOS.debugLog.query({}).length` (czy bufor w ogóle coś ma) tuż obok zapytania o `game:over`.
+
+---
+
 ## Findings — 🔴 P1: PREDYKAT KOŃCA GRY (najcięższa pozycja rejestru)
 
 > ⚠ **Waga wyższa niż wszystkiego powyżej — i to jest ocena właściciela, nie moja.** Skutkiem nie jest

@@ -1,5 +1,30 @@
-# AI CAPTURE — podbój, który AI potrafi domknąć · plan doc (**✅ PODPISANY 2026-08-19**)
+# AI CAPTURE — podbój, który AI potrafi domknąć · plan doc (**✅ SLICE ZAMKNIĘTY 2026-08-20**)
 
+> # ✅ SLICE ZAMKNIĘTY 2026-08-20 — AC-0…AC-9 wdrożone, GATE 1 + GATE 2 oba PASS
+> **Pętla podboju domyka się z własnej inicjatywy AI** — to było jedno zdanie, po które ten slice
+> powstał, i jest zmierzone end-to-end, nie przez dźwignię w konsoli.
+>
+> **GATE 1 PASS** (AI dochodzi i przejmuje kolonię).
+> **GATE 2 PASS w całości** (2026-08-20): §1 księga kampanii · §2 widoczność utraty terenu ·
+> §3 higiena po utracie kolonii · §4-A rekolonizacja **realnie osiągalna** (zmierzona end-to-end
+> trasą warp: `getPlayerColonies()` 0 → 1, statek skonsumowany) · **§4-B ekran końca gry naprawdę
+> pada** — „CIVILIZATION DESTROYED", tekst o **podboju**, nie o wymarciu, czas przetrwania 2 lata ·
+> §5 regresja odbicia (potwierdzona wcześniej dwukrotnie: W3 GATE 3 §5 oraz GATE P0 §7).
+>
+> ⚠ **§3 kosztował dodatkowy blok pracy i to był dobry koszt.** Ujawnił, że higiena AC-8 **nie
+> przeżywa wczytania zapisu** — awaria odtwarzała się z każdego pliku, bez udziału gracza. Domknięte
+> osobnym arciem **BRAMKA WŁASNOŚCI, blok P0** (`COLONY_OWNERSHIP_GUARD_PLAN.md`, GATE P0 §1-§7 PASS).
+>
+> ⚠ **Co ten slice ŚWIADOMIE zostawia otwarte** (nic z tego nie blokuje zamknięcia):
+> **Finding 49** — katalog AI nie ma kadłuba transportowego, więc *produkcyjne* wejście AI w desant
+> pozostaje zamknięte (gate wchodził dźwignią `force_invasion`) · **Finding 50** — desant AI biegnie
+> na modelu **LEGACY**, nie archetypach · **Finding 111 (P1)** — `canReverseFate` liczy *istnienie*
+> kolonizatora, nie jego *zdolność*, więc w jednej z trzech konfiguracji gra **nigdy się nie kończy**.
+> ⇒ Kolejność dalszych prac ustalona z właścicielem: **111 → część II bramki własności (D1-D6) →
+> reszta rejestru**.
+>
+> ---
+>
 > # ✅ PODPISANY 2026-08-19
 > **Właściciel podpisał całość 2026-08-19. Implementacja rusza od AC-0 (keeper szwów).**
 > D1, D1b, D2 (+ załącznik wariant i), D3 — zatwierdzone 2026-08-19. D4, D5, D6, D7 — potwierdzone

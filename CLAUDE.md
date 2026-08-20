@@ -1587,6 +1587,60 @@ archetypy, Finding 50).
 
 ---
 
+## AI_CAPTURE — podbój, który AI domyka SAMO (save **v101 bez migracji**, GATE 1 + GATE 2 oba PASS — SLICE ZAMKNIĘTY 2026-08-20)
+
+Slice arca WOJNA I POKÓJ, workstream B. Plan + 9 decyzji + rejestr: `docs/design/AI_CAPTURE_PLAN.md`;
+audyt wejściowy `AI_CAPTURE_AUDIT.md`; checklisty `AI_CAPTURE_GATE2_CHECKLIST.md`.
+Commity: `990255f` (AC-7) · `bb614ed` (AC-8) · `105b873` (AC-9) + wcześniejsze AC-0…AC-6.
+
+**Jedno zdanie:** W3 dowiózł uderzenie (AI wychodzi z domu, wygrywa orbitę, zrzuca wojsko), ale
+**zdobycz nie zmieniała właściciela z własnej inicjatywy AI**. Ten slice domknął ostatni krok pętli.
+
+**Co odblokowało pętlę** (mechanizm istniał — brakowało intencji, bramek i księgowości):
+- **AC-4** — jednostka desantowa dostała **cel terytorialny** (marsz na `capitalBase`, fallback:
+  najbliższy kafel z budynkiem). ⚠ To rozwiązało **deadlock**: dotąd `_tickCombatAI` celował wyłącznie
+  w ŻYWĄ jednostkę gracza i przy `if (!best) continue` stawał, więc warunki „armia wybita" i „stolica
+  zdobyta" były **wzajemnie wykluczające się**.
+- **AC-5** — symetryczny predykat obrońcy: blokuje **każda żywa** jednostka (był filtr `role==='military'`).
+- **AC-6** — ciało **bez stolicy** (placówka) stało się zdobywalne (retire bramki `if (!capital) continue`).
+- **AC-7** — **jedna kampania na ciało** (koniec podwójnych fal, jedno `colony:captured`).
+- **AC-8** — higiena po utracie + `game:over` `reason:'conquered'` (D5 + **D9=W3**, karencja 12 civY).
+- **AC-9** — gracz **widzi**, że traci teren (`tile:ownerChanged` → dzwonek + Dziennik/Walka).
+- **AC-3 (D8)** — **partia zaczyna się PUSTA**: zero jednostek startowych po obu stronach. To warunek,
+  przy którym symetryczny predykat AC-5 jest uczciwy — nikt nie dostaje wojska za darmo.
+
+**GATE 2 PASS w całości (2026-08-20):** §1 księga · §2 widoczność · §3 higiena · **§4-A rekolonizacja
+realnie osiągalna** (zmierzone end-to-end trasą warp: `getPlayerColonies()` 0 → 1, statek skonsumowany) ·
+**§4-B ekran końca gry pada** („CIVILIZATION DESTROYED", tekst o **podboju**, nie o wymarciu) ·
+§5 regresja odbicia (potwierdzona wcześniej dwukrotnie: W3 GATE 3 §5 + GATE P0 §7).
+
+⚠ **§3 kosztował osobny blok pracy i to był dobry koszt** — ujawnił, że higiena AC-8 **nie przeżywa
+wczytania zapisu**. Domknięte arciem **BRAMKA WŁASNOŚCI, blok P0** (sekcja niżej).
+
+⚠ **ŚWIADOMIE OTWARTE (nie blokuje zamknięcia):** **Finding 49** — katalog AI **nie ma kadłuba
+transportowego**, więc *produkcyjne* wejście AI w desant pozostaje zamknięte (gate wchodził dźwignią
+`WarOverlay force_invasion`) · **Finding 50** — desant AI biegnie na modelu **LEGACY**, nie archetypach ·
+🔴 **Finding 111 (P1)** — `canReverseFate` liczy *istnienie* kolonizatora, nie *zdolność* (sekcja niżej).
+
+⚠ **Trzy drobne findingi z domknięcia GATE 2** (żaden nie blokował): **112** ekran „CIVILIZATION
+DESTROYED" (`UIManager._drawGameOver:2412-2475`) **nie ma pojęcia zawijania** — wszystkie pięć napisów
+to gołe `fillText` w ramce o zaszytych `DW=420, DH=180`; nowy tekst o podboju ma **100 zn. wobec 49**
+najdłuższego dotychczasowego, stąd przepełnienie (⚠ helper `_wrapText:2800` istnieje **w tej samej
+klasie**, nigdy niepodłączony; ⚠ `DH=180` zostawia ~20 px zapasu, więc zawinięcie zderzy się z linią
+niżej) · **113** ten sam ekran ma **zahardkodowany polski** (`Czas przetrwania…`, `NOWA GRA`) —
+⚠ `check-i18n` tego **nie łapie**, bo nie ma tam wywołań `t()` · **114** `debugLog.query` pusty przy
+działającym ekranie: mechanizm **sprawny** (kształt zapytania OK, oba zdarzenia w `TRACKED_EVENTS`,
+`clear()` nie leży na tej ścieżce) ⇒ przyczyna **środowiskowa**.
+⚠ **REGUŁA Z 114: `debugLog` NIE przeżywa restartu sceny** (`GameScene:1914`) — odczyty gate'u zbierać
+w tej samej partii i karcie; **nie opierać kryterium PASS na odczycie, który może być pusty z powodu
+cyklu życia sceny**.
+
+**Kolejność dalszych prac (ustalona z właścicielem 2026-08-20):** **1.** Finding 111 (P1, samodzielny) →
+**2.** część II `COLONY_OWNERSHIP_GUARD_PLAN` (D1-D6) → **3.** reszta rejestru (97, bug mapy 108-110,
+przepełnienie tekstu na ekranie końca gry).
+
+---
+
 ## BRAMKA WŁASNOŚCI KOLONII — blok P0: wczytanie nie oddaje gracza koloni wroga (save **v101 bez migracji**, GATE P0 §1-§7 PASS — BLOK ZAMKNIĘTY 2026-08-20)
 
 Slice **przekrojowy, NIE należący do AI_CAPTURE**. Plan + 10 decyzji + rejestr:
@@ -1652,7 +1706,7 @@ Sweep **159/159 0 FAIL** · `check-i18n` PASS.
 ⚠ **Klasa A to nie „34 miejsca"**: **9** żywych bramek intencji gracza · **8** systemowych (termin
 własności byłby tam **błędem kategorii**) · **17** martwych (zdarzenie bez emitenta).
 
-**Findings 69-111** (rejestr w planie). ⚠ **NAJCIĘŻSZE jest 111 (P1, niżej); 97 jest drugie i też ZMIERZONE:**
+**Findings 69-114** (rejestr w planie). ⚠ **NAJCIĘŻSZE jest 111 (P1, niżej); 97 jest drugie i też ZMIERZONE:**
 🔴 **kolonia WROGA płaci za utrzymanie floty gracza** — `VesselManager._resolvePayHomeId:2062-2067`
 filtruje **tylko** `!col.isOutpost`, bez terminu własności, z fallbackiem na nigdy nieprzecelowywany
 `homePlanet`; po W3-1 zdobycz zostaje w `_colonies`, więc płaci. Zmierzone: 300 Kr/rozliczenie,
