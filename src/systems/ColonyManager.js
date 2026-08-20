@@ -81,6 +81,10 @@ export class ColonyManager {
     // Aktualnie aktywna kolonia (której mapę gracz ogląda)
     this._activePlanetId = null;
 
+    // P0-A=W1: zapisana aktywna kolonia czeka tu między `restore()` a ownership-aware wyborem
+    // w `resolveActiveColonyAfterRestore()` (wołanym z GameScene PO relinku własności).
+    this._pendingActivePlanetId = null;
+
     // Drogi handlowe: lista tras automatycznych
     this._tradeRoutes = [];
 
@@ -321,6 +325,67 @@ export class ColonyManager {
       planetName: window.KOSMOS?.homePlanet?.name ?? '',
       detail: reasonDetail,
     });
+  }
+
+  /**
+   * P0 (COLONY_OWNERSHIP_GUARD) — JEDNA drabina zapasowa aktywnej kolonii dla WSZYSTKICH trzech
+   * ścieżek: utrata kolonii (`transferColony`), zniszczenie ciała (`removeColony`) i wczytanie
+   * zapisu (`resolveActiveColonyAfterRestore`).
+   *
+   * Kształt jest DOSŁOWNYM lustrem tego, co AC-8 wpisał do `transferColony` — dom, jeśli należy
+   * do GRACZA, potem dowolna kolonia GRACZA, a przy braku obu `null` (wołający odpina kontekst).
+   * Wyciągnięte do helpera, bo do AC-8 istniała tylko jedna kopia, a druga (`removeColony`)
+   * została nieutwardzona i przez to ŻYWA: test `_colonies.has(homePlanetId)` jest testem
+   * PRZYNALEŻNOŚCI, a nie własności, więc po przejęciu stolicy przepinał gracza na ciało wroga
+   * (od W3-1 przejęta kolonia zostaje w `_colonies`, a `window.KOSMOS.homePlanet` nadal ją nazywa).
+   *
+   * ⚠ `excludeId` jest KONIECZNE, nie kosmetyczne: obaj wołający uruchamiają drabinę, gdy kolonia
+   *   jeszcze jest w rejestrze — `transferColony` przed przestemplowaniem właściciela (więc nadal
+   *   czyta się jako kolonia gracza), `removeColony` przed `_colonies.delete`.
+   *
+   * @param {string|null} excludeId — kolonia wypadająca z gry/rąk gracza; nigdy nie zwracana
+   * @returns {string|null} id koloni GRACZA albo null, gdy gracz nie ma już żadnej
+   */
+  _pickFallbackActiveColony(excludeId = null) {
+    const homePlanetId = window.KOSMOS?.homePlanet?.id;
+    const mine = (id) => id !== excludeId && ColonyManager.isPlayerColony(this._colonies.get(id));
+    if (homePlanetId && mine(homePlanetId)) return homePlanetId;
+    return [...this._colonies.keys()].find(mine) ?? null;
+  }
+
+  /**
+   * P0-A=W1 — JEDYNY wybór aktywnej kolonii po wczytaniu zapisu.
+   *
+   * ⚠ DLACZEGO TO NIE MOŻE MIESZKAĆ W `restore()`: własność kolonii NIE jest serializowana
+   *   (decyzja P0-B=W1, zapisana w `EmpireColonyBootstrap.js:543` — „derived z emp.colonies").
+   *   Stempluje ją `relinkColoniesAfterRestore`, wołane z `GameScene` PO `colonyManager.restore`.
+   *   W trakcie `restore` KAŻDA kolonia w pliku wygląda więc na niczyją, a `isPlayerColony`
+   *   odpowiedziałaby „gracza" także dla zdobyczy wroga. Ta metoda jest wołana z bloku
+   *   odroczonego `GameScene` — który biegnie PO relinku i jest OSTATNIM pisarzem wskaźników.
+   *
+   * Drabina (podpisana, wariant (a)):
+   *   0. zapisana aktywna kolonia — **o ile należy do gracza** (wierny port dawnej bramki
+   *      `if (data.activePlanetId && this._colonies.has(...))`, dołożony termin własności;
+   *      bez tego wczytanie zawsze snapowałoby gracza na stolicę, gubiąc jego ostatni widok),
+   *   1. planeta macierzysta — o ile należy do gracza,
+   *   2. dowolna kolonia gracza,
+   *   3. brak ⇒ `_detachActiveColony()` (D9=W3: magazyn NIE zostaje z graczem).
+   *
+   * @returns {string|null} id wybranej koloni albo null, gdy kontekst został odpięty
+   */
+  resolveActiveColonyAfterRestore() {
+    const saved = this._pendingActivePlanetId ?? null;
+    this._pendingActivePlanetId = null;
+
+    if (saved && ColonyManager.isPlayerColony(this._colonies.get(saved))) {
+      this.switchActiveColony(saved);
+      return saved;
+    }
+    const next = this._pickFallbackActiveColony(null);
+    if (next) { this.switchActiveColony(next); return next; }
+
+    this._detachActiveColony();
+    return null;
   }
 
   /**
@@ -664,12 +729,21 @@ export class ColonyManager {
       r => r.colonyA !== planetId && r.colonyB !== planetId
     );
 
-    // Jeśli aktywna kolonia = zniszczona → przełącz na homePlanet
+    // Jeśli aktywna kolonia = zniszczona → przełącz na inną kolonię GRACZA.
+    //
+    // ⚠ P0-D=W1 — TU STAŁ NIEUTWARDZONY BLIŹNIAK AC-8, i był ŻYWY. Warunek brzmiał
+    //   `if (homePlanetId && this._colonies.has(homePlanetId)) switchActiveColony(homePlanetId)`
+    //   — czyli test PRZYNALEŻNOŚCI do rejestru, nie własności. Po przejęciu stolicy
+    //   `window.KOSMOS.homePlanet` NADAL ją nazywa (nikt go nie przecelowuje), a od W3-1 zdobycz
+    //   ZOSTAJE w `_colonies` — więc zniszczenie dowolnej innej aktywnej koloni gracza (kolizja,
+    //   wyrzucenie z układu, `entity:removed`) przepinało wszystkie pięć wskaźników
+    //   `window.KOSMOS` na kolonię WROGA. AC-8 utwardził wyłącznie `transferColony`.
+    // ⚠ Ta gałąź MUSI zostać przed `dispose ×5` i `_colonies.delete` niżej — inaczej kontekst
+    //   zostaje na zdisposowanych podsystemach albo na skasowanym kluczu.
     if (this._activePlanetId === planetId) {
-      const homePlanetId = window.KOSMOS?.homePlanet?.id;
-      if (homePlanetId && this._colonies.has(homePlanetId)) {
-        this.switchActiveColony(homePlanetId);
-      }
+      const next = this._pickFallbackActiveColony(planetId);
+      if (next) this.switchActiveColony(next);
+      else this._detachActiveColony();   // gracz nie ma już żadnej koloni — magazyn nie zostaje
     }
 
     const colonyName = colony.name ?? planetId;
@@ -785,11 +859,9 @@ export class ColonyManager {
     //   wszystko, „gospodarował" więc magazynem przeciwnika.
     const wasActive = this._activePlanetId === planetId;
     if (wasActive) {
-      const homePlanetId = window.KOSMOS?.homePlanet?.id;
-      const mine = (id) => id !== planetId && ColonyManager.isPlayerColony(this._colonies.get(id));
-      const next = (homePlanetId && mine(homePlanetId))
-        ? homePlanetId
-        : ([...this._colonies.keys()].find(mine) ?? null);
+      // P0: drabina wyciągnięta do `_pickFallbackActiveColony` — ten sam kształt obsługuje teraz
+      // także `removeColony` (bliźniak, który do P0 był nieutwardzony) i wczytanie zapisu.
+      const next = this._pickFallbackActiveColony(planetId);
       if (next) this.switchActiveColony(next);
       else this._detachActiveColony();   // ⚠ D9=W3 — gracz nie ma już ŻADNEJ kolonii
     }
@@ -797,6 +869,20 @@ export class ColonyManager {
     const colonyName = colony.name ?? planetId;
     const population = colony.civSystem?.population ?? 0;
     const wasHomePlanet = !!colony.isHomePlanet;
+
+    // ⚠ P0-C=W2 — STOLICA PRZESTAJE BYĆ STOLICĄ W CHWILI UTRATY.
+    //   Do P0 `transferColony` flagę tylko CZYTAŁO (wiersz wyżej), nigdy nie zapisując. Skutkiem
+    //   było to, że `ColonyManager.restore` uzbrajał z niej `_activePlanetId` NA CIELE WROGA —
+    //   awaria odtwarzała się z każdego wczytania, bez udziału gracza (§6 audytu).
+    //   ⚠ KOLEJNOŚĆ JEST KONTRAKTEM: czyścimy PO snapshocie `wasHomePlanet`, bo ten zasila
+    //     narrację utraty („Stolica utracona" vs „Kolonia utracona" — `GameScene`,
+    //     `NotificationCenter`). Wyczyszczenie przed snapshotem cicho degraduje komunikat.
+    //   ⚠ DWA ŚWIADOME SKUTKI UBOCZNE (podpisane, nie odkryte przypadkiem):
+    //     1. ex-dom przestaje być niezniszczalny — `removeColony` nie wraca już wcześnie na
+    //        `if (colony.isHomePlanet) return`, więc zdobycz wroga może zginąć razem z ciałem;
+    //     2. przy wczytaniu wpada w gałąź heal-up (`!isHomePlanet && !isOutpost`) — tak samo jak
+    //        KAŻDA kolonia AI już dziś; to pre-existing i ślepe na własność, filowane osobno.
+    colony.isHomePlanet = false;
 
     // ⚠ KOLEJNOŚĆ: tech imperium USTALAMY PRZED `addColony`. `_findEmpireTechSystem`
     //   iteruje `getColoniesByEmpire(empireId)`, więc po dopisaniu tej kolonii do imperium
@@ -892,6 +978,15 @@ export class ColonyManager {
     // Zdejmij oznaczenia wroga → getPlayerColonies() zacznie widzieć ciało
     colony.ownerEmpireId = null;
     colony.isTestEnemy   = false;
+
+    // ⚠ P0-C=W2 (symetria do `transferColony`) — ODBICIE WŁASNEJ STOLICY PRZYWRACA JEJ RANGĘ.
+    //   `transferColony` czyści `isHomePlanet` przy utracie; bez lustra tutaj gracz, który
+    //   odbiłby swoją stolicę, dostawałby ją z powrotem TRWALE ZDEGRADOWANĄ do zwykłej koloni
+    //   (a `window.KOSMOS.homePlanet` i tak nadal na nią wskazuje — dwa pojęcia „domu"
+    //   rozjeżdżałyby się na stałe). Warunkiem jest TOŻSAMOŚĆ z macierzystą, nie sam fakt
+    //   odbicia: zdobycie CUDZEJ stolicy nie czyni z niej naszej.
+    if (planetId && planetId === window.KOSMOS?.homePlanet?.id) colony.isHomePlanet = true;
+
     // Oczyść znacznik "[WRÓG]" z nazwy (SpawnTestEnemy dokleja go)
     if (typeof colony.name === 'string') {
       colony.name = colony.name.replace(/\s*\[WR[ÓO]G\]\s*$/i, '').trim() || planetId;
@@ -2448,11 +2543,17 @@ export class ColonyManager {
 
       this._colonies.set(colData.planetId, colony);
 
-      if (colData.isHomePlanet) {
-        this._activePlanetId = colData.planetId;
-        window.KOSMOS.factorySystem = factSys;
-        window.KOSMOS.prosperitySystem = prospSys;
-      }
+      // ⚠ P0-A=W1 — TU NIE WIĄŻEMY JUŻ NICZEGO. Stało tu:
+      //     if (colData.isHomePlanet) { this._activePlanetId = colData.planetId;
+      //                                 window.KOSMOS.factorySystem = factSys;
+      //                                 window.KOSMOS.prosperitySystem = prospSys; }
+      //   — czyli wybór aktywnej koloni z SAMEJ flagi, plus wiązanie DWÓCH z pięciu wskaźników,
+      //   ślepo na własność. Ponieważ `transferColony` flagi nie czyścił (P0-C), przejęta stolica
+      //   wciąż ją nosiła i każde wczytanie oddawało gracza koloni wroga (§6 audytu).
+      //   Wiązanie 2-z-5 łamało przy okazji inwariant `switchActiveColony` („NIGDY
+      //   stale-inna-kolonia", Faza 3 BUG 2).
+      //   Wybór przeniesiony w CAŁOŚCI do `resolveActiveColonyAfterRestore()`, wołanego przez
+      //   `GameScene` PO `relinkColoniesAfterRestore` — bo dopiero tam własność w ogóle istnieje.
 
       // Heal-up: kolonie uszkodzone przez wcześniejszy bug (brak Stolicy + pop=0).
       // Idempotentne — nic nie robi jeśli kolonia jest zdrowa.
@@ -2478,9 +2579,13 @@ export class ColonyManager {
       }
     }
 
-    if (data.activePlanetId && this._colonies.has(data.activePlanetId)) {
-      this._activePlanetId = data.activePlanetId;
-    }
+    // ⚠ P0-A=W1 — zapisana aktywna kolonia jest teraz PODPOWIEDZIĄ, nie przypisaniem.
+    //   Dawna bramka (`if (data.activePlanetId && this._colonies.has(...))`) była testem
+    //   PRZYNALEŻNOŚCI, więc przepuszczała kolonię wroga; a przy zapisie zrobionym po utracie
+    //   wszystkiego (`activePlanetId: null`) była po prostu FAŁSZYWA i nie cofała uzbrojenia
+    //   z flagi `isHomePlanet` wyżej. Ownership-aware wybór robi
+    //   `resolveActiveColonyAfterRestore()` — po relinku, gdy własność już istnieje.
+    this._pendingActivePlanetId = data.activePlanetId ?? null;
 
     // Przywróć drogi handlowe i liczniki
     this._tradeRoutes      = data.tradeRoutes ?? [];

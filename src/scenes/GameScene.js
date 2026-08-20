@@ -2054,44 +2054,51 @@ export class GameScene {
       this.influenceMap?.refresh();       // mapa wpływów czyta ten indeks — musi pójść za nim
       // Ustaw homePlanet i aktywne systemy
       const homePlanetId = c4x.homePlanetId ?? c4x.colonies?.find(c => c.isHomePlanet)?.planetId;
-      if (homePlanetId) {
-        setTimeout(() => {
-          const hp = this.colonyManager._findEntity(homePlanetId);
-          if (hp) {
-            window.KOSMOS.homePlanet = hp;
-            hp.explored = true;
-            hp.analyzed = true;   // planeta domowa = pełna wiedza
-          }
-          // Przywróć aktywne systemy z homePlanet (per-kolonia instancje)
-          const homeCol = this.colonyManager.getColony(homePlanetId);
-          if (homeCol) {
-            window.KOSMOS.resourceSystem  = homeCol.resourceSystem;
-            window.KOSMOS.civSystem       = homeCol.civSystem;
-            window.KOSMOS.buildingSystem  = homeCol.buildingSystem;
-            if (homeCol.factorySystem) {
-              window.KOSMOS.factorySystem = homeCol.factorySystem;
-              this.factorySystem = homeCol.factorySystem;
-            }
-            if (homeCol.prosperitySystem) {
-              window.KOSMOS.prosperitySystem = homeCol.prosperitySystem;
-            }
-            this.resourceSystem  = homeCol.resourceSystem;
-            this.civSystem       = homeCol.civSystem;
-            this.buildingSystem  = homeCol.buildingSystem;
-            this.expeditionSystem.resourceSystem = homeCol.resourceSystem;
-            this.techSystem.resourceSystem      = homeCol.resourceSystem;
-            const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
-            this.buildingSystem._gridHeight = gridSizes[hp?.planetType] ?? 10;
-            if (hp?.deposits) this.buildingSystem.setDeposits(hp.deposits);
-          }
-          // Po swapie KOSMOS: wymuś ponowną rejestrację konsumpcji POP
-          // (przy restore() guard EventBus blokował emit bo KOSMOS wskazywał na stary ResourceSystem)
-          for (const col of this.colonyManager.getAllColonies()) {
-            col.civSystem._registeredPop = -1;
-            col.civSystem.forceConsumptionSync(col.resourceSystem);
-          }
-        }, 0);
-      }
+      // ⚠ P0-A=W1 (COLONY_OWNERSHIP_GUARD) — TEN BLOK JEST JEDYNYM PISARZEM WSKAŹNIKÓW PRZY WCZYTANIU
+      //   i biegnie PO `relinkColoniesAfterRestore` (wyżej, synchronicznie), więc jako JEDYNE miejsce
+      //   w całym łańcuchu ładowania widzi `ownerEmpireId`. `ColonyManager.restore` już nie wiąże nic.
+      // ⚠ CAŁOŚĆ WYJĘTA SPOD `if (homePlanetId)` — warunek podpisu P0-A. Uzasadnieniem jest
+      //   UTWARDZENIE, nie naprawa: `homePlanetId` pochodzi z `window.KOSMOS.homePlanet`
+      //   (`SaveSystem.js:180`), a tej referencji NIC nie czyści przy utracie kolonii (trzej
+      //   pisarze: `:382`, ten blok, `_setupColony`) — więc stara bramka w praktyce BYŁA wchodzona,
+      //   a defekt siedział gdzie indziej (uzbrajanie z `isHomePlanet` w `restore` + `if (homeCol)`).
+      //   Wyjęcie sprawia, że wybór aktywnej koloni nie zależy już od referencji, której nikt nie
+      //   utrzymuje. Dom jest przesłanką wyboru, nie warunkiem wykonania.
+      // ⚠ KOLEJNOŚĆ WZGLĘDEM RELINKU JEST KONTRAKTEM (pin źródłowy: `colony_ownership_load_smoke`
+      //   T8): przed `relinkColoniesAfterRestore` własność nie istnieje i drabina wybrałaby
+      //   zdobycz wroga. NIE przenosić tego wywołania bliżej `colonyManager.restore`.
+      setTimeout(() => {
+        const hp = homePlanetId ? this.colonyManager._findEntity(homePlanetId) : null;
+        if (hp) {
+          window.KOSMOS.homePlanet = hp;
+          hp.explored = true;
+          hp.analyzed = true;   // planeta domowa = pełna wiedza
+        }
+
+        // Ownership-aware wybór aktywnej koloni (drabina: zapisana → dom → dowolna GRACZA → odpięcie).
+        // `switchActiveColony` w środku ustawia komplet pięciu wskaźników + expedition/tech naraz,
+        // więc nie ma tu już ręcznego przepisywania „dwa z pięciu".
+        const activeId = this.colonyManager.resolveActiveColonyAfterRestore();
+        const activeCol = activeId ? this.colonyManager.getColony(activeId) : null;
+        if (activeCol) {
+          // Pola SCENY (poza `window.KOSMOS`) — z kolonii WYBRANEJ, nie z domu.
+          this.resourceSystem  = activeCol.resourceSystem;
+          this.civSystem       = activeCol.civSystem;
+          this.buildingSystem  = activeCol.buildingSystem;
+          if (activeCol.factorySystem) this.factorySystem = activeCol.factorySystem;
+          const activePlanet = activeCol.planet ?? this.colonyManager._findEntity(activeId);
+          const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
+          this.buildingSystem._gridHeight = gridSizes[activePlanet?.planetType] ?? 10;
+          if (activePlanet?.deposits) this.buildingSystem.setDeposits(activePlanet.deposits);
+        }
+
+        // Po swapie KOSMOS: wymuś ponowną rejestrację konsumpcji POP
+        // (przy restore() guard EventBus blokował emit bo KOSMOS wskazywał na stary ResourceSystem)
+        for (const col of this.colonyManager.getAllColonies()) {
+          col.civSystem._registeredPop = -1;
+          col.civSystem.forceConsumptionSync(col.resourceSystem);
+        }
+      }, 0);
       if (c4x.missions || c4x.expeditions) this.expeditionSystem.restore(c4x.missions ?? c4x.expeditions);
       // Przywróć VesselManager
       if (c4x.vesselManager) {
