@@ -165,7 +165,7 @@ produktu**, tylko regresję (audyt §6).
 
 ---
 
-### P0-A — Kto jest jedynym autorytatywnym pisarzem pięciu wskaźników przy wczytaniu? ⬜ **DO PODPISU**
+### P0-A — Kto jest jedynym autorytatywnym pisarzem pięciu wskaźników przy wczytaniu? ✅ **PODPISANA: W1**
 
 > **To jest prawdziwa decyzja tego bloku**, a nie „dopisz bramkę". Dwa zmierzone ograniczenia **wykluczają
 > się nawzajem**:
@@ -218,7 +218,7 @@ podpisu**, nie do przemycenia — i **wymaga re-weryfikacji keepera `ai_capture_
 
 ---
 
-### P0-B — Własność serializowana czy dalej wyprowadzana? ⬜ **DO PODPISU**
+### P0-B — Własność serializowana czy dalej wyprowadzana? ✅ **PODPISANA: W1** (zostaje wyprowadzana)
 
 > ⚠ **To nie jest naprawa buga — to ODWRÓCENIE zapisanej decyzji projektowej.** Kod mówi wprost, że
 > własność jest wyprowadzana:
@@ -259,7 +259,17 @@ rzeczy naraz.
 
 ---
 
-### P0-C — `isHomePlanet` przy przejęciu i przy odbiciu ⬜ **DO PODPISU**
+### P0-C — `isHomePlanet` przy przejęciu i przy odbiciu ✅ **PODPISANA: W2 (+„dom wraca przy odbiciu"=W2)**
+
+> ✅ **POTWIERDZENIE (2026-08-20, właściciel) — NIE jest to nowy finding.**
+> Skutek uboczny „**ex-stolica przestaje być niezniszczalna po utracie**" (wiersz *skutek uboczny:
+> `removeColony:646`* w tabeli niżej) wybrzmiał ponownie przy audycie trasy warp i został **wprost
+> potwierdzony jako świadoma, podpisana decyzja, nie regresja**.
+> Mechanizm: `removeColony` wraca wcześnie na `if (colony.isHomePlanet) return;` (`:711`); P0-C zdejmuje
+> tę flagę przy przejęciu, więc ochrona **przestaje obowiązywać dokładnie w chwili, gdy ciało przestaje
+> być nasze**. Pinowane wykonaniem przez `colony_ownership_load_smoke` **T9b** (ex-dom usuwalny)
+> z kontrolą **T9b KONTROLA PINU** (żywa stolica gracza **nadal** chroniona).
+> ⚠ Nie zakładać dla tego osobnej pozycji rejestru — to jest ta sama, już rozstrzygnięta decyzja.
 
 **Zmierzone:** `transferColony` **tylko czyta** flagę (`:799`), nigdy nie zapisuje. Czytelników
 decyzyjnych jest **cztery**: `removeColony:646` (dom jest niezniszczalny), `restore:2451` (uzbraja
@@ -290,7 +300,7 @@ naprawi połowę, której keeper i tak nie widzi** (`GameScene` nie importuje si
 
 ---
 
-### P0-D — Bliźniak w `removeColony` ⬜ **DO PODPISU** (nowy — nie było go w audycie)
+### P0-D — Bliźniak w `removeColony` ✅ **PODPISANA: W1** (w P0; nowy — nie było go w audycie)
 
 > **Zmierzone, ŻYWE dziś, ta sama klasa co cały P0.** AC-8 utwardził **wyłącznie** `transferColony`.
 > Bliźniaczy fallback w `removeColony` został:
