@@ -1753,6 +1753,67 @@ osierocą stację orbitalną **drugiej** koloni (⚠ `transferColony`, w odróż
 
 ---
 
+## Finding 125 — „Powrót do bazy" nie brykuje statku (naprawa IZOLOWANA, save **v101 bez migracji**, live-gate + re-gate PASS, commit `cc20af5`)
+
+Mała, samodzielna naprawa **poza** arciem VESSEL_ORDERS (P0-P5 zostaje osobnym, podpisanym planem).
+Rejestr: `docs/design/UNIFIED_VESSEL_ORDERS_AUDIT.md` §Findings 125 (wpis zamknięty, z pełnym inwentarzem).
+
+**Defekt:** rozkaz powrotu z obcego układu **kłamał o stanie statku**, żeby przejść bramkę dyspozytora
+(`status='idle'; position.state='docked'; mission=null`), a kłamstwa **nikt nie cofał**, gdy skok odpadał —
+najczęściej z braku `warp_cores`, czyli dokładnie wtedy, gdy gracz ten przycisk klika. Statek zostawał
+„zadokowany" przy ciele **BEZ portu**. ⚠ **Sprzeczności nie było w bramce** — `canLaunchFromCurrent`
+odpowiadała poprawnie o stanie, który rozkaz sam przed chwilą sfałszował.
+
+**⚠ KŁAMSTWO BYŁO ZBĘDNE OD POCZĄTKU:** `dispatchInterstellar` (`VesselManager:757-763`) przyjmuje `docked`
+**I** `orbiting` i we własnym komentarzu pisze „Status nie blokuje"; `WarpRouteSystem.canOrder:51-53` tak samo.
+Jedyny stan blokujący skok to lot w układzie (`in_transit`).
+
+**Naprawa — NEW `src/utils/ReturnJump.js`** (czysty moduł, zero importów, wzór `MovementOrderCancellation.js`):
+`returnJumpTransactional(vessel, jumpFn)` — snapshot → przygotuj **MINIMUM** (tylko `in_transit`, i to do
+**swobodnego dryfu** `orbiting`+`dockedAt=null`, **nie** do fałszywego doku) → skok → przy odmowie przywróć
+stan **CO DO POLA** (z `pendingOrder` włącznie — odmowa nie kasuje zakolejkowanej dostawy gracza).
+⚠ **Ścieżka sukcesu jest ścisłym NO-OPEM** względem starego kodu: `dispatchInterstellar` i tak nadpisuje
+wszystkie cztery pola. Zmienia się **wyłącznie** zachowanie przy odmowie. Wzór zasady stoi w tym repo od dawna:
+`VesselManager.dockAtColony` przy braku portu **nie dokuje na siłę**, tylko zostawia statek na orbicie.
+
+**CZTERECH producentów tego samego przycisku** (grep `position.state = 'docked'` dał 5 zapisów: 2 prawdziwe
+dokowania + te 4) — wszyscy przez jedną transakcję: `OrderService.issueReturn` (rejestr floty) ·
+FMO `interstellar_return` (ekran „Interstellar Arrival") · FMO `foreign_return`/`foreign_return_from_recon`
+(panel obcego układu) · `FleetActions.return_home.execute` (**uśpiony** bliźniak — `FleetPanel`/`FleetTabPanel`
+nie są nigdzie importowane; utwardzony mimo to, bo nieutwardzony bliźniak to mina — lekcja `removeColony:667`).
+
+**Dogrywka po 1. live-gate — brak POWODU:** gracz zobaczył „Cannot issue order" bez wyjaśnienia i podejrzewał
+**piątego producenta**. Zmierzone renderem: piątego **NIE MA** (ekran „Interstellar Arrival" wystawia
+`interstellar_return`, już objętą). Realnym defektem był brak powodu: te przyciski wołały `dispatchInterstellar`,
+który zwraca **GOŁY BOOL**. Przepięte na `OrderService.issueWarp` (cel skoku **bez zmian** — ten sam `systemId`
+z hit-zony) ⇒ „Nie można wydać rozkazu — ✗ Za mało rdzeni warp". Były to **ostatnie surowe wywołania dyspozytora**
+wśród przycisków powrotu. ⚠ **Konsekwencja ZADEKLAROWANA:** powrót idzie teraz przez planer wielo-przeskokowy
+(ten sam silnik co „Powrót" z rejestru), więc trasa dłuższa niż jeden skok zostanie **ZŁOŻONA** zamiast po cichu
+odmówić.
+
+**⚠ `KOSMOS.debugLog` NIE JEST instrumentem floty** (zmierzone WYKONANIEM, keeper T13): to audyt
+AI/wojny/dyplomacji z **zamkniętą** listą `TRACKED_EVENTS`, w której nie ma **ANI JEDNEGO** zdarzenia floty,
+a rozkazy floty nie ruszają `GameState` (brak nawet wpisu `state`). **Pusty `tail()` NIE ROZRÓŻNIA ŚCIEŻEK** —
+milczy tak samo dla naprawionej i nienaprawionej; live-gate wyciągnął z tej ciszy fałszywy wniosek i słusznie,
+bo instrument nie mówił prawdy o swoim zasięgu. Kanałem floty jest **Dziennik** (`EventLogSystem`, `channel:'fleet'`)
+— odmowa pisze tam `severity:'warn'` (toast jest ulotny, wpis zostaje). ⚠ **NIE dopisywać zdarzeń floty do
+`TRACKED_EVENTS`** — to rozcieńczyłoby narzędzie zbudowane pod audyt AI.
+
+**Świadomie POZA transakcją:** `abortForeignRecon` — sam ląduje statek w pełni wykonalnym
+`exploration/orbiting_body`, więc odmowa zostawia go SPRAWNYM; cofanie dałoby hybrydę (misja przemianowana,
+pozycja przywrócona) = **nowe limbo**.
+
+**Testy:** keeper `src/testing/smoke/return_home_no_brick_smoke.mjs` **77/77** (T1-T13). ⚠ **T12 = pin RENDERU**
+(który ekran wystawia którą hit-zonę) — **pin, którego brak kosztował jedną rundę live-gate'u**; T10 = pin
+źródłowy (komentarze zdejmowane) z **dwiema** kontrolami pinu; T13 = cisza `debugLog` z kontrolą pinu.
+Sweep **160/160 0 FAIL** · `check-i18n` PASS · zero migracji · **zero nowych kluczy i18n** (reuse słownika
+`_warpErrLabel` + `fleet.warpOrderFailed`).
+
+**NASTĘPNE (kolejka właściciela, NIE w tej sesji):** **Finding 111** (P1 — gra, która nigdy się nie kończy) →
+**VESSEL_ORDERS** (P0-P5, osobny podpisany plan) → reszta rejestru.
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
