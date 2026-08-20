@@ -777,15 +777,81 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     `colonyId`): `KOSMOS.vesselManager.getVessel('<id>').homeColonyId` oraz
     `KOSMOS.vesselManager._resolvePayHomeId(v, KOSMOS.colonyManager)`.
 
-98-101. **Pozostają w `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md` §Findings — BEZ decyzji
-    o zakresie** (właściciel, 2026-08-20). Skrótowo, żeby nie trzeba było otwierać audytu, by wiedzieć,
-    że istnieją: **98** `_openColonistThenTarget:2612-2617` wymaga rozwiązywalnej koloni statku bez
-    filtra własności (nie ugryzło, bo W3-1 zostawia zdobycz w rejestrze; ugryzie, gdy kolonia zostanie
-    USUNIĘTA) · **99** afordancja kolonizacji **znika** zamiast pokazać się zablokowana z powodem ·
-    **100** `MissionSystem.createMission('colonize', …)` ma **ZERO** wołających produkcyjnych (żywa
-    trasa: `expedition:sendRequest {type:'colony'}` → `:493 _launch` → `:597 _launchColony`) ·
-    **101** komentarz `MovementOrderSystem.js:1857` „orbiting bez `dockedAt`" jest **nieprawdziwy**
-    (zmierzone: `dockedAt` JEST stemplowane).
+98-105. **Pozostają w audytach — BEZ decyzji o zakresie** (właściciel, 2026-08-20).
+    `COLONIZE_PATH_ZERO_COLONY_AUDIT.md`: **98** `_openColonistThenTarget:2612-2617` wymaga
+    rozwiązywalnej koloni statku bez filtra własności (nie ugryzło, bo W3-1 zostawia zdobycz
+    w rejestrze; ugryzie, gdy kolonia zostanie USUNIĘTA) · **99** afordancja kolonizacji **znika**
+    zamiast pokazać się zablokowana z powodem · **100** `MissionSystem.createMission('colonize', …)`
+    ma **ZERO** wołających produkcyjnych · **101** komentarz `MovementOrderSystem.js:1857` „orbiting
+    bez `dockedAt`" jest **nieprawdziwy**.
+    `WARP_COLONIZE_ROUTE_AUDIT.md`: **102** trasa „obca" blokuje POPy załogi **na zawsze** (surowy
+    `_vessels.delete` zamiast `destroyVessel`) · **103** `_redirectInterstellarVessel` omija
+    bramkowanie startu (brak portu, brak odrzucenia przy braku paliwa) · **104** dwie równoległe
+    implementacje kolonizacji · **105** drugie potwierdzenie nieprawdziwego komentarza z 101.
+
+106. 🔴 **TRASA ZADOKOWANA JEST PRZY ZERZE KOLONII ŚLEPYM ZAUŁKIEM — bramka przechodzi, akcja pada
+     CICHO.** Przy zerze kolonii `canLaunchColony` zwraca `ok:true`, `FLEET_ACTIONS.colonize.canExecute`
+     zwraca `{ok:true}`, **przycisk jest aktywny** — ale klik umiera w `MissionSystem._launchColony`
+     (`:648`) na `if (!this.resourceSystem || !this.resourceSystem.canAfford(COLONY_LAUNCH_COST))`,
+     bo `_detachActiveColony` (D9=W3) wyzerował `missionSystem.resourceSystem`. **Zmierzone: misji
+     przed/po = 0/0.**
+     ⚠ **To unieważnia werdykt 1 z `COLONIZE_PATH_ZERO_COLONY_AUDIT.md`** (tam wpisane sprostowanie).
+     ⚠ **Konsekwencja dla D9:** `PlayerViability.js:16-18` cytuje przejście `canLaunchColony` jako
+     zmierzony dowód, że „statek w locie = los odwracalny". Ta przesłanka opisuje **bramkę, nie skutek**.
+     ⚠ **LEKCJA WIĄŻĄCA:** przy pytaniu „czy X działa" **bramka nie jest odpowiedzią** — dowodem jest
+     SKUTEK (`getPlayerColonies()` 0 → 1, statek znika z rejestru).
+     ⇒ Zakres nierozstrzygnięty; ta sama rodzina co reszta (miejsce zakładające żywy kontekst kolonii).
+107. 🟠 **Bliźniak Findingu 102: trasa „obca" OSIEROCA JEDNOSTKI W ŁADOWNI DESANTOWEJ.**
+     `_startForeignColonize` usuwa statek surowym `this._vessels.delete` (`VesselManager.js:3246`)
+     zamiast `destroyVessel` (`:1042`) — a `destroyVessel` rozlicza nie tylko załogę
+     (`_settleCrewOnLoss`, Finding 102), ale też zawartość `troop_bay`. Jednostki naziemne wiezione
+     na pokładzie zostają bez nosiciela. **Niezgłoszone przed 2026-08-20.**
+     ⚠ Wspólna przyczyna z 102 i 104: **dwie równoległe implementacje kolonizacji**, z których jedna
+     omija cały rytuał sprzątania drugiej.
+---
+
+## Findings — BUG MAPY STRATCOM (poza tematem tego arca, zapisane tu, bo to żywy rejestr)
+
+> 🔴 **Zgłoszone przez właściciela jako BLOKUJĄCE normalne sterowanie grą** (2026-08-20), zmierzone
+> wykonaniem. ⚠ **Nie należy do bramki własności** — to osobny, przekrojowy problem UI. Trafia tutaj
+> wyłącznie dlatego, że to jest aktualnie prowadzony rejestr; przy zakładaniu własnego planu dla mapy
+> należy je przenieść.
+>
+> ⚠ **Diagnoza właściciela („ikona statku przechwytuje klik") jest NIETRAFIONA, a objaw prawdziwy:**
+> ikona statku na mapie galaktyki **nie ma żadnej strefy klikalnej**. Działają **trzy niezależne
+> przyczyny naraz** (108/109/110) — i to dlatego żadne obejście nie pomagało.
+>
+> ✅ **OBEJŚCIE, KTÓRE DZIAŁA — nie przez mapę STRATCOM:** `switchActiveSystem` wołają bezpośrednio
+> chipy układów na głównej mapie 3D (`MapLabelLayer.js:541`), **trzy ścieżki w Outlinerze** oraz górny
+> pasek zasobów. Każda z nich wprowadzi gracza do układu niezależnie od stanu STRATCOM.
+
+108. 🔴 **Mapa STRATCOM — MECHANIZM 1: zaznaczony statek warp UKRYWA jedyny przycisk wejścia do układu.**
+     `FleetManagerOverlay.js:6097-6102` — gdy `_selectedWarpShipId` jest ustawione, rysowany jest panel
+     rozkazu warp **zamiast** panelu systemu, a `cluster_switch` (`:6294-6300`) — **jedyne w grze
+     wejście do widoku układu** — istnieje wyłącznie w tym drugim. Zmierzone zrzuty stref potwierdzają
+     zniknięcie `cluster_switch`.
+     ⚠ **To PUŁAPKA, nie przełącznik:** `warp_order_cancel` (`:2291-2293`) czyści `_selectedClusterSystem`,
+     ale **nigdy** `_selectedWarpShipId` ⇒ ponowny klik gwiazdy znów uzbraja panel warp, w nieskończoność.
+     Wyjścia: ponowny klik w TEN SAM wiersz statku (toggle, `:2274`) albo wyjście i powrót do zakładki
+     (`:605-610`). **Blokuje normalne sterowanie grą.**
+109. 🔴 **Mapa STRATCOM — MECHANIZM 2: klik i hover używają PRZECIWNYCH reguł rozstrzygania.**
+     Klik iteruje strefy **od końca** (`:1382`, wygrywa ostatnia pushowana), hover **od początku**
+     (`:1722`). 72 strefy `cluster_star` (22×22 px), **17 nakładających się par** przy domyślnym
+     zoomie, a `_stratcomVisibleSystems` sortuje od najbliższych (`:5503`) ⇒ deterministycznie
+     **hover podświetla bliższy układ, a klik wybiera dalszy — 15/15 zmierzonych przypadków**.
+     ⚠ Kolejność push tego **nie rozstrzygnie** (obie strefy tego samego typu) — potrzebny tie-break,
+     którego overlay nie ma, plus uzgodnienie reguły hover z regułą klika.
+     ⚠ `FleetManagerOverlay` **NIE dziedziczy po `BaseOverlay`** (`:352`), więc `_hitTest` z `.find()`
+     (FIRST-match) **nigdy się tu nie stosuje** — overlay nosi dwie sprzeczne reguły.
+110. 🟠 **Mapa STRATCOM — MECHANIZM 3: ikona statku w martwym pasie, klik połykany bez śladu.**
+     Ikona rysowana `STRATCOM_FAN_DY = -13` px nad gwiazdą (`:212`), o połowie wysokości ~4.5, czyli
+     `sy−17.5…sy−9.5`; strefa `cluster_star` sięga `sy−11…sy+11` (`hitR = max(r+5, 11)`, a `r` ≤ 7 wg
+     `:6051`) ⇒ **górna połowa ikony leży poza jakąkolwiek strefą**. Sama ikona **nie rejestruje strefy**
+     (`_drawStratcomOwnBlip:6440-6459` tylko rysuje). Klik tam trafiony jest **cicho połykany** przez
+     terminalne `return true` (`:1415`), bo fallback pustego obszaru (`:1394`) jest bramkowany na
+     zakładkę `tactical`. ⚠ Obie stałe są w pikselach ekranu ⇒ **zoom nigdy nie pomaga**.
+     ⚠ **Obejście, które DZIAŁA** (nie przez STRATCOM): `switchActiveSystem` wołają bezpośrednio chipy
+     układów na mapie 3D (`MapLabelLayer.js:541`), trzy ścieżki Outlinera i górny pasek zasobów.
 
 ---
 

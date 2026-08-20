@@ -1652,15 +1652,30 @@ Sweep **159/159 0 FAIL** · `check-i18n` PASS.
 ⚠ **Klasa A to nie „34 miejsca"**: **9** żywych bramek intencji gracza · **8** systemowych (termin
 własności byłby tam **błędem kategorii**) · **17** martwych (zdarzenie bez emitenta).
 
-**Findings 69-101** (rejestr w planie). ⚠ **97 jest ZMIERZONE i najcięższe z całej reszty:**
+**Findings 69-110** (rejestr w planie). ⚠ **97 jest ZMIERZONE i najcięższe z całej reszty:**
 🔴 **kolonia WROGA płaci za utrzymanie floty gracza** — `VesselManager._resolvePayHomeId:2062-2067`
 filtruje **tylko** `!col.isOutpost`, bez terminu własności, z fallbackiem na nigdy nieprzecelowywany
 `homePlanet`; po W3-1 zdobycz zostaje w `_colonies`, więc płaci. Zmierzone: 300 Kr/rozliczenie,
 5000→3094 przez 80 lat, `unpaidYears` = 0. ⚠ **Osiągalne przy ŻYWYCH koloniach gracza** (statek
 w drodze do koloni, która zostaje przejęta) — nie chowa się w scenariuszu D9. **Ta sama rodzina co
 D1-D6; zakres NIEROZSTRZYGNIĘTY** — do decyzji przy podpisywaniu części II planu.
-**98-101** (audyt kolonizacji) — bez decyzji o zakresie; m.in. `createMission('colonize')` ma **ZERO**
-wołających produkcyjnych. Raport: `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md`.
+**98-105** (audyty kolonizacji) — bez decyzji o zakresie; m.in. `createMission('colonize')` ma **ZERO**
+wołających produkcyjnych (100), a trasa „obca" blokuje POPy załogi **na zawsze** (102) i osierocą
+jednostki z `troop_bay` (107). Raporty: `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md` ·
+`docs/audit/WARP_COLONIZE_ROUTE_AUDIT.md`.
+🔴 **106 — TRASA ZADOKOWANA JEST PRZY ZERZE KOLONII ŚLEPYM ZAUŁKIEM.** Bramka przechodzi
+(`canLaunchColony` `ok:true`, `canExecute` `{ok:true}`, przycisk **aktywny**), a klik umiera cicho
+w `MissionSystem._launchColony:648`, bo `_detachActiveColony` wyzerował `missionSystem.resourceSystem`.
+Zmierzone: misji przed/po **0/0**. ⚠ **Unieważnia werdykt 1** poprzedniego audytu (sprostowanie wpisane
+w jego nagłówku). ⚠ **LEKCJA WIĄŻĄCA: przy pytaniu „czy X działa" BRAMKA NIE JEST ODPOWIEDZIĄ** —
+dowodem jest SKUTEK (`getPlayerColonies()` 0 → 1, statek znika z rejestru).
+🔴 **108-110 — BUG MAPY STRATCOM, blokuje sterowanie grą** (poza tematem tego arca): **108** zaznaczony
+statek warp ukrywa `cluster_switch`, jedyne wejście do widoku układu, a `warp_order_cancel` **nie czyści**
+`_selectedWarpShipId` ⇒ pułapka · **109** klik iteruje strefy od końca, hover od początku ⇒ przy
+nakładających się gwiazdach **hover pokazuje bliższy układ, klik wybiera dalszy** (15/15 zmierzonych) ·
+**110** ikona statku w martwym pasie nad gwiazdą, klik cicho połykany.
+⚠ `FleetManagerOverlay` **NIE dziedziczy po `BaseOverlay`** — `_hitTest` z `.find()` tu nie obowiązuje.
+✅ **Obejście:** `switchActiveSystem` wołają chipy `MapLabelLayer:541`, Outliner i górny pasek zasobów.
 **95/96** to **obserwacje z gate'u, NIEZBADANE**:
 **95** statek ze stoczni orbitalnej na koloni WTÓRNEJ po utracie stolicy wychodzi jako **obcy/nieznany
 kontakt** i nie trafia na listę rozmieszczenia (⚠ kontekst: `createAndRegister:186-211` **nigdy** nie

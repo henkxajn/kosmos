@@ -11,13 +11,40 @@ przekroju (8 agentów, 4 przekroje; zero refutacji, ~33 poprawki wchłonięte). 
 
 ---
 
+> # 🔴 SPROSTOWANIE 2026-08-20 — WERDYKT 1 BYŁ BŁĘDNY. CZYTAJ TO PIERWSZE.
+>
+> **Ten audyt zmierzył BRAMKĘ i nazwał ją SKUTKIEM.** Punkt 1 niżej mówi, że kolonizacja
+> z zadokowanego statku „działa przy zerze kolonii", bo `canExecute` zwraca `{ok:true}`.
+> **Bramka rzeczywiście przechodzi — ale KLIK NIE DAJE KOLONII.**
+>
+> Zmierzone (audyt bramki mapy/kolonizacji, ta sama data): przy zerze kolonii przycisk jest
+> **aktywny**, a klik umiera cicho w `MissionSystem._launchColony` (`:648`) na
+> `if (!this.resourceSystem || !this.resourceSystem.canAfford(COLONY_LAUNCH_COST))` — bo
+> `ColonyManager._detachActiveColony` (D9=W3) **wyzerował `missionSystem.resourceSystem`**.
+> **Misji przed/po = 0/0.**
+>
+> ⇒ **Trasa zadokowana jest przy zerze kolonii ŚLEPYM ZAUŁKIEM: „wygląda, że działa, a nie działa".**
+> ⇒ Punkt 3 zamówienia (świeży fail po stronie kolonizacji) **JEDNAK ZACHODZI** — tylko nie tam,
+> gdzie go szukałem: nie w bramce UI, lecz w wykonaniu akcji.
+> ⚠ **Konsekwencja dla D9:** `PlayerViability.js:16-18` powołuje się na przejście `canLaunchColony`
+> jako dowód, że „statek w locie = los odwracalny". Ta cytowana przesłanka opisuje **bramkę**, nie
+> skutek. ⇒ **Finding 106.**
+>
+> ⚠ **LEKCJA METODOLOGICZNA, wiążąca dalej:** przy pytaniu „czy X działa" **bramka nie jest
+> odpowiedzią**. Dowodem jest SKUTEK — tu: `getPlayerColonies().length` 0 → 1 oraz zniknięcie statku
+> z rejestru. Każdy przyszły audyt tej klasy ma mierzyć skutek, nie predykat.
+>
+> Reszta werdyktu (punkty 2 i 3) **zostaje w mocy** — patrz sprostowania inline niżej.
+
+---
+
 ## WERDYKT (na początku)
 
-> **1. NIE. Przycisk „Colonize" NIE zależy — w żaden sposób — od posiadania kolonii.**
-> Zmierzone wykonaniem: **zadokowany** statek kolonizacyjny przy **ZERZE** kolonii gracza daje
-> `FLEET_ACTIONS.colonize.canExecute === {ok:true}` i `canLaunchColony(cel, statek) === {ok:true}`.
-> ⇒ **To NIE jest fail D9 Scenariusza A.** Punkt 3 zamówienia (osobny, świeży fail po stronie
-> kolonizacji) **nie zachodzi** — nie ma czego zgłaszać jako zakres.
+> ⚠ **1. NIEAKTUALNY — patrz sprostowanie wyżej.** ~~Przycisk „Colonize" nie zależy od posiadania
+> kolonii.~~ **Co pozostaje prawdą:** żadna BRAMKA UI nie ma terminu „liczba kolonii" — zmierzone,
+> `FLEET_ACTIONS.colonize.canExecute === {ok:true}` i `canLaunchColony(cel, statek) === {ok:true}`
+> przy zerze kolonii. **Co było błędem:** wniosek „⇒ to nie jest fail D9-A". Bramka przechodzi,
+> a akcja pada — patrz Finding 106.
 >
 > **2. TAK. `_processColonyArrival` stempluje własność i konsumuje statek** — w przeciwieństwie do
 > gołego `createColony`. Zmierzone wykonaniem przy ZERZE kolonii: kolonia powstaje
@@ -190,17 +217,22 @@ a nie przerzucona. Wtedy przy zerze kolonii modal kolonistów **nie otworzy się
 
 ## 6. CO TO ZNACZY DLA GATE 2 §4 SCENARIUSZ A
 
-| pytanie | odpowiedź |
-|---|---|
-| Czy §4-A padło? | **NIE.** Mechanizm D9 zadziałał: `player:noReversalPossible` nie strzeliło, statek w locie poprawnie liczy się jako zdolność odwrócenia |
-| Czy UI blokuje kolonizację przy zerze kolonii? | **NIE** — zmierzone wykonaniem, przy 0 i przy 1 koloni wynik identyczny |
-| Czy zostało coś nieprzetestowane? | **TAK — domknięcie 0 → 1 przez PRAWDZIWĄ ścieżkę.** Headless mówi, że działa; **na żywo nie zostało pokazane**, bo statek poleciał `moveToPoint` |
+⚠ **CAŁA TA SEKCJA ZOSTAŁA UNIEWAŻNIONA SPROSTOWANIEM Z 2026-08-20** (nagłówek dokumentu).
+Zostawiona w oryginalnym brzmieniu jako zapis tego, co audyt twierdził — i dlaczego się mylił.
 
-**Do domknięcia §4-A na żywo wystarczy jedna zmiana w scenariuszu:** wyślij kolonizatora **formalną
-misją** (akcja `colonize` z zadokowanego statku), a nie rozkazem ruchu — wtedy przylot sam założy
-kolonię i zobaczysz `getPlayerColonies()` 0 → 1.
+| pytanie | odpowiedź (⚠ pierwotna) | stan po sprostowaniu |
+|---|---|---|
+| Czy §4-A padło? | **NIE.** Mechanizm D9 zadziałał: `player:noReversalPossible` nie strzeliło | ⚠ **Predykat przeżycia zadziałał — ale ścieżka wykonania NIE.** D9 utrzymuje gracza przy życiu obietnicą, której trasa zadokowana nie spełnia |
+| Czy UI blokuje kolonizację przy zerze kolonii? | **NIE** — bramki identyczne przy 0 i 1 koloni | ✅ **nadal prawda** — i właśnie w tym problem: przycisk jest **aktywny**, a akcja pada |
+| Czy zostało coś nieprzetestowane? | TAK — domknięcie 0 → 1 na żywo | 🔴 **Zostało przetestowane wykonaniem i NIE domyka się**: `_launchColony:648`, misji 0/0 ⇒ **Finding 106** |
+
+**Do domknięcia §4-A na żywo — ⚠ ZALECENIE ZMIENIONE.** Pierwotnie stało tu: „wyślij kolonizatora
+formalną misją z zadokowanego statku". **Tego nie rób w stanie zera kolonii — to jest właśnie ślepy
+zaułek.** Jedyną trasą, która przy zerze kolonii ma zmierzone domknięcie 0 → 1, jest **warp**
+(`WARP_COLONIZE_ROUTE_AUDIT.md`).
 ⚠ **Nie licz na przycisk przy statku, który już orbituje po `moveToPoint`** — z §2 wynika, że go tam
-nie będzie **przy żadnej liczbie kolonii**, i to jest zachowanie dzisiejsze, nie regresja.
+nie będzie **przy żadnej liczbie kolonii**; to zachowanie dzisiejsze, nie regresja. (Ten punkt
+pozostaje w mocy.)
 
 ---
 
