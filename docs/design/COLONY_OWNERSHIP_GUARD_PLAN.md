@@ -968,6 +968,11 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      ⇒ **Do rozstrzygnięcia jest nie „czy naprawić", tylko CO JEST PRAWDĄ:** czy „los odwracalny"
      ma znaczyć *istnieje kadłub*, czy *istnieje kadłub, który MOŻE założyć kolonię*. To jest powrót
      D9 na stół, a nie poprawka.
+     ➡ **PLAN NAPRAWY (2026-08-20, NIEPODPISANY):** `docs/design/PLAYER_VIABILITY_PREDICATE_PLAN.md`
+     — predykat po TYPIE MISJI (trzy żywe trasy zmierzone wykonaniem) + ⚠ **sprzężona decyzja D-111**:
+     `MissionSystem._launchFoundOutpost:744` to **nieutwardzony bliźniak** bramki D9 (miękkie
+     `if (this.resourceSystem)`), przez który przy ZERZE kolonii placówka zakłada się **za darmo**
+     (zmierzone: kolonie gracza 0 → 1). Samego predykatu **nie wolno zawęzić bez tej decyzji**.
 
 ---
 
