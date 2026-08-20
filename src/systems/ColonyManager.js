@@ -1317,12 +1317,26 @@ export class ColonyManager {
 
   /** Maks jednostek w kolonii (Population 2.0: floor(pop/16), min 2 — ÷4 redenominacja). Drony i supply unit exempt. */
   _getMaxGroundUnits(colony) {
+    // ⚠ NULL-SAFE OD GATE P0 §6: brak koloni ⇒ zero miejsc, nie wyjątek. Patrz `_canRecruitMoreUnits`.
+    if (!colony) return 0;
     const pop = Math.floor(colony.civSystem?.population ?? 0);
     return Math.max(2, Math.floor(pop / 16));
   }
 
   /** Czy można zrekrutować kolejną jednostkę (pop cap)? */
   _canRecruitMoreUnits(colony, archetypeId) {
+    // ⚠ NULL-SAFE OD GATE P0 §6 — ZŁAPANE NA ŻYWO, crash CO KLATKĘ.
+    //   Gracz bez ŻADNEJ koloni ma `activePlanetId === null` (D9=W3, `_detachActiveColony`), więc
+    //   `colony` przychodzi tu jako `null`, a `colony.planetId` wywracało pętlę rysowania
+    //   (`GroundUnitPanel._drawActions` → `draw` → `FleetManagerOverlay._drawGroundTab`).
+    //   ⚠ WOŁAJĄCY MIAŁ `colonyMgr?._canRecruitMoreUnits?.(colony, archId) ?? true` — opcjonalne
+    //     łańcuchowanie chroni ODBIORNIK, nigdy ARGUMENT. Guard musi stać w helperze, bo to helper
+    //     jest kontraktem; poprawka wyłącznie w wołającym zostawiłaby minę następnemu.
+    //   ⚠ ODPOWIEDŹ „NIE MOŻNA", nie „można": bez koloni nie ma gdzie ani z czego rekrutować.
+    //     Wcześniejszy `?? true` u wołającego kłamał w drugą stronę (przycisk aktywny), tyle że
+    //     nigdy się nie wykonał — wyjątek leciał wcześniej.
+    if (!colony) return false;
+
     if (GROUND_UNIT_CAP_EXEMPT.has(archetypeId)) return true;
 
     const mgr = window.KOSMOS?.groundUnitManager;

@@ -574,12 +574,20 @@ export class GroundUnitPanel {
     // ── Gating info (jeśli zablokowany) ──
     const gate = this._getGatingStatus();
     if (!gate.unlocked && gate.reason) {
-      ctx.fillStyle = THEME.danger;
-      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
       let msg = '';
       if (gate.reason === 'tech')     msg = t('groundPanel.lockedTech', gate.missing);
       if (gate.reason === 'barracks') msg = t('groundPanel.lockedBarracks', gate.requiredLv);
-      ctx.fillText(`🔒 ${msg}`, x + PAD, cy + 10);
+      // ⚠ GATE P0 §6: `reason === 'no_colony'` (gracz stracił wszystkie kolonie) nie ma i NIE
+      //   POTRZEBUJE własnego tekstu — ta sama klatka mówi to już DWA razy: `_drawColonyInfo`
+      //   (`groundPanel.noColony`) i etykieta przycisku (`groundPanel.recruitDisabled`).
+      //   Bez tego guarda malowała się goła kłódka „🔒 " z pustym komunikatem, czyli czerwony
+      //   znak zakazu, który niczego nie wyjaśnia, dokładnie w chwili, gdy gracz najbardziej
+      //   potrzebuje wyjaśnienia. Rysujemy wyłącznie wtedy, gdy MAMY co napisać.
+      if (msg) {
+        ctx.fillStyle = THEME.danger;
+        ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+        ctx.fillText(`🔒 ${msg}`, x + PAD, cy + 10);
+      }
     }
   }
 
