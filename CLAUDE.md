@@ -1652,7 +1652,7 @@ Sweep **159/159 0 FAIL** · `check-i18n` PASS.
 ⚠ **Klasa A to nie „34 miejsca"**: **9** żywych bramek intencji gracza · **8** systemowych (termin
 własności byłby tam **błędem kategorii**) · **17** martwych (zdarzenie bez emitenta).
 
-**Findings 69-110** (rejestr w planie). ⚠ **97 jest ZMIERZONE i najcięższe z całej reszty:**
+**Findings 69-111** (rejestr w planie). ⚠ **NAJCIĘŻSZE jest 111 (P1, niżej); 97 jest drugie i też ZMIERZONE:**
 🔴 **kolonia WROGA płaci za utrzymanie floty gracza** — `VesselManager._resolvePayHomeId:2062-2067`
 filtruje **tylko** `!col.isOutpost`, bez terminu własności, z fallbackiem na nigdy nieprzecelowywany
 `homePlanet`; po W3-1 zdobycz zostaje w `_colonies`, więc płaci. Zmierzone: 300 Kr/rozliczenie,
@@ -1669,6 +1669,15 @@ w `MissionSystem._launchColony:648`, bo `_detachActiveColony` wyzerował `missio
 Zmierzone: misji przed/po **0/0**. ⚠ **Unieważnia werdykt 1** poprzedniego audytu (sprostowanie wpisane
 w jego nagłówku). ⚠ **LEKCJA WIĄŻĄCA: przy pytaniu „czy X działa" BRAMKA NIE JEST ODPOWIEDZIĄ** —
 dowodem jest SKUTEK (`getPlayerColonies()` 0 → 1, statek znika z rejestru).
+🔴 **111 (P1, NAJCIĘŻSZE) — `canReverseFate` liczy statki, ktore NIE MAJA JAK NIC ZROBIC ⇒ gra,
+ktora NIGDY sie nie konczy.** `PlayerViability.js:57` sprawdza istnienie kadluba z habitatem i **zero**
+stanu (dok/orbita/misja), a `_tickPlayerViability` (`ColonyManager.js:314`) zeruje licznik karencji przy
+kazdym tiku, dopoki `state.ok`. Zmierzone trzy konfiguracje: **w locie/po warpie** 0 → 1 ✅ ·
+**zadokowany przy traconej koloni** — `transferColony:838-843` go niszczy, predykat poprawny ✅ ·
+**zadokowany gdzie indziej / dryfujacy po `moveToPoint`** — liczony jako ratunek, a nie moze nic ⇒
+🔴 **LIMBO bez konca gry**. ⚠ Trzecia konfiguracja to ta, na ktora wlasciciel trafil w normalnej grze.
+⚠ D9 stoi na przeslance, ktora opisuje BRAMKE, nie skutek (Finding 106) — to powrot D9 na stol,
+nie poprawka. Kandydat na osobny **P1**.
 🔴 **108-110 — BUG MAPY STRATCOM, blokuje sterowanie grą** (poza tematem tego arca): **108** zaznaczony
 statek warp ukrywa `cluster_switch`, jedyne wejście do widoku układu, a `warp_order_cancel` **nie czyści**
 `_selectedWarpShipId` ⇒ pułapka · **109** klik iteruje strefy od końca, hover od początku ⇒ przy

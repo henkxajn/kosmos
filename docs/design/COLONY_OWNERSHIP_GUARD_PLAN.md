@@ -799,18 +799,26 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     bramkowanie startu (brak portu, brak odrzucenia przy braku paliwa) · **104** dwie równoległe
     implementacje kolonizacji · **105** drugie potwierdzenie nieprawdziwego komentarza z 101.
 
-106. 🔴 **TRASA ZADOKOWANA JEST PRZY ZERZE KOLONII ŚLEPYM ZAUŁKIEM — bramka przechodzi, akcja pada
-     CICHO.** Przy zerze kolonii `canLaunchColony` zwraca `ok:true`, `FLEET_ACTIONS.colonize.canExecute`
-     zwraca `{ok:true}`, **przycisk jest aktywny** — ale klik umiera w `MissionSystem._launchColony`
-     (`:648`) na `if (!this.resourceSystem || !this.resourceSystem.canAfford(COLONY_LAUNCH_COST))`,
-     bo `_detachActiveColony` (D9=W3) wyzerował `missionSystem.resourceSystem`. **Zmierzone: misji
-     przed/po = 0/0.**
-     ⚠ **To unieważnia werdykt 1 z `COLONIZE_PATH_ZERO_COLONY_AUDIT.md`** (tam wpisane sprostowanie).
-     ⚠ **Konsekwencja dla D9:** `PlayerViability.js:16-18` cytuje przejście `canLaunchColony` jako
-     zmierzony dowód, że „statek w locie = los odwracalny". Ta przesłanka opisuje **bramkę, nie skutek**.
-     ⚠ **LEKCJA WIĄŻĄCA:** przy pytaniu „czy X działa" **bramka nie jest odpowiedzią** — dowodem jest
-     SKUTEK (`getPlayerColonies()` 0 → 1, statek znika z rejestru).
-     ⇒ Zakres nierozstrzygnięty; ta sama rodzina co reszta (miejsce zakładające żywy kontekst kolonii).
+106. 🟠 **UI nie mówi, że start kolonizacji jest przy zerze kolonii ZABRONIONY — przycisk zostaje
+     aktywny.** ⚠ **SKORYGOWANE 2026-08-20 (drugi pomiar, wykonaniowy) — pierwotnie zapisane jako
+     „ŚLEPY ZAUŁEK / akcja pada cicho", i to było ZA OSTRE.**
+     **Co jest prawdą:** `canLaunchColony` → `ok:true`, `FLEET_ACTIONS.colonize.canExecute` → `{ok:true}`,
+     przycisk **aktywny**, a klik kończy się odmową w `MissionSystem._launchColony` (`:648`), bo
+     `_detachActiveColony` wyzerował `missionSystem.resourceSystem`. Zmierzone: **misji przed/po = 0/0**.
+     ⚠ **Czego NIE wolno z tego wyciągać — i co wyciągnąłem błędnie:** ta odmowa **NIE jest defektem.**
+     Komentarz `MissionSystem.js:643-647` mówi to wprost: *„nowej misji kolonizacyjnej nie da się wysłać
+     z zera; zostaje statek JUŻ W LOCIE, z zasobami JUŻ załadowanymi"* — czyli to **podpisane
+     rozstrzygnięcie AC-8/D9** („magazyn NIE zostaje z graczem"), działające dokładnie jak zamierzono.
+     ⚠ Odmowa **nie jest też w pełni cicha**: leci `expedition:launchFailed` i **jedna czerwona linia
+     w Dzienniku** („Start anulowany: Brak surowców startowych", kanał flota, severity `warn`).
+     **Realny defekt jest węższy:** przycisk **pozostaje włączony** po odmowie (zamiast być wyszarzony
+     z powodem), a toast jest bramkowany na `cause === 'fuel'`, więc tu nie leci.
+     ⚠ **Zmierzone przy okazji:** martwy jest **START** przy zerze kolonii, **nie PRZYLOT** — misja
+     kolonizacyjna wystartowana PRZED utratą domyka się PO niej poprawnie (0 → 1, statek skonsumowany).
+     ⚠ **LEKCJA WIĄŻĄCA (zostaje w mocy):** przy pytaniu „czy X działa" **bramka nie jest odpowiedzią** —
+     dowodem jest SKUTEK. Ten wpis jest też przykładem drugiego kroku tej lekcji: **zmierzony skutek
+     trzeba jeszcze skonfrontować z ZAMIAREM** zapisanym w kodzie, zanim nazwie się go defektem.
+     ⇒ Sprostowanie wpisane też w nagłówku `COLONIZE_PATH_ZERO_COLONY_AUDIT.md`.
 107. 🟠 **Bliźniak Findingu 102: trasa „obca" OSIEROCA JEDNOSTKI W ŁADOWNI DESANTOWEJ.**
      `_startForeignColonize` usuwa statek surowym `this._vessels.delete` (`VesselManager.js:3246`)
      zamiast `destroyVessel` (`:1042`) — a `destroyVessel` rozlicza nie tylko załogę
@@ -862,6 +870,38 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      zakładkę `tactical`. ⚠ Obie stałe są w pikselach ekranu ⇒ **zoom nigdy nie pomaga**.
      ⚠ **Obejście, które DZIAŁA** (nie przez STRATCOM): `switchActiveSystem` wołają bezpośrednio chipy
      układów na mapie 3D (`MapLabelLayer.js:541`), trzy ścieżki Outlinera i górny pasek zasobów.
+
+---
+
+## Findings — 🔴 P1: PREDYKAT KOŃCA GRY (najcięższa pozycja rejestru)
+
+> ⚠ **Waga wyższa niż wszystkiego powyżej — i to jest ocena właściciela, nie moja.** Skutkiem nie jest
+> brzydki UI ani utracone kredyty, tylko **gra, która nigdy się nie kończy, mimo że gracz faktycznie
+> przegrał i nie ma żadnej drogi powrotu**. To defekt w predykacie decydującym **czy partia trwa**.
+> ⚠ Kandydat na **osobny P1**, nie na doklejkę do D1-D6 (decyzja o zakresie: przy podpisie części II).
+
+111. 🔴 **`canReverseFate` liczy statki, które NIE MAJĄ JAK NIC ZROBIĆ ⇒ trwałe zawieszenie bez końca gry.**
+     `PlayerViability.js:57` — `hasColonyCapableShip(vessels)` to
+     `vessels.some(v => isPlayersVessel(v) && canColonize(v))`: **czyste istnienie + moduł habitatu,
+     ZERO sprawdzenia stanu** (dok / orbita / misja / paliwo). A `_tickPlayerViability`
+     (`ColonyManager.js:314`) **zeruje `_viabilityLostFor` przy każdym tiku**, dopóki `state.ok`.
+     ⇒ dopóki gdziekolwiek istnieje kadłub z habitatem, **`game:over` nie padnie NIGDY**.
+     **Zmierzone — trzy konfiguracje, trzy różne wyniki:**
+     | kolonizator w chwili utraty | zachowanie | werdykt |
+     |---|---|---|
+     | **w locie / po warpie** | 0 → 1, statek skonsumowany (pełny łańcuch przez prawdziwe UI) | ✅ **działa** |
+     | **zadokowany przy traconej koloni** | `transferColony:838-843` **niszczy** go (`state==='docked'`) ⇒ predykat poprawnie mówi „nie ma czym" | ✅ **słusznie** |
+     | **zadokowany gdzie indziej / dryfujący po `moveToPoint`** | liczony jako ratunek, a **nie może nic**: start zabroniony (`_launchColony:648`, podpisane D9), brak akcji `colonize` (`state !== 'docked'`), brak panelu obcego (`mission === null`) | 🔴 **LIMBO** |
+     ⚠ **Trzecia konfiguracja to dokładnie ta, na którą właściciel trafił grając normalnie** (`v_9`
+     wysłany `moveToPoint`) — nie jest to przypadek brzegowy wymyślony przez audyt.
+     ⚠ **Fundament D9 ma tu mierzalne pęknięcie.** Reguła „**ISTNIENIE, NIE OSIĄGALNOŚĆ**"
+     (`PlayerViability.js:18-21`) była świadomie podpisana, ale oparto ją na przesłance zapisanej
+     w tym samym pliku (`:13-15`): *„przy ZERZE kolonii `canLaunchColony` przechodzi, a przylot zakłada
+     kolonię"*. Ta przesłanka jest **PÓŁPRAWDĄ** — bramka przechodzi, **start nie** (Finding 106).
+     Decyzja D9 stoi więc na fakcie, który opisuje predykat, a nie skutek.
+     ⇒ **Do rozstrzygnięcia jest nie „czy naprawić", tylko CO JEST PRAWDĄ:** czy „los odwracalny"
+     ma znaczyć *istnieje kadłub*, czy *istnieje kadłub, który MOŻE założyć kolonię*. To jest powrót
+     D9 na stół, a nie poprawka.
 
 ---
 
