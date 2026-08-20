@@ -21,14 +21,22 @@
 
 **Sesja właściciela przerwana w trakcie §3.** Stan gry **zabezpieczony do pliku `.json`** przed
 zamknięciem karty — nie trzeba odtwarzać scenariusza od zera, wystarczy wczytać tamten zapis.
-**W repo nic się nie zmieniło od rozpoczęcia gate'u**, więc ta checklista opisuje dokładnie ten kod,
-na którym gate biegł (AC-7 `990255f` · AC-8 `bb614ed` · AC-9 `105b873`).
+⚠ **SPROSTOWANIE 2026-08-20 — to zdanie stało tu jako „w repo nic się nie zmieniło od rozpoczęcia
+gate'u" i JUŻ NIE JEST PRAWDZIWE.** Między §3 a §4 wszedł **blok P0** arca BRAMKA WŁASNOŚCI
+(`e86c091` · `0085a37` · `6796617`; plan `docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`), bo §3 obnażyło
+defekt, przez który **wczytanie zapisu samo oddawało gracza koloni wroga**. Czyli:
+- **§1-§3 biegły na kodzie sprzed P0** (AC-7 `990255f` · AC-8 `bb614ed` · AC-9 `105b873`);
+- **§4 i §5 pobiegną na kodzie Z P0** — i to jest w porządku: mechanizmy, które one mierzą
+  (`_tickPlayerViability`, `canReverseFate`, `captureColonyForPlayer`, `colony:capturedByPlayer`),
+  **P0 nie tknął**. Sprawdzone punkt po punkcie 2026-08-20; treść §4 i §5 **nie wymagała zmian**.
+- 🔴 **Dlatego §4/§5 wykonujemy na ŚWIEŻEJ partii, nie na tamtym zapisie `.json`** — tamten plik jest
+  skażony dokładnie tą regresją, którą P0 naprawiło (`COLONY_OWNERSHIP_GATE_AUDIT.md` §6).
 
 | § | zakres | status |
 |---|---|---|
 | **§1** | księga kampanii (AC-7) | ✅ **PASS** |
 | **§2** | widoczność utraty terenu (AC-9) | ✅ **PASS** |
-| **§3** | higiena po utracie kolonii (AC-8) | 🔶 **W TOKU — dwa punkty zostały** |
+| **§3** | higiena po utracie kolonii (AC-8) | 🔶 **JEDEN punkt został** — przeklikanie UI zamknięte w GATE P0 §6 (PASS); zostaje **odmowa nowej misji kolonizacyjnej**. ⚠ Zrób go przy §4 scenariusz B — będziesz DOKŁADNIE w tym stanie |
 | **§4** | D9=W3, koniec gry przy braku odwrotu | ⬜ **NIE ZACZĘTE** |
 | **§5** | regresja odbicia (D7 z W3) | ⬜ **NIE ZACZĘTE** |
 
@@ -45,10 +53,13 @@ sekcji. Zgodnie z checklistą.
 **§3 — co JUŻ potwierdzone:** `K4` → `{ aktywna: null, magazyn: 'ODPIĘTY', kolonieGracza: 0 }`;
 kolonia zniknęła z górnego paska i z całego UI; brak widocznego crasha.
 **§3 — co ZOSTAŁO do domknięcia (od tego zacznij):**
-1. **Systematyczne przeklikanie UI z otwartą konsolą** — Outliner, Ekonomia, Populacja, mapa
-   strategiczna. Kryterium nie brzmi „kolonia zniknęła", tylko **„nic nie rzuca wyjątkiem"**.
-   ⚠ To jest najostrzejszy punkt całego gate'u: `resourceSystem` i `civSystem` są tam po raz
-   pierwszy `null`, a headless nie rysuje paneli, więc tego ryzyka nie da się zamknąć testem.
+1. ✅ **ZAMKNIĘTE GDZIE INDZIEJ (2026-08-20) — nie powtarzaj.** Systematyczne przeklikanie UI z otwartą
+   konsolą wykonano jako **GATE P0 §6** (`COLONY_OWNERSHIP_GATE_P0_CHECKLIST.md`), na świeżej partii
+   i na kodzie PO naprawie — **PASS**. ⚠ I ten punkt **zarobił na siebie**: za pierwszym podejściem
+   PADŁ, ujawniając crash **co klatkę** w `GroundUnitPanel._drawActions` → `_canRecruitMoreUnits`
+   (`colony.planetId` przy `colony === null`) plus drugi, ukryty za nim (`_getMaxGroundUnits`).
+   Naprawione w `6796617`, przykryte keeperem **wykonaniowym** `zero_colony_panels_smoke` (11/11).
+   Dokładnie tak, jak zapowiadało kryterium: **„nic nie rzuca wyjątkiem"**, nie „panel jest pusty".
 2. **Próba wysłania NOWEJ misji kolonizacyjnej** → oczekiwana **ODMOWA** („brak zasobów
    startowych"), nie darmowy start. To jest bezpośredni sprawdzian rozstrzygnięcia „magazyn nie
    zostaje z graczem" — i zarazem pułapki, w której miękkie `if (this.resourceSystem)` czyniło
@@ -162,7 +173,10 @@ Utrata ostatniej kolonii bez statku desantowego z wojskiem i bez kolonizatora.
 > już dowiedzionego (W3 GATE 3 §5, odbicie Nekkar d). Tu wraca, bo AC-7/AC-8 dotknęły dokładnie
 > tej ścieżki: guard idempotencji w `transferColony` i filtr właściciela w fallbacku.
 
-- [ ] Odbij kolonię zajętą przez AI (wybij najeźdźców; skan chodzi raz na rok gry).
+- [ ] Odbij kolonię zajętą przez AI (wybij najeźdźców; skan chodzi raz na **1.0 civYear = jeden
+      WYŚWIETLANY MIESIĄC**, nie raz na rok gry — `InvasionSystem.js:51-61` akumuluje `civDeltaYears`
+      z progiem `1.0`, a `CIV_TIME_SCALE = 12`. ⚠ Sprostowane 2026-08-20; poprzednia wartość była 12×
+      zawyżona, więc nie czekaj roku).
 - [ ] Wraca **kompletna**: populacja, budynki, produkcja, lista kolonii, panel.
 - [ ] `KOSMOS.debugLog.query({ kind: 'colony:captured' })` **nie rośnie** przy odbiciu
       (gracz odzyskuje przez `colony:capturedByPlayer`, nie przez `colony:captured`).

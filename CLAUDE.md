@@ -1578,12 +1578,86 @@ teraz z zapisanym mechanizmem: konflikt to file watcher, nie uwaga).
 Keepery W3: `w3_dominance_persist` 16 · `w3_attack_dispatch` 35 · `w3_cross_system_attack` 42 ·
 `w3_raider_lever` 24 · `w3_target_selection` 30 · `w3_foreign_arrival_gate` 5 · `w3_director_mounting`
 17 · `w3_ai_invasion` 23 · `w3_attack_visibility` 42 · `w3_battle_booking` 19 · sondy
-`probe-w3-seams`/`probe-w3-targets`. Sweep **148/148 0 FAIL** · `check-i18n` PASS.
+`probe-w3-seams`/`probe-w3-targets`. Sweep **148/148 0 FAIL** (stan W3; dziś **159/159** — patrz blok BRAMKA WŁASNOŚCI) · `check-i18n` PASS.
 
 **NASTĘPNE (osobne, nowe sesje — NIE w tym wątku):** **W4 — pokój terytorialny** (charter
 `WAR_BACKBONE.md` §6a + addendum po W3) · nowy gate **„AI przejmuje kolonię"** (Finding 51) ·
 **katalog transportowca AI** (Finding 49) · slice **GROUND** (S12 morale → R13 RNG → pule desantu na
 archetypy, Finding 50).
+
+---
+
+## BRAMKA WŁASNOŚCI KOLONII — blok P0: wczytanie nie oddaje gracza koloni wroga (save **v101 bez migracji**, GATE P0 §1-§7 PASS — BLOK ZAMKNIĘTY 2026-08-20)
+
+Slice **przekrojowy, NIE należący do AI_CAPTURE**. Plan + 10 decyzji + rejestr:
+`docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`; audyt read-only: `docs/audit/COLONY_OWNERSHIP_GATE_AUDIT.md`;
+checklista: `COLONY_OWNERSHIP_GATE_P0_CHECKLIST.md`. Commity: `e86c091` (OG-0 keeper szwów) ·
+`0085a37` (OG-2 naprawa) · `a03be51` (docs) · `c4ab33b` (checklista) · `6796617` (fix po §6).
+
+**Jedno zdanie:** gra ma bramkę **„KTÓRA kolonia"** i nie ma bramki **„CZYJA"** — `switchActiveColony`
+sprawdza ISTNIENIE (`ColonyManager.js:262-264`), a guard `window.KOSMOS?.buildingSystem !== this`
+(`BuildingSystem.js:99-102`, 35 wystąpień w repo) sprawdza AKTYWNOŚĆ. **Żadne nie pyta o właściciela.**
+⚠ Dziura jest **PRE-EXISTING** (guard stoi w pierwszym commicie repo, `9951d5e`, 2026-03-01); warunkiem
+koniecznym osiągalności była **W3-1** (`efa8f85` — przejęta kolonia ZOSTAJE w `_colonies`), **nie AC-8**.
+⚠ **Gracz nie „kradł sobie gospodarki" — KARMIŁ gospodarkę wroga**: `_activateBuilding:755` rejestruje
+producenta na WŁASNEJ instancji koloni, więc kopalnia była płacona z magazynu wroga i produkowała do
+magazynu wroga; `switchActiveColony` przecelował tylko HUD.
+
+**Blok P0 (podpisany 2026-08-19, wdrożony i zweryfikowany 2026-08-20) — zamknięcie ścieżki WCZYTANIA:**
+- **P0-A=W1** — `ColonyManager.restore` **nie wiąże już niczego** (było: uzbrojenie `_activePlanetId`
+  z samej flagi `isHomePlanet` + wiązanie **DWÓCH z pięciu** wskaźników, ślepo na własność, wbrew
+  inwariantowi `switchActiveColony` „NIGDY stale-inna-kolonia"). Zapisany `activePlanetId` to teraz
+  PODPOWIEDŹ (`_pendingActivePlanetId`). NEW **`resolveActiveColonyAfterRestore()`** — drabina:
+  zapisana-jeśli-gracza → dom-jeśli-gracza → dowolna kolonia GRACZA → `_detachActiveColony`.
+  Wołane z bloku odroczonego `GameScene`, **wyjętego spod `if (homePlanetId)`**.
+  ⚠ **KOLEJNOŚĆ JEST KONTRAKTEM:** blok biegnie **PO** `relinkColoniesAfterRestore` (`GameScene:2046`,
+  synchronicznie) i jako **JEDYNE** miejsce w łańcuchu ładowania widzi `ownerEmpireId`.
+- **P0-B=W1** — własność zostaje **WYPROWADZANA** z `empires[].colonies` (`EmpireColonyBootstrap.js:543`
+  mówi to wprost). **Bez zmiany formatu zapisu.**
+- **P0-C=W2** — `transferColony` **czyści** `colony.isHomePlanet` **PO** snapshocie `wasHomePlanet`
+  (inaczej „Stolica utracona" cicho degraduje do „Kolonia utracona"); `captureColonyForPlayer`
+  **przywraca** flagę przy odbiciu WŁASNEJ stolicy. Dwa **podpisane** skutki uboczne: ex-dom przestaje
+  być niezniszczalny; wpada w gałąź heal-up przy restore (już dziś ślepą na własność dla kolonii AI).
+- **P0-D=W1** — `removeColony:667` miał **NIEUTWARDZONEGO BLIŹNIAKA** fallbacku AC-8 i był **ŻYWY**:
+  test PRZYNALEŻNOŚCI (`_colonies.has`) zamiast własności ⇒ po przejęciu stolicy zniszczenie
+  **dowolnej innej** aktywnej koloni gracza (kolizja, wyrzucenie, `entity:removed`) przepinało wszystkie
+  pięć wskaźników na kolonię WROGA. Drabina wyciągnięta do `_pickFallbackActiveColony(excludeId)` —
+  jedno źródło dla **trzech** ścieżek (utrata / zniszczenie / wczytanie).
+
+**⚠ GATE P0 §6 PADŁ i to była wartość gate'u.** Kryterium „**nic nie rzuca wyjątkiem**" (nie „panel jest
+pusty") złapało crash **co klatkę**: `GroundUnitPanel._drawActions` → `ColonyManager._canRecruitMoreUnits`
+(`colony.planetId` przy `colony === null`), a za nim **drugi, ukryty**: `_getMaxGroundUnits`
+(`colony.civSystem`, wołany z `GroundUnitPanel:623`). Naprawione w `6796617`. **Żaden nie był defektem
+P0** — to ta sama KLASA w pliku, którego P0 nie dotykał.
+⚠ **LEKCJA WIĄŻĄCA DALEJ:** `mgr?._method?.(nullColony)` — **opcjonalne łańcuchowanie chroni ODBIORNIK,
+nigdy ARGUMENT**. Guard należy do **helpera**, bo to helper jest kontraktem; poprawka wyłącznie
+u wołającego zostawia minę następnemu.
+⚠ **`GroundUnitPanel` i `FleetManagerOverlay` IMPORTUJĄ SIĘ pod node** (inaczej niż `GameScene`/
+`ColonyOverlay`), a `getColony` jest **wstrzykiwane do konstruktora** ⇒ tę klasę paneli da się pinować
+**WYKONANIEM** (prawdziwa pętla `draw()` na atrapie ctx z `getColony: () => null`).
+
+**Keepery:** `colony_ownership_seams` 11 (⚠ trzy szwy świadomie odwrócone; **S4 ŻYJE** — `switchActiveColony`
+przyjmuje kolonię AI, to **D1**) · `colony_ownership_load` 33 (⚠ **T8 pinuje ŹRÓDŁOWO SPOSÓB SKŁADANIA
+SCENY**: wywołanie istnieje, stoi **PO relinku**, nie jest zagnieżdżone w bramce — pin kolejnościowy
+**dowiedziony MUTACJĄ źródła**, bo bez niego przeniesienie wywołania przed relink odtwarzało defekt
+w całości przy **zielonych** keeperach) · `zero_colony_panels` 11 (wykonaniowy).
+Sweep **159/159 0 FAIL** · `check-i18n` PASS.
+
+**⬜ NIEPODPISANE i NADAL ŻYWE (D1-D6, osobny podpis):** **D1** ścieżka klikana (4 wejścia:
+`GameScene:3287-3295` `system:switched` bierze `cols[0]` z `getAllColonies()` filtrowanego tylko po
+`systemId` · `BottomContext:423` · `GameScene:5366` · `EventLogOverlay:348`) · **D5** przynależność kafla
+(⚠ `_build` **zero** odwołań do `this._grid` w `:796-1015`; stan „mój portfel, cudzy kafel" jest żywy
+**już dziś** przez zaprojektowany podgląd obcej planety — `show({colonyId})` nie woła
+`switchActiveColony`, a pasek budowy bramkuje tylko `!isPreview`) · **D2/D3/D4/D6**.
+⚠ **Klasa A to nie „34 miejsca"**: **9** żywych bramek intencji gracza · **8** systemowych (termin
+własności byłby tam **błędem kategorii**) · **17** martwych (zdarzenie bez emitenta).
+
+**Findings 69-96** (rejestr w planie). Dwa ostatnie to **obserwacje z gate'u, NIEZBADANE**:
+**95** statek ze stoczni orbitalnej na koloni WTÓRNEJ po utracie stolicy wychodzi jako **obcy/nieznany
+kontakt** i nie trafia na listę rozmieszczenia (⚠ kontekst: `createAndRegister:186-211` **nigdy** nie
+stempluje własności, więc stempel wroga musi pochodzić skądinąd) · **96** czy utrata głównej koloni
+osierocą stację orbitalną **drugiej** koloni (⚠ `transferColony`, w odróżnieniu od `removeColony`,
+**nie emituje** `colony:destroyed`, na którym stoi mechanizm osierocenia z S3.4c). ⇒ **osobny audyt.**
 
 ---
 

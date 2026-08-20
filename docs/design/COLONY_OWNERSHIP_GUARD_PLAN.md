@@ -1,10 +1,22 @@
-# BRAMKA WŁASNOŚCI KOLONII — plan doc (🔶 **P0 WDROŻONY · D1-D6 DO PODPISU**)
+# BRAMKA WŁASNOŚCI KOLONII — plan doc (✅ **BLOK P0 ZAMKNIĘTY · D1-D6 DO PODPISU**)
 
-> # 🔶 BLOK P0 PODPISANY I WDROŻONY · D1-D6 CZEKAJĄ NA PODPIS
+> # ✅ BLOK P0 ZAMKNIĘTY — GATE P0 ZDANY W CAŁOŚCI (2026-08-20)
 > **P0-A=W1 · P0-B=W1 · P0-C=W2 (+„dom wraca przy odbiciu"=W2) · P0-D=W1** — podpisane 2026-08-19,
-> wdrożone 2026-08-20 w commitach **OG-0** (`e86c091`, keeper szwów) i **OG-2** (`0085a37`, naprawa).
-> Stare zapisy **naprawiają się same przy wczytaniu** (uzasadnienie wariantu (a)); **zapis v101, bez migracji**.
-> **Live-gate P0 — DO WYKONANIA przez właściciela, na ŚWIEŻEJ partii** (§Weryfikacja).
+> wdrożone i **zweryfikowane na żywo 2026-08-20**.
+> **GATE P0 §1-§7 PASS**, w tym §7 (odbicie stolicy przywraca `isHomePlanet: true`).
+> Commity: **OG-0** `e86c091` (keeper szwów) · **OG-2** `0085a37` (naprawa) · `a03be51` (docs) ·
+> `c4ab33b` (checklista) · **`6796617`** (fix po §6 — niżej).
+> Stare zapisy **naprawiają się same przy wczytaniu**; **zapis v101, bez migracji**.
+>
+> ⚠ **§6 PADŁ ZA PIERWSZYM PODEJŚCIEM I TO BYŁA WARTOŚĆ GATE'U.** Kryterium „nic nie rzuca wyjątkiem"
+> (a nie „panel jest pusty") złapało crash **co klatkę** w `GroundUnitPanel._drawActions` →
+> `ColonyManager._canRecruitMoreUnits` (`colony.planetId` przy `colony === null`), a za nim **drugi,
+> ukryty**: `_getMaxGroundUnits` (`colony.civSystem`, `GroundUnitPanel:623`). Oba naprawione w `6796617`;
+> keeper `zero_colony_panels_smoke` (11/11) jest **wykonaniowy** — przepędza prawdziwą pętlę `draw()`
+> z `getColony: () => null`. **Ani jeden, ani drugi nie był defektem P0** — to była ta sama KLASA
+> (kod zakładający żywą kolonię) w pliku, którego P0 nie dotykał.
+> ⚠ **Lekcja wiążąca dalej:** `mgr?._method?.(nullColony)` — **opcjonalne łańcuchowanie chroni
+> ODBIORNIK, nigdy ARGUMENT**. Guard należy do helpera, bo to helper jest kontraktem.
 >
 > **D1-D6 (klasy A/B/C, przynależność kafla, predykat) — ⬜ NIEPODPISANE.** Rekomendacje w sekcjach.
 > **Zero kodu w tym dokumencie.** Cytaty ze źródła są dowodem, nie propozycją implementacji.
@@ -707,11 +719,41 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
 
 ---
 
+## Findings z GATE P0 (zaobserwowane na żywo 2026-08-20, NIE zbadane)
+
+95. 🔴 ⚠ **OBSERWACJA Z GATE'U, NIEZBADANA — statek ze stoczni orbitalnej na koloni WTÓRNEJ, po utracie
+    stolicy, wychodzi jako obcy.** Zgłoszone przez właściciela 2026-08-20 przy okazji GATE P0; **NIE
+    zbadane konsolowo** — właściciel musiał przejść na inny zapis, zanim zebrał dane.
+    **Zaobserwowane:** po utracie głównej/stolicowej koloni budowa statku przez **stację orbitalną**
+    przy **drugiej** (nie-stolicowej) koloni produkuje statek, który **(a)** nie pojawia się na liście
+    do rozmieszczenia i **(b)** jest traktowany jako **wrogi/nieznany kontakt**, nie jako statek gracza.
+    **Podejrzenie (do potwierdzenia, NIE ustalone):** zły stempel `owner`/`ownerEmpireId`/`isEnemy`
+    w `VesselManager.createAndRegister` albo w ścieżce stoczni stacyjnej, gdy w chwili budowy nie ma
+    żywej koloni macierzystej — czyli **prawdopodobnie ta sama klasa co ten plan**: kod zakładający
+    istnienie `homePlanet` bez fallbacku.
+    ⚠ **Kontekst, który czyni to prawdopodobnym, a nie tylko możliwym:** `createAndRegister`
+    (`VesselManager.js:186-211`) **nigdy nie stempluje** `owner`/`ownerEmpireId`/`isEnemy`
+    (zmierzone przy Finding 73), więc „statek gracza" jest u niego stanem DOMYŚLNYM — a to znaczy,
+    że stempel wroga musiałby pochodzić **skądinąd**, i właśnie to trzeba znaleźć.
+    ⇒ **Osobny audyt** (wzór `AI_DROP_HULL_AUDIT` / `COLONY_OWNERSHIP_GATE_AUDIT`), gdy właściciel
+    przygotuje scenę z odczytem `owner`/`ownerEmpireId`/`isEnemy` świeżo zbudowanego statku.
+96. ⚠ **NIEPOTWIERDZONE, do tego samego audytu: czy utrata głównej koloni osierocą/usuwa stację
+    orbitalną przypisaną do koloni DRUGIEJ.** Zgłoszone razem z Findingiem 95, bez danych.
+    ⚠ Kontekst z S3.4c, który każe to sprawdzić poważnie: stacje mają `ownerColonyId` i mechanizm
+    osierocenia (`StationSystem._onColonyDestroyed` ustawia `depotDetached` na `colony:destroyed`),
+    a `transferColony` — w odróżnieniu od `removeColony` — **nie emituje** `colony:destroyed`.
+    Pytanie brzmi więc: co dzieje się ze stacją, gdy jej kolonia-matka zmienia WŁAŚCICIELA, a nie ginie.
+---
+
 ## Gdzie to stawia arc
 
 Ten slice **nie należy** do AI_CAPTURE i **nie blokuje** jego domknięcia — poza jednym punktem:
-**GATE 2 §3/§4/§5 wznawiamy na ŚWIEŻEJ partii** (audyt §6), a **GATE P0 tego planu jest tańszy do
-wykonania na tej samej świeżej partii**, więc naturalną kolejnością jest OG-0..OG-2 → GATE P0 →
-wznowienie AI_CAPTURE GATE 2 → OG-3..OG-6.
+**GATE 2 §4/§5 wznawiamy na ŚWIEŻEJ partii** (audyt §6), bo stary zapis jest skażony regresją, którą
+P0 właśnie naprawiło. Zrealizowana kolejność: OG-0 → OG-2 → **GATE P0 (§1-§7 PASS)** → `6796617`
+(fix po §6) → **wznowienie AI_CAPTURE GATE 2 §4/§5** → dopiero potem D1-D6.
 
-**Do podpisu:** P0-A, P0-B, P0-C, P0-D (blok pierwszy, osobno) — potem D1..D6.
+**Stan na 2026-08-20:** blok P0 **ZAMKNIĘTY**. **Do podpisu zostaje D1..D6** — z rekomendacjami
+w sekcjach (D5=W1 · D1=W2+W1 · D3=W1 · D4=W3 · D6=W2 · D2=W3+W1).
+⚠ **Dwa szwy są nadal ŻYWE i pinowane jako żywe**: `switchActiveColony` przyjmuje kolonię AI
+(keeper `colony_ownership_seams` S4 → **D1**) oraz `_build` nie sprawdza przynależności kafla
+(**D5**, i ten drugi jest osiągalny **już dziś** przez zaprojektowany podgląd obcej planety).
