@@ -901,12 +901,25 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      zostawia **~20 px** zapasu w pionie — zawinięty powód **zderzy się** z linią `civDead`.
      ⚠ **NIEZWERYFIKOWANE ADWERSARIALNIE** (weryfikator padł na limicie); wszystkie cytowane linie
      sprawdziłem osobiście, ale **szerokości są LICZONE, nie mierzone** — node nie ma metryk czcionki.
-113. 🟠 **Ten sam ekran ma ZAHARDKODOWANY POLSKI — gracz EN widzi polskie napisy.**
-     Znalezione przy okazji 112, **nie było przedmiotem zlecenia**. `UIManager.js:2460`
-     `` ctx.fillText(`Czas przetrwania: ${years} lat`, …) `` z `toLocaleString('pl-PL')` (`:2457`)
-     oraz `:2472` `ctx.fillText('NOWA GRA', …)` — **żadnego `t()`, żadnego klucza i18n**.
-     ⚠ `tools/check-i18n.mjs` tego **nie złapie**, bo skaner szuka wywołań funkcji tłumaczącej,
-     a tu ich po prostu nie ma. Klasa błędu niewidoczna dla istniejącej bramki.
+113. 🟠 **ZAHARDKODOWANY POLSKI NA EKRANIE KOŃCA GRY — gracz EN widzi polskie napisy.**
+     ⚠ **Wpis SAMODZIELNY, nie dodatek do 112** (rozstrzygnięcie właściciela 2026-08-20). Wspólny
+     jest tylko plik; **przyczyna jest inna** (brak tłumaczenia, nie brak zawijania), **skutek jest
+     inny** (obcojęzyczny napis, nie przepełniona ramka) i **naprawa jest niezależna** — jedno da się
+     zrobić bez drugiego.
+     `UIManager.js:2460` — `` ctx.fillText(`Czas przetrwania: ${years} lat`, …) `` (plus
+     `toLocaleString('pl-PL')` w `:2457`) oraz `:2472` — `ctx.fillText('NOWA GRA', …)`.
+     **Żadnego `t()`, żadnego klucza i18n.** Ekran końca gry to jedno z **najbardziej pamiętanych**
+     miejsc w grze, więc obcy język uderza tam mocniej niż w panelu bocznym.
+     ⚠ **MARTWY KĄT SAMEGO NARZĘDZIA — to jest szersze niż ten ekran.** `tools/check-i18n.mjs` pyta
+     „*czy każdy klucz użyty w `t()` istnieje w PL i EN*", a **nie** „*czy każdy widoczny napis
+     przechodzi przez `t()`*". Tekst wpisany prosto w `fillText` jest dla niego **niewidzialny** —
+     bramka przechodzi (`PASS`, `pl=en`) mimo dosłownie polskiego UI.
+     ⇒ **Kandydat na poprawkę NARZĘDZIA, nie tylko tego jednego miejsca:** wykrywanie literałów
+     tekstowych w wywołaniach rysujących (`fillText`/`strokeText`) poza `t()`. To zamieniłoby klasę
+     błędu z „znajdowanej przypadkiem przy audycie" na „łapaną przez bramkę".
+     ⚠ **Zasięg NIEZMIERZONY:** sprawdzony był wyłącznie ten ekran (przy okazji 112). **Nie wiadomo,
+     ile innych miejsc w UI ma ten sam kształt** — policzenie ich to część ewentualnej poprawki
+     narzędzia, nie osobne zlecenie.
 114. **`debugLog.query` zwrócił puste tablice mimo działającego ekranu końca gry — MECHANIZM JEST
      SPRAWNY, przyczyna jest ŚRODOWISKOWA.** (Niski priorytet, zgodnie ze zgłoszeniem.)
      Sprawdzone i **wykluczone** jako przyczyny: kształt zapytania jest poprawny — `_push` zapisuje

@@ -1627,8 +1627,13 @@ DESTROYED" (`UIManager._drawGameOver:2412-2475`) **nie ma pojęcia zawijania** �
 to gołe `fillText` w ramce o zaszytych `DW=420, DH=180`; nowy tekst o podboju ma **100 zn. wobec 49**
 najdłuższego dotychczasowego, stąd przepełnienie (⚠ helper `_wrapText:2800` istnieje **w tej samej
 klasie**, nigdy niepodłączony; ⚠ `DH=180` zostawia ~20 px zapasu, więc zawinięcie zderzy się z linią
-niżej) · **113** ten sam ekran ma **zahardkodowany polski** (`Czas przetrwania…`, `NOWA GRA`) —
-⚠ `check-i18n` tego **nie łapie**, bo nie ma tam wywołań `t()` · **114** `debugLog.query` pusty przy
+niżej) · **113** (wpis **samodzielny**, nie dodatek do 112) ten sam ekran ma **zahardkodowany polski**
+(`Czas przetrwania…` `:2460`, `NOWA GRA` `:2472`) — gracz EN widzi polskie napisy w jednym
+z najbardziej pamiętanych miejsc gry. ⚠ **MARTWY KĄT NARZĘDZIA:** `check-i18n` pyta „*czy klucz
+użyty w `t()` istnieje w PL i EN*", a **nie** „*czy każdy widoczny napis przechodzi przez `t()`*" —
+literał w `fillText` jest dla niego **niewidzialny**, więc bramka przechodzi mimo polskiego UI.
+⇒ kandydat na poprawkę **samego narzędzia** (wykrywanie literałów w `fillText`/`strokeText` poza
+`t()`), nie tylko tego ekranu; ⚠ zasięg w reszcie UI **niezmierzony** · **114** `debugLog.query` pusty przy
 działającym ekranie: mechanizm **sprawny** (kształt zapytania OK, oba zdarzenia w `TRACKED_EVENTS`,
 `clear()` nie leży na tej ścieżce) ⇒ przyczyna **środowiskowa**.
 ⚠ **REGUŁA Z 114: `debugLog` NIE przeżywa restartu sceny** (`GameScene:1914`) — odczyty gate'u zbierać
