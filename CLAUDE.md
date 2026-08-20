@@ -1652,7 +1652,16 @@ Sweep **159/159 0 FAIL** · `check-i18n` PASS.
 ⚠ **Klasa A to nie „34 miejsca"**: **9** żywych bramek intencji gracza · **8** systemowych (termin
 własności byłby tam **błędem kategorii**) · **17** martwych (zdarzenie bez emitenta).
 
-**Findings 69-96** (rejestr w planie). Dwa ostatnie to **obserwacje z gate'u, NIEZBADANE**:
+**Findings 69-101** (rejestr w planie). ⚠ **97 jest ZMIERZONE i najcięższe z całej reszty:**
+🔴 **kolonia WROGA płaci za utrzymanie floty gracza** — `VesselManager._resolvePayHomeId:2062-2067`
+filtruje **tylko** `!col.isOutpost`, bez terminu własności, z fallbackiem na nigdy nieprzecelowywany
+`homePlanet`; po W3-1 zdobycz zostaje w `_colonies`, więc płaci. Zmierzone: 300 Kr/rozliczenie,
+5000→3094 przez 80 lat, `unpaidYears` = 0. ⚠ **Osiągalne przy ŻYWYCH koloniach gracza** (statek
+w drodze do koloni, która zostaje przejęta) — nie chowa się w scenariuszu D9. **Ta sama rodzina co
+D1-D6; zakres NIEROZSTRZYGNIĘTY** — do decyzji przy podpisywaniu części II planu.
+**98-101** (audyt kolonizacji) — bez decyzji o zakresie; m.in. `createMission('colonize')` ma **ZERO**
+wołających produkcyjnych. Raport: `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md`.
+**95/96** to **obserwacje z gate'u, NIEZBADANE**:
 **95** statek ze stoczni orbitalnej na koloni WTÓRNEJ po utracie stolicy wychodzi jako **obcy/nieznany
 kontakt** i nie trafia na listę rozmieszczenia (⚠ kontekst: `createAndRegister:186-211` **nigdy** nie
 stempluje własności, więc stempel wroga musi pochodzić skądinąd) · **96** czy utrata głównej koloni

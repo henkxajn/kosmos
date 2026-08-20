@@ -743,6 +743,50 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     osierocenia (`StationSystem._onColonyDestroyed` ustawia `depotDetached` na `colony:destroyed`),
     a `transferColony` — w odróżnieniu od `removeColony` — **nie emituje** `colony:destroyed`.
     Pytanie brzmi więc: co dzieje się ze stacją, gdy jej kolonia-matka zmienia WŁAŚCICIELA, a nie ginie.
+
+---
+
+## Findings z audytu ścieżki kolonizacji (ZMIERZONE WYKONANIEM 2026-08-20)
+
+> Źródło: `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md` (8 agentów, 4 przekroje, kontrprzebieg
+> adwersarialny; zero refutacji). ⚠ W odróżnieniu od 95/96 **te są zmierzone, nie zaobserwowane.**
+
+97. 🔴 **KOLONIA WROGA PŁACI ZA UTRZYMANIE FLOTY GRACZA — kolejne miejsce BEZ terminu własności,
+    ta sama rodzina co D1-D6.** ⚠ **ZMIERZONE WYKONANIEM**, nie zaobserwowane: 300 Kr w jednym
+    rozliczeniu (5000 → 4700, tożsamość płatnika potwierdzona), 5000 → 3094 Kr przez 80 lat gry,
+    `unpaidYears` stale **0**, własna kolonia gracza **nietknięta**.
+    Pełny raport: `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md` §4.
+    ```
+    VesselManager.js:2062-2067   _resolvePayHomeId(vessel, colMgr) {
+                                   const col = colMgr.getColony(vessel.homeColonyId);
+                                   if (col && !col.isOutpost) return vessel.homeColonyId;  ← filtr TYLKO na placówkę
+                                   const hp = window.KOSMOS?.homePlanet;                   ← nigdy nieprzecelowywany
+                                   return hp ? hp.id : null; }
+    ```
+    Ani jednego terminu własności; `CivilianTradeSystem.spendCredits:876` też go nie ma. Po **W3-1**
+    przejęta kolonia **zostaje w `_colonies`**, więc `getColony` ją znajduje i **płaci**. Dodatkowo
+    `VesselManager._onColonyDestroyed` (subskrybent `colony:captured`, `:115`) **wychodzi wcześnie**,
+    gdy gracz nie ma już kolonii (`:1117-1118`), a gdy biegnie — gałęzie 1 i 2 (`:1129`, `:1144`)
+    rekoncyliują **tylko `colonyId`**, nigdy `homeColonyId`; rusza go dopiero gałąź 3 (`:1163`).
+    ⚠ **OSIĄGALNE PRZY ŻYWYCH KOLONIACH GRACZA** — wystarczy statek w drodze do koloni, która zostaje
+    przejęta. To **nie** jest przypadek brzegowy „zero kolonii", więc nie chowa się w scenariuszu D9.
+    ⚠ **ZAKRES NIEROZSTRZYGNIĘTY** (decyzja właściciela 2026-08-20): czy wchodzi do **D1-D6**, czy
+    osobno — **do rozstrzygnięcia przy podpisywaniu CZĘŚCI II tego planu**. Tu leży jako pozycja
+    rejestru, nie jako propozycja naprawy.
+    ⚠ Do odczytania jednym wierszem przy najbliższym gate'cie (w tej sesji raportowano tylko
+    `colonyId`): `KOSMOS.vesselManager.getVessel('<id>').homeColonyId` oraz
+    `KOSMOS.vesselManager._resolvePayHomeId(v, KOSMOS.colonyManager)`.
+
+98-101. **Pozostają w `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md` §Findings — BEZ decyzji
+    o zakresie** (właściciel, 2026-08-20). Skrótowo, żeby nie trzeba było otwierać audytu, by wiedzieć,
+    że istnieją: **98** `_openColonistThenTarget:2612-2617` wymaga rozwiązywalnej koloni statku bez
+    filtra własności (nie ugryzło, bo W3-1 zostawia zdobycz w rejestrze; ugryzie, gdy kolonia zostanie
+    USUNIĘTA) · **99** afordancja kolonizacji **znika** zamiast pokazać się zablokowana z powodem ·
+    **100** `MissionSystem.createMission('colonize', …)` ma **ZERO** wołających produkcyjnych (żywa
+    trasa: `expedition:sendRequest {type:'colony'}` → `:493 _launch` → `:597 _launchColony`) ·
+    **101** komentarz `MovementOrderSystem.js:1857` „orbiting bez `dockedAt`" jest **nieprawdziwy**
+    (zmierzone: `dockedAt` JEST stemplowane).
+
 ---
 
 ## Gdzie to stawia arc
