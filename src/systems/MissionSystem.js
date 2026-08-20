@@ -740,10 +740,22 @@ export class MissionSystem {
     }
 
     // Pobierz koszt budynku z kolonii macierzystej (budynek stawiany za darmo na outpoście)
+    //
+    // ⚠ D-111 = W1 (Finding 111) — BLIŹNIAK bramki z `_launchColony`. Do tej poprawki stało tu
+    //   miękkie `if (this.resourceSystem) { spend… }`, a `canFoundOutpost` liczy `canAfford` również
+    //   miękko (`if (resSys) …`), więc przy ODPIĘTYM magazynie flaga zostawała `true` z inicjalizacji
+    //   i CAŁA bramka przechodziła. Zmierzone wykonaniem: przy zerze kolonii placówka zakładała się
+    //   ZA DARMO — `getPlayerColonies()` 0 → 1. To dokładna odwrotność rozstrzygnięcia „magazyn NIE
+    //   zostaje z graczem", które AC-8 utwardziło o jeden `_launch` obok, i przez to trasa placówki
+    //   przeczyła predykatowi końca gry.
+    //   ⚠ ZASIĘG ZMIANY: przy żywej koloni `check.canAfford` odmawia już w bramce wyżej, więc
+    //   zachowanie zmienia się WYŁĄCZNIE przy `resourceSystem == null`. Zwykła gra: bit w bit.
     const totalCost = check.totalCost;
-    if (this.resourceSystem) {
-      this.resourceSystem.spend(totalCost);
+    if (!this.resourceSystem || !this.resourceSystem.canAfford(totalCost)) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
+      return;
     }
+    this.resourceSystem.spend(totalCost);
 
     // Czas podróży
     const shipSpeed  = this._getShipSpeed(vesselId);
