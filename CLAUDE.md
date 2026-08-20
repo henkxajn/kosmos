@@ -1620,7 +1620,8 @@ wczytania zapisu**. Domknięte arciem **BRAMKA WŁASNOŚCI, blok P0** (sekcja ni
 ⚠ **ŚWIADOMIE OTWARTE (nie blokuje zamknięcia):** **Finding 49** — katalog AI **nie ma kadłuba
 transportowego**, więc *produkcyjne* wejście AI w desant pozostaje zamknięte (gate wchodził dźwignią
 `WarOverlay force_invasion`) · **Finding 50** — desant AI biegnie na modelu **LEGACY**, nie archetypach ·
-🔴 **Finding 111 (P1)** — `canReverseFate` liczy *istnienie* kolonizatora, nie *zdolność* (sekcja niżej).
+✅ **Finding 111 (P1)** — `canReverseFate` liczył *istnienie* kolonizatora, nie *zdolność*;
+**ZAMKNIĘTY 2026-08-20** (sekcja niżej).
 
 ⚠ **Trzy drobne findingi z domknięcia GATE 2** (żaden nie blokował): **112** ekran „CIVILIZATION
 DESTROYED" (`UIManager._drawGameOver:2412-2475`) **nie ma pojęcia zawijania** — wszystkie pięć napisów
@@ -1640,7 +1641,7 @@ działającym ekranie: mechanizm **sprawny** (kształt zapytania OK, oba zdarzen
 w tej samej partii i karcie; **nie opierać kryterium PASS na odczycie, który może być pusty z powodu
 cyklu życia sceny**.
 
-**Kolejność dalszych prac (ustalona z właścicielem 2026-08-20):** **1.** Finding 111 (P1, samodzielny) →
+**Kolejność dalszych prac (ustalona z właścicielem 2026-08-20):** **1.** ~~Finding 111~~ ✅ **ZROBIONE** →
 **2.** część II `COLONY_OWNERSHIP_GUARD_PLAN` (D1-D6) → **3.** reszta rejestru (97, bug mapy 108-110,
 przepełnienie tekstu na ekranie końca gry).
 
@@ -1809,8 +1810,78 @@ pozycja przywrócona) = **nowe limbo**.
 Sweep **160/160 0 FAIL** · `check-i18n` PASS · zero migracji · **zero nowych kluczy i18n** (reuse słownika
 `_warpErrLabel` + `fleet.warpOrderFailed`).
 
-**NASTĘPNE (kolejka właściciela, NIE w tej sesji):** **Finding 111** (P1 — gra, która nigdy się nie kończy) →
+**NASTĘPNE (kolejka właściciela, NIE w tej sesji):** ~~Finding 111~~ ✅ **ZROBIONE** (sekcja niżej) →
 **VESSEL_ORDERS** (P0-P5, osobny podpisany plan) → reszta rejestru.
+
+---
+
+## Finding 111 — predykat końca gry pyta o ZDOLNOŚĆ, nie o ISTNIENIE (save **v101 bez migracji**, live-gate §1-§4 PASS, ARC ZAMKNIĘTY 2026-08-20)
+
+Samodzielny **P1**, **poza** arciem BRAMKA WŁASNOŚCI (D1-D6) i **poza** VESSEL_ORDERS. Plan + rejestr
+decyzji + wynik gate'u: `docs/design/PLAYER_VIABILITY_PREDICATE_PLAN.md`.
+Commity: `a180619` (kod) · `8537e78` (keeper) · `1ee611d` (plan) · close-out.
+
+**Defekt:** `PlayerViability.hasColonyCapableShip` pytał o sam moduł habitacyjny, a `_tickPlayerViability`
+zeruje karencję przy każdym tiku, dopóki `state.ok` ⇒ **dopóki gdziekolwiek stał taki kadłub, `game:over`
+nie padał NIGDY** — także gdy statek był zadokowany albo dryfował i nie miał jak nic zacząć.
+⚠ Fundament D9 stał na przesłance, którą Finding 106 obalił: *„przy ZERZE kolonii `canLaunchColony`
+przechodzi, a przylot zakłada kolonię"* — **bramka przechodzi, start nie**.
+
+**Model (jedna oś):** `hasLiveRecolonizationPath` klasyfikuje po **TYPIE MISJI**, nie po kadłubie i nie
+po stanie: `COLONY_OUTLET_MISSIONS` = `colony` | `found_outpost` (sam PRZYLOT tworzy kolonię — **bez
+wymogu habitatu**, bo placówkę wozi frachtowiec) · `FOREIGN_FLOW_MISSIONS` = `interstellar_jump` |
+`exploration` | `foreign_recon` (**wymagają** `canColonize` — tam kolonizuje przycisk, nie przylot).
+`hasColonyCapableHull` zostaje **wyłącznie do diagnostyki**. Zaparkowany, dryfujący i orbitujący po
+zwiadzie **nie liczą się**.
+
+**⚠ TRZY REGUŁY, KAŻDA KUPIONA POMIAREM (nie zakładaj, że da się prościej):**
+1. **`mission` I `_suspendedMission` — NIGDY `??`.** Rozkaz ruchu **podmienia** `vessel.mission`
+   (`move_to_point`), a prawdziwą chowa w `_suspendedMission`; fallback nigdy by po nią nie sięgnął.
+   Zmierzone: prototyp z `??` odrzucał kolonizatora w misji `colony` przerwanej rozkazem ruchu.
+2. **BRAK terminu paliwowego.** Paliwo pobierane jest **z góry przy starcie**, a stranding
+   *„emituje wyłącznie sygnał — niczego nie blokuje"*; `_redirectInterstellarVessel` paliwo **klampuje
+   zamiast odmawiać** (Finding 103). Termin paliwowy dokładałby fałszywe negatywy.
+3. **BRAK terminu stanu.** `status='on_mission'` + `orbiting` opisuje ZARÓWNO zwiad zaparkowany
+   **bezterminowo** (zmierzone: `mission=recon` wisi po 100 latach gry), JAK I statek z żywym panelem
+   po warpie. Odrzucony wariant „licz każdą żywą misję" zostawiłby limbo w innym kształcie.
+
+**⚠ ZNALEZISKO, KTÓREGO NIE ZAMAWIANO — nieutwardzony BLIŹNIAK bramki D9 (decyzja D-111 = W1):**
+`MissionSystem._launchFoundOutpost` miał **miękkie** `if (this.resourceSystem) { spend… }`, a
+`canFoundOutpost` liczy `canAfford` równie miękko (`if (resSys) …`) ⇒ przy ZERZE kolonii **placówka
+zakładała się ZA DARMO** (zmierzone: `getPlayerColonies()` **0 → 1**). Utwardzone bliźniaczo do
+`_launchColony`. **Zasięg zmiany WYŁĄCZNIE przy `resourceSystem == null`** — przy żywej koloni
+`check.canAfford` odmawia już w bramce wyżej, więc zwykła gra jest bit w bit.
+⚠ Obie zmiany są **SPRZĘŻONE**: samo zawężenie predykatu bez utwardzenia bliźniaka dawałoby **fałszywy
+negatyw** (koniec gry przy żywej trasie). ⚠ Kolejka `pendingOutpostOrders` kończy na
+`expedition:foundOutpostRequest` ⇒ **ten sam chokepoint**, jedno utwardzenie zamyka obie ścieżki.
+
+**⚠ `canFoundOutpost` DALEJ zwraca `ok:true` przy zerze kolonii — I TAK MA BYĆ.** To wzorzec Findingu
+106: bramka opisuje możliwość, odmowa mieszka przy STARCIE. „Naprawienie" bramki na czerwono skasowałoby
+jedyne miejsce, gdzie różnica bramka↔skutek jest widoczna.
+
+**Diagnostyka:** `describeNoReversal` rozróżnia **`colony_ship_no_route`** (kadłub JEST, zaparkowany)
+od `no_colony_ship` (nie ma żadnego) — inaczej gate mierzyłby ciszę.
+
+**⚠ GAŁĄŹ DESANTU ZOSTAJE ISTNIENIOWA** (podpisane D9, reguła 1 w nagłówku modułu): `transferColony`
+**nie tyka jednostek naziemnych** (przepisuje tylko `tile.owner`), więc „statek z `drop_pods` + ocalały
+oddział" **nadal wstrzymuje koniec gry**. To znany, świadomie przyjęty fałszywy pozytyw — zawężenie tej
+gałęzi wymaga OSOBNEGO podpisu i trudniejszego pomiaru.
+
+**Keeper** `ai_capture_last_stand_smoke` **25 → 40 asercji, 0 FAIL**. ⚠ **T4 i T5 KONTROLA PINU A
+ODWRÓCONE ŚWIADOMIE** — w starym kształcie pinowały DEFEKT („sam kolonizator wystarcza", „zaparkowany
+wstrzymuje koniec gry BEZTERMINOWO"); powód wpisany w nagłówku pliku (wzór `deploy_seams`,
+`s34c_z9_transfer_dispose`). Nowe: T7 (tabela tras + pomiar „zwiad wisi 60 lat" + **pin na `??`** +
+pin na rozróżnienie powodów) · T8 (bliźniak T2 + kontrola pinu przy żywej koloni).
+Sweep **160/160 0 FAIL** · `check-i18n` PASS · zero nowych kluczy i18n.
+
+**Live-gate:** §1/§2 **na żywo** (właściciel) · §3/§4 **headless** na przekazanie właściciela,
+**15 PASS / 0 FAIL** (odmowa z powodem, misje 0 → 0, statek i paliwo nietknięte, kolonie 0 → 0 przy
+zerze / 1 → 2 przy żywej). ⚠ **Granica dowodu:** headless pinuje **chokepoint silnika**, NIE klikalność
+UI — ścieżka `FLEET_ACTIONS.found_outpost` → `_openOutpostBuildingPicker` (DOM, async) nie była
+przechodzona; nie nazywać jej zweryfikowaną.
+
+**NASTĘPNE (kolejka właściciela):** część II `COLONY_OWNERSHIP_GUARD_PLAN` (D1-D6) · **VESSEL_ORDERS**
+(P0-P5) · reszta rejestru (97, bug mapy 108-110, 112/113 ekran końca gry).
 
 ---
 

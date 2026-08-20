@@ -18,7 +18,7 @@
 > ⚠ **Co ten slice ŚWIADOMIE zostawia otwarte** (nic z tego nie blokuje zamknięcia):
 > **Finding 49** — katalog AI nie ma kadłuba transportowego, więc *produkcyjne* wejście AI w desant
 > pozostaje zamknięte (gate wchodził dźwignią `force_invasion`) · **Finding 50** — desant AI biegnie
-> na modelu **LEGACY**, nie archetypach · **Finding 111 (P1)** — `canReverseFate` liczy *istnienie*
+> na modelu **LEGACY**, nie archetypach · **Finding 111 (P1, ✅ ZAMKNIĘTY 2026-08-20)** — `canReverseFate` liczył *istnienie*
 > kolonizatora, nie jego *zdolność*, więc w jednej z trzech konfiguracji gra **nigdy się nie kończy**.
 > ⇒ Kolejność dalszych prac ustalona z właścicielem: **111 → część II bramki własności (D1-D6) →
 > reszta rejestru**.

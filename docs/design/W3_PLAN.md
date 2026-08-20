@@ -986,6 +986,7 @@ path instead). Next live run can settle it in one read — the first record shou
     `canReverseFate` counts a colony ship's **existence**, not its **ability to colonize**, so a player
     whose last colony falls while the colonizer sits docked elsewhere (or drifts after a `moveToPoint`)
     enters a **permanent limbo in which `game:over` never fires**. ⇒ Finding **111** in
+    (✅ **CLOSED 2026-08-20** — `a180619`+`8537e78`, plan `docs/design/PLAYER_VIABILITY_PREDICATE_PLAN.md`)
     `docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`, ranked **P1**. D9's premise is sound in two of three
     configurations and cracked in the third.
 

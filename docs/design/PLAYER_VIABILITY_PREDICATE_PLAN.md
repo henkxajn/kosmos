@@ -1,6 +1,10 @@
 # PLAN — Finding 111 (P1): predykat końca gry ma pytać o ZDOLNOŚĆ, nie o ISTNIENIE
 
-**Data:** 2026-08-20 · **Status:** ⬜ **NIEPODPISANY — zero kodu napisanego.**
+**Data:** 2026-08-20 · **Status:** ✅ **ZAMKNIĘTY — D-111 = W1 podpisane, live-gate §1-§4 PASS.**
+**Commity:** `a180619` (kod: predykat + powód + bramka placówki) · `8537e78` (keeper 25 → 40 asercji,
+0 FAIL) · `1ee611d` (ten plan) · close-out. Save **v101 bez migracji**, zero nowych kluczy i18n.
+**Live-gate:** §1 i §2 **na żywo w przeglądarce** (właściciel) · §3/§4 **headless**, na wyraźne
+przekazanie weryfikacji — **15 PASS / 0 FAIL**. Pełny wynik i granice dowodu: **§11**.
 **Klasa:** samodzielny P1, **poza** arciem BRAMKA WŁASNOŚCI (D1-D6) i **poza** VESSEL_ORDERS (P0-P5).
 **Rejestr źródłowy:** `COLONY_OWNERSHIP_GUARD_PLAN.md` §Findings 111 (tam wpis, tu naprawa).
 **Audyty wejściowe:** `docs/audit/WARP_COLONIZE_ROUTE_AUDIT.md` · `docs/audit/COLONIZE_PATH_ZERO_COLONY_AUDIT.md`
@@ -238,12 +242,12 @@ placówki **DZIAŁA** (utwardzenie nie wyłącza mechaniki).
 
 ## 9. Warunki podpisu
 
-1. ☐ **D-111 rozstrzygnięte** (W1 / W2 / W3). Bez tego nie zaczynamy — W1 i W2 dają **inny predykat**.
-2. ☐ Zgoda na **odwrócenie T4 + T5A** w keeperze (to nie jest regresja, to jest naprawa pinu).
-3. ☐ Przyjęcie do wiadomości §6 — **gałąź desantu zostaje istnieniowa**, więc po naprawie gra nadal
+1. ☑ **D-111 rozstrzygnięte** (W1 / W2 / W3). Bez tego nie zaczynamy — W1 i W2 dają **inny predykat**.
+2. ☑ Zgoda na **odwrócenie T4 + T5A** w keeperze (to nie jest regresja, to jest naprawa pinu).
+3. ☑ Przyjęcie do wiadomości §6 — **gałąź desantu zostaje istnieniowa**, więc po naprawie gra nadal
    może się nie kończyć przy „statek desantowy + ocalały oddział".
-4. ☐ Potwierdzenie, że `no_colony_ship` → `colony_ship_no_route` w `detail` jest OK (§7).
-5. ☐ Karencja **zostaje 12 civYears** (`ColonyManager:1293`) — rekomendacja: nie ruszać. Predykat mierzy
+4. ☑ Potwierdzenie, że `no_colony_ship` → `colony_ship_no_route` w `detail` jest OK (§7).
+5. ☑ Karencja **zostaje 12 civYears** (`ColonyManager:1293`) — rekomendacja: nie ruszać. Predykat mierzy
    teraz „trasa żyje", a każda nowo powstała trasa (przylot warpu, start misji) **natychmiast** zeruje licznik.
 
 **Plan wykonania po podpisie:** 1 commit kodu (predykat + powód + przy W1 bramka placówki) →
@@ -273,3 +277,42 @@ po warpie omija bramkowanie startu) · **Finding 106** (ślepy zaułek trasy zad
 ślepy **zgodnie z D9**, ale UI nadal nie mówi dlaczego) · **112/113** (ekran końca gry: brak zawijania,
 zahardkodowany polski) · rozważenie, czy `transferColony` powinien cokolwiek robić z jednostkami
 naziemnymi gracza (§6, obserwacja bez werdyktu).
+
+---
+
+## 11. WYNIK LIVE-GATE (2026-08-20) — §1-§4 PASS, arc ZAMKNIĘTY
+
+**§1 i §2 — na ŻYWO w przeglądarce, potwierdzone przez właściciela.**
+§1: zaparkowany kolonizator ⇒ pada ekran końca gry, powód `colony_ship_no_route`.
+§2 (kontrola pinu): kolonizator w misji `colony` ⇒ gra się **nie** kończy, a przylot daje **0 → 1**.
+
+**§3 i §4 — headless, na wyraźne przekazanie weryfikacji przez właściciela** (ręczna próba z konsoli
+utykała na przeszkodach **proceduralnych**, nie merytorycznych: kolejność argumentów `canFoundOutpost`,
+brak zbadanego ciała w świeżej partii, nieznana nazwa budynku). Sonda gate'owa: prawdziwy `GameCore`,
+prawdziwy `Ticker`, prawdziwe wywołanie `_launchFoundOutpost` — **15 PASS / 0 FAIL**:
+
+| pomiar | wynik |
+|---|---|
+| `canFoundOutpost` przy ZERZE kolonii (`mine` i `farm`) | `ok=true`, `canAfford=true` — **bramka świeci** |
+| `_launchFoundOutpost` tamże | **ODMOWA**, `expedition:launchFailed`, powód „Brak surowców startowych" |
+| misje `en_route` przed/po | **0 → 0** (zero cichych startów) |
+| stan statku po odmowie | `mission=null`, `idle`, `docked`, **paliwo 30 → 30** — odmowa nie brykuje statku |
+| kolonie gracza po 40 latach gry | **0 → 0** ⚠ przed D-111 zmierzone **0 → 1** |
+| kolejka `pendingOutpostOrders` przy zerze kolonii | również **0 → 0** — jeden chokepoint zamyka obie ścieżki |
+| §4: start przy ŻYWEJ koloni | misja rusza, `en_route` **+1**, zero odmów |
+| §4: koszt | pobrany **dokładnie raz** (Fe 200→180, C 150→140, alloys 15→12, extraction 5→3, cells 12→11) |
+| §4: skutek po tickach | kolonie **1 → 2**, nowy wpis ma `isOutpost === true` |
+
+⚠ **Obserwacja właściciela z konsoli potwierdzona co do joty i to jest sedno §3:** `canFoundOutpost`
+zwraca `ok:true, canAfford:true` **także przy zerze kolonii** — i tak ma być. To ten sam wzorzec co
+**Finding 106**: bramka opisuje możliwość, odmowa mieszka przy STARCIE. Gdyby ktoś kiedyś „naprawił"
+`canFoundOutpost` tak, żeby świeciła na czerwono, straciłby jedyne miejsce, w którym różnica między
+bramką a skutkiem jest widoczna — a to jest dokładnie ta pomyłka, którą 106 opisał.
+
+⚠ **GRANICE DOWODU — czego headless NIE zweryfikował** (uczciwie, jak „deliberately accepted gap" w C7/C8):
+sonda dowodzi **chokepointu silnika**, a nie **klikalności UI**. Nie przeszła przez
+`FLEET_ACTIONS.found_outpost.canExecute` → `_openOutpostBuildingPicker` (DOM-owy, async), więc
+**nie jest zweryfikowane na żywo**, jak odmowa wygląda dla gracza (toast/Dziennik) po kliknięciu
+„Załóż placówkę" przy zerze kolonii. Ryzyko oceniam jako niskie — `_launchFoundOutpost` jest JEDYNYM
+producentem tej misji, a odmowa idzie tym samym kanałem `expedition:launchFailed`, co wszystkie
+pozostałe odmowy startu (te są w UI obsłużone od dawna) — ale **nie nazywam tego zweryfikowanym**.

@@ -470,7 +470,8 @@ a nie teleport.
 
 > **Werdykt §6:** zmiana **usuwa fałszywą przesłankę** („statek, który nie może nic") w trzeciej
 > konfiguracji, ale **nie dotyka predykatu**. `canReverseFate` dalej nie pyta o paliwo, o zasięg, o to,
-> czy jest gdzie lecieć, ani o to, czy cel jest zbadany. **Finding 111 pozostaje otwarty jako osobny P1**
+> czy jest gdzie lecieć, ani o to, czy cel jest zbadany. **Finding 111 był osobnym P1** (✅ ZAMKNIĘTY 2026-08-20, niezależnie od tego arca —
+> `a180619`+`8537e78`; ten akapit zostaje, bo diagnoza „VESSEL_ORDERS nie rusza predykatu” **była trafna**)
 > — po prostu przestaje być tak dotkliwy. ⚠ Odwrotna kolejność (napraw 111 najpierw) też jest sensowna
 > i **tańsza** — i taka jest dziś ustalona kolejność właściciela (`CLAUDE.md`, „Kolejność dalszych prac").
 

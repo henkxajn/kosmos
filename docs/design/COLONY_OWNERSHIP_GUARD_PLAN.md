@@ -946,7 +946,11 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
 > przegrał i nie ma żadnej drogi powrotu**. To defekt w predykacie decydującym **czy partia trwa**.
 > ⚠ Kandydat na **osobny P1**, nie na doklejkę do D1-D6 (decyzja o zakresie: przy podpisie części II).
 
-111. 🔴 **`canReverseFate` liczy statki, które NIE MAJĄ JAK NIC ZROBIĆ ⇒ trwałe zawieszenie bez końca gry.**
+111. ✅ **ZAMKNIĘTY 2026-08-20** (`a180619` + `8537e78`, live-gate §1-§4 PASS; plan:
+     `docs/design/PLAYER_VIABILITY_PREDICATE_PLAN.md`). Predykat pyta dziś o TYP MISJI, a bliźniacza
+     bramka `_launchFoundOutpost` została utwardzona (D-111 = W1). Treść zgłoszenia zostaje niżej
+     jako zapis tego, co było mierzone.
+     🔴 **`canReverseFate` liczy statki, które NIE MAJĄ JAK NIC ZROBIĆ ⇒ trwałe zawieszenie bez końca gry.**
      `PlayerViability.js:57` — `hasColonyCapableShip(vessels)` to
      `vessels.some(v => isPlayersVessel(v) && canColonize(v))`: **czyste istnienie + moduł habitatu,
      ZERO sprawdzenia stanu** (dok / orbita / misja / paliwo). A `_tickPlayerViability`
