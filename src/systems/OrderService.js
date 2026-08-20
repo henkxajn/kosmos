@@ -25,6 +25,7 @@ import EntityManager from '../core/EntityManager.js';
 import { t }         from '../i18n/i18n.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
+import { returnJumpTransactional } from '../utils/ReturnJump.js';
 
 export class OrderService {
   constructor() {
@@ -183,13 +184,19 @@ export class OrderService {
     const isForeign   = vessel.systemId && vessel.systemId !== homeSystemId;
 
     if (isForeign) {
-      // Przerwij composite w toku i bieżącą misję foreign_recon, potem skok do domu.
-      vessel.pendingOrder = null;
+      // POZA transakcją świadomie: `abortForeignRecon` sam ląduje statek na orbicie z panelem
+      // `exploration/orbiting_body`, więc odmowa skoku zostawia go SPRAWNYM (patrz ReturnJump.js).
       if (vessel.mission?.type === 'foreign_recon') vMgr.abortForeignRecon?.(vessel.id);
-      vessel.status = 'idle';
-      vessel.position.state = 'docked';
-      vessel.mission = null;
-      return this.issueWarp(vesselId, homeSystemId);
+      // Finding 125 — skok TRANSAKCYJNY. Ta ścieżka kłamała o stanie statku
+      // (`idle`+`docked`+`mission=null`), żeby przejść bramkę dyspozytora, a kłamstwa nikt nie
+      // cofał, gdy skok odpadał (brak `warp_cores` = najczęstszy powód kliknięcia tego przycisku)
+      // → statek zostawał „zadokowany" przy ciele bez portu i nie mógł już nic.
+      // Kasowanie composite'u (warp→dostawa) siedzi WEWNĄTRZ transakcji: odmowa skoku nie ma
+      // prawa po cichu unieważnić zakolejkowanej dostawy, której gracz nie odwoływał.
+      return returnJumpTransactional(vessel, () => {
+        vessel.pendingOrder = null;
+        return this.issueWarp(vesselId, homeSystemId);
+      });
     }
 
     // Lokalny powrót — anuluj aktywną misję lub bezpośredni startReturn.

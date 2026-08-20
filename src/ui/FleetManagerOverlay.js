@@ -30,6 +30,7 @@ import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
+import { returnJumpTransactional } from '../utils/ReturnJump.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
@@ -2313,11 +2314,11 @@ export class FleetManagerOverlay {
         const vMgr3 = window.KOSMOS?.vesselManager;
         const v = vMgr3?.getVessel(zone.data.vesselId);
         if (v) {
-          // Reset statusu — dispatchInterstellar wymaga idle+docked
-          v.status = 'idle';
-          v.position.state = 'docked';
-          v.mission = null;
-          vMgr3.dispatchInterstellar(zone.data.vesselId, zone.data.fromSystemId);
+          // Finding 125 — skok TRANSAKCYJNY + Z POWODEM. Komentarz, który tu stał
+          // („dispatchInterstellar wymaga idle+docked"), był NIEPRAWDĄ: dyspozytor przyjmuje też
+          // `orbiting` i nie patrzy na `status`. Fałszywy dok kosztował statek wszystkie rozkazy.
+          const res = this._dispatchReturnJump(v, zone.data.fromSystemId);
+          if (!res.ok) this._toastReturnFailed(res.reason);
         }
         break;
       }
@@ -2366,14 +2367,13 @@ export class FleetManagerOverlay {
         const vMgr4 = window.KOSMOS?.vesselManager;
         const v2 = vMgr4?.getVessel(zone.data.vesselId);
         if (v2) {
-          // Przerwij rekon jeśli aktywny
+          // Przerwij rekon jeśli aktywny (POZA transakcją — sam ląduje statek na orbicie).
           if (v2.mission?.type === 'foreign_recon') {
             vMgr4.abortForeignRecon(zone.data.vesselId);
           }
-          v2.status = 'idle';
-          v2.position.state = 'docked';
-          v2.mission = null;
-          vMgr4.dispatchInterstellar(zone.data.vesselId, zone.data.fromSystemId);
+          // Finding 125 — skok TRANSAKCYJNY + Z POWODEM (patrz ReturnJump.js).
+          const res2 = this._dispatchReturnJump(v2, zone.data.fromSystemId);
+          if (!res2.ok) this._toastReturnFailed(res2.reason);
         }
         break;
       }
@@ -2543,7 +2543,10 @@ export class FleetManagerOverlay {
       const orderService = window.KOSMOS?.orderService;
       if (orderService && actionId === 'return_home') {
         // Zunifikowana ścieżka powrotu (foreign→warp / local→cancel) przez OrderService.
-        orderService.issueReturn(vessel.id);
+        // Finding 125 — wynik NIE jest już połykany: odmowa skoku (najczęściej brak rdzeni warp)
+        // musi się gdzieś odezwać, inaczej przycisk zostaje cichym no-opem.
+        const res = orderService.issueReturn(vessel.id);
+        if (res && res.ok === false) this._toastReturnFailed(res.reason);
       } else {
         const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
         const colMgr = window.KOSMOS?.colonyManager;
@@ -6627,6 +6630,47 @@ export class FleetManagerOverlay {
       case WARP_ROUTE_REASONS.UNKNOWN_SYSTEM:    return t('fleet.warpErrConfig');
       default:                                   return t('fleet.warpErrNoRoute');
     }
+  }
+
+  // Finding 125 (dogrywka po live-gate) — JEDNO wejście skoku „powrót do bazy" dla trzech
+  // przycisków panelu obcego układu (Interstellar Arrival / orbita obcego ciała / przerwany rekon).
+  //
+  // ⚠ Dlaczego przez `OrderService.issueWarp`, a nie wprost przez `dispatchInterstellar`:
+  // dyspozytor zwraca GOŁY BOOL, więc gracz dostawał samo „Nie można wydać rozkazu" — bez
+  // informacji, że brakuje rdzeni warp. Fasada zwraca `{ok, reason}` i jest tym samym silnikiem,
+  // którego używa „Powrót" z rejestru floty ORAZ każdy inny rozkaz skoku w tym pliku
+  // (`cluster_send`, `cluster_send_pick`, `warp_order_send`) — te trzy przyciski były ostatnimi
+  // surowymi wywołaniami dyspozytora w UI.
+  // KONSEKWENCJA, ZADEKLAROWANA: powrót idzie teraz przez planer wielo-przeskokowy, więc trasa
+  // dłuższa niż jeden skok zostanie ZŁOŻONA zamiast po cichu odmówić. Cel skoku BEZ ZMIAN —
+  // bierzemy dokładnie ten `systemId`, który niesie hit-zone.
+  _dispatchReturnJump(vessel, toSystemId) {
+    const os   = window.KOSMOS?.orderService;
+    const vMgr = window.KOSMOS?.vesselManager;
+    return returnJumpTransactional(vessel, () => {
+      if (os?.issueWarp) return os.issueWarp(vessel.id, toSystemId);
+      // Brak fasady (headless/legacy) — stara ścieżka; bool nie niesie powodu.
+      return { ok: !!vMgr?.dispatchInterstellar?.(vessel.id, toSystemId) };
+    });
+  }
+
+  // Finding 125 — jeden komunikat o odmowie „Powrotu do bazy" dla WSZYSTKICH trzech wejść.
+  // Zero nowych kluczy i18n: reużywa słownika `_warpErrLabel` (powody bramki vs powody trasy)
+  // i istniejącego nagłówka `fleet.warpOrderFailed`. Bez `reason` (dispatchInterstellar zwraca
+  // goły bool) leci sam nagłówek.
+  _toastReturnFailed(reason) {
+    const GATE_REASONS = ['in_transit', 'immobilized', 'not_warp_capable', 'bad_state', 'not_player'];
+    let detail = null;
+    if (reason === 'no_active_mission')      detail = t('fleet.reason.noActiveMission');
+    else if (GATE_REASONS.includes(reason))  detail = this._warpErrLabel(null, { ok: false, reason });
+    else if (reason)                         detail = this._warpErrLabel({ reason }, { ok: true });
+    const text = detail ? `${t('fleet.warpOrderFailed')} — ${detail}` : t('fleet.warpOrderFailed');
+    EventBus.emit('ui:toast', { text, color: THEME.danger ?? '#ff4466', durationMs: 3000 });
+    // ⚠ Toast jest ULOTNY, a odrzucony rozkaz nie zostawiał ŻADNEGO śladu — live-gate nie miał
+    // czego przeczytać. `KOSMOS.debugLog` tu nie pomoże: to audyt AI/wojny/dyplomacji z zamkniętą
+    // listą `TRACKED_EVENTS`, w której nie ma ANI JEDNEGO zdarzenia floty (sprawdzone). Właściwym
+    // adresem jest Dziennik, kanał `fleet` — wpis zostaje w historii i da się go odczytać po fakcie.
+    window.KOSMOS?.eventLogSystem?.push?.({ text, channel: 'fleet', severity: 'warn' });
   }
 
   // Panel potwierdzenia rozkazu skoku warp (gdy wybrany statek warp + system).

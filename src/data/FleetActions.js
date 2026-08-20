@@ -19,6 +19,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canColonize } from '../entities/Vessel.js';
+import { returnJumpTransactional } from '../utils/ReturnJump.js';
 
 // Helper: czy statek wymaga wyrzutni (spaceport)?
 // Małe kadłuby (size === 'small') nie wymagają — mogą startować/lądować wszędzie
@@ -377,11 +378,10 @@ const ACTIONS = {
         if (vessel.mission?.type === 'foreign_recon') {
           vMgr.abortForeignRecon(vessel.id);
         }
-        // Resetuj stan do idle i odpal skok międzygwiezdny
-        vessel.status = 'idle';
-        vessel.position.state = 'docked';
-        vessel.mission = null;
-        vMgr.dispatchInterstellar(vessel.id, homeSystemId);
+        // Finding 125 — skok TRANSAKCYJNY (bliźniak `OrderService.issueReturn`, do którego ta
+        // ścieżka schodzi tylko gdy fasada jest niedostępna). Bez tego odmowa skoku zostawiała
+        // statek w fałszywym doku przy ciele bez portu — nie do ruszenia żadnym rozkazem.
+        returnJumpTransactional(vessel, () => vMgr.dispatchInterstellar(vessel.id, homeSystemId));
         return;
       }
 
