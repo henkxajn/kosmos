@@ -1578,7 +1578,7 @@ teraz z zapisanym mechanizmem: konflikt to file watcher, nie uwaga).
 Keepery W3: `w3_dominance_persist` 16 · `w3_attack_dispatch` 35 · `w3_cross_system_attack` 42 ·
 `w3_raider_lever` 24 · `w3_target_selection` 30 · `w3_foreign_arrival_gate` 5 · `w3_director_mounting`
 17 · `w3_ai_invasion` 23 · `w3_attack_visibility` 42 · `w3_battle_booking` 19 · sondy
-`probe-w3-seams`/`probe-w3-targets`. Sweep **148/148 0 FAIL** (stan W3; dziś **159/159** — patrz blok BRAMKA WŁASNOŚCI) · `check-i18n` PASS.
+`probe-w3-seams`/`probe-w3-targets`. Sweep **148/148 0 FAIL** (stan W3; dziś **165/165** — patrz blok BRAMKA WŁASNOŚCI CZĘŚĆ II) · `check-i18n` PASS.
 
 **NASTĘPNE (osobne, nowe sesje — NIE w tym wątku):** **W4 — pokój terytorialny** (charter
 `WAR_BACKBONE.md` §6a + addendum po W3) · nowy gate **„AI przejmuje kolonię"** (Finding 51) ·
@@ -1648,6 +1648,8 @@ przepełnienie tekstu na ekranie końca gry).
 ---
 
 ## BRAMKA WŁASNOŚCI KOLONII — blok P0: wczytanie nie oddaje gracza koloni wroga (save **v101 bez migracji**, GATE P0 §1-§7 PASS — BLOK ZAMKNIĘTY 2026-08-20)
+
+> ⚠ **CZĘŚĆ II (D1-D6 + Finding 97) JEST ZAMKNIĘTA — sekcja niżej.** Ten blok opisuje wyłącznie P0.
 
 Slice **przekrojowy, NIE należący do AI_CAPTURE**. Plan + 10 decyzji + rejestr:
 `docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`; audyt read-only: `docs/audit/COLONY_OWNERSHIP_GATE_AUDIT.md`;
@@ -1751,6 +1753,94 @@ kontakt** i nie trafia na listę rozmieszczenia (⚠ kontekst: `createAndRegiste
 stempluje własności, więc stempel wroga musi pochodzić skądinąd) · **96** czy utrata głównej koloni
 osierocą stację orbitalną **drugiej** koloni (⚠ `transferColony`, w odróżnieniu od `removeColony`,
 **nie emituje** `colony:destroyed`, na którym stoi mechanizm osierocenia z S3.4c). ⇒ **osobny audyt.**
+
+---
+
+## BRAMKA WŁASNOŚCI KOLONII — CZĘŚĆ II: D1-D6 + Finding 97 (save **v101 bez migracji**, GATE OG-1/OG-1b/OG-3 live PASS, GATE 2 headless — ARC ZAMKNIĘTY 2026-08-22)
+
+Domknięcie arca rozpoczętego blokiem P0. **Podpis części II: 2026-08-22** — D1=W2+W1 · D2=W3+W1 ·
+D3=W1 · D4=W3+flash · D5=W1 · D6=W2, plus **Finding 97 w zakresie** jako osobny commit.
+Plan + rejestr: `docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`. Commity: `4c928ca` (podpis) ·
+`f63ef74` (OG-1 / D5) · `01a1b2d` (OG-1b) · `89c78e7` (OG-3 / D1+D2) · `6973639` (OG-4 / D4) ·
+`6423b59` (GATE 2 headless) · `f89c1d2` (OG-5 / D6) · `80adbf2` (OG-3b / Finding 97) · OG-6 (docs).
+
+**Jedno zdanie:** gra miała bramkę **„KTÓRA kolonia"** i nie miała bramki **„CZYJA"**; P0 zamknął
+ścieżkę wczytania, część II zamyka **wszystkie cztery pozostałe powierzchnie** — wiązanie, szynę
+zdarzeń, panel i rozliczenie okresowe.
+
+⚠ **SKUTEK BYŁ ODWROTNY, NIŻ BRZMI.** Nie „gracz kradnie sobie gospodarkę", tylko
+**gracz KARMIŁ gospodarkę wroga**: `_activateBuilding` rejestruje producenta na WŁASNEJ instancji
+koloni, więc kopalnia postawiona na związanej koloni wroga była płacona z magazynu WROGA
+i produkowała do magazynu WROGA — a `switchActiveColony` przecelowywał tylko HUD.
+
+**Cztery powierzchnie, cztery różne bramki** (i to jest sedno — żadna nie zastępuje pozostałych):
+
+| powierzchnia | bramka | gdzie |
+|---|---|---|
+| **przynależność kafla** (D5/OG-1) | `_isOwnTile` — `grid.get(q,r) === tile`, **tożsamość, nie współrzędne** | `BuildingSystem._build/_upgrade/_demolish` |
+| **kontrola kafla** (OG-1b) | `_isTileControlledByOther` — `tile.owner` z okupacji; **tylko rozbiórka** | `BuildingSystem._demolish` |
+| **wiązanie koloni** (D1/OG-3) | odmowa w `switchActiveColony` + **dziewiątka bramek intencji** (D2) | `ColonyManager`, `BuildingSystem`/`FactorySystem`/`CivilizationSystem` |
+| **panel** (D4/OG-4) | allowlista + inwariant na górze `_onHit` + wygaszeni producenci | `ColonyOverlay`, NEW `ColonyOrderGuard.js` |
+| **rozliczenie okresowe** (Finding 97/OG-3b) | termin własności w `_resolvePayHomeId` **i w jego fallbacku** | `VesselManager` |
+
+**Kanon (D6/OG-5):** NEW `src/utils/ColonyOwnership.js` — **rodzina nazw**, nie jeden przeciążony
+predykat: `isPlayerColony(colony)` · `isPlayerColonyId(planetId)` (fail-closed) ·
+`isLivePlayerColony` (+`resourceSystem`) · `isManageablePlayerColony` (+`!isPreview && !isOutpost`).
+`ColonyManager.isPlayerColony` **deleguje** (~40 konsumentów nietkniętych). Osiem nazwanych kopii
+zmigrowanych. **Zero migracji save (v101), zero nowych kluczy i18n poza trzema powodami odmowy.**
+
+---
+
+### ⚠ Reguły, które wychodzą poza ten arc
+
+1. **`node --check` NIE jest testem.** W OG-4 producent trafił w `_drawWorkforceTab` (**legacy V1**),
+   podczas gdy żywa jest `_drawWorkforceTableV2` — `ordersOk` było w V2 **używane bez deklaracji**
+   i żywa tabela rzuciłaby `ReferenceError` przy pierwszym rysowaniu. Składnia była poprawna.
+   ⇒ **W `ColonyOverlay` żyją pary „V1 legacy + V2 żywa"; pin producenta MUSI nazwać ŻYWĄ.**
+2. **Pin, który celuje w martwą ścieżkę, świeci na zielono dokładnie tam, gdzie jest defekt.**
+   Ta sama runda złapała to tylko dzięki **kontroli pinu**. Każdy pin źródłowy bez kontroli jest
+   zgadywaniem.
+3. **Predykat opisany w komentarzu ≠ predykat egzekwowany.** `isPlayerColony` przez cztery commity
+   miało w dokumentacji ostrzeżenie „bierze OBIEKT, nie id", a kod **przepuszczał string**
+   (`'p_ai'.ownerEmpireId === undefined` ⇒ „kolonia gracza" dla DOWOLNEGO id).
+4. **Allowlista jest bezpieczniejsza od bloklisty, ale ma cenę: pominięty ODCZYT też zostaje
+   zablokowany.** `wfInfo` (tooltip satysfakcji) wypadł z pierwszej wersji i znalazła go dopiero
+   ekstrakcja **wszechświata etykiet** (`_addHit` + `case`, 68 pozycji).
+5. **Jałowa kontrola pinu to fałszywa zieleń.** Trzy złapane w tym arcu: listener rejestrowany przed
+   `GameCore.boot()` (który woła `EventBus.clear()`), `setCredits` przez nieistniejące `addCredits`,
+   porównanie `0 Kr` z `0 Kr` bez własnego statku.
+6. **Nie podnoś stuba w `node_modules/`, żeby zazielenić test.** `ColonyOverlay` nie importuje się
+   pod node (`PlanetTextureUtils:16` → `new THREE.TextureLoader()`); stub jest **gitignorowany**,
+   więc łatka dawałaby zieleń wyłącznie na jednej maszynie. Granicę dowodu nazywa się wprost.
+7. **Furtki tylko wtedy, gdy pomiar ich wymaga.** Plan przewidywał dwie (`GameCore`,
+   `CombatSandbox`) — pomiar pokazał, że **oba wiążą planetę macierzystą gracza**, więc przechodzą
+   samym terminem. Zero furtek; sweep 165/165 to potwierdza.
+
+---
+
+### ⚠ Otwarte po tym arcu (żadne nie blokuje)
+
+- 🟠 **Brak płatnika = flota DARMOWA** (pin F6 w `fleet_upkeep_payer_smoke`): `_resolvePayHomeId`
+  zwraca `null`, a `_tickVesselMaintenance` robi `if (!homeId) continue`. Osiągalne, gdy gracz
+  stracił dom, a `window.KOSMOS.homePlanet` nadal go nazywa. Zamknięcie = **trzeci szczebel
+  drabiny** („dowolna żywa kolonia gracza"), poza podpisem OG-3b.
+- **Obserwacja UX z GATE OG-3 §3:** klik na kolonię AI na mapie 3D + „mapa ciała" **przekierowuje
+  na WŁASNĄ kolonię** zamiast stanu neutralnego. Nie wyciek (`activePlanetId` się nie zmienia) —
+  myląca prezentacja. To wejście woła `switchActiveColony` + `openPanel`, a nie zaprojektowany
+  podgląd `show({colonyId})`.
+- **Zahardkodowany polski w `ColonyOverlay:171-173`** — trzy flashe sukcesu budowy
+  (`'⏳ W kolejce…'`, `'🔨 Budowa rozpoczęta'`, `'✓ Zbudowano'`). Ta sama klasa co **Finding 113**;
+  `check-i18n` ich nie widzi (pyta o klucze w `t()`, nie o napisy w `fillText`/flashu).
+- **Backlog (decyzja właściciela: NIE w tym arcu):** lazy-init loadera w `PlanetTextureUtils`
+  odblokowałby import `ColonyOverlay` pod node i **wykonaniowe** testowanie całej warstwy UI.
+- **D1-D6 nie objęły wejść NAWIGACYJNYCH** — 4 miejsca wołające `switchActiveColony` bezpośrednio
+  (`GameScene:3302`, `BottomContext:424`, `CivilizationOverlay:730`, `EventLogOverlay:368`) są dziś
+  bezpieczne **przez odmowę**, ale żadne nie oferuje stanu neutralnego.
+
+**Keepery arca:** `colony_tile_membership` 48 · `colony_ownership_guard` 30 · `colony_order_guard` 61
+· `colony_ownership_canon` 40 · `fleet_upkeep_payer` 19 · `colony_ownership_seams` 11 (**S4 odwrócony
+— wszystkie cztery szwy zamknięte**) · `colony_ownership_load` 33 · `zero_colony_panels` 11.
+Sweep **165/165 0 FAIL** · `check-i18n` PASS.
 
 ---
 

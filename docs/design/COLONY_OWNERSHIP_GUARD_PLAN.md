@@ -1,4 +1,4 @@
-# BRAMKA WŁASNOŚCI KOLONII — plan doc (✅ **BLOK P0 ZAMKNIĘTY · D1-D6 PODPISANE 2026-08-22**)
+# BRAMKA WŁASNOŚCI KOLONII — plan doc (✅ **ARC ZAMKNIĘTY 2026-08-22 — P0 + D1-D6 + Finding 97**)
 
 > # ✅ BLOK P0 ZAMKNIĘTY — GATE P0 ZDANY W CAŁOŚCI (2026-08-20)
 > **P0-A=W1 · P0-B=W1 · P0-C=W2 (+„dom wraca przy odbiciu"=W2) · P0-D=W1** — podpisane 2026-08-19,
@@ -28,8 +28,10 @@
 
 **Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** przekrojowy (nie należy do AI_CAPTURE) ·
 **Slice:** COLONY_OWNERSHIP_GUARD
-**Status:** ✅ **Blok P0 (P0-A..P0-D) PODPISANY 2026-08-19 i WDROŻONY 2026-08-20** (`e86c091`, `0085a37`).
-✅ **D1-D6 PODPISANE 2026-08-22** (+ Finding 97 w zakresie) — implementacja rusza od **OG-1**.
+**Status:** ✅ **ARC ZAMKNIĘTY 2026-08-22.** Blok P0 (P0-A..P0-D) podpisany 2026-08-19, wdrożony
+2026-08-20. D1-D6 podpisane 2026-08-22, wdrożone tego samego dnia wraz z Findingiem 97.
+**Wszystkie sześć decyzji + Finding 97 = WDROŻONE i pinowane.** Zamknięcie w `CLAUDE.md`, sekcja
+„BRAMKA WŁASNOŚCI KOLONII — CZĘŚĆ II".
 **Parent:** `AI_CAPTURE_PLAN.md` §Findings (slice-rodzic **nie jest** właścicielem tej wady) ·
 `W3_PLAN.md` (W3-1 `efa8f85` jest warunkiem koniecznym osiągalności)
 **Basis:** `docs/audit/COLONY_OWNERSHIP_GATE_AUDIT.md` (2026-08-19 — 13 agentów, sześć sond
@@ -1431,6 +1433,34 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
 
 ---
 
+## Findings z domknięcia części II (2026-08-22)
+
+126. 🟠 **ZAHARDKODOWANY POLSKI W TRZECH FLASHACH BUDOWY** — `ColonyOverlay.js:171-173`:
+     `'⏳ W kolejce — brak surowców'`, `'🔨 Budowa rozpoczęta'`, `'✓ Zbudowano'`. Żadnego `t()`,
+     żadnego klucza. Zauważone przy OG-1, gdy dokładałem obok nich odmowę **przez i18n** — kontrast
+     w jednej funkcji jest teraz jawny.
+     ⚠ **TA SAMA KLASA CO FINDING 113 i ten sam martwy kąt narzędzia:** `check-i18n` pyta „czy klucz
+     użyty w `t()` istnieje w PL i EN", a nie „czy każdy widoczny napis przechodzi przez `t()`" —
+     literał wpisany prosto we flash jest dla niego **niewidzialny**, więc bramka przechodzi.
+     ⇒ kandydat do wspólnej poprawki z 113 (wykrywanie literałów w `fillText`/`_showFlash` poza `t()`),
+     nie do osobnego zlecenia. **Zasięg w reszcie UI NIEZMIERZONY.**
+
+127. **BACKLOG (decyzja właściciela 2026-08-22: NIE w tym arcu) — odblokowanie `ColonyOverlay` pod
+     node.** Zmierzone: import wywraca się na `PlanetTextureUtils.js:16`
+     (`new THREE.TextureLoader()` na poziomie modułu), a stub `three` w `node_modules/` jest
+     **gitignorowany**, więc jego podniesienie dawałoby zieleń wyłącznie lokalnie.
+     **Lazy-init loadera (1-3 linie, zachowanie bez zmian)** odblokowałby **wykonaniowe** testowanie
+     całej warstwy UI — dziś największa luka testowa tego repo (GATE 2 musiał zostawić 2 z 6 punktów
+     na pinie źródłowym). Zmiana produkcyjna, poza zakresem D1-D6.
+
+128. **D1-D6 NIE OBJĘŁY WEJŚĆ NAWIGACYJNYCH.** Cztery miejsca wołające `switchActiveColony`
+     bezpośrednio (`GameScene:3302` `system:switched`, `BottomContext:424`, `CivilizationOverlay:730`,
+     `EventLogOverlay:368`) są po D1 **bezpieczne przez odmowę**, ale żadne nie oferuje stanu
+     NEUTRALNEGO — stąd obserwacja UX z GATE OG-3 §3 (klik na kolonię AI przekierowuje na własną).
+     Naprawa = przepiąć te wejścia na zaprojektowany podgląd `show({colonyId})`. Osobny podpis.
+
+---
+
 ## Gdzie to stawia arc
 
 Ten slice **nie należy** do AI_CAPTURE i **nie blokuje** jego domknięcia — poza jednym punktem:
@@ -1438,8 +1468,11 @@ Ten slice **nie należy** do AI_CAPTURE i **nie blokuje** jego domknięcia — p
 P0 właśnie naprawiło. Zrealizowana kolejność: OG-0 → OG-2 → **GATE P0 (§1-§7 PASS)** → `6796617`
 (fix po §6) → **wznowienie AI_CAPTURE GATE 2 §4/§5** → dopiero potem D1-D6.
 
-**Stan na 2026-08-22:** blok P0 **ZAMKNIĘTY**; **D1-D6 PODPISANE** (+ Finding 97 w zakresie) —
-implementacja rusza od **OG-1**. Kolejność: **OG-1 → OG-3 → OG-3b → OG-4 (+GATE 2) → OG-5 → OG-6**.
+**Stan końcowy 2026-08-22 — ARC ZAMKNIĘTY.** Zrealizowana kolejność: **OG-0 → OG-2 (GATE P0) →
+OG-1 (GATE OG-1) → OG-1b (re-test) → OG-3 (GATE OG-3) → OG-4 (GATE 2 headless) → OG-5 → OG-3b →
+OG-6**. Cztery gate'y live PASS (P0, OG-1, OG-1b, OG-3), GATE 2 zweryfikowany headless z **jawnie
+nazwaną granicą dowodu** (2 z 6 punktów = pin źródłowy, bo `ColonyOverlay` nie importuje się pod node).
+Sweep **165/165 0 FAIL** · `check-i18n` PASS · **zapis v101 przez cały arc, zero migracji**.
 ⚠ **Dwa szwy są nadal ŻYWE i pinowane jako żywe**: `switchActiveColony` przyjmuje kolonię AI
 (keeper `colony_ownership_seams` S4 → **D1/OG-3**) oraz `_build` nie sprawdza przynależności kafla
 (**D5/OG-1**, i ten drugi jest osiągalny **już dziś** przez zaprojektowany podgląd obcej planety).
