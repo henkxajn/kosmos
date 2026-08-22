@@ -794,6 +794,12 @@ export class BuildingSystem {
   // ── Budowa ──────────────────────────────────────────────────────────────
 
   _build(tile, buildingId) {
+    // D5/OG-1 — przynależność kafla PRZED czymkolwiek innym (koniec „cudzy kafel, mój portfel").
+    if (!this._isOwnTile(tile)) {
+      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.tileNotOwned') });
+      return;
+    }
+
     const building = BUILDINGS[buildingId];
     if (!building) {
       EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.unknownBuilding') });
@@ -1015,6 +1021,12 @@ export class BuildingSystem {
   // ── Ulepszenie budynku ──────────────────────────────────────────────────
 
   _upgrade(tile) {
+    // D5/OG-1 — przynależność kafla PRZED resztą walidacji.
+    if (!this._isOwnTile(tile)) {
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.tileNotOwned') });
+      return;
+    }
+
     if (!tile.buildingId) {
       EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.noBuilding') });
       return;
@@ -1168,6 +1180,12 @@ export class BuildingSystem {
   // ── Rozbiórka ───────────────────────────────────────────────────────────
 
   _demolish(tile) {
+    // D5/OG-1 — przynależność kafla PRZED efektem ubocznym na cache i przed zwrotem do magazynu.
+    if (!this._isOwnTile(tile)) {
+      EventBus.emit('planet:demolishResult', { success: false, tile, reason: t('ui.tileNotOwned') });
+      return;
+    }
+
     this._greedyStaffCache = null;   // Slice 5C.2 (review): usunięcie/downgrade zmienia _active/obsadę → świeży greedy
     // Anulowanie oczekującego zamówienia (pending)
     if (tile.pendingBuild) {
@@ -1864,6 +1882,35 @@ export class BuildingSystem {
   // Fail-open: brak referencji → null → bramka klimatyczna pomijana (nigdy nie blokuje na braku danych).
   _resolveOwnPlanet() {
     return window.KOSMOS?.colonyManager?.getColony(this._planetId)?.planet ?? null;
+  }
+
+  /**
+   * D5 / OG-1 — czy kafel należy do siatki TEGO systemu?
+   *
+   * ⚠ PO CO (`docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md` §D5, PODPISANA 2026-08-22: W1):
+   *   `_build`/`_upgrade`/`_demolish` przyjmowały DOWOLNY obiekt kafla — w całym ciele `_build`
+   *   nie było ani jednego odwołania do `this._grid`, a klimat brany jest z `_resolveOwnPlanet()`,
+   *   czyli z planety AKTYWNEJ koloni. Stąd stan „cudzy kafel, MÓJ portfel, MÓJ klimat":
+   *   rozkaz wydany na podglądzie obcej planety mutował kafel, który do tego systemu nie należy,
+   *   i płacił z magazynu koloni związanej.
+   *
+   * ⚠ TOŻSAMOŚĆ, NIE WSPÓŁRZĘDNE. Każda siatka ma swój kafel `"0,0"`; porównanie `q`/`r`
+   *   przepuszczałoby obcy kafel przy każdej kolizji klucza — czyli w praktyce zawsze.
+   *
+   * ⚠ ZAWODZI OTWARCIE (część decyzji, nie niedopatrzenie). `_grid` bywa wstrzykiwane z zewnątrz
+   *   (`ColonyManager:622/2585/2629`, `ColonyOverlay._ensureGrid`, `EmpireColonyBootstrap:172/379`,
+   *   `MissionSystem:2361`, `SpawnTestEnemy:118`, `CombatSandbox:162/397`) i bywa `null` do
+   *   pierwszego otwarcia mapy. System, który nie zna swojej siatki, MUSI przepuścić — inaczej
+   *   jedna niezainicjowana ścieżka wyłącza budowanie w całej grze. Ten sam powód obejmuje
+   *   siatkę nieznanego kształtu (bez `get`, np. przyszły `RegionSystem`).
+   *
+   * ⚠ NIE JEST to bramka WŁASNOŚCI kolonii — ta należy do D1 (`switchActiveColony`, OG-3).
+   *   Tu pytamy wyłącznie o przynależność kafla do siatki, którą ten system obsługuje.
+   */
+  _isOwnTile(tile) {
+    const grid = this._grid;
+    if (!grid || typeof grid.get !== 'function') return true;   // fail-open — patrz komentarz wyżej
+    return grid.get(tile?.q, tile?.r) === tile;
   }
 
   _canBuildOnTile(tile, building) {
