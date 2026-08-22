@@ -925,6 +925,7 @@ export default {
   'ui.factionSliderRequired': 'Requires faction slider {0}',
   'ui.tileOccupied': 'Tile occupied',
   'ui.tileNotOwned': 'Tile belongs to another colony',
+  'ui.tileEnemyControlled': 'Tile under enemy control',
   'ui.terrainForbidden': 'Forbidden terrain',
   'ui.requiresWarmth': 'Too cold for this building',
   'ui.requiresAtmosphere': 'Requires atmosphere',

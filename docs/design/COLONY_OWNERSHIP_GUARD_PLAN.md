@@ -590,7 +590,64 @@ jako naprawa istniejącej dziury, a nie warunek wstępny P0. **P0 wszedł przed 
 
 ✅ **PODPISANA 2026-08-22: W1** — `_build`/`_upgrade`/`_demolish` walidują przynależność kafla,
 **PRZED albo RAZEM z D1**, i **muszą zawodzić OTWARCIE przy `_grid == null`**. To **OG-1**, pierwszy
-commit kodu w części II.
+commit kodu w części II. **WDROŻONE `f63ef74`** (keeper `colony_tile_membership_smoke` 31/31).
+
+---
+
+#### ✅ OG-1b — KONTROLA kafla obok PRZYNALEŻNOŚCI (rozszerzenie D5, podpisane 2026-08-22)
+
+**Skąd się wzięło:** live-gate OG-1 punkt (c). Gracz nacisnął **Delete** na budynkach koloni, na
+której trwał desant — `entity_3` spadło z 15 do 13 budynków **zanim** kolonia formalnie przeszła
+w ręce wroga.
+
+⚠ **To NIE była regresja `f63ef74` — i to zostało wykluczone WYKONANIEM, nie lekturą.** Sonda
+przeszła dokładną trasę klawisza (`ColonyOverlay:5595` → `planet:demolishRequest` → handler
+`BuildingSystem:104-107` → `_demolish`):
+
+| | kafel okupowany, kolonia wciąż moja | kontrola: kafel z INNEJ siatki |
+|---|---|---|
+| `isPlayerColony(kolonia)` | **true** (`ownerEmpireId = null`) | — |
+| `grid.get(q,r) === tile` | **true** | false |
+| `_isOwnTile(tile)` | **true → przepuszcza** | **false → odmawia** |
+| `_active` | 5 → **4** (budynek zniszczony) | 1 → 1 (nietknięte) |
+| `demolishResult` | `{success:true}` | `{success:false, reason:"Pole nie należy do tej kolonii"}` |
+
+Bramka D5 odpowiedziała **poprawnie**: kolonia formalnie należała do gracza, a kafel fizycznie leżał
+w jego siatce. Brakowało **drugiej osi** — `tile.owner`, przerzucanego przez okupację
+(`GroundUnitManager._changeTileOwner:626`), który miał **zero** odwołań we wszystkich trzech
+metodach (`_build` 0, `_upgrade` 0, `_demolish` 0).
+
+**Trzy fakty, które przesądziły decyzję (wszystkie ZMIERZONE):**
+1. 🔴 **Rozbiórka na kaflu wroga nie tylko odmawia zdobyczy — ona PŁACI.** `mine` na kaflu
+   `owner='emp_001'` zwrócił **+10 Fe / +5 C / +1 structural_alloys**. Nieodwracalność zniszczenia
+   razem z rabatem 50% czyniły „spaloną ziemię" na cudzym terytorium **dochodową**.
+2. ⚠ **`tile.isOccupied` NIE JEST terminem okupacji** — to getter „stoi budynek / trwa budowa /
+   czeka w kolejce" (`HexTile:279`). Kto po niego sięgnie, zabramkuje coś zupełnie innego.
+3. ⚠ **Na świeżo wygenerowanej siatce WSZYSTKIE 300 kafli ma `owner === null`** — stempel
+   `'player'` stawia wyłącznie `ColonyOverlay._ensureGrid` w gałęzi generowania. Bramka
+   `owner !== 'player'` wyłączyłaby rozbiórkę na każdej koloni, której mapy gracz nigdy nie otworzył
+   (AI, headless, świeżo wczytane).
+
+**PODPISANE (właściciel, 2026-08-22):** blokujemy **wyłącznie `_demolish`**, gdy `tile.owner`
+wskazuje **INNEGO, NIEPUSTEGO** właściciela. Uzasadnienie właściciela: *„nieodwracalność zniszczenia
++ zmierzony rabat 50% razem tworzą niezamierzoną, dochodową taktykę «spalonej ziemi» na cudzym
+terytorium — to nie powinno być tanie ani zyskowne"*.
+- **Budowa i ulepszenie ZOSTAJĄ dozwolone** na kaflu obcego (live-gate (b) PASS: są odwracalne
+  i nie odbierają zdobyczy). Pinowane jako **decyzja**, nie przeoczenie (keeper T15).
+- **Faza odliczania ZOSTAJE dozwolona**: `occupyEmpireId` ustawione, ale `owner` wciąż mój = kafel
+  jeszcze MÓJ, więc rozbiórka jest obroną własnego majątku. Termin stoi na `owner`, **nie** na
+  `occupyEmpireId` (keeper T13).
+- **Fail-open przy `owner == null`** oraz przy nierozwiązywalnym właścicielu kolonii (keeper T14).
+- **Osobny powód i18n** `ui.tileEnemyControlled` — diagnostyka odtwarza REALNĄ ścieżkę decyzji,
+  nie uśrednia dwóch osi w jeden komunikat (keeper T16).
+
+⚠ **`_resolveOwnTileOwner` jest LUSTREM `ColonyOverlay._ensureGrid` (`defaultOwner`)** — to jedyne
+miejsce w grze stawiające ten stempel. Rozjazd tych dwóch = bramka odmawiająca na własnym kaflu.
+
+⚠ **Po (b) zostaje świadoma luka:** po **faktycznym** przejęciu koloni klik budowy nie robi nic
+**i nie mówi dlaczego** — żądanie nie powstaje, bo pasek budowy jest bramkowany `!isPreview`
+(`ColonyOverlay:919`). Właściciel uznał to za akceptowalne (gracz wie, że stracił kolonię).
+Komunikat należałby do **D4/OG-4**, nie tutaj.
 
 ---
 
@@ -649,7 +706,8 @@ cudzy kafel + MÓJ portfel) · **keeper przed każdą zmianą zachowania**.
 | # | commit | treść | wynika z | gate |
 |---|---|---|---|---|
 | **OG-0** ✅ `e86c091` | `test: keeper szwow wlasnosci kolonii` | pinuje STAN DZISIEJSZY **wykonaniem** (17/17): **S1** `transferColony` nie czyści `isHomePlanet`; **S2** `removeColony` przepina na ex-dom wroga (test przynależności); **S3** round-trip przez **produkcyjny** `SaveSystem._serializeCiv4x` uzbraja `_activePlanetId` na koloni wroga; **S4** `switchActiveColony` przyjmuje kolonię AI. Każdy pin z **kontrolą pinu**. ⚠ Pin „budowa na obcym kaflu przechodzi" **NIE wszedł** — należy do **D5**, niepodpisanego | — | — |
-| **OG-1** | `fix(game): budowa i rozbiórka tylko na własnym kaflu` | **D5=W1**, fail-open przy `_grid == null` | **D5** | — |
+| **OG-1** ✅ `f63ef74` | `fix(game): budowa i rozbiórka tylko na własnym kaflu` | **D5=W1**, fail-open przy `_grid == null`. Keeper 31/31, sweep 161/161 | **D5** | **GATE OG-1** (a/b/d PASS, c → OG-1b) |
+| **OG-1b** | `fix(game): rozbiórka nie na kaflu przejętym przez obcego` | **D5 rozszerzone** — `_demolish` odmawia, gdy `tile.owner` wskazuje innego, niepustego właściciela; budowa/ulepszenie bez zmian; fail-open przy `owner == null`; osobny powód `ui.tileEnemyControlled` | **D5/OG-1b** | re-test punktu (c) |
 | **OG-2** ✅ `0085a37` | `fix(save): wczytanie nie oddaje gracza koloni wroga` | **P0-A + P0-C + P0-D** jako JEDNA zmiana (wszystkie w `ColonyManager.js` + `GameScene.js`); drabina własności; `_detachActiveColony` w gałęzi terminalnej | **P0-A,C,D** | **GATE P0** |
 | **OG-3** | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` + **dwie** jawne furtki (`GameCore`, `CombatSandbox`) + dziewiątka bramek jako obrona w głąb. **Tu też pinujemy D3=W1** (wskaźnik nie trafia na obcą) | D1, D2, D3 | — |
 | **OG-3b** | `fix(fleet): utrzymanie floty płaci tylko kolonia gracza` | **Finding 97** — `_resolvePayHomeId` dostaje termin własności obok filtru `!isOutpost`, a fallback `window.KOSMOS.homePlanet` **przechodzi ten sam test** (po przejęciu nazywa zdobycz wroga). ⚠ Dowodem jest **pomiar kredytów w czasie**, nie kliknięcie | 97 | — |
@@ -695,7 +753,7 @@ GATE 2 AI_CAPTURE jest otwarty, więc baza może się jeszcze ruszyć).
 | keeper | commit | co pinuje |
 |---|---|---|
 | `colony_ownership_seams_smoke` | OG-0 | cztery szwy dzisiejsze (a-d) + kontrole pinów; **trzy z nich MAJĄ paść** i zostać świadomie odwrócone w OG-1/OG-2/OG-3 |
-| `colony_tile_membership_smoke` | OG-1 | budowa/rozbiórka na cudzym kaflu **odrzucona**; własny kafel przechodzi (kontrola pinu); `_grid == null` **przepuszcza** (fail-open) |
+| `colony_tile_membership_smoke` | OG-1 + OG-1b | **T1-T11 (przynależność):** budowa/ulepszenie/rozbiórka na kaflu spoza siatki **odrzucona**; kontrole pinu na własnym kaflu; **tożsamość, nie `q`/`r`** (kafel-widmo o tych samych współrzędnych odrzucony); fail-open przy `_grid == null` i przy siatce bez `get`; regresja AI (`forEach` == `get`); powód przez i18n. **T12-T16 (kontrola):** rozbiórka na kaflu obcego odrzucona **i bez zwrotu 50%**; faza `occupyEmpireId` przy własnym `owner` przechodzi; `owner == null` przechodzi; **budowa/ulepszenie na kaflu obcego NADAL przechodzą (pin decyzji)**; osobny powód i18n |
 | `colony_ownership_load_smoke` | OG-2 | round-trip przez **produkcyjny** `SaveSystem._serializeCiv4x`: przejęta stolica → zapis → wczytanie ⇒ `_activePlanetId` **nie** wskazuje koloni wroga; wariant „gracz bez domu" ⇒ **detach**, nie stan sprzed; `removeColony` po przejęciu **nie** przepina na ex-dom |
 | `colony_ownership_guard_smoke` | OG-3 | `switchActiveColony` odmawia na koloni AI; **dwie** jawne furtki działają; `GameCore`/`CombatSandbox` startują; ⚠ pin **D3=W1**: po odmowie `MissionSystem.resourceSystem` **nadal wskazuje kolonię gracza**; ⚠ pin scenariuszowy: `GameScene:3444/3476/3501` wiążą własną planetę i **przechodzą bez furtki** |
 | `fleet_upkeep_payer_smoke` | OG-3b | płatnikiem utrzymania **nigdy** kolonia z `ownerEmpireId`; fallback `homePlanet` wskazujący **zdobycz wroga** nie płaci; kontrola pinu: własna kolonia gracza płaci jak dotąd |
@@ -728,6 +786,18 @@ z sesji 2026-08-19 (audyt §6: skażony tą regresją).
 2. **Zapis do pliku → wczytanie → ponowny `K4`.** Kryterium: **ten sam wynik**, bez kliknięcia.
 3. Zniszczenie innej koloni gracza (kolizja) ⇒ `_activePlanetId` **nie** ląduje na ex-domu wroga (P0-D).
 4. Przeklikanie UI z konsolą: **nic nie rzuca wyjątkiem** przy `resourceSystem === null`.
+
+**GATE OG-1 (po OG-1) — „rozkaz nie działa na cudzym kaflu" — PRZEPROWADZONY 2026-08-22.**
+**(a) PASS** własna kolonia bez zmian · **(b) PASS z doprecyzowaniem** — budowa podczas desantu na
+**własnej** (jeszcze nieprzejętej) koloni działa i **tak ma być**; po faktycznym przejęciu klik jest
+nieskuteczny (bez komunikatu — świadomie, patrz §D5/OG-1b) · **(c) FAIL → OG-1b** Delete niszczył
+budynki na kaflach zajętych przez wroga; zmierzone `entity_3` 15 → 13. Przyczyna rozstrzygnięta
+**wykonaniem**: nie regresja OG-1, tylko nieobjęta oś (kontrola kafla) ⇒ osobna decyzja i commit
+OG-1b · **(d) PASS** AI rozbudowuje kolonie, w tym **przejętą od gracza** (`entity_3` 19 → 22
+budynków) — bramka nie zatrzymała `ColonyAutoExpander`.
+⬜ **Do domknięcia: re-test punktu (c)** po OG-1b — Delete na kaflu zajętym przez wroga ma odmówić
+komunikatem „Pole pod kontrolą wroga", a na kaflu jeszcze nieprzerzuconym (trwa odliczanie) **ma
+dalej działać**.
 
 **GATE 2 (po OG-4) — „rozkaz nie przechodzi".** Klik kafla na koloni wroga: **budowa odmawia**, komunikat
 jest **przetłumaczony**, zaprojektowany desant/ostrzał **dalej działa**, panel **da się zamknąć**.

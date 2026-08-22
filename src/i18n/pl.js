@@ -926,6 +926,7 @@ export default {
   'ui.factionSliderRequired': 'Wymaga suwaka frakcji {0}',
   'ui.tileOccupied': 'Pole zajęte',
   'ui.tileNotOwned': 'Pole nie należy do tej kolonii',
+  'ui.tileEnemyControlled': 'Pole pod kontrolą wroga',
   'ui.terrainForbidden': 'Teren niedozwolony',
   'ui.requiresWarmth': 'Za zimno dla tego budynku',
   'ui.requiresAtmosphere': 'Wymaga atmosfery',

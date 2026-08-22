@@ -333,5 +333,122 @@ console.log('T11 — powód odmowy przechodzi przez i18n (PL + EN)');
     'T11: odmowa niesie przetłumaczony powód, nie surowy token');
 }
 
+// == OG-1b — KONTROLA KAFLA (rozszerzenie D5, podpisane 2026-08-22) =========================
+//
+// ⚠ INNA OŚ NIŻ T1-T11. Tamte pytają „czy kafel leży w MOJEJ siatce" (przynależność). Te pytają
+//   „czy kafel jest KONTROLOWANY przez kogoś innego" (`tile.owner`, przerzucany przez okupację
+//   w `GroundUnitManager._changeTileOwner:626`). Live-gate OG-1 (c) zmierzył, że pierwsza oś
+//   przepuszcza drugą: kolonia formalnie gracza + kafel zajęty przez wroga ⇒ Delete niszczył
+//   budynek I ZWRACAŁ 50% kosztu (zmierzone: +10 Fe / +5 C / +1 structural_alloys za `mine`).
+//   Nieodwracalność zniszczenia razem z rabatem tworzyły dochodową „spaloną ziemię" na cudzym
+//   terytorium. Decyzja: blokujemy TYLKO rozbiórkę; budowa i ulepszenie zostają dozwolone (T15).
+//
+// ⚠ FAZA ODLICZANIA ZOSTAJE DOZWOLONA (T13). `occupyEmpireId` ustawione, ale `owner` wciąż mój =
+//   kafel jeszcze MÓJ, więc rozbiórka jest obroną własnego majątku, nie niszczeniem cudzego.
+//
+// ⚠ FAIL-OPEN PRZY `owner == null` (T14) JEST KONIECZNY, NIE OSTROŻNOŚCIOWY. Zmierzone: na świeżo
+//   wygenerowanej siatce WSZYSTKIE 300 kafli ma `owner === null` — stempel `'player'` stawia
+//   wyłącznie `ColonyOverlay._ensureGrid` w gałęzi generowania. Bramka `owner !== 'player'`
+//   wyłączyłaby rozbiórkę na każdej koloni, której mapy gracz nigdy nie otworzył (AI, headless,
+//   świeżo wczytane).
+//
+// ⚠ `tile.isOccupied` NIE JEST TERMINEM OKUPACJI — to getter „stoi budynek / trwa budowa / czeka
+//   w kolejce" (`HexTile:279`). Kto po niego sięgnie, zabramkuje coś zupełnie innego.
+
+console.log('T12 (OG-1b) — `_demolish` na kaflu kontrolowanym przez OBCEGO');
+{
+  const { bA, last, reset } = boot();
+  const id = Object.values(BUILDINGS).find(b => !b.requires && !b.isCapital).id;
+  const own = findBuildableTile(bA, bA._grid, id);
+  buildAndFinish(bA, own, id);
+  assert(!!bA._active.get(own.key), 'T12 przesłanka: budynek GOTOWY na kaflu gracza');
+
+  own.owner = 'emp_001';                 // dokładnie to, co pisze `GroundUnitManager:626`
+  own.occupyEmpireId = 'emp_001';
+  const feBefore = bA.resourceSystem.getAmount('Fe');
+  const activeBefore = bA._active.size;
+  reset();
+  bA._demolish(own);
+
+  assert(bA._active.size === activeBefore && !!bA._active.get(own.key),
+    'T12: budynek NIE zniszczony na kaflu przejętym przez obcego');
+  assert(last['planet:demolishResult']?.success === false, 'T12: planet:demolishResult z success:false');
+  assert(bA.resourceSystem.getAmount('Fe') === feBefore,
+    'T12: BRAK zwrotu 50% (koniec dochodowej „spalonej ziemi" na cudzym kaflu)');
+}
+
+console.log('T13 (KONTROLA PINU) — trwa odliczanie, ale `owner` WCIĄŻ mój => rozbiórka wolna');
+{
+  const { bA, last, reset } = boot();
+  const id = Object.values(BUILDINGS).find(b => !b.requires && !b.isCapital).id;
+  const own = findBuildableTile(bA, bA._grid, id);
+  buildAndFinish(bA, own, id);
+
+  own.owner = 'player';                  // stempel z `ColonyOverlay._ensureGrid`
+  own.occupyEmpireId = 'emp_001';        // desant trwa, kafel jeszcze NIE przerzucony
+  const activeBefore = bA._active.size;
+  reset();
+  bA._demolish(own);
+  assert(bA._active.size === activeBefore - 1, 'T13: własny kafel pod odliczaniem DA się rozebrać');
+  assert(last['planet:demolishResult']?.success === true, 'T13: brak odmowy w fazie odliczania');
+}
+
+console.log('T14 (FAIL-OPEN) — `tile.owner == null` PRZEPUSZCZA');
+{
+  const { bA, last, reset } = boot();
+  const id = Object.values(BUILDINGS).find(b => !b.requires && !b.isCapital).id;
+  const own = findBuildableTile(bA, bA._grid, id);
+  buildAndFinish(bA, own, id);
+  assert(own.owner == null, 'T14 przesłanka: siatka spoza `ColonyOverlay` ma `owner === null`');
+
+  const activeBefore = bA._active.size;
+  reset();
+  bA._demolish(own);
+  assert(bA._active.size === activeBefore - 1, 'T14: brak stempla właściciela nie blokuje rozbiórki');
+  assert(last['planet:demolishResult']?.success === true, 'T14: fail-open bez odmowy');
+}
+
+console.log('T15 (PIN DECYZJI) — budowa i ulepszenie na kaflu obcego NADAL dozwolone');
+{
+  const { bA, last, reset } = boot();
+  const id = Object.values(BUILDINGS).find(b => !b.requires && !b.isCapital).id;
+
+  const free = findBuildableTile(bA, bA._grid, id);
+  free.owner = 'emp_001';
+  reset();
+  bA._build(free, id);
+  assert(!untouched(free), 'T15: BUDOWA na kaflu kontrolowanym przez obcego przechodzi (świadomie poza OG-1b)');
+  assert(last['planet:buildResult']?.success === true, 'T15: brak odmowy przy budowie');
+
+  const up = findBuildableTile(bA, bA._grid, id);
+  buildAndFinish(bA, up, id);
+  up.owner = 'emp_001';
+  const lvlBefore = up.buildingLevel ?? 1;
+  reset();
+  bA._upgrade(up);
+  assert((up.buildingLevel ?? 1) > lvlBefore || !!up.underConstruction || !!up.pendingBuild,
+    'T15: ULEPSZENIE na kaflu kontrolowanym przez obcego przechodzi (świadomie poza OG-1b)');
+}
+
+console.log('T16 — powód odmowy OG-1b przechodzi przez i18n i JEST INNY niż powód D5');
+{
+  const KEY = 'ui.tileEnemyControlled';
+  assert(typeof PL[KEY] === 'string' && PL[KEY].length > 0, 'T16: klucz ' + KEY + ' istnieje w PL');
+  assert(typeof EN[KEY] === 'string' && EN[KEY].length > 0, 'T16: klucz ' + KEY + ' istnieje w EN');
+  assert(PL[KEY] !== EN[KEY], 'T16: PL i EN to różne napisy');
+  assert(PL[KEY] !== PL['ui.tileNotOwned'],
+    'T16: inny powód niż przynależność — diagnostyka odtwarza REALNĄ ścieżkę decyzji, nie uśrednia dwóch osi');
+
+  const { bA, last, reset } = boot();
+  const id = Object.values(BUILDINGS).find(b => !b.requires && !b.isCapital).id;
+  const own = findBuildableTile(bA, bA._grid, id);
+  buildAndFinish(bA, own, id);
+  own.owner = 'emp_001';
+  reset();
+  bA._demolish(own);
+  assert(typeof PL[KEY] === 'string' && last['planet:demolishResult']?.reason === PL[KEY],
+    'T16: odmowa niesie przetłumaczony powód kontroli kafla');
+}
+
 console.log(`\n${pass} PASS / ${fail} FAIL`);
 process.exit(fail === 0 ? 0 : 1);

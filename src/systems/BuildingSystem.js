@@ -1186,6 +1186,14 @@ export class BuildingSystem {
       return;
     }
 
+    // OG-1b — kafel przejęty przez obcego: rozbiórka jest nieodwracalna I zwraca 50% kosztu,
+    // więc bez tej bramki „spalona ziemia" na cudzym terytorium jest dochodowa. Osobny powód
+    // od powyższego — dwie różne osie, dwie różne diagnozy.
+    if (this._isTileControlledByOther(tile)) {
+      EventBus.emit('planet:demolishResult', { success: false, tile, reason: t('ui.tileEnemyControlled') });
+      return;
+    }
+
     this._greedyStaffCache = null;   // Slice 5C.2 (review): usunięcie/downgrade zmienia _active/obsadę → świeży greedy
     // Anulowanie oczekującego zamówienia (pending)
     if (tile.pendingBuild) {
@@ -1911,6 +1919,52 @@ export class BuildingSystem {
     const grid = this._grid;
     if (!grid || typeof grid.get !== 'function') return true;   // fail-open — patrz komentarz wyżej
     return grid.get(tile?.q, tile?.r) === tile;
+  }
+
+  /**
+   * OG-1b (rozszerzenie D5, podpisane 2026-08-22) — czy kafel jest KONTROLOWANY przez kogoś innego?
+   *
+   * ⚠ INNA OŚ NIŻ `_isOwnTile`. Tamta pyta o PRZYNALEŻNOŚĆ kafla do siatki tego systemu; ta o
+   *   KONTROLĘ, czyli o stempel `tile.owner` przerzucany przez okupację
+   *   (`GroundUnitManager._changeTileOwner:626`). Live-gate OG-1 (c) zmierzył, że pierwsza oś
+   *   przepuszcza drugą: kolonia formalnie gracza + kafel zajęty przez wroga ⇒ Delete niszczył
+   *   budynek I ZWRACAŁ 50% kosztu (+10 Fe / +5 C / +1 structural_alloys za `mine`).
+   *   Nieodwracalność zniszczenia razem z rabatem tworzyły dochodową „spaloną ziemię" na cudzym
+   *   terytorium.
+   *
+   * ⚠ UŻYWA TEGO WYŁĄCZNIE `_demolish`. Budowa i ulepszenie na kaflu obcego zostają DOZWOLONE
+   *   (decyzja właściciela — live-gate OG-1 (b) PASS): są odwracalne i nie odbierają zdobyczy.
+   *
+   * ⚠ FAZA ODLICZANIA JEST DOZWOLONA. `tile.occupyEmpireId` bywa ustawione, zanim `owner` się
+   *   przerzuci — dopóki `owner` jest mój, kafel jest MÓJ, a rozbiórka to obrona własnego majątku.
+   *   Dlatego termin stoi na `owner`, NIE na `occupyEmpireId`.
+   *
+   * ⚠ ZAWODZI OTWARCIE PRZY `owner == null` — i to jest wymóg, nie ostrożność. Zmierzone: na
+   *   świeżo wygenerowanej siatce WSZYSTKIE kafle mają `owner === null`; stempel `'player'` stawia
+   *   wyłącznie `ColonyOverlay._ensureGrid` w gałęzi generowania. Bramka `owner !== 'player'`
+   *   wyłączyłaby rozbiórkę na każdej koloni, której mapy gracz nigdy nie otworzył (AI, headless,
+   *   świeżo wczytane). Ta sama zasada obejmuje nierozwiązywalnego właściciela kolonii.
+   *
+   * ⚠ NIE MYLIĆ z `tile.isOccupied` (`HexTile:279`) — to getter „stoi budynek / trwa budowa /
+   *   czeka w kolejce", bez związku z okupacją wojskową.
+   */
+  _isTileControlledByOther(tile) {
+    const owner = tile?.owner;
+    if (owner == null) return false;             // fail-open — patrz komentarz wyżej
+    const mine = this._resolveOwnTileOwner();
+    if (mine == null) return false;              // fail-open
+    return owner !== mine;
+  }
+
+  /**
+   * Jakim stemplem `tile.owner` opisane są kafle TEJ kolonii.
+   * ⚠ Formuła jest LUSTREM `ColonyOverlay._ensureGrid` (`defaultOwner`), bo to jedyne miejsce
+   *   w grze, które ten stempel stawia. Rozjazd tych dwóch = bramka odmawiająca na własnym kaflu.
+   */
+  _resolveOwnTileOwner() {
+    const colony = window.KOSMOS?.colonyManager?.getColony(this._planetId);
+    if (!colony) return null;
+    return colony.ownerEmpireId ?? (colony.isTestEnemy ? 'enemy' : 'player');
   }
 
   _canBuildOnTile(tile, building) {
