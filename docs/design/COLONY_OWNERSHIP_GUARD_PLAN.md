@@ -626,7 +626,11 @@ droidy), więc bramki szyny z D2 **ich nie widzą**; a D1 ich nie zasłania, bo 
 idzie przez `show({colonyId})`, które ŚWIADOMIE nie woła `switchActiveColony`.
 
 **ALLOWLISTA, NIE BLOKLISTA** (decyzja, nie wygoda): nowa etykieta hitu jest **domyślnie
-zablokowana** na cudzej koloni. Wariant odwrotny przeciekałby przy każdym przyszłym producencie,
+zablokowana** na cudzej koloni. ⚠ **Cena tej decyzji jest realna i zmaterializowała się od razu:**
+pominięty ODCZYT też zostaje zablokowany. `wfInfo` (tooltip satysfakcji/wzrostu) wypadł z pierwszej
+wersji listy i został znaleziony dopiero **ekstrakcją wszechświata etykiet** przy GATE 2 — stąd pin
+G7 („zero wpisów-widm" **oraz** „wszystkie czyste odczyty przechodzą") jest częścią kontraktu, nie
+ozdobą. Wariant odwrotny przeciekałby przy każdym przyszłym producencie,
 który zapomni się dopisać — a `draft_open:1949` jest w tym samym pliku żywym dowodem tej klasy
 porażki. Trzy rodziny w allowliście: nawigacja/czytanie · **dowodzenie desantem** (`unit*`, `army*`,
 `stack*`, `drawer*` — zakres po `unit.owner`, nie po koloni) · absorbery i zamknięcia modali.
@@ -941,7 +945,45 @@ a nie ZAPROJEKTOWANY podgląd `show({colonyId})`. **Naprawa byłaby jednolinijko
 wejście na ścieżkę podglądu), ale należy do **osobnego podpisu** — D1-D6 nie obejmowały wejść
 nawigacyjnych. Kandydat do dopisania przy OG-6 albo do części III.
 
-**GATE 2 (po OG-4) — „rozkaz nie przechodzi".** ⬜ DO PRZEPROWADZENIA.
+**GATE 2 (po OG-4) — „rozkaz nie przechodzi".** ✅ **ZWERYFIKOWANY HEADLESS 2026-08-22**
+(keeper `colony_order_guard_smoke` **61/61**), live-gate odłożony przez właściciela do naturalnej
+okazji: scenariusz wymaga złożonego stanu (żywa kolonia AI z budynkami, aktywne tryby desantu),
+trudnego do bezbłędnego odtworzenia z konsoli.
+
+⚠ **GRANICA DOWODU — CZYTAJ, ZANIM UZNASZ TO ZA RÓWNOWAŻNE LIVE-GATE'OWI.** `ColonyOverlay.js`
+**nie importuje się pod node** — zmierzone dokładnie: `PlanetTextureUtils.js:16` robi
+`new THREE.TextureLoader()` na poziomie modułu, a stub `three` (`node_modules/three`, **gitignorowany**)
+tego symbolu nie eksportuje. **Podniesienie stuba zostało ROZWAŻONE I ODRZUCONE**: dałoby zieleń
+wyłącznie na jednej maszynie, a keeper padałby przy każdym świeżym checkoutcie — to ta sama klasa
+fałszywej zieleni, którą ten arc tępi. ⇒ **`_onHit` NIE JEST wykonywany w tym dowodzie.**
+- **WYKONANIE (pełne):** G2a/G2b (tablica decyzji + nośność bramki), G4 (kolejność w `handleClick`),
+  G5 (`close`), G6 (20 etykiet dowodzenia), G7 (wszechświat etykiet, widma, odczyty).
+- **PIN ŹRÓDŁOWY + live-gate:** G1 i G3 — **renderowanie** (czy zakładka faktycznie się rysuje,
+  czy 🔒 jest widoczne, czy flash pojawia się na ekranie).
+
+⚠ **CO CZYNI TEN DOWÓD MOCNYM MIMO GRANICY — pomiar, nie zapewnienie:** **11 z 14 etykiet rozkazu
+mutuje kolonię BEZPOŚREDNIO** (`setStrataFocus`, `setStrataTarget`, `setBuildingDesignation`,
+`installSyntheticForStrata`, `removeSynthetic`, `autonomizeBuilding`, `cancelPending`) — dla nich
+**D4 jest JEDYNĄ bramką**. G2b dowodzi tego **wykonaniem**: te same mutatory wołane wprost na koloni
+AI **zmieniają jej stan**. Pozostałe trzy (`build`/`upgrade`/`demolish`) idą szyną i mają zapasową
+bramkę przynależności kafla z OG-1 — czyli po tym arcu są bramkowane **trzykrotnie**.
+
+🔴 **GATE ZNALAZŁ REALNY DEFEKT ALLOWLISTY — `wfInfo`.** Ekstrakcja wszechświata etykiet
+(`_addHit` + `case`, **68** pozycji) pokazała, że `wfInfo` (`ColonyOverlay:2084/2097`) to **tooltip
+satysfakcji i wzrostu w stopce Załogi**, czyli czysty ODCZYT — a nie było go w allowliście. Klik
+w ten readout na cudzej koloni flashowałby „Ta kolonia nie należy do ciebie", czyli bramka
+**kłamałaby o tym, co jest rozkazem**. Naprawione; G7 pinuje teraz, że wszystkie cztery czyste
+odczyty (`strataRow`, `targetState`, `wfInfo`, `headerBuilding`) przechodzą, oraz że allowlista
+**nie ma wpisów-widm**.
+
+⚠ **DWA BŁĘDY W SAMYM KEEPERZE, ZŁAPANE PRZEZ KONTROLE PINU** (nie w produkcie): (a) G4 zgadywał
+nazwy trybów (`_bombardMode`/`_orbitalStrikeMode`) — realne to **`_landingMode`, `_strikeMode`,
+`_dropMode`**; (b) G2b sprawdzał `setStrataFocus` na świeżej koloni, gdzie **`jobs = 0` na każdej
+warstwie ⇒ `focusCap = 0`** i suwak klampuje się do zera. Zamiast osłabić asercję (co ukryłoby, że
+focus w ogóle nie został sprawdzony), keeper **stawia koloni AI budynek** i mierzy na stanie,
+w którym suwak ma sens.
+
+**Punkty do przeklikania, gdy trafi się naturalna okazja (live-gate):**
 1. **Panel obcej koloni (podgląd z desantu/ostrzału) DALEJ SIĘ OTWIERA i pokazuje dane** — zakładka
    Załoga zostaje **czytelnym wywiadem** (nie znika). To jest podpisana decyzja, więc jej brak =
    regresja, nie ulepszenie.

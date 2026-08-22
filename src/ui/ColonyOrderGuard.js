@@ -36,7 +36,11 @@ import { isPlayerColony } from '../utils/ColonyOwnership.js';
 export const ALWAYS_ALLOWED_HITS = new Set([
   // 1. nawigacja / czytanie
   'close', 'deselectHex', 'infoTab', 'colonyTab', 'floatPanel', 'headerBuilding',
-  'cycleHexUnit', 'strataRow', 'targetState',
+  'cycleHexUnit', 'strataRow', 'targetState', 'wfInfo',
+  //   ⚠ `wfInfo` (`ColonyOverlay:2084/2097`) to TOOLTIP satysfakcji i wzrostu w stopce Załogi —
+  //     czysty ODCZYT. Bez niego klik w te readouty na cudzej koloni flashowałby odmowę,
+  //     czyli bramka kłamałaby o tym, co jest rozkazem. Znalezione pomiarem wszechświata
+  //     etykiet przy GATE 2, nie przy pisaniu allowlisty.
   // 2. dowodzenie desantem — zakres po `unit.owner`, nie po koloni
   'unitSurvey', 'unitAnalyze', 'unitDeselect', 'unitAttack', 'unitSupportStart',
   'unitClearSupport', 'unitDeploy', 'unitPackUp', 'unitCancelDeploy',
