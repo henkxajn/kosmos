@@ -1,4 +1,4 @@
-# BRAMKA WŁASNOŚCI KOLONII — plan doc (✅ **BLOK P0 ZAMKNIĘTY · D1-D6 DO PODPISU**)
+# BRAMKA WŁASNOŚCI KOLONII — plan doc (✅ **BLOK P0 ZAMKNIĘTY · D1-D6 PODPISANE 2026-08-22**)
 
 > # ✅ BLOK P0 ZAMKNIĘTY — GATE P0 ZDANY W CAŁOŚCI (2026-08-20)
 > **P0-A=W1 · P0-B=W1 · P0-C=W2 (+„dom wraca przy odbiciu"=W2) · P0-D=W1** — podpisane 2026-08-19,
@@ -18,15 +18,18 @@
 > ⚠ **Lekcja wiążąca dalej:** `mgr?._method?.(nullColony)` — **opcjonalne łańcuchowanie chroni
 > ODBIORNIK, nigdy ARGUMENT**. Guard należy do helpera, bo to helper jest kontraktem.
 >
-> **D1-D6 (klasy A/B/C, przynależność kafla, predykat) — ⬜ NIEPODPISANE.** Rekomendacje w sekcjach.
+> **D1-D6 (klasy A/B/C, przynależność kafla, predykat) — ✅ PODPISANE 2026-08-22** w całości zgodnie
+> z rekomendacjami sekcji: **D1=W2+W1 · D2=W3+W1 · D3=W1 · D4=W3+flash · D5=W1 · D6=W2**, plus
+> **Finding 97 w zakresie** jako osobny commit **OG-3b**. Trzy sprostowania z dnia podpisu i kolejność
+> commitów: §Podpis części II.
 > **Zero kodu w tym dokumencie.** Cytaty ze źródła są dowodem, nie propozycją implementacji.
 
 ---
 
 **Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** przekrojowy (nie należy do AI_CAPTURE) ·
 **Slice:** COLONY_OWNERSHIP_GUARD
-**Status:** 🔶 **Blok P0 (P0-A..P0-D) PODPISANY 2026-08-19 i WDROŻONY 2026-08-20** (`e86c091`, `0085a37`).
-D1-D6 — ⬜ do podpisu.
+**Status:** ✅ **Blok P0 (P0-A..P0-D) PODPISANY 2026-08-19 i WDROŻONY 2026-08-20** (`e86c091`, `0085a37`).
+✅ **D1-D6 PODPISANE 2026-08-22** (+ Finding 97 w zakresie) — implementacja rusza od **OG-1**.
 **Parent:** `AI_CAPTURE_PLAN.md` §Findings (slice-rodzic **nie jest** właścicielem tej wady) ·
 `W3_PLAN.md` (W3-1 `efa8f85` jest warunkiem koniecznym osiągalności)
 **Basis:** `docs/audit/COLONY_OWNERSHIP_GATE_AUDIT.md` (2026-08-19 — 13 agentów, sześć sond
@@ -62,12 +65,13 @@ repo), a warunkiem koniecznym osiągalności była **W3-1**, nie AC-8.
 | **P0-B** | Własność kolonii: **serializowana** czy dalej **wyprowadzana** z `empires[].colonies`? | ✅ **PODPISANA: W1** (wyprowadzana) |
 | **P0-C** | `isHomePlanet` przy przejęciu: czyścić? A przy odbiciu — przywracać? | ✅ **PODPISANA: W2 + W2** · WDROŻONA |
 | **P0-D** | **Bliźniak w `removeColony`** (`:667-672`, nieutwardzony, ŻYWY dziś) — w P0 czy osobno? | ✅ **PODPISANA: W1** (w P0) · WDROŻONA |
-| **D1** | Czy **wiązanie** cudzej kolonii jest zabronione, czy tylko **działanie** na niej? | ⬜ DO PODPISU |
-| **D2** | Klasa A — gdzie mieszka termin własności i **których guardów NIE wolno tknąć**? | ⬜ DO PODPISU |
-| **D3** | Klasa B — `MissionSystem.resourceSystem` i `TechSystem.resourceSystem` | ⬜ DO PODPISU |
-| **D4** | Klasa C — chokepoint w `ColonyOverlay` + **czy bramka odmawia, czy chowa** | ⬜ DO PODPISU |
-| **D5** | **Przynależność kafla** w `_build`/`_demolish` — ⚠ **kolejność wobec P0** | ⬜ DO PODPISU |
-| **D6** | Predykat: **jedno źródło prawdy vs ujednolicenie stopniowe** (Finding 74) | ⬜ DO PODPISU |
+| **D1** | Czy **wiązanie** cudzej kolonii jest zabronione, czy tylko **działanie** na niej? | ✅ **PODPISANA: W2 (inwariant) + W1 (UX)** |
+| **D2** | Klasa A — gdzie mieszka termin własności i **których guardów NIE wolno tknąć**? | ✅ **PODPISANA: W3 + W1 (obrona w głąb)** |
+| **D3** | Klasa B — `MissionSystem.resourceSystem` i `TechSystem.resourceSystem` | ✅ **PODPISANA: W1** (bez własnego commitu — skutek OG-3) |
+| **D4** | Klasa C — chokepoint w `ColonyOverlay` + **czy bramka odmawia, czy chowa** | ✅ **PODPISANA: W3 + „flash z powodem"** |
+| **D5** | **Przynależność kafla** w `_build`/`_demolish` — ⚠ **kolejność wobec D1** | ✅ **PODPISANA: W1** — pierwsza w kolejce (**OG-1**) |
+| **D6** | Predykat: **jedno źródło prawdy vs ujednolicenie stopniowe** (Finding 74) | ✅ **PODPISANA: W2** |
+| **+97** | Utrzymanie floty płacone z koloni WROGA — w zakresie części II czy osobno? | ✅ **PODPISANA: w zakresie, własny commit OG-3b** |
 
 ⚠ **Dwie zależności kolejnościowe są twarde i wynikają z pomiaru, nie z gustu:**
 1. **D5 musi wejść PRZED albo RAZEM z D1** (⚠ **SPROSTOWANE 2026-08-20 — pierwotnie stało tu
@@ -82,6 +86,43 @@ repo), a warunkiem koniecznym osiągalności była **W3-1**, nie AC-8.
    powodów**, nie jako warunek P0.
 2. **P0-B rozstrzyga, czy P0-A ma z czego czytać własność** — ale **NIE tak, jak zakładał audyt**:
    patrz „Sprostowanie" niżej.
+
+### ✅ Podpis części II — 2026-08-22
+
+**Podpisane w całości zgodnie z rekomendacjami sekcji** (właściciel, 2026-08-22):
+**D1=W2+W1 · D2=W3+W1 · D3=W1 · D4=W3+flash · D5=W1 · D6=W2 · Finding 97 = w zakresie, osobny commit.**
+
+**Kolejność commitów (wiążąca):** **OG-1** (D5) → **OG-3** (D1+D2) → **OG-3b** (Finding 97) →
+**OG-4** (D4) + **GATE 2** → **OG-5** (D6) → **OG-6** (docs).
+⚠ **D3 nie dostaje własnego commitu** — przy D1=W2 wskaźnik nie ma jak trafić na obcą kolonię, więc W1
+jest **skutkiem OG-3**; do rejestru i do pinu w keeperze, nie do implementacji.
+⚠ **Zero migracji — zapis zostaje v101**: żadna z sześciu decyzji nie dotyka formatu zapisu.
+
+**Trzy sprostowania wpisane w dniu podpisu** (pomiar w źródle, nie nowy audyt — rozwinięcia przy
+odpowiednich decyzjach):
+1. **D3: „pięć miękkich spendów" to dziś CZTERY.** `_launchFoundOutpost` utwardzone przez **D-111**
+   (Finding 111, `a180619`). Zostają: transport cargo (`:840`/`:844`) i dwa rekonesanse (`:1245`,
+   `:1386`). Piąty adres z audytu (`:1697`) to `receive(gained)` — **nagroda, nie wydatek** ⇒ brak
+   exploita. **Werdykt D3 bez zmian.**
+2. **D1: lista furtek spadła z czterech do DWÓCH** — `GameCore:310` i `CombatSandbox:228`. Własne
+   fallbacki `ColonyManagera` po P0 wołają `switchActiveColony` **wyłącznie przez
+   `_pickFallbackActiveColony`, które samo filtruje `ColonyManager.isPlayerColony`**.
+3. **Finding 97: zakres ROZSTRZYGNIĘTY — wchodzi**, ale jako **własny commit OG-3b**, nie jako
+   rozszerzenie D2/D3/D4.
+
+**Co P0 i Finding 111 zmieniły w warunkach wstępnych** (poza trójką wyżej **żadna decyzja nie zmieniła
+wariantu** — to jest wynik sprawdzenia, nie założenie):
+- **D1 ma już gotowe „dokąd po odmowie"** — `_pickFallbackActiveColony` (`:349-354`) +
+  `_detachActiveColony` (`:408`, lustro `switchActiveColony` co do pola), oba pinowane keeperem
+  `colony_ownership_load` (33). Odmowa nie musi wymyślać stanu terminalnego.
+- **D4 ma dowód, że UI znosi `colony === null`** — keeper `zero_colony_panels` (11, **wykonaniowy**)
+  + fix `6796617`. Do tego lekcja z GATE P0 §6: **guard należy do helpera, nie do wołającego** — co
+  wzmacnia wariant „producent + inwariant" przeciwko wariantowi „tylko `_onHit`".
+- **D6: kanon się umocnił** — P0 dołożył trzy nowe wywołania `ColonyManager.isPlayerColony`.
+- **D2 i D5 bez zmian** — oba szwy nadal ŻYWE (`switchActiveColony` bez terminu własności `:266-283`;
+  `_build` nadal nie odwołuje się do `this._grid`).
+
+---
 
 ### ⚠ Sprostowanie do audytu §6 (zmierzone po jego napisaniu — zmienia dostępne warianty)
 
@@ -355,7 +396,7 @@ i przyznają realne korzyści: `SaveMigration:536-537` (`inv.semiconductors = 2`
 
 # CZĘŚĆ II — BRAMKA WŁASNOŚCI (klasy A/B/C + predykat)
 
-### D1 — Czy zabronione jest WIĄZANIE cudzej kolonii, czy tylko DZIAŁANIE na niej? ⬜ **DO PODPISU**
+### D1 — Czy zabronione jest WIĄZANIE cudzej kolonii, czy tylko DZIAŁANIE na niej? ✅ **PODPISANA: W2 + W1**
 
 To decyzja nadrzędna: przesądza kształt D2, D3 i D4.
 
@@ -377,9 +418,25 @@ akurat związane**. Wiązanie **nie jest** więc pasywne.
 ⚠ Furtka dla `GameCore`/`CombatSandbox`/fallbacków musi być **jawna i nazwana**, nie „przypadkiem
 przechodzi".
 
+✅ **PODPISANA 2026-08-22: W2 (inwariant) + W1 (UX).**
+
+⚠ **SPROSTOWANIE 2026-08-22 — furtki są DWIE, nie cztery.** Wiersz „⚠ pułapka" w tabeli wyżej wymienia
+także **własne fallbacki ColonyManagera** (`:671`, `:793` wg audytu). Po P0 to nieaktualne: oba miejsca
+(dziś `:744` i `:864`) wołają `switchActiveColony(next)`, gdzie `next` pochodzi z
+`_pickFallbackActiveColony` (`:349-354`), **który sam filtruje `ColonyManager.isPlayerColony`** ⇒
+z definicji nie poda koloni AI. **Jawnych, nazwanych furtek wymagają wyłącznie `GameCore:310`
+i `CombatSandbox:228`.**
+⚠ **Pozostali wołający furtki NIE dostają — i to jest cała treść D1:** `GameScene` (11 miejsc),
+`BottomContext:424`, `CivilizationOverlay:730`, `ColonyOverlay:1248`, `EventLogOverlay:368` to
+**ścieżki intencji gracza**; wiązanie własnej koloni przechodzi samym terminem własności, wiązanie
+cudzej ma zostać **odmówione**.
+⚠ Scenariuszowe `GameScene:3444/3476/3501` wiążą **własną** planetę cywilizacji ⇒ przechodzą bez
+furtki. **Do PINU w keeperze OG-3, nie do założenia** — to jest dokładnie ta klasa, w której „przecież
+przechodzi" bywało nieprawdą.
+
 ---
 
-### D2 — Klasa A: gdzie mieszka termin własności? ⬜ **DO PODPISU**
+### D2 — Klasa A: gdzie mieszka termin własności? ✅ **PODPISANA: W3 + W1 (obrona w głąb)**
 
 ⚠ **Twarde ograniczenie, złamanie którego zapala ~20 keeperów:** termin musi **zawodzić OTWARCIE**, gdy
 właściciela nie da się rozwiązać z instancji. Około dwudziestu keeperów przypisuje **goły** system do
@@ -410,9 +467,20 @@ siedemnastka martwych ⇒ ewentualny osobny `chore` prune, precedens C8 `7201670
 go **ignoruje**, więc niepokój koloni AI nakłada −30% produkcji na związaną kolonię gracza. Milczenie
 czyta się jako aprobatę.
 
+✅ **PODPISANA 2026-08-22: W3 (tylko `switchActiveColony`) + W1 (dziewiątka bramek) jako obrona
+w głąb.** **NIE dotykamy** ósemki bramek systemowych ani siedemnastki martwych.
+
+✅ **Przeciek `civ:unrest` — ROZSTRZYGNIĘTY PRZY PODPISIE: FILE, nie naprawa.** I to wynika z samego
+podpisu, nie z osobnej decyzji: `BuildingSystem:121` należy do **ósemki bramek systemowych**, których
+D2=W1 jawnie zabrania tykać. **Finding 86 zostaje otwartą pozycją rejestru.**
+⚠ **I trzeba być uczciwym co do zasięgu: D1=W2 tego NIE zasłania.** Emitentem jest `civSystem`
+**koloni AI** — tyka własnym rytmem, niezależnie od tego, co gracz ogląda — a odbiorcą `buildingSystem`
+**akurat związany**, czyli normalnie gracza. Przeciek jest więc żywy **niezależnie od wiązania**
+i przeżyje całą część II. Nie wolno go przy okazji uznać za „załatwiony przez D1".
+
 ---
 
-### D3 — Klasa B: `MissionSystem.resourceSystem` i `TechSystem.resourceSystem` ⬜ **DO PODPISU**
+### D3 — Klasa B: `MissionSystem.resourceSystem` i `TechSystem.resourceSystem` ✅ **PODPISANA: W1**
 
 🔴 **Ostrzeżenie z pomiaru — to jest dokładnie pułapka, w którą AC-8 już raz wpadł.**
 Wyzerowanie `MissionSystem.resourceSystem` **NIE jest bezpieczną wersją bramki**: pięć miejsc wydatku
@@ -431,6 +499,18 @@ inwentarza zamiast go oblać — na tej osi zerowanie jest **słabsze** niż prz
 | tech | analogicznie | ⚠ **słabsze** niż W1 | — |
 
 **Rekomendacja formalna: W1** — najtańszy wariant, który nie tworzy exploita.
+
+✅ **PODPISANA 2026-08-22: W1** — wskaźnik zostaje na ostatniej koloni gracza; **`TechSystem` POZA
+slice'em, zapisany jako uśpiony.**
+
+⚠ **SPROSTOWANIE 2026-08-22 — miękkich spendów jest CZTERY, nie pięć.** `_launchFoundOutpost`
+(`:744-745` wg audytu) zostało utwardzone przez **D-111** (Finding 111, `a180619`) i dziś czyta
+`if (!this.resourceSystem || !canAfford) return odmowa` (`MissionSystem.js:754`). Zostają: **transport
+cargo** (`:840`/`:844`), **rekonesans** (`:1245`) i **drugi rekonesans** (`:1386`). Piąty adres
+(`:1697`) to `receive(gained)` — **nagroda, nie wydatek**: przy `null` znika przychód, nie powstaje
+darmowy start. **Werdykt bez zmian: W2 nadal tworzyłoby exploit na trzech ścieżkach.**
+⚠ **D3 nie dostaje własnego commitu.** Przy D1=W2 wskaźnik nie ma jak trafić na obcą kolonię, więc W1
+jest **skutkiem OG-3** — do zapisania w rejestrze i **do pinu w keeperze OG-3**, nie do implementacji.
 ⚠ **`TechSystem` można zostawić poza slice'em** i zapisać jako uśpiony: jedyni czytelnicy siedzą
 w `_research()`, którego zdarzenie **nie ma emitenta produkcyjnego**, a żywa ścieżka badań
 (`ResearchSystem:70`) już puluje `getPlayerColonies()`. **Ale** każda instancja `TechSystem` subskrybuje
@@ -438,7 +518,7 @@ bez guardu tożsamości (`:31`) ⇒ ożywienie zdarzenia **pomnoży wadę przez 
 
 ---
 
-### D4 — Klasa C: chokepoint w `ColonyOverlay` + czy bramka ODMAWIA, czy CHOWA ⬜ **DO PODPISU**
+### D4 — Klasa C: chokepoint w `ColonyOverlay` + czy bramka ODMAWIA, czy CHOWA ✅ **PODPISANA: W3 + flash**
 
 ⚠ **Ograniczenie projektowe, którego nie wolno złamać:** bramka **nie może** stać na górze
 `handleClick`, w `_getColony()` ani w `_screenToTile` — wszystkie trzy są wspólne dla
@@ -470,9 +550,19 @@ inwazji jest raczej pożądane) **czy znika**. To decyzja projektowa, nie mechan
 pliku usuwały). Przed dodaniem nowego klucza trzeba uzasadnić, czemu nie wystarczy istniejący
 `transportOrder.reason_not_player_colony` (PL+EN, już emitowany jako token `not_player_colony`).
 
+✅ **PODPISANA 2026-08-22: W3** (dwie bramki producenckie **+** inwariant na górze `_onHit`
+z allowlistą) **oraz „POKAŻ ZABLOKOWANE + FLASH Z POWODEM"**, nie „schowaj całkiem".
+**Powód projektowy:** zakładka Załoga na koloni wroga w trakcie inwazji jest **czytelnym wywiadem** —
+schowanie odbierałoby graczowi informację, której nie da się zdobyć inaczej.
+⚠ **Konsekwencja obowiązkowa (nie opcja):** tekst **musi** iść przez i18n, a przed dodaniem nowego
+klucza obowiązuje uzasadnienie wobec `transportOrder.reason_not_player_colony`.
+⚠ **Allowlist MUSI zwolnić** `close:4780` **i 12 etykiet jednostkowo-armijnych** (`unitSurvey:5041` …
+`armySplit:5160`) — inaczej gracz, który zrzucił desant, nie zamknie panelu i straci warstwę
+dowodzenia desantem.
+
 ---
 
-### D5 — Przynależność kafla w `_build`/`_demolish` ⬜ **DO PODPISU** · ⚠ **KOLEJNOŚĆ**
+### D5 — Przynależność kafla w `_build`/`_demolish` ✅ **PODPISANA: W1** · ⚠ **KOLEJNOŚĆ**
 
 **Zmierzone:** `_build(tile, buildingId)` (`:796-1015`) **nie odwołuje się do `this._grid` ani razu**
 (dwa trafienia w tym zakresie to `this._gridHeight`, nie przynależność). Klimat rozwiązuje z
@@ -498,9 +588,13 @@ commit kodu w całym planie, przed P0". Pomiar po podpisie pokazał, że ta zale
 a ten stan **jest żywy już dziś** przez zaprojektowany podgląd obcej planety. D5 zostaje pilne — ale
 jako naprawa istniejącej dziury, a nie warunek wstępny P0. **P0 wszedł przed D5 i było to bezpieczne.**
 
+✅ **PODPISANA 2026-08-22: W1** — `_build`/`_upgrade`/`_demolish` walidują przynależność kafla,
+**PRZED albo RAZEM z D1**, i **muszą zawodzić OTWARCIE przy `_grid == null`**. To **OG-1**, pierwszy
+commit kodu w części II.
+
 ---
 
-### D6 — Predykat: jedno źródło prawdy vs ujednolicenie stopniowe (Finding 74) ⬜ **DO PODPISU**
+### D6 — Predykat: jedno źródło prawdy vs ujednolicenie stopniowe (Finding 74) ✅ **PODPISANA: W2**
 
 **Census (zmierzony):** 1 kanon (`ColonyManager.isPlayerColony:232`) + **4 nazwane kopie**
 (`RightClickMenuOptions:136`, `TerritoryService:16`, `TransportOrderSystem:553`, `EconomyHistoryLog:33`)
@@ -539,19 +633,26 @@ kupuje odporność na przyszłość, nie naprawia żywego buga** — i tak trzeb
 i serializowane — `StationSystem:123`, `Station.js:26`), więc jeden predykat na oba rodzaje encji to
 **druga decyzja**, nie darmowy dodatek.
 
+✅ **PODPISANA 2026-08-22: W2** — kanon w `src/utils/`, **dwa wejścia** (obiekt + `id`), **rodzina nazw**
+`isPlayerColony` / `isLivePlayerColony` / `isManageablePlayerColony` (doczepki z ograniczenia 3
+**rozdzielone**, nie uśrednione), 6 nazwanych kopii ujednoliconych, ~36 słabych kształtów **pinowanych
+źródłowo**. **Stacje poza zakresem.**
+
 ---
 
-## Zakres i kolejność prac (commit plan — WARUNKOWY na decyzjach)
+## Zakres i kolejność prac (commit plan — ✅ PODPISANY 2026-08-22)
 
 ⚠ **Kolejność jest wiążąca i wynika z dwóch zmierzonych zależności**, nie z wygody:
-**D5 przed P0** (inaczej naprawa wiązania czyni grę gorszą) · **keeper przed każdą zmianą zachowania**.
+**D5 przed D1** (⚠ sprostowane — pierwotnie stało „przed P0"; inaczej naprawa wiązania czyni grę gorszą:
+cudzy kafel + MÓJ portfel) · **keeper przed każdą zmianą zachowania**.
 
 | # | commit | treść | wynika z | gate |
 |---|---|---|---|---|
 | **OG-0** ✅ `e86c091` | `test: keeper szwow wlasnosci kolonii` | pinuje STAN DZISIEJSZY **wykonaniem** (17/17): **S1** `transferColony` nie czyści `isHomePlanet`; **S2** `removeColony` przepina na ex-dom wroga (test przynależności); **S3** round-trip przez **produkcyjny** `SaveSystem._serializeCiv4x` uzbraja `_activePlanetId` na koloni wroga; **S4** `switchActiveColony` przyjmuje kolonię AI. Każdy pin z **kontrolą pinu**. ⚠ Pin „budowa na obcym kaflu przechodzi" **NIE wszedł** — należy do **D5**, niepodpisanego | — | — |
 | **OG-1** | `fix(game): budowa i rozbiórka tylko na własnym kaflu` | **D5=W1**, fail-open przy `_grid == null` | **D5** | — |
 | **OG-2** ✅ `0085a37` | `fix(save): wczytanie nie oddaje gracza koloni wroga` | **P0-A + P0-C + P0-D** jako JEDNA zmiana (wszystkie w `ColonyManager.js` + `GameScene.js`); drabina własności; `_detachActiveColony` w gałęzi terminalnej | **P0-A,C,D** | **GATE P0** |
-| **OG-3** | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1 + D2** — odmowa w `switchActiveColony` + furtka dev/harness + (opcjonalnie) dziewiątka bramek | D1, D2 | — |
+| **OG-3** | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` + **dwie** jawne furtki (`GameCore`, `CombatSandbox`) + dziewiątka bramek jako obrona w głąb. **Tu też pinujemy D3=W1** (wskaźnik nie trafia na obcą) | D1, D2, D3 | — |
+| **OG-3b** | `fix(fleet): utrzymanie floty płaci tylko kolonia gracza` | **Finding 97** — `_resolvePayHomeId` dostaje termin własności obok filtru `!isOutpost`, a fallback `window.KOSMOS.homePlanet` **przechodzi ten sam test** (po przejęciu nazywa zdobycz wroga). ⚠ Dowodem jest **pomiar kredytów w czasie**, nie kliknięcie | 97 | — |
 | **OG-4** | `fix(ui): panel kolonii nie wydaje rozkazów na cudzej koloni` | **D4** — dwie bramki producenckie + inwariant `_onHit` + allowlist + i18n | D4 | GATE 2 |
 | **OG-5** | `refactor: jedno źródło prawdy o własności kolonii` | **D6=W2** — `src/utils/`, dwa wejścia, rodzina nazw, 6 kopii | D6 | — |
 | **OG-6** | `docs: rejestr + sprostowania` | Findings 81-93, sprostowanie `CLAUDE.md` (sweep 148→157), ewentualne sprostowanie `EmpireColonyBootstrap:543` gdy P0-B=W2/W3 | — | — |
@@ -560,9 +661,12 @@ i serializowane — `StationSystem:123`, `Station.js:26`), więc jeden predykat 
 `node tools/check-i18n.mjs` **PASS** · commit atomowy, staging **po jawnych ścieżkach**,
 `git status --short` + `--cached --stat` pokazane właścicielowi **przed** commitem.
 
-⚠ **Okno niespójności — jedno, świadome:** między **OG-1** a **OG-2** gracz nadal może związać się
-z kolonią wroga (widzi jej HUD), ale **nie może już nic na niej postawić ani rozebrać**. To jest krok
-**do przodu** względem dziś i dlatego ta kolejność jest bezpieczna w każdym momencie przerwania.
+⚠ **Okno niespójności — jedno, świadome; po faktycznej zamianie OG-1↔OG-2 jest ODWRÓCONE względem
+pierwotnego zapisu.** OG-2 wszedł pierwszy (P0), więc ścieżka **wczytania** jest już czysta, a stan
+„mój portfel, cudzy kafel" **jest żywy dziś** przez zaprojektowany podgląd obcej planety. Po **OG-1**
+gracz nadal będzie mógł związać się z kolonią wroga (widzi jej HUD), ale **nie postawi już na niej ani
+nie rozbierze niczego**; samo wiązanie zamyka dopiero **OG-3**. Każdy moment przerwania tej sekwencji
+jest krokiem **do przodu** względem stanu dzisiejszego.
 
 ---
 
@@ -593,7 +697,8 @@ GATE 2 AI_CAPTURE jest otwarty, więc baza może się jeszcze ruszyć).
 | `colony_ownership_seams_smoke` | OG-0 | cztery szwy dzisiejsze (a-d) + kontrole pinów; **trzy z nich MAJĄ paść** i zostać świadomie odwrócone w OG-1/OG-2/OG-3 |
 | `colony_tile_membership_smoke` | OG-1 | budowa/rozbiórka na cudzym kaflu **odrzucona**; własny kafel przechodzi (kontrola pinu); `_grid == null` **przepuszcza** (fail-open) |
 | `colony_ownership_load_smoke` | OG-2 | round-trip przez **produkcyjny** `SaveSystem._serializeCiv4x`: przejęta stolica → zapis → wczytanie ⇒ `_activePlanetId` **nie** wskazuje koloni wroga; wariant „gracz bez domu" ⇒ **detach**, nie stan sprzed; `removeColony` po przejęciu **nie** przepina na ex-dom |
-| `colony_ownership_guard_smoke` | OG-3 | `switchActiveColony` odmawia na koloni AI; furtka dev/harness działa; `GameCore`/`CombatSandbox` startują |
+| `colony_ownership_guard_smoke` | OG-3 | `switchActiveColony` odmawia na koloni AI; **dwie** jawne furtki działają; `GameCore`/`CombatSandbox` startują; ⚠ pin **D3=W1**: po odmowie `MissionSystem.resourceSystem` **nadal wskazuje kolonię gracza**; ⚠ pin scenariuszowy: `GameScene:3444/3476/3501` wiążą własną planetę i **przechodzą bez furtki** |
+| `fleet_upkeep_payer_smoke` | OG-3b | płatnikiem utrzymania **nigdy** kolonia z `ownerEmpireId`; fallback `homePlanet` wskazujący **zdobycz wroga** nie płaci; kontrola pinu: własna kolonia gracza płaci jak dotąd |
 | `colony_overlay_ownership_pin` | OG-4 | ⚠ **pin ŹRÓDŁOWY** (`ColonyOverlay` nie importuje się pod node): dwie bramki producenckie obecne, `_onHit` ma inwariant, allowlist zawiera `close` + 12 etykiet jednostkowych |
 
 **⚠ Dyscypliny obowiązkowe, każda z pomiaru:**
@@ -780,9 +885,19 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     rekoncyliują **tylko `colonyId`**, nigdy `homeColonyId`; rusza go dopiero gałąź 3 (`:1163`).
     ⚠ **OSIĄGALNE PRZY ŻYWYCH KOLONIACH GRACZA** — wystarczy statek w drodze do koloni, która zostaje
     przejęta. To **nie** jest przypadek brzegowy „zero kolonii", więc nie chowa się w scenariuszu D9.
-    ⚠ **ZAKRES NIEROZSTRZYGNIĘTY** (decyzja właściciela 2026-08-20): czy wchodzi do **D1-D6**, czy
-    osobno — **do rozstrzygnięcia przy podpisywaniu CZĘŚCI II tego planu**. Tu leży jako pozycja
-    rejestru, nie jako propozycja naprawy.
+    ✅ **ZAKRES ROZSTRZYGNIĘTY (podpis 2026-08-22): WCHODZI do części II jako WŁASNY commit `OG-3b`**
+    (po OG-3), **nie** jako rozszerzenie D2/D3/D4.
+    **Dlaczego wchodzi:** to jedyny **zmierzony, żywy drenaż** z tej rodziny, osiągalny przy ŻYWYCH
+    koloniach gracza — podczas gdy reszta części II kupuje głównie odporność na przyszłość (D6 mówi to
+    o sobie wprost). Kształt naprawy jest **reuse, nie nową matematyką**: dokładnie ten sam wzór
+    („test przynależności zamiast własności + fallback na nigdy nieprzecelowywany `homePlanet`"),
+    który P0 naprawił już dwa razy (`removeColony:667` i wybór aktywnej koloni po wczytaniu).
+    **Dlaczego OSOBNY commit:** leży na **czwartej powierzchni**, poza A/B/C tego planu — na
+    **rozliczeniu okresowym** (`VesselManager._resolvePayHomeId` + `CivilianTradeSystem.spendCredits`).
+    Inny plik, inny keeper i **inny rodzaj dowodu: pomiar kredytów w czasie, nie kliknięcie**;
+    wciśnięty w OG-3/OG-4 rozmyłby ich zakres i gate.
+    ⚠ **Finding 95 zostaje POZA** — dzieli z 97 korzeń („`homePlanet` nigdy nieprzecelowywany"), ale
+    jest **niezmierzony** ⇒ własny audyt, jak zapisano wyżej.
     ⚠ Do odczytania jednym wierszem przy najbliższym gate'cie (w tej sesji raportowano tylko
     `colonyId`): `KOSMOS.vesselManager.getVessel('<id>').homeColonyId` oraz
     `KOSMOS.vesselManager._resolvePayHomeId(v, KOSMOS.colonyManager)`.
@@ -987,8 +1102,10 @@ Ten slice **nie należy** do AI_CAPTURE i **nie blokuje** jego domknięcia — p
 P0 właśnie naprawiło. Zrealizowana kolejność: OG-0 → OG-2 → **GATE P0 (§1-§7 PASS)** → `6796617`
 (fix po §6) → **wznowienie AI_CAPTURE GATE 2 §4/§5** → dopiero potem D1-D6.
 
-**Stan na 2026-08-20:** blok P0 **ZAMKNIĘTY**. **Do podpisu zostaje D1..D6** — z rekomendacjami
-w sekcjach (D5=W1 · D1=W2+W1 · D3=W1 · D4=W3 · D6=W2 · D2=W3+W1).
+**Stan na 2026-08-22:** blok P0 **ZAMKNIĘTY**; **D1-D6 PODPISANE** (+ Finding 97 w zakresie) —
+implementacja rusza od **OG-1**. Kolejność: **OG-1 → OG-3 → OG-3b → OG-4 (+GATE 2) → OG-5 → OG-6**.
 ⚠ **Dwa szwy są nadal ŻYWE i pinowane jako żywe**: `switchActiveColony` przyjmuje kolonię AI
-(keeper `colony_ownership_seams` S4 → **D1**) oraz `_build` nie sprawdza przynależności kafla
-(**D5**, i ten drugi jest osiągalny **już dziś** przez zaprojektowany podgląd obcej planety).
+(keeper `colony_ownership_seams` S4 → **D1/OG-3**) oraz `_build` nie sprawdza przynależności kafla
+(**D5/OG-1**, i ten drugi jest osiągalny **już dziś** przez zaprojektowany podgląd obcej planety).
+Oba mają zostać **świadomie odwrócone** w swoich commitach, **z powodem wpisanym w nagłówku keepera**
+(wzór `deploy_seams`, `ai_capture_last_stand`, `s34c_z9_transfer_dispose`).
