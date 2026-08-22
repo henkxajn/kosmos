@@ -45,6 +45,7 @@ import { t } from '../i18n/i18n.js';
 import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
 import { isSameSystem } from '../utils/SystemScope.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
+import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -2060,10 +2061,22 @@ export class VesselManager {
 
   /** S3.5a-1 — id kolonii płacącej utrzymanie: homeColonyId (gdy pełna kolonia) → fallback homePlanet. */
   _resolvePayHomeId(vessel, colMgr) {
+    // Finding 97 / OG-3b — TERMIN WLASNOSCI OBOK FILTRU PLACOWKI.
+    // ⚠ ZMIERZONE PRZED NAPRAWA: 300 Kr w jednym rozliczeniu, 5000 → 3094 Kr przez 80 lat gry,
+    //   `unpaidYears` stale 0, wlasna kolonia gracza NIETKNIETA — czyli statki gracza byly
+    //   utrzymywane z magazynu WROGA. Po W3-1 przejeta kolonia ZOSTAJE w `_colonies`, wiec
+    //   `getColony` ja znajduje; sam `!isOutpost` nie pytal, CZYJA ona jest.
+    // ⚠ TEN SAM WZOR NAPRAWIONY JUZ DWA RAZY W P0: „test PRZYNALEZNOSCI zamiast WLASNOSCI +
+    //   fallback na nigdy nieprzecelowywany `homePlanet`" (`removeColony:667`, wybor aktywnej
+    //   koloni po wczytaniu). Trzeci brat, ta sama poprawka.
+    // ⚠ FALLBACK PRZECHODZI TEN SAM TEST — bo to on byl drugim polowem wycieku:
+    //   `window.KOSMOS.homePlanet` NIE jest przecelowywane po utracie stolicy.
     const col = colMgr.getColony(vessel.homeColonyId);
-    if (col && !col.isOutpost) return vessel.homeColonyId;
+    if (col && !col.isOutpost && isPlayerColony(col)) return vessel.homeColonyId;
+
     const hp = window.KOSMOS?.homePlanet;                  // fallback (outpost-homed / sierota)
-    return hp ? hp.id : null;
+    if (!hp) return null;
+    return isPlayerColony(colMgr.getColony(hp.id)) ? hp.id : null;
   }
 
   /**

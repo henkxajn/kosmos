@@ -874,7 +874,7 @@ cudzy kafel + MÓJ portfel) · **keeper przed każdą zmianą zachowania**.
 | **OG-1b** | `fix(game): rozbiórka nie na kaflu przejętym przez obcego` | **D5 rozszerzone** — `_demolish` odmawia, gdy `tile.owner` wskazuje innego, niepustego właściciela; budowa/ulepszenie bez zmian; fail-open przy `owner == null`; osobny powód `ui.tileEnemyControlled` | **D5/OG-1b** | re-test punktu (c) |
 | **OG-2** ✅ `0085a37` | `fix(save): wczytanie nie oddaje gracza koloni wroga` | **P0-A + P0-C + P0-D** jako JEDNA zmiana (wszystkie w `ColonyManager.js` + `GameScene.js`); drabina własności; `_detachActiveColony` w gałęzi terminalnej | **P0-A,C,D** | **GATE P0** |
 | **OG-3** ✅ | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` (⚠ **ZERO furtek** — zmierzone) + NEW `src/utils/ColonyOwnership.js` + dziewiątka bramek jako obrona w głąb + pin **D3=W1**. Szew **S4 ODWRÓCONY** w `colony_ownership_seams`. Keeper 30/30, sweep 162/162 | D1, D2, D3 | **GATE OG-3** |
-| **OG-3b** | `fix(fleet): utrzymanie floty płaci tylko kolonia gracza` | **Finding 97** — `_resolvePayHomeId` dostaje termin własności obok filtru `!isOutpost`, a fallback `window.KOSMOS.homePlanet` **przechodzi ten sam test** (po przejęciu nazywa zdobycz wroga). ⚠ Dowodem jest **pomiar kredytów w czasie**, nie kliknięcie | 97 | — |
+| **OG-3b** ✅ | `fix(fleet): utrzymanie floty placi tylko kolonia gracza` | **Finding 97** — termin własności obok `!isOutpost` **oraz** w fallbacku. Keeper `fleet_upkeep_payer_smoke` **19/19** z dowodem END-TO-END na kredytach; sweep 165/165 | 97 | — |
 | **OG-4** ✅ | `fix(ui): panel kolonii nie wydaje rozkazow na cudzej koloni` | **D4=W3 + flash** — NEW `src/ui/ColonyOrderGuard.js` (allowlista + predykaty) + inwariant na górze `_onHit` + dwaj producenci (`locked`/wygaszenie, hit-zony zostają) + `ui.notYourColony`. Keeper 29/29, sweep 163/163 | D4 | **GATE 2** |
 | **OG-5** ✅ | `refactor: jedno zrodlo prawdy o wlasnosci kolonii` | **D6=W2** — rodzina 4 funkcji, dwa wejścia, **8** nazwanych kopii (nie 6 — census zmierzony od nowa) + 🔴 fix kanonu (przepuszczał STRING). Keeper 40/40, sweep 164/164 | D6 | — |
 | **OG-6** | `docs: rejestr + sprostowania` | Findings 81-93, sprostowanie `CLAUDE.md` (sweep 148→157), ewentualne sprostowanie `EmpireColonyBootstrap:543` gdy P0-B=W2/W3 | — | — |
@@ -1211,6 +1211,29 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     wciśnięty w OG-3/OG-4 rozmyłby ich zakres i gate.
     ⚠ **Finding 95 zostaje POZA** — dzieli z 97 korzeń („`homePlanet` nigdy nieprzecelowywany"), ale
     jest **niezmierzony** ⇒ własny audyt, jak zapisano wyżej.
+
+    ✅ **ZAMKNIĘTY w OG-3b (2026-08-22).** `_resolvePayHomeId` pyta teraz o własność w OBU gałęziach:
+    `col && !col.isOutpost && isPlayerColony(col)` oraz fallback
+    `isPlayerColony(colMgr.getColony(homePlanet.id)) ? homePlanet.id : null`. Keeper
+    `fleet_upkeep_payer_smoke` **19/19**.
+    ⚠ **Dowód jest END-TO-END, nie na zwrotce** — F3 przepuszcza prawdziwy `_tickVesselMaintenance`
+    i mierzy KREDYTY obu kolonii. **Fail-first odtworzył Finding 97 co do kwoty**: przed naprawą
+    portfel wroga 5000 → 4950, portfel gracza nietknięty; po naprawie dokładnie odwrotnie.
+    ⚠ **DWIE JAŁOWE KONTROLE PINU ZŁAPANE PO DRODZE** (obie w keeperze, nie w produkcie):
+    (a) helper `setCredits` zakładał nieistniejące `addCredits` i po cichu NIE podnosił salda, więc
+    F3/F7 mierzyły zera; kredyty to zwykłe pole `colony.credits`. (b) F7 bez WŁASNEGO statku
+    porównywał `0 Kr` z `0 Kr` — przechodziłby niezależnie od tego, czy guard `isEnemyVessel`
+    w ogóle istnieje.
+    🟠 **ZAPISANY SKUTEK, NIE APROBATA (pin F6):** gdy ŻADEN płatnik nie przejdzie testu,
+    `_resolvePayHomeId` zwraca `null`, a `_tickVesselMaintenance` robi `if (!homeId) continue` ⇒
+    statek **nie płaci ANI nie zalega** — flota staje się DARMOWA. Osiągalne, gdy gracz stracił dom,
+    a `window.KOSMOS.homePlanet` nadal go nazywa (ten sam root co Finding 97). Zamknięcie wymaga
+    **TRZECIEGO szczebla drabiny** („dowolna żywa kolonia gracza", wzór `_pickFallbackActiveColony`),
+    czyli **zmiany poza podpisem OG-3b**, który brzmiał „dołóż termin własności + przepuść fallback
+    przez ten sam test". ⇒ **do rozstrzygnięcia osobno.**
+    ⚠ Efekt uboczny przyjęty świadomie: dawny fallback zwracał `homePlanet.id` NAWET gdy pod tym id
+    nie ma koloni (`spendCredits` cicho nie płaciło, `unpaidYears` rosło). Teraz taki stan daje
+    `null` ⇒ zamiast narastającej zaległości jest cisza. Stan zdegenerowany, ale zmiana jest realna.
     ⚠ Do odczytania jednym wierszem przy najbliższym gate'cie (w tej sesji raportowano tylko
     `colonyId`): `KOSMOS.vesselManager.getVessel('<id>').homeColonyId` oraz
     `KOSMOS.vesselManager._resolvePayHomeId(v, KOSMOS.colonyManager)`.
