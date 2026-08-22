@@ -927,6 +927,7 @@ export default {
   'ui.tileOccupied': 'Pole zajęte',
   'ui.tileNotOwned': 'Pole nie należy do tej kolonii',
   'ui.tileEnemyControlled': 'Pole pod kontrolą wroga',
+  'ui.notYourColony': 'Ta kolonia nie należy do ciebie',
   'ui.terrainForbidden': 'Teren niedozwolony',
   'ui.requiresWarmth': 'Za zimno dla tego budynku',
   'ui.requiresAtmosphere': 'Wymaga atmosfery',

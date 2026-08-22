@@ -610,6 +610,63 @@ klucza obowiązuje uzasadnienie wobec `transportOrder.reason_not_player_colony`.
 `armySplit:5160`) — inaczej gracz, który zrzucił desant, nie zamknie panelu i straci warstwę
 dowodzenia desantem.
 
+**WDROŻONA w OG-4.** NEW `src/ui/ColonyOrderGuard.js` (czysty; importuje wyłącznie kanon własności)
++ inwariant na górze `_onHit` + dwa producenty. Keeper `colony_order_guard_smoke` 29/29, sweep 163/163.
+
+⚠ **„14 etykiet" POTWIERDZONE POMIAREM, nie przepisane z audytu:** **8** rozkazów pływającego panelu
+(`build`, `upgrade`, `demolish`, `setDesignation`, `installSynthetic`, `removeSynthetic`,
+`autonomizeBuilding`, `cancelPending` — WSZYSTKIE rejestrowane w `_drawFloatingPanel`) + **6**
+zakładki Załoga (`focusMinus/Plus`, `targetMinus/Plus`, `droidInstall/Remove` — wszystkie
+w `_drawWorkforceTab`). `_onHit` ma **56** etykiet; reszta to nawigacja, dowodzenie desantem
+i absorbery.
+
+⚠ **DLACZEGO TO NIE DUBLUJE OG-3 — i to jest cała racja bytu D4:** te `case` mutują
+`colony.civSystem` / `colony.buildingSystem` **BEZPOŚREDNIO** (`setStrataFocus`, `setStrataTarget`,
+droidy), więc bramki szyny z D2 **ich nie widzą**; a D1 ich nie zasłania, bo podgląd obcej planety
+idzie przez `show({colonyId})`, które ŚWIADOMIE nie woła `switchActiveColony`.
+
+**ALLOWLISTA, NIE BLOKLISTA** (decyzja, nie wygoda): nowa etykieta hitu jest **domyślnie
+zablokowana** na cudzej koloni. Wariant odwrotny przeciekałby przy każdym przyszłym producencie,
+który zapomni się dopisać — a `draft_open:1949` jest w tym samym pliku żywym dowodem tej klasy
+porażki. Trzy rodziny w allowliście: nawigacja/czytanie · **dowodzenie desantem** (`unit*`, `army*`,
+`stack*`, `drawer*` — zakres po `unit.owner`, nie po koloni) · absorbery i zamknięcia modali.
+
+⚠ **„POKAŻ ZABLOKOWANE" ZREALIZOWANE ISTNIEJĄCYM IDIOMEM, nie nową maszynerią.** `_drawFloatingPanel`
+miał już wzorzec `locked` dla bramki klimatu, z komentarzem mówiącym wprost: *„Zablokowany klimatem
+zostaje klikalny: klik → `_build` odrzuci z powodem → flash"*. Własność **wpina się w ten sam
+`locked`** (🔒 + wyszarzenie), a przyciski Ulepsz/Rozbiórka i steppery Załogi dostają wygaszony
+kolor. **Hit-zony ZOSTAJĄ** — inaczej odmowa byłaby cicha, czyli dokładnie to, co podpis odrzucił.
+
+⚠ **BRAMKA NIE STOI w `handleClick`, `_getColony()` ani `_screenToTile`** (ograniczenie projektowe).
+Zweryfikowane, że tryby zaprojektowane **w ogóle nie przechodzą przez `_onHit`**: `handleClick`
+robi `if (hit) { this._onHit(hit); return true; }` (`:4575`) **PRZED** lądowaniem/ostrzałem/zrzutem
+(`:4584+`), które są klikami MAPY bez hit-zony. Pin T9 pilnuje, że bramka tam nie wejdzie.
+
+⚠ **NOWY KLUCZ i18n `ui.notYourColony`, NIE reuse `transportOrder.reason_not_player_colony`** —
+uzasadnienie wymagane przy podpisie: istniejący klucz to fragment zdania w **liście powodów** innego
+UI i siedzi w cudzej przestrzeni nazw. Reuse sprzęgłby dwa niezwiązane ekrany: przeredagowanie
+komunikatu dla giełdy transportowej po cichu zmieniłoby flash panelu kolonii. Pin T10 pilnuje, że
+oba napisy pozostają różne.
+
+⚠ **ODSTĘPSTWO OD PLANU NA KORZYŚĆ:** plan zapowiadał keeper `colony_overlay_ownership_pin` jako
+**pin ŹRÓDŁOWY** (bo `ColonyOverlay` nie importuje się pod node). Tablica decyzji została wyciągnięta
+do czystego modułu, więc **7 z 10 testów to WYKONANIE**, a pinów źródłowych zostały trzy (inwariant
+przed `switch`, dwaj producenci, brak bramki w miejscach zakazanych) — każdy z kontrolą pinu.
+Precedens kształtu: `ColonyModalLogic.js`.
+
+🔴 **BŁĄD ZŁAPANY W TRAKCIE OG-4 — I LEKCJA, KTÓRA ZOSTAJE.** Producent zakładki Załoga został
+najpierw wpięty w **`_drawWorkforceTab`**, który jest **legacy V1** (`popAllocation2 === false`),
+podczas gdy ścieżką ŻYWĄ jest **`_drawWorkforceTableV2`** (`ColonyOverlay:1372-1373` wybiera jedną
+z dwóch). Steppery `target`/`droid` leżą w V2 — więc `ordersOk` było tam **UŻYWANE BEZ DEKLARACJI**
+i żywa tabela rzuciłaby **`ReferenceError` przy pierwszym rysowaniu**.
+⚠ **`node --check` tego NIE łapie** (składnia jest poprawna), a pierwsza wersja pinu T8 celowała
+w legacy i **przeszła na zielono** — czyli dawała fałszywą pewność dokładnie tam, gdzie był defekt.
+⚠ **Utwardzenie:** T8 pinuje teraz OBIE ścieżki osobno **i** sprawdza inwariant „każda funkcja
+używająca `ordersOk` sama je deklaruje". Kontrola pinu wykonana na syntetycznym układzie: wadliwy
+kształt daje 1 osieroconą funkcję, poprawny 0 — **pin naprawdę by to złapał**.
+⚠ **REGUŁA WIĄŻĄCA DALEJ:** w `ColonyOverlay` żyją pary „V1 legacy + V2 żywa". Pin producenta MUSI
+nazwać ścieżkę ŻYWĄ — sama obecność wywołania w funkcji o podobnej nazwie niczego nie dowodzi.
+
 ---
 
 ### D5 — Przynależność kafla w `_build`/`_demolish` ✅ **PODPISANA: W1** · ⚠ **KOLEJNOŚĆ**
@@ -768,7 +825,7 @@ cudzy kafel + MÓJ portfel) · **keeper przed każdą zmianą zachowania**.
 | **OG-2** ✅ `0085a37` | `fix(save): wczytanie nie oddaje gracza koloni wroga` | **P0-A + P0-C + P0-D** jako JEDNA zmiana (wszystkie w `ColonyManager.js` + `GameScene.js`); drabina własności; `_detachActiveColony` w gałęzi terminalnej | **P0-A,C,D** | **GATE P0** |
 | **OG-3** ✅ | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` (⚠ **ZERO furtek** — zmierzone) + NEW `src/utils/ColonyOwnership.js` + dziewiątka bramek jako obrona w głąb + pin **D3=W1**. Szew **S4 ODWRÓCONY** w `colony_ownership_seams`. Keeper 30/30, sweep 162/162 | D1, D2, D3 | **GATE OG-3** |
 | **OG-3b** | `fix(fleet): utrzymanie floty płaci tylko kolonia gracza` | **Finding 97** — `_resolvePayHomeId` dostaje termin własności obok filtru `!isOutpost`, a fallback `window.KOSMOS.homePlanet` **przechodzi ten sam test** (po przejęciu nazywa zdobycz wroga). ⚠ Dowodem jest **pomiar kredytów w czasie**, nie kliknięcie | 97 | — |
-| **OG-4** | `fix(ui): panel kolonii nie wydaje rozkazów na cudzej koloni` | **D4** — dwie bramki producenckie + inwariant `_onHit` + allowlist + i18n | D4 | GATE 2 |
+| **OG-4** ✅ | `fix(ui): panel kolonii nie wydaje rozkazow na cudzej koloni` | **D4=W3 + flash** — NEW `src/ui/ColonyOrderGuard.js` (allowlista + predykaty) + inwariant na górze `_onHit` + dwaj producenci (`locked`/wygaszenie, hit-zony zostają) + `ui.notYourColony`. Keeper 29/29, sweep 163/163 | D4 | **GATE 2** |
 | **OG-5** | `refactor: jedno źródło prawdy o własności kolonii` | **D6=W2** — `src/utils/`, dwa wejścia, rodzina nazw, 6 kopii | D6 | — |
 | **OG-6** | `docs: rejestr + sprostowania` | Findings 81-93, sprostowanie `CLAUDE.md` (sweep 148→157), ewentualne sprostowanie `EmpireColonyBootstrap:543` gdy P0-B=W2/W3 | — | — |
 
@@ -815,7 +872,7 @@ GATE 2 AI_CAPTURE jest otwarty, więc baza może się jeszcze ruszyć).
 | `colony_ownership_guard_smoke` | OG-3 | **30 asercji, G1-G12.** Odmowa na koloni AI (zwrotka + żaden z pięciu wskaźników nie drga) · kontrole pinu (własna kolonia, nieistniejąca kolonia) · **G4 ZERO FURTEK**: empirycznie (`GameCore.boot()` wiąże bez obejścia) **i** źródłowo (`stripComments` + brak `allowForeign\|bypass\|unchecked\|force`, z kontrolą pinu na `isPlayerColony`) · **G5 pin D3=W1** · **G6-G8** dziewiątka bramek: odmowa na systemie AI, przejście na graczu, **fail-open dla gołego systemu bez koloni** · **G9 regresja AI** (`_build` bezpośrednio, z pominięciem szyny) · **G10/G11** to samo dla `FactorySystem` i `CivilizationSystem` · **G12 pin „NIE DOTYKAMY"**: bramka SYSTEMOWA (`civ:unrest`) dalej działa na koloni AI |
 | `colony_ownership_seams_smoke` | OG-3 (aktualizacja) | **S4 ODWRÓCONY** — ostatni z czterech szwów; nagłówkowa tabela kontraktu przepisana, test **nie skasowany** |
 | `fleet_upkeep_payer_smoke` | OG-3b | płatnikiem utrzymania **nigdy** kolonia z `ownerEmpireId`; fallback `homePlanet` wskazujący **zdobycz wroga** nie płaci; kontrola pinu: własna kolonia gracza płaci jak dotąd |
-| `colony_overlay_ownership_pin` | OG-4 | ⚠ **pin ŹRÓDŁOWY** (`ColonyOverlay` nie importuje się pod node): dwie bramki producenckie obecne, `_onHit` ma inwariant, allowlist zawiera `close` + 12 etykiet jednostkowych |
+| `colony_order_guard_smoke` | OG-4 | **29 asercji, T1-T10.** ⚠ Nazwa i kształt **zmienione wobec planu na korzyść**: tablica decyzji wyciągnięta do czystego `ColonyOrderGuard.js`, więc **T1-T6 to WYKONANIE** (14 etykiet zablokowanych na cudzej / te same przechodzą na własnej · allowlista: `close`, dowodzenie desantem, absorbery · **domyślna odmowa dla nieznanej etykiety** · fail-open przy braku koloni · zero przecieków rozkazów do allowlisty). **T7-T9 to piny ŹRÓDŁOWE** z kontrolą pinu: inwariant PRZED `switch`, obaj producenci konsultują bramkę, bramki NIE MA w `_getColony`/`_screenToTile`. **T10** — własny klucz i18n, różny od `transportOrder.*` |
 
 **⚠ Dyscypliny obowiązkowe, każda z pomiaru:**
 1. **`env.js` PIERWSZY** — bez `src/testing/headless/env.js` goły import **dowolnego** modułu pada na
@@ -870,8 +927,33 @@ dalej działać**.
 5. **AI się rozbudowuje** — kolonie AI dalej stawiają budynki (szyna ich nie dotyczy; `_build`
    wołane bezpośrednio).
 
-**GATE 2 (po OG-4) — „rozkaz nie przechodzi".** Klik kafla na koloni wroga: **budowa odmawia**, komunikat
-jest **przetłumaczony**, zaprojektowany desant/ostrzał **dalej działa**, panel **da się zamknąć**.
+**WYNIK GATE OG-3 (2026-08-22): PASS.** §1 `switchActiveColony('entity_98')` → `false`,
+`activePlanetId` zostało przy `entity_4` · §2 desant na własnej koloni bez zmian · §3
+`switchActiveSystem('sys_055')` NIE przestawiło aktywnej koloni na `entity_98` (AI) · §4 **N/A**
+(gracz miał jedną kolonię) · §5 kolonia AI `entity_98` urosła 23 → 24 budynki w 2 lata gry.
+
+⚠ **OBSERWACJA UX z §3 (NIE fail, zapisana na wniosek właściciela):** klik na kolonię AI na mapie 3D
++ przycisk „mapa ciała" **przekierowuje na WŁASNĄ kolonię gracza** zamiast pokazać stan
+neutralny/pusty. **To nie jest wyciek danych** — `activePlanetId` się nie zmienia (bramka D1
+działa) — tylko **myląca prezentacja**: gracz prosi o mapę koloni AI i dostaje swoją.
+⚠ Przyczyna jest ta sama co §3 PASS: to wejście woła `switchActiveColony` + `openPanel('colony')`,
+a nie ZAPROJEKTOWANY podgląd `show({colonyId})`. **Naprawa byłaby jednolinijkowa** (przepiąć to
+wejście na ścieżkę podglądu), ale należy do **osobnego podpisu** — D1-D6 nie obejmowały wejść
+nawigacyjnych. Kandydat do dopisania przy OG-6 albo do części III.
+
+**GATE 2 (po OG-4) — „rozkaz nie przechodzi".** ⬜ DO PRZEPROWADZENIA.
+1. **Panel obcej koloni (podgląd z desantu/ostrzału) DALEJ SIĘ OTWIERA i pokazuje dane** — zakładka
+   Załoga zostaje **czytelnym wywiadem** (nie znika). To jest podpisana decyzja, więc jej brak =
+   regresja, nie ulepszenie.
+2. **Rozkaz odmawia z POWODEM:** klik w wiersz budynku / Ulepsz / Rozbiórka / stepper focus / droid
+   ⇒ flash **„Ta kolonia nie należy do ciebie"**, zero zmian stanu. Kontrola: te same kliknięcia na
+   WŁASNEJ koloni działają jak dotąd.
+3. **Rozkazy widać jako ZABLOKOWANE, nie zniknięte** — wiersze budowy z 🔒 i wyszarzone, przyciski
+   i steppery wygaszone.
+4. **Zaprojektowane tryby DZIAŁAJĄ:** lądowanie Away Team, ostrzał orbitalny, zrzut desantu.
+5. **Panel DA SIĘ ZAMKNĄĆ** (`close` w allowliście) — to był jawny warunek podpisu D4.
+6. **Dowodzenie desantem działa na cudzej koloni:** zaznaczanie oddziałów, atak, rozwinięcie,
+   tworzenie/rozwiązywanie armii — wszystko zakresowane po `unit.owner`, nie po koloni.
 
 ⚠ **CC nie pisze plików w trakcie gate'u** (Live Server przeładowuje kartę i cofa grę do ostatniego
 zapisu). Filtry one-linerów **po rodzaju zdarzenia, nigdy po tekście Dziennika** (gra bywa po angielsku).

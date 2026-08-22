@@ -42,6 +42,7 @@ import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 import { drawStationManageCompact, drawStationPickerModal } from './StationManagementView.js';   // C6c-2b — compact embed + floating picker (C6c-3: pełnoekranowy drawStationManagement retired)
 import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
 import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
+import { canIssueColonyOrders, isColonyOrderBlocked } from './ColonyOrderGuard.js';   // D4/OG-4 — bramka rozkazów
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -1798,6 +1799,10 @@ export class ColonyOverlay extends BaseOverlay {
   // Tabela: strata | etaty | pracownicy | płaca (highlight pressure>0.25) | focus [− n +].
   // Stopka: bezrobotni (warn >10%), satysfakcja, prosperity + strzałka trendu, wzrost.
   _drawWorkforceTab(ctx, x, y, w, h, colony, civ) {
+    // D4=W3 (OG-4) — zakładka ZOSTAJE widoczna na cudzej koloni (czytelny wywiad w trakcie
+    // inwazji), ale steppery focus/droid rysują się wygaszone. Hit-zony ZOSTAJĄ — inwariant
+    // `_onHit` odmawia z powodem. „Schowaj całkiem" zostało jawnie ODRZUCONE przy podpisie D4.
+    const ordersOk = canIssueColonyOrders(colony);
     // Legacy V1 (popAllocation2=false). Żywa ścieżka = _drawWorkforceTableV2 + _drawWorkforceSummaryV2.
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
@@ -1861,7 +1866,7 @@ export class ColonyOverlay extends BaseOverlay {
       const capOff = r.focusCap <= 0;
       ctx.textAlign = 'center';
       ctx.font = `bold 13px ${THEME.fontFamily}`;
-      ctx.fillStyle = capOff ? THEME.textDim : THEME.accent;
+      ctx.fillStyle = (capOff || !ordersOk) ? THEME.textDim : THEME.accent;   // D4/OG-4 — wygaszone na cudzej
       ctx.fillText('−', focusX0 + 9, my);
       ctx.fillText('+', focusRight - 9, my);
       ctx.font = `11px ${THEME.fontFamily}`;
@@ -1926,6 +1931,10 @@ export class ColonyOverlay extends BaseOverlay {
   //  UDZIAŁ (share) tej warstwy; droid [±] auto-pick (najsłabiej obsadzony budynek / zwrot do magazynu).
   //  ROW_H=30 i steppery NIETKNIĘTE (stepperButtonBand bez zmian); stopka → _drawWorkforceSummaryV2.
   _drawWorkforceTableV2(ctx, x, y, w, colony, civ) {
+    // D4=W3 (OG-4) — SCIEZKA ZYWA (V1 `_drawWorkforceTab` jest legacy). Tabela ZOSTAJE widoczna
+    // na cudzej koloni (czytelny wywiad), steppery target/droid rysuja sie wygaszone, a hit-zony
+    // ZOSTAJA — inwariant `_onHit` odmawia z powodem.
+    const ordersOk = canIssueColonyOrders(colony);
     const lang = getLocale();
     const rows = civ.getWorkforceBreakdown();
 
@@ -2005,7 +2014,7 @@ export class ColonyOverlay extends BaseOverlay {
                      : tstate === 'active' ? THEME.success
                      : THEME.textDim;
       ctx.textAlign = 'center'; ctx.font = `bold 12px ${THEME.fontFamily}`;   // #3: 13→12 (bliżej 11px treści; waga bold odróżnia przyciski)
-      ctx.fillStyle = tgtOff ? THEME.textDim : THEME.accent;
+      ctx.fillStyle = (tgtOff || !ordersOk) ? THEME.textDim : THEME.accent;   // D4/OG-4 - wygaszone na cudzej
       ctx.fillText('−', stepX0 + 9, b1.glyphY); ctx.fillText('+', stepRight - 9, b1.glyphY);
       // Środek: „nn%≈P" (P = docelowa liczba osób; ! gdy nieosiągalne). Podgląd żywy podczas regulacji.
       ctx.font = `10px ${THEME.fontFamily}`;
@@ -2038,8 +2047,8 @@ export class ColonyOverlay extends BaseOverlay {
       const canRemove = r.synthetic > 0;
       const canInstall = r.synthetic < r.grossJobs;
       ctx.textAlign = 'center'; ctx.font = `bold 12px ${THEME.fontFamily}`;   // #3: 13→12 (spójne z linią 1)
-      ctx.fillStyle = canRemove ? THEME.accent : THEME.textDim;  ctx.fillText('−', stepX0 + 9, b2.glyphY);
-      ctx.fillStyle = canInstall ? THEME.accent : THEME.textDim; ctx.fillText('+', stepRight - 9, b2.glyphY);
+      ctx.fillStyle = (canRemove && ordersOk) ? THEME.accent : THEME.textDim;  ctx.fillText('−', stepX0 + 9, b2.glyphY);   // D4/OG-4
+      ctx.fillStyle = (canInstall && ordersOk) ? THEME.accent : THEME.textDim; ctx.fillText('+', stepRight - 9, b2.glyphY);   // D4/OG-4
       ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = r.synthetic > 0 ? THEME.accent : THEME.textDim;
       ctx.fillText(`🤖${r.synthetic}`, (stepX0 + stepRight) / 2, my2);
       if (canRemove)  this._addHit(stepX0, b2.top, 20, b2.h, 'droidRemove', { type: r.type, tooltip: t('workforce.droidTooltip') });
@@ -3768,6 +3777,10 @@ export class ColonyOverlay extends BaseOverlay {
 
   // ── Floating panel ───────────────────────────────────────────────────────
   _drawFloatingPanel(ctx, x, y, tile, colony, grid) {
+    // D4=W3 (OG-4) — „widoczny, ale zablokowany". Panel ZOSTAJE (jest też wywiadem o kaflu),
+    // ale rozkazy rysują się wygaszone i z 🔒. Hit-zony ZOSTAJĄ — klik ma powiedzieć DLACZEGO
+    // (inwariant `_onHit` → flash). Dokładnie idiom `locked` używany tu dla bramki klimatu.
+    const ordersOk = canIssueColonyOrders(colony);
     const terrain = TERRAIN_TYPES[tile.type] ?? TERRAIN_TYPES.plains;
     const b = tile.buildingId ? BUILDINGS[tile.buildingId] : null;
 
@@ -4057,11 +4070,11 @@ export class ColonyOverlay extends BaseOverlay {
       cy += 4;
       // Przyciski
       if (b.maxLevel && (tile.buildingLevel ?? 1) < b.maxLevel) {
-        this._drawBtn(ctx, '⬆ Ulepsz', x + 8, cy, FLOAT_W - 16, 24, '#1a6e50');
+        this._drawBtn(ctx, '⬆ Ulepsz', x + 8, cy, FLOAT_W - 16, 24, ordersOk ? '#1a6e50' : '#2a2a2a');
         if (_bVis(cy, 24)) this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'upgrade');
         cy += 28;
       }
-      this._drawBtn(ctx, '🗑 Rozbiórka', x + 8, cy, FLOAT_W - 16, 24, '#6e1a1a');
+      this._drawBtn(ctx, '🗑 Rozbiórka', x + 8, cy, FLOAT_W - 16, 24, ordersOk ? '#6e1a1a' : '#2a2a2a');
       if (_bVis(cy, 24)) this._addHit(x + 8, cy, FLOAT_W - 16, 24, 'demolish');
       cy += 28;
 
@@ -4203,7 +4216,7 @@ export class ColonyOverlay extends BaseOverlay {
         if (cy + rowH < listTop - 50 || cy > listBot + 50) { cy += rowH + 2; continue; }
 
         const canAfford = this._canAfford(colony, bd);
-        const locked = entry.locked;            // Stage 1: klimat — widoczny, ale zablokowany
+        const locked = entry.locked || !ordersOk;   // klimat (Stage 1) LUB cudza kolonia (D4/OG-4)
         const greyed = locked || !canAfford;    // wyszarzenie jak przy braku surowców
         const isHov = this._hoveredBuildId === bid;
 
@@ -4773,6 +4786,24 @@ export class ColonyOverlay extends BaseOverlay {
 
   _onHit(zone) {
     const colony = this._getColony();
+
+    /* D4=W3 (OG-4) — INWARIANT WŁASNOŚCI. Panel obcej planety jest ZAPROJEKTOWANY
+       (`_openAsColonyPanel`: „dla konkretnej planety (własnej LUB obcej)") i służy desantowi,
+       ostrzałowi orbitalnemu oraz grupie badawczej — celem jest DZIAŁANIE MOIMI jednostkami,
+       nie zarządzanie CUDZĄ kolonią.
+       ⚠ TO NIE DUBLUJE D1/D2: poniższe `case` mutują `colony.civSystem` / `colony.buildingSystem`
+         BEZPOŚREDNIO (`setStrataFocus`, `setStrataTarget`, droidy), więc bramki szyny ich nie
+         widzą; a `show({colonyId})` świadomie omija `switchActiveColony`.
+       ⚠ MIEJSCE JEST OGRANICZENIEM PROJEKTOWYM: bramka NIE MOŻE stać na górze `handleClick`,
+         w `_getColony()` ani w `_screenToTile` — wszystkie trzy są WSPÓLNE z trybami
+         zaprojektowanymi. Góra `_onHit` to jedyny punkt kosztujący zero tych przepływów.
+       ⚠ ODMOWA JEST GŁOŚNA — allowlista (nawigacja, dowodzenie desantem, absorbery modali)
+         przechodzi bez słowa, reszta dostaje flash z powodem. */
+    if (isColonyOrderBlocked(zone.type, colony)) {
+      this._showFlash(t('ui.notYourColony'));
+      return;
+    }
+
     const grid = colony ? this._getGrid(colony) : null;
     const tile = this._selectedHex && grid ? grid.get(this._selectedHex.q, this._selectedHex.r) : null;
 

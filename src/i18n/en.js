@@ -926,6 +926,7 @@ export default {
   'ui.tileOccupied': 'Tile occupied',
   'ui.tileNotOwned': 'Tile belongs to another colony',
   'ui.tileEnemyControlled': 'Tile under enemy control',
+  'ui.notYourColony': 'This colony is not yours',
   'ui.terrainForbidden': 'Forbidden terrain',
   'ui.requiresWarmth': 'Too cold for this building',
   'ui.requiresAtmosphere': 'Requires atmosphere',
