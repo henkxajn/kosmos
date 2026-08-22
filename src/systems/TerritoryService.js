@@ -11,9 +11,10 @@
 import EventBus from '../core/EventBus.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 
-// Odpowiednik ColonyManager.isPlayerColony (kanon tam) — inline, by NIE importować
-// systemu do systemu (CLAUDE.md) i utrzymać TerritoryService node-testowalnym.
-const isPlayerColony = (c) => !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player');
+// D6/OG-5 — kanon w `src/utils/ColonyOwnership.js` (zero importów => zero cykli, node-testowalny).
+// Powód dla dawnej kopii inline („nie importujemy systemu do systemu") zniknął wraz z przeniesieniem
+// kanonu poza systemy — to była cała treść ograniczenia 1 z D6.
+import { isPlayerColony } from '../utils/ColonyOwnership.js';
 
 // devScore dla samej stacji (posterunek bez kolonii) — stały, niski.
 const STATION_DEV_SCORE = 1;

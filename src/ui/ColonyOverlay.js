@@ -43,6 +43,7 @@ import { drawStationManageCompact, drawStationPickerModal } from './StationManag
 import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
 import { GroundUnitPanel } from './GroundUnitPanel.js';                // rekrutacja jednostek scoped do tej kolonii
 import { canIssueColonyOrders, isColonyOrderBlocked } from './ColonyOrderGuard.js';   // D4/OG-4 — bramka rozkazów
+import { isManageablePlayerColony } from '../utils/ColonyOwnership.js';               // D6/OG-5 — kanon własności
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -1441,8 +1442,10 @@ export class ColonyOverlay extends BaseOverlay {
     // NIE rysuje się dla outpostów → utrata tej niszowej ścieżki. Decyzja świadoma (spójność z hide-outpost dla
     // Załogi/Populacji); gdyby trzeba zachować budowę z outpostu — osobny follow-up (nie przez ten slice).
     const hasStationTech = window.KOSMOS?.techSystem?.isResearched?.('orbital_construction') ?? false;
-    const isPlayerColony = !!colony && !colony.isPreview && !colony.isOutpost && !colony.ownerEmpireId && !colony.isTestEnemy;
-    if (hasStationTech && isPlayerColony) {
+    // D6/OG-5 — „własność + rodzaj" z kanonu (dawniej inline; `isTestEnemy` pominięty jako
+    // dowodnie redundantny wobec `ownerEmpireId` — patrz `ColonyOwnership.js`).
+    const canManage = isManageablePlayerColony(colony);
+    if (hasStationTech && canManage) {
       tabs.push({ id: 'stacja', labelKey: 'colonyInfo.tabStation' });
     }
     return tabs;

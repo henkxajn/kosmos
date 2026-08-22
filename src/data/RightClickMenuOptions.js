@@ -8,6 +8,7 @@
 // jako tooltip (data-tooltip) bez disabling samej opcji.
 
 import { SHIP_MODULES } from './ShipModulesData.js';
+import { isPlayerColonyId } from '../utils/ColonyOwnership.js';
 //
 // Target shape (dostarczany przez P1.2 raycaster — RaycasterHelper.resolveTargetFromHits):
 //   { type, entityId?, vessel?, poi?, planet?, worldPoint }
@@ -133,11 +134,8 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
  * @returns {boolean}
  */
 // Slice 8b — czy `id` to kolonia gracza (dock target = hangar/port). Kolonie AI mają ownerEmpireId.
-function _isPlayerColony(id) {
-  if (!id) return false;
-  const c = window.KOSMOS?.colonyManager?.getColony?.(id);
-  return !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player');
-}
+// D6/OG-5 — wejście po `id` z kanonu (fail-closed przy braku kolonii, jak dotąd).
+const _isPlayerColony = isPlayerColonyId;
 
 function _vesselInCombat(vesselId) {
   if (!vesselId) return false;

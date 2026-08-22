@@ -813,6 +813,52 @@ i serializowane — `StationSystem:123`, `Station.js:26`), więc jeden predykat 
 **rozdzielone**, nie uśrednione), 6 nazwanych kopii ujednoliconych, ~36 słabych kształtów **pinowanych
 źródłowo**. **Stacje poza zakresem.**
 
+**WDROŻONA w OG-5.** Keeper `colony_ownership_canon_smoke` **40/40**, sweep 164/164.
+
+**Rodzina — trzy RÓŻNE pytania, które dotąd odpowiadało jedno wyrażenie:**
+| funkcja | pytanie | doczepka | skąd pochodzi |
+|---|---|---|---|
+| `isPlayerColony(colony)` | „czyja jest ta kolonia" | — | kanon |
+| `isPlayerColonyId(planetId)` | to samo, ale mam tylko `id` | lookup + **fail-closed** | `RightClickMenuOptions`, `EconomyHistoryLog` |
+| `isLivePlayerColony(colony)` | „czy ma gdzie trzymać towar" | `&& !!resourceSystem` (**żywotność**) | `TransferStore:37` |
+| `isManageablePlayerColony(colony)` | „czy gracz może nią zarządzać" | `&& !isPreview && !isOutpost` (**rodzaj**) | `ColonyOverlay:1444`, `StationGroup:83` |
+
+⚠ **SPROSTOWANIE CENSUSU — nazwanych miejsc było OSIEM, nie sześć** (numery z audytu zdążyły się
+przesunąć o cztery commity, więc mierzone od nowa): `TerritoryService:16` · `TransportOrderSystem:554` ·
+`EconomyHistoryLog:35` · `RightClickMenuOptions:139` · `TransferStore:37` · `ColonyOverlay:1444` ·
+`StationGroup:83` · `JournalScope:39`. **Wszystkie osiem zmigrowane.**
+⚠ Dwa z nich (`TerritoryService`, `TransportOrderSystem`) nosiły w komentarzu **powód** istnienia kopii:
+*„inline, by NIE importować systemu do systemu"*. Przeniesienie kanonu poza systemy ten powód
+**skasowało** — to była cała treść ograniczenia 1.
+⚠ `JournalScope.isPlayerColonyEvent` **NIE stało się aliasem** `isPlayerColonyId`: ma ŚWIADOMIE inną
+domyślną (brak `planetId` ⇒ `true`, bo zdarzenia bez tagu nie wyciszamy). Spłaszczenie zmieniłoby
+zachowanie Dziennika.
+
+🔴 **KEEPER ZNALAZŁ REALNY DEFEKT KANONU — i żył cztery commity.** `isPlayerColony(colony)` miało
+kształt `!!c && (!c.ownerEmpireId || …)`, który **PRZEPUSZCZAŁ STRING**: `'p_ai'.ownerEmpireId` to
+`undefined`, więc podanie identyfikatora zwracało **„kolonia gracza" dla DOWOLNEGO id**. Dokładnie ta
+pułapka stała opisana w komentarzu przy funkcji (ograniczenie 2 census D6) — **opisana, nie
+egzekwowana**. Naprawione (`typeof colony !== 'object'` ⇒ `false`); pin E2 to trzyma.
+⚠ Sweep po naprawie: **164/164** — czyli żaden z ~40 konsumentów `ColonyManager.isPlayerColony`
+nie podawał stringa. Defekt był bombą z opóźnionym zapłonem, nie żywym błędem.
+
+⚠ **`isTestEnemy` NIE WSZEDŁ DO RODZINY — i to jest ZMIERZONE, nie przepisane z audytu.** Obaj
+producenci ustawiają go RAZEM z `ownerEmpireId` (`SpawnTestEnemy:112-113`, `CombatSandbox:392-393`),
+a `captureColonyForPlayer` **czyści oba razem** (`ColonyManager:1004-1005`) ⇒ jest redundantny wobec
+własności. Do tego nie jest serializowany, więc opieranie na nim czegokolwiek dawałoby **inną
+odpowiedź przed i po wczytaniu tego samego zapisu**. `ColonyOverlay:1444` i `StationGroup:83` straciły
+go przy migracji — bez zmiany zachowania.
+
+⚠ **„RESZTA PINOWANA" = JAWNY ZBIÓR, NIE PRÓG.** Pozostałe inline kształty to **7 plików**, każdy
+zmierzony co do PODMIOTU (D6 dotyczy KOLONII):
+- **poza D6 z podpisu (4):** `UIManager:1290-1291` i `PlayerViability:50` — **STATKI** (kanon statków
+  to `isEnemyVessel`); `BodyName:57` i `StationGroup:37` — **STACJE** (wyłączone podpisem).
+- **kolonijne słabe kształty, świadomie zostawione (3):** `ColonyManager:986` (negacja wewnątrz
+  `captureColonyForPlayer`), `InvasionSystem:340/358`, `WarSystem:557`. To pierwsi kandydaci, gdyby
+  D6 kiedyś rozszerzać — W1 (pełny sweep) został odrzucony przy podpisie.
+Pin E6 sprawdza **obie strony**: żaden NOWY plik nie dorabia się kopii **i** żaden z siedmiu nie znika
+po cichu (inaczej lista dezaktualizowałaby się bez śladu).
+
 ---
 
 ## Zakres i kolejność prac (commit plan — ✅ PODPISANY 2026-08-22)
@@ -830,7 +876,7 @@ cudzy kafel + MÓJ portfel) · **keeper przed każdą zmianą zachowania**.
 | **OG-3** ✅ | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` (⚠ **ZERO furtek** — zmierzone) + NEW `src/utils/ColonyOwnership.js` + dziewiątka bramek jako obrona w głąb + pin **D3=W1**. Szew **S4 ODWRÓCONY** w `colony_ownership_seams`. Keeper 30/30, sweep 162/162 | D1, D2, D3 | **GATE OG-3** |
 | **OG-3b** | `fix(fleet): utrzymanie floty płaci tylko kolonia gracza` | **Finding 97** — `_resolvePayHomeId` dostaje termin własności obok filtru `!isOutpost`, a fallback `window.KOSMOS.homePlanet` **przechodzi ten sam test** (po przejęciu nazywa zdobycz wroga). ⚠ Dowodem jest **pomiar kredytów w czasie**, nie kliknięcie | 97 | — |
 | **OG-4** ✅ | `fix(ui): panel kolonii nie wydaje rozkazow na cudzej koloni` | **D4=W3 + flash** — NEW `src/ui/ColonyOrderGuard.js` (allowlista + predykaty) + inwariant na górze `_onHit` + dwaj producenci (`locked`/wygaszenie, hit-zony zostają) + `ui.notYourColony`. Keeper 29/29, sweep 163/163 | D4 | **GATE 2** |
-| **OG-5** | `refactor: jedno źródło prawdy o własności kolonii` | **D6=W2** — `src/utils/`, dwa wejścia, rodzina nazw, 6 kopii | D6 | — |
+| **OG-5** ✅ | `refactor: jedno zrodlo prawdy o wlasnosci kolonii` | **D6=W2** — rodzina 4 funkcji, dwa wejścia, **8** nazwanych kopii (nie 6 — census zmierzony od nowa) + 🔴 fix kanonu (przepuszczał STRING). Keeper 40/40, sweep 164/164 | D6 | — |
 | **OG-6** | `docs: rejestr + sprostowania` | Findings 81-93, sprostowanie `CLAUDE.md` (sweep 148→157), ewentualne sprostowanie `EmpireColonyBootstrap:543` gdy P0-B=W2/W3 | — | — |
 
 **Per-commit gates (bez wyjątków, konwencja projektu):** `node src/testing/smoke/run-all.mjs` **0 FAIL** ·
@@ -891,6 +937,8 @@ GATE 2 AI_CAPTURE jest otwarty, więc baza może się jeszcze ruszyć).
 5. **`ColonyManager.isPlayerColony` jest STATYCZNE i bierze OBIEKT** — wołanie na instancji rzuca
    `TypeError`, a podanie `planetId` **po cichu zwraca złą odpowiedź**.
 6. **Drugi wołający `_detachActiveColony` ⇒ re-weryfikacja `ai_capture_last_stand` T1.**
+
+| `colony_ownership_canon_smoke` | OG-5 | **40 asercji, E1-E7.** Rodzina rozdziela trzy pytania (kolonia gracza BEZ magazynu: własność ✓ / żywotność ✗; placówka i podgląd: własność ✓ / zarządzalność ✗) · wejście po `id` **fail-closed** · **wejście obiektowe ODRZUCA string** (fix realnego defektu) · `isTestEnemy` nie wchodzi do logiki (+ pin źródłowy na parowanie u obu producentów) · osiem nazwanych kopii importuje kanon i nie ma własnej · `ColonyManager.isPlayerColony` deleguje · **jawny zbiór 7 plików** z inline kształtem (obie strony: nic nowego, nic nie zniknęło) · stacje poza rodziną |
 
 **Regresja bez edycji:** `ai_capture_last_stand` · `ai_capture_ledger` · `invasion_player_capture` ·
 `s34c_z9_transfer_dispose` · `w3_conquest_persists` · pełny sweep.

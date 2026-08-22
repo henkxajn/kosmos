@@ -30,6 +30,7 @@ import { GAME_CONFIG }                from '../config/GameConfig.js';
 import { isEnemyVessel, loadCargo, isInService } from '../entities/Vessel.js';
 import { COMMODITIES }                from '../data/CommoditiesData.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
+import { isPlayerColony } from '../utils/ColonyOwnership.js';
 
 const SWEEP_INTERVAL_CIVYEARS = 0.5;   // lekki sweep łapiący statki w fazie 'waiting' + backstop dispatchu
 
@@ -549,10 +550,9 @@ export class TransportOrderSystem {
 }
 
 // ── Helpery modułowe ─────────────────────────────────────────────────────────
-// isPlayerColony inline (nie importujemy ColonyManager — reguła: bez cross-importów systemów).
-function _isPlayerColony(c) {
-  return !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player');
-}
+// D6/OG-5 — dawna kopia inline istniała, bo „nie importujemy ColonyManager". Kanon mieszka teraz
+// poza systemami (`src/utils/ColonyOwnership.js`, zero importów), więc powód zniknął.
+const _isPlayerColony = isPlayerColony;
 
 // Waga towaru/surowca (tony/szt) — mirror _getWeight z Vessel.js.
 function _weight(id) {

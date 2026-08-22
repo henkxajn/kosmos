@@ -9,6 +9,7 @@
 // nietknięty (trzyma własną kopię derywacji). Wspólna jest TYLKO reguła „co należy do tej planety".
 
 import EntityManager from '../core/EntityManager.js';
+import { isManageablePlayerColony } from './ColonyOwnership.js';
 
 /** Kotwica grupy dla ciała: planeta = własne id; księżyc = parentPlanetId (fallback: własne id). */
 export function stationGroupAnchorId(body) {
@@ -80,7 +81,9 @@ export function resolveStationTabHost(station) {
   const colMgr = window.KOSMOS?.colonyManager;
   if (!station || !colMgr) return null;
   const group = stationGroupOf(EntityManager.get(station.bodyId));
-  const isHost = (c) => c && !c.ownerEmpireId && !c.isTestEnemy && !c.isPreview && !c.isOutpost && c.civSystem;
+  // D6/OG-5 — własność+rodzaj z kanonu; `civSystem` (ma warstwę populacyjną) zostaje LOKALNĄ
+  // doczepką, bo to czwarte pytanie i nie należy do rodziny.
+  const isHost = (c) => isManageablePlayerColony(c) && !!c.civSystem;
   const anchorCol = colMgr.getColony?.(group.anchorId);
   if (isHost(anchorCol)) return anchorCol;
   for (const bid of group.memberBodyIds) { const c = colMgr.getColony?.(bid); if (isHost(c)) return c; }

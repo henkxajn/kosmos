@@ -14,6 +14,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
+import { isPlayerColonyId } from '../utils/ColonyOwnership.js';
 
 const MAX_YEARS = 20;
 
@@ -29,10 +30,9 @@ export class EconomyHistoryLog {
   }
 
   // ── Atrybucja: czy planetId to kolonia GRACZA (null/'player') ──────────────
+  // D6/OG-5 — wejście po `id` z kanonu (`fail-closed` przy braku kolonii, dokładnie jak tu wcześniej).
   _isPlayer(planetId) {
-    if (!planetId) return false;
-    const col = window.KOSMOS?.colonyManager?.getColony?.(planetId);
-    return !!col && (!col.ownerEmpireId || col.ownerEmpireId === 'player');
+    return isPlayerColonyId(planetId);
   }
 
   _ensureCur(year) {

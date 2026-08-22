@@ -15,6 +15,7 @@
 // czytał o zbrojeniach i o głodzie obcego imperium z pominięciem warstwy intelu.
 
 import { ColonyManager } from '../systems/ColonyManager.js';
+import { isPlayerColony } from './ColonyOwnership.js';
 
 /**
  * Czy zdarzenie dotyczy kolonii GRACZA (wolno je wpisać do Dziennika).
@@ -36,5 +37,5 @@ export function isPlayerColonyEvent(planetId) {
   if (planetId === undefined || planetId === null) return true;   // emisja bez tagu — nie wyciszamy
   const colony = globalThis.window?.KOSMOS?.colonyManager?.getColony?.(planetId);
   if (!colony) return false;                                      // fail-closed
-  return ColonyManager.isPlayerColony(colony);
+  return isPlayerColony(colony);
 }

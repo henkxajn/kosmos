@@ -4,6 +4,7 @@
 // „kolonia LUB stacja" — reuse: MissionSystem (pętla cargo), VesselManager (tankowanie).
 
 import EntityManager from '../core/EntityManager.js';
+import { isLivePlayerColony } from './ColonyOwnership.js';
 
 /**
  * Rozwiąż magazyn (resourceSystem-podobny) dla id ciała/stacji.
@@ -33,8 +34,9 @@ export function isStationId(id) {
  * @param {object} station — encja Station
  * @returns {object|null} colony (posiada resourceSystem) | null (sierota)
  */
-// Kolonia gracza (AI ma ownerEmpireId = id imperium; gracz null/undefined/'player').
-const _isPlayerCol = (c) => !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player') && !!c.resourceSystem;
+// D6/OG-5 — własność + ŻYWOTNOŚĆ to JEDNO z trzech pytań rodziny; doklejka `&& !!c.resourceSystem`
+// nie została uśredniona z czystą własnością, tylko dostała własną nazwę.
+const _isPlayerCol = isLivePlayerColony;
 
 /**
  * SILNY link matki: stamp `ownerColonyId` → per-body → parent (księżyc). BEZ „jedyna w systemie"
