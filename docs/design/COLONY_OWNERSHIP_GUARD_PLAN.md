@@ -418,7 +418,25 @@ akurat związane**. Wiązanie **nie jest** więc pasywne.
 ⚠ Furtka dla `GameCore`/`CombatSandbox`/fallbacków musi być **jawna i nazwana**, nie „przypadkiem
 przechodzi".
 
-✅ **PODPISANA 2026-08-22: W2 (inwariant) + W1 (UX).**
+✅ **PODPISANA 2026-08-22: W2 (inwariant) + W1 (UX).** **WDROŻONA w OG-3** — keeper
+`colony_ownership_guard_smoke` 30/30, sweep 162/162.
+
+⚠ **SPROSTOWANIE #2 (OG-3) — FURTEK JEST ZERO, NIE DWIE. Zmierzone, nie założone.** Oba miejsca,
+dla których plan przewidywał jawną furtkę, **wiążą planetę MACIERZYSTĄ GRACZA** i przechodzą samym
+terminem własności:
+- `GameCore.js:310` — komentarz na call-site mówi to wprost: *„Aktywna kolonia = home planet"*;
+- `CombatSandbox.js:228` — *„14) Aktywuj kolonię gracza w UI"*, a `civPlanet` jest w sygnaturze
+  udokumentowana jako *„planeta macierzysta gracza"* (`:142`). Kolonia wroga tego scenariusza
+  (`:392-393`) **nigdy** nie jest wiązana.
+
+⇒ `switchActiveColony` **nie dostał żadnego parametru obejścia**. Dowód empiryczny: pełny sweep
+**162/162 0 FAIL** — a każdy keeper w repo startuje przez `GameCore.boot()`. Dowód źródłowy:
+keeper G4 (`stripComments` + brak tokenów `allowForeign|bypass|unchecked|force`, z kontrolą pinu na
+obecność `isPlayerColony`).
+⚠ **I tak jest LEPIEJ, niż planowano:** każda niepotrzebna furtka to mina dla następnego — dokładnie
+ta klasa, która dała `removeColony:667` (nieutwardzony bliźniak, żywy przez cały arc).
+
+⚠ **Odmowa jest CICHA.** Komunikat dla gracza należy do **D4/OG-4** (prawdomówność UI), nie do D1.
 
 ⚠ **SPROSTOWANIE 2026-08-22 — furtki są DWIE, nie cztery.** Wiersz „⚠ pułapka" w tabeli wyżej wymienia
 także **własne fallbacki ColonyManagera** (`:671`, `:793` wg audytu). Po P0 to nieaktualne: oba miejsca
@@ -469,6 +487,36 @@ czyta się jako aprobatę.
 
 ✅ **PODPISANA 2026-08-22: W3 (tylko `switchActiveColony`) + W1 (dziewiątka bramek) jako obrona
 w głąb.** **NIE dotykamy** ósemki bramek systemowych ani siedemnastki martwych.
+**WDROŻONA w OG-3** — termin w `src/utils/ColonyOwnership.js` (`systemBelongsToPlayer`), wpięty
+w 3 bramki `BuildingSystem` + 5 `FactorySystem` + 1 `CivilizationSystem`.
+
+⚠ **SPROSTOWANIE (OG-3) — „dziewiątka żywych" ma dziś TYLKO SZEŚĆ producentów produkcyjnych.**
+Zmierzone po emitentach, nie po numerach linii z audytu (te zdążyły się przesunąć):
+
+| bramka | producenci PRODUKCYJNI | producenci TESTOWI |
+|---|---|---|
+| `planet:buildRequest` · `demolishRequest` · `upgradeRequest` | 4 · 3 · 1 | — |
+| `factory:setExportEnabled` · `setExportTier` | 1 · 1 (`EconomyOverlay:2649/2652`) | — |
+| `civ:resolveMovement` | 1 | — |
+| `factory:enqueue` · `dequeue` · `setMode` | **0** | 1 · 1 · 2 (`ActionAdapter`, boty) |
+
+**Zabramkowano wszystkie dziewięć** — zgodnie z podpisem — ale trzy ostatnie są dziś osiągalne
+**wyłącznie z harnessu**. To NIE zmienia decyzji; zmienia opis rzeczywistości i chroni przed
+wnioskiem „skoro nikt tego nie emituje, można usunąć". ⚠ Powód, dla którego szyna fabryk jest
+niemal martwa, jest już w audycie: **19 z 21 mutacji fabryk gracza idzie bezpośrednio
+z `EconomyOverlay` na `col.factorySystem`**, z pominięciem szyny.
+
+⚠ **PUŁAPKA, KTÓRA KOSZTOWAŁABY CICHĄ DZIURĘ:** termin własności **NIE MOŻE** korzystać
+z `FactorySystem._getOwnerColony()` (`:1411`). Ta metoda ma fast-path
+`if (window.KOSMOS.factorySystem === this) return colony(activePlanetId)` — odpowiada więc na
+pytanie *„która kolonia jest AKTYWNA"*, a nie *„która mnie POSIADA"*. Wewnątrz bramki intencji te
+dwa pytania rozjeżdżają się dokładnie w scenariuszu, który bramka ma łapać. Dlatego
+`findOwningColony(system, key)` szuka po **tożsamości referencji**.
+
+⚠ **Kanon powstał TU, nie w OG-5.** `src/utils/ColonyOwnership.js` (zero importów ⇒ zero cykli;
+`ColonyManager` konstruuje `BuildingSystem`, więc import w drugą stronę byłby cyklem).
+`ColonyManager.isPlayerColony` **deleguje** — dwóch definicji nie ma ani przez chwilę. **OG-5
+kontynuuje stąd**: wejście po `id`, rodzina nazw, migracja sześciu nazwanych kopii.
 
 ✅ **Przeciek `civ:unrest` — ROZSTRZYGNIĘTY PRZY PODPISIE: FILE, nie naprawa.** I to wynika z samego
 podpisu, nie z osobnej decyzji: `BuildingSystem:121` należy do **ósemki bramek systemowych**, których
@@ -501,7 +549,9 @@ inwentarza zamiast go oblać — na tej osi zerowanie jest **słabsze** niż prz
 **Rekomendacja formalna: W1** — najtańszy wariant, który nie tworzy exploita.
 
 ✅ **PODPISANA 2026-08-22: W1** — wskaźnik zostaje na ostatniej koloni gracza; **`TechSystem` POZA
-slice'em, zapisany jako uśpiony.**
+slice'em, zapisany jako uśpiony.** **PINOWANA w OG-3 bez własnego commitu** (keeper G5: po odmowie
+`MissionSystem.resourceSystem` i `TechSystem.resourceSystem` nadal wskazują magazyn koloni GRACZA,
+nie AI i nie `null`).
 
 ⚠ **SPROSTOWANIE 2026-08-22 — miękkich spendów jest CZTERY, nie pięć.** `_launchFoundOutpost`
 (`:744-745` wg audytu) zostało utwardzone przez **D-111** (Finding 111, `a180619`) i dziś czyta
@@ -649,6 +699,13 @@ miejsce w grze stawiające ten stempel. Rozjazd tych dwóch = bramka odmawiając
 (`ColonyOverlay:919`). Właściciel uznał to za akceptowalne (gracz wie, że stracił kolonię).
 Komunikat należałby do **D4/OG-4**, nie tutaj.
 
+⚠ **OBSERWACJA Z RE-TESTU (c), NIEZBADANA, przyjęta przez właściciela:** odmowa OG-1b była
+**cicha**, choć handler `ColonyOverlay:179` routuje `e.reason` do flasha
+(`else if (!e.success && e.reason) this._showFlash(e.reason)`), a odmowa ten `reason` niesie
+(pinowane keeperem T16). Rozjazd **nie został zdiagnozowany** — właściciel jawnie nie wymaga
+komunikatu, więc nie ruszamy. Gdyby kiedyś wróciło jako pytanie „czy klucz `ui.tileEnemyControlled`
+jest martwy": **nie jest**, jedzie w zdarzeniu; nieustalone jest, czemu nie widać go na ekranie.
+
 ---
 
 ### D6 — Predykat: jedno źródło prawdy vs ujednolicenie stopniowe (Finding 74) ✅ **PODPISANA: W2**
@@ -709,7 +766,7 @@ cudzy kafel + MÓJ portfel) · **keeper przed każdą zmianą zachowania**.
 | **OG-1** ✅ `f63ef74` | `fix(game): budowa i rozbiórka tylko na własnym kaflu` | **D5=W1**, fail-open przy `_grid == null`. Keeper 31/31, sweep 161/161 | **D5** | **GATE OG-1** (a/b/d PASS, c → OG-1b) |
 | **OG-1b** | `fix(game): rozbiórka nie na kaflu przejętym przez obcego` | **D5 rozszerzone** — `_demolish` odmawia, gdy `tile.owner` wskazuje innego, niepustego właściciela; budowa/ulepszenie bez zmian; fail-open przy `owner == null`; osobny powód `ui.tileEnemyControlled` | **D5/OG-1b** | re-test punktu (c) |
 | **OG-2** ✅ `0085a37` | `fix(save): wczytanie nie oddaje gracza koloni wroga` | **P0-A + P0-C + P0-D** jako JEDNA zmiana (wszystkie w `ColonyManager.js` + `GameScene.js`); drabina własności; `_detachActiveColony` w gałęzi terminalnej | **P0-A,C,D** | **GATE P0** |
-| **OG-3** | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` + **dwie** jawne furtki (`GameCore`, `CombatSandbox`) + dziewiątka bramek jako obrona w głąb. **Tu też pinujemy D3=W1** (wskaźnik nie trafia na obcą) | D1, D2, D3 | — |
+| **OG-3** ✅ | `fix(game): rozkaz gracza tylko na koloni gracza` | **D1=W2 + D2=W3+W1** — odmowa w `switchActiveColony` (⚠ **ZERO furtek** — zmierzone) + NEW `src/utils/ColonyOwnership.js` + dziewiątka bramek jako obrona w głąb + pin **D3=W1**. Szew **S4 ODWRÓCONY** w `colony_ownership_seams`. Keeper 30/30, sweep 162/162 | D1, D2, D3 | **GATE OG-3** |
 | **OG-3b** | `fix(fleet): utrzymanie floty płaci tylko kolonia gracza` | **Finding 97** — `_resolvePayHomeId` dostaje termin własności obok filtru `!isOutpost`, a fallback `window.KOSMOS.homePlanet` **przechodzi ten sam test** (po przejęciu nazywa zdobycz wroga). ⚠ Dowodem jest **pomiar kredytów w czasie**, nie kliknięcie | 97 | — |
 | **OG-4** | `fix(ui): panel kolonii nie wydaje rozkazów na cudzej koloni` | **D4** — dwie bramki producenckie + inwariant `_onHit` + allowlist + i18n | D4 | GATE 2 |
 | **OG-5** | `refactor: jedno źródło prawdy o własności kolonii` | **D6=W2** — `src/utils/`, dwa wejścia, rodzina nazw, 6 kopii | D6 | — |
@@ -755,7 +812,8 @@ GATE 2 AI_CAPTURE jest otwarty, więc baza może się jeszcze ruszyć).
 | `colony_ownership_seams_smoke` | OG-0 | cztery szwy dzisiejsze (a-d) + kontrole pinów; **trzy z nich MAJĄ paść** i zostać świadomie odwrócone w OG-1/OG-2/OG-3 |
 | `colony_tile_membership_smoke` | OG-1 + OG-1b | **T1-T11 (przynależność):** budowa/ulepszenie/rozbiórka na kaflu spoza siatki **odrzucona**; kontrole pinu na własnym kaflu; **tożsamość, nie `q`/`r`** (kafel-widmo o tych samych współrzędnych odrzucony); fail-open przy `_grid == null` i przy siatce bez `get`; regresja AI (`forEach` == `get`); powód przez i18n. **T12-T16 (kontrola):** rozbiórka na kaflu obcego odrzucona **i bez zwrotu 50%**; faza `occupyEmpireId` przy własnym `owner` przechodzi; `owner == null` przechodzi; **budowa/ulepszenie na kaflu obcego NADAL przechodzą (pin decyzji)**; osobny powód i18n |
 | `colony_ownership_load_smoke` | OG-2 | round-trip przez **produkcyjny** `SaveSystem._serializeCiv4x`: przejęta stolica → zapis → wczytanie ⇒ `_activePlanetId` **nie** wskazuje koloni wroga; wariant „gracz bez domu" ⇒ **detach**, nie stan sprzed; `removeColony` po przejęciu **nie** przepina na ex-dom |
-| `colony_ownership_guard_smoke` | OG-3 | `switchActiveColony` odmawia na koloni AI; **dwie** jawne furtki działają; `GameCore`/`CombatSandbox` startują; ⚠ pin **D3=W1**: po odmowie `MissionSystem.resourceSystem` **nadal wskazuje kolonię gracza**; ⚠ pin scenariuszowy: `GameScene:3444/3476/3501` wiążą własną planetę i **przechodzą bez furtki** |
+| `colony_ownership_guard_smoke` | OG-3 | **30 asercji, G1-G12.** Odmowa na koloni AI (zwrotka + żaden z pięciu wskaźników nie drga) · kontrole pinu (własna kolonia, nieistniejąca kolonia) · **G4 ZERO FURTEK**: empirycznie (`GameCore.boot()` wiąże bez obejścia) **i** źródłowo (`stripComments` + brak `allowForeign\|bypass\|unchecked\|force`, z kontrolą pinu na `isPlayerColony`) · **G5 pin D3=W1** · **G6-G8** dziewiątka bramek: odmowa na systemie AI, przejście na graczu, **fail-open dla gołego systemu bez koloni** · **G9 regresja AI** (`_build` bezpośrednio, z pominięciem szyny) · **G10/G11** to samo dla `FactorySystem` i `CivilizationSystem` · **G12 pin „NIE DOTYKAMY"**: bramka SYSTEMOWA (`civ:unrest`) dalej działa na koloni AI |
+| `colony_ownership_seams_smoke` | OG-3 (aktualizacja) | **S4 ODWRÓCONY** — ostatni z czterech szwów; nagłówkowa tabela kontraktu przepisana, test **nie skasowany** |
 | `fleet_upkeep_payer_smoke` | OG-3b | płatnikiem utrzymania **nigdy** kolonia z `ownerEmpireId`; fallback `homePlanet` wskazujący **zdobycz wroga** nie płaci; kontrola pinu: własna kolonia gracza płaci jak dotąd |
 | `colony_overlay_ownership_pin` | OG-4 | ⚠ **pin ŹRÓDŁOWY** (`ColonyOverlay` nie importuje się pod node): dwie bramki producenckie obecne, `_onHit` ma inwariant, allowlist zawiera `close` + 12 etykiet jednostkowych |
 
@@ -798,6 +856,19 @@ budynków) — bramka nie zatrzymała `ColonyAutoExpander`.
 ⬜ **Do domknięcia: re-test punktu (c)** po OG-1b — Delete na kaflu zajętym przez wroga ma odmówić
 komunikatem „Pole pod kontrolą wroga", a na kaflu jeszcze nieprzerzuconym (trwa odliczanie) **ma
 dalej działać**.
+
+**GATE OG-3 (po OG-3) — „gracz nie wiąże się z kolonią wroga".** ⬜ DO PRZEPROWADZENIA.
+1. **Klik na kolonię AI** (Outliner / górny pasek zasobów / lista w `CivilizationOverlay` /
+   `BottomContext` / wpis w Dzienniku) ⇒ HUD **NIE** przecelowuje się na jej magazyn; panele
+   dalej opisują kolonię GRACZA. ⚠ Odmowa jest **cicha** (komunikat = D4/OG-4).
+2. **Podgląd obcej planety w trakcie desantu dalej działa** — `show({colonyId})` nie idzie przez
+   `switchActiveColony`; lądowanie, ostrzał orbitalny i grupa badawcza bez zmian.
+3. **Skok warp do układu, w którym gracz nie ma koloni** (`GameScene:3302` bierze `cols[0]`
+   filtrowane tylko po `systemId`) ⇒ wskaźniki **zostają** przy poprzedniej koloni gracza, nie
+   lądują na koloni AI tego układu.
+4. **Własne przełączanie między koloniami gracza działa jak dotąd** (kontrola pinu).
+5. **AI się rozbudowuje** — kolonie AI dalej stawiają budynki (szyna ich nie dotyczy; `_build`
+   wołane bezpośrednio).
 
 **GATE 2 (po OG-4) — „rozkaz nie przechodzi".** Klik kafla na koloni wroga: **budowa odmawia**, komunikat
 jest **przetłumaczony**, zaprojektowany desant/ostrzał **dalej działa**, panel **da się zamknąć**.

@@ -17,6 +17,7 @@
 import EventBus from '../core/EventBus.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BASE_DEMAND } from '../data/ConsumerGoodsData.js';
+import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
 
 // ── Predefiniowane szablony priorytetów ──────────────────────────────────────
 export const PRIORITY_TEMPLATES = {
@@ -180,11 +181,13 @@ export class FactorySystem {
 
     EventBus.on('factory:enqueue', ({ commodityId, qty }) => {
       if (window.KOSMOS?.factorySystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this.enqueue(commodityId, qty);
     });
 
     EventBus.on('factory:dequeue', ({ index }) => {
       if (window.KOSMOS?.factorySystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this.dequeue(index);
     });
 
@@ -196,6 +199,7 @@ export class FactorySystem {
 
     EventBus.on('factory:setMode', ({ mode }) => {
       if (window.KOSMOS?.factorySystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this.setMode(mode);
     });
 
@@ -242,12 +246,14 @@ export class FactorySystem {
 
     EventBus.on('factory:setExportEnabled', ({ enabled }) => {
       if (window.KOSMOS?.factorySystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this._exportPrefs.enabled = !!enabled;
       this._emitStatus();
     });
 
     EventBus.on('factory:setExportTier', ({ tier, enabled }) => {
       if (window.KOSMOS?.factorySystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'factorySystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       if (tier < 1 || tier > 4) return;
       this._exportPrefs.tiers[tier] = !!enabled;
       this._emitStatus();

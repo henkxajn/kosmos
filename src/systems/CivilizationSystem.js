@@ -61,6 +61,7 @@ export const POP_PER_BUILDING = 0.25;  // domyślny koszt POP na budynek
 
 // Konsumpcja per POP per rok gry (nowy system: food/water/energy)
 import { POP_CONSUMPTION } from '../data/ResourcesData.js';
+import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
 // POP_CONSUMPTION = { food: 2.5, water: 1.5, energy: 1.0 }
 
 // Wzrost populacji
@@ -234,6 +235,7 @@ export class CivilizationSystem {
     // Rozwiazanie ruchu spolecznego (z UI — EventChoiceModal)
     EventBus.on('civ:resolveMovement', ({ movementType, resolutionId }) => {
       if (window.KOSMOS?.civSystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'civSystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this.resolveMovement(movementType, resolutionId);
     });
   }

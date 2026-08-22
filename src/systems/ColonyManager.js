@@ -42,6 +42,7 @@ import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkA
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { EmpireColonyBootstrap } from './EmpireColonyBootstrap.js';   // W3-1 — reuse resolvera tech imperium
 import { canReverseFate, describeNoReversal } from '../utils/PlayerViability.js';   // D9=W3 (AC-8)
 import { t } from '../i18n/i18n.js';
@@ -231,10 +232,13 @@ export class ColonyManager {
     return [...this._colonies.values()];
   }
 
-  // Czy kolonia należy do gracza. Kolonie AI mają ownerEmpireId = identyfikator imperium;
-  // kolonie gracza mają null/undefined (lub jawnie 'player').
+  // Czy kolonia należy do gracza.
+  // ⚠ OG-3: definicja przeniesiona do `src/utils/ColonyOwnership.js` (D6=W2 — kanon nie może
+  //   mieszkać w systemie; dwie kopie w repo powstały cytując tę regułę w źródle). Ta metoda
+  //   ZOSTAJE jako kanoniczne wejście dla ~40 istniejących konsumentów i DELEGUJE — dwóch
+  //   definicji nie ma ani przez chwilę.
   static isPlayerColony(c) {
-    return !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player');
+    return isPlayerColony(c);
   }
 
   // Kolonie GRACZA (bez kolonii imperiów AI) — jedyne źródło dla paneli/list widocznych
@@ -262,10 +266,31 @@ export class ColonyManager {
   }
 
   // Przełącz aktywną kolonię — swap systemów w window.KOSMOS
-  // Zwraca true jeśli przełączono, false jeśli kolonia nie istnieje
+  // Zwraca true jeśli przełączono, false jeśli kolonia nie istnieje ALBO nie należy do gracza.
   switchActiveColony(planetId) {
     const colony = this.getColony(planetId);
     if (!colony) return false;
+
+    // ── D1=W2 (OG-3) — BRAMKA WŁASNOŚCI ──────────────────────────────────────────────────
+    // ⚠ PO CO: gra miała bramkę „KTÓRA kolonia" (istnienie, wiersz wyżej) i nie miała bramki
+    //   „CZYJA". Skutkiem nie było „gracz kradnie sobie gospodarkę", tylko ODWROTNOŚĆ:
+    //   `_activateBuilding` rejestruje producenta na WŁASNEJ instancji koloni, więc kopalnia
+    //   postawiona na związanej koloni wroga była płacona z magazynu WROGA i produkowała do
+    //   magazynu WROGA — a `switchActiveColony` przecelowywał tylko HUD.
+    // ⚠ WIĄZANIE NIE JEST PASYWNE — dlatego bramka stoi TU, a nie tylko na akcjach:
+    //   `ProsperitySystem:150` rejestruje konsumpcję w związanej koloni, a
+    //   `CivilizationSystem._updateUnrest` czyta prosperity przez locator i nie trzyma
+    //   referencji per-kolonia ⇒ niepokój liczy się z tego, co akurat związane.
+    // ⚠ PODGLĄD OBCEJ PLANETY ZOSTAJE NIETKNIĘTY — idzie przez `ColonyOverlay.show({colonyId})`,
+    //   które NIE woła tej metody (desant, ostrzał orbitalny, grupa badawcza). Celem D1 jest
+    //   DZIAŁANIE, nie PATRZENIE.
+    // ⚠ ZERO FURTEK — ZMIERZONE, NIE ZAŁOŻONE. Plan przewidywał dwie jawne furtki dla
+    //   `GameCore:310` i `CombatSandbox:228`; pomiar pokazał, że OBA wiążą planetę MACIERZYSTĄ
+    //   GRACZA, więc przechodzą samym terminem. Niepotrzebna furtka to mina dla następnego
+    //   (lekcja `removeColony:667`) — nie dodajemy jej „na wszelki wypadek".
+    // ⚠ ODMOWA JEST CICHA. Komunikat dla gracza należy do D4/OG-4 (prawdomówność UI), nie tutaj.
+    if (!ColonyManager.isPlayerColony(colony)) return false;
+
     this._activePlanetId = planetId;
     // ⚠ BEZWARUNKOWO — wszystkie systemy window.KOSMOS MUSZĄ opisywać JEDNĄ (aktywną) kolonię.
     // Wcześniej `if (colony.X)` zostawiał stary system poprzedniej kolonii, gdy nowa go nie miała →

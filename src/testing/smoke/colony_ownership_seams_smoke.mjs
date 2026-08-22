@@ -13,14 +13,16 @@
 //   | S1   | `transferColony` NIE czyścił `isHomePlanet`           | P0-C=W2         | flaga była tokenem, z którego `restore` uzbrajał aktywną kolonię na ciele wroga |
 //   | S2   | `removeColony` przepinał na ex-dom wroga (`_colonies.has`) | P0-D=W1     | bliźniak fallbacku AC-8; test przynależności zamiast własności |
 //   | S3   | `restore` uzbrajał `_activePlanetId` z samej flagi     | P0-A=W1         | wybór przeniesiony za relink, gdzie własność w ogóle istnieje |
-//   | S4   | `switchActiveColony` przyjmuje kolonię AI             | — **ŻYJE**      | ścieżka KLIKANA należy do D1 (osobny podpis) |
+//   | S4   | `switchActiveColony` przyjmuje kolonię AI             | D1=W2 (OG-3)    | wiązanie NIE jest pasywne — `ProsperitySystem:150` rejestruje konsumpcję w związanej koloni, a `_activateBuilding` rejestruje producenta na WŁASNEJ instancji, więc gracz związany z kolonią wroga KARMIŁ gospodarkę wroga |
 //
 // ⚠ PEŁNY dowód odwrócenia (kontrole pinu, round-trip przez produkcyjny zapis, pin źródłowy na
 //   `GameScene`) mieszka w `colony_ownership_load_smoke.mjs`. Tutaj zostają jednolinijkowe
 //   potwierdzenia, żeby oba keepery nie mierzyły tego samego dwa razy.
 //
-//   S4 jest jedynym pinem tego pliku, który NADAL opisuje wadę — i jest zarazem KONTROLĄ, że P0
-//   nie tknął przypadkiem ścieżki żywej. Gdy D1 wejdzie, S4 ma paść i zostać przepisany tak jak S1-S3.
+//   ⚠ WSZYSTKIE CZTERY SZWY SĄ JUŻ ODWRÓCONE. S4 padł w OG-3 dokładnie tak, jak zapowiadał
+//   poprzedni nagłówek („gdy D1 wejdzie, ten pin ma paść") — i został przepisany, nie skasowany.
+//   Pełna bramka własności (odmowa + dziewiątka bramek intencji + fail-open + regresja AI) mieszka
+//   w `colony_ownership_guard_smoke.mjs`; tutaj zostaje jednolinijkowe potwierdzenie odwrócenia.
 //
 // Uruchom: node src/testing/smoke/colony_ownership_seams_smoke.mjs
 
@@ -100,19 +102,19 @@ console.log('S3 (ODWRÓCONY, P0-A) — wczytanie nie odtwarza awarii samo z sieb
     'S3 ODWRÓCONY: po wczytaniu aktywna kolonia to NIE ex-dom wroga (§6 audytu zamknięte)');
 }
 
-// ── S4 — ŻYWY SZEW: `switchActiveColony` przyjmuje kolonię AI (należy do D1) ────────────────
-console.log('S4 (ŻYWY — D1) — `switchActiveColony` nadal przyjmuje kolonię AI');
+// ── S4 (ODWRÓCONY przez D1=W2 / OG-3) ──────────────────────────────────────────────────────
+console.log('S4 (ODWRÓCONY, D1=W2) — `switchActiveColony` odmawia na koloni AI');
 {
   const { cm } = boot();
   const ai = cm.getAllColonies().find(c => !ColonyManager.isPlayerColony(c));
   assert(ai != null, 'S4 przesłanka: scenariusz ma kolonię AI w tym samym rejestrze');
+  const resBefore = window.KOSMOS.resourceSystem;
 
   const ok = cm.switchActiveColony(ai.planetId);
-  assert(ok === true && cm.activePlanetId === ai.planetId,
-    'S4 SZEW: przełączenie na kolonię AI ZWRACA `true` — bramka istnienia, nie własności. ' +
-    '⚠ To jest ścieżka KLIKANA i należy do D1 (niepodpisane). Gdy D1 wejdzie, ten pin ma paść');
-  assert(window.KOSMOS.resourceSystem === ai.resourceSystem,
-    'S4 SZEW 2: wskaźniki `window.KOSMOS` celują w magazyn AI');
+  assert(ok === false && cm.activePlanetId !== ai.planetId,
+    'S4 ODWRÓCONY: bramka pyta już o WŁASNOŚĆ, nie tylko o istnienie');
+  assert(window.KOSMOS.resourceSystem === resBefore && window.KOSMOS.resourceSystem !== ai.resourceSystem,
+    'S4 ODWRÓCONY 2: wskaźniki zostają przy koloni GRACZA — koniec karmienia gospodarki wroga');
 }
 {
   // KONTROLA PINU — nieistniejąca kolonia jest odrzucana (bramka istnienia DZIAŁA).

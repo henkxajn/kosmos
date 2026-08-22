@@ -32,6 +32,7 @@ import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
 import { t, getName }      from '../i18n/i18n.js';
 import { envMultiplier, computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
+import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
 import { BASE_MINE_RATE }  from '../data/ResourcesData.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
@@ -98,16 +99,19 @@ export class BuildingSystem {
     // Guard: tylko aktywna kolonia przetwarza żądania budowy/rozbiórki
     EventBus.on('planet:buildRequest', ({ tile, buildingId }) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'buildingSystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this._build(tile, buildingId);
     });
 
     EventBus.on('planet:demolishRequest', ({ tile }) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'buildingSystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this._demolish(tile);
     });
 
     EventBus.on('planet:upgradeRequest', ({ tile }) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
+      if (!systemBelongsToPlayer(this, 'buildingSystem')) return;   // D2=W1 (OG-3) — obrona w głąb
       this._upgrade(tile);
     });
 
