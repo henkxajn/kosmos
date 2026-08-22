@@ -82,6 +82,18 @@ function _gameYear() {
   return window.KOSMOS?.game?.yearLabel ?? '';
 }
 
+// ── Wideo popupów kolonizacyjnych ────────────────────────────────────────
+// Raport misji dobiera klip ze `svgKey:'report'` → `science.mp4` (`ScheduledEventPopup.js:18`),
+// co dla ZAŁOŻENIA placówki brzmiało jak „badania zakończone". Misje kolonizacyjne dostają klip
+// założenia kolonii. Ostatnie ogniwa = zachowanie zapasowe: `_loadVideo` sprawdza każdy src
+// zapytaniem HEAD (`ScheduledEventPopup.js:378`), więc brak pliku cicho schodzi niżej.
+const COLONY_VIDEO_SRC = [
+  'assets/event-videos/colony_founded.mp4',
+  'assets/event-videos/colony.mp4',
+  'assets/event-videos/default.mp4',
+];
+const COLONY_MISSION_TYPES = new Set(['colony', 'found_outpost']);
+
 // ── Budowa HTML statystyk ciała (reużywalna) ────────────────────────────
 
 function _buildBodyStats(body) {
@@ -332,9 +344,7 @@ function _onColonyFounded({ expedition: exp, planetId, startResources, startPop,
     // ⚠ WIDEO WPROST. `colony.mp4` to klip ŻYCIA kolonii (zdarzenia bieżące), a ZAŁOŻENIE ma
     //   inny rejestr emocjonalny — bez `videoSrc` wybór idzie z `svgKey` przez `SVG_TO_VIDEO`
     //   (`ScheduledEventPopup.js:443-446`, 'colony' → 'colony'), więc oba momenty grały to samo.
-    //   Ogniwo zapasowe = DAWNE zachowanie: `_loadVideo` sprawdza każdy src zapytaniem HEAD, więc
-    //   dopóki `colony_founded.mp4` nie leży w repo, popup gra `colony.mp4` dokładnie jak dotąd.
-    videoSrc: ['assets/event-videos/colony_founded.mp4', 'assets/event-videos/colony.mp4', 'assets/event-videos/default.mp4'],
+    videoSrc: COLONY_VIDEO_SRC,
     svgLabel: t('missionPopup.colonyFoundedLabel').replace(/\n/g, '<br>'),
     prompt: '> COLONY_INIT.EXE_',
     headline: t('missionPopup.newColony', planetName.toUpperCase()).replace(/\n/g, '<br>'),
@@ -382,6 +392,9 @@ function _onMissionReport({ expedition: exp, gained, multiplier }) {
     barTitle: t('missionPopup.reportBar'),
     barRight: _gameYear(),
     svgKey: icon,
+    // Misja kolonizacyjna → klip kolonii zamiast `science.mp4`. Falsy = auto-wybór z svgKey
+    // (`ScheduledEventPopup.js:444`), więc pozostałe raporty zachowują się bit w bit jak dotąd.
+    videoSrc: COLONY_MISSION_TYPES.has(exp.type) ? COLONY_VIDEO_SRC : undefined,
     svgLabel: (exp.type === 'mining' ? t('missionPopup.miningComplete') : t('missionPopup.researchComplete')).replace(/\n/g, '<br>'),
     prompt: `> ${t('missionPopup.reportPrompt')}`,
     headline: t('missionPopup.reportHeadline', _missionTypeLabel(exp.type).toUpperCase()).replace(/\n/g, '<br>'),
