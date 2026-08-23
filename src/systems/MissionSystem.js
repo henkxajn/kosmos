@@ -275,21 +275,24 @@ export class MissionSystem {
   // Szacowany czas misji rozpoznawczej
   getReconTime(scope, vesselId) {
     const speed = this._getShipSpeed(vesselId);
+    // VO-1 — szacunek liczony od statku (spójnie ze startem). ⚠ Metoda nie ma dziś ANI JEDNEGO
+    //   wołającego w repo; poprawiona dla spójności rodziny, dowodem może być tylko keeper.
+    const origin = this._getVesselOrigin(vesselId);
     if (scope === 'nearest') {
       const nearest = this._findNearestUnexplored();
-      const dist = nearest ? this._calcDistance(nearest) : 2.0;
+      const dist = nearest ? this._calcDistance(nearest, origin) : 2.0;
       return parseFloat(Math.max(0.05, dist / speed).toFixed(3));
     }
     if (scope === 'full_system') {
       const nearest = this._findNearestUnexplored();
-      const dist = nearest ? this._calcDistance(nearest) : 2.0;
+      const dist = nearest ? this._calcDistance(nearest, origin) : 2.0;
       const unexploredTotal = this.getUnexploredCount().total;
       return parseFloat(Math.max(0.1, (dist / speed) * Math.max(1, unexploredTotal * 0.7)).toFixed(1));
     }
     // Konkretne ciało — dystans × 2 (tam i z powrotem)
     const target = this._findTarget(scope);
     if (target) {
-      const dist = this._calcDistance(target);
+      const dist = this._calcDistance(target, origin);
       return parseFloat(Math.max(0.05, (dist / speed) * 2).toFixed(3));
     }
     return 1.0;
@@ -518,7 +521,8 @@ export class MissionSystem {
       return;
     }
 
-    const distance = this._calcDistance(target);
+    // VO-1 — dystans od STATKU (fallback: dom, gdy misja bez statku).
+    const distance = this._calcDistance(target, this._getVesselOrigin(vesselId));
 
     const vMgr  = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
@@ -611,7 +615,8 @@ export class MissionSystem {
     }
 
     const target = this._findTarget(targetId);
-    const distance = this._calcDistance(target);
+    // VO-1 — dystans od STATKU (fallback: dom, gdy misja bez statku).
+    const distance = this._calcDistance(target, this._getVesselOrigin(vesselId));
 
     const vMgr  = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
@@ -726,7 +731,8 @@ export class MissionSystem {
       return;
     }
 
-    const distance = this._calcDistance(target);
+    // VO-1 — dystans od STATKU (tu `vessel` jest już pobrany i zwalidowany wyżej).
+    const distance = this._calcDistance(target, this._getVesselOrigin(vessel.id));
 
     // Sprawdź paliwo — Etap 4: ×dopłata za studnię grawitacyjną ciała-źródła (stacja/przestrzeń → ×1.0).
     // fuelNeeded płynie do dispatchOnMission niżej (fuelCost: fuelNeeded) — jedno źródło prawdy.
@@ -1117,11 +1123,27 @@ export class MissionSystem {
       exp.returnYear = returnYear;
     } else {
       // Z orbity
-      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, exp.distance / shipSpeed).toFixed(3));
+      // ⚠ VO-1 — do tego commitu stało tu `exp.distance / shipSpeed`, i to było poprawne WYŁĄCZNIE
+      //   PRZYPADKIEM: `exp.distance` znaczyło wtedy dom→cel, więc opisywało też drogę powrotną.
+      //   Po odkotwiczeniu dystansu (P0) znaczy statek→cel — krótki odcinek — więc powrót
+      //   z wysuniętej bazy dostałby kalendarz z ZUPEŁNIE innego odcinka. To defekt, który VO-1
+      //   SAM BY STWORZYŁ, więc zamyka go w tym samym commicie.
+      //   Wzorzec nie jest wynalazkiem: gałąź `en_route` tej samej metody liczy tak od dawna.
+      //   ⚠ Paliwo i bramka strandingu były i zostają NIEZALEŻNE — `VesselManager.startReturn`
+      //   liczy własną trasę (`_calcRoute`) od bieżącej pozycji.
+      const vessel = (vMgr && exp.vesselId) ? vMgr.getVessel(exp.vesselId) : null;
+      const homeEntity = vessel ? EntityManager.get(vessel.colonyId) : null;
+      let returnDist = exp.distance;
+      if (vessel && homeEntity) {
+        returnDist = DistanceUtils.euclideanAU(
+          { x: vessel.position.x, y: vessel.position.y },
+          homeEntity
+        );
+      }
+      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, returnDist / shipSpeed).toFixed(3));
       const returnYear = this._gameYear + returnTime;
       let ok = true;
       if (vMgr && exp.vesselId) {
-        const vessel = vMgr.getVessel(exp.vesselId);
         if (vessel?.mission) vessel.mission.returnYear = returnYear;
         ok = vMgr.startReturn(exp.vesselId);   // (d) może odrzucić → statek zostaje
       }
@@ -1146,9 +1168,11 @@ export class MissionSystem {
     }
 
     const currentBody = this._findTarget(exp.targetId);
+    // ⚠ Pierwsza gałąź była poprawna od dawna (liczy od ciała, które statek orbituje). VO-1 rusza
+    //   TYLKO fallback — dotąd spadał on na `homePlanet`, choć statek jest na orbicie gdzie indziej.
     const dist = currentBody
       ? DistanceUtils.euclideanAU(currentBody, target)
-      : this._calcDistance(target);
+      : this._calcDistance(target, this._getVesselOrigin(exp.vesselId));
 
     const vMgr = window.KOSMOS?.vesselManager;
     if (exp.vesselId && vMgr) {
@@ -1261,7 +1285,9 @@ export class MissionSystem {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noUnexplored') });
         return;
       }
-      const distance = this._calcDistance(firstTarget);
+      // VO-1 — dystans od STATKU. ⚠ WYBÓR celu (`_findNearestUnexplored` wyżej) zostaje
+      //   zakotwiczony w domu — świadomie poza zakresem VO-1 (zmieniałby zachowanie, nie liczbę).
+      const distance = this._calcDistance(firstTarget, this._getVesselOrigin(vesselId));
       const shipSpeed = this._getShipSpeed(vesselId);
       const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
 
@@ -1306,7 +1332,8 @@ export class MissionSystem {
 
     // scope === 'nearest'
     const nearest = this._findNearestUnexplored(null);
-    const distance = nearest ? this._calcDistance(nearest) : 0.1;
+    // VO-1 — jw.: cena od statku, WYBÓR celu nadal od domu.
+    const distance = nearest ? this._calcDistance(nearest, this._getVesselOrigin(vesselId)) : 0.1;
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
 
@@ -1360,7 +1387,8 @@ export class MissionSystem {
       return;
     }
 
-    const distance = this._calcDistance(target);
+    // VO-1 — dystans od STATKU (fallback: dom, gdy misja bez statku).
+    const distance = this._calcDistance(target, this._getVesselOrigin(vesselId));
     const vMgr  = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
 
@@ -2683,11 +2711,52 @@ export class MissionSystem {
     return gained;
   }
 
-  _calcDistance(target) {
-    const home = window.KOSMOS?.homePlanet;
-    if (!home || !target) return 0.1;
-    const dist = DistanceUtils.euclideanAU(home, target);
+  /**
+   * Odległość do celu — VO-1 (ruch P0, Finding 122).
+   * @param {object} target — encja celu
+   * @param {object|null} from — punkt startu ({x,y} lub encja). BRAK ⇒ `homePlanet`.
+   *
+   * ⚠ Do VO-1 ta metoda liczyła ZAWSZE od `window.KOSMOS.homePlanet`, także dla statku stojącego
+   *   przy celu. ZMIERZONE: 2.581 AU wyceny dla realnego 0.001 AU, czyli 0.90 jednostki paliwa,
+   *   którego nikt nie potrzebował. Ta jedna liczba zasila CZTERECH konsumentów: bramkę paliwa,
+   *   `travelTime`, kalendarz `arrivalYear`/`returnYear` i `fuelCost` odejmowany w `dispatchOnMission`.
+   * ⚠ Brak `from` to NIE jest błąd — to ścieżki BEZ statku (envoy, sortowanie kandydatów recon),
+   *   które świadomie zostają zakotwiczone w domu. Zachowanie bit w bit jak przed VO-1.
+   */
+  _calcDistance(target, from = null) {
+    const source = from || window.KOSMOS?.homePlanet;
+    if (!source || !target) return 0.1;
+    const dist = DistanceUtils.euclideanAU(source, target);
     return Math.max(0.001, dist);
+  }
+
+  /**
+   * Skąd statek FIZYCZNIE startuje. KANON: `VesselManager.dispatchOnMission:407-412` — ta sama
+   * rozdzielczość liczy START TRASY, więc wycena misji i jej faktyczny lot przestają mieć dwa
+   * różne źródła prawdy.
+   *
+   * ⚠ Encja stacji ma STATYCZNE x/y (anchored GEO, `Station.orbital = null`) → origin bierzemy
+   *   z jej ciała macierzystego. Repo powtarza tę regułę w czterech miejscach
+   *   (`VesselManager:2213`, `dockAtStation:722`, `_findTarget:2753`, `StationSystem:525`).
+   *   ⚠ Martwy bliźniak `ExpeditionSystem._getVesselOrigin:1984` tego NIE robi — zwraca encję doku
+   *   wprost i przy stacji myli się o zmierzone 0.695 AU. Powstał 2026-03-27, encja `Station`
+   *   2026-06-04: jest STARSZY niż mechanika, o którą się rozbija. Nie kopiować go stamtąd.
+   * ⚠ Zwraca `null`, gdy statku nie ma — wołający MA wtedy spaść na `homePlanet`. NIE wolno
+   *   zwracać `{x:0,y:0}`: `DistanceUtils.euclideanAU` jest fail-open (`a?.x ?? 0`) i taki „origin"
+   *   wyceniłby misję po cichu od GWIAZDY.
+   */
+  _getVesselOrigin(vesselId) {
+    if (!vesselId) return null;
+    const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (!vessel?.position) return null;
+    let startEntity = vessel.position.dockedAt ? EntityManager.get(vessel.position.dockedAt) : null;
+    if (startEntity?.type === 'station') {
+      startEntity = EntityManager.get(startEntity.bodyId) ?? startEntity;
+    }
+    return {
+      x: startEntity?.x ?? vessel.position.x,
+      y: startEntity?.y ?? vessel.position.y,
+    };
   }
 
   _getShipSpeed(vesselId) {
