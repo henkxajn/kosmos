@@ -1,0 +1,761 @@
+# VESSEL_ORDERS — plan doc (✅ **PODPISANY 2026-08-23** — P0-P5, decyzje D-VO1…D-VO5)
+
+> # ✅ PODPIS KOMPLETNY — 2026-08-23
+> **D-VO1 = W1** (preempcja identyczna dla obu stron + jawna flaga `force`; `AutoRetreatSystem`
+> dostaje wymuszenie **w tym samym commicie VO-3**) ·
+> **D-VO1b = W1 ROZDZIELONE** (zerowanie `movementOrder` **przy preempcji** → VO-3; **przy domknięciu**
+> → **osobny VO-3b z własnym gate'em mierzącym tempo AI**) ·
+> **D-VO2 = W2** (`P0 → P2 → P1 → P3 → P5 → P4`) + **kill-switch = B**
+> (jedna flaga `FEATURES.unifiedVesselOrders`, obejmuje **P1 + P3**, default **ON**) ·
+> **D-VO3 = W2** (VO-6 semantyka → VO-7 izolowany prune wzorem `7201670`); cztery klauzule
+> obowiązkowe przyjęte, w tym **`abortForeignRecon` ZOSTAJE** (4 żywe call-site'y) ·
+> **D-VO4 = W1** (P5 bez `found_outpost` cross-system; **D9 rozstrzygane OSOBNO w VO-6**) + **obie
+> klauzule §3.4.3 podpisane** ·
+> **D-VO5 = zgoda z klasyfikacją 1/13** (do odwrócenia wyłącznie `moveto_no_return` T2).
+>
+> **Plan commitów VO-0…VO-8 zatwierdzony w całości**, z gate'ami A-E; **GATE B najważniejszy**.
+> **Zero migracji w VO-1…VO-5. Migracja pojawia się DOPIERO w VO-6** (§2.2, oznaczone przy commicie).
+> **Tryb pracy:** fail-first · sweep + `check-i18n` czyste przy każdym commicie · **live-gate robi
+> właściciel**, headless po stronie CC wszędzie, gdzie się da.
+>
+> ⚠ Poniższy tekst **zostaje w formie sprzed podpisu** (warianty i rekomendacje), bo to jest zapis
+> tego, **co** było wybierane i **dlaczego** — zgodnie z konwencją `COLONY_OWNERSHIP_GUARD_PLAN.md`.
+> **Zakres kodu w tym dokumencie: ŻADEN.**
+>
+> **Nowego audytu NIE robiono.** Podstawą jest `UNIFIED_VESSEL_ORDERS_AUDIT.md` (2026-08-20, 577 lin.,
+> Findings 115-129). Wykonano wyłącznie **pomiar uzupełniający pod warianty tych decyzji**
+> (2026-08-23, 8 agentów: 6 sond źródłowych + 2 przebiegi adwersarialne, plus dwie weryfikacje własne
+> prowadzącego) — bo audyt ma trzy dni, a w międzyczasie weszły **`cc20af5`** (Finding 125) i
+> **`a180619`** (Finding 111), które **unieważniły część jego twierdzeń**. Korekty: **§2**.
+>
+> ⚠ **Trzy rzeczy z pomiaru zmieniają TREŚĆ decyzji, nie tylko liczby** — czytać przed wariantami:
+> **(1)** retirement `foreign_*` to **926 linii, nie ~455**, i **wymaga migracji save** (§2.1, §2.2);
+> **(2)** `foreign_*` **NIE umiera** po P1-P3 — to samowystarczalna powierzchnia UI, omijająca
+> `FLEET_ACTIONS` w całości (§2.3); **(3)** najcięższe ryzyko całego zestawu **nie jest w P1, tylko
+> w P4**, i jest **binarne wobec D9** (§3.4).
+
+---
+
+**Arc:** WOJNA I POKÓJ 1.0 · **Workstream:** przekrojowy (flota — nie należy do AI_CAPTURE ani do W3)
+**Slice:** VESSEL_ORDERS · **Status:** ✅ **PODPISANY 2026-08-23** — wdrożenie od **VO-0**
+**Basis:** `docs/design/UNIFIED_VESSEL_ORDERS_AUDIT.md` (§0-§8, Findings 115-129) + pomiar uzupełniający
+2026-08-23 (ten dokument, §2 i §5)
+**Sąsiedzi (oba ZAMKNIĘTE, oba tylko współistnieją — §6):** `PLAYER_VIABILITY_PREDICATE_PLAN.md`
+(Finding 111, `a180619`) · `COLONY_OWNERSHIP_GUARD_PLAN.md` (P0 + D1-D6, `e964c6b`)
+**Save:** v101 · `CURRENT_VERSION = 101`, `MIN_SUPPORTED_VERSION = 4` (`SaveMigration.js:28-29`).
+⚠ **Ten plan NIE przesądza bumpu — to treść decyzji D-VO3** (audyt mówił „prawdopodobnie bez bumpu";
+pomiar mówi, że dla P4 **to nieprawda** — §2.2).
+**Baza keeperów:** **165 suit** (`src/testing/smoke/*.mjs` = 166 plików minus `run-all.mjs`); ostatni
+zmierzony sweep **165/165 0 FAIL**.
+**Konwencja językowa:** polski, jak `AI_CAPTURE_PLAN.md` / `W2_PLAN.md` / `COLONY_OWNERSHIP_GUARD_PLAN.md`.
+
+---
+
+## RESUME — czytaj to PIERWSZE
+
+**Jedno zdanie, z którego wynika cały ten plan:**
+
+> Gra ma **dwie niezależne prawdy o tym, gdzie jest statek** — `vessel.position` (fizyka) i rekord
+> ekspedycji w `MissionSystem` (kalendarz) — i **nic ich nie spina**; a menu akcji jest **zaszytym
+> automatem na `position.state`**, nie funkcją tego, co statek POTRAFI. Nie dokładamy mechaniki —
+> **spinamy dwie prawdy w jedną i zdejmujemy automat**.
+
+**Trzy z pięciu ruchów to USUNIĘCIE kodu.** Rdzeń logiki: ~150 linii netto w **czterech**
+chokepointach + prerekwizyt. Koszt nie leży w rdzeniu — leży w **58 bramkach do indywidualnego
+przesądzenia**, w **926 liniach `foreign_*`** i w **13 keeperach** (audyt mówił 12), z których
+**jeden trzeba świadomie odwrócić**.
+
+**Cel właściciela, dosłownie (audyt §4):** (a) nowy rozkaz zawsze przerywa i zastępuje stary
+natychmiast; (b) statek po przybyciu gdziekolwiek jest wolny; (c) kolonizacja jest akcją jak każda
+inna, dostępną zawsze, gdy warunki fizyczne są spełnione.
+
+---
+
+# §1 CHOKEPOINTY — 4 + 1, streszczenie
+
+Pełny wywód, dowody i pomiary: **audyt §4** (projekt) i **§5** (koszt). Tu wyłącznie tyle, ile trzeba,
+żeby czytać decyzje. **Numery linii — po odświeżeniu 2026-08-23** (audyt miał 21 z 30 przesuniętych, §2.4).
+
+### P0 — Odkotwiczenie dystansu (prerekwizyt)
+
+`MissionSystem._calcDistance` (`:2686-2689`) liczy odległość **od `window.KOSMOS.homePlanet`**, nie od
+statku. **ZMIERZONE (audyt T10):** dla statku stojącego **0,000 AU** od celu misja wycenia **1,813 AU** —
+i ta liczba idzie w `travelTime`, `fuelCost` oraz pre-check paliwa dla `colony`, `mining` i `recon`.
+Bez tego „kolonizuj skądkolwiek" (P3/P5) **kłamie o koszcie lotu**, a to jest właśnie przyczyna, dla
+której obcy układ w ogóle dostał drugi silnik misji. Wzór do skopiowania jest **w tym samym pliku**:
+`_launchTransport:849-856` już dziś liczy od `vessel.position`. ⇒ **Finding 122.**
+
+### P1 — Jeden szew preempcji (`_preempt`)
+
+`MovementOrderSystem.issueOrder` (`:181-246`) **nie woła `cancelOrder`, nie dotyka rekordu misji, nie
+czyści `pendingOrder`** — nadpisuje `vessel.movementOrder` i `vessel.mission` i tyle. Kanał, którym
+preempcja mogłaby biec (`vessel:orderIssued`), **nie ma ani jednego subskrybenta** (Finding 127).
+Jedna funkcja na wejściu każdego intentu robi cztery rzeczy: domyka rozkaz · kasuje
+`_suspendedMission` · **anuluje rekord ekspedycji** · czyści `pendingOrder`. Kasuje Findings
+115/116/118/119/126. ⚠ Wymaga jawnego wyjątku dla ścieżek SYSTEMOWYCH — **treść D-VO1**.
+
+### P2 — Przylot jest własnością STATKU, nie kalendarza
+
+`_checkArrivals` (`:1463`) bramkuje **wyłącznie zegarem**: `exp.status === 'en_route' && this._gameYear
+>= exp.arrivalYear`. Ani słowa o tym, gdzie jest statek. Jeden warunek („statek faktycznie u celu")
+kasuje **ducha misji** (115), **teleport** (116) i **kolonię 4,14 AU od statku, który nigdzie nie
+poleciał** (117). ⚠ **Druga połowa jest obowiązkowa w tym samym commicie:** dziś `_launch*` tworzy
+rekord i **ignoruje zwrotkę `dispatchOnMission`** (`:678` push przed `:682` dispatch) — po P2 taki
+rekord nigdy nie „przyleci", więc `_launch*` musi **odmówić głośno** i rekordu nie tworzyć.
+
+### P3 — Menu z MOŻLIWOŚCI, nie z kubełka
+
+`getAvailableActions` (`FleetActions.js:610`) to automat na trzech kubełkach `position.state`
+(`:614` docked / `:646` orbiting / `:680` in_transit). **ZMIERZONE (audyt T7b, prawdziwy lot):**
+`docked` 6 akcji · **`in_transit` 1** · `orbiting` 3. Zmiana: iteruj **wszystkie** akcje, pytaj
+`canExecute`, zwracaj **także zablokowane, z powodem** — wzór już jest w tym drzewie
+(`foreign_colonize` rysuje się wyszarzony). Karmi **trzy** UI naraz, więc to jeden chokepoint.
+⚠ Wtedy każda z **58 bramek** staje się jedynym miejscem decyzji i **każdą trzeba przesądzić z osobna**.
+
+### P4 — `foreign_*` przestają istnieć jako osobny byt
+
+Cztery przyciski panelu obcego (rekon ciała, rekon układu, kolonizuj, rozładuj) wchodzą do
+`FLEET_ACTIONS` jako **zwykłe akcje**; bramka `type==='exploration' && phase==='orbiting_body'`
+(`FMO:7449`) znika, a z nią pułapka z Findingu 121. ⚠ **Warunek konieczny:** dwie równoległe
+implementacje kolonizacji muszą się zejść do jednej — i **to jest najcięższa decyzja całego planu**
+(D-VO4/§3.4), bo `_startForeignColonize` **omija bramkę D9**.
+
+### P5 — `OrderService.issueColonize`
+
+`OrderService` ma `issueTransport / issuePassenger / issueMove / issueWarp / issueAttack / issueReturn`
+— i **nie ma kolonizacji ani skanu**. P5 to lustro `issueTransport`: ten sam układ → emit do
+`MissionSystem`; inny układ → composite. To dokładnie ta funkcja, której brakuje, żeby „wybór celu
+bezpośrednio LUB dolot i kolonizacja po przybyciu" był **jednym rozkazem**.
+⚠ **Pułapka wdrożeniowa zmierzona dziś:** `_maybeDeliver` rewaliduje cel jako **kolonię albo stację
+gracza** (`OrderService.js:270`), a cel kolonizacji jest z definicji ciałem **nieskolonizowanym** ⇒
+composite kolonizacji **bez własnej gałęzi** zawsze skończy się `target_lost`.
+
+---
+
+# §2 KOREKTY DO AUDYTU — zmierzone 2026-08-23, zmieniają decyzje
+
+> Audyt jest z 2026-08-20. Od tego czasu weszły `cc20af5` i `a180619`. Poniższe **nie są uzupełnieniem
+> — są sprostowaniem**, i każde ma wpływ na wariant, który właściciel wybierze.
+
+### 2.1 🔴 `foreign_*` to **926 linii**, nie ~455
+
+Audyt liczył **osobno** FMO (~455) i `VesselManager` (~350) i te liczby zlewały się w rozmowie do
+jednej. **ZMIERZONE dziś:**
+
+| miejsce | zakres | linie |
+|---|---|---|
+| `VesselManager` — **jeden ciągły blok** 6 metod | `:2848-3320` | **473** (ciała 444) |
+| `FMO` — panel obcego układu | `:7348-7689` | 342 |
+| `FMO` — handlery `case 'foreign_*'` | `:2305-2384` | 80 |
+| `FMO` — `_isForeignRedirectClickable` | `:9205-9223` | 19 |
+| `FMO` — gałąź klik-mapy | `:1994-2005` | 12 |
+| **razem** | | **~926** |
+
+⚠ Do tego **18 kluczy i18n w `pl.js` + 20 w `en.js`** osieroci się bezgłośnie — `check-i18n` pyta
+*„czy klucz użyty w `t()` istnieje w obu językach"*, a **nie** *„czy klucz jest jeszcze używany"*.
+⚠ **Struktura jest za to nietypowo czysta:** 5 z 6 metod jest osiągalnych **wyłącznie przez EventBus**,
+a **wszystkich 7 emitentów siedzi w JEDNYM pliku** (FMO). Jedyny wyciek to `abortForeignRecon` —
+**4 zewnętrzne call-site'y** (`FleetActions:379`, `OrderService:189`, `FMO:2372`, `FMO:2382`).
+
+### 2.2 🔴 P4 **WYMAGA migracji save** — audyt mówił „prawdopodobnie bez bumpu"
+
+Misja jest serializowana **hurtem, przez spread, bez białej listy pól**: `VesselManager.serialize:1318`
+(`missionData = { ...v.mission }`) i `restore:1479`. ⇒ stary zapis wraca **verbatim** z
+`type:'foreign_recon'` oraz polami wyłącznymi dla tej misji (`scope`, `targets[]`, `currentIdx`,
+`scanCompleteYear`) i **bez handlera zamraża statek na zawsze**.
+⚠ **Faza `orbiting_body` jest WSPÓŁDZIELONA** z misją `exploration` (rekon macierzysty) — nie wolno
+jej usuwać razem z `foreign_recon`.
+⚠ Typ `foreign_recon` jest zaszyty **poza** tymi dwoma plikami w **trzech** miejscach:
+`PlayerViability.js:68` (**predykat końca gry — zamknięty Finding 111**), `FleetPictureLogic.js:97`,
+`NavPeekProviders.js:47`.
+
+### 2.3 🔴 `foreign_*` **NIE staje się martwe** po P1-P3 — to odpowiedź na D-VO3
+
+Panel obcego układu jest **samowystarczalną powierzchnią UI**: bramkuje się **bezpośrednio** na
+`vessel.mission.type/phase` (`:7350`, `:7449`, `:7630`) i pcha **własne hit-zony**, **całkowicie omijając
+`FLEET_ACTIONS`/`getAvailableActions`**. `FleetActions.js` ma **dwie** wzmianki o `foreign` (`:377-378`,
+abort w `return_home`). ⇒ **P3 tych przycisków nie retire'uje.** Odroczenie P4 = **dwie żywe,
+równoległe implementacje kolonizacji obok siebie**.
+
+### 2.4 🟠 21 z 30 odnośników audytu **przesunięte** (żaden nie zniknął)
+
+Dryf: +9…+15 lin. w `VesselManager`, +12 w `MissionSystem`, **+42…+44 w `FleetManagerOverlay`**.
+Największy dryf to skutek `cc20af5`. Trafiają co do linii i są bezpieczne: `WarpRouteSystem.canOrder`
+(`:47-55`), `MOS._suspendMissionIfAny` (`:142/:147/:148/:149`), trzy subskrypcje `VesselManager`
+(`:126/:128/:135`), `FleetActions.survey.canExecute` (`:63`) i `getAvailableActions` (`:610`), trzy
+bramki `_launchColony` (`:601/:620/:648`).
+
+### 2.5 🟠 Dwa twierdzenia audytu są **NIEAKTUALNE** — nie cytować ich dalej
+
+- **„Przycisk powrotu kłamie o doku"** — **zniesione** przez `cc20af5`. `ReturnJump.js:57-72` przerywa
+  wyłącznie `in_transit` i to do **swobodnego dryfu**, nie do fałszywego doku. Findings 124/125 zamknięte.
+- **„Darmowa placówka przy zerze kolonii"** — **zniesione** przez `a180619` (D-111 = W1).
+  `_launchFoundOutpost` ma dziś **twardą** bramkę kosztu (`:754-758`), bliźniaczą do `_launchColony:648`.
+  ⚠ Audytowy odnośnik `:724` wskazuje dziś **inną treść** (bramkę stanu statku).
+
+### 2.6 ⚪ Dokumentacja pauzy bojowej **kłamie o fladze**
+
+`docs/player-combat-mission-pause.md` deklaruje *„flag default **OFF**"*, a `GameConfig.js:86` ma
+`m4PlayerCombatMissionPause: true`. Keeper `player_combat_mission_pause_smoke.mjs:126` ustawia `false`
+z komentarzem *„przywróć default"*. ⇒ **wyjątek `{preempt:false}` jest nośny DZIŚ, nie hipotetycznie.**
+⇒ **Finding 135.**
+
+---
+
+# §3 DECYZJE DO PODPISU
+
+---
+
+## D-VO1 — Bezpieczeństwo AI przy preempcji (P1) ✅ **PODPISANA: W1** · **NAJWAŻNIEJSZA DECYZJA TEGO PLANU**
+
+### 3.1.1 Co zmierzono (bo pytanie brzmiało „czy to w ogóle osiągalny scenariusz")
+
+**Odpowiedź krótka: TAK, jest osiągalny — ale dyscyplina siedzi WYŁĄCZNIE po stronie PRODUCENTÓW,
+a nie w silniku.**
+
+`MOS.issueOrder` (`:181-206`) **nie ma ŻADNEGO guardu „statek ma już rozkaz"**. Sprawdza tylko
+`vessel_not_found` (`:183`), `vessel_is_wreck` (`:184`), `validateOrder` (`:186-187`),
+`vessel_immobilized` (`:193`) i `vessel_in_reserve` (`:205`). **Nadpisanie żywego rozkazu jest dziś
+w pełni dozwolone i całkowicie ciche** — `_issueMoveToPoint:673-677` pisze wprost po polach,
+podmienia wpis w rejestrze (`:679`) i **nie emituje anulowania poprzedniego**.
+
+**Inwentarz producentów AI (ZMIERZONE, 10 miejsc):**
+
+| producent | API | guard „statek zajęty"? |
+|---|---|---|
+| `DirectorOffensive:202` (`strike_player_target`) | `OrderService.issueAttack` | ✅ **potrójny**: `strikeReadyVessels:82-84` — `if (v.mission) continue` / `if (v.movementOrder) continue` / `if (v.pendingOrder) continue` |
+| `DirectorDoctrine:187` (patrol/obrona) | `MOS.issueOrder` | ✅ `_idleArmedAtCapital:268-275` — dok + `mission` + `movementOrder` + `_hasAnyDoctrine` |
+| `EmpireLogisticsSystem:390` (kurier) | `dispatchOnMission` | ✅ **stanowy**: `:357` idle/refueling + docked, **drugi zamek** w `VesselManager:396` |
+| `EmpireLogisticsSystem:423` (powrót) | `startReturn` | ✅ ta sama misja, nie nowy rozkaz |
+| `EmpireLogisticsSystem:601` (`colony:destroyed`) | `startReturn` | ⚠ **odwrócony** — `:596` **wymaga** trwającej misji, żeby ją przerwać |
+| `DirectorMobilization:112`, `ELS:375` | `deployVessel` | ✅ inna oś (`serviceState`), nie tyka rozkazów |
+| **`AutoRetreatSystem:97` i `:109`** | `MOS.issueOrder` | 🔴 **BRAK. Zero testu `mission`/`movementOrder`** |
+| `DirectorFirstContact:225` (sonda) | **brak API** — bezpośredni zapis `position.x/y` co tik | ⚠ nieosiągalna dla żadnego mechanizmu rozkazów |
+
+**Kadencja (ZMIERZONE):** Director chodzi **raz na rok cywilizacyjny na imperium**
+(`AlienCivSystem:55-66/:128`), z dławikiem **jednej próby rzutu na rok wyświetlany**
+(`DirectorSystem:212-213`) i cooldownami 3-5 lat (`DirectorRuleData:159/179/221/254`). ⇒ **preempcja
+byłaby rzadka nawet po zdjęciu wszystkich filtrów.** Jedyna pętla naprawdę per-tick
+(`ELS._advanceAllCouriers:205`) dyspatchuje **wyłącznie** statek `idle` + `docked`.
+
+⚠ **Kontrprzykład znaleziony przez przebieg adwersarialny — i on zmienia obraz:** mechanizm zrywający
+uderzenie AI w locie **istnieje już dziś i jest cięższy od wszystkiego, co robi P1**.
+`DSCS._freezeAsStationary:1157` ustawia `vessel.mission = null` **bezwarunkowo dla każdego statku
+strony B** (`:355` — strona B to **zawsze** AI, `:293`), **bez snapshotu i bez ścieżki wznowienia**
+(`:1217-1219` wychodzi, gdy nie ma strony gracza). Okręt AI wysłany regułą `strike_player_target`
+**traci misję `attack` bezpowrotnie**, gdy tylko wejdzie w zasięg walki — a `EnemyAttackHandler:41`
+bramkuje na `mission.type !== 'attack'` i po bitwie go **nie rozpozna**.
+✅ **Zweryfikowane osobiście** (`DeepSpaceCombatSystem.js:1155-1157` + `:355`). ⇒ **Finding 130.**
+
+> **Wniosek dla decyzji:** pytanie *„czy P1 zepsuje AI"* jest źle postawione. **AI już dziś ma trzy
+> mechanizmy zrywające własne rozkazy** (DSCS, AutoRetreat, zawrócenie kuriera), z których **jeden jest
+> cichym defektem**. `_preempt` — który misji **nie zeruje** — jest przy tym tle **mniej inwazyjny**.
+
+### 3.1.2 Warianty D-VO1 — oś właściciela
+
+| | **W1 — preempcja IDENTYCZNA dla obu, + jawna flaga `force`** | **W2 — preempcja bramkowana WŁAŚCICIELEM** | **W3 — preempcja identyczna, BEZ flagi (ścieżki systemowe nie preemptują z definicji)** |
+|---|---|---|---|
+| istota | jeden szew, jedna reguła; ścieżki systemowe (auto-odwrót, doktryna floty, pauza bojowa) wołają z `{ preempt:false }` / `{ force:true }` | `_preempt` odpala tylko dla `!isEnemyVessel(vessel)`; rozkazy AI nadpisują jak dziś, po cichu | `_preempt` woła się zawsze; ścieżki systemowe rozpoznaje się po `issuedBy`, bez nowego parametru |
+| precedens w repo | ✅ **jest** — `VesselManager.startReturn:577`: `if (!opts.force && !isEnemyVessel(vessel) && …)` — bramka paliwa obowiązuje **tylko gracza** | ✅ ten sam precedens, druga strona | ⚠ `issuedBy` istnieje (`AutoRetreat` podaje `'auto_retreat'`), ale nigdy nie sterował zachowaniem |
+| `AutoRetreatSystem` | ✅ dostaje `force` **w tym samym commicie** — odwrót **ma** bić atak | ✅ nietknięty (statki AI i tak nie preemptują) | ⚠ musi trafić na listę „systemowych", inaczej odwrót AI **przestanie działać** |
+| ryzyko regresji AI | 🟠 średnie — ale **zmierzalne**: `w3_attack_dispatch` jedzie `mos.issueOrder` na statkach AI (34 asercje) i **zaświeci na czerwono**, jeśli szew jest zły | 🟢 najniższe — AI dosłownie bit w bit | 🔴 najwyższe — brak jawnego opt-outu; każda przyszła ścieżka systemowa musi pamiętać |
+| co zostaje niespójne | nic | ⛔ **AI dalej ma cichy ślad rozkazu i ducha misji** — czyli Findings 119 i 115 zostają naprawione **połowicznie** | nic |
+| ⚠ pułapka | flaga bez inwariantu **gnije** (lekcja R-5 z OG: producent zapomina terminu) | „bezpieczne, bo nie ruszamy AI" jest **złudzeniem** — DSCS już dziś zeruje misję AI (Finding 130) | wymyśla klasyfikację, której repo nie ma |
+
+**Rekomendacja formalna: W1.** Jeden szew i jedna reguła to cała wartość P1; bramkowanie właścicielem
+(W2) zostawia AI z **połową** naprawy przy zerowym zysku bezpieczeństwa — bo zmierzona kadencja
+Directora (raz/rok cyw., cooldown 3-5 lat, potrójny filtr u producenta) sprawia, że **AI i tak prawie
+nigdy nie trafi w preempcję**. Precedens `force` **już w tym pliku istnieje** (`startReturn:577`).
+⚠ Cena W1 jest jawna i musi być podpisana: **`AutoRetreatSystem` dostaje wymuszenie w TYM SAMYM
+commicie**, inaczej odwrót AI po bitwie wyląduje w `vessel:autoRetreatFailed` (`:137-139`) zamiast
+w odwrocie.
+
+### 3.1.3 ✅ D-VO1b (sub-decyzja) — **PODPISANA: W1 ROZDZIELONE** — czy `_preempt` zeruje `movementOrder`?
+
+> ⚠ **To NIE jest sprzątanie. To zmiana balansu AI, przemycona w slice'ie o preempcji.**
+
+**ZMIERZONE:** `vessel.movementOrder` **nigdy nie jest zerowane w kodzie produkcyjnym**. Domknięcia
+ustawiają wyłącznie status: `MOS:1234-1236` (`completed` + `_byVessel.delete`), `:1853-1855` (przylot),
+`:1591-1593` (`cancelled`). Jedyne `= null` poza fabryką to `SaveMigration.js:1786` (default migracji).
+⇒ filtry Directora `if (v.movementOrder) continue` (`DirectorOffensive:83`, `DirectorDoctrine:270`)
+są **LEPKIE i JEDNORAZOWE**: **okręt AI po PIERWSZYM ukończonym rozkazie już nigdy nie wejdzie do puli
+uderzeniowej ani doktrynalnej.**
+
+| | **W1 — TAK, zeruj (naprawa Findingu 119 wchodzi w zakres)** | **W2 — NIE, zostaw pole; 119 dostaje osobny podpis** |
+|---|---|---|
+| co naprawia | 🟢 statek gracza **wraca do puli logistycznej** (Finding 119 — dziś wypada **na stałe** po jednym rozkazie, `TransportOrderSystem:517`) · `FleetGroupPanelLogic:86` przestaje pokazywać ukończony rozkaz jako bieżący | tylko strona gracza zostaje zepsuta jak dziś |
+| skutek dla AI | 🔴 **AI odzyskuje okręty**: po ukończonym uderzeniu/patrolu wracają do puli ⇒ **wielokrotne uderzenia** ⇒ **więcej `_onVesselGroupVictory`** ⇒ **więcej desantów**. To zmiana tempa AI_CAPTURE | 🟢 zero |
+| keeper | 🔴 **łamie `w3_attack_dispatch` T2** (`:176`): *„rozkaz uderzenia DOMYKA SIĘ przy przylocie … nie zostaje"* — asercja **wymaga**, by `movementOrder` przeżyło przylot | ✅ nietknięty |
+| ⚠ | rozdziela się na dwie osie: zerowanie **przy PREEMPCJI** (bezpieczne, pole i tak jest zastępowane) vs zerowanie **przy DOMKNIĘCIU** (to jest ta zmiana balansu) | Finding 119 zostaje otwarty i jest **realnie dokuczliwy dla gracza** |
+
+**Rekomendacja: W1, ale ROZDZIELONE** — `_preempt` zeruje/zastępuje `movementOrder` **przy preempcji**
+(darmowe, pole i tak ginie), a zerowanie **przy domknięciu rozkazu** dostaje **własny commit i własny
+live-gate**, bo to jest jedyna zmiana w całym planie, która **przyspiesza AI**. ⚠ Bez rozdzielenia
+gate zmierzy „AI atakuje częściej" i nie będzie wiadomo, czy to preempcja, czy odblokowanie puli.
+
+### 3.1.4 Trzy warunki mechaniczne — **wiążące niezależnie od wariantu**
+
+1. ⚠ **`_preempt` MUSI stać POD bramkami `issueOrder`, nie NAD nimi.** Bramki (`:193`, `:205`) są dziś
+   jawnym kontraktem „odmowa PRZED mutacją stanu". `_preempt` powyżej sprawi, że **odrzucony** rozkaz
+   (`vessel_in_reserve`, `target_other_system`) **skasuje żywe uderzenie** — Director sam anulowałby
+   własny strike próbą nielegalnego drugiego.
+2. ⚠ **Kolejność wewnątrz `_preempt` jest kontraktem.** Emisja `vessel:orderCancelled` odpala
+   **synchronicznie** `VesselManager._resumeMissionAfterOrder` (`:128-129`) — czyli dokładnie mechanizm,
+   który P1 ma zabić. Skasowanie `_suspendedMission` **po** emisji wskrzesi starą misję i nadpisze
+   świeżo wydany rozkaz.
+3. ⚠ **Punkt 2 (kasuj `_suspendedMission`) i punkt 3 (anuluj rekord ekspedycji) muszą wejść w JEDNYM
+   commicie.** Sam punkt 2 daje **fałszywy negatyw predykatu końca gry** — przylot jest kalendarzowy
+   (`MissionSystem:1463`), więc duch `en_route` **założy kolonię**, a karencja D9 już leci
+   (`ColonyManager:339` zeruje licznik tylko przy `state.ok`).
+
+---
+
+## D-VO2 — Kolejność wdrożenia ✅ **PODPISANA: W2** (+ kill-switch **B**)
+
+**Zależności są zmierzone, nie preferencyjne:**
+
+- **P0 przed P3 i P5** — bez odkotwiczenia dystansu „kolonizuj skądkolwiek" wycenia lot z domu
+  (1,813 AU dla statku stojącego 0,000 AU od celu).
+- **P2 przed P3** — inaczej P3 daje przycisk „Kolonizuj", który wywołuje **teleport**, nie kolonizację
+  (Finding 117: kolonia powstała **4,14 AU** od statku, który nigdzie nie poleciał). Audyt §6 mówi to
+  wprost: P2 jest **warunkiem koniecznym**, żeby P3 dał realną kolonizację.
+- **P5 przed P4** — P4 wymaga, żeby dwie implementacje kolonizacji zeszły się do jednej; **replacement
+  musi istnieć zanim usuniemy oryginał**. ⚠ Audyt zapisał `P4 → P5`; **pomiar mówi, że to odwrotnie**.
+- **P1 i P2 — wzajemnie niezależne**, ale każde zostawia inne okno niespójności (niżej).
+
+| | **W1 — kolejność z audytu: P0 → P2 → P1 → P3 → P4 → P5** | **W2 (REKOMENDOWANA) — P0 → P2 → P1 → P3 → P5 → P4** | **W3 — P0 → P1 → P2 → P3 → P5 → P4** |
+|---|---|---|---|
+| różnica | P4 przed P5 | **retirement OSTATNI**, po replacement | P1 przed P2 |
+| ⚠ wada | 🔴 retiruje `_startForeignColonize`, **zanim** `issueColonize` istnieje ⇒ okno, w którym kolonizacja w obcym układzie **nie ma żadnej implementacji** | brak znanej | 🟠 P1 sam kasuje ducha tylko dla **przekierowania przez gracza**; duch z **odmowy dyspozytora** (`_launch*` ignoruje zwrotkę) zostaje do P2 |
+| okno niespójności | dwa | **jedno, jednocommitowe** (niżej) | jedno, ale szersze |
+
+**Okno niespójności przy W2 — jedno, świadome, jednocommitowe.** Po **VO-2** (P2) rekord ekspedycji
+statku, który został przekierowany, przestaje być **duchem dostarczającym** i staje się **zombie, który
+nigdy nie przyleci**. To jest **krok do przodu** (koniec fantomowych surowców i teleportu), ale nie jest
+stanem docelowym — zamyka go **VO-3** (P1, anulowanie rekordu). ⚠ Ten sam wzór, co odwrócone okno
+OG-1↔OG-2 w bramce własności: **każdy moment przerwania sekwencji jest lepszy od stanu dzisiejszego**.
+
+**Rekomendacja: W2.** Jedyna zmiana wobec audytu to **zamiana P4↔P5**, i wynika z zależności
+(replacement przed retirementem), nie z wygody.
+
+### 3.2.1 ✅ Oś towarzysząca: kill-switch — **PODPISANA: B**
+
+Repo ma silną konwencję flag (`FEATURES.transportOrders`, `orbitalLogisticsHub`, `territoryOverlay` —
+wszystkie default ON, „cały sens tej fazy to ocena w praktyce").
+
+- **A — bez flagi** (jak P0 bramki własności): najprostsze; rollback = `git revert`. ⚠ P1 i P3 zmieniają
+  **odczuwalne tempo gry**, a to jest dokładnie ta klasa, dla której konwencja flag powstała.
+- **B (rekomendowane) — jedna flaga `FEATURES.unifiedVesselOrders`, default ON, obejmująca P1 + P3**
+  (dwa ruchy zmieniające zachowanie gracza). P0/P2/P5 bez flagi (naprawy poprawności — nie ma czego
+  wyłączać). P4 bez flagi (usunięcie kodu; flaga na usuniętym kodzie nie ma sensu).
+- **C — flaga per ruch**: pięć kill-switchy. ⚠ Kombinatoryka stanów jest wtedy **niepinowalna** keeperem.
+
+---
+
+## D-VO3 — Retirement P4: jeden duży commit czy stopniowo? ✅ **PODPISANA: W2**
+
+**Obawa ze zlecenia jest trafna i zmierzona: „zostawienie martwego kodu obok żywego kusi do
+przypadkowego wywołania starej ścieżki".** Ale pomiar mówi coś mocniejszego (§2.3): **po P1-P3 ten kod
+NIE jest martwy — jest w pełni osiągalny.** Panel obcego układu omija `FLEET_ACTIONS` w całości. ⇒
+pytanie nie brzmi *„kiedy usunąć martwe"*, tylko *„kiedy zabić żywe"*.
+
+| | **W1 — jeden duży commit po P1-P3** | **W2 (REKOMENDOWANA) — rozdzielenie po RODZAJU: semantyka w slice'ie, prune izolowany na końcu** | **W3 — wycinanie po każdym P** |
+|---|---|---|---|
+| kształt | jeden commit: unifikacja + usunięcie 926 lin. + migracja + i18n | **VO-6** (semantyka: unifikacja kolonizacji + przepięcie 4 przycisków w `FLEET_ACTIONS` + migracja) → **VO-7** (`chore`: prune 926 lin., **jeden commit, dwa pliki**) | fragmenty przy każdym ruchu |
+| precedens | — | ✅ **`7201670`** — `chore(ui): prune dead FMO shipyard render cluster`, **1 plik, 545 usunięć, PO slice'ie funkcjonalnym**, z raw-proof nieosiągalności + `node --check` + zero-token grep + sweep + live-gate. Ten sam plik, ta sama klasa | — |
+| ryzyko „przypadkowego wywołania" | 🟢 znika naraz | 🟢 znika w **VO-6** (przycisk przestaje być emitentem); **VO-7** usuwa już-nieosiągalne | 🔴 **największe** — długi stan pół-żywy |
+| przeglądalność diffu | 🔴 926 usunięć **wymieszanych** ze zmianą zachowania | 🟢 diff semantyczny mały; diff prune **czysto mechaniczny** | 🟠 rozmyta |
+| ⚠ | migracja save ląduje w jednym worku ze zmianą UI | wymaga **raw-proof nieosiągalności** przed VO-7 (wzór 7201670: „8 site'ów przypisania, zero feederów") | każdy krok potrzebuje własnego gate'u |
+
+**Rekomendacja: W2.** To nie jest kompromis między W1 a W3 — to **inna oś cięcia**. Ryzyko, o które
+pyta zlecenie (przypadkowe wywołanie starej ścieżki), znika w **VO-6**, gdy przycisk przestaje być
+emitentem; **VO-7** usuwa wtedy kod, który jest już **dowiedzenie** nieosiągalny — dokładnie tak, jak
+`7201670`.
+
+**✅ Cztery klauzule obowiązkowe — PODPISANE 2026-08-23:**
+
+1. **Migracja save** (§2.2) — albo bump, albo normalizator przy restore. Milczenie = zamrożone statki
+   u graczy ze starym zapisem.
+2. ✅ **`abortForeignRecon` ZOSTAJE** — ma **4 żywe zewnętrzne call-site'y** (`FleetActions:379`,
+   `OrderService:189`, `FMO:2372/2382`) i **przeżył** naprawę Findingu 125 jako świadomie wyłączony
+   z transakcji. ⇒ **VO-7 go NIE wycina**, a keeper `return_home_no_brick` **T5 przeżywa bez zmian**.
+3. **`interstellar_return` NIE JEST `foreign_*`** (`FMO:2312-2324`) — to ścieżka powrotu z `cc20af5`
+   (`_dispatchReturnJump`) i **musi przeżyć cięcie**. Siedzi w tym samym bloku handlerów.
+4. ✅ **i18n: osierocone klucze czyszczone RĘCZNIE** w VO-7 (18 PL + 20 EN) — `check-i18n` **tego nie
+   zobaczy** (§2.1), więc lista idzie do commita jawnie, nie „przy okazji”.
+
+---
+
+## D-VO4 — Zakres P5 (`issueColonize`) i zgodność z dzisiejszym D9 ✅ **PODPISANA: W1** (+ obie klauzule §3.4.3)
+
+**Zlecenie prosiło o potwierdzenie, że dzisiejsze ustalenia (D9 zabrania startu z zera, ale statek
+już w locie ma działać) zgadzają się z tym, co P0-P5 zmienia w modelu stanu statku. Odpowiedź: TAK
+dla P5, ale przy okazji wyszło, że najcięższy problem jest w P4.**
+
+### 3.4.1 P5 jest dla D9 i dla predykatu 111 **BEZPIECZNY** — z dowodem
+
+- **Nie powstaje nowy typ misji.** Pełen inwentarz typów produkcyjnych to 11 pozycji;
+  `issueColonize` w kształcie z audytu emituje `expedition:sendRequest {type:'colony'}` →
+  `_launch` → `_launchColony`, czyli typ **już w `COLONY_OUTLET_MISSIONS`** (`PlayerViability.js:59`).
+- **Noga cross-system też nie tworzy typu** — `kind` żyje w `vessel.pendingOrder`
+  (`OrderService:217`), a misją zostaje `interstellar_jump` (`VesselManager:2640-2641`), czyli
+  **`FOREIGN_FLOW_MISSIONS`**. Kolonizator z habitatem przechodzi zbiorem 2.
+- **D9 nie jest obchodzone** — `OrderService` **nigdy nie zakłada kolonii sam**, deleguje eventem, więc
+  wchodzi w `_launchColony` **razem z twardą bramką** `:648`.
+
+⚠ **Jedno rozszerzenie, którego NIE wolno zrobić bez osobnego podpisu:** rozciągnięcie P5 na
+**`found_outpost` cross-system**. Frachtowiec placówkowy **nie ma habitatu**, więc na nodze warpowej ma
+tylko `interstellar_jump` i **przegrywa warunek `canColonize`** (`PlayerViability.js:119`) ⇒ predykat
+odpowie „brak trasy" statkowi, który realnie leci założyć kolonię. **Fałszywy negatyw = koniec gry
+przy żywej trasie.**
+
+### 3.4.2 🔴 Ryzyko, którego zlecenie nie zamawiało: **P4 jest binarne wobec D9**
+
+**ZMIERZONE i zweryfikowane osobiście:** `VesselManager._startForeignColonize` (`:3185-3261`) zakłada
+kolonię z **zaszytym na sztywno** zestawem zasobów (`:3209-3212`: `Fe:200, C:100, Si:80, Cu:30, Ti:10,
+food:80, water:80`) i ma w całym ciele **ZERO** wystąpień `canAfford` / `resourceSystem` / `spend(`
+(policzone: **0**). ⇒ **przy zerze kolonii ta trasa DZIAŁA, gdy in-system odmawia.**
+
+> ⚠ **I to obejście jest DOKŁADNIE tym, co uzasadnia zbiór 2 predykatu.** `FOREIGN_FLOW_MISSIONS`
+> liczy się jako ratunek **wyłącznie dlatego**, że trasa obca omija bramkę D9. **Zbiór 2 predykatu
+> i obejście D9 to jedna i ta sama rzecz, widziana z dwóch stron.**
+
+Skutek unifikacji jest **binarny i w obu kierunkach dotyka podpisanej decyzji**:
+
+| kierunek unifikacji | skutek |
+|---|---|
+| **(a) na `_launchColony`** (z bramką kosztu) | trasa obca **zamyka się** przy zerze kolonii ⇒ `FOREIGN_FLOW_MISSIONS` staje się **fałszywym POZYTYWEM** ⇒ **wraca defekt Findingu 111** („gra, która się nie kończy") w nowym miejscu |
+| **(b) bez bramki** | **CICHO odwraca D9** — start z zera znów możliwy |
+
+**Trzeciej opcji nie ma.**
+
+| | **W1 (REKOMENDOWANA) — P5 w zakresie audytu; P4 dostaje WŁASNY podpis na D9** | **W2 — P5 + P4 razem, D9 rozstrzygane teraz** | **W3 — P5 poza zakresem (odłóż)** |
+|---|---|---|---|
+| istota | `issueColonize` = lustro `issueTransport`, same-system + composite, **bez** `found_outpost` cross-system | jeden podpis obejmuje kolonizację i D9 | zostaje `issueTransport/Passenger/Move/Warp/Attack/Return`, kolonizacja dalej bez fasady |
+| D9 | ✅ nietknięte (P5 deleguje eventem) | ⚠ przesądzane w slice'ie o rozkazach — **zły adres**, D9 należy do arca końca gry | ✅ nietknięte |
+| Finding 111 | ✅ nietknięty; zbiory **przeglądane**, nie przepisywane | 🔴 zbiór 2 predykatu trzeba przepisać **w tym samym commicie** | ✅ |
+| cel (c) właściciela | ✅ osiągnięty (kolonizacja = jeden rozkaz) | ✅ | ⛔ **nieosiągnięty** |
+
+**Rekomendacja: W1.** P5 realizuje cel (c) i jest dla obu zamkniętych arców obojętny. Pytanie „czy
+trasa obca ma dalej omijać D9" jest pytaniem **o regułę gry**, nie o model rozkazów — i zasługuje na
+osobny podpis w **VO-6**, z własnym wariantem i własnym live-gate'em.
+
+### 3.4.3 ⚠ Dwie klauzule, które **muszą** trafić do zapisu decyzji
+
+1. **Wyjątek `{preempt:false}` chroni TAKŻE predykat końca gry — nikt tego nie zapisał.**
+   Audyt uzasadnia go **wyłącznie** wznowieniem misji po bitwie (`:299-302`). Ale
+   `_freezeAsStationary:1157` **zeruje `vessel.mission`**, więc **w czasie bitwy `_suspendedMission`
+   jest JEDYNYM nośnikiem misji `colony`**. Objęcie tej ścieżki preempcją **oślepiłoby predykat na
+   czas walki** ⇒ koniec gry statkowi, który bitwę przeżyje. ⇒ to jest **drugi, niezależny powód**
+   istnienia wyjątku i musi być w komentarzu, inaczej następna sesja go „posprząta".
+   ⚠ **Sprostowanie mechaniczne:** `_pausePlayerSideForCombat` **nie przechodzi przez `issueOrder`** —
+   woła `mos._suspendMissionIfAny` **bezpośrednio** (`DSCS:1202`). Realnym nosicielem wyjątku są więc
+   **auto-odwrót i doktryna floty**, nie sama pauza. Audyt umieścił wyjątek pod złym adresem.
+2. 🔴 **Para P1 × P3 daje fałszywy negatyw, którego żaden z nich nie daje osobno.** Po P3 statek
+   z habitatem dostaje **klikalny** przycisk „Kolonizuj", a po P1 traci ostatni nośnik typu misji
+   (po `engage`) ⇒ `canReverseFate` powie **„brak trasy"** statkowi, który **może kolonizować**.
+   ⚠ Dziś predykat jest **lustrem bramki UI `FMO:7449`** — P3 tę bramkę zdejmuje, więc lustro pęka.
+   ⇒ **przegląd zbiorów `PlayerViability` jest obowiązkowym punktem gate'u po VO-4**, nie
+   opcjonalnym follow-upem.
+
+---
+
+## D-VO5 — Zasięg keeperów do świadomego odwrócenia ✅ **PODPISANA: zgoda z klasyfikacją 1/13**
+
+**Audyt wymienił 12 keeperów „pinujących dzisiejsze zachowanie". Pomiar mówi: 13 (jeden pominięty),
+a klasyfikacja ryczałtowa byłaby błędna — z 13 tylko JEDEN pinuje defekt do odwrócenia.**
+
+| # | keeper | asercje | werdykt | uzasadnienie (indywidualne) |
+|---|---|---|---|---|
+| 1 | **`moveto_no_return`** | 15 | 🔴 **DO ODWRÓCENIA — i tylko T2** | **T2 (`:86`, `:87`) pinuje wprost mechanizm, który P1 kasuje**: *„in_transit + żywa misja → snapshot (intencja pursue/intercept)"*. ⚠ **T5/T6 pinują już DZIŚ stan docelowy** (`_suspendedMission` wyczyszczony po `moveToPoint`) — P1 je **uogólnia**, nie łamie. ⇒ odwracamy **2 asercje**, nie plik |
+| 2 | `order_blocked_resume` | **9** (audyt mówił „4" — to **4 TESTY**, nie asercje) | 🟢 **ZOSTAJE** | Pinuje stronę **wznawiania** po `orderBlocked`, która po P1 zostaje żywa dla ścieżek systemowych. ⚠ Do przepisania sama **narracja fixture'u T2** (`:66-75` opisuje osierocenie wyprodukowane przez `pursue` **gracza**); stan wejściowy jest ustawiany ręcznie, więc **asercje nie padną** |
+| 3 | `player_combat_mission_pause` | 19 | 🟢 **ZOSTAJE** — ⚠ **ale NIE udowodni `{preempt:false}`** | Kierunek audytu potwierdzony (wznowienie po bitwie **ma zostać**), ale siła dowodowa **skorygowana**: keeper **mockuje obie granice** (`:39` `_suspendMissionIfAny: () => true`, `:35` `_resumeMissionAfterOrder`) i **nie woła ani `OrderService`, ani `MOS.issueOrder`**. ⇒ dowód wyjątku wymaga **nowej asercji na realnej ścieżce** |
+| 4 | `ai_capture_last_stand` | 40 | 🟠 **DO PRZEJRZENIA** | Dwa punkty wiszą na modelu, który ten slice rusza: **(a)** blok pomiarowy T7 (`:339`) pinuje *„po przylocie zwiad NADAL trzyma misję … i wisi tak bezterminowo"* — to **przesłanka**, którą cel (b) właściciela ma usunąć; **(b)** pin na `??` (`:313`) opisuje stan (`mission=move_to_point` + `_suspendedMission=colony`), który po P1 **przestanie powstawać** ⇒ pin zrobi się **jałowy** (zielony test przestanie opisywać rzeczywistość) |
+| 5 | `s34_faza4` | 80 | 🟠 **DO PRZEJRZENIA — największa robota** | **9 wywołań `_checkArrivals` jedzie na mocku `dispatchOnMission` (`:85`), który zostawia statek `in_transit` i NIGDY nie stempluje `dockedAt` celu** ⇒ po P2 te przyloty przestaną się odpalać i **~40 asercji sekcji 4/5/6/9/10 padnie NA FIXTURZE, nie na intencji**. Osobno: **8.1** (`:290`) pinuje **BRAK** pozycji w menu — po P3 `hasAction()` będzie `true`. **7.8 zostaje** (dok wymagany do zaokrętowania POP — zgodne z regułą P3) |
+| 6 | `load_colonists` | 27 | 🟠 **DO PRZEJRZENIA** | **2.3** (`:84`) mierzy **NIEOBECNOŚĆ** pozycji w menu, a P3 zamienia nieobecność na „obecna + zablokowana" ⇒ do przepisania na „obecna z `reason`". **3.2 zostaje** (`orbiting` → `reasonNotDocked`) — to dokładnie ta bramka, którą P3 **jawnie zostawia**. ⚠ **4.7** (`:156`) odwzorowuje wzór `_startForeignColonize` — po P4 komentarz przestanie wskazywać istniejący kod |
+| 7 | `w2_deploy_ui` | 23 | 🟠 **DO PRZEJRZENIA (kosmetyka)** | **T4a** (`:166-167`) wchodzi w early-return `_drawActions` **wyłącznie** przez stan `'none'` spoza trzech kubełków. Po P3 lista **nigdy nie będzie pusta** ⇒ asercja **dalej przejdzie, ale przestanie cokolwiek mierzyć** — klasyczna **jałowa kontrola pinu** |
+| 8 | `a4_transport_outpost_explored_gate` | 14 | 🟢 **ZOSTAJE** | Wchodzi **poniżej** bramki, którą rusza P2: woła `_processTransportArrival` **wprost** (`:57`), z pominięciem `_checkArrivals`. Pinowana intencja jest ortogonalna |
+| 9 | `s3_0a_d` | 33 | 🟢 **ZOSTAJE** | **T7** (`:176-178`) pinuje **dokładnie tę zasadę**, którą domknął Finding 125: odmowa rozkazu powrotu **nie może mutować stanu statku**. ⚠ Ale woła `startReturn` **bezpośrednio**, więc **NIE pokrywa** ryzyka, że destrukcyjny `_preempt` odpali się na wejściu intentu **zanim** bramka paliwa odmówi ⇒ **potrzebna nowa asercja przez `OrderService.issueReturn`** |
+| 10 | `stage4_launch_gravity` | 47 | 🟢 **ZOSTAJE** | Jedyne odwołania do `position.state` są **CENNIKOWE, nie uprawnieniowe** (`docked` rozstrzyga studnię grawitacyjną startu; start z przestrzeni = fail-open ×1.0). P3 czyni tę gałąź **częstszą**, nie błędną |
+| 11 | `w2_deploy_model` | 27 | 🟢 **ZOSTAJE** | Wszystkie wykluczenia stoją na osi **ZDOLNOŚCI** (`isInService`), nie na kubełku `position.state` — czyli **dokładnie tam, gdzie P3 chce, żeby decyzja zapadała**. Zero styku z preempcją, przylotem i `foreign_*` |
+| 12 | `w3_attack_dispatch` | 34 | 🟢 **ZOSTAJE — i jest SIATKĄ BEZPIECZEŃSTWA dla D-VO1** | T1-T4 jadą `mos.issueOrder` **na statkach AI** (`:77` `owner: empireId`) ⇒ **jeśli szew preempcji jest zły, ten keeper zaświeci na czerwono**. ⚠ **T2 (`:176`) łamie się przy D-VO1b = W1 w wariancie „zeruj przy domknięciu"** — wymaga, by `movementOrder` przeżyło przylot |
+| **13** | **`foreign_recon_analyzed`** ⬅ **NIE BYŁO W AUDYCIE** | 14 | 🔴 **UMIERA z P4** | Woła `_tickForeignRecon` (`:66/:80/:110`) i `_startForeignRecon` (`:94`) **bezpośrednio** ⇒ do skasowania albo przepisania na nową ścieżkę. **Bez tego wpisu inwentarz keeperów P4 jest niepełny** |
+
+**Poza tą trzynastką (do odnotowania):** `return_home_no_brick` **T5** stubuje `abortForeignRecon`
+(`:92`) ⇒ **przeżyje, o ile `abort` zostaje** (D-VO3 punkt 2).
+**Fałszywe trafienia grepu `foreign`** (5 plików — nie dotyczą): `colony_tile_membership` („cudzy
+kafel"), `w3_cross_system_attack` (funkcja `foreignBody()`), `moveto_*` (`systemId: 'sys_foreign'`).
+
+**Rekomendacja D-VO5: DO ODWRÓCENIA jest DOKŁADNIE JEDEN keeper i DOKŁADNIE DWIE asercje**
+(`moveto_no_return` T2, `:86` i `:87`). Cztery keepery to **przegląd fixture'ów** (4-7), jeden
+**umiera z P4** (13), siedem **zostaje bez zmian**.
+⚠ **Odwrócenie MUSI być opisane w komentarzu keepera** — precedens: `deploy_seams` T1/T2/T4 (W2),
+`colony_ownership_seams` S4 (P0), `s34c_z9_transfer_dispose`, `ai_capture_last_stand` T4/T5A (D-111).
+Bez tego następna sesja przywróci defekt, „naprawiając regresję".
+
+---
+
+# §4 PLAN COMMITÓW (do podpisu razem z decyzjami)
+
+✅ **ZATWIERDZONY W CAŁOŚCI 2026-08-23.**
+⚠ **Kolejność wynika z zależności z D-VO2, nie z wygody.** Nazewnictwo wzorem `OG-*` / `W2-*` / `AC-*`.
+⚠ **SAVE: VO-1…VO-5 = ZERO MIGRACJI (v101 bez zmian). Migracja pojawia się DOPIERO w VO-6** —
+to jedyny commit w tym planie, który dotyka formatu zapisu.
+
+| # | commit | treść | wynika z | gate |
+|---|---|---|---|---|
+| **VO-0** | `test: keeper szwow modelu rozkazow` | Pinuje **STAN DZISIEJSZY wykonaniem**, z kontrolą pinu przy każdym: **S1** duch misji dostarcza pod nieobecność statku · **S2** `arriveAtTarget` teleportuje do celu **nowego** rozkazu · **S3** `_suspendedMission` wskrzeszany po `pursue` · **S4** `movementOrder` przeżywa domknięcie i wypycha statek z puli logistycznej · **S5** `issueOrder` **nie ma** guardu „statek ma już rozkaz" · **S6** menu = 3 kubełki (`docked` 6 / `in_transit` 1 / `orbiting` 3). ⚠ **Wszystkie sześć MA paść** w VO-2..VO-4 i zostać **świadomie odwrócone** | — | — |
+| **VO-1** | `fix(fleet): dystans misji liczony od statku, nie od planety macierzystej` | **P0** — `_calcDistance` wzorem `_launchTransport:849-856`. Finding 122 | P0 | — |
+| **VO-2** | `fix(fleet): przylot misji nalezy do statku, nie do kalendarza` | **P2, obie połowy w jednym commicie** — warunek „statek u celu" w `_checkArrivals` + **głośna odmowa** w pięciu `_launch*`. Kasuje 115/116/117. ⚠ Przegląd fixture'ów `s34_faza4` | P2 | 🔒 **GATE A** |
+| **VO-3** | `fix(fleet): nowy rozkaz przerywa stary` | **P1 + D-VO1=W1** (za flagą `FEATURES.unifiedVesselOrders`) — `_preempt` **pod** bramkami `issueOrder`; kolejność wewnętrzna wg §3.1.4; `AutoRetreatSystem` dostaje wymuszenie **tu**; zerowanie `movementOrder` **tylko przy preempcji**. Kasuje 118/119(część)/126/127. ⚠ Odwrócenie `moveto_no_return` T2 | P1, D-VO1 | 🔒 **GATE B** (największe ryzyko regresji AI) |
+| **VO-3b** | `fix(fleet): rozkaz domyka sie i zwalnia statek` | **D-VO1b** — zerowanie `movementOrder` **przy domknięciu**. **OSOBNY commit, bo to JEDYNA zmiana balansu w planie.** Domyka Finding 119. ⚠ Odwrócenie `w3_attack_dispatch` T2 | D-VO1b | 🔒 **GATE B2** (pomiar tempa AI) |
+| **VO-4** | `feat(fleet): menu akcji z mozliwosci, nie ze stanu` | **P3** (za tą samą flagą `unifiedVesselOrders`) — `getAvailableActions` bez kubełków, akcje zablokowane **z powodem**; **58 bramek przesądzonych indywidualnie** (tabela w commicie). ⚠ `drop_troops`/`orbital_strike` **zostają przy `orbiting`** i dostają brakujący guard `dockedAt != null` (R-8). Kasuje 120/128, zamyka 99 | P3 | 🔒 **GATE C** (+ obowiązkowy przegląd zbiorów `PlayerViability`, §3.4.3 pkt 2) |
+| **VO-5** | `feat(fleet): OrderService.issueColonize` | **P5 = D-VO4/W1** — lustro `issueTransport` + **własna gałąź w `_maybeDeliver`** (inaczej `target_lost`, `OrderService:270`). **Bez** `found_outpost` cross-system | P5, D-VO4 | — |
+| **VO-6** ⚠ **JEDYNY COMMIT Z MIGRACJĄ SAVE** | `refactor(fleet): jedna kolonizacja, rozkazy obcego ukladu jako zwykle akcje` | **P4 semantyka** — cztery przyciski do `FLEET_ACTIONS`; bramka `FMO:7449` znika (Finding 121); **unifikacja dwóch kolonizacji** + **podpis D9** (§3.4.2 a/b) + **migracja save** (§2.2). ⚠ `interstellar_return` **zostaje** | P4, D9 | 🔒 **GATE D** |
+| **VO-7** | `chore(fleet): prune martwej warstwy foreign_*` | **P4 mechanika, wzorem `7201670`** — `VesselManager:2848-3320` **minus `abortForeignRecon` (ZOSTAJE)** + 4 bloki FMO + subskrypcje + **ręczne** czyszczenie 18/20 kluczy i18n. **Poprzedzone raw-proofem nieosiągalności.** ⚠ `interstellar_return` **zostaje**. Keeper `foreign_recon_analyzed` skasowany/przepisany | D-VO3/W2 | 🔒 **GATE E** |
+| **VO-8** | `docs: rejestr + close-out` | Findings 130-135, sprostowania audytu (§2), `CLAUDE.md`, `MEMORY.md` | — | — |
+
+**Per-commit, bez wyjątków (konwencja projektu):** `node src/testing/smoke/run-all.mjs` **0 FAIL** ·
+`node tools/check-i18n.mjs` **PASS** · commit atomowy · staging **po jawnych ścieżkach** ·
+`git status --short` + `--cached --stat` pokazane właścicielowi **przed** commitem · **live-gate robi
+właściciel**.
+
+### 4.1 Gate'y — co konkretnie musi zostać zmierzone
+
+> ⚠ **Dowodem jest SKUTEK, nie bramka** (lekcja Findingu 106) · ⚠ **`KOSMOS.debugLog` NIE zna zdarzeń
+> floty** (`TRACKED_EVENTS` bez ani jednego) — pusty `tail()` **nie rozróżnia ścieżek**; kanałem floty
+> jest **Dziennik, kanał `fleet`** · ⚠ **filtry gate'u nigdy po TEKŚCIE Dziennika** (gra po angielsku).
+
+- **GATE A (po VO-2)** — wydaj rozkaz ruchu statkowi na misji `mining` w przeciwną stronę; **magazyn
+  kolonii bez zmian** (dziś: `{Fe:+30, Si:+7.12, Ti:+5}`) i **statek nie teleportuje się**.
+  Kontrola pinu: normalna misja **dolatuje i wypłaca** jak dotąd.
+- 🔒 **GATE B (po VO-3) — NAJWAŻNIEJSZY, bo mierzy AI.** (1) Rozkaz gracza przerywa misję i statek
+  **nie wraca** do starej roboty. (2) **Statek wraca do puli logistycznej** po ukończonym rozkazie.
+  (3) **AI: uderzenie `strike_player_target` dolatuje i rozlicza się jak dotąd** (keeper
+  `w3_attack_dispatch` to lustro headless). (4) **Odwrót AI po bitwie DZIAŁA** (wymuszenie).
+  (5) Kontrola pinu: **wznowienie misji po bitwie żyje** (`m4PlayerCombatMissionPause`, §2.6).
+- **GATE B2 (po VO-3b)** — **pomiar tempa**: liczba uderzeń AI i desantów w N lat gry, **porównana
+  z przebiegiem sprzed VO-3b**. To jedyny gate w tym planie mierzący **balans**, nie poprawność.
+- **GATE C (po VO-4)** — zaparkowany kolonizator ma **klikalny** przycisk „Kolonizuj" i klik daje
+  **realną kolonię NA CELU** (`getPlayerColonies()` +1, statek skonsumowany) — **nie teleport**.
+  ⚠ Plus obowiązkowo: **przegląd `PlayerViability`** (§3.4.3 pkt 2) — czy predykat nadal odpowiada
+  prawdę dla statku, który dostał nowy przycisk.
+- **GATE D (po VO-6)** — kolonizacja w obcym układzie **przechodzi jedną ścieżką**; zachowanie przy
+  **zerze kolonii** zgodne z podpisanym kierunkiem D9; **stary zapis z misją `foreign_recon` wczytuje
+  się i statek NIE jest zamrożony**.
+- **GATE E (po VO-7)** — zero błędów konsoli, panel floty i obcy układ działają, sweep 0 FAIL.
+
+---
+
+# §5 RYZYKA (rankowane)
+
+**R-1 (wysokie) — 🔴 zerowanie `movementOrder` przy domknięciu to ZMIANA BALANSU AI, nie sprzątanie.**
+Filtry `DirectorOffensive:83` / `DirectorDoctrine:270` są dziś **lepkie i jednorazowe** (pole nigdy nie
+jest zerowane). Odblokowanie ich daje **wielokrotne uderzenia AI ⇒ więcej desantów ⇒ szybsze
+AI_CAPTURE**. **Mitygacja: D-VO1b jako osobny commit + GATE B2 mierzący tempo.**
+
+**R-2 (wysokie) — 🔴 `_preempt` emitujący `orderCancelled` wskrzesza to, co ma zabić.**
+`VesselManager:128-129` subskrybuje **synchronicznie** i woła `_resumeMissionAfterOrder`. Zła kolejność
+⇒ stara misja nadpisuje świeżo wydany rozkaz. **Mitygacja: kolejność wewnętrzna jako kontrakt (§3.1.4
+pkt 2) + asercja w keeperze.**
+
+**R-3 (wysokie) — 🔴 `_preempt` NAD bramkami sprawia, że ODRZUCONY rozkaz kasuje żywy.**
+`issueOrder` ma jawny kontrakt „odmowa przed mutacją" (`:193`, `:205`). Dotyczy **też AI**: Director
+anulowałby własny strike próbą nielegalnego drugiego. ⚠ `s3_0a_d` T7 **tego nie pokrywa** (woła
+`startReturn` wprost). **Mitygacja: `_preempt` pod bramkami + nowa asercja przez `OrderService.issueReturn`.**
+
+**R-4 (wysokie) — 🔴 P4 jest binarne wobec D9** (§3.4.2): albo wraca defekt Findingu 111, albo cicho
+odwracamy podpisaną regułę. **Mitygacja: osobny podpis D9 w VO-6, własny live-gate.**
+
+**R-5 (wysokie) — 🔴 P4 wymaga migracji save** (§2.2). Milczenie = **zamrożone statki** u graczy ze
+starym zapisem (misja serializowana spreadem, bez białej listy). **Mitygacja: migracja albo
+normalizator przy restore, przesądzone w VO-6.**
+
+**R-6 (średnie) — 🟠 para P1 × P3 daje fałszywy negatyw predykatu końca gry** (§3.4.3 pkt 2), którego
+**żaden z nich nie daje osobno**. ⚠ `ai_capture_last_stand` **tego nie złapie** — T7 testuje czystą
+funkcję na ręcznie budowanych obiektach (`:304`, `:313`), więc **zielony test przestanie opisywać
+rzeczywistość**. **Mitygacja: przegląd zbiorów jako punkt GATE C.**
+
+**R-7 (średnie) — 🟠 `AutoRetreatSystem` jest jedynym producentem bez guardu i to jest ZAMIERZONE.**
+Odwrót **ma** bić atak. Każda odmowa typu „statek ma już rozkaz" złamie odwrót AI i wyląduje
+w `vessel:autoRetreatFailed` (`:137-139`). ⚠ **Metoda jest osiągalna dla OBU stron** — `DSCS:1236`
+woła `_issueRetreatOrder` także dla statków **gracza**. **Mitygacja: wymuszenie w VO-3.**
+
+**R-8 (średnie) — 🟠 `drop_troops` bierze cel z `position.dockedAt` BEZ guardu na `null`**
+(`FleetActions:541/546/561`), a stan `orbiting` + `dockedAt=null` jest **realny** (`MOS:1252-1253` —
+dryf/engage). **Dziura jest PRE-EXISTING**; P3 ją **uwidoczni w menu**. ⇒ `drop_troops` i
+`orbital_strike` **zostają przy `orbiting`** i dostają brakujący guard. ⇒ **Finding 132.**
+
+**R-9 (średnie) — 🟠 ~40 asercji `s34_faza4` padnie NA FIXTURZE, nie na intencji** (mock
+`dispatchOnMission` nigdy nie stempluje `dockedAt`). ⚠ **Największe ryzyko procesowe:** pokusa
+„naprawienia" testu przez **osłabienie P2**. **Mitygacja: fixture naprawiany, warunek P2 nietykalny.**
+
+**R-10 (średnie) — 🟠 `EmpireLogisticsSystem` ma ZERO odwołań do `movementOrder`** (grep = 0) —
+wyprowadza stan kuriera z (`status`, `position.state`, `mission.phase`). Gdyby kurier kiedykolwiek
+dostał `movementOrder`, maszyna stanów **jej nie zobaczy**, a `_advanceAllCouriers` chodzi **każdy
+tick**: MOS parkuje statek w `orbiting` (`:1623-1625`), gałąź dispatchu wymaga `docked` ⇒ **ciche
+limbo**. Dokładnie ta klasa, przed którą ostrzega komentarz W2-7 (`:360-372`).
+
+**R-11 (średnie) — 🟠 P3 × P2 blokuje dowóz wojska.** `orbit` (`FleetActions:302`) jest bramkowany na
+`docked` i tworzy misję; rozluźnienie go **bez zmiany dyspozytora** (`VesselManager:396` wymaga
+`docked`+`idle`) da po P2 **przycisk aktywny + głośną odmowę**. Wariant z orbity **istnieje osobno**
+(`redispatchFromOrbit:453`) i to jest właściwy adres.
+
+**R-12 (niskie, mina) — ⚪ `DirectorFirstContact` porusza sondą bezpośrednim zapisem `position.x/y`
+co tik** (`:225-226`), bez `mission` i bez `movementOrder`. **Żaden mechanizm rozkazów jej nie
+dosięgnie.** Jeśli którykolwiek keeper założy „każdy statek AI da się zatrzymać rozkazem" — założenie
+jest **fałszywe** dla tej klasy.
+
+**R-13 (niskie) — ⚪ i18n: 18 kluczy PL + 20 EN osieroci się przy P4, a `check-i18n` tego nie zobaczy**
+(pyta o klucze **użyte** w `t()`, nie o **nieużywane**). Ta sama klasa martwego kąta co Finding 113.
+
+**R-14 (niskie) — ⚪ typ `foreign_recon` jest zaszyty poza dwoma dużymi plikami w trzech miejscach:**
+`PlayerViability.js:68`, `FleetPictureLogic.js:97`, `NavPeekProviders.js:47`. Pierwsze z nich to
+**predykat końca gry z zamkniętego arca**.
+
+### 5.1 ⚠ Czy to dotyka AI_CAPTURE? — odpowiedź wprost
+
+**Rdzeń AI_CAPTURE jest ODPORNY, z dowodem — ale są cztery styki, wszystkie wymienione wyżej.**
+
+**Co jest bezpieczne (ZMIERZONE):**
+- `InvasionSystem` (524 lin.) ma **ZERO trafień** na `mission|movementOrder|position\.|dockedAt|
+  expedition|arriv`. Czyta wyłącznie `isWreck`, właściciela, `canDropTroops`, `troopCapacity`,
+  `groundUnits` (`:222-226`) i dominację orbitalną (`:211`).
+- **Desant nie idzie przez `MissionSystem` w ŻADNĄ stronę**: AI = `battle:resolved` → `launchInvasion`
+  → `createUnit` (`:130`); gracz = `vessel:dropTroopsRequest` → `ColonyOverlay:310` →
+  `unloadGroundUnit` (`Vessel.js:734`). Żadna nie tworzy rekordu ekspedycji.
+- `transferColony` czyta **tylko** `position.state === 'docked'` (`ColonyManager:865`);
+  `captureColonyForPlayer` (`:982-1048`) **nie ma ani jednego odwołania do statku**.
+- **Uderzenie AI omija `_checkArrivals` w całości** — `_issueAttack` pisze `vessel.mission` wprost
+  (`MOS:673`, `:294`), a przylot łapie `VesselManager._updatePositions:2369`. ⇒ **P2 nie dotyka pętli
+  AI_CAPTURE**; Findings 115/116 **nie są jej podporą**.
+- Keepery `ai_capture_army/intent/ledger/outpost/seams/visibility` i `invasion_player_capture` mają
+  **zero** odwołań do modelu misji/rozkazów.
+
+**Cztery styki:** **R-1** (tempo desantów) · **R-2/R-3** (kolejność i miejsce wpięcia mogą zerwać
+uderzenie AI) · **R-6** (D9/koniec gry) · **R-8** (desant gracza).
+⚠ **Tło, które zmienia proporcje:** mechanizm zrywający uderzenie AI **istnieje już dziś i jest
+cięższy** — `DSCS:1157` zeruje misję wroga przy starciu (**Finding 130**).
+
+---
+
+# §6 POZA ZAKRESEM (świadomie)
+
+**Potwierdzenie, o które prosiło zlecenie — oba sąsiednie arce są ZAMKNIĘTE i ten plan ich NIE RUSZA,
+tylko z nimi WSPÓŁISTNIEJE:**
+
+- ✅ **Finding 111** (`PLAYER_VIABILITY_PREDICATE_PLAN.md`, `a180619`, zamknięty 2026-08-20).
+  Ten plan **nie dotyka `PlayerViability.js`**. Rozwiązuje **przesłankę**, na której 111 stał
+  (zaparkowany statek odzyska realne rozkazy), ale **predykatu nie zmienia**. ⚠ **Jedyny obowiązek:
+  PRZEGLĄD zbiorów po VO-4** (§3.4.3 pkt 2) — plan 111 zapisał to wprost: *„zbiory trzeba będzie
+  **przejrzeć ponownie**, nie przepisać"*. ⚠ Jeśli przegląd wykaże konieczność zmiany zbiorów —
+  to jest **osobny podpis w tamtym planie**, nie w tym.
+- ✅ **D1-D6 + P0 bramki własności** (`COLONY_OWNERSHIP_GUARD_PLAN.md`, `e964c6b`, zamknięty
+  2026-08-22). Ten plan **nie dotyka `ColonyOwnership.js`, `ColonyOrderGuard.js` ani
+  `switchActiveColony`**. Rodziny terminów **nie mieszamy**: własność KOLONII to tamten kanon,
+  własność STATKU to `isEnemyVessel` (`Vessel.js:437-443`).
+- ✅ **Finding 125** (`cc20af5`) — `ReturnJump.js` **zostaje nietknięty**; P1 nie może go obejść
+  (`s3_0a_d` T7 + `return_home_no_brick` 77/77 to pilnują).
+- ✅ **W2 `serviceState` / `isInService`** — oś rezerwy jest **ortogonalna** i zostaje
+  (`w2_deploy_model` bez zmian).
+
+**Poza zakresem także (z audytu §4, potwierdzone):**
+- **kolejkowanie rozkazów (shift-klik)** — to **przeciwieństwo** celu (a);
+- **fizyczna podróż zamiast teleportu w auto-powrocie z dryfu** (M5 backlog);
+- **retirement `MissionSystem`** — rekord ekspedycji zostaje, zmienia się tylko jego **autorytet**;
+- **ujednolicenie `mission` i `movementOrder` w jedno pole** — kuszące, ale to przepisanie, nie zmiana;
+- **Findings 102/104/107** (wyciek locka załogi, osierocone jednostki desantowe na trasie obcej) —
+  ta sama trasa, **inne defekty**; wchodzą w zakres **tylko wtedy**, gdy D-VO4 pójdzie wariantem W2;
+- **Finding 123** (wyciek celów cross-system na trzech ścieżkach) — audyt oznaczył go jako
+  **NIE zmierzony wykonaniem** (headless generuje jeden układ); wymaga harnessu z realną galaktyką;
+- **Findings 130-135** (nowe, §7) — **filed, nie w zakresie**, poza R-8, który wchodzi w VO-4.
+
+---
+
+# §7 FINDINGS FILED (numeracja ciągła po 129 z audytu)
+
+130. 🔴 **DSCS rozpuszcza uderzenie AI w chwili starcia.** `_freezeAsStationary:1155-1157` ustawia
+     `vessel.mission = null` **bezwarunkowo** dla każdego statku strony B (`:355`; strona B to zawsze
+     AI, `:293`), **bez snapshotu i bez ścieżki wznowienia** (`:1217-1219` wychodzi przy braku strony
+     gracza). `EnemyAttackHandler:41` bramkuje na `mission.type !== 'attack'` ⇒ **po bitwie nie
+     rozpozna napastnika**. Okręt wysłany regułą `strike_player_target` traci misję, gdy tylko wejdzie
+     w zasięg walki. **Zweryfikowane osobiście.** ⚠ To jest **cięższa** ingerencja w rozkazy AI niż
+     cokolwiek, co proponuje P1.
+131. 🟠 **`VesselManager._onColonyDestroyed` re-homuje statki AI do kolonii GRACZA.** `:1123` iteruje
+     **wszystkie** statki **bez filtru właściciela**; `:1130` przypisuje `vessel.colonyId = homePlanetId`
+     z `_resolvePlayerHomePort` (`:1100-1105`, **wyłącznie kolonie gracza**), `:1133-1135` dopisuje do
+     `homeColony.fleet`, `:1137` wymusza `startReturn({force:true})`. ⇒ statek AI lecący z misją
+     `attack` na kolonię gracza, która ginie fizycznie, zostaje **przepisany na gracza** i zawrócony.
+132. 🟠 **`drop_troops` bierze cel z `position.dockedAt` bez guardu na `null`.**
+     `FleetActions:541/546/561`; stan `orbiting` + `dockedAt=null` jest udokumentowany jako realny
+     (`MOS:1252-1253`). **Pre-existing**; P3 uwidoczni go w menu. ⇒ w zakresie **VO-4** (R-8).
+133. 🟠 **`_suspendMissionIfAny` snapshotuje wyłącznie przy `in_transit`** (`MOS:149`) ⇒ **orbitujący**
+     kolonizator z misją `colony`, któremu wydano `engage`, traci ją **bez śladu już dziś**
+     (`:871` nadpisuje `vessel.mission`, snapshot nie powstaje). Pre-existing, poza P1.
+134. ⚪ **Typ `foreign_recon` zaszyty poza `VesselManager`/`FMO` w trzech miejscach:**
+     `PlayerViability.js:68` (predykat końca gry), `FleetPictureLogic.js:97`, `NavPeekProviders.js:47`.
+     Inwentarz P4 bez nich jest niepełny.
+135. ⚪ **`docs/player-combat-mission-pause.md` deklaruje flagę `default OFF`, a `GameConfig.js:86` ma
+     `true`.** `player_combat_mission_pause_smoke.mjs:126` ustawia `false` z komentarzem *„przywróć
+     default"*. ⇒ wyjątek `{preempt:false}` jest nośny **dziś**, nie hipotetycznie.
+
+⚠ **Korekty liczbowe do audytu** (nie nowe findingi): `order_blocked_resume` ma **9 asercji**, nie 4
+(audyt policzył testy) · subskrypcje `foreign_*` stoją na `:120-121/:160-161/:162-163/:164-165`, nie
+`:119/:159/:161/:163` (off-by-one) · retirement to **926 lin.**, nie ~455 (§2.1) · keeperów dotkniętych
+jest **13**, nie 12 (§3.5).
+
+---
+
+# §8 WARUNKI PODPISU — ✅ **WSZYSTKIE SPEŁNIONE 2026-08-23**
+
+1. ☑ **D-VO1 = W1** — preempcja identyczna dla obu stron + jawna flaga `force`.
+2. ☑ **D-VO1b = W1 ROZDZIELONE** — preempcja w VO-3, domknięcie w **osobnym VO-3b** z gate'em tempa.
+3. ☑ **D-VO2 = W2** (`P0 → P2 → P1 → P3 → P5 → P4`) · **kill-switch = B**
+   (`FEATURES.unifiedVesselOrders`, obejmuje P1 + P3, default ON).
+4. ☑ **D-VO3 = W2** + cztery klauzule: migracja w VO-6 · **`abortForeignRecon` ZOSTAJE** ·
+   **`interstellar_return` przeżywa** · i18n czyszczone ręcznie.
+5. ☑ **D-VO4 = W1** — P5 bez `found_outpost` cross-system; **D9 osobno w VO-6**.
+   ☑ **Obie klauzule §3.4.3 podpisane:** wyjątek `{preempt:false}` chroni **także predykat końca gry**
+   (obowiązkowy komentarz w kodzie) · **przegląd zbiorów `PlayerViability` = obowiązkowy punkt GATE C**.
+6. ☑ **D-VO5** — odwrócenie `moveto_no_return` T2 (`:86`, `:87`) zatwierdzone; **każde odwrócenie MUSI
+   mieć komentarz uzasadniający**, jak dotąd (`deploy_seams`, `colony_ownership_seams`, `ai_capture_last_stand`).
+7. ☑ **R-6 przyjęte do wiadomości** — para P1 × P3 może dać fałszywy negatyw końca gry, a
+   `ai_capture_last_stand` **tego nie złapie**.
+8. ☑ **58 bramek** dostaje decyzję **indywidualnie** (tabela w commicie VO-4).
+9. ☑ **Save: VO-1…VO-5 bez migracji (v101). Migracja DOPIERO w VO-6.**
+
+**Tryb pracy (podpisany):** fail-first · `run-all.mjs` **0 FAIL** + `check-i18n` **PASS** przy każdym
+commicie · **live-gate robi właściciel** (A/B/C/D/E), **headless po stronie CC wszędzie, gdzie się da**.
+
+---
+
+# §9 METODA, PEWNOŚĆ I GRANICE DOWODU
+
+**Podstawa:** audyt z 2026-08-20 (6 sond headless `GameCore`, `scratchpad/probe-orders*.mjs`, poza repo).
+**Pomiar uzupełniający 2026-08-23** (ten dokument): **8 agentów** — 6 sond źródłowych
+(rozkazy AI · klasyfikacja keeperów · odświeżenie 30 odnośników · sprzężenie z AI_CAPTURE · kolonizacja
+i predykat · inwentarz retirementu) + **2 przebiegi adwersarialne**, których zadaniem było **OBALIĆ**
+dwa najcięższe twierdzenia. **Oba wróciły z werdyktem `CZĘŚCIOWO BŁĘDNE`** — i to dzięki nim powstały
+Finding 130, sprostowanie adresu wyjątku `{preempt:false}` (§3.4.3 pkt 1) i ryzyko pary P1 × P3 (R-6).
+**Dwie weryfikacje własne prowadzącego** (`_startForeignColonize` bez `canAfford`/`resourceSystem`/
+`spend` — policzone **0**; `_freezeAsStationary` zerujące misję strony B).
+
+**⚠ Czego NIE zmierzono — uczciwie:**
+- **Gra nie była uruchamiana.** Wszystko powyżej to odczyt źródła + wcześniejszy headless.
+  **Live-gate jest warunkiem każdego commitu**, nie tego dokumentu.
+- **Wpływ na TEMPO gry** — o ile „statek zawsze wolny" zmienia rytm rozgrywki. To pytanie do
+  **GATE B2/C**, nie do planu.
+- **Finding 123** (wyciek celów cross-system) — ustalony **ze źródła**, nie z danych; headless
+  `GameCore` generuje **jeden** układ.
+- **Findings 102/104/107** — **nie re-mierzone**; pochodzą z `WARP_COLONIZE_ROUTE_AUDIT.md` i są tu
+  cytowane wyłącznie jako warunek konieczny P4.
+- **`FleetManagerOverlay` importuje się pod node, ale metody rysujące wymagają kontekstu 2D** ⇒ bramki
+  panelu obcego ustalono **źródłowo**. `ColonyOverlay`/`GameScene` **nie importują się pod node** ⇒ tam
+  obowiązuje **pin źródłowy albo live-gate**.
+
+⚠ **STANDING LESSON, która obowiązuje przy wykonaniu tego planu:** pisanie plików przez CC —
+**także dokumentacji** — przeładowuje kartę gracza przez **Live Server** i **resetuje runtime do
+ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
+
+**Zero zmian w kodzie W TYM DOKUMENCIE.** §1-§4 były projektem do podpisania; **podpis zapadł
+2026-08-23** (nagłówek + §8) i od tej chwili §4 jest **planem do wykonania**, zaczynając od **VO-0**.
