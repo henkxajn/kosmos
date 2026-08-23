@@ -834,6 +834,59 @@ jest **13**, nie 12 (§3.5).
 
 ---
 
+## Findings z live-gate VO-2 (2026-08-23) — drugi silnik misji
+
+⚠ **Żaden nie jest skutkiem VO-2 — wykluczone DWUSTRONNIE.** `2335c4b` zmienił **zero linii**
+w `VesselManager`, a bramka stoi w pętli po `MissionSystem._missions`, do której `exploration`
+**nigdy nie trafia**. ZMIERZONE: `_checkArrivals` wywołane **460×**, `_vesselIsAtTarget` dla tego
+statku **0×**. Kontrola odwrotna: nawet po ręcznym wstawieniu rekordu `exploration` do `_missions`,
+w konfiguracji gracza (`dockedAt === targetId`) predykat zwraca **`true`** — identycznie jak
+w symulacji stanu sprzed VO-2 (monkey-patch). Jedyny blokowany stan to `dockedAt !== targetId`.
+
+⚠ **To NIE jest Finding 121 w przebraniu.** 121 opisuje statek **UWOLNIONY kosztem panelu**; tutaj
+statek **MA panel i jest ZABLOKOWANY**. Przeciwne objawy, przeciwne przyczyny.
+
+144. 🟠 **`exploration/orbiting_body` nie ma ŻADNEGO samodomknięcia — statek jest zajęty na zawsze.**
+     To zaprojektowany stan terminalno-postojowy pod panel obcego układu, ale nic go nie kończy:
+     `_updatePositions` zostawia `status='on_mission'` i nic tego nie cofa. **ZMIERZONE: 200 lat
+     gry po przylocie — nadal `on_mission`, `dockedAt === targetId`, `missionsComplete = 0`.**
+     Skutek: `getAvailable` (`VesselManager:297`) i `dispatchOnMission` wymagają `idle`, więc statek
+     **wypada z doboru do jakiejkolwiek misji** aż do ręcznego anulowania w UI.
+     ⚠ Objaw zgłoszony przez gracza (`v_19` „Dyplomata") to **dokładnie ten mechanizm**.
+     ⚠ `bodiesSurveyed = 0` **potwierdza rozdwojenie silników**, a nie brak skanowania: licznik
+     mieszka w `vessel.stats` i podbijają go **wyłącznie** `MissionSystem._processReconArrival`
+     (`:2613`, `:2653`). `VesselManager._tickForeignRecon` skanuje i **nigdy go nie dotyka**.
+     ⚠ Nazwa „Dyplomata" to **rename gracza** — nie ma jej w pulach `VesselNames`, a `envoy`
+     **nie może** przerodzić się w `exploration` (bramka `VesselManager:2857-2859`).
+
+145. 🔴 **`OrderService.issueReturn:206` POŁYKA `false` ze `startReturn` i zwraca `{ok:true}`** —
+     a odmowa jest **fałszywa**. Przyczyna: `exploration` nie ma `returnYear`, którego
+     `startReturn:555` wymaga ⇒ `_predictPosition(colonyId, undefined) = NaN` ⇒ silnik melduje
+     **„brak paliwa"** i wystawia status **„⛽ Utknął" statkowi z 27 AU zasięgu**.
+     ⚠ **To jest REGRESJA FASADY wobec ścieżki bezpośredniej:** `FleetActions.return_home:409`
+     ustawia to pole **poprawnie**, a fasada je **zgubiła**. Ta sama klasa co Finding 141
+     („silnik mówi — UI połyka"), ale gorsza: tu **fasada kłamie o sukcesie**.
+
+146. 🔴 **Leg powrotny misji BEZ rekordu w `MissionSystem` nie ma domknięcia — statek zamarza
+     `in_transit/returning` na zawsze.** `VesselManager:2369` **jawnie wyklucza** `phase.startsWith
+     ('return')` z własnej detekcji przylotu, a jedyny closer powrotu (`MissionSystem:1600-1608`
+     → `dockAtColony`) **wymaga rekordu**, którego drugi silnik nie tworzy.
+     **ZMIERZONE:** `returnYear = 3.32`, a przy `gameYear = 24.17` statek nadal `on_mission /
+     in_transit / phase=returning / dockedAt=null`, zawieszony **0.105 AU od domu**. Po 200 latach
+     i **ośmiu kliknięciach „Powrót"** dystans do domu **ROŚNIE** (0.4064 → 0.4197 AU).
+     ⚠ **KONTROLA PINU (zmierzona):** identyczna operacja na misji `recon` **Z rekordem** kończy się
+     poprawnie (`status=idle`, `mission=null`, `docked`). **Różni je WYŁĄCZNIE obecność rekordu.**
+     ⚠ **Ironia do zapamiętania:** jedynym działającym wyjściem bez utraty statku okazuje się
+     `moveToPoint` — czyli dokładnie mechanizm, który **Finding 121 opisuje jako SZKODĘ**.
+
+⚠ **ZWIĄZEK Z PLANEM — te trzy wzmacniają uzasadnienie P4 (VO-6/VO-7).** Wszystkie trzy mieszkają
+w kodzie, który **P4 i tak retiruje**: gdy `foreign_*` staną się zwykłymi akcjami z rekordem
+w `MissionSystem`, **144 i 146 znikają z konstrukcji** (rekord daje i samodomknięcie, i closer
+powrotu). **145 należy do slice'u `ORDER_TRUTHFULNESS`** (§7a) — to fasada, nie model misji.
+⇒ żaden nie wymaga osobnego slice'u; **dopisać jako kryteria gate'u D (VO-6)**.
+
+---
+
 # §7a ZAPLANOWANY FOLLOW-UP — slice **ORDER_TRUTHFULNESS** (PO zamknięciu VESSEL_ORDERS)
 
 ✅ **Zdecydowane 2026-08-23:** Findingi **141/142** dostają **osobny, mały slice PO** tym arcu —
