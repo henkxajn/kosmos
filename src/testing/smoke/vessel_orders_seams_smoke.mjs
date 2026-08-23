@@ -13,10 +13,10 @@
 //
 //   | szew | co pinuje DZIŚ                                                    | MA PAŚĆ w | jak się zmieni |
 //   |------|-------------------------------------------------------------------|-----------|----------------|
-//   | S1   | rekord ekspedycji „przylatuje" po samym ZEGARZE i wypłaca łup,    | VO-2 (P2) | przylot wymaga, by statek FAKTYCZNIE był u celu |
-//   |      | choć statek poleciał gdzie indziej (Finding 115)                  |           | |
-//   | S2   | `arriveAtTarget` snapuje pozycję do celu NOWEGO rozkazu           | VO-2 (P2) | duch nie odpali, więc nie ma czego snapować |
-//   |      | — statek teleportuje się i przedwcześnie domyka rozkaz (116)      |           | |
+//   | S1   | ✅ **ODWRÓCONY w VO-2** — rekord NIE „przylatuje" i NIE wypłaca   | ✔ zrobione| było: przylot po samym ZEGARZE, łup wypłacany |
+//   |      | łupu, gdy statku nie ma u celu (Finding 115 zamknięty)            |           | przy statku kilka AU od celu |
+//   | S2   | ✅ **ODWRÓCONY w VO-2** — brak teleportu; rozkaz ruchu NIE jest   | ✔ zrobione| było: `arriveAtTarget` snapował do celu NOWEGO |
+//   |      | domykany cudzym przylotem (Finding 116 zamknięty)                 |           | rozkazu, ~21 AU w jednym tiku |
 //   | S3   | rozkaz gracza ROBI snapshot misji, a anulowanie ją WSKRZESZA      | VO-3 (P1) | `_preempt` kasuje snapshot — rozkaz gracza nigdy nie wskrzesza |
 //   |      | (Finding 118)                                                     |           | starej roboty; ścieżki systemowe wołają z `{preempt:false}` |
 //   | S4   | `vessel.movementOrder` PRZEŻYWA domknięcie i wypycha statek       | VO-3 /    | zerowanie przy PREEMPCJI → VO-3; przy DOMKNIĘCIU → VO-3b |
@@ -190,13 +190,16 @@ header('S1 — duch misji dostarcza łup pod nieobecność statku (WYKONANIE)');
   const feAfter = s.store.getAmount('Fe');
   const dAway = dist(s.v.position, s.rock);
 
-  assert(s.exp.status === 'orbiting',
-    `S1 PIN DZIŚ: ekspedycja „doleciała" (status=${s.exp.status}) mimo że statek jest ` +
-    `${dAway.toFixed(2)} AU od celu — bramka to WYŁĄCZNIE kalendarz (MissionSystem.js:1463). ` +
-    'VO-2 MA to odwrócić.');
-  assert(feAfter > feBefore && dAway > 1.0,
-    `S1 PIN DZIŚ (SKUTEK, nie bramka): łup WYPŁACONY do magazynu Fe ${feBefore} → ${feAfter} ` +
-    `(+${(feAfter - feBefore).toFixed(0)}) przy statku ${dAway.toFixed(2)} AU od miejsca wydobycia`);
+  // ⚠ ODWRÓCONE w VO-2 (P2). Poprzednia wersja pinowała DEFEKT: `status === 'orbiting'`
+  //   („ekspedycja doleciała mimo dystansu") i `feAfter > feBefore` („łup wypłacony przy statku
+  //   8 AU od złoża"). Oba były prawdziwe, dopóki bramką przylotu był SAM ZEGAR.
+  //   Nie kasujemy testu — przepisujemy go na stan docelowy (wzór `colony_ownership_seams` S4).
+  assert(s.exp.status === 'en_route',
+    `S1 ✅ ODWRÓCONY (VO-2): ekspedycja NIE „doleciała" (status=${s.exp.status}) przy statku ` +
+    `${dAway.toFixed(2)} AU od celu — termin kalendarza jest warunkiem KONIECZNYM, nie wystarczającym`);
+  assert(feAfter === feBefore && dAway > 1.0,
+    `S1 ✅ ODWRÓCONY (SKUTEK, nie bramka): łup NIE wypłacony (Fe ${feBefore} → ${feAfter}) ` +
+    `przy statku ${dAway.toFixed(2)} AU od miejsca wydobycia — Finding 115 zamknięty`);
 }
 {
   // KONTROLA PINU — ta sama scena BEZ rozkazu: przylot też następuje, ale statek JEST u celu.
@@ -233,16 +236,26 @@ header('S2 — przylot ducha TELEPORTUJE statek do celu nowego rozkazu (WYKONANI
   const toOrder  = dist(s.v.position, far);
   const toRock   = dist(s.v.position, s.rock);
 
-  assert(toOrder < 0.01 && toRock > 1.0,
-    `S2 PIN DZIŚ: statek wylądował ${toOrder.toFixed(3)} AU od celu ROZKAZU i ${toRock.toFixed(2)} AU ` +
-    'od celu MISJI — `VesselManager.arriveAtTarget:505-506` snapuje do `vessel.mission.targetX/Y`, ' +
-    'czyli do misji NOWEJ. VO-2 MA to odwrócić.');
-  assert(jumped > 1.0,
-    `S2 PIN DZIŚ (SKUTEK): ${jumped.toFixed(2)} AU pokonane w jednym tiku — droga, na którą rozkaz ` +
-    `przewidywał rok ${orderArrival.toFixed(2)}, przebyta w roku ${(expArrival + 0.01).toFixed(2)}`);
-  assert(s.v.movementOrder?.status === 'completed' && s.v.mission === null,
-    `S2 PIN DZIŚ: teleport DOMYKA też rozkaz ruchu (status=${s.v.movementOrder?.status}) — ` +
-    'gracz dostaje „wykonano", choć statek nigdy nie leciał');
+  // ⚠ ODWRÓCONE w VO-2 (P2). Poprzednia wersja pinowała DEFEKT: statek lądował 0.000 AU od celu
+  //   ROZKAZU (bo `arriveAtTarget` snapował do `vessel.mission.targetX/Y`, czyli do misji NOWEJ),
+  //   pokonując ~21 AU w jednym tiku, a rozkaz ruchu był przy okazji domykany cudzym przylotem.
+  //   Źródło teleportu zniknęło: duch nie odpala, więc nie ma czego snapować.
+  //   ⚠ `jumped` (SKUTEK) jest nadal mierzone — ale teraz pinuje BRAK skoku.
+  assert(toOrder > 0.5,
+    `S2 ✅ ODWRÓCONY (VO-2): statek NIE został teleportowany do celu ROZKAZU ` +
+    `(${toOrder.toFixed(3)} AU od niego) — Finding 116 zamknięty`);
+  // ⚠ Właściwą miarą NIE jest „mało przeleciał" — zegar skacze tu o ~5 lat naraz, więc statek
+  //   przy 1 AU/rok legalnie pokonuje ~5 AU. Teleport poznaje się po tym, że statek pokonywał
+  //   drogę PONAD własną prędkość (przed VO-2: 8.06 AU w oknie 5.11 roku = cała trasa rozkazu).
+  const elapsed = expArrival + 0.01;
+  const maxHonest = elapsed * (s.v.speedAU ?? 1);
+  assert(jumped <= maxHonest + 1e-6,
+    `S2 ✅ ODWRÓCONY (SKUTEK): ${jumped.toFixed(2)} AU w oknie ${elapsed.toFixed(2)} roku przy ` +
+    `${(s.v.speedAU ?? 1)} AU/rok — statek leci WŁASNYM tempem (limit ${maxHonest.toFixed(2)} AU). ` +
+    'Przed VO-2 pokonywał 8.06 AU, czyli całą trasę rozkazu, cudzym przylotem');
+  assert(s.v.movementOrder?.status === 'active',
+    `S2 ✅ ODWRÓCONY: rozkaz ruchu POZOSTAJE aktywny (status=${s.v.movementOrder?.status}) — ` +
+    'gracz nie dostaje fałszywego „wykonano" za lot, którego nie było');
 }
 {
   // KONTROLA PINU — bez rozkazu statek ląduje NA CELU MISJI. Ta sama funkcja `arriveAtTarget`,

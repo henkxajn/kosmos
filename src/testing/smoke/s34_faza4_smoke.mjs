@@ -83,6 +83,9 @@ globalThis.window.KOSMOS = {
       dispatched.push({ id, data });
       const v = vessels.get(id);
       if (v) { v.position.state = 'in_transit'; v.status = 'in_transit'; if (data.fuelCost) v.fuel.current -= data.fuelCost; }
+      // VO-2 — zwrotka dyspozytora jest teraz CZYTANA przez `_launch*`: falsy = odmowa,
+      // rekord misji nie powstaje. Mock musi odpowiadać jak produkcja (sukces).
+      return true;
     },
     dockAtTarget: (id, tId) => { const v = vessels.get(id); if (v) { v.position.state = 'docked'; v.position.dockedAt = tId; } },
     dockAtColony: (id, cId) => { const v = vessels.get(id); if (v) { v.position.state = 'docked'; v.position.dockedAt = cId; v.colonyId = cId; } },
@@ -102,6 +105,26 @@ function freshStation(id, { modules = [], pop = 0, bodyId = 'body_1' } = {}) {
 
 const ms = new MissionSystem();
 ms._gameYear = 0;
+
+// ── VO-2 (ruch P2): przylot jest WLASNOSCIA STATKU ────────────────────────────────────────────
+// `_checkArrivals` pyta teraz, czy statek FAKTYCZNIE stoi u celu (`position.dockedAt === targetId`).
+// Mock dyspozytora zostawia statek `in_transit` przy DOKU STARTOWYM i nigdy nie stempluje celu,
+// wiec bez tego helpera fixture mierzylby BRAMKE zamiast intencji FAZY 4 (transport POP).
+// Lustro produkcyjnego `VesselManager._updatePositions` (stempel przylotu).
+// UWAGA: swiadomie ustawiamy `orbiting`, a NIE `docked` — dokowanie robi dopiero handler
+// przylotu w MissionSystem (`dockAtTarget`/`dockAtColony`). Dzieki temu asercje 4.11 / 5.4 / 6.10
+// dalej mierza PRODUKCJE, a nie ten helper (patrz komentarze przy nich).
+function arriveAt(exp) {
+  const v = vessels.get(exp.vesselId);
+  const tgt = EntityManager.get(exp.targetId);
+  if (v) {
+    v.position.state    = 'orbiting';
+    v.position.dockedAt = exp.targetId;
+    if (tgt) { v.position.x = tgt.x; v.position.y = tgt.y; }
+  }
+  ms._gameYear = exp.arrivalYear + 0.01;
+  ms._checkArrivals();
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. canColonize — REGRESJA OBOWIĄZKOWA
@@ -169,13 +192,14 @@ ms._gameYear = 0;
   T('4.6 dispatchOnMission wywołany (fuel odjęty)', dispatched.some(d => d.id === 'v_cs') && v.fuel.current < 500);
 
   // Przylot (przez _checkArrivals z advancem czasu).
-  ms._gameYear = mission.arrivalYear + 0.01;
-  ms._checkArrivals();
+  arriveAt(mission);
   T('4.7 station.pop 0→1', st.pop === 1);
   T('4.8 vessel.colonists 0 (rozładowany)', v.colonists === 0);
   T('4.9 mission completed', mission.status === 'completed');
   T('4.10 station:popArrived emitowany', events.popArrived?.length === 1 && events.popArrived[0].stationId === 'st_dst' && events.popArrived[0].count === 1);
-  T('4.11 vessel zadokowany przy stacji', v.position.dockedAt === 'st_dst');
+  // VO-2: `state === 'docked'` ustawia WYLACZNIE produkcyjny `dockAtTarget` — helper `arriveAt`
+  //        zostawia `orbiting`. Bez tego czlonu asercja przechodzilaby dzieki fixture'owi.
+  T('4.11 vessel zadokowany przy stacji', v.position.dockedAt === 'st_dst' && v.position.state === 'docked');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -190,12 +214,12 @@ ms._gameYear = 0;
 
   ms._launchPassenger('st_full', 'v_full');
   const mission = ms._missions.find(m => m.vesselId === 'v_full');
-  ms._gameYear = mission.arrivalYear + 0.01;
-  ms._checkArrivals();
+  arriveAt(mission);
   T('5.1 pełna stacja → status no_housing', mission.status === 'no_housing');
   T('5.2 station.pop bez zmian (1)', st.pop === 1);
   T('5.3 vessel.colonists nadal 1 (nie rozładowany)', v.colonists === 1);
-  T('5.4 vessel zadokowany przy stacji (czeka)', v.position.dockedAt === 'st_full');
+  // VO-2: jw. — dowodem dokowania jest `state`, nie sam `dockedAt` (ten stempluje helper).
+  T('5.4 vessel zadokowany przy stacji (czeka)', v.position.dockedAt === 'st_full' && v.position.state === 'docked');
   T('5.5 brak station:popArrived jeszcze', (events.popArrived?.length ?? 0) === 0);
 
   // Zwolnij miejsce (np. odpłynął inny POP) → retry co tick.
@@ -224,13 +248,13 @@ ms._gameYear = 0;
   T('6.4 station:popDeparted emitowany', events.popDeparted?.length === 1 && events.popDeparted[0].stationId === 'st_src' && events.popDeparted[0].count === 1);
   T('6.5 mission originStationId st_src', mission?.originStationId === 'st_src');
 
-  ms._gameYear = mission.arrivalYear + 0.01;
-  ms._checkArrivals();
+  arriveAt(mission);
   T('6.6 kolonia population 4→5 (addPop)', col.civSystem.population === 5);
   T('6.7 civ:popBorn emitowany (planetId home)', events.popBorn?.length === 1 && events.popBorn[0].planetId === 'home');
   T('6.8 vessel.colonists 0', v.colonists === 0);
   T('6.9 mission completed', mission.status === 'completed');
-  T('6.10 vessel zadokowany przy kolonii home', v.position.dockedAt === 'home');
+  // VO-2: jw. + `colonyId` — to pole ustawia wylacznie produkcyjny `dockAtColony`.
+  T('6.10 vessel zadokowany przy kolonii home', v.position.dockedAt === 'home' && v.position.state === 'docked' && v.colonyId === 'home');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -328,8 +352,7 @@ ms._gameYear = 0;
   ms._launchPassenger('st_k1c', 'v_k1c');
   const m3 = ms._missions.find(m => m.vesselId === 'v_k1c');
   T('9.3a załadunek 2', v3.colonists === 2);
-  ms._gameYear = m3.arrivalYear + 0.01;
-  ms._checkArrivals();
+  arriveAt(m3);
   T('9.3b rozładunek częściowy: station.pop 1, vessel.colonists 1, no_housing', st.pop === 1 && v3.colonists === 1 && m3.status === 'no_housing');
   T('9.3c popArrived count=1 (częściowy)', events.popArrived?.length === 1 && events.popArrived[0].count === 1);
   st.modules.push(makeStationModule('habitat', 1));   // cap → 2
@@ -349,8 +372,7 @@ ms._gameYear = 0;
   col.fleet.push('v_b2');
   ms._launchPassenger('st_b2', 'v_b2');
   const m = ms._missions.find(x => x.vesselId === 'v_b2');
-  ms._gameYear = m.arrivalYear + 0.01;
-  ms._checkArrivals();
+  arriveAt(m);
   T('10.1 pełna stacja → status no_housing', m.status === 'no_housing');
   T('10.2 marker vessel._awaitingHousing = true', v._awaitingHousing === true);
   T('10.3 event vessel:awaitingHousing emitowany (na wejściu)', events.awaitingHousing?.length === 1 && events.awaitingHousing[0].stationId === 'st_b2' && events.awaitingHousing[0].count === 1);

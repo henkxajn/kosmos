@@ -26,7 +26,8 @@ import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-import { addMissionLog, loadCargo, canDoEnvoy, loadColonists } from '../entities/Vessel.js';
+import { addMissionLog, loadCargo, canDoEnvoy, loadColonists, unloadColonists } from '../entities/Vessel.js';
+import { isSameSystem }  from '../utils/SystemScope.js';
 import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
 import { t }             from '../i18n/i18n.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
@@ -119,6 +120,14 @@ export class MissionSystem {
     // Cleanup misji przy zniszczeniu kolonii
     EventBus.on('colony:destroyed', ({ planetId }) =>
       this._onColonyDestroyed(planetId));
+    // VO-2 (D-VO2a) — statek zniszczony w locie: rekord MUSI umrzeć razem z nim.
+    // ⚠ `_preempt` z VO-3 tego NIE domknie — odpala na `issueOrder`, a wrak nie przechodzi
+    //   przez żaden intent rozkazu. Bez tego P2 zamieniłby „duch wypłaca łup z martwego statku"
+    //   (nieodnotowany wariant Findingu 115) na TRWAŁEGO zombie, a zombie nie jest inertny:
+    //   recon-zombie na stałe wyklucza swój cel z `_findNearestUnexplored`, a `.find(vesselId)`
+    //   w siedmiu miejscach zwraca go zamiast żywej misji.
+    EventBus.on('vessel:wrecked', ({ vesselId, vessel }) =>
+      this._onVesselWrecked(vesselId ?? vessel?.id));
     // ⚠ W3-1: UTRATA kolonii przez PRZEJĘCIE wymaga tego samego sprzątania co jej zniszczenie.
     //   Do W3-1 `transferColony` kasowało kolonię i mimo to NIE emitowało `colony:destroyed`,
     //   więc misje w drodze do utraconego ciała leciały dalej. Teraz ciało ŻYJE pod obcą flagą —
@@ -582,7 +591,7 @@ export class MissionSystem {
 
     if (vMgr && assignedVesselId) {
       const dispatchVessel = vMgr.getVessel(assignedVesselId);
-      vMgr.dispatchOnMission(assignedVesselId, {
+      const dispatched = vMgr.dispatchOnMission(assignedVesselId, {
         type,
         targetId,
         targetName: target.name,
@@ -592,6 +601,8 @@ export class MissionSystem {
         // Etap 4 — dopłata za studnię grawitacyjną (spójna z pre-checkiem paliwa wyżej).
         fuelCost:    distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel),
       });
+      // VO-2 — dyspozytor odmowil => rekord znika, koszt startu wraca.
+      if (!dispatched) return this._abortLaunch(mission, () => this.resourceSystem?.receive(LAUNCH_COST));
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
@@ -684,7 +695,7 @@ export class MissionSystem {
 
     if (vMgr && vesselId) {
       const dispatchVessel = vMgr.getVessel(vesselId);
-      vMgr.dispatchOnMission(vesselId, {
+      const dispatched = vMgr.dispatchOnMission(vesselId, {
         type:        'colony',
         targetId,
         targetName:  target.name,
@@ -694,6 +705,8 @@ export class MissionSystem {
         // Etap 4 — dopłata za studnię grawitacyjną (spójna z pre-checkiem paliwa wyżej).
         fuelCost:    distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel),
       });
+      // VO-2 — jw. Bez zwrotu odmowa kasowalaby COLONY_LAUNCH_COST bez zadnego skutku.
+      if (!dispatched) return this._abortLaunch(mission, () => this.resourceSystem?.receive(COLONY_LAUNCH_COST));
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
@@ -791,7 +804,7 @@ export class MissionSystem {
     this._missions.push(mission);
 
     // Wyślij statek
-    vMgr.dispatchOnMission(vessel.id, {
+    const dispatched = vMgr.dispatchOnMission(vessel.id, {
       type:        'found_outpost',
       targetId,
       targetName:  target.name,
@@ -800,6 +813,9 @@ export class MissionSystem {
       returnYear:  null,
       fuelCost:    fuelNeeded,
     });
+    // VO-2 — UWAGA: `totalCost` zawiera KOSZT BUDYNKU placowki; odmowa bez zwrotu bylaby
+    //   najdrozsza z osmiu cichych strat.
+    if (!dispatched) return this._abortLaunch(mission, () => this.resourceSystem?.receive(totalCost));
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
   }
@@ -943,11 +959,17 @@ export class MissionSystem {
         cargo: { ...cargo },
       };
 
-      if (isOrbiting) {
-        // Re-dispatch z orbity — nie wymaga idle+docked
-        vMgr.redispatchFromOrbit(vesselId, missionData);
-      } else {
-        vMgr.dispatchOnMission(vesselId, missionData);
+      // VO-2 — OBIE galezie czytaja zwrotke. UWAGA: `redispatchFromOrbit` jest tu rownie wazny
+      //   jak `dispatchOnMission` — TA sciezka biegnie DOSTAWA PO SKOKU WARP
+      //   (`OrderService._maybeDeliver` -> `expedition:transportRequest`, statek orbiting+on_mission).
+      const dispatched = isOrbiting
+        ? vMgr.redispatchFromOrbit(vesselId, missionData)
+        : vMgr.dispatchOnMission(vesselId, missionData);
+      if (!dispatched) {
+        // Zwrot ladunku TYLKO jesli byl realnie zdjety z magazynu (start z bazy, bez preload).
+        return this._abortLaunch(mission, () => {
+          if (!isRedispatch && !cargoPreloaded) this.resourceSystem?.receive(cargo);
+        });
       }
     }
 
@@ -1076,12 +1098,28 @@ export class MissionSystem {
     this._missions.push(mission);
 
     // dispatchOnMission sam odejmuje fuelCost (nie podwajać) + ustawia trasę/pozycję.
-    vMgr.dispatchOnMission(vesselId, {
+    const dispatched = vMgr.dispatchOnMission(vesselId, {
       type: 'passenger', targetId,
       targetName: mission.targetName,
       departYear, arrivalYear: mission.arrivalYear, returnYear: null,
       fuelCost: distance * (vessel.fuel?.consumption ?? 0) * launchMult,
     });
+    // VO-2 (D-VO2b) — TU wraca nie surowiec, tylko LUDZIE. POP zdejmowane sa wyzej
+    //   (stacja / kolonia) PRZED dispatchem, wiec odmowa bez zwrotu kasowala ich bez sladu
+    //   (ZMIERZONE: 4 POP zdjete, statek zostal w doku).
+    //   UWAGA: komentarz nad ta metoda DEKLAROWAL te ochrone, a jej nie bylo.
+    //   UWAGA: zwrot do kolonii idzie przez `unloadColonists`, wiec POPy wracaja jako `laborer`
+    //   — tak samo jak przy normalnym przylocie. Rozklad warstw nie jest odtwarzany.
+    if (!dispatched) {
+      return this._abortLaunch(mission, () => {
+        if (originStation) {
+          originStation.pop = (originStation.pop ?? 0) + loadedCount;
+          vessel.colonists  = Math.max(0, (vessel.colonists ?? 0) - loadedCount);
+        } else if (originCol?.civSystem) {
+          unloadColonists(vessel, originCol.civSystem);
+        }
+      });
+    }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
   }
@@ -1318,12 +1356,13 @@ export class MissionSystem {
         const dispatchVessel = vMgr.getVessel(vesselId);
         // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (start naziemny; stacja/przestrzeń → ×1.0).
         const fuelCost = distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel);
-        vMgr.dispatchOnMission(vesselId, {
+        const dispatched = vMgr.dispatchOnMission(vesselId, {
           type: 'recon', targetId: firstTarget.id,
           targetName: firstTarget.name,
           departYear, arrivalYear: mission.arrivalYear, returnYear: null,
           fuelCost,
         });
+        if (!dispatched) return this._abortLaunch(mission, () => this.resourceSystem?.receive(RECON_COST));
       }
 
       this._emit('mission:started', 'expedition:launched', { expedition: mission });
@@ -1363,12 +1402,13 @@ export class MissionSystem {
       const dispatchVessel = vMgr.getVessel(vesselId);
       // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (start naziemny; stacja/przestrzeń → ×1.0).
       const fuelCost = distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel);
-      vMgr.dispatchOnMission(vesselId, {
+      const dispatched = vMgr.dispatchOnMission(vesselId, {
         type: 'recon', targetId: nearest?.id ?? 'nearest',
         targetName: mission.targetName,
         departYear, arrivalYear: mission.arrivalYear, returnYear: mission.returnYear,
         fuelCost,
       });
+      if (!dispatched) return this._abortLaunch(mission, () => this.resourceSystem?.receive(RECON_COST));
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
@@ -1450,12 +1490,13 @@ export class MissionSystem {
       const dispatchVessel = vMgr.getVessel(vesselId);
       // Etap 4 reformy — dopłata za studnię grawitacyjną ciała-źródła (start naziemny; stacja/przestrzeń → ×1.0).
       const fuelCost = distance * (dispatchVessel?.fuel?.consumption ?? 0) * launchFuelMultiplierForVessel(dispatchVessel);
-      vMgr.dispatchOnMission(vesselId, {
+      const dispatched = vMgr.dispatchOnMission(vesselId, {
         type: 'recon', targetId,
         targetName: mission.targetName,
         departYear, arrivalYear: mission.arrivalYear, returnYear: mission.returnYear,
         fuelCost,
       });
+      if (!dispatched) return this._abortLaunch(mission, () => this.resourceSystem?.receive(RECON_COST));
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
@@ -1483,12 +1524,77 @@ export class MissionSystem {
     }
   }
 
+  /**
+   * VO-2 (D-VO2a) — statek zniszczony ⇒ jego misje są zamknięte. Lustro `_onColonyDestroyed`.
+   * ⚠ Zamykamy, a nie kasujemy: `_checkArrivals` sam przycina nadmiar `completed` (zostawia 5).
+   */
+  _onVesselWrecked(vesselId) {
+    if (!vesselId) return;
+    for (const exp of this._missions) {
+      if (exp.vesselId !== vesselId || exp.status === 'completed') continue;
+      exp.status = 'completed';
+    }
+  }
+
+  /**
+   * VO-2 (ruch P2) — czy statek FAKTYCZNIE stoi u celu misji.
+   *
+   * Predykat: `vessel.position.dockedAt === exp.targetId`. Trzy powody, każdy ZMIERZONY:
+   * 1. Nie ma pułapki jajko-kura. `VesselManager._updatePositions` ma WŁASNĄ detekcję przylotu
+   *    i stempluje `dockedAt`, a `_gameYear` idzie z `time:display`, emitowanego PO `time:tick`
+   *    ⇒ misja czyta zegar o TIK STARSZY i stempel już jest. LAG = 0 na sześciu typach misji.
+   * 2. Wariant odległościowy jest niewykonalny — wymagany ε rośnie z prędkością gry
+   *    (0.122 AU @ tick 0.25 → 2.978 AU @ 12.0), czyli do rzędu, który ma być KARANY.
+   * 3. `dockedAt` daje termin układu ZA DARMO: `_updatePositions` sam ustawia `null` dla ciała
+   *    spoza układu statku (5518 par cross-system w promieniu 0,5 AU — odległość byłaby ślepa).
+   */
+  _vesselIsAtTarget(exp) {
+    // Misja ABSTRAKCYJNA — envoy ma `targetEmpireId`, NIE `targetId`, i statek nigdy nie leci.
+    // Bez tego wyjątku: 249 zablokowanych przylotów i statek `on_mission` na zawsze (ZMIERZONE).
+    if (!exp.targetId) return true;
+    // Misja bez statku (legacy / stary zapis) — nie ma czego pytać.
+    if (!exp.vesselId) return true;
+    const vessel = window.KOSMOS?.vesselManager?.getVessel?.(exp.vesselId);
+    // Statek zniknął z rejestru — rekord domyka `_onVesselWrecked` / `validateMissions`,
+    // nie ta bramka. Cicha wypłata łupu z nieistniejącego statku jest tym, co P2 kasuje.
+    if (!vessel) return false;
+    // Cel w INNYM UKŁADZIE — W3-4b ŚWIADOMIE nie dokuje do obcego ciała (`dockedAt = null`),
+    // więc predykat nie ma czym odpowiedzieć. Nie bramkujemy tego, czego nie umiemy zmierzyć;
+    // ta trasa należy do `OrderService` (composite warp→dostawa).
+    const target = this._findTarget(exp.targetId);
+    if (target && !isSameSystem(vessel, target)) return true;
+    return vessel.position?.dockedAt === exp.targetId;
+  }
+
+  /**
+   * VO-2 (druga połowa, D-VO2b) — dyspozytor odmówił ⇒ rekord NIE MOŻE zostać.
+   * Do VO-2 wszystkie osiem ścieżek `_launch*` ignorowało zwrotkę `dispatchOnMission`, więc rekord
+   * zostawał `en_route` i „przylatywał" po samym zegarze (ZMIERZONE: duch wypłacił 77 minerałów
+   * i przeniósł statek 3,4 AU bez lotu i bez paliwa).
+   * ⚠ ZWROT JEST OBOWIĄZKOWY: każda ścieżka wydaje PRZED dispatchem, a `_launchPassenger`
+   *   fizycznie ZDEJMUJE POP ⇒ głośna odmowa bez cofnięcia zamieniłaby cichego zombie
+   *   na cichą KRADZIEŻ. Wzorzec zwrotki nie jest wynalazkiem — `_dispatchLoopLeg` był jedynym
+   *   miejscem w tym pliku, które czytało wynik dyspozytora poprawnie.
+   */
+  _abortLaunch(mission, refund = null) {
+    const i = this._missions.indexOf(mission);
+    if (i >= 0) this._missions.splice(i, 1);
+    // Zwrot best-effort — nigdy nie blokuje samej odmowy.
+    try { refund?.(); } catch (_e) { /* ignore */ }
+    this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
+  }
+
   // ── Sprawdzanie przybycz i powrotów ───────────────────────────────────────
   _checkArrivals() {
     let changed = false;
 
     for (const exp of this._missions) {
       if (exp.status === 'en_route' && this._gameYear >= exp.arrivalYear) {
+        // VO-2 (P2) — termin kalendarza to WARUNEK KONIECZNY, nie wystarczający.
+        // ⚠ Bramka stoi WYŁĄCZNIE w tej gałęzi. Gałąź `returning` niżej MUSI zostać wolna:
+        //   `VesselManager._updatePositions` jawnie wyklucza `phase.startsWith('return')`,
+        //   więc statek nie ma własnego domknięcia powrotu i bramka zawiesiłaby KAŻDY powrót.
+        if (!this._vesselIsAtTarget(exp)) continue;
         this._processArrival(exp);
         changed = true;
       } else if (exp.status === 'returning' && exp.returnYear && this._gameYear >= exp.returnYear) {
