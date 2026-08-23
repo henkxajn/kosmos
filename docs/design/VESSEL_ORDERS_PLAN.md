@@ -699,10 +699,172 @@ tylko z nimi WSPÓŁISTNIEJE:**
      `true`.** `player_combat_mission_pause_smoke.mjs:126` ustawia `false` z komentarzem *„przywróć
      default"*. ⇒ wyjątek `{preempt:false}` jest nośny **dziś**, nie hipotetycznie.
 
+136. ⚪ **`ExpeditionPanel.js:453` przekazuje drugi argument, którego żywy `MissionSystem` nie
+     przyjmował** — `exSys?._calcDistance(body, activeColonyPlanet)`, przy `exSys` = alias na
+     `MissionSystem`. **ZMIERZONE:** to samo wejście dawało `3.3450 AU` (żywy, ignorował origin) vs
+     `4.1370 AU` (martwy fork, honorował) — **0.7920 AU po cichu połknięte**. ⚠ Defekt **LATENTNY**:
+     `ExpeditionPanel` ma **zero importerów** w repo, więc ta linia nigdy się nie wykonuje.
+     ⚠ Komentarz nad nią (`:443`) mówi wprost *„Odległości od aktywnej kolonii (nie zawsze
+     homePlanet)"* — **intencja została zapisana, mechanizm nie**. Po VO-1 sygnatura wreszcie
+     przyjmuje ten argument, więc gdyby panel ożył, wywołanie stałoby się poprawne.
+     ⚠ **Historia (git, ZMIERZONE):** naprawa **nigdy nie była** w `MissionSystem`. Ten powstał
+     2026-03-06 (`503eff3`) jako kopia ówczesnego forka. Naprawa trafiła do forka **12 dni później**
+     (`18b38f1`) — w commicie, który **w tym samym diffie ruszał żywy `MissionSystem`**. Fork był
+     potem pielęgnowany na ślepo jeszcze ~4 miesiące (16 commitów, w tym 410-liniowa „Colonization
+     reform"), a pliki rozjechały się o ~848/1547 linii.
+
+---
+
+## Findings z live-gate VO-1 (2026-08-23) — obserwacje z ŻYWEJ gry
+
+⚠ **Żaden z poniższych nie jest skutkiem VO-1** — wykluczone WYKONANIEM (kontrola odwrotna:
+ta sama sekwencja na dzisiejszym kodzie i na semantyce sprzed VO-1 → **zero różnic**, przy dowiedzionej
+skuteczności patcha: `exp.distance` 0.0500 vs 5.0500 AU). `ecf8233` tknął **dwa pliki**, a
+`MovementOrderSystem` i `MissionSystem` **nie znają nawzajem swoich nazw** (grep w obie strony = 0).
+
+137. 🟠 **Domknięty rozkaz jest w UI nieodróżnialny od żywego, a statek cicho wypada z trzech pul.**
+     Konsekwencja Findingu 119 **zaobserwowana na żywo**. Po domknięciu `moveToPoint` w **pusty punkt**
+     (`targetEntityId: null`) statek zostaje z markerem `status:'completed'`, `_byVessel` pusta
+     (**poprawnie** — `_indexExistingOrders:115` pomija nie-`active`), pozycja zamrożona
+     (**zaprojektowany dryf**, `MovementOrderSystem.js:1857`: *„statek dryfuje w punkcie… gracz musi
+     wydać kolejny order"*).
+     ⚠ **Mechanicznie wszystko działa** — nowy rozkaz przechodzi natychmiast (ZMIERZONE: `ok:true`,
+     1.000 AU w rok). **Szkoda jest informacyjna:** martwy marker wypisuje statek z puli logistycznej
+     (`TransportOrderSystem:517`), uderzeniowej AI (`DirectorOffensive:83`) i doktrynalnej
+     (`DirectorDoctrine:270`), a panel floty pokazuje **domknięty rozkaz jako bieżący**
+     (`FleetGroupPanelLogic:86`). Gracz nie dostaje sygnału, że statek doleciał i czeka.
+     ⚠ **Koszt zmierzony w praktyce: jedna runda live-gate'u** — obserwator uznał statek za trwale
+     zamrożony i wstrzymał weryfikację.
+     ⚠ Wspólny wzorzec z **Findingiem 125**, ale **inna klasa szkody**: 125 odbierał ZDOLNOŚĆ startu,
+     137 odbiera wyłącznie WIEDZĘ. ⇒ **naprawa w VO-3b**; do jego gate'u dochodzi kryterium
+     *„statek po ukończonym rozkazie WRACA do puli i panel przestaje pokazywać rozkaz"*.
+
+138. 🔴 **`VesselManager._findBodyNearPoint` skanuje CAŁĄ GALAKTYKĘ — blokuje graczowi rozkaz ruchu
+     we WŁASNYM układzie.** Iteruje `EntityManager.getByType(type)` **bez filtru układu**, z progiem
+     `SNAP_TO_BODY_AU = 0.5 AU`. Ponieważ **współrzędne są LOKALNE dla układu** (gwiazda każdego stoi
+     w `(0,0)`), ciała obcych układów siedzą w tych samych zakresach liczbowych.
+     Łańcuch: „leć tutaj" → `_issueMoveToPoint:534-537` auto-przejmuje ciało spod punktu → snap trafia
+     w **obce** ciało → bramka W3-4b (`isSameSystem`) odrzuca jako **`target_other_system`**.
+     ⚠ **Bramka jest poprawna — zepsuty jest snap tuż nad nią.** Komentarz nad bramką (`:539-545`)
+     tłumaczy dokładnie lekcję *„identyfikatory GLOBALNE, współrzędne lokalne"*, a wywołanie trzy
+     linie wyżej ją łamie.
+     ⚠ **`EntityManager.getByTypeInSystem(type, systemId)` ISTNIEJE** (`:82`) i jest używane gdzie
+     indziej — naprawa to podmiana wywołania + przekazanie `vessel.systemId`.
+     ⚠ **Czwarty site klasy Findingu 123 — i pierwszy, który BLOKUJE gracza**, a nie tylko cicho źle
+     liczy. Im więcej wygenerowanych układów, tym częstsze trafienie.
+     **PRE-EXISTING, poza zakresem VESSEL_ORDERS** (to bramkowanie celu, nie model rozkazów).
+     Obejście na czas arca: podawać **jawny cel-ciało** zamiast punktu (`spec.targetBodyId` pomija snap).
+
+139. ⚪ **`cancelOrder` czyta MARKER, nie indeks** (`vessel.movementOrder`, wymóg `status === 'active'`)
+     ⇒ mutuje dawno martwy rozkaz mimo pustego `_byVessel`, ustawiając `blockReason`. Facet Findingu
+     119; **domyka się razem z VO-3b**. ⚠ Praktycznie użyteczne: `movementOrder.blockReason` jest
+     **jedynym śladem**, kto anulował rozkaz.
+
+140. 🟠 **Hook re-indeksu `GameScene.js:2109-2110` nie jest pinowany przez ŻADEN keeper**, a
+     `GameScene` **nie importuje się pod node** ⇒ jego regresja byłaby **niewidzialna dla sweepu**,
+     a objawem byłby zamrożony statek po wczytaniu u każdego gracza.
+     ⚠ **SPROSTOWANIE do potocznej diagnozy „MOS nie ma serialize/restore, więc `_byVessel` jest
+     ZAWSZE puste po wczytaniu": to NIEPRAWDA.** MOS istotnie nie ma własnej serializacji — i **nie
+     potrzebuje jej**, bo rozkazy są zapisywane **na statkach** (`VesselManager.serialize:1325-1334`,
+     pełna głęboka kopia ze `status`), a indeks odbudowuje `_indexExistingOrders` wołane po
+     `vesselManager.restore`. **ZMIERZONY round-trip:** rozkaz `active` → zapis → nowy MOS (`size 0`)
+     → `restore` (`0`) → **po re-indeksie `size = 1`**. Problem został rozwiązany raz, w M4 P1, i
+     komentarz w kodzie nazywa go wprost.
+     ⚠ **OTWARTY WĄTEK (niezmierzony):** w sesji live-gate zaobserwowano `mo_3` ze statusem `active`
+     przy pustym `_byVessel` — zgodne z niezadziałaniem hooka, ale **NIE dowiedzione**; `GameScene`
+     nie da się uruchomić headless. Klasa **R-1 z arca bramki własności**.
+     ⇒ kandydat na **pin ŹRÓDŁOWY przy VO-3b** (wywołanie istnieje, stoi PO `restore`, nie jest
+     zagnieżdżone w bramce) — wzór: `colony_ownership_load` T8.
+
+141. 🟠 **Rozkaz ruchu na cel w INNYM układzie dla statku bez warpu ginie po cichu.** ZAOBSERWOWANE
+     na żywo: `warpFuel.max === 0`, statek zadokowany, rozkaz na cel międzysystemowy ⇒
+     `movementOrder` zostaje `null`, statek nie rusza, **zero komunikatu w UI**.
+     ⚠ **ROOT CAUSE (audyt 2026-08-23, ZMIERZONE): SILNIK MÓWI — UI POŁYKA.**
+     `MovementOrderSystem:545-547` zwraca jawne **`target_other_system`**, a `WarpRouteSystem:49`
+     — **`not_warp_capable`**. Stan statku po odmowie jest **nietknięty** (`movementOrder:null`,
+     `docked`), więc to nie jest wzorzec 125 (tam odmowa BRYKAŁA statek) — to **czysta cisza**.
+     ⚠ **`warpFuel.max === 0` NIE jest sprawdzane na ścieżce ruchu** — ta odpada wcześniej, na bramce
+     układu; test warpu żyje wyłącznie w bramce skoku, z innym powodem.
+     **Gdzie ginie powód (ZMIERZONE wykonaniem prawdziwych handlerów):**
+     · `RightClickMenu:316-343` — powód **zna i tłumaczy poprawnie**, ale kieruje go **WYŁĄCZNIE do
+       Dziennika** (`channel:'fleet'`, `severity:'warn'`); zmierzone `toasty: []`. Dla gracza
+       patrzącego na mapę = brak reakcji. Komunikat JEST — tylko nie tam, gdzie gracz patrzy.
+     · `FleetManagerOverlay:2879-2886` — zwrotka `OrderService` **nie jest przypisana do niczego**.
+       ⚠ Ta sama funkcja wyżej (`:2820`, `:2829`) używa gotowego kanału `expedition:launchFailed`
+       (→ `UIManager:1100` robi wpis + toast) — gałąź `OrderService` po prostu z niego nie korzysta.
+     · `FleetSystem:220` — emit `fleet:orderIssued` stoi pod `if (accepted.length > 0)`, a to
+       **jedyny** konsument tłumaczący powody per statek ⇒ **przy pełnym odrzuceniu powód nie dociera
+       nigdzie**.
+     **Skala (ZMIERZONA):** **30 z 41** powodów odmowy nie ma klucza i18n · **6 z 15** wywołań
+     producenckich połyka odmowę całkowicie, 2 pokazują surowy `snake_case`, 2 tłumaczą ale piszą
+     tylko do Dziennika ⇒ **żaden powód nie ma zagwarantowanej widoczności**.
+     ⚠ **Cała rodzina zdarzeń `vessel:order*` (w tym `orderBlocked`) ma ZERO konsumentów UI — wbrew
+     tabeli zdarzeń w `CLAUDE.md`, która deklaruje ich dwóch.** (Rozszerzenie Findingu 127.)
+     **i18n: ZERO nowych kluczy** — `vessel.reasonTargetOtherSystem` i `fleet.warpErrConfig` istnieją
+     w PL i EN; gotowa powierzchnia to `_toastReturnFailed` + `_warpErrLabel` (`FMO:6616-6665`,
+     dorobek Findingu 125 — jako jedyna robi **toast ORAZ** trwały wpis).
+     **Chokepoint naprawy:** `MovementOrderSystem.issueOrder` (`:181-246`) — wszystkie 9 gałęzi
+     `_issueX` wychodzi tym samym `return`. ⚠ Nie pokryje dwóch klas, które trzeba nazwać z góry:
+     odmów PRZED wejściem do MOS (`OrderService`, early-return UI) oraz blokad w locie
+     (`vessel:orderBlocked`). ⚠ Konieczny filtr `isEnemyVessel`, żeby nie zalać gracza odmowami AI.
+     ⇒ **poza zakresem VESSEL_ORDERS** (to warstwa prawdomówności UI, nie model rozkazów), ale
+     **naturalny kandydat na osobny, tani slice** — szkic: ~20 lin. w MOS + ~14 w `UIManager`.
+
+142. 🔴 **`_getValidTargets` oferuje cele, których statek nie dosięgnie — bo klucza się na
+     OGLĄDANYM układzie, nie na układzie STATKU.** `FleetManagerOverlay:9032-9039` czyta
+     `window.KOSMOS.activeSystemId` i stempluje każdy cel na sztywno `systemId: activeSysId,
+     sameSystem: true` (`:9098-9109`). Jawna gałąź cross-system JEST bramkowana warpem (`:9140`),
+     ale **pętla główna nie**.
+     **ZMIERZONE** (prawdziwa `_getValidTargets`, statek `warpFuel.max = 0` w `sys_home`):
+     `activeSystemId='sys_home'` → **43 cele**, wszystkie własne · po przełączeniu widoku na
+     `sys_061` → **61 celów, wszystkie `sameSystem:true`, `reachable:true`**, każdy z żywą hit-zoną
+     `select_target`. Klik → `{ok:false, reason:'not_warp_capable'}` → i ta zwrotka ginie w `:2883`.
+     ⇒ **to jest mechanizm, przez który gracz w ogóle dostał ten klik.** Potwierdza i **mierzy**
+     Finding 123 (audyt oznaczał go jako NIE zmierzony — headless generował jeden układ).
+     ⚠ Naprawa (`sameSystem` liczone względem `vessel.systemId`) ma **ŚREDNIE** ryzyko: picker
+     obsługuje wszystkie misje, więc pin musi wykazać, że przy `activeSystemId === vessel.systemId`
+     lista jest **identyczna co do wiersza** (baza zmierzona: 43 cele). **Poza zakresem VESSEL_ORDERS.**
+
+---
+
 ⚠ **Korekty liczbowe do audytu** (nie nowe findingi): `order_blocked_resume` ma **9 asercji**, nie 4
 (audyt policzył testy) · subskrypcje `foreign_*` stoją na `:120-121/:160-161/:162-163/:164-165`, nie
 `:119/:159/:161/:163` (off-by-one) · retirement to **926 lin.**, nie ~455 (§2.1) · keeperów dotkniętych
 jest **13**, nie 12 (§3.5).
+
+---
+
+# §7a ZAPLANOWANY FOLLOW-UP — slice **ORDER_TRUTHFULNESS** (PO zamknięciu VESSEL_ORDERS)
+
+✅ **Zdecydowane 2026-08-23:** Findingi **141/142** dostają **osobny, mały slice PO** tym arcu —
+nie wpis w rejestrze i nie wtrącenie w środek P0-P5.
+
+**Uzasadnienie decyzji (zapisane, żeby nie trzeba było go odtwarzać):** to warstwa **prawdomówności
+UI**, nie model rozkazów — **nie blokuje żadnego z P0-P5**. Naprawa jest tania i ma **gotowy wzorzec
+w repo** (`_toastReturnFailed` + `_warpErrLabel`, `FMO:6616-6665`, dorobek Findingu 125), więc
+**nie ucieknie**. Przerywanie **wiążącej** kolejności `P0 → P2 → P1 → P3 → P5 → P4`, żeby go wcisnąć
+teraz, kosztowałoby więcej niż zaczekanie.
+
+⚠ **Dług jest jednak REALNY i zmierzony w praktyce: kosztował DWA zatrzymania live-gate'u VO-1.**
+Za pierwszym razem obserwator uznał statek za trwale zamrożony (137), za drugim — rozkaz za cichy
+no-op silnika (141). W obu przypadkach **system miał coś do powiedzenia i tego nie powiedział**.
+
+**Zakres (szkic, do podpisania osobno):**
+1. **Powierzchnia odmowy** — chokepoint `MovementOrderSystem.issueOrder` (`:181-246`; wszystkie
+   9 gałęzi `_issueX` wychodzi tym samym `return`) → nowe `vessel:orderRejected` → JEDNA subskrypcja
+   w `UIManager` robiąca **toast ORAZ wpis w Dzienniku** (wzór `_toastReturnFailed`). ~20 lin. + ~14.
+2. **Dostępność (Finding 142)** — `_getValidTargets` liczy `sameSystem` względem **`vessel.systemId`**,
+   nie `activeSystemId`. ⚠ Ryzyko ŚREDNIE (picker obsługuje wszystkie misje) ⇒ pin musi wykazać
+   **identyczność co do wiersza** przy `activeSystemId === vessel.systemId` (baza zmierzona: 43 cele).
+3. **Uzupełnienie i18n** — 30 z 41 powodów bez klucza.
+
+⚠ **Trzy rzeczy do nazwania w podpisie tamtego slice'u, wszystkie zmierzone tutaj:**
+· chokepoint **nie pokryje** odmów sprzed wejścia do MOS (`OrderService`, early-return UI) ani
+  **blokad w locie** (`vessel:orderBlocked`) — to osobne klasy;
+· **konieczny filtr `isEnemyVessel`**, inaczej gracz dostanie odmowy AI;
+· **ryzyko podwójnego komunikatu** — producenci fan-out (`RightClickMenu`, `UIManager` na
+  `fleet:orderIssued`) już raportują per statek, więc potrzebny dedup albo zawór `_silentReject`
+  na trzech ścieżkach automatycznych (`AutoRetreatSystem:97/:109`, `FleetSystem:585`).
 
 ---
 
