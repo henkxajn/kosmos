@@ -283,16 +283,18 @@ header('S3 — statek sam wraca do poprzedniej roboty po anulowaniu pościgu (WY
     { name: 'Zwierzyna', modules: ['engine_ion'], x: 3 * AU, y: 3 * AU });
   prey.position.state = 'orbiting'; prey.position.dockedAt = null;
 
+  // ⚠ ODWRÓCONE w VO-3 (P1). Poprzednia wersja pinowała DEFEKT: „pościg ROBI snapshot misji"
+  //   oraz „po anulowaniu statek SAM wrócił do misji" — to był mechanizm Findingu 118.
   const r = s.mos.issueOrder(s.v.id, { type: ORDER_TYPES.pursue, targetEntityId: prey.id });
-  assert(r?.ok === true && s.v._suspendedMission?.type === 'mining',
-    `S3 PIN DZIŚ: pościg ROBI snapshot misji (_suspendedMission=${s.v._suspendedMission?.type}) — ` +
-    'VO-3 MA to odwrócić: rozkaz gracza nigdy nie ma wskrzeszać starej roboty');
+  assert(r?.ok === true && s.v._suspendedMission === undefined,
+    `S3 ✅ ODWRÓCONY (VO-3): pościg NIE zostawia snapshotu ` +
+    `(_suspendedMission=${JSON.stringify(s.v._suspendedMission)}) — rozkaz gracza nigdy nie ` +
+    'wskrzesza starej roboty');
 
   s.mos.cancelOrder(s.v.id, 'player');
-  assert(s.v.mission?.type === 'mining' && s.v._suspendedMission === undefined,
-    `S3 PIN DZIŚ (SKUTEK): po anulowaniu statek SAM wrócił do misji (${s.v.mission?.type}, ` +
-    `state=${s.v.position.state}) — ścieżka: MOS→\`vessel:orderCancelled\`→` +
-    'VesselManager._resumeMissionAfterOrder (subskrypcja :128)');
+  assert(s.v.mission?.type !== 'mining',
+    `S3 ✅ ODWRÓCONY (SKUTEK): po anulowaniu statek NIE wrócił do starej misji ` +
+    `(mission=${s.v.mission?.type ?? 'null'}, state=${s.v.position.state}) — Finding 118 zamknięty`);
 }
 {
   // KONTROLA PINU (a) — `moveToPoint` jest TERMINALNY: nie snapshotuje i KASUJE istniejący snapshot.
@@ -442,12 +444,16 @@ header('S5 — `issueOrder` nie ma guardu „statek ma już rozkaz" (WYKONANIE +
   assert(rB?.ok === true && v.movementOrder !== orderA,
     'S5 PIN DZIŚ: drugi rozkaz na statku z ŻYWYM rozkazem PRZECHODZI — `issueOrder:181-206` ' +
     'nie ma testu „ma już rozkaz". VO-3 MA to odwrócić (preempcja zamiast cichego nadpisania).');
-  assert(orderA.status === 'active' && orderA.completedYear == null,
-    `S5 PIN DZIŚ: stary rozkaz zostaje OSIEROCONY ze statusem \`${orderA.status}\` — nikt go ` +
-    'nigdy nie domknie, bo `cancelOrder` czyta `vessel.movementOrder`, czyli już NOWY rozkaz');
-  assert(seen.cancelled === 0 && seen.completed === 0 && seen.blocked === 0,
-    `S5 PIN DZIŚ (CISZA): zero zdarzeń zamknięcia dla nadpisanego rozkazu ` +
-    `(cancelled=${seen.cancelled}, completed=${seen.completed}, blocked=${seen.blocked})`);
+  // ⚠ ODWRÓCONE w VO-3 (P1). Poprzednia wersja pinowała DEFEKT: stary rozkaz zostawał `active`
+  //   NA ZAWSZE (nikt go nie domykał, bo `cancelOrder` czyta już NOWY rozkaz), a nadpisanie było
+  //   CAŁKOWICIE CICHE. Teraz `_preempt` domyka go i melduje — Findingi 118/119/127 zamknięte.
+  assert(orderA.status === 'superseded',
+    `S5 ✅ ODWRÓCONY: stary rozkaz DOMKNIĘTY (status=${orderA.status}) — koniec osieroconych ` +
+    'obiektów `active`, których nikt nigdy nie zamknie');
+  assert(seen.cancelled === 1,
+    `S5 ✅ ODWRÓCONY (KONIEC CISZY): nadpisanie MELDUJE domknięcie ` +
+    `(cancelled=${seen.cancelled}) — payload niesie id rozkazu PRZERYWANEGO, bo z id nowego ` +
+    '`FleetSystem` wszedłby w gałąź `tracked !== orderId` i rozkaz floty nigdy by się nie domknął');
   assert(seen.issued > 0 && seen.launched > 0,
     `S5 KONTROLA PINU (cisza ≠ „nie zmierzyłem"): ten sam nasłuch ZŁAPAŁ zdarzenia, które LECĄ ` +
     `(issued=${seen.issued}, launched=${seen.launched}) — milczenie na kanałach zamknięcia jest ` +
@@ -492,10 +498,18 @@ header('S5 — `issueOrder` nie ma guardu „statek ma już rozkaz" (WYKONANIE +
   assert(/isImmobilized/.test(body) && /isInService\s*\(\s*vessel\s*\)/.test(body),
     'S5b KONTROLA PINU: ten sam wycinek WIDZI istniejące bramki (`isImmobilized`, `isInService`) — ' +
     'nieobecność innych pochodzi z KODU, nie z regeksu');
-  assert(!/movementOrder/.test(body) && !/cancelOrder/.test(body) && !/_preempt/.test(body),
-    'S5b PIN DZIŚ: ciało `issueOrder` nie odwołuje się ANI do `movementOrder`, ANI do `cancelOrder`, ' +
-    'ANI do `_preempt` — nie ma czym przerwać starego rozkazu. VO-3 MA to odwrócić, wstawiając ' +
-    '`_preempt` POD istniejącymi bramkami (plan §3.1.4 pkt 1).');
+  // ⚠ ODWRÓCONE w VO-3 (P1). Poprzednia wersja pinowała, że ciało `issueOrder` nie ma CZYM
+  //   przerwać starego rozkazu. Teraz ma — i pin sprawdza, że mechanizm jest DWUFAZOWY
+  //   (D-VO3a): snapshot przed rozgałęzieniem, destrukcja dopiero po `res.ok`.
+  assert(/_preemptSnapshot/.test(body) && /_preemptCommit/.test(body),
+    'S5b ✅ ODWRÓCONY: ciało `issueOrder` wywołuje OBIE fazy preempcji');
+  assert(body.indexOf('_preemptSnapshot') < body.indexOf('_dispatchByType')
+      && body.indexOf('_dispatchByType') < body.indexOf('_preemptCommit'),
+    'S5b PIN KOLEJNOŚCIOWY (D-VO3a): snapshot PRZED rozgałęzieniem, destrukcja PO nim — ' +
+    'inaczej odrzucony rozkaz (np. `no_weapons` jednym kliknięciem) skasowałby ŻYWE uderzenie');
+  assert(/res\?\.ok/.test(body),
+    'S5b PIN: destrukcja jest bramkowana `res.ok` — ~25 ścieżek odmowy leży PONIŻEJ ' +
+    'rozgałęzienia typów, więc warunek „pod bramkami" sam w sobie był fikcją');
 }
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════

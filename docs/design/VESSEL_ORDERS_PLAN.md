@@ -270,6 +270,127 @@ nigdy nie trafi w preempcję**. Precedens `force` **już w tym pliku istnieje** 
 commicie**, inaczej odwrót AI po bitwie wyląduje w `vessel:autoRetreatFailed` (`:137-139`) zamiast
 w odwrocie.
 
+### 3.1.4b ✅ POPRAWKI DO WARUNKÓW MECHANICZNYCH — **PODPISANE 2026-08-23**, po pomiarze pod VO-3
+
+⚠ **Rozpoznanie przed VO-3 wykazało, że warunki z §3.1.4 są w podpisanym brzmieniu
+NIEWYSTARCZAJĄCE.** Cztery poprawki, każda wynikająca z POMIARU, nie z preferencji.
+
+**D-VO3a ✅ — `_preempt` jest DWUFAZOWY; destrukcja dopiero po `res.ok`.**
+Warunek (a) („`_preempt` POD bramkami `:193`/`:205`") pokrywa **5 z ~30** ścieżek odmowy
+`issueOrder`; pozostałe ~25 leży **PONIŻEJ rozgałęzienia na typy** (`no_weapons`,
+`insufficient_fuel`, `target_other_system`, `unreachable_target`, `target_already_in_range`…).
+⚠ Najdotkliwszy przypadek osiągalny **jednym kliknięciem gracza**: „Zaangażuj" na statku bez broni
+→ `no_weapons` (`:830`) ⇒ **odrzucony rozkaz skasowałby żywe uderzenie**. ⇒ faza 1 (odczyt) przed
+rozgałęzieniem, faza 2 (destrukcja) **wyłącznie po `res.ok`**.
+
+**D-VO3b ✅ — `_preempt` ZERUJE `vessel.mission`, z guardem `phase !== 'warp_transit'`.**
+Bez tego VO-3 **WPROWADZA TELEPORT**: dla `pursue`/`intercept`/`engage` `vessel.mission` nigdy nie
+jest podmieniana, a para `state='orbiting'` + żywa misja trafia w gałąź
+`VesselManager._updatePositions:2224`, która **PINUJE statek do `m.targetId`**.
+**ZMIERZONE: skok 5,05 AU w jednym tiku 0,001 roku** (limit uczciwy 0,0010 AU); po dołożeniu
+`vessel.mission = null` — **0,0000 AU**. To byłaby regresja **klasy Findingu 116** w commicie, który
+ma zamykać 118/119/126/127.
+⚠ **Guard warp jest obowiązkowy:** MOS **nie ma ŻADNEJ bramki** na `interstellar_jump` /
+`phase === 'warp_transit'` (grep = 0), a `_reconcileSystemId` i cała **Slice A** stoją na
+`mission.toSystemId`. Zerowanie misji w trakcie skoku rozbiłoby podróż międzygwiezdną.
+⚠ **Ta sama poprawka leczy DRUGIE, nowo zmierzone ryzyko przeciwnego znaku niż R-6:** punkt 3
+(anulowanie rekordu) przy `pursue`/`intercept`/`escort`/`patrol` zostawiał `vessel.mission='colony'`
+**nad martwym rekordem** ⇒ predykat mówił „trasa żyje", a kolonie **2→2**. To odtwarzało limbo
+**Findingu 111 od strony fałszywego POZYTYWU**.
+
+**D-VO3c ✅ — punkt 2 rusza `_suspendMissionIfAny`, nie tylko wejście intentu.**
+`delete vessel._suspendedMission` na wejściu jest **NO-OPEM**: cztery call-site'y
+(`MOS:426/757/866/1438`) **odtwarzają snapshot w tej samej ramce**. ZMIERZONE: pin „pościg ROBI
+snapshot" świeci na **zielono mimo preempcji**.
+⚠ **DETEKTOR WDROŻENIA:** jeśli po VO-3 `moveto_no_return` dalej daje **15/15**, punkt 2 **nie
+wszedł** — a żaden inny test tego nie zauważy.
+
+**D-VO3d ✅ — zakres wymuszenia obejmuje `FleetSystem:585`; `OrderService.issueReturn` WYŁĄCZONY
+z preempcji.**
+⚠ `FleetSystem.js:585` (doktryna `retreat_at_50`) to **TRZECI producent odwrotu**, który omija
+`AutoRetreatSystem._issueRetreatOrder` i woła `mos.issueOrder` wprost. Podpis D-VO1 wymieniał tylko
+`AutoRetreatSystem:97/:109` — **to jest nieutwardzony bliźniak, ta sama klasa co `removeColony:667`**.
+⚠ `_preempt` na wejściu `issueReturn` **COFNĄŁBY Finding 125**: skasowałby `pendingOrder` PRZED
+snapshotem `ReturnJump.js:58`, więc odmowa skoku przywróciłaby `null` i po cichu skasowała
+zakolejkowaną dostawę gracza (pinuje to `return_home_no_brick` T4b).
+
+⚠ **DWA DALSZE OGRANICZENIA IMPLEMENTACJI, zmierzone:**
+· `_preempt` **NIE MOŻE być zbudowany na `cancelOrder`** — jej `_stopVesselMotion` (`:1618-1631`)
+  kasuje `vessel.mission`, ustawia `orbiting`/`dockedAt=null`/`idle`, więc wywołana po zainstalowaniu
+  nowego rozkazu **zdemolowałaby świeży rozkaz**.
+· `_preempt` **NIE MOŻE użyć `MissionSystem.cancelMission`** — to alias `_orderReturn`, który
+  **odsyła statek do domu** i **nie zamyka rekordu** (`status='returning'`, ZMIERZONE). Właściwy
+  prymityw to kształt `_onVesselWrecked` z VO-2: `status='completed'` bez ruszania statku.
+
+**D-VO3e ✅ — guard kluczuje się na PRZEŻYCIU misji warp, nie na fakcie warpu; `_preempt` przerywa
+też TRASĘ WARP przez publiczną intencję.** ⚠ **PODPISANE po tym, jak pomiar wykazał, że guard
+D-VO3b był w pierwotnym kształcie SZKODLIWY** — czyli była to regresja wprowadzona przez sam ten commit.
+
+**Co zmierzono:** gałąź typu (`_issueMoveToPoint:768`, `_issueEngage:966`) **NADPISUJE
+`vessel.mission` ZANIM `_preemptCommit` w ogóle ruszy** (biegnie w `_dispatchByType`, przed
+`if (res?.ok)`). Guard `prev.mission?.phase === 'warp_transit'` pilnował więc **pola, którego już
+nie ma** — misja warp ginęła tak czy owak (`interstellar_jump` → `move_to_point`) — a w zamian
+**zostawiał żywy `pendingOrder` i OSIEROCONĄ trasę warp**.
+
+**Skutek osieroconej trasy (ZMIERZONY, nie wywnioskowany):**
+· podróż **NIGDY się nie domyka** — 400 lat gry, **zero zdarzeń warp**; detekcja przylotu stoi na
+  `mission.type === 'interstellar_jump'`, a misję właśnie nadpisano. Kontrola: ta sama podróż **bez**
+  rozkazu ruchu kończy się `warpRoute:completed` + `interstellar:arrived`.
+· `OrderService._maybeDeliver:242` ma `if (v.warpRoute) return` ⇒ sierota **BLOKUJE dostawy
+  composite DO KOŃCA PARTII**, także **po wczytaniu zapisu** (oba pola są serializowane).
+· samoleczenie istniało, ale **przypadkowe**: dopiero NASTĘPNY skok gracza kończył sierotę jako
+  `diverted`.
+
+**Kształt poprawki:** `warpMissionSurvived = inWarp && vessel.mission === prev.mission`.
+Gdy misja warp **przeżyła** (`pursue`/`intercept` jej nie podmieniają) — nie ruszamy niczego.
+Gdy **zginęła** — pełne sprzątanie: `pendingOrder`, rekord ekspedycji **oraz trasa warp**.
+⚠ Trasę przerywa **NOWA publiczna intencja `WarpRouteSystem.abortJourney(vesselId, reason)`**, bo
+`vessel.warpRoute` ma jednego producenta i trzy miejsca kasowania, **wszystkie w `WarpRouteSystem`**,
+a `_abort` jest prywatne. To ten sam wzorzec, którym preempcja sięga po rekordy misji —
+**mutacja przez intencję u WŁAŚCICIELA STANU**, nigdy przez cudze pole.
+⚠ Obejmuje TAKŻE statek **spoza** warpu z żywą trasą wielo-przeskokową (zmierzone: `pendingOrder`
+był czyszczony, a `warpRoute` zostawał).
+
+⚠ **Brakująca bramka „nie wolno wydać rozkazu ruchu statkowi w skoku" (Finding 147) ZOSTAJE POZA
+ZAKRESEM** — jest koncepcyjnie czystsza i czyniłaby ten guard zbędnym, ale to zmiana zachowania
+poza P1; należy do `OrderService`/P4.
+
+**D-VO3f ✅ — pula logistyczna sprząta się SAMA, na `mission:aborted`.** ⚠ Druga regresja
+wprowadzona przez ten commit, znaleziona w live-gate B.
+`TransportOrderSystem` nie subskrybował **żadnego** zdarzenia rozkazu ani przerwania misji (tylko
+`expedition:arrived`, `vessel:wrecked`, `colony:destroyed`, `colony:captured`, `time:tick`). Do VO-3
+istniała **działająca ścieżka leczenia** przez `_suspendedMission` → `_resumeMissionAfterOrder`:
+po pościgu wydanym wożącemu kurierowi zlecenie **szło dalej**. Guard D-VO3c ją usuwa.
+**ZMIERZONE (60 lat gry, ON vs OFF):** OFF → `assignments: to_origin`, cargo puste, **50 Fe
+dostarczone**; ON → `assignments: hauling {Fe:50}` **zamrożone**, **0 dostarczone**.
+⚠ **Koszt ukryty:** `inFlight` **rezerwuje** te jednostki, więc **inne statki z puli też ich nie
+wezmą**.
+**Kształt:** TOS słucha **`mission:aborted`** (zdarzenie dodane w tym commicie przez
+`abortMissionsForVessel`) i sam zwalnia przydział — lustro `_onVesselWrecked`.
+⚠ **NIE `vessel:orderCancelled`**, choć tak brzmiał pierwszy pomysł: ten leci **tylko gdy istniał
+POPRZEDNI `movementOrder`**, a kurier na kursie jedzie na **misji** (`issueTransport`) i żadnego
+rozkazu ruchu nie ma — emisja by go **nie dosięgła** (zmierzone).
+⚠ **Świadomie NIE trzeci `abortX()` w `_preemptCommit`:** łańcuch rósłby o wywołanie na każdy nowo
+odkryty system, a czwarty zostałby przeoczony — ta sama klasa co nieutwardzony bliźniak
+(`removeColony:667`, `FleetSystem:585`). Właściciel stanu ogłasza, zainteresowani słuchają.
+⚠ **Guard niepotrzebny — zwolnienie jest IDEMPOTENTNE** (potwierdzone): `_findAssignment` zwraca
+`null`, gdy nic nie ma, a `_releaseAssignment` ma własne bramki (`!a?.courseCargo`, `if (i >= 0)`).
+⚠ Statek **ZOSTAJE w puli** — gracz go stamtąd nie wypisał, więc po zwolnieniu ma być znów dostępny.
+
+**⚠ SIATKA AI NIE MIERZY TEGO, O CO PYTA D-VO1 — nowa asercja obowiązkowa w keeperze VO-3.**
+`w3_attack_dispatch` przechodzi 36/36, ale przy **`liveOrder = 0`**: w całym sweepie preempcja nad
+ŻYWYM rozkazem odpala **dokładnie raz**, i to nie na statku AI. Dowodzi więc „preempcja nie psuje
+normalnej ścieżki AI", a **nie** „preempcja nad żywym uderzeniem AI jest bezpieczna".
+⇒ **keeper VO-3 MUSI mieć: statek AI z aktywnym `attack` + drugi, ODRZUCONY rozkaz ⇒ uderzenie
+przeżywa.** To jest sedno GATE B.
+
+**Do odwrócenia w VO-3: 6 asercji w 2 plikach** (plan mówił o 2 w 1) — `moveto_no_return` T2
+(`:86`, `:87` **oraz `:88`**, pominięta w planie) + `vessel_orders_seams` (`:287` S3 snapshot,
+`:445` S5 osierocony rozkaz, `:448` S5 cisza). ⚠ Dodatkowo `seams:292` **zostanie zielone, ale
+zrobi się JAŁOWE** — wymaga przepisania, nie odwrócenia.
+
+---
+
 ### 3.1.3 ✅ D-VO1b (sub-decyzja) — **PODPISANA: W1 ROZDZIELONE** — czy `_preempt` zeruje `movementOrder`?
 
 > ⚠ **To NIE jest sprzątanie. To zmiana balansu AI, przemycona w slice'ie o preempcji.**
@@ -884,6 +1005,53 @@ w kodzie, który **P4 i tak retiruje**: gdy `foreign_*` staną się zwykłymi ak
 w `MissionSystem`, **144 i 146 znikają z konstrukcji** (rekord daje i samodomknięcie, i closer
 powrotu). **145 należy do slice'u `ORDER_TRUTHFULNESS`** (§7a) — to fasada, nie model misji.
 ⇒ żaden nie wymaga osobnego slice'u; **dopisać jako kryteria gate'u D (VO-6)**.
+
+---
+
+## Finding z implementacji VO-3 (2026-08-23)
+
+147. 🟠 **Rozkaz ruchu KASUJE misję statku w trakcie skoku warp — MOS nie ma żadnej bramki na
+     `warp_transit`.** `_issueMoveToPoint` podmienia `vessel.mission` bezwarunkowo, a `MOS` nie
+     odwołuje się do `interstellar_jump` / `phase === 'warp_transit'` **ani razu** (grep = 0).
+     Tymczasem `VesselManager._reconcileSystemId` i **cała Slice A** stoją na `mission.toSystemId`.
+     ⚠ **PRE-EXISTING, starsze od VO-3** — `_preempt` dostał własny guard (D-VO3b) i misji w skoku
+     **nie tyka**, ale gałąź typu robi to niezależnie od preempcji.
+     ⚠ **Złapane przez pin, który początkowo mierzył CUDZY defekt:** pierwsza wersja T6 w keeperze
+     `preempt_order_smoke` używała `moveToPoint` i padała **nie na moim guardzie**, tylko na tej
+     bramce. Pin zawężono do `pursue` (tam gałąź misji nie rusza), a defekt wydzielono tutaj.
+     **Naprawa należy do `OrderService`** (jedyny dozwolony orkiestrator multi-system) albo do P4 —
+     nie do preempcji. ⇒ **kryterium gate'u D (VO-6)**.
+
+---
+
+## Findings z live-gate VO-3 (2026-08-24) — pula logistyczna
+
+⚠ **Oba PRE-EXISTING, oba zmierzone ON vs OFF jako identyczne** — w odróżnieniu od D-VO3f, którą
+ten commit wprowadził i którą w nim naprawiono. Rozdzielenie tych trzech przypadków było całą
+treścią rozstrzygnięcia.
+⚠ **Sprostowanie atrybucji:** objaw zgłoszono jako `EmpireLogisticsSystem`. **To niemożliwe** —
+statek gracza nie może zostać kurierem AI (`EmpireLogisticsSystem:516`: `if (!empId || empId ===
+'player') return;`), a `assignedRouteId` na statku gracza **nigdy nie był ustawiony** (nie „wrócił
+do null" — nigdy nie istniał; `VesselManager` normalizuje go do `?? null`). Przydział gracza siedzi
+w `order.assignments[]` w `TransportOrderSystem`, zgodnie z `CLAUDE.md`.
+
+148. 🟠 **Rozkaz ruchu zostawia zlecenie transportowe przypisane do statku, który już nic nie wiezie
+     — bo `_driveVessel` bramkuje się na `docked`, a rozkaz kończy statek w `orbiting`.**
+     `TransportOrderSystem:226-228`: `const docked = v.position?.state === 'docked'; … if (!docked
+     || !available) return;`. **ZMIERZONE:** statek stoi **przy koloni docelowej**
+     (`dockedAt === cel`) z ładunkiem w ładowni i **nie rozładowuje**; po 93 latach gry zlecenie
+     otwarte, `inFlight {Fe:50}`, dostarczone **0**, sweep odpalił setki razy bez skutku.
+     ⚠ **KONTROLA PINU:** ręczne `dockAtColony` ⇒ sweep **natychmiast** podejmuje robotę, zlecenie
+     zamknięte, Fe dostarczone. **Mechanizm działa — brakuje wyłącznie przejścia w `docked`.**
+     ⚠ Rozkaz `ORDER_TYPES.dock` taki dok produkuje; zwykłe „Leć tutaj" — nie.
+     **PRE-EXISTING** (ON i OFF identyczne co do pola). ⚠ **VO-3 to UWIDACZNIA**, bo wcześniej statek
+     i tak nie wracał do puli przez martwy `movementOrder` (Finding 119) — commit zamienił „statek
+     trwale zablokowany" na „statek wolny, ale zlecenie go trzyma". **Poza zakresem VO-3.**
+
+149. ⚪ **`removeFromPool` nie zwalnia przydziału** — zlecenie dalej wypisuje statek, którego gracz
+     właśnie wyjął z puli. `TransportOrderSystem:83-92` rusza wyłącznie `st.pool`, nie woła
+     `_releaseAssignment`. **ZMIERZONE:** `isInPool=false`, a `assignments` dalej 1.
+     Bez związku z preempcją. **Poza zakresem VO-3.**
 
 ---
 

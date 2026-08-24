@@ -145,6 +145,32 @@ export class WarpRouteSystem {
     if (!this._vm.dispatchInterstellar(v.id, nextTarget)) { this._abort(v, 'dispatch_failed'); }
   }
 
+  /**
+   * VO-3 (D-VO3e) — PUBLICZNA INTENCJA: przerwij trwajaca podroz warp tego statku.
+   *
+   * ⚠ Istnieje, bo `MovementOrderSystem` NIE MA prawa dotykac `vessel.warpRoute` wprost:
+   *   to pole ma JEDNEGO producenta (`beginJourney`) i trzy miejsca kasowania, wszystkie tutaj,
+   *   a `_abort` jest prywatne. Ten sam wzorzec, ktorym preempcja siega po rekordy misji
+   *   (`MissionSystem.abortMissionsForVessel`) — mutacja przez intencje u WLASCICIELA STANU.
+   *
+   * ⚠ POWOD: preempcja, ktora nadpisuje misje statku w skoku, ROZBIJA detekcje przylotu
+   *   (`VesselManager` bramkuje ja na `mission.type === 'interstellar_jump'`). ZMIERZONE:
+   *   bez tego wywolania trasa wisi na statku BEZTERMINOWO — 400 lat gry, ZERO zdarzen warp —
+   *   a `OrderService._maybeDeliver` ma `if (v.warpRoute) return`, wiec osierocona trasa
+   *   BLOKUJE composite dostawy do konca partii, takze po wczytaniu zapisu (oba pola sa
+   *   serializowane). Samoleczenie istnialo, ale przypadkowe: dopiero NASTEPNY skok gracza
+   *   konczyl sierote jako `diverted`.
+   *
+   * @returns {boolean} czy byla jakas trasa do przerwania (gate musi odroznic „przerwano"
+   *   od „nie bylo czego" — inaczej zmierzy CISZE).
+   */
+  abortJourney(vesselId, reason = 'superseded') {
+    const v = this._vm?.getVessel?.(vesselId);
+    if (!v?.warpRoute) return false;
+    this._abort(v, reason);
+    return true;
+  }
+
   _abort(v, reason) {
     const finalId = v.warpRoute?.finalSystemId ?? null;
     v.warpRoute = null;   // statek stranduje tam, gdzie jest (orbita bieżącego układu)

@@ -265,6 +265,17 @@ export const GAME_CONFIG = {
     //   więc ponowne włączenie podejmuje grę tam, gdzie ją zostawiła.
     //   Default ON — cały sens tej fazy to ocena w praktyce (wzór transportOrders).
     reactionDirector:     true,
+
+    // ── VESSEL_ORDERS (P1 + P3) — zunifikowana warstwa rozkazow floty ──────
+    //   ON  = nowy rozkaz PRZERYWA i zastepuje stary (preempcja: domkniecie starego rozkazu,
+    //         skasowanie snapshotu misji, anulowanie rekordu ekspedycji, wyczyszczenie
+    //         composite'u) ORAZ menu akcji liczone z MOZLIWOSCI, a nie z kubelka position.state.
+    //   OFF = zachowanie sprzed VO-3 bit w bit (rozkaz nadpisuje po cichu, duch misji zyje).
+    //   ⚠ JEDNA flaga na P1 i P3 SWIADOMIE: para P1xP3 ma zmierzone ryzyko wspolne (R-6),
+    //     wiec musi dac sie wylaczyc ATOMOWO. Rozdzielenie ich dalo by stan, ktorego nie pinuje
+    //     zaden keeper — ta sama klasa co pulapka 8-slotow z C7/C8.
+    //   Default ON — caly sens tego arca to ocena w praktyce (wzor transportOrders).
+    unifiedVesselOrders:  true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

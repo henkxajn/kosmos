@@ -140,6 +140,15 @@ export class MovementOrderSystem {
    * @returns {boolean} true gdy coś suspendowaliśmy (używane do UI log).
    */
   _suspendMissionIfAny(vessel, { forCombat = false } = {}) {
+    // ⚠ VO-3 (D-VO3c) — przy aktywnej preempcji rozkaz gracza NIE zostawia snapshotu, wiec statek
+    //   nie ma z czego „wrocic do poprzedniej roboty" (Finding 118). Samo skasowanie snapshotu
+    //   na wejsciu `issueOrder` bylo NO-OPEM: CZTERY call-site'y tej metody (escort/pursue/engage/
+    //   patrol) odtwarzaly go w TEJ SAMEJ RAMCE — ZMIERZONE.
+    //   ⚠ `forCombat` ZOSTAJE: pauza bojowa (`m4PlayerCombatMissionPause`) to swiadoma,
+    //   udokumentowana funkcja, a jej wznowienie chroni TAKZE predykat konca gry — podczas walki
+    //   `_freezeAsStationary` zeruje `vessel.mission`, wiec `_suspendedMission` jest wtedy
+    //   JEDYNYM nosnikiem misji `colony`.
+    if (!forCombat && this._preemptEnabled()) return false;
     const m = vessel.mission;
     if (!m) return false;
     // moveToPoint jest TERMINALNY dla movement orders (nie wznawia się po innym rozkazie).
@@ -214,6 +223,23 @@ export class MovementOrderSystem {
     // M1: pełna implementacja moveToPoint, pursue/intercept (Commit 5).
     // M2b C6: goToPOI (delegat do moveToPoint) + patrol (runtime).
     // M2b C7: escort runtime — zostaje stub w C6.
+    // ── VO-3 (P1) — PREEMPCJA, FAZA 1: czysty ODCZYT. Nic nie mutuje. ────────────────────
+    // ⚠ Dwufazowosc jest WYMOGIEM (D-VO3a), nie stylem. Warunek „_preempt POD bramkami"
+    //   pokrywal 5 z ~30 sciezek odmowy — pozostale ~25 lezy PONIZEJ tego rozgalezienia
+    //   (`no_weapons`, `insufficient_fuel`, `target_other_system`, `unreachable_target`...).
+    //   Najdotkliwszy przypadek jest osiagalny JEDNYM KLIKNIECIEM: „Zaangazuj" na statku bez
+    //   broni -> `no_weapons` ⇒ jednofazowa preempcja skasowalaby ZYWE uderzenie.
+    const preemptState = this._preemptSnapshot(vessel, spec);
+
+    const res = this._dispatchByType(vessel, spec);
+
+    // ── FAZA 2: destrukcja WYLACZNIE po sukcesie ─────────────────────────────────────────
+    if (res?.ok) this._preemptCommit(vessel, preemptState, spec);
+    return res;
+  }
+
+  /** Rozgalezienie na typy rozkazu — wydzielone z `issueOrder`, zeby preempcja mogla byc dwufazowa. */
+  _dispatchByType(vessel, spec) {
     if (spec.type === ORDER_TYPES.moveToPoint) {
       return this._issueMoveToPoint(vessel, spec);
     }
@@ -243,6 +269,90 @@ export class MovementOrderSystem {
     }
 
     return { ok: false, reason: 'unhandled_type' };
+  }
+
+  /** Czy preempcja jest aktywna (kill-switch VESSEL_ORDERS). */
+  _preemptEnabled() {
+    return GAME_CONFIG.FEATURES?.unifiedVesselOrders !== false;
+  }
+
+  /**
+   * VO-3 FAZA 1 — snapshot stanu SPRZED wydania rozkazu. CZYSTY ODCZYT, zero mutacji.
+   * Musi biec PRZED `_dispatchByType`, bo galezie typow nadpisuja `vessel.movementOrder`
+   * i (dla moveToPoint) `vessel.mission`.
+   */
+  _preemptSnapshot(vessel, spec) {
+    if (!this._preemptEnabled() || spec?.preempt === false) return null;
+    return {
+      order:   vessel.movementOrder ?? null,
+      mission: vessel.mission ?? null,
+    };
+  }
+
+  /**
+   * VO-3 FAZA 2 — destrukcja. Wolane WYLACZNIE po `res.ok`.
+   *
+   * ⚠ KOLEJNOSC JEST KONTRAKTEM, nie stylem (zmierzona na obu wariantach):
+   *   emisja `vessel:orderCancelled` odpala SYNCHRONICZNIE
+   *   `VesselManager._resumeMissionAfterOrder`, czyli DOKLADNIE mechanizm, ktory P1 ma zabic.
+   *   Kolejnosc „emit -> delete snapshot" WSKRZESZA stara misje i pozniejszy `delete` niczego
+   *   nie cofa; kolejnosc „delete -> emit" nie wskrzesza, bo resume wychodzi na `if (!snapshot)`.
+   *
+   * ⚠ NIE JEST zbudowane na `cancelOrder`: jej `_stopVesselMotion` kasuje `vessel.mission`,
+   *   ustawia `orbiting`/`dockedAt=null`/`idle` — wolana PO zainstalowaniu nowego rozkazu
+   *   ZDEMOLOWALABY swiezy rozkaz.
+   */
+  _preemptCommit(vessel, prev, spec) {
+    if (!prev) return;
+
+    // ⚠ GUARD WARP (D-VO3b): w trakcie skoku NIE ruszamy misji ani rekordu. MOS nie ma zadnej
+    //   wlasnej bramki na `warp_transit`, a `_reconcileSystemId` i cala Slice A stoja na
+    //   `mission.toSystemId` — zerowanie misji w skoku rozbiloby podroz miedzygwiezdna.
+    const inWarp = prev.mission?.phase === 'warp_transit';
+    // ⚠ D-VO3e — guard kluczuje sie na tym, czy misja warp REALNIE PRZEZYLA, a NIE na tym,
+    //   czy statek byl w warpie. Powod jest zmierzony: galaz typu (`_issueMoveToPoint`,
+    //   `_issueEngage`) NADPISUJE `vessel.mission` ZANIM tu dojdziemy, wiec pierwotny guard
+    //   `inWarp` pilnowal pola, ktorego juz nie ma — a w zamian zostawial ZYWY `pendingOrder`
+    //   i OSIEROCONA trase warp, ktora nigdy sie nie domyka (400 lat gry, zero zdarzen warp)
+    //   i BLOKUJE dostawy composite do konca partii. `pursue`/`intercept` misji nie podmieniaja,
+    //   wiec tam misja warp faktycznie przezywa i tam guard ma sens.
+    const warpMissionSurvived = inWarp && vessel.mission === prev.mission;
+
+    // (2) snapshot misji — PRZED emisja (patrz kontrakt kolejnosci wyzej).
+    delete vessel._suspendedMission;
+
+    if (!warpMissionSurvived) {
+      // (4) composite warp->dostawa (Finding 126). ⚠ `OrderService.issueReturn` NIE przechodzi
+      //     przez ten szew i przechodzic NIE MOZE — skasowanie `pendingOrder` przed snapshotem
+      //     `ReturnJump` cofneloby Finding 125.
+      vessel.pendingOrder = null;
+
+      // (3) rekord ekspedycji — u WLASCICIELA STANU, przez publiczna intencje.
+      window.KOSMOS?.missionSystem?.abortMissionsForVessel?.(vessel.id, 'superseded');
+
+      // (5, D-VO3e) trasa warp — TEZ przez publiczna intencje wlasciciela stanu.
+      //   ⚠ Dotyczy takze statku SPOZA warpu z zywa trasa wielo-przeskokowa (zmierzone:
+      //   `pendingOrder` byl czyszczony, a `warpRoute` zostawal).
+      window.KOSMOS?.warpRouteSystem?.abortJourney?.(vessel.id, 'superseded');
+    }
+
+    // (D-VO3b) stara misja, ale TYLKO gdy galaz typu jej NIE podmienila. Dla `moveToPoint`
+    //   `vessel.mission` jest juz nowa (synth) — porownanie referencji to rozstrzyga.
+    //   Dla `pursue`/`intercept`/`engage` stara misja ZOSTAJE i to ona powodowala TELEPORT:
+    //   para `orbiting` + zywa misja wpada w `VesselManager._updatePositions` i PINUJE statek
+    //   do `m.targetId` (ZMIERZONE: skok 5,05 AU w jednym tiku 0,001 roku).
+    if (!inWarp && prev.mission && vessel.mission === prev.mission) vessel.mission = null;
+
+    // (1) domkniecie starego rozkazu. ⚠ Payload MUSI niesc id rozkazu PRZERYWANEGO — z id nowego
+    //     `FleetSystem` wchodzi w galaz `tracked !== orderId` i rozkaz floty NIGDY sie nie domknie.
+    const old = prev.order;
+    if (old && old !== vessel.movementOrder && old.status === 'active') {
+      old.status      = 'superseded';
+      old.blockReason = 'superseded';
+      EventBus.emit('vessel:orderCancelled', {
+        vesselId: vessel.id, orderId: old.id, reason: 'superseded',
+      });
+    }
   }
 
   /**

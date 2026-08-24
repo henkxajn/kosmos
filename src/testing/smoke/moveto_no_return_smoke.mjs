@@ -78,14 +78,38 @@ header('T1 arrived/orbiting + martwa misja → brak snapshotu');
   assert(v._suspendedMission === undefined, 'BRAK _suspendedMission (nie ożyje po moveToPoint)');
 }
 
-// ── T2 — intencja zachowana: in_transit snapshotuje ──────────────────────────
-header('T2 in_transit + żywa misja → snapshot (intencja pursue/intercept)');
+// ── T2 — ⚠ ODWRÓCONE w VO-3 (P1, D-VO3c) ─────────────────────────────────────
+// Ten test pinował DEFEKT, a nie intencję. Poprzednia wersja mówiła: „in_transit + żywa misja →
+// snapshot (intencja pursue/intercept)" i asertowała `suspended === true` + zachowany snapshot.
+// To był mechanizm **Findingu 118**: po pościgu/przechwycie/starciu/patrolu statek SAM wracał
+// do poprzedniej roboty, choć gracz świadomie przekierował go gdzie indziej.
+// ⚠ Nagłówek keepera mówił wprost, że naprawiono to „wyłącznie dla moveToPoint", a T2 pinuje
+//   pozostałe rozkazy JAKO INTENCJĘ — VO-3 tę intencję odwraca i to jest treść D-VO3c.
+// ⚠ Nie kasujemy testu — przepisujemy go na stan docelowy (wzór `colony_ownership_seams` S4).
+// ⚠ TEN TEST JEST DETEKTOREM WDROŻENIA punktu 2: samo skasowanie snapshotu na wejściu
+//   `issueOrder` było NO-OPEM (cztery call-site'y `_suspendMissionIfAny` odtwarzały go w TEJ
+//   SAMEJ RAMCE). Jeśli kiedykolwiek wróci tu 15/15, punkt 2 przestał działać.
+header('T2 ⚠ ODWRÓCONY (VO-3): rozkaz gracza NIE zostawia snapshotu — koniec „powrotu do starej roboty"');
 {
   const v = makeVessel({ state: 'in_transit', mission: { type: 'transport', targetId: 'planet_x', phase: 'outgoing' } });
   const suspended = mos._suspendMissionIfAny(v);
-  assert(suspended === true, '_suspendMissionIfAny zwraca true dla statku w locie');
-  assert(v._suspendedMission?.type === 'transport', '_suspendedMission zachowany (resume po pursue)');
-  assert(v._suspendedMission?.suspendedDuringReturn === false, 'suspendedDuringReturn=false (outgoing)');
+  assert(suspended === false, 'T2 ✅ ODWRÓCONY: `_suspendMissionIfAny` odmawia snapshotu przy aktywnej preempcji');
+  assert(v._suspendedMission === undefined, 'T2 ✅ ODWRÓCONY: brak `_suspendedMission` (Finding 118 zamknięty)');
+
+  // KONTROLA PINU — pauza bojowa (`forCombat`) MUSI dalej snapshotować. To świadoma,
+  // udokumentowana funkcja, a jej wznowienie chroni TAKŻE predykat końca gry: podczas walki
+  // `_freezeAsStationary` zeruje `vessel.mission`, więc snapshot jest wtedy JEDYNYM nośnikiem
+  // misji `colony`. Bez tej kontroli odwrócenie wyglądałoby jak „wyłączyliśmy mechanizm".
+  const c = makeVessel({ state: 'in_transit', mission: { type: 'transport', targetId: 'planet_x', phase: 'outgoing' } });
+  assert(mos._suspendMissionIfAny(c, { forCombat: true }) === true,
+    'T2 KONTROLA PINU: `forCombat` DALEJ snapshotuje — pauza bojowa nietknięta');
+  // ⚠ Etykieta i ten komentarz CELOWO omijaja wzorzec: litera t, spacja, nawias, cudzyslow.
+  //   `check-i18n` regexuje wywolania funkcji tlumaczacej po CALYM src/ (smoke'i i komentarze
+  //   TEZ), wiec polskie slowo konczace sie na te litere, po ktorym idzie nawias z cytatem,
+  //   liczy sie jako uzycie nieistniejacego klucza. Zlapane dwa razy pod rzad: raz w asercji,
+  //   raz w komentarzu, ktory to wyjasnial.
+  assert(c._suspendedMission?.suspendedDuringReturn === false,
+    'T2 KONTROLA PINU: snapshot bojowy ma poprawne pole suspendedDuringReturn = false');
 }
 
 // ── T3 — synth move_to_point nie jest suspendowany ───────────────────────────

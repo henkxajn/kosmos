@@ -1537,6 +1537,41 @@ export class MissionSystem {
   }
 
   /**
+   * VO-3 (ruch P1, punkt 3) — PUBLICZNA INTENCJA: zamknij aktywne rekordy misji tego statku,
+   * NIE ruszajac samego statku. Wolane przez `MovementOrderSystem` przy preempcji.
+   *
+   * ⚠ TO NIE JEST `cancelMission`. Tamta jest aliasem `_orderReturn`, ktory ODSYLA STATEK DO DOMU
+   *   (`startReturn`) i zostawia rekord w stanie NIETERMINALNYM `returning` — przy preempcji byloby
+   *   to dokladne przeciwienstwo intencji gracza, ktory wlasnie kazal leciec GDZIE INDZIEJ.
+   *   ZMIERZONE: po `cancelMission` startReturn wolany 1x, status `returning`, rekord DALEJ zywy.
+   * ⚠ Status terminalny to `completed`, a NIE nowy (np. `preempted`). ZMIERZONE: nowy status tworzy
+   *   WIECZNEGO ZOMBIE — GC w `_checkArrivals` i `serialize` tna WYLACZNIE `completed`, a DZIESIECIU
+   *   konsumentow keyuje na „nie completed" (FleetActions x4, OrderService, FMO, FleetPanel x2,
+   *   FleetTabPanel, ThreeRenderer). `completed` ustawione PRZED przylotem jest calkowicie INERTNE:
+   *   zero wyplaty lupu, zero emisji przylotu, zero ruchu statku, cargo bit w bit.
+   * ⚠ NIC NIE ZWRACAMY — i to jest zasadnicza roznica wobec VO-2: tam statek NIE WYLECIAL
+   *   (dyspozytor odmowil), wiec zwrot byl obowiazkowy; tu statek JUZ LECI, a towar i ludzie sa
+   *   FIZYCZNIE NA POKLADZIE. Zwrot DUPLIKOWALBY dobra.
+   * ⚠ Emisja jest KONIECZNA, nie kosmetyczna: `UIManager` trzyma WLASNA kopie listy misji, karmiona
+   *   wylacznie zdarzeniami, i cicho zamkniety rekord zostawia martwy wiersz w Outlinerze.
+   *
+   * @returns {number} ile rekordow zamknieto — gate MUSI umiec odroznic „zamknieto 1" od „nie bylo
+   *   czego zamykac", inaczej zmierzy CISZE (lekcja W3).
+   */
+  abortMissionsForVessel(vesselId, reason = 'superseded') {
+    if (!vesselId) return 0;
+    let closed = 0;
+    for (const exp of this._missions) {
+      if (exp.vesselId !== vesselId || exp.status === 'completed') continue;
+      exp.status = 'completed';
+      exp.abortReason = reason;
+      closed++;
+      this._emit('mission:aborted', 'expedition:returned', { expedition: exp, reason });
+    }
+    return closed;
+  }
+
+  /**
    * VO-2 (ruch P2) — czy statek FAKTYCZNIE stoi u celu misji.
    *
    * Predykat: `vessel.position.dockedAt === exp.targetId`. Trzy powody, każdy ZMIERZONY:

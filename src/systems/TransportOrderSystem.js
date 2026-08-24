@@ -43,6 +43,7 @@ export class TransportOrderSystem {
     this._onWreckedBound = (d) => this._onVesselWrecked(d);
     this._onColonyDestroyedBound = (d) => this._onColonyDestroyed(d);
     this._onTickBound = (d) => this._onTick(d);
+    this._onMissionAbortedBound     = (d) => this._onMissionAborted(d);
 
     // TYLKO 'expedition:arrived' — MissionSystem._emit emituje OBA ('mission:arrived'
     // + 'expedition:arrived') dla każdego przylotu; subskrypcja obu = podwójne _onArrival
@@ -53,6 +54,17 @@ export class TransportOrderSystem {
     // ⚠ W3-1: przejęte ciało przestaje być prawidłowym końcem zlecenia (żyje, ale jest wrogie).
     EventBus.on('colony:captured',    this._onColonyDestroyedBound);
     EventBus.on('time:tick',          this._onTickBound);
+    // ⚠ VO-3 — PREEMPCJA. Rozkaz gracza zabija misje kuriera, ale pula o tym nie wiedziala:
+    //   TOS nie subskrybowal ZADNEGO zdarzenia rozkazu ani przerwania misji, wiec zlecenie
+    //   zostawalo przypisane do statku, ktory juz nic nie wiozl. ZMIERZONE: po posciagu wydanym
+    //   wozacemu kurierowi zlecenie wisialo `hauling` z zamrozonym `{Fe:50}` przez 60 lat gry,
+    //   a `inFlight` REZERWOWAL te jednostki, wiec inne statki z puli tez ich nie wzialy.
+    //   ⚠ Kanalem jest `mission:aborted`, a NIE `vessel:orderCancelled`: ten drugi leci tylko,
+    //   gdy istnial POPRZEDNI `movementOrder`, a kurier na kursie jedzie na MISJI (issueTransport)
+    //   i zadnego rozkazu ruchu nie ma — emisja by go nie dosiegla (zmierzone).
+    //   Wlascicielem stanu misji jest MissionSystem i to on oglasza przerwanie; pula sprzata sie SAMA,
+    //   zamiast rosnac jako kolejne wywolanie w `_preemptCommit`.
+    EventBus.on('mission:aborted',     this._onMissionAbortedBound);
   }
 
   destroy() {
@@ -61,6 +73,7 @@ export class TransportOrderSystem {
     EventBus.off('colony:destroyed',   this._onColonyDestroyedBound);
     EventBus.off('colony:captured',    this._onColonyDestroyedBound);
     EventBus.off('time:tick',          this._onTickBound);
+    EventBus.off('mission:aborted',     this._onMissionAbortedBound);
   }
 
   // ── Kolaboratorzy (leniwie) ─────────────────────────────────────────────────
@@ -433,6 +446,26 @@ export class TransportOrderSystem {
     this.removeFromPool(vesselId);
     const found = this._findAssignment(vesselId);
     if (found) this._releaseAssignment(found.order, found.a);
+    this._pump();
+  }
+
+  /**
+   * VO-3 — misja kuriera zostala PRZERWANA (preempcja rozkazem gracza). Zwolnij przydzial,
+   * zeby zlecenie nie trzymalo statku, ktory juz nic nie wiezie, i zeby `inFlight` przestal
+   * rezerwowac jednostki innym statkom z puli. Lustro `_onVesselWrecked`.
+   * ⚠ Idempotentne: `_findAssignment` zwraca null, gdy nic nie ma, a `_releaseAssignment`
+   *   ma wlasne guardy (`!a?.courseCargo`, `if (i >= 0)`) — zwolnienie zwolnionego to no-op.
+   *   Dlatego NIE potrzebuje bramki „czy to na pewno preempcja": kazde przerwanie misji kuriera
+   *   ma ten sam skutek dla puli.
+   * ⚠ Statek ZOSTAJE w puli (`removeFromPool` NIE jest wolane) — gracz go stamtad nie wypisal,
+   *   wiec po zwolnieniu przydzialu ma znow byc dostepny dla dispatchera.
+   */
+  _onMissionAborted({ expedition } = {}) {
+    const vesselId = expedition?.vesselId;
+    if (!vesselId) return;
+    const found = this._findAssignment(vesselId);
+    if (!found) return;
+    this._releaseAssignment(found.order, found.a);
     this._pump();
   }
 
