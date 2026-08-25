@@ -42,6 +42,9 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import { COMBAT_ENGAGEMENT_AU } from './ProximitySystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+// ⚠ Wariant FAIL-CLOSED, wyłącznie dla warstwy walki. `isSameSystem` (fail-open) zostaje
+// nietknięty dla bramek wydawania rozkazów — uzasadnienie w SystemScope.
+import { isSameSystemStrict, systemIdOf } from '../utils/SystemScope.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -132,6 +135,22 @@ export class DeepSpaceCombatSystem {
       if (trace) console.log('[DSCS] reject handleCRE: vessel missing/wreck', { v1: !!v1, v2: !!v2, w1: v1?.isWreck, w2: v2?.isWreck });
       return false;
     }
+    // ⚠ BRAMKA UKŁADU — JEDYNY PUNKT POKRYWAJĄCY WSZYSTKICH PRODUCENTÓW ZDARZENIA.
+    // `vessel:combatRangeEnter` emitują TRZY miejsca, a tylko jedno ma własny guard:
+    //   • `ProximitySystem._checkPair` — MA guard międzyukładowy;
+    //   • `MovementOrderSystem:1163` (force-engage w `_tickEngageOrder`) — BEZ guardu;
+    //   • `MovementOrderSystem:1505` (po ukończeniu pursue/intercept) — BEZ guardu, a dystans
+    //     w payloadzie jest wręcz WPISANY NA SZTYWNO (`THREAT_RADIUS_AU`).
+    // Oba force-emity dodatkowo majstrują przy `ps._activeCombatPairs`, więc strażnik proximity
+    // ich nie łapie nawet pośrednio. Bramka stoi TUTAJ, bo to jedyne publiczne wejście do DSCS
+    // (`startEngagement` i `_joinEncounter` nie mają innych wołających poza tym plikiem).
+    // Predykat jest FAIL-CLOSED — uzasadnienie w `SystemScope.isSameSystemStrict`.
+    if (!isSameSystemStrict(v1, v2)) {
+      if (trace) console.log('[DSCS] reject handleCRE: other system', {
+        v1Id, v2Id, v1Sys: systemIdOf(v1), v2Sys: systemIdOf(v2),
+      });
+      return false;
+    }
     if (trace) console.log('[DSCS] handleCRE OK — dispatching', { v1Id, v2Id, v1State: v1.position?.state, v2State: v2.position?.state });
 
     const existing1 = this._findActiveEncounterContaining(v1Id);
@@ -210,6 +229,12 @@ export class DeepSpaceCombatSystem {
       for (const v of vm._vessels.values()) {
         if (v.isWreck) continue;
         if (!_inCombatState(v)) continue;
+        // ⚠ TERMIN UKŁADU — bez niego ta pętla zbierała skład bitwy z CAŁEJ GALAKTYKI.
+        // `vm._vessels` jest PŁASKI, a gwiazda każdego układu stoi w (0,0), więc statek 0,2 AU
+        // od SWOJEJ gwiazdy ma niemal te same surowe `x/y` co statek 0,2 AU od INNEJ. Warunek
+        // niżej porównuje właśnie surowe `x/y`, więc kwalifikował obcych z pełną pewnością siebie.
+        // Odniesieniem jest `v1` — statek WYZWALAJĄCY, ten sam, którego układ stempluje starcie.
+        if (!isSameSystemStrict(v, v1)) continue;
         const dx = v.position.x - mid.x;
         const dy = v.position.y - mid.y;
         if (Math.hypot(dx, dy) <= bufferPx) nearby.push(v);
@@ -290,14 +315,15 @@ export class DeepSpaceCombatSystem {
       bestGroup: bestGroup.map(v => v.id),
       bestEmpireId, bestHostility,
     });
-    return this._createEncounter(playerGroup, bestGroup, mid, 'player', bestEmpireId);
+    // Układ starcia bierzemy z pary WYZWALAJĄCEJ, nie z rostera — patrz `_createEncounter`.
+    return this._createEncounter(playerGroup, bestGroup, mid, 'player', bestEmpireId, systemIdOf(v1));
   }
 
   /**
    * Buduj EncounterState i dodaj do _activeEncounters.
    * @private
    */
-  _createEncounter(sideAVessels, sideBVessels, mid, ownerA, ownerB) {
+  _createEncounter(sideAVessels, sideBVessels, mid, ownerA, ownerB, triggerSystemId = null) {
     const year = this._year();
     const id = this._makeEncounterId(year, ownerA, ownerB);
 
@@ -315,7 +341,14 @@ export class DeepSpaceCombatSystem {
       ? `${empireB?.name ?? 'Wróg'} (${sideBVessels.length})`
       : `${empireB?.name ?? 'Wróg'} — ${sideBVessels[0].name ?? sideBVessels[0].shipId}`;
 
-    const systemId = sideAVessels[0]?.systemId ?? sideBVessels[0]?.systemId ?? 'sys_home';
+    // ⚠ UKŁAD STARCIA POCHODZI Z PARY WYZWALAJĄCEJ, NIE Z ROSTERA. Dawniej stało tu
+    // „weź `systemId` pierwszego elementu strony A" — a ta tablica powstaje z kolejności
+    // iteracji płaskiego rejestru statków, więc układ był ZGADYWANY. To był CICHY STEMPEL:
+    // rekord bitwy o mieszanym składzie dostawał jedną, wiarygodnie wyglądającą etykietę,
+    // przez co żaden konsument `battle:resolved` nie miał jak wykryć anomalii — a etykieta
+    // idzie dalej do `WarSystem._updateOrbitalDominance`, czyli do TRWAŁEGO stanu zapisu.
+    // Fallback zachowany dla wywołań bez parametru (żadne produkcyjne dziś nie istnieje).
+    const systemId = triggerSystemId ?? systemIdOf(sideAVessels[0]) ?? 'sys_home';
 
     /** @type {EncounterState} */
     const encounter = {
@@ -389,6 +422,19 @@ export class DeepSpaceCombatSystem {
     if (!_inCombatState(v)) {
       if (window.KOSMOS?.debug?.combatTrace) {
         console.log('[DSCS] _joinEncounter reject: NOT in combat state', { vesselId: newVesselId, state: v.position?.state });
+      }
+      return;
+    }
+
+    // ⚠ DEFENSE-IN-DEPTH (termin układu). Po bramce w `handleCombatRangeEnter` ta ścieżka jest
+    // nieosiągalna dla obcego statku — `_joinEncounter` wołają WYŁĄCZNIE `:145` i `:150`,
+    // oba wewnątrz tamtego dyspozytora. Guard stoi tu mimo to, bo „członkostwo w starciu" ma
+    // być prawdą LOKALNĄ dla tej funkcji: gdyby kiedyś pojawił się drugi wołający (posiłki
+    // z doktryny, multi-empire z P5), mieszanina wróciłaby bez ani jednego czerwonego testu.
+    if (systemIdOf(v) !== encounter.location?.systemId) {
+      if (window.KOSMOS?.debug?.combatTrace) {
+        console.log('[DSCS] _joinEncounter reject: other system',
+          { vesselId: newVesselId, vSys: systemIdOf(v), encSys: encounter.location?.systemId });
       }
       return;
     }
@@ -1177,7 +1223,22 @@ export class DeepSpaceCombatSystem {
       // _updatePositions z dockedAt) → enemy porusza się z planetą i
       // sideA, dystans pozostaje stały, walka konkluduje w normalnym
       // czasie zamiast trwać przez całą orbitę planety wokół słońca.
-      if (pinDockedAt) vessel.position.dockedAt = pinDockedAt;
+      // ⚠ JEDYNY ZAPIS W TEJ ŚCIEŻCE, KTÓRY TRWALE MUTUJE STATEK — i dlatego dostaje własny
+      // guard, niezależnie od bramek wyżej. `pinDockedAt` to ciało wzięte z większości strony
+      // GRACZA; wpisane statkowi z innego układu dawało `dockedAt` na ciało, którego w jego
+      // układzie NIE MA, a `VesselManager._updatePositions` przeliczał z niego `x/y` — czyli
+      // statek był przenoszony we własnym układzie i „dokowany" przy nieistniejącym ciele.
+      // Nikt tego później nie czyścił, więc szkoda szła do zapisu. Rozwiązanie id jest globalne
+      // (`_findEntity` = `EntityManager.get`), więc porównujemy układy jawnie.
+      if (pinDockedAt) {
+        const body = this._vm?._findEntity?.(pinDockedAt);
+        if (body && isSameSystemStrict(body, vessel)) {
+          vessel.position.dockedAt = pinDockedAt;
+        } else if (window.KOSMOS?.debug?.combatTrace) {
+          console.log('[DSCS] _freezeAsStationary: pominięto pin z innego układu',
+            { vesselId: vessel.id, vSys: systemIdOf(vessel), pin: pinDockedAt, bodySys: body ? systemIdOf(body) : null });
+        }
+      }
     }
   }
 

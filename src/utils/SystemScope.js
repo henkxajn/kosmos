@@ -42,3 +42,34 @@ export function isSameSystem(a, b) {
   if (sa == null || sb == null) return true;   // nie wiemy → nie blokujemy
   return sa === sb;
 }
+
+/**
+ * WARIANT FAIL-CLOSED — WYŁĄCZNIE DLA WARSTWY WALKI (`DeepSpaceCombatSystem`,
+ * `VesselCombatSystem`). Nie używać w bramkach wydawania rozkazów.
+ *
+ * ⚠ DLACZEGO ISTNIEJE OSOBNO, ZAMIAST ZMIENIĆ `isSameSystem`: bilans kosztu błędu jest tu
+ * ODWROTNY. Przy rozkazie cena fałszywego NEGATYWU to cichy paraliż floty (patrz nagłówek),
+ * więc fail-open jest właściwy. W WALCE cena fałszywego POZYTYWU to trwale stracone kadłuby,
+ * wraki w międzyukładowym punkcie i zatruty klucz `orbitalDominance` W ZAPISIE — a cena
+ * fałszywego negatywu to jedna niestoczona bitwa. Dlatego tu blokujemy przy niewiedzy.
+ *
+ * ⚠ `null` NIE ZNACZY TU „NIE WIEMY". `systemIdOf` mapuje `undefined` → `'sys_home'`, więc
+ * statek ze starego zapisu (sprzed multi-system) przechodzi normalnie. Do `null` dochodzi
+ * WYŁĄCZNIE prawdziwy tranzyt międzygwiezdny (`VesselManager._resolveSystemId`), a statek
+ * w warpie nie ma prawa walczyć: jest fizycznie pomiędzy układami, a jego `x/y` to
+ * współrzędne sprzed skoku.
+ *
+ * Powód istnienia (ZMIERZONE w żywej grze): starcie ze stemplem `sys_024` łączyło statek
+ * gracza z `sys_024` ze statkami z `sys_061` i `sys_home`, bo gwiazda każdego układu stoi
+ * w (0,0), a rejestr statków jest płaski. Patrz `combat_system_scope_smoke.mjs`.
+ *
+ * @param {object} a
+ * @param {object} b
+ * @returns {boolean}
+ */
+export function isSameSystemStrict(a, b) {
+  const sa = systemIdOf(a);
+  const sb = systemIdOf(b);
+  if (sa == null || sb == null) return false;  // nie wiemy / tranzyt warp → NIE walczymy
+  return sa === sb;
+}

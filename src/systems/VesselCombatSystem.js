@@ -38,6 +38,8 @@ import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { COMBAT_ENGAGEMENT_AU, pairKey } from './ProximitySystem.js';
+// ⚠ Wariant FAIL-CLOSED, wyłącznie dla warstwy walki (lustro DSCS).
+import { isSameSystemStrict, systemIdOf } from '../utils/SystemScope.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -120,6 +122,22 @@ export class VesselCombatSystem {
       return;
     }
     if (sameFaction) { if (trace) console.log('[VCS] reject CRE: sameFaction'); return; }
+
+    // ⚠ BRAMKA UKŁADU — lustro `DeepSpaceCombatSystem.handleCombatRangeEnter`. Stoi PRZED
+    // cooldownem i przed delegacją, więc chroni obie gałęzie: i tę delegującą do DSCS, i awaryjną
+    // instant-path. Dwaj z trzech producentów `vessel:combatRangeEnter` omijają guard
+    // w `ProximitySystem` (MovementOrderSystem :1163 i :1505).
+    {
+      const vmChk = this._vm;
+      const a = vmChk?._vessels?.get?.(vesselAId);
+      const b = vmChk?._vessels?.get?.(vesselBId);
+      if (a && b && !isSameSystemStrict(a, b)) {
+        if (trace) console.log('[VCS] reject CRE: other system', {
+          vesselAId, vesselBId, aSys: systemIdOf(a), bSys: systemIdOf(b),
+        });
+        return;
+      }
+    }
 
     const now = this._year();
     const key = pairKey(vesselAId, vesselBId);
@@ -219,6 +237,12 @@ export class VesselCombatSystem {
     for (const v of vm._vessels.values()) {
       if (v.isWreck) continue;
       if (!_inCombatState(v)) continue;
+      // ⚠ TERMIN UKŁADU — lustro poprawki w `DeepSpaceCombatSystem.startEngagement`. Ta pętla
+      // jest jej ZNAKOWYM BLIŹNIAKIEM i ma dokładnie ten sam defekt: iteruje płaski rejestr
+      // całej galaktyki i kwalifikuje po surowych `x/y`. Gałąź jest dziś uśpiona flagą
+      // `m4DeepSpaceCombat`, ale ma jawny fallback (`:156-165`) i utrzymywaną ścieżkę rollbacku
+      // — nieutwardzony bliźniak to mina (lekcja `removeColony:667`).
+      if (!isSameSystemStrict(v, v1)) continue;
       const dx = v.position.x - mid.x;
       const dy = v.position.y - mid.y;
       if (Math.hypot(dx, dy) <= bufferPx) nearby.push(v);
@@ -255,12 +279,13 @@ export class VesselCombatSystem {
     }
     if (!bestEmpireId || !bestGroup) return;
 
-    this._battle(playerGroup, bestGroup, mid, 'player', bestEmpireId);
+    this._battle(playerGroup, bestGroup, mid, 'player', bestEmpireId, systemIdOf(v1));
   }
 
-  _battle(sideA, sideB, mid, ownerA, ownerB) {
+  _battle(sideA, sideB, mid, ownerA, ownerB, triggerSystemId = null) {
     const empireB = window.KOSMOS?.empireRegistry?.get?.(ownerB);
-    const systemId = sideA[0]?.systemId ?? sideB[0]?.systemId ?? 'sys_home';
+    // ⚠ Układ z pary WYZWALAJĄCEJ, nie zgadywany z rostera — lustro poprawki w DSCS.
+    const systemId = triggerSystemId ?? systemIdOf(sideA[0]) ?? 'sys_home';
     const location = { systemId, planetId: null, point: { x: mid.x, y: mid.y } };
 
     const labelA = sideA.length > 1 ? `Gracz (${sideA.length})` : `Gracz — ${sideA[0].name ?? sideA[0].shipId}`;
