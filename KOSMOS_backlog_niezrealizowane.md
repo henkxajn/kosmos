@@ -208,3 +208,39 @@ Prompty do wygenerowania obu istnieją: `assets/event-videos/midjourney_prompts.
 Łańcuch fallbacku (`GameScene.js:3028-3034`) próbuje `<id>.mp4` → `<videoCategory>.mp4` → `default.mp4`,
 a dla `population_milestone` kategoria to `colony` (`ScheduledEventsData.js:329`) i `colony.mp4`
 **istnieje** — popup gra normalnie, 404 dotyczy tylko pierwszego ogniwa.
+
+## 🔴 Podwójne pobranie Kr za jednostki naziemne (zgłoszone 2026-08-25, ZMIERZONE, NIENAPRAWIONE)
+
+Znalezione przy audycie utrzymania floty (wariant B). **Nie należy do tamtego arca** — właściciel
+polecił zalogować osobno, do naprawy kiedyś.
+
+**Mechanizm.** `ColonyManager._tickGroundUnitUpkeep` odejmuje kredyty RĘCZNIE **i** emituje
+`trade:spendCredits`, które ma żywego odbiorcę:
+
+```
+ColonyManager.js:1543-1546   home.credits = Math.max(0, (home.credits ?? 0) - bucket.total);
+                             EventBus.emit('trade:spendCredits', { colonyId: homeId, amount: bucket.total, … });
+CivilianTradeSystem.js:46/57 this._onSpend = ({ colonyId, amount, purpose }) => this.spendCredits(colonyId, amount, purpose);
+```
+
+⚠ **Niuans, bez którego pomiar wygląda na losowy:** drugie pobranie przechodzi TYLKO wtedy, gdy po
+pierwszym zostało `>= bucket.total` (bramka salda `CivilianTradeSystem.js:879`) ⇒ **bogata kolonia
+płaci 2×, biedna 1×**. Do tego kadencja jest w latach **CYWILIZACYJNYCH**
+(`ColonyManager.js:1505-1507`, wołane z `:150`) = 12 rozliczeń na rok gry, a panel BUDŻET wpisuje tę
+pozycję do sumy „Kr/rok".
+
+**Bliźniak, NIEZMIERZONY:** ten sam wzór przy rekrutacji jednostki (`ColonyManager.js:1441-1442`).
+
+**Kontrast — wzorzec jest niespójny w trzech miejscach:** `shipyard_surge` (`ColonyManager.js:1773`)
+oraz `TradeOverlay.js:1085/1095/1105` emitują **bez** ręcznego minusa, czyli pobierają raz.
+`VesselManager._tickVesselMaintenance` omija problem, wołając fasadę bezpośrednio — jego komentarz
+(`:1973-1974`) nazywa to „double-deduct latentny w ground-unit upkeep". **Nie jest latentny — jest żywy.**
+
+⚠ **Nie dotyczyło zgłoszenia właściciela o unieruchomionej flocie:** `ColonyManager.js:1517`
+(`if (allUnits.length === 0) return;`), a partia startuje **bez** jednostek naziemnych
+(AI_CAPTURE decyzja D8/AC-3). Przy zerze jednostek ten wypływ wnosi dokładnie zero.
+
+**Naprawa** = usunąć ręczne `-=` i zostawić sam emit (albo odwrotnie — byle jeden wzorzec), plus
+keeper wykonaniowy: saldo przed/po jednym rozliczeniu == dokładnie tabela `GROUND_UNIT_UPKEEP`.
+⚠ Keeper musi mieć **bogatą** kolonię w fixture, inaczej bramka salda ukryje drugie pobranie
+i test przejdzie jałowo.
