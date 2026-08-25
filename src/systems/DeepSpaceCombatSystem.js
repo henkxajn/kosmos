@@ -878,6 +878,20 @@ export class DeepSpaceCombatSystem {
     // nie ruch wycofania. Walka kończy się normalnie przez kill (HP=0) lub
     // time-out (MAX_ROUNDS). Symetrycznie wykluczamy state='docked' (vessel
     // siedzi w hangarze).
+    // ⚠ D-FDd (slice RETREAT_TARGET) — WYJĄTEK OD GUARDU WYŻEJ. Guard z 2026-05-21 mówi
+    // „zadokowany ≠ uciekający" i to zostaje prawdą dla OBROŃCY. Ale po naprawie F-D udany odwrót
+    // KOŃCZY SIĘ orbitą ciała (`dockedAt = bodyId`), więc bez tego wyjątku uciekinier wypadałby
+    // z liczenia: `aliveCount` schodziłoby do zera, `_allOutsideOf` zwracałoby `false`, bitwa
+    // dojeżdżałaby do MAX_ROUNDS z `retreated = null` — i robiła side-level wrak ŻYWYCH
+    // przegranych. Czyli udany odwrót byłby groźniejszy od nieudanego.
+    // Wyjątek NIE zakłada, że uciekinier jest daleko — dopuszcza go tylko do TESTU ODLEGŁOŚCI
+    // niżej. Ciało bliżej niż clearance dalej policzy się jako „w środku".
+    // ⚠ Wyścig jest realny i zmierzony: przy 1 r/s statek pokonuje ~1,85 AU na jedną rundę
+    //   (110 ms), więc potrafi przejść z „wewnątrz" wprost w „zadokowany" między dwoma
+    //   sprawdzeniami. Sam bufor odległości w selektorze tego NIE zamyka — dlatego marker.
+    const isRetreating = (v) => v?.movementOrder?._retreatFromCombat === true
+                             || v?.movementOrder?.retreatFromBattleId != null;
+
     const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
     let aliveCount = 0;
     let outsideCount = 0;
@@ -886,8 +900,9 @@ export class DeepSpaceCombatSystem {
       if (!state || state.hp <= 0) continue;
       const v = this._vm?._vessels?.get(vid);
       if (!v) continue;
-      if (v.position?.state === 'docked') continue;
-      if (v.position?.dockedAt != null) continue;  // orbituje ciało niebieskie → nie ucieka
+      const retreating = isRetreating(v);
+      if (!retreating && v.position?.state === 'docked') continue;
+      if (!retreating && v.position?.dockedAt != null) continue;  // orbituje ciało → nie ucieka
       aliveCount++;
       const dx = v.position.x - mid.x;
       const dy = v.position.y - mid.y;

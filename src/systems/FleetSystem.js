@@ -530,9 +530,10 @@ export class FleetSystem {
    * czy którykolwiek member jest w DSCS encounter (derived _inCombat —
    * nie subscribe noise), agreguj HP, gdy <threshold → trigger retreat.
    *
-   * Retreat: każdy żywy member dostaje moveToPoint do nearest friendly
-   * planet via AutoRetreatSystem._findNearestFriendlyPlanet + bypass fuel
-   * check + _pendingReturnDock marker (auto-dock przy dotarciu).
+   * Retreat: każdy żywy member dostaje moveToPoint do najbliższego SCHRONIENIA przez
+   * `MovementOrderSystem.resolveShelterOrderSpec` (termin układu + drabina własności +
+   * clearance od punktu starcia). Bypass paliwa i portu jest w spec.
+   * ⚠ BEZ markera `_pendingReturnDock` (D-FDf) — ucieczka ORBITUJE, nie re-homuje floty.
    *
    * Idempotent przez fleet.activeOrder._retreatTriggered flag.
    *
@@ -573,22 +574,25 @@ export class FleetSystem {
 
       // Trigger retreat — moveToPoint do nearest friendly per member.
       ao._retreatTriggered = true;
-      const ar  = window.KOSMOS?.autoRetreatSystem;
+      // (`autoRetreatSystem` nie jest tu już potrzebny — dobór celu przeszedł do MOS.)
       const mos = window.KOSMOS?.movementOrderSystem;
       const issuedIds = [];
+      // ⚠ To jest ODWRÓT, nie powrót do bazy — mimo że historycznie reużywał infrastruktury
+      // powrotu. Slice RETREAT_TARGET rozdziela te dwie rzeczy (plan `RETREAT_TARGET_PLAN.md`):
+      //   • cel dobiera `resolveShelterOrderSpec` (termin układu + drabina własności + clearance
+      //     od punktu starcia), a nie `_findNearestFriendlyPlanet` — tamta nie ma terminu układu;
+      //   • marker `_pendingReturnDock` ZNIKA (D-FDf): jego konsument `_maybeAutoDockOnReturn:653`
+      //     przepisuje `vessel.colonyId` BEZWARUNKOWO, więc odwrót na ciało niczyje albo cudze
+      //     robiłby z niego nową BAZĘ całej floty. Ucieczka ma orbitować, nie re-homować.
       for (const vid of fleet.memberIds) {
         const v = this._vm._vessels?.get?.(vid);
         if (!v || v.isWreck) continue;
-        const nearest = ar?._findNearestFriendlyPlanet?.(v);
-        if (!nearest?.planet) continue;
-        v._pendingReturnDock = nearest.planet.id;
-        const res = mos?.issueOrder?.(vid, {
-          type: 'moveToPoint',
-          targetPoint: { x: nearest.planet.x, y: nearest.planet.y },
-          bypassFuelCheck: true,
-          bypassSpaceportCheck: true,
-        }, { fromFleet: fleet.id });
-        if (res?.ok) issuedIds.push(vid);
+        const enc = this._findEncounterFor(vid, dscs);
+        const avoidPoint = enc?.location?.point ?? { x: v.position.x, y: v.position.y };
+        const plan = mos?.resolveShelterOrderSpec?.(v, { avoidPoint, issuedBy: 'doctrine_retreat' });
+        if (!plan?.ok) continue;
+        const res = mos?.issueOrder?.(vid, plan.spec, { fromFleet: fleet.id });
+        if (res?.ok) { mos?.markAsRetreat?.(v, null); issuedIds.push(vid); }
       }
       EventBus.emit('fleet:retreatTriggered', {
         fleetId:        fleet.id,

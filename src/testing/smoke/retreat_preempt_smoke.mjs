@@ -56,6 +56,15 @@
 //     (c) producent w ogóle NIE WOŁA `issueOrder` (wyjście na `:56`) → T3.
 //   (b) i (c) są niewidoczne dla grepa — zamyka je wyłącznie keeper na PRAWDZIWYM producencie.
 //
+// ⚠ AKTUALIZACJA (slice RETREAT_TARGET, `docs/design/RETREAT_TARGET_PLAN.md`): Finding F-D ZOSTAŁ
+//   NAPRAWIONY. Wszystko powyżej opisuje stan SPRZED naprawy i zostaje jako zapis pomiarów — ale
+//   dwa wnioski są już nieaktualne:
+//     • „dopóki F-D żyje, KAŻDY producent odwrotu odpada PRZED preempcją" — nieaktualne. T4 został
+//       ODWRÓCONY i pinuje teraz, że odwrót DOCIERA do preempcji także przy koloni w obcym układzie.
+//     • „żywy gate wraca na stół dopiero po naprawie F-D" — warunek spełniony; gate jest wykonalny.
+//   Inwariant D-VO3a stracił tu swojego producenta odmowy (odwrót przestał odpadać) i został
+//   PRZENIESIONY do nowego bloku T4b, na powód `not_in_combat`.
+//
 // Uruchom: node src/testing/smoke/retreat_preempt_smoke.mjs
 
 import '../headless/env.js';           // MUSI być pierwszy (inaczej `localStorage is not defined`)
@@ -295,34 +304,62 @@ header("T3 — POMIAR 1 Z GATE B: literał empireId:'player' NIE dociera do prod
     'brała się z PAYLOADU, a nie z martwego harnessu');
 }
 
-header('T4 — POMIAR 2 Z GATE B (Finding F-D): kolonia w OBCYM układzie ⇒ odmowa, NIE wrak');
+header('T4 — ⚠ PIN ODWRÓCONY (slice RETREAT_TARGET): kolonia w OBCYM układzie ⇒ odwrót JEDNAK DZIAŁA');
 {
+  // ⚠ TEN TEST ZOSTAŁ ŚWIADOMIE ODWRÓCONY. W poprzednim kształcie pinował DEFEKT (Finding F-D):
+  //   `_findNearestFriendlyPlanet` nie miało terminu układu, wskazywało kolonię z `sys_061`,
+  //   a `_issueMoveToPoint` odrzucało rozkaz na `target_other_system` ⇒ odwrót nie działał
+  //   dla NIKOGO. Naprawa (`docs/design/RETREAT_TARGET_PLAN.md`) przenosi dobór celu do
+  //   `MovementOrderSystem.resolveShelterOrderSpec` → `utils/RetreatTarget.js`: cel szuka się
+  //   WYŁĄCZNIE w układzie statku, a WŁASNOŚĆ jest kolejnością preferencji, nie filtrem.
+  //   Skutkiem ubocznym jest to, czego GATE B nie mógł zmierzyć: odwrót DOCIERA do preempcji
+  //   także tą ścieżką — czyli D-VO3d dostaje tu drugi, niezależny pin.
   const s = scene(AI_FAR_SYSTEM);
   const ev = listen();
   const { ai, strike } = raiderWithLiveStrike(s);
 
   battleResolved(ai, 'emp_001', 'btl_t4');
 
-  const failed = ev.find('vessel:autoRetreatFailed');
-  assert(!!failed && failed.reason === 'target_other_system',
-    `T4 PIN (luka „b"): odwrót ODPADŁ na bramce układu (reason=${failed?.reason}) — ZMIERZONE ` +
-    'identycznie na żywo. `_findNearestFriendlyPlanet` nie ma terminu układu, a `_findBodyNearPoint` ' +
-    'snapuje ciało GLOBALNIE, więc `_issueMoveToPoint` odrzuca. Preempcja NIE zostaje dotknięta');
+  const issued = ev.find('vessel:autoRetreatIssued');
+  assert(!!issued && issued.vesselId === ai.id,
+    `T4 PIN ODWRÓCONY: odwrót ZOSTAŁ WYDANY mimo że jedyna kolonia właściciela leży w \`sys_061\` ` +
+    `(issued=${!!issued}). PRZED SLICE'EM leciało tu \`vessel:autoRetreatFailed\` z ` +
+    '`reason=target_other_system`');
 
-  assert(ai.movementOrder === strike && strike?.status === 'active',
-    'T4 PIN (D-VO3a): ODRZUCONY odwrót NIE zniszczył żywego uderzenia — destrukcja wolno dopiero ' +
-    'po `res.ok`. Jednofazowa preempcja skasowałaby tu strike AI');
+  const dest = EntityManager.get(ai.mission?.targetId);
+  assert(!!dest && (dest.systemId ?? 'sys_home') === 'sys_home',
+    `T4 PIN (rdzeń F-D): cel odwrotu leży w UKŁADZIE STATKU (targetId=${ai.mission?.targetId}, ` +
+    `sys=${dest?.systemId ?? '—'}) — nie w \`sys_061\`, mimo że tam jest jedyna kolonia właściciela`);
+
+  assert(ev.find('vessel:autoRetreatFailed') === null,
+    'T4 KONTROLA PINU: ZERO odmów — inaczej test mierzyłby dalej starą ścieżkę');
+
+  assert(strike?.status === 'superseded' && ai.movementOrder !== strike,
+    `T4 PIN (D-VO3d, drugie źródło): UDANY odwrót PRZERYWA żywe uderzenie (strike=${strike?.status})`);
 
   assert(ai.isWreck !== true && ai.status !== 'destroyed',
-    `T4 PIN SEMANTYKI (wejście do slice'u F-D): odmowa ≠ zabójstwo — statek ŻYJE ` +
-    `(isWreck=${ai.isWreck}, status=${ai.status}). \`AutoRetreatSystem:135-140\` mówi wprost ` +
-    '„NIE wrecking". ⚠ NAIWNY fix F-D (zwrot `null`, gdy brak koloni w układzie) przestawi tę ' +
-    'ścieżkę na gałąź `!dest` → `_turnIntoWreck` i ZAMIENI nieszkodliwą odmowę w ZABÓJSTWO — ' +
-    'także dla floty GRACZA, bo `DeepSpaceCombatSystem:1236` woła `_issueRetreatOrder` WPROST, ' +
-    'omijając bramkę `:56`. Ta asercja ma wtedy PAŚĆ — i to jest jej zadanie');
+    `T4 PIN SEMANTYKI: statek ŻYJE (isWreck=${ai.isWreck}, status=${ai.status}). Gałąź ` +
+    '`_turnIntoWreck` została z `AutoRetreatSystem` USUNIĘTA (D-FDe) — brak celu nigdy nie zabija');
+}
 
-  assert(ev.find('vessel:autoRetreatIssued') === null,
-    'T4 KONTROLA PINU: żaden odwrót NIE został wydany — inaczej T4 mierzyłby sukces, nie odmowę');
+header('T4b — D-VO3a przeniesiony: ODRZUCONY odwrót nadal NIE niszczy żywego uderzenia');
+{
+  // ⚠ T4 był JEDYNYM pinem inwariantu D-VO3a na ścieżce odwrotu, a naprawa F-D odebrała mu
+  //   producenta odmowy. Bez tego bloku inwariant zostałby BEZ STRAŻNIKA. Nowym producentem jest
+  //   `not_in_combat` (rozkaz `retreat` bez aktywnego starcia) — odmowa PONIŻEJ rozgałęzienia
+  //   typów, czyli dokładnie tam, gdzie jednofazowa preempcja skasowałaby uderzenie.
+  //   ⚠ NIE `vessel_immobilized`: po D-FDk zaległości NIE blokują już ucieczki, więc ten powód
+  //   nigdy by tu nie padł i pin mierzyłby ciszę.
+  const s = scene(AI_IN_SYSTEM);
+  const { ai, strike } = raiderWithLiveStrike(s);
+  assert(strike?.status === 'active', 'T4b PRZESŁANKA: uderzenie żyje');
+
+  const res = s.mos.issueOrder(ai.id, { type: ORDER_TYPES.retreat });
+  assert(res?.ok === false && res?.reason === 'not_in_combat',
+    `T4b KONTROLA PINU: odwrót ODRZUCONY z powodem (reason=${res?.reason}) — bez odmowy nie ma czego pinować`);
+
+  assert(ai.movementOrder === strike && strike?.status === 'active',
+    'T4b PIN (D-VO3a): odrzucony rozkaz NIE zniszczył żywego uderzenia — destrukcja wolno dopiero po `res.ok`');
 }
 
 header('T5 — SCENARIUSZ B: doktryna `retreat_at_50` (FleetSystem:585) też przechodzi przez preempcję');

@@ -35,6 +35,26 @@ export const TYPES_WITH_POI_TARGET = new Set([ORDER_TYPES.goToPOI]);
 export const TYPES_WITH_BODY_TARGET = new Set([ORDER_TYPES.attack]);
 
 /**
+ * Czy ten rozkaz jest UCIECZKĄ Z BITWY (D-FDk, plan `RETREAT_TARGET_PLAN.md`).
+ *
+ * ⚠ JEDNO ŹRÓDŁO PRAWDY, bo producentów odwrotu jest TRZECH i tylko jeden z nich używa
+ *   `ORDER_TYPES.retreat`. Pozostali dwaj (`AutoRetreatSystem` na `battle:resolved` oraz doktryna
+ *   `retreat_at_50` w `FleetSystem`) wydają zwykły `moveToPoint` — i bez tego predykatu bramki
+ *   `vessel_immobilized` / `vessel_in_reserve` odbierałyby im prawo do ucieczki, mimo że rozkaz
+ *   gracza z PPM by przeszedł. Asymetria „ten sam czyn, inna odpowiedź, zależnie od producenta"
+ *   jest dokładnie tą klasą defektu, którą ten slice zamyka.
+ *
+ * Znacznik `isRetreat` ustawiają producenci JAWNIE — nie wyprowadzamy go z `issuedBy`, bo to pole
+ * jest opisowe (trafia do logów) i nikt nie gwarantuje jego wartości.
+ *
+ * @param {object} spec
+ * @returns {boolean}
+ */
+export function isRetreatSpec(spec) {
+  return spec?.type === ORDER_TYPES.retreat || spec?.isRetreat === true;
+}
+
+/**
  * Waliduje specyfikację orderu przekazaną do MovementOrderSystem.issueOrder.
  *
  * @param {object} spec — { type, targetEntityId?, targetPoint?, patrolRoute?, issuedBy? }

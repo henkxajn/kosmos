@@ -666,6 +666,12 @@ export default {
   'vessel.reasonVesselNotFound': 'vessel does not exist',
   'vessel.reasonVesselIsWreck': 'vessel is a wreck',
   'vessel.reasonUnknown': 'order rejected',
+  // RETREAT_TARGET slice (D-FDj). The two middle keys did NOT exist in EITHER language, although
+  // the reasons `no_friendly_planet` / `not_in_combat` have been returned since M4 P3 — the player
+  // was shown the raw slug.
+  'vessel.reasonNoShelterInSystem': 'No shelter in this system — no body lies outside the engagement radius',
+  'vessel.reasonNoFriendlyPlanet': 'No friendly planet in range',
+  'vessel.reasonNotInCombat': 'Vessel is not in combat',
   // Group-order aggregate feedback (some vessels skipped)
   'vessel.orderPartial': 'Order: {0}/{1} moved · skipped: {2}',
   'vessel.orderNoneMoved': 'No vessel moved · {0}',
@@ -3358,6 +3364,10 @@ export default {
   'log.m4.battleResolvedRetreat':  'Battle {0} — side "{1}" retreated',
   'log.m4.retreatIssued':          'Vessel "{0}" retreating from combat toward "{1}"',
   'log.m4.autoRetreatFailed':      'Vessel "{0}" cannot retreat: {1}',
+  // RETREAT_TARGET (D-FDj): a successful retreat had NOT a single consumer — the fix would show up
+  // only as failure messages disappearing, i.e. the gate would be measuring silence.
+  'log.m4.autoRetreatIssued':      'Vessel "{0}" is retreating from battle to orbit of "{1}"',
+  'log.m4.driftStranded':          'Vessel "{0}" is stranded — no own colony in this system; issue an order manually',
   'log.m4.autoRetreatLowFuel':     'Vessel "{0}" drifting on fumes toward "{1}"',
   'log.m4.driftIdle':              'Vessel "{0}" completed pursuit — auto-return in 5 yrs or issue new order',
   'log.m4.driftAutoReturn':        'Vessel "{0}" drifted too long — auto-return to "{1}"',

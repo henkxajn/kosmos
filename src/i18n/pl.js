@@ -667,6 +667,11 @@ export default {
   'vessel.reasonVesselNotFound': 'statek nie istnieje',
   'vessel.reasonVesselIsWreck': 'statek to wrak',
   'vessel.reasonUnknown': 'rozkaz odrzucony',
+  // Slice RETREAT_TARGET (D-FDj). Dwa środkowe klucze NIE ISTNIAŁY w ŻADNYM języku, mimo że
+  // powody `no_friendly_planet` / `not_in_combat` były zwracane od M4 P3 — gracz widział surowy slug.
+  'vessel.reasonNoShelterInSystem': 'Brak schronienia w tym układzie — żadne ciało nie leży poza promieniem starcia',
+  'vessel.reasonNoFriendlyPlanet': 'Brak własnej planety w zasięgu',
+  'vessel.reasonNotInCombat': 'Statek nie bierze udziału w bitwie',
   // Zbiorczy feedback rozkazu grupowego (część statków pominięta)
   'vessel.orderPartial': 'Rozkaz: ruszyło {0}/{1} · pominięto: {2}',
   'vessel.orderNoneMoved': 'Żaden statek nie ruszył · {0}',
@@ -3360,6 +3365,10 @@ export default {
   'log.m4.battleResolvedRetreat':  'Bitwa {0} — strona "{1}" wycofała się',
   'log.m4.retreatIssued':          'Statek "{0}" wycofuje się z bitwy w kierunku "{1}"',
   'log.m4.autoRetreatFailed':      'Statek "{0}" nie może się wycofać: {1}',
+  // RETREAT_TARGET (D-FDj): udany odwrót nie miał ANI JEDNEGO konsumenta — naprawa objawiałaby się
+  // wyłącznie zniknięciem komunikatów o porażce, czyli gate mierzyłby ciszę.
+  'log.m4.autoRetreatIssued':      'Statek "{0}" wycofuje się z bitwy na orbitę "{1}"',
+  'log.m4.driftStranded':          'Statek "{0}" utknął — brak własnej kolonii w tym układzie; wydaj rozkaz ręcznie',
   'log.m4.autoRetreatLowFuel':     'Statek "{0}" dryfuje na resztkach paliwa do "{1}"',
   'log.m4.driftIdle':              'Statek "{0}" ukończył pościg — auto-powrót za 5 lat lub wydaj nowy rozkaz',
   'log.m4.driftAutoReturn':        'Statek "{0}" dryfował zbyt długo — auto-powrót do "{1}"',

@@ -14,7 +14,7 @@
 
 import EventBus              from '../core/EventBus.js';
 import EntityManager         from '../core/EntityManager.js';
-import { ORDER_TYPES, validateOrder } from '../data/MovementOrderTypes.js';
+import { ORDER_TYPES, validateOrder, isRetreatSpec } from '../data/MovementOrderTypes.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { addMissionLog, isInService } from '../entities/Vessel.js';
 import { PredictionConeMath } from '../utils/PredictionConeMath.js';
@@ -22,6 +22,7 @@ import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { SHIP_MODULES }      from '../data/ShipModulesData.js';
 import { canLaunchFromCurrent, launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { isSameSystem } from '../utils/SystemScope.js';
+import { nearestShelter, escapeVector, nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -195,10 +196,19 @@ export class MovementOrderSystem {
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
 
+    // ── D-FDk (plan `RETREAT_TARGET_PLAN.md`) — UCIECZKA Z BITWY PRZEBIJA OBIE BRAMKI NIŻEJ ──
+    // Prawo do przeżycia nie jest nagrodą za opłacone utrzymanie ani za obsadzenie załogą.
+    // ⚠ To NIE jest furtka „na wszelki wypadek": zmierzone na żywym gate'cie, że
+    // `vessel_immobilized` blokował ucieczkę z bitwy przy DODATNIM budżecie kolonii, i pomiar
+    // trzeba było odblokowywać ręcznym zerowaniem licznika (nagłówek `retreat_preempt_smoke.mjs`).
+    // Predykat jest wspólny dla WSZYSTKICH trzech producentów odwrotu — dwaj z nich wydają zwykły
+    // `moveToPoint`, więc sam `type === 'retreat'` by ich nie objął.
+    const isRetreat = isRetreatSpec(spec);
+
     // S3.5a-1 — statek immobilized (>=2 lata nieopłaconego utrzymania) nie przyjmuje
     // nowych rozkazów. Powrót do bazy idzie przez VesselManager.startReturn (poza issueOrder),
     // więc pozostaje dozwolony. Bramka PRZED mutacją stanu (drift marker, mission suspend).
-    if (this._vm.isImmobilized?.(vessel))
+    if (!isRetreat && this._vm.isImmobilized?.(vessel))
       return { ok: false, reason: 'vessel_immobilized' };
 
     // W3-4 / decyzja D6 — kadłub w REZERWIE nie przyjmuje ŻADNEGO rozkazu ruchu.
@@ -211,7 +221,10 @@ export class MovementOrderSystem {
     // rozgałęzieniem na typy, więc nowy rozkaz W3 (`attack`) dziedziczy ją z urzędu.
     // Powrót do bazy idzie przez `VesselManager.startReturn` (poza `issueOrder`) i pozostaje
     // dozwolony — dokładnie jak przy `vessel_immobilized` wyżej.
-    if (!isInService(vessel))
+    // ⚠ D-FDk: `isRetreat` przebija także tę bramkę. Kadłub w magazynie nie powinien znaleźć się
+    // w starciu — ale JEŚLI się znalazł (spawn spoza dwóch szwów W2, stary zapis, cheat), to
+    // odmowa ucieczki zamienia defekt wejściowy w zgon.
+    if (!isRetreat && !isInService(vessel))
       return { ok: false, reason: 'vessel_in_reserve' };
 
     // Propaguj opts.fromFleet do spec (forwarded do order factory).
@@ -429,14 +442,14 @@ export class MovementOrderSystem {
   }
 
   /**
-   * M4 P3 polish — manualne wycofanie z bitwy. Auto-wybór najbliższej friendly
-   * planety przez reuse AutoRetreatSystem._findNearestFriendlyPlanet. Wydaje
-   * moveToPoint z markerem `_retreatFromCombat=true` żeby UI mogło rozróżnić
-   * retreat od zwykłego ruchu.
+   * M4 P3 polish — manualne wycofanie z bitwy. Cel dobiera `resolveShelterOrderSpec`
+   * (drabina: ciało-schronienie → wektor ucieczki → odmowa). Wydaje moveToPoint z markerem
+   * `_retreatFromCombat=true`, po którym UI odróżnia odwrót od zwykłego ruchu, a
+   * `DeepSpaceCombatSystem._allOutsideOf` odróżnia UCIEKINIERA od zadokowanego OBROŃCY.
    *
    * Reject:
    *   - not_in_combat (vessel nie jest w aktywnym DSCS encounter)
-   *   - no_friendly_planet (brak kolonii/outpostu w zasięgu)
+   *   - no_shelter_in_system (ani ciała poza bąblem starcia, ani wektora ucieczki)
    *
    * Po wydaniu rozkazu vessel kieruje się do friendly planety; gdy wyjdzie
    * z combat range (>0.50 AU od midpoint), DSCS._handleCombatRangeExit
@@ -450,30 +463,108 @@ export class MovementOrderSystem {
     const inCombat = dscs?._findActiveEncounterContaining?.(vessel.id);
     if (!inCombat) return { ok: false, reason: 'not_in_combat' };
 
-    const target = window.KOSMOS?.autoRetreatSystem?._findNearestFriendlyPlanet?.(vessel);
-    if (!target) return { ok: false, reason: 'no_friendly_planet' };
+    // Punkt starcia — od niego liczy się bąbel clearance. `_finalizeBattle` jeszcze nie nadał
+    // `battleId`, więc markerem jest `_retreatFromCombat`, nie identyfikator bitwy.
+    const avoidPoint = inCombat.location?.point ?? { x: vessel.position.x, y: vessel.position.y };
+    const plan = this.resolveShelterOrderSpec(vessel, { avoidPoint, issuedBy: 'manual_retreat' });
+    if (!plan.ok) return { ok: false, reason: plan.reason };
 
-    // _findNearestFriendlyPlanet zwraca { colony, planet, distanceAU } — czytamy z .planet
-    // (AutoRetreatSystem._issueRetreatOrder line 99 robi to samo: dest.planet.x/y).
-    const planet = target.planet ?? target;
-    const targetX = planet.x ?? planet.position?.x ?? 0;
-    const targetY = planet.y ?? planet.position?.y ?? 0;
-    const targetName = planet.name ?? target.colony?.name ?? '?';
-
-    const result = this._issueMoveToPoint(vessel, {
-      type: 'moveToPoint',
-      targetPoint: { x: targetX, y: targetY },
-      issuedBy: 'manual_retreat',
-    });
-    if (result.ok && vessel.movementOrder) {
-      vessel.movementOrder._retreatFromCombat = true;
+    // ⚠ WPROST `_issueMoveToPoint`, nie `issueOrder` — jesteśmy JUŻ wewnątrz `issueOrder`
+    // (`_dispatchByType`), więc ponowne wejście zdublowałoby preempcję i bramki.
+    const result = this._issueMoveToPoint(vessel, plan.spec);
+    if (result.ok) {
+      this.markAsRetreat(vessel, null);
       EventBus.emit('vessel:retreatIssued', {
-        vesselId:   vessel.id,
-        targetPoint: { x: targetX, y: targetY },
-        targetName,
+        vesselId:    vessel.id,
+        targetPoint: plan.spec.targetPoint,
+        targetName:  plan.targetName,
+        tier:        plan.tier,
       });
     }
     return result;
+  }
+
+  /**
+   * D-FDa/D-FDc/D-FDe — JEDNO ŹRÓDŁO doboru celu i KSZTAŁTU rozkazu ucieczki dla WSZYSTKICH
+   * trzech producentów odwrotu (`_issueRetreat` gracza, `AutoRetreatSystem` po bitwie, doktryna
+   * `retreat_at_50` we `FleetSystem`). Rozwiązuje cel — NIE wydaje rozkazu, bo każdy producent
+   * dyspozycjonuje inaczej: ten wewnątrz `issueOrder` woła `_issueMoveToPoint` wprost, pozostali
+   * wchodzą normalnie przez `issueOrder` (i mają przejść przez preempcję — D-VO3d).
+   *
+   * DRABINA (D-FDe): ciało-schronienie → wektor ucieczki w pusty punkt → odmowa.
+   * ⚠ ŻADEN szczebel nie robi wraku. Brak celu to odmowa, nie egzekucja.
+   *
+   * @param {object} vessel
+   * @param {object} opts — { avoidPoint?, issuedBy?, clearanceAU? }
+   * @returns {{ ok: boolean, reason?: string, spec?: object, targetName?: string, tier?: number }}
+   */
+  resolveShelterOrderSpec(vessel, opts = {}) {
+    const avoidPoint = opts.avoidPoint ?? null;
+    const issuedBy   = opts.issuedBy ?? 'retreat';
+
+    // SZCZEBEL 1 — ciało w TYM układzie, poza bąblem starcia, wg drabiny własności.
+    const shelter = nearestShelter(vessel, {
+      avoidPoint,
+      clearanceAU: opts.clearanceAU,
+      colonyManager: this._colonyManagerRef(),
+    });
+    if (shelter) {
+      return {
+        ok: true, tier: shelter.tier, targetName: shelter.body.name ?? shelter.body.id,
+        spec: {
+          type:        ORDER_TYPES.moveToPoint,
+          // D-FDi — JAWNY `targetBodyId`. Bez niego cel rozwiązywałby `_findBodyNearPoint`,
+          // który NIE MA terminu układu (Finding 138), a przewidziany punkt ruchomej planety
+          // i tak nie pokrywa się z jej bieżącą pozycją.
+          targetBodyId: shelter.body.id,
+          targetPoint:  { x: shelter.body.x, y: shelter.body.y },
+          targetName:   shelter.body.name ?? shelter.body.id,
+          issuedBy,
+          isRetreat:            true,   // D-FDk — przebija immobilized / rezerwę
+          bypassSpaceportCheck: true,
+          bypassFuelCheck:      true,   // D-FDg — z bitwy wychodzi się także na resztkach
+        },
+      };
+    }
+
+    // SZCZEBEL 2 — brak ciała poza bąblem: pusty punkt w kierunku OD starcia.
+    // ⚠ W realnym układzie ten szczebel jest nieosiągalny (pomiar: 0/7200) — jest backstopem.
+    if (avoidPoint) {
+      const vec = escapeVector(vessel, avoidPoint, opts.clearanceAU);
+      if (vec) {
+        return {
+          ok: true, tier: null, targetName: null,
+          spec: {
+            type: ORDER_TYPES.moveToPoint,
+            targetPoint: vec,
+            issuedBy,
+            isRetreat:            true,
+            bypassSpaceportCheck: true,
+            bypassFuelCheck:      true,
+          },
+        };
+      }
+    }
+
+    // SZCZEBEL 3 — odmowa z POWODEM. Statek zostaje taki, jaki był.
+    return { ok: false, reason: 'no_shelter_in_system' };
+  }
+
+  /**
+   * Marker ucieczki na żywym rozkazie — czyta go `DeepSpaceCombatSystem._allOutsideOf` (D-FDd),
+   * żeby zadokowany UCIEKINIER nie był mylony z zadokowanym OBROŃCĄ.
+   * @param {object} vessel
+   * @param {string|null} battleId
+   */
+  markAsRetreat(vessel, battleId) {
+    if (!vessel?.movementOrder) return;
+    vessel.movementOrder._retreatFromCombat = true;
+    if (battleId != null) vessel.movementOrder.retreatFromBattleId = battleId;
+  }
+
+  /** ColonyManager — MOS bierze go przez locator (spójnie z resztą tego pliku). */
+  _colonyManagerRef() {
+    return window.KOSMOS?.colonyManager ?? null;
   }
 
   /**
@@ -1847,9 +1938,15 @@ export class MovementOrderSystem {
   _tryAutoReturnDrift(vessel, gameYear) {
     const dest = this._findNearestFriendlyPlanetForDrift(vessel);
     if (!dest) {
-      // Brak friendly planety — extend timer o kolejne 5 game-years (lazy retry),
-      // gracz zauważy w UI i ręcznie wyda order. NIE wreckujemy — drift jest miękki.
+      // D-FDh — DRUGI SZCZEBEL zamiast cichej wiecznej pętli. Retry zostaje (jest tani, a
+      // sytuacja bywa przejściowa — kolonia w tym układzie może dopiero powstać), ale gracz
+      // dowiaduje się RAZ, że statek utknął. Dotąd ta gałąź nie emitowała NICZEGO: statek
+      // dryfował bez śladu w Dzienniku, a pętla „+5 lat" kręciła się do końca partii.
       vessel.driftIdle.autoReturnYear = gameYear + DRIFT_AUTO_RETURN_GAME_YEARS;
+      if (!vessel.driftIdle.stranded) {
+        vessel.driftIdle.stranded = true;
+        EventBus.emit('vessel:driftStranded', { vesselId: vessel.id, sinceYear: gameYear });
+      }
       return;
     }
 
@@ -1897,38 +1994,18 @@ export class MovementOrderSystem {
   }
 
   /**
-   * M4 P1 — clone AutoRetreatSystem._findNearestFriendlyPlanet. ColonyManager
-   * pobierany przez window.KOSMOS (spójnie z reszta MOS — _vm jest jedyny
-   * konstruktor-injected). Preferencja: full colonies > outposts.
+   * Najbliższa WŁASNA kolonia W TYM UKŁADZIE (preferencja: pełne kolonie > placówki).
+   * ⚠ Nie jest to już klon — delegacja do `utils/RetreatTarget.js` (D-FDh). ColonyManager
+   * pobierany przez `window.KOSMOS` (spójnie z resztą MOS — `_vm` jest jedynym wstrzykiwanym).
    */
   _findNearestFriendlyPlanetForDrift(vessel) {
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (!colMgr?.getAllColonies) return null;
-    const ownerId = vessel.ownerEmpireId ?? vessel.owner ?? 'player';
-
-    const all = colMgr.getAllColonies().filter(c => {
-      const cOwner = c.ownerEmpireId ?? 'player';
-      if (cOwner !== ownerId) return false;
-      return !!EntityManager.get(c.planetId);
-    });
-    if (all.length === 0) return null;
-
-    const fullColonies = all.filter(c => !c.isOutpost);
-    const candidates = fullColonies.length > 0 ? fullColonies : all;
-
-    const vwrap = { x: vessel.position.x, y: vessel.position.y };
-    let best = null;
-    let bestDist = Infinity;
-    for (const c of candidates) {
-      const planet = EntityManager.get(c.planetId);
-      if (!planet) continue;
-      const d = DistanceUtils.euclideanAU(vwrap, planet);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { colony: c, planet, distanceAU: d };
-      }
-    }
-    return best;
+    // D-FDh (Finding F-E) — delegacja do JEDNEGO źródła. Ta funkcja była kopią 1:1
+    // `AutoRetreatSystem._findNearestFriendlyPlanet` i dziedziczyła jej defekt: BRAK TERMINU
+    // UKŁADU. Tu jest on jeszcze groźniejszy niż przy odwrocie, bo ratunek z dryfu NIE wydaje
+    // rozkazu — TELEPORTUJE statek (niżej) — więc bramka `target_other_system` w ogóle go nie
+    // chroniła i statek lądował na współrzędnych ciała z obcego układu, z niezmienionym `systemId`.
+    // ⚠ WŁASNOŚĆ ZOSTAJE FILTREM: dryf znaczy „wróć do siebie", nie „schowaj się gdziekolwiek".
+    return nearestOwnColonyBodyInSystem(vessel, window.KOSMOS?.colonyManager);
   }
 
   _findVesselIdFor(order) {

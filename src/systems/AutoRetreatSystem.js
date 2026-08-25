@@ -1,10 +1,21 @@
 // AutoRetreatSystem — automatyczne wycofanie vesseli po retreat w bitwie (M2a).
 //
 // Event-driven. Nasłuchuje battle:resolved. Gdy result.retreated === 'A'|'B',
-// dla każdego vessela strony retreatującej wydaje moveToPoint order do
-// najbliższej friendly planety przez MovementOrderSystem. Gdy brak friendly
-// planety (player ma tylko wrogie systemy lub zero kolonii) — vessel staje się
-// deep-space wrakiem w miejscu aktualnej pozycji.
+// dla każdego vessela strony retreatującej wydaje moveToPoint order do najbliższego
+// SCHRONIENIA przez MovementOrderSystem.
+//
+// ⚠ ZMIANA SEMANTYKI (slice RETREAT_TARGET, plan `docs/design/RETREAT_TARGET_PLAN.md`):
+//   1. Cel dobiera `MovementOrderSystem.resolveShelterOrderSpec` → `utils/RetreatTarget.js`, a nie
+//      `_findNearestFriendlyPlanet`. Tamta funkcja NIE MA TERMINU UKŁADU i wskazywała kolonie
+//      z innych układów (gwiazda każdego układu stoi w (0,0)) ⇒ rozkaz odpadał na
+//      `target_other_system` i ODWRÓT NIE DZIAŁAŁ DLA NIKOGO (Finding F-D, zmierzone na żywo 3×).
+//      `_findNearestFriendlyPlanet` ZOSTAJE nietknięta — czytają ją cztery ścieżki „Powrót do bazy",
+//      gdzie filtr własności jest poprawny.
+//   2. BRAK CELU NIE ZABIJA (D-FDe). Dawniej `!dest` robiło `_turnIntoWreck`. Ta gałąź była
+//      praktycznie martwa (selektor przeszukiwał całą galaktykę, więc zawsze coś znajdował), ale po
+//      dodaniu terminu układu stałaby się TYPOWA — AI atakuje z definicji w cudzym układzie.
+//      ⚠ I zabijałaby TAKŻE flotę GRACZA: `DeepSpaceCombatSystem:1236` woła `_issueRetreatOrder`
+//      WPROST, omijając bramkę `empireId === 'player'` niżej.
 //
 // Nie ma osobnego feature flag — system aktywny gdy FEATURES.vesselCombat=true
 // (bez combat nie ma retreat; lazy init w GameScene razem z VCS).
@@ -19,7 +30,8 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
+// ⚠ `GAME_CONFIG` przestał tu być potrzebny wraz z usunięciem retry „low fuel"
+// (`m4FuelAwareRetreat`) — bypass paliwa jest teraz bezwarunkowy w `resolveShelterOrderSpec`.
 
 export class AutoRetreatSystem {
   /**
@@ -51,104 +63,93 @@ export class AutoRetreatSystem {
     if (side.type !== 'vessel_group') return;  // abstract fleet retreat → M3
     // M4 P3 polish 2026-05-18: player retreat jest manualny — gracz albo wydał
     // explicit retreat order (już dostał moveToPoint), albo poszedł moveToPoint
-    // sam. Nie nadpisujemy jego decyzji. AutoRetreatSystem zachowany TYLKO
-    // dla enemy AI (która sama nie potrafi wybrać friendly planety).
+    // sam. Nie nadpisujemy jego decyzji.
+    // ⚠ TO NIE JEST BRAMKA SYMETRII i nie należy jej tak czytać. Gracz DOSTAJE auto-odwrót —
+    //   tyle że drugimi drzwiami: `DeepSpaceCombatSystem._resolvePlayerMissionsPostBattle:1236`
+    //   woła `_issueRetreatOrder` WPROST, z pominięciem tego `return`, gdy flota gracza spadnie
+    //   ≤ RETREAT_THRESHOLD HP. Symetria mieszka w SELEKTORZE i w drabinie `!dest`, nie tutaj.
     if (side.empireId === 'player') return;
     const vesselIds = Array.isArray(side.vesselIds) ? side.vesselIds : [];
     if (vesselIds.length === 0) return;
 
+    // Punkt starcia — od niego liczy się bąbel clearance (D-FDc). Bez niego statek „uciekłby"
+    // na orbitę ciała, o które właśnie walczył: zostaje w zasięgu broni i wpada w ponowne zwarcie.
+    const battlePoint = result.location?.point ?? null;
+
     for (const vId of vesselIds) {
       const v = this._vm?.getVessel?.(vId) ?? this._vm?._vessels?.get?.(vId);
       if (!v || v.isWreck) continue;
-      this._issueRetreatOrder(v, battleId);
+      this._issueRetreatOrder(v, battleId, battlePoint);
     }
   }
 
   // ── Retreat order ────────────────────────────────────────────────────
 
-  _issueRetreatOrder(vessel, battleId) {
-    const dest = this._findNearestFriendlyPlanet(vessel);
-    if (!dest) {
-      // Brak friendly planety — wrak w miejscu pozycji (delegacja do EAH).
-      const handler = window.KOSMOS?.enemyAttackHandler;
-      const pos = { x: vessel.position.x, y: vessel.position.y };
-      if (handler?._turnIntoWreck) {
-        handler._turnIntoWreck(vessel, pos, this._year());
-      } else {
-        // Fallback — taki sam stan jak deep-space wreck bez handler.
-        vessel.isWreck  = true;
-        vessel.status   = 'destroyed';
-        vessel.mission  = null;
-        vessel.wreckedAt = this._year();
-        vessel.position.state    = 'orbiting';
-        vessel.position.dockedAt = null;
-        vessel.wreckLocation = pos;
-        if (vessel.fuel) vessel.fuel.current = 0;
-        EventBus.emit('vessel:wrecked', { vesselId: vessel.id, vessel });
-      }
+  /**
+   * @param {object} vessel
+   * @param {string} battleId
+   * @param {{x:number,y:number}|null} [battlePoint] — punkt starcia; gdy brak (ścieżka
+   *   `DeepSpaceCombatSystem:1236`), bąbel liczymy od bieżącej pozycji statku. Po
+   *   `_freezeAsStationary` statek stoi praktycznie w midpoincie, więc to bliskie przybliżenie
+   *   — i tak nazwane wprost, żeby nikt nie czytał go jako dokładności.
+   */
+  _issueRetreatOrder(vessel, battleId, battlePoint = null) {
+    if (!this._mos?.issueOrder) return null;
+
+    const avoidPoint = battlePoint ?? { x: vessel.position.x, y: vessel.position.y };
+    const plan = this._mos.resolveShelterOrderSpec?.(vessel, {
+      avoidPoint, issuedBy: 'auto_retreat',
+    });
+
+    if (!plan?.ok) {
+      // ⚠ D-FDe — BRAK CELU NIE ZABIJA. Tu stał `_turnIntoWreck` (+ inline fallback); statek
+      // ginął za GEOMETRIĘ układu, a nie za przegraną bitwę. Zostaje sama odmowa Z POWODEM:
+      // kadłub żyje, gracz może wydać rozkaz ręcznie, a jeśli ma zginąć — zginie normalną drogą
+      // (kill po HP=0 albo side-level wrak przy time-oucie DSCS).
       EventBus.emit('vessel:autoRetreatFailed', {
-        vesselId: vessel.id, battleId, reason: 'no_friendly_planet',
+        vesselId: vessel.id, battleId, reason: plan?.reason ?? 'no_shelter_in_system',
       });
       return null;
     }
 
-    if (!this._mos?.issueOrder) return null;
-
-    const res = this._mos.issueOrder(vessel.id, {
-      type:        'moveToPoint',
-      targetPoint: { x: dest.planet.x, y: dest.planet.y },
-      issuedBy:    'auto_retreat',
-    });
+    const res = this._mos.issueOrder(vessel.id, plan.spec);
     if (!res?.ok) {
-      // M4 P1 — gdy insufficient_fuel i flag m4FuelAwareRetreat ON, retry z bypass.
-      // Vessel doleci do friendly planety mimo niedoboru (P4 reforma fuel doda real
-      // consequences typu velocity degradation). Bez fallbacku gracz tracił statek
-      // — silent fail w deep-space. Marker lowFuelDrift dla UI.
-      if (res?.reason === 'insufficient_fuel'
-          && GAME_CONFIG.FEATURES?.m4FuelAwareRetreat) {
-        const retry = this._mos.issueOrder(vessel.id, {
-          type:            'moveToPoint',
-          targetPoint:     { x: dest.planet.x, y: dest.planet.y },
-          issuedBy:        'auto_retreat_low_fuel',
-          bypassFuelCheck: true,
-        });
-        if (retry?.ok) {
-          vessel.lowFuelDrift = {
-            sinceYear:     this._year(),
-            destPlanetId:  dest.planet.id,
-            originBattleId: battleId,
-          };
-          if (vessel.movementOrder) {
-            vessel.movementOrder.retreatFromBattleId = battleId;
-            vessel.movementOrder.lowFuelDrift        = true;
-          }
-          EventBus.emit('vessel:autoRetreatLowFuel', {
-            vesselId:            vessel.id,
-            battleId,
-            destinationPlanetId: dest.planet.id,
-            orderId:             retry.orderId,
-          });
-          return retry.orderId;
-        }
-        // Retry też failed — fallthrough do standard fail.
-      }
-      // Order rejected (inny powód niż fuel, lub retry też się nie udał).
-      // NIE wrecking — gracz może zatankować i ręcznie wydać order.
+      // Rozkaz odrzucony NIŻEJ (np. `unreachable_target`). NIE wrecking — patrz wyżej.
+      // ⚠ Retry „low fuel" USUNIĘTY jako martwy: `resolveShelterOrderSpec` daje `bypassFuelCheck`
+      //   BEZWARUNKOWO (D-FDg), więc `insufficient_fuel` nie może już stąd wyjść.
       EventBus.emit('vessel:autoRetreatFailed', {
         vesselId: vessel.id, battleId, reason: res?.reason ?? 'order_rejected',
       });
       return null;
     }
 
-    // Marker retreatFromBattleId — UI pokazuje kontekst retreat.
-    if (vessel.movementOrder) {
-      vessel.movementOrder.retreatFromBattleId = battleId;
+    // Marker — czyta go `DeepSpaceCombatSystem._allOutsideOf` (D-FDd) oraz UI.
+    this._mos.markAsRetreat?.(vessel, battleId);
+
+    // Paliwo pobierane jest przy WYDANIU rozkazu (`MovementOrderSystem:765-767`), także pod
+    // bypassem — więc pusty bak po odwrocie jest normalnym, oczekiwanym stanem. Marker zostaje,
+    // bo to on karmi ostrzeżenie w panelu floty.
+    if ((vessel.fuel?.current ?? 1) <= 0) {
+      vessel.lowFuelDrift = {
+        sinceYear:      this._year(),
+        destPlanetId:   plan.spec.targetBodyId ?? null,
+        originBattleId: battleId,
+      };
+      if (vessel.movementOrder) vessel.movementOrder.lowFuelDrift = true;
+      EventBus.emit('vessel:autoRetreatLowFuel', {
+        vesselId:            vessel.id,
+        battleId,
+        destinationPlanetId: plan.spec.targetBodyId ?? null,
+        orderId:             res.orderId,
+      });
     }
 
     EventBus.emit('vessel:autoRetreatIssued', {
       vesselId:            vessel.id,
       battleId,
-      destinationPlanetId: dest.planet.id,
+      destinationPlanetId: plan.spec.targetBodyId ?? null,
+      destinationName:     plan.targetName ?? null,
+      tier:                plan.tier ?? null,
       orderId:             res.orderId,
     });
     return res.orderId;

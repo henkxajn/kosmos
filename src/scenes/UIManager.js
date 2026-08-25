@@ -1371,11 +1371,37 @@ export class UIManager {
       }
     });
 
-    // Wycofanie nieudane (brak friendly planety + retry też failed).
+    // Wycofanie nieudane. ⚠ D-FDj — POWÓD BYŁ WYPISYWANY JAKO SUROWY SLUG (`no_friendly_planet`),
+    // bo ten `_log` wstawiał `reason` wprost, a klucze `vessel.reasonNoFriendlyPlanet` /
+    // `vessel.reasonNotInCombat` NIE ISTNIAŁY w ŻADNYM języku. Odmowa bez czytelnego powodu czyta
+    // się dla gracza jak „naprawa nie działa" — repo ma na to własną lekcję.
     EventBus.on('vessel:autoRetreatFailed', ({ vesselId, reason }) => {
       const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const key = `vessel.reason${_pascalCaseReason(reason)}`;
+      const label = t(key);
       this._log(t('log.m4.autoRetreatFailed',
-        v?.name ?? vesselId ?? '?', reason ?? 'unknown'), 'combat');
+        v?.name ?? vesselId ?? '?',
+        (label && label !== key) ? label : (reason ?? 'unknown')), 'combat');
+    });
+
+    // D-FDj — UDANY odwrót. Dotąd `vessel:autoRetreatIssued` nie miał ANI JEDNEGO subskrybenta
+    // w całym `src/`, więc naprawa F-D objawiałaby się WYŁĄCZNIE zniknięciem komunikatów
+    // o porażce — czyli gate mierzyłby ciszę i nie odróżniłby jej od „nic się nie stało".
+    EventBus.on('vessel:autoRetreatIssued', ({ vesselId, destinationPlanetId, destinationName }) => {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      // ⚠ `window.KOSMOS.entityManager`, NIE import — `UIManager` nie importuje `EntityManager`
+      // (wzór sąsiedniego handlera `vessel:autoRetreatLowFuel`).
+      const body = window.KOSMOS?.entityManager?.get?.(destinationPlanetId);
+      this._log(t('log.m4.autoRetreatIssued',
+        v?.name ?? vesselId ?? '?',
+        destinationName ?? body?.name ?? destinationPlanetId ?? '?'), 'combat');
+    });
+
+    // D-FDh — statek utknął w dryfie (brak WŁASNEJ kolonii w tym układzie). Dotąd ta gałąź
+    // przedłużała timer w NIESKOŃCZONOŚĆ i była całkowicie niema.
+    EventBus.on('vessel:driftStranded', ({ vesselId }) => {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      this._log(t('log.m4.driftStranded', v?.name ?? vesselId ?? '?'), 'fleet');
     });
 
     // Wycofanie awaryjne na resztkach paliwa (low_fuel_drift).
