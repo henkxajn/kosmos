@@ -9,8 +9,10 @@
 //      `_findNearestFriendlyPlanet`. Tamta funkcja NIE MA TERMINU UKŁADU i wskazywała kolonie
 //      z innych układów (gwiazda każdego układu stoi w (0,0)) ⇒ rozkaz odpadał na
 //      `target_other_system` i ODWRÓT NIE DZIAŁAŁ DLA NIKOGO (Finding F-D, zmierzone na żywo 3×).
-//      `_findNearestFriendlyPlanet` ZOSTAJE nietknięta — czytają ją cztery ścieżki „Powrót do bazy",
-//      gdzie filtr własności jest poprawny.
+//      `_findNearestFriendlyPlanet` ZOSTAJE nietknięta — czytają ją TRZY produkcyjne ścieżki
+//      „Powrót do bazy" (`FleetManagerOverlay:4550`, `FleetGroupPanel:445`, `FleetCommandPanel:384`),
+//      gdzie filtr własności jest poprawny. ⚠ Ona nadal NIE MA terminu układu i to jest znane:
+//      Finding 154 w `docs/design/VESSEL_ORDERS_PLAN.md` (follow-up, własny podpis).
 //   2. BRAK CELU NIE ZABIJA (D-FDe). Dawniej `!dest` robiło `_turnIntoWreck`. Ta gałąź była
 //      praktycznie martwa (selektor przeszukiwał całą galaktykę, więc zawsze coś znajdował), ale po
 //      dodaniu terminu układu stałaby się TYPOWA — AI atakuje z definicji w cudzym układzie.

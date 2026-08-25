@@ -1142,3 +1142,74 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
 
 **Zero zmian w kodzie W TYM DOKUMENCIE.** §1-§4 były projektem do podpisania; **podpis zapadł
 2026-08-23** (nagłówek + §8) i od tej chwili §4 jest **planem do wykonania**, zaczynając od **VO-0**.
+
+---
+
+## Findings z live-gate F-D (2026-08-25) — sklejenie miedzyukladowe w warstwie WALKI
+
+> **Kontekst.** Live-gate naprawy F-D (`aeef035`) zlapal defekt NIEZALEZNY od F-D i ciezszy:
+> `DeepSpaceCombatSystem` laczyl w jedno starcie statki z ROZNYCH ukladow. ZMIERZONE w zywej grze:
+> encounter ze stemplem `location.systemId = 'sys_024'` zawieral statek gracza z `sys_024` ORAZ
+> statki z `sys_061` i `sys_home` (potwierdzone dwoma zrzutami przy przelaczaniu widoku ukladu).
+>
+> **Klasa: „globalne id != polozenie"** — ta sama co Finding 138 i W3-4b. Kazdy uklad ma wlasna ramke
+> wspolrzednych na swojej gwiezdzie w (0,0), a rejestry (`EntityManager`, `VesselManager._vessels`)
+> sa PLASKIE. Statek 0,2 AU od SWOJEJ gwiazdy ma niemal te same surowe `x/y` co statek 0,2 AU od INNEJ.
+>
+> **✅ ZAMKNIETE w `131cc2e`** (bramka w dyspozytorze DSCS + termin ukladu w gatherze + stempel z pary
+> wyzwalajacej, lustrzana trojka w `VesselCombatSystem`, defense-in-depth w `_joinEncounter`
+> i `_freezeAsStationary`; NEW `SystemScope.isSameSystemStrict` fail-CLOSED wylacznie dla walki).
+> Keeper: `combat_system_scope_smoke.mjs` 25/25.
+>
+> ⚠ **Naprawa NIE cofa szkod juz zapisanych** (falszywe `position.dockedAt`, zatrute klucze
+> `orbitalDominance`, wraki w miedzyukladowych punktach, wyczerpanie wojenne z fikcyjnych bitew).
+> Sonda diagnostyczna read-only powstala i zostala zweryfikowana wykonaniem na syntetycznym zapisie,
+> ale **wlasciciel swiadomie zrezygnowal** z naprawy stanu (zapis testowy). Przy PRAWDZIWEJ partii
+> temat wraca.
+>
+> ⚠ **Lekcja, ktora wychodzi poza ten slice:** utwardzanie tej klasy bylo robione PUNKTOWO, przy
+> okazji konkretnych defektow (`ProximitySystem` dostal guard 2026-07-15, `MovementOrderSystem`
+> bramki `target_other_system` w W3-4b) — i wlasnie dlatego zostaly dziury. **Guard postawiony
+> u jednego producenta zdarzenia nie jest guardem systemu**: `vessel:combatRangeEnter` ma TRZECH
+> producentow, a utwardzony byl JEDEN.
+
+150. 🔴 **`battle:resolved` leci DWA RAZY przy zadeklarowanej wojnie.** `DeepSpaceCombatSystem`
+     emituje je z `warId: null` (`:1022`), a nastepnie `WarSystem.recordBattle:314` emituje PONOWNIE,
+     tym razem z `warId`. Kazdy subskrybent (`AutoRetreatSystem`, `InvasionSystem`, `GameScene`,
+     `ProximitySystem._handleBattleResolved`, UI) dostaje wiec ten sam wynik dwukrotnie, w dwoch
+     roznych ksztaltach. ⚠ NIE ZMIERZONO, ktorzy konsumenci sa idempotentni — `AutoRetreatSystem`
+     wyglada na odporny (drugi przebieg trafia na statek z juz wydanym rozkazem), ale to ODCZYT,
+     nie pomiar. **Osobny finding, osobny pomiar** — swiadomie poza slice'em `131cc2e`.
+
+151. 🟠 **`ProximitySystem:187` ma WLASNA koercje zamiast `systemIdOf`, i ta koercja polyka tranzyt
+     warp.** `(v1.systemId ?? 'sys_home') === (v2.systemId ?? 'sys_home')` — a `??` lapie takze `null`,
+     ktory w tym repo znaczy SWIADOMIE „statek jest miedzy ukladami" (`VesselManager:842`, inwariant
+     pilnowany przez `_resolveSystemId`). Naglowek `SystemScope.js:14-17` ostrzega przed dokladnie tym
+     sklejeniem. Skutek: statek w warpie jest liczony jako mieszkaniec `sys_home` — na wspolrzednych
+     SPRZED skoku. ⚠ Ta linia bramkuje NIE TYLKO walke, ale i DETEKCJE oraz INTEL (rumor/contact),
+     wiec zmiana wymaga wlasnego slice'u z wlasnym gate'em; `131cc2e` swiadomie jej NIE dotknal.
+
+152. 🟠 **POI nie ma pojecia ukladu — i nie da sie tego zalatac guardem.** `POIRuntimeSystem._tickPicket`
+     (`:133`) i `_tickRally` (`:186`) licza `gameplayDistance(center, vessel.position)` po pelnej liscie
+     statkow, bez terminu ukladu. ⚠ Roznica wobec pozostalych dziur tej klasy: `POIRegistry.js`
+     i `POITypes.js` **NIE MAJA pola `systemId` w ogole** (grep: zero trafien), wiec nie ma nawet czym
+     filtrowac. Naprawa = DODANIE pola + migracja zapisu, czyli decyzja o zakresie, nie jedna linia.
+
+153. 🟠 **`EmpireLogisticsSystem` dobiera outposty bez terminu ukladu, a kurier nie ma warpu.**
+     `:240-242` filtruje `getColoniesByEmpire(...)` po wlascicielu i zlozu, ZERO filtra ukladu
+     (`systemId` pojawia sie w okolicy tylko w `:230` jako klucz do `ssm.getSystem`), a trasa wyceniana
+     jest `_distAU` (`:659-664`) = surowy hypot. Komentarz `:653` mowi wprost „kurier in-system —
+     nigdy warp". ⚠ NIEUSTALONE, czy AI realnie zaklada outposty poza ukladem stolicy — bez tego
+     pomiaru nie wiadomo, czy dziura jest osiagalna.
+
+154. 🟠 **`AutoRetreatSystem._findNearestFriendlyPlanet` DALEJ nie ma terminu ukladu — i jest ZYWA.**
+     Slice RETREAT_TARGET (`aeef035`) swiadomie jej nie tknal, bo odwrot z bitwy przeszedl na
+     `utils/RetreatTarget.js`. Czytaja ja jednak **TRZY** produkcyjne sciezki „Powrot do bazy":
+     `FleetManagerOverlay.js:4550`, `FleetGroupPanel.js:445`, `FleetCommandPanel.js:384`. Skutek jest
+     ten sam co przy F-D: przycisk moze wskazac kolonie z INNEGO ukladu, po czym rozkaz odpadnie na
+     `target_other_system` — z ta roznica, ze te trzy sciezki pokazuja graczowi toast
+     `fleet.noFriendlyPlanet` albo milcza. **Follow-up RETREAT_TARGET, wlasny podpis.**
+
+> **Juz zarejestrowane, NIE duplikuje:** **Finding 138** (`VesselManager._findBodyNearPoint` skanuje
+> cala galaktyke) i **Finding 142** (`_getValidTargets` klucza sie na OGLADANYM ukladzie, nie na
+> `vessel.systemId`) naleza do tej samej klasy i pozostaja otwarte.
