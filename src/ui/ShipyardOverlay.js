@@ -479,7 +479,10 @@ export class ShipyardOverlay extends BaseOverlay {
     ctx.textAlign = 'left';
     cy += LH + 8;
 
-    const arrears = vMgr.colonyInArrears?.(activePid) ?? false;
+    // B — zatrzask jest IMPERIALNY, nie kolonijny: pytamy o flotę, nie o aktywną kolonię.
+    // ⚠ Przed B ten odczyt brał `activePid`, więc przy aktywnej ≠ kolonia-płatnik MILCZAŁ
+    //   dokładnie w konfiguracji, w której gracz najbardziej potrzebował ostrzeżenia.
+    const arrears = vMgr.fleetInArrears?.() ?? false;
 
     for (const v of rows) {
       const rowH = 40;

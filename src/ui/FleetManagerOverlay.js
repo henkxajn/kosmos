@@ -7246,12 +7246,23 @@ export class FleetManagerOverlay {
           Math.round((vMgr?.getVesselBaseUpkeepCredits?.(vessel) ?? 0))), x + pad, cy + 10);
         cy += 16;
       }
+      // A — licznik zaległości WYJĘTY z gałęzi `if (immobilized)`. Przed tą zmianą pierwszy
+      // nieopłacony rok nie miał w UI ŻADNEJ reprezentacji, więc dwuletnia karencja była dla
+      // gracza niewidzialna — kara pojawiała się bez ostrzeżenia. Teraz rok 1 świeci
+      // ostrzegawczo (warning), a dopiero rok 2 dokłada twardy komunikat o unieruchomieniu.
+      const unpaid = vessel.unpaidYears ?? 0;
       if (immobilized) {
         ctx.fillStyle = THEME.danger;
         ctx.fillText(`⚠ ${t('fleet.immobilized')}`, x + pad, cy + 10);
         cy += 16;
+      } else if (unpaid > 0) {
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(`⚠ ${t('fleet.upkeepUnpaidWarn')}`, x + pad, cy + 10);
+        cy += 16;
+      }
+      if (unpaid > 0) {
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(t('fleet.unpaidYears', vessel.unpaidYears ?? 0), x + pad, cy + 10);
+        ctx.fillText(t('fleet.unpaidYears', unpaid), x + pad, cy + 10);
         cy += 16;
       }
     }

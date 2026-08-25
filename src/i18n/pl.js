@@ -1185,6 +1185,10 @@ export default {
   //   KIEDY blokada zniknie — inaczej gracz szuka guzika „zapłać", którego nie ma.
   'fleet.deployBlockedArrears': 'Budżet nie utrzymał floty — blokada zniknie po najbliższym udanym rozliczeniu (rocznym)',
   'fleet.unpaidYears': 'Nieopłacone: {0} lat',
+  // A (2026-08-25) — ostrzeżenie PRZED karą. Rok 1 = ostrzeżenie, rok 2 = unieruchomienie.
+  //   ⚠ NIE pisać „zapłać" — nie ma takiego guzika; rozliczenie biegnie raz na ROK GRY.
+  'fleet.upkeepUnpaidWarn': 'Nieopłacony rok utrzymania — kolejny unieruchomi okręt',
+  'log.fleetUpkeepUnpaid': 'Skarbiec nie pokrył utrzymania floty ({0} okr.) — brakło {1} Kr',
 
   // Slice 8b — FleetGroupPanel (panel zaznaczonej grupy statków)
   'fleetGroup.title': 'Zaznaczone statki',

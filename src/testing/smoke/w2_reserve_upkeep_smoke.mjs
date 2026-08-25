@@ -153,7 +153,7 @@ console.log('T4 — rezerwa NIE zalega (decyzja 17): magazyn nie zamienia się w
 }
 
 // ── T5 — deploy odmówiony przy zaległościach ────────────────────────────────────────────────
-console.log('T5 — rozmieszczenie ODMÓWIONE, gdy kolonia zalega (decyzja 17)');
+console.log('T5 — rozmieszczenie ODMÓWIONE, gdy FLOTA zalega (decyzja 17, zasięg imperialny po B)');
 {
   const core = boot();
   const home = window.KOSMOS.homePlanet?.id;
@@ -163,7 +163,11 @@ console.log('T5 — rozmieszczenie ODMÓWIONE, gdy kolonia zalega (decyzja 17)')
   const debtor = mk(core, home, 'hull_cruiser', 'active', 'Dłużnik');
   const stored = mk(core, home, 'hull_frigate', 'stored', 'Czeka w magazynie');
 
-  assert(vm.colonyInArrears(home) === false, 'T5 KONTROLA PINU: bez długu kolonia NIE zalega');
+  // ⚠ ARANŻACJA PRZEPISANA W B (2026-08-25): zatrzask przestał być własnością KOLONII.
+  //   Rachunek płaci teraz SKARBIEC (dowolne kolonie gracza), więc nie da się wskazać koloni,
+  //   która „miała zapłacić i nie zapłaciła". Sama decyzja 17 jest NIETKNIĘTA — rezerwa dalej
+  //   nie zalega i dalej bramkujemy ROZMIESZCZENIE. Zmienił się WYŁĄCZNIE zasięg predykatu.
+  assert(vm.fleetInArrears() === false, 'T5 KONTROLA PINU: bez długu flota NIE zalega');
   const okBefore = vm.deployVessel(stored.id);
   assert(okBefore?.ok === true,
     `T5 KONTROLA PINU: bez długu rozmieszczenie PRZECHODZI (ok=${okBefore?.ok}, reason=${okBefore?.reason ?? '—'})`);
@@ -172,11 +176,11 @@ console.log('T5 — rozmieszczenie ODMÓWIONE, gdy kolonia zalega (decyzja 17)')
 
   col.credits = 0;
   vm._maintenanceAccum = 0; vm._tickVesselMaintenance(1.0);
-  assert((debtor.unpaidYears ?? 0) > 0, `T5: kolonia realnie wpadła w dług (${debtor.unpaidYears} rok)`);
-  assert(vm.colonyInArrears(home) === true, 'T5: `colonyInArrears` widzi dług');
+  assert((debtor.unpaidYears ?? 0) > 0, `T5: flota realnie wpadła w dług (${debtor.unpaidYears} rok)`);
+  assert(vm.fleetInArrears() === true, 'T5: `fleetInArrears` widzi dług');
 
   const res = vm.deployVessel(stored.id);
-  assert(res?.ok === false && res?.reason === 'colony_in_arrears',
+  assert(res?.ok === false && res?.reason === 'fleet_in_arrears',
     `T5: rozmieszczenie ODMÓWIONE z powodem (ok=${res?.ok}, reason=${res?.reason})`);
   assert(stored.serviceState === 'stored',
     'T5: kadłub ZOSTAJE w rezerwie — odmowa nie oddaje okrętu sparaliżowanego, tylko go nie wypuszcza');

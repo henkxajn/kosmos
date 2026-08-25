@@ -134,23 +134,31 @@ console.log('F5 (STARY KONTRAKT) — placówka nadal wykluczona z płacenia');
     'F5: placówka nadal nie jest płatnikiem (filtr `!isOutpost` nietknięty)');
 }
 
-// ── F6 — POMIAR KONSEKWENCJI: brak płatnika = brak opłaty I brak zaległości ───────────────
-console.log('F6 (POMIAR, nie ocena) — co się dzieje, gdy żaden płatnik nie przejdzie testu');
+// ── F6 — ⚠ ASERCJA ŚWIADOMIE ODWRÓCONA W B (2026-08-25) ────────────────────────────────────
+// DAWNIEJ pinowała: „brak płatnika ⇒ statek NIE płaci ANI nie zalega" — czyli DARMOWĄ FLOTĘ.
+// Sam ówczesny komentarz nazywał to „zapisanym skutkiem, nie aprobatą" i wskazywał warunek
+// zamknięcia: „wymaga TRZECIEGO szczebla drabiny (dowolna kolonia gracza)".
+// Wariant B ten szczebel dowiózł — i to nie jako trzeci stopień drabiny, lecz przez ZNIESIENIE
+// desygnowanego płatnika: rachunek idzie do SKARBCA (`spendFromTreasury`), więc bezdomny statek
+// jest opłacany tak samo jak każdy inny. Pin przestaje pilnować luki i zaczyna pilnować naprawy.
+// Bliźniaczy, pozytywny dowód (kto realnie zapłacił) stoi w `fleet_upkeep_imperial_smoke` B6.
+console.log('F6 (ODWRÓCONY w B) — brak płatnika nominalnego NIE czyni floty darmową');
 {
   const { cm, vm, home } = boot();
   const v = vm.createAndRegister('science_vessel', home.id, {});
   v.homeColonyId = 'nie_ma_takiej';
   cm.transferColony(home.id, EMP, 'probe');        // gracz bez domu ⇒ fallback odpada
 
-  assert(vm._resolvePayHomeId(v, cm) === null, 'F6: brak płatnika => `null`');
+  assert(vm._resolvePayHomeId(v, cm) === null,
+    'F6 KONTROLA PINU: `_resolvePayHomeId` dalej zwraca `null` — resolver ATRYBUCJI żyje i nie zmiękł');
   const before = v.unpaidYears ?? 0;
   vm._maintenanceAccum = 0;
   vm._tickVesselMaintenance(1.0);
-  assert((v.unpaidYears ?? 0) === before,
-    'F6: `_tickVesselMaintenance` robi `if (!homeId) continue` ⇒ statek NIE płaci ANI nie zalega');
-  // ⚠ To jest ZAPISANY SKUTEK, nie aprobata: przy zerze kolonii gracza flota staje się darmowa.
-  //   Zamknięcie tego wymaga TRZECIEGO szczebla drabiny (dowolna kolonia gracza) — poza podpisem
-  //   OG-3b, który brzmiał „dołóż termin własności + przepuść fallback przez ten sam test".
+  assert((v.unpaidYears ?? 0) > before,
+    'F6: statek bez płatnika ZALEGA (a nie: jest darmowy) — rachunek wystawiono, imperium go nie pokryło');
+  // ⚠ Aranżacja `transferColony(home)` zabiera graczowi JEDYNĄ kolonię, więc skarbiec jest PUSTY
+  //   i rachunek nie ma z czego zejść. To celowe: mierzymy, że brak płatnika nominalnego nie
+  //   wypycha już statku POZA rozliczenie. Że przy niepustym skarbcu realnie PŁACI — pinuje B6.
 }
 
 // ── F7 — stary kontrakt: statki AI i wraki poza rozliczeniem ──────────────────────────────

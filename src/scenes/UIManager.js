@@ -1054,7 +1054,7 @@ export class UIManager {
     EventBus.on('vessel:deployRejected', ({ vessel, reason }) => {
       if (vessel && isEnemyVessel(vessel)) return;
       const KEYS = {
-        colony_in_arrears:  'fleet.deployBlockedArrears',
+        fleet_in_arrears:   'fleet.deployBlockedArrears',   // B — zatrzask imperialny (był `colony_in_arrears`)
         no_crew_pops:       'fleet.noCrewPops',
         no_crew_colony:     'fleet.deployNoColony',
         vessel_in_transit:  'fleet.withdrawInTransit',
@@ -1068,6 +1068,40 @@ export class UIManager {
       const msg = key ? t(key, vessel?.crewLocked ?? '') : String(reason ?? '');
       this._log(`⚠ ${vessel?.name ?? '—'}: ${msg}`, 'fleet');
       EventBus.emit('ui:toast', { text: msg, color: THEME.warning ?? '#ffcc44', durationMs: 3000 });
+    });
+
+    // A (2026-08-25) — SKARBIEC NIE POKRYŁ UTRZYMANIA. Przed tą zmianą pierwszy nieopłacony rok
+    // był CAŁKOWICIE niemy: licznik rósł w ciszy, a UI pokazywało „Nieopłacone: N" dopiero
+    // PO unieruchomieniu (`FleetManagerOverlay` trzymał ten wiersz wewnątrz `if (immobilized)`).
+    // Dwuletnia karencja istniała w silniku i nie istniała dla gracza.
+    //
+    // ⚠ AGREGACJA JEST WYMOGIEM, NIE OZDOBĄ. Zdarzenie leci PER STATEK w jednym rozliczeniu,
+    //   więc flota 20 okrętów wyplułaby 20 wpisów naraz i wypłukała ring buffer Dziennika
+    //   (ta sama lekcja co `SAVE_ALERT_COOLDOWN_YEARS` przy alarmie zapisu). Wszystkie emity
+    //   jednego rozliczenia lecą SYNCHRONICZNIE w jednym stosie, więc `queueMicrotask` zbiera
+    //   dokładnie jedno rozliczenie — bez zegara i bez progu do strojenia.
+    EventBus.on('fleet:upkeepUnpaid', ({ vessel, shortfall, immobilized }) => {
+      if (vessel && isEnemyVessel(vessel)) return;
+      if (!this._upkeepUnpaidBatch) {
+        this._upkeepUnpaidBatch = { count: 0, shortfall: 0, immobilized: 0 };
+        queueMicrotask(() => {
+          const b = this._upkeepUnpaidBatch;
+          this._upkeepUnpaidBatch = null;
+          if (!b || b.count === 0) return;
+          const msg = t('log.fleetUpkeepUnpaid', b.count, Math.round(b.shortfall));
+          window.KOSMOS?.eventLogSystem?.push({ text: `⚠ ${msg}`, channel: 'fleet', severity: 'warn' });
+          this._dirty = true;
+          // Toast tylko przy PIERWSZYM nieopłaconym roku (ostrzeżenie); gdy okręty już stoją,
+          // sygnałem jest szary tint na mapie i badge w rejestrze — kolejny toast byłby szumem.
+          if (b.immobilized === 0) {
+            EventBus.emit('ui:toast', { text: msg, color: THEME.warning ?? '#ffcc44', durationMs: 4000 });
+          }
+        });
+      }
+      const b = this._upkeepUnpaidBatch;
+      b.count++;
+      b.shortfall = Math.max(b.shortfall, shortfall ?? 0);
+      if (immobilized) b.immobilized++;
     });
 
     EventBus.on('expedition:reconProgress', ({ body, discovered }) => {

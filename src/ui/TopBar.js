@@ -739,10 +739,17 @@ export class TopBar {
     if (window.KOSMOS?.civMode) {
       const colMgr = window.KOSMOS?.colonyManager;
       if (colMgr) {
-        let totalKr = 0;
-        for (const col of colMgr.getAllColonies()) {
-          if (col.ownerEmpireId) continue;   // S3.5a-1 fix: pomiń kolonie AI (ownerEmpireId != null)
-          totalKr += col.credits ?? 0;        //   — ich kredyty maskowały drain floty gracza (BUG D/F)
+        // B — jedno źródło prawdy: `getTreasuryCredits()` liczy DOKŁADNIE ten zbiór, z którego
+        // `spendFromTreasury` opłaca flotę, więc ta liczba nie może już skłamać wobec tego, co
+        // realnie da się opłacić. Fallback = dawna pętla (S3.5a-1 fix: pomiń kolonie AI —
+        // ich kredyty maskowały drain floty gracza, BUG D/F).
+        let totalKr = window.KOSMOS?.civilianTradeSystem?.getTreasuryCredits?.() ?? null;
+        if (totalKr === null) {
+          totalKr = 0;
+          for (const col of colMgr.getAllColonies()) {
+            if (col.ownerEmpireId) continue;
+            totalKr += col.credits ?? 0;
+          }
         }
         const krStr = totalKr >= 1000 ? (totalKr / 1000).toFixed(1) + 'k' : String(totalKr);
         items.push({

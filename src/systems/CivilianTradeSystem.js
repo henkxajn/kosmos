@@ -889,6 +889,62 @@ export class CivilianTradeSystem {
   }
 
   /**
+   * B (2026-08-25) — SKARBIEC IMPERIALNY: suma Kr wszystkich kolonii GRACZA.
+   *
+   * Nie jest to osobne konto (to wariant C, odłożony) — to nazwanie zbioru, z którego wolno
+   * ściągnąć rachunek imperialny. Getter istnieje po to, żeby WSZYSTKIE odczyty „Skarbiec"
+   * (TopBar, NavPeek, panele) i ŚCIEŻKA PIENIĄDZA (`spendFromTreasury`) liczyły dokładnie ten
+   * sam zbiór. Dopóki obie strony pytają tą samą funkcją, liczba na ekranie nie może skłamać
+   * wobec tego, co realnie da się opłacić — a to była istota zgłoszenia właściciela.
+   *
+   * ⚠ Zbiór to `getPlayerColonies()` (kanon `ColonyOwnership`), więc kolonie AI są POZA nim
+   *   z definicji. To ta sama bramka, która naprawiła Finding 97; nie duplikujemy tu terminu
+   *   własności ręcznym `!ownerEmpireId`.
+   */
+  getTreasuryCredits() {
+    const cols = this.colonyManager?.getPlayerColonies?.() ?? [];
+    let total = 0;
+    for (const col of cols) total += col.credits ?? 0;
+    return total;
+  }
+
+  /**
+   * B — pobierz kwotę ze SKARBCA (dowolne kolonie gracza), najbogatsza pierwsza.
+   *
+   * ALL-OR-NOTHING NA CAŁYM KOSZCIE, nie na pojedynczej sakiewce: jeśli suma imperium pokrywa
+   * rachunek, płacimy — choćby trzeba go było złożyć z trzech kolonii; jeśli nie pokrywa, nie
+   * schodzi ANI GROSZ. Bez tej symetrii częściowe obciążenie zjadałoby kredyty za nic i gracz
+   * płaciłby za usługę, której nie dostał.
+   *
+   * ⚠ „Najbogatsza pierwsza" jest ŚWIADOME i różni się od sortowania statków (najtańszy pierwszy,
+   *   decyzja 16): tam chodzi o to, KTÓRY okręt przetrwa niedobór, a tu o to, żeby jak najmniej
+   *   sakiewek zeszło do zera — kolonia na zerze przestaje płacić własne płace (floor przy 0).
+   *
+   * Pobranie idzie przez `spendCredits`, więc każda kolonia dostaje swoje `trade:creditsChanged`
+   * z `purpose` — telemetria balansu klasyfikuje po nim kubełki i nie traci widoczności.
+   *
+   * @returns {boolean} true jeśli opłacono w całości
+   */
+  spendFromTreasury(amount, purpose) {
+    if (!(amount > 0)) return true;                      // rachunek zerowy = opłacony
+    const purses = (this.colonyManager?.getPlayerColonies?.() ?? [])
+      .filter(col => (col.credits ?? 0) > 0)
+      .sort((a, b) => (b.credits ?? 0) - (a.credits ?? 0));
+
+    let available = 0;
+    for (const col of purses) available += col.credits ?? 0;
+    if (available < amount) return false;                // NIC nie pobieramy
+
+    let left = amount;
+    for (const col of purses) {
+      if (left <= 0) break;
+      const take = Math.min(col.credits ?? 0, left);
+      if (take > 0 && this.spendCredits(col.planetId, take, purpose)) left -= take;
+    }
+    return left <= 0;
+  }
+
+  /**
    * Ustaw override handlu na kolonii
    * @param {string} mode - 'block' | 'priority' | null (usuń)
    */

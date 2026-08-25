@@ -118,7 +118,10 @@ function _economy() {
   const cm = K().colonyManager;
   let used = 0, total = 0;
   for (const c of cols) { const fs = c.factorySystem; if (fs) { used += fs.usedPoints ?? 0; total += fs.totalPoints ?? 0; } }
-  const treasury  = _sum(cols, c => c.credits);
+  // B — jedno źródło prawdy: ten sam getter, z którego liczy się ŚCIEŻKA PIENIĄDZA
+  // (`spendFromTreasury`). Etykieta „Skarbiec" stała nad sumą liczoną lokalną pętlą, więc mogła
+  // rozjechać się ze zbiorem, który realnie płaci. Fallback zostaje na wypadek braku systemu.
+  const treasury  = K().civilianTradeSystem?.getTreasuryCredits?.() ?? _sum(cols, c => c.credits);
   const tradeFlow = _sum(cols, c => c.creditsPerYear);
   const tax = cm?.calculateTaxIncome ? _sum(full, c => cm.calculateTaxIncome(c)) : 0;
   const fleetUp = K().vesselManager?.getTotalFleetUpkeep?.() ?? 0;

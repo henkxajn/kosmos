@@ -1183,6 +1183,10 @@ export default {
   //   The string must name the BUDGET and say WHEN the block lifts.
   'fleet.deployBlockedArrears': 'Budget did not cover fleet upkeep — clears at the next successful settlement (annual)',
   'fleet.unpaidYears': 'Unpaid: {0} yr',
+  // A (2026-08-25) — warn BEFORE the penalty. Year 1 = warning, year 2 = immobilisation.
+  //   ⚠ Do NOT say "pay now" — there is no such button; settlement runs once per GAME year.
+  'fleet.upkeepUnpaidWarn': 'Upkeep year unpaid — the next one immobilises the ship',
+  'log.fleetUpkeepUnpaid': 'Treasury did not cover fleet upkeep ({0} ship(s)) — {1} Kr short',
 
   // Slice 8b — FleetGroupPanel (selected vessel group panel)
   'fleetGroup.title': 'Selected vessels',

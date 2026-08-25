@@ -903,13 +903,14 @@ export class VesselManager {
     const colony = this._resolveCrewColony(vessel);
     if (!colony?.civSystem) return { ok: false, reason: 'no_crew_colony' };
 
-    // W2-5 (decyzja 17) — kolonia z długiem utrzymania NIE rozmieszcza. Rezerwa nie zalega,
+    // W2-5 (decyzja 17) + B — FLOTA z długiem utrzymania NIE rozmieszcza. Rezerwa nie zalega,
     // więc bez tej bramki gracz obchodziłby spiralę utrzymania, wypuszczając ze schowka
     // kolejne okręty, których i tak nie stać mu opłacić. Odmowa jest UCZCIWA: lepiej nie
     // wypuścić okrętu, niż oddać sparaliżowany.
-    const payHomeId = this._resolvePayHomeId(vessel, window.KOSMOS?.colonyManager ?? { getColony: () => null });
-    if (this.colonyInArrears(payHomeId)) {
-      return { ok: false, reason: 'colony_in_arrears', colonyId: payHomeId };
+    // ⚠ Zatrzask jest IMPERIALNY (B): pyta o flotę, nie o imienną kolonię-płatnika, bo takiej
+    //   już nie ma. `colonyId` w zwrotce byłoby odtąd fikcją, więc go NIE podajemy.
+    if (this.fleetInArrears()) {
+      return { ok: false, reason: 'fleet_in_arrears' };
     }
 
     const crewCost = _getHullDef(vessel.shipId)?.crewCost ?? 0;
@@ -1987,8 +1988,8 @@ export class VesselManager {
     const civTrade = window.KOSMOS?.civilianTradeSystem;
     if (!colMgr || !civTrade) return;
 
-    // grupuj statki GRACZA po pay-home (homeColonyId → fallback homePlanet)
-    const byHome = new Map();
+    // B (2026-08-25) — JEDNA LISTA CAŁEJ FLOTY GRACZA, bez desygnowanego płatnika.
+    const fleet = [];
     for (const v of this._vessels.values()) {
       // PHASE5_TODO (ekonomia AI) — ⚠ TA LINIA ZOSTAJE ŚWIADOMIE, orzeczenie właściciela
       //   (W2 decyzja 14): utrzymanie floty AI NIE jest naliczane, bo AI nie ma dochodu
@@ -1998,47 +1999,71 @@ export class VesselManager {
       //   Hamulce na gromadzenie floty przez AI: bramka załogowa + przepustowość stoczni.
       //   Zdjąć dopiero razem z pełną ekonomią AI (dochód + budżet), nie wcześniej.
       if (v.isWreck || isEnemyVessel(v)) continue;        // tylko player, bez wraków
-      const homeId = this._resolvePayHomeId(v, colMgr);
-      if (!homeId) continue;
-      if (!byHome.has(homeId)) byHome.set(homeId, []);
-      byHome.get(homeId).push(v);
+      // ⚠ ŻADNEJ bramki płatnika. Przed B stało tu `_resolvePayHomeId` + `if (!homeId) continue`,
+      //   przez co statek bez rozwiązywalnego domu był DARMOWY, a jego licznik zaległości
+      //   ZAMROŻONY (oba resety leżą ZA tym `continue`) — otwarty pin F6. Teraz rachunek
+      //   wystawiamy KAŻDEMU statkowi gracza, a płaci imperium.
+      fleet.push(v);
     }
+    if (fleet.length === 0) return;
 
-    for (const [homeId, vessels] of byHome) {
-      // W2-5 (decyzja 16) — SŁUŻBA PIERWSZA, potem najtańszy. Przy niedoborze kredytów bez
-      // opłaty zostaje REZERWA, nie okręt, który właśnie broni układu. Drugi klucz liczy się
-      // ze stawki PEŁNEJ — rabat rezerwy w kluczu odwróciłby cały ranking.
-      vessels.sort((a, b) =>
-        (isInService(b) ? 1 : 0) - (isInService(a) ? 1 : 0)
-        || this.getVesselBaseUpkeepCredits(a) - this.getVesselBaseUpkeepCredits(b));
-      for (const v of vessels) {
-        const cost = this.getVesselUpkeepCredits(v);
-        if (cost <= 0) { v.unpaidYears = 0; continue; }
-        const paid = civTrade.spendCredits(homeId, cost, 'fleet_upkeep'); // 1 deduct + trade:creditsChanged + bool
-        if (paid) { v.unpaidYears = 0; continue; }          // resume → un-immobilize
-        // W2-5 (decyzja 17) — REZERWA NIE ZALEGA. Nieopłacony magazyn nie ma czego
-        // unieruchamiać (i tak nie lata), a narastające zaległości robiłyby z niego pułapkę:
-        // kadłub wychodziłby z rezerwy od razu sparaliżowany. Zamiast tego bramkujemy
-        // ROZMIESZCZENIE, dopóki kolonia ma długi (`deployVessel` → `colony_in_arrears`).
-        if (!isInService(v)) continue;
-        v.unpaidYears = (v.unpaidYears ?? 0) + 1;           // narasta; >=2 → immobilized (pochodna)
-      }
+    // W2-5 (decyzja 16) — SŁUŻBA PIERWSZA, potem najtańszy. Przy niedoborze kredytów bez
+    // opłaty zostaje REZERWA, nie okręt, który właśnie broni układu. Drugi klucz liczy się
+    // ze stawki PEŁNEJ — rabat rezerwy w kluczu odwróciłby cały ranking.
+    // ⚠ Sortowanie działa teraz na JEDNEJ liście całej floty, a nie w obrębie jednej koloni:
+    //   przy niedoborze imperium ratuje obrońców GLOBALNIE, nie per sakiewka.
+    fleet.sort((a, b) =>
+      (isInService(b) ? 1 : 0) - (isInService(a) ? 1 : 0)
+      || this.getVesselBaseUpkeepCredits(a) - this.getVesselBaseUpkeepCredits(b));
+
+    for (const v of fleet) {
+      const cost = this.getVesselUpkeepCredits(v);
+      if (cost <= 0) { v.unpaidYears = 0; continue; }
+      // B — rachunek idzie do SKARBCA (dowolne kolonie gracza, najbogatsza pierwsza),
+      // all-or-nothing na CAŁYM koszcie. `spendFromTreasury` woła `spendCredits` per kolonia,
+      // więc pojedyncze odjęcie + `trade:creditsChanged` z `purpose` zostają nietknięte.
+      const paid = civTrade.spendFromTreasury(cost, 'fleet_upkeep');
+      if (paid) { v.unpaidYears = 0; continue; }          // resume → un-immobilize
+      // W2-5 (decyzja 17) — REZERWA NIE ZALEGA. Nieopłacony magazyn nie ma czego
+      // unieruchamiać (i tak nie lata), a narastające zaległości robiłyby z niego pułapkę:
+      // kadłub wychodziłby z rezerwy od razu sparaliżowany. Zamiast tego bramkujemy
+      // ROZMIESZCZENIE, dopóki FLOTA ma długi (`deployVessel` → `fleet_in_arrears`).
+      if (!isInService(v)) continue;
+      v.unpaidYears = (v.unpaidYears ?? 0) + 1;           // narasta; >=2 → immobilized (pochodna)
+      // A — KONIEC CICHEGO ODLICZANIA. Przed B ta linia była goła: pierwszy nieopłacony rok
+      // nie zostawiał ŻADNEGO śladu (UI pokazuje „Nieopłacone" dopiero po unieruchomieniu),
+      // więc gracz dowiadywał się o karze dopiero, gdy było za późno na reakcję.
+      EventBus.emit('fleet:upkeepUnpaid', {
+        vesselId:    v.id,
+        vessel:      v,
+        cost,
+        shortfall:   Math.max(0, Math.ceil(cost - civTrade.getTreasuryCredits())),
+        unpaidYears: v.unpaidYears,
+        immobilized: this.isImmobilized(v),
+      });
     }
   }
 
   /**
-   * W2-5 — czy kolonia zalega z utrzymaniem floty. Pochodna, bez nowego stanu: zaległość
-   * NOSZĄ statki (`unpaidYears`), a kolonia „zalega", jeśli którykolwiek z jej okrętów
-   * w służbie ma nieopłacony rok. Bramkuje rozmieszczenie (decyzja 17).
+   * W2-5 (decyzja 17) + B — czy FLOTA zalega z utrzymaniem. Pochodna, bez nowego stanu:
+   * zaległość NOSZĄ statki (`unpaidYears`), a flota „zalega", jeśli którykolwiek okręt
+   * W SŁUŻBIE ma nieopłacony rok. Bramkuje rozmieszczenie.
+   *
+   * ⚠ ZASIĘG ZMIENIONY W B (podpis właściciela 2026-08-25): było `colonyInArrears(colonyId)`.
+   *   Skoro rachunek płaci imperium, a nie imienna kolonia, „kolonia zalega" straciło desygnat —
+   *   nie da się wskazać koloni, która „miała zapłacić i nie zapłaciła". Zatrzask jest teraz
+   *   własnością FLOTY. Sama decyzja 17 (rezerwa nie zalega, bramkujemy ROZMIESZCZENIE, zatrzask
+   *   zdejmuje dopiero UDANE rozliczenie — nie dosypanie kredytów) zostaje w mocy bez zmian.
+   *
+   * ⚠ `isInService` był OBIECANY w docstringu od W2-5, ale NIE BYŁ TESTOWANY — okręt wycofany
+   *   do rezerwy z długiem blokował deploy bezterminowo, bo rezerwa nie ma jak spłacić
+   *   (nie narasta, ale i nie zeruje). Teraz predykat robi to, co mówi. Pin: B9.
    */
-  colonyInArrears(colonyId) {
-    if (!colonyId) return false;
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (!colMgr) return false;
+  fleetInArrears() {
     for (const v of this._vessels.values()) {
       if (v.isWreck || isEnemyVessel(v)) continue;
-      if ((v.unpaidYears ?? 0) <= 0) continue;
-      if (this._resolvePayHomeId(v, colMgr) === colonyId) return true;
+      if (!isInService(v)) continue;                 // patrz ⚠ wyżej — teraz EGZEKWOWANE
+      if ((v.unpaidYears ?? 0) > 0) return true;
     }
     return false;
   }

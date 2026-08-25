@@ -72,7 +72,7 @@ function stubWorld(vessels, { arrears = false } = {}) {
     getVesselUpkeepCredits: () => 30,
     getVesselBaseUpkeepCredits: () => 300,
     isImmobilized: () => false,
-    colonyInArrears: () => arrears,
+    fleetInArrears: () => arrears,   // B — zatrzask imperialny (był `colonyInArrears(colonyId)`)
     deployVessel: () => ({ ok: true }),
     withdrawVessel: () => ({ ok: true }),
   };
