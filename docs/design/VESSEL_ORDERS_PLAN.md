@@ -1180,6 +1180,14 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      roznych ksztaltach. ⚠ NIE ZMIERZONO, ktorzy konsumenci sa idempotentni — `AutoRetreatSystem`
      wyglada na odporny (drugi przebieg trafia na statek z juz wydanym rozkazem), ale to ODCZYT,
      nie pomiar. **Osobny finding, osobny pomiar** — swiadomie poza slice'em `131cc2e`.
+     ⚠ **POTWIERDZONY W ŻYWEJ GRZE 2026-08-26 (live-gate F-D) — DWUKROTNIE w jednej sesji.**
+     Dwie RÓŻNE pary id bitew, za każdym razem **dwie sprzeczne linijki o zwycięzcy TEJ SAMEJ walki**
+     w Dzienniku. To zmienia status wpisu na dwa sposoby: (a) z „znany, niezmierzony" na
+     **reprodukowalny w żywej rozgrywce**; (b) duplikat okazuje się **WIDOCZNY DLA GRACZA**, a nie
+     tylko wewnętrzny — sprzeczny meldunek o zwycięzcy podważa zaufanie do warstwy walki nawet wtedy,
+     gdy stan gry jest poprawny. ⚠ **NADAL NIEZMIERZONE: którzy konsumenci są idempotentni** — a to
+     jest właściwe pytanie o szkodę, bo dwa emity o dwóch RÓŻNYCH kształtach (`warId: null` vs `warId`)
+     mogą rozejść się po konsumentach różnie. Pomiar musi objąć każdego subskrybenta z osobna.
 
 151. 🟠 **`ProximitySystem:187` ma WLASNA koercje zamiast `systemIdOf`, i ta koercja polyka tranzyt
      warp.** `(v1.systemId ?? 'sys_home') === (v2.systemId ?? 'sys_home')` — a `??` lapie takze `null`,

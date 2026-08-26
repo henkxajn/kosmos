@@ -1975,6 +1975,244 @@ przechodzona; nie nazywać jej zweryfikowaną.
 
 ---
 
+## RETREAT_TARGET — odwrót z bitwy dobiera SCHRONIENIE, nie BAZĘ (F-D + F-E) (save **v101 bez migracji**, live-gate 4/4 PASS — ARC ZAMKNIĘTY 2026-08-26)
+
+Slice **przekrojowy**, NIE należy do VESSEL_ORDERS (P0-P5 zostaje osobnym, podpisanym planem).
+Plan + decyzje **D-FDa…D-FDk** + trzy pomiary wykonane PRZED kodem: `docs/design/RETREAT_TARGET_PLAN.md`.
+Rejestr wyjściowy: `UNIFIED_VESSEL_ORDERS_AUDIT.md` (F-D/F-E). Commity: `aeef035` (kod) ·
+`ee71fc7` (rejestr + korekta komentarza, który kłamał o liczbie konsumentów: „cztery ścieżki" → **trzy**).
+
+**Jedno zdanie:** odwrót z bitwy i „Powrót do bazy" dzieliły JEDNĄ funkcję doboru celu
+(`AutoRetreatSystem._findNearestFriendlyPlanet`), która filtruje po WŁAŚCICIELU i **nie ma terminu
+układu** — a gwiazda każdego układu stoi w (0,0), więc selektor wskazywał kolonie z INNYCH układów,
+rozkaz odpadał na `target_other_system` ⇒ **odwrót nie działał dla NIKOGO, gracza włącznie**
+(zmierzone na żywo 3×).
+
+**Rozszczepienie na dwie nazwy** — rdzeń slice'u: jedna funkcja odpowiadała naraz na DWA różne
+pytania i dlatego na żadne nie odpowiadała dobrze.
+
+| pytanie | odpowiedź | własność | koniec drogi |
+|---|---|---|---|
+| „gdzie mogę się **SCHRONIĆ**?" | NEW `src/utils/RetreatTarget.js` | **kolejność preferencji** (D-FDb) | **ORBITA**, `colonyId` NIETKNIĘTY |
+| „gdzie jest moja **BAZA**?" | `_findNearestFriendlyPlanet` **NIETKNIĘTA** | filtr (poprawny) | dok + re-homing `colonyId` |
+
+⚠ **`_findNearestFriendlyPlanet` NADAL nie ma terminu układu i jest ŻYWA** przez TRZY produkcyjne
+ścieżki „Powrót do bazy" (`FleetManagerOverlay:4550`, `FleetGroupPanel:445`, `FleetCommandPanel:384`)
+— **Finding 154, otwarty, własny podpis**. Świadomie nietknięta: tam filtr własności jest właściwy,
+a promień rażenia zmiany obejmowałby przycisk używany w normalnej grze.
+
+**`MovementOrderSystem.resolveShelterOrderSpec` = JEDNO ŹRÓDŁO** doboru celu **i kształtu rozkazu**
+dla WSZYSTKICH TRZECH producentów odwrotu (`_issueRetreat` gracza z PPM · `AutoRetreatSystem` na
+`battle:resolved` · doktryna `retreat_at_50` we `FleetSystem`). Rozwiązuje cel — **nie wydaje**
+rozkazu, bo każdy producent dyspozycjonuje inaczej (ten wewnątrz `issueOrder` woła `_issueMoveToPoint`
+wprost, żeby nie zdublować preempcji i bramek; pozostali wchodzą normalnie przez `issueOrder`).
+
+**Drabina rang (D-FDb + D-FDg) — BEZWZGLĘDNA**, odległość porządkuje dopiero WEWNĄTRZ tieru:
+
+```
+tier 0  własna kolonia/stacja Z PORTEM   ← jedyny tier, na którym da się zatankować
+tier 1  własna kolonia/stacja bez portu
+tier 2  ciało NICZYJE
+tier 3  kolonia OBCEGO właściciela        ← ostatni (Z1: wrogi orbiter blokuje pulę hubu SAMYM
+                                            faktem `dockedAt` i dolicza się do następnej fali)
+```
+
+Powód pierwszeństwa portu: rozkaz leci z `bypassFuelCheck`, a **paliwo pobierane jest PRZY WYDANIU**
+(`MOS:765-767`) — statek doleci wszędzie, ale z bakiem na zerze, a tankowanie wymaga `state==='docked'`
+(przylot daje `orbiting`). Bez tej preferencji produkowaliśmy limbo klasy **Finding 111/125**.
+
+**Drabina szczebli (D-FDe) — ŻADEN szczebel nie robi wraku:** ciało-schronienie → wektor ucieczki
+w pusty punkt → **odmowa z POWODEM**. `_turnIntoWreck` **USUNIĘTY** z `AutoRetreatSystem`.
+⚠ Ta gałąź była praktycznie martwa PRZED naprawą (selektor przeszukiwał całą galaktykę, więc zawsze
+coś znajdował) — po dodaniu terminu układu stałaby się **TYPOWA**, bo AI atakuje z definicji w cudzym
+układzie. I **zabijałaby także flotę GRACZA**: `DeepSpaceCombatSystem:1236` woła `_issueRetreatOrder`
+WPROST, omijając bramkę `empireId === 'player'`.
+
+⚠ **`AutoRetreatSystem:56` NIE JEST bramką symetrii i nie należy jej tak czytać.** Gracz DOSTAJE
+auto-odwrót — drugimi drzwiami, tą ścieżką z `:1236`. Symetria mieszka w SELEKTORZE i w drabinie,
+nie w tym `return`.
+
+**D-FDk — ucieczka przebija `vessel_immobilized` I `vessel_in_reserve`.** Prawo do przeżycia nie jest
+nagrodą za opłacone utrzymanie ani za obsadzenie załogą. Predykat `isRetreatSpec` (`MovementOrderTypes.js`)
+jest **jednym źródłem**, bo tylko JEDEN z trzech producentów używa `ORDER_TYPES.retreat` — dwaj pozostali
+wydają zwykły `moveToPoint`, więc sam test typu dałby asymetrię „ten sam czyn, inna odpowiedź, zależnie
+od producenta". Znacznik `isRetreat` ustawiają producenci JAWNIE (nie wyprowadzamy go z `issuedBy` —
+to pole jest opisowe i trafia do logów).
+
+**D-FDd — `DSCS._allOutsideOf` uczy się markera odwrotu.** Po naprawie udany odwrót KOŃCZY SIĘ orbitą
+(`dockedAt = bodyId`), a guard z 2026-05-21 („zadokowany ≠ uciekający", prawdziwy dla OBROŃCY) wypychał
+uciekiniera z liczenia ⇒ `aliveCount` → 0 ⇒ `retreated = null` ⇒ **side-level wrak ŻYWYCH przegranych**.
+Bez wyjątku **udany odwrót byłby groźniejszy od nieudanego**. Marker dopuszcza uciekiniera wyłącznie
+do TESTU ODLEGŁOŚCI — ciało bliżej niż clearance dalej liczy się jako „w środku".
+
+**D-FDf — orbita zamiast doku.** `_pendingReturnDock` **usunięty ze ścieżki doktryny**: jego konsument
+`FleetSystem._maybeAutoDockOnReturn:653` przepisuje `vessel.colonyId` **BEZWARUNKOWO**, więc odwrót na
+ciało niczyje albo cudze robiłby z niego nową BAZĘ całej floty. (⚠ próg `RETURN_DOCK_THRESHOLD_AU:30`
+jest **martwy** — stała bez konsumenta.)
+
+**F-E (D-FDh) — dryf.** `_findNearestFriendlyPlanetForDrift` był klonem 1:1 tamtej funkcji i dziedziczył
+ten sam defekt; **tu groźniejszy**, bo ratunek z dryfu **NIE wydaje rozkazu — TELEPORTUJE**, więc bramka
+`target_other_system` w ogóle go nie chroniła i statek lądował na współrzędnych ciała z OBCEGO układu
+z niezmienionym `systemId`. Teraz delegacja do `nearestOwnColonyBodyInSystem` (⚠ **własność ZOSTAJE
+FILTREM** — dryf znaczy „wróć do siebie", nie „schowaj się gdziekolwiek") + **drugi szczebel zamiast
+niemej pętli „+5 lat"**: `vessel:driftStranded` mówi RAZ, że statek utknął.
+
+**D-FDj — widoczność.** Udany odwrót **nie miał ANI JEDNEGO subskrybenta** w całym `src/`, więc naprawa
+objawiałaby się WYŁĄCZNIE zniknięciem komunikatów o porażce — **gate mierzyłby ciszę i nie odróżniłby
+jej od „nic się nie stało"**. Doszły konsumenty `vessel:autoRetreatIssued` + `vessel:driftStranded`
+(`UIManager`, kanał `combat`/`fleet`) oraz **klucze, których NIE BYŁO W ŻADNYM JĘZYKU** mimo że powody
+`no_friendly_planet` / `not_in_combat` są zwracane od M4 P3 (gracz widział **surowy slug**):
+`vessel.reasonNoShelterInSystem` / `reasonNoFriendlyPlanet` / `reasonNotInCombat` PL+EN.
+
+### ⚠ Pomiary PRZED kodem (sondy poza repo) — trzy rzeczy, których nie dało się zgadnąć
+
+1. **Bąbel clearance NIGDY nie opróżnia zbioru: 0/7200** (12 wygenerowanych układów, 38-57 ciał każdy)
+   ⇒ **szczebel 2 (wektor ucieczki) jest w praktyce NIEOSIĄGALNY** i dlatego keeper pinuje go na
+   układzie **ZDEGENEROWANYM** — inaczej mierzyłby ciszę.
+2. **Knob `RETREAT_CLEARANCE_AU` = 0,50 jest NIEWRAŻLIWY.** Rozkład jest bimodalny: przy ciele najbliższe
+   leży ≤0,15 AU, następne dopiero ~3 AU ⇒ każda wartość z ~0,16-3,0 AU wybiera TO SAMO ciało.
+   **Nie ma czego stroić.** Cena bąbla realna, ale opłacalna: mediana odwrotu 3 AU = **12 % baku fregaty**.
+3. **Wyścig jest realny — i sam clearance go NIE zamyka.** Przy 1 d/s klasyfikacja uciekiniera nie
+   następuje NIGDY w oknie życia bitwy; przy 1 r/s statek pokonuje **1,85 AU na jedną rundę** (110 ms),
+   więc potrafi przejść z „wewnątrz" wprost w „zadokowany" **nie będąc policzonym ani razu**.
+   ⇒ marker D-FDd był **konieczny, dowiedziony**, a nie ostrożnościowy.
+
+⚠ **POMIAR, KTÓRY ZMIENIA INTUICJĘ O ODWROCIE:** bitwa DSCS żyje **~2,2 s REALNEGO czasu**
+(`MAX_ROUNDS 20` × `ROUND_INTERVAL_MS 110`), a `speedAU` to AU na rok **GRY** — pokonanie 0,5 AU przy
+1 d/s trwa ~130 s, czyli **~59× dłużej niż cała bitwa**. **Cel odwrotu NIE decyduje o wyniku bitwy**;
+decyduje o tym, GDZIE ocalały wyląduje i czy nie zostanie zwarty ponownie. Odwrót jest z natury
+**post-battle**.
+
+### Live-gate 2026-08-26 — 4/4 PASS (właściciel, na żywo)
+
+1. **Komunikat o odwrocie w Dzienniku** — potwierdzony DWUKROTNIE, przy dwóch różnych bitwach
+   (to jest dokładnie ten konsument, którego brak czyniłby naprawę niemierzalną — D-FDj).
+2. **Orbita we WŁASNYM układzie, baza NIETKNIĘTA** — na `v_49 „Żmija"`: pierwszy odwrót do własnej
+   stolicy (**tier 0, port**), drugi odwrót (inna walka) do innego ciała (**Nowy Księżyc**).
+   ⇒ drabina rang i D-FDf potwierdzone **zachowaniem**, nie odczytem.
+3. **D-FDk — OBIE POŁÓWKI czysto:** odwrót przechodzi mimo `unpaidYears = 2`, a **zwykły `moveToPoint`
+   na TYM SAMYM statku z TYM SAMYM długiem** dostaje `vessel_immobilized`. Kontrola pinu na żywym silniku.
+4. **Czytelny powód odmowy w UI**, nie surowy slug w konsoli.
+
+**Keepery:** NEW `retreat_target_smoke` **44/44** (fail-first startował 12/25) · `retreat_preempt_smoke`
+**29/29** — ⚠ **T4 ODWRÓCONY ŚWIADOMIE** (pinował DEFEKT: `reason === 'target_other_system'`), a jedyny
+pin inwariantu **D-VO3a** stracił swojego producenta odmowy ⇒ przeniesiony do nowego **T4b** na powód
+`not_in_combat` (po D-FDk `vessel_immobilized` przestał blokować `retreat`, więc stary pin znowu
+mierzyłby ciszę). Sweep **173/173 OK, 0 FAIL** (`run-all.mjs`) · `check-i18n` PASS · zero migracji.
+
+**⚠ Świadomie POZA zakresem (filed):** **Finding 154** (`_findNearestFriendlyPlanet` bez terminu układu,
+żywa przez trzy przyciski „Powrót do bazy") · **Finding 138** (`_findBodyNearPoint` skanuje całą
+galaktykę — dotyka KAŻDEGO rozkazu celowanego punktem, D-FDi=W2) · `_pendingReturnDock` stawiany PRZED
+`issueOrder` i **niesprzątany przy odmowie** na trzech ścieżkach POWROTU (wzór poprawki jest w repo:
+`_issueDock` stawia `_pendingDock` pod `if (result?.ok)`, `MOS:427`) · kara dyplomatyczna za przylot
+uciekiniera zostaje jak jest · strona AI **nie ma snapshotu/wznowienia misji** po `_freezeAsStationary`
+(gracz ma) ⇒ okręt AI z wyzerowaną misją zostaje z `movementOrder` w `active` na zawsze · **balans**:
+czy 3 AU odwrotu od kolonii to właściwa cena.
+
+---
+
+## Starcie jest JEDNOUKŁADOWE Z KONSTRUKCJI — bramka + gather + stempel (save **v101 bez migracji**, live-gate PASS — ARC ZAMKNIĘTY 2026-08-26)
+
+**KRYTYCZNE, złapane MIMOCHODEM.** Live-gate naprawy F-D wyłapał defekt **niezależny od F-D i cięższy**:
+`DeepSpaceCombatSystem` łączył w JEDNO starcie statki z RÓŻNYCH układów. Commit `131cc2e`; rejestr
+findingów 150-154 `ee71fc7` (sekcja w `docs/design/VESSEL_ORDERS_PLAN.md`).
+
+**ZMIERZONE W ŻYWEJ GRZE:** encounter ze stemplem `location.systemId = 'sys_024'` zawierał statek gracza
+z `sys_024` **ORAZ** statki z `sys_061` i `sys_home` (potwierdzone dwoma zrzutami przy przełączaniu widoku
+układu). Podważało to zaufanie do **KAŻDEGO** wyniku bitwy, nie tylko do odwrotu.
+
+**Mechanizm — klasa „globalne id ≠ położenie"** (ta sama co Finding 138 i W3-4b): każdy układ ma własną
+ramkę współrzędnych ze swoją gwiazdą w (0,0), a rejestry (`EntityManager`, `VesselManager._vessels`) są
+**PŁASKIE**. Statek 0,2 AU od SWOJEJ gwiazdy ma niemal te same surowe `x/y` co statek 0,2 AU od INNEJ.
+
+**TRZY MIEJSCA, nie jedno** (i trzecie maskowało dwa pierwsze):
+
+1. **`startEngagement` team-up gather** iterował `vm._vessels.values()` po CAŁEJ galaktyce i kwalifikował
+   po gołym `hypot` → skład bitwy zbierany z całej mapy.
+2. **`handleCombatRangeEnter`** — jedyne publiczne wejście — bramkował tylko `sameFaction`/wrak.
+3. **`_createEncounter` ZGADYWAŁ** `location.systemId` z `sideAVessels[0]`, czyli **z kolejności iteracji
+   płaskiego rejestru**. ⚠ To był **CICHY STEMPEL**: rekord bitwy o mieszanym składzie dostawał jedną,
+   wiarygodnie wyglądającą etykietę, więc żaden konsument `battle:resolved` nie miał jak wykryć anomalii
+   — a etykieta idzie dalej do `WarSystem._updateOrbitalDominance`, czyli do **TRWAŁEGO STANU ZAPISU**.
+
+Teraz: bramka w **dyspozytorze**, termin układu w **gatherze**, stempel z **pary WYZWALAJĄCEJ**.
+
+### ⚠ LEKCJA WIĄŻĄCA DALEJ: guard u JEDNEGO producenta nie jest guardem SYSTEMU
+
+`ProximitySystem._checkPair` **MA** guard międzyukładowy (dostał go 2026-07-15) — ale **nie jest jedynym
+producentem** `vessel:combatRangeEnter`. `MovementOrderSystem` emituje je **wprost w dwóch miejscach**
+(`:1163` force-engage, `:1505` po pursue/intercept — ten drugi z dystansem **wpisanym na sztywno**), oba
+majstrują dodatkowo przy `ps._activeCombatPairs`, więc strażnik proximity nie łapie ich nawet pośrednio.
+**Utwardzony był JEDEN z TRZECH — i właśnie dlatego dziura przeżyła dwa wcześniejsze utwardzenia tej
+klasy.** Bramka stoi teraz w **dyspozytorze DSCS**, bo to jedyne publiczne wejście, które widzi
+wszystkich trzech producentów. ⇒ **policz PRODUCENTÓW zdarzenia, zanim uznasz klasę za utwardzoną.**
+
+### ⚠ `isSameSystemStrict` — fail-CLOSED, WYŁĄCZNIE dla warstwy walki
+
+NEW w `src/utils/SystemScope.js`, **osobno** zamiast zmiany `isSameSystem`, bo **bilans kosztu błędu jest
+odwrotny**: przy wydawaniu rozkazu cena fałszywego NEGATYWU to cichy paraliż floty (fail-open słuszny),
+a w WALCE cena fałszywego POZYTYWU to **trwale stracone kadłuby, wraki w międzyukładowym punkcie
+i zatruty `orbitalDominance` W ZAPISIE** — wobec jednej niestoczonej bitwy. `isSameSystem` (fail-open)
+**NIETKNIĘTY** dla bramek rozkazów.
+⚠ **`null` NIE ZNACZY TU „nie wiemy":** `systemIdOf` mapuje `undefined` → `'sys_home'`, więc **stary zapis
+sprzed multi-system walczy normalnie** (pin T5), a do `null` dochodzi **wyłącznie prawdziwy tranzyt warp**
+— a statek w warpie nie ma prawa walczyć: jest fizycznie pomiędzy układami, a jego `x/y` to współrzędne
+SPRZED skoku.
+
+**Lustrzana trójka w `VesselCombatSystem` W TYM SAMYM COMMICIE** — znakowo ta sama pętla i ten sam stempel.
+Gałąź jest uśpiona flagą `m4DeepSpaceCombat`, ale ma **jawny fallback i utrzymywaną ścieżkę rollbacku**
+⇒ reguła **nieutwardzonego bliźniaka** (`removeColony:667`).
+
+**Defense-in-depth (dwa miejsca, świadomie nadmiarowe):** `_joinEncounter` odmawia obcemu układowi
+(dziś nieosiągalne — ma dwóch wołających, obu wewnątrz dyspozytora; guard stoi, żeby „członkostwo
+w starciu" było prawdą LOKALNĄ, gdyby doszedł trzeci wołający) · `_freezeAsStationary` **nie przypina
+ciała z innego układu** — to **jedyny zapis w tej ścieżce trwale mutujący statek**: `pinDockedAt` brany
+z większości strony GRACZA, wpisany statkowi z innego układu, dawał `dockedAt` na ciało, którego w jego
+układzie NIE MA, a `VesselManager._updatePositions` przeliczał z niego `x/y` ⇒ statek przenoszony we
+własnym układzie i „dokowany" przy nieistniejącym ciele. **Nikt tego później nie czyścił, więc szkoda
+szła do zapisu.**
+
+**Keeper `combat_system_scope_smoke` 25/25** (fail-first 11/8); **T3 odtwarza pomiar z gry co do nazw
+statków**. ⚠ **Pierwsza wersja T1/T3 PRZECHODZIŁA na NIEPOPRAWIONYM kodzie** — intruz wypadał przy
+wyborze `bestGroup`, nie przez filtr; fixture poprawiony, powód wpisany w komentarzu. Każdy pin ma
+kontrolę pinu, w tym **T4** (tranzyt warp = fail-closed) i **T5** (stary zapis bez `systemId` walczy
+normalnie). Sweep **173/173 OK, 0 FAIL** · `check-i18n` PASS · bez migracji save.
+
+**Live-gate 2026-08-26 — PASS przez BRAK NAWROTU:** wiele bitew w jednej sesji, **zero kolejnej
+kontaminacji cross-system**. ⚠ Nazywam to wprost: to potwierdzenie **przez nieobecność** — ale jest
+mocne, bo defekt był wcześniej **głośny i reprodukowalny w tej samej klasie sesji** (dwa zrzuty).
+Nie jest to dowód na każdą ścieżkę z osobna.
+
+⚠ **NAPRAWA NIE COFA SZKÓD JUŻ ZAPISANYCH:** fałszywe `position.dockedAt`, zatrute klucze
+`orbitalDominance`, wraki w międzyukładowych punktach, wyczerpanie wojenne z fikcyjnych bitew. Sonda
+diagnostyczna read-only powstała i **została zweryfikowana wykonaniem** na syntetycznym zapisie, ale
+**właściciel świadomie zrezygnował** z naprawy stanu (zapis testowy). **Przy PRAWDZIWEJ partii temat wraca.**
+
+### Findingi 150-153 — otwarte, każdy z własnym powodem odroczenia
+
+- 🔴 **150 — `battle:resolved` leci DWA RAZY przy zadeklarowanej wojnie.** DSCS emituje z `warId: null`
+  (`:1022`), potem `WarSystem.recordBattle:314` emituje PONOWNIE, z `warId` ⇒ każdy subskrybent
+  (`AutoRetreatSystem`, `InvasionSystem`, `GameScene`, `ProximitySystem`, UI) dostaje ten sam wynik
+  dwukrotnie, **w dwóch różnych kształtach**. ⚠ **POTWIERDZONY ŻYWO 2026-08-26, DWUKROTNIE w jednej
+  sesji** (dwie różne pary id bitew, za każdym razem **dwie sprzeczne linijki o zwycięzcy TEJ SAMEJ
+  walki** w Dzienniku) ⇒ z „odczyt, nie pomiar" przechodzi na **reprodukowalny w żywej rozgrywce**,
+  a duplikat okazuje się **WIDOCZNY DLA GRACZA**, nie tylko wewnętrzny. NADAL NIEZMIERZONE: którzy
+  konsumenci są idempotentni. **Osobny pomiar, osobny slice.**
+- 🟠 **151 — `ProximitySystem:187` ma WŁASNĄ koercję zamiast `systemIdOf`, i ta koercja połyka tranzyt
+  warp** (`?? 'sys_home'` łapie także `null`, który znaczy „między układami") ⇒ statek w warpie liczony
+  jako mieszkaniec `sys_home`, na współrzędnych SPRZED skoku. ⚠ Ta linia bramkuje **nie tylko walkę, ale
+  i DETEKCJĘ oraz INTEL** (rumor/contact) ⇒ własny slice, własny gate; `131cc2e` świadomie jej nie tknął.
+- 🟠 **152 — POI nie ma pojęcia układu i NIE DA SIĘ tego załatać guardem:** `POIRegistry.js`/`POITypes.js`
+  **nie mają pola `systemId` w ogóle** ⇒ naprawa = DODANIE pola + **migracja zapisu**, czyli decyzja
+  o zakresie, nie jedna linia.
+- 🟠 **153 — `EmpireLogisticsSystem` dobiera outposty bez terminu układu, a kurier nie ma warpu**
+  (`:240-242` filtruje po właścicielu i złożu, trasa wyceniana surowym `hypot`). ⚠ **NIEUSTALONE**, czy AI
+  realnie zakłada outposty poza układem stolicy — bez tego pomiaru nie wiadomo, czy dziura jest osiągalna.
+- **Już zarejestrowane, nie duplikują:** **138** (`_findBodyNearPoint` skanuje całą galaktykę) i **142**
+  (`_getValidTargets` klucza się na OGLĄDANYM układzie, nie na `vessel.systemId`) — ta sama klasa, otwarte.
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
