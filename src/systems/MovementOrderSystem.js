@@ -76,6 +76,16 @@ export class MovementOrderSystem {
     /** @type {Set<string>} */
     this._driftingVessels = new Set();
 
+    // VO-3b (D-VO1b-3) — statki, którym zwolnienie pola `movementOrder` ODROCZONO, bo w chwili
+    // domknięcia rozkazu były w AKTYWNYM starciu. `DeepSpaceCombatSystem._allOutsideOf` odróżnia
+    // zadokowanego UCIEKINIERA od zadokowanego OBROŃCY WYŁĄCZNIE po markerze odwrotu, który
+    // siedzi na tym polu (D-FDd) — zdjęcie go w trakcie bitwy zrobiłoby side-level wrak żywych
+    // przegranych, czyli dokładnie tę szkodę, którą D-FDd kupił.
+    // ⚠ ODROCZENIE MUSI MIEĆ DOKOŃCZENIE — przemiata je `_tick`. Bez sweepu D-VO1b-3 produkuje
+    //   NOWĄ klasę lepkiego markera, czyli defekt, który ten slice zamyka.
+    /** @type {Set<string>} */
+    this._pendingRelease = new Set();
+
     // Cache gameYear poprzedniego ticku — do obliczania dPhysicsYear.
     // VesselManager._tick dostaje civDeltaYears, ale ruch pursue/intercept operuje
     // w skali physics (spójnie z vessel.speedAU = AU/gameYear). Diff gameYear
@@ -121,6 +131,9 @@ export class MovementOrderSystem {
         EventBus.emit('vessel:orderCancelled', {
           vesselId: v.id, orderId: mo.id, reason: 'target_lost_on_load',
         });
+        // VO-3b — szósty (i ostatni) producent stanu terminalnego: rozkaz unieważniony PRZY
+        // WCZYTANIU. Bez zwolnienia stary zapis wnosiłby lepki marker prosto do nowej sesji.
+        this._releaseOrder(v, mo);
         continue;
       }
       this._byVessel.set(v.id, mo);
@@ -565,6 +578,54 @@ export class MovementOrderSystem {
   /** ColonyManager — MOS bierze go przez locator (spójnie z resztą tego pliku). */
   _colonyManagerRef() {
     return window.KOSMOS?.colonyManager ?? null;
+  }
+
+  /**
+   * VO-3b (D-VO1b-1/2/3) — JEDYNY punkt zwalniania pola `vessel.movementOrder`.
+   * Plan: `docs/design/VO3B_PLAN.md`.
+   *
+   * ⚠ PO CO TO ISTNIEJE: pole NIE BYŁO zerowane NIGDZIE w kodzie produkcyjnym. Cztery przejścia
+   * terminalne (`completed` ×2, `blocked`, `cancelled`) ustawiały wyłącznie `status`, a indeks
+   * `_byVessel` czyściły poprawnie — więc defekt siedział WYŁĄCZNIE w polu na statku. Trzy pule
+   * bramkują SAMO ISTNIENIE tego pola (`DirectorOffensive:83`, `DirectorDoctrine:270`,
+   * `TransportOrderSystem:550`), więc okręt po PIERWSZYM ukończonym rozkazie wypadał z nich
+   * NA ZAWSZE — i przez zapis, bo marker jest serializowany. ZMIERZONE: `strikeReady` 4 → 0,
+   * pula logistyczna gracza 1 → 0 (Finding 119).
+   *
+   * ⚠ ARCHIWUM JEST RUNTIME-ONLY. `vessel.lastOrder` NIE przechodzi przez `VesselManager.serialize`
+   * (biała lista pól), więc ten slice NIE rusza wersji zapisu. Trzymamy je, bo `blockReason` jest
+   * JEDYNYM śladem, kto anulował rozkaz (Finding 139) — czyszczenie bez archiwum zabierałoby
+   * diagnostykę razem z defektem.
+   *
+   * @param {object} vessel
+   * @param {object} order — rozkaz w stanie terminalnym (status już ustawiony przez wołającego)
+   */
+  _releaseOrder(vessel, order) {
+    if (!vessel) return;
+    if (order) vessel.lastOrder = order;
+
+    // D-VO1b-3 — w AKTYWNYM starciu pole ZOSTAJE (obrona D-FDd). Odroczenie, NIE pominięcie:
+    // domknięcie robi `_tick` niżej, gdy statek wyjdzie ze starcia.
+    if (this._inActiveEncounter(vessel)) {
+      this._pendingRelease.add(vessel.id);
+      return;
+    }
+    vessel.movementOrder = null;
+    this._pendingRelease.delete(vessel.id);
+  }
+
+  /**
+   * Czy statek jest w AKTYWNYM starciu głębokiego kosmosu.
+   * ⚠ Locator, nie import — DSCS jest opcjonalny (feature flag) i MOS nie ma prawa od niego
+   * zależeć twardo. Brak systemu ⇒ `false` ⇒ zwalniamy normalnie (fail-open jest tu właściwy:
+   * bez DSCS nie ma bitwy, której marker miałby bronić).
+   * @param {object} vessel
+   * @returns {boolean}
+   */
+  _inActiveEncounter(vessel) {
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    if (!dscs?._findActiveEncounterContaining) return false;
+    return !!dscs._findActiveEncounterContaining(vessel.id);
   }
 
   /**
@@ -1513,6 +1574,10 @@ export class MovementOrderSystem {
         }
       }
     }
+
+    // VO-3b — zwolnienie NA KOŃCU, po emisji i po force-engage: oba czytają `order`, a blok
+    // wyżej może wręcz OTWORZYĆ starcie (`vessel:combatRangeEnter`), które zaraz odroczy zwolnienie.
+    this._releaseOrder(vessel, order);
   }
 
   _blockAndCancel(vessel, order, reason) {
@@ -1523,6 +1588,7 @@ export class MovementOrderSystem {
     EventBus.emit('vessel:orderBlocked', {
       vesselId: vessel.id, orderId: order.id, reason,
     });
+    this._releaseOrder(vessel, order);   // VO-3b — `blocked` też jest stanem terminalnym (D-VO1b-1)
   }
 
   // M2b C5 — cancel orderów referencjujących usunięty POI (§9.2 design doc).
@@ -1804,6 +1870,7 @@ export class MovementOrderSystem {
     EventBus.emit('vessel:orderCancelled', {
       vesselId, orderId: order.id, reason,
     });
+    this._releaseOrder(vessel, order);   // VO-3b (D-VO1b-1) — `blockReason` przeżywa w `lastOrder`
     return true;
   }
 
@@ -1884,6 +1951,22 @@ export class MovementOrderSystem {
         //   _onVesselArrived (rozszerzone o goToPOI → emit vesselReachedPOI).
         //   `attack` (W3-4) świadomie NIE ma własnego ticka: to `moveToPoint` z innym
         //   ZAMIAREM, a bitwę otwiera EnemyAttackHandler przy przylocie.
+      }
+    }
+
+    // VO-3b (D-VO1b-3) — DOKOŃCZENIE ODROCZONYCH ZWOLNIEŃ. Statek, któremu domknięto rozkaz
+    // w trakcie starcia, trzyma marker do wyjścia z bitwy; tu go zwalniamy.
+    // ⚠ To NIE jest sprzątanie „przy okazji": bez tej pętli D-VO1b-3 produkuje nową klasę
+    //   lepkiego markera — dokładnie defekt, który ten slice zamyka (keeper T4b).
+    if (this._pendingRelease.size > 0) {
+      for (const vId of [...this._pendingRelease]) {
+        const v = this._vm.getVessel?.(vId);
+        if (!v) { this._pendingRelease.delete(vId); continue; }
+        // Statek dostał w międzyczasie NOWY rozkaz — odroczenie jest bezprzedmiotowe.
+        if (v.movementOrder?.status === 'active') { this._pendingRelease.delete(vId); continue; }
+        if (this._inActiveEncounter(v)) continue;          // wciąż walczy
+        v.movementOrder = null;
+        this._pendingRelease.delete(vId);
       }
     }
 
@@ -2057,6 +2140,10 @@ export class MovementOrderSystem {
         type:          order.type,
         completedYear: gameYear,
       });
+      // VO-3b — PO emisji: subskrybenci (`FleetSystem`, `VesselManager`) czytają `vesselId`/
+      // `orderId` z payloadu, nie pole na statku, ale kolejność „najpierw powiedz, potem zwolnij"
+      // jest tańsza w utrzymaniu niż audyt każdego przyszłego subskrybenta.
+      this._releaseOrder(vessel, order);
     }
   }
 
@@ -2079,6 +2166,12 @@ export class MovementOrderSystem {
       EventBus.emit('vessel:orderCancelled', {
         vesselId: vessel.id, orderId: order.id, reason: 'vessel_wrecked',
       });
+      // VO-3b — wrak też domyka rozkaz. ⚠ Wrak nie może wisieć w `_pendingRelease` przez trwające
+      // starcie, więc zwalniamy WPROST, z pominięciem odroczenia: martwy kadłub nie jest już
+      // uciekinierem, którego `_allOutsideOf` miałby liczyć.
+      vessel.movementOrder = null;
+      vessel.lastOrder     = order;
+      this._pendingRelease.delete(vessel.id);
     }
 
     // Target wrecked → block orderów innych vesseli które go ścigały.

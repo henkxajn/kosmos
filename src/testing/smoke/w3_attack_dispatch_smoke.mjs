@@ -13,6 +13,13 @@
 //       daje `move_to_point` i ZERO bitew — czyli bitwę otwiera ZAMIAR, nie sam przylot.
 //   T2  `attack` jest DELEGATEM do `moveToPoint`, nie drugą implementacją lotu: ta sama trasa,
 //       ten sam cel-ciało, to samo domknięcie rozkazu przy przylocie.
+//       ⚠ **ODWRÓCONE ŚWIADOMIE w VO-3b** (plan `docs/design/VO3B_PLAN.md`, D-VO1b-1). Asercja
+//       brzmiała `movementOrder?.status === 'completed'`, ale jej INTENCJĄ było „rozkaz nie zostaje
+//       aktywny na zawsze w indeksie MOS” — a nie „pole ma przeżyć przylot”. VO-3b ZWALNIA pole przy
+//       każdym stanie terminalnym (domknięty rozkaz wypisywał kadłub z puli uderzeniowej NA ZAWSZE,
+//       zmierzone: `strikeReady` 4 → 0), więc dosłowny kształt asercji pinowałby DEFEKT. Intencja
+//       zachowana w nowej postaci: pole ZWOLNIONE **i** indeks pusty. Wzór: `deploy_seams` T1/T2/T4,
+//       `ai_capture_last_stand` T4/T5, `retreat_preempt` T4.
 //   T3  ⚠ ODWRACA `w3_seams_smoke` T5: `_holdAtHome` na okręcie Z DALA od stolicy PRZECHODZI
 //       (było `missing_target_point`). KONTROLA PINU: patrol niezmieniony.
 //   T4  D6 — kadłub w REZERWIE nie dostaje ŻADNEGO rozkazu ruchu (`vessel_in_reserve`), łącznie
@@ -172,10 +179,15 @@ console.log('T2 — `attack` to `moveToPoint` z innym ZAMIAREM (delegat, nie kop
     `T2: …ale ROZKAZ nazywa się \`${b.movementOrder?.type}\` (rejestr mówi prawdę o zamiarze)`);
 
   // Domknięcie rozkazu przy przylocie — inaczej `_byVessel` trzymałoby uderzenie w nieskończoność.
+  // ⚠ ODWRÓCONE ŚWIADOMIE w VO-3b — powód w nagłówku pliku. Pinujemy INTENCJę („nie zostaje
+  //   aktywny na zawsze”), a nie dawny kształt („pole przeżywa przylot”), bo ten drugi opisywał defekt.
   fastForwardArrival(core, b);
-  assert(b.movementOrder?.status === 'completed',
-    `T2: rozkaz uderzenia DOMYKA SIĘ przy przylocie (${b.movementOrder?.status}) — nie zostaje ` +
-    'aktywny na zawsze w indeksie MOS');
+  assert(b.movementOrder === null,
+    `T2 (VO-3b): przylot ZWALNIA pole rozkazu (jest: ${b.movementOrder?.status ?? 'null'}) — ` +
+    'domknięty rozkaz nie ma prawa wypisywać kadłuba z puli uderzeniowej na zawsze');
+  assert(mos._byVessel.has(b.id) === false,
+    'T2 (VO-3b) INTENCJA ORYGINAŁU: rozkaz nie zostaje aktywny w indeksie MOS — to jest ta sama ' +
+    'własność, której pilnowała asercja sprzed odwrócenia');
 
   // Walidator: cel-CIAŁO jest wymagany (punkt dokłada `_issueAttack`).
   assert(validateOrder({ type: 'attack' }).reason === 'missing_target_body',

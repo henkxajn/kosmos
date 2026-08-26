@@ -19,7 +19,7 @@
 //   |      | domykany cudzym przylotem (Finding 116 zamknięty)                 |           | rozkazu, ~21 AU w jednym tiku |
 //   | S3   | rozkaz gracza ROBI snapshot misji, a anulowanie ją WSKRZESZA      | VO-3 (P1) | `_preempt` kasuje snapshot — rozkaz gracza nigdy nie wskrzesza |
 //   |      | (Finding 118)                                                     |           | starej roboty; ścieżki systemowe wołają z `{preempt:false}` |
-//   | S4   | `vessel.movementOrder` PRZEŻYWA domknięcie i wypycha statek       | VO-3 /    | zerowanie przy PREEMPCJI → VO-3; przy DOMKNIĘCIU → VO-3b |
+//   | S4   | ✅ ODWRÓCONY w **VO-3b**: domknięcie ZWALNIA `movementOrder`     | — (zrobione) | pin przepisany na stan docelowy: pole `null` + powrót do puli; kontrola pinu podkłada MARTWY marker i pokazuje, że konsument nadal bramkuje samą obecność (D-VO1b-6) |
 //   |      | z puli logistycznej NA STAŁE (Finding 119)                        | VO-3b     | (D-VO1b: to zmiana tempa AI, dlatego osobny commit) |
 //   | S5   | `issueOrder` NIE MA guardu „statek ma już rozkaz" — nadpisanie    | VO-3 (P1) | `_preempt` domyka stary rozkaz i emituje anulowanie |
 //   |      | jest ciche, stary rozkaz zostaje osierocony (Findings 118/127)    |           | ⚠ `_preempt` stoi POD bramkami, nie NAD (plan §3.1.4 pkt 1) |
@@ -362,26 +362,33 @@ header('S4 — martwy rozkaz wypycha statek z puli logistycznej NA STAŁE (WYKON
 
   // Domknięcie PRODUKCYJNĄ ścieżką: `vessel:arrived` → MOS._onVesselArrived (subskrypcja :86).
   EventBus.emit('vessel:arrived', { vessel: v, mission: v.mission });
-  assert(v.movementOrder?.status === 'completed' && v.mission === null && mos._byVessel.size === 0,
-    `S4 PIN DZIŚ: domknięcie ZEROWAŁO misję i indeks (mission=${v.mission}, _byVessel=` +
-    `${mos._byVessel.size}), ale marker ZOSTAŁ (status=${v.movementOrder?.status}) — ` +
-    'dwa źródła prawdy o zajętości rozjeżdżają się. VO-3b MA to odwrócić.');
+  // ⚠ ODWRÓCONE ŚWIADOMIE w VO-3b (D-VO1b-1). Do VO-3b ten pin brzmiał: „marker ZOSTAŁ
+  //   (status=completed), a misja i indeks się wyzerowały — dwa źródła prawdy o zajętości
+  //   rozjeżdżają się". Teraz zbiegają się: JEDEN punkt (`MOS._releaseOrder`) zwalnia pole
+  //   przy KAŻDYM stanie terminalnym.
+  assert(v.movementOrder === null && v.mission === null && mos._byVessel.size === 0,
+    `S4 PIN (po VO-3b): domknięcie zwalnia WSZYSTKIE trzy źródła prawdy o zajętości — ` +
+    `marker=${v.movementOrder === null ? 'null' : v.movementOrder?.status}, mission=${v.mission}, ` +
+    `_byVessel=${mos._byVessel.size}`);
 
   // Symulujemy zadokowanie (robi to `VesselManager.dockAtColony`, poza tym pinem — patrz granice dowodu).
   v.position.state = 'docked'; v.position.dockedAt = 'p_home'; v.status = 'idle'; v.mission = null;
-  const withMarker = free();
-  const keep = v.movementOrder;
+  const afterRelease = free();
+  // KONTROLA PINU — podkładamy MARTWY marker ręcznie. Konsument (`TransportOrderSystem:550`)
+  // ma zostać NIETKNIĘTY (D-VO1b-6), więc musi dalej bramkować samą OBECNOŚĆ pola — i różnica
+  // musi być przypisana markerowi, niczemu innemu.
+  v.movementOrder = { id: 'mo_martwy', type: ORDER_TYPES.moveToPoint, status: 'completed' };
+  const withStaleMarker = free();
   v.movementOrder = null;
-  const withoutMarker = free();
-  v.movementOrder = keep;
-  const restored = free();
+  const backAgain = free();
 
-  assert(withMarker === 0,
-    'S4 PIN GŁÓWNY: zadokowany, bezczynny statek bez misji NIE WRACA do puli logistycznej ' +
-    '(`TransportOrderSystem.js:517` odrzuca każdy `v.movementOrder`, a ten nigdy nie wygasa)');
-  assert(withoutMarker === 1 && restored === 0,
-    `S4 KONTROLA PINU: zmiana WYŁĄCZNIE jednego pola przełącza wynik ${withMarker} → ` +
-    `${withoutMarker} → ${restored} — różnica jest przypisana markerowi i niczemu innemu`);
+  assert(afterRelease === 1,
+    'S4 PIN GŁÓWNY (odwrócony w VO-3b): zadokowany, bezczynny statek bez misji WRACA do puli ' +
+    'logistycznej — do VO-3b wypadał z niej NA STAŁE, bo `movementOrder` nie wygasał (Finding 119)');
+  assert(withStaleMarker === 0 && backAgain === 1,
+    `S4 KONTROLA PINU: podkładany martwy marker dalej wypycha statek z puli ` +
+    `(${afterRelease} → ${withStaleMarker} → ${backAgain}) — konsument NIETKNIĘTY (D-VO1b-6), ` +
+    'naprawa siedzi w ŹRÓDLE markera, nie w predykacie puli');
 
   tos.destroy?.();
 }
@@ -395,9 +402,14 @@ header('S4 — martwy rozkaz wypycha statek z puli logistycznej NA STAŁE (WYKON
   assert(assigns.length >= 4,
     `S4b KONTROLA PINU: ten sam regex WIDZI ${assigns.length} przypisań do \`.movementOrder\` ` +
     'w `MovementOrderSystem.js` — pin nie świeci przez literówkę we wzorcu ani na pustym pliku');
-  assert(nulls.length === 0 && !/delete\s+\w+\.movementOrder/.test(mosCode),
-    'S4b PIN DZIŚ: ANI JEDNO z nich nie zeruje pola i nie ma `delete` — marker jest z konstrukcji ' +
-    'nieusuwalny przez warstwę rozkazów. VO-3/VO-3b MA to odwrócić.');
+  // ⚠ ODWRÓCONE ŚWIADOMIE w VO-3b. Do VO-3b brzmiało: „ANI JEDNO z tych przypisań nie zeruje
+  //   pola — marker jest z konstrukcji nieusuwalny przez warstwę rozkazów".
+  assert(nulls.length >= 1,
+    `S4b PIN (po VO-3b): warstwa rozkazów POTRAFI zwolnić pole — ${nulls.length} przypisań ` +
+    '`= null` w `MovementOrderSystem.js`');
+  assert(/_releaseOrder\s*\(/.test(mosCode),
+    'S4b PIN (po VO-3b): zwalnianie ma JEDEN nazwany punkt `_releaseOrder` — rozsypanie go po ' +
+    'sześciu ścieżkach terminalnych byłoby zaproszeniem do pominięcia jednej z nich');
 
   // Trzej dalsi konsumenci tego samego martwego markera — to oni zamieniają naprawę S4
   // w zmianę TEMPA AI (plan D-VO1b / R-1). Pinujemy ich, żeby fix nie przeszedł po cichu.

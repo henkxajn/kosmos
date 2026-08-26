@@ -88,6 +88,32 @@ export class DirectorOffensive {
   }
 
   /**
+   * VO-3b (D-VO1b-5) — kadłuby STRUKTURALNIE zdolne do uderzenia: własne, uzbrojone, w służbie,
+   * z bakiem warp. BEZ predykatów zajętości (`mission`/`movementOrder`/`pendingOrder`).
+   *
+   * ⚠ PO CO OSOBNA PĘTLA, skoro to prawie `strikeReadyVessels`: bo tamta jest PULĄ, a ta jest
+   * DIAGNOZĄ. Odmowa `no_warp_capable_hull` przy pełnym baku i sprawnych kadłubach KŁAMIE
+   * o stanie świata — a GATE B2 mierzy właśnie rozkład powodów odmowy i na kłamiącym powodzie
+   * byłby ślepy. Świadomie NIE refaktoryzuję puli do wspólnego helpera: D-VO1b-6 trzyma predykaty
+   * pul nietknięte, a keeper `vo3b_order_clear` T7 pinuje to źródłowo.
+   */
+  _warpCapableHulls(empireId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?._vessels) return [];
+    const out = [];
+    for (const v of vMgr._vessels.values()) {
+      if (!v || v.isWreck) continue;
+      if (!isEnemyVessel(v)) continue;
+      if ((v.ownerEmpireId ?? v.owner) !== empireId) continue;
+      if (!hasWeapons(v)) continue;
+      if (!isInService(v)) continue;
+      if (!(v.warpFuel?.max > 0)) continue;
+      out.push(v);
+    }
+    return out;
+  }
+
+  /**
    * Kolonie GRACZA leżące W ZASIĘGU imperium — czyli w jego przestrzeni roszczonej albo
    * w powłoce granicznej (§Findings 27: to REGUŁA stawia granicę, nie warstwa transportu).
    *
@@ -181,7 +207,15 @@ export class DirectorOffensive {
       if (!target) return this._refuse(empireId, 'no_target_in_reach', year);
 
       const ready = this.strikeReadyVessels(empireId);
-      if (ready.length === 0) return this._refuse(empireId, 'no_warp_capable_hull', year);
+      if (ready.length === 0) {
+        // D-VO1b-5 — drabina odmów ma być PRAWDOMÓWNA. Dwa różne stany świata dostają dwa różne
+        // powody: „nie mam czym skoczyć" vs „mam, ale wszystko zajęte". Dotąd oba mówiły to
+        // pierwsze — a to jest kanał, z którego GATE B2 czyta, DLACZEGO ofensywa AI stoi.
+        const hulls = this._warpCapableHulls(empireId);
+        return hulls.length > 0
+          ? this._refuse(empireId, 'no_idle_hull', year, { hulls: hulls.length })
+          : this._refuse(empireId, 'no_warp_capable_hull', year);
+      }
 
       // §Findings 34 — przeciw obronie lecimy eskadrą albo wcale.
       const needed = target.defended ? SQUADRON_VS_DEFENDED : SQUADRON_VS_UNDEFENDED;
