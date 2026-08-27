@@ -792,7 +792,11 @@ export class MovementOrderSystem {
     // ground-truth tmp_moveto_orbit_groundtruth). Chokepoint = wszystkie ścieżki rozkazu ruchu.
     let bodyId = spec.targetBodyId ?? null;
     if (!bodyId && p && typeof p.x === 'number' && typeof p.y === 'number') {
-      const near = this._vm._findBodyNearPoint?.(p.x, p.y);
+      // ⚠ `vessel` W 4. ARGUMENCIE JEST OBOWIĄZKOWY (Finding 138, D-SS1=W1): bez niego snap
+      // przeszukuje CAŁĄ GALAKTYKĘ i bierze ciało z cudzego układu, po czym bramka trzy linie
+      // niżej słusznie odrzuca rozkaz jako `target_other_system`. Bramka była poprawna — zepsuty
+      // był snap NAD nią. Pinuje to `system_scope_orders_smoke` (T1 wykonaniowo + T2e źródłowo).
+      const near = this._vm._findBodyNearPoint?.(p.x, p.y, undefined, vessel);
       if (near) bodyId = near.id;
     }
     // ⚠ W3-4b — BRAMKA UKŁADU. `MovementOrderSystem` jest z konstrukcji WEWNĄTRZUKŁADOWY:

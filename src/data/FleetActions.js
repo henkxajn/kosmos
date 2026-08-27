@@ -101,7 +101,8 @@ const ACTIONS = {
       if (!caps.has('deep_scan')) {
         return { ok: false, reason: t('fleet.reason.noScanCap') };
       }
-      const unexplored = ms.getUnexploredCount();
+      // D-SS4 — bramka pyta o uklad STATKU, nie o ogladany (bez `vessel` liczylaby cudzy uklad).
+      const unexplored = ms.getUnexploredCount(vessel);
       if (unexplored.total === 0) return { ok: false, reason: t('fleet.reason.systemFullyExplored') };
       return { ok: true };
     },

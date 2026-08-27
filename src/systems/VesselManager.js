@@ -43,7 +43,7 @@ import {
 } from '../data/VesselNames.js';
 import { t } from '../i18n/i18n.js';
 import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
-import { isSameSystem } from '../utils/SystemScope.js';
+import { isSameSystem, systemIdOf } from '../utils/SystemScope.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
 
@@ -398,6 +398,9 @@ export class VesselManager {
     // Pozwól statkom tankującym na misję (przerwij tankowanie)
     if (!isInService(vessel)) return false;   // W2 — rezerwa nie wychodzi na misję
     if ((vessel.status !== 'idle' && vessel.status !== 'refueling') || vessel.position.state !== 'docked') return false;
+    // D-SS5 — cel w innym układzie: trasa liczona niżej (`_calcRoute`) jest z konstrukcji
+    // WEWNĄTRZUKŁADOWA, więc taki lot byłby fantomem. Bliźniak w `redispatchFromOrbit`.
+    if (this._missionTargetOutOfSystem(vessel, mission)) return false;
 
     // Zastosuj fuel efficiency z tech (np. plasma_drives -30% zużycie)
     // Bazowe zużycie z modułów+masy (vessel.fuel.consumption ustawione przy tworzeniu)
@@ -458,6 +461,10 @@ export class VesselManager {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
     if (vessel.position.state !== 'orbiting') return false;
+    // D-SS5 — BLIŹNIAK bramki z `dispatchOnMission`. ⚠ Ta ścieżka obsługuje DOSTAWĘ PO SKOKU
+    // WARP (`MissionSystem:967`), więc bramka jest tu poprawna tylko dlatego, że
+    // `OrderService._maybeDeliver` wydaje dostawę DOPIERO gdy `v.systemId === targetSystemId`.
+    if (this._missionTargetOutOfSystem(vessel, mission)) return false;
 
     // Pozycja startu = bieżąca pozycja orbity
     const sx = vessel.position.x;
@@ -3458,21 +3465,75 @@ export class VesselManager {
    * przewidzi jego pozycję na ETA, snapnie do żywej pozycji na przylocie i będzie je ORBITOWAŁ
    * (zamiast zamarznąć w heliocentrycznym punkcie, gdy ciało odleci dalej). Pomija gwiazdę i
    * stacje (statyczne — nie odlatują, więc bug zamrożenia ich nie dotyczy).
+   *
+   * ⚠ ZAKRES = UKŁAD STATKU (Finding 138, decyzja D-SS1=W1). `EntityManager.getByType` jest
+   * PŁASKI I GALAKTYCZNY, a gwiazda każdego układu stoi w (0,0) — więc bez `vessel` ta funkcja
+   * porównuje współrzędne z RÓŻNYCH ramek odniesienia i zwraca ciało z cudzego układu. Skutek
+   * był mierzalny: przy 12 wygenerowanych układach 90,9 % snapujących klików „leć tutaj" brało
+   * ciało obce, po czym bramka W3-4b w `MovementOrderSystem` słusznie odrzucała rozkaz jako
+   * `target_other_system` (przy JEDNYM układzie: 0 % — to defekt fazy średniej, nie startu).
+   *
+   * ⚠ FILTR JEST FAIL-OPEN (`systemIdOf`), NIE `EntityManager.getByTypeInSystem` (D-SS2=W1).
+   * Ta druga robi twarde `e.systemId === systemId`, więc wycięłaby encję bez stempla i statek
+   * przestałby mieć dokąd lecieć. Repo rozstrzygnęło to raz — `RetreatTarget.js:70-72`.
+   * Tu jest to dodatkowo wiążące, bo PRZED tą zmianą filtra nie było żadnego: wprowadzenie
+   * fail-closed byłoby regresją, a nie naprawą.
+   *
+   * @param {object|null} vessel — statek pytający. Pominięcie = BRAK zakresu (skan galaktyczny,
+   *        zachowanie sprzed Findingu 138). Jedyny produkcyjny wołający MUSI go podać —
+   *        pinuje to `system_scope_orders_smoke` (pin źródłowy T2e).
    * @returns {object|null} najbliższe ciało w zasięgu lub null (pusta przestrzeń → drift).
    */
-  _findBodyNearPoint(x, y, maxAU = VesselManager.SNAP_TO_BODY_AU) {
+  _findBodyNearPoint(x, y, maxAU = VesselManager.SNAP_TO_BODY_AU, vessel = null) {
     if (typeof x !== 'number' || typeof y !== 'number') return null;
+    // `null` po stronie statku znaczy TRANZYT MIĘDZYGWIEZDNY, nie „nie wiem" — statek między
+    // układami nie ma „tutaj", więc nie ma czego snapować (wzór `RetreatTarget.bodiesInSystemOf`).
+    const scopeSys = vessel ? systemIdOf(vessel) : undefined;
+    if (vessel && scopeSys == null) return null;
     const maxPx = maxAU * AU_TO_PX;
     let best = null;
     let bestDist = Infinity;
     for (const type of ['planet', 'moon', 'planetoid']) {
       for (const body of EntityManager.getByType(type)) {
         if (typeof body.x !== 'number' || typeof body.y !== 'number') continue;
+        if (scopeSys !== undefined && systemIdOf(body) !== scopeSys) continue;
         const d = Math.hypot(body.x - x, body.y - y);
         if (d <= maxPx && d < bestDist) { best = body; bestDist = d; }
       }
     }
     return best;
+  }
+
+  /**
+   * Czy cel misji leży w INNYM układzie niż statek? (Finding 142, decyzja D-SS5.)
+   *
+   * ⚠ PO CO OSOBNY PREDYKAT, SKORO SELEKTORY SĄ JUŻ NAPRAWIONE: bo picker to tylko JEDEN
+   * producent celu. Zmierzone (audyt §2.3): cały łańcuch od wyboru celu do przylotu nie miał
+   * ANI JEDNEJ bramki układu, więc misja na ciało z cudzego układu startowała, pobierała
+   * paliwo, leciała do współrzędnych odmierzonych od CUDZEJ gwiazdy — a `_vesselIsAtTarget`
+   * meldował przylot (świadomy fail-open, słuszny pod warunkiem, że taki rekord nie powstaje).
+   *
+   * ⚠ WOŁAJĄ TO DWAJ DYSPOZYTORZY, nie jeden: `dispatchOnMission` I `redispatchFromOrbit`.
+   * Ten drugi obsługuje DOSTAWĘ PO SKOKU WARP (`MissionSystem:967`), więc bramka postawiona
+   * tylko w pierwszym byłaby nieutwardzonym bliźniakiem — na dodatek akurat na trasie legalnej.
+   *
+   * ⚠ TYLKO GRACZ (D-SS5b). AI zwolnione świadomie: osiągalność Findingu 153
+   * (`EmpireLogisticsSystem` dobiera outposty bez terminu układu) jest NIEZMIERZONA, a cichy
+   * zator logistyki AI byłby regresją gorszą od defektu, który tu zamykamy. PHASE5_TODO.
+   *
+   * Odmowa wraca jako `false` z dyspozytora — całą obsługę (usunięcie rekordu + zwrot kosztów)
+   * zbudował już VO-2: osiem ścieżek `_launch*` czyta zwrotkę i woła `_abortLaunch`.
+   *
+   * @param {object} vessel
+   * @param {object} mission
+   * @returns {boolean}
+   */
+  _missionTargetOutOfSystem(vessel, mission) {
+    if (!vessel || !mission?.targetId) return false;
+    if (isEnemyVessel(vessel)) return false;               // PHASE5_TODO — AI: Finding 153
+    const target = this._findEntity(mission.targetId);
+    if (!target) return false;                             // nieznany cel = nie nasza bramka
+    return !isSameSystem(vessel, target);                  // fail-open przy niewiedzy
   }
 
   /**

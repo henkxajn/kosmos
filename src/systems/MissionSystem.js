@@ -27,7 +27,7 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { addMissionLog, loadCargo, canDoEnvoy, loadColonists, unloadColonists } from '../entities/Vessel.js';
-import { isSameSystem }  from '../utils/SystemScope.js';
+import { isSameSystem, systemIdOf } from '../utils/SystemScope.js';
 import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
 import { t, getName }    from '../i18n/i18n.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
@@ -65,6 +65,24 @@ const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, wa
 // recon(full_system)    → deep_scan
 // colony               → colonize
 // mining/transport — bez zmian
+
+/**
+ * Zakres układu dla selektorów recon (Finding 142 / D-SS4) — JEDNO źródło dla
+ * `getUnexploredCount` i `_findNearestUnexplored`.
+ *
+ * ⚠ Trzy stany, nie dwa: statek podany ⇒ jego układ · statek podany, ale w TRANZYCIE warp
+ * (`systemId === null`) ⇒ `null` = „nie ma tutaj, zbiór pusty" · statek NIEpodany ⇒ kamera
+ * (zgodność wstecz dla wołających spoza ścieżki gracza).
+ * ⚠ `?? activeSystemId` po `systemIdOf` byłoby BŁĘDEM: zamieniłoby tranzyt warp z powrotem
+ *    w „statek jest tam, gdzie patrzy gracz" — dokładnie defekt, który tu zamykamy.
+ *
+ * @param {object|null} vessel
+ * @returns {string|null}
+ */
+function _reconScopeSystemId(vessel) {
+  if (vessel) return systemIdOf(vessel);
+  return window.KOSMOS?.activeSystemId ?? 'sys_home';
+}
 
 export class MissionSystem {
   constructor(resourceSystem = null) {
@@ -261,9 +279,10 @@ export class MissionSystem {
   }
 
   // Liczba niezbadanych ciał wg typu
-  getUnexploredCount() {
+  getUnexploredCount(vessel = null) {
     const homePl = window.KOSMOS?.homePlanet;
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const sysId = _reconScopeSystemId(vessel);
+    if (sysId == null) return { planets: 0, moons: 0, other: 0, total: 0 };  // tranzyt warp
     let planets = 0, moons = 0, other = 0;
     for (const p of EntityManager.getByTypeInSystem('planet', sysId)) {
       if (p === homePl) continue;
@@ -1285,7 +1304,9 @@ export class MissionSystem {
       return;
     }
 
-    const unexplored = this.getUnexploredCount();
+    // D-SS4 — bramka liczy uklad STATKU, nie kamere.
+    const reconVessel = vesselId ? window.KOSMOS?.vesselManager?.getVessel?.(vesselId) : null;
+    const unexplored = this.getUnexploredCount(reconVessel);
     const isSpecificTarget = scope !== 'nearest' && scope !== 'full_system';
 
     if (!isSpecificTarget) {
@@ -1318,13 +1339,14 @@ export class MissionSystem {
 
     if (scope === 'full_system') {
       // Sekwencyjny deep_scan
-      const firstTarget = this._findNearestUnexplored(null);
+      const firstTarget = this._findNearestUnexplored(null, reconVessel);
       if (!firstTarget) {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noUnexplored') });
         return;
       }
-      // VO-1 — dystans od STATKU. ⚠ WYBÓR celu (`_findNearestUnexplored` wyżej) zostaje
-      //   zakotwiczony w domu — świadomie poza zakresem VO-1 (zmieniałby zachowanie, nie liczbę).
+      // VO-1 — dystans od STATKU. D-SS4: WYBÓR celu (`_findNearestUnexplored` wyżej) też już od
+      //   statku. ⚠ Poprzedni komentarz mówił „zakotwiczony w domu" — kod czytał `activeSystemId`,
+      //   czyli KAMERĘ; pokrywało się to wyłącznie wtedy, gdy gracz patrzył na dom.
       const distance = this._calcDistance(firstTarget, this._getVesselOrigin(vesselId));
       const shipSpeed = this._getShipSpeed(vesselId);
       const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -1370,8 +1392,9 @@ export class MissionSystem {
     }
 
     // scope === 'nearest'
-    const nearest = this._findNearestUnexplored(null);
-    // VO-1 — jw.: cena od statku, WYBÓR celu nadal od domu.
+    const nearest = this._findNearestUnexplored(null, reconVessel);
+    // VO-1 — cena od statku. D-SS4: WYBÓR celu tez juz od statku (byl od KAMERY, nie od „domu",
+    //   jak twierdzil poprzedni komentarz — pokrywalo sie to tylko przy kamerze na domu).
     const distance = nearest ? this._calcDistance(nearest, this._getVesselOrigin(vesselId)) : 0.1;
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -1616,7 +1639,17 @@ export class MissionSystem {
     if (i >= 0) this._missions.splice(i, 1);
     // Zwrot best-effort — nigdy nie blokuje samej odmowy.
     try { refund?.(); } catch (_e) { /* ignore */ }
-    this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
+    // D-SS5 — dyspozytor zwraca GOŁY BOOL, więc powód nie ma jak tu dojechać. Ta funkcja jest
+    // JEDYNYM lejkiem odmów startu (wszystkie osiem ścieżek `_launch*` — dorobek VO-2), więc
+    // pyta o powód sama, TYM SAMYM predykatem co bramka. To duplikuje WYJAŚNIENIE, nie bramkę.
+    // ⚠ Bez tego gracz dostawałby „Statek niedostępny" na odmowę, której przyczyną jest układ —
+    // czyli komunikat prawdziwy składniowo i myląco fałszywy co do treści (klasa Findingu 141).
+    const abortVessel = window.KOSMOS?.vesselManager?.getVessel?.(mission?.vesselId);
+    const abortTarget = mission?.targetId ? this._findTarget(mission.targetId) : null;
+    const reason = (abortVessel && abortTarget && !isSameSystem(abortVessel, abortTarget))
+      ? t('vessel.reasonTargetOtherSystem')          // istnieje w PL i EN — zero nowych kluczy
+      : t('mission.shipUnavailable');
+    this._emit('mission:failed', 'expedition:launchFailed', { reason });
   }
 
   // ── Sprawdzanie przybycz i powrotów ───────────────────────────────────────
@@ -2766,9 +2799,24 @@ export class MissionSystem {
     return targets;
   }
 
-  _findNearestUnexplored(excludeExpId = null) {
+  /**
+   * Najbliższe niezbadane ciało — cel recon `nearest` i pierwszy przystanek `deep_scan`.
+   *
+   * ⚠ ZAKRES = UKŁAD STATKU (Finding 142 / D-SS4). Do tej naprawy funkcja czytała
+   * `activeSystemId`, czyli KAMERĘ: gracz oglądający cudzy układ dostawał cel z tamtego układu
+   * dla statku stojącego u siebie. Poprawny bliźniak stoi DWIE FUNKCJE NIŻEJ
+   * (`_findNearestUnexploredFrom` bierze `fromEntity.systemId`) — klasyczny nieutwardzony bliźniak.
+   * ⚠ Komentarz przy wołającym (`_launchRecon`) twierdził, że wybór celu jest „zakotwiczony
+   * w DOMU". Nie był — był zakotwiczony w kamerze; pokrywa się to tylko wtedy, gdy gracz
+   * patrzy na dom, i dlatego przeżyło.
+   *
+   * @param {string|null} excludeExpId
+   * @param {object|null} vessel — statek pytający; pominięcie = zakres z kamery (zgodność wstecz).
+   */
+  _findNearestUnexplored(excludeExpId = null, vessel = null) {
     const homePl = window.KOSMOS?.homePlanet;
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const sysId = _reconScopeSystemId(vessel);
+    if (sysId == null) return null;                    // statek w tranzycie warp — brak „tutaj"
     const activeTargets = this._getActiveReconTargets(excludeExpId);
     const candidates = [];
 

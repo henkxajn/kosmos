@@ -9146,14 +9146,25 @@ export class FleetManagerOverlay {
     const sourceColonyId = this._getVesselColony?.(vessel)?.planetId
       ?? vessel.colonyId ?? vessel.homeColonyId ?? null;
 
-    // Zbierz ciała aktywnego układu
-    const activeSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    // ⚠ ZAKRES = UKŁAD STATKU, NIE KAMERY (Finding 142, decyzja D-SS3=W1). Do tej naprawy stało
+    // tu `window.KOSMOS.activeSystemId`, przez co picker odpowiadał na pytanie „co widzę", a nie
+    // „co ten statek może zrobić". ZMIERZONE przy kamerze na cudzym układzie: własne, osiągalne
+    // cele statku znikały w CAŁOŚCI (0/3), a obce dostawały stempel `sameSystem: true` +
+    // `reachable: true` — dystans liczony surowym hypot na dwóch RÓŻNYCH ramkach odniesienia.
+    // ⚠ Fałszywy NEGATYW był równie realny jak fałszywy pozytyw; rejestr wymieniał tylko drugi.
+    // ⚠ `getByTypeInSystem` (fail-CLOSED) ZOSTAJE — tu było już wcześniej i nie jest regresją;
+    //   inaczej niż w `VesselManager._findBodyNearPoint`, gdzie filtra NIE BYŁO i wprowadzenie
+    //   fail-closed odcięłoby encje bez stempla (D-SS2 → `systemIdOf`).
+    // ⚠ `activeSystemId` NIE JEST TU JUŻ CZYTANE ANI RAZ — i to jest cała naprawa 142.
+    //   Kamera opisuje widok, nie możliwości statku. Zmienna została usunięta świadomie, żeby
+    //   nikt nie „przywrócił" jej jako wygodnego fallbacku.
+    const scopeSysId = vessel.systemId === undefined ? 'sys_home' : vessel.systemId;
     const bodies = [
-      ...EntityManager.getByTypeInSystem('planet', activeSysId),
-      ...EntityManager.getByTypeInSystem('moon', activeSysId),
-      ...EntityManager.getByTypeInSystem('planetoid', activeSysId),
-      ...EntityManager.getByTypeInSystem('asteroid', activeSysId),
-      ...EntityManager.getByTypeInSystem('comet', activeSysId),
+      ...EntityManager.getByTypeInSystem('planet', scopeSysId),
+      ...EntityManager.getByTypeInSystem('moon', scopeSysId),
+      ...EntityManager.getByTypeInSystem('planetoid', scopeSysId),
+      ...EntityManager.getByTypeInSystem('asteroid', scopeSysId),
+      ...EntityManager.getByTypeInSystem('comet', scopeSysId),
     ];
 
     for (const body of bodies) {
@@ -9221,7 +9232,7 @@ export class FleetManagerOverlay {
         explored: body.explored ?? false,
         reachable,
         colonyStatus,
-        systemId: activeSysId,
+        systemId: scopeSysId,
         sameSystem: true,
       });
     }
@@ -9229,7 +9240,7 @@ export class FleetManagerOverlay {
     // S3.3b-S3b — stacje GRACZA (HUB handlowy) jako cele transportu cargo; S3.4 FAZA 4 — także cel
     // transportu pasażerskiego (dostawa POP na stację). Cudze stacje pominięte (cross-empire → S3.5).
     if (actionId === 'transport' || actionId === 'transport_passenger') {
-      for (const st of EntityManager.getByTypeInSystem('station', activeSysId)) {
+      for (const st of EntityManager.getByTypeInSystem('station', scopeSysId)) {
         if ((st.ownerEmpireId ?? 'player') !== 'player') continue;
         if (st.id === vessel.position.dockedAt) continue;   // nie celuj we własny dok (no-op)
         // WSZYSTKIE stacje gracza są legalnym celem cargo (zniesiony filtr D8 „stacja z matką").
@@ -9244,7 +9255,7 @@ export class FleetManagerOverlay {
           id: st.id, name: st.name ?? st.id, type: 'station',
           distAU, explored: true, reachable: distAU <= effectiveRange(vessel),
           colonyStatus: 'station',
-          systemId: activeSysId,
+          systemId: scopeSysId,
           sameSystem: true,
         });
       }
@@ -9256,11 +9267,14 @@ export class FleetManagerOverlay {
     // NIE transport — pomijane. Reachable = zasięg warp (multi-hop planuje beginJourney).
     if ((actionId === 'transport' || actionId === 'transport_passenger') && (vessel.warpFuel?.max ?? 0) > 0) {
       const galaxy = window.KOSMOS?.galaxyData?.systems ?? [];
-      const curSysId = vessel.systemId ?? activeSysId;
+      const curSysId = scopeSysId;
       const curSys = galaxy.find(s => s.id === curSysId);
       const warpReachLY = warpRange(vessel);
       for (const sys of galaxy) {
-        if (sys.id === activeSysId || sys.id === curSysId) continue;   // in-system pokryty wyżej
+        // ⚠ D-SS3 — WYKLUCZAMY WYŁĄCZNIE UKŁAD STATKU. Dawny warunek pomijał też układ
+        //   OGLĄDANY, z komentarzem „in-system pokryty wyżej" — a pokryty NIE BYŁ, bo pętla
+        //   główna używała kamery. Dwa błędy znosiły się do zera celów w tym układzie.
+        if (sys.id === curSysId) continue;
         const distLY = (curSys && sys) ? warpDist3D(curSys, sys) : Infinity;
         const reachable = warpReachLY >= distLY;
         const sysName = sys.name ?? sys.id;
