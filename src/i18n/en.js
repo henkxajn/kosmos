@@ -2969,7 +2969,7 @@ export default {
   'unit.ground_supply_unit.name': 'Supply Unit',
   'unit.ground_supply_unit.desc': 'Mobile logistics. Refills at Capital/Barracks, feeds adjacent allies within 1 hex.',
   'unit.space_supply_ship.name':  'Supply Ship',
-  'unit.space_supply_ship.desc':  'Fleet supply (placeholder — fleet-group mechanic in separate project).',
+  'unit.space_supply_ship.desc': 'Fleet resupply — keeps warships on station without returning to base.',
 
   // Vessel name pool
   'vesselName.space_supply_ship': 'Quartermaster, Commissary, Provisioner, Arsenal, Intendant, Warehouse, Depot, Train, Forage, Logistician',
@@ -3339,7 +3339,7 @@ export default {
   'tooltip.menu.outOfRange':        'Target out of range',
   'tooltip.fleet.cancelOrderHint':  'Cancel vessel order',
   // M3 P3.1 — POI runtime events + auto-slow + rally assignment UI
-  'eventLog.poi.picketAlert':     'Picket "{0}" detected hostile vessel "{1}" (Empire {2})',
+  'eventLog.poi.picketAlert':     'Picket "{0}" detected hostile vessel "{1}" ({2})',
   'eventLog.poi.rallyComplete':   'Rally point "{0}" assembled — {1} vessels ready',
   'log.autoSlowPicketAlert':      'picket alert',
   'tooltip.poi.triggered':        'ALERT — hostile detected',
@@ -3723,4 +3723,15 @@ export default {
   'battle.label.orbitalDefence': "Orbital defence",
   'battle.label.tokenDefence':   "Token defence",
   'battle.label.playerGroup':    "Player ({0})",
+
+  // Journal view chrome (Finding 176).
+  'eventLog.title':          "📜 LOG",
+  'eventLog.history':        "EVENT HISTORY",
+  'eventLog.entryCount':     "{0}/{1} entries",
+  'eventLog.showAll':        "↻ Show all channels",
+  'eventLog.allActive':      "All channels active",
+  'eventLog.noMatch':        "No entries match active filters",
+  'eventLog.empty':          "Log is empty",
+  'eventLog.drawerTitle':    "📜 Event log",
+  'eventLog.unavailable':    "Journal unavailable — EventLogSystem not registered",
 };

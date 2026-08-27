@@ -10,7 +10,7 @@
 
 import { THEME, bgAlpha, GLASS_BORDER, hexToRgb } from '../config/ThemeConfig.js';
 import { COSMIC }            from '../config/LayoutConfig.js';
-import { getLocale }         from '../i18n/i18n.js';
+import { t }                 from '../i18n/i18n.js';
 import { stepSlide, navIsAnimating, pointInRect, NAV_TRIGGER_W, NAV_HIDE_DELAY }
   from './NavDrawerLogic.js';
 
@@ -126,7 +126,7 @@ export class EventLogDrawer {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(getLocale() === 'pl' ? '📜 Dziennik zdarzeń' : '📜 Event log', px + PAD, fullTop + HEADER_H / 2);
+    ctx.fillText(t('eventLog.drawerTitle'), px + PAD, fullTop + HEADER_H / 2);
 
     // Wpisy: najnowszy (i=0) przy DOLE, starsze wyżej
     const now = Date.now();

@@ -2970,7 +2970,7 @@ export default {
   'unit.ground_supply_unit.name': 'Jednostka Zaopatrzeniowa',
   'unit.ground_supply_unit.desc': 'Mobilne zaopatrzenie. Tankuje w Capital/Koszarach, karmi sąsiadów w 1 hex.',
   'unit.space_supply_ship.name':  'Statek Zaopatrzeniowy',
-  'unit.space_supply_ship.desc':  'Zaopatrzenie flotowe (placeholder — fleet-group w osobnym projekcie).',
+  'unit.space_supply_ship.desc':  'Zaopatrzenie flotowe — utrzymuje okręty w polu bez powrotu do bazy.',
 
   // Vessel name pool
   'vesselName.space_supply_ship': 'Kwatermistrz, Prowiant, Zaopatrzeniowiec, Arsenał, Intendent, Magazyn, Depot, Tabor, Furaż, Komisariat',
@@ -3274,7 +3274,7 @@ export default {
   'poi.type.label.rally':         'Punkt zborny',
   'poi.type.label.ambush':        'Zasadzka',
   // POI Create — M3 P2.3 (RightClickMenu type-specific entries)
-  'poi.create.waypoint':          'Utwórz Waypoint tutaj',
+  'poi.create.waypoint':          'Utwórz punkt nawigacyjny tutaj',
   'poi.create.patrol':            'Utwórz Patrol tutaj',
   'poi.create.picket':            'Utwórz Pikietę tutaj',
   'poi.create.rally':             'Utwórz Punkt Zborny tutaj',
@@ -3340,11 +3340,11 @@ export default {
   'tooltip.menu.outOfRange':        'Cel poza zasięgiem',
   'tooltip.fleet.cancelOrderHint':  'Anuluj rozkaz statku',
   // M3 P3.1 — POI runtime events + auto-slow + rally assignment UI
-  'eventLog.poi.picketAlert':     'Pikieta "{0}" wykryła wrogi vessel "{1}" (Imperium {2})',
-  'eventLog.poi.rallyComplete':   'Punkt zborny "{0}" zebrany — {1} vessels gotowe',
+  'eventLog.poi.picketAlert':     'Pikieta „{0}" wykryła wrogi statek „{1}" ({2})',
+  'eventLog.poi.rallyComplete':   'Punkt zborny „{0}" zebrany — {1} statków gotowych',
   'log.autoSlowPicketAlert':      'alarm pikiety',
   'tooltip.poi.triggered':        'ALERT — wykrył wroga',
-  'tooltip.poi.rally.progress':   '{0}/{1} vessels',
+  'tooltip.poi.rally.progress':   '{0}/{1} statków',
   'tooltip.poi.rally.complete':   'ZEBRANY',
   'tooltip.poi.rally.progressLabel': 'gotowe',
   'fleet.rally.sectionHeader':    'Punkt zborny',
@@ -3406,10 +3406,10 @@ export default {
   'tooltip.menu.noWeapons':        'Brak broni — statek zostanie zniszczony',
   // P3 — fleet retreat + doctrine descriptions
   'log.fleetRetreatTriggered':     '⚑ {0}: AUTO-WYCOFANIE ({1}% HP, {2} statków)',
-  'log.fleetRetreatNoTarget':      '⚠ {0}: retreat zablokowany — brak friendly planety',
+  'log.fleetRetreatNoTarget':      '⚠ {0}: odwrót zablokowany — brak własnej planety w zasięgu',
   'fleet.doctrine.engage_in_range.desc': 'Statki angażują wroga w zasięgu broni (domyślne zachowanie).',
-  'fleet.doctrine.kite.desc':            'Engage utrzymuje maksymalny zasięg (0.98× zamiast 0.95×) — bezpieczniej, ale ryzyko utraty kontaktu.',
-  'fleet.doctrine.hold_position.desc':   'Blokuje pursue/intercept/engage. Flota dalej broni się reaktywnie gdy wróg podejdzie.',
+  'fleet.doctrine.kite.desc':            'Atak utrzymuje maksymalny zasięg (0.98× zamiast 0.95×) — bezpieczniej, ale ryzyko utraty kontaktu.',
+  'fleet.doctrine.hold_position.desc':   'Blokuje pościg, przechwycenie i atak. Flota dalej broni się reaktywnie, gdy wróg podejdzie.',
   'fleet.doctrine.retreat_at_50.desc':   'Auto-wycofanie do najbliższej kolonii gdy HP floty spadnie poniżej progu (suwak).',
   'fleet.retreatThreshold.label':    'Próg auto-wycofania',
   'fleet.retreatThreshold.tooltip':  'Procent łącznego HP floty, poniżej którego wszyscy żywi członkowie ruszają do najbliższej friendly planety. Aktywne tylko gdy doktryna = retreat_at_50.',
@@ -3726,4 +3726,15 @@ export default {
   'battle.label.orbitalDefence': "Obrona orbitalna",
   'battle.label.tokenDefence':   "Symboliczna obrona",
   'battle.label.playerGroup':    "Gracz ({0})",
+
+  // Chrome widoków Dziennika (Finding 176) — było zaszyte jako ternary pl?:en w widoku.
+  'eventLog.title':          "📜 DZIENNIK",
+  'eventLog.history':        "HISTORIA ZDARZEŃ",
+  'eventLog.entryCount':     "{0}/{1} wpisów",
+  'eventLog.showAll':        "↻ Pokaż wszystkie kanały",
+  'eventLog.allActive':      "Wszystkie kanały aktywne",
+  'eventLog.noMatch':        "Brak wpisów po aktywnych filtrach",
+  'eventLog.empty':          "Dziennik pusty",
+  'eventLog.drawerTitle':    "📜 Dziennik zdarzeń",
+  'eventLog.unavailable':    "Dziennik niedostępny — EventLogSystem niezarejestrowany",
 };

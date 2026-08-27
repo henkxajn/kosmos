@@ -8,7 +8,7 @@
 
 import { BaseOverlay } from './BaseOverlay.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
-import { getLocale } from '../i18n/i18n.js';
+import { t, getLocale } from '../i18n/i18n.js';
 import { CHANNELS, CHANNEL_IDS } from '../systems/EventLogSystem.js';
 import EntityManager from '../core/EntityManager.js';
 import EventBus from '../core/EventBus.js';
@@ -38,6 +38,17 @@ function _wrapText(ctx, text, maxWidth) {
   }
   return text.slice(0, Math.max(1, lo - 1)) + '…';
 }
+
+// Etykieta kanalu wg locale — `CHANNELS` trzyma obie wersje jako DANE (jak reszta encji
+// w tym repo), wiec nie przenosimy ich do slownika; wybor jezyka nalezy do widoku.
+const _chanLabel = (chan) => (getLocale() === 'pl' ? chan.labelPL : chan.labelEN);
+
+// Czy z tego wpisu da sie DOKADKOLWIEK przejsc? Bitwy stempluja `entityRef` identyfikatorem
+// UKLADU, a uklady nie sa encjami — wiersz wygladal na klikalny i konczyl na `console.warn`.
+const _isNavigable = (ref) => {
+  if (!ref) return false;
+  return !!EntityManager.get(ref) || !!window.KOSMOS?.colonyManager?.getColony?.(ref);
+};
 
 function _severityColor(sev) {
   if (sev === 'alert') return THEME.danger;
@@ -103,7 +114,7 @@ export class EventLogOverlay extends BaseOverlay {
     if (!logSys) {
       ctx.fillStyle = THEME.textDim;
       ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-      ctx.fillText('Dziennik niedostępny — EventLogSystem niezarejestrowany', ox + 20, oy + 60);
+      ctx.fillText(t('eventLog.unavailable'), ox + 20, oy + 60);
       return;
     }
 
@@ -116,8 +127,7 @@ export class EventLogOverlay extends BaseOverlay {
     const pad = 12;
 
     // Nagłówek (standard)
-    const pl = getLocale() === 'pl';
-    this._drawOverlayHeader(ctx, x, y, w, pl ? '📜 DZIENNIK' : '📜 LOG');
+    this._drawOverlayHeader(ctx, x, y, w, t('eventLog.title'));
 
     // Lista kanałów
     const counts = logSys.getCountsByChannel();
@@ -143,7 +153,7 @@ export class EventLogOverlay extends BaseOverlay {
 
       // Ikona + nazwa kanału
       ctx.fillStyle = hidden ? THEME.textDim : THEME.textPrimary;
-      ctx.fillText(`${chan.icon} ${pl ? chan.labelPL : chan.labelEN}`, boxX + 20, cy + 16);
+      ctx.fillText(`${chan.icon} ${_chanLabel(chan)}`, boxX + 20, cy + 16);
 
       // Liczba wpisów w kanale (prawy wyrównany)
       ctx.textAlign = 'right';
@@ -179,13 +189,13 @@ export class EventLogOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.warning;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.textAlign = 'center';
-      ctx.fillText(pl ? '↻ Pokaż wszystkie kanały' : '↻ Show all channels', btnX + btnW / 2, cy + 17);
+      ctx.fillText(t('eventLog.showAll'), btnX + btnW / 2, cy + 17);
       ctx.textAlign = 'left';
       this._addHit(btnX, cy, btnW, btnH, 'show_all');
     } else {
       ctx.fillStyle = THEME.textDim;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillText(pl ? 'Wszystkie kanały aktywne' : 'All channels active', x + pad, cy + 14);
+      ctx.fillText(t('eventLog.allActive'), x + pad, cy + 14);
     }
   }
 
@@ -196,12 +206,11 @@ export class EventLogOverlay extends BaseOverlay {
     // Nagłówek (standard)
     const visible = logSys.getVisible();
     const totalAll = logSys._entries.length;
-    const pl = getLocale() === 'pl';
-    this._drawOverlayHeader(ctx, x, y, w, pl ? 'HISTORIA ZDARZEŃ' : 'EVENT HISTORY');
+    this._drawOverlayHeader(ctx, x, y, w, t('eventLog.history'));
     // Licznik widocznych/wszystkich
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`${visible.length}/${totalAll} ${pl ? 'wpisów' : 'entries'}`, x + pad, y + 36);
+    ctx.fillText(t('eventLog.entryCount', visible.length, totalAll), x + pad, y + 36);
 
     // Lista wpisów — scrollowalny obszar
     const listY = y + HEADER_H;
@@ -222,7 +231,7 @@ export class EventLogOverlay extends BaseOverlay {
     for (let i = startIdx; i < endIdx; i++) {
       const entry = visible[i];
       const rowY = listY + (i - startIdx) * ROW_H;
-      const clickable = !!entry.entityRef;
+      const clickable = _isNavigable(entry.entityRef);
       const isHover = clickable
         && this._hoverZone?.type === 'entry'
         && this._hoverZone?.data?.entryId === entry.id;
@@ -295,9 +304,7 @@ export class EventLogOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textDim;
       ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
       ctx.textAlign = 'center';
-      const msg = totalAll > 0
-        ? (pl ? 'Brak wpisów po aktywnych filtrach' : 'No entries match active filters')
-        : (pl ? 'Dziennik pusty' : 'Log is empty');
+      const msg = totalAll > 0 ? t('eventLog.noMatch') : t('eventLog.empty');
       ctx.fillText(msg, x + w / 2, listY + listH / 2);
       ctx.textAlign = 'left';
     }
@@ -348,16 +355,9 @@ export class EventLogOverlay extends BaseOverlay {
     const ovMgr  = window.KOSMOS?.overlayManager;
     const colony = colMgr?.getColony(entityRef);
 
-    console.log('[EventLog] klik wpisu →', entityRef, {
-      entityExists: !!entity,
-      colonyExists: !!colony,
-      entityName:   entity?.name,
-    });
-
-    if (!entity && !colony) {
-      console.warn('[EventLog] nie znaleziono encji/kolonii dla entityRef', entityRef);
-      return;
-    }
+    // ⚠ Bez wpisu do konsoli na KAZDY klik (szum produkcyjny). Sam guard zostaje: wiersz
+    // moze sie zdezaktualizowac miedzy klatka a klikiem (encja zniszczona w tym samym tiku).
+    if (!entity && !colony) return;
 
     // Zamknij dziennik PRZED otwarciem Colony (OverlayManager.openPanel sam zamknie,
     // ale robimy to ręcznie żeby state był czysty)

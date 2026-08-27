@@ -1337,8 +1337,13 @@ export class UIManager {
     // M3 P3.1 post-fix #1 — POI runtime events. Handlery zarejestrowane
     // tu (NIE w src/ui/EventLog.js, który jest dead-file w runtime).
     EventBus.on('poi:alertTriggered', ({ poiName, vesselName, empireId }) => {
+      // ⚠ Bylo `empireId ?? '?'` — gracz czytal „(Imperium emp_003)". Nazwa BRAMKOWANA
+      // poziomem wywiadu (wzorzec `NotificationCenter._empireLabel`): pikieta nie moze
+      // rozdawac tozsamosci za darmo, bo to wywraca projekt warstwy intelu.
+      const named = window.KOSMOS?.intelSystem?.isAtLeast?.(empireId, 'detailed');
+      const emp   = named ? window.KOSMOS?.empireRegistry?.get?.(empireId)?.name : null;
       this._log(t('eventLog.poi.picketAlert',
-        poiName ?? '?', vesselName ?? '?', empireId ?? '?'), 'poi_alert');
+        poiName ?? '?', vesselName ?? '?', emp ?? t('intel.unknownEmpire')), 'poi_alert');
     });
     EventBus.on('poi:rallyComplete', ({ poiName, memberCount }) => {
       this._log(t('eventLog.poi.rallyComplete',

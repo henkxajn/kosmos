@@ -28,6 +28,8 @@
 //   T2  WYKONANIE — 169: routing poi_alert/poi_rally + TRZY kontrole pinu
 //   T3  pin ŹRÓDŁOWY — 167: linia nazwy układu woła kanon + kontrole pinu (w tym wykonaniowe)
 //   T4  WYKONANIE — D2: kanał dyplomacji + trzy szczeble severity + kontrola pinu na braku migracji
+//   T5  WYKONANIE — 174: słowniki nie mieszają języków w kluczach Dziennika (+ kontrola pinu)
+//   T6  pin ŹRÓDŁOWY — 176/172: chrome widoku przez t(), strzałka tylko dla osiągalnego celu
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -154,6 +156,70 @@ console.log('\nT3 — 167: nazwa układu w linii bitwy idzie przez kanon (pin Ź
     'T3: kanon spada na nazwę GWIAZDY, gdy układu nie ma w rejestrze');
   assert(systemDisplayName('sys_024', {}) === 'sys_024',
     'T3: KONTROLA PINU — bez ŻADNEGO źródła kanon zwraca id (dlatego gałąź "?" w GameScene zostaje)');
+}
+
+console.log('\nT5 — 174: słownik PL nie mówi po angielsku w kluczach Dziennika');
+{
+  const pl = (await import('../../i18n/pl.js')).default;
+  const en = (await import('../../i18n/en.js')).default;
+
+  assert(Object.keys(pl).length === Object.keys(en).length && Object.keys(pl).length > 3000,
+    `T5: KONTROLA PINU — oba słowniki wczytane i równoliczne (pl=${Object.keys(pl).length}, en=${Object.keys(en).length})`);
+
+  // ⚠ To NIE sa literaly w kodzie — to wpisy w kanonicznym slowniku. `check-i18n` ich nie
+  //   widzi, bo sprawdza ISTNIENIE kluczy, nie jezyk ich TRESCI.
+  const EN_IN_PL = /\b(vessel|vessels|waypoint|waypoints|retreat|friendly|engage|pursue|intercept|placeholder)\b/i;
+  const dirty = Object.entries(pl)
+    .filter(([k, v]) => typeof v === 'string' && /^(log\.|eventLog\.|tooltip\.poi\.|poi\.create\.|fleet\.doctrine\.|unit\.)/.test(k))
+    .filter(([, v]) => EN_IN_PL.test(v));
+  assert(dirty.length === 0,
+    `T5: zero angielskich słów w polskich wpisach Dziennika/POI/doktryn (znaleziono ${dirty.length}: ${dirty.map(d => d[0]).join(', ')})`);
+
+  // KONTROLA PINU: predykat NIE jest jałowy — na sztucznej próbce musi zapłonąć.
+  assert(EN_IN_PL.test('Punkt zborny zebrany — 3 vessels gotowe'),
+    'T5: KONTROLA PINU — predykat wykrywa angielskie słowo w polskim zdaniu');
+
+  // Notatka deweloperska wystawiona graczowi jako opis jednostki — w OBU jezykach.
+  assert(!/placeholder/i.test(pl['unit.space_supply_ship.desc'] ?? '')
+      && !/placeholder/i.test(en['unit.space_supply_ship.desc'] ?? ''),
+    'T5: opis jednostki nie jest już notatką deweloperską („placeholder — fleet-group…")');
+}
+
+console.log('\nT6 — 176/172: chrome widoku i martwy klik (pin ŹRÓDŁOWY)');
+{
+  const ov = stripComments(read('ui', 'EventLogOverlay.js'));
+  assert(ov.length > 3000, 'T6: KONTROLA PINU — EventLogOverlay.js wczytany');
+
+  // 176 — zero POLSKICH literałów w widoku (komentarze zdjęte wyżej).
+  // ⚠ PIERWSZA WERSJA TEGO PINU BYŁA JAŁOWA: szukała `getLocale() === 'pl' ? '…'`, a stary kod
+  //   przypisywał najpierw `const pl = getLocale() === 'pl'` i dopiero potem robił `pl ? … : …`
+  //   ⇒ pin ŚWIECIŁ ZIELONO na kodzie sprzed naprawy (zmierzone). Teraz mierzy SKUTEK —
+  //   obecność polskiego napisu — a nie jeden konkretny kształt zapisu ternary.
+  const PL_DIA = /[ĄĆĘŁŃÓŚŹŻąćęłńóśźż]/;
+  const plLiterals = [...ov.matchAll(/'([^'\n]*)'|"([^"\n]*)"/g)]
+    .map(m => m[1] ?? m[2] ?? '')
+    .filter(s => PL_DIA.test(s));
+  assert(plLiterals.length === 0,
+    `T6: zero polskich literałów w widoku (znaleziono ${plLiterals.length}: ${plLiterals.slice(0, 3).join(' | ')})`);
+  assert(PL_DIA.test('Dziennik pusty — brak wpisów'),
+    'T6: KONTROLA PINU — predykat wykrywa polski napis (nie jest jałowy na niepustej próbce)');
+  assert(!ov.includes('Dziennik niedostępny'),
+    'T6: komunikat awarii przez t() — miał zaszyty polski BEZ wariantu EN');
+  assert(ov.includes("t('eventLog.title')") && ov.includes("t('eventLog.history')"),
+    'T6: nagłówki idą przez t()');
+
+  // ⚠ KONTROLA PINU: `getLocale` ZOSTAJE — etykiety kanalow to DANE (labelPL/labelEN
+  //   w `CHANNELS`), a nie klucze slownika. Pin nie ma zabraniac samego getLocale.
+  assert(ov.includes('getLocale'),
+    'T6: KONTROLA PINU — getLocale nadal używany (etykiety kanałów to dane, nie klucze)');
+
+  // 172 — strzalka „przejdz" tylko dla wpisu, ktory realnie gdzies prowadzi.
+  assert(/const clickable = _isNavigable\(/.test(ov),
+    'T6: klikalność wpisu liczona przez _isNavigable, nie przez samo istnienie entityRef');
+  assert(!/const clickable = !!entry\.entityRef/.test(ov),
+    'T6: stary kształt (każdy entityRef = klikalny) zniknął — bitwy stemplują id UKŁADU, a układy nie są encjami');
+  assert(!/console\.log\('\[EventLog\] klik/.test(ov),
+    'T6: log deweloperski na każde kliknięcie usunięty z produkcji');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
