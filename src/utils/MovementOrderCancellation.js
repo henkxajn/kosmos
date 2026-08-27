@@ -12,6 +12,8 @@
 // Zwraca { ok, reason? } zamiast czystego boolean by smoke mógł asercjonować
 // konkretną przyczynę odrzucenia (no_vessel vs no_order vs mos_rejected).
 
+import { ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY } from '../ui/FleetPictureLogic.js';
+
 /**
  * @param {object} deps
  * @param {object} deps.mos              — MovementOrderSystem instance (lub null)
@@ -31,12 +33,23 @@ export function tryCancelVesselOrder(deps, vesselId) {
   if (!vessel.movementOrder) return { ok: false, reason: 'no_order' };
 
   const orderType = vessel.movementOrder.type;
+  // ⚠ Do audytu 2026-08-27 do wpisu szedł SUROWY slug (`moveToPoint`). Kompletna macierz
+  //   etykiet (9 typów + `generic`) istniała w `FleetPictureLogic` jako PRYWATNA — teraz
+  //   eksportowana. To czyste DANE, więc import nie wciąga i18n i nie psuje testowalności
+  //   tego modułu pod node (tłumacz nadal wchodzi PARAMETREM, wzorzec `BattleSides`).
+  const orderLabel = t
+    ? t(ORDER_ACTIVITY_KEYS[orderType] ?? ORDER_ACTIVITY_FALLBACK_KEY)
+    : orderType;
   const cancelled = mos.cancelOrder(vesselId, 'player');
   if (!cancelled) return { ok: false, reason: 'mos_rejected' };
 
   // EventLog wpis — channel='fleet' (V5: 'orders' nie istnieje w CHANNELS).
   eventLogSystem?.push?.({
-    text: t ? t('fleet.cancelOrderEntry', vessel.name ?? '?', orderType) : `cancelled ${vesselId}`,
+    // ⚠ Modul jest BEZJEZYKOWY z rozmyslu (`t` wchodzi parametrem — ten sam wzorzec co
+    // `BattleSides`), ale fallback byl zaszytym angielskim z surowym id. Gdy tlumacza nie ma,
+    // lepiej wypisac NAZWE statku niz `v_49`.
+    text: t ? t('fleet.cancelOrderEntry', vessel.name ?? '?', orderLabel)
+            : `${vessel.name ?? vesselId}: ${orderType}`,
     channel: 'fleet',
     severity: 'info',
     entityRef: vesselId,

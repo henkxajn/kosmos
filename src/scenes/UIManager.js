@@ -53,7 +53,9 @@ import { TacticalDock }        from '../ui/TacticalDock.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
 import { BottomControlBar }    from '../ui/BottomControlBar.js';
-import { t, getName }          from '../i18n/i18n.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
+import { ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY,
+         MISSION_ACTIVITY_KEYS, MISSION_ACTIVITY_FALLBACK_KEY } from '../ui/FleetPictureLogic.js';
 import { CASUS_BELLI }         from '../data/CasusBelliData.js';
 
 // Nowe komponenty UI
@@ -116,6 +118,22 @@ const C = {
   get purple() { return THEME.purple; },
   get mint()   { return THEME.mint; },
   get dim()    { return THEME.textDim; },
+};
+
+// ── Etykiety zamiast surowych kodow w Dzienniku (Findingi 170/175) ──────────
+// ⚠ Do audytu 2026-08-27 wpisy wypisywaly `moveToPoint`, `foreign_recon` i `hull_frigate`
+//   wprost. Kompletne macierze kluczy istnialy w `FleetPictureLogic` (prywatne) i w
+//   `ShipsData` (`getName`) — brakowalo TYLKO wywolania.
+const _orderLabel   = (type) => t(ORDER_ACTIVITY_KEYS[type] ?? ORDER_ACTIVITY_FALLBACK_KEY);
+const _missionLabel = (type) => t(MISSION_ACTIVITY_KEYS[type] ?? MISSION_ACTIVITY_FALLBACK_KEY);
+const _shipLabel    = (ship, shipId) => (ship ? getName(ship, 'ship') : (shipId ?? '?'));
+// Surowiec albo towar — jedna nazwa dla obu rodzin (`resource.*` w slowniku, COMMODITIES
+// przez `getName`); nieznane id zostaje soba, zeby nie sklamac.
+const _goodLabel = (id) => {
+  const res = t(`resource.${id}`);
+  if (res !== `resource.${id}`) return res;
+  const cd = COMMODITIES[id];
+  return cd ? getName({ id, namePL: cd.namePL, nameEN: cd.nameEN }, 'commodity') : id;
 };
 
 // ── Formatowanie liczb ──────────────────────────────────────────────
@@ -755,7 +773,7 @@ export class UIManager {
       this._dirty = true;
     });
     EventBus.on('expedition:redirectFailed', ({ reason }) => {
-      this._addNotification(`⚠ Zmiana celu: ${reason}`);
+      this._addNotification(t('log.el.redirectFailed', reason), 'fleet', 'warn');
     });
 
     // Flota — kanał 'fleet', severity info/warn zależnie od zdarzenia.
@@ -769,20 +787,20 @@ export class UIManager {
     EventBus.on('fleet:buildStarted', ({ planetId, shipId }) => {
       if (!this._isPlayerColonyEvent(planetId)) return;
       const ship = SHIPS[shipId];
-      this._addNotification(`⚓ Stocznia: budowa ${ship?.namePL ?? shipId}`, 'fleet', 'info');
+      this._addNotification(t('log.el.shipyardBuilding', _shipLabel(ship, shipId)), 'fleet', 'info');
     });
     EventBus.on('fleet:shipCompleted', ({ planetId, shipId }) => {
       if (!this._isPlayerColonyEvent(planetId)) return;
       const ship = SHIPS[shipId];
-      this._addNotification(`✅ Statek gotowy: ${ship?.icon ?? '🚀'} ${ship?.namePL ?? shipId}`, 'fleet', 'info');
+      this._addNotification(t('log.el.shipReady', ship?.icon ?? '🚀', _shipLabel(ship, shipId)), 'fleet', 'info');
     });
     EventBus.on('fleet:buildFailed', ({ planetId, reason }) => {
       if (!this._isPlayerColonyEvent(planetId)) return;
-      this._addNotification(`⚠ Stocznia: ${reason}`, 'fleet', 'warn');
+      this._addNotification(t('log.el.shipyardFailed', reason), 'fleet', 'warn');
     });
     EventBus.on('fleet:disbandFailed', ({ reason, details }) => {
       const suffix = details ? ` (${details})` : '';
-      this._addNotification(`⚠ Disband: ${reason}${suffix}`, 'fleet', 'warn');
+      this._addNotification(t('log.el.disbandFailed', `${reason}${suffix}`), 'fleet', 'warn');
     });
     EventBus.on('fleet:disbanded', (payload) => {
       // Legacy (ColonyManager) emit {vesselId, shipId, planetId} dla decommissioned statku.
@@ -791,23 +809,25 @@ export class UIManager {
       if (payload?.fleetId) return;
       const { shipId } = payload ?? {};
       const ship = SHIPS[shipId] ?? null;
-      this._addNotification(`🗑 Statek rozformowany: ${ship?.namePL ?? shipId}`, 'fleet', 'info');
+      this._addNotification(t('log.el.shipScrapped', _shipLabel(ship, shipId)), 'fleet', 'info');
     });
     EventBus.on('fleet:buildQueued', ({ planetId, shipId }) => {
       if (!this._isPlayerColonyEvent(planetId)) return;
       const ship = SHIPS[shipId];
-      this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`, 'fleet', 'info');
+      this._addNotification(t('log.el.shipyardWaiting', _shipLabel(ship, shipId)), 'fleet', 'info');
     });
 
     // ── Player Fleet Groups (P2) — fleet lifecycle + orders ──
     EventBus.on('fleet:created', ({ fleet }) => {
-      this._addNotification(`⚑ Utworzono flotę „${fleet?.name ?? '?'}"`, 'fleet', 'info');
+      this._addNotification(t('log.el.fleetCreated', fleet?.name ?? '?'), 'fleet', 'info');
     });
     EventBus.on('fleet:disbanded', ({ fleetId, reason }) => {
       // 'shipId' fleet:disbanded ma starszy semantykę (vessel decommission) i
       // dostarczana wyzej. Tu kontrastujemy po payloadzie: fleetId field.
       if (fleetId) {
-        this._addNotification(`⚑ Rozwiązano flotę (${reason === 'empty' ? 'pusta' : reason ?? 'manual'})`, 'fleet', 'info');
+        const why = reason === 'empty' ? t('log.el.fleetDisbandEmpty')
+                  : reason ? reason : t('log.el.fleetDisbandManual');
+        this._addNotification(t('log.el.fleetDisbanded', why), 'fleet', 'info');
       }
     });
     EventBus.on('fleet:orderIssued', ({ fleetId, type, accepted, rejected, fleetEta, speedCap }) => {
@@ -816,10 +836,10 @@ export class UIManager {
       const rN = rejected?.length ?? 0;
       const total = aN + rN;
       let extra = '';
-      if (typeof fleetEta === 'number') extra = ` (ETA ~${fleetEta.toFixed(1)} roku)`;
-      else if (typeof speedCap === 'number') extra = ` (cap ${speedCap.toFixed(1)} AU/r)`;
+      if (typeof fleetEta === 'number') extra = t('log.el.fleetOrderEta', fleetEta.toFixed(1));
+      else if (typeof speedCap === 'number') extra = t('log.el.fleetOrderCap', speedCap.toFixed(1));
       const sev = rN > 0 ? 'warn' : 'info';
-      this._addNotification(`⚑ ${fname} → ${type}: ${aN}/${total}${extra}`, 'fleet', sev);
+      this._addNotification(t('log.el.fleetOrderIssued', fname, _orderLabel(type), aN, total, extra), 'fleet', sev);
       // Pominięte statki — nazwa + powód (np. USS Enterprise: brak uzbrojenia). Bez tego
       // gracz widział tylko „2/3" i nie wiedział, KTÓRY statek i DLACZEGO nie ruszył.
       if (rN > 0 && Array.isArray(rejected)) {
@@ -829,17 +849,17 @@ export class UIManager {
           const rt  = t(key);
           const reason = rt !== key ? rt : (r?.reason ?? 'unknown');
           const nm = vm?.getVessel?.(r?.vesselId)?.name ?? r?.vesselId;
-          this._addNotification(`⚑ ${nm}: ${reason}`, 'fleet', 'warn');
+          this._addNotification(t('log.el.fleetVesselSkipped', nm, reason), 'fleet', 'warn');
         }
       }
     });
     EventBus.on('fleet:orderCompleted', ({ fleetId, type }) => {
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
-      this._addNotification(`⚑ ${fname}: ${type} zakończone`, 'fleet', 'info');
+      this._addNotification(t('log.el.fleetOrderDone', fname, _orderLabel(type)), 'fleet', 'info');
     });
     EventBus.on('fleet:orderCancelled', ({ fleetId, reason }) => {
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
-      this._addNotification(`⚑ ${fname}: rozkaz anulowany (${reason})`, 'fleet', 'info');
+      this._addNotification(t('log.el.fleetOrderCancel', fname, reason), 'fleet', 'info');
     });
     // P3 — retreat_at_50 doctrine triggered auto-retreat.
     EventBus.on('fleet:retreatTriggered', ({ fleetId, aggregateHpPct, memberCount, retreatedIds }) => {
@@ -859,18 +879,20 @@ export class UIManager {
       const icon = sd?.icon ?? '🚀';
       const mIcon = mission?.type === 'colony' ? '🚢'
         : mission?.type === 'transport' ? '📦' : mission?.type === 'recon' ? '🔭' : '⛏';
-      this._addNotification(`${icon} ${vessel.name} → ${mission?.targetName ?? '?'} (${mIcon} ${mission?.type})`, 'fleet', 'info');
+      this._addNotification(
+        t('log.el.vesselLaunched', icon, vessel.name, mission?.targetName ?? '?', mIcon, _missionLabel(mission?.type)),
+        'fleet', 'info');
     });
     EventBus.on('vessel:docked', ({ vessel }) => {
       if (isEnemyVessel(vessel)) return;
-      this._addNotification(`↩ ${vessel.name} powrócił`, 'fleet', 'info');
+      this._addNotification(t('log.el.vesselReturned', vessel.name), 'fleet', 'info');
     });
 
     // Autosave
     EventBus.on('game:saved', ({ gameTime, sizeBytes }) => {
-      const y = Math.round(gameTime).toLocaleString('pl-PL');
+      const y = Math.round(gameTime).toLocaleString(getLocale() === 'en' ? 'en-US' : 'pl-PL');
       const mb = sizeBytes ? ` ${(sizeBytes / 1024 / 1024).toFixed(2)} MB` : '';
-      this._addNotification(`\u{1F4BE} Zapisano (${y} lat${mb})`, 'system', 'info');
+      this._addNotification(t('log.el.gameSaved', y, mb), 'system', 'info');
     });
 
     // Awaria zapisu. Utrata zapisu to JEDYNE nieodwracalne zdarzenie w grze, a szło dotąd
@@ -1277,7 +1299,7 @@ export class UIManager {
       if (!items || Object.keys(items).length === 0) return;
       const colName = window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.name ?? colonyId;
       const summary = Object.entries(items)
-        .map(([id, qty]) => `${id}:${qty}`)
+        .map(([id, qty]) => `${_goodLabel(id)} ${qty}`)
         .join(', ');
       this._log(`📦 ${vesselName} → ${colName}: ${summary}`, 'fleet');
     });

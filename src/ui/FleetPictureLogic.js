@@ -88,7 +88,7 @@ export const DEFAULT_LOW_FUEL_PCT = 0.2;
 // ── Słownik: aktywność (klucze i18n) ─────────────────────────────────────────
 // Misje — pełna macierz 12 typów z weryfikacji pkt 3 (w tym syntetyczne
 // move_to_point/engage od MovementOrderSystem; interstellar_jump → warp).
-const MISSION_ACTIVITY_KEYS = Object.freeze({
+export const MISSION_ACTIVITY_KEYS = Object.freeze({
   transport:         'fleetPicture.mission.transport',
   recon:             'fleetPicture.mission.recon',
   colony:            'fleetPicture.mission.colony',
@@ -102,10 +102,10 @@ const MISSION_ACTIVITY_KEYS = Object.freeze({
   engage:            'fleetPicture.mission.engage',
   interstellar_jump: 'fleetPicture.activity.warp',
 });
-const MISSION_ACTIVITY_FALLBACK_KEY = 'fleetPicture.mission.generic';
+export const MISSION_ACTIVITY_FALLBACK_KEY = 'fleetPicture.mission.generic';
 
 // Rozkazy — pełna macierz 9 typów ORDER_TYPES (weryfikacja pkt 4).
-const ORDER_ACTIVITY_KEYS = Object.freeze({
+export const ORDER_ACTIVITY_KEYS = Object.freeze({
   moveToPoint: 'fleetPicture.order.moveToPoint',
   pursue:      'fleetPicture.order.pursue',
   intercept:   'fleetPicture.order.intercept',
@@ -116,7 +116,7 @@ const ORDER_ACTIVITY_KEYS = Object.freeze({
   retreat:     'fleetPicture.order.retreat',
   dock:        'fleetPicture.order.dock',
 });
-const ORDER_ACTIVITY_FALLBACK_KEY = 'fleetPicture.order.generic';
+export const ORDER_ACTIVITY_FALLBACK_KEY = 'fleetPicture.order.generic';
 
 // Rozkazy na ruchomy cel — ETA nie jest stałe (plan §2: confidence 'moving').
 const MOVING_ETA_ORDER_TYPES = Object.freeze(['pursue', 'intercept']);

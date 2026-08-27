@@ -29,7 +29,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { addMissionLog, loadCargo, canDoEnvoy, loadColonists, unloadColonists } from '../entities/Vessel.js';
 import { isSameSystem }  from '../utils/SystemScope.js';
 import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
-import { t }             from '../i18n/i18n.js';
+import { t, getName }    from '../i18n/i18n.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
 
 // ── Koszty misji ─────────────────────────────────────────────────────────────
@@ -1868,7 +1868,18 @@ export class MissionSystem {
     }
 
     const targetName = exp.targetName ?? '?';
-    const gainParts = Object.entries(gained).map(([k, v]) => `${k}:${v}`).join(', ');
+    // ⚠ Bylo `${k}:${v}` — surowe id (`minerals:12`). Klucze `resource.*` istnieja
+    // w obu slownikach od Etapu 6.1; brakowalo wywolania (Finding 170).
+    const gainParts = Object.entries(gained)
+      .map(([k, v]) => {
+        const nm = t(`resource.${k}`);
+        const cd = COMMODITIES[k];
+        const label = nm !== `resource.${k}`
+          ? nm
+          : (cd ? getName({ id: k, namePL: cd.namePL, nameEN: cd.nameEN }, 'commodity') : k);
+        return `${label} ${v}`;
+      })
+      .join(', ');
     const multStr = multiplier !== 1.0 ? ` (×${multiplier.toFixed(1)})` : '';
     this._emit('mission:report', 'expedition:missionReport', {
       expedition: exp, gained, multiplier,

@@ -248,7 +248,7 @@ export class RightClickMenu {
       if (!res?.ok) {
         const reason = res?.rejected?.[0]?.reason ?? res?.reason ?? 'unknown';
         window.KOSMOS?.eventLogSystem?.push?.({
-          text: `Fleet order rejected: ${reason}`,
+          text: t('log.el.orderRejected', reason),
           channel: 'fleet', severity: 'warn',
         });
       }

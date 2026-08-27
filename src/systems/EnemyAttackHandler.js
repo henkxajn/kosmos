@@ -12,6 +12,7 @@
 // gracza, użyje dokładnie tego samego flow (createVessel → mission 'attack' → arrive).
 
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 import EntityManager from '../core/EntityManager.js';
 // ⚠ Import `gameState` USUNIĘTY w W1-4: po przepięciu na `recordBattle` ten plik nie pisze
 // już nic do stanu gry bezpośrednio — całe księgowanie należy do WarSystem (P3).
@@ -142,13 +143,20 @@ export class EnemyAttackHandler {
     // faktycznie agreguje DOWOLNE vessele z modułami; oryginalnie player).
     const enemyUnit = playerVesselsToBattleUnit(
       allEnemies, HULLS, SHIP_MODULES,
+      // ⚠ Ta etykieta WCHODZI do przetlumaczonej `log.battleLine` przez `participantName`
+      // (`BattleSides:46` — szczebel `p.label`), wiec zaszyta po polsku dawala „Battle in …:
+      // Flota wroga (3 statków) vs Player" u gracza z angielskim Dziennikiem (Finding 171).
+      // Strona GRACZA jest maskowana przez `playerLabel`, strona WROGA nie — i dlatego to
+      // umykalo.
       allEnemies.length > 1
-        ? `${empire?.name ?? 'Flota wroga'} (${allEnemies.length} statków)`
-        : `${empire?.name ?? 'Wróg'} — ${firstVessel.name ?? firstVessel.shipId}`
+        ? (empire?.name
+            ? `${empire.name} (${allEnemies.length})`
+            : t('battle.label.enemyFleet', allEnemies.length))
+        : `${empire?.name ?? t('battle.label.enemyUnnamed')} — ${firstVessel.name ?? firstVessel.shipId}`
     );
 
     const playerUnit = warSys?._buildPlayerBattleUnit?.(systemId) ?? {
-      label: 'Gracz',
+      label: t('battle.label.playerUnit'),
       hp: 30, shieldHP: 0, armor: 0, evasion: 0.02,
       techMult: 1.0, morale: 1.0,
       weapons: [{ damage: 2, tracking: 0.5 }],
@@ -211,12 +219,11 @@ export class EnemyAttackHandler {
           { warId: war.id, empireId, systemId });
       }
     } else {
-      evtLog?.push({
-        text: `⚔ Bitwa w ${systemId}: ${enemyUnit.label} vs Gracz. Zwycięzca: ${result.winner === 'A' ? 'wróg' : result.winner === 'B' ? 'gracz' : 'remis'}.`,
-        channel: 'combat',
-        severity: result.winner === 'A' ? 'alert' : 'info',
-        entityRef: systemId,
-      });
+      // ⚠ Wlasny wpis USUNIETY (Finding 166): ta galaz emituje nizej `battle:resolved`,
+      // ktore lapie KANONICZNY narrator w `GameScene` (`log.battleLine` — przetlumaczony,
+      // z nazwa ukladu przez `systemDisplayName` i nazwami stron przez `BattleSides`).
+      // Ten push dawal DRUGI wpis o tej samej potyczce: zaszyty po polsku, z surowym
+      // `systemId` i z tozsamoscia stron liczona osobno. Narrator ma byc jeden (Finding 155).
 
       // ⚠ W1-4 — domknięcie widelca. Ta gałąź (wojny NIE udało się zadeklarować) do tej pory
       // NIE emitowała nic i NIE zapisywała nic: bitwa nie była ani zaksięgowana na wojnę, ani
@@ -246,8 +253,8 @@ export class EnemyAttackHandler {
       const count = allEnemies.length;
       evtLog?.push({
         text: count > 1
-          ? `💥 ${count} wrogich statków zestrzelonych nad ${systemId}.`
-          : `💥 Wrogi statek "${firstVessel.name ?? '?'}" zestrzelony nad ${systemId}.`,
+          ? t('log.el.orbitalShotDown', count, this._systemLabel(systemId))
+          : t('log.el.orbitalShotDown1', firstVessel.name ?? '?', this._systemLabel(systemId)),
         channel: 'combat',
         severity: 'info',
         entityRef: systemId,
@@ -257,12 +264,23 @@ export class EnemyAttackHandler {
       for (const v of allEnemies) this._turnIntoWreck(v, planetId, year);
       this._wreckPlayerVesselsInSystem(systemId, year);
       evtLog?.push({
-        text: `💥 Bitwa nad ${systemId} — remis. Obie floty zniszczone (${allEnemies.length} wroga).`,
+        text: t('log.el.orbitalDraw', this._systemLabel(systemId), allEnemies.length),
         channel: 'combat',
         severity: 'warn',
         entityRef: systemId,
       });
     }
+  }
+
+  // Nazwa WYSWIETLANA ukladu — kanon `systemDisplayName` (rejestr → nazwa GWIAZDY → id).
+  // ⚠ Bez tego wpisy tej klasy meldowaly „zestrzelony nad sys_024" (Finding 167).
+  _systemLabel(systemId) {
+    if (!systemId) return '?';
+    const K = window.KOSMOS;
+    const sys = K?.galaxyData?.systems?.find?.(s => s.id === systemId);
+    if (sys?.name) return sys.name;
+    const star = K?.entityManager?.getByTypeInSystem?.('star', systemId)?.[0]?.name;
+    return star ?? systemId;
   }
 
   // Konwertuje vessel na wrak — zachowuje go w VesselManager z nowym stanem.

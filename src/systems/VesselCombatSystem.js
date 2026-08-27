@@ -32,6 +32,7 @@
 // gwarantuje stabilność w testach headless.
 
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
@@ -288,10 +289,15 @@ export class VesselCombatSystem {
     const systemId = triggerSystemId ?? systemIdOf(sideA[0]) ?? 'sys_home';
     const location = { systemId, planetId: null, point: { x: mid.x, y: mid.y } };
 
-    const labelA = sideA.length > 1 ? `Gracz (${sideA.length})` : `Gracz — ${sideA[0].name ?? sideA[0].shipId}`;
+    // ⚠ Finding 171 — etykieta strony wchodzi do PRZETLUMACZONEJ `log.battleLine`
+    // przez `participantName` (szczebel `p.label`). Strona wroga NIE jest maskowana.
+    const labelA = sideA.length > 1
+      ? t('battle.label.playerGroup', sideA.length)
+      : `${t('battle.label.playerUnit')} — ${sideA[0].name ?? sideA[0].shipId}`;
+    const foeB = empireB?.name ?? t('battle.label.enemyUnnamed');
     const labelB = sideB.length > 1
-      ? `${empireB?.name ?? 'Wróg'} (${sideB.length})`
-      : `${empireB?.name ?? 'Wróg'} — ${sideB[0].name ?? sideB[0].shipId}`;
+      ? `${foeB} (${sideB.length})`
+      : `${foeB} — ${sideB[0].name ?? sideB[0].shipId}`;
 
     const unitA = playerVesselsToBattleUnit(sideA, HULLS, SHIP_MODULES, labelA);
     const unitB = playerVesselsToBattleUnit(sideB, HULLS, SHIP_MODULES, labelB);
@@ -334,7 +340,7 @@ export class VesselCombatSystem {
         empireId:  ownerA,
         vesselIds: sideA.map(v => v.id),
         count:     sideA.length,
-        label:     `Gracz (${sideA.length})`,
+        label:     t('battle.label.playerGroup', sideA.length),
       },
       participantB: {
         type:      'vessel_group',

@@ -37,6 +37,7 @@
 // P3-8 doda:  serialize/restore (deepSpaceEngagements persist)
 
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { COMBAT_ENGAGEMENT_AU } from './ProximitySystem.js';
@@ -1474,8 +1475,8 @@ export class DeepSpaceCombatSystem {
       if (vesselStates.size < 2) continue;  // brak walczących stron
       this._activeEncounters.set(id, {
         id:              enc.id ?? id,
-        sideA:           enc.sideA ?? { vesselIds: [], joinedVesselIds: [], ownerEmpireId: 'player', label: 'Gracz' },
-        sideB:           enc.sideB ?? { vesselIds: [], joinedVesselIds: [], ownerEmpireId: 'empire_unknown', label: 'Wróg' },
+        sideA:           enc.sideA ?? { vesselIds: [], joinedVesselIds: [], ownerEmpireId: 'player', label: t('battle.label.playerUnit') },
+        sideB:           enc.sideB ?? { vesselIds: [], joinedVesselIds: [], ownerEmpireId: 'empire_unknown', label: t('battle.label.enemyUnnamed') },
         vesselStates,
         location:        enc.location ?? { systemId: 'sys_home', planetId: null, point: { x: 0, y: 0 } },
         startYear:       enc.startYear ?? 0,

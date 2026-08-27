@@ -23,6 +23,7 @@
 // Tutaj wojna to logika + reaktywne starcie gdy gracz staje na ich drodze.
 
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { resolveBattle, empireFleetToBattleUnit, playerVesselsToBattleUnit } from './BattleSystem.js';
@@ -609,7 +610,7 @@ export class WarSystem {
     const vessels = this._playerVesselsInSystem(systemId);
 
     // Zbierz statki gracza — baza jednostki bitwy
-    let unit = playerVesselsToBattleUnit(vessels, HULLS, SHIP_MODULES, 'Gracz');
+    let unit = playerVesselsToBattleUnit(vessels, HULLS, SHIP_MODULES, t('battle.label.playerUnit'));
 
     // Dodaj obronę z budynków defensywnych w koloniach gracza w tym systemie.
     // defense_tower (level): +40 HP, +5 dmg, +1 armor per level.
@@ -644,7 +645,7 @@ export class WarSystem {
       // Flota + obrona — zsumuj stats
       unit = {
         ...unit,
-        label: 'Flota + Obrona orbitalna',
+        label: t('battle.label.fleetAndOrbital'),
         hp:    (unit.hp ?? 0) + defHP,
         armor: (unit.armor ?? 0) + defArmor,
         weapons: [...(unit.weapons ?? []), { damage: defDmg, tracking: 0.6 }],
@@ -652,7 +653,7 @@ export class WarSystem {
     } else if (!hasFleet && hasDefense) {
       // Tylko obrona orbitalna z budynków
       unit = {
-        label: 'Obrona orbitalna',
+        label: t('battle.label.orbitalDefence'),
         hp: defHP, shieldHP: 0, armor: defArmor, evasion: 0.05,
         techMult: 1.0, morale: 1.0,
         weapons: [{ damage: defDmg, tracking: 0.6 }],
@@ -664,7 +665,7 @@ export class WarSystem {
       const hasColony = colonies.length > 0;
       if (hasColony) {
         unit = {
-          label: 'Symboliczna obrona',
+          label: t('battle.label.tokenDefence'),
           hp: 30, shieldHP: 0, armor: 0, evasion: 0.02,
           techMult: 1.0, morale: 0.8,
           weapons: [{ damage: 2, tracking: 0.5 }],

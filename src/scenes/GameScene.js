@@ -2469,7 +2469,8 @@ export class GameScene {
       const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
       const label = vessel?.name ?? vesselId;
       evtLog.push({
-        text:      `Wykryto obcy statek (${newQuality}): ${label}`,
+        text:      t('log.el.vesselDetected',
+                     t(newQuality === 'detailed' ? 'intel.levelDetailed' : 'intel.levelContact'), label),
         channel:   'intel',
         severity:  'info',
         entityRef: vesselId,
@@ -2483,9 +2484,9 @@ export class GameScene {
       const label = vessel?.name ?? vesselId;
       const pos = lastKnownPosition
         ? `[${Math.round(lastKnownPosition.x)},${Math.round(lastKnownPosition.y)}]`
-        : '[unknown]';
+        : `[${t('log.el.positionUnknown')}]`;
       evtLog.push({
-        text:      `Utracono kontakt z ${label}: ostatnia pozycja ${pos}`,
+        text:      t('log.el.contactLost', label, pos),
         channel:   'intel',
         severity:  'warn',
         entityRef: vesselId,
@@ -2499,7 +2500,7 @@ export class GameScene {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog) return;
       evtLog.push({
-        text:      `Utworzono POI ${poi.type} '${poi.name}'`,
+        text:      t('log.el.poiCreated', t(`poi.type.label.${poi.type}`), poi.name),
         channel:   'intel',
         severity:  'info',
       });
@@ -2509,7 +2510,7 @@ export class GameScene {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog) return;
       evtLog.push({
-        text:      `Usunięto POI '${name ?? poiId}'`,
+        text:      t('log.el.poiDeleted', name ?? poiId),
         channel:   'intel',
         severity:  'info',
       });
@@ -2524,7 +2525,7 @@ export class GameScene {
       const vLabel = vessel?.name ?? vesselId;
       const pLabel = poi?.name ?? poiId;
       evtLog.push({
-        text:      `${vLabel} → POI '${pLabel}'`,
+        text:      t('log.el.vesselToPoi', vLabel, pLabel),
         channel:   'fleet',
         severity:  'info',
         entityRef: vesselId,
@@ -2541,9 +2542,9 @@ export class GameScene {
         const poi = window.KOSMOS?.poiRegistry?.getPOI?.(poiId);
         const pLabel = poi?.name ?? poiId;
         const wpCount = poi?.waypoints?.length ?? '?';
-        text = `${vLabel} rozpoczyna patrol '${pLabel}' (${wpCount} waypoints)`;
+        text = t('log.el.patrolStarted', vLabel, pLabel, wpCount);
       } else {
-        text = `${vLabel} rozpoczyna patrol manualny`;
+        text = t('log.el.patrolManual', vLabel);
       }
       evtLog.push({ text, channel: 'fleet', severity: 'info', entityRef: vesselId });
     });
@@ -2555,7 +2556,7 @@ export class GameScene {
       const total = vessel?.movementOrder?.patrolRoute?.length ?? '?';
       const vLabel = vessel?.name ?? vesselId;
       evtLog.push({
-        text:      `${vLabel} osiągnął waypoint ${waypointIndex + 1}/${total}`,
+        text:      t('log.el.waypointReached', vLabel, waypointIndex + 1, total),
         channel:   'fleet',
         severity:  'info',
         entityRef: vesselId,
@@ -2572,7 +2573,7 @@ export class GameScene {
       const vLabel = v?.name ?? vesselId;
       const eLabel = e?.name ?? escorteeId;
       evtLog.push({
-        text:      `${vLabel} eskortuje ${eLabel}`,
+        text:      t('log.el.escortStarted', vLabel, eLabel),
         channel:   'fleet',
         severity:  'info',
         entityRef: vesselId,
@@ -2584,9 +2585,9 @@ export class GameScene {
       if (!evtLog) return;
       const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
       const vLabel = vessel?.name ?? vesselId;
-      const reasonText = reason === 'escortee_lost' ? 'cel utracony' : reason;
+      const reasonText = reason === 'escortee_lost' ? t('log.el.escortLostTarget') : reason;
       evtLog.push({
-        text:      `${vLabel} przerwał eskortę: ${reasonText}`,
+        text:      t('log.el.escortEnded', vLabel, reasonText),
         channel:   'fleet',
         severity:  'warn',
         entityRef: vesselId,
@@ -5314,16 +5315,15 @@ export class GameScene {
     EventBus.on('combat:round', ({ planetId, q, r, round, playerLosses, enemyLosses }) => {
       const log = this.eventLogSystem;
       if (!log?.push) return;
-      const pl = playerLosses ?? {};
-      const en = enemyLosses ?? {};
-      const pKilled = pl.killed ?? 0, eKilled = en.killed ?? 0;
-      const pDmg = pl.dmgDealt ?? 0, eDmg = en.dmgDealt ?? 0;
-      // Wpis per runda — zwięzły format
-      let text = `⚔ Bitwa (${q},${r}) runda ${round}`;
-      if (pKilled > 0 || eKilled > 0) text += ` · straty: gracz −${pKilled}, wróg −${eKilled}`;
-      text += ` · dmg: gracz ${pDmg}→, wróg ${eDmg}→`;
-      const severity = pKilled > 0 ? 'alert' : (eKilled > 0 ? 'warn' : 'info');
-      log.push({ text, channel: 'combat', severity, entityRef: planetId });
+      // ⚠ TYLKO pierwsza runda. Bilans niesie `combat:hexResolved` — wpisy posrednie byly
+      // duplikacja, ktora wymiatala ring buffer (500 miejsc, ~26 starc = cala historia).
+      if (round !== 1) return;
+      log.push({
+        text:      t('log.el.groundBattle', q, r),
+        channel:   'combat',
+        severity:  'info',
+        entityRef: planetId,
+      });
     });
 
     EventBus.on('combat:hexResolved', ({ planetId, q, r, winnerId, playerKilled, enemyKilled, playerDmg, enemyDmg }) => {
@@ -5332,13 +5332,13 @@ export class GameScene {
         let text;
         let severity;
         if (winnerId === 'player') {
-          text = `⚔ Zwycięstwo (${q},${r}) — wróg zneutralizowany. Straty własne: ${playerKilled}, zadano ${playerDmg} dmg.`;
+          text = t('log.el.groundWin', q, r, playerKilled, playerDmg);
           severity = 'info';
         } else if (winnerId && winnerId !== 'player') {
-          text = `💀 Przegrana (${q},${r}) — własne wojsko wybite. Straty: ${playerKilled}, zadano wrogowi ${playerDmg} dmg.`;
+          text = t('log.el.groundLoss', q, r, playerKilled, playerDmg);
           severity = 'alert';
         } else {
-          text = `⚔ Bitwa (${q},${r}) zakończona remisem. Straty: ${playerKilled} / ${enemyKilled}.`;
+          text = t('log.el.groundDraw', q, r, playerKilled, enemyKilled);
           severity = 'warn';
         }
         log.push({ text, channel: 'combat', severity, entityRef: planetId });
