@@ -2385,7 +2385,20 @@ export class GameScene {
       const sysId = loc.systemId;
       const homeSys = window.KOSMOS?.homePlanet?.systemId ?? 'sys_home';
       const homeName = window.KOSMOS?.homePlanet?.name ?? t('battle.homeSystem');
-      const sysName = sysId === homeSys ? homeName : (sysId ?? '?');
+      // ⚠ NIGDY surowe id. Kanon `systemDisplayName` (rejestr → nazwa GWIAZDY → id) jest
+      // zaimportowany w TYM pliku (:15) i użyty przez napis intro (:4911) — ta jedna linia go
+      // omijała, więc KAŻDA bitwa poza układem macierzystym meldowała się jako „sys_024"
+      // (Finding 167, audyt Dziennika 2026-08-27).
+      // ⚠ Gałąź macierzysta zostaje na `homePlanet.name` ŚWIADOMIE: to nazwa PLANETY w miejscu
+      // nazwy układu (ta sama klasa defektu), ale jej zmiana byłaby widoczna w KAŻDEJ bitwie
+      // u siebie ⇒ osobna decyzja, nie przemyt przy okazji.
+      // Ostatni szczebel kanonu zwraca samo id, stąd zachowany fallback na „?".
+      const sysName = sysId === homeSys ? homeName : (sysId
+        ? systemDisplayName(sysId, {
+            systems:  this.starSystemManager?.getAllSystems?.() ?? [],
+            starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
+          })
+        : '?');
 
       // Finding 155 — jedno źródło tożsamości (patrz listener kina wyżej). NIGDY z ról wojny.
       const sides = resolveBattleSides(result, {

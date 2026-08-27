@@ -42,6 +42,15 @@ const TYPE_MAP = {
   expedition_fail:    { channel: 'fleet',  severity: 'warn'  },
   fleet:              { channel: 'fleet',  severity: 'info'  },
 
+  // POI runtime (M3 P3.1). ⚠ TA SAMA CICHA USTERKA co blok niżej (M4 P1): `LOG_COLORS`
+  //   w UIManagerze definiuje `poi_alert`/`poi_rally` (`:149-150`), więc wpis miał poprawny
+  //   KOLOR i wyglądał na dobrze skierowany — a `TYPE_MAP` ich NIE ZNAŁO, więc szedł przez
+  //   `TYPE_MAP.info` na kanał **system**. Alarm pikiety („wróg wszedł w pole obserwacji")
+  //   wypadał z filtra wywiadu. W2-7 naprawiło intel/combat/diplomacy i te DWA pominęło.
+  //   Znalezione audytem Dziennika 2026-08-27 (Finding 169).
+  poi_alert:          { channel: 'intel',  severity: 'warn'  },
+  poi_rally:          { channel: 'fleet',  severity: 'info'  },
+
   // Wojna, wywiad, dyplomacja (M4 P1 — kanały istniały w `CHANNELS`, ale NIE tutaj).
   // ⚠ To była CICHA usterka, nie brak funkcji: `_log(text, 'combat')` trafiał na
   //   `TYPE_MAP[type] || TYPE_MAP.info`, czyli na kanał **system**, mimo że `LOG_COLORS`
@@ -201,6 +210,18 @@ export class EventLogSystem {
         ? Math.max(...this._entries.map(e => e.id ?? 0)) + 1
         : 1
     );
+
+    // ⚠ Rok wpisu pochodzi WYŁĄCZNIE z `time:display`, a `TimeSystem` nie emituje go na
+    //   pauzie (`TimeSystem.js:70` — early return). Bez zasiania KAŻDY wpis powstały po
+    //   wczytaniu, a przed pierwszą odpauzowaną klatką, dostawał `year = 0` i renderował się
+    //   w Dzienniku jako „---" (`EventLogOverlay:240`). ZMIERZONE: restore(rok 250) → push()
+    //   → year === 0 (Finding 168).
+    // ⚠ Źródłem jest OSTATNI wpis (tablica jest chronologiczna), NIE `window.KOSMOS` — ten
+    //   moduł nie ma zależności od globalu i TYLKO dzięki temu jest pinowalny wykonaniem pod
+    //   node. To SEED, nie zamrożenie: pierwszy `time:display` normalnie go nadpisze.
+    const last = this._entries[this._entries.length - 1];
+    if (last?.year != null) this._currentYear = last.year;
+
     // Hidden channels nie persistują — zawsze start z pełną widocznością.
     this._hiddenChannels.clear();
   }
