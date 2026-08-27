@@ -55,6 +55,7 @@ function _entryColor(entry) {
     combat: THEME.danger,
     trade:  THEME.mint,
     intel:  THEME.purple ?? THEME.accent,
+    diplomacy: THEME.yellow,
     system: THEME.textSecondary,
   };
   return chanColors[entry.channel] ?? THEME.textSecondary;

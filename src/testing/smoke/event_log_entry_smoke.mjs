@@ -27,6 +27,7 @@
 //   T1  WYKONANIE — 168: restore zasiewa rok + DWIE kontrole pinu
 //   T2  WYKONANIE — 169: routing poi_alert/poi_rally + TRZY kontrole pinu
 //   T3  pin ŹRÓDŁOWY — 167: linia nazwy układu woła kanon + kontrole pinu (w tym wykonaniowe)
+//   T4  WYKONANIE — D2: kanał dyplomacji + trzy szczeble severity + kontrola pinu na braku migracji
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -101,9 +102,32 @@ console.log('\nT2 — 169: typy POI trafiają do swoich kanałów');
   assert(unknown.channel === 'system' && unknown.severity === 'info',
     'T2: KONTROLA PINU — nieznany typ NADAL leci na system/info (mierzymy dodanie, nie usunięcie fallbacku)');
 
-  // KONTROLA PINU (c): zakres slice'u — kanał dyplomacji świadomie POZA nim (D2).
-  assert(!CHANNELS.diplomacy,
-    'T2: kanał diplomacy świadomie NIE dodany w tym slice (D2 — osobna decyzja, audyt §6)');
+  EventBus.clear?.();
+}
+
+console.log('\nT4 — D2: dyplomacja ma własny kanał i rozróżnia sukces od porażki');
+{
+  EventBus.clear?.();
+  const log = new EventLogSystem();
+  const ok    = log.pushLegacy('traktat przyjęty',  'diplomacy');
+  const bad   = log.pushLegacy('pokój odrzucony',   'diplomacy_warn');
+  const war   = log.pushLegacy('wojna wypowiedziana', 'diplomacy_alert');
+
+  assert(!!CHANNELS.diplomacy, 'T4: kanał diplomacy istnieje w CHANNELS (był tylko w LOG_COLORS)');
+  assert(CHANNELS.diplomacy.labelPL && CHANNELS.diplomacy.labelEN,
+    'T4: kanał ma OBIE etykiety językowe (reguła dwujęzyczności z CLAUDE.md)');
+  assert([ok, bad, war].every(e => e.channel === 'diplomacy'),
+    'T4: wszystkie trzy szczeble lądują na kanale diplomacy, nie w System');
+
+  // ⚠ Sedno D2: JEDEN typ nie umiał rozróżnić sojuszu od wypowiedzenia wojny — oba były 'warn'.
+  assert(ok.severity === 'info' && bad.severity === 'warn' && war.severity === 'alert',
+    `T4: trzy szczeble severity (${ok.severity}/${bad.severity}/${war.severity}) — sojusz nie wygląda już jak ostrzeżenie`);
+
+  // KONTROLA PINU: stary wpis z zapisu (channel 'system') NIE jest migrowany — zostaje, gdzie był.
+  const old = new EventLogSystem();
+  old.restore({ entries: [{ id: 1, year: 5, createdAt: 0, text: 'stara dyplomacja', channel: 'system', severity: 'warn' }], nextId: 2 });
+  assert(old.getEntries()[0].channel === 'system',
+    'T4: KONTROLA PINU — stare wpisy zostają na kanale system (brak migracji, świadomie)');
   EventBus.clear?.();
 }
 

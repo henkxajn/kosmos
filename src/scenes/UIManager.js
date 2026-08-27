@@ -54,6 +54,7 @@ import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
 import { BottomControlBar }    from '../ui/BottomControlBar.js';
 import { t, getName }          from '../i18n/i18n.js';
+import { CASUS_BELLI }         from '../data/CasusBelliData.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -151,7 +152,9 @@ const LOG_COLORS = {
   // M4 P1 — channele dla nowych notyfikacji
   get intel()              { return THEME.info; },       // wykrycia, kontakty, predykcje
   get combat()             { return THEME.danger; },     // bitwy, retreaty, wraki
-  get diplomacy()          { return THEME.warning; },    // wojny, ultimatums, hostility
+  get diplomacy()          { return THEME.yellow; },     // traktaty, emisariusze, pokój
+  get diplomacy_warn()     { return THEME.warning; },    // odmowy (pokój, traktat, emisariusz)
+  get diplomacy_alert()    { return THEME.danger; },     // wypowiedzenie wojny
 };
 
 // Koszty akcji gracza (zsynchronizowane z PlayerActionSystem)
@@ -1472,7 +1475,7 @@ export class UIManager {
       const empire = window.KOSMOS?.empireRegistry?.get?.(empireId ?? declaredBy);
       const empName = empire?.namePL ?? empire?.name ?? empireId ?? declaredBy ?? '?';
       this._triggerAutoSlowIfTime(t('log.autoSlowWar'));
-      this._log(t('log.m4.warDeclared', empName), 'diplomacy');
+      this._log(t('log.m4.warDeclared', empName), 'diplomacy_alert');
     });
 
     // W1-4 — POTYCZKA: starcie BEZ stanu wojny. Osobny wpis, bo dla gracza to zupełnie inne
@@ -1537,23 +1540,28 @@ export class UIManager {
       // Ten sam fakt mówi uczciwie `war:autoPeaceRefused` kilka linii niżej — i tylko on ma prawo.
       if (playerInitiated !== true) return;
       const nm = _empName(empireId);
-      this._log(t('log.diplo.peaceRejected', nm), 'diplomacy');
+      this._log(t('log.diplo.peaceRejected', nm), 'diplomacy_warn');
       EventBus.emit('ui:toast', { text: t('log.diplo.peaceRejected', nm), color: '#D8A030' });
     });
     EventBus.on('diplomacy:envoyRefused',   ({ empireId }) => {
       const nm = _empName(empireId);
-      this._log(t('log.diplo.envoyRefused', nm), 'diplomacy');
+      this._log(t('log.diplo.envoyRefused', nm), 'diplomacy_warn');
       EventBus.emit('ui:toast', { text: t('log.diplo.envoyRefused', nm), color: '#D8A030' });
     });
     EventBus.on('war:autoPeaceRefused',     ({ empireId, casusBelli }) => {
       // Wojna doszła do sufitu wyczerpania i NIE zakończyła się sama — to jest nowość
       // w grze i gracz musi o tym wiedzieć, inaczej wygląda jak zawieszony system.
-      this._log(t('log.diplo.autoPeaceRefused', _empName(empireId), String(casusBelli ?? '?')), 'diplomacy');
+      // ⚠ `casusBelli` szedł tu jako SUROWY SLUG (`border_incident`), mimo że `CASUS_BELLI`
+      // ma `namePL`/`nameEN` od pierwszego commita dyplomacji — `getName` czyta te pola bez
+      // potrzeby nowych kluczy i18n.
+      const cbDef = CASUS_BELLI[casusBelli];
+      const cbName = cbDef ? getName(cbDef, 'casusBelli') : (casusBelli ?? '?');
+      this._log(t('log.diplo.autoPeaceRefused', _empName(empireId), String(cbName)), 'diplomacy_warn');
     });
     EventBus.on('diplomacy:treatyAccepted', ({ empireId }) => this._log(t('log.diplo.treatyAccepted', _empName(empireId)), 'diplomacy'));
     EventBus.on('diplomacy:treatyRejected', ({ empireId, reason }) => {
       if (reason === 'already_signed') return;
-      this._log(t('log.diplo.treatyRejected', _empName(empireId)), 'diplomacy');
+      this._log(t('log.diplo.treatyRejected', _empName(empireId)), 'diplomacy_warn');
     });
 
     // M4 P1.5 — vessel:firstSighting subskrypcja USUNIĘTA po playtest #4.

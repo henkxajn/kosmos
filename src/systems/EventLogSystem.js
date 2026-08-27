@@ -60,7 +60,15 @@ const TYPE_MAP = {
   //   Znalezione przy W2-7, bo powiadomienie o mobilizacji AI MUSI trafić na kanał wywiadu.
   intel:              { channel: 'intel',  severity: 'info'  },
   combat:             { channel: 'combat', severity: 'warn'  },
-  diplomacy:          { channel: 'system', severity: 'warn'  },
+  // ⚠ D2 — dyplomacja miała kanał w `LOG_COLORS`, ale NIE w `CHANNELS`, więc ~15 wpisów
+  //   (wypowiedzenia wojny, emisariusze, traktaty, pokój) lądowało w **System**, obok
+  //   komunikatów o autozapisie — i to KAŻDY z severity `warn`, czyli przyjęty sojusz
+  //   wyglądał jak ostrzeżenie. Jeden typ nie umiał rozróżnić sukcesu od porażki, bo
+  //   `TYPE_MAP` klucza się po TYPIE, a nie po zdarzeniu ⇒ trzy szczeble zamiast jednego.
+  //   ⚠ Stare wpisy z zapisu zostają na `channel: 'system'` (brak migracji, świadomie).
+  diplomacy:          { channel: 'diplomacy', severity: 'info'  },
+  diplomacy_warn:     { channel: 'diplomacy', severity: 'warn'  },
+  diplomacy_alert:    { channel: 'diplomacy', severity: 'alert' },
 
   // System
   auto_slow:          { channel: 'system', severity: 'info'  },
@@ -76,6 +84,7 @@ export const CHANNELS = {
   combat: { icon: '⚔',  labelPL: 'Walka',    labelEN: 'Combat'   },
   trade:  { icon: '💱', labelPL: 'Handel',   labelEN: 'Trade'    },
   intel:  { icon: '🔭', labelPL: 'Wywiad',   labelEN: 'Intel'    },
+  diplomacy: { icon: '🕊', labelPL: 'Dyplom.', labelEN: 'Diplo.' },
   system: { icon: '⚙',  labelPL: 'System',   labelEN: 'System'   },
 };
 
