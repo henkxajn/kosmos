@@ -573,7 +573,12 @@ export class FleetManagerOverlay {
     this._selectedClusterSystem = null;
     this._clusterHoverSystem = null;
     this._pendingSendSystemId = null;
-    this._activeTab = 'tactical';
+    // Finding 108 (c) — PARYTET RODZINY. `_switchTab('stratcom')` zeruje CZTERY pola razem, a tu
+    // zerowano tylko dwa. Ponieważ `open({tab})` przypisuje zakładkę z pominięciem `_switchTab`
+    // (Finding 160), uzbrojony tryb rozkazu przeżywał Esc + ponowne otwarcie klawiszem M/G —
+    // czyli ścieżkę, której gracz używa najczęściej.
+    this._selectedWarpShipId = null;
+    this._warpShipScrollY = 0;
     // Zwolnij kontekst WebGL galaktyki 3D (odtworzy się leniwie przy ponownym wejściu)
     if (this._galaxy3D) { this._galaxy3D.dispose(); this._galaxy3D = null; }
     this._galaxyDist = null;
@@ -2302,6 +2307,11 @@ export class FleetManagerOverlay {
       }
       case 'warp_order_cancel':
         this._selectedClusterSystem = null;
+        // Finding 108 (a) — „Anuluj" ROZBRAJA TRYB, nie tylko zapomina gwiazdę. Bez tego ponowny
+        // klik dowolnej gwiazdy znowu otwierał panel rozkazu (bo statek pozostawał wybrany),
+        // i tak w kółko. ⚠ „Wyślij" celowo NIE rozbraja (decyzja E2): marker statku przydaje się
+        // przy wysyłaniu kolejnych, a po dodaniu „Przełącz widok" do tego panelu nie ma już pułapki.
+        this._selectedWarpShipId = null;
         break;
       case 'warp_order_bg':
         break;   // absorber kliknięć tła panelu rozkazu (nie przepuszcza do gwiazd pod spodem)
@@ -6711,8 +6721,17 @@ export class FleetManagerOverlay {
     const hasPlanInfo = plan.ok || plan.reason === WARP_ROUTE_REASONS.INSUFFICIENT_FUEL;
     const feasible = plan.ok && gate.ok;
 
+    // Finding 108 (b) — WEJŚCIE DO UKŁADU NIE MOŻE ZNIKAĆ. Ten panel zastępuje panel systemu,
+    // a `cluster_switch` żył wyłącznie tam — więc uzbrojenie trybu rozkazu odcinało jedyną drogę
+    // do widoku układu i gracz zostawał w pętli (klik gwiazdy → znowu ten panel).
+    // ⚠ Bramka SKOPIOWANA z `_drawStratcomDetail`, nie wymyślona (Z4): panel rozkazu bywa otwarty
+    //   na układzie NIEZBADANYM — po to się tam wysyła statek — a wtedy nie ma dokąd wchodzić.
+    const ssMgrSwitch = window.KOSMOS?.starSystemManager;
+    const sysRegSwitch = ssMgrSwitch?.getSystem?.(sys.id);
+    const canSwitch = !!(sysRegSwitch && (sysRegSwitch.explored || sys.explored));
+
     const infoLines = hasPlanInfo ? (plan.etaYears != null ? 4 : 3) : 0;
-    const panelH = PAD + 18 + 16 + (infoLines * 14) + 18 + 22 + PAD;
+    const panelH = PAD + 18 + 16 + (infoLines * 14) + 18 + 22 + (canSwitch ? 26 : 0) + PAD;
     ctx.fillStyle = 'rgba(8,12,18,0.94)';
     ctx.fillRect(px, py, panelW, panelH);
     ctx.strokeStyle = feasible ? THEME.accent : THEME.border; ctx.lineWidth = 1;
@@ -6761,6 +6780,19 @@ export class FleetManagerOverlay {
     // Hity przycisków NA KOŃCU (priorytet nad tłem-absorberem).
     if (feasible) this._hitZones.push({ x: sendX, y: iy, w: btnW, h: btnH, type: 'warp_order_send', data: { vesselId: v.id, systemId: sys.id } });
     this._hitZones.push({ x: cancelX, y: iy, w: btnW, h: btnH, type: 'warp_order_cancel', data: {} });
+
+    // Finding 108 (b) — „Przełącz widok" także tutaj. Ten sam typ hitu i ten sam handler co
+    // w panelu systemu, więc zero nowej logiki i zero nowych kluczy i18n.
+    if (canSwitch) {
+      iy += btnH + 4;
+      const fullW = panelW - PAD * 2;
+      ctx.fillStyle = 'rgba(0,255,180,0.08)'; ctx.fillRect(px + PAD, iy, fullW, btnH);
+      ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1; ctx.strokeRect(px + PAD, iy, fullW, btnH);
+      ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.clusterSwitch'), px + PAD + fullW / 2, iy + 15);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: px + PAD, y: iy, w: fullW, h: btnH, type: 'cluster_switch', data: { systemId: sys.id } });
+    }
   }
 
   // ── Tooltip informacji o ciele niebieskim ─────────────────────────────────
