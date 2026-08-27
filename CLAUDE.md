@@ -2337,14 +2337,11 @@ T3 absorber **przechodził już przed naprawą** = strażnik regresji) · NEW `s
 **14/14** (fail-first 9/5). Sweep **178/178 OK, 0 FAIL** · `check-i18n` PASS · **zero nowych kluczy**
 (reuse `fleet.clusterSwitch`).
 
-**Otwarte:** **110** — ⚠ **naprawa NIE jest „powiększeniem strefy"** (audyt
-`docs/audit/STRATCOM_110_159_160_AUDIT.md`): `pickStarZone` liczy odległość do środka STREFY, więc
-rozciągnięcie jej **cofa Finding 109** (zmierzone: 2 przewroty dla gwiazd różniących się w osi Y;
-okno nakładania +59 %, z wachlarzem +385 %). Kotwica celowania musi być **JAWNA** w `zone.data`.
-Decyzja właściciela: **wariant (c)** — ikona wybiera STATEK, reszta strefy UKŁAD.
-**159** — ⬜ **PRZEKLASYFIKOWANY na UTAJONY**: `commandTacticalMap: false` ⇒ 6 z 7 producentów
-`map_body` nigdy nie biegnie, a siódmy (Atlas) to rozłączne wiersze z tooltipem już iterującym od
-końca. Wraca tylko z flagą — i **po 110**. · **160** ✅ ZAMKNIĘTE (sekcja niżej).
+**Domknięte:** **110** ✅ (sekcja „Ikona statku…" niżej) · **160** ✅ (sekcja „Wejście w zakładkę…"
+niżej). **159** — ⬜ **PRZEKLASYFIKOWANY na UTAJONY**: `commandTacticalMap: false` ⇒ 6 z 7
+producentów `map_body` nigdy nie biegnie, a siódmy (Atlas) to rozłączne wiersze z tooltipem już
+iterującym od końca. Wraca tylko z flagą. Audyt całej trójki:
+`docs/audit/STRATCOM_110_159_160_AUDIT.md`.
 
 ---
 
@@ -2389,7 +2386,59 @@ Pliki: `FleetManagerOverlay.open()` (3 linie), NEW keeper `src/testing/smoke/ove
 ⚠ Granica dowodu live-gate §4: brak wraków w zapisie ⇒ potwierdzone **zachowanie**, nie **treść**
 filtra wraków (ta pinowana wykonaniowo, T5).
 
-**NEXT: Finding 110** (wariant (c), kotwica jawna w `zone.data`).
+---
+
+## Ikona statku na mapie galaktyki — Finding 110 (save **v101 bez migracji**, live-gate 7/7 PASS — ZAMKNIĘTE)
+
+Plan + decyzje S1-S7: `docs/design/STRATCOM_SHIP_ICON_PLAN.md`; audyt: `docs/audit/STRATCOM_110_159_160_AUDIT.md` §1.
+
+**Jedno zdanie:** ikona własnego statku rysuje się **13 px nad gwiazdą**, a strefa klikalna sięgała
+11 px w górę — więc wyglądała na klikalną, nie była, a klik w nią był **cicho połykany**.
+
+**Wariant (c)** (podpisany): ikona przechwytuje **własny** klik (wybiera STATEK, typ
+`warp_ship_select` = **reuse** handlera z listy po lewej `:2303`), reszta strefy gwiazdy wybiera
+UKŁAD jak dotąd. Jedyny wariant spójny ze statkami **w tranzycie**, które nie mają obok siebie
+żadnej gwiazdy. `_drawStratcomOwnBlip` **zwraca** punkt kotwiczenia ikony (albo `null` dla licznika
+„+N") — żeby rysowanie i trafianie nie liczyły tej samej geometrii dwa razy (klasa 109).
+
+⚠ **POMIAR BYŁ GORSZY NIŻ REJESTR:** środek ikony nie leżał w strefie **NIGDY** (81 % ikony poza,
+także przy jednym statku); martwy pas był **też POZIOMY** (wachlarz ±22,5 px przy półszerokości
+strefy 11 ⇒ skrajne ikony **0 %** wspólnego pola); ikony w tranzycie nie miały **żadnej** strefy.
+
+⚠ **SPROSTOWANIE, które trzeba znać przed dotknięciem tej okolicy:** „kotwica celowania musi być
+JAWNA w `zone.data`" jest prawdą **wyłącznie dla naprawy przez ROZCIĄGNIĘCIE strefy** (`pickStarZone`
+liczy do środka STREFY ⇒ asymetria przesuwa kotwicę i cofa 109 — zmierzone 2 przewroty). Wariant (c)
+niczego nie rozciąga, więc strefa gwiazdy zostaje symetryczna i kotwica byłaby **no-opem**. Zamiast
+zmieniać działający kanon stoi **TRIPWIRE** (keeper T8, pin źródłowy): asertuje symetrię
+`cluster_star` i przy próbie rozciągnięcia wypisuje instrukcję ze zmierzonymi liczbami. Decyzja S1=W2.
+
+⚠ **SZEROKOŚĆ STREFY == `STRATCOM_FAN_STEP` to decyzja, nie zbieg okoliczności** (S3): strefy ikon
+**kafelkują** wachlarz ⇒ 0 par nachodzących. Szersze wymagałyby tie-breaku między ikonami, czyli
+dokładnie dwuznaczności, którą usuwał 109. Live-gate potwierdził, że 9 × 12 px wystarcza w realnym
+użyciu (wariant W2 z wyższą strefą został niewykorzystaną furtką).
+
+⚠ **CULL WIDOCZNOŚCI BYŁ OBOWIĄZKOWY** (S4): `ctx.clip()` przycina RYSOWANIE, ale `_hitZones` to
+zwykłe prostokąty — **clip ich nie dotyczy**. Pętla gwiazd ma jawny cull i **dlatego** ich strefy nie
+uciekają poza mapę; pętla blipów go nie miała. Bez niego strefa ikony z układu poza kadrem
+wylądowałaby **nad lewą listą statków warp** (rysowaną wcześniej ⇒ phantom pushowany później
+wygrałby `topMostZoneAt` i klik w wiersz listy zaznaczałby inny statek).
+
+**Zysk ponad naprawę:** lewa lista ma `break` przy przepełnieniu (`:6613`, „MVP: limit widocznych")
+⇒ statki poza widocznymi wierszami były **niewybieralne w ogóle**; ikona na mapie jest dla nich
+jedyną drogą. Tak samo statek w tranzycie warp.
+
+Pliki: `FleetManagerOverlay` (nowa stała `STRATCOM_SHIP_HIT_H`, `_drawStratcomOwnBlip` zwraca punkt,
+NEW `_pushShipBlipHitZone`), NEW keeper `src/testing/smoke/stratcom_ship_icon_smoke.mjs` **32/32**
+(fail-first **21/11**, zmierzony finalnymi pinami przez `git stash` samego kodu gry). Sweep
+**180/180 0 FAIL** · `check-i18n` PASS · **zero** zmian w `StratcomHitLogic` · zero migracji · zero
+nowych kluczy i18n.
+
+⚠ **Dwie lekcje z pisania tego keepera:** (1) `every()` i pętla par **przechodzą jałowo na pustej
+tablicy** ⇒ dwa piny świeciły zielono dokładnie tam, gdzie był defekt (pierwszy przebieg 23/9 zamiast
+21/11); asercje muszą wymagać niepustego zbioru. (2) Trójkąt statku rysuje się **niesymetrycznie**
+względem kotwicy (wierzchołek −4,5, podstawa +3,5), więc środek bboxa leży 0,5 px nad nią — ostra
+równość `at.y === drawn.y` była pinem **nieprawdziwym**; tolerancja ≤ 1 px przy skali realnego
+rozjazdu = 9 px (krok wachlarza).
 
 ---
 

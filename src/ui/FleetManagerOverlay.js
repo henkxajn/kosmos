@@ -212,6 +212,11 @@ const STRATCOM_BG_BRIGHTNESS = 0.25;  // jasność tła-mgławicy paneli Stratco
 const STRATCOM_FAN_MAX  = 6;    // powyżej → licznik „+N" zamiast kolejnych ikon
 const STRATCOM_FAN_STEP = 9;    // odstęp ikon w rządku [px]
 const STRATCOM_FAN_DY   = -13;  // wysokość rządka nad gwiazdą [px]
+// Finding 110 — strefa klikalna ikony statku. SZEROKOŚĆ == STRATCOM_FAN_STEP, i to jest decyzja
+// projektowa (S3), nie zbieg okoliczności: strefy ikon KAFELKUJĄ wachlarz, więc nie nachodzą na
+// siebie. Szersze wymagałyby tie-breaku między ikonami — czyli dokładnie tej dwuznaczności, którą
+// usuwał Finding 109. Wysokość 12 px przy ikonie 7×8 (ikona: `sy−17,5…sy−9,5` przy `FAN_DY = −13`).
+const STRATCOM_SHIP_HIT_H = 12; // wysokość strefy ikony statku [px]
 
 // Offset idx-tej ikony z `count` statków stojących w tym samym układzie (rządek wyśrodkowany).
 function _stratcomFanOffset(idx, count) {
@@ -6125,7 +6130,12 @@ export class FleetManagerOverlay {
     // także w 3D (projPt spłaszcza do z=0 i rozjechałaby się z gwiazdą o z ≠ 0).
     for (const e of ownBlips) {
       const p = e.starS ? projS(e.starS) : projPt(e.gx, e.gy);
-      if (p) this._drawStratcomOwnBlip(ctx, e, p.sx, p.sy);
+      if (!p) continue;
+      const at = this._drawStratcomOwnBlip(ctx, e, p.sx, p.sy);
+      // Finding 110 — strefa DOKŁADNIE tam, gdzie ikona stanęła. Push PO pętli gwiazd ⇒ ikona
+      // jest strefą wierzchnią, tak jak jest RYSOWANA (spójne z `topMostZoneAt`). Bramka `isBig`
+      // dla parytetu ze strefami gwiazd.
+      if (isBig) this._pushShipBlipHitZone(e, at, { x, y, w, h });
     }
 
     // Soczewka sensora (H5): pierścień zasięgu + obracający się sweep od home (gdy włączona).
@@ -6475,6 +6485,11 @@ export class FleetManagerOverlay {
   // statycznego trójkąta (selekcja = podświetlenie, NIE warunek widoczności).
   // (sx,sy) = punkt po projekcji; wachlarz doliczany tutaj, żeby oba panele miały
   // wywołanie jednolinijkowe. Statek w tranzycie ma własny punkt na trasie → bez wachlarza.
+  // Finding 110 — ZWRACA punkt, w którym ikona realnie stanęła (`{x, y}`), albo `null` dla
+  // licznika „+N" (to tekst, nie statek — bez strefy klikalnej, decyzja S6).
+  // ⚠ Zwracamy, zamiast liczyć offset drugi raz w pętli: offsety wachlarza są prywatne dla tej
+  //   funkcji, a dwa niezależne rachunki TEJ SAMEJ geometrii to dokładnie klasa, którą naprawiał
+  //   Finding 109 (rysowanie i trafianie rozjeżdżały się o kilka px i nikt tego nie widział).
   _drawStratcomOwnBlip(ctx, e, sx, sy) {
     let dx = 0, dy = 0;
     if (!e.inTransit) {
@@ -6488,12 +6503,36 @@ export class FleetManagerOverlay {
           ctx.fillText(`+${e.fanCount - STRATCOM_FAN_MAX}`, sx + o.dx + 6, sy + o.dy);
           ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
         }
-        return;
+        return null;
       }
       ({ dx, dy } = _stratcomFanOffset(e.fanIdx, e.fanCount));
     }
     if (e.v.id === this._selectedWarpShipId) this._drawMyShipMarker(ctx, sx + dx, sy + dy);
     else this._drawOwnShipTriangle(ctx, sx + dx, sy + dy);
+    return { x: sx + dx, y: sy + dy };
+  }
+
+  // Finding 110 — strefa klikalna ikony statku (wariant (c): ikona wybiera STATEK, reszta strefy
+  // gwiazdy wybiera UKŁAD). Typ `warp_ship_select` = REUSE handlera z listy po lewej (`:2303`),
+  // więc „zaznacz statek" znaczy to samo na mapie i na liście — zero nowego dispatchu.
+  //
+  // ⚠ WYDZIELONE Z PĘTLI, żeby dało się pinować WYKONANIEM: `_drawStratcomGalaxy` wymaga pełnej
+  //   sceny (galaxyData, projekcje, 3D), a ta metoda nie wymaga niczego.
+  // ⚠ CULL JEST OBOWIĄZKOWY, nie kosmetyczny (decyzja S4). `ctx.clip()` w `_drawStratcomGalaxy`
+  //   przycina RYSOWANIE, ale `_hitZones` to zwykłe prostokąty — clip ich NIE dotyczy. Pętla
+  //   gwiazd ma ten sam cull i DLATEGO strefy gwiazd nigdy nie uciekają poza mapę; pętla blipów
+  //   go nie miała, bo dotąd tylko rysowała. Bez culla strefa ikony z układu poza kadrem
+  //   wylądowałaby NAD LEWĄ LISTĄ statków warp — a że lista rysuje się WCZEŚNIEJ, phantom
+  //   pushowany PÓŹNIEJ wygrałby `topMostZoneAt` i klik w wiersz listy zaznaczałby inny statek.
+  _pushShipBlipHitZone(e, at, view) {
+    if (!at || !e?.v?.id || !view) return;
+    const { x, y, w, h } = view;
+    if (at.x < x - 20 || at.x > x + w + 20 || at.y < y - 20 || at.y > y + h + 20) return;
+    const zw = STRATCOM_FAN_STEP, zh = STRATCOM_SHIP_HIT_H;
+    this._hitZones.push({
+      x: at.x - zw / 2, y: at.y - zh / 2, w: zw, h: zh,
+      type: 'warp_ship_select', data: { vesselId: e.v.id },
+    });
   }
 
   // Statyczna ikona własnego statku — mniejszy brat trójkąta z _drawMyShipMarker (bez

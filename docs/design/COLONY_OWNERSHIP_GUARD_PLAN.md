@@ -1346,7 +1346,30 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      naprawianego. Pin T3 trzyma to w obie strony.
      ⚠ Hover przy okazji przestał podświetlać gwiazdy **pod panelem** (E4). `map_body` **nietknięty**
      — ta sama klasa, ale niemierzona i na głównej mapie taktycznej (Finding 159).
-110. 🟠 **Mapa STRATCOM — MECHANIZM 3: ikona statku w martwym pasie, klik połykany bez śladu.**
+110. ✅ **ZAMKNIĘTE 2026-08-27** (plan `docs/design/STRATCOM_SHIP_ICON_PLAN.md`, wariant **(c)** +
+     decyzje S1=W2 / S2-S7=W1; keeper `stratcom_ship_icon_smoke` **32/32**, fail-first 21/11;
+     sweep 180/180; live-gate **7/7 PASS**).
+     Naprawa: ikona przechwytuje **własny** klik — strefa `warp_ship_select` (reuse handlera z listy
+     po lewej, `:2303`) o szerokości **== `STRATCOM_FAN_STEP`**, więc strefy ikon **kafelkują**
+     wachlarz i nie nachodzą na siebie. `_drawStratcomOwnBlip` **zwraca** punkt kotwiczenia ikony
+     (albo `null` dla licznika „+N"), żeby trafianie i rysowanie nie liczyły geometrii dwa razy.
+     Strefa gwiazdy **nietknięta** — kanon 109 bez zmian.
+     ⚠ **SPROSTOWANIE do korekty wyżej:** „kotwica musi być JAWNA" było prawdziwe **wyłącznie dla
+     naprawy przez rozciągnięcie strefy**. Wariant (c) niczego nie rozciąga, więc strefa gwiazdy
+     zostaje symetryczna i `z.x + z.w/2` **nadal** jest środkiem glifu — kotwica byłaby dziś
+     no-opem. Zamiast zmieniać działający kanon postawiony został **TRIPWIRE** (keeper T8, pin
+     źródłowy): asertuje symetrię strefy `cluster_star` i przy próbie rozciągnięcia wypisuje
+     instrukcję razem ze zmierzonymi liczbami. Decyzja S1=W2.
+     ⚠ **CULL WIDOCZNOŚCI BYŁ OBOWIĄZKOWY, nie kosmetyczny:** `ctx.clip()` przycina RYSOWANIE, ale
+     `_hitZones` to zwykłe prostokąty — clip ich nie dotyczy. Pętla gwiazd ma jawny cull i dlatego
+     ich strefy nie uciekają poza mapę; pętla blipów go nie miała. Bez dołożenia strefa ikony
+     z układu poza kadrem wylądowałaby **nad lewą listą statków warp** (rysowaną wcześniej ⇒
+     phantom pushowany później wygrałby `topMostZoneAt`). Pin T7.
+     ⚠ **ZYSK PONAD NAPRAWĘ:** lewa lista ma `break` przy przepełnieniu (`:6613`, „MVP: limit
+     widocznych") ⇒ statki poza widocznymi wierszami były **niewybieralne w ogóle**; ikona na mapie
+     jest dla nich jedyną drogą. Tak samo statek **w tranzycie warp** — dotąd bez żadnej strefy.
+     Opis defektu (zachowany):
+     **Mapa STRATCOM — MECHANIZM 3: ikona statku w martwym pasie, klik połykany bez śladu.**
      Ikona rysowana `STRATCOM_FAN_DY = -13` px nad gwiazdą (`:212`), o połowie wysokości ~4.5, czyli
      `sy−17.5…sy−9.5`; strefa `cluster_star` sięga `sy−11…sy+11` (`hitR = max(r+5, 11)`, a `r` ≤ 7 wg
      `:6051`) ⇒ **górna połowa ikony leży poza jakąkolwiek strefą**. Sama ikona **nie rejestruje strefy**
