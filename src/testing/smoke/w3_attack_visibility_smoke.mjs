@@ -27,6 +27,7 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { NotificationCenter } from '../../systems/NotificationCenter.js';
+import { isPlayerParticipant } from '../../utils/BattleSides.js';   // kanon tożsamości stron (F155/F157)
 import PL from '../../i18n/pl.js';
 import EN from '../../i18n/en.js';
 
@@ -134,8 +135,25 @@ console.log('T4 — ⚠ `empireId: \'player\'` na uczestniku-graczu (naprawia 3 
     'pomijał — brak auto-slow, brak Dziennika, a przy przegranej gracz tracił flotę bez słowa');
 
   const ui = stripComments(readFileSync(join(SRC, 'scenes', 'UIManager.js'), 'utf8'));
-  assert(/empireId\s*===\s*'player'/.test(ui),
-    'T4 KONTROLA PINU: konsument NAPRAWDĘ filtruje po tym polu — inaczej stempel niczego nie naprawia');
+
+  // ⚠ KONTROLA PINU PRZEPIĘTA NA KANON (Finding 157, 2026-08-27). Wcześniej stało tu
+  //   `/empireId\s*===\s*'player'/.test(ui)` — grep po LITERALE w konsumencie. Ta forma padła,
+  //   gdy `UIManager` zaczął pytać o tożsamość przez `utils/BattleSides.js`, choć stempel ma się
+  //   dobrze i ma realnego konsumenta.
+  //   ⚠ I TU JEST LEKCJA, nie tylko refaktor: TAMTA WERSJA ŚWIECIŁA NA ZIELONO PRZEZ CAŁY CZAS,
+  //   GDY KONSUMENT BYŁ ZEPSUTY — literał istniał, ale wewnątrz KONIUNKCJI
+  //   `type === 'vessel_group' && empireId === 'player'`, która kształt EAH odrzucała (Finding 157).
+  //   Pin dowodził OBECNOŚCI NAPISU, a nie PRZYJĘCIA KSZTAŁTU. Dlatego teraz: delegacja pinowana
+  //   źródłowo + akceptacja stempla pinowana WYKONANIEM na prawdziwym kształcie z EAH.
+  assert(/import\s*\{[^}]*isPlayerParticipant[^}]*\}\s*from\s*'\.\.\/utils\/BattleSides\.js'/.test(ui)
+      && /isPlayerParticipant\s*\(\s*result\.participant/.test(ui),
+    'T4 KONTROLA PINU: konsument czyta tożsamość przez KANON (import + użycie na uczestniku bitwy)');
+  assert(isPlayerParticipant({ type: 'player', empireId: 'player', systemId: 'sys_home' }) === true
+      && isPlayerParticipant({ type: 'vessel_group', empireId: 'emp_001' }) === false,
+    'T4 KONTROLA PINU: …a kanon NAPRAWDĘ przyjmuje stempel i odrzuca imperium (WYKONANIE, nie grep)');
+  assert(((p) => p?.type === 'vessel_group' && p?.empireId === 'player')(
+      { type: 'player', empireId: 'player' }) === false,
+    'T4 KONTROLA PINU: stara koniunkcja na TYM SAMYM stemplu odpadała — dowód, że sam grep nie wystarczał');
 }
 
 // ── T5 — natywny alert nie żyje ─────────────────────────────────────────────

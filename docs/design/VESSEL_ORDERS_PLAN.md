@@ -1302,6 +1302,23 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      (S25), ale ten konsument pyta **też** o `type` — stempel go nie uratował. Naprawa = **dodanie**
      linii, czyli zmiana zachowania ⇒ własny podpis. Kanon `isPlayerParticipant`
      (`utils/BattleSides.js`) jest gotowy do użycia.
+     **AUDYT 2026-08-27** — `docs/audit/BATTLE_RESULT_CLASSIFICATION_AUDIT.md`. Trzy sprostowania do
+     tego wpisu: (a) numer linii to **`:1383`**, nie `:1356`; (b) zasięg obejmuje **trzech**
+     producentów, nie samą obronę stolicy — `EnemyAttackHandler:181`, `WarSystem.forceBattle:416`
+     (żywy, przycisk `WarOverlay:354`) i `_fleetArrived:550` (stare zapisy po W3-8); (c) ⚠ **skutek
+     jest INNY, niż mówi tytuł**: klasyfikacja wyniku **JEST** dowożona — pełnoekranowym, PAUZUJĄCYM
+     banerem `showBattleOutcome` (`BattleIntroModal:215`, werdykt poprawny po 155) oraz linią
+     `log.battleLine` z `GameScene:2380` (z nazwami stron i **poprawną** severity). Brakuje
+     **wyłącznie auto-slow** — i to jest cięższa połowa, bo `vessel:engaged` (jedyne inne wejście
+     auto-slow przy walce) ma **dokładnie jednego producenta: `DSCS:395`**, więc bitwa o stolicę nie
+     zwalnia czasu w ŻADNYM punkcie swojego cyklu życia, a po kliknięciu OK gra wraca do prędkości
+     sprzed bitwy — prosto w desant (`InvasionSystem._onVesselGroupVictory:198`).
+     **PODPISANY W3, ZAMKNIĘTE 2026-08-27:** auto-slow przez kanon + **gałąź `log.m4.battleResolved*`
+     WYCOFANA** (`GameScene` jedynym narratorem). Poszerzenie filtru odrzucone: rozmnażałoby drugiego,
+     gorszego narratora (surowe `battleId`, `TYPE_MAP.combat` → płaskie `warn` **nawet dla
+     zwycięstwa**) wbrew linii 150/155, a przy potyczce bez wojny dawałoby **trzecią** linię (162).
+     Przy okazji skasowany polski literał `'gracz'`/`'wróg'` wstrzykiwany do klucza i18n (`:1390`,
+     klasa Findingu 113). Keeper `battle_result_classification_smoke`.
 
 158. 🟠 **`BattleIntroModal` ma zahardkodowany polski i myli role z kolejnością.** `:130,139,226-231`
      wypisują `AGRESOR` / `OBROŃCA` / `ZWYCIĘSTWO` po polsku (gracz EN widzi polskie napisy), a same
@@ -1309,6 +1326,66 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      zwykłe indeksy uczestników. Po naprawie 155 pola niosą już poprawne nazwy stron, więc kłamią
      tylko nagłówki. ⚠ Ta sama klasa co **Finding 113**: `check-i18n` pyta o klucze w `t()`, a nie
      o to, czy każdy widoczny napis przez `t()` przechodzi — literał jest dla niego niewidzialny.
+     **Rozszerzone o pomiar 163** (niżej) — baner wyniku to DRUGI blok literałów w tym samym pliku.
+
+161. 🟠 **Baner bitwy ODPAUZOWUJE ręcznie zapauzowaną grę.** `BattleIntroModal.js:41` i `:218`
+     zapisują `wasPaused: window.KOSMOS?.timeSystem?.paused ?? false`, a `TimeSystem` ma pole
+     **`isPaused`** (`:22`) i pola `paused` **nie ma nigdzie w klasie** (grep) ⇒ `wasPaused` jest
+     **zawsze `false`** ⇒ `_restoreTime:201-206` **zawsze** emituje `time:play`. Skutek: bitwa
+     rozstrzygnięta przy ręcznej pauzie po kliknięciu OK **wznawia grę, o której gracz nie prosił**.
+     ⚠ Osiągalność wąska i **NIEZMIERZONA na żywo**: przy pauzie nie ma tików, więc EAH/DSCS nie
+     wystrzelą — realną drogą zostaje `forceBattle` z `WarOverlay:354` (klik, nie tik). Znalezione
+     przy audycie 157, poza jego zakresem (dotyczy pauzy, nie klasyfikacji).
+
+162. 🟠 **Potyczka bez wojny daje DWIE linie Dziennika, z czego jedna jest zaszyta po polsku.**
+     Gałąź EAH bez wojny (`EnemyAttackHandler:214-219`) pisze **własny** wpis (`⚔ Bitwa w ${systemId}:
+     … Zwycięzca: ${…'wróg'/'gracz'/'remis'}`) i **dopiero potem** emituje `battle:resolved` `:228`,
+     na którym `GameScene:2380` dokłada `log.battleLine`. ⇒ dublet narracji **niezależny od 150**
+     (to dwaj narratorzy, nie podwójna emisja) + gracz EN dostaje polski meldunek. Klasa Findingu
+     113/158. ⚠ **To był argument przeciw poszerzeniu filtru w 157** (byłaby trzecia linia); naprawa
+     W3 go **nie usuwa** — dublet EAH↔GameScene zostaje. Kształt naprawy: skasować wpis w EAH
+     (`GameScene` już go pokrywa) albo przenieść go na `t()`.
+
+163. 🟠 **`showBattleOutcome` — drugi blok zaszytego polskiego w `BattleIntroModal`** (dodatek do 158).
+     `:226-231` (`ZWYCIĘSTWO` / `PORAŻKA` / `REMIS`) oraz `:288-292` (`Tur:` / `Straty:` /
+     `'Agresor'` / `'Obrońca'` jako fallbacki). ⚠ Wpis jest **osobny od 158**, bo ta ścieżka pokazuje
+     się **także wtedy, gdy gracz pominął kino** (`_tryShowNextBattle:3830` — gałąź `skip`) **oraz**
+     dla KAŻDEJ bitwy deep-space (`:3796`, `fcCombatFx`) ⇒ to najczęściej oglądane okno walki w grze,
+     nie wariant. Naprawa 157/W3 świadomie go nie tyka (osobny podpis: i18n + nazwy nagłówków).
+
+164. 🟠 **Przełącznik auto-slow nie ma producenta — gracz NIE MOŻE go wyłączyć.**
+     `TimeSystem:34` nasłuchuje `time:autoSlowToggle`, a **zdarzenia tego nie emituje NIKT w całym
+     `src/`** (zmierzone przeglądem plików produkcyjnych, pin `battle_result_classification_smoke`
+     T7). `_autoSlowEnabled` startuje jako `true` (`:25`) i **nie jest serializowane**, więc
+     w normalnej rozgrywce jest true ZAWSZE. Menu dolnego paska ma „Auto-pauza…", ale to **inny
+     system** (`AutoPauseSystem`, który `battle:resolved` w ogóle nie słucha) — pozostały też
+     resztki po przełączniku: `time:display` wciąż wozi pole `autoSlow`, `UIManager._timeState.autoSlow`
+     domyśla się `true` i jest przekazywane do `BottomBar.hitTest`.
+     ⚠ **ZNALEZIONE PRZEZ BŁĄD W MOIM GATE'CIE, nie przez pomiar kodu**: krok 4 live-gate'u 157 kazał
+     właścicielowi „wyłączyć auto-slow w menu" i uznać dalsze zwalnianie za porażkę naprawy. Właściciel
+     zgłosił 🔴, i miał rację co do OBSERWACJI — ale przyczyną nie był defekt naprawy, tylko **krok
+     niewykonalny**: przełącznika nie ma. Lekcja jest dokładnie tą, którą repo już zapisało
+     (`validate-gate-oneliners-on-live-engine`), rozszerzoną: **weryfikuj także ISTNIENIE elementu UI,
+     który każesz komuś kliknąć — nie tylko składnię jednolinijkowca**. Skutek uboczny: asercja
+     „guard wygrywa z wolą gracza" w keeperze pinuje **model**, nie wybór gracza — jest tak
+     oznaczona, a osobny pin zapłonie, gdy przełącznik zyska nadawcę.
+     **Decyzja o zakresie NIEPODJĘTA** (podłączyć przełącznik vs. wyciąć resztki) — poza podpisem 157.
+
+165. 🟠 **Obrona orbitalna nie ma PRZEBIEGU — rozstrzyga się jednym wywołaniem, bez sygnału na
+     starcie.** `EnemyAttackHandler._onVesselArrived` zbiera przybyłych przez okno
+     `BATTLE_BATCH_WINDOW_MS = 500` (ms REALNE) i woła `_resolveBatchedBattle` → **jedno**
+     `resolveBattle` (abstrakcyjny `BattleSystem`) → `battle:resolved`. Nie ma `vessel:engaged`, nie
+     ma rund, nie ma nic na mapie. Dla porównania DSCS: `startEngagement` → **`vessel:engaged`
+     (auto-slow NA STARCIE, `TimeSystem:51`)** → `_tickEncounter` co `ROUND_INTERVAL_MS = 110`
+     (~2,2 s realne) → `_finalizeBattle`. ⇒ **walka o stolicę jest dla gracza wyłącznie WYNIKIEM PO
+     FAKCIE**, a walka w głębokim kosmosie ma widoczny przebieg i czas na reakcję.
+     ⚠ Istniejący popup „⚔ WYKRYTO WROGĄ JEDNOSTKĘ" (`GameScene:2646`, `vessel:firstSighting` +
+     `_triggerAutoSlow` + pauza) **NIE jest tym samym**: to detekcja obserwatorium, **raz na statek**,
+     nie sygnał starcia — drugie uderzenie znanym już okrętem nie da nic.
+     ⚠ **To NIE jest porażka naprawy 157** (potwierdzone na gate'cie): 157 dowiózł jedyny sygnał
+     czasowy, jaki ta ścieżka w ogóle ma, i z konstrukcji ląduje on na rozstrzygnięciu — bo wcześniej
+     nie ma czego obserwować. Zamknięcie = albo sygnał przed bitwą (odpowiednik `vessel:engaged` dla
+     EAH), albo przeniesienie obrony orbitalnej na potok DSCS. **Osobny podpis, własny pomiar.**
 
 > ⚠ **Rozstrzygnięte przy okazji, ŻEBY NIE WRACAŁO:** wpisy „N tur" pochodzą **wyłącznie**
 > z `BattleSystem.resolveBattle` (`MAX_TURNS = 30`); **`DeepSpaceCombatSystem` NIE zwraca pola

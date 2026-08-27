@@ -19,6 +19,7 @@ import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/Buil
 import { SHIPS } from '../data/ShipsData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { isPlayerColonyEvent } from '../utils/JournalScope.js';   // zasięg właścicielski Dziennika
+import { isPlayerParticipant } from '../utils/BattleSides.js';    // KTO stał po której stronie bitwy
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
@@ -1376,26 +1377,37 @@ export class UIManager {
       this._log(t('log.m4.retreatIssued', vessel?.name ?? '?', targetName ?? '?'), 'combat');
     });
 
-    // Bitwa zakończona — popup-like log, klasyfikuj wynik.
-    EventBus.on('battle:resolved', ({ battleId, result }) => {
+    // Bitwa zakończona — AUTO-SLOW. Narrację prowadzi WYŁĄCZNIE `GameScene` (Finding 157, W3).
+    //
+    // ⚠ FILTR PYTAŁ O KONIUNKCJĘ `type === 'vessel_group' && empireId === 'player'`, a obrona
+    //   orbitalna opisuje gracza jako `{ type: 'player' }` (`EnemyAttackHandler:181`) ⇒ predykat
+    //   odpadał na `type`. Powstał w M4 P1, gdy jedynym producentem bitew „z graczem" była rodzina
+    //   vessel-combat; W3-7 dostemplował `empireId`, żeby domknąć klasę S25 — ale ten konsument
+    //   pyta TEŻ o `type`, więc stempel go nie uratował. Ten sam defekt dotyczył `forceBattle`
+    //   i `_fleetArrived` (`{type:'empire'}` vs `{type:'player'}`) — trzej producenci, jedna
+    //   koniunkcja. Teraz tożsamość idzie przez KANON (`utils/BattleSides.js`).
+    //
+    // ⚠ AUTO-SLOW JEST TU CAŁĄ WARTOŚCIĄ, nie dodatkiem. `vessel:engaged` — jedyne inne wejście
+    //   auto-slow przy walce — ma DOKŁADNIE JEDNEGO producenta (`DeepSpaceCombatSystem:395`),
+    //   więc bitwa o stolicę nie zwalniała czasu w ŻADNYM punkcie swojego cyklu życia. Baner
+    //   wyniku wprawdzie pauzuje grę, ale `_restoreTime` emituje `time:play` BEZ zmiany mnożnika
+    //   (pauza i mnożnik są ortogonalne — `setMultiplier` nie dotyka `isPaused`), więc po
+    //   kliknięciu OK gracz wracał do prędkości sprzed bitwy — prosto w desant
+    //   (`InvasionSystem._onVesselGroupVictory`).
+    //
+    // ⚠ DRUGA LINIA DZIENNIKA WYCOFANA (W3, podpisane): `log.m4.battleResolved*` był DRUGIM
+    //   narratorem tej samej bitwy — z surowym `battleId` w tekście dla gracza i płaską wagą
+    //   (`TYPE_MAP.combat` → `warn` NAWET dla zwycięstwa) — obok lepszego `log.battleLine`
+    //   z `GameScene` (nazwy stron, poprawna severity, i18n). Poszerzenie filtru zamiast
+    //   wycofania rozmnażałoby dublet wbrew linii 150/155, a przy potyczce bez wojny dawałoby
+    //   TRZECIĄ linię (Finding 162). Razem z gałęzią znikł polski literał `'gracz'`/`'wróg'`
+    //   wstrzykiwany do klucza i18n (klasa Findingu 113). Klucze zostają w słownikach —
+    //   ich skasowanie to osobna higiena.
+    EventBus.on('battle:resolved', ({ result }) => {
       if (!result) return;
-      // Filtruj: tylko gdy player jest stroną.
-      const isPlayerSide = (p) => p?.type === 'vessel_group' && p?.empireId === 'player';
-      const playerA = isPlayerSide(result.participantA);
-      const playerB = isPlayerSide(result.participantB);
-      if (!playerA && !playerB) return;
-      const playerSide = playerA ? 'A' : 'B';
+      if (!isPlayerParticipant(result.participantA)
+        && !isPlayerParticipant(result.participantB)) return;
       this._triggerAutoSlowIfTime(t('log.autoSlowBattle'));
-      if (result.retreated) {
-        const retreatedSide = result.retreated === playerSide ? 'gracz' : 'wróg';
-        this._log(t('log.m4.battleResolvedRetreat', battleId ?? '?', retreatedSide), 'combat');
-      } else if (result.winner === 'draw') {
-        this._log(t('log.m4.battleResolvedDraw', battleId ?? '?'), 'combat');
-      } else if (result.winner === playerSide) {
-        this._log(t('log.m4.battleResolvedVictory', battleId ?? '?'), 'combat');
-      } else {
-        this._log(t('log.m4.battleResolvedDefeat', battleId ?? '?'), 'combat');
-      }
     });
 
     // Wycofanie nieudane. ⚠ D-FDj — POWÓD BYŁ WYPISYWANY JAKO SUROWY SLUG (`no_friendly_planet`),
