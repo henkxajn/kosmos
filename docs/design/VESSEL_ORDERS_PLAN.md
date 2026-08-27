@@ -1392,3 +1392,66 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
 > `turns` w ogóle**, więc odczyty `29 tur` / `10 tur` **nie są** przekroczeniem `MAX_ROUNDS = 20`
 > i nie dotyczą warstwy naprawianej w `131cc2e`. Dwa wpisy o różnych liczbach = **dwie realne
 > bitwy** (paczka 2 + pojedynczy rajder), nie duplikat.
+
+---
+
+## Findings z audytu Dziennika (2026-08-27) — języki, surowe kody, poprawność
+
+Audyt read-only na zgłoszenie właściciela („*w Dzienniku pojawiają się informacje w dwóch
+językach… czasami `sys_home` albo `sys_xxx` zamiast nazwy… wiele kwestii w formie kodu*").
+Pełny raport z pomiarami: `docs/audit/EVENT_LOG_AUDIT.md`. Keeper: `event_log_entry_smoke` 34.
+Commity: `0aacf8c` (167/168/169) · `1483a25` (D2) · `ffc72fb` (E+F, 170/171/173/175) ·
+`8fe43eb` (172/174/176).
+
+**Zmierzone wejściowo:** 119 miejsc pisania do Dziennika · **29 z literałem omijającym `t()`**
+(z czego **26 POLSKICH**) · **≥20 z surowym id/slugiem** · słowniki `pl=en`, 0 luk,
+0 niezgodnych placeholderów · `check-i18n` **PASS**.
+
+⚠ **DLACZEGO TO NIE BYŁA „PRACA TŁUMACZENIOWA".** Właściciel gra z **angielskim Dziennikiem**
+(memory `gate-filters-language-agnostic`), więc 26 polskich literałów pokazywało mu się po
+polsku **bez żadnego przełączania języka**. Teza „gram w jednym języku, więc problemy
+tłumaczenia mnie nie dotyczą" była fałszywa **dokładnie w jego przypadku** — i to ona
+uzasadniała zejście z zakresu, dopóki nie została zmierzona.
+
+⚠ **MARTWY KĄT NARZĘDZIA (ta sama klasa co Finding 113).** `check-i18n` pyta „*czy klucz użyty
+w `t()` istnieje w pl i en*", a **nie** „*czy każdy widoczny napis przechodzi przez `t()`*".
+Literał w `push({ text: … })` jest dla niego **niewidzialny**, więc bramka świeciła na zielono
+przy 29 literałach. ⇒ kandydat na poprawkę **samego narzędzia**.
+
+| # | rzecz | status |
+|---|---|---|
+| **165** | Tekst wpisu renderowany PRZY EMISJI i persystowany (200 wpisów w save) ⇒ po zmianie języka Dziennik jest dwujęzyczny **z konstrukcji**. Zmierzone wykonaniem: `restore()` nie tłumaczy ponownie. | ⬜ **ZAPARKOWANY** świadomie (decyzja właściciela 2026-08-27) — dotyczy wyłącznie gracza, który PRZEŁĄCZA język; jedyna pozycja z bumpem save'a. Zamknięcie = model `{key, args}` + fallback `text` dla starych zapisów. |
+| **166** | `EnemyAttackHandler` ×4 — polskie literały + surowe `sys_xxx`, a gałąź bez wojny **dublowała** linię bitwy (własny wpis + kanoniczny `log.battleLine` z `GameScene`). Jedna potyczka = dwa wpisy, dwa formaty, dwa języki. | ✅ `ffc72fb` — własny wpis usunięty, narrator jeden (spójne z 155). |
+| **167** | `GameScene:2388` liczyło nazwę układu jako `sysId ?? '?'`, mimo że kanon `systemDisplayName` jest **zaimportowany w tym samym pliku** (`:15`) i użyty 2500 linii niżej (`:4911`). | ✅ `0aacf8c`. ⚠ Gałąź macierzysta ZOSTAJE na `homePlanet.name` — nazwa PLANETY w miejscu nazwy UKŁADU, ta sama klasa, ale zmiana widoczna w każdej bitwie u siebie ⇒ **osobna decyzja**. |
+| **168** | `EventLogSystem.restore` nie zasiewał `_currentYear`, a `time:display` nie leci na pauzie (`TimeSystem:70`) ⇒ wpisy tuż po wczytaniu miały `year = 0` i renderowały się jako `---`. | ✅ `0aacf8c` — seed z ostatniego wpisu (nie z `window.KOSMOS`: moduł ma zostać pinowalny wykonaniem). |
+| **169** | `TYPE_MAP` bez `poi_alert`/`poi_rally` ⇒ alarm pikiety lądował w kanale **System**. ⚠ Objaw podstępny: wpis miał poprawny KOLOR (z `LOG_COLORS`) i wyglądał na dobrze skierowany. Ta sama cicha usterka, którą W2-7 naprawiło dla intel/combat/diplomacy — te dwa typy pominięto. Osobno: brak kanału `diplomacy` w `CHANNELS`. | ✅ `0aacf8c` + `1483a25` (D2: kanał + trzy szczeble severity — jeden typ nie umiał odróżnić sojuszu od wypowiedzenia wojny, oba były `warn`). |
+| **170** | 29 literałów omijających `t()` w 5 plikach; 2 wpisy **dwujęzyczne w jednej linii** („ostatnia pozycja `[unknown]`", „osiągnął `waypoint` 3/5"); `ship.namePL` na twardo; `toLocaleString('pl-PL')` na twardo; surowe `emp_003` w alarmie pikiety. | ✅ `ffc72fb` + `8fe43eb`. Nazwa imperium **bramkowana poziomem wywiadu** (wzór `NotificationCenter._empireLabel`) — pikieta nie rozdaje tożsamości za darmo. |
+| **171** | Polskie `label` uczestników bitwy (EAH/WarSystem/DSCS/VCS) wchodzą przez `participantName` (`BattleSides:46`) do **przetłumaczonej** `log.battleLine`. ⚠ Strona GRACZA jest maskowana przez `playerLabel`, strona WROGA **nie** — i dlatego to umykało: gracz EN czytał „Battle in …: Flota wroga (3 statków) vs Player". | ✅ `ffc72fb`. ⚠ `BattleSides` pozostaje **bezjęzykowy** (etykiety parametrem) — jego testowalność pod node zależy od braku importu i18n. |
+| **172** | `EventLogOverlay` rysował „↗" i hit-zonę dla **każdego** wpisu z `entityRef`, a bitwy stemplują go id UKŁADU — a układy **nie są encjami** (jedyny `entities.set` to `EntityManager:25`) ⇒ wiersz wyglądał na klikalny i kończył na `console.warn`. | ✅ `8fe43eb` (`_isNavigable`) + usunięty `console.log` na każde kliknięcie. |
+| **173** | `combat:round` pisał wpis na **każdą rundę**; ring buffer ma 500 miejsc ⇒ ~26 starć naziemnych wymiatało CAŁĄ wcześniejszą historię. Bilans i tak niesie `combat:hexResolved`. | ✅ `ffc72fb` — model „start + podsumowanie" zamiast per-runda. |
+| **174** | 8 wpisów PL z angielskimi słowami **w samym słowniku** (`vessel`, `vessels`, `waypoint`, `retreat`, `friendly`, `Engage`, `pursue/intercept`), w tym **notatka deweloperska** wystawiona graczowi jako opis jednostki („placeholder — fleet-group w osobnym projekcie"). | ✅ `8fe43eb`. Pin **wykonaniowy** (T5) na czystość językową kluczy Dziennika/POI/doktryn. |
+| **175** | Trzy kopie rezolwera nazwy układu o różnej jakości; `ORDER_ACTIVITY_KEYS`/`MISSION_ACTIVITY_KEYS` (kompletne, PL+EN, z `generic`) **prywatne** w `FleetPictureLogic` ⇒ Dziennik wypisywał `moveToPoint`; `resource.*` istniały od Etapu 6.1, a raporty pokazywały `minerals:12`. | ✅ `ffc72fb` — eksport zamiast trzeciej kopii; surowce/towary przez `getName`/`resource.*`; casus belli przez `CASUS_BELLI`. |
+| **176** | `EventLogOverlay`/`EventLogDrawer` z własnymi ternary `pl ? … : …` (7 miejsc); jeden napis — „Dziennik niedostępny…" — **bez wariantu EN w ogóle**. | ✅ `8fe43eb`. `getLocale` ZOSTAJE dla etykiet kanałów: `CHANNELS` trzyma `labelPL`/`labelEN` jako DANE. |
+
+### ⚠ Lekcja procesowa z tej rundy — pin, który świecił zielono dokładnie na defekcie
+
+Pierwsza wersja pinu T6 szukała `getLocale() === 'pl' ? '…'`. Stary kod przypisywał najpierw
+`const pl = getLocale() === 'pl'` i **dopiero potem** robił `pl ? … : …` ⇒ **pin przechodził
+na kodzie sprzed naprawy** (zmierzone na treści z `HEAD`). Przepisany na pomiar **SKUTKU** —
+„zero polskich literałów w widoku" — pada teraz na starym kodzie z 6 trafieniami.
+To trzeci raz w tym repo, gdy jałowy pin złapała dopiero **kontrola pinu**
+(por. `pin-must-name-the-live-path`, `threshold-scale-false-green`).
+
+### Otwarte / świadomie poza zakresem
+
+- **165** (wyżej) — jedyna pozycja z bumpem save'a.
+- **167** gałąź macierzysta — nazwa planety w miejscu nazwy układu.
+- **Poprawka `check-i18n`** — wykrywanie literałów w `push({text})` / `fillText` poza `t()`.
+  Bez niej 30. literał wejdzie przy zielonej bramce; zasięg w reszcie UI **niezmierzony**.
+- **`fleet.clusterGate` = „🌀 Jump Gate"** — zostawione świadomie (nazwa własna konstrukcji).
+- **Niezweryfikowane:** czy `combat:round`/`combat:hexResolved` mogą odpalić dla walki
+  AI-vs-AI (handler zakłada udział gracza; `CombatSystem:128` domyśla `u.owner ?? 'player'`).
+- ⚠ **Wszystkie cztery commity BEZ live-gate'u** — na wyraźne polecenie właściciela.
+  I **naprawy nie cofają wpisów JUŻ ZAPISANYCH**: 200 wpisów siedzi w save jako gotowy tekst,
+  więc stare linie zostaną w starej postaci, aż wypadną z ring buffera. Bez tego zastrzeżenia
+  gate przeczyta to jako „naprawa nie działa" (por. `reasonless-failure-reads-as-unfixed`).

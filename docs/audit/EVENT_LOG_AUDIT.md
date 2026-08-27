@@ -8,6 +8,11 @@
 pojawiają się dane nt. układów np. `sys_home` albo inne `sys_xxx` zamiast nazwy planety/ciała/układu.
 Wiele innych kwestii też jest w formie kodu zamiast nazw."*
 
+> ⚠ **STAN: ZREALIZOWANY** (2026-08-27, cztery commity — patrz §11 na końcu). Ten dokument
+> zostaje **migawką sprzed naprawy**: §1-§7 opisują stan zastany, §8-§9 są **planem, który
+> został wykonany z jedną świadomą zmianą zakresu** (Finding 165 zaparkowany). Rejestr
+> zamknięcia: `docs/design/VESSEL_ORDERS_PLAN.md` §Findings z audytu Dziennika.
+
 **Werdykt jednym zdaniem:** oba objawy są **realne i odtwarzalne**, ale mają **cztery różne
 przyczyny źródłowe**, a nie jedną — i żadna z nich nie leży w słownikach tłumaczeń, które są
 w zaskakująco dobrym stanie.
@@ -415,3 +420,51 @@ Najwyższy zajęty numer w repo to **164**. Nowe findingi z tego audytu:
   (część ścieżek — POI, patrol, eskorta — może być rzadka lub uśpiona).
 - **Zero zmian w kodzie gry.** Ten dokument i dwa skrypty skanujące są jedynymi artefaktami;
   skrypty leżą poza repo (scratchpad sesji).
+
+---
+
+## 11. WYKONANIE (2026-08-27) — co poszło, czego świadomie nie ruszono
+
+| commit | zakres | findingi |
+|---|---|---|
+| `0aacf8c` | nazwa układu w linii bitwy · rok wpisu po wczytaniu · kanał POI | 167, 168, 169 |
+| `1483a25` | kanał dyplomacji + trzy szczeble severity (D2) · casus belli po nazwie | 169 |
+| `ffc72fb` | 26 literałów → `t()` · etykiety stron bitwy · nazwy zamiast kodów · agregacja log walki | 166, 170, 171, 173, 175 |
+| `8fe43eb` | martwy klik · chrome widoków · angielszczyzna w słowniku PL | 172, 174, 176 |
+
+**Bilans:** 8 z 9 pozycji planu §8 zrobione. Pozycja **#8 (Finding 165)** — model `{key, args}`
+zamiast `text` — **zaparkowana świadomie**: dotyczy wyłącznie gracza, który PRZEŁĄCZA język,
+i jest jedyną, która dotyka formatu zapisu.
+
+**Nowe klucze i18n:** 56 par PL+EN (`pl=en=3339`). **Zero migracji save** (v101).
+**Keeper:** `src/testing/smoke/event_log_entry_smoke.mjs` **34/34** (T1-T6; fail-first zmierzony
+osobno dla każdej partii). **Sweep 185/185 OK, 0 FAIL** · `check-i18n` **PASS**.
+
+### ⚠ Trzy rzeczy, których ten audyt NIE przewidział, a wyszły przy wykonaniu
+
+1. **Teza właściciela „gram w jednym języku, więc tłumaczenia mnie nie dotyczą" była fałszywa
+   w jego własnym przypadku.** Pomiar: z 29 literałów **26 jest POLSKICH**, a właściciel gra
+   z **angielskim Dziennikiem** ⇒ widział je po polsku bez żadnego przełączania. Gdyby nie ten
+   pomiar, cały blok E zostałby słusznie-brzmiąco odpuszczony.
+2. **Pin, który świecił zielono dokładnie na defekcie.** Pierwsza wersja T6 szukała
+   `getLocale() === 'pl' ? '…'`, a stary kod przypisywał najpierw `const pl = …` i dopiero
+   potem robił `pl ? … : …`. Złapała to **kontrola pinu** na treści z `HEAD`, nie recenzja kodu.
+   Przepisany na pomiar SKUTKU („zero polskich literałów w widoku") pada teraz z 6 trafieniami.
+3. **Wspólne drzewo.** Równoległa sesja (Findingi 138/142) edytowała w tym samym czasie
+   `MissionSystem.js`, `MovementOrderSystem.js`, `VesselManager.js`, `FleetActions.js`,
+   `FleetManagerOverlay.js`, `CLAUDE.md` i `VESSEL_ORDERS_PLAN.md`. Kolizja wystąpiła
+   w **jednym** pliku (`MissionSystem.js`) i została rozwiązana **chirurgicznym stagingiem**:
+   `git diff -U0` → filtr moich 2 hunków z 13 → `git apply --cached --unidiff-zero` →
+   `node --check` na wersji z **indeksu** (dowód, że moje hunki są samowystarczalne).
+
+### ⚠ Otwarte po wykonaniu
+
+- **Finding 165** — zaparkowany (wyżej).
+- **Gałąź macierzysta w `GameScene:2388`** — nadal `homePlanet.name`, czyli nazwa PLANETY
+  w miejscu nazwy UKŁADU. Zmiana widoczna w każdej bitwie u siebie ⇒ osobny podpis.
+- **Poprawka `check-i18n`** — wykrywanie literałów w `push({text})` / `fillText` poza `t()`.
+  ⚠ Bez niej 30. literał wejdzie przy zielonej bramce. Zasięg w reszcie UI **niezmierzony** —
+  ten audyt liczył tylko producentów Dziennika.
+- **Live-gate** — ⚠ **NIEWYKONANY dla żadnego z czterech commitów** (na wyraźne polecenie
+  właściciela). I: naprawy **nie cofają wpisów już zapisanych** — 200 wpisów siedzi w save jako
+  gotowy tekst, więc stare linie zostaną w starej postaci, aż wypadną z ring buffera.

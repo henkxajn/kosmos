@@ -3069,3 +3069,59 @@ Zakończenia są niejednoznaczne — nie ma gwarantowanego happy endu.
 - `src/systems/FactionSystem.js` — suwak frakcji, napięcie polityczne
 - `src/scenes/FactionSelectScene.js` — ekran wyboru przy nowej grze
 - Sfera Dysona — 20 segmentów w 4 fazach (Etap 17, ukończone)
+
+---
+
+## DZIENNIK ZDARZEŃ — języki, surowe kody, poprawność (save **v101 bez migracji**, ARC ZAMKNIĘTY 2026-08-27)
+
+Audyt na zgłoszenie właściciela („*w Dzienniku pojawiają się informacje w dwóch językach…
+czasami `sys_home` albo `sys_xxx` zamiast nazwy… wiele kwestii w formie kodu*"). Raport
+z pomiarami: `docs/audit/EVENT_LOG_AUDIT.md`; rejestr **Findingów 165-176**:
+`docs/design/VESSEL_ORDERS_PLAN.md` §Findings z audytu Dziennika. Commity: `0aacf8c` ·
+`1483a25` · `ffc72fb` · `8fe43eb`. Keeper: `event_log_entry_smoke` **34**.
+
+**Jedno zdanie:** oba objawy były realne, ale miały **cztery różne przyczyny źródłowe** —
+i żadna nie leżała w słownikach, które okazały się zdrowe (`pl=en`, 0 luk, 0 niezgodnych
+placeholderów).
+
+⚠ **NAJWAŻNIEJSZA LEKCJA — „gram w jednym języku" NIE znaczy „bez mieszania".** Właściciel gra
+z **angielskim Dziennikiem**, a z 29 literałów omijających `t()` **26 było POLSKICH** ⇒ widział
+je po polsku **bez żadnego przełączania języka**. Odwrotny kierunek też istniał (`Fleet order
+rejected`, `[unknown]`, `waypoint`, `vessel` w słowniku PL). ⇒ **zanim zejdziesz z zakresu i18n
+„bo gracz i tak gra w jednym języku", ZMIERZ, w którą stronę cieknie.**
+
+**Cztery przyczyny (rozłączne, każda z osobną naprawą):**
+1. **Tekst renderowany PRZY EMISJI i persystowany** (200 wpisów w save) ⇒ po zmianie języka
+   Dziennik jest dwujęzyczny z konstrukcji. **Finding 165 — ZAPARKOWANY** (jedyna pozycja
+   z bumpem save'a; dotyczy tylko gracza, który przełącza język).
+2. **29 literałów omijających `t()`** w 5 plikach ⇒ ✅ zamknięte (56 nowych par kluczy).
+3. **Surowe id/slugi**, mimo że rezolwery ISTNIAŁY w repo: `systemDisplayName` był
+   **zaimportowany w tym samym pliku** i pomijany (167); `ORDER_ACTIVITY_KEYS`/
+   `MISSION_ACTIVITY_KEYS` (kompletne, PL+EN) były **prywatne** w `FleetPictureLogic` (175);
+   `resource.*` istniały od Etapu 6.1, a raporty pokazywały `minerals:12` ⇒ ✅ zamknięte.
+4. **Niekompletne `TYPE_MAP`/`CHANNELS`** — `poi_alert`/`poi_rally` bez wpisu ⇒ alarm pikiety
+   lądował w kanale System; brak kanału `diplomacy` w ogóle ⇒ ✅ zamknięte (D2: kanał +
+   **trzy szczeble severity**, bo jeden typ nie umiał odróżnić sojuszu od wypowiedzenia wojny).
+
+**Poprawki niejęzykowe przy okazji:** rok wpisu `---` po wczytaniu (168 — `restore` nie zasiewał
+`_currentYear`, a `time:display` nie leci na pauzie) · martwy klik na wpisie bitwy (172 —
+`entityRef` to id UKŁADU, a **układy nie są encjami**) · ring buffer wymiatany przez log walki
+naziemnej per runda (173 — ~26 starć kasowało całą historię).
+
+⚠ **MARTWY KĄT `check-i18n` (ta sama klasa co Finding 113).** Bramka pyta „*czy klucz użyty
+w `t()` istnieje w pl i en*", a **nie** „*czy każdy widoczny napis przechodzi przez `t()`*" ⇒
+świeciła na zielono przy 29 literałach. **Nowy literał w `push({text})` wejdzie przy zielonej
+bramce.** Poprawka samego narzędzia (wykrywanie literałów w `push`/`fillText` poza `t()`) —
+**otwarta**, i to ona jest realnym zabezpieczeniem przed nawrotem.
+
+⚠ **`CHANNELS` trzyma `labelPL`/`labelEN` jako DANE** (jak reszta encji w repo) — etykiety
+kanałów świadomie NIE idą przez słownik; wybór języka należy tam do widoku (`getLocale`).
+Nowy kanał ⇒ dopisz OBIE etykiety.
+
+⚠ **Stare wpisy z zapisu nie są migrowane** — dyplomacja sprzed D2 zostaje na `channel:'system'`,
+a wszystkie zapisane teksty zostają w języku z chwili zapisu, aż wypadną z ring buffera.
+
+**Świadomie POZA zakresem:** Finding 165 · gałąź macierzysta w `GameScene:2388` (nazwa PLANETY
+w miejscu nazwy UKŁADU) · poprawka `check-i18n` · czy walka naziemna AI-vs-AI może zasilać
+Dziennik gracza (niezmierzone). ⚠ **Live-gate NIEWYKONANY dla żadnego z czterech commitów** —
+na wyraźne polecenie właściciela.
