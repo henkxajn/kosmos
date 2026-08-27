@@ -875,6 +875,22 @@ skuteczności patcha: `exp.distance` 0.0500 vs 5.0500 AU). `ecf8233` tknął **d
      liczy. Im więcej wygenerowanych układów, tym częstsze trafienie.
      **PRE-EXISTING, poza zakresem VESSEL_ORDERS** (to bramkowanie celu, nie model rozkazów).
      Obejście na czas arca: podawać **jawny cel-ciało** zamiast punktu (`spec.targetBodyId` pomija snap).
+     **ZAMKNIĘTE 2026-08-27** — slice `138+142`, audyt `docs/audit/SYSTEM_SCOPE_138_142_AUDIT.md`,
+     decyzje D-SS1..D-SS5b. Naprawa: `_findBodyNearPoint(x, y, maxAU, vessel)` — zakres liczony
+     WEWNĄTRZ funkcji przez `systemIdOf` (D-SS1=W1), bo kontrakt należy do helpera, nie do
+     jedynego dzisiejszego wołającego.
+     ⚠ **PROPOZYCJA Z TEGO WPISU BYŁA BŁĘDNA:** `getByTypeInSystem` jest **fail-CLOSED**
+     (zmierzone: ciało bez stempla → 0 wyników), a repo odrzuciło ją z tego powodu explicite —
+     `RetreatTarget.js:70-72`. Tu było to wiążące podwójnie: PRZED naprawą filtra nie było
+     żadnego, więc fail-closed byłby regresją, nie naprawą. Użyto `systemIdOf` (D-SS2=W1).
+     ⚠ **SKALA ZMIERZONA** (sonda `probe-system-scope-138-142.mjs` §2, realne układy
+     z `SystemGenerator`): przy **1** wygenerowanym układzie defekt **NIE ISTNIEJE (0 %)** —
+     układy powstają leniwie. Przy 12 układach **90,9 %** snapujących klików bierze obce ciało,
+     przy 20 — **94,6 %**. To defekt fazy średniej/późnej, nie startu.
+     ⚠ **KSZTAŁT OBJAWU BYŁ WĘŻSZY, NIŻ BRZMI:** klik DOKŁADNIE na własnym ciele wygrywa
+     **62/62** (dystans 0 jest nie do pobicia). Bolało klikanie w PUSTĄ PRZESTRZEŃ — i dlatego
+     przeżyło tak długo. 14/62 własnych ciał ma jednak obcego rywala w promieniu 0,5 AU.
+     Keeper `system_scope_orders_smoke` (T1 wykonaniowo, T2e pin źródłowy na producenta).
 
 139. ⚪ **`cancelOrder` czyta MARKER, nie indeks** (`vessel.movementOrder`, wymóg `status === 'active'`)
      ⇒ mutuje dawno martwy rozkaz mimo pustego `_byVessel`, ustawiając `blockReason`. Facet Findingu
@@ -945,6 +961,41 @@ skuteczności patcha: `exp.distance` 0.0500 vs 5.0500 AU). `ecf8233` tknął **d
      ⚠ Naprawa (`sameSystem` liczone względem `vessel.systemId`) ma **ŚREDNIE** ryzyko: picker
      obsługuje wszystkie misje, więc pin musi wykazać, że przy `activeSystemId === vessel.systemId`
      lista jest **identyczna co do wiersza** (baza zmierzona: 43 cele). **Poza zakresem VESSEL_ORDERS.**
+     **ZAMKNIĘTE 2026-08-27** — ten sam slice co 138. `_getValidTargets` klucza się teraz na
+     `vessel.systemId`; `activeSystemId` **nie jest w tej funkcji czytane ANI RAZ** (zmienna
+     usunięta świadomie, żeby nikt nie przywrócił jej jako wygodnego fallbacku).
+     ⚠ **WPIS OPISYWAŁ POŁOWĘ DEFEKTU.** Obok fałszywego POZYTYWU („oferuje cele, których statek
+     nie dosięgnie") istniał symetryczny fałszywy NEGATYW: **własne, osiągalne cele statku
+     znikały w CAŁOŚCI (0/3)**. Mechanizm: pętla główna brała ciała kamery, a gałąź cross-system
+     pomijała `sys.id === activeSysId` z komentarzem „in-system pokryty wyżej" — pokryty NIE BYŁ.
+     Dwa błędy znosiły się do zera celów w oglądanym układzie.
+     ⚠ **SKUTEK BYŁ CIĘŻSZY NIŻ ODMOWA.** Dla akcji INNYCH niż transport odmowy nie ma na żadnym
+     szczeblu: misja startuje, pobiera paliwo (zmierzone 2,80), leci do współrzędnych odmierzonych
+     od CUDZEJ gwiazdy (start 1,00 AU → cel 2,15/8,74 AU **wewnątrz sys_home**, gdzie nie ma nic),
+     a `_vesselIsAtTarget` **przyjmuje przylot** (fail-open, słuszny pod warunkiem, że taki rekord
+     nie powstaje — picker ten warunek łamał).
+     ⇒ dlatego doszła **obrona w głąb (D-SS5)**: `VesselManager._missionTargetOutOfSystem` wołany
+     z **OBU** dyspozytorów (`dispatchOnMission` I `redispatchFromOrbit` — ten drugi obsługuje
+     dostawę PO SKOKU WARP, więc bramka w jednym byłaby nieutwardzonym bliźniakiem). Odmowę
+     obsługuje maszyneria VO-2 (osiem ścieżek `_launch*` → `_abortLaunch` ze zwrotem kosztów).
+     **Tylko GRACZ** (D-SS5b) — AI zwolnione, bo osiągalność Findingu 153 jest niezmierzona,
+     a cichy zator logistyki AI byłby regresją gorszą od zamykanego defektu (`PHASE5_TODO`).
+     ⚠ `_abortLaunch` pyta o powód **tym samym predykatem** co bramka, bo dyspozytor zwraca goły
+     bool — inaczej gracz dostawałby „Statek niedostępny" na odmowę o przyczynie układowej
+     (klasa Findingu 141). Zero nowych kluczy i18n (`vessel.reasonTargetOtherSystem`).
+     ⚠ **STRAŻNIK, KTÓREGO WYMAGAŁ §7a, ISTNIAŁ JUŻ WCZEŚNIEJ I BYŁ ŚLEPY:**
+     `cross_system_targets_smoke` (8/8) ustawia `activeSystemId === vessel.systemId`, więc nie
+     widział defektu — ale przechodzi po naprawie bez zmian, czyli jest dokładnie tym pinem
+     „identyczność co do wiersza", o który prosił plan. Nowy keeper dokłada scenę dwuukładową.
+     ⚠ **RODZINA LICZYŁA TRZY MIEJSCA, NIE JEDNO** (D-SS4): `MissionSystem._findNearestUnexplored`
+     i `getUnexploredCount` miały ten sam defekt, przy czym **poprawny bliźniak
+     (`_findNearestUnexploredFrom:2782`) stał dwie funkcje niżej**. Żywe przez `deep_scan`
+     i recon `nearest`. Komentarz przy wołającym twierdził, że wybór celu jest „zakotwiczony
+     w DOMU" — kod czytał KAMERĘ; pokrywało się to tylko wtedy, gdy gracz patrzył na dom.
+     ⚠ **Bliźniak w `ExpeditionSystem.js` NIE ruszony** — zero produkcyjnych importów (grep),
+     martwy alias zgodnie z `CLAUDE.md`.
+     Nowe findingi z audytu: **166** (`_handleFleetEngage` — lista wrogów wg kamery, świadomie
+     poza slice'em, D-SS6) i korekta odnośników 154 (`FMO:4581/4590`, nie `:4550`).
 
 ---
 
@@ -1074,9 +1125,10 @@ no-op silnika (141). W obu przypadkach **system miał coś do powiedzenia i tego
 1. **Powierzchnia odmowy** — chokepoint `MovementOrderSystem.issueOrder` (`:181-246`; wszystkie
    9 gałęzi `_issueX` wychodzi tym samym `return`) → nowe `vessel:orderRejected` → JEDNA subskrypcja
    w `UIManager` robiąca **toast ORAZ wpis w Dzienniku** (wzór `_toastReturnFailed`). ~20 lin. + ~14.
-2. **Dostępność (Finding 142)** — `_getValidTargets` liczy `sameSystem` względem **`vessel.systemId`**,
-   nie `activeSystemId`. ⚠ Ryzyko ŚREDNIE (picker obsługuje wszystkie misje) ⇒ pin musi wykazać
-   **identyczność co do wiersza** przy `activeSystemId === vessel.systemId` (baza zmierzona: 43 cele).
+2. ~~**Dostępność (Finding 142)**~~ ✅ **ZROBIONE 2026-08-27** poza tym slice'em, razem z Findingiem
+   138 (`docs/audit/SYSTEM_SCOPE_138_142_AUDIT.md`). Wymóg „identyczność co do wiersza" spełniony
+   dwoma pinami: istniejący `cross_system_targets_smoke` 8/8 bez zmian + `system_scope_orders_smoke`
+   T4a. ⚠ Zakres okazał się szerszy, niż zakładał ten punkt — patrz zamknięcie wpisu 142.
 3. **Uzupełnienie i18n** — 30 z 41 powodów bez klucza.
 
 ⚠ **Trzy rzeczy do nazwania w podpisie tamtego slice'u, wszystkie zmierzone tutaj:**
@@ -1237,7 +1289,13 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
 
 > **Juz zarejestrowane, NIE duplikuje:** **Finding 138** (`VesselManager._findBodyNearPoint` skanuje
 > cala galaktyke) i **Finding 142** (`_getValidTargets` klucza sie na OGLADANYM ukladzie, nie na
-> `vessel.systemId`) naleza do tej samej klasy i pozostaja otwarte.
+> `vessel.systemId`) naleza do tej samej klasy.
+> ✅ **OBA ZAMKNIETE 2026-08-27** we wspolnym slice (audyt `docs/audit/SYSTEM_SCOPE_138_142_AUDIT.md`).
+> ⚠ **151/152/153 SWIADOMIE NIE DOLACZONE** — trzy rozne powody, kazdy zmierzony osobno: **151**
+> ma ODWROTNY kierunek fail (bramkuje detekcje i intel, nie ruch) ⇒ jeden podpis nie moze zawierac
+> dwoch przeciwnych odpowiedzi na to samo pytanie; **152** to brak POLA `systemId`, nie zly filtr
+> ⇒ migracja zapisu; **153** ma NIEZNANA osiagalnosc ⇒ gate zmierzylby cisze. **154** zostaje
+> osobno na wyrazna decyzje wlasciciela (swiadomy wybor przy `RETREAT_TARGET_PLAN`).
 
 ---
 
@@ -1432,6 +1490,7 @@ przy 29 literałach. ⇒ **poprawione w Findingu 177** (zapadka na baseline).
 | **174** | 8 wpisów PL z angielskimi słowami **w samym słowniku** (`vessel`, `vessels`, `waypoint`, `retreat`, `friendly`, `Engage`, `pursue/intercept`), w tym **notatka deweloperska** wystawiona graczowi jako opis jednostki („placeholder — fleet-group w osobnym projekcie"). | ✅ `8fe43eb`. Pin **wykonaniowy** (T5) na czystość językową kluczy Dziennika/POI/doktryn. |
 | **175** | Trzy kopie rezolwera nazwy układu o różnej jakości; `ORDER_ACTIVITY_KEYS`/`MISSION_ACTIVITY_KEYS` (kompletne, PL+EN, z `generic`) **prywatne** w `FleetPictureLogic` ⇒ Dziennik wypisywał `moveToPoint`; `resource.*` istniały od Etapu 6.1, a raporty pokazywały `minerals:12`. | ✅ `ffc72fb` — eksport zamiast trzeciej kopii; surowce/towary przez `getName`/`resource.*`; casus belli przez `CASUS_BELLI`. |
 | **176** | `EventLogOverlay`/`EventLogDrawer` z własnymi ternary `pl ? … : …` (7 miejsc); jeden napis — „Dziennik niedostępny…" — **bez wariantu EN w ogóle**. | ✅ `8fe43eb`. `getLocale` ZOSTAJE dla etykiet kanałów: `CHANNELS` trzyma `labelPL`/`labelEN` jako DANE. |
+| **177** | `check-i18n` odpowiadał wyłącznie na „czy klucz użyty w `t()` istnieje w pl i en", a **nie** na „czy każdy widoczny napis przechodzi przez `t()`" ⇒ bramka świeciła na zielono przy 29 literałach w Dzienniku. Ta sama klasa co Finding 113. | ✅ `8420c98` — skan sinków napisów (2 tiery, T3 świadomie pomijany) + **zapadka na baseline 62 w 11 plikach UI**. Keeper `i18n_hardcoded_gate_smoke` 14. |
 
 ### ⚠ Lekcja procesowa z tej rundy — pin, który świecił zielono dokładnie na defekcie
 
@@ -1457,4 +1516,3 @@ To trzeci raz w tym repo, gdy jałowy pin złapała dopiero **kontrola pinu**
   I **naprawy nie cofają wpisów JUŻ ZAPISANYCH**: 200 wpisów siedzi w save jako gotowy tekst,
   więc stare linie zostaną w starej postaci, aż wypadną z ring buffera. Bez tego zastrzeżenia
   gate przeczyta to jako „naprawa nie działa" (por. `reasonless-failure-reads-as-unfixed`).
-| **177** | `check-i18n` odpowiadał wyłącznie na „czy klucz użyty w `t()` istnieje w pl i en", a **nie** na „czy każdy widoczny napis przechodzi przez `t()`" ⇒ bramka świeciła na zielono przy 29 literałach w Dzienniku. Ta sama klasa co Finding 113. | ✅ `8420c98` — skan sinków napisów (2 tiery, T3 świadomie pomijany) + **zapadka na baseline 62 w 11 plikach UI**. Keeper `i18n_hardcoded_gate_smoke` 14. |

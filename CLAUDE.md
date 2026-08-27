@@ -2502,6 +2502,80 @@ JEDNOSTKĘ" (`vessel:firstSighting`) to **detekcja raz na statek**, nie sygnał 
 
 ---
 
+## Zakres układu przy wyborze celu — Findingi 138 + 142 (save **v101 bez migracji**, fail-first 12/17 → 31/31, live-gate PENDING)
+
+Audyt + pomiary: `docs/audit/SYSTEM_SCOPE_138_142_AUDIT.md` · sonda `src/testing/headless/probe-system-scope-138-142.mjs`
+(before/after) · rejestr macierzysty `docs/design/VESSEL_ORDERS_PLAN.md` §138/§142 (oba zamknięte).
+Decyzje **D-SS1..D-SS5b** podpisane 2026-08-27.
+
+**Jedno zdanie:** dwa selektory celu odpowiadały na pytanie „**co widzę**" zamiast „**co ten statek
+może zrobić**" — a każdy układ ma własną ramkę współrzędnych z gwiazdą w (0,0), więc ciała obcych
+układów zajmują te same zakresy surowych x/y.
+
+⚠ **SKUTKI BYŁY PRZECIWNE i to jest sedno slice'u:** 138 kończył się **ODMOWĄ**
+(`_findBodyNearPoint` brał obce ciało → bramka W3-4b słusznie odrzucała `target_other_system`),
+142 kończył się **ZGODĄ** (misja startowała, pobierała paliwo, leciała w pustkę własnego układu,
+a `_vesselIsAtTarget` **przyjmował przylot**). Naprawa samego 138 zamieniłaby odmowę w dryf
+w pustkę, czyli w 142 w innym opakowaniu — dlatego jeden slice.
+
+- **D-SS1=W1** — `_findBodyNearPoint(x, y, maxAU, vessel)`, filtr **wewnątrz helpera** (kontrakt
+  należy do helpera, nie do jedynego dzisiejszego wołającego — lekcja `131cc2e` + P0 §6).
+  `vessel` opcjonalny (zgodność wstecz) ⇒ **pin ŹRÓDŁOWY** T2e pilnuje, że jedyny producent go podaje.
+- **D-SS2=W1** — **fail-OPEN przez `systemIdOf`**, NIE `EntityManager.getByTypeInSystem`.
+  ⚠ Ta druga jest **fail-CLOSED** (zmierzone: ciało bez stempla → 0 wyników) i repo odrzuciło ją raz
+  explicite (`RetreatTarget.js:70-72`). Tu wiążące podwójnie: PRZED naprawą filtra **nie było
+  żadnego**, więc fail-closed byłby regresją, nie naprawą. Tripwire **T1e** zapali się, gdy ktoś
+  „uprości" naprawę. `systemId === null` (tranzyt warp) ⇒ pusty zbiór (wzór `bodiesInSystemOf`).
+- **D-SS3=W1** — `_getValidTargets` klucza się na `vessel.systemId`; **`activeSystemId` nie jest
+  w tej funkcji czytane ANI RAZ** (zmienna usunięta świadomie). ⚠ Rejestr opisywał **połowę**
+  defektu: obok fałszywego pozytywu istniał fałszywy NEGATYW — własne, osiągalne cele znikały
+  w całości (**0/3**), bo pętla główna brała ciała kamery, a gałąź cross-system pomijała
+  `sys.id === activeSysId` z komentarzem „in-system pokryty wyżej" (**nie był**). Dwa błędy znosiły
+  się do zera celów. ⚠ W pickerze `getByTypeInSystem` **ZOSTAJE** — było tam już wcześniej, więc
+  nie jest regresją; różnica wobec D-SS2 jest zamierzona i opisana w kodzie.
+- **D-SS4=TAK** — rodzina liczyła **trzy** miejsca: `MissionSystem._findNearestUnexplored`
+  + `getUnexploredCount` (żywe przez `deep_scan` i recon `nearest`) miały ten sam defekt, a
+  **poprawny bliźniak `_findNearestUnexploredFrom:2782` stał dwie funkcje niżej**. Wspólny helper
+  `_reconScopeSystemId(vessel)` — trzy stany, nie dwa (statek / tranzyt warp `null` / brak statku
+  = kamera dla zgodności wstecz). ⚠ Komentarz przy wołającym twierdził, że wybór celu jest
+  „zakotwiczony w **domu**" — kod czytał **kamerę**; pokrywało się to tylko przy kamerze na domu.
+- **D-SS5=TAK / D-SS5b=tylko GRACZ** — obrona w głąb: `VesselManager._missionTargetOutOfSystem`
+  wołany z **OBU** dyspozytorów. ⚠ **`_launch*` NIE JEST jednym miejscem, a dyspozytorzy są DWAJ**:
+  `dispatchOnMission` **i** `redispatchFromOrbit` (`MissionSystem:967` — dostawa **PO SKOKU WARP**),
+  więc bramka w jednym byłaby nieutwardzonym bliźniakiem na trasie legalnej. Odmowa reużywa
+  maszynerii **VO-2** (osiem ścieżek `_launch*` → `_abortLaunch` ze zwrotem kosztów). Bezpieczne,
+  bo `OrderService._maybeDeliver` wydaje dostawę dopiero przy `v.systemId === po.targetSystemId`.
+  **AI zwolnione** (`PHASE5_TODO` → Finding 153: osiągalność niezmierzona, a cichy zator logistyki
+  AI byłby regresją gorszą od zamykanego defektu).
+- ⚠ **`_abortLaunch` pyta o powód TYM SAMYM predykatem co bramka**, bo dyspozytor zwraca goły bool
+  — inaczej gracz dostawał „Statek niedostępny" na odmowę o przyczynie układowej (klasa Findingu
+  141). To duplikuje **wyjaśnienie**, nie bramkę. Zero nowych kluczy i18n (`vessel.reasonTargetOtherSystem`).
+
+**Skala (sonda §2, realne `SystemGenerator`):** przy **1** układzie defekt **NIE ISTNIEJE (0 %)** —
+układy powstają leniwie; przy 12 → **90,9 %** snapujących klików bierze obce ciało, przy 20 → 94,6 %.
+⚠ Klik **dokładnie** na własnym ciele wygrywa **62/62** (dystans 0 jest nie do pobicia) — bolało
+klikanie w **pustą przestrzeń**, i dlatego przeżyło tak długo.
+
+**Świadomie POZA slice'em:** **151** (odwrotny kierunek fail — bramkuje detekcję/intel) · **152**
+(brak POLA `systemId` ⇒ migracja zapisu) · **153** (nieznana osiągalność) · **154** (decyzja
+właściciela przy `RETREAT_TARGET_PLAN`) · **166 NEW** (`FMO._handleFleetEngage:4544` — lista wrogów
+wg kamery, poziom floty, niezmierzone) · bliźniak w `ExpeditionSystem.js` (**zero** produkcyjnych
+importów — martwy alias).
+
+**Pliki:** `VesselManager` (zakres snapu + `_missionTargetOutOfSystem` + 2 dyspozytory),
+`MovementOrderSystem` (producent snapu), `MissionSystem` (`_reconScopeSystemId` + 2 selektory
++ `_abortLaunch`), `FleetActions` (bramka `deep_scan`), `FleetManagerOverlay` (`_getValidTargets`).
+Keeper `src/testing/smoke/system_scope_orders_smoke.mjs` **31/31**; regresja `cross_system_targets_smoke`
+8/8 bez zmian (⚠ ustawia `activeSystemId === vessel.systemId`, więc defektu **nie widział** — ale
+jest dokładnie pinem „identyczność co do wiersza", którego wymagał `VESSEL_ORDERS_PLAN` §7a).
+Sweep **185/185 0 FAIL** · `check-i18n` PASS.
+
+⚠ **Trzy piny przeszły w międzyczasie JAŁOWO i każdy świecił dokładnie tam, gdzie był defekt:**
+odmowa nie tworzy misji, więc `mission?.targetId == null` było zielone na zepsutym kodzie ·
+`every()` na **pustym** zbiorze celów · identyczna liczba niezbadanych ciał w obu układach fixture'u.
+Fail-first bez ich poprawienia pokazywał **11/10** zamiast **12/17**.
+
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
