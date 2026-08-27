@@ -13,8 +13,14 @@
 //       — i to samo starcie z odwróconym `winner` odwraca ciężar. NIGDY po `lossesA/B`.
 //   T3  ⚠ WIDELEC WYCZERPUJĄCY: bitwa BEZ wojny nadal idzie w POTYCZKĘ (napięcie, zero
 //       exhaustion) — nie otworzyliśmy drugiej polityki, tylko domknęliśmy trzecią ścieżkę
-//   T4  brak re-entrancji: `recordBattle` re-emituje z `warId`, więc drugi przebieg wychodzi
-//       natychmiast — DOKŁADNIE jedno zaksięgowanie na jedno starcie
+//   T4  ⚠ ODWRÓCONY ŚWIADOMIE (Finding 150, 2026-08-27). W pierwotnym kształcie asertował
+//       `withWar === 1` OBOK `withoutWar === 1`, czyli PINOWAŁ SAM DEFEKT: jedna bitwa =
+//       DWA ogłoszenia. Nagłówek „brak re-entrancji" mówił prawdę o PĘTLI (bramka
+//       `if (warId) return` naprawdę ucina drugi przebieg), ale przy okazji utrwalał duplikat
+//       u WSZYSTKICH konsumentów — a ten miał skutki stanowe (podwójny rozkaz odwrotu +
+//       podwójna opłata paliwowa, zmierzone ×2.0 w `battle_announce_once_smoke` T5).
+//       Inwariant, który ten test naprawdę chroni — „DOKŁADNIE jedno zaksięgowanie na jedno
+//       starcie" — ZOSTAJE i służy teraz jako kontrola pinu.
 //   T5  starcie BEZ udziału gracza NIE jest doksięgowywane do wojny gracza (bramka pod D5)
 //   T6  ⚠ KOLIZJA JEDNOSTEK: `lossesA/B` nie wpływa na NIC w księgowaniu (W1 §Findings 3)
 //
@@ -154,13 +160,17 @@ console.log('T3 — bitwa BEZ wojny nadal jest POTYCZKĄ (nie otworzyliśmy drug
     'T3: potyczka NIE tworzy wojny — to napięcie i pamięć, nie księgowanie');
 }
 
-// ── T4 — brak re-entrancji ──────────────────────────────────────────────────
-console.log('T4 — `recordBattle` re-emituje z `warId`, więc nie ma pętli ani podwójnego wpisu');
+// ── T4 — jedno starcie = jedno zaksięgowanie I jedno ogłoszenie ─────────────
+console.log('T4 — jedno starcie: jedno zaksięgowanie i JEDNO ogłoszenie (odwrócony, Finding 150)');
 {
   const core = boot();
   const empireId = empireOf(core);
   core.diplomacySystem.declareWar(empireId, 'keeper');
   const battlesBefore = core.warSystem.getWarWith(empireId).battles.length;
+
+  let recordCalls = 0;
+  const origRec = core.warSystem.recordBattle.bind(core.warSystem);
+  core.warSystem.recordBattle = (...a) => { recordCalls++; return origRec(...a); };
 
   const emitted = [];
   const onResolved = (p) => emitted.push(p);
@@ -169,15 +179,22 @@ console.log('T4 — `recordBattle` re-emituje z `warId`, więc nie ma pętli ani
   deepSpaceBattle(core, empireId, 'A');
 
   EventBus.off('battle:resolved', onResolved);
+  core.warSystem.recordBattle = origRec;
   const after = core.warSystem.getWarWith(empireId);
 
   const withWar = emitted.filter(p => p?.warId);
   const withoutWar = emitted.filter(p => !p?.warId);
   assert(withoutWar.length === 1, `T4: DSCS wyemitował dokładnie 1 zdarzenie bez warId (${withoutWar.length})`);
-  assert(withWar.length === 1, `T4: …i powstało dokładnie 1 z warId (${withWar.length}) — re-emit księgowania`);
+  // ⚠ ODWRÓCONE: tu stało `withWar.length === 1` („re-emit księgowania"). Księgowanie ma
+  // MILCZEĆ, gdy producent już ogłosił — patrz nagłówek pliku i `WarSystem.recordBattle` opts.
+  assert(withWar.length === 0,
+    `T4: …i ZERO ogłoszeń z warId (${withWar.length}) — księgowanie nie dubluje producenta`);
+  // ⚠ KONTROLA PINU — bez tych dwóch asercji „zero ogłoszeń" dałoby się osiągnąć wycięciem
+  //   całego księgowania, a test świeciłby na zielono nad wypatroszoną wojną.
+  assert(recordCalls === 1,
+    `T4: …a `.trim() + `\`recordBattle\` PRZESZŁO dokładnie raz (${recordCalls}) — cisza dotyczy ogłoszenia, nie księgi`);
   assert(after.battles.length === battlesBefore + 1,
-    `T4: w wojnie przybyła DOKŁADNIE jedna bitwa (${battlesBefore} → ${after.battles.length}) — ` +
-    'gałąź (a) ucina drugi przebieg, więc nie ma pętli ani dubla');
+    `T4: w wojnie przybyła DOKŁADNIE jedna bitwa (${battlesBefore} → ${after.battles.length})`);
 }
 
 // ── T5 — bramka „tylko starcia z udziałem gracza" (pod D5) ──────────────────

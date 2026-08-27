@@ -27,6 +27,7 @@ import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { resolveBattle, empireFleetToBattleUnit, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
+import { isPlayerParticipant } from '../utils/BattleSides.js';
 import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { CB_MEMORY_WINDOW } from '../data/OpinionModifierData.js';
 import { HULLS } from '../data/HullsData.js';
@@ -179,8 +180,22 @@ export class WarSystem {
    * a producenci bitew mają zostać czystymi dostawcami wyniku. Jeden szew pokrywa DSCS, VCS
    * i każdego przyszłego producenta; dwa wywołania w dwóch systemach rozjechałyby się.
    *
-   * ⚠ Re-entrancja jest ograniczona z konstrukcji: `recordBattle` emituje `battle:resolved`
-   * PONOWNIE, ale już z `warId`, więc drugi przebieg wychodzi natychmiast gałęzią (a).
+   * ⚠ KSIĘGUJEMY BEZ OGŁASZANIA (`announce: false`, Finding 150). Producent, który nas tu
+   * przywiódł, JUŻ wyemitował `battle:resolved` — a `recordBattle` domyślnie emituje po raz
+   * drugi, z `warId`. Skutek był realny, nie kosmetyczny: każdy subskrybent dostawał ten sam
+   * wynik dwa razy, w dwóch różnych kształtach ⇒ `AutoRetreatSystem` wydawał DRUGI rozkaz
+   * odwrotu (a paliwo pobierane jest PRZY WYDANIU — zmierzone ×2.0), Dziennik pisał dwie
+   * linijki o jednej walce, a `GameScene._battleQueue` (bez dedupu po `battleId`) otwierał do
+   * tego modal kina. Bramka `if (warId) return` wyżej chroniła TYLKO przed pętlą, nie przed
+   * duplikatem u konsumentów.
+   * ⚠ Cisza dotyczy WYŁĄCZNIE tego wywołania. `EnemyAttackHandler:205`, `forceBattle` i
+   * `_fleetArrived` wołają `recordBattle` WPROST i są jedynym ogłoszeniem swojej bitwy —
+   * tam emisja MUSI zostać (keeper `battle_announce_once_smoke` T3).
+   * ⚠ Z2 (podpisane D2): jedynym ogłoszeniem bitwy DSCS jest odtąd emit producenta, czyli
+   * SPRZED tego księgowania. Świat pozostaje spójny dla dalszych konsumentów tylko dlatego,
+   * że `EventBus.emit` jest synchroniczny w kolejności rejestracji (`EventBus.js:31`), a
+   * `WarSystem` powstaje PRZED `InvasionSystem` (`GameScene.js:318/319`) — więc księgi domykają
+   * się WEWNĄTRZ tego samego emitu. To kontrakt POZYCYJNY; pinuje go T7.
    *
    * ⚠ Asymetria wyczerpania (W1-4b) przychodzi ZA DARMO — `recordBattle` liczy ją z
    * `result.winner` przez `_battleLoserSide`. Nowa gałąź nie dotyka `lossesA/B` (kolizja
@@ -201,7 +216,7 @@ export class WarSystem {
       // player-only, ale D5 (pary AI↔AI) to zmieni — guard ma być na miejscu WCZEŚNIEJ.
       if (!this._hasPlayerSide(result)) return;
       const war = this.getWarWith(empireId);
-      if (war) this.recordBattle(war.id, result);
+      if (war) this.recordBattle(war.id, result, { announce: false });
       return;
     }
 
@@ -235,10 +250,10 @@ export class WarSystem {
    * (`W3_PLAN.md` §Audit S25) i której nie wolno tu powtórzyć jednym testem.
    */
   _hasPlayerSide(result) {
-    for (const p of [result?.participantA, result?.participantB]) {
-      if (p?.empireId === 'player' || p?.type === 'player') return true;
-    }
-    return false;
+    // D5 — kanon w `utils/BattleSides.js`. Semantyka BEZ ZMIAN (dosłownie ten sam predykat);
+    // chodzi o to, żeby „czy to gracz" miało JEDNO miejsce, bo rozjazd między kopiami tego
+    // testu jest właśnie tą klasą defektu, którą naprawia Finding 155.
+    return isPlayerParticipant(result?.participantA) || isPlayerParticipant(result?.participantB);
   }
 
   /**
@@ -264,8 +279,18 @@ export class WarSystem {
     return null;                                             // uczestnik spoza tej wojny
   }
 
-  /** Rekord wyniku bitwy — przypisuje do wojny + zapisuje w gameState.battles. */
-  recordBattle(warId, result) {
+  /**
+   * Rekord wyniku bitwy — przypisuje do wojny + zapisuje w gameState.battles.
+   *
+   * @param {string} warId
+   * @param {object} result
+   * @param {{ announce?: boolean }} [opts] — `announce: false` KSIĘGUJE BEZ OGŁASZANIA
+   *   (Finding 150). Używa tego WYŁĄCZNIE `_classifyBattle`, bo tam producent bitwy już
+   *   wyemitował `battle:resolved` i drugie ogłoszenie było duplikatem u wszystkich
+   *   konsumentów. Domyślnie ogłaszamy — wywołania WPROST (`EnemyAttackHandler`,
+   *   `forceBattle`, `_fleetArrived`) są jedynym ogłoszeniem swojej bitwy.
+   */
+  recordBattle(warId, result, opts = {}) {
     const war = this.getWar(warId);
     if (!war) return null;
     const year = this._year();
@@ -311,7 +336,12 @@ export class WarSystem {
     // w zdarzeniu. Nikt nie zależał od odczytu stanu SPRZED bitwy.
     this._updateOrbitalDominance(battleRec);
 
-    EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
+    // Finding 150 — księgowanie i OGŁOSZENIE to dwie różne rzeczy. Gdy producent bitwy już
+    // ogłosił wynik (ścieżka `_classifyBattle`), milczymy: dublet szedł do KAŻDEGO
+    // subskrybenta i miał skutki stanowe (podwójny rozkaz odwrotu + podwójna opłata paliwowa).
+    if (opts.announce !== false) {
+      EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
+    }
 
     return battleRec;
   }
