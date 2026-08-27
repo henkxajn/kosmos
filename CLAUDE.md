@@ -2442,6 +2442,66 @@ rozjazdu = 9 px (krok wachlarza).
 
 ---
 
+## Bitwa o stolicę zwalnia czas, narratorem zostaje JEDEN — Finding 157 (save **v101 bez migracji**, live-gate 1/2/5 PASS, commit `a5ca81e`)
+
+Audyt: `docs/audit/BATTLE_RESULT_CLASSIFICATION_AUDIT.md`; rejestr: `VESSEL_ORDERS_PLAN.md` §157
+(zamknięty) + nowe **161-165**.
+
+**Jedno zdanie:** `UIManager` rozpoznawał gracza w bitwie po **koniunkcji**
+`type === 'vessel_group' && empireId === 'player'`, a obrona orbitalna opisuje gracza jako
+`{type:'player'}` (`EnemyAttackHandler:181`) ⇒ predykat odpadał na `type`.
+
+⚠ **POMIAR ZMIENIŁ TYTUŁ FINDINGU.** Klasyfikacja wyniku **JEST** dowożona: pauzującym banerem
+`showBattleOutcome` (werdykt poprawny po 155) i linią `log.battleLine` z `GameScene` (nazwy stron +
+poprawna severity). Brakowało **wyłącznie auto-slow** — i to cięższa połowa, bo `vessel:engaged`
+(jedyne inne wejście auto-slow przy walce) ma **dokładnie jednego producenta: `DSCS:395`**. Baner
+pauzuje, ale `_restoreTime` emituje `time:play` **BEZ zmiany mnożnika** (pauza i mnożnik są
+ortogonalne — `setMultiplier` nie dotyka `isPaused`), więc po OK gracz wracał do prędkości sprzed
+bitwy — **prosto w desant** (`InvasionSystem._onVesselGroupVictory`).
+
+**Zasięg: TRZEJ producenci**, nie sama stolica — EAH `:181`, `WarSystem.forceBattle:416`,
+`_fleetArrived:550`. Filtr powstał w **M4 P1** (`b2be101`), gdy jedynym producentem bitew „z graczem"
+była rodzina vessel-combat; **W3-7 dostemplował `empireId`**, żeby domknąć klasę S25 — ale ten
+konsument pyta **też** o `type`.
+
+**Naprawa (wariant W3, podpisany):** handler pyta kanonem `isPlayerParticipant` i robi już **tylko**
+auto-slow; gałąź `log.m4.battleResolved*` **WYCOFANA**. Była DRUGIM narratorem tej samej bitwy —
+surowy `battleId` w tekście dla gracza, płaska waga (`TYPE_MAP.combat` → `warn` **nawet dla
+zwycięstwa**). Poszerzenie filtru rozmnażałoby dublet wbrew linii 150/155, a przy potyczce bez wojny
+dawałoby **trzecią** linię (162). Razem z gałęzią znikł polski literał `'gracz'`/`'wróg'` wstrzykiwany
+do klucza i18n (klasa 113). ⚠ `playerSide` przestał być potrzebny ⇒ **REGUŁA BRAKU zniknęła jako
+problem** — nie ma czego zgadywać, gdy nie ma czego opisywać. Klucze zostają w słownikach.
+
+### ⚠ Dwie lekcje, obie kupione na tym gate'cie
+
+1. **Kontrola pinu grepująca LITERAL w konsumencie dowodzi OBECNOŚCI NAPISU, nie PRZYJĘCIA KSZTAŁTU.**
+   `w3_attack_visibility_smoke` T4 sprawdzało `/empireId === 'player'/` w `UIManagerze` jako dowód, że
+   stempel W3-7 ma realnego konsumenta — i **świeciło na zielono przez cały czas, gdy konsument był
+   zepsuty** (literał istniał, tylko wewnątrz koniunkcji odrzucającej EAH). Przepięte na: delegacja
+   źródłowo + **akceptacja stempla WYKONANIEM** (44/44).
+2. **Weryfikuj ISTNIENIE elementu UI, który każesz komuś kliknąć** — nie tylko składnię
+   jednolinijkowca (rozszerzenie `validate-gate-oneliners-on-live-engine`). Krok 4 gate'u kazał
+   właścicielowi wyłączyć auto-slow w menu; **takiego przełącznika nie ma** (Finding 164), więc
+   zgłoszona 🔴 była poprawną obserwacją **niewykonalnego kroku**, nie defektem naprawy.
+
+**Keeper** `battle_result_classification_smoke` **34/34**, fail-first **26/6** (padło dokładnie sześć
+asercji opisujących naprawę; wszystkie kontrole pinu zielone po OBU stronach). ⚠ `UIManager` **nie
+importuje się pod node** (`THREE.TextureLoader is not a constructor` — ta sama ściana co
+`ColonyOverlay`; stub `three` **celowo** nie wystawia loadera i **nie wolno** go podnosić) ⇒
+zachowanie pinowane **źródłowo**, matematyka i lekarstwo **wykonaniem** (prawdziwy `TimeSystem`).
+Sweep **183/183 0 FAIL** · `check-i18n` PASS · zero nowych kluczy i18n.
+
+**Otwarte po tym slice'ie (żadne nie blokuje):** **161** baner odpauzowuje ręczną pauzę
+(`timeSystem.paused` nie istnieje — jest `isPaused` ⇒ `wasPaused` zawsze `false`) · **162** EAH bez
+wojny pisze własną polską linię Dziennika obok `log.battleLine` · **163** drugi blok polskich
+literałów w `showBattleOutcome` (dodatek do 158) · **164** przełącznik auto-slow bez producenta
+(`time:autoSlowToggle` = handler + zero nadawców; `_autoSlowEnabled` niesérializowane ⇒ zawsze `true`)
+· **165** **obrona orbitalna nie ma PRZEBIEGU** — EAH rozstrzyga jednym `resolveBattle` (batch 500 ms),
+bez rund i bez `vessel:engaged`, podczas gdy DSCS tyka rundami ~2,2 s realne; popup „WYKRYTO WROGĄ
+JEDNOSTKĘ" (`vessel:firstSighting`) to **detekcja raz na statek**, nie sygnał starcia.
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
