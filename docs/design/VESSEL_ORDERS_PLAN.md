@@ -1416,7 +1416,7 @@ uzasadniała zejście z zakresu, dopóki nie została zmierzona.
 ⚠ **MARTWY KĄT NARZĘDZIA (ta sama klasa co Finding 113).** `check-i18n` pyta „*czy klucz użyty
 w `t()` istnieje w pl i en*", a **nie** „*czy każdy widoczny napis przechodzi przez `t()`*".
 Literał w `push({ text: … })` jest dla niego **niewidzialny**, więc bramka świeciła na zielono
-przy 29 literałach. ⇒ kandydat na poprawkę **samego narzędzia**.
+przy 29 literałach. ⇒ **poprawione w Findingu 177** (zapadka na baseline).
 
 | # | rzecz | status |
 |---|---|---|
@@ -1446,8 +1446,10 @@ To trzeci raz w tym repo, gdy jałowy pin złapała dopiero **kontrola pinu**
 
 - **165** (wyżej) — jedyna pozycja z bumpem save'a.
 - **167** gałąź macierzysta — nazwa planety w miejscu nazwy układu.
-- **Poprawka `check-i18n`** — wykrywanie literałów w `push({text})` / `fillText` poza `t()`.
-  Bez niej 30. literał wejdzie przy zielonej bramce; zasięg w reszcie UI **niezmierzony**.
+- ✅ **Poprawka `check-i18n` — ZROBIONA** (Finding 177, `8420c98`). ⚠ Zasięg został ZMIERZONY:
+  **62 napisy w 11 plikach UI** siedzą teraz w baseline jako dług — w tym **ekran końca gry
+  (Finding 113)**, 3 flashe budowy w `ColonyOverlay` i 9 w legacy `PlanetScene` (nieosiągalne).
+  Zapadka nie pozwala tego długu POWIĘKSZYĆ; spłata to osobna praca.
 - **`fleet.clusterGate` = „🌀 Jump Gate"** — zostawione świadomie (nazwa własna konstrukcji).
 - **Niezweryfikowane:** czy `combat:round`/`combat:hexResolved` mogą odpalić dla walki
   AI-vs-AI (handler zakłada udział gracza; `CombatSystem:128` domyśla `u.owner ?? 'player'`).
@@ -1455,3 +1457,4 @@ To trzeci raz w tym repo, gdy jałowy pin złapała dopiero **kontrola pinu**
   I **naprawy nie cofają wpisów JUŻ ZAPISANYCH**: 200 wpisów siedzi w save jako gotowy tekst,
   więc stare linie zostaną w starej postaci, aż wypadną z ring buffera. Bez tego zastrzeżenia
   gate przeczyta to jako „naprawa nie działa" (por. `reasonless-failure-reads-as-unfixed`).
+| **177** | `check-i18n` odpowiadał wyłącznie na „czy klucz użyty w `t()` istnieje w pl i en", a **nie** na „czy każdy widoczny napis przechodzi przez `t()`" ⇒ bramka świeciła na zielono przy 29 literałach w Dzienniku. Ta sama klasa co Finding 113. | ✅ `8420c98` — skan sinków napisów (2 tiery, T3 świadomie pomijany) + **zapadka na baseline 62 w 11 plikach UI**. Keeper `i18n_hardcoded_gate_smoke` 14. |
