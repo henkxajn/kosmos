@@ -2213,6 +2213,83 @@ diagnostyczna read-only powstała i **została zweryfikowana wykonaniem** na syn
 
 ---
 
+## NARRACJA BITWY — jedno ogłoszenie, zwycięzca z uczestników (Findingi 150 + 155, save **v101 bez migracji**)
+
+Slice przekrojowy, **NIE należy** do VESSEL_ORDERS (P0-P5 zostaje osobnym planem). Plan + pomiar +
+decyzje D1-D6: `docs/design/BATTLE_NARRATION_PLAN.md`; rejestr macierzysty: `VESSEL_ORDERS_PLAN.md`
+§Findings 150/155 (zamknięte) + 156-158 (nowe).
+
+**Dwa różne defekty, jeden objaw.** Gra **ogłaszała jedną bitwę dwa razy** (150) i **czytała
+zwycięzcę z kolejności ról wojny zamiast z uczestników** (155) — razem dawały cztery linie o jednej
+walce, z których część kłamała o tym, kto wygrał.
+
+- **150 — `announce: false` w JEDNYM szwie.** `DeepSpaceCombatSystem` emituje `battle:resolved` sam
+  (`warId: null`), po czym `WarSystem._classifyBattle` księguje starcie przez `recordBattle`, a ta
+  **emitowała ponownie**. Naprawa: `recordBattle(warId, result, { announce: false })` **wyłącznie**
+  z `_classifyBattle` — jedyne wejście re-entrantne. Domyślnie ogłaszamy, więc `EnemyAttackHandler`,
+  `forceBattle` i `_fleetArrived` (wywołania WPROST, jedyne ogłoszenie swojej bitwy) są nietknięte.
+  **Jeden szew pokrywa DSCS i VCS** — lekcja `131cc2e` odwrócona: nie łatamy N producentów, tylko
+  miejsce, przez które wszyscy przechodzą.
+  ⚠ **KOREKTA ZAKRESU wobec rejestru:** duplikat dotyczył **tylko DSCS/VCS** (producent emituje sam,
+  a księgowanie dokłada drugie ogłoszenie). EAH ogłaszał **raz**.
+- **155 — tożsamość z UCZESTNIKA, nigdy z ról wojny.** NEW czysty `src/utils/BattleSides.js`
+  (`isPlayerParticipant` / `participantName` / `resolveBattleSides` / `battleWinnerName`), wpięty
+  w OBA listenery `battle:resolved` w `GameScene`. `_hasPlayerSide` deleguje do kanonu (D5);
+  `_battleLoserSide` **nietknięte** (odpowiada na inne pytanie).
+  ⚠ **Gracz jest oznaczony NIEJEDNOLICIE** — `{type:'vessel_group', empireId:'player'}` (DSCS/VCS),
+  `{type:'player', empireId:'player'}` (EAH), `{type:'player'}` bez `empireId` (stary zapis).
+  Predykat pyta o OBA znaczniki; zawężenie do `empireId` po cichu gubi obronę orbitalną (klasa S25).
+  ⚠ **REGUŁA BRAKU:** nie da się przypisać gracza do strony ⇒ `playerSide === null` i **nie
+  zgadujemy** — mniej treści zamiast odwróconej treści (wzór `_battleLoserSide`).
+
+**⚠ TRZY RZECZY, KTÓRYCH POMIAR NIE POTWIERDZIŁ, TYLKO ZMIENIŁ:**
+1. **Szkoda 150 była STANOWA, nie kosmetyczna.** `AutoRetreatSystem` nie jest idempotentny: drugi
+   emit = drugi rozkaz odwrotu, a paliwo pobierane jest **przy wydaniu** (`MovementOrderSystem:924`)
+   ⇒ **zmierzone ×2,0** (0,817 spalone przy koszcie kursu 0,409). Do tego `_battleQueue` nie
+   deduplikuje po `battleId`, więc bitwa deep-space dostawała baner **i** pauzujący modal kina —
+   wbrew decyzji Slice 1.
+2. **Zagnieżdżony emit wyprzedza oryginalny.** `EventBus.emit` jest synchroniczny; zagnieżdżone
+   ogłoszenie domyka się **w całości**, zanim zewnętrzny `forEach` dojdzie do kolejnego subskrybenta
+   ⇒ **błędna linia trafiała do Dziennika PRZED poprawną**.
+3. **Z2 okazał się KONTRAKTEM POZYCYJNYM, nie regresją.** Po naprawie jedynym ogłoszeniem bitwy DSCS
+   jest emit producenta — czyli sprzed księgowania. Świat pozostaje spójny **tylko dlatego**, że
+   `WarSystem` jest zarejestrowany PRZED `InvasionSystem` (`GameScene:318/319`), więc `recordBattle`
+   domyka księgi wewnątrz tego samego emitu. **Zmierzone wykonaniem** (keeper T7a). ⚠ Kto zmieni
+   kolejność konstrukcji albo udrożni desant AI z bitew DSCS — **T7 padnie**, i o to chodzi (D2).
+
+**⚠ Dwie lekcje procesowe z tego slice'u:**
+- **Próg dobrany do niewłaściwej skali to fałszywa zieleń.** Mój pierwszy pin paliwowy asertował
+  „spalone ≤ połowa baku" i **przeszedł na niepoprawionym kodzie** — kurs odwrotu jest o rzędy
+  wielkości tańszy niż bak. Pin musi porównywać z **kosztem jednego kursu**, nie z pojemnością.
+- **Pin źródłowy bez kontroli na kodzie SPRZED naprawy jest zgadywaniem.** Wszystkie sześć pinów T6
+  przepuszczono przez `git show HEAD` — każdy tam pada.
+
+**i18n (D3):** linia Dziennika była **zahardkodowana po polsku** i `check-i18n` jej nie widział
+(pyta o klucze w `t()`, nie o literały) — gracz EN dostawał polski meldunek o najgłośniejszym
+zdarzeniu w grze. Siedem kluczy PL+EN (`log.battleLine`, `battle.player/unknownForce/homeSystem/
+deepSpaceIn/retreatPlayer/retreatEnemy`). ⚠ **Prefiks `⚔` zostaje w OBU językach** — to językowo
+neutralny uchwyt filtra na gate'cie (właściciel gra po EN).
+
+**⚠ Środowisko headless:** `node_modules/` zniknęło z maszyny, a łańcuch `GameCore → GroundUnitManager
+→ GroundUnitFactory → GlbSnapshotRenderer` importuje `three`, które **nie jest zależnością
+produkcyjną** (Three.js idzie z CDN). Odtworzono **udokumentowany** stub (`0.0.0-headless-stub`, tylko
+`.` + `GLTFLoader`). ⚠ **Granica dowodu zachowana i zweryfikowana**: stub nadal NIE eksportuje
+`TextureLoader`, więc `ColonyOverlay`/`GameScene` dalej nie importują się pod node. `node_modules/`
+jest gitignorowane ⇒ nie wchodzi do commita.
+
+Keepery: NEW `battle_announce_once_smoke` **19/19** (T5 = szkoda stanowa, T6 = pin limitu 156,
+T7 = pin Z2 z kontrolą pinu na kształcie EAH) · NEW `battle_sides_smoke` **35/35** ·
+`w3_battle_booking` T4 **ODWRÓCONY ŚWIADOMIE** (pinował `withWar === 1`, czyli sam defekt, pod
+nagłówkiem „brak re-entrancji"; inwariant „jedno zaksięgowanie na starcie" został jako kontrola pinu),
+20/20. Sweep **176/176 OK, 0 FAIL** · `check-i18n` PASS (pl=en=3279).
+
+**Otwarte po tym slice'ie:** **156** (dwa rekordy jednej bitwy w zapisie, niepowiązane id) ·
+**157** (`UIManager` filtruje `type === 'vessel_group'` ⇒ obrona orbitalna bez klasyfikacji wyniku
+i bez auto-slow) · **158** (`BattleIntroModal`: zahardkodowany polski + nagłówki „AGRESOR/OBROŃCA"
+na indeksach uczestników).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

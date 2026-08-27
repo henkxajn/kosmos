@@ -1188,6 +1188,23 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      gdy stan gry jest poprawny. ⚠ **NADAL NIEZMIERZONE: którzy konsumenci są idempotentni** — a to
      jest właściwe pytanie o szkodę, bo dwa emity o dwóch RÓŻNYCH kształtach (`warId: null` vs `warId`)
      mogą rozejść się po konsumentach różnie. Pomiar musi objąć każdego subskrybenta z osobna.
+     **ZAMKNIĘTE 2026-08-27** — plan `docs/design/BATTLE_NARRATION_PLAN.md`; naprawa w
+     `WarSystem._classifyBattle` (`recordBattle(..., { announce: false })`): księgowanie milczy, gdy
+     producent już ogłosił. **Jeden szew pokrywa DSCS i VCS** (lekcja `131cc2e` odwrócona — nie łatamy
+     producentów, tylko jedyne wejście re-entrantne). Keeper `battle_announce_once_smoke` 19/19;
+     `w3_battle_booking` T4 **odwrócony** (pinował `withWar === 1`, czyli sam defekt).
+     KOREKTA ZAKRESU: duplikat dotyczył WYŁĄCZNIE producentów, którzy emitują sami i dopiero potem są
+     księgowani (**DSCS/VCS**). `EnemyAttackHandler` woła `recordBattle` WPROST i ogłaszał **raz** —
+     wpis sugerował szerszy zasięg, niż miał.
+     POMIAR IDEMPOTENCJI (brakująca odpowiedź): odporni — `_classifyBattle`, `ProximitySystem`,
+     `VesselCombatSystem`, `ThreeRenderer` (wychodzi na `loc.point`), `InvasionSystem` (wychodzi na
+     kształcie uczestnika). NIEODPORNI — **`AutoRetreatSystem`** (drugi rozkaz odwrotu ⇒ **podwójna
+     opłata paliwowa, ZMIERZONE ×2,0**: 0,817 spalone przy koszcie kursu 0,409), **Dziennik** (2 wpisy),
+     **kolejka kina** (`_battleQueue` bez dedupu ⇒ baner **plus** pauzujący modal „ENGAGEMENT IMMINENT",
+     wbrew decyzji Slice 1), **`UIManager`** (2 linie z różnymi `battleId` + podwójny auto-slow), `DebugLog`.
+     KOLEJNOŚĆ DUPLIKATU (odkryte przy pomiarze): zagnieżdżony emit domyka się w CAŁOŚCI, zanim
+     zewnętrzny `forEach` dojdzie do kolejnego subskrybenta ⇒ **błędna linia trafiała do Dziennika PRZED
+     poprawną**. Kolejność nie była przypadkowa.
 
 151. 🟠 **`ProximitySystem:187` ma WLASNA koercje zamiast `systemIdOf`, i ta koercja polyka tranzyt
      warp.** `(v1.systemId ?? 'sys_home') === (v2.systemId ?? 'sys_home')` — a `??` lapie takze `null`,
@@ -1221,3 +1238,80 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
 > **Juz zarejestrowane, NIE duplikuje:** **Finding 138** (`VesselManager._findBodyNearPoint` skanuje
 > cala galaktyke) i **Finding 142** (`_getValidTargets` klucza sie na OGLADANYM ukladzie, nie na
 > `vessel.systemId`) naleza do tej samej klasy i pozostaja otwarte.
+
+---
+
+## Finding z GATE B2 (2026-08-26) — narracja bitwy w Dzienniku
+
+155. 🟠 **Dziennik MYLI ZWYCIĘZCĘ, gdy gracz jest AGRESOREM wojny.** `GameScene:2398-2402`
+     (ścieżka A, brana **zawsze gdy `warId` jest ustawione**) mapuje **literę wyniku** (`A`/`B`)
+     na nazwy wzięte z **rekordu wojny**:
+     `aName = war.aggressor === 'player' ? 'Gracz' : …`, `winnerLabel = winner === 'A' ? aName : dName`.
+     To zakłada `A = agresor`, a **nic tego nie gwarantuje**: `WarSystem.recordBattle:283-284`
+     kopiuje `participantA/B` DOSŁOWNIE, a `EnemyAttackHandler:172-186` **zawsze** wstawia wroga
+     jako `A`, a gracza jako `B`. ⇒ gdy graczem jest AGRESOR wojny, nazwy są zamienione:
+     **wygrana gracza jest raportowana jako zwycięstwo wroga**.
+     ⚠ **ZAOBSERWOWANE NA ŻYWO** (GATE B2): trzy rajdery `emp_001` zestrzelone przez obronę
+     stolicy, a Dziennik napisał „Zwycięzca: Liga Spalonej Drogi".
+     ⚠ **Adnotacja o odwrocie jest liczona INNĄ drogą** (przez `playerSide`, które EAH podaje
+     poprawnie jako `'B'`) i mówi prawdę — dlatego jedno zdanie zawiera dwie wzajemnie sprzeczne
+     połowy („Zwycięzca: wróg" + „Wróg wycofał się"). To jest podpis defektu, nie dwie usterki.
+     ⚠ **DRUGI, GROŹNIEJSZY WARIANT TEGO SAMEGO:** dla bitew **DSCS/VCS** zaksięgowanych w wojnie
+     `playerSide = result.participantB?.type === 'player' ? 'B' : 'A'` **degeneruje się do `'A'`
+     bezwarunkowo**, bo OBAJ uczestnicy mają tam `type: 'vessel_group'`
+     (`DSCS:1006,1013`, `VCS:333`). Wtedy przekłamuje się także adnotacja o odwrocie.
+     ✅ **STAN GRY NIETKNIĘTY — zweryfikowane.** `WarSystem._battleLoserSide:255-265` rozstrzyga
+     zwycięzcę po `part.empireId` (WŁASNOŚĆ), nie po kolejności, i zwraca `null`, gdy nie umie
+     zmapować. Wyczerpanie wojenne naliczane jest poprawnie. Kłamie **wyłącznie zdanie w Dzienniku**.
+     ⚠ **INTERAKCJA Z FINDINGIEM 150** (i to jest jego realny koszt dla gracza): DSCS emituje
+     `battle:resolved` z `warId: null` → ścieżka **B** (poprawna, po `empireId`), a `recordBattle`
+     emituje PONOWNIE z `warId` → ścieżka **A** (zepsuta). ⇒ **ta sama bitwa, dwa wpisy, dwa różne
+     schematy etykietowania, jeden poprawny i jeden błędny** — dokładnie „dwie sprzeczne linijki
+     o zwycięzcy", zgłoszone jako potwierdzenie 150.
+     **Kształt naprawy jest znany i JUŻ ISTNIEJE W REPO DWUKROTNIE:** wyprowadzać nazwy i stronę
+     gracza z `participantA/B.empireId` — tak robi ścieżka B (`GameScene:2410-2414`) oraz
+     `_battleLoserSide`. Jedna funkcja, dwa call-site'y, zero nowej matematyki.
+     **ZAMKNIĘTE 2026-08-27** — plan `docs/design/BATTLE_NARRATION_PLAN.md`. NEW czysty
+     `src/utils/BattleSides.js` (`isPlayerParticipant` / `participantName` / `resolveBattleSides` /
+     `battleWinnerName`), wpięty w OBA listenery `battle:resolved` w `GameScene`; `_hasPlayerSide`
+     deleguje do kanonu (D5). Keeper `battle_sides_smoke` 35/35 — WYKONANIE dla modułu + pin ŹRÓDŁOWY
+     wpięcia (wszystkie sześć pinów zweryfikowane na kodzie SPRZED naprawy: każdy by tam padł).
+     REGUŁA BRAKU: gdy gracza nie da się przypisać do strony, `playerSide === null` i **nie zgadujemy**
+     — linia powstaje bez atrybucji „Gracz/Wróg" i z neutralną wagą (wzór `_battleLoserSide`).
+     PRZY OKAZJI (D3): linia Dziennika była **zahardkodowana po polsku** i `check-i18n` jej nie widział
+     (pyta o klucze w `t()`, nie o literały) — gracz EN dostawał polski meldunek o najgłośniejszym
+     zdarzeniu w grze. Siedem kluczy PL+EN; prefiks `⚔` zostaje w obu językach jako **językowo
+     neutralny uchwyt filtra na gate'cie**. D4: adnotacja o odwrocie bramkowana znaną stroną gracza.
+     ZOSTAJE OTWARTE (Finding 158): `BattleIntroModal` ma zahardkodowany polski i nagłówki kolumn
+     „AGRESOR/OBROŃCA", podczas gdy strony A/B nie są rolami wojny.
+
+156. 🟠 **Jedna bitwa DSCS-w-wojnie zostawia DWA rekordy w `gameState.battles`, o niepowiązanych id.**
+     DSCS pisze swój (`battle_ds_*`, `:1067`), a `recordBattle` nadaje WŁASNE id
+     (`battle_<rok>_<warId>_<n>`) i zapisuje drugi rekord tej samej walki; `war.battles[]` zna tylko
+     ten drugi, a `vessel.lastBattleId` — ten pierwszy. Oba rozwiązują się przez `getBattleRecord`,
+     więc nic dziś nie pada, ale **duplikat idzie do ZAPISU** i z id DSCS nie da się dojść do rekordu
+     wojennego. ⚠ Naprawa 150 tego **nie rusza** (dotyczy OGŁOSZEŃ, nie rekordów) — pin stoi
+     w `battle_announce_once_smoke` T6, żeby nikt nie uznał tego za załatwione. Naprawa = dotknięcie
+     treści zapisu ⇒ osobna decyzja o zakresie.
+
+157. 🟠 **Bitwy obrony orbitalnej nie dostają od `UIManager` ŻADNEJ klasyfikacji wyniku.**
+     `UIManager:1356` filtruje `p?.type === 'vessel_group' && p?.empireId === 'player'`, a
+     `EnemyAttackHandler` opisuje gracza jako `{ type: 'player', empireId: 'player' }` ⇒ predykat
+     odpada na `type`. Skutek: brak linii `log.m4.battleResolved*` i brak auto-slow dla walk, w
+     których gracz broni STOLICY. ⚠ W3-7 dostemplował `empireId` właśnie po to, by domknąć tę klasę
+     (S25), ale ten konsument pyta **też** o `type` — stempel go nie uratował. Naprawa = **dodanie**
+     linii, czyli zmiana zachowania ⇒ własny podpis. Kanon `isPlayerParticipant`
+     (`utils/BattleSides.js`) jest gotowy do użycia.
+
+158. 🟠 **`BattleIntroModal` ma zahardkodowany polski i myli role z kolejnością.** `:130,139,226-231`
+     wypisują `AGRESOR` / `OBROŃCA` / `ZWYCIĘSTWO` po polsku (gracz EN widzi polskie napisy), a same
+     nagłówki są **kategorialnie błędne**: strony A/B bitwy nie są agresorem/obrońcą WOJNY — to
+     zwykłe indeksy uczestników. Po naprawie 155 pola niosą już poprawne nazwy stron, więc kłamią
+     tylko nagłówki. ⚠ Ta sama klasa co **Finding 113**: `check-i18n` pyta o klucze w `t()`, a nie
+     o to, czy każdy widoczny napis przez `t()` przechodzi — literał jest dla niego niewidzialny.
+
+> ⚠ **Rozstrzygnięte przy okazji, ŻEBY NIE WRACAŁO:** wpisy „N tur" pochodzą **wyłącznie**
+> z `BattleSystem.resolveBattle` (`MAX_TURNS = 30`); **`DeepSpaceCombatSystem` NIE zwraca pola
+> `turns` w ogóle**, więc odczyty `29 tur` / `10 tur` **nie są** przekroczeniem `MAX_ROUNDS = 20`
+> i nie dotyczą warstwy naprawianej w `131cc2e`. Dwa wpisy o różnych liczbach = **dwie realne
+> bitwy** (paczka 2 + pojedynczy rajder), nie duplikat.
