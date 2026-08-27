@@ -29,6 +29,7 @@ import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
+import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
@@ -1380,12 +1381,16 @@ export class FleetManagerOverlay {
     // Szukaj hit zone (reverse — top-most first).
     // M3 P1.3.5: map_vessel obsługiwane (selection z tactical mapy);
     // wcześniej skipped — wybór tylko z listy po lewej.
-    for (let i = this._hitZones.length - 1; i >= 0; i--) {
-      const z = this._hitZones[i];
-      if (mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
-        this._handleHit(z, mx, my);
-        return true;
-      }
+    //
+    // Finding 109 — `resolveStratcomZone` NIE zmienia reguły międzywarstwowej: nadal wygrywa
+    // strefa WIERZCHNIA (ostatnia pushowana), więc absorbery (`warp_order_bg`) pozostają
+    // nadrzędne nad gwiazdami pod spodem. Doprecyzowuje wyłącznie przypadek, w którym wierzchnia
+    // strefa okazała się gwiazdą: wtedy spośród NAKŁADAJĄCYCH SIĘ gwiazd wybiera tę o najbliższym
+    // środku. Hover używa tej samej funkcji, więc klik i hover nie mogą się już rozjechać.
+    const hitZone = resolveStratcomZone(this._hitZones, mx, my);
+    if (hitZone) {
+      this._handleHit(hitZone, mx, my);
+      return true;
     }
 
     // M3 P1.3.5 — pusty obszar tactical map (nie atlas/cluster):
@@ -1720,16 +1725,22 @@ export class FleetManagerOverlay {
     // Hover na ciele na mapie
     this._mapHoverBody = null;
     this._clusterHoverSystem = null;
+    // ⚠ map_body ZOSTAJE pierwszo-trafieniowy (decyzja E4). Ma tę samą klasę rozjazdu co gwiazdy
+    //   (Finding 159), ale dotyczy głównej mapy taktycznej i nie był mierzony — nie ruszamy go
+    //   przy okazji. Gałąź `cluster_star` wyjęta z tej pętli: gwiazdy rozstrzyga teraz ta sama
+    //   funkcja co klik. Zmiana jest bezpieczna, bo oba typy powstają w INNYCH zakładkach i nigdy
+    //   nie ma ich naraz w `_hitZones`.
     for (const z of this._hitZones) {
       if (z.type === 'map_body' && mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
         this._mapHoverBody = { bodyId: z.data.bodyId, screenX: z.x + z.w / 2, screenY: z.y + z.h };
         break;
       }
-      if (z.type === 'cluster_star' && mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
-        this._clusterHoverSystem = z.data.systemId;
-        break;
-      }
     }
+    // Gwiazdy STRATCOM — JEDNA reguła z klikiem (Finding 109 / E4). Przy okazji hover przestaje
+    // podświetlać gwiazdę schowaną POD panelem rozkazu: `resolveStratcomZone` zwróci wtedy
+    // absorber, a nie gwiazdę.
+    const hoverZone = resolveStratcomZone(this._hitZones, mx, my);
+    if (hoverZone?.type === 'cluster_star') this._clusterHoverSystem = hoverZone.data.systemId;
     // Hover osadzonych części UnitDesignOverlay (Stocznia = edytor projektów,
     // Jednostki = GroundUnitPanel) — podświetlenia wierszy i tooltipy panelu
     // czytają editor._hoverZone oraz _mouseX/_mouseY (UDO.handleMouseMove nie
