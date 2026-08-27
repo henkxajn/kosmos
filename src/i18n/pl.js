@@ -1194,6 +1194,9 @@ export default {
   //   ⚠ NIE pisać „zapłać" — nie ma takiego guzika; rozliczenie biegnie raz na ROK GRY.
   'fleet.upkeepUnpaidWarn': 'Nieopłacony rok utrzymania — kolejny unieruchomi okręt',
   'log.fleetUpkeepUnpaid': 'Skarbiec nie pokrył utrzymania floty ({0} okr.) — brakło {1} Kr',
+  'fleet.upkeepShortfall': 'Brakuje {0} Kr w skarbcu',
+  'fleet.arrearsClearsSoon': 'Skarbiec wystarcza — kara zejdzie przy najbliższej próbie',
+  'log.fleetArrearsCleared': 'Zaległości opłacone — {0} okr. znów operacyjnych',
 
   // Slice 8b — FleetGroupPanel (panel zaznaczonej grupy statków)
   'fleetGroup.title': 'Zaznaczone statki',

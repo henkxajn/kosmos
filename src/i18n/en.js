@@ -1193,6 +1193,9 @@ export default {
   //   ⚠ Do NOT say "pay now" — there is no such button; settlement runs once per GAME year.
   'fleet.upkeepUnpaidWarn': 'Upkeep year unpaid — the next one immobilises the ship',
   'log.fleetUpkeepUnpaid': 'Treasury did not cover fleet upkeep ({0} ship(s)) — {1} Kr short',
+  'fleet.upkeepShortfall': 'Treasury short by {0} Kr',
+  'fleet.arrearsClearsSoon': 'Treasury covers it — clears at next attempt',
+  'log.fleetArrearsCleared': 'Arrears paid — {0} ship(s) operational again',
 
   // Slice 8b — FleetGroupPanel (selected vessel group panel)
   'fleetGroup.title': 'Selected vessels',

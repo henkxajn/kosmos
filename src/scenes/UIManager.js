@@ -1104,6 +1104,33 @@ export class UIManager {
       if (immobilized) b.immobilized++;
     });
 
+    // Bliźniak powyższego. Kara miała głos, ZDJĘCIE kary nie miało żadnego — gracz nie miał
+    // jak zauważyć, że flota znów lata (ponowienie spłaty leci co miesiąc gry, cicho).
+    // Ta sama agregacja przez queueMicrotask (jeden przebieg = jeden wpis), ten sam powód:
+    // przebieg dotyka WSZYSTKICH zalegających naraz, więc bez niej 20 okrętów = 20 wpisów.
+    EventBus.on('fleet:arrearsCleared', ({ vessel, wasImmobilized }) => {
+      if (vessel && isEnemyVessel(vessel)) return;
+      if (!this._arrearsClearedBatch) {
+        this._arrearsClearedBatch = { count: 0, freed: 0 };
+        queueMicrotask(() => {
+          const b = this._arrearsClearedBatch;
+          this._arrearsClearedBatch = null;
+          if (!b || b.count === 0) return;
+          const msg = t('log.fleetArrearsCleared', b.count);
+          window.KOSMOS?.eventLogSystem?.push({ text: `✓ ${msg}`, channel: 'fleet', severity: 'info' });
+          this._dirty = true;
+          // Toast tylko gdy coś realnie RUSZYŁO z miejsca — zdjęcie pierwszego (jeszcze
+          // nieunieruchamiającego) roku zaległości nie jest wydarzeniem dla gracza.
+          if (b.freed > 0) {
+            EventBus.emit('ui:toast', { text: msg, color: THEME.success ?? '#44dd88', durationMs: 4000 });
+          }
+        });
+      }
+      const b = this._arrearsClearedBatch;
+      b.count++;
+      if (wasImmobilized) b.freed++;
+    });
+
     EventBus.on('expedition:reconProgress', ({ body, discovered }) => {
       // Postęp sekwencyjnego recon — odkryto kolejne ciało
       const name = body?.name ?? '???';

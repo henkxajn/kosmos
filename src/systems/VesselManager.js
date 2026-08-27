@@ -79,6 +79,10 @@ export class VesselManager {
   // S3.5a-1 — utrzymanie floty (core mechanic, bez FEATURES flagi — stałe lokalne klasy).
   static UPKEEP_GRACE_YEARS = 2;      // LATA GRY bez opłaty → immobilized (pochodna isImmobilized)
   static DEFAULT_VESSEL_UPKEEP = 50;  // Kr/rok (rok gry) fallback dla nieznanego shipId
+  // Co ile CIV-LAT (1 civYear = 1 MIESIĄC gry) ponawiamy próbę spłaty dla ZALEGAJĄCYCH.
+  // Rozliczenie roczne odpowiada na pytanie „czy dało się zapłacić W TEJ KLATCE"; ponowienie
+  // sprawia, że zatrzask znaczy „imperium jest TERAZ niewypłacalne", nie „miało pecha rok temu".
+  static ARREARS_RETRY_CIVYEARS = 1.0;
   // Rozkaz "leć do punktu" wskazujący (blisko) ciała → przejmij ciało jako cel, by statek je
   // ŚLEDZIŁ i orbitował, zamiast zamarznąć w heliocentrycznym punkcie gdy ciało odleci. AU.
   static SNAP_TO_BODY_AU = 0.5;
@@ -1711,6 +1715,7 @@ export class VesselManager {
   _tick(deltaYears, physDeltaYears = deltaYears / (GAME_CONFIG.CIV_TIME_SCALE ?? 12)) {
     this._tickRefueling(deltaYears);
     this._tickVesselMaintenance(physDeltaYears);   // S3.5a-1 — utrzymanie per ROK GRY (nie civYear)
+    this._tickArrearsRetry(deltaYears);            // ponowienie spłaty zalegających — per CIV-ROK (miesiąc gry)
     this._tickRepair(deltaYears);
     this._tickMobilization(deltaYears);            // W2-4 — rezerwa ↔ służba, per civYear (NIE physDt!)
     this._tickFullScans(deltaYears);
@@ -2041,6 +2046,54 @@ export class VesselManager {
         unpaidYears: v.unpaidYears,
         immobilized: this.isImmobilized(v),
       });
+    }
+  }
+
+  /**
+   * Ponowienie spłaty dla ZALEGAJĄCYCH — raz na civYear (miesiąc gry).
+   *
+   * PO CO (zmierzone na żywo 2026-08-27): rozliczenie leci raz na ROK GRY, a zatrzask zdejmuje
+   * wyłącznie udana płatność (decyzja 17). Gracz, który odzyskał płynność tuż po nieudanym
+   * rozliczeniu, stał ze sparaliżowaną flotą do następnego — przy 1 d/s ~6 minut realnego
+   * czekania z pełnym skarbcem, bez licznika i bez sprawczości. Do tego `_maintenanceAccum`
+   * NIE jest serializowany, więc kara przeżywała wczytanie, a lekarstwo nie: dziewięć
+   * nieopłaconych lat (narosłych przy tempie 1 w ~9 sekund realnych, pod STARYM modelem
+   * jednego imiennego płatnika) wyglądało na dożywotnie przy skarbcu pełnym 38 tys. Kr.
+   *
+   * ⚠ TO NIE JEST drugie rozliczenie. Dotyka WYŁĄCZNIE statków, które już zalegają, więc
+   *   opłacony w tym roku nie zapłaci drugi raz. Zaległość jest LICZNIKIEM, nie saldem —
+   *   długu w Kr nigdy nie kumulowaliśmy, więc statek płaci tu bieżącą stawkę.
+   * ⚠ REZERWA pominięta — nie zalega (decyzja 17), nie ma czego ponawiać.
+   * ⚠ `break`, nie `continue`: lista rośnie po cenie, więc jeśli skarbca nie stać na najtańszy
+   *   kadłub, nie stać go i na resztę — dalsze próby byłyby jałowe.
+   */
+  _tickArrearsRetry(civDeltaYears) {
+    if (!civDeltaYears || civDeltaYears <= 0) return;
+    if (!window.KOSMOS?.civMode) return;
+    this._arrearsRetryAccum = (this._arrearsRetryAccum ?? 0) + civDeltaYears;
+    if (this._arrearsRetryAccum < VesselManager.ARREARS_RETRY_CIVYEARS) return;
+    this._arrearsRetryAccum -= VesselManager.ARREARS_RETRY_CIVYEARS;
+
+    const civTrade = window.KOSMOS?.civilianTradeSystem;
+    if (!civTrade?.spendFromTreasury) return;
+
+    const debtors = [];
+    for (const v of this._vessels.values()) {
+      if (v.isWreck || isEnemyVessel(v)) continue;
+      if (!isInService(v)) continue;
+      if ((v.unpaidYears ?? 0) <= 0) continue;      // zdrowe statki NIETKNIĘTE
+      debtors.push(v);
+    }
+    if (debtors.length === 0) return;
+    debtors.sort((a, b) => this.getVesselBaseUpkeepCredits(a) - this.getVesselBaseUpkeepCredits(b));
+
+    for (const v of debtors) {
+      const cost = this.getVesselUpkeepCredits(v);
+      if (cost <= 0) { v.unpaidYears = 0; continue; }
+      if (!civTrade.spendFromTreasury(cost, 'fleet_upkeep')) break;
+      const wasImmobilized = this.isImmobilized(v);
+      v.unpaidYears = 0;
+      EventBus.emit('fleet:arrearsCleared', { vesselId: v.id, vessel: v, cost, wasImmobilized });
     }
   }
 

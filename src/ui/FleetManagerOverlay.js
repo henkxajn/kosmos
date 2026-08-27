@@ -7360,6 +7360,17 @@ export class FleetManagerOverlay {
         ctx.fillStyle = THEME.textDim;
         ctx.fillText(t('fleet.unpaidYears', unpaid), x + pad, cy + 10);
         cy += 16;
+        // Sam licznik nie mówi ANI ile brakuje, ANI że kara zejdzie sama — a to jedyne dwie
+        // rzeczy, na które gracz ma wpływ. Zmierzone na żywo (2026-08-27): przy skarbcu pełnym
+        // 38 tys. Kr „Nieopłacone: 9 lat" czyta się jak dożywocie, choć wystarczyło jedno
+        // udane rozliczenie. Kwota liczona LIVE z tego samego gettera, z którego płaci
+        // `spendFromTreasury` — inaczej panel mógłby obiecać spłatę, której nie ma z czego zrobić.
+        const treasury = window.KOSMOS?.civilianTradeSystem?.getTreasuryCredits?.() ?? 0;
+        const short    = Math.max(0, Math.ceil(upkeep - treasury));
+        ctx.fillStyle  = short > 0 ? THEME.warning : THEME.success;
+        ctx.fillText(short > 0 ? t('fleet.upkeepShortfall', short) : t('fleet.arrearsClearsSoon'),
+                     x + pad, cy + 10);
+        cy += 16;
       }
     }
 
