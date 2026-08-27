@@ -124,7 +124,9 @@ export class ShipyardOverlay extends BaseOverlay {
       editor._scrollLeft = 0;            // wspólny scroll obsługuje _shipyardScrollY
       const savedHits = editor._hitZones;
       editor._hitZones = this._hitZones; // hity edytora do wspólnej tablicy
-      bottom = editor._drawShipDesigner(ctx, x, cy, w, BIG) ?? cy;
+      // 5. argument = dolna krawędź WIDOCZNEGO pasma → edytor przypina stopkę ZAPISZ/WYCZYŚĆ
+      // do dołu widoku. Bez tego picker modułów (~850 px) wypychał przyciski poza ekran.
+      bottom = editor._drawShipDesigner(ctx, x, cy, w, BIG, y + h) ?? cy;
       editor._hitZones = savedHits;
     }
 

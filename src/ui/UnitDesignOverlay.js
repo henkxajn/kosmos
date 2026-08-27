@@ -14,6 +14,7 @@ import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { showRenameModal } from './ModalInput.js';
 import { t, getName }    from '../i18n/i18n.js';
 import { GroundUnitPanel } from './GroundUnitPanel.js';
+import { dropZonesInRect } from './InfoPanelLayoutLogic.js';
 
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
 const PAD       = 8;
@@ -24,6 +25,13 @@ const MOD_ROW_H = 24;
 const TPL_ROW_H = 28;
 const HEADER_H  = 28;
 const DIVIDER_W = 1;
+
+// Przypięta stopka akcji (ZAPISZ / WYCZYŚĆ) — zawsze na dole WIDOCZNEGO pasma. Powód: picker
+// modułów potrafi mieć ~850 px (30 modułów w 9 kategoriach), a `_advanceToNextSlot` trzyma go
+// otwartym, dopóki nie wypełnisz wszystkich slotów danego typu — więc dokładnie w trakcie
+// projektowania przyciski lądowały poza ekranem i trzeba było ich szukać scrollem.
+const ACTION_BAR_H      = 34;   // 24 px przycisk + 2×5 px oddechu
+const ACTION_BAR_WARN_H = 48;   // + linia „⚠ brak napędu"
 
 // Ikony kategorii modułów
 const CATEGORY_ICONS = {
@@ -149,7 +157,7 @@ export class UnitDesignOverlay extends BaseOverlay {
     ctx.beginPath();
     ctx.rect(ox, oy, halfW, oh);
     ctx.clip();
-    this._drawShipDesigner(ctx, ox, oy, halfW, oh);
+    this._drawShipDesigner(ctx, ox, oy, halfW, oh, oy + oh);
     ctx.restore();
 
     // ── Separator pionowy ──────────────────────────────────────
@@ -168,10 +176,17 @@ export class UnitDesignOverlay extends BaseOverlay {
   // SHIP DESIGNER (lewa połowa)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  _drawShipDesigner(ctx, x, y, w, h) {
+  // `viewBottom` — dolna krawędź WIDOCZNEGO pasma (host ją zna, treść nie). Podana →
+  // stopka akcji jest przypięta do dołu widoku zamiast płynąć z treścią. Brak (stary
+  // kontrakt 4-argumentowy) → zachowanie legacy: pasek w kolumnie, tam gdzie wypadnie.
+  _drawShipDesigner(ctx, x, y, w, h, viewBottom = null) {
     // Scroll — przesuwamy renderowanie w górę
     let cy = y + PAD - this._scrollLeft;
     const useLang = (window.KOSMOS?.lang ?? 'pl') === 'en';
+
+    const pinned = viewBottom != null;
+    let showActionBar = false;
+    let hasEngine = false;
 
     // ── Nagłówek (standard: bold 13 accent, do lewej) ──
     ctx.fillStyle = THEME.accent;
@@ -302,49 +317,88 @@ export class UnitDesignOverlay extends BaseOverlay {
       cy = this._drawStatsPreview(ctx, x, cy, w);
 
       // ── Przyciski akcji ────────────────────────────────────
-      this._drawSeparator(ctx, x + PAD, cy, x + w - PAD, cy);
-      cy += 6;
-
-      const hasEngine = this._slotAssignments.some(id => {
+      hasEngine = this._slotAssignments.some(id => {
         const m = SHIP_MODULES[id];
         return m && m.slotType === 'propulsion';
       });
 
-      // Przycisk zapisu szablonu
-      const saveBtnW = Math.floor((w - PAD * 3) / 2);
-      const saveBtnStyle = hasEngine ? 'primary' : 'disabled';
-      this._drawButton(ctx, t('unitDesign.saveTemplate'), x + PAD, cy, saveBtnW, 24, saveBtnStyle);
-      if (hasEngine) {
-        this._addHit(x + PAD, cy, saveBtnW, 24, 'save_template', { label: t('unitDesign.saveTemplate') });
+      if (pinned) {
+        // Stopka rysowana NA KOŃCU metody — musi przykryć przewiniętą treść, a tu
+        // jesteśmy dopiero w połowie kolumny. Tutaj wyłącznie odnotowanie.
+        showActionBar = true;
+      } else {
+        this._drawSeparator(ctx, x + PAD, cy, x + w - PAD, cy);
+        cy += 6;
+        cy = this._drawActionButtons(ctx, x, cy, w, hasEngine) + 6;
       }
-
-      // Przycisk wyczyść
-      this._drawButton(ctx, t('unitDesign.clear'), x + PAD * 2 + saveBtnW, cy, saveBtnW, 24, 'secondary');
-      this._addHit(x + PAD * 2 + saveBtnW, cy, saveBtnW, 24, 'clear_design', { label: t('unitDesign.clear') });
-
-      if (!hasEngine) {
-        cy += 28;
-        ctx.fillStyle = THEME.warning;
-        ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
-        ctx.fillText(`⚠ ${t('unitDesign.needEngine')}`, x + PAD, cy + 8);
-      }
-
-      cy += 30;
     }
 
     // ── Lista zapisanych szablonów ─────────────────────────────
     cy = this._drawSavedTemplates(ctx, x, cy, w, 99999);
 
-    cy += 40; // margines dolny
+    // Margines dolny + pas pod przypiętą stopkę: bez tej rezerwy ostatniego wiersza
+    // nie dałoby się wyscrollować spod paska.
+    cy += 40 + (showActionBar ? (hasEngine ? ACTION_BAR_H : ACTION_BAR_WARN_H) : 0);
 
     // Ogranicz scroll do zakresu treści
     const contentH = (cy + this._scrollLeft) - y;
     const maxScroll = Math.max(0, contentH - h);
     if (this._scrollLeft > maxScroll) this._scrollLeft = maxScroll;
 
+    // Stopka NA SAMYM KOŃCU — po całej treści, więc ją przykrywa (i odbiera jej strefy klik).
+    if (showActionBar) this._drawPinnedActionBar(ctx, x, w, viewBottom, hasEngine);
+
     // Zwróć dolną krawędź treści — pozwala hostowi (zakładka Stocznia w
     // Dowództwie Taktycznym) policzyć łączną wysokość do wspólnego scrolla.
     return cy;
+  }
+
+  // ── Przyciski akcji projektu (ZAPISZ / WYCZYŚĆ) ────────────────────────────
+  // JEDNO źródło rysowania dla trybu przypiętego i płynącego z treścią — inaczej dwa
+  // warianty tego samego paska rozjechałyby się przy pierwszej zmianie etykiet.
+  // Zwraca dolną krawędź narysowanego bloku.
+  _drawActionButtons(ctx, x, cy, w, hasEngine) {
+    const btnW = Math.floor((w - PAD * 3) / 2);
+
+    this._drawButton(ctx, t('unitDesign.saveTemplate'), x + PAD, cy, btnW, 24,
+                     hasEngine ? 'primary' : 'disabled');
+    if (hasEngine) {
+      this._addHit(x + PAD, cy, btnW, 24, 'save_template', { label: t('unitDesign.saveTemplate') });
+    }
+
+    this._drawButton(ctx, t('unitDesign.clear'), x + PAD * 2 + btnW, cy, btnW, 24, 'secondary');
+    this._addHit(x + PAD * 2 + btnW, cy, btnW, 24, 'clear_design', { label: t('unitDesign.clear') });
+
+    if (!hasEngine) {
+      ctx.fillStyle = THEME.warning;
+      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'left';
+      ctx.fillText(`⚠ ${t('unitDesign.needEngine')}`, x + PAD, cy + 36);
+      return cy + 40;
+    }
+    return cy + 24;
+  }
+
+  // ── Przypięta stopka akcji ────────────────────────────────────────────────
+  // Rysowana po całej treści (przykrywa przewinięte wiersze) i odbierająca im strefy klik:
+  // `_hitTest` bierze PIERWSZE trafienie, a treść jest zarejestrowana wcześniej niż stopka,
+  // więc bez `dropZonesInRect` klik w „Zapisz" trafiałby w moduł schowany pod paskiem.
+  _drawPinnedActionBar(ctx, x, w, viewBottom, hasEngine) {
+    const barH = hasEngine ? ACTION_BAR_H : ACTION_BAR_WARN_H;
+    const barY = viewBottom - barH;
+
+    dropZonesInRect(this._hitZones, { x, y: barY, w, h: barH });
+
+    ctx.fillStyle = bgAlpha(0.96);
+    ctx.fillRect(x, barY, w, barH);
+    ctx.strokeStyle = THEME.borderActive;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, barY + 0.5);
+    ctx.lineTo(x + w, barY + 0.5);
+    ctx.stroke();
+
+    this._drawActionButtons(ctx, x, barY + 5, w, hasEngine);
   }
 
   // ── Picker modułów dla aktywnego slotu ────────────────────────────────────

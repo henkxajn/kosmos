@@ -50,6 +50,22 @@ export function pruneZones(zones, fromIndex, top, bot) {
   return zones;
 }
 
+// Odwrotność `pruneZones`: USUWA strefy NACHODZĄCE na prostokąt (nie „mieszczące się w paśmie").
+// Pod PRZYPIĘTĄ stopkę — `_hitTest` bierze PIERWSZE trafienie, a treść przewinięta pod stopkę jest
+// zarejestrowana WCZEŚNIEJ niż jej przyciski, więc bez tego klik w „Zapisz" trafiałby w wiersz,
+// który pasek właśnie zasłonił. In-place kompaktacja całej tablicy. Pure.
+export function dropZonesInRect(zones, rect) {
+  let write = 0;
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i];
+    const hits = z.x < rect.x + rect.w && z.x + z.w > rect.x &&
+                 z.y < rect.y + rect.h && z.y + z.h > rect.y;
+    if (!hits) zones[write++] = z;
+  }
+  zones.length = write;
+  return zones;
+}
+
 // Klamp offsetu scrolla do [0, max(0, contentH − viewportH)]. Zawartość mieści się → 0.
 // (Dolny klamp też w handleScroll; górny wymaga znanej contentH — stąd tutaj.)
 export function clampScroll(scroll, contentH, viewportH) {
