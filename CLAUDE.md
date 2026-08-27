@@ -2337,9 +2337,59 @@ T3 absorber **przechodził już przed naprawą** = strażnik regresji) · NEW `s
 **14/14** (fail-first 9/5). Sweep **178/178 OK, 0 FAIL** · `check-i18n` PASS · **zero nowych kluczy**
 (reuse `fleet.clusterSwitch`).
 
-**Otwarte:** **110** (ikona statku w martwym pasie — teraz bezpieczniejsze do ruszenia, ale wymaga
-własnego pomiaru) · **159** (`map_body`: ta sama asymetria, niemierzona, główna mapa taktyczna) ·
-**160** (`open({tab})` omija `_switchTab` — dla innych zakładek nierozstrzygnięte).
+**Otwarte:** **110** — ⚠ **naprawa NIE jest „powiększeniem strefy"** (audyt
+`docs/audit/STRATCOM_110_159_160_AUDIT.md`): `pickStarZone` liczy odległość do środka STREFY, więc
+rozciągnięcie jej **cofa Finding 109** (zmierzone: 2 przewroty dla gwiazd różniących się w osi Y;
+okno nakładania +59 %, z wachlarzem +385 %). Kotwica celowania musi być **JAWNA** w `zone.data`.
+Decyzja właściciela: **wariant (c)** — ikona wybiera STATEK, reszta strefy UKŁAD.
+**159** — ⬜ **PRZEKLASYFIKOWANY na UTAJONY**: `commandTacticalMap: false` ⇒ 6 z 7 producentów
+`map_body` nigdy nie biegnie, a siódmy (Atlas) to rozłączne wiersze z tooltipem już iterującym od
+końca. Wraca tylko z flagą — i **po 110**. · **160** ✅ ZAMKNIĘTE (sekcja niżej).
+
+---
+
+## Wejście w zakładkę Dowództwa — Finding 160 (save **v101 bez migracji**, live-gate 6/6 PASS — ZAMKNIĘTE)
+
+Domknięcie **niedokończonej połowy Findingu 108**. Plan + decyzje T1-T6: `docs/design/OVERLAY_TAB_ENTRY_PLAN.md`;
+audyt: `docs/audit/STRATCOM_110_159_160_AUDIT.md` §3.
+
+**Jedno zdanie:** klawisz otwierający Dowództwo **na już otwartym Dowództwie** przełączał zakładkę
+z pominięciem `_switchTab` **i** `close()`, więc nic nie sprzątało po zakładce, z której gracz wyszedł.
+
+⚠ **`close()` NIE JEST ratunkiem, bo NIE BIEGNIE.** `OverlayManager.handleKey:75-80` przy JUŻ aktywnym
+overlayu woła `_showOverlay` **bez** `_hideOverlay` (żeby drugie wciśnięcie `K` ponawiało focus zamiast
+zamykać) ⇒ `open(opts)` wykonuje się na ŻYWYM overlayu. W `open()` były **TRZY** przypisania
+`_activeTab` (`opts.tab` · `focusSection` · `view:'registry'`) i żadne nie szło przez `_switchTab`.
+Naprawa utwardza **wszystkie trzy** — nieutwardzony bliźniak to mina (`removeColony:667`, `ReturnJump`).
+
+⚠ **OSIĄGALNOŚĆ ROZSTRZYGA POJEDYNCZY BRAK HANDLERA.** Pole ilości Logistyki ma `blur → commit →
+close` (`:1089`) ⇒ samo się leczy, a póki ma fokus, jego `keydown` robi `stopPropagation`, więc `M`
+i tak nie dotrze do gry ⇒ **nieosiągalne**. **Wyszukiwarka Rejestru (`:4366-4393`) NIE MA `blur`** —
+celowo, fraza ma przeżyć przeglądanie listy ⇒ wpisz frazę, kliknij kanwę, wciśnij `M` i **pole
+tekstowe zostaje nad mapą galaktyki**. To jedyna osiągalna ścieżka i to ona jest rdzeniem gate'u.
+`blur` **świadomie NIE dołożony** (T5) — po zamknięciu chokepointu byłby naprawą objawu.
+
+⚠ **`_switchTab` ma early-return `tab === _activeTab` i TO ZOSTAJE** (T4, pinowane): wyciek polega na
+**PRZENIESIENIU** pola DOM tam, gdzie nie należy; gdy zakładka się nie zmienia, nic się nie przenosi.
+Gracz w Rejestrze, który wciska `K`, ma zobaczyć pole **na miejscu** — to poprawny wynik, nie defekt.
+
+⚠ **PRZY OKAZJI DOMKNIĘTA RESZTKA 108:** kontrola pinu T4 padła fail-first — przed naprawą wejście na
+Stratcom **z innej zakładki** nie resetowało `_selectedWarpShipId`/`_selectedClusterSystem`, bo tamten
+slice zamknął to wyłącznie w `_close()` (ścieżka Esc). Druga droga do tej samej pułapki zamknięta.
+
+**Zbiór producentów zamknięty:** dokładnie `g`, `m`, `k` — jedyne wpisy keymapy w formie `{id, opts}`,
+wszystkie celujące w `fleet`. `Outliner:732/736` woła `openPanel('fleet')` **bez opcji**, a
+`TacticalDock:671` jest przy otwartym overlayu **nieklikalny** (`UIManager:1724`). ⚠ Ale **Outliner
+JEST klikalny przy otwartym overlayu** (`UIManager:1715` bez bramki `isAnyOpen`, inaczej niż Dok) —
+dziś nieszkodliwe, furtka na przyszłość, gdyby ktoś dodał tam `opts.tab`.
+
+Pliki: `FleetManagerOverlay.open()` (3 linie), NEW keeper `src/testing/smoke/overlay_tab_entry_smoke.mjs`
+**28/28** (fail-first 20/8; T6 = pin **wykonaniowy** na `new OverlayManager()._keyMap`, nie regex na
+źródle). Sweep **179/179 0 FAIL** · `check-i18n` PASS · zero migracji · zero nowych kluczy i18n.
+⚠ Granica dowodu live-gate §4: brak wraków w zapisie ⇒ potwierdzone **zachowanie**, nie **treść**
+filtra wraków (ta pinowana wykonaniowo, T5).
+
+**NEXT: Finding 110** (wariant (c), kotwica jawna w `zone.data`).
 
 ---
 

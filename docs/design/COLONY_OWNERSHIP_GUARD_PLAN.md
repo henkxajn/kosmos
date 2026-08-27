@@ -1360,8 +1360,45 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      dwuznaczność z Findingu 109. Dlatego 109 poszło pierwsze; jego naprawa nie rusza 110 w żadną
      stronę. Po 109 rozstrzyganie „najbliższy środek" sprawia, że powiększenie stref jest
      BEZPIECZNIEJSZE niż było — ale nadal wymaga własnego pomiaru.
+     ⚠ **KOREKTA PO POMIARZE (audyt 2026-08-27, `docs/audit/STRATCOM_110_159_160_AUDIT.md`):**
+     zdanie wyżej o „bezpieczniejszym powiększaniu" jest **NIEPRAWDZIWE — jest odwrotnie.**
+     `pickStarZone` liczy odległość do **środka STREFY** (`z.x + z.w/2`), nie do glifu, więc
+     rozciągnięcie strefy w górę o 13 px przesuwa kotwicę celowania o 6,5 px i **przewraca wybór**
+     dla gwiazd różniących się w osi Y (zmierzone: 2 realne przewroty + 1 remis; kursor bliżej
+     glifu sys_A, wynik sys_B). Znosi się to tylko dla gwiazd na tej samej wysokości — dlatego
+     pierwszy wariant pomiaru dawał uspokajające 10/10 i **wprowadzał w błąd**. Okno nakładania
+     rośnie 484 → 770 px² (**+59 %**), a z objęciem wachlarza → 2345 px² (**+385 %**).
+     ⇒ **Naprawa NIE jest „powiększeniem strefy".** Kotwica celowania musi być **JAWNA**
+     (`zone.data`), a `pickStarZone` ma ją preferować — dopiero wtedy strefa może mieć dowolny
+     kształt bez dotykania 109. **To 110 zmienia kontrakt kanonu**, więc 159 (gdyby wracało) idzie
+     PO 110, nie obok — kolejność z rejestru odwraca się.
+     ⚠ **POMIAR JEST GORSZY NIŻ TEN WPIS:** środek ikony nie leży w strefie **NIGDY** (także przy
+     jednym statku — 81 % ikony poza strefą, nie „górna połowa"); martwy pas jest **też POZIOMY**
+     (wachlarz rozsuwa ikony o ±22,5 px przy półszerokości strefy 11 ⇒ skrajne ikony mają **0 %**
+     wspólnego pola); a ikony **w tranzycie warp** (`starS: null`, rysowane między gwiazdami) nie
+     mają w pobliżu **żadnej** strefy — to nie „ciasna strefa", to jej brak.
+     ✅ **DECYZJA WŁAŚCICIELA (2026-08-27) — wariant (c):** klik w prostokąt ikony wybiera **STATEK**
+     (`warp_ship_select`), reszta strefy gwiazdy wybiera **UKŁAD** jak dziś. Powód: jedyny wariant
+     spójny ze statkami w tranzycie. Odrzucone: (a) ikona jako przedłużenie strefy gwiazdy (nie
+     obsługuje tranzytu), (b) cała powiększona strefa wybiera statek (zabiera wybór układu).
+     **Kolejność prac: 160 → 110.**
 
-159. 🟠 **`map_body` ma TĘ SAMĄ asymetrię klik/hover co gwiazdy — i jest ślepy na absorbery.**
+159. ⬜ **PRZEKLASYFIKOWANY 2026-08-27 na UTAJONY (flaga OFF) — NIE planować.** `map_body` ma TĘ SAMĄ
+     asymetrię klik/hover co gwiazdy — i jest ślepy na absorbery.
+     ⚠ **PRZESŁANKA TEGO WPISU NIE OBOWIĄZUJE W DOMYŚLNEJ KONFIGURACJI** (audyt
+     `docs/audit/STRATCOM_110_159_160_AUDIT.md` §2). „Główna mapa taktyczna" Dowództwa **nie
+     istnieje**: `FEATURES.commandTacticalMap = false` + `fleetRegistry = true` ⇒
+     `mapAvailable === false` ⇒ `_tacticalView` wymuszony na `'registry'` ⇒ gałąź
+     `_drawCenter`/`_drawCenterMap` **nigdy nie biegnie** (komentarz w źródle `:735` mówi wprost:
+     „3g — próba deprecjacji mapy 2D"). **Sześć z siedmiu** producentów `map_body` żyje właśnie tam
+     ⇒ w normalnej grze nie pushują żadnej strefy. **Siódmy** (`:5380`) to **Atlas** — rozłączne
+     wiersze listy (pierwsze trafienie == wierzchnie), a `atlas_report` jest tam pushowany na wierzch
+     **celowo**; ścieżka tooltipa Atlasu (`GameScene._tooltipHoverFromFleetAtlas:5494`) **już dziś
+     iteruje od końca**. Poboczne: `FleetTabPanel.js` (też pusha `map_body`) **nie jest nigdzie
+     importowany** — uśpiony bliźniak.
+     ⇒ **Wraca na stół TYLKO wtedy, gdy `commandTacticalMap` zostanie włączone — i wtedy PO 110**,
+     bo to 110 zmienia kontrakt kotwicy w `StratcomHitLogic`, który 159 by konsumowało.
+     Oryginalny opis (zachowany):
      Hover (`FleetManagerOverlay` pętla `for (const z of this._hitZones)`) rozstrzyga PIERWSZYM
      trafieniem, a klik `resolveStratcomZone` → wierzchnią strefą; dla `map_body` (7 miejsc pushu)
      nie ma też testu, czy nad kafelkiem nie leży panel. ⚠ Świadomie **nietknięte** przy naprawie 109
@@ -1369,14 +1406,48 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      czy strefy ciał realnie się nakładają. Kanon `src/ui/StratcomHitLogic.js` jest gotowy do reużycia.
      Pin limitu: `stratcom_star_pick_smoke` T5.
 
-160. 🟠 **`open({tab})` przypisuje zakładkę Z POMINIĘCIEM `_switchTab` — żaden reset wejścia nie biegnie.**
+160. ✅ **ZAMKNIĘTE 2026-08-27** (plan `docs/design/OVERLAY_TAB_ENTRY_PLAN.md`, decyzje T1-T6 = W1;
+     keeper `overlay_tab_entry_smoke` **28/28**, fail-first 20/8; sweep 179/179; live-gate 6/6 PASS).
+     Naprawa: **wszystkie TRZY** przypisania `_activeTab` w `open()` idą przez `_switchTab`
+     (`opts.tab` · `focusSection` · `view:'registry'`) — bramka u właściciela stanu, zero zmian
+     w `OverlayManager` (wariant „hide przed re-show" odrzucony: łamie intencję klawisza `K`
+     i disposuje kontekst WebGL galaktyki przy każdym wciśnięciu).
+     ⚠ **PRZY OKAZJI DOMKNIĘTA RESZTKA FINDINGU 108:** kontrola pinu T4 padła fail-first — przed
+     naprawą wejście na Stratcom **z innej zakładki** nie resetowało rodziny 108
+     (`_selectedWarpShipId` / `_selectedClusterSystem`), bo tamten slice zamknął to wyłącznie
+     w `_close()` (ścieżka Esc). Druga droga do tej samej pułapki jest teraz zamknięta.
+     ⚠ **Granica dowodu live-gate §4:** brak wraków w zapisie ⇒ potwierdzone **zachowanie**
+     (`K` → Rejestr, nic nie wisi), nie **treść** filtra wraków; ta jest pinowana wykonaniowo (T5).
+     Opis defektu (zachowany):
+     **`open({tab})` przypisuje zakładkę Z POMINIĘCIEM `_switchTab` — żaden reset wejścia nie biegnie.**
      `FleetManagerOverlay:511` robi `if (opts.tab) this._activeTab = opts.tab`, podczas gdy cały
      reset stanu per-zakładka mieszka w `_switchTab` (`:586-611`: hovery, drop-downy Logistyki,
      `_missionConfig`, scrolle, selekcje Stratcomu). Klawisze **`G` i `M`** (`OverlayManager:33,39`)
      otwierają overlay właśnie tą ścieżką. Dla Findingu 108 to była **połowa mechanizmu** (uzbrojony
      tryb rozkazu przeżywał Esc + `M`) i została zamknięta punktowo przez parytet rodziny w `_close()`.
-     ⚠ **NIEROZSTRZYGNIĘTE dla pozostałych zakładek:** `close()` sprząta DOM-inputy, więc najgroźniejsza
-     klasa jest pokryta, ale czy jakiś stan per-zakładka wycieka przy `G`/`M` — niezmierzone.
+     ⚠ ~~**NIEROZSTRZYGNIĘTE dla pozostałych zakładek:** `close()` sprząta DOM-inputy, więc
+     najgroźniejsza klasa jest pokryta, ale czy jakiś stan per-zakładka wycieka przy `G`/`M` —
+     niezmierzone.~~ **ZMIERZONE 2026-08-27** (audyt `docs/audit/STRATCOM_110_159_160_AUDIT.md` §3;
+     plan naprawy: `docs/design/OVERLAY_TAB_ENTRY_PLAN.md`).
+     ⚠ **MECHANIZM JEST OSTRZEJSZY, NIŻ TU ZAPISANO — `close()` NIE JEST ratunkiem, bo NIE BIEGNIE.**
+     `OverlayManager.handleKey:75-80`: gdy overlay jest **już aktywny** i wpis keymapy ma niepuste
+     `opts`, leci `_showOverlay(...)` **z pominięciem `_hideOverlay`** ⇒ `open(opts)` wykonuje się na
+     ŻYWYM overlayu. `open()` ma **TRZY** przypisania `_activeTab` (`:512` z `opts.tab`, `:517` przy
+     `focusSection`, `:529` przy `view === 'registry'`) i żadne nie przechodzi przez `_switchTab`.
+     ⚠ **OSIĄGALNOŚĆ ZALEŻY OD KONKRETNEGO POLA DOM — i to jest sedno:** pole ilości Logistyki ma
+     `blur → commit → _closeLogiQtyInput` (`:1089`), więc **samo się leczy** (a póki ma fokus, jego
+     `keydown` robi `stopPropagation`, więc `M` i tak nie dotrze do gry) ⇒ w praktyce nieosiągalne.
+     **Wyszukiwarka Rejestru (`:4366-4393`) NIE MA handlera `blur`** — celowo, fraza ma przeżyć
+     przeglądanie listy ⇒ gracz wpisuje frazę, klika na kanwę (input zostaje, fokus schodzi),
+     wciska `M` ⇒ **pole tekstowe zostaje nad mapą galaktyki. OSIĄGALNE, zmierzone wykonaniem**
+     (obie kontrole pinu — `_switchTab` i `close()` — czyste).
+     ⚠ **ZBIÓR PRODUCENTÓW JEST WĘŻSZY, NIŻ WYGLĄDAŁ:** dokładnie `g`, `m`, `k` — jedyne wpisy
+     keymapy w formie `{id, opts}`, wszystkie trzy celujące w `fleet`. `Outliner:732/736` woła
+     `openPanel('fleet')` **bez opcji** (`_activeTab` nietknięty), a `TacticalDock:671` jest przy
+     otwartym overlayu **nieklikalny** (`UIManager:1724` bramkuje na `!overlayManager.isAnyOpen()`).
+     ⚠ Odnotowane przy okazji: **Outliner JEST klikalny przy otwartym overlayu** (`UIManager:1715`
+     nie ma bramki `isAnyOpen`, inaczej niż Dok) — dziś nieszkodliwe, ale to furtka: gdyby ktoś dodał
+     tam `opts.tab`, wyciek wróci.
 
 ---
 

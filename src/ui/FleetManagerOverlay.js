@@ -505,16 +505,30 @@ export class FleetManagerOverlay {
     if (this._visible) this._pendingFocusInit = true;
     else this._close();
   }
+  // Finding 160 — WSZYSTKIE trzy przypisania zakładki idą przez `_switchTab`, nigdy wprost.
+  // POWÓD: `OverlayManager.handleKey:75-80` przy JUŻ aktywnym overlayu woła `_showOverlay` BEZ
+  // `_hideOverlay` (żeby drugie wciśnięcie K ponawiało focus zamiast zamykać), więc `open()`
+  // wykonuje się na ŻYWYM overlayu — `close()` nie biegnie i nic nie sprząta po zakładce, z której
+  // gracz właśnie wyszedł. Zmierzone: wyszukiwarka Rejestru (NIE ma handlera `blur` — celowo, fraza
+  // ma przeżyć przeglądanie listy) zostawała jako osierocony <input> nad mapą galaktyki.
+  // ⚠ Utwardzone wszystkie trzy, nie tylko `opts.tab` — klawisz K i wejście `view:'registry'` też
+  //   flipują zakładkę, a nieutwardzony bliźniak to mina (por. `removeColony:667`, `ReturnJump`).
+  // ⚠ `_switchTab` ma early-return `tab === _activeTab` i TAK MA ZOSTAĆ: wyciek polega na
+  //   PRZENIESIENIU pola DOM tam, gdzie nie należy; gdy zakładka się nie zmienia, nic się nie
+  //   przenosi (plan T4=W1, pinowane keeperem).
+  // Plan: docs/design/OVERLAY_TAB_ENTRY_PLAN.md · audyt: docs/audit/STRATCOM_110_159_160_AUDIT.md §3
   open(opts = {}) {
     this._visible = true;
     this._pendingFocusInit = true;
     // Wybór zakładki przez wywołującego (klawisze G/M → 'stratcom', nav itp.).
-    if (opts.tab) this._activeTab = opts.tab;
+    if (opts.tab) this._switchTab(opts.tab);
     // M4 P2 — klawisz K otwiera fleet z focusSection: 'wreck'. Przy najbliższym
     // draw wymuszamy scroll listy do tej sekcji + auto-select pierwszy wrak.
     // Sekcja Wraki żyje w lewym pasie (tylko zakładka taktyczna) → wymuś ją.
+    // Kolejność zachowana (plan T3=W1): `_switchTab` NIE dotyka `_pendingFocusSection` ani
+    // `_registryFilter`, więc pola intencji wejścia przeżywają przełączenie.
     this._pendingFocusSection = opts.focusSection ?? null;
-    if (this._pendingFocusSection) this._activeTab = 'tactical';
+    if (this._pendingFocusSection) this._switchTab('tactical');
     // 3g: przy mapie 2D OFF klawisz K (sekcja wraków lewej listy) prowadzi do
     // REJESTRU z włączonym chipem 💀 (lewa lista nie istnieje w tym trybie).
     if (this._pendingFocusSection === 'wreck'
@@ -526,7 +540,7 @@ export class FleetManagerOverlay {
     }
     // F3: otwarcie wprost w REJESTRZE (chip 🌀 tranzytu → prefiltr transit).
     if (opts.view === 'registry' && GAME_CONFIG.FEATURES?.fleetRegistry === true) {
-      this._activeTab = 'tactical';
+      this._switchTab('tactical');
       this._tacticalView = 'registry';
       if (opts.registrySystemKey !== undefined) {
         this._registryFilter.systemKey = opts.registrySystemKey;
