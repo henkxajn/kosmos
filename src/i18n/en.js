@@ -3354,6 +3354,19 @@ export default {
   'rallyModal.removeAssignment':  'Remove assignment',
   'rallyModal.assignedLabel':     'assigned',
 
+  // ── Battle narration (Finding 155 + D3) ─────────────────────────────
+  // ⚠ The battle line was HARDCODED IN POLISH inside `GameScene` — `check-i18n` cannot see that
+  //   (it checks keys used in `t()`, not literals in `fillText`/`push`), so an EN player got a
+  //   Polish report of the loudest event in the game. The ⚔ prefix STAYS in both languages: it
+  //   is the language-neutral filter handle used by the gate.
+  'log.battleLine':                '⚔ Battle in {0}: {1} vs {2}. Winner: {3}. Losses: {4}/{5}, {6} turns.',
+  'battle.player':                 'Player',
+  'battle.unknownForce':           'Unknown force',
+  'battle.homeSystem':             'home',
+  'battle.deepSpaceIn':            'deep space ({0})',
+  'battle.retreatPlayer':          ' Player retreated.',
+  'battle.retreatEnemy':           ' Enemy retreated.',
+
   // ── M4 P1 — Notifications + drift + retreat ─────────────────────────
   'log.m4.enemyFleetMoving':       'Alien fleet movement detected (Empire {0}, ETA {1} yrs)',
   'log.m4.enemyFleetArrival':      'ALIEN FLEET materializing at home! Empire {0}, {1} vessels',

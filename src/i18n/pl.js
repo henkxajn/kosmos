@@ -3355,6 +3355,19 @@ export default {
   'rallyModal.removeAssignment':  'Usuń przypisanie',
   'rallyModal.assignedLabel':     'przypisanych',
 
+  // ── Narracja bitwy (Finding 155 + D3) ───────────────────────────────
+  // ⚠ Linia bitwy była ZAHARDKODOWANA PO POLSKU w `GameScene` — `check-i18n` tego nie widzi
+  //   (pyta o klucze w `t()`, nie o napisy w `fillText`/`push`), więc gracz EN dostawał polski
+  //   meldunek o najgłośniejszym zdarzeniu w grze. Prefiks ⚔ ZOSTAJE w OBU językach: jest
+  //   językowo neutralnym uchwytem filtra na gate'cie.
+  'log.battleLine':                '⚔ Bitwa w {0}: {1} vs {2}. Zwycięzca: {3}. Straty: {4}/{5}, {6} tur.',
+  'battle.player':                 'Gracz',
+  'battle.unknownForce':           'Obcy',
+  'battle.homeSystem':             'dom',
+  'battle.deepSpaceIn':            'głębokim kosmosie ({0})',
+  'battle.retreatPlayer':          ' Gracz wycofał się.',
+  'battle.retreatEnemy':           ' Wróg wycofał się.',
+
   // ── M4 P1 — Notifications + drift + retreat ─────────────────────────
   'log.m4.enemyFleetMoving':       'Wykryto ruch obcej floty (Imperium {0}, ETA {1} lat)',
   'log.m4.enemyFleetArrival':      'OBCA FLOTA materializuje się przy domu! Imperium {0}, {1} statków',
