@@ -2290,6 +2290,59 @@ na indeksach uczestników).
 
 ---
 
+## STEROWANIE MAPĄ STRATCOM — Findingi 108 + 109 (save **v101 bez migracji**)
+
+Plan + decyzje E1-E5 + gate: `docs/design/STRATCOM_CONTROL_PLAN.md`; rejestr macierzysty:
+`COLONY_OWNERSHIP_GUARD_PLAN.md` §108-110 (108/109 zamknięte) + nowe 159/160.
+
+**Dwa niezależne mechanizmy, jeden objaw: gracz tracił sterowanie mapą.** 109 — mapa **wybierała
+inny układ, niż podświetlała**; 108 — tryb rozkazu warp **odcinał jedyne wejście do widoku układu
+i nie dawał się rozbroić**.
+
+- **109 — NEW `src/ui/StratcomHitLogic.js`** (czysty, zero importów): `topMostZoneAt` /
+  `pickStarZone` / `resolveStratcomZone`, używany przez **klik i hover**.
+  ⚠ **DWIE REGUŁY, NIE JEDNA — to jest cała subtelność.** `topMostZoneAt` rozstrzyga między
+  **warstwami** (panel bije mapę — ta reguła **chroni absorbery**), `pickStarZone` rozstrzyga
+  **między gwiazdami** (najbliższy środek). Zlanie ich w pre-pass — kuszące, bo taki wzór stoi
+  w tym samym pliku przy `:1369` — **przebiłoby `warp_order_bg`** i przywróciło klik-przez-panel,
+  czyli defekt cięższy od naprawianego. Rozstrzygacz jest **doprecyzowaniem zwycięzcy**.
+- **108 — trzy dopięcia**: (a) `warp_order_cancel` czyści też `_selectedWarpShipId` („Anuluj" =
+  *rozbrój tryb*); (b) `cluster_switch` **także** w `_drawWarpOrderPanel`, z bramką **skopiowaną**
+  `explored && sysReg`; (c) `_close()` zeruje `_selectedWarpShipId` + `_warpShipScrollY`.
+  ⚠ **`warp_order_send` świadomie NIE rozbraja** (decyzja E2) — marker przydaje się przy wysyłaniu
+  kolejnych statków, a po (b) nie tworzy pułapki. Pinowane, żeby nikt tego nie „naprawił".
+
+**⚠ CZTERY RZECZY, KTÓRYCH POMIAR NIE POTWIERDZIŁ, TYLKO ZMIENIŁ:**
+1. **To KLIK miał rację, nie hover** — rysowanie idzie w kolejności pushu, więc „ostatnia pushowana"
+   znaczy „na wierzchu". Ale **żadne nie miało racji do końca**: strefy 22×22 przy glifie r ≤ 7
+   nakładają się także wtedy, gdy gwiazdy wizualnie się nie stykają ⇒ właściwą odpowiedzią jest
+   **najbliższy środek**, a nie kolejność. Samo odwrócenie pętli **nie wystarczyło**.
+2. **Ucieczki z pułapki 108 były WĘŻSZE, niż zapisano.** `_close()` czyścił **dwóch z czterech**
+   członków rodziny, a `open({tab})` przypisuje zakładkę **z pominięciem `_switchTab`** ⇒
+   **Esc + `M`/`G` nie odblokowywało**; pułapka przeżywała zamknięcie overlaya.
+3. **`cluster_switch` ma DRUGIEGO producenta** (`:7395`, panel „Interstellar Arrival") — wąska
+   furtka, której rejestr nie odnotował.
+4. **Kolejność wobec Findingu 110 jest wiążąca**: 110 naprawia się przez **powiększenie** stref
+   gwiazd, co **zwiększyłoby nakładanie** i pogorszyło 109. Dlatego 109 poszło pierwsze.
+
+**⚠ `FleetManagerOverlay` IMPORTUJE SIĘ pod node** (zweryfikowane wykonaniem), a `handleClick`
+i `handleMouseMove` są na prototypie ⇒ **oba findingi pinowane WYKONANIEM, nie źródłowo** — dla
+warstwy UI w tym repo to rzadkość. Panel testowany **prawdziwą ścieżką rysującą** na atrapie `ctx`
+(wzór `zero_colony_panels`), z kontrolą pinu „panel realnie się narysował" — inaczej brak przycisku
+myliłby się z brakiem rysowania.
+
+Keepery: NEW `stratcom_star_pick_smoke` **10/10** (fail-first 4/6; T2 ma **dwa** przypadki o różnych
+poprawnych odpowiedziach, więc „naprawa przez odwrócenie pętli" zdałaby połowę i padła na drugiej;
+T3 absorber **przechodził już przed naprawą** = strażnik regresji) · NEW `stratcom_warp_trap_smoke`
+**14/14** (fail-first 9/5). Sweep **178/178 OK, 0 FAIL** · `check-i18n` PASS · **zero nowych kluczy**
+(reuse `fleet.clusterSwitch`).
+
+**Otwarte:** **110** (ikona statku w martwym pasie — teraz bezpieczniejsze do ruszenia, ale wymaga
+własnego pomiaru) · **159** (`map_body`: ta sama asymetria, niemierzona, główna mapa taktyczna) ·
+**160** (`open({tab})` omija `_switchTab` — dla innych zakładek nierozstrzygnięte).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

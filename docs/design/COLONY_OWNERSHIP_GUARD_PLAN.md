@@ -1305,6 +1305,22 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      ale **nigdy** `_selectedWarpShipId` ⇒ ponowny klik gwiazdy znów uzbraja panel warp, w nieskończoność.
      Wyjścia: ponowny klik w TEN SAM wiersz statku (toggle, `:2274`) albo wyjście i powrót do zakładki
      (`:605-610`). **Blokuje normalne sterowanie grą.**
+     **ZAMKNIĘTE 2026-08-27** — plan `docs/design/STRATCOM_CONTROL_PLAN.md`, decyzje E1/E2. Trzy
+     dopięcia: (a) `warp_order_cancel` czyści też `_selectedWarpShipId` — „Anuluj" znaczy odtąd
+     *rozbrój tryb*; (b) `cluster_switch` **także** w `_drawWarpOrderPanel`, z bramką SKOPIOWANĄ
+     `explored && sysReg` (panel bywa otwarty na układzie niezbadanym — po to się tam wysyła statek);
+     (c) `_close()` zeruje `_selectedWarpShipId` + `_warpShipScrollY`. Keeper `stratcom_warp_trap_smoke`
+     14/14 (fail-first 9/5), pinowany WYKONANIEM — `FleetManagerOverlay` importuje się pod node,
+     a panel testowany jest prawdziwą ścieżką rysującą na atrapie `ctx`.
+     ⚠ **KOREKTA: UCIECZKI BYŁY WĘŻSZE, NIŻ TU ZAPISANO.** „Wyjście i powrót do zakładki" działa
+     wyłącznie przez pasek zakładek: `_switchTab` ma early-return `if (tab === this._activeTab)`,
+     `_close()` czyścił **dwóch z czterech** członków rodziny, a `open({tab})` przypisuje zakładkę
+     **z pominięciem `_switchTab`** (Finding 160). ⇒ **Esc + `M`/`G` NIE odblokowywało** — pułapka
+     przeżywała zamknięcie overlaya.
+     ⚠ **Druga furtka, której ten wpis nie miał:** `cluster_switch` ma drugiego producenta (`:7395`)
+     w panelu „Interstellar Arrival" — wąska (statek świeżo po skoku), ale istnieje.
+     ⚠ **DECYZJA E2 (podpisana):** `warp_order_send` **nie** rozbraja trybu — marker statku zostaje
+     świadomie (przydatny przy wysyłaniu kolejnych), bo po (b) nie tworzy to już pułapki. Pin T5.
 109. 🔴 **Mapa STRATCOM — MECHANIZM 2: klik i hover używają PRZECIWNYCH reguł rozstrzygania.**
      Klik iteruje strefy **od końca** (`:1382`, wygrywa ostatnia pushowana), hover **od początku**
      (`:1722`). 72 strefy `cluster_star` (22×22 px), **17 nakładających się par** przy domyślnym
@@ -1314,6 +1330,22 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      którego overlay nie ma, plus uzgodnienie reguły hover z regułą klika.
      ⚠ `FleetManagerOverlay` **NIE dziedziczy po `BaseOverlay`** (`:352`), więc `_hitTest` z `.find()`
      (FIRST-match) **nigdy się tu nie stosuje** — overlay nosi dwie sprzeczne reguły.
+     **ZAMKNIĘTE 2026-08-27** — plan `docs/design/STRATCOM_CONTROL_PLAN.md`, decyzje E3/E4. NEW czysty
+     `src/ui/StratcomHitLogic.js` (`topMostZoneAt` / `pickStarZone` / `resolveStratcomZone`), używany
+     przez KLIK i HOVER. Keeper `stratcom_star_pick_smoke` 10/10 (fail-first 4/6), WYKONANIOWY.
+     ⚠ **TO KLIK MIAŁ RACJĘ, NIE HOVER** — rysowanie idzie w kolejności pushu, więc „ostatnia
+     pushowana" znaczy „namalowana na wierzchu". Ale **żadne z nich nie miało racji do końca**:
+     strefy (22×22) są dużo większe od glifów (r ≤ 7), więc nakładają się także wtedy, gdy gwiazdy
+     wizualnie się nie stykają — a wtedy pytaniem gracza jest „w KTÓRĄ celuję", czyli **najbliższy
+     środek**. Samo uzgodnienie kierunku pętli **nie wystarczyło** i keeper tego pilnuje (dwa
+     przypadki o różnych poprawnych odpowiedziach).
+     ⚠ **DWIE REGUŁY, NIE JEDNA (E3):** `topMostZoneAt` rozstrzyga między WARSTWAMI (panel bije mapę
+     — to ona **chroni absorbery**), `pickStarZone` rozstrzyga MIĘDZY GWIAZDAMI. Rozstrzygacz jest
+     **doprecyzowaniem zwycięzcy**, nie pre-passem: pre-pass (kuszący, bo taki wzór stoi w tym pliku
+     przy `:1369`) przebiłby `warp_order_bg` i przywrócił klik-przez-panel — defekt cięższy od
+     naprawianego. Pin T3 trzyma to w obie strony.
+     ⚠ Hover przy okazji przestał podświetlać gwiazdy **pod panelem** (E4). `map_body` **nietknięty**
+     — ta sama klasa, ale niemierzona i na głównej mapie taktycznej (Finding 159).
 110. 🟠 **Mapa STRATCOM — MECHANIZM 3: ikona statku w martwym pasie, klik połykany bez śladu.**
      Ikona rysowana `STRATCOM_FAN_DY = -13` px nad gwiazdą (`:212`), o połowie wysokości ~4.5, czyli
      `sy−17.5…sy−9.5`; strefa `cluster_star` sięga `sy−11…sy+11` (`hitR = max(r+5, 11)`, a `r` ≤ 7 wg
@@ -1323,6 +1355,28 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      zakładkę `tactical`. ⚠ Obie stałe są w pikselach ekranu ⇒ **zoom nigdy nie pomaga**.
      ⚠ **Obejście, które DZIAŁA** (nie przez STRATCOM): `switchActiveSystem` wołają bezpośrednio chipy
      układów na mapie 3D (`MapLabelLayer.js:541`), trzy ścieżki Outlinera i górny pasek zasobów.
+     ⚠ **KOLEJNOŚĆ WOBEC 109 MA ZNACZENIE (ustalone 2026-08-27):** naprawa 110 polega na
+     **powiększeniu** strefy `cluster_star` w górę, co **zwiększyłoby nakładanie** stref i pogorszyło
+     dwuznaczność z Findingu 109. Dlatego 109 poszło pierwsze; jego naprawa nie rusza 110 w żadną
+     stronę. Po 109 rozstrzyganie „najbliższy środek" sprawia, że powiększenie stref jest
+     BEZPIECZNIEJSZE niż było — ale nadal wymaga własnego pomiaru.
+
+159. 🟠 **`map_body` ma TĘ SAMĄ asymetrię klik/hover co gwiazdy — i jest ślepy na absorbery.**
+     Hover (`FleetManagerOverlay` pętla `for (const z of this._hitZones)`) rozstrzyga PIERWSZYM
+     trafieniem, a klik `resolveStratcomZone` → wierzchnią strefą; dla `map_body` (7 miejsc pushu)
+     nie ma też testu, czy nad kafelkiem nie leży panel. ⚠ Świadomie **nietknięte** przy naprawie 109
+     (decyzja E4): dotyczy GŁÓWNEJ mapy taktycznej, a rozjazd **nie był mierzony** — nie wiadomo,
+     czy strefy ciał realnie się nakładają. Kanon `src/ui/StratcomHitLogic.js` jest gotowy do reużycia.
+     Pin limitu: `stratcom_star_pick_smoke` T5.
+
+160. 🟠 **`open({tab})` przypisuje zakładkę Z POMINIĘCIEM `_switchTab` — żaden reset wejścia nie biegnie.**
+     `FleetManagerOverlay:511` robi `if (opts.tab) this._activeTab = opts.tab`, podczas gdy cały
+     reset stanu per-zakładka mieszka w `_switchTab` (`:586-611`: hovery, drop-downy Logistyki,
+     `_missionConfig`, scrolle, selekcje Stratcomu). Klawisze **`G` i `M`** (`OverlayManager:33,39`)
+     otwierają overlay właśnie tą ścieżką. Dla Findingu 108 to była **połowa mechanizmu** (uzbrojony
+     tryb rozkazu przeżywał Esc + `M`) i została zamknięta punktowo przez parytet rodziny w `_close()`.
+     ⚠ **NIEROZSTRZYGNIĘTE dla pozostałych zakładek:** `close()` sprząta DOM-inputy, więc najgroźniejsza
+     klasa jest pokryta, ale czy jakiś stan per-zakładka wycieka przy `G`/`M` — niezmierzone.
 
 ---
 
