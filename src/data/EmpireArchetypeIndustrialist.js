@@ -261,7 +261,13 @@ export const INDUSTRIALIST = {
     // na piatym z szesciu priorytetow (DEFAULT_REACTIVE_ORDER), wiec towary, ktore AI umie
     // zrobic i ma z czego, nie wchodza do produkcji nigdy.
     // D4 — LISTA FILTROWANA PO OSIAGALNOSCI TEGO archetypu; nie dopisujemy tu:
-    //   metamaterials     (exotic_materials poza planem — jedyne pozostale wykluczenie).
+    //   (brak) — lista D4 nie wyklucza juz NICZEGO dla tego archetypu.
+    // ⚠ metamaterials byly tu wykluczone jako „exotic_materials poza planem" — to bylo BLEDNE.
+    //   exotic_materials JEST w researchQueue (dodane przez W2-1 pod lancuch towarow wojennych,
+    //   zbadane ok. 12 gy). Blad wzial sie z wady narzedzia odczytu, nie z pliku: nie-zachlanny
+    //   regex kolejki zatrzymywal sie na `]` wewnatrz komentarza „(root, requires [])", gubiac
+    //   trzy ostatnie pozycje. Wniosek na przyszlosc: liste kolejki czytac WYKONANIEM
+    //   (import ARCHETYPES), nie regexem po zrodle.
     // ⚠ antimatter_cells i warp_cores BYLY tu wykluczone jako nieosiagalne; galaz fuzji (wyzej,
     //   plan AI_FUSION_BRANCH F1/F2) usunela powod wykluczenia, wiec wracaja — F3 nakazuje zrobic
     //   to w TYM SAMYM commicie, inaczej odblokowalibysmy zdolnosc i zostawili cel zapasu na
@@ -275,5 +281,6 @@ export const INDUSTRIALIST = {
     propulsion_systems:   50,
     antimatter_cells:     50,   // F3 — odblokowane galezia fuzji
     warp_cores:           50,   // F3 — oba polprodukty juz osiagalne
+    metamaterials:        50,   // osiagalne przez exotic_materials (W2-1) — korekta bledu D4
   },
 };
