@@ -243,5 +243,37 @@ nagłówek keepera nakazuje przepisać wiersz tabeli, nie kasować testu; kontro
 MARTWY marker i dowodzi, że konsument został nietknięty — D-VO1b-6). Sweep **174/174 OK, 0 FAIL** ·
 `check-i18n` PASS.
 
-**GATE B2 — do wykonania na żywo.** Kryteria w §7; **obowiązkowo** dopisać obserwację **Z2**
-(D-VO1b-4): rajder AI parkuje w układzie gracza i uderza co cooldown bez powrotu do domu.
+## §9 GATE B2 — WYNIK (2026-08-26): **zdany CZĘŚCIOWO, świadomie**
+
+**✅ SEDNO D-VO1b potwierdzone na żywym silniku:** domknięty rozkaz zwalnia `movementOrder`,
+archiwum `lastOrder` wypełnione, a kadłub **wraca do puli uderzeniowej** (`strikeReadyVessels`
+0 → 1). Przed VO-3b w tym miejscu było `0` na zawsze.
+
+**✅ Z1 (D-VO1b-3) potwierdzone POŚREDNIO i nieplanowanie:** podczas realnej bitwy gracz
+zaobserwował rozkaz w stanie `completed` z **nietkniętym markerem** — czyli odroczenie zadziałało
+dokładnie tam, gdzie miało (obrona D-FDd). Sweep `_pendingRelease` dokończył zwolnienie po starciu.
+
+**⬜ NIE ZMIERZONO — realizowana częstość** (rzut + `cooldown 5 lat` przez 100 lat wyświetlanych).
+Świadoma decyzja właściciela: to **strojenie tempa, nie poprawność** — do naturalnej rozgrywki.
+⚠ Dodatkowy powód, dla którego i tak nie dałoby się tego zmierzyć w tej partii: **produkcja
+okrętów AI stoi** (patrz niżej), więc flota istniała wyłącznie z dźwigni debugowej.
+
+**⚠ Z2 — NAZWANE JAWNIE, zgodnie z D-VO1b-4:** rajder AI po uderzeniu **parkuje w układzie gracza
+i bije co cooldown bez powrotu do domu**, bez tankowania i bez ryzyka przechwycenia na własnej
+granicy. Przyjęte przez właściciela jako konsekwencja TYMCZASOWA; zamyka to osobny slice
+**„AI wraca po ataku"**.
+
+**Trzy rzeczy wyszły przy okazji i NIE należą do VO-3b:**
+- 🟠 **produkcja okrętów AI stoi na głodzie komodytów** — `startShipBuild` zwraca `queued`
+  (nie stać koloni), a `ORDER_TTL_DISPLAYED_YEARS = 3.0` kasuje zlecenie po trzech latach
+  (`director:orderExpired`), cicho. Ta sama rodzina co stall kitów placówek zmierzony w `docs/BALANS_PHASE2_AI.md`
+  §4.1/§4.2/§5 — z tą różnicą, że tamta połowa (PLACÓWKI) została w BALANS Phase 3 zapisana
+  jako naprawiona (`startingPops` 24, reguła housing, porzucanie stuck), a ta (OKRĘTY) jest
+  obserwacją PO tych fiksach. A/B z 2026-08-28 potwierdziło: strona placówkowa **nie cofnęła
+  się** (imperia bez placówki 8/16 → 1/16), a nienaprawiony został **transport** — Finding 178
+  (`VESSEL_ORDERS_PLAN.md`), kandydat na warunek wstępny tego wpisu.
+- 🟠 **Finding 155** — Dziennik myli zwycięzcę, gdy gracz jest agresorem wojny (rejestr
+  `VESSEL_ORDERS_PLAN.md`).
+- ⚪ **A/B kolonizacji AI** (HEAD vs `5d3c022`, 2 seedy × 45 gy): liczby **identyczne**
+  (5 ciał, 1. placówka 7 gy, naruszenia 11/24) ⇒ **żaden z dzisiejszych commitów nie ruszył
+  tempa ekspansji AI**. Podejrzenie regresji ZAMKNIĘTE pomiarem.

@@ -1516,3 +1516,39 @@ To trzeci raz w tym repo, gdy jałowy pin złapała dopiero **kontrola pinu**
   I **naprawy nie cofają wpisów JUŻ ZAPISANYCH**: 200 wpisów siedzi w save jako gotowy tekst,
   więc stare linie zostaną w starej postaci, aż wypadną z ring buffera. Bez tego zastrzeżenia
   gate przeczyta to jako „naprawa nie działa" (por. `reasonless-failure-reads-as-unfixed`).
+
+---
+
+## Findings z A/B ekonomii AI (2026-08-28) — pomiar headless, BEZ naprawy
+
+Pomiar na zgłoszenie właściciela („*chcę świeży test zdrowia ekonomii AI — podejrzewam, że
+zmiany mechaniki wzrostu populacji cofnęły naprawy z BALANS Phase 3*"). **Podejrzenie
+NIEPOTWIERDZONE** — A/B `214127a` (rekord BALANS Phase 3) vs HEAD `06a3de1`, 8 seedów × 45 gy,
+galaktyka przypięta (`HEADLESS_GALAXY_SEED`), przyrząd (`AiTelemetry`/`AiThresholds`/`RuleBot`)
+**bit w bit niezmieniony**: imperia bez placówki **8/16 → 1/16**, obsada etatów **83 % → 100 %**,
+Ti brakuje **8/16 → 1/16**, werdykt narzędzia `outcome 1` → `outcome 3`. Industrialista wychodzi
+**co do roku identycznie** po obu stronach; cała poprawa siedzi w ekspansjoniście.
+
+⚠ **Sprostowanie chronologiczne, które obala samą przesłankę:** Population 2.0 zamknęła się
+**2026-07-30** (`6c9cffd`), a BALANS Phase 3 exp #1 mierzył **2026-08-05** (`81489f5`) — baseline
+Phase 3 **już zawierał** nową mechanikę wzrostu. Po 5 sierpnia w plikach populacji nie ma żadnej
+zmiany mechaniki wzrostu.
+
+⚠ **Czego ten panel NIE mierzy (zmierzone, nie założone):** `GameCore.js` nie montuje Directora,
+a bootstrap sam pisze `brak window.KOSMOS.stationSystem — żeton stacji NIE zasiany, produkcja
+okrętów wojennych pozostanie zablokowana (R-3)` ⇒ **GATE B2(a) jest headless nieweryfikowalny
+z definicji**. Ponadto `runOneGame` przypina `galaxySeed` **bez ścieżki nadpisania z `opts`**, więc
+„świeże seedy" zmieniają układ GRACZA, a domy AI zostają `sys_061`/`sys_040` — to nadal
+**2 sytuacje × N powtórzeń**, nie N niezależnych losowań.
+
+| # | rzecz | status |
+|---|---|---|
+| **178** | **Kurierzy AI: wysłano ≫ dostarczono; 4/8 imperiów nie buduje ani jednego.** ZMIERZONE (`probe-ai-economy-health.mjs`, 4 seedy × 45 gy, galaktyka przypięta): wysłano→dostarczono **12→2, 12→2, 8→0** na HEAD; **14→4, 14→4, 11→1** na `214127a` ⇒ obecne po OBU stronach A/B, czyli **stan zastany, NIE regresja**. 4/8 imperiów na HEAD buduje ZERO kurierów. Zatrzask `pendingBuildRoute` zapalony na koniec przebiegu w 1 z 4 seedów **mimo** fixu W1-6 (`45b3135`). Rodzina: **GATE B2(a)** (`VO3B_PLAN.md` §9) + `docs/BALANS_PHASE2_AI.md` §4.2 (kit placówki: `Cu`, `conductor_bundles` — dokładnie to, co kurier miał dowozić) ⇒ kandydat na **warunek wstępny** B2(a). | 🟠 **OTWARTY, świadomie NIE priorytet.** ⚠ **GRANICA DOWODU: zmierzony jest LICZNIK `logi.stats.delivered`, NIE przepływ towaru.** Pierwszy krok każdej przyszłej pracy = porównać stany magazynów placówka↔stolica w czasie; jeśli ładunek dociera, a licznik nie tyka, to finding o **liczniku**, nie o logistyce (klasa Findingu 106: dowodem jest SKUTEK, nie odczyt). ⚠ NIE blokuje dziś ekspansji AI (1/16 bez placówki, mediana 3 ciała) — stąd 🟠, nie 🔴. |
+| **179** | **Kolonizacja bota referencyjnego pada na VO-2 — przypięte, odłożone świadomie.** ZMIERZONE (mediana ciał gracza w panelu AI): `214127a` = 5 · `e964c6b` = 4 · `ecf8233` (VO-1) = 4 · **`2335c4b` (VO-2) = 1** · `577b829` = 1 · HEAD = 1, w 8/8 seedach. AI nietknięte (4 po obu stronach) — AI nie zakłada kolonii przez misje statków. `7d4f9a7` (138+142) **oczyszczone pomiarem**. | ⚪ **NISKI priorytet, decyzja właściciela 2026-08-28.** ⚠ To **bot referencyjny w headless, NIE ścieżka UI**: właściciel gra regularnie i objawu nie obserwuje, a VO-2 przeszedł live-gate ⇒ czytane jako artefakt sposobu, w jaki bot wydaje misje. **Nie jest to zdiagnozowany bug rozgrywki i nie wolno go tak cytować.** Powód zapisania mimo to: panel BALANS używa gracza jako **punktu odniesienia dla AI**, więc dopóki to stoi, każde porównanie „AI vs gracz" jest przekrzywione. Tani rozstrzygacz, gdyby wracało: czy kolonizacja przez `ActionAdapter` przechodzi tym samym dyspozytorem co UI. |
+
+**Przyrząd:** NEW `src/testing/headless/probe-ai-economy-health.mjs` (read-only, nic nie zapisuje
+poza stdout) — `AiTelemetry` mierzy DECYZJE i nie dotyka ani fabryk poza droidem, ani kurierów.
+⚠ Sonda rozdziela **rudy od towarów**; bez tego rozdziału ~200 000 jednostek rudy udaje produkcję
+fabryki (pierwsza wersja tak właśnie kłamała). Zmierzony stosunek **~500 sztuk towarów na ~200 000
+rudy** i **11 towarów trwale na zerze** to ta sama diagnoza co slice ZASOBY: gospodarka jest
+**komponentowa, nie rudowa**.
