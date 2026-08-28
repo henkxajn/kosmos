@@ -277,3 +277,7 @@ granicy. Przyjęte przez właściciela jako konsekwencja TYMCZASOWA; zamyka to o
 - ⚪ **A/B kolonizacji AI** (HEAD vs `5d3c022`, 2 seedy × 45 gy): liczby **identyczne**
   (5 ciał, 1. placówka 7 gy, naruszenia 11/24) ⇒ **żaden z dzisiejszych commitów nie ruszył
   tempa ekspansji AI**. Podejrzenie regresji ZAMKNIĘTE pomiarem.
+  ⚠ **Próba 2-seedowa.** Panel **8-seedowy** z 2026-08-28 daje medianę **3 ciała** i **39/96**
+  naruszeń — „5 ciał" nie jest tempem ekspansji AI, tylko artefaktem małej próby. Nie cytować
+  tej liczby jako tempa. Pomiar: **Finding 178**, `VESSEL_ORDERS_PLAN.md` §Findings z A/B
+  ekonomii AI.
