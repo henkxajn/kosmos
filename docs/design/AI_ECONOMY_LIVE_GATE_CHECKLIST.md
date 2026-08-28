@@ -144,6 +144,35 @@ więc powyższe wyjście uzyskano z bezpośrednim importem `EntityManager`. Kszt
 - ⚠ **`Nt` bywa zerowe** w stolicach AI i wtedy `quantum_cores`/`antimatter_cells` stoją na braku
   składnika, nie na bramce — rodzina Findingu **178** (kanał logistyczny nie wozi towarów).
 
+## §8 WYNIK — 2026-08-28: **ZALICZONY**, dwa niezależne seedy przeglądarki
+
+| kryterium | wynik | dowód |
+|---|---|---|
+| 1. ≥1 imperium `BOGATY` + `bonus=49` + `plasma_cores>0` | ✅ **PASS** | seed 1: `plasma_cores=50` |
+| 2. każde `ubogi` → `bonus=0`, tier 3+ na zerze | ✅ **PASS** | seed 1 |
+| 3. `fusion_power=true` | ✅ **PASS ×2** | **15,2 gy** (seed 1) · **14 gy** (seed 2) |
+| 4. izolacja D1 — kolonie gracza | ✅ **PASS** | `bonus=0`, `plasma_cores=0` |
+| 5. `warp_cores>0` *(bonus)* | ⬜ **nietestowane** | oba przebiegi za krótkie |
+
+**Walidacja krzyżowa osi czasu — najmocniejszy pojedynczy wynik tego gate'u.** Headless na
+galaktyce **PRZYPIĘTEJ** przewidywał gałąź fuzji na **13-14 gy**. Przeglądarka, na **dwóch różnych
+LOSOWYCH** galaktykach, trafiła w to okno dwa razy (14 i 15,2 gy). Prognoza nie była więc artefaktem
+przypiętego seeda — co podnosi zaufanie do reszty osi czasu z §1, w tym do przewidywanych ~63 gy
+dla `warp_cores`.
+
+**Drugi seed odwrócił role archetypów** (bogaty = ekspansjonista, ubogi = industrialista) i **to jest
+lepszy wynik niż powtórka headless**: dowodzi, że bramka idzie za majątkiem kolonii, nie za
+tożsamością imperium. Przypięta galaktyka headless z zasady nie mogła tego pokazać.
+
+⚠ **Granica dowodu — `warp_cores` pozostają potwierdzone WYŁĄCZNIE headless.** Najgłębsze ogniwo
+łańcucha (tier 5) nie zostało zaobserwowane na żywo. Kryterium było bonusowe, więc gate jest
+zaliczony, ale twierdzenie „AI produkuje rdzenie warp" opiera się dziś na jednym silniku, nie dwóch.
+Kto będzie miał długą partię (65+ gy) — warto dobić KOM-2.
+
+⚠ **Ujawnione przy okazji, nieplanowane:** `netto/rok` wszystkich czterech rud zamożności jest
+**ujemne** (KOM-5), więc bramka D3 działa na **oknie stockpile'u**, nie na trwałym progu. Zapisane
+w §6; kandydat na histerezę (otwierać przy 20k, zamykać przy ~10k), gdyby okno okazało się za wąskie.
+
 ## §7 Jeśli gate PADNIE
 
 Zgłoś, co pokazały KOM-1..4 i przy którym roku gry. Najbardziej prawdopodobne źródło rozbieżności
