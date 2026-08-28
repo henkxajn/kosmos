@@ -28,12 +28,22 @@ wchodzą we dwie:
 | `fusion_power` | **400** | 3 | `nuclear_power`, `plasma_physics` | ✅ / ⬆ powyżej |
 | **razem** | **600 rp** | | | |
 
-Kolejka Industrialisty kosztuje dziś **4130 rp**, więc to **+14,5 %**.
+Kolejka Industrialisty kosztuje dziś **4930 rp** (13 pozycji), więc to **+12,2 %**.
 
-**ZMIERZONE tempo** (2 seedy, deterministycznie identyczne): cała kolejka domyka się w **10 gy**
-(`nuclear_power` 1 gy · `ion_drives` 3 · `quantum_physics` 4 · `warp_theory` 6 · `warp_drive` 10).
-Tempo ≈ **413 rp/gy** ⇒ 600 rp to **≈ 1,5 gy**. Partia trwa 45–60+ gy, więc w kategoriach rozgrywki
-koszt czasowy jest **pomijalny**.
+⚠ **KOREKTA WOBEC PIERWSZEJ WERSJI TEGO PLANU (4130 rp / +14,5 %).** Liczba była zaniżona przez wadę
+mojego narzędzia odczytu, nie przez plik: regex `researchQueue:\s*\[(.*?)\]` jest **nie-zachłanny**
+i zatrzymał się na `]` **wewnątrz komentarza** `(root, requires [])` przy `advanced_mining`, gubiąc
+trzy ostatnie pozycje dodane przez W2-1: `deep_drilling` 200 · `space_mining` 250 ·
+`exotic_materials` 350 = **800 rp**. Korekta idzie na KORZYŚĆ zmiany (narzut mniejszy).
+⚠ Skutek uboczny tej samej pomyłki: `metamaterials` **są** dla Industrialisty osiągalne
+(`exotic_materials` jest w kolejce), więc ich wykluczenie z listy D4 w Findingu 182 było błędem —
+do poprawienia osobno.
+
+**ZMIERZONE tempo** (2 seedy, deterministycznie identyczne, PEŁNA kolejka):
+`nuclear_power` 1 gy · `ion_drives` 3 · `quantum_physics` 4 · `warp_theory` 6 · **`warp_drive` 10** ·
+`advanced_mining` 10 · `deep_drilling` 11 · `space_mining` 11 · `exotic_materials` 12 ⇒ dotychczasowa
+kolejka domyka się w **12 gy**, a gałąź fuzji ląduje na **13–14 gy**. Partia trwa 45–60+ gy, więc
+koszt czasowy jest **pomijalny** — a `warp_drive` **nie rusza się z 10 gy** (to jest cała treść F2).
 
 ⚠ **`antimatter_containment` NIE jest tańszą alternatywą** — kosztuje 600 rp **i wymaga
 `fusion_power`**, czyli jest ścieżką ściśle droższą (1200 rp łącznie). Odpada.

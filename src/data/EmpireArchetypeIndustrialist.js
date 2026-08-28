@@ -208,6 +208,16 @@ export const INDUSTRIALIST = {
     'space_mining',          // Górnictwo Kosmiczne (req rocketry ✓ + deep_drilling)
     'exotic_materials',      // Materiały Egzotyczne (req advanced_materials ✓ idx3 + space_mining)
                              //   → odblokowuje recepturę `metamaterials` (Ti 6, Hv 5, Xe 2, Si 4)
+    // Finding 181 / plan AI_FUSION_BRANCH §3 (podpisany 2026-08-28) — galaz fuzji.
+    // Odblokowuje antimatter_cells, a przez nie warp_cores: warp_cores = quantum_cores +
+    // antimatter_cells + Ti, wiec BEZ tej galezi byly dla Industrialisty nieosiagalne MIMO
+    // posiadania ion_drives i warp_drive. To ta sama para, ktora Ekspansjonista ma od S3.2 —
+    // wyrownanie archetypow, nie nowy stan.
+    // F2 — NA KONCU kolejki SWIADOMIE: 600 rp to ~1,5 gy przy tempie ~413 rp/gy (ZMIERZONE:
+    // cala kolejka domyka sie w 10 gy). Wstawka wczesniej przesunelaby warp_drive, czyli tech
+    // krytyczny dla ekspansji cross-system. Fuzja przychodzi ok. 11,5 gy przy partii 45-60+ gy.
+    'plasma_physics',        // 200 rp — JEDYNY brakujacy prereq fusion_power (req efficient_solar ✓ poz. 2)
+    'fusion_power',          // 400 rp — req nuclear_power ✓ (poz. 3) + plasma_physics ⬆
   ],
 
   // Startowe surowce — deponowane do colony.resourceSystem.inventory.
@@ -251,11 +261,11 @@ export const INDUSTRIALIST = {
     // na piatym z szesciu priorytetow (DEFAULT_REACTIVE_ORDER), wiec towary, ktore AI umie
     // zrobic i ma z czego, nie wchodza do produkcji nigdy.
     // D4 — LISTA FILTROWANA PO OSIAGALNOSCI TEGO archetypu; nie dopisujemy tu:
-    //   antimatter_cells  (wymaga fusion_power / antimatter_containment — Industrialist NIE ma
-    //                      zadnej w planie badan; Finding 181),
-    //   warp_cores        (bramke przechodzi przez warp_drive, ale polprodukt antimatter_cells
-    //                      jest nieosiagalny — zamowienie skonczyloby sie stallem),
-    //   metamaterials     (exotic_materials poza planem).
+    //   metamaterials     (exotic_materials poza planem — jedyne pozostale wykluczenie).
+    // ⚠ antimatter_cells i warp_cores BYLY tu wykluczone jako nieosiagalne; galaz fuzji (wyzej,
+    //   plan AI_FUSION_BRANCH F1/F2) usunela powod wykluczenia, wiec wracaja — F3 nakazuje zrobic
+    //   to w TYM SAMYM commicie, inaczej odblokowalibysmy zdolnosc i zostawili cel zapasu na
+    //   1 sztuce, czyli powtorzyli Finding 182 na swiezej galezi.
     // Zamawianie tego, czego archetyp nie umie dokonczyc, generuje stalle missing_ingredient
     // — ZMIERZONE (0-1 -> 1-4) w wariancie bez tego filtra.
     plasma_cores:         50,
@@ -263,5 +273,7 @@ export const INDUSTRIALIST = {
     quantum_processors:   50,
     semiconductor_arrays: 50,
     propulsion_systems:   50,
+    antimatter_cells:     50,   // F3 — odblokowane galezia fuzji
+    warp_cores:           50,   // F3 — oba polprodukty juz osiagalne
   },
 };

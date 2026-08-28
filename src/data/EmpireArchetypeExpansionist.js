@@ -41,11 +41,13 @@ export const EXPANSIONIST = {
           'colonization of other star systems.',
   color:  '#2E9B8F',
 
-  // Finding 182 / D4 — WLASNY zbior celow zapasu tier 3+. Klon odziedziczylby liste
-  // Industrialisty, a ta jest WEZSZA: Ekspansjonista ma w kolejce badan fusion_power,
-  // wiec antimatter_cells sa dla niego osiagalne, a przez to i warp_cores (drugi polprodukt,
-  // quantum_cores, tez ma). Reszta pozycji identyczna. metamaterials POMINIETE — exotic_materials
-  // jest poza planem obu archetypow.
+  // Finding 182 / D4 — WLASNY zbior celow zapasu tier 3+.
+  // ⚠ Od czasu dodania galezi fuzji Industrialiscie (plan AI_FUSION_BRANCH, 2026-08-28) ten
+  //   override jest funkcjonalnie ROWNOWAZNY liscie bazowej — obie zawieraja juz
+  //   antimatter_cells i warp_cores. ZOSTAWIONY SWIADOMIE jako jawny zapis, ze Ekspansjonista
+  //   ma te pozycje z WLASNEGO powodu (fusion_power ma w kolejce od S3.2, niezaleznie od
+  //   Industrialisty) — gdyby ktos kiedys cofnal galez fuzji u Industrialisty, ta lista NIE
+  //   moze sie razem z nia skurczyc. Spread z _base trzyma reszte pozycji zsynchronizowana.
   startingSafetyStocks: {
     ..._base.startingSafetyStocks,
     antimatter_cells: 50,
