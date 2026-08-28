@@ -246,5 +246,22 @@ export const INDUSTRIALIST = {
     // Consumer goods — POP demand. Target 10 = ~2 lata bufora przy 6 POP × ~0.5/y demand
     basic_supplies:     10,   // Zaopatrzenie Bytowe (consumptionLayer: functioning)
     civilian_goods:     10,   // Dobra Cywilizacyjne (consumptionLayer: comfort)
+    // Finding 182 (podpisany 2026-08-28, plan AI_SAFETY_STOCK_PLAN §3 D2/D4/D5):
+    // cel zapasu dla tier 3+ = 50. Bez tego getSafetyStockTarget zwraca dla nich 1 SZTUKE,
+    // na piatym z szesciu priorytetow (DEFAULT_REACTIVE_ORDER), wiec towary, ktore AI umie
+    // zrobic i ma z czego, nie wchodza do produkcji nigdy.
+    // D4 — LISTA FILTROWANA PO OSIAGALNOSCI TEGO archetypu; nie dopisujemy tu:
+    //   antimatter_cells  (wymaga fusion_power / antimatter_containment — Industrialist NIE ma
+    //                      zadnej w planie badan; Finding 181),
+    //   warp_cores        (bramke przechodzi przez warp_drive, ale polprodukt antimatter_cells
+    //                      jest nieosiagalny — zamowienie skonczyloby sie stallem),
+    //   metamaterials     (exotic_materials poza planem).
+    // Zamawianie tego, czego archetyp nie umie dokonczyc, generuje stalle missing_ingredient
+    // — ZMIERZONE (0-1 -> 1-4) w wariancie bez tego filtra.
+    plasma_cores:         50,
+    quantum_cores:        50,
+    quantum_processors:   50,
+    semiconductor_arrays: 50,
+    propulsion_systems:   50,
   },
 };

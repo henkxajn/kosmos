@@ -39,7 +39,18 @@ export const EXPANSIONIST = {
           'kolonizacji innych układów słonecznych.',
   descEN: 'Civilization driven toward the stars. Seeks warp drive and ' +
           'colonization of other star systems.',
-  color:  '#2E9B8F',  // teal — odróżnialny od Industrialist (#B07020 amber)
+  color:  '#2E9B8F',
+
+  // Finding 182 / D4 — WLASNY zbior celow zapasu tier 3+. Klon odziedziczylby liste
+  // Industrialisty, a ta jest WEZSZA: Ekspansjonista ma w kolejce badan fusion_power,
+  // wiec antimatter_cells sa dla niego osiagalne, a przez to i warp_cores (drugi polprodukt,
+  // quantum_cores, tez ma). Reszta pozycji identyczna. metamaterials POMINIETE — exotic_materials
+  // jest poza planem obu archetypow.
+  startingSafetyStocks: {
+    ..._base.startingSafetyStocks,
+    antimatter_cells: 50,
+    warp_cores:       50,
+  },  // teal — odróżnialny od Industrialist (#B07020 amber)
 
   // S3.2 S2 — NADPISANIE kolejki badań (inaczej klon odziedziczyłby kolejkę
   // Industrialisty z _base). Ścieżka warpowa: napęd jonowy → fizyka → fuzja → warp.

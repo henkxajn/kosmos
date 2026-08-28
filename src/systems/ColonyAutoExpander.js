@@ -18,6 +18,8 @@
 
 import EventBus from '../core/EventBus.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
+import { ARCHETYPES } from '../data/EmpireData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import {
@@ -79,6 +81,25 @@ const UNREACHABLE_RETRY_CIVYEARS = 30;
 //   - Wartość 3 (build) wynika z obserwacji: gracz w nagraniu referencyjnym miał
 //     typowo 1–2 budynki w budowie naraz; 3 to bezpieczny bufor. BuildingSystem
 //     nie ma twardego maxConcurrentBuilds, więc limit egzekwuje AutoExpander.
+// ── Finding 182 / D3 — bramka zamoznosci dla celow zapasu tier 3+ ────────────
+// Cel zapasu tier 3+ (50, z startingSafetyStocks archetypu) wlacza sie DOPIERO, gdy
+// kolonia jest realnie bogata. Powod jest ZMIERZONY, nie ostrozniosciowy: wariant bez
+// bramki kosztowal ekspansje — imperia bez zadnej placowki 1/32 -> 3/32, obsada etatow
+// 97% -> 94% (panel 16 seedow). Koszt spada na imperium UBOGIE, wiec bramka jest
+// OCHRONA BIEDNEGO, nie przyspieszeniem bogatego.
+//
+// ⚠ ODSTEPSTWO OD LITERALNYCH PROGOW Z PODPISU (>20k dla wiekszosci, >5k dla Xe/Nt).
+// Pomiar stanow PER RUDA w stolicach AI po 45 gy:
+//   industrialist  Si 71k  Fe 45k  Cu 38k  C 33k | Hv 10.6k  Ti 10.2k  Xe 4.9k  Li 4.5k
+//   expansionist   Si 62k  C 54k   H 47k   Li 17k | Fe 13k  Hv 9.3k  Ti 4.1k  Cu 2.8k  Xe 0.9k
+// Setki tysiecy rudy istnieja TYLKO w agregacie i tylko na rudach POSPOLITYCH. Ti/Hv/Li
+// nigdy nie dobijaja 20k, Xe rzadko 5k, a Nt jest ZEROWE u obu. Literalne progi trzymalyby
+// bramke zamknieta niemal zawsze => zmiana bylaby no-opem. Dlatego zamoznosc mierzymy
+// rudami POSPOLITYMI, a rud rzadkich NIE bramkujemy: to wlasnie one sa wsadem receptur,
+// wiec warunek -produkuj dopiero, gdy masz duzo tego, co receptura zjada- bylby cykliczny.
+const WEALTH_ORES      = ['Fe', 'Si', 'Cu', 'C'];
+const WEALTH_THRESHOLD = 20000;   // jednostki rudy, KAZDA z WEALTH_ORES osobno
+
 export const MAX_PENDING_BUILDS_PER_COLONY   = 3;
 export const MAX_PENDING_UPGRADES_PER_COLONY = 2;
 
@@ -198,6 +219,7 @@ export class ColonyAutoExpander {
       //   ustal czy wolno jeszcze coś budować. Population 2.0 Faza 2: budowa NIE wymaga
       //   wolnych POP (§3.4 płynna obsada) — jedynym hamulcem jest limit kolejki, NIE brak
       //   rąk. Budynki działają understaffed; alokacja dośle ludzi, a wzrost je zapełni.
+      this._syncTier3SafetyDemand(colony);
       this._reconcilePending(colony, civYear);
       this._syncGridFromActive(colony);   // #3: grid AI niesynchronizowany przez UI — re-derive z _active przed _findFreeTile
       const pendingBuilds = this._pendingCounts(colony).builds;
@@ -605,6 +627,33 @@ export class ColonyAutoExpander {
   //   - wpis w _pendingQueue dłużej niż PENDING_STUCK_CIVYEARS → prawdziwy fail
   //     (POP/surowce nigdy nie dojdą): anuluj zamówienie, wyczyść tile, oznacz
   //     buildingId jako unreachable, usuń ze śledzenia.
+
+  /**
+   * D3 — wlacz/wylacz cele zapasu tier 3+ w zaleznosci od zamoznosci kolonii.
+   * AI-ONLY z konstrukcji: ColonyAutoExpander tyka wylacznie kolonie imperiow,
+   * wiec kolonie gracza NIE sa tu nigdy dotykane (warunek D1 izolacji).
+   * Zrodlem celow jest startingSafetyStocks archetypu — ta sama tabela, ktora
+   * bootstrap wpisuje na starcie; tu tylko przelaczamy ja w czasie.
+   */
+  _syncTier3SafetyDemand(colony) {
+    const fs = colony?.factorySystem;
+    const res = colony?.resourceSystem;
+    if (!fs || !res) return;
+    const empId = colony.ownerEmpireId;
+    if (!empId) return;                       // paranoja: kolonia gracza tu nie trafia
+    const arch = ARCHETYPES[window.KOSMOS?.empireRegistry?.get?.(empId)?.archetype];
+    const stocks = arch?.startingSafetyStocks;
+    if (!stocks) return;
+
+    const rich = WEALTH_ORES.every(ore => (res.getAmount?.(ore) ?? 0) >= WEALTH_THRESHOLD);
+    for (const [cid, target] of Object.entries(stocks)) {
+      const def = COMMODITIES[cid];
+      if (!def || (def.tier ?? 0) < 3) continue;   // tier 1-2 NIETKNIETE — poza zakresem podpisu
+      // bonus = cel - baza; baza dla tier 3+ wynosi 1 (FactorySystem.getSafetyStockTarget)
+      fs.setDemandBonus(cid, rich ? Math.max(0, target - 1) : 0);
+    }
+  }
+
   _reconcilePending(colony, civYear) {
     const m = colony._caePendingBuilds;
     if (!m || m.size === 0) return;
