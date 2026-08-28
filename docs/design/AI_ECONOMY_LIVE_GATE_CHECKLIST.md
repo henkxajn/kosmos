@@ -75,6 +75,26 @@ console.log(KOSMOS.colonyManager.getAllColonies().filter(c=>!c.ownerEmpireId).ma
 ```
 Wyjście z żywego silnika: `entity_2 bonus(plasma_cores)=0 plasma_cores=1`.
 
+**KOM-5 — DLACZEGO imperium jest ubogie: brak złoża czy brak przepływu?**
+Rozstrzyga, czy niska ruda to **deadlock strukturalny** (jak Ti u ekspansjonisty w BALANS §4.2:
+dom bez złoża, więc nigdy nie będzie), czy **problem przepływu** (złoże jest, ale wydobycie nie
+nadąża za konsumpcją). To dwie różne diagnozy i dwie różne naprawy.
+```js
+console.log(KOSMOS.empireRegistry.listAll().map(e=>{const cs=KOSMOS.empireRegistry.getColoniesByEmpire(e.id)||[];const cap=cs.find(x=>x&&!x.isOutpost&&x.resourceSystem);const r=cap?.resourceSystem;const dep=id=>cs.map(c=>{const b=KOSMOS.entityManager?.get?.(c.planetId);const d=(b?.deposits||[]).find(z=>z.resourceId===id);return d?Math.round(d.remaining):0}).reduce((a,b)=>a+b,0);return e.archetype.padEnd(14)+' '+['Fe','Si','Cu','C'].map(o=>o+': stan='+Math.round(r?.getAmount(o)??0)+' netto/rok='+(r?.getPerYear?.(o)??0).toFixed(1)+' zloza='+dep(o)).join('\n               ')}).join('\n'))
+```
+Wyjście z żywego silnika (45 gy) — **wzorzec „przepływ", nie „deadlock"**:
+```
+industrialist  Fe: stan=14651 netto/rok=-53.0 zloza=222859
+               Si: stan=36924 netto/rok=-174.0 zloza=217623
+               Cu: stan=20183 netto/rok=-6.0  zloza=202152
+               C:  stan=32871 netto/rok=-6.0  zloza=124843
+```
+**Jak czytać:** `zloza` ≫ 0 **i** `netto/rok` < 0 ⇒ ruda **jest w ziemi**, ale imperium ją przejada —
+to problem wydobycia/konsumpcji. `zloza` = 0 ⇒ **deadlock strukturalny**, dom bez tego surowca,
+rodzina deadlocku Ti.
+⚠ `KOSMOS.entityManager` istnieje **tylko w przeglądarce** (`GameScene:388`); headless go nie wystawia,
+więc powyższe wyjście uzyskano z bezpośrednim importem `EntityManager`. Kształt odczytu ten sam.
+
 ## §4 Przebieg
 
 | krok | kiedy | komenda | czego szukasz |
@@ -87,8 +107,16 @@ Wyjście z żywego silnika: `entity_2 bonus(plasma_cores)=0 plasma_cores=1`.
 
 ## §5 Kryteria zaliczenia
 
-1. ✅ `plasma_cores` u industrialisty **> 0** (przed zmianą było twarde 0). To jest **minimum** gate'u.
-2. ✅ Ekspansjonista pokazuje `ubogi` **i `bonus=0`** — bramka go chroni.
+> ⚠ **KOREKTA 2026-08-28 — pierwotne kryteria 1 i 2 były WADLIWE i zostały przepisane.**
+> Nazywały archetypy („industrialista się bogaci", „ekspansjonista jest ubogi"), czyli wpisywały
+> w warunek zaliczenia **przypadkowy wynik PRZYPIĘTEJ galaktyki headless** — w dokumencie, którego
+> §7 ostrzega, że przeglądarka mintuje inną. Podpisana teza nigdy nie mówiła o archetypach, tylko
+> o **majątku**: `_syncTier3SafetyDemand` czyta wyłącznie rudy danej kolonii i nie rozróżnia
+> archetypów (zweryfikowane w źródle). Poniższe brzmienie odpowiada tezie, nie mojej pomyłce.
+
+1. ✅ **Co najmniej jedno imperium AI** pokazuje jednocześnie `BOGATY`, `bonus=49` i
+   `plasma_cores > 0`. **Który** to archetyp — nieistotne. To jest **minimum** gate'u.
+2. ✅ **Każde** imperium pokazujące `ubogi` ma `bonus=0` i tier 3+ na zerze — bramka chroni ubogich.
 3. ✅ `fusion_power=true` u industrialisty (przed zmianą **nigdy**).
 4. ✅ KOM-4: `bonus(plasma_cores)=0` na koloniach gracza — zmiana jest AI-only.
 5. 🎯 *Bonus, nie warunek:* `warp_cores > 0` u industrialisty.
@@ -98,6 +126,15 @@ Wyjście z żywego silnika: `entity_2 bonus(plasma_cores)=0 plasma_cores=1`.
 - ⚠ **Bramka jest DYNAMICZNA.** `bonus=0` i `ubogi` mogą wystąpić **po** okresie bogactwa, gdy ruda
   została skonsumowana. Stan `plasma_cores=50` **przy** `bonus=0` jest **poprawny** — zapas powstał
   wcześniej i się utrzymuje. Zmierzone: seed B otworzył bramkę w 28 gy i zamknął ją do 80 gy.
+- ⚠ **KTÓRY archetyp się bogaci, jest własnością GALAKTYKI, nie archetypu.** W przypiętej galaktyce
+  headless bogacił się industrialista; w losowej galaktyce przeglądarki bywa odwrotnie i **to nie jest
+  usterka** — bramka czyta majątek kolonii, nie tożsamość imperium. Odwrócony wzorzec jest wręcz
+  **mocniejszym** dowodem niż powtórka wyniku headless, bo pokazuje, że mechanizm idzie za rudą.
+- ⚠ **Zamożność jest z natury PRZEJŚCIOWA — knob D3 nie tworzy trwałego stanu.** Zmierzone (KOM-5,
+  45 gy): `netto/rok` jest **ujemne dla WSZYSTKICH czterech rud** u obu imperiów przy złożach rzędu
+  200 tys. w ziemi. Imperium nie „bogaci się z czasem" — **przejada zapas**, więc bramka otwiera się
+  na oknie stockpile'u i zamyka, gdy ten spadnie poniżej 20 tys. Panel headless tego nie pokazywał,
+  bo patrzył na stan końcowy i pierwsze otwarcie, nie na bilans.
 - ⚠ **`warp_cores` przychodzą późno i w małych liczbach** — zmierzone **6 sztuk** przy 60-80 gy.
   Nie oczekuj setek; to najgłębszy poziom łańcucha (tier 5).
 - ⚠ **`quantum_processors` mogą rosnąć mimo braku `quantum_computing`** — to nie błąd, tylko
