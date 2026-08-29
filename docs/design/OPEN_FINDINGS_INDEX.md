@@ -1,6 +1,6 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
-> **Stan na 2026-08-29** (po zamknięciu W3-32 + 186/187) · **Save v101** ·
+> **Stan na 2026-08-29** (po zamknięciu W3-32 + 186/187; **188** otwarty z tamtego live-gate'u) · **Save v101** ·
 > Sweep: **187/187 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
@@ -201,6 +201,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **62 · 63** | ⚪ | kolizje `PhysicsSystem` nie są bramkowane scenariuszem (rozjazd z dokumentacją) · `empire:colonyRemoved` brak w `DebugLog.TRACKED_EVENTS` | |
 | **W3-2** | 🟠 | `_resolveBatchedBattle` **nie filtruje rezerwy**, a `_wreckPlayerVesselsInSystem` **filtruje** ⇒ kadłub rezerwowy AI walczy, kadłub gracza jest zwolniony z wrakowania | ✔ zweryfikowane w źródle |
 | **W3-3** | 🟠 | **AI nigdy nie demobilizuje** — każdy `withdrawVessel` jest po stronie gracza ⇒ rezerwy drenują populację AI monotonicznie | |
+| **188** | 🟠 | panel detalu STRATCOM wydaje na `rumor` **nazwę układu + żywą populację + życie** pod jedną flagą `known`, a drabina wywiadu daje na `rumor` **zero pól** | rodzeństwo W3-4; liczby są PRAWDZIWE (determinizm modelu, ZMIERZONE) — defektem jest samo ujawnienie. Naprawa = decyzja projektowa, nie predykat |
 | **W3-4** | 🟠 | `ThreatAssessment` to prawda **globalna**, nie bramkowana intelem; 3 z 7 metod publicznych bez konsumentów | |
 | **W3-5** | ⚪ | `director.posture` pisany, serializowany i **czytany przez nikogo**; `director:doctrineAssigned` emitowany w nicość | |
 | **W3-6** | ⚪ | jednostka ETA pomylona **12×** (JSDoc civYears vs arytmetyka `gameTime`) — bezwładna po retirementcie W3-8, ożyje z abstrakcyjnymi flotami | |

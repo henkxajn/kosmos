@@ -1588,3 +1588,14 @@ już spóźniony.**
 ⚠ **Reguła o indeksie:** `OPEN_FINDINGS_INDEX.md` sam siebie opisuje jako nieźródło prawdy i miał
 rację — jego pozycja **nr 1** była zamknięta. Przed planowaniem czegokolwiek z listy przepisanej bez
 pomiaru: **najpierw uruchom keeper i przeczytaj `git log -S`**, dopiero potem planuj slice.
+
+---
+
+## Finding z live-gate 186/187 (2026-08-29) — obserwacja właściciela, BEZ naprawy
+
+Wypłynęło przy weryfikacji kanonu eksploracji i **nie należy do tamtej poprawki** — to inny
+mechanizm w tym samym panelu. Zapisane jako otwarte, bez decyzji o zakresie.
+
+| # | rzecz | status |
+|---|---|---|
+| **188** | **Panel detalu STRATCOM ujawnia na `rumor` to, czego drabina wywiadu nie daje na żadnym poziomie.** `_drawStratcomDetail` liczy `known = isHome || explored || isAtLeast(empireId, 'rumor')` i pod tą JEDNĄ flagą wydaje **trzy różne fakty**: prawdziwą nazwę układu (`nameKnown`, `:5542`), **żywą populację** sumowaną wprost z `ColonyManager` (`civSystem.population` — bez pośrednictwa rekordu wywiadu) oraz obecność życia z `lifeScore`. Tymczasem `IntelSystem:125-155` daje na `rumor` **zero pól**, na `contact` archetyp + **które** układy są czyje (`knownColonies`), a liczby (siła, rezerwa, zdolność załogowa) dopiero na `detailed`. ⚠ Zaobserwowane przez właściciela przy live-gate 186/187: status „Niezbadany" obok `population: 55` dla dwóch układów AI (Akhernar, Wezen). ⚠ **Identyczna wartość dla dwóch imperiów to DETERMINIZM MODELU POPULACJI, nie wyciek cudzych liczb** — ZMIERZONE w żywej grze: `emp_001` (sys_036) i `emp_002` (sys_059) mają realnie po 55 POP, a `uklad_snapshot == uklad_live` dla **wszystkich ośmiu** kolonii, bez wyjątku. Każda stolica AI startuje z `{ laborer: 4, worker: 4 }` = 8 POP (`EmpireColonyBootstrap:325`) przy archetypowo identycznych budynkach ⇒ identyczne housing ⇒ ta sama krzywa logistyczna. **Panel pokazuje więc liczby PRAWDZIWE — defektem jest to, że pokazuje je w ogóle.** ⚠ Przy okazji ZMIERZONA I ODRZUCONA druga hipoteza: panel kluczuje kolonie po ŻYWYM `EntityManager.get(planetId).systemId`, a pozostałych 26 konsumentów po snapshocie `col.systemId` — te dwa źródła **nie rozjeżdżają się** w żadnej z ośmiu kolonii, więc to NIE jest druga połowa tego findingu (gdyby kiedyś się rozjechały, byłaby to klasa lustra z 186). | 🟠 **OTWARTY, bez decyzji o zakresie.** Naprawa jest **rozstrzygnięciem PROJEKTOWYM** („co widać na `rumor`, co na `contact`"), nie poprawką predykatu: wymaga **rozdzielenia trzech reweali** jadących dziś na jednej fladze `known`. ⚠ Rodzeństwo: **W3-4** (`ThreatAssessment` to prawda globalna, nie bramkowana intelem) — ta sama klasa „wiedza gracza o AI omija warstwę wywiadu", inny mechanizm. ⚠ Kandydat do serii szybkiej obok `87`+`86` (ta sama rodzina „coś obcego wpływa na obraz gracza", ten sam kształt keepera: prawdziwa funkcja rysująca + atrapa `ctx`, wzorzec gotowy w `system_exploration_canon_smoke`). |
