@@ -146,6 +146,7 @@ import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
 import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
 import { t, getLocale } from '../i18n/i18n.js';
+import { isSystemExploredId } from '../utils/SystemExploration.js';
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -971,7 +972,6 @@ export class GameScene {
         const cm   = window.KOSMOS?.colonyManager;
         const dipl = window.KOSMOS?.diplomacySystem;
         const civ  = window.KOSMOS?.civilianTradeSystem;
-        const gs   = window.KOSMOS?.galaxyData?.systems;
         const warp = window.KOSMOS?.techSystem?.isResearched?.('ion_drives') ?? false;
         console.log(`[cross-empire trade] gracz warp(ion_drives)=${warp}`);
         const perEmpire = {};
@@ -980,8 +980,9 @@ export class GameScene {
           const emp = c.ownerEmpireId;
           const treaty    = dipl?.hasTradeAgreement?.(emp) ?? false;
           const toggle    = civ?.isCrossEmpireTradeEnabled?.(emp) ?? true;
-          const sys       = gs?.find(s => s.id === c.systemId);
-          const explored  = !!sys?.explored;
+          // Diagnostyka MUSI czytać ten sam predykat co bramka (CivilianTradeSystem:95),
+          // inaczej konsola potrafi zapewniać, że handel przejdzie, gdy bramka go odrzuca.
+          const explored  = isSystemExploredId(c.systemId);
           const spaceport = civ?._hasSpaceport?.(c) ?? null;
           const isolation = !!c.tradeOverrides?.isolation;
           const blocked = [];

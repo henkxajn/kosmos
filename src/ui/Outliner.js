@@ -15,6 +15,7 @@ import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
 import { resolveBodyName } from '../utils/BodyName.js';
+import { isSystemExploredData } from '../utils/SystemExploration.js';
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
@@ -182,12 +183,14 @@ export class Outliner {
         }
       }
       // Dodaj TYLKO układy ZNANE graczowi (odwiedzone). Układy AI, których gracz sam
-      // nie zwiedził, pozostają UKRYTE — mgła wojny (galaxyStar.explored=false dla AI;
-      // sysData.explored zostaje true, więc filtrujemy po galaxyStar).
+      // nie zwiedził, pozostają UKRYTE — mgła wojny.
+      // ⚠ Ten plik pierwszy zapisał, że lustro `sysData.explored` kłamie („zostaje true, więc
+      //   filtrujemy po galaxyStar") — i przez trzy miesiące był jedynym, który to wiedział.
+      //   Ta wiedza jest teraz kanonem: `isSystemExploredData` (Finding 186).
       const ssMgr = window.KOSMOS?.starSystemManager;
       if (ssMgr) {
         for (const sys of ssMgr.getAllSystems()) {
-          const visited = sys.systemId === 'sys_home' || sys.galaxyStar?.explored === true;
+          const visited = isSystemExploredData(sys);
           if (!visited) continue;
           if (!bySystem.has(sys.systemId)) bySystem.set(sys.systemId, []);
         }

@@ -1,7 +1,7 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
-> **Stan na 2026-08-27** (po zamknięciu 138+142) · **Save v101** ·
-> Sweep zmierzony przy tworzeniu tego pliku: **186/186 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
+> **Stan na 2026-08-29** (po zamknięciu W3-32 + 186/187) · **Save v101** ·
+> Sweep: **187/187 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
 
@@ -77,6 +77,17 @@ filtr rezerwy jest **tylko** w `_wreckPlayerVesselsInSystem:376`, `_resolveBatch
 
 **Zamknięte 2026-08-27** (zdjęte z tego indeksu): 108 · 109 · 110 · 119 · 124 · 137 · 138 · 139 · 140 ·
 142 · 150 · 155 · 157 · 160 · 166b-176 · 177 · W3-1 · W2-9.
+**Zamknięte 2026-08-29:** **W3-32** — ⚠ okazał się zamknięty już **2026-08-18** (`61bdffe`),
+czyli DZIEWIĘĆ DNI przed powstaniem tego pliku; wiersz był przepisany bez pomiaru i stał tu jako
+pozycja nr 1 rekomendacji. Przy okazji audytu wyszła i została zamknięta jego **stanowa reszta** —
+**186** (żywy od pierwszej tury: mgła nad układami AI przebita OR-em nad lustrem `sysData.explored`;
+darmowy spis ciał w tierze 3 bez obserwatorium + wejście w widok 3D cudzego układu) i **187**
+(ten sam mechanizm na ścieżce przylotu, latentny). Rejestr macierzysty obu: `VESSEL_ORDERS_PLAN.md`
+§Findings z audytu W3-32; kanon `src/utils/SystemExploration.js`, keeper
+`system_exploration_canon_smoke` 21/21.
+⚠ **Wniosek dla tego pliku, nie dla tamtych findingów:** przed planowaniem czegokolwiek z listy
+„przepisane bez ponownego pomiaru" **uruchom keeper i `git log -S`**. Jedno wywołanie odjęło cały
+slice z kolejki.
 **Przeklasyfikowane:** 159 (utajony za flagą) · 165b (zaparkowany).
 
 ---
@@ -183,7 +194,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **49** | 🔴 | katalog AI **nie ma roli transportowej** ⇒ `no_drop_capable_hull` to jedyna osiągalna odpowiedź złącza bitwa→desant | `AI_DROP_HULL_AUDIT.md` |
 | **50** | 🔴 | desant AI biegnie na modelu **LEGACY** (60 HP / 12 atak vs 15 / 7), bez morale i zaopatrzenia | `GROUND_UNITS_AUDIT.md` |
 | **65** | 🔴 | **przyczyna 50, w dwóch liniach**: morale legacy `?? 0` przy odejmowaniu vs `?? 100` przy odczycie ⇒ **pierwsze trafienie usuwa jednostkę z gry**. Dotyczy też startowej piechoty gracza | + martwy wyjątek „garnizon się nie wycofuje" |
-| **W3-32** | 🔴 | przylot międzygwiezdny **AI** odpala graczowi pełny popup przylotu — z darmowym skanem układu — **i PAUZUJE grę** | wyciek intelu + fałszywe twierdzenie |
 | **53** | 🟠 | „wieczna inwazja" na placówce gracza — rekord `active:true` nie może wygasnąć i trafia do **każdego** zapisu | |
 | **54** | 🟠 | startowy garnizon gracza wisi na **efekcie ubocznym UI**; kolonie wtórne i placówki: 0 jednostek na zawsze | |
 | **55** | 🟠 | kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy ⇒ `launchInvasion` zwraca `no_grid` | |
@@ -354,14 +364,21 @@ wartością jest zapisana reguła, nie naprawa).
 
 # E · Rekomendacja kolejności — trzy pozycje, każda z innego powodu
 
-1. **`W3-32`** — jedyny otwarty defekt, który **pauzuje grę i kłamie graczowi w twarz** przy każdym
-   przylocie AI, a po ① („rajder nie wraca") będzie się powtarzał. Naprawa = filtr właściciela
-   w jednym subskrybencie (`MissionEventModal._onInterstellarArrived:609`).
+1. ~~**`W3-32`**~~ — ✅ **wykonane 2026-08-29**, a właściwie: **zamknięte 2026-08-18**, o czym ten
+   plik nie wiedział. Audyt dowiózł zamiast tego jego stanową resztę (186 + 187). Wiersz zostaje
+   jako ślad procesowy: **pozycja nr 1 rekomendacji była nieaktualna**, bo przepisano ją z rejestru
+   bez uruchomienia keepera.
 2. **`87` + `86`** — dwa **zmierzone w źródle** przecieki „kolonia AI wpływa na grę gracza":
    jeden **pauzuje grę fałszywym alarmem o utracie stolicy**, drugi zabiera **−30 % produkcji**.
    Ta sama rodzina co domknięty arc własności, ta sama tania naprawa, ten sam kształt keepera.
 3. **① `130` + `Z2`** — bo dopóki rajder parkuje z wyzerowaną misją, **każdy pomiar tempa wojny
    mierzy artefakt**.
+
+⚠ **Kolejka wielosesyjna uzgodniona z właścicielem 2026-08-29:** (1) szybka seria `W3-32` →
+`87`+`86` → `130`+`Z2`; (2) `151` · `152` · `153` · `154` **osobno**, każdy z innego powodu
+wykluczenia (§D2); (3) trzy duże sloty pełnym cyklem audyt→pomiar→plan→implementacja→live-gate:
+**GROUND** (49, 50, 65, 56, 54, 58, 67, 68 + `185`) · **kolonizacja** (98-107, ⚠ §D2: to NIE jest
+jedna rzecz — zakres rozstrzygnąć na wejściu) · **ORDER_TRUTHFULNESS** (141, 145, 127).
 
 ---
 

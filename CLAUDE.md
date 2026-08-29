@@ -2576,6 +2576,69 @@ odmowa nie tworzy misji, więc `mission?.targetId == null` było zielone na zeps
 Fail-first bez ich poprawienia pokazywał **11/10** zamiast **12/17**.
 
 
+---
+
+## KANON „UKŁAD ZBADANY" — Findingi 186 + 187, stanowa reszta W3-32 (save **v101 bez migracji**, live-gate PASS)
+
+Audyt W3-32 (pozycja nr 1 w `OPEN_FINDINGS_INDEX.md` §E) zastał ten finding **ZAMKNIĘTY dziewięć dni
+wcześniej** (`61bdffe`, W3-5b; bramka właściciela `MissionEventModal:634`, keeper 5/5 zielony po
+ponownym uruchomieniu). ⚠ **Ale W3-32 nazwał DWIE szkody:** pauzę z fałszywą treścią (zamknięta) i
+**„darmowy skan układu"**. Ta druga miała drugi, niezależny kanał — **stanowy, u producenta** — i żyła.
+Rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §Findings z audytu W3-32.
+
+**186 (🔴 żywy od pierwszej tury).** `StarSystemManager.generateAndRegister` zapalał DWIE flagi —
+`galaxyStar.explored` (`:105`) i lustro `sysData.explored` (`:114`) — a `EmpireColonyBootstrap:612-615`
+gasił **tylko pierwszą**. Pięciu konsumentów czytało `galaxyStar` (poprawnie), DWAJ czytali obie przez
+**OR**: `FleetManagerOverlay:6249` (panel detalu STRATCOM) i `:6784` (panel rozkazu warp — bramka
+**świadomie skopiowana** stamtąd w Findingu 108/Z4, więc odziedziczyła też defekt). Skutek, ZMIERZONY
+WYKONANIEM przy `getMaxSystemScanTier() = 0` (gracz **bez obserwatorium**): pełny spis ciał w **tierze 3**
+(`Planety=11 Księżyce=27 Planetoidy=26 … Razem=64`), status „Zbadany" na zielono i przycisk
+**„🔭 Przełącz widok"** → widok 3D cudzego układu. **Dwa kliknięcia** (strefa `cluster_star` jest
+pushowana dla KAŻDEJ gwiazdy, bez bramki `known`, `:6124`), dla domowego układu **każdego** imperium AI
+(`EmpireGenerator:242` bootstrapuje wszystkie przy generacji galaktyki), **i szło do zapisu**
+(`serialize:238` / `restore:265` z fail-OPEN `?? true`). ⚠ Przeżyło, bo nazwa układu ma TRZECI predykat
+(`_systemDisplayName:6355`) i zostawała „???" — panel **wyglądał** na zamglony, oddając spis i wejście.
+
+**187 (🟠 latentny).** `VesselManager._tickInterstellar:2709` woła generator dla **dowolnego** statku, więc
+przylot rajdera AI zapalał `galaxyStar.explored` — czyli mgłę **także na mapie i w Outlinerze**. Dziś
+nieosiągalne: AI skacze wyłącznie do układów gracza (`DirectorOffensive.reachableTargets:122-136`), a te są
+zbadane z definicji. Uzbraja się przy pierwszym skoku AI gdziekolwiek indziej.
+
+**Naprawa — (b) kanon + (a) obrona w głąb, jeden commit.** NEW `src/utils/SystemExploration.js` (wzór
+`ColonyOwnership.js`: rodzina nazw `isSystemExplored` / `isSystemExploredId` / `isSystemExploredData` /
+`markSystemExplored`, **zero importów**, **fail-CLOSED**). `generateAndRegister` **przestaje oznaczać
+eksplorację** — generacja układu to fakt techniczny, nie akt poznania; oznacza wołający. `restore`
+fail-closed z gałęzią domową. **Siedem** konsumentów na kanon (FMO ×4, `Outliner:191`,
+`CivilianTradeSystem:95`, diagnostyka `GameScene` — bo diagnostyka MUSI czytać predykat bramki).
+Bootstrap gasi **obie** flagi.
+
+**⚠ TRZY RZECZY, KTÓRYCH POMIAR NIE POTWIERDZIŁ, TYLKO ZMIENIŁ:**
+1. **Kierunek fail jest tu ODWROTNY niż w `SystemScope.isSameSystem`.** Tam brak stempla znaczy
+   „przepuść", bo cena fałszywego negatywu to cichy paraliż floty. Przy mgle wojny cena fałszywego
+   POZYTYWU to trwały wyciek, który **idzie do zapisu** ⇒ „nie wiem" musi znaczyć „nie znam".
+2. **Zamknięty PRZECIWNY defekt, którego nikt nie zgłosił:** `_tickInterstellar` woła generator tylko
+   `if (!ssMgr.getSystem(...))`, a układ AI jest już wygenerowany przy bootstrapie ⇒ przylot **GRACZA**
+   do cudzego układu **nie odkrywał go wcale**. Ten fałszywy negatyw był maskowany przez lustro w OR-ze
+   `:6249` — czyli przez sam defekt 186. Dlatego oznaczenie stoi **poza** gałęzią leniwej generacji.
+3. **Fixture keepera opierał się na usuwanym side-effekcie** i po naprawie padło **pięć kontroli pinu**.
+   Poprawny fixture modeluje **zatruty zapis** (lustro jawnie zapalone — tak wygląda każdy save sprzed
+   poprawki) i markuje „zbadany" **prawdziwą ścieżką pisarza** (przylot gracza). Bez tej korekty T1
+   przechodziłby **jałowo**.
+
+⚠ **LEKCJA WIĄŻĄCA DALEJ — lustro stanu jest długiem, nie wygodą.** Fakt „`sysData.explored` zostaje
+true, więc filtrujemy po `galaxyStar`" był **zapisany w źródle w DWÓCH miejscach**
+(`EmpireColonyBootstrap:612`, `Outliner:185-186`) zanim ktokolwiek nazwał go defektem. **Gdy dwa miejsca
+obchodzą to samo pole, kanon jest już spóźniony.**
+⚠ **REGUŁA O INDEKSIE:** `OPEN_FINDINGS_INDEX.md` nie jest źródłem prawdy (sam to deklaruje) — jego
+pozycja nr 1 była zamknięta. Przed planowaniem slice'u z listy „przepisane bez pomiaru": **uruchom
+keeper i `git log -S`**.
+
+**Live-gate 2026-08-29 PASS** (właściciel, dwa układy AI — Akhernar i Wezen): status „Niezbadany", brak spisu ciał, brak przycisku „Przełącz widok".
+
+Keeper `src/testing/smoke/system_exploration_canon_smoke.mjs` **21/21**, fail-first **7/14** zmierzony
+FINALNYM fixture'em przez `git stash` samego kodu gry (wszystkie sześć kontroli pinu zielone po obu
+stronach). Sweep **187/187 0 FAIL** · `check-i18n` PASS · zero migracji · zero nowych kluczy i18n.
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

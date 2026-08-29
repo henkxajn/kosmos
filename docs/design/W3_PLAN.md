@@ -779,6 +779,19 @@ path instead). Next live run can settle it in one read — the first record shou
     ⚠ It also **pauses the game** (the modal is a pausing popup), so from W3-5 onward — when AI
     raiders warp on their own initiative — this fires repeatedly with a false claim. Foreign
     arrivals should be at most a **sensor contact behind detection**, never a player-arrival modal.
+    ✅ **CLOSED 2026-08-18** (`61bdffe`, W3-5b) — owner gate at `MissionEventModal:634`, keeper
+    `w3_foreign_arrival_gate_smoke` 5/5 (re-run green 2026-08-29). The gate is load-bearing, not
+    dead code: AI cross-system strikes really do emit `interstellar:arrived` (`OrderService:132`
+    routes AI past the planner into `dispatchInterstellar`; `DirectorOffensive:236`).
+    ⚠ **HALF OF THIS FINDING SURVIVED THE FIX AND WAS CLOSED SEPARATELY ON 2026-08-29.** The entry
+    names TWO harms; the patch closed the pausing modal and the survey *rendered inside it*. The
+    "free survey" had a second, **stateful** channel at the producer: `generateAndRegister` lit
+    `galaxyStar.explored` **and** the never-reset mirror `sysData.explored` for any caller, so
+    every AI home system read as *Explored* in the STRATCOM detail panel — full tier-3 body census
+    with no observatory, plus the button that switches the 3D view into it. Filed and closed as
+    **Findings 186 (live) + 187 (latent)** in `docs/design/VESSEL_ORDERS_PLAN.md` §Findings
+    z audytu W3-32, with canon `src/utils/SystemExploration.js` and keeper
+    `system_exploration_canon_smoke` 21/21.
 33. **OWNER UX REQUEST — full orders/navigation in foreign systems. Assessment: VIEW-LAYER
     asymmetry, not a world constraint.** Measured: `StarSystemManager.switchActiveSystem` is
     complete (rebuilds the 3D scene, emits `system:switched`) and has **exactly one caller in the

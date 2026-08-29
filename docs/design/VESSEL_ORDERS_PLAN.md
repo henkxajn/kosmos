@@ -1558,3 +1558,33 @@ poza stdout) — `AiTelemetry` mierzy DECYZJE i nie dotyka ani fabryk poza droid
 fabryki (pierwsza wersja tak właśnie kłamała). Zmierzony stosunek **~500 sztuk towarów na ~200 000
 rudy** i **11 towarów trwale na zerze** to ta sama diagnoza co slice ZASOBY: gospodarka jest
 **komponentowa, nie rudowa**.
+
+---
+
+## Findings z audytu W3-32 (2026-08-29) — STANOWA reszta „darmowego skanu układu"
+
+Audyt otwierał serię przeglądu rejestru (`OPEN_FINDINGS_INDEX.md` §E, pozycja 1). **Sam W3-32 okazał
+się ZAMKNIĘTY dziewięć dni przed powstaniem indeksu** (`61bdffe`, W3-5b; bramka właściciela stoi
+w `MissionEventModal:634`, keeper `w3_foreign_arrival_gate_smoke` 5/5 uruchomiony ponownie —
+zielony). Indeks nie kłamał: sam deklaruje, że poza dziesięcioma pozycjami „przepisane z rejestrów
+BEZ ponownego pomiaru", a ta była jedną z przepisanych.
+
+⚠ **Ale W3-32 nazwał DWIE szkody, nie jedną.** Poprawka zamknęła pauzę z fałszywą treścią i skan
+**widoczny w popupie**. „Darmowy skan układu" miał drugi, niezależny kanał — **stanowy, u
+producenta** — i ten żył. Poniżej dwa findingi tej reszty, oba zamknięte w tym samym commicie.
+
+| # | rzecz | status |
+|---|---|---|
+| **186** | **Mgła wojny nad układami AI przebita OR-em nad flagą, której reset zapomniał — ŻYWE OD PIERWSZEJ TURY.** `StarSystemManager.generateAndRegister` zapalał DWIE flagi: `galaxyStar.explored` (`:105`) i lustro `sysData.explored` (`:114`). `EmpireColonyBootstrap:612-615` gasił **tylko pierwszą** — z komentarzem formułującym regułę projektu wprost („Gracz nie ma free intel na system AI — musi zrobić własny recon"). Pięciu konsumentów czytało `galaxyStar` (poprawnie), a DWAJ czytali obie przez **OR**: `FleetManagerOverlay:6249` (panel detalu STRATCOM) i `:6784` (panel rozkazu warp, gdzie bramka była **świadomie skopiowana** z tego pierwszego — Finding 108/Z4). W OR-ze wygrywało nigdy-nieresetowane lustro. **ZMIERZONE WYKONANIEM** (prawdziwa `_buildSystemScanLayout`, gracz **bez obserwatorium**, `getMaxSystemScanTier() = 0`): `explored=true` → **6 wierszy, tier 3** (`Planety=11 Księżyce=27 Planetoidy=26 … Razem=64`); `explored=false` → 0 wierszy, kontrolka `locked`. Do tego status „Zbadany" na zielono i przycisk **„🔭 Przełącz widok"** → `switchActiveSystem` → widok 3D cudzego układu. **Osiągalne dwoma kliknięciami**: strefa `cluster_star` jest pushowana dla KAŻDEJ gwiazdy, bez bramki `known` (`:6124`), a `_drawStratcomDetail` rysuje się dla dowolnego zaznaczenia (`:6145-6149`). Uzbrojone dla domowego układu **każdego** imperium AI, bo `EmpireGenerator:242` bootstrapuje wszystkie przy generacji galaktyki. **Szło do zapisu** (`serialize:238` / `restore:265`, w dodatku z fail-OPEN `?? true`). ⚠ **Dlaczego przeżyło:** nazwa układu ma TRZECI predykat (`_systemDisplayName:6355`, samo `sys.explored`) i zostawała „???" — panel WYGLĄDAŁ na zamglony, oddając spis i wejście. | ✅ **ZAMKNIĘTY 2026-08-29.** (b) NEW `src/utils/SystemExploration.js` — kanon rodziny nazw (`isSystemExplored` / `isSystemExploredId` / `isSystemExploredData` / `markSystemExplored`), fail-CLOSED, zero importów (wzór `ColonyOwnership.js`); `generateAndRegister` **przestaje oznaczać eksplorację** (generacja układu to fakt techniczny, nie akt poznania); `restore` fail-closed z gałęzią domową; **siedem** konsumentów zmigrowanych (FMO ×4, `Outliner:191`, `CivilianTradeSystem:95`, diagnostyka `GameScene`). (a) bootstrap gasi **obie** flagi jako obrona w głąb. Zapis **v101 bez migracji**, zero nowych kluczy i18n. Keeper `system_exploration_canon_smoke` **21/21**, fail-first **7/14** zmierzony finalnym fixture'em przez `git stash` samego kodu gry. **Live-gate PASS 2026-08-29** — dwa układy AI (Akhernar, Wezen), status „Niezbadany", brak spisu, brak wejścia w widok. |
+| **187** | **Ten sam mechanizm na ścieżce PRZYLOTU — dokładnie tam, gdzie mieszkał W3-32.** `VesselManager._tickInterstellar:2709` woła `generateAndRegister` dla **dowolnego** przylatującego statku, więc przylot rajdera AI zapalał `galaxyStar.explored` — czyli przebijał mgłę **także na mapie galaktyki i w Outlinerze**, nie tylko w panelu detalu. Dziś nieosiągalne: AI skacze wyłącznie do układów GRACZA (`DirectorOffensive.reachableTargets:122-136` buduje cele z `getPlayerColonies()`), a te są zbadane z definicji. Uzbraja się w dniu, w którym AI skoczy gdziekolwiek indziej (logistyka cross-system, roamer, ekspansja). | ✅ **ZAMKNIĘTY 2026-08-29** razem ze 186 — bramka właściciela na przylocie (`!isEnemyVessel` → `markSystemExplored`). ⚠ **Przy okazji zamknięty PRZECIWNY defekt, którego nikt nie zgłosił:** oznaczenie stoi **poza** gałęzią leniwej generacji, bo `_tickInterstellar` woła generator tylko `if (!ssMgr.getSystem(...))` — układ imperium AI jest już wygenerowany przy bootstrapie, więc przylot **GRACZA** do cudzego układu **nie odkrywał go wcale**. Ten fałszywy negatyw był dotąd maskowany przez lustro w OR-ze `:6249`, czyli przez sam defekt 186. Pin: T4 + kontrola pinu. |
+
+⚠ **Lekcja, która wychodzi poza te dwa wpisy — LUSTRO STANU JEST DŁUGIEM, NIE WYGODĄ.** Ten sam
+fakt („`sysData.explored` zostaje true, więc filtrujemy po `galaxyStar`") był **zapisany w źródle
+w dwóch miejscach** — `EmpireColonyBootstrap:612` i `Outliner:185-186` — zanim ktokolwiek nazwał go
+defektem. Obejście napisane dwa razy z pamięci to nie jest wiedza projektu; to jest odliczanie do
+trzeciego konsumenta, który jej nie będzie miał. **Gdy dwa miejsca obchodzą to samo pole, kanon jest
+już spóźniony.**
+
+⚠ **Reguła o indeksie:** `OPEN_FINDINGS_INDEX.md` sam siebie opisuje jako nieźródło prawdy i miał
+rację — jego pozycja **nr 1** była zamknięta. Przed planowaniem czegokolwiek z listy przepisanej bez
+pomiaru: **najpierw uruchom keeper i przeczytaj `git log -S`**, dopiero potem planuj slice.

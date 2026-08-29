@@ -18,6 +18,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { K_TRADE } from '../data/PopulationData.js';   // Faza 3: mnożnik handlu z zatrudnienia przemysłu
+import { isSystemExploredId } from '../utils/SystemExploration.js';
 
 export class CivilianTradeSystem {
   constructor(colonyManager) {
@@ -91,8 +92,10 @@ export class CivilianTradeSystem {
       if (c.ownerEmpireId && galaxySystems) {
         const hasTreaty = window.KOSMOS?.diplomacySystem?.hasTradeAgreement?.(c.ownerEmpireId) ?? false;
         if (!hasTreaty) {
-          const system = galaxySystems.find(s => s.id === c.systemId);
-          if (!system?.explored) return false;
+          // Finding 186 — kanon eksploracji. Struktura warunku ZOSTAJE: brak `galaxyData`
+          // (bramka wyżej) dalej NIE blokuje handlu — kanon jest fail-closed, więc wciągnięcie
+          // go przed ten guard zmieniłoby tryb awarii bramki handlowej.
+          if (!isSystemExploredId(c.systemId)) return false;
         }
       }
       return true;

@@ -609,10 +609,17 @@ export class EmpireColonyBootstrap {
     // w try/finally — bezpieczne dla reszty kodu).
     const sysData = ssMgr.generateAndRegister(galaxyStar);
 
-    // Reset explored=true które ssMgr.generateAndRegister ustawia automatycznie.
     // Gracz nie ma free intel na system AI — musi zrobić własny recon.
     // (IntelSystem.initForAllEmpires inicjalizuje level='unknown'.)
+    //
+    // ⚠ Finding 186 — TO JEST OBRONA W GŁĄB, NIE GŁÓWNA BRAMKA. Po poprawce kanonu
+    //   `generateAndRegister` w ogóle nie zapala eksploracji, więc w normalnej ścieżce ten reset
+    //   jest no-opem. Zostaje z dwóch powodów: (1) rekord układu mógł już istnieć z zapalonym
+    //   lustrem, (2) przez trzy miesiące jedynym, co trzymało mgłę nad układami AI, była WŁAŚNIE
+    //   ta linia — i gasiła tylko JEDNĄ z dwóch flag, przez co `FleetManagerOverlay` czytający
+    //   je OR-em oddawał spis ciał i wejście do widoku 3D. Kasujemy OBIE.
     galaxyStar.explored = false;
+    if (sysData) sysData.explored = false;
 
     return sysData;
   }

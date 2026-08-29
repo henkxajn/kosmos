@@ -13,6 +13,7 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem }   from './DepositSystem.js';
+import { isSystemExplored, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
 
 export class StarSystemManager {
   constructor() {
@@ -80,6 +81,15 @@ export class StarSystemManager {
 
   /**
    * Generuje układ gwiezdny dla danej gwiazdy z galaktyki i rejestruje encje.
+   *
+   * ⚠ NIE OZNACZA UKŁADU JAKO ZBADANEGO — i to jest treść poprawki Findingów 186/187.
+   *   Ta funkcja zapalała `galaxyStar.explored` i lustro `sysData.explored` dla KAŻDEGO
+   *   wywołania, a wołają ją także zdarzenia, które z eksploracją gracza nie mają nic wspólnego:
+   *   bootstrap imperium AI (`EmpireColonyBootstrap:610`) i przylot DOWOLNEGO statku, w tym
+   *   rajdera AI (`VesselManager._tickInterstellar`). Generacja układu to fakt techniczny
+   *   (leniwe stworzenie encji), nie akt poznania. Oznaczanie należy do wołającego, przez
+   *   `markSystemExplored` — jedynego pisarza kanonu.
+   *
    * @param {Object} galaxyStar — wpis z GalaxyGenerator (id, name, spectralType, mass, luminosity, ...)
    * @returns {StarSystemData}
    */
@@ -101,9 +111,6 @@ export class StarSystemManager {
     result.asteroids.forEach(a => a.systemId = systemId);
     result.comets.forEach(c => c.systemId = systemId);
 
-    // Oznacz gwiazdę jako zbadaną w galaxyData
-    galaxyStar.explored = true;
-
     const sysData = {
       systemId,
       galaxyStar,
@@ -111,7 +118,9 @@ export class StarSystemManager {
       planetIds:     result.planets.map(p => p.id),
       moonIds:       result.moons.map(m => m.id),
       planetoidIds:  result.planetoids.map(p => p.id),
-      explored:      true,
+      // Lustro stanu wiedzy — NIEAUTORYTATYWNE (patrz `utils/SystemExploration.js`).
+      // Trzymane, bo idzie do zapisu; czytane przez nikogo. Prawdą jest `galaxyStar.explored`.
+      explored:      isSystemExplored(galaxyStar),
       warpBeacon:    null,
       jumpGate:      null,
     };
@@ -262,7 +271,10 @@ export class StarSystemManager {
         planetIds:    sd.planetIds || [],
         moonIds:      sd.moonIds || [],
         planetoidIds: sd.planetoidIds || [],
-        explored:     sd.explored ?? true,
+        // FAIL-CLOSED (było `?? true`): brak pola w zapisie nie może znaczyć „gracz to zna".
+        // Dom zna się z definicji. Lustro NIE jest źródłem prawdy — zostaje takie, jakie było
+        // w zapisie, i nikt go nie czyta (kanon pyta `galaxyStar`, dowiązywaną niżej).
+        explored:     sd.explored ?? (sd.systemId === HOME_SYSTEM_ID),
         warpBeacon:   sd.warpBeacon || null,
         jumpGate:     sd.jumpGate || null,
       });

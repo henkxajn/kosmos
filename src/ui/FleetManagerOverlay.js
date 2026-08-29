@@ -29,6 +29,7 @@ import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
+import { isSystemExplored } from '../utils/SystemExploration.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
@@ -5538,7 +5539,7 @@ export class FleetManagerOverlay {
         const dx = (s.x ?? 0) - (home.x ?? 0);
         const dy = (s.y ?? 0) - (home.y ?? 0);
         const d2 = Math.sqrt(dx * dx + dy * dy);
-        const known = !!s.isHome || !!s.explored || isEmpKnown(s);
+        const known = isSystemExplored(s) || isEmpKnown(s);
         // Nazwa znana = zbadany LUB przeskanowany w STRATCOM (skan ujawnia nazwę).
         const nameKnown = known || !!obsSys?.getSystemScanResult?.(s.id);
         list.push({ s, d2, known, nameKnown, inSensor: d2 <= rangeLY });
@@ -6246,7 +6247,13 @@ export class FleetManagerOverlay {
     const empId    = sys.empireId;
     const empKnown = !!(empId && (intel ? intel.isAtLeast(empId, 'rumor') : false));
     const sysReg   = ssMgr?.getSystem(sys.id);
-    const explored = !!sysReg?.explored || !!sys.explored;
+    // ⚠ Finding 186 — KANON, nie OR nad dwiema flagami. `sysReg.explored` to lustro, które
+    //   bootstrap imperium AI zostawiał zapalone (gasił tylko `galaxyStar.explored`), więc układ
+    //   KAŻDEGO imperium był tu „Zbadany" od pierwszej tury: pełny spis ciał w tierze 3 bez
+    //   obserwatorium plus przycisk wejścia w widok 3D cudzego układu. Nazwa zostawała „???",
+    //   bo `_systemDisplayName` ma własny predykat — panel wyglądał na zamglony, oddając resztę.
+    //   `sysReg` zostaje w warunku przycisku niżej: do widoku można wejść tylko po generacji.
+    const explored = isSystemExplored(sys);
     const known    = !!sys.isHome || explored || empKnown;
 
     // Populacja + życie (tylko gdy znane)
@@ -6352,7 +6359,7 @@ export class FleetManagerOverlay {
   // Nazwa układu do wyświetlenia — ujawniona po zbadaniu LUB skanie STRATCOM; inaczej „???".
   _systemDisplayName(sys) {
     if (!sys) return '???';
-    if (sys.isHome || sys.explored) return sys.name ?? '???';
+    if (isSystemExplored(sys)) return sys.name ?? '???';
     const scanned = !!window.KOSMOS?.observatorySystem?.getSystemScanResult?.(sys.id);
     return scanned ? (sys.name ?? '???') : '???';
   }
@@ -6779,9 +6786,12 @@ export class FleetManagerOverlay {
     // do widoku układu i gracz zostawał w pętli (klik gwiazdy → znowu ten panel).
     // ⚠ Bramka SKOPIOWANA z `_drawStratcomDetail`, nie wymyślona (Z4): panel rozkazu bywa otwarty
     //   na układzie NIEZBADANYM — po to się tam wysyła statek — a wtedy nie ma dokąd wchodzić.
+    // ⚠ Finding 186: skopiowana bramka odziedziczyła też jej defekt (OR nad lustrem
+    //   `sysData.explored`). Oba site'y czytają teraz TEN SAM kanon — kopia zostaje kopią
+    //   INTENCJI, nie predykatu.
     const ssMgrSwitch = window.KOSMOS?.starSystemManager;
     const sysRegSwitch = ssMgrSwitch?.getSystem?.(sys.id);
-    const canSwitch = !!(sysRegSwitch && (sysRegSwitch.explored || sys.explored));
+    const canSwitch = !!(sysRegSwitch && isSystemExplored(sys));
 
     const infoLines = hasPlanInfo ? (plan.etaYears != null ? 4 : 3) : 0;
     const panelH = PAD + 18 + 16 + (infoLines * 14) + 18 + 22 + (canSwitch ? 26 : 0) + PAD;

@@ -44,6 +44,7 @@ import {
 import { t } from '../i18n/i18n.js';
 import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
 import { isSameSystem, systemIdOf } from '../utils/SystemScope.js';
+import { markSystemExplored } from '../utils/SystemExploration.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
 
@@ -2708,6 +2709,17 @@ export class VesselManager {
       if (ssMgr && targetStar && !ssMgr.getSystem(m.toSystemId)) {
         ssMgr.generateAndRegister(targetStar);
       }
+
+      // Finding 187 — TO PRZYLOT ODKRYWA UKŁAD, NIE JEGO GENERACJA. Dwie rzeczy naraz:
+      //  (a) bramka właściciela — `generateAndRegister` zapalało `explored` dla DOWOLNEGO
+      //      statku, więc rajder AI odsłaniał graczowi układ (ta sama rodzina co W3-32:
+      //      konsument/producent, który nigdy nie pyta, CZYJ jest ten stan);
+      //  (b) oznaczenie stoi POZA gałęzią leniwej generacji — układ imperium AI jest już
+      //      wygenerowany przy bootstrapie, więc gałąź `if (!getSystem)` nie wbiegłaby i przylot
+      //      GRACZA do cudzego układu nie odkryłby go. Ten fałszywy negatyw był dotąd maskowany
+      //      przez lustro `sysData.explored` w OR-ze `FleetManagerOverlay:6249` — czyli przez
+      //      dokładnie ten defekt, który zamyka Finding 186.
+      if (targetStar && !isEnemyVessel(vessel)) markSystemExplored(targetStar);
 
       // Ustaw statek w nowym układzie (pozycja = obrzeża, wolna przestrzeń)
       const sysData = ssMgr?.getSystem(m.toSystemId);
