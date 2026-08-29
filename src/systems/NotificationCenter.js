@@ -38,6 +38,8 @@ export class NotificationCenter {
     EventBus.on('expedition:reconComplete',  e => this._handleReconComplete(e));
     EventBus.on('observatory:discovered',    e => this._handleObservatoryDiscovered(e));
     EventBus.on('observatory:vesselScanComplete', e => this._handleVesselScanComplete(e));
+    // Finding 190 — prognoza kolizji dołącza do rodzeństwa obserwatorium (dzwonek, bez pauzy).
+    EventBus.on('observatory:collisionAlert', e => this._handleCollisionAlert(e));
     // W2-7 — mobilizacja rezerwy obcego imperium. Bramka jakości kontaktu SIEDZI W HANDLERZE
     // (patrz `_handleMobilized`): `add()` dubluje wszystko do Dziennika, więc filtrować trzeba
     // PRZED nim, a nie po.
@@ -256,6 +258,27 @@ export class NotificationCenter {
         bodyName: body.name,
         colonyName: colonyName ?? null,
       },
+    });
+  }
+
+  // Finding 190 — prognoza kolizji. Wcześniej to zdarzenie PAUZOWAŁO grę i zostawiało jedną
+  // linię w Dzienniku; teraz jest cichym meldunkiem jak reszta obserwatorium. Bramka
+  // `isPlayerColony` jest po stronie producenta wyliczona, ale pytamy o nią i tutaj — dzwonek
+  // gracza nie ma meldować kolizji, które go nie dotyczą.
+  _handleCollisionAlert({ bodyA, bodyB, yearsUntil, margin, isPlayerColony }) {
+    if (!isPlayerColony || !bodyA || !bodyB) return;
+    const nameA = bodyA.name ?? '?';
+    const nameB = bodyB.name ?? '?';
+    const years = Math.round(yearsUntil ?? 0);
+    this.add({
+      type: 'collision_alert',
+      severity: 'warn',
+      source: 'collisionForecast',
+      logChannel: 'intel',          // spójnie z observatory:discovered
+      title: t('notif.collisionTitle', nameA, nameB),
+      subtitle: t('notif.collisionSubtitle', years, margin ?? 0),
+      logText: t('log.collisionForecastColony', nameA, nameB, years, margin ?? 0),
+      payload: { bodyId: bodyA.id, bodyBId: bodyB.id, yearsUntil: years },
     });
   }
 

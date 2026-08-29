@@ -1,7 +1,7 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
-> **Stan na 2026-08-29** (po zamknięciu W3-32 + 186/187; **188** otwarty z tamtego live-gate'u) · **Save v101** ·
-> Sweep: **187/187 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
+> **Stan na 2026-08-29** (po zamknięciu W3-32 + 186/187 + **86/87/190**; otwarte z tych rund: **188**, **189**, **191**, **192**) · **Save v101** ·
+> Sweep: **189/189 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
 
@@ -77,6 +77,8 @@ filtr rezerwy jest **tylko** w `_wreckPlayerVesselsInSystem:376`, `_resolveBatch
 
 **Zamknięte 2026-08-27** (zdjęte z tego indeksu): 108 · 109 · 110 · 119 · 124 · 137 · 138 · 139 · 140 ·
 142 · 150 · 155 · 157 · 160 · 166b-176 · 177 · W3-1 · W2-9.
+**Zamknięte 2026-08-29 (runda 2):** **190** (pętla pauzy — domknięta dopiero za DRUGIM podejściem, pierwsza diagnoza obalona pomiarem — ZGŁOSZONA PRZEZ WŁAŚCICIELA w live-gate 86/87 i naprawiona w TYM SAMYM commicie, bo inaczej 87 dowoziłby regresję rozgrywki razem z funkcją) · **86** (termin tożsamości w `BuildingSystem`, G12 zielone bez dotknięcia) · **87** — ⚠ **SPROSTOWANY**: opisany mechanizm NIE ISTNIAŁ (`ColonyManager` nie ma akcesora `colonies`, `git log -S` pusty), skutek był ODWROTNY (brak alarmu o własnej koloni poza macierzystą), a treść wpisu okazała się opisem **pułapki w naprawie**. Trzy kopie martwej gałęzi naprawione razem.
+
 **Zamknięte 2026-08-29:** **W3-32** — ⚠ okazał się zamknięty już **2026-08-18** (`61bdffe`),
 czyli DZIEWIĘĆ DNI przed powstaniem tego pliku; wiersz był przepisany bez pomiaru i stał tu jako
 pozycja nr 1 rekomendacji. Przy okazji audytu wyszła i została zamknięta jego **stanowa reszta** —
@@ -160,8 +162,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **95** | 🔴 | statek ze stoczni orbitalnej na koloni WTÓRNEJ po utracie stolicy wychodzi jako **obcy kontakt** i nie trafia na listę rozmieszczenia | OBSERWOWANE, **niezbadane** |
 | **96** | ⚠ | czy utrata głównej koloni osierocą stację **drugiej** koloni (`transferColony` nie emituje `colony:destroyed`) | niepotwierdzone |
 | **F6** | 🟠 | **brak płatnika = flota DARMOWA** — `_resolvePayHomeId` → `null`, `_tickVesselMaintenance` robi `continue` | pin w `fleet_upkeep_payer_smoke`; wymaga **trzeciego szczebla drabiny** |
-| **86** | 🟠 | `BuildingSystem:124` nasłuchuje `civ:unrest` przez `() =>` — **ignoruje `planetId`** ⇒ niepokój koloni AI daje −30 % produkcji koloni gracza | ✔ zweryfikowane w źródle |
-| **87** | 🟠 | `CollisionForecast:244` buduje `playerPlanetIds` ze WSZYSTKICH kolonii i emituje `isHomePlanet` ⇒ prognoza kolizji koloni AI **pauzuje grę gracza** komunikatem o utracie stolicy | ✔ zweryfikowane w źródle |
 | **90** | ⚪ | `isTestEnemy` nadal nieserializowane ⇒ `undefined` po każdym wczytaniu | ✔ zweryfikowane |
 | **83** | ⚪ | `destroyEmpire:230-238` nie odpina kolonii ⇒ kolonia skasowanego imperium wraca z wczytania jako kolonia GRACZA | dziś debug/sandbox |
 | **88 · 89** | ⚪ | dwie migracje kluczują się na `isHomePlanet` i przyznają realne korzyści · **cztery** ścieżki `game:over` kluczują się ENCJĄ, nie flagą | ograniczenie na przyszłość |
@@ -201,6 +201,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **62 · 63** | ⚪ | kolizje `PhysicsSystem` nie są bramkowane scenariuszem (rozjazd z dokumentacją) · `empire:colonyRemoved` brak w `DebugLog.TRACKED_EVENTS` | |
 | **W3-2** | 🟠 | `_resolveBatchedBattle` **nie filtruje rezerwy**, a `_wreckPlayerVesselsInSystem` **filtruje** ⇒ kadłub rezerwowy AI walczy, kadłub gracza jest zwolniony z wrakowania | ✔ zweryfikowane w źródle |
 | **W3-3** | 🟠 | **AI nigdy nie demobilizuje** — każdy `withdrawVessel` jest po stronie gracza ⇒ rezerwy drenują populację AI monotonicznie | |
+| **191** | 🟠 | prognoza kolizji skanuje `activeSystemId` (KAMERA), a włącza ją `getMaxObservatoryLevel()` liczone po WSZYSTKICH koloniach gracza bez terminu układu ⇒ obserwatorium z układu A działa w układzie B, gdy tam patrzysz | rodzina „brak granicy systemu"; kierunek naprawy **projektowy**, nie techniczny. ⚠ **był WARUNKIEM KONIECZNYM 190** (jak 130+Z2) — 190 domknięto zawężeniem czyszczenia, ale pytanie „czy obserwatorium ma widzieć obce układy” zostaje **projektowe** |
+| **192** | 🟠 | prognoza propaguje **stałe elementy orbitalne** do 700 lat, a świat ma perturbacje; `MARGIN_PERCENT` sztywne niezależnie od horyzontu, a **47 % zagrożeń leży 350+ lat w przyszłość** | zastąpiło **obaloną pomiarem** hipotezę „niepowtarzalność detekcji”; wymaga pomiaru rozjazdu model↔świat |
+| **189** | 🟠 | `CivilizationSystem._updateUnrest:1104` czyta prosperity **AKTYWNEJ** koloni dla KAŻDEJ koloni ⇒ kolonie AI wpadają w niepokój, gdy kryzys ma gracz | zmiana **BALANSU** (niepokój globalny → lokalny), własny pomiar; `CivilizationSystem` nie ma referencji do swojego `ProsperitySystem` |
 | **188** | 🟠 | panel detalu STRATCOM wydaje na `rumor` **nazwę układu + żywą populację + życie** pod jedną flagą `known`, a drabina wywiadu daje na `rumor` **zero pól** | rodzeństwo W3-4; liczby są PRAWDZIWE (determinizm modelu, ZMIERZONE) — defektem jest samo ujawnienie. Naprawa = decyzja projektowa, nie predykat |
 | **W3-4** | 🟠 | `ThreatAssessment` to prawda **globalna**, nie bramkowana intelem; 3 z 7 metod publicznych bez konsumentów | |
 | **W3-5** | ⚪ | `director.posture` pisany, serializowany i **czytany przez nikogo**; `director:doctrineAssigned` emitowany w nicość | |

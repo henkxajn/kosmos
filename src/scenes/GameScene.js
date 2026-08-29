@@ -50,7 +50,7 @@ import { EconomyHistoryLog }    from '../systems/EconomyHistoryLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
 import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
-import { CollisionForecast } from '../systems/CollisionForecast.js';
+import { CollisionForecast, COLLISION_AUTOSLOW_YEARS } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { GroundUnitManager } from '../systems/GroundUnitManager.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
@@ -2634,14 +2634,19 @@ export class GameScene {
       requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
     });
 
-    // Prognoza kolizji — alert z obserwatorium (isHomePlanet = dowolna kolonia gracza)
-    EventBus.on('observatory:collisionAlert', ({ bodyA, bodyB, yearsUntil, margin, isHomePlanet }) => {
-      if (isHomePlanet) {
-        this.timeSystem?.pause();
-        const nameA = bodyA.name ?? '?';
-        const nameB = bodyB.name ?? '?';
-        this.uiManager?.addInfo(`🔭 ${t('log.collisionForecastHome', nameA, nameB, Math.round(yearsUntil), margin)}`);
-      }
+    // Prognoza kolizji — alert z obserwatorium. Finding 87: flaga ZAWSZE znaczyła „dowolna
+    // kolonia gracza" (mówił to ten komentarz), więc nazywa się teraz tak, jak działa.
+    // ⚠ Finding 190 — TWARDA PAUZA USUNIĘTA (decyzja właściciela, 2026-08-29). Powód nie jest
+    //   kosmetyczny: pauza obiecywała pewność, której model nie ma, i przerywała rozgrywkę
+    //   komunikatem bez kontekstu. Meldunek idzie teraz kanałem, na którym SIOSTRZANE zdarzenia
+    //   obserwatorium (`observatory:discovered`, `observatory:vesselScanComplete`) są od dawna:
+    //   `NotificationCenter` (dzwonek + wpis w Dzienniku, bez pauzy). Wpis do Dziennika robi
+    //   `NotificationCenter.add()`, więc TU już nie logujemy — inaczej byłyby dwie linie.
+    //   Zostaje wyłącznie reakcja czasowa i tylko dla zagrożeń BLISKICH.
+    EventBus.on('observatory:collisionAlert', ({ yearsUntil, isPlayerColony }) => {
+      if (!isPlayerColony) return;
+      if (yearsUntil > COLLISION_AUTOSLOW_YEARS) return;
+      this.uiManager?._triggerAutoSlowIfTime?.(t('log.autoSlowCollision'));
     });
 
     // Ostrzeżenie obserwatorium — zbliżające się zdarzenie

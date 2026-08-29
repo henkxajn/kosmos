@@ -5,7 +5,7 @@
 //
 // Komunikacja:
 //   Nasłuchuje: 'time:tick' { civDeltaYears }
-//   Emituje:    'observatory:collisionAlert' { bodyA, bodyB, yearsUntil, margin }
+//   Emituje:    'observatory:collisionAlert' { bodyA, bodyB, yearsUntil, margin, isPlayerColony }
 //               'observatory:alertCleared'   { alertId }
 
 import EventBus      from '../core/EventBus.js';
@@ -13,6 +13,7 @@ import EntityManager from '../core/EntityManager.js';
 import { KeplerMath }  from '../utils/KeplerMath.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t }           from '../i18n/i18n.js';
+import { playerBodyIds } from '../utils/ColonyOwnership.js';
 
 // Horyzont prognozy per level obserwatorium (lata gry) — idx = poziom (Lv6 dodany)
 const HORIZON_BY_LEVEL = [0, 50, 100, 200, 350, 500, 700];
@@ -26,6 +27,18 @@ const STEPS_PER_TICK = 200;
 const COLLISION_THRESHOLD_MULT = 0.65;
 // Margines błędu prognozy (±%)
 const MARGIN_PERCENT = 10;
+
+// Próg auto-slow: zagrożenie bliższe niż tyle lat gry dodatkowo ZWALNIA czas (poza dzwonkiem).
+// ⚠ NIE jest to nowa magiczna liczba — to `HORIZON_BY_LEVEL[1]`, czyli zasięg NAJPROSTSZEGO
+//   obserwatorium (Lv1): „zagrożenie jest tak blisko, że widziałoby je nawet pierwsze
+//   obserwatorium, jakie gracz kiedykolwiek zbudował". Druga, niezależna derywacja trafia w tę
+//   samą wartość: przy 50 latach własny margines prognozy (`MARGIN_PERCENT`) schodzi do ±5 lat,
+//   więc „kiedy" zaczyna być informacją, a nie przedziałem.
+// ⚠ Progu NIE da się uzasadnić wiarygodnością detekcji — ZMIERZONE: powtarzalność wykrycia jest
+//   PŁASKA (100 % przy 23, 155, 434, 452, 465, 585 i 601 latach, 40 przeliczeń), bo
+//   `updateMeanAnomaly` to analityczna propagacja Keplera, bez błędu narastającego z liczbą
+//   kroków. Podstawą jest budżet przerwań: przy 50 latach auto-slow dotyka ~7 % zagrożeń.
+export const COLLISION_AUTOSLOW_YEARS = 50;   // === HORIZON_BY_LEVEL[1]
 
 // Typy ciał uwzględniane w prognozie
 const FORECAST_TYPES = ['planet', 'moon', 'planetoid'];
@@ -93,6 +106,7 @@ export class CollisionForecast {
   _startSimulation(obsLevel) {
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const star = EntityManager.getByTypeInSystem('star', sysId)?.[0];
+    this._scanSystemId = sysId;   // Finding 190 — czyszczenie musi znać ZAKRES skanu
     if (!star) return;
 
     const horizon = HORIZON_BY_LEVEL[Math.min(obsLevel, HORIZON_BY_LEVEL.length - 1)];
@@ -145,6 +159,7 @@ export class CollisionForecast {
     if (pairs.length === 0) return;
 
     this._simState = {
+      systemId: sysId,
       bodies,
       pairs,
       step: 0,
@@ -210,8 +225,20 @@ export class CollisionForecast {
     const s = this._simState;
     if (!s) return;
 
-    // Wyczyść stare alerty
-    const oldAlertIds = new Set(this._alerts.keys());
+    // ⚠ Finding 190 (druga połowa) — CZYŚCIMY TYLKO ALERTY Z PRZESKANOWANEGO UKŁADU.
+    //   Skan jest kluczowany na `activeSystemId` (Finding 191, który jest tu WARUNKIEM
+    //   KONIECZNYM, nie tematem obok), a mapa `_alerts` jest wspólna dla całej gry — więc
+    //   `new Set(this._alerts.keys())` kasowało alerty WSZYSTKICH układów przy każdym skanie.
+    //   Powrót do poprzedniego układu tworzył je od nowa z NOWYM id, więc `existingId` był null,
+    //   dedup nie trafiał i gracz dostawał kolejny alarm.
+    //   ZMIERZONE sondą: trzy skany pod rząd w jednym układzie = 0 skasowanych; jedno
+    //   przełączenie widoku tam i z powrotem = +15 skasowanych i +15 alarmów.
+    const scanSysId = s.systemId ?? this._scanSystemId ?? null;
+    const oldAlertIds = new Set(
+      [...this._alerts.entries()]
+        .filter(([, a]) => a.systemId === scanSysId)
+        .map(([id]) => id)
+    );
 
     for (const col of s.foundCollisions) {
       // Sprawdź czy alert już istnieje dla tej pary
@@ -230,28 +257,43 @@ export class CollisionForecast {
         bodyBName:    col.bodyB.name,
         yearsUntil:   col.yearsUntil,
         margin,
+        systemId:     scanSysId,   // Finding 190 — zakres czyszczenia
         detectedYear: this._gameYear,
       };
 
       this._alerts.set(alert.id, alert);
       if (existingId) oldAlertIds.delete(existingId);
 
-      // Sprawdź czy kolizja dotyczy jakiejkolwiek kolonii gracza
-      const colMgr = window.KOSMOS?.colonyManager;
-      const playerPlanetIds = new Set();
-      if (window.KOSMOS?.homePlanet?.id) playerPlanetIds.add(window.KOSMOS.homePlanet.id);
-      if (colMgr?.colonies) {
-        for (const c of colMgr.colonies.values()) playerPlanetIds.add(c.planetId);
-      }
-      const isPlayerColony = playerPlanetIds.has(col.bodyA.id) || playerPlanetIds.has(col.bodyB.id);
+      // Czy kolizja dotyczy KTÓREJKOLWIEK kolonii gracza (Finding 87).
+      // ⚠ Poprzednia wersja bramkowała się na `colMgr.colonies`, którego ColonyManager NIE MA,
+      //   więc pętla nie wykonała się ani razu i do zbioru trafiał wyłącznie `homePlanet.id`
+      //   ⇒ kolizja grożąca koloni innej niż macierzysta NIE pauzowała gry.
+      const playerPlanetIds = playerBodyIds();
+      const hitsPlayerColony = playerPlanetIds.has(col.bodyA.id) || playerPlanetIds.has(col.bodyB.id);
 
-      // Emituj alert (nowy lub zaktualizowany)
+      // ⚠ Finding 190 — EMIT TYLKO DLA NOWEGO ALERTU. Poprzednio emitowaliśmy „nowy LUB
+      //   ZAKTUALIZOWANY", a jedyny konsument (`GameScene:2638`) na każdym emicie z
+      //   `isPlayerColony` robi `timeSystem.pause()`. Przeliczenie wraca co
+      //   `RECALC_BY_LEVEL` = 10/8/5/3/2/1 civYears wg poziomu obserwatorium, a 1 civYear to
+      //   JEDEN wyświetlany miesiąc ⇒ trwałe zagrożenie pauzowało grę co miesiąc-dwa, bez końca.
+      // ⚠ Defekt jest PRE-EXISTING, ale widoczny stał się dopiero z naprawą 87: wcześniej zbiór
+      //   zawierał wyłącznie `homePlanet.id`, więc powtarzalna pauza wymagała kolizji z samą
+      //   stolicą. Naprawa 87 bez tej linii dowoziłaby regresję rozgrywki razem z funkcją —
+      //   dokładnie ten sam układ co bramka przylotu w W3-5b.
+      // ⚠ Rekord w `_alerts` jest NADAL odświeżany wyżej, więc lista w ObservatoryOverlay
+      //   (`getAlerts()`) pokazuje aktualne `yearsUntil` — nie gubimy informacji, gasimy pauzę.
+      //   Świadomie NIE alertujemy ponownie przy skróceniu prognozy (np. 200 → 20 lat): to byłby
+      //   nowy PRÓG do zaprojektowania, a nie usunięcie pętli pauzy.
+      if (existingId) continue;
+
       EventBus.emit('observatory:collisionAlert', {
         bodyA:      col.bodyA,
         bodyB:      col.bodyB,
         yearsUntil: col.yearsUntil,
         margin,
-        isHomePlanet: isPlayerColony,
+        // Nazwa mówi teraz prawdę: zbiór ZAWSZE obejmował wszystkie kolonie gracza, nie samą
+        // macierzystą — komentarz u jedynego konsumenta (`GameScene`) pisał to wprost.
+        isPlayerColony: hitsPlayerColony,
       });
     }
 
@@ -287,6 +329,15 @@ export class CollisionForecast {
       for (const a of data.alerts) {
         // Filtruj stare alerty dotyczące księżyców (fałszywe — orbita wokół planety, nie gwiazdy)
         if (moonIds.has(a.bodyAId) || moonIds.has(a.bodyBId)) continue;
+        // Finding 190 — backfill układu dla zapisów sprzed tej poprawki. Bez stempla alert nie
+        // pasowałby do ŻADNEGO skanu i wisiałby wiecznie; alert o ciele, którego już nie ma,
+        // jest bezwartościowy, więc go odrzucamy. Zapis v101 BEZ migracji (pole dochodzi
+        // w serialize samo, a restore je uzupełnia).
+        if (!a.systemId) {
+          a.systemId = EntityManager.get(a.bodyAId)?.systemId
+                    ?? EntityManager.get(a.bodyBId)?.systemId ?? null;
+        }
+        if (!a.systemId) continue;
         this._alerts.set(a.id, a);
       }
     }

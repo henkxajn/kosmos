@@ -1125,9 +1125,47 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
     z `EconomyOverlay` na `col.factorySystem`.
 86. **Przeciek `civ:unrest` między koloniami** — `CivilizationSystem:1121` wysyła `planetId`,
     `BuildingSystem:121` go ignoruje ⇒ niepokój koloni AI daje −30% produkcji koloni związanej.
-87. **`CollisionForecast:242-254` buduje `playerPlanetIds` ze WSZYSTKICH kolonii** i emituje pole
-    nazwane `isHomePlanet` ⇒ prognoza kolizji koloni AI **pauzuje grę gracza** komunikatem o utracie
-    stolicy (`GameScene:2618-2621`).
+    ✅ **ZAMKNIĘTY 2026-08-29.** Potwierdzony dwiema drogami (źródło + `git log -S`: linia
+    **nietknięta od pierwszego commitu repo**, `9951d5e`). Naprawa = termin **TOŻSAMOŚCI**
+    (`BuildingSystem._isOwnColonyEvent`), NIE własności — `colony_ownership_guard_smoke` **G12**
+    słusznie zabrania tu terminu własności, ale testuje przypadek TEJ SAMEJ koloni, podczas gdy 86
+    to przypadek MIĘDZYKOLONIOWY; pytanie „czy to zdarzenie jest o MOJEJ koloni" **przywraca
+    przesłankę G12** („fakty o ZWIĄZANEJ koloni"), której dotąd nic nie sprawdzało. **G12 zostało
+    zielone bez dotknięcia.**
+    ⚠ Wariant tańszy (porównanie z `colonyManager.activePlanetId`) **wykluczony pomiarem**: G12
+    ręcznie ustawia aktywny `buildingSystem` na kolonię AI, zostawiając `activePlanetId` na domu,
+    a fixture'u nie da się „naprawić", bo po D1 `switchActiveColony` odmawia koloni AI.
+    ⚠ Tożsamość była **już zamontowana** — `BuildingSystem._planetId` (`:222`) ustawiają wszystkie
+    cztery ścieżki `ColonyManager` (`:493`, `:565`, `:643`, `:2500`), więc zapowiadana cena „5 miejsc
+    produkcyjnych" nie została zapłacona. Fail-open po OBU stronach (brak `_planetId` / brak
+    `planetId` w zdarzeniu) — ok. 40 konstrukcji testowych nigdy nie woła `setPlanetId`.
+    ⚠ Bliźniak `civ:popBorn` (`:134`, ten sam kształt `() =>`) **świadomie NIE ruszony**: przelicza
+    stawki, więc cudze zdarzenie kosztuje zbędne wywołanie, a nie BŁĘDNY STAN.
+    Keeper `unrest_event_identity_smoke` **7/7**, fail-first **5/2**.
+87. ~~**`CollisionForecast:242-254` buduje `playerPlanetIds` ze WSZYSTKICH kolonii**~~ ⇒ prognoza
+    kolizji koloni AI pauzuje grę gracza komunikatem o utracie stolicy.
+    🔴 **SPROSTOWANIE 2026-08-29 — TEN MECHANIZM NIE ISTNIEJE.** ZMIERZONE WYKONANIEM:
+    `ColonyManager` **nie ma akcesora `colonies`** (`typeof cm.colonies === 'undefined'`; publiczne
+    są `getColony`/`getAllColonies`/`getPlayerColonies`), a `git log -S` na `get colonies`
+    i `this.colonies =` zwraca **pustkę** ⇒ to nie zgnilizna po zmianie nazwy, tylko błąd od chwili
+    napisania (`56a8069`). Strażnik `if (colMgr?.colonies)` czynił gałąź **martwą**, wyglądając
+    przy tym na obronny.
+    ⇒ **Skutek był ODWROTNY do zapisanego:** nie fałszywy alarm o cudzej koloni, tylko **BRAK alarmu
+    o własnej** — do zbioru trafiał wyłącznie `homePlanet.id`, więc kolizja grożąca dowolnej koloni
+    gracza **poza macierzystą** nie pauzowała gry.
+    ⚠ **Trzy kopie jednego błędu**, nie jedna: `CollisionForecast:243`, `ObservatoryOverlay:423`
+    (zakładka Zagrożenia nie oznaczała kolonii gracza) i `:783` (plakietka „🏠 kolonia na tym ciele"
+    **nie renderowała się nigdy, dla żadnej koloni** — ten site nie miał nawet fallbacku na dom).
+    ⚠ **Treść tego wpisu okazała się dokładnym opisem PUŁAPKI W NAPRAWIE:** gałąź „naprawiona"
+    przez `getAllColonies()` wpuściłaby kolonie AI i realnie wyprodukowała opisany defekt. Kanonem
+    jest `getPlayerColonies()`.
+    ✅ **ZAMKNIĘTY 2026-08-29** — NEW `ColonyOwnership.playerBodyIds()` w trzech site'ach naraz
+    (nieutwardzony bliźniak to mina) + ładunek przemianowany `isHomePlanet` → `isPlayerColony`
+    (flaga ZAWSZE znaczyła „dowolna kolonia gracza" — mówił to wprost komentarz `GameScene:2637`)
+    + klucz `log.collisionForecastHome` → `log.collisionForecastColony` PL+EN (EN mówił „COLLISION
+    WITH HOME PLANET" dla dowolnej koloni). Seed `window.KOSMOS.homePlanet.id` **usunięty jako
+    redundantny** (dom siedzi w `_colonies`) i niosący klasę Findingu 97 (wskaźnik nieprzecelowywany
+    po utracie stolicy). Keeper `observatory_player_colonies_smoke` **14/14**, fail-first **2/12**.
 88. **Dwie migracje kluczują się na `isHomePlanet` i przyznają realne korzyści** (`SaveMigration:536-537`
     `inv.semiconductors = 2`; `:666-667` `requiresSpaceportFirst = false`) ⇒ ograniczenie na przyszłość,
     gdy flaga stanie się kasowalna.

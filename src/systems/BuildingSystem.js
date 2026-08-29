@@ -121,12 +121,24 @@ export class BuildingSystem {
 
     // Kara efficiency podczas niepokojów społecznych (−30% produkcji przez 10 lat)
     this._civPenalty = 1.0;
-    EventBus.on('civ:unrest', () => {
+    // ⚠ Finding 86 — TERMIN TOŻSAMOŚCI, NIE WŁASNOŚCI. Oba nasłuchy brały `() =>`, czyli
+    //   WYRZUCAŁY `planetId`, który producent rzetelnie wysyła (`CivilizationSystem:1125`
+    //   i `:1111`). Jedyna bramka (`buildingSystem !== this`) pyta o AKTYWNOŚĆ, nie o to,
+    //   CZYJE jest zdarzenie ⇒ niepokój na DOWOLNEJ koloni, także AI, zabierał aktywnej koloni
+    //   gracza −30 % produkcji, a `unrestLifted` z cudzej koloni KASOWAŁ karę uzasadnioną
+    //   (groźniejsza połowa: cudzy licznik leczył kryzys, którego nie wywołał).
+    // ⚠ NIE wolno wstawić tu terminu WŁASNOŚCI — `colony_ownership_guard_smoke` G12 pinuje, że
+    //   bramki systemowe raportują fakty o ZWIĄZANEJ koloni, więc własność byłaby błędem
+    //   kategorii. To pytanie „czy to zdarzenie jest o MOJEJ koloni" PRZYWRACA przesłankę tamtego
+    //   pinu; G12 zostaje zielone bez dotykania go.
+    EventBus.on('civ:unrest', ({ planetId } = {}) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
+      if (!this._isOwnColonyEvent(planetId)) return;
       this._civPenalty = 0.7; this._reapplyAllRates();
     });
-    EventBus.on('civ:unrestLifted', () => {
+    EventBus.on('civ:unrestLifted', ({ planetId } = {}) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
+      if (!this._isOwnColonyEvent(planetId)) return;
       this._civPenalty = 1.0; this._reapplyAllRates();
     });
 
@@ -220,6 +232,27 @@ export class BuildingSystem {
   setFactorySystem(fs) { this._factorySystem = fs; }
   setRegionMode(isRegion) { this._isRegionMode = !!isRegion; }
   setPlanetId(id) { this._planetId = id; }
+
+  /**
+   * Czy zdarzenie kolonijne dotyczy TEJ koloni (Finding 86).
+   *
+   * ⚠ FAIL-OPEN PO OBU STRONACH, i to jest decyzja, nie niedbałość:
+   *   - brak `_planetId` — ok. 40 konstrukcji `new BuildingSystem(...)` w testach nigdy nie woła
+   *     `setPlanetId`; system, który nie umie rozwiązać swojej tożsamości, MUSI przepuścić
+   *     (ten sam precedens co w kanonie własności kolonii);
+   *   - brak `planetId` w zdarzeniu — zdarzenia, którego nie da się przypisać, nie wolno po cichu
+   *     odrzucić.
+   *   Wszystkie CZTERY ścieżki produkcyjne `ColonyManager` wołają `setPlanetId` (`:493`, `:565`,
+   *   `:643`, `:2500`), więc w prawdziwej grze bramka jest szczelna — pinuje to T7 keepera
+   *   `unrest_event_identity_smoke` (wykonaniem, nie źródłowo).
+   * ⚠ ŚWIADOMIE NIE ROZSZERZONE na `civ:popBorn` (`:134`, ten sam kształt `() =>`): tamten
+   *   handler tylko przelicza stawki, więc cudze zdarzenie kosztuje zbędne wywołanie, a nie
+   *   BŁĘDNY STAN. Rozszerzenie = osobna zmiana z własnym pomiarem.
+   */
+  _isOwnColonyEvent(planetId) {
+    if (!this._planetId || !planetId) return true;
+    return planetId === this._planetId;
+  }
 
   // ── Sprawdź czy kolonia ma port kosmiczny ────────────────────────────────
   hasSpaceport() {

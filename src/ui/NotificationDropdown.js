@@ -23,12 +23,14 @@ const GROUP_ICONS = {
   mobilization:   '⚓',   // W2-7 — obce imperium obsadza okręty z rezerwy
   tileLost:         '🚩',   // AC-9 — gracz traci teren na własnej koloni
   invasionRepelled: '🛡',   // AC-9 — desant odparty
+  collision_alert:  '☄',   // Finding 190 — prognoza kolizji (dawniej twarda pauza)
 };
 
 function _groupTitle(type) {
   switch (type) {
     case 'discovery_body': return t('notif.group.discoveryBody');
     case 'vessel_scan':    return t('notif.group.vesselScan');
+    case 'collision_alert': return t('notif.group.collisionAlert');
     case 'mobilization':   return t('notif.group.mobilization');
     case 'tileLost':         return t('notif.group.tileLost');
     case 'invasionRepelled': return t('notif.group.invasionRepelled');

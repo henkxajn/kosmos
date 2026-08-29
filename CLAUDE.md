@@ -2639,6 +2639,118 @@ Keeper `src/testing/smoke/system_exploration_canon_smoke.mjs` **21/21**, fail-fi
 FINALNYM fixture'em przez `git stash` samego kodu gry (wszystkie sześć kontroli pinu zielone po obu
 stronach). Sweep **187/187 0 FAIL** · `check-i18n` PASS · zero migracji · zero nowych kluczy i18n.
 
+---
+
+## Findingi 86 + 87 (+190) — tożsamość zdarzenia, martwa gałąź i pętla pauzy (save **v101 bez migracji**, live-gate 86/87 PASS · 190 re-gate PENDING)
+
+Druga runda „szybkiej serii" przeglądu rejestru. Rejestr macierzysty obu:
+`docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`. ⚠ **Weryfikacja przed audytem (reguła z W3-32)
+zwróciła nierówny wynik: 86 potwierdzone, 87 OBALONE co do mechanizmu.**
+
+**86 — `civ:unrest` / `civ:unrestLifted` bez terminu tożsamości.** `BuildingSystem:124/128`
+nasłuchiwał przez `() =>`, czyli wyrzucał `planetId`, który producent rzetelnie wysyła
+(`CivilizationSystem:1125`/`:1111`); jedyna bramka (`window.KOSMOS?.buildingSystem !== this`) pyta
+o **aktywność**, nie o to, czyje jest zdarzenie. Linia **nietknięta od pierwszego commitu repo**
+(`9951d5e`). Skutek: niepokój dowolnej koloni (w tym AI) zabierał aktywnej koloni gracza −30 %
+produkcji, a `unrestLifted` z cudzej koloni **kasował karę uzasadnioną** (groźniejsza połowa).
+
+⚠ **TERMIN TOŻSAMOŚCI, NIE WŁASNOŚCI — i to jest cała subtelność.**
+`colony_ownership_guard_smoke` **G12** pinuje wprost, że te bramki nie mają dostać terminu
+własności („raportują FAKTY o ZWIĄZANEJ koloni"), z ostrzeżeniem „jeśli kiedyś padnie, ktoś
+poprawił przy okazji". G12 ma rację — ale testuje przypadek **tej samej** koloni, a 86 to
+przypadek **międzykoloniowy**. Pytanie „czy to zdarzenie jest o MOJEJ koloni" **przywraca
+przesłankę G12**, której dotąd nic nie sprawdzało. **G12 zostało zielone bez dotknięcia.**
+⚠ Wariant tańszy (porównanie z `colonyManager.activePlanetId`) **wykluczony pomiarem**: G12 ręcznie
+ustawia aktywny `buildingSystem` na kolonię AI, zostawiając `activePlanetId` na domu, a fixture'u
+**nie da się** „naprawić", bo po arcu D1 `switchActiveColony` odmawia koloni AI.
+⚠ Tożsamość okazała się **już zamontowana**: `BuildingSystem._planetId` (`:222`) ustawiają
+**wszystkie cztery** ścieżki `ColonyManager` (`:493`/`:565`/`:643`/`:2500`) — zapowiadana cena
+„5 miejsc produkcyjnych" nie została zapłacona. `_isOwnColonyEvent` jest **fail-open po OBU
+stronach** (ok. 40 konstrukcji testowych nigdy nie woła `setPlanetId`; zdarzenia bez `planetId`
+nie wolno po cichu odrzucić). Bliźniak `civ:popBorn` (`:134`) **świadomie nietknięty**: przelicza
+stawki, więc cudze zdarzenie kosztuje zbędne wywołanie, a nie BŁĘDNY STAN.
+
+**87 — ⚠ REJESTR OPISYWAŁ MECHANIZM, KTÓREGO NIE MA.** ZMIERZONE WYKONANIEM: `ColonyManager`
+**nie ma akcesora `colonies`** (publiczne są `getColony`/`getAllColonies`/`getPlayerColonies`),
+a `git log -S` na `get colonies` i `this.colonies =` zwraca **pustkę** — to nie zgnilizna po
+zmianie nazwy, tylko błąd od chwili napisania (`56a8069`). Strażnik `if (colMgr?.colonies)` czynił
+gałąź **martwą**, wyglądając przy tym na obronny. ⇒ **skutek ODWROTNY do zapisanego**: nie fałszywy
+alarm o cudzej koloni, tylko **brak alarmu o własnej** (do zbioru trafiał wyłącznie `homePlanet.id`).
+**Trzy kopie**, nie jedna: `CollisionForecast:243` (kolizja grożąca koloni innej niż macierzysta nie
+pauzowała gry) · `ObservatoryOverlay:423` (zakładka Zagrożenia nie oznaczała kolonii gracza) ·
+`:783` (plakietka „🏠 kolonia na tym ciele" **nie renderowała się nigdy, dla żadnej koloni** — ten
+site nie miał nawet fallbacku na dom).
+
+⚠ **A TREŚĆ WPISU OKAZAŁA SIĘ OPISEM PUŁAPKI W NAPRAWIE:** gałąź „naprawiona" przez
+`getAllColonies()` wpuściłaby kolonie AI i realnie wyprodukowała defekt, który rejestr opisywał
+jako istniejący. Kanonem jest **`getPlayerColonies()`** — NEW `ColonyOwnership.playerBodyIds()`,
+wpięty w trzy site'y naraz. Ładunek przemianowany `isHomePlanet` → `isPlayerColony` (flaga ZAWSZE
+znaczyła „dowolna kolonia gracza" — mówił to wprost komentarz `GameScene:2637`), klucz
+`log.collisionForecastHome` → `log.collisionForecastColony` PL+EN (EN mówił „COLLISION WITH HOME
+PLANET" dla dowolnej koloni). Seed `window.KOSMOS.homePlanet.id` **usunięty**: redundantny (dom
+siedzi w `_colonies`, `:524`) i niósł klasę Findingu 97 (wskaźnik nieprzecelowywany po utracie stolicy).
+
+⚠ **Wypłynął przy tym Finding 189 (otwarty, NIE naprawiony):** `CivilizationSystem._updateUnrest:1104`
+czyta `window.KOSMOS?.prosperitySystem?.prosperity` — prosperity **AKTYWNEJ** koloni — dla
+**każdej** koloni, choć każda ma własny `ProsperitySystem`. Kolonie AI wpadają więc w niepokój, gdy
+kryzys ma gracz. Naprawa wygląda na jedną linię, ale `CivilizationSystem` **nie trzyma referencji**
+do swojego `ProsperitySystem` (zależność idzie w drugą stronę), a zmiana czyni niepokój zjawiskiem
+**lokalnym zamiast globalnego** — czyli to **balans z własnym pomiarem**, nie higiena.
+
+⚠ **LIVE-GATE 86/87 PASS, ale ujawnił trzy dalsze findingi — i jeden musiał wejść NATYCHMIAST.**
+
+**190 (pętla pauzy, ZAMKNIĘTY tu) — domknięty dopiero za DRUGIM podejściem.** `_finalizeSimulation`
+emitowało alert kolizyjny **bezwarunkowo** przy każdym przeliczeniu („nowy lub ZAKTUALIZOWANY”),
+a konsument na każdym emicie robił `timeSystem.pause()`; przeliczenie wraca co 10/8/5/3/2/1 civYears
+wg poziomu obserwatorium, czyli przy Lv6 **co jeden wyświetlany miesiąc**. Defekt PRE-EXISTING, ale
+dopóki zbiór zawierał tylko `homePlanet.id`, wymagał kolizji ze stolicą — naprawa 87 uczyniła go
+powszechnym ⇒ wchodzi w TEN SAM commit, inaczej 87 dowoziłby **regresję rozgrywki razem z funkcją**
+(układ z W3-5b).
+
+⚠ **PIERWSZA POPRAWKA (`if (existingId) continue;`) NIE WYSTARCZYŁA, a moja diagnoza była BŁĘDNA.**
+Live-gate #2: pauzy trwają, jedno zagrożenie „pojawia się i znika naprzemiennie”. Postawiona wtedy
+hipoteza **„loteria próbkowania”** (okno detekcji 7× węższe niż `SIM_STEP`) została **OBALONA
+POMIAREM**: powtarzalność wykrycia jest **PŁASKA — 100 % w 40 przeliczeniach** dla par o horyzoncie
+23, 155, 434, 452, 465, 585 i 601 lat, bo `updateMeanAnomaly` to **analityczna propagacja Keplera**,
+bez błędu narastającego z liczbą kroków (wskaźnik 7× liczył prędkość ORBITALNĄ, a liczy się WZGLĘDNA
+prędkość pary na kursie kolizyjnym).
+**Prawdziwa przyczyna: ZAKRES CZYSZCZENIA.** `oldAlertIds = new Set(this._alerts.keys())` brało
+**wszystkie** alerty, a skan jest kluczowany na `activeSystemId` (**191**) ⇒ każde spojrzenie na inny
+układ kasowało alerty poprzedniego, a powrót tworzył je od nowa z **nowym id**, więc dedup nie miał
+czego rozpoznać. ZMIERZONE: trzy skany pod rząd w jednym układzie = **0 skasowanych, 0 powtórnych
+emisji**; jedno przełączenie tam i z powrotem = **+15 skasowanych i +15 alarmów**.
+⇒ Zamknięcie ma trzy części: **(a)** dedup zostaje; **(b)** czyszczenie zawężone do przeskanowanego
+układu (`alert.systemId` + backfill w `restore`, **v101 bez migracji**); **(c)** ZMIANA PROJEKTU
+(decyzja właściciela): **twarda pauza usunięta**, meldunek idzie przez `NotificationCenter` (dzwonek
++ Dziennik, bez pauzy) — tam, gdzie od dawna są SIOSTRZANE zdarzenia obserwatorium
+(`observatory:discovered`, `observatory:vesselScanComplete`) — a jedyną reakcją czasową jest
+**auto-slow poniżej `COLLISION_AUTOSLOW_YEARS = 50`**.
+⚠ **Próg nie jest nową magiczną liczbą ani nie opiera się na wiarygodności detekcji** (ta jest
+płaska): to `HORIZON_BY_LEVEL[1]` — zasięg najprostszego obserwatorium; druga, niezależna derywacja
+daje tę samą liczbę (przy 50 latach `MARGIN_PERCENT` schodzi do ±5 lat). Budżet przerwań ZMIERZONY:
+**~7 %** zagrożeń (rozkład: 0-25 lat 7 %, 50-100 7 %, 100-200 20 %, 200-350 20 %, **350+ 47 %**).
+
+**191 (zasięg obserwatorium, OTWARTY):** hipotezę postawił właściciel („obserwatorium działa, jakby
+wykrywało zagrożenia we wszystkich systemach”); pomiar **potwierdził rodzinę, ale skorygował
+kształt** — to nie skan całej galaktyki, tylko **klucz na KAMERZE** (`_startSimulation:94` czyta
+`activeSystemId`) **plus globalne włączenie** (`getMaxObservatoryLevel:117-131` iteruje wszystkie
+kolonie gracza bez terminu układu). Obserwatorium z układu A daje prognozę w układzie B, gdy tam
+patrzysz. ⚠ **SPROSTOWANIE: 191 był WARUNKIEM KONIECZNYM 190** (ta sama relacja co `130 + Z2`) —
+pierwotny zapis „NIE łączyć” był błędny. Zawężenie czyszczenia domyka 190, ale **nie przesądza**
+pytania z 191, czy obserwatorium ma w ogóle widzieć obce układy — i to pytanie jest projektowe.
+
+**192 (OTWARTY):** prognoza propaguje **stałe elementy orbitalne** do 700 lat, a w „Cywilizacji”
+perturbacje **działają**; `MARGIN_PERCENT = 10` jest sztywne niezależnie od horyzontu, a **47 %
+zagrożeń leży 350+ lat w przyszłość**. Wpis powstał **zamiast** obalonej hipotezy o niepowtarzalności
+detekcji: detekcja jest stabilna, ale **model może nie opisywać świata** tak daleko.
+
+
+Keepery: NEW `unrest_event_identity_smoke` **7/7** (fail-first **5/2**; T7 pinuje MONTAŻ tożsamości
+wykonaniem — bez niego bramka byłaby w grze martwa) · NEW `observatory_player_colonies_smoke`
+**28/28** (fail-first **2/12**; T7 dedup, T8 zakres czyszczenia — fail-first **3 SEDNO**, T9 zmiana projektu). ⚠ Pierwszy przebieg dał **3/11**, bo pin „kolonia AI nie wchodzi do
+zbioru" przechodził **jałowo na pustym zbiorze** — wymóg `ids.size === 2` jest częścią pinu.
+Sweep **189/189 0 FAIL** · `check-i18n` PASS · zero migracji.
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

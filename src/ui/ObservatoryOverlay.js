@@ -15,6 +15,7 @@ import { COSMIC }        from '../config/LayoutConfig.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
 import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
 import { t }             from '../i18n/i18n.js';
+import { playerBodyIds } from '../utils/ColonyOwnership.js';
 
 // Typy ciał wyświetlane w katalogu
 const ORBIT_TYPES = ['planet', 'moon', 'planetoid'];
@@ -418,12 +419,9 @@ export class ObservatoryOverlay {
     const warnings = (window.KOSMOS?.randomEventSystem?.getWarnings() ?? []).slice().sort((a, b) => a.remainingYears - b.remainingYears);
 
     // Kolonie gracza
-    const colMgr = window.KOSMOS?.colonyManager;
-    const playerPlanetIds = new Set();
-    if (colMgr?.colonies) {
-      for (const col of colMgr.colonies.values()) playerPlanetIds.add(col.planetId);
-    }
-    if (window.KOSMOS?.homePlanet?.id) playerPlanetIds.add(window.KOSMOS.homePlanet.id);
+    // Finding 87 — druga z trzech kopii martwej gałęzi `colMgr.colonies` (akcesor nie istnieje).
+    // Kanon obejmuje też dom, więc seed z `window.KOSMOS.homePlanet.id` był redundantny.
+    const playerPlanetIds = playerBodyIds();
 
     let html = `<div class="obs-scroll-main" style="flex:1; overflow-y:auto; min-height:0; padding-right:4px;">`;
 
@@ -779,15 +777,15 @@ export class ObservatoryOverlay {
     html += `</div>`;
 
     // Kolonie na tym ciele
+    // Finding 87 — trzecia kopia. ⚠ Ten site nie miał nawet fallbacku na dom, więc plakietka
+    // kolonii nie renderowała się NIGDY, dla żadnej koloni. `getPlayerColonies` (nie `getAll`)
+    // — panel jest częścią obrazu gracza, kolonie AI nie mają się tu ujawniać.
     const colMgr = window.KOSMOS?.colonyManager;
-    if (colMgr?.colonies) {
-      for (const col of colMgr.colonies.values()) {
-        if (col.planetId === body.id) {
-          html += `<div style="margin-top:8px; padding:4px 8px; background:${THEME.accentDim}; border-radius:3px; font-size:12px;">`;
-          html += `<span style="color:${THEME.accent};">🏠</span> <span style="color:${THEME.textPrimary};">${col.name ?? 'Kolonia'}</span>`;
-          html += `</div>`;
-        }
-      }
+    for (const col of (colMgr?.getPlayerColonies?.() ?? [])) {
+      if (col.planetId !== body.id) continue;
+      html += `<div style="margin-top:8px; padding:4px 8px; background:${THEME.accentDim}; border-radius:3px; font-size:12px;">`;
+      html += `<span style="color:${THEME.accent};">🏠</span> <span style="color:${THEME.textPrimary};">${col.name ?? 'Kolonia'}</span>`;
+      html += `</div>`;
     }
 
     html += `</div>`;

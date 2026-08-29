@@ -113,3 +113,30 @@ export function systemBelongsToPlayer(system, key) {
   if (!colony) return true;            // fail-open — patrz komentarz wyżej
   return isPlayerColony(colony);
 }
+
+/**
+ * Zbiór identyfikatorów CIAŁ, na których gracz ma kolonię (Finding 87).
+ *
+ * ⚠ POWSTAŁO Z MARTWEJ GAŁĘZI, NIE Z POTRZEBY REFAKTORU. Trzy miejsca w warstwie obserwatorium
+ *   budowały ten zbiór własnoręcznie przez `if (colMgr?.colonies) for (… of colMgr.colonies.values())`
+ *   — a `ColonyManager` **nie ma i nigdy nie miał** akcesora `colonies` (`git log -S` pusty), więc
+ *   pętla nie wykonała się ANI RAZU od `56a8069`. Strażnik `if` czynił martwą gałąź wyglądającą
+ *   na obronną. Skutek był ODWROTNY do zapisanego w rejestrze: nie fałszywy alarm o koloni AI,
+ *   tylko BRAK alarmu o własnej koloni innej niż macierzysta.
+ *
+ * ⚠ `getPlayerColonies`, NIE `getAllColonies` — to jest pułapka, którą rejestr opisał jako
+ *   istniejący defekt: „naprawa" przez pełną listę wpuściłaby kolonie AI i realnie
+ *   wyprodukowała ten wyciek.
+ *
+ * ⚠ BEZ SEEDOWANIA `window.KOSMOS.homePlanet.id`, choć tak robiły dwa z trzech site'ów. Dom
+ *   siedzi w `_colonies` (`ColonyManager:524`), więc seed był redundantny — a niósł klasę
+ *   Findingu 97: ten wskaźnik NIE JEST przecelowywany po utracie stolicy, więc po podboju
+ *   wskazywałby ciało, które nie jest już kolonią gracza.
+ */
+export function playerBodyIds() {
+  const out = new Set();
+  const cols = (typeof window !== 'undefined'
+    ? window.KOSMOS?.colonyManager?.getPlayerColonies?.() : null) ?? [];
+  for (const c of cols) if (c?.planetId) out.add(c.planetId);
+  return out;
+}
