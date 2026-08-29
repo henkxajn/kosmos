@@ -2641,7 +2641,7 @@ stronach). Sweep **187/187 0 FAIL** · `check-i18n` PASS · zero migracji · zer
 
 ---
 
-## Findingi 86 + 87 (+190) — tożsamość zdarzenia, martwa gałąź i pętla pauzy (save **v101 bez migracji**, live-gate 86/87 PASS · 190 re-gate PENDING)
+## Findingi 86 + 87 (+190) — tożsamość zdarzenia, martwa gałąź i pętla pauzy (save **v101 bez migracji**, live-gate 86/87 PASS · 190 re-gate PASS)
 
 Druga runda „szybkiej serii" przeglądu rejestru. Rejestr macierzysty obu:
 `docs/design/COLONY_OWNERSHIP_GUARD_PLAN.md`. ⚠ **Weryfikacja przed audytem (reguła z W3-32)
@@ -2729,6 +2729,7 @@ układu (`alert.systemId` + backfill w `restore`, **v101 bez migracji**); **(c)*
 płaska): to `HORIZON_BY_LEVEL[1]` — zasięg najprostszego obserwatorium; druga, niezależna derywacja
 daje tę samą liczbę (przy 50 latach `MARGIN_PERCENT` schodzi do ±5 lat). Budżet przerwań ZMIERZONY:
 **~7 %** zagrożeń (rozkład: 0-25 lat 7 %, 50-100 7 %, 100-200 20 %, 200-350 20 %, **350+ 47 %**).
+✅ **RE-GATE PASS** (na żywo): meldunek raz bez pauzy; **przełączenie układu i powrót nie tworzy nowego alarmu**. ⚠ **Granica dowodu:** auto-slow <50 lat **nie sprowokowany w przeglądarce** (trudno wywołać takie zagrożenie na żądanie) — pinuje go wyłącznie keeper T9, derywacją z `HORIZON_BY_LEVEL[1]`; świadomie przyjęta luka. ⚠ **191 POTWIERDZONY NA ŻYWO** przy tej samej sesji: jedno obserwatorium, alerty z **dwóch** układów.
 
 **191 (zasięg obserwatorium, OTWARTY):** hipotezę postawił właściciel („obserwatorium działa, jakby
 wykrywało zagrożenia we wszystkich systemach”); pomiar **potwierdził rodzinę, ale skorygował
