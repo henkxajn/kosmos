@@ -3607,3 +3607,69 @@ a wszystkie zapisane teksty zostają w języku z chwili zapisu, aż wypadną z r
 w miejscu nazwy UKŁADU) · poprawka `check-i18n` · czy walka naziemna AI-vs-AI może zasilać
 Dziennik gracza (niezmierzone). ⚠ **Live-gate NIEWYKONANY dla żadnego z czterech commitów** —
 na wyraźne polecenie właściciela.
+
+---
+
+## STAN SESJI 2026-08-31 — trzy arce AI: DEFENSE_SCOPE · TARGET_FALLTHROUGH · 215 (save v101, bez migracji)
+
+Jeden dzień, jedna rodzina: **AI atakuje to, czego nie weźmie → nie atakuje tego, co weźmie →
+w ogóle nie ma czym**. Każdy arc obalił ramę poprzedniego POMIAREM, nie rozumowaniem.
+
+**✅ DEFENSE_SCOPE — Findingi 199 + 200 + 209, live-gate §7 PASS** (`792a034` C1 · `b2e94ef` C2 ·
+`6e48460` C3 · `9a58bfb` close-out). Obrona planetarna broni **swojego CIAŁA** (wariant **V4**:
+budynki per-kolonia, okręty per-układ), eskadra AI **gradowana do siły, którą bitwa naprawdę
+wystawi**, **bez clampa** (`needed > MAX_STRIKE_SIZE` ⇒ własny powód `target_beyond_reach`).
+Bezbronny kadłub wnosi HP, ale **zero broni** (fallbacki były **DWA**: `playerVesselsToBattleUnit`
+**i** `normalizeFleet` — zdjęcie jednego było BUFFEM 2→5). Kill-switch `FEATURES.defenseScope`.
+Rozpuściło D-199-3/D-199-4 oraz findingi **203** i **206**. Keeper `defense_scope_smoke` **69/69**.
+
+**✅ TARGET_FALLTHROUGH — Finding 210, live-gate §8 PASS** (`1e633d4` · `e864ea8` close-out).
+Drabina odmów oceniała **wyłącznie głowę rankingu wartości**; teraz `pickAttainableTarget(empireId,
+ready)` schodzi **w istniejącym porządku wartości** do pierwszego celu osiągalnego. **TRZY stany
+terminalne** — start bez pominięcia / start z `skippedHead` / **pełna odmowa, która NIE MILCZY**
+(liczby GŁOWY + `attemptedTargets`, lekcja Findingu 196). Ta sama flaga `defenseScope`.
+⚠ Na gate'cie zaobserwowano **pełną pętlę rozgrywki**: AI bierze zdobywalną kolonię ×2 → gracz
+fortyfikuje → kolejny rajder ginie → tabela gradowała cel na `needed 2` ⇒ **AI odmówi zamiast
+powtórzyć błąd**. 199 i 210 działają razem.
+
+**🟡 215 — bramki `freePops` na ścieżce AI, WDROŻONE, LIVE-GATE JUTRO** (`ade36d8` C1 · `2b27e4f` C2).
+`_employedPops` liczy **ETATY**, nie pracowników, a `ColonyAutoExpander` stawia ich u AI więcej niż
+jest POPów ⇒ **`freePops` = 0 na stałe**. Population 2.0 Faza 2 (FIX A, `d95d9b8`) zdjęła takie
+bramki z budowy budynków, ale **sweep nie objął ścieżki AI**. Dwie martwe bramki, **dwa różne
+lekarstwa**: kolonia = **ZASTĄPIENIE** (bramka KOSZTU źle zmierzona — `removePop('laborer', …)` płaci
+naprawdę) → `laborer >= popTransferSize + MOTHER_RESERVE (4)`; kurier = **USUNIĘCIE** (prawdziwy
+strażnik `deployVessel`→`commitCrew` płaci przy `freePops = 0`, a jego ścieżka porażki jest czysta).
+`popTransferSize` **8 → 4** (AI only). Flaga **`FEATURES.aiPopGates`** (jedna na obie połowy).
+Skutek zmierzony: `shipBuildRequested` 0→6, `_loadByRarity` 0→14, **dostarczono 0→8**, kolonie 3→4.
+Keeper `ai_pop_gates_smoke` **22/22**. Plan + gate: `docs/design/AI_POP_GATES_PLAN.md` (§G.0 = oficjalne odczyty).
+
+**⚠ TRZY RAMY OBALONE PO KOLEI** (178/208): „głód komodytów" → „głód żelaza" (**artefakt
+niedoprecyzowanego fixture'u** — `GameCore.boot` bez `DRIVER_DEFAULTS` daje AI **bez placówek**)
+→ „`warp_cores`" → **próg POP**. Dokument `COURIER_LOAD_ORDER_PLAN.md` **przycięty do części
+zweryfikowanych**, z §1 przeetykietowanym „**wyprowadzone ze źródła, NIGDY nie zaobserwowane
+w działaniu**". **178-jako-kolejność-ładowania wraca do gry dopiero, gdy kurierzy realnie latają
+w żywym zapisie.**
+
+**Nowe findingi:** 211 (adnotacja odwrotu doklejana do PLANETY) · 212 (fallback wideo bez cache'u
+porażki — ⚠ hipoteza „brak plików" **OBALONA**, `assets/event-videos/` ma 21 plików) · 213
+(`TEMPLATE_ROLES` zna rolę `courier`, żaden szablon jej nie ma) · 214 (popyt na RUDĘ karmi
+`FactorySystem`, który rud nie produkuje) · **215** (zamknięty) · **216** (kolonie AI zakładają się
+i **nie rosną** — ⚠ *hipoteza, nie diagnoza*).
+
+**KOLEJKA PO GATE'CIE 215:** **154** → **151 / 152 / 153** osobno → wielkie sloty (**GROUND**,
+**kolonizacja 98-107** — ⚠ **216 sąsiaduje**, nie wciągać; **ORDER_TRUTHFULNESS**).
+**202** zostaje **nazwaną następną dystorsją** (wartość per-UKŁAD rankuje cele per-CIAŁO).
+
+### ⚠ DWIE LEKCJE METODY Z TEGO DNIA (obie kupione pomiarem)
+
+1. **PYTAJ, CO SIĘ NIE WYKONUJE, NIE CZEGO BRAKUJE.** Trzy kolejne błędne ramy powstały z odczytów
+   POŚREDNICH („czego brakuje w magazynie"). Przełom dał **licznik wywołań** (`_loadByRarity`
+   `wywolan = 0`) i **przebieg kontrolny** bez własnych zamówień. **Brakujący zasób mówi, GDZIE
+   jesteś; nieuruchomiona funkcja mówi, DLACZEGO.**
+2. **OVERRIDE W SONDZIE I TABELA POMIAROWA WYMAGAJĄ KONTROLI TAK SAMO JAK PIN KEEPERA.** Sweep
+   `popTransferSize` przeszedł na **fikcyjnym override** (`emp.strategyConfig`/`ess._defaults` nie
+   istnieją; `_config` czyta `ARCHETYPES[...].strategicColonization`) i dał tabelę **odwróconą
+   arytmetycznie**. Złapała to dopiero niemożliwa arytmetyka. ⇒ **odczyt zwrotny PRZED liczeniem**
+   (`AI_POP_GATES_PLAN.md` §4) i **metryka, która nie może przejść jałowo**: „przeżywalność" kolonii
+   wyszła 100 % tylko dlatego, że **solo headless nic koloni nie zabija** — headline'em musi być
+   „**stała się czymkolwiek**", nie „przeżyła".

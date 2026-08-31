@@ -215,6 +215,40 @@ To ta sama argumentacja co `aiStrikeRecall` (Z2, D-Z2) i `defenseScope` (D-210-5
 
 ## 6. GATE (LIVE) — dwa obserwable, po jednym na połowę
 
+### §G.0 — OFICJALNE ODCZYTY KONSOLI (sprawdzone co do KSZTAŁTU wobec źródeł, **NIE wykonane**)
+
+⚠ Uruchomić **na starcie** (baseline) i powtarzać w trakcie — gate czyta **RÓŻNICĘ**, nie wartość
+bezwzględną. ⚠ Najpierw potwierdzić flagę: `KOSMOS.gameConfig.FEATURES.aiPopGates` → `true`.
+
+**(a) §G.1 — pełne kolonie `emp_001`** (`getAllColonies` / `ownerEmpireId` / `isOutpost` — wszystkie
+używane produkcyjnie w `EmpireStrategySystem`):
+```js
+(() => { const c = KOSMOS.colonyManager.getAllColonies().filter(x => x.ownerEmpireId === 'emp_001');
+  return { gy: Math.floor(KOSMOS.timeSystem.gameTime),
+           pelne: c.filter(x => !x.isOutpost).length,
+           placowki: c.filter(x => x.isOutpost).length }; })()
+```
+**PASS** = `pelne` rośnie wzgl. baseline'u. ⚠ `placowki` to **KONTROLA**: ekspansja ma **rosnąć**,
+a nie przesuwać się z placówek na kolonie (zmierzone headless: 3,3 → 4,0).
+
+**(b) §G.3 (guard 180) — rudy rzadkie w stolicy `emp_001`** (`directorProduction` montowany
+`GameScene:458`; `capitalOf` to **kanon stolicy** — nie flaga `isHomePlanet`, która jest flagą GRACZA):
+```js
+(() => { const cap = KOSMOS.directorProduction?.capitalOf('emp_001'), rs = cap?.resourceSystem;
+  return { gy: Math.floor(KOSMOS.timeSystem.gameTime), stolica: cap?.planetId,
+           H:  Math.floor(rs?.getAmount('H')  ?? 0),
+           Xe: Math.floor(rs?.getAmount('Xe') ?? 0),
+           Nt: Math.floor(rs?.getAmount('Nt') ?? 0) }; })()
+```
+**PASS** = wartości **nie zapadają się** wzgl. baseline'u.
+⚠ **`Nt` jest tu OBSERWABLEM DIAGNOSTYCZNYM, nie tylko guardem**: to najgłębsze ogniwo łańcucha §G.2
+(`Nt` → `quantum_cores` + `antimatter_cells` → `warp_cores` → fregata). **`Nt` rosnące z zera to
+pierwszy dowód, że kurierzy realnie wożą.** `Nt` stale zerowe **przy latających kurierach** kieruje
+śledztwo na **przepustowość Nt** — i **dopiero tam** pytanie Findingu 178 o kolejność ładowania
+staje się w ogóle mierzalne.
+
+---
+
 **§G.1 — połowa KOLONIZACYJNA: pierwsza pełna kolonia AI.**
 Odczyt: liczba nie-placówkowych kolonii imperium rośnie; `ai:strategyColonyFounded` w `debugLog`.
 ⚠ **CZEGO SIĘ SPODZIEWAĆ: kolonia BĘDZIE ISTNIEĆ I NIEWIELE ROBIĆ.** Obserwablem tego gate'u jest
