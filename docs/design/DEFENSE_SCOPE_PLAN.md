@@ -1,11 +1,14 @@
 # Findingi 199 + 200 — „AI atakuje to, czego nie jest w stanie zdobyć"
 
-> **Status:** 📋 **PODPISANE W CAŁOŚCI 2026-08-31.** Podpis właściciela: **D-199-1 = W1
+> **Status:** ✅ **WDROŻONE 2026-08-31 (commity 1-3), LIVE-GATE PENDING.** Podpis właściciela: **D-199-1 = W1
 > Z POPRAWKĄ** (bez clampa → własny powód odmowy) · **D-199-5 = W2** (poza zakresem → Finding 202,
 > z potwierdzonym warunkiem sortowania) · **D-199-6 = 6a + 6b RAZEM** (ponowny podpis po §4.1) ·
 > **D-199-7 = W1** · **D-199-8 = W1** · **D-199-2 = V4** (budynki CIAŁO, okręty UKŁAD) ·
 > **D-199-3 i D-199-4 ROZPUSZCZONE przez V4** (findingi 203 i 206 domykają się z commitem 3).
 > Save **v101, zero migracji** (zakres liczony w czasie bitwy, nic nowego nie persystuje).
+> **Commity:** `90978a2` (plan) · `792a034` (C1 — D-199-6) · `b2e94ef` (C2 — D-199-1/7/8) · C3 (D-199-2 = V4).
+> Keeper `defense_scope_smoke` **50/50** · sweep **193/193 0 FAIL** · `check-i18n` PASS.
+> ⚠ Kill-switch: `GAME_CONFIG.FEATURES.defenseScope` (ON). Dowód flipa — §11 (**czwórka**, nie para).
 > **Rejestr macierzysty:** `docs/design/VESSEL_ORDERS_PLAN.md` §Findings 199 · 200 (oba otwarte).
 > Sondy pomiarowe: scratchpad, **poza repo** (`probe-199-base.mjs`, `probe-199-tempo.mjs`,
 > `probe-199-v4.mjs`, `probe-200-freeweapon.mjs`) — wszystkie liczby niżej pochodzą z ich wyjścia.
@@ -460,6 +463,12 @@ drugiego** — dokładnie tak ten buff się chował. Warstwa (2) jest jedyną, k
 | **T9** legacy bez zmian | `_buildPlayerBattleUnit(sys)` bez ciała === wartość sprzed slice'u | assert, że w układzie **jest** broniona kolonia, inaczej 30 === 30 | pin źródłowy: `EnemyAttackHandler:158` **podaje** drugi argument (komentarze zdjęte) |
 | **T10** kill-switch | para odczytu stanu przeskakuje **jako para** | assert, że **obie** liczby się ruszają; jedna z dwóch = FAIL | — |
 
+| **T14** SEDNO zakresu | siatka obronna STOLICY nie wchodzi do bitwy o inne ciało | assert, że stolica ma realną obronę (≥180 HP) — inaczej „nie przeciekła" jest prawdą trywialną | nad WŁASNYM ciałem obrona wchodzi w całości (**T15**) |
+| **T15** kontrola zakresu | wywołanie BEZ ciała dalej sumuje układ | — | chroni `forceBattle` / `_fleetArrived`, które ciała nie mają |
+| **T16** D-199-3 rozpuszczona | zakres wraków == zakres okrętów | assert, że statek przy stolicy WCHODZI do bitwy o wtórną (różnica V4 wobec V1) | ten sam statek ginie przy upadku układu |
+| **T17** kill-switch | **CZWÓRKA**, nie para (§11) — zakres widać na wtórnej, kompetencję na stolicy | assert, że przy OFF każde ciało ma TEGO SAMEGO obrońcę | druga liczba się NIE rusza — i to jest poprawne, bo to sam Finding 199 |
+| **T18** WYPŁATA slice'u | AI celuje w ciało TAŃSZE do wzięcia | assert, że ciała **realnie różnią się** kosztem (pod zakresem układu byłyby identyczne ⇒ pin jałowy) | ⚠ pin powstał z awarii własnych fixture'ów T9/T10 |
+
 **Regresja do przebiegu (oczekiwane zielone):** `deploy_seams` · `w2_deploy_model` ·
 `w3_target_selection` · `w3_cross_system_attack` · `w3_ai_invasion` · `w3_battle_booking` ·
 `battle_announce_once` · `battle_sides` · `battle_result_classification` · `ai_strike_recall` ·
@@ -475,6 +484,47 @@ Commity 1 i 2 są bramkowane wyłącznie keeperem + sweepem.
 *Warunki wstępne: wojna z `emp_001`; stolica z `defense_grid` + druga kolonia bez obrony w tym samym
 układzie; jeden bezbronny handlowiec przy stolicy. **CC nie pisze plików w trakcie gate'u.***
 
+### §7.0 — PRZYGOTOWANIE: zasianie puli AI i ODCZYT TABELI CELÓW (obowiązkowe)
+
+⚠ **Pula uderzeniowa w realnym zapisie jest najpewniej PUSTA (Finding 208)** — produkcja okrętów
+AI stoi, więc bez zasiania kroki §7.3-§7.5 zmierzą ciszę, nie zachowanie.
+
+**(a) Kto, gdzie ma stolicę, co widzi.** ⚠ Rajder MUSI wylądować w **układzie macierzystym
+imperium** — filtr puli z Z2 (`strikeReadyVessels`) odrzuca okręty spoza domu, a
+`spawnEnemyRaider` domyślnie wybiera *najbliższy inny niż gracza*, co nie musi być domem AI.
+```js
+KOSMOS.debug.strikeReport('emp_001')      // → ukladMacierzysty, celeWZasiegu, cel{...}, werdykt
+```
+Zapisz `ukladMacierzysty` — dalej `SYS_AI`.
+
+**(b) Zasiej rajdery — jedno wywołanie = JEDEN okręt.**
+```js
+['R1','R2','R3'].forEach(n => KOSMOS.debug.spawnEnemyRaider({
+  empireId: 'emp_001', systemId: 'SYS_AI', vesselName: n, autoOrder: false }))
+```
+⚠ `autoOrder: false` jest obowiązkowe — bez niego rajder od razu dostaje rozkaz i **wypada
+z puli** (`v.movementOrder` ≠ null), więc kolejne kroki zmierzyłyby pustą pulę.
+
+**(c) ODCZYT PULI — przed KAŻDYM `forceStrike`, bez wyjątku.**
+```js
+KOSMOS.directorOffensive.strikeReadyVessels('emp_001').map(v => v.name)
+```
+**Odmowa przy pustej puli nie dowodzi niczego** (lekcja Z2: pin na pustym zbiorze przechodzi
+z niewłaściwego powodu).
+
+**(d) TABELA CELÓW — najważniejszy odczyt całego gate'u.**
+```js
+(() => { const o = KOSMOS.directorOffensive, r = o.strikeReadyVessels('emp_001');
+  return o.reachableTargets('emp_001').map(t => ({
+    cel: t.body.name, hp: o.estimateDefenderHp(t),
+    needed: o.requiredSquadron(t, r).needed, gotowych: r.length })); })()
+```
+Oczekiwane w Twoim zapisie: **stolica ~210 HP → `needed` 3** · **kolonia wtórna bez obrony →
+`needed` 1**. ⚠ **AI uderzy w wiersz o NAJMNIEJSZYM `needed`** (D-199-5) — o tym są kroki niżej
+i o tym trzeba pamiętać przy dobieraniu liczby rajderów.
+
+---
+
 **§7.1 — asymetria widoczna PRZED zaufaniem naprawie** (odczyt bazowy, flaga OFF)
 ```js
 (() => { const o=KOSMOS.directorOffensive, w=KOSMOS.warSystem, t=o.pickTarget('emp_001');
@@ -485,13 +535,33 @@ układzie; jeden bezbronny handlowiec przy stolicy. **CC nie pisze plików w tra
 **§7.2 — cel i próg eskadry** (flaga ON) — `KOSMOS.debug.strikeReport('emp_001')`
 **PASS** = werdykt nazywa **liczbę okrętów**, nie boolean; tekst różny od §7.1.
 
-**§7.3 — AI odmawia zamiast ginąć** — `KOSMOS.debug.forceStrike('emp_001')`
-**PASS** = przy niedoborze `{ launched: 0, reason: 'insufficient_squadron', needed, available }`
-i **zero nowych misji**. ⚠ Odczytaj flotę AI **przed** wywołaniem — odmowa na pustej puli nie dowodzi niczego.
+**§7.3 — AI ODMAWIA zamiast ginąć** (`insufficient_squadron`).
+Z tabeli §7.0(d) weź **najmniejsze `needed`** — nazwijmy je `N`. Zasiej **`N − 1`** rajderów
+(np. dla stolicy `needed 3` ⇒ **dwa**; jeśli masz kolonię wtórną z `needed 1`, patrz uwaga niżej).
+```js
+KOSMOS.directorOffensive.strikeReadyVessels('emp_001').map(v => v.name)   // ODCZYT PULI — zawsze
+KOSMOS.debug.forceStrike('emp_001')
+```
+**PASS** = `{ launched: 0, reason: 'insufficient_squadron', needed: N, available: N-1, defenderHp }`
+i **zero nowych misji** na rajderach. **FAIL** = `launched > 0`.
+⚠ **Gdy `N` = 1** (kolonia wtórna bez obrony), tego stanu nie da się pokazać — jeden okręt zawsze
+wystarcza. Wtedy albo prowadź §7.3 na zapisie bez takiej kolonii, albo postaw na niej `defense_grid`
+Lv1 (podnosi `needed` do 2) i powtórz odczyt (d).
 
-**§7.4 — ⚠ POPRAWKA WŁAŚCICIELA na żywo** — ufortyfikuj stolicę do `grid Lv3 + tower Lv5`, potem
-`forceStrike`. **PASS** = `reason: 'target_beyond_reach'`, `needed: 7` (**nie** `launched: 3`).
-**FAIL** = jakikolwiek start ⇒ clamp wrócił.
+**§7.4 — ⚠ POPRAWKA WŁAŚCICIELA na żywo: BEZ CLAMPA** (`target_beyond_reach`).
+Ufortyfikuj do `defense_grid` Lv3 + `defense_tower` Lv5 (**~500 HP ⇒ `needed` 7**).
+⚠ **Fortyfikuj to ciało, które tabela (d) pokazuje z NAJMNIEJSZYM `needed`, i powtarzaj odczyt (d),
+aż KAŻDY wiersz ma `needed > 3`.** Inaczej AI po prostu ominie twierdzę i uderzy w słabsze ciało —
+i **to nie będzie porażka gate'u, tylko wypłata slice'u** (pinowana keeperem T18; tak właśnie
+wywróciły się moje własne fixture'y T9/T10 przy implementacji).
+```js
+// tabela musi mieć min(needed) > 3 PRZED tym wywołaniem
+KOSMOS.debug.forceStrike('emp_001')
+```
+**PASS** = `{ launched: 0, reason: 'target_beyond_reach', needed: 7, defenderHp: ~500 }`.
+**FAIL** = `launched: 3` ⇒ clamp wrócił.
+⚠ Zasiej przy tym **3 rajdery** — pin ma pokazać, że AI odmawia **mając pełny sufit**, a nie
+dlatego, że mu brakuje okrętów.
 
 **§7.5 — batching EAH + zakres wraków** (niemierzalne headless): po realnym uderzeniu
 ```js
@@ -524,18 +594,30 @@ ale **nie wykonane na żywej karcie** — ta walidacja należy do slice'u implem
 OFF ⇒ zachowanie sprzed slice'u co do bitu, z regułą eskadry włącznie. ⚠ **Jedna, nie dwie** — dwie
 dałyby trzeci, nieokreślony stan „w połowie wyłączone".
 
-**Dowód flipa parą odczytu stanu** (kształt Z2 `[1,[]] ↔ [0,[...]]`, bez obserwowania zachowania):
+**Dowód flipa odczytem stanu** (kształt Z2 `[1,[]] ↔ [0,[...]]`, bez obserwowania zachowania):
+
+⚠ **KOREKTA DO PIERWOTNEJ WERSJI TEJ SEKCJI — para NIE WYSTARCZA, i dowiodło tego wykonanie.**
+Planowałem tu `[hp, needed]` czytane na koloni WTÓRNEJ i przewidywałem `[30, 1]` ON / `[210, 2]` OFF.
+Druga liczba była błędna: **dwie połowy tej flagi objawiają się na RÓŻNYCH celach.**
+Na koloni wtórnej `needed` **nie drgnie** (boolean mówi „niebroniona" ⇒ 1, a gradowanie z 30 HP
+też daje 1) — i to nie jest luka, tylko **sam Finding 199**: kolonia bez własnej obrony wygląda
+na bezbronną w OBU trybach. Połowa kompetencyjna jest widoczna dopiero na **stolicy**.
 
 ```js
-(() => { const o=KOSMOS.directorOffensive, w=KOSMOS.warSystem, t=o.pickTarget('emp_001');
-  return [ t?.body?.id, w._buildPlayerBattleUnit(t.systemId, t.body.id)?.hp,
-           o.requiredSquadron?.(t) ?? (o.isDefended(t)?2:1) ]; })()
-// ON  -> ["<wtórna>",  30, 1]
-// OFF -> ["<wtórna>", 210, 2]
+(() => { const o=KOSMOS.directorOffensive, w=KOSMOS.warSystem;
+  const T = (id) => ({ colony: KOSMOS.colonyManager.getColony(id), body: KOSMOS.entityManager.get(id),
+                       systemId: KOSMOS.entityManager.get(id).systemId });
+  const SEC='<id koloni WTÓRNEJ>', CAP='<id STOLICY>';
+  return [ w._buildPlayerBattleUnit(T(SEC).systemId, SEC)?.hp, o.requiredSquadron(T(SEC)).needed,
+           w._buildPlayerBattleUnit(T(CAP).systemId, CAP)?.hp, o.requiredSquadron(T(CAP)).needed ]; })()
+// ON  -> [ 30, 1, 210, 3]     ← 1. liczba = ZAKRES        (stolica nie broni już wtórnej)
+// OFF -> [210, 1, 210, 2]     ← 4. liczba = KOMPETENCJA   (próg wraca do booleana)
 ```
 
-Para jest rozstrzygająca, bo środkowa liczba **JEST** zakresem, a trzecia **JEST** regułą
-kompetencji; żadnej nie da się wyprodukować drugim wariantem.
+Czwórka jest rozstrzygająca: **pierwsza** liczba JEST zakresem, **czwarta** JEST regułą
+kompetencji, a przy OFF pierwsza i trzecia muszą być RÓWNE (każde ciało w układzie ma tego
+samego obrońcę — definicja stanu sprzed slice'u). Pinuje to `defense_scope_smoke` **T17**,
+z kontrolą pinu na drugiej liczbie.
 
 ---
 

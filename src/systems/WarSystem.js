@@ -590,6 +590,28 @@ export class WarSystem {
   }
 
   /**
+   * KTÓRE kolonie gracza wnoszą obronę BUDYNKOWĄ do tej bitwy (D-199-2 = V4).
+   *
+   * ⚠ TO JEST CAŁA ZMIANA ZAKRESU TEGO SLICE'U — jedna linia filtru, i dlatego stoi osobno:
+   *   `defense_tower` / `defense_grid` bronią SWOJEGO ciała, nie całego układu. Do 199 bitwa
+   *   nad DOWOLNYM ciałem sumowała obronę WSZYSTKICH kolonii gracza w układzie, więc kolonia
+   *   bez jednego działka była w praktyce osłonięta siatką orbitalną stolicy — a AI, które
+   *   czyta obronę per-ciało, uznawało ją za bezbronną i szło tam ginąć (Finding 199).
+   * ⚠ OKRĘTY ZOSTAJĄ W ZAKRESIE UKŁADU (`_playerVesselsInSystem` NIETKNIĘTE) — to jest wariant
+   *   V4, nie V1. Zmierzone: przy zakresie ciała dwie fregaty stojące w układzie warte są
+   *   dokładnie zero, a flota przestaje mieć sens jako obrona. Dzięki temu zakres okrętów =
+   *   zakres `_wreckPlayerVesselsInSystem`, więc ginie ten statek, który bronił (D-199-3 znika),
+   *   i nie potrzeba żadnego promienia „przy tym ciele" (D-199-4 znika).
+   * ⚠ Bez `targetBodyId` (`forceBattle`, `_fleetArrived` — bitwy „nad układem", bez konkretnego
+   *   ciała) zakres zostaje układowy. Tam ciała po prostu NIE MA, więc nie ma czego zawężać.
+   */
+  _defendingColonies(systemId, targetBodyId = null) {
+    const all = this._playerColoniesInSystem(systemId);
+    if (GAME_CONFIG.FEATURES?.defenseScope === false || !targetBodyId) return all;
+    return all.filter(c => c.planetId === targetBodyId);
+  }
+
+  /**
    * Czy gracz JEST w tym układzie — cokolwiek, co mogłoby stanąć do bitwy?
    *
    * ⚠ W3-4b — pytanie brzmi trywialnie, a nie było zadawane NIGDZIE. `_buildPlayerBattleUnit`
@@ -632,7 +654,7 @@ export class WarSystem {
     // defense_grid (level):  +100 HP, +10 dmg, +2 armor per level.
     // Bez żadnego z tych budynków gracz polega tylko na flocie; brak floty +
     // brak obrony → symboliczna obrona pasywna planety (30 HP / 2 dmg).
-    const colonies = this._playerColoniesInSystem(systemId);
+    const colonies = this._defendingColonies(systemId, targetBodyId);
 
     let defHP = 0, defDmg = 0, defArmor = 0;
     for (const col of colonies) {
@@ -653,6 +675,7 @@ export class WarSystem {
       });
     }
 
+    void targetBodyId;   // konsumowane wyżej (zakres budynków) — patrz `_defendingColonies`
     const hasDefense = defHP > 0;
     const hasFleet   = vessels.length > 0;
 

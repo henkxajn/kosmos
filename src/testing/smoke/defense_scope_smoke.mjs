@@ -270,7 +270,7 @@ console.log('T7 — Finding 209: obronca-widmo NAPRAWDE jest bezbronny (komentar
 //   T13 sort po `needed` rosnaco (przygotowanie — dziala dopiero z commitem 3)
 // ════════════════════════════════════════════════════════════════════════════════════════════
 
-const { DirectorOffensive, SQUADRON_HP_RATIO, MAX_STRIKE_SIZE } =
+const { DirectorOffensive, SQUADRON_HP_RATIO, MAX_STRIKE_SIZE, SQUADRON_VS_DEFENDED } =
   await import('../../systems/director/DirectorOffensive.js');
 
 /** Swiat dla decyzji AI: kolonie gracza + rejestr statkow + zasieg imperium. */
@@ -321,7 +321,9 @@ console.log('T8 — `requiredSquadron` GRADUJE: rozna obrona ⇒ rozna liczba ok
 console.log('T9 — silna obrona ⇒ `target_beyond_reach`, NIE start eskadra o rozmiarze sufitu');
 {
   const raiders = [mkRaider('1'), mkRaider('2'), mkRaider('3')];
-  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: raiders });
+  // ⚠ OBA ciala ufortyfikowane. Pod V4 `pickTarget` wybiera NAJTANSZE do wziecia, wiec
+  //   fixture z jednym slabym cialem testowalby ATAK na nie, a nie odmowe (zlapane wykonaniem).
+  mkAiWorld({ capDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: raiders });
   const off = new DirectorOffensive();
   const uncapped = off.requiredSquadron(tgtOf(SEC)).needed;
 
@@ -340,7 +342,7 @@ console.log('T9 — silna obrona ⇒ `target_beyond_reach`, NIE start eskadra o 
 console.log('T10 — „za slaba pula" i „za mocny cel" to DWA rozne stany swiata');
 {
   // (a) cel osiagalny (needed <= sufit), ale pula za mala ⇒ insufficient_squadron
-  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 1 }], vessels: [mkRaider('1')] });
+  mkAiWorld({ capDef: [{ id: 'defense_grid', level: 1 }], secDef: [{ id: 'defense_grid', level: 1 }], vessels: [mkRaider('1')] });
   let off = new DirectorOffensive();
   const needA = off.requiredSquadron(tgtOf(SEC)).needed;
   const resA = off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
@@ -350,7 +352,7 @@ console.log('T10 — „za slaba pula" i „za mocny cel" to DWA rozne stany swi
     `T10a: stan przejsciowy ma swoj powod (jest: ${resA.reason})`);
 
   // (b) ten sam ROZMIAR puli, cel nieosiagalny ⇒ target_beyond_reach (kolejnosc badania!)
-  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: [mkRaider('1')] });
+  mkAiWorld({ capDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: [mkRaider('1')] });
   off = new DirectorOffensive();
   const resB = off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
   assert(resB.reason === 'target_beyond_reach',
@@ -416,6 +418,148 @@ console.log('T13 — `pickTarget` sortuje po GRADOWANYM `needed` rosnaco, nie po
   assert(/localeCompare/.test(sortLine),
     'T13 kontrola pinu: rozstrzygniecie remisu po id ZOSTAJE — inaczej wybor przestalby byc ' +
     'deterministyczny po wczytaniu zapisu');
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// COMMIT 3 — D-199-2 = V4: budynki obronne broniA SWOJEGO CIALA, okrety dalej calego UKLADU.
+//
+// ⚠ WARIANT V4, NIE V1 — i to jest podpisana decyzja, nie skrot. Przy zakresie ciala TAKZE dla
+//   okretow (V1) dwie fregaty stojace w ukladzie warte sa dokladnie ZERO, wiec flota przestaje
+//   byc obrona. V4 zachowuje jej sens i przy okazji ROZPUSZCZA dwie decyzje: zakres okretow
+//   = zakres `_wreckPlayerVesselsInSystem` (ginie ten, ktory bronil ⇒ D-199-3/Finding 203),
+//   a budynki naleza do ciala z konstrukcji, wiec zaden promien nie jest potrzebny (D-199-4).
+//
+//   T14 SEDNO: siatka obronna STOLICY nie broni juz koloni wtornej
+//   T15 stolica broni SIEBIE bez zmian (pin, ze nie oslabilismy obrony w ogole)
+//   T16 zakres WRAKOW == zakres OKRETOW (Finding 203 nieosiagalny — D-199-3 rozpuszczona)
+//   T17 kill-switch `defenseScope`: para odczytu stanu przeskakuje JAKO PARA
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+const { GAME_CONFIG } = await import('../../config/GameConfig.js');
+const { EnemyAttackHandler } = await import('../../systems/EnemyAttackHandler.js');
+
+const CAPDEF = [{ id: 'defense_grid', level: 1 }, { id: 'defense_tower', level: 2 }];
+
+// ── T14 — SEDNO ─────────────────────────────────────────────────────────────────────────────
+console.log('T14 — SEDNO: siatka obronna STOLICY nie broni juz koloni wtornej');
+{
+  mkAiWorld({ capDef: CAPDEF, secDef: [], vessels: [] });
+  const war = new WarSystem();
+  const atSec = war._buildPlayerBattleUnit(SYS, SEC);
+  const capHp = war._buildPlayerBattleUnit(SYS, CAP)?.hp ?? 0;
+
+  assert(capHp >= 180,
+    `T14 NIEJALOWOSC: stolica ma REALNA obrone (${capHp} HP) — bez niej „nie przeciekla" ` +
+    'byloby prawda trywialnie');
+  assert((atSec.hp ?? 0) < capHp,
+    `T14: bitwa nad kolonia wtorna wystawia ${atSec.hp} HP, a nie ${capHp} HP ze stolicy`);
+  assert(!(atSec.weapons ?? []).some(w => w.damage === 20),
+    `T14: bron z budynkow STOLICY (dmg 20) NIE pojawia sie w bitwie o inne cialo ` +
+    `(jest: ${JSON.stringify(atSec.weapons)})`);
+}
+
+// ── T15 — stolica broni SIEBIE ──────────────────────────────────────────────────────────────
+console.log('T15 — stolica DALEJ broni siebie (nie oslabilismy obrony w ogole)');
+{
+  mkAiWorld({ capDef: CAPDEF, secDef: [], vessels: [] });
+  const war = new WarSystem();
+  const atCap = war._buildPlayerBattleUnit(SYS, CAP);
+  assert((atCap.hp ?? 0) >= 180 && (atCap.weapons ?? []).some(w => w.damage === 20),
+    `T15: nad WLASNYM cialem obrona wchodzi w calosci (hp ${atCap.hp}, ${JSON.stringify(atCap.weapons)}) — ` +
+    'T14 mierzy PRZYNALEZNOSC obrony, a nie jej skasowanie');
+
+  // Kontrola pinu: bez ciala (forceBattle / _fleetArrived) zakres zostaje UKLADOWY.
+  const noBody = war._buildPlayerBattleUnit(SYS);
+  assert((noBody.hp ?? 0) >= 180,
+    `T15 KONTROLA: wywolanie BEZ ciala dalej sumuje uklad (${noBody.hp} HP) — inaczej ` +
+    '`forceBattle` i `_fleetArrived`, ktore ciala nie maja, po cichu stracilyby obronce');
+}
+
+// ── T16 — zakres wrakow == zakres okretow ───────────────────────────────────────────────────
+console.log('T16 — Finding 203 NIEOSIAGALNY: zakres wrakow == zakres okretow (D-199-3 rozpuszczona)');
+{
+  const cargo = mkCargo('t16', CAP);                       // statek stoi przy STOLICY
+  mkAiWorld({ capDef: CAPDEF, secDef: [], vessels: [cargo] });
+  const war = new WarSystem();
+
+  const atSec = war._buildPlayerBattleUnit(SYS, SEC);
+  assert((atSec.hp ?? 0) >= 30,
+    `T16 NIEJALOWOSC: statek przy stolicy WCHODZI do bitwy o kolonie wtorna (${atSec.hp} HP) — ` +
+    'to jest wlasnie roznica V4 wobec V1, w ktorym bylby wart zero');
+
+  const eah = new EnemyAttackHandler();
+  eah._wreckPlayerVesselsInSystem(SYS, 40);
+  assert(cargo.isWreck === true,
+    'T16: i ten sam statek ginie przy upadku ukladu — obrona i strata maja TEN SAM zakres, ' +
+    'wiec nie ma stanu „nie bronil, a zginal" (Finding 203)');
+}
+
+// ── T17 — kill-switch ───────────────────────────────────────────────────────────────────────
+console.log('T17 — kill-switch `defenseScope`: para odczytu stanu przeskakuje JAKO PARA');
+{
+  // ⚠ ODCZYT MUSI BYC CZWORKA, NIE PARA — i to jest ustalenie z WYKONANIA, nie ostroznosc.
+  //   Plan przewidywal pare `[hp, needed]` czytana na koloni WTORNEJ i to bylo BLEDNE:
+  //   dwie polowy tej flagi objawiaja sie na ROZNYCH celach.
+  //     • polowa ZAKRESU widac na koloni wtornej   — hp 30 (ON) vs 210 (OFF);
+  //     • polowa KOMPETENCJI widac na STOLICY      — needed 3 (ON) vs 2 (OFF, boolean).
+  //   Na wtornej `needed` NIE drgnie (bool „niebroniona" = 1, gradowanie z 30 HP = 1), bo
+  //   „kolonia bez wlasnej obrony wyglada na bezbronna" to jest DOKLADNIE Finding 199.
+  const readQuad = () => {
+    mkAiWorld({ capDef: CAPDEF, secDef: [], vessels: [mkCargo('t17', CAP)] });
+    const war = new WarSystem();
+    const off = new DirectorOffensive();
+    return [
+      war._buildPlayerBattleUnit(SYS, SEC)?.hp ?? 0, off.requiredSquadron(tgtOf(SEC)).needed,
+      war._buildPlayerBattleUnit(SYS, CAP)?.hp ?? 0, off.requiredSquadron(tgtOf(CAP)).needed,
+    ];
+  };
+
+  const before = GAME_CONFIG.FEATURES.defenseScope;
+  GAME_CONFIG.FEATURES.defenseScope = true;
+  const on = readQuad();
+  GAME_CONFIG.FEATURES.defenseScope = false;
+  const off = readQuad();
+  GAME_CONFIG.FEATURES.defenseScope = before;
+
+  assert(on[0] !== off[0],
+    `T17 ZAKRES: obrona koloni wtornej wraca do ukladowej (ON ${on[0]} HP / OFF ${off[0]} HP)`);
+  assert(on[3] !== off[3],
+    `T17 KOMPETENCJA: prog eskadry na stolicy wraca do booleana (ON ${on[3]} / OFF ${off[3]})`);
+  assert(off[3] === SQUADRON_VS_DEFENDED && off[0] === off[2],
+    `T17: OFF to zachowanie SPRZED slice'u bit w bit — kazde cialo w ukladzie ma TEGO SAMEGO ` +
+    `obronce (${off[0]} = ${off[2]} HP), a prog to stala ${off[3]} (= SQUADRON_VS_DEFENDED)`);
+  assert(on[1] === off[1],
+    `T17 KONTROLA PINU: na koloni wtornej \`needed\` sie NIE zmienia (${on[1]} = ${off[1]}) — ` +
+    'to nie jest luka, tylko sam Finding 199: boolean nie widzial tam obrony, a gradowanie ' +
+    'przy 30 HP tez zada jednego okretu. Polowy flagi widac na ROZNYCH celach');
+  assert(GAME_CONFIG.FEATURES.defenseScope === before,
+    'T17 higiena: flaga przywrocona do stanu wyjsciowego (inaczej kolejne suity w sweepie ' +
+    'dziedziczylyby stan tego pinu)');
+}
+
+// ── T18 — WYPLATA slice'u: AI omija twierdze i idzie w slabe cialo ──────────────────────────
+// ⚠ TEN PIN POWSTAL Z AWARII WLASNYCH FIXTUREOW T9/T10. Po wejsciu zakresu ciala oba zaczely
+//   przechodzic „nie ta sciezka": AI przestalo odmawiac, bo `pickTarget` znajdowalo DRUGIE,
+//   nieufortyfikowane cialo i tam szlo. To nie byl defekt — to jest dokladnie zachowanie,
+//   po ktore ten slice powstal, wiec zostaje zapinowane WPROST, a nie tylko w komentarzu.
+console.log('T18 — WYPLATA: AI wybiera cialo TANSZE do wziecia, a nie „pierwsze z brzegu"');
+{
+  mkAiWorld({
+    capDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }],   // twierdza
+    secDef: [],                                                                       // slabe cialo
+    vessels: [],
+  });
+  const off = new DirectorOffensive();
+  const nCap = off.requiredSquadron(tgtOf(CAP)).needed;
+  const nSec = off.requiredSquadron(tgtOf(SEC)).needed;
+  assert(nCap > nSec,
+    `T18 NIEJALOWOSC: ciala RZECZYWISCIE roznia sie kosztem (stolica ${nCap} vs wtorna ${nSec}) — ` +
+    'pod zakresem ukladu bylyby identyczne i pin nie mialby o czym mowic');
+
+  const pick = off.pickTarget('emp_001');
+  assert(pick?.body?.id === SEC,
+    `T18: regula celuje w cialo TANSZE (${pick?.body?.name}) — do 199 sortowal boolean, ` +
+    'ktory przy jednakowym `defended` spadal na identyfikator i potrafil wskazac twierdze');
 }
 
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);

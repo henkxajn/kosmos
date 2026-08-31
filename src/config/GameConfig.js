@@ -94,6 +94,17 @@ export const GAME_CONFIG = {
     // slice'u, bit w bit" — dwie flagi daly by trzy rozne stany „wylaczone".
     // OFF = rajder parkuje na orbicie gracza i bije stamtad co cooldown (stan sprzed Z2).
     aiStrikeRecall: true,
+    // DEFENSE_SCOPE (Findingi 199 + 200, D-199-2 = V4) — ZAKRES OBRONY PLANETARNEJ.
+    // ON  = budynki obronne bronia SWOJEGO CIALA (`defense_grid`/`defense_tower` liczone tylko
+    //       z koloni celu), okrety gracza dalej calego UKLADU; eskadra AI GRADOWANA do sily,
+    //       ktora bitwa naprawde wystawi (`requiredSquadron`), bez clampa.
+    // OFF = zachowanie sprzed slice'u BIT W BIT: siatka obronna stolicy broni kazdego ciala
+    //       w ukladzie, a prog eskadry wraca do BOOLEANA (1 na cel bez obrony, 2 na broniony).
+    // ⚠ JEDNA flaga na obie polowy (zakres + kompetencja) — dwie dalyby trzeci, nieokreslony
+    //   stan „w polowie wylaczone" (ta sama zasada co `aiStrikeRecall`).
+    // ⚠ Kazdy napis w grze obiecuje zakres PLANETY/KOLONII („Planetarna siatka obronna",
+    //   „ochrona kolonii", tech „Obrona Planetarna") — to OFF jest stanem, w ktorym UI klamie.
+    defenseScope: true,
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).

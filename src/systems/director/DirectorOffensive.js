@@ -72,6 +72,15 @@ export const SQUADRON_HP_RATIO = 1.5;
  * więc stała tutaj byłaby kłamstwem o sile eskadry.
  */
 export const STRIKE_HULL_HP_FALLBACK = 120;
+/**
+ * ⚠ ŚCIEŻKA ROLLBACKU, NIE ŻYWY PRÓG. Te dwie liczby są czytane WYŁĄCZNIE przy
+ * `FEATURES.defenseScope === false`, żeby kill-switch znaczył „zachowanie sprzed slice'u
+ * bit w bit" — z regułą eskadry włącznie, bo bez niej OFF dawałby trzeci stan: gradowanie
+ * na układowym zakresie, którego nikt nigdy nie wypuścił.
+ * ⚠ Nie mylić z knobem: przy fladze ON NIC ich nie czyta (`grep` to potwierdzi).
+ */
+export const SQUADRON_VS_DEFENDED = 2;
+export const SQUADRON_VS_UNDEFENDED = 1;
 /** Górna klamra jednego uderzenia — imperium nie wysyła wszystkiego, co ma. */
 export const MAX_STRIKE_SIZE = 3;
 
@@ -269,6 +278,14 @@ export class DirectorOffensive {
    * @returns {{needed:number, defenderHp:number, perShipHp:number}}
    */
   requiredSquadron(target, ready = []) {
+    // Kill-switch: pełny powrót do BOOLEANA sprzed slice'u (patrz stałe wyżej).
+    if (GAME_CONFIG.FEATURES?.defenseScope === false) {
+      return {
+        needed: this.isDefended(target) ? SQUADRON_VS_DEFENDED : SQUADRON_VS_UNDEFENDED,
+        defenderHp: this.estimateDefenderHp(target),
+        perShipHp: this._avgHullHp(ready),
+      };
+    }
     const defenderHp = this.estimateDefenderHp(target);
     const perShipHp  = this._avgHullHp(ready);
     const needed     = Math.max(1, Math.ceil((defenderHp * SQUADRON_HP_RATIO) / perShipHp));
