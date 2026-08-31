@@ -30,6 +30,7 @@ import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { isSystemExplored } from '../utils/SystemExploration.js';
+import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
@@ -5525,28 +5526,43 @@ export class FleetManagerOverlay {
   // WSZYSTKIE gwiazdy (mapa nawigacyjna — można planować skoki do odległych).
   // `known` = zbadane/home/intel-empire; `inSensor` = w zasięgu sensorów obserwatorium
   // (wykrywanie OBECNOŚCI statków own/enemy ograniczone do tego promienia).
-  // Zwraca { home, list:[{s,d2,known,inSensor}] (sort wg odległości), rangeLY, isEmpKnown }.
+  // Zwraca { home, list:[{s,d2,reveal,inSensor}] (sort wg odległości), rangeLY }.
+  // ── Mgła wojny: JEDEN punkt składania rekordu widoczności (Finding 188) ────
+  // Trzy kanały (eksploracja / skan STRATCOM / drabina wywiadu) schodzą się TUTAJ i nigdzie
+  // indziej. Każda powierzchnia — nagłówek panelu, etykieta gwiazdy 2D, jasność gwiazdy 3D,
+  // pierścień wrogości — czyta pole tego samego rekordu. Rozjazd predykatów nazwy (mapa
+  // wydawała ją na `rumor`, panel dopiero po zbadaniu) był połową Findingu 188.
+  _systemReveal(sys) {
+    const intel  = window.KOSMOS?.intelSystem;
+    const obsSys = window.KOSMOS?.observatorySystem;
+    return resolveSystemReveal(sys, {
+      explored:     isSystemExplored(sys),
+      scanned:      !!obsSys?.getSystemScanResult?.(sys?.id),
+      intelAtLeast: (lvl) => !!intel?.isAtLeast?.(sys?.empireId, lvl),
+    });
+  }
+
   _stratcomVisibleSystems() {
     const systems = window.KOSMOS?.galaxyData?.systems ?? [];
     const home = systems.find(s => s.isHome) ?? null;
-    const intel = window.KOSMOS?.intelSystem;
-    const obsSys = window.KOSMOS?.observatorySystem;
     const rangeLY = this._getStratcomRangeLY();
-    const isEmpKnown = (s) => !!(s.empireId && (intel ? intel.isAtLeast(s.empireId, 'rumor') : false));
+    // ⚠ Finding 188 — `isEmpKnown` (predykat „intel >= rumor") USUNIĘTY, nie osierocony.
+    //   Stracił ostatniego konsumenta wraz z flagą `known`, a zostawiony byłby miną: to
+    //   dokładnie ten predykat, którym wyciekała tożsamość imperium. Pytania o właściciela
+    //   zadaje się dziś przez `_systemReveal` (`ownerExists` / `ownerIdentity`).
     const list = [];
     if (home) {
       for (const s of systems) {
         const dx = (s.x ?? 0) - (home.x ?? 0);
         const dy = (s.y ?? 0) - (home.y ?? 0);
         const d2 = Math.sqrt(dx * dx + dy * dy);
-        const known = isSystemExplored(s) || isEmpKnown(s);
-        // Nazwa znana = zbadany LUB przeskanowany w STRATCOM (skan ujawnia nazwę).
-        const nameKnown = known || !!obsSys?.getSystemScanResult?.(s.id);
-        list.push({ s, d2, known, nameKnown, inSensor: d2 <= rangeLY });
+        // Finding 188 — koniec jednej flagi `known`. Rekord rozdziela oś MIEJSCA od osi
+        // WŁAŚCICIELA; `nameKnown`/`known` znikły, bo to one zlewały oba pytania w jedno.
+        list.push({ s, d2, reveal: this._systemReveal(s), inSensor: d2 <= rangeLY });
       }
       list.sort((a, b) => a.d2 - b.d2);
     }
-    return { home, list, rangeLY, isEmpKnown };
+    return { home, list, rangeLY };
   }
 
   // Blipy WŁASNEJ floty — wspólne dla radaru i mapy galaktyki. Statki gracza widać
@@ -5968,11 +5984,11 @@ export class FleetManagerOverlay {
       const hPx = Math.max(2, Math.round((h - 1) * (Math.abs(m.d) || 1)));
 
       // Gwiazdy 3D z mgły wojny (kolor spektralny + dim wg stanu); współrzędne home-względne
-      g3.setSystems(vis.list.map(({ s, known }) => ({
+      g3.setSystems(vis.list.map(({ s, reveal }) => ({
         id: s.id, x: (s.x ?? 0) - hx, y: (s.y ?? 0) - hy, z: (s.z ?? 0) - hz,
         colorHex: s.colorHex, glowColorHex: s.glowColorHex, spectralType: s.spectralType,
         luminosity: s.luminosity ?? 1,
-        isHome: !!s.isHome, dim: !known && !s.isHome,
+        isHome: !!s.isHome, dim: !reveal.place,
       })));
       const rangeLY = this._getStratcomRangeLY();
       g3.setRangeRings([rangeLY * 0.25, rangeLY * 0.5, rangeLY * 0.75, rangeLY]);
@@ -6084,16 +6100,15 @@ export class FleetManagerOverlay {
 
     // Gwiazdy (widoczne) — w 3D ciało rysuje WebGL pod spodem; tu chrome 2D
     const selSys = this._selectedClusterSystem;
-    for (const { s, known, nameKnown } of vis.list) {
+    for (const { s, reveal } of vis.list) {
       const pp = projS(s); if (!pp) continue;
       const sx = pp.sx, sy = pp.sy;
       if (sx < x - 20 || sx > x + w + 20 || sy < y - 20 || sy > y + h + 20) continue;
       const isHome = !!s.isHome;
       const isSelected = selSys === s.id;
       const isHover = this._clusterHoverSystem === s.id;
-      const empKnown = vis.isEmpKnown(s);
-      let r = isHome ? 6 : (known ? 4 : 3); if (isSelected || isHover) r += 1;
-      const dim = !known && !isHome;   // w zasięgu, ale niezbadana → „widmowa"
+      let r = isHome ? 6 : (reveal.place ? 4 : 3); if (isSelected || isHover) r += 1;
+      const dim = !reveal.place;   // niezbadana i nieskanowana → „widmowa”
       if (!use3D) {
         // 2D: ciało gwiazdy rysujemy tu (w 3D rysuje je WebGL)
         if (isHome || isSelected) {
@@ -6104,20 +6119,25 @@ export class FleetManagerOverlay {
         // „Małe słońce" w realnym kolorze typu gwiazdy (stan = nakładki niżej)
         this._drawStarGlyph(ctx, sx, sy, r, s, dim);
       }
-      if (empKnown) {
+      if (reveal.hostility) {
         const host = dipl?.getTension(s.empireId) ?? 0;
         ctx.strokeStyle = host <= 30 ? (THEME.success ?? '#44cc66') : host <= 70 ? (THEME.warning ?? '#ffcc44') : (THEME.danger ?? '#ff4466');
         ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx, sy, r + 3, 0, Math.PI * 2); ctx.stroke();
+      } else if (reveal.ownerExists) {
+        // D-188-2/4: wiadomo, ze uklad jest CZYJS, ale nie kim jest wlasciciel ani jak
+        //   nastawiony — pierscien neutralny, bez odczytu dyplomatycznego.
+        ctx.strokeStyle = THEME.textDim;
+        ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, sy, r + 3, 0, Math.PI * 2); ctx.stroke();
       }
       if (isSelected) { ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2); ctx.stroke(); }
-      if (known) {
+      if (reveal.place) {
         const sysData = ssMgr?.getSystem(s.id);
         this._drawStratcomOwnerGlyph(ctx, s.id, sx + r + 5, sy - r + 2);
         if (sysData?.warpBeacon || s.warpBeacon) { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('📡', sx + r + 2, sy + 2); }
         if (sysData?.jumpGate   || s.jumpGate)   { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('🌀', sx + r + 2, sy + 10); }
       }
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`; ctx.textAlign = 'center';
-      if (nameKnown) { ctx.fillStyle = isHome ? THEME.yellow : THEME.textPrimary; ctx.fillText(s.name, sx, sy + r + 12); }
+      if (reveal.name) { ctx.fillStyle = isHome ? THEME.yellow : THEME.textPrimary; ctx.fillText(s.name, sx, sy + r + 12); }
       else if (isHover || isSelected) { ctx.fillStyle = THEME.textDim; ctx.fillText('???', sx, sy + r + 12); }
       ctx.textAlign = 'left';
       if (isBig) {
@@ -6245,7 +6265,9 @@ export class FleetManagerOverlay {
     const obsSys = window.KOSMOS?.observatorySystem;
 
     const empId    = sys.empireId;
-    const empKnown = !!(empId && (intel ? intel.isAtLeast(empId, 'rumor') : false));
+    // Finding 188 — rekord widoczności (`_systemReveal`) zamiast jednej flagi `known`.
+    //   `empKnown` (=`rumor`) wydawał tożsamość, wrogość, populację i życie naraz.
+    const reveal   = this._systemReveal(sys);
     const sysReg   = ssMgr?.getSystem(sys.id);
     // ⚠ Finding 186 — KANON, nie OR nad dwiema flagami. `sysReg.explored` to lustro, które
     //   bootstrap imperium AI zostawiał zapalone (gasił tylko `galaxyStar.explored`), więc układ
@@ -6254,13 +6276,14 @@ export class FleetManagerOverlay {
     //   bo `_systemDisplayName` ma własny predykat — panel wyglądał na zamglony, oddając resztę.
     //   `sysReg` zostaje w warunku przycisku niżej: do widoku można wejść tylko po generacji.
     const explored = isSystemExplored(sys);
-    const known    = !!sys.isHome || explored || empKnown;
 
-    // Populacja + życie (tylko gdy znane)
+    // Populacja i życie — DWIE różne osie, więc dwie osobne bramki (rdzeń Findingu 188).
     let pop = null, life = null;
-    if (known) {
+    if (reveal.population) {
       const cols = colMgr?.getAllColonies?.().filter(c => EntityManager.get(c.planetId)?.systemId === sys.id) ?? [];
       if (cols.length) pop = cols.reduce((a, c) => a + (c.civSystem?.population ?? 0), 0);
+    }
+    if (reveal.life) {
       const planets = EntityManager.getByTypeInSystem?.('planet', sys.id) ?? [];
       if (planets.length) life = planets.some(p => (p.lifeScore ?? 0) > 0 || (p.lifeStage && p.lifeStage !== 'none' && p.lifeStage !== 'sterile'));
     }
@@ -6275,7 +6298,10 @@ export class FleetManagerOverlay {
 
     // Wysokość panelu — z rzeczywiście rysowanych wierszy (unikamy przycięcia/pustki)
     let panelH = PAD + 20 /*nazwa*/ + 16 /*status*/;
-    panelH += empKnown ? 28 : 14;          // imperium+wrogość | „nieznane"
+    // ⚠ Wiersz właściciela ma TRZY stany, nie dwa: „nieznany" / „obce imperium" (po jednym
+    //   wierszu) oraz nazwa+wrogość (dwa). Przy dwustanie panel ucinał treść albo zostawiał
+    //   dziurę — cicho, bo canvas nie zgłasza przepełnienia.
+    panelH += reveal.ownerIdentity ? 28 : 14;
     if (tName) panelH += 16;               // terytorium
     panelH += 28;                          // populacja + życie
     if (layout.height) panelH += layout.height + 2;
@@ -6305,13 +6331,18 @@ export class FleetManagerOverlay {
     ctx.fillStyle = explored ? THEME.success : THEME.textDim;
     ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10); iy += 16;
     // Imperium + wrogość
-    if (empKnown) {
+    if (reveal.ownerIdentity) {
       const emp = empReg?.get(empId);
       ctx.fillStyle = ARCHETYPES[emp?.archetype]?.color ?? THEME.textPrimary;
       ctx.fillText(t('fleet.stratcomEmpire', emp?.name ?? '?'), px + PAD, iy + 10); iy += 14;
       const host = dipl?.getTension(empId) ?? 0;
       ctx.fillStyle = host <= 30 ? THEME.success : host <= 70 ? THEME.warning : THEME.danger;
       ctx.fillText(t('fleet.stratcomHostility', Math.round(host)), px + PAD, iy + 10); iy += 14;
+    } else if (reveal.ownerExists) {
+      // D-188-2: na `rumor` gracz wie, że układ jest CZYJŚ — nie wie, czyj. Kolor neutralny,
+      //   bo barwa archetypu sama w sobie ujawniałaby tożsamość (klasa tego samego wycieku).
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('fleet.stratcomEmpireForeign'), px + PAD, iy + 10); iy += 14;
     } else {
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(t('fleet.stratcomEmpireUnknown'), px + PAD, iy + 10); iy += 14;
@@ -6356,12 +6387,13 @@ export class FleetManagerOverlay {
     }
   }
 
-  // Nazwa układu do wyświetlenia — ujawniona po zbadaniu LUB skanie STRATCOM; inaczej „???".
+  // Nazwa układu do wyświetlenia — JEDEN predykat wspólny z etykietą gwiazdy na mapie.
+  // ⚠ Finding 188: te dwa miejsca miały OSOBNE reguły i się nie zgadzały (mapa wydawała nazwę
+  //   na `rumor`, panel dopiero po zbadaniu). Lustro predykatów to klasa Findingu 186 —
+  //   keeper `stratcom_reveal_smoke` T4 pilnuje równości obu powierzchni w 16 stanach.
   _systemDisplayName(sys) {
     if (!sys) return '???';
-    if (isSystemExplored(sys)) return sys.name ?? '???';
-    const scanned = !!window.KOSMOS?.observatorySystem?.getSystemScanResult?.(sys.id);
-    return scanned ? (sys.name ?? '???') : '???';
+    return this._systemReveal(sys).name ? (sys.name ?? '???') : '???';
   }
 
   // ── Skan układu STRATCOM (wspólne dla panelu galaktyki i radaru) ──────────

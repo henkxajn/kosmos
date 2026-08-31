@@ -1075,6 +1075,42 @@ export class GameScene {
       // warp (pełna instancja Vessel) do testu ghost „?" na radarze/galaktyce Stratcom.
       // Zastępuje kruchy ręczny `_vessels.set('ghost_test', {...})` (surowy obiekt → crashe).
       spawnEnemyWarpGhost,
+      // KOSMOS.debug.setIntel(empireId, level) — USTAW poziom wywiadu o imperium.
+      //
+      // ⚠ ISTNIEJE, BO `advanceIntel` JEST JEDNOKIERUNKOWE (`if (newRank <= oldRank) return false`).
+      //   Obniżenie poziomu NIE jest legalną intencją gry — jest wyłącznie afordancją testową,
+      //   dlatego mieszka tutaj, a nie w API `IntelSystem`.
+      //
+      // ⚠ MECHANIZM: kasuje rekord do `unknown` SUROWYM zapisem, a potem PODNOSI go PRAWDZIWĄ
+      //   ścieżką produkcyjną (`advanceIntel`). Dzięki temu stan po `setIntel` jest bit w bit tym,
+      //   co gra wyprodukowałaby naturalnie — łącznie z polami pochodnymi (`knownColonies` na
+      //   `contact`, `knownMilitary`/`knownReserve`/`knownCrewCapacity` na `detailed`). Helper,
+      //   który produkuje stan nieosiągalny w grze, czyniłby gate bezwartościowym.
+      setIntel: (empireId = 'emp_001', level = 'rumor') => {
+        const intel = window.KOSMOS?.intelSystem;
+        if (!intel) { console.warn('[setIntel] brak window.KOSMOS.intelSystem'); return null; }
+        const LEVELS = ['unknown', 'rumor', 'contact', 'detailed'];
+        if (!LEVELS.includes(level)) {
+          console.warn(`[setIntel] nieznany poziom „${level}" — dozwolone: ${LEVELS.join(', ')}`);
+          return null;
+        }
+        if (!window.KOSMOS?.empireRegistry?.get?.(empireId)) {
+          console.warn(`[setIntel] nieznane imperium ${empireId}. Dostępne:`,
+            (window.KOSMOS?.empireRegistry?.listAll?.() ?? []).map(e => e.id).join(', ') || '—');
+          return null;
+        }
+        const before = intel.getLevel(empireId);
+        // Zejście do zera: czysty rekord bez pól z wyższych szczebli (inaczej panel wywiadu
+        // pokazywałby siłę wojskową imperium, o którym „nic nie wiemy").
+        gameState.set(`intel.${empireId}`, {
+          level: 'unknown', knownColonies: [], knownTech: [], lastIncidents: [],
+          knownMilitary: null, knownReserve: null, knownCrewCapacity: null,
+        }, 'debug_set_intel_reset');
+        if (level !== 'unknown') intel.advanceIntel(empireId, level, 'debug_set_intel');
+        const after = intel.getLevel(empireId);
+        console.log(`[setIntel] ${empireId}: ${before} → ${after}`);
+        return after;
+      },
       // KOSMOS.debug.dumpIntel() — wypisz intel quality dla każdego enemy
       // vessela i imperium. Sprawdza czy IntelSystem (M4 P2) dziala.
       dumpIntel: () => {
@@ -1083,12 +1119,17 @@ export class GameScene {
         const reg = window.KOSMOS?.empireRegistry;
         if (!intel) { console.warn('[debug] Brak IntelSystem'); return; }
 
+        // ⚠ Finding 194 — ta sekcja BYŁA MARTWA: `reg.getAll` nie istnieje (jest `listAll`),
+        //   a `intel.getEmpireContact` nie istnieje (jest `getLevel`). Pętla nie wykonywała ANI
+        //   JEDNEGO obrotu (`?? []`), więc nagłówek drukował się nad pustką — instrument
+        //   raportował ciszę nieodróżnialną od „nie znam żadnego imperium". Ta sama klasa co
+        //   Findingi 87/193: kod obchodzący własne API, przy poprawnym wzorze obok.
         console.log('=== INTEL EMPIRE CONTACTS ===');
         if (reg) {
-          for (const empire of reg.getAll?.() ?? []) {
+          for (const empire of reg.listAll?.() ?? []) {
             if (empire.id === 'player') continue;
-            const quality = intel.getEmpireContact?.(empire.id) ?? '?';
-            console.log(`  ${empire.id} (${empire.namePL ?? empire.name}): ${quality}`);
+            const lvl = intel.getLevel?.(empire.id) ?? '?';
+            console.log(`  ${empire.id} (${empire.namePL ?? empire.name}): ${lvl}`);
           }
         }
 

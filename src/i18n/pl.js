@@ -1363,6 +1363,7 @@ export default {
   'fleet.sensorLens': 'Sensory',
   'fleet.stratcomEmpire': 'Imperium: {0}',
   'fleet.stratcomEmpireUnknown': 'Właściciel: nieznany',
+  'fleet.stratcomEmpireForeign': 'Właściciel: obce imperium',
   'fleet.stratcomHostility': 'Wrogość: {0}/100',
   'fleet.stratcomPopulation': 'Populacja: {0}',
   'fleet.stratcomPopUnknown': 'Populacja: ?',

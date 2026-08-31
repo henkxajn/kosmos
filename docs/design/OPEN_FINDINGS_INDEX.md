@@ -1,6 +1,6 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
-> **Stan na 2026-08-29** (po zamknięciu W3-32 + 186/187 + **86/87/190**; otwarte z tych rund: **188**, **189**, **191**, **192**) · **Save v101** ·
+> **Stan na 2026-08-31** (po zamknięciu W3-32 + 186/187 + **86/87/190** + **188**; otwarte z tych rund: **189**, **191**, **192**, **193**) · **Save v101** ·
 > Sweep: **189/189 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
@@ -204,7 +204,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **191** | 🟠 | prognoza kolizji skanuje `activeSystemId` (KAMERA), a włącza ją `getMaxObservatoryLevel()` liczone po WSZYSTKICH koloniach gracza bez terminu układu ⇒ obserwatorium z układu A działa w układzie B, gdy tam patrzysz | rodzina „brak granicy systemu"; kierunek naprawy **projektowy**, nie techniczny. ⚠ **był WARUNKIEM KONIECZNYM 190** (jak 130+Z2) — 190 domknięto zawężeniem czyszczenia, ale pytanie „czy obserwatorium ma widzieć obce układy” zostaje **projektowe**; ✅ **POTWIERDZONY NA ŻYWO** (1 obserwatorium, alerty z 2 układów) |
 | **192** | 🟠 | prognoza propaguje **stałe elementy orbitalne** do 700 lat, a świat ma perturbacje; `MARGIN_PERCENT` sztywne niezależnie od horyzontu, a **47 % zagrożeń leży 350+ lat w przyszłość** | zastąpiło **obaloną pomiarem** hipotezę „niepowtarzalność detekcji”; wymaga pomiaru rozjazdu model↔świat |
 | **189** | 🟠 | `CivilizationSystem._updateUnrest:1104` czyta prosperity **AKTYWNEJ** koloni dla KAŻDEJ koloni ⇒ kolonie AI wpadają w niepokój, gdy kryzys ma gracz | zmiana **BALANSU** (niepokój globalny → lokalny), własny pomiar; `CivilizationSystem` nie ma referencji do swojego `ProsperitySystem` |
-| **188** | 🟠 | panel detalu STRATCOM wydaje na `rumor` **nazwę układu + żywą populację + życie** pod jedną flagą `known`, a drabina wywiadu daje na `rumor` **zero pól** | rodzeństwo W3-4; liczby są PRAWDZIWE (determinizm modelu, ZMIERZONE) — defektem jest samo ujawnienie. Naprawa = decyzja projektowa, nie predykat |
+| ~~188~~ | ✅ | **ZAMKNIĘTY 2026-08-31** — mgła wojny STRATCOM rozdzielona na oś MIEJSCA i oś WŁAŚCICIELA (kanon `SystemReveal.js`). ⚠ reweali było **sześć**, nie trzy; nazwa w panelu była już poprawna, wyciekała na mapie | `docs/design/STRATCOM_REVEAL_PLAN.md` |
+| **193** | 🔴 | **`IntelSystem._tickPassiveListening` MARTWY od napisania** — czyta `col.systemId` z tablicy **stringów**; `inRange` zawsze `false`, więc „8 lat w 10 ly → rumor" nie odpaliło ani razu | trzecia gałąź klasy Findingu 87; ZMIERZONE wykonaniem. ⚠ ożywić dopiero PO 188 (inaczej wyciek staje się automatyczny) — i to zmiana **tempa gry**, nie higiena |
+| ~~194~~ | ✅ | **`debug.dumpIntel()` nie raportował imperiów** — `getAll`/`getEmpireContact` nie istnieją (są `listAll`/`getLevel`); pętla bez obrotu | ZAMKNIĘTY 2026-08-31 przy gate 188; czwarty przypadek klasy 87/193 |
 | **W3-4** | 🟠 | `ThreatAssessment` to prawda **globalna**, nie bramkowana intelem; 3 z 7 metod publicznych bez konsumentów | |
 | **W3-5** | ⚪ | `director.posture` pisany, serializowany i **czytany przez nikogo**; `director:doctrineAssigned` emitowany w nicość | |
 | **W3-6** | ⚪ | jednostka ETA pomylona **12×** (JSDoc civYears vs arytmetyka `gameTime`) — bezwładna po retirementcie W3-8, ożyje z abstrakcyjnymi flotami | |

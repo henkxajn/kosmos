@@ -2752,6 +2752,91 @@ wykonaniem — bez niego bramka byłaby w grze martwa) · NEW `observatory_playe
 zbioru" przechodził **jałowo na pustym zbiorze** — wymóg `ids.size === 2` jest częścią pinu.
 Sweep **189/189 0 FAIL** · `check-i18n` PASS · zero migracji.
 
+## MGŁA WOJNY STRATCOM — Finding 188: dwie osie zamiast jednej flagi (save **v101 bez migracji**, live-gate PENDING)
+
+Plan + decyzje **D-188-1..8 (wszystkie W1)** + wykonanie + checklista gate'u:
+`docs/design/STRATCOM_REVEAL_PLAN.md`; rejestr macierzysty: `VESSEL_ORDERS_PLAN.md` §188 (zamknięty)
++ nowy **193**.
+
+**Jedno zdanie:** panel STRATCOM wydawał na `rumor` nazwę imperium, jego wrogość i realną populację
+przy statusie „Niezbadany" — bo `known = isHome || explored || isAtLeast(empireId,'rumor')` **zlewało
+dwie niezależne osie wiedzy** i każdy z sześciu faktów wychodził przy SŁABSZYM z dwóch warunków.
+
+⚠ **REJESTR POLICZYŁ TRZY REWEALE, A BYŁO ICH SZEŚĆ — i jeden z policzonych był fałszywy.** Nazwa
+w PANELU była już bramkowana poprawnie (`_systemDisplayName` → `???`); wyciekała na MAPIE
+(`_stratcomVisibleSystems`), czyli w innej funkcji. Nie policzono za to **tożsamości imperium**
+i **wrogości** — obu na `rumor`, w panelu I jako kolorowy pierścień gwiazdy. ⇒ [[registry-may-describe-the-trap-not-the-bug]].
+
+**Dwie osie (to jest cały model, nie próg):**
+- **oś MIEJSCA** — `isSystemExplored` / skan STRATCOM — *byłem tam albo zmierzyłem*: nazwa, ciała,
+  życie, infrastruktura, jasność gwiazdy.
+- **oś WŁAŚCICIELA** — `intel.<empireId>` (`rumor → contact → detailed`) — *co wiem o tym, KTO tam
+  mieszka*: tożsamość, archetyp, wrogość, liczby.
+
+**Kanon NEW `src/utils/SystemReveal.js`** — `resolveSystemReveal(sys, {explored, scanned, intelAtLeast})`
+→ rekord `{place, name, ownerExists, ownerIdentity, hostility, population, life}`. **Zero importów**
+(trzy kanały wstrzykiwane), **fail-CLOSED** (jak `SystemExploration`, odwrotnie niż `SystemScope`).
+Rekord, nie rodzina predykatów — bo pytań jest sześć i to gwarantuje, że cztery powierzchnie (panel
+detalu, etykieta gwiazdy 2D, jasność gwiazdy 3D, pierścień wrogości) czytają TO SAMO POLE.
+Punkt składania: `FleetManagerOverlay._systemReveal` — **jedyny**.
+
+**Sygnatura (W1):** nazwa `explored‖skan‖rumor` · `Właściciel: obce imperium` na `rumor` (jeden nowy
+klucz i18n) · tożsamość+wrogość `contact` · **populacja `detailed`** · życie `explored` · infrastruktura
+oś miejsca. Pierścień na `rumor` → **neutralny** (bez odczytu dyplomatycznego).
+
+⚠ **`population` ma gałąź `!hasOwner` i jest ona KONIECZNA:** układ skolonizowany przez GRACZA nie ma
+`empireId`, więc bez niej gracz przestałby widzieć populację **własnej** kolonii poza domem. To jedyne
+miejsce, gdzie zwężenie mgły mogło uderzyć w gracza zamiast w AI (krok 6 live-gate'u).
+
+**⚠ TRZY POMIARY, KTÓRE ZMIENIŁY PROJEKT (nie potwierdziły go):**
+1. **`IntelSystem` NIE musiał być ruszany** — wizyta w cudzym układzie JUŻ podnosi intel do `contact`
+   (`IntelSystem:204`), więc osie były połączone poprawnie; zepsuta była wyłącznie **prezentacja**.
+2. **Spór „żywy odczyt vs snapshot" był już rozstrzygnięty w tym repo** — `_refreshKnownMilitary`
+   odświeża `knownMilitary` co tik dla `detailed`, z uzasadnieniem w komentarzu: *„to nie jest wyciek
+   mgły wojny, tylko aktualizacja tego, co gracz i tak ma prawo widzieć"*. Defektem jest **szczebel**,
+   nie **żywość** ⇒ populacja zostaje żywym odczytem, zero zmian formatu zapisu.
+3. **`detailed` jest OSIĄGALNE** (sprawdzone celowo, żeby nie rekomendować szczebla, na którym pole
+   byłoby puste na zawsze): `ColonyOverlay:5077` → `GroundUnitManager.startSurvey` → … → emit. Droga —
+   wymaga butów na ziemi w ich układzie.
+
+⚠ **`isEmpKnown` USUNIĘTY, nie osierocony** — stracił konsumenta wraz z flagą `known`, a to nim
+wyciekała tożsamość; zostawiony byłby gotową miną („czy znam to imperium") dla następnej osoby.
+⚠ Komentarz w `SystemExploration.js` wskazywał `FMO:5541` jako **celowe** miejsce składania trzech
+kanałów — po tej zmianie kłamałby, więc został zaktualizowany w tym samym commicie.
+
+**Keeper** `stratcom_reveal_smoke` **75/75**, fail-first **46/25** (finalne piny na nietkniętym kodzie,
+kontrole pinu zielone po obu stronach). T4 = **tripwire anty-lustro**: nazwa w panelu i na mapie muszą
+pochodzić z jednego predykatu, sprawdzane w komplecie **16 stanów**. ⚠ **Granica dowodu:** keeper nie
+przechodzi pętli rysującej gwiazdy, więc **pierścień, jasność i ikony infrastruktury pinowane są tylko
+pośrednio** (czytają pola tego samego rekordu) — te trzy potwierdza dopiero live-gate.
+Sweep **190/190 0 FAIL** · `check-i18n` PASS.
+⚠ **T7 pinuje REGRESJĘ PO STRONIE GRACZA**: układ skolonizowany przez gracza nie ma `empireId`,
+więc bez gałęzi `!hasOwner` w `population` gracz straciłby widok populacji WŁASNEJ kolonii poza domem.
+
+**Przyrządy (dodane przy przygotowaniu gate'u):** `KOSMOS.debug.setIntel(empireId, level)` — NOWY;
+`advanceIntel` jest **jednokierunkowe** (zmierzone), więc bez tego nie da się zejść z `contact` do
+`rumor`. Kasuje rekord surowo do `unknown` i podnosi PRODUKCYJNĄ ścieżką ⇒ stan bit w bit taki, jaki
+gra produkuje sama. 🔴 **Finding 194 (ZAMKNIĘTY tu):** `KOSMOS.debug.dumpIntel()` nie raportował
+**żadnego** imperium — wołał `reg.getAll` (jest `listAll`) i `intel.getEmpireContact` (jest
+`getLevel`), więc pętla nie wykonywała ani jednego obrotu. **Czwarty przypadek klasy 87/193.**
+Bez tej naprawy gate mierzyłby ciszę.
+
+⚠ **Drabina wywiadu — komplet producentów** (`STRATCOM_REVEAL_PLAN.md` §11): `rumor` ← przelot sondy
+pierwszego kontaktu · **wykrycie DOWOLNEGO statku obcych przez obserwatorium** (`ObservatorySystem:648`
+— najczęstszy w praktyce) · odkrycie ciała w ich układzie. `contact` ← **przylot statku**
+(`vessel:arrived`). `detailed` ← survey jednostki naziemnej. ⚠ Intel STATKU (`intel.vessels`) to
+OSOBNA domena — proximity/sensor-lock ruszają tylko ją i **nie podnoszą poziomu imperium**.
+⚠ `_onVesselArrived` nie filtruje właściciela statku; chroni go tylko `mission == null` u emitentów
+AI — osiągalność NIEZMIERZONA, zapisane jako obserwacja.
+
+**🔴 Finding 193 (OTWARTY, wypłynął przy okazji):** `IntelSystem._tickPassiveListening` jest **MARTWY
+od napisania** — iteruje `emp.colonies` (tablica **stringów**) i czyta `col.systemId` ⇒ `undefined`
+⇒ `inRange` zawsze `false` ⇒ mechanika „8 lat w promieniu 10 ly → `rumor`" **nie odpaliła ani razu**.
+Trzecia gałąź klasy **Findingu 87**, przy poprawnym wzorze dwa miejsca dalej w tym samym pliku.
+⚠ **Kolejność wiążąca:** ożywić dopiero PO 188 (wcześniej zamieniłoby wyciek punktowy w automatyczny),
+i to **zmiana tempa gry wywiadu z własnym pomiarem**, nie higiena.
+
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

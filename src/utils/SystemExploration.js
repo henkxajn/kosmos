@@ -23,9 +23,12 @@
 //
 // ⚠ „ZBADANY" ≠ „WIDOCZNY". Ten kanon odpowiada wyłącznie na pytanie o WŁASNĄ eksplorację.
 //   Wiedza z wywiadu (`IntelSystem.isAtLeast(empireId, 'rumor')`) i skan STRATCOM
-//   (`ObservatorySystem.getSystemScanResult`) to OSOBNE kanały, celowo składane u konsumenta
-//   (`FleetManagerOverlay:5541` robi `known = isHome || explored || empKnown`). Wciągnięcie ich
-//   tutaj skleiłoby trzy różne pytania w jedno i odtworzyło defekt, który ten plik zamyka.
+//   (`ObservatorySystem.getSystemScanResult`) to OSOBNE kanały. Wciągnięcie ich tutaj skleiłoby
+//   trzy różne pytania w jedno i odtworzyło defekt, który ten plik zamyka.
+// ⚠ AKTUALIZACJA (Finding 188): składanie tych kanałów PRZESTAŁO być prywatną sprawą konsumenta.
+//   `FleetManagerOverlay` robił `known = isHome || explored || empKnown` i wydawał pod tą sumą
+//   sześć faktów z dwóch różnych osi — czyli dokładnie ten błąd, przed którym ostrzega akapit
+//   wyżej, tylko o jedno piętro wyżej. Kanonem składania jest dziś `utils/SystemReveal.js`.
 
 /** Identyfikator układu macierzystego — dom zna się z definicji, niezależnie od flag. */
 export const HOME_SYSTEM_ID = 'sys_home';
