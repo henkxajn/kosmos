@@ -1,8 +1,10 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
 > **Stan na 2026-08-31** (po zamknięciu W3-32 + 186/187 + **86/87/190** + **188** + **130** + **GATE B2 / Z2**;
-> otwarte z tych rund: **189**, **191**, **192**, **193**, **195**-**200**) · **Save v101** ·
-> Sweep: **192/192 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
+> otwarte z tych rund: **189**, **191**, **192**, **193**, **195**-**199** oraz **201**-**208**
+> (te ostatnie zarejestrowane w `docs/design/DEFENSE_SCOPE_PLAN.md` §13 — wiersze indeksu dojdą
+> z commitem 3 slice'u); **200 i 209 ZAMKNIĘTE 2026-08-31**, commit 1/3 DEFENSE_SCOPE) · **Save v101** ·
+> Sweep: **193/193 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
 
@@ -221,7 +223,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **GATE B2 (a)** | 🟠 | **produkcja okrętów AI stoi na głodzie komodytów** — `startShipBuild` zwraca `queued`, a `ORDER_TTL_DISPLAYED_YEARS = 3.0` kasuje zlecenie **cicho** (`director:orderExpired`) | `VO3B_PLAN.md` §9 · **rodzina:** `docs/BALANS_PHASE2_AI.md` §4.1/§4.2/§5 — połowa PLACÓWKOWA tej samej rodziny, ZMIERZONA i zapisana jako naprawiona w BALANS Phase 3; ta (okrętowa) jest obserwacją PO tych fiksach. Warunek wstępny: **178** |
 | **195** | 🔴 | `VesselManager._onColonyDestroyed:1136` przepisuje `vessel.colonyId` **bez terminu właściciela** — także statkom AI — na kolonię GRACZA (`_resolvePlayerHomePort`, AC-8), po czym robi `startReturn({force:true})`. Rodzina Findingu 97 | osiągalność NIEZMIERZONA (wymaga śmierci ciała w trakcie lotu), ale ścieżka bezwarunkowa. ⚠ Slice Z2 go **OMIJA, nie naprawia**: `issueRecall` nie czyta `colonyId`. `VESSEL_ORDERS_PLAN.md` |
 | **199** | 🔴 | AI wybiera cel **po CIELE** (`isDefended` czyta `target.colony`), a bije się z **CAŁYM UKŁADEM** (`_buildPlayerBattleUnit(systemId)` sumuje obronę WSZYSTKICH kolonii gracza w układzie) ⇒ atakuje „bezbronną" kolonię i ginie od siatki obronnej **stolicy** | **ZMIERZONE** (winner B → A przy zdjęciu obrony z INNEGO ciała, ten sam seed). ⚠ `pickTarget` sortuje „słabiej broniony pierwszy" ⇒ bias systematyczny. Rodzina „brak granicy", ale **odwrotny kierunek**. Zakres naprawy = decyzja PROJEKTOWA (balans w obie strony). `VESSEL_ORDERS_PLAN.md` |
-| **200** | 🟠 | bezbronny frachtowiec gracza jest kombatantem w bitwie orbitalnej i dostaje **broń dmg 2** w prezencie (`BattleSystem:262`); `_playerVesselsInSystem` bez filtra `hasWeapons`. ⚠ DSCS ma bramkę „anyArmed" (`36d9551`), ścieżka orbitalna NIE | ⚠ **nie naprawiać bez 199** — sam w sobie zmienia szum, nie wynik; fallback ma też drugiego konsumenta (`enemyUnit` w EAH) |
+| **200** | ✅ | **ZAMKNIĘTY 2026-08-31** (commit 1/3 DEFENSE_SCOPE) — bezbronny kadłub wnosi HP, ale **zero broni**. ⚠ Fallbacków były **DWA**, nie jeden: zdjęcie samego `BattleSystem:262` to **BUFF 2→5** (`normalizeFleet` podstawiał `{damage:5}`) — naprawa wymagała obu | keeper `defense_scope_smoke` 19/19, fail-first 10/9 · `VESSEL_ORDERS_PLAN.md` §200 · plan `DEFENSE_SCOPE_PLAN.md` |
+| **209** | ✅ | **ZAMKNIĘTY 2026-08-31** (ten sam commit) — `WarSystem:597` i `EnemyAttackHandler:120` opisywały obrońcę-widmo jako „ZERO broni", a `normalizeFleet` dawał mu laser dmg 5 (zmierzone: 129 obrażeń). Klasa „predykat opisany w komentarzu ≠ egzekwowany" | pin `defense_scope_smoke` T7 · `VESSEL_ORDERS_PLAN.md` §209 |
 | **196** | 🟠 | `no_idle_hull` (VO-3b) jest w ścieżce REGUŁY nieosiągalny — guard `empireHasStrikeForce` odcina przed akcją i przed rzutem | **nie defekt, ostrzeżenie metodyczne**: „dlaczego ofensywa AI stoi" NIE da się odczytać z `director:strikeRefused`; użyj `strikeReport`/`directorRules`, inaczej gate mierzy ciszę |
 | **197** | 🟠 | `war:peaceSigned` ma ZERO konsumentów poza `DebugLog` — żaden system nie reaguje na pokój | ZŁAGODZONY przez Z2 (reguła powrotu świadomie bez guardu wojny, D-Z2-8), ale pytanie „jak flota AI reaguje na pokój" należy do **W4** |
 | **198** | ⚪ | `DSCS._findActiveEncounterContaining` jest de facto publiczny (8 konsumentów po Z2, w tym renderer); prefiks `_` kłamie o roli | kosmetyka. ⚠ Pytanie „czy trzeba zbudować predykat »statek w starciu«" padło już DWA razy (F130 §8, Z2) — odpowiedź oba razy: **istnieje** |

@@ -36,9 +36,19 @@ function normalizeFleet(raw, side) {
   const evasion  = Math.max(0, Math.min(0.9, raw.evasion ?? 0.1));
   const techMult = Math.max(0.1, raw.techMult ?? 1.0);
   const morale   = Math.max(0.1, Math.min(2.0, raw.morale ?? 1.0));
-  const weapons  = Array.isArray(raw.weapons) && raw.weapons.length > 0
+  // ⚠ D-199-6 (Finding 200 + 209) — JAWNIE PUSTA LISTA ZNACZY „BEZBRONNY", i to jest różnica
+  //   między deklaracją a brakiem danych:
+  //     `weapons: []`        → producent MÓWI, że jednostka nie ma czym strzelać ⇒ honorujemy;
+  //     brak pola / nie-tablica → dane niepełne ⇒ zostaje domyślny lekki laser.
+  //   Do tej pory oba przypadki dostawały laser, więc `weapons: []` było nieosiągalne —
+  //   a `WarSystem:597` i `EnemyAttackHandler:120` opisywały obrońcę-widmo jako
+  //   „sto wytrzymałości i ZERO broni", czyli flotę, której nie dało się zbudować.
+  //   ⚠ To jest DRUGI z dwóch fallbacków w tej ścieżce (pierwszy: `playerVesselsToBattleUnit`).
+  //   Zdjęcie tylko jednego z nich WZMACNIA bezbronnego (dmg 2 → 5) zamiast go rozbroić —
+  //   zmierzone, keeper `defense_scope_smoke` T1/T2 pinuje obie warstwy.
+  const weapons  = Array.isArray(raw.weapons)
     ? raw.weapons
-    : [{ damage: 5, tracking: 0.7, armorPierce: 0 }]; // domyślny lekki laser
+    : [{ damage: 5, tracking: 0.7, armorPierce: 0 }]; // domyślny lekki laser (dane niepełne)
 
   return {
     side,
@@ -259,7 +269,16 @@ export function playerVesselsToBattleUnit(vessels, hullsData, modulesData, label
     evasion: count > 0 ? evasionSum / count : 0.1,
     techMult: 1.0,
     morale:   1.0,
-    weapons: weapons.length > 0 ? weapons : [{ damage: 2, tracking: 0.7 }],
+    // ⚠ D-199-6 (Finding 200) — BEZBRONNY KADŁUB WNOSI HP, ALE NIE BROŃ.
+    //   Był tu fallback `[{ damage: 2, tracking: 0.7 }]`, więc frachtowiec bez modułu
+    //   uzbrojenia wchodził do bitwy orbitalnej jako pełnoprawny kombatant. Gracz bez ani
+    //   jednego okrętu wojennego wystawiał UZBROJONĄ jednostkę — „obrona znikąd".
+    //   Ścieżki walki były w tej sprawie niezgodne: `DSCS.startEngagement` ma bramkę
+    //   „anyArmed" (`36d9551`) i ODMAWIA starcia bezbronnych, ścieżka orbitalna nie miała.
+    //   ⚠ Skutek jest SYMETRYCZNY i zamierzony: `EnemyAttackHandler:144` agreguje wrogów tym
+    //   samym helperem, więc bezbronny kadłub AI też przestaje dostawać broń w prezencie.
+    //   ⚠ Samo to nie wystarcza — patrz komentarz przy `normalizeFleet` (drugi fallback).
+    weapons,
   };
 }
 
