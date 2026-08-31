@@ -1,7 +1,7 @@
 # Z2 — „AI wraca po ataku": rajder przestaje być STAŁĄ BAZĄ WYSUNIĘTĄ
 
-> **Status:** ✅ **PODPISANE 2026-08-31 (D-Z2-1…D-Z2-10, wszystkie zgodnie z rekomendacją) i WDROŻONE.**
-> Wykonanie: §11. Live-gate: **PENDING** (skrypt w §7).
+> **Status:** ✅ **PODPISANE, WDROŻONE i ZAMKNIĘTE 2026-08-31.** Live-gate **PASS** — §12.
+> Wykonanie: §11. Zamyka **GATE B2 / Z2** z `VO3B_PLAN.md` §9.
 > Rejestry macierzyste: `VO3B_PLAN.md` §6/§9 (GATE B2 · Z2) · `AI_COMBAT_MISSION_PLAN.md` §3 (anatomia)
 > · `OPEN_FINDINGS_INDEX.md` §D1 ①. Save **v101, zero migracji** (stan runtime).
 > Sondy pomiarowe: scratchpad, **poza repo** (`probe-z2-{a,b,c,d,e,f}.mjs`).
@@ -542,3 +542,43 @@ save **v101, zero migracji** · **zero nowych kluczy i18n**.
 właściciela — 🔴 otwarty, ten slice go OMIJA, nie naprawia) · **196** (`no_idle_hull` nieosiągalny
 w ścieżce reguły — ostrzeżenie metodyczne dla gate'ów) · **197** (`war:peaceSigned` bez
 konsumentów — złagodzony) · **198** (`_findActiveEncounterContaining` de facto publiczny).
+
+---
+
+## 12. LIVE-GATE — ✅ **PASS 2026-08-31** (właściciel, na żywo)
+
+**Kroki 1-4 — pętla powrotu na żywym silniku.** Rajder przeszedł pełną sekwencję
+`interstellar_jump → move_to_point → orbiting @ entity_96` (stolica AI), a `directorRules`
+pokazał wiersz `recall_strike_force` z `odpalila: TAK`. To jest rdzeń Z2: uderzenie AI znowu
+ma DOLOT, a orbita gracza przestaje być cudzą bazą.
+
+**Krok 6 — kill-switch, metodą BEZ BITWY.** Pierwotny skrypt kazał doprowadzić do zaparkowania
+rajdera po wygranej bitwie; okazało się to niewykonalne, bo **właściciel nie znalazł kolonii bez
+obrony** (przyczyna to osobny defekt — Findingi 199/200). Zastąpione dźwignią
+`spawnEnemyRaider({ autoOrder: false })`, która daje ten sam kształt (orbita poza domem, bez
+misji i rozkazu) natychmiast:
+
+| flaga | `[countStranded, strikeReadyVessels]` | odczyt |
+|---|---|---|
+| **ON** | `[1, []]` | zamiatacz widzi porzuconego rajdera, pula go **wyklucza** |
+| **OFF** | `[0, ['Rajder', 'Rajder']]` | zamiatacz **milczy**, pula **przyjmuje** |
+
+⚠ **Dlaczego to jest mocniejszy dowód niż obserwacja zachowania:** gdyby flaga bramkowała
+tylko JEDEN z dwóch mechanizmów, odczyt brzmiałby `[0, []]` albo `[1, ['Rajder']]`. Przejście
+**po przekątnej** jest jedynym wynikiem zgodnym z „jedna flaga, oba mechanizmy" (D-Z2-4 pod tą
+samą flagą co D-Z2-1).
+⚠ **Uczciwie o drugim „Rajderze" w gałęzi OFF:** to okręt z próby ON, który zdążył **wrócić do
+stolicy** — przy stolicy jest w puli niezależnie od flagi. Sygnałem różnicującym jest **wyłącznie**
+nowy rajder (i liczba `0` w zamiataczu); stary jest potwierdzeniem, że powrót z kroków 1-4 się
+domknął.
+
+**⚠ Gate wyprodukował dwa findingi spoza swojego zakresu** — 199 (🔴) i 200: obrona planetarna
+liczy się na CAŁY UKŁAD, a `DirectorOffensive.isDefended` czyta pojedyncze CIAŁO, więc AI
+systematycznie wybiera cele, których nie zdoła zdobyć. Rejestr: `VESSEL_ORDERS_PLAN.md`,
+commit `9890720`. **Nie należą do Z2 i nie zostały tu naprawione** — obie ścieżki naprawy są
+zmianą balansu w przeciwnych kierunkach.
+
+⚠ **Granica dowodu:** krok 5 (plakietka `⚠ PULA` znikająca po odejściu rajdera) **nie był
+sprawdzany** — wymagałby koloni-księżyca z hubem orbitalnym pod blokadą. Mechanizm blokady
+pinuje `orbital_logistics_hub_smoke`, ale **związek „rajder odchodzi ⇒ plakietka gaśnie" pozostaje
+niezweryfikowany na żywo.**
