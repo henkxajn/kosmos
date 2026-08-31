@@ -1,7 +1,8 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
-> **Stan na 2026-08-31** (po zamknięciu W3-32 + 186/187 + **86/87/190** + **188**; otwarte z tych rund: **189**, **191**, **192**, **193**) · **Save v101** ·
-> Sweep: **189/189 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
+> **Stan na 2026-08-31** (po zamknięciu W3-32 + 186/187 + **86/87/190** + **188** + **130** + **GATE B2 / Z2**;
+> otwarte z tych rund: **189**, **191**, **192**, **193**, **195**, **196**, **197**, **198**) · **Save v101** ·
+> Sweep: **192/192 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
 
@@ -145,7 +146,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis |
 |---|---|---|
-| ~~130~~ | ✅ | **ZAMKNIĘTY 2026-08-31** — migawka/wznowienie misji uogólnione na OBIE strony (`_pauseSideForCombat` / `_resolveMissionsPostBattle`, flaga `m4EnemyCombatMissionPause`). ⚠ To nie był brak mechanizmu, tylko **asymetria**: gracz miał go od `046976d`. ⚠ **Z2 NIE jest tym zamknięty** — `EnemyAttackHandler:245` nietknięty (keeper T4 pinuje granicę). `docs/design/AI_COMBAT_MISSION_PLAN.md` |
+| ~~130~~ | ✅ | **ZAMKNIĘTY 2026-08-31** — migawka/wznowienie misji uogólnione na OBIE strony (`_pauseSideForCombat` / `_resolveMissionsPostBattle`, flaga `m4EnemyCombatMissionPause`). ⚠ To nie był brak mechanizmu, tylko **asymetria**: gracz miał go od `046976d`. ⚠ Z2 NIE był tym zamknięty — **domknął go osobny slice „AI wraca po ataku" 2026-08-31** (`AI_RECALL_PLAN.md`): zamiatacz `DirectorRecall` + composite `recall` w `OrderService` + termin układu macierzystego w puli uderzeniowej. `EnemyAttackHandler:245` **nadal** parkuje (świadoma granica, pin `ai_strike_recall_smoke` T8) — okno parkowania skrócone do ≤ 1 roku wyświetlanego. `docs/design/AI_COMBAT_MISSION_PLAN.md` |
 | **156** | 🟠 | jedna bitwa DSCS-w-wojnie zostawia **DWA rekordy** w `gameState.battles` o niepowiązanych id — i duplikat **idzie do zapisu** |
 | **158** | 🟠 | `BattleIntroModal` — zaszyty polski + nagłówki „AGRESOR/OBROŃCA" postawione na indeksach uczestników (to nie są role wojny) |
 | **161** | 🟠 | baner bitwy **odpauzowuje ręcznie zapauzowaną grę** — czyta `timeSystem.paused`, a pole nazywa się `isPaused` ⇒ `wasPaused` zawsze `false` |
@@ -218,7 +219,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **W3-16 · W2-12** | 🟠 | dwa dalsze site'y bez rozproszenia seeda: `DirectorPressure._pickRoamer` · **pierwszy kontakt to zsynchronizowana para sond z jednego namiaru w KAŻDEJ partii** (226°/227°, ZMIERZONE) | sonda `probe-firstcontact-seed.mjs` |
 | **W3-23 · W3-27** | ⚪ | bramka portu jest nieaktywna dla AI **tylko przez przypadek katalogu** — dzień, w którym dojdzie cięższy szablon, AI zacznie **cicho** odmawiać startów · AI ma **jeden skok bez limitu odległości** | |
 | **GATE B2 (a)** | 🟠 | **produkcja okrętów AI stoi na głodzie komodytów** — `startShipBuild` zwraca `queued`, a `ORDER_TTL_DISPLAYED_YEARS = 3.0` kasuje zlecenie **cicho** (`director:orderExpired`) | `VO3B_PLAN.md` §9 · **rodzina:** `docs/BALANS_PHASE2_AI.md` §4.1/§4.2/§5 — połowa PLACÓWKOWA tej samej rodziny, ZMIERZONA i zapisana jako naprawiona w BALANS Phase 3; ta (okrętowa) jest obserwacją PO tych fiksach. Warunek wstępny: **178** |
-| **GATE B2 (Z2)** | 🟠 | rajder AI po uderzeniu **parkuje w układzie gracza i bije co cooldown** — bez powrotu do domu, bez tankowania, bez ryzyka przechwycenia na własnej granicy. ⚠ **Pełna anatomia (4 składniki) zmierzona i zapisana** przy zamykaniu 130: dwa producenty parkowania (`DSCS:1219` + **`EnemyAttackHandler:245`**, ten drugi dokuje przy planecie gracza), brak filtra puli, `bypassFuelCheck`, **brak jakiejkolwiek logiki powrotu AI**. 130 to **złagodziło, nie zamknęło** | `VO3B_PLAN.md` §9 · `AI_COMBAT_MISSION_PLAN.md` §3 |
+| **195** | 🔴 | `VesselManager._onColonyDestroyed:1136` przepisuje `vessel.colonyId` **bez terminu właściciela** — także statkom AI — na kolonię GRACZA (`_resolvePlayerHomePort`, AC-8), po czym robi `startReturn({force:true})`. Rodzina Findingu 97 | osiągalność NIEZMIERZONA (wymaga śmierci ciała w trakcie lotu), ale ścieżka bezwarunkowa. ⚠ Slice Z2 go **OMIJA, nie naprawia**: `issueRecall` nie czyta `colonyId`. `VESSEL_ORDERS_PLAN.md` |
+| **196** | 🟠 | `no_idle_hull` (VO-3b) jest w ścieżce REGUŁY nieosiągalny — guard `empireHasStrikeForce` odcina przed akcją i przed rzutem | **nie defekt, ostrzeżenie metodyczne**: „dlaczego ofensywa AI stoi" NIE da się odczytać z `director:strikeRefused`; użyj `strikeReport`/`directorRules`, inaczej gate mierzy ciszę |
+| **197** | 🟠 | `war:peaceSigned` ma ZERO konsumentów poza `DebugLog` — żaden system nie reaguje na pokój | ZŁAGODZONY przez Z2 (reguła powrotu świadomie bez guardu wojny, D-Z2-8), ale pytanie „jak flota AI reaguje na pokój" należy do **W4** |
+| **198** | ⚪ | `DSCS._findActiveEncounterContaining` jest de facto publiczny (8 konsumentów po Z2, w tym renderer); prefiks `_` kłamie o roli | kosmetyka. ⚠ Pytanie „czy trzeba zbudować predykat »statek w starciu«" padło już DWA razy (F130 §8, Z2) — odpowiedź oba razy: **istnieje** |
 | **178** | 🟠 | **kurierzy AI: wysłano ≫ dostarczono** (HEAD 12→2, 12→2, 8→0; `214127a` 14→4, 14→4, 11→1) — obecne po OBU stronach A/B ⇒ **stan zastany, nie regresja**; 4/8 imperiów buduje ZERO kurierów; zatrzask `pendingBuildRoute` zapalony na koniec mimo W1-6. ⚠ **zmierzony LICZNIK `stats.delivered`, NIE przepływ towaru** — pierwszy krok to porównanie magazynów placówka↔stolica (klasa 106). ⚠ **Poszerzone 2026-08-28:** kanału NIE MA dla **całej klasy towarów wytwarzanych** — `_loadByRarity` ładuje wyłącznie `MINED_RESOURCES`, a trasa jest jednokierunkowa (outpost → stolica) ⇒ wtórne kolonie AI nigdy nie dostają komponentów; pomiar przepływu potwierdzi zero **z definicji** | `VESSEL_ORDERS_PLAN.md` §Findings z A/B ekonomii AI · sonda `probe-ai-economy-health.mjs` · kandydat na warunek wstępny **GATE B2 (a)** |
 | **179** | ⚪ | kolonizacja **bota referencyjnego** pada na `2335c4b` (VO-2): mediana ciał gracza 5 → 1, w 8/8 seedach, AI nietknięte. ⚠ **bot headless, NIE ścieżka UI** — właściciel gra regularnie i objawu nie widzi, VO-2 przeszedł live-gate ⇒ **nie cytować jako bug rozgrywki**. Zapisane, bo przekrzywia punkt odniesienia panelu BALANS | niski priorytet, decyzja właściciela 2026-08-28 |
 | **180** | ⬜ | **(d) BRAK PROCESU — paliwo AI.** `_scanFuelDemand()` zwraca `[]` bezwarunkowo (paliwo to produkt rafinerii, nie fabryki); obie rafinerie są dla AI otwarte technologicznie (`exploration` w `startingTechs`, `popCost: 0`, koszt trywialny), ale `BUILD_PRIORITY` to zamknięta lista 10 pozycji **bez rafinerii** (grep `refinery` w warstwie decyzyjnej AI = 0). Kurier nie uniesie towaru (`MINED_RESOURCES` only), trasa jednokierunkowa. `H` ma `rarity: 5` ⇒ zwożony pierwszy i nieprzetwarzany (żywa gra: `emp_001` H = 78 620 przy `fuel` = 0) | **UTAJONY** — statki AI zwolnione z bramek paliwowych (`canReach:588`, `canJump:818`), więc dziś nic nie blokuje. ⚠ Gate na tej naprawie **zmierzy ciszę**, dopóki zwolnienie stoi; naprawa ma sens tylko RAZEM ze zdjęciem zwolnienia. Klasa W3-23. NIE rodzina B2(a) (grep: `fuel` poza kosztami statków). `VESSEL_ORDERS_PLAN.md` §Findings z A/B ekonomii AI |
@@ -284,13 +288,16 @@ i test przejdzie **jałowo**.
 
 ## D1 — Łączyć
 
-### ① `130` + GATE B2 `Z2` — slice „AI wraca po ataku" ⭐ najmocniejszy merge na liście
-Wyglądają na dwa tematy (state-clobber w DSCS vs brakująca reguła Directora), ale **130 jest
-warunkiem koniecznym Z2**: `_freezeAsStationary` zeruje misję rajdera bez snapshotu, więc rajder,
-który miałby wrócić do domu, **nie ma czym** — zostaje z `movementOrder` w `active` na zawsze
-(ta sama obserwacja stoi w `RETREAT_TARGET_PLAN` §Poza zakresem: strona AI nie ma snapshotu ani
-wznowienia, gracz ma). Reguła powrotu napisana bez 130 **nie widziałaby własnej przesłanki**,
-a gate zmierzyłby ciszę.
+### ① ~~`130` + GATE B2 `Z2`~~ — ✅ ZAMKNIĘTE (2026-08-31), ale **NIE jako jeden slice**
+⚠ **PRZESŁANKA TEGO WPISU ZOSTAŁA OBALONA POMIAREM.** Brzmiała: „130 jest warunkiem koniecznym
+Z2 — rajder, który miałby wrócić do domu, **nie ma czym**, bo migawki nie ma". Pomiar
+(`AI_COMBAT_MISSION_PLAN` §2, potem `AI_RECALL_PLAN` §0) pokazał, że **w migawce NIGDY nie było
+nogi powrotnej**: `_issueAttack` wydaje `moveToPoint` przemianowany na `attack`, czyli bilet
+w jedną stronę — wznowienie zawróciłoby rajdera do planety, przy której już stoi.
+⇒ 130 zamknięto osobno (`77c1092`), Z2 osobno (`AI_RECALL_PLAN.md`), i to była właściwa kolejność:
+Z2 wymagał **zbudowania** mechanizmu powrotu, nie odtworzenia go z migawki.
+**Lekcja procesowa:** związek dwóch findingów jest hipotezą jak każda inna — `git log -S` i sonda
+PRZED planowaniem, nie po.
 
 ### ② `49` + GATE B2 `(a)` — slice „AI ma czym desantować"
 Różne przyczyny, **identyczny widoczny skutek**: AI nigdy nie wystawia transportowca. Sam wpis
@@ -377,8 +384,11 @@ wartością jest zapisana reguła, nie naprawa).
 2. **`87` + `86`** — dwa **zmierzone w źródle** przecieki „kolonia AI wpływa na grę gracza":
    jeden **pauzuje grę fałszywym alarmem o utracie stolicy**, drugi zabiera **−30 % produkcji**.
    Ta sama rodzina co domknięty arc własności, ta sama tania naprawa, ten sam kształt keepera.
-3. **① `130` + `Z2`** — bo dopóki rajder parkuje z wyzerowaną misją, **każdy pomiar tempa wojny
-   mierzy artefakt**.
+3. ~~**① `130` + `Z2`**~~ — ✅ **wykonane 2026-08-31**, w dwóch slice'ach zamiast jednego.
+   ⚠ Uzasadnienie („dopóki rajder parkuje z wyzerowaną misją, każdy pomiar tempa wojny mierzy
+   artefakt") było **trafne co do kierunku i błędne co do mechanizmu**: pomiar pokazał, że tempo
+   jest zaciśnięte przez `strike_player_target.cooldown = 5.0`, a Z2 psuł nie CZĘSTOTLIWOŚĆ, tylko
+   **dolot** (ostrzeżenie 0,0 zamiast 5,1 roku) i **trwałą okupację** orbity. Patrz `AI_RECALL_PLAN.md` §3.
 
 ⚠ **Kolejka wielosesyjna uzgodniona z właścicielem 2026-08-29:** (1) szybka seria `W3-32` →
 `87`+`86` → `130`+`Z2`; (2) `151` · `152` · `153` · `154` **osobno**, każdy z innego powodu

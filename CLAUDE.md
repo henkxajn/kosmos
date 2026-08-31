@@ -2887,6 +2887,102 @@ potwierdza D-130-3 na żywym silniku. ⚠ **Granica dowodu: kill-switch NIE test
 ⚠ **Obserwacja do rejestru przy Z2:** w trakcie TRWAJĄCEJ bitwy rajder jest w `strikeReadyVessels`
 — **nie istnieje publiczny predykat „statek jest w starciu"** (grep czysty). Pre-existing, przez tę
 naprawę **zwężone**, nie poszerzone. Osiągalność niezmierzona.
+⚠ **SPROSTOWANIE (Z2, 2026-08-31): predykat ISTNIEJE.** `DSCS._findActiveEncounterContaining` ma
+sześciu konsumentów poza własnym plikiem (MOS ×4, ProximitySystem, FleetSystem, ThreeRenderer).
+Tamten grep pytał o dwie nazwy, których nie ma (`_vesselToEncounter`, `isInCombat`), a nie
+o mechanizm. Z2 dołożył siódmego i ósmego (Finding 198).
+
+## Z2 — „AI wraca po ataku": rajder przestaje być STAŁĄ BAZĄ WYSUNIĘTĄ (save **v101 bez migracji**, live-gate PENDING)
+
+Plan + 10 podpisanych decyzji (D-Z2-1…D-Z2-10, wszystkie W1) + pomiary PRZED kodem:
+`docs/design/AI_RECALL_PLAN.md`. Rejestr macierzysty findingów: `VESSEL_ORDERS_PLAN.md`
+§Findingi z audytu Z2. Zamyka **GATE B2 / Z2** z `VO3B_PLAN.md` §9.
+
+**Jedno zdanie:** okręt AI po uderzeniu zostawał na orbicie planety GRACZA z `mission=null`,
+`movementOrder=null` (VO-3b) i `pendingOrder=null` — czyli spełniał WSZYSTKIE warunki
+`DirectorOffensive.strikeReadyVessels` i bił stamtąd co cooldown z dystansu **0 AU**.
+
+**⚠ POMIAR ZMIENIŁ PROJEKT, NIE POTWIERDZIŁ GO — i to jest sedno tego slice'u.** Zlecenie zakładało
+„strojenie tempa" (jak długo zostać, jaki koszt paliwowy). **Ani jedno, ani drugie nie jest dźwignią:**
+
+| | bitwy / 100 lat wyśw. | ostrzeżenie | orbita gracza |
+|---|---|---|---|
+| **przed** (parkuje) | 19,8 = 1 na 5,1 roku | **0,0 roku** (1. uderzenie 5,1; każde następne **0**) | **zajęta 100 % czasu** |
+| **po** (powrót na orbitę stolicy) | 10,0 = 1 na 10,0 roku | **5,1 roku** | wolna |
+
+- **Tempo jest już zaciśnięte gdzie indziej:** `strike_player_target.cooldown = 5.0` + rzut nasycony
+  do 100 % ⇒ **powrót krótszy niż cooldown jest w kadencji NIEWIDOCZNY** (postój 3 lata = te same
+  19,8 uderzeń). Knob tempa **zostaje w danych** i to on koryguje ewentualne przestrzelenie.
+- **Paliwo nie jest kosztem AI w ŻADNYM punkcie** (bak warp startuje PUSTY, `dispatchInterstellar`
+  omija `canJump` dla `isEnemyVessel`, `consumeWarpFuel` klampuje do zera, każdy rozkaz AI leci
+  z `bypassFuelCheck`) ⇒ „presja paliwowa" nie wystroiłaby tempa, tylko **wyłączyła ofensywę AI**.
+- Realna szkoda to **brak dolotu** i **trwała okupacja**: zaparkowany rajder zrywał pulę hubu
+  orbitalnego (`SystemPoolService._hostileWarshipInOrbit`), doliczał się do KAŻDEJ kolejnej bitwy
+  (`EnemyAttackHandler:93-98` — rosnący stos bojowy bez budowania czegokolwiek) i **przeżywał
+  POKÓJ** (`war:peaceSigned` ma zero konsumentów, a `DSCS` nie ma bramki wojny).
+
+**⚠ NAIWNA NAPRAWA JEST GORSZA OD DEFEKTU (zmierzone).** Sam skok do domu zostawia rajdera na
+obrzeżach (`_tickInterstellar:2729-2736`: 30 AU, `dockedAt=null`) z **niewyczyszczoną** misją
+`interstellar_jump` ⇒ wypada z **KAŻDEJ** puli AI na zawsze. Dlatego powrót jest **composite'em**
+z drugim odcinkiem i stanem końcowym. Pinuje to keeper T5.
+
+**Kształt:**
+- **Mechanizm** — `OrderService.issueRecall` + `_issueRecallLeg` + gałąź `recall` w `_maybeDeliver`
+  (czwarty rodzaj composite'u obok `transport`/`passenger`/`attack`). Skok warp → `moveToPoint` na
+  CIAŁO stolicy → `orbiting` + `dockedAt = stolica`, czyli stan, który rozumieją wszystkie pule.
+  ⚠ **NIE `issueReturn`**: tamten czyta `vessel.colonyId`, a `_onColonyDestroyed:1136` przepisuje to
+  pole **bez terminu właściciela** na kolonię GRACZA (**Finding 195**) — rajder dostałby rozkaz
+  powrotu do domu gracza. Domem jest `directorProduction.capitalOf` (kanon Directora).
+  ⚠ **`startReturn` to mina, nie skrót**: liczy cel przez `_predictPosition(vessel.colonyId)` bez
+  terminu układu ⇒ interpolowałby rajdera do współrzędnych stolicy AI **wewnątrz układu gracza**.
+- **Decyzja** — NEW `src/systems/director/DirectorRecall.js` (wzór `DirectorMobilization`): sonda
+  **ZAMIATACZ** `strandedWarshipsAwayFromHome` + akcja `recallVessels`. ⚠ Zamiatacz, nie hook, bo
+  producentów stanu „okręt AI stoi poza domem" jest **SIEDEM** (EAH, remis DSCS, odwrót na ciało
+  niczyje, odwrót na ciało GRACZA, anulowany rozkaz, stary zapis, debug) — hook u każdego to
+  `131cc2e` po raz kolejny. Reguła `recall_strike_force`: **bez rzutu**, `cooldown 1.0` roku
+  wyświetlanego (granularność zegara decyzji, nie wymyślony próg), **bez guardu wojny** (D-Z2-8 —
+  dzięki temu sprząta też po pokoju), `delay: 0`, `count: 3` (lustro `MAX_STRIKE_SIZE`).
+- **Filtr puli** — `strikeReadyVessels` wymaga układu macierzystego **i** braku aktywnego starcia.
+  ⚠ To **nie jest ostrożność**: bez filtra reguła uderzenia i reguła powrotu ścigałyby się o ten sam
+  kadłub, a zwycięzcę rozstrzygałaby **KOLEJNOŚĆ KLUCZY w `DIRECTOR_RULES`** (`tickEmpire` iteruje
+  `Object.values`). Keeper T10 pinuje rozłączność obu zbiorów.
+- **Drabina odmów rozszerzona o trzeci szczebel** `no_hull_at_home` (kadłuby są WOLNE, ale żaden nie
+  jest w domu). `strikeReport` przepisany, żeby werdykt odtwarzał REALNĄ drabinę — inaczej zacząłby
+  kłamać dokładnie w stanie, który ten slice wprowadza.
+
+**Predykat „statek w starciu" REUŻYTY, nie zbudowany** (D-Z2-5) — `DSCS._findActiveEncounterContaining`.
+
+**Kill-switch `FEATURES.aiStrikeRecall`** (default ON) — ⚠ bramkuje **zamiatacz I filtr puli** pod
+JEDNĄ flagą, bo OFF ma znaczyć „zachowanie sprzed slice'u bit w bit"; dwie flagi dałyby trzy różne
+stany „wyłączone".
+
+**⚠ `EnemyAttackHandler` NIETKNIĘTY** (D-Z2-6, pin granicy T8): dalej dokuje rajdera przy planecie
+gracza. Zamiatacz **skraca** to okno do ≤ 1 roku wyświetlanego, nie kasuje zapisu.
+
+**⚠ Świadome odwrócenie pinu w `ai_combat_mission_pause` (F130) T2:** kontrola pinu brzmiała „z
+wyzerowaną misją rajder BYŁ w puli" — i mierzyła to **w trakcie walki**, czyli stan, który Z2 celowo
+zamknął. INTENCJA oryginału zachowana (mierzona PO domknięciu starcia); powód w nagłówku keepera.
+⚠ Przy okazji wyszło, że bez `enc.isActive = false` asercja „rajder ze wznowioną misją nie wraca do
+puli" przechodziłaby po Z2 **z niewłaściwego powodu** — fałszywa zieleń.
+
+**⚠ Cztery keepery Directora wymagały `registerRecallBehaviors`** — `DirectorSystem` waliduje
+wszystkie nazwy katalogu w konstruktorze i RZUCA na nieznanej (R12). To nie niedogodność, tylko
+dowód, że bramka działa. `w3_director_mounting` T2 dostał nową nazwę także na liście „boot woła".
+
+**Testy:** NEW `ai_strike_recall_smoke` **62/62**, fail-first **12/44**. ⚠ Pierwszy przebieg fail-first
+dał 13/43 i był **nieuczciwy**: siedem asercji wykluczających przechodziło JAŁOWO (pusta lista ==
+pusta lista) — każda wymaga teraz OBECNOŚCI świadka. Sweep **192/192 OK, 0 FAIL** · `check-i18n` PASS
+· **zero nowych kluczy i18n** (`director:recalled`/`recallRefused` to kanał AUDYTU — dodane do
+`DebugLog.TRACKED_EVENTS` w tym samym commicie, reguła W3).
+
+**Kontrola montażu** (sonda poza repo, prawdziwy `DirectorSystem.tickEmpire`): reguła odpaliła sama,
+`director:recalled {count:1}`, rajder → `interstellar_jump` + `pendingOrder=recall`, po skoku
+`move_to_point → stolica`, **ETA 4,68 roku** — zgodne z Pomiarem 2 (4,5-4,9).
+
+**Otwarte po tym slice'ie:** **195** (🔴 `_onColonyDestroyed` bez terminu właściciela — ten slice go
+OMIJA, nie naprawia) · **196** (`no_idle_hull` nieosiągalny w ścieżce reguły ⇒ gate NIE może czytać
+„pusta pula" ze zdarzeń) · **197** (`war:peaceSigned` bez konsumentów — złagodzony, reszta do W4) ·
+**198** (`_findActiveEncounterContaining` de facto publiczny).
 
 ## Dodawanie nowych funkcji
 
