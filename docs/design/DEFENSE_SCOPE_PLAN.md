@@ -1,6 +1,7 @@
 # Findingi 199 + 200 — „AI atakuje to, czego nie jest w stanie zdobyć"
 
-> **Status:** ✅ **WDROŻONE 2026-08-31 (commity 1-3), LIVE-GATE PENDING.** Podpis właściciela: **D-199-1 = W1
+> **Status:** ✅ **ARC ZAMKNIĘTY 2026-08-31 — LIVE-GATE §7 PASS z udokumentowanymi odstępstwami (§10a).**
+> Podpis właściciela: **D-199-1 = W1
 > Z POPRAWKĄ** (bez clampa → własny powód odmowy) · **D-199-5 = W2** (poza zakresem → Finding 202,
 > z potwierdzonym warunkiem sortowania) · **D-199-6 = 6a + 6b RAZEM** (ponowny podpis po §4.1) ·
 > **D-199-7 = W1** · **D-199-8 = W1** · **D-199-2 = V4** (budynki CIAŁO, okręty UKŁAD) ·
@@ -581,6 +582,48 @@ działa (157 zamknięty). ⚠ Właściciel gra po **EN** — filtruj po prefiksi
 ⚠ Wszystkie jednolinijkowce sprawdzone **co do kształtu** wobec źródeł (`strikeReport`/`forceStrike`
 istnieją `GameScene:655/694`; `window.KOSMOS.directorOffensive` montowany `:469`; `warSystem` `:450`),
 ale **nie wykonane na żywej karcie** — ta walidacja należy do slice'u implementacyjnego.
+
+⚠ **DŹWIGNIA FLAGI — `GAME_CONFIG` NIE JEST GLOBALNE.** Poprawny uchwyt to
+`KOSMOS.gameConfig.FEATURES.defenseScope` (`GameScene:394` przypisuje `window.KOSMOS.gameConfig =
+GAME_CONFIG`, ta sama tożsamość obiektu, `FEATURES` niezamrożone). **Ten sam błąd autora skryptu
+złapał już gate Z2** (`f021ccf`) i repo ma na to regułę (`validate-gate-oneliners-on-live-engine`) —
+została złamana **po raz drugi, w tym samym miejscu**. Potwierdzone wykonaniem na żywej karcie.
+
+---
+
+## 10a. WYNIK LIVE-GATE'U (2026-08-31, właściciel, na żywo) — **PASS**
+
+| krok | wynik |
+|---|---|
+| **§7.0** | ✅ `strikeReport` **prawdomówny na pustym imperium**: werdykt „brak okrętu zdolnego do skoku" przy `kadlubyZeSkokiem: 0` — **Finding 208 potwierdzony NA ŻYWO**. Tabela celów odtworzyła matematykę gradowania **co do liczby**: 690 HP → 9 · 730 HP → 10 · 30 HP → 1 (przy `hull_frigate` 120). Zasiany **1** rajder (nie 3 — patrz §7.3) |
+| **§7.1** | ⚠ **NIEWYKONALNY w tym zapisie** — uzbrojona flota gracza stoi w `sys_home`, więc sprzeczność „`bronione:false` przy dużym HP" nie ma jak wystąpić. Obie połowy flagi udowodnione **czwórką z §11** zamiast tego |
+| **§7.2** | ✅ werdykt nazywa **liczby**, nie boolean |
+| **§7.3** | ⚠ **NIEOSIĄGALNY NA ŻYWO w tym zapisie** — drabina ocenia wyłącznie **głowę rankingu wartości** (`needed 9`), więc `insufficient_squadron` nie ma jak wypłynąć, dopóki `sys_home` dominuje. **To jest NOWY DEFEKT → Finding 210**, nie awaria naprawy. Pokryty headless (**T10**); odstępstwo przyjęte |
+| **§7.4** | ✅ **PASS w formie MOCNEJ**: `{launched: 0, reason: 'target_beyond_reach', needed: 9, available: 1, defenderHp: 690}` — i to przeciw **PRAWDZIWEJ flocie gracza jako twierdzy**, nie przeciw fixture'owi. **Clamp nie wrócił** |
+| **§7.5** | ✅ realna bitwa przy Colony Alioth (przez ręczne `issueAttack`). **Zero wraków gracza — forma SŁABA**: w tamtym układzie gracz nie miał czego stracić. Szew batchowania EAH przećwiczony na żywo. **Bonus:** odczyt R1 po bitwie `{mo: null, last: mo_1 completed, pending: false, inEnc: false}` — zwolnienie rozkazu **VO-3b potwierdzone po PRAWDZIWEJ wygranej bitwie**; pusta pula = filtr układu macierzystego (R1 jest teraz bazą wysuniętą Z2 w `sys_014`, zgodnie z projektem) |
+| **§7.6** | ✅ **JEDNA** linia `⚔`, po angielsku, z przetłumaczonymi nazwami, **zwycięzca POPRAWNY przy graczu jako AGRESORZE wojny** (konfiguracja, w której 155/2b się wywracało — naprawa trzyma). Auto-slow zadziałał. ⚪ Obserwacja → **Finding 211** |
+| **§7.7** | ✅ `ON [690,9,730,10]` → `OFF [730,2,730,2]` (1. == 3., boolean wrócił) → `ON [690,9,730,10]`, **bez przeładowania**. ⚠ korekta do §11 niżej |
+| **§7.8** | ✅ konsola czysta |
+
+### ⚠ Trzy rzeczy, które gate zmienił w tym dokumencie
+
+**(a) `sys_home` jako TWIERDZA to lepszy dowód §7.4, niż planowałem.** Scenariusz zakładał ręczne
+fortyfikowanie do `grid Lv3 + tower Lv5`. Na żywo wystarczyła **prawdziwa flota gracza** (690 HP →
+`needed 9`), więc odmowa `target_beyond_reach` została zmierzona na stanie, którego nikt nie
+spreparował. To jest mocniejsza forma tego samego pinu.
+
+**(b) KOREKTA DO §11 — „druga liczba jest kontrolą" obowiązuje TYLKO dla GOŁEJ koloni wtórnej.**
+W zapisie właściciela druga liczba **ruszyła się** (`9 ↔ 2`), bo tamta kolonia jest broniona
+**FLOTĄ**, nie budynkami: przy ON gradowanie liczy 690 HP → 9, przy OFF boolean widzi uzbrojony
+okręt w układzie → `isDefended = true` → 2. **Ruchoma druga liczba NIE JEST awarią pinu.**
+Nieruchoma jest tylko wtedy, gdy kolonia wtórna nie ma **ani** obrony, **ani** floty w układzie.
+⚠ Rozstrzygające pozostają: **1. liczba** (zakres) i **równość 1. == 3. przy OFF** (każde ciało ma
+tego samego obrońcę). Keeper T17 mierzy wariant GOŁY i dlatego jego kontrola pinu jest tam prawdziwa.
+
+**(c) Dwa kroki okazały się niewykonalne w konkretnym zapisie (§7.1, §7.3) — i to jest własność
+ZAPISU, nie naprawy.** §7.1 wymaga koloni bez floty w układzie; §7.3 wymaga, żeby głowa rankingu
+była osiągalna. Oba pokryte headless (T1/T14 i T10). ⚠ Przy następnym gate'cie tej rodziny warto
+**zacząć od tabeli celów** i dobrać kroki do tego, co zapis w ogóle potrafi pokazać.
 
 ---
 
