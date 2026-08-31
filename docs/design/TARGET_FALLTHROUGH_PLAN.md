@@ -1,6 +1,7 @@
 # Finding 210 — drabina ocenia tylko GŁOWĘ rankingu, więc AI nie atakuje tego, co MOŻE wziąć
 
-> **Status:** 📋 **PODPISANE 2026-08-31.** Decyzje: **D-210-1 = A** (fall-through W ISTNIEJĄCYM
+> **Status:** ✅ **ARC ZAMKNIĘTY 2026-08-31 — LIVE-GATE §8 PASS** (wynik: §8a). Commit `1e633d4`.
+> Decyzje: **D-210-1 = A** (fall-through W ISTNIEJĄCYM
 > porządku wartości) · **D-210-2 = TAK** (rozdział `pickTarget` / `pickAttainableTarget`, z §6.3
 > wciągniętym w sygnaturę) · **D-210-3 = TAK** (`skippedHead` w `strikeLaunched`) ·
 > **D-210-4 = NIE** (bez limitu fall-through) · **D-210-5 = ta sama flaga `FEATURES.defenseScope`** ·
@@ -210,13 +211,25 @@ z `sys_home` z jej `needed`. **FAIL** = `target_beyond_reach` (fall-through nie 
 o tym, w co AI uderzy.
 
 **§8.3 — stan (c) dalej słyszalny.** Ufortyfikuj/zabierz cele tak, by **żaden** wiersz tabeli nie
-mieścił się w suficie, potem `forceStrike`.
-**PASS** = `{launched: 0, reason: 'target_beyond_reach', needed: <głowy>, attemptedTargets: N>1}`.
-**FAIL** = cisza (Finding 196: brak zdarzenia = brak audytu).
+mieścił się w dostępnej puli, potem `forceStrike`.
+**PASS** = poleciała odmowa z `needed`/`defenderHp` **GŁOWY** + `attemptedTargets > 1`.
+⚠ **POWÓD ZALEŻY OD LISTY, NIE OD GŁOWY** (korekta po live-gate — pierwsza wersja tego wiersza
+zapowiadała `target_beyond_reach` i **była sprzeczna z kontraktem z §4**): gdy **którykolwiek** cel
+mieści się w sufcie `MAX_STRIKE_SIZE`, poprawnym powodem jest **`insufficient_squadron`** (stan
+PRZEJŚCIOWY — więcej okrętów pomoże); `target_beyond_reach` należy się dopiero, gdy **żaden** cel
+nie mieści się w sufcie. Zmierzone na gate'cie: Alioth ufortyfikowany do 140 HP → `needed 2`
+(≤ sufit) przy puli 1 ⇒ `insufficient_squadron`, `needed: 9` i `defenderHp: 690` z GŁOWY,
+`attemptedTargets: 6`. **FAIL** = cisza (Finding 196: brak zdarzenia = brak audytu).
 
 **§8.4 — kill-switch.** `KOSMOS.gameConfig.FEATURES.defenseScope = false` → `forceStrike`
-**PASS** = wraca **dzisiejsza odmowa na głowie** (`target_beyond_reach`, `needed 9`), bez fall-through.
-Przełącz z powrotem na `true` → uderzenie znów rusza. Bez przeładowania.
+**PASS** = wraca odmowa **na samej głowie**, bez fall-through. Przełącz z powrotem na `true` →
+uderzenie znów rusza. Bez przeładowania.
+⚠ **LICZBY PRZY OFF SĄ Z EPOKI BOOLEANA, nie z gradowania** (korekta po live-gate — pierwsza wersja
+zapowiadała `target_beyond_reach, needed 9` i **była błędem autora**): `defenseScope` cofa **CAŁY
+pakiet** (D-210-5), więc przy OFF `requiredSquadron` wraca do progu 1/2, a `_buildPlayerBattleUnit`
+do zakresu układowego. Zmierzone: `insufficient_squadron`, **`needed: 2`**, `defenderHp: 730`.
+⚠ Ta sama klasa pomyłki co korekta §11 w `DEFENSE_SCOPE_PLAN.md` — **przy jednej fladze na kilka
+mechanizmów odczyt przy OFF trzeba WYPROWADZIĆ, a nie przepisać z odczytu przy ON**.
 ⚠ Uchwyt to `KOSMOS.gameConfig`, **nie** `GAME_CONFIG` — ten błąd złapał już dwa gate'y (Z2 `f021ccf`
 i DEFENSE_SCOPE §7.7).
 
@@ -224,7 +237,33 @@ i DEFENSE_SCOPE §7.7).
 
 ---
 
-## 8. Świadomie poza zakresem
+## 8a. WYNIK LIVE-GATE'U (2026-08-31, właściciel, na żywo) — **PASS**
+
+| krok | wynik |
+|---|---|
+| **§8.1** | ✅ **ODCZYT ROZSTRZYGAJĄCY.** Ta sama komenda, która przed naprawą zwracała `{launched: 0, target_beyond_reach, needed: 9}`, zwróciła **`{launched: 1, targetBodyId: entity_283, needed: 1, skippedHead: {entity_11, sys_home, needed: 9, defenderHp: 690}}`** |
+| **§8.2** | ✅ `strikeReport` pokazuje `celGlowa` **i** `cel` jednocześnie; werdykt narracyjnie odtwarza drabinę i uczciwie melduje „czeka na rzut reguły". **Bonus:** stan brzegowy PRZED wojną też jest prawdomówny — `cel: null`, werdykt „brak wojny — reguła milczy z definicji", a `celGlowa` dalej pokazany |
+| **§8.3** | ✅ odmowa **nie zamilkła**: `{launched: 0, insufficient_squadron, needed: 9, available: 1, defenderHp: 690, attemptedTargets: 6}` — klasyfikacja z **LISTY** (przejściowy, bo Alioth mieści się w sufcie), liczby z **GŁOWY**. ⚠ tekst planu poprawiony (wyżej) |
+| **§8.4** | ✅ obie strony, bez przeładowania. OFF → `insufficient_squadron, needed: 2, defenderHp: 730` (epoka booleana). ⚠ tekst planu poprawiony (wyżej) |
+| **§8.5** | ✅ jedna linia `⚔` na bitwę, EN, zwycięzcy poprawni **w obie strony** (Liga, gdy rajder wziął kolonię 30-40 HP; Gracz po postawieniu siatki). Auto-slow zadziałał. **Bonus:** odwrót wroga zadziałał na żywo (R3 „retreating", potem zestrzelony nad Alioth) — ścieżka wroga z **F-D** potwierdzona ponownie |
+| konsola | ⚠ **nieczysta, ale JEDNA niepowiązana rodzina** — patrz Finding **212** (weryfikacja: to NIE jest brak plików) |
+
+### ⚠ PĘTLA ROZGRYWKI ZAOBSERWOWANA OD POCZĄTKU DO KOŃCA — najważniejszy wynik tego gate'u
+
+Na żywo przeszedł **pełny cykl, którego żaden pomiar headless nie mógł pokazać**:
+
+1. AI **wzięło zdobywalną kolonię** — dwukrotnie (to jest 210: przed naprawą nie tknęłoby jej ani razu);
+2. gracz **ufortyfikował** to ciało w odpowiedzi;
+3. kolejny rajder **przegrał** i zginął w odwrocie;
+4. tabela celów gradowała tę kolonię już na **`needed 2`**, więc AI **odmówi zamiast powtórzyć błąd**.
+
+⇒ **199 i 210 działają RAZEM**: 199 nauczyło AI nie atakować tego, czego nie weźmie; 210 — nie
+odpuszczać tego, co wziąć może. Sprzężenie zwrotne z graczem (fortyfikacja → zmiana decyzji AI)
+domyka pętlę, o którą chodziło od początku arca.
+
+---
+
+## 9. Świadomie poza zakresem
 
 **202** (`targetValue` per-UKŁAD rankuje cele per-CIAŁO) — **zapisane jako NASTĘPNA dystorsja**
 (D-210-6): po 210 AI będzie preferować gołą placówkę w bogatym układzie nad prawdziwą kolonią
