@@ -110,6 +110,7 @@ import { DirectorPressure, registerPressureBehaviors } from '../systems/director
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../systems/director/DirectorDoctrine.js';
 import { DirectorMobilization, registerMobilizationBehaviors } from '../systems/director/DirectorMobilization.js';
 import { DirectorOffensive, registerOffensiveBehaviors } from '../systems/director/DirectorOffensive.js';
+import { DirectorRecall, registerRecallBehaviors } from '../systems/director/DirectorRecall.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
@@ -375,6 +376,11 @@ export class GameScene {
     // rozwiązywany LENIWIE w tiku — więc kolejność względem jego wpięcia nie ma znaczenia.
     this.directorOffensive    = new DirectorOffensive();
     registerOffensiveBehaviors(this.directorOffensive, { allowOverride: true });
+    // Z2 — decyzja o POWROCIE okretu do domu. Ta sama zasada kolejnosci: rejestracja PRZED
+    // konstrukcja silnika. Powrot idzie wylacznie przez `OrderService.issueRecall`, rozwiazywany
+    // LENIWIE w tiku — wiec kolejnosc wzgledem jego wpiecia nie ma znaczenia.
+    this.directorRecall       = new DirectorRecall();
+    registerRecallBehaviors(this.directorRecall, { allowOverride: true });
     this.directorSystem       = new DirectorSystem();
     // Orbital Logistics Hub — „system pool" surowców matka+księżyce (runtime-only,
     // odtwarzany z modułów stacji; getStore używany przez call-sites w commit 2).
@@ -461,6 +467,11 @@ export class GameScene {
     // Konstrukcja bez wystawienia w lokatorze jest tu NIEWIDOCZNA: nic nie krzyczy, bo
     // wszystkie odczyty są opcjonalne (`?.`). Pinowane strukturalnie: `w3_director_mounting_smoke`.
     window.KOSMOS.directorOffensive  = this.directorOffensive;
+    // ⚠ Z2 — TEN WIERSZ JEST OBOWIAZKOWY z tego samego powodu co wiersz wyzej (W3-5b):
+    // regula `recall_strike_force` zyje w katalogu niezaleznie od lokatora, ale KAZDY odczyt
+    // gate'u i debugu idzie przez `window.KOSMOS`, a wszystkie sa opcjonalne (`?.`) — wiec brak
+    // wpisu jest NIEWIDZIALNY. Pin strukturalny: `ai_strike_recall_smoke` / `w3_director_mounting`.
+    window.KOSMOS.directorRecall     = this.directorRecall;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
@@ -646,6 +657,13 @@ export class GameScene {
         const im = window.KOSMOS?.influenceMap;
         const t  = off.pickTarget(empireId);
         const ready = off.strikeReadyVessels(empireId);
+        // Z2 — diagnostyka MUSI odtwarzać priorytet realnej drabiny odmów z `launchStrike`.
+        // Po dołożeniu terminu układu „ready pusta" ma trzy różne przyczyny, a stary werdykt
+        // mówił o wszystkich „brak okrętu zdolnego do skoku" — czyli KŁAMAŁ dokładnie w tym
+        // stanie, który ten slice wprowadza (okręty wracają do domu).
+        const hulls    = off._warpCapableHulls(empireId);
+        const idleAway = hulls.filter(v => !v.mission && !v.movementOrder && !v.pendingOrder);
+        const stranded = window.KOSMOS?.directorRecall?.countStranded?.(empireId) ?? '—';
         const rep = {
           imperium: empireId,
           wojna: !!window.KOSMOS?.warSystem?.getWarWith?.(empireId)?.active,
@@ -653,12 +671,17 @@ export class GameScene {
           powlokaGraniczna: im?.getBorderSystems?.(empireId)?.length ?? '—',
           celeWZasiegu: off.countReachableTargets(empireId),
           cel: t ? { cialo: t.body.id, uklad: t.systemId, wartosc: t.value, bronione: t.defended } : null,
+          ukladMacierzysty: off._homeSystemIdOf(empireId) ?? '— (brak stolicy)',
           okretyGotowe: ready.map(v => `${v.name}(warp ${v.warpFuel?.max})`),
+          kadlubyZeSkokiem: hulls.length,
+          wracajaDoDomu: stranded,
           werdykt: null,
         };
         rep.werdykt = !rep.wojna ? 'brak wojny — reguła milczy z definicji'
           : rep.celeWZasiegu === 0 ? 'ZERO celów w zasięgu (uklad gracza poza przestrzenia/powloka imperium)'
-          : ready.length === 0 ? 'brak okrętu zdolnego do skoku'
+          : (ready.length === 0 && hulls.length === 0) ? 'brak okrętu zdolnego do skoku'
+          : (ready.length === 0 && idleAway.length === 0) ? 'kadłuby są, ale każdy ma zajęcie (no_idle_hull)'
+          : ready.length === 0 ? 'kadłuby są WOLNE, ale żaden nie jest w domu — wracają (no_hull_at_home, Z2)'
           : (t?.defended && ready.length < 2) ? 'cel broniony, a okręt jeden — potrzeba eskadry'
           : 'wszystkie warunki spełnione — czeka na rzut reguły';
         console.log('[strikeReport]', rep);

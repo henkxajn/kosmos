@@ -253,6 +253,40 @@ export const DIRECTOR_RULES = {
     personalityMod: { axis: 'aggression', at0: 0.5, at1: 1.5 },
     cooldown: { years: 5.0 },
   },
+
+  /**
+   * Z2 — POWRÓT OKRĘTU DO DOMU. „Uderzenie się skończyło, wracamy na własną orbitę."
+   *
+   * Do tej reguły okręt AI po uderzeniu zostawał na orbicie planety GRACZA jako STAŁA BAZA
+   * WYSUNIĘTA: bił co cooldown z dystansu 0 AU (ostrzeżenie 0,0 roku zamiast 5,1), trzymał
+   * pulę hubu orbitalnego zerwaną i doliczał się do każdej kolejnej bitwy.
+   *
+   * ⚠ TO NIE JEST REGUŁA O TEMPIE. Zmierzone przed kodem (`AI_RECALL_PLAN.md` §2): wiążącym
+   * ograniczeniem kadencji jest `cooldown` reguły UDERZENIA wyżej, a nie długość powrotu.
+   * Ta reguła kupuje DOLOT (5,1 roku widocznego podejścia) i WOLNĄ ORBITĘ między uderzeniami.
+   *
+   * ⚠ BEZ `roll`, więc MUSI mieć `cooldown` (decyzja 11) — `tickEmpire` biegnie co rok
+   * CYWILIZACYJNY, a przepustnica „jeden rzut na rok wyświetlany" siedzi WEWNĄTRZ `if (rule.roll)`.
+   * Rzutu świadomie nie ma (D-Z2-3): rzut znaczyłby „okupacja utrzymuje się z jakimś
+   * prawdopodobieństwem", czyli Z2 nie byłby zamknięty, tylko przerywany. `1.0` roku to
+   * GRANULARNOŚĆ ZEGARA DECYZJI Directora, nie wymyślony próg balansowy.
+   *
+   * ⚠ BRAK GUARDU — także wojny (D-Z2-8). `war:peaceSigned` nie ma ani jednego konsumenta, więc
+   * bez tego okupacja orbity gracza przeżywałaby pokój. Zamiatanie po pokoju wychodzi za darmo.
+   *
+   * ⚠ `delay: 0` OBOWIĄZKOWO — `_firePending` dereferencuje wpis, który `gameState.set(key, null)`
+   * zostawia jako `null`, POZA oboma try/catch (pinowane katalogowo przez `w2_ai_mobilization` T4).
+   *
+   * `count: 3` to LUSTRO `MAX_STRIKE_SIZE` z `DirectorOffensive` — ściągamy tylu, ilu imperium
+   * wysyła w jednym uderzeniu. Nie jest to nowy próg do strojenia.
+   */
+  recall_strike_force: {
+    id:       'recall_strike_force',
+    trigger:  { kind: 'poll', probe: 'strandedWarshipsAwayFromHome', gte: 1 },
+    delay:    0,
+    response: { action: 'recallVessels', params: { count: 3 } },
+    cooldown: { years: 1.0 },
+  },
 };
 
 /**

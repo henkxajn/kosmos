@@ -30,6 +30,7 @@ import { DirectorPressure, registerPressureBehaviors } from '../../systems/direc
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 import { DirectorMobilization, registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
 import { DirectorOffensive, registerOffensiveBehaviors } from '../../systems/director/DirectorOffensive.js';
+import { DirectorRecall, registerRecallBehaviors } from '../../systems/director/DirectorRecall.js';
 import { DirectorProduction, registerProductionGuards } from '../../systems/director/DirectorProduction.js';
 import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
 
@@ -241,6 +242,7 @@ console.log('T8 — DirectorSystem: kill-switch, walidacja przy starcie, katalog
 // W3-5: katalog niesie regule wyboru celu (`strike_player_target`), wiec jej nazwy TEZ musza
 // byc w rejestrach — konstruktor DirectorSystem waliduje CALY katalog i rzuca na nieznanej.
 registerOffensiveBehaviors(new DirectorOffensive(), { allowOverride: true });
+registerRecallBehaviors(new DirectorRecall(), { allowOverride: true });
   registerProductionGuards(new DirectorProduction(), { allowOverride: true });
   assert(!throws(() => new DirectorSystem()),
     '…a PO rejestracji katalog produkcyjny konstruuje się normalnie');

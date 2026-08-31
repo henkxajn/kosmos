@@ -85,6 +85,12 @@ const TRACKED_EVENTS = [
   // musiałby zgadywać, czy reguła nie odpaliła, czy nikt jej nie podłączył.
   'director:strikeLaunched',
   'director:strikeRefused',
+  // Z2 — odwołanie okrętu do domu. Ta sama para co wyżej i z tego samego powodu: powrót jest
+  // NIEWIDOCZNY dla gracza dopóki rajder nie zniknie z jego orbity, więc bez tych dwóch nazw
+  // gate mierzyłby CISZĘ. ⚠ `recallRefused` niesie `no_capital` — jedyne miejsce, w którym
+  // widać, że imperium bez stolicy przestało ściągać okręty (D-Z2-10).
+  'director:recalled',
+  'director:recallRefused',
 ];
 
 class DebugLog {

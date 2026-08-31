@@ -43,6 +43,7 @@
 import { DirectorProbes, DirectorGuards, DirectorActions } from './DirectorRegistry.js';
 import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { isEnemyVessel, hasWeapons, isInService } from '../../entities/Vessel.js';
 import { PLAYER_OWNER_ID } from '../ThreatAssessment.js';
 
@@ -61,6 +62,28 @@ export class DirectorOffensive {
     return window.KOSMOS?.directorProduction?.capitalOf?.(empireId)?.planetId ?? null;
   }
 
+  /** Z2 — układ macierzysty imperium = układ jego stolicy. `null` gdy stolicy nie ma. */
+  _homeSystemIdOf(empireId) {
+    const capId = this._capitalBodyId(empireId);
+    if (!capId) return null;
+    return EntityManager.get(capId)?.systemId ?? null;
+  }
+
+  /**
+   * Z2 (D-Z2-5) — czy okręt jest w AKTYWNYM starciu.
+   *
+   * ⚠ To NIE jest nowy predykat, tylko szósty leniwy odczyt TEGO SAMEGO
+   * (`DSCS._findActiveEncounterContaining`) — dokładnie jak `MovementOrderSystem`,
+   * `ProximitySystem`, `FleetSystem` i `ThreeRenderer`. Nowa publiczna nazwa byłaby drugim
+   * słownikiem na to samo zdarzenie. Fail-open: bez DSCS nie ma bitwy, której trzeba by bronić.
+   * @private
+   */
+  _inActiveEncounter(vesselId) {
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    if (!dscs?._findActiveEncounterContaining) return false;
+    return !!dscs._findActiveEncounterContaining(vesselId);
+  }
+
   /**
    * Okręty gotowe do UDERZENIA MIĘDZYGWIEZDNEGO.
    *
@@ -71,6 +94,15 @@ export class DirectorOffensive {
   strikeReadyVessels(empireId) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr?._vessels) return [];
+    // Z2 (D-Z2-4) — TERMIN UKŁADU MACIERZYSTEGO. Do Z2 pula przyjmowała okręt stojący na
+    // orbicie planety GRACZA, więc rajder po uderzeniu bił stamtąd co cooldown z dystansu 0 AU.
+    // ⚠ Ten filtr NIE jest ostrożnością „na wszelki wypadek": bez niego reguła uderzenia
+    // (`strike_player_target`) i reguła powrotu (`recall_strike_force`) ścigałyby się o TEN SAM
+    // kadłub, a zwycięzcę rozstrzygałaby KOLEJNOŚĆ KLUCZY w `DIRECTOR_RULES` — bo
+    // `DirectorSystem.tickEmpire` iteruje `Object.values(katalog)`. Filtr czyni wynik
+    // niezależnym od kolejności; pinuje to `ai_strike_recall_smoke` T10.
+    const gated  = GAME_CONFIG.FEATURES?.aiStrikeRecall !== false;
+    const homeSys = gated ? this._homeSystemIdOf(empireId) : null;
     const out = [];
     for (const v of vMgr._vessels.values()) {
       if (!v || v.isWreck) continue;
@@ -82,6 +114,8 @@ export class DirectorOffensive {
       if (v.mission) continue;                   // ma zajęcie
       if (v.movementOrder) continue;             // już pod rozkazem
       if (v.pendingOrder) continue;              // composite w toku (skok→uderzenie)
+      if (gated && homeSys && (v.systemId ?? 'sys_home') !== homeSys) continue;   // Z2 — poza domem
+      if (gated && this._inActiveEncounter(v.id)) continue;                       // Z2 — właśnie się bije
       out.push(v);
     }
     return out;
@@ -212,9 +246,16 @@ export class DirectorOffensive {
         // powody: „nie mam czym skoczyć" vs „mam, ale wszystko zajęte". Dotąd oba mówiły to
         // pierwsze — a to jest kanał, z którego GATE B2 czyta, DLACZEGO ofensywa AI stoi.
         const hulls = this._warpCapableHulls(empireId);
-        return hulls.length > 0
-          ? this._refuse(empireId, 'no_idle_hull', year, { hulls: hulls.length })
-          : this._refuse(empireId, 'no_warp_capable_hull', year);
+        if (hulls.length === 0) return this._refuse(empireId, 'no_warp_capable_hull', year);
+        // Z2 (D-Z2-4) — TRZECI SZCZEBEL DRABINY. `no_idle_hull` znaczy „kadłuby są, ale każdy ma
+        // zajęcie". Po dołożeniu terminu układu powstał stan trzeci: kadłuby są WOLNE, tylko
+        // żadnego nie ma W DOMU (właśnie wracają z uderzenia). Bez własnej nazwy ten stan
+        // kłamałby o świecie — a `director:strikeRefused` jest JEDYNYM kanałem, z którego widać,
+        // dlaczego ofensywa AI stoi. Filtr jest DIAGNOZĄ, nie drugą pulą (jak `_warpCapableHulls`).
+        const idle = hulls.filter(v => !v.mission && !v.movementOrder && !v.pendingOrder);
+        if (idle.length === 0) return this._refuse(empireId, 'no_idle_hull', year, { hulls: hulls.length });
+        return this._refuse(empireId, 'no_hull_at_home', year,
+          { hulls: hulls.length, idleAway: idle.length, homeSystemId: this._homeSystemIdOf(empireId) });
       }
 
       // §Findings 34 — przeciw obronie lecimy eskadrą albo wcale.

@@ -47,6 +47,7 @@ import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/direc
 import { DirectorMobilization, registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
 import { DirectorOffensive, registerOffensiveBehaviors } from '../../systems/director/DirectorOffensive.js';
 import { DirectorProduction, registerProductionGuards } from '../../systems/director/DirectorProduction.js';
+import { DirectorRecall, registerRecallBehaviors } from '../../systems/director/DirectorRecall.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -114,6 +115,7 @@ console.log('T2 — nazwy z katalogu rozwiązują się po rejestratorach, które
   registerDoctrineBehaviors(new DirectorDoctrine(), { allowOverride: true });
   registerMobilizationBehaviors(new DirectorMobilization(), { allowOverride: true });
   registerOffensiveBehaviors(new DirectorOffensive(), { allowOverride: true });
+  registerRecallBehaviors(new DirectorRecall(), { allowOverride: true });
   registerProductionGuards(new DirectorProduction(), { allowOverride: true });
 
   const missing = [];
@@ -129,7 +131,8 @@ console.log('T2 — nazwy z katalogu rozwiązują się po rejestratorach, które
   // Każdy rejestrator z listy jest w boocie IMPORTOWANY — inaczej powyższe nic nie dowodzi.
   for (const reg of ['registerFirstContactBehaviors', 'registerPressureBehaviors',
                      'registerDoctrineBehaviors', 'registerMobilizationBehaviors',
-                     'registerOffensiveBehaviors', 'registerProductionGuards']) {
+                     'registerOffensiveBehaviors', 'registerRecallBehaviors',
+                     'registerProductionGuards']) {
     assert(gameSceneSrc.includes(reg), `T2: boot importuje/woła \`${reg}\``);
   }
 }
@@ -137,6 +140,7 @@ console.log('T2 — nazwy z katalogu rozwiązują się po rejestratorach, które
 // ── T3 — silnik wstaje z prawdziwym katalogiem ──────────────────────────────
 console.log('T3 — `new DirectorSystem()` z PRAWDZIWYM katalogiem nie rzuca');
 {
+  registerRecallBehaviors(new DirectorRecall(), { allowOverride: true });
   let threw = null;
   try { new DirectorSystem(); } catch (e) { threw = e; }
   assert(threw === null,

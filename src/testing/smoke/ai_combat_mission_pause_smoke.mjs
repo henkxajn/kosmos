@@ -13,6 +13,14 @@
 // ⚠ TO NIE BYL BRAK MECHANIZMU, TYLKO ASYMETRIA. Migawka/wznowienie istnialy od `046976d`,
 //   ale wylacznie dla gracza (`m4PlayerCombatMissionPause`). D-130-1 uogolnia te sciezke.
 //
+// ⚠ ODWROCENIE PINU W T2 (Z2, 2026-08-31) — SWIADOME. Kontrola pinu brzmiala „z wyzerowana
+//   misja rajder BYL w puli W TRAKCIE WALKI". Z2 (`ai_strike_recall_smoke` T3) celowo to
+//   ZAMKNAL: pula uderzeniowa wyklucza teraz statek w aktywnym starciu, bo inaczej Director
+//   moglby wyslac na nowe uderzenie okret, ktory wlasnie sie bije — a nowy rozkaz ruchu
+//   wyprowadzilby go z babla starcia i `DSCS._handleCombatRangeExit` policzylby strone AI jako
+//   UCIEKAJACA (darmowe zwyciestwo gracza). INTENCJA oryginalu — „to misja, a nie przypadek,
+//   trzyma rajdera poza pula" — zostala: mierzymy ja teraz PO domknieciu starcia.
+//
 // ⚠ GRANICA SLICE'U — T4 PINUJE JA WPROST. `EnemyAttackHandler:245` (dokowanie rajdera przy
 //   planecie GRACZA po wygranej + drugie bezwarunkowe zerowanie misji) jest NIETKNIETY. Z2
 //   („rajder parkuje w ukladzie gracza") ZOSTAJE OTWARTY. Zielony keeper NIE znaczy, ze Z2
@@ -142,20 +150,27 @@ console.log('T2 — wznowiona misja trzyma rajdera POZA pula uderzeniowa');
     'T2 kontrola pinu: przed walka rajder ma misje → poza pula');
 
   w.dscs.startEngagement(w.mine.id, w.raider.id);
-  // Bez wznowienia rajder ma mission=null → wraca do puli. To jest silnik Z2.
-  const inPoolDuringCombat = w.off.strikeReadyVessels(EMP).map(v => v.id);
-
   const enc = [...w.dscs._activeEncounters.values()][0];
   assert(!!enc, 'T2 kontrola pinu: encounter realnie istnieje (inaczej reszta T2 byla by jalowa)');
   resolvePost(w, enc);
+
+  // ⚠ Z2 — DOMKNIECIE STARCIA JEST WYMOGIEM POMIARU, nie kosmetyka. Pula wyklucza teraz takze
+  //   statek W TRWAJACYM starciu (`ai_strike_recall_smoke` T3), wiec bez tej linii ponizsze
+  //   asercje mierzylyby filtr Z2 zamiast wznowionej misji z F130 — czyli przechodzilyby
+  //   z NIEWLASCIWEGO powodu.
+  enc.isActive = false;
+
   const restored = w.raider.mission?.type ?? null;
   const inPoolAfter = w.off.strikeReadyVessels(EMP).map(v => v.id);
-
   assert(restored === 'attack', 'T2: misja rajdera WZNOWIONA po bitwie');
   assert(!inPoolAfter.includes('v_ai'),
     'T2: rajder ze wznowiona misja NIE wraca do puli uderzeniowej (lagodzi Z2)');
-  assert(inPoolDuringCombat.includes('v_ai'),
-    'T2 kontrola pinu: z wyzerowana misja rajder BYL w puli — to jest mechanizm, nie domysl');
+
+  // Kontrola pinu — INTENCJA ORYGINALU zachowana na innym nosniku: to MISJA trzyma rajdera
+  // poza pula. Mierzymy ja PO starciu, bo „w trakcie" przestalo byc prawda (patrz naglowek).
+  w.raider.mission = null;
+  assert(w.off.strikeReadyVessels(EMP).map(v => v.id).includes('v_ai'),
+    'T2 kontrola pinu: z WYZEROWANA misja rajder JEST w puli — to jest mechanizm, nie domysl');
 }
 
 // ── T3 — warstwa ORDER przejela ─────────────────────────────────────────────

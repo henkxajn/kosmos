@@ -88,6 +88,12 @@ export const GAME_CONFIG = {
     // OSOBNY kill-switch od gracza: zmiana zachowania AI jest odczuwalna w rozgrywce
     // i musi dać się wyłączyć niezależnie. OFF = zachowanie sprzed naprawy (mission=null).
     m4EnemyCombatMissionPause: true,
+    // Z2 (D-Z2-4 + D-Z2-1 pod JEDNA flaga) — „AI wraca po ataku": zamiatacz powrotu
+    // (`DirectorRecall`) ORAZ filtr puli uderzeniowej (`strikeReadyVessels` wymaga ukladu
+    // macierzystego). Jedna flaga dla obu, bo OFF ma znaczyc dokladnie „zachowanie sprzed
+    // slice'u, bit w bit" — dwie flagi daly by trzy rozne stany „wylaczone".
+    // OFF = rajder parkuje na orbicie gracza i bije stamtad co cooldown (stan sprzed Z2).
+    aiStrikeRecall: true,
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).
