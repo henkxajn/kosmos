@@ -72,7 +72,10 @@ const DROIDS_PER_OUTPOST = 2;
 const DEFAULTS = {
   targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
   targetNtOutposts:       1,    // ile outpostów Nt (Neutronium) zabezpieczyć (P5) — Slice 2 S3
-  popTransferSize:        8,    // ile POP wysłać na pełną kolonię (Population 2.0: ×4, było 2)
+  // ⚠ 215 (D-215-1c): 8 → 4, spójnie z `ARCHETYPES[...].strategicColonization`. Ten wpis jest
+  //   fallbackiem dla archetypu BEZ bloku `strategicColonization`; rozjazd z blokiem archetypu
+  //   dałby dwie różne ceny kolonii zależnie od tego, kto pyta. Uzasadnienie: archetyp + §2.2 planu.
+  popTransferSize:        4,
   // ⚠ 215 (D-215-3): `minFreePops: 8` USUNIĘTE razem z czytelnikiem. Był to próg NIEOSIĄGALNY
   //   (`freePops` u AI = 0 na stałe), a martwy knob to knob, który kłamie — wygląda na regulator
   //   ekspansji AI, a od Population 2.0 Fazy 2 nie regulował niczego poza jej zatrzymaniem.

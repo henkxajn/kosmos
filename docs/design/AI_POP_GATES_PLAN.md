@@ -2,12 +2,12 @@
 
 > **Status:** 📋 **PODPISANE 2026-08-31.** **D-215-1 = obie postacie** (kolonia → ZASTĄPIENIE
 > predykatu, kurier → USUNIĘCIE pre-checku) · **D-215-1b = rezerwa 4** · **D-215-2 = JEDNA flaga
-> `aiPopGates`** · **D-215-1c = pytanie WYMAGANE, nierozstrzygnięte** (krzywa `popTransferSize`).
+> `aiPopGates`** · **D-215-1c = PODPISANE: `popTransferSize` 8 → 4** (krzywa zmierzona, §2.2).
 > **Dwa commity, wzór DEFENSE_SCOPE:** C1 = predykaty (higiena + mała zmiana balansu),
-> **C2 = `popTransferSize` dla AI, ląduje WYŁĄCZNIE po podpisie wartości przez właściciela.**
+> **C2 = `popTransferSize` 8 → 4 dla AI (podpisane po krzywej).**
 > Save **v101, zero migracji**. **Rejestr macierzysty:** `VESSEL_ORDERS_PLAN.md` §215 · §208 · §178.
 > Poprzedni dokument tej rodziny: `COURIER_LOAD_ORDER_PLAN.md` (rama obalona pomiarem).
-> Sondy: scratchpad, poza repo (`probe-178-pops.mjs`, `probe-178-three.mjs`, `probe-215-colony.mjs`).
+> Sondy: scratchpad, poza repo (`probe-178-pops.mjs`, `probe-178-three.mjs`, `probe-215-colony.mjs`, `probe-215-curve.mjs`).
 
 ---
 
@@ -113,6 +113,41 @@ Podstawiałem `emp.strategyConfig` i `ess._defaults` — **żadne z tych pól ni
 odwrócona arytmetyka, wpisałbym „transfer 4 daje 12 kolonii" jako wynik i cały commit 2 stanąłby na
 liczbie z fikcyjnego override'u. ⇒ **Dziura w tabeli zostaje ZAETYKIETOWANA, nie zalepiona** (D-215-1c).
 
+### 2.2 KRZYWA `popTransferSize` (commit 2) — 3 seedy × 100 gy, rezerwa 4
+
+**Odczyt kontrolny override PRZESZEDŁ** dla wszystkich czterech wartości: `_config(empire)` zwracał
+zamierzoną liczbę **zanim** cokolwiek policzono (sonda przerywa przebieg, jeśli nie).
+
+| transfer | założonych /100 gy | przeżyło | **urosło** | mediana pop koloni @gy100 | placówki (kontrola) | matka lab/pop @gy100 |
+|---|---|---|---|---|---|---|
+| **2** | **5,3** | 5,3 | 0,7 | **2** | 4,3 | 12,9 / 34,3 |
+| **4** ✅ **PODPISANE** | **3,7** | 3,7 | 0,7 | **4** | 4,0 | **13,1 / 35,0** |
+| 6 | 1,0 | 1,0 | **0,0** | 3 | 3,3 | 10,8 / 23,4 |
+| **8 (dziś)** | **1,0** | 1,0 | **0,0** | 4 | 3,3 | 10,8 / 23,7 |
+
+**Krzywa drenażu matki w czasie (robotnicy)** — na żadnym poziomie nie ma zapaści; wszystkie cztery
+mają dołek w połowie i odbijają: transfer 4 → 7,3 (gy10) · 7,2 (gy30) · 7,0 (gy50) · 7,2 (gy70) ·
+**13,7 (gy100)**; transfer 8 → 8,8 · 5,7 · 5,5 · 5,7 · 11,7.
+
+**Podstawa podpisu `4`:** wygrywa z dzisiejszą `8` na **każdej mierzonej osi** — 3,7× więcej kolonii,
+zdrowsza matka (13,1/35,0 vs 10,8/23,7) i **więcej placówek** (4,0 vs 3,3), więc ekspansja nie jest
+przesuwana, tylko rośnie. Wobec `2` przegrywa liczbą (3,7 vs 5,3), ale `2` zakłada jednostki
+o **medianie populacji 2** — nieodróżnialne od placówki.
+
+### 2.2a ⚠ METRYKA PRZEŻYWALNOŚCI OKAZAŁA SIĘ BLISKA JAŁOWEJ — i tak ją należy czytać
+
+Przeżywalność wyszła **100 % na każdym poziomie**, więc hipoteza „mały transfer zakłada kolonie, które
+umierają" **nie potwierdziła się**. Ale kontrola pokazała, dlaczego: **mediana populacji koloni w gy 100
+równa się populacji założycielskiej**, a `grew` wynosi 0,0-0,7. **W solo headless NIC nie zabija koloni
+AI**, więc „przeżyła" znaczy tylko „istnieje" — metryka mierzyła trwałość bytu bezwładnego.
+
+⇒ **Nie podpisano na przeżywalności.** ⚠ **Reguła dla przyszłych pomiarów kolonii: headline'em jest
+„STAŁA SIĘ CZYMKOLWIEK" (wzrost ponad `startPop`), nie „przeżyła".** Sama trwałość przechodzi jałowo.
+⇒ Osobne znalezisko: **Finding 216** (kolonie AI nie rosną) — **nie bramkowało** D-215-1c, bo `grew`
+jest płaskie we wszystkich czterech wariantach i nie mogło zmienić rankingu.
+
+---
+
 ---
 
 ## 3. Kształt naprawy — COMMIT 1 (predykaty)
@@ -136,7 +171,7 @@ ludzi") dla następnej osoby, przy pojęciu, które dla AI nie znaczy tego, co b
 
 ---
 
-## 4. COMMIT 2 — `popTransferSize` dla AI (⚠ TYLKO PO PODPISIE WARTOŚCI)
+## 4. COMMIT 2 — `popTransferSize` dla AI ✅ WYKONANE (8 → 4, wynik w §2.2)
 
 **Hipoteza do zmierzenia, NIE do założenia:** `popTransferSize = 8` to ~cała populacja matki AI
 (3-8), bo Faza 1 ×4 podniosła koszt, a populacja AI nigdy nie urosła do tej skali. Jeśli tak,
@@ -164,7 +199,7 @@ na tej ścieżce, ale keeper ma to pinować, żeby nikt nie „ujednolicił" teg
 |---|---|---|
 | **D-215-1** | kształt obu połówek | ✅ **kolonia = ZASTĄPIENIE, kurier = USUNIĘCIE** (§1) |
 | **D-215-1b** | rezerwa matki | ✅ **4** — zmierzone: T2 matka 4/8 vs T1 0/3, koszt = 3,8 roku zwłoki |
-| **D-215-1c** | `popTransferSize` | ⚠ **PYTANIE WYMAGANE, NIEROZSTRZYGNIĘTE** — krzywa z §4, wartość **podpisuje właściciel**, commit 2 nie ląduje bez podpisu |
+| **D-215-1c** | `popTransferSize` | ✅ **PODPISANE: 8 → 4** po krzywej (§2.2). Wygrywa z 8 na każdej mierzonej osi; wobec 2 daje kolonię o użytecznym rozmiarze. ⚠ **NIE podpisane na przeżywalności** (§2.2a) |
 | **D-215-2** | kill-switch | ✅ **JEDNA flaga `aiPopGates`** dla OBU commitów |
 | **D-215-3** | martwe knoby | ✅ `minFreePops`, `minFreePopsForCourier`, `_enoughFreePops` — **usunięte razem z czytelnikami** |
 
@@ -182,6 +217,9 @@ To ta sama argumentacja co `aiStrikeRecall` (Z2, D-Z2) i `defenseScope` (D-210-5
 
 **§G.1 — połowa KOLONIZACYJNA: pierwsza pełna kolonia AI.**
 Odczyt: liczba nie-placówkowych kolonii imperium rośnie; `ai:strategyColonyFounded` w `debugLog`.
+⚠ **CZEGO SIĘ SPODZIEWAĆ: kolonia BĘDZIE ISTNIEĆ I NIEWIELE ROBIĆ.** Obserwablem tego gate'u jest
+**ZAŁOŻENIE**, nie rozwój — mediana populacji koloni AI w gy 100 równa się populacji założycielskiej
+(**Finding 216**). Kolonia, która po dekadzie ma dalej ~4 POP, **NIE JEST porażką tego slice'u**.
 **Horyzont: WCZESNY — pierwsza dekada.** Zmierzone headless: **gy 4,2** przy rezerwie 4.
 Bramkowane tylko afordancją POP, więc nie czeka na tech ani na logistykę.
 

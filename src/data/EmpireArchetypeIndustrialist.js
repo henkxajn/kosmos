@@ -50,7 +50,16 @@ export const INDUSTRIALIST = {
   strategicColonization: {
     targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
     targetNtOutposts:       1,    // ile outpostów Nt (Neutronium) — Slice 2 S3, P5
-    popTransferSize:        8,    // ile POP wysłać na pełną kolonię (Population 2.0: ×4, było 2)
+    // ⚠ 215 (D-215-1c, PODPISANE po krzywej pomiarowej): 8 → 4. `8` powstało w Population 2.0
+    //   Fazie 1 jako ×4 dawnego `2` — ale populacja matki AI nigdy nie urosła do tej skali
+    //   (3-8 POP), więc transfer 8 był ~CAŁĄ kolonią. ZMIERZONE (3 seedy × 100 gy, rezerwa 4):
+    //     transfer 8 → 1,0 koloni/100 gy, matka 10,8 robotnika / 23,7 POP
+    //     transfer 4 → 3,7 koloni/100 gy, matka 13,1 / 35,0, placówki 4,0 (bez kanibalizacji)
+    //     transfer 2 → 5,3 koloni, ale MEDIANA POP KOLONII = 2 (jednostki bezwładne)
+    //   4 wygrywa na KAŻDEJ mierzonej osi wobec 8 i daje kolonię o użytecznym rozmiarze.
+    //   ⚠ NIE podpisane na przeżywalności — ta była w tym środowisku bliska JAŁOWEJ (nic nie
+    //     zabija koloni solo headless); patrz Finding 216 i `AI_POP_GATES_PLAN.md` §2.2.
+    popTransferSize:        4,
     minFoodTransfer:        200,  // próg = transfer food (bootstrap wymaga ≥ 200)
     minWaterTransfer:       200,  // próg = transfer water
     blacklistDurationCy:    30,   // jak długo ciało-cel na blackliście po failure

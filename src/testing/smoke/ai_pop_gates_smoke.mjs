@@ -124,5 +124,65 @@ console.log('T5 — kill-switch `aiPopGates`: OBIE polowy pod JEDNA flaga (D-215
     'wypuscil: AI z koloniami bez logistyki albo kurierzy do kolonii, ktore nie powstaja');
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// COMMIT 2 — `popTransferSize` = 4 (D-215-1c, podpisane po krzywej pomiarowej).
+//
+// ⚠ PIN IDZIE PRODUKCYJNA SCIEZKA ODCZYTU, nie po samej literce w danych. `_config(empire)` czyta
+//   `ARCHETYPES[archetyp].strategicColonization` SCALONE nad modulowym `DEFAULTS` — i to jest
+//   JEDYNA droga. Poprzednia runda pomiarowa podstawiala nieistniejace `emp.strategyConfig`
+//   i `ess._defaults`; override byl FIKCYJNY, a tabela wyszla odwrocona arytmetycznie.
+//   Pin czytajacy tylko plik danych powtorzylby ten blad, tyle ze cicho.
+//
+//   T6  `popTransferSize` = 4 CZYTANE PRZEZ `_config` (obie sciezki: archetyp i DEFAULTS)
+//   T7  SCIEZKA GRACZA NIETKNIETA — `popTransferSize` nie istnieje poza warstwa AI
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+const { EmpireStrategySystem } = await import('../../systems/EmpireStrategySystem.js');
+const { ARCHETYPES } = await import('../../data/EmpireData.js');
+
+// ── T6 — wartosc czytana produkcyjnie ───────────────────────────────────────────────────────
+console.log('T6 — `popTransferSize` = 4 przez PRODUKCYJNY `_config`, nie przez odczyt pliku danych');
+{
+  const ess = new EmpireStrategySystem();
+  const withBlock = Object.entries(ARCHETYPES).filter(([, a]) => a?.strategicColonization);
+  assert(withBlock.length > 0,
+    `T6 NIEJALOWOSC: sa archetypy z blokiem \`strategicColonization\` (${withBlock.length}) — ` +
+    'na pustym zbiorze `every` przeszloby jalowo');
+
+  const read = withBlock.map(([id]) => ess._config({ archetype: id })?.popTransferSize);
+  assert(read.every(v => v === 4),
+    `T6: KAZDY archetyp z blokiem zwraca 4 przez \`_config\` (jest: [${read.join(', ')}])`);
+
+  // Fallback DEFAULTS — archetyp BEZ bloku nie moze miec innej ceny kolonii.
+  const fallback = ess._config({ archetype: '__brak_takiego_archetypu__' })?.popTransferSize;
+  assert(fallback === 4,
+    `T6: fallback \`DEFAULTS\` tez = 4 (jest ${fallback}) — rozjazd dalby DWIE rozne ceny kolonii ` +
+    'zaleznie od tego, kto pyta');
+  ess.stop?.();
+
+  // KONTROLA PINU: prog kolonizacji jest POCHODNA tej liczby, nie osobna stala.
+  assert(/cfg\.popTransferSize[^\n]*MOTHER_RESERVE|popTransferSize.*\+.*MOTHER_RESERVE/.test(ESS),
+    'T6 KONTROLA PINU: prog dalej liczy sie z `popTransferSize`, wiec zmiana ceny AUTOMATYCZNIE ' +
+    'przesuwa bramke — inaczej podpisana wartosc rozjechalaby sie z predykatem');
+}
+
+// ── T7 — sciezka GRACZA ─────────────────────────────────────────────────────────────────────
+console.log('T7 — sciezka GRACZA nietknieta: `popTransferSize` zyje wylacznie w warstwie AI');
+{
+  const PLAYER_FILES = [
+    '../../systems/MissionSystem.js',
+    '../../systems/ColonyManager.js',
+    '../../data/FleetActions.js',
+  ];
+  const hits = PLAYER_FILES.filter(f => /popTransferSize/.test(src(f)));
+  assert(hits.length === 0,
+    `T7: zaden plik sciezki gracza nie czyta \`popTransferSize\` (trafienia: ${hits.join(', ') || 'brak'}) — ` +
+    'kolonizacja GRACZA ma wlasny koszt POP i ta zmiana jej nie dotyczy');
+  // KONTROLA PINU: pliki gracza ISTNIEJA i zostaly wczytane (inaczej „brak trafien" byloby puste).
+  assert(PLAYER_FILES.every(f => src(f).length > 1000),
+    'T7 KONTROLA PINU: wszystkie trzy pliki gracza wczytane i niepuste — inaczej T7 przechodzilby ' +
+    'jalowo na nieistniejacych sciezkach');
+}
+
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);
