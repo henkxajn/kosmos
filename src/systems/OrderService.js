@@ -171,6 +171,60 @@ export class OrderService {
   }
 
   /**
+   * Z2 (D-Z2-1) — ODWOŁANIE OKRĘTU AI DO WŁASNEJ STOLICY.
+   *
+   * Powrót jest z natury WIELO-UKŁADOWY, więc mieszka tutaj: skok warp jest tylko PIERWSZYM
+   * odcinkiem, a `_tickInterstellar` zostawia statek na obrzeżach (30 AU, `dockedAt=null`)
+   * z NIEWYCZYSZCZONĄ misją `interstellar_jump`. ⚠ ZMIERZONE (plan §2, Pomiar 1): sam skok
+   * WYPYCHA rajdera z KAŻDEJ puli AI (uderzeniowej, doktrynalnej, rezerwy) — czyli „naiwna
+   * naprawa" jest gorsza od defektu, który miała zamknąć. Dlatego rozkaz jest COMPOSITE'em:
+   * drugi odcinek (`_maybeDeliver`, gałąź `recall`) dowozi okręt na orbitę stolicy.
+   *
+   * ⚠ TO NIE JEST `issueReturn` I NIE MOŻE BYĆ. Tamten czyta `vessel.colonyId`, a
+   * `VesselManager._onColonyDestroyed:1136-1153` przepisuje to pole BEZ TERMINU WŁAŚCICIELA
+   * na kolonię GRACZA (`_resolvePlayerHomePort`, AC-8) ⇒ rajder mógłby dostać rozkaz powrotu
+   * do domu gracza (Finding 195). Do tego `issueReturn` jawnie zeruje `pendingOrder`, czyli
+   * z założenia NIE łańcuchuje. Domem jest tu `directorProduction.capitalOf` — kanon Directora.
+   *
+   * @param {string} vesselId
+   * @param {{ homeSystemId: string, capitalBodyId: string }} spec
+   * @returns {{ok:boolean, reason?:string, composite?:boolean, orderId?:string}}
+   */
+  issueRecall(vesselId, { homeSystemId, capitalBodyId } = {}) {
+    const vessel = this._vm?.getVessel?.(vesselId);
+    if (!vessel) return { ok: false, reason: 'no_vessel' };
+    if (!homeSystemId || !capitalBodyId) return { ok: false, reason: 'no_capital' };
+    if (!EntityManager.get(capitalBodyId)) return { ok: false, reason: 'no_capital' };
+
+    // Już we własnym układzie — zostaje sam odcinek wewnątrzukładowy.
+    if (this._sameSystem(vessel, homeSystemId)) return this._issueRecallLeg(vessel, capitalBodyId);
+    return this._beginComposite(vessel, 'recall', { targetId: capitalBodyId, targetSystemId: homeSystemId });
+  }
+
+  /**
+   * Odcinek domowy powrotu — `moveToPoint` na CIAŁO stolicy.
+   * Wzór 1:1 z `DirectorDoctrine._holdAtHome` (ciało + punkt zapasowy, bo `validateOrder`
+   * wymaga `targetPoint` nawet przy podanym ciele) i z `bypassFuelCheck`, bo kolonie AI nie
+   * trzymają paliwa. Stan końcowy po przylocie: `orbiting` + `dockedAt = stolica` — czyli
+   * dokładnie ten, który wszystkie pule Directora rozumieją.
+   * @private
+   */
+  _issueRecallLeg(vessel, capitalBodyId) {
+    const body = EntityManager.get(capitalBodyId);
+    if (!body) return { ok: false, reason: 'target_lost' };
+    const mos = this._mos;
+    if (!mos) return { ok: false, reason: 'mos_disabled' };
+    return mos.issueOrder(vessel.id, {
+      type:         'moveToPoint',
+      targetBodyId: capitalBodyId,
+      targetPoint:  { x: body.x ?? 0, y: body.y ?? 0 },
+      targetName:   body.name ?? null,
+      issuedBy:     'ai_recall',
+      bypassFuelCheck: true,
+    });
+  }
+
+  /**
    * Powrót do macierzystego układu. Foreign → skok warp; local → anuluj misję / startReturn.
    * Absorbuje logikę FleetActions.return_home.execute (jedno źródło prawdy).
    */
@@ -260,6 +314,26 @@ export class OrderService {
         // Głośno (R12): statek doleciał, a rozkaz odpadł — to błąd wpięcia, nie stan gry.
         console.error('[OrderService] uderzenie po skoku ODRZUCONE', { vesselId, targetId: po.targetId, reason: r?.reason });
         EventBus.emit('order:compositeFailed', { vesselId, reason: r?.reason ?? 'attack_rejected' });
+        return;
+      }
+      EventBus.emit('order:compositeDelivering', { vesselId, kind: po.kind, targetId: po.targetId });
+      return;
+    }
+
+    // Z2 (D-Z2-1) — POWRÓT: drugi odcinek to podejście do stolicy WEWNĄTRZ własnego układu.
+    // Celem jest CIAŁO imperium, nie kolonia/stacja gracza, więc re-walidacja jest inna —
+    // tak samo jak przy `attack` wyżej.
+    if (po.kind === 'recall') {
+      v.pendingOrder = null;
+      const r = this._issueRecallLeg(v, po.targetId);
+      if (!r?.ok) {
+        // ⚠ NIE ZOSTAWIAMY STATKU Z MARTWĄ MISJĄ `interstellar_jump` — to jest DOKŁADNIE brick
+        // z §2 planu: okręt stoi 30 AU od gwiazdy i wypada z każdej puli AI NA ZAWSZE, bo nikt
+        // tej misji nie czyści. Sprowadzamy go do stanu, który świat rozumie: bezczynny okręt
+        // WE WŁASNYM układzie — czyli z powrotem materiał na uderzenie. (Gałąź `attack` wyżej
+        // świadomie tego nie robi: tam odmowa po skoku jest błędem wpięcia, nie stanem gry.)
+        if (v.mission?.type === 'interstellar_jump') { v.mission = null; v.status = 'idle'; }
+        EventBus.emit('order:compositeFailed', { vesselId, reason: r?.reason ?? 'recall_rejected' });
         return;
       }
       EventBus.emit('order:compositeDelivering', { vesselId, kind: po.kind, targetId: po.targetId });
