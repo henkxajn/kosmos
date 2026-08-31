@@ -357,8 +357,43 @@ Regresja obowiązkowa: `ai_combat_mission_pause` 19 · `player_combat_mission_pa
 | 3 | po bitwie: `KOSMOS.vesselManager.getAllVessels().filter(v=>v.ownerEmpireId).map(v=>[v.name,v.systemId,v.position.dockedAt,v.mission?.type])` | rajder **wraca**: `interstellar_jump` → `move_to_point` → na końcu `dockedAt` = stolica AI |
 | 4 | `KOSMOS.debug.directorRules(empireId)` | wiersz `recall_strike_force` z `odpalenieRok` |
 | 5 | kolonia gracza z `logistics_hub` + księżyc | plakietka **`⚠ PULA` znika** po odejściu rajdera (nagłówek ColonyOverlay: „Łącze zerwane" → „Połączona z hubem") |
-| 6 | `GAME_CONFIG.FEATURES.aiStrikeRecall = false`, powtórz 2-3 | rajder parkuje jak dotąd (kill-switch) |
+| 6 | kill-switch — ⚠ **procedura niżej**, bo `GAME_CONFIG` NIE jest globalne | rajder parkuje jak dotąd |
 | 7 | konsola | brak błędów |
+
+#### ⚠ Krok 6 — poprawiony po live-gate (pierwsza wersja była NIEWYKONALNA)
+
+Pierwsza wersja tego wiersza brzmiała `GAME_CONFIG.FEATURES.aiStrikeRecall = false` i była
+**błędem autora skryptu**: `GAME_CONFIG` to import modułowy, niedostępny z konsoli. Repo ma tę
+regułę zapisaną (`validate-gate-oneliners-on-live-engine`) — została złamana.
+
+**Ścieżka, ZWERYFIKOWANA WYKONANIEM** (`window.KOSMOS.gameConfig === GAME_CONFIG` → `true`,
+`Object.isFrozen(FEATURES)` → `false`, obaj konsumenci przełączają się w obie strony):
+
+```js
+KOSMOS.gameConfig.FEATURES.aiStrikeRecall = false
+```
+
+⚠ **Samo przestawienie flagi NIE JEST jeszcze dowodem** — rajder stojący przy WŁASNEJ stolicy
+wygląda tak samo przy obu wartościach (jest w puli, nie jest zamiatany). Sygnał różnicujący
+istnieje wyłącznie wtedy, gdy okręt stoi **poza domem**, więc krok 6 wymaga jeszcze jednego
+uderzenia:
+
+```js
+const E = 'emp_001';                                  // id imperium z kroku 1
+KOSMOS.gameConfig.FEATURES.aiStrikeRecall = false;    // 1. wyłącz
+KOSMOS.debug.forceStrike(E);                          // 2. wyślij (dolot ~5 lat wyśw.)
+// 3. gdy bitwa się rozegra i rajder zaparkuje przy planecie gracza:
+[ KOSMOS.directorRecall.countStranded(E),
+  KOSMOS.directorOffensive.strikeReadyVessels(E).map(v => v.name) ]
+```
+
+| stan flagi | oczekiwany odczyt | zachowanie |
+|---|---|---|
+| `false` | `[0, ['<nazwa rajdera>']]` — zamiatacz milczy, pula GO PRZYJMUJE | rajder **zostaje** na orbicie gracza bezterminowo |
+| `true` (przełącz z powrotem) | `[1, []]` | odlatuje w ciągu **≤ 1 roku wyświetlanego** (cooldown reguły) |
+
+To przejście w obie strony na jednym, zaparkowanym okręcie jest właściwym dowodem kill-switcha:
+pokazuje, że flaga bramkuje **oba** mechanizmy (zamiatacz I filtr puli) pod jedną wartością.
 
 ⚠ **GRANICA DOWODU — gate NIE MOŻE czytać „pusta pula" ze zdarzeń.** Guard `empireHasStrikeForce`
 stoi **przed** akcją i **przed** rzutem (`DirectorSystem._evaluate`), więc gdy wszystkie kadłuby są
