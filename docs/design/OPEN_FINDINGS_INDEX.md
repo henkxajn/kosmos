@@ -1,7 +1,7 @@
 # OTWARTE FINDINGI — INDEKS PRZEKROJOWY
 
 > **Stan na 2026-08-31** (po zamknięciu W3-32 + 186/187 + **86/87/190** + **188** + **130** + **GATE B2 / Z2**;
-> otwarte z tych rund: **189**, **191**, **192**, **193**, **195**, **196**, **197**, **198**) · **Save v101** ·
+> otwarte z tych rund: **189**, **191**, **192**, **193**, **195**-**200**) · **Save v101** ·
 > Sweep: **192/192 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
 
 ---
@@ -220,6 +220,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **W3-23 · W3-27** | ⚪ | bramka portu jest nieaktywna dla AI **tylko przez przypadek katalogu** — dzień, w którym dojdzie cięższy szablon, AI zacznie **cicho** odmawiać startów · AI ma **jeden skok bez limitu odległości** | |
 | **GATE B2 (a)** | 🟠 | **produkcja okrętów AI stoi na głodzie komodytów** — `startShipBuild` zwraca `queued`, a `ORDER_TTL_DISPLAYED_YEARS = 3.0` kasuje zlecenie **cicho** (`director:orderExpired`) | `VO3B_PLAN.md` §9 · **rodzina:** `docs/BALANS_PHASE2_AI.md` §4.1/§4.2/§5 — połowa PLACÓWKOWA tej samej rodziny, ZMIERZONA i zapisana jako naprawiona w BALANS Phase 3; ta (okrętowa) jest obserwacją PO tych fiksach. Warunek wstępny: **178** |
 | **195** | 🔴 | `VesselManager._onColonyDestroyed:1136` przepisuje `vessel.colonyId` **bez terminu właściciela** — także statkom AI — na kolonię GRACZA (`_resolvePlayerHomePort`, AC-8), po czym robi `startReturn({force:true})`. Rodzina Findingu 97 | osiągalność NIEZMIERZONA (wymaga śmierci ciała w trakcie lotu), ale ścieżka bezwarunkowa. ⚠ Slice Z2 go **OMIJA, nie naprawia**: `issueRecall` nie czyta `colonyId`. `VESSEL_ORDERS_PLAN.md` |
+| **199** | 🔴 | AI wybiera cel **po CIELE** (`isDefended` czyta `target.colony`), a bije się z **CAŁYM UKŁADEM** (`_buildPlayerBattleUnit(systemId)` sumuje obronę WSZYSTKICH kolonii gracza w układzie) ⇒ atakuje „bezbronną" kolonię i ginie od siatki obronnej **stolicy** | **ZMIERZONE** (winner B → A przy zdjęciu obrony z INNEGO ciała, ten sam seed). ⚠ `pickTarget` sortuje „słabiej broniony pierwszy" ⇒ bias systematyczny. Rodzina „brak granicy", ale **odwrotny kierunek**. Zakres naprawy = decyzja PROJEKTOWA (balans w obie strony). `VESSEL_ORDERS_PLAN.md` |
+| **200** | 🟠 | bezbronny frachtowiec gracza jest kombatantem w bitwie orbitalnej i dostaje **broń dmg 2** w prezencie (`BattleSystem:262`); `_playerVesselsInSystem` bez filtra `hasWeapons`. ⚠ DSCS ma bramkę „anyArmed" (`36d9551`), ścieżka orbitalna NIE | ⚠ **nie naprawiać bez 199** — sam w sobie zmienia szum, nie wynik; fallback ma też drugiego konsumenta (`enemyUnit` w EAH) |
 | **196** | 🟠 | `no_idle_hull` (VO-3b) jest w ścieżce REGUŁY nieosiągalny — guard `empireHasStrikeForce` odcina przed akcją i przed rzutem | **nie defekt, ostrzeżenie metodyczne**: „dlaczego ofensywa AI stoi" NIE da się odczytać z `director:strikeRefused`; użyj `strikeReport`/`directorRules`, inaczej gate mierzy ciszę |
 | **197** | 🟠 | `war:peaceSigned` ma ZERO konsumentów poza `DebugLog` — żaden system nie reaguje na pokój | ZŁAGODZONY przez Z2 (reguła powrotu świadomie bez guardu wojny, D-Z2-8), ale pytanie „jak flota AI reaguje na pokój" należy do **W4** |
 | **198** | ⚪ | `DSCS._findActiveEncounterContaining` jest de facto publiczny (8 konsumentów po Z2, w tym renderer); prefiks `_` kłamie o roli | kosmetyka. ⚠ Pytanie „czy trzeba zbudować predykat »statek w starciu«" padło już DWA razy (F130 §8, Z2) — odpowiedź oba razy: **istnieje** |
