@@ -2837,6 +2837,57 @@ Trzecia gałąź klasy **Findingu 87**, przy poprawnym wzorze dwa miejsca dalej 
 i to **zmiana tempa gry wywiadu z własnym pomiarem**, nie higiena.
 
 
+## Finding 130 — misja rajdera AI przeżywa starcie (save **v101 bez migracji**, live-gate PASS)
+
+Plan + decyzje **D-130-1..4 (W1)** + zmierzona anatomia Z2: `docs/design/AI_COMBAT_MISSION_PLAN.md`.
+
+**Jedno zdanie:** `DSCS.startEngagement` zerował `mission` strony AI **bezwarunkowo, bez migawki
+i bez wznowienia**, podczas gdy gracz miał pełny mechanizm od `046976d`.
+
+⚠ **TO NIE BYŁ BRAK MECHANIZMU, TYLKO ASYMETRIA** — i pokazała to dopiero **reguła wejścia**
+(`git log -S` + uruchomienie keepera PRZED audytem). Naprawa = uogólnienie istniejącej,
+przetestowanej ścieżki gracza na obie strony, nie projektowanie od zera.
+
+**Dwie szkody, nie jedna:** (1) `EnemyAttackHandler:42` bramkuje na `mission.type === 'attack'`,
+więc przechwycenie w głębokiej przestrzeni **po cichu kasowało całe uderzenie AI**; (2)
+`DirectorOffensive.strikeReadyVessels:82` ma `if (v.mission) continue` — zerowanie misji
+**wpisywało rajdera z powrotem do puli uderzeniowej** w tej samej chwili (to jest silnik Z2).
+
+**Zmiany:** `_pausePlayerSideForCombat` → `_pauseSideForCombat(vessels, pin, {isPlayer})` ·
+`_resolvePlayerMissionsPostBattle` → `_resolveMissionsPostBattle` (obie strony, każda bramkowana
+własną flagą) · `_joinEncounter` też przez wspólną ścieżkę (bez tego nieutwardzony bliźniak) ·
+NEW flaga `m4EnemyCombatMissionPause` (ON, niezależna od gracza).
+
+⚠ **Zamrażanie zostaje ASYMETRYCZNE i to jest zamierzone:** strona AI zamrażana ZAWSZE (także przy
+fladze OFF — zachowanie sprzed naprawy; kill-switch nie ma prawa go zmienić), strona gracza tylko
+przy fladze ON. ⚠ Gałąź odwrotu **tylko dla gracza** (D-130-3): dla AI odwrót wydaje
+`AutoRetreatSystem`, więc druga gałąź dałaby **dwa odwroty na jedną bitwę**.
+
+⚠ **KEEPER A1 T6 PINOWAŁ DEFEKT** — asercja „no-op dla AI↔AI" utrwalała ograniczenie „migawkę
+dostaje tylko gracz", czyli sam Finding 130. **Odwrócona świadomie**; inwariant „bez właściwej
+flagi nic się nie dzieje" przeniesiony na kontrolę pinu. `player_combat_mission_pause` 19 → **21/21**.
+⚠ Dwa odwołania, które po zmianie nazwy by KŁAMAŁY (komentarz `AutoRetreatSystem:70` + wywołania
+w keeperze A1) — naprawione w tym samym commicie. Aliasu świadomie nie zostawiono.
+
+**🟠 Z2 ZOSTAJE OTWARTY — 130 go ZŁAGODZIŁO, NIE ZAMKNĘŁO.** Zmierzona anatomia (4 składniki):
+parkowanie ma **DWÓCH producentów** (`DSCS:1219` + **`EnemyAttackHandler:241-245`**, ten drugi
+jawnie dokuje rajdera przy planecie GRACZA), brak filtra puli, `bypassFuelCheck`, oraz **brak
+jakiejkolwiek logiki powrotu AI** (`homeSystemId` tylko w kolonizacji/logistyce). ⚠ Rejestr mówił,
+że 130 jest warunkiem koniecznym Z2, bo „rajder nie ma czym wrócić" — **mechanizm jest inny**:
+misja ataku to `moveToPoint` przemianowany, czyli **bilet w jedną stronę**, więc nie ma czego
+przywracać. Transport gotowy (`dispatchInterstellar`); brakuje **intencji**. Keeper **T4 pinuje tę
+granicę wprost**, żeby zielony przebieg nie został wzięty za zamknięcie Z2.
+
+**Testy:** NEW `ai_combat_mission_pause_smoke` **19/19**, fail-first **13/6** (kontrole pinu zielone
+po obu stronach). Sweep **191/191 0 FAIL** · `check-i18n` PASS. Live-gate PASS: `v_21` wznowił
+`attack` i doleciał do celu; `v_22` wycofał się przez `AutoRetreatSystem` **bez konfliktu** — to
+potwierdza D-130-3 na żywym silniku. ⚠ **Granica dowodu: kill-switch NIE testowany w przeglądarce**
+— pinuje go wyłącznie keeper T5.
+
+⚠ **Obserwacja do rejestru przy Z2:** w trakcie TRWAJĄCEJ bitwy rajder jest w `strikeReadyVessels`
+— **nie istnieje publiczny predykat „statek jest w starciu"** (grep czysty). Pre-existing, przez tę
+naprawę **zwężone**, nie poszerzone. Osiągalność niezmierzona.
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)

@@ -67,7 +67,7 @@ export class AutoRetreatSystem {
     // explicit retreat order (już dostał moveToPoint), albo poszedł moveToPoint
     // sam. Nie nadpisujemy jego decyzji.
     // ⚠ TO NIE JEST BRAMKA SYMETRII i nie należy jej tak czytać. Gracz DOSTAJE auto-odwrót —
-    //   tyle że drugimi drzwiami: `DeepSpaceCombatSystem._resolvePlayerMissionsPostBattle:1236`
+    //   tyle że drugimi drzwiami: `DeepSpaceCombatSystem._resolveMissionsPostBattle`
     //   woła `_issueRetreatOrder` WPROST, z pominięciem tego `return`, gdy flota gracza spadnie
     //   ≤ RETREAT_THRESHOLD HP. Symetria mieszka w SELEKTORZE i w drabinie `!dest`, nie tutaj.
     if (side.empireId === 'player') return;

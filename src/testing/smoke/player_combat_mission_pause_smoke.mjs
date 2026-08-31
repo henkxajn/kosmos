@@ -5,7 +5,8 @@
 // po walce WZNOWIONA (>20% MAX HP floty) albo WYCOFANA (≤20%). Player-only. FleetSystem (retreat_at_50)
 // owns members floty z aktywnym activeOrder → tylko freeze, bez abort z tej ścieżki.
 //
-// Pokrycie (logika _resolvePlayerMissionsPostBattle + _isMissionPauseEligible):
+// Pokrycie (logika _resolveMissionsPostBattle + _isMissionPauseEligible):
+// ⚠ Funkcja uogolniona na OBIE strony przy Findingu 130 — ten keeper pilnuje POLOWY GRACZA.
 //   T1  eligible, pct 0.5 (>0.2) → RESUME
 //   T2  eligible, pct 0.1 (≤0.2) → ABORT (retreat), snapshot dropped
 //   T3  order layer przejęła (v.mission != null, np. retreat_at_50) → drop snapshot, bez resume/abort
@@ -58,7 +59,7 @@ function run({ eligible = true, hp = 50, maxHp = 100, mission = null, isWreck = 
   const enc = mkEncounter('v1', hp, maxHp);
   const v = { id: 'v1', _combatPause: { eligible }, mission, isWreck, _suspendedMission: { targetId: 'body_1' } };
   dscs._vm._vessels.set('v1', v);
-  dscs._resolvePlayerMissionsPostBattle(enc, 'battle_1');
+  dscs._resolveMissionsPostBattle(enc, 'battle_1');
   return { resumeCalls, retreatCalls, v };
 }
 
@@ -105,17 +106,32 @@ header('T5: wrak → skip');
   assert(r.v._suspendedMission === undefined, 'snapshot dropped');
 }
 
-// ── T6 — brak strony gracza → no-op ──────────────────────────────────────────
-header('T6: AI↔AI (brak player side) → no-op');
+// ── T6 — AI↔AI: ODWROCONY SWIADOMIE przy Findingu 130 ────────────────────────
+// ⚠ W starym ksztalcie ta asercja brzmiala „no-op dla AI↔AI" i pinowala DEFEKT: migawke misji
+//   dostawal wylacznie gracz, wiec bitwa dwoch AI nie wznawiala niczego, a rajder wychodzil z niej
+//   z `mission = null`. To jest dokladnie Finding 130. Po D-130-1 sciezka jest wspolna dla obu
+//   stron, wiec AI↔AI MA wznawiac. Inwariant „bez wlasciwej flagi nic sie nie dzieje" nie znika —
+//   przenosi sie na kontrole pinu ponizej (flaga AI OFF → znowu no-op).
+header('T6: AI↔AI wznawia (po 130) + kontrola pinu na fladze');
 {
   const { dscs, resumeCalls, retreatCalls } = setup();
   GAME_CONFIG.FEATURES.m4PlayerCombatMissionPause = true;
-  const enc = { sideA: { ownerEmpireId: 'emp_a', vesselIds: ['v1'], joinedVesselIds: [] },
-                sideB: { ownerEmpireId: 'emp_b', vesselIds: [], joinedVesselIds: [] },
-                vesselStates: new Map([['v1', { hp: 10, hpStart: 100 }]]) };
+  GAME_CONFIG.FEATURES.m4EnemyCombatMissionPause  = true;
+  const mkEnc = () => ({ sideA: { ownerEmpireId: 'emp_a', vesselIds: ['v1'], joinedVesselIds: [] },
+                         sideB: { ownerEmpireId: 'emp_b', vesselIds: [], joinedVesselIds: [] },
+                         vesselStates: new Map([['v1', { hp: 10, hpStart: 100 }]]) });
   dscs._vm._vessels.set('v1', { id: 'v1', _combatPause: { eligible: true }, _suspendedMission: {} });
-  dscs._resolvePlayerMissionsPostBattle(enc, 'b');
-  assert(resumeCalls.length === 0 && retreatCalls.length === 0, 'no-op dla AI↔AI');
+  dscs._resolveMissionsPostBattle(mkEnc(), 'b');
+  assert(resumeCalls.length === 1, 'AI↔AI WZNAWIA misje (Finding 130 — dawniej no-op)');
+  assert(retreatCalls.length === 0, 'AI nie dostaje galezi odwrotu (D-130-3 — robi to AutoRetreatSystem)');
+
+  // kontrola pinu — to nie jest „zawsze wznawia": kill-switch AI przywraca dawne no-op
+  GAME_CONFIG.FEATURES.m4EnemyCombatMissionPause = false;
+  dscs._vm._vessels.set('v2', { id: 'v2', _combatPause: { eligible: true }, _suspendedMission: {} });
+  const enc2 = mkEnc(); enc2.sideA.vesselIds = ['v2'];
+  dscs._resolveMissionsPostBattle(enc2, 'b');
+  assert(resumeCalls.length === 1, 'kontrola pinu: przy fladze AI OFF znowu no-op');
+  GAME_CONFIG.FEATURES.m4EnemyCombatMissionPause = true;
 }
 
 // ── T7 — flaga OFF → no-op ───────────────────────────────────────────────────

@@ -84,6 +84,10 @@ export const GAME_CONFIG = {
     // Player-only (ownerEmpireId==='player'). Domyślnie ON — kill-switch; live-gate PASS
     // (freeze/pause/resume), gałąź abort ≤20% pokryta T2, live odroczony — docs/deferred-live-gates.md.
     m4PlayerCombatMissionPause: true,
+    // Finding 130 (D-130-2) — migawka/wznowienie misji dla strony AI w starciu DSCS.
+    // OSOBNY kill-switch od gracza: zmiana zachowania AI jest odczuwalna w rozgrywce
+    // i musi dać się wyłączyć niezależnie. OFF = zachowanie sprzed naprawy (mission=null).
+    m4EnemyCombatMissionPause: true,
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).

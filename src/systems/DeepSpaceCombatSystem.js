@@ -386,12 +386,15 @@ export class DeepSpaceCombatSystem {
     // w absolute space, planeta z player vesselami orbituje słońce, dystans
     // rośnie poza weapon range, walka cienie się.
     const dominantDocked = this._findDominantDockedAt(sideAVessels);
-    for (const v of sideBVessels) this._freezeAsStationary(v, dominantDocked);
+    // Finding 130 (D-130-1) — OBIE strony przez JEDNĄ ścieżkę. Wcześniej strona B dostawała
+    // `_freezeAsStationary` (czyli `mission = null`) BEZ migawki i bez wznowienia, podczas gdy
+    // gracz miał pełny mechanizm od `046976d`. To nie był brak mechanizmu, tylko ASYMETRIA.
+    this._pauseSideForCombat(sideBVessels, dominantDocked, { isPlayer: false });
 
     // Player side (gated m4PlayerCombatMissionPause): freeze + pauza misji. Bez flagi player
     // zachowuje movement orders (obecne zachowanie — dryf/porażka). Pin = dominantDocked (orbita
     // gracza) lub null (deep-space in_transit → free-float hold w bieżącej pozycji).
-    if (ownerA === 'player') this._pausePlayerSideForCombat(sideAVessels, dominantDocked);
+    if (ownerA === 'player') this._pauseSideForCombat(sideAVessels, dominantDocked, { isPlayer: true });
 
     EventBus.emit('vessel:engaged', {
       encounterId:   id,
@@ -461,12 +464,14 @@ export class DeepSpaceCombatSystem {
     side.joinedVesselIds.push(newVesselId);
 
     // Stationary AI dla wroga.
-    if (side === encounter.sideB) this._freezeAsStationary(v);
+    // Dołączający też przechodzi przez wspólną ścieżkę (inaczej wzmocnienie AI gubiłoby misję
+    // mimo naprawy 130 — nieutwardzony bliźniak tego samego szwu).
+    if (side === encounter.sideB) this._pauseSideForCombat([v], null, { isPlayer: false });
     // Player reinforcement (gated) — freeze + pauza misji jak przy starcie encountera.
     else if (side === encounter.sideA && encounter.sideA.ownerEmpireId === 'player') {
-      this._pausePlayerSideForCombat([v], this._findDominantDockedAt(
+      this._pauseSideForCombat([v], this._findDominantDockedAt(
         [...encounter.sideA.vesselIds, ...encounter.sideA.joinedVesselIds]
-          .map(id => this._vm?._vessels?.get?.(id)).filter(Boolean)));
+          .map(id => this._vm?._vessels?.get?.(id)).filter(Boolean)), { isPlayer: true });
     }
 
     // Append join event do timeline (na bieżącej rundzie).
@@ -1063,7 +1068,7 @@ export class DeepSpaceCombatSystem {
 
     // Player combat mission pause/resume (gated) — wznów albo wycofaj zawieszone misje gracza
     // PRZED emitem battle:resolved (AutoRetreatSystem i tak pomija stronę gracza).
-    this._resolvePlayerMissionsPostBattle(encounter, battleId);
+    this._resolveMissionsPostBattle(encounter, battleId);
 
     gameState.set?.(`battles.${battleId}`, battleRec, 'deep_space_combat');
     EventBus.emit('battle:resolved', { warId: null, battleId, result: battleRec });
@@ -1270,49 +1275,76 @@ export class DeepSpaceCombatSystem {
    *  i _handleCombatRangeExit liczy to jako porażkę — reported symptom). SNAPSHOT = dla każdego z żywą
    *  misją in_transit (universal, by freeze nie osierocił misji). Marker `_combatPause.eligible`
    *  rozstrzyga przy końcu bitwy: abort (tylko eligible) vs samo resume. Gated flagą. */
-  _pausePlayerSideForCombat(vessels, pinDockedAt) {
-    if (!GAME_CONFIG.FEATURES?.m4PlayerCombatMissionPause) return;
+  /**
+   * Zamrożenie strony na czas walki + migawka misji (Finding 130, D-130-1).
+   *
+   * ⚠ ZAMRAŻANIE NIE JEST SYMETRYCZNE i to jest zamierzone. Strona AI jest zamrażana ZAWSZE,
+   *   także przy fladze OFF — to zachowanie sprzed tej naprawy i kill-switch nie ma prawa go
+   *   zmienić. Strona GRACZA jest zamrażana wyłącznie przy fladze ON (kontrakt z `046976d`:
+   *   bez flagi gracz zachowuje movement orders). Migawka dochodzi tylko przy fladze ON.
+   *
+   * ⚠ `eligible` liczymy TYLKO dla gracza (D-130-3). To ono otwiera gałąź odwrotu przy niskim
+   *   HP w `_resolveMissionsPostBattle`; dla AI odwrót wydaje `AutoRetreatSystem` na
+   *   `battle:resolved`, więc druga gałąź dawałaby DWA odwroty na jedną bitwę.
+   */
+  _pauseSideForCombat(vessels, pinDockedAt, { isPlayer = false } = {}) {
+    const F = GAME_CONFIG.FEATURES ?? {};
+    const paused = isPlayer ? F.m4PlayerCombatMissionPause : F.m4EnemyCombatMissionPause;
+    if (!paused) {
+      if (!isPlayer) for (const v of vessels) this._freezeAsStationary(v, pinDockedAt);
+      return;
+    }
     const mos = window.KOSMOS?.movementOrderSystem;
     for (const v of vessels) {
       if (!v || v.isWreck) continue;
-      const eligible = this._isMissionPauseEligible(v);
+      const eligible = isPlayer ? this._isMissionPauseEligible(v) : false;
       const snapped  = mos?._suspendMissionIfAny?.(v, { forCombat: true }) ?? false;
       this._freezeAsStationary(v, pinDockedAt);
-      if (snapped) v._combatPause = { eligible };
+      if (snapped) v._combatPause = { eligible, isPlayer };
     }
   }
 
-  /** Koniec bitwy: wznów/wycofaj zawieszone misje gracza (gated). Dla każdego vessela gracza
+  /** Koniec bitwy: wznów/wycofaj zawieszone misje OBU stron (gated osobno per strona,
+   *  D-130-1/3). Dla każdego vessela z markerem `_combatPause`
    *  z markerem `_combatPause`:
    *   - wrak → drop snapshot,
    *   - warstwa ORDER przejęła w trakcie (vessel.mission != null, np. retreat_at_50 wydał moveToPoint)
    *     → oddaj sterowanie (drop snapshot, bez wznowienia — brak wyścigu z FleetSystem),
    *   - eligible I pct floty ≤ RETREAT_THRESHOLD (bieżące/MAX HP) → ABORT: wycofaj do friendly planety,
    *   - inaczej → RESUME misji (body → żywa pozycja, punkt → zapamiętane koordy). */
-  _resolvePlayerMissionsPostBattle(encounter, battleId) {
-    if (!GAME_CONFIG.FEATURES?.m4PlayerCombatMissionPause) return;
-    const playerSide = encounter.sideA.ownerEmpireId === 'player' ? 'A'
-                     : encounter.sideB.ownerEmpireId === 'player' ? 'B' : null;
-    if (!playerSide) return;
-    const side  = playerSide === 'A' ? encounter.sideA : encounter.sideB;
-    const maxHp = this._sumMaxHP(encounter, playerSide);
-    const curHp = this._sumHP(encounter, playerSide);
-    const pct   = maxHp > 0 ? curHp / maxHp : 1.0;
-
+  _resolveMissionsPostBattle(encounter, battleId) {
+    if (!encounter) return;
+    const F  = GAME_CONFIG.FEATURES ?? {};
     const vm = this._vm;
     const ar = window.KOSMOS?.autoRetreatSystem;
-    for (const vid of [...side.vesselIds, ...side.joinedVesselIds]) {
-      const v = vm?._vessels?.get?.(vid);
-      if (!v?._combatPause) continue;
-      const eligible = v._combatPause.eligible;
-      delete v._combatPause;
-      if (v.isWreck) { delete v._suspendedMission; continue; }
-      if (v.mission) { delete v._suspendedMission; continue; }   // order layer przejęła → nie wznawiaj
-      if (eligible && pct <= RETREAT_THRESHOLD) {
-        delete v._suspendedMission;
-        ar?._issueRetreatOrder?.(v, battleId);                   // rozbita flota → friendly planeta
-      } else {
-        vm?._resumeMissionAfterOrder?.(v.id);                    // wznów z miejsca walki
+
+    for (const key of ['A', 'B']) {
+      const side = key === 'A' ? encounter.sideA : encounter.sideB;
+      if (!side) continue;
+      const isPlayer = side.ownerEmpireId === 'player';
+      if (!(isPlayer ? F.m4PlayerCombatMissionPause : F.m4EnemyCombatMissionPause)) continue;
+
+      // Próg odwrotu liczymy WYŁĄCZNIE dla gracza — dla AI gałąź i tak nie istnieje (D-130-3),
+      // a `_sumHP` po stronie bez `_combatPause` byłoby czystym kosztem.
+      let pct = 1.0;
+      if (isPlayer) {
+        const maxHp = this._sumMaxHP(encounter, key);
+        pct = maxHp > 0 ? this._sumHP(encounter, key) / maxHp : 1.0;
+      }
+
+      for (const vid of [...side.vesselIds, ...side.joinedVesselIds]) {
+        const v = vm?._vessels?.get?.(vid);
+        if (!v?._combatPause) continue;
+        const eligible = v._combatPause.eligible;
+        delete v._combatPause;
+        if (v.isWreck) { delete v._suspendedMission; continue; }
+        if (v.mission) { delete v._suspendedMission; continue; }   // order layer przejęła → nie wznawiaj
+        if (isPlayer && eligible && pct <= RETREAT_THRESHOLD) {
+          delete v._suspendedMission;
+          ar?._issueRetreatOrder?.(v, battleId);                   // rozbita flota → friendly planeta
+        } else {
+          vm?._resumeMissionAfterOrder?.(v.id);                    // wznów z miejsca walki
+        }
       }
     }
   }

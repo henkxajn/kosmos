@@ -183,6 +183,11 @@ statek nie jest już w starciu. ⚠ Sweep jest **warunkiem koniecznym poprawnoś
   ⚠ **ŚWIADOMIE ZAAKCEPTOWANE przez właściciela jako konsekwencja TYMCZASOWA** (podpis 2026-08-26),
   do zamknięcia osobnym slice'em **„AI wraca po ataku"**. **D-VO1b-4: MUSI zostać jawnie nazwane
   w wyniku GATE B2 — nie wolno go tam przemilczeć.**
+  ✅ **ANATOMIA ZMIERZONA 2026-08-31** przy zamykaniu Findingu 130 (`AI_COMBAT_MISSION_PLAN.md` §3):
+  parkowanie ma **DWÓCH producentów** (`DSCS:1219` i **`EnemyAttackHandler:241-245`** — ten drugi
+  jawnie ustawia `dockedAt = planetId` gracza), a **logika powrotu AI nie istnieje w ogóle**
+  (`homeSystemId` tylko w kolonizacji/logistyce). Transport jest gotowy: AI podróżuje przez
+  `dispatchInterstellar`. Brakuje **intencji**, nie maszynerii. 130 to Z2 **złagodziło, nie zamknęło**.
 - 🟠 **Z3 — `pendingOrder` to DRUGIE pole tego samego kształtu** (`DirectorOffensive:84`). Zeruje je
   `_maybeDeliver`, ale ścieżki odmowy composite'u trzeba przejrzeć — reguła nieutwardzonego bliźniaka.
   **Filed; nie wchodzi w ten commit.**
