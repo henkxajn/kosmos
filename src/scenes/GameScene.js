@@ -109,7 +109,7 @@ import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/
 import { DirectorPressure, registerPressureBehaviors } from '../systems/director/DirectorPressure.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../systems/director/DirectorDoctrine.js';
 import { DirectorMobilization, registerMobilizationBehaviors } from '../systems/director/DirectorMobilization.js';
-import { DirectorOffensive, registerOffensiveBehaviors } from '../systems/director/DirectorOffensive.js';
+import { DirectorOffensive, registerOffensiveBehaviors, MAX_STRIKE_SIZE } from '../systems/director/DirectorOffensive.js';
 import { DirectorRecall, registerRecallBehaviors } from '../systems/director/DirectorRecall.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
@@ -663,6 +663,8 @@ export class GameScene {
         // stanie, który ten slice wprowadza (okręty wracają do domu).
         const hulls    = off._warpCapableHulls(empireId);
         const idleAway = hulls.filter(v => !v.mission && !v.movementOrder && !v.pendingOrder);
+        // D-199-1 — eskadra liczona z REALNEJ puli (per-kadłubowe HP), dokładnie jak w decyzji.
+        const sq       = t ? off.requiredSquadron(t, ready) : null;
         const stranded = window.KOSMOS?.directorRecall?.countStranded?.(empireId) ?? '—';
         const rep = {
           imperium: empireId,
@@ -670,7 +672,12 @@ export class GameScene {
           ukladyRoszczone: im?.getClaimedSystems?.(empireId)?.length ?? '—',
           powlokaGraniczna: im?.getBorderSystems?.(empireId)?.length ?? '—',
           celeWZasiegu: off.countReachableTargets(empireId),
-          cel: t ? { cialo: t.body.id, uklad: t.systemId, wartosc: t.value, bronione: t.defended } : null,
+          // D-199-1/7 — raport MUSI mowic liczbami eskadry, nie booleanem. `bronione` zostaje
+          // jako sygnal opisowy, ale to `potrzeba` rozstrzyga o starcie.
+          cel: t ? {
+            cialo: t.body.id, uklad: t.systemId, wartosc: t.value, bronione: t.defended,
+            hpObroncy: sq?.defenderHp ?? '—', potrzeba: sq?.needed ?? '—', sufit: MAX_STRIKE_SIZE,
+          } : null,
           ukladMacierzysty: off._homeSystemIdOf(empireId) ?? '— (brak stolicy)',
           okretyGotowe: ready.map(v => `${v.name}(warp ${v.warpFuel?.max})`),
           kadlubyZeSkokiem: hulls.length,
@@ -682,7 +689,15 @@ export class GameScene {
           : (ready.length === 0 && hulls.length === 0) ? 'brak okrętu zdolnego do skoku'
           : (ready.length === 0 && idleAway.length === 0) ? 'kadłuby są, ale każdy ma zajęcie (no_idle_hull)'
           : ready.length === 0 ? 'kadłuby są WOLNE, ale żaden nie jest w domu — wracają (no_hull_at_home, Z2)'
-          : (t?.defended && ready.length < 2) ? 'cel broniony, a okręt jeden — potrzeba eskadry'
+          // ⚠ D-199-7 — DWA OSTATNIE SZCZEBLE MUSZĄ ODTWARZAĆ `launchStrike` CO DO KOLEJNOŚCI.
+          //   Stał tu zaszyty boolean (`t?.defended && ready.length < 2`), czyli LUSTRO progu,
+          //   a nie sam próg — skłamałoby przy pierwszej zmianie reguły eskadry. Teraz oba
+          //   szczeble liczą tą samą metodą co decyzja, i w tej samej kolejności: najpierw
+          //   „cel za mocny w ogóle", potem „chwilowo za mało okrętów".
+          : (sq && sq.needed > MAX_STRIKE_SIZE)
+            ? `cel PONAD ZASIĘG: obrona ${sq.defenderHp} HP wymaga ${sq.needed} okrętów, sufit to ${MAX_STRIKE_SIZE} (target_beyond_reach)`
+          : (sq && ready.length < sq.needed)
+            ? `za mała eskadra: potrzeba ${sq.needed}, gotowych ${ready.length} (insufficient_squadron)`
           : 'wszystkie warunki spełnione — czeka na rzut reguły';
         console.log('[strikeReport]', rep);
         return rep;

@@ -46,11 +46,32 @@ import EntityManager from '../../core/EntityManager.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { isEnemyVessel, hasWeapons, isInService } from '../../entities/Vessel.js';
 import { PLAYER_OWNER_ID } from '../ThreatAssessment.js';
+// ⚠ OBIE STRONY ILORAZU MUSZĄ POCHODZIĆ Z TEJ SAMEJ FUNKCJI. `defenderHp` liczy
+// `WarSystem._buildPlayerBattleUnit` przez `playerVesselsToBattleUnit`; gdyby siłę WŁASNEJ
+// eskadry liczyć osobnym wzorem (np. sumą `HULLS[...].baseHP`), `SQUADRON_HP_RATIO`
+// porównywałby dwie różne wielkości i przestałby znaczyć to, co zmierzono.
+// `BattleSystem` jest tu biblioteką czystych funkcji (tak używają go EAH/VCS/WarSystem),
+// nie systemem stanowym — import nie łamie zasady „systemy gadają EventBusem".
+import { playerVesselsToBattleUnit } from '../BattleSystem.js';
+import { HULLS } from '../../data/HullsData.js';
+import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 
-/** Ile okrętów wysyłamy na cel BRONIONY (§Findings 34 — samotny rajder ginie za darmo). */
-export const SQUADRON_VS_DEFENDED = 2;
-/** Ile na cel bez obrony. */
-export const SQUADRON_VS_UNDEFENDED = 1;
+/**
+ * ⚠ JEDYNE POKRĘTŁO BALANSU TEGO SLICE'U (D-199-1). Ile razy więcej wytrzymałości musi mieć
+ * eskadra od obrońcy, żeby uderzenie miało sens. 1.5 pochodzi z pomiaru, nie z wyczucia:
+ * dwa rajdery (240 HP) PRZEGRYWAŁY z obroną 210 HP, trzy (360) wygrywały.
+ *
+ * ⚠ Nazwana stała, NIGDY literał we wzorze — inaczej przestrojenie balansu wymagałoby czytania
+ * formuły, a `grep` nie znalazłby knoba.
+ */
+export const SQUADRON_HP_RATIO = 1.5;
+/**
+ * Wytrzymałość pojedynczego kadłuba używana WYŁĄCZNIE w diagnostyce, gdy pula jest pusta
+ * (`strikeReport` na imperium bez okrętów). W realnej decyzji liczymy z KADŁUBÓW, które
+ * naprawdę polecą — szablony bojowe AI degradują `hull_frigate` (120) do `hull_small` (30),
+ * więc stała tutaj byłaby kłamstwem o sile eskadry.
+ */
+export const STRIKE_HULL_HP_FALLBACK = 120;
 /** Górna klamra jednego uderzenia — imperium nie wysyła wszystkiego, co ma. */
 export const MAX_STRIKE_SIZE = 3;
 
@@ -213,15 +234,70 @@ export class DirectorOffensive {
   }
 
   /**
-   * Wybór celu: najcenniejszy, a przy remisie — słabiej broniony.
+   * ILE WYTRZYMAŁOŚCI WYSTAWI OBROŃCA — pytamy TĄ SAMĄ funkcją, która zbuduje jednostkę bitwy
+   * (`WarSystem._buildPlayerBattleUnit`), więc oszacowanie nie może się rozjechać z rzeczywistością.
+   *
+   * ⚠ ZERO NOWEGO WYCIEKU INFORMACJI: dzisiejsze `isDefended` i tak czyta
+   * `colony.buildingSystem._active` wprost. Gradowanie przestaje tylko WYRZUCAĆ to, co przeczytało.
+   * ⚠ Fail-OPEN (brak `warSystem` ⇒ 0): imperium zachowa się jak przy celu bez obrony i wyśle
+   * minimum. Fail-closed odmawiałoby uderzeń przy niekompletnym locatorze — cisza nie do odróżnienia
+   * od „reguła nie działa" (lekcja Findingu 35).
+   */
+  estimateDefenderHp(target) {
+    const war = window.KOSMOS?.warSystem;
+    if (!war?._buildPlayerBattleUnit || !target?.systemId) return 0;
+    // D-199-8 — ciało PODAJEMY (konsumowane od commitu 3); dziś zakres jest układowy.
+    const unit = war._buildPlayerBattleUnit(target.systemId, target.body?.id ?? null);
+    return Math.max(0, unit?.hp ?? 0);
+  }
+
+  /** Średnia wytrzymałość kadłuba w danej puli — z REALNYCH okrętów, nie ze stałej. */
+  _avgHullHp(ships) {
+    if (!Array.isArray(ships) || ships.length === 0) return STRIKE_HULL_HP_FALLBACK;
+    const unit = playerVesselsToBattleUnit(ships, HULLS, SHIP_MODULES, 'pula');
+    const hp = (unit?.hp ?? 0) / ships.length;
+    return hp > 0 ? hp : STRIKE_HULL_HP_FALLBACK;
+  }
+
+  /**
+   * ILU OKRĘTÓW POTRZEBA NA TEN CEL (D-199-1). ⚠ **BEZ CLAMPA do `MAX_STRIKE_SIZE`** — to jest
+   * poprawka właściciela i ma zmierzone uzasadnienie: obrona `defense_grid` Lv3 + `defense_tower`
+   * Lv5 daje 530 HP ⇒ `needed = 7`. Gdyby wynik był tu przycinany do sufitu, imperium wysłałoby
+   * trzy okręty i przegrało na KAŻDYM ziarnie — czyli clamp odtwarzałby dokładnie to samobójstwo,
+   * dla którego ten slice powstał, tylko wyżej na skali. Klamruje `launchStrike`, osobnym powodem.
+   *
+   * @returns {{needed:number, defenderHp:number, perShipHp:number}}
+   */
+  requiredSquadron(target, ready = []) {
+    const defenderHp = this.estimateDefenderHp(target);
+    const perShipHp  = this._avgHullHp(ready);
+    const needed     = Math.max(1, Math.ceil((defenderHp * SQUADRON_HP_RATIO) / perShipHp));
+    return { needed, defenderHp, perShipHp };
+  }
+
+  /**
+   * Wybór celu: najcenniejszy, a przy remisie — TAŃSZY DO WZIĘCIA.
    * Deterministyczny (żadnego RNG): los jest w RZUCIE reguły, nie w wyborze celu — inaczej
    * ten sam zapis dawałby po wczytaniu inny cel.
+   *
+   * ⚠ D-199-5 — PORZĄDEK IDZIE PO GRADOWANYM `needed`, NIE PO BOOLEANIE `defended`. Zmierzone:
+   * pod zakresem ciała boolean wskazywał cel TRUDNIEJSZY (stolica `needed 3` wygrywała z kolonią
+   * `needed 1`), bo `defended` był jednakowy, a rozstrzygał identyfikator. ⚠ Dopóki bitwa liczy
+   * CAŁY układ (do commitu 3), wszystkie ciała w układzie mają identycznego obrońcę, więc ta
+   * zmiana jest jeszcze NO-OPEM — wchodzi teraz, żeby commit 3 nie musiał wracać do sortowania.
+   * ⚠ Kolejność jest niewrażliwa na `perShipHp` (wspólny dzielnik), więc liczymy ją bez puli.
+   * `defended` ZOSTAJE jako sygnał do zdarzenia i raportu — przestał być tylko kluczem porządku.
    */
   pickTarget(empireId) {
     const cands = this.reachableTargets(empireId);
     if (cands.length === 0) return null;
-    const scored = cands.map(c => ({ ...c, value: this.targetValue(c), defended: this.isDefended(c) }));
-    scored.sort((a, b) => (b.value - a.value) || (Number(a.defended) - Number(b.defended))
+    const scored = cands.map(c => ({
+      ...c,
+      value:    this.targetValue(c),
+      defended: this.isDefended(c),
+      needed:   this.requiredSquadron(c).needed,
+    }));
+    scored.sort((a, b) => (b.value - a.value) || (a.needed - b.needed)
                        || String(a.body.id).localeCompare(String(b.body.id)));
     return scored[0];
   }
@@ -258,11 +334,25 @@ export class DirectorOffensive {
           { hulls: hulls.length, idleAway: idle.length, homeSystemId: this._homeSystemIdOf(empireId) });
       }
 
-      // §Findings 34 — przeciw obronie lecimy eskadrą albo wcale.
-      const needed = target.defended ? SQUADRON_VS_DEFENDED : SQUADRON_VS_UNDEFENDED;
+      // §Findings 34 + D-199-1 — przeciw obronie lecimy eskadrą DOBRANĄ DO NIEJ albo wcale.
+      // Do 199 próg był BOOLEANEM (1 albo 2), więc kolonia osłonięta siatką obronną stolicy
+      // wyglądała na bezbronną i dostawała jeden okręt. Teraz liczba pochodzi z jednostki,
+      // którą bitwa NAPRAWDĘ zbuduje.
+      const { needed, defenderHp } = this.requiredSquadron(target, ready);
+
+      // ⚠ KOLEJNOŚĆ TYCH DWÓCH BRAMEK JEST KONTRAKTEM, NIE STYLEM (D-199-7).
+      //   Opisują DWA RÓŻNE STANY ŚWIATA i mylenie ich czyni drabinę kłamliwą:
+      //     `target_beyond_reach`   — „nawet w pełni sił tego nie wezmę"  → STRUKTURALNY;
+      //     `insufficient_squadron` — „wziąłbym, ale nie mam teraz okrętów" → PRZEJŚCIOWY.
+      //   Przy `needed = 7` i puli 1 odwrotna kolejność meldowałaby chwilowy niedobór, czyli
+      //   kazałaby czekać na okręty, których liczba i tak nigdy nie wystarczy.
+      if (needed > MAX_STRIKE_SIZE) {
+        return this._refuse(empireId, 'target_beyond_reach', year,
+          { needed, available: ready.length, defenderHp, defended: target.defended });
+      }
       if (ready.length < needed) {
         return this._refuse(empireId, 'insufficient_squadron', year,
-          { needed, available: ready.length, defended: target.defended });
+          { needed, available: ready.length, defenderHp, defended: target.defended });
       }
 
       const cap = Math.min(Number(params.maxShips ?? MAX_STRIKE_SIZE), MAX_STRIKE_SIZE);

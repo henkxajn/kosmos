@@ -606,7 +606,22 @@ export class WarSystem {
         || this._playerColoniesInSystem(systemId).length > 0;
   }
 
-  _buildPlayerBattleUnit(systemId) {
+  /**
+   * Jednostka bitwy GRACZA broniąca układu.
+   *
+   * ⚠ D-199-8 — `targetBodyId` jest PRZYJMOWANE, ale w commicie 2 jeszcze NIC nie zmienia.
+   *   Zakres schodzi do ciała dopiero w commicie 3 (D-199-2 = V4: budynki per-kolonia, okręty
+   *   dalej per-układ). Parametr wchodzi wcześniej z jednego powodu: jedyny produkcyjny wołacz
+   *   (`EnemyAttackHandler`) i `DirectorOffensive.requiredSquadron` mają go PODAWAĆ od teraz,
+   *   żeby commit 3 był zmianą JEDNEGO miejsca — a nie polowaniem na wołaczy, z których któryś
+   *   po cichu zostałby na zakresie układu (wzór `removeColony:667` — nieutwardzony bliźniak).
+   *   `null` ⇒ zachowanie sprzed slice'u, więc `forceBattle` i `_fleetArrived` (które ciała nie
+   *   mają) są nietknięte. Pinuje to `defense_scope_smoke` T12, ze źródłowym pinem na wołaczu.
+   *
+   * @param {string} systemId
+   * @param {string|null} targetBodyId — ciało, nad którym toczy się bitwa (konsumowane w commicie 3)
+   */
+  _buildPlayerBattleUnit(systemId, targetBodyId = null) {
     const vessels = this._playerVesselsInSystem(systemId);
 
     // Zbierz statki gracza — baza jednostki bitwy

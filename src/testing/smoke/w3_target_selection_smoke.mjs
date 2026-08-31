@@ -11,8 +11,20 @@
 //       którego zabrakło przy pierwszym kontakcie (§Findings 24)
 //   T3  ZASIĘG: celem jest wyłącznie kolonia gracza w przestrzeni roszczonej albo w powłoce
 //       granicznej imperium (§Findings 27 — transport dałby skok przez pół galaktyki)
-//   T4  ⚠ ESKADRA: przeciw celowi BRONIONEMU reguła wysyła 2+ albo NIC (`insufficient_squadron`),
-//       przeciw niebronionemu wystarcza jeden (§Findings 34 — zmierzone dwa razy na GATE 2)
+//   T4  ⚠ ESKADRA: przeciw celowi BRONIONEMU reguła wysyła tyle, ile trzeba, albo NIC
+//       (`insufficient_squadron`); przeciw słabo bronionemu wystarcza jeden
+//       (§Findings 34 — zmierzone dwa razy na GATE 2)
+//
+// ⚠ T4 ZOSTAŁ ŚWIADOMIE ODWRÓCONY 2026-08-31 (slice DEFENSE_SCOPE, commit 2, D-199-1).
+//   Poprzednia wersja pinowała `r1.needed === SQUADRON_VS_DEFENDED`, czyli **stały próg 2 dla
+//   czegokolwiek bronionego** — a to jest dokładnie ta gruba reguła, którą Finding 199 każe
+//   zastąpić. Boolean nie odróżniał wieży Lv1 od pełnej siatki orbitalnej, więc AI albo szło
+//   za słabo (samobójstwo), albo wymagało eskadry tam, gdzie starczał jeden okręt.
+//   INTENCJA oryginału („samotny rajder nie ma prawa skruszyć bronionego celu, dwa mają")
+//   jest ZACHOWANA i pinowana dalej — zmienia się wyłącznie ŹRÓDŁO liczby: teraz pochodzi
+//   z jednostki, którą bitwa naprawdę zbuduje (`requiredSquadron`), a nie ze stałej.
+//   Stałe `SQUADRON_VS_DEFENDED`/`SQUADRON_VS_UNDEFENDED` USUNIĘTE — nie miały już czytelnika
+//   w produkcji, a martwy knob to knob, który kłamie.
 //   T5  DOBÓR OKRĘTÓW po WŁASNOŚCI `warpFuel.max > 0`, nigdy po id szablonu (D4); rezerwa,
 //       kurier i okręt pod rozkazem są pomijane
 //   T6  guardy naprawdę bramkują (wojna + posiadanie okrętu zdolnego do skoku)
@@ -30,7 +42,7 @@ import { createVessel } from '../../entities/Vessel.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { OrderService } from '../../systems/OrderService.js';
 import { DirectorOffensive, registerOffensiveBehaviors,
-         SQUADRON_VS_DEFENDED } from '../../systems/director/DirectorOffensive.js';
+         MAX_STRIKE_SIZE } from '../../systems/director/DirectorOffensive.js';
 import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { rollFires } from '../../utils/DirectorRuleMath.js';
 
@@ -153,9 +165,10 @@ console.log('T4 — ⚠ przeciw celowi BRONIONEMU: eskadra albo nic');
   stubInfluence({ border: [home.systemId] });
   window.KOSMOS.diplomacySystem?.declareWar?.(empireId, 'w3_5_probe');
 
-  // Cel BRONIONY — wieża obronna w kolonii gracza.
-  core.colonyManager.getColony(home.id)?.buildingSystem?._active
-    ?.set('def_probe', { building: { id: 'defense_tower' }, level: 2, jobs: 0 });
+  // Cel BRONIONY — wieża obronna Lv3 (120 HP) w kolonii gracza. ⚠ Poziom dobrany tak, żeby
+  // GRADOWANY próg wynosił 2 przy kadłubach `hull_frigate` (120 HP): ceil(120·1.5/120) = 2.
+  const defActives = core.colonyManager.getColony(home.id)?.buildingSystem?._active;
+  defActives?.set('def_probe', { building: { id: 'defense_tower' }, level: 3, jobs: 0 });
   const target = off.pickTarget(empireId);
   assert(target?.defended === true, 'T4: reguła WIDZI obronę planetarną celu');
 
@@ -167,15 +180,29 @@ console.log('T4 — ⚠ przeciw celowi BRONIONEMU: eskadra albo nic');
     'Zmierzone dwa razy na GATE 2: samotny rajder oddaje graczowi darmowe zwycięstwo ' +
     'i 3,6 własnego wyczerpania za każdym razem');
   assert(!v1.mission && !v1.movementOrder, 'T4: odmowa NIE rusza okrętu (nie ma półśrodków)');
-  assert(r1?.needed === SQUADRON_VS_DEFENDED, 'T4: próg eskadry pochodzi ze stałej, nie z literału');
+  assert(r1?.needed === 2 && r1?.needed <= MAX_STRIKE_SIZE,
+    `T4: próg eskadry (${r1?.needed}) pochodzi z GRADOWANIA — z jednostki, którą bitwa naprawdę ` +
+    'zbuduje (`requiredSquadron`), a nie ze stałej „2 na cokolwiek bronionego" (D-199-1)');
+  assert((r1?.defenderHp ?? 0) > 0,
+    `T4: odmowa niesie ZMIERZONĄ siłę obrońcy (${r1?.defenderHp} HP) — bez tej liczby ` +
+    'powód „za mała eskadra" jest nieweryfikowalny');
 
   // Drugi rajder — eskadra kompletna.
   spawnAiHull(core, empireId, capBody, { name: 'Skrzydłowy' });
   const r2 = off.launchStrike({ empireId, year: 12 });
-  assert(r2?.launched >= SQUADRON_VS_DEFENDED,
+  assert(r2?.launched >= 2,
     `T4 SEDNO: przy dwóch okrętach uderzenie RUSZA (${r2?.launched}) — to jest cała różnica ` +
     'między karmieniem gracza a realnym zagrożeniem');
   assert(r2?.targetSystemId === home.systemId, 'T4: i celuje w układ gracza');
+
+  // ⚠ KONTROLA ODWRÓCENIA (D-199-1): SŁABSZA obrona wymaga MNIEJ okrętów. Stary boolean
+  //   odpowiadał „2" na jedno i drugie — i to jest dokładnie ta ślepota, którą 199 zamyka.
+  defActives?.set('def_probe', { building: { id: 'defense_tower' }, level: 1, jobs: 0 });
+  const weak = off.pickTarget(empireId);
+  const sqWeak = off.requiredSquadron(weak, off.strikeReadyVessels(empireId));
+  assert(weak?.defended === true && sqWeak.needed < 2,
+    `T4 KONTROLA: cel DALEJ jest „broniony" (bool ${weak?.defended}), ale gradowanie widzi, ` +
+    `że starczy ${sqWeak.needed} okręt(y) przy ${sqWeak.defenderHp} HP obrony — boolean by tego nie odróżnił`);
 }
 
 // ── T5 — dobór okrętów po WŁASNOŚCI ─────────────────────────────────────────

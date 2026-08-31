@@ -49,6 +49,7 @@ import { HULLS } from '../../data/HullsData.js';
 import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 import { createVessel, hasWeapons } from '../../entities/Vessel.js';
 import { resolveTemplate } from '../../utils/ShipTemplateResolver.js';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -249,6 +250,172 @@ console.log('T7 — Finding 209: obronca-widmo NAPRAWDE jest bezbronny (komentar
   assert(dealt === 0,
     `T7b: i NAPRAWDE nie strzela (zadal: ${dealt}). Przed naprawa komentarz mowil „ZERO broni", ` +
     'a `normalizeFleet` dawal widmu laser dmg 5 — predykat opisany w komentarzu != egzekwowany');
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// COMMIT 2 — D-199-1 (gradowana eskadra, BEZ clampa) + D-199-7 (prawdomowna drabina)
+//            + D-199-8 (sygnatura z cialem) + przygotowanie sortu po `needed`.
+//
+// ⚠ POPRAWKA WLASCICIELA DO D-199-1: `needed` NIE JEST clampowane do `MAX_STRIKE_SIZE`.
+//   Gdy przekracza sufit, `launchStrike` ODMAWIA wlasnym powodem `target_beyond_reach`.
+//   Bez tego clamp odtwarza DOKLADNIE to samobojstwo, dla ktorego slice istnieje, tylko wyzej
+//   na skali. ZMIERZONE: grid Lv3 + tower Lv5 → hp 530, needed 7, po clampie 3 rajdery (360)
+//   → winner B (gracz) na czterech ziarnach. Pinuje to T11, z NIEJALOWOSCIA na `needed > 3`.
+//
+//   T8  `requiredSquadron` GRADUJE (>= 2 rozne wartosci) — stub ze stala musi paść
+//   T9  BEZ CLAMPA: silna obrona ⇒ `target_beyond_reach`, nie start eskadra 3
+//   T10 drabina jest PRAWDOMOWNA: „za slaba pula" != „za mocny cel"; kolejnosc badania
+//   T11 pin uzasadnienia poprawki: przy clampie ta sama bitwa jest PRZEGRANA
+//   T12 D-199-8: sygnatura przyjmuje cialo, a produkcyjny wolacz je PODAJE (pin zrodlowy)
+//   T13 sort po `needed` rosnaco (przygotowanie — dziala dopiero z commitem 3)
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+const { DirectorOffensive, SQUADRON_HP_RATIO, MAX_STRIKE_SIZE } =
+  await import('../../systems/director/DirectorOffensive.js');
+
+/** Swiat dla decyzji AI: kolonie gracza + rejestr statkow + zasieg imperium. */
+function mkAiWorld({ capDef = [], secDef = [], vessels = [] } = {}) {
+  const w = mkWorld({ capDef, secDef, vessels });
+  window.KOSMOS.influenceMap    = { isClaimedBy: () => false, isInBorderZone: () => true };
+  window.KOSMOS.territoryService = { getSystemDevScore: () => 5 };
+  // ⚠ `estimateDefenderHp` pyta o obroncę TĄ SAMĄ funkcją, ktora zbuduje jednostke bitwy —
+  //   wiec `warSystem` MUSI byc w locatorze, tak jak w produkcji (`GameScene:450`).
+  window.KOSMOS.warSystem = new WarSystem();
+  return w;
+}
+
+function mkRaider(id) {
+  const v = createVessel(RTPL.hullId, 'p_ai', { name: 'Rajder-' + id, modules: [...RTPL.modules], systemId: SYS });
+  v.ownerEmpireId = 'emp_001';
+  v.position = { state: 'orbiting', dockedAt: 'p_ai_cap', x: 0, y: 0 };
+  return v;
+}
+
+const tgtOf = (planetId) => ({
+  colony: window.KOSMOS.colonyManager.getPlayerColonies().find(c => c.planetId === planetId),
+  body: EntityManager.get(planetId),
+  systemId: SYS,
+});
+
+// ── T8 — gradowanie ─────────────────────────────────────────────────────────────────────────
+console.log('T8 — `requiredSquadron` GRADUJE: rozna obrona ⇒ rozna liczba okretow');
+{
+  assert(SQUADRON_HP_RATIO === 1.5,
+    `T8 kontrola: \`SQUADRON_HP_RATIO\` jest NAZWANA STALA EKSPORTOWANA (${SQUADRON_HP_RATIO}) — ` +
+    'jedyne pokretlo balansu tego slice\'u nie moze byc literalem we wzorze');
+
+  const seen = new Set();
+  for (const def of [[], [{ id: 'defense_tower', level: 1 }],
+                     [{ id: 'defense_grid', level: 1 }, { id: 'defense_tower', level: 2 }],
+                     [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }]]) {
+    mkAiWorld({ secDef: def, vessels: [] });
+    const off = new DirectorOffensive();
+    seen.add(off.requiredSquadron(tgtOf(SEC)).needed);
+  }
+  assert(seen.size >= 2,
+    `T8: rozne poziomy obrony daja ROZNE \`needed\` (${[...seen].sort((a, b) => a - b)}) — ` +
+    'stub zwracajacy stala musi tu paść');
+}
+
+// ── T9 — BEZ CLAMPA ─────────────────────────────────────────────────────────────────────────
+console.log('T9 — silna obrona ⇒ `target_beyond_reach`, NIE start eskadra o rozmiarze sufitu');
+{
+  const raiders = [mkRaider('1'), mkRaider('2'), mkRaider('3')];
+  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: raiders });
+  const off = new DirectorOffensive();
+  const uncapped = off.requiredSquadron(tgtOf(SEC)).needed;
+
+  assert(uncapped > MAX_STRIKE_SIZE,
+    `T9 NIEJALOWOSC: \`needed\` BEZ CLAMPA (${uncapped}) przekracza sufit ${MAX_STRIKE_SIZE} — ` +
+    'bez tego warunku pin przechodzilby takze dla implementacji Z clampem');
+
+  const res = off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
+  assert(res.launched === 0 && res.reason === 'target_beyond_reach',
+    `T9: odmowa wlasnym powodem (jest: launched=${res.launched}, reason=${res.reason})`);
+  assert(res.needed === uncapped && res.defenderHp > 0,
+    `T9: ladunek odmowy niesie PRAWDZIWE liczby {needed:${res.needed}, defenderHp:${res.defenderHp}}`);
+}
+
+// ── T10 — drabina prawdomowna ───────────────────────────────────────────────────────────────
+console.log('T10 — „za slaba pula" i „za mocny cel" to DWA rozne stany swiata');
+{
+  // (a) cel osiagalny (needed <= sufit), ale pula za mala ⇒ insufficient_squadron
+  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 1 }], vessels: [mkRaider('1')] });
+  let off = new DirectorOffensive();
+  const needA = off.requiredSquadron(tgtOf(SEC)).needed;
+  const resA = off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
+  assert(needA > 1 && needA <= MAX_STRIKE_SIZE,
+    `T10a NIEJALOWOSC: cel jest OSIAGALNY (needed ${needA} <= ${MAX_STRIKE_SIZE}), a pula ma 1 okret`);
+  assert(resA.reason === 'insufficient_squadron',
+    `T10a: stan przejsciowy ma swoj powod (jest: ${resA.reason})`);
+
+  // (b) ten sam ROZMIAR puli, cel nieosiagalny ⇒ target_beyond_reach (kolejnosc badania!)
+  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: [mkRaider('1')] });
+  off = new DirectorOffensive();
+  const resB = off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
+  assert(resB.reason === 'target_beyond_reach',
+    `T10b: przy TEJ SAMEJ puli 1 okretu powodem jest struktura celu, nie chwilowy niedobor ` +
+    `(jest: ${resB.reason}) — czyli \`target_beyond_reach\` jest badane PRZED \`insufficient_squadron\``);
+  assert(resA.reason !== resB.reason,
+    'T10 kontrola pinu: oba stany daja ROZNE powody — drabina nie zlala ich w jeden');
+}
+
+// ── T11 — uzasadnienie poprawki: clamp = przegrana bitwa ────────────────────────────────────
+console.log('T11 — PIN UZASADNIENIA: gdyby `needed` bylo clampowane, ta bitwa jest PRZEGRANA');
+{
+  mkAiWorld({ secDef: [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }], vessels: [] });
+  const war = new WarSystem();
+  const defender = war._buildPlayerBattleUnit(SYS, SEC);
+  const off = new DirectorOffensive();
+  const needed = off.requiredSquadron(tgtOf(SEC)).needed;
+
+  assert(needed > MAX_STRIKE_SIZE,
+    `T11 NIEJALOWOSC: needed=${needed} > sufit ${MAX_STRIKE_SIZE} (inaczej clamp niczego nie zmienia)`);
+
+  const clamped = playerVesselsToBattleUnit(
+    Array.from({ length: MAX_STRIKE_SIZE }, (_, i) => mkRaider('c' + i)), HULLS, SHIP_MODULES, 'eskadra sufitowa');
+  const winners = SEEDS.map(s => resolveBattle(clamped, defender,
+    { casusBelli: 'border_incident', location: { systemId: SYS, planetId: SEC, point: null }, seed: s }).winner);
+  assert(winners.every(w => w === 'B'),
+    `T11: eskadra o rozmiarze sufitu przegrywa z ta obrona na KAZDYM ziarnie (${winners.join('')}) — ` +
+    'to jest zmierzony powod, dla ktorego clamp odtwarzalby samobojstwo');
+}
+
+// ── T12 — D-199-8: sygnatura + produkcyjny wolacz ───────────────────────────────────────────
+console.log('T12 — D-199-8: `_buildPlayerBattleUnit` przyjmuje cialo, a EnemyAttackHandler je PODAJE');
+{
+  mkAiWorld({ capDef: [{ id: 'defense_grid', level: 1 }], vessels: [] });
+  const war = new WarSystem();
+  const withBody = war._buildPlayerBattleUnit(SYS, CAP);
+  const legacy   = war._buildPlayerBattleUnit(SYS);
+  assert((withBody?.hp ?? 0) > 0 && (legacy?.hp ?? 0) > 0,
+    'T12 NIEJALOWOSC: obie formy zwracaja jednostke (pin nie mierzy wyjatku)');
+  assert(JSON.stringify(withBody) === JSON.stringify(legacy),
+    'T12: w COMMICIE 2 cialo jeszcze NIE zmienia zakresu — zgodnosc wsteczna `forceBattle`/' +
+    '`_fleetArrived` i keeperow `deploy_seams`/`w2_deploy_model` (zakres wchodzi w commicie 3)');
+
+  // Pin ZRODLOWY (komentarze zdjete): jedyny produkcyjny wolacz podaje drugi argument.
+  const eah = readFileSync(new URL('../../systems/EnemyAttackHandler.js', import.meta.url), 'utf-8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert(/_buildPlayerBattleUnit\?\.\(\s*systemId\s*,\s*planetId\s*\)/.test(eah),
+    'T12: `EnemyAttackHandler` podaje CIALO do budowniczego obroncy — bez tego commit 3 ' +
+    'zmieni sygnature, a jedyna produkcyjna sciezka po cichu zostanie na zakresie ukladu');
+}
+
+// ── T13 — sort po `needed` (przygotowanie) ──────────────────────────────────────────────────
+console.log('T13 — `pickTarget` sortuje po GRADOWANYM `needed` rosnaco, nie po booleanie');
+{
+  const src = readFileSync(new URL('../../systems/director/DirectorOffensive.js', import.meta.url), 'utf-8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const sortLine = (src.match(/scored\.sort\([^;]+;/s) ?? [''])[0];
+  assert(/needed/.test(sortLine),
+    `T13: klucz sortowania odwoluje sie do \`needed\` (jest: ${sortLine.replace(/\s+/g, ' ').slice(0, 120)})`);
+  assert(!/Number\(a\.defended\)/.test(sortLine),
+    'T13: boolean `defended` NIE jest juz kluczem porzadku — wskazywal cel TRUDNIEJSZY ' +
+    '(zmierzone: pod zakresem ciala bool wybiera stolice, needed wybiera slaba kolonie)');
+  assert(/localeCompare/.test(sortLine),
+    'T13 kontrola pinu: rozstrzygniecie remisu po id ZOSTAJE — inaczej wybor przestalby byc ' +
+    'deterministyczny po wczytaniu zapisu');
 }
 
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);

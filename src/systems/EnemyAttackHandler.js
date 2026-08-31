@@ -155,7 +155,10 @@ export class EnemyAttackHandler {
         : `${empire?.name ?? t('battle.label.enemyUnnamed')} — ${firstVessel.name ?? firstVessel.shipId}`
     );
 
-    const playerUnit = warSys?._buildPlayerBattleUnit?.(systemId) ?? {
+    // ⚠ D-199-8 — CIAŁO PODAJEMY OD COMMITU 2, choć konsumuje je dopiero commit 3 (zakres V4).
+    //   To jedyna produkcyjna ścieżka budowania obrońcy; gdyby została na `(systemId)`, commit 3
+    //   zmieniłby sygnaturę, a realna bitwa po cichu dalej liczyłaby CAŁY układ.
+    const playerUnit = warSys?._buildPlayerBattleUnit?.(systemId, planetId) ?? {
       label: t('battle.label.playerUnit'),
       hp: 30, shieldHP: 0, armor: 0, evasion: 0.02,
       techMult: 1.0, morale: 1.0,
