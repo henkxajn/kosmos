@@ -664,7 +664,12 @@ export class GameScene {
         const hulls    = off._warpCapableHulls(empireId);
         const idleAway = hulls.filter(v => !v.mission && !v.movementOrder && !v.pendingOrder);
         // D-199-1 — eskadra liczona z REALNEJ puli (per-kadłubowe HP), dokładnie jak w decyzji.
+        // D-210-2 — raport pokazuje DWA cele: GŁOWĘ rankingu (`t`, czego AI najbardziej chce)
+        //   i cel OSIĄGALNY (`att`, w co realnie uderzy). Po fall-through pokazanie samej głowy
+        //   byłoby kłamstwem o zachowaniu — ta sama klasa co zaszyty próg z D-199-7.
+        const att      = off.pickAttainableTarget(empireId, ready);
         const sq       = t ? off.requiredSquadron(t, ready) : null;
+        const sqPick   = att?.pick ? off.requiredSquadron(att.pick, ready) : null;
         const stranded = window.KOSMOS?.directorRecall?.countStranded?.(empireId) ?? '—';
         const rep = {
           imperium: empireId,
@@ -674,10 +679,16 @@ export class GameScene {
           celeWZasiegu: off.countReachableTargets(empireId),
           // D-199-1/7 — raport MUSI mowic liczbami eskadry, nie booleanem. `bronione` zostaje
           // jako sygnal opisowy, ale to `potrzeba` rozstrzyga o starcie.
-          cel: t ? {
+          celGlowa: t ? {
             cialo: t.body.id, uklad: t.systemId, wartosc: t.value, bronione: t.defended,
             hpObroncy: sq?.defenderHp ?? '—', potrzeba: sq?.needed ?? '—', sufit: MAX_STRIKE_SIZE,
           } : null,
+          cel: att?.pick ? {
+            cialo: att.pick.body.id, uklad: att.pick.systemId, wartosc: att.pick.value,
+            hpObroncy: sqPick?.defenderHp ?? '—', potrzeba: sqPick?.needed ?? '—',
+            pominietoGlowe: !!(t && att.pick.body.id !== t.body.id),
+          } : null,
+          celeRozwazone: att?.ranked?.length ?? 0,
           ukladMacierzysty: off._homeSystemIdOf(empireId) ?? '— (brak stolicy)',
           okretyGotowe: ready.map(v => `${v.name}(warp ${v.warpFuel?.max})`),
           kadlubyZeSkokiem: hulls.length,
@@ -694,8 +705,15 @@ export class GameScene {
           //   a nie sam próg — skłamałoby przy pierwszej zmianie reguły eskadry. Teraz oba
           //   szczeble liczą tą samą metodą co decyzja, i w tej samej kolejności: najpierw
           //   „cel za mocny w ogóle", potem „chwilowo za mało okrętów".
+          // ⚠ D-210: werdykt musi odtwarzać DRABINĘ PO FALL-THROUGH, a nie los samej głowy.
+          //   Gdy głowa jest poza zasięgiem, ale AI ma w co uderzyć — to NIE jest odmowa.
+          : (att?.pick && sq && sq.needed > MAX_STRIKE_SIZE)
+            ? `głowa (${t.body.id}) ponad zasięg: ${sq.needed} okrętów przy sufcie ${MAX_STRIKE_SIZE} — ` +
+              `uderzy w OSIĄGALNY cel ${att.pick.body.id} (potrzeba ${sqPick?.needed}); czeka na rzut reguły`
+          : att?.pick ? 'wszystkie warunki spełnione — czeka na rzut reguły'
           : (sq && sq.needed > MAX_STRIKE_SIZE)
-            ? `cel PONAD ZASIĘG: obrona ${sq.defenderHp} HP wymaga ${sq.needed} okrętów, sufit to ${MAX_STRIKE_SIZE} (target_beyond_reach)`
+            ? `ŻADEN z ${att?.ranked?.length ?? 0} celów nie mieści się w sufcie ${MAX_STRIKE_SIZE}; ` +
+              `głowa: obrona ${sq.defenderHp} HP wymaga ${sq.needed} okrętów (target_beyond_reach)`
           : (sq && ready.length < sq.needed)
             ? `za mała eskadra: potrzeba ${sq.needed}, gotowych ${ready.length} (insufficient_squadron)`
           : 'wszystkie warunki spełnione — czeka na rzut reguły';

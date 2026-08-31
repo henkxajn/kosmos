@@ -306,17 +306,57 @@ export class DirectorOffensive {
    * `defended` ZOSTAJE jako sygnał do zdarzenia i raportu — przestał być tylko kluczem porządku.
    */
   pickTarget(empireId) {
+    return this.pickAttainableTarget(empireId).head;
+  }
+
+  /**
+   * CEL, W KTÓRY IMPERIUM REALNIE UDERZY (Finding 210, D-210-1 = wariant A).
+   *
+   * Do 210 `launchStrike` oceniało **wyłącznie głowę rankingu**: gdy najcenniejszy cel wypadał
+   * `target_beyond_reach`, akcja odmawiała **bez zejścia niżej** — więc imperium było trwale
+   * bierne, ilekroć jego najbogatszy osiągalny układ okazał się twierdzą, choćby obok stała
+   * kolonia do wzięcia jednym okrętem. ZMIERZONE NA ŻYWO (live-gate DEFENSE_SCOPE §7.3/§7.4):
+   * Colony Alioth `needed 1` nietknięte, bo głowa (`sys_home`, wartość 227) → `needed 9`.
+   * ⚠ **Lustro Findingu 199**: tam AI atakowało to, czego nie zdoła zdobyć; tu nie atakowało tego,
+   * co zdobyć MOŻE.
+   *
+   * ⚠ FALL-THROUGH IDZIE W ISTNIEJĄCYM PORZĄDKU WARTOŚCI, a nie po przesortowaniu wg kosztu
+   * (D-210-1). Pomiar obu wariantów: przesortowanie po `needed` daje AI, które **zawsze** bije
+   * w najsłabsze ciało — Alioth przy puli 1, 2 i 3 — czyli tę samą przewidywalność, którą
+   * D-199-1 wyrzuciło z booleana. Zejście w porządku wartości eskaluje cel wraz z siłą
+   * (Alioth → Średni → Placówka), więc **wybór AI niesie informację o imperium**.
+   *
+   * ⚠ `ready` JEST ARGUMENTEM I TO JEST KONTRAKT (D-210-2 + §6.3 planu): `needed` liczy się
+   * z REALNEJ puli — i dla PROGU osiągalności, i dla PORZĄDKU. Jedna funkcja licząca ⇒ raport
+   * i decyzja nie mają jak się rozjechać (lekcja D-199-7: `strikeReport` zaszywał próg i kłamał).
+   * Bez puli (`ready = []`) próg to zero, a porządek zostaje poprawny — `perShipHp` jest wspólnym
+   * dzielnikiem, więc nie zmienia kolejności; zmienia wyłącznie to, co się mieści.
+   *
+   * ⚠ BEZ LIMITU liczby przeglądanych celów (D-210-4): `reachableTargets` to z natury krótka lista
+   * (kolonie gracza w przestrzeni/powłoce imperium), a limit byłby progiem bez pomiaru.
+   *
+   * @returns {{pick: object|null, head: object|null, ranked: object[]}}
+   */
+  pickAttainableTarget(empireId, ready = []) {
     const cands = this.reachableTargets(empireId);
-    if (cands.length === 0) return null;
-    const scored = cands.map(c => ({
-      ...c,
-      value:    this.targetValue(c),
-      defended: this.isDefended(c),
-      needed:   this.requiredSquadron(c).needed,
-    }));
-    scored.sort((a, b) => (b.value - a.value) || (a.needed - b.needed)
+    if (cands.length === 0) return { pick: null, head: null, ranked: [] };
+
+    const ranked = cands.map(c => {
+      const { needed, defenderHp } = this.requiredSquadron(c, ready);
+      return { ...c, value: this.targetValue(c), defended: this.isDefended(c), needed, defenderHp };
+    });
+    // Porządek BEZ ZMIAN wobec commitu 2: wartość desc → koszt asc → id (determinizm po wczytaniu).
+    ranked.sort((a, b) => (b.value - a.value) || (a.needed - b.needed)
                        || String(a.body.id).localeCompare(String(b.body.id)));
-    return scored[0];
+
+    const cap = Math.min(ready.length, MAX_STRIKE_SIZE);
+    const fits = (t) => t.needed <= cap;
+    // Kill-switch (D-210-5): OFF ⇒ oceniamy WYŁĄCZNIE głowę, czyli zachowanie sprzed 210.
+    const pick = (GAME_CONFIG.FEATURES?.defenseScope === false)
+      ? (fits(ranked[0]) ? ranked[0] : null)
+      : (ranked.find(fits) ?? null);
+
+    return { pick, head: ranked[0], ranked };
   }
 
   // ── AKCJA ─────────────────────────────────────────────────────────────────────────────────
@@ -330,8 +370,9 @@ export class DirectorOffensive {
     const { empireId } = ctx ?? {};
     const year = ctx?.year ?? (window.KOSMOS?.timeSystem?.gameTime ?? 0);
     try {
-      const target = this.pickTarget(empireId);
-      if (!target) return this._refuse(empireId, 'no_target_in_reach', year);
+      if (this.countReachableTargets(empireId) === 0) {
+        return this._refuse(empireId, 'no_target_in_reach', year);
+      }
 
       const ready = this.strikeReadyVessels(empireId);
       if (ready.length === 0) {
@@ -355,22 +396,35 @@ export class DirectorOffensive {
       // Do 199 próg był BOOLEANEM (1 albo 2), więc kolonia osłonięta siatką obronną stolicy
       // wyglądała na bezbronną i dostawała jeden okręt. Teraz liczba pochodzi z jednostki,
       // którą bitwa NAPRAWDĘ zbuduje.
-      const { needed, defenderHp } = this.requiredSquadron(target, ready);
+      const { pick, head, ranked } = this.pickAttainableTarget(empireId, ready);
 
-      // ⚠ KOLEJNOŚĆ TYCH DWÓCH BRAMEK JEST KONTRAKTEM, NIE STYLEM (D-199-7).
-      //   Opisują DWA RÓŻNE STANY ŚWIATA i mylenie ich czyni drabinę kłamliwą:
-      //     `target_beyond_reach`   — „nawet w pełni sił tego nie wezmę"  → STRUKTURALNY;
-      //     `insufficient_squadron` — „wziąłbym, ale nie mam teraz okrętów" → PRZEJŚCIOWY.
-      //   Przy `needed = 7` i puli 1 odwrotna kolejność meldowałaby chwilowy niedobór, czyli
-      //   kazałaby czekać na okręty, których liczba i tak nigdy nie wystarczy.
-      if (needed > MAX_STRIKE_SIZE) {
-        return this._refuse(empireId, 'target_beyond_reach', year,
-          { needed, available: ready.length, defenderHp, defended: target.defended });
+      // ── STAN TERMINALNY (c): fall-through wyczerpał listę ────────────────────────────────
+      // ⚠ TA GAŁĄŹ NIE MA PRAWA ZAMILKNĄĆ. „Wszystko jest twierdzą" to DZISIEJSZE zachowanie na
+      //   żywo (live-gate DEFENSE_SCOPE §7.4) i po fall-through musi dalej być SŁYSZALNE —
+      //   `director:strikeRefused` jest jedynym kanałem, z którego widać, dlaczego ofensywa AI
+      //   stoi (lekcja Findingu 196: zdarzenia są jedynym audytem).
+      // ⚠ LICZBY pochodzą z GŁOWY (czego nie zdobyłem), a KLASYFIKACJA z CAŁEJ LISTY (czy warto
+      //   czekać na okręty) — to nie jest niespójność, tylko dwie różne informacje. Rozróżnienie
+      //   strukturalny/przejściowy z D-199-7 zostaje, tylko liczone szerzej:
+      //     ktoś na liście mieści się w suficie ⇒ `insufficient_squadron` (PRZEJŚCIOWY);
+      //     nikt                                ⇒ `target_beyond_reach`   (STRUKTURALNY).
+      if (!pick) {
+        const scope = (GAME_CONFIG.FEATURES?.defenseScope === false) ? [head] : ranked;
+        const reason = scope.some(t => t.needed <= MAX_STRIKE_SIZE)
+          ? 'insufficient_squadron' : 'target_beyond_reach';
+        return this._refuse(empireId, reason, year, {
+          needed: head.needed, available: ready.length, defenderHp: head.defenderHp,
+          defended: head.defended, attemptedTargets: ranked.length,
+        });
       }
-      if (ready.length < needed) {
-        return this._refuse(empireId, 'insufficient_squadron', year,
-          { needed, available: ready.length, defenderHp, defended: target.defended });
-      }
+
+      const target = pick;
+      const needed = pick.needed;
+      // Stan (a) głowa była osiągalna ⇒ null; stan (b) pominięta ⇒ nazywamy JĄ, nie cel (D-210-3).
+      const skippedHead = (pick.body.id === head.body.id) ? null : {
+        bodyId: head.body.id, systemId: head.systemId,
+        needed: head.needed, defenderHp: head.defenderHp,
+      };
 
       const cap = Math.min(Number(params.maxShips ?? MAX_STRIKE_SIZE), MAX_STRIKE_SIZE);
       const send = ready.slice(0, Math.max(needed, Math.min(cap, ready.length)));
@@ -390,13 +444,20 @@ export class DirectorOffensive {
 
       // Fakt goły — BEZ nazwy imperium i bez wpisu do Dziennika gracza. Bramkę jakości
       // kontaktu zakłada odbiorca (`NotificationCenter`, W3-7) — ten sam wzór co mobilizacja.
+      // ⚠ `skippedHead` (D-210-3) — bez niego pominięcie głowy byłoby CICHE, a wraz z nim
+      //   zniknąłby jedyny ślad, że twierdza gracza odstraszyła imperium. Zamiana defektu
+      //   na niewidzialność jest gorsza od defektu (Finding 196).
       EventBus.emit('director:strikeLaunched', {
         empireId, year, count: launched,
         targetSystemId: target.systemId,
         defended: target.defended,
         rejected: rejected.length,
+        skippedHead,
       });
-      return { launched, targetBodyId: target.body.id, targetSystemId: target.systemId };
+      return {
+        launched, targetBodyId: target.body.id, targetSystemId: target.systemId,
+        needed, skippedHead,
+      };
     } catch (err) {
       // Reguła NIE MA PRAWA wywrócić tiku — patrz nagłówek.
       console.error('[DirectorOffensive] launchStrike rzucił — uderzenie pominięte', err);

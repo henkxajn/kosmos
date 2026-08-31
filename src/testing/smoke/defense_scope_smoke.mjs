@@ -409,7 +409,12 @@ console.log('T13 — `pickTarget` sortuje po GRADOWANYM `needed` rosnaco, nie po
 {
   const src = readFileSync(new URL('../../systems/director/DirectorOffensive.js', import.meta.url), 'utf-8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const sortLine = (src.match(/scored\.sort\([^;]+;/s) ?? [''])[0];
+  // ⚠ Zmienna nazywala sie `scored` w commicie 2; Finding 210 przeniosl porzadek do
+  //   `pickAttainableTarget` i przemianowal ja na `ranked`. Pin celuje w SORTOWANIE, nie w nazwe,
+  //   wiec akceptujemy obie — inaczej stary regex meldowalby pusty string i pin bylby JALOWY.
+  const sortLine = (src.match(/(?:scored|ranked)\.sort\([^;]+;/s) ?? [''])[0];
+  assert(sortLine.length > 0,
+    'T13 NIEJALOWOSC: znaleziono wyrazenie sortujace w zrodle (pusty match = pin mierzylby cisze)');
   assert(/needed/.test(sortLine),
     `T13: klucz sortowania odwoluje sie do \`needed\` (jest: ${sortLine.replace(/\s+/g, ' ').slice(0, 120)})`);
   assert(!/Number\(a\.defended\)/.test(sortLine),
@@ -560,6 +565,186 @@ console.log('T18 — WYPLATA: AI wybiera cialo TANSZE do wziecia, a nie „pierw
   assert(pick?.body?.id === SEC,
     `T18: regula celuje w cialo TANSZE (${pick?.body?.name}) — do 199 sortowal boolean, ` +
     'ktory przy jednakowym `defended` spadal na identyfikator i potrafil wskazac twierdze');
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// FINDING 210 — FALL-THROUGH: drabina przestaje oceniac WYLACZNIE glowe rankingu.
+// Plan + decyzje D-210-1..6: docs/design/TARGET_FALLTHROUGH_PLAN.md.
+//
+// ⚠ TEN SAM PLIK, nie nowy keeper: 210 zostalo ODSLONIETE przez ten slice (dopoki bitwa liczyla
+//   caly uklad, wszystkie ciala gradowaly sie identycznie, wiec glowa i reszta nie mialy jak sie
+//   rozjechac) i chodzi pod TA SAMA flaga `defenseScope`.
+//
+// ⚠ 210 BIJE WYLACZNIE CROSS-SYSTEM. Wewnatrz ukladu mityguje je juz commit 2 (czlon `needed` asc
+//   sortuje w obrebie tego samego poziomu wartosci), dlatego fixture MUSI miec DWA UKLADY
+//   o roznej wartosci — jednoukladowy pokazalby zielono na zepsutym kodzie.
+//
+// ⚠ KONTRAKT DRABINY MA TRZY STANY TERMINALNE (poprawka wlasciciela) i kazdy ma tu swoj pin:
+//     (a) start bez pominiecia   — glowa byla osiagalna        ⇒ `skippedHead: null`
+//     (b) start z pominieciem    — glowa ponad sufit           ⇒ `skippedHead` nazywa GLOWE
+//     (c) pelna odmowa           — fall-through wyczerpal liste ⇒ `strikeRefused` NIE MILCZY
+//   Stan (c) to DZISIEJSZE zachowanie na zywo (live-gate DEFENSE_SCOPE §7.4) — po naprawie musi
+//   dalej byc slyszalny. Lekcja Findingu 196: zdarzenia sa jedynym kanalem audytu.
+//
+//   T19 SEDNO: glowa ponad sufit + osiagalny cel dalej na liscie ⇒ uderzenie RUSZA
+//   T20 stany (a) i (b): `skippedHead` null vs nazywajacy GLOWE
+//   T21 stan (c) NIE MILCZY — odmowa niesie liczby GLOWY + `attemptedTargets`
+//   T22 klasyfikacja (c): „ktorys <= sufit” vs „zaden” daja ROZNE powody
+//   T23 JEDNA funkcja liczaca — `needed` z PRZEKAZANEJ puli, dla progu i dla porzadku
+// ════════════════════════════════════════════════════════════════════════════════════════════
+
+const EventBus = (await import('../../core/EventBus.js')).default;
+
+const SYS2 = 'sys_far', FAR = 'p_far';
+EntityManager.add({ id: FAR, name: 'Alioth', type: 'planet', systemId: SYS2, x: 110, y: 0 });
+
+const HEAVY = [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }];
+
+/**
+ * Swiat DWUUKLADOWY: `sys_home` = BOGATY (wartosc 227), `sys_far` = ubogi (50).
+ * Roznica wartosci jest tu warunkiem koniecznym — bez niej tie-break `needed` z commitu 2
+ * sam ustawilby tansze cialo na glowie i defektu nie byloby widac.
+ */
+function mkTwoSystemWorld({ homeDef = HEAVY, farDef = [], vessels = [] } = {}) {
+  const cols = [
+    { planetId: CAP, buildingSystem: { _active: mkActives(homeDef) } },
+    { planetId: FAR, buildingSystem: { _active: mkActives(farDef) } },
+  ];
+  const map = new Map(vessels.map(v => [v.id, v]));
+  window.KOSMOS = {
+    vesselManager: { _vessels: map, getVessel: id => map.get(id), getAllVessels: () => [...map.values()] },
+    colonyManager: { getAllColonies: () => cols, getPlayerColonies: () => cols },
+    entityManager: EntityManager, timeSystem: { gameTime: 40 },
+    influenceMap: { isClaimedBy: () => false, isInBorderZone: () => true },
+    territoryService: { getSystemDevScore: (s) => (s === SYS ? 227 : 50) },
+  };
+  window.KOSMOS.warSystem = new WarSystem();
+  window.KOSMOS.orderService = { issueAttack: () => ({ ok: true }) };
+  return cols;
+}
+
+function capture(fn) {
+  const seen = [];
+  const onL = (p) => seen.push({ ev: 'launched', ...p });
+  const onR = (p) => seen.push({ ev: 'refused', ...p });
+  EventBus.on('director:strikeLaunched', onL);
+  EventBus.on('director:strikeRefused', onR);
+  try { return { res: fn(), seen }; }
+  finally { EventBus.off('director:strikeLaunched', onL); EventBus.off('director:strikeRefused', onR); }
+}
+
+// ── T19 — SEDNO ─────────────────────────────────────────────────────────────────────────────
+console.log('T19 — SEDNO: glowa PONAD SUFIT, a uderzenie i tak rusza w cel osiagalny dalej na liscie');
+{
+  mkTwoSystemWorld({ vessels: [mkRaider('f1')] });
+  const off = new DirectorOffensive();
+  const ready = off.strikeReadyVessels('emp_001');
+  const { pick, head } = off.pickAttainableTarget('emp_001', ready);
+  const cap = Math.min(ready.length, MAX_STRIKE_SIZE);
+
+  assert(head && head.needed > cap,
+    `T19 NIEJALOWOSC: GLOWA rankingu jest poza zasiegiem (${head?.body?.name} needed ${head?.needed} > cap ${cap}) — ` +
+    'bez tego pin przechodzilby takze dla implementacji BEZ fall-through');
+  assert(pick && pick.needed <= cap && pick.body.id !== head.body.id,
+    `T19: wybrany cel jest INNY i OSIAGALNY (${pick?.body?.name}, needed ${pick?.needed} <= ${cap})`);
+
+  const { res } = capture(() => off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' }));
+  assert(res.launched > 0 && res.targetBodyId === FAR,
+    `T19 SEDNO: uderzenie RUSZA w cel osiagalny (launched=${res.launched}, cel=${res.targetBodyId}) — ` +
+    'przed naprawa ta sama konfiguracja dawala `target_beyond_reach` i ZERO uderzen przez 100 lat');
+}
+
+// ── T20 — stany (a) i (b) ───────────────────────────────────────────────────────────────────
+console.log('T20 — `skippedHead`: null gdy glowa osiagalna (a), nazywa GLOWE gdy pominieta (b)');
+{
+  // (b) glowa ponad sufit
+  mkTwoSystemWorld({ vessels: [mkRaider('b1')] });
+  let off = new DirectorOffensive();
+  const { res: resB } = capture(() => off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' }));
+  assert(resB.skippedHead && resB.skippedHead.bodyId === CAP && resB.skippedHead.bodyId !== resB.targetBodyId,
+    `T20b: \`skippedHead\` nazywa GLOWE (${resB.skippedHead?.bodyId}), nie cel (${resB.targetBodyId})`);
+  assert((resB.skippedHead?.needed ?? 0) > MAX_STRIKE_SIZE && (resB.skippedHead?.defenderHp ?? 0) > 0,
+    `T20b: i niesie JEJ liczby {needed:${resB.skippedHead?.needed}, defenderHp:${resB.skippedHead?.defenderHp}}`);
+
+  // (a) glowa osiagalna — lista DALEJ dwuelementowa (niejalowosc)
+  mkTwoSystemWorld({ homeDef: [], vessels: [mkRaider('a1')] });
+  off = new DirectorOffensive();
+  const ranked = off.pickAttainableTarget('emp_001', off.strikeReadyVessels('emp_001')).ranked;
+  assert(ranked.length >= 2,
+    `T20a NIEJALOWOSC: lista ma ${ranked.length} cele — przy jednym „brak pominiecia” jest prawda trywialna`);
+  const { res: resA } = capture(() => off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' }));
+  assert(resA.launched > 0 && resA.skippedHead === null && resA.targetBodyId === CAP,
+    `T20a: glowa byla osiagalna ⇒ uderzenie w NIA i \`skippedHead: null\` (jest: ${JSON.stringify(resA.skippedHead)})`);
+}
+
+// ── T21 — stan (c) NIE MILCZY ───────────────────────────────────────────────────────────────
+console.log('T21 — stan (c): fall-through wyczerpal liste ⇒ odmowa NIE MILCZY (lekcja Findingu 196)');
+{
+  mkTwoSystemWorld({ homeDef: HEAVY, farDef: HEAVY, vessels: [mkRaider('c1')] });
+  const off = new DirectorOffensive();
+  const ready = off.strikeReadyVessels('emp_001');
+  const { pick, head, ranked } = off.pickAttainableTarget('emp_001', ready);
+
+  assert(ranked.length >= 2 && !pick,
+    `T21 NIEJALOWOSC: celow bylo ${ranked.length} i ZADEN sie nie zmiescil — inaczej pin nie mierzy (c)`);
+
+  const { res, seen } = capture(() => off.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' }));
+  const ref = seen.find(e => e.ev === 'refused');
+  assert(!!ref, 'T21 SEDNO: `director:strikeRefused` ZOSTAL WYEMITOWANY — cisza byla by zamiana defektu na niewidzialnosc');
+  assert(ref?.needed === head.needed && (ref?.defenderHp ?? 0) > 0,
+    `T21: odmowa niesie liczby GLOWY (needed ${ref?.needed} = ${head.needed}, defenderHp ${ref?.defenderHp})`);
+  assert(ref?.attemptedTargets === ranked.length,
+    `T21: \`attemptedTargets\` = ${ref?.attemptedTargets} odroznia „jeden cel ponad zasieg” od „wszystkie ponad zasieg”`);
+  assert(res.launched === 0, 'T21: i nic nie wystartowalo');
+
+  // KONTROLA PINU: gdy JEDEN cel jest osiagalny, odmowa NIE leci.
+  mkTwoSystemWorld({ homeDef: HEAVY, farDef: [], vessels: [mkRaider('c2')] });
+  const off2 = new DirectorOffensive();
+  const { seen: seen2 } = capture(() => off2.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' }));
+  assert(!seen2.some(e => e.ev === 'refused'),
+    'T21 KONTROLA PINU: przy osiagalnym celu odmowa NIE leci — czyli T21 mierzy stan (c), a nie stale gadulstwo');
+}
+
+// ── T22 — klasyfikacja (c) ──────────────────────────────────────────────────────────────────
+console.log('T22 — klasyfikacja (c) liczona na CALEJ liscie: przejsciowy vs strukturalny');
+{
+  // wszystkie ponad SUFIT ⇒ strukturalny
+  mkTwoSystemWorld({ homeDef: HEAVY, farDef: HEAVY, vessels: [mkRaider('d1')] });
+  const r1 = new DirectorOffensive().launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
+
+  // jest cel <= SUFIT, ale pula za mala ⇒ przejsciowy
+  mkTwoSystemWorld({ homeDef: HEAVY, farDef: [{ id: 'defense_grid', level: 1 }], vessels: [mkRaider('d2')] });
+  const off2 = new DirectorOffensive();
+  const ranked2 = off2.pickAttainableTarget('emp_001', off2.strikeReadyVessels('emp_001')).ranked;
+  const r2 = off2.launchStrike({ empireId: 'emp_001', year: 40, ruleId: 'test' });
+
+  assert(ranked2.some(t => t.needed <= MAX_STRIKE_SIZE) && r2.launched === 0,
+    'T22 NIEJALOWOSC: w drugiej konfiguracji ISTNIEJE cel w zasiegu sufitu, a mimo to nie wystartowano');
+  assert(r1.reason === 'target_beyond_reach' && r2.reason === 'insufficient_squadron',
+    `T22: „zaden <= sufit” ⇒ strukturalny (${r1.reason}); „ktorys <= sufit, za malo okretow” ⇒ ` +
+    `przejsciowy (${r2.reason}) — dwa rozne stany swiata, dwa rozne powody`);
+  assert(r1.reason !== r2.reason, 'T22 KONTROLA PINU: powody sie ROZNIA (drabina ich nie zlala)');
+}
+
+// ── T23 — JEDNA funkcja liczaca ─────────────────────────────────────────────────────────────
+console.log('T23 — `needed` liczone z PRZEKAZANEJ puli: prog i porzadek z jednego zrodla');
+{
+  mkTwoSystemWorld({ homeDef: [{ id: 'defense_grid', level: 1 }, { id: 'defense_tower', level: 2 }], vessels: [] });
+  const off = new DirectorOffensive();
+  const small = [mkRaider('s1')];
+  const big   = [mkRaider('s2'), mkRaider('s3'), mkRaider('s4')];
+
+  const pSmall = off.pickAttainableTarget('emp_001', small).pick;
+  const pBig   = off.pickAttainableTarget('emp_001', big).pick;
+  assert(pSmall && pBig && pSmall.body.id !== pBig.body.id,
+    `T23: ta sama plansza, RÓZNE pule ⇒ rozny cel (${pSmall?.body?.name} vs ${pBig?.body?.name}) — ` +
+    'czyli prog osiagalnosci liczy sie z PRZEKAZANEJ puli, nie ze stalej');
+
+  const src = readFileSync(new URL('../../systems/director/DirectorOffensive.js', import.meta.url), 'utf-8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert(/pickAttainableTarget\s*\(\s*empireId\s*,\s*ready/.test(src),
+    'T23 pin zrodlowy: `ready` jest ARGUMENTEM, nie odczytem z locatora — inaczej raport i decyzja ' +
+    'moglyby liczyc na dwoch roznych pulach (lekcja D-199-7)');
 }
 
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);
