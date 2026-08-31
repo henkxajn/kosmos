@@ -32,6 +32,23 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+
+/**
+ * ⚠ 215 (D-215-1b, PODPISANE) — ILU ROBOTNIKÓW MATKA ZATRZYMUJE DLA SIEBIE.
+ *
+ * Sam `laborer >= popTransferSize` pozwoliłby AI **wydrenować matkę do zera robotników**
+ * (nieobsadzone budynki, zapaść, którą metryka guard zobaczyłaby dopiero po fakcie).
+ * ZMIERZONE (100 gy, boot skalibrowany): bez rezerwy matka kończy **0 robotników / 3 POP**
+ * i zakłada kolonię w gy 0,4; z rezerwą 4 kończy **4 / 8** i zakłada w gy 4,2.
+ * **Cztery lata zwłoki za zdrową matkę** — to jest cała treść tej stałej.
+ * ⚠ Okno użyteczne to **0-4**: przy rezerwie 8+ bramka zamyka się z powrotem (0 kolonii/100 gy),
+ * bo populacja matki AI dobija najwyżej do 3-8.
+ */
+export const MOTHER_RESERVE = 4;
+
+/** Próg sprzed slice'u — czytany WYŁĄCZNIE przez ścieżkę rollbacku `aiPopGates = false`. */
+const LEGACY_MIN_FREE_POPS = 8;
 
 // Tempo decyzji (z architektury AI: A=1, B=3, C=5 civYears)
 const STRATEGY_INTERVAL_CIVYEARS = 5;
@@ -56,7 +73,9 @@ const DEFAULTS = {
   targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
   targetNtOutposts:       1,    // ile outpostów Nt (Neutronium) zabezpieczyć (P5) — Slice 2 S3
   popTransferSize:        8,    // ile POP wysłać na pełną kolonię (Population 2.0: ×4, było 2)
-  minFreePops:            8,    // min freePops macierzystej by uruchomić full-colony
+  // ⚠ 215 (D-215-3): `minFreePops: 8` USUNIĘTE razem z czytelnikiem. Był to próg NIEOSIĄGALNY
+  //   (`freePops` u AI = 0 na stałe), a martwy knob to knob, który kłamie — wygląda na regulator
+  //   ekspansji AI, a od Population 2.0 Fazy 2 nie regulował niczego poza jej zatrzymaniem.
   minFoodTransfer:        200,  // próg = transfer (minimum wg promptu, bez bufora)
   minWaterTransfer:       200,
   blacklistDurationCy:    30,   // backoff ciała-celu po failure
@@ -427,9 +446,35 @@ export class EmpireStrategySystem {
     return mother.resourceSystem.canAfford(this._outpostCombinedCost());
   }
 
+  /**
+   * ⚠ 215 (D-215-1) — PYTAMY O TĘ SAMĄ PULĘ, Z KTÓREJ AKCJA NAPRAWDĘ PŁACI.
+   *
+   * Stało tu `freePops < cfg.minFreePops` (próg 8) — i było to **bramką KOSZTU ZMIERZONĄ WZGLĘDEM
+   * ZŁEJ PULI**. Kilka wierszy niżej `foundFullColony` woła `civ.removePop('laborer', popN)`, więc
+   * płaci z warstwy **laborer**, a próg 8 jest DOKŁADNIE równy `popTransferSize` — ktoś napisał
+   * „czy stać mnie na wysłanie ośmiu", tylko policzył to na `freePops`.
+   *
+   * Po Population 2.0 `freePops = population − (employedPops − syntheticJobs) − lockedPops`, przy
+   * czym `_employedPops` liczy **ETATY zarejestrowane przez budynki, NIE pracowników**. U AI
+   * `ColonyAutoExpander` stawia więcej etatów niż jest POPów, więc **`freePops` klamruje się do 0
+   * NA STAŁE** — dosypanie ludności nic nie daje. ZMIERZONE: `freePops` 5,00 w gy 0 → **0,00 od
+   * gy ~6 i już zawsze** ⇒ **AI nie założyło ANI JEDNEJ pełnej kolonii w 100 gy**.
+   * `CivilizationSystem:384` mówi to samo od strony projektu; **FIX A** (Faza 2, `d95d9b8`) zdjął
+   * z tego powodu gate'y POP z budowy budynków — ale **sweep nie objął ścieżki AI**.
+   *
+   * ⚠ DLACZEGO NIE USUNIĘCIE (FIX A verbatim): `removePop('laborer', 8)` pobiegłoby wobec matki,
+   * która ośmiu robotników mieć nie musi ⇒ **populacja z niczego albo warstwa poniżej zera**.
+   * Bramka kosztu wymaga ZASTĄPIENIA, nie skasowania. (Kurier — odwrotnie: tam prawdziwy strażnik
+   * stoi niżej i jest mocniejszy, więc pre-check ZNIKA. Patrz `EmpireLogisticsSystem`.)
+   */
   _canAffordFullColony(mother, cfg) {
-    const freePops = mother.civSystem.freePops ?? 0;
-    if (freePops < cfg.minFreePops) return false;
+    if (GAME_CONFIG.FEATURES?.aiPopGates === false) {
+      // Ścieżka rollbacku — próg sprzed slice'u, z jego (nieosiągalną) semantyką.
+      if ((mother.civSystem.freePops ?? 0) < LEGACY_MIN_FREE_POPS) return false;
+    } else {
+      const laborers = mother.civSystem?.strata?.laborer?.count ?? 0;
+      if (laborers < (cfg.popTransferSize ?? 0) + MOTHER_RESERVE) return false;
+    }
     // Decyzja "minimum wg promptu": próg = transfer (200), bez bufora.
     if (mother.resourceSystem.getAmount('food')  < cfg.minFoodTransfer)  return false;
     if (mother.resourceSystem.getAmount('water') < cfg.minWaterTransfer) return false;

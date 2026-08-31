@@ -58,10 +58,13 @@ const LOGISTICS_INTERVAL_CIVYEARS = 1;
 const ENGINE_TIERS = ['engine_fusion', 'engine_ion', 'engine_chemical'];
 
 // Domyślny config logistyki — fallback per-klucz gdy archetyp nie ma logisticsConfig.
+/** 215 (D-215-3) — prog sprzed slice'u; czytany WYLACZNIE przez sciezke rollbacku `aiPopGates=false`.
+ *  W DEFAULT_LOGISTICS_CONFIG go NIE MA: martwy knob to knob, ktory klamie. */
+const LEGACY_MIN_FREE_POPS_COURIER = 0.05;
+
 const DEFAULT_LOGISTICS_CONFIG = {
   couriersPerRoute:      2,
   cargoModule:           'cargo_small',
-  minFreePopsForCourier: 0.05,
   // S3.3b-S1: Ti dodany — outposty Ti dostają trasę (Ti i tak wożony rare-first).
   // W2-1 (orzeczenie właściciela 2026-08-15): Hv dodany TYM SAMYM wzorcem. `metamaterials`
   //   (Ti 6, Hv 5, Xe 2, Si 4) to jedyny towar wojenny, który W2 czyni realnym dla AI —
@@ -278,7 +281,26 @@ export class EmpireLogisticsSystem {
 
       // Budowa nowego kuriera — gdy nadal za mało I brak pending buildu (1 na raz/empire).
       if (route.courierIds.length < couriersPerRoute && logi.pendingBuildRoute == null) {
-        if (this._shipyardSlotFree(capital) && this._enoughFreePops(capital, cfg)) {
+        // ⚠ 215 (D-215-1) — TU BYŁ PRE-CHECK `this._enoughFreePops(capital, cfg)` (próg 0,05).
+        //   USUNIĘTY, bo był **słabszym duplikatem przed silniejszym oryginałem**:
+        //   • budowa kuriera NIE kosztuje POP (W2-4 zdjęło załogę z budowy);
+        //   • koszt płaci ROZMIESZCZENIE — `deployVessel` niżej w tej samej funkcji pobiera
+        //     `crewCost` (`hull_small` = 0,2) przez `commitCrew`, którego pojemność to
+        //     `_unemployed` **+ hostable ZATRUDNIENI**, więc **płaci nawet przy `freePops = 0`**;
+        //   • a `freePops` u AI jest 0 NA STAŁE (etatów więcej niż POPów) ⇒ pre-check żądał 0,05
+        //     z puli strukturalnie zerowej i **kurier NIE BYŁ NIGDY ZAMAWIANY**
+        //     (ZMIERZONE: `logistics:shipBuildRequested = 0`, `built/dispatched/delivered = 0/0/0`,
+        //      trasy istnieją z pustym rosterem, imperium ma ZERO statków w 35 gy).
+        //   ⚠ Ścieżka porażki prawdziwego strażnika jest CZYSTA i to ona uprawnia do usunięcia:
+        //     `commitCrew` przy odmowie NIE MUTUJE NICZEGO (brak osieroconego kadłuba, brak
+        //     zmarnowanych surowców), odmowa jest SŁYSZALNA (`director:mobilizeRejected`),
+        //     a ponowienie idzie co przebieg dyspozytora, nie co tik.
+        //   ⚠ Kolonia AI dostała odwrotne leczenie (ZASTĄPIENIE, nie usunięcie) — tam bramka
+        //     strzeże realnego `removePop`, którego nikt nie dubluje. Patrz `EmpireStrategySystem`.
+        const popGate = GAME_CONFIG.FEATURES?.aiPopGates === false
+          ? this._legacyFreePopsGate(capital)
+          : true;
+        if (this._shipyardSlotFree(capital) && popGate) {
           const engine = this._bestEngine(capital.techSystem);
           const modules = [engine, cfg.cargoModule ?? 'cargo_small'];
           const res = cm.startShipBuild(capital.planetId, 'hull_small', modules);
@@ -634,9 +656,15 @@ export class EmpireLogisticsSystem {
     return this._shipyardLevel(capital) > (capital.shipQueues?.length ?? 0);
   }
 
-  _enoughFreePops(capital, cfg) {
+  /**
+   * ⚠ 215 (D-215-3) — ŚCIEŻKA ROLLBACKU, NIE ŻYWA BRAMKA. Czytana WYŁĄCZNIE przy
+   * `FEATURES.aiPopGates === false`. Dawniej `_enoughFreePops`; **nazwa zmieniona celowo**,
+   * żeby nikt nie wziął jej za działający predykat „czy AI ma wolnych ludzi" — dla AI
+   * `freePops` jest 0 na stałe i to pojęcie nie znaczy tego, co brzmi.
+   */
+  _legacyFreePopsGate(capital) {
     const free = capital.civSystem?.freePops ?? 0;
-    return free >= (cfg.minFreePopsForCourier ?? DEFAULT_LOGISTICS_CONFIG.minFreePopsForCourier);
+    return free >= LEGACY_MIN_FREE_POPS_COURIER;
   }
 
   _couriersPerRoute(empire) {
