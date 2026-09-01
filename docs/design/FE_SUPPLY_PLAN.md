@@ -544,3 +544,76 @@ z `laborer = 0` i `food = 0` **nie istnieje w grze żadna ścieżka powrotu**. K
 `× humans`, więc przy małym `humans` i zerowej żywności układ jest **absorbujący**.
 ⇒ **Zapisane jako obserwacja wymagająca własnego numeru przy następnym audycie AI** — nie projektuję
 tu lekarstwa.
+
+---
+
+## 11. STAN NA KONIEC 2026-09-01 — SLICE OTWARTY, OŚ GŁÓWNA NIEPODPISANA
+
+**Werdykt z czystego przyrządu:** pierwotną awarią stolicy AI jest **ŻYWNOŚĆ**, nie energia.
+`food` **250 → 0 między gy0 a gy4**, przy `avail = 1,00` i **obecnych robotnikach**; kolaps
+energetyczny startuje dopiero w **gy7** i jest **NASTĘPSTWEM**, nie przyczyną (mniej ludzi → mniej
+rąk → survival dosypuje elektrownie → §10.5a). ⇒ **oś główna pozostaje NIEPODPISANA** — R1/R2/R4
+zostały wycenione, ale żadna nie adresuje tego, co pęka jako pierwsze.
+
+**Status obu połówek R4:**
+* **226 (bramka pętli elektrowni)** — działa i zostaje: obniża popyt na robotników **36 → 24**.
+  Ale przy `laborer = 0` `empPenalty` to `0/36` = `0/24` ⇒ **żadnego zysku w tym fixturze**.
+  **Strażnik, nie lekarstwo.**
+* **225 (skalowanie karmicieli)** — formuła skorygowana o `empPenalty` i **przycięta do poziomu
+  obsadzalnego** (podpisany warunek: karmiciel niesie `popCost` jak elektrownia). ⚠ **Połowa
+  karmicielska jest nadal BEZCZYNNA** w kryzysie, bo przy `laborer = 0` cap daje stan bieżący.
+  **Zmierzone WYŁĄCZNIE na czystym harnessie** — brak potwierdzenia z żywego silnika.
+
+**Przewidywanie falsyfikowalne — na protokół, przed żywą tabelą:**
+> Metryką rozstrzygającą dla gy-30 jest **`strata.laborer` w stolicy, NIE `solar`.**
+> Są robotnicy ⇒ R4 pokaże realny efekt. `laborer = 0` ⇒ R4 zamilknie dokładnie jak na harnessie
+> (rozbieżność wyłącznie w liczbie elektrowni).
+
+**Wdrożone i zacommitowane w tym slice'ie:**
+
+| co | commit |
+|---|---|
+| flagi `courierLoadOrder` / `aiInternalTrade` / `aiScaleBasicInfra` (R1 + R2 + R4) | `8226dcc` ⚠ **niesie fałszywą tabelę R4** |
+| `DirectorHarness` (D-178-3, podpisane 2026-08-31 → zbudowane 2026-09-01) | `c9675c8` |
+| korekta: izolacja bootu (**228**) + pin **T7/T7b** + realny `_feederTarget` (**225**) + §9a/§10.5/§10.7 + **227** + aneks **212** | `2edda19` |
+
+---
+
+## 12. KOLEJKA NA JUTRO — w tej kolejności, nic poza nią
+
+### (a) AUDYT: **KRACH ŻYWNOŚCIOWY** — dlaczego 2 obsadzone farmy nie żywią 24 POP w gy0-4?
+
+⚠ **Reguła wejścia obowiązuje**: `git log -S` na każdym dotykanym symbolu **plus** uruchomienie
+`fe_supply_smoke`, `ai_pop_gates_smoke`, `director_harness_smoke` **przed** czytaniem czegokolwiek.
+
+Podejrzani **do sprawdzenia w źródle** (kolejność = malejące prawdopodobieństwo, nie pewność):
+
+1. **Priorytet obsady farm w `CivilizationSystem._allocateWorkforce`** — czy robotnicy idą najpierw
+   do **kopalni/fabryki**, a farma dostaje resztę? Etap 1 rankuje po **pressure malejąco**
+   (Population 2.0 Faza 3), a fabryki mają wysoki `getSlotDemand` ⇒ hipoteza: **żywność przegrywa
+   ranking z przemysłem dokładnie wtedy, gdy jest najbardziej potrzebna.**
+2. **Realne wyjście farmy pod wczesnym `empPenalty`** — nominalnie 10 food/rok; ile faktycznie
+   przy obsadzie z gy0-4? (`_getBuildingLaborEfficiency` × `_applyTechMultipliers`, gałąź `val > 0`.)
+3. **Model konsumpcji** — ⚠ **rozjazd do wyjaśnienia**: `POP_CONSUMPTION.food = 0,625` × 24 POP
+   = **15/rok**, a `food/rok` startuje **+17,6** i pada do **−8,9 w gy5** przy populacji 19.
+   Sprawdzić, czy w rachunku nie siedzi liczba **mieszkańców** (×4) zamiast **jednostek POP** —
+   to byłaby klasa „declared-but-unenforced units".
+4. **Interakcja skorygowanego `_feederTarget` z powyższymi** — cap obsadzalności jest poprawny,
+   ale jeśli (1) jest prawdą, to cap **utrwala** przegraną żywności zamiast ją przerywać.
+
+⚠ **Wynik audytu może unieważnić oś główną Fe** — i to jest dopuszczalny wynik. Głodująca stolica
+nie ma po co dostawać rudy.
+
+### (b) Pomiar skorygowanego R4 na czystym harnessie (pin bootu zielony)
+Kolumny R0/R4 w jednym procesie są **teraz dozwolone** — pin **T7** jest tego gwarantem.
+
+### (c) Żywa tabela z `GATE-215-gy30`
+* **R0 + R4** — pełny horyzont (do gy 50-55). **Metryka wiodąca: `strata.laborer`**, dopiero
+  potem `solar` i `avail`.
+* **R1 + R2** — krótkie (do gy 40), jako **kontrole przewidywanej ciszy**.
+* **R3** — pominięte.
+
+### (d) Podpis osi głównej z PEŁNEJ tabeli, potem wdrożenie i gate
+Kryterium bramki: **`kadlubyZeSkokiem` 0 → ≥1 z REALNEJ produkcji na żywym zapisie**
+(nie z `spawn*`, nie z `force*`).
+
