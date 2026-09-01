@@ -314,3 +314,74 @@ z ręki") łapała też `probe-130-z2`, która buduje **syntetyczny** `window.KO
 D-178-3 chroni przed ręcznym składaniem **pełnej gry**, więc pin łapie dokładnie to: sonda, która
 **bootuje `GameCore` I montuje Director sama**. Zmigrowana została **jedna** (`probe-w3-targets`),
 a `T6b` pinuje ZAKRES: sondy jednostkowe zostają nietknięte.
+
+---
+
+## 10. R0 (live) + R4 — ⚠ DWIE PRZESŁANKI OBALONE, KORZEŃ OKAZAŁ SIĘ INNY
+
+### 10.1 R0 — kolumna kontrolna z żywego silnika (`GATE-Fe-gy40` → gy 62,1)
+
+```
+gy 62,1 · Fe 0 · FePerYear −70,2 (STAŁE) · warp_cores 4 · energia 0 · kadlubyZeSkokiem 0
+zlecenia 3 · wygasłe 27 · outposty: Fe 129 777 · Xe 20 967 · Nt 37 393
+energy = {production: 0, consumption: 123,15, balance: −123,15, brownout: true}
+```
+
+⚠ **`production` DOKŁADNIE zero** — nie „mało". To jest wskazówka, która przewróciła cały plan.
+
+### 10.2 Ciemna stolica — trzy odpowiedzi ze źródła
+
+| pytanie | odpowiedź |
+|---|---|
+| stocznia potrzebuje `avail > 0`? | **NIE.** `ColonyManager._tickShipBuilds:1221` → `progress += deltaYears * speedBonus`; `startShipBuild`/`_tickPendingShipOrders` bramkują tylko `canAfford` |
+| fabryka produkuje coś przy 0? | **NIE, i to na zawsze.** `FactorySystem:897` → `alloc.progress += deltaYears * avail`; przy zerze postęp nie akumuluje się **wcale** |
+| kopalnie wydobywają przy 0? | **NIE.** `BuildingSystem:2519` → `extractFromDeposits(deps, _cachedMineLevelGrid * avail, …)`, komentarz: *„avail=0 → złoże NIETKNIĘTE"* |
+
+⇒ **`Fe 0` to nie dren, tylko ZERO WYDOBYCIA.** Ciemna stolica nie blokuje budowy okrętów
+bezpośrednio — **wygasza wszystko, co ją karmi**.
+
+### 10.3 ⚠ ŁAŃCUCH PRZYCZYNOWY — zmierzony end-to-end na `DirectorHarness`
+
+| gy | pop | laborer | demand | farm | solar | prod | avail | food/rok | głód | Fe |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 24 | 12 | 10 | 2 | 6 | 56,7 | 1,00 | **+17,6** | — | 200 |
+| 5 | 23 | 9 | 30 | 2 | 12 | 74,8 | 1,00 | **+3,5** | — | 2046 |
+| 10 | 19 | 7 | 36 | 2 | 12 | 104,8 | 1,00 | **−8,9** | **TAK** | 0 |
+| 15 | 11 | **0** | 37 | 2 | 13 | **0** | **0** | −4,5 | TAK | 0 |
+| 20 | **4** | 0 | 37 | 2 | 13 | 0 | 0 | +0,5 | — | 0 |
+
+**farm stoi na 2** → `food/rok` spada wraz z populacją → **GŁÓD w gy 10** → populacja 24 → 4 →
+**laborer 0** → `empPenalty = laborer/demand = 0/37` → **wszystkie 13 elektrowni produkuje ZERO**
+→ `avail 0` → kopalnie nie wydobywają, fabryka nie postępuje → **Fe 0 na zawsze**.
+
+### 10.4 ⚠ DWIE PRZESŁANKI PODPISANEGO R4 — OBALONE
+
+1. **„Ekspander nie skaluje energii" — NIEPRAWDA.** Buduje **6 → 13** elektrowni przy celu 5
+   (moduł survival, `ColonyAutoExpander:253-258`). **Dynamiczne skalowanie energii byłoby NO-OPEM**
+   — i, co gorsza, wyglądałoby na naprawę. Dlatego R4 skaluje **wyłącznie żywność i wodę**.
+2. **„Wystarczy skalować karmicieli" — NIEPRAWDA.** R4 z samym skalowaniem farm dał pop
+   **27 → 16 → 3**: `empPenalty` dzieli produkcję WSZYSTKICH budynków, w tym nowych farm.
+
+⇒ Prawdziwym korzeniem jest **Finding 226**: gałąź survival dokłada elektrownię przy każdym
+ujemnym bilansie, a `solar_farm` ma `popCost 0.25`, więc **każda dokłada etat, którego nie ma kto
+obsadzić** — produkuje zero i **podnosi mianownik** `empPenalty`. Bilans dalej ujemny ⇒ kolejna.
+
+### 10.5 R4 — wynik zmierzony (`DirectorHarness`, side-by-side)
+
+| | gy10 | gy20 | gy30 |
+|---|---|---|---|
+| **R0** (flagi OFF) | pop 19 · lab 7 · avail 1,00 · Fe 0 · placówki 1 | pop **4** · lab **0** · avail **0,00** · Fe 0 | pop 4 · avail 0 · solar 13 |
+| **R4** (bez bramki 226) | pop 27 · farm 3 · Fe 2057 · placówki 2 | pop 16 · Fe 3817 · placówki 5 | pop **3** · avail 0 · **solar 30** |
+| **R4 pełne** | pop 27 · lab 9 · avail 1,00 · Fe 1911 · placówki 2 | pop **29** · lab 9 · avail **1,00** · Fe **12 099** · placówki 5 | pop **36** · avail **0,99** · Fe **19 826** · **solar 10** |
+
+⚠ **MNIEJ ELEKTROWNI = WIĘCEJ ENERGII** (solar 30 → 10, `avail` 0,00 → 0,99). To jest cały dowód
+pętli 226 w jednej linijce.
+⚠ **Kontrola d44af5e (placówki): 5 vs 1** — ekspansja **rośnie**, nie jest przesuwana z placówek.
+⚠ **R4 to DWIE zmiany pod jedną flagą** (225 skalowanie karmicieli + 226 bramka pętli), a pomiar
+mówi, że **dominuje 226**. Rozdzielenie flag jest do decyzji właściciela — pomiar jest powyżej.
+
+### 10.6 Co to znaczy dla osi głównej
+
+R1 i R2 leżą **w dole strumienia**: dowożą Fe do fabryki, która przy `avail = 0` mnoży postęp przez
+zero, i do kopalń, które nie wydobywają. **Bez 225+226 żadna z nich nie może przewrócić obserwabla.**
+Rekomendacja kolejności: **R4 → R2 → R1**. Oś główną sygnuje właściciel z pełnej tabeli.

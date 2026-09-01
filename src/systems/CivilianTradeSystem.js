@@ -13,6 +13,7 @@
 //               'trade:transferExecuted'  { from, to, goodId, qty, creditsDelta }
 
 import EventBus from '../core/EventBus.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import { BASE_PRICE, scarcityMultiplier, routingPriority, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -89,6 +90,13 @@ export class CivilianTradeSystem {
       // Kolonia obcego imperium — wymaga odkrytego systemu (fog of war),
       // CHYBA że gracz ma z tym imperium traktat handlowy (S3.5b: traktat ⇒ kontakt,
       // kolonie partnera handlowalne niezależnie od statusu eksploracji).
+      // 223 — BRAMKA MGLY DOTYCZY PAR GRACZ<->AI, NIE PAR AI<->AI TEGO SAMEGO IMPERIUM.
+      // ⚠ ZMIERZONE: przy nieodkrytym ukladzie AI ta bramka wycinala WSZYSTKIE kolonie imperium
+      // (3 -> 0), wiec `tradingColonies.length < 2` i `_halfYearlyTick` wychodzil natychmiast —
+      // imperium nie handlowalo SAMO ZE SOBA, dopoki gracz nie zajrzal do jego ukladu. Fog-of-war
+      // gracza nie ma prawa bramkowac wewnetrznej logistyki AI. Bramka przenosi sie do
+      // `_calcAllConnections`, do galezi `!sameEmpire`, gdzie jej miejsce.
+      if (GAME_CONFIG.FEATURES?.aiInternalTrade !== false) return true;
       if (c.ownerEmpireId && galaxySystems) {
         const hasTreaty = window.KOSMOS?.diplomacySystem?.hasTradeAgreement?.(c.ownerEmpireId) ?? false;
         if (!hasTreaty) {
@@ -164,6 +172,11 @@ export class CivilianTradeSystem {
           const playerSide = aEmp === null ? a : (bEmp === null ? b : null);
           const aiSide     = aEmp === null ? b : (bEmp === null ? a : null);
           if (!playerSide || !aiSide) continue;
+          // 223 — mgla wojny egzekwowana TU, na parze gracz<->AI (przeniesiona z filtra kolonii).
+          if (GAME_CONFIG.FEATURES?.aiInternalTrade !== false) {
+            const treaty = window.KOSMOS?.diplomacySystem?.hasTradeAgreement?.(aiSide.ownerEmpireId) ?? false;
+            if (!treaty && !isSystemExploredId(aiSide.systemId)) continue;
+          }
 
           // Wymóg: gracz ma warp (ion_drives — match silnik engine_warp/warp_cores) I traktat handlowy.
           const warp   = window.KOSMOS?.techSystem?.isResearched?.('ion_drives') ?? false;
@@ -615,6 +628,12 @@ export class CivilianTradeSystem {
       if (rates[goodId] && rates[goodId] < 0) {
         consumption += Math.abs(rates[goodId]);
       }
+    }
+    // 224 — POBOR FABRYKI. `_consumeIngredients` pisze do inventory BEZPOSREDNIO, wiec nie jest
+    // zarejestrowanym producentem i do tej petli nie wchodzi. Bez tego czlonu `_deficitScore`
+    // stolicy jest zanizony o DOMINUJACEGO konsumenta (przy structural_alloys rzedu 1000 Fe/civY).
+    if (GAME_CONFIG.FEATURES?.aiInternalTrade !== false) {
+      consumption += colony.factorySystem?.getIngredientDrawPerYear?.(goodId) ?? 0;
     }
     return consumption;
   }

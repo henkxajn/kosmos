@@ -430,7 +430,7 @@ export class EmpireLogisticsSystem {
         && v.position.dockedAt === route.outpostId
         && v.mission && v.mission.phase !== 'returning') {
       if (outpost?.resourceSystem) {
-        this._loadByRarity(v, outpost.resourceSystem);
+        this._loadByRarity(v, outpost.resourceSystem, capital);
         this._depletionWarn(outpost);
       }
       const full = (v.cargoUsed ?? 0) >= (v.cargoMax ?? 0) - EPS;
@@ -486,17 +486,77 @@ export class EmpireLogisticsSystem {
   // ── Ładowanie rare-first ─────────────────────────────────────────────────────
   // Sortuje surowce wydobywalne malejąco po rarity (Xe/Nt=5 najpierw, Fe/C=1 na końcu)
   // i ładuje każdy do pełna. loadCargo clampuje wg wolnego miejsca/wagi/dostępności.
-  _loadByRarity(vessel, resSys) {
+  _loadByRarity(vessel, resSys, capital = null) {
     if (!vessel || !resSys) return;
     const ids = Object.keys(MINED_RESOURCES).sort(
       (a, b) => (MINED_RESOURCES[b]?.rarity ?? 0) - (MINED_RESOURCES[a]?.rarity ?? 0)
     );
+
+    // ── 178 / W4 (D-Fe-1 = UNIA) — NAJPIERW TO, NA CO STOLICA CZEKA ────────────────────
+    // ⚠ ZMIERZONE, ze dwie tansze naprawy NIE dzialaja i dlatego ich tu NIE MA:
+    //   • sam cap per surowiec  -> Fe 0 (ladownia zapelnia sie na SIEDMIU rzadszych rudach);
+    //   • rezerwacja pasma „pospolitych" -> Fe 0, bo Fe (rarity 1) jest OSTATNIE takze w tym
+    //     pasmie i C/Si/Cu zjadaja rezerwe.
+    //   Rusza wylacznie ladowanie STEROWANE POPYTEM. Piny: `fe_supply_smoke` T2/T3.
+    // ⚠ UNIA, nie same stalle (D-Fe-1): `Fe 100` fregaty jest kosztem STOCZNI, nie receptura,
+    //   wiec na liscie stalli NIE POJAWIA SIE NIGDY — przy samych stallach kurier nie wozilby
+    //   dla stoczni w ogole, a przywiezione 40 zjadalaby produkcja stopow.
+    if (GAME_CONFIG.FEATURES?.courierLoadOrder !== false && capital) {
+      const need = this._capitalOreNeed(capital);
+      const cap = (vessel.cargoMax ?? 0) * 0.6;
+      for (const [resId, qty] of Object.entries(need)) {
+        if ((vessel.cargoUsed ?? 0) >= (vessel.cargoMax ?? 0) - EPS) break;
+        const w = MINED_RESOURCES[resId]?.weight ?? 1;
+        const room = Math.floor(Math.min(cap, (vessel.cargoMax ?? 0) - (vessel.cargoUsed ?? 0)) / w);
+        const a = Math.min(resSys.getAmount?.(resId) ?? 0, qty, room);
+        if (a > 0) loadCargo(vessel, resId, a, resSys);
+      }
+      // Reszta wg rzadkosci, ale Z CAPEM — inaczej jeden lekki i obfity surowiec (Xe wazy 0,1)
+      // zjada cala pozostala ladownie i konczymy z hoardem Xe (Finding 180).
+      const capPer = (vessel.cargoMax ?? 0) / 3;
+      for (const resId of ids) {
+        if ((vessel.cargoUsed ?? 0) >= (vessel.cargoMax ?? 0) - EPS) break;
+        const w = MINED_RESOURCES[resId]?.weight ?? 1;
+        const a = Math.min(resSys.getAmount?.(resId) ?? 0, Math.floor(capPer / w));
+        if (a > 0) loadCargo(vessel, resId, a, resSys);
+      }
+      return;
+    }
+
     for (const resId of ids) {
       if ((vessel.cargoUsed ?? 0) >= (vessel.cargoMax ?? 0) - EPS) break;
       const avail = resSys.getAmount?.(resId) ?? 0;
       if (avail <= 0) continue;
       loadCargo(vessel, resId, avail, resSys);
     }
+  }
+
+  /**
+   * UNIA popytu stolicy na RUDY (D-Fe-1). Dwa zrodla, oba juz istniejace i prawdomowne:
+   *   (a) LISTA STALLI — `getStallReason().missing` zwraca `{resId, need, have}` per alokacja.
+   *       To jest jedyny istniejacy kanal popytu na RUDY (Finding 214: `_feedCommodityDemand`
+   *       przepuszcza rudy, ale fabryka ich nie produkuje, wiec kanal jest tam martwy).
+   *   (b) LUKI RUD ZE ZLECEN OKRETOWYCH — `pendingShipOrders[].cost` minus zapas; ta sama
+   *       lista, ktora `director:commodityDemand` raportuje jako „Fe 114".
+   * @returns {Object<string, number>} {resId: ile brakuje}, tylko rudy (MINED_RESOURCES)
+   */
+  _capitalOreNeed(capital) {
+    const need = {};
+    const rs = capital?.resourceSystem;
+    if (!rs) return need;
+    const add = (resId, qty) => {
+      if (!MINED_RESOURCES[resId] || !(qty > 0)) return;
+      need[resId] = (need[resId] ?? 0) + qty;
+    };
+    for (const alloc of (capital.factorySystem?.getAllocations?.() ?? [])) {
+      for (const m of (alloc.stallReason?.missing ?? [])) add(m.resId, (m.need ?? 0) - (m.have ?? 0));
+    }
+    for (const order of (capital.pendingShipOrders ?? [])) {
+      for (const [resId, qty] of Object.entries(order.cost ?? {})) {
+        add(resId, (qty ?? 0) - (rs.getAmount?.(resId) ?? 0));
+      }
+    }
+    return need;
   }
 
   // Czy outpost ma JESZCZE jakikolwiek surowiec wydobywalny w inwentarzu?

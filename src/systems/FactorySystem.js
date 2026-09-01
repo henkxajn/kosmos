@@ -541,6 +541,31 @@ export class FactorySystem {
   // zakresem tego slice'u). Popyt zamówieniowy jest ZOBOWIĄZANIEM, które Director
   // już zaciągnął, i żadna polityka min-zapasu nie ma prawa go wyzerować.
 
+  /**
+   * 224 — ILE TEGO SUROWCA FABRYKA ZJADA NA CIVYEAR (stawka POCHODNA, bez nowego stanu).
+   *
+   * ⚠ PO CO: `_consumeIngredients` pisze do inventory BEZPOSREDNIO, wiec pobor fabryki NIE JEST
+   * zarejestrowanym producentem — nie widzi go ani `_inventoryPerYear` (stad korekta w 216), ani
+   * `CivilianTradeSystem._getConsumption`. Skutek: `_deficitScore` stolicy jest systematycznie
+   * ZANIZONY i handel wysyla za malo i za pozno.
+   *
+   * ⚠ Stawka liczona z `timePerUnit` SILNIKA (`1 / timePerUnit` sztuk na civYear), a nie z
+   * odtworzonego lancucha mnoznikow — inaczej dublowalibysmy `scenarioMult x techSpeed x assembly`
+   * i pierwsza zmiana ktoregokolwiek rozjechalaby te liczbe po cichu.
+   */
+  getIngredientDrawPerYear(resId) {
+    if (!resId) return 0;
+    let sum = 0;
+    for (const a of this.getAllocations()) {
+      if (a.paused || !(a.points > 0) || !(a.timePerUnit > 0)) continue;
+      const def = COMMODITIES[a.commodityId];
+      if (!def?.recipe) continue;
+      const per = this._getScaledRecipe(def.recipe, a.commodityId)[resId] ?? 0;
+      if (per > 0) sum += per / a.timePerUnit;
+    }
+    return sum;
+  }
+
   /** Suma gapów wszystkich żywych zleceń dla danego towaru (człon POCHODNY). */
   getOrderDemand(commodityId) {
     if (!orderDemandChannelOn()) return 0;

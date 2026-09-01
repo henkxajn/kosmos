@@ -20,6 +20,8 @@ import EventBus from '../core/EventBus.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
+import { POP_CONSUMPTION } from '../data/ResourcesData.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import {
@@ -97,6 +99,14 @@ const UNREACHABLE_RETRY_CIVYEARS = 30;
 // bramke zamknieta niemal zawsze => zmiana bylaby no-opem. Dlatego zamoznosc mierzymy
 // rudami POSPOLITYMI, a rud rzadkich NIE bramkujemy: to wlasnie one sa wsadem receptur,
 // wiec warunek -produkuj dopiero, gdy masz duzo tego, co receptura zjada- bylby cykliczny.
+// 225 / R4 — zapas ponad break-even karmicieli. Glod uderza ZANIM licznik pokaze deficyt,
+// bo `empPenalty` reaguje z opoznieniem, a populacja spada skokowo.
+const FEEDER_MARGIN = 1.25;
+
+// 225 / R4 — ponizej tej obsady deficyt energii jest OBSADOWY, nie mocowy: dokladanie
+// elektrowni dodaje wtedy etaty, ktorych nie ma kto obsadzic, i poglebia problem.
+const STAFFING_CRITICAL = 0.35;
+
 const WEALTH_ORES      = ['Fe', 'Si', 'Cu', 'C'];
 const WEALTH_THRESHOLD = 20000;   // jednostki rudy, KAZDA z WEALTH_ORES osobno
 
@@ -242,7 +252,19 @@ export class ColonyAutoExpander {
 
       // 1) Energia — bilans poniżej progu → solar_farm (najwyższy priorytet, brownout psuje wszystko)
       const bal = res.energy?.balance ?? 0;
-      if (!restFromBuilds && bal < (TH.energy_balance_min ?? 0)
+      // ⚠ 226 / R4 — PĘTLA ŚMIERCI, ZMIERZONA. Ta gałąź dokłada elektrownię przy KAŻDYM ujemnym
+      // bilansie, a `solar_farm` ma `popCost 0.25`, więc każda dokłada ETAT. Gdy deficyt jest
+      // OBSADOWY (`empPenalty = laborer/demand → 0`), nowa elektrownia produkuje ZERO
+      // (`_applyTechMultipliers`: produkcja × empPenalty) i tylko pogłębia niedobór rąk.
+      // ZMIERZONE na `DirectorHarness`: solar 11 → 28 → 30 przy `laborer = 0` i `avail = 0.00`
+      // przez cały czas — trzydzieści elektrowni nie dało ANI JEDNEJ jednostki energii.
+      // ⇒ przy krytycznej obsadzie NIE budujemy mocy; ratunkiem jest żywność, nie panele.
+      // Bramka pod `aiScaleBasicInfra` (ta sama intencja co reguła kolejności: nie pogłębiaj deficytu).
+      const _lab = colony.civSystem?.strata?.laborer?.count ?? 0;
+      const _dem = colony.buildingSystem?.getSlotDemand?.('laborer') ?? 0;
+      const _obsadaKrytyczna = GAME_CONFIG.FEATURES?.aiScaleBasicInfra !== false
+        && _dem > 0 && (_lab / _dem) < STAFFING_CRITICAL;
+      if (!_obsadaKrytyczna && !restFromBuilds && bal < (TH.energy_balance_min ?? 0)
           && !this._isUnreachable(colony, 'build:solar_farm', civYear)) {
         if (this._doSurvival(colony, 'energy', civYear)) {
           this._survivalBuildOutcome(colony, 'solar_farm', civYear, `energy balance ${bal.toFixed(1)}`);
@@ -358,8 +380,8 @@ export class ColonyAutoExpander {
       // a) COUNTS (step function) — zbuduj pierwszy brakujący budynek wg priorytetu.
       //    Silent fail (np. brak techu) → zarejestruj unreachable i przejdź do
       //    następnego budynku z priorytetu (zamiast pętlić się w nieskończoność).
-      if (!buildQueueFull) for (const buildingId of BUILD_PRIORITY) {
-        const want = cp.buildings[buildingId]?.count ?? 0;
+      if (!buildQueueFull) for (const buildingId of this._buildOrder(colony)) {
+        const want = this._targetCount(colony, cp, buildingId);
         if (want <= 0) continue;
         const cur = this._countBuilding(colony, buildingId);
         if (cur >= want) continue;
@@ -432,6 +454,77 @@ export class ColonyAutoExpander {
     if (low.key === high.key || lv == null || hv == null) return Math.round(lv ?? hv);
     const frac = Math.max(0, Math.min(1, (gy - low.gy) / (high.gy - low.gy)));
     return Math.round(lv + (hv - lv) * frac);
+  }
+
+  // ═══ 225 / R4 — KARMICIELE SKALOWANI POPULACJĄ ════════════════════════════════════════
+  //
+  // ⚠ PRZESŁANKA SLICE'U ZOSTAŁA OBALONA POMIAREM I TO JEST TREŚĆ TEJ SEKCJI.
+  // Hipoteza brzmiała „ekspander nie skaluje podstaw: żywności, wody ANI energii".
+  // ZMIERZONE (`DirectorHarness`, stolica AI, gy 0→30):
+  //     gy 0  pop 24  laborer 12  solar  6  farm 2  prod  56,7  avail 1,00  food +17,6
+  //     gy 5  pop 23  laborer  9  solar 12  farm 2  prod  74,8  avail 1,00  food  +3,5
+  //     gy10  pop 19  laborer  7  solar 12  farm 2  prod 104,8  avail 1,00  food  −8,9  GŁÓD
+  //     gy15  pop 11  laborer  0  solar 13  farm 2  prod   0    avail 0
+  //     gy20  pop  4  laborer  0  solar 13  farm 2  prod   0    avail 0
+  // ⇒ ENERGIA NIE JEST PROBLEMEM: ekspander buduje 6 → 13 elektrowni (cel w `targets` mówi 5,
+  //   dobudowuje moduł survival). Skalowanie energii byłoby NO-OPEM i, co gorsza, wyglądałoby
+  //   na naprawę. Zapaść jest w ŻYWNOŚCI: `farm` stoi na 2 przez wszystkie checkpointy, więc
+  //   `food/rok` spada wraz ze wzrostem populacji (17,6 → 3,5 → −8,9), w gy 10 wchodzi GŁÓD,
+  //   populacja wali się 24 → 3, `laborer` → 0, a wtedy `empPenalty = laborer/demand = 0/37`
+  //   GASI WSZYSTKIE 13 ELEKTROWNI (`_applyTechMultipliers`: produkcja × empPenalty).
+  //   Dopiero stąd `avail = 0` → kopalnie nie wydobywają (`BuildingSystem:2519`), fabryka nie
+  //   akumuluje postępu (`FactorySystem:897`), `Fe = 0` na zawsze.
+  // ⇒ Ciemna stolica jest OBJAWEM GŁODU, nie brakiem elektrowni. Dlatego R4 skaluje
+  //   WYŁĄCZNIE żywność i wodę; energia zostaje nietknięta (kill-switch dotyczy całości).
+  //
+  // Próg jest arytmetyczny, nie zgadywany: `POP_CONSUMPTION.food = 0,625`/POP/civY przy
+  // `farm.rates.food = 10` daje break-even 16 POP na farmę (woda: 0,375 przy 6 → 16 POP).
+  // MARGIN = 1,25 — kolonia ma jeść z zapasem, bo `empPenalty` reaguje na głód z opóźnieniem.
+  _feederTarget(colony, buildingId) {
+    const def = BUILDINGS[buildingId];
+    const resId = buildingId === 'farm' ? 'food' : 'water';
+    const perBuilding = def?.rates?.[resId] ?? 0;
+    const perPop = POP_CONSUMPTION[resId] ?? 0;
+    if (perBuilding <= 0 || perPop <= 0) return 0;
+    const pop = Math.max(1, colony.civSystem?.population ?? 0);
+    return Math.ceil((pop * perPop * FEEDER_MARGIN) / perBuilding);
+  }
+
+  /** Cel liczby budynku: karmiciele DYNAMICZNIE (nigdy poniżej checkpointu), reszta z tabeli. */
+  _targetCount(colony, cp, buildingId) {
+    const staticWant = cp.buildings[buildingId]?.count ?? 0;
+    if (GAME_CONFIG.FEATURES?.aiScaleBasicInfra === false) return staticWant;
+    if (buildingId !== 'farm' && buildingId !== 'well') return staticWant;
+    return Math.max(staticWant, this._feederTarget(colony, buildingId));
+  }
+
+  /**
+   * Kolejność budowy. ⚠ PRZY DEFICYCIE ENERGII KARMICIELE IDĄ PRZED KONSUMENTAMI —
+   * inaczej ten sam tik dokłada farmę i fabrykę, a fabryka ciągnie prąd, którego farma
+   * jeszcze nie daje. Kolejność: energia → żywność/woda → reszta (bez zmiany zawartości
+   * `BUILD_PRIORITY`, tylko permutacja).
+   */
+  _buildOrder(colony) {
+    if (GAME_CONFIG.FEATURES?.aiScaleBasicInfra === false) return BUILD_PRIORITY;
+    const avail = colony.resourceSystem?.getEnergyAvailability?.() ?? 1;
+    if (avail >= 1) return BUILD_PRIORITY;
+
+    // ⚠ POPRAWKA ZMIERZONA — pierwsza wersja tej reguły MIAŁA WŁASNĄ PĘTLĘ ZWROTNĄ.
+    // Podpisany kształt brzmiał „przy deficycie: energia → żywność/woda → reszta". Przy
+    // `avail = 0` ZMIERZONO, że stolica dobudowuje elektrownie **11 → 28 → 30**, a każda
+    // dokłada ETAT (`solar_farm.popCost 0.25`), którego nie ma kto obsadzić — więc pogłębia
+    // dokładnie ten `empPenalty = laborer/demand`, przez który produkcja jest zerowa.
+    // Budowanie mocy, gdy zerowa jest OBSADA, nie dodaje ani jednej jednostki energii.
+    // ⇒ gdy deficyt jest OBSADOWY (brak robotników), pierwsi są KARMICIELE, nie energia:
+    //   to żywność odbudowuje populację, a populacja dopiero uruchamia istniejące elektrownie.
+    const laborer = colony.civSystem?.strata?.laborer?.count ?? 0;
+    const demand  = colony.buildingSystem?.getSlotDemand?.('laborer') ?? 0;
+    const obsadaKrytyczna = demand > 0 && (laborer / demand) < STAFFING_CRITICAL;
+
+    const power   = BUILD_PRIORITY.filter(id => id === 'solar_farm');
+    const feeders = BUILD_PRIORITY.filter(id => id === 'farm' || id === 'well');
+    const reszta  = BUILD_PRIORITY.filter(id => !power.includes(id) && !feeders.includes(id));
+    return obsadaKrytyczna ? [...feeders, ...power, ...reszta] : [...power, ...feeders, ...reszta];
   }
 
   // safetyStocks — interpolacja liniowa per commodity, aplikacja przez setDemandBonus.

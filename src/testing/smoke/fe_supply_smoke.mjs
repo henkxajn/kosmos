@@ -24,11 +24,14 @@
 import '../headless/env.js';           // MUSI byc pierwszy
 import { EmpireLogisticsSystem } from '../../systems/EmpireLogisticsSystem.js';
 import { CivilianTradeSystem } from '../../systems/CivilianTradeSystem.js';
+import { FactorySystem } from '../../systems/FactorySystem.js';
+import { COMMODITIES } from '../../data/CommoditiesData.js';
 import { MINED_RESOURCES } from '../../data/ResourcesData.js';
 import { TRADEABLE_GOODS } from '../../data/TradeValuesData.js';
 import { HULLS } from '../../data/HullsData.js';
 import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 import { loadCargo } from '../../entities/Vessel.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -47,6 +50,19 @@ const mkOutpost = (stock) => { const inv = new Map(Object.entries(stock));
     canAfford: c => Object.entries(c).every(([k, v]) => (inv.get(k) ?? 0) >= v) }; };
 const mkCourier = () => ({ id: 'v_9', cargo: {}, cargoUsed: 0, cargoMax: 200 });
 const els = new EmpireLogisticsSystem();
+
+/** Stolica z REALNYM popytem: stall fabryki na Fe 40 + zlecenie okretowe na Fe 100. */
+function mkCapital({ stall = 40, shipFe = 0, feStock = 0 } = {}) {
+  return {
+    planetId: 'entity_185',
+    resourceSystem: { getAmount: (id) => (id === 'Fe' ? feStock : 0) },
+    factorySystem: { getAllocations: () => (stall > 0
+      ? [{ commodityId: 'structural_alloys', points: 0, paused: true,
+           stallReason: { kind: 'missing_ingredient', missing: [{ resId: 'Fe', need: stall, have: feStock }] } }]
+      : []) },
+    pendingShipOrders: shipFe > 0 ? [{ id: 'pso_1', cost: { Fe: shipFe, Ti: 130 } }] : [],
+  };
+}
 
 /** W2 — cap 1/3 ladowni na surowiec, kolejnosc dalej wg rzadkosci. */
 function loadCapped(v, rs, capFrac = 1 / 3) {
@@ -76,7 +92,7 @@ console.log('T1 — FAIL-FIRST: kurier ma przywozic Fe, gdy stolica na nie stoi'
   const wyniki = {};
   for (const [nazwa, stock] of Object.entries(OUTPOSTS)) {
     const rs = mkOutpost(stock), v = mkCourier();
-    els._loadByRarity(v, rs);
+    els._loadByRarity(v, rs, mkCapital({ stall: 40 }));   // sciezka PRODUKCYJNA (R1)
     wyniki[nazwa] = { fe: v.cargo.Fe ?? 0, xe: v.cargo.Xe ?? 0, uzyte: v.cargoUsed, max: v.cargoMax,
                       feNaSkladzie: stock.Fe };
   }
@@ -156,15 +172,23 @@ console.log('\nT4 — D-Fe-1: zrodlem popytu jest UNIA, bo same stalle NIGDY nie
   // ⚠ FAIL-FIRST NA KODZIE GRY. Powyzsze dwie asercje przechodza na MOICH helperach i przeszlyby
   //   takze wtedy, gdyby gra nigdy nie dostala ladowania sterowanego popytem. Pin musi pytac
   //   o PRODUKCYJNY loader, inaczej jest zielony dokladnie tam, gdzie jest defekt.
-  const maPopyt = typeof els._loadByNeed === 'function'
-    || (els._loadByRarity.length >= 3);   // trzeci argument = zrodlo popytu
+  // ⚠ PIN ZACHOWANIOWY, nie sygnaturowy — i to jest korekta mojego wlasnego pina. Pierwsza
+  //   wersja sprawdzala `els._loadByRarity.length >= 3`, ale `Function.length` NIE LICZY
+  //   parametrow z wartoscia domyslna (`capital = null` daje arity 2). Pin padalby na
+  //   POPRAWNEJ implementacji, ktora zachowuje zgodnosc wsteczna. Pytamy wiec o SKUTEK:
+  //   ten sam kurier i ten sam outpost, raz BEZ stolicy, raz Z NIA.
+  const bezStolicy = mkCourier(); els._loadByRarity(bezStolicy, mkOutpost(OUTPOSTS.xe));
+  const zeStolica  = mkCourier(); els._loadByRarity(zeStolica, mkOutpost(OUTPOSTS.xe), mkCapital({ stall: 40 }));
+  const maPopyt = (zeStolica.cargo.Fe ?? 0) > (bezStolicy.cargo.Fe ?? 0);
   assert(maPopyt,
-    'T4a: PRODUKCYJNY loader przyjmuje zrodlo popytu (`_loadByNeed` albo trzeci argument ' +
-    `\`_loadByRarity\`; dzis arity = ${els._loadByRarity.length})`);
+    'T4a: PRODUKCYJNY loader REAGUJE na popyt stolicy — ten sam kurier bierze wiecej Fe, gdy dostanie ' +
+    `stolice (bez: ${(bezStolicy.cargo.Fe ?? 0).toFixed(0)}, ze: ${(zeStolica.cargo.Fe ?? 0).toFixed(0)})`);
 
   if (maPopyt) {
     const c = mkCourier();
-    (els._loadByNeed ?? els._loadByRarity).call(els, c, mkOutpost(OUTPOSTS.xe), unia);
+    // ⚠ Scenariusz ROZSTRZYGAJACY: fabryka NIE STOI (zero stalli), czeka WYLACZNIE zlecenie
+    //   okretowe. Przy samych stallach kurier nie zaladowalby tu ANI JEDNEJ jednostki Fe.
+    els._loadByRarity(c, mkOutpost(OUTPOSTS.xe), mkCapital({ stall: 0, shipFe: koszt.Fe ?? 100 }));
     assert((c.cargo.Fe ?? 0) > 0,
       `T4b: produkcyjny loader z UNIA wozi Fe (${(c.cargo.Fe ?? 0).toFixed(0)}) w scenariuszu ` +
       '„fabryka nie stoi, czeka zlecenie okretowe"');
@@ -190,27 +214,28 @@ console.log('\nT5 — 223: kolonie AI wypadaja z tradingColonies, gdy gracz nie 
   const cts = new CivilianTradeSystem({ getAllColonies: () => cols, getColony: id => cols.find(c => c.planetId === id) });
   cts._hasSpaceport = () => true;
 
+  cts._getDistance = () => 5;                 // ten sam uklad, w zasiegu bazowym 10 AU
+  // ⚠ PRZEZ PRODUKCYJNY TICK, nie przez odtworzony filtr — inaczej pin mierzylby moja
+  //   wyobraznie o bramce, a nie bramke.
   const policz = (explored) => {
     globalThis.window.KOSMOS = {
       galaxyData: { systems: [{ id: 'sys_057', explored }] },
       diplomacySystem: { hasTradeAgreement: () => false },
       colonyManager: { getAllColonies: () => cols },
+      gameConfig: GAME_CONFIG,
     };
-    return cols.filter(c => {
-      if (!cts._hasSpaceport(c)) return false;
-      if (!c.ownerEmpireId) return true;
-      const sys = window.KOSMOS.galaxyData.systems.find(x => x.id === c.systemId);
-      return !!sys?.explored;
-    }).length;
+    cts._connections = [];
+    cts._halfYearlyTick();
+    return cts._connections.length;
   };
   assert(TRADEABLE_GOODS.includes('Fe'),
     'T5k KONTROLA: `Fe` JEST towarem handlowym — kanal umialby wozic rude, wiec bramka jest ' +
     'jedynym powodem, dla ktorego nie wozi');
-  assert(policz(true) === 3,
-    `T5k KONTROLA: przy ZWIEDZONYM ukladzie wszystkie 3 kolonie sa handlowe (jest ${policz(true)})`);
-  assert(policz(false) >= 2,
-    `T5: przy NIEzwiedzonym ukladzie kolonie TEGO SAMEGO imperium nadal moga handlowac ze soba ` +
-    `(jest ${policz(false)}, potrzeba >= 2 zeby _halfYearlyTick w ogole ruszyl)`);
+  assert(policz(true) >= 1,
+    `T5k KONTROLA: przy ZWIEDZONYM ukladzie polaczenia POWSTAJA (${policz(true)}) — pin ma z czym porownywac`);
+  assert(policz(false) >= 1,
+    `T5: przy NIEzwiedzonym ukladzie kolonie TEGO SAMEGO imperium NADAL handluja ze soba ` +
+    `(polaczen: ${policz(false)}) — mgla wojny GRACZA nie bramkuje wewnetrznej logistyki AI`);
 }
 
 // ── T6 — 224: `_getConsumption` nie widzi poboru receptur ──────────────────────────────────
@@ -218,8 +243,23 @@ console.log('\nT6 — 224: deficyt stolicy zanizony, bo pobor FABRYKI nie jest z
 {
   const cts = new CivilianTradeSystem({ getAllColonies: () => [], getColony: () => null });
   // (a) stolica, ktora ZUZYWA Fe wylacznie przez fabryke (bezposredni zapis do inventory)
-  const fabryczna = { planetId: 'entity_185',
-    resourceSystem: { _producers: new Map(), inventory: new Map([['Fe', 4]]), getAmount: () => 4 } };
+  // ⚠ REALNY `FactorySystem` z ZYWA alokacja — atrapa zwracajaca stala stawke przechodzilaby
+  //   trywialnie i nie dowodzilaby, ze pochodna liczy sie z `timePerUnit` silnika.
+  const invF = new Map(Object.entries({ Fe: 4, C: 500 }));
+  const rsF = { inventory: invF, _inventoryPerYear: new Map(), _producers: new Map(),
+    getAmount: (k) => invF.get(k) ?? 0, getEnergyAvailability: () => 1.0 };
+  const fsF = new FactorySystem(rsF);
+  const colF = { planetId: 'entity_185', ownerEmpireId: 'emp_002', factorySystem: fsF, resourceSystem: rsF,
+    buildingSystem: { techSystem: { isResearched: () => true, isCommodityUnlocked: () => true, getFactorySpeedMultiplier: () => 1 } },
+    pendingShipOrders: [], shipQueues: [] };
+  globalThis.window.KOSMOS = { colonyManager: { getAllColonies: () => [colF], getColony: () => colF, activePlanetId: null },
+    scenario: 'civilization', gameConfig: GAME_CONFIG };
+  fsF.setTotalPoints(5);
+  fsF._allocations.set('structural_alloys', { points: 5, progress: 0, targetQty: 100, produced: 0 });
+  const fabryczna = colF;
+  assert(fsF.getIngredientDrawPerYear('Fe') > 0,
+    `T6k KONTROLA: pochodna stawka poboru Fe liczy sie z timePerUnit silnika ` +
+    `(${fsF.getIngredientDrawPerYear('Fe').toFixed(1)}/civY) — nie ze stalej w atrapie`);
   // (b) kontrola: ten sam pobor, ale ZAREJESTROWANY jako producent z ujemna stawka
   const zarejestrowana = { planetId: 'entity_185',
     resourceSystem: { _producers: new Map([['budynek_x', { Fe: -70 }]]),

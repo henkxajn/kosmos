@@ -126,6 +126,25 @@ export const GAME_CONFIG = {
     // OFF = zachowanie bit-w-bit sprzed slice'u (Director pisze `setDemandBonus`,
     //   `getSafetyStockTarget` ignoruje ksiege).
     aiOrderDemandChannel: true,
+    // ── 178 / R1 — ladowanie kuriera AI wg POPYTU stolicy (D-178-4, D-Fe-1 = UNIA) ──────
+    // ZMIERZONE przed naprawa: Fe/kurs = 0 na KAZDYM realistycznym outposcie (Fe ma rarity 1,
+    // wiec jest ostatnie, a Xe wazy 0,1 i zjada cala ladownie). Dwie tansze naprawy PADLY
+    // w pomiarze: sam cap -> Fe 0, rezerwacja pasma pospolitych -> Fe 0.
+    courierLoadOrder: true,
+    // ── 178 / R2 — 223 + 224: wewnetrzna logistyka AI ──────────────────────────────────
+    // 223: bramka mgly wojny GRACZA wycinala kolonie AI z `tradingColonies` (3 -> 0), wiec
+    //      imperium nie handlowalo samo ze soba. Bramka nalezy do par gracz<->AI.
+    // 224: `_getConsumption` nie widzial poboru fabryki (dominujacego konsumenta), wiec
+    //      `_deficitScore` stolicy byl zanizony. JEDNA flaga — obie polowy sa jednym lancuchem:
+    //      otwarty kanal z zanizonym deficytem wysle za malo i za pozno.
+    aiInternalTrade: true,
+    // ── 225 / R4 — karmiciele skalowani POPULACJA (zywnosc + woda; energia NIETKNIETA) ──
+    // ⚠ PRZESLANKA OBALONA POMIAREM: ekspander BUDUJE elektrownie (6 -> 13 przy celu 5),
+    //   wiec skalowanie energii byloby NO-OPEM. Zapasc jest w ZYWNOSCI: farm stoi na 2, wiec
+    //   food/rok spada 17,6 -> 3,5 -> -8,9, w gy10 wchodzi GLOD, populacja 24 -> 3, laborer -> 0
+    //   i empPenalty = laborer/demand = 0/37 GASI wszystkie 13 elektrowni. Ciemna stolica = OBJAW glodu.
+    // Prog arytmetyczny: 0,625 food/POP przy 10 na farme = 16 POP/farme (woda tak samo).
+    aiScaleBasicInfra: true,
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).
