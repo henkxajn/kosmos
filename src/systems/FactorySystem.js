@@ -1135,8 +1135,10 @@ export class FactorySystem {
     // Alokuj najpierw łańcuch (niższy tier → musi powstać zanim powstanie parent)
     for (const ch of chainNeeds) {
       if (remainingFP <= 0) break;
-      const stock = this._getStock(ch.commodityId);
-      const stillNeeded = Math.max(0, ch.qty - stock);
+      // ⚠ 221 — BLIŹNIAK poprawki z `_reactiveAllocate`: `ch.qty` to już deficyt, więc
+      // odejmowanie zapasu drugi raz zaniżało cel i potrafiło pominąć całe ogniwo.
+      // Nieutwardzony bliźniak byłby miną (reguła `removeColony:667`).
+      const stillNeeded = Math.max(0, ch.qty);
       if (stillNeeded <= 0) continue;
 
       const fp = Math.min(1, remainingFP);
@@ -1395,23 +1397,28 @@ export class FactorySystem {
     for (const ch of chainNeeds) {
       if (remainingFP <= 0) break;
       if (this._allocations.has(ch.commodityId)) continue; // już alokowany jako main
-      const stock = this._getStock(ch.commodityId);
-      if (stock >= ch.qty) continue;
+      // ⚠ 221 — `ch.qty` JEST JUŻ DEFICYTEM. `_addChainFor` liczy `totalNeeded - stock`
+      // i dopiero taką wartość wkłada do `chainMap`; odjęcie zapasu TUTAJ było odjęciem
+      // GO DRUGI RAZ. Skutki były dwa: (1) przy `stock >= ch.qty` ogniwo łańcucha było
+      // POMIJANE, więc rodzic stał zablokowany na zawsze — bije to przy gapach wielkości
+      // ZAMÓWIENIA (1-2) i jest niewidoczne przy celach min-zapasu rzędu 50, które ten
+      // defekt maskowały; (2) `targetQty` był zaniżony dokładnie o `stock`.
+      if (ch.qty <= 0) continue;
 
       const fp = Math.min(1, remainingFP);
       const old = oldProgress.get(ch.commodityId);
       this._allocations.set(ch.commodityId, {
         points: fp,
         progress: old?.progress ?? 0,
-        targetQty: ch.qty - stock,
+        targetQty: ch.qty,
         produced: 0,
         _isChain: true,
       });
       remainingFP -= fp;
       newAutoChain.push({
         commodityId: ch.commodityId,
-        qty: ch.qty - stock,
-        produced: stock,
+        qty: ch.qty,
+        produced: this._getStock(ch.commodityId),
         forCommodityId: ch.forCommodityId,
       });
     }

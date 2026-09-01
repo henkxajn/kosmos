@@ -299,3 +299,94 @@ bramkę.
 - **Finding 219** (cicha częściowa realizacja `queueWarships`) i **220** (dren Fe / skalowanie ×5) —
   osobne, niezależne od tego slice'u.
 - **216 / woda** — następna pozycja kolejki, poza tym slice'em.
+
+---
+
+## 10. ⚠ FINDING 221 — DRUGA BLOKADA, ODSŁONIĘTA PRZEZ WDROŻENIE (commit 3/3)
+
+Wdrożenie księgi zadziałało zgodnie z podpisem, ale keeper został na **22/5**: łańcuch nadal
+nie powstawał. Przyczyna okazała się **osobnym, starszym defektem** na tej samej ścieżce.
+
+**Mechanizm.** `_addChainFor` liczy `deficit = qty × ingQty − stock` i **taką wartość** wkłada do
+`chainMap`. Obie pętle alokacyjne odejmują zapas **ponownie**:
+
+```
+_reactiveAllocate:  if (stock >= ch.qty) continue;   …  targetQty: ch.qty − stock
+_priorityAllocate:  stillNeeded = ch.qty − stock;    …  (bliźniak)
+```
+
+ZMIERZONE: `warp_cores` cost 2, zapas 1 ⇒ deficyt 1 ⇒ `_addChainFor` zwraca `quantum_cores qty 1`
+(poprawnie — brakuje jednego), a pętla liczy `stock(1) >= ch.qty(1)` i **pomija ogniwo**. Rodzic
+zostaje zaalokowany, ale bez składników ⇒ `_autoConsolidate` zeruje wszystko ⇒ **used 0/25**.
+Drugi, cichszy skutek: gdy ogniwo przechodzi, `targetQty` jest zaniżony **dokładnie o `stock`**.
+
+### 10.1 Przebieg kontrolny, który ODDZIELA 221 od 217
+
+**Żywe** zlecenie w `pendingShipOrders`, księga PUSTA, `_demandBonus` PUSTY:
+
+```
+scan:      build:warp_cores=2 | safety:warp_cores=1
+alokacje:  warp_cores:0        | used 0
+```
+
+⇒ w oknie TTL popyt **BYŁ dostarczany przez cały czas** (`_scanBuildDemand` czyta zlecenia
+oczekujące), a łańcuch i tak nie powstawał. Na tej ścieżce były więc **DWIE niezależne blokady**:
+
+| | kiedy bije | mechanizm |
+|---|---|---|
+| **217** | **po** wygaśnięciu TTL | ekspander zeruje popyt Directora (własność pola) |
+| **221** | **w trakcie** TTL | ogniwo łańcucha nigdy nie alokowane (podwójne odjęcie) |
+
+**I to 221 tłumaczy to, czego 217 wytłumaczyć nie mógł:** dlaczego pięć zleceń wygasło, choć każde
+zgłaszało popyt przez trzy lata.
+
+⚠ **Dlaczego 221 przeżył tak długo:** przy celach min-zapasu rzędu **50** deficyt jest duży
+(`1 >= 97` fałsz), więc defekt **nie bije**. Maskowały go dokładnie te cele, które 217 zastępuje
+**ograniczonym pullem**. Zaleta nowego projektu odsłoniła starą wadę — dlatego oba findingi należą
+do jednego slice'u, choć są niezależne.
+
+### 10.2 Strona GRACZA — ZMIERZONA PRZED decyzją o fladze
+
+`_reactiveAllocate` / `_priorityAllocate` są **współdzielone**: kolonia gracza używa tych samych
+pętli. Sonda `probe-221-player.mjs` (kolonia **bez** `ownerEmpireId`, scenariusz `civilization`,
+6 FP, `avail 1.0`):
+
+| przypadek | PRZED | PO | ocena |
+|---|---|---|---|
+| min-zapas 1 ponad stan, półprodukty na poziomie deficytu | **brak łańcucha** (`warp_cores fp0`) | `quantum_cores cel 1` · `antimatter_cells cel 1` | ✅ **koniec cichego zatrzymania** |
+| ten sam deficyt, półprodukty **0** | `cel 2` | `cel 2` | bez zmian |
+| duży min-zapas (cel 20) | `cel 36` | **`cel 37`** | ✅ korekta o zaniżony zapas |
+| łańcuch płytki (`electronic_systems`) | `fp6, cel 3` | `fp6, cel 3` | bez zmian |
+
+**Nazwana zmiana zachowania widoczna dla gracza:** ustawienie minimalnego zapasu **jeden ponad stan**
+dla towaru z łańcuchem **nie produkowało dotąd NICZEGO**, jeśli półprodukty leżały na poziomie
+deficytu — fabryka wyglądała na sprawną i stała. Po naprawie produkuje. **Żaden zmierzony przypadek
+nie produkuje WIĘCEJ, niż realnie brakuje** — obie zmiany są korektami w tę samą stronę.
+
+⇒ **BEZ FLAGI** (precedens `normalizeFleet`, Finding 200): poprawka poprawności we współdzielonym
+kodzie, bez niespodzianek w pomiarze. Pin: `ai_order_demand_smoke` **T8a-d** (w tym kontrola T8c —
+ścieżka, której 221 NIE zmienia).
+
+### 10.3 T6b przeformułowany
+
+Stary pin żądał, żeby przy fladze OFF łańcuch **nie był** alokowany. Po naprawie 221 popyt płynie
+też z `_scanBuildDemand` żywego zlecenia, więc łańcuch alokuje się **niezależnie od flagi** — i to
+jest poprawne, bo 221 to inny defekt i jego naprawa legalnie zmienia zachowanie w **obu** stanach
+flagi. Kontrakt kill-switcha dotyczy **księgi**, więc pin dotyczy teraz **wpływu księgi**:
+`T6b` (Director nie pisze do księgi), `T6c` (pisze do `_demandBonus`, ekspander to kasuje, cel wraca
+do bazy = defekt sprzed slice'u odtworzony), `T6d` (flaga OFF nie otwiera bramki `rich`).
+
+### 10.4 ⚠ LEKCJA — trzeci raz: `node --check` NIE JEST TESTEM
+
+Pierwsza wersja poprawki 221 usunęła `const stock`, zostawiając jego użycie **piętnaście linii
+niżej** (`qty: ch.qty − stock` w `newAutoChain.push`). **Składnia była poprawna**, `node --check`
+przeszedł, a moduł wywracał się przy pierwszym wywołaniu (`ReferenceError: stock is not defined`).
+Złapane URUCHOMIENIEM. To trzecie udokumentowane wystąpienie tej klasy w projekcie —
+po `d44af5e` (`export` odcięty od stałej ⇒ cała telemetria padała na imporcie) i po regule z arca
+BRAMKA WŁASNOŚCI (`ordersOk` używane bez deklaracji w żywej gałęzi UI).
+
+⚠ **I drugi near-miss w tej samej rundzie, tej samej klasy:** dodanie `import { GAME_CONFIG }` do
+`FactorySystem` przeszło `node --check` i wywróciło `factory_production_toggle_smoke` — `GameConfig`
+ciągnie `i18n`, a ten sięga po `localStorage` **przy ładowaniu modułu**. `FactorySystem` jest
+importowany przez lekkie keepery bez pełnego środowiska. ⇒ flaga czytana jest przez lokator
+(`KOSMOS.gameConfig`), a nie importem — ten sam uchwyt, którego używa live-gate.

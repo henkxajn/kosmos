@@ -219,12 +219,19 @@ console.log('\nT6 — kill-switch `aiOrderDemandChannel` (D-217-5)');
     directorOrders(colony, { id: 'pso_X' });
     expanderZeroes(fs);
     const alloc = plan(fs);
-    // ⚠ Bez wymogu ISTNIENIA API ten pin przechodzilby jalowo — „ksiega ignorowana" jest
-    //   trywialnie prawda, gdy ksiegi nie ma. Najpierw feature MUSI istniec.
-    assert(typeof fs.setOrderDemand === 'function'
-        && (fs.getOrderDemand?.('warp_cores') ?? 0) === 0
-        && !alloc.has('quantum_cores') && fs.getSafetyStockTarget('warp_cores') === 1,
-      'T6b: przy fladze OFF ksiega ISTNIEJE, ale jest IGNOROWANA — zachowanie bit-w-bit dzisiejsze');
+    // ⚠ PIN PRZEFORMULOWANY (221). Wczesniej zadal, zeby przy fladze OFF lancuch NIE byl
+    //   alokowany — ale po naprawie 221 popyt plynie tez z `_scanBuildDemand` zywego zlecenia,
+    //   wiec lancuch alokuje sie NIEZALEZNIE od flagi. To jest poprawne: 221 to INNY defekt
+    //   i jego naprawa legalnie zmienia zachowanie w OBU stanach flagi. Kontrakt kill-switcha
+    //   dotyczy KSIEGI, wiec pinujemy WPLYW KSIEGI, nie calosciowy wynik alokacji.
+    assert(typeof fs.setOrderDemand === 'function' && fs._orderDemand.size === 0,
+      'T6b: przy fladze OFF ksiega ISTNIEJE, ale Director do niej NIE pisze (zostaje pusta)');
+    assert(fs.getDemandBonus('warp_cores') === 0 && fs.getOrderDemand('warp_cores') === 0
+        && fs.getSafetyStockTarget('warp_cores') === 1,
+      'T6c: przy fladze OFF Director pisze do `_demandBonus`, ekspander to KASUJE, a ksiega ' +
+      'nie wnosi nic ⇒ cel wraca do bazy = defekt sprzed slice-u ODTWORZONY');
+    assert(!alloc.has('plasma_cores'),
+      'T6d KONTROLA: flaga OFF nie otwiera bramki `rich` — pozostale tier-3+ dalej milcza');
   } finally {
     if (prev !== undefined) GAME_CONFIG.FEATURES.aiOrderDemandChannel = prev;
   }
@@ -265,6 +272,51 @@ console.log('\nT7 — zapis SPRZED slice\'u: ksiega ODBUDOWANA z zywych zlecen, 
   fs._reconcileOrderDemand();
   assert(fs._orderDemand.size === 0,
     'T7e: zlecenie zniknelo z listy POZA realizacja i TTL — rekoncyliacja i tak nie zostawia resztki');
+}
+
+// ── T8 — 221 PO STRONIE GRACZA: `_reactiveAllocate` jest WSPOLDZIELONE ──────────────────────
+console.log('\nT8 — 221 dotyka takze fabryk GRACZA (te same petle) — zmiana zachowania NAZWANA');
+{
+  // Kolonia GRACZA = brak `ownerEmpireId` (kanon `ColonyOwnership`), scenariusz zwykly (bez x5).
+  const mkPlayer = (stock) => {
+    const inv = new Map(Object.entries(stock));
+    const rs = { inventory: inv, _inventoryPerYear: new Map(Object.entries({ Si: 5, Nt: 2, Hv: 5, Xe: 5, Ti: 5, Li: 2 })),
+      getAmount: id => inv.get(id) ?? 0, getEnergyAvailability: () => 1.0 };
+    const fs = new FactorySystem(rs);
+    const colony = { planetId: 'p_home', factorySystem: fs, resourceSystem: rs,   // BRAK ownerEmpireId
+      buildingSystem: { techSystem: { isResearched: () => true, isCommodityUnlocked: () => true, getFactorySpeedMultiplier: () => 1 } },
+      pendingShipOrders: [], shipQueues: [], fleet: [] };
+    globalThis.window.KOSMOS = { colonyManager: { getAllColonies: () => [colony], getColony: () => colony, activePlanetId: 'p_home' },
+      scenario: 'civilization', gameConfig: GAME_CONFIG };
+    fs.setTotalPoints(6); fs.setMode('reactive');
+    return fs;
+  };
+  const RAW = { Si: 500, Nt: 60, Hv: 200, Xe: 200, Ti: 400, Li: 80 };
+
+  // (a) SEDNO: gracz ustawia min-zapas 1 ponad stan, a polprodukty ma na poziomie deficytu.
+  const a = mkPlayer({ ...RAW, quantum_cores: 1, antimatter_cells: 1, warp_cores: 1 });
+  a.setDemandBonus('warp_cores', 1);
+  a._reactiveAllocate(); a._autoConsolidate();
+  assert(a._allocations.has('quantum_cores') && a._allocations.has('antimatter_cells'),
+    'T8a: fabryka GRACZA alokuje lancuch przy deficycie 1 — przed 221 NIE alokowala go wcale ' +
+    '(min-zapas ustawiony 1 ponad stan nie produkowal NIC)');
+  assert(a._allocations.get('quantum_cores').targetQty === 1,
+    `T8b: cel ogniwa = PRAWDZIWY deficyt 1 (jest ${a._allocations.get('quantum_cores').targetQty})`);
+
+  // (b) KONTROLA: przypadek, ktorego 221 NIE zmienia (zapas polproduktow 0) — dziala tak samo.
+  const b = mkPlayer({ ...RAW, quantum_cores: 0, antimatter_cells: 0, warp_cores: 1 });
+  b.setDemandBonus('warp_cores', 1);
+  b._reactiveAllocate(); b._autoConsolidate();
+  assert(b._allocations.get('quantum_cores')?.targetQty === 2,
+    'T8c KONTROLA: przy zerowym zapasie polproduktow cel to nadal 2 — 221 nie rusza tej sciezki');
+
+  // (c) Cel przy DUZYM deficycie byl zanizony DOKLADNIE o zapas (36 zamiast 37).
+  const c = mkPlayer({ ...RAW, quantum_cores: 1, antimatter_cells: 1, warp_cores: 1 });
+  c.setDemandBonus('warp_cores', 19);
+  c._reactiveAllocate(); c._autoConsolidate();
+  assert(c._allocations.get('quantum_cores')?.targetQty === 37,
+    `T8d: przy duzym deficycie cel jest teraz PELNY (37, wczesniej 36 = zanizony o zapas); ` +
+    'to jest ta sama pomylka, tylko nie zabijala alokacji, wiec przez to byla niewidoczna');
 }
 
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);
