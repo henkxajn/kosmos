@@ -20,15 +20,12 @@
 //   ręcznie, mówi o tym wprost.
 
 import './env.js';
-import { GameCore } from './GameCore.js';
+import { bootWithDirector } from './DirectorHarness.js';
 import EntityManager from '../../core/EntityManager.js';
 import { createVessel } from '../../entities/Vessel.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { OrderService } from '../../systems/OrderService.js';
-import { InfluenceMap } from '../../systems/InfluenceMap.js';
-import { TerritoryService } from '../../systems/TerritoryService.js';
 import { StationSystem } from '../../systems/StationSystem.js';
-import { DirectorOffensive, registerOffensiveBehaviors } from '../../systems/director/DirectorOffensive.js';
 import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { rollFires } from '../../utils/DirectorRuleMath.js';
 
@@ -46,23 +43,26 @@ function mkRaider(core, empireId, capBody, name) {
 }
 
 function boot(seed) {
-  const core = new GameCore();
-  core.boot({ quiet: true, scenario: 'civilization', galaxySeed: Number(seed) });
-  const K = window.KOSMOS;
+  // D-178-3 — montaz Directora idzie przez WSPOLNY harness (`bootWithDirector`), nie z reki.
+  // ⚠ Harness wnosi ze soba to, co ta sonda montowala osobno: TerritoryService PRZED InfluenceMap
+  //   (R12 — sam `new InfluenceMap()` przechodzi, rzuca dopiero pierwszy odczyt), stub stacji
+  //   z `serialize`/`restore` oraz kalibracje. Zeton R-3 zasiewa ponizej `seedStationToken`
+  //   PRAWDZIWYM `StationSystem` — to jest swiadoma roznica wobec stubu harnessu, bo ta sonda
+  //   dowodzi, ze zeton sie PRZYJAL, a nie tylko ze istnieje.
+  const { core, K } = bootWithDirector({
+    seed: Number(seed), calibrated: false, opts: { scenario: 'civilization' },
+  });
   K.movementOrderSystem = new MovementOrderSystem(core.vesselManager);
   K.orderService = new OrderService();
-  // InfluenceMap zada TerritoryService (glosno, R12) — montujemy go recznie, bo GameCore nie.
-  K.territoryService = new TerritoryService();
-  K.influenceMap = new InfluenceMap();
-  const off = new DirectorOffensive();
-  registerOffensiveBehaviors(off, { allowOverride: true });
-  return { core, K, off };
+  return { core, K, off: K.directorOffensive };
 }
 
 /** Zasiew żetonu R-3 + DOWÓD, że się przyjął. Bez tego dalszy pomiar jest bezwartościowy. */
 function seedStationToken(core, empireId) {
   const K = window.KOSMOS;
-  if (!K.stationSystem) K.stationSystem = new StationSystem();
+  // ⚠ Harness zasiewa STUB zetonu (D-178-3). Ta sonda dowodzi, ze zeton sie PRZYJAL, wiec
+  //   potrzebuje PRAWDZIWEGO StationSystem — podmiana jest JAWNA i po to jest `_isHarnessStub`.
+  if (!K.stationSystem || K.stationSystem._isHarnessStub) K.stationSystem = new StationSystem();
   const cap = core.colonyManager.getAllColonies().find(c => c.ownerEmpireId === empireId);
   if (!cap) return { ok: false, why: 'brak kolonii imperium' };
   const st = K.stationSystem.createStation(cap.planetId, {

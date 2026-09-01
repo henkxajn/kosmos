@@ -272,3 +272,45 @@ nie dostał liczby, której nie zmierzyłem.
 - ⚠ Tabela §2 będzie pochodzić z **headless boot skalibrowany**, nie z wczytania zapisu
   `GATE-Fe-gy40` (harness nie importuje zapisów przeglądarki). Zapis pozostaje fixture'em
   **live-gate'u**; tabela jest **pomiarem porównawczym**, i tak ma być czytana.
+
+---
+
+## 9. ⚠ LEKCJA — podpisana decyzja to NIE zbudowany artefakt
+
+Tabela §2 miała powstać na `src/testing/headless/DirectorHarness.js`. **Ten plik nie istniał** —
+choć decyzja **D-178-3** (`COURIER_LOAD_ORDER_PLAN.md` §4) miała status **✅** i opisywała go
+szczegółowo: `bootWithDirector({ aiEmpires, seed })`, stub stacji z `serialize`/`restore`, `Ticker`
+z `balans-driver`, zapieczona kalibracja, a nawet dwie pułapki, które „kosztowały przebieg".
+
+```
+ls src/testing/headless/                          → 69 plików, brak DirectorHarness
+grep -rn "bootWithDirector" src/                  → pusto
+git log --all --diff-filter=AD *DirectorHarness*  → pusto (NIGDY nie istniał w historii)
+```
+
+**Mechanizm:** slice, razem z którym instrument miał powstać, został **wstrzymany** — D-178-1 ma
+w tym samym dokumencie status **ZAWIESZONE — NIE DO PODPISU** (wariantów nie dało się wycenić,
+dopóki `_loadByRarity` się nie wykonywało). Decyzja o instrumencie przeżyła, kod nie.
+
+⚠ **REGUŁA: `✅` w planie znaczy „ZDECYDOWANE”. O tym, czy coś ISTNIEJE, mówi repo.**
+To ta sama rodzina co `findings-index-row-may-be-closed` (pozycja rejestru bywa nieaktualna)
+i `registry-may-describe-the-trap-not-the-bug` (wpis bywa opisem pułapki, nie stanu) — tylko
+w drugą stronę: **wpis opisuje ZAMIAR, a czyta się jak STAN**.
+⚠ Rachunek jest policzony w samym §4: brak tego harnessu kosztował **GATE B2, 199, 208** — a teraz
+**czwartą** ślepą plamę, tę tabelę. ⇒ przy każdym „użyj instrumentu X, on już jest": **`ls` i
+`git log -S` PRZED planowaniem wokół niego.**
+
+⚠ **I drugi wniosek, tańszy, ale ostry:** przy budowie okazało się, że §4 nie wymieniał **czwartego**
+prerekwizytu — `InfluenceMap` **żąda `TerritoryService`** (R12), a `new InfluenceMap()` przechodzi
+bez niego i rzuca dopiero przy pierwszym odczycie. Wiedza **BYŁA w repo** (komentarz w
+`probe-w3-targets`), tylko nie w planie. Dlatego keeper pinuje `InfluenceMap` **WYKONANIEM**
+(`getBorderSystems`), nie istnieniem obiektu — mój pierwszy pin sprawdzał `!!K.influenceMap`
+i przepuściłby harness, w którym każda sonda nacisku wywraca się przy pierwszym użyciu.
+
+⚠ **Trzeci wniosek — korekta MOJEGO pina.** Pierwsza wersja T6 („żadna sonda nie montuje Directora
+z ręki") łapała też `probe-130-z2`, która buduje **syntetyczny** `window.KOSMOS` (zero odwołań do
+`GameCore`) i izoluje jedno zachowanie. Migracja takiej sondy na pełny, skalibrowany boot
+**zmieniłaby to, co ona mierzy** — to nie deduplikacja, tylko zepsucie działającego przyrządu.
+D-178-3 chroni przed ręcznym składaniem **pełnej gry**, więc pin łapie dokładnie to: sonda, która
+**bootuje `GameCore` I montuje Director sama**. Zmigrowana została **jedna** (`probe-w3-targets`),
+a `T6b` pinuje ZAKRES: sondy jednostkowe zostają nietknięte.

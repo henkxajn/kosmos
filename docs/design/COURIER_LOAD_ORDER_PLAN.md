@@ -142,7 +142,15 @@ całą rundę: `GameCore.boot({ scenario: 'civilization', aiEmpires: 2 })` daje 
 (patrz wycięte §1.2). **Harness, który nie niesie kalibracji, przewozi tę pułapkę dalej.**
 
 ⇒ „Director nie montuje się headless" przestaje być właściwością środowiska. **Ta luka kosztowała
-trzy ślepe plamy: GATE B2, 199 i 208.**
+CZTERY ślepe plamy: GATE B2, 199, 208 — i tabelę podaży Fe (2026-09-01).**
+
+✅ **ZBUDOWANE 2026-09-01** (`src/testing/headless/DirectorHarness.js`, keeper
+`director_harness_smoke` 17/17). ⚠ Przy budowie wyszło, że §4 nie wymieniał **czwartego**
+prerekwizytu: `InfluenceMap` **żąda `TerritoryService`** (R12), a `new InfluenceMap()`
+przechodzi bez niego i rzuca dopiero przy PIERWSZYM ODCZYCIE. Wykryte przy migracji
+`probe-w3-targets`, która montowała oba ręcznie i miała to spisane w komentarzu — czyli
+wiedza BYŁA w repo, tylko nie w planie. Dlatego keeper pinuje `InfluenceMap` **WYKONANIEM**
+(`getBorderSystems`), nie istnieniem obiektu.
 
 ---
 
@@ -152,7 +160,7 @@ trzy ślepe plamy: GATE B2, 199 i 208.**
 |---|---|---|
 | **D-178-1** | wariant ładowania | ⚠ **ZAWIESZONE — NIE DO PODPISU.** Wariantów nie da się wycenić, dopóki `_loadByRarity` się nie wykonuje (wszystkie dały `wywolan = 0`). Wraca po rozstrzygnięciu **215** |
 | **D-178-2** | zakres: tylko kurier AI | ✅ `_loadByRarity` ma **jednego wołającego**; `loadCargo` (gracz/transport) **nietknięty** |
-| **D-178-3** | promocja instrumentu | ✅ `DirectorHarness.js` + keeper na jego **montażu**, **z `DRIVER_DEFAULTS` + `aiEmpires: true` + przypiętym seedem jako DOMYŚLNYMI** (jawny opt-out) — §4 |
+| **D-178-3** | promocja instrumentu | ✅ **PODPISANE 2026-08-31 — ZBUDOWANE 2026-09-01** (`src/testing/headless/DirectorHarness.js`, keeper `director_harness_smoke` 17/17). ⚠ **Przez życie trzech slice’ów ten wiersz miał ✅, a pliku NIE BYŁO** — `git log --all --diff-filter=AD` na nazwie zwracał pustkę. Slice, razem z którym instrument miał powstać, został wstrzymany (D-178-1 ZAWIESZONE), więc instrument nie powstał wraz z nim, a ✅ czytało się jak „istnieje”. **✅ w planie znaczy „ZDECYDOWANE”; o tym, czy coś ISTNIEJE, mówi repo** (lekcja: `FE_SUPPLY_PLAN.md` §9). Pierwotny zapis: `DirectorHarness.js` + keeper na jego **montażu**, **z `DRIVER_DEFAULTS` + `aiEmpires: true` + przypiętym seedem jako DOMYŚLNYMI** (jawny opt-out) — §4 |
 | **D-178-4** | kill-switch | ✅ **`FEATURES.courierLoadOrder`** — osobna od `defenseScope` (inna domena, inny rollback) |
 | **D-178-5** | **TTL nietknięty** | ✅ własny audyt: **objaw, nie przyczyna**. Przy Fe 4/100 żaden TTL nie pomoże; wydłużenie zamieniłoby 15 cichych wygaśnięć w **jedno wieczne zlecenie**. Zmiana TTL = osobny kandydat z własnym uzasadnieniem |
 | **D-178-6** | 180 poza zakresem | ✅ ale guard metric **JEST** pomiarem końca 180 |
