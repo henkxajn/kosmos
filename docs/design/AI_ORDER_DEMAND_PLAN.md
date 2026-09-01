@@ -390,3 +390,48 @@ BRAMKA WŁASNOŚCI (`ordersOk` używane bez deklaracji w żywej gałęzi UI).
 ciągnie `i18n`, a ten sięga po `localStorage` **przy ładowaniu modułu**. `FactorySystem` jest
 importowany przez lekkie keepery bez pełnego środowiska. ⇒ flaga czytana jest przez lokator
 (`KOSMOS.gameConfig`), a nie importem — ten sam uchwyt, którego używa live-gate.
+
+---
+
+## 11. LIVE-GATE 217 + 221 — WYNIK (2026-09-01, `GATE-215-gy30`, gy 30 → 42)
+
+**WERDYKT: PASS na swoim ogniwie. §G.2 (obserwabl `kadlubyZeSkokiem`) → PASS-PENDING na dostawie Fe.**
+
+### 11.1 Ogniwo łańcucha — PASS
+
+- **`warp_cores` 1 → 4** między gy 30 a 40 (**trzy wyprodukowane**; `quantum_cores`/`antimatter_cells`
+  wracają do 1/1 po konsumpcji — czyli łańcuch **przerabia**, a nie tylko stoi zaalokowany).
+- `director:commodityDemand`: gy 31,0 = `Fe 114` + `structural_alloys 4` + **`warp_cores 1`** →
+  od gy 32,1 **`warp_cores` ZNIKA z listy braków**, zostaje `Fe` (113-136) + `structural_alloys` (3-4).
+  ⇒ dokładnie ten podpis, którego oczekiwaliśmy: popyt na `warp_cores` zaspokojony u źródła.
+
+⚠ **Granice dowodu, zapisane bez upiększania:**
+- **Para dowodowa nie została uchwycona w chwili alokacji** — odczyt „po" padł dopiero w gy 40.
+  Dowodem jest więc **1 → 4**, a nie zrzut alokacji. Jest to dowód MOCNIEJSZY (skutek, nie stan
+  pośredni), ale **nie jest to para, którą zaprojektowaliśmy w §7**.
+- **Live flip kill-switcha jest w tym stanie JAŁOWY** i został tak zaprotokołowany: księga jest pusta
+  (gapy rud odfiltrowane per Finding 214, a `warp_cores` pokryte zapasem), więc OFF i ON dają to samo.
+  Kontrakt flagi pokrywa **wyłącznie** keeper (T6b/T6c/T6d), headless. ⚠ To jest znany, przyjęty limit —
+  live-gate tej flagi wymagałby stanu z niezaspokojonym gapem towarowym w księdze.
+
+### 11.2 Obserwabl §G.2 — PASS-PENDING, blokada przesunęła się O JEDNO OGNIWO W GÓRĘ
+
+`kadlubyZeSkokiem` = **0 w gy 42**. **12 zleceń wygasło na TTL** (gy 34,0 / 35,1 / 39,1 / 40,2 —
+za każdym razem eskorta + 2 obrońców) — **wszystkie na `Fe`**, nie na `warp_cores`.
+
+Stan stolicy w gy 42: **`Fe` 4** · `getPerYear('Fe')` **−70,2/civY** · `Ti` 7257 · `Cu` 15196 ·
+`warp_cores` **4** · dostępność energii **0,42 → 0,25 → 0,14** w trakcie przebiegu.
+`fabryka`: alokacja `structural_alloys` z **celem 1239**, stall `Fe 0-10/40`; `reactive_armor` `Fe 0/5`.
+
+⇒ **217 i 221 zrobiły dokładnie to, co miały: `warp_cores` przestały być wąskim gardłem.**
+Nowe wąskie gardło to **podaż Fe** — i tym razem w skalibrowanej żywej grze, nie w fixture'cie.
+Kandydat na następny slice: **łańcuch dostaw Fe** (178 jako kolejność ładowania + 220 + pytanie
+o cel 1239), audyt-first.
+
+### 11.3 Co ten gate ustalił o samym slice'ie
+
+- **Obie naprawy są niezależnie potwierdzone na żywym silniku** — 217 (popyt przeżywa tik ekspandera)
+  przez zniknięcie `warp_cores` z braków, 221 (łańcuch alokowany przy gapie 1) przez realną produkcję
+  trzech sztuk. Bez 221 sam 217 nie dowiózłby ani jednej.
+- **Fixture `GATE-215-gy30` zostaje CZYSTY** — sesja gate'u została skażona (dwa omyłkowe
+  `spawnEnemyAttack` ⇒ `emp_test_enemy` / „Rój Testowy" w świecie) i **nie została nadpisana** na zapis.
