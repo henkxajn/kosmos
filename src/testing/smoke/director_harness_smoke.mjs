@@ -137,5 +137,37 @@ console.log('\nT6 — żadna sonda nie montuje Directora Z RĘKI (inaczej duplik
     `(${jednostkowe.join(', ')}) — pin nie ma ich migrować`);
 }
 
+// ── T7 — IZOLACJA BOOTU (Finding 228) ───────────────────────────────────────────────────────
+console.log('\nT7 — dwa boothy w JEDNYM procesie musza dac IDENTYCZNY swiat');
+{
+  // ⚠ TEN PIN POWSTAL Z MOJEGO BLEDU POMIARU. `GameCore.boot` czysci `EntityManager` i `EventBus`,
+  //   ale NIE reseeduje PRNG i NIE resetuje `gameState` (singleton z `director.rules`). Drugi boot
+  //   w tym samym procesie dostawal INNA galaktyke i cudze cooldowny regul. Tabela R0-vs-R4
+  //   puszczona tak dala R4 „pop 36, Fe 19 826"; te same warianty w osobnych procesach — „pop 6".
+  //   Falszywy wynik trafil do commita `8226dcc`. Bez tego pinu KAZDA przyszla tabela
+  //   porownawcza jest podejrzana.
+  const probka = () => {
+    const { ticker, K } = bootWithDirector({ aiEmpires: true });
+    ticker.run(120, { quiet: true });
+    const emp = K.empireRegistry.listAll()[0]?.id;
+    const c = K.directorProduction.capitalOf(emp);
+    const solar = [...(c?.buildingSystem?._active?.values() ?? [])]
+      .filter(e => e.building?.id === 'solar_farm').length;
+    return { emp, pop: Math.floor(c?.civSystem?.population ?? -1),
+             Fe: Math.floor(c?.resourceSystem?.getAmount?.('Fe') ?? -1), solar };
+  };
+  const a = probka(), b = probka();
+  assert(a.pop > 0 && a.emp,
+    `T7k NIEJALOWOSC: pierwszy boot dal zywy swiat (${a.emp}, pop ${a.pop}) — inaczej „identyczne" ` +
+    'byloby prawda o dwoch pustkach');
+  assert(a.emp === b.emp && a.pop === b.pop && a.Fe === b.Fe && a.solar === b.solar,
+    `T7: drugi boot w tym samym procesie jest IDENTYCZNY z pierwszym ` +
+    `(#1 ${JSON.stringify(a)} vs #2 ${JSON.stringify(b)})`);
+  const HARNESS = src('../headless/DirectorHarness.js');
+  assert(/reseed\(/.test(HARNESS) && /gameState\.restore\(null\)/.test(HARNESS),
+    'T7b PIN ZRODLOWY: harness reseeduje PRNG i resetuje `gameState` przed bootem — dwa konkretne ' +
+    'przecieki, ktorych `GameCore.boot` nie zamyka');
+}
+
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);

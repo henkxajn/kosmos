@@ -107,6 +107,10 @@ const FEEDER_MARGIN = 1.25;
 // elektrowni dodaje wtedy etaty, ktorych nie ma kto obsadzic, i poglebia problem.
 const STAFFING_CRITICAL = 0.35;
 
+// 225 — podloga obsady w liczeniu REALNEJ wydajnosci karmiciela. Bez niej przy obsadzie ~0
+// cel wychodzilby w nieskonczonosc; z nia cap obsadzalnosci i tak go przycina.
+const FEEDER_STAFFING_FLOOR = 0.25;
+
 const WEALTH_ORES      = ['Fe', 'Si', 'Cu', 'C'];
 const WEALTH_THRESHOLD = 20000;   // jednostki rudy, KAZDA z WEALTH_ORES osobno
 
@@ -487,7 +491,35 @@ export class ColonyAutoExpander {
     const perPop = POP_CONSUMPTION[resId] ?? 0;
     if (perBuilding <= 0 || perPop <= 0) return 0;
     const pop = Math.max(1, colony.civSystem?.population ?? 0);
-    return Math.ceil((pop * perPop * FEEDER_MARGIN) / perBuilding);
+
+    // ⚠ POPRAWKA ZMIERZONA — pierwsza wersja liczyła przeciw NOMINALNEJ wydajności (`rates.food = 10`),
+    // a realna to `10 × empPenalty`. Przy obsadzie 0,3 farma daje 3, nie 10, więc cel wychodził
+    // ~3× za niski: ZMIERZONE `_feederTarget = 2` przy pop 19, czyli TYLE SAMO co cel statyczny —
+    // skalowanie było BEZCZYNNE dokładnie tam, gdzie miało ratować. Liczymy więc przeciw
+    // wydajności REALNEJ (z podłogą, żeby przy obsadzie ~0 nie wyjść w nieskończoność).
+    const staffing = this._colonyStaffing(colony);
+    const realOutput = perBuilding * Math.max(FEEDER_STAFFING_FLOOR, staffing);
+    const potrzeba = Math.ceil((pop * perPop * FEEDER_MARGIN) / realOutput);
+
+    // ⚠ WARUNEK OBSADY (rozszerzenie podpisane przez właściciela, nie preferencja): karmiciel
+    // NIESIE `popCost` DOKŁADNIE TAK JAK ELEKTROWNIA (`farm.popCost 0.25`). Potrojenie celu przy
+    // niskiej obsadzie odbudowałoby pętlę 226 DRZWIAMI ŻYWNOŚCIOWYMI: nowe farmy dodałyby etaty,
+    // których nikt nie obsadzi, obniżyły `empPenalty` wszystkim i zmniejszyły produkcję żywności.
+    // Dlatego cel jest CAPOWANY do poziomu, który ta kolonia jest w stanie OBSADZIĆ.
+    const jobsPer = Math.max(1, def?.jobs ?? 1);
+    const wolneRece = Math.max(0, (colony.civSystem?.strata?.laborer?.count ?? 0)
+                                - (colony.buildingSystem?.getSlotDemand?.('laborer') ?? 0));
+    const obsadzalne = this._countBuilding(colony, buildingId) + Math.floor(wolneRece / jobsPer);
+    return Math.max(0, Math.min(potrzeba, obsadzalne));
+  }
+
+  /** Obsada ludzka warstwy `laborer` w tej kolonii [0..1] — ten sam iloraz, którym
+   *  `_getBuildingLaborEfficiency` mnoży PRODUKCJĘ każdego budynku tej warstwy. */
+  _colonyStaffing(colony) {
+    const lab = colony.civSystem?.strata?.laborer?.count ?? 0;
+    const dem = colony.buildingSystem?.getSlotDemand?.('laborer') ?? 0;
+    if (dem <= 0) return 1;
+    return Math.max(0, Math.min(1, lab / dem));
   }
 
   /** Cel liczby budynku: karmiciele DYNAMICZNIE (nigdy poniżej checkpointu), reszta z tabeli. */

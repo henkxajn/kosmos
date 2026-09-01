@@ -24,6 +24,7 @@
 
 import './env.js';                       // MUSI być pierwszy
 import { GameCore, HEADLESS_GALAXY_SEED } from './GameCore.js';
+import { reseed } from './env.js';
 import { DRIVER_DEFAULTS } from './balans-driver.mjs';
 import { Ticker } from './Ticker.js';
 import { InfluenceMap } from '../../systems/InfluenceMap.js';
@@ -36,6 +37,7 @@ import { DirectorMobilization, registerMobilizationBehaviors } from '../../syste
 import { DirectorOffensive, registerOffensiveBehaviors } from '../../systems/director/DirectorOffensive.js';
 import { DirectorRecall, registerRecallBehaviors } from '../../systems/director/DirectorRecall.js';
 import { DirectorSystem } from '../../systems/director/DirectorSystem.js';
+import gameState from '../../core/GameState.js';
 
 /** Moduły Directora montowane przez harness — keeper pinuje KOMPLET tej listy. */
 export const DIRECTOR_MODULES = Object.freeze([
@@ -70,6 +72,19 @@ export function bootWithDirector({
   planetClass = 'REAL', opts = {}, quiet = true,
 } = {}) {
   const cfg = calibrated ? { ...DRIVER_DEFAULTS, aiEmpires, ...opts } : { aiEmpires, ...opts };
+
+  // ⚠ IZOLACJA BOOTU — PUŁAPKA 4, ZNALEZIONA PRZEZ WŁASNY BŁĄD POMIARU (Finding 228).
+  // `GameCore.boot` czyści `EntityManager` i `EventBus` (`:119-120`), ale NIE czyści dwóch
+  // rzeczy globalnych, przez które drugi boot w tym samym procesie dziedziczy po pierwszym:
+  //   • STRUMIEŃ PRNG — `balans-driver.runOneGame:54` reseeduje PRZED bootem; harness tego nie
+  //     robił, więc drugi boot dostawał INNĄ galaktykę i inny teren (a więc inne wyniki budowy);
+  //   • `gameState` — singleton z `director.rules` / `director.posture`; cooldowny i
+  //     `lastFiredYear` z przebiegu #1 przechodziły do #2.
+  // ZMIERZONE: tabela porównawcza R0-vs-R4 puszczona w JEDNYM procesie dała R4 „pop 36, Fe 19 826",
+  // a ten sam wariant w osobnych procesach — „pop 6, Fe 22". Fałszywy wynik trafił do commita
+  // `8226dcc`. Pin izolacji: `director_harness_smoke` T7.
+  reseed(String(seed));
+  gameState.restore(null);        // `restore(null)` → świeży `createDefaultState()` (GameState:146-149)
 
   const core = new GameCore();
   core.boot({ quiet, planetClass, galaxySeed: seed, ...cfg });

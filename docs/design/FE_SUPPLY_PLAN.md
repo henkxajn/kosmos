@@ -317,7 +317,41 @@ a `T6b` pinuje ZAKRES: sondy jednostkowe zostają nietknięte.
 
 ---
 
+## 9a. ⚠ LEKCJA — SKAŻONY PRZYRZĄD PRODUKUJE PEWNE SIEBIE TABELE
+
+Wpisana obok „**podpisana decyzja to nie zbudowany artefakt**" (§9), bo to jest ta sama rodzina:
+**artefakt istnieje, wygląda na gotowy i nikt go nie sprawdził na własnym poziomie.**
+
+`DirectorHarness` powstał po to, żeby przestać montować Director ręcznie w każdej sondzie — i tę
+robotę wykonał. Ale **sam nie dostał testu na to, co robi między dwoma bootami**: `GameCore.boot`
+czyści `EntityManager` i `EventBus`, więc wyglądał na czysty, a **nie reseeduje PRNG i nie resetuje
+`gameState`**. Dwie kolumny R0/R4 puszczone w jednym procesie porównywały **dwie różne galaktyki**.
+Wynik: tabela z ośmioma konkretnymi liczbami, wewnętrznie spójna, **z narracją, która się broniła**
+(„mniej elektrowni = więcej energii — to jest cały dowód pętli") — i **cała nieprawdziwa**.
+
+**Co ją złapało:** dane właściciela z żywej gry (R0/R4/R2 nierozróżnialne). Nie test, nie przegląd
+kodu — **niezależny pomiar na innym przyrządzie**.
+
+Trzy reguły, które z tego zostają:
+
+1. **Nowy przyrząd pomiarowy dostaje pin na SWOJĄ nieinwazyjność w tym samym commicie, co pin na
+   swoją funkcję.** `director_harness_smoke` pinował **MONTAŻ** (czy Director jest podpięty) —
+   poprawnie i zgodnie z lekcją W3 „skonstruowany ≠ zamontowany" — ale nie pinował **IZOLACJI**.
+   Teraz pinuje: **T7** (dwa boothy = identyczny świat) + **T7b** (pin źródłowy na oba przecieki).
+2. **Dwa warianty w jednym procesie są dowodem dopiero wtedy, gdy istnieje pin, że proces ich nie
+   miesza.** Do tego czasu porównania idą w **osobnych procesach**, choćby było wolniej.
+3. **Kiedy pomiar właściciela z żywej gry rozjeżdża się z moją tabelą, to MOJA TABELA jest
+   podejrzana.** Żywy silnik jest instancją referencyjną; harness jest jej modelem. Model, który
+   nie zgadza się z referencją, jest hipotezą o modelu — nie o świecie.
+
+⚠ **Zasięg szkody:** fałszywy wynik trafił do commitów `b712ee1` i `8226dcc`, do §10.5 tego planu
+i do rejestru **225**/**226**. Wszystkie cztery miejsca są poprawione; **historia git zostaje
+z fałszem i dlatego numer commita jest w rejestrze wprost** — żeby ktoś, kto trafi na `8226dcc`
+przez `git log -S`, zobaczył sprostowanie zanim uwierzy w liczby.
+
 ## 10. R0 (live) + R4 — ⚠ DWIE PRZESŁANKI OBALONE, KORZEŃ OKAZAŁ SIĘ INNY
+
+> 🔴 **KOREKTA 2026-09-01 — CZĘŚĆ LICZB W TEJ SEKCJI BYŁA FAŁSZYWA.** Tabela R4 w §10.5 i wyprowadzona z niej kolejność przyczynowa w §10.3 pochodziły z `DirectorHarness` **bez izolacji bootu** (Finding **228**); fałszywy wynik został zacommitowany w **`8226dcc`** (wcześniej `b712ee1`). Sekcje §10.1-§10.4 zostają **z oznaczeniami**, żeby był widoczny tok rozumowania, który padł; **obowiązujące liczby są w §10.5 i tylko tam**.
 
 ### 10.1 R0 — kolumna kontrolna z żywego silnika (`GATE-Fe-gy40` → gy 62,1)
 
@@ -341,6 +375,8 @@ energy = {production: 0, consumption: 123,15, balance: −123,15, brownout: true
 bezpośrednio — **wygasza wszystko, co ją karmi**.
 
 ### 10.3 ⚠ ŁAŃCUCH PRZYCZYNOWY — zmierzony end-to-end na `DirectorHarness`
+
+> ⚠ **KOLEJNOŚĆ W TYM ŁAŃCUCHU JEST ODWRÓCONA — patrz §10.5c.** Na czystym przyrządzie `food` spada do **0 w gy4**, gdy `avail` wynosi jeszcze **1,00**; kolaps energetyczny startuje dopiero w **gy7**. ⇒ pierwotna awaria to **ŻYWNOŚĆ**, a ciemność jest jej **następstwem**. Opis sprzężenia poniżej pozostaje trafny; **strzałka przyczynowa biegnie w drugą stronę**.
 
 | gy | pop | laborer | demand | farm | solar | prod | avail | food/rok | głód | Fe |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -366,22 +402,145 @@ bezpośrednio — **wygasza wszystko, co ją karmi**.
 ujemnym bilansie, a `solar_farm` ma `popCost 0.25`, więc **każda dokłada etat, którego nie ma kto
 obsadzić** — produkuje zero i **podnosi mianownik** `empPenalty`. Bilans dalej ujemny ⇒ kolejna.
 
-### 10.5 R4 — wynik zmierzony (`DirectorHarness`, side-by-side)
+### 10.5 ⚠ R4 — WYNIK WYCOFANY I ZMIERZONY PONOWNIE NA CZYSTYM PRZYRZĄDZIE
 
-| | gy10 | gy20 | gy30 |
-|---|---|---|---|
-| **R0** (flagi OFF) | pop 19 · lab 7 · avail 1,00 · Fe 0 · placówki 1 | pop **4** · lab **0** · avail **0,00** · Fe 0 | pop 4 · avail 0 · solar 13 |
-| **R4** (bez bramki 226) | pop 27 · farm 3 · Fe 2057 · placówki 2 | pop 16 · Fe 3817 · placówki 5 | pop **3** · avail 0 · **solar 30** |
-| **R4 pełne** | pop 27 · lab 9 · avail 1,00 · Fe 1911 · placówki 2 | pop **29** · lab 9 · avail **1,00** · Fe **12 099** · placówki 5 | pop **36** · avail **0,99** · Fe **19 826** · **solar 10** |
+> 🔴 **Tabela, która stała w tym miejscu, była FAŁSZYWA i została zacommitowana w `8226dcc`.**
+> Mówiła: R4 daje `pop 36 · avail 0,99 · Fe 19 826 · solar 10` przeciw `pop 3 · avail 0,00` w R0.
+> **Żadna z tych liczb nie jest prawdziwa.** Powstały, bo R0 i R4 biegły w JEDNYM procesie na
+> harnessie **bez izolacji bootu** — drugi boot dziedziczył strumień PRNG i `gameState` po pierwszym
+> (Finding **228**). Właściciel zgłosił z żywej gry, że R0, R4 i R2 są **nierozróżnialne**; jego dane
+> były poprawne, **moja tabela była odstająca**. Poniżej pomiar po naprawie przyrządu.
 
-⚠ **MNIEJ ELEKTROWNI = WIĘCEJ ENERGII** (solar 30 → 10, `avail` 0,00 → 0,99). To jest cały dowód
-pętli 226 w jednej linijce.
-⚠ **Kontrola d44af5e (placówki): 5 vs 1** — ekspansja **rośnie**, nie jest przesuwana z placówek.
-⚠ **R4 to DWIE zmiany pod jedną flagą** (225 skalowanie karmicieli + 226 bramka pętli), a pomiar
-mówi, że **dominuje 226**. Rozdzielenie flag jest do decyzji właściciela — pomiar jest powyżej.
+**Instrument:** `DirectorHarness` z izolacją bootu (`reseed` + `gameState.restore(null)`), pin **T7**
+w `director_harness_smoke`. Oba warianty w jednym procesie — **to jest teraz dozwolone i samo w sobie
+jest testem izolacji**. Poprawka `_feederTarget` (niżej) w miejscu.
+
+| gy | **R0** (`aiScaleBasicInfra` OFF) | **R4** (ON) |
+|---|---|---|
+| 0 | pop 24 · lab 12 · farm 2 · solar 6 · avail 1,00 · food 250 · Fe 200 | **identycznie** |
+| 3 | pop 20 · lab 6 · avail 1,00 · **food 12** | identycznie |
+| 4 | pop 20 · lab 5 · avail **1,00** · **food 0** | identycznie |
+| 6 | pop 17 · lab 3 · solar 6 · avail 0,99 | identycznie |
+| **7** | pop 17 · lab 3 · **solar 12** · avail **0,68** | pop 17 · lab 2 · **solar 6** · avail **0,64** ← **pierwsza rozbieżność** |
+| 8 | pop 16 · lab 2 · solar 12 · avail **0,28** | pop 16 · lab **0** · solar 6 · avail **0,00** |
+| 9 | pop 14 · lab 0 · avail 0,00 | pop 14 · lab 0 · avail 0,00 |
+| 10 | pop 12 · solar 12 · food 0 · Fe 230 · plac 1 | pop 12 · solar **6** · food 0 · Fe 0 · plac 1 |
+| 20 | pop 6 · well 2 · solar 12 | pop 6 · well 2 · solar **6** |
+| 30 | pop 6 · solar 12 | pop 6 · solar **6** |
+| 40 | pop 3 · well 4 · solar 12 | pop 3 · well 4 · solar **6** |
+| 50 | pop 4 · well 4 · solar 12 · food 7 | pop 4 · well 4 · solar **6** · food 7 |
+
+**Jedyna różnica na całym horyzoncie to `solar 12` vs `solar 6`.** Populacja, `food`, `avail`, `farm`,
+`well` i liczba placówek są **identyczne co do jednostki** w każdym checkpoincie.
+⚠ **Kontrola d44af5e (placówki): 1 vs 1** — nie 5 vs 1. Poprzednia liczba też pochodziła ze
+skażonego przebiegu.
+
+#### 10.5a ⚠ DLACZEGO bramka 226 nic nie daje — i dlaczego mechanizm mimo to jest prawdziwy
+
+Pełny inwentarz stolicy w gy10 różni się **jednym wpisem**:
+
+| | R0 | R4 |
+|---|---|---|
+| budynki | … `solar_farm: 12` … | … `solar_farm: 6` … (reszta **identyczna**) |
+| `getSlotDemand('laborer')` | **36** | **24** |
+| `strata.laborer` | **0** | **0** |
+
+Bramka **działa** — obniża popyt na robotników o 12 etatów. Ale `empPenalty = laborer / demand`, więc
+przy `laborer = 0` penalty wynosi **`0/36` i `0/24` — czyli zero w obu przypadkach**. Bramka może
+pomóc **wyłącznie wtedy, gdy robotnicy jeszcze są**; w tym fixturze schodzą do zera w **gy9**,
+a bramka zaczyna działać w **gy7** — dwa lata za późno.
+
+⚠ **DRUGA TEZA WYCOFANA:** zdanie „**mniej elektrowni = więcej energii** — to jest cały dowód pętli"
+**nie reprodukuje się**. Na czystym przyrządzie R4 ma w gy7-8 `avail` **niższe** (0,64 vs 0,68;
+0,00 vs 0,28), bo sześć dodatkowych elektrowni R0 zdąży jeszcze coś wyprodukować, zanim ich etaty
+zjedzą resztki załogi. Od gy9 obie kolumny siedzą na 0,00. **Mechanizm pętli 226 pozostaje prawdziwy
+i jest potwierdzony ŹRÓDŁOWO** (`ColonyAutoExpander:253-258` buduje `solar_farm` przy każdym ujemnym
+bilansie; `solar_farm.popCost 0.25` ⇒ każda sztuka dokłada etat) — **fałszywy był zmierzony ZYSK**,
+nie opis mechanizmu.
+
+#### 10.5b Poprawka `_feederTarget` — podpisana, wdrożona, ZMIERZONA jako niewystarczająca
+
+Poprzednia wersja liczyła cel wobec **nominalnej** wydajności farmy (10 food/rok), ignorując
+`empPenalty`. Zmierzone: przy pop 19 dawała `_feederTarget = 2` — **dokładnie tyle, ile cel statyczny**
+⇒ 225 było **bezczynne**. Po poprawce cel liczy się wobec **realnego** wyjścia
+(`perBuilding × max(FEEDER_STAFFING_FLOOR 0,25, staffing)`) i jest **przycięty do poziomu
+obsadzalnego** — zgodnie z podpisanym warunkiem właściciela, że **bramka 226 musi objąć także
+KARMICIELI** (farma niesie `popCost` tak samo jak elektrownia).
+
+⚠ **I to jest powód, dla którego R4 milczy w tym fixturze:** przycięcie do obsady jest **poprawne**
+i właśnie dlatego samoogranicza R4 w kryzysie, który R4 miał leczyć. Przy `laborer = 0` liczba
+obsadzalnych farm wynosi `2 + floor(0/jobs) = 2` — czyli stan bieżący. **R4 jest STRAŻNIKIEM
+(zapobiega dwóm pętlom śmierci), nie LEKARSTWEM.**
+
+#### 10.5c ⚠ TRZECIA PRZESŁANKA OBALONA — głód wyprzedza ciemność
+
+Łańcuch przyczynowy z §10.3 (`energia → produkcja → żywność`) **nie opisuje tego fixture'u**:
+`food` spada do **0 w gy4**, kiedy `avail` wynosi jeszcze **1,00**; kolaps energetyczny zaczyna się
+dopiero w **gy7**, gdy populacja spada już od trzech lat. ⇒ **pierwotna awaria to ŻYWNOŚĆ, a energia
+jest jej NASTĘPSTWEM** (mniej ludzi → mniej rąk → mniej wydobycia → survival dosypuje elektrownie).
+§10.3 zostaje jako opis sprzężenia, ale **kolejność była odwrócona**.
+
+#### 10.5d Przewidywanie falsyfikowalne dla żywej tabeli
+
+Skoro bramka działa wyłącznie przy `laborer > 0`, to na `GATE-215-gy30`:
+**jeśli stolica ma jeszcze robotników — R4 pokaże realny efekt; jeśli `laborer = 0` — R4 będzie
+milczeć dokładnie tak jak na harnessie** (rozbieżność tylko w liczbie elektrowni).
+⇒ **`strata.laborer` w stolicy jest metryką rozstrzygającą, ważniejszą niż `solar`.**
 
 ### 10.6 Co to znaczy dla osi głównej
 
 R1 i R2 leżą **w dole strumienia**: dowożą Fe do fabryki, która przy `avail = 0` mnoży postęp przez
 zero, i do kopalń, które nie wydobywają. **Bez 225+226 żadna z nich nie może przewrócić obserwabla.**
 Rekomendacja kolejności: **R4 → R2 → R1**. Oś główną sygnuje właściciel z pełnej tabeli.
+
+### 10.7 Odpowiedzi na dwa pytania właściciela — HABITATY i ŻYWNOŚĆ (pełny tekst)
+
+#### (a) Habitaty — czy mieszkania są wąskim gardłem?  **NIE, i to jest zmierzone**
+
+Cel `habitat` jest **statyczny: 1** we wszystkich czterech checkpointach `targets/industrialist.js`
+(dokładnie ta sama wada co `farm`/`mine` z Findingu 225 — habitat po prostu **nie był w zakresie R4**,
+bo R4 objął karmicieli `farm`/`well`, a energię objęła bramka 226).
+
+Zmierzony sufit mieszkaniowy stolicy AI: **32 miejsca, płaskie przez całe 50 gy** (`colony_base` 16 +
+`habitat` 12 + `launch_pad` 4 — po redenominacji ×4 z Population 2.0 Fazy 1).
+
+**Populacja nigdy się o ten sufit nie opiera.** Szczyt w całym przebiegu to **24 w gy0** (czyli stan
+startowy z bootstrapu), potem monotoniczny spadek: 24 → 20 → 17 → 12 → 6 → 3. Wzrost logistyczny ma
+człon `(1 − humans/capacity)`, więc przy `humans 12 / capacity 32` hamulec mieszkaniowy wynosi
+`1 − 0,375 = 0,625` — **jest, ale nie jest wiążący**; wiążące jest to, że `food` = 0, a głodująca
+kolonia nie rośnie niezależnie od tego, ile ma pustych łóżek.
+
+⇒ **Mieszkania stoją W KOLEJCE ZA ŻYWNOŚCIĄ.** Skalowanie habitatów dziś byłoby **no-opem
+wyglądającym na naprawę** — dokładnie ta sama klasa co „skalowanie energii" z §10.4, które obaliliśmy
+pomiarem **przed** napisaniem kodu. ⚠ Habitaty **wracają na stół** dopiero wtedy, gdy populacja
+realnie dobije do 32 — i wtedy jest to **własna, osobno podpisana decyzja**, nie dodatek do tego
+slice'u.
+
+#### (b) Żywność — czy AI powinno badać lepsze budynki żywnościowe?  **DZIŚ TO NIE MA JAK ZADZIAŁAĆ**
+
+Sprawdzone w danych, nie wyrozumowane:
+
+* `hydroponics` (`TechData:283`) **nie występuje w `researchQueue` archetypu Industrialist** — AI
+  **nigdy** go nie zbada, niezależnie od ilości punktów badawczych. (Stolica ma 2 `research_station`
+  i 3 naukowców, więc punkty **są** — nie ma tylko po nie wyciągniętej ręki.)
+* `synthesized_food_plant` (`BuildingsData:386`, `food 6`, `popCost 0.5`) **wymaga właśnie tej,
+  niewyuczonej technologii**.
+
+⇒ Reguła „**preferuj lepsze budynki żywnościowe**" byłaby **martwa z konstrukcji**: preferencja bez
+odblokowanego budynku nie ma czego preferować. ⚠ I nawet po odblokowaniu `synthesized_food_plant`
+niesie `popCost 0.5` (= 2 etaty) wobec `farm` — czyli w kryzysie obsadowym jest **droższy w rękach**,
+a to jest dokładnie ten zasób, którego brakuje.
+
+⇒ **Kolejność jest wymuszona, nie preferowana: najpierw KOLEJKA BADAŃ AI (osobny kandydat na
+decyzję), potem — i tylko potem — preferencja budynków.** Odwrotna kolejność produkuje kod, który
+przechodzi testy i nic nie robi.
+
+#### (c) ⚠ Czego brakuje, żeby stolica w ogóle mogła WSTAĆ — mechanizm, którego NIE MA
+
+Właściciel poprosił, żeby przy braku mechanizmu **zgłosić finding, a nie projektować**. Zgłaszam:
+z `laborer = 0` i `food = 0` **nie istnieje w grze żadna ścieżka powrotu**. Kolonia AI nie ma
+(1) transferu POP **do** stolicy (kierunek jest tylko na zewnątrz — kolonizacja), (2) importu żywności
+**bez portu** (Finding 227), (3) awaryjnego odblokowania etatów. Wzrost logistyczny ma człon
+`× humans`, więc przy małym `humans` i zerowej żywności układ jest **absorbujący**.
+⇒ **Zapisane jako obserwacja wymagająca własnego numeru przy następnym audycie AI** — nie projektuję
+tu lekarstwa.
