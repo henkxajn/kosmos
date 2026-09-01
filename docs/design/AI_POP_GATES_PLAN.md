@@ -1,6 +1,9 @@
 # 215 — bramki `freePops` na ścieżce AI, z gate'em 208
 
-> **Status:** 📋 **PODPISANE 2026-08-31.** **D-215-1 = obie postacie** (kolonia → ZASTĄPIENIE
+> **Status:** ✅ **GATE PASS 2026-09-01** — §G.1 PASS · §G.2 **PASS-PENDING na nazwanej blokadzie zewnętrznej** (Finding **217**: fabryka nigdy nie alokuje łańcucha warp) · §G.3 OK · §G.4 PASS. Wynik i poprawki do samego planu: **§9** i **§10**; korekta uzasadnienia progów: **§2.3**.
+> Fixture: zapis **`GATE-215-gy30`**.
+>
+> **Podpis:** 📋 **PODPISANE 2026-08-31.** **D-215-1 = obie postacie** (kolonia → ZASTĄPIENIE
 > predykatu, kurier → USUNIĘCIE pre-checku) · **D-215-1b = rezerwa 4** · **D-215-2 = JEDNA flaga
 > `aiPopGates`** · **D-215-1c = PODPISANE: `popTransferSize` 8 → 4** (krzywa zmierzona, §2.2).
 > **Dwa commity, wzór DEFENSE_SCOPE:** C1 = predykaty (higiena + mała zmiana balansu),
@@ -93,8 +96,14 @@ Boot **skalibrowany** (`civilization_boosted`, `solo`, `planetClass: 'REAL'`, pr
 
 **Trzy odczyty:**
 1. **T0 potwierdza martwą bramkę: ZERO pełnych kolonii AI w 100 gy.**
-2. **Okno użytecznej rezerwy to 0-4.** Przy 8+ bramka zamyka się z powrotem, bo populacja matki AI
-   dobija najwyżej do 3-8.
+2. **Okno użytecznej rezerwy to 0-4.** Przy 8+ bramka zamyka się z powrotem.
+   ⚠ **UZASADNIENIE SKORYGOWANE 2026-09-01 (post-gate) — okno jest poprawne, powód był błędny.**
+   Stało tu „bo populacja matki AI dobija najwyżej do 3-8". Prawdziwą krawędzią jest
+   **`startingPops.laborer = 12`** (`EmpireArchetypeIndustrialist.js:138-143`): próg to
+   `popTransferSize + MOTHER_RESERVE`, a każde założenie zdejmuje `popTransferSize` robotników
+   (`removePop('laborer', n)` dekrementuje `strata.laborer.count` n razy), więc **startowa pula
+   dzieli się całkowitą liczbę razy**. Stąd krawędź `rezerwa < 12 − popTransferSize = 8`, a nie
+   z obserwowanego stanu końcowego matki. Patrz §2.3.
 3. **Rezerwa robi dokładnie to, po co jest** (D-215-1b): T2 zakłada **później** (gy 4,2 zamiast 0,4)
    i zostawia matkę **mierzalnie zdrowszą** (4/8 zamiast 0/3). Cztery lata zwłoki za zdrową matkę.
 
@@ -147,6 +156,43 @@ AI**, więc „przeżyła" znaczy tylko „istnieje" — metryka mierzyła trwa�
 jest płaskie we wszystkich czterech wariantach i nie mogło zmienić rankingu.
 
 ---
+
+---
+
+## 2.3 ⚠ CO TABELE §2 I §2.2 NAPRAWDĘ ZMIERZYŁY (korekta post-gate, 2026-09-01)
+
+Osiem wierszy obu tabel odtwarza się **arytmetycznie** z jednej liczby, której żadna z nich nie
+wymieniała: **`startingPops.laborer = 12`** na stolicy AI.
+
+Próg bramki to `popTransferSize + MOTHER_RESERVE`, a każde założenie zdejmuje dokładnie
+`popTransferSize` robotników. Startowa pula dzieli się więc całkowitą liczbę razy:
+
+| transfer | próg (rezerwa 4) | ile razy 12 się dzieli | §2.2 zmierzone /100 gy |
+|---|---|---|---|
+| 2 | 6 | 12→10→8→6 = **4** | 5,3 |
+| **4** | 8 | 12→8→4 = **2** | **3,7** |
+| 6 | 10 | 12→6 = **1** | 1,0 |
+| 8 | 12 | 12→4 = **1** | 1,0 |
+
+I tak samo tabela rezerwy z §2 (transfer 8): rezerwa 0 → próg 8 → **1** (zmierzone 1) · rezerwa 4 →
+próg 12 → **1** (zmierzone 1) · rezerwa 8 → próg 16 → **0** (zmierzone 0) · rezerwa 16 → **0**
+(zmierzone 0).
+
+**Co z tego wynika, a co nie:**
+- ⚠ **Mierzyliśmy głównie „jak drobno pokroić startową pulę 12", a nie tempo trwałej ekspansji.**
+  Reszta (0-1,7 koloni/100 gy) to odrost. To **nie unieważnia podpisu D-215-1c** — `4` nadal wygrywa
+  z `8` na każdej mierzonej osi — ale zmienia to, czym ten knob jest: **jest sprzężony ze stałą
+  Population 2.0 ustawioną w innym slice'ie i w innym celu** (migracja ×4, `bc87846`).
+- ⚠ **Rachunek jest przybliżeniem, nie tożsamością.** W wierszach z ZEREM założeń matka i tak kończy
+  z 0-3 robotnikami, więc `laborer` **nie stoi na 12** — `_allocateWorkforce` przesuwa robotników do
+  innych warstw (stolica AI startuje z ~18 darmowymi budynkami). Pula jest **sufitem w chwili t≈0**,
+  nie stałą; stąd T2 zakłada w gy 4,2, a nie 0,4.
+- ⚠ Krzywa jest **schodkowa**, nie gładka: `6` i `8` dają identyczne 1,0, bo pula dzieli się raz
+  w obu przypadkach. Strojenie tego knobu poniżej rozdzielczości schodka nic nie zmieni.
+
+**Potwierdzenie na żywo (gate 215):** emp_001 miał `pelne 2` już w gy 0 (1 zasiew + 1 założenie
+w pierwszym tiku strategii, ~gy 0,42), emp_002 `pelne 4` w gy 10 (zasiew + 2 z puli + 1 po odroście).
+Rozkład zgodny z rachunkiem powyżej.
 
 ---
 
@@ -302,3 +348,105 @@ sprawdzona **w źródle**, nie wywołana). **Nic nie uruchamiane w przeglądarce
 ⚠ **Lekcja z §2.1 wiążąca dla przyszłych pomiarów:** override w sondzie wymaga **kontroli, że wszedł**
 — odczytania podmienionej wartości produkcyjną drogą przed policzeniem czegokolwiek. Bez niej tabela
 pomiarowa może przejść **jałowo**, dokładnie jak pin.
+
+---
+
+## 9. GATE 215 — WYNIK (2026-09-01, na żywo, świeża partia od gy 0)
+
+**WERDYKT: PASS.** §G.1 **PASS** · §G.2 **PASS-PENDING na NAZWANEJ blokadzie zewnętrznej**
+(Finding **217**) · §G.3 **OK** · §G.4 **PASS** · konsola: wyłącznie rodzina 212.
+Zapis-fixture: **`GATE-215-gy30`** (nacisk żywy, komplet surowców łańcucha w magazynie).
+
+### 9.1 §G.1 — połowa KOLONIZACYJNA: **PASS, definitywnie**
+
+- **emp_001**: `pelne` 1 (zasiew) → **2** w gy 0. **emp_002**: → **4** w gy 10, wszystkie w macierzystym
+  `sys_057`, plus **5 placówek**, w tym cross-system (`sys_034`, `sys_043`). Kontrola z §G.0(a) trzyma:
+  ekspansja **rośnie**, nie przesuwa się z placówek na kolonie.
+- **Dyskryminator zasiewu potwierdzony**: `entity_185` = stolica (pop 35, pełny miks warstw),
+  `entity_186/187/188` = założone (**wyłącznie `laborer` + `miner`**). ⇒ bootstrap zasiewa **JEDNĄ**
+  pełną kolonię na imperium (`EmpireGenerator.js:242` — jedyny wołający `bootstrapHomeColony`).
+- **Aneks do 216**: `186` urosło **4 → 6** — pierwszy zmierzony kontrprzykład dla „kolonie AI nie rosną".
+  Wzrost istnieje, tylko jest wolny i (po stronie wody) skończony.
+- ⚠ **Ograniczenie przyrządu odsłonięte przy okazji:** `colonyReport` zakłada drzewo MACIERZYSTE
+  (`emp.homeSystemId`), a emp_002 ma placówki w dwóch obcych układach. Pole `ukladyImperium` było
+  zaprojektowanym sygnałem ostrzegawczym i zadziałało. Połowa POP/zasobowa raportu jest nietknięta
+  (matka to jedna kolonia w obu wariantach); poprawka = iterować układy z `getColoniesByEmpire`.
+
+### 9.2 §G.2 — połowa KURIERSKA: **PASS-PENDING, łańcuch prześledzony do końca**
+
+Wszystko, czego dotyczy slice 215, **działa**: kurierzy realnie wożą (**Nt 0 → 157** w stolicy),
+`reactive_armor` 33, `propulsion_systems` 5, `electronic_systems` 26 — cały łańcuch z **181** produkuje.
+Nacisk militarny przeszedł end-to-end: **L1 gy 20,85 → L2 gy 22,01 (własny trigger) → L1 gy 25,93
+(z eskalacją, `escalations: 1`) → L2 gy 27,10**; 5× `director:shipQueued`, `director:shipRejected`
+**pusty**; 5× `director:orderExpired` po 3 latach (zgodnie z D-178-5, **to nie jest porażka gate'u**).
+
+**`kadlubyZeSkokiem` zostaje 0 z powodu, który NIE LEŻY W 215** — Finding **217**: fabryka nigdy nie
+alokuje łańcucha warp, bo `ColonyAutoExpander._syncTier3SafetyDemand` zeruje `_demandBonus` dopisany
+przez Directora. Zmierzone: FP **25 wolnych**, komplet surowców (Si 18580 · Nt 214 · Hv 6002 · Xe 4831
+· Ti 8174 · Li 589), `isRecipeAvailable` i `_colonyCanSustainRecipe` **true**, **zero alokacji**.
+Reprodukcja sondą bit-w-bit — patrz rejestr, Finding 217.
+
+### 9.3 §G.3 / §G.4
+
+- **§G.3 (guard 180)**: rudy rzadkie **nie zapadły się** — `Nt` **0 → 157**, `Hv` 6002, `Xe` 4831.
+  ⚠ `Fe` spadł **4359 → 20** i to jest osobne znalezisko (**220**), nie regresja 215.
+- **§G.4 (kill-switch)**: `aiPopGates` ON → `laborer 6/8` · OFF → `freePops [ROLLBACK] 0/8` · ON —
+  **bez przeładowania strony**. Obie gałęzie predykatu odpowiadają zgodnie z kontraktem rollbacku.
+
+---
+
+## 10. POPRAWKI DO SAMEGO PLANU (wykryte przy wykonaniu gate'u)
+
+### 10.1 🔴 §G.1 wskazywał KANAŁ, KTÓREGO NIE MA (klasa Findingu 194)
+
+Instrukcja *„`ai:strategyColonyFounded` w `debugLog`"* mierzyłaby **ciszę nieodróżnialną od porażki**:
+`ai:strategyColonyFounded` (`EmpireStrategySystem:813`) **i jego bliźniak** `ai:strategyOutpostFounded`
+(`:775`) mają **ZERO subskrybentów w całym `src/`** i **nie ma ich w `DebugLog.TRACKED_EVENTS`**.
+⚠ Reguła W3 („nowy powód odmowy dołącza do `TRACKED_EVENTS` w tym samym commicie") **nie objęła
+zdarzeń SUKCESU** — a gate potrzebował właśnie ich.
+**Obejście użyte na gate'cie (bez zmiany kodu):** rejestrator konsolowy `window.__aiExp` instalowany
+PO starcie partii — `EventBus.clear()` w `GameScene:162` kasuje go przy każdym nowym starcie i F5.
+
+### 10.2 🔴 §G.2 stał na ODWRÓCONYM założeniu o wojnie
+
+Plan traktował wypowiedzenie wojny jako element okna §G.2. **Wojna DYSKWALIFIKUJE nacisk:** obie reguły
+mają `guard: ['empireNotAtWarWithPlayer']` (`DirectorRuleData:106/134` → `dipl.getStatus(id) !== 'war'`),
+a `pressureResponse` jest **jedynym produkcyjnym wołającym `queueWarships`** (grep czysty). ⇒ deklaracja
+wojny zamyka jedyny kanał produkcji okrętów AI. Właściwa kolejność: **pokój → 3 uzbrojone statki gracza
+w powłoce granicznej → L1 → L2 → rezerwa → mobilizacja → dopiero potem ewentualna wojna**.
+
+Dwie rzeczy, których plan nie odnotował, a bez których §G.2 jest niewykonalny:
+- **L1 nie może dowieźć obserwabla.** `frigate_system_defender` **celowo nie ma `warp_tank`**
+  (`ShipTemplateData.js:130-137`), a `kadlubyZeSkokiem` filtruje `warpFuel.max > 0`
+  (`DirectorOffensive:174`) **oraz** `isInService` (`:173`). ⇒ potrzebny jest **roamer szczebla L2**,
+  a po zbudowaniu jeszcze **mobilizacja** (`mobilize_reserve`).
+- **Do L2 prowadzą DWIE drogi**, i druga okazała się w praktyce ważniejsza: `DirectorSystem:230-234`
+  podmienia regułę na L2 **wewnątrz oceny L1**, gdy `now − lastFiredYear ≤ escalationWindowYears (10)`
+  — **bez sprawdzania triggera ≥3 ani guardów L2**. Zmierzone: L1 gy 20,85 → L1 gy 25,93 odpalił
+  z eskalacją.
+
+### 10.3 §G.0 — przyrządy dorobione na gate'cie (wszystkie read-only)
+
+| przyrząd | co odpowiada |
+|---|---|
+| rejestrator `window.__aiExp` | zastępuje nieistniejący kanał §G.1 (10.1) |
+| `colonyReport(empireId)` | drabina odmowy pełnej koloni: pula POP z progiem **wyprowadzonym przez produkcyjny predykat** (nie przepisanym), food/water z produkcyjnego kosztu, ciało-cel P3/fallback, kontrola spójności wobec `_canAffordFullColony` |
+| `celNacisku(empireId)` | wybiera układ powłoki **wyłącznie** danego imperium (`getClaimant === null` ∧ `getBorderOwners = [emp]`) |
+| `nacisk(empireId)` | tabela per-statek + **produkcyjna sonda** `countArmedPlayerVesselsInBorder`, progi z `DIRECTOR_RULES`, `hasWeapons` przez `import()` żywego modułu (zero lustrzenia predykatu) |
+| `fabryka(planetId)` | alokacje + `stallReason` + łańcuch warp z `_getMissingIngredients` + ETA z **odwróconego** mnożnika silnika |
+| `zlecenia(planetId)` | `pendingShipOrders` z `directorTemplateId`, TTL i brakami wobec magazynu |
+| gotowe w repo | `KOSMOS.debug.influenceMap(id)` (lista GRANICZNE z nazwami — zbudowana pod GATE 3), `debug.directorRules(id)`, `debugLog.query` na `director:shipRejected` / `director:pressureIncident` |
+
+⚠ **Dyskryminator zasiewu do zapamiętania:** stolica loguje `[EmpireBootstrap] … pop=24`
+(`EmpireColonyBootstrap:283`), kolonia strategiczna `[bootstrapColony] … pop=4` (`:426`). Dwa różne
+tagi, dwie różne liczby — bez tego `pelne N` łatwo policzyć źle.
+
+### 10.4 Co jeszcze plan opisywał zbyt optymistycznie
+
+- **„warp_cores gap 1 ONLY" nie znaczy „brakuje jednej sztuki"** — `_feedCommodityDemand` nie schodzi
+  w łańcuch (Finding **218**). Stan łańcucha czyta się z `getAllocations()[].stallReason`.
+- **§8 „Granice dowodu" domyka się w jednym punkcie:** *„czy `deployVessel` odmawia w praktyce po
+  zdjęciu pre-checku"* — na gate'cie **nie odmówił ani razu**; kurierzy mobilizowali się i latały.
+- **Zostaje niedomknięte:** czy rezerwa 4 zachowuje się tak samo przy większej liczbie imperiów
+  (gate biegł na 2) oraz czy pierwsza kolonia AI **utrzymuje się** — 216 pokazuje, że po stronie wody
+  **nie** (11,1 roku do zera).
