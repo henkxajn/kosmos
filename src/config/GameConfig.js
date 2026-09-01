@@ -115,6 +115,17 @@ export const GAME_CONFIG = {
     //   logistyki albo kurierzy do kolonii, ktore nie powstaja. Obie bramki siedza na JEDNYM
     //   lancuchu (kurier → Nt → komponenty → okret; kolonia → wiecej stolic). Wzor: `aiStrikeRecall`.
     aiPopGates: true,
+    // ── 217 — KANAL POPYTU ZAMOWIENIOWEGO (save v101, bez migracji) ────────
+    // Popyt Directora (zamowienie okretowe czekajace na komodyt) dostaje WLASNY
+    // czlon addytywny — ksiege per zlecenie — zamiast pisac do `_demandBonus`,
+    // ktorego wlascicielem jest `ColonyAutoExpander` i ktory ten zeruje przy
+    // zamknietej bramce `rich`. ZMIERZONE przed naprawa (GATE-215-gy30): 25 FP
+    // bezczynnych, komplet surowcow lancucha warp, ZERO alokacji.
+    // ⚠ Bramka `rich` i prog 20 000 NIETKNIETE (zamkniete Z PROJEKTU, panel
+    //   16 seedow w `d44af5e`) — to osobne pytanie balansowe, rodzina 182.
+    // OFF = zachowanie bit-w-bit sprzed slice'u (Director pisze `setDemandBonus`,
+    //   `getSafetyStockTarget` ignoruje ksiege).
+    aiOrderDemandChannel: true,
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).

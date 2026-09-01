@@ -35,6 +35,7 @@
 //     nie istnieje ścieżka AI do `queueStationShip`. Bramka żyje TUTAJ, u zamawiającego.
 
 import EventBus from '../../core/EventBus.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { DirectorGuards, DirectorActions } from './DirectorRegistry.js';
 import { resolveTemplate } from '../../utils/ShipTemplateResolver.js';
 import { SHIP_TEMPLATES } from '../../data/ShipTemplateData.js';
@@ -275,6 +276,9 @@ export class DirectorProduction {
         const o = list[i];
         if (o?.[TTL_FIELD] == null || now < o[TTL_FIELD]) continue;
         list.splice(i, 1);
+        // 217 (D-217-2) — TTL wygasl ⇒ USUN WPIS ksiegi (nie odejmuj). Rekoncyliacja
+        // w `FactorySystem` zlapalaby to i tak, ale tu wiemy o tym NATYCHMIAST.
+        colony.factorySystem?.clearOrderDemand?.(o.id);
         EventBus.emit('director:orderExpired', {
           empireId: colony.ownerEmpireId ?? null,
           colonyId: colony.planetId,
@@ -300,19 +304,32 @@ export class DirectorProduction {
    * Surowce kopalne (Fe/Ti/Cu…) świadomie POMIJAMY — te nie są produkowane przez
    * fabrykę, więc bonus popytu nic by dla nich nie znaczył; na nie działa TTL.
    */
-  _feedCommodityDemand(colony, cost, empireId) {
+  _feedCommodityDemand(colony, order, empireId) {
     const fs = colony?.factorySystem;
     if (!fs?.setDemandBonus) return [];
+    const cost = order?.cost ?? order ?? {};   // wstecznie: wolajacy moze podac sam koszt
+    // 217 (D-217-1/2/4) — popyt zamowieniowy idzie do WLASNEJ ksiegi, kluczowanej id zlecenia.
+    // Zapisujemy SAM GAP; stare `cur + gap` doliczalo baze przy kazdym zamowieniu i pisalo do
+    // pola, ktorego wlascicielem jest `ColonyAutoExpander` — a ten zeruje je przy zamknietej
+    // bramce `rich`, wiec zobowiazanie Directora znikalo przy najblizszym tiku ekspandera.
+    const useLedger = GAME_CONFIG.FEATURES?.aiOrderDemandChannel !== false
+      && typeof fs.setOrderDemand === 'function' && !!order?.id;
     const missing = [];
-    for (const [id, need] of Object.entries(cost ?? {})) {
+    const gaps = {};
+    for (const [id, need] of Object.entries(cost)) {
       if (!fs.isKnownCommodity?.(id) && !fs.getSafetyStockTarget?.(id)) continue;
       const have = colony.resourceSystem?.getAmount?.(id) ?? 0;
       const gap = Math.ceil(need - have);
       if (gap <= 0) continue;
-      const cur = fs.getSafetyStockTarget?.(id) ?? 0;
-      fs.setDemandBonus(id, Math.max(0, cur) + gap);
+      if (useLedger) {
+        gaps[id] = gap;                       // filtr COMMODITIES robi `setOrderDemand`
+      } else {
+        const cur = fs.getSafetyStockTarget?.(id) ?? 0;
+        fs.setDemandBonus(id, Math.max(0, cur) + gap);
+      }
       missing.push({ commodityId: id, gap });
     }
+    if (useLedger) fs.setOrderDemand(order.id, gaps);
     if (missing.length) {
       fs.setMode?.('reactive');                          // bez tego bonus popytu jest martwy
       EventBus.emit('director:commodityDemand', {
@@ -394,7 +411,7 @@ export class DirectorProduction {
         queued++;
         const order = this._stampTtl(capital, templateId);
         // Sprzężenie ekonomiczne — brakujące komodyty w priorytety produkcji kolonii.
-        this._feedCommodityDemand(capital, order?.cost ?? {}, empireId);
+        this._feedCommodityDemand(capital, order, empireId);
       } else {
         started++;
       }

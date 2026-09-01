@@ -24,6 +24,7 @@ import { FactorySystem } from '../../systems/FactorySystem.js';
 import { COMMODITIES } from '../../data/CommoditiesData.js';
 import { ARCHETYPES } from '../../data/EmpireData.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
+import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -58,11 +59,24 @@ function mkFactory({ owner = 'emp_002' } = {}) {
   globalThis.window.KOSMOS = {
     colonyManager: { getAllColonies: () => [colony], getColony: () => colony, activePlanetId: null },
     scenario: 'civilization_boosted',
+    gameConfig: GAME_CONFIG,      // lustro `GameScene:394` — tym uchwytem czyta flage FactorySystem
   };
   fs.setTotalPoints(25);
   fs.setMode('reactive');
   fs.setDemandBonus('structural_alloys', 27);   // popyt budowlany (tier 1 — poza bramka `rich`)
   return { fs, rs, colony, inv };
+}
+
+/**
+ * PRODUKCYJNA sciezka zapisu popytu: prawdziwy `DirectorProduction._feedCommodityDemand`.
+ * ⚠ Swiadomie NIE modelujemy tego zapisu recznie — pin ma sprawdzac WPIECIE, nie moja
+ *   wyobraznie o nim. Zwraca zlecenie dopisane do `colony.pendingShipOrders`.
+ */
+function directorOrders(colony, { id = 'pso_1', cost = { warp_cores: 2, Ti: 8 } } = {}) {
+  const order = { id, shipId: 'hull_frigate', cost, queuedAt: 20, directorTemplateId: 'frigate_laser_escort' };
+  colony.pendingShipOrders.push(order);
+  new DirectorProduction()._feedCommodityDemand(colony, order, colony.ownerEmpireId);
+  return order;
 }
 
 /** Odwzorowuje `_syncTier3SafetyDemand` przy `rich === false` — ekspander zeruje cele tier-3+. */
@@ -80,9 +94,9 @@ function plan(fs) {
 // ── T1 — FAIL-FIRST: brak alokacji lancucha warp przy komplecie surowcow ─────────────────────
 console.log('T1 — FAIL-FIRST: popyt zamowieniowy Directora ma przezyc tik ekspandera');
 {
-  const { fs } = mkFactory();
-  // Director sygnalizuje brak 1 szt. warp_cores (dokladnie jak `_feedCommodityDemand` w grze)...
-  fs.setDemandBonus('warp_cores', 2);
+  const { fs, colony } = mkFactory();
+  // Director sygnalizuje brak warp_cores PRODUKCYJNA sciezka...
+  directorOrders(colony);
   // ...a ekspander przy nastepnym tiku zeruje cale tier-3+.
   expanderZeroes(fs);
   const alloc = plan(fs);
@@ -107,8 +121,8 @@ console.log('T1 — FAIL-FIRST: popyt zamowieniowy Directora ma przezyc tik eksp
 // ── T2 — INWARIANCJA: pinujemy POLE ekspandera, nie skutek ──────────────────────────────────
 console.log('\nT2 — INWARIANCJA: zerowanie `_demandBonus` przez ekspandera bit-w-bit dzisiejsze');
 {
-  const { fs } = mkFactory();
-  fs.setDemandBonus('warp_cores', 2);
+  const { fs, colony } = mkFactory();
+  directorOrders(colony);
   expanderZeroes(fs);
   const zeroed = T3.every(([cid]) => fs.getDemandBonus(cid) === 0);
   assert(zeroed,
@@ -132,8 +146,8 @@ console.log('\nT3 — PROMIEN RAZENIA: pozostala piatka tier-3+ bez alokacji (pr
     `T3k NIEJALOWOSC (lustro V-RICH): przy otwartej bramce piatka DOSTAJE alokacje ` +
     `(${mirrorHits.join(', ')}) — dowod, ze ich brak w V-SPLIT jest WYNIKIEM, nie cisza`);
 
-  const { fs } = mkFactory();
-  fs.setDemandBonus('warp_cores', 2);
+  const { fs, colony } = mkFactory();
+  directorOrders(colony);
   expanderZeroes(fs);
   const alloc = plan(fs);
   const leaked = OTHER_FIVE.filter(c => alloc.has(c));
@@ -201,9 +215,9 @@ console.log('\nT6 — kill-switch `aiOrderDemandChannel` (D-217-5)');
   const prev = GAME_CONFIG.FEATURES?.aiOrderDemandChannel;
   try {
     GAME_CONFIG.FEATURES.aiOrderDemandChannel = false;
-    const { fs } = mkFactory();
+    const { fs, colony } = mkFactory();
+    directorOrders(colony, { id: 'pso_X' });
     expanderZeroes(fs);
-    fs.setOrderDemand?.('pso_X', { warp_cores: 2 });
     const alloc = plan(fs);
     // ⚠ Bez wymogu ISTNIENIA API ten pin przechodzilby jalowo — „ksiega ignorowana" jest
     //   trywialnie prawda, gdy ksiegi nie ma. Najpierw feature MUSI istniec.
@@ -214,6 +228,43 @@ console.log('\nT6 — kill-switch `aiOrderDemandChannel` (D-217-5)');
   } finally {
     if (prev !== undefined) GAME_CONFIG.FEATURES.aiOrderDemandChannel = prev;
   }
+}
+
+// ── T7 — ZAPIS SPRZED SLICE'U: ksiega odbudowana z zywych pendingShipOrders ──────────────────
+console.log('\nT7 — zapis SPRZED slice\'u: ksiega ODBUDOWANA z zywych zlecen, nie przyjeta jako pusta');
+{
+  const zero = mkFactory();
+  const saved = zero.fs.serialize();
+  delete saved.orderDemand;                       // zapis sprzed slice'u
+  assert(!('orderDemand' in saved),
+    'T7k NIEJALOWOSC: fixture to naprawde zapis BEZ pola `orderDemand` (stan sprzed slice\'u)');
+
+  const { fs, colony } = mkFactory();
+  colony.pendingShipOrders.push({ id: 'pso_stary', shipId: 'hull_frigate',
+    cost: { warp_cores: 2, Ti: 8 }, queuedAt: 20, directorTemplateId: 'frigate_laser_escort' });
+  fs.restore(saved);
+  assert(colony.pendingShipOrders.length === 1,
+    'T7k NIEJALOWOSC: po restore lista pending JEST niepusta — inaczej odbudowa nie mialaby czego zrobic');
+  assert(fs._orderDemand instanceof Map && fs._orderDemand.size === 0,
+    'T7a: tuz po `restore` ksiega jest PUSTA (`?? {}` — v101 bez migracji)');
+
+  fs._reconcileOrderDemand();
+  assert(fs._orderDemand.has('pso_stary') && fs.getOrderDemand('warp_cores') === 1,
+    `T7b: rekoncyliacja ODBUDOWALA ksiege z zywego zlecenia (gap 1, jest ${fs.getOrderDemand('warp_cores')}) — ` +
+    'bez tego zlecenia ze starego zapisu nie generowalyby popytu i umarlyby na TTL jak przed naprawa');
+  assert(!Object.prototype.hasOwnProperty.call(fs._orderDemand.get('pso_stary') ?? {}, 'Ti'),
+    'T7c: do ksiegi wchodza WYLACZNIE towary — ruda `Ti` z kosztu zlecenia pominieta (Finding 214)');
+
+  const covered = mkFactory();
+  covered.colony.pendingShipOrders.push({ id: 'pso_ok', cost: { warp_cores: 1 } });
+  covered.fs._reconcileOrderDemand();
+  assert(!covered.fs._orderDemand.has('pso_ok'),
+    'T7d KONTRA-PIN: zlecenie w pelni pokryte zapasem NIE tworzy wpisu');
+
+  colony.pendingShipOrders.length = 0;            // trzecia sciezka: poza realizacja i TTL
+  fs._reconcileOrderDemand();
+  assert(fs._orderDemand.size === 0,
+    'T7e: zlecenie zniknelo z listy POZA realizacja i TTL — rekoncyliacja i tak nie zostawia resztki');
 }
 
 console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} pass, ${fail} fail`);

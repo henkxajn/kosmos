@@ -19,6 +19,13 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BASE_DEMAND } from '../data/ConsumerGoodsData.js';
 import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
 
+// ⚠ 217 — flaga czytana przez LOKATOR, nie importem modulowym. `GameConfig` ciagnie `i18n`,
+// ktory przy ladowaniu modulu siega po `localStorage`; `FactorySystem` jest importowany przez
+// lekkie keepery bez pelnego srodowiska (`factory_production_toggle_smoke` wywrocil sie na tym
+// natychmiast). Uchwyt `KOSMOS.gameConfig` jest zreszta tym samym, ktorego uzywa live-gate.
+const orderDemandChannelOn = () =>
+  window.KOSMOS?.gameConfig?.FEATURES?.aiOrderDemandChannel !== false;
+
 // ── Predefiniowane szablony priorytetów ──────────────────────────────────────
 export const PRIORITY_TEMPLATES = {
   fuel: {
@@ -163,6 +170,21 @@ export class FactorySystem {
     // Ręczny bonus zapasu per-towar: Map<commodityId, number>
     // Dodawany do bazowego celu (safety stock tier default / consumption base)
     this._demandBonus = new Map();
+    // ── 217 — KSIEGA POPYTU ZAMOWIENIOWEGO (D-217-2) ────────────────────────────────────
+    // `Map<orderId, { [commodityId]: gap }>`. Czlon sumowany jest POCHODNY (`getOrderDemand`).
+    //
+    // ⚠ DLACZEGO KSIEGA, A NIE LICZNIK. `_demandBonus` ma DWOCH pisarzy i zero proweniencji:
+    //   `ColonyAutoExpander._syncTier3SafetyDemand` pisze ABSOLUTNIE (`rich ? target-1 : 0`),
+    //   a `DirectorProduction._feedCommodityDemand` pisal PRZYROSTOWO — wiec polityka min-zapasu
+    //   po cichu kasowala zobowiazanie juz zaciagniete przez Directora. ZMIERZONE: 25 FP
+    //   bezczynnych przy komplecie surowcow i zerowej alokacji lancucha warp (Finding 217).
+    //   Goly licznik z dwiema sciezkami czyszczenia jest ZAPADKA CZEKAJACA NA TRZECI PRZYPADEK
+    //   (czesciowe realizacje, kilka rownoleglych zlecen, smierc kolonii, reset stoczni).
+    //   Przy ksiedze „wyczyszczenie" znaczy SKASOWANIE WPISU, wiec resztka jest niemozliwa
+    //   Z KSZTALTU DANYCH, a nie z dyscypliny wolajacych.
+    // ⚠ Klucz zlecenia daje trzeci, DARMOWY mechanizm: `_reconcileOrderDemand` porownuje ksiege
+    //   z zywa lista `colony.pendingShipOrders`, wiec „brak resztek" jest WLASNOSCIA SPRAWDZALNA.
+    this._orderDemand = new Map();
 
     // Interwał auto-alokacji (nie co tick — co ~0.1 roku civ)
     this._autoAllocTimer = 0;
@@ -504,11 +526,93 @@ export class FactorySystem {
     this._emitStatus();
   }
 
-  /** Cel zapasu bezpieczeństwa (domyślny wg tieru + bonus gracza) */
+  /** Cel zapasu bezpieczeństwa (domyślny wg tieru + bonus gracza + popyt zamówieniowy). */
   getSafetyStockTarget(commodityId) {
     const def = COMMODITIES[commodityId];
     const base = (def?.tier <= 2) ? 3 : 1;
-    return base + this.getDemandBonus(commodityId);
+    return base + this.getDemandBonus(commodityId) + this.getOrderDemand(commodityId);
+  }
+
+  // ── 217 — kanał popytu ZAMÓWIENIOWEGO (osobny od min-zapasu) ─────────────
+  //
+  // ⚠ To są DWA RÓŻNE RODZAJE POPYTU i dlatego mają dwa pola. Min-zapas
+  // (`_demandBonus`) jest POLITYKĄ, którą `ColonyAutoExpander` ma prawo wyłączyć
+  // (bramka `rich` — zamknięta Z PROJEKTU, panel 16 seedów w `d44af5e`, POZA
+  // zakresem tego slice'u). Popyt zamówieniowy jest ZOBOWIĄZANIEM, które Director
+  // już zaciągnął, i żadna polityka min-zapasu nie ma prawa go wyzerować.
+
+  /** Suma gapów wszystkich żywych zleceń dla danego towaru (człon POCHODNY). */
+  getOrderDemand(commodityId) {
+    if (!orderDemandChannelOn()) return 0;
+    let sum = 0;
+    for (const gaps of this._orderDemand.values()) sum += (gaps?.[commodityId] ?? 0);
+    return sum;
+  }
+
+  /**
+   * Zapisz gapy JEDNEGO zlecenia. `gaps` = `{ [commodityId]: gap }` — SAM GAP,
+   * nigdy `base + bonus + gap` (D-217-4: stare `cur + gap` doliczało bazę przy
+   * każdym zamówieniu, co było dowodem, że ten zapis mylił się co do swojego pola).
+   * ⚠ Do księgi wchodzą WYŁĄCZNIE towary (`COMMODITIES`) — rudy z kosztu zlecenia
+   * pomijamy, bo fabryka ich nie produkuje (Finding 214); wpuszczone podniosłyby
+   * `getSafetyStockTarget` surowca, którego żaden skaner i tak nie obsłuży.
+   */
+  setOrderDemand(orderId, gaps) {
+    if (!orderId || !gaps) return;
+    const clean = {};
+    let any = false;
+    for (const [cid, gap] of Object.entries(gaps)) {
+      if (!COMMODITIES[cid]) continue;
+      const g = Math.max(0, Math.ceil(gap ?? 0));
+      if (g <= 0) continue;
+      clean[cid] = g; any = true;
+    }
+    if (any) this._orderDemand.set(orderId, clean);
+    else this._orderDemand.delete(orderId);
+    this._emitStatus();
+  }
+
+  /** Zlecenie zrealizowane / wygasłe / zniknęło — USUŃ WPIS (nigdy nie odejmuj). */
+  clearOrderDemand(orderId) {
+    if (this._orderDemand.delete(orderId)) this._emitStatus();
+  }
+
+  /**
+   * Rekoncyliacja księgi z żywą listą `pendingShipOrders` kolonii-właściciela.
+   * Robi DWIE rzeczy i obie są konieczne:
+   *   (a) usuwa wpisy zleceń, których na liście już nie ma — to domyka realizację,
+   *       wygaśnięcie TTL **i każdą trzecią ścieżkę** (śmierć kolonii, reset stoczni);
+   *   (b) dosiewa wpisy dla zleceń, które na liście SĄ, a w księdze ich nie ma —
+   *       ⚠ to jest ścieżka ZAPISU SPRZED TEGO SLICE'U: `restore` wczytuje pustą
+   *       księgę (`?? {}`), a zapis może nieść żywe `pendingShipOrders`. Bez (b)
+   *       takie zlecenia nie generowałyby popytu NIGDY i umarłyby na TTL dokładnie
+   *       jak przed naprawą — czyli slice nie działałby na zapisach, na których
+   *       najbardziej go potrzeba.
+   */
+  _reconcileOrderDemand() {
+    if (!orderDemandChannelOn()) return;
+    const colony = this._getOwnerColony();
+    const pending = colony?.pendingShipOrders;
+    if (!Array.isArray(pending)) {
+      if (this._orderDemand.size > 0) { this._orderDemand.clear(); this._emitStatus(); }
+      return;
+    }
+    const live = new Set(pending.map(o => o?.id).filter(Boolean));
+    let changed = false;
+    for (const orderId of [...this._orderDemand.keys()]) {
+      if (!live.has(orderId)) { this._orderDemand.delete(orderId); changed = true; }
+    }
+    for (const order of pending) {
+      if (!order?.id || this._orderDemand.has(order.id)) continue;
+      const gaps = {};
+      for (const [cid, need] of Object.entries(order.cost ?? {})) {
+        if (!COMMODITIES[cid]) continue;
+        const gap = Math.ceil((need ?? 0) - (this.resourceSystem?.getAmount?.(cid) ?? 0));
+        if (gap > 0) gaps[cid] = gap;
+      }
+      if (Object.keys(gaps).length > 0) { this._orderDemand.set(order.id, gaps); changed = true; }
+    }
+    if (changed) this._emitStatus();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -722,6 +826,7 @@ export class FactorySystem {
       })),
       reactiveSourceOrder:  [...this._reactiveSourceOrder],
       demandBonus:          Object.fromEntries(this._demandBonus),
+      orderDemand:          Object.fromEntries(this._orderDemand),   // 217 (D-217-3: `?? {}` ⇒ v101)
       everProducedHere:     [...this._everProducedHere],
       exportPrefs: {
         enabled: this._exportPrefs.enabled,
@@ -788,6 +893,11 @@ export class FactorySystem {
       Object.entries(data.demandBonus ?? data.safetyStockOverrides ?? {})
         .filter(([id]) => !COMMODITIES[id]?.isDroidUnit),
     );
+    // 217 (D-217-3) — zapis SPRZED slice'u nie ma tego pola ⇒ pusta księga bez migracji (v101).
+    // ⚠ Pusta księga NIE znaczy „brak zleceń": `_reconcileOrderDemand` dosiewa ją z żywych
+    // `pendingShipOrders` przy pierwszym ticku, inaczej zlecenia ze starego zapisu nie
+    // generowałyby popytu i umarłyby na TTL dokładnie jak przed naprawą.
+    this._orderDemand = new Map(Object.entries(data.orderDemand ?? {}));
     this._everProducedHere = new Set(data.everProducedHere ?? []);
     this._exportPrefs = data.exportPrefs
       ? { enabled: !!data.exportPrefs.enabled, tiers: { ...DEFAULT_EXPORT_PREFS.tiers, ...(data.exportPrefs.tiers ?? {}) } }
@@ -844,6 +954,11 @@ export class FactorySystem {
       this._needsUnsustainablePrune = false;
       this._pruneUnsustainableAllocations();
     }
+
+    // 217 — księga popytu zamówieniowego pogodzona z żywą listą zleceń ZANIM
+    // planista policzy popyt; inaczej pierwszy przebieg po wczytaniu zapisu
+    // widziałby pustą księgę (ścieżka (b) w `_reconcileOrderDemand`).
+    this._reconcileOrderDemand();
 
     // Auto-alokacja (priorytetowy/reaktywny) co interwał
     if (this._mode !== 'manual') {
@@ -1540,6 +1655,12 @@ export class FactorySystem {
     }
     // Ręczny bonus gracza też włącza commodity w safety scope (UI-facing)
     for (const id of this._demandBonus.keys()) localScope.add(id);
+    // 217 — a popyt ZAMÓWIENIOWY tak samo. ⚠ Bez tego towar, którego ta kolonia nigdy
+    // nie produkowała, miałby gap w księdze i mimo to NIE wszedłby do skanu — pull
+    // działałby wyłącznie dla towarów już raz wyprodukowanych, czyli przypadkiem.
+    for (const gaps of this._orderDemand.values()) {
+      for (const cid of Object.keys(gaps ?? {})) localScope.add(cid);
+    }
 
     for (const id of localScope) {
       const def = COMMODITIES[id];
