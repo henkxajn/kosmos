@@ -305,6 +305,22 @@ export const GAME_CONFIG = {
     //   Kill-switch: OFF = zachowanie 5C.1 (uniform fill, brak tri-state/pauzy).
     //   Default ON (live-gate). Save v99 bez bumpu (designation ?? 'active').
     popAllocation2Priority: true,
+    // ── S1 / Finding 229 — UNIFORM STAFFING DLA KOLONII AI ────────────────
+    //   Greedy fill 5C.2 napełnia budynki JEDEN PO DRUGIM do 100% w porządku
+    //   `designation:'priority'` → `activeKey` (czyli WSPÓŁRZĘDNE HEX). Gracz ma
+    //   czym ten porządek nadpisać (klik desygnacji w ColonyOverlay); AI NIE MA —
+    //   `setBuildingDesignation` ma dokładnie jednego producenta i jest nim mysz.
+    //   ZMIERZONE: farmy stolicy AI stoją na końcu kolejki laborera (8 etatów przed
+    //   pierwszą farmą), więc od gy3 mają obsadę 0% przy sześciu elektrowniach na
+    //   100% → stolica umiera z głodu, a razem z nią `avail`, kopalnie i oś Fe.
+    //   Pozycja farmy w kolejce zależy od ZIARNA GALAKTYKI (zmierzone 1..8 etatów
+    //   na czterech ziarnach) — czyli o przeżyciu stolicy decyduje generator mapy.
+    //   ON = kolonie AI liczą obsadę UNIFORM (formuła 5C.1: strataCount/humanDemand),
+    //   gracz zostaje na greedy + priorytet CO DO BITU. Termin własności przez
+    //   `systemBelongsToPlayer` (kanon, FAIL-OPEN → nierozwiązywalny właściciel =
+    //   greedy = dziś; chroni ~20 keeperów pinujących goły system).
+    //   OFF = zachowanie sprzed S1, co do bitu. Save v101 bez migracji.
+    aiUniformStaffing: true,
     // ── PopulationOverlay OFF (C7) — degate samodzielnego panelu Populacji ──
     //   Treść panelu przeniesiona do zakładki „Populacja" w prawym info-panelu
     //   ColonyOverlay (C5). Ten kill-switch odłącza STARY samodzielny overlay:

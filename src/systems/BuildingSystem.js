@@ -28,11 +28,11 @@ import { HexGrid }        from '../map/HexGrid.js';
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
 import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
+import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
 import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
 import { t, getName }      from '../i18n/i18n.js';
 import { envMultiplier, computeBuildResourceCost, computeBuildCommodityCost } from '../data/EnvironmentCost.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
-import { systemBelongsToPlayer } from '../utils/ColonyOwnership.js';
 import { BASE_MINE_RATE }  from '../data/ResourcesData.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
@@ -59,6 +59,10 @@ export class BuildingSystem {
 
     // Slice 5C.2: memo greedy-fill (activeKey → frakcja obsady), unieważniane w _reapplyAllRates.
     this._greedyStaffCache = null;
+    // S1 (229): memo odpowiedzi „czy ta kolonia jest GRACZA" — odświeżane RAZEM z `_greedyStaffCache`
+    // (patrz `_greedyApplies`), więc `systemBelongsToPlayer` (skan O(kolonie)) biegnie raz na
+    // generację cache, a nie raz na budynek.
+    this._greedyOwnerIsPlayer = undefined;
     // Slice 5C.2: czy MY spauzowaliśmy fabryki (priorytet+budowa) — nie nadpisuj ręcznego OFFLINE gracza.
     this._factoryPausedByPriority = false;
     this._pausingSelf = false;             // guard: własne setProductionEnabled ≠ zewnętrzny toggle gracza (review)
@@ -2294,6 +2298,34 @@ export class BuildingSystem {
     }
   }
 
+  /**
+   * S1 / Finding 229 — czy w TEJ koloni obowiązuje greedy fill (5C.2), czy uniform (5C.1).
+   *
+   * ⚠ TO NIE JEST BRAMKA INTENCJI ANI SYSTEMOWA — to TRZECIA kategoria: WYBÓR POLITYKI.
+   *   `ColonyOwnership` ostrzega, żeby nie doklejać terminu własności do bramek systemowych
+   *   (raportują FAKTY o związanej koloni — D2). Tu nie bramkujemy faktu: wybieramy model
+   *   obsady, a modele różnią się WŁAŚNIE tym, czy właściciel ma czym nadpisać kolejkę.
+   *   Greedy bez nadpisania to nie „inna polityka", tylko losowanie po współrzędnych hex.
+   *
+   * ⚠ FAIL-OPEN JEST WYMOGIEM, NIE OSTROŻNOŚCIĄ. `systemBelongsToPlayer` zwraca `true`, gdy
+   *   właściciela nie da się rozwiązać — a ~20 keeperów przypina GOŁY `BuildingSystem` do
+   *   `window.KOSMOS` bez koloni w rejestrze (`pop2_5c2` pinuje wprost greedy). Fail-closed
+   *   przewróciłby je wszystkie i zmienił zachowanie tam, gdzie defektu nie ma.
+   *
+   * ⚠ KADENCJA MEMO = kadencja `_greedyStaffCache` (unieważniany w 5 miejscach: budowa,
+   *   rozbiórka/downgrade, `_reapplyAllRates`, konstruktor). Przejęcie koloni zmienia
+   *   `ownerEmpireId` w miejscu, więc w najgorszym razie model obsady jest o JEDNĄ generację
+   *   cache spóźniony — niewidoczne, a alternatywą byłby skan po kolonach na każdy budynek.
+   */
+  _greedyApplies() {
+    if (GAME_CONFIG.FEATURES?.aiUniformStaffing !== true) return true;   // flaga OFF = 5C.2, co do bitu
+    if (this._greedyStaffCache === null) this._greedyOwnerIsPlayer = undefined;   // świeża generacja → przelicz
+    if (this._greedyOwnerIsPlayer === undefined) {
+      this._greedyOwnerIsPlayer = systemBelongsToPlayer(this, 'buildingSystem');
+    }
+    return this._greedyOwnerIsPlayer;
+  }
+
   /** Per-budynkowe labor efficiency oparte o matching strata type lub syntheticSlot */
   _getBuildingLaborEfficiency(building, tileKey = null) {
     if (!building || !this.civSystem?.strata) return 1.0;
@@ -2310,7 +2342,8 @@ export class BuildingSystem {
     // Slice 5C.2: within-stratum GREEDY fill (flag) — budynki tej straty napełniane po kolei do 100%
     // (priorytet najpierw, potem stabilny porządek) zamiast UNIFORM (każdy ×strataCount/humanDemand).
     // Suma obsadzonych etatów zachowana (tylko dystrybucja się zmienia). Flag OFF / brak tileKey = uniform (5C.1).
-    const gk = (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && tileKey) ? this._resolveActiveKey(tileKey) : null;
+    const gk = (GAME_CONFIG.FEATURES?.popAllocation2Priority === true && tileKey && this._greedyApplies())
+                 ? this._resolveActiveKey(tileKey) : null;
     const humanStaff = gk ? this._greedyStaffFor(gk)
                           : (humanDemand > 0 ? Math.min(1.0, strataCount / humanDemand) : 1.0);
 
