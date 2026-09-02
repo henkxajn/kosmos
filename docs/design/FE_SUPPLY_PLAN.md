@@ -840,3 +840,121 @@ z ULEPSZEŃ, nie z budowy.
 z tego **no-op od gy0** (Finding 231). S4 musi zacząć od pomiaru, nie od formuły.
 S4 nie naprawia też wariantu GRACZA tej pułapki (nie mierzone, czy gracz jest w stanie się w nią
 wpędzić, mając UI priorytetu).
+
+---
+
+## 13. S4 — BUDŻET PRACY EKSPANDERA. Podpisane D-S4-1/2/3, wdrożone 2026-09-02
+
+Audyt następczy po §12c. Reguła wejścia wykonana; framing właściciela **potwierdzony hashami
+i okazał się mocniejszy, niż brzmiał**.
+
+### 13.1 Framing — zweryfikowany hashem
+
+`ColonyAutoExpander` powstał **`e846f5a`, 2026-05-25**; cała jego logika budowy/ulepszania
+pochodzi z `2026-05-25 … 2026-05-30`. Population 2.0 Faza 2 to **`d95d9b8`, 2026-07-27**.
+Od czasu, gdy praca stała się dobrem rzadkim, plik tknęły **cztery** commity:
+
+| hash | data | logika budowy/ulepszania? |
+|---|---|---|
+| `d95d9b8` | 07-27 | **TAK — USUNĄŁ jedyny hamulec pracy** |
+| `d44af5e` | 08-28 | nie (cel zapasu tier 3+, Finding 182) |
+| `8226dcc` / `2edda19` | 09-01 | tak — `_feederTarget` + `_buildOrder`; połowa karmicielska to **udowodniony no-op** (231) |
+
+Usunięty hamulec, verbatim z `d95d9b8`:
+
+```diff
+-      const freePops      = civ.freePops ?? 0;
+-      const restFromBuilds =
+-        pendingBuilds >= MAX_PENDING_BUILDS_PER_COLONY ||
+-        (freePops <= 0 && pendingBuilds >= 1);
++      const restFromBuilds = pendingBuilds >= MAX_PENDING_BUILDS_PER_COLONY;
+```
+
+z uzasadnieniem *„budowa NIE wymaga wolnych POP (§3.4 płynna obsada) … alokacja dośle ludzi,
+a wzrost je zapełni"*. Uzasadnienie jest trafne co do AKTU budowy i opiera się na przesłance,
+którą **229 obaliło**: alokacja rzeczywiście dosyła ludzi — do tego, co sortuje się pierwsze
+po współrzędnej hex.
+
+⚠ **I był to WYŁĄCZNIE hamulec BUDOWY.** `git log -S '_upgrade' -- ColonyAutoExpander.js` zwraca
+same commity z 2026-05. **Ścieżka ULEPSZEŃ nie miała bramki pracy NIGDY** — a to ona jest pompą.
+
+### 13.2 Tabela — świeży boot na wariant, osobne procesy, S1 ON jako baza
+
+Nagłówek = gy pierwszego `kadlubaZeSkokiem`, dwa ziarna.
+
+| wariant | 1. kadłub (A / B) | dem@60 | farmy % | food@60 | Fe@60 | kol/plac | blokady bud./ulep. |
+|---|---|---|---|---|---|---|---|
+| **R0** | **BRAK / —** | 24 | 0 | 15 | 0 | 4/1 | — |
+| **S1** (baza) | 38 / 37 | 42 | 21 | 2 652 | 2 408 | 14/5 | — |
+| S4a `pop+2` | 22 / 29 | 42 | 21 | 3 754 | 7 329 | 12/5 | 24 / 1 064 |
+| S4a `pop×1,1` | 36 / — | 42 | 21 | 3 357 | 9 852 | 12/5 | 51 / 1 052 |
+| **S4a `workers+2`** ✅ | **21 / 21** | **11** | **82** | **10 189** | **43 168** | 11/5 | 879 / 3 569 |
+| S4a `workers+U+2` | 22 / — | 12 | 75 | 14 177 | 36 631 | 9/5 | 855 / 3 377 |
+| S4a „rośnij gdy pełna" | 26 / 22 | 10 | 90 | 4 569 | 33 248 | 13/5 | 1 636 / 7 576 |
+| **S4b** (cap L3) ❌ | **27 / 52** | 42 | 24 | 2 491 | 22 836 | 12/5 | 0 / 747 |
+
+**S4b zdyskwalifikowane WŁASNYMI liczbami:** na ziarnie B dało **gy 52 — GORZEJ niż nic** (S1 = 37),
+przy 10 zamówieniach wobec 14 i 2 kadłubach wobec 4. Jest ślepe na populację w OBIE strony: blokuje
+ulepszenia, które kolonia UDŹWIGNIE (kopalnia L5+ przy dostępnych górnikach), i nie blokuje **ani
+jednej** budowy.
+
+⚠ **Margines +2 wobec +10 % to WARIANCJA, nie ranking** (gy22 vs gy36 na tym samym ziarnie, różnica
+jednego etatu). Stabilny jest **ODCZYT**: `workers` bije `population` na obu ziarnach (21/21 wobec
+22/29). Dlatego D-S4-1 podpisuje ODCZYT, a margines bierze najprostszy z mierzonych.
+
+### 13.3 Pompa — potwierdzona liczbą, z korektą
+
+Blokady S4a rozkładają się na budowę/ulepszenie jak **879 / 3 569** dla podpisanego odczytu
+(`workers+2`) i **24 / 1 064** dla odczytu populacyjnego.
+
+⚠ **KOREKTA WOBEC ZLECENIA:** „~98 % blokad na ścieżce ulepszeń" to liczba odczytu **populacyjnego**
+(97,8 %). Dla **podpisanego** `workers+2` jest to **80,2 %** (ziarno B: 80,7 %). Wniosek właściciela
+stoi — ulepszenia dominują w każdym odczycie, w stosunku ok. **4:1** — ale wersja shipowana ma 80 %,
+nie 98 %, i tak jest to zapisane w kodzie.
+
+### 13.4 Decyzje
+
+* **D-S4-1 ✅** — S4a, odczyt `workers`, margines **+2**. Stała `LABOR_BUDGET_MARGIN = 2`
+  (jedno miejsce do strojenia, pinowane źródłowo). Flaga `FEATURES.aiLaborBudget` (ON;
+  OFF = zachowanie sprzed S4, co do bitu). Save v101 bez migracji, zero kluczy i18n.
+* **D-S4-2 ✅** — **zamrożony sektor laborera PRZYJĘTY przy tej skali**, bez członu wzrostu.
+  Podstawy z pomiaru: 11 job-units żywi i zasila stolicę 47-pop; kontrola Sargas pokazuje
+  2 obsadzone farmy żywiące 103 pop; a próba „rośnij gdy pełna obsada" **zamroziła sufit NIŻEJ**
+  (10) — kolejny wymyślony człon to pułapka strażnik-zamiast-lekarstwa. Zamiast członu →
+  **TRIPWIRE, Finding 237**.
+* **D-S4-3 ✅** — warunek TWARDY spełniony PRZED dotknięciem pliku: keeper regresyjny ekspandera
+  wszedł do sweepu (`2043a48`), sweep 198 → 199. **Straż udowodniona wykonaniem**: przy fladze ON
+  piny E/F tego keepera padają (17/2), przy OFF przechodzą (19/0) — czyli sweep realnie pilnuje
+  ścieżki, którą S4 modyfikuje.
+* **S4b ❌ zdyskwalifikowane** (13.2). **S4c → file, don't design** (Finding 235).
+
+### 13.5 Czego S4 NIE dotyka — i to jest strukturalne
+
+`ColonyAutoExpander._managedColonies()` odsiewa `ownerEmpireId == null` (kolonie GRACZA)
+i `isOutpost`. **S4 jest AI-only Z KONSTRUKCJI i nie potrzebuje terminu własności** — inaczej niż
+S1, gdzie trzeba go było dopisać ręcznie. Wyjaśnia to również, dlaczego liczba placówek (kontrola
+`d44af5e`) jest identyczna we WSZYSTKICH wariantach (5). Pinowane: `colony_auto_expander_smoke` A-D.
+
+⚠ **Housing poza regułą:** `habitat.jobs === 0` (jawnie w `BuildingsData` — `popCost > 0` powodował
+deadlock housing-capu), więc budżet go nie widzi i wzrost populacji zostaje wolny. Pin T5.
+
+### 13.6 Dowód na żywych flagach (harness, po commicie)
+
+| wariant | 1. kadłub | pop@60 | lab/dem | farmy % | food | avail | Fe | kadłuby | zamówienia |
+|---|---|---|---|---|---|---|---|---|---|
+| R0 (obie flagi OFF) | **BRAK** | 4 | 0/27 | 0/0 | 15 | 0,00 | 0 | 0 | 6 |
+| S1 | 38 | 37 | 9/42 | 21/21 | 2 652 | 1,00 | 2 408 | 2 | 16 |
+| **S1 + S4a** | **21** | **47** | 9/11 | **82/82** | **10 189** | 0,91 | **43 168** | **6** | 21 |
+| S1 (ziarno B) | 37 | 51 | 9/42 | 21/21 | 1 242 | 0,75 | 18 006 | 4 | 14 |
+| **S1 + S4a (B)** | **21** | **61** | 9/11 | **82/82** | **8 812** | 0,61 | **45 152** | **6** | 17 |
+
+⚠ **`avail` schodzi do 0,61-0,91 przy S4a** — kolonia jest gęstsza i energia jest ciaśniejsza niż
+przy S1 samym (1,00). Nie blokuje niczego w 60 gy, ale to jedyna metryka, na której S4a wypada
+gorzej od bazy, i należy ją obserwować na live-gate.
+
+### 13.7 Granice dowodu
+
+Wszystko powyżej to **harness**, dwa ziarna, 60 gy, z jednakowym zastrzykiem presji produkcyjnej
+(`queueWarships` co 5 gy, `frigate_laser_escort`). Live-gate na ŚWIEŻEJ kampanii — bieżący zapis
+nie ma żyjącej stolicy zdolnej do Nt. Nie nazywać S4a potwierdzonym, dopóki live nie pokaże
+`kadlubyZeSkokiem` ≥ 1 z realnej produkcji.
