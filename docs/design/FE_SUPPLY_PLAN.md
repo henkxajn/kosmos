@@ -78,6 +78,20 @@ wycenić osobno, nie zlać w jedną naprawę.
 
 ## 2. TRZY PRZEBIEGI — oś główna wychodzi z TABELI, nie z rozumowania
 
+> 🔴 **DOWODY SKAŻONE — CAŁA TA SEKCJA JEST WSTRZYMANA DO CZASU S1 (audyt §12a, 2026-09-02).**
+> R1 i R2 były mierzone na stolicy, która **umiera z głodu w gy4-8**: od gy8 `avail = 0`, więc
+> kopalnie nie wydobywają, fabryka nie akumuluje postępu, a Fe stoi na zerze **niezależnie od
+> tego, co zrobi kurier**. „Cisza R1/R2" nie znaczy „ta zmiana nie działa" — znaczy „nie było
+> czego wozić i nie było komu tego przyjąć".
+> ZMIERZONE (`DirectorHarness`, gy30, ta sama stolica): **R0 → pop 6, `avail` 0,00, poziom
+> kopalni 1, statków 6** wobec **S1 → pop 28, `avail` 1,00, poziom kopalni 3,2, statków 12**.
+> Pod S1 pojawiają się nawet międzyukładowe misje `logistics`, których w R0 nie ma ANI JEDNEJ.
+> ⇒ **R1/R2 do ponownego pomiaru na ŻYWEJ stolicy, po S1.** Wyniki sprzed tej daty są
+> nierozstrzygające i nie wolno ich cytować jako obalenia W4 ani 223/224.
+> ⚠ To ta sama klasa co **228** (skażony przyrząd), tylko o piętro wyżej: tam przyrząd mieszał
+> dwa światy, tu przyrząd mierzył świat, który sam się zawalił.
+
+
 Każdy na `GATE-Fe-gy40`, ten sam horyzont, **identyczne metryki**:
 
 | | **R1** | **R2** | **R3** |
@@ -563,11 +577,28 @@ zostały wycenione, ale żadna nie adresuje tego, co pęka jako pierwsze.
   obsadzalnego** (podpisany warunek: karmiciel niesie `popCost` jak elektrownia). ⚠ **Połowa
   karmicielska jest nadal BEZCZYNNA** w kryzysie, bo przy `laborer = 0` cap daje stan bieżący.
   **Zmierzone WYŁĄCZNIE na czystym harnessie** — brak potwierdzenia z żywego silnika.
+  > 🔴 **SPROSTOWANIE 2026-09-02 (Finding 231):** „bezczynna **w kryzysie**" jest ZA SŁABE —
+  > pomiar per-gy mówi **bezczynna ZAWSZE**: `_feederTarget(farm)` = **2 przy każdym gy 0→10**,
+  > identycznie ze statycznym celem. `wolneRece` = 0 od gy1 na zawsze, więc cap obsadzalności
+  > zwraca stan bieżący; w gy0 sam `potrzeba` wychodzi 2. ⚠ Cap był **podpisanym warunkiem
+  > właściciela** — przesłanka poprawna (bez niego 226 wraca drzwiami żywnościowymi), skutek
+  > odwrotny do zamierzonego. **Ta sama klasa co tabela z dwóch bootów (228): decyzja może być
+  > dobrze uzasadniona i mimo to być cichym no-opem — i w obu razach wykrył to POMIAR, nie przegląd.**
+  > ⚠ I tak by nie pomogło: obie ISTNIEJĄCE farmy stały na obsadzie 0 % (**229**).
 
 **Przewidywanie falsyfikowalne — na protokół, przed żywą tabelą:**
 > Metryką rozstrzygającą dla gy-30 jest **`strata.laborer` w stolicy, NIE `solar`.**
 > Są robotnicy ⇒ R4 pokaże realny efekt. `laborer = 0` ⇒ R4 zamilknie dokładnie jak na harnessie
 > (rozbieżność wyłącznie w liczbie elektrowni).
+
+> 🔴 **PRZEWIDYWANIE ZREWIDOWANE 2026-09-02 (audyt §12a).** Powyższe jest **KONIECZNE, ale
+> NIEWYSTARCZAJĄCE**: w gy5 zmierzono `laborer = 5` (NIEZEROWE!) przy **obu farmach na 0 %**.
+> Pin na liczbie robotników świeciłby wtedy zielono dokładnie w chwili śmierci koloni.
+> **Metryką rozstrzygającą jest OBSADA FARMY W PROCENTACH** (`_buildGreedyStaffCache` dla kafla
+> farmy) **plus liczba etatów laborera stojących PRZED pierwszą farmą w porządku `activeKey`**.
+> Jeśli żywe farmy czytają 0 % przy `laborer > 0` — **229/230 potwierdzone na żywym silniku**.
+> Jeśli żywe farmy czytają > 0 %, a żywność i tak siada — **229 jest BŁĘDNE** i przyczyna leży
+> gdzie indziej.
 
 **Wdrożone i zacommitowane w tym slice'ie:**
 
@@ -617,3 +648,195 @@ Kolumny R0/R4 w jednym procesie są **teraz dozwolone** — pin **T7** jest tego
 Kryterium bramki: **`kadlubyZeSkokiem` 0 → ≥1 z REALNEJ produkcji na żywym zapisie**
 (nie z `spawn*`, nie z `force*`).
 
+
+---
+
+## 12a. AUDYT (a) WYKONANY — KRACH ŻYWNOŚCIOWY. Wiążący defekt: KOLEJNOŚĆ OBSADY, nie alokacja
+
+Data: 2026-09-02. Reguła wejścia wykonana (`git log -S '_allocateWorkforce'` → alokacja przepisana
+DWA razy po Fazie 3: `82458aa` 5C.1, `0e34b2c` 5C.2 — **opis w `CLAUDE.md` „Etap 1 pressure-desc"
+jest NIEAKTUALNY**; keepery zielone PRZED czytaniem: `director_harness` 20/20 z pinem izolacji bootu,
+`fe_supply` 21, `ai_pop_gates` 22, `pop2_employment` 52, `pop2_5c1` 43, `pop2_5c2` 64,
+`energy_brownout_gate` 32, `director_ai_production` 32).
+
+### 12a.1 Tabela — stolica `Thuban b` (emp_001), KSIĘGA zarejestrowana, nie przeliczenie
+
+| gy | pop | lab/dem | *uniform-equiv* | farma `6,3` | farma `7,2` | prod | kons | bilans | zapas | etaty solar/well/farm |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 24 | 12/10 | 1,00 | L1 j=1 **100 %** | L1 j=1 **100 %** | 32,6 | −15,0 | **+17,6** | 250 | 6 / 2 / 2 |
+| 1 | 21 | 10/10 | 1,00 | L1 j=1 100 % | L1 j=1 100 % | 32,6 | −13,1 | +19,4 | 218 | 6 / 2 / 2 |
+| 2 | 23 | 9/12 | 0,75 | L1 j=1 100 % | **L3 j=3 → 0 %** | 17,9 | −14,4 | +3,5 | 296 | 6 / 2 / 4 |
+| 3 | 20 | 6/16 | 0,38 | **L3 j=3 → 0 %** | L3 j=3 0 % | 3,2 | −12,5 | **−9,3** | 12 | 6 / 4 / 6 |
+| 4 | 20 | 5/20 | 0,25 | 0 % | 0 % | 3,0 | −12,5 | −9,5 | **0** | 8 / 6 / 6 |
+| 5 | 19 | 5/24 | 0,21 | 0 % | 0 % | 3,0 | −11,9 | −8,9 | 0 | 12 / 6 / 6 |
+| 6 | 17 | 3/24 | 0,13 | 0 % | 0 % | 3,0 | −10,6 | −7,6 | 0 | 12 / 6 / 6 |
+| 7 | 17 | 2/24 | 0,08 | 0 % | 0 % | 3,0 | −10,6 | −7,6 | 0 | 12 / 6 / 6 |
+| 8 | 16 | **0**/24 | 0,00 | 0 % | 0 % | 2,4 | −10,0 | −7,6 | 0 | 12 / 6 / 6 |
+| 9 | 14 | 0/24 | 0,00 | 0 % | 0 % | 2,4 | −8,8 | −6,3 | 0 | 12 / 6 / 6 |
+| 10 | 12 | 0/24 | 0,00 | 0 % | 0 % | 2,4 | −7,5 | −5,1 | 0 | 12 / 6 / 6 |
+
+Od gy3 JEDYNYM producentem żywności jest `colony_base` (autonomiczny, `jobs = 0`, więc odporny).
+Obie farmy są **wyrejestrowane jako producenci** — ich stawka efektywna to zero.
+
+### 12a.2 Mechanizm — inny niż wszyscy czterej podejrzani z §12(a)
+
+* `farm.popType = 'laborer'` — **ta sama warstwa co `solar_farm`, `well` i `habitat`**. To NIGDY nie
+  było pytanie o ranking MIĘDZY warstwami; konkurencja jest WEWNĄTRZ jednej warstwy.
+* Przy `popAllocation2Priority: true` obsadę liczy `_buildGreedyStaffCache` (`BuildingSystem:2190`):
+  budynki napełniane **do 100 %, jeden po drugim**, w porządku `designation:'priority'` → **sort
+  stringa `activeKey`**, czyli **WSPÓŁRZĘDNE HEX**.
+* Zmierzona kolejka: `0,3 0,4 2,5 2,6 3,5 4,4` (sześć elektrowni) → `5,3 5,4` (dwie studnie) →
+  **`6,3 7,2` (obie farmy, na samym końcu)**. **8 etatów stoi przed pierwszą farmą.**
+* Jedynym produkcyjnym pisarzem `designation` jest `ColonyOverlay:4979` — **klik myszy gracza**.
+  **AI nie może ustawić `priority` NIGDY.** Mechanizm, który naprawiłby kolejność, istnieje
+  i jest dla AI strukturalnie nieosiągalny.
+
+**Ciosem kończącym jest samo ULEPSZENIE.** `getSlotDemand` liczy `entry.jobs × entry.level`. W gy2
+auto-ekspander podnosi farmę `7,2` z L1 na L3: wymaganie rośnie 1 → 3, farma wypada za koniec kolejki
+i **jej całe 14,70 food/civY znika w tej samej chwili** (prod 32,6 → 17,9 = dokładnie jedna farma).
+W gy3 to samo spotyka farmę `6,3`. Liczba farm nie zmienia się ani razu — stoi na 2.
+
+⚠ **Arytmetyka ulepszenia pod greedy (wyszła dopiero z keepera, nie z rozumowania):**
+`base × level × (share / (jobs × level))` skraca się do `base × share` ⇒ **ulepszenie jest
+w najlepszym razie NEUTRALNE** (potrojenie nominału nie kupuje ani jednej jednostki żywności),
+a zerem kończy się przy JEDNYM robotniku mniej. Pinuje to `ai_uniform_staffing_smoke` T5b/T5c.
+
+**O wyniku decydują WSPÓŁRZĘDNE.** Ten sam kod, ten sam archetyp, ta sama populacja, cztery ziarna:
+
+| ziarno | stolica | etaty przed 1. farmą | food/rok @gy4 | los |
+|---|---|---|---|---|
+| `HEADLESS_GALAXY_SEED` | Thuban b | **8** | −9,5 | głód |
+| 424242 | Hadar c | 6 | +1,6 | na styk |
+| 7 | Izar b | 4 | −10,6 | głód |
+| 99991 | Betelgeza c | **1** | **+48,5** | kwitnie (zapas 946) |
+
+### 12a.3 Odpowiedzi na cztery pytania §12(a)
+
+1. **Priorytet obsady w `_allocateWorkforce` — HIPOTEZA OBALONA.** Nie ma ŻADNEJ reguły
+   „karmiciele najpierw", ale to nieistotne: w gy0-1 laborer 12 wobec popytu 10, `eff` 1,00 —
+   alokacja **w ogóle nie jest napięta**. Zabija konkurencja WEWNĄTRZ warstwy.
+   (Przy okazji, do rejestru: `_allocateStage1Economic` robi snapshot pressure/płacy PRZED pętlą
+   i **nigdy go nie odświeża**, więc zwycięska warstwa wysysa bezrobotnych do wyczerpania swoich
+   etatów, zanim ruszy następna. Tu bez skutku — warstwa jest jedna.)
+2. **Realne wyjście farmy** — zarejestrowane **14,70 food/civY** na farmę L1 (nominał 10 × 1,47
+   z adjacency + lojalności). Po ulepszeniu na L3: **0**. Nie „mniej" — zero.
+3. **Model konsumpcji — HIPOTEZA ×4 OBALONA.** Księga: `civilization_consumption.food = −15,00`
+   przy pop 24, czyli **dokładnie 24 × 0,625 jednostek POP**. Zagadka „+17,6 wobec 15" domyka się
+   co do cyfry: `3,15 (colony_base) + 14,70 + 14,70 = 32,55`, minus 15,00 = **17,55**, i tyle
+   pokazuje `_inventoryPerYear.food`. **„~65-68 mieszkańców" z Findingu 216 to POMYŁKA ETYKIETY,
+   nie defekt jednostek** — `40,8 / 0,625 ≈ 65` liczy **jednostki POP**; 216 sam pisze, że tamta
+   stolica była „dwukrotnie ponad progiem 32". Dren recepturowy (**220**, ×5 w `civilization_boosted`
+   — harness potwierdza ten scenariusz) zmierzony: **55 food / 60 water przez 10 gy**, ok. 4 %
+   konsumpcji. Realny, ale nie on rządzi.
+4. **`_feederTarget` — POTWIERDZONY, MOCNIEJ NIŻ ZAPISANO** → Finding **231**.
+
+### 12a.4 Cztery przebiegi kontrolne — który mechanizm jest WIĄŻĄCY
+
+| wariant | pop @gy20 | zapas food | `avail` @gy8+ | werdykt |
+|---|---|---|---|---|
+| **R0** (dziś) | 6 | 0 | 0,00 | umiera |
+| **CF_NOCOLONY** (blokada `_executeFullColony` — bez −8 laborerów i −400 food) | 8 | 0 | 0,00 | **i tak umiera**, tylko później (−14,3 food/rok już w gy4) |
+| **CF_NOR4** (`aiScaleBasicInfra` OFF) | 6 | 0 | 0,00 | **identyczny z R0** do gy6; różnica wyłącznie w liczbie elektrowni (36 vs 24) |
+| **CF_UNIFORM** (`popAllocation2Priority` OFF → obsada uniform) | **22** | **1831** | **1,00** | **przeżywa na OBU osiach** |
+
+**KONTROLA PINU (dlaczego CF_UNIFORM izoluje właśnie kolejność):** każda POZOSTAŁA gałąź bramkowana
+`popAllocation2Priority` zależy od `designation ∈ {paused, priority}` (`_isEntryPaused`,
+`getPriorityHumanJobs`, bump w `_effectiveTargetShare`, `_updateFactoryPause`, gałąź paused
+w `_applyTechMultipliers`, `setBuildingDesignation`), a `designation` koloni AI jest ZAWSZE `'active'`,
+bo jedynym pisarzem jest mysz gracza. ⇒ **dla koloni AI jedynym efektem tej flagi jest
+greedy-vs-uniform.**
+
+**Przewidywanie falsyfikowalne z 2026-09-01 POTWIERDZONE:** CF_NOR4 ≡ R0, R4 milczy, różnica tylko
+w liczbie elektrowni. **R4 jest strażnikiem, nie lekarstwem** — tak, jak zapisano.
+
+---
+
+## 12b. S1 — PODPISANE (2026-09-02) i WDROŻONE. Trzy warunki właściciela
+
+**Kształt:** kolonie AI liczą obsadę **UNIFORM** (formuła 5C.1 `strataCount / humanDemand`); gracz
+zostaje na **greedy + priorytet CO DO BITU**. Jedna zmiana logiki: `BuildingSystem._greedyApplies()`
+w warunku `gk` w `_getBuildingLaborEfficiency`. Termin własności przez **`systemBelongsToPlayer`**
+(kanon `ColonyOwnership`, **FAIL-OPEN**). Flaga **`FEATURES.aiUniformStaffing`** (default ON),
+**OFF = zachowanie sprzed S1 co do bitu**. Save **v101 bez migracji**, zero nowych kluczy i18n.
+
+⚠ **TO TRZECIA KATEGORIA UŻYCIA KANONU, i jest to nazwane w kodzie.** `ColonyOwnership` ostrzega,
+by nie doklejać terminu własności do bramek SYSTEMOWYCH (raportują FAKTY o związanej koloni — D2).
+Tu nie bramkujemy faktu — **wybieramy politykę**, a polityki różnią się właśnie tym, czy właściciel
+ma czym nadpisać kolejkę. Greedy bez nadpisania to nie „inna polityka", tylko losowanie po hexach.
+
+⚠ **FAIL-OPEN JEST WYMOGIEM.** Nierozwiązywalny właściciel ⇒ greedy ⇒ dzisiaj. Około dwudziestu
+keeperów przypina GOŁY `BuildingSystem` do `window.KOSMOS` bez koloni w rejestrze (`pop2_5c2`
+pinuje greedy WPROST). Fail-closed przewróciłby je wszystkie.
+
+⚠ **KADENCJA MEMO** = kadencja `_greedyStaffCache` (5 miejsc unieważnienia), więc
+`systemBelongsToPlayer` (skan O(kolonie)) biegnie raz na generację cache, nie raz na budynek.
+Po przejęciu koloni model obsady jest najwyżej o JEDNĄ generację spóźniony.
+
+### Warunek 1 — pomiar REALNEJ bramki AI-only, osobno (wykonany)
+
+⚠ CF_UNIFORM był przebiegiem z flagą GLOBALNĄ (zmieniał też kolonię GRACZA), więc **nie był
+dowodem na bramkę**. Osobny przebieg z `aiUniformStaffing`, `DirectorHarness`, gy0-30:
+
+| @gy30 | S1_OFF | S1_ON |
+|---|---|---|
+| `_greedyApplies()` gracz (`Capital`) | **true** | **true** |
+| `_greedyApplies()` AI (`Thuban b`) | **true** | **false** |
+| pop stolicy AI | 6 | **28** |
+| obsada farm `7,2` / `6,3` | **0 % / 0 %** | **23 % / 23 %** |
+| food/rok · zapas | −0,8 · 20 | **+6,0 · 2456** |
+| `avail` | **0,00** | **1,00** |
+| poziom kopalni | 1 | **3,2** |
+| zamówione statki | 6 | **12** |
+
+⚠ Liczby S1_ON różnią się od CF_UNIFORM (pop 28 vs 22, statki 12 vs 10) i **tak ma być**:
+CF_UNIFORM zmieniał także kolonię gracza, czyli inny świat. Bramka AI-only jest mierzona osobno
+i wypada **nie gorzej**.
+
+### Warunek 2 — własna flaga (wykonany)
+`FEATURES.aiUniformStaffing`, default ON. OFF = 5C.2 co do bitu — pinuje **T6** (przy fladze OFF
+kolonia AI i kolonia gracza dają IDENTYCZNE liczby).
+
+### Warunek 3 — keeper wg ZREWIDOWANEGO przewidywania (wykonany)
+`src/testing/smoke/ai_uniform_staffing_smoke.mjs` — **21/21**, fail-first **16/5**.
+
+⚠ **Pinuje OBSADĘ FARMY W PROCENTACH**, nie liczbę farm i nie `strata.laborer`: w gy5
+`laborer = 5` (NIEZEROWE), a obie farmy stały na 0 % — pin na robotnikach świeciłby zielono
+dokładnie w chwili śmierci koloni.
+⚠ **NIEJAŁOWOŚĆ (T1)** — fixture MUSI postawić farmę za ≥ 6 etatami w porządku `activeKey`
+**i** dać pulę mniejszą od tej liczby; inaczej T2/T3 porównują 100 % ze 100 %.
+Pozostałe: **T2** defekt (0 % przy elektrowniach na 100 %) · **T3** naprawa (= uniform) ·
+**T4** gracz co do bitu, z priorytetem dalej przestawiającym kolejkę · **T5** Finding 230 ·
+**T6** kontrola pinu · **T7** fail-open · **T8** kadencja memo.
+⚠ Dwie asercje T4d/T5b padły w pierwszym przebiegu **na własnej arytmetyce fixture'u**, nie na
+kodzie gry — i to one wyprodukowały ustalenie „ulepszenie jest neutralne, nie ujemne" (12a.2).
+
+Sweep **198/198 OK, 0 FAIL** · `check-i18n` PASS.
+
+### Co świadomie NIE wchodzi
+
+* **S2 (kolejność „karmiciele najpierw" wewnątrz greedy) — ODRZUCONE POMIAREM.** Przebieg
+  FOODFIRST: żywność rozwiązana wzorowo (zapas 4448 @gy20, pop 24), ale **`avail` 0,00 od gy3** —
+  głoduje ENERGIA, kopalnie i fabryki stają, oś Fe dalej martwa. Każdy STATYCZNY porządek tylko
+  przenosi ofiarę; warstwa jest przepisana 2-4×, a kolejność nie tworzy ludzi.
+* **S3 (AI ustawia `designation:'priority'`)** — to S2 innymi drzwiami (priorytet = przestawienie
+  kolejki), PLUS uzbraja `_updateFactoryPause` (priorytet + kolejka budowy → pauza fabryk AI),
+  czyli dodatkowa, niezmierzona zmiana zachowania. Sensowne tylko jako DYNAMICZNY sterownik.
+* **S4 — NASTĘPNY AUDYT, PO LIVE-GATE (nie teraz).** Patrz §12c.
+* **232 zaparkowane przy rezerwie 4** — akcelerant, nie defekt wiążący (CF_NOCOLONY i tak umiera).
+
+---
+
+## 12c. S4 — NASTĘPNY AUDYT (po live-gate S1), NIE TERAZ
+
+**Teza:** popyt na laborera jest strukturalnie **2-4× większy od puli** (10 → 24 przy ZERO nowych
+budynków; 36 przy R4 OFF), a pula szczytuje na 12. `ColonyAutoExpander` nie ma **budżetu pracy**.
+
+⚠ **ŚCIEŻKA ULEPSZEŃ NIE MA DZIŚ ŻADNEJ BRAMKI.** Bramka z **226** ogranicza LICZBĘ elektrowni,
+nie ich POZIOM, a `getSlotDemand` liczy `jobs × level` — więc każde ulepszenie mnoży wymaganie
+pracy i **żaden strażnik tego nie widzi**. Cały wzrost popytu 10 → 24 w tabeli 12a.1 pochodzi
+z ULEPSZEŃ, nie z budowy.
+
+⚠ **Ryzyko powtórki:** 225 było już próbą tej klasy („cap do poziomu obsadzalnego") i wyszedł
+z tego **no-op od gy0** (Finding 231). S4 musi zacząć od pomiaru, nie od formuły.
+S4 nie naprawia też wariantu GRACZA tej pułapki (nie mierzone, czy gracz jest w stanie się w nią
+wpędzić, mając UI priorytetu).
