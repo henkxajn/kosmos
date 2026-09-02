@@ -110,6 +110,8 @@ const STAFFING_CRITICAL = 0.35;
 // 225 — podloga obsady w liczeniu REALNEJ wydajnosci karmiciela. Bez niej przy obsadzie ~0
 // cel wychodzilby w nieskonczonosc; z nia cap obsadzalnosci i tak go przycina.
 const FEEDER_STAFFING_FLOOR = 0.25;
+// S4a (D-S4-1): margines budżetu pracy — ile job-units wolno mieć PONAD pracowników warstwy.
+const LABOR_BUDGET_MARGIN = 2;
 
 const WEALTH_ORES      = ['Fe', 'Si', 'Cu', 'C'];
 const WEALTH_THRESHOLD = 20000;   // jednostki rudy, KAZDA z WEALTH_ORES osobno
@@ -645,7 +647,47 @@ export class ColonyAutoExpander {
   //   'fail'    — _build silent-failował (brak techu/walidacji — nie zmienił tile)
   //   'no_tile' — brak wolnego hexa pasującego regule terenu
   //   'invalid' — nieznany building lub brak _build
+  /**
+   * S4a / Finding 233 — BUDŻET PRACY (D-S4-1, podpisane 2026-09-02: odczyt „workers", margines +2).
+   *
+   * Nie buduj i nie ulepszaj, jeśli WYNIKOWE job-units tej warstwy (`getSlotDemand` liczy
+   * `jobs × level`) przekroczyłyby liczbę pracowników TEJ WARSTWY + `LABOR_BUDGET_MARGIN`.
+   *
+   * ⚠ ODCZYT „WORKERS", NIE „POPULATION" — wybrany TABELĄ, nie instynktem. Budżet wobec całej
+   *   populacji (`pop+2` / `pop×1.1`) dawał pierwszy kadłub w gy22/gy29 przy 3:1 przepisaniu
+   *   warstwy; budżet wobec pracowników warstwy dał gy21/gy21 na OBU ziarnach, popyt 42→11,
+   *   obsadę farm 21%→82% i Fe 2 408→43 168. Margines +2 i +10% różnią się o jeden etat i dają
+   *   gy22 vs gy36 na tym samym ziarnie — to WARIANCJA, nie ranking; stabilny jest ODCZYT.
+   *
+   * ⚠ ŚWIADOMY SUFIT (D-S4-2): pracownicy warstwy pojawiają się tylko tam, gdzie są etaty, więc
+   *   `workers + 2` jest sufitem SAMOSPEŁNIAJĄCYM — warstwa laborer stoi na ~11 job-units mimo
+   *   potrojenia populacji. PRZYJĘTE przy tej skali (11 job-units żywi i zasila stolicę 47-pop;
+   *   kontrola Sargas: 2 obsadzone farmy żywią 103 pop). Próba „rośnij gdy pełna obsada" zamroziła
+   *   sufit NIŻEJ (10) — kolejny wymyślony człon to pułapka strażnik-zamiast-lekarstwa. TRIPWIRE
+   *   w rejestrze (Finding 237): wrócić, gdy stolice AI zbliżą się do ~100 pop albo gdy otworzy
+   *   się gałąź cywilna techu.
+   *
+   * ⚠ HOUSING NIGDY NIE BRAMKOWANY: `habitat.jobs === 0` (jawnie, `BuildingsData` — `popCost>0`
+   *   powodował deadlock housing-capu), więc reguła go nie widzi i wzrost populacji zostaje wolny.
+   * ⚠ TO NIE JEST LEKARSTWO: przy `workers = 0` budżet wynosi 2 i kolonia nie odbuduje się sama —
+   *   popyt AI jest monotonicznie niemalejący (Finding 235, brak zdejmowania). ZMIERZONE: S4a bez
+   *   S1 nie ratuje niczego (pop 4, obsada farm 0%, zero kadłubów w 60 gy). Lekarstwem jest S1.
+   */
+  _overLaborBudget(colony, buildingId) {
+    if (GAME_CONFIG.FEATURES?.aiLaborBudget !== true) return false;   // flaga OFF = zachowanie sprzed S4
+    const def = BUILDINGS[buildingId];
+    if (!def) return false;
+    const jobs = def.jobs ?? 0;
+    if (jobs <= 0) return false;                       // habitat i budynki autonomiczne — poza regułą
+    const bSys = colony.buildingSystem, civ = colony.civSystem;
+    if (!bSys?.getSlotDemand || !civ?.strata) return false;   // fail-open: nierozpoznany kształt koloni
+    const strataType = def.popType ?? 'laborer';
+    const workers = civ.strata[strataType]?.count ?? 0;
+    return (bSys.getSlotDemand(strataType) + jobs) > (workers + LABOR_BUDGET_MARGIN);
+  }
+
   _tryBuild(colony, buildingId, meta = {}) {
+    if (this._overLaborBudget(colony, buildingId)) return 'no_labor';   // S4a — bez backoffu, próbuj następny
     if (!BUILDINGS[buildingId]) return 'invalid';
     const bSys = colony.buildingSystem;
     if (typeof bSys?._build !== 'function') return 'invalid';
@@ -685,6 +727,7 @@ export class ColonyAutoExpander {
   //   'fail'         — _upgrade silent-failował (brak techu/maxLevel — bez zmiany tile)
   //   'no_candidate' — brak budynku tego typu poniżej docelowego poziomu
   _tryUpgrade(colony, buildingId, targetLevel, meta = {}) {
+    if (this._overLaborBudget(colony, buildingId)) return 'no_labor';   // S4a — ULEPSZENIE to ~98% blokad
     const bSys = colony.buildingSystem;
     if (typeof bSys?._upgrade !== 'function') return 'no_candidate';
     const grid = bSys._grid;

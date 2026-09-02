@@ -321,6 +321,21 @@ export const GAME_CONFIG = {
     //   greedy = dziś; chroni ~20 keeperów pinujących goły system).
     //   OFF = zachowanie sprzed S1, co do bitu. Save v101 bez migracji.
     aiUniformStaffing: true,
+    // ── S4a / Finding 233 — BUDŻET PRACY EKSPANDERA (D-S4-1) ──────────────
+    //   `ColonyAutoExpander` nie miał ŻADNEGO budżetu pracy: jedyny hamulec
+    //   (`freePops <= 0`) był BUDOWLANY i został usunięty w `d95d9b8` (Population
+    //   2.0 Faza 2), a ścieżka ULEPSZEŃ nie miała go NIGDY — mimo że `getSlotDemand`
+    //   liczy `jobs × level`, więc samo ulepszenie mnoży wymaganie pracy.
+    //   ZMIERZONE: popyt 10 → 24 przy ZERO nowych budynków, przy puli robotników 12.
+    //   ON = nie buduj/nie ulepszaj, jeśli wynikowe job-units warstwy przekroczą
+    //   pracowników TEJ warstwy + 2. Odczyt „workers" i margines +2 wybrane TABELĄ
+    //   (pierwszy kadłub gy21/gy21 na obu ziarnach wobec gy38/gy37 bez budżetu;
+    //   Fe 2 408 → 43 168; obsada farm 21 % → 82 %). Habitat (jobs=0) poza regułą.
+    //   ⚠ AI-only Z KONSTRUKCJI: `_managedColonies` odsiewa kolonie gracza
+    //   (`ownerEmpireId == null`) i placówki — bez terminu własności.
+    //   ⚠ NIE JEST LEKARSTWEM na 229: bez `aiUniformStaffing` nie ratuje niczego.
+    //   OFF = zachowanie sprzed S4, co do bitu. Save v101 bez migracji.
+    aiLaborBudget: true,
     // ── PopulationOverlay OFF (C7) — degate samodzielnego panelu Populacji ──
     //   Treść panelu przeniesiona do zakładki „Populacja" w prawym info-panelu
     //   ColonyOverlay (C5). Ten kill-switch odłącza STARY samodzielny overlay:
