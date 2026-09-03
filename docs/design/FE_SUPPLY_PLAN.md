@@ -958,3 +958,146 @@ Wszystko powyżej to **harness**, dwa ziarna, 60 gy, z jednakowym zastrzykiem pr
 (`queueWarships` co 5 gy, `frigate_laser_escort`). Live-gate na ŚWIEŻEJ kampanii — bieżący zapis
 nie ma żyjącej stolicy zdolnej do Nt. Nie nazywać S4a potwierdzonym, dopóki live nie pokaże
 `kadlubyZeSkokiem` ≥ 1 z realnej produkcji.
+
+---
+
+## 14. GATE-S4-fresh — ŻYWY PRZEBIEG gy 0→60. **S1 + S4a POTWIERDZONE, ŁUK GŁODOWY ZAMKNIĘTY**
+
+Data: **2026-09-03**. Przebieg właściciela: **świeża kampania**, jedna sesja, **gy 0 → 60**,
+komplet flag ON, **pokój przez cały przebieg**. Zapis: **`GATE-S4-fresh-gy60`**.
+
+### 14.0 ⚠ Protokół tego gate'u NIE ISTNIAŁ NA DYSKU — §14 odtwarza go z raportu
+
+`grep` po repo jest czysty: hipotez **H1-H4 nie ma w żadnym pliku**. Protokół powstał *w odpowiedzi*
+poprzedniej sesji i przeżył wyłącznie w rozmowie ⇒ brzmienie hipotez poniżej jest **odtworzone
+z raportu właściciela**, nie odczytane z artefaktu.
+
+⚠ **To ta sama klasa co §9 („podpisane ≠ zbudowane"): protokół gate'u, który żyje tylko w rozmowie,
+NIE JEST artefaktem.** W `docs/design/` stoi dwanaście plików `*_GATE*_CHECKLIST.md` — **następny
+gate zaczyna się od dopisania trzynastego, PRZED przebiegiem**, nie od odtwarzania go po fakcie.
+
+### 14.1 H1 — kadencja kolonizacji (215) trzyma się na żywym silniku. **PASS**
+
+| | emp_001 | emp_002 |
+|---|---|---|
+| pełne kolonie | 3 → **5** | 3 → **6** |
+| placówki | **5** | **5** |
+
+Placówki **5/5** = kontrola `d44af5e` **czysta**: §13.5 pinowało, że liczba placówek jest identyczna
+we WSZYSTKICH wariantach harnessu (bo `_managedColonies` odsiewa `isOutpost`), i tak samo wypada na
+żywo ⇒ **S4a nie kupił kolonii kosztem placówek**, a kadencja 215 dowozi poza harnessem.
+
+### 14.2 H2 — stolica AI ŻYJE I ROŚNIE. **PASS, poza kopertą harnessu**
+
+| gy | 0 | 15 | ~30 | ~40 | ~50 | 60 |
+|---|---|---|---|---|---|---|
+| **emp_001 `Propus b`** | 24 | **53** | 86 | 117 | 147 | **170** |
+| **emp_002 `Regulus c`** | | | | | | **158** |
+
+* **obsada farm 45 % → 80 % → 100 %**, i **ANI RAZU 0 % przy `laborer > 0`.** To jest DOKŁADNIE
+  metryka rozstrzygająca z §11 (zrewidowane przewidywanie: pin na OBSADZIE, nie na liczbie
+  robotników) ⇒ **229 potwierdzone jako naprawione NA ŻYWO**, na tej metryce, która miała rozstrzygać.
+* żywność **8,4-12,3 tys.** — harness dawał 8 812-10 189 (§13.6) ⇒ **żywa kampania wypada LEPIEJ
+  od modelu.**
+* mieszkania **32 → 188** — sufit housing rośnie z populacją ⇒ **236 zaobserwowane na żywo.**
+* ⚠ **stara krzywa głodu przewidywała na gy 15 `pop → 3`. Zmierzono 53.**
+
+**Budżet pracy SAM SIĘ ZWALNIA — tego harness nie pokazał:**
+
+| faza | `zablokowane` | licznik blokad | laborer (obsadzeni / popyt) |
+|---|---|---|---|
+| wczesna | `[farm, well, solar_farm, factory]` | 607 → 1 204 → 1 456 | **9 / 11** |
+| środkowa | ↓ | | 16 / 20 |
+| **od gy 40** | **`[]`** | **1 637 — PŁASKI przez gy 50-60** | **33 / 33** |
+
+⚠ **MECHANIZMEM ZWOLNIENIA JEST TO, CO §13.5 ZAPISAŁO JAKO ZASTRZEŻENIE.** `habitat.jobs === 0`,
+więc budżet **nie widzi mieszkań** (pin T5): mieszkania rosną (32 → 188) → rośnie populacja → rośnie
+pula pracowników → **podnosi się sufit `workers + 2`** → blokady ustają. **Caveat okazał się ZAWOREM.**
+⚠ To odczyt **spójny z liczbami**, nie izolowany pomiar przyczynowy — zmierzono równoległy wzrost
+mieszkań, populacji i sufitu oraz płaski licznik blokad od gy 40, nie odcięto pozostałych ścieżek.
+
+⇒ **obawa Findingu 237 (sufit SAMOSPEŁNIAJĄCY) rozpuściła się na żywo**: popyt urósł **11 → 33**
+razem z populacją, **bez członu wzrostu** — dokładnie tak, jak podpisano w **D-S4-2**.
+
+⚠ **JEDYNA METRYKA, NA KTÓREJ ŻYWY PRZEBIEG WYPADA GORZEJ OD HARNESSU — `avail`, i to ta, którą
+§13.6 kazał obserwować.** W fazie zagęszczenia **0,38-0,62**, emp_002 najniżej **0,38-0,54**,
+czyli **PONIŻEJ pasma 0,61-0,91** z harnessu. Od **gy 40 wraca do 1,00** bez żadnej interwencji.
+⇒ zapisać jako **przejściowy koszt gęstości**, który sam się rozwiązuje — **nie** jako „mieściło się
+w paśmie" (nie mieściło) i **nie** jako blokadę (nic nie zatrzymał w 60 gy).
+
+### 14.3 H3 — obserwabl `kadlubyZeSkokiem`: **NIE-WYNIK, ZGODNIE Z PRZEWIDYWANIEM**
+
+`kadlubyZeSkokiem` = **0 w gy 60**. Przewidziane PRZED przebiegiem (korekta poprzedniej sesji):
+S1+S4a odblokowują **ŻYCIE stolicy**, nie **łańcuch warp**; blokada przesuwa się o ogniwo w górę,
+więc H3 miał być mierzony **SERIĄ, nie progiem**. Seria zdana — i to ona jest tu produktem:
+
+| wielkość (stolica emp_001) | gy ~50 | gy 60 |
+|---|---|---|
+| `Fe` | 20 034 | **14 046** ⚠ SPADEK — stolica zaczęła Fe ZUŻYWAĆ |
+| `Xe` | 7,5 tys. | 10,1 tys. |
+| `H` | **0** | **0** |
+| **`Nt` (neutronium)** | **0** | **0** |
+| `warp_cores` | 0 | **1** |
+| `quantum_cores` | | 3 |
+| `antimatter_cells` | 2 | 3 |
+| poziom kopalni | | **12** |
+
+⚠ **Fe PRZESTAŁO BYĆ WĄSKIM GARDŁEM** — 14 tys. w magazynie, kopalnia L12, saldo ujemne (czyli
+realna konsumpcja przemysłowa, nie stagnacja). `warp_cores` 0 → 1 i AC 2 → 3 mówią, że **łańcuch
+RUSZYŁ**. Zatrzymuje go **`Nt = 0` i `H = 0`** — dwa surowce, nie praca i nie ruda.
+
+**DIAGNOSTYKA ZAMYKAJĄCA — Nt LEŻY W PLACÓWKACH, NIE W STOLICY.** Pięć placówek emp_001:
+
+| placówka | układ | `Nt` | `Fe` |
+|---|---|---|---|
+| 1 | `sys_059` | 8 732 | 25-28 tys. |
+| 2 | `sys_059` | 6 030 | 25-28 tys. |
+| 3 | `sys_063` | 8 449 | 25-28 tys. |
+| 4 | `sys_063` | 7 084 | 25-28 tys. |
+| 5 | `sys_023` | 7 470 | 25-28 tys. |
+| **razem** | | **≈ 37,7 tys.** | |
+
+**Stolica: `Nt` = 0.** ⇒ **wiążącym ogniwem CAŁEGO pozostałego łańcucha jest TRANSPORT `Nt` do
+żywej stolicy.** Nie wydobycie (jest), nie receptura (**217** zamknięty), nie alokacja (**221**
+zamknięty), nie praca (**229**/**233** zamknięte), nie ruda (14 tys. Fe). **To jest przedmiot
+następnego audytu** (ogniwo Nt) — i pierwszy w tym slice'ie moment, w którym oś wskazuje na
+LOGISTYKĘ, a nie na kolonię.
+
+### 14.4 H4 — uczciwość flag. **PASS na parze, która realnie coś mierzy**
+
+* `aiUniformStaffing` **OFF → `_greedyApplies()` = `true` w OBU stolicach; ON → `false`.**
+  Sprawdzone **w obie strony** ⇒ kontrakt flagi S1 potwierdzony na żywym silniku.
+* ⚠ **odczyt budżetu przy `aiLaborBudget` OFF był w tym stanie JAŁOWY**: przy ON lista
+  `zablokowane` była **już pusta od gy 40**, więc „pusta przy OFF" **nie odróżnia niczego**.
+  **Zapisane wprost: kontrakt OFF dla S4a pokrywają WYŁĄCZNIE piny headless**
+  (`ai_labor_budget_smoke`), **nie ta para live**. Klasa: kontrola pinu przechodząca jałowo
+  (ta sama, co niejałowość T1 w §12b).
+
+### 14.5 WERDYKT GATE'U
+
+> **S1 + S4a — POTWIERDZONE NA ŻYWO. Łuk głodowy ZAMKNIĘTY.**
+
+Stolica AI, która przez cały ten slice umierała w gy 4-10, **żyje 60 gy**, ma **170 pop**,
+**14 tys. Fe**, kopalnię **L12** i wyprodukowała **pierwszy `warp_core`**. Trzy findingi domknięte
+**SKUTKIEM, nie argumentem**: **229** (obsada) · **230** (ulepszenie farmy) · **233/234** (budżet
+pracy). Oś główna 178 („podaż Fe") **jest zaspokojona jako PODAŻ i ustępuje miejsca osi „DOSTAWA Nt".**
+
+⚠ **Czego ten gate NIE dowiódł — nazwane wprost:**
+1. **`kadlubyZeSkokiem` ≥ 1** — kryterium §12(d) **nadal niespełnione**, świadomie (H3 był
+   przewidzianym nie-wynikiem, mierzonym serią).
+2. **Kontraktu OFF flagi `aiLaborBudget` na żywym silniku** (14.4) — pokryty tylko headless.
+3. **Niczego o R1/R2 jako WARIANTACH** — ⚠ **i to jest korekta ramy**: `courierLoadOrder`
+   i `aiInternalTrade` są w `GameConfig` **default ON** (odczyt `!== false`, shipowane ON
+   w `8226dcc`), więc w tym przebiegu **BYŁY AKTYWNE**. `Nt = 0` w stolicy **zmierzono przy R1 i R2
+   WŁĄCZONYCH** ⇒ pytanie „czy R1/R2 by pomogły" jest źle postawione; właściwe brzmi **„dlaczego
+   R1/R2, będąc włączone, nie dowiozły Nt"**. Przedmiot następnego audytu.
+
+**Zapis `GATE-S4-fresh-gy60` zostaje KANONICZNYM FIXTURE'M** — zastępuje martwe zapisy `GATE-Fe-*`
+(tamte nie mają żyjącej stolicy, więc każdy pomiar łańcucha warp na nich mierzył ciszę). Zawartość:
+dwie żywe, bogate stolice AI (pop **170/158**, Fe 14 tys.+, pełne warstwy), **stała presja
+produkcyjna** (3 uzbrojone fregaty gracza w `sys_060`), **pokój**, żywa postawa.
+
+**Obserwacja do rejestru (bez numeru, bez akcji):** `U` (bezrobotni) sięga w gy 60 **67 / 20** —
+w stolicach powstała **nadwyżkowa pula pracy**. Przy zamkniętym budżecie (`33/33`) i płaskim
+liczniku blokad to jest **kandydat na dźwignię TEMPA KOLONIZACJI** (kolonizacja płaci POP-ami,
+**232**), a nie na kolejny strażnik. Zmierzyć, zanim ktokolwiek nazwie to funkcją.

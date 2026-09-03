@@ -3610,86 +3610,75 @@ na wyraźne polecenie właściciela.
 
 ---
 
-## STAN SESJI 2026-09-01 — Fe-supply: slice OTWARTY, oś główna NIEPODPISANA (save v101, bez migracji)
+## STAN SESJI 2026-09-03 — Fe-supply: **S1 + S4a POTWIERDZONE NA ŻYWO, łuk głodowy ZAMKNIĘTY, oś przechodzi na DOSTAWĘ Nt** (save v101, bez migracji)
 
-Plan + kolejka na jutro: `docs/design/FE_SUPPLY_PLAN.md` §11 (stan) i §12 (kolejka).
-Rejestr findingów: `docs/design/VESSEL_ORDERS_PLAN.md` (223-228).
+Plan + pełne tabele: `docs/design/FE_SUPPLY_PLAN.md` §12a (krach żywnościowy) · §12b (S1) · §13 (S4a) ·
+**§14 (GATE-S4-fresh — żywy przebieg gy 0→60)**. Rejestr: `VESSEL_ORDERS_PLAN.md` (223-238).
+Commity: `a345d09` (S1) · `2043a48` (keeper ekspandera → sweep) · `bee26cf` (S4a) · `7c30f5a` (docs §13).
 
-**⚠ WERDYKT Z CZYSTEGO PRZYRZĄDU — PIERWOTNĄ AWARIĄ STOLICY AI JEST ŻYWNOŚĆ, NIE ENERGIA.**
-`food` **250 → 0 między gy0 a gy4**, przy `avail = 1,00` i **obecnych robotnikach**. Kolaps
-energetyczny startuje dopiero w **gy7** i jest **NASTĘPSTWEM** (mniej ludzi → mniej rąk → moduł
-survival dosypuje elektrownie → pętla 226). ⇒ **strzałka przyczynowa z `FE_SUPPLY_PLAN` §10.3 była
-odwrócona**, a oś główna slice'u **pozostaje NIEPODPISANA** — R1/R2/R4 wycenione, ale żadna nie
-adresuje tego, co pęka pierwsze.
+**Dwa slice'y, jedna przyczyna.** Stolica AI umierała z **GŁODU** w gy 4-10 — nie z braku energii
+i nie z braku rudy. Obie naprawy są AI-only, każda za własną flagą, obie potwierdzone **SKUTKIEM**:
+- **S1 / Finding 229** (`aiUniformStaffing`, ON) — kolonie AI liczą obsadę **UNIFORM**; gracz zostaje
+  na greedy + priorytet CO DO BITU. Greedy napełnia budynki **po WSPÓŁRZĘDNYCH HEX**, a jedynym
+  pisarzem `designation:'priority'` jest **mysz gracza** ⇒ farmy stolicy AI stały na końcu kolejki
+  z obsadą **0 % przy elektrowniach na 100 %**. **O przeżyciu stolicy decydował generator mapy**
+  (1..8 etatów przed pierwszą farmą na czterech ziarnach).
+- **S4a / Findingi 233 + 234** (`aiLaborBudget`, ON) — ekspander dostał **BUDŻET PRACY**
+  (`getSlotDemand + jobs > workers + LABOR_BUDGET_MARGIN(2)`). Hamulec budowlany usunięto w `d95d9b8`,
+  a **ścieżka ULEPSZEŃ nie miała go NIGDY** — przy `jobs × level` samo ulepszenie mnoży wymaganie
+  pracy (**80,2 % blokad to ulepszenia**). Popyt rósł **10 → 24 przy ZERO nowych budynków**.
 
-**Status R4 (obie połówki pod jedną flagą `aiScaleBasicInfra`):**
-- **226 (bramka pętli elektrowni)** — działa: popyt na robotników **36 → 24** w gy10. Ale
-  `empPenalty = laborer / demand`, a `laborer = 0` ⇒ `0/36` = `0/24` ⇒ **zysk zerowy w tym fixturze**.
-  Bramka wchodzi w gy7, robotnicy znikają w gy9 — **dwa lata za późno**.
-- **225 (skalowanie karmicieli)** — formuła skorygowana o `empPenalty` (liczy wobec REALNEGO wyjścia
-  `perBuilding × max(0,25, staffing)`) i **przycięta do poziomu obsadzalnego** — podpisany warunek
-  właściciela, że **bramka 226 obejmuje TAKŻE karmicieli** (farma niesie `popCost` jak elektrownia).
-  ⚠ **Połowa karmicielska NADAL BEZCZYNNA w kryzysie**: przy `laborer = 0` cap daje stan bieżący.
-  ⚠ **Zmierzone WYŁĄCZNIE na czystym harnessie** — bez potwierdzenia z żywego silnika.
-- ⇒ **R4 jako dostarczone jest STRAŻNIKIEM dwóch pętli śmierci, NIE LEKARSTWEM.**
+**GATE-S4-fresh** (właściciel, świeża kampania, **gy 0→60**, pokój, komplet flag ON) — **PASS**:
 
-**⚠ PRZEWIDYWANIE FALSYFIKOWALNE — na protokół, PRZED żywą tabelą gy-30:**
-> Metryką rozstrzygającą jest **`strata.laborer` w stolicy, NIE `solar`.** Są robotnicy ⇒ R4 pokaże
-> realny efekt. `laborer = 0` ⇒ R4 zamilknie dokładnie jak na harnessie (rozbieżność wyłącznie
-> w liczbie elektrowni).
+| hipoteza | wynik |
+|---|---|
+| **H1** kadencja kolonizacji (215) | pełne kolonie **3 → 5** / **3 → 6**, placówki **5/5** ⇒ kontrola `d44af5e` czysta |
+| **H2** stolica żyje i rośnie | pop **24 → 170** (`Propus b`) / **158** (`Regulus c`); farmy **45 → 80 → 100 %**, **ani razu 0 % przy `laborer > 0`**; żywność 8,4-12,3 tys.; mieszkania **32 → 188** |
+| **H3** `kadlubyZeSkokiem` | **0 — NIE-WYNIK, PRZEWIDZIANY**; produktem jest SERIA: Fe 20 034 → **14 046**, `warp_cores` 0 → **1**, AC 2 → 3, kopalnia **L12**, **`Nt` = 0 i `H` = 0** |
+| **H4** uczciwość flag | `aiUniformStaffing` OFF → `_greedyApplies()` **true** w obu stolicach, ON → **false** — sprawdzone w OBIE strony |
 
-**Wdrożone i zacommitowane w tym slice'ie:** flagi `courierLoadOrder` / `aiInternalTrade` /
-`aiScaleBasicInfra` — `8226dcc` (⚠ **niesie fałszywą tabelę R4**) · `DirectorHarness` (D-178-3,
-podpisany 2026-08-31, **zbudowany** 2026-09-01) — `c9675c8` · korekta: izolacja bootu (**228**) +
-pin **T7/T7b** + realny `_feederTarget` (**225**) + `FE_SUPPLY_PLAN` §9a/§10.5/§10.7 + **227** +
-aneks **212** — `2edda19`.
+**⚠ BUDŻET PRACY SAM SIĘ ZWALNIA — tego harness nie pokazał.** `zablokowane`
+`[farm, well, solar_farm, factory]` → **`[]` od gy 40**, licznik blokad **płaski 1 637** przez
+gy 50-60, laborer **9/11 → 33/33**. Mechanizmem jest to, co §13.5 zapisało jako ZASTRZEŻENIE:
+`habitat.jobs === 0`, więc budżet **nie widzi mieszkań** → mieszkania rosną → rośnie populacja →
+rośnie pula → **podnosi się sufit `workers + 2`**. **Caveat okazał się ZAWOREM.**
+⇒ obawa **Findingu 237** (sufit samospełniający) **rozpuściła się**, a jego **próg ~100 pop został
+przekroczony 1,7× bez wystąpienia zjawiska** — **tripwire z przekroczonym progiem jest MARTWYM
+PRZYRZĄDEM**; zostaje wyłącznie klauzula **238** (gałąź cywilna techu).
 
-**⚠ LEKCJA DNIA — SKAŻONY PRZYRZĄD PRODUKUJE PEWNE SIEBIE TABELE** (`FE_SUPPLY_PLAN` §9a, obok
-„podpisane ≠ zbudowane"). `DirectorHarness.bootWithDirector` **przeciekał między bootami**:
-`GameCore.boot` czyści `EntityManager` i `EventBus`, ale **nie reseeduje PRNG i nie resetuje
-`gameState`** (singleton z `director.rules`), więc dwie kolumny w jednym procesie porównywały **dwie
-różne galaktyki**. Wynik: tabela z ośmioma konkretnymi liczbami, wewnętrznie spójna, z narracją,
-która się broniła (**„mniej elektrowni = więcej energii"**) — i **cała nieprawdziwa**; trafiła do
-`b712ee1` i `8226dcc`. **Złapały to dane właściciela z żywej gry** (R0/R4/R2 nierozróżnialne), nie
-test i nie przegląd kodu. Trzy reguły: (1) **nowy przyrząd pomiarowy dostaje pin na SWOJĄ
-nieinwazyjność w tym samym commicie co pin na swoją funkcję** — `director_harness_smoke` pinował
-MONTAŻ (poprawnie, wg lekcji W3), ale nie IZOLACJĘ; (2) dwa warianty w jednym procesie są dowodem
-dopiero, gdy istnieje pin, że proces ich nie miesza — do tego czasu **osobne procesy**; (3) **gdy
-pomiar właściciela z żywej gry rozjeżdża się z moją tabelą, podejrzana jest MOJA TABELA** (żywy
-silnik = instancja referencyjna, harness = jej model).
+**⚠ Jedyna metryka gorsza od harnessu — `avail`**, i to dokładnie ta, którą §13.6 kazał obserwować:
+w fazie zagęszczenia **0,38-0,62** (emp_002 do 0,38), czyli **PONIŻEJ pasma 0,61-0,91**, z powrotem
+do **1,00 od gy 40**. Przejściowy koszt gęstości — nie blokada, ale i nie „mieściło się w paśmie".
 
-**NOWE FINDINGI:** **227** 🔴 (założone kolonie AI **nigdy nie dostają portu** — `launch_pad` jest
-w `targets` archetypu, ale **NIE MA GO w `ColonyAutoExpander.BUILD_PRIORITY`** ⇒ zmierzone **1 z 5**
-kolonii kwalifikuje się do handlu, a `_calcAllConnections` wymaga **≥2**; trzeci, niezależny powód
-ciszy handlowej AI obok 223 i 224 — i jedyny, którego tamte naprawy nie zdejmują) · **228** ✅
-(przeciek bootu harnessu, zamknięty) · aneks **212** (`scout_report.mp4` = **piąty** realny 404
-⇒ luka katalogu jest **systematyczna**) · obserwacja bez numeru (`FE_SUPPLY_PLAN` §10.7c): z
-`laborer = 0` **i** `food = 0` **nie istnieje w grze żadna ścieżka powrotu** — brak transferu POP
-**do** stolicy, brak importu bez portu (227), brak awaryjnego odblokowania etatów; układ absorbujący.
+**Czego gate NIE dowiódł — nazwane:** (1) **`kadlubyZeSkokiem ≥ 1`** — kryterium §12(d) **nadal
+niespełnione**, świadomie (H3 był przewidzianym nie-wynikiem); (2) kontraktu **OFF** flagi
+`aiLaborBudget` na żywym silniku — odczyt był **JAŁOWY** (przy ON lista blokad już pusta od gy 40),
+więc pokrywają go **wyłącznie piny headless**; (3) ⚠ **korekta ramy: `courierLoadOrder`
+i `aiInternalTrade` są w `GameConfig` default ON** (`!== false`, shipowane w `8226dcc`) ⇒ w tym
+przebiegu **BYŁY AKTYWNE**, a `Nt = 0` w stolicy zmierzono **przy R1 i R2 WŁĄCZONYCH**.
 
-**Odpowiedzi na dwa pytania właściciela** (`FE_SUPPLY_PLAN` §10.7): **habitaty NIE są wąskim
-gardłem** — sufit **32 płaski przez 50 gy**, szczyt populacji **24 (gy0)**, więc mieszkania stoją
-**w kolejce za żywnością**; skalowanie ich dziś byłoby **no-opem wyglądającym na naprawę** (ta sama
-klasa co obalone „skalowanie energii"). **Lepsze budynki żywnościowe nie mają dziś jak zadziałać** —
-`hydroponics` (`TechData:283`) **nie występuje w `researchQueue` Industrialisty**, a
-`synthesized_food_plant` (`BuildingsData:386`) wymaga właśnie tej technologii ⇒ preferencja bez
-odblokowania nie ma czego preferować. **Kolejność wymuszona: najpierw KOLEJKA BADAŃ AI, dopiero
-potem preferencja budynków.**
+**⚠ LEKCJA — protokół gate'u, który żyje tylko w rozmowie, NIE JEST artefaktem.** Hipotez H1-H4
+**nie ma w żadnym pliku** (`grep` czysty), więc §14 **odtwarza je z raportu właściciela**. Ta sama
+klasa co „podpisane ≠ zbudowane" (§9) i „skażony przyrząd produkuje pewne siebie tabele" (§9a).
+W `docs/design/` stoi dwanaście `*_GATE*_CHECKLIST.md` — **następny gate zaczyna się od dopisania
+trzynastego, PRZED przebiegiem.**
 
-**KOLEJKA NA JUTRO** (`FE_SUPPLY_PLAN` §12, w tej kolejności): **(a)** audyt **KRACHU
-ŻYWNOŚCIOWEGO** — dlaczego 2 obsadzone farmy nie żywią 24 POP w gy0-4; podejrzani ze źródła:
-priorytet obsady farm w `_allocateWorkforce` (Etap 1 rankuje po **pressure malejąco** ⇒ hipoteza:
-żywność przegrywa z przemysłem), realne wyjście farmy pod wczesnym `empPenalty`, **rozjazd modelu
-konsumpcji** (`POP_CONSUMPTION.food 0,625 × 24 = 15/rok` wobec startowego `+17,6` i `−8,9` przy
-pop 19 — sprawdzić, czy nie siedzi tam liczba **mieszkańców ×4** zamiast **jednostek POP**, klasa
-„declared-but-unenforced units"), oraz interakcja skorygowanego `_feederTarget` z powyższymi.
-⚠ **Wynik audytu może unieważnić oś główną Fe i to jest dopuszczalny wynik** · **(b)** pomiar
-skorygowanego R4 na czystym harnessie · **(c)** żywa tabela z `GATE-215-gy30`: **R0 + R4 pełny
-horyzont** (metryka: `laborer`), **R1 + R2 krótkie** jako kontrole przewidywanej ciszy, **R3
-pominięte** · **(d)** podpis osi głównej z PEŁNEJ tabeli, potem wdrożenie i gate:
-**`kadlubyZeSkokiem` 0 → ≥1 z REALNEJ produkcji na żywym zapisie**.
+**NOWY KANONICZNY FIXTURE: `GATE-S4-fresh-gy60`** — dwie żywe, bogate stolice AI (pop **170/158**,
+Fe 14 tys.+, pełne warstwy), stała presja produkcyjna (3 uzbrojone fregaty gracza w `sys_060`),
+pokój, żywa postawa. **Zastępuje martwe zapisy `GATE-Fe-*`** — tamte nie mają żyjącej stolicy, więc
+każdy pomiar łańcucha warp na nich mierzył ciszę.
 
-Sweep **197/197 0 FAIL** · `check-i18n` PASS · save **v101 bez migracji**.
+**⚠ NASTĘPNE OGNIWO — DOSTAWA `Nt`, nie podaż Fe.** Pięć placówek emp_001 trzyma **≈ 37,7 tys. Nt**
+(8 732 / 6 030 / 8 449 / 7 084 / 7 470; `sys_059` ×2, `sys_063` ×2, `sys_023`) przy Fe 25-28 tys.
+każda — a **stolica ma `Nt` = 0**. Praca (**229**/**233**), popyt (**217**) i alokacja (**221**) są
+zamknięte, ruda jest (14 tys.) ⇒ wiążącym ogniwem jest **TRANSPORT**. Audyt ogniwa Nt (kandydaci
+findingów + kształty naprawy, **bez implementacji przed podpisem**): odpowiedź z 2026-09-03.
+
+**Obserwacja bez numeru:** `U` (bezrobotni) **67 / 20** w gy 60 — w stolicach powstała nadwyżkowa
+pula pracy. Kandydat na dźwignię **TEMPA KOLONIZACJI** (kolonizacja płaci POP-ami, **232**), a nie na
+kolejnego strażnika. **Zmierzyć, zanim ktokolwiek nazwie to funkcją.**
+
+Sweep **200/200 0 FAIL** · `check-i18n` PASS · save **v101 bez migracji**.
 
 ---
 
