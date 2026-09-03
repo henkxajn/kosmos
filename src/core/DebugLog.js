@@ -96,6 +96,8 @@ const TRACKED_EVENTS = [
   // W TYM SAMYM commicie — inaczej gate mierzy ciszę i nie odróżni jej od „nic się nie stało".
   'logistics:routeUnreachable',
   'logistics:routeAborted',
+  // 240 / C2 — odzysk kadłuba z pozy, z której zadna galaz maszyny stanow go nie zdejmie.
+  'logistics:courierRecovered',
 ];
 
 class DebugLog {

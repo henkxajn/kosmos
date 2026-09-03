@@ -86,6 +86,16 @@ const EPS = 1e-6;
  */
 const PENDING_BUILD_TTL_YEARS = 15;
 
+/**
+ * 240 / C2 — o ile lat GRY kurier musi być SPÓŹNIONY, zanim watchdog uzna go za zamrożonego.
+ * ⚠ Wartość wyprowadzona z POMIARU, nie z ostrożności: zmierzone zamrożenie (poza 239) jest
+ * spóźnione o **36-44 lata** (GATE-S4-fresh-gy60, odczyt L5), a statek W LOCIE bywa spóźniony
+ * najwyżej o jeden tik — `_updatePositions` przetwarza przylot w tym samym tiku, w którym
+ * termin mija. Margines rozdziela więc te dwa światy z zapasem trzech rzędów wielkości
+ * i chroni przed wyścigiem kolejności systemów w obrębie jednego tiku.
+ */
+const STALL_GRACE_YEARS = 1.0;
+
 export class EmpireLogisticsSystem {
   constructor() {
     this._acc     = 0;       // akumulator civDeltaYears dla dispatchera
@@ -231,6 +241,10 @@ export class EmpireLogisticsSystem {
 
     const capital = this._pickCapital(empire);
     if (!capital) { this._log('brak stolicy (pełnej kolonii) — skip', empire?.id); return; }
+    // 240 / C2 — watchdog PRZED bramką stoczni: odzysk zamrożonego kadłuba to sprzątanie,
+    // a nie produkcja, i imperium bez wolnej stoczni też ma prawo odzyskać swoje statki.
+    this._recoverStalledCouriers(empire, logi, capital);
+
     if (this._shipyardLevel(capital) <= 0) { this._log('brak stoczni @stolica — czekam', empire?.id); return; }
 
     const systemId = empire.homeSystemId ?? capital.systemId;
@@ -723,6 +737,59 @@ export class EmpireLogisticsSystem {
     });
     this._log('placówka poza układem stolicy — trasy NIE tworzę',
       `${outpostId} (${oEnt?.systemId}) vs stolica (${capEnt?.systemId})`);
+  }
+
+  /**
+   * 240 / C2 — ODZYSK kadłuba, którego żadna gałąź maszyny stanów nie może już posunąć.
+   *
+   * ⚠ KLUCZUJEMY SIĘ NA ZEGARZE MISJI, NIE NA POZIE — i to jest cała różnica. `orbiting`
+   * albo `in_transit` z `dockedAt = null` to TAKŻE normalny stan statku W LOCIE (zmierzone:
+   * zdrowy kurier na działającej trasie ma dokładnie tę pozę, razem z resztką `cargoUsed`
+   * rzędu 1e-14 — Finding **244**). Zamrożenie odróżnia WYŁĄCZNIE to, że termin minął dawno.
+   *
+   * Trzy stany świadomie POMINIĘTE, bo każdy z nich posuwa ktoś inny:
+   *   • `docked`                      — kurier jest u siebie, dyspozytor go wyśle;
+   *   • `dockedAt === <ciało>`        — LEGALNE CZEKANIE przy wyczerpanej placówce
+   *                                     (`_advanceRouteCourier` dobija tam produkcję);
+   *   • `phase === 'returning'`       — posuwa gałąź RETURNING (dostawa + dok).
+   * Zostaje dokładnie jedna poza: statek jest SPÓŹNIONY i nie jest NIGDZIE — czyli 239.
+   */
+  _recoverStalledCouriers(empire, logi, capital) {
+    if (GAME_CONFIG.FEATURES?.aiCourierRouteScope === false) return;
+    const vm = this._vm();
+    if (!vm || !capital || !logi) return;
+    const now = this._gameTime();
+
+    const ids = [
+      ...(logi.routes ?? []).flatMap(r => r.courierIds ?? []),
+      ...(logi.reserve ?? []),          // po C1 martwe trasy zostawiają kadłuby właśnie tu
+    ];
+
+    for (const cid of ids) {
+      const v = vm.getVessel(cid);
+      if (!v || v.isWreck) continue;
+      if (v.position?.state === 'docked') continue;
+      if (v.position?.dockedAt != null) continue;
+      const m = v.mission;
+      if (!m || m.phase === 'returning') continue;
+      const due = m.arrivalYear;
+      if (!Number.isFinite(due)) continue;        // brak zegara = INNY mechanizm, nie ten
+      if (now < due + STALL_GRACE_YEARS) continue; // w locie albo tuż po terminie — nie ruszamy
+
+      this._sendCourierHome(v, capital.planetId);
+
+      // Emitujemy po SKUTKU, nie po próbie: gdyby `startReturn` odmówił, cisza jest uczciwa,
+      // a kolejny przebieg dyspozytora spróbuje ponownie (operacja jest idempotentna).
+      if (v.mission?.phase === 'returning') {
+        EventBus.emit('logistics:courierRecovered', {
+          empireId:     empire?.id ?? null,
+          vesselId:     cid,
+          overdueYears: +(now - due).toFixed(2),
+          reason:       'stalled_no_dock',
+        });
+        this._log('odzysk zamrożonego kuriera', `${cid} spóźniony o ${(now - due).toFixed(1)} lat`);
+      }
+    }
   }
 
   /**
