@@ -75,6 +75,32 @@
 - **EconAI jako 2-poziomowy GOAP** (roczny cel strategiczny → rozkład na akcje) — Faza 7 ongoing, do dopracowania.
 - **Realny hull-gating dla AI** (dziś AI zwolnione — buduje wszystko) → mniej rozwinięte AI buduje więcej małych kadłubów.
 
+### 🔴 DUZY SLOT: **POPYT NA WARP** — po co AI ma rdzenie skokowe (obok GROUND)
+
+> Powolany decyzja wlasciciela **2026-09-03** przy zamykaniu Findingu **247** (STATUS QUO).
+> Material wyjsciowy: **inwentarz konsumentow `warp_cores`** w `VESSEL_ORDERS_PLAN.md` §247
+> (wyczerpujacy grep po `src/`) + `CHAIN_ENTRY_PLAN.md` §D-CE-0/D-CE-1.
+
+**Stan dzisiaj (zmierzony, nie zalozony):** lancuch warp AI jest **rezerwa gotowosci** — gromadzi do
+sufitu `startingSafetyStocks.warp_cores = 50` i konwertuje **wylacznie pod naciskiem gracza**
+(`DirectorProduction` ← `armedPlayerVesselsInBorderZone`). Konsument biezacy (paliwo skoku) mierzy
+**0,0** pobranych rdzeni w 100 gy przy szesciu otankowanych kadlubach AI. ⇒ AI, ktore nigdy nie
+spotka gracza, **nigdy nie uzywa swojej technologii definiujacej**.
+
+**Dwie galezie, oba warianty odrzucone z biezacego slice'u jako STRATEGICZNE, nie tuningowe:**
+
+- **B1 — rywalizacja AI-vs-AI.** Okrety warp dostaja zrodlo popytu istniejace bez gracza. ⚠ Najwieksza
+  zmiana: warstwa strategiczna **nie ma dzis sciezki wojny AI-vs-AI** — `MilitaryAI`/`EconAI` wycofano
+  w W3-8 (`814fb38`) wlasnie dlatego, ze mialy **zero wejsc**. To jest **nowa zdolnosc**, nie pokretlo.
+- **B2 — doktryna patrolowa (+ zdjecie odpornosci paliwowej warpu dla AI).** Staly patrol warp nad
+  wlasnymi ukladami drenuje rdzenie przez budowe **i** — gdy baki zaczna sie realnie napelniac —
+  przez sciezke paliwowa, ktora dzis mierzy zero. Najmniejsza z dwoch, ale bez zdjecia odpornosci
+  paliwowej konsument paliwowy pozostaje teoretyczny.
+
+**Wiazace dla obu:** dopoki zadna nie istnieje, **podnoszenie przepustowosci Nt nie zmienia zadnego
+wyniku strategicznego** — zmierzone we wszystkich wariantach tabeli 241, na obu galaktykach.
+Sasiaduje z Findingiem **251** (`frigate_system_defender` placi 2 rdzenie za silnik bez baku).
+
 *Źródło: `docs/kosmos_ai_architecture.md`, ROADMAP §5–6.*
 
 ---
