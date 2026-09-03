@@ -1,4 +1,4 @@
-# OGNIWO Nt — kurier, który nie ma jak dolecieć (F1 + F2 PODPISANE 2026-09-03)
+# OGNIWO Nt — kurier, który nie ma jak dolecieć (F1 + F2 WDROŻONE, **LIVE-GATE PASS 2026-09-03**)
 
 > Slice przekrojowy, **NIE należy** do arca Fe (`FE_SUPPLY_PLAN.md` — tamten zamknął się na §14).
 > Rejestr findingów: `VESSEL_ORDERS_PLAN.md` §**239-244** (+ **227**, **153**, **213**).
@@ -224,6 +224,34 @@ dyspozytor buduje tylko wtedy, gdy trasa jest NIEDOOBSADZONA. Obserwowalne jest 
 **rezerwa rośnie**, a nie licznik `built`. (AI nie płaci utrzymania — nadwyżka nic nie kosztuje.)
 
 **Odczyt rezerwy:** `KOSMOS.empireRegistry.get('emp_001').logistics.reserve.length`.
+
+### 7.1 WYNIK LIVE-GATE — `GATE-S4-fresh-gy60`, gy 60,55 → 77, jedno posiedzenie. **PASS 4/4**
+
+| kryterium | zmierzone |
+|---|---|
+| **(a) uczciwe trasy** | trasy **5 → 2 na imperium**, każdy wiersz `dom:true`; w audycie `routeUnreachable` **×6** i `routeAborted` **×6** z powodem `outpost_other_system` |
+| **(b) odzysk** | **12 odzysków (6+6)**, `overdueYears` **35,64-44,21** — dokładnie rozpiętość zmierzona wcześniej przez L5; **rezerwa 6** na imperium, **ani jeden kadłub nie zginął**; `built` **płaski na 10**, zgodnie z korektą oczekiwania |
+| **(c) kontrola anty-wyciszeniowa** (po ~15 gy) | wszyscy czterej kurierzy domowi **żywi** (`returning`, `spozniony:false`); `delivered` **16 → 20** (emp_001) i **12 → 16** (emp_002) — kadencja zgodna z ~9 gy na kurs |
+| **(d) rollback w obie strony** | OFF odtworzył trzy trasy cross **w 2 gy** (kurierzy zaciągnięci z rezerwy); ON przyciął z powrotem do dwóch — **bit-for-bit** |
+
+⚠ **Korekta oczekiwania POTWIERDZONA w praktyce:** `built` NIE urósł i nie miał prawa — dwie
+trasy osiągalne potrzebują czterech kadłubów z dziesięciu istniejących, a dyspozytor buduje
+wyłącznie dla trasy NIEDOOBSADZONEJ. Obserwowalnym skutkiem jest **rezerwa**, nie licznik budowy.
+
+⚠ **Obserwacja z okna rollbacku (do rejestru, bez akcji):** przy fladze OFF zdążyło wyruszyć
+**6 kadłubów** na trasy cross. Po powrocie flagi na ON zamrożą się w pozie 239 i **odzyska je
+ten sam watchdog C2**, bez interwencji ⇒ **ścieżka OFF→ON jest samolecząca Z KONSTRUKCJI**.
+Świadomie nie podjęto żadnej akcji — to jest właściwy sposób, w jaki kill-switch ma się zachowywać.
+
+### 7.2 STAN ARCA PO ZAMKNIĘCIU SLICE'U
+
+> **Jedynym żywym kanałem Nt są dziś DWIE uczciwe trasy domowe: 13 Nt na kurs, kadencja ~9 gy.**
+> Stolica będzie **pełzła**, łańcuch warp będzie **się wlókł**, a **37,7 tys. Nt zostaje za decyzją
+> zdolnościową 241** (tabela pomiarowa §6, NIEURUCHOMIONA), z **243** i **245** obok niej.
+
+To jest stan ZAMIERZONY, nie niedokończony: slice miał uczynić trasy uczciwymi, odzyskać kadłuby
+i naprawić arytmetykę — i dokładnie tyle dowiózł. Zwiększenie ZASIĘGU logistyki AI było poza jego
+zakresem od pierwszego zdania planu.
 
 ---
 
