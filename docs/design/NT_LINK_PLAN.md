@@ -48,7 +48,23 @@ trasa w układzie jest **zdrowa i pozostaje zdrowa**, trasa międzyukładowa nie
 `built 10 · dispatched 26 · delivered 16`; wszystkie pięć placówek **ma trasę** (`maTrase:true` —
 brak trzeciego mechanizmu przez `_hasDeposit`), `port:false` na wszystkich (→ **243**),
 `popytNaRudy {}` (→ Nt bez priorytetu, rzadkościowy przebieg z capem **13 Nt/kurs**).
-**Sześć z dziesięciu** kadłubów stoi w pozie 239 (trasy cross: `entity_403`/`401`/`490`).
+
+### 2.2a ODCZYT ZEGARA MISJI (L5) — werdykt czysty, JEDEN kształt
+
+Oba imperia, gy 60,55:
+
+| grupa | odczyt | wniosek |
+|---|---|---|
+| **HOME** `v_1`-`v_4` (emp_001), `v_5`-`v_8` (emp_002) | `spozniony:false`, `zostalo` **0,63-5,97** i **1,14-4,04**; `v_1` w fazie `returning`, `cel 66,52` | **statki W LOCIE** — nogi rzędu ~6 gy |
+| **CROSS** `v_9`-`v_14`, `v_15`-`v_20` | **wszystkie** `orbiting_body`, spóźnione o **36-44 gy** (`cel 16-24`) | **12 kadłubów w pozie 239** |
+
+**Ani jednego `cel:null`, ani jednego drugiego kształtu.** ⇒ zakres C2 zostaje przy JEDNEJ pozie,
+a korekta okna 3 gy (§2.3) potwierdzona: połowa domowa **działa, tylko wolno** (≈ 9 gy/kurs,
+13 Nt/kurs, pusta unia popytu ⇒ Nt bez priorytetu).
+
+⚠ **NAGŁÓWEK SLICE'U JEST WIĘC INNY, NIŻ BRZMIAŁ NA POCZĄTKU:** to nie jest „stolica głoduje",
+tylko **uczciwe trasy + odzysk + arytmetyka**. Głód dotyczy wyłącznie tego, co leży w placówkach
+NIEOSIĄGALNYCH — a tego ten slice świadomie NIE naprawia (to **241**, decyzja zdolnościowa).
 
 ### 2.3 ⚠ Co zostało OBALONE — resztka `cargoUsed` (kandydat 244)
 
@@ -130,6 +146,25 @@ w ścieżce budowy — kurierzy POWSTAJĄ i kiedyś DOWOZIŁY ⇒ **C1 zostaje p
 **Dlaczego C3 na końcu:** jego kontrolą regresji jest „keepery C1/C2 dalej zielone", a jego jedyny
 behawioralny skutek (jałowy kurs) staje się obserwowalny dopiero, gdy trasy są już uczciwe.
 
+### 5.1 STAN — wszystkie trzy WDROŻONE (2026-09-03)
+
+| commit | hash | keeper | fail-first |
+|---|---|---|---|
+| C1 — termin układu + prune + flaga + audyt | `3139533` | `nt_route_scope_smoke` **25/25** | 16/6 |
+| C2 — watchdog na zegarze misji | `5fdd414` | `nt_courier_watchdog_smoke` **17/17** | **10/7** |
+| C3 — rekoncyliacja `cargoUsed` | `673b11b` | `cargo_used_reconcile_smoke` **15/15** | **12/3** |
+
+Sweep **200 → 203**, `check-i18n` PASS, save v101 bez migracji, **zero nowych kluczy i18n**
+(wszystkie trzy powody idą kanałem AUDYTU, nie Dziennikiem gracza).
+
+⚠ **Trzy rzeczy, których nie dało się przewidzieć z projektu, a wyszły przy pisaniu keeperów:**
+1. **Atrapa magazynu musi mieć `inventory`** — `Vessel._getAvailable` czyta `inventory`/`get`,
+   a **nie** `getAmount`. Pierwsza wersja T3 (C1) mierzyła pustą placówkę i przechodziła jałowo.
+2. **`isSameSystem` jest fail-open dla `null`, ale `undefined` mapuje na `sys_home`** — pierwsza
+   wersja pinu T7 żądała zachowania, którego `SystemScope` nie obiecuje. Rozbite na T7a/T7b.
+3. **Import nazwany brakującego eksportu wywala keeper przy linkowaniu** — fail-first C3 był
+   niemierzalny, dopóki import nie poszedł przez przestrzeń nazw.
+
 ---
 
 ## 6. FOLLOW-UP — 241 dostaje traktowanie S1/S4a: NAJPIERW TABELA (zaprojektowana, NIEURUCHOMIONA)
@@ -171,10 +206,24 @@ artefaktem. Jednolinijkowce **wykonane** na harnessie (`probe-nt-route-ab.mjs` �
    ⇒ `spozniony:true` przy braku postępu = poza do odzyskania (C2); `spozniony:false` = statek w locie,
    **niczego nie ruszamy**.
 
-**Kryteria PASS:** (a) żadna nowa trasa do placówki spoza układu, z powodem w `debugLog`;
-(b) kadłuby uwięzione w pozie 239 wracają i **etat trasy się zwalnia** (`built` znów może rosnąć);
-(c) trasy w układzie **nadal dowożą** (`delivered` rośnie, Nt stolicy rośnie) — to jest kontrola,
-bez której (a) można „zdać" przez wyciszenie wszystkiego; (d) flaga OFF przywraca zachowanie sprzed.
+**Kryteria PASS:**
+* **(a)** żadna trasa do placówki spoza układu — `L2` pokazuje wyłącznie wiersze `teSameUklady:true`;
+  powód `logistics:routeUnreachable` **i** `logistics:routeAborted` widoczne w `debugLog`.
+* **(b)** **DWANAŚCIE odzysków** (`logistics:courierRecovered`, po 6 na imperium), każdy
+  z `overdueYears` w przedziale **36-44**; potem te kadłuby **nie są już nigdzie zaczepione**
+  o martwą trasę.
+* **(c)** ⚠ **KONTROLA, bez której (a) da się „zdać" przez wyciszenie wszystkiego:** trasy
+  w układzie **NADAL DOWOŻĄ** — `delivered` rośnie ponad 16, a nogi w `L5` mają `spozniony:false`.
+* **(d)** flaga OFF przywraca zachowanie sprzed (trasy cross wracają przy najbliższym przebiegu
+  dyspozytora — one powstają na nowo, bo placówki nadal istnieją).
+
+⚠ **KOREKTA OCZEKIWANIA — `built` NIE MUSI ROSNĄĆ, i to nie jest porażka.** Po prune zostają
+**dwie** trasy osiągalne na imperium, czyli zapotrzebowanie **2 × `couriersPerRoute`(2) = 4**
+kadłuby, przy **10 istniejących**. Sześć nadwyżkowych ląduje w `reserve` i tam zostaje —
+dyspozytor buduje tylko wtedy, gdy trasa jest NIEDOOBSADZONA. Obserwowalne jest więc:
+**rezerwa rośnie**, a nie licznik `built`. (AI nie płaci utrzymania — nadwyżka nic nie kosztuje.)
+
+**Odczyt rezerwy:** `KOSMOS.empireRegistry.get('emp_001').logistics.reserve.length`.
 
 ---
 
