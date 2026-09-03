@@ -598,6 +598,39 @@ function _getWeight(id) {
   return COMMODITIES[id]?.weight ?? MINED_RESOURCES[id]?.weight ?? HARVESTED_RESOURCES[id]?.weight ?? 1;
 }
 
+/**
+ * 244 — JEDNO ŹRÓDŁO PRAWDY o zajętości ładowni: `vessel.cargo`.
+ *
+ * `cargoUsed` był agregatem DENORMALIZOWANYM — utrzymywanym przyrostowo (`+ actual*weight`
+ * przy załadunku, `− actual*weight` przy rozładunku), podczas gdy `vessel.cargo` jest
+ * czyszczone (`delete` przy ≤ 0). Oba pola się rozjeżdżały: mapa PUSTA, a `cargoUsed`
+ * niezerowe. ZMIERZONE: cykl symetryczny daje dokładnie 0 (`a+x−x===a`), ale asymetria
+ * wielokursowa — a tak właśnie lata kurier AI, bo `_loadByRarity` ładuje TEN SAM surowiec
+ * w dwóch przebiegach, a `_deliverAndDock` rozładowuje go jednym wywołaniem — zostawia
+ * resztkę: 8 kursów → 7,105e-15, a przebieg 60 gy → 1,4210854715202004e-14, czyli wartość
+ * z ŻYWEJ GRY co do bitu.
+ *
+ * Resztka przewracała dokładnie dwie bramki kształtu `cargoUsed > 0`:
+ *   • `EmpireLogisticsSystem:441` — kurier ruszał w drogę powrotną z PUSTĄ ładownią
+ *     (jałowy kurs), gdy `_loadByRarity` nic nie wziął, a placówka miała jeszcze cokolwiek;
+ *   • `TransportOrderSystem:246` — zlecenie GRACZA uznawało pusty statek za załadowany.
+ * ⚠ Resztka NIE zamrażała statku — to była osobna teza i została OBALONA pomiarem.
+ *
+ * ⚠ Przeliczenie jest bezpieczne, bo `cargo` jest kompletne we WSZYSTKICH ścieżkach:
+ *   jedyny pisarz `cargoUsed` poza tym plikiem (`ExpeditionSystem:631-633`, zresztą martwy
+ *   alias `MissionSystem`) w tej samej pętli dopisuje `vessel.cargo[resId]`.
+ * @returns {number} nowa zajętość w tonach
+ */
+export function recalcCargoUsed(vessel) {
+  let sum = 0;
+  for (const [id, qty] of Object.entries(vessel?.cargo ?? {})) {
+    if (!(qty > 0)) continue;
+    sum += qty * _getWeight(id);
+  }
+  if (vessel) vessel.cargoUsed = sum;
+  return sum;
+}
+
 // Pobierz ilość z ResourceSystem (inventory Map) lub plain object
 function _getAvailable(resSys, id) {
   if (resSys?.inventory instanceof Map) return resSys.inventory.get(id) ?? 0;
@@ -633,7 +666,7 @@ export function loadCargo(vessel, commodityId, qty, resSys) {
 
   // Dodaj do cargo statku
   vessel.cargo[commodityId] = (vessel.cargo[commodityId] ?? 0) + actual;
-  vessel.cargoUsed = (vessel.cargoUsed ?? 0) + actual * weight;
+  recalcCargoUsed(vessel);        // 244 — agregat liczony Z `cargo`, nie doliczany osobno
 
   return actual;
 }
@@ -783,7 +816,7 @@ export function unloadCargo(vessel, commodityId, qty, resSys) {
   const actual = Math.min(qty, have);
   if (actual <= 0) return 0;
 
-  const weight = _getWeight(commodityId);
+  // 244 — `weight` NIE jest tu już potrzebne: zajętość liczy `recalcCargoUsed` z `cargo`.
 
   // Dodaj do inventory kolonii
   if (resSys?.receive) {
@@ -793,7 +826,7 @@ export function unloadCargo(vessel, commodityId, qty, resSys) {
   // Zdejmij z cargo statku
   vessel.cargo[commodityId] -= actual;
   if (vessel.cargo[commodityId] <= 0) delete vessel.cargo[commodityId];
-  vessel.cargoUsed = Math.max(0, (vessel.cargoUsed ?? 0) - actual * weight);
+  recalcCargoUsed(vessel);        // 244 — pusta mapa `cargo` ⇒ DOKŁADNIE 0, bez resztki
 
   return actual;
 }
