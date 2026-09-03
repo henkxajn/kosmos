@@ -353,6 +353,15 @@ export const GAME_CONFIG = {
     //   ⚠ NIE JEST LEKARSTWEM na 229: bez `aiUniformStaffing` nie ratuje niczego.
     //   OFF = zachowanie sprzed S4, co do bitu. Save v101 bez migracji.
     aiLaborBudget: true,
+    // ── 246 / E3H — WEJŚCIE DO ŁAŃCUCHA tier 3+ przez ZATRZASK Z PASMEM ──
+    //   Zastępuje bramkę binarną `d44af5e` (wszystkie z Fe/Si/Cu/C >= 20k albo nic) celem
+    //   PROPORCJONALNYM do zamożności, z histerezą na `wealthFrac` (OPEN 0.20 / CLOSE 0.12).
+    //   Powod (Finding 246): rudy bramki są ROZŁĄCZNE z wsadem receptur łańcucha, więc archetyp,
+    //   ktoremu `warp_cores` udostępniono świadomie (Expansionist), nie przechodził jej NIGDY.
+    //   ⚠ Pasmo, nie prog: churn celu jest KANAŁEM SZKODY — zmierzone wyparcie FP build|consumption
+    //   spada z 1,78 (sam cel skalowany) do 0,08 na 1000 wywołań alokatora, czyli do pasma E0.
+    //   OFF = zachowanie `d44af5e` CO DO BITU. Plan: `docs/design/CHAIN_ENTRY_PLAN.md` §11.3.
+    aiTier3ScaledEntry: true,
     // ── PopulationOverlay OFF (C7) — degate samodzielnego panelu Populacji ──
     //   Treść panelu przeniesiona do zakładki „Populacja" w prawym info-panelu
     //   ColonyOverlay (C5). Ten kill-switch odłącza STARY samodzielny overlay:

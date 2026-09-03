@@ -115,6 +115,17 @@ const LABOR_BUDGET_MARGIN = 2;
 
 const WEALTH_ORES      = ['Fe', 'Si', 'Cu', 'C'];
 const WEALTH_THRESHOLD = 20000;   // jednostki rudy, KAZDA z WEALTH_ORES osobno
+// 246 / E3H — pasmo histerezy na `wealthFrac` (= min po WEALTH_ORES z stock/WEALTH_THRESHOLD).
+//   ⚠ PASMO, nie prog. Sam cel skalowany (bez histerezy) migocze: `round((target-1)*frac)` dla
+//   MAŁYCH celów tier 3+ zaokrągla się do 0 albo 1, a KAŻDE ponowne wejście popytu do skanu jest
+//   szansą na wyparcie pozycji build|consumption w wywołaniu ze związanym budżetem FP. ZMIERZONE:
+//   3376 przejść przez zero i 1,78 wyparcia/1k (sam cel) wobec 880 i 0,08 (z pasmem) — pasmo E0
+//   to [0 ; 0,32]. ⚠ Podłoga `max(2, scaled)` była MIERZONA I PRZEGRAłA (2,63/1k): trzyma popyt
+//   tier 3+ na stałe włączony, więc konkuruje w KAŻDYM związanym wywołaniu.
+//   Progi PROWIZORYCZNE — wyprowadzone z punktu pracy ekspansjonisty (frac ≈ 0,25 na obu galaktykach),
+//   NIE z trajektorii churnu; `CHAIN_ENTRY_PLAN.md` §11.3 zapisuje tę lukę wprost.
+const WEALTH_OPEN  = 0.20;   // zatrzask OTWIERA sie, gdy wealthFrac >= tyle
+const WEALTH_CLOSE = 0.12;   // ...i ZAMYKA dopiero ponizej tego (pasmo 8 pp)
 
 export const MAX_PENDING_BUILDS_PER_COLONY   = 3;
 export const MAX_PENDING_UPGRADES_PER_COLONY = 2;
@@ -813,12 +824,42 @@ export class ColonyAutoExpander {
     const stocks = arch?.startingSafetyStocks;
     if (!stocks) return;
 
-    const rich = WEALTH_ORES.every(ore => (res.getAmount?.(ore) ?? 0) >= WEALTH_THRESHOLD);
+    // 246 / E3H — dwie sciezki. OFF = `d44af5e` co do bitu (bramka binarna all-4).
+    const scaled = GAME_CONFIG.FEATURES?.aiTier3ScaledEntry !== false;
+
+    if (!scaled) {
+      const rich = WEALTH_ORES.every(ore => (res.getAmount?.(ore) ?? 0) >= WEALTH_THRESHOLD);
+      for (const [cid, target] of Object.entries(stocks)) {
+        const def = COMMODITIES[cid];
+        if (!def || (def.tier ?? 0) < 3) continue;   // tier 1-2 NIETKNIETE — poza zakresem podpisu
+        // bonus = cel - baza; baza dla tier 3+ wynosi 1 (FactorySystem.getSafetyStockTarget)
+        fs.setDemandBonus(cid, rich ? Math.max(0, target - 1) : 0);
+      }
+      return;
+    }
+
+    // Zamoznosc jako UDZIAL progu, nie bit: najslabsza z rud bramki decyduje.
+    let frac = 1;
+    for (const ore of WEALTH_ORES) {
+      frac = Math.min(frac, ((res.getAmount?.(ore) ?? 0) / WEALTH_THRESHOLD));
+    }
+    frac = Math.max(0, Math.min(1, frac));
+
+    // ⚠ ZATRZASK NIE JEST SERIALIZOWANY (D-E3-2). Po wczytaniu zapisu pole jest `undefined`,
+    //   czyli falsy — i to JEST odbudowa fail-closed: kolonia wczytana WEWNATRZ pasma startuje
+    //   zamknieta i otwiera sie dopiero przy najblizszym przejsciu >= WEALTH_OPEN. Deterministyczne
+    //   i konserwatywne; save v101 bez migracji. Precedens: rekoncyliacja ksiegi popytu (217).
+    let open = colony._tier3Latch === true;
+    if (!open && frac >= WEALTH_OPEN) open = true;
+    else if (open && frac < WEALTH_CLOSE) open = false;
+    colony._tier3Latch = open;
+
     for (const [cid, target] of Object.entries(stocks)) {
       const def = COMMODITIES[cid];
       if (!def || (def.tier ?? 0) < 3) continue;   // tier 1-2 NIETKNIETE — poza zakresem podpisu
-      // bonus = cel - baza; baza dla tier 3+ wynosi 1 (FactorySystem.getSafetyStockTarget)
-      fs.setDemandBonus(cid, rich ? Math.max(0, target - 1) : 0);
+      // Po otwarciu cel jest PROPORCJONALNY, z podloga 1 — zeby pozycja o malym `target` nie
+      // zaokraglala sie z powrotem do zera i nie wnosila churnu, ktory pasmo wlasnie usuwa.
+      fs.setDemandBonus(cid, open ? Math.max(1, Math.round(Math.max(0, target - 1) * frac)) : 0);
     }
   }
 
