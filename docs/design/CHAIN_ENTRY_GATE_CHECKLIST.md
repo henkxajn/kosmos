@@ -103,3 +103,65 @@ liczbę", a nie że „fabryka coś zrobiła" — dokładnie ta klasa błędu, k
   nikt tam nie operuje (0,286 i 0,702). Pokrywa **wyłącznie** keeper T2 (fixture skonstruowany, D-E3-3).
 * **Finding 247 zostaje otwarty z projektu** — sufit 50 jest sensem „rezerwy gotowości" (D-CE-0).
   Gate **nie** mierzy zużycia rdzeni; mierzy **wejście**.
+
+---
+
+# WYNIK — **PASS**, live, fixture `GATE-S4-fresh-gy60`, gy 60 → 75 (2026-09-03)
+
+| # | kryterium | wynik |
+|---|---|---|
+| **A** | emp_002 `celWC` 1 → **12**, zatrzask otwarty ~**gy 62**, `QC/AC/WC` **0 → 3 / 1 / 7** z własnego `Nt` 156 | ✅ **PASS** — archetyp z warpem w kolejce badań **wszedł do własnego łańcucha**. Kontrola anty-wyciszeniowa spełniona: produktem jest `QC>0 ∧ AC>0 ∧ WC>0`, nie sam wzrost celu |
+| **B** | emp_001 `celWC` śledzi `frac`: **36 → 32 → 26 → 21 → 19 → 14** | ✅ **PASS** — cel jest **proporcjonalny**, nie binarny (36 ≠ 15 ≠ 50) |
+| **C** | rollback OFF = `d44af5e` co do bitu | ✅ **PASS — ale dowodem jest BAZA + keeper, NIE round-trip z gy 75** (patrz niżej) |
+| **D** | po wczytaniu zatrzask nie otwarty mimo `frac = 0,702` | ✅ **PASS** — `latch undefined` po load, fail-closed na żywym silniku |
+| **E** | kolonia gracza bez zmian po obu stronach flagi | ✅ **PASS** — cele tier 3+ gracza = 1, identycznie OFF i ON |
+| — | higiena konsoli | ✅ czysto (wyłącznie 212 × 404 na brakujące pliki wideo — znany backlog) |
+
+## ⚠ C — DOWÓD JEST Z BAZY I KEEPERA, NIE Z ROUND-TRIPU NA gy 75
+
+**Na gy 75 oba stany flagi czytają `celWC` 14/1 IDENTYCZNIE. To NIE jest porażka rollbacku i nie
+wolno tego tak odczytać później.** Mechanizm jest znany i zamierzony:
+
+1. **emp_001** — zatrzask był już `true`. **Ścieżka OFF nigdy go nie czyta ani nie czyści**, a
+   `getSafetyStockTarget` zwraca **ostatnio zapisany** bonus. Odczyt przy OFF pokazuje więc
+   pozostałość po ON, nie decyzję ścieżki OFF.
+2. **emp_002** — `frac` spadł do **0**, więc **obie** ścieżki mają bramkę zamkniętą (all-4 daje 0,
+   pasmo poniżej `WEALTH_CLOSE` też). Stan zdegradowany nie różnicuje niczego.
+
+**Rozdział OFF ↔ ON jest udokumentowany trzema niezależnymi dowodami:**
+
+* **baza gy 60** (przed flipem): oba imperia `celWC` **1 / 1** przy `frac` 0,702 i 0,286 — czyli
+  bramka `d44af5e` zamknięta dla obu; po ON: **36 / 12**;
+* **keeper T4** (`ai_tier3_scaled_entry_smoke`): na TYM SAMYM stanie OFF daje 0, ON daje 34 —
+  kontrola pinu, nie sama asercja „OFF = dziś";
+* **tabela headless 100 gy** (produkcyjna ścieżka, nie atrapa): przy OFF `latch` jest **undefined
+  przez cały przebieg** — ścieżka OFF nigdy nie zapisuje zatrzasku — a wynik to `celWC` 50/1 i
+  `WC` 23/0, identycznie jak przed wdrożeniem.
+
+⇒ **Kryterium C zaliczone. Round-trip na stanie zdegradowanym jest niediagnostyczny z konstrukcji**
+i został tu zapisany właśnie po to, żeby nikt nie wziął go za regresję.
+
+## Dwa wyniki NIEPLANOWANE (zaobserwowane przy okazji, obie do rejestru)
+
+**(1) RAMIĘ ZAMYKAJĄCE ODPALIŁO NA ŻYWO — częściowo domyka lukę „histereza nieprzetestowana".**
+Dren `Fe` z Findingu **220** zabrał emp_002 `frac` z **0,286 → 0** w ciągu 15 gy; zatrzask przewrócił
+się **true → false** poniżej `WEALTH_CLOSE` w **gy 66**, `celWC` wrócił do **1**. ⇒ ochrona ubogiego
+imperium z `d44af5e` **działa w nowym kształcie tak, jak ją podpisano**.
+⚠ Luka domknięta **CZĘŚCIOWO**: zaobserwowano **ramię zamykające**, nie pełną histerezę — imperium
+przeszło przez pasmo **w dół i tylko raz**. Zachowanie „wraca w górę i NIE otwiera się aż do 0,20"
+pokrywa nadal **wyłącznie keeper T2** (fixture skonstruowany, D-E3-3).
+
+**(2) ŁAŃCUCH UDOWODNIONY OD KOŃCA DO KOŃCA — pierwsze okręty wojenne AI z własnej produkcji.**
+emp_001: `director:shipCompleted` **3**, `shipQueued` **11**, `pressureIncident` **6**;
+**SIEDEM uzbrojonych okrętów w rezerwie**, zbudowanych z własnej ekonomii — **pierwszy raz w projekcie**.
+⚠ `kadlubyZeSkokiem` jest **nadal 0 i to jest POPRAWNE**: jedyna eskorta zdolna do skoku
+(`frigate_laser_escort`, ma `warp_tank`) stoi **w kolejce, nie ukończona** (TTL 76,7 — brakuje jej
+**drugiego** `warp_core`), a dwa **ukończone** okręty to obrońcy układu — wzorzec **martwego balastu**
+z Findingu **251** (`engine_warp` bez `warp_tank`, `warpFuel.max = 0`), więc **słusznie się nie liczą**.
+**Jeden cykl fabryki od przewrócenia licznika.** To jest fakt **projektu danych**, nie defekt.
+
+## Stan po gate'cie
+
+* **Finding 246 — ZAMKNIĘTY.** Wejście do łańcucha działa i jest proporcjonalne.
+* **Finding 247 — OTWARTY Z PROJEKTU** (D-CE-0): sufit 50 jest sensem „rezerwy gotowości".
+* Flaga `aiTier3ScaledEntry` **zostaje ON**; OFF pozostaje ścieżką rollbacku (dowód: baza + T4 + tabela).

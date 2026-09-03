@@ -1,4 +1,6 @@
-# WEJŚCIE DO ŁAŃCUCHA — bramka zamożności tier 3+ (Finding 246). **POMIAR PODPISANY, WDROŻENIE NIE**
+# WEJŚCIE DO ŁAŃCUCHA — bramka zamożności tier 3+ (Finding 246). **E3H WDROŻONY, LIVE-GATE PASS — ARC ZAMKNIĘTY**
+
+> ✅ **2026-09-03:** podpisany kształt **E3H** wdrożony (`d284765`, flaga `aiTier3ScaledEntry`, ON), keeper **25/25** (fail-first 16/24), sweep **204/204**, live-gate **PASS A-E** na fixturze `GATE-S4-fresh-gy60` — wynik i dowody: **`CHAIN_ENTRY_GATE_CHECKLIST.md` §Wynik**. Finding 246 ZAMKNIĘTY; **247 zostaje otwarty z projektu**.
 
 > Slice przekrojowy. Rejestr macierzysty findingów: `VESSEL_ORDERS_PLAN.md` §**246-251**.
 > Poprzednicy w rodzinie: `FE_SUPPLY_PLAN.md` (§14 — łuk głodowy) · `NT_LINK_PLAN.md` (§6 — tabela 241).
@@ -305,6 +307,8 @@ for (cid, target) of archetype.startingSafetyStocks where COMMODITIES[cid].tier 
     bonus = open ? Math.max(1, Math.round((target - 1) * frac)) : 0
     factorySystem.setDemandBonus(cid, bonus)
 ```
+
+⚠ **AKTUALIZACJA PO LIVE-GATE (2026-09-03): ramię ZAMYKAJĄCE zostało zaobserwowane na żywo** — dren `Fe` (Finding **220**) zabrał ekspansjoniście `frac` z 0,286 do 0, zatrzask przewrócił się **true → false** poniżej `WEALTH_CLOSE` w gy 66, cel wrócił do 1. Luka „histereza pasma nieprzetestowana na żywo" jest więc domknięta **CZĘŚCIOWO**: przejście było **w dół i jednorazowe**, a zachowanie „wraca w górę i NIE otwiera się aż do 0,20" pokrywa nadal **wyłącznie keeper T2**.
 
 ⚠ **Progi 0,20 / 0,12 są PROWIZORYCZNE i ich pochodzenie jest tu zapisane wprost:** wyprowadziłem je
 z **pre-checku** (§3.3 — ekspansjonista operuje przy `frac ≈ 0,25 na obu galaktykach`), a **nie** z

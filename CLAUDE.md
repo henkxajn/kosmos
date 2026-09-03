@@ -3610,6 +3610,66 @@ na wyraźne polecenie właściciela.
 
 ---
 
+## ŁAŃCUCH EKONOMICZNY AI — **KOMPLETNY I POTWIERDZONY NA ŻYWO OD KOŃCA DO KOŃCA** (2026-09-03, save v101 bez migracji)
+
+> Zamknięcie wielosesyjnego łuku. Wejście do łańcucha (Finding **246**) było jego ostatnim brakującym
+> ogniwem. Gate: `docs/design/CHAIN_ENTRY_GATE_CHECKLIST.md` §Wynik · plan: `CHAIN_ENTRY_PLAN.md`.
+
+**Pełna ścieżka, każde ogniwo domknięte SKUTKIEM na żywym silniku:**
+
+| ogniwo | slice | dowód |
+|---|---|---|
+| **żywność** — stolica przestaje umrzeć w gy 4-10 | **S1** `aiUniformStaffing` (229) | obsada farm 45 → 100 %, pop 24 → 170 |
+| **budżet pracy** — popyt przestaje uciekać puli | **S4a** `aiLaborBudget` (233/234) | blokady `[farm, well, solar, factory]` → `[]` od gy 40 |
+| **Fe z obsadzonych kopalń** | S1 + S4a | Fe 14-48 tys., kopalnia L12, saldo ujemne (realna konsumpcja) |
+| **rdzenie** — receptura i alokacja | **217 / 221** | `quantum_cores` i `antimatter_cells` alokują się i produkują |
+| **`Nt` uczciwymi trasami** | **NT_LINK** C1/C2/C3 (239/240/244) | trasy 5 → 2 na imperium, 12 odzysków, dostawa 13 `Nt`/kurs |
+| **WEJŚCIE DO ŁAŃCUCHA** | **E3H** (246, `aiTier3ScaledEntry`) | ekspansjonista `celWC` 1 → 12, `QC/AC/WC` **0 → 3/1/7** |
+| **ukończone okręty pod naciskiem** | Director (S3/S6) | **7 uzbrojonych okrętów emp_001 z WŁASNEJ ekonomii** — pierwszy raz w projekcie |
+
+**Finding 246 — ZAMKNIĘTY** (`d284765`; keeper `ai_tier3_scaled_entry_smoke` **25/25**, fail-first 16/24;
+sweep **204/204**; live-gate **PASS A-E**). Kształt: zatrzask z pasmem `WEALTH_OPEN 0.20` /
+`WEALTH_CLOSE 0.12` + cel **proporcjonalny** `max(1, round((target−1)×frac))`, w
+`ColonyAutoExpander._syncTier3SafetyDemand`, AI-only. `_tier3Latch` **nie serializowany** — po
+wczytaniu `undefined` ⇒ fail-closed z samej inicjalizacji (D-E3-2, **bez migracji**).
+
+⚠ **Trzy rzeczy z tego łuku, które wychodzą poza niego:**
+1. **Kontrola, która nie może paść, nie jest kontrolą.** Panel czterech liczb `d44af5e` uruchomiony
+   i **nie odtworzył** własnej kolumny (0/32 · 100 % · 0 wobec 1/32 · 99 % · 1,5) — bo S1/S4a/215
+   naprawiły pod nim świat. Zastąpiony **konkurencją o FP** (`CHAIN_ENTRY_PLAN` §10), która realnie
+   różnicuje (×30). Stary panel został jako **appendix z pomiarem, dlaczego umarł** (§13) — nie skasowany.
+2. **Churn celu JEST kanałem szkody, nie kosmetyką.** Sam cel skalowany: 3376 przejść przez zero
+   i **1,78** wyparcia FP `build|consumption` na 1000 wywołań alokatora. Z pasmem: 880 i **0,08** —
+   pasmo E0 to [0 ; 0,32]. ⚠ **Podłoga `max(2, scaled)` była MIERZONA I PRZEGRAŁA (2,63/1k)** —
+   trzyma popyt tier 3+ na stałe włączony, więc konkuruje w KAŻDYM związanym wywołaniu.
+3. **Rollback na stanie ZDEGRADOWANYM jest niediagnostyczny.** Na gy 75 OFF i ON czytały identycznie,
+   bo ścieżka OFF nigdy nie czyta ani nie czyści zatrzasku, a `getSafetyStockTarget` zwraca ostatni
+   zapisany bonus. Dowodem rozdziału są **baza gy 60 (1/1 → 36/12)**, **keeper T4** (kontrola pinu:
+   ten sam stan daje 0 przy OFF i 34 przy ON) i **tabela headless 100 gy** (`latch undefined` przez
+   cały przebieg OFF). Zapisane w §Wynik, żeby nikt nie wziął tego za regresję.
+
+**Finding 247 — OTWARTY Z PROJEKTU.** Sufit `startingSafetyStocks.warp_cores = 50` jest **sensem**
+„rezerwy gotowości" (D-CE-0): AI gromadzi i konwertuje **pod naciskiem gracza**. ⚠ `kadlubyZeSkokiem`
+jest nadal **0 i to jest POPRAWNE** — jedyna eskorta z `warp_tank` stoi w kolejce (brak drugiego
+`warp_core`), a dwa ukończone okręty to wzorzec **251** (`engine_warp` bez baku, `warpFuel.max = 0`).
+**Jeden cykl fabryki od przewrócenia licznika** — fakt projektu danych, nie defekt.
+
+**Kanoniczny fixture NA DYSKU (pierwszy w projekcie):** `src/testing/fixtures/GATE-S4-fresh-gy60.save.json.gz`
+(215 KB, metryczka obok: v101, `savedAt` 2026-09-03 09:48:57, HEAD `977112a`, kod gry `bee26cf`).
+⚠ **Powstał PRZED naprawami NT_LINK**, więc niesie 5 tras i **6 kadłubów w pozie 239 na imperium** —
+jest kanoniczną kontrolą „zamrożonych kadłubów". Konwencja + sonda read-only: `src/testing/fixtures/README.md`,
+`probe-fixture-inspect.mjs`. ⚠ **Replay headless NIE działa i jest zaparkowany** (`GameCore.boot` nie ma
+ścieżki restore; łańcuch mieszka w `GameScene`, który nie importuje się pod node).
+
+**KOLEJKA (potwierdzona 2026-09-03):** **154** (`_findNearestFriendlyPlanet` bez terminu układu, żywa
+przez trzy przyciski „Powrót do bazy") → **151 / 152 / 153** osobno → duże sloty. Nowi nazwani kandydaci
+na duży slot: **POPYT NA WARP** (rywalizacja AI-vs-AI + doktryna patrolowa, `KOSMOS_backlog_niezrealizowane.md`
+§5, materiał wyjściowy = inwentarz konsumentów w **247**) oraz **238** (cała gałąź cywilna techu jest dla
+AI niewidzialna). Otwarte z tego łuku: **248** (canSustain jako predykat wejścia), **249** (F5: trzy
+prerekwizyty + system-ślepy `orbitalAU`), **250** (pakowanie F3), **251**, **252** (martwy panel WARN).
+
+---
+
 ## STAN SESJI 2026-09-03 — Fe-supply: **S1 + S4a POTWIERDZONE NA ŻYWO, łuk głodowy ZAMKNIĘTY, oś przechodzi na DOSTAWĘ Nt** (save v101, bez migracji)
 
 Plan + pełne tabele: `docs/design/FE_SUPPLY_PLAN.md` §12a (krach żywnościowy) · §12b (S1) · §13 (S4a) ·
