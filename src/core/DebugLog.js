@@ -91,6 +91,11 @@ const TRACKED_EVENTS = [
   // widać, że imperium bez stolicy przestało ściągać okręty (D-Z2-10).
   'director:recalled',
   'director:recallRefused',
+  // 239 / C1 — odmowa trasy kurierskiej do placówki spoza układu stolicy ORAZ rozwiązanie
+  // takiej trasy ze starego zapisu. Reguła z W3: nowy powód odmowy dołącza do listy audytu
+  // W TYM SAMYM commicie — inaczej gate mierzy ciszę i nie odróżni jej od „nic się nie stało".
+  'logistics:routeUnreachable',
+  'logistics:routeAborted',
 ];
 
 class DebugLog {

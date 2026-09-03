@@ -38,6 +38,7 @@ import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { MINED_RESOURCES } from '../data/ResourcesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { loadCargo, unloadCargo } from '../entities/Vessel.js';
+import { isSameSystem } from '../utils/SystemScope.js';
 
 // px na 1 AU (z DistanceUtils/VesselManager — spójność travel-time z fizyką lotu)
 const AU_TO_PX = GAME_CONFIG?.AU_TO_PX ?? 110;
@@ -89,6 +90,8 @@ export class EmpireLogisticsSystem {
   constructor() {
     this._acc     = 0;       // akumulator civDeltaYears dla dispatchera
     this._verbose = false;   // KOSMOS.empireLogisticsSystem._verbose = true
+    // 239 / C1 — dedup powodu odmowy trasy (runtime-only, patrz `_noteUnreachable`).
+    this._unreachableNoted = new Set();
 
     this._onTick            = ({ civDeltaYears }) => this._tick(civDeltaYears ?? 0);
     this._onVesselCreated   = ({ vessel })        => this._onVesselCreatedClaim(vessel);
@@ -240,9 +243,39 @@ export class EmpireLogisticsSystem {
 
     // #14: outposty są teraz w EmpireRegistry (bootstrapAutonomousOutpost woła addColony)
     //   → bierzemy je z getColoniesByEmpire (jedno źródło prawdy, koniec skanu bodyIds systemu).
-    const outpostIds = reg.getColoniesByEmpire(empire.id)
-      .filter(c => c.isOutpost && strategic.some(r => this._hasDeposit(EntityManager.get(c.planetId), r)))
-      .map(c => c.planetId);
+    //
+    // ── 239 / C1 — TERMIN UKŁADU ────────────────────────────────────────────────────────
+    // Kurier jest Z PROJEKTU in-system (nagłówek pliku, S3.2 S1), a ten dobór pytał wyłącznie
+    // o WŁAŚCICIELA i ZŁOŻE. Trasa do placówki w innym układzie jest POCHŁANIACZEM KURIERÓW:
+    // `dispatchOnMission` przepuszcza cel (AI zwolnione z `_missionTargetOutOfSystem`, D-SS5b),
+    // guard przylotu W3-4b słusznie NIE dokuje do obcego ciała (`dockedAt=null`) — i wtedy
+    // w `_advanceRouteCourier` NIE MA już gałęzi, która taki statek dopasuje (IDLE chce
+    // `docked`, LOADING chce `dockedAt===outpostId`, RETURNING chce `phase==='returning'`).
+    // Etat trasy zostaje zajęty na zawsze, więc następca się nie buduje.
+    //   ZMIERZONE A/B (jeden boot, jedyna różnica to układ placówki): trasa w układzie —
+    //   `delivered 18`, stolica Nt 0→234; trasa międzyukładowa — 15 gy BEZ ŻADNEJ zmiany.
+    //   ŻYWO (GATE-S4-fresh-gy60, L5): DWANAŚCIE kadłubów w tej pozie, spóźnionych 36-44 gy.
+    // ⚠ `isSameSystem` jest FAIL-OPEN i tak ma zostać: to bramka strony ROZKAZU, a fail-closed
+    //   skasowałby dziś DZIAŁAJĄCE trasy domowe, gdyby ciału brakowało stempla (argument D-SS2).
+    const capEnt  = EntityManager.get(capital.planetId);
+    const scopeOn = GAME_CONFIG.FEATURES?.aiCourierRouteScope !== false;
+    const outpostIds = [];
+    for (const c of reg.getColoniesByEmpire(empire.id)) {
+      if (!c?.isOutpost) continue;
+      const oEnt = EntityManager.get(c.planetId);
+      if (!strategic.some(r => this._hasDeposit(oEnt, r))) continue;
+      if (scopeOn && !isSameSystem(capEnt, oEnt)) {
+        this._noteUnreachable(empire, c.planetId, oEnt, capEnt);
+        continue;
+      }
+      outpostIds.push(c.planetId);
+    }
+
+    // 239 / C1 — trasy JUŻ istniejące do nieosiągalnych placówek (stary zapis) rozwiązujemy.
+    // Bez tego naprawa działa wyłącznie na NOWEJ partii, a kadłuby z zapisu zostają uwięzione.
+    // Kurierzy → `reserve` (ten sam kanał, co przy zniszczonej koloni); z samej POZY zdejmuje
+    // ich dopiero watchdog C2 — `reserve` tego nie robi.
+    if (scopeOn) this._pruneUnreachableRoutes(empire, logi, capEnt);
 
     for (const outpostId of outpostIds) {
       let route = logi.routes.find(r => r.outpostId === outpostId);
@@ -666,6 +699,54 @@ export class EmpireLogisticsSystem {
         EventBus.emit('logistics:capitalLost', { empireId: empire.id });
         this._log('capitalLost — trasy rozwiązane', empire.id);
       }
+    }
+  }
+
+  /**
+   * 239 / C1 — odmowa trasy do placówki spoza układu stolicy. MUSI być słyszalna: bez śladu
+   * audytu „AI nie wozi Nt" wygląda identycznie przed naprawą i po niej.
+   * ⚠ Raz na DECYZJĘ, nie co tik — dyspozytor biegnie co `LOGISTICS_INTERVAL_CIVYEARS`,
+   *   więc bez dedupu ten sam powód zalałby `debugLog` i wypłukał z niego resztę audytu AI.
+   *   Dedup jest RUNTIME-only (po wczytaniu zapisu powód zabrzmi raz jeszcze — i dobrze,
+   *   bo to jedyny moment, w którym gracz może go zobaczyć po powrocie do gry).
+   */
+  _noteUnreachable(empire, outpostId, oEnt, capEnt) {
+    const key = `${empire?.id}:${outpostId}`;
+    if (this._unreachableNoted.has(key)) return;
+    this._unreachableNoted.add(key);
+    EventBus.emit('logistics:routeUnreachable', {
+      empireId:        empire?.id ?? null,
+      outpostId,
+      outSystemId:     oEnt?.systemId ?? null,
+      capitalSystemId: capEnt?.systemId ?? null,
+      reason:          'outpost_other_system',
+    });
+    this._log('placówka poza układem stolicy — trasy NIE tworzę',
+      `${outpostId} (${oEnt?.systemId}) vs stolica (${capEnt?.systemId})`);
+  }
+
+  /**
+   * 239 / C1 — rozwiązanie tras, które powstały ZANIM bramka istniała (stary zapis).
+   * Kurierzy trafiają do `reserve` i zostają tam do czasu, aż watchdog C2 zdejmie ich z pozy,
+   * a dyspozytor przypisze do trasy osiągalnej. Idempotentne.
+   */
+  _pruneUnreachableRoutes(empire, logi, capEnt) {
+    for (let i = (logi.routes?.length ?? 0) - 1; i >= 0; i--) {
+      const route = logi.routes[i];
+      const oEnt = EntityManager.get(route.outpostId);
+      if (isSameSystem(capEnt, oEnt)) continue;          // fail-open: nie wiemy → nie ruszamy
+      for (const cid of [...(route.courierIds ?? [])]) {
+        const v = this._vm()?.getVessel(cid);
+        if (!v || v.isWreck) continue;
+        v.assignedRouteId = null;
+        if (!logi.reserve.includes(cid)) logi.reserve.push(cid);
+      }
+      if (logi.pendingBuildRoute === route.routeId) logi.pendingBuildRoute = null;
+      logi.routes.splice(i, 1);
+      EventBus.emit('logistics:routeAborted', {
+        empireId: empire?.id ?? null, routeId: route.routeId, reason: 'outpost_other_system',
+      });
+      this._log('routeAborted (placówka poza układem stolicy)', route.routeId);
     }
   }
 

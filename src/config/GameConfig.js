@@ -138,6 +138,23 @@ export const GAME_CONFIG = {
     //      `_deficitScore` stolicy byl zanizony. JEDNA flaga — obie polowy sa jednym lancuchem:
     //      otwarty kanal z zanizonym deficytem wysle za malo i za pozno.
     aiInternalTrade: true,
+    // ── 239 + 240 / C1+C2 — ZAKRES UKŁADU TRASY KURIERSKIEJ + ODZYSK ──────────────────
+    // Kurier AI jest Z PROJEKTU in-system (EmpireLogisticsSystem, S3.2 S1: silniki warp
+    // wykluczone, bo warp wymaga warp_cores <= Nt <= kuriera), ale dobór placówek pytał
+    // wyłącznie o WŁAŚCICIELA i ZŁOŻE. Trasa do placówki w innym układzie to POCHŁANIACZ:
+    // przylot do obcego ciała daje `dockedAt=null` (guard W3-4b), po czym ŻADNA gałąź
+    // `_advanceRouteCourier` już nie pasuje — etat trasy zajęty na zawsze.
+    // ZMIERZONE: A/B (jeden boot) — trasa w układzie `delivered 18`, Nt stolicy 0→234;
+    //   trasa międzyukładowa 15 gy bez zmian. ŻYWO (GATE-S4-fresh-gy60): 12 kadłubów
+    //   spóźnionych o 36-44 gy, po 6 na imperium.
+    // ON  = (a) trasy tylko do placówek w układzie stolicy, z powodem w audycie;
+    //       (b) rozwiązanie tras nieosiągalnych ze STAREGO zapisu (kurierzy → reserve);
+    //       (c) watchdog na ZEGARZE MISJI odzyskuje kadłuby uwięzione w tej pozie.
+    // ⚠ JEDNA flaga na (a)+(b)+(c) świadomie: dwie dałyby trzeci stan („bramka bez odzysku"),
+    //   w którym nowe martwe trasy nie powstają, ale kadłuby z zapisu zostają uwięzione —
+    //   czyli stan, którego nikt nie chce utrzymywać (wzór: `aiStrikeRecall`).
+    // OFF = zachowanie sprzed slice'u CO DO BITU. Save v101 bez migracji.
+    aiCourierRouteScope: true,
     // ── 225 / R4 — karmiciele skalowani POPULACJA (zywnosc + woda; energia NIETKNIETA) ──
     // ⚠ PRZESLANKA OBALONA POMIAREM: ekspander BUDUJE elektrownie (6 -> 13 przy celu 5),
     //   wiec skalowanie energii byloby NO-OPEM. Zapasc jest w ZYWNOSCI: farm stoi na 2, wiec
