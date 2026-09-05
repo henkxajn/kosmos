@@ -1055,6 +1055,7 @@ statek **MA panel i jest ZABLOKOWANY**. Przeciwne objawy, przeciwne przyczyny.
 w kodzie, który **P4 i tak retiruje**: gdy `foreign_*` staną się zwykłymi akcjami z rekordem
 w `MissionSystem`, **144 i 146 znikają z konstrukcji** (rekord daje i samodomknięcie, i closer
 powrotu). **145 należy do slice'u `ORDER_TRUTHFULNESS`** (§7a) — to fasada, nie model misji.
+⇒ **PLAN PODPISANY 2026-09-05 dla 145 + 146: patrz §145 SLICE RETURN TRUTHFULNESS na końcu tego pliku.**
 ⇒ żaden nie wymaga osobnego slice'u; **dopisać jako kryteria gate'u D (VO-6)**.
 
 ---
@@ -1703,3 +1704,423 @@ zamknął **GATE B2 / Z2** (wiersz zdjęty z `OPEN_FINDINGS_INDEX.md`).
 | **250** | ⚪ **Ograniczenia PAKOWANIA dla dowolnego przyszlego F3 (kurier warp).** (a) **Obsada swiadoma zdolnosci jest OBOWIAZKOWA**: petla reserve→trasa w `_runDispatcher` (`while (route.courierIds.length < couriersPerRoute && logi.reserve.length > 0)`) **nie pyta, czy kadlub umie obsluzyc te trase**; na istniejacym zapisie daje to livelock — ZMIERZONE **2160 cykli zwolnij/przypisz**, zero korzysci, 6 kadlubow nadal zamrozonych. (b) **F3 musi miec WLASNA flage i NIGDY nie reuzywac `aiCourierRouteScope`**: D-Nt-3 swiadomie zlalo C1 i C2 w jedna flage, wiec zdjecie bramki, zeby dopuscic trasy cross, **wylacza tez watchdog C2**, ktory odzyskalby te kadluby. (c) **Waiver `warp_cores` jest NOSNY, nie opcjonalny**: bez niego przelaczenie silnika kuriera na warp daje **0 statkow, 0 dyspozycji, 0 dostaw** — logistyka nie degraduje sie, tylko **nie startuje**. (d) Kurier cross-system jest **~0,3× tak produktywny na kadlub** co in-system (126 vs 398 Nt/kadlub w gy 100) ⇒ **okolo trzech czwartych zmierzonego zysku F3 to SILNIK, jedna czwarta to ZASIEG**. | ⚪ **OTWARTY — material wejsciowy, gdyby 241 kiedykolwiek wrocilo.** Na osi transportu nic nie jest podpisane; **FK** (`couriersPerRoute` 2→4, jedna stala, zmierzone 1,6-1,7× Nt w gy 100 na obu galaktykach) lezy w kieszeni jako ksztalt-gdyby. |
 | **251** | ⚪ **`frigate_system_defender` placi 2 `warp_cores` za silnik, ktorego nie moze uzyc.** Szablon wymaga `engine_warp` (`ShipTemplateData:143`), ale **swiadomie NIE MA `warp_tank`** (komentarz `:135`: „CELOWY BRAK — ten okret NIE MOZE opuscic swojego ukladu”), a bez baku `dispatchInterstellar` odmawia na `wf.max <= 0` (`VesselManager:809`). Sam kod nazywa 30-tonowy silnik **„martwym balastem”** (`:127`) i odnotowuje, ze drabinki `['engine_warp','engine_ion','engine_chemical']` swiadomie nie zastosowano, bo popsulaby eskorty. ⇒ obronca ukladu drenuje **2 rdzenie z sufitu 50** (**247**) na zdolnosc, ktorej z definicji nie uzyje. Obserwacja DANYCH — nie zmierzono jej wplywu na rozgrywke (przy dzisiejszym braku konsumenta sufit i tak sie nie domyka). | ⚪ **OTWARTY — ale wzorzec POTWIERDZONY NA ŻYWO (gate 246, gy 60→75):** dwa **ukończone** okręty emp_001 to dokładnie ten kształt — `engine_warp` bez `warp_tank`, `warpFuel.max = 0`, więc **słusznie nie liczą się** do `kadlubyZeSkokiem`, choć każdy zapłacił 2 rdzenie. Kosmetyka danych. Nie tkniete swiadomie: zmiana szablonu rusza balans katalogu Directora (`4755f19`), a przy **247** / STATUS QUO nie ma pilnosci. |
 | **252** | 🟠 **Panel zdrowia AI emituje TRZY ostrzeżenia na stałe i TRZY zaliczenia na stałe — jego licznik „naruszeń" niesie ZERO informacji.** ZMIERZONE (16 ziaren × 2 imperia = 192 sprawdzeń, `AiThresholds.evaluateThresholds`): **96/192**, i to **te same trzy** kody w KAŻDYM przebiegu i KAŻDYM wariancie bramki tier-3 — `AI_SLOW_FIRST_OUTPOST` (próg **2 gy**, zmierzone 5-7 gy), `AI_RESOURCE_ZERO` (woda na zerze 7-14 gy przy progu **1 gy**), `AI_ENERGY_DEFICIT` (ujemny bilans 13-33 gy przy progu **1 gy**). Pozostałe trzy (`FEW_COLONIES`, `POP_DECLINE`, `NO_MOTHER`) nie odpalają nigdy. ⚠ **NIE są „niezależne od wariantu z konstrukcji"** — każdy z nich mógłby w zasadzie drgnąć (podaż androida pod placówkę, konkurencja o FP z konsumpcją); są **NASYCONE KALIBRACJĄ**: progi leżą o rząd wielkości poniżej osiągalnych wartości. ⚠ **I były niemal jałowe JUŻ przy `d44af5e`** — 83/192 wobec 82/192 to delta **1 na 192**. Zestaw pochodzi z JEDNEGO commita `d5d38bb` (2026-08-05) i **nie był tknięty ani razu**, podczas gdy S1 (`aiUniformStaffing`), S4a (`aiLaborBudget`), 215 i `d44af5e` zmieniły pod nim świat. Trzy żywe ostrzeżenia opisują **prawdziwe** problemy AI (wolna pierwsza placówka, sucha woda, chroniczny deficyt energii) — ale jako **kontrola panelu** są martwe. | 🟠 **OTWARTY — dotyczy PRZYRZąDU, nie gry.** Do rozstrzygnięcia: przekalibrować progi do dzisiejszych wartości osiągalnych (i wtedy panel znowu coś znaczy) albo **wycofać trzy nasycone kody** z licznika naruszeń i zostawić je jako czyste obserwacje. ⚠ Do tego czasu **żaden plan nie ma prawa użyć „naruszeń X/192" jako kryterium** — `CHAIN_ENTRY_PLAN.md` §13 zapisuje pierwszy przypadek, w którym to zawiodło. Żywe weto tego planu: §10 (konkurencja o FP). |
+
+---
+
+# §145 SLICE **RETURN TRUTHFULNESS** — plan PODPISANY 2026-09-05 (Findingi **145** + **146**)
+
+> **Audyt wejściowy:** ta sesja, wykonaniem na żywym silniku (`VesselManager`, `OrderService`,
+> `FleetManagerOverlay` importują się pod node; sondy przez `node --input-type=module -e` ze
+> **stdin — zero zapisów na dysk**, więc karta gracza nie była przeładowywana).
+> **Stan wejściowy:** HEAD `2efe23f`, sweep **204/204 OK, 0 FAIL, 28 advisory**,
+> keepery `return_home_no_brick` **77/77** i `preempt_order` **35/35** zielone PRZED audytem.
+> **Dryf numeracji wobec rejestru:** `issueReturn:206 → :260`, `startReturn:555 → :559`
+> (bramka `:589`, predykcja `:567`) — Z2 dołożył `issueRecall` powyżej.
+
+## §145.1 Dwa defekty — rozłączne, każdy z własną kontrolą
+
+**Zmierzona tabela prawdy** (prawdziwy silnik; statek 27 AU zasięgu, 0,4 AU od domu):
+
+| przypadek | `startReturn` | `issueReturn` | `vessel:returnBlocked` |
+|---|---|---|---|
+| **A** `exploration` bez `returnYear` (headline 145) | `false` | **`{ok:true}`** | poszedł |
+| **B** identyczny + `returnYear` USTAWIONY — *kontrola (b)* | **`true`** | `{ok:true}` | — |
+| **C** naprawdę pusty bak, `returnYear` ustawiony — *kontrola (a)* | `false` | **`{ok:true}`** | poszedł |
+| **D** `vessel.mission === null` | `false` | **`{ok:true}`** | **cisza zupełna** |
+
+A i B różnią się **jednym polem**. C nie zawiera NaN-a w ogóle ⇒ **(a) jest żywe niezależnie od (b),
+a (b) niezależnie od (a)**. To jest powód, dla którego to są DWA commity, a nie jeden.
+
+**(a) Fasada melduje sukces na odmowie** — `OrderService.js:260`:
+`vMgr.startReturn(vessel.id); return { ok: true };` — wartość `boolean` (trzy `return false`:
+`:561` brak statku/misji, `:592` bramka paliwa; jeden `return true` `:610`) jest **odrzucana**.
+⚠ To NIE jest nawyk repo, tylko lokalna regresja: trzej konsumenci silnika czytają ją poprawnie
+(`MissionSystem:1176 / 1205 / 2785` — `const ok = …; if (ok) exp.status = 'returning';`).
+
+**(b) NaN staje się „brakiem paliwa"** — cztery ogniwa, każde ZMIERZONE:
+
+1. `VesselManager:567` `_predictPosition(colonyId, m.returnYear)` — `returnYear === undefined`
+   ⇒ `dt = NaN` ⇒ `KeplerMath.updateMeanAnomaly(M, NaN, T) = NaN` ⇒ **`{x:NaN, y:NaN}`**
+   (kontrola: z `41.2` zwraca `{x:-219.8, y:32.3}`).
+2. `:568-569` `predictedHome.x ?? m.startX` — **`??` NIE łapie `NaN`** (zmierzone: `NaN ?? 999 → NaN`).
+   Zamierzony strażnik nie odpala NIGDY, a w praktyce jest bliski martwego: `_predictPosition`
+   zwraca liczby albo `{x:0,y:0}`, nigdy `null`/`undefined`.
+3. `_calcRoute(…, NaN, NaN, …)` ⇒ `returnDistAU = NaN`.
+4. `:589` `!canReach(vessel, NaN)` — `27 >= NaN` to `false` ⇒ bramka zatrzaskuje się.
+
+⚠ **Nic nie liczy „za mało paliwa".** Bramka pyta `27 >= NaN`, dostaje `false` z IEEE-754 (każde
+porównanie z NaN jest fałszem) i czyta ten jeden `false` jako „nie doleci". **Zasięg nie jest
+w ogóle konsultowany.**
+
+**Misje bez `returnYear`** — pole jest NIEOBECNE w literale, nie ustawione na `null`:
+`VesselManager:2985` `type:'exploration'` oraz literał `type:'interstellar_jump'`.
+
+**Regresja wobec działającego bliźniaka:** `FleetActions.js:410-411` ustawia
+`vessel.mission.returnYear = gameYear + travelYears;` **tuż przed** `startReturn`. Fasada woła gołe.
+
+**⚠ DRUGIE WEJŚCIE, którego rejestr nie nazywa — ZMIERZONE.** `isForeign = vessel.systemId && …`,
+a `vessel.systemId` jest **`null` w prawdziwym tranzycie warp** (`:854`, kanon Slice A) ⇒ `null` jest
+falsy ⇒ **statek w skoku idzie gałęzią LOKALNĄ**. Zmierzone: `canExecute(return_home) = {ok:true}`
+(przycisk JEST oferowany), `startReturn → false`, `issueReturn → {ok:true}`, `_strandedNotified = true`,
+misja `warp_transit` nietknięta.
+
+**Co widzi gracz i dlaczego to trwałe.** `_strandedNotified` (`:590`) zasila DWA odczyty:
+`FleetManagerOverlay:8343` → `fleet.statusTextStranded` („⛽ Utknął — brak paliwa") oraz
+`FleetPictureLogic:159` → `fleetPicture.alert.stranded` przy **severity 1**; do tego `UIManager:1203`
+robi z `vessel:returnBlocked` toast + wpis `expedition_fail`. Gracz nie dostaje ciszy — **dostaje
+GŁOŚNO ZŁY POWÓD, w dwóch panelach i w Dzienniku**. Zmierzone 8 kolejnych kliknięć: `{ok:true}` ×8,
+paliwo 27 bez zmian, `stranded` dalej zapalone. Flaga NIE jest serializowana (`:534-536`) — fałszywa
+etykieta ginie po wczytaniu, **przyczyna nie**.
+
+## §145.2 Promień rażenia (zmierzony)
+
+**Konsument `{ok}`: dokładnie JEDEN** — `FleetManagerOverlay:2590`, z `_handleAction` (`:2537`),
+pojedynczy klik, **bez fan-outu**. Kod konsumenta jest POPRAWNY i już wpięty w maszynerię komunikatów
+z Findingu 125 — jest **zagłodzony przez fasadę, nie zepsuty**.
+
+**POZA promieniem** (sprawdzone, żeby nie rozdąć slice-u): `FleetGroupPanel:445`
+i `FleetCommandPanel:384` „Powrót do bazy" **nie wołają** `issueReturn` — idą przez
+`AutoRetreatSystem._findNearestFriendlyPlanet` + `moveToPoint` ⇒ to rodzina **Findingu 154**.
+`RightClickMenu` / `FleetPanel` / `FleetTabPanel` — zero wywołań.
+
+**AI nie trafia w ŻADEN z dwóch defektów, i to z trzech niezależnych powodów:** fasady nie woła
+(jedyny caller to UI gracza; ścieżką AI jest `issueRecall`, jawnie NIE-`issueReturn`) · oba wywołania
+`startReturn` po stronie AI ustawiają pole PRZED (`EmpireLogisticsSystem:491` z komentarzem
+nazywającym dokładnie ten hazard, `:830`) · bramka `:589` jest owner-gated `!isEnemyVessel`.
+⚠ Jeden połyk po stronie AI ISTNIEJE i **nie należy do 145**: `EmpireLogisticsSystem:831`
+`try { … } catch (_e) {}` odrzuca boolean — nieszkodliwy dziś tylko dlatego, że `:830` ustawia pole.
+**Do rejestru 141.**
+
+**⚠ SPRZĘŻENIE Z FINDINGIEM 146 — powód, dla którego to slice na TRZY commity.** ZMIERZONE na świecie
+symulującym „(b) już naprawione" (`returnYear` poprawny, prawdziwy `startReturn`, prawdziwe
+`_updatePositions`):
+
+```
+startReturn -> true | phase: returning | state: in_transit
+t=41   dist 0.0000 AU  in_transit  dockedAt: null  status: on_mission  phase: returning
+t=240  dist 0.0000 AU  in_transit  dockedAt: null  status: on_mission  phase: returning
+```
+
+Statek dolatuje **na planetę** i wisi 200 lat. Przyczyna: `VesselManager:2455`
+`if (!m.phase?.startsWith('return') && gameYear >= m.arrivalYear)` — VesselManager wyklucza własny leg
+powrotny z detekcji przylotu, a jedyny closer (`MissionSystem:1668-1676` → `dockAtColony`) **wymaga
+rekordu**, którego misja zbudowana przez VesselManager nie ma.
+⚠ **GRANICA DOWODU:** fixture nie tyka fizyki, więc dom nie krąży i dystans siada na 0,0000 zamiast
+**rosnąć**, jak zmierzył rejestr (0,4064 → 0,4197). Zmierzony jest tu **BRAK DOMKNIĘCIA**; detal dryfu
+zostaje pomiarem 146, nie moim.
+
+## §145.3 Decyzje podpisane 2026-09-05
+
+| # | decyzja | treść |
+|---|---|---|
+| **D-145-1** | **(b) = B2** | `startReturn` broni się SAM: `returnYear` niefinitny ⇒ wyprowadź z `dist/speed` przed predykcją. Strażnik należy do **helpera**, bo helper jest kontraktem (lekcja P0 §6). **B1 odrzucone** (drugi egzemplarz tej samej matematyki obok `FleetActions:410` — reguła nieutwardzonego bliźniaka; zostawia minę pozostałym 5 callerom). **B3 odrzucone** (zmiana semantyki `_predictPosition` dotyka 6 innych call-site-ów i po cichu maskuje inne braki roku). Obowiązkowy **pin ŹRÓDŁOWY: żaden caller nie polega na NaN**. |
+| **D-145-1b** | **typ zwrotu `startReturn` NIETKNIĘTY** | ⚠ `MissionSystem:1176/1205/2785` robią `if (ok)`, a **`{ok:false}` jest truthy** ⇒ refaktor kontraktu po cichu zepsułby trzy żywe call-site-y. Powód wyprowadza **fasada, TYM SAMYM predykatem co bramka** — precedens podpisany przy 138/142 (`_abortLaunch`). |
+| **D-145-2** | **zależność 146 = (i)** | Leg powrotny misji BEZ rekordu dostaje closer **wewnątrz `VesselManager`**. Uzasadnienie właściciela: (b) bez closera zamienia mylną etykietę na wiecznego ducha `in_transit` — **strictly worse**; pin b5 istnieje po to, żeby padać do czasu tego commitu. **(iii) = przypadek „(a) sam", przed którym audyt ostrzegał.** |
+| **D-145-2b** | **(ii) ROZWAŻONE i ODRZUCONE** | Mniejsze (~10 linii), ale **nie zamyka 146 dla tej klasy**: freeze przeżywa w `_resumeMissionAfterOrder:2577` i w bliźniaku `FleetActions` (świadomie poza zakresem, D-145-4) ⇒ warunek właściciela niespełniony. Do tego instytucjonalizuje **szkodę z Findingu 121** (`moveToPoint` gasi panel obcego układu) jako zaprojektowane zachowanie przycisku Powrót i zostawia NaN żywy dla 5 pozostałych callerów wbrew D-145-1. |
+| **D-145-3** | **zawór podwójnego komunikatu** | Fasada **nie dokłada** drugiego komunikatu dla powodów, które silnik już ogłasza przez `vessel:returnBlocked`. Istniejący toast `UIManager:1203` **zostaje nietknięty**. Pin a5: dokładnie JEDEN komunikat widoczny dla gracza na klik. |
+| **D-145-4** | **bliźniak `FleetActions.return_home.execute` POZA zakresem** | Martwy importer (`orderService` zawsze zamontowany w GameScene ⇒ gałąź `else` w `FMO:2592` nieosiągalna), nie jest load-bearing dla 145. **Zapisane jako obserwacja, NIE ruszane** — patrz §145.7. |
+| **D-145-5** | **i18n = DOKŁADNIE JEDEN klucz** | Tylko ten, bez którego odmowa paliwowa in-system renderuje się jako „Brak trasy w zasięgu". Pozostałe 29 zostaje przy 141. |
+
+### ⚠ Dlaczego jeden klucz jest KONIECZNY (zmierzone renderem)
+
+`startReturn` zwraca **goły boolean**, a naiwne przepuszczenie jego powodu daje:
+
+```
+PL: insufficient_fuel -> "Nie można wydać rozkazu — ✗ Brak trasy w zasięgu"
+EN: insufficient_fuel -> "Cannot issue order — ✗ No route in range"
+```
+
+bo `WARP_ROUTE_REASONS.INSUFFICIENT_FUEL` to string **`'insufficient_warp_fuel'`**, więc
+`'insufficient_fuel'` spada do `default:` w `_warpErrLabel` → `fleet.warpErrNoRoute`.
+Klucza dla `insufficient_fuel` **nie ma nigdzie** (grep = 0). Bez niego (a) wymienia jedno błędne
+wyjaśnienie na drugie.
+
+## §145.4 Closer (146) — JEDNO oczywiste miejsce, nie widelec
+
+**Shape A — closer w `VesselManager._updatePositions`, zakresowany do misji BEZ rekordu.**
+Lustro detekcji przylotu stojącej tuż wyżej (`:2455`), obok interpolacji, która już tam biegnie
+(`:2404`). Zero nowego stanu, zero wpływu na zapis.
+
+**Shape B (backfill rekordu w `MissionSystem`) ODRZUCONE — trzy konkretne powody:** rekord powstały
+w locie zmienia `getActive()` dla kilku konsumentów (m.in. `issueReturn` wybrałoby wtedy gałąź
+`cancelMission`, `_vesselIsAtTarget`, listy UI) · robi połowę roboty **P4**, i to w złą stronę
+(backfill przy powrocie zamiast rekordu przy tworzeniu) · promień rażenia większy przy zerowym zysku.
+
+**Predykat zakresu jest czysty i ZMIERZONY** — trzy kategorie legów `phase='returning'`:
+
+1. z rekordem `MissionSystem` → closer `MissionSystem:1668`, **działa**;
+2. kurierzy AI (`EmpireLogisticsSystem`) → **własny** poller/closer (`:500`, `:516`), a
+   `isEnemyVessel(kurier) === true` (`:655` stempluje `ownerEmpireId`), gracz `false`;
+3. bez rekordu, gracz (`exploration`, `interstellar_jump`, oraz wznowienie
+   `_resumeMissionAfterOrder:2577`) → **brak closera** = Finding 146.
+
+⚠ Globalne zdjęcie wykluczenia `:2455` jest NIEDOSTĘPNE — dałoby kategorii 2 **drugi** closer
+(podwójny dok, pominięty rozładunek). Stąd zakres, który podpis już przewidywał.
+
+**Sub-decyzja „co przy braku portu" NIE ISTNIEJE — helper już ją rozstrzyga** (ZMIERZONE, obie
+gałęzie): `dockAtColony` degraduje do `state='orbiting'`, `dockedAt=null`, **`status='idle'`,
+`mission=null`**, `missionsComplete++`, `vessel:orbiting {reason:'no_spaceport'}`. Statek jest
+zwolniony i znów zadaniowalny w obu przypadkach ⇒ **closer to po prostu `dockAtColony`**.
+
+## §145.5 Plan commitów
+
+| # | commit | pinuje | i18n | zapis |
+|---|---|---|---|---|
+| **b** | `startReturn` broni się przed niefinitnym `returnYear` (D-145-1) | keeper `return_truthfulness` T-b1/b1c/b2/b3/b4 | — | v101 |
+| **a** | `issueReturn` nie melduje sukcesu na odmowie + powód + zawór (D-145-1b/3/5) | T-a1/a2/a3/a4/a4c/a5 | **1 klucz** PL+EN | v101 |
+| **c** | closer legu powrotnego bez rekordu (D-145-2) — **zamyka 146** | T-b5 + własne kontrole | — | v101 |
+
+Każdy commit: **fail-first zmierzony FINALNYMI pinami** przez `git stash` samego kodu gry, każda
+kontrola pinu zielona po OBU stronach, `run-all.mjs` **0 FAIL**, `check-i18n` **PASS**, bez migracji.
+
+### ⚠ KOLEJNOŚĆ — konflikt do rozstrzygnięcia jednym słowem
+
+Podpisano `(b) → (a) → (c)`. **Pin b5 pada przy (b) i zielenieje dopiero przy (c)**, więc albo b5
+wędruje do keepera commitu (c), albo commit 1 ląduje ze świadomie czerwonym pinem — a to łamie
+„per-commit sweep 0 FAIL".
+⚠ Dodatkowo: **commity docierają do karty gracza** (zapis pliku przeładowuje Live Server), więc okno
+między (b) a (c) jest stanem, w którym przycisk Powrót zamienia mylną etykietę na ducha
+`in_transit` — ZMIERZONE jako **ściśle mniej opcji**: `phase='returning'` zamyka też wyjście
+`_redirectInterstellarVessel` (wymaga `orbiting_body`).
+**REKOMENDACJA: `(c) → (b) → (a)`** — każdy commit 0 FAIL, a (b) nie może wyprodukować ducha nawet
+przejściowo. To jest dokładnie argument, którym właściciel uzasadnił wybór (i).
+
+## §145.6 Keepery — kształty i kontrole NIEJAŁOWOŚCI
+
+**`return_truthfulness_smoke` — (b):**
+
+| id | rodzaj | asercja | dziś |
+|---|---|---|---|
+| b1 | PIN | `exploration` bez `returnYear`, 27 AU zasięgu, 0,4 AU do domu ⇒ `startReturn === true`, **zero** `vessel:returnBlocked`, `_strandedNotified` niezapalone | **PADA** |
+| b1c | **kontrola** | TEN SAM fixture + `returnYear` ⇒ `true`. Dowodzi, że jedyną różnicą jest brakujące pole — **statek Z ZASIĘGIEM jest ZMIERZONY, nie zadeklarowany** | zielony po obu stronach |
+| b2 | PIN | tranzyt warp (`systemId === null`, `interstellar_jump`) ⇒ brak odmowy | **PADA** |
+| b3 | **kontrola anty-jałowa** | naprawdę pusty bak (`fuel.current 0.001`, `returnYear` ustawiony) ⇒ **dalej odmowa**, `insufficient_fuel`, event poszedł — dowód, że naprawa nie wyłączyła bramki | zielony po obu stronach |
+| b4 | kontrola | statek AI (`isEnemyVessel`) dalej omija bramkę | zielony po obu stronach |
+| b5 | PIN | po UDANYM powrocie statek się **domyka** (`status='idle'`, `mission=null`) — *tripwire 146* | **PADA do commitu (c)** |
+
+⚠ b1 musi asertować `startReturn === true` **oraz** brak zdarzenia. Sama nieobecność zdarzenia
+przeszłaby **jałowo** na każdej ścieżce, która wychodzi wcześniej.
+
+**`return_truthfulness_smoke` — (a):**
+
+| id | rodzaj | asercja | dziś |
+|---|---|---|---|
+| a1 | PIN | **naprawdę** pusty bak ⇒ `issueReturn` zwraca `{ok:false, reason:…}` | **PADA** |
+| a2 | PIN | `vessel.mission === null` ⇒ `{ok:false, reason:'no_active_mission'}` | **PADA** |
+| a3 | **kontrola anty-jałowa** | UDANY powrót lokalny ⇒ dalej `{ok:true}` **i** silnik naprawdę ruszył (`phase='returning'`, paliwo zużyte) | zielony po obu stronach |
+| a4 | PIN | `insufficient_fuel` NIE renderuje się jako „Brak trasy w zasięgu" | **PADA** |
+| a4c | kontrola | `insufficient_warp_fuel` dalej „Za mało rdzeni warp" — słownik nietknięty | zielony po obu stronach |
+| a5 | PIN | **dokładnie jeden** komunikat widoczny na klik (D-145-3) | **PADA** |
+
+⚠ **a1 MUSI używać pustego baku, nigdy przypadku NaN.** Napisany na fixture `exploration`
+zjałowiałby w chwili wejścia (b) — odmowa znika i pin przechodzi z niewłaściwego powodu (lekcja
+`w3_attack_visibility` T4).
+⚠ **Istniejący keeper nie łapie żadnego z dwóch defektów Z KONSTRUKCJI:**
+`return_home_no_brick_smoke.mjs:90` stubuje `startReturn: () => { startReturnCalls++; return true; }`,
+a T7 asertuje wyłącznie `startReturnCalls === 1` — nigdy nie czyta wartości, która nie może być
+`false`. Nowe keepery używają **prawdziwego** `VesselManager` (importuje się pod node — zweryfikowane).
+
+## §145.7 Linia zakresu
+
+**145 zamyka:** prawdomówność `{ok}` w `issueReturn` dla wszystkich czterech zmierzonych przypadków ·
+fałszywą odmowę NaN wraz z **drugim wejściem** (tranzyt warp, `systemId === null`) · jeden klucz i18n
++ zawór podwójnego komunikatu. **Commit (c) zamyka Finding 146** dla klasy „leg powrotny bez rekordu".
+
+**Zostaje przy 141:** chokepoint `vessel:orderRejected` w `MOS.issueOrder:181-246` (145 nie dotyka MOS
+— gałąź lokalna `issueReturn` nigdy tam nie wchodzi) · **29 z 30** brakujących kluczy powodów ·
+**5 z 6** połykających producentów, w tym `EmpireLogisticsSystem:831` · trzy klauzule §7a
+(filtr `isEnemyVessel`, odmowy sprzed MOS, `_silentReject`) — żadna nie jest nośna dla 145, bo jego
+jedyny konsument to pojedynczy klik bez fan-outu.
+
+**Zostaje przy 127:** nietknięte.
+
+**⚠ ZOSTAJE OTWARTY — Finding 144.** Closer domyka statek, któremu gracz KAZAŁ wrócić. Statek
+zaparkowany w `exploration/orbiting_body`, którego nikt nie odwołał, **nadal nie ma samodomknięcia**.
+145 tego nie naprawia i **nie wolno twierdzić, że naprawia**.
+
+**Obserwacja zapisana, świadomie NIE ruszana (D-145-4):** `FleetActions.return_home.execute` zwraca
+`void` i połyka wynik `startReturn` tak samo jak fasada przed naprawą. Jest to **nieutwardzony
+bliźniak** tej samej klasy, którą Finding 125 utwardzał w tym samym pliku — dziś nieosiągalny, bo
+`orderService` jest zawsze zamontowany. Gdyby kiedykolwiek stał się osiągalny, defekt (a) wraca
+w całości tą drogą.
+
+## §145.8 REWIZJA 2026-09-05 — zmiana kierunku właściciela: (a) → (a') USUNIĘCIE przycisku
+
+**Decyzja właściciela:** zamiast dowozić prawdomówną fasadę (commit `a`), **usuwamy przycisk Powrót
+z UI**. Commity `(b)` i `(c)` **zostają** — naprawiają model ruchu, nie sam przycisk.
+
+| # | decyzja | treść |
+|---|---|---|
+| **D-145-6** | **(a) ZASTĄPIONE przez (a')** | Zamiast prawdomównej fasady — **usunięcie przycisku**. **Bez nowego klucza i18n** ⇒ **D-145-5 staje się BEZPRZEDMIOTOWE**. |
+| **D-145-7** | **kolejność** | `(c) closer → (b) NaN → (a') usunięcie`. |
+
+### ⚠ BRAMKA WYKONALNOŚCI — ODPOWIEDŹ ZMIERZONA, i ma DWIE części
+
+Pytanie właściciela brzmiało: czy `moveToPoint` pokrywa każdy stan, w którym Powrót był JEDYNYM
+wyjściem. **Zmierzone `MovementOrderSystem.issueOrder` na żywym silniku:**
+
+| stan | `moveToPoint` | werdykt |
+|---|---|---|
+| tranzyt warp (`systemId=null`) | `{ok:true}` — ale **NISZCZY misję skoku**, a `_reconcileSystemId` stempluje potem **`sys_home`** | ⛔ **NIE jest wyjściem — to PUŁAPKA** |
+| obcy układ → cel W TYM układzie | `{ok:true}` | ✅ |
+| obcy układ → cel W DOMU | **`{ok:false, reason:'target_other_system'}`** | ⛔ **nie sprowadza do domu** |
+| `in_transit` we własnym układzie | `{ok:true}` | ✅ (przez PPM) |
+| unieruchomiony (dług ≥ 2 lata) | **`{ok:false, reason:'vessel_immobilized'}`** | ⛔ |
+| rezerwa (`serviceState='stored'`) | **`{ok:false, reason:'vessel_in_reserve'}`** | ⛔ |
+
+**Pomiar tranzytu warp — pełny, bo jest najgorszy.** Statek w skoku `sys_061 → sys_099`, po
+`moveToPoint`: misja `interstellar_jump` **skasowana**, `warpFuel` spalone, skok bezpowrotnie
+utracony, a `_resolveSystemId` (brak gałęzi `interstellar_jump` ⇒ `v.systemId ?? 'sys_home'`, a `??`
+łapie `null`) stempluje **`sys_home`** — układ, w którym statek NIGDY nie był i do którego nie leciał,
+przy `x/y` będących współrzędnymi `sys_061`. **To jest MIS-HOMED STATEK — dokładnie klasa, którą
+Slice A likwidował** (`f072da0`), wpuszczona z powrotem przez niebramkowaną gałąź **Findingu 147**.
+
+### ⚠ ROZSTRZYGNIĘCIE ZAKRESU — „przycisk Powrót" to CZTERY producenty, nie jeden
+
+| producent | gdzie | fasada | dotknięty defektem (a)? |
+|---|---|---|---|
+| **`return_home`** (akcja) | lista akcji rejestru, `FMO:2586` | `OrderService.issueReturn` | **TAK** — to jedyny z połykiem |
+| `interstellar_return` | ekran „Interstellar Arrival", `FMO:7603` | `_dispatchReturnJump` → `issueWarp` | nie (Finding 125 już go utwardził) |
+| `foreign_return` | panel orbity w obcym układzie, `FMO:7784` | `_dispatchReturnJump` → `issueWarp` | nie |
+| `foreign_return_from_recon` | panel rekonu, `FMO:7844` | `_dispatchReturnJump` → `issueWarp` | nie |
+
+**(a') MOŻE usunąć WYŁĄCZNIE akcję `return_home`. Trzy pozostałe MUSZĄ zostać.**
+Powód ZMIERZONY: statek w obcym układzie jest `orbiting` + `on_mission`, a lista statków warp
+w Stratcomie filtruje `position.state !== 'docked'` i `status !== 'idle'` (`FMO:8056-8060`) ⇒
+**taki statek NIE POJAWIA SIĘ w Stratcomie**, więc `warp_order_send` jest dla niego nieosiągalne.
+Przy `target_other_system` z tabeli wyżej oznacza to, że po usunięciu wszystkich czterech
+**statek w obcym układzie nie miałby ŻADNEJ drogi do domu**. To jest twardy strand i bramkuje
+tamten wariant.
+
+**Przy wariancie „tylko akcja `return_home`" NIC nie zostaje uwięzione bez wyjścia** — ale trzy
+skutki trzeba nazwać, bo żaden nie jest oczywisty:
+
+1. ⚠ **Dwa komentarze w `issueOrder` STANĄ SIĘ KŁAMSTWEM** i muszą polecieć w tym samym commicie:
+   przy `vessel_immobilized` („Powrót do bazy idzie przez VesselManager.startReturn (poza
+   issueOrder), więc pozostaje dozwolony") i przy `vessel_in_reserve` (to samo zdanie). Po (a')
+   statek unieruchomiony / w rezerwie **nie ma żadnego rozkazu ruchu** do czasu spłaty utrzymania
+   albo `deployVessel`. Nie jest to strand (oba stany są odwracalne, a statek z misją i tak ją
+   dokończy), ale to **odebranie udokumentowanej furtki** — decyzja, nie skutek uboczny.
+2. ⚠ **Lista akcji dla statku `in_transit` zrobi się PUSTA** — `_getAvailableActions`
+   (`FleetActions:681-684`) ma w tym kubełku **wyłącznie** `return_home` („W locie — tylko powrót").
+   Jedyną powierzchnią rozkazu zostaje PPM na mapie.
+3. ⚠ **Tranzyt warp traci JEDYNE bezpieczne przerwanie.** Dziś Powrót jest tam cichym kłamstwem
+   (zmierzone), więc nic nie traci; ale **po (b) zacząłby działać** — a (a') go zabiera, zostawiając
+   pułapkę `moveToPoint` z wiersza 1 tabeli, jeden PPM od gracza. Statek nie jest uwięziony (skok
+   domyka się sam), więc to **nie bramkuje** (a') — ale jest realną utratą.
+
+### ⚠ SPROSTOWANIE UZASADNIENIA (zmierzone, jedno zdanie, bez podważania decyzji)
+
+Przesłanka „move-to-point na długim dystansie trafia w ten sam NaN i tę samą niedomkniętość"
+**nie potwierdza się w źródle**: `_issueMoveToPoint:822-825` liczy `estArrival = gy0 + estDistAU /
+max(0.01, speed)` — **zawsze skończone** — więc `_predictPosition` nie dostaje tam niefinitnego roku;
+a rozkaz domyka się przez `vessel:orderCompleted` w MOS, nie przez closer legu powrotnego z (c).
+**(b) i (c) stoją jednak samodzielnie i decyzja o ich utrzymaniu jest słuszna:** `startReturn` ma
+**osiem** callerów poza fasadą (MissionSystem ×3, EmpireLogisticsSystem ×2, FleetActions, wewnętrzny),
+a (c) zamyka **Finding 146** niezależnie od jakiegokolwiek przycisku.
+⚠ Warta odnotowania jest za to **obecność tej samej klasy** w `_issueMoveToPoint:826`
+(`p = { x: pred?.x ?? nowX }` — `??` ślepe na NaN). Dziś nieuzbrojona wyłącznie dlatego, że
+`estArrival` jest skończone. **To podnosi wartość pinu źródłowego z D-145-1** („żaden caller nie
+polega na NaN") — pin ma objąć również ten site.
+
+### Nowy plan commitów
+
+| # | commit | pinuje | i18n | zapis |
+|---|---|---|---|---|
+| **c** | closer legu powrotnego bez rekordu — **zamyka 146** | T-b5 + kontrole | — | v101 |
+| **b** | `startReturn` broni się przed niefinitnym `returnYear` (D-145-1) + pin źródłowy (2 site-y) | T-b1/b1c/b2/b3/b4 | — | v101 |
+| **a'** | usunięcie akcji `return_home` + naprawa dwóch kłamiących komentarzy | T-a'1/a'2/a'3 | **żadne** | v101 |
+
+**Keeper (a') — kształty:**
+- **a'1 PIN**: akcja `return_home` nie występuje w `_getAvailableActions` w żadnym kubełku.
+- **a'2 PIN (kontrola zakresu)**: trzy strefy warp-home (`interstellar_return`, `foreign_return`,
+  `foreign_return_from_recon`) **DALEJ się renderują** — pin renderu, wzór T12
+  z `return_home_no_brick_smoke`. Bez tego (a') mógłby po cichu zabrać drogę do domu z obcego układu.
+- **a'3 PIN (anty-strand)**: statek w obcym układzie ma nadal co najmniej jedno wyjście do domu.
+
+⚠ **Do rozstrzygnięcia przy (a'), NIE rozstrzygnięte tutaj:** po usunięciu akcji `OrderService.issueReturn`
+zostaje **bez ani jednego produkcyjnego wołającego** (jedyny to `FMO:2590`) ⇒ staje się martwym kodem
+klasy Findingu 127. Albo znika razem z przyciskiem, albo dostaje komentarz mówiący, dlaczego żyje.
+Keeper `return_home_no_brick_smoke` (77 asercji) w dużej części pinuje **tę właśnie ścieżkę** —
+jego los też trzeba rozstrzygnąć świadomie, a nie odkryć przy czerwonym sweepie.
+
+---
+
+## Finding 253 — audyt panelu „obcy układ" (na zlecenie właściciela, 2026-09-05, READ-ONLY)
+
+> **Kontekst:** właściciel uznaje panel obcego układu za niechciany jako **stały element** —
+> „eksplorowanie/podbijanie sprawia, że układ przestaje być obcy". Audyt ma dać podstawę do wyboru
+> **„ukryj po pierwszej wizycie" vs „usuń"**. To jest **rodzina Findingu 121**
+> (`UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 — `moveToPoint` bezpowrotnie gasi ten panel), ale **osobny
+> finding**: 121 opisuje SZKODĘ, 253 opisuje SAM PANEL. **Zero zmian w kodzie.**
+
+**253. ⚪ Panel „obcy układ" to trzy gałęzie renderu w `_drawRight`, a nie komponent — i niesie
+DWIE akcje, których nie ma nigdzie indziej w grze.**
+
+### (1) Który to komponent
+
+**Nie ma osobnego komponentu.** To **trzy siostrzane gałęzie wewnątrz
+`FleetManagerOverlay._drawRight` (`:7088`)**, bramkowane wyłącznie **misją zaznaczonego statku**:
+
+| gałąź | warunek | zakres linii |
+|---|---|---|
+| „Interstellar Arrival" | `mission.type === 'interstellar_jump'` (po przylocie) | ~`:7530-7605` |
+| **panel orbity w obcym układzie** | `mission.type === 'exploration' && mission.phase === 'orbiting_body'` | `:7607-7787` |
+| panel rekonu w toku | `mission.type === 'foreign_recon'` | `:7789+` |
+
+⚠ **To jest mechanizm Findingu 121 wyrażony wprost:** warunek czyta `mission.type`, a `moveToPoint`
+**podmienia `vessel.mission`** na `move_to_point` ⇒ warunek przestaje być prawdziwy ⇒ panel znika,
+i nie ma drogi powrotnej do `exploration/orbiting_body` poza ponownym przylotem albo
+`abortForeignRecon`.
+
+### (2) Co wyświetla i JAKIE AKCJE ginęłyby razem z nim
+
+Panel orbity niesie **sześć** klas akcji. Cztery są przewidywalne z nazwy, **dwie nie są**:
+
+| akcja | strefa | bramka | ⚠ |
+|---|---|---|---|
+| Recon ciała | `foreign_recon_body` | `caps.has('recon')` + `!orbitBody.analyzed` | |
+| Recon układu | `foreign_recon_system` | `caps.has('recon')` | |
+| **Kolonizuj** | `foreign_colonize` | `vesselCanColonize` + `explored` + `!isColonized` + typ rocky/ice/planetoid | ⚠ **JEDYNY producent** |
+| **Rozładuj cargo** | `foreign_unload` | `caps.has('cargo') && cargoUsed > 0` | ⚠ **JEDYNY producent** |
+| Leć do innego ciała | `foreign_redirect` | pełna lista ciał układu, sortowana realnym dystansem | |
+| Powrót do bazy | `foreign_return` | — | ⚠ patrz §145.8 — **jedyne wyjście z obcego układu** |
+
+**⚠ DWIE AKCJE SĄ UNIKATOWE — ZMIERZONE GREPEM.** `expedition:foreignColonize` i
+`expedition:foreignUnload` mają **dokładnie po jednym producencie** (`FMO:2384` i `:2392`), karmionym
+**wyłącznie** przez strefy tego panelu (`:7702`, `:7718`); konsument obu to `VesselManager:167/169`.
+⇒ **Usunięcie panelu usuwa jedyny sposób skolonizowania ciała w obcym układzie i jedyny sposób
+rozładowania tam cargo** (`vessel.foreignUnloadOutpost` — rozładunek zakłada placówkę!).
+To jest odpowiedź na pytanie „czy niesie akcję, której gracz by nie odgadł z nazwy": **tak, dwie.**
+
+Panel „Interstellar Arrival" niesie dodatkowo `interstellar_redirect` (lista ciał + dystans AU) oraz
+`interstellar_return`; panel rekonu — `abort_foreign_recon`.
+
+### (3) Kto go wyzwala i czy da się zamknąć JEDNYM warunkiem
+
+**Nikt go nie „wyzwala".** To gałąź renderu prawego panelu rejestru floty — pojawia się zawsze, gdy
+gracz **zaznaczy statek** będący w jednym z trzech stanów misji. Nie jest to popup ani modal, więc
+nie ma zdarzenia do wygaszenia; jest stan.
+
+**Jednowarunkowa bramka JEST dostępna i jest idiomatyczna:** kanon
+`src/utils/SystemExploration.js` (`isSystemExplored`, dorobek Findingów 186/187) odpowiada dokładnie
+na pytanie „czy ten układ jest jeszcze obcy". Gate `!isSystemExplored(vessel.systemId)` byłby
+**jedną linią i jednym importem**.
+
+⚠ **ALE CAŁOPANELOWA BRAMKA JEST NIEWYKONALNA — i to jest sedno tego findingu.** Warunek „układ już
+zbadany" zapala się dokładnie wtedy, gdy panel jest gracz**owi** najbardziej potrzebny:
+- **`foreign_return` zniknąłby** ⇒ statek w obcym układzie zostaje **bez drogi do domu**
+  (zmierzone w §145.8: `moveToPoint` odmawia `target_other_system`, a Stratcom nie listuje statku
+  niezadokowanego / nie-`idle`) — **twardy strand**;
+- **`foreign_colonize` zniknąłby** ⇒ kolonizacja jest bramkowana `explored`, więc panel schowałby ją
+  **w chwili, gdy staje się dostępna** — sprzeczność wprost.
+
+⇒ **Wybór „ukryj po pierwszej wizycie" jest wykonalny TYLKO per-sekcja, nie per-panel.** Rozsądny
+podział, gdyby właściciel wybrał ukrywanie: chować **listę rekonu i listę ciał** (`foreign_recon_*`,
+`foreign_redirect` — to one czynią panel „stałym elementem"), zachować **Kolonizuj / Rozładuj /
+Powrót** jako akcje kontekstowe. Wariant „usuń" wymaga wcześniejszego **przeniesienia dwóch
+unikatowych akcji** (kolonizacja, rozładunek) na inną powierzchnię — inaczej usuwa mechanikę, nie UI.
+
+**Świadomie NIEZMIERZONE:** czy `foreign_colonize` / `foreign_unload` mają odpowiedniki w ścieżce
+macierzystej na tyle bliskie, by je przejąć (`_launchColony` / transport) — to jest pytanie
+projektowe do wyboru wariantu, nie odczyt.
