@@ -9281,7 +9281,17 @@ export class FleetManagerOverlay {
         const distLY = (curSys && sys) ? warpDist3D(curSys, sys) : Infinity;
         const reachable = warpReachLY >= distLY;
         const sysName = sys.name ?? sys.id;
-        // Kolonie gracza w tym układzie
+        // ⚠ d1 (Finding 254) — MGŁA WOJNY JEST GRANICĄ TEGO SLICE'U. Ciała układu, w którym gracz
+        //   nigdy nie był, NIE ISTNIEJĄ (`getByTypeInSystem` → 0), a wygenerowanie ich po to, żeby
+        //   je WYLISTOWAĆ, oddałoby graczowi spis ciał nieskanowanego układu — czyli otworzyłoby
+        //   ponownie Finding 186 innymi drzwiami. Repo ma na to jawny rozdział:
+        //   `peekCountsForStar` (LICZBY, bez encji) vs `generateAndRegister` (encje).
+        //   Ten predykat trzyma nas po stronie „liczby" i jest OBRONĄ W GŁĄB: nawet gdyby ktoś
+        //   kiedyś zaczął generować układy wcześniej, gołe ciała nadal nie wejdą do pickera.
+        //   ⛔ NIE wolno tu wołać `generateAndRegister` — pin D1-5 w
+        //   `cross_system_body_targets_smoke` liczy encje przed i po odpytaniu.
+        const sysGenerated = !!window.KOSMOS?.starSystemManager?.getSystem?.(sys.id);
+        // Ciała tego układu (kolonie gracza ORAZ — od d1 — gołe ciała, gdy układ jest znany)
         const foreignBodies = [
           ...EntityManager.getByTypeInSystem('planet', sys.id),
           ...EntityManager.getByTypeInSystem('moon', sys.id),
@@ -9289,14 +9299,20 @@ export class FleetManagerOverlay {
         ];
         for (const body of foreignBodies) {
           const col = colMgr?.getColony(body.id);
-          // Kolonia gracza = brak ownerEmpireId (lub 'player'); kolonie AI = handel S3.5b, nie transport.
-          if (!col || (col.ownerEmpireId && col.ownerEmpireId !== 'player')) continue;
+          // Kolonie AI = handel cross-empire (S3.5b), NIE transport — granica bez zmian.
+          if (col && col.ownerEmpireId && col.ownerEmpireId !== 'player') continue;
+          if (!col) {
+            // Pasażer wymaga housingu — `_processPassengerArrival` zeruje colonists na ciele
+            // bez habitatów, więc POPy by przepadły. Cargo takiej bramki nie potrzebuje:
+            // `_startForeignUnload` zakłada z ładunku placówkę.
+            if (actionId !== 'transport') continue;
+            if (!sysGenerated) continue;
+          }
           if (sourceColonyId && body.id === sourceColonyId) continue;
-          const existingCol = col;
           targets.push({
             id: body.id, name: body.name ?? body.id, type: body.type,
-            distAU: null, distLY, explored: true, reachable,
-            colonyStatus: existingCol.isOutpost ? 'outpost' : 'colony',
+            distAU: null, distLY, explored: col ? true : (body.explored ?? false), reachable,
+            colonyStatus: col ? (col.isOutpost ? 'outpost' : 'colony') : 'none',
             systemId: sys.id, sameSystem: false, systemName: sysName,
           });
         }

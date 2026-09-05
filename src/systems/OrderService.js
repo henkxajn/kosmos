@@ -341,7 +341,18 @@ export class OrderService {
     }
 
     // Re-walidacja: cel przeżył podróż (kolonia lub stacja gracza)?
-    const targetAlive = !!this._colMgr?.hasColony?.(po.targetId) || !!this._stations?.getStation?.(po.targetId);
+    // ⚠ d1 (Finding 254) — DRUGA POWIERZCHNIA tej samej reguły co picker. Sam filtr w
+    //   `_getValidTargets` by nie wystarczył: `pendingOrder` jest serializowane, więc cel mógł
+    //   zostać wybrany przed zmianą reguł albo pochodzić z zapisu. Ciało BEZ kolonii jest legalnym
+    //   celem cargo (`_startForeignUnload` zakłada z ładunku placówkę), ale WYŁĄCZNIE w układzie
+    //   JUŻ WYGENEROWANYM — inaczej dostawa celowałaby w encję, której nie ma, i otwierałaby mgłę
+    //   z Findingu 186 od strony DOSTAWY zamiast od strony listy.
+    const targetBody = EntityManager.get(po.targetId);
+    const bodyTargetOk = !!targetBody
+      && !!window.KOSMOS?.starSystemManager?.getSystem?.(targetBody.systemId);
+    const targetAlive = !!this._colMgr?.hasColony?.(po.targetId)
+      || !!this._stations?.getStation?.(po.targetId)
+      || bodyTargetOk;
     if (!targetAlive) {
       v.pendingOrder = null;
       EventBus.emit('order:compositeFailed', { vesselId, reason: 'target_lost' });
