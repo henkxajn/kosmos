@@ -613,6 +613,29 @@ export class VesselManager {
   }
 
   /**
+   * (c) Finding 146 — czy leg powrotny tego statku jest SIEROTĄ (nie ma żadnego closera)?
+   *
+   * Są TRZY kategorie legów `returning` i sierotą jest tylko jedna:
+   *   1. z rekordem `MissionSystem` → closer `MissionSystem:1668` (`dockAtColony`) — DZIAŁA
+   *   2. kurier AI (`EmpireLogisticsSystem`) → WŁASNY poller/closer (`:500`, `:516`),
+   *      który najpierw ROZŁADOWUJE ładunek do stolicy, a dopiero potem dokuje
+   *   3. bez rekordu, statek gracza (`exploration`, `interstellar_jump`, wznowienie
+   *      `_resumeMissionAfterOrder`) → BRAK closera = Finding 146
+   *
+   * ⚠ Ten predykat jest CZĘŚCIĄ naprawy, nie ostrożnością. Bez niego kategoria 2 dostałaby
+   *   DRUGI closer: podwójny dok i pominięty rozładunek u kurierów AI.
+   * ⚠ Brak `missionSystem` czytamy jako „rekordu NIE MA" (a nie „nie wiem"), bo to jest
+   *   dosłownie prawda — a podwójne domknięcie wymaga ISTNIEJĄCEGO rekordu, więc ta gałąź
+   *   nie może wyprodukować szkody, przed którą chroni filtr wyżej.
+   */
+  _isOrphanReturnLeg(vessel) {
+    if (!vessel || isEnemyVessel(vessel)) return false;                    // kategoria 2
+    const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
+    const active = ms?.getActive?.() ?? [];
+    return !active.some(rec => rec?.vesselId === vessel.id);               // 1 vs 3
+  }
+
+  /**
    * Statek powrócił do bazy.
    */
   dockAtColony(vesselId, colonyId) {
@@ -2450,6 +2473,27 @@ export class VesselManager {
         // M1: velocity z delty pozycji (AU/civYear) — przed ewentualnym snap'em
         // do targetu przy arrival (który teleportuje pozycję i dałby NaN-wa prędkość).
         this._updateVelocityFromDelta(vessel, prevX, prevY, deltaYears, gameYear);
+
+        // ── (c) Finding 146 — DOMKNIĘCIE LEGU POWROTNEGO MISJI BEZ REKORDU ──
+        // Detekcja przylotu NIŻEJ jawnie wyklucza `phase.startsWith('return')`, a jedyny closer
+        // powrotu (`MissionSystem` → `dockAtColony`) WYMAGA rekordu misji. Misje budowane przez
+        // sam VesselManager (`exploration`, `interstellar_jump`, wznowienie
+        // `_resumeMissionAfterOrder`) rekordu nie mają ⇒ statek po powrocie wisiał
+        // `in_transit / returning / dockedAt=null` BEZ KOŃCA (ZMIERZONE: 200 lat gry,
+        // dystans do domu 0.0000 AU, dalej `on_mission`).
+        // ⚠ ZAKRES JEST CZĘŚCIĄ NAPRAWY — są TRZY kategorie legów `returning`, a sierotą jest
+        //   tylko jedna. Globalne zdjęcie wykluczenia dałoby kurierom AI DRUGI closer
+        //   (podwójny dok, pominięty rozładunek), bo `EmpireLogisticsSystem:500/516` sam ich
+        //   pilnuje. Stąd `_isOrphanReturnLeg`, a nie samo `phase === 'returning'`.
+        if (m.phase?.startsWith('return') && gameYear >= (m.returnYear ?? Infinity)
+            && this._isOrphanReturnLeg(vessel)) {
+          // `dockAtColony` jest CAŁYM closerem: przy braku portu degraduje do orbity, ale w OBU
+          // gałęziach zwalnia statek (`status='idle'`, `mission=null`) — więc nie ma ścieżki,
+          // w której domknięcie zostawia ducha.
+          this.dockAtColony(vessel.id, vessel.colonyId);
+          moving.push(vessel);
+          continue;
+        }
 
         // ── Detekcja przylotu — statek dotarł do celu ──
         if (!m.phase?.startsWith('return') && gameYear >= m.arrivalYear) {
