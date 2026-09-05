@@ -219,8 +219,11 @@ export class MovementOrderSystem {
     const isRetreat = isRetreatSpec(spec);
 
     // S3.5a-1 — statek immobilized (>=2 lata nieopłaconego utrzymania) nie przyjmuje
-    // nowych rozkazów. Powrót do bazy idzie przez VesselManager.startReturn (poza issueOrder),
-    // więc pozostaje dozwolony. Bramka PRZED mutacją stanu (drift marker, mission suspend).
+    // nowych rozkazów. Bramka PRZED mutacją stanu (drift marker, mission suspend).
+    // ⚠ (a', Finding 145) — stała tu klauzula mówiąca, że rozkaz powrotu omija tę bramkę
+    //   przez `VesselManager.startReturn`. Przycisk powrotu ZOSTAŁ USUNIĘTY, więc klauzula
+    //   była już nieprawdą. Statek unieruchomiony NIE MA dziś rozkazu ruchu — odzyskuje go,
+    //   gdy kolonia spłaci utrzymanie (`unpaidYears` → 0).
     if (!isRetreat && this._vm.isImmobilized?.(vessel))
       return { ok: false, reason: 'vessel_immobilized' };
 
@@ -232,9 +235,9 @@ export class MovementOrderSystem {
     // nie mechanika: „poderwać rezerwę" ma już swoją cenę i nazywa się `deployVessel`.
     // ⚠ Bramka stoi PRZED mutacją stanu (drift marker, zawieszenie misji) i PRZED
     // rozgałęzieniem na typy, więc nowy rozkaz W3 (`attack`) dziedziczy ją z urzędu.
-    // Powrót do bazy idzie przez `VesselManager.startReturn` (poza `issueOrder`) i pozostaje
-    // dozwolony — dokładnie jak przy `vessel_immobilized` wyżej.
-    // ⚠ D-FDk: `isRetreat` przebija także tę bramkę. Kadłub w magazynie nie powinien znaleźć się
+    // ⚠ (a', Finding 145) — stało tu, że powrót do bazy „pozostaje dozwolony" przez
+    // ⚠ (a', Finding 145) — stała tu ta sama klauzula co przy `vessel_immobilized` wyżej
+    //   i była już nieprawdą. Rezerwę podrywa `deployVessel`, nie żaden przycisk.
     // w starciu — ale JEŚLI się znalazł (spawn spoza dwóch szwów W2, stary zapis, cheat), to
     // odmowa ucieczki zamienia defekt wejściowy w zgon.
     if (!isRetreat && !isInService(vessel))

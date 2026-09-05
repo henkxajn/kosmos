@@ -542,18 +542,21 @@ header('S6 — menu akcji jest zaszytym automatem na position.state (WYKONANIE)'
   assert(JSON.stringify(docked) === JSON.stringify(
     ['orbit', 'colonize', 'load_colonists', 'transport', 'transport_passenger', 'found_outpost']),
     `S6 PIN DZIŚ: kubełek \`docked\` = ${docked.length} pozycji w tej kolejności [${docked.join(', ')}]`);
-  assert(JSON.stringify(orbiting) === JSON.stringify(['return_home', 'redirect', 'transport']),
+  // ⚠ ODWRÓCONE ŚWIADOMIE w (a'), Finding 145: `return_home` znikło z OBU kubełków.
+  //   Intencja pinu (kubełek jest zaszytym automatem na `position.state`, Finding 120) ŻYJE —
+  //   zmieniła się tylko liczba pozycji. VO-4 dalej ma to odwrócić.
+  assert(JSON.stringify(orbiting) === JSON.stringify(['redirect', 'transport']),
     `S6 PIN DZIŚ: kubełek \`orbiting\` = ${orbiting.length} pozycji [${orbiting.join(', ')}]`);
-  assert(inTransit.length === 1 && inTransit[0] === 'return_home',
-    `S6 PIN DZIŚ: statek W LOCIE ma DOKŁADNIE JEDNĄ akcję [${inTransit.join(', ')}] — ` +
-    'to nie jest „mniej swobody w obcym układzie", to brak swobody wszędzie. VO-4 MA to odwrócić.');
+  assert(inTransit.length === 0,
+    `S6 PIN DZIŚ: statek W LOCIE ma ZERO akcji [${inTransit.join(', ')}] — ` +
+    'po (a-prim) PPM na mapie jest jedyną powierzchnią rozkazu w locie — zapisany skutek, nie defekt.');
 
   // Sufit `in_transit` jest STRUKTURALNY, nie fixture'owy — kitchen-sink też daje 1.
   const vMax = createVessel('hull_large', 'p_home',
     { modules: ['engine_ion', 'habitat_pod', 'cargo_small', 'drop_pods', 'science_lab'] });
   vMax.position.state = 'in_transit';
-  assert(getAvailableActions(vMax, {}).length === 1,
-    'S6 KONTROLA PINU: kadłub z pięcioma modułami W LOCIE też ma 1 pozycję — sufit bierze się ' +
+  assert(getAvailableActions(vMax, {}).length === 0,
+    'S6 KONTROLA PINU: kadłub z pięcioma modułami W LOCIE też ma 0 pozycji — sufit bierze się ' +
     'z gałęzi `else if (in_transit)` (FleetActions.js:680-683), a nie z ubogiego fixture\'u');
 
   // Brak gałęzi `else` — nieznany stan gasi menu po cichu.

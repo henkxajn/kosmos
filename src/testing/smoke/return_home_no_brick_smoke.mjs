@@ -386,12 +386,17 @@ const arrival = renderPanel({ type: 'interstellar_jump', phase: 'in_system', toS
 ok(arrival.drawn.some(x => x.includes(t('fleet.interstellarArrival'))), 'ekran „Interstellar Arrival" faktycznie się rysuje');
 ok(arrival.zones.includes('cluster_switch'), 'ma „Switch view" (to ten ekran z opisu live-gate)');
 const arrivalReturns = arrival.zones.filter(z => /return/i.test(z));
-ok(arrivalReturns.length === 1 && arrivalReturns[0] === 'interstellar_return',
-   `jedyny przycisk powrotu na tym ekranie to interstellar_return (znaleziono: ${JSON.stringify(arrivalReturns)})`);
+// ⚠ ODWRÓCONE ŚWIADOMIE w (a', Finding 145). Pin mierzył PRZEDROZBIÓRKOWY kontrakt renderu
+//   („który ekran wystawia który przycisk powrotu") i kosztował jedną rundę live-gate'u, bo bez
+//   niego brak przycisku mylił się z brakiem rysowania. Po (a') przycisków NIE MA — intencja
+//   pinu (żadnego PIĄTEGO producenta) żyje dalej w `return_actions_removed_smoke` A2, a tutaj
+//   zostaje jako STRAŻNIK REGRESJI: gdyby ktoś przywrócił przycisk, ten pin padnie.
+ok(arrivalReturns.length === 0,
+   `ekran „Interstellar Arrival" NIE ma juz przycisku powrotu (znaleziono: ${JSON.stringify(arrivalReturns)})`);
 const orbitingBody = renderPanel({ type: 'exploration', phase: 'orbiting_body', targetId: 'planet_foreign', originId: 'sys_home' });
 const obReturns = orbitingBody.zones.filter(z => /return/i.test(z));
-ok(obReturns.length === 1 && obReturns[0] === 'foreign_return',
-   `ekran orbity obcego ciała wystawia foreign_return (znaleziono: ${JSON.stringify(obReturns)})`);
+ok(obReturns.length === 0,
+   `ekran orbity obcego ciala NIE ma juz przycisku powrotu (znaleziono: ${JSON.stringify(obReturns)})`);
 ok(!orbitingBody.zones.includes('cluster_switch'), 'ekran orbity NIE ma „Switch view" (to dwa różne ekrany)');
 
 // ── T13 — cisza w debugLog jest Z KONSTRUKCJI (mierzone, nie wyczytane) ───────────────────────

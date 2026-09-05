@@ -671,7 +671,9 @@ export function getAvailableActions(vessel, state) {
         result.push(_check(ACTIONS.collect_away_team, vessel, state));
       }
     }
-    result.push(_check(ACTIONS.return_home, vessel, state));
+    // (a') Finding 145 — `return_home` USUNIĘTE z listy akcji. Droga do domu = wysyłka z mapy
+    // galaktyki (Stratcom → statek → gwiazda domowa → „Wyślij"). Definicja ACTIONS.return_home
+    // zostaje jako martwy kod do sweepu 127.
     result.push(_check(ACTIONS.redirect, vessel, state));
     result.push(_check(ACTIONS.transport, vessel, state));
     // Dokowanie do stacji — tylko gdy na orbicie ciała jest stacja (depot paliwa, S3.3b-S3).
@@ -679,8 +681,8 @@ export function getAvailableActions(vessel, state) {
       result.push(_check(ACTIONS.dock_station, vessel, state));
     }
   } else if (vessel.position.state === 'in_transit') {
-    // W locie — tylko powrót
-    result.push(_check(ACTIONS.return_home, vessel, state));
+    // (a') — w locie nie ma już ŻADNEJ akcji w rejestrze; PPM na mapie jest jedyną
+    // powierzchnią rozkazu dla statku w locie (zapisany skutek, nie defekt).
   }
 
   return result;

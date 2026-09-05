@@ -7583,26 +7583,11 @@ export class FleetManagerOverlay {
           cy += pBtnH + 2;
         }
       }
-
-      // Przycisk: Powrót do bazy
-      cy += 4;
-      const retBtnW = w - pad * 2;
-      const retBtnH = 22;
-      ctx.fillStyle = 'rgba(255,51,68,0.08)';
-      ctx.fillRect(x + pad, cy, retBtnW, retBtnH);
-      ctx.strokeStyle = THEME.danger;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + pad, cy, retBtnW, retBtnH);
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.danger;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.clusterReturn'), x + w / 2, cy + 15);
-      ctx.textAlign = 'left';
-      this._hitZones.push({
-        x: x + pad, y: cy, w: retBtnW, h: retBtnH,
-        type: 'interstellar_return', data: { vesselId: vessel.id, fromSystemId: isMission.fromSystemId },
-      });
-      cy += retBtnH + 8;
+      // (a') Finding 145 — PRZYCISK „Powrót do bazy" USUNIĘTY. Zdolność powrotu ZOSTAJE:
+      // wysyłka z mapy galaktyki (_drawWarpShipList → warp_ship_select → gwiazda domowa →
+      // _drawWarpOrderPanel → warp_order_send → OrderService.issueWarp; canOrder blokuje
+      // wyłącznie in_transit). Handler `interstellar_return` żyje dalej jako martwy kod do sweepu 127 —
+      // usunęliśmy PRZYCISK, nie zdolność.
     }
 
     // ── Panel orbiting_body — rozkazy kontekstowe w obcym układzie ──
@@ -7766,24 +7751,11 @@ export class FleetManagerOverlay {
           cy += pBtnH2 + 2;
         }
       }
-
-      // ── Powrót do bazy ──
-      cy += 4;
-      ctx.fillStyle = 'rgba(255,51,68,0.08)';
-      ctx.fillRect(x + pad, cy, btnW, btnH);
-      ctx.strokeStyle = THEME.danger;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + pad, cy, btnW, btnH);
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.danger;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.foreignReturn'), x + w / 2, cy + 15);
-      ctx.textAlign = 'left';
-      this._hitZones.push({
-        x: x + pad, y: cy, w: btnW, h: btnH,
-        type: 'foreign_return', data: { vesselId: vessel.id, fromSystemId: isMission.originId },
-      });
-      cy += btnH + 8;
+      // (a') Finding 145 — PRZYCISK „Powrót do bazy" USUNIĘTY. Zdolność powrotu ZOSTAJE:
+      // wysyłka z mapy galaktyki (_drawWarpShipList → warp_ship_select → gwiazda domowa →
+      // _drawWarpOrderPanel → warp_order_send → OrderService.issueWarp; canOrder blokuje
+      // wyłącznie in_transit). Handler `foreign_return` żyje dalej jako martwy kod do sweepu 127 —
+      // usunęliśmy PRZYCISK, nie zdolność.
     }
 
     // ── Panel foreign_recon w trakcie ──
@@ -7830,22 +7802,11 @@ export class FleetManagerOverlay {
       ctx.fillText('⏹ ' + t('fleet.abortRecon'), x + pad + 8, cy + btnH / 2 + 4);
       this._hitZones.push({ x: x + pad, y: cy, w: abortBtnW, h: btnH, type: 'abort_foreign_recon', data: { vesselId: vessel.id } });
       cy += btnH + 4;
-
-      // Powrót do macierzystego układu (skok warp)
-      const homeCol = window.KOSMOS?.colonyManager?.getColony(vessel.colonyId);
-      const fromSysId = vessel.systemId;
-      if (fromSysId && fromSysId !== (homeCol?.systemId ?? 'sys_home')) {
-        ctx.fillStyle = THEME.danger;
-        ctx.fillRect(x + pad, cy, abortBtnW, btnH);
-        ctx.fillStyle = '#fff';
-        ctx.fillText('🏠 ' + t('fleet.returnHomeSystem'), x + pad + 8, cy + btnH / 2 + 4);
-        this._hitZones.push({
-          x: x + pad, y: cy, w: abortBtnW, h: btnH,
-          type: 'foreign_return_from_recon',
-          data: { vesselId: vessel.id, fromSystemId: homeCol?.systemId ?? 'sys_home' },
-        });
-        cy += btnH + 4;
-      }
+      // (a') Finding 145 — PRZYCISK „Powrót do bazy" USUNIĘTY. Zdolność powrotu ZOSTAJE:
+      // wysyłka z mapy galaktyki (_drawWarpShipList → warp_ship_select → gwiazda domowa →
+      // _drawWarpOrderPanel → warp_order_send → OrderService.issueWarp; canOrder blokuje
+      // wyłącznie in_transit). Handler `foreign_return_from_recon` żyje dalej jako martwy kod do sweepu 127 —
+      // usunęliśmy PRZYCISK, nie zdolność.
     }
 
     // ── Aktywna pętla transportowa ──────────────────────────
