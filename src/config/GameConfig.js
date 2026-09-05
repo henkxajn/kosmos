@@ -394,6 +394,15 @@ export const GAME_CONFIG = {
     //     zaden keeper — ta sama klasa co pulapka 8-slotow z C7/C8.
     //   Default ON — caly sens tego arca to ocena w praktyce (wzor transportOrders).
     unifiedVesselOrders:  true,
+
+    // ── VISUALS 1.0 (slice 1) — natężenie światła gwiazdy zależne od KLASY ──
+    //   ON  = intensywność PointLighta = 2.8 × luminosity^0.22 (M≈1.4, K≈2.3,
+    //         G=2.8, F≈3.6). Do tej pory renderer NIE czytał `luminosity` w ogóle,
+    //         więc układ czerwonego karła świecił dokładnie tak samo jak F.
+    //   OFF = płaskie 2.8 dla każdej klasy (zachowanie sprzed slice'u).
+    //   ⚠ decay=0 / distance=0 NIE są tą flagą objęte i NIE są defektem —
+    //     to świadoma decyzja czytelności (ThreeRenderer._buildLights:533-535).
+    starClassLighting:    true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

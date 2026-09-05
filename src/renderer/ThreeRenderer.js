@@ -65,6 +65,11 @@ const FX_HDR_WRECK     = 2.2;  // emissiveIntensity żarzącego się wraku
 // bloom = post-process — nic nie zasłaniają). Większy = większy dysk = zasłania więcej
 // ciał przechodzących za słońcem. Strojenie na żywym obrazie.
 const STAR_CORE_SCALE = 3.0;
+// Wykładnik kompresji percepcyjnej jasności gwiazdy (FEATURES.starClassLighting).
+// STAR_TYPES.luminosity ma rozpiętość ×75 (M 0.04 → F 3.0); podniesienie do ^0.22
+// sprowadza ją do ×2.6, więc klasa gwiazdy jest CZYTELNA, a układ czerwonego karła
+// nadal da się grać (nie tonie w czerni). Strojenie na żywym obrazie.
+const STAR_LUMINOSITY_EXP = 0.22;
 const S           = (v) => v / WORLD_SCALE; // skrót: skaluj pozycję
 const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
@@ -366,8 +371,10 @@ export class ThreeRenderer {
     // ── Faza D3: Sfera Dysona — wizualne pierścienie wokół gwiazdy ──
     this._dysonStage      = 0;
     this._dysonRingsGroup = null;
-    // Zachowane oryginalne wartości lighta — restore przy stage 0 (dla idempotencji)
-    this._starLightOrigColor     = 0xfff1de;   // = _buildLights (pipeline HDR)
+    // Wartości BAZOWE lighta (= _buildLights, pipeline HDR). Czyta je
+    // _starLightBaseline: kolor już tylko jako fallback „nie ma gwiazdy",
+    // intensywność jako mnożnik bazowy przed skalowaniem klasą (^0.22).
+    this._starLightOrigColor     = 0xfff1de;
     this._starLightOrigIntensity = 2.8;
 
     // ── Raycaster ─────────────────────────────────────────────
@@ -1215,6 +1222,30 @@ export class ThreeRenderer {
     this._starClickMesh = null;
   }
 
+  // ── Baza PointLighta gwiazdy — JEDNO ŹRÓDŁO PRAWDY ───────────────────────
+  // Czytają ją DWA miejsca: renderStar (budowa układu) i updateStarForDyson
+  // (reset przy zmianie etapu Sfery). Wcześniej to drugie wpisywało zaszyte
+  // _starLightOrigColor/_starLightOrigIntensity, więc KAŻDA zmiana etapu Dysona
+  // gasiła barwę TEJ gwiazdy na generyczne 0xfff1de — i przez aliasing obiektu
+  // Color (renderStar:`_starLight.color = color`, ten sam obiekt siedzi w
+  // coreMat.uniforms.uColor) przemalowywała też POWIERZCHNIĘ gwiazdy.
+  // ⚠ Kolor jest naprawiany BEZWARUNKOWO (defekt tożsamości gwiazdy, ortogonalny
+  //   do skalowania klasą); flagą objęta jest wyłącznie INTENSYWNOŚĆ.
+  _starLightBaseline(star = this._star) {
+    const spec   = star?.spectralType || 'G';
+    const stData = STAR_TYPES[spec] || STAR_TYPES.G;
+    const lum    = Math.max(stData.luminosity ?? 1.0, 1e-6);
+    const scaled = GAME_CONFIG.FEATURES?.starClassLighting !== false;
+    return {
+      // Fallback na _starLightOrigColor tylko gdy gwiazdy nie ma (wywołanie
+      // przed renderStar) — przy żywej gwieździe zawsze jej własna barwa.
+      colorHex:  star?.visual?.color ?? this._starLightOrigColor,
+      intensity: scaled
+        ? this._starLightOrigIntensity * Math.pow(lum, STAR_LUMINOSITY_EXP)
+        : this._starLightOrigIntensity,
+    };
+  }
+
   // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
   renderStar(star) {
     this._star = star;
@@ -1349,8 +1380,12 @@ export class ThreeRenderer {
     this._starCoronaUniform = null;
     this._starPromCount = 0;
 
-    // Zaktualizuj PointLight
+    // Zaktualizuj PointLight. ⚠ PRZYPISANIE (nie .copy) jest celowo zachowane:
+    // `color` to TEN SAM obiekt co coreMat.uniforms.uColor, więc etap 4 Dysona
+    // (fioletowe światło) przemalowuje także tarczę gwiazdy — istniejące,
+    // zamierzone zachowanie. Intensywność idzie z bazy (klasa gwiazdy).
     this._starLight.color = color;
+    this._starLight.intensity = this._starLightBaseline(star).intensity;
     this._starLight.position.set(S(star.x), 0, S(star.y));
   }
 
@@ -2676,9 +2711,12 @@ export class ThreeRenderer {
     this._dysonStage = stage;
     if (!this._starGroup || !this._starLight) return;
 
-    // Reset światła do oryginału przy każdej zmianie (idempotencja)
-    this._starLight.color.setHex(this._starLightOrigColor);
-    this._starLight.intensity = this._starLightOrigIntensity;
+    // Reset światła do BAZY tej gwiazdy przy każdej zmianie (idempotencja).
+    // ⚠ Baza, nie zaszyte 0xfff1de/2.8 — inaczej każda zmiana etapu Dysona
+    // kasowała barwę i klasę gwiazdy (patrz _starLightBaseline).
+    const base = this._starLightBaseline();
+    this._starLight.color.setHex(base.colorHex);
+    this._starLight.intensity = base.intensity;
 
     switch (stage) {
       case 0:
