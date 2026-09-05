@@ -564,9 +564,35 @@ export class VesselManager {
     // Pozycja startu powrotu + predykowany cel (kolonia macierzysta w momencie przylotu)
     const returnStartX = vessel.position.x;
     const returnStartY = vessel.position.y;
-    const predictedHome = this._predictPosition(vessel.colonyId, m.returnYear);
-    const returnTargetX = predictedHome.x ?? m.startX;
-    const returnTargetY = predictedHome.y ?? m.startY;
+    const homeNow = this._findEntity(vessel.colonyId);
+
+    // ── (b) Finding 145 — SAMOOBRONA PRZED NIEFINITNYM `returnYear` (decyzja B2) ──
+    // Misje budowane przez sam VesselManager (`exploration` :2985, `interstellar_jump`) NIE MAJĄ
+    // klucza `returnYear` w literale. `_predictPosition(colonyId, undefined)` → `dt = NaN` →
+    // `{x:NaN, y:NaN}`; `??` NIE łapie NaN-a; `_calcRoute` → `returnDistAU = NaN`; a bramka niżej
+    // pyta `canReach(v, NaN)`, czyli `27 >= NaN` — FAŁSZ w IEEE-754. Silnik meldował „brak
+    // paliwa" statkowi z 27 AU zasięgu przy 0,4 AU do domu. ⚠ NIC nie liczyło „za mało paliwa" —
+    // zasięg nie był w ogóle konsultowany.
+    // ⚠ Strażnik stoi W HELPERZE, nie u wołającego (lekcja P0 §6): `startReturn` ma OŚMIU
+    //   callerów, a poprawny bliźniak `FleetActions:410` ustawiał pole tylko u siebie.
+    // Wzór wyprowadzenia = `MovementOrderSystem._issueMoveToPoint` (ETA z bieżącej pozycji ciała
+    // + clamp prędkości) — ten sam, sprawdzony sposób na skończony rok w tym repo.
+    let returnYear = m.returnYear;
+    if (!Number.isFinite(returnYear)) {
+      const gy0 = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const speed0 = Math.max(0.01, vessel.speedAU ?? _getHullDef(vessel.shipId)?.speedAU ?? 1);
+      const estDistAU = homeNow
+        ? Math.hypot((homeNow.x ?? 0) - returnStartX, (homeNow.y ?? 0) - returnStartY) / AU_TO_PX
+        : 0;
+      returnYear = gy0 + estDistAU / speed0;
+    }
+
+    const predictedHome = this._predictPosition(vessel.colonyId, returnYear);
+    // ⚠ `??` zostaje NIEWYSTARCZAJĄCE z definicji — testujemy SKOŃCZONOŚĆ. Zapasem jest BIEŻĄCA
+    //   pozycja domu, NIE `m.startX`: to ostatnie jest punktem startu lotu DOCELOWEGO (przy
+    //   `exploration` — poprzednie ciało), więc jako cel powrotu byłoby po prostu złym miejscem.
+    const returnTargetX = Number.isFinite(predictedHome?.x) ? predictedHome.x : (homeNow?.x ?? m.startX);
+    const returnTargetY = Number.isFinite(predictedHome?.y) ? predictedHome.y : (homeNow?.y ?? m.startY);
 
     // Route powrotny (unikanie Słońca + ciał) — potrzebny do bramki paliwa I waypoints.
     // Liczony PRZED mutacją stanu, by zablokowany powrót nie zostawiał półstanu.
@@ -593,6 +619,11 @@ export class VesselManager {
     }
 
     // Commit powrotu
+    // ⚠ ZAPIS PO BRAMCE, nie przed — inwariant „odmowa nie zostawia półstanu" (return false wyżej).
+    //   Zapis JEST konieczny: `_updatePositions` interpoluje powrót po `m.returnYear`, a closer
+    //   sieroty (Finding 146) czyta `m.returnYear ?? Infinity` — bez tego NIGDY by nie strzelił
+    //   dokładnie na misjach, które ta naprawa odblokowuje.
+    m.returnYear = returnYear;
     m.returnStartX = returnStartX;
     m.returnStartY = returnStartY;
     m.returnDepartYear = window.KOSMOS?.timeSystem?.gameTime ?? m.arrivalYear;
