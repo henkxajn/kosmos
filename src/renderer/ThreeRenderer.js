@@ -15,7 +15,8 @@ import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
-import { resolveTextureType, loadPlanetTextures, loadStarTextures, hashCode, TEXTURE_VARIANTS }
+import { resolveTextureType, loadPlanetTextures, loadStarTextures, hashCode, TEXTURE_VARIANTS,
+         resolveMaxAnisotropy, setMaxAnisotropy }
   from './PlanetTextureUtils.js';
 import { RegionGenerator }    from '../map/RegionSystem.js';
 import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
@@ -202,6 +203,11 @@ export class ThreeRenderer {
     this.renderer.toneMappingExposure = 1.12;   // strojenie globalnej ekspozycji: 1.0–1.3
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x000000, 1); // prawdziwa czerń kosmosu
+    // Anizotropia — policzona RAZ (getMaxAnisotropy i tak cache'uje w capabilities)
+    // i zarejestrowana w module tekstur, który obsługuje planety/gwiazdy. Tekstury
+    // tworzone lokalnie (pierścienie) czytają this._maxAniso.
+    this._maxAniso = resolveMaxAnisotropy(this.renderer);
+    setMaxAnisotropy(this._maxAniso);
 
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
@@ -1537,6 +1543,10 @@ export class ThreeRenderer {
     }
 
     const rTex = new THREE.CanvasTexture(ringCanvas);
+    // Pierścienie to płaski dysk oglądany niemal zawsze pod ostrym kątem —
+    // największy zysk z anizotropii w całej scenie (tekstura 512×1 rozciągnięta
+    // po całym promieniu; bez niej szczeliny Cassiniego rozmywają się w smugę).
+    rTex.anisotropy = this._maxAniso;
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(r * innerMult, r * outerMult, 64),
       new THREE.MeshStandardMaterial({

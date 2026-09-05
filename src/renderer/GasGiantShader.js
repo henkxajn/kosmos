@@ -10,7 +10,7 @@
 // Kompatybilny z WebGL 1 (brak #version 300 es).
 
 import * as THREE from 'three';
-import { hashCode } from './PlanetTextureUtils.js';
+import { hashCode, resolveMaxAnisotropy } from './PlanetTextureUtils.js';
 import { GLSL_NOISE_LIB, mulberry32, rngRange } from './PlanetShader.js';
 import { resolveTextureType } from './PlanetTextureUtils.js';
 
@@ -570,6 +570,9 @@ function _renderBakePass(renderer, uniforms, outputMode, w, h) {
   const tex = new THREE.CanvasTexture(canvas);
   // diffuse → sRGB, normal/roughness → linear
   tex.colorSpace = (outputMode === 0) ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+  // Pasy gazowego giganta biegną równoleżnikowo — przy biegunach i na krawędzi
+  // tarczy patrzymy na nie pod bardzo ostrym kątem, gdzie mipmap sam je zlewa.
+  tex.anisotropy = resolveMaxAnisotropy(renderer);
 
   // Cleanup GPU
   rt.dispose();

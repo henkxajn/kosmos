@@ -17,6 +17,47 @@ const _textureLoader = new THREE.TextureLoader();
 const TEXTURE_DIR    = 'assets/planet-textures';
 export const TEXTURE_VARIANTS = 3; // ile wariantów per typ
 
+// ── Anizotropia — JEDNO ŹRÓDŁO PRAWDY ───────────────────────────────
+// Kula planety i (zwłaszcza) pierścienie oglądane są pod ostrymi kątami, gdzie
+// sam mipmapping rozmywa teksturę w kaszę. Cap 8: wyżej zysk jest niewidoczny,
+// a koszt próbkowania rośnie liniowo.
+// ⚠ PODŁOGA 1 JEST KONIECZNA: THREE `capabilities.getMaxAnisotropy()` zwraca
+//   **0**, gdy brak rozszerzenia EXT_texture_filter_anisotropic (three.module.js
+//   :2273-2275). Samo `Math.min(cap, 8)` dałoby wtedy anisotropy=0 — wartość
+//   zdegenerowaną (domyślna Three to 1), a nie „wyłączone".
+export const MAX_ANISOTROPY_CAP = 8;
+let _maxAnisotropy = 1;   // domyślna Three — dopóki renderer się nie przedstawi
+
+/** Ile anizotropii wolno użyć na TYM rendererze (z podłogą 1 i capem). */
+export function resolveMaxAnisotropy(renderer) {
+  const cap = renderer?.capabilities?.getMaxAnisotropy?.() ?? 1;
+  return Math.max(1, Math.min(cap, MAX_ANISOTROPY_CAP));
+}
+
+/**
+ * Rejestruje anizotropię dla tekstur ładowanych przez ten moduł.
+ * ⚠ Cache jest WSPÓŁDZIELONY przez ThreeRenderer, PlanetGlobeRenderer i
+ *   StratcomGalaxyRenderer, a każdy ma własny WebGLRenderer i konstruuje się
+ *   w innym momencie. Dlatego setter RETRO-APLIKUJE wartość na tekstury już
+ *   wczytane — inaczej to, czy tekstura dostanie anizotropię, zależałoby od
+ *   kolejności konstruowania rendererów (cicha pułapka kolejnościowa).
+ */
+export function setMaxAnisotropy(n) {
+  const v = Math.max(1, Math.floor(n || 1));
+  if (v === _maxAnisotropy) return _maxAnisotropy;
+  _maxAnisotropy = v;
+  for (const [, tex] of _textureCache) {
+    if (tex && tex.anisotropy !== v) {
+      tex.anisotropy = v;
+      tex.needsUpdate = true;   // wymusza ponowny upload już wgranych tekstur
+    }
+  }
+  return _maxAnisotropy;
+}
+
+/** Aktualna anizotropia modułu (do zastosowania na teksturze spoza cache). */
+export function currentMaxAnisotropy() { return _maxAnisotropy; }
+
 /**
  * Mapowanie typu planety (gra) → typ tekstury (generator).
  * Zwraca klucz odpowiadający typowi w PLANET_TYPES generatora.
@@ -82,6 +123,7 @@ export function loadPlanetTextures(texType, variant) {
       const tex = _textureLoader.load(`${prefix}_${key}.png`);
       // diffuse → sRGB, reszta → linear (dane, nie kolory)
       tex.colorSpace = (key === 'diffuse') ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+      tex.anisotropy = _maxAnisotropy;
       _textureCache.set(cacheKey, tex);
     }
     maps[key] = _textureCache.get(cacheKey);
@@ -107,6 +149,7 @@ export function loadStarTextures(texType, variant) {
       const tex = _textureLoader.load(`${prefix}_${key}.png`);
       // diffuse i emission → sRGB, normal → linear (dane)
       tex.colorSpace = (key === 'normal') ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+      tex.anisotropy = _maxAnisotropy;   // emission = tarcza gwiazdy pod ostrym kątem
       _textureCache.set(cacheKey, tex);
     }
     maps[key] = _textureCache.get(cacheKey);
