@@ -70,6 +70,21 @@ const STAR_CORE_SCALE = 3.0;
 // sprowadza ją do ×2.6, więc klasa gwiazdy jest CZYTELNA, a układ czerwonego karła
 // nadal da się grać (nie tonie w czerni). Strojenie na żywym obrazie.
 const STAR_LUMINOSITY_EXP = 0.22;
+// Ambient sceny (FEATURES.starClassLighting): baza = wartość z _buildLights, oraz
+// chłodniejszy wariant dla gwiazd M/K. Czerwony karzeł oświetla scenę ciepło i słabo,
+// więc lekko chłodniejsze wypełnienie utrzymuje kontrast barwny nocnej strony zamiast
+// zlewać ją z pomarańczem gwiazdy. G/F (i flaga OFF) dostają bazę CO DO BITU.
+// ⚠ ZMIERZONE, NIE ZAŁOŻONE: przy MIX=0.15 różnica jest PONIŻEJ rozdzielczości
+// pipeline'u. Oba kolory w przestrzeni LINIOWEJ (tej, którą mnoży shader) to
+// rgb(1,3,5)/255; po zlerpowaniu 15% delta liniowa wynosi (0,0,0) — a wynik jest
+// jeszcze mnożony przez intensity 0.4 i przepuszczony przez ACES. W sRGB widać
+// 1/255 na dwóch kanałach (0x101a26 → 0x101925). Mechanizm jest podpięty i
+// symetryczny, ale ŻEBY BYŁO WIDAĆ EFEKT trzeba podnieść MIX albo oddalić
+// kolor docelowy — to decyzja wizualna (kalibracja na żywym obrazie), nie kod.
+const AMBIENT_BASE_HEX     = 0x101a26;
+const AMBIENT_COOL_COLOR   = new THREE.Color(0x0d1420);
+const AMBIENT_COOL_MIX     = 0.15;                 // 15% ku chłodnemu (patrz ⚠ wyżej)
+const AMBIENT_COOL_CLASSES = new Set(['M', 'K']);  // tylko chłodne, słabe gwiazdy
 const S           = (v) => v / WORLD_SCALE; // skrót: skaluj pozycję
 const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
@@ -363,6 +378,7 @@ export class ThreeRenderer {
     this._star      = null;
     this._starGroup = null;
     this._starLight = null;
+    this._ambient   = null;           // AmbientLight — barwa przestrajana klasą gwiazdy
     this._starCorona = null;          // billboard korony HDR (sync quaternion w pętli)
     this._starCoronaUniform  = null;  // referencja do uTime korony
     this._starTwinkleUniform = null;  // referencja do uTime migotania gwiazd tła
@@ -536,7 +552,10 @@ export class ThreeRenderer {
   _buildLights() {
     // Ambient — słabe, chłodne wypełnienie (nocna strona LEDWO czytelna, nie szara).
     // Wartości pod ACES (ściemnia midtony ~20% względem NoToneMapping).
-    this.scene.add(new THREE.AmbientLight(0x101a26, 0.4));
+    // Uchwyt trzymany, bo renderStar przestraja BARWĘ wypełnienia wg klasy gwiazdy
+    // (_applyAmbientForClass). Konstrukcja i intensywność bez zmian.
+    this._ambient = new THREE.AmbientLight(AMBIENT_BASE_HEX, 0.4);
+    this.scene.add(this._ambient);
     // PointLight od gwiazdy — decay=0: brak fizycznego tłumienia (r171 domyślnie decay=2
     // co przy intensity=2.0 i odl.=11j daje 2/121≈0.017 = czarny).
     // distance=0 = brak limitu zasięgu. Intensywność 2.8 kompensuje krzywą ACES.
@@ -1243,7 +1262,19 @@ export class ThreeRenderer {
       intensity: scaled
         ? this._starLightOrigIntensity * Math.pow(lum, STAR_LUMINOSITY_EXP)
         : this._starLightOrigIntensity,
+      // Chłodniejszy ambient TYLKO dla M/K i TYLKO przy fladze ON.
+      ambientCool: scaled && AMBIENT_COOL_CLASSES.has(spec),
     };
+  }
+
+  // Barwa ambientu wg klasy gwiazdy. ⚠ SYMETRYCZNIE Z KONSTRUKCJI: zawsze zaczyna
+  // od bazy, więc przeskok układu M → F nie zostawia schłodzonego wypełnienia po
+  // poprzedniej gwieździe (a G/F i flaga OFF dostają 0x101a26 co do bitu).
+  // Intensywność (0.4) NIE jest ruszana — zmieniamy wyłącznie odcień.
+  _applyAmbientForClass(cool) {
+    if (!this._ambient) return;
+    this._ambient.color.setHex(AMBIENT_BASE_HEX);
+    if (cool) this._ambient.color.lerp(AMBIENT_COOL_COLOR, AMBIENT_COOL_MIX);
   }
 
   // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
@@ -1384,9 +1415,13 @@ export class ThreeRenderer {
     // `color` to TEN SAM obiekt co coreMat.uniforms.uColor, więc etap 4 Dysona
     // (fioletowe światło) przemalowuje także tarczę gwiazdy — istniejące,
     // zamierzone zachowanie. Intensywność idzie z bazy (klasa gwiazdy).
+    const lightBase = this._starLightBaseline(star);
     this._starLight.color = color;
-    this._starLight.intensity = this._starLightBaseline(star).intensity;
+    this._starLight.intensity = lightBase.intensity;
     this._starLight.position.set(S(star.x), 0, S(star.y));
+    // Ambient — ustawiany przy KAŻDEJ gwieździe (nie tylko M/K), inaczej przejście
+    // na jaśniejszy układ zostawiłoby chłodne wypełnienie poprzedniego.
+    this._applyAmbientForClass(lightBase.ambientCool);
   }
 
   // Rozmiary 3D planet per typ — logarytmiczna skala masy
