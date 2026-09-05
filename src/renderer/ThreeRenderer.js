@@ -1971,8 +1971,17 @@ export class ThreeRenderer {
       lg.material?.dispose();
       this._lifeGlows.delete(id);
     }
+    // ⚠ Finding 246 — NIEUTWARDZONY BLIŹNIAK tego samego wycieku: usunięcie planety
+    // (kolizja / wyrzucenie z układu / entity:removed) też zdejmowało linię orbity ze
+    // sceny bez zwolnienia zasobów. Rzadsze niż _rebuildAllOrbits, ale ta sama klasa —
+    // zostawienie go byłoby miną (wzór: removeColony:667).
     const orb = this._orbits.get(id);
-    if (orb) { this.scene.remove(orb); this._orbits.delete(id); }
+    if (orb) {
+      this.scene.remove(orb);
+      orb.geometry?.dispose();
+      orb.material?.dispose();
+      this._orbits.delete(id);
+    }
 
     // Usuń księżyce powiązane z tą planetą
     this._moons.forEach((moonEntry, moonId) => {
@@ -2436,7 +2445,20 @@ export class ThreeRenderer {
 
   // ── Orbity eliptyczne ─────────────────────────────────────────
   _rebuildAllOrbits() {
-    this._orbits.forEach(line => this.scene.remove(line));
+    // ⚠ Finding 246: linie były tylko ZDEJMOWANE ze sceny — geometria i materiał
+    // zostawały na GPU. Funkcja biegnie co ~180 klatek (~3 s) ORAZ na ośmiu
+    // zdarzeniach, więc przy ~9 planetach osierocało to ~9 par geometria+materiał
+    // co trzy sekundy przez całą partię.
+    // Dispose jest tu BEZPIECZNY — sprawdzone, nie założone: _buildOrbit tworzy oba
+    // obiekty ŚWIEŻO per planeta i trzyma je wyłącznie w this._orbits; dwa inne
+    // miejsca w tym pliku (_disposeAllMeshes i bliźniaczy _rebuildPlanetoidOrbits)
+    // disposują dokładnie te same obiekty od dawna. Linie handlu i pierścienie
+    // księżyców mają własne geometrie/materiały i własny cykl życia.
+    this._orbits.forEach(line => {
+      this.scene.remove(line);
+      line.geometry?.dispose();
+      line.material?.dispose();
+    });
     this._orbits.clear();
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     EntityManager.getByTypeInSystem('planet', sysId).forEach(p => this._buildOrbit(p));
