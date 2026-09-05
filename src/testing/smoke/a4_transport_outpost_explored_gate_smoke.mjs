@@ -9,7 +9,7 @@
 // Pokrycie:
 //   T1  EXPLORED + same-system + cargo → createOutpost WYWOŁANY (z cargo); status completed; cargo statku wyczyszczony
 //   T2  UNEXPLORED + same-system + cargo → createOutpost NIE wywołany; status orbiting; arriveAtTarget; cargo NA POKŁADZIE
-//   T3  EXPLORED + CROSS-system + cargo → orbit (bez zmian; cross-system nietknięty), brak outpostu
+//   T3  CROSS-system + układ ZNANY + cargo → outpost (ODWRÓCONE w (e); patrz nota przy teście)
 //   T4  UNEXPLORED + same-system + BEZ cargo → orbit (brak outpostu; no-cargo path nietknięty dla zbadanych)
 //   T5  analyzed⇒explored: explored=true (analyzed implikuje explored) → outpost (parytet found_outpost)
 
@@ -18,6 +18,9 @@ globalThis.localStorage = { getItem:()=>null, setItem(){}, removeItem(){} };
 globalThis.document = { createElement:()=>({style:{},appendChild(){},addEventListener(){}}), getElementById:()=>null };
 
 const { MissionSystem } = await import('../../systems/MissionSystem.js');
+// (e) — helper zakładania placówki jest WSPÓLNY, więc stub pożycza PRAWDZIWĄ metodę:
+// inaczej ten keeper mierzyłby własną atrapę zamiast kodu gry.
+const { VesselManager } = await import('../../systems/VesselManager.js');
 
 let pass = 0, fail = 0;
 function assert(cond, label) {
@@ -31,7 +34,9 @@ function runArrival({ explored, sameSystem, cargo }) {
   const createOutpostCalls = [];
   const arriveCalls = [];
   const targetBody = { id: 'body_target', type: 'moon', explored, systemId: sameSystem ? 'sys_home' : 'sys_other', x: 5, y: 5 };
-  const vessel = { cargo: { ...(cargo ?? {}) }, cargoUsed: cargo ? 10 : 0, colonyId: null, stats: null };
+  // (e) — `missionLog` jest wymagany przez wspólny helper (addMissionLog); prawdziwe statki
+  // zawsze je mają, ten stub był po prostu minimalny.
+  const vessel = { cargo: { ...(cargo ?? {}) }, cargoUsed: cargo ? 10 : 0, colonyId: null, stats: null, missionLog: [], name: 'stub' };
 
   globalThis.window.KOSMOS = {
     colonyManager: {
@@ -43,8 +48,12 @@ function runArrival({ explored, sameSystem, cargo }) {
       getVessel: () => vessel,
       arriveAtTarget: (...a) => arriveCalls.push(a),
       dockAtColony: () => {},
+      _findEntity: () => targetBody,
+      foundOutpostFromCargo: VesselManager.prototype.foundOutpostFromCargo,
     },
     timeSystem: { gameTime: 10 },
+    // (e) — reguła mgły: placówka tylko na ciele z układu, który gra ZNA.
+    starSystemManager: { getSystem: (id) => (id === 'sys_home' || id === 'sys_other' ? { systemId: id } : null) },
   };
 
   const inst = Object.create(MissionSystem.prototype);
@@ -80,12 +89,18 @@ header('T2: UNEXPLORED + same-system + cargo → orbit, cargo NA POKŁADZIE');
 }
 
 // ── T3 — EXPLORED cross-system → orbit (bez zmian) ────────────────────────────
-header('T3: explored + CROSS-system → orbit (cross-system nietknięty)');
+header('T3: CROSS-system + układ ZNANY → outpost (ODWRÓCONE w (e))');
+// ⚠ ODWRÓCONE ŚWIADOMIE, Finding 254 (e). Pin mierzył gałąź, którą A4 celowo zamykała:
+//   „obcy układ ⇒ statek orbituje, placówka nie powstaje". Po d1 gracz może wysłać transport na
+//   obce ciało, a przycisk „Rozładuj cargo" zakłada tam placówkę OD ZAWSZE — więc dwie ścieżki na
+//   TYM SAMYM ciele dawały różny wynik. Obca strona schodzi teraz do reguły MGŁY (układ znany),
+//   nie do `explored`: statek tam BYŁ. Zbieżność obu ścieżek pinuje
+//   `outpost_founding_convergence_smoke` (e-1); tutaj zostaje strażnik samej gałęzi.
 {
   const r = runArrival({ explored: true, sameSystem: false, cargo: { minerals: 10 } });
-  assert(r.createOutpostCalls.length === 0, 'createOutpost NIE wywołany (cross-system orbituje)');
-  assert(r.expStatus === 'orbiting', 'status = orbiting');
-  assert(r.vesselCargo?.minerals === 10, 'cargo NA POKŁADZIE');
+  assert(r.createOutpostCalls.length === 1, 'createOutpost WYWOŁANY (obcy, ale ZNANY układ)');
+  assert(r.expStatus === 'completed', 'status = completed');
+  assert(Object.keys(r.vesselCargo).length === 0, 'cargo dostarczone (ładownia pusta)');
 }
 
 // ── T4 — UNEXPLORED + no cargo → orbit ────────────────────────────────────────

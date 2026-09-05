@@ -2388,32 +2388,33 @@ export class MissionSystem {
       // w tym samym układzie idzie TĄ SAMĄ ścieżką co obcy układ: statek orbituje z cargo NA POKŁADZIE,
       // misja kończy się bez błędu, bez outpostu, bez utraty ładunku.
       const targetExplored = targetBody?.explored === true;
-      if (originSysId !== targetSysId || !targetExplored) {
-        // Obcy układ LUB ciało niezbadane — statek orbituje cel, NIE tworzymy outpostu.
+      // (e) Finding 254 — RECONCILE Z `_startForeignUnload`. Przycisk „Rozładuj cargo" zakłada
+      // placówkę na obcym ciele od zawsze i BEZ bramek; dostawa transportowa odmawiała, więc po
+      // d1 (transport może celować w obce ciało) dwie ścieżki na TYM SAMYM ciele dawały różny
+      // wynik. Obca strona schodzi teraz do reguły MGŁY (układ znany), a nie do `explored`:
+      // statek tam BYŁ, więc `explored:false` na ciele jest uczciwe i nie ma prawa blokować.
+      // ⚠ Strona IN-SYSTEM zostaje BEZ ZMIAN (`explored` dalej wymagane) — reconcile nie ma
+      //   prawa wyciec do ścieżki, której nie dotyczy (pin e-3).
+      const sameSystem = originSysId === targetSysId;
+      const foreignKnown = !sameSystem
+        && !!window.KOSMOS?.starSystemManager?.getSystem?.(targetSysId);
+      const canFound = sameSystem ? targetExplored : foreignKnown;
+      if (!canFound) {
+        // Ciało niezbadane we własnym układzie LUB układ nieznany — statek orbituje z cargo.
         exp.status = 'orbiting';
         if (exp.vesselId && vMgr) {
           vMgr.arriveAtTarget(exp.vesselId, exp.targetId);
         }
       } else {
-        // Ten sam układ + ciało ZBADANE — utwórz outpost z cargo (jeśli jest co dostarczyć)
-        const outpostResources = {};
+        // (e) — placówkę zakłada WSPÓLNY helper `VesselManager.foundOutpostFromCargo`
+        // (marshalling cargo + createOutpost + wpis do dziennika). Tu zostaje wyłącznie
+        // księgowość REKORDU MISJI, która należy do MissionSystem i do nikogo innego.
+        const founding = (vessel && vMgr)
+          ? vMgr.foundOutpostFromCargo(vessel, exp.targetId, exp.cargo)
+          : { ok: false, reason: 'no_vessel' };
+        const outpostResources = founding.resources ?? {};
 
-        if (vessel?.cargo) {
-          for (const [comId, qty] of Object.entries(vessel.cargo)) {
-            if (qty <= 0) continue;
-            outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
-          }
-        }
-
-        if (exp.cargo) {
-          for (const [key, val] of Object.entries(exp.cargo)) {
-            if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
-          }
-        }
-
-        const hasCargo = Object.keys(outpostResources).length > 0;
-
-        if (!hasCargo) {
+        if (!founding.ok) {
           // Pusty transport bez cargo — statek orbituje cel, nie tworzy pustego outpostu
           exp.status = 'orbiting';
           if (exp.vesselId && vMgr) {
@@ -2425,8 +2426,6 @@ export class MissionSystem {
             for (const v of Object.values(outpostResources)) vessel.stats.resourcesHauled += v;
           }
 
-          const gameYear = Math.floor(this._gameYear);
-          colMgr.createOutpost(exp.targetId, outpostResources, gameYear);
 
           if (exp.vesselId && vMgr) {
             const oldColonyId = vessel?.colonyId;

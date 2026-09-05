@@ -3435,6 +3435,59 @@ export class VesselManager {
   /**
    * Rozładunek cargo w obcym układzie (przycisk „📦 Rozładuj cargo" na orbitującym statku).
    */
+  /**
+   * (e) Finding 254 — JEDYNE ŹRÓDŁO PRAWDY dla „placówka z ładunku statku".
+   *
+   * ⚠ Powstało z ROZJAZDU dwóch pełnych implementacji, które dzieliły wyłącznie prymityw
+   *   `ColonyManager.createOutpost`, a decyzję, marshalling cargo i log miały własne:
+   *     • `_startForeignUnload` (przycisk „Rozładuj cargo") — ZERO bramek;
+   *     • `MissionSystem._processTransportArrival` (A4) — wymagała TEGO SAMEGO układu
+   *       ORAZ `body.explored`, więc na obcym ciele placówka NIE powstawała.
+   *   Rozjazd stał się nośny po d1: gracz może wysłać transport na obce ciało, więc dostawa
+   *   milczkiem nie zakładała placówki, którą przycisk na TYM SAMYM ciele zakłada.
+   *   Zbieżność musi być JEDNĄ implementacją, nie dwiema, które dziś się zgadzają — to repo
+   *   trzy razy zapłaciło za nieutwardzonego bliźniaka (`removeColony:667`, `ReturnJump`,
+   *   `FleetActions.return_home`).
+   *
+   * ⚠ Bramka MGŁY jest tu jawna, choć dziś nieosiągalna: statek nie ma jak dolecieć do ciała
+   *   z układu niewygenerowanego (d1/d2 tego nie dopuszczają). Inwariant zapisany, nie
+   *   zakładany — pin e-4.
+   * ⚠ Jedyna różnica wobec starego `_startForeignUnload`: PUSTY ładunek nie tworzy już pustej
+   *   placówki (`no_cargo`). Z UI nieosiągalne (przycisk wymaga `cargoUsed > 0`), a ścieżka
+   *   transportowa i tak miała własną gałąź na ten przypadek.
+   *
+   * @param {object} vessel  statek-nosiciel (jego `cargo` wchodzi do zasobów startowych)
+   * @param {string} targetId  ciało docelowe
+   * @param {object|null} extraResources  dodatkowe zasoby (ładunek rekordu misji)
+   * @returns {{ok:boolean, reason?:string, resources?:object}}
+   */
+  foundOutpostFromCargo(vessel, targetId, extraResources = null) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const target = this._findEntity(targetId);
+    if (!vessel || !colMgr || !target) return { ok: false, reason: 'no_target' };
+    if (colMgr.getColony(targetId)) return { ok: false, reason: 'already_colonised' };
+    if (!window.KOSMOS?.starSystemManager?.getSystem?.(target.systemId)) {
+      return { ok: false, reason: 'target_system_unknown' };
+    }
+
+    const resources = {};
+    for (const [k, q] of Object.entries(vessel.cargo ?? {})) {
+      if (q > 0) resources[k] = (resources[k] ?? 0) + q;
+    }
+    if (extraResources) {
+      for (const [k, q] of Object.entries(extraResources)) {
+        if (q > 0) resources[k] = (resources[k] ?? 0) + q;
+      }
+    }
+    if (Object.keys(resources).length === 0) return { ok: false, reason: 'no_cargo' };
+
+    const gameYear = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
+    colMgr.createOutpost(targetId, resources, gameYear);
+    addMissionLog(vessel, gameYear,
+      t('vessel.foreignUnloadOutpost', target.name ?? targetId), 'success');
+    return { ok: true, resources };
+  }
+
   _startForeignUnload(vesselId, targetId) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel || !vessel.cargo) return;
@@ -3447,14 +3500,8 @@ export class VesselManager {
     const colony = colMgr?.getColony(targetId);
 
     if (!colony && colMgr) {
-      // Brak kolonii — utwórz outpost z cargo jako zasoby startowe
-      const startRes = {};
-      for (const [key, qty] of Object.entries(vessel.cargo)) {
-        if (qty > 0) startRes[key] = qty;
-      }
-      colMgr.createOutpost(targetId, startRes, gameYear);
-      addMissionLog(vessel, gameYear,
-        t('vessel.foreignUnloadOutpost', target.name ?? targetId), 'success');
+      // (e) — JEDNA implementacja zakładania placówki z ładunku (patrz `foundOutpostFromCargo`).
+      this.foundOutpostFromCargo(vessel, targetId);
     } else if (colony) {
       // Jest kolonia — dodaj cargo do inventory przez receive() (zapis do Map,
       // NIE do legacy proxy resources[] który jest nadpisywany przy _syncLegacyProxy).
