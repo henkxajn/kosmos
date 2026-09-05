@@ -2730,22 +2730,63 @@ export class ThreeRenderer {
   }
 
   // ── Małe ciała ────────────────────────────────────────────────
+  // ⚠ Finding 247: funkcja biegła z `physics:updated`, czyli CO KLATKĘ, i BEZWARUNKOWO
+  // demontowała chmurę punktów (scene.remove + 2× dispose) zanim w ogóle sprawdziła, czy
+  // jest co rysować. Przy `FEATURES.smallBodies=false` (domyślnie) encje nie powstają,
+  // więc cała ta praca była jałowa. Teraz wyjścia stoją PRZED demontażem.
+  // ⚠ Sprzątanie MUSI zostać osiągalne w obu wyjściach: przy wyłączeniu flagi w locie
+  //   albo przejściu do układu bez małych ciał chmura zostałaby w scenie NA ZAWSZE.
+  //   Dlatego to `_disposeSmallBodyPoints()` (no-op gdy nie ma czego zwalniać), a nie
+  //   goły `return`.
   _syncSmallBodies() {
+    if (GAME_CONFIG.FEATURES?.smallBodies === false) { this._disposeSmallBodyPoints(); return; }
+
     const sbSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const bodies = [
       ...EntityManager.getByTypeInSystem('asteroid', sbSysId),
       ...EntityManager.getByTypeInSystem('comet', sbSysId),
     ];
-    if (this._smallBodyPoints) {
-      this.scene.remove(this._smallBodyPoints);
-      this._smallBodyPoints.geometry.dispose();
-      this._smallBodyPoints.material.dispose();
-      this._smallBodyPoints = null;
-    }
-    if (!bodies.length) return;
+    if (!bodies.length) { this._disposeSmallBodyPoints(); return; }
 
+    // Ścieżka szybka: liczba ciał się nie zmieniła → nadpisz bufory W MIEJSCU.
+    // Skład może być inny (kometa zginęła, asteroida powstała) — dlatego wypełniamy
+    // TAKŻE kolory, nie tylko pozycje.
+    const geo   = this._smallBodyPoints?.geometry;
+    const pAttr = geo?.getAttribute('position');
+    const cAttr = geo?.getAttribute('color');
+    if (pAttr && cAttr && pAttr.count === bodies.length) {
+      this._fillSmallBodyBuffers(bodies, pAttr.array, cAttr.array);
+      pAttr.needsUpdate = true;
+      cAttr.needsUpdate = true;
+      return;
+    }
+
+    // Zmieniła się liczba ciał → pełna przebudowa (rzadka).
+    this._disposeSmallBodyPoints();
     const pos = new Float32Array(bodies.length * 3);
     const col = new Float32Array(bodies.length * 3);
+    this._fillSmallBodyBuffers(bodies, pos, col);
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+    this._smallBodyPoints = new THREE.Points(g,
+      new THREE.PointsMaterial({ size: 0.3, vertexColors: true }));
+    this.scene.add(this._smallBodyPoints);
+  }
+
+  // Zwalnia chmurę małych ciał. No-op, gdy nie ma czego zwalniać.
+  _disposeSmallBodyPoints() {
+    if (!this._smallBodyPoints) return;
+    this.scene.remove(this._smallBodyPoints);
+    this._smallBodyPoints.geometry.dispose();
+    this._smallBodyPoints.material.dispose();
+    this._smallBodyPoints = null;
+  }
+
+  // Wypełnia bufory pozycji i koloru — JEDNO źródło prawdy dla ścieżki in-place
+  // i dla pełnej przebudowy (inaczej obie rozjechałyby się przy zmianie palety).
+  _fillSmallBodyBuffers(bodies, pos, col) {
     bodies.forEach((b, i) => {
       const bx = isNaN(b.x) ? 0 : b.x;
       const by = isNaN(b.y) ? 0 : b.y;
@@ -2753,13 +2794,6 @@ export class ThreeRenderer {
       if (b.type === 'comet') { col[i*3]=0.7; col[i*3+1]=0.8; col[i*3+2]=1.0; }
       else { const v = 0.45; col[i*3]=v; col[i*3+1]=v; col[i*3+2]=v; }
     });
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-    this._smallBodyPoints = new THREE.Points(geo,
-      new THREE.PointsMaterial({ size: 0.3, vertexColors: true }));
-    this.scene.add(this._smallBodyPoints);
   }
 
   // ── Synchronizacja gwiazdy ────────────────────────────────────
