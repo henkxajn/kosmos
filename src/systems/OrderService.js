@@ -96,6 +96,26 @@ export class OrderService {
   issueMove(vesselId, spec, opts = undefined) {
     const mos = this._mos;
     if (!mos) return { ok: false, reason: 'mos_disabled' };
+
+    // ── d2 (Finding 254) — CEL W INNYM UKŁADZIE = COMPOSITE, NIE LUZOWANIE BRAMKI ──
+    // ⛔ NIE wolno zdejmować `target_other_system` w MOS: rozkazy niosą `targetPoint` we
+    //   WSPÓŁRZĘDNYCH UKŁADU (każda gwiazda w (0,0)), więc statek leciałby ku punktowi z ramki
+    //   INNEGO układu — klasa „globalne id ≠ położenie" (131cc2e, W3-4b). Zamiast tego skaczemy,
+    //   a odcinek przylotowy wydajemy PO przylocie — wtedy bramka przepuszcza go sama.
+    // ⚠ Mgła: ciało układu nigdy nieodwiedzonego nie istnieje, a układu nie wolno generować,
+    //   żeby odpowiedzieć „gdzie to jest" (Finding 186; pin d2-3 liczy encje).
+    if (spec?.type === 'moveToPoint' && spec?.targetBodyId) {
+      const vessel = this._vm?.getVessel?.(vesselId);
+      const body = EntityManager.get(spec.targetBodyId);
+      if (vessel && !body) return { ok: false, reason: 'target_system_unknown' };
+      if (vessel && body && !this._sameSystem(vessel, body.systemId)) {
+        const known = !!window.KOSMOS?.starSystemManager?.getSystem?.(body.systemId);
+        if (!known) return { ok: false, reason: 'target_system_unknown' };
+        return this._beginComposite(vessel, 'move', {
+          targetId: spec.targetBodyId, targetSystemId: body.systemId,
+        });
+      }
+    }
     return mos.issueOrder(vesselId, spec, opts);
   }
 
@@ -210,17 +230,36 @@ export class OrderService {
    * @private
    */
   _issueRecallLeg(vessel, capitalBodyId) {
-    const body = EntityManager.get(capitalBodyId);
+    // d2 — delegacja do wspólnego odcinka. Opcje AI zostają DOKŁADNIE te co dotąd:
+    // `bypassFuelCheck` jest tu uzasadnione tym, że kolonie AI nie trzymają paliwa.
+    return this._issueArrivalMoveLeg(vessel, capitalBodyId, {
+      issuedBy: 'ai_recall', bypassFuelCheck: true,
+    });
+  }
+
+  /**
+   * d2 (Finding 254) — WSPÓLNY ODCINEK PRZYLOTOWY: `moveToPoint` na CIAŁO, wydawany dopiero
+   * gdy statek jest już w układzie celu (wtedy bramka układu w MOS przepuszcza rozkaz).
+   *
+   * ⚠ SPARAMETRYZOWANY ŚWIADOMIE. `_issueRecallLeg` miał zaszyte `bypassFuelCheck: true`
+   *   i `issuedBy: 'ai_recall'` — jedno i drugie jest założeniem o AI, nie o odcinku.
+   *   Dla rozkazu GRACZA obejście bramki paliwa byłoby cichym prezentem, a etykieta
+   *   kłamstwem w rejestrze rozkazów. Sam CEL nie niósł żadnego założenia o przyjazności
+   *   ani o „domu" — to jest jedyny powód, dla którego ten odcinek dało się reużyć wprost.
+   * @private
+   */
+  _issueArrivalMoveLeg(vessel, bodyId, { issuedBy, bypassFuelCheck } = {}) {
+    const body = EntityManager.get(bodyId);
     if (!body) return { ok: false, reason: 'target_lost' };
     const mos = this._mos;
     if (!mos) return { ok: false, reason: 'mos_disabled' };
     return mos.issueOrder(vessel.id, {
       type:         'moveToPoint',
-      targetBodyId: capitalBodyId,
-      targetPoint:  { x: body.x ?? 0, y: body.y ?? 0 },
+      targetBodyId: bodyId,
+      targetPoint:  { x: body.x ?? 0, y: body.y ?? 0 },   // validateOrder wymaga punktu
       targetName:   body.name ?? null,
-      issuedBy:     'ai_recall',
-      bypassFuelCheck: true,
+      issuedBy,
+      bypassFuelCheck: !!bypassFuelCheck,
     });
   }
 
@@ -323,6 +362,25 @@ export class OrderService {
     // Z2 (D-Z2-1) — POWRÓT: drugi odcinek to podejście do stolicy WEWNĄTRZ własnego układu.
     // Celem jest CIAŁO imperium, nie kolonia/stacja gracza, więc re-walidacja jest inna —
     // tak samo jak przy `attack` wyżej.
+    // d2 (Finding 254) — MOVE: drugi odcinek to podejście do CIAŁA wewnątrz układu celu.
+    // Lustro `recall` niżej, z jedną różnicą, która jest całym sensem parametryzacji:
+    // rozkaz GRACZA podlega bramce paliwa (`bypassFuelCheck: false`).
+    if (po.kind === 'move') {
+      v.pendingOrder = null;
+      const rm = this._issueArrivalMoveLeg(v, po.targetId, {
+        issuedBy: 'order_service_move', bypassFuelCheck: false,
+      });
+      if (!rm?.ok) {
+        // Ten sam ratunek co przy `recall`: nie zostawiamy martwej misji `interstellar_jump`,
+        // bo statek wypadłby z doboru na zawsze 30 AU od gwiazdy (brick z §2 planu Z2).
+        if (v.mission?.type === 'interstellar_jump') { v.mission = null; v.status = 'idle'; }
+        EventBus.emit('order:compositeFailed', { vesselId, reason: rm?.reason ?? 'move_rejected' });
+        return;
+      }
+      EventBus.emit('order:compositeDelivering', { vesselId, kind: po.kind, targetId: po.targetId });
+      return;
+    }
+
     if (po.kind === 'recall') {
       v.pendingOrder = null;
       const r = this._issueRecallLeg(v, po.targetId);
