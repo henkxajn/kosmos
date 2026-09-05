@@ -74,16 +74,21 @@ const STAR_LUMINOSITY_EXP = 0.22;
 // chłodniejszy wariant dla gwiazd M/K. Czerwony karzeł oświetla scenę ciepło i słabo,
 // więc lekko chłodniejsze wypełnienie utrzymuje kontrast barwny nocnej strony zamiast
 // zlewać ją z pomarańczem gwiazdy. G/F (i flaga OFF) dostają bazę CO DO BITU.
-// ⚠ ZMIERZONE, NIE ZAŁOŻONE: przy MIX=0.15 różnica jest PONIŻEJ rozdzielczości
-// pipeline'u. Oba kolory w przestrzeni LINIOWEJ (tej, którą mnoży shader) to
-// rgb(1,3,5)/255; po zlerpowaniu 15% delta liniowa wynosi (0,0,0) — a wynik jest
-// jeszcze mnożony przez intensity 0.4 i przepuszczony przez ACES. W sRGB widać
-// 1/255 na dwóch kanałach (0x101a26 → 0x101925). Mechanizm jest podpięty i
-// symetryczny, ale ŻEBY BYŁO WIDAĆ EFEKT trzeba podnieść MIX albo oddalić
-// kolor docelowy — to decyzja wizualna (kalibracja na żywym obrazie), nie kod.
+// ⚠ ZMIERZONE, NIE ZAŁOŻONE (D-V0c, wartości PROWIZORYCZNE — finalna kalibracja
+// okiem na live-gate V0). Chłodzimy PRZESUNIĘCIEM ODCIENIA (błękit w górę), nie
+// ściemnianiem: pierwsza próba (0x0d1420 @ 0.15) ciągnęła wszystkie kanały w dół
+// i dawała deltę LINIOWĄ (0,0,0) — czyli była mierzalnym no-opem.
+//   base 0x101a26          → linear8 (1,3,5)
+//   cool 0x0a1c4d @ 0.6    → linear8 (1,3,13)   = sRGB 0x0d1b41
+//   delta liniowa          → (0,0,8)  ⇒ błękit ×2.6 przy ~stałej luminancji
+//   delta sRGB8            → (−3,+1,+27)
+// ⚠ lerp liczy się w przestrzeni LINIOWEJ (ColorManagement r171), więc wynik sRGB
+//   NIE jest naiwnym środkiem: przewidywano rgb(12,27,61), wyszło rgb(13,27,65).
+// Czułość MIX (ten sam kolor docelowy), linear8 błękitu: 0.15→7 · 0.3→9 · 0.6→13
+//   · 0.8→16 · 1.0→19. To jest pokrętło do strojenia okiem.
 const AMBIENT_BASE_HEX     = 0x101a26;
-const AMBIENT_COOL_COLOR   = new THREE.Color(0x0d1420);
-const AMBIENT_COOL_MIX     = 0.15;                 // 15% ku chłodnemu (patrz ⚠ wyżej)
+const AMBIENT_COOL_COLOR   = new THREE.Color(0x0a1c4d);
+const AMBIENT_COOL_MIX     = 0.6;                  // 60% ku chłodnemu (patrz ⚠ wyżej)
 const AMBIENT_COOL_CLASSES = new Set(['M', 'K']);  // tylko chłodne, słabe gwiazdy
 const S           = (v) => v / WORLD_SCALE; // skrót: skaluj pozycję
 const SR          = (r) => r / WORLD_SCALE; // skaluj promień
