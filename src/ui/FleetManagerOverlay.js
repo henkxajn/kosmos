@@ -142,6 +142,9 @@ function _isEnemyTracked(v) {
 }
 
 // ── Helper: ikona ciała dla list redirect (spójna: interstellar_redirect + foreign_redirect) ──
+// ⚠ MARTWY od (f-A, Finding 253): obie listy usunięte, ZERO konsumentów. Zostaje do sweepu 127
+//   razem z `issueReturn` / `_dispatchReturnJump` / `ACTIONS.return_home` — nie kasujemy tu,
+//   bo to osobna, jednorodna praca.
 function _redirectBodyIcon(type) {
   return type === 'moon'      ? '🌙'
        : type === 'planetoid' ? '🪨'
@@ -7545,44 +7548,14 @@ export class FleetManagerOverlay {
         cy += switchBtnH + 4;
       }
 
-      // Lista ciał w nowym układzie — redirect. WSZYSTKIE typy (planeta/księżyc/planetoida/
-      // asteroida/kometa) — backend _redirectInterstellarVessel przyjmuje dowolne ciało (_findEntity).
-      const bodies = ['planet', 'moon', 'planetoid', 'asteroid', 'comet']
-        .flatMap(tp => EntityManager.getByTypeInSystem(tp, isMission.toSystemId));
-      if (bodies.length > 0) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(t('fleet.systemPlanets'), x + pad, cy + 10);
-        cy += 16;
-
-        // Bez cap/`break` — cała lista rysowana w treść panelu; przewija ją wspólny
-        // _rightScrollY (clip + scrollbar + clip hit-zon w _finishRight). Każde ciało osiągalne.
-        for (const body of bodies) {
-          const pBtnW = w - pad * 2;
-          const pBtnH = 20;
-
-          ctx.fillStyle = 'rgba(170,136,255,0.06)';
-          ctx.fillRect(x + pad, cy, pBtnW, pBtnH);
-          ctx.strokeStyle = THEME.border;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x + pad, cy, pBtnW, pBtnH);
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textPrimary;
-          ctx.fillText(`${_redirectBodyIcon(body.type)} ${body.name ?? body.id}`, x + pad + 6, cy + 14);
-
-          // Odległość od statku (spójnie z listą foreign_redirect niżej; sensowna dla każdego typu)
-          ctx.textAlign = 'right';
-          ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${this._calcDistAU(vessel, body).toFixed(1)} AU`, x + w - pad - 4, cy + 14);
-          ctx.textAlign = 'left';
-
-          this._hitZones.push({
-            x: x + pad, y: cy, w: pBtnW, h: pBtnH,
-            type: 'interstellar_redirect', data: { vesselId: vessel.id, targetId: body.id },
-          });
-          cy += pBtnH + 2;
-        }
-      }
+      // (f-A) Finding 253 — ENUMERACJA CIAŁ USUNIĘTA (ekran przylotu międzygwiezdnego).
+      // To ona czyniła z panelu STAŁY KATALOG zamiast zestawu akcji. Usunięcie jest DARMOWE,
+      // bo zdolność „leć do innego ciała" ma dwie inne drogi: klik ciała NA MAPIE
+      // (`FMO:2034`, ten sam `vessel:interstellarRedirect`; jego komentarz mówi wprost „to samo
+      // co wiersz listy, tylko wygodniej") oraz — od d2 — rozkaz ruchu cross-system.
+      // ⚠ Przyciski RECONU ZOSTAJĄ: `expedition:foreignRecon` ma tylko tych dwóch producentów,
+      //   a `foreign_colonize` jest bramkowane `explored`, które na obcym ciele ustawia WYŁĄCZNIE
+      //   recon — ukrycie go zostawiłoby Kolonizuj narysowane i MARTWE (pin f-2).
       // (a') Finding 145 — PRZYCISK „Powrót do bazy" USUNIĘTY. Zdolność powrotu ZOSTAJE:
       // wysyłka z mapy galaktyki (_drawWarpShipList → warp_ship_select → gwiazda domowa →
       // _drawWarpOrderPanel → warp_order_send → OrderService.issueWarp; canOrder blokuje
@@ -7704,53 +7677,14 @@ export class FleetManagerOverlay {
         cy += btnH + 4;
       }
 
-      // ── Separator ──
-      cy += 2;
-
-      // ── Leć do innego ciała (planety + księżyce + planetoidy w tym układzie) ──
-      // Redirect (_redirectInterstellarVessel) przyjmuje dowolne ciało przez _findEntity,
-      // więc lista obejmuje WSZYSTKIE typy (planeta/księżyc/planetoida/asteroida/kometa) —
-      // nie tylko planety. Sortujemy wg realnej odległości od statku (_calcDistAU), nie półosi.
-      const sysId = vessel.systemId;
-      const redirectBodies = [
-        ...EntityManager.getByTypeInSystem('planet', sysId),
-        ...EntityManager.getByTypeInSystem('moon', sysId),
-        ...EntityManager.getByTypeInSystem('planetoid', sysId),
-        ...EntityManager.getByTypeInSystem('asteroid', sysId),
-        ...EntityManager.getByTypeInSystem('comet', sysId),
-      ]
-        .filter(b => b.id !== isMission.targetId)
-        .map(b => ({ body: b, distAU: this._calcDistAU(vessel, b) }))
-        .sort((a, b) => a.distAU - b.distAU);
-      if (redirectBodies.length > 0) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(t('fleet.foreignRedirect'), x + pad, cy + 10);
-        cy += 16;
-
-        // Bez `break` — pełna lista przewijalna wspólnym _rightScrollY (parytet z listą wyżej).
-        for (const { body: rb, distAU: rDist } of redirectBodies) {
-          const pBtnH2 = 20;
-          const rIcon = _redirectBodyIcon(rb.type);
-          ctx.fillStyle = 'rgba(170,136,255,0.06)';
-          ctx.fillRect(x + pad, cy, btnW, pBtnH2);
-          ctx.strokeStyle = THEME.border;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x + pad, cy, btnW, pBtnH2);
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textPrimary;
-          ctx.fillText(`${rIcon} ${rb.name ?? rb.id}`, x + pad + 6, cy + 14);
-          ctx.textAlign = 'right';
-          ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${rDist.toFixed(1)} AU`, x + w - pad - 4, cy + 14);
-          ctx.textAlign = 'left';
-          this._hitZones.push({
-            x: x + pad, y: cy, w: btnW, h: pBtnH2,
-            type: 'foreign_redirect', data: { vesselId: vessel.id, targetId: rb.id },
-          });
-          cy += pBtnH2 + 2;
-        }
-      }
+      // (f-A) Finding 253 — ENUMERACJA CIAŁ USUNIĘTA (orbita obcego ciała).
+      // To ona czyniła z panelu STAŁY KATALOG zamiast zestawu akcji. Usunięcie jest DARMOWE,
+      // bo zdolność „leć do innego ciała" ma dwie inne drogi: klik ciała NA MAPIE
+      // (`FMO:2034`, ten sam `vessel:interstellarRedirect`; jego komentarz mówi wprost „to samo
+      // co wiersz listy, tylko wygodniej") oraz — od d2 — rozkaz ruchu cross-system.
+      // ⚠ Przyciski RECONU ZOSTAJĄ: `expedition:foreignRecon` ma tylko tych dwóch producentów,
+      //   a `foreign_colonize` jest bramkowane `explored`, które na obcym ciele ustawia WYŁĄCZNIE
+      //   recon — ukrycie go zostawiłoby Kolonizuj narysowane i MARTWE (pin f-2).
       // (a') Finding 145 — PRZYCISK „Powrót do bazy" USUNIĘTY. Zdolność powrotu ZOSTAJE:
       // wysyłka z mapy galaktyki (_drawWarpShipList → warp_ship_select → gwiazda domowa →
       // _drawWarpOrderPanel → warp_order_send → OrderService.issueWarp; canOrder blokuje
