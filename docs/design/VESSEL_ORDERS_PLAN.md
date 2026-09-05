@@ -2124,3 +2124,114 @@ unikatowych akcji** (kolonizacja, rozładunek) na inną powierzchnię — inacze
 **Świadomie NIEZMIERZONE:** czy `foreign_colonize` / `foreign_unload` mają odpowiedniki w ścieżce
 macierzystej na tyle bliskie, by je przejąć (`_launchColony` / transport) — to jest pytanie
 projektowe do wyboru wariantu, nie odczyt.
+
+---
+
+## Finding 254 — wycena redesignu „celuj w dowolne ciało w obcym układzie" (READ-ONLY, 2026-09-05)
+
+> **Zlecenie właściciela:** pozwolić misjom transportowym I `moveToPoint` celować w DOWOLNE ciało
+> obcego układu (także NIEZBADANE, bez posiadłości gracza), żeby Kolonizuj/Rozładuj stały się akcjami
+> kontekstowymi na ciele docelowym, a panel obcego układu (Finding 253) dał się usunąć W CAŁOŚCI.
+> **Werdykt: NIE jest to jeden slice — i blokerem NIE jest celowanie, tylko MGŁA WOJNY.**
+
+### ⚠ NAJPIERW DWIE KOREKTY PRZESŁANEK (obie zmierzone)
+
+**(1) „transport target selection jest ograniczony do stacji / kolonii / outpostów" — PRAWDA TYLKO
+DLA GAŁĘZI CROSS-SYSTEM.** W pętli głównej (`FMO._getValidTargets`) cargo **już dziś** przyjmuje ciało
+NIESKOLONIZOWANE i NIEZBADANE — komentarz mówi to wprost (*„Transport CARGO (A3) — uncolonised body
+DOZWOLONE"*). Ograniczone są: `transport_passenger` (wymaga kolonii — POPy bez housingu przepadają)
+i `found_outpost` (wymaga `body.explored`). **Realną barierą pętli głównej jest
+`scopeSysId = vessel.systemId`** (Finding 142 / D-SS3 — świadoma naprawa).
+Filtr „tylko posiadłości gracza" siedzi **wyłącznie** w gałęzi cross-system:
+`if (!col || (col.ownerEmpireId && col.ownerEmpireId !== 'player')) continue;`.
+
+**(2) `target_other_system` NIE bramkuje transportu.** Transport to MISJA (`MissionSystem`), a nie
+rozkaz MOS. `target_other_system` (`MOS:416/812/975/1092`) dotyczy `moveToPoint`/`pursue`/`intercept`/
+`engage`. To DWIE różne powierzchnie i redesign musi je wyceniać osobno.
+
+### ⛔ BLOKER 1 — ciała nieodwiedzonego układu NIE ISTNIEJĄ
+
+Układy są generowane **leniwie**. Produkcyjni wołający `generateAndRegister` to **dwa**:
+`EmpireColonyBootstrap:610` (układy domowe AI przy generacji galaktyki) i `VesselManager:2710`
+(przylot międzygwiezdny). **ZMIERZONE** (`GalaxyGenerator.generate(12345)`, 72 układy):
+
+```
+pola galaxyStar: id,name,spectralType,mass,luminosity,colorHex,glowColorHex,x,y,z,distanceLY,explored,isHome
+PRZED generacja -> getByTypeInSystem('planet', sys) =  0 cial
+PO   generacji  -> getByTypeInSystem('planet', sys) =  7 cial   (np. „Phact c", explored:false)
+koszt: 1.4 ms / uklad · 52.6 encji / uklad · ekstrapolacja na galaktyke: ~3787 encji
+```
+
+`galaxyStar` **nie niesie żadnych danych o ciałach** — sama gwiazda i pozycja galaktyczna. Picker nie
+ma czego wylistować, bo nie ma id, w które można by celować. Czas generacji jest **pomijalny**
+(1,4 ms); problemem jest liczba encji w PŁASKICH rejestrach i to, co ta generacja **oznacza**.
+
+### ⛔⛔ BLOKER 2 (WŁAŚCIWY) — generacja po to, żeby wylistować ciała, OTWIERA PONOWNIE FINDING 186
+
+Gra ma **jawny, zaprojektowany rozdział** między „ile" a „które":
+
+| API | zwraca | rejestruje encje? | używane przez |
+|---|---|---|---|
+| `SystemGenerator.peekCountsForStar` | **LICZBY** ciał | **NIE** (ta sama sekwencja RNG, bez `.add`) | skan układu STRATCOM (`ObservatorySystem._countSystemBodies`) |
+| `StarSystemManager.generateAndRegister` | pełne encje | **TAK** | przylot statku, bootstrap AI |
+
+⚠ **To jest dokładnie granica, którą redesign musiałby przekroczyć.** Finding **186** (zamknięty
+2026-08-29, sześć dni temu) mierzył jako szkodę **„darmowy spis ciał w tierze 3 bez obserwatorium"**;
+Finding **188** ustanowił dwie osie ujawniania (`SystemReveal`: oś MIEJSCA vs oś WŁAŚCICIELA).
+**Wylistowanie ciał nieskanowanego układu w pickerze transportu oddaje ten sam spis — tylko innymi
+drzwiami.** Nie jest to problem wydajności; to **sprzeczność z arciem zamkniętym w tym miesiącu**.
+
+### ✅ CO JUŻ DZIAŁA (dobre wieści — trzy rzeczy nie trzeba budować)
+
+1. **Odkrycie na przylocie ISTNIEJE.** `VesselManager._tickInterstellar:2709-2723`: leniwa generacja
+   układu + `markSystemExplored(targetStar)` **bramkowane właścicielem** (`!isEnemyVessel`).
+   Statek NIE „przylatuje w nicość".
+2. **Composite warp→dostawa ISTNIEJE** (`OrderService._beginComposite` / `_maybeDeliver`), a gałąź
+   celująca w **CIAŁO** (nie kolonię/stację) też już jest — to W3-4b `attack`. Rozszerzenie
+   `_maybeDeliver` o cel-ciało jest **tanie**.
+3. **Kolonizacja/outpost z ładunku ISTNIEJE** — ale patrz niżej.
+
+⚠ **ALE:** statek ląduje na **OBRZEŻACH układu (30 AU, `dockedAt=null`)**, nie przy ciele. Dotarcie do
+konkretnego ciała wymaga DRUGIEGO odcinka w układzie — dziś robi to `_redirectInterstellarVessel`
+(misja `exploration`). Maszyneria jest, ale to jest **trzeci** odcinek composite'u, nie „ten sam lot".
+
+### ⚠ CZEGO POTRZEBUJE `foreignUnload`, A CZEGO KOLONIZACJA IN-SYSTEM NIE
+
+`MissionSystem._processTransportArrival` (bramka A4) tworzy outpost z ładunku **tylko** gdy
+**ten sam układ ORAZ ciało ZBADANE**; przy obcym układzie lub ciele niezbadanym
+**statek orbituje i outpost NIE powstaje**. ⇒ `expedition:foreignUnload` nie jest duplikatem —
+**wypełnia dokładnie tę lukę** (`vessel.foreignUnloadOutpost`). Usunięcie panelu bez zastępnika
+**usuwa zdolność**, nie tylko przycisk. To jest cena wariantu „usuń".
+
+### Mapa zależności i werdykt
+
+| element | koszt | zależność |
+|---|---|---|
+| zdjęcie filtru posiadłości w gałęzi cross-system `_getValidTargets` | **1 warunek** | — |
+| `_maybeDeliver` — gałąź celu-ciała | **mała** (wzór W3-4b) | — |
+| trzeci odcinek composite (obrzeża → ciało) | **średnia** | `_redirectInterstellarVessel` |
+| `moveToPoint` na ciało w obcym układzie | **średnia** | `target_other_system` ×4 + rodzina **138/142** |
+| **listowanie ciał NIEODWIEDZONEGO układu** | ⛔ | **generacja sceny + sprzeczność z 186/188** |
+| przeniesienie `foreignColonize` / `foreignUnload` na ciało docelowe | średnia | bramka A4 w `_processTransportArrival` |
+
+**WERDYKT: to NIE jest jeden slice w wersji, o którą właściciel prosił** („także NIEZBADANE, bez
+posiadłości"). Wciąga generację sceny, a przez nią **rewizję mgły wojny domkniętej sześć dni temu**.
+⇒ **STOP i przeskalowanie**, zgodnie z warunkiem postawionym w zleceniu.
+
+### ✅ Wersja, która JEST jednym slice'em (rekomendacja) — „układy JUŻ ZNANE"
+
+Dopuścić celowanie w dowolne ciało obcego układu **pod warunkiem, że układ jest już wygenerowany**
+(odwiedzony raz albo dom AI). Wtedy: **zero nowych encji · zero konfliktu z 186/188 · zero pracy nad
+sceną** — bo ciała już istnieją, a ich `explored:false` jest uczciwe (znasz układ, nie znasz ciał).
+Pokrywa realny scenariusz gracza: *„byłem tam raz — teraz wyślij kolonizator na TEN księżyc"*.
+Predykat jest gotowy i kanoniczny: `StarSystemManager.getSystem(sysId) != null` (albo
+`isSystemExplored` dla wariantu ostrzejszego).
+⚠ Nie pokrywa „ślij w ciemno do układu, w którym nigdy nie byłeś" — a to jest właśnie ta część,
+która kosztuje mgłę wojny.
+
+**Panel (253) przy tym wariancie:** da się usunąć `foreign_redirect` i listy rekonu (to one czynią
+panel stałym elementem), ale `foreignColonize` / `foreignUnload` / `foreign_return` wymagają
+**wcześniejszego** przeniesienia — kolejność jest wiążąca, inaczej usuwamy mechanikę.
+
+**Świadomie NIEZMIERZONE:** wpływ ~3787 encji na rozmiar zapisu wobec limitu localStorage
+(`SaveSystem` próg 3,5 mln znaków) — istotne tylko dla odrzuconego wariantu eager-generacji.
