@@ -1618,18 +1618,41 @@ export class ThreeRenderer {
     if (!biomeMap) return null;
 
     // 3. Bake material — shader z uniformami (bez oświetlenia)
+    // ⚠ Finding 251: materiał, geometria i scena są WSPÓŁDZIELONE między wywołaniami.
+    // Dawniej powstawały i były zwalniane per ciało, a material.dispose() kasuje wpis
+    // etapu shadera w WebGLShaderCache (usedTimes→0), więc następny materiał z tym samym
+    // źródłem dostawał nowy id → nowy programCacheKey → PEŁNA rekompilacja w ANGLE.
+    // Ta ścieżka biegnie RAZ NA KAŻDE ciało skaliste/lodowe (planety, księżyce,
+    // planetoidy) przy starcie układu — zanim wczytają się tekstury terenu i przejmie
+    // je tryb 1 (_rebakePlanetTextures).
+    // ⚠ NIE ZWALNIAĆ tego materiału w teardownie per ciało.
     const uniforms = PlanetShader.createBakeUniforms(planet, biomeMap);
-    const bakeMat = new THREE.ShaderMaterial({
-      vertexShader:   PlanetShader.bakeVertexShader,
-      fragmentShader: PlanetShader.bakeFragmentShader,
-      uniforms,
-    });
+    if (!this._planetBakeCtx) {
+      const material = new THREE.ShaderMaterial({
+        vertexShader:   PlanetShader.bakeVertexShader,
+        fragmentShader: PlanetShader.bakeFragmentShader,
+        uniforms,
+      });
+      const scene = new THREE.Scene();
+      scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+      this._planetBakeCtx = {
+        material, scene,
+        cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+      };
+    } else {
+      // Stabilna referencja obiektu uniformów: three czyta materialProperties.uniforms
+      // przy każdym uploadzie, więc przepisujemy WARTOŚCI zamiast podmieniać obiekt
+      // (podmiana wymagałaby needsUpdate → przebudowy programu). Zbiory kluczy identyczne
+      // z konstrukcji — oba z PlanetShader.createBakeUniforms.
+      const target = this._planetBakeCtx.material.uniforms;
+      for (const key in uniforms) {
+        if (target[key]) target[key].value = uniforms[key].value;
+      }
+    }
 
-    // 4. Fullscreen quad + ortho camera
-    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bakeMat);
-    const cam  = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const bakeScene = new THREE.Scene();
-    bakeScene.add(quad);
+    // 4. Fullscreen quad + ortho camera (współdzielone)
+    const bakeScene = this._planetBakeCtx.scene;
+    const cam       = this._planetBakeCtx.cam;
 
     // 5. Render do RenderTarget
     const rt = new THREE.WebGLRenderTarget(BAKE_W, BAKE_H, {
@@ -1660,11 +1683,13 @@ export class ThreeRenderer {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
 
-    // 7. Cleanup tymczasowych zasobów GPU
+    // 7. Cleanup tymczasowych zasobów GPU (materiał i geometria ZOSTAJĄ — patrz punkt 3)
     rt.dispose();
-    bakeMat.dispose();
-    quad.geometry.dispose();
     biomeMap.dispose();
+    // BiomeMap jest per ciało — odepnij zwolnioną teksturę od współdzielonych uniformów
+    if (this._planetBakeCtx.material.uniforms.uBiomeMap?.value === biomeMap) {
+      this._planetBakeCtx.material.uniforms.uBiomeMap.value = null;
+    }
 
     return tex;
   }

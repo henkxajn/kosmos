@@ -558,6 +558,56 @@ function createGasBakeUniforms(planet) {
   };
 }
 
+// ── Współdzielony materiał bake'u (Finding 251) ──────────────────────────────
+// ⚠ Materiał i geometria BYŁY tworzone i zwalniane PER PRZEBIEG. material.dispose()
+// woła releaseShaderCache → WebGLShaderCache.remove() zbija usedTimes do zera i KASUJE
+// wpis etapu shadera, więc następny materiał z tym samym źródłem dostawał NOWY id etapu
+// → nowy programCacheKey → PEŁNA rekompilacja w ANGLE. Zmierzone (RTX 3070, D3D11):
+// 269,7 ms/mapę z dispose vs 0,10 ms/mapę przy reżyciu — a kontrola „nowy materiał,
+// ale BEZ dispose" też 0,10 ms, więc winowajcą jest dispose, nie konstrukcja.
+// Materiał NIE trzyma stanu renderera (zasoby GPU siedzą w WebGLProperties per
+// renderer), więc wolno go dzielić między ThreeRenderer i PlanetGlobeRenderer — każdy
+// kontekst kompiluje program u siebie raz.
+// ⚠ NIE ZWALNIAĆ go w żadnym teardownie per planeta / per renderer: jedno dispose
+// przywraca dokładnie ten koszt, który ten blok usuwa.
+let _bakeMaterial = null;
+let _bakeScene    = null;
+let _bakeCam      = null;
+
+// Pierwsze wywołanie ADOPTUJE obiekt uniformów pierwszego gazowca; kolejne PRZEPISUJĄ
+// do niego wartości. Referencja musi być stabilna — three czyta
+// materialProperties.uniforms przy każdym uploadzie, a podmiana obiektu wymagałaby
+// material.needsUpdate, czyli przebudowy programu. Zbiory kluczy są identyczne
+// z konstrukcji: oba pochodzą z createGasBakeUniforms (literał o stałym kształcie).
+function _ensureBakeContext(uniforms) {
+  if (!_bakeMaterial) {
+    _bakeMaterial = new THREE.ShaderMaterial({
+      vertexShader:   gasVertexShader,
+      fragmentShader: gasFragmentShader,
+      uniforms,
+    });
+    _bakeScene = new THREE.Scene();
+    _bakeScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), _bakeMaterial));
+    _bakeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    return;
+  }
+  const target = _bakeMaterial.uniforms;
+  for (const key in uniforms) {
+    if (target[key]) target[key].value = uniforms[key].value;
+  }
+}
+
+// Paleta pasów to DataTexture PER PLANETA — zwalniana po bake'u jak dotąd. Przy
+// współdzielonym materiale trzeba jeszcze ODPIĄĆ referencję, żeby w uniformach nie
+// została zwolniona tekstura.
+function _releasePalette(uniforms) {
+  const tex = uniforms?.uBandColors?.value;
+  if (tex) { try { tex.dispose(); } catch (e) { /* kontekst mógł paść */ } }
+  if (_bakeMaterial && _bakeMaterial.uniforms.uBandColors?.value === tex) {
+    _bakeMaterial.uniforms.uBandColors.value = null;
+  }
+}
+
 // ── RTT bake — renderuje jedną mapę (diffuse/normal/roughness) ───────────────
 // Zwraca WebGLRenderTarget — jego .texture idzie PROSTO na materiał. Dawna ścieżka
 // czytała cel przez readRenderTargetPixels (2 MiB synchronicznego stalla GPU→CPU na
@@ -566,19 +616,8 @@ function createGasBakeUniforms(planet) {
 // ⚠ Parametry próbkowania MUSZĄ stać w opcjach celu: three czyta je RAZ, w
 // setupRenderTarget (setTextureParameters + setupFrameBufferTexture) przy pierwszym
 // setRenderTarget — późniejsza zmiana nie przealokuje już tekstury.
-function _renderBakePass(renderer, uniforms, outputMode, w, h) {
-  uniforms.uOutputMode.value = outputMode;
-
-  const bakeMat = new THREE.ShaderMaterial({
-    vertexShader:   gasVertexShader,
-    fragmentShader: gasFragmentShader,
-    uniforms,
-  });
-
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bakeMat);
-  const cam  = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  const scene = new THREE.Scene();
-  scene.add(quad);
+function _renderBakePass(renderer, outputMode, w, h) {
+  _bakeMaterial.uniforms.uOutputMode.value = outputMode;
 
   const isDiffuse = (outputMode === 0);
   const rt = new THREE.WebGLRenderTarget(w, h, {
@@ -605,13 +644,11 @@ function _renderBakePass(renderer, uniforms, outputMode, w, h) {
   });
 
   renderer.setRenderTarget(rt);
-  renderer.render(scene, cam);   // mipmapy generuje samo render() (updateRenderTargetMipmap)
+  renderer.render(_bakeScene, _bakeCam);   // mipmapy generuje samo render() (updateRenderTargetMipmap)
   renderer.setRenderTarget(null);
 
-  // Cleanup GPU — cel ZOSTAJE (trzyma go cache, zwalnia disposeGasTexturesFor)
-  bakeMat.dispose();
-  quad.geometry.dispose();
-
+  // Materiał, geometria i scena ZOSTAJą (współdzielone — patrz Finding 251 wyżej).
+  // Cel też ZOSTAJE: trzyma go cache, zwalnia disposeGasTexturesFor.
   return rt;
 }
 
@@ -631,6 +668,7 @@ function bakeGasGiantTextures(planet, renderer) {
 
   const BAKE_W = 1024, BAKE_H = 512;
   const uniforms = createGasBakeUniforms(planet);
+  _ensureBakeContext(uniforms);
 
   // ⚠ _renderBakePass NIE zwalnia już swojego celu, więc do chwili wpisania go do
   // wyniku jedyną referencją jest ta tablica. Bez niej wyjątek w drugim albo trzecim
@@ -638,17 +676,17 @@ function bakeGasGiantTextures(planet, renderer) {
   // po sobie sam, więc rzut niczego nie zostawiał po stronie GPU).
   const targets = [];
   try {
-    targets.push(_renderBakePass(renderer, uniforms, 0, BAKE_W, BAKE_H));   // diffuse
-    targets.push(_renderBakePass(renderer, uniforms, 1, BAKE_W, BAKE_H));   // normal
-    targets.push(_renderBakePass(renderer, uniforms, 2, BAKE_W, BAKE_H));   // roughness
+    targets.push(_renderBakePass(renderer, 0, BAKE_W, BAKE_H));   // diffuse
+    targets.push(_renderBakePass(renderer, 1, BAKE_W, BAKE_H));   // normal
+    targets.push(_renderBakePass(renderer, 2, BAKE_W, BAKE_H));   // roughness
   } catch (err) {
     for (const rt of targets) { try { rt.dispose(); } catch (e) { /* kontekst mógł paść */ } }
-    uniforms.uBandColors.value.dispose();
+    _releasePalette(uniforms);
     throw err;
   }
 
-  // Cleanup DataTexture palety
-  uniforms.uBandColors.value.dispose();
+  // Cleanup DataTexture palety (+ odpięcie jej od współdzielonego materiału)
+  _releasePalette(uniforms);
 
   const result = {
     diffuse:   targets[0].texture,
