@@ -3817,7 +3817,14 @@ Projekt (decyzje `D-V0a…`, `D-V1a…D-V1m`) mieszka **po stronie właściciela
 brały „następny wolny numer” **równolegle, z dwóch sesji**, więc `git log` pokazuje
 `fix(visuals): Finding 246` obok `feat(246): E3H` — to **dwa różne defekty**. Ta sama klasa co
 udokumentowany defekt 165/166, ale cięższa: tamta kolizja siedziała w jednym pliku, ta jest
-**w historii commitów**. Do czasu decyzji: **numer goły = arc ekonomiczny**, **`V-<nr>` = VISUALS**.
+**w historii commitów**.
+✅ **ROZSTRZYGNIĘTE 2026-09-06 (podpisane):** **nie przenumerowujemy** — arc VISUALS ma prefiks
+**`V-`** (wzorem **W2 1-14**). W całym repo: **numer goły z 246-254 = arc EKONOMIA AI · `V-<nr>` =
+VISUALS**. Powód: numery są **w treści commitów**, więc renumeracja dodałaby TRZECIĄ wersję prawdy
+zamiast usunąć dwuznaczność; prefiks jest jedyną zmianą działającą **wstecz**. ⚠ Commity sprzed
+decyzji **nie zostały przepisane** — prefiks rozstrzyga **odczyt**, nie zapis historyczny.
+⚠ **Defekt 165/166 to NIE ten sam przypadek** i ta decyzja go **nie rozstrzyga**: tamta kolizja
+nie weszła do historii commitów, więc renumeracja jest tam wciąż wykonalna — dalej czeka.
 
 **V0 (światło + higiena sceny):** natężenie światła gwiazdy zależne od klasy (`FEATURES.starClassLighting`,
 `01430b6`) · chłodniejszy ambient M/K przez **ODCIEŃ, nie ściemnianie** (`52f75c7`+`a20033b`) ·
@@ -3884,9 +3891,20 @@ pokrywamy zachowania shadera keeperem**. Tam, gdzie potrzebne było WYKONANIE (`
 pinu na kopii `HEAD`, żeby pin nie świecił jałowo. ⚠ **Backtick w literale szablonowym z GLSL**
 przechodzi `node --check` i psuje plik — złapane dwa razy.
 
-**Otwarte, zgłoszone:** **V-248** · **V-249** · **V-252** (zimny bake globusa — regresja PRZYJĘTA) ·
-**V-253** (rozjazd palety mapa↔globus) · **V-254** (martwy `renderBodyThumbnail` — **nie usuwać**) ·
-**V-255** · **V-258** (precesja `Ry·Rz`) · **V-259** (pętla wycieku w `_syncGlobe`).
+**Otwarte, zgłoszone** (pełne wpisy: `VISUALS_PLAN.md` §Rejestr): **V-252** (zimny bake globusa —
+regresja PRZYJĘTA) · **V-253** (rozjazd palety mapa↔globus) · **V-254** (martwy
+`renderBodyThumbnail` — **nie usuwać**) · **V-258** (precesja `Ry·Rz`) · **V-259** (pętla wycieku
+w `_syncGlobe`) — oraz trzy, które warto znać z treści, bo każdy jest pułapką dla następnego:
+- **V-248** — `_starLight.color` jest **PRZYPISANY (nie skopiowany)** tą samą instancją
+  `THREE.Color`, co uniform `uColor` rdzenia gwiazdy ⇒ mutacja światła **przemalowuje powierzchnię
+  gwiazdy**. ⚠ Fioletowy dysk **Dyson etap 4 świadomie na tym aliasie stoi** ⇒ `.clone()` to
+  **decyzja wizualna**, nie higiena.
+- **V-249** — wyróżnienie orbit w trybie taktycznym **cicho zanika po ~3 s**: `_tacticalOrbitStyled`
+  trzyma referencje do MATERIAŁÓW, a `_rebuildAllOrbits` **podmienia obiekty linii co 180 klatek**
+  ⇒ boost siedzi na zwolnionych materiałach, nowe linie nigdy go nie dostają. ⚠ **Pre-existing
+  i NIEZALEŻNY od V-246** (tamta o zwalnianiu zasobów, ta o wiązaniu stanu).
+- **V-255** — dwa pozostałe zaszyte kroki `0.016` (`_colonyMarkers.tick`, `_animateTradeFireflies`)
+  ⇒ połowa tempa przy 30 fps. Bliźniaki V-250, **świadomie nietknięte w C2**.
 **V-256 zamknięty JAKO ZGODNY Z PROJEKTEM** — do gazowca nie prowadzi żadna ścieżka UI do mapy
 kolonii (tylko placówki-rafinerie, celowo jak przy planetoidach); zgłoszenie z gate'u znaczyło
 „funkcji nie ma z projektu”, nie „jest zepsuta”.

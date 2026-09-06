@@ -39,13 +39,21 @@ numeracji) — tylko że tam kolidowały wpisy w jednym pliku, a tu **w historii
 ⚠ **`git log --oneline` pokazuje `fix(visuals): Finding 246` i `feat(246): E3H` obok siebie** —
 to NIE jest ten sam finding. Grep po samym numerze **da dwa różne defekty**.
 
-**REKOMENDACJA (NIEZASTOSOWANA — czeka na decyzję właściciela):** nie przenumerowywać, tylko
-**nadać temu arcowi WŁASNĄ przestrzeń nazw z prefiksem `V-`** (`V-246`…`V-259`), wzorem
-**W2 1-14**, który już dziś jest w `OPEN_FINDINGS_INDEX.md` oznaczony jako osobna przestrzeń.
-Powód: numery są już **w treści commitów**, których nie przepisujemy, więc renumeracja (wariant
-zastosowany kiedyś do 165/166) tutaj **nie usunęłaby dwuznaczności z historii** — dodałaby
-trzecią wersję prawdy. Prefiks jest jedyną zmianą, która działa wstecz.
-⚠ Do czasu decyzji **w tym pliku obowiązuje zapis `V-<nr>`**, a numer goły znaczy arc ekonomiczny.
+### ✅ ROZSTRZYGNIĘTE — 2026-09-06, PODPISANE PRZEZ WŁAŚCICIELA
+
+**Arc VISUALS ma WŁASNĄ PRZESTRZEŃ NAZW z prefiksem `V-`** (`V-246`…`V-259`), wzorem
+**W2 1-14**. Obowiązuje w całym repo, nie tylko w tym pliku:
+
+> **numer goły = arc EKONOMIA AI · `V-<nr>` = arc VISUALS**
+
+**Dlaczego prefiks, a nie renumeracja** (wariant zastosowany kiedyś do 165/166): numery są już
+**w treści commitów**, których nie przepisujemy, więc przenumerowanie **nie usunęłoby
+dwuznaczności z historii** — dodałoby **trzecią wersję prawdy**. Prefiks jest jedyną zmianą,
+która działa **wstecz**: stary commit `fix(visuals): Finding 246` czyta się dziś jako `V-246`
+bez dotykania historii.
+
+⚠ **Commity tego arca sprzed decyzji nie zostały przepisane** — piszą „Finding 246/247/250/251”
+bez prefiksu. To świadome: prefiks rozstrzyga **odczyt**, nie zapis historyczny.
 
 ---
 
@@ -94,21 +102,27 @@ i globalnie — `_tickGasMaterials` przepisuje `LIVE_GAS` do uniformów co klatk
 |---|---|---|
 | ~~**V-246**~~ | ✅ ZAMKNIĘTY w V0 (`202d67d`) | `_rebuildAllOrbits` nie zwalniał geometrii/materiału linii |
 | ~~**V-247**~~ | ✅ ZAMKNIĘTY w V0 (`a082899`) | `_syncSmallBodies` — kolejność wobec demontażu + update in-place |
-| **V-248** | ⬜ OTWARTY | zgłoszony po stronie właściciela; treść **nie jest** w tym repo |
-| **V-249** | ⬜ OTWARTY | jw. |
+| **V-248** | ⬜ OTWARTY | 🟠 **`_starLight.color` jest PRZYPISANY (nie skopiowany) tą SAMĄ instancją `THREE.Color`, co uniform `uColor` shadera rdzenia gwiazdy** ⇒ mutacja światła **przemalowuje powierzchnię gwiazdy**. ⚠ To **nie jest** czysty defekt: fioletowy dysk **Dyson etap 4** świadomie na tym aliasie stoi. Rozprzęganie (`.clone()`) = **decyzja wizualna**, nie higiena — zmieni wygląd Dysona. Znalezione przy V0 commit 1 |
+| **V-249** | ⬜ OTWARTY | 🟠 **Wyróżnienie orbit w trybie taktycznym cicho zanika po ~3 s.** `_tacticalOrbitStyled` trzyma referencje do MATERIAŁÓW, żeby później przywrócić stan, ale `_rebuildAllOrbits` **podmienia obiekty linii co 180 klatek** ⇒ boost siedzi na **nieżywych (już zwolnionych) materiałach**, a nowe linie **nigdy go nie dostają**. ⚠ **Pre-existing i NIEZALEŻNY od naprawy V-246** — tamta dotyczyła zwalniania zasobów, ta wiązania stanu. Znalezione przy V0 commit 3 |
 | ~~**V-250**~~ | ✅ ZAMKNIĘTY w V1 (`cc12e04`) | zaszyte `0.016` s/klatkę w chmurach i gazowcu ⇒ tempo animacji zależne od FPS maszyny. Krok mierzony `performance.now`, **clamp 0,1 s** (`ANIM_DT_MAX_S`); arytmetyka wydzielona do eksportowanej `animDeltaSeconds` po to, żeby dała się sprawdzić WYKONANIEM. ⚠ Dwaj pozostali konsumenci zaszytego kroku (`_colonyMarkers.tick(0.016…)`, `_animateTradeFireflies`) **świadomie nietknięci** — ich tempo to osobna decyzja |
 | ~~**V-251**~~ | ✅ ZAMKNIĘTY w V1 (`58628f8`) | `material.dispose()` na pass bake'u wymuszał pełną retranslację ANGLE. ZMIERZONE: **269,7 → 0,10 ms/mapa** (kontrola: nowy materiał BEZ dispose = 0,10 ⇒ sprawcą jest dispose, nie alokacja); ścieżka rocky **125,8 → 6,5 ms/ciało**, przy medianie 47 ciał w układzie ≈ **9,6 s rekompilacji** przy wczytaniu układu |
 | **V-252** | ⬜ OTWARTY (regresja PRZYJĘTA) | zimny bake globusa po C0 |
 | **V-253** | ⬜ OTWARTY | rozjazd palety mapa ↔ globus |
 | **V-254** | ⬜ OTWARTY | martwy `renderBodyThumbnail` — ⚠ **nie usuwać** (decyzja z C1a) |
-| **V-255** | ⬜ OTWARTY | zgłoszony po stronie właściciela; treść **nie jest** w tym repo |
+| **V-255** | ⬜ OTWARTY | ⚪ **Dwa pozostałe zaszyte kroki `0.016` real-time**: `_colonyMarkers.tick(0.016, camDist)` i `_animateTradeFireflies` ⇒ przy 30 fps chodzą **o połowę za wolno** (bliźniaki V-250). Kosmetyczne. Świadomie **nietknięte w C2** — ich tempo to osobna decyzja, nie skutek uboczny tamtej naprawy |
 | ~~**V-256**~~ | ✅ ZAMKNIĘTY **JAKO ZGODNY Z PROJEKTEM** | „mapa ciała" globusa dla gazowców. ⚠ **Nie było defektu**: do gazowca **nie prowadzi żadna ścieżka UI** do mapy kolonii (tylko placówki-rafinerie, celowo identycznie jak przy planetoidach). Zgłoszenie z gate'u znaczyło „funkcji nie ma z projektu", nie „jest zepsuta". Statyczny trace ścieżki (sprawdzona wykonaniem: siatka 14×10, 96 kafli, bake osiągalny, brak wyjątku) zostaje jako dokumentacja stanu „gdyby jednak wywołać" |
 | ~~**V-257**~~ | ✅ ZAMKNIĘTY w V1 (`0f20904` + `118f837`) | żywy gazowiec miał **DWA** ruchy na **DWÓCH** zegarach, o przeciwnych znakach ⇒ gracz widział ich różnicę `0,1719·fps − OMEGA_DEG` [°/s], a pod pauzą czysty shader (stąd „dryf odwraca się przy pauzie"). Bramka stoi na **MATERIALE** (`userData.gasUniforms`, jeden producent w repo), nie na `planetType` — inaczej ścieżka OFF straciłaby JEDYNY ruch, jaki ma |
 | **V-258** | ⬜ OTWARTY | precesja `Ry·Rz` przy pochyleniu osi |
 | **V-259** | ⬜ OTWARTY | pętla wycieku w `_syncGlobe` (canvas + kontekst na klatkę w gałęzi `catch`) |
 
-⚠ **Granica dowodu tego rejestru:** treść **V-248, V-249, V-255** nie została mi nigdy podana —
-wiem o nich tylko tyle, że są otwarte. Nie zgaduję ich; rejestr właściciela jest tu źródłem prawdy.
+✅ **Granica dowodu — UZUPEŁNIONA 2026-09-06.** Treść **V-248, V-249, V-255** została dopisana
+z rejestru właściciela (backfill), więc ten rejestr jest **samowystarczalny**: nie trzeba
+sięgać gdzie indziej, żeby wiedzieć, **co** jest otwarte i **dlaczego** nie zostało ruszone.
+⚠ **UZASADNIENIE PROJEKTOWE** (dlaczego akurat tak, jakie warianty odpadły) zostaje po stronie
+właściciela — dla niego **rejestr właściciela jest źródłem prawdy**, a ten plik odsyła.
+⚠ Trzy wpisy nie były przeze mnie **zmierzone w źródle** — są przepisane. Przed planowaniem
+czegokolwiek z nich obowiązuje reguła domu: **uruchom keeper i `git log -S`**
+(`OPEN_FINDINGS_INDEX.md` §Granica dowodu, lekcja W3-32).
 
 ---
 

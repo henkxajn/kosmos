@@ -63,13 +63,19 @@ tamta kolizja siedziała w JEDNYM pliku, ta **jest już w HISTORII COMMITÓW** �
 `git log --oneline` pokazuje `fix(visuals): Finding 246` i `feat(246): E3H` obok siebie, a to
 **dwa różne defekty**. Pełna tabela kolizji: `VISUALS_PLAN.md` §Kolizja numeracji.
 
-**Rekomendacja (NIE zastosowana — czeka na decyzję właściciela):** **nie przenumerowywać**, tylko
-nadać arcowi VISUALS prefiks **`V-`** (wzorem **W2 1-14**, już dziś osobnej przestrzeni). Wariant
-zastosowany do 165/166 (nowe numery dla wpisów B) **tutaj nie działa**: numery są w treści
+✅ **ROZSTRZYGNIĘTE 2026-09-06 (PODPISANE):** **nie przenumerowujemy** — arc VISUALS dostaje
+prefiks **`V-`** (wzorem **W2 1-14**, już dziś osobnej przestrzeni). Obowiązuje w całym repo:
+
+> **numer goły z zakresu 246-254 = arc EKONOMIA AI · `V-<nr>` = arc VISUALS**
+
+Wariant zastosowany do 165/166 (nowe numery dla wpisów B) **tutaj nie działa**: numery są w treści
 commitów, których nie przepisujemy, więc renumeracja dodałaby TRZECIĄ wersję prawdy zamiast
-usunąć dwuznaczność. Prefiks jest jedyną zmianą, która działa wstecz.
-⚠ Do czasu decyzji **numer goły z zakresu 246-254 znaczy arc EKONOMICZNY**, a wersja z prefiksem
-`V-` — arc VISUALS.
+usunąć dwuznaczność. Prefiks jest jedyną zmianą, która działa **wstecz**.
+⚠ **Commity VISUALS sprzed decyzji nie zostały przepisane** (piszą „Finding 246/247/250/251”) —
+prefiks rozstrzyga **odczyt**, nie zapis historyczny.
+⚠ **Wzorzec do naśladowania przy 165/166**, które **dalej czekają na decyzję**: tam kolizja nie
+weszła do historii commitów, więc renumeracja jest wciąż wykonalna — to **nie jest** ten sam
+przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 
 ---
 
@@ -322,12 +328,12 @@ Włączenie jej to zmiana balansu, własny commit i własny pomiar.
 
 | # | opis |
 |---|---|
-| **V-248** | zgłoszony po stronie właściciela — treść **nie jest** w tym repo |
-| **V-249** | jw. |
+| **V-248** | 🟠 `_starLight.color` **przypisany** (nie skopiowany) tą samą instancją `THREE.Color`, co uniform `uColor` rdzenia gwiazdy ⇒ mutacja światła **przemalowuje gwiazdę**. ⚠ Dyson etap 4 świadomie na tym stoi ⇒ rozprzęganie to **decyzja wizualna**, nie higiena |
+| **V-249** | 🟠 wyróżnienie orbit w trybie taktycznym **cicho zanika po ~3 s** — `_rebuildAllOrbits` podmienia linie co 180 klatek, a boost zostaje na **zwolnionych** materiałach; **pre-existing, niezależny od V-246** |
 | **V-252** | zimny bake globusa po C0 — **regresja PRZYJĘTA** świadomie w V1 |
 | **V-253** | rozjazd palety **mapa ↔ globus** |
 | **V-254** | martwy `renderBodyThumbnail` — ⚠ **nie usuwać** (decyzja z C1a) |
-| **V-255** | zgłoszony po stronie właściciela — treść **nie jest** w tym repo |
+| **V-255** | ⚪ dwa pozostałe zaszyte kroki `0.016` (`_colonyMarkers.tick`, `_animateTradeFireflies`) — połowa tempa przy 30 fps; bliźniaki V-250, **świadomie nietknięte w C2** |
 | **V-258** | precesja `Ry·Rz` przy pochyleniu osi |
 | **V-259** | pętla wycieku w `_syncGlobe` — canvas + kontekst **na klatkę** w gałęzi `catch` |
 
