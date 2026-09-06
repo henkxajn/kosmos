@@ -149,6 +149,29 @@ const GHOST_PULSE_HOVER_FREQ   = 7.5;       // częstotliwość pulsu (rad/s) �
 const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
 const _GAS_LIGHT_DIR = new THREE.Vector3(); // scratch — kierunek do gwiazdy (C1a, bez alokacji per klatkę)
 
+// ── Krok czasu animacji REAL-TIME (C2 / Finding 250) ─────────────────────
+// Do C2 animacje real-time (chmury skalistych planet, żywy gazowiec) szły po ZASZYTYM
+// 0.016 s na klatkę, czyli zakładały równe 60 fps. Skutek: przy 30 fps chmury i burze
+// płynęły O POŁOWĘ za wolno, przy 120 fps dwa razy za szybko — tempo zależało od
+// wydajności maszyny, a nie od zegara.
+// ⚠ SUFIT JEST OBOWIĄZKOWY, nie ostrożnościowy: requestAnimationFrame zamiera w karcie
+// w tle, a sama pętla renderowania ma jeszcze dwie bramki (_contextLost oraz
+// _renderingEnabled — BattleView3D przejmuje canvas na czas starcia). Powrót po minucie
+// dostarczyłby dt liczone w SEKUNDACH i jednym skokiem teleportowałby każdą warstwę
+// chmur i każdą burzę. 0.1 s = 6 klatek przy 60 fps: spadki wydajności przechodzą,
+// skok w czasie nie.
+const ANIM_DT_MAX_S   = 0.1;      // [s] sufit kroku animacji real-time
+const ANIM_DT_FIRST_S = 1 / 60;   // [s] pierwsza klatka — nie ma jeszcze poprzedniego stempla
+
+// Zmierzony krok animacji w sekundach. Wydzielone z _tickClouds, żeby dawało się
+// sprawdzić WYKONANIEM bez konstruowania całego renderera.
+export function animDeltaSeconds(nowMs, lastMs) {
+  if (!Number.isFinite(lastMs)) return ANIM_DT_FIRST_S;
+  const dt = (nowMs - lastMs) / 1000;
+  if (!(dt > 0)) return 0;                    // zegar cofnięty albo ta sama klatka
+  return Math.min(dt, ANIM_DT_MAX_S);
+}
+
 // ── POI sprites (M2b C7) ────────────────────────────────────────────────
 // Wizualne markery 5 typów POI na mapie 3D: per-typ paleta cyan-shifted
 // + symbol Unicode (Canvas → CanvasTexture → SpriteMaterial → THREE.Sprite).
@@ -3685,17 +3708,26 @@ export class ThreeRenderer {
   }
 
   // Animacja chmur — co klatkę, niezaleznie od pauzy gry
-  // ⚠ C1b/D-V1d: żywy gazowiec dostaje uTime TUTAJ, tym samym zaszytym krokiem 0.016
-  // co chmury — oba są real-time i oba mają ten sam dług (Finding 250). C2 naprawia dt
-  // dla obu NARAZ, więc muszą stać w jednym miejscu; nie przenosić tego do
-  // _tickGasMaterials, bo rozdzieliłoby to poprawę na dwa punkty.
+  // ⚠ C1b/D-V1d: żywy gazowiec dostaje uTime TUTAJ, tym samym krokiem co chmury — oba
+  // są real-time i oba miały ten sam dług (Finding 250, naprawiony w C2). Dlatego stoją
+  // w JEDNYM miejscu; nie przenosić gazowca do _tickGasMaterials, bo rozdzieliłoby to
+  // krok czasu na dwa punkty i następna poprawka musiałaby trafić w oba.
+  // ⚠ Krok jest ZMIERZONY (animDeltaSeconds), nie zaszyty — i CELOWO nie jest
+  // współdzielony z innymi konsumentami kroku w tym pliku: _colonyMarkers.tick(0.016)
+  // i _animateTradeFireflies mają własne zaszyte 0.016 i ZOSTAJĄ nietknięte — zmiana
+  // ich tempa to osobna decyzja, nie skutek uboczny tej.
   _tickClouds() {
+    const now = performance.now();
+    const dt  = animDeltaSeconds(now, this._lastAnimTickMs);
+    this._lastAnimTickMs = now;
+    if (dt === 0) return;
+
     for (const [, entry] of this._planets) {
       const gasU = entry.mesh?.material?.userData?.gasUniforms;
-      if (gasU) gasU.uGasTime.value += 0.016;
+      if (gasU) gasU.uGasTime.value += dt;
       for (const child of entry.group.children) {
         if (child.userData.isCloud && child.material?.uniforms?.uTime) {
-          child.material.uniforms.uTime.value += 0.016;
+          child.material.uniforms.uTime.value += dt;
         }
       }
     }
