@@ -2254,7 +2254,17 @@ export class ThreeRenderer {
       // Guard NaN z fizyki — zapobiega propagacji do kamery → biały ekran
       if (isNaN(planet.x) || isNaN(planet.y)) return;
       entry.group.position.set(S(planet.x), 0, S(planet.y));
-      entry.mesh.rotation.y += 0.003;
+      // ⚠ D-257 — spin geometrii POMIJA żywy shader gazowca. Ten mesh miał DWA
+      // niezależne ruchy naraz: ten spin (zegar GRY — staje przy pauzie, +0.003 rad
+      // na KLATKĘ, więc tempo zależało od FPS gracza, a nie od czegokolwiek w grze)
+      // oraz dryf pasów liczony w shaderze (zegar REALNY, uGasTime). Znaki są
+      // PRZECIWNE, więc gracz widział ich RÓŻNICĘ, a pod pauzą czysty shader — stąd
+      // wrażenie, że dryf odwraca się przy pauzie (Finding 257). Odwrócenie
+      // następowało, gdy 0.1719·fps > OMEGA_DEG, czyli powyżej ~70 fps przy ω=12.
+      // ⚠ Bramka stoi na MATERIALE, nie na planetType: ścieżka bake (liveGasShaders
+      // OFF) i wszystkie planety skaliste zachowują spin BEZ ZMIAN — tam jest on
+      // jedynym ruchem, jaki mają.
+      if (!entry.mesh.material?.userData?.gasUniforms) entry.mesh.rotation.y += 0.003;
 
 
       // Aktualizuj kierunek światła w atmosferze i chmurach
