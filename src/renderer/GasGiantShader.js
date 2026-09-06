@@ -742,10 +742,12 @@ function disposeGasTexturesFor(renderer) {
 // łapie się natychmiast i dla WSZYSTKICH gazowców, bez restartu i bez rebuildu materiału.
 const LIVE_GAS = {
   RIM:            0.35,   // siła rim fresnela (D-V1g)
-  // ⚠ OMEGA_DEG i STORM_SPIN są SKALIBROWANE PRZEZ GRACZA na live gate V1 (widok bez
-  // pauzy) — to nie są już wartości prowizoryczne. Prowizoryczne pozostały OMEGA_SHEAR
-  // i oba parametry oddechu: gate ich nie ruszył.
-  OMEGA_DEG:     12.0,    // ω RÓWNIKOWA [° / sekundę REALNEGO czasu] — pełny obrót równika w 30 s
+  // ⚠ OMEGA_DEG i STORM_SPIN są SKALIBROWANE PRZEZ GRACZA — to nie są wartości
+  // prowizoryczne. OMEGA_DEG przemierzona PO D-257 (0f20904), gdy ruch stał się czysto
+  // shaderowy: wcześniejsze 12 °/s kompensowało odejmowany spin geometrii, więc po jego
+  // zdjęciu ta sama liczba wyglądała na dwa razy za szybką.
+  // Prowizoryczne pozostały OMEGA_SHEAR i oba parametry oddechu: gate ich nie ruszył.
+  OMEGA_DEG:      6.0,    // ω RÓWNIKOWA [° / sekundę REALNEGO czasu] — pełny obrót równika w 60 s
   OMEGA_SHEAR:    0.35,   // ile ω traci biegun: ω(lat) = ω_eq · (1 − shear·e²), e: 0 równik → 1 biegun (prowizoryczne)
   STORM_SPIN:     1.0,    // [rad/s] wir kręci się wokół WŁASNEGO środka (niezależnie od dryfu)
   STORM_BREATH:   0.12,   // amplituda oddechu rozmiaru burzy (±12%)
