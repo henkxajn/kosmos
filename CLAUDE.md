@@ -3805,3 +3805,91 @@ i **nie rosną** — ⚠ *hipoteza, nie diagnoza*).
    (`AI_POP_GATES_PLAN.md` §4) i **metryka, która nie może przejść jałowo**: „przeżywalność" kolonii
    wyszła 100 % tylko dlatego, że **solo headless nic koloni nie zabija** — headline'em musi być
    „**stała się czymkolwiek**", nie „przeżyła".
+
+---
+
+## VISUALS 1.0 — V0 (światło gwiazdy) + V1 (żywy shader gazowca) (save **v101 bez migracji**, live-gate PASS — ARC ZAMKNIĘTY 2026-09-06)
+
+Rejestr macierzysty + zapis wykonania + rejestr findingów: **`docs/design/VISUALS_PLAN.md`**.
+Projekt (decyzje `D-V0a…`, `D-V1a…D-V1m`) mieszka **po stronie właściciela** — w repo są skutki.
+
+🔴 **KOLIZJA NUMERACJI — czytaj, zanim użyjesz numeru 246-254.** Ten arc i arc **EKONOMIA AI**
+brały „następny wolny numer” **równolegle, z dwóch sesji**, więc `git log` pokazuje
+`fix(visuals): Finding 246` obok `feat(246): E3H` — to **dwa różne defekty**. Ta sama klasa co
+udokumentowany defekt 165/166, ale cięższa: tamta kolizja siedziała w jednym pliku, ta jest
+**w historii commitów**. Do czasu decyzji: **numer goły = arc ekonomiczny**, **`V-<nr>` = VISUALS**.
+
+**V0 (światło + higiena sceny):** natężenie światła gwiazdy zależne od klasy (`FEATURES.starClassLighting`,
+`01430b6`) · chłodniejszy ambient M/K przez **ODCIEŃ, nie ściemnianie** (`52f75c7`+`a20033b`) ·
+anizotropia tekstur (`420d00f`) · **V-246** `_rebuildAllOrbits` zwalnia geometrię/materiał (`202d67d`) ·
+**V-247** `_syncSmallBodies` wychodzi PRZED demontażem (`a082899`).
+
+**V1 (żywy gazowiec)** — `4849c8f` C0 · `58628f8` C0b · `4812f28` C1a · `b5dfbb2` C1b · `cc12e04` C2 ·
+`abd1fc9` kalibracja · `0f20904` V-257 · `118f837` finalna kalibracja:
+- **C0** — bake oddaje `rt.texture`, koniec **9 readbacków GPU→CPU**. ⚠ Readback przemycał
+  **reinterpretację przestrzeni barw**; parytet uzyskany przez otagowanie RT diffuse jako
+  `SRGBColorSpace` (→ `SRGB8_ALPHA8`, sprzętowe kodowanie przy zapisie) + konwersję sRGB→linear
+  **na KOŃCU** gałęzi diffuse w shaderze. Zmierzone: diffuse maxΔ = 1/255, normal i roughness
+  **bit w bit**. ⚠ Cache przerobiony na **`WeakMap<renderer, Map>`** — globus kolonii **niszczy swój
+  kontekst GL** przy każdym zamknięciu panelu, więc cache po samym `planet.id` podałby teksturę
+  z martwego kontekstu (czarne planety na zawsze).
+- **C0b / V-251** — wspólny materiał bake'u w OBU ścieżkach. `material.dispose()` na pass wymuszał
+  pełną retranslację ANGLE: **269,7 → 0,10 ms/mapa** (kontrola: nowy materiał BEZ dispose = 0,10
+  ⇒ sprawcą jest dispose, nie alokacja); rocky **125,8 → 6,5 ms/ciało**, przy medianie 47 ciał
+  ≈ **9,6 s rekompilacji** na wczytanie układu.
+- **C1a/C1b** — `MeshStandardMaterial` + **modułowy `onBeforeCompile`**, pasy/burze/czapy/rim liczone
+  per-fragment; ruch: rotacja **różnicowa** ω(lat), dryf burz z prędkością ich pasma, własny obrót
+  i wolny oddech. ⚠ **TWARDA REGUŁA: każda wartość per-planeta idzie UNIFORMEM, NIGDY
+  interpolacją stringa do GLSL** — `customProgramCacheKey` domyślnie stringifikuje
+  `onBeforeCompile`, więc jedna funkcja modułowa = **jeden `WebGLProgram` dla wszystkich gazowców**
+  (zmierzone: 4 dodatkowe gazowce ⇒ programs 3→3, bez wzrostu).
+- **C2 / V-250** — `0.016` zaszyte na klatkę ⇒ tempo animacji zależne od FPS maszyny. Krok mierzony
+  (`performance.now`) + **clamp `ANIM_DT_MAX_S = 0.1`** (obowiązkowy: rAF zamiera w karcie w tle,
+  a pętla ma jeszcze bramki `_contextLost` i `_renderingEnabled` ⇒ powrót po minucie dałby dt
+  w SEKUNDACH i teleport każdej warstwy chmur). ⚠ Dwaj pozostali konsumenci zaszytego kroku
+  (`_colonyMarkers.tick`, `_animateTradeFireflies`) **świadomie nietknięci**.
+- **V-257** — żywy gazowiec miał **DWA ruchy na DWÓCH zegarach**, o przeciwnych znakach: spin
+  geometrii (`_syncPlanetMeshes`, zegar GRY, stały przyrost **na klatkę**) minus dryf shadera
+  (zegar REALNY) ⇒ gracz widział **różnicę** `0,1719·fps − OMEGA_DEG` [°/s], a pod pauzą czysty
+  shader — stąd „dryf odwraca się przy pauzie”. ⚠ Bramka stoi na **MATERIALE**
+  (`material.userData.gasUniforms`, **jeden producent w repo**), nie na `planetType`: inaczej
+  ścieżka bake (flaga OFF) straciłaby **JEDYNY** ruch, jaki ma.
+
+**Stan końcowy ruchu:** czysty shader, równik **6,0 °/s czasu REALNEGO** (obrót w 60 s), biegun
+3,9 °/s, identycznie pod pauzą i bez, niezależnie od FPS. ⚠ **Dwie kalibracje ω to nie pomyłka**:
+przed V-257 ω=12 kompensowało odejmowany spin, po jego zdjęciu ta sama liczba była dwa razy za
+szybka i wróciła do 6. Token strojenia: `KOSMOS.threeRenderer.gasTuning.OMEGA_DEG = X`.
+**Kill-switch `FEATURES.liveGasShaders`** (default ON; OFF = ścieżka bake z C0b, materiał żywy
+**nie powstaje w ogóle**).
+
+### ⚠ Trzy reguły z tego arca, które wychodzą poza niego
+
+1. **Dyskryminacja-vs-kontrola** — dla porównań, które **z projektu nie mogą wyjść identyczne**
+   (żywy shader vs bake) próg bezwzględny jest **zgadywaniem skali**: „korelacja > 0,9” dało 0,867,
+   a po detrendingu 0,470 (ten sam seed) vs 0,419 (inny) — **brak rozdziału**. Metryka musi
+   porównywać **ten sam seed z innym seedem**, nie z wymyśloną liczbą.
+2. **Przesunięcie w px przy krótkim Δt** — dla RUCHU. Korelacja **nasyca się**: 0,7003 vs 0,7027
+   przy **trzykrotnej** różnicy ω. Mierzy się przesunięcie, nie podobieństwo.
+3. **Rytuał leczący objaw wygląda dokładnie jak wiedza.** Sypanie się harnessów modułowych
+   przypisałem „zaspójnionym profilom Chrome” i przepisałem rytuał czyszczenia — **błędnie**.
+   Przyczyną był serwer testowy: `SimpleHTTPRequestHandler` mówi domyślnie **HTTP/1.0** przy
+   **backlogu 5**, a strona importująca ~33 moduły przebija go w jednym bursie — Chrome zapamiętuje
+   zgubiony moduł jako **trwale nieudany**. `protocol_version = "HTTP/1.1"` + `request_queue_size = 128`
+   ⇒ przebiegi przechodzą za pierwszym razem w ~2 s.
+
+**Ziarnistość weryfikacji tego arca (ustalona z góry):** **piny źródłowe + live gate**.
+`ThreeRenderer` **nie importuje się pod node**, a GLSL nie jest wykonywalny w sweepie ⇒ **nie
+pokrywamy zachowania shadera keeperem**. Tam, gdzie potrzebne było WYKONANIE (`_syncPlanetMeshes`,
+`animDeltaSeconds`), służył headless Chrome z **prototypem wołanym na atrapie `this`** — z kontrolą
+pinu na kopii `HEAD`, żeby pin nie świecił jałowo. ⚠ **Backtick w literale szablonowym z GLSL**
+przechodzi `node --check` i psuje plik — złapane dwa razy.
+
+**Otwarte, zgłoszone:** **V-248** · **V-249** · **V-252** (zimny bake globusa — regresja PRZYJĘTA) ·
+**V-253** (rozjazd palety mapa↔globus) · **V-254** (martwy `renderBodyThumbnail` — **nie usuwać**) ·
+**V-255** · **V-258** (precesja `Ry·Rz`) · **V-259** (pętla wycieku w `_syncGlobe`).
+**V-256 zamknięty JAKO ZGODNY Z PROJEKTEM** — do gazowca nie prowadzi żadna ścieżka UI do mapy
+kolonii (tylko placówki-rafinerie, celowo jak przy planetoidach); zgłoszenie z gate'u znaczyło
+„funkcji nie ma z projektu”, nie „jest zepsuta”.
+
+**NASTĘPNY SLICE: V2 — Sun 2.0** (granulacja domain-warp, strumienie korony, protuberancje) —
+**NIEROZPOCZĘTY**, otwiera się własnym zadaniem projektowym w przyszłej sesji.

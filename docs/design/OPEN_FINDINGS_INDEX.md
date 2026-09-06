@@ -9,6 +9,11 @@
 > **200** i **209** (commit 1) oraz **203** i **206** (commit 3 — ROZPUSZCZONE przez wariant V4,
 > nie naprawione) · **Save v101** ·
 > Sweep: **193/193 OK, 0 FAIL, 24 advisory** (`run-all.mjs`).
+>
+> **Aktualizacja 2026-09-06 — arc VISUALS 1.0 (slice'y V0 + V1) ZAMKNIęTY.** Ma od dziś własny
+> rejestr macierzysty `VISUALS_PLAN.md` i **WŁASNĄ PRZESTRZEŃ NAZW `V-`** — patrz ⚠ niżej,
+> jego numery **kolidują** z 246-254 arca ekonomicznego. Sweep w tej rundzie: **211/211 OK, 0 FAIL,
+> 28 advisory**.
 
 ---
 
@@ -50,6 +55,22 @@ w pliku i mają już odnośniki z `BATTLE_RESULT_CLASSIFICATION_AUDIT.md` oraz
 nie blokuje.
 ⚠ Do czasu decyzji w tym pliku obowiązuje zapis **165a/165b** i **166a/166b**.
 
+### 🔴 NAWRÓT TEJ SAMEJ KLASY — 2026-09-06, tym razem MIĘDZY RÓWNOLEGŁYMI SESJAMI
+
+**Numery 246-254 są użyte dwa razy**: arc **VISUALS** (V0/V1) i arc **EKONOMIA AI** brali
+„następny wolny numer” **jednocześnie, z dwóch sesji**. Różnica wobec 165/166 jest istotna:
+tamta kolizja siedziała w JEDNYM pliku, ta **jest już w HISTORII COMMITÓW** —
+`git log --oneline` pokazuje `fix(visuals): Finding 246` i `feat(246): E3H` obok siebie, a to
+**dwa różne defekty**. Pełna tabela kolizji: `VISUALS_PLAN.md` §Kolizja numeracji.
+
+**Rekomendacja (NIE zastosowana — czeka na decyzję właściciela):** **nie przenumerowywać**, tylko
+nadać arcowi VISUALS prefiks **`V-`** (wzorem **W2 1-14**, już dziś osobnej przestrzeni). Wariant
+zastosowany do 165/166 (nowe numery dla wpisów B) **tutaj nie działa**: numery są w treści
+commitów, których nie przepisujemy, więc renumeracja dodałaby TRZECIĄ wersję prawdy zamiast
+usunąć dwuznaczność. Prefiks jest jedyną zmianą, która działa wstecz.
+⚠ Do czasu decyzji **numer goły z zakresu 246-254 znaczy arc EKONOMICZNY**, a wersja z prefiksem
+`V-` — arc VISUALS.
+
 ---
 
 ## Mapa numeracji — gdzie mieszka który zakres
@@ -64,6 +85,7 @@ nie blokuje.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
+| **V-246 … V-259** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
 
 ---
@@ -289,6 +311,31 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 ⚠ **W2 §Pułapka 2 — niezaadresowana:** `_tickRepair` szuka stoczni po `entry.buildingId`, a wpisy
 `BuildingSystem._active` mają `entry.building.id` ⇒ **naprawa statków jest martwa u wszystkich**.
 Włączenie jej to zmiana balansu, własny commit i własny pomiar.
+
+---
+
+# B2 · REJESTR VISUALS — osobna numeracja `V-246 … V-259`
+
+> Rejestr macierzysty: **`VISUALS_PLAN.md`**. Tu są **tylko wiersze OTWARTE** — zamknięcia
+> wpisuje się tam, nie tutaj (reguła 1 tego pliku).
+> 🔴 **Numer goły ≠ numer z prefiksem `V-`** — patrz §Nawrót klasy wyżej.
+
+| # | opis |
+|---|---|
+| **V-248** | zgłoszony po stronie właściciela — treść **nie jest** w tym repo |
+| **V-249** | jw. |
+| **V-252** | zimny bake globusa po C0 — **regresja PRZYJĘTA** świadomie w V1 |
+| **V-253** | rozjazd palety **mapa ↔ globus** |
+| **V-254** | martwy `renderBodyThumbnail` — ⚠ **nie usuwać** (decyzja z C1a) |
+| **V-255** | zgłoszony po stronie właściciela — treść **nie jest** w tym repo |
+| **V-258** | precesja `Ry·Rz` przy pochyleniu osi |
+| **V-259** | pętla wycieku w `_syncGlobe` — canvas + kontekst **na klatkę** w gałęzi `catch` |
+
+**Zamknięte w arcu** (szczegóły i pomiary w rejestrze macierzystym): **V-246** · **V-247**
+(oba w V0) · **V-250** (`cc12e04`) · **V-251** (`58628f8`) · **V-257** (`0f20904` + `118f837`) ·
+**V-256** — ⚠ zamknięty **JAKO ZGODNY Z PROJEKTEM**: do gazowca nie prowadzi żadna ścieżka UI
+do mapy kolonii (tylko placówki-rafinerie, celowo jak przy planetoidach), więc zgłoszenie
+znaczyło „funkcji nie ma z projektu”, a nie „jest zepsuta”.
 
 ---
 
