@@ -147,6 +147,7 @@ const GHOST_PULSE_HOVER_FREQ   = 7.5;       // częstotliwość pulsu (rad/s) �
 // ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
 // Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
 const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
+const _GAS_LIGHT_DIR = new THREE.Vector3(); // scratch — kierunek do gwiazdy (C1a, bez alokacji per klatkę)
 
 // ── POI sprites (M2b C7) ────────────────────────────────────────────────
 // Wizualne markery 5 typów POI na mapie 3D: per-typ paleta cyan-shifted
@@ -1141,7 +1142,10 @@ export class ThreeRenderer {
       if (entry.group) {
         entry.group.traverse(obj => {
           if (obj.geometry) obj.geometry.dispose();
-          if (obj.material) obj.material.dispose();
+          if (obj.material) {
+            GasGiantShader.disposeLiveGasPalette(obj.material);  // C1a — paleta żywego gazowca
+            obj.material.dispose();
+          }
         });
         this.scene.remove(entry.group);
       }
@@ -1791,15 +1795,21 @@ export class ThreeRenderer {
     const isGas = planet.planetType === 'gas';
     let material;
     if (isGas) {
-      // RTT bake — proceduralny gas giant (diffuse + normal + roughness)
-      const baked = GasGiantShader.bakeGasGiantTextures(planet, this.renderer);
-      if (baked) {
-        material = new THREE.MeshStandardMaterial({
-          map:          baked.diffuse,
-          normalMap:    baked.normal,
-          roughnessMap: baked.roughness,
-          metalness:    0.0,
-        });
+      if (GAME_CONFIG.FEATURES.liveGasShaders) {
+        // ŻYWY shader (C1a) — diffuse liczony per-fragment, bez tekstur.
+        // OFF → ścieżka bake'u niżej, nietknięta (materiał żywy nie powstaje w ogóle).
+        material = GasGiantShader.createLiveGasMaterial(planet);
+      } else {
+        // RTT bake — proceduralny gas giant (diffuse + normal + roughness)
+        const baked = GasGiantShader.bakeGasGiantTextures(planet, this.renderer);
+        if (baked) {
+          material = new THREE.MeshStandardMaterial({
+            map:          baked.diffuse,
+            normalMap:    baked.normal,
+            roughnessMap: baked.roughness,
+            metalness:    0.0,
+          });
+        }
       }
     } else {
       // RTT bake — proceduralny diffuse z BiomeMap + PlanetShader
@@ -1969,20 +1979,29 @@ export class ThreeRenderer {
     mesh.geometry = new THREE.SphereGeometry(r, 48, 48);
 
     // Odtwórz materiał z odpowiednimi teksturami
+    // ⚠ D-V1k — NIEUTWARDZONY BLIŹNIAK addPlanetMesh (ta sama klasa co Finding 246):
+    // paleta żywego materiału jest JEGO własnością, a Material.dispose() nie rusza
+    // tekstur, więc bez tej linii każdy update gazowca (kolizja, planet:updated,
+    // przywrócenie kontekstu) zostawiałby osieroconą DataTexture.
+    GasGiantShader.disposeLiveGasPalette(mesh.material);
     mesh.material.dispose();
     const isGas = planet.planetType === 'gas';
     if (isGas) {
-      // Gas giant — procedural RTT bake
-      const baked = GasGiantShader.bakeGasGiantTextures(planet, this.renderer);
-      if (baked) {
-        mesh.material = new THREE.MeshStandardMaterial({
-          map: baked.diffuse, normalMap: baked.normal,
-          roughnessMap: baked.roughness, metalness: 0.0,
-        });
+      if (GAME_CONFIG.FEATURES.liveGasShaders) {
+        mesh.material = GasGiantShader.createLiveGasMaterial(planet);
       } else {
-        mesh.material = new THREE.MeshStandardMaterial({
-          color: planet.visual?.color ?? 0x888888, metalness: 0.0, roughness: 0.6,
-        });
+        // Gas giant — procedural RTT bake
+        const baked = GasGiantShader.bakeGasGiantTextures(planet, this.renderer);
+        if (baked) {
+          mesh.material = new THREE.MeshStandardMaterial({
+            map: baked.diffuse, normalMap: baked.normal,
+            roughnessMap: baked.roughness, metalness: 0.0,
+          });
+        } else {
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: planet.visual?.color ?? 0x888888, metalness: 0.0, roughness: 0.6,
+          });
+        }
       }
     } else {
       const texType = resolveTextureType(planet);
@@ -2013,7 +2032,10 @@ export class ThreeRenderer {
     entry.group.traverse(obj => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
-        // Tekstury PBR z loadPlanetTextures są w _textureCache — nie dispose'uj
+        // Tekstury PBR z loadPlanetTextures są w _textureCache — nie dispose'uj.
+        // Paleta żywego gazowca (C1a) jest natomiast WŁASNOŚCIĄ materiału — no-op
+        // dla wszystkich pozostałych materiałów.
+        GasGiantShader.disposeLiveGasPalette(obj.material);
         obj.material.dispose();
       }
     });
@@ -3586,6 +3608,7 @@ export class ThreeRenderer {
 
         // Animacja chmur — niezaleznie od pauzy gry (real-time)
         this._tickClouds();
+        this._tickGasMaterials();        // C1a — uDetail + kierunek światła żywych gazowców
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
@@ -3612,6 +3635,42 @@ export class ThreeRenderer {
       }
     };
     loop();
+  }
+
+  // Żywe gazowce (C1a) — dwa uniformy odświeżane co klatkę, niezależnie od pauzy gry:
+  //  · uGasLightDirView — kierunek do gwiazdy w przestrzeni WIDOKU; bramkuje rim
+  //    (N·L), żeby świeciła wyłącznie oświetlona krawędź tarczy.
+  //  · uGasDetail — drabina 0/1/2 wg ŚREDNICY TARCZY NA EKRANIE (nie wg samego
+  //    dystansu): px = 2r · (H/2) / (d · tan(fov/2)).
+  // Koszt: per gazowiec 1 distanceTo (sqrt) + sub/normalize/transformDirection
+  // (~20 flopów) + kilka skalarów. Przy 1-3 gazowcach w układzie to szum pomiarowy;
+  // pętla i tak przechodzi po this._planets tuż obok (_tickClouds).
+  _tickGasMaterials() {
+    if (!GAME_CONFIG.FEATURES.liveGasShaders) return;
+    const cam = this.camera;
+    if (!cam) return;
+
+    const halfH   = (window.innerHeight || 720) / 2;
+    const tanHalf = Math.tan(((cam.fov ?? 55) * Math.PI / 180) / 2);
+    const starPos = this._starGroup ? this._starGroup.position : null;
+    const T = GasGiantShader.LIVE_GAS;
+
+    for (const [, entry] of this._planets) {
+      const u = entry.mesh?.material?.userData?.gasUniforms;
+      if (!u) continue;
+
+      if (starPos) {
+        _GAS_LIGHT_DIR.copy(starPos).sub(entry.group.position).normalize()
+          .transformDirection(cam.matrixWorldInverse);
+        u.uGasLightDirView.value.copy(_GAS_LIGHT_DIR);
+      }
+
+      const dist = cam.position.distanceTo(entry.group.position);
+      const r    = entry.mesh.geometry?.parameters?.radius ?? 1;
+      const px   = 2 * r * halfH / Math.max(dist * tanHalf, 1e-4);
+      const lvl  = px >= T.DETAIL_PX_FULL ? 2 : (px >= T.DETAIL_PX_MED ? 1 : 0);
+      u.uGasDetail.value = Math.min(lvl, T.DETAIL_CAP);
+    }
   }
 
   // Animacja chmur — co klatkę, niezaleznie od pauzy gry

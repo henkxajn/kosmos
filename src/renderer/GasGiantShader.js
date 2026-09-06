@@ -722,11 +722,224 @@ function disposeGasTexturesFor(renderer) {
   return freed;
 }
 
+// ── ŻYWY materiał gazowca (C1a) — shader zamiast bake'u ──────────────────────
+// Diffuse liczony per-fragment w MeshStandardMaterial (onBeforeCompile) zamiast
+// pieczenia do tekstury. Parametryzacja jest TA SAMA co w bake'u, więc układ pasów
+// i burz musi się zgadzać: lon/lat wyprowadzone z pozycji OBIEKTU (SphereGeometry ma
+// UV równoleżnikowe, więc to ta sama parametryzacja — bez atrapy mapy).
+//
+// ⚠ REGUŁA ŻELAZNA: KAŻDA wartość per-gazowiec idzie przez UNIFORM, NIGDY przez
+// wklejenie do źródła GLSL. Material.customProgramCacheKey() domyślnie zwraca
+// this.onBeforeCompile.toString() — wszystkie gazowce dzielą TĘ SAMĄ funkcję, więc
+// dostają JEDEN program (i są oddzielone od zwykłych MeshStandardMaterial, których
+// domyślny onBeforeCompile stringuje się inaczej). Gdyby źródło zawierało literały
+// per-gazowiec, klucz cache i tak byłby identyczny (domknięcia stringują się do
+// TEKSTU, nie do wartości) — i wszystkie gazowce dostałyby program PIERWSZEGO.
+
+// Strojenie żywej ścieżki (prowizoryczne — do kalibracji na live gate)
+const LIVE_GAS = {
+  RIM:            0.35,   // siła rim fresnela (D-V1g)
+  BLOOM_GUARD:    0.98,   // rim nie przepycha piksela przez próg bloomu (=1.0)
+  ROUGHNESS:      0.45,   // stała zamiast roughnessMap (D-V1m: brak map w V1)
+  DETAIL_CAP:     2,      // furtka gate'u (D-V1i): 1 = zbij sufit drabiny
+  DETAIL_PX_FULL: 260,    // średnica tarczy [px] ≥ → uDetail 2 (pełne oktawy)
+  DETAIL_PX_MED:  90,     // średnica tarczy [px] ≥ → uDetail 1
+};
+
+// Deklaracje wstrzykiwane po #include <common> we FRAGMENCIE
+const GAS_LIVE_PARS = /* glsl */ `
+uniform vec3  uGasSeed;
+uniform float uGasBandCount;
+uniform sampler2D uGasBandColors;
+uniform float uGasTurbulence;
+uniform float uGasPolarDark;
+uniform vec4  uGasStorm0;
+uniform vec4  uGasStorm1;
+uniform vec4  uGasStorm2;
+uniform vec4  uGasStorm3;
+uniform vec4  uGasStorm4;
+uniform int   uGasDetail;
+uniform vec3  uGasLightDirView;
+uniform float uGasRim;
+varying vec3 vGasObjPos;
+
+${GLSL_NOISE_LIB}
+
+float gasAngleDiff(float a, float b) {
+  float d = a - b;
+  d = mod(d + 3.14159265, 6.28318530) - 3.14159265;
+  return d;
+}
+
+// sRGB -> liniowo. Paleta jest autorska w sRGB, a diffuseColor musi być LINIOWY —
+// dokładnie ta sama konwersja, którą w ścieżce bake'u robi sprzęt (SRGB8_ALPHA8).
+vec3 gasSrgbToLinear(vec3 c) {
+  return mix(
+    pow(c * 0.9478672986 + vec3(0.0521327014), vec3(2.4)),
+    c * 0.0773993808,
+    vec3(lessThanEqual(c, vec3(0.04045)))
+  );
+}
+
+vec2 gasStormEffect(vec4 stormData, float lat, float lon, vec3 sp) {
+  if (stormData.z < 0.001) return vec2(0.0);
+  float dLat = (lat - stormData.x) / stormData.z;
+  float dLon = gasAngleDiff(lon, stormData.y) / stormData.w;
+  float d2 = dLat * dLat + dLon * dLon;
+  if (d2 > 1.0) return vec2(0.0);
+  float mask = smoothstep(1.0, 0.2, d2);
+  float angle = atan(dLon, dLat);
+  float swirl = sin(angle * 3.0 + sqrt(d2) * 6.0 + sphereNoise(sp, 8.0) * 1.5) * 0.5 + 0.5;
+  return vec2(mask, swirl);
+}
+`;
+
+// Diffuse — wstrzykiwany PO #include <map_fragment> (który bez mapy jest pusty)
+const GAS_LIVE_DIFFUSE = /* glsl */ `
+  // Parametryzacja bake'u wyprowadzona z pozycji obiektu.
+  // SphereGeometry: x = -sin(theta)cos(phi), y = cos(theta), z = sin(theta)sin(phi),
+  // a bake liczył spherePos = (sin(lat)cos(lon), cos(lat), sin(lat)sin(lon)) —
+  // stąd odwrócony znak X i lon = atan(z, -x).
+  vec3 gp = normalize(vGasObjPos);
+  vec3 gSp = vec3(-gp.x, gp.y, gp.z) + uGasSeed;
+  float gLatNorm = acos(clamp(gp.y, -1.0, 1.0)) / PI;
+  float gLon = atan(gp.z, -gp.x);
+  float gLatFromEq = abs(gLatNorm - 0.5) * 2.0;
+
+  float gBandNoise = sphereNoise(gSp, 3.0) * uGasTurbulence
+                   + sphereNoise(gSp, 7.0) * uGasTurbulence * 0.5;
+  float gBandFloat = (gLatNorm + gBandNoise) * uGasBandCount;
+  float gBandIdx  = floor(gBandFloat);
+  float gBandFrac = fract(gBandFloat);
+  vec3 gC0 = texture2D(uGasBandColors, vec2((gBandIdx + 0.5) / uGasBandCount, 0.5)).rgb;
+  vec3 gC1 = texture2D(uGasBandColors, vec2((gBandIdx + 1.5) / uGasBandCount, 0.5)).rgb;
+  vec3 gColor = mix(gC0, gC1, smoothstep(0.15, 0.85, gBandFrac));
+
+  // Drabina uDetail: pełne oktawy tylko gdy tarcza jest duża na ekranie.
+  // Poziom 2 jest IDENTYCZNY z bake'em — na nim liczy się parytet układu.
+  vec3 gStretched = gSp * vec3(0.25, 1.0, 0.25);
+  float gFbm = sphereNoise(gStretched, 6.0) * 0.50;
+  if (uGasDetail >= 1) gFbm += sphereNoise(gStretched, 12.0) * 0.25;
+  if (uGasDetail >= 2) gFbm += sphereNoise(gStretched, 24.0) * 0.125;
+  gFbm = gFbm * 0.5 + 0.5;
+  gColor *= (0.90 + gFbm * 0.20);
+
+  if (uGasDetail >= 1) {
+    vec3 gZonal = gSp * vec3(0.15, 1.0, 0.15);
+    gColor *= (1.0 + sphereNoise(gZonal, 4.0) * 0.06);
+  }
+
+  vec2 gS;
+  gS = gasStormEffect(uGasStorm0, gLatNorm, gLon, gSp);
+  if (gS.x > 0.0) gColor = mix(gColor, mix(gColor * 0.7, gColor * 1.4, gS.y), gS.x * 0.7);
+  gS = gasStormEffect(uGasStorm1, gLatNorm, gLon, gSp);
+  if (gS.x > 0.0) gColor = mix(gColor, mix(gColor * 0.7, gColor * 1.4, gS.y), gS.x * 0.7);
+  gS = gasStormEffect(uGasStorm2, gLatNorm, gLon, gSp);
+  if (gS.x > 0.0) gColor = mix(gColor, mix(gColor * 0.7, gColor * 1.4, gS.y), gS.x * 0.7);
+  gS = gasStormEffect(uGasStorm3, gLatNorm, gLon, gSp);
+  if (gS.x > 0.0) gColor = mix(gColor, mix(gColor * 0.7, gColor * 1.4, gS.y), gS.x * 0.7);
+  gS = gasStormEffect(uGasStorm4, gLatNorm, gLon, gSp);
+  if (gS.x > 0.0) gColor = mix(gColor, mix(gColor * 0.7, gColor * 1.4, gS.y), gS.x * 0.7);
+
+  gColor *= (1.0 - smoothstep(0.6, 1.0, gLatFromEq) * uGasPolarDark);
+
+  diffuseColor.rgb = gasSrgbToLinear(gColor);
+`;
+
+// Rim — wstrzykiwany PRZED #include <opaque_fragment>, czyli tam, gdzie istnieje
+// już policzony outgoingLight, a jeszcze przed tone mappingiem i sRGB.
+const GAS_LIVE_RIM = /* glsl */ `
+  {
+    vec3 gN = normalize(normal);
+    vec3 gV = normalize(vViewPosition);
+    float gFres = pow(1.0 - saturate(dot(gN, gV)), 3.0);
+    // Bramka N·L — rim TYLKO po stronie oświetlonej (inaczej terminator świeci).
+    float gNdL = saturate(dot(gN, normalize(uGasLightDirView)));
+    vec3 gRim = diffuseColor.rgb * (uGasRim * gFres * gNdL);
+    // Nie przepychaj piksela przez próg bloomu (UnrealBloomPass threshold = 1.0):
+    // dodajemy tylko tyle, ile zostało zapasu do progu — i nic nie ściemniamy.
+    gRim = min(gRim, max(vec3(0.0), vec3(GAS_BLOOM_GUARD) - outgoingLight));
+    outgoingLight += gRim;
+  }
+`.replace('GAS_BLOOM_GUARD', LIVE_GAS.BLOOM_GUARD.toFixed(3));
+
+// ⚠ WSPÓLNA funkcja dla WSZYSTKICH gazowców — jedna referencja = jeden
+// programCacheKey = jeden WebGLProgram. Wartości per-gazowiec czyta z
+// this.userData.gasUniforms (wołana jako METODA materiału), nie z domknięcia.
+function gasOnBeforeCompile(shader) {
+  const u = this.userData?.gasUniforms;
+  if (u) for (const key in u) shader.uniforms[key] = u[key];
+
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vGasObjPos;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvGasObjPos = position;');
+
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\n' + GAS_LIVE_PARS)
+    .replace('#include <map_fragment>', '#include <map_fragment>\n' + GAS_LIVE_DIFFUSE)
+    .replace('#include <opaque_fragment>', GAS_LIVE_RIM + '\n#include <opaque_fragment>');
+
+  // Kontrakt 3: onBeforeCompile odpala się PONOWNIE, gdy zmieni się klucz programu
+  // (np. inny zestaw define'ów) — a three tworzy wtedy ŚWIEŻY obiekt uniformów.
+  // Wstrzykujemy TE SAME obiekty {value}, więc animacja/uniformy przeżywają rekompilację;
+  // referencja shadera zostaje wystawiona do diagnostyki i sond.
+  this.userData.gasShader = shader;
+}
+
+// ── Publiczne API żywego materiału ───────────────────────────────────────────
+// Zwraca MeshStandardMaterial z proceduralnym diffuse. Uniformy pochodzą z TEJ SAMEJ
+// derywacji co bake (createGasBakeUniforms), więc układ pasów/burz jest ten sam.
+// ⚠ Paleta (DataTexture) jest WŁASNOŚCIĄ tego materiału — bake zwalnia swoją po
+// każdym pieczeniu (C0b/_releasePalette), więc żywa ścieżka NIE MOŻE jej współdzielić.
+// Zwolnienie: disposeLiveGasPalette() z teardownów ThreeRenderera.
+function createLiveGasMaterial(planet) {
+  const bake = createGasBakeUniforms(planet);
+
+  const material = new THREE.MeshStandardMaterial({
+    metalness: 0.0,
+    roughness: LIVE_GAS.ROUGHNESS,
+  });
+
+  material.userData.gasUniforms = {
+    uGasSeed:         bake.uSeed,
+    uGasBandCount:    bake.uBandCount,
+    uGasBandColors:   bake.uBandColors,        // własna DataTexture tego materiału
+    uGasTurbulence:   bake.uTurbulence,
+    uGasPolarDark:    bake.uPolarDarkening,
+    uGasStorm0:       bake.uStorm0,
+    uGasStorm1:       bake.uStorm1,
+    uGasStorm2:       bake.uStorm2,
+    uGasStorm3:       bake.uStorm3,
+    uGasStorm4:       bake.uStorm4,
+    uGasDetail:       { value: LIVE_GAS.DETAIL_CAP },
+    uGasLightDirView: { value: new THREE.Vector3(0, 0, 1) },
+    uGasRim:          { value: LIVE_GAS.RIM },
+  };
+  material.onBeforeCompile = gasOnBeforeCompile;
+
+  return material;
+}
+
+// Zwalnia paletę żywego materiału. Idempotentne i bezpieczne dla materiałów spoza
+// żywej ścieżki — wołane z traverse'ów, które widzą wszystkie materiały sceny.
+// Material.dispose() NIE rusza tekstur, więc bez tego każdy gazowiec ciekłby DataTexture.
+function disposeLiveGasPalette(material) {
+  const u = material?.userData?.gasUniforms;
+  const tex = u?.uGasBandColors?.value;
+  if (!tex) return false;
+  try { tex.dispose(); } catch (e) { /* kontekst mógł paść */ }
+  u.uGasBandColors.value = null;
+  return true;
+}
+
 export const GasGiantShader = {
   gasVertexShader,
   gasFragmentShader,
   createGasBakeUniforms,
   bakeGasGiantTextures,
   disposeGasTexturesFor,
+  createLiveGasMaterial,
+  disposeLiveGasPalette,
+  LIVE_GAS,
   GAS_PRESETS,
 };

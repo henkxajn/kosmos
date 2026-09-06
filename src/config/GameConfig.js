@@ -403,6 +403,17 @@ export const GAME_CONFIG = {
     //   ⚠ decay=0 / distance=0 NIE są tą flagą objęte i NIE są defektem —
     //     to świadoma decyzja czytelności (ThreeRenderer._buildLights:533-535).
     starClassLighting:    true,
+
+    // ── VISUALS 1.0 (C1a) — ŻYWY shader gazowego giganta ──────────────
+    //   ON  = gazowiec dostaje MeshStandardMaterial z proceduralnym diffuse
+    //         liczonym W SHADERZE (onBeforeCompile) — pasy, burze, polar
+    //         darkening i rim fresnela, bez tekstury. Drabina uDetail zbija
+    //         liczbę oktaw noise wg średnicy tarczy na ekranie.
+    //   OFF = ścieżka bake'u z C0b (3 render targety per gazowiec), bajt w bajt
+    //         jak przed tym slice'em; żywy materiał NIE jest w ogóle konstruowany.
+    //   ⚠ Bake ZOSTAJE w obu stanach — używa go globus kolonii
+    //     (PlanetGlobeRenderer ma własny kontekst GL i własny materiał).
+    liveGasShaders:       true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
