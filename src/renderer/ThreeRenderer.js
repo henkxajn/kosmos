@@ -210,6 +210,11 @@ export class ThreeRenderer {
     this._maxAniso = resolveMaxAnisotropy(this.renderer);
     setMaxAnisotropy(this._maxAniso);
 
+    // C1b — JEDEN token strojenia ruchu gazowców dla live gate'u:
+    //   KOSMOS.threeRenderer.gasTuning.OMEGA_DEG = 12
+    // _tickGasMaterials czyta to co klatkę, więc działa natychmiast i globalnie.
+    this.gasTuning = GasGiantShader.LIVE_GAS;
+
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
     canvas.addEventListener('webglcontextlost', (e) => {
@@ -3665,6 +3670,12 @@ export class ThreeRenderer {
         u.uGasLightDirView.value.copy(_GAS_LIGHT_DIR);
       }
 
+      // Strojenie ruchu czytane z LIVE_GAS KAŻDEJ klatki — to jest ta ścieżka, dzięki
+      // której gate zmienia ω jednym tokenem w konsoli i widzi efekt bez restartu.
+      u.uGasOmega.value      = T.OMEGA_DEG * Math.PI / 180;
+      u.uGasOmegaShear.value = T.OMEGA_SHEAR;
+      u.uGasStormMotion.value.set(T.STORM_BREATH, T.STORM_BREATH_HZ, T.STORM_SPIN);
+
       const dist = cam.position.distanceTo(entry.group.position);
       const r    = entry.mesh.geometry?.parameters?.radius ?? 1;
       const px   = 2 * r * halfH / Math.max(dist * tanHalf, 1e-4);
@@ -3674,8 +3685,14 @@ export class ThreeRenderer {
   }
 
   // Animacja chmur — co klatkę, niezaleznie od pauzy gry
+  // ⚠ C1b/D-V1d: żywy gazowiec dostaje uTime TUTAJ, tym samym zaszytym krokiem 0.016
+  // co chmury — oba są real-time i oba mają ten sam dług (Finding 250). C2 naprawia dt
+  // dla obu NARAZ, więc muszą stać w jednym miejscu; nie przenosić tego do
+  // _tickGasMaterials, bo rozdzieliłoby to poprawę na dwa punkty.
   _tickClouds() {
     for (const [, entry] of this._planets) {
+      const gasU = entry.mesh?.material?.userData?.gasUniforms;
+      if (gasU) gasU.uGasTime.value += 0.016;
       for (const child of entry.group.children) {
         if (child.userData.isCloud && child.material?.uniforms?.uTime) {
           child.material.uniforms.uTime.value += 0.016;

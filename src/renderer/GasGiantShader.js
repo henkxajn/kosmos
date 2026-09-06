@@ -737,8 +737,16 @@ function disposeGasTexturesFor(renderer) {
 // TEKSTU, nie do wartości) — i wszystkie gazowce dostałyby program PIERWSZEGO.
 
 // Strojenie żywej ścieżki (prowizoryczne — do kalibracji na live gate)
+// ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.gasTuning.OMEGA_DEG = 12
+// — _tickGasMaterials przepisuje te wartości do uniformów KAŻDEJ klatki, więc zmiana
+// łapie się natychmiast i dla WSZYSTKICH gazowców, bez restartu i bez rebuildu materiału.
 const LIVE_GAS = {
   RIM:            0.35,   // siła rim fresnela (D-V1g)
+  OMEGA_DEG:      6.0,    // ω RÓWNIKOWA [° / sekundę REALNEGO czasu] (D-V1a, prowizoryczne)
+  OMEGA_SHEAR:    0.35,   // ile ω traci biegun: ω(lat) = ω_eq · (1 − shear·e²), e: 0 równik → 1 biegun
+  STORM_SPIN:     0.55,   // [rad/s] wir kręci się wokół WŁASNEGO środka (niezależnie od dryfu)
+  STORM_BREATH:   0.12,   // amplituda oddechu rozmiaru burzy (±12%)
+  STORM_BREATH_HZ:0.05,   // [rad/s] tempo oddechu — celowo wolne, ma być ledwo zauważalne
   BLOOM_GUARD:    0.98,   // rim nie przepycha piksela przez próg bloomu (=1.0)
   ROUGHNESS:      0.45,   // stała zamiast roughnessMap (D-V1m: brak map w V1)
   DETAIL_CAP:     2,      // furtka gate'u (D-V1i): 1 = zbij sufit drabiny
@@ -761,9 +769,20 @@ uniform vec4  uGasStorm4;
 uniform int   uGasDetail;
 uniform vec3  uGasLightDirView;
 uniform float uGasRim;
+uniform float uGasTime;          // [s] realnego czasu — ten sam krok co chmury (D-V1d)
+uniform float uGasOmega;         // [rad/s] ω na równiku
+uniform float uGasOmegaShear;    // 0..1 — o ile wolniejszy jest biegun
+uniform vec3  uGasStormMotion;   // (amplituda oddechu, tempo oddechu [rad/s], spin [rad/s])
 varying vec3 vGasObjPos;
 
 ${GLSL_NOISE_LIB}
+
+// ω(lat) — rotacja RÓŻNICOWA: równik szybciej, bieguny wolniej.
+// latNorm: 0 = biegun N, 0.5 = równik, 1 = biegun S.
+float gasOmega(float latNorm) {
+  float e = abs(latNorm - 0.5) * 2.0;
+  return uGasOmega * (1.0 - uGasOmegaShear * e * e);
+}
 
 float gasAngleDiff(float a, float b) {
   float d = a - b;
@@ -781,15 +800,23 @@ vec3 gasSrgbToLinear(vec3 c) {
   );
 }
 
+// Burza jest WIECZNA (D-V1e) — nie ma cyklu życia, nie gaśnie. Rusza się na trzy sposoby:
+//  · DRYF   — płynie z ω SWOJEGO pasa, więc nie ucieka względem tła, które ścina się tak samo,
+//  · SPIN   — wir kręci się wokół własnego środka, niezależnie od dryfu,
+//  · ODDECH — powolna zmiana rozmiaru; faza wzięta z długości geograficznej burzy, żeby
+//             każda oddychała w innym momencie BEZ dodatkowego uniformu per burza.
 vec2 gasStormEffect(vec4 stormData, float lat, float lon, vec3 sp) {
   if (stormData.z < 0.001) return vec2(0.0);
-  float dLat = (lat - stormData.x) / stormData.z;
-  float dLon = gasAngleDiff(lon, stormData.y) / stormData.w;
+  float lonNow = stormData.y + gasOmega(stormData.x) * uGasTime;
+  float breath = 1.0 + uGasStormMotion.x * sin(uGasTime * uGasStormMotion.y + stormData.y * 3.0);
+  float dLat = (lat - stormData.x) / (stormData.z * breath);
+  float dLon = gasAngleDiff(lon, lonNow) / (stormData.w * breath);
   float d2 = dLat * dLat + dLon * dLon;
   if (d2 > 1.0) return vec2(0.0);
   float mask = smoothstep(1.0, 0.2, d2);
   float angle = atan(dLon, dLat);
-  float swirl = sin(angle * 3.0 + sqrt(d2) * 6.0 + sphereNoise(sp, 8.0) * 1.5) * 0.5 + 0.5;
+  float swirl = sin(angle * 3.0 + sqrt(d2) * 6.0 + sphereNoise(sp, 8.0) * 1.5
+                    + uGasTime * uGasStormMotion.z) * 0.5 + 0.5;
   return vec2(mask, swirl);
 }
 `;
@@ -801,10 +828,21 @@ const GAS_LIVE_DIFFUSE = /* glsl */ `
   // a bake liczył spherePos = (sin(lat)cos(lon), cos(lat), sin(lat)sin(lon)) —
   // stąd odwrócony znak X i lon = atan(z, -x).
   vec3 gp = normalize(vGasObjPos);
-  vec3 gSp = vec3(-gp.x, gp.y, gp.z) + uGasSeed;
+  vec3 gBase = vec3(-gp.x, gp.y, gp.z);
   float gLatNorm = acos(clamp(gp.y, -1.0, 1.0)) / PI;
   float gLon = atan(gp.z, -gp.x);
   float gLatFromEq = abs(gLatNorm - 0.5) * 2.0;
+
+  // ⚠ ROTACJA DZIAŁA NA POZYCJI PRÓBKOWANIA, wokół Y i PRZED dodaniem uGasSeed.
+  // Pasy zależą wyłącznie od gLatNorm, którego rotacja wokół Y NIE RUSZA — więc pręgi
+  // STOJĄ, a turbulencja i fbm (czytające obrócony punkt) ŚCINAJĄ SIĘ tym mocniej, im
+  // bliżej równika. Dodanie uGasSeed PO rotacji jest istotne: seed to stałe przesunięcie
+  // pola szumu, a nie punkt na sferze — obrócony razem z pozycją wlókłby cały wzór.
+  float gAng = gasOmega(gLatNorm) * uGasTime;
+  float gCos = cos(gAng), gSin = sin(gAng);
+  vec3 gSp = vec3(gBase.x * gCos - gBase.z * gSin,
+                  gBase.y,
+                  gBase.x * gSin + gBase.z * gCos) + uGasSeed;
 
   float gBandNoise = sphereNoise(gSp, 3.0) * uGasTurbulence
                    + sphereNoise(gSp, 7.0) * uGasTurbulence * 0.5;
@@ -914,6 +952,14 @@ function createLiveGasMaterial(planet) {
     uGasDetail:       { value: LIVE_GAS.DETAIL_CAP },
     uGasLightDirView: { value: new THREE.Vector3(0, 0, 1) },
     uGasRim:          { value: LIVE_GAS.RIM },
+    // Ruch (C1b). uGasTime bije _tickClouds tym samym krokiem co chmury (D-V1d);
+    // resztę przepisuje z LIVE_GAS co klatkę _tickGasMaterials, żeby gate mógł
+    // stroić ω jednym tokenem. Zero stanu w save — uTime startuje od 0.
+    uGasTime:         { value: 0 },
+    uGasOmega:        { value: LIVE_GAS.OMEGA_DEG * Math.PI / 180 },
+    uGasOmegaShear:   { value: LIVE_GAS.OMEGA_SHEAR },
+    uGasStormMotion:  { value: new THREE.Vector3(
+                          LIVE_GAS.STORM_BREATH, LIVE_GAS.STORM_BREATH_HZ, LIVE_GAS.STORM_SPIN) },
   };
   material.onBeforeCompile = gasOnBeforeCompile;
 
