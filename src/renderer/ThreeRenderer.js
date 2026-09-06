@@ -238,6 +238,35 @@ export class ThreeRenderer {
       } catch (e) {
         console.error('[ThreeRenderer] Error rebuilding after context restore:', e);
       }
+      // ⚠ needsUpdate wskrzesza tylko tekstury z danymi po stronie CPU — setTexture2D
+      // pomija upload dla isRenderTargetTexture, więc cele bake'u gazowców przepadły
+      // razem z kontekstem i three ich nie odtworzy. Trzeba upiec je od nowa; dawna
+      // ścieżka CanvasTexture wracała sama z canvasu.
+      // Odroczone, jedna planeta na klatkę (wzór _rebakePlanetTextures), bo:
+      //  (a) bake woła renderer.render(), które MILCZĄCO wychodzi przy _isContextLost —
+      //      dziś ratuje nas tylko to, że three rejestruje swój listener w konstruktorze
+      //      renderera, czyli WCZEŚNIEJ niż ten; odroczenie zdejmuje tę zależność,
+      //  (b) trzy przebiegi na gazowca to setki ms — najgorszy moment na zamrożenie
+      //      wątku to chwila zaraz po resecie GPU.
+      // Własny try na KAŻDĄ planetę: jeden rzut nie może zostawić reszty gazowców z
+      // teksturami wyrzuconymi z cache (addPlanetMesh ma early-return, a
+      // _rebakePlanetTextures filtruje gas — nikt by ich już nie odzyskał).
+      try { GasGiantShader.disposeGasTexturesFor(this.renderer); }
+      catch (e) { console.error('[ThreeRenderer] gas cache drop failed:', e); }
+      (async () => {
+        const gasIds = [];
+        this._planets.forEach(({ planet }, id) => {
+          if (planet?.planetType === 'gas') gasIds.push(id);
+        });
+        for (const id of gasIds) {
+          await new Promise(r => setTimeout(r, 0));
+          if (this._contextLost) return;    // kolejna utrata — posprząta następny restore
+          const entry = this._planets.get(id);
+          if (!entry) continue;
+          try { this._updatePlanetMesh(entry.planet); }
+          catch (e) { console.error('[ThreeRenderer] gas re-bake failed:', id, e); }
+        }
+      })();
     });
 
     // ── Scena ─────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // GasGiantShader — proceduralny shader GLSL do RTT bake tekstur gazowych gigantów
 //
 // Pipeline: createGasBakeUniforms(planet) → 3× RTT pass (diffuse/normal/roughness)
-// → CanvasTexture cache per planet.id
+// → tekstury render-targetów, cache per renderer → planet.id
 //
 // Generuje: pasy szerokościowe (zonal flow), turbulencje Kelvin-Helmholtz,
 // burze owalne (wiry), polar darkening — deterministycznie z planet.id seed.
@@ -14,8 +14,19 @@ import { hashCode, resolveMaxAnisotropy } from './PlanetTextureUtils.js';
 import { GLSL_NOISE_LIB, mulberry32, rngRange } from './PlanetShader.js';
 import { resolveTextureType } from './PlanetTextureUtils.js';
 
-// ── Cache baked tekstur per planet.id ────────────────────────────────────────
-const _gasTextureCache = new Map();
+// ── Cache baked tekstur: renderer → planet.id ────────────────────────────────
+// ⚠ KLUCZ MUSI ZAWIERAĆ RENDERER. bakeGasGiantTextures wołają DWA rendererzy:
+// ThreeRenderer (mapa 3D — kontekst na całą sesję) i PlanetGlobeRenderer (globus
+// panelu kolonii — WŁASNY WebGLRenderer, którego close() robi forceContextLoss()
+// przy KAŻDYM zamknięciu panelu i KAŻDEJ zmianie kolonii). Dopóki cache trzymał
+// CanvasTexture, wspólny klucz `gas_<id>` był nieszkodliwy: dane leżą po stronie
+// CPU, więc każdy renderer wgrywał sobie własną kopię. Tekstura render-targetu
+// należy do JEDNEGO kontekstu GL — oddana drugiemu rendererowi wiąże się jako null
+// (WebGLProperties jest per-renderer, a setTexture2D pomija upload dla
+// isRenderTargetTexture) i planeta wychodzi CZARNA; wpis po martwym kontekście
+// globusa zostawałby w cache NA ZAWSZE. WeakMap: wpisy giną razem z rendererem —
+// nowy kontekst = świeży bake, bez własnej ścieżki eviction.
+const _gasTextureCache = new WeakMap();   // WebGLRenderer → Map<cacheKey, entry>
 
 // ── Presets per pod-typ gazowego giganta ──────────────────────────────────────
 // Każdy preset ma wiele palet — PRNG z planet.id losuje jedną z nich.
@@ -341,6 +352,25 @@ vec2 stormEffect(vec4 stormData, float lat, float lon, vec3 sp) {
   return vec2(mask, swirl);
 }
 
+// sRGB → liniowo (dokładnie sRGBTransferEOTF z three r171).
+// ⚠ To NIE jest korekta koloru, tylko PRZENIESIENIE konwersji, którą do dziś
+// wykonywał odczyt pikseli: bake pisał paletę SUROWO do RGBA8, a powstała z niej
+// CanvasTexture dostawała etykietę SRGBColorSpace — więc GPU dekodował te bajty
+// przy próbkowaniu. Bez readbacku cel diffuse ma format SRGB8_ALPHA8 i GPU sam
+// koduje zapis liniowo → sRGB, dlatego oddajemy tu kolor LINIOWY: sprzętowe
+// kodowanie odtwarza DOKŁADNIE te same bajty co dawny canvas, a próbkowanie tę
+// samą wartość liniową. Konwersja stoi na KOŃCU (po wymieszaniu pasów, burz i
+// polar darkening) — tam, gdzie dekodował ją stary potok; przeniesienie jej na
+// paletę zmieniłoby wynik mieszania. vec3(lessThanEqual(...)), nie mix(...,bvec3)
+// — shader zostaje zgodny z GLSL ES 1.0.
+vec3 srgbToLinear(vec3 c) {
+  return mix(
+    pow(c * 0.9478672986 + vec3(0.0521327014), vec3(2.4)),
+    c * 0.0773993808,
+    vec3(lessThanEqual(c, vec3(0.04045)))
+  );
+}
+
 void main() {
   // UV → sfera (equirectangular projection)
   float lon = vUv.x * 6.28318530;
@@ -403,7 +433,8 @@ void main() {
     float polarMask = smoothstep(0.6, 1.0, latFromEquator);
     color *= (1.0 - polarMask * uPolarDarkening);
 
-    gl_FragColor = vec4(color, 1.0);
+    // Cel diffuse jest SRGB8_ALPHA8 — GPU zakoduje zapis, więc oddajemy liniowo.
+    gl_FragColor = vec4(srgbToLinear(color), 1.0);
   }
 
   // ── NORMAL MAP (mode 1) ────────────────────────────────────────────────────
@@ -528,6 +559,13 @@ function createGasBakeUniforms(planet) {
 }
 
 // ── RTT bake — renderuje jedną mapę (diffuse/normal/roughness) ───────────────
+// Zwraca WebGLRenderTarget — jego .texture idzie PROSTO na materiał. Dawna ścieżka
+// czytała cel przez readRenderTargetPixels (2 MiB synchronicznego stalla GPU→CPU na
+// mapę, czyli 9 stalli / 18 MiB na układ z trzema gazowcami) tylko po to, by przelać
+// bajty do canvasu i zrobić z niego CanvasTexture.
+// ⚠ Parametry próbkowania MUSZĄ stać w opcjach celu: three czyta je RAZ, w
+// setupRenderTarget (setTextureParameters + setupFrameBufferTexture) przy pierwszym
+// setRenderTarget — późniejsza zmiana nie przealokuje już tekstury.
 function _renderBakePass(renderer, uniforms, outputMode, w, h) {
   uniforms.uOutputMode.value = outputMode;
 
@@ -542,66 +580,108 @@ function _renderBakePass(renderer, uniforms, outputMode, w, h) {
   const scene = new THREE.Scene();
   scene.add(quad);
 
+  const isDiffuse = (outputMode === 0);
   const rt = new THREE.WebGLRenderTarget(w, h, {
     format: THREE.RGBAFormat,
     type:   THREE.UnsignedByteType,
+    // Lustro etykiet dawnej CanvasTexture: diffuse → sRGB, normal/roughness →
+    // linear. Dla diffuse daje to załącznik SRGB8_ALPHA8, czyli sprzętowe
+    // dekodowanie przy próbkowaniu — dokładnie to, co robiła CanvasTexture
+    // (po stronie zapisu odpowiada mu srgbToLinear w gasFragmentShader).
+    colorSpace: isDiffuse ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace,
+    // CanvasTexture miała mipmapy z domyślnych ustawień Texture; render target ich
+    // NIE ma (generateMipmaps:false, minFilter:LinearFilter), a bez nich pasy
+    // gazowca migotałyby z odległości. 1024×512 = POT, mipmapy legalne.
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+    magFilter: THREE.LinearFilter,
+    // Jak commit 420d00f dla CanvasTexture — pasy biegną równoleżnikowo, więc przy
+    // biegunach i na krawędzi tarczy patrzymy na nie pod bardzo ostrym kątem.
+    anisotropy: resolveMaxAnisotropy(renderer),
+    // Bake to fullscreen quad — głębia zbędna, a cel żyje teraz tak długo jak
+    // tekstura, więc renderbuffer głębi (2 MiB/mapę) zostawałby na stałe.
+    depthBuffer:   false,
+    stencilBuffer: false,
   });
+
   renderer.setRenderTarget(rt);
-  renderer.render(scene, cam);
+  renderer.render(scene, cam);   // mipmapy generuje samo render() (updateRenderTargetMipmap)
   renderer.setRenderTarget(null);
 
-  // Odczytaj piksele → CanvasTexture (Y-flip)
-  const pixels = new Uint8Array(w * h * 4);
-  renderer.readRenderTargetPixels(rt, 0, 0, w, h, pixels);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  const imgData = ctx.createImageData(w, h);
-
-  for (let y = 0; y < h; y++) {
-    const srcRow = (h - 1 - y) * w * 4;
-    const dstRow = y * w * 4;
-    imgData.data.set(pixels.subarray(srcRow, srcRow + w * 4), dstRow);
-  }
-  ctx.putImageData(imgData, 0, 0);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  // diffuse → sRGB, normal/roughness → linear
-  tex.colorSpace = (outputMode === 0) ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
-  // Pasy gazowego giganta biegną równoleżnikowo — przy biegunach i na krawędzi
-  // tarczy patrzymy na nie pod bardzo ostrym kątem, gdzie mipmap sam je zlewa.
-  tex.anisotropy = resolveMaxAnisotropy(renderer);
-
-  // Cleanup GPU
-  rt.dispose();
+  // Cleanup GPU — cel ZOSTAJE (trzyma go cache, zwalnia disposeGasTexturesFor)
   bakeMat.dispose();
   quad.geometry.dispose();
 
-  return tex;
+  return rt;
 }
 
-// ── Publiczna funkcja bake — cache per planet.id ─────────────────────────────
-// Zwraca { diffuse, normal, roughness } jako CanvasTexture
+// ── Publiczna funkcja bake — cache per renderer → planet.id ──────────────────
+// Zwraca { diffuse, normal, roughness } jako tekstury render-targetów
 function bakeGasGiantTextures(planet, renderer) {
+  if (!renderer) return null;
+
+  let perRenderer = _gasTextureCache.get(renderer);
+  if (!perRenderer) {
+    perRenderer = new Map();
+    _gasTextureCache.set(renderer, perRenderer);
+  }
+
   const cacheKey = `gas_${planet.id}`;
-  if (_gasTextureCache.has(cacheKey)) return _gasTextureCache.get(cacheKey);
+  if (perRenderer.has(cacheKey)) return perRenderer.get(cacheKey);
 
   const BAKE_W = 1024, BAKE_H = 512;
   const uniforms = createGasBakeUniforms(planet);
 
-  const diffuse   = _renderBakePass(renderer, uniforms, 0, BAKE_W, BAKE_H);
-  const normal    = _renderBakePass(renderer, uniforms, 1, BAKE_W, BAKE_H);
-  const roughness = _renderBakePass(renderer, uniforms, 2, BAKE_W, BAKE_H);
+  // ⚠ _renderBakePass NIE zwalnia już swojego celu, więc do chwili wpisania go do
+  // wyniku jedyną referencją jest ta tablica. Bez niej wyjątek w drugim albo trzecim
+  // przebiegu zostawiałby 1-2 FBO bez właściciela (dawniej każdy przebieg sprzątał
+  // po sobie sam, więc rzut niczego nie zostawiał po stronie GPU).
+  const targets = [];
+  try {
+    targets.push(_renderBakePass(renderer, uniforms, 0, BAKE_W, BAKE_H));   // diffuse
+    targets.push(_renderBakePass(renderer, uniforms, 1, BAKE_W, BAKE_H));   // normal
+    targets.push(_renderBakePass(renderer, uniforms, 2, BAKE_W, BAKE_H));   // roughness
+  } catch (err) {
+    for (const rt of targets) { try { rt.dispose(); } catch (e) { /* kontekst mógł paść */ } }
+    uniforms.uBandColors.value.dispose();
+    throw err;
+  }
 
   // Cleanup DataTexture palety
   uniforms.uBandColors.value.dispose();
 
-  const result = { diffuse, normal, roughness };
-  _gasTextureCache.set(cacheKey, result);
+  const result = {
+    diffuse:   targets[0].texture,
+    normal:    targets[1].texture,
+    roughness: targets[2].texture,
+    // Cele trzymamy przy wyniku — tekstura nie ma publicznej drogi powrotnej do
+    // swojego render targetu, a to on jest właścicielem FBO do zwolnienia.
+    _targets:  targets,
+  };
+  perRenderer.set(cacheKey, result);
 
   return result;
+}
+
+// ── Zwolnienie celów bake'u należących do DANEGO renderera ───────────────────
+// Wołane z teardownu, który niszczy kontekst GL (PlanetGlobeRenderer.close) i po
+// odzyskaniu kontekstu w ThreeRenderer. Bez tego wpisy i tak odeszłyby razem z
+// rendererem (WeakMap), ale jawne zwolnienie zdejmuje FBO od razu — i, co
+// ważniejsze, USUWA wpis, więc następny bake nie odda tekstury z martwego
+// kontekstu. Zwraca liczbę zwolnionych celów (diagnostyka).
+function disposeGasTexturesFor(renderer) {
+  const perRenderer = renderer && _gasTextureCache.get(renderer);
+  if (!perRenderer) return 0;
+
+  let freed = 0;
+  for (const entry of perRenderer.values()) {
+    for (const rt of (entry?._targets || [])) {
+      try { rt.dispose(); freed++; } catch (e) { /* kontekst mógł już paść */ }
+    }
+  }
+  perRenderer.clear();
+  _gasTextureCache.delete(renderer);
+  return freed;
 }
 
 export const GasGiantShader = {
@@ -609,5 +689,6 @@ export const GasGiantShader = {
   gasFragmentShader,
   createGasBakeUniforms,
   bakeGasGiantTextures,
+  disposeGasTexturesFor,
   GAS_PRESETS,
 };
