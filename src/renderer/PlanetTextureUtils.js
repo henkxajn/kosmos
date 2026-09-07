@@ -132,17 +132,30 @@ export function loadPlanetTextures(texType, variant) {
 }
 
 /**
- * Ładuje zestaw tekstur gwiazdy (diffuse + emission + normal) z cache.
+ * Ładuje teksturę gwiazdy z cache.
+ *
+ * ⚠ V-265 — ładujemy WYŁĄCZNIE `emission`. Mapy `diffuse` i `normal` były wczytywane
+ *   od zawsze i NIE MAJĄ konsumenta nigdzie w src/: obaj wołający czytają tylko
+ *   `.emission` (ThreeRenderer — tarcza gwiazdy; StratcomGalaxyRenderer — gwiazdy mapy
+ *   galaktyki). Cena tej bezczynności: 24 pliki ≈ 23,6 MiB na dysku, do 24 żądań HTTP
+ *   i ~64 MiB VRAM po rozpakowaniu (1024×512 RGBA + mipy), gdy Stratcom rozgrzeje
+ *   wszystkie 12 wariantów.
+ * ⚠ Pliki PNG ZOSTAJĄ w assets/, a generator nie przestaje ich robić — kasowanie
+ *   assetów to osobna decyzja, nie skutek uboczny tej.
+ * ⚠ Pętla zostaje generyczna mimo JEDNEGO elementu: reguła colorSpace (normal →
+ *   linear, reszta → sRGB) jest poprawna dla każdego klucza, więc dołożenie mapy
+ *   z powrotem to zmiana jednej tablicy. Kształt zwracanego obiektu bez zmian.
+ *
  * @param {string} texType — np. 'star_M', 'star_G'
  * @param {number} variant — 1, 2, lub 3
- * @returns {{ diffuse: THREE.Texture, emission: THREE.Texture, normal: THREE.Texture }}
+ * @returns {{ emission: THREE.Texture }}
  */
 export function loadStarTextures(texType, variant) {
   const vStr   = String(variant).padStart(2, '0');
   const prefix = `${TEXTURE_DIR}/${texType}_${vStr}`;
   const maps   = {};
 
-  const mapTypes = ['diffuse', 'emission', 'normal'];
+  const mapTypes = ['emission'];   // V-265 — patrz nagłówek
   for (const key of mapTypes) {
     const cacheKey = `${texType}_${vStr}_${key}`;
     if (!_textureCache.has(cacheKey)) {
