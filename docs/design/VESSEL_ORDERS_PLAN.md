@@ -1307,13 +1307,64 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ⚠ Gate 215 pokazał też, że **153 NIE bramkuje §G.2**: stolica emp_002 ma w gy 30 `Nt 157`
      i komplet surowców łańcucha warp bez udziału kurierów cross-system.
 
-154. 🟠 **`AutoRetreatSystem._findNearestFriendlyPlanet` DALEJ nie ma terminu ukladu — i jest ZYWA.**
+154. 🔴 **`AutoRetreatSystem._findNearestFriendlyPlanet` DALEJ nie ma terminu ukladu — i jest ZYWA.**
      Slice RETREAT_TARGET (`aeef035`) swiadomie jej nie tknal, bo odwrot z bitwy przeszedl na
      `utils/RetreatTarget.js`. Czytaja ja jednak **TRZY** produkcyjne sciezki „Powrot do bazy":
-     `FleetManagerOverlay.js:4550`, `FleetGroupPanel.js:445`, `FleetCommandPanel.js:384`. Skutek jest
-     ten sam co przy F-D: przycisk moze wskazac kolonie z INNEGO ukladu, po czym rozkaz odpadnie na
-     `target_other_system` — z ta roznica, ze te trzy sciezki pokazuja graczowi toast
-     `fleet.noFriendlyPlanet` albo milcza. **Follow-up RETREAT_TARGET, wlasny podpis.**
+     `FleetManagerOverlay.js:4581` (`_handleFleetReturnBase`, zakladka Floty — ⚠ wiec teza „FleetManager
+     nie ma Powrotu" jest polprawda: nie ma go lista akcji REJESTRU, ma go zakladka FLOTY),
+     `FleetGroupPanel.js:445` (`grpReturn`), `FleetCommandPanel.js:384` (`_fleetReturn`).
+
+     ⚠ **KOREKTA ZAPISANEJ KONSEKWENCJI (2026-09-07, audyt `MAP_VESSEL_PANEL_PLAN.md` §7).** Stalo tu,
+     ze „rozkaz odpadnie na `target_other_system`". **To NIEPRAWDA — i prawda jest GORSZA.** Wszystkie
+     trzy sciezki podaja **goly `targetPoint` BEZ `targetBodyId`**, a bramka W3-4b stoi WEWNATRZ
+     `if (bodyId)` (`MovementOrderSystem:815-826`) ⇒ rozkaz **PRZECHODZI**. Zmierzone na realnym
+     `MovementOrderSystem`:
+     `statek w sys_061, goly punkt → {ok:true}` · `ten sam cel z targetBodyId → {ok:false, target_other_system}`.
+     Po domknieciu rozkazu `_pendingReturnDock` odpala `FleetSystem._maybeAutoDockOnReturn:645`, ktory
+     **teleportuje bezwarunkowo**: `position.x/y` = wspolrzedne ciala z OBCEGO ukladu, `dockedAt` = to
+     cialo, `colonyId` **przepisany**, `systemId` **nietkniety**. Zmierzone: `systemId=sys_061` przy
+     `dockedAt=p_home (sys_home)` ⇒ statek „zadokowany" przy ciele, ktorego w jego ukladzie NIE MA —
+     **i ten stan idzie do ZAPISU**. Ta sama klasa co `_freezeAsStationary` w arcu RETREAT_TARGET.
+     Stad 🟠 → 🔴.
+     ⚠ Wzorzec `registry-may-describe-the-trap-not-the-bug`: wpis opisywal konsekwencje LAGODNIEJSZA
+     niz rzeczywista, wiec przez tygodnie wygladal na kosmetyke. **Naprawa = Finding 255.**
+
+255. 🔴 **Trzy producenty „Powrotu do bazy" omijaja bramke ukladu, bo podaja GOLY punkt (mechanizm 154).**
+     Nie jest to duplikat 154: 154 nazywa ZLY SELEKTOR (`_findNearestFriendlyPlanet` bez terminu
+     ukladu), 255 nazywa **droge, ktora ten zly cel przechodzi przez system rozkazow** — i ta droga
+     jest szersza niz Powrot. `_issueDock:449` robi to samo (patrz 256), a bramka `if (bodyId)`
+     przepuszcza KAZDY rozkaz punktowy bez ciala. Domkniecie wymaga decyzji o zakresie: (a) termin
+     ukladu takze dla formy punktowej w `_issueMoveToPoint` — dotyka **KAZDEGO rozkazu punktowego
+     w grze**, wiec wlasny gate i wlasny pomiar; albo (b) trzy producenty przestaja podawac goly punkt
+     + `_pendingReturnDock` dostaje termin ukladu.
+     ⚠ Marker `_pendingReturnDock` byl juz raz uznany za niebezpieczny: **D-FDf** (arc RETREAT_TARGET)
+     zdjal go ze sciezki odwrotu doktrynalnego dokladnie dlatego, ze `_maybeAutoDockOnReturn`
+     przepisuje `colonyId` BEZWARUNKOWO. Ta sama funkcja, ta sama linia, inna sciezka wejscia.
+     **Osobny slice, wlasny podpis. NIE laczyc z UI.**
+
+256. 🟠 **`Dokuj` (picker grupowy) przyjmuje cel z OBCEGO ukladu.**
+     Rodzenstwo 154/255, ale **inny producent i inny selektor**, wiec osobny numer.
+     `getDockTargets()` (`BodyName.js:47`) listuje `getPlayerColonies()` + stacje gracza **bez terminu
+     ukladu**, a `MovementOrderSystem._issueDock:449` **zrzuca `targetBodyId`** przed wywolaniem
+     `_issueMoveToPoint` (ustawia `_pendingDock` dopiero PO sukcesie) ⇒ bramka W3-4b nigdy tego celu
+     nie oglada. Zmierzone: `dock: statek sys_061 → kolonia sys_home | {ok:true} | _pendingDock=p_home`.
+     ⚠ Konsumenci: `FleetGroupPanel:479` (`grpDock`) i `FleetCommandPanel:465` (`bgDock`) — **JUZ DZIS
+     dwie niemal znak-w-znak kopie** (ten sam `showBodyPickerModal`, ta sama petla, ten sam klucz
+     `fleetGroup.dockFailed`).
+     ⚠ **CZESCIOWO ZAADRESOWANE** w slice MAP_VESSEL_PANEL (commit 3): wspolny helper
+     `VesselGroupActions.openDockPicker(ids, {sameSystemOnly})` zwija te dwie kopie do jednego zrodla,
+     a nowa powierzchnia (panel mapy) przekazuje `sameSystemOnly: true`. **Dwie istniejace powierzchnie
+     zostaja na `false` = zachowanie dzisiejsze bit w bit** — ich zmiana to wlasnie ten finding.
+     Naprawa 256 = przelaczenie jednego argumentu + usuniecie flagi.
+
+257. 🟠 **`countActionable` nie ma terminu `isInService`, a handlery `grpX` polykaja wynik `issueOrder`.**
+     `FleetGroupPanelLogic.countActionable` (`:106`) liczy `canReturn`/`canRetreat`/`canDock` wylacznie
+     z `position.state` i `isImmobilized` ⇒ **kadlub w REZERWIE (`serviceState='stored'`) dostaje
+     przyciski WLACZONE**. Realny `MovementOrderSystem` odmawia (`{ok:false, reason:'vessel_in_reserve'}`
+     — zmierzone), ale `grpReturn`/`grpRetreat`/`grpDock` **odrzucaja zwrotke** ⇒ klik jest cichym
+     no-opem. Klasa „reasonless failure reads as unfixed" (re-gate Findingu 125).
+     ⚠ Zostaje na `FleetGroupPanel`, wiec po slice MAP_VESSEL_PANEL jest **zywy przy N≥2**
+     (przy N==1 ta powierzchnia sie nie rysuje). Osobny slice.
 
 > **Juz zarejestrowane, NIE duplikuje:** **Finding 138** (`VesselManager._findBodyNearPoint` skanuje
 > cala galaktyke) i **Finding 142** (`_getValidTargets` klucza sie na OGLADANYM ukladzie, nie na
