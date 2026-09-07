@@ -163,6 +163,18 @@ const _GAS_LIGHT_DIR = new THREE.Vector3(); // scratch — kierunek do gwiazdy (
 const ANIM_DT_MAX_S   = 0.1;      // [s] sufit kroku animacji real-time
 const ANIM_DT_FIRST_S = 1 / 60;   // [s] pierwsza klatka — nie ma jeszcze poprzedniego stempla
 
+// ── Obrót gwiazdy (V-260) ───────────────────────────────────────────────
+// Do tej poprawki rdzeń kręcił się przez `core.rotation.y += 0.0005` liczone
+// NA KLATKĘ, więc tempo zależało od FPS maszyny: ~1.72 °/s przy 60 fps, dwa razy
+// szybciej przy 120, o połowę wolniej przy 30. To TRZECIA instancja klasy V-250
+// (chmury i gazowiec naprawione w C2) i JEDYNA, której V-255 nie wymienia.
+// 0.0005 rad/klatkę × 60 fps = 0.03 rad/s = 1.719 °/s — przy dokładnie 60 fps
+// obraz jest identyczny co do bitu, przy każdym innym FPS poprawny.
+// ⚠ Poprawka jest CELOWO POZA flagą `liveSunShader` (D-V2z): stan OFF nie ma
+// prawa przywracać defektu. W slice'ie S1 stała przeniesie się do LIVE_SUN jako
+// pokrętło gate'u — tutaj zostaje stałą, żeby ten commit nie zależał od S1.
+const STAR_SPIN_RAD_PER_S = 0.03;   // [rad/s] czasu REALNEGO
+
 // Zmierzony krok animacji w sekundach. Wydzielone z _tickClouds, żeby dawało się
 // sprawdzić WYKONANIEM bez konstruowania całego renderera.
 export function animDeltaSeconds(nowMs, lastMs) {
@@ -3606,11 +3618,9 @@ export class ThreeRenderer {
         // Aktualizuj migotanie gwiazd tła
         if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
 
-        // Animacja gwiazdy — [0]=rdzeń (rotacja granulacji), [1]=korona (billboard + oddech)
-        if (this._starGroup) {
-          const core = this._starGroup.children[0];
-          if (core) core.rotation.y += 0.0005;   // granulacja widoczna przy zoom-in
-        }
+        // Korona gwiazdy — billboard + oddech.
+        // ⚠ Obrót rdzenia NIE JEST już tutaj: przeniesiony do _tickClouds, jedynego
+        //   miejsca w tym pliku, gdzie krok czasu jest ZMIERZONY (V-260).
         if (this._starCorona) {
           // Billboard — plane zawsze frontem do kamery (group ma tylko pozycję, bez rotacji)
           this._starCorona.quaternion.copy(this.camera.quaternion);
@@ -3717,7 +3727,7 @@ export class ThreeRenderer {
     }
   }
 
-  // Animacja chmur — co klatkę, niezaleznie od pauzy gry
+  // Animacja chmur + gazowca + OBROTU GWIAZDY — co klatkę, niezaleznie od pauzy gry
   // ⚠ C1b/D-V1d: żywy gazowiec dostaje uTime TUTAJ, tym samym krokiem co chmury — oba
   // są real-time i oba miały ten sam dług (Finding 250, naprawiony w C2). Dlatego stoją
   // w JEDNYM miejscu; nie przenosić gazowca do _tickGasMaterials, bo rozdzieliłoby to
@@ -3731,6 +3741,16 @@ export class ThreeRenderer {
     const dt  = animDeltaSeconds(now, this._lastAnimTickMs);
     this._lastAnimTickMs = now;
     if (dt === 0) return;
+
+    // Obrót gwiazdy — ten sam ZMIERZONY krok co chmury i gazowiec (V-260).
+    // ⚠ Stoi TUTAJ, a nie w pętli renderowania, z tego samego powodu co gazowiec:
+    //   krok czasu ma JEDNO miejsce (dekret C1b wyżej). Rdzeń to children[0]
+    //   (kolejność budowy: rdzeń, korona, sfera klikalna) — nazwany uchwyt
+    //   zastąpi ten indeks w commicie V-266.
+    if (this._starGroup) {
+      const core = this._starGroup.children[0];
+      if (core) core.rotation.y += STAR_SPIN_RAD_PER_S * dt;
+    }
 
     for (const [, entry] of this._planets) {
       const gasU = entry.mesh?.material?.userData?.gasUniforms;
