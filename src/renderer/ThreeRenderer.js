@@ -24,7 +24,7 @@ import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
-         classGranParams, granAmplitude } from './SunAnimationLogic.js';
+         classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
@@ -150,7 +150,8 @@ const GHOST_PULSE_HOVER_FREQ   = 7.5;       // częstotliwość pulsu (rad/s) �
 // ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
 // Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
 const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
-const _GAS_LIGHT_DIR = new THREE.Vector3(); // scratch — kierunek do gwiazdy (C1a, bez alokacji per klatkę)
+const _GAS_LIGHT_DIR = new THREE.Vector3();
+const _SUN_TO_CAM    = new THREE.Vector3(); // scratch — kierunek gwiazda→kamera (S4) // scratch — kierunek do gwiazdy (C1a, bez alokacji per klatkę)
 
 // ── Krok czasu animacji REAL-TIME (C2 / Finding 250) ─────────────────────
 // Do C2 animacje real-time (chmury skalistych planet, żywy gazowiec) szły po ZASZYTYM
@@ -262,6 +263,10 @@ export class ThreeRenderer {
     this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
     this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
     this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
+    this._sunPromSlots = [];      // 4 sloty protuberancji (kotwice ŚWIATOWE, D-V2x)
+    this._sunPromTime  = 0;       // [s] AKUMULOWANY czas cyklu życia
+    this._sunCoreRadius = 1;      // promień widocznej tarczy [WU] — do maski sylwetki
+    this._sunQuadHalf   = 1;      // połowa boku quada korony [WU]
 
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
@@ -1295,6 +1300,7 @@ export class ThreeRenderer {
       this._starCore   = null;   // rdzeń był dzieckiem groupy (już zdisposowany)
       this._sunGranU   = null;   // uniformy żywego rdzenia znikają razem z materiałem
       this._sunCoronaU = null;   // to samo dla żywej korony
+      this._sunPromSlots = [];
       this._starCorona = null;   // billboard korony był dzieckiem groupy (już zdisposowany)
     }
 
@@ -1445,11 +1451,19 @@ export class ThreeRenderer {
     // Zastępuje dawne 3 sprite'y canvas (glow ×7/×21/×42 — patrz analiza).
     const coronaCol = new THREE.Color(star.visual.glowColor ?? star.visual.color)
       .lerp(new THREE.Color(1, 1, 1), 0.5);   // 50% ku bieli — naturalniejszy glare
+    // Maska sylwetki i rzut kotwic potrzebują OBU promieni w jednostkach świata.
+    this._sunCoreRadius = r * STAR_CORE_SCALE;
+    this._sunQuadHalf   = r * glowScale * 1.1;   // = coronaSize / 2
+    this._sunPromSlots  = liveSun ? SunShader.promSlotsFor(star.id) : [];
+    this._sunPromTime   = 0;
     const coronaMat = SunShader.createStarCoronaMaterial({
       coronaColor: coronaCol,
       gain: 0.95 * glowOpacity,   // <1.0 = korona NIE karmi bloomu (czysty gradient)
       live: liveSun,
       seed: liveSun ? SunShader.sunSeedFromId(star.id) : null,
+      glowHex:    star.visual.glowColor ?? star.visual.color,
+      quadHalf:   this._sunQuadHalf,
+      coreRadius: this._sunCoreRadius,
     });
     this._sunCoronaU       = liveSun ? coronaMat.uniforms : null;
     this._sunStreamerPhase = 0;
@@ -3776,6 +3790,40 @@ export class ThreeRenderer {
     cu.uStreamerDepth.value = T.STREAMER_DEPTH;
     cu.uStreamerGain.value  = T.STREAMER_GAIN;
     cu.uCoronaGuard.value   = T.CORONA_GUARD;
+
+    // ── Protuberancje (S4) ────────────────────────────────────────────────
+    cu.uStarCenterWorld.value.copy(this._starGroup.position);
+    cu.uCamPosWorld.value.copy(cam.position);
+    cu.uQuadHalf.value   = this._sunQuadHalf;
+    cu.uCoreRadius.value = this._sunCoreRadius;
+
+    // ⚠ Rampa po px NIE chowa protuberancji z powodu bloomu — podprogowość zapewnia
+    //   sufit korony (D-V2k). Ta rampa istnieje wyłącznie po to, żeby łuk szerokości
+    //   dwóch pikseli nie migotał przy szerokim planie.
+    const promVis = granAmplitude(this._sunDiscPx,
+                      { pxMin: T.PROM_PX_MIN, pxFull: T.PROM_PX_FULL });
+    const toCam = _SUN_TO_CAM.copy(cam.position).sub(this._starGroup.position).normalize();
+    const scale = this._sunCoreRadius / Math.max(this._sunQuadHalf, 1e-6);
+    const halfW = T.PROM_HALFW * scale;
+    let any = 0;
+    const slotU  = [cu.uProm0,  cu.uProm1,  cu.uProm2,  cu.uProm3];
+    const slotUB = [cu.uPromB0, cu.uPromB1, cu.uPromB2, cu.uPromB3];
+    for (let i = 0; i < 4; i++) {
+      const sl = this._sunPromSlots[i];
+      if (!sl) { slotU[i].value.set(0, 0, 0, 0); continue; }
+      const env  = promEnvelope(this._sunPromTime, sl).env;
+      const limb = limbWeight(sl.anchor.dot(toCam), T.PROM_LIMB_BAND);
+      const inten = env * limb * promVis;
+      if (inten > 0.002) any = 1;
+      // Rzut kotwicy na przestrzeń quada: quad niesie kwaternion kamery, więc jego
+      // lokalne x/y TO SĄ osie kamery — rzut to dwa iloczyny skalarne.
+      slotU[i].value.set(
+        sl.anchor.dot(cu.uSunCamRight.value) * scale,
+        sl.anchor.dot(cu.uSunCamUp.value)    * scale,
+        halfW, inten);
+      slotUB[i].value.set(sl.height, sl.seed, sl.phase, 0);
+    }
+    cu.uPromAny.value = any;
   }
 
   // ── S1: przyrząd gate'u — KOSMOS.debug.sunInfo(granNeutral) ─────────────────
@@ -3863,6 +3911,9 @@ export class ThreeRenderer {
       this._sunStreamerPhase = integratePhase(
         this._sunStreamerPhase, SunShader.LIVE_SUN.STREAMER_DRIFT, dt);
       this._sunCoronaU.uStreamerPhase.value = this._sunStreamerPhase;
+      // Zegar cyklu życia protuberancji — ten sam zmierzony krok co reszta.
+      this._sunPromTime += dt;
+      this._sunCoronaU.uPromTime.value = this._sunPromTime;
     }
 
     for (const [, entry] of this._planets) {

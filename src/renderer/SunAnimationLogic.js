@@ -127,6 +127,61 @@ export function granAmplitude(px, { pxMin, pxFull }) {
   return t * t * (3 - 2 * t);                            // smoothstep
 }
 
+// ── Cykl życia protuberancji (D-V2l) ─────────────────────────────────────────
+// ⚠ Odroczenie z S1 WYGASA tutaj: w S1 ta rzecz świadomie nie weszła, bo nie miała
+//   wołającego, a jej liczby to smak, nie arytmetyka. Teraz ma wołającego (S4), więc
+//   wchodzi razem z pokryciem.
+//
+// Slot chodzi w kółko: dormant → rise → sustain → collapse → dormant …
+// ⚠ Długości są losowane RAZ przy budowie gwiazdy (z ziarna), a nie co cykl. To świadome
+//   uproszczenie: cztery sloty o różnych, niewspółmiernych okresach i różnych przesunięciach
+//   dają agregat, który nie powtarza się w widocznym oknie czasu, a funkcja zostaje czysta
+//   i w pełni testowalna — bez PRNG w środku i bez stanu między klatkami.
+// ⚠ Anty-kicz jest tu LICZBĄ, nie deklaracją: aktywna część cyklu to 22-35 s przy pełnym
+//   cyklu 47-105 s, czyli wypełnienie ~0.375. Cztery sloty dają wartość oczekiwaną ~1,5
+//   aktywnego slotu, a ważenie limbem (limbWeight) ścina to mniej więcej o połowę —
+//   „zwykle jedna, czasem dwie, czasem żadna".
+export const PROM = {
+  RISE: 4, SUSTAIN_MIN: 12, SUSTAIN_MAX: 25, COLLAPSE: 6,
+  DORMANT_MIN: 25, DORMANT_MAX: 70,
+};
+
+export function promSlotTiming(r1, r2) {
+  return {
+    dormant:  PROM.DORMANT_MIN + r1 * (PROM.DORMANT_MAX - PROM.DORMANT_MIN),
+    rise:     PROM.RISE,
+    sustain:  PROM.SUSTAIN_MIN + r2 * (PROM.SUSTAIN_MAX - PROM.SUSTAIN_MIN),
+    collapse: PROM.COLLAPSE,
+  };
+}
+
+export function promEnvelope(t, slot) {
+  const total = slot.dormant + slot.rise + slot.sustain + slot.collapse;
+  if (!(total > 0)) return { env: 0, stage: 'dormant' };
+  let u = ((t + (slot.offset || 0)) % total + total) % total;   // dodatnie także dla t < 0
+  if (u < slot.dormant) return { env: 0, stage: 'dormant' };
+  u -= slot.dormant;
+  if (u < slot.rise) { const x = u / slot.rise; return { env: x * x * (3 - 2 * x), stage: 'rise' }; }
+  u -= slot.rise;
+  if (u < slot.sustain) return { env: 1, stage: 'sustain' };
+  u -= slot.sustain;
+  const x = Math.max(0, 1 - u / slot.collapse);
+  return { env: x * x * (3 - 2 * x), stage: 'collapse' };
+}
+
+// ── Widoczność przy limbie ───────────────────────────────────────────────────
+// dot = anchorDir · (kierunek od gwiazdy do kamery). 1 = kotwica na wprost obserwatora,
+// 0 = dokładnie na limbie, −1 = po drugiej stronie. Protuberancja czyta się TYLKO
+// z profilu, więc widoczna jest przy |dot| bliskim zera — po obu stronach, bo pętla
+// na dalekim limbie też wystaje poza tarczę.
+// ⚠ To ważenie robi jednocześnie drugą robotę: degeneracja bazy (kotwica na wprost
+//   kamery, gdzie rzut promienisty na ekran przestaje mieć kierunek) wypada DOKŁADNIE
+//   tam, gdzie waga jest zerem. Osobliwość i wygaszenie to jedno miejsce.
+export function limbWeight(dot, band) {
+  const a = Math.min(Math.abs(dot) / Math.max(band, 1e-6), 1);
+  return 1 - a * a * (3 - 2 * a);
+}
+
 // ── Akumulacja fazy (D-V2u) ──────────────────────────────────────────────────
 // ⚠ Faza AKUMULUJE SIĘ, nigdy nie liczy się jako ω·t. Różnica jest widoczna dokładnie
 //   wtedy, gdy gate kręci pokrętłem: przy akumulacji zmiana ω to zmiana PRĘDKOŚCI,

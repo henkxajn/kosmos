@@ -30,12 +30,19 @@
 //   T7  granAmplitude (S2) — ciągła rampa po px. KONTROLA: degeneracja pxFull <= pxMin
 //       daje próg skokowy, nie NaN.
 //   T8  Żywy shader S2 — piny TREŚCI: rozdzielony sunNoise, straż smoothstep, obrót warpu.
+//   T9  Żywa korona S3 — kierunek świata, straż normalize, return zamiast discard, NOŚNY
+//       sufit. KONTROLA PINU: słowo discard JEST w komentarzu shadera, więc pin bez
+//       zdejmowania komentarzy byłby ślepy.
+//   T10 Cykl życia protuberancji (S4, D-V2l) — odroczenie z S1 wygasło wraz z wołającym.
+//       KONTROLA: env i limbWeight NIE są stałe (trywialna implementacja padłaby).
+//   T11 Protuberancje w GLSL — prostokąt przed szumem, snoise(vec2) na płaskim quadzie,
+//       DOKŁADNA maska promień-kontra-kula. KONTROLA: maska nie jest testem 2D w quadzie.
 
 import fs from 'fs';
 import crypto from 'crypto';
 import {
   sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase, FADE_LO_CAP,
-  classGranParams, granAmplitude,
+  classGranParams, granAmplitude,  promSlotTiming, promEnvelope, limbWeight,
 } from '../../renderer/SunAnimationLogic.js';
 
 let pass = 0, fail = 0;
@@ -56,8 +63,13 @@ const pullGlsl = (name) => {
 };
 const sha = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex').slice(0, 16);
 // ⚠ Sumy wzięte z GLSL, który stał w renderStar w commicie b7c7360 i został przeniesiony
-//   bez zmiany ani jednego znaku. S2 ZMIENIA fragment rdzenia — i wtedy ta suma ma paść,
-//   żeby zmiana była świadoma, a nie przypadkowa.
+//   bez zmiany ani jednego znaku.
+// ⚠ SPROSTOWANIE wobec pierwszej wersji: zapowiadałem, że S2 zmieni fragment rdzenia
+//   i suma ma wtedy paść. Tak się NIE stało i nie powinno było: kontrakt kill-switcha
+//   wymaga, żeby OFF było stanem sprzed slice'u co do bajtu, a jedynym sposobem, żeby to
+//   ZAGWARANTOWAĆ, jest zostawić te literały w spokoju i dopisać warianty *_LIVE obok.
+//   Dlatego te cztery sumy mają przechodzić przez CAŁY arc — jeśli któraś padnie, ktoś
+//   ruszył ścieżkę OFF i to jest wtedy defekt, a nie planowana zmiana.
 const GOLDEN = {
   STAR_CORE_VERT:   { len: 367,  sha: '1698e482ec6d2219' },
   STAR_CORE_FRAG:   { len: 1114, sha: '6b6d6b694a39b94d' },
@@ -288,8 +300,13 @@ ok('wczesne wyjście PRZED szumem i przez return, NIE discard (early-Z zostaje)'
   && !coronaLiveCode.includes('discard'));
 ok('KONTROLA pinu: słowo discard JEST w komentarzu, więc pin bez zdejmowania komentarzy byłby ślepy',
   coronaLive.includes('discard') && !coronaLiveCode.includes('discard'));
-ok('SUFIT NOŚNY: wynik przechodzi przez min(..., uCoronaGuard) (D-V2i)',
-  coronaLive.includes('min(uColor * uGain * I * S, vec3(uCoronaGuard))'));
+// ⚠ Od S4 pod sufitem stoi SUMA korony i protuberancji. To nie jest kosmetyka: gdyby
+//   protuberancje dodawano PO clampie, sufit przestałby cokolwiek gwarantować, a cała
+//   podprogowość D-V2k opiera się właśnie na tym, że przechodzą przez to samo min().
+ok('SUFIT NOŚNY: SUMA korony i protuberancji przechodzi przez min(..., uCoronaGuard) (D-V2i)',
+  coronaLive.includes('min(uColor * uGain * I * S + prom, vec3(uCoronaGuard))'));
+ok('KONTROLA: nic nie jest dodawane do koloru PO clampie (sufit byłby wtedy fikcją)',
+  !/vec3 c = min\([^;]*\);[\s\S]{0,200}c \+=/.test(coronaLive));
 ok('faza dryfu przychodzi UNIFORMEM, nie jest liczona jako omega*czas (D-V2u)',
   coronaLive.includes('uniform float uStreamerPhase;') && !/uStreamerDrift\s*\*/.test(coronaLive));
 ok('pole zależy od kierunku, nie od promienia (promieniste smugi, nie plamy)',
@@ -300,6 +317,83 @@ ok('KONTROLA: wariant VERBATIM korony nie zna ANI JEDNEGO uniformu S3 — ście�
   && !coronaFrag.includes('uSunCamRight'));
 ok('KONTROLA: vertex korony jest WSPÓLNY — żywa ścieżka nie dodała ani jednego varying',
   pullGlsl('STAR_CORONA_VERT') !== null && !shaderSrc.includes('STAR_CORONA_VERT_LIVE'));
+
+// ── T10 ──────────────────────────────────────────────────────────────────────
+console.log('\nT10 — cykl życia protuberancji (D-V2l); odroczenie z S1 wygasło');
+const tim = promSlotTiming(0.5, 0.5);
+const slotMid = { ...tim, offset: 0 };
+const totalMid = tim.dormant + tim.rise + tim.sustain + tim.collapse;
+ok('rise/collapse są STAŁE (4 s / 6 s)', tim.rise === 4 && tim.collapse === 6);
+ok('dormant w [25,70]: ' + tim.dormant.toFixed(1), tim.dormant >= 25 && tim.dormant <= 70);
+ok('sustain w [12,25]: ' + tim.sustain.toFixed(1), tim.sustain >= 12 && tim.sustain <= 25);
+ok('skrajne losowania trafiają w brzegi przedziałów',
+  promSlotTiming(0, 0).dormant === 25 && promSlotTiming(1, 1).dormant === 70
+  && promSlotTiming(0, 0).sustain === 12 && promSlotTiming(1, 1).sustain === 25);
+// ⚠ Anty-kicz jest LICZBĄ: wypełnienie ~0.375 x 4 sloty = ~1,5 aktywnego, a ważenie
+//   limbem ścina to mniej więcej o połowę — „zwykle jedna, czasem dwie, czasem żadna".
+ok('wypełnienie cyklu = 0.375 (aktywne 28.5 s / 76 s)',
+  near((totalMid - tim.dormant) / totalMid, 0.375, 1e-9));
+ok('faza dormant: env == 0', promEnvelope(0, slotMid).env === 0 && promEnvelope(40, slotMid).env === 0);
+ok('faza rise: env rośnie z 0 do 1', promEnvelope(48, slotMid).env < promEnvelope(50, slotMid).env);
+ok('faza sustain: env == 1', promEnvelope(60, slotMid).env === 1);
+ok('faza collapse: env maleje', promEnvelope(70.5, slotMid).env > promEnvelope(73, slotMid).env);
+ok('cykl jest OKRESOWY: env(t) == env(t + total)',
+  near(promEnvelope(60, slotMid).env, promEnvelope(60 + totalMid, slotMid).env, 1e-12));
+ok('ujemny czas nie psuje modulo (env skończone, w [0,1])',
+  Number.isFinite(promEnvelope(-500, slotMid).env)
+  && promEnvelope(-500, slotMid).env >= 0 && promEnvelope(-500, slotMid).env <= 1);
+ok('KONTROLA: env NIE jest stałe — trywialna implementacja zwracająca 1 padłaby',
+  promEnvelope(0, slotMid).env !== promEnvelope(60, slotMid).env);
+ok('limbWeight: 1 na limbie (dot 0), 0 poza pasmem, symetryczne względem znaku',
+  near(limbWeight(0, 0.55), 1, 1e-12) && limbWeight(0.55, 0.55) === 0
+  && near(limbWeight(0.3, 0.55), limbWeight(-0.3, 0.55), 1e-12));
+ok('KONTROLA: limbWeight NIE jest stałe i maleje monotonicznie od limbu',
+  limbWeight(0.1, 0.55) > limbWeight(0.3, 0.55) && limbWeight(0.3, 0.55) > limbWeight(0.5, 0.55));
+
+// ── T11 ──────────────────────────────────────────────────────────────────────
+console.log('\nT11 — protuberancje w GLSL: piny TREŚCI');
+const promCode = stripComments(coronaLive);
+ok('slot ma prostokąt ograniczający PRZED szumem (idiom gasStormEffect)',
+  /if \(abs\(loc\.x\) > 1\.2[\s\S]{0,80}return vec3\(0\.0\);/.test(promCode));
+ok('na PŁASKIM quadzie używa snoise(vec2), a NIE sphereNoise (3x drożej, bez sensu)',
+  promCode.includes('snoise(vec2(loc.x') && !/sphereNoise\(vec2/.test(promCode));
+ok('MASKA SYLWETKI jest dokładna: promień-kontra-kula w świecie (D-V2y)',
+  promCode.includes('float perp = sqrt(max(dot(oc, oc) - bq * bq, 0.0));')
+  && promCode.includes('smoothstep(uCoreRadius * 0.995, uCoreRadius * 1.02, perp)'));
+ok('KONTROLA: maska NIE jest testem promienia w przestrzeni quada (rzut równoległy)',
+  !/outsideDisc = smoothstep\([^)]*\bd\b/.test(promCode));
+ok('protuberancje są przemnażane przez maskę, nie dodawane obok niej',
+  promCode.includes('prom *= outsideDisc;'));
+ok('cały blok stoi za bramką uPromAny (dormant sloty nie płacą za maskę ani szum)',
+  promCode.includes('if (uPromAny > 0.5)'));
+ok('kierunek promienisty z samej kotwicy, bez budowania bazy',
+  promCode.includes('vec2 up = normalize(P.xy);'));
+ok('STRAŻ: zerowa kotwica nie wchodzi do normalize (osobliwość == wygaszenie)',
+  promCode.includes('dot(P.xy, P.xy) < 1e-8'));
+
+// ── T12 ──────────────────────────────────────────────────────────────────────
+console.log('\nT12 — każde pokrętło LIVE_SUN jest albo ŻYWE, albo jawnie BAKED');
+// ⚠ Ten pin powstał, bo S4 przemycił oba defekty naraz: PROM_DRIFT zadeklarowane
+//   i nigdy nieczytane (kształt usunięty przez 1079cd9), a PROM_GAIN czytane tylko przy
+//   budowie materiału — przez co krok 5 re-gate'u („PROM_GAIN = 3 → brak zmiany")
+//   wyglądał na dowód nasycenia sufitu, a był brakiem podpięcia pokrętła.
+//   Pokrętło, które nie jest ani żywe, ani opisane jako baked, kosztuje rundę gate'u.
+const rendererSrc = fs.readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8');
+const liveSunBlock = shaderSrc.slice(shaderSrc.indexOf('const LIVE_SUN = {'),
+                                     shaderSrc.indexOf('};', shaderSrc.indexOf('const LIVE_SUN = {')));
+const knobs = [...liveSunBlock.matchAll(/^\s{2}([A-Z][A-Z0-9_]*):/gm)].map(m => m[1]);
+ok('LIVE_SUN ma sensowną liczbę pokręteł (' + knobs.length + ')', knobs.length >= 15);
+const orphans = [];
+for (const k of knobs) {
+  const live  = rendererSrc.includes('T.' + k) || rendererSrc.includes('LIVE_SUN.' + k);
+  const baked = new RegExp('^\\s*' + k + ':.*//.*BAKED', 'm').test(liveSunBlock);
+  if (!live && !baked) orphans.push(k);
+}
+ok('żadne pokrętło nie jest sierotą (ani czytane, ani oznaczone BAKED): ' +
+   (orphans.length ? orphans.join(', ') : 'brak'), orphans.length === 0);
+ok('KONTROLA: pin dyskryminuje — zmyślone pokrętło zostałoby wykryte jako sierota',
+   !(rendererSrc.includes('T.PROM_NIE_ISTNIEJE') || /^\s*PROM_NIE_ISTNIEJE:.*BAKED/m.test(liveSunBlock)));
+ok('PROM_DRIFT nie wrócił jako martwe pole', !knobs.includes('PROM_DRIFT'));
 
 // ── wynik ────────────────────────────────────────────────────────────────────
 console.log('\n' + (fail === 0 ? 'OK' : 'FAIL') + '  ' + pass + ' pass, ' + fail + ' fail');
