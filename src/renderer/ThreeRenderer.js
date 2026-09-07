@@ -22,6 +22,8 @@ import { RegionGenerator }    from '../map/RegionSystem.js';
 import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
+import { SunShader }         from './SunShader.js';
+import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
@@ -163,17 +165,11 @@ const _GAS_LIGHT_DIR = new THREE.Vector3(); // scratch — kierunek do gwiazdy (
 const ANIM_DT_MAX_S   = 0.1;      // [s] sufit kroku animacji real-time
 const ANIM_DT_FIRST_S = 1 / 60;   // [s] pierwsza klatka — nie ma jeszcze poprzedniego stempla
 
-// ── Obrót gwiazdy (V-260) ───────────────────────────────────────────────
-// Do tej poprawki rdzeń kręcił się przez `core.rotation.y += 0.0005` liczone
-// NA KLATKĘ, więc tempo zależało od FPS maszyny: ~1.72 °/s przy 60 fps, dwa razy
-// szybciej przy 120, o połowę wolniej przy 30. To TRZECIA instancja klasy V-250
-// (chmury i gazowiec naprawione w C2) i JEDYNA, której V-255 nie wymienia.
-// 0.0005 rad/klatkę × 60 fps = 0.03 rad/s = 1.719 °/s — przy dokładnie 60 fps
-// obraz jest identyczny co do bitu, przy każdym innym FPS poprawny.
-// ⚠ Poprawka jest CELOWO POZA flagą `liveSunShader` (D-V2z): stan OFF nie ma
-// prawa przywracać defektu. W slice'ie S1 stała przeniesie się do LIVE_SUN jako
-// pokrętło gate'u — tutaj zostaje stałą, żeby ten commit nie zależał od S1.
-const STAR_SPIN_RAD_PER_S = 0.03;   // [rad/s] czasu REALNEGO
+// ⚠ Obrót gwiazdy (V-260) mieszka teraz w SunShader.LIVE_SUN.OMEGA_RAD_PER_S — obiecana
+//   w commicie 033e794 migracja stałej do pokrętła gate'u. Konsument: _tickClouds.
+//   Pokrętło jest w rad/s, nie w °/s jak LIVE_GAS.OMEGA_DEG (D-S1-a): stroi się je
+//   odczytem rotation.y, więc jednostka pokrętła i sondy musi się zgadzać.
+// ⚠ Obrót zostaje POZA flagą liveSunShader (D-V2z): OFF nie przywraca defektu klasy V-250.
 
 // Zmierzony krok animacji w sekundach. Wydzielone z _tickClouds, żeby dawało się
 // sprawdzić WYKONANIEM bez konstruowania całego renderera.
@@ -249,6 +245,15 @@ export class ThreeRenderer {
     //   KOSMOS.threeRenderer.gasTuning.OMEGA_DEG = 12
     // _tickGasMaterials czyta to co klatkę, więc działa natychmiast i globalnie.
     this.gasTuning = GasGiantShader.LIVE_GAS;
+
+    // S1 — ten sam kontrakt dla gwiazdy: KOSMOS.threeRenderer.sunTuning.OMEGA_RAD_PER_S = 0.06
+    // ⚠ To ALIAS, nie kopia. _tickSunMaterials czyta SunShader.LIVE_SUN wprost, więc pokrętło
+    //   działa TYLKO dopóki oba wskazują ten sam obiekt. Żadnego spreadu, żadnego clone'a —
+    //   inaczej konsola zmienia pole, którego nikt nie czyta (w gasTuning tak właśnie
+    //   zachowują się cztery pola wpisywane raz przy budowie materiału).
+    this.sunTuning  = SunShader.LIVE_SUN;
+    this._sunDiscPx = 0;    // średnica tarczy [CSS px] — liczona w _tickSunMaterials
+    this._sunDetail = 0;    // poziom drabiny oktaw (0/1/2); konsument w shaderze dochodzi w S2
 
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
@@ -1395,56 +1400,13 @@ export class ThreeRenderer {
     const variant = (hashCode(star.id || 'star') % TEXTURE_VARIANTS) + 1;
     const texMaps = loadStarTextures(texType, variant);
 
-    const coreMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uEmission:   { value: texMaps.emission },
-        uColor:      { value: color },
-        uBrightness: { value: brightness },   // 2.5-3.5 z STAR_TYPES.corona = skala HDR rdzenia
-        uWhitePower: { value: whitePower },   // szerokość gorącego centrum (M/K szerokie, F wąskie)
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vNormal;
-        varying vec3 vViewDir;
-        void main() {
-          vUv = uv;
-          vNormal = normalize(normalMatrix * normal);
-          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          vViewDir = normalize(-mvPos.xyz);
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D uEmission;
-        uniform vec3  uColor;
-        uniform float uBrightness;
-        uniform float uWhitePower;
-
-        varying vec2 vUv;
-        varying vec3 vNormal;
-        varying vec3 vViewDir;
-
-        void main() {
-          vec3 emTex = texture2D(uEmission, vUv).rgb;
-          float lum = dot(emTex, vec3(0.299, 0.587, 0.114));
-
-          // Limb darkening — krawędzie ciemniejsze (fizycznie poprawne)
-          float NdotV = max(dot(vNormal, vViewDir), 0.0);
-          float limb = 0.35 + 0.65 * pow(NdotV, 0.65);
-
-          // Granulacja powierzchni z tekstury emission (widoczna przy zoomie)
-          float gran = mix(0.55, 1.35, lum);
-
-          // HDR linear: kolor typu × jasność × kształt — BEZ clampu i Reinharda
-          vec3 base = uColor * uBrightness * limb * gran;
-
-          // Gorące centrum — uWhitePower×1.7 zachowuje charakter per-typ
-          // (M/K szerokie białe centrum, F wąskie)
-          base += vec3(1.0) * uBrightness * 0.45 * pow(NdotV, uWhitePower * 1.7);
-
-          gl_FragColor = vec4(base, 1.0);
-        }
-      `,
+    // ⚠ `color` jest przekazywany jako INSTANCJA (nie kopia) — alias V-248, od którego
+    //   zależy fioletowa gwiazda na etapie 4 Sfery Dysona. Szczegóły w JSDoc fabryki.
+    const coreMat = SunShader.createStarCoreMaterial({
+      emissionMap: texMaps.emission,
+      sharedColor: color,
+      brightness,
+      whitePower,
     });
     // ⚠ Nazwany uchwyt rdzenia (V-266). Do commita 033e794 obrót czytał
     //   `_starGroup.children[0]` — kontrakt POZYCYJNY, który przy zmianie kolejności
@@ -1462,30 +1424,9 @@ export class ThreeRenderer {
     // Zastępuje dawne 3 sprite'y canvas (glow ×7/×21/×42 — patrz analiza).
     const coronaCol = new THREE.Color(star.visual.glowColor ?? star.visual.color)
       .lerp(new THREE.Color(1, 1, 1), 0.5);   // 50% ku bieli — naturalniejszy glare
-    const coronaMat = new THREE.ShaderMaterial({
-      transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, depthTest: true,
-      uniforms: {
-        uColor: { value: coronaCol },
-        uGain:  { value: 0.95 * glowOpacity },   // <1.0 = korona NIE karmi bloomu (czysty gradient)
-      },
-      vertexShader: `
-        varying vec2 vP;
-        void main() {
-          vP = uv * 2.0 - 1.0;
-          gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));
-        }
-      `,
-      fragmentShader: `
-        varying vec2 vP;
-        uniform vec3  uColor;
-        uniform float uGain;
-        void main() {
-          float d = length(vP);
-          float I = (exp(-d * 4.0) - exp(-4.0)) / (1.0 - exp(-4.0));   // wykładniczo DO ZERA
-          gl_FragColor = vec4(uColor * uGain * max(I, 0.0), 1.0);
-        }
-      `,
+    const coronaMat = SunShader.createStarCoronaMaterial({
+      coronaColor: coronaCol,
+      gain: 0.95 * glowOpacity,   // <1.0 = korona NIE karmi bloomu (czysty gradient)
     });
     const coronaSize = r * glowScale * 2.2;   // G: 1.2×7×2.2 ≈ 18.5 j. (wciąż ~3× mniej niż stary sprite [3])
     const corona = new THREE.Mesh(new THREE.PlaneGeometry(coronaSize, coronaSize), coronaMat);
@@ -3668,6 +3609,7 @@ export class ThreeRenderer {
         // Animacja chmur — niezaleznie od pauzy gry (real-time)
         this._tickClouds();
         this._tickGasMaterials();        // C1a — uDetail + kierunek światła żywych gazowców
+        this._tickSunMaterials();        // S1 — drabina gwiazdy (bramkowane liveSunShader)
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
@@ -3738,6 +3680,70 @@ export class ThreeRenderer {
     }
   }
 
+  // ── S1: księgowość zależna od KAMERY (lustro _tickGasMaterials) ─────────────
+  // ⚠ Ta funkcja NIGDY nie liczy dt. Zmierzony krok ma jedno miejsce — _tickClouds —
+  //   i dekret C1b zabrania go rozdzielać. Od S2 uSunTime i wszystkie fazy też idą tam.
+  // ⚠ LIVE_SUN czytane KAŻDEJ klatki: to jest cały kontrakt „jeden token w konsoli".
+  //   Wartość wpisana raz przy budowie materiału NIE jest pokrętłem (w gasTuning są
+  //   cztery takie pola i poking ich nie robi nic).
+  _tickSunMaterials() {
+    if (!GAME_CONFIG.FEATURES.liveSunShader) return;
+    const cam = this.camera;
+    if (!cam || !this._starCore || !this._starGroup) return;
+    const T = SunShader.LIVE_SUN;
+
+    this._sunDiscPx = sunDiscPx({
+      radiusWorld:      this._starCore.geometry?.parameters?.radius ?? 1,
+      distance:         cam.position.distanceTo(this._starGroup.position),
+      viewportHeightPx: window.innerHeight || 720,
+      fovDeg:           cam.fov ?? 55,
+    });
+    this._sunDetail = sunDetailLevel(this._sunDiscPx, {
+      pxFull: T.DETAIL_PX_FULL, pxMed: T.DETAIL_PX_MED, cap: T.DETAIL_CAP,
+    });
+  }
+
+  // ── S1: przyrząd gate'u — KOSMOS.debug.sunInfo(granNeutral) ─────────────────
+  // Jedyny konsument granFadeEdges w S1. Shader dostanie brzegi dopiero w S2, więc gate
+  // widzi POLICZONE liczby o commit wcześniej, niż cokolwiek od nich zależy.
+  // ⚠ granNeutral jest PARAMETREM, nie tabelą: średnie jasności map emission zmierzono
+  //   offline (M 0.693 · K 0.782 · G 0.907 · F 1.012) i S1 celowo ich nie wpisuje na
+  //   sztywno — dane bez konsumenta to dokładnie to, co usunął V-266. Domyślne 1.0
+  //   znaczy „granulacja na neutralu".
+  getSunInfo(granNeutral = 1.0) {
+    const flag = !!GAME_CONFIG.FEATURES.liveSunShader;
+    if (!this._starCore) return { flag, active: false, reason: 'brak gwiazdy' };
+    // ⚠ discPx/detail liczy _tickSunMaterials, które przy fladze OFF w ogóle nie biegnie —
+    //   więc przy OFF są NIEAKTUALNE. Zwracamy null zamiast starej liczby: przyrząd, który
+    //   nie odróżnia „nie zmierzono" od „zmierzono", jest gorszy niż brak przyrządu.
+    //   lumaA i fade liczą się ze świeżych uniformów, więc są ważne niezależnie od flagi.
+    const u = this._starCore.material?.uniforms;
+    const c = u?.uColor?.value;
+    if (!c) return { flag, active: false, reason: 'brak uniformu uColor' };
+
+    // uColor jest LINIOWY (THREE.Color konwertuje sRGB→linear pod ColorManagement),
+    // a bramka bloomu waży Rec.709 — te same wagi, co LuminosityHighPassShader.
+    const luma709   = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    const brightness = u.uBrightness?.value ?? 0;
+    const whitePower = u.uWhitePower?.value ?? 1;
+    const T = SunShader.LIVE_SUN;
+    const fade = granFadeEdges({
+      lumaA: luma709 * brightness, whiteCoef: brightness * 0.45,
+      whitePower, granNeutral, band: T.GUARD_BAND,
+    });
+    return {
+      flag, active: flag,
+      spectralType: this._star?.spectralType ?? '?',
+      brightness, whitePower, granNeutral,
+      lumaA:  luma709 * brightness,
+      discPx: flag ? this._sunDiscPx : null,
+      detail: flag ? this._sunDetail : null,
+      omegaRadPerSec: T.OMEGA_RAD_PER_S,
+      omegaDegPerSec: T.OMEGA_RAD_PER_S * 180 / Math.PI,
+      fade,   // { cross, lo, hi } — cross === null gdy tarcza nie przecina progu
+    };
+  }
+
   // Animacja chmur + gazowca + OBROTU GWIAZDY — co klatkę, niezaleznie od pauzy gry
   // ⚠ C1b/D-V1d: żywy gazowiec dostaje uTime TUTAJ, tym samym krokiem co chmury — oba
   // są real-time i oba miały ten sam dług (Finding 250, naprawiony w C2). Dlatego stoją
@@ -3756,7 +3762,12 @@ export class ThreeRenderer {
     // Obrót gwiazdy — ten sam ZMIERZONY krok co chmury i gazowiec (V-260).
     // ⚠ Stoi TUTAJ, a nie w pętli renderowania, z tego samego powodu co gazowiec:
     //   krok czasu ma JEDNO miejsce (dekret C1b wyżej).
-    if (this._starCore) this._starCore.rotation.y += STAR_SPIN_RAD_PER_S * dt;
+    // ⚠ Przez integratePhase, nie przez `+=`: akumulacja fazy jest KONTRAKTEM (D-V2u),
+    //   a kontrakt bez konsumenta jest atrapą. Arytmetycznie to dokładnie to samo działanie.
+    if (this._starCore) {
+      this._starCore.rotation.y =
+        integratePhase(this._starCore.rotation.y, SunShader.LIVE_SUN.OMEGA_RAD_PER_S, dt);
+    }
 
     for (const [, entry] of this._planets) {
       const gasU = entry.mesh?.material?.userData?.gasUniforms;

@@ -519,6 +519,20 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // KOSMOS.debug.sunInfo()      — stan warstwy Sun 2.0 dla live gate'u (S1).
+      // KOSMOS.debug.sunInfo(0.693) — to samo, ale z ZMIERZONĄ średnią mapy emission
+      //   klasy M (K 0.782 · G 0.907 · F 1.012), czyli brzegi wygaszania takie, jakich
+      //   użyje S2. Domyślne 1.0 znaczy „granulacja na neutralu".
+      // Zwraca m.in. discPx (średnica tarczy w CSS px), detail (drabina oktaw) oraz
+      // fade { cross, lo, hi } — policzone brzegi bramki progu bloomu (D-V2e).
+      sunInfo: (granNeutral) => {
+        const r = window.KOSMOS?.threeRenderer;
+        if (!r?.getSunInfo) { console.warn('[sunInfo] brak renderera 3D'); return null; }
+        const info = r.getSunInfo(granNeutral);
+        console.table(info.fade ? { ...info, fade: undefined } : info);
+        if (info.fade) console.table(info.fade);
+        return info;
+      },
       // KOSMOS.debug.replayIntro()      — odtwórz sam lot kinowy startu (kalibracja bez nowej gry).
       // KOSMOS.debug.replayIntro(true)  — lot + ekrany narracyjne (LOG → MANUAL → nazwy).
       replayIntro: (withText) => {

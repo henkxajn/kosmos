@@ -414,6 +414,26 @@ export const GAME_CONFIG = {
     //   ⚠ Bake ZOSTAJE w obu stanach — używa go globus kolonii
     //     (PlanetGlobeRenderer ma własny kontekst GL i własny materiał).
     liveGasShaders:       true,
+
+    // ── VISUALS 1.0 / V2 (S1) — warstwa „Sun 2.0" ─────────────────────────
+    //   ON  = księgowość kamery: _tickSunMaterials liczy średnicę tarczy i poziom
+    //         drabiny oktaw. Od S2 dochodzi granulacja, od S3 strumienie korony,
+    //         od S4 protuberancje — i dopiero wtedy flaga bramkuje COKOLWIEK widocznego.
+    //   OFF = _tickSunMaterials wychodzi natychmiast; sunInfo() zwraca active:false
+    //         oraz discPx/detail = null (bo nikt ich nie zmierzył).
+    //   ⚠ POZA flagą, bo nie są jej częścią: materiały z SunShader.js (renderStar buduje
+    //     je bezwarunkowo — w S1 są przeniesione VERBATIM, więc nie ma czego bramkować)
+    //     oraz sam przyrząd KOSMOS.debug.sunInfo().
+    //   ⚠ Brak klucza = OFF (idiom liveGasShaders, nie starClassLighting).
+    //   ⚠ W S1 ON i OFF są PIKSELOWO IDENTYCZNE. Scaffold jest jałowy z założenia:
+    //     GLSL przeniesiono do SunShader.js VERBATIM (co do znaku, sprawdzone
+    //     round-tripem przy generacji), a three kluczuje cache programów po treści
+    //     źródła — identyczny string to identyczny program i identyczna klatka.
+    //     Flaga bramkuje w S1 wyłącznie księgowość CPU, żeby nie była zaślepką.
+    //   ⚠ BAZĄ stanu OFF jest gwiazda z commita b7c7360, a NIE sprzed arca:
+    //     poprawka obrotu V-260 stoi POZA flagą (D-V2z) — OFF nie ma prawa
+    //     przywracać defektu zależnego od FPS.
+    liveSunShader:        true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
