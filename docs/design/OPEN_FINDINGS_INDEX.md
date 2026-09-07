@@ -14,6 +14,11 @@
 > rejestr macierzysty `VISUALS_PLAN.md` i **WŁASNĄ PRZESTRZEŃ NAZW `V-`** — patrz ⚠ niżej,
 > jego numery **kolidują** z 246-254 arca ekonomicznego. Sweep w tej rundzie: **211/211 OK, 0 FAIL,
 > 28 advisory**.
+>
+> **Aktualizacja 2026-09-07 — slice V2 (Sun 2.0) ZAMKNIĘTY, arc VISUALS 1.0 bez otwartego frontu.**
+> Przestrzeń `V-` rośnie do **V-270**. Zamknięte w V2: **V-260** (`033e794`), **V-265** (`b7c7360`),
+> **V-266** (`1079cd9`). Nowe otwarte: **V-261**-**V-264** (Dyson wizualnie), **V-267**, **V-268**
+> (głębia i wnętrze tarczy), **V-269**, **V-270**. Sweep: **212/212 OK, 0 FAIL**.
 
 ---
 
@@ -91,7 +96,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
-| **V-246 … V-259** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
+| **V-246 … V-270** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
 
 ---
@@ -320,7 +325,7 @@ Włączenie jej to zmiana balansu, własny commit i własny pomiar.
 
 ---
 
-# B2 · REJESTR VISUALS — osobna numeracja `V-246 … V-259`
+# B2 · REJESTR VISUALS — osobna numeracja `V-246 … V-270`
 
 > Rejestr macierzysty: **`VISUALS_PLAN.md`**. Tu są **tylko wiersze OTWARTE** — zamknięcia
 > wpisuje się tam, nie tutaj (reguła 1 tego pliku).
@@ -336,9 +341,18 @@ Włączenie jej to zmiana balansu, własny commit i własny pomiar.
 | **V-255** | ⚪ dwa pozostałe zaszyte kroki `0.016` (`_colonyMarkers.tick`, `_animateTradeFireflies`) — połowa tempa przy 30 fps; bliźniaki V-250, **świadomie nietknięte w C2** |
 | **V-258** | precesja `Ry·Rz` przy pochyleniu osi |
 | **V-259** | pętla wycieku w `_syncGlobe` — canvas + kontekst **na klatkę** w gałęzi `catch` |
+| **V-261** | 🟠 **pierścienie Dysona wymiarowane wobec promienia sprzed `STAR_CORE_SCALE`** (zaszyte `starRadius = 1.6` wobec tarczy `r * 3.0`) ⇒ pierścień etapu 1 i wewnętrzne pierścienie 2-3 leżą **wewnątrz** nieprzezroczystej tarczy |
+| **V-262** | 🔴 **stan wizualny Dysona nie przeżywa wczytania zapisu ani zmiany układu** — jedyny emitent to `_onSegmentCompleted`, a słuchacz rejestruje się PO `restore()`; przy 20/20 zdarzeń już nie ma, więc utrata jest **TRWAŁA**, a panel dalej melduje etap 4 z 4 |
+| **V-263** | 🟠 **etapy 3 i 4 nie dotykają tarczy gwiazdy** — zmienia się wyłącznie `_starLight.intensity` (+ barwa na etapie 4, przez alias V-248); i18n obiecuje graczowi trzy rzeczy, których renderer nie implementuje |
+| **V-264** | 🟠 **sfera klikalna gwiazdy MNIEJSZA od tarczy** (`r * 2.5` wobec `r * 3.0`), a komentarz twierdzi odwrotnie; zewnętrzne 16,7 % promienia martwe dla kliknięć. ⚠ Świadomie NIE naprawione w V2 (U4) — powiększenie przy V-267 złapałoby planety orbit wewnętrznych |
+| **V-267** | 🔴 **sześć ręcznie pisanych ShaderMaterialów pisze głębię STAŁOPRZECINKOWĄ do bufora LOGARYTMICZNEGO** (brak chunków `logdepthbuf_*` przy `logarithmicDepthBuffer: true`) ⇒ **planeta z DOWOLNEJ odległości wygrywa test z gwiazdą**; potwierdzone na gate'cie S3. ⚠ Naprawa zmienia okluzję gwiazdy wobec KAŻDEJ planety — własny slice |
+| **V-268** | 🟡 **kamera wchodzi do wnętrza tarczy i nic tego nie pilnuje** — `_minDist` 0.3 wobec promienia rdzenia 2,29-4,57, a klik w gwiazdę tylko obniża podłogę (bez auto-zoomu) ⇒ jedno kliknięcie i scroll; `FrontSide` wycina rdzeń i korona zalewa ekran. V2 ogranicza **własny** wkład sufitem, zalania nie naprawia |
+| **V-269** | ⚪ `isTextureInCache` **wyeksportowane i nigdy niewołane** — cache chroni dziś wyłącznie to, że `Material.dispose()` w three tylko wysyła zdarzenie |
+| **V-270** | 🟠 **przekręcenie `LIVE_GAS.OMEGA_DEG` na żywo jest SKOKIEM POŁOŻENIA, nie zmianą prędkości** (`uGasTime` akumulowane bez wrapu, ω mnożone przez pełny czas) — a to było pokrętło, którym V1 stroił ω **dwa razy**. Kształt naprawy: faza akumulowana w JS (D-V2u, zastosowane w V2) |
 
 **Zamknięte w arcu** (szczegóły i pomiary w rejestrze macierzystym): **V-246** · **V-247**
 (oba w V0) · **V-250** (`cc12e04`) · **V-251** (`58628f8`) · **V-257** (`0f20904` + `118f837`) ·
+**V-260** (`033e794`) · **V-265** (`b7c7360`) · **V-266** (`1079cd9`) — trzy ostatnie w V2 ·
 **V-256** — ⚠ zamknięty **JAKO ZGODNY Z PROJEKTEM**: do gazowca nie prowadzi żadna ścieżka UI
 do mapy kolonii (tylko placówki-rafinerie, celowo jak przy planetoidach), więc zgłoszenie
 znaczyło „funkcji nie ma z projektu”, a nie „jest zepsuta”.

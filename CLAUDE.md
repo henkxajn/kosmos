@@ -3808,7 +3808,7 @@ i **nie rosną** — ⚠ *hipoteza, nie diagnoza*).
 
 ---
 
-## VISUALS 1.0 — V0 (światło gwiazdy) + V1 (żywy shader gazowca) (save **v101 bez migracji**, live-gate PASS — ARC ZAMKNIĘTY 2026-09-06)
+## VISUALS 1.0 — V0 (światło gwiazdy) + V1 (żywy shader gazowca) (save **v101 bez migracji**, live-gate PASS — ZAMKNIĘTE 2026-09-06; V2 „Sun 2.0" w osobnej sekcji niżej)
 
 Rejestr macierzysty + zapis wykonania + rejestr findingów: **`docs/design/VISUALS_PLAN.md`**.
 Projekt (decyzje `D-V0a…`, `D-V1a…D-V1m`) mieszka **po stronie właściciela** — w repo są skutki.
@@ -3909,5 +3909,94 @@ w `_syncGlobe`) — oraz trzy, które warto znać z treści, bo każdy jest puł
 kolonii (tylko placówki-rafinerie, celowo jak przy planetoidach); zgłoszenie z gate'u znaczyło
 „funkcji nie ma z projektu”, nie „jest zepsuta”.
 
-**NASTĘPNY SLICE: V2 — Sun 2.0** (granulacja domain-warp, strumienie korony, protuberancje) —
-**NIEROZPOCZĘTY**, otwiera się własnym zadaniem projektowym w przyszłej sesji.
+**V2 — Sun 2.0 ZAMKNIĘTY 2026-09-07** — własna sekcja niżej.
+
+---
+
+## VISUALS 1.0 — V2 „Sun 2.0": żywa gwiazda (save **v101 bez migracji**, live-gate PASS na każdym slice — ARC ZAMKNIĘTY 2026-09-07)
+
+Trzeci i ostatni slice arca VISUALS 1.0. Rejestr macierzysty + zapis wykonania:
+**`docs/design/VISUALS_PLAN.md`** §V2. Projekt (decyzje `D-V2a…D-V2ab`, rozstrzygnięcia
+właściciela **U1-U6**) mieszka **po stronie właściciela** — w repo są skutki.
+⚠ **Prefiks `V-` obowiązuje** (kolizja numeracji z arciem EKONOMIA AI): numer goły 246-254 =
+ekonomia, `V-<nr>` = VISUALS.
+
+**Siedem commitów — trzy higieny, cztery funkcyjne** (diff funkcji ma nie kłamać o tym, co się
+zmieniło; precedens C8 `7201670`):
+
+| commit | treść |
+|---|---|
+| `033e794` | **V-260** — obrót gwiazdy po ZMIERZONYM kroku (`0.03` rad/s w `_tickClouds`) zamiast `+= 0.0005` na klatkę. **Poza flagą** (D-V2z): OFF nie ma prawa przywracać defektu |
+| `1079cd9` | **V-266** — martwe zaślepki (`_starPromCount`, `_starCoronaUniform`, lokalna `glow`) + `_starCore` zamiast kontraktu pozycyjnego `_starGroup.children[0]` |
+| `b7c7360` | **V-265** — `loadStarTextures` ładuje wyłącznie `emission` (−24 pliki, −23,6 MiB, −64 MiB VRAM; scena układu 3→1, Stratcom 36→12) |
+| `a95539e` | **S1** — rusztowanie: NEW `SunShader.js` (GLSL + `LIVE_SUN`) + NEW `SunAnimationLogic.js` (**ZERO importów**, node-testowalne) + `FEATURES.liveSunShader` + `_tickSunMaterials` + `KOSMOS.debug.sunInfo()`. **Wizualnie JAŁOWE** |
+| `b4caa57` | **S2** — żywa granulacja (mix z teksturą, domain warp w płaszczyźnie stycznej) + **bramka progu bloomu z brzegami liczonymi na CPU** |
+| `7537d87` | **S3** — strumienie korony w kierunku ŚWIATA + **NOŚNY** sufit `CORONA_GUARD 0.98`. Domyka U6: `THREE.Clock` nie dotyka już grupy gwiazdy |
+| `6a716be` | **S4** — protuberancje: 4 sloty **złożone w quad korony** (U1), maska sylwetki promień-kontra-kula, wspólny sufit |
+
+**Kill-switch `FEATURES.liveSunShader`** (default ON; brak klucza = OFF — idiom `liveGasShaders`).
+⚠ **BAZĄ stanu OFF jest gwiazda z `b7c7360`, NIE sprzed arca** — V-260 stoi poza flagą.
+
+### ⚠ Cztery rzeczy z tego slice'u, które wychodzą poza niego
+
+1. **OFF jest identyczne Z KONSTRUKCJI, nie z obietnicy.** three kluczuje cache programów po
+   **TREŚCI ŹRÓDŁA** shadera (`WebGLShaderCache._getShaderStage` → `customVertexShaderID` →
+   `getProgramCacheKey`) ⇒ identyczny string to identyczny `WebGLProgram` i identyczna klatka.
+   Dlatego S1 przeniósł cztery literały GLSL **co do znaku**, a S2/S3/S4 ich **nie ruszały** —
+   dopisały warianty `*_LIVE` obok. Keeper trzyma cztery sumy SHA-256 (T0) i **mają przechodzić
+   przez cały arc**; padnięcie którejś znaczy, że ktoś ruszył ścieżkę OFF.
+2. **Próg `UnrealBloomPass` jest niemal BINARNY** (`smoothWidth` 0.01) i przepuszcza **CAŁY
+   teksel, nie nadwyżkę** ⇒ animacja przechodząca przez granicę sprawia, że **wrze MASKA bloomu**,
+   a zmniejszanie amplitudy tego **nie naprawia** (to nie jest problem wielkości). Lekarstwo:
+   poniżej progu `lo` granulacja jest PŁASKA, więc kontur `L=1` przestaje zależeć od szumu.
+   ⚠ Brzegi liczy **CPU co klatkę i to jest celowe**: `uColor` bywa mutowane W MIEJSCU przez alias
+   **V-248** (Dyson etap 4) bez żadnego kanału powiadomienia — bezwarunkowe przeliczanie to jedyny
+   sposób, żeby bramka nadążała za Dysonem **bez gałęzi per-etap**.
+3. **Sufit korony jest NOŚNY, nie ozdobny.** Zapas 5-12× to zapas przy **zasłoniętym** środku
+   korony; gracz jednym kliknięciem i scrollem wchodzi **do wnętrza tarczy** (V-268), gdzie
+   `FrontSide` wycina rdzeń i realny zapas klasy G spada do **1,115×**. Gate S3 sprawdził to
+   w najgorszej **osiągalnej** pozycji kamery.
+4. **Wynik live-gate S2 zmienił rolę bramki (wariant A):** z bramką wyłączoną CAŁKOWICIE limb
+   klasy M przy tarczy ~936 px **nie migotał** ⇒ `GUARD_BAND` 0.25 → **0.08**, bramka jako
+   PODŁOGA. Zera nie wybrano świadomie: przy `band = 0` shader widzi `hi == lo` i wchodzi w gałąź
+   `granFade = 1.0`, czyli bramki nie ma wcale.
+
+### ⚠ Ustalenia proceduralne dołożone przez V2 (obowiązują dalej)
+
+- **Każdy commit ruszający GLSL niesie headless-sondę kompilacji PRZED stagem, a sonda musi mieć
+  KONTROLĘ, która pada.** S4 tego nie zrobił i gate zapłacił: `Shader Error 1282,
+  VALIDATE_STATUS false` (deklaracja po użyciu), a że protuberancje są **złożone w quad korony**,
+  martwy materiał zabrał ze sobą także strumienie S3. ⚠ **Piny tekstowe nie mogą tego złapać
+  z definicji** — wszystkie stringi BYŁY obecne, tylko w złej kolejności.
+- **Keeper trzeba przepuścić przez MUTACJĘ, zanim się mu uwierzy** — **24 z 40** asercji
+  przechodziło na implementacjach ignorujących pół funkcji, bo pinowana była wielkość pomocnicza
+  (`cross`), a produktem są `lo`/`hi`. **Pin na wielkości pomocniczej nie jest pinem na wyniku.**
+- **Pin negatywny czyta KOD, nie komentarze** (+ kontrola, że słowo faktycznie jest w komentarzu).
+- **`git show` normalizuje końce linii, drzewo robocze nie** — porównuj **dysk z dyskiem**.
+  ⚠ Ta sama pułapka w skryptach łatających: `Path.read_text()` w Pythonie tłumaczy CRLF na LF
+  po cichu, więc kotwica CRLF nie trafia w plik, który JEST CRLF.
+- ⚠ **Piąte, o pokrętłach:** pokrętło ani nieczytane co klatkę, ani jawnie opisane jako `BAKED`
+  **kosztuje rundę gate'u** — gate nim kręci, nie widzi zmiany i bierze to za dowód czegoś innego.
+  W V2 zdarzyło się to dwa razy naraz (`PROM_DRIFT` martwe, `PROM_GAIN` baked), **już PO passie
+  re-gate'u**. Pilnuje tego strukturalny pin keepera T12.
+
+**Testy:** NEW `src/testing/smoke/sun_animation_logic_smoke.mjs` **145/145** (T0 sumy GLSL ·
+T1-T5 geometria/fade/faza · T6-T8 granulacja · T9 strumienie · T10-T11 protuberancje ·
+T12 pin sierocych pokręteł). Sweep **212/212 OK, 0 FAIL** · `check-i18n` PASS · zero migracji ·
+zero nowych kluczy i18n.
+
+⚠ **Ziarnistość weryfikacji (jak w całym arcu):** piny źródłowe + live gate + headless-Chrome
+sondy wykonaniowe. `ThreeRenderer` **nie importuje się pod node**, a GLSL nie jest wykonywalny
+w sweepie ⇒ **zachowanie shadera nie jest pokryte keeperem** — pokrywa je live gate.
+
+**Otwarte po V2 (żadne nie jest regresją V2, pełne wpisy w `VISUALS_PLAN.md` §Rejestr):**
+**V-261** (pierścienie Dysona wymiarowane wobec promienia sprzed `STAR_CORE_SCALE`) ·
+🔴 **V-262** (stan wizualny Dysona nie przeżywa wczytania zapisu — utrata TRWAŁA przy 20/20) ·
+**V-263** (etapy 3-4 nie dotykają tarczy; i18n obiecuje trzy rzeczy, których renderer nie robi) ·
+**V-264** (sfera klikalna mniejsza od tarczy — świadomie nietknięte, U4) ·
+🔴 **V-267** (sześć ShaderMaterialów pisze głębię stałoprzecinkową do bufora logarytmicznego ⇒
+planeta z DOWOLNEJ odległości wygrywa z gwiazdą; **naprawa zmienia okluzję w całej grze**) ·
+**V-268** (kamera wchodzi do wnętrza tarczy) · **V-269** · **V-270**.
+
+**Arc VISUALS 1.0 nie ma otwartego frontu** — kolejny slice otwiera się własnym zadaniem
+projektowym.
