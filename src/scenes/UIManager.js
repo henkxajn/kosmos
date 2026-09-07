@@ -24,9 +24,10 @@ import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
-import { COSMIC }          from '../config/LayoutConfig.js';
+import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 import { OverlayManager }  from '../ui/OverlayManager.js';
 import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
+import { resolveMapSelectionSurface } from '../ui/MapVesselPanelLogic.js';
 import { EventLogOverlay }    from '../ui/EventLogOverlay.js';
 import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
 import { ShipyardOverlay }     from '../ui/ShipyardOverlay.js';
@@ -293,7 +294,10 @@ export class UIManager {
 
     // ── OverlayManager (panele pełnoekranowe) ─────────────
     this.overlayManager = new OverlayManager();
-    this.overlayManager.register('fleet', new FleetManagerOverlay());
+    // Slice 258 — TA SAMA instancja obsluguje Dowodztwo i panel statku nad mapa 3D.
+    // Uchwyt trzymany wprost, zeby wiazanie bylo jawne (nie przez overlays['fleet']).
+    this._fleetOverlay = new FleetManagerOverlay();
+    this.overlayManager.register('fleet', this._fleetOverlay);
     // C7 — PopulationOverlay degated (treść w zakładce „Populacja" ColonyOverlay, C5).
     // Kill-switch FEATURES.populationOverlay (default OFF): nie konstruujemy overlayu →
     // listener civ:populationChanged nigdy się nie rejestruje (audyt §2.3). ON = powrót 1:1.
@@ -412,6 +416,40 @@ export class UIManager {
   // Slice 8 — kopia zbioru zaznaczonych (lead + reszta). Single-select = [lead].
   getSelectedVesselIds() {
     return [...this._selectedVesselIds];
+  }
+
+  // ── Slice 258 — panel statku z Rejestru nad mapą 3D ─────────────────────────────────────
+
+  /**
+   * Która powierzchnia obsługuje bieżące zaznaczenie mapy (D-MVP-3). Reguła mieszka
+   * w czystym `MapVesselPanelLogic` — `UIManager` nie importuje się pod node, więc `if`
+   * zaszyty tutaj byłby niepinowalny wykonaniem.
+   * @returns {'none'|'vessel'|'group'}
+   */
+  _mapSurface() {
+    return resolveMapSelectionSurface([...this._selectedVesselIds], {
+      flagOn: GAME_CONFIG.FEATURES?.mapVesselPanel !== false,
+    });
+  }
+
+  /**
+   * Geometria panelu: prawa kolumna, na lewo od Outlinera — MIRROR miejsca, w którym detal
+   * statku siedzi w Dowództwie (pamięć mięśniowa). Szerokość 300 == `REGISTRY_RIGHT_W`, więc
+   * treść układa się identycznie jak w Rejestrze. Wzór kotwiczenia: `UIManager:1755`.
+   */
+  _vesselPanelBounds(W, H) {
+    const w = 300;
+    const x = Math.max(8, W - COSMIC.OUTLINER_W - w - 12);
+    const y = COSMIC.TOP_BAND_H + 8;
+    const h = Math.max(160, H - BOTTOM_RESERVED - y - 8);
+    return { x, y, w, h };
+  }
+
+  /** Czy kursor jest nad panelem statku (blokada kamery / pochłonięcie kliku). */
+  _vesselPanelHit(x, y) {
+    const r = this._fleetOverlay?._vesselPanelRect;
+    if (!r) return false;
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
   }
 
   // Single-select: zastępuje CAŁY zbiór jednym statkiem (lub czyści gdy null).
@@ -1717,7 +1755,9 @@ export class UIManager {
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.isOver?.(x, y)) return true;
 
     // Slice 8b — FleetGroupPanel / FleetCommandPanel (lewy-dolny, pływające) blokują kamerę gdy kursor nad nimi.
-    if (window.KOSMOS?.civMode && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
+    if (window.KOSMOS?.civMode && this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
+    if (window.KOSMOS?.civMode && this._mapSurface() === 'group'
+        && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
     if (window.KOSMOS?.civMode && this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
     // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim.
     if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
@@ -1760,7 +1800,8 @@ export class UIManager {
   isPointerOverFloatingPanel(rawX, rawY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
-    if (this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
+    if (this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
+    if (this._mapSurface() === 'group' && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
     if (this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
     if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
     return false;
@@ -1796,9 +1837,15 @@ export class UIManager {
     // Faza 4 — Dok taktyczny (PRZED overlayManager; gate flaga+tryb Y). Konsumuje kliki w pas.
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
         && !this.overlayManager.isAnyOpen() && this.tacticalDock?.handleClick?.(x, y)) return true;
+    // Slice 258 — panel statku nad mapą (N==1). Ta sama instancja co Dowództwo; klik wraca
+    // do `_handleHit`, więc akcje/picker/modale działają dokładnie jak w prawej kolumnie Rejestru.
+    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel'
+        && this._fleetOverlay?.handleVesselPanelClick?.(x, y)) return true;
     // Slice 8b — panel grupy statków (PRZED overlayManager, tylko gdy żaden overlay otwarty — bo draw też gated).
+    // ⚠ Bramka `_mapSurface()` jest OBOWIĄZKOWA: panel grupy zostaje `visible` przy N==1 (self-managed
+    //   na `ui:selectionChanged`), więc bez niej jego STARE strefy łapałyby kliki, choć go nie rysujemy.
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
-        && this.fleetGroupPanel?.handleClick?.(x, y)) return true;
+        && this._mapSurface() === 'group' && this.fleetGroupPanel?.handleClick?.(x, y)) return true;
     // Slice 8b — panel dowodzenia flotą (FleetCommandPanel).
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen()
         && this.fleetCommandPanel?.handleClick?.(x, y)) return true;
@@ -2153,7 +2200,13 @@ export class UIManager {
     if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.draw(ctx, W, H);
     // Slice 8b — panel grupy statków: NA WIERZCHU sceny, ukryty gdy otwarty pełnoekranowy overlay
     // (jak ramki selekcji) — by nie nadrysowywać FleetManagerOverlay (rysowany wcześniej).
-    if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.draw(ctx, W, H);
+    if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
+        && this._mapSurface() === 'group') this.fleetGroupPanel.draw(ctx, W, H);
+    // Slice 258 — panel statku (N==1) rysowany w tym samym miejscu cyklu co panel grupy.
+    if (civMode && !globeOpen && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel') {
+      const r = this._vesselPanelBounds(W, H);
+      this._fleetOverlay?.drawVesselPanel?.(ctx, r.x, r.y, r.w, r.h);
+    }
     // C2 (S3.4b) — pasek zadań zminimalizowanych paneli (lewy-dół, nad nawigacją); ukryty gdy pełny overlay.
     // #1 (review) — bez bramki civMode: BottomContext (a więc i minimalizacja) działa też poza civMode.
     if (!globeOpen && !this.overlayManager.isAnyOpen()) this.panelDock.draw(ctx, W, H);

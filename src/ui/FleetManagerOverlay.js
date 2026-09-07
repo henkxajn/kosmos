@@ -1383,6 +1383,77 @@ export class FleetManagerOverlay {
 
   // ── Obsługa kliknięć ──────────────────────────────────────────────────────
 
+  // ── Slice 258 — panel statku nad mapą 3D (Wariant A, „panel mode") ────────────────────────
+  //
+  // ⚠ TO NIE JEST DRUGI RENDER. `drawVesselPanel` DELEGUJE do `this._drawRight` — tej samej
+  //   metody, na tej samej instancji, na tych samych polach (`_selectedVesselId`, `_missionConfig`,
+  //   `_rightScrollY`, `_cachedTargets`). Identyczność panelu mapy z prawą kolumną Rejestru jest
+  //   więc STRUKTURALNA, a nie utrzymywana dyscypliną. Gdyby ktoś zamienił delegację na kopię,
+  //   pada `map_vessel_panel_smoke` P1-id (szpieg na `_drawRight`) — i o to w tym pinie chodzi.
+  //
+  // ⚠ JEDYNA mutacja współdzielonego stanu to TRANSIENTNE wymuszenie gałęzi (D-MVP-5):
+  //   `_drawRight` jest multiplekserem i czyta `_selectedFleetId` / `_pendingSendSystemId` u góry,
+  //   więc bez wyzerowania mapa pokazałaby detal floty albo ship picker. Przywracamy w `finally`,
+  //   bo `_drawRight` potrafi rzucić (ma własny `finally` na clip) — nieprzywrócone pola zepsułyby
+  //   Dowództwo przy najbliższym otwarciu.
+  drawVesselPanel(ctx, x, y, w, h) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr || !this._selectedVesselId) { this._vesselPanelRect = null; return false; }
+    const v = vMgr.getVessel(this._selectedVesselId);
+    // D-MVP-12 — mapa nie zaznacza wrogów ani wraków; panel nie jest dla nich.
+    if (!v || v.isWreck || isEnemyVessel(v)) { this._vesselPanelRect = null; return false; }
+
+    // D-MVP-4 — router ma widzieć WYŁĄCZNIE strefy z TEGO rysowania.
+    this._hitZones = [];
+
+    const savedFleetId = this._selectedFleetId;
+    const savedSendSys = this._pendingSendSystemId;
+    this._selectedFleetId     = null;
+    this._pendingSendSystemId = null;
+    try {
+      const colMgr = window.KOSMOS?.colonyManager;
+      this._drawRight(ctx, x, y, w, h, vMgr,
+        window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem,
+        colMgr, colMgr?.activePlanetId);
+    } finally {
+      this._selectedFleetId     = savedFleetId;
+      this._pendingSendSystemId = savedSendSys;
+    }
+    this._vesselPanelRect = { x, y, w, h };
+    return true;
+  }
+
+  /**
+   * Klik w panel statku nad mapą 3D. Osobne wejście od `handleClick`, bo tamto bramkuje na
+   * `_visible`/`_bounds` OVERLAYA (a tu overlay jest zamknięty) — ale rozstrzyganie trafień
+   * i dyspozycja są TE SAME: `resolveStratcomZone` → `_handleHit`.
+   *
+   * ⚠ Prostokąt panelu jest bramką: bez niego klik w mapę poza panelem mógłby trafić w strefę
+   *   zostawioną przez POPRZEDNIE rysowanie (np. tuż po zamknięciu overlaya). Mirror `_bounds`.
+   */
+  handleVesselPanelClick(mx, my) {
+    const r = this._vesselPanelRect;
+    if (!r) return false;
+    if (mx < r.x || mx > r.x + r.w || my < r.y || my > r.y + r.h) return false;
+    if (!this._hitZones?.length) return false;
+    // Guard modalu DOM — identyczny jak w `handleClick`: modal na wierzchu połyka klik.
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return false;
+
+    // Priorytet ciała/stacji przy wyborze celu — mirror `handleClick`. Dziś inertny
+    // (`commandTacticalMap:false` ⇒ `map_body`/`map_station` nie mają producentów), zachowany
+    // ŚWIADOMIE, żeby obie powierzchnie miały JEDEN algorytm trafień, nie dwa podobne.
+    if (this._missionConfig?.step === 'select') {
+      const tgt = this._hitZones.find(z =>
+        (z.type === 'map_body' || z.type === 'map_station') &&
+        mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
+      if (tgt) { this._handleHit(tgt, mx, my); return true; }
+    }
+    const zone = resolveStratcomZone(this._hitZones, mx, my);
+    if (!zone) return false;
+    this._handleHit(zone, mx, my);
+    return true;
+  }
+
   handleClick(mx, my) {
     if (!this._visible) return false;
     if (!this._bounds) return false;

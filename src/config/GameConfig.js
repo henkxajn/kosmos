@@ -211,6 +211,10 @@ export const GAME_CONFIG = {
     fcMultiSelect:        true,   // Slice 8 — multi-select (CTRL+klik toggle + SHIFT box-select)
     fcGroupPanel:         true,   // Slice 8b — panel zarządzania zaznaczoną grupą statków (lewy-dolny róg)
     fcFleetPanel:         true,   // Slice 8b — pływający panel dowodzenia wybraną flotą (FleetCommandPanel)
+    // Slice 258 — panel statku z Rejestru nad mapą 3D (Wariant A, „panel mode"): klik w statek
+    // na mapie otwiera TĘ SAMĄ powierzchnię co prawa kolumna Dowództwa (ta sama instancja FMO).
+    // OFF ⇒ zachowanie sprzed 258: pojedynczy statek obsługuje FleetGroupPanel.
+    mapVesselPanel:       true,
     // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
     // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
     //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem
