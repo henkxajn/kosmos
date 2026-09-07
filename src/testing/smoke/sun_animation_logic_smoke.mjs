@@ -24,11 +24,18 @@
 //   T4  Degeneracje, sufit i INWERSJA gwarancji (cross > sufit ⇒ płaska strefa kończy się
 //       przed konturem). KONTROLA: sąsiedni przypadek bez inwersji.
 //   T5  integratePhase — kontrakt D-V2u. KONTROLA: forma omega*t daje inny wynik.
+//   T6  classGranParams (S2) — wyprowadzenie per klasa z temperatury, nie tabela.
+//       KONTROLA: oba mnożniki są RÓŻNE (wykładniki 0.6 i 0.8 nie są tym samym) i rosną
+//       z temperaturą — inaczej „wyprowadzenie" byłoby stałą przebraną za formułę.
+//   T7  granAmplitude (S2) — ciągła rampa po px. KONTROLA: degeneracja pxFull <= pxMin
+//       daje próg skokowy, nie NaN.
+//   T8  Żywy shader S2 — piny TREŚCI: rozdzielony sunNoise, straż smoothstep, obrót warpu.
 
 import fs from 'fs';
 import crypto from 'crypto';
 import {
   sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase, FADE_LO_CAP,
+  classGranParams, granAmplitude,
 } from '../../renderer/SunAnimationLogic.js';
 
 let pass = 0, fail = 0;
@@ -191,6 +198,75 @@ ok('akumulacja: 0.03*5 + 0.06*5 = 0.45 rad (zmiana tempa = zmiana PRĘDKOŚCI)',
   near(phSplit, 0.45, 1e-12));
 ok('KONTROLA: forma omega*t dałaby 0.60 rad — SKOK o 0.15 rad w jednej klatce (V-270)',
   near(omegaT, 0.60, 1e-12) && !near(phSplit, omegaT, 1e-6));
+
+// ── T6 ───────────────────────────────────────────────────────────────────────
+console.log('\nT6 — classGranParams: wyprowadzenie z temperatury (D-V2p)');
+const TEMPS = { M: 3500, K: 4500, G: 5800, F: 7000 };
+const EXPECT_FREQ = { M: 0.739, K: 0.859, G: 1.000, F: 1.119 };
+const EXPECT_BOIL = { M: 0.668, K: 0.816, G: 1.000, F: 1.162 };
+for (const [k, T] of Object.entries(TEMPS)) {
+  const p = classGranParams({ temperature: T });
+  ok('klasa ' + k + ': freqMult = ' + p.freqMult.toFixed(3) + ' (tabela ' + EXPECT_FREQ[k].toFixed(3) + ')',
+    near(p.freqMult, EXPECT_FREQ[k], 0.001));
+  ok('klasa ' + k + ': boilMult = ' + p.boilMult.toFixed(3) + ' (tabela ' + EXPECT_BOIL[k].toFixed(3) + ')',
+    near(p.boilMult, EXPECT_BOIL[k], 0.001));
+}
+ok('G (5800 K) jest punktem odniesienia: oba mnożniki dokładnie 1.0',
+  classGranParams({ temperature: 5800 }).freqMult === 1 && classGranParams({ temperature: 5800 }).boilMult === 1);
+ok('monotoniczność: chłodniejsza gwiazda ma WIĘKSZE komórki (niższa częstotliwość)',
+  classGranParams({ temperature: 3500 }).freqMult < classGranParams({ temperature: 7000 }).freqMult);
+ok('KONTROLA: freqMult != boilMult poza G — to są dwa RÓŻNE wykładniki, nie jedna stała',
+  !near(classGranParams({ temperature: 3500 }).freqMult, classGranParams({ temperature: 3500 }).boilMult, 1e-6)
+  && !near(classGranParams({ temperature: 7000 }).freqMult, classGranParams({ temperature: 7000 }).boilMult, 1e-6));
+ok('KONTROLA: brak/zerowa temperatura spada na G, nie na NaN',
+  classGranParams({}).freqMult === 1 && Number.isFinite(classGranParams({ temperature: 0 }).boilMult));
+
+// ── T7 ───────────────────────────────────────────────────────────────────────
+console.log('\nT7 — granAmplitude: ciągła rampa po średnicy tarczy (D-V2v)');
+const AMP = { pxMin: 70, pxFull: 180 };
+ok('px=0   -> 0 (przy domyślnej ramce układu granulacji NIE MA — D-V2ab)', granAmplitude(0, AMP) === 0);
+ok('px=70  -> 0 (dolny brzeg)', granAmplitude(70, AMP) === 0);
+ok('px=125 -> 0.5 (środek rampy, smoothstep)', near(granAmplitude(125, AMP), 0.5, 1e-9));
+ok('px=180 -> 1 (górny brzeg)', granAmplitude(180, AMP) === 1);
+ok('px=400 -> 1 (nasycenie)', granAmplitude(400, AMP) === 1);
+ok('monotoniczność na całej rampie',
+  granAmplitude(80, AMP) < granAmplitude(120, AMP) && granAmplitude(120, AMP) < granAmplitude(160, AMP));
+ok('KONTROLA: degeneracja pxFull <= pxMin daje próg skokowy, nie NaN',
+  granAmplitude(100, { pxMin: 180, pxFull: 180 }) === 0
+  && granAmplitude(200, { pxMin: 180, pxFull: 180 }) === 1);
+
+// ── T8 ───────────────────────────────────────────────────────────────────────
+console.log('\nT8 — żywy shader S2: piny TREŚCI (GLSL nie jest wykonywalny w sweepie)');
+const liveFrag = pullGlsl('STAR_CORE_FRAG_LIVE');
+ok('żywy wariant istnieje i jest ISTOTNIE dłuższy od verbatim', liveFrag && liveFrag.length > frag.length);
+ok('sunNoise ma ROZDZIELONY kierunek mieszania i punkt próbkowania (D-V2t)',
+  liveFrag.includes('float sunNoise(vec3 dir, vec3 p, float scale)')
+  && liveFrag.includes('vec3 w = abs(dir);'));
+ok('warp OBRACA się w płaszczyźnie stycznej (kipienie w miejscu, nie dryf — D-V2d)',
+  liveFrag.includes('w1 * ca - w2 * sa') && liveFrag.includes('w1 * sa + w2 * ca'));
+ok('faza kipienia przychodzi UNIFORMEM, nie jest liczona jako omega*czas (D-V2u)',
+  liveFrag.includes('uniform float uBoilPhase;') && !/uBoilHz\s*\*/.test(liveFrag));
+ok('STRAŻ smoothstep: hi > lo sprawdzane przed użyciem (edge0 == edge1 dzieli przez zero)',
+  liveFrag.includes('(uGranFadeHi > uGranFadeLo)'));
+ok('granulacja MIESZA się z teksturą, nie zastępuje jej (D-V2b)',
+  liveFrag.includes('mix(granTex, granTex * granProc, uGranMix)'));
+ok('drabina 2/3/4: druga oktawa odpada dokładnie na poziomie 1 (warp ją zastępuje)',
+  liveFrag.includes('bool secondOctave = (uSunDetail != 1);'));
+ok('żywy vertex wystawia pozycję obiektu (granulacja jest w przestrzeni obiektu)',
+  pullGlsl('STAR_CORE_VERT_LIVE').includes('vObjPos = position;'));
+// ⚠ Wynik live-gate S2 (wariant A): bramka zeszła do roli PODŁOGI. Pin trzyma wartość,
+//   bo 0.25 i 0.08 dają WIDOCZNIE inny kawałek tarczy przy pełnym kontraście, a 0 wyłącza
+//   mechanizm w całości (shader wchodzi wtedy w gałąź granFade = 1.0).
+ok('shipowany GUARD_BAND == 0.08 (podłoga po wariancie A, NIE 0 i NIE 0.25)',
+  shaderSrc.includes('GUARD_BAND: 0.08,'));
+const shipped = granFadeEdges({ ...CLASSES.M, band: 0.08 });
+ok('przy shipowanym bandzie M: lo ' + shipped.lo.toFixed(4) + ' bez zmian, hi ' + shipped.hi.toFixed(4) + ' = lo + 0.08',
+  near(shipped.lo, CLASSES.M.lo, 0.001) && near(shipped.hi - shipped.lo, 0.08, 1e-9));
+ok('KONTROLA: band NIE rusza strefy płaskiej — lo identyczne przy 0.08 i 0.25 (lewarem jest FADE_MARGIN)',
+  granFadeEdges({ ...CLASSES.M, band: 0.08 }).lo === granFadeEdges({ ...CLASSES.M, band: 0.25 }).lo);
+
+ok('KONTROLA: wariant VERBATIM nie zna ANI JEDNEGO uniformu S2 — ścieżka OFF nietknięta',
+  !frag.includes('uGranMix') && !frag.includes('uBoilPhase') && !frag.includes('sunNoise'));
 
 // ── wynik ────────────────────────────────────────────────────────────────────
 console.log('\n' + (fail === 0 ? 'OK' : 'FAIL') + '  ' + pass + ' pass, ' + fail + ' fail');

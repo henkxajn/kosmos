@@ -99,6 +99,34 @@ export function granFadeEdges({ lumaA, whiteCoef, whitePower, granNeutral, band 
   return { cross, lo: fadeLo, hi: fadeHi, inverted: fadeLo <= cross };
 }
 
+// ── Parametry granulacji per KLASA, WYPROWADZONE (D-V2p) ─────────────────────
+// Zasada domu: prostota reguł, złożoność emergentna — więc wyprowadzamy z pola, które
+// STAR_TYPES już niesie (temperature), zamiast dopisywać czwartą tabelę do strojenia.
+// Fizyka w znaku się zgadza dla karłów ciągu głównego: rozmiar granuli skaluje się
+// z wysokością skali ciśnieniowej, więc chłodniejsza gwiazda ma WIĘKSZE komórki
+// (niższa częstotliwość), a gorętsza — drobniejsze i szybsze.
+//   freqMult: M 0.74 · K 0.86 · G 1.00 · F 1.12   (rozpiętość ×1,5)
+//   boilMult: M 0.66 · K 0.81 · G 1.00 · F 1.16   (rozpiętość ×1,8)
+// ⚠ Wykładniki są POKRĘTŁAMI, nie prawami przyrody — dobrane tak, by różnica była
+//   czytelna, a nie karykaturalna. Realny rozrzut aktywności M vs F to rzędy wielkości.
+export const GRAN_FREQ_EXP = 0.6;
+export const GRAN_BOIL_EXP = 0.8;
+export function classGranParams({ temperature }) {
+  const t = Math.max(temperature || 5800, 1) / 5800;
+  return { freqMult: Math.pow(t, GRAN_FREQ_EXP), boilMult: Math.pow(t, GRAN_BOIL_EXP) };
+}
+
+// ── Ciągłe wygaszanie amplitudy po rozmiarze tarczy (D-V2v) ──────────────────
+// ⚠ Amplituda GAŚNIE PŁYNNIE, a skacze wyłącznie liczba oktaw. Powód jest asymetryczny:
+//   dołożona oktawa to pasmo częstotliwości, którego przy tej wielkości tarczy i tak nie
+//   widać, więc jej wejście jest niewidoczne; skok AMPLITUDY widać zawsze jako „pop".
+//   To także powód, dla którego drabina nie potrzebuje histerezy.
+export function granAmplitude(px, { pxMin, pxFull }) {
+  if (!(pxFull > pxMin)) return px >= pxFull ? 1 : 0;   // degeneracja: próg skokowy
+  const t = Math.min(Math.max((px - pxMin) / (pxFull - pxMin), 0), 1);
+  return t * t * (3 - 2 * t);                            // smoothstep
+}
+
 // ── Akumulacja fazy (D-V2u) ──────────────────────────────────────────────────
 // ⚠ Faza AKUMULUJE SIĘ, nigdy nie liczy się jako ω·t. Różnica jest widoczna dokładnie
 //   wtedy, gdy gate kręci pokrętłem: przy akumulacji zmiana ω to zmiana PRĘDKOŚCI,

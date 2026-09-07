@@ -23,7 +23,8 @@ import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
-import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase } from './SunAnimationLogic.js';
+import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
+         classGranParams, granAmplitude } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
@@ -253,7 +254,11 @@ export class ThreeRenderer {
     //   zachowują się cztery pola wpisywane raz przy budowie materiału).
     this.sunTuning  = SunShader.LIVE_SUN;
     this._sunDiscPx = 0;    // średnica tarczy [CSS px] — liczona w _tickSunMaterials
-    this._sunDetail = 0;    // poziom drabiny oktaw (0/1/2); konsument w shaderze dochodzi w S2
+    this._sunDetail = 0;    // poziom drabiny oktaw (0/1/2)
+    this._sunGranU     = null;  // uniformy ŻYWEGO rdzenia (null przy fladze OFF)
+    this._sunBoilPhase = 0;     // [rad] AKUMULOWANA faza kipienia (D-V2u)
+    this._sunBoilMult  = 1;     // mnożnik tempa z klasy gwiazdy
+    this._sunFreqMult  = 1;     // mnożnik skali komórek z klasy gwiazdy
 
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
@@ -1285,6 +1290,7 @@ export class ThreeRenderer {
       this.scene.remove(this._starGroup);
       this._starGroup = null;
       this._starCore   = null;   // rdzeń był dzieckiem groupy (już zdisposowany)
+      this._sunGranU   = null;   // uniformy żywego rdzenia znikają razem z materiałem
       this._starCorona = null;   // billboard korony był dzieckiem groupy (już zdisposowany)
     }
 
@@ -1402,12 +1408,23 @@ export class ThreeRenderer {
 
     // ⚠ `color` jest przekazywany jako INSTANCJA (nie kopia) — alias V-248, od którego
     //   zależy fioletowa gwiazda na etapie 4 Sfery Dysona. Szczegóły w JSDoc fabryki.
+    const liveSun = !!GAME_CONFIG.FEATURES.liveSunShader;
+    const granCls = classGranParams({ temperature: stData.temperature ?? 5800 });
+    this._sunFreqMult  = granCls.freqMult;
+    this._sunBoilMult  = granCls.boilMult;
+    this._sunBoilPhase = 0;
     const coreMat = SunShader.createStarCoreMaterial({
       emissionMap: texMaps.emission,
       sharedColor: color,
       brightness,
       whitePower,
+      live: liveSun,
+      seed: liveSun ? SunShader.sunSeedFromId(star.id) : null,
+      granFreqMult: granCls.freqMult,
     });
+    // Uchwyt uniformów żywej granulacji — null przy OFF, więc każdy konsument bramkuje
+    // się na NIM, a nie na fladze (wzór D-V1: bramka stoi na MATERIALE, nie na typie).
+    this._sunGranU = liveSun ? coreMat.uniforms : null;
     // ⚠ Nazwany uchwyt rdzenia (V-266). Do commita 033e794 obrót czytał
     //   `_starGroup.children[0]` — kontrakt POZYCYJNY, który przy zmianie kolejności
     //   budowy grupy łamie się CICHO (bez wyjątku, bez logu: kręci się nie ten mesh,
@@ -3701,6 +3718,34 @@ export class ThreeRenderer {
     this._sunDetail = sunDetailLevel(this._sunDiscPx, {
       pxFull: T.DETAIL_PX_FULL, pxMed: T.DETAIL_PX_MED, cap: T.DETAIL_CAP,
     });
+
+    const u = this._sunGranU;
+    if (!u) return;
+    u.uSunDetail.value    = this._sunDetail;
+    u.uGranAmp.value      = granAmplitude(this._sunDiscPx,
+                              { pxMin: T.SURF_PX_MIN, pxFull: T.SURF_PX_FULL });
+    u.uGranMix.value      = T.GRAN_MIX;
+    u.uGranContrast.value = T.GRAN_CONTRAST;
+    u.uGranWarp.value     = T.GRAN_WARP;
+    u.uGranFreq.value     = T.GRAN_FREQ * this._sunFreqMult;
+
+    // Brzegi bramki progu bloomu — liczone CO KLATKĘ, i to jest celowe.
+    // ⚠ uColor bywa mutowane W MIEJSCU przez alias V-248 (etap 4 Sfery Dysona robi
+    //   setHex na świetle, a to TA SAMA instancja Color). Nie ma kanału powiadomienia
+    //   o tej mutacji, więc jedynym sposobem, żeby bramka nadążyła za Dysonem BEZ
+    //   gałęzi per-etap, jest przeliczać ją bezwarunkowo. Koszt: ~80 iteracji bisekcji
+    //   na klatkę, czyli nic wobec jednego fragmentu tarczy.
+    const c = u.uColor.value;
+    const lumaA = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) * u.uBrightness.value;
+    const fade = granFadeEdges({
+      lumaA,
+      whiteCoef:   u.uBrightness.value * 0.45,
+      whitePower:  u.uWhitePower.value,
+      granNeutral: SunShader.emissionMeanFor(this._star?.spectralType),
+      band:        T.GUARD_BAND,
+    });
+    u.uGranFadeLo.value = fade.lo;
+    u.uGranFadeHi.value = fade.hi;
   }
 
   // ── S1: przyrząd gate'u — KOSMOS.debug.sunInfo(granNeutral) ─────────────────
@@ -3710,7 +3755,7 @@ export class ThreeRenderer {
   //   offline (M 0.693 · K 0.782 · G 0.907 · F 1.012) i S1 celowo ich nie wpisuje na
   //   sztywno — dane bez konsumenta to dokładnie to, co usunął V-266. Domyślne 1.0
   //   znaczy „granulacja na neutralu".
-  getSunInfo(granNeutral = 1.0) {
+  getSunInfo(granNeutral = null) {
     const flag = !!GAME_CONFIG.FEATURES.liveSunShader;
     if (!this._starCore) return { flag, active: false, reason: 'brak gwiazdy' };
     // ⚠ discPx/detail liczy _tickSunMaterials, które przy fladze OFF w ogóle nie biegnie —
@@ -3727,14 +3772,19 @@ export class ThreeRenderer {
     const brightness = u.uBrightness?.value ?? 0;
     const whitePower = u.uWhitePower?.value ?? 1;
     const T = SunShader.LIVE_SUN;
+    // ⚠ Domyślnie ZMIERZONA średnia mapy emission tej klasy — czyli dokładnie to, czego
+    //   używa shader. Podaj własną liczbę, żeby zobaczyć brzegi przy innym neutralu.
+    const neutral = granNeutral ?? SunShader.emissionMeanFor(this._star?.spectralType);
     const fade = granFadeEdges({
       lumaA: luma709 * brightness, whiteCoef: brightness * 0.45,
-      whitePower, granNeutral, band: T.GUARD_BAND,
+      whitePower, granNeutral: neutral, band: T.GUARD_BAND,
     });
     return {
       flag, active: flag,
       spectralType: this._star?.spectralType ?? '?',
-      brightness, whitePower, granNeutral,
+      brightness, whitePower, granNeutral: neutral,
+      granAmp: this._sunGranU ? this._sunGranU.uGranAmp.value : null,
+      boilPhase: this._sunBoilPhase,
       lumaA:  luma709 * brightness,
       discPx: flag ? this._sunDiscPx : null,
       detail: flag ? this._sunDetail : null,
@@ -3767,6 +3817,14 @@ export class ThreeRenderer {
     if (this._starCore) {
       this._starCore.rotation.y =
         integratePhase(this._starCore.rotation.y, SunShader.LIVE_SUN.OMEGA_RAD_PER_S, dt);
+    }
+    // Kipienie granulacji — TEN SAM zmierzony krok co obrót, chmury i gazowiec.
+    // ⚠ Faza jest AKUMULOWANA, nie liczona jako ω·t (D-V2u): inaczej przekręcenie
+    //   BOIL_HZ na gate'cie teleportowałoby wzór zamiast zmienić jego tempo (V-270).
+    if (this._sunGranU) {
+      this._sunBoilPhase = integratePhase(
+        this._sunBoilPhase, SunShader.LIVE_SUN.BOIL_HZ * this._sunBoilMult, dt);
+      this._sunGranU.uBoilPhase.value = this._sunBoilPhase;
     }
 
     for (const [, entry] of this._planets) {
