@@ -54,6 +54,20 @@ const LIVE_SUN = {
   SURF_PX_MIN:   70,
   SURF_PX_FULL:  180,
 
+  // ── Korona: strumienie + oddech (S3) ─────────────────────────────────────
+  // ⚠ SUFIT 0.98 JEST NOŚNY, nie ozdobny. Zapas do progu bloomu przy limbie wynosi
+  //   5-12×, ale to zapas przy ZASŁONIĘTYM środku korony. Gracz jednym kliknięciem
+  //   i scrollem wjeżdża do WNĘTRZA tarczy (_minDist 0.3 wobec promienia rdzenia
+  //   2.29-4.57): FrontSide wycina rdzeń, korona przestaje być zasłonięta i zalewa
+  //   ekran wartością I(0) = 1.0. Realny zapas klasy G wynosi tam 1,115× — czyli
+  //   mnożnik 1.6 BEZ sufitu wypycha pełnoekranowy addytywny quad ponad próg.
+  STREAMER_DEPTH: 0.55,   // ile smugi modulują gładki gradient
+  STREAMER_GAIN:  1.6,    // szczytowe pojaśnienie promienia (pod sufitem)
+  STREAMER_DRIFT: 0.015,  // [rad/s] ko-rotacja smug wokół osi gwiazdy
+  CORONA_GUARD:   0.98,   // twardy sufit luminancji źródła korony
+  BREATH_AMP:     0.03,   // ±3% „oddechu" jasności (zachowane z V0)
+  BREATH_HZ:      0.9,    // [rad/s] tempo oddechu
+
   // Szerokość rampy wygaszania granulacji [NdotV] — patrz granFadeEdges (D-V2e).
   // ⚠ Konsument w shaderze dochodzi w S2; w S1 czyta to KOSMOS.debug.sunInfo(),
   //   żeby gate zobaczył policzone brzegi ZANIM cokolwiek od nich zależy.
@@ -275,6 +289,68 @@ ${GLSL_NOISE_LIB}
         }
       `;
 
+const STAR_CORONA_FRAG_LIVE = /* glsl */ `
+        varying vec2 vP;
+        uniform vec3  uColor;
+        uniform float uGain;
+
+        uniform vec3  uSunSeed;
+        uniform vec3  uSunCamRight;
+        uniform vec3  uSunCamUp;
+        uniform float uStreamerPhase;
+        uniform float uStreamerDepth;
+        uniform float uStreamerGain;
+        uniform float uCoronaGuard;
+        uniform int   uSunDetail;
+
+${GLSL_NOISE_LIB}
+
+        void main() {
+          float d = length(vP);
+          float I = (exp(-d * 4.0) - exp(-4.0)) / (1.0 - exp(-4.0));   // wykladniczo DO ZERA
+
+          // ⚠ Wczesne wyjscie PRZED szumem. Dwa powody naraz:
+          //   1. ~29% quada nie ma nic do pokazania, a szum kosztuje tam tyle samo;
+          //   2. ogony alfy w zakresie 0.0005-0.03 to dokladnie ten mechanizm, ktory
+          //      kazal usunac trzy stare sprite-y glow (mierzony podbicie szarosci
+          //      +5.5/255) — zerowanie ich u zrodla zamyka te klase.
+          // ⚠ To jest return, a NIE discard: discard wylacza wczesne odrzucanie
+          //   glebi dla calego draw calla, wiec fragmenty za nieprzezroczystym rdzeniem
+          //   liczylyby caly szum, zanim zostana wyrzucone.
+          if (I < 0.002) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+
+          float S = 1.0;
+          if (uSunDetail >= 1) {
+            // Kierunek NA NIEBIE, w przestrzeni SWIATA — nie kat ekranowy (D-V2h).
+            // Quad niesie kwaternion kamery, wiec kat liczony z samego vP bylby
+            // przybity do ekranu i smugi obracalyby sie razem z kamera: klasyczny
+            // znak rozpoznawczy billboardu. Odtworzenie kierunku swiata z bazy kamery
+            // sprawia, ze orbitowanie PRZECIAGA wielkie kolo przez pole 3D i smugi
+            // naleza do gwiazdy, a nie do obserwatora.
+            // ⚠ Straz na dlugosci: w samym srodku quada vP = (0,0), a normalize(0)
+            //   to NaN. Srodek bywa widoczny — gracz moze wjechac kamera do wnetrza
+            //   tarczy, gdzie rdzen znika przez backface culling.
+            vec3 sky = (d > 1e-4)
+              ? normalize(uSunCamRight * vP.x + uSunCamUp * vP.y)
+              : vec3(0.0, 1.0, 0.0);
+            float ca = cos(uStreamerPhase), sa = sin(uStreamerPhase);
+            vec3 sr = vec3(sky.x * ca - sky.z * sa, sky.y, sky.x * sa + sky.z * ca) + uSunSeed;
+            // Pole zalezy WYLACZNIE od kierunku, nie od promienia — stad promieniste
+            // smugi zamiast plam.
+            float ray = sphereNoise(sr, 3.2);
+            if (uSunDetail >= 2) ray += sphereNoise(sr, 7.4) * 0.4;
+            S = 1.0 + uStreamerDepth * (uStreamerGain - 1.0) * smoothstep(-0.15, 0.55, ray)
+                    - uStreamerDepth * 0.35 * smoothstep(0.20, -0.45, ray);
+          }
+
+          // ⚠ Sufit NOSNY (patrz LIVE_SUN.CORONA_GUARD): przy kamerze wewnatrz tarczy
+          //   korona jest pelnoekranowa i NIEZASLONIETA, wiec bez tego clampa mnoznik
+          //   1.6 wypchnalby ja ponad prog bloomu.
+          vec3 c = min(uColor * uGain * I * S, vec3(uCoronaGuard));
+          gl_FragColor = vec4(max(c, 0.0), 1.0);
+        }
+      `;
+
 // ── Fabryki materiałów ──────────────────────────────────────────────────────
 
 /**
@@ -329,16 +405,38 @@ function createStarCoreMaterial({ emissionMap, sharedColor, brightness, whitePow
  * ⚠ `gain` < 1.0 trzyma koronę PONIŻEJ progu bloomu (1.0) — decyzja z V0, nie przypadek:
  *   szeroki miękki zanik robi korona, ciasny glare robi bloom. Nie podnosić bez pomiaru.
  */
-function createStarCoronaMaterial({ coronaColor, gain }) {
+function createStarCoronaMaterial({ coronaColor, gain, live = false, seed = null }) {
+  const uniforms = {
+    uColor: { value: coronaColor },
+    uGain:  { value: gain },
+  };
+  // ⚠ Vertex jest WSPÓLNY dla obu ścieżek — żywa korona nie potrzebuje ani jednego
+  //   nowego varying (kierunek świata odtwarzamy z bazy kamery we fragmencie).
+  if (!live) {
+    return new THREE.ShaderMaterial({
+      transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: true,
+      uniforms,
+      vertexShader:   STAR_CORONA_VERT,
+      fragmentShader: STAR_CORONA_FRAG,
+    });
+  }
+  Object.assign(uniforms, {
+    uSunSeed:       { value: seed ?? new THREE.Vector3() },
+    uSunCamRight:   { value: new THREE.Vector3(1, 0, 0) },   // sensowny stan startowy —
+    uSunCamUp:      { value: new THREE.Vector3(0, 1, 0) },   // uniform pisany co klatkę
+    uStreamerPhase: { value: 0 },   // AKUMULOWANA faza (D-V2u)
+    uStreamerDepth: { value: LIVE_SUN.STREAMER_DEPTH },
+    uStreamerGain:  { value: LIVE_SUN.STREAMER_GAIN },
+    uCoronaGuard:   { value: LIVE_SUN.CORONA_GUARD },
+    uSunDetail:     { value: 0 },
+  });
   return new THREE.ShaderMaterial({
     transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, depthTest: true,
-    uniforms: {
-      uColor: { value: coronaColor },
-      uGain:  { value: gain },
-    },
+    uniforms,
     vertexShader:   STAR_CORONA_VERT,
-    fragmentShader: STAR_CORONA_FRAG,
+    fragmentShader: STAR_CORONA_FRAG_LIVE,
   });
 }
 

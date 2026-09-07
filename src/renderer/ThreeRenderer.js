@@ -259,6 +259,9 @@ export class ThreeRenderer {
     this._sunBoilPhase = 0;     // [rad] AKUMULOWANA faza kipienia (D-V2u)
     this._sunBoilMult  = 1;     // mnożnik tempa z klasy gwiazdy
     this._sunFreqMult  = 1;     // mnożnik skali komórek z klasy gwiazdy
+    this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
+    this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
+    this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
 
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
@@ -1291,6 +1294,7 @@ export class ThreeRenderer {
       this._starGroup = null;
       this._starCore   = null;   // rdzeń był dzieckiem groupy (już zdisposowany)
       this._sunGranU   = null;   // uniformy żywego rdzenia znikają razem z materiałem
+      this._sunCoronaU = null;   // to samo dla żywej korony
       this._starCorona = null;   // billboard korony był dzieckiem groupy (już zdisposowany)
     }
 
@@ -1444,7 +1448,12 @@ export class ThreeRenderer {
     const coronaMat = SunShader.createStarCoronaMaterial({
       coronaColor: coronaCol,
       gain: 0.95 * glowOpacity,   // <1.0 = korona NIE karmi bloomu (czysty gradient)
+      live: liveSun,
+      seed: liveSun ? SunShader.sunSeedFromId(star.id) : null,
     });
+    this._sunCoronaU       = liveSun ? coronaMat.uniforms : null;
+    this._sunStreamerPhase = 0;
+    this._sunBreathPhase   = 0;
     const coronaSize = r * glowScale * 2.2;   // G: 1.2×7×2.2 ≈ 18.5 j. (wciąż ~3× mniej niż stary sprite [3])
     const corona = new THREE.Mesh(new THREE.PlaneGeometry(coronaSize, coronaSize), coronaMat);
     corona.renderOrder = 2;
@@ -3593,10 +3602,18 @@ export class ThreeRenderer {
         if (this._starCorona) {
           // Billboard — plane zawsze frontem do kamery (group ma tylko pozycję, bez rotacji)
           this._starCorona.quaternion.copy(this.camera.quaternion);
-          // Delikatne „oddychanie" jasności korony (±3%)
+          // Delikatne „oddychanie" jasności korony (±3%).
+          // ⚠ Faza jest AKUMULOWANA w _tickClouds, a NIE brana z this._clock (U6).
+          //   THREE.Clock zwraca POZYCJĘ na osi czasu ściennego i liczy dalej, gdy pętla
+          //   stoi — a stoi przy utracie kontekstu i przez CAŁĄ bitwę (BattleView3D
+          //   przejmuje canvas). Po powrocie oddech przeskakiwałby o długość przerwy.
+          //   Dla samego sinusa to drobiazg, ale smugi korony jadą na tej samej rodzinie
+          //   faz i tam skok jest widoczny jako cięcie. Jedna rodzina, jeden zegar.
           const gU = this._starCorona.material.uniforms?.uGain;
           const base = this._starCorona.material.userData._baseGain;
-          if (gU && base !== undefined) gU.value = base * (1 + Math.sin(t * 0.9) * 0.03);
+          if (gU && base !== undefined) {
+            gU.value = base * (1 + Math.sin(this._sunBreathPhase) * SunShader.LIVE_SUN.BREATH_AMP);
+          }
         }
 
         // Podgląd obserwatorium — twardy lock kamery na ciele co klatkę (przed update, bez lerp-lag).
@@ -3746,6 +3763,19 @@ export class ThreeRenderer {
     });
     u.uGranFadeLo.value = fade.lo;
     u.uGranFadeHi.value = fade.hi;
+
+    const cu = this._sunCoronaU;
+    if (!cu) return;
+    // Baza kamery w przestrzeni ŚWIATA — z niej fragment odtwarza kierunek na niebie,
+    // dzięki czemu smugi należą do gwiazdy, a nie do ekranu (D-V2h). Quad niesie
+    // kwaternion kamery, więc jego lokalne x/y TO SĄ te dwie osie.
+    const e = cam.matrixWorld.elements;
+    cu.uSunCamRight.value.set(e[0], e[1], e[2]);
+    cu.uSunCamUp.value.set(e[4], e[5], e[6]);
+    cu.uSunDetail.value     = this._sunDetail;
+    cu.uStreamerDepth.value = T.STREAMER_DEPTH;
+    cu.uStreamerGain.value  = T.STREAMER_GAIN;
+    cu.uCoronaGuard.value   = T.CORONA_GUARD;
   }
 
   // ── S1: przyrząd gate'u — KOSMOS.debug.sunInfo(granNeutral) ─────────────────
@@ -3825,6 +3855,14 @@ export class ThreeRenderer {
       this._sunBoilPhase = integratePhase(
         this._sunBoilPhase, SunShader.LIVE_SUN.BOIL_HZ * this._sunBoilMult, dt);
       this._sunGranU.uBoilPhase.value = this._sunBoilPhase;
+    }
+    // Oddech korony — POZA bramką żywego materiału, bo dotyczy obu ścieżek: przy fladze
+    // OFF pętla renderowania nadal wpisuje uGain z tej fazy.
+    this._sunBreathPhase = integratePhase(this._sunBreathPhase, SunShader.LIVE_SUN.BREATH_HZ, dt);
+    if (this._sunCoronaU) {
+      this._sunStreamerPhase = integratePhase(
+        this._sunStreamerPhase, SunShader.LIVE_SUN.STREAMER_DRIFT, dt);
+      this._sunCoronaU.uStreamerPhase.value = this._sunStreamerPhase;
     }
 
     for (const [, entry] of this._planets) {

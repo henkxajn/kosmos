@@ -268,6 +268,39 @@ ok('KONTROLA: band NIE rusza strefy płaskiej — lo identyczne przy 0.08 i 0.25
 ok('KONTROLA: wariant VERBATIM nie zna ANI JEDNEGO uniformu S2 — ścieżka OFF nietknięta',
   !frag.includes('uGranMix') && !frag.includes('uBoilPhase') && !frag.includes('sunNoise'));
 
+// ── T9 ───────────────────────────────────────────────────────────────────────
+console.log('\nT9 — żywa korona S3: piny TREŚCI');
+const coronaFrag = pullGlsl('STAR_CORONA_FRAG');
+const coronaLive = pullGlsl('STAR_CORONA_FRAG_LIVE');
+ok('żywy wariant korony istnieje i jest istotnie dłuższy od verbatim',
+  coronaLive && coronaLive.length > coronaFrag.length * 2);
+ok('kierunek liczony w przestrzeni ŚWIATA z bazy kamery, nie jako kąt ekranowy (D-V2h)',
+  coronaLive.includes('uSunCamRight * vP.x + uSunCamUp * vP.y'));
+ok('STRAŻ normalize: środek quada (vP = 0) nie produkuje NaN — kamera bywa w środku tarczy',
+  coronaLive.includes('(d > 1e-4)'));
+// ⚠ Pin NEGATYWNY musi czytać KOD, nie komentarze: shader tłumaczy w komentarzu, DLACZEGO
+//   nie używa discard, więc naiwne includes('discard') zawsze by padało. To jest dokładnie
+//   reguła domu o pinach źródłowych (zdejmuj komentarze + zawsze miej kontrolę pinu).
+const stripComments = (t) => t.replace(/\/\/[^\n]*/g, '');
+const coronaLiveCode = stripComments(coronaLive);
+ok('wczesne wyjście PRZED szumem i przez return, NIE discard (early-Z zostaje)',
+  coronaLiveCode.includes('if (I < 0.002)') && coronaLiveCode.includes('return;')
+  && !coronaLiveCode.includes('discard'));
+ok('KONTROLA pinu: słowo discard JEST w komentarzu, więc pin bez zdejmowania komentarzy byłby ślepy',
+  coronaLive.includes('discard') && !coronaLiveCode.includes('discard'));
+ok('SUFIT NOŚNY: wynik przechodzi przez min(..., uCoronaGuard) (D-V2i)',
+  coronaLive.includes('min(uColor * uGain * I * S, vec3(uCoronaGuard))'));
+ok('faza dryfu przychodzi UNIFORMEM, nie jest liczona jako omega*czas (D-V2u)',
+  coronaLive.includes('uniform float uStreamerPhase;') && !/uStreamerDrift\s*\*/.test(coronaLive));
+ok('pole zależy od kierunku, nie od promienia (promieniste smugi, nie plamy)',
+  coronaLive.includes('sphereNoise(sr, 3.2)') && !/sphereNoise\([^)]*\bd\b/.test(coronaLive));
+ok('shipowany CORONA_GUARD == 0.98', shaderSrc.includes('CORONA_GUARD:   0.98,'));
+ok('KONTROLA: wariant VERBATIM korony nie zna ANI JEDNEGO uniformu S3 — ścieżka OFF nietknięta',
+  !coronaFrag.includes('uStreamerPhase') && !coronaFrag.includes('uCoronaGuard')
+  && !coronaFrag.includes('uSunCamRight'));
+ok('KONTROLA: vertex korony jest WSPÓLNY — żywa ścieżka nie dodała ani jednego varying',
+  pullGlsl('STAR_CORONA_VERT') !== null && !shaderSrc.includes('STAR_CORONA_VERT_LIVE'));
+
 // ── wynik ────────────────────────────────────────────────────────────────────
 console.log('\n' + (fail === 0 ? 'OK' : 'FAIL') + '  ' + pass + ' pass, ' + fail + ' fail');
 process.exit(fail === 0 ? 0 : 1);
