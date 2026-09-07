@@ -18,13 +18,12 @@ import { COSMIC }          from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
 import { t, getName }      from '../i18n/i18n.js';
 import { showRenameModal } from './ModalInput.js';
-import { showFleetAssignModal } from './FleetAssignModal.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
-import { resolveBodyName, resolveBodyPos, getDockTargets } from '../utils/BodyName.js';
-import { showBodyPickerModal } from './BodyPickerModal.js';
+import { resolveBodyName } from '../utils/BodyName.js';
 import { summarizeFleetGroup, buildRosterRows, countActionable } from './FleetGroupPanelLogic.js';
+import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
 // Wymiary
@@ -404,34 +403,10 @@ export class FleetGroupPanel extends BaseOverlay {
       }
       case 'assignFleet': {
         // Przypisz całe zaznaczenie do floty (battlegroup) — popup: istniejąca / nowa.
-        // Reuse FleetSystem (createFleet/addMember) + wspólny FleetAssignModal. Po przypisaniu
-        // flota jest dostępna w Dowództwie (zakładka Floty); selekcja mapy zostaje bez zmian.
-        const fSys = window.KOSMOS?.fleetSystem;
-        if (!fSys) return;
-        const ids = this._liveVessels().map((v) => v.id);
-        if (ids.length === 0) return;
-        const fleets = fSys.listFleets?.() ?? [];
-        showFleetAssignModal(fleets).then(async (choice) => {
-          if (!choice) return;
-          let targetFleetId = choice.fleetId;
-          if (choice.action === 'new') {
-            const name = await showRenameModal(t('fleet.newFleetDefaultName'));
-            if (!name?.trim()) return;
-            targetFleetId = fSys.createFleet(name.trim())?.id;
-          }
-          if (!targetFleetId) return;
-          let accepted = 0;
-          for (const vid of ids) {
-            if (fSys.addMember(targetFleetId, vid)?.ok) accepted++;
-          }
-          const fleet = fSys.getFleet?.(targetFleetId);
-          window.KOSMOS?.uiManager?.setSelectedFleetId?.(targetFleetId);
-          EventBus.emit('ui:toast', {
-            text: t('fleetGroup.assignedToFleet', accepted, fleet?.name ?? ''),
-            color: THEME.accent, durationMs: 2500,
-          });
-          this._markDirty();
-        });
+        // ⚠ Slice 258: JEDNO źródło (`VesselGroupActions`), współdzielone z panelem statku nad
+        //   mapą. Wcześniej ta logika żyła TYLKO tutaj; footer panelu mapy zrobiłby z niej DRUGĄ
+        //   kopię. Czysty przerzut — zachowanie bez zmian.
+        assignVesselsToFleet(this._liveVessels().map((v) => v.id), { onDone: () => this._markDirty() });
         return;
       }
       case 'grpReturn': {
@@ -477,25 +452,12 @@ export class FleetGroupPanel extends BaseOverlay {
         }
         this._markDirty(); return;
       case 'grpDock': {
-        // Dock — picker celów: kolonie z PORTEM + orbitalne stacje gracza (Filip).
-        const bodies = getDockTargets();
-        const ids = this._liveVessels().map((v) => v.id);
-        if (ids.length === 0) return;
-        showBodyPickerModal(bodies, 'bodyPicker.dockTitle').then((choice) => {
-          if (!choice?.bodyId) return;
-          const pos = resolveBodyPos(choice.bodyId);
-          if (!pos) return;
-          const name = resolveBodyName(choice.bodyId);
-          let okN = 0, firstFail = null;
-          for (const id of ids) {
-            const r = mos?.issueOrder?.(id, { type: 'dock', targetBodyId: choice.bodyId, targetName: name, targetPoint: pos });
-            if (r?.ok) okN++; else if (!firstFail) firstFail = r?.reason;
-          }
-          if (okN === 0 && firstFail) {
-            EventBus.emit('ui:toast', { text: t('fleetGroup.dockFailed', firstFail), color: '#ff4466', durationMs: 3500 });
-          }
-          this._markDirty();
-        });
+        // Dock — picker celów: kolonie z PORTEM + orbitalne stacje gracza.
+        // ⚠ Slice 258: JEDNO źródło (`VesselGroupActions.openDockPicker`). Ta logika istniała
+        //   w DWÓCH niemal znak-w-znak kopiach (tu i `FleetCommandPanel.bgDock`) — teraz w jednej.
+        // ⚠ `sameSystemOnly` CELOWO POMINIĘTE (=false): ta powierzchnia zachowuje zachowanie
+        //   sprzed 258 BIT W BIT. Zawężenie do własnego układu to Finding 256, nie ten slice.
+        openDockPicker(this._liveVessels().map((v) => v.id), { onDone: () => this._markDirty() });
         return;
       }
       // 'bg' → swallow (klik w panel nie przelatuje niżej).

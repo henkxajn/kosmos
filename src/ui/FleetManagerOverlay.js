@@ -32,6 +32,7 @@ import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { isSystemExplored } from '../utils/SystemExploration.js';
 import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
+import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
@@ -222,6 +223,9 @@ const STRATCOM_FAN_DY   = -13;  // wysokość rządka nad gwiazdą [px]
 // siebie. Szersze wymagałyby tie-breaku między ikonami — czyli dokładnie tej dwuznaczności, którą
 // usuwał Finding 109. Wysokość 12 px przy ikonie 7×8 (ikona: `sy−17,5…sy−9,5` przy `FAN_DY = −13`).
 const STRATCOM_SHIP_HIT_H = 12; // wysokość strefy ikony statku [px]
+// Eksportowane, bo keeper musi porownywac panel mapy z Rejestrem przy TEJ SAMEJ wysokosci
+// tresci (`_clipRightHitZones` przycina strefy pod spodem) — inaczej pin dryfowalby od kodu.
+export const MVP_FOOTER_H = 34;  // Slice 258 — pasmo footera-3 panelu statku nad mapa [px]
 
 // Offset idx-tej ikony z `count` statków stojących w tym samym układzie (rządek wyśrodkowany).
 function _stratcomFanOffset(idx, count) {
@@ -1410,17 +1414,56 @@ export class FleetManagerOverlay {
     const savedSendSys = this._pendingSendSystemId;
     this._selectedFleetId     = null;
     this._pendingSendSystemId = null;
+    // Footer-3 (Odwrót / → Flota / Dokuj) dostaje własne pasmo NA DOLE, POZA `_drawRight`.
+    // ⚠ ŚWIADOMIE poza `_drawRight`: ta metoda jest WSPÓLNA z prawą kolumną Dowództwa, więc
+    //   dorysowanie footera w niej dołożyłoby trzy przyciski TAKŻE tam i zerwało golden C6/P6.
+    //   Footer jest mapo-specyficzny, ale jego DYSPOZYCJA idzie przez to samo, JEDYNE źródło
+    //   (`VesselGroupActions`) co `FleetGroupPanel` — więc nie powstaje „jedno plus własne mapy".
+    const bodyH = Math.max(80, h - MVP_FOOTER_H);
     try {
       const colMgr = window.KOSMOS?.colonyManager;
-      this._drawRight(ctx, x, y, w, h, vMgr,
+      this._drawRight(ctx, x, y, w, bodyH, vMgr,
         window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem,
         colMgr, colMgr?.activePlanetId);
     } finally {
       this._selectedFleetId     = savedFleetId;
       this._pendingSendSystemId = savedSendSys;
     }
+    this._drawVesselPanelFooter(ctx, x, y + h - MVP_FOOTER_H, w, MVP_FOOTER_H, v);
     this._vesselPanelRect = { x, y, w, h };
     return true;
+  }
+
+  /**
+   * Trzy rozkazy grupowe, których panel Rejestru nie ma, a `FleetGroupPanel` miał (D-MVP-8).
+   * Bez nich przejście na panel statku przy N==1 ODEBRAŁOBY graczowi Odwrót, → Flotę i Dokuj.
+   */
+  _drawVesselPanelFooter(ctx, x, y, w, h, vessel) {
+    const pad = 8, gap = 6, n = 3;
+    const bw = (w - pad * 2 - gap * (n - 1)) / n;
+    const by = y + (h - 22) / 2;
+    const docked = vessel?.position?.state === 'docked';
+    const immob  = !!window.KOSMOS?.vesselManager?.isImmobilized?.(vessel);
+    const btns = [
+      { type: 'mvpRetreat', label: t('fleetGroup.actionRetreat'), enabled: !docked && !immob },
+      { type: 'mvpFleet',   label: t('fleetGroup.assignFleet'),   enabled: !!window.KOSMOS?.fleetSystem },
+      { type: 'mvpDock',    label: t('fleetGroup.actionDock'),    enabled: !immob },
+    ];
+    for (let i = 0; i < btns.length; i++) {
+      const b = btns[i];
+      const bx = x + pad + i * (bw + gap);
+      ctx.fillStyle   = b.enabled ? 'rgba(40,60,90,0.75)' : 'rgba(30,34,42,0.5)';
+      ctx.fillRect(bx, by, bw, 22);
+      ctx.strokeStyle = b.enabled ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, 21);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = b.enabled ? THEME.textPrimary : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(_fitText(ctx, b.label, bw - 8), bx + bw / 2, by + 15);
+      ctx.textAlign = 'left';
+      if (b.enabled) this._hitZones.push({ x: bx, y: by, w: bw, h: 22, type: b.type, data: { vesselId: vessel.id } });
+    }
   }
 
   /**
@@ -1450,8 +1493,35 @@ export class FleetManagerOverlay {
     }
     const zone = resolveStratcomZone(this._hitZones, mx, my);
     if (!zone) return false;
+    // Footer-3 obsługiwany TU, nie w `_handleHit`: tamten router jest WSPÓLNY z Dowództwem,
+    // a te trzy strefy istnieją wyłącznie na mapie. Dyspozycja idzie do JEDNEGO źródła.
+    if (zone.type === 'mvpRetreat' || zone.type === 'mvpFleet' || zone.type === 'mvpDock') {
+      this._handleVesselPanelFooter(zone);
+      return true;
+    }
     this._handleHit(zone, mx, my);
     return true;
+  }
+
+  /** Dyspozycja footera-3 — WYŁĄCZNIE przez `VesselGroupActions` (jedyne źródło). */
+  _handleVesselPanelFooter(zone) {
+    const ids = zone.data?.vesselId ? [zone.data.vesselId] : [];
+    if (ids.length === 0) return;
+    const um = window.KOSMOS?.uiManager;
+    if (zone.type === 'mvpRetreat') {
+      // ⚠ Odwrót NIE JEST kopią: jedynym źródłem jest `MovementOrderSystem`, a pod nim
+      //   `resolveShelterOrderSpec` (arc RETREAT_TARGET) — ten sam dobór schronienia dla
+      //   wszystkich trzech producentów odwrotu. To wywołanie, nie duplikat.
+      const mos = window.KOSMOS?.movementOrderSystem;
+      for (const id of ids) mos?.issueOrder?.(id, { type: 'retreat' });
+    } else if (zone.type === 'mvpFleet') {
+      assignVesselsToFleet(ids, { onDone: () => { if (um) um._dirty = true; } });
+    } else {
+      // ⚠ `sameSystemOnly: true` — NOWA powierzchnia nie przemyca Findingu 256.
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(ids[0]) ?? null;
+      openDockPicker(ids, { sameSystemOnly: true, vessel: v, onDone: () => { if (um) um._dirty = true; } });
+    }
+    if (um) um._dirty = true;
   }
 
   handleClick(mx, my) {

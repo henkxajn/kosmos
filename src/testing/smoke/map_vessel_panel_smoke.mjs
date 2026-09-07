@@ -47,7 +47,7 @@ globalThis.localStorage = {
   get length() { return Object.keys(this._s).length; },
 };
 
-const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
+const { FleetManagerOverlay, MVP_FOOTER_H } = await import('../../ui/FleetManagerOverlay.js');
 const { GAME_CONFIG }         = await import('../../config/GameConfig.js');
 const EntityManager           = (await import('../../core/EntityManager.js')).default;
 
@@ -55,6 +55,8 @@ const EntityManager           = (await import('../../core/EntityManager.js')).de
 // (martwy harness = 0/0 = fałszywa zieleń, nie fail-first).
 let MapLogic = null;
 try { MapLogic = await import('../../ui/MapVesselPanelLogic.js'); } catch { /* fail-first */ }
+let VGA = null;
+try { VGA = await import('../../ui/VesselGroupActions.js'); } catch { /* fail-first */ }
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ FAIL: ' + m); } };
@@ -119,6 +121,9 @@ function world() {
 /** Zbiór stref jako porównywalny podpis: typ + actionId (BEZ x/y — geometria się różni). */
 const sig = (zones) => zones.map((z) => z.type + (z.data?.actionId ? ':' + z.data.actionId : '')).sort();
 const actionIds = (zones) => zones.filter((z) => z.type === 'action').map((z) => z.data.actionId).sort();
+/** Footer-3 istnieje TYLKO na mapie (rysuje go adapter, nie `_drawRight`) — P1/P7 go pomijają. */
+const FOOTER_TYPES = new Set(['mvpRetreat', 'mvpFleet', 'mvpDock']);
+const sigBody = (zones) => sig(zones.filter((z) => !FOOTER_TYPES.has(z.type)));
 
 function overlayDraw(fmo) {
   fmo._hitZones = [];
@@ -177,11 +182,14 @@ header('P1  PIN — panel mapy ≡ prawa kolumna Rejestru (ten sam zbiór stref)
     ok(false, 'panel mapy zawiera akcje orbit+transport (anty-jałowość)');
   } else {
     const overlayZones = overlayDraw(fmo);
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
+    // ⚠ Panel mapy rezerwuje pasmo na footer, więc TREŚĆ jest niższa o MVP_FOOTER_H.
+    //   Porównanie musi iść przy RÓWNEJ wysokości treści — `_clipRightHitZones` przycina
+    //   strefy poniżej panelu, więc niższy panel dałby mniej stref i pin kłamałby o różnicy.
+    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 800 + MVP_FOOTER_H);
     const mapZones = [...fmo._hitZones];
     ok(true, 'FleetManagerOverlay.drawVesselPanel istnieje');
-    ok(JSON.stringify(sig(mapZones)) === JSON.stringify(sig(overlayZones)),
-       `zbiory stref identyczne (mapa: ${sig(mapZones).length}, overlay: ${sig(overlayZones).length})`);
+    ok(JSON.stringify(sigBody(mapZones)) === JSON.stringify(sig(overlayZones)),
+       `zbiory stref identyczne BEZ footera (mapa: ${sigBody(mapZones).length}, overlay: ${sig(overlayZones).length})`);
     ok(mapZones.length > 0 && actionIds(mapZones).includes('orbit') && actionIds(mapZones).includes('transport'),
        `panel mapy NIEPUSTY i z akcjami orbit+transport (jest: ${JSON.stringify(actionIds(mapZones))})`);
   }
@@ -346,9 +354,8 @@ header('P7  PIN — panel mapy wymusza gałąź STATKU mimo `_selectedFleetId` (
   if (typeof fmo.drawVesselPanel !== 'function') {
     ok(false, 'panel mapy renderuje gałąź statku mimo _selectedFleetId/_pendingSendSystemId');
   } else {
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    const s = sig([...fmo._hitZones]);
-    ok(JSON.stringify(s) === JSON.stringify(GOLDEN),
+    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 800 + MVP_FOOTER_H);
+    ok(JSON.stringify(sigBody([...fmo._hitZones])) === JSON.stringify(GOLDEN),
        'panel mapy renderuje gałąź STATKU (zbiór == golden), nie gałąź floty/pickera');
   }
   delete window.KOSMOS.fleetSystem;
@@ -428,6 +435,127 @@ header('P-mount  PIN ŹRÓDŁOWY — adapter jest ZAMONTOWANY w UIManagerze');
   ok(code.includes("_mapSurface() === 'vessel'"), 'panel statku bramkowany na _mapSurface()===vessel');
   ok(code.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${code.length} zn.)`);
   ok(!code.includes('drawVesselPanelXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+}
+
+// ═══ P8 — scalenie docka 2→1 jest CZYSTYM PRZERZUTEM, nie zmianą zachowania ═══════════════
+header('P8  PIN — dock: JEDNO źródło, a dwie stare powierzchnie działają jak DZIŚ');
+{
+  world();
+  if (!VGA) { for (let i = 0; i < 10; i++) ok(false, 'VesselGroupActions istnieje (P8)'); }
+  else {
+  const issued = [];
+  window.KOSMOS.movementOrderSystem = { issueOrder: (id, spec) => { issued.push({ id, spec }); return { ok: true }; } };
+  const res = VGA.dispatchDockTo(['v_1', 'v_9'], 'p_home');
+  ok(issued.length === 2, `rozkaz poszedł do KAŻDEGO statku (jest: ${issued.length})`);
+  const sp = issued[0]?.spec ?? {};
+  ok(sp.type === 'dock' && sp.targetBodyId === 'p_home' && !!sp.targetName && !!sp.targetPoint,
+     `kształt spec-a identyczny ze starymi kopiami (${JSON.stringify(Object.keys(sp).sort())})`);
+  ok(res.okCount === 2, `okCount złożony poprawnie (jest: ${res.okCount})`);
+
+  const { readFileSync } = await import('node:fs');
+  const strip = (f) => readFileSync(new URL(f, import.meta.url), 'utf-8')
+    .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const fgp = strip('../../ui/FleetGroupPanel.js');
+  const fcp = strip('../../ui/FleetCommandPanel.js');
+  const vga = strip('../../ui/VesselGroupActions.js');
+  // 2 → 1: żadna ze starych powierzchni nie konstruuje już rozkazu dock sama.
+  ok(!fgp.includes("type: 'dock'"), 'FleetGroupPanel NIE konstruuje już rozkazu dock sam');
+  ok(!fcp.includes("type: 'dock'"), 'FleetCommandPanel NIE konstruuje już rozkazu dock sam');
+  ok(vga.includes("type: 'dock'"), 'KONTROLA: rozkaz dock konstruuje WYŁĄCZNIE VesselGroupActions');
+  // Kontrola dwustronna — brak literalu mógłby znaczyć „funkcję usunięto", nie „przeniesiono".
+  ok(fgp.includes('openDockPicker('), 'KONTROLA: FleetGroupPanel woła openDockPicker');
+  ok(fcp.includes('openDockPicker('), 'KONTROLA: FleetCommandPanel woła openDockPicker');
+  ok(fgp.includes('assignVesselsToFleet('), 'KONTROLA: FleetGroupPanel woła assignVesselsToFleet');
+  // BIT W BIT: stare powierzchnie NIE proszą o zawężenie do własnego układu (to Finding 256).
+  ok(!fgp.includes('sameSystemOnly: true') && !fcp.includes('sameSystemOnly: true'),
+     'stare powierzchnie NIE używają sameSystemOnly:true — zachowanie sprzed 258');
+  }
+}
+
+// ═══ P9 — szew `sameSystemOnly` (Finding 256) działa W OBIE STRONY ════════════════════════
+header('P9  PIN — sameSystemOnly odsiewa cel z obcego układu, a false go ZACHOWUJE');
+{
+  world();
+  if (!VGA) { for (let i = 0; i < 3; i++) ok(false, 'VesselGroupActions istnieje (P9)'); }
+  else {
+  EntityManager.add({ id: 'p_far', type: 'planet', name: 'Obca', x: 4 * AU, y: 0, systemId: 'sys_061' });
+  const targets = [{ id: 'p_home' }, { id: 'p_far' }];
+  const v = window.KOSMOS.vesselManager.getVessel('v_1');   // sys_home
+  const kept = VGA.filterDockTargets(targets, v, true).map((x) => x.id);
+  ok(kept.length === 1 && kept[0] === 'p_home', `true ⇒ zostaje tylko własny układ (jest: ${JSON.stringify(kept)})`);
+  const all = VGA.filterDockTargets(targets, v, false).map((x) => x.id);
+  ok(all.length === 2, `KONTROLA: false ⇒ lista NIETKNIĘTA (jest: ${JSON.stringify(all)})`);
+  const warp = VGA.filterDockTargets(targets, { ...v, systemId: null }, true);
+  ok(warp.length === 0, `tranzyt warp (systemId=null) ⇒ brak celów (jest: ${warp.length})`);
+  }
+}
+
+// ═══ P-footer — trzy akcje na mapie, dyspozycja przez JEDNO źródło ════════════════════════
+header('P-footer  PIN — Odwrót / → Flota / Dokuj na panelu mapy');
+{
+  world();
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = 'v_1';
+  const v = window.KOSMOS.vesselManager.getVessel('v_1');
+  v.position.state = 'orbiting';           // Odwrót wymaga statku w przestrzeni
+  window.KOSMOS.fleetSystem = { listFleets: () => [] };
+  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 600);
+  const foot = fmo._hitZones.filter((z) => FOOTER_TYPES.has(z.type)).map((z) => z.type).sort();
+  ok(foot.length === 3, `footer wystawia DOKŁADNIE 3 strefy (jest: ${foot.length} — ${JSON.stringify(foot)})`);
+  const issued = [];
+  window.KOSMOS.movementOrderSystem = { issueOrder: (id, spec) => { issued.push(spec.type); return { ok: true }; } };
+  const rz = fmo._hitZones.find((z) => z.type === 'mvpRetreat');
+  if (!rz) ok(false, 'strefa mvpRetreat istnieje (bez niej nie ma czego klikać)');
+  else {
+    fmo.handleVesselPanelClick(rz.x + 2, rz.y + 2);
+    ok(issued.length === 1 && issued[0] === 'retreat', `Odwrót dyspozycjonuje rozkaz retreat (jest: ${JSON.stringify(issued)})`);
+  }
+  const { readFileSync } = await import('node:fs');
+  const fmoSrc = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8')
+    .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const at = fmoSrc.indexOf('_handleVesselPanelFooter(zone) {');
+  const body = at >= 0 ? fmoSrc.slice(at, at + 1400) : '';
+  ok(body.includes('assignVesselsToFleet(') && body.includes('openDockPicker('),
+     'footer dyspozycjonuje przez VesselGroupActions (jedno źródło)');
+  ok(!body.includes("type: 'dock'"), 'footer NIE ma własnej kopii rozkazu dock');
+  ok(body.includes('sameSystemOnly: true'), 'panel mapy prosi o sameSystemOnly:true (Finding 256)');
+  ok(at >= 0 && body.length > 300, `KONTROLA: ciało _handleVesselPanelFooter znalezione (${body.length} zn.)`);
+}
+
+// ═══ P10 — obie stare powierzchnie NADAL SIĘ WYKONUJĄ po przerzucie ═══════════════════════
+// ⚠ `node --check` NIE JEST TESTEM (lekcja z arca OG-4). Usunięcie importu osieroconego przez
+//   przerzut zostawia poprawną SKŁADNIĘ i `ReferenceError` dopiero przy pierwszym kliknięciu.
+//   Żaden keeper w repo nie wykonywał tych dwóch paneli (sprawdzone: tylko `FleetGroupPanelLogic`),
+//   więc bez tego pinu regresja 2→1 przeszłaby na zielono.
+header('P10  PIN — FleetGroupPanel / FleetCommandPanel wykonują się po scaleniu docka');
+{
+  const callSafe = (fn) => { try { fn(); return null; } catch (e) { return e; } };
+  // KONTROLA HELPERA: musi realnie wykrywać ReferenceError, inaczej cały pin jest jałowy.
+  ok(callSafe(() => { __nieistniejacy_symbol__(); }) instanceof ReferenceError,
+     'KONTROLA: helper wykrywa ReferenceError');
+
+  world();
+  const { FleetGroupPanel }   = await import('../../ui/FleetGroupPanel.js');
+  const { FleetCommandPanel } = await import('../../ui/FleetCommandPanel.js');
+  window.KOSMOS.movementOrderSystem = { issueOrder: () => ({ ok: true }), cancelOrder: () => true };
+  window.KOSMOS.fleetSystem = {
+    listFleets: () => [{ id: 'f_1', name: 'Alfa', memberIds: ['v_1'] }],
+    getFleet: () => ({ id: 'f_1', name: 'Alfa', memberIds: ['v_1'], activeOrder: null, doctrine: null }),
+    createFleet: () => ({ id: 'f_1' }), addMember: () => ({ ok: true }),
+  };
+
+  const gp = new FleetGroupPanel();
+  gp._ids = ['v_1'];
+  ok(callSafe(() => gp.draw(stubCtx(), 1920, 1080)) === null, 'FleetGroupPanel.draw() nie rzuca');
+  for (const type of ['grpDock', 'assignFleet']) {
+    const e = callSafe(() => gp._onHit({ type }));
+    ok(!(e instanceof ReferenceError), `FleetGroupPanel ${type} bez ReferenceError (${e?.name ?? 'brak wyjątku'})`);
+  }
+
+  const cp = new FleetCommandPanel();
+  cp._fleetId = 'f_1';
+  const e2 = callSafe(() => cp._onHit({ type: 'bgDock' }));
+  ok(!(e2 instanceof ReferenceError), `FleetCommandPanel bgDock bez ReferenceError (${e2?.name ?? 'brak wyjątku'})`);
 }
 
 console.log(`\n═══ ${pass}/${pass + fail} OK, ${fail} FAIL ═══`);

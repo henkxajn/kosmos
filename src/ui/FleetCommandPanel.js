@@ -23,11 +23,11 @@ import { showRenameModal } from './ModalInput.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
-import { resolveBodyName, resolveBodyPos, getDockTargets } from '../utils/BodyName.js';
-import { showBodyPickerModal } from './BodyPickerModal.js';
+import { resolveBodyName } from '../utils/BodyName.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import { summarizeFleetGroup, buildRosterRows } from './FleetGroupPanelLogic.js';
 import { nextFleetId, nextDoctrine, nearestEnemyToPoint } from './FleetCommandPanelLogic.js';
+import { openDockPicker } from './VesselGroupActions.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
 const PW           = 340;
@@ -464,26 +464,12 @@ export class FleetCommandPanel extends BaseOverlay {
       }
       case 'bgDock': {
         // Dock — picker kolonii gracza → rozkaz dock per członek (issueFleetOrder nie zna 'dock').
+        // ⚠ Slice 258: JEDNO źródło (`VesselGroupActions.openDockPicker`) — ta pętla była niemal
+        //   znak-w-znak kopią `FleetGroupPanel.grpDock`. Czysty przerzut, bez zmiany zachowania;
+        //   `sameSystemOnly` CELOWO POMINIĘTE (=false) — patrz Finding 256.
         const fleet = this._fleet();
         if (!fleet) return;
-        const bodies = getDockTargets();   // kolonie z portem + orbitalne stacje gracza
-        const memberIds = [...fleet.memberIds];
-        showBodyPickerModal(bodies, 'bodyPicker.dockTitle').then((choice) => {
-          if (!choice?.bodyId) return;
-          const pos = resolveBodyPos(choice.bodyId);
-          if (!pos) return;
-          const name = resolveBodyName(choice.bodyId);
-          const mos = window.KOSMOS?.movementOrderSystem;
-          let okN = 0, firstFail = null;
-          for (const id of memberIds) {
-            const r = mos?.issueOrder?.(id, { type: 'dock', targetBodyId: choice.bodyId, targetName: name, targetPoint: pos });
-            if (r?.ok) okN++; else if (!firstFail) firstFail = r?.reason;
-          }
-          if (okN === 0 && firstFail) {
-            EventBus.emit('ui:toast', { text: t('fleetGroup.dockFailed', firstFail), color: '#ff4466', durationMs: 3500 });
-          }
-          this._markDirty();
-        });
+        openDockPicker([...(fleet.memberIds ?? [])], { onDone: () => this._markDirty() });
         return;
       }
       // 'bg' → swallow
