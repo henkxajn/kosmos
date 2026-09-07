@@ -460,10 +460,16 @@ export class ThreeRenderer {
     this._starGroup = null;
     this._starLight = null;
     this._ambient   = null;           // AmbientLight — barwa przestrajana klasą gwiazdy
+    this._starCore   = null;          // mesh rdzenia — NAZWANY uchwyt (V-266)
     this._starCorona = null;          // billboard korony HDR (sync quaternion w pętli)
-    this._starCoronaUniform  = null;  // referencja do uTime korony
     this._starTwinkleUniform = null;  // referencja do uTime migotania gwiazd tła
-    this._starPromCount      = 0;     // liczba protuberancji
+    // ⚠ V-266 — USUNIĘTE: _starCoronaUniform („referencja do uTime korony") oraz
+    //   _starPromCount („liczba protuberancji"). Oba były zapisywane dwa razy
+    //   i NIGDY nieczytane; `git log -S` pokazuje, że weszły MARTWE już w c02574f,
+    //   czyli były zaślepkami NAZEWNICZYMI, nie pozostałością po działającym kodzie.
+    //   Nazwane dokładnie jak dwie rzeczy, które buduje V2 (uTime korony, protuberancje),
+    //   zwracały w grepie fałszywy trop „to już istnieje". Uchwyty V2 powstają z zerowego
+    //   stanu i z własnymi nazwami — nie wskrzeszać tych.
 
     // ── Faza D3: Sfera Dysona — wizualne pierścienie wokół gwiazdy ──
     this._dysonStage      = 0;
@@ -1273,6 +1279,7 @@ export class ThreeRenderer {
       });
       this.scene.remove(this._starGroup);
       this._starGroup = null;
+      this._starCore   = null;   // rdzeń był dzieckiem groupy (już zdisposowany)
       this._starCorona = null;   // billboard korony był dzieckiem groupy (już zdisposowany)
     }
 
@@ -1368,7 +1375,6 @@ export class ThreeRenderer {
     const starMass = star.mass ?? 1.0;
     const r = Math.max(0.6, Math.min(1.6, 0.6 + starMass * 0.6));
     const color = new THREE.Color(star.visual.color);
-    const glow  = new THREE.Color(star.visual.glowColor ?? star.visual.color);
 
     // Typ spektralny → konfiguracja per-typ
     const spec   = star.spectralType || 'G';
@@ -1440,7 +1446,14 @@ export class ThreeRenderer {
         }
       `,
     });
-    group.add(new THREE.Mesh(new THREE.SphereGeometry(r * STAR_CORE_SCALE, 64, 64), coreMat));
+    // ⚠ Nazwany uchwyt rdzenia (V-266). Do commita 033e794 obrót czytał
+    //   `_starGroup.children[0]` — kontrakt POZYCYJNY, który przy zmianie kolejności
+    //   budowy grupy łamie się CICHO (bez wyjątku, bez logu: kręci się nie ten mesh,
+    //   a granulacja staje). V2 dokłada dzieci tej grupy, więc indeks znika ZANIM
+    //   zdąży to zrobić.
+    const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(r * STAR_CORE_SCALE, 64, 64), coreMat);
+    group.add(coreMesh);
+    this._starCore = coreMesh;
 
     // ── [1] Korona — JEDEN billboard shaderowy (float = zero bandingu 8-bit).
     // Zanik wykładniczy DO ZERA przed krawędzią plane'a (żadnych ogonów alpha,
@@ -1492,8 +1505,6 @@ export class ThreeRenderer {
 
     this.scene.add(group);
     this._starGroup = group;
-    this._starCoronaUniform = null;
-    this._starPromCount = 0;
 
     // Zaktualizuj PointLight. ⚠ PRZYPISANIE (nie .copy) jest celowo zachowane:
     // `color` to TEN SAM obiekt co coreMat.uniforms.uColor, więc etap 4 Dysona
@@ -3744,13 +3755,8 @@ export class ThreeRenderer {
 
     // Obrót gwiazdy — ten sam ZMIERZONY krok co chmury i gazowiec (V-260).
     // ⚠ Stoi TUTAJ, a nie w pętli renderowania, z tego samego powodu co gazowiec:
-    //   krok czasu ma JEDNO miejsce (dekret C1b wyżej). Rdzeń to children[0]
-    //   (kolejność budowy: rdzeń, korona, sfera klikalna) — nazwany uchwyt
-    //   zastąpi ten indeks w commicie V-266.
-    if (this._starGroup) {
-      const core = this._starGroup.children[0];
-      if (core) core.rotation.y += STAR_SPIN_RAD_PER_S * dt;
-    }
+    //   krok czasu ma JEDNO miejsce (dekret C1b wyżej).
+    if (this._starCore) this._starCore.rotation.y += STAR_SPIN_RAD_PER_S * dt;
 
     for (const [, entry] of this._planets) {
       const gasU = entry.mesh?.material?.userData?.gasUniforms;
