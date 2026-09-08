@@ -462,6 +462,16 @@ export class VesselManager {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
     if (vessel.position.state !== 'orbiting') return false;
+    // ⚠ Finding 259 (D-259-3) — SYMETRIA REZERWY z `dispatchOnMission:400`. Ta bramka była tu
+    //   nieobecna, bo do W2 ścieżkę osiągał wyłącznie statek `orbiting` + `on_mission`, a kadłub
+    //   w rezerwie na misji nie bywa. D-259-1 otwiera ją TAKŻE dla `orbiting` + `idle`, a
+    //   `withdrawVessel:1014` blokuje odstawienie do rezerwy tylko dla `in_transit` ⇒ stan
+    //   `stored` + `orbiting` + `idle` JEST osiągalny. Bez tej linii narrow A otworzyłby dziurę
+    //   w zbiorze wykluczeń W2 (który wymienia `dispatchOnMission`/`getAvailable`, nie tę metodę).
+    // ⚠ Dostawa po skoku warp (`OrderService._maybeDeliver`) przez tę bramkę PRZECHODZI: kadłub
+    //   kompozytu jest w służbie z konstrukcji (rezerwa nie wystartowałaby), a brak pola
+    //   (stary zapis) `isInService` czyta jako SŁUŻBĘ. Pinowane: T4b.
+    if (!isInService(vessel)) return false;
     // D-SS5 — BLIŹNIAK bramki z `dispatchOnMission`. ⚠ Ta ścieżka obsługuje DOSTAWĘ PO SKOKU
     // WARP (`MissionSystem:967`), więc bramka jest tu poprawna tylko dlatego, że
     // `OrderService._maybeDeliver` wydaje dostawę DOPIERO gdy `v.systemId === targetSystemId`.

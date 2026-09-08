@@ -862,7 +862,24 @@ export class MissionSystem {
     // ── Standardowy transport (nie trasa handlowa) ──────────────────
 
     // Sprawdź czy statek jest na orbicie lub zadokowany w zdalnej lokalizacji (re-dispatch)
-    const isOrbiting = vessel && vessel.position.state === 'orbiting' && vessel.status === 'on_mission';
+    // ⚠ Finding 259 (D-259-1, narrow) — `isOrbiting` NIE pyta już o `status`. Wymóg
+    //   `status === 'on_mission'` robił DZIURĘ między dwiema bramkami, które się nie pokrywały:
+    //   statek `orbiting` + `idle` wypadał tędy w gałąź `!isRedispatch`, ta woła
+    //   `VesselManager.dispatchOnMission`, a TAMTA żąda `position.state === 'docked'` (`:401`)
+    //   ⇒ `false` ⇒ `_abortLaunch`, którego DOMYŚLNYM powodem jest `mission.shipUnavailable`
+    //   ⇒ gracz czytał „Statek niedostępny" na statku, który stał sobie na orbicie i był wolny.
+    //   `orbiting` + `idle` to NORMALNY stan spoczynkowy po zakończonej misji i po `undock`,
+    //   więc odmowa trafiała w zwykłą rozgrywkę (i w całą klikalną populację mapy 3D).
+    // ⚠ `redispatchFromOrbit` NIGDY nie czytał `status` — bramkuje wyłącznie
+    //   `state === 'orbiting'`, a `status` sam ZAPISUJE (`VesselManager:495`). Ta gałąź była
+    //   więc gotowa na `idle` od zawsze; brakowało wyłącznie skierowania jej tutaj.
+    // ⚠ ODRZUCONO wariant „broad" (dopuszczenie `orbiting` w `dispatchOnMission:401`):
+    //   ta metoda ma 16 miejsc wywołania (każdy typ misji + kurierzy AI), a kupowałby
+    //   dokładnie ten sam wynik. `redispatchFromOrbit` ma w produkcji JEDNEGO konsumenta.
+    // ⚠ ODRZUCONO też teorię „brak ładowni" (pierwsza diagnoza z live-gate'u): ZMIERZONE —
+    //   wynik jest identyczny z ładownią i bez, w każdym z trzech stanów. Pilnuje tego
+    //   pin NEGATYWNY T5 w `transport_orbiting_idle_smoke`.
+    const isOrbiting = vessel && vessel.position.state === 'orbiting';
     const isRemoteDocked = vessel && vessel.position.state === 'docked'
       && (vessel.status === 'idle' || vessel.status === 'refueling')
       && vessel.colonyId !== colMgr?.activePlanetId;
