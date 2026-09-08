@@ -1366,7 +1366,7 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ⚠ Zostaje na `FleetGroupPanel`, wiec po slice MAP_VESSEL_PANEL jest **zywy przy N≥2**
      (przy N==1 ta powierzchnia sie nie rysuje). Osobny slice.
 
-259. 🔴 **`Transport` odmawia statkowi w stanie `orbiting` + `idle` — dziura MIĘDZY DWOMA
+259. ✅ **[ZAMKNIĘTY 2026-09-08, `6b8bb09` — live-gate PENDING] `Transport` odmawia statkowi w stanie `orbiting` + `idle` — dziura MIĘDZY DWOMA
      dyspozytorami.** Zgłoszone jako ② z live-gate'u slice'u MAP_VESSEL_PANEL. **Własny slice,
      NIE bramkowany flagą `mapVesselPanel`** — `_launchTransport` jest wspólny, więc odmawia
      identycznie z Rejestru i z Dowództwa; zgaszenie flagi jej nie usuwa.
@@ -1478,6 +1478,43 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ⚠ Pozycje paneli w tej rodzinie są **NIESERIALIZOWANE** (ustalenie S3.4b) — jeśli 260 dostanie
      drag, ma to zostać.
      ⚪ **Czysty polish, zero wpływu na stan gry.** Nie blokuje live-gate'u; do zrobienia po nim.
+
+261. ⚪ **`SUMMARY_RE` w `run-all.mjs` nie zna DOMINUJĄCEGO formatu podsumowania keeperów —
+     17 plików ląduje w koszu ADVISORY.** Higiena PRZYRZĄDU, nie gry. Jeden commit, własny slice.
+
+     `SUMMARY_RE` (`src/testing/smoke/run-all.mjs:27-32`) rozpoznaje cztery kształty:
+     `=== WYNIK`, `PASS…FAIL` w jednej linii, `N passed…M failed`, `PASS — n/n`. **Nie zna
+     `═══ N/N OK, M FAIL ═══`** — a to jest format 17 keeperów (m.in. `map_vessel_panel_smoke`
+     i `transport_orbiting_idle_smoke` z arców 258/259). Przy 30 advisory w sweepie ta jedna
+     alternatywa odpowiada za **ponad połowę listy**.
+
+     ⚠ **KOREKTA ZAŁOŻONEJ KONSEKWENCJI — ZMIERZONE, i wyszło ŁAGODNIEJ, niż brzmiało.**
+     Hipoteza przy zgłoszeniu: „regresja w tych keeperach przeszłaby sweep jako advisory,
+     zamiast twardo paść". **Nieprawda.** `runSuites` ustala `ok = exit === 0` i sam kod nazywa
+     to `AUTORYTATYWNE` (`:54`); `advisory = ok && !hadSummary` jest tylko ETYKIETĄ dla
+     przebiegów, które PRZESZŁY. Zmierzone trzema plikami-atrapami przez prawdziwe `runSuites`:
+
+     | atrapa | exit | `hadSummary` | `ok` | `advisory` | jak liczy sweep |
+     |---|---|---|---|---|---|
+     | regresja w formacie `═══` | 1 | false | **false** | **false** | **FAIL** |
+     | cichy no-op (brak wyjścia) | 0 | false | true | **true** | passed + advisory |
+     | zielony w formacie `═══` | 0 | false | true | true | passed + advisory |
+
+     ⇒ **regresja w obu keeperach DALEJ twardo pada.** Realne ryzyko jest węższe i inne:
+     **cichy no-op jest nieodróżnialny od przejścia**. Keeper wypatroszony (harness umiera przed
+     asercjami, fixture przestaje cokolwiek twierdzić, `pass+fail === 0`) wychodzi z exit 0 bez
+     rozpoznanego podsumowania i ląduje w tym samym worku co ~30 innych plików. Nagłówek
+     `run-all.mjs:41-43` mówi wprost, że advisory jest **do RĘCZNEGO sprawdzenia** — a listy
+     30-elementowej nikt przy każdym sweepie nie czyta. **Defektem jest ROZCIEŃCZENIE SYGNAŁU,
+     nie przepuszczanie regresji.**
+
+     **Kształt naprawy (nie robić przy okazji czegoś innego):** dołożyć do `SUMMARY_RE` JEDNĄ,
+     ZAKOTWICZONĄ alternatywę na `═══ \d+/\d+ OK, \d+ FAIL ═══`. ⚠ **Nie luzować matchera
+     ogólnie** — komentarz `:41-42` tłumaczy, że jest celowo konserwatywny („5+ wariantów summary
+     w repo, heurystyka dawałaby dziesiątki false-positive'ów"), i ta ostrożność zostaje.
+     **Kontrola obowiązkowa:** po zmianie plik, który NAPRAWDĘ nic nie twierdzi, MUSI dalej
+     świecić advisory — inaczej naprawa kasuje jedyny sygnał, dla którego ten kubełek istnieje.
+     Metryka rozstrzygająca: liczba advisory spada z 30 do ~13, a `passed`/`failed` nie drgają.
 
 > **Juz zarejestrowane, NIE duplikuje:** **Finding 138** (`VesselManager._findBodyNearPoint` skanuje
 > cala galaktyke) i **Finding 142** (`_getValidTargets` klucza sie na OGLADANYM ukladzie, nie na
