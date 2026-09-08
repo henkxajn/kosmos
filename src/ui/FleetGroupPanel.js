@@ -265,10 +265,18 @@ export class FleetGroupPanel extends BaseOverlay {
     ctx.beginPath(); ctx.moveTo(px + PAD, cy); ctx.lineTo(px + PW - PAD, cy); ctx.stroke();
     cy += 3;
 
-    // ── Rozkazy grupowe (2 rzędy × 3) ──
+    // ── Rozkazy grupowe (rząd 2 + rząd 3) ──
+    // ⚠ Slice 258 / A1 — „Powrót" ZDJĘTY. Panel statku nad mapą (N==1) to powierzchnia REJESTRU,
+    //   a rejestr nie ma tej akcji od Findingu 145 (a'): `return_home` wypadło z listy akcji, a
+    //   `MovementOrderSystem:224` zapisuje wprost „Przycisk powrotu ZOSTAŁ USUNIĘTY". Zostawienie
+    //   `grpReturn` przy N>=2 dawało ROZJAZD SŁOWNIKA na jednej mapie: ten sam statek miał Powrót
+    //   albo go nie miał, zależnie od tego, ilu kolegów było zaznaczonych obok.
+    // ⚠ SKUTEK UBOCZNY, ZMIERZONY: to była JEDNA Z TRZECH produkcyjnych ścieżek czytających
+    //   `AutoRetreatSystem._findNearestFriendlyPlanet` (Finding 154 — brak terminu układu).
+    //   Producentów zostaje DWÓCH: `FleetCommandPanel:384` i `FleetManagerOverlay:4736`.
+    //   Ten slice 154 NIE naprawia — tylko zwęża.
     const actionRows = [
       [
-        { type: 'grpReturn', label: t('fleetGroup.actionReturn'), enabled: act.canReturn > 0 },
         { type: 'grpDock',   label: t('fleetGroup.actionDock'),   enabled: act.canDock   > 0 },
         { type: 'grpUndock', label: t('fleetGroup.actionUndock'), enabled: act.canUndock > 0 },
       ],
@@ -408,31 +416,6 @@ export class FleetGroupPanel extends BaseOverlay {
         //   kopię. Czysty przerzut — zachowanie bez zmian.
         assignVesselsToFleet(this._liveVessels().map((v) => v.id), { onDone: () => this._markDirty() });
         return;
-      }
-      case 'grpReturn': {
-        // Recall do bazy ZAWSZE (każdy statek w przestrzeni) — kanoniczna ścieżka jak
-        // FleetManagerOverlay._handleFleetReturnBase: nearest friendly planet + moveToPoint
-        // (targetBodyId śledzi orbitujące ciało) + marker `_pendingReturnDock` → FleetSystem
-        // listener `_maybeAutoDockOnReturn` (globalny, bez wymogu floty) dokuje przy dotarciu.
-        const ar = window.KOSMOS?.autoRetreatSystem;
-        for (const v of this._liveVessels()) {
-          if (v.position?.state === 'docked' || vm?.isImmobilized?.(v)) continue;  // już w bazie / nie rusza się
-          const planet = ar?._findNearestFriendlyPlanet?.(v)?.planet;
-          if (planet && mos) {
-            const tx = planet.x ?? planet.position?.x ?? 0;
-            const ty = planet.y ?? planet.position?.y ?? 0;
-            // STATYCZNY targetPoint (NIE targetBodyId!) — order MUSI się zakończyć, by
-            // `vessel:orderCompleted` odpalił `FleetSystem._maybeAutoDockOnReturn`, który
-            // snapuje do ŻYWEJ pozycji planety + dokuje (sprite usuwany). targetBodyId
-            // = tracking/orbita (order nie kończy się) → brak docka → sprite zostaje
-            // w starym miejscu (bug live-gate runda 2). Wzór: _handleFleetReturnBase.
-            v._pendingReturnDock = planet.id;
-            mos.issueOrder(v.id, { type: 'moveToPoint', targetPoint: { x: tx, y: ty } });
-          } else {
-            vm?.startReturn?.(v.id);  // fallback (brak AutoRetreatSystem/planety) — wraca przez misję
-          }
-        }
-        this._markDirty(); return;
       }
       case 'grpRefuel':
         for (const v of this._liveVessels()) {

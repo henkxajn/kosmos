@@ -1211,7 +1211,6 @@ export default {
   'fleetGroup.statusDocked': 'Dok',
   'fleetGroup.statusTransit': 'W drodze',
   'fleetGroup.statusOrbiting': 'Na orbicie',
-  'fleetGroup.actionReturn': 'Powrót',
   'fleetGroup.actionRefuel': 'Tankuj',
   'fleetGroup.actionStop': 'Stop',
   'fleetGroup.actionRetreat': 'Odwrót',

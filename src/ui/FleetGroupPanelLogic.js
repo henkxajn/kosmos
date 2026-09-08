@@ -93,30 +93,29 @@ export function buildRosterRows(vessels, { vesselManager } = {}) {
 
 /**
  * Liczba statków kwalifikujących się do każdej akcji grupowej (do wyszarzania przycisków).
- * - return: w przestrzeni (nie zadokowany) i nie unieruchomiony — recall do bazy ZAWSZE
- *           (niezależnie od misji; ścieżka = nearest friendly planet + auto-dock)
+ * ⚠ Slice 258 / A1 — `canReturn` USUNIĘTE razem z przyciskiem „Powrót" (rozjazd słownika
+ *   N==1 vs N>=2; rejestr nie ma tej akcji od Findingu 145 (a')). Nikt inny go nie czytał.
  * - refuel: zadokowany (manualRefuel wymaga state==='docked')
  * - stop:   ma aktywny rozkaz ruchu (cancelOrder zwróci false bez niego)
  * - retreat:w przestrzeni (nie zadokowany) i nie unieruchomiony
  * @param {Array<object>} vessels
  * @param {{ vesselManager? }} deps
- * @returns {{ canReturn:number, canRefuel:number, canStop:number, canRetreat:number,
+ * @returns {{ canRefuel:number, canStop:number, canRetreat:number,
  *            canUndock:number, canDock:number }}
  */
 export function countActionable(vessels, { vesselManager } = {}) {
   const list = vessels ?? [];
-  let canReturn = 0, canRefuel = 0, canStop = 0, canRetreat = 0, canUndock = 0, canDock = 0;
+  let canRefuel = 0, canStop = 0, canRetreat = 0, canUndock = 0, canDock = 0;
   for (const v of list) {
     const immob   = !!vesselManager?.isImmobilized?.(v);
     const state   = v?.position?.state;
     const docked  = state === 'docked';
     const hasActiveOrder = v?.movementOrder?.status === 'active';
-    if (!docked && !immob)      canReturn++;
     if (docked)                 canRefuel++;
     if (hasActiveOrder)         canStop++;
     if (!docked && !immob)      canRetreat++;
     if (docked)                 canUndock++;   // Undock: zadokowany → orbita ciała
     if (!immob)                 canDock++;      // Dock: dowolny ruchomy (picker wybiera ciało)
   }
-  return { canReturn, canRefuel, canStop, canRetreat, canUndock, canDock };
+  return { canRefuel, canStop, canRetreat, canUndock, canDock };
 }

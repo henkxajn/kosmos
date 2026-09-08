@@ -30,6 +30,11 @@
 //   P-open   rysowanie panelu NIE ustawia `_visible` (nie perturbuje `isAnyOpen()`)
 //   P-flag   `mapVesselPanel:false` ⇒ przy N==1 powierzchnią jest `group` (dzisiejsze zachowanie)
 //   P-scroll `_rightScrollY` WSPÓLNY (D-MVP-6) + reset przy zmianie statku dalej działa
+//   P11      RENDER: przy każdym N (0/1/≥2) rysuje DOKŁADNIE JEDNA powierzchnia, a w UIManagerze
+//            jest JEDEN producent każdego rysowania (odpowiedź na ① z live-gate'u 2026-09-07 —
+//            fakt był prawdziwy, ale NIC go nie pilnowało)
+//   P-A1     żadna powierzchnia keyed-on-N nie wystawia „Powrotu" (dokończenie Findingu 145 (a');
+//            Odwrót ZOSTAJE — to inna akcja). Zwęża też Finding 154: producentów 3 → 2.
 //
 // ⚠ Piny commitu 3 (footer-3 + `sameSystemOnly`) dochodzą osobno: P8/P9.
 //
@@ -546,7 +551,9 @@ header('P10  PIN — FleetGroupPanel / FleetCommandPanel wykonują się po scale
 
   const gp = new FleetGroupPanel();
   gp._ids = ['v_1'];
+  gp.show();   // ⚠ bez tego `draw` wraca na `if (!this.visible)` i asercja niżej jest JAŁOWA
   ok(callSafe(() => gp.draw(stubCtx(), 1920, 1080)) === null, 'FleetGroupPanel.draw() nie rzuca');
+  ok(gp._hitZones.length > 0, `KONTROLA: draw realnie coś narysował (${gp._hitZones.length} stref)`);
   for (const type of ['grpDock', 'assignFleet']) {
     const e = callSafe(() => gp._onHit({ type }));
     ok(!(e instanceof ReferenceError), `FleetGroupPanel ${type} bez ReferenceError (${e?.name ?? 'brak wyjątku'})`);
@@ -557,6 +564,132 @@ header('P10  PIN — FleetGroupPanel / FleetCommandPanel wykonują się po scale
   const e2 = callSafe(() => cp._onHit({ type: 'bgDock' }));
   ok(!(e2 instanceof ReferenceError), `FleetCommandPanel bgDock bez ReferenceError (${e2?.name ?? 'brak wyjątku'})`);
 }
+
+// ═══ P11 — RENDER: dokładnie JEDNA powierzchnia rysuje przy każdym N ══════════════════════
+// ⚠ PO CO, skoro P4 pinuje już mutex? Bo P4 pinuje CZYSTĄ REGUŁĘ, a nie to, że reguła rozstrzyga
+//   RENDER. Live-gate 2026-09-07 zgłosił ① („dwa panele naraz przy N>=2") i analiza pokazała, że
+//   to NIE był defekt adaptera — ale w repo NIE BYŁO ANI JEDNEGO pinu tego inwariantu, więc
+//   odpowiedź trzeba było wyprowadzać z lektury źródła. Teraz jest pin.
+// ⚠ ANTY-JAŁOWOŚĆ (część nośna): przy N==1 OBA panele muszą UMIEĆ narysować niepusty zbiór stref.
+//   Bez tej kontroli pin przechodziłby także wtedy, gdyby panel grupy milczał z powodu PUSTKI
+//   (np. `visible === false`), a nie z powodu mutexu — czyli mierzyłby ciszę, nie rozdział.
+header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia (0 / 1 / >=2)');
+{
+  const f = MapLogic?.resolveMapSelectionSurface;
+  world();
+  const { FleetGroupPanel } = await import('../../ui/FleetGroupPanel.js');
+  const vm = window.KOSMOS.vesselManager;
+  vm._vessels.set('v_2', { ...vm.getVessel('v_1'), id: 'v_2', name: 'Wenus' });
+  window.KOSMOS.fleetSystem = { listFleets: () => [] };
+  window.KOSMOS.movementOrderSystem = { issueOrder: () => ({ ok: true }), cancelOrder: () => true };
+
+  const fmo = new FleetManagerOverlay();
+  const gp  = new FleetGroupPanel();
+
+  // Mirror montażu z `UIManager.draw` (P-mount pinuje, że tak właśnie jest wpięte).
+  const drawFor = (ids) => {
+    const surface = f(ids, { flagOn: true });
+    fmo._selectedVesselId = ids[0] ?? null;
+    fmo._hitZones = [];
+    fmo._vesselPanelRect = null;
+    gp._ids = [...ids];
+    gp._hitZones = [];
+    if (ids.length) gp.show(); else gp.hide();
+    if (surface === 'vessel') fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
+    if (surface === 'group')  gp.draw(stubCtx(), 1920, 1080);
+    return { surface, vesselZones: fmo._hitZones.length, groupZones: gp._hitZones.length };
+  };
+
+  // KONTROLA NOŚNA — przy N==1 OBA panele UMIEJĄ narysować niepusty zbiór stref.
+  {
+    fmo._selectedVesselId = 'v_1'; fmo._hitZones = [];
+    fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
+    const vOne = fmo._hitZones.length;
+    gp._ids = ['v_1']; gp._hitZones = []; gp.show();
+    gp.draw(stubCtx(), 1920, 1080);
+    const gOne = gp._hitZones.length;
+    ok(vOne > 0 && gOne > 0,
+       `KONTROLA: przy N==1 OBA panele umieją rysować (statek: ${vOne}, grupa: ${gOne}) — cisza bierze się z MUTEXU, nie z pustki`);
+  }
+
+  const r0 = drawFor([]);
+  ok(r0.surface === 'none' && r0.vesselZones === 0 && r0.groupZones === 0,
+     `N==0 → nic nie rysuje (surface=${r0.surface}, statek=${r0.vesselZones}, grupa=${r0.groupZones})`);
+  const r1 = drawFor(['v_1']);
+  ok(r1.vesselZones > 0 && r1.groupZones === 0,
+     `N==1 → rysuje TYLKO panel statku (statek=${r1.vesselZones}, grupa=${r1.groupZones})`);
+  const r2 = drawFor(['v_1', 'v_2']);
+  ok(r2.groupZones > 0 && r2.vesselZones === 0,
+     `N==2 → rysuje TYLKO panel grupy (statek=${r2.vesselZones}, grupa=${r2.groupZones})`);
+
+  // Pin ŹRÓDŁOWY — JEDEN producent każdego rysowania w `UIManager`. Ten fakt był JEDYNĄ
+  // odpowiedzią na ①, a nic go nie pilnowało. `UIManager` nie importuje się pod node.
+  const { readFileSync } = await import('node:fs');
+  const uiCode = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8')
+    .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const cnt = (hay, needle) => hay.split(needle).length - 1;
+  ok(cnt(uiCode, 'fleetGroupPanel.draw(') === 1,
+     `dokładnie JEDNO miejsce wywołania fleetGroupPanel.draw( (jest: ${cnt(uiCode, 'fleetGroupPanel.draw(')})`);
+  ok(cnt(uiCode, 'drawVesselPanel?.(') === 1,
+     `dokładnie JEDNO miejsce wywołania drawVesselPanel?.( (jest: ${cnt(uiCode, 'drawVesselPanel?.(')})`);
+
+  vm._vessels.delete('v_2');
+  delete window.KOSMOS.fleetSystem;
+}
+
+// ═══ P-A1 — „Powrót" nie istnieje na ŻADNEJ powierzchni keyed-on-N ════════════════════════
+// ⚠ Rejestr nie ma akcji `return_home` od Findingu 145 (a'), a `MovementOrderSystem:224` pisze
+//   wprost „Przycisk powrotu ZOSTAŁ USUNIĘTY". `grpReturn` przeżył w `FleetGroupPanel` i dawał
+//   ROZJAZD SŁOWNIKA: ten sam statek miał Powrót przy N>=2, a nie miał przy N==1.
+// ⚠ Pinowane WYKONANIEM, nie grepem: grep po źródle przeszedłby na samym komentarzu, a i tak nie
+//   powiedziałby, czy przycisk SIĘ RYSUJE.
+header('P-A1  PIN — żadna powierzchnia mapy nie wystawia „Powrotu" (ani przy N==1, ani przy N>=2)');
+{
+  world();
+  const { FleetGroupPanel } = await import('../../ui/FleetGroupPanel.js');
+  const vm = window.KOSMOS.vesselManager;
+  vm._vessels.set('v_2', { ...vm.getVessel('v_1'), id: 'v_2', name: 'Wenus' });
+  // Stan, w którym „Powrót" BYŁ aktywny (`!docked && !immob`) — inaczej pin mierzyłby wyszarzenie.
+  for (const id of ['v_1', 'v_2']) vm.getVessel(id).position.state = 'orbiting';
+  window.KOSMOS.fleetSystem = { listFleets: () => [] };
+  window.KOSMOS.movementOrderSystem = { issueOrder: () => ({ ok: true }), cancelOrder: () => true };
+
+  const gp = new FleetGroupPanel();
+  gp._ids = ['v_1', 'v_2']; gp.show(); gp._hitZones = [];
+  gp.draw(stubCtx(), 1920, 1080);
+  const grpTypes = [...new Set(gp._hitZones.map((z) => z.type))].sort();
+  ok(gp._hitZones.length > 0, `KONTROLA: panel grupy realnie się narysował (${gp._hitZones.length} stref)`);
+  ok(!grpTypes.includes('grpReturn'), `N>=2 — brak strefy grpReturn (typy: ${JSON.stringify(grpTypes)})`);
+  // KONTROLA niejałowości: pozostałe rozkazy grupowe SĄ (nie zniknął cały rząd przycisków).
+  ok(grpTypes.includes('grpDock') && grpTypes.includes('grpRetreat'),
+     'KONTROLA: pozostałe rozkazy grupowe (grpDock, grpRetreat) dalej się rysują');
+
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = 'v_1'; fmo._hitZones = [];
+  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
+  const mapTypes = [...new Set(fmo._hitZones.map((z) => z.type))];
+  ok(!mapTypes.includes('grpReturn') && !mapTypes.includes('mvpReturn'),
+     'N==1 — panel statku też nie wystawia Powrotu');
+  // ⚠ Odwrót — `retreat` — to CO INNEGO niż Powrót i musi zostać na obu powierzchniach.
+  //   ⚠ Nawias po słowie „Odwrót" świadomie usunięty: `check-i18n` skanuje wywołania i18n
+  //   w CAŁYM `src/`, a polskie „ó" nie jest znakiem słowa w jego wzorcu — więc końcówka
+  //   „...ót" tuż przed nawiasem parsowała się jako wywołanie i18n z kluczem `retreat`.
+  ok(fmo._hitZones.some((z) => z.type === 'mvpRetreat'),
+     'KONTROLA: Odwrót (mvpRetreat) NIE został zdjęty razem z Powrotem');
+
+  // Klucz i18n wycofany z OBU słowników (parytet — `check-i18n` liczy pl == en).
+  const { readFileSync } = await import('node:fs');
+  const pl = readFileSync(new URL('../../i18n/pl.js', import.meta.url), 'utf-8');
+  const en = readFileSync(new URL('../../i18n/en.js', import.meta.url), 'utf-8');
+  ok(!pl.includes('fleetGroup.actionReturn') && !en.includes('fleetGroup.actionReturn'),
+     'klucz fleetGroup.actionReturn wycofany z pl.js i en.js');
+  ok(pl.includes('fleetGroup.actionRetreat') && en.includes('fleetGroup.actionRetreat'),
+     'KONTROLA: sąsiedni klucz fleetGroup.actionRetreat dalej istnieje w obu (pliki realnie wczytane)');
+
+  vm._vessels.delete('v_2');
+  delete window.KOSMOS.fleetSystem;
+}
+
 
 console.log(`\n═══ ${pass}/${pass + fail} OK, ${fail} FAIL ═══`);
 process.exit(fail > 0 ? 1 : 0);

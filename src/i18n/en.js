@@ -1210,7 +1210,6 @@ export default {
   'fleetGroup.statusDocked': 'Docked',
   'fleetGroup.statusTransit': 'In transit',
   'fleetGroup.statusOrbiting': 'Orbiting',
-  'fleetGroup.actionReturn': 'Return',
   'fleetGroup.actionRefuel': 'Refuel',
   'fleetGroup.actionStop': 'Stop',
   'fleetGroup.actionRetreat': 'Retreat',
