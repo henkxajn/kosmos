@@ -1366,76 +1366,97 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ⚠ Zostaje na `FleetGroupPanel`, wiec po slice MAP_VESSEL_PANEL jest **zywy przy N≥2**
      (przy N==1 ta powierzchnia sie nie rysuje). Osobny slice.
 
-259. 🔴 **Panel statku nad mapą oferuje akcje, których silnik nie wykona — a NAJBOGATSZY zestaw
-     akcji jest z mapy NIEKLIKALNY.** Zgłoszone jako ② z live-gate'u slice'u MAP_VESSEL_PANEL
-     (2026-09-07: „akcje celowane nie dochodzą do dyspozycji — *Ship unavailable*"). **NIE jest to
-     wada adaptera i NIE mieści się w fladze `mapVesselPanel`** — odmawia identycznie z Rejestru,
-     więc zgaszenie flagi jej nie usuwa. Własny slice, własny podpis.
+259. 🔴 **`Transport` odmawia statkowi w stanie `orbiting` + `idle` — dziura MIĘDZY DWOMA
+     dyspozytorami.** Zgłoszone jako ② z live-gate'u slice'u MAP_VESSEL_PANEL. **Własny slice,
+     NIE bramkowany flagą `mapVesselPanel`** — `_launchTransport` jest wspólny, więc odmawia
+     identycznie z Rejestru i z Dowództwa; zgaszenie flagi jej nie usuwa.
 
-     **(a) Macierz akcji — ZMIERZONA** (`FLEET_ACTIONS[*].canExecute` + `getAvailableActions`,
-     kadłub `hull_medium`, moduły `engine_ion`+`cargo_small`):
+     **MECHANIZM (ZMIERZONY, wersja finalna).** Statek `orbiting` + `idle` wypada między dwie
+     wzajemnie niepokrywające się bramki:
+     - `MissionSystem._launchTransport:865-869` liczy
+       `isRedispatch = isOrbiting || isRemoteDocked`, gdzie `isOrbiting` wymaga
+       `position.state === 'orbiting'` **ORAZ `status === 'on_mission'`** ⇒ dla `idle` **false**;
+     - gałąź `!isRedispatch` woła `VesselManager.dispatchOnMission`, a ta bramkuje
+       (`:401`) `(status idle|refueling) && position.state === 'docked'` ⇒ dla `orbiting` **false**;
+     - `false` z dyspozytora → `MissionSystem._abortLaunch:1651`, którego **domyślnym powodem**
+       jest `mission.shipUnavailable` ⇒ gracz czyta „Statek niedostępny".
+
+     **Tabela rozstrzygająca** (`OrderService.issueTransport` → `_launchTransport`, wierne
+     odwzorowanie bramki `VesselManager:401`; kolumna „z ładownią" to KONTROLA):
+
+     | stan statku | bez ładowni (`cargoMax 0`) | z ładownią (`cargoMax 50`) |
+     |---|---|---|
+     | `docked` + `idle` | misja (`dispatchOnMission`) | misja |
+     | **`orbiting` + `idle`** | **ODMOWA `mission.shipUnavailable`** | **ODMOWA — identycznie** |
+     | `orbiting` + `on_mission` | misja (`redispatchFromOrbit`) | misja |
+
+     ⚠ **`cargoMax` NIE MA Z TYM NIC WSPÓLNEGO — obie kolumny są identyczne.** Hipoteza robocza
+     z live-gate'u brzmiała „`_launchTransport` traktuje transport jak przewóz ładunku i odrzuca
+     statek bez ładowni" (`Fregata I`: `engine_warp`/`warp_tank`/`titanic_plating`/`weapon_missile`,
+     `cargoMax 0`). Pomiar jej **nie potwierdza**: `_launchTransport` nie zawiera ANI JEDNEGO
+     odwołania do `cargoMax`/`cargoCapacity`, a jedyny predykat ładowni w repo
+     (`Vessel.canHaulCargo:487`) ma **zero konsumentów produkcyjnych**. Statek z ładownią, który
+     „działał", był **ZADOKOWANY** — czyli w jedynym stanie, który przechodzi. **Ładownia była
+     skorelowana, nie sprawcza.**
+     ⚠ **Kontrast zmierzony przez właściciela na żywo — ten sam statek, ten sam cel: PPM
+     move-to-point DZIAŁA, Transport ODMAWIA — potwierdza mechanizm i jest jego najczystszym
+     podpisem:** `moveToPoint` idzie przez `MovementOrderSystem` i **w ogóle nie dotyka**
+     `dispatchOnMission`. Dwie drogi do tego samego ciała, jedna zna stan `orbiting`, druga nie.
+     ⚠ **Dlaczego uderza akurat w panel mapy:** klikalna populacja mapy to `orbiting`/`in_transit`
+     (`ThreeRenderer:4783`/`:1185` — zadokowany nie ma sprite'a), a `orbiting` + `idle` to
+     NORMALNY stan spoczynkowy statku po zakończonej misji albo po `undock`. Panel mapy niczego
+     nie psuje — **eksponuje** stan, w którym gra już wcześniej odmawiała.
+     ⚠ **Poprzednie dwie hipotezy (wybór Outlinerem/Tabem, `_abortLaunch` jako przyczyna)
+     WYCOFANE** — pomiar `cargoMax`/stanu je zastępuje. `_abortLaunch` zostaje w opisie, ale jako
+     **kanał komunikatu**, nie przyczyna.
+     ⚠ **GRANICA DOWODU:** tabela to headless z wiernym odwzorowaniem `VesselManager:401`, nie
+     przebieg w przeglądarce. Odtwarza JEDNAK i zgłoszoną odmowę, i zgłoszony kontrast, a kontrola
+     ładowni jest rozstrzygająca WEWNĄTRZ fixture'u. Do potwierdzenia na żywo w gate'cie 259.
+
+     **KIERUNEK PODPISANY (właściciel, 2026-09-08) — intencja projektowa jest nadrzędna wobec
+     dzisiejszej semantyki:** `Transport` ma być **najprostszym rozkazem „wyślij dowolny statek
+     do celu"** i **musi działać dla KAŻDEGO statku**. Dzisiejsze zachowanie to rozjazd INTENCJI:
+     silnik traktuje `transport` jak „przewóz ładunku z bazy", gracz jak „leć tam".
+     - **OPCJA A (LEAN)** — transport statku, który nie ma czego wieźć (albo nie może wystartować
+       ścieżką bazową), **degraduje się do move-to-point**: leci do celu, nic nie wiezie.
+     - **OPCJA B** — uczciwy komunikat („brak ładowni" / „statek nie jest w bazie") + osobny
+       move-to-point.
+     **Do zmierzenia PRZED podpisem slice'u** (właściciel podpisuje z liczb, nie z opisu):
+     koszt i promień rażenia A — dotyka `_launchTransport` i/lub predykatu `isRedispatch`, czyli
+     ścieżki WSPÓLNEJ dla Rejestru, Dowództwa i panelu mapy, a `dispatchOnMission` ma konsumentów
+     poza transportem (każdy typ misji); czy A ma być zawężona do `orbiting` + `idle` (domknięcie
+     dziury), czy szeroka (każda odmowa dyspozytora → move-to-point); co się dzieje z ładunkiem
+     zadeklarowanym w modalu, gdy lot degraduje się do move-to-point.
+     ⚠ **Nie mylić z Findingiem 255**: tam problem to goły punkt OMIJAJĄCY bramkę układu; tu
+     ścieżka celowana, która NIE STARTUJE. Ale A wprowadza kolejnego producenta `moveToPoint`,
+     więc **255 trzeba przeczytać przed podpisem A**.
+
+     **(dodatkowo, zachowane) Kolizja i18n — PL nie rozróżnia dwóch RÓŻNYCH odmów.**
+     `mission.shipUnavailable` (`pl.js:1765`) i `expedition.vesselUnavailable` (`pl.js:3185`) mają
+     **identyczny** tekst „Statek niedostępny"; w EN to „Ship unavailable" vs „Vessel unavailable".
+     Drugi klucz emituje `FleetManagerOverlay._executeMission:3005`, gdy
+     `getVessel(_selectedVesselId)` zwróci `null` — **inna przyczyna, inna warstwa, ten sam
+     komunikat dla gracza PL**. ⚠ Rozróżnienie kosztowało rundę diagnozy i udało się **tylko
+     dlatego, że właściciel gra po angielsku**. ⚠ Pod **opcją A** pytanie o komunikat częściowo
+     się rozpuszcza (nie ma odmowy do zakomunikowania), ale **kolizja kluczy zostaje** i dotyczy
+     wszystkich pozostałych ścieżek — nie kasować tego akapitu razem z 259.
+
+     **(kontekst) Macierz akcji panelu — ZMIERZONA**, przydatna każdemu, kto rusza katalog akcji:
 
      | stan statku | sprite na mapie 3D | akcje oferowane w panelu |
      |---|---|---|
      | `docked` + `idle` | **BRAK — NIEKLIKALNY** | `orbit`, `transport`, `found_outpost` ← **najbogatszy** |
      | `orbiting` + `idle` | jest → klikalny | `transport` |
      | `orbiting` + `on_mission` | jest → klikalny | `transport`, `redirect` |
-     | `in_transit` | jest → klikalny | **żadnych** (kubełek `in_transit` w `getAvailableActions` jest pusty) |
+     | `in_transit` | jest → klikalny | **żadnych** (kubełek `in_transit` jest pusty) |
 
-     ⚠ **Premisa nieklikalności:** `ThreeRenderer._syncVesselPositions:4783` usuwa sprite'a
-     zadokowanego statku i **NIE odtwarza go**, a `_restoreActiveSystemVesselSprites:1185` robi
-     `continue`. ⇒ stan z najbogatszym zestawem akcji jest z mapy nieosiągalny KLIKIEM.
-     ⚠ **ALE POPULACJA PANELU JEST SZERSZA NIŻ POPULACJA KLIKALNA** (zmierzone w źródle, ważne dla
-     gate'u): panel rysuje się z samego `_selectedVesselId`, a to pole ustawiają TAKŻE
-     `Outliner:668` i `UIManager.cycleSelectedVessel` (Tab/Shift+Tab, `GameScene:4702`) — **bez
-     żadnego wymogu sprite'a**. Zadokowany statek MOŻE więc napędzać panel mapy, jeśli gracz wybrał
-     go Outlinerem albo Tabem. To jedyna droga, którą stan z tabeli wiersz 1 trafia na tę powierzchnię.
-
-     **(b) Sześć miejsc `mission.shipUnavailable` — z przypisaniem do funkcji** (`MissionSystem`):
-     `:561` `_launch` · `:656` `_launchColony` · `:762` `_launchFoundOutpost` · `:1021`
-     `_launchPassenger` · `:1461` `_launchReconTarget` — wszystkie bramkują `!vessel ||
-     vessel.status !== 'idle'` (passenger dodatkowo `position.state !== 'docked'` i dopuszcza
-     `refueling`); szósty `:1651` to **`_abortLaunch`**, czyli nie bramka, tylko **domyślny POWÓD**
-     doklejany do każdej odmowy startu, która nie jest odmową układową.
-
-     **(c) ⚠ SPROSTOWANIE MECHANIZMU — `_launchTransport` NIE MA tej bramki w ogóle.**
-     Jedyna akcja tworząca misję, którą panel oferuje na `orbiting`, trafia do `_launchTransport`
-     (`:843-1013`), a ta funkcja **nie zawiera ani jednego `status !== 'idle'`**. Co więcej,
-     `:865-869` liczy `isRedispatch = isOrbiting || isRemoteDocked`, gdzie
-     `isOrbiting = position.state === 'orbiting' && status === 'on_mission'` — czyli **DOKŁADNIE
-     stan osiągalny z mapy**. To jedyne miejsce w `MissionSystem`, które ten stan rozumie;
-     pozostałych pięć bramek go odrzuca. **Model istnieje, po prostu nie został zastosowany.**
-
-     **Zmierzona tabela odmów** (prawdziwy `MissionSystem`, cel `p_two`, produkcyjne ścieżki):
-
-     | akcja → funkcja | `docked/idle` | `orbiting/idle` | `orbiting/on_mission` |
-     |---|---|---|---|
-     | `transport` → `_launchTransport` | misja + `dispatchOnMission` | misja + `dispatchOnMission` | **misja + `redispatchFromOrbit`** |
-     | `orbit`/`survey` → `_launchReconTarget` | misja | misja | **ODMOWA `mission.shipUnavailable`** |
-
-     ⚠ **Z tego wynika rzecz, której zgłoszenie nie zawierało: bramka `status !== 'idle'` jest
-     z panelu mapy NIEOSIĄGALNA przez akcję, którą panel na `orbiting` oferuje.** `orbit`/`survey`
-     są w `getAvailableActions` **wyłącznie** w gałęzi `docked`. ⇒ **DOKŁADNY WYZWALACZ odmowy
-     z live-gate'u NIE JEST USTALONY.** Dwie hipotezy, obie do pomiaru w slice'ie 259, żadna nie
-     przyjęta: **(H1)** wybrany statek był ZADOKOWANY (Outliner/Tab — patrz (a)), więc panel
-     pokazał `orbit`/`found_outpost` i odmowa przyszła z `_launchReconTarget`; **(H2)** misja
-     powstała i została zwinięta przez `_abortLaunch:1651`, którego domyślnym powodem jest ten
-     sam klucz. ⚠ **Nie zapisywać mechanizmu, dopóki nie zostanie zmierzony na tej samej ścieżce,
-     na której gracz go zobaczył** — wzorzec `registry-may-describe-the-trap-not-the-bug`.
-
-     **(d) Kolizja i18n — PL nie rozróżnia dwóch RÓŻNYCH odmów.** `mission.shipUnavailable`
-     (`pl.js:1765`) i `expedition.vesselUnavailable` (`pl.js:3185`) mają **identyczny** tekst
-     „Statek niedostępny"; w EN to „Ship unavailable" vs „Vessel unavailable". Drugi klucz emituje
-     `FleetManagerOverlay._executeMission:3005`, gdy `getVessel(_selectedVesselId)` zwróci `null` —
-     czyli **inna przyczyna, inna warstwa, ten sam komunikat dla gracza PL**. ⚠ Rozróżnienie ich
-     kosztowało rundę diagnozy przy live-gate'cie i udało się **tylko dlatego, że właściciel gra
-     po angielsku**. Gracz PL tego rozróżnienia nie ma.
-
-     **Zakres slice'u 259 (nie rozstrzygnięty tutaj):** czy pięć bramek `status !== 'idle'`
-     przyjmuje wzorzec `isRedispatch` z `_launchTransport`, czy `getAvailableActions` przestaje
-     oferować to, czego silnik nie wykona (dziś rozjazd idzie w OBIE strony: `orbit` widoczny
-     tylko na doku, choć dok jest z mapy nieklikalny), czy jedno i drugie. ⚠ **Nie łączyć z UI
-     panelu mapy** — 259 jest o silniku misji i o katalogu akcji.
+     ⚠ Populacja PANELU jest szersza niż populacja KLIKALNA: `_selectedVesselId` ustawiają też
+     `Outliner:668` i Tab (`GameScene:4702`), bez wymogu sprite'a — tak zadokowany statek trafia
+     na tę powierzchnię.
+     ⚠ **Pozostałe pięć bramek `status !== 'idle'`** (`:561` `_launch`, `:656` `_launchColony`,
+     `:762` `_launchFoundOutpost`, `:1021` `_launchPassenger`, `:1461` `_launchReconTarget`) jest
+     z panelu mapy **nieosiągalnych** (ich akcje żyją tylko w gałęzi `docked` katalogu), ale
+     opisują TĘ SAMĄ klasę i powinny zostać przejrzane razem z A.
 
 260. ⚪ **Panel statku nad mapą: kółko myszy niepodpięte, panel nieprzesuwalny (polish ④).**
      **(a) Scroll — maszyneria JEST, brakuje TRASY.** `UIManager.handleWheel:1934-1956` ma pięć

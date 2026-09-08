@@ -244,7 +244,7 @@ Rdzeń PASS (krok 2: panel nad mapą pokazuje DOKŁADNIE powierzchnię Rejestru)
 |---|---|---|
 | ① | „przy N≥2 rysują się dwa panele" | **NIE defekt adaptera** — `fleetGroupPanel.draw` ma jedno miejsce wywołania, a obie bramki czytają ten sam `_mapSurface()` w tej samej klatce. Realny problem: powrót przycisku „Powrót" przy N≥2 i **rozjazd słownika akcji** N==1 vs N≥2 ⇒ **A1** (`e591172`). Inwariant renderu dostał pin **P11** (nic go dotąd nie pilnowało). |
 | ③ | klik w panel nie jest pochłaniany | **ZAMKNIĘTE** (`aaf0b54`) — consume-on-rect-hit + płyta tła. Piny **P12** (fail-first) i **P-plate**. |
-| ② | „akcje celowane nie dochodzą do dyspozycji (*Ship unavailable*)" | **NIE mieści się w tej fladze** — odmawia identycznie z Rejestru. ⇒ **Finding 259**, własny slice. ⚠ Dokładny wyzwalacz **NIEUSTALONY**: pomiar wyklucza `transport` (ta ścieżka przechodzi we wszystkich trzech stanach); dwie hipotezy zapisane w 259. |
+| ② | „akcje celowane nie dochodzą do dyspozycji (*Ship unavailable*)" | **NIE mieści się w tej fladze** — odmawia identycznie z Rejestru i z Dowództwa. ⇒ **Finding 259**, własny slice, kierunek podpisany. ⚠ **Root cause USTALONY po rundzie 2:** `orbiting` + `idle` wypada MIĘDZY dwie bramki (`isRedispatch` chce `on_mission`, `dispatchOnMission` chce `docked`) → `_abortLaunch` → „Statek niedostępny". `cargoMax` **nieistotny** — kontrola pokazała obie kolumny identyczne. |
 
 **Zarejestrowane, NIEZREALIZOWANE:**
 - **Finding 259** 🔴 — macierz akcji (dok = najbogatszy zestaw, a z mapy nieklikalny), sześć miejsc
