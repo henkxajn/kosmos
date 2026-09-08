@@ -96,7 +96,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
-| **V-246 … V-270** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
+| **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
 
 ---
@@ -325,7 +325,7 @@ Włączenie jej to zmiana balansu, własny commit i własny pomiar.
 
 ---
 
-# B2 · REJESTR VISUALS — osobna numeracja `V-246 … V-270`
+# B2 · REJESTR VISUALS — osobna numeracja `V-246 … V-275`
 
 > Rejestr macierzysty: **`VISUALS_PLAN.md`**. Tu są **tylko wiersze OTWARTE** — zamknięcia
 > wpisuje się tam, nie tutaj (reguła 1 tego pliku).
@@ -345,10 +345,15 @@ Włączenie jej to zmiana balansu, własny commit i własny pomiar.
 | **V-262** | 🔴 **stan wizualny Dysona nie przeżywa wczytania zapisu ani zmiany układu** — jedyny emitent to `_onSegmentCompleted`, a słuchacz rejestruje się PO `restore()`; przy 20/20 zdarzeń już nie ma, więc utrata jest **TRWAŁA**, a panel dalej melduje etap 4 z 4 |
 | **V-263** | 🟠 **etapy 3 i 4 nie dotykają tarczy gwiazdy** — zmienia się wyłącznie `_starLight.intensity` (+ barwa na etapie 4, przez alias V-248); i18n obiecuje graczowi trzy rzeczy, których renderer nie implementuje |
 | **V-264** | 🟠 **sfera klikalna gwiazdy MNIEJSZA od tarczy** (`r * 2.5` wobec `r * 3.0`), a komentarz twierdzi odwrotnie; zewnętrzne 16,7 % promienia martwe dla kliknięć. ⚠ Świadomie NIE naprawione w V2 (U4) — powiększenie przy V-267 złapałoby planety orbit wewnętrznych |
-| **V-267** | 🔴 **sześć ręcznie pisanych ShaderMaterialów pisze głębię STAŁOPRZECINKOWĄ do bufora LOGARYTMICZNEGO** (brak chunków `logdepthbuf_*` przy `logarithmicDepthBuffer: true`) ⇒ **planeta z DOWOLNEJ odległości wygrywa test z gwiazdą**; potwierdzone na gate'cie S3. ⚠ Naprawa zmienia okluzję gwiazdy wobec KAŻDEJ planety — własny slice |
+| **V-267** | 🔴 **sześć ręcznie pisanych ShaderMaterialów pisze głębię STAŁOPRZECINKOWĄ do bufora LOGARYTMICZNEGO** (brak chunków `logdepthbuf_*` przy `logarithmicDepthBuffer: true`) ⇒ **planeta z DOWOLNEJ odległości wygrywa test z gwiazdą**; potwierdzone na gate'cie S3. ⚠ Naprawa zmienia okluzję gwiazdy wobec KAŻDEJ planety — własny slice. **⚠ Od V3 nie jest to już tylko odczyt ze źródła**: sonda zmierzyła skutek liczbowo (9477 → 0 px), a live gate potwierdził go w grze — patrz V-271 |
 | **V-268** | 🟡 **kamera wchodzi do wnętrza tarczy i nic tego nie pilnuje** — `_minDist` 0.3 wobec promienia rdzenia 2,29-4,57, a klik w gwiazdę tylko obniża podłogę (bez auto-zoomu) ⇒ jedno kliknięcie i scroll; `FrontSide` wycina rdzeń i korona zalewa ekran. V2 ogranicza **własny** wkład sufitem, zalania nie naprawia |
 | **V-269** | ⚪ `isTextureInCache` **wyeksportowane i nigdy niewołane** — cache chroni dziś wyłącznie to, że `Material.dispose()` w three tylko wysyła zdarzenie |
 | **V-270** | 🟠 **przekręcenie `LIVE_GAS.OMEGA_DEG` na żywo jest SKOKIEM POŁOŻENIA, nie zmianą prędkości** (`uGasTime` akumulowane bez wrapu, ω mnożone przez pełny czas) — a to było pokrętło, którym V1 stroił ω **dwa razy**. Kształt naprawy: faza akumulowana w JS (D-V2u, zastosowane w V2) |
+| **V-271** | 🔴 **warstwa chmur nad tarczą planety jest MARTWA** — instancja V-267 o innym skutku (nie „przebijanie", tylko funkcja shipowana i niewidoczna). `FrontSide` r = 1.025 R z `depthTest: true` pisze głębię stałoprzecinkową i przegrywa z log-głębią rdzenia. **ZMIERZONE** sondą V3 (9477 → **0** px wewnątrz tarczy) i **POTWIERDZONE W GRZE** na live gate'cie V3 (chmury tylko jako obwódka przy krawędziach). ⚠ Nie jest to regresja V3 |
+| **V-272** | 🟠 **księżyce z `atmosphere === 'thin'` nie dostają ani powłoki, ani chmur** — `getAtmosphereMoon` potrafi to zwrócić, `_addMoonMesh` nie buduje żadnej warstwy. ⚠ Świadomie NIE naprawione w V3 (D-V3l): dodanie powłok czyni mapę BARDZIEJ wyrazistą, odwrotnie do zlecenia |
+| **V-273** | 🟠 **`_updatePlanetMesh` odbudowuje wyłącznie rdzeń** — powłoka i chmury zachowują promień i istnienie sprzed zmiany; planeta, która ZYSKA atmosferę, nigdy jej nie dostanie, a która STRACI — nigdy nie zgubi |
+| **V-274** | ⚪ **szara zasłona fog-of-war (`radius * 1.03`) leży WEWNĄTRZ powłoki (1.08)** — niezbadane ciało jest wyszarzone i jednocześnie nosi halo. Po V3 halo jest już tylko dzienne; pytanie „czy zasłona ma tłumić też powłokę" zostaje |
+| **V-275** | ⚪ **rodzina V-253: mapa daje wszystkim planetom skalistym i lodowym ten sam `0x4488ff`** (bo `glowColor` jest `null` dla `rocky`/`gas`/`ice`), a `PlanetShader.createUniforms` ma gotową tablicę `atmColors` per typ. ⚠ Świadomie poza V3 (D-V3o): zmiana koloru wszystkich planet naraz zabrudziłaby gate'owi odczyt zmiany oświetleniowej |
 
 **Zamknięte w arcu** (szczegóły i pomiary w rejestrze macierzystym): **V-246** · **V-247**
 (oba w V0) · **V-250** (`cc12e04`) · **V-251** (`58628f8`) · **V-257** (`0f20904` + `118f837`) ·

@@ -33,9 +33,10 @@ import { atmoStrengthFor } from './AtmosphereLogic.js';
 //   tutaj, razem ze swoim czytelnikiem w ATMO_FRAG_LIVE — lekcja V-266 (1079cd9):
 //   pole zadeklarowane przed swoim czytelnikiem to zaślepka nazwana jak funkcja.
 const LIVE_ATMO = {
-  // ⚠ PROWIZORYCZNE — do kalibracji na live gate. Bramka N·L kasuje nocną połowę
-  //   pierścienia, ale dziennej nie przygasza wcale, więc „subtelniej w ogóle" to
-  //   osobne cięcie: 0.55 → 0.38 (−31 %).
+  // ⚠ SKALIBROWANE PRZEZ GRACZA, nie prowizoryczne (live gate 2026-09-08: 0.38
+  //   zatwierdzone jako finalne). Bramka N·L kasuje nocną połowę pierścienia, ale
+  //   dziennej nie przygasza wcale, więc „subtelniej w ogóle" to było osobne cięcie:
+  //   0.55 → 0.38 (−31 %).
   STRENGTH:           0.38,  // mistrz alfy powłoki
 
   // ⚠ 0.18 NIE JEST nową magiczną liczbą: to termWidth używany dziś w OBU torach
@@ -57,9 +58,12 @@ const LIVE_ATMO = {
 
   // ⚠ NEUTRALNE DOMYŚLNIE (hi <= lo ⇒ discFade zwraca 1.0), ale ŻYWE — czytane co
   //   klatkę, więc gate włącza zanik małych tarcz dwoma tokenami z konsoli i widzi
-  //   efekt bez restartu. Celuje w samo zgłoszenie: na mapie układu większość tarcz
-  //   ma kilkanaście pikseli, a 2-pikselowe halo wokół 12-pikselowej kropki to jest
-  //   ten „paciorkowy" efekt.
+  //   efekt bez restartu.
+  // ⚠ ZMIERZONE NA LIVE GATE (2026-09-08): przy tarczach 2-32 px z tamtego zapisu
+  //   włączenie pasma NIE dało dostrzegalnej różnicy — pierścień jest tam i tak
+  //   podpikselowy. Pokrętło ZOSTAJE (kosztuje jedną linię i jest żywe), ale hipoteza
+  //   „paciorkowego" efektu przy małych tarczach NIE potwierdziła się i nie należy
+  //   jej powtarzać bez nowego pomiaru.
   FADE_PX_LO:         0,     // średnica tarczy [CSS px], poniżej której powłoka gaśnie całkiem
   FADE_PX_HI:         0,     // średnica tarczy [CSS px], powyżej której powłoka świeci pełnią
 };

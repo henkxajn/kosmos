@@ -1,8 +1,8 @@
 # VISUALS 1.0 — rejestr repo-side + zapis wykonania (slice'y V0, V1, V2)
 
-> **Stan: V0, V1 i V2 ZAMKNIĘTE** (V2 — 2026-09-07, save **v101 bez migracji**, live-gate PASS
-> na każdym z czterech slice'ów funkcyjnych). Arc VISUALS 1.0 nie ma otwartego frontu;
-> kolejne slice'y otwierają się własnym zadaniem projektowym.
+> **Stan: V0, V1, V2 i V3 ZAMKNIĘTE** (V3 — 2026-09-08, save **v101 bez migracji**, live-gate
+> FULL PASS). Arc VISUALS 1.0 nie ma otwartego frontu; kolejne slice'y otwierają się własnym
+> zadaniem projektowym.
 
 ---
 
@@ -126,6 +126,12 @@ i globalnie — `_tickGasMaterials` przepisuje `LIVE_GAS` do uniformów co klatk
 | **V-269** | ⬜ OTWARTY | ⚪ `isTextureInCache` jest wyeksportowane i NIGDY niewołane. Tekstury w cache chroni dziś to, że `Material.dispose()` w three tylko wysyła zdarzenie — właściwość biblioteki, nie decyzja tego pliku |
 | **V-270** | ⬜ OTWARTY | 🟠 **Przekręcenie `LIVE_GAS.OMEGA_DEG` na żywo jest SKOKIEM POŁOŻENIA, nie zmianą prędkości** — w SHIPOWANEJ ścieżce gazowca. `ThreeRenderer:3737` akumuluje `uGasTime += dt` bez wrapu, a `GasGiantShader:846` liczy `gasOmega(lat) * uGasTime`, więc zmiana ω po czasie *t* obraca pasy natychmiast o `Δω·t` — dla kalibracji 6→12 po dziesięciu minutach to ≈ 10 pełnych obrotów w jednej klatce. ⚠ To było pokrętło, którym arc V1 stroił ω **dwa razy**. Kształt naprawy: akumulować fazę w JS (D-V2u, zastosowane w całym V2) |
 
+| **V-271** | ⬜ OTWARTY | 🔴 **Warstwa chmur nad tarczą planety jest MARTWA — instancja V-267 o innym skutku.** `_createSystemCloudMesh` daje sferę `FrontSide` r = 1.025 R z `depthTest: true`, geometrycznie PRZED powierzchnią, ale pisze głębię STAŁOPRZECINKOWĄ (~0,99997 przy w = 30), podczas gdy rdzeń planety z biblioteki three pisze LOGARYTMICZNĄ (~0,403) ⇒ przy `LessEqual` chmury przegrywają test na całej tarczy. **ZMIERZONE sondą A1** (warstwa `FrontSide` w tej samej konfiguracji: 9477 → **0** pikseli wewnątrz tarczy po dodaniu nieprzezroczystego rdzenia) i **POTWIERDZONE W GRZE na live gate'cie V3**: chmury widoczne wyłącznie jako obwódka przy krawędziach tarczy, dokładnie jak przewiduje model głębi. ⚠ NIE jest to regresja V3 — defekt jest pre-existing; V3 tylko dostarczył przyrząd, który go zmierzył. Naprawa = V-267 (własny slice, zmienia okluzję w całej grze) |
+| **V-272** | ⬜ OTWARTY | 🟠 **Księżyce z `atmosphere === 'thin'` nie dostają ani powłoki, ani chmur.** `getAtmosphereMoon` (`SystemGenerator.js:407-419`) potrafi zwrócić `'thin'` (duże księżyce w niskich temperaturach, Tytan-like), a `_addMoonMesh` nie buduje żadnej z tych warstw — dane mówią „atmosfera”, render milczy. ⚠ **Świadomie NIE naprawione w V3** (D-V3l): dodanie powłok czyni mapę BARDZIEJ wyrazistą, czyli odwrotnie do zlecenia |
+| **V-273** | ⬜ OTWARTY | 🟠 **`_updatePlanetMesh` odbudowuje WYŁĄCZNIE rdzeń.** Powłoka i chmury zachowują promień i samo istnienie sprzed zmiany ⇒ planeta, która po kolizji zmieni masę, nosi powłokę o starym promieniu; planeta, która ZYSKA atmosferę, nigdy jej nie dostanie; która STRACI — nigdy nie zgubi. Pre-existing, znalezione przy audycie V3 |
+| **V-274** | ⬜ OTWARTY | ⚪ **Szara zasłona fog-of-war leży WEWNĄTRZ powłoki.** `_syncBodyScanVeil` skaluje ją do `radius * 1.03`, a powłoka stoi na 1.08 ⇒ niezbadane ciało jest wyszarzone i jednocześnie nosi pełne halo. Po V3 halo jest już tylko dzienne, ale pytanie „czy zasłona ma tłumić też powłokę” zostaje otwarte |
+| **V-275** | ⬜ OTWARTY | ⚪ **Rodzina V-253: mapa daje WSZYSTKIM planetom skalistym i lodowym ten sam `0x4488ff`.** `glowColor` jest `null` dla `rocky`/`gas`/`ice` w `PLANET_TYPE_CONFIG` (niezerowy tylko dla `hot_rocky`), więc fallback łapie prawie wszystko — podczas gdy `PlanetShader.createUniforms` ma gotową tablicę `atmColors` per typ (ice jasny błękit, volcanic pomarańcz, desert piaskowy). ⚠ **Świadomie POZA V3** (D-V3o): zmiana koloru każdej planety naraz zabrudziłaby gate'owi odczyt zmiany oświetleniowej. Najtańszy krok następny, gdyby mapa miała być mniej monotonna |
+
 ✅ **Granica dowodu — UZUPEŁNIONA 2026-09-06.** Treść **V-248, V-249, V-255** została dopisana
 z rejestru właściciela (backfill), więc ten rejestr jest **samowystarczalny**: nie trzeba
 sięgać gdzie indziej, żeby wiedzieć, **co** jest otwarte i **dlaczego** nie zostało ruszone.
@@ -148,6 +154,19 @@ Obie powstały z **własnych nieudanych pomiarów** i obie są dziś regułą, n
    z wymyśloną liczbą.
 2. **Przesunięcie w px przy krótkim Δt** — dla RUCHU. Korelacja **nasyca się**: 0,7003 vs 0,7027
    przy **trzykrotnej** różnicy ω. Mierzy się przesunięcie, nie podobieństwo.
+
+3. **Bateria mutacyjna jako UCZCIWY ZAMIENNIK niemożliwego fail-first** (V3/A0). Klasyczny
+   fail-first nie istnieje dla commita, który TWORZY moduły: na `e9f12b7` keeper nie
+   załadowałby się w ogóle (importy nie istniały), więc „padło N asercji” nie ma jak powstać.
+   Zamiast udawać pomiar, wprowadza się BATERIĘ: N celowych mutacji kodu produkcyjnego,
+   każda uruchamiana i **rewertowana z weryfikacją bit w bit**, z wymogiem, żeby KAŻDA dała
+   non-zero exit. A0: 8/8, A1: 12/12. ⚠ Mutant, który się **nie aplikuje** (zła kotwica),
+   liczy się jako **JAŁOWY**, nie jako zdany — w A1 zdarzyło się raz i pin trzeba było
+   dobić osobno; był to akurat najważniejszy strażnik slice'u (złota suma ścieżki OFF).
+4. **Pinuj NIEOBECNOŚĆ, gdy nieobecność jest decyzją** (V3/A0→A1). A0 asertował, że pięciu
+   pokręteł **NIE MA**, bo ich czytelnik przychodził dopiero w A1 (reguła V-266). W A1 te
+   asercje **miały paść** i zostały zamienione na piny OBECNOŚCI z kontrolami. Powód wpisuje
+   się w nagłówek keepera — inaczej pin, który znika, wygląda później jak zgubiony.
 
 ⚠ **Trzecia lekcja, procesowa — moja własna błędna diagnoza, sprostowana w C2.** Sypanie się
 harnessów modułowych przypisałem „zaśmieconym profilom Chrome" i przepisałem rytuał czyszczenia
@@ -200,6 +219,13 @@ razem w ~2 s. **Rytuał leczący objaw wygląda dokładnie jak wiedza.**
   normalizuj końce linii i **powiedz, że to zrobiłeś**. ⚠ Ta sama pułapka po stronie skryptów
   łatających: `Path.read_text()` w Pythonie tłumaczy `\r\n` → `\n` po cichu, więc kotwica
   zbudowana z CRLF nie trafia w plik, który jest CRLF.
+- **Flaga `FEATURES` przełączona W KONSOLI łapie się dopiero przy PRZEBUDOWIE MESHY** (V3,
+  gate §6). Materiał powstaje raz, w `addPlanetMesh`, więc samo przestawienie pola nic nie
+  robi. Przebudowę wymusza **wejście w INNY układ** — odbicie się o mapę galaktyki i powrót
+  do TEGO SAMEGO układu **nie wystarcza**. ⚠ I druga połowa: **`F5` wczytuje `FEATURES`
+  z pliku**, więc kasuje przestawienie zrobione w konsoli. Krok gate'u „przełącz flagę
+  i odśwież” jest więc **sprzeczny sam ze sobą** — albo konsola + zmiana układu, albo
+  edycja `GameConfig.js` + `F5`.
 - **Pokrętło musi być albo ŻYWE, albo jawnie `BAKED`.** Pokrętło nieczytane co klatkę i nieopisane
   kosztuje rundę gate'u: gate nim kręci, nie widzi zmiany i bierze to za dowód czegoś innego.
   W V2 zdarzyło się to dwa razy naraz (`PROM_DRIFT` martwe, `PROM_GAIN` czytane raz przy budowie
@@ -291,3 +317,128 @@ wycofany z grupy gwiazdy; każda faza akumulowana w JS z kroku C2.
 V-261 · V-262 · V-263 · V-264 · V-267 · V-268 · V-269 · V-270. Żaden nie jest regresją V2;
 V-267 i V-268 objawiły się na gate'cie S3 wewnątrz tarczy i zostały tam poprawnie
 przypisane, a nie zrzucone na slice.
+
+---
+
+## V3 — ATMOSFERA PO STRONIE DNIA (ZAMKNIĘTY 2026-09-08, save v101 bez migracji, live-gate FULL PASS)
+
+Powłoka atmosfery planet skalistych rysowała **pełny jasny pierścień dookoła tarczy,
+niezależnie od oświetlenia** — wyraźnie widoczny po stronie nocnej, za terminatorem —
+i była przy tym „bardzo wyróżniająca się" w ogóle. Dwa commity funkcyjne w kształcie
+S1→S2 z V2 (rusztowanie jałowe, potem funkcja), bo diff funkcji ma nie kłamać o tym, co
+się zmieniło.
+
+| commit | treść |
+|---|---|
+| `65e9231` | **A0** — rusztowanie: NEW `AtmosphereShader.js` (GLSL przeniesiony VERBATIM) + NEW `AtmosphereLogic.js` (ZERO importów) + flaga `dayNightAtmosphere` + `_tickAtmoMaterials` + `KOSMOS.debug.atmoInfo()`. **Pikselowo jałowy z konstrukcji** |
+| `d9499bb` | **A1** — `ATMO_FRAG_LIVE`: bramka N·L na ALFIE, fresnel per-fragment, wspólny `TERM_WIDTH`, usunięta martwa gałąź koloru nocy; `STRENGTH` 0.55 → 0.38 + mnożniki klasy atmosfery; NEW `ATMO_OFF_KNOBS` |
+| (ten) | **A2** — docs + korekta dwóch komentarzy, które po gate'cie kłamały |
+
+### Diagnoza — jedno zdanie
+
+`alpha = glow(fresnel) * uStrength` **nie zawierała członu oświetlenia**. Kolor zmieniał się
+z kątem słońca (dzień → terminator → noc), przezroczystość nie — a przy `AdditiveBlending`
+(`SrcAlpha, One`) wkład na ekran to `kolor × alfa`, więc **alfa JEST jasnością**.
+
+⚠ **Plumbing N·L JUŻ ISTNIAŁ i był poprawny**, co zmieniło rozmiar slice'u: `uLightDir` to
+POZYCJA ŚWIATOWA gwiazdy (nazwa kłamie od zawsze), wpisywana w `_syncPlanetMeshes`, a fragment
+liczył z niej `sunAngle` **per-fragment**, dokładniej niż precedens gazowca (kierunek w
+przestrzeni widoku). V3 **nie dołożył ani jednego varyinga, ani jednego kanału do gwiazdy** —
+przeniósł policzoną już wielkość z koloru do alfy.
+
+⚠ Zasięg był systemowy, nie punktowy: `getAtmosphere` zwraca `'thin'` z prawdopodobieństwem
+0,70-0,80 dla każdej nie-gazowej planety o `g ≥ 0,30`, więc **większość planet skalistych
+w układzie nosiła ten pierścień** — stąd „w ogóle za bardzo się wyróżnia".
+
+### Co zdecydowało o kształcie
+
+- **`smoothstep(−TERM_WIDTH, +TERM_WIDTH, N·L)`, nie `clamp(N·L)`** — twardy lambert gaśnie
+  liniowo przez **90° łuku**, czyli przygaszałby dzienny limb, tę część, która ma zostać.
+- ⚠ **Świadomie NIE używamy geometrycznego cienia powłoki.** Punkt na powłoce r = 1.08 R wchodzi
+  w cień dopiero przy `N·L ≈ −0,93` (bo `sin θ < 1/1,08`) — dosłowna geometria kazałaby świecić
+  prawie całą noc. Renderujemy jednak **KOLUMNĘ** atmosfery, a jej masa rozpraszająca siedzi
+  nisko i wchodzi w cień od razu za terminatorem. Wpis istnieje po to, żeby nikt tego
+  „nie naprawił" na −0,93.
+- **Ciepły pas dzieli `TERM_WIDTH` z bramką**: bramka ma w terminatorze wartość dokładnie 0.5,
+  więc łuk sam przycisza się o połowę i ląduje na krawędzi zaniku — tam, gdzie w naturze jest.
+  Jedno pokrętło rusza obiema rzeczami, więc nie mogą się rozjechać.
+- **Gałąź koloru NOCY usunięta w wariancie żywym** — alfa i tak gasiła te fragmenty do zera,
+  więc było to liczenie koloru, którego nikt nie zobaczy. ⚠ Sprzężenie do zapamiętania:
+  podniesienie `NIGHT_FLOOR` daje residual w chromie DNIA, a nie w dawnym granacie.
+- **Mnożnik klasy atmosfery** (`thin` 0.55 / `breathable` 1.00 / `dense` 1.35) wchodzi w
+  ISTNIEJĄCY `uStrength`, liczony na CPU ⇒ shader nie dostał ani jednego pola na gęstość,
+  a obniżona została MEDIANA pierścienia (bo `thin` jest najczęstsze), nie wszystko po równo.
+- **`atmoScale` NIE jest pokrętłem** (D-V3c/W3 odrzucone): zwężenie 8-procentowego pierścienia
+  zepchnęłoby go w aliasing przy typowej tarczy na mapie układu.
+
+### ⚠ Sonda złapała defekt, którego projekt nie przewidział — TRZECI STAN kill-switcha
+
+Fabryka **ścieżki OFF** liczyła siłę z `LIVE_ATMO`, więc po zmianie mistrza na 0.38 stan OFF
+dawał `uStrength` **0.209 zamiast 0.55**. To nie jest „trochę inny odcień": kill-switch ma
+przywracać stan SPRZED slice'u, a dawał **trzeci stan** — ani przed, ani po. Lekarstwo:
+NEW **`ATMO_OFF_KNOBS`**, `Object.freeze`'owana migawka pokręteł sprzed slice'u, czytana
+WYŁĄCZNIE przez fabrykę OFF i celowo **nie śledząca** `LIVE_ATMO`.
+
+⚠ **Reguła, która z tego wychodzi:** kiedy kill-switch dzieli obiekt konfiguracji z wariantem
+żywym, ścieżka OFF **musi mieć własną, zamrożoną kopię wartości**. Inaczej każda kalibracja
+wariantu żywego po cichu przesuwa też stan „wyłączone".
+
+### Pomiar (sonda kompilacji + funkcjonalna, Chrome headless + SwiftShader)
+
+Gwiazda na +X, wąskie pasma limbu z pominięciem frędzla terminatora, 256×256:
+
+| | noc (max) | dzień (max) | noc/dzień | pikseli świecących |
+|---|---|---|---|---|
+| **OFF (stan sprzed slice'u)** | **36** | 112 | **0,3214** | 19 992 |
+| **ŻYWY (A1)** | **0** | 43 | **0,0000** | 9 596 |
+
+Dzienny limb 112 → 43 = **0.209/0.55** co do trzeciego miejsca. Ciepły pas **123 → 43**:
+przestał być najjaśniejszą rzeczą na ekranie. Pokrętła sprawdzone wykonaniem: `uDiscFade 0.25`
+→ dzień 43→11 (×0,256) · `NIGHT_FLOOR 0.5` → noc 0→22 · `TERM_WIDTH 0.6` → szerszy zanik,
+noc dalej 0. **KONTROLA SONDY PADA**: materiał z niezadeklarowaną funkcją GLSL daje
+`glError 1282`, `VALIDATE_STATUS false`, 0 pikseli.
+
+### Live gate 2026-09-08 — FULL PASS
+
+§1-3 noc ciemna za terminatorem, dzienny limb zachowany, ciepły łuk obecny i spokojny, mapa
+układu spokojniejsza z różnicowaniem wg klasy · §4 `atmoInfo()` co do liczby (0.209/0.380/0.513)
+· §6 **rollback zweryfikowany WARTOŚCIĄ I OKIEM**: flaga OFF + przebudowa ⇒ `zywy:false`,
+`uStrength` płaskie 0.55 z zamrożonej migawki, pełny pierścień sprzed slice'u razem z nocną
+stroną; flaga ON przywraca nowy wygląd. **`STRENGTH = 0.38` zatwierdzone jako finalne.**
+
+⚠ **§5 — hipoteza OBALONA pomiarem, pokrętło zostaje.** `FADE_PX` przy tarczach 2-32 px
+z tamtego zapisu **nie dało dostrzegalnej różnicy** — pierścień jest tam i tak podpikselowy.
+Shipuje się NEUTRALNIE (0/0) zgodnie z podpisem, ale przewidywanie z audytu („paciorkowy efekt
+przy małych tarczach") **nie potwierdziło się** i nie należy go powtarzać bez nowego pomiaru.
+
+⚠ **§7 — V-271 POTWIERDZONY W GRZE**: chmury widoczne wyłącznie jako obwódka przy krawędziach
+tarczy, dokładnie jak przewidywał model głębi. **Nie jest to regresja A1** — defekt jest
+pre-existing (V-267); V3 dostarczył tylko przyrząd, który go zmierzył.
+
+### Kill-switch i granice
+
+`FEATURES.dayNightAtmosphere` (default **ON**, brak klucza = OFF — idiom `liveGasShaders`).
+Bramka stoi **u wołającego** (`addPlanetMesh`), więc przy OFF materiał żywy **nie powstaje
+w ogóle**, a moduł shadera nie importuje `GameConfig` (ani i18n). ⚠ Zapis `uLightDir`
+w `_syncPlanetMeshes` zostaje **poza flagą** — jest sprzed slice'u i karmi mieszankę koloru,
+z której ścieżka OFF nadal korzysta.
+
+⚠ **V3 musiał zostać efektem KRAWĘDZI.** Widoczny jest wyłącznie pierścień między 1,00 R
+a 1,08 R; jakakolwiek „mgiełka nad tarczą" jest dziś kasowana testem głębi (V-267) i należy
+do tamtego slice'u. Projekt jest przy tym odporny na przyszłą naprawę V-267: przy poprawnej
+głębi powłoka `BackSide` nadal jest zasłaniana przez własną planetę.
+
+**Świadomie POZA V3** (D-V3k/l/m/o): powłoka globusa kolonii (inny materiał, inny renderer,
+inny defekt — płaska poświata `MeshBasic` bez oświetlenia) · księżyce z atmosferą (V-272) ·
+rozpraszanie w przód (`V·L` — rozjaśnia cienki sierp, czyli działa przeciw zleceniu) ·
+ujednolicenie palety (V-275).
+
+**Testy:** keeper `src/testing/smoke/atmosphere_logic_smoke.mjs` **100/100** (T0 złote sumy
+ścieżki OFF · T0b pin przeniesienia · T0c treść wariantu żywego, gdzie **każdy pin ma kontrolę
+dającą ODWROTNY wynik na literale OFF** · T1/T2/T3/T6 wykonaniem · T4 wpięcie i pułapka D-V3j
+· T5 idiom flagi). Baterie mutacyjne **8/8** (A0) i **12/12** (A1). Sweep **216/216 OK, 0 FAIL**
+· `check-i18n` PASS · save v101 bez migracji · **zero kluczy i18n** (V3 nie dodaje napisów).
+
+⚠ **Naprawiony defekt NIE MA numeru `V-`** i to jest świadome: przyszedł ze zrzutu ekranu
+właściciela i został zamknięty w tym samym oddechu, więc nigdy nie mieszkał w rejestrze.
+V3 **otwiera** natomiast pięć wpisów: V-271 … V-275.
