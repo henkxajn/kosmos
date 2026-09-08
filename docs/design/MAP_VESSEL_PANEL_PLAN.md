@@ -229,7 +229,23 @@ układu; kontrola: `false` go zachowuje — dowód, że filtr działa, a nie że
 - **256** (pełna naprawa `getDockTargets` + `_issueDock`) — tu tylko bramka nowej powierzchni (§7).
 - **257** (`countActionable` bez terminu `isInService`; wyniki `issueOrder` połykane) — zostaje na
   `FleetGroupPanel`, żywy przy N≥2.
-- **Wariant B** (ekstrakcja `VesselActionPanel`, ≈2 400 linii) — osobny arc, tylko po live-gate.
+- ~~**Wariant B** (ekstrakcja `VesselActionPanel`, ≈2 400 linii) — osobny arc, tylko po live-gate.~~
+  ⛔ **ZAMKNIĘTY 2026-09-08, NIE WRACA JAKO SLICE.** Decyzja właściciela po zmierzeniu B1.
+  Kryterium podpisane brzmiało: "liczba guardów `if (!compact)` decyduje, czy karczunek kiedykolwiek
+  dostanie slice — kilkanaście znaczy NIGDY". **ZMIERZONE: JEDEN guard**, obejmujący ciągły,
+  138-liniowy region karty katalogowej (zero stref klikalnych, zero `return`, zero zmiennych
+  czytanych niżej). Realna zmiana: **22 wstawki / 3 usunięcia** (`git diff -w`).
+  Kompakt okazał się ŚCISŁYM PODZBIOREM, a nie innym układem (bez własnej kolejności wierszy,
+  bez własnego skalowania) ⇒ nie potrzebuje własnego renderera.
+  ⚠ **Trzy powody, dla których karczunek NIE broni się także merytorycznie** (zmierzone w audycie B):
+  (1) **nie dowoziłby celu** — po przeniesieniu 2504 linii / 26 % pliku nadal renderowałbyś tę samą
+  kartę katalogową; kompaktowy układ trzeba by zaprojektować OSOBNO, czyli i tak zrobić B1;
+  (2) **odbiera gwarancję, która uczyniła slice 258 wiarygodnym** — dziś "panel mapy ≡ Rejestr"
+  jest prawdą Z KONSTRUKCJI (ta sama metoda, ta sama instancja, ta sama klatka; golden P1/C6
+  zmierzony co do piksela), a komponent z DWOMA miejscami wywołania trzeba utrzymywać DYSCYPLINĄ;
+  (3) byłby **4× największym karczunkiem w historii repo**, w najczęściej edytowanym pliku.
+  **Ponowne otwarcie wymaga uzasadnienia ARCHITEKTONICZNEGO, nie UX-owego** — UX-owe zostało
+  zmierzone i obalone (B1 dowozi mały panel jednym guardem).
 - **Powrót** — panel Rejestru go nie ma, więc przy **N==1 znika**; ale `grpReturn` żyje przy **N≥2**,
   a `bgReturn` i `fleetReturnBase` (`FMO:3806`) są nietknięte. ⚠ „Nigdzie nie ma Powrotu" **nie jest**
   darmową konsekwencją tego slice'u — to osobna decyzja.

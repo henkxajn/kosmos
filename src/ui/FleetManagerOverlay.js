@@ -1400,7 +1400,7 @@ export class FleetManagerOverlay {
   //   więc bez wyzerowania mapa pokazałaby detal floty albo ship picker. Przywracamy w `finally`,
   //   bo `_drawRight` potrafi rzucić (ma własny `finally` na clip) — nieprzywrócone pola zepsułyby
   //   Dowództwo przy najbliższym otwarciu.
-  drawVesselPanel(ctx, x, y, w, h) {
+  drawVesselPanel(ctx, x, y, w, h, opts = {}) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr || !this._selectedVesselId) { this._vesselPanelRect = null; return false; }
     const v = vMgr.getVessel(this._selectedVesselId);
@@ -1440,7 +1440,7 @@ export class FleetManagerOverlay {
       const colMgr = window.KOSMOS?.colonyManager;
       this._drawRight(ctx, x, y, w, bodyH, vMgr,
         window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem,
-        colMgr, colMgr?.activePlanetId);
+        colMgr, colMgr?.activePlanetId, opts);
     } finally {
       this._selectedFleetId     = savedFleetId;
       this._pendingSendSystemId = savedSendSys;
@@ -7265,8 +7265,18 @@ export class FleetManagerOverlay {
     ctx.fillText('— brak dostępnych akcji —', x + pad, cy + 14);
   }
 
-  _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid) {
+  _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid, opts = {}) {
     const pad = 8;
+    // ⚠ B1 — TRYB KOMPAKTOWY (Finding 260 / slice B). `compact` ZWĘŻA treść gałęzi statku
+    //   do tego, po co gracz otwiera panel nad mapą: nagłówek + AKCJE + status misji.
+    //   ZMIERZONE PRZED ZMIANĄ: nad pierwszym przyciskiem akcji leżało 456 px karty
+    //   katalogowej (opis kadłuba, OSIĄGI, paski paliwa/wytrzymałości, utrzymanie), przy
+    //   contentH = 550 px ⇒ „mały panel z pełnym zestawem akcji" był problemem UKŁADU,
+    //   a nie geometrii: samo zmniejszenie okna wpychało akcje pod fold.
+    // ⚠ REJESTR I DOWÓDZTWO NIE PODAJĄ `opts` ⇒ `compact` jest falsy ⇒ ich render jest
+    //   BIT W BIT jak dotąd. To ten sam mechanizm bezpieczeństwa, który obronił slice 258:
+    //   golden (P1/C6) chroniony Z KONSTRUKCJI, nie dyscypliną.
+    const compact = opts.compact === true;
     // Domyślnie brak scrolla (gałęzie early-return: flota/picker/brak/wróg). Ścieżka
     // szczegółów statku gracza nadpisuje _rightContentH przez _finishRight (niżej).
     this._rightViewH = h;
@@ -7457,142 +7467,151 @@ export class FleetManagerOverlay {
     ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
     cy += 8;
 
-    // ── Osiągi (opis kadłuba + specyfikacja) ─────────────────
-    if (ship) {
-      cy = this._drawShipSpecs(ctx, x, cy, w, pad, ship, vessel);
-    }
+    // ── KARTA KATALOGOWA (opis kadłuba + OSIĄGI + paski + utrzymanie) ─────────
+    // ⚠ B1 — POMIJANA w trybie kompaktowym. Ten region jest CIĄGŁY i czysto informacyjny:
+    //   ZERO stref klikalnych, ZERO `return`, ZERO zmiennych czytanych niżej (zmierzone),
+    //   więc jeden `if` wystarcza i nie trzeba niczego wycinać do osobnej metody.
+    //   Przycisk Cargo ZOSTAJE poza guardem — to AKCJA (strefa `cargo_load`), nie karta
+    //   katalogowa; jego zdjęcie odebrałoby kompaktowi ładowanie ładunku, czyli dokładnie
+    //   to, po co ten panel istnieje („pełny zestaw akcji").
+    if (!compact) {
+      // ── Osiągi (opis kadłuba + specyfikacja) ─────────────────
+      if (ship) {
+        cy = this._drawShipSpecs(ctx, x, cy, w, pad, ship, vessel);
+      }
 
-    // Separator (osiągi → zasoby)
-    ctx.strokeStyle = THEME.border;
-    ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
-    cy += 8;
+      // Separator (osiągi → zasoby)
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+      cy += 8;
 
-    // ── Pasek paliwa (h=36) ──────────────────────────────────
-    const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.labelFuel'), x + pad, cy + 10);
-
-    ctx.fillStyle = THEME.textPrimary;
-    ctx.textAlign = 'right';
-    ctx.fillText(`${vessel.fuel.current.toFixed(1)} / ${vessel.fuel.max} pc`, x + w - pad, cy + 10);
-    ctx.textAlign = 'left';
-
-    const fBarX = x + pad;
-    const fBarY = cy + 16;
-    const fBarW = w - pad * 2;
-    const fBarH = 8;
-    ctx.fillStyle = THEME.bgTertiary;
-    ctx.fillRect(fBarX, fBarY, fBarW, fBarH);
-    const fColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
-    ctx.fillStyle = fColor;
-    ctx.fillRect(fBarX, fBarY, Math.round(fBarW * fuelPct), fBarH);
-    ctx.strokeStyle = THEME.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(fBarX, fBarY, fBarW, fBarH);
-
-    cy += 32;
-
-    // ── Pasek paliwa warp (S3.0b S1b — tylko statki z Komorą Warp) ──
-    if (vessel.warpFuel && vessel.warpFuel.max > 0) {
-      const wfPct = vessel.warpFuel.current / vessel.warpFuel.max;
+      // ── Pasek paliwa (h=36) ──────────────────────────────────
+      const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`🌀 ${t('fleet.labelWarpFuel')}`, x + pad, cy + 10);
+      ctx.fillText(t('fleet.labelFuel'), x + pad, cy + 10);
+
       ctx.fillStyle = THEME.textPrimary;
       ctx.textAlign = 'right';
-      ctx.fillText(`${vessel.warpFuel.current.toFixed(1)} / ${vessel.warpFuel.max} wc`, x + w - pad, cy + 10);
+      ctx.fillText(`${vessel.fuel.current.toFixed(1)} / ${vessel.fuel.max} pc`, x + w - pad, cy + 10);
       ctx.textAlign = 'left';
-      const wBarX = x + pad;
-      const wBarY = cy + 16;
-      const wBarW = w - pad * 2;
-      const wBarH = 8;
+
+      const fBarX = x + pad;
+      const fBarY = cy + 16;
+      const fBarW = w - pad * 2;
+      const fBarH = 8;
       ctx.fillStyle = THEME.bgTertiary;
-      ctx.fillRect(wBarX, wBarY, wBarW, wBarH);
-      ctx.fillStyle = THEME.info;
-      ctx.fillRect(wBarX, wBarY, Math.round(wBarW * wfPct), wBarH);
+      ctx.fillRect(fBarX, fBarY, fBarW, fBarH);
+      const fColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
+      ctx.fillStyle = fColor;
+      ctx.fillRect(fBarX, fBarY, Math.round(fBarW * fuelPct), fBarH);
       ctx.strokeStyle = THEME.border;
       ctx.lineWidth = 1;
-      ctx.strokeRect(wBarX, wBarY, wBarW, wBarH);
-      cy += 32;
-    }
+      ctx.strokeRect(fBarX, fBarY, fBarW, fBarH);
 
-    // ── Pasek endurance (Milestone 1 — stamina operacyjna) ────
-    if (vessel.endurance && vessel.endurance.max > 0) {
-      const endPct = vessel.endurance.current / vessel.endurance.max;
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.labelEndurance'), x + pad, cy + 10);
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${Math.round(vessel.endurance.current)} / ${Math.round(vessel.endurance.max)}`, x + w - pad, cy + 10);
-      ctx.textAlign = 'left';
-      const eBarX = x + pad;
-      const eBarY = cy + 16;
-      const eBarW = w - pad * 2;
-      const eBarH = 8;
-      ctx.fillStyle = THEME.bgTertiary;
-      ctx.fillRect(eBarX, eBarY, eBarW, eBarH);
-      const eColor = endPct > 0.4 ? THEME.success : endPct > 0.2 ? THEME.warning : THEME.danger;
-      ctx.fillStyle = eColor;
-      ctx.fillRect(eBarX, eBarY, Math.round(eBarW * endPct), eBarH);
-      ctx.strokeStyle = THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(eBarX, eBarY, eBarW, eBarH);
       cy += 32;
-    }
 
-    // ── S3.5a-1 — utrzymanie floty (Kr/rok) + status immobilizacji ──
-    {
-      const vMgr        = window.KOSMOS?.vesselManager;
-      const upkeep      = vMgr?.getVesselUpkeepCredits?.(vessel) ?? 0;
-      const immobilized = vMgr?.isImmobilized?.(vessel) ?? false;
-      // W2-5 — stawka jest EFEKTYWNA. Dla kadłuba w rezerwie dopisujemy, że to 10 % pełnej,
-      // inaczej gracz czytałby dziesięciokrotnie zaniżoną liczbę bez wyjaśnienia.
-      const inReserve = (vessel?.serviceState ?? 'active') !== 'active';
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.maintenance'), x + pad, cy + 10);
-      ctx.fillStyle = immobilized ? THEME.danger : THEME.textPrimary;
-      ctx.textAlign = 'right';
-      ctx.fillText(`-${t('fleet.upkeepPerYear', Math.round(upkeep))}`, x + w - pad, cy + 10);
-      ctx.textAlign = 'left';
-      cy += 18;
-      if (inReserve) {
+      // ── Pasek paliwa warp (S3.0b S1b — tylko statki z Komorą Warp) ──
+      if (vessel.warpFuel && vessel.warpFuel.max > 0) {
+        const wfPct = vessel.warpFuel.current / vessel.warpFuel.max;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(t('fleet.reserveRateNote',
-          Math.round((vMgr?.getVesselBaseUpkeepCredits?.(vessel) ?? 0))), x + pad, cy + 10);
-        cy += 16;
+        ctx.fillText(`🌀 ${t('fleet.labelWarpFuel')}`, x + pad, cy + 10);
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${vessel.warpFuel.current.toFixed(1)} / ${vessel.warpFuel.max} wc`, x + w - pad, cy + 10);
+        ctx.textAlign = 'left';
+        const wBarX = x + pad;
+        const wBarY = cy + 16;
+        const wBarW = w - pad * 2;
+        const wBarH = 8;
+        ctx.fillStyle = THEME.bgTertiary;
+        ctx.fillRect(wBarX, wBarY, wBarW, wBarH);
+        ctx.fillStyle = THEME.info;
+        ctx.fillRect(wBarX, wBarY, Math.round(wBarW * wfPct), wBarH);
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(wBarX, wBarY, wBarW, wBarH);
+        cy += 32;
       }
-      // A — licznik zaległości WYJĘTY z gałęzi `if (immobilized)`. Przed tą zmianą pierwszy
-      // nieopłacony rok nie miał w UI ŻADNEJ reprezentacji, więc dwuletnia karencja była dla
-      // gracza niewidzialna — kara pojawiała się bez ostrzeżenia. Teraz rok 1 świeci
-      // ostrzegawczo (warning), a dopiero rok 2 dokłada twardy komunikat o unieruchomieniu.
-      const unpaid = vessel.unpaidYears ?? 0;
-      if (immobilized) {
-        ctx.fillStyle = THEME.danger;
-        ctx.fillText(`⚠ ${t('fleet.immobilized')}`, x + pad, cy + 10);
-        cy += 16;
-      } else if (unpaid > 0) {
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText(`⚠ ${t('fleet.upkeepUnpaidWarn')}`, x + pad, cy + 10);
-        cy += 16;
-      }
-      if (unpaid > 0) {
+
+      // ── Pasek endurance (Milestone 1 — stamina operacyjna) ────
+      if (vessel.endurance && vessel.endurance.max > 0) {
+        const endPct = vessel.endurance.current / vessel.endurance.max;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(t('fleet.unpaidYears', unpaid), x + pad, cy + 10);
-        cy += 16;
-        // Sam licznik nie mówi ANI ile brakuje, ANI że kara zejdzie sama — a to jedyne dwie
-        // rzeczy, na które gracz ma wpływ. Zmierzone na żywo (2026-08-27): przy skarbcu pełnym
-        // 38 tys. Kr „Nieopłacone: 9 lat" czyta się jak dożywocie, choć wystarczyło jedno
-        // udane rozliczenie. Kwota liczona LIVE z tego samego gettera, z którego płaci
-        // `spendFromTreasury` — inaczej panel mógłby obiecać spłatę, której nie ma z czego zrobić.
-        const treasury = window.KOSMOS?.civilianTradeSystem?.getTreasuryCredits?.() ?? 0;
-        const short    = Math.max(0, Math.ceil(upkeep - treasury));
-        ctx.fillStyle  = short > 0 ? THEME.warning : THEME.success;
-        ctx.fillText(short > 0 ? t('fleet.upkeepShortfall', short) : t('fleet.arrearsClearsSoon'),
-                     x + pad, cy + 10);
-        cy += 16;
+        ctx.fillText(t('fleet.labelEndurance'), x + pad, cy + 10);
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(vessel.endurance.current)} / ${Math.round(vessel.endurance.max)}`, x + w - pad, cy + 10);
+        ctx.textAlign = 'left';
+        const eBarX = x + pad;
+        const eBarY = cy + 16;
+        const eBarW = w - pad * 2;
+        const eBarH = 8;
+        ctx.fillStyle = THEME.bgTertiary;
+        ctx.fillRect(eBarX, eBarY, eBarW, eBarH);
+        const eColor = endPct > 0.4 ? THEME.success : endPct > 0.2 ? THEME.warning : THEME.danger;
+        ctx.fillStyle = eColor;
+        ctx.fillRect(eBarX, eBarY, Math.round(eBarW * endPct), eBarH);
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(eBarX, eBarY, eBarW, eBarH);
+        cy += 32;
+      }
+
+      // ── S3.5a-1 — utrzymanie floty (Kr/rok) + status immobilizacji ──
+      {
+        const vMgr        = window.KOSMOS?.vesselManager;
+        const upkeep      = vMgr?.getVesselUpkeepCredits?.(vessel) ?? 0;
+        const immobilized = vMgr?.isImmobilized?.(vessel) ?? false;
+        // W2-5 — stawka jest EFEKTYWNA. Dla kadłuba w rezerwie dopisujemy, że to 10 % pełnej,
+        // inaczej gracz czytałby dziesięciokrotnie zaniżoną liczbę bez wyjaśnienia.
+        const inReserve = (vessel?.serviceState ?? 'active') !== 'active';
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('fleet.maintenance'), x + pad, cy + 10);
+        ctx.fillStyle = immobilized ? THEME.danger : THEME.textPrimary;
+        ctx.textAlign = 'right';
+        ctx.fillText(`-${t('fleet.upkeepPerYear', Math.round(upkeep))}`, x + w - pad, cy + 10);
+        ctx.textAlign = 'left';
+        cy += 18;
+        if (inReserve) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(t('fleet.reserveRateNote',
+            Math.round((vMgr?.getVesselBaseUpkeepCredits?.(vessel) ?? 0))), x + pad, cy + 10);
+          cy += 16;
+        }
+        // A — licznik zaległości WYJĘTY z gałęzi `if (immobilized)`. Przed tą zmianą pierwszy
+        // nieopłacony rok nie miał w UI ŻADNEJ reprezentacji, więc dwuletnia karencja była dla
+        // gracza niewidzialna — kara pojawiała się bez ostrzeżenia. Teraz rok 1 świeci
+        // ostrzegawczo (warning), a dopiero rok 2 dokłada twardy komunikat o unieruchomieniu.
+        const unpaid = vessel.unpaidYears ?? 0;
+        if (immobilized) {
+          ctx.fillStyle = THEME.danger;
+          ctx.fillText(`⚠ ${t('fleet.immobilized')}`, x + pad, cy + 10);
+          cy += 16;
+        } else if (unpaid > 0) {
+          ctx.fillStyle = THEME.warning;
+          ctx.fillText(`⚠ ${t('fleet.upkeepUnpaidWarn')}`, x + pad, cy + 10);
+          cy += 16;
+        }
+        if (unpaid > 0) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(t('fleet.unpaidYears', unpaid), x + pad, cy + 10);
+          cy += 16;
+          // Sam licznik nie mówi ANI ile brakuje, ANI że kara zejdzie sama — a to jedyne dwie
+          // rzeczy, na które gracz ma wpływ. Zmierzone na żywo (2026-08-27): przy skarbcu pełnym
+          // 38 tys. Kr „Nieopłacone: 9 lat" czyta się jak dożywocie, choć wystarczyło jedno
+          // udane rozliczenie. Kwota liczona LIVE z tego samego gettera, z którego płaci
+          // `spendFromTreasury` — inaczej panel mógłby obiecać spłatę, której nie ma z czego zrobić.
+          const treasury = window.KOSMOS?.civilianTradeSystem?.getTreasuryCredits?.() ?? 0;
+          const short    = Math.max(0, Math.ceil(upkeep - treasury));
+          ctx.fillStyle  = short > 0 ? THEME.warning : THEME.success;
+          ctx.fillText(short > 0 ? t('fleet.upkeepShortfall', short) : t('fleet.arrearsClearsSoon'),
+                       x + pad, cy + 10);
+          cy += 16;
+        }
       }
     }
 

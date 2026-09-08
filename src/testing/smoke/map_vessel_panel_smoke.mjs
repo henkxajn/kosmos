@@ -280,7 +280,11 @@ header('P1-src  PIN ŹRÓDŁOWY — w FMO istnieje DOKŁADNIE JEDNA implementacj
   const defs = codeLines.filter((l) => l.startsWith('  _drawRight(')).length;
   ok(defs === 1, `dokładnie jedna definicja _drawRight (jest: ${defs})`);
   const code = codeLines.join(String.fromCharCode(10));
-  const at = code.indexOf('  drawVesselPanel(ctx, x, y, w, h) {');
+  // ⚠ Kotwica CELOWO bez listy parametrów: slice B (B1) dołożył `opts = {}` i pełna
+  //   sygnatura przestała pasować — pin zgasł, a złapała to dopiero jego KONTROLA
+  //   (`body.length > 300`). Kotwica na samej nazwie przeżyje kolejną zmianę sygnatury,
+  //   a kontrola długości dalej dowodzi, że ciało zostało realnie znalezione.
+  const at = code.indexOf('  drawVesselPanel(');
   const body = at >= 0 ? code.slice(at, at + 1800) : '';
   ok(body.includes('this._drawRight('), 'drawVesselPanel odwołuje się do this._drawRight (delegacja, nie kopia)');
   // KONTROLA: pin nie jest jałowy — ciało metody zostało realnie znalezione w źródle.

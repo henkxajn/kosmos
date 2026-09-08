@@ -2205,7 +2205,11 @@ export class UIManager {
     // Slice 258 — panel statku (N==1) rysowany w tym samym miejscu cyklu co panel grupy.
     if (civMode && !globeOpen && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel') {
       const r = this._vesselPanelBounds(W, H);
-      this._fleetOverlay?.drawVesselPanel?.(ctx, r.x, r.y, r.w, r.h);
+      // B1 — tryb kompaktowy za flagą. Bez tego wiersza flaga byłaby MARTWA (wszyscy
+      //   konsumenci czytają przez `?.`, więc nic by nie krzyknęło) — lekcja W3
+      //   „skonstruowany ≠ zamontowany".
+      this._fleetOverlay?.drawVesselPanel?.(ctx, r.x, r.y, r.w, r.h,
+        { compact: GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true });
     }
     // C2 (S3.4b) — pasek zadań zminimalizowanych paneli (lewy-dół, nad nawigacją); ukryty gdy pełny overlay.
     // #1 (review) — bez bramki civMode: BottomContext (a więc i minimalizacja) działa też poza civMode.

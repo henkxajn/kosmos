@@ -222,6 +222,16 @@ export const GAME_CONFIG = {
     //     „Statek niedostępny" przy Transporcie przychodzi z `MissionSystem`/`VesselManager`
     //     i wygląda TAK SAMO z Rejestru i z Dowództwa. Własny slice, kierunek podpisany.
     mapVesselPanel:       true,
+    // Slice B (B1) — TRYB KOMPAKTOWY panelu statku nad mapą. ON ⇒ panel pomija kartę
+    //   katalogową (opis kadłuba, OSIĄGI, paski, utrzymanie) i pokazuje nagłówek + AKCJE
+    //   + status misji. Powód: ZMIERZONE 456 px karty katalogowej nad pierwszym
+    //   przyciskiem akcji przy contentH 550 ⇒ panel był w 83 % kartą, w 17 % akcjami.
+    // ⚠ OFF ⇒ dzisiejsza kolumna A BIT W BIT (Rejestr i Dowództwo nie podają `opts`
+    //   w ogóle, więc ich render jest niezależny od tej flagi Z KONSTRUKCJI).
+    // ⚠ To DRUGA oś obok `mapVesselPanel`: tamta OFF = zachowanie sprzed 258
+    //   (`FleetGroupPanel` od N==1), ta OFF = pełna kolumna A. Fallbackiem podczas
+    //   slice'u B jest A, nie stan sprzed 258 — dlatego dwie flagi, nie jedna.
+    mapVesselPanelCompact: false,
     // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
     // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
     //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem
