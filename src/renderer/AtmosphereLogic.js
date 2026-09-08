@@ -1,4 +1,4 @@
-// AtmosphereLogic — czysta arytmetyka powłoki atmosfery (V3 / commit A0).
+// AtmosphereLogic — czysta arytmetyka powłoki atmosfery (V3 / A0 + A1).
 //
 // ⚠ ZERO importów, w tym three (precedens: SunAnimationLogic.js, HolotableCamera.js).
 //   To JEDYNY moduł tego slice'u, który importuje się pod node, więc JEDYNY, który da się
@@ -7,11 +7,10 @@
 //   da się policzyć POZA shaderem, ma stać tutaj i mieć keeper. Bez tego cały slice V3
 //   wisiałby na grepie.
 //
-// ⚠ Lekcja V-266 (1079cd9): żadnej funkcji bez konsumenta. Obie poniżej mają go już w A0
-//   — createAtmosphereMaterial przy budowie materiału ORAZ _tickAtmoMaterials co klatkę.
-//   discFade (zanik wg średnicy tarczy, D-V3f) NIE wchodzi tutaj w A0: przyjdzie w A1
-//   razem ze swoim wołającym, dokładnie tak jak cykl życia protuberancji przyszedł
-//   dopiero w S4, a nie w S1.
+// ⚠ Lekcja V-266 (1079cd9): żadnej funkcji bez konsumenta. Każda z trzech poniżej ma
+//   go w kodzie produkcyjnym — densityMul i atmoStrengthFor od A0 (fabryka materiału
+//   + _tickAtmoMaterials), discFade od A1 (_tickAtmoMaterials pisze uDiscFade). Dlatego
+//   discFade weszła dopiero teraz, a nie razem z rusztowaniem.
 
 // ── Klasa atmosfery → mnożnik siły powłoki ───────────────────────────────────
 // Wartości brane z obiektu pokręteł (LIVE_ATMO), a nie zaszyte tutaj — dzięki temu
@@ -45,4 +44,22 @@ export function densityMul(atmosphereClass, knobs) {
 //   pilnuje pin strukturalny keepera (wzór T12 z V2).
 export function atmoStrengthFor(atmosphereClass, knobs) {
   return knobs.STRENGTH * densityMul(atmosphereClass, knobs);
+}
+
+// ── Zanik wg ŚREDNICY TARCZY na ekranie (D-V3f) ──────────────────────────────
+// Pełna siła przy px >= hi, zero przy px <= lo, hermite pomiędzy — ten sam kształt,
+// co GLSL-owy smoothstep, żeby wartość liczona na CPU i intuicja z shadera się zgadzały.
+//
+// ⚠ NEUTRALNOŚĆ JEST WBUDOWANA, nie osiągana wartościami: przy hi <= lo (w tym przy
+//   shipowanym 0/0) funkcja zwraca 1.0, czyli mnożnik, którego nie widać. Dzięki temu
+//   pokrętło jest ŻYWE (czytane co klatkę) i JEDNOCZEŚNIE domyślnie nic nie zmienia —
+//   gate włącza je dwoma tokenami, bez rebuildu materiału.
+//
+// ⚠ FAIL-OPEN na nie-liczbie (ta sama stanza co densityMul): powłoka ma prawo być za
+//   jasna, nie ma prawa zniknąć przez NaN, który wjechał z pomiaru kamery.
+export function discFade(px, lo, hi) {
+  if (!(hi > lo)) return 1.0;
+  if (!Number.isFinite(px)) return 1.0;
+  const t = Math.min(1, Math.max(0, (px - lo) / (hi - lo)));
+  return t * t * (3 - 2 * t);
 }

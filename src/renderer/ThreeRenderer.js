@@ -24,7 +24,7 @@ import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
 import { AtmosphereShader }  from './AtmosphereShader.js';
-import { atmoStrengthFor, densityMul } from './AtmosphereLogic.js';
+import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
@@ -1921,13 +1921,16 @@ export class ThreeRenderer {
     // Atmosfera Rayleigh — tylko planety skaliste z atmosferą (NIE gas giganty)
     const hasAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
     if (hasAtmo) {
-      // V3 / A0 — GLSL i uniformy przeniesione CO DO ZNAKU do AtmosphereShader.js.
-      // ⚠ To jest PRZENIESIENIE, nie zmiana: three kluczuje cache programów po treści
-      //   źródła shadera, więc identyczny string to identyczny program i identyczna
-      //   klatka. Sumy SHA-256 obu literałów trzyma keeper (atmosphere_logic_smoke).
+      // V3 — GLSL i uniformy mieszkają w AtmosphereShader.js. Literał ścieżki OFF jest
+      // przeniesiony CO DO ZNAKU i przypięty sumą SHA-256 w keeperze; wariant żywy stoi
+      // OBOK, nie zamiast (three kluczuje cache programów po treści źródła).
+      // ⚠ Bramka stoi TUTAJ, u wołającego — wzór liveGasShaders. Przy fladze OFF materiał
+      //   żywy NIE POWSTAJE W OGÓLE, a moduł shadera nie musi importować GameConfig.
       const atmoMesh = new THREE.Mesh(
         new THREE.SphereGeometry(r * AtmosphereShader.ATMO_SCALE, 32, 32),
-        AtmosphereShader.createAtmosphereMaterial(planet)
+        GAME_CONFIG.FEATURES.dayNightAtmosphere
+          ? AtmosphereShader.createLiveAtmosphereMaterial(planet)
+          : AtmosphereShader.createAtmosphereMaterial(planet)
       );
       atmoMesh.userData.isAtmosphere = true;
       group.add(atmoMesh);
@@ -3680,10 +3683,9 @@ export class ThreeRenderer {
   //   (dokładnie awaria PROM_DRIFT z re-gate'u S4). Zapis uLightDir zostaje tam, gdzie
   //   był (_syncPlanetMeshes): kierunek światła zmienia się tylko wtedy, gdy ciała się
   //   poruszają, i ten zapis jest sprzed slice'u, więc stoi POZA flagą.
-  // ⚠ W A0 zapisywana wartość jest LICZBOWO NEUTRALNA (0.55 × 1.0 = dzisiejsze
-  //   atmoStrength), więc ten commit nie zmienia ani jednego piksela — ale ścieżka jest
-  //   ŻYWA: KOSMOS.threeRenderer.atmoTuning.STRENGTH = 0.1 przygasza pierścień od razu.
-  //   To jedyny NIEJAŁOWY dowód, że rusztowanie jest podpięte.
+  // ⚠ Wszystkie dziewięć pokręteł czytane jest KAŻDEJ klatki — to jest cały kontrakt
+  //   „jeden token w konsoli": KOSMOS.threeRenderer.atmoTuning.STRENGTH = 0.1 przygasza
+  //   pierścień natychmiast i globalnie, bez restartu i bez rebuildu materiału.
   _tickAtmoMaterials() {
     if (!GAME_CONFIG.FEATURES.dayNightAtmosphere) return;
     const cam = this.camera;
@@ -3703,12 +3705,22 @@ export class ThreeRenderer {
         // Konsument (discFade, D-V3f) dochodzi w A1; tutaj karmi wyłącznie przyrząd
         // KOSMOS.debug.atmoInfo(), żeby gate widział POLICZONE liczby o commit
         // wcześniej, niż cokolwiek od nich zależy (wzór getSunInfo z S1).
-        child.userData.atmoDiscPx = sunDiscPx({
+        const px = sunDiscPx({
           radiusWorld:      entry.mesh?.geometry?.parameters?.radius ?? 1,
           distance:         cam.position.distanceTo(entry.group.position),
           viewportHeightPx: vh,
           fovDeg:           fov,
         });
+        child.userData.atmoDiscPx = px;
+
+        // ⚠ Pozostałe cztery pokrętła istnieją TYLKO w wariancie żywym. Guard nie jest
+        //   ozdobą: flagę da się przełączyć w konsoli PO zbudowaniu materiałów, a wtedy
+        //   ta pętla trafia na materiał ścieżki OFF, który ma dokładnie trzy uniformy.
+        if (!u.uTermWidth) continue;
+        u.uTermWidth.value   = T.TERM_WIDTH;
+        u.uTwilightMix.value = T.TWILIGHT_MIX;
+        u.uNightFloor.value  = T.NIGHT_FLOOR;
+        u.uDiscFade.value    = discFade(px, T.FADE_PX_LO, T.FADE_PX_HI);
       }
     }
   }
@@ -3729,8 +3741,10 @@ export class ThreeRenderer {
         shells.push({
           planeta:   entry.planet?.name ?? id,
           klasa,
+          zywy:      !!child.material?.uniforms?.uTermWidth,
           uStrength: child.material?.uniforms?.uStrength?.value ?? null,
           mnoznik:   densityMul(klasa, T),
+          uDiscFade: child.material?.uniforms?.uDiscFade?.value ?? null,
           discPx:    flag ? (child.userData.atmoDiscPx ?? null) : null,
         });
       }
