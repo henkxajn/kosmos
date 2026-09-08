@@ -1458,7 +1458,7 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      z panelu mapy **nieosiągalnych** (ich akcje żyją tylko w gałęzi `docked` katalogu), ale
      opisują TĘ SAMĄ klasę i powinny zostać przejrzane razem z A.
 
-260. ⚪ **Panel statku nad mapą: kółko myszy niepodpięte, panel nieprzesuwalny (polish ④).**
+260. ✅ **[ZAMKNIĘTY 2026-09-08 — OBIE połowy: `b20826b` (kółko) + `30ee229` (drag)]** **Panel statku nad mapą: kółko myszy niepodpięte, panel nieprzesuwalny (polish ④).**
      **(a) Scroll — maszyneria JEST, brakuje TRASY.** `UIManager.handleWheel:1934-1956` ma pięć
      gałęzi (Dok taktyczny, górny pasek, Outliner, `overlayManager` **gdy `isAnyOpen()`**,
      BottomContext) i **żadnej dla panelu mapy** — a gałąź overlaya jest z definicji martwa dla tej
@@ -1515,6 +1515,38 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      **Kontrola obowiązkowa:** po zmianie plik, który NAPRAWDĘ nic nie twierdzi, MUSI dalej
      świecić advisory — inaczej naprawa kasuje jedyny sygnał, dla którego ten kubełek istnieje.
      Metryka rozstrzygająca: liczba advisory spada z 30 do ~13, a `passed`/`failed` nie drgają.
+
+262. 🟠 **`StationPanel` kotwiczy się w px CSS, choć rysuje w px LOGICZNYCH — panel rozjeżdża
+     się na KAŻDEJ rozdzielczości ≠ 1280×720.** Defekt PRE-EXISTING, znaleziony przy slice B
+     (commit 2), świadomie NIE naprawiony tam: inny panel, zmiana czysto WIZUALNA, własny gate.
+
+     `ThreeRenderer.getStationScreenPosition` / `getVesselScreenPosition` liczą z
+     `window.innerWidth/Height`, czyli w **px CSS**. Overlay 2D rysuje pod
+     `setTransform(UI_SCALE * _DPR, 0, 0, UI_SCALE * _DPR, 0, 0)` (`UIManager._draw`), czyli
+     w **px LOGICZNYCH** (`W = _PW / UI_SCALE`). Kanoniczna konwersja istnieje i jest opisana:
+     `MapLabelLogic.toLogicalPx` (`:182`), a jej własny komentarz mówi wprost — "bez tej konwersji
+     pozycje rozjezdzaja sie na KAZDEJ rozdzielczosci != 1280x720 (Aneks A.3)".
+     **`MapLabelLayer` dzieli** (`:78`, `:88`, `:279`). **`StationPanel:117-120` NIE dzieli** —
+     używa `sp.x + 18` / `sp.y - PH/2` wprost.
+
+     **Skala błędu:** `UI_SCALE = min(_PW/1280, _PH/720)`, więc na 1920×1080 wynosi **1,5**.
+     Kotwica przesuwa się o `pos × (1 − 1/1,5)`, czyli o **~33 % odległości od początku układu**
+     — stacja w połowie ekranu (raw x 960) kotwiczy panel na logicznym x 960, co odpowiada
+     raw 1440, czyli 75 % szerokości. ⚠ **Dlaczego to przeżyło:** `FloatingPanel._clamp` trzyma
+     panel w obszarze mapy, więc objaw czyta się jako „panel mniej więcej przy stacji, trochę
+     nie tam", a nie jako oczywista awaria. Im dalej od lewego-górnego rogu, tym gorzej.
+
+     ⚠ **Panel statku (slice B) robi to POPRAWNIE** — `MapVesselPanelLogic.resolveVesselPanelAnchor`
+     dzieli przez `uiScale`, a keeper `map_vessel_panel_compact_smoke` pin **A1** sprawdza to przy
+     `uiScale = 1,5` i ma KONTROLĘ ANTY-JAŁOWĄ: asertuje, że wynik NIE jest wersją bez konwersji.
+     Wzorzec do skopiowania jest więc gotowy i pinowany.
+
+     **Naprawa:** `StationPanel` woła `toLogicalPx(sp, window.KOSMOS?.uiScale ?? 1)` przed
+     policzeniem `ax`/`ay`. ⚠ **Sprawdzić przy okazji pozostałych konsumentów `get*ScreenPosition`**
+     — czy `StationPanel` jest jedynym outlierem, czy klasą. ⚠ Gate MUSI być live-visual i na
+     rozdzielczości ≠ 1280×720 (na 1280×720 `UI_SCALE = 1` i defekt JEST NIEWIDOCZNY — headless
+     ani gate w tej rozdzielczości niczego nie pokażą).
+     ⚪ Nie pilne: panel jest używalny, `_clamp` chroni przed zniknięciem z ekranu.
 
 > **Juz zarejestrowane, NIE duplikuje:** **Finding 138** (`VesselManager._findBodyNearPoint` skanuje
 > cala galaktyke) i **Finding 142** (`_getValidTargets` klucza sie na OGLADANYM ukladzie, nie na
