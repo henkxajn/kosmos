@@ -35,8 +35,42 @@
 //            fakt był prawdziwy, ale NIC go nie pilnowało)
 //   P-A1     żadna powierzchnia keyed-on-N nie wystawia „Powrotu" (dokończenie Findingu 145 (a');
 //            Odwrót ZOSTAJE — to inna akcja). Zwęża też Finding 154: producentów 3 → 2.
+//   P12      ③ — klik w PROSTOKĄT panelu jest pochłaniany ZAWSZE, także bez trafienia w strefę
+//            (kontrola kierunku: poza prostokątem nadal `false`, inaczej panel zjadałby mapę)
+//   P13      INTEGRACJA — akcja CELOWANA klikana z panelu mapy zmienia stan PRAWDZIWEGO
+//            `MissionSystem` (+ P13-src: pin premisy populacji)
+//   P-plate  płyta tła pokrywa CAŁY prostokąt panelu i NIE jest strefą (absorber ③ ma być
+//            widoczny; golden P1/C6 i prostokąt-bramka P12 bez zmian)
 //
 // ⚠ Piny commitu 3 (footer-3 + `sameSystemOnly`) dochodzą osobno: P8/P9.
+//
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// ⚠ LEKCJA, KTÓRA KOSZTOWAŁA JEDNĄ RUNDĘ LIVE-GATE'U — FIXTURE MUSI POCHODZIĆ Z POPULACJI
+//   OSIĄGALNEJ NA NOWEJ POWIERZCHNI.
+//
+//   Ten keeper świecił 66/66, a live-gate 2026-09-07 złapał trzy defekty. Powód nie był taki,
+//   że pinów było za mało — tylko taki, że wszystkie mierzyły LOGIKĘ, a żaden INTEGRACJI:
+//
+//   (a) FIXTURE Z NIEOSIĄGALNEJ POPULACJI. `world()` buduje statek ZADOKOWANY, bo tak najłatwiej
+//       dostać bogaty zbiór akcji. Ale zadokowany statek NIE MA SPRITE'A na mapie 3D
+//       (`ThreeRenderer._syncVesselPositions`: usuwa i NIE odtwarza; `_restoreActiveSystemVesselSprites`
+//       robi `continue`) ⇒ GRACZ NIE MOŻE GO KLIKNĄĆ. P1/P2/P3 pinowały więc stan, którego ta
+//       powierzchnia NIGDY nie widzi. Populacja mapy to `orbiting` / `in_transit` — i tam zbiór
+//       akcji jest INNY (zmierzone: dok `["found_outpost","orbit","transport"]` vs mapa
+//       `["redirect","transport"]`). P13 prowadzi fixture z TEJ populacji i pinuje różnicę wprost.
+//
+//   (b) PINOWANA TYLKO ŚCIEŻKA UDANA. P2 sprawdzało klik, który TRAFIA w strefę. ③ siedziało
+//       w ścieżce NIETRAFIONEJ (`return false` → klik leci do mapy 3D). Pin ścieżki sukcesu nie
+//       widzi defektu ścieżki porażki — P12 dokłada tę drugą, z kontrolą kierunku.
+//
+//   (c) KONIEC ŁAŃCUCHA NA ATRAPIE. Piny kończyły się na `_handleAction` / `_missionConfig.step`.
+//       P13 idzie do końca: akcja → picker → potwierdzenie → PRAWDZIWY `MissionSystem` → zmiana
+//       stanu (`targetId` p_two → p_thr) + wywołanie na `VesselManager`.
+//
+//   ⚠ Reguła na przyszłość: gdy pin dotyka NOWEJ powierzchni, najpierw ustal, JAKI STAN encji
+//     ta powierzchnia w ogóle pokazuje — i dopiero z tego zbioru bierz fixture. Bogatszy fixture
+//     z innej powierzchni daje zielony pin i zero pokrycia.
+// ══════════════════════════════════════════════════════════════════════════════════════════
 //
 // Uruchom: node src/testing/smoke/map_vessel_panel_smoke.mjs
 
@@ -688,6 +722,230 @@ header('P-A1  PIN — żadna powierzchnia mapy nie wystawia „Powrotu" (ani prz
 
   vm._vessels.delete('v_2');
   delete window.KOSMOS.fleetSystem;
+}
+
+
+// ═══ P12 — ③ POCHŁANIANIE: klik w prostokąt panelu NIGDY nie leci do mapy 3D ══════════════
+// ⚠ TO JEST PIN INTEGRACYJNY, nie logiczny. Keeper miał 66/66 i mimo to live-gate 2026-09-07
+//   złapał ③: `handleVesselPanelClick` zwracało `false`, gdy klik nie trafił w strefę — a
+//   `UIManager.handleClick` jest łańcuchem `if (...) return true`, więc `GameScene:5360` oddawał
+//   ten klik mapie 3D (odznaczenie statku + zjazd kamery). P2 tego NIE MOGŁO złapać: pinowało
+//   wyłącznie ścieżkę TRAFIONĄ, a defekt siedział w ścieżce NIETRAFIONEJ, której nikt nie mierzył.
+header('P12  PIN — klik WEWNĄTRZ prostokąta panelu jest pochłaniany także BEZ trafienia w strefę');
+{
+  world();
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = 'v_1';
+  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
+  const r = fmo._vesselPanelRect;
+  ok(!!r, `KONTROLA: panel ustawił prostokąt (${JSON.stringify(r)})`);
+  ok(fmo._hitZones.length > 0, `KONTROLA: panel ma strefy (${fmo._hitZones.length}) — pin nie mierzy pustego panelu`);
+
+  // Znajdź punkt WEWNĄTRZ prostokąta, który NIE trafia w żadną strefę (etykieta / pasek / luka).
+  const inZone = (zx, zy) => fmo._hitZones.some(z => zx >= z.x && zx <= z.x + z.w && zy >= z.y && zy <= z.y + z.h);
+  let gap = null;
+  for (let gy = r.y + 1; gy < r.y + r.h - 1 && !gap; gy += 3) {
+    for (let gx = r.x + 1; gx < r.x + r.w - 1; gx += 3) {
+      if (!inZone(gx, gy)) { gap = { x: gx, y: gy }; break; }
+    }
+  }
+  // ⚠ ANTY-JAŁOWOŚĆ: bez tej asercji „nie znaleźliśmy luki" po cichu pominęłoby cały pin.
+  ok(!!gap, `KONTROLA: istnieje punkt w panelu bez strefy (${JSON.stringify(gap)}) — jest co klikać`);
+
+  if (gap) {
+    let dispatched = 0;
+    const origHit = fmo._handleHit;
+    fmo._handleHit = function (...a) { dispatched++; return origHit.apply(this, a); };
+    ok(fmo.handleVesselPanelClick(gap.x, gap.y) === true,
+       'klik w LUKĘ wewnątrz panelu zwraca true (nie leci do mapy 3D)');
+    ok(dispatched === 0, `KONTROLA: klik w lukę NICZEGO nie dyspozycjonuje (wywołań _handleHit: ${dispatched})`);
+    fmo._handleHit = origHit;
+  }
+
+  // Panel BEZ ŻADNYCH stref (drugi wariant ③) — prostokąt dalej pochłania.
+  fmo._hitZones = [];
+  ok(fmo.handleVesselPanelClick(r.x + r.w / 2, r.y + r.h / 2) === true,
+     'panel bez stref też pochłania klik w swój prostokąt');
+
+  // KONTROLA KIERUNKU — poza prostokątem NADAL `false`, inaczej panel zjadałby całą mapę.
+  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
+  ok(fmo.handleVesselPanelClick(r.x - 5, r.y + 10) === false, 'KONTROLA: klik NA LEWO od panelu → false');
+  ok(fmo.handleVesselPanelClick(r.x + r.w + 5, r.y + 10) === false, 'KONTROLA: klik NA PRAWO od panelu → false');
+  ok(fmo.handleVesselPanelClick(r.x + 10, r.y - 5) === false, 'KONTROLA: klik NAD panelem → false');
+  ok(fmo.handleVesselPanelClick(r.x + 10, r.y + r.h + 5) === false, 'KONTROLA: klik POD panelem → false');
+
+  // KONTROLA: brak narysowanego panelu (rect === null) → false, żeby nie połykać kliku na ślepo.
+  fmo._vesselPanelRect = null;
+  ok(fmo.handleVesselPanelClick(r.x + 10, r.y + 10) === false, 'KONTROLA: bez narysowanego panelu → false');
+
+  // KONTROLA: TRAFIONA strefa dalej dyspozycjonuje (nie zamieniliśmy routera w no-op).
+  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
+  const spy = [];
+  fmo._handleAction = (d) => spy.push(d.actionId);
+  const az = fmo._hitZones.find(z => z.type === 'action');
+  ok(!!az, 'KONTROLA: jest strefa action do kliknięcia');
+  if (az) {
+    fmo.handleVesselPanelClick(az.x + az.w / 2, az.y + az.h / 2);
+    ok(spy.length === 1, `KONTROLA: trafiona akcja DALEJ dyspozycjonuje (wywołań: ${spy.length})`);
+  }
+}
+
+// ═══ P13 — INTEGRACJA: rozkaz CELOWANY z panelu mapy dochodzi do PRAWDZIWEGO MissionSystem ══
+// ⚠ FIXTURE POCHODZI Z POPULACJI OSIĄGALNEJ NA TEJ POWIERZCHNI — to jest cała lekcja z ②/③.
+//   P2/P3 prowadzą statek ZADOKOWANY, a zadokowany statek NIE MA SPRITE'A na mapie 3D
+//   (`ThreeRenderer._syncVesselPositions` usuwa go i NIE odtwarza; `_restoreActiveSystemVesselSprites`
+//   robi `continue`) ⇒ gracz NIE MOŻE go kliknąć, więc tamte piny mierzyły stan, którego ta
+//   powierzchnia nigdy nie widzi. Populacja mapy to `orbiting` / `in_transit`.
+// ⚠ GRANICA DOWODU, ŚWIADOMA: to NIE jest pin na `createMission`. Bramka `vessel.status !== 'idle'`
+//   w pięciu `_launch*` (② — `mission.shipUnavailable`) jest PRE-EXISTING i odmawia tak samo
+//   z Rejestru; ma własny finding i własny slice. P13 dowozi to, co należy do TEGO slice'u:
+//   że łańcuch klików panelu mapy (akcja → picker → potwierdzenie) dociera do prawdziwego
+//   silnika i ZMIENIA JEGO STAN — na akcji, która jest z mapy realnie osiągalna.
+header('P13  PIN INTEGRACYJNY — akcja celowana z panelu mapy zmienia stan PRAWDZIWEGO MissionSystem');
+{
+  world();
+  const { MissionSystem } = await import('../../systems/MissionSystem.js');
+  const EventBus = (await import('../../core/EventBus.js')).default;
+  EntityManager.add({ id: 'p_thr', type: 'planet', name: 'Trzecia', x: 5 * AU, y: 0, systemId: 'sys_home',
+                      orbital: { a: 5, e: 0, T: 9, M: 0 }, deposits: [], explored: false, analyzed: false });
+
+  const vm = window.KOSMOS.vesselManager;
+  const v  = vm.getVessel('v_1');
+  const redirects = [];
+  vm.redirectToTarget = (id, tid, yr) => redirects.push({ id, tid, yr });
+  vm.dispatchOnMission = () => true;
+  vm.redispatchFromOrbit = () => true;
+
+  const colony = window.KOSMOS.colonyManager.getColony('p_home');
+  const ms = new MissionSystem(colony.resourceSystem);
+  window.KOSMOS.missionSystem = ms;
+
+  const failures = [];
+  EventBus.on('expedition:launchFailed', (e) => failures.push(e?.reason));
+
+  // Misja bazowa POWSTAJE PRODUKCYJNĄ ŚCIEŻKĄ (nie jest sklejona ręcznie) — statek `idle`
+  // i ZADOKOWANY, bo taka jest bramka akcji `orbit` ORAZ bramka ② (`status !== 'idle'`).
+  // ⚠ `orbitOnly: true` to dokładnie to, co robi akcja `orbit` — i jedyny wariant przechodzący
+  //   przez bramkę `bodyAlreadyExplored` (`p_two` jest w tym fixture ZBADANA). Bez tego misja
+  //   bazowa NIE POWSTAJE i cały pin mierzy ciszę.
+  ms.createMission('survey', 'v_1', { targetId: 'p_two', orbitOnly: true });
+  const m0 = ms.getActive()[0];
+  ok(!!m0 && m0.targetId === 'p_two',
+     `KONTROLA: misja bazowa powstała PRODUKCYJNIE i celuje w p_two (${JSON.stringify(m0 && { t: m0.type, s: m0.status, tg: m0.targetId })})`);
+  if (m0) m0.status = 'orbiting';
+  v.status = 'on_mission';
+  v.position.state = 'orbiting';       // ← POPULACJA MAPY: nie-zadokowany = ma sprite = klikalny
+  ok(v.position.state !== 'docked',
+     'KONTROLA: fixture jest z populacji OSIĄGALNEJ z mapy (nie-zadokowany ⇒ ma sprite 3D)');
+
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = 'v_1';
+  const draw  = () => { fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700); return [...fmo._hitZones]; };
+  const click = (z) => fmo.handleVesselPanelClick(z.x + z.w / 2, z.y + z.h / 2);
+
+  let zones = draw();
+  const mapActions = actionIds(zones);
+  ok(mapActions.length > 0, `zbiór akcji z populacji mapy jest NIEPUSTY (${JSON.stringify(mapActions)})`);
+  // ⚠ Anty-jałowość lekcji: gdyby fixture nadal był zadokowany, ten zbiór równałby się goldenowi.
+  ok(JSON.stringify(mapActions) !== JSON.stringify(GOLDEN_ACTIONS),
+     `KONTROLA: to INNY zbiór niż golden zadokowanego (mapa: ${JSON.stringify(mapActions)} vs dok: ${JSON.stringify(GOLDEN_ACTIONS)})`);
+  // ⚠ LEKCJA WYKONYWALNA: akcja, którą prowadzi ten pin, jest osiągalna WYŁĄCZNIE z populacji
+  //   mapy. Gdyby ktoś „uprościł" fixture z powrotem do zadokowanego (bogatszy zbiór akcji!),
+  //   pin nie miałby czego kliknąć — i ta kontrola powie DLACZEGO, zamiast zostawić 6x FAIL bez
+  //   wyjaśnienia. Zmierzone: dok NIE MA `redirect` (wymaga `position.state === 'orbiting'`).
+  ok(!GOLDEN_ACTIONS.includes('redirect') && mapActions.includes('redirect'),
+     'KONTROLA: redirect istnieje TYLKO w populacji mapy (dok: nie, mapa: tak)');
+
+  const az = zones.find(z => z.type === 'action' && z.data?.actionId === 'redirect');
+  if (!az) {
+    ok(false, 'akcja celowana `redirect` dostępna z panelu mapy');
+    ok(false, 'picker celu emituje >=2 cele'); ok(false, 'wybór celu → krok confirm');
+    ok(false, 'potwierdzenie zmienia stan MissionSystem'); ok(false, 'VesselManager dostał redirectToTarget');
+    ok(false, 'brak expedition:launchFailed w łańcuchu');
+  } else {
+    ok(click(az) === true, 'klik w akcję celowaną pochłonięty i obsłużony');
+    ok(fmo._missionConfig?.step === 'select', `krok pickera (jest: ${fmo._missionConfig?.step})`);
+
+    zones = draw();
+    const targets = zones.filter(z => z.type === 'select_target');
+    ok(targets.length >= 2, `picker celu emituje >=2 cele (jest: ${targets.length})`);
+    const pick = targets.find(z => JSON.stringify(z.data ?? {}).includes('p_thr'));
+    ok(!!pick, 'KONTROLA: w pickerze JEST cel p_thr (inaczej mierzylibyśmy inny rozkaz)');
+
+    if (pick) {
+      ok(click(pick) === true, 'klik w cel pochłonięty i obsłużony');
+      ok(fmo._missionConfig?.targetId === 'p_thr' && fmo._missionConfig?.step === 'confirm',
+         `cel wybrany, krok potwierdzenia (target=${fmo._missionConfig?.targetId}, step=${fmo._missionConfig?.step})`);
+
+      zones = draw();
+      const cz = zones.find(z => z.type === 'confirm_mission');
+      ok(!!cz, 'panel mapy emituje strefę confirm_mission');
+      if (cz) {
+        ok(click(cz) === true, 'klik w potwierdzenie pochłonięty i obsłużony');
+        const after = ms.getActive();
+        ok(after.length === 1 && after[0].targetId === 'p_thr',
+           `PRAWDZIWY MissionSystem zmienił stan: cel p_two → ${after[0]?.targetId} (misji: ${after.length})`);
+        ok(redirects.length === 1 && redirects[0].id === 'v_1' && redirects[0].tid === 'p_thr',
+           `VesselManager dostał redirectToTarget(v_1, p_thr) (jest: ${JSON.stringify(redirects)})`);
+        ok(failures.length === 0, `KONTROLA: łańcuch nie wywołał expedition:launchFailed (${JSON.stringify(failures)})`);
+      }
+    }
+  }
+}
+
+// ═══ P13-src — PREMISA POPULACJI: zadokowany statek NIE MA sprite'a na mapie ══════════════
+// ⚠ Cały wybór fixture'u P13 stoi na tym fakcie. `ThreeRenderer` nie importuje się pod node
+//   (THREE), więc pin ŹRÓDŁOWY — z kontrolą, że plik został realnie wczytany.
+header('P13-src  PIN ŹRÓDŁOWY — zadokowany statek nie dostaje sprite\'a (premisa populacji mapy)');
+{
+  const { readFileSync } = await import('node:fs');
+  const tr = readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf-8');
+  const code = tr.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const cnt = (h, n) => h.split(n).length - 1;
+  ok(cnt(code, "vessel.position?.state === 'docked'") >= 1 || cnt(code, "v.position?.state === 'docked'") >= 1,
+     'ThreeRenderer ma gałąź „docked” w synchronizacji sprite\'ów');
+  ok(code.length > 100000, `KONTROLA: źródło ThreeRenderera realnie wczytane (${code.length} zn.)`);
+  ok(!code.includes('docked_XYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+}
+
+
+// ═══ P-plate — płyta tła jest MALOWANIEM, nie strefą ══════════════════════════════════════
+// ⚠ Panel nad mapą maluje własną płytę (`_drawRight` jej nie ma — w Dowództwie leży na płycie
+//   overlaya). Bez płyty treść Rejestru wisiała wprost nad sceną 3D, a po ③ prostokąt pochłania
+//   KAŻDY klik ⇒ gracz widziałby „napisy zjadające kliki w pustce".
+//   Ten pin trzyma DWA warunki naraz: płyta pokrywa CAŁY prostokąt panelu ORAZ nie dokłada
+//   ANI JEDNEJ strefy (inaczej golden P1/C6 by się rozjechał, a `_hitTest` łapałby tło).
+header('P-plate  PIN — panel maluje płytę na CAŁYM prostokącie i NIE dodaje przez to strefy');
+{
+  world();
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = 'v_1';
+
+  // ctx nagrywający operacje tła (reszta jak stubCtx).
+  const painted = [];
+  const recCtx = new Proxy({}, {
+    get: (t, k) => k === 'measureText' ? ((str) => ({ width: String(str).length * 6 }))
+      : (k === 'canvas' ? { width: 1920, height: 1080 }
+      : (typeof k === 'string'
+          ? ((...a) => { if (k === 'fillRect' || k === 'strokeRect') painted.push(k + ':' + a.join(',')); })
+          : undefined)),
+    set: () => true,
+  });
+
+  fmo.drawVesselPanel(recCtx, 20, 100, 300, 700);
+  ok(painted.includes('fillRect:20,100,300,700'),
+     `płyta wypełnia CAŁY prostokąt panelu (fillRect 20,100,300,700 — jest: ${painted.includes('fillRect:20,100,300,700')})`);
+  ok(painted.some((c) => c.startsWith('strokeRect:20.5,100.5,')), 'płyta ma ramkę na krawędzi panelu');
+  ok(painted.length > 2, `KONTROLA: ctx realnie nagrywał operacje (${painted.length}) — pin nie mierzy ciszy`);
+
+  // Płyta NIE jest strefą: ani jednej strefy o wymiarach całego panelu.
+  const full = fmo._hitZones.filter((z) => z.x === 20 && z.y === 100 && z.w === 300 && z.h === 700);
+  ok(full.length === 0, `płyta NIE dodaje strefy pełnowymiarowej (jest: ${full.length})`);
+  ok(fmo._hitZones.length > 0, `KONTROLA: panel ma normalne strefy (${fmo._hitZones.length})`);
+
+  // Prostokąt-bramka ③/P12 nietknięty przez płytę.
+  ok(JSON.stringify(fmo._vesselPanelRect) === JSON.stringify({ x: 20, y: 100, w: 300, h: 700 }),
+     `prostokąt panelu bez zmian (${JSON.stringify(fmo._vesselPanelRect)})`);
 }
 
 

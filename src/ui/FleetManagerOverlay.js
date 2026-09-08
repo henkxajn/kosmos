@@ -1407,6 +1407,22 @@ export class FleetManagerOverlay {
     // D-MVP-12 — mapa nie zaznacza wrogów ani wraków; panel nie jest dla nich.
     if (!v || v.isWreck || isEnemyVessel(v)) { this._vesselPanelRect = null; return false; }
 
+    // ⚠ PŁYTA TŁA (③, ten sam commit) — panel MUSI czytać się jak PANEL, nie jak tekst
+    //   wiszący nad gwiazdami. `_drawRight` NIE maluje własnego tła: w Dowództwie leży na
+    //   płycie overlaya, a nad mapą takiej płyty NIE MA (`UIManager` woła `drawVesselPanel`
+    //   bez podkładu) — czyli treść Rejestru rysowała się wprost na scenie 3D.
+    //   Po ③ prostokąt panelu POCHŁANIA każdy klik, więc bez płyty gracz widziałby „napisy,
+    //   które zjadają kliki w pustce". Płyta czyni absorber CZYTELNYM.
+    //   Styl 1:1 z `FleetGroupPanel:171-175` (drugi panel pływający nad mapą): `bgAlpha(0.92)`
+    //   + ramka `borderActive ?? accent`. ⚠ To jest WYŁĄCZNIE malowanie tła — ZERO `_addHit`,
+    //   więc golden stref (P1/C6) zostaje bit w bit, a prostokąt panelu (`_vesselPanelRect`,
+    //   bramka ③/P12) jest ten sam co dotąd.
+    ctx.fillStyle = bgAlpha(0.92);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = THEME.borderActive ?? THEME.accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
     // D-MVP-4 — router ma widzieć WYŁĄCZNIE strefy z TEGO rysowania.
     this._hitZones = [];
 
@@ -1473,33 +1489,53 @@ export class FleetManagerOverlay {
    *
    * ⚠ Prostokąt panelu jest bramką: bez niego klik w mapę poza panelem mógłby trafić w strefę
    *   zostawioną przez POPRZEDNIE rysowanie (np. tuż po zamknięciu overlaya). Mirror `_bounds`.
+   *
+   * ⚠ ③ (live-gate 2026-09-07) — KLIK W PROSTOKĄT PANELU JEST POCHŁANIANY ZAWSZE.
+   *   Dawniej trzy ścieżki zwracały `false` MIMO trafienia w prostokąt: brak stref, modal DOM
+   *   na wierzchu i — najczęstsza — klik w etykietę / pasek / puste miejsce między strefami.
+   *   `UIManager.handleClick` jest łańcuchem `if (...) return true`, a `GameScene:5360` robi
+   *   `if (!uiManager.handleClick(x, y)) { threeRenderer.handleClick(...); _handleTacticalLeftClick(...) }`,
+   *   więc każde `false` oddawało klik MAPIE 3D: statek się ODZNACZAŁ, panel znikał, a kamera
+   *   zjeżdżała na środek układu. Panel był wtedy GORSZY niż jego brak.
+   *   ⚠ Bramka `isOverUI` NIE MOGŁA tu pomóc, choć zwraca `true` nad panelem: `GameScene:5903`
+   *   pyta o nią wyłącznie `if (!isGameCanvas)`, a panel rysuje się na `#ui-canvas` — czyli na
+   *   CANVASIE. Jedynym chokepointem jest zwrotka tej metody.
+   *   To jest idiom `bg`-absorbera, który `FleetGroupPanel` ma od Slice'u 8b (`_addHit(px, py,
+   *   PW, totalH, 'bg')` na KOŃCU listy): panel konsumuje własny prostokąt, nawet gdy pod
+   *   kursorem nie ma żadnej akcji.
+   *   ⚠ Zmiana dotyczy WYŁĄCZNIE zwrotki routera — dyspozycja i zbiór stref są nietknięte
+   *   (golden P1/C6 zostaje bit w bit).
    */
   handleVesselPanelClick(mx, my) {
     const r = this._vesselPanelRect;
     if (!r) return false;
     if (mx < r.x || mx > r.x + r.w || my < r.y || my > r.y + r.h) return false;
-    if (!this._hitZones?.length) return false;
-    // Guard modalu DOM — identyczny jak w `handleClick`: modal na wierzchu połyka klik.
-    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return false;
 
-    // Priorytet ciała/stacji przy wyborze celu — mirror `handleClick`. Dziś inertny
-    // (`commandTacticalMap:false` ⇒ `map_body`/`map_station` nie mają producentów), zachowany
-    // ŚWIADOMIE, żeby obie powierzchnie miały JEDEN algorytm trafień, nie dwa podobne.
-    if (this._missionConfig?.step === 'select') {
-      const tgt = this._hitZones.find(z =>
-        (z.type === 'map_body' || z.type === 'map_station') &&
-        mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
-      if (tgt) { this._handleHit(tgt, mx, my); return true; }
+    // ══ OD TEGO MIEJSCA KAŻDA ŚCIEŻKA ZWRACA true (③) ══
+    // Guard modalu DOM — mirror `handleClick`: modal na wierzchu połyka klik. NIE dyspozycjonujemy,
+    // ale POCHŁANIAMY: panel dalej się rysuje pod modalem (modal DOM nie ustawia
+    // `overlayManager.active`), więc oddanie kliku mapie odznaczyłoby statek spod otwartego modalu.
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return true;
+
+    if (this._hitZones?.length) {
+      // Priorytet ciała/stacji przy wyborze celu — mirror `handleClick`. Dziś inertny
+      // (`commandTacticalMap:false` ⇒ `map_body`/`map_station` nie mają producentów), zachowany
+      // ŚWIADOMIE, żeby obie powierzchnie miały JEDEN algorytm trafień, nie dwa podobne.
+      if (this._missionConfig?.step === 'select') {
+        const tgt = this._hitZones.find(z =>
+          (z.type === 'map_body' || z.type === 'map_station') &&
+          mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
+        if (tgt) { this._handleHit(tgt, mx, my); return true; }
+      }
+      const zone = resolveStratcomZone(this._hitZones, mx, my);
+      // Footer-3 obsługiwany TU, nie w `_handleHit`: tamten router jest WSPÓLNY z Dowództwem,
+      // a te trzy strefy istnieją wyłącznie na mapie. Dyspozycja idzie do JEDNEGO źródła.
+      if (zone && (zone.type === 'mvpRetreat' || zone.type === 'mvpFleet' || zone.type === 'mvpDock')) {
+        this._handleVesselPanelFooter(zone);
+      } else if (zone) {
+        this._handleHit(zone, mx, my);
+      }
     }
-    const zone = resolveStratcomZone(this._hitZones, mx, my);
-    if (!zone) return false;
-    // Footer-3 obsługiwany TU, nie w `_handleHit`: tamten router jest WSPÓLNY z Dowództwem,
-    // a te trzy strefy istnieją wyłącznie na mapie. Dyspozycja idzie do JEDNEGO źródła.
-    if (zone.type === 'mvpRetreat' || zone.type === 'mvpFleet' || zone.type === 'mvpDock') {
-      this._handleVesselPanelFooter(zone);
-      return true;
-    }
-    this._handleHit(zone, mx, my);
     return true;
   }
 
