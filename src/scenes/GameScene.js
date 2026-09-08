@@ -533,6 +533,18 @@ export class GameScene {
         if (info.fade) console.table(info.fade);
         return info;
       },
+      // KOSMOS.debug.atmoInfo() — stan powłoki atmosfery dla live gate'u (V3 / A0).
+      //   Tabela per powłoka: klasa atmosfery, ŻYWY uStrength, mnożnik klasy i średnica
+      //   tarczy w CSS px. Strojenie jednym tokenem, natychmiast i globalnie:
+      //     KOSMOS.threeRenderer.atmoTuning.STRENGTH = 0.1
+      atmoInfo: () => {
+        const r = window.KOSMOS?.threeRenderer;
+        if (!r?.getAtmoInfo) { console.warn('[atmoInfo] brak renderera 3D'); return null; }
+        const info = r.getAtmoInfo();
+        console.table(info.knobs);
+        console.table(info.shells);
+        return info;
+      },
       // KOSMOS.debug.replayIntro()      — odtwórz sam lot kinowy startu (kalibracja bez nowej gry).
       // KOSMOS.debug.replayIntro(true)  — lot + ekrany narracyjne (LOG → MANUAL → nazwy).
       replayIntro: (withText) => {

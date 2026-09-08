@@ -455,6 +455,27 @@ export const GAME_CONFIG = {
     //     poprawka obrotu V-260 stoi POZA flagą (D-V2z) — OFF nie ma prawa
     //     przywracać defektu zależnego od FPS.
     liveSunShader:        true,
+
+    // ── VISUALS 1.0 / V3 (A0) — powłoka atmosfery po stronie DNIA ─────────
+    //   ON  = _tickAtmoMaterials liczy siłę powłoki per planeta (mistrz alfy ×
+    //         mnożnik klasy atmosfery) i średnicę tarczy. Od A1 dochodzi bramka N·L
+    //         w shaderze i dopiero wtedy flaga bramkuje COKOLWIEK widocznego.
+    //   OFF = _tickAtmoMaterials wychodzi natychmiast; atmoInfo() zwraca discPx null
+    //         (bo nikt go nie zmierzył), a uStrength zostaje wartością z budowy materiału.
+    //   ⚠ POZA flagą, bo nie są jej częścią: materiały z AtmosphereShader.js (addPlanetMesh
+    //     buduje je bezwarunkowo — w A0 przeniesione VERBATIM, więc nie ma czego bramkować),
+    //     zapis uLightDir w _syncPlanetMeshes (sprzed slice'u — karmi mieszankę koloru,
+    //     z której ścieżka OFF nadal korzysta) oraz sam przyrząd KOSMOS.debug.atmoInfo().
+    //   ⚠ Brak klucza = OFF (idiom liveGasShaders / liveSunShader, nie starClassLighting).
+    //   ⚠ W A0 ON i OFF są PIKSELOWO IDENTYCZNE. Rusztowanie jest jałowe z założenia:
+    //     GLSL przeniesiony do AtmosphereShader.js CO DO ZNAKU (sumy SHA-256 w keeperze),
+    //     a three kluczuje cache programów po TREŚCI ŹRÓDŁA — identyczny string to identyczny
+    //     program i identyczna klatka. Pokrętła A0 są neutralne LICZBOWO (0.55 × 1.0 =
+    //     dzisiejsze atmoStrength), więc flaga bramkuje w A0 wyłącznie zapis uniformu
+    //     i księgowość CPU — żeby nie była zaślepką.
+    //   ⚠ BAZĄ stanu OFF jest HEAD e9f12b7. W V3 nie ma poprawki wyjętej spod flagi
+    //     (inaczej niż V-260 w V2).
+    dayNightAtmosphere:   true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -23,6 +23,8 @@ import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
+import { AtmosphereShader }  from './AtmosphereShader.js';
+import { atmoStrengthFor, densityMul } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
@@ -260,6 +262,13 @@ export class ThreeRenderer {
     this._sunBoilPhase = 0;     // [rad] AKUMULOWANA faza kipienia (D-V2u)
     this._sunBoilMult  = 1;     // mnożnik tempa z klasy gwiazdy
     this._sunFreqMult  = 1;     // mnożnik skali komórek z klasy gwiazdy
+
+    // V3 / A0 — ten sam kontrakt dla powłoki atmosfery:
+    //   KOSMOS.threeRenderer.atmoTuning.STRENGTH = 0.1
+    // ⚠ ALIAS, nie kopia i nie spread — _tickAtmoMaterials czyta AtmosphereShader.LIVE_ATMO
+    //   przez ten sam obiekt. Kopia sprawiłaby, że konsola zmienia pole, którego nikt nie
+    //   czyta (tak zachowują się cztery pola gasTuning wpisywane raz przy budowie materiału).
+    this.atmoTuning = AtmosphereShader.LIVE_ATMO;
     this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
     this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
     this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
@@ -1912,80 +1921,13 @@ export class ThreeRenderer {
     // Atmosfera Rayleigh — tylko planety skaliste z atmosferą (NIE gas giganty)
     const hasAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
     if (hasAtmo) {
-      const atmoColor    = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
-      const atmoScale    = 1.08;
-      const atmoStrength = 0.55;
-
-      const atmoMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uColor:     { value: atmoColor },
-          uLightDir:  { value: new THREE.Vector3(0, 0, 0) },
-          uStrength:  { value: atmoStrength },
-        },
-        vertexShader: `
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-          varying vec3 vWorldNormal;
-          varying vec3 vWorldPos;
-          varying float vFresnel;
-          void main() {
-            vNormal = normalize(normalMatrix * normal);
-            vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-            vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-            vViewDir = normalize(-mvPos.xyz);
-            float NdotV = dot(vNormal, vViewDir);
-            float rim = 1.0 - abs(NdotV);
-            vFresnel = rim * rim * rim;
-            gl_Position = projectionMatrix * mvPos;
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 uColor;
-          uniform vec3 uLightDir;
-          uniform float uStrength;
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-          varying vec3 vWorldNormal;
-          varying vec3 vWorldPos;
-          varying float vFresnel;
-          void main() {
-            float fresnel = vFresnel;
-
-            // Kąt słońca w tym punkcie atmosfery
-            vec3 toLight = normalize(uLightDir - vWorldPos);
-            float sunAngle = dot(vWorldNormal, toLight);
-
-            // Dzień — jaśniejszy kolor od strony słońca
-            float dayAtm = max(sunAngle, 0.0);
-            vec3 dayAtmColor = mix(uColor, uColor * vec3(1.2, 1.1, 0.9), dayAtm * 0.6);
-
-            // Terminator — pomarańczowy pas
-            float atmTerminator = exp(-abs(sunAngle) / 0.18);
-            atmTerminator = pow(atmTerminator, 1.5);
-            vec3 terminatorColor = vec3(1.0, 0.45, 0.15);
-
-            // Noc — ciemna atmosfera
-            vec3 nightAtmColor = uColor * vec3(0.15, 0.18, 0.35);
-
-            // Blend
-            vec3 atmColor = mix(dayAtmColor, nightAtmColor, smoothstep(-0.1, 0.3, -sunAngle));
-            atmColor = mix(atmColor, terminatorColor, atmTerminator * 0.65);
-
-            // Glow na krawędzi
-            float glow = fresnel * smoothstep(1.0, 0.6, fresnel);
-            float alpha = glow * uStrength;
-
-            gl_FragColor = vec4(atmColor, alpha);
-          }
-        `,
-        side: THREE.BackSide,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
+      // V3 / A0 — GLSL i uniformy przeniesione CO DO ZNAKU do AtmosphereShader.js.
+      // ⚠ To jest PRZENIESIENIE, nie zmiana: three kluczuje cache programów po treści
+      //   źródła shadera, więc identyczny string to identyczny program i identyczna
+      //   klatka. Sumy SHA-256 obu literałów trzyma keeper (atmosphere_logic_smoke).
       const atmoMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(r * atmoScale, 32, 32), atmoMat
+        new THREE.SphereGeometry(r * AtmosphereShader.ATMO_SCALE, 32, 32),
+        AtmosphereShader.createAtmosphereMaterial(planet)
       );
       atmoMesh.userData.isAtmosphere = true;
       group.add(atmoMesh);
@@ -3658,6 +3600,7 @@ export class ThreeRenderer {
         this._tickClouds();
         this._tickGasMaterials();        // C1a — uDetail + kierunek światła żywych gazowców
         this._tickSunMaterials();        // S1 — drabina gwiazdy (bramkowane liveSunShader)
+        this._tickAtmoMaterials();       // V3/A0 — siła powłoki atmosfery (bramkowane dayNightAtmosphere)
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
@@ -3728,6 +3671,72 @@ export class ThreeRenderer {
     }
   }
 
+  // ── V3 / A0: księgowość powłoki atmosfery (lustro _tickGasMaterials) ────────
+  // ⚠ Ta funkcja NIGDY nie liczy dt. Atmosfera nie ma animacji, a dekret C1b („krok
+  //   czasu ma JEDNO miejsce", _tickClouds) zostaje nietknięty.
+  // ⚠ Stoi w PĘTLI RENDEROWANIA, a nie w _syncPlanetMeshes, i to jest cała decyzja
+  //   D-V3j: _syncPlanetMeshes biegnie z physics:updated, czyli STOI PRZY PAUZIE — gate
+  //   przekręciłby pokrętło, nie zobaczył zmiany i wyciągnął wniosek o czymś innym
+  //   (dokładnie awaria PROM_DRIFT z re-gate'u S4). Zapis uLightDir zostaje tam, gdzie
+  //   był (_syncPlanetMeshes): kierunek światła zmienia się tylko wtedy, gdy ciała się
+  //   poruszają, i ten zapis jest sprzed slice'u, więc stoi POZA flagą.
+  // ⚠ W A0 zapisywana wartość jest LICZBOWO NEUTRALNA (0.55 × 1.0 = dzisiejsze
+  //   atmoStrength), więc ten commit nie zmienia ani jednego piksela — ale ścieżka jest
+  //   ŻYWA: KOSMOS.threeRenderer.atmoTuning.STRENGTH = 0.1 przygasza pierścień od razu.
+  //   To jedyny NIEJAŁOWY dowód, że rusztowanie jest podpięte.
+  _tickAtmoMaterials() {
+    if (!GAME_CONFIG.FEATURES.dayNightAtmosphere) return;
+    const cam = this.camera;
+    if (!cam) return;
+
+    const vh  = window.innerHeight || 720;
+    const fov = cam.fov ?? 55;
+    const T   = AtmosphereShader.LIVE_ATMO;
+
+    for (const [, entry] of this._planets) {
+      for (const child of entry.group.children) {
+        if (!child.userData.isAtmosphere) continue;
+        const u = child.material?.uniforms;
+        if (!u?.uStrength) continue;
+        u.uStrength.value = atmoStrengthFor(entry.planet?.atmosphere, T);
+        // Średnica tarczy [CSS px] — REUSE sunDiscPx, a nie trzecia kopia tego wzoru.
+        // Konsument (discFade, D-V3f) dochodzi w A1; tutaj karmi wyłącznie przyrząd
+        // KOSMOS.debug.atmoInfo(), żeby gate widział POLICZONE liczby o commit
+        // wcześniej, niż cokolwiek od nich zależy (wzór getSunInfo z S1).
+        child.userData.atmoDiscPx = sunDiscPx({
+          radiusWorld:      entry.mesh?.geometry?.parameters?.radius ?? 1,
+          distance:         cam.position.distanceTo(entry.group.position),
+          viewportHeightPx: vh,
+          fovDeg:           fov,
+        });
+      }
+    }
+  }
+
+  // ── V3 / A0: przyrząd gate'u — KOSMOS.debug.atmoInfo() ──────────────────────
+  // ⚠ Wzór getSunInfo: przy fladze OFF _tickAtmoMaterials w ogóle nie biegnie, więc
+  //   discPx jest NIEAKTUALNE. Zwracamy null zamiast starej liczby — przyrząd, który
+  //   nie odróżnia „nie zmierzono" od „zmierzono", jest gorszy niż brak przyrządu.
+  //   uStrength czytane jest ze ŻYWEGO uniformu, więc jest ważne niezależnie od flagi.
+  getAtmoInfo() {
+    const flag = !!GAME_CONFIG.FEATURES.dayNightAtmosphere;
+    const T = AtmosphereShader.LIVE_ATMO;
+    const shells = [];
+    for (const [id, entry] of this._planets) {
+      for (const child of entry.group.children) {
+        if (!child.userData.isAtmosphere) continue;
+        const klasa = entry.planet?.atmosphere ?? '?';
+        shells.push({
+          planeta:   entry.planet?.name ?? id,
+          klasa,
+          uStrength: child.material?.uniforms?.uStrength?.value ?? null,
+          mnoznik:   densityMul(klasa, T),
+          discPx:    flag ? (child.userData.atmoDiscPx ?? null) : null,
+        });
+      }
+    }
+    return { flag, active: flag, knobs: { ...T }, count: shells.length, shells };
+  }
   // ── S1: księgowość zależna od KAMERY (lustro _tickGasMaterials) ─────────────
   // ⚠ Ta funkcja NIGDY nie liczy dt. Zmierzony krok ma jedno miejsce — _tickClouds —
   //   i dekret C1b zabrania go rozdzielać. Od S2 uSunTime i wszystkie fazy też idą tam.
