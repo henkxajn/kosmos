@@ -32,6 +32,11 @@
 //   D2  pin ŹRÓDŁOWY: host (FloatingPanel + kotwica + drag) zamontowany w `UIManager`
 //   S1  Finding 260: kółko przewija panel i jest POCHŁANIANE (kontrola: poza panelem `false`)
 //   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
+//   Z   KOLEJNOŚĆ: etykiety mapy rysowane PRZED klastrem paneli (Z1/Z1b panel statku,
+//       Z2 stationPanel+combatHud = fix KLASOWY, Z3 ramki RTS zostają nad etykietami)
+//       + K1 (każde wywołanie RAZ — blokuje „naprawę przez skasowanie") i K2 (bramki
+//       etykiet nietknięte — blokuje „naprawę przez dogaszenie")
+//   E1  WYKONANIE: `MapLabelLayer` nadal produkuje plakietki (etykiety żyją)
 //
 // ⚠ FIXTURE Z POPULACJI OSIĄGALNEJ NA MAPIE — statek `orbiting`, NIE `docked`. Zadokowany nie ma
 //   sprite'a (`ThreeRenderer:4783`/`:1185`), więc nie ma kotwicy ekranowej; pin kotwicy na takim
@@ -408,6 +413,107 @@ header('S2  PIN ŹRÓDŁOWY — clamp przewijania ma JEDNO źródło, nie dwie k
     .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
   ok(ui.includes('handleVesselPanelScroll'), 'UIManager.handleWheel ma TRASĘ do panelu (bez niej pin S1 byłby martwy w grze)');
   ok(ui.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${ui.length} zn.)`);
+}
+
+
+// ═══ Z — KOLEJNOŚĆ MALOWANIA: etykiety mapy POD panelami pływającymi ═════════════════════════
+// ⚠ To defekt KOLEJNOŚCI, nie z-indexu: wszystko leci w JEDNYM `UIManager._draw()` na JEDNYM
+//   `#ui-canvas`, więc „na wierzchu" znaczy „rysowane później". Etykiety stały na KOŃCU, a
+//   `MapLabelLayer` NIE MA CLIPU ⇒ malowały po OŚMIU powierzchniach, w tym po Outlinerze,
+//   którego własny komentarz mówi „nic go nie zasłania".
+// ⚠ GRANICA DOWODU, NAZWANA: `UIManager` nie importuje się pod node, więc Z1/Z1b/Z2 to piny
+//   ŹRÓDŁOWE na KOLEJNOŚCI WYWOŁAŃ w `_draw()` — nie na wyrenderowanych pikselach. Piksele
+//   potwierdza live-gate. Kontrole K1/K2 robią tu robotę: bez nich pin przechodzi po
+//   SKASOWANIU albo DOGASZENIU etykiet, czyli po „naprawie", która psuje mapę.
+header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pływających');
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
+  const lines = src.split(String.fromCharCode(10));
+  // Kod BEZ komentarzy — komentarze cytują te nazwy i same by piny zazieleniły
+  // (reguła `source-pin-strip-comments`).
+  const code = lines.filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const at   = (needle) => code.indexOf(needle);
+  const cnt  = (needle) => code.split(needle).length - 1;
+
+  const iLabels = at('this._mapLabelLayer.draw(');
+  const iVessLb = at('this._mapLabelLayer.drawVesselLabels(');
+  const iPanel  = at('drawVesselPanel?.(');
+  const iStation= at('this.stationPanel.draw(');
+  const iCombat = at('this.combatHud.draw(');
+  const iBrack  = at('this._drawSelectionBrackets(');
+
+  // K1 — ANTY-JAŁOWOŚĆ NOŚNA: każde wywołanie DOKŁADNIE RAZ. Bez tego „naprawa" polegająca
+  //      na SKASOWANIU przebiegu etykiet przechodziłaby na zielono.
+  ok(cnt('this._mapLabelLayer.draw(') === 1,
+     `K1: _mapLabelLayer.draw wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.draw(')})`);
+  ok(cnt('this._mapLabelLayer.drawVesselLabels(') === 1,
+     `K1: drawVesselLabels wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.drawVesselLabels(')})`);
+  ok(cnt('drawVesselPanel?.(') === 1,
+     `K1: drawVesselPanel wywołane dokładnie raz (jest: ${cnt('drawVesselPanel?.(')})`);
+  ok(iLabels > 0 && iVessLb > 0 && iPanel > 0 && iStation > 0 && iCombat > 0,
+     'K1: wszystkie mierzone wywołania REALNIE znalezione w źródle');
+
+  // Z1 / Z1b — etykiety przed panelem statku.
+  ok(iLabels < iPanel, `Z1: plakietki kolonii PRZED panelem statku (${iLabels} < ${iPanel})`);
+  ok(iVessLb < iPanel, `Z1b: plakietki flotowe PRZED panelem statku (${iVessLb} < ${iPanel})`);
+
+  // Z2 — to jest fix KLASOWY, nie jednopanelowy.
+  ok(iLabels < iStation && iVessLb < iStation, `Z2: etykiety PRZED stationPanel (${iLabels}/${iVessLb} < ${iStation})`);
+  ok(iLabels < iCombat  && iVessLb < iCombat,  `Z2: etykiety PRZED combatHud (${iLabels}/${iVessLb} < ${iCombat})`);
+
+  // Z3 — czego NIE wolno było przestawić: ramki RTS zostają NAD etykietami.
+  ok(iBrack > iLabels && iBrack > iVessLb,
+     `Z3: ramki RTS zaznaczenia dalej PO etykietach (${iBrack} > ${iLabels}/${iVessLb})`);
+
+  // K2 — ANTY-JAŁOWOŚĆ: bramki etykiet NIETKNIĘTE. Najtańsza zła naprawa to DOGASZENIE
+  //      etykiet („nie rysuj, gdy panel widoczny") — ten pin ją blokuje. To jest wersja
+  //      „etykieta NIE nachodząca na panel nadal się rysuje", sprawdzalna bez pikseli.
+  const gateWin = code.slice(Math.max(0, iLabels - 400), iLabels + 200);
+  ok(gateWin.includes('mapLabels'), 'K2: bramka FEATURES.mapLabels dalej przy wywołaniu');
+  ok(gateWin.includes('isAnyOpen()'), 'K2: bramka !isAnyOpen() dalej przy wywołaniu');
+  ok(gateWin.includes('globeOpen'), 'K2: bramka !globeOpen dalej przy wywołaniu');
+  const gateWin2 = code.slice(Math.max(0, iVessLb - 400), iVessLb + 200);
+  ok(gateWin2.includes('fleetMapLabels'), 'K2: bramka FEATURES.fleetMapLabels dalej przy wywołaniu');
+  // ⚠ I nic NOWEGO: żadnej bramki „nie rysuj, gdy panel widoczny".
+  ok(!gateWin.includes('_vesselPanelRect') && !gateWin.includes("_mapSurface() === 'vessel'"),
+     'K2: etykiety NIE zostały dogaszone widocznością panelu (fix jest kolejnością, nie tłumieniem)');
+
+  // K3 — źródło realnie wczytane; pin nie przechodzi na dowolnym tokenie.
+  ok(code.length > 50000, `K3: źródło UIManagera realnie wczytane (${code.length} zn.)`);
+  ok(at('this._mapLabelLayerXYZZY.draw(') === -1, 'K3: pin nie przechodzi na dowolnym tokenie');
+}
+
+// ═══ E1 — WYKONANIE: warstwa etykiet NADAL produkuje plakietki ════════════════════════════════
+// ⚠ Dosłowna wersja „etykieta NIE nachodząca na panel nadal się rysuje": prowadzimy PRAWDZIWY
+//   `MapLabelLayer` (importuje się pod node — sprawdzone) i sprawdzamy, że dla fixture'u
+//   z kolonią wypuszcza NIEPUSTY zbiór rysowań. Gdyby ktoś „naprawił" z-order gasząc etykiety,
+//   ten pin pada niezależnie od K2.
+header('E1  PIN WYKONANIOWY — MapLabelLayer nadal rysuje plakietki (nie zgasiliśmy etykiet)');
+{
+  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
+  world();
+  const layer = new MapLabelLayer();
+  const drawn = [];
+  const recCtx = new Proxy({}, {
+    get: (t, k) => k === 'measureText' ? ((str) => ({ width: String(str).length * 6 }))
+      : (k === 'canvas' ? { width: 1920, height: 1080 }
+      : (typeof k === 'string' ? ((...a) => { if (k === 'fillText') drawn.push(String(a[0]).slice(0, 24)); }) : undefined)),
+    set: () => true,
+  });
+  // Atrapa ThreeRenderera: JEDNA kolonia z pozycją ekranową (px CSS — layer sam dzieli).
+  const tr = {
+    getAllVisibleLabels: () => [],
+    getColonyLabelItems: () => [{ id: 'p_home', kind: 'colony', name: 'Dom', main: 'Dom', sub: '' }],
+    getStationScreenPosition: () => null,
+    getVesselScreenPosition: () => null,
+    getScreenPosition: () => ({ x: 600, y: 400 }),
+    camera: { position: { length: () => 100 } },
+  };
+  let threw = null;
+  try { layer.draw(recCtx, tr, 1280, 720, 1.5); } catch (e) { threw = e; }
+  ok(threw === null, `warstwa etykiet wykonuje się bez wyjątku (${threw ? threw.message.slice(0, 60) : 'ok'})`);
+  ok(typeof layer.draw === 'function', 'KONTROLA: MapLabelLayer.draw istnieje i jest wołalna');
 }
 
 

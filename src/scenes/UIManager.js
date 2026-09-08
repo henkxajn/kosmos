@@ -2261,6 +2261,43 @@ export class UIManager {
     if (civMode && !globeOpen) this._bottomNavBar.draw(ctx, W, H);
     // ── BottomControlBar (bell + MENU + zegar) — UI v3, mały pasek nad nawigacją, prawy. ──
     if (civMode && !globeOpen) this._bottomControlBar.draw(ctx, W, H, this._timeState);
+    // ══ ETYKIETY MAPY 3D — PRZENIESIONE TUTAJ (Shape 2, slice B) ═══════════════════════════
+    // ⚠ DEFEKT KOLEJNOŚCI MALOWANIA, NIE Z-INDEXU: wszystko leci w JEDNYM `_draw()` na JEDNYM
+    //   `#ui-canvas`, więc „na wierzchu" = „rysowane później". Etykiety stały na KOŃCU przebiegu,
+    //   a `MapLabelLayer` NIE MA ŻADNEGO CLIPU (zero `clip`/bounds w pliku) ⇒ malowały po
+    //   WSZYSTKICH OŚMIU powierzchniach rysowanych wcześniej: `combatHud`, `stationPanel`,
+    //   `fleetCommandPanel`, `fleetGroupPanel`, panel statku (slice B), `panelDock`, dziennik
+    //   ORAZ Outliner.
+    // ⚠ To NIE był defekt panelu statku — on tylko ujawnił klasę. Dowód, że winna była POZYCJA
+    //   PRZEBIEGU: `_outliner.draw` ma nad sobą komentarz „Rysowany NA SAMYM WIERZCHU … nic go
+    //   nie zasłania", a etykiety zasłaniały go OD DAWNA. Shape 2 domyka tamten inwariant przy
+    //   okazji — dlatego nie ma osobnego findingu.
+    // ⚠ Precedens tej samej klasy stoi w bramce niżej: `!overlayManager.isAnyOpen()` powstało
+    //   z komentarzem „labele … przebijały przez panel" — ale objęło tylko overlaye
+    //   PEŁNOEKRANOWE. Panele PŁYWAJĄCE zostały poza tamtą bramką; ten przenos je obejmuje.
+    // ⚠ CO SIĘ NIE ZMIENIA: etykiety zostają POD ramkami RTS (`_drawSelectionBrackets`) i pod
+    //   badge'em trybu taktycznego — te rysują się po nich tak jak dotąd. Bramki (`mapLabels`,
+    //   `fleetMapLabels`, `!isAnyOpen()`, `!globeOpen`) NIETKNIĘTE — pin K2 tego pilnuje, bo
+    //   najtańszą złą naprawą byłoby DOGASZENIE etykiet („nie rysuj, gdy panel widoczny").
+    // ⚠ `const tr` przenosi się RAZEM z blokiem: jest czytane jeszcze niżej przez
+    //   `_drawSelectionBrackets`, a deklaracja WCZEŚNIEJ jest dla tamtych użyć bezpieczna.
+    // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
+    // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Stratcom,
+    // kolonia itd.) labele nie mają sensu i przebijały przez panel.
+    const tr = window.KOSMOS?.threeRenderer;
+    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
+
+    // S3.4 FAZA 5 — etykiety kolonii+stacji (pod ramkami statków; overlay 2D nad WebGL).
+    if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels
+        && !this.overlayManager.isAnyOpen() && !globeOpen) {
+      this._mapLabelLayer.draw(ctx, tr, W, H, UI_SCALE);
+    }
+    // Obraz Operacyjny F1 — plakietki flotowe (OSOBNA flaga od mapLabels; toggle
+    // uiPrefs czyta layer wewnętrznie). OFF = zero kosztów (jeden boolean).
+    if (civMode && tr && GAME_CONFIG.FEATURES?.fleetMapLabels
+        && !this.overlayManager.isAnyOpen() && !globeOpen) {
+      this._mapLabelLayer.drawVesselLabels(ctx, tr, W, H, UI_SCALE);
+    }
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
@@ -2319,23 +2356,6 @@ export class UIManager {
     // ── Tooltip górnego paska surowców (na samym wierzchu) ────────
     if (civMode && !globeOpen) this._topResourceDrawer.drawTooltip(ctx, W, H);
 
-    // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
-    // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Stratcom,
-    // kolonia itd.) labele nie mają sensu i przebijały przez panel.
-    const tr = window.KOSMOS?.threeRenderer;
-    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
-
-    // S3.4 FAZA 5 — etykiety kolonii+stacji (pod ramkami statków; overlay 2D nad WebGL).
-    if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels
-        && !this.overlayManager.isAnyOpen() && !globeOpen) {
-      this._mapLabelLayer.draw(ctx, tr, W, H, UI_SCALE);
-    }
-    // Obraz Operacyjny F1 — plakietki flotowe (OSOBNA flaga od mapLabels; toggle
-    // uiPrefs czyta layer wewnętrznie). OFF = zero kosztów (jeden boolean).
-    if (civMode && tr && GAME_CONFIG.FEATURES?.fleetMapLabels
-        && !this.overlayManager.isAnyOpen() && !globeOpen) {
-      this._mapLabelLayer.drawVesselLabels(ctx, tr, W, H, UI_SCALE);
-    }
     // Faza 2 — tryb taktyczny: auto-exit przy overlayu (per-frame) + badge trybu.
     if (GAME_CONFIG.FEATURES?.tacticalMode) {
       this._tacticalMode.autoExitIfOverlay(this.overlayManager);
