@@ -236,6 +236,36 @@ układu; kontrola: `false` go zachowuje — dowód, że filtr działa, a nie że
 
 ---
 
+## §11a Live-gate 2026-09-07 — wynik i co z niego wyszło
+
+Rdzeń PASS (krok 2: panel nad mapą pokazuje DOKŁADNIE powierzchnię Rejestru). Trzy zgłoszenia:
+
+| # | zgłoszenie | rozstrzygnięcie |
+|---|---|---|
+| ① | „przy N≥2 rysują się dwa panele" | **NIE defekt adaptera** — `fleetGroupPanel.draw` ma jedno miejsce wywołania, a obie bramki czytają ten sam `_mapSurface()` w tej samej klatce. Realny problem: powrót przycisku „Powrót" przy N≥2 i **rozjazd słownika akcji** N==1 vs N≥2 ⇒ **A1** (`e591172`). Inwariant renderu dostał pin **P11** (nic go dotąd nie pilnowało). |
+| ③ | klik w panel nie jest pochłaniany | **ZAMKNIĘTE** (`aaf0b54`) — consume-on-rect-hit + płyta tła. Piny **P12** (fail-first) i **P-plate**. |
+| ② | „akcje celowane nie dochodzą do dyspozycji (*Ship unavailable*)" | **NIE mieści się w tej fladze** — odmawia identycznie z Rejestru. ⇒ **Finding 259**, własny slice. ⚠ Dokładny wyzwalacz **NIEUSTALONY**: pomiar wyklucza `transport` (ta ścieżka przechodzi we wszystkich trzech stanach); dwie hipotezy zapisane w 259. |
+
+**Zarejestrowane, NIEZREALIZOWANE:**
+- **Finding 259** 🔴 — macierz akcji (dok = najbogatszy zestaw, a z mapy nieklikalny), sześć miejsc
+  `mission.shipUnavailable`, `_launchTransport:865` `isRedispatch` jako istniejący wzorzec, kolizja
+  i18n PL. **Nie jest bramkowane flagą `mapVesselPanel`.**
+- **Finding 260** ⚪ — polish ④: kółko myszy niepodpięte (maszyneria scrolla istnieje, brakuje trasy
+  i wąskiego wejścia — lustra `handleVesselPanelClick`) + panel nieprzesuwalny (`FloatingPanel` /
+  `PanelDock` mają trzech konsumentów, ten panel nie jest jednym z nich).
+
+**Dorobek pinów po live-gate'cie** (keeper `map_vessel_panel_smoke` 66 → 118): P11 (render-mutex),
+P-A1, P12 (③), P13 + P13-src (integracja end-to-end na prawdziwym `MissionSystem`, fixture
+z populacji OSIĄGALNEJ z mapy), P-plate. Nagłówek keepera niesie lekcję „fixture musi pochodzić
+z populacji osiągalnej na nowej powierzchni".
+
+⚠ **Do live-gate'u rundy 2:** flaga ON, statek **ORBITUJĄCY** — zadokowanego NIE DA SIĘ kliknąć
+na mapie (`ThreeRenderer:4783`/`:1185`). ⚠ Ale panel przyjmuje go z **Outlinera i z Taba**
+(`Outliner:668`, `GameScene:4702` → `setSelectedVesselId`, bez wymogu sprite'a) — jeśli krok gate'u
+ma mierzyć KLIK NA MAPIE, statek musi być orbitujący.
+
+---
+
 ## §12 Live-gate (do wykonania przez właściciela, po commicie 2 i po 3)
 
 1. Klik w statek na mapie → panel z **pełnym** zestawem akcji (Transport / Kolonizuj / Załaduj
