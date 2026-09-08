@@ -2002,6 +2002,13 @@ export class UIManager {
         && this.tacticalDock?.handleWheel?.(x, y, delta)) return true;
     // Górny pasek surowców — scroll listy kolonii (gdy kursor nad rozwiniętym panelem).
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleWheel?.(x, y, delta)) return true;
+    // Finding 260 — panel statku nad mapą. Bramka MIRROR draw/click (`_mapSurface()==='vessel'`
+    // + żaden overlay otwarty), bo panel rysuje się tylko w tym stanie; bez tej trasy kółko
+    // przelatywało do kamery i ZOOMOWAŁO mapę zamiast przewinąć panel.
+    // ⚠ Gałąź `overlayManager` NIŻEJ jest dla tej powierzchni MARTWA Z DEFINICJI — bramkuje ją
+    //   `isAnyOpen()`, a panel mapy istnieje wyłącznie gdy NIC nie jest otwarte (D-MVP-7).
+    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel'
+        && this._fleetOverlay?.handleVesselPanelScroll?.(x, y, delta)) return true;
     // Prawy Outliner — scroll listy (kolonie/flota potrafią być dłuższe niż panel).
     if (window.KOSMOS?.civMode && this._outliner?.handleWheel?.(x, y, delta, W, H)) return true;
     // Overlay pełnoekranowy — scroll

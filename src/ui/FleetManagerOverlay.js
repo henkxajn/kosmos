@@ -1483,6 +1483,39 @@ export class FleetManagerOverlay {
   }
 
   /**
+   * JEDYNE miejsce, które przewija prawą kolumnę (Rejestr, Dowództwo I panel mapy).
+   * Wyciągnięte z `handleScroll` przy Findingu 260, żeby panel mapy NIE dostał drugiej,
+   * osobnej kopii tej samej arytmetyki — clamp i czułość mają zostać jedne.
+   */
+  _applyRightScroll(delta) {
+    const maxScroll = Math.max(0, (this._rightContentH || 0) - (this._rightViewH || 0));
+    this._rightScrollY = Math.max(0, Math.min(maxScroll, (this._rightScrollY || 0) + delta * 0.5));
+  }
+
+  /**
+   * Kółko myszy nad panelem statku na mapie 3D (Finding 260).
+   *
+   * ⚠ DLACZEGO OSOBNE WEJŚCIE, a nie trasa do `handleScroll`: tamta metoda bramkuje na
+   *   `!this._visible || !this._bounds`, czyli na stanie OVERLAYA — a nad mapą overlay jest
+   *   ZAMKNIĘTY (D-MVP-7). Trasa do niej dawałaby ciche `false` przy każdym obrocie kółka.
+   *   To dokładnie ta sama asymetria, dla której `handleVesselPanelClick` istnieje obok
+   *   `handleClick` — i to samo lekarstwo: wąskie wejście z bramką PROSTOKĄTA panelu.
+   * ⚠ Maszyneria przewijania (`_rightScrollY` / `_rightContentH` / `_rightViewH`, reset per
+   *   statek przez `_rightScrollVesselId`) ISTNIAŁA od 258 — brakowało wyłącznie TRASY.
+   *   Scroll jest WSPÓLNY z Rejestrem (D-MVP-6, pinowane P-scroll) i to jest zamierzone.
+   * ⚠ Zwraca `true` na KAŻDY obrót w prostokącie panelu, także gdy treść się mieści i clamp
+   *   nic nie zmieni — inaczej kółko przelatywałoby do kamery i ZOOMOWAŁO mapę pod panelem.
+   *   Ten sam idiom pochłaniania co ③ w `handleVesselPanelClick`.
+   */
+  handleVesselPanelScroll(mx, my, delta) {
+    const r = this._vesselPanelRect;
+    if (!r) return false;
+    if (mx < r.x || mx > r.x + r.w || my < r.y || my > r.y + r.h) return false;
+    this._applyRightScroll(delta);
+    return true;
+  }
+
+  /**
    * Klik w panel statku nad mapą 3D. Osobne wejście od `handleClick`, bo tamto bramkuje na
    * `_visible`/`_bounds` OVERLAYA (a tu overlay jest zamknięty) — ale rozstrzyganie trafień
    * i dyspozycja są TE SAME: `resolveStratcomZone` → `_handleHit`.
@@ -1811,8 +1844,7 @@ export class FleetManagerOverlay {
     const _effRightW = (GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry')
       ? REGISTRY_RIGHT_W : RIGHT_W;
     if (mx > b.x + b.w - _effRightW && (this._selectedVesselId || this._selectedFleetId)) {
-      const maxScroll = Math.max(0, (this._rightContentH || 0) - (this._rightViewH || 0));
-      this._rightScrollY = Math.max(0, Math.min(maxScroll, (this._rightScrollY || 0) + delta * 0.5));
+      this._applyRightScroll(delta);
       return true;
     }
     // Zoom-at-cursor mapy taktycznej

@@ -30,6 +30,8 @@
 //   A2  panel nie zakrywa sprite'a statku
 //   D1  DRAG na PRAWDZIWYM `FloatingPanel`: dragPos > kotwica, `reanchor()` wraca, clamp
 //   D2  pin ŹRÓDŁOWY: host (FloatingPanel + kotwica + drag) zamontowany w `UIManager`
+//   S1  Finding 260: kółko przewija panel i jest POCHŁANIANE (kontrola: poza panelem `false`)
+//   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
 //
 // ⚠ FIXTURE Z POPULACJI OSIĄGALNEJ NA MAPIE — statek `orbiting`, NIE `docked`. Zadokowany nie ma
 //   sprite'a (`ThreeRenderer:4783`/`:1185`), więc nie ma kotwicy ekranowej; pin kotwicy na takim
@@ -347,6 +349,65 @@ header('D2  PIN ŹRÓDŁOWY — FloatingPanel + kotwica + drag realnie wpięte w
   ok(code.includes('reanchor()'), 'zmiana statku wraca do kotwicy');
   ok(code.length > 50000, `KONTROLA: źródło realnie wczytane (${code.length} zn.)`);
   ok(!code.includes('resolveVesselPanelAnchorXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+}
+
+
+// ═══ S1 — Finding 260: KÓŁKO przewija panel i jest POCHŁANIANE ═══════════════════════════════
+// ⚠ Maszyneria przewijania istniała od 258 (`_rightScrollY`/`_rightContentH`/`_rightViewH`
+//   + clamp) — brakowało wyłącznie TRASY. Trasa do `handleScroll` NIE działa: tamta metoda
+//   bramkuje na `_visible`/`_bounds` OVERLAYA, a nad mapą overlay jest ZAMKNIĘTY (D-MVP-7).
+// ⚠ W kompakcie scroll jest NOŚNY, nie kosmetyczny: przy 300 px okna treść (322 px) i tak
+//   wystaje, a krok wyboru celu ma 326 px — bez kółka część rozkazów byłaby nieosiągalna.
+header('S1  PIN — kółko myszy przewija panel statku i NIE przelatuje do kamery');
+{
+  world();
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = 'v_1';
+  if (typeof fmo.handleVesselPanelScroll !== 'function') {
+    for (let i = 0; i < 8; i++) ok(false, 'FleetManagerOverlay.handleVesselPanelScroll istnieje');
+  } else {
+    ok(true, 'FleetManagerOverlay.handleVesselPanelScroll istnieje');
+    // Panel NIŻSZY niż treść — inaczej clamp trzyma 0 i pin przechodziłby jałowo.
+    fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 200, { compact: true });
+    const r = fmo._vesselPanelRect;
+    ok(fmo._rightContentH > fmo._rightViewH,
+       `KONTROLA: treść przekracza okno (${Math.round(fmo._rightContentH)} > ${Math.round(fmo._rightViewH)}) — jest co przewijać`);
+    const before = fmo._rightScrollY || 0;
+    const consumed = fmo.handleVesselPanelScroll(r.x + r.w / 2, r.y + r.h / 2, 40);
+    ok(consumed === true, 'obrót kółka NAD panelem jest POCHŁONIĘTY (nie zoomuje mapy)');
+    ok((fmo._rightScrollY || 0) > before,
+       `scroll faktycznie się przesunął (${before} → ${Math.round(fmo._rightScrollY)})`);
+    // Clamp — ten sam, co w Rejestrze (jedno źródło `_applyRightScroll`).
+    fmo.handleVesselPanelScroll(r.x + 5, r.y + 5, 99999);
+    const maxS = Math.max(0, (fmo._rightContentH || 0) - (fmo._rightViewH || 0));
+    ok(Math.round(fmo._rightScrollY) === Math.round(maxS),
+       `clamp górny trzyma na maxScroll (${Math.round(fmo._rightScrollY)} == ${Math.round(maxS)})`);
+    fmo.handleVesselPanelScroll(r.x + 5, r.y + 5, -99999);
+    ok((fmo._rightScrollY || 0) === 0, `clamp dolny trzyma na 0 (jest ${fmo._rightScrollY})`);
+    // KONTROLA KIERUNKU — poza prostokątem NIE pochłaniamy (inaczej panel zjadłby zoom całej mapy).
+    ok(fmo.handleVesselPanelScroll(r.x - 5, r.y + 10, 40) === false, 'KONTROLA: kółko POZA panelem → false');
+    fmo._vesselPanelRect = null;
+    ok(fmo.handleVesselPanelScroll(r.x + 10, r.y + 10, 40) === false,
+       'KONTROLA: bez narysowanego panelu → false');
+  }
+}
+
+// ═══ S2 — JEDNO źródło clampu (Rejestr i panel mapy przewijają się tak samo) ══════════════════
+header('S2  PIN ŹRÓDŁOWY — clamp przewijania ma JEDNO źródło, nie dwie kopie');
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8');
+  const code = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const cnt = (h, n) => h.split(n).length - 1;
+  ok(cnt(code, '_applyRightScroll(') >= 3,
+     `_applyRightScroll: 1 definicja + >=2 wołających (jest wystąpień: ${cnt(code, '_applyRightScroll(')})`);
+  // Arytmetyka clampu występuje DOKŁADNIE RAZ — w helperze, nie skopiowana do panelu mapy.
+  ok(cnt(code, "this._rightScrollY = Math.max(0, Math.min(maxScroll") === 1,
+     `arytmetyka clampu występuje raz (jest: ${cnt(code, "this._rightScrollY = Math.max(0, Math.min(maxScroll")})`);
+  const ui = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8')
+    .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  ok(ui.includes('handleVesselPanelScroll'), 'UIManager.handleWheel ma TRASĘ do panelu (bez niej pin S1 byłby martwy w grze)');
+  ok(ui.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${ui.length} zn.)`);
 }
 
 
