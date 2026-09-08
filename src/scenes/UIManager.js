@@ -27,7 +27,8 @@ import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 import { OverlayManager }  from '../ui/OverlayManager.js';
 import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
-import { resolveMapSelectionSurface } from '../ui/MapVesselPanelLogic.js';
+import { resolveMapSelectionSurface, resolveVesselPanelAnchor } from '../ui/MapVesselPanelLogic.js';
+import { FloatingPanel }        from '../ui/FloatingPanel.js';
 import { EventLogOverlay }    from '../ui/EventLogOverlay.js';
 import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
 import { ShipyardOverlay }     from '../ui/ShipyardOverlay.js';
@@ -85,6 +86,11 @@ let _PW = window.innerWidth;
 let _PH = window.innerHeight;
 // Skala UI względem bazowego 1280×720 — automatycznie skaluje tekst i panele
 let UI_SCALE = Math.min(_PW / 1280, _PH / 720);
+// Slice B — wysokość pływającego panelu statku (px logiczne). Kompakt mieści
+// MODUŁY + Cargo + AKCJE (zmierzone: pierwsza akcja na y+228); krok wyboru celu
+// rośnie do MVP_SELECT_H (zmierzona treść kroku select w kompakcie: 326 px).
+const MVP_COMPACT_H = 300;
+const MVP_SELECT_H  = 360;
 // DPR backing store (cap 2 = limit kosztu): canvas renderuje w pikselach urządzenia → ostrość na HiDPI
 let _DPR = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
 // Wymiary logiczne (używane w kodzie rysującym — niezależne od DPI/rozdzielczości)
@@ -343,6 +349,10 @@ export class UIManager {
     // Non-exclusive (jak StationPanel/CombatHUD): self-managed przez ui:selectionChanged,
     // rysowany PO overlayManager (tylko gdy żaden overlay otwarty), klik PRZED overlayManager.
     this.fleetGroupPanel = new FleetGroupPanel();
+    // Slice B commit 2 — pływający panel statku: drag + clamp + kotwica.
+    //   Host trzyma UIManager (to on liczy geometrię i routuje kliki), renderem jest
+    //   nadal `FleetManagerOverlay.drawVesselPanel` — podział ze slice'u 258 bez zmian.
+    this._vesselPanelFloat = new FloatingPanel();
     window.KOSMOS.fleetGroupPanel = this.fleetGroupPanel;
 
     // S3.4 FAZA 5 — etykiety kolonii+stacji na mapie 3D (overlay 2D, Trasa A). Non-exclusive:
@@ -433,17 +443,65 @@ export class UIManager {
   }
 
   /**
-   * Geometria panelu: prawa kolumna, na lewo od Outlinera — MIRROR miejsca, w którym detal
-   * statku siedzi w Dowództwie (pamięć mięśniowa). Szerokość 300 == `REGISTRY_RIGHT_W`, więc
-   * treść układa się identycznie jak w Rejestrze. Wzór kotwiczenia: `UIManager:1755`.
+   * Geometria panelu statku.
+   *
+   * ⚠ TRYB KOMPAKTOWY (slice B) — panel jest MAŁY i ZAKOTWICZONY PRZY STATKU, a nie kolumną
+   *   pełnej wysokości. Szerokość zostaje 300 (== `REGISTRY_RIGHT_W`), żeby treść układała się
+   *   IDENTYCZNIE jak w Rejestrze — na tym stoi golden E1/E2.
+   *   Wysokość: `MVP_COMPACT_H` (zmierzone: przy contentH 322 pierwsza akcja leży na y+228,
+   *   więc 300 px mieści MODUŁY + Cargo + AKCJE bez przewijania), a w kroku wyboru celu panel
+   *   ROŚNIE do `MVP_SELECT_H` (decyzja właściciela: „picker rośnie na czas select, wraca po
+   *   potwierdzeniu"; zmierzone: treść kroku select w kompakcie = 326 px).
+   * ⚠ BEZ kompaktu geometria zostaje DOKŁADNIE ta, co w 258 (kolumna przy prawej krawędzi) —
+   *   flaga OFF ma znaczyć „A bit w bit", także w geometrii.
    */
   _vesselPanelBounds(W, H) {
     const w = 300;
-    const x = Math.max(8, W - COSMIC.OUTLINER_W - w - 12);
-    const y = COSMIC.TOP_BAND_H + 8;
-    const h = Math.max(160, H - BOTTOM_RESERVED - y - 8);
-    return { x, y, w, h };
+    const compact = GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true;
+    if (!compact) {
+      const x = Math.max(8, W - COSMIC.OUTLINER_W - w - 12);
+      const y = COSMIC.TOP_BAND_H + 8;
+      const h = Math.max(160, H - BOTTOM_RESERVED - y - 8);
+      return { x, y, w, h };
+    }
+    const selecting = this._fleetOverlay?._missionConfig?.step === 'select';
+    const h = selecting ? MVP_SELECT_H : MVP_COMPACT_H;
+    // Obszar mapy do clampu: pod górnym pasmem, nad rezerwą dolną (nawigacja + dziennik + dok).
+    const oy = COSMIC.TOP_BAND_H + 8;
+    const dockRes = window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0;
+    const b = { ox: 8, oy, ow: Math.max(80, W - 16), oh: Math.max(60, H - BOTTOM_RESERVED - oy - dockRes) };
+    const sp = window.KOSMOS?.threeRenderer?.getVesselScreenPosition?.(this._selectedVesselId);
+    const a  = resolveVesselPanelAnchor(sp, UI_SCALE, b, w, h, 24);
+    // drag (dragPos) wygrywa nad kotwicą aż do `reanchor()` przy zmianie statku.
+    const { px, py } = this._vesselPanelFloat.place(a.x, a.y, w, h, b);
+    this._vesselPanelDragBounds = b;
+    return { x: px, y: py, w, h };
   }
+
+  // ── Slice B commit 2 — przeciąganie panelu statku (mirror stationPanel) ──────────────────
+  /** Pas nagłówka panelu (poza przyciskami) jako uchwyt do przeciągania. */
+  tryBeginVesselPanelDrag(x, y) {
+    if (!GAME_CONFIG.FEATURES?.mapVesselPanelCompact) return false;
+    if (this._mapSurface() !== 'vessel' || this.overlayManager.isAnyOpen()) return false;
+    const r = this._fleetOverlay?._vesselPanelRect;
+    if (!r) return false;
+    // Górne 22 px panelu, z zapasem 70 px z prawej na przyciski nagłówka (wzór StationPanel).
+    if (x < r.x || x > r.x + r.w - 70 || y < r.y || y > r.y + 22) return false;
+    this._vesselPanelFloat.beginDrag(x, y, r.x, r.y);
+    return true;
+  }
+
+  handleVesselPanelDragMove(x, y) {
+    const r = this._fleetOverlay?._vesselPanelRect;
+    const b = this._vesselPanelDragBounds;
+    if (!r || !b) return false;
+    const moved = this._vesselPanelFloat.updateDrag(x, y, r.w, r.h, b);
+    if (moved) this._dirty = true;
+    return moved;
+  }
+
+  endVesselPanelDrag()      { return this._vesselPanelFloat.endDrag(); }
+  isDraggingVesselPanel()   { return this._vesselPanelFloat.isDragging(); }
 
   /** Czy kursor jest nad panelem statku (blokada kamery / pochłonięcie kliku). */
   _vesselPanelHit(x, y) {
@@ -467,6 +525,8 @@ export class UIManager {
     const prev = this._selectedVesselId;
     this._selectedVesselId = vesselId;
     this._selectedVesselIds = vesselId === null ? new Set() : new Set([vesselId]);
+    // Slice B — nowy statek ⇒ panel wraca do kotwicy przy NIM (wzór StationPanel:50).
+    if (prev !== vesselId) this._vesselPanelFloat?.reanchor();
     this._syncFleetOvLead();
     EventBus.emit('ui:selectionChanged', { vesselId, vesselIds: [...this._selectedVesselIds], prevVesselId: prev });
   }
@@ -1962,6 +2022,7 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y, button); return; }
     // C1 (S3.4b) — drag pływających paneli za nagłówek (kamera już zablokowana przez isOverUI).
     if (button === 0) {
+      if (this.tryBeginVesselPanelDrag(x, y)) return;   // Slice B — drag panelu statku
       if (this.stationPanel?.visible && this.stationPanel.tryBeginDrag?.(x, y)) return;
       if (this._bottomContext?.tryBeginDrag?.(x, y)) return;
     }
@@ -1973,6 +2034,7 @@ export class UIManager {
     const y = rawY / UI_SCALE;
     // C1 (S3.4b) — zakończ drag paneli ZAWSZE (przed early-return na overlay — inaczej _dragging utyka, #4).
     // Realny drag (moved) pochłania nadchodzący click, by nie przeleciał do sceny 3D (deselekcja, #5).
+    const draggedV = this.endVesselPanelDrag();   // Slice B
     const draggedS = this.stationPanel?.endDrag?.();
     const draggedB = this._bottomContext?.endDrag?.();
     if (draggedS || draggedB) this._panelDragConsumedClick = true;
@@ -1994,6 +2056,7 @@ export class UIManager {
     // #4 (review) — overlay/modal pojawił się w trakcie draga → przerwij drag (inaczej _dragging utyka).
     if (this.overlayManager.isAnyOpen()) { this.stationPanel?.endDrag?.(); this._bottomContext?.endDrag?.(); }
     // C1 (S3.4b) — jeśli panel jest przeciągany, aktualizuj i POCHŁOŃ ruch (bez hoverów pod spodem).
+    if (this.isDraggingVesselPanel())            { this.handleVesselPanelDragMove(x, y);   return; }   // Slice B
     if (this.stationPanel?.isDraggingPanel?.())   { this.stationPanel.handleDragMove(x, y);   return; }
     if (this._bottomContext?.isDraggingPanel?.()) { this._bottomContext.handleDragMove(x, y); return; }
     // Overlay pełnoekranowy — hover

@@ -26,6 +26,10 @@
 //   E2  GOLDEN NIETKNIĘTY: Rejestr BEZ `compact` = dzisiejsza sygnatura Z GEOMETRIĄ stref
 //   R1  RENDER: `compact` realnie SKRACA panel — karta katalogowa znika, akcje idą do góry
 //   R2  PICKER: krok `select` mieści listę celów w ~360 px (panel rośnie na czas wyboru)
+//   A1  KOTWICA: px CSS → px LOGICZNE (`/uiScale`), offset prawo-dół, `null` → fallback
+//   A2  panel nie zakrywa sprite'a statku
+//   D1  DRAG na PRAWDZIWYM `FloatingPanel`: dragPos > kotwica, `reanchor()` wraca, clamp
+//   D2  pin ŹRÓDŁOWY: host (FloatingPanel + kotwica + drag) zamontowany w `UIManager`
 //
 // ⚠ FIXTURE Z POPULACJI OSIĄGALNEJ NA MAPIE — statek `orbiting`, NIE `docked`. Zadokowany nie ma
 //   sprite'a (`ThreeRenderer:4783`/`:1185`), więc nie ma kotwicy ekranowej; pin kotwicy na takim
@@ -50,6 +54,11 @@ globalThis.localStorage = {
 const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
 const { GAME_CONFIG }         = await import('../../config/GameConfig.js');
 const EntityManager           = (await import('../../core/EntityManager.js')).default;
+// Reguła kotwicy mieszka w CZYSTYM module (UIManager nie importuje się pod node).
+// Import owinięty: gdyby helper jeszcze nie istniał, keeper ma dać FAIL-FIRST, nie umrzeć
+// na starcie (martwy harness = 0/0 = fałszywa zieleń).
+let MapLogic = null;
+try { MapLogic = await import('../../ui/MapVesselPanelLogic.js'); } catch { /* fail-first */ }
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ FAIL: ' + m); } };
@@ -238,6 +247,108 @@ header('M  PIN ŹRÓDŁOWY — `mapVesselPanelCompact` jest realnie wpięta w UI
   ok(GAME_CONFIG.FEATURES?.mapVesselPanelCompact === false,
      'flaga istnieje i jest domyślnie OFF (fallback = kolumna A)');
 }
+
+// ═══ A1 — KOTWICA: panel siada PRZY STATKU, w px LOGICZNYCH ══════════════════════════════════
+// ⚠ KONWERSJA `/uiScale` JEST SEDNEM TEGO PINU. `getVesselScreenPosition` liczy z
+//   `window.innerWidth/Height` (px CSS), a overlay rysuje pod `setTransform(UI_SCALE * _DPR)`.
+//   Bez dzielenia panel rozjeżdża się na KAŻDEJ rozdzielczości ≠ 1280×720 — a to jest KAŻDY
+//   nowoczesny ekran. Kanon: `MapLabelLogic.toLogicalPx` (Aneks A.3).
+//   ⚠ `StationPanel:117-120` tej konwersji NIE robi (defekt PRE-EXISTING, osobny finding);
+//   ten pin pilnuje, żeby panel statku NIE powielił tamtego wzorca.
+header('A1  PIN — kotwica panelu: px CSS → px LOGICZNE, offset prawo-dół, fallback bez chowania');
+{
+  const f = MapLogic?.resolveVesselPanelAnchor;
+  const B = { ox: 8, oy: 40, ow: 1264, oh: 600 };
+  if (typeof f !== 'function') {
+    for (let i = 0; i < 7; i++) ok(false, 'resolveVesselPanelAnchor istnieje');
+  } else {
+    ok(true, 'MapVesselPanelLogic.resolveVesselPanelAnchor istnieje');
+    // uiScale = 1 → kotwica = pozycja + offset
+    const a1 = f({ x: 400, y: 300 }, 1, B, 300, 300, 24);
+    ok(a1.anchored === true && a1.x === 424 && a1.y === 324,
+       `uiScale 1: offset prawo-dół +24 (jest: ${a1.x},${a1.y})`);
+    // uiScale = 1.5 (1920×1080!) → MUSI podzielić, inaczej panel ucieka o połowę ekranu
+    const a15 = f({ x: 900, y: 600 }, 1.5, B, 300, 300, 24);
+    ok(a15.x === 624 && a15.y === 424,
+       `uiScale 1.5: pozycja PODZIELONA (900/1.5+24=624, 600/1.5+24=424) — jest: ${a15.x},${a15.y}`);
+    // ⚠ KONTROLA ANTY-JAŁOWA: bez dzielenia wyszłoby 924/624 — pin realnie mierzy konwersję.
+    ok(a15.x !== 924 && a15.y !== 624,
+       'KONTROLA: to NIE jest wynik bez konwersji (924/624) — dzielenie faktycznie zaszło');
+    // null (statek za kamerą albo ZADOKOWANY — brak sprite'a) → fallback, NIE chowanie
+    const fb = f(null, 1.5, B, 300, 300, 24);
+    ok(fb.anchored === false, 'brak pozycji ekranowej → kotwica zapasowa (nie chowamy panelu)');
+    ok(fb.x === B.ox + B.ow - 300 - 12 && fb.y === B.oy + 8,
+       `fallback = prawa krawędź obszaru mapy (jest: ${fb.x},${fb.y})`);
+    // NaN traktowany jak brak (obrona przed rzutem za kamerę)
+    const nan = f({ x: NaN, y: 10 }, 1, B, 300, 300, 24);
+    ok(nan.anchored === false, 'NaN w pozycji ⇒ fallback, nie panel na NaN');
+  }
+}
+
+// ═══ A2 — PANEL NIE ZAKRYWA STATKU ═══════════════════════════════════════════════════════════
+// Offset prawo-dół sprawia, że lewy-górny róg panelu leży POZA sprite'em. Sprite statku ma
+// promień rzędu kilkunastu px; offset 24 daje zapas w obu osiach.
+header('A2  PIN — zakotwiczony panel nie zachodzi na sprite statku');
+{
+  const f = MapLogic?.resolveVesselPanelAnchor;
+  if (typeof f !== 'function') { ok(false, 'A2 — brak helpera'); }
+  else {
+    const B = { ox: 0, oy: 0, ow: 1280, oh: 720 };
+    const shipLogical = { x: 400, y: 300 };
+    const a = f({ x: 400, y: 300 }, 1, B, 300, 300, 24);
+    const SPRITE_R = 16;   // z zapasem powyżej realnego promienia ikony statku
+    const overlaps = a.x < shipLogical.x + SPRITE_R && a.y < shipLogical.y + SPRITE_R;
+    ok(!overlaps, `panel zaczyna się poza sprite'em (panel ${a.x},${a.y} vs statek ${shipLogical.x},${shipLogical.y} r=${SPRITE_R})`);
+    ok(a.x > shipLogical.x && a.y > shipLogical.y, 'kierunek: PRAWO-DÓŁ od statku');
+  }
+}
+
+// ═══ D1 — DRAG: `dragPos` wygrywa nad kotwicą, `reanchor()` go zdejmuje ══════════════════════
+// ⚠ Prowadzone na PRAWDZIWYM `FloatingPanel` (importuje się pod node), nie na atrapie —
+//   inaczej pin mierzyłby moją kopię reguły, a nie regułę.
+header('D1  PIN — drag panelu: dragPos wygrywa nad kotwicą, reanchor wraca do statku');
+{
+  const { FloatingPanel } = await import('../../ui/FloatingPanel.js');
+  const B = { ox: 0, oy: 0, ow: 1280, oh: 720 };
+  const fp = new FloatingPanel();
+  const anchored = fp.place(400, 300, 300, 300, B);
+  ok(anchored.px === 400 && anchored.py === 300, `bez draga panel siedzi na kotwicy (${anchored.px},${anchored.py})`);
+  fp.beginDrag(410, 310, 400, 300);
+  const movedSmall = fp.updateDrag(412, 312, 300, 300, B);
+  ok(movedSmall === false, 'KONTROLA: ruch poniżej progu to KLIK, nie drag (kotwica nietknięta)');
+  const moved = fp.updateDrag(600, 500, 300, 300, B);
+  ok(moved === true, 'ruch powyżej progu ustawia dragPos');
+  const dragged = fp.place(400, 300, 300, 300, B);
+  ok(dragged.px !== 400 || dragged.py !== 300, `dragPos WYGRYWA nad kotwicą (${dragged.px},${dragged.py})`);
+  ok(fp.endDrag() === true, 'endDrag zgłasza realny drag (panel może pochłonąć klik)');
+  fp.reanchor();
+  const back = fp.place(400, 300, 300, 300, B);
+  ok(back.px === 400 && back.py === 300, 'reanchor() wraca do kotwicy przy statku');
+  // Clamp: panel nigdy nie ucieka poza obszar mapy.
+  const fp2 = new FloatingPanel();
+  const far = fp2.place(5000, 5000, 300, 300, B);
+  ok(far.px <= B.ox + B.ow - 300 && far.py <= B.oy + B.oh - 300,
+     `clamp trzyma panel na ekranie (${far.px},${far.py})`);
+}
+
+// ═══ D2 — pin ŹRÓDŁOWY: host jest ZAMONTOWANY w UIManagerze ══════════════════════════════════
+// `UIManager` nie importuje się pod node ⇒ pin źródłowy, z kontrolami (lekcja „skonstruowany
+// ≠ zamontowany": konsumenci czytają przez `?.`, martwy host NIE krzyczy).
+header('D2  PIN ŹRÓDŁOWY — FloatingPanel + kotwica + drag realnie wpięte w UIManagerze');
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
+  const code = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  ok(code.includes('new FloatingPanel()'), 'UIManager tworzy FloatingPanel dla panelu statku');
+  ok(code.includes('resolveVesselPanelAnchor('), 'i liczy kotwicę CZYSTYM helperem (nie inline)');
+  ok(code.includes('tryBeginVesselPanelDrag(x, y)'), 'drag wpięty w mousedown');
+  ok(code.includes('endVesselPanelDrag()'), 'drag zamykany w mouseup');
+  ok(code.includes('isDraggingVesselPanel()'), 'drag prowadzony w mousemove');
+  ok(code.includes('reanchor()'), 'zmiana statku wraca do kotwicy');
+  ok(code.length > 50000, `KONTROLA: źródło realnie wczytane (${code.length} zn.)`);
+  ok(!code.includes('resolveVesselPanelAnchorXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+}
+
 
 console.log(`\n═══ ${pass}/${pass + fail} OK, ${fail} FAIL ═══`);
 process.exit(fail > 0 ? 1 : 0);
