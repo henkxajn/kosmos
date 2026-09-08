@@ -214,16 +214,14 @@ export const GAME_CONFIG = {
     // Slice 258 — panel statku z Rejestru nad mapą 3D (Wariant A, „panel mode"): klik w statek
     // na mapie otwiera TĘ SAMĄ powierzchnię co prawa kolumna Dowództwa (ta sama instancja FMO).
     // OFF ⇒ zachowanie sprzed 258: pojedynczy statek obsługuje FleetGroupPanel.
-    // ⚠ ZGASZONE PO LIVE-GATE 2026-09-07 (decyzja właściciela) — DWA powody, oba naprawiane
-    //   w następnej sesji, oba zawarte w tej fladze:
-    //   ③ klik w panel NIE JEST POCHŁANIANY, gdy nie trafi w strefę (`handleVesselPanelClick`
-    //     zwraca false) ⇒ przelatuje do mapy 3D: odznacza statek i zrzuca kamerę na środek
-    //     układu. Panel jest wtedy GORSZY niż jego brak — to bramkuje domyślne ON.
-    //   ② akcje celowane nie dochodzą do dyspozycji („Ship unavailable"). ⚠ NIE jest to wina
-    //     adaptera (zmierzone: cała ścieżka dyspozycji nie czyta pól wymuszanych przy
-    //     rysowaniu) — to PRE-EXISTING bramka w `MissionSystem`, która tak samo odmawia
-    //     z Rejestru. Własny finding i własny slice; ta flaga jej NIE naprawi.
-    mapVesselPanel:       false,
+    // ⚠ ON PO LIVE-GATE'CIE RUNDY 2 (2026-09-08, PASS) — slice 258 ZAMKNIĘTY.
+    //   Zweryfikowane na żywo: płyta tła + pełny zestaw akcji Rejestru (①), klik w panel
+    //   POCHŁANIANY (brak odznaczenia, brak zjazdu kamery — ③), przy N>=2 panel grupy BEZ
+    //   „Powrotu" (A1). OFF dalej = zachowanie sprzed 258 (`FleetGroupPanel` od N==1).
+    //   ⚠ ② NIE jest bramkowane tą flagą i NIE zamyka się z 258 — `Finding 259`. Odmowa
+    //     „Statek niedostępny" przy Transporcie przychodzi z `MissionSystem`/`VesselManager`
+    //     i wygląda TAK SAMO z Rejestru i z Dowództwa. Własny slice, kierunek podpisany.
+    mapVesselPanel:       true,
     // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
     // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
     //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem
