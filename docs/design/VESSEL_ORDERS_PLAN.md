@@ -1366,10 +1366,26 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ⚠ Zostaje na `FleetGroupPanel`, wiec po slice MAP_VESSEL_PANEL jest **zywy przy N≥2**
      (przy N==1 ta powierzchnia sie nie rysuje). Osobny slice.
 
-259. ✅ **[ZAMKNIĘTY 2026-09-08, `6b8bb09` — live-gate PENDING] `Transport` odmawia statkowi w stanie `orbiting` + `idle` — dziura MIĘDZY DWOMA
+259. ✅ **[ZAMKNIĘTY 2026-09-08, `6b8bb09` — LIVE-GATE PASS 2026-09-08] `Transport` odmawia statkowi w stanie `orbiting` + `idle` — dziura MIĘDZY DWOMA
      dyspozytorami.** Zgłoszone jako ② z live-gate'u slice'u MAP_VESSEL_PANEL. **Własny slice,
      NIE bramkowany flagą `mapVesselPanel`** — `_launchTransport` jest wspólny, więc odmawia
      identycznie z Rejestru i z Dowództwa; zgaszenie flagi jej nie usuwa.
+
+     ⚠ **KOREKTA WPISU 2026-09-09: „live-gate PENDING" było NIEAKTUALNE.** Gate przeszedł
+     w tej samej sesji, w której powstał `6b8bb09`, protokołem spisanym w stopce tamtego
+     commita: *fregata BEZ ładowni, orbita, Transport → cel → potwierdzenie → musi
+     wystartować*. Wynik: **PASS** (zgłoszenie właściciela). Wpis został przepisany dopiero
+     teraz, bo `e9f12b7` zamknął finding ZANIM gate się odbył — i nikt nie wrócił do linii.
+     ⚠ **GRANICA DOWODU, NAZWANA:** protokół jest w commicie, **wynik NIE ma artefaktu** —
+     żaden `*_GATE*_CHECKLIST.md` dla 259 nie powstał, więc źródłem jest raport właściciela,
+     nie zapis. To dokładnie ta klasa co ustalenie z `FE_SUPPLY_PLAN` §14: *protokół gate'u,
+     który żyje tylko w rozmowie, NIE JEST artefaktem*. Nie dopisuję szczegółów przebiegu,
+     których nie mam — „PASS" tu znaczy „właściciel potwierdził start misji", i tyle.
+     ⚠ Headless pinuje to niezależnie od gate'u: `transport_orbiting_idle_smoke` **22/22**
+     prowadzi PRAWDZIWY `VesselManager`, więc bramka `:401` i `isInService` są MIERZONE.
+     ⚠ **Kolizja i18n `mission.shipUnavailable` / `expedition.vesselUnavailable` ZOSTAJE
+     OTWARTA** (akapit niżej) — dotyczy wszystkich pozostałych ścieżek odmowy i nie zamknęła
+     się razem z 259.
 
      **MECHANIZM (ZMIERZONY, wersja finalna).** Statek `orbiting` + `idle` wypada między dwie
      wzajemnie niepokrywające się bramki:

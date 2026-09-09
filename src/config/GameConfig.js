@@ -231,7 +231,15 @@ export const GAME_CONFIG = {
     // ⚠ To DRUGA oś obok `mapVesselPanel`: tamta OFF = zachowanie sprzed 258
     //   (`FleetGroupPanel` od N==1), ta OFF = pełna kolumna A. Fallbackiem podczas
     //   slice'u B jest A, nie stan sprzed 258 — dlatego dwie flagi, nie jedna.
-    mapVesselPanelCompact: false,
+    // ⚠ DOMYŚLNIE ON od 2026-09-09 — reguła „default-ON dopiero PO gate'cie": live-gate B1
+    //   zdał 6/6, gate kolejności malowania 4/4 (`23523af`). Precedens: `mapVesselPanel`
+    //   (`48c913f`). Bez tego kompakt istniałby wyłącznie po ręcznym wpisie w konsoli.
+    // ⚠ KOMPAKT LEŻY POD FLAGĄ RODZICA, nie obok niej: wszystkie TRZY odczyty tej flagi
+    //   w `UIManager` są za bramką `_mapSurface() === 'vessel'` (dwa w bloku rysowania,
+    //   trzeci — `tryBeginVesselPanelDrag` — ma bramkę we własnym ciele), a
+    //   `resolveMapSelectionSurface` przy `mapVesselPanel:false` NIGDY nie zwraca `vessel`.
+    //   ⇒ zgaszenie rodzica gasi kompakt Z KONSTRUKCJI (pin M2 w keeperze).
+    mapVesselPanelCompact: true,
     // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
     // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
     //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem

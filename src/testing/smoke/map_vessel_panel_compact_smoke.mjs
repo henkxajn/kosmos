@@ -24,6 +24,8 @@
 // PINY (mają PAŚĆ przed zmianą, przejść po niej)
 //   E1  RÓWNOŚĆ: zbiór akcji w `compact` ≡ zbiór akcji Rejestru (ta sama metoda, ta sama instancja)
 //   E2  GOLDEN NIETKNIĘTY: Rejestr BEZ `compact` = dzisiejsza sygnatura Z GEOMETRIĄ stref
+//   E3  KILL-SWITCH: `{compact:false}` (runtime OFF po flipie) ≡ brak `opts`, CO DO PIKSELA
+//   M2  BRAMKA RODZICA: kompakt NIEOSIĄGALNY przy `mapVesselPanel:false` (wykonanie + źródło)
 //   R1  RENDER: `compact` realnie SKRACA panel — karta katalogowa znika, akcje idą do góry
 //   R2  PICKER: krok `select` mieści listę celów w ~360 px (panel rośnie na czas wyboru)
 //   A1  KOTWICA: px CSS → px LOGICZNE (`/uiScale`), offset prawo-dół, `null` → fallback
@@ -38,6 +40,14 @@
 //       etykiet nietknięte — blokuje „naprawę przez dogaszenie")
 //   E1  WYKONANIE: `MapLabelLayer` nadal produkuje plakietki (etykiety żyją)
 //
+// ⚠ PIN M ODWRÓCONY 2026-09-09 (`false` → `true`): flaga dostała default-ON po zdanym
+//   live-gate'cie B1 (6/6) i gate'cie kolejności malowania (4/4, `23523af`). Stary kształt
+//   pinowałby od tej chwili DEFEKT — panel niewidoczny bez wpisu w konsoli. Powód tutaj,
+//   bo odwrócony pin bez zapisanego powodu jest nieodróżnialny od poluzowanego.
+// ⚠ M2 i E3 NIE SĄ fail-first tego commitu — przechodzą po OBU stronach flipu, bo opisują
+//   WARUNKI, które czyniły flip bezpiecznym. Sprawdzone MUTACJĄ, że potrafią paść:
+//   M2 pada po wyprowadzeniu argumentu `compact:` poza blok bramki (i po dodaniu czwartego
+//   odczytu flagi), E3 pada, gdy `_drawRight` przestaje odróżniać `false` od braku `opts`.
 // ⚠ FIXTURE Z POPULACJI OSIĄGALNEJ NA MAPIE — statek `orbiting`, NIE `docked`. Zadokowany nie ma
 //   sprite'a (`ThreeRenderer:4783`/`:1185`), więc nie ma kotwicy ekranowej; pin kotwicy na takim
 //   fixturze mierzyłby ciszę. Lekcja z 258, tu wpisana od pierwszej wersji.
@@ -200,6 +210,39 @@ header('E2  PIN — Rejestr BEZ `compact` = panel mapy BEZ `compact`, co do PIKS
   ok(reg.contentH > 500, `KONTROLA: mierzymy PEŁNĄ treść, nie pustkę (${Math.round(reg.contentH)})`);
 }
 
+// ═══ E3 — KILL-SWITCH PRZEŻYWA FLIP: `{compact:false}` ≡ brak `opts`, CO DO PIKSELA ══════════
+// PYTANIE, NA KTÓRE TEN PIN ODPOWIADA: po flipie na default-ON `UIManager` przekazuje
+// `{ compact: false }` (jawne false), a NIE pomija `opts` — bo argument jest zawsze budowany
+// (`{ compact: GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true }`). Zgaszenie flagi
+// w RUNTIME musi więc dać kolumnę A, a nie „prawie A".
+// ⚠ E2 tego NIE POKRYWA: tamten pin porównuje Rejestr z panelem BEZ `opts` (`draw(null)`) —
+//   czyli ścieżkę, którą po flipie chodzi Rejestr, a NIE ścieżkę wyłączonego kill-switcha.
+//   Różnica jest jedną linią w `_drawRight` (`opts.compact === true`), ale to właśnie ta linia
+//   jest tu kontraktem, a niesprawdzony kontrakt to kill-switch, który „powinien" działać.
+// ⚠ Znowu NIE jest to pin fail-first tego commitu (przechodzi po obu stronach) — to
+//   potwierdzenie warunku, na którym flip stoi.
+header('E3  PIN — runtime OFF (`{compact:false}`) = kolumna A bit w bit (kontrola: `true` różni się)');
+{
+  const noOpts = draw(null);
+  const offFlg = draw({ compact: false });
+  const onFlg  = draw({ compact: true });
+  const sNo  = sigGeom(noOpts.zones);
+  const sOff = sigGeom(offFlg.zones);
+  const sOn  = sigGeom(onFlg.zones);
+
+  ok(sNo.length > 0 && noOpts.contentH > 500,
+     `KONTROLA ANTY-JAŁOWA: baza to PEŁNY panel, nie pustka (${sNo.length} stref, contentH ${Math.round(noOpts.contentH)})`);
+  ok(JSON.stringify(sOff) === JSON.stringify(sNo),
+     `sygnatura Z GEOMETRIĄ identyczna (${sOff.length} vs ${sNo.length} stref)`);
+  ok(Math.round(offFlg.contentH) === Math.round(noOpts.contentH),
+     `contentH identyczne (${Math.round(noOpts.contentH)} = ${Math.round(offFlg.contentH)})`);
+  ok(JSON.stringify(offFlg.fmo._vesselPanelRect) === JSON.stringify(noOpts.fmo._vesselPanelRect),
+     `prostokąt panelu identyczny (${JSON.stringify(offFlg.fmo._vesselPanelRect)})`);
+  // KONTROLA KIERUNKU — bez niej pin przeszedłby także wtedy, gdyby `compact` NIC nie robił.
+  ok(JSON.stringify(sOn) !== JSON.stringify(sNo),
+     `KONTROLA: `.concat(`{compact:true} RÓŻNI się od bazy (contentH ${Math.round(onFlg.contentH)} vs ${Math.round(noOpts.contentH)})`));
+}
+
 // ═══ R1 — RENDER: compact realnie skraca panel ═══════════════════════════════════════════════
 header('R1  PIN — `compact` SKRACA panel: karta katalogowa znika, akcje idą do góry');
 {
@@ -251,8 +294,84 @@ header('M  PIN ŹRÓDŁOWY — `mapVesselPanelCompact` jest realnie wpięta w UI
   ok(code.includes('mapVesselPanelCompact'), 'UIManager czyta flagę mapVesselPanelCompact');
   ok(code.includes('compact:'), 'i podaje ją do drawVesselPanel jako `compact:`');
   ok(code.length > 50000, `KONTROLA: źródło realnie wczytane (${code.length} zn.)`);
-  ok(GAME_CONFIG.FEATURES?.mapVesselPanelCompact === false,
-     'flaga istnieje i jest domyślnie OFF (fallback = kolumna A)');
+  // ⚠ PIN ODWRÓCONY ŚWIADOMIE 2026-09-09. Do live-gate'u asertował `=== false` — czyli stan
+  //   „kompakt istnieje, ale gra go nie używa", właściwy WYŁĄCZNIE na czas slice'u B. Po
+  //   zdanym gate'cie (B1 6/6 + kolejność malowania 4/4, `23523af`) flaga zasłużyła na
+  //   default-ON regułą „default-ON dopiero PO gate'cie"; precedens `mapVesselPanel`
+  //   (`48c913f`). Stara asercja pinowałaby od tej chwili DEFEKT: panel, którego gracz nie
+  //   widzi bez wpisu w konsoli. Wzór odwracania: `deploy_seams` T1/T2/T4,
+  //   `ai_capture_last_stand` T4/T5.
+  ok(GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true,
+     'flaga istnieje i jest domyślnie ON (kompakt jest zachowaniem gry od startu)');
+}
+
+// ═══ M2 — KOMPAKT LEŻY POD FLAGĄ RODZICA (potwierdzenie do flipu default-ON) ═════════════════
+// PYTANIE, NA KTÓRE TEN PIN ODPOWIADA: czy default-ON kompaktu tworzy stan, którego nikt nie
+// bramkuje — kompakt próbujący się rysować, gdy sam panel jest wyłączony (`mapVesselPanel:false`)?
+// ODPOWIEDŹ: nie, i to Z KONSTRUKCJI. Dwie połowy, obie mierzone:
+//   (a) WYKONANIE — `resolveMapSelectionSurface` przy `flagOn:false` NIGDY nie zwraca `vessel`,
+//       a cała maszyneria kompaktu wisi POD tą odpowiedzią;
+//   (b) ŹRÓDŁO — WSZYSTKIE trzy odczyty flagi w `UIManager` są za bramką `'vessel'`: dwa leżą
+//       w bloku rysowania otwartym przez tę bramkę (dowodzone ZLICZANIEM KLAMER, nie
+//       sąsiedztwem), trzeci (`tryBeginVesselPanelDrag`) niesie bramkę we własnym ciele.
+// ⚠ To NIE jest pin fail-first tego commitu (przechodzi po obu stronach flipu) — to WARUNEK,
+//   który czynił flip bezpiecznym. Ma paść, gdy ktoś wyprowadzi `compact:` poza bramkę albo
+//   doda czwarty, niebramkowany odczyt flagi. Zweryfikowane MUTACJĄ (patrz nagłówek pliku).
+header('M2  PIN — kompakt jest NIEOSIĄGALNY przy `mapVesselPanel:false` (bramka rodzica)');
+{
+  // (a) WYKONANIE — czysta reguła powierzchni.
+  const f = MapLogic?.resolveMapSelectionSurface;
+  if (typeof f !== 'function') {
+    for (let i = 0; i < 3; i++) ok(false, 'resolveMapSelectionSurface istnieje');
+  } else {
+    const off = [[], ['a'], ['a', 'b'], ['a', 'b', 'c']].map((ids) => f(ids, { flagOn: false }));
+    ok(off.every((s) => s !== 'vessel'),
+       `flagOn:false ⇒ ŻADNE N nie daje 'vessel' (jest: ${JSON.stringify(off)})`);
+    ok(off.length === 4 && off[1] === 'group',
+       'KONTROLA ANTY-JAŁOWA: zbiór N jest NIEPUSTY, a N==1 realnie trafia na `group`');
+    ok(f(['a'], { flagOn: true }) === 'vessel',
+       'KONTROLA KIERUNKU: przy flagOn:true N==1 to `vessel` — bramka mierzy flagę, nie ciszę');
+  }
+
+  // (b) ŹRÓDŁO — inwentarz odczytów flagi i ich bramki.
+  const { readFileSync } = await import('node:fs');
+  const src   = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8');
+  const code  = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  const cnt   = (n) => code.split(n).length - 1;
+  const FLAG  = 'mapVesselPanelCompact';
+  const GUARD = "this._mapSurface() === 'vessel') {";   // UNIKALNY — bramka bloku RYSOWANIA
+
+  ok(code.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${code.length} zn.)`);
+  ok(cnt('nie-ma-takiego-tokenu-w-UIManagerze') === 0, 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+
+  // Blok bramki wycięty ZLICZANIEM KLAMER — dowód PRZYNALEŻNOŚCI, nie sąsiedztwa.
+  ok(cnt(GUARD) === 1, `bramka bloku rysowania występuje DOKŁADNIE raz (jest: ${cnt(GUARD)})`);
+  const iG = code.indexOf(GUARD);
+  let depth = 0, endG = -1;
+  for (let k = code.indexOf('{', iG); k < code.length && k >= 0; k++) {
+    if (code[k] === '{') depth++;
+    else if (code[k] === '}') { depth--; if (depth === 0) { endG = k; break; } }
+  }
+  const block = endG > iG ? code.slice(iG, endG + 1) : '';
+  ok(block.length > 40 && block.length < 2000,
+     `KONTROLA: blok bramki realnie wycięty i jest CIASNY (${block.length} zn.)`);
+  ok(block.includes('compact: GAME_CONFIG.FEATURES?.' + FLAG),
+     'odczyt #1 (argument `compact:`) leży WEWNĄTRZ bloku bramki');
+  ok(block.includes('_vesselPanelBounds(W, H)'),
+     'odczyt #2 dochodzi przez `_vesselPanelBounds`, wołane WEWNĄTRZ bloku bramki');
+  ok(cnt('drawVesselPanel?.(') === 1 && cnt('_vesselPanelBounds(') === 2,
+     `oba wejścia mają po JEDNYM wywołaniu (panel ${cnt('drawVesselPanel?.(')}, bounds ${cnt('_vesselPanelBounds(') - 1} + definicja)`);
+
+  // Odczyt #3 — drag; bramka we WŁASNYM ciele, nie u wołającego.
+  const iDrag = code.indexOf('tryBeginVesselPanelDrag(x, y) {');
+  ok(iDrag > 0, 'KONTROLA: `tryBeginVesselPanelDrag` znaleziony w źródle');
+  const body = code.slice(iDrag, iDrag + 400);
+  ok(body.includes(FLAG) && body.includes("this._mapSurface() !== 'vessel'"),
+     'odczyt #3 (`tryBeginVesselPanelDrag`) niesie bramkę `!== vessel` we własnym ciele');
+
+  // INWENTARZ ZAMKNIĘTY: czwarty odczyt ma ten pin ZŁAMAĆ, a nie przemknąć niezauważony.
+  ok(cnt(FLAG) === 3,
+     `flaga czytana w UIManagerze DOKŁADNIE 3× — wszystkie zbramkowane (jest: ${cnt(FLAG)})`);
 }
 
 // ═══ A1 — KOTWICA: panel siada PRZY STATKU, w px LOGICZNYCH ══════════════════════════════════
