@@ -4327,3 +4327,100 @@ razu**). **Korekty rejestru:** 154 i 255 mówiły „TRZY producenty Powrotu" �
 producenci przestają podawać goły punkt; **263** jest naturalnym partnerem, te same dwa call-site'y
 stawiają `_pendingReturnDock`) → **256** (jednoargumentowa poprawka UX, szew `sameSystemOnly`
 gotowy) → **266** → reszta rejestru (151/152/153, 264).
+
+---
+
+## Findingi 154 + 263 — „Powrót do bazy" celuje w UKŁAD STATKU, a marker doku nie przeżywa rozkazu (save **v101 bez migracji**, live-gate PASS 6/6 — ZAMKNIĘTE 2026-09-09, commit `9e1e7d8`)
+
+Slice **producent-side**, kontynuacja arca zaczętego Findingiem 147. Plan + decyzje D-255a…f +
+rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §154 (zamknięty), §263 (zamknięty), §255 (leg Powrotu
+zamknięty, leg mapy OTWARTY), §256 (korekta „jednego argumentu").
+
+**Jedno zdanie:** trzy defekty jednej rodziny, każdy w innej warstwie — zły SELEKTOR (154), droga,
+którą jego wynik przechodził przez system rozkazów (255, leg Powrotu) i KONSUMENT, który
+teleportował po markerze bez terminu układu (263).
+
+**154 — SELEKTOR.** `AutoRetreatSystem._findNearestFriendlyPlanet` filtrowała po WŁAŚCICIELU
+i liczyła `euclideanAU` po WSZYSTKICH koloniach w galaktyce. Gwiazda każdego układu stoi w (0,0),
+więc kolonia z obcego układu **wygrywała RANKING** — ZMIERZONE: statek w `sys_020` dostawał
+`p_home` [sys_home] jako **„2.00 AU"**, przy własnej koloni **6.00 AU** dalej w JEGO układzie.
+Obie żywe ścieżki przeszły na `nearestOwnColonyBodyInSystem` (`utils/RetreatTarget.js`, D-FDh);
+sierota USUNIĘTA (~35 linii) wraz z jej jedynymi konsumentami importów (`EntityManager`,
+`DistanceUtils`). ⚠ **Lekarstwo jest DROP-INEM — zweryfikowane, nie założone:** identyczna
+zwrotka, ten sam filtr własności, **zachowany fallback placówkowy**, warp ⇒ `null`.
+⚠ **KOREKTA REJESTRU:** mówił „TRZY produkcyjne ścieżki" — są **DWIE** (`grpReturn` zdjęty
+w 258/A1, `e591172`), a `_findNearestFriendlyPlanetForDrift` była już naprawiona (D-FDh).
+⚠ **`FleetCommandPanel` zweryfikowany PO RAZ PIERWSZY** — bez pomiaru i bez pinu, defektywny
+znak-w-znak jak FMO.
+
+**263 — KONSUMENT.** `FleetSystem._maybeAutoDockOnReturn` TELEPORTUJE bezwarunkowo (przepisuje
+`position.x/y`, `dockedAt` **i `colonyId`** — całą bazę statku). Dostał **TERMIN UKŁADU**
+(`isSameSystem`, fail-OPEN: encja bez stempla = stary zapis, dokuje jak dotąd).
+
+⚠ **TERMINU ODLEGŁOŚCI NIE MA I MIEĆ NIE BĘDZIE — to nie zaniedbanie, to cofnięta pułapka.**
+`RETURN_DOCK_THRESHOLD_AU = 0.5` stała zadeklarowana **bez ANI JEDNEGO ODCZYTU** od `7ea94e8`
+(2026-05-20), bo usunięto ją tam ŚWIADOMIE jako naprawę **Bug F2** („dotarli ale dalej nie
+dokuja"), z podpisem „snap to teleport — akceptowalny convenience UX w 4X". Ożywienie stałej
+**cofałoby zamkniętą naprawę**. Pomiar to potwierdza, i to WEWNĄTRZ jednego układu (czyli już po
+154): statyczny `targetPoint` z chwili wydania rozkazu nie zna ruchu planety, więc po locie
+planeta jest **3,15-7,62 AU** od tego punktu ⇒ próg 0,5 AU **padałby ZAWSZE**. Stała skasowana,
+dwa kłamiące komentarze poprawione (`FMO` „Centroid floty" — kod nigdy nie liczył centroidu —
+oraz obietnica progu), a pin **T6 z kontrolą na zmutowanej kopii** pilnuje, żeby nikt tego nie
+„naprawił" przez powrót progu.
+
+**SPRZĄTANIE MARKERÓW (D-255b) — kształt WYMUSZONY POMIAREM, nie wybrany.** Sam swap selektora
+NIE wystarczył: marker **przeżywa porzucenie rozkazu**. ZMIERZONE w JEDNYM układzie i **BEZ
+kliknięcia „Stop"**: Powrót → nowy rozkaz na 12,00 AU → statek kończy na **1,00 AU zadokowany
+przy bazie**; rozkaz gracza po cichu przekierowany. `_pendingDock` zachowuje się identycznie.
+Trzy części naprawy:
+- producenci stawiają marker **PO** `issueFleetOrder` i **tylko dla `res.accepted`** — to zabiło
+  DRUGIE, utajone źródło: statek z ODRZUCONYM rozkazem zostawał z markerem;
+- `issueOrder` sprząta markery na **WEJŚCIU** (przed `_preemptSnapshot`);
+- `_releaseOrder` sprząta na **każdym przejściu terminalnym poza `completed`** — cztery z pięciu
+  ścieżek, wliczając unieważnienie **PRZY WCZYTANIU** (`MOS:136`), czyli dokładnie „lepki marker
+  prosto do nowej sesji", przed którym ostrzega komentarz tamtej gałęzi.
+
+⚠ **Sprzątanie w `_preemptCommit` SPRAWDZONE I ODRZUCONE** — wycierałoby marker rozkazu, który sam
+właśnie instalujemy (producent stawia go PRZED `issueOrder`, więc `_preemptSnapshot` widzi już
+NOWY, a porównanie snapshotu też nie rozróżnia). Złapane **przed uruchomieniem czegokolwiek**;
+dlatego markery stawiane są po sukcesie, a sprzątanie stoi na wejściu.
+
+⚠ **INSTRUMENT WYMIENIONY w `retreat_target_smoke` T1.** Jego KONTROLA PINU dowodziła, że fixture
+reprodukuje F-D, **wołając funkcję, którą ten slice usunął** — sweep padł crashem. Intencja
+zostaje, wyrażona wprost: obce ciało JEST bliżej w px niż własne (to jedyne, czego tamto wywołanie
+dowodziło). Nagłówek pliku, opisujący usuniętą funkcję w czasie teraźniejszym, poprawiony.
+**Pin NIE został skasowany, żeby zazielenić sweep.**
+
+**Leg C (256) — WYPADŁ Z ZAKRESU PO POMIARZE, nie z wygody.** „Przełączenie jednego argumentu"
+jest nieprawdą: `sameSystemOnly:true` **bez `vessel` jest NO-OPEM** (`filterDockTargets` ma guard
+`if (!vessel) return list`), a obie stare powierzchnie `vessel` nie podają ⇒ dwa argumenty na
+site. Do tego picker jest GRUPOWY, a `vessel` jeden — ZMIERZONE: reprezentant `Alfa` daje ofertę
+`[p_home,h2]`, `Beta` daje `[f_far]`, więc **każdy wybór zostawia część statków z celem w obcej
+ramce**, a `_issueDock` tego nie broni. To **decyzja właściciela** (reprezentant / przecięcie /
+admisja per statek), nie argument — zapisana w 256. ✅ Komunikat pustego pickera jest darmowy:
+`bodyPicker.empty` istnieje PL+EN.
+
+**Live-gate 2026-09-09 (właściciel, klient EN) — PASS 6/6.** §0 **pre-skan kampanii na chimery
+(`dockedAt` w innym układzie niż statek) zwrócił PUSTĄ listę** ⇒ pytanie „czy leczyć stare zapisy"
+rozstrzygnięte POMIAREM: **zero pacjentów**, przebieg leczący zbędny (same markery są i tak
+runtime-only — nie ma ich w `VesselManager.serialize`) · §1 odmowa cross-system: jeden toast
+`fleet.noFriendlyPlanet` (EN „No friendly planet in range"), zero rozkazu, zero markera · §2 Powrót
+in-system na OBU powierzchniach, `dockSys === systemId`, `colonyId` re-homowany · §3 stary marker
+w OBU wariantach (ze „Stop" i bez) — statek słucha NOWEGO rozkazu · §4 dock picker in-system
+dokuje; oferty cross-system na dwóch starych powierzchniach **nadal są** (leg C dropped, zapisane)
+· §5 nie-regresja 147 + 254.
+
+**Testy:** NEW `return_dock_family_smoke` **41/41**, fail-first **24/17** zmierzony FINALNYMI
+pinami na kodzie sprzed naprawy (detached worktree) · `retreat_target_smoke` **44/44** ·
+sweep **221/221 0 FAIL** · `check-i18n` PASS (pl=en=3343, **zero nowych kluczy i18n**).
+⚠ **Brak kill-switcha w tym slice'ie** (żadna z decyzji D-255a…f go nie przewidywała) —
+rollback = `git revert`.
+
+**NASTĘPNE (kolejka właściciela):** **leg D** 🔴 — odmowa po stronie PRODUCENTA dla legu MAPY
+z 255 (`buildOrderSpec` / `_buildFleetSpec` odmawiają, gdy `systemIdOf(vessel) !== activeSystemId`;
+**2 site'y, zero nowych pól w `spec`, zero zmian w MOS**, reużywa kanału Dziennika, który już
+nazywa każdy pominięty statek). ⚠ Wiersze **8/9** (pickery flotowe) zostają otwarte i **mają być
+tak nazwane w gate'cie**. Stempel ramki `spec.frameSystemId` **ZAPARKOWANY jako własna decyzja**
+(zmierzony: działa, nie dotyka POI, bez migracji — ale kosztuje nowe pole + 4-6 producentów
++ wyjątek POI + bramkę w MOS). Dalej: **256** (z decyzją o regule grupowej) → **266** →
+reszta rejestru (151/152/153, 264/265).
