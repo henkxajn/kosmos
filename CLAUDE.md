@@ -4093,7 +4093,7 @@ V-253 — wszystkie planety skaliste i lodowe dostają ten sam `0x4488ff`).
 
 ---
 
-## VISUALS 1.0 — V4 „spójna głębia sceny" (save **v101 bez migracji**, kod wdrożony, live-gate PENDING)
+## VISUALS 1.0 — V4 „spójna głębia sceny" (save **v101 bez migracji**, live-gate PASS z dwoma odstępstwami — ARC ZAMKNIĘTY 2026-09-09)
 
 Piąty slice arca VISUALS. Rejestr macierzysty + zapis wykonania: **`docs/design/VISUALS_PLAN.md`**
 §V4. Projekt (decyzje `D-D1…D-D13`) mieszka **po stronie właściciela**; w repo są skutki.
@@ -4112,7 +4112,8 @@ przed niczym.
 | `95c8833` | **D1 / V-278** — `LIVE_CLOUDS` + `cloudTuning`, pokrętła ŻYWE, **liczbowo neutralne** |
 | `7c8c5b6` | **V-261** — podłoga prześwitu pierścieni Dysona, **PRZED** naprawą głębi |
 | `94971d5` | **D2 / V-267 + V-271** — sześć materiałów pisze głębię logarytmiczną |
-| (ten) | **D3** — rejestr + zapis wykonania |
+| `e16e226` | **D3** — rejestr + zapis wykonania (przed gate'em) |
+| (ten) | **D4** — wynik gate'u + dwa odstępstwa |
 
 **Kill-switch `FEATURES.sceneDepthUnification`** (default ON, brak klucza = OFF — idiom
 `liveGasShaders`). ⚠ **BAZĄ stanu OFF jest `7c8c5b6`, nie stan sprzed arca** — poprawka V-261
@@ -4123,6 +4124,33 @@ mieści się CAŁE w tarczy G 3,6 WU) · **V-271** (warstwa chmur martwa nad tar
 2,5 % obwódki) · **V-261** (pierścienie Dysona w tarczy) · **V-276** NOWY (głębia korony
 i rdzenia zlewała się poniżej 1 ULP powyżej ~199-271 WU ⇒ korona rozjaśniała tarczę
 w domyślnym kadrze szerokich układów) · **V-278** NOWY (chmury bez ani jednego pokrętła).
+
+### Live gate 2026-09-09 — PASS, dwa zapisane odstępstwa
+
+**§1-§7 i §9 PASS** na żywo: tranzyt (planeta **całkowicie** zasłonięta za tarczą) · elipsy
+orbit przycinają się na tarczy · korona bez cięć wzdłuż linii orbit i bez fantomowych dziur
+po planetach · **tarcza identyczna przy 100 i 400+ WU** (V-276 domknięty OKIEM) · **chmury
+ŻYWE na pełnych tarczach po raz pierwszy od 2026-03-30** · brak migotania przy kącie
+stycznym · `atmoInfo()` bit w bit jak na gate'cie V3 · statki poprawnie zasłaniane ·
+zasłona fog-of-war zakrywa chmury, halo zostaje na zewnątrz.
+**§Rollback PASS:** OFF przez przebudowę w INNYM układzie = **dokładnie** wygląd sprzed
+slice'u, ON przywraca nowy — **żadnego trzeciego stanu**.
+**Domyślne chmury ZATWIERDZONE: `ALPHA` zostaje 0.88** — warstwa niewidoczna przez pół roku
+shipuje się bez ani jednego strojenia; pokrętła (V-278) zostają jako żywy instrument.
+
+⚠ **Odstępstwo 1 — §8 (wejście/wyjście z `BattleView3D`) NIE ZWERYFIKOWANE NA ŻYWO**, ryzyko
+przyjęte przez właściciela (głośny tryb awarii + mitygacja jednym przełącznikiem). Powód jest
+STRUKTURALNY i wyszedł dopiero przy zamykaniu: `_tryShowNextBattle:3938` przy `fcCombatFx`
+i `source === 'dscs'` pokazuje **tylko baner wyniku**, więc **wszystkie bitwy deep-space kino
+OMIJAJĄ**; `BattleView3D` startuje wyłącznie dla **Path A** (war-driven) i tylko po wyborze
+„Obserwuj". Hand-off z procedurą powtórzenia: **`docs/deferred-live-gates.md` ENTRY 4**.
+
+⚠ **Odstępstwo 2 — §10 (pierścienie Dysona) ŚWIADOMIE NIE URUCHOMIONE.** Właściciel
+rozstrzyga, **czy Sfera Dysona zostaje w grze w ogóle**, więc ocena estetyczna wspólnego
+promienia wewnętrznego etapów 1-3 na K/G/F jest **ODROCZONA razem z tamtą decyzją**.
+To NIE jest luka w naprawie: geometria pokryta keeperem 53/53 (4 klasy × 4 etapy, model
+liczony formułą WZIĘTĄ ZE ŹRÓDŁA), a podłoga **musiała** wejść przed naprawą głębi, bo bez
+niej etap 1 znikałby całkowicie na K/G/F. Podłoga shipuje się as-is.
 
 ### ⚠ Cztery rzeczy z tego slice'u, które wychodzą poza niego
 
@@ -4181,12 +4209,13 @@ na fladze" jest ten sam i dalej pinowany, plus dołożona kontrola dyskryminacji
 Sonda kompilacji: **9/9 wariantów, KONTROLA pada** (`glError 1282`), liczby pikseli identyczne
 przed i po ⇒ chunki zmieniają GŁĘBIĘ, nie cieniowanie.
 Sweep **219/219 OK, 0 FAIL** · `check-i18n` PASS · zero migracji · zero kluczy i18n.
+Live gate **PASS** (§1-§7, §9, §Rollback); §8 i §10 — patrz odstępstwa wyżej.
 
 ⚠ **Ziarnistość weryfikacji (jak w całym arcu):** piny źródłowe + headless-Chrome sonda
 kompilacji + live gate. `ThreeRenderer` nie importuje się pod node, a GLSL nie jest wykonywalny
 w sweepie ⇒ **zachowanie głębi na ekranie nie jest pokryte keeperem** — pokrywa je live gate.
 
-**Otwarte po V4:** **V-264** (ODBLOKOWANY — po naprawie „widoczna tarcza" == „obszar klikalny") ·
+**Otwarte po V4:** **§8 kina** (`deferred-live-gates.md` ENTRY 4) · **estetyka odstępów pierścieni Dysona** (odroczona razem z decyzją o losie Sfery) · **V-264** (ODBLOKOWANY — po naprawie „widoczna tarcza" == „obszar klikalny") ·
 **V-273** (awansuje z latentnego na WIDOCZNY: nieodświeżona warstwa chmur po `_updatePlanetMesh`
 była dotąd i tak niewidoczna nad tarczą) · **V-274** (zasłona poprawnie zakrywa teraz ożywione
 chmury; pytanie o powłokę zostaje) · V-248 · V-249 · V-252 · V-253 · V-255 · V-262 · V-263 ·

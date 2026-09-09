@@ -101,3 +101,57 @@ Unrelated to A1. The mission panel does not allow selecting a body in a
 non-home system as an exploration target. This is what blocked the Entry
 1 test — I had to fall back to `moveToPoint`, which invalidated it. Not
 investigated; log only, needs its own audit.
+
+## ENTRY 4 — V4 (spójna głębia sceny): wejście i wyjście z BattleView3D, NIE zweryfikowane w przeglądarce
+
+Status: wdrożone, sonda kompilacji + keepery zielone, **§8 gate'u NIE wykonany** —
+ryzyko przyjęte świadomie przez właściciela na live gate'cie 2026-09-09.
+
+Czego dotyczy: `BattleView3D` **współdzieli `WebGLRenderer`** z główną sceną
+(`BattleView3D.js:71-77` bierze `window.KOSMOS.threeRenderer.renderer`), ale ma
+własną scenę i własną kamerę (`near 0.1 / far 1000` wobec `0.001 / 5000` mapy
+układu). `logDepthBufFC` jest liczone **z kamery**, więc podczas kina uniform
+przyjmuje wartość tamtej kamery, a po `resume()` wraca do wartości mapy układu.
+Pytanie §8 brzmiało: czy główna scena po wyjściu z kina wygląda identycznie.
+
+Dlaczego to jest niskie ryzyko (i dlaczego właściciel je przyjął):
+- **Tryb awarii jest GŁOŚNY, nie cichy.** Gdyby `logDepthBufFC` nie odświeżyło się
+  po powrocie, cała mapa układu miałaby złą głębię naraz — gwiazda, planety i statki
+  jednocześnie. To nie jest defekt, który da się przeoczyć.
+- **three odświeża ten uniform per materiał, per klatkę**, przy każdym `setProgram`
+  (`three.module.js:16658-16663`), a nie raz na scenę — więc odzyskanie jest
+  automatyczne z konstrukcji.
+- **W scenie bitwy nie ma ANI JEDNEGO z sześciu naprawianych materiałów** — buduje ją
+  wyłącznie z materiałów bibliotecznych (`PointsMaterial`, `MeshStandard/Basic`,
+  światła), które chunki `logdepthbuf_*` miały od zawsze.
+- Mitygacja jednym przełącznikiem: `KOSMOS.gameConfig.FEATURES.sceneDepthUnification
+  = false` + wejście w INNY układ przywraca stan sprzed slice'u.
+
+Dlaczego nie dało się tego wykonać na gate'cie: kino **nie jest** domyślną ścieżką
+bitwy. `GameScene._tryShowNextBattle:3938` przy `FEATURES.fcCombatFx` i
+`battleData.source === 'dscs'` pokazuje **wyłącznie baner wyniku** i wychodzi —
+czyli wszystkie bitwy deep-space (najczęstsze w normalnej grze) kino OMIJAJĄ.
+`BattleView3D` startuje tylko dla **Path A** (war-driven: `EnemyAttackHandler`,
+`WarSystem.forceBattle`, `_fleetArrived`) i dodatkowo tylko wtedy, gdy gracz wybierze
+„Obserwuj" w modalu intro (`getBattleViewPreference()` musi być `'ask'`, nie `'skip'`).
+
+Procedura powtórzenia dla tego, kto to podejmie:
+1. Zapamiętaj wygląd gwiazdy i chmur (albo zrób zrzut) — to jest punkt odniesienia.
+2. Upewnij się, że preferencja kina to `'ask'` (ustawienie „Zawsze pomijaj" musi być
+   WYŁĄCZONE — inaczej `choice` jest twardo `'skip'` i kino nigdy nie wystartuje).
+3. Wywołaj bitwę **Path A**, nie DSCS: `KOSMOS.debug.spawnEnemyAttack()` (ścieżka
+   `EnemyAttackHandler`). ⚠ `spawnEnemyRaider` domyślnie prowadzi do starcia
+   deep-space, które kino POMIJA.
+4. W modalu intro wybierz „Obserwuj". Obejrzyj lub przewiń kino do końca i zamknij.
+5. Sprawdź główną scenę: tarcza gwiazdy zasłania planety za sobą, chmury dalej rysują
+   się nad tarczą planety, korona bez dziur. Jeden odczyt liczbowy wystarcza za resztę:
+
+   ```js
+   KOSMOS.threeRenderer._starCore.material.fragmentShader.includes('USE_LOGDEPTHBUF')
+   // ma być true PRZED i PO kinie — materiał nie jest przebudowywany, więc gdyby
+   // dało false, ktoś odbudował scenę i to jest osobny defekt
+   ```
+6. Oczekiwane: brak jakiejkolwiek różnicy. Sygnał porażki: mapa układu po wyjściu
+   z kina ma złą okluzję CAŁOŚCIOWO (planety przez gwiazdę, chmury znikają).
+
+---

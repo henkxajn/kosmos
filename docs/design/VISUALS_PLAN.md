@@ -1,8 +1,8 @@
 # VISUALS 1.0 — rejestr repo-side + zapis wykonania (slice'y V0, V1, V2, V3, V4)
 
-> **Stan: V0, V1, V2 i V3 ZAMKNIĘTE. V4 (spójna głębia sceny) — KOD WDROŻONY,
-> LIVE-GATE PENDING.** Arc VISUALS 1.0 nie ma innego otwartego frontu; kolejne slice'y
-> otwierają się własnym zadaniem projektowym.
+> **Stan: V0, V1, V2, V3 i V4 ZAMKNIĘTE** (V4 — 2026-09-09, save **v101 bez migracji**,
+> live-gate **PASS z dwoma zapisanymi odstępstwami**: §8 i §10). Arc VISUALS 1.0 nie ma
+> otwartego frontu; kolejne slice'y otwierają się własnym zadaniem projektowym.
 
 ---
 
@@ -115,23 +115,23 @@ i globalnie — `_tickGasMaterials` przepisuje `LIVE_GAS` do uniformów co klatk
 | **V-258** | ⬜ OTWARTY | precesja `Ry·Rz` przy pochyleniu osi |
 | **V-259** | ⬜ OTWARTY | pętla wycieku w `_syncGlobe` (canvas + kontekst na klatkę w gałęzi `catch`) |
 | ~~**V-260**~~ | ✅ ZAMKNIĘTY w V2 (`033e794`) | **TRZECIA instancja klasy V-250, nigdzie niewymieniona**: `core.rotation.y += 0.0005` liczone NA KLATKĘ, więc obrót gwiazdy zależał od FPS (~1,72 °/s przy 60, dwa razy szybciej przy 120) i zamierał przy zbramkowanej pętli. Przeniesione do `_tickClouds` na ZMIERZONY krok; 0.03 rad/s jest identyczne co do bitu przy równych 60 fps. **Poza flagą** (D-V2z): OFF nie ma prawa przywracać defektu. ⚠ Gate zmierzył to LICZBOWO, bo oko nie widzi 1,72 °/s na prześwietlonej tarczy: 0.0300 rad/s bez throttlingu i pod pauzą, 0.0149 przy 20× wobec modelu klampa 0.0148 i sygnatury starego kodu 0.0030 |
-| ~~**V-261**~~ | ✅ ZAMKNIĘTY w V4 (`7c8c5b6`) | 🟠 **Pierścienie Dysona wymiarowane wobec promienia sprzed `STAR_CORE_SCALE`.** `_addDysonRings` ma zaszyte `starRadius = 1.6` (wartość `_getEntityRadius`), a tarcza to `r * 3.0` = 2,34 (M) … 4,32 (F). Archeologia: pierścienie `8a26066` (2026-04-07) poprzedzają `a666a07` (2026-07-21, powiększenie tarczy). Skutek: pierścień etapu 1 oraz wewnętrzne pierścienie etapów 2-3 leżą W ŚRODKU nieprzezroczystej tarczy — stąd wrażenie, że na etapie 1 nic się nie dzieje. **ZAMKNIĘTE PRZED V-267 i to była cała pilność:** dziś te pierścienie WIDAĆ wyłącznie dlatego, że V-267 pozwala im rysować się PO tarczy — po naprawie głębi zniknęłyby CAŁKOWICIE (etap 1 na K/G/F, 2/2 pierścienie etapu 2 na F). Lekarstwo to **PODŁOGA** `max(1.6·scale, tarcza·4.0/3.6)`, a NIE podstawienie bazy: to drugie mnoży wszystko (etap 4 na G 6,40 → **14,40** WU, na F → 17,28, czyli wprost w problem „zajmowały cały ekran”, pod który dobrano `scale` w D3-fix). Podłoga podnosi tylko to, co i tak było niewidoczne: M bez zmian, G outer +0,0 %, F +20 % |
+| ~~**V-261**~~ | ✅ ZAMKNIĘTY w V4 (`7c8c5b6`) | 🟠 **Pierścienie Dysona wymiarowane wobec promienia sprzed `STAR_CORE_SCALE`.** `_addDysonRings` ma zaszyte `starRadius = 1.6` (wartość `_getEntityRadius`), a tarcza to `r * 3.0` = 2,34 (M) … 4,32 (F). Archeologia: pierścienie `8a26066` (2026-04-07) poprzedzają `a666a07` (2026-07-21, powiększenie tarczy). Skutek: pierścień etapu 1 oraz wewnętrzne pierścienie etapów 2-3 leżą W ŚRODKU nieprzezroczystej tarczy — stąd wrażenie, że na etapie 1 nic się nie dzieje. **ZAMKNIĘTE PRZED V-267 i to była cała pilność:** dziś te pierścienie WIDAĆ wyłącznie dlatego, że V-267 pozwala im rysować się PO tarczy — po naprawie głębi zniknęłyby CAŁKOWICIE (etap 1 na K/G/F, 2/2 pierścienie etapu 2 na F). Lekarstwo to **PODŁOGA** `max(1.6·scale, tarcza·4.0/3.6)`, a NIE podstawienie bazy: to drugie mnoży wszystko (etap 4 na G 6,40 → **14,40** WU, na F → 17,28, czyli wprost w problem „zajmowały cały ekran”, pod który dobrano `scale` w D3-fix). Podłoga podnosi tylko to, co i tak było niewidoczne: M bez zmian, G outer +0,0 %, F +20 %. ⚠ **§10 gate'u ŚWIADOMIE NIE URUCHOMIONY** — właściciel rozstrzyga, czy Sfera Dysona zostaje w grze w ogóle, więc **ocena estetyczna wspólnego promienia wewnętrznego etapów 1-3 na K/G/F jest ODROCZONA razem z tamtą decyzją**. Geometria pokryta keeperem 53/53; podłoga shipuje się as-is |
 | **V-262** | ⬜ OTWARTY | 🔴 **Stan wizualny Dysona nie przeżywa ani wczytania zapisu, ani zmiany układu.** Jedyny emitent `dyson:visualStageChanged` to `DysonSystem._onSegmentCompleted`, a jedyny słuchacz rejestruje się w `GameScene` PO `dysonSystem.restore()`. `_disposeAllMeshes` kasuje pierścienie i zeruje `_dysonStage`, a `renderStar` niczego nie przywraca. Przy 20/20 nie ma już zdarzeń, więc utrata jest TRWAŁA, podczas gdy panel dalej melduje etap 4 z 4 |
 | **V-263** | ⬜ OTWARTY | 🟠 **Etapy 3 i 4 nie dotykają tarczy gwiazdy.** Zmienia się WYŁĄCZNIE `_starLight.intensity` (i barwa na etapie 4, przez alias V-248). Nigdzie nie ma `_starGroup.visible`, mutacji `uBrightness` ani bramki etapu na `uGain` korony. Etap 4 daje JASNĄ fioletową tarczę wewnątrz NIEZMIENIONEJ pomarańczowej korony (`coronaCol` to świeży `Color`, nie alias). i18n obiecuje graczowi wiązki energii, gwiazdę przysłoniętą i prawie niewidoczną — renderer nie implementuje żadnej z tych trzech rzeczy |
 | **V-264** | ⬜ OTWARTY | 🟠 **Sfera klikalna gwiazdy jest MNIEJSZA od tarczy** (`r * 2.5` wobec `r * 3.0`), a komentarz nad nią twierdzi odwrotnie — przestał być prawdziwy przy `a666a07`. Zewnętrzne 16,7 % promienia jest dziś martwe dla kliknięć, a protuberancje siedzą całkowicie poza tą sferą. ⚠ Świadomie NIE naprawione w V2 (rozstrzygnięcie U4): powiększenie sfery zmienia, co przechwytuje kliknięcia w pobliżu gwiazdy, a przy V-267 złapałoby planety orbit wewnętrznych (orbita 3,3 WU wewnątrz tarczy G 3,6 WU) — własny projekt i własny gate. **ODBLOKOWANE PO V4:** U4 odmawiał, bo powiększenie sfery połykałoby kliknięcia w planety, które gracz WIDZI wewnątrz tarczy. Po naprawie głębi planeta za gwiazdą jest NIEWIDOCZNA, więc „widoczna tarcza” == „obszar klikalny gwiazdy” staje się spójne i powiększenie jest jednolinijkowe |
 | ~~**V-265**~~ | ✅ ZAMKNIĘTY w V2 (`b7c7360`) | `loadStarTextures` wczytywało `diffuse` i `normal`, których NIKT nie czyta — obaj wołający biorą wyłącznie `.emission`. Zmierzona cena bezczynności: 24 pliki ≈ 23,6 MiB na dysku, do 24 zbędnych żądań HTTP i ~64 MiB VRAM po rozpakowaniu. Scena układu schodzi z 3 plików na 1, Stratcom z 36 na 12. Pliki PNG zostają, generator nietknięty |
 | ~~**V-266**~~ | ✅ ZAMKNIĘTY w V2 (`1079cd9`) | `_starPromCount` i `_starCoronaUniform` — pisane po dwa razy, nieczytane nigdzie; `git log -S` pokazuje, że weszły MARTWE już w `c02574f`, czyli były zaślepkami NAZEWNICZYMI nazwanymi dokładnie jak dwie rzeczy, które budował V2. Razem z nimi zniknął kontrakt POZYCYJNY `_starGroup.children[0]` (łamie się CICHO: kręci się nie ten mesh, a granulacja staje) oraz martwa lokalna `glow` |
-| ~~**V-267**~~ | ✅ ZAMKNIĘTY w V4 (`94971d5`) | 🔴 **Sześć ręcznie pisanych ShaderMaterialów pisze głębię STAŁOPRZECINKOWĄ do bufora LOGARYTMICZNEGO** (starfield, mgławica, rdzeń, korona, atmosfera, chmury — żaden nie ma chunków `logdepthbuf_*`, a renderer ma `logarithmicDepthBuffer: true`). Gwiazda pisze ≈ 0,99999, planety ≈ 0,5, test to LessEqual — więc **planeta z DOWOLNEJ odległości wygrywa**. `MIN_ORBIT_AU = 0.3` = 3,3 WU wobec tarczy G 3,6 WU, czyli CAŁA orbita najbliższej planety mieści się w tarczy. Potwierdzone na gate'cie S3: wewnątrz tarczy widać przebijające planety i gwiazdy tła. ⚠ Naprawa zmienia okluzję gwiazdy wobec KAŻDEJ planety w grze — własny slice, własny gate. **ZAMKNIĘTE (V4/D2):** kanon `LogDepthChunks.js` (ZERO importów, wykonywalny pod node) wstawia chunki `logdepthbuf_*` do wszystkich sześciu; mgławica przez `depthTest: false` (D-D3), bo rysuje się PIERWSZA na wyczyszczonym buforze i nigdy do niego nie pisze. Flaga `sceneDepthUnification` (jedna na wszystkie sześć — głębia jest RELACJĄ). Sonda kompilacji 9/9 + KONTROLA pada |
+| ~~**V-267**~~ | ✅ ZAMKNIĘTY w V4 (`94971d5`) | 🔴 **Sześć ręcznie pisanych ShaderMaterialów pisze głębię STAŁOPRZECINKOWĄ do bufora LOGARYTMICZNEGO** (starfield, mgławica, rdzeń, korona, atmosfera, chmury — żaden nie ma chunków `logdepthbuf_*`, a renderer ma `logarithmicDepthBuffer: true`). Gwiazda pisze ≈ 0,99999, planety ≈ 0,5, test to LessEqual — więc **planeta z DOWOLNEJ odległości wygrywa**. `MIN_ORBIT_AU = 0.3` = 3,3 WU wobec tarczy G 3,6 WU, czyli CAŁA orbita najbliższej planety mieści się w tarczy. Potwierdzone na gate'cie S3: wewnątrz tarczy widać przebijające planety i gwiazdy tła. ⚠ Naprawa zmienia okluzję gwiazdy wobec KAŻDEJ planety w grze — własny slice, własny gate. **ZAMKNIĘTE (V4/D2):** kanon `LogDepthChunks.js` (ZERO importów, wykonywalny pod node) wstawia chunki `logdepthbuf_*` do wszystkich sześciu; mgławica przez `depthTest: false` (D-D3), bo rysuje się PIERWSZA na wyczyszczonym buforze i nigdy do niego nie pisze. Flaga `sceneDepthUnification` (jedna na wszystkie sześć — głębia jest RELACJĄ). Sonda kompilacji 9/9 + KONTROLA pada. **LIVE GATE PASS** (§1-§3, §7): tranzyt, elipsy orbit i statki zasłaniane poprawnie, korona bez cięć i fantomowych dziur |
 | **V-268** | ⬜ OTWARTY | 🟡 **Kamera wchodzi do wnętrza tarczy i nic tego nie pilnuje.** `_minDist` 0.3 wobec promienia rdzenia 2,29-4,57; klik w gwiazdę **nie robi auto-zoomu** (`ThreeRenderer:892` wyklucza `type === 'star'`), a jedynie obniża podłogę — więc ta pozycja to jedno kliknięcie i scroll, nie przypadek brzegowy. FrontSide wycina rdzeń, korona przestaje być zasłonięta i zalewa ekran przy `I(0) = 1.0`. V2 ogranicza własny wkład sufitem `CORONA_GUARD`, ale samego zalania nie naprawia |
 | **V-269** | ⬜ OTWARTY | ⚪ `isTextureInCache` jest wyeksportowane i NIGDY niewołane. Tekstury w cache chroni dziś to, że `Material.dispose()` w three tylko wysyła zdarzenie — właściwość biblioteki, nie decyzja tego pliku |
 | **V-270** | ⬜ OTWARTY | 🟠 **Przekręcenie `LIVE_GAS.OMEGA_DEG` na żywo jest SKOKIEM POŁOŻENIA, nie zmianą prędkości** — w SHIPOWANEJ ścieżce gazowca. `ThreeRenderer:3737` akumuluje `uGasTime += dt` bez wrapu, a `GasGiantShader:846` liczy `gasOmega(lat) * uGasTime`, więc zmiana ω po czasie *t* obraca pasy natychmiast o `Δω·t` — dla kalibracji 6→12 po dziesięciu minutach to ≈ 10 pełnych obrotów w jednej klatce. ⚠ To było pokrętło, którym arc V1 stroił ω **dwa razy**. Kształt naprawy: akumulować fazę w JS (D-V2u, zastosowane w całym V2) |
 
-| ~~**V-271**~~ | ✅ ZAMKNIĘTY w V4 (`94971d5`) | 🔴 **Warstwa chmur nad tarczą planety jest MARTWA — instancja V-267 o innym skutku.** `_createSystemCloudMesh` daje sferę `FrontSide` r = 1.025 R z `depthTest: true`, geometrycznie PRZED powierzchnią, ale pisze głębię STAŁOPRZECINKOWĄ (~0,99997 przy w = 30), podczas gdy rdzeń planety z biblioteki three pisze LOGARYTMICZNĄ (~0,403) ⇒ przy `LessEqual` chmury przegrywają test na całej tarczy. **ZMIERZONE sondą A1** (warstwa `FrontSide` w tej samej konfiguracji: 9477 → **0** pikseli wewnątrz tarczy po dodaniu nieprzezroczystego rdzenia) i **POTWIERDZONE W GRZE na live gate'cie V3**: chmury widoczne wyłącznie jako obwódka przy krawędziach tarczy, dokładnie jak przewiduje model głębi. ⚠ NIE jest to regresja V3 — defekt jest pre-existing; V3 tylko dostarczył przyrząd, który go zmierzył. Naprawa = V-267 (własny slice, zmienia okluzję w całej grze). **ZAMKNIĘTE razem z V-267** — czysta instancja, bez własnej przyczyny. ⚠ Koszt naprawy jest tu ZEROWY: shader chmur ma `discard`, więc early-Z było wyłączone JUŻ, a 15 wywołań `snoise` na fragment było płacone codziennie za nic |
+| ~~**V-271**~~ | ✅ ZAMKNIĘTY w V4 (`94971d5`) | 🔴 **Warstwa chmur nad tarczą planety jest MARTWA — instancja V-267 o innym skutku.** `_createSystemCloudMesh` daje sferę `FrontSide` r = 1.025 R z `depthTest: true`, geometrycznie PRZED powierzchnią, ale pisze głębię STAŁOPRZECINKOWĄ (~0,99997 przy w = 30), podczas gdy rdzeń planety z biblioteki three pisze LOGARYTMICZNĄ (~0,403) ⇒ przy `LessEqual` chmury przegrywają test na całej tarczy. **ZMIERZONE sondą A1** (warstwa `FrontSide` w tej samej konfiguracji: 9477 → **0** pikseli wewnątrz tarczy po dodaniu nieprzezroczystego rdzenia) i **POTWIERDZONE W GRZE na live gate'cie V3**: chmury widoczne wyłącznie jako obwódka przy krawędziach tarczy, dokładnie jak przewiduje model głębi. ⚠ NIE jest to regresja V3 — defekt jest pre-existing; V3 tylko dostarczył przyrząd, który go zmierzył. Naprawa = V-267 (własny slice, zmienia okluzję w całej grze). **ZAMKNIĘTE razem z V-267** — czysta instancja, bez własnej przyczyny. ⚠ Koszt naprawy jest tu ZEROWY: shader chmur ma `discard`, więc early-Z było wyłączone JUŻ, a 15 wywołań `snoise` na fragment było płacone codziennie za nic. **LIVE GATE PASS** (§5, §6, §9): chmury żywe na pełnych tarczach, bez migotania przy kącie stycznym, zasłona fog-of-war poprawnie je zakrywa |
 | **V-272** | ⬜ OTWARTY | 🟠 **Księżyce z `atmosphere === 'thin'` nie dostają ani powłoki, ani chmur.** `getAtmosphereMoon` (`SystemGenerator.js:407-419`) potrafi zwrócić `'thin'` (duże księżyce w niskich temperaturach, Tytan-like), a `_addMoonMesh` nie buduje żadnej z tych warstw — dane mówią „atmosfera”, render milczy. ⚠ **Świadomie NIE naprawione w V3** (D-V3l): dodanie powłok czyni mapę BARDZIEJ wyrazistą, czyli odwrotnie do zlecenia |
 | **V-273** | ⬜ OTWARTY | 🟠 **`_updatePlanetMesh` odbudowuje WYŁĄCZNIE rdzeń.** Powłoka i chmury zachowują promień i samo istnienie sprzed zmiany ⇒ planeta, która po kolizji zmieni masę, nosi powłokę o starym promieniu; planeta, która ZYSKA atmosferę, nigdy jej nie dostanie; która STRACI — nigdy nie zgubi. Pre-existing, znalezione przy audycie V3 |
 | **V-274** | ⬜ OTWARTY | ⚪ **Szara zasłona fog-of-war leży WEWNĄTRZ powłoki.** `_syncBodyScanVeil` skaluje ją do `radius * 1.03`, a powłoka stoi na 1.08 ⇒ niezbadane ciało jest wyszarzone i jednocześnie nosi pełne halo. Po V3 halo jest już tylko dzienne, ale pytanie „czy zasłona ma tłumić też powłokę” zostaje otwarte |
-| ~~**V-276**~~ | ✅ ZAMKNIĘTY w V4 (skutek uboczny) | 🟠 **Głębia korony i rdzenia ZLEWAŁA SIĘ przy oddaleniu, więc korona rozjaśniała TARCZĘ w domyślnym kadrze szerokich układów.** Rozdzielenie stałoprzecinkowe rdzeń↔korona to **8,7 ULP przy kamerze 85 WU, 0,4 ULP przy 400 i 0,0 przy 2000** (bufor DEPTH_COMPONENT24, 1 ULP = 5,96e-8). Poniżej 1 ULP wartości są RÓWNE, a `LessEqual` przepuszcza ⇒ korona rysuje się po tarczy. Próg: **M ≈199 · K ≈228 · G ≈248 · F ≈271 WU**. `frameSystem` otwiera układ na `clamp(maxOrbitAU × 20, 70, 450)`, więc układ z orbitami ≥ 12,5 AU **startuje wewnątrz pasma przecieku** — to był domyślny widok, nie przypadek brzegowy. Po naprawie rozdzielenie logarytmiczne wynosi **17 763 ULP przy 400 WU**. ⚠ Nigdy wcześniej nienazwane; znalezione rachunkiem przy audycie V-267 |
-| ~~**V-278**~~ | ✅ ZAMKNIĘTY w V4 (`95c8833`) | ⚪ **Warstwa chmur nie miała ANI JEDNEGO pokrętła** — liczby zaszyte w GLSL, bez obiektu strojenia, bez aliasu na rendererze, bez pisarza per klatkę. Łamie regułę „pokrętło albo ŻYWE, albo jawnie BAKED” i czyniło krok gate'u „czy chmury nie są za głośne” niewykonalnym bez edycji kodu i F5. `LIVE_CLOUDS` + `cloudTuning`: ALPHA · COVERAGE_LO/HI · NIGHT_FLOOR uniformem, **DRIFT_MULT mnoży KROK, nie fazę** (anti-V-270: `uTime` jest akumulowane, więc mnożnik w GLSL byłby SKOKIEM POŁOŻENIA). Wartości = dzisiejsze literały, commit liczbowo neutralny |
+| ~~**V-276**~~ | ✅ ZAMKNIĘTY w V4 (skutek uboczny) | 🟠 **Głębia korony i rdzenia ZLEWAŁA SIĘ przy oddaleniu, więc korona rozjaśniała TARCZĘ w domyślnym kadrze szerokich układów.** Rozdzielenie stałoprzecinkowe rdzeń↔korona to **8,7 ULP przy kamerze 85 WU, 0,4 ULP przy 400 i 0,0 przy 2000** (bufor DEPTH_COMPONENT24, 1 ULP = 5,96e-8). Poniżej 1 ULP wartości są RÓWNE, a `LessEqual` przepuszcza ⇒ korona rysuje się po tarczy. Próg: **M ≈199 · K ≈228 · G ≈248 · F ≈271 WU**. `frameSystem` otwiera układ na `clamp(maxOrbitAU × 20, 70, 450)`, więc układ z orbitami ≥ 12,5 AU **startuje wewnątrz pasma przecieku** — to był domyślny widok, nie przypadek brzegowy. Po naprawie rozdzielenie logarytmiczne wynosi **17 763 ULP przy 400 WU**. ⚠ Nigdy wcześniej nienazwane; znalezione rachunkiem przy audycie V-267. **LIVE GATE PASS** (§4): tarcza gwiazdy identyczna przy 100 i 400+ WU — domknięte OKIEM, nie tylko rachunkiem |
+| ~~**V-278**~~ | ✅ ZAMKNIĘTY w V4 (`95c8833`) | ⚪ **Warstwa chmur nie miała ANI JEDNEGO pokrętła** — liczby zaszyte w GLSL, bez obiektu strojenia, bez aliasu na rendererze, bez pisarza per klatkę. Łamie regułę „pokrętło albo ŻYWE, albo jawnie BAKED” i czyniło krok gate'u „czy chmury nie są za głośne” niewykonalnym bez edycji kodu i F5. `LIVE_CLOUDS` + `cloudTuning`: ALPHA · COVERAGE_LO/HI · NIGHT_FLOOR uniformem, **DRIFT_MULT mnoży KROK, nie fazę** (anti-V-270: `uTime` jest akumulowane, więc mnożnik w GLSL byłby SKOKIEM POŁOŻENIA). Wartości = dzisiejsze literały, commit liczbowo neutralny. **LIVE GATE: domyślne ZATWIERDZONE przez właściciela — `ALPHA` zostaje 0.88**, warstwa shipuje się bez ani jednego strojenia; pokrętła zostają jako żywy instrument |
 | **V-275** | ⬜ OTWARTY | ⚪ **Rodzina V-253: mapa daje WSZYSTKIM planetom skalistym i lodowym ten sam `0x4488ff`.** `glowColor` jest `null` dla `rocky`/`gas`/`ice` w `PLANET_TYPE_CONFIG` (niezerowy tylko dla `hot_rocky`), więc fallback łapie prawie wszystko — podczas gdy `PlanetShader.createUniforms` ma gotową tablicę `atmColors` per typ (ice jasny błękit, volcanic pomarańcz, desert piaskowy). ⚠ **Świadomie POZA V3** (D-V3o): zmiana koloru każdej planety naraz zabrudziłaby gate'owi odczyt zmiany oświetleniowej. Najtańszy krok następny, gdyby mapa miała być mniej monotonna |
 
 ✅ **Granica dowodu — UZUPEŁNIONA 2026-09-06.** Treść **V-248, V-249, V-255** została dopisana
@@ -447,7 +447,7 @@ V3 **otwiera** natomiast pięć wpisów: V-271 … V-275.
 
 ---
 
-## V4 — SPÓJNA GŁĘBIA SCENY (V-267 + V-271 + V-261 + V-276 + V-278) — kod wdrożony, live-gate PENDING
+## V4 — SPÓJNA GŁĘBIA SCENY (ZAMKNIĘTY 2026-09-09, save v101 bez migracji, live-gate PASS z dwoma odstępstwami)
 
 Sześć ręcznie pisanych `ShaderMaterial`ów pisało głębię **stałoprzecinkową** do bufora,
 w którym cała reszta sceny pisze **logarytmiczną**. Slice domyka tę niespójność, a razem
@@ -459,7 +459,8 @@ z nią cztery findingi, które z niej wynikały albo ją maskowały.
 | `95c8833` | **D1 / V-278** — `LIVE_CLOUDS` + `cloudTuning`, pokrętła ŻYWE, LICZBOWO NEUTRALNE |
 | `7c8c5b6` | **V-261** — podłoga prześwitu pierścieni Dysona (PRZED naprawą głębi) |
 | `94971d5` | **D2 / V-267 + V-271** — sześć materiałów pisze głębię logarytmiczną, flaga `sceneDepthUnification` |
-| (ten) | **D3** — rejestr + zapis wykonania |
+| `e16e226` | **D3** — rejestr + zapis wykonania (przed gate'em) |
+| (ten) | **D4** — wynik live gate'u, dwa odstępstwa, potwierdzenie domyślnych chmur |
 
 **Kill-switch:** `FEATURES.sceneDepthUnification` (default **ON**, brak klucza = OFF — idiom
 `liveGasShaders`). ⚠ **BAZĄ stanu OFF jest `7c8c5b6`, a nie stan sprzed arca**: poprawka V-261
@@ -583,6 +584,51 @@ dokładnie to, co gra wysyła do GPU.
    z `\n` nie trafiają w plik, który jest CRLF; a skrypt, który przerywa na asercji PO
    częściowym zapisie, zostawia plik w stanie pośrednim. Stąd reguła praktyczna: albo
    `read_bytes().decode()` + kotwice z wykrytym `NL`, albo Write całego pliku.
+
+### Live gate 2026-09-09 — PASS z dwoma zapisanymi odstępstwami
+
+**§1-§7 i §9 PASS**, na żywo, jedna sesja: tranzyt poprawny (planeta **całkowicie
+zasłonięta** za tarczą) · elipsy orbit przycinają się na tarczy · korona bez cięć wzdłuż
+linii orbit i bez fantomowych dziur po planetach · **tarcza gwiazdy identyczna przy 100
+i 400+ WU** (V-276 domknięty OKIEM) · **chmury ŻYWE na pełnych tarczach po raz pierwszy
+od 2026-03-30** · brak migotania przy kącie stycznym · `atmoInfo()` bit w bit jak na
+gate'cie V3 · statki poprawnie zasłaniane przez gwiazdę · zasłona fog-of-war zakrywa
+chmury, halo zostaje na zewnątrz (V-274 bez zmian).
+
+**§Rollback PASS:** OFF przez przebudowę w INNYM układzie daje **dokładnie** wygląd
+sprzed slice'u, ON przywraca nowy — **żadnego trzeciego stanu** (to jest ten sam kontrakt,
+który w V3/A1 złapała dopiero sonda).
+
+**Domyślne chmury ZATWIERDZONE przez właściciela: `ALPHA` zostaje 0.88**, razem z resztą
+`LIVE_CLOUDS`. Warstwa, która przez pół roku była niewidoczna, shipuje się bez ani jednego
+strojenia — pokrętła (V-278) zostają jako żywy instrument, nie jako obejście.
+
+#### ⚠ Odstępstwo 1 — §8 (wejście/wyjście z BattleView3D): NIE ZWERYFIKOWANE NA ŻYWO
+
+Zapis właściciela, dosłownie: *„§8 (battle in/out) not exercisable at the gate — risk
+accepted: loud failure mode + one-toggle mitigation; note it in the registry as »not
+verified live«."*
+
+Powód jest STRUKTURALNY, nie organizacyjny — i wyszedł dopiero przy zamykaniu:
+`GameScene._tryShowNextBattle:3938` przy `FEATURES.fcCombatFx` i `source === 'dscs'`
+pokazuje **wyłącznie baner wyniku**, więc **wszystkie bitwy deep-space kino OMIJAJĄ**.
+`BattleView3D` startuje tylko dla **Path A** (war-driven) i tylko gdy gracz wybierze
+„Obserwuj". Ta ścieżka jest w normalnej grze rzadka — co samo w sobie obniża ryzyko.
+Pełny hand-off z procedurą powtórzenia: **`docs/deferred-live-gates.md` ENTRY 4**.
+
+#### ⚠ Odstępstwo 2 — §10 (pierścienie Dysona): ŚWIADOMIE NIE URUCHOMIONE
+
+Zapis właściciela, dosłownie: *„§10 (Dyson rings) deliberately not run — the owner is
+deciding whether Dyson stays in the game at all; the aesthetic judgement on the
+shared-floor spacing is DEFERRED with that decision; keeper coverage stands, V-261's floor
+ships as-is."*
+
+⚠ **To NIE jest luka w naprawie, tylko odroczona ocena estetyczna.** Geometria jest
+pokryta keeperem `dyson_ring_clearance_smoke` **53/53** (4 klasy × 4 etapy, model liczony
+formułą WZIĘTĄ ZE ŹRÓDŁA, fail-first 38/15), a sama poprawka **musiała** wejść przed
+naprawą głębi, bo bez niej etap 1 zniknąłby całkowicie na K/G/F. Nierozstrzygnięte zostaje
+jedno: czy wspólny promień wewnętrzny etapów 1-3 na K/G/F (skutek podłogi) czyta się dobrze
+— i to pytanie czeka na decyzję, **czy Sfera Dysona w ogóle zostaje w grze**.
 
 ### Świadomie POZA V4 (zgłoszone, nie robione)
 
