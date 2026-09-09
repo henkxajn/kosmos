@@ -209,6 +209,18 @@ export class MovementOrderSystem {
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
 
+    // ── D-255b (Finding 263) — NOWY ROZKAZ ZABIERA STARE MARKERY DOKU ────────────────────
+    // `_pendingReturnDock` / `_pendingDock` to stan JEDNEGO rozkazu, ale mieszkają na STATKU
+    // i nikt ich nie czyścił przy porzuceniu rozkazu. ZMIERZONE, w JEDNYM układzie i BEZ
+    // kliknięcia „Stop": Powrót do bazy → nowy rozkaz na 12,00 AU → statek kończy na 1,00 AU
+    // **zadokowany przy bazie**. Stary marker po cichu przekierował rozkaz gracza.
+    // ⚠ MIEJSCE JEST KONTRAKTEM: sprzątamy na WEJŚCIU, PRZED `_preemptSnapshot` i PRZED
+    // `_dispatchByType`, bo markery NOWEGO rozkazu powstają PÓŹNIEJ — `_issueDock` stawia swój
+    // po sukcesie (`:494`), a producenci Powrotu po zwrotce `issueFleetOrder` (D-255b: przeniesione
+    // tam z „przed wywołaniem" właśnie po to). Sprzątanie w `_preemptCommit` WYCIERAŁOBY marker
+    // rozkazu, który sam właśnie instalujemy — sprawdzone i odrzucone.
+    this._sweepDockMarkers(vessel, 'new_order');
+
     // ── D-147a (Finding 147) — STATEK W SKOKU MIĘDZYGWIEZDNYM NIE MA „TUTAJ" ──────────────
     // Rozkazy ruchu są z konstrukcji WEWNĄTRZUKŁADOWE: liczą trasę we współrzędnych
     // mierzonych od gwiazdy, która w każdym układzie stoi w (0,0). Statek w tranzycie jest
@@ -645,6 +657,16 @@ export class MovementOrderSystem {
     if (!vessel) return;
     if (order) vessel.lastOrder = order;
 
+    // D-255b (Finding 263) — rozkaz PORZUCONY (cancelled / blocked / target_lost_on_load) zabiera
+    // ze sobą markery doku OD RAZU, nie „przy najbliższym następnym rozkazie". `completed` NIE
+    // sprząta: tam marker jest zużywany przez `FleetSystem._maybeAutoDockOnReturn` /
+    // `_maybeDockOnArrival` i to jest cały sens Powrotu.
+    // ⚠ Cztery z pięciu przejść terminalnych przechodzą tędy, łącznie z unieważnieniem PRZY
+    // WCZYTANIU (`:136`) — czyli dokładnie „lepki marker prosto do nowej sesji", przed którym
+    // ostrzega komentarz tamtej gałęzi. Piąte (`superseded`) łapie sprzątanie na WEJŚCIU
+    // `issueOrder`, bo tam nowy rozkaz swoich markerów jeszcze nie postawił.
+    if (order?.status !== 'completed') this._sweepDockMarkers(vessel, order?.status ?? 'released');
+
     // D-VO1b-3 — w AKTYWNYM starciu pole ZOSTAJE (obrona D-FDd). Odroczenie, NIE pominięcie:
     // domknięcie robi `_tick` niżej, gdy statek wyjdzie ze starcia.
     if (this._inActiveEncounter(vessel)) {
@@ -667,6 +689,34 @@ export class MovementOrderSystem {
     const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     if (!dscs?._findActiveEncounterContaining) return false;
     return !!dscs._findActiveEncounterContaining(vessel.id);
+  }
+
+  /**
+   * D-255b (Finding 263) — SPRZĄTANIE MARKERÓW DOKU po PORZUCONYM rozkazie.
+   *
+   * ⚠ PO CO: `_pendingReturnDock` (Powrót do bazy) i `_pendingDock` (rozkaz Dock) są stawiane
+   * PRZED wydaniem rozkazu, a ich konsumenci (`FleetSystem._maybeAutoDockOnReturn` /
+   * `_maybeDockOnArrival`) wiszą na `vessel:orderCompleted`. Nikt ich nie czyścił przy porzuceniu
+   * rozkazu, więc marker przeżywał i odpalał się przy domknięciu **DOWOLNEGO NASTĘPNEGO** rozkazu
+   * punktowego. ZMIERZONE, w JEDNYM układzie i BEZ kroku „Stop": Powrót → nowy rozkaz na 12,00 AU
+   * (preempcja) → statek kończy na 1,00 AU **zadokowany przy bazie**. Rozkaz gracza został po
+   * cichu przekierowany przez stary marker.
+   *
+   * ⚠ NIE WOŁAMY tego na ścieżce UKOŃCZENIA — tam marker jest ZUŻYWANY zgodnie z projektem.
+   * `_releaseOrder` jest wołane przez WSZYSTKIE pięć przejść terminalnych, więc guard na statusie
+   * jest tym, co odróżnia „porzucony" od „domknięty".
+   *
+   * @param {object} vessel
+   * @param {string} why — do trace'u (jaki stan terminalny)
+   */
+  _sweepDockMarkers(vessel, why) {
+    if (!vessel) return;
+    const had = (vessel._pendingReturnDock ?? null) !== null || (vessel._pendingDock ?? null) !== null;
+    if (!had) return;
+    _trace(`sweep dock markers vessel=${vessel.id} (${why}): `
+      + `returnDock=${vessel._pendingReturnDock ?? '-'} dock=${vessel._pendingDock ?? '-'}`);
+    delete vessel._pendingReturnDock;
+    delete vessel._pendingDock;
   }
 
   /**

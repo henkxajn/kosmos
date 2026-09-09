@@ -28,6 +28,8 @@ import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import { summarizeFleetGroup, buildRosterRows } from './FleetGroupPanelLogic.js';
 import { nextFleetId, nextDoctrine, nearestEnemyToPoint } from './FleetCommandPanelLogic.js';
 import { openDockPicker } from './VesselGroupActions.js';
+// D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
+import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
 const PW           = 340;
@@ -374,25 +376,33 @@ export class FleetCommandPanel extends BaseOverlay {
     }, { intent: 'fleetcmd_engage', fleetId });
   }
 
+  // ⚠ D-255a (Finding 154) — cel POWROTU dobiera `nearestOwnColonyBodyInSystem`, nie
+  //   `AutoRetreatSystem._findNearestFriendlyPlanet`. Tamta nie miała TERMINU UKŁADU i przy
+  //   gwiazdach stojących w (0,0) wygrywała dystansem kolonia z OBCEGO układu (zmierzone:
+  //   „2.00 AU" do `sys_home` dla statku w `sys_020`). Ta powierzchnia miała ten defekt
+  //   znak-w-znak jak `FleetManagerOverlay._handleFleetReturnBase` — i to był jej PIERWSZY pomiar.
   _fleetReturn(fleetId) {
     const fs = this._fs();
     const vm = window.KOSMOS?.vesselManager;
-    const ar = window.KOSMOS?.autoRetreatSystem;
     const fleet = fs?.getFleet?.(fleetId);
     if (!fleet || !vm) return;
     const firstMember = fleet.memberIds.map((id) => vm.getVessel(id)).find((v) => v && !v.isWreck);
-    const planet = firstMember ? ar?._findNearestFriendlyPlanet?.(firstMember)?.planet : null;
+    const planet = firstMember
+      ? nearestOwnColonyBodyInSystem(firstMember, window.KOSMOS?.colonyManager)?.planet
+      : null;
     if (!planet) {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
     }
     const tx = planet.x ?? planet.position?.x ?? 0;
     const ty = planet.y ?? planet.position?.y ?? 0;
-    for (const id of fleet.memberIds) {
+    const res = fs.issueFleetOrder(fleetId, { type: 'moveToPoint', targetPoint: { x: tx, y: ty } });
+    // ⚠ D-255b (Finding 263) — marker PO rozkazie i tylko dla PRZYJĘTYCH (bliźniak
+    //   `FleetManagerOverlay._handleFleetReturnBase`; powód opisany tam).
+    for (const id of (res?.accepted ?? [])) {
       const m = vm.getVessel(id);
       if (m) m._pendingReturnDock = planet.id;   // auto-dock przy dotarciu (FleetSystem listener)
     }
-    const res = fs.issueFleetOrder(fleetId, { type: 'moveToPoint', targetPoint: { x: tx, y: ty } });
     this._announce(res);
     this._markDirty();
   }

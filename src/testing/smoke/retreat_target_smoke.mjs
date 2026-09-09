@@ -1,7 +1,8 @@
 // RETREAT_TARGET (F-D + F-E) — keeper doboru celu ODWROTU. Plan: docs/design/RETREAT_TARGET_PLAN.md.
 //
 // PO CO: odwrót z bitwy i powrót do bazy dzieliły JEDNĄ funkcję doboru celu
-// (`AutoRetreatSystem._findNearestFriendlyPlanet`), która filtruje po WŁAŚCICIELU i NIE MA
+// (`AutoRetreatSystem._findNearestFriendlyPlanet` — JUŻ NIE ISTNIEJE, usunięta w D-255a razem
+// z zamknięciem Findingu 154), która filtrowała po WŁAŚCICIELU i NIE MIAŁA
 // terminu układu. Gwiazda każdego układu stoi w (0,0), więc ciała obcych układów leżą w tej
 // samej przestrzeni px co własne ⇒ selektor wskazywał kolonię z innego układu, a rozkaz odpadał
 // na bramce `target_other_system`. ZMIERZONE na żywo trzy razy (patrz nagłówek
@@ -127,12 +128,21 @@ header('T1 — TERMIN UKŁADU (rdzeń F-D): selektor nie wychodzi poza układ st
   assert(got?.body?.id !== 'p_far',
     'ciało z `sys_061` NIE zostało wybrane, mimo że w px jest bliżej (0.4 AU vs 3.0 AU)');
 
-  // KONTROLA PINU — czy fixture w ogóle reprodukuje F-D? Stara funkcja MUSI się nabrać.
-  const ars = new AutoRetreatSystem(vm, col, new MovementOrderSystem(vm));
-  const old = ars._findNearestFriendlyPlanet(v);
-  assert(old?.planet?.id === 'p_far',
-    `KONTROLA PINU: stara funkcja WSKAZUJE ciało z obcego układu (got=${old?.planet?.id ?? 'null'}) ` +
-    '— gdyby wskazała lokalne, T1 nie mierzyłby niczego');
+  // KONTROLA PINU — czy fixture w ogóle reprodukuje F-D?
+  // ⚠ INSTRUMENT WYMIENIONY (D-255a): stało tu wywołanie
+  //   `AutoRetreatSystem._findNearestFriendlyPlanet`, które MIAŁO się nabrać na obce ciało.
+  //   Ta funkcja została USUNIĘTA razem z zamknięciem Findingu 154, więc kontrola nie ma już
+  //   czym mierzyć. INTENCJA ZOSTAJE i jest tu wyrażona wprost: F-D reprodukowało się dlatego,
+  //   że ciało z OBCEGO układu leży w px BLIŻEJ niż własne (gwiazda każdego układu w (0,0)) —
+  //   i to jest jedyne, czego stara funkcja dowodziła. Gdyby fixture przestał być
+  //   konkurencyjny, T1 przechodziłby jałowo.
+  const local   = EntityManager.get('p_local');
+  const foreign = EntityManager.get('p_far');
+  const dLocal   = Math.hypot(local.x   - v.position.x, local.y   - v.position.y);
+  const dForeign = Math.hypot(foreign.x - v.position.x, foreign.y - v.position.y);
+  assert(dForeign < dLocal,
+    `KONTROLA PINU: obce ciało jest BLIŻEJ w px (${(dForeign / AU).toFixed(2)} AU) niż własne `
+    + `(${(dLocal / AU).toFixed(2)} AU) — bez tego T1 nie mierzyłby niczego`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════

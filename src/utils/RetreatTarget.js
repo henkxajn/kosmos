@@ -1,6 +1,8 @@
 // RetreatTarget — dobór celu UCIECZKI z bitwy. Plan: docs/design/RETREAT_TARGET_PLAN.md (F-D + F-E).
 //
-// PO CO TO ISTNIEJE OSOBNO OD `AutoRetreatSystem._findNearestFriendlyPlanet`:
+// PO CO TO POWSTAŁO OSOBNO OD `AutoRetreatSystem._findNearestFriendlyPlanet` (funkcji JUŻ NIE MA —
+// usunięta w D-255a razem z zamknięciem Findingu 154; jej ostatnimi czytelnikami były dwie ścieżki
+// „Powrót do bazy", dziś obie na `nearestOwnColonyBodyInSystem` niżej):
 // ta jedna funkcja odpowiadała naraz na DWA różne pytania, i dlatego na żadne nie odpowiadała dobrze.
 //   „Gdzie jest moja BAZA?"       — własna kolonia, dok, przepisanie `colonyId`. Filtr własności OK.
 //   „Gdzie mogę się SCHRONIĆ?"    — jakiekolwiek ciało, na które da się wejść na orbitę. Filtr

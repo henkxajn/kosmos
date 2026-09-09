@@ -33,6 +33,8 @@ import { isSystemExplored } from '../utils/SystemExploration.js';
 import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
+// D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
+import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
@@ -4785,29 +4787,37 @@ export class FleetManagerOverlay {
     } catch { /* cancel */ }
   }
 
-  // Return to base: auto-target nearest friendly planet, fire moveToPoint.
-  // Centroid floty (najbliższa kolonia od centroidu, NIE od per-vessel).
+  // Return to base: cel = najbliższa WŁASNA kolonia W UKŁADZIE STATKU, potem moveToPoint.
+  //
+  // ⚠ POPRAWKA DWÓCH KŁAMSTW W TYM MIEJSCU (D-255a, Findingi 154 + 255):
+  //   1. Stało tu „Centroid floty (najbliższa kolonia od centroidu, NIE od per-vessel)". Kod
+  //      NIGDY nie liczył centroidu — bierze PIERWSZEGO żywego członka (`firstMember` niżej).
+  //   2. Cel dobierał `AutoRetreatSystem._findNearestFriendlyPlanet`, która filtrowała po
+  //      WŁAŚCICIELU i **nie miała terminu układu**. Gwiazda każdego układu stoi w (0,0), więc
+  //      kolonia z INNEGO układu wygrywała dystansem: ZMIERZONE — statek w `sys_020` dostawał
+  //      `p_home` [sys_home] jako „2.00 AU", podczas gdy własna kolonia w jego układzie leżała
+  //      6.00 AU dalej. Rozkaz przechodził (bramka `if (bodyId)` w MOS widzi tylko cele-CIAŁA,
+  //      a tu leci GOŁY PUNKT), statek leciał do tych współrzędnych we WŁASNEJ ramce, a marker
+  //      `_pendingReturnDock` dokował go potem przy ciele, którego w jego układzie NIE MA.
+  //   Teraz: `nearestOwnColonyBodyInSystem` (`utils/RetreatTarget.js`, D-FDh) — ta sama zwrotka
+  //   `{ colony, planet, distanceAU }`, ten sam filtr własności, ta sama preferencja pełnych
+  //   kolonii nad placówkami, PLUS termin układu. Brak własnej kolonii w układzie ⇒ `null`
+  //   ⇒ UCZCIWA ODMOWA z komunikatem (niżej), a nie lot w cudzą ramkę.
   _handleFleetReturnBase(fleetId) {
     const fs = window.KOSMOS?.fleetSystem;
     const fleet = fs?.getFleet?.(fleetId);
     if (!fleet || fleet.memberIds.length === 0) return;
-    const ar = window.KOSMOS?.autoRetreatSystem;
-    if (!ar?._findNearestFriendlyPlanet) {
-      EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
-      return;
-    }
     const vm = window.KOSMOS?.vesselManager;
     const firstMember = fleet.memberIds
       .map(vid => vm?.getVessel?.(vid))
       .find(v => v && !v.isWreck);
     if (!firstMember) return;
-    const nearest = ar._findNearestFriendlyPlanet(firstMember);
+    const nearest = nearestOwnColonyBodyInSystem(firstMember, window.KOSMOS?.colonyManager);
     if (!nearest) {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
     }
-    // Bug P2 fix #2: _findNearestFriendlyPlanet zwraca { colony, planet, distanceAU }
-    // — unwrap przez nearest.planet (nie nearest.x).
+    // Zwrotka to `{ colony, planet, distanceAU }` — unwrap przez `.planet` (nie `.x`).
     const planet = nearest.planet;
     const tx = planet?.x ?? planet?.position?.x ?? 0;
     const ty = planet?.y ?? planet?.position?.y ?? 0;
@@ -4815,18 +4825,23 @@ export class FleetManagerOverlay {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
     }
-    // Bug F (polish): auto-dock flag na każdym memberze. FleetSystem listener na
-    // vessel:orderCompleted snap'uje pozycję + dock'uje gdy vessel dotrze w dystansie
-    // RETURN_DOCK_THRESHOLD_AU od planety. Bez tego vessel stoi w statycznym punkcie
-    // gdzie planeta BYŁA w momencie issue (planeta tymczasem orbituje dalej).
-    for (const memberId of fleet.memberIds) {
-      const member = vm.getVessel(memberId);
-      if (member) member._pendingReturnDock = planet.id;
-    }
     const res = fs.issueFleetOrder(fleetId, {
       type: 'moveToPoint',
       targetPoint: { x: tx, y: ty },
     });
+    // Auto-dock flag: `FleetSystem._maybeAutoDockOnReturn` (listener `vessel:orderCompleted`)
+    // snapuje pozycję do AKTUALNEJ pozycji planety i dokuje. Bez tego statek stoi w statycznym
+    // punkcie z chwili wydania rozkazu, a planeta orbituje dalej (Bug F2 — dlatego NIE MA tam
+    // progu odległości; patrz nagłówek `FleetSystem.js`).
+    // ⚠ D-255b (Finding 263) — MARKER STAWIAMY **PO** ROZKAZIE i TYLKO DLA PRZYJĘTYCH.
+    //   Stał przed `issueFleetOrder` i na WSZYSTKICH członkach, więc: (a) statek, którego rozkaz
+    //   ODRZUCONO, zostawał z markerem, który odpalał się przy domknięciu dowolnego NASTĘPNEGO
+    //   rozkazu; (b) `MovementOrderSystem.issueOrder` nie mógł sprzątać starych markerów na
+    //   wejściu, bo wycierałby ten świeżo postawiony. Teraz sprzątanie ma jednoznaczny moment.
+    for (const memberId of (res?.accepted ?? [])) {
+      const member = vm.getVessel(memberId);
+      if (member) member._pendingReturnDock = planet.id;
+    }
     this._announceFleetOrderResult(res, fleetId, 'returnBase');
   }
 

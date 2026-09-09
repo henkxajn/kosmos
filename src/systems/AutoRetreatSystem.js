@@ -9,10 +9,13 @@
 //      `_findNearestFriendlyPlanet`. Tamta funkcja NIE MA TERMINU UKŁADU i wskazywała kolonie
 //      z innych układów (gwiazda każdego układu stoi w (0,0)) ⇒ rozkaz odpadał na
 //      `target_other_system` i ODWRÓT NIE DZIAŁAŁ DLA NIKOGO (Finding F-D, zmierzone na żywo 3×).
-//      `_findNearestFriendlyPlanet` ZOSTAJE nietknięta — czytają ją TRZY produkcyjne ścieżki
-//      „Powrót do bazy" (`FleetManagerOverlay:4550`, `FleetGroupPanel:445`, `FleetCommandPanel:384`),
-//      gdzie filtr własności jest poprawny. ⚠ Ona nadal NIE MA terminu układu i to jest znane:
-//      Finding 154 w `docs/design/VESSEL_ORDERS_PLAN.md` (follow-up, własny podpis).
+//      ⚠ AKTUALIZACJA (D-255a, Finding 154 ZAMKNIĘTY): `_findNearestFriendlyPlanet` została
+//      USUNIĘTA. Stało tu, że „ZOSTAJE nietknięta, bo czytają ją TRZY produkcyjne ścieżki
+//      Powrotu do bazy" — do czasu tego slice'u były to już tylko DWIE
+//      (`FleetManagerOverlay._handleFleetReturnBase`, `FleetCommandPanel._fleetReturn`;
+//      `grpReturn` zdjęto w 258/A1, `e591172`), a obie przeszły na
+//      `nearestOwnColonyBodyInSystem`. Ta sama zwrotka, ten sam filtr własności, ta sama
+//      preferencja pełnych kolonii — plus TERMIN UKŁADU.
 //   2. BRAK CELU NIE ZABIJA (D-FDe). Dawniej `!dest` robiło `_turnIntoWreck`. Ta gałąź była
 //      praktycznie martwa (selektor przeszukiwał całą galaktykę, więc zawsze coś znajdował), ale po
 //      dodaniu terminu układu stałaby się TYPOWA — AI atakuje z definicji w cudzym układzie.
@@ -30,10 +33,10 @@
 // UI może pokazać "Retreating from battle X" (M2b hookup).
 
 import EventBus from '../core/EventBus.js';
-import EntityManager from '../core/EntityManager.js';
-import { DistanceUtils } from '../utils/DistanceUtils.js';
 // ⚠ `GAME_CONFIG` przestał tu być potrzebny wraz z usunięciem retry „low fuel"
 // (`m4FuelAwareRetreat`) — bypass paliwa jest teraz bezwarunkowy w `resolveShelterOrderSpec`.
+// ⚠ `EntityManager` i `DistanceUtils` odeszły razem z `_findNearestFriendlyPlanet` (D-255a):
+// były używane WYŁĄCZNIE w jej ciele. Dobór celu robi dziś `utils/RetreatTarget.js`.
 
 export class AutoRetreatSystem {
   /**
@@ -158,49 +161,20 @@ export class AutoRetreatSystem {
   }
 
   // ── Target selection ─────────────────────────────────────────────────
-
-  /**
-   * Znajdź najbliższą friendly planetę. Preferuje pełne kolonie (isOutpost=false);
-   * gdy brak — fallback na outposty. Gdy nic — return null (wrak).
-   *
-   * @param {object} vessel
-   * @returns {{ colony: object, planet: object, distanceAU: number } | null}
-   */
-  _findNearestFriendlyPlanet(vessel) {
-    if (!this._col?.getAllColonies) return null;
-    const ownerId = vessel.ownerEmpireId ?? vessel.owner ?? 'player';
-
-    // Filtruj kolonie tej samej frakcji + istnieje Entity.
-    const all = this._col.getAllColonies().filter(c => {
-      const cOwner = c.ownerEmpireId ?? 'player';
-      if (cOwner !== ownerId) return false;
-      return !!EntityManager.get(c.planetId);
-    });
-    if (all.length === 0) return null;
-
-    // Preferuj pełne kolonie (isOutpost=false). Jeśli żadna nie spełnia —
-    // fallback na outposty. Design decyzja różniąca od doca §8.5: doc filtruje
-    // outposty dla player "na twardo", ale gdy player MA tylko outposty,
-    // zostałby wrakiem co jest zbyt surowe. Graceful fallback: outpost > wrak.
-    const fullColonies = all.filter(c => !c.isOutpost);
-    const candidates = fullColonies.length > 0 ? fullColonies : all;
-
-    // Wrapper vessel jako { x, y } — DistanceUtils czyta .x/.y directly.
-    const vwrap = { x: vessel.position.x, y: vessel.position.y };
-
-    let best = null;
-    let bestDist = Infinity;
-    for (const c of candidates) {
-      const planet = EntityManager.get(c.planetId);
-      if (!planet) continue;
-      const d = DistanceUtils.euclideanAU(vwrap, planet);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { colony: c, planet, distanceAU: d };
-      }
-    }
-    return best;
-  }
+  //
+  // ⚠ `_findNearestFriendlyPlanet` USUNIĘTA (D-255a, Finding 154). Nie miała TERMINU UKŁADU:
+  //   filtrowała po WŁAŚCICIELU i liczyła `euclideanAU` po WSZYSTKICH koloniach w galaktyce,
+  //   a gwiazda każdego układu stoi w (0,0), więc kolonia z obcego układu wygrywała DYSTANSEM
+  //   (zmierzone: statek w `sys_020` dostawał `p_home` [sys_home] jako „2.00 AU", przy własnej
+  //   koloni 6.00 AU dalej w jego układzie). Odwrót z bitwy zszedł z niej już w arcu
+  //   RETREAT_TARGET (`aeef035`) na `nearestShelter`; ostatnimi czytelnikami były DWIE ścieżki
+  //   „Powrót do bazy" (`FleetManagerOverlay._handleFleetReturnBase`,
+  //   `FleetCommandPanel._fleetReturn`) — oba przeszły na `nearestOwnColonyBodyInSystem`
+  //   (`utils/RetreatTarget.js`): identyczna zwrotka, ten sam filtr własności, ta sama
+  //   preferencja pełnych kolonii nad placówkami, PLUS termin układu.
+  //   ⚠ `this._col` ZOSTAJE polem (kontrakt konstruktora, `GameScene`), choć po usunięciu
+  //   selektora nikt go tu nie czyta — dobór schronienia robi `resolveShelterOrderSpec`,
+  //   które bierze `ColonyManager` przez locator.
 
   _year() {
     return window.KOSMOS?.timeSystem?.gameTime ?? 0;

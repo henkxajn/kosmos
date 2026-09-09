@@ -22,12 +22,19 @@ import { FLEET_DOCTRINES, DEFAULT_DOCTRINE, isValidDoctrine } from '../data/Flee
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { isStationId } from '../utils/TransferStore.js';
+// D-255d (Finding 263) — termin układu dla auto-doku po Powrocie. Fail-OPEN, jak każda bramka
+// rozkazowa (`SystemScope.js`): brak stempla `systemId` = stary zapis, dokujemy jak dotąd.
+import { isSameSystem } from '../utils/SystemScope.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
-// Próg auto-dock przy Return to base — gdy vessel dotrze w tej odległości od
-// planety docelowej, FleetSystem snap'uje pozycję + ustawia dockedAt. Bez tego
-// `moveToPoint` zostawia statek statycznie w punkcie (planeta odlatuje po orbicie).
-const RETURN_DOCK_THRESHOLD_AU = 0.5;
+// ⚠ `RETURN_DOCK_THRESHOLD_AU = 0.5` USUNIĘTA (D-255d, Finding 263) — i NIE WOLNO jej wracać.
+//   Stała żyła tu jako deklaracja BEZ ANI JEDNEGO ODCZYTU od `7ea94e8` (2026-05-20), a komentarze
+//   w dwóch miejscach obiecywały próg, którego nie było. Usunięcie progu było wtedy ŚWIADOMĄ
+//   naprawą (Bug F2: „dotarli ale dalej nie dokuja") z podpisem „snap to teleport — akceptowalny
+//   convenience UX w 4X". POMIAR POTWIERDZA, że decyzja jest nadal słuszna, i to WEWNĄTRZ jednego
+//   układu: statyczny `targetPoint` z chwili wydania rozkazu nie zna ruchu planety, więc po lotcie
+//   planeta jest 3,15-7,62 AU od tego punktu (cel na orbicie 9 AU) — próg 0,5 AU PADAŁBY ZAWSZE.
+//   Dlatego 263 domykamy TERMINEM UKŁADU w `_maybeAutoDockOnReturn`, a nie terminem odległości.
 // Sanity bound dla fleet_eta — jeśli flota startuje rozproszona (członek 100 AU
 // od target) i większość blisko, fleet_eta byłoby dominowane przez outlier.
 // Sanity: cap fleet_eta na MAX_SYNC_BOOST_FACTOR × min(native_eta). Empirycznie
@@ -649,6 +656,20 @@ export class FleetSystem {
     delete v._pendingReturnDock;  // jednorazowy flag
     const planet = EntityManager.get(planetId);
     if (!planet) return;
+    // ── D-255d (Finding 263) — TERMIN UKŁADU. NIE ma tu terminu ODLEGŁOŚCI, patrz nagłówek pliku.
+    // Ta funkcja TELEPORTUJE: przepisuje `position.x/y`, `dockedAt` i `colonyId` (całą bazę statku).
+    // Bez terminu układu robiła to na ciało z INNEGO układu — statek dostawał `dockedAt` przy ciele,
+    // którego w jego układzie NIE MA, przy niezmienionym `systemId`, i ten stan szedł DO ZAPISU.
+    // ⚠ Po D-255a normalna ścieżka „Powrót do bazy" już takiego markera nie stawia (selektor jest
+    // zakresowany układem statku), ale marker PRZEŻYWA porzucenie rozkazu, więc stan „stary marker,
+    // nowy układ" jest osiągalny — i to jest OBRONA NA TEJ ŚCIEŻCE, nie zamiast sprzątania markera.
+    // ⚠ `isSameSystem` (fail-OPEN), NIE `isSameSystemStrict`: encja bez stempla `systemId` (stary
+    // zapis) MUSI dalej dokować tak jak dotąd. Fail-closed byłby tu regresją, nie ostrożnością.
+    if (!isSameSystem(v, planet)) {
+      console.warn(`[FleetSystem] auto-dock ODRZUCONY: ${vesselId} jest w ${v.systemId ?? '?'}, `
+        + `a cel ${planetId} w ${planet.systemId ?? '?'} — marker zużyty, statek zostaje na miejscu`);
+      return;
+    }
     // Snap do AKTUALNEJ pozycji planety (uwzględnia orbit movement during travel).
     v.position.x = planet.x;
     v.position.y = planet.y;
