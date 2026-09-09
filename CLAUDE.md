@@ -4090,3 +4090,105 @@ tylko jako obwódka przy krawędziach — **nie jest to regresja V3**) · **V-27
 z `atmosphere: 'thin'` bez powłoki i chmur) · **V-273** (`_updatePlanetMesh` odbudowuje wyłącznie
 rdzeń) · **V-274** (zasłona fog-of-war 1.03 leży WEWNĄTRZ powłoki 1.08) · **V-275** (rodzina
 V-253 — wszystkie planety skaliste i lodowe dostają ten sam `0x4488ff`).
+
+---
+
+## VISUALS 1.0 — V4 „spójna głębia sceny" (save **v101 bez migracji**, kod wdrożony, live-gate PENDING)
+
+Piąty slice arca VISUALS. Rejestr macierzysty + zapis wykonania: **`docs/design/VISUALS_PLAN.md`**
+§V4. Projekt (decyzje `D-D1…D-D13`) mieszka **po stronie właściciela**; w repo są skutki.
+⚠ **Prefiks `V-` obowiązuje** (kolizja numeracji z arciem EKONOMIA AI): numer goły 246-254 =
+ekonomia, `V-<nr>` = VISUALS.
+
+**Jedno zdanie:** sześć ręcznie pisanych `ShaderMaterial`ów pisało głębię **stałoprzecinkową**
+(0,9967 przy d = 0,3 … 0,999999 przy d = 1850) do bufora, w którym cała reszta sceny pisze
+**logarytmiczną** (0,031 … 0,883) — a przy `LessEqual` znaczyło to, że **te sześć zachowywało
+się, jakby leżały w NIESKOŃCZONOŚCI**: wszystko z biblioteki było „przed" nimi, a one nie były
+przed niczym.
+
+| commit | treść |
+|---|---|
+| `ebbc5df` | **D0** — NEW `LogDepthChunks.js` (ZERO importów, wykonywalny pod node) + keeper, **ZERO call-site'ów** |
+| `95c8833` | **D1 / V-278** — `LIVE_CLOUDS` + `cloudTuning`, pokrętła ŻYWE, **liczbowo neutralne** |
+| `7c8c5b6` | **V-261** — podłoga prześwitu pierścieni Dysona, **PRZED** naprawą głębi |
+| `94971d5` | **D2 / V-267 + V-271** — sześć materiałów pisze głębię logarytmiczną |
+| (ten) | **D3** — rejestr + zapis wykonania |
+
+**Kill-switch `FEATURES.sceneDepthUnification`** (default ON, brak klucza = OFF — idiom
+`liveGasShaders`). ⚠ **BAZĄ stanu OFF jest `7c8c5b6`, nie stan sprzed arca** — poprawka V-261
+stoi poza flagą (precedens V-260/D-V2z).
+
+**Zamknięte findingi:** **V-267** (rdzeń nie zasłaniał NICZEGO — `MIN_ORBIT_AU 0.3` = 3,3 WU
+mieści się CAŁE w tarczy G 3,6 WU) · **V-271** (warstwa chmur martwa nad tarczą, zostawała
+2,5 % obwódki) · **V-261** (pierścienie Dysona w tarczy) · **V-276** NOWY (głębia korony
+i rdzenia zlewała się poniżej 1 ULP powyżej ~199-271 WU ⇒ korona rozjaśniała tarczę
+w domyślnym kadrze szerokich układów) · **V-278** NOWY (chmury bez ani jednego pokrętła).
+
+### ⚠ Cztery rzeczy z tego slice'u, które wychodzą poza niego
+
+1. **DERYWACJA bije KOPIĘ, gdy kopii miałoby być więcej niż jedna.** Wzór V2/V3 („literał
+   `*_LIVE` obok, przypięty sumą SHA-256") jest poprawny dla JEDNEJ pary ścieżek, ale tutaj
+   dałby ~16 literałów i ~16 sum — szesnastu nieutwardzonych bliźniaków, żeby ustrzec się
+   przed jednym. Ścieżka ON jest więc liczona z literału OFF przez czystą transformację, a pin
+   zastępczy — **round-trip co do bajtu** — jest MOCNIEJSZY: dowodzi tożsamości, zamiast ją
+   deklarować. Sześć istniejących złotych sum przeszło arc bez zmiany.
+2. **Kolejność commitów jest częścią poprawki, nie kosmetyką.** V-261 musiał wejść PRZED
+   naprawą głębi, bo dziś te pierścienie widać WYŁĄCZNIE dzięki defektowi — po naprawie
+   znikłyby całkowicie. Żaden commit w sekwencji nie niesie regresji.
+   ⚠ I odwrotnie: **dosłowny „one-liner" z audytu był ZŁY** — podstawienie bazy mnożyłoby
+   wszystko (etap 4 na G 6,40 → 14,40 WU), więc weszła PODŁOGA, a odstępstwo zostało zmierzone
+   i opisane w commicie.
+3. **Instrument gate'u powstaje PRZED gate'em.** Chmury nie miały pokręteł, więc pytanie „czy
+   nie za głośno" byłoby niewykonalne bez edycji kodu i F5 — a warstwa akurat po raz pierwszy
+   staje się widoczna. Stąd `LIVE_CLOUDS` jako osobny, liczbowo neutralny commit.
+   ⚠ `DRIFT_MULT` mnoży **KROK, nie fazę** (anti-V-270): `uTime` jest akumulowane, więc mnożnik
+   w GLSL byłby SKOKIEM POŁOŻENIA.
+4. **ODWRÓCENIE reguły „utwardź bliźniaka".** `PlanetGlobeRenderer` ma niemal identyczny
+   shader chmur, `StratcomGalaxyRenderer` własny rdzeń gwiazdy — i **żadnego z nich nie wolno
+   chunkować**: te renderery nie ustawiają `logarithmicDepthBuffer`, więc `logDepthBufFC`
+   nigdy nie zostanie tam wgrany (zostanie 0) ⇒ `gl_FragDepth = 0` dla KAŻDEGO fragmentu.
+   Mechaniczne zastosowanie domowej reguły zepsułoby globus kolonii. Pilnuje tego **pin**,
+   nie komentarz.
+
+### ⚠ Trzy pomiary, które zmieniły projekt (a nie potwierdziły go)
+
+- **PIĄTY blok GLSL był WYMOGIEM kompilacji.** `logdepthbuf_vertex` woła `isPerspectiveMatrix()`
+  z chunku `<common>`, którego te shadery nie dołączają — bez osobnego bloku PREREQ nie
+  skompilowałby się ani jeden wariant wierzchołka. Czterech chunków przy tym NIE modyfikujemy,
+  żeby pin „cztery teksty == cztery literały biblioteki" został prawdziwy.
+- **`logDepthBufFC` nie wymaga ANI JEDNEJ linii wiring-u** — renderer ustawia go bezwarunkowo
+  (`three.module.js:16658`), a `WebGLUniforms.setValue` jest cichym no-opem dla nieznanego
+  uniformu (`:5466`). Wystarczy go ZADEKLAROWAĆ.
+- **Rdzeń gwiazdy na tej naprawie ZYSKUJE, nie traci.** Opaque sortuje się
+  `renderOrder → material.id → z`, `material.id` PRZED `z`, a `initSystem` woła `renderStar`
+  przed `addPlanetMesh` ⇒ rdzeń jest rysowany PIERWSZY, więc nie ma dziś żadnego early-Z do
+  stracenia, a po naprawie staje się prawdziwym okluderem. **Jedyna realna cena to korona:
+  11,9 % powierzchni quada** (sylwetka rdzenia) — reszta tego, co early-Z jej odrzucało, była
+  samym defektem. Komentarz w `SunShader`, który tłumaczył `return` zamiast `discard` właśnie
+  tą oszczędnością, poprawiony w TYM SAMYM commicie.
+
+⚠ **`node --check` NIE JEST TESTEM — nowa postać tej samej lekcji.** Ciało fabryki OFF powłoki
+czytało `logDepth`, którego **nie było w jej sygnaturze**: składnia poprawna, `ReferenceError`
+dopiero na żywej ścieżce. Pin T7 liczy teraz deklaracje parametru w obu modułach.
+
+**Testy:** NEW `log_depth_chunks_smoke` **146/146** (fail-first D2 **127/19**; bateria mutacyjna
+D0 **8/8 zabitych**, bo fail-first nie istnieje dla commita tworzącego moduł) · NEW
+`cloud_tuning_smoke` **34/34** (fail-first 12/22) · NEW `dyson_ring_clearance_smoke` **53/53**
+(fail-first 38/15) · `sun_animation_logic` 145/145 (cztery złote sumy nietknięte) ·
+`atmosphere_logic` 101/101 (⚠ jeden pin V3 ROZLUŹNIONY z powodem w kodzie: wymagał dosłownie
+jednoargumentowego `createAtmosphereMaterial(planet)`; inwariant „wybór fabryki robi RENDERER
+na fladze" jest ten sam i dalej pinowany, plus dołożona kontrola dyskryminacji).
+Sonda kompilacji: **9/9 wariantów, KONTROLA pada** (`glError 1282`), liczby pikseli identyczne
+przed i po ⇒ chunki zmieniają GŁĘBIĘ, nie cieniowanie.
+Sweep **219/219 OK, 0 FAIL** · `check-i18n` PASS · zero migracji · zero kluczy i18n.
+
+⚠ **Ziarnistość weryfikacji (jak w całym arcu):** piny źródłowe + headless-Chrome sonda
+kompilacji + live gate. `ThreeRenderer` nie importuje się pod node, a GLSL nie jest wykonywalny
+w sweepie ⇒ **zachowanie głębi na ekranie nie jest pokryte keeperem** — pokrywa je live gate.
+
+**Otwarte po V4:** **V-264** (ODBLOKOWANY — po naprawie „widoczna tarcza" == „obszar klikalny") ·
+**V-273** (awansuje z latentnego na WIDOCZNY: nieodświeżona warstwa chmur po `_updatePlanetMesh`
+była dotąd i tak niewidoczna nad tarczą) · **V-274** (zasłona poprawnie zakrywa teraz ożywione
+chmury; pytanie o powłokę zostaje) · V-248 · V-249 · V-252 · V-253 · V-255 · V-262 · V-263 ·
+V-268 (log depth NIC tam nie zmienia — rdzeń backface-culled, korona testowana o nic) ·
+V-269 · V-270 · V-272 · V-275 · analityczny early-out korony (follow-up wydajnościowy).
