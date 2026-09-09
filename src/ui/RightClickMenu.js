@@ -16,7 +16,15 @@ import { THEME } from '../config/ThemeConfig.js';
 import { buildMenuOptions } from '../data/RightClickMenuOptions.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatcher.js';
+import { systemIdOf } from '../utils/SystemScope.js';
 import { t } from '../i18n/i18n.js';
+
+// ── Leg D (Finding 255, noga MAPY) — typy rozkazu, których cel POCHODZI Z KLIKANEGO
+//    PUNKTU, czyli z ramki KAMERY. Tylko dla nich wolno pytać „czy statek jest w tej
+//    ramce" — patrz komentarz przy `_outOfCameraFrame`.
+//    `dock` jest tu, bo `MovementOrderSystem._issueDock` ZRZUCA `targetBodyId` przed
+//    `_issueMoveToPoint` (Finding 256), więc bramka W3-4b nigdy tego celu nie ogląda.
+const POINT_SOURCED_ORDER_TYPES = new Set(['moveToPoint', 'dock']);
 
 export class RightClickMenu {
   constructor() {
@@ -191,6 +199,70 @@ export class RightClickMenu {
     return null;
   }
 
+  // ── Leg D (Finding 255, noga MAPY) — ramka KAMERY vs ramka STATKU ─────────
+  // Współrzędne są LOKALNE dla układu (gwiazda każdego układu stoi w (0,0)), więc goły
+  // punkt NIE NIESIE RAMKI. Klik na mapie 3D jest zawsze w ramce KAMERY
+  // (`activeSystemId`), a `StarSystemManager.switchActiveSystem:152` NIE czyści
+  // zaznaczenia statku ani floty (żaden konsument `system:switched` tego nie robi) —
+  // więc statek z innego układu zostaje zaznaczony i dostaje TE SAME współrzędne,
+  // odmierzone od SWOJEJ gwiazdy. Repro właściciela (`mo_6`): statek w `sys_020`,
+  // kamera na `sys_home`, klik w pustkę → statek leci do (15.71, −158.94) w `sys_020`.
+  //
+  // ⚠ DLACZEGO TU, a nie w `buildOrderSpec` / `_buildFleetSpec` (D-LD1): tamte są
+  //   CZYSTE — `OrderDispatcher.js` nie importuje niczego i dostaje `vesselId` jako
+  //   STRING, nie obiekt, a `_buildFleetSpec(option, target)` nie dostaje ani statku,
+  //   ani `fleetId`. Termin siedzi u WOŁAJĄCEGO, bo tylko on ma obie strony pytania.
+  //
+  // ⚠ DLACZEGO NIE W `FleetSystem.issueFleetOrder` — jedynym miejscu, które pokryłoby
+  //   naraz PPM floty I oba pickery (`FMO:4739`, `FleetCommandPanel:354`): ta funkcja
+  //   obsługuje TAKŻE „Powrót do bazy", którego cel liczy się w układzie STATKU
+  //   (`nearestOwnColonyBodyInSystem`, naprawa 154). Termin „ramka statku ≠ kamera"
+  //   odrzuciłby tam rozkaz CAŁKOWICIE POPRAWNY. ZMIERZONE: flota w `sys_020`, kamera
+  //   `sys_home` → Powrót `{ok:true, accepted:[v_1,v_2]}`. Ten predykat NIE jest
+  //   własnością ROZKAZU — jest własnością pary (statek, kamera), więc wolno go stosować
+  //   WYŁĄCZNIE tam, gdzie punkt na pewno pochodzi z kamery (`POINT_SOURCED_ORDER_TYPES`).
+  //   Ta sama miara wyklucza `retreat` (cel liczony w układzie statku — ZMIERZONE:
+  //   statek w `sys_020` przy kamerze na `sys_home` dostaje poprawny `targetPoint`
+  //   w swoim układzie) oraz `escort` (Finding 264 — inny brak, nie ten).
+  //
+  // FAIL-OPEN (idiom `SystemScope`): `systemIdOf` zwraca `null` dla statku W TRANZYCIE
+  // międzygwiezdnym. Taki rozkaz ma odrzucić bramka Findingu 147 w `MovementOrderSystem`
+  // WŁASNYM powodem (`vessel_in_warp_transit`) — nie ten termin. Kolejność zmierzona.
+  _outOfCameraFrame(vesselId) {
+    const v    = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    const cam  = window.KOSMOS?.activeSystemId ?? null;
+    const vSys = systemIdOf(v);
+    if (vSys == null || cam == null) return null;   // nie wiemy / warp → przepuść dalej
+    return vSys === cam ? null : 'target_other_system';
+  }
+
+  // Członkowie floty poza ramką kamery. Zbiór „eligible" LUSTRZANY wobec
+  // `FleetSystem.issueFleetOrder:120-127` (żywi, nie-wraki) — inaczej odmawialibyśmy
+  // z powodu statku, którego fan-out i tak by pominął.
+  _fleetOffendersOutOfFrame(fleetId) {
+    const fleet = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId);
+    const vm    = window.KOSMOS?.vesselManager;
+    const out   = [];
+    for (const vid of (fleet?.memberIds ?? [])) {
+      const v = vm?.getVessel?.(vid);
+      if (!v || v.isWreck) continue;
+      const bad = this._outOfCameraFrame(vid);
+      if (bad) out.push({ vesselId: vid, reason: bad });
+    }
+    return out;
+  }
+
+  // Nazwa statku + przetłumaczony powód. Jedno źródło formatowania dla OBU ścieżek
+  // (per-statek i flotowej) — inaczej ten sam powód czytałby się inaczej zależnie od
+  // tego, którym przyciskiem gracz go wywołał.
+  _describeFail(f) {
+    const key    = `vessel.reason${_pascalCase(f.reason ?? 'unknown')}`;
+    const rt     = t(key);
+    const reason = rt !== key ? rt : (f.reason ?? 'unknown');
+    const nm     = window.KOSMOS?.vesselManager?.getVessel?.(f.vesselId)?.name ?? f.vesselId;
+    return `${nm} (${reason})`;
+  }
+
   _handleOptionClick(option, target) {
     this.hide();
 
@@ -243,6 +315,26 @@ export class RightClickMenu {
       if (!spec) {
         console.warn('[RightClickMenu] buildFleetSpec returned null');
         return;
+      }
+      // Leg D / D-LD2 — CAŁA flota odmawia, gdy CHOĆBY JEDEN członek jest poza ramką
+      //   kamery. Wysłanie samego podzbioru złamałoby po cichu kontrakt rozkazu flotowego
+      //   (zsynchronizowany przylot: `FleetSystem` liczy `_arrivalSyncYear` ze WSZYSTKICH
+      //   eligible), a `issueFleetOrder` fan-outuje do wszystkich i nie przyjmuje listy
+      //   wyjątków — per-członkowa odmowa wymagałaby albo nowego pola w `spec`, albo
+      //   terminu w fan-oucie, który regresowałby „Powrót do bazy" (patrz `_outOfCameraFrame`).
+      // ⚠ Raport nazywa KAŻDEGO winowajcę. Kanał `res.rejected?.[0]` (niżej) pokazuje
+      //   TYLKO pierwszy powód, więc tutaj go nie używamy.
+      if (POINT_SOURCED_ORDER_TYPES.has(option.orderType)) {
+        const offenders = this._fleetOffendersOutOfFrame(fleetId);
+        if (offenders.length > 0) {
+          window.KOSMOS?.eventLogSystem?.push?.({
+            text: t('vessel.orderNoneMoved', offenders.map(f => this._describeFail(f)).join(', ')),
+            channel: 'fleet',
+            severity: 'warn',
+            entityRef: offenders[0].vesselId,
+          });
+          return;
+        }
       }
       const res = fSys.issueFleetOrder(fleetId, spec);
       if (!res?.ok) {
@@ -305,7 +397,15 @@ export class RightClickMenu {
 
     let anyOk = false;
     const fails = [];  // [{ vesselId, reason }] — WSZYSTKIE pominięte (nie tylko pierwszy)
+    // Leg D — bramka WYŁĄCZNIE dla rozkazów, których cel pochodzi z klikanego punktu.
+    // Odmowa wpada do `fails[]`, więc raport per-statek niżej niesie ją ZA DARMO.
+    const pointSourced = POINT_SOURCED_ORDER_TYPES.has(option.orderType);
     for (const vid of ids) {
+      const frameFail = pointSourced ? this._outOfCameraFrame(vid) : null;
+      if (frameFail) {
+        fails.push({ vesselId: vid, reason: frameFail });
+        continue;
+      }
       const built = buildOrderSpec(option, target, vid);
       if (!built.ok) {
         fails.push({ vesselId: vid, reason: built.reason });
@@ -325,15 +425,7 @@ export class RightClickMenu {
     // Wcześniej log leciał wyłącznie gdy NIC się nie udało → przy „2 z 3 poleciały" gracz
     // nie wiedział, czemu trzeci (np. USS Enterprise bez uzbrojenia) został na orbicie.
     if (fails.length > 0) {
-      const vm = window.KOSMOS?.vesselManager;
-      const describe = (f) => {
-        const key = `vessel.reason${_pascalCase(f.reason ?? 'unknown')}`;
-        const rt  = t(key);
-        const reason = rt !== key ? rt : (f.reason ?? 'unknown');
-        const nm = vm?.getVessel?.(f.vesselId)?.name ?? f.vesselId;
-        return `${nm} (${reason})`;
-      };
-      const skipped = fails.map(describe).join(', ');
+      const skipped = fails.map(f => this._describeFail(f)).join(', ');
       window.KOSMOS?.eventLogSystem?.push({
         text: anyOk
           ? t('vessel.orderPartial', ids.length - fails.length, ids.length, skipped)
