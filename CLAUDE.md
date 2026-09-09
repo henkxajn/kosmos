@@ -4221,3 +4221,109 @@ była dotąd i tak niewidoczna nad tarczą) · **V-274** (zasłona poprawnie zak
 chmury; pytanie o powłokę zostaje) · V-248 · V-249 · V-252 · V-253 · V-255 · V-262 · V-263 ·
 V-268 (log depth NIC tam nie zmienia — rdzeń backface-culled, korona testowana o nic) ·
 V-269 · V-270 · V-272 · V-275 · analityczny early-out korony (follow-up wydajnościowy).
+
+---
+
+## Finding 147 — statek w SKOKU nie przyjmuje rozkazu ruchu (save **v101 bez migracji**, live-gate PASS — ZAMKNIĘTY 2026-09-09, commit `1cb4a97`)
+
+Slice samodzielny, **poza** arciem VESSEL_ORDERS (P0-P5 zostaje osobnym planem). Plan + decyzje
+D-147a…D-147e + rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §147 (zamknięty) + nowe **263-266**.
+
+**Jedno zdanie:** `MovementOrderSystem` nie miał **żadnej** bramki na tranzyt międzygwiezdny
+(rejestr: „grep = 0"), więc „Leć tutaj" wydane statkowi W SKOKU przechodziło `{ok:true}`,
+podmieniało misję `interstellar_jump` na `move_to_point` i — przez `_reconcileSystemId` biegnące
+CO TIK — stemplowało statek `sys_home` przy współrzędnych układu, z którego wystartował. **MIS-HOMED
+DUCH**, czyli klasa likwidowana przez Slice A (`f072da0`), wpuszczona z powrotem niebramkowaną
+gałęzią typu. **Jeden PPM od gracza; stempel szedł DO ZAPISU** (`VesselManager:1438`), a
+`_migrateV91toV92` go nie leczy (leczy tylko `phase === 'warp_transit'`).
+
+⚠ **WARP CORES SĄ FORFEITED, nie „wydane przez ten rozkaz".** `moveToPoint` nie tyka `warpFuel`
+w ogóle (zmierzone 0,5 → 0,5); rdzenie pobiera **z góry** `dispatchInterstellar`
+(`VesselManager:895`, `consumeWarpFuel`) i **nie ma ścieżki zwrotu** ⇒ traci się zapłacony SKOK.
+Osobno spalane jest paliwo in-system (9999 → 9996,85 przy koszcie kursu 2,150).
+
+**Shape A (D-147a) — JEDEN termin admisyjny, 6 linii kodu gry.** W `issueOrder`, **NAD**
+`isRetreat` i **POZA** `_dispatchByType`. Predykat: `mission.type === 'interstellar_jump' &&
+mission.phase === 'warp_transit'` (źródło prawdy `VesselManager._resolveSystemId`;
+`systemId === null` to inwariant POTWIERDZAJĄCY, sprawdzany keeperem, **nie** część bramki).
+Kill-switch `FEATURES.warpTransitOrderGate` (default ON, **brak klucza = OFF**).
+
+⚠ **DLACZEGO JEDNA LINIA OBEJMUJE WSZYSTKIE DZIESIĘĆ TYPÓW** (krok obowiązkowy podpisu, grep
+PRZED kodem): `_dispatchByType` ma **dokładnie jednego wołającego** (`issueOrder:263`);
+`_issueMoveToPoint` ma **pięć** call-site'ów, wszystkie w MOS i wszystkie pod `_dispatchByType`
+(zero zewnętrznych); `mission.type='move_to_point'` konstruowany jest w **jednym** miejscu
+(`MOS:918`). Do tego **`patrol` buduje WŁASNY order i nie przechodzi przez `_issueMoveToPoint`**,
+więc bramka postawiona niżej byłaby nieutwardzonym bliźniakiem. Ścieżka flotowa
+(`RightClickMenu:247 → FleetSystem:201`) też schodzi do `issueOrder` **per statek**.
+
+⚠ **NIE `isSameSystem`** — dla `systemId === null` jest **fail-OPEN** (ZMIERZONE: `true`), więc
+przepuściłaby dokładnie ten przypadek. **NIE `isSameSystemStrict`** — zabroniona dla bramek
+rozkazów własnym docblockiem. ⚠ **Zasięg AI: ZERO** — obie pule AI pomijają statek z misją
+(`DirectorOffensive:144`, `DirectorDoctrine:269`), a statek w skoku zawsze ma `interstellar_jump`.
+
+**Widoczność odmowy:** `vessel_in_warp_transit` + **jedna** para i18n
+`vessel.reasonVesselInWarpTransit`; BEZ reużycia `reasonTargetOtherSystem` (byłoby kłamstwem dla
+statku, który właśnie skacze — klasa Findingu 141). Dziennik, kanał **`fleet`**, severity **`warn`**
+(`RightClickMenu:337-346`), PL „Statek jest w skoku międzygwiezdnym — poczekaj na przylot" /
+EN „Vessel is in interstellar transit — wait for arrival". ⚠ Menu **nadal oferuje** „Leć tutaj"
+statkowi w skoku i tak ma być: to bramka **ADMISJI**, nie filtr OFERTY (pin T7a).
+
+**Dźwignia:** `KOSMOS.gameConfig.FEATURES.warpTransitOrderGate = false` — flaga czytana przy
+KAŻDYM wywołaniu, więc flip działa **na żywo, bez przeładowania** (`window.KOSMOS.gameConfig`
+ustawia `GameScene:394`; ten sam uchwyt opisuje `FactorySystem:25`).
+⚠ **Recepta konsolowa, ZMIERZONA (poprawka po gate'cie):** `OrderService.issueMove` to **cienki
+forward** do `MOS.issueOrder`, więc `spec.type` jest **OBOWIĄZKOWY**, a pole nazywa się
+**`targetPoint`**, nie `point`. `issueMove(id, {targetBodyId, point})` zwraca
+`{ok:false, reason:'invalid_type'}` (`validateOrder`, `MovementOrderTypes:70-73`) — i **bez `type`
+cel-CIAŁO cross-system nie trafi też do composite'u** (`issueMove:107` testuje
+`spec?.type === 'moveToPoint'`). Poprawnie:
+`KOSMOS.orderService.issueMove(vId, { type: 'moveToPoint', targetBodyId: 'h2', targetPoint: {x, y} })`.
+
+### ⚠ Dwa keepery przepisane ŚWIADOMIE — ich PRZESŁANKA była tym findingiem
+
+`preempt_order_smoke` **T6** zakładał, że rozkaz ZOSTAJE PRZYJĘTY, a misji broni gałąź `inWarp`
+w `_preemptCommit`; dziś broni jej ADMISJA ⇒ pin czyta POWÓD odmowy. **Bez tego był jałowy
+i PRZECHODZIŁ, czyli sweep by go NIE zgłosił** — to jest cała lekcja. **T11** zakładał, że
+`moveToPoint` ZABIJA misję warp i osierocą trasę; dziś nie zabija, więc inwariant D-VO3e pinowany
+jest na wejściu, które NADAL istnieje i które sam D-VO3e wymienia (statek **spoza** warpu z żywą
+trasą wielo-przeskokową). ⚠ **Konsekwencja strukturalna → Finding 265:** gałąź
+`inWarp`/`warpMissionSurvived` w `_preemptCommit` jest od teraz **nieosiągalna**; kod ZOSTAJE,
+ale żaden pin jej nie dotyka.
+⚠ `return_actions_removed_smoke` A6 — okno źródła **anchorowane strukturalnie** zamiast
+`iStart + 3000`. Kontrola pinu PADŁA, gdy termin 147 wypchnął `vessel_in_reserve` za 3000 znaków,
+czyli zrobiła dokładnie to, do czego jest. **Ta sama lekcja co `fleet_clock_band` T4: proxy
+rozmiarowe → inwariant strukturalny.**
+
+### Live-gate 2026-09-09 (właściciel, klient EN) — PASS
+
+§0 flaga=true · §1 odmowa czysta, snapshot PRZED/PO **bit w bit** (fuel 20.00 → 20.00, `warpFuel`
+nietknięty, misja do `sys_020` żywa, `mo:null`) · §2 przylot zahomowany w **`sys_020`**, nie
+`sys_home` · §3 anty-jałowość (goły punkt in-system leci) · §5 rollback w obie strony, na żywo:
+OFF ⇒ `{ok:true}` + zabita misja + stempel `sys_home` (**forfeiture potwierdzone**), ON ⇒ odmowa.
+
+⚠ **§4 (composite) — ODSTĘPSTWO STRUKTURALNE: NIE zweryfikowane na żywo w TYM gate'cie.** Po
+Findingu 138 klik PPM w obce ciało **nie może** dać celu-CIAŁA (snap zakresowany układem STATKU),
+więc z mapy wychodzi **goły punkt** — czyli ścieżka Findingu 255. **Mapa nie umie uruchomić
+composite'u w ogóle.** Composite stoi na **T9a-c (headless)** + własnym live-gate slice'u **254**.
+
+**Testy:** NEW `warp_transit_order_gate_smoke` **49/49**, fail-first **27/21** zmierzony FINALNYMI
+pinami na kodzie sprzed naprawy (detached worktree) · `preempt_order_smoke` **38/38** (fail-first
+36/2) · `return_actions_removed_smoke` **16/16**. Sweep **220/220 0 FAIL** · `check-i18n` PASS
+(pl=en=3343). Zapis **v101, bez migracji**.
+
+**Nowe findingi z tego slice'u (`VESSEL_ORDERS_PLAN.md`):** **263** (`_maybeAutoDockOnReturn`
+teleportuje bezwarunkowo; `RETURN_DOCK_THRESHOLD_AU` zadeklarowany w `FleetSystem:30` i **bez
+ani jednego odczytu** — komentarz obiecuje próg, którego nie ma) · **264** (`_issueEscort` bez
+terminu układu na eskortowanym; osiągalność NIEZMIERZONA i to część wpisu) · **265** (martwa gałąź
+`inWarp`) · **266** (🟠 **„Docked" jest DOMYŚLNĄ etykietą w DWÓCH miejscach** — `?? 'docked'`
+w `FleetGroupPanelLogic:83` i `?? 'fleetGroup.statusDocked'` w `FleetGroupPanel:345` /
+`FleetCommandPanel:297`; ZMIERZONE wykonaniem: stan `undefined`, stan nieznany i brak całego
+`position` renderują się jako „zadokowany", a `dockedAt` **nie jest w tej ścieżce czytany ani
+razu**). **Korekty rejestru:** 154 i 255 mówiły „TRZY producenty Powrotu" — jest **DWÓCH**
+(`grpReturn` zdjęty w 258/A1, `e591172`); 255 dostał **potwierdzenie NA ŻYWO** (`mo_6`,
+`targetPoint {15.71,-158.94}`, statek w `sys_020` poleciał do współrzędnych z ramki `sys_home`).
+
+**NASTĘPNE (kolejka właściciela):** **255 + 154** jako jeden slice producent-side (Shape C —
+producenci przestają podawać goły punkt; **263** jest naturalnym partnerem, te same dwa call-site'y
+stawiają `_pendingReturnDock`) → **256** (jednoargumentowa poprawka UX, szew `sameSystemOnly`
+gotowy) → **266** → reszta rejestru (151/152/153, 264).

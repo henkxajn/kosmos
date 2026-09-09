@@ -1074,6 +1074,72 @@ powrotu). **145 należy do slice'u `ORDER_TRUTHFULNESS`** (§7a) — to fasada, 
      **Naprawa należy do `OrderService`** (jedyny dozwolony orkiestrator multi-system) albo do P4 —
      nie do preempcji. ⇒ **kryterium gate'u D (VO-6)**.
 
+     ⚠ **KOREKTA TREŚCI (2026-09-09): „warp cores wydane przez ten rozkaz" było NIEŚCISŁE.**
+     `moveToPoint` **nie tyka `warpFuel` w ogóle** (zmierzone: 0,5 → 0,5). Rdzenie pobiera
+     **Z GÓRY** `dispatchInterstellar` (`VesselManager:895`, `consumeWarpFuel`) i **nie ma
+     ścieżki zwrotu** ⇒ gracz traci **zapłacony SKOK**, bo ginie misja. Właściwe słowo to
+     **FORFEITED**, nie „spent". Spalane jest osobno paliwo in-system (zmierzone 9999 → 9996,85
+     przy koszcie kursu 2,150).
+
+     ✅ **ZAMKNIĘTY 2026-09-09 — commit `1cb4a97`, LIVE-GATE PASS.** Wbrew powyższemu naprawa
+     **NIE poszła do `OrderService`**: audyt pokazał, że to nie jest problem orkiestracji
+     multi-system, tylko **ADMISJI** — statek w tranzycie nie ma „tutaj", więc żaden rozkaz ruchu
+     nie ma dla niego sensu. **Shape A (D-147a):** JEDEN termin w `MovementOrderSystem.issueOrder`,
+     **NAD** `isRetreat` i **POZA** `_dispatchByType`. Predykat:
+     `mission.type === 'interstellar_jump' && mission.phase === 'warp_transit'`.
+     Zmiana w kodzie gry: **6 linii**. Zapis **v101, bez migracji**.
+
+     ⚠ **DLACZEGO JEDNA LINIA POKRYWA DZIESIĘĆ TYPÓW ROZKAZU:** `_dispatchByType` ma **DOKŁADNIE
+     JEDNEGO WOŁAJĄCEGO** (`issueOrder:263`), a `_issueMoveToPoint` ma **pięć call-site'ów, wszystkie
+     wewnątrz MOS i wszystkie pod `_dispatchByType`** — zero zewnętrznych. Do tego `patrol` buduje
+     WŁASNY order i **nie przechodzi** przez `_issueMoveToPoint`, więc bramka postawiona niżej
+     byłaby nieutwardzonym bliźniakiem. Wszystko zweryfikowane grepem PRZED kodem (krok obowiązkowy
+     podpisu), łącznie ze ścieżką flotową `RightClickMenu:247 → FleetSystem:201` — ona też schodzi
+     do `issueOrder` **per statek**.
+     ⚠ **NIE `isSameSystem`** — ZMIERZONE, że dla `systemId === null` jest **fail-OPEN** (`true`),
+     więc przepuściłaby dokładnie ten przypadek. **NIE `isSameSystemStrict`** — zabroniona dla bramek
+     rozkazów własnym docblockiem (`SystemScope.js`).
+     ⚠ **ZASIĘG AI: ZERO.** Obie pule AI pomijają statek z misją (`DirectorOffensive:144`,
+     `DirectorDoctrine:269`), a statek w skoku zawsze ma `interstellar_jump`.
+
+     **Powód `vessel_in_warp_transit` + JEDNA para i18n** `vessel.reasonVesselInWarpTransit` (D-147b).
+     BEZ reużycia `reasonTargetOtherSystem` — „najpierw skok warp" byłoby kłamstwem dla statku, który
+     WŁAŚNIE skacze (klasa Findingu 141). Odmowa jest GŁOŚNA za darmo: `RightClickMenu:337-346`
+     opisuje każdy pominięty statek w Dzienniku (kanał `fleet`, `warn`).
+     Kill-switch `FEATURES.warpTransitOrderGate` (default ON, **brak klucza = OFF**); OFF = dziura
+     wraca bit w bit i to **JEST** ścieżka rollbacku (D-147c). Flaga czytana przy każdym wywołaniu ⇒
+     `KOSMOS.gameConfig.FEATURES.warpTransitOrderGate` działa **NA ŻYWO, bez przeładowania**.
+
+     **Testy:** NEW `warp_transit_order_gate_smoke` **49/49**, fail-first **27/21** zmierzony
+     FINALNYMI pinami na kodzie sprzed naprawy (detached worktree). Sweep **220/220 0 FAIL** ·
+     `check-i18n` PASS (pl=en=3343).
+     ⚠ **DWA KEEPERY PRZEPISANE ŚWIADOMIE — ich PRZESŁANKA była tym findingiem:**
+     `preempt_order_smoke` **T6** zakładał, że rozkaz ZOSTAJE PRZYJĘTY, a misji broni gałąź `inWarp`
+     w `_preemptCommit` — dziś broni jej ADMISJA, więc pin czyta POWÓD odmowy (bez tego **przechodził**,
+     czyli sweep by go NIE zgłosił); **T11** zakładał, że `moveToPoint` ZABIJA misję warp i osierocą
+     trasę — dziś nie zabija, więc inwariant D-VO3e pinowany jest na wejściu, które NADAL istnieje
+     i które sam D-VO3e wymienia (statek SPOZA warpu z żywą trasą). Fail-first tej suity: **36/2**.
+     ⚠ `return_actions_removed_smoke` A6 — okno źródła **anchorowane strukturalnie** zamiast
+     `iStart + 3000`; kontrola pinu PADŁA, gdy termin 147 wypchnął `vessel_in_reserve` za 3000 znaków,
+     czyli zrobiła dokładnie to, do czego jest (ta sama lekcja co `fleet_clock_band` T4).
+
+     **LIVE-GATE 2026-09-09 (właściciel, klient EN) — PASS:**
+     §0 flaga=true · §1 odmowa czysta: linia audytu w konsoli (`RightClickMenu:320`, reason
+     `vessel_in_warp_transit`) + wpis w Dzienniku dla gracza; snapshot PRZED/PO **bit w bit**
+     (fuel 20.00 → 20.00, `warpFuel` nietknięty, misja `interstellar_jump` do `sys_020` żywa,
+     `phase warp_transit`, `mo:null`) · §2 przylot zahomowany w **`sys_020`** (nie `sys_home`),
+     `phase in_system` · §3 anty-jałowość: goły punkt we własnym układzie leci (`move_to_point`,
+     `mo_1`, fuel 19.84) · §5 rollback w OBIE strony, flip **na żywo bez przeładowania**: OFF ⇒
+     `{ok:true}`, trasa przerwana, misja zabita, stempel `sys_home` (statek startował Z `sys_home`,
+     więc bez trwałego skażenia; **forfeiture potwierdzone**), ON ⇒ odmowa wraca.
+
+     ⚠ **§4 (composite) — ODSTĘPSTWO STRUKTURALNE, NIE ZWERYFIKOWANE NA ŻYWO W TYM GATE'CIE.**
+     Po Findingu 138 klik PPM w obce ciało **nie może** wyprodukować celu-CIAŁA: snap jest
+     zakresowany układem STATKU (`_findBodyNearPoint`, D-SS1), więc z mapy wychodzi **goły punkt**
+     — czyli ścieżka Findingu **255**, nie composite. **Mapa nie jest w stanie uruchomić composite'u
+     w ogóle.** Composite stoi więc na **T9a-c (headless)** + własnym live-gate slice'u **254**.
+     Nazywam to wprost: w TYM gate'cie composite **nie został potwierdzony w przeglądarce**.
+
 ---
 
 ## Findings z live-gate VO-3 (2026-08-24) — pula logistyczna
@@ -1309,6 +1375,11 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
 
 154. 🔴 **`AutoRetreatSystem._findNearestFriendlyPlanet` DALEJ nie ma terminu ukladu — i jest ZYWA.**
      Slice RETREAT_TARGET (`aeef035`) swiadomie jej nie tknal, bo odwrot z bitwy przeszedl na
+     ⚠ **KOREKTA LICZBY (2026-09-09, audyt 147+255): producentow jest DWOCH, nie trzech.**
+     `grpReturn` zostal ZDJETY z `FleetGroupPanel` w slice 258/A1 (`e591172`) — mowi to wprost
+     komentarz zrodlowy `FleetGroupPanel:265-277`, ktory sam wymienia pozostalych:
+     `FleetCommandPanel:384` i `FleetManagerOverlay:4790` (`_handleFleetReturnBase`, punkt `:4828`,
+     marker `:4824`). Ponizsza lista jest sprzed tamtego slice'u.
      `utils/RetreatTarget.js`. Czytaja ja jednak **TRZY** produkcyjne sciezki „Powrot do bazy":
      `FleetManagerOverlay.js:4581` (`_handleFleetReturnBase`, zakladka Floty — ⚠ wiec teza „FleetManager
      nie ma Powrotu" jest polprawda: nie ma go lista akcji REJESTRU, ma go zakladka FLOTY),
@@ -1341,6 +1412,25 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      zdjal go ze sciezki odwrotu doktrynalnego dokladnie dlatego, ze `_maybeAutoDockOnReturn`
      przepisuje `colonyId` BEZWARUNKOWO. Ta sama funkcja, ta sama linia, inna sciezka wejscia.
      **Osobny slice, wlasny podpis. NIE laczyc z UI.**
+
+     ⚠ **KOREKTA LICZBY (2026-09-09): producentow „Powrotu" jest DWOCH, nie trzech** — patrz korekta
+     w 154 (`grpReturn` zdjety w 258/A1, `e591172`). Sciezka punktowa pozostaje szersza niz Powrot
+     (`_issueDock`, pickery flotowe, PPM), wiec **zakres findingu sie NIE zmienia** — zmienia sie
+     tylko liczba w zdaniu naglowkowym.
+
+     🔴 **POTWIERDZONY NA ZYWO 2026-09-09** (przy okazji live-gate'u 147, klient EN). Wlasciciel
+     kliknal PPM w ramce `sys_home`, majac zaznaczony statek w `sys_020`; statek **polecial do TYCH
+     SAMYCH wspolrzednych we WLASNYM ukladzie**. Zmierzone z `lastOrder`:
+     `mo_6 { targetEntityId: null, targetPoint: { x: 15.71, y: -158.94 }, issuedBy: 'player',
+     status: completed }`. ⇒ objaw nie jest teoretyczny i nie wymaga przycisku „Powrot": wystarcza
+     PPM na mapie przy statku spoza ogladanego ukladu.
+
+     ⚠ **STRUKTURALNA KONSEKWENCJA ZMIERZONA W TYM SAMYM GATE'CIE (wazna dla ZAKRESU naprawy):**
+     po Findingu 138 klik w obce cialo **nie moze** dac celu-CIALA (snap zakresowany ukladem STATKU),
+     wiec z mapy **zawsze** wychodzi goly punkt. To znaczy, ze (a) 255 jest **jedyna** droga, ktora
+     mapa oferuje dla celu w innym ukladzie, i (b) **composite z 254 jest z mapy nieosiagalny** —
+     zaden klik PPM go nie uruchomi. Domykajac 255 trzeba wiec rozstrzygnac, co ma sie dziac
+     z intencja gracza „lec tam", gdy „tam" jest w innym ukladzie: odmowa czy composite.
 
 256. 🟠 **`Dokuj` (picker grupowy) przyjmuje cel z OBCEGO ukladu.**
      Rodzenstwo 154/255, ale **inny producent i inny selektor**, wiec osobny numer.
@@ -1953,6 +2043,10 @@ zamknął **GATE B2 / Z2** (wiersz zdjęty z `OPEN_FINDINGS_INDEX.md`).
 | **250** | ⚪ **Ograniczenia PAKOWANIA dla dowolnego przyszlego F3 (kurier warp).** (a) **Obsada swiadoma zdolnosci jest OBOWIAZKOWA**: petla reserve→trasa w `_runDispatcher` (`while (route.courierIds.length < couriersPerRoute && logi.reserve.length > 0)`) **nie pyta, czy kadlub umie obsluzyc te trase**; na istniejacym zapisie daje to livelock — ZMIERZONE **2160 cykli zwolnij/przypisz**, zero korzysci, 6 kadlubow nadal zamrozonych. (b) **F3 musi miec WLASNA flage i NIGDY nie reuzywac `aiCourierRouteScope`**: D-Nt-3 swiadomie zlalo C1 i C2 w jedna flage, wiec zdjecie bramki, zeby dopuscic trasy cross, **wylacza tez watchdog C2**, ktory odzyskalby te kadluby. (c) **Waiver `warp_cores` jest NOSNY, nie opcjonalny**: bez niego przelaczenie silnika kuriera na warp daje **0 statkow, 0 dyspozycji, 0 dostaw** — logistyka nie degraduje sie, tylko **nie startuje**. (d) Kurier cross-system jest **~0,3× tak produktywny na kadlub** co in-system (126 vs 398 Nt/kadlub w gy 100) ⇒ **okolo trzech czwartych zmierzonego zysku F3 to SILNIK, jedna czwarta to ZASIEG**. | ⚪ **OTWARTY — material wejsciowy, gdyby 241 kiedykolwiek wrocilo.** Na osi transportu nic nie jest podpisane; **FK** (`couriersPerRoute` 2→4, jedna stala, zmierzone 1,6-1,7× Nt w gy 100 na obu galaktykach) lezy w kieszeni jako ksztalt-gdyby. |
 | **251** | ⚪ **`frigate_system_defender` placi 2 `warp_cores` za silnik, ktorego nie moze uzyc.** Szablon wymaga `engine_warp` (`ShipTemplateData:143`), ale **swiadomie NIE MA `warp_tank`** (komentarz `:135`: „CELOWY BRAK — ten okret NIE MOZE opuscic swojego ukladu”), a bez baku `dispatchInterstellar` odmawia na `wf.max <= 0` (`VesselManager:809`). Sam kod nazywa 30-tonowy silnik **„martwym balastem”** (`:127`) i odnotowuje, ze drabinki `['engine_warp','engine_ion','engine_chemical']` swiadomie nie zastosowano, bo popsulaby eskorty. ⇒ obronca ukladu drenuje **2 rdzenie z sufitu 50** (**247**) na zdolnosc, ktorej z definicji nie uzyje. Obserwacja DANYCH — nie zmierzono jej wplywu na rozgrywke (przy dzisiejszym braku konsumenta sufit i tak sie nie domyka). | ⚪ **OTWARTY — ale wzorzec POTWIERDZONY NA ŻYWO (gate 246, gy 60→75):** dwa **ukończone** okręty emp_001 to dokładnie ten kształt — `engine_warp` bez `warp_tank`, `warpFuel.max = 0`, więc **słusznie nie liczą się** do `kadlubyZeSkokiem`, choć każdy zapłacił 2 rdzenie. Kosmetyka danych. Nie tkniete swiadomie: zmiana szablonu rusza balans katalogu Directora (`4755f19`), a przy **247** / STATUS QUO nie ma pilnosci. |
 | **252** | 🟠 **Panel zdrowia AI emituje TRZY ostrzeżenia na stałe i TRZY zaliczenia na stałe — jego licznik „naruszeń" niesie ZERO informacji.** ZMIERZONE (16 ziaren × 2 imperia = 192 sprawdzeń, `AiThresholds.evaluateThresholds`): **96/192**, i to **te same trzy** kody w KAŻDYM przebiegu i KAŻDYM wariancie bramki tier-3 — `AI_SLOW_FIRST_OUTPOST` (próg **2 gy**, zmierzone 5-7 gy), `AI_RESOURCE_ZERO` (woda na zerze 7-14 gy przy progu **1 gy**), `AI_ENERGY_DEFICIT` (ujemny bilans 13-33 gy przy progu **1 gy**). Pozostałe trzy (`FEW_COLONIES`, `POP_DECLINE`, `NO_MOTHER`) nie odpalają nigdy. ⚠ **NIE są „niezależne od wariantu z konstrukcji"** — każdy z nich mógłby w zasadzie drgnąć (podaż androida pod placówkę, konkurencja o FP z konsumpcją); są **NASYCONE KALIBRACJĄ**: progi leżą o rząd wielkości poniżej osiągalnych wartości. ⚠ **I były niemal jałowe JUŻ przy `d44af5e`** — 83/192 wobec 82/192 to delta **1 na 192**. Zestaw pochodzi z JEDNEGO commita `d5d38bb` (2026-08-05) i **nie był tknięty ani razu**, podczas gdy S1 (`aiUniformStaffing`), S4a (`aiLaborBudget`), 215 i `d44af5e` zmieniły pod nim świat. Trzy żywe ostrzeżenia opisują **prawdziwe** problemy AI (wolna pierwsza placówka, sucha woda, chroniczny deficyt energii) — ale jako **kontrola panelu** są martwe. | 🟠 **OTWARTY — dotyczy PRZYRZąDU, nie gry.** Do rozstrzygnięcia: przekalibrować progi do dzisiejszych wartości osiągalnych (i wtedy panel znowu coś znaczy) albo **wycofać trzy nasycone kody** z licznika naruszeń i zostawić je jako czyste obserwacje. ⚠ Do tego czasu **żaden plan nie ma prawa użyć „naruszeń X/192" jako kryterium** — `CHAIN_ENTRY_PLAN.md` §13 zapisuje pierwszy przypadek, w którym to zawiodło. Żywe weto tego planu: §10 (konkurencja o FP). |
+| **263** | 🟠 **`FleetSystem._maybeAutoDockOnReturn` TELEPORTUJE bezwarunkowo, a próg, który wg komentarza ma tego pilnować, NIE ISTNIEJE JAKO ODCZYT.** `:645-668` przepisuje `position.x/y` na współrzędne ciała, `position.state='orbiting'`, **`dockedAt = planetId`** i **`colonyId = planetId`** (re-homing CAŁEJ bazy statku), zeruje misję, ustawia `idle` i emituje `vessel:arrived` — **bez ANI JEDNEGO testu odległości ani układu**. Komentarz nad nim (`FMO:4820`) obiecuje co innego: *„FleetSystem listener … dock'uje gdy vessel dotrze w dystansie `RETURN_DOCK_THRESHOLD_AU` od planety"*. Stała **`RETURN_DOCK_THRESHOLD_AU = 0.5` jest zadeklarowana w `FleetSystem:30` i NIE MA ANI JEDNEGO ODCZYTU** w całym `src/` (grep). ⇒ obietnica komentarza jest martwa od napisania. W parze z **154**/**255** (marker `_pendingReturnDock` stawiają `FMO:4824` i `FleetCommandPanel:393` z celu wybranego BEZ terminu układu) daje to zmierzony stan „`systemId = sys_061` przy `dockedAt` = ciało z `sys_home`" — i ten stan **idzie do zapisu**. ⚠ **D-FDf zdjął ten marker ze ścieżki odwrotu doktrynalnego DOKŁADNIE z tego powodu** (`FleetSystem:584`), ale ścieżka „Powrót do bazy" go zachowała. | 🟠 **OTWARTY — filed w D-147d, świadomie NIE naprawiony w slice'ie 147** (Shape A dotyka wyłącznie admisji rozkazu, nie doku). Naturalny partner slice'u **255+154** (Shape C, producent-side): te same dwa call-site'y stawiają marker. ⚠ Do rozstrzygnięcia przy podpisie: czy `RETURN_DOCK_THRESHOLD_AU` **ożywić** (dok tylko w promieniu), czy **skasować** wraz z kłamiącym komentarzem — dziś stała jest trzecim rodzajem długu: obietnicą bez egzekucji. |
+| **264** | 🟠 **`MovementOrderSystem._issueEscort:650` nie ma terminu układu na eskortowanym.** Trzy bramki celu są (`escortee_not_found` / `_is_wreck` / `_self` / `_not_vessel`), ale **żadna nie pyta o układ** — w odróżnieniu od rodzeństwa: `_issuePursueOrIntercept:978` i `_issueEngage:1095` mają `isSameSystem(vessel, target)`, `_issueAttack:419` też. `_resolveTarget` szuka po **globalnym id** (`EntityManager` jest płaski), więc eskortowany z innego układu przechodzi, a `_tickEscortOrder:727` goni jego `x/y` odmierzone od CUDZEJ gwiazdy — klasa „globalne id ≠ położenie" (`131cc2e`, W3-4b). ⚠ **Osiągalność NIEZMIERZONA** i to jest część wpisu: `escort` jest bramkowany `FEATURES.poiSystem` (ON) i jego jedynym producentem w normalnej grze jest PPM na własnym statku (`RightClickMenuOptions:82`) — a menu buduje się z targetu pod kursorem, czyli ze statku RYSOWANEGO w oglądanym układzie. Trzeba zmierzyć, czy da się wybrać eskortowanego spoza układu (`FleetManagerOverlay`, Outliner, Tab). | 🟠 **OTWARTY — filed w D-147d.** Świadomie poza 147: Shape A to **jedna** bramka admisyjna nad wszystkimi typami; ta jest bramką **CELU** i należy do rodziny **138/142/151/152/153** (system-ślepe selektory). ⚠ Naprawa jest jednolinijkowa (`isSameSystem` jak u trzech braci), ale **pomiar osiągalności ma poprzedzić kod** — inaczej dokładamy bramkę bez wiedzy, czy zamyka cokolwiek. |
+| **265** | ⚪ **Po zamknięciu 147 gałąź `inWarp` / `warpMissionSurvived` w `_preemptCommit` jest NIEOSIĄGALNA.** `_preemptCommit` ma **jednego** wołającego (`issueOrder:266`, pod `if (res?.ok)`), a nowy termin admisyjny odrzuca każdy rozkaz przy `mission.phase === 'warp_transit'` ⇒ do `_preemptCommit` **nie da się już wejść** z `prev.mission.phase === 'warp_transit'`, więc `inWarp` jest zawsze `false`, a `warpMissionSurvived` — stałą `false`. To akurat ta subtelność, na którą D-VO3e poświęcił osobną rundę pomiaru (guard kluczowany na PRZEŻYCIU misji, nie na samym warpie). | ⚪ **OTWARTY, KOSMETYKA — kod ZOSTAJE.** Usunięcie to własna decyzja i własny pomiar (gałąź jest obroną w głąb, gdyby ktoś kiedyś dodał drugie wejście do `_dispatchByType` albo zdjął flagę `warpTransitOrderGate`). Zapisane, bo **żaden pin już jej nie dotyka**: `preempt_order_smoke` T6/T11 zostały świadomie przepięte na wejścia, które istnieją (nagłówek tamtego pliku to opisuje). ⚠ Kto ją kiedyś skasuje, niech skasuje razem z nią komentarz D-VO3e i nagłówkową notkę keepera — inaczej zostawi trzy odwołania do kodu, którego nie ma. |
+| **266** | 🟠 **„Docked" jest DOMYŚLNĄ ETYKIETĄ w DWÓCH niezależnych miejscach — panel raportuje FALLBACK jako FAKT, i żaden z tych miejsc nie czyta `dockedAt`.** ZMIERZONE WYKONANIEM (`buildRosterRows` + realna mapa widoku): stan `undefined` → **`statusKey = 'docked'`** (`FleetGroupPanelLogic:83`, `?? 'docked'`); stan NIEZNANY (np. `'exploring'`) → klucz nie trafia w mapę i widok robi `?? 'fleetGroup.statusDocked'` (`FleetGroupPanel:345`, `FleetCommandPanel:297`) → **„Docked"**; brak całego `position` → to samo. Trzy różne stany świata renderują się jako „zadokowany", a **`position.dockedAt` nie jest w tej ścieżce czytany ani razu**. ⚠ **TRIGGER: obserwacja z live-gate'u 147** — rejestr floty pokazywał `v_13` jako „docked at Mstow", gdy stan statku był `systemId: sys_020`, `dockedAt: null`, `_pendingReturnDock: null`, `_pendingDock: null`. ⚠ **GRANICA DOWODU, NAZWANA:** pinpoint KTÓREJ powierzchni dotyczył tamten odczyt wymaga `position.state` **z chwili renderu**, a zrzut go nie zawierał. Drugi kandydat na tamto konkretne zdanie to `FleetManagerOverlay._getLocationText:3819-3830` / wiersz `:3717-3722` — te keyują na `position.state` i nazwę biorą z `_resolveName(position.dockedAt)`, a `_resolveName(null)` zwraca **`'???'`** (`:171`), więc dla `dockedAt: null` napisałyby „Hangar: ???", nie „Hangar: Mstow" ⇒ albo `dockedAt` **nie był** null w chwili renderu (zrzut i render nie były jednoczesne), albo powierzchnią był jeden z panelo­wych fallbacków wyżej. **Defekt fallbacku jest jednak reprodukowalny NIEZALEŻNIE od tego rozstrzygnięcia.** | 🟠 **OTWARTY — AUDYT/POMIAR ONLY, zero kodu w slice'ie 147** (polecenie właściciela). Rodzina: **NIE** 255/263 (tam problem jest w RAMCE WSPÓŁRZĘDNYCH i idzie do zapisu) — to **własny defekt WARSTWY WYŚWIETLANIA**, klasa „reasonless failure reads as unfixed" / „aggregate readout is not an account": UI podaje wartość domyślną tam, gdzie nie ma pomiaru. Kształt naprawy (do podpisu): stan nierozpoznany ma się renderować jako **nieznany**, nie jako „docked"; `?? 'docked'` w logice i `?? 'fleetGroup.statusDocked'` w widoku to DWA osobne site'y i oba trzeba tknąć (nieutwardzony bliźniak). ⚠ Do gate'u tamtej naprawy: dorzucić zrzut `position.state` obok `dockedAt`, żeby pomiar nazwał powierzchnię. |
 
 ---
 
