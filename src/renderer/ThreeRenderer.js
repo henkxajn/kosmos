@@ -76,6 +76,27 @@ const STAR_CORE_SCALE = 3.0;
 // sprowadza ją do ×2.6, więc klasa gwiazdy jest CZYTELNA, a układ czerwonego karła
 // nadal da się grać (nie tonie w czerni). Strojenie na żywym obrazie.
 const STAR_LUMINOSITY_EXP = 0.22;
+// ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
+// ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
+//   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
+//   natychmiast, dla wszystkich planet, bez restartu i bez rebuildu materiału.
+// ⚠ WSZYSTKIE PIĘĆ PÓL JEST ŻYWYCH (reguła V-266: pole przed swoim czytelnikiem to
+//   zaślepka nazwana jak funkcja). Cztery idą uniformem, DRIFT_MULT mnoży krok czasu.
+// ⚠ WARTOŚCI SĄ DZISIEJSZYMI LITERAŁAMI CO DO BITU — ten commit jest liczbowo
+//   neutralny. Warstwa jest dziś praktycznie niewidoczna (V-271: chmury przegrywają
+//   test głębi na całej tarczy), więc pokrętła powstają ZANIM będzie co stroić —
+//   inaczej gate nie miałby czym odpowiedzieć na pytanie „czy nie za głośno".
+const LIVE_CLOUDS = {
+  ALPHA:       0.88,  // mistrz alfy warstwy (było zaszyte 0.88)
+  COVERAGE_LO: 0.48,  // dolny próg smoothstep maski — NIŻEJ = więcej chmur
+  COVERAGE_HI: 0.70,  // górny próg maski
+  NIGHT_FLOOR: 0.05,  // rezydualna alfa po stronie nocnej (reszta skaluje się sama)
+  // ⚠ DRIFT_MULT NIE jest uniformem i to jest cała jego poprawność. uTime jest
+  //   AKUMULOWANE (`+= dt`), a shader liczy dryf jako `t * 0.06`, więc mnożnik wpisany
+  //   do SHADERA byłby SKOKIEM POŁOŻENIA, nie zmianą prędkości — dokładnie V-270
+  //   w gazowcu. Mnożymy KROK po stronie JS (D-V2u), więc pokrętło zmienia tempo.
+  DRIFT_MULT:  1.00,
+};
 // Ambient sceny (FEATURES.starClassLighting): baza = wartość z _buildLights, oraz
 // chłodniejszy wariant dla gwiazd M/K. Czerwony karzeł oświetla scenę ciepło i słabo,
 // więc lekko chłodniejsze wypełnienie utrzymuje kontrast barwny nocnej strony zamiast
@@ -269,6 +290,13 @@ export class ThreeRenderer {
     //   przez ten sam obiekt. Kopia sprawiłaby, że konsola zmienia pole, którego nikt nie
     //   czyta (tak zachowują się cztery pola gasTuning wpisywane raz przy budowie materiału).
     this.atmoTuning = AtmosphereShader.LIVE_ATMO;
+
+    // V4 / D1 (V-278) — ten sam kontrakt dla warstwy chmur:
+    //   KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
+    // ⚠ ALIAS, nie kopia i nie spread — _tickClouds czyta LIVE_CLOUDS przez ten sam
+    //   obiekt (lekcja sunTuning: kopia sprawia, że konsola zmienia pole, którego
+    //   nikt nie czyta).
+    this.cloudTuning = LIVE_CLOUDS;
     this._sunCoronaU     = null;  // uniformy ŻYWEJ korony (null przy fladze OFF)
     this._sunStreamerPhase = 0;   // [rad] AKUMULOWANA faza dryfu smug (D-V2u)
     this._sunBreathPhase   = 0;   // [rad] AKUMULOWANA faza oddechu korony
@@ -2124,6 +2152,9 @@ export class ThreeRenderer {
     const cloudFrag = `
       uniform float uTime;
       uniform vec3  uLightDir;
+      uniform float uCloudAlpha;
+      uniform vec2  uCloudCoverage;
+      uniform float uCloudNightFloor;
       varying vec3  vSpherePos;
       varying vec3  vNormal;
       varying vec3  vViewDir;
@@ -2162,7 +2193,7 @@ export class ThreeRenderer {
         n=n*0.5+0.5;
         float evolve=sphereNoise(vSpherePos+vec3(t*0.04,-t*0.03,t*0.02),2.0)*0.12;
         n+=evolve;
-        float cloudMask=smoothstep(0.48,0.70,n);
+        float cloudMask=smoothstep(uCloudCoverage.x,uCloudCoverage.y,n);
         if(cloudMask<0.01){discard;}
         vec3 toStar=normalize(uLightDir-vWorldPos);
         float rawDiff=dot(vWorldNormal,toStar);
@@ -2172,7 +2203,7 @@ export class ThreeRenderer {
         float nightFade=smoothstep(-0.15,0.2,rawDiff);
         float fresnel=1.0-max(dot(vNormal,vViewDir),0.0);
         float edgeFade=1.0-pow(fresnel,2.5)*0.5;
-        float alpha=cloudMask*0.88*edgeFade*(0.05+0.95*nightFade);
+        float alpha=cloudMask*uCloudAlpha*edgeFade*(uCloudNightFloor+(1.0-uCloudNightFloor)*nightFade);
         gl_FragColor=vec4(cloudColor,alpha);
       }
     `;
@@ -2181,6 +2212,11 @@ export class ThreeRenderer {
       uniforms: {
         uTime:     { value: 0.0 },
         uLightDir: { value: new THREE.Vector3(0, 0, 0) },
+        // V-278 — pokrętła gate'u. Wartości startowe = dzisiejsze literały; _tickClouds
+        // przepisuje je z LIVE_CLOUDS co klatkę, więc konsola działa bez rebuildu.
+        uCloudAlpha:      { value: LIVE_CLOUDS.ALPHA },
+        uCloudCoverage:   { value: new THREE.Vector2(LIVE_CLOUDS.COVERAGE_LO, LIVE_CLOUDS.COVERAGE_HI) },
+        uCloudNightFloor: { value: LIVE_CLOUDS.NIGHT_FLOOR },
       },
       // depthTest:true — chmury (sfera 1.025× promienia) są PRZED powierzchnią, więc
       // dalej rysują się nad planetą, ale są prawidłowo ZASŁANIANE przez ciała bliżej
@@ -3944,7 +3980,15 @@ export class ThreeRenderer {
       if (gasU) gasU.uGasTime.value += dt;
       for (const child of entry.group.children) {
         if (child.userData.isCloud && child.material?.uniforms?.uTime) {
-          child.material.uniforms.uTime.value += dt;
+          const cu = child.material.uniforms;
+          // ⚠ Mnożnik tempa działa na KROKU, nie w shaderze (D-V2u / anti-V-270):
+          //   uTime jest akumulowane, więc mnożnik po stronie GLSL teleportowałby wzór.
+          cu.uTime.value += dt * LIVE_CLOUDS.DRIFT_MULT;
+          // Pozostałe cztery pokrętła przepisywane BEZWARUNKOWO co klatkę — inaczej
+          // konsola zmieniałaby pole, którego nikt nie czyta (lekcja PROM_GAIN/BAKED).
+          if (cu.uCloudAlpha)      cu.uCloudAlpha.value = LIVE_CLOUDS.ALPHA;
+          if (cu.uCloudCoverage)   cu.uCloudCoverage.value.set(LIVE_CLOUDS.COVERAGE_LO, LIVE_CLOUDS.COVERAGE_HI);
+          if (cu.uCloudNightFloor) cu.uCloudNightFloor.value = LIVE_CLOUDS.NIGHT_FLOOR;
         }
       }
     }
