@@ -653,6 +653,10 @@ export default {
   'vessel.reasonVesselImmobilized': 'Vessel immobilized — fleet upkeep in arrears (fund the colony)',
   // W3-4b — target in another system: movement orders are intra-system, the jump is OrderService's
   'vessel.reasonTargetOtherSystem': 'Target is in another system — warp jump first',
+  // Finding 147 (D-147b) — a vessel IN TRANSIT takes no movement order. ⚠ We do NOT reuse
+  // `reasonTargetOtherSystem`: "warp jump first" would lie about a ship that is already
+  // jumping (Finding-141 class — a reason that does not describe the state of the world).
+  'vessel.reasonVesselInWarpTransit': 'Vessel is in interstellar transit — wait for arrival',
   // W3-4 (D6) — a hull in reserve takes no movement orders (MovementOrderSystem.issueOrder)
   'vessel.reasonVesselInReserve': 'Hull in reserve — crew it first (Deploy)',
   // Attack-order (engage/pursue) rejection reasons — shown per skipped vessel

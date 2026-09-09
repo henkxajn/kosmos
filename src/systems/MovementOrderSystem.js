@@ -209,6 +209,44 @@ export class MovementOrderSystem {
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
 
+    // ── D-147a (Finding 147) — STATEK W SKOKU MIĘDZYGWIEZDNYM NIE MA „TUTAJ" ──────────────
+    // Rozkazy ruchu są z konstrukcji WEWNĄTRZUKŁADOWE: liczą trasę we współrzędnych
+    // mierzonych od gwiazdy, która w każdym układzie stoi w (0,0). Statek w tranzycie jest
+    // FIZYCZNIE POMIĘDZY układami, a jego `x/y` to współrzędne SPRZED skoku — więc każdy
+    // rozkaz punktowy jest tam bezsensowny, i to nie „prawie", a z konstrukcji: po
+    // Findingu 138 (D-SS2) `_findBodyNearPoint` zwraca dla takiego statku PUSTY zbiór, czyli
+    // rozkaz nigdy nie dostanie ciała i nigdy nie dojdzie do bramki `if (bodyId)` niżej.
+    //
+    // ZMIERZONE PRZED POPRAWKĄ (statek `sys_061` → `sys_099`, goły punkt z PPM):
+    //   `{ok:true}` · misja `interstellar_jump` → `move_to_point` (`toSystemId` PRZEPADA) ·
+    //   `fuel` 9999 → 9996.85 · `warpFuel` 0.5 → 0.5, bo `warp_cores` pobiera Z GÓRY
+    //   `dispatchInterstellar` (`VesselManager:895`) i NIE MA ścieżki zwrotu — zapłacony skok
+    //   jest FORFEITED, nie „wydany przez ten rozkaz" · `_reconcileSystemId` (biegnie CO TIK,
+    //   `VesselManager:2311`) stempluje `sys_home`, bo `_resolveSystemId` traci gałąź
+    //   `interstellar_jump` i wpada w `v.systemId ?? 'sys_home'`, a `??` łapie `null`.
+    //   Stempel jest SERIALIZOWANY (`VesselManager:1438`), więc mis-homed duch idzie do zapisu,
+    //   a `_migrateV91toV92` go NIE naprawi (leczy tylko `phase === 'warp_transit'`).
+    //
+    // ⚠ DLACZEGO TU, a nie w `_issueMoveToPoint`: `issueOrder` jest JEDYNYM wejściem do
+    //   `_dispatchByType` (`:263` — jedyny wołający), więc jedna linia tutaj obejmuje WSZYSTKIE
+    //   dziesięć typów rozkazu, `patrol` włącznie (ten ma własny order i NIE przechodzi przez
+    //   `_issueMoveToPoint`, więc bramka postawiona niżej byłaby nieutwardzonym bliźniakiem).
+    // ⚠ DLACZEGO NAD `isRetreat`: ucieczka z bitwy przebija utrzymanie i rezerwę (D-FDk), ale
+    //   ta bramka nie ma prawa jej odebrać ANI dostać wyjątku. Nie odbiera, bo statek w warpie
+    //   nie może być w starciu: `DeepSpaceCombatSystem` bramkuje `isSameSystemStrict`, która dla
+    //   `systemId === null` jest fail-CLOSED, a oba producenty odwrotu biegną SYNCHRONICZNIE na
+    //   `battle:resolved` — nie ma chwili, w której statek wchodzi w skok „pomiędzy".
+    // ⚠ NIE `isSameSystem` — fail-OPEN dla `null` (ZMIERZONE: `true`), więc przepuściłaby
+    //   dokładnie ten przypadek. NIE `isSameSystemStrict` — zabroniona dla bramek rozkazów
+    //   własnym docblockiem (`SystemScope.js`).
+    // Kill-switch: `FEATURES.warpTransitOrderGate` (brak klucza = OFF ⇒ dziura wraca).
+    if (GAME_CONFIG.FEATURES?.warpTransitOrderGate) {
+      const m = vessel.mission;
+      if (m?.type === 'interstellar_jump' && m?.phase === 'warp_transit') {
+        return { ok: false, reason: 'vessel_in_warp_transit' };
+      }
+    }
+
     // ── D-FDk (plan `RETREAT_TARGET_PLAN.md`) — UCIECZKA Z BITWY PRZEBIJA OBIE BRAMKI NIŻEJ ──
     // Prawo do przeżycia nie jest nagrodą za opłacone utrzymanie ani za obsadzenie załogą.
     // ⚠ To NIE jest furtka „na wszelki wypadek": zmierzone na żywym gate'cie, że

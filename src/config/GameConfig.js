@@ -424,6 +424,25 @@ export const GAME_CONFIG = {
     //   Default ON — caly sens tego arca to ocena w praktyce (wzor transportOrders).
     unifiedVesselOrders:  true,
 
+    // ── Finding 147 (D-147a/c) — STATEK W SKOKU NIE PRZYJMUJE ROZKAZU RUCHU ──
+    //   ON  = `MovementOrderSystem.issueOrder` odmawia KAŻDEGO rozkazu ruchu statkowi
+    //         w tranzycie międzygwiezdnym, powodem `vessel_in_warp_transit`.
+    //   OFF = zachowanie sprzed slice'u BIT W BIT, czyli DZIURA: „Leć tutaj" na statku
+    //         w skoku zwraca `{ok:true}`, podmienia misję `interstellar_jump` na
+    //         `move_to_point`, spala paliwo in-system, przepada zapłacony wcześniej
+    //         `warp_cores`, a `_reconcileSystemId` stempluje statek `sys_home` przy
+    //         współrzędnych układu, z którego startował (MIS-HOMED — klasa zamknięta
+    //         przez Slice A, `f072da0`). To JEST ścieżka rollbacku, świadomie.
+    //   ⚠ Brak klucza = OFF (idiom liveGasShaders / liveSunShader).
+    //   ⚠ Predykat celowo NIE jest `isSameSystem`: ta jest fail-OPEN dla `systemId === null`
+    //     (ZMIERZONE: `isSameSystem({systemId:null}, {systemId:'sys_home'}) === true`), więc
+    //     przepuściłaby dokładnie ten przypadek. `isSameSystemStrict` jest zabroniona dla
+    //     bramek rozkazów przez własny docblock (`SystemScope.js`). Źródłem prawdy o tranzycie
+    //     jest para `mission.type === 'interstellar_jump' && mission.phase === 'warp_transit'`
+    //     (ta sama, którą czyta `VesselManager._resolveSystemId`); `systemId === null` jest
+    //     inwariantem POTWIERDZAJĄCYM, nie testem — i tak go pinuje keeper.
+    warpTransitOrderGate: true,
+
     // ── VISUALS 1.0 (slice 1) — natężenie światła gwiazdy zależne od KLASY ──
     //   ON  = intensywność PointLighta = 2.8 × luminosity^0.22 (M≈1.4, K≈2.3,
     //         G=2.8, F≈3.6). Do tej pory renderer NIE czytał `luminosity` w ogóle,

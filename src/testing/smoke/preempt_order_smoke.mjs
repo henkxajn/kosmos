@@ -24,6 +24,20 @@
 //   • **D-VO3d (T8)** — `OrderService.issueReturn` WYŁĄCZONY z preempcji: `_preempt` skasowałby
 //     `pendingOrder` PRZED snapshotem `ReturnJump.js:58` i **cofnął Finding 125**.
 //
+// ⚠ DWA PINY PRZEPISANE ŚWIADOMIE PO ZAMKNIĘCIU FINDINGU 147 (D-147a) — T6 i T11.
+//   `MovementOrderSystem.issueOrder` ma od tej pory ADMISYJNY termin tranzytu warp: statek
+//   w skoku nie przyjmuje ŻADNEGO rozkazu ruchu. W obu tych pinach wejściem był właśnie statek
+//   w skoku, więc ich PRZESŁANKA była Findingiem 147:
+//     • T6 zakładał, że rozkaz zostaje PRZYJĘTY, a misji broni gałąź `inWarp` w `_preemptCommit`.
+//       Dziś broni jej ADMISJA — pin czyta więc POWÓD odmowy, inaczej byłby jałowy.
+//     • T11 zakładał, że `moveToPoint` ZABIJA misję warp i osierocą trasę. Dziś nie zabija, więc
+//       nie ma czego sprzątać. Inwariant D-VO3e został pinowany na wejściu, które NADAL istnieje
+//       i które sam D-VO3e wymienia: statek SPOZA warpu z żywą trasą wielo-przeskokową.
+//   ⚠ KONSEKWENCJA STRUKTURALNA, ZGŁOSZONA OSOBNO: gałąź `inWarp` / `warpMissionSurvived`
+//   w `_preemptCommit` jest od teraz NIEOSIĄGALNA. Kod ZOSTAJE (usunięcie = własna decyzja
+//   i własny pomiar); tu jest tylko zapisane, że żaden pin już jej nie dotyka.
+//   Keeper samego 147: `warp_transit_order_gate_smoke.mjs`.
+//
 // ⚠ T2 JEST SEDNEM GATE B I POWSTAŁ, BO SWEEP TEGO NIE MIERZYŁ. `w3_attack_dispatch` przechodzi
 //    36/36, ale przy **`liveOrder = 0`** — w całym sweepie preempcja nad ŻYWYM rozkazem odpala
 //    dokładnie raz i NIE na statku AI. Tamten keeper dowodzi więc „preempcja nie psuje normalnej
@@ -261,22 +275,32 @@ header('T6 — GUARD WARP (D-VO3b): statek w skoku NIE traci misji międzygwiezd
   v.mission = { type: 'interstellar_jump', phase: 'warp_transit', toSystemId: 'sys_far',
     targetId: null, arrivalYear: 5 };
 
-  // ⚠ ZAKRES PINU JEST WĄSKI I TAKI MA BYĆ: mierzy, że **`_preempt`** nie tyka misji w skoku.
-  //   Dlatego `pursue`, a NIE `moveToPoint`: gałąź `_issueMoveToPoint` PODMIENIA `vessel.mission`
-  //   sama z siebie, niezależnie od preempcji — to zachowanie PRE-EXISTING, starsze od VO-3.
-  //   Pierwsza wersja tego pinu używała `moveToPoint` i padała, mierząc CUDZY defekt zamiast
-  //   mojego guardu (złapane po implementacji). Ten defekt jest realny i został ZGŁOSZONY
-  //   osobno — patrz Finding 147 w `VESSEL_ORDERS_PLAN.md`; naprawa należy do P4/OrderService,
-  //   bo to bramka podróży międzygwiezdnej, nie preempcja.
-  s.mos.issueOrder(v.id, { type: ORDER_TYPES.pursue, targetEntityId: prey.id });
+  // ⚠ MECHANIZM SIĘ ZMIENIŁ — PIN PRZEPISANY ŚWIADOMIE (Finding 147, D-147a).
+  //   Do zamknięcia 147 ten pin mierzył guard warp W `_preempt`: rozkaz był PRZYJMOWANY, a misji
+  //   skoku broniła gałąź `inWarp` w `_preemptCommit`. Dlatego stał tu `pursue`, a nie
+  //   `moveToPoint` — gałąź `_issueMoveToPoint` podmieniała `vessel.mission` niezależnie od
+  //   preempcji (własny komentarz tego pinu wskazywał to jako Finding 147 i odsyłał naprawę
+  //   do `OrderService`/P4).
+  //   TERAZ `issueOrder` ODMAWIA KAŻDEGO rozkazu ruchu statkowi w tranzycie, więc `_preempt`
+  //   dla takiego statku NIE BIEGNIE W OGÓLE. Misja skoku przeżywa nadal — ale przez ADMISJĘ,
+  //   nie przez guard preempcji.
+  //   ⚠ Bez asercji na POWÓD ten pin byłby od tej pory JAŁOWY: „misja przeżyła" jest prawdą
+  //   także wtedy, gdy odmowa przyszła z dowolnego innego tytułu. Dlatego czytamy zwrotkę.
+  //   ⚠ KONSEKWENCJA STRUKTURALNA, ZGŁOSZONA OSOBNO: gałąź `inWarp` / `warpMissionSurvived`
+  //   w `_preemptCommit` staje się NIEOSIĄGALNA (nie da się już wejść do `_preemptCommit`
+  //   z `prev.mission.phase === 'warp_transit'`). Kod ZOSTAJE — usunięcie go to własna decyzja
+  //   i własny pomiar. Nowy keeper: `warp_transit_order_gate_smoke.mjs`.
+  const r6 = s.mos.issueOrder(v.id, { type: ORDER_TYPES.pursue, targetEntityId: prey.id });
 
+  assert(r6?.ok === false && r6?.reason === 'vessel_in_warp_transit',
+    `T6 PIN (D-147a): rozkaz dla statku w skoku ODRZUCONY i to powodem WARP ` +
+    `(ok=${r6?.ok}, reason=${r6?.reason}) — bez tej asercji dwie następne są jałowe`);
   assert(v.mission?.phase === 'warp_transit' && v.mission?.toSystemId === 'sys_far',
-    `T6 PIN (D-VO3b): \`_preempt\` NIE tknął misji skoku (phase=${v.mission?.phase}, ` +
+    `T6 PIN (D-VO3b, inwariant ZACHOWANY): misja skoku nietknięta (phase=${v.mission?.phase}, ` +
     `toSystemId=${v.mission?.toSystemId}) — \`_reconcileSystemId\` i cała Slice A stoją na ` +
     '`mission.toSystemId`, więc wyzerowanie jej w skoku rozbiłoby podróż międzygwiezdną');
   assert(v._suspendedMission === undefined,
-    'T6 KONTROLA PINU: guard warp NIE wyłącza reszty preempcji — snapshot i tak nie powstał, ' +
-    'czyli gałąź warp jest wąska, a nie „nic nie rób"');
+    'T6 KONTROLA PINU: odmowa nie zostawia po sobie snapshotu misji (preempcja nie zaczęła się)');
 }
 
 header('T7 — PUNKT 2 REALNY (D-VO3c): pościg NIE odtwarza snapshotu w tej samej ramce');
@@ -351,34 +375,42 @@ header('T10 — KILL-SWITCH: przy OFF zachowanie wraca do stanu sprzed VO-3');
 
 header('T11 — D-VO3e: przekierowanie NIE zostawia osieroconej trasy warp');
 {
+  // ⚠ FIXTURE PRZEPISANY ŚWIADOMIE (Finding 147, D-147a). Stał tu statek W SKOKU, bo to
+  //   `moveToPoint` na takim statku ZABIJAŁO misję warp i robiło z trasy sierotę. Po zamknięciu
+  //   147 taki rozkaz jest ODRZUCANY, więc tamten wejściowy stan nie produkuje już osieroconej
+  //   trasy — nie ma czego sprzątać, a pin mierzyłby ciszę.
+  //   INWARIANT D-VO3e ZOSTAJE PINOWANY, tylko na wejściu, które NADAL ISTNIEJE i które sam
+  //   plan D-VO3e wymienia wprost: „⚠ Obejmuje TAKŻE statek SPOZA warpu z żywą trasą
+  //   wielo-przeskokową (zmierzone: `pendingOrder` był czyszczony, a `warpRoute` zostawał)".
   const s = scene();
   const v = ship(s.vMgr);
-  // Statek w SKOKU z zywa trasa wielo-przeskokowa i zakolejkowana dostawa composite.
-  v.mission = { type: 'interstellar_jump', phase: 'warp_transit', toSystemId: 'sys_far',
-    targetId: null, arrivalYear: 5 };
+  // Statek SPOZA warpu (misja skoku już się domknęła), ale z ZYWA trasa wielo-przeskokowa
+  // i zakolejkowana dostawa composite — dokladnie druga polowa pomiaru D-VO3e.
   v.warpRoute = { hops: ['sys_home', 'sys_mid', 'sys_far'], legIndex: 0,
     finalSystemId: 'sys_far', totalFuelPlanned: 4, startedYear: 0 };
   v.pendingOrder = { kind: 'transport', targetId: 'p_tgt', targetSystemId: 'sys_far' };
-  assert(!!v.warpRoute && !!v.pendingOrder,
-    'T11 PRZESLANKA: statek ma ZYWA trase warp i zakolejkowana dostawe composite');
+  assert(!!v.warpRoute && !!v.pendingOrder && v.mission == null,
+    'T11 PRZESLANKA: statek SPOZA skoku ma ZYWA trase warp i zakolejkowana dostawe composite');
 
-  // `moveToPoint` PODMIENIA misje — czyli misja warp ginie i trasa staje sie sierota.
-  s.mos.issueOrder(v.id, MOVE(-4));
+  const r11 = s.mos.issueOrder(v.id, MOVE(-4));
+  assert(r11?.ok === true,
+    `T11 PRZESLANKA 2: rozkaz PRZYJETY (ok=${r11?.ok}, reason=${r11?.reason ?? '—'}) — inaczej `
+    + 'ponizsze asercje przechodzilyby przez odmowe, nie przez sprzatanie');
 
   assert(v.warpRoute == null,
     `T11 PIN (D-VO3e): trasa warp PRZERWANA (warpRoute=${JSON.stringify(v.warpRoute)}) — bez tego `
-    + 'wisiala BEZTERMINOWO (ZMIERZONE: 400 lat gry, ZERO zdarzen warp), bo detekcja przylotu stoi '
-    + 'na mission.type === "interstellar_jump", a galaz typu wlasnie te misje nadpisala. '
+    + 'wisiala BEZTERMINOWO (ZMIERZONE: 400 lat gry, ZERO zdarzen warp). '
     + 'UWAGA: OrderService._maybeDeliver ma `if (v.warpRoute) return`, wiec sierota BLOKOWALA '
     + 'dostawy composite do konca partii — takze po wczytaniu zapisu (oba pola sa serializowane)');
   assert(v.pendingOrder == null,
-    `T11 PIN (D-VO3e): pendingOrder tez wyczyszczony (${JSON.stringify(v.pendingOrder)}) — `
-    + 'pierwotny guard inWarp pilnowal misji, ktorej galaz typu i tak juz nie zostawila, '
-    + 'a w zamian zostawial te dostawe zywa. To byla regresja wprowadzona przez sam ten commit');
+    `T11 PIN (D-VO3e): pendingOrder tez wyczyszczony (${JSON.stringify(v.pendingOrder)})`);
 }
 {
-  // KONTROLA PINU — misja warp, ktora REALNIE PRZEZYLA rozkaz (`pursue` jej nie podmienia):
-  // tu trasa i dostawa MUSZA zostac nietkniete, inaczej D-VO3e psulby podroz miedzygwiezdna.
+  // KONTROLA PINU — statek W SKOKU: po 147 rozkaz ODMAWIA, wiec trasa i dostawa maja zostac
+  // NIETKNIETE. To jest lustro pinu wyzej: sprzatanie ma odpalac WYLACZNIE tam, gdzie cos
+  // realnie osierocilo, a nie „przy okazji" na kazdym statku z trasa.
+  // ⚠ Powod odmowy jest czescia asercji — bez niego kontrola przechodzi takze wtedy, gdy rozkaz
+  //   odpadl z innego tytulu i nie mierzy juz nic (ta sama poprawka co w T6).
   const s = scene();
   const v = ship(s.vMgr);
   const prey = ship(s.vMgr, { x: 3 * AU, y: 3 * AU });
@@ -389,10 +421,12 @@ header('T11 — D-VO3e: przekierowanie NIE zostawia osieroconej trasy warp');
     totalFuelPlanned: 2, startedYear: 0 };
   v.pendingOrder = { kind: 'transport', targetId: 'p_tgt', targetSystemId: 'sys_far' };
 
-  s.mos.issueOrder(v.id, { type: ORDER_TYPES.pursue, targetEntityId: prey.id });
+  const rc = s.mos.issueOrder(v.id, { type: ORDER_TYPES.pursue, targetEntityId: prey.id });
+  assert(rc?.ok === false && rc?.reason === 'vessel_in_warp_transit',
+    `T11 KONTROLA PINU (a): rozkaz dla statku w skoku ODRZUCONY powodem warp (reason=${rc?.reason})`);
   assert(v.mission?.phase === 'warp_transit' && v.warpRoute != null && v.pendingOrder != null,
-    'T11 KONTROLA PINU: gdy misja warp PRZEZYWA rozkaz (pursue jej nie podmienia), trasa '
-    + 'i dostawa zostaja NIETKNIETE — guard kluczuje sie na PRZEZYCIU misji, nie na samym warpie');
+    'T11 KONTROLA PINU (b): odmowa NIE sprzata trasy ani dostawy — sprzatanie odpala wylacznie '
+    + 'na sciezce PRZYJETEGO rozkazu, ktory cos realnie osierocil');
 }
 
 header('T12 — pula logistyczna: przerwana misja kuriera ZWALNIA przydzial zlecenia');

@@ -172,7 +172,16 @@ ok(warpCalls.length === 1 && warpCalls[0].sys === 'sys_home',
 header('A6 PIN ŹRÓDŁOWY — issueOrder nie powołuje się na przycisk powrotu');
 const mosSrc = readFileSync(new URL('../../systems/MovementOrderSystem.js', import.meta.url), 'utf8');
 const iStart = mosSrc.indexOf('issueOrder(vesselId, spec');
-const win = mosSrc.slice(iStart, iStart + 3000);
+// ⚠ OKNO ANCHOROWANE STRUKTURALNIE, NIE ROZMIAREM. Stało tu `iStart + 3000` i kontrola pinu
+//   niżej PADŁA, gdy Finding 147 dołożył do `issueOrder` termin tranzytu warp z opisem —
+//   `vessel_in_reserve` wypadło za 3000 znaków, czyli pin nad nią stał się częściowo jałowy.
+//   Kontrola zrobiła dokładnie to, do czego jest. Teraz okno to CAŁE ciało `issueOrder`:
+//   od jego nagłówka do definicji `_dispatchByType`, która stoi bezpośrednio za nim.
+//   Ta sama lekcja co `fleet_clock_band` T4 (sztywne proxy → inwariant strukturalny).
+const iEnd = mosSrc.indexOf('_dispatchByType(vessel, spec) {', iStart);
+ok(iStart >= 0 && iEnd > iStart,
+  `KONTROLA PINU: obie kotwice okna znalezione (iStart=${iStart}, iEnd=${iEnd}) — bez tego okno byłoby puste`);
+const win = mosSrc.slice(iStart, iEnd);
 ok(!/Powrót do bazy idzie przez/.test(win),
   'zdanie „Powrót do bazy idzie przez VesselManager.startReturn … pozostaje dozwolony" USUNIĘTE ' +
   '(po (a\') nie ma już takiego przycisku — komentarz byłby kłamstwem)');
