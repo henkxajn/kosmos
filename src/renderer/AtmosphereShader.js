@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { atmoStrengthFor } from './AtmosphereLogic.js';
+import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
 
 // ── Pokrętła ─────────────────────────────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.atmoTuning.STRENGTH = 0.1
@@ -216,6 +217,15 @@ const ATMO_FRAG_LIVE = /* glsl */ `
           }
         `;
 
+// ── Warianty z logarytmiczną głębią (V-267) ─────────────────────────────────
+// ⚠ DERYWACJE, nie kopie — ATMO_VERT i ATMO_FRAG zostają nietknięte, więc obie złote
+//   sumy SHA-256 przechodzą przez ten arc bez zmiany. ATMO_VERT jest WSPÓLNY dla obu
+//   ścieżek, więc jedna derywacja obsługuje OFF i ŻYWĄ.
+// ⚠ Liczone RAZ, na starcie modułu — rzut z LogDepthChunks jest wtedy deterministyczny.
+const ATMO_VERT_LD      = withLogDepthVertex(ATMO_VERT);
+const ATMO_FRAG_LD      = withLogDepthFragment(ATMO_FRAG);
+const ATMO_FRAG_LIVE_LD = withLogDepthFragment(ATMO_FRAG_LIVE);
+
 // ── Materiał powłoki ─────────────────────────────────────────────────────────
 // ⚠ Uniformy są DOKŁADNIE te trzy, które powłoka ma dzisiaj. uTermWidth / uTwilightMix /
 //   uNightFloor dojdą w A1 razem z ATMO_FRAG_LIVE, który jako jedyny je deklaruje.
@@ -225,15 +235,15 @@ const ATMO_FRAG_LIVE = /* glsl */ `
 //   i karmi mieszankę koloru, z której ścieżka OFF nadal korzysta.
 //   Wartość startowa (0,0,0) nie jest zepsuta: daje kierunek do początku świata, czyli
 //   do gwiazdy, dopóki nie przyjdzie pierwszy physics:updated.
-function createAtmosphereMaterial(planet) {
+function createAtmosphereMaterial(planet, logDepth = false) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uColor:    { value: new THREE.Color(planet.visual?.glowColor ?? ATMO_FALLBACK_COLOR) },
       uLightDir: { value: new THREE.Vector3(0, 0, 0) },
       uStrength: { value: atmoStrengthFor(planet.atmosphere, ATMO_OFF_KNOBS) },
     },
-    vertexShader:   ATMO_VERT,
-    fragmentShader: ATMO_FRAG,
+    vertexShader:   logDepth ? ATMO_VERT_LD : ATMO_VERT,
+    fragmentShader: logDepth ? ATMO_FRAG_LD : ATMO_FRAG,
     side:        THREE.BackSide,
     transparent: true,
     blending:    THREE.AdditiveBlending,
@@ -247,7 +257,7 @@ function createAtmosphereMaterial(planet) {
 //   (a przez niego i18n), a przy fladze OFF materiał żywy NIE POWSTAJE W OGÓLE.
 // ⚠ Cztery nowe uniformy istnieją WYŁĄCZNIE tutaj. Materiał ścieżki OFF ma dalej
 //   dokładnie trzy — to jest sprawdzane sondą kompilacji i keeperem.
-function createLiveAtmosphereMaterial(planet) {
+function createLiveAtmosphereMaterial(planet, logDepth = false) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uColor:       { value: new THREE.Color(planet.visual?.glowColor ?? ATMO_FALLBACK_COLOR) },
@@ -258,8 +268,8 @@ function createLiveAtmosphereMaterial(planet) {
       uNightFloor:  { value: LIVE_ATMO.NIGHT_FLOOR },
       uDiscFade:    { value: 1.0 },
     },
-    vertexShader:   ATMO_VERT,
-    fragmentShader: ATMO_FRAG_LIVE,
+    vertexShader:   logDepth ? ATMO_VERT_LD : ATMO_VERT,
+    fragmentShader: logDepth ? ATMO_FRAG_LIVE_LD : ATMO_FRAG_LIVE,
     side:        THREE.BackSide,
     transparent: true,
     blending:    THREE.AdditiveBlending,

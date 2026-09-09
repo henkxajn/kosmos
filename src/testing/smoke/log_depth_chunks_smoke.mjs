@@ -32,9 +32,16 @@
 //       z WCZESNYM `return` (kształt żywej korony) — wstawka MUSI stać przed nim.
 //   T4  Wierzchołek: wstawka PO ostatnim przypisaniu gl_Position, a PARS przed main.
 //   T5  Podwójna transformacja RZUCA; brak kotwicy RZUCA. Cisza jest tu gorsza od błędu.
-//   T6  D0 nie ma call-site'ów w src/ (ma paść w D2) + bliźniaki BEZ log-depth
-//       (PlanetGlobeRenderer / StratcomGalaxyRenderer / GlbSnapshotRenderer) nie tkną
-//       tego modułu. To jest ODWRÓCENIE reguły „utwardź bliźniaka" i dlatego ma pin.
+//   T6  ⚠ ODWROCONY W D2 WOBEC D0. W D0 pinowal ZERO call-site'ow (rusztowanie mialo
+//       byc jalowe); w D2 jego czytelnicy istnieja, wiec pinuje OBECNOSC wpiecia we
+//       WSZYSTKICH trzech modulach sceny ukladu. Powod zapisany, bo pin, ktory znika
+//       bez sladu, wyglada potem jak zgubiony (wzor A0->A1 w keeperze atmosfery).
+//       Niezmienne zostaja blizniaki BEZ log-depth (PlanetGlobeRenderer /
+//       StratcomGalaxyRenderer / GlbSnapshotRenderer): ODWROCENIE reguly „utwardz
+//       blizniaka" — tam chunki dalyby gl_FragDepth = 0 dla KAZDEGO fragmentu.
+//   T7  WPIECIE (D2): flaga czytana FUNKCJA, obie sciezki KAZDEJ fabryki, derywacje
+//       liczone RAZ na starcie modulu, mglawica przez depthTest zamiast chunkow,
+//       zlote sumy sciezki OFF nietkniete, komentarz przy `return` korony poprawiony.
 
 import fs from 'fs';
 import {
@@ -53,6 +60,12 @@ const threeSrc  = read('../../lib/three.module.js');
 const sunSrc    = read('../../renderer/SunShader.js');
 const atmoSrc   = read('../../renderer/AtmosphereShader.js');
 const chunkSrc  = read('../../renderer/LogDepthChunks.js');
+const rendSrc   = read('../../renderer/ThreeRenderer.js');
+const cfgSrc    = read('../../config/GameConfig.js');
+const strip     = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+const rendCode  = strip(rendSrc);
+const sunCode   = strip(sunSrc);
+const atmoCode  = strip(atmoSrc);
 
 // Literał `var <name> = "…";` z three.module.js — jedna linia, standardowe escape'y.
 const pullThree = (name) => {
@@ -205,25 +218,69 @@ ok('nie-string rzuca', throws(() => withLogDepthVertex(null)) && throws(() => wi
 ok('KONTROLA: poprawne źródło NIE rzuca', !throws(() => withLogDepthVertex(SYNTH.syn_points_vert)));
 
 // ── T6 ───────────────────────────────────────────────────────────────────────
-console.log('\nT6 — D0 nie ma call-site\'ów (MA PAŚĆ w D2) + bliźniaki BEZ log-depth');
+console.log('\nT6 — wpięcie OBECNE (⚠ odwrócone wobec D0) + bliźniaki BEZ log-depth');
 const consumers = [];
 for (const f of ['ThreeRenderer.js', 'SunShader.js', 'AtmosphereShader.js', 'GasGiantShader.js',
                  'PlanetGlobeRenderer.js', 'StratcomGalaxyRenderer.js', 'GlbSnapshotRenderer.js', 'PlanetShader.js']) {
   if (read('../../renderer/' + f).includes('LogDepthChunks')) consumers.push(f);
 }
-ok('D0: ZERO importów LogDepthChunks w src/renderer (⚠ ten pin MA PAŚĆ w D2)', consumers.length === 0);
+ok('konsumenci to DOKŁADNIE trzy moduły sceny układu: ' + consumers.join(', '),
+   consumers.length === 3 && consumers.includes('ThreeRenderer.js') &&
+   consumers.includes('SunShader.js') && consumers.includes('AtmosphereShader.js'));
 // ⚠ ODWRÓCONA reguła bliźniaka: te trzy renderery NIE MAJĄ logarithmicDepthBuffer, więc
 //   logDepthBufFC nigdy nie zostanie tam wgrany (zostanie 0) ⇒ gl_FragDepth = 0 dla
-//   KAŻDEGO fragmentu. Ten pin ma przeżyć D2 i każdy następny slice.
+//   KAŻDEGO fragmentu. Ten pin ma przeżyć każdy następny slice.
 for (const f of ['PlanetGlobeRenderer.js', 'StratcomGalaxyRenderer.js', 'GlbSnapshotRenderer.js']) {
   const s = read('../../renderer/' + f);
   ok('BLIŹNIAK ' + f + ': bez logarithmicDepthBuffer', !s.includes('logarithmicDepthBuffer'));
   ok('BLIŹNIAK ' + f + ': NIE importuje LogDepthChunks', !s.includes('LogDepthChunks'));
 }
-ok('KONTROLA: renderer mapy układu logarithmicDepthBuffer MA',
-   read('../../renderer/ThreeRenderer.js').includes('logarithmicDepthBuffer: true'));
+ok('KONTROLA: renderer mapy układu logarithmicDepthBuffer MA', rendSrc.includes('logarithmicDepthBuffer: true'));
 ok('LogDepthChunks.js nie ma ANI JEDNEGO importu (warunek wykonywalności pod node)',
    !/^\s*import\s/m.test(chunkSrc));
+ok('materiał bake (ortho, offscreen) ŚWIADOMIE bez chunków',
+   rendCode.includes('vertexShader:   PlanetShader.bakeVertexShader') && !rendCode.includes('withLogDepthVertex(PlanetShader'));
+
+// ── T7 ───────────────────────────────────────────────────────────────────────
+console.log('\nT7 — wpięcie D2: flaga, obie ścieżki, derywacje raz, mgławica bez chunków');
+ok('flaga czytana FUNKCJĄ, nie stałą modułową (inaczej konsola nie złapie się nawet po zmianie układu)',
+   rendCode.includes('const logDepthOn = () => !!GAME_CONFIG.FEATURES?.sceneDepthUnification;'));
+ok('idiom „brak klucza = OFF" (!! zamiast !== false)',
+   /logDepthOn = \(\) => !!GAME_CONFIG/.test(rendCode) && !/sceneDepthUnification !== false/.test(rendCode));
+ok('flaga istnieje w GameConfig i jest domyślnie ON', /sceneDepthUnification:\s*true/.test(strip(cfgSrc)));
+ok('starfield: obie ścieżki przez flagę',
+   rendCode.includes('logDepthOn() ? withLogDepthVertex(starVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(starFrag)'));
+ok('chmury: obie ścieżki przez flagę',
+   rendCode.includes('logDepthOn() ? withLogDepthVertex(cloudVert)') && rendCode.includes('logDepthOn() ? withLogDepthFragment(cloudFrag)'));
+ok('mgławica: depthTest wyłączany flagą, BEZ chunków (D-D3)',
+   rendCode.includes('depthTest: !logDepthOn()') && !rendCode.includes('withLogDepthVertex(nebVert'));
+ok('rdzeń i korona: logDepth przekazywany do OBU fabryk', (rendCode.match(/logDepth: logDepthOn\(\),/g) || []).length === 2);
+ok('powłoka atmosfery: logDepth w OBU gałęziach dayNightAtmosphere',
+   rendCode.includes('createLiveAtmosphereMaterial(planet, logDepthOn())') && rendCode.includes('createAtmosphereMaterial(planet, logDepthOn())'));
+for (const [n, pair] of Object.entries({
+  'rdzeń OFF':   ['STAR_CORE_VERT_LD : STAR_CORE_VERT', 'STAR_CORE_FRAG_LD : STAR_CORE_FRAG'],
+  'rdzeń ŻYWY':  ['STAR_CORE_VERT_LIVE_LD : STAR_CORE_VERT_LIVE', 'STAR_CORE_FRAG_LIVE_LD : STAR_CORE_FRAG_LIVE'],
+  'korona OFF':  ['STAR_CORONA_VERT_LD : STAR_CORONA_VERT', 'STAR_CORONA_FRAG_LD : STAR_CORONA_FRAG'],
+  'korona ŻYWA': ['STAR_CORONA_VERT_LD : STAR_CORONA_VERT', 'STAR_CORONA_FRAG_LIVE_LD : STAR_CORONA_FRAG_LIVE'],
+})) ok('SunShader — ' + n + ': obie ścieżki', pair.every(t => sunCode.includes(t)));
+for (const [n, pair] of Object.entries({
+  'powłoka OFF':  ['ATMO_VERT_LD : ATMO_VERT', 'ATMO_FRAG_LD : ATMO_FRAG'],
+  'powłoka ŻYWA': ['ATMO_VERT_LD : ATMO_VERT', 'ATMO_FRAG_LIVE_LD : ATMO_FRAG_LIVE'],
+})) ok('AtmosphereShader — ' + n + ': obie ścieżki', pair.every(t => atmoCode.includes(t)));
+// ⚠ `node --check` NIE łapie użycia niezadeklarowanego parametru w ciele funkcji —
+//   złapane realnie w tym slice: ciało fabryki OFF czytało `logDepth`, którego nie było
+//   w sygnaturze (ReferenceError dopiero na żywej ścieżce).
+ok('SunShader: obie fabryki DEKLARUJĄ logDepth', (sunCode.match(/logDepth = false/g) || []).length === 2);
+ok('AtmosphereShader: obie fabryki DEKLARUJĄ logDepth', (atmoCode.match(/logDepth = false/g) || []).length === 2);
+ok('derywacje liczone RAZ, na starcie modułu (7 w SunShader + 3 w AtmosphereShader)',
+   (sunCode.match(/^const \w+_LD\s+= withLogDepth/gm) || []).length === 7 &&
+   (atmoCode.match(/^const \w+_LD\s+= withLogDepth/gm) || []).length === 3);
+ok('KONTROLA: literały ścieżki OFF NIETKNIĘTE (bez chunków w źródle)',
+   !pullGlsl(sunSrc, 'STAR_CORE_FRAG').includes('USE_LOGDEPTHBUF') &&
+   !pullGlsl(atmoSrc, 'ATMO_FRAG').includes('USE_LOGDEPTHBUF'));
+ok('komentarz przy wczesnym `return` korony ZAKTUALIZOWANY (nie obiecuje już early-Z)',
+   sunSrc.includes('KOREKTA (V4 / D2)') && sunSrc.includes('11,9 %'));
+
 
 console.log('\n' + (fail ? 'FAIL' : 'OK') + '  ' + pass + ' pass, ' + fail + ' fail');
 process.exit(fail ? 1 : 0);

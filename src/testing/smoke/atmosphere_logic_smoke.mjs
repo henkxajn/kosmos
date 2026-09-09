@@ -226,8 +226,15 @@ ok('tick liczy uDiscFade przez discFade(px, LO, HI)',
 ok('tick ma guard na materiał ścieżki OFF (trzy uniformy zamiast siedmiu)',
    !!atmoBody && atmoBody.includes('if (!u.uTermWidth) continue;'));
 // ⚠ Bramka flagi stoi U WOŁAJĄCEGO — wzór liveGasShaders; moduł shadera nie importuje GameConfig.
+// ⚠ ROZLUŹNIONE W V4/D2 (2026-09-09) i to jest zamierzone. Pin wymagał DOSŁOWNIE
+//   `createAtmosphereMaterial(planet)` — jednoargumentowo — więc padł, gdy fabryki
+//   dostały drugi parametr `logDepth` (V-267). INWARIANT, którego pilnuje, jest ten sam
+//   i dalej prawdziwy: wybór fabryki robi RENDERER na fladze, a nie moduł shadera.
+//   Zapisane, bo pin, który cicho łagodnieje, przestaje być pinem.
 ok('bramka flagi jest w addPlanetMesh (wybór fabryki), nie w module shadera',
-   /GAME_CONFIG\.FEATURES\.dayNightAtmosphere[\s\S]{0,120}createLiveAtmosphereMaterial\(planet\)[\s\S]{0,120}createAtmosphereMaterial\(planet\)/.test(rendererCode));
+   /GAME_CONFIG\.FEATURES\.dayNightAtmosphere[\s\S]{0,160}createLiveAtmosphereMaterial\(planet[^)]*\)[\s\S]{0,160}createAtmosphereMaterial\(planet[^)]*\)/.test(rendererCode));
+ok('KONTROLA: pin dalej DYSKRYMINUJE — nie przechodzi bez nazwy flagi',
+   !/GAME_CONFIG\.FEATURES\.liveSunShader[\s\S]{0,160}createLiveAtmosphereMaterial\(planet[^)]*\)/.test(rendererCode));
 ok('AtmosphereShader.js NIE importuje GameConfig (a przez niego i18n)',
    !shaderSrc.includes("from '../config/GameConfig.js'"));
 // ⚠ Pułapka D-V3j: _syncPlanetMeshes biegnie z physics:updated, czyli STOI PRZY PAUZIE.

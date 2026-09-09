@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { GLSL_NOISE_LIB } from './PlanetShader.js';
 import { mixSeed, hashStringToInt } from '../utils/SeedMath.js';
 import { promSlotTiming } from './SunAnimationLogic.js';
+import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
 
 // ── Strojenie na żywo ────────────────────────────────────────────────────────
 // Czytane co klatkę w _tickSunMaterials (poza OMEGA_RAD_PER_S, które czyta _tickClouds).
@@ -425,9 +426,25 @@ ${GLSL_NOISE_LIB}
           //   2. ogony alfy w zakresie 0.0005-0.03 to dokladnie ten mechanizm, ktory
           //      kazal usunac trzy stare sprite-y glow (mierzony podbicie szarosci
           //      +5.5/255) — zerowanie ich u zrodla zamyka te klase.
-          // ⚠ To jest return, a NIE discard: discard wylacza wczesne odrzucanie
-          //   glebi dla calego draw calla, wiec fragmenty za nieprzezroczystym rdzeniem
-          //   liczylyby caly szum, zanim zostana wyrzucone.
+          // ⚠ KOREKTA (V4 / D2): to nadal jest return, a NIE discard, ale POWOD SIE
+          //   ZMIENIL. Do naprawy V-267 argumentem bylo wczesne odrzucanie glebi:
+          //   discard wylacza early-Z dla calego draw calla, wiec fragmenty za
+          //   nieprzezroczystym rdzeniem liczylyby caly szum, zanim zostana wyrzucone.
+          //   Ten argument NIE OBOWIAZUJE — korona pisze teraz gl_FragDepth, a to
+          //   wylacza early-Z tak samo jak discard i nie da sie tego cofnac (GLSL ES
+          //   3.00 nie ma layout(depth_greater), czyli WebGL2 nie ma conservative depth).
+          //   ZMIERZONA cena: sylwetka rdzenia to 11,9 % powierzchni quada — tyle
+          //   fragmentow early-Z odrzucalo legalnie. Reszta tego, co odrzucalo,
+          //   byla SAMYM DEFEKTEM (dziury po planetach, ktore sa ZA korona).
+          // ⚠ Return zostaje z DRUGIEGO, wciaz waznego powodu: ~25 % quada nie ma nic
+          //   do pokazania (I < 0.002), a szum kosztuje tam tyle samo. Wyjscie liczy
+          //   sie wiec dalej — po prostu jako oszczednosc ALU, nie jako brama early-Z.
+          // ⚠ Wstawka logdepthbuf stoi NA GORZE main, czyli PRZED tym returnem. Musi:
+          //   inaczej ta ~25 % quada wychodzilaby z NIEZDEFINIOWANYM gl_FragDepth.
+          // ⚠ Odzyskanie tamtej oszczednosci analitycznie (maska sylwetki rdzenia jest
+          //   tu policzona nizej, z uStarCenterWorld/uCamPosWorld/uCoreRadius) jest
+          //   ZGLOSZONE jako follow-up, a nie robione tutaj: to slice wydajnosciowy,
+          //   a mieszanie go z poprawnoscia odbiera gate'owi mozliwosc atrybucji.
           if (I < 0.002) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
 
           float S = 1.0;
@@ -486,6 +503,22 @@ ${GLSL_NOISE_LIB}
         }
       `;
 
+// ── Warianty z logarytmiczną głębią (V-267) ─────────────────────────────────
+// ⚠ DERYWACJE, nie ręcznie utrzymywane kopie. Literały wyżej pozostają nietknięte —
+//   i dlatego cztery złote sumy SHA-256 keepera przechodzą przez ten arc bez zmiany.
+//   Wariant „*_DEPTH wpisany obok" (wzór z V2/V3 dla ścieżek OFF/LIVE) TUTAJ SIĘ NIE
+//   SKALUJE: dałby dziesięć literałów i dziesięć sum tylko w tym pliku, czyli dziesięciu
+//   nieutwardzonych bliźniaków, żeby ustrzec się przed jednym.
+// ⚠ Liczone RAZ, na starcie modułu. Rzut z LogDepthChunks (brak kotwicy) jest wtedy
+//   deterministyczny i głośny — a nie ujawnia się dopiero przy budowie sceny.
+const STAR_CORE_VERT_LD        = withLogDepthVertex(STAR_CORE_VERT);
+const STAR_CORE_FRAG_LD        = withLogDepthFragment(STAR_CORE_FRAG);
+const STAR_CORE_VERT_LIVE_LD   = withLogDepthVertex(STAR_CORE_VERT_LIVE);
+const STAR_CORE_FRAG_LIVE_LD   = withLogDepthFragment(STAR_CORE_FRAG_LIVE);
+const STAR_CORONA_VERT_LD      = withLogDepthVertex(STAR_CORONA_VERT);
+const STAR_CORONA_FRAG_LD      = withLogDepthFragment(STAR_CORONA_FRAG);
+const STAR_CORONA_FRAG_LIVE_LD = withLogDepthFragment(STAR_CORONA_FRAG_LIVE);
+
 // ── Fabryki materiałów ──────────────────────────────────────────────────────
 
 /**
@@ -500,7 +533,8 @@ ${GLSL_NOISE_LIB}
  *   fioletową gwiazdę. NIE ROBIĆ TEGO.
  */
 function createStarCoreMaterial({ emissionMap, sharedColor, brightness, whitePower,
-                                  live = false, seed = null, granFreqMult = 1.0 }) {
+                                  live = false, seed = null, granFreqMult = 1.0,
+                                  logDepth = false }) {
   const uniforms = {
     uEmission:   { value: emissionMap },
     uColor:      { value: sharedColor },   // ⚠ alias V-248 — patrz JSDoc wyżej
@@ -510,8 +544,8 @@ function createStarCoreMaterial({ emissionMap, sharedColor, brightness, whitePow
   if (!live) {
     return new THREE.ShaderMaterial({
       uniforms,
-      vertexShader:   STAR_CORE_VERT,
-      fragmentShader: STAR_CORE_FRAG,
+      vertexShader:   logDepth ? STAR_CORE_VERT_LD : STAR_CORE_VERT,
+      fragmentShader: logDepth ? STAR_CORE_FRAG_LD : STAR_CORE_FRAG,
     });
   }
   // Żywa ścieżka: te same cztery uniformy + granulacja. Wszystkie wartości per gwiazda
@@ -530,8 +564,8 @@ function createStarCoreMaterial({ emissionMap, sharedColor, brightness, whitePow
   });
   return new THREE.ShaderMaterial({
     uniforms,
-    vertexShader:   STAR_CORE_VERT_LIVE,
-    fragmentShader: STAR_CORE_FRAG_LIVE,
+    vertexShader:   logDepth ? STAR_CORE_VERT_LIVE_LD : STAR_CORE_VERT_LIVE,
+    fragmentShader: logDepth ? STAR_CORE_FRAG_LIVE_LD : STAR_CORE_FRAG_LIVE,
   });
 }
 
@@ -541,7 +575,8 @@ function createStarCoreMaterial({ emissionMap, sharedColor, brightness, whitePow
  *   szeroki miękki zanik robi korona, ciasny glare robi bloom. Nie podnosić bez pomiaru.
  */
 function createStarCoronaMaterial({ coronaColor, gain, live = false, seed = null,
-                                    glowHex = 0xffffff, quadHalf = 1, coreRadius = 1 }) {
+                                    glowHex = 0xffffff, quadHalf = 1, coreRadius = 1,
+                                    logDepth = false }) {
   const uniforms = {
     uColor: { value: coronaColor },
     uGain:  { value: gain },
@@ -553,8 +588,8 @@ function createStarCoronaMaterial({ coronaColor, gain, live = false, seed = null
       transparent: true, blending: THREE.AdditiveBlending,
       depthWrite: false, depthTest: true,
       uniforms,
-      vertexShader:   STAR_CORONA_VERT,
-      fragmentShader: STAR_CORONA_FRAG,
+      vertexShader:   logDepth ? STAR_CORONA_VERT_LD : STAR_CORONA_VERT,
+      fragmentShader: logDepth ? STAR_CORONA_FRAG_LD : STAR_CORONA_FRAG,
     });
   }
   Object.assign(uniforms, {
@@ -586,8 +621,8 @@ function createStarCoronaMaterial({ coronaColor, gain, live = false, seed = null
     transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, depthTest: true,
     uniforms,
-    vertexShader:   STAR_CORONA_VERT,
-    fragmentShader: STAR_CORONA_FRAG_LIVE,
+    vertexShader:   logDepth ? STAR_CORONA_VERT_LD : STAR_CORONA_VERT,
+    fragmentShader: logDepth ? STAR_CORONA_FRAG_LIVE_LD : STAR_CORONA_FRAG_LIVE,
   });
 }
 

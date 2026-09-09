@@ -484,6 +484,45 @@ export const GAME_CONFIG = {
     //   ⚠ BAZĄ stanu OFF jest HEAD e9f12b7. W V3 nie ma poprawki wyjętej spod flagi
     //     (inaczej niż V-260 w V2).
     dayNightAtmosphere:   true,
+
+    // ── VISUALS 1.0 / V4 (D2) — SPÓJNA GŁĘBIA SCENY (V-267) ───────────────
+    //   ON  = sześć ręcznie pisanych shaderów (starfield, rdzeń, korona, powłoka
+    //         atmosfery, chmury — oraz mgławica, inaczej: patrz niżej) pisze
+    //         i testuje głębię LOGARYTMICZNĄ, czyli tę samą, którą pisze cała
+    //         reszta sceny z biblioteki.
+    //   OFF = stan sprzed slice'u BIT W BIT: te shadery piszą głębię
+    //         stałoprzecinkową, a materiał z chunkami NIE POWSTAJE W OGÓLE
+    //         (bramka stoi u wołającego — wzór liveGasShaders/dayNightAtmosphere).
+    //
+    //   ⚠ Renderer mapy układu ma logarithmicDepthBuffer od `b06d831` (2026-03-29),
+    //     gdzie włączono go dla ZBLIŻEŃ NA MODELE STATKÓW przy near = 0.001. three
+    //     wstrzykuje `#define USE_LOGDEPTHBUF` do KAŻDEGO nie-Raw materiału, więc
+    //     define był w tych shaderach od zawsze — brakowało tylko CIAŁ chunków.
+    //     Trzy z sześciu były napisane WCZEŚNIEJ i cicho przestały być poprawne;
+    //     trzy powstały PÓŹNIEJ i nigdy poprawne nie były.
+    //
+    //   ⚠ JEDNA FLAGA NA WSZYSTKIE SZEŚĆ, nie sześć flag. Głębia jest RELACJĄ:
+    //     stan „naprawiona korona przy niepoprawionym rdzeniu" to konfiguracja,
+    //     której nikt nigdy nie wypuścił i której nie da się sensownie opisać
+    //     (korona nieprzycinana nigdzie). Ta sama zasada co `aiStrikeRecall`
+    //     i `defenseScope`: dwie flagi dałyby trzeci, nieokreślony stan.
+    //
+    //   ⚠ MGŁAWICA dostaje `depthTest: false` zamiast chunków (D-D3) i to też
+    //     siedzi pod tą flagą. Jest rysowana PIERWSZA (renderOrder -2) na
+    //     wyczyszczonym buforze i nigdy do niego nie pisze, więc jej test głębi
+    //     jest no-opem w obie strony; chunki kosztowałyby zapis gl_FragDepth na
+    //     pełnoekranowym przebiegu najcięższego shadera sceny.
+    //
+    //   ⚠ Brak klucza = OFF (idiom liveGasShaders / liveSunShader, nie starClassLighting).
+    //   ⚠ Czytana FUNKCJĄ przy budowie materiału (ThreeRenderer.logDepthOn), nie stałą
+    //     modułową — inaczej przestawienie w konsoli nie złapałoby się nawet po zmianie
+    //     układu, a to jedyna ścieżka rollbacku bez edycji pliku i F5.
+    //
+    //   ⚠ BAZĄ stanu OFF jest HEAD 7c8c5b6, a NIE stan sprzed arca: poprawka
+    //     prześwitu pierścieni Dysona (V-261) stoi POZA flagą, bo bez niej etap 1
+    //     Sfery znikałby całkowicie na gwiazdach K/G/F — OFF nie ma prawa
+    //     przywracać regresji, której ta flaga miała uniknąć (precedens V-260/D-V2z).
+    sceneDepthUnification: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

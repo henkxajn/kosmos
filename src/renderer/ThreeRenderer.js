@@ -24,6 +24,7 @@ import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { SunShader }         from './SunShader.js';
 import { AtmosphereShader }  from './AtmosphereShader.js';
+import { withLogDepthVertex, withLogDepthFragment } from './LogDepthChunks.js';
 import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
@@ -76,6 +77,12 @@ const STAR_CORE_SCALE = 3.0;
 // sprowadza ją do ×2.6, więc klasa gwiazdy jest CZYTELNA, a układ czerwonego karła
 // nadal da się grać (nie tonie w czerni). Strojenie na żywym obrazie.
 const STAR_LUMINOSITY_EXP = 0.22;
+// ── V-267 — czy ręcznie pisane shadery piszą głębię LOGARYTMICZNĄ ────────────
+// ⚠ FUNKCJA, nie stała modułowa. Stała zamroziłaby flagę na czas IMPORTU, więc
+//   przestawienie jej w konsoli nie złapałoby się NAWET po zmianie układu — a to
+//   jedyna ścieżka rollbacku, jaką gate ma bez edycji pliku i F5.
+// ⚠ Idiom „brak klucza = OFF" (liveGasShaders / liveSunShader / dayNightAtmosphere).
+const logDepthOn = () => !!GAME_CONFIG.FEATURES?.sceneDepthUnification;
 // ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
 //   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
@@ -606,12 +613,10 @@ export class ThreeRenderer {
     geo.setAttribute('aSize',      new THREE.BufferAttribute(size, 1));
     geo.setAttribute('aPhase',     new THREE.BufferAttribute(phase, 1));
 
-    const starMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0.0 },
-        uPx:   { value: this._pixelRatio },   // gl_PointSize jest w device px
-      },
-      vertexShader: `
+    // ⚠ Podniesione do NAZWANYCH lokalnych (V4/D2), zeby transformacja glebi miala
+    //   JEDNO miejsce zastosowania, a keeper i sonda kompilacji mogly wyciagnac te
+    //   shadery po nazwie. Tresc GLSL przeniesiona CO DO ZNAKU.
+    const starVert = `
         attribute float aIntensity;
         attribute float aSize;
         attribute float aPhase;
@@ -628,8 +633,8 @@ export class ThreeRenderer {
           gl_PointSize = aSize * uPx;
           gl_Position  = projectionMatrix * mvPos;
         }
-      `,
-      fragmentShader: `
+      `;
+    const starFrag = `
         varying vec3  vColor;
         varying float vI;
 
@@ -643,7 +648,14 @@ export class ThreeRenderer {
           if (I < 0.002) discard;
           gl_FragColor = vec4(vColor * I, 1.0);   // additive — alpha bez znaczenia
         }
-      `,
+      `;
+    const starMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0.0 },
+        uPx:   { value: this._pixelRatio },   // gl_PointSize jest w device px
+      },
+      vertexShader:   logDepthOn() ? withLogDepthVertex(starVert)   : starVert,
+      fragmentShader: logDepthOn() ? withLogDepthFragment(starFrag) : starFrag,
       transparent: true,
       vertexColors: true,
       depthWrite: false,
@@ -660,7 +672,12 @@ export class ThreeRenderer {
     // (na ekranie ~10-14/255 po ACES). Struktura i głębia bez rozjaśniania tła;
     // pas „drogi mlecznej" wokół nachylonej płaszczyzny. Statyczna (bez uniformów).
     const nebMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false,
+      // ⚠ D-D3 — KOPUŁA NIEBA, nie uczestnik testu głębi. Mgławica jest rysowana
+      //   PIERWSZA (renderOrder -2) na WYCZYSZCZONYM buforze i nigdy do niego nie
+      //   pisze, więc jej test głębi jest no-opem w obie strony — a chunki kosztowałyby
+      //   zapis gl_FragDepth na PEŁNOEKRANOWYM przebiegu najcięższego shadera sceny.
+      //   Wyłączenie testu mówi to wprost i nic nie zmienia wizualnie.
+      side: THREE.BackSide, depthWrite: false, depthTest: !logDepthOn(),
       uniforms: { uPeak: { value: 0.014 } },
       vertexShader: `varying vec3 vDir;
         void main(){ vDir = normalize(position);
@@ -1468,6 +1485,7 @@ export class ThreeRenderer {
       live: liveSun,
       seed: liveSun ? SunShader.sunSeedFromId(star.id) : null,
       granFreqMult: granCls.freqMult,
+      logDepth: logDepthOn(),
     });
     // Uchwyt uniformów żywej granulacji — null przy OFF, więc każdy konsument bramkuje
     // się na NIM, a nie na fladze (wzór D-V1: bramka stoi na MATERIALE, nie na typie).
@@ -1501,6 +1519,7 @@ export class ThreeRenderer {
       glowHex:    star.visual.glowColor ?? star.visual.color,
       quadHalf:   this._sunQuadHalf,
       coreRadius: this._sunCoreRadius,
+      logDepth: logDepthOn(),
     });
     this._sunCoronaU       = liveSun ? coronaMat.uniforms : null;
     this._sunStreamerPhase = 0;
@@ -1957,8 +1976,8 @@ export class ThreeRenderer {
       const atmoMesh = new THREE.Mesh(
         new THREE.SphereGeometry(r * AtmosphereShader.ATMO_SCALE, 32, 32),
         GAME_CONFIG.FEATURES.dayNightAtmosphere
-          ? AtmosphereShader.createLiveAtmosphereMaterial(planet)
-          : AtmosphereShader.createAtmosphereMaterial(planet)
+          ? AtmosphereShader.createLiveAtmosphereMaterial(planet, logDepthOn())
+          : AtmosphereShader.createAtmosphereMaterial(planet, logDepthOn())
       );
       atmoMesh.userData.isAtmosphere = true;
       group.add(atmoMesh);
@@ -2208,7 +2227,8 @@ export class ThreeRenderer {
       }
     `;
     const mat = new THREE.ShaderMaterial({
-      vertexShader: cloudVert, fragmentShader: cloudFrag,
+      vertexShader:   logDepthOn() ? withLogDepthVertex(cloudVert)   : cloudVert,
+      fragmentShader: logDepthOn() ? withLogDepthFragment(cloudFrag) : cloudFrag,
       uniforms: {
         uTime:     { value: 0.0 },
         uLightDir: { value: new THREE.Vector3(0, 0, 0) },
