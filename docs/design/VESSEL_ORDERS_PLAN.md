@@ -1457,8 +1457,8 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      | noga | mechanizm | stan |
      |---|---|---|
      | **Powrót** (wiersze 6/7 tabeli producentów) | selektor bez terminu układu ⇒ producent podawał punkt z CUDZEJ ramki | ✅ **ZAMKNIĘTA** przez naprawę 154 — po niej punkt jest z definicji własnoramkowy |
-     | **klik na mapie** (wiersze 1/2) | gracz klika w ramce KAMERY, mając zaznaczony statek z innego układu | 🔴 **OTWARTA** — to jest żywe repro właściciela (`mo_6`) |
-     | **pickery flotowe** (wiersze 8/9) | punkt z pickera w ramce kamery, członkowie floty gdzie indziej | 🔴 **OTWARTA, nazwana wprost** — `FMO:4739`, `FleetCommandPanel:352` |
+     | **klik na mapie** (wiersze 1/2) | gracz klika w ramce KAMERY, mając zaznaczony statek z innego układu | ✅ **ZAMKNIĘTA 2026-09-09** — leg D, `92e075f`, live-gate PASS (niżej) |
+     | **pickery flotowe** (wiersze 8/9) | punkt z pickera w ramce kamery, członkowie floty gdzie indziej | 🔴 **OTWARTA — POTWIERDZONA NA ŻYWO 2026-09-09** (niżej) — `FMO:4739`, `FleetCommandPanel:354` |
 
      **NASTĘPNY SLICE (leg D, 🔴):** odmowa **PO STRONIE PRODUCENTA** — `buildOrderSpec` /
      `_buildFleetSpec` zwracają `{ok:false}`, gdy `systemIdOf(vessel) !== activeSystemId`.
@@ -1477,6 +1477,94 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ale **nie jest dziś czytany** w `RightClickMenu` / `OrderDispatcher` / `FleetCommandPanel`
      (0 wystąpień) — więc to nowy odczyt globalu w kilku plikach, nie pole, które już mają.
      ⇒ Decyzja o nim NALEŻY do właściciela i ma być podjęta PO ocenie legu D.
+
+     ✅ **LEG D ZAMKNIĘTY 2026-09-09 — commit `92e075f`, LIVE-GATE PASS** (decyzje D-LD1..D-LD5).
+     Termin siedzi **U WOŁAJĄCEGO** (`RightClickMenu`), nie w budowniczych spec — bo
+     `OrderDispatcher.js` jest CZYSTY (zero importów, dostaje `vesselId` jako **STRING**, nie
+     obiekt), a `_buildFleetSpec(option, target)` nie dostaje **ani statku, ani `fleetId`**.
+     Dwa site'y, jeden plik, ZERO nowych pól w `spec`, ZERO zmian w MOS, ZERO nowych kluczy i18n
+     (reuse `vessel.reasonTargetOtherSystem` — D-LD3), zapis v101 bez migracji, bez flagi
+     (rollback = revert). Odmowa per-statek wpada do istniejącego `fails[]`, więc raport
+     nazywający KAŻDY pominięty statek działa **za darmo**; gałąź flotowa (D-LD2) odmawia
+     CAŁOFLOTOWO, gdy choćby jeden członek jest poza ramką, i też nazywa każdego winowajcę
+     (kanał `res.rejected[0]` pokazuje tylko pierwszy, więc nie jest tam używany).
+
+     ⚠ **ZAKRES TYPÓW ZMIERZONY, NIE ZAŁOŻONY** — `POINT_SOURCED_ORDER_TYPES` = `moveToPoint`
+     + `dock`. Bramka na CAŁEJ pętli byłaby fałszywym negatywem **tej samej klasy co regresja
+     fan-outu**: `retreat` liczy cel w układzie STATKU (ZMIERZONE: statek w `sys_020` przy kamerze
+     `sys_home` dostaje poprawny `targetPoint {286,0}` = `f_a` w SWOIM układzie), `escort` to
+     Finding 264, a `goToPOI`/`patrol` chodzą po `poiId` — POI nie ma `systemId` (Finding 152).
+     `dock` JEST w zbiorze (D-LD4), bo `_issueDock` **zrzuca `targetBodyId`** przed
+     `_issueMoveToPoint`, więc bramka W3-4b nigdy tego celu nie ogląda.
+
+     ⚠ **DLACZEGO NIE W `FleetSystem.issueFleetOrder`** — w jedynym miejscu, które pokryłoby naraz
+     PPM floty I oba pickery: ta funkcja obsługuje TAKŻE „Powrót do bazy", którego cel liczy się
+     w układzie STATKU (`nearestOwnColonyBodyInSystem`, naprawa 154). Termin „ramka statku ≠ kamera"
+     odrzuciłby tam rozkaz CAŁKOWICIE POPRAWNY. ZMIERZONE: flota w `sys_020`, kamera `sys_home`
+     → Powrót `{ok:true, accepted:2}`. **Predykat NIE jest własnością ROZKAZU — jest własnością
+     pary (statek, kamera)**, więc wolno go stosować wyłącznie tam, gdzie punkt na pewno pochodzi
+     z kamery. Pinuje to keeper **T4**, najważniejszy pin slice'u (mierzy PRAWDZIWE `issueFleetOrder`).
+
+     ⚠ **ODMOWA JEST STRICTE NO-OPEM** (zmierzone): brak rozkazu, brak misji, stan i paliwo
+     nietknięte (9999 → 9999), **ISTNIEJĄCY rozkaz statku przeżywa** (`mo_1` przed i po,
+     `status active`), a `fleet.activeOrder` i rozkazy członków też — bo wracamy **PRZED**
+     `issueFleetOrder:118`, które kasuje poprzedni rozkaz floty. Odrzucony klik nie może zepsuć
+     bieżących rozkazów.
+
+     **Test uczciwości 141 zdany dla REUŻYCIA powodu:** przy producencie punkt MA znaną ramkę
+     (kamera), więc zdanie „cel jest w innym układzie" jest PRAWDZIWE, a „najpierw skok warp" to
+     realne lekarstwo — inaczej niż przy 147, gdzie ten sam tekst byłby kłamstwem o statku, który
+     WŁAŚNIE skacze. ⚠ Dwa zapisane zastrzeżenia: (a) najużyteczniejsza byłaby druga strona
+     niezgodności („ten statek jest w innym układzie"), którą łagodzi prefiks z NAZWĄ statku
+     w raporcie; (b) kadłub z `warpFuel.max === 0` nie może wykonać porady — **własność
+     PRE-EXISTING tego stringa** (W3-4b używa go identycznie), nie wprowadzona przez leg D.
+
+     **Keeper `map_click_frame_smoke` 40/40**, fail-first **18 PASS / 22 FAIL** zmierzony
+     FINALNYMI pinami na kodzie sprzed naprawy (`git archive HEAD` — bez dotykania drzewa
+     roboczego i bez mutacji `.git`). Sweep 222/222 0 FAIL, `check-i18n` PASS.
+
+     ⚠ **DWIE LEKCJE Z PISANIA TEGO KEEPERA** (obie kupione pomiarem, obie wychodzą poza slice):
+     1. **Pin białoskrzynkowy na metodzie, która przed naprawą NIE ISTNIEJE, WYWALA cały przebieg
+        fail-first i ukrywa kolor wszystkich pinów niżej.** Zmierzone dwukrotnie: pierwszy przebieg
+        urwał się na T5 (`TypeError: rcm._outOfCameraFrame is not a function`), drugi na T7 — za
+        każdym razem T5b-T10 nie miały ŻADNEGO koloru. Taki pin musi **degradować, nie przerywać**
+        (`typeof … === 'function' ? … : null`); po naprawie jest tak samo mocny.
+     2. **Jałowa zieleń znaleziona i zabita:** „tekst BEZ surowego sluga" przechodziło przed
+        naprawą, bo **tekstu w ogóle nie było**. Wymóg `txt.length > 0` jest częścią pinu —
+        i dlatego licznik fail-first przesunął się 20/20 → 18/22.
+
+     🔴 **PIERWSZE POTWIERDZENIE NA ŻYWO DLA WIERSZY 8/9 (2026-09-09, przy gate'cie legu D).**
+     Właściciel wszedł w §5 przez **picker floty w panelu** (`FleetCommandPanel:354`
+     `_armMovePicker` = wiersz 9, znany-otwarty): **oba statki wystartowały**, ten spoza ramki
+     poleciał do klikniętych współrzędnych **we WŁASNYM układzie**, **zero wpisów w Dzienniku**.
+     Powtórka przez PPM mapy 3D („Flota: lecisz tutaj") zachowała się dokładnie wg D-LD2 —
+     nikt nie ruszył, nazwany wyłącznie członek spoza ramki. ⇒ **To NIE była porażka legu D, tylko
+     wejście innym kanałem** — i jest to dowód, że wiersze 8/9 są osiągalne w normalnej grze,
+     a nie tylko wyprowadzone ze źródła. Pinowane ODWRÓCONYM pinem `map_click_frame_smoke` **T9a**
+     (pin pinuje DEFEKT i **MA PAŚĆ**, gdy wiersze 8/9 zostaną domknięte).
+
+     ⚠ **DOCK Z MAPY — POKRYCIE INCYDENTALNE, BEZ CICHEGO KREDYTU DLA 256.** `dock` jedzie przez
+     `buildOrderSpec`, więc leg D zamyka **producenta PPM mapy** („Dokuj tutaj" na ciele z ramki
+     kamery; zmierzone: `_pendingDock` **nie zostaje ustawiony**). **Obie połowy Findingu 256
+     — OFERTOWA (`getDockTargets` bez terminu układu) i ADMISYJNA (`_issueDock` zrzuca
+     `targetBodyId`) — ZOSTAJĄ OTWARTE**, i tak samo zostaje reguła grupowa (wariant a/b/c),
+     która jest decyzją właściciela. Pinuje to keeper **T4b**: dock wydany POZA mapą (pickery)
+     dalej przechodzi `{ok:true}`.
+
+     ⚠ **DEWIACJA GATE'U §3 — mieszany multi-select NIE JEST wykonalny Z MAPY, i to jest
+     ZAMIERZONE.** Zgłoszenie: „CTRL+klik na statek z innego układu ZASTĘPUJE zaznaczenie".
+     ZMIERZONE w źródle — **nie ma żadnego mechanizmu czyszczącego `_selectedVesselIds`**
+     (`addToSelection`/`toggleSelection` **nie mają terminu układu**, `removeFromSelection` ma
+     dokładnie dwóch wołających: sprzątanie wraków i przycisk ✕ w `FleetGroupPanel`; `system:switched`
+     selekcji nie rusza). Prawdziwy mechanizm jest inny i strukturalny: `ThreeRenderer._syncVesselPositions:4883`
+     **USUWA sprite** statku spoza aktywnego układu (`_removeVesselSprite`), a `_getVesselAtScreen`
+     iteruje dokładnie ten rejestr ⇒ **na mapie 3D nie ma czego kliknąć**. Usunięcie jest
+     ŚWIADOME — pochodzi z `2f76605` „Fix vessel sprites showing from other star systems on
+     tactical map" (2026-03-25). ⇒ **NIE zakładam findingu** — to zaprojektowana granica, nie
+     defekt. ⚠ Ale stan T2 **JEST osiągalny w grze**, tylko innymi powierzchniami:
+     **Outliner CTRL+klik** (`Outliner:665`, grupuje statki pod nagłówkami układów, `toggleSelection`
+     bez filtra) i **TacticalDock CTRL+klik** (`TacticalDock:639`). Keeper T2 pinuje więc stan
+     realny, nie syntetyczny — ale **nie da się go wyprodukować kliknięciem w mapę**.
 
 256. 🟠 **`Dokuj` (picker grupowy) przyjmuje cel z OBCEGO ukladu.**
      Rodzenstwo 154/255, ale **inny producent i inny selektor**, wiec osobny numer.
@@ -2118,6 +2206,7 @@ zamknął **GATE B2 / Z2** (wiersz zdjęty z `OPEN_FINDINGS_INDEX.md`).
 | **264** | 🟠 **`MovementOrderSystem._issueEscort:650` nie ma terminu układu na eskortowanym.** Trzy bramki celu są (`escortee_not_found` / `_is_wreck` / `_self` / `_not_vessel`), ale **żadna nie pyta o układ** — w odróżnieniu od rodzeństwa: `_issuePursueOrIntercept:978` i `_issueEngage:1095` mają `isSameSystem(vessel, target)`, `_issueAttack:419` też. `_resolveTarget` szuka po **globalnym id** (`EntityManager` jest płaski), więc eskortowany z innego układu przechodzi, a `_tickEscortOrder:727` goni jego `x/y` odmierzone od CUDZEJ gwiazdy — klasa „globalne id ≠ położenie" (`131cc2e`, W3-4b). ⚠ **Osiągalność NIEZMIERZONA** i to jest część wpisu: `escort` jest bramkowany `FEATURES.poiSystem` (ON) i jego jedynym producentem w normalnej grze jest PPM na własnym statku (`RightClickMenuOptions:82`) — a menu buduje się z targetu pod kursorem, czyli ze statku RYSOWANEGO w oglądanym układzie. Trzeba zmierzyć, czy da się wybrać eskortowanego spoza układu (`FleetManagerOverlay`, Outliner, Tab). | 🟠 **OTWARTY — filed w D-147d.** Świadomie poza 147: Shape A to **jedna** bramka admisyjna nad wszystkimi typami; ta jest bramką **CELU** i należy do rodziny **138/142/151/152/153** (system-ślepe selektory). ⚠ Naprawa jest jednolinijkowa (`isSameSystem` jak u trzech braci), ale **pomiar osiągalności ma poprzedzić kod** — inaczej dokładamy bramkę bez wiedzy, czy zamyka cokolwiek. |
 | **265** | ⚪ **Po zamknięciu 147 gałąź `inWarp` / `warpMissionSurvived` w `_preemptCommit` jest NIEOSIĄGALNA.** `_preemptCommit` ma **jednego** wołającego (`issueOrder:266`, pod `if (res?.ok)`), a nowy termin admisyjny odrzuca każdy rozkaz przy `mission.phase === 'warp_transit'` ⇒ do `_preemptCommit` **nie da się już wejść** z `prev.mission.phase === 'warp_transit'`, więc `inWarp` jest zawsze `false`, a `warpMissionSurvived` — stałą `false`. To akurat ta subtelność, na którą D-VO3e poświęcił osobną rundę pomiaru (guard kluczowany na PRZEŻYCIU misji, nie na samym warpie). | ⚪ **OTWARTY, KOSMETYKA — kod ZOSTAJE.** Usunięcie to własna decyzja i własny pomiar (gałąź jest obroną w głąb, gdyby ktoś kiedyś dodał drugie wejście do `_dispatchByType` albo zdjął flagę `warpTransitOrderGate`). Zapisane, bo **żaden pin już jej nie dotyka**: `preempt_order_smoke` T6/T11 zostały świadomie przepięte na wejścia, które istnieją (nagłówek tamtego pliku to opisuje). ⚠ Kto ją kiedyś skasuje, niech skasuje razem z nią komentarz D-VO3e i nagłówkową notkę keepera — inaczej zostawi trzy odwołania do kodu, którego nie ma. |
 | **266** | 🟠 **„Docked" jest DOMYŚLNĄ ETYKIETĄ w DWÓCH niezależnych miejscach — panel raportuje FALLBACK jako FAKT, i żaden z tych miejsc nie czyta `dockedAt`.** ZMIERZONE WYKONANIEM (`buildRosterRows` + realna mapa widoku): stan `undefined` → **`statusKey = 'docked'`** (`FleetGroupPanelLogic:83`, `?? 'docked'`); stan NIEZNANY (np. `'exploring'`) → klucz nie trafia w mapę i widok robi `?? 'fleetGroup.statusDocked'` (`FleetGroupPanel:345`, `FleetCommandPanel:297`) → **„Docked"**; brak całego `position` → to samo. Trzy różne stany świata renderują się jako „zadokowany", a **`position.dockedAt` nie jest w tej ścieżce czytany ani razu**. ⚠ **TRIGGER: obserwacja z live-gate'u 147** — rejestr floty pokazywał `v_13` jako „docked at Mstow", gdy stan statku był `systemId: sys_020`, `dockedAt: null`, `_pendingReturnDock: null`, `_pendingDock: null`. ⚠ **GRANICA DOWODU, NAZWANA:** pinpoint KTÓREJ powierzchni dotyczył tamten odczyt wymaga `position.state` **z chwili renderu**, a zrzut go nie zawierał. Drugi kandydat na tamto konkretne zdanie to `FleetManagerOverlay._getLocationText:3819-3830` / wiersz `:3717-3722` — te keyują na `position.state` i nazwę biorą z `_resolveName(position.dockedAt)`, a `_resolveName(null)` zwraca **`'???'`** (`:171`), więc dla `dockedAt: null` napisałyby „Hangar: ???", nie „Hangar: Mstow" ⇒ albo `dockedAt` **nie był** null w chwili renderu (zrzut i render nie były jednoczesne), albo powierzchnią był jeden z panelo­wych fallbacków wyżej. **Defekt fallbacku jest jednak reprodukowalny NIEZALEŻNIE od tego rozstrzygnięcia.** | 🟠 **OTWARTY — AUDYT/POMIAR ONLY, zero kodu w slice'ie 147** (polecenie właściciela). Rodzina: **NIE** 255/263 (tam problem jest w RAMCE WSPÓŁRZĘDNYCH i idzie do zapisu) — to **własny defekt WARSTWY WYŚWIETLANIA**, klasa „reasonless failure reads as unfixed" / „aggregate readout is not an account": UI podaje wartość domyślną tam, gdzie nie ma pomiaru. Kształt naprawy (do podpisu): stan nierozpoznany ma się renderować jako **nieznany**, nie jako „docked"; `?? 'docked'` w logice i `?? 'fleetGroup.statusDocked'` w widoku to DWA osobne site'y i oba trzeba tknąć (nieutwardzony bliźniak). ⚠ Do gate'u tamtej naprawy: dorzucić zrzut `position.state` obok `dockedAt`, żeby pomiar nazwał powierzchnię. |
+| **267** | 🟠 **`patrolManual` — TRZECI producent punktu z ramki KAMERY w tym samym pliku, poza zasięgiem legu D.** `RightClickMenu:278` (opcja `patrolManual` z `MENU_OPTIONS_BY_TARGET.empty`) uruchamia picker waypointów; te wracają jako gameplay px **z kamery** (`GameScene:5931` → `um.addPickerWaypoint(gp)`) i idą do `buildPatrolFromWaypoints` (`OrderDispatcher:149`) → `mos.issueOrder({type:'patrol', patrolRoute})`. Ścieżka **nie przechodzi przez `buildOrderSpec`**, a `patrol` buduje własny order z pominięciem `_issueMoveToPoint` (`MOS:1667`), więc **żadna bramka układu jej nie ogląda**. ZMIERZONE: statek w `sys_020`, kamera `sys_home`, trasa `[(1 AU,0),(4 AU,0)]` z ramki kamery → `{ok:true, orderId:'mo_3'}` — statek patroluje punkty odmierzone od CUDZEJ gwiazdy. ⚠ Ta sama klasa co 255 (goły punkt bez ramki), ale **inny producent i inny typ rozkazu**, więc osobny numer — dokładnie jak 256 wobec 255. | ⬜ **OTWARTY, świadomie poza legiem D (D-LD5).** Pinowany ODWRÓCONYM pinem `map_click_frame_smoke` **T9b** (pin pinuje DEFEKT; **ma paść**, gdy 267 zostanie domknięty). Naprawa = ten sam termin `_outOfCameraFrame` w gałęzi `patrol` (`RightClickMenu:274-291`), ale ⚠ **wymaga podpisu co do MOMENTU odmowy**: przy WYBORZE opcji (przed pickerem — tańsze, ale gracz traci klik) czy przy FINALIZACJI (po zebraniu waypointów — uczciwsze wobec gracza, który mógł w międzyczasie przełączyć układ, ale wyrzuca zebraną pracę). ⚠ Osiągalność: `patrolManual` jest jedyną pozycją menu wchodzącą w tryb pickera z PPM. |
 
 ---
 

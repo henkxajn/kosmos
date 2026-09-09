@@ -4416,11 +4416,87 @@ sweep **221/221 0 FAIL** · `check-i18n` PASS (pl=en=3343, **zero nowych kluczy 
 ⚠ **Brak kill-switcha w tym slice'ie** (żadna z decyzji D-255a…f go nie przewidywała) —
 rollback = `git revert`.
 
-**NASTĘPNE (kolejka właściciela):** **leg D** 🔴 — odmowa po stronie PRODUCENTA dla legu MAPY
-z 255 (`buildOrderSpec` / `_buildFleetSpec` odmawiają, gdy `systemIdOf(vessel) !== activeSystemId`;
-**2 site'y, zero nowych pól w `spec`, zero zmian w MOS**, reużywa kanału Dziennika, który już
-nazywa każdy pominięty statek). ⚠ Wiersze **8/9** (pickery flotowe) zostają otwarte i **mają być
-tak nazwane w gate'cie**. Stempel ramki `spec.frameSystemId` **ZAPARKOWANY jako własna decyzja**
-(zmierzony: działa, nie dotyka POI, bez migracji — ale kosztuje nowe pole + 4-6 producentów
-+ wyjątek POI + bramkę w MOS). Dalej: **256** (z decyzją o regule grupowej) → **266** →
-reszta rejestru (151/152/153, 264/265).
+**NASTĘPNE:** ✅ **leg D ZROBIONY** — sekcja niżej.
+
+---
+
+## Finding 255 — LEG D: klik na mapie nie wysyła statku spoza ramki kamery (save **v101 bez migracji**, live-gate PASS — noga MAPY ZAMKNIĘTA 2026-09-09, commity `92e075f` + docs)
+
+Trzecia i ostatnia noga arca zaczętego Findingiem 147. Plan/decyzje **D-LD1..D-LD5** + rejestr:
+`docs/design/VESSEL_ORDERS_PLAN.md` §255 (noga MAPY zamknięta, wiersze 8/9 OTWARTE) + §267 NOWY.
+
+**Jedno zdanie:** współrzędne są LOKALNE dla układu (gwiazda każdego układu stoi w (0,0)), więc
+goły punkt **nie niesie ramki** — a `switchActiveSystem:152` **nie czyści zaznaczenia**, więc
+statek z innego układu zostawał zaznaczony i dostawał kliknięte współrzędne odmierzone od SWOJEJ
+gwiazdy. Repro właściciela (`mo_6`) odtworzone przez PRAWDZIWY łańcuch PPM: misja `move_to_point`
+do (15.71, −158.94) **w `sys_020`**, paliwo 9999 → 9997.735, **0 wpisów w Dzienniku**. Cicho.
+
+**Kształt — termin U WOŁAJĄCEGO, nie w budowniczych spec (D-LD1).** `OrderDispatcher.js` jest
+CZYSTY (zero importów, dostaje `vesselId` jako **STRING**, nie obiekt) i **pozostaje nietknięty**;
+`_buildFleetSpec(option, target)` nie dostaje **ani statku, ani `fleetId`**. Dwa site'y, jeden plik
+(`RightClickMenu`): pętla per-statek (odmowa → istniejący `fails[]` ⇒ raport nazywający każdy
+pominięty statek **za darmo**) + gałąź flotowa (**D-LD2**: odmowa CAŁOFLOTOWA, gdy choćby jeden
+członek jest poza ramką, z nazwaniem każdego winowajcy — kanał `res.rejected[0]` pokazuje tylko
+pierwszy). Zero nowych pól w `spec`, zero zmian w MOS, **zero nowych kluczy i18n** (reuse
+`vessel.reasonTargetOtherSystem`, D-LD3), brak flagi (rollback = revert).
+
+⚠ **ZAKRES TYPÓW ZMIERZONY, NIE ZAŁOŻONY** — `POINT_SOURCED_ORDER_TYPES` = `moveToPoint` + `dock`.
+Bramka na CAŁEJ pętli byłaby fałszywym negatywem **tej samej klasy co regresja fan-outu**:
+`retreat` liczy cel w układzie STATKU (ZMIERZONE: statek w `sys_020` przy kamerze `sys_home`
+dostaje poprawny `targetPoint {286,0}` = `f_a` w SWOIM układzie), `escort` to Finding 264,
+`goToPOI`/`patrol` chodzą po `poiId` (POI bez `systemId` — Finding 152). `dock` JEST w zbiorze
+(D-LD4), bo `_issueDock` **zrzuca `targetBodyId`** przed `_issueMoveToPoint`.
+
+⚠ **DLACZEGO NIE W `FleetSystem.issueFleetOrder`** — w jedynym miejscu pokrywającym naraz PPM floty
+I oba pickery: ta funkcja obsługuje TAKŻE „Powrót do bazy", którego cel liczy się w układzie STATKU
+(naprawa 154), więc termin „ramka statku ≠ kamera" odrzuciłby tam rozkaz CAŁKOWICIE POPRAWNY
+(ZMIERZONE: flota `sys_020`, kamera `sys_home` → `{ok:true, accepted:2}`). **Predykat nie jest
+własnością ROZKAZU — jest własnością pary (statek, kamera).** Pinuje to **T4**, najważniejszy pin
+slice'u (mierzy PRAWDZIWE `issueFleetOrder`).
+
+⚠ **ODMOWA JEST STRICTE NO-OPEM** (zmierzone): brak rozkazu/misji, stan i paliwo nietknięte,
+**istniejący rozkaz statku przeżywa** (`mo_1` przed i po, `status active`), a `fleet.activeOrder`
+i rozkazy członków też — bo wracamy **PRZED** `issueFleetOrder:118`, które kasuje poprzedni rozkaz
+floty. Odrzucony klik nie może zepsuć bieżących rozkazów.
+
+**Live-gate 2026-09-09 (właściciel, klient EN) — PASS.** §1 single · §2 anty-jałowość · §4 flota ·
+§5 flota mieszana · §6 dock z mapy · §7 Powrót floty spoza ramki (kontrola wycieku do fan-outu,
+na żywo) · §8 nie-regresja 147. **Dwie dewiacje zapisane, nie wygładzone:**
+- 🔴 **§5 wszedł najpierw INNYM KANAŁEM i dał PIERWSZE POTWIERDZENIE NA ŻYWO dla wierszy 8/9**:
+  picker floty w panelu (`FleetCommandPanel:354` = wiersz 9, znany-otwarty) wysłał OBA statki,
+  ten spoza ramki poleciał do klikniętych współrzędnych we WŁASNYM układzie, **zero wpisów
+  w Dzienniku**. Powtórka przez PPM mapy zachowała się dokładnie wg D-LD2. To **dowód osiągalności**
+  wierszy 8/9 w normalnej grze, nie porażka legu D.
+- ⚠ **§3 (mieszany multi-select) NIE JEST wykonalny Z MAPY — i to jest ZAMIERZONE.** Pomiar:
+  **nie ma mechanizmu czyszczącego** `_selectedVesselIds` (`addToSelection`/`toggleSelection` bez
+  terminu układu; `removeFromSelection` ma dwóch wołających — wraki i ✕ w `FleetGroupPanel`;
+  `system:switched` selekcji nie rusza). Prawdziwy mechanizm jest strukturalny:
+  `ThreeRenderer._syncVesselPositions:4883` **usuwa sprite** statku spoza aktywnego układu,
+  a `_getVesselAtScreen` iteruje dokładnie ten rejestr ⇒ **na mapie nie ma czego kliknąć**.
+  Usunięcie jest ŚWIADOME (`2f76605`, „Fix vessel sprites showing from other star systems").
+  ⇒ **NIE zakładam findingu.** Stan T2 jest osiągalny **innymi powierzchniami**: Outliner
+  CTRL+klik (`Outliner:665`) i TacticalDock CTRL+klik (`TacticalDock:639`) — obie listują statki
+  wszystkich układów i wołają `toggleSelection` bez filtra.
+
+⚠ **DWIE LEKCJE Z PISANIA KEEPERA (wychodzą poza slice):** (1) **pin białoskrzynkowy na metodzie,
+której przed naprawą NIE MA, WYWALA przebieg fail-first i ukrywa kolor wszystkich pinów niżej** —
+zmierzone dwukrotnie (`TypeError` na T5, potem na T7; T5b-T10 bez koloru). Taki pin musi
+**degradować, nie przerywać**. (2) **Jałowa zieleń:** „tekst bez surowego sluga" przechodziło przed
+naprawą, bo **tekstu nie było** — wymóg `txt.length > 0` jest częścią pinu (licznik 20/20 → 18/22).
+
+⚠ **DOCK Z MAPY = POKRYCIE INCYDENTALNE, BEZ CICHEGO KREDYTU:** leg D zamyka producenta PPM mapy,
+ale **obie połowy Findingu 256 (ofertowa `getDockTargets` i admisyjna `_issueDock`) ZOSTAJĄ
+OTWARTE**, razem z regułą grupową (a/b/c) czekającą na podpis. Pinuje to **T4b**.
+
+**NOWY FINDING 267** (`patrolManual`) — trzeci producent punktu z ramki kamery w tym samym pliku,
+poza `buildOrderSpec`; ZMIERZONE `{ok:true, orderId:'mo_3'}`. Otwarty, pinowany **odwróconym**
+T9b; naprawa wymaga podpisu **co do MOMENTU odmowy** (przed pickerem vs po zebraniu waypointów).
+
+**Testy:** NEW `map_click_frame_smoke` **40/40**, fail-first **18 PASS / 22 FAIL** zmierzony
+FINALNYMI pinami na pristine HEAD (`git archive` — bez dotykania drzewa roboczego i bez mutacji
+`.git`). ⚠ **T9a/T9b to piny ODWRÓCONE** — pinują DEFEKT (wiersze 8/9 oraz 267) i **mają paść**,
+gdy te zostaną domknięte. Sweep **222/222 0 FAIL** · `check-i18n` PASS.
+
+**KOLEJKA (rodzina 255 i dalej):** **wiersze 8/9** (pickery flotowe — teraz z dowodem na żywo)
+→ **256** (decyzja właściciela o regule grupowej) → **266** → **267** (decyzja o momencie odmowy)
+→ reszta rejestru (**151** / **152** / **153**, **264** / **265**).
