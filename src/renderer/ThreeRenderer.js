@@ -2973,11 +2973,34 @@ export class ThreeRenderer {
     const cfg = configs[stage];
     if (!cfg) return;
 
-    // Bazowy promień gwiazdy: 1.6 (stała z _getEntityRadius dla 'star')
-    const starRadius = 1.6;
+    // ── V-261 — pierścienie nie mogą leżeć WEWNĄTRZ tarczy ────────────────────
+    // Baza 1.6 to `_getEntityRadius('star')`, czyli promień SPRZED `STAR_CORE_SCALE`.
+    // Archeologia: pierścienie (8a26066, 2026-04-07) poprzedzają powiększenie tarczy
+    // (a666a07, 2026-07-21) — skala nigdy nie została z tamtą zmianą uzgodniona.
+    // Tarcza ma dziś 2,34 (M) … 4,32 (F) WU, więc pierścień etapu 1 (2,40) leży
+    // W ŚRODKU tarczy na K, G i F, a etap 2 traci na F oba pierścienie.
+    //
+    // ⚠ Dziś to jeszcze WIDAĆ — i tylko dlatego, że V-267 pozwala im rysować się PO
+    //   tarczy. Po naprawie głębi zniknęłyby CAŁKOWICIE, czyli etap 1 przestałby
+    //   istnieć wizualnie na K/G/F. Dlatego ta poprawka wchodzi PRZED naprawą głębi:
+    //   żaden commit w sekwencji nie ma prawa nieść tej regresji.
+    //
+    // ⚠ PODŁOGA, a nie przeskalowanie bazy. Podstawienie `starRadius = tarcza`
+    //   (kuszące, bo to jedna linia) mnoży WSZYSTKO: etap 4 na G idzie 6,40 → 14,40 WU,
+    //   na F → 17,28, czyli wprost w problem „zajmowały cały ekran", pod który
+    //   dobrano `scale` w D3-fix. Podłoga podnosi TYLKO to, co i tak było niewidoczne:
+    //   M bez zmian, G outer 6,40 → 6,45, F 6,40 → 7,74.
+    //
+    // ⚠ Prześwit NIE jest nową magiczną liczbą: to stosunek, w jakim pierścień etapu 4
+    //   stoi DZIŚ nad tarczą gwiazdy typu G (4,00 WU wobec 3,60 WU). Bierzemy
+    //   najciaśniejszy prześwit, jaki gra już wypuściła i który przeszedł oko.
+    const DYSON_CLEARANCE = 4.0 / 3.6;
+    // `_sunCoreRadius` jest ustawiane w renderStar PRZED `_starGroup`, a updateStarForDyson
+    // wychodzi wcześniej przy `!this._starGroup` — więc na tej ścieżce jest zawsze aktualne.
+    const base = Math.max(1.6 * cfg.scale, this._sunCoreRadius * DYSON_CLEARANCE);
 
     for (let i = 0; i < cfg.rings; i++) {
-      const radius = starRadius * cfg.scale * (1 + i * 0.3);
+      const radius = base * (1 + i * 0.3);
       const geo    = new THREE.RingGeometry(radius * 0.97, radius, 64);
       const mat    = new THREE.MeshBasicMaterial({
         color:        cfg.color,
