@@ -23,14 +23,21 @@
 //   locie planeta jest 3,15-7,62 AU od tego punktu ⇒ próg 0,5 AU PADAŁBY ZAWSZE. Dlatego 263
 //   domykamy TERMINEM UKŁADU, a T6 pilnuje, żeby nikt nie „naprawił" tego przez powrót progu.
 //
-// ⚠ CZEGO TU NIE MA: **T13** (leg C — `sameSystemOnly` na dwóch starych powierzchniach docka).
-//   Leg C WYPADŁ z tego slice'u po pomiarze: `sameSystemOnly:true` BEZ `vessel` jest NO-OPEM
-//   (`filterDockTargets` ma guard `if (!vessel) return list`), a obie stare powierzchnie `vessel`
-//   NIE PODAJĄ — więc to nie „jeden argument", a dwa plus REGUŁA dla grupy rozpiętej na dwa układy
-//   (zmierzone: reprezentant Alfa daje [p_home,h2], Beta daje [f_far] — którykolwiek wybór zostawia
-//   część statków z celem w obcej ramce, a `_issueDock` tego nie broni). Zostaje przy Findingu 256.
+// ✅ FINDING 256 ZAMKNIĘTY 2026-09-10 — TU MIESZKAJĄ JEGO PINY (D1-D9, D-256e).
+//   Leg C wypadł wtedy z zakresu po pomiarze i miał rację: `sameSystemOnly:true` BEZ `vessel`
+//   jest NO-OPEM (`filterDockTargets` ma guard `if (!vessel) return list`) — zmierzone:
+//   `filterDockTargets(all, null, true)` zwraca WSZYSTKIE trzy ciała. Czyli dwa argumenty
+//   na site, nie jeden, plus REGUŁA dla grupy rozpiętej na dwa układy.
+//   PODPIS WŁAŚCICIELA: **A + C** — oferta REPREZENTANTA (pierwszy żywy członek) + admisja
+//   per statek. Wariant PRZECIĘCIA odrzucony świadomie: pusty picker odbierałby graczowi
+//   legalną akcję (dok tych, którzy MOGĄ), więc **D2 (pusta oferta) NIE ISTNIEJE** — to nie
+//   przeoczenie, tylko konsekwencja wybranego kształtu.
 //
-// PINY:
+// ⚠ DLACZEGO `SystemScope`, A NIE `CameraFrame`: dock ma PRAWDZIWE ciało w spec-u, więc pytanie
+//   brzmi „czy to ciało jest w układzie STATKU" — predykat (statek, CIAŁO), fail-OPEN. Termin
+//   KAMERY (Finding 255) odrzucałby tu flotę dokującą legalnie we własnym układzie, gdy gracz
+//   patrzy na inny — inna rodzina, inne narzędzie.
+//// PINY:
 //   T1   FMO „Powrót do bazy" — marker celuje w ciało W UKŁADZIE STATKU (+ ŚWIADEK: własna kolonia
 //        w tym układzie ISTNIEJE, inaczej pin przechodzi na świecie bez konkurencji)
 //   T2   `FleetCommandPanel._fleetReturn` — bliźniak T1 (ta powierzchnia NIGDY nie była mierzona)
@@ -48,6 +55,24 @@
 //   T10  parytet selektora + sierota USUNIĘTA (kształt zwrotki, fallback placówkowy, warp → null)
 //   T11  NIE-REGRESJA 147 — statek w skoku dalej odrzucany
 //   T12  NIE-REGRESJA 254 — composite cross-system dalej działa (`getSystem` stubowany TRUTHY)
+//   ── Finding 256 (dock: oferta + admisja) ──
+//   ⚠ D1 (oferta reprezentanta) DOCHODZI W NASTĘPNYM COMMICIE — pinuje kod, którego
+//     ten commit jeszcze nie ma (dwie stare powierzchnie docka). Tu żyje połowa ADMISYJNA.
+//   D3   🔑 ADMISJA — `dock` cross-system ODRZUCANY: zero rozkazu, zero misji, zero markera
+//        (+ KONTROLA nie-jałowości: ciało naprawdę jest w innym układzie)
+//   D4   🔑 ODMOWA MÓWI — wpis `fleet`/`warn` z NAZWĄ i PRZETŁUMACZONYM powodem; TRZY
+//        zmierzone pułapki ciszy: (i) odmowa BEZ powodu (`?? null` gasiło raport),
+//        (ii) odmowa CZĘŚCIOWA (raport szedł tylko gdy NIKT nie ruszył), (iii) sukces MILCZY
+//   D5   CZĘŚCIOWA WYSYŁKA JEST UCZCIWA — kto mógł, polecił; kto nie — NAZWANY
+//        (⚠ all-or-nothing z D-LD2 NIE przenosi się na dock: `dispatchDockTo` to zwykła pętla
+//        per statek, bez wspólnego `_arrivalSyncYear` — zmierzone)
+//   D6   ANTY-JAŁOWOŚĆ — dock we WŁASNYM układzie przechodzi CAŁY łańcuch aż do `docked`
+//   D7   KONSUMENT (D-256b) — NIEŚWIEŻY marker `_pendingDock` na obce ciało NIE re-homuje bazy
+//        (+ KONTROLA: marker naprawdę był ustawiony)
+//   D8   SYMETRIA BLIŹNIAKÓW — oba konsumenty markera (`_maybeDockOnArrival` i
+//        `_maybeAutoDockOnReturn`) odpowiadają TAK SAMO na ten sam stan świata
+//   D9   PIN źRÓDŁOWY — termin siedzi w `_issueDock`, dokładnie raz, i NIE ma drugiej kopii
+//        w `VesselGroupActions` (+ kontrola pinu na zmutowanej kopii)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy (inaczej `localStorage is not defined`)
@@ -66,6 +91,9 @@ import { systemIdOf }          from '../../utils/SystemScope.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { FleetCommandPanel }   from '../../ui/FleetCommandPanel.js';
 import { dispatchDockTo }      from '../../ui/VesselGroupActions.js';
+import { isSameSystem }       from '../../utils/SystemScope.js';
+import { fileURLToPath }      from 'node:url';
+import { dirname, join }      from 'node:path';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 
 let pass = 0, fail = 0;
@@ -418,5 +446,137 @@ header('T11/T12  nie-regresja — 147 (admisja warp) i 254 (composite)');
   delete window.KOSMOS.warpRouteSystem;
 }
 
+// ═══ D3 — 🔑 ADMISJA ═════════════════════════════════════════
+header('D3  `dock` na ciało z OBCEGO układu — odmowa, i to STRICTE no-op');
+{
+  world();
+  const v = ship({ sys: 'sys_020', auX: 3, name: 'Kestrel' });
+  const home = EntityManager.get('p_home');
+  assert(!isSameSystem(v, home),
+    `D3a KONTROLA: cel NAPRAWDĘ jest w innym układzie (statek ${v.systemId}, cel ${home.systemId})`);
+  const fuelBefore = v.fuel.current;
+  const r = mos.issueOrder(v.id, { type: ORDER_TYPES.dock, targetBodyId: 'p_home',
+    targetPoint: { x: home.x, y: home.y } });
+  assert(r?.ok === false && r?.reason === 'target_other_system',
+    `D3b ODMOWA z powodem 256 (${JSON.stringify(r)})`);
+  assert(mos.getOrder(v.id) == null && (v._pendingDock ?? null) === null
+         && v.mission == null && v.fuel.current === fuelBefore,
+    `D3c NO-OP: rozkaz=${mos.getOrder(v.id)?.type ?? 'BRAK'}, marker=${v._pendingDock ?? 'brak'}, `
+    + `misja=${v.mission?.type ?? 'brak'}, paliwo ${fuelBefore}→${v.fuel.current}`);
+}
+
+// ═══ D4 + D5 — 🔑 ODMOWA MÓWI, I MÓWI NAZWAMI ═══════════════════════
+header('D4/D5 odmowa docka jest głośna — trzy pułapki ciszy zamknięte');
+for (const loc of ['pl', 'en']) {
+  const prev = getLocale();
+  setLocale(loc);
+  world();
+  const pushed = [];
+  window.KOSMOS.eventLogSystem = { push: (e) => pushed.push(e) };
+  const inSys  = ship({ sys: 'sys_home', auX: 2, name: 'Sable' });
+  const outSys = ship({ sys: 'sys_020',  auX: 3, name: 'Kestrel' });
+  const res = dispatchDockTo([inSys.id, outSys.id], 'p_home');
+
+  // D5 — KONTROLA NIE-JAŁOWOŚCI po OBU stronach: ktoś polecił I ktoś został pominięty.
+  assert(res.okCount === 1 && mos.getOrder(inSys.id)?.type === 'moveToPoint'
+         && mos.getOrder(outSys.id) == null,
+    `D5-${loc} częściowa wysyłka: kto mógł — polecił (okCount=${res.okCount})`);
+
+  const e = pushed[0];
+  const txt = e?.text ?? '';
+  assert(pushed.length === 1 && e?.channel === 'fleet' && e?.severity === 'warn'
+         && e?.entityRef === outSys.id,
+    `D4a-${loc} DOKŁADNIE jeden wpis (kanał=${e?.channel}, waga=${e?.severity}, ref=${e?.entityRef})`);
+  // ⚠ `txt.length > 0` JEST CZĘŚCIĄ PINU — bez tego „brak surowego sluga" przechodzi na PUSTYM
+  //   tekście (lekcja legu D, licznik fail-first 20/20 → 18/22).
+  assert(txt.length > 0 && txt.includes('Kestrel') && !txt.includes('Sable')
+         && txt.includes(t('vessel.reasonTargetOtherSystem')) && !/target_other_system/.test(txt),
+    `D4b-${loc} nazwany WYŁĄCZNIE pominięty, powód PRZETŁUMACZONY → „${txt}"`);
+
+  // PUŁAPKA (i): odmowa BEZ powodu — `?? null` gasiło CAŁY raport (zmierzone).
+  world();
+  const pushed2 = [];
+  window.KOSMOS.eventLogSystem = { push: (ev) => pushed2.push(ev) };
+  const w = ship({ sys: 'sys_020', auX: 3, name: 'Zmija' });
+  const realIssue = mos.issueOrder.bind(mos);
+  mos.issueOrder = () => ({ ok: false });          // brak `reason`
+  const r2 = dispatchDockTo([w.id], 'p_home');
+  mos.issueOrder = realIssue;
+  assert(pushed2.length === 1 && (pushed2[0].text ?? '').length > 0 && r2.firstFail === 'unknown',
+    `D4c-${loc} odmowa BEZ powodu też MÓWI (firstFail=${JSON.stringify(r2.firstFail)}, `
+    + `wpisów=${pushed2.length})`);
+
+  // PUŁAPKA (iii): SUKCES ma milczeć — inaczej raport zamieniłby się w szum.
+  world();
+  const pushed3 = [];
+  window.KOSMOS.eventLogSystem = { push: (ev) => pushed3.push(ev) };
+  const okShip = ship({ sys: 'sys_home', auX: 2, name: 'Sable' });
+  const r3 = dispatchDockTo([okShip.id], 'p_home');
+  assert(r3.okCount === 1 && pushed3.length === 0,
+    `D4d-${loc} pełny sukces MILCZY (okCount=${r3.okCount}, wpisów=${pushed3.length})`);
+  setLocale(prev);
+}
+
+// ═══ D6 — ANTY-JAŁOWOŚĆ: dok we własnym układzie działa CAŁY łańcuch ══════════
+header('D6  dock we WŁASNYM układzie — nietknięty od rozkazu do `docked`');
+{
+  world();
+  const v = ship({ sys: 'sys_home', auX: 3, name: 'Sable' });
+  const r = dispatchDockTo([v.id], 'p_home');
+  assert(r.okCount === 1, `D6a PRZESŁANKA: rozkaz przyjęty (${JSON.stringify(r)})`);
+  completeOrder(v);
+  assert(v.position.state === 'docked' && v.position.dockedAt === 'p_home',
+    `D6b statek ZADOKOWAŁ (state=${v.position.state}, dockedAt=${v.position.dockedAt})`);
+}
+
+// ═══ D7 — KONSUMENT: nieświeży marker nie re-homuje bazy ════════════════
+header('D7  stary `_pendingDock` na obce ciało — BAZA statku nietknięta (D-256b)');
+{
+  world();
+  const v = ship({ sys: 'sys_020', auX: 3, colonyId: 'f_far', name: 'Kestrel' });
+  v._pendingDock = 'p_home';                       // marker przeżył porzucenie rozkazu
+  assert((v._pendingDock ?? null) === 'p_home' && v.colonyId === 'f_far',
+    `D7a KONTROLA: marker ustawiony, baza w ${v.colonyId}`);
+  const xBefore = v.position.x;
+  fs._maybeDockOnArrival(v.id);
+  assert(v.colonyId === 'f_far' && (v.position.dockedAt ?? null) === null
+         && v.position.x === xBefore,
+    `D7b baza NIE re-homowana (colonyId=${v.colonyId}, dockedAt=${v.position.dockedAt ?? 'null'}, `
+    + `x ${xBefore}→${v.position.x})`);
+  assert((v._pendingDock ?? null) === null, 'D7c marker ZUŻYTY mimo odmowy (jednorazowy flag)');
+}
+
+// ═══ D8 — SYMETRIA BLIŹNIAKÓW ═════════════════════════════════
+header('D8  oba konsumenty markera odpowiadają TAK SAMO na ten sam stan świata');
+{
+  world();
+  const a = ship({ sys: 'sys_020', auX: 3, colonyId: 'f_far', name: 'Kestrel' });
+  const b = ship({ sys: 'sys_020', auX: 3, colonyId: 'f_far', name: 'Vipera' });
+  a._pendingDock = 'p_home';
+  b._pendingReturnDock = 'p_home';
+  fs._maybeDockOnArrival(a.id);
+  fs._maybeAutoDockOnReturn(b.id);
+  assert(a.colonyId === 'f_far' && b.colonyId === 'f_far'
+         && (a.position.dockedAt ?? null) === null && (b.position.dockedAt ?? null) === null,
+    `D8a oba markery odrzucone identycznie (dock: ${a.colonyId}/${a.position.dockedAt ?? 'null'}, `
+    + `return: ${b.colonyId}/${b.position.dockedAt ?? 'null'})`);
+}
+
+// ═══ D9 — PIN źRÓDŁOWY: jeden termin, jedno miejsce ═══════════════════
+header('D9  termin siedzi w `_issueDock`, dokładnie raz, bez drugiej kopii');
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const mosSrc = strip(readFileSync(join(here, '../../systems/MovementOrderSystem.js'), 'utf-8'));
+  const vgaSrc = strip(readFileSync(join(here, '../../ui/VesselGroupActions.js'), 'utf-8'));
+  // ⚠ Kotwica `[\s\S]` — nigdy `\n` (Finding 270: świeży checkout CRLF).
+  const dockFn = mosSrc.match(/_issueDock\(vessel, spec\)\s*\{[\s\S]*?\n  \}/);
+  assert(!!dockFn && /isSameSystem\(vessel,\s*bodyEnt\)/.test(dockFn[0]),
+    'D9a termin (statek, CIAŁO) siedzi WEWNĄTRZ `_issueDock`');
+  assert(!/isSameSystem/.test(vgaSrc),
+    'D9b `VesselGroupActions` NIE ma drugiej kopii terminu (jedno miejsce, nie dwa)');
+  assert(/isSameSystem/.test(vgaSrc + 'isSameSystem(a,b)'),
+    'D9c KONTROLA PINU: na zmutowanej kopii D9b PADA');
+}
 console.log(`\n════ return_dock_family_smoke: ${pass} PASS / ${fail} FAIL ════`);
 process.exit(fail > 0 ? 1 : 0);

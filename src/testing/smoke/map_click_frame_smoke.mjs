@@ -49,7 +49,7 @@
 //   T4   🔑 KONTROLA WYCIEKU DO FAN-OUTU — „Powrót do bazy" floty spoza ramki NADAL
 //        przechodzi przez PRAWDZIWE `issueFleetOrder` + kontrola nie-jałowości (cel
 //        naprawdę pochodzi z układu STATKU)
-//   T4b  KONTROLA ZAKRESU D-LD4 — `dock` wydany POZA mapą (wprost do MOS) dalej
+//   T4b  KONTROLA ZAKRESU D-LD4 — `dock` W SWOIM UKŁADZIE wydany POZA mapą (wprost do MOS)
 //        przechodzi; leg D zamyka producenta MAPY, nie mechanikę doku (256 zostaje)
 //   T5   NIE-REGRESJA 147 — statek w skoku dostaje DOKŁADNIE `vessel_in_warp_transit`,
 //        nie powód legu D (fail-open na `systemIdOf === null` — kolejność zmierzona)
@@ -360,7 +360,7 @@ header('T4  „Powrót do bazy" floty spoza ramki — PRAWDZIWE issueFleetOrder'
 }
 
 // ═══ T4b — KONTROLA ZAKRESU D-LD4 ════════════════════════════════════════════
-header('T4b dock POZA mapą — leg D zamyka producenta MAPY, nie mechanikę doku');
+header('T4b dock POZA mapą — leg D zamyka producenta MAPY, nie mechanikę doku (+ 256)');
 {
   scene({ camera: 'sys_home' });
   const v = ship({ sys: 'sys_020', auX: 2, name: 'Żmija' });
@@ -368,7 +368,17 @@ header('T4b dock POZA mapą — leg D zamyka producenta MAPY, nie mechanikę dok
   // Ścieżka NIE-mapowa (pickery `VesselGroupActions`, `FleetCommandPanel`) — wprost do MOS.
   const r = mos.issueOrder(v.id, { type: 'dock', targetBodyId: 'f_a', targetPoint: { x: fa.x, y: fa.y } });
   assert(r?.ok === true,
-    `T4b dock wydany POZA mapą dalej przechodzi (ok=${r?.ok}, reason=${r?.reason ?? '—'}) — Finding 256 NIETKNIĘTY`);
+    `T4b dock W SWOIM UKŁADZIE wydany POZA mapą dalej przechodzi (ok=${r?.ok}, reason=${r?.reason ?? '—'})`);
+
+  // ⚠ RODZEŃSTWO (Finding 256 ZAMKNIĘTY 2026-09-10, D-256a). Etykieta wyżej brzmiała
+  //   „Finding 256 NIETKNIĘTY" — i była prawdziwa, dopóki admisja przepuszczała cel z obcego
+  //   układu. Sama ASERCJA nie musiała paść: jej fixture jest SAME-SYSTEM (`sys_020` → `f_a`
+  //   z `sys_020`), a dok we własnym układzie zostaje legalny NA ZAWSZE. Kłamała etykieta.
+  const rx = mos.issueOrder(v.id, { type: 'dock', targetBodyId: 'p_home',
+    targetPoint: { x: EntityManager.get('p_home').x, y: EntityManager.get('p_home').y } });
+  assert(rx?.ok === false && rx?.reason === 'target_other_system' && (v._pendingDock ?? null) === null,
+    `T4b-x dock CROSS-SYSTEM (też poza mapą) jest ODRZUCANY (ok=${rx?.ok}, reason=${rx?.reason}, 
+marker=${v._pendingDock ?? 'brak'}) — Finding 256, połowa admisyjna`);
 
   // A ten sam `dock` PRZEZ MAPĘ na ciało z ramki KAMERY jest odmawiany (D-LD4).
   scene({ camera: 'sys_home' });

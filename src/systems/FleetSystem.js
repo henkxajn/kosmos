@@ -698,6 +698,22 @@ export class FleetSystem {
     if (!v || !v._pendingDock) return;
     const bodyId = v._pendingDock;
     delete v._pendingDock;   // jednorazowy flag
+    // ── D-256b (Finding 256) — TERMIN UKŁADU, lustro bramki z `_maybeAutoDockOnReturn` (263) ──
+    // `dockAtColony`/`dockAtStation` przepisują `position.dockedAt`, `position.x/y` **i `colonyId`**
+    // — czyli CAŁĄ BAZĘ statku — bez jakiegokolwiek terminu układu. ZMIERZONE przed naprawą:
+    // `Kestrel systemId=sys_020 colonyId=f_far` → po dokowaniu na `p_home[sys_home]`
+    // `colonyId=p_home dockedAt=p_home xy=(110,0)` przy NIEZMIENIONYM `systemId=sys_020`.
+    // ⚠ PO CO TU, skoro D-256a zamyka admisję: marker PRZEŻYWA porzucenie rozkazu (dokładnie ta
+    //   sama survival mode, którą zmierzył 263 dla `_pendingReturnDock`), więc stan „stary marker,
+    //   nowy układ" jest osiągalny BEZ przechodzenia przez `_issueDock` jeszcze raz.
+    //   To jest obrona NA TEJ ŚCIEŻCE, nie zamiast bramki admisyjnej.
+    // ⚠ `isSameSystem` fail-OPEN — encja bez stempla (stary zapis) dokuje jak dotąd.
+    const dockEnt = EntityManager.get(bodyId);
+    if (dockEnt && !isSameSystem(v, dockEnt)) {
+      console.warn(`[FleetSystem] dock ODRZUCONY: ${vesselId} jest w ${v.systemId ?? '?'}, `
+        + `a cel ${bodyId} w ${dockEnt.systemId ?? '?'} — marker zużyty, statek zostaje na miejscu`);
+      return;
+    }
     // Stacja orbitalna → dockAtStation: statek CHOWA SIĘ w stacji (hangar, sprite usuwany — Filip:
     // „schować się w niej, nie orbitować"). Fallback gdy dock się nie powiódł → orbituj stację
     // WIDOCZNIE (śledzona w _tickOrbitingVessels), żeby sprite nie zamarzł.

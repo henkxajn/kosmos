@@ -23,6 +23,7 @@ import EntityManager       from '../core/EntityManager.js';
 import { THEME }           from '../config/ThemeConfig.js';
 import { t }               from '../i18n/i18n.js';
 import { systemIdOf }      from '../utils/SystemScope.js';
+import { describeOrderFail } from '../utils/CameraFrame.js';
 import { resolveBodyName, resolveBodyPos, getDockTargets } from '../utils/BodyName.js';
 import { showBodyPickerModal } from './BodyPickerModal.js';
 import { showFleetAssignModal } from './FleetAssignModal.js';
@@ -64,14 +65,43 @@ export function dispatchDockTo(vesselIds, bodyId) {
   const pos = resolveBodyPos(bodyId);
   if (!pos) return { okCount: 0, firstFail: 'target_not_found' };
   const name = resolveBodyName(bodyId);
+  const ids = vesselIds ?? [];
   let okCount = 0, firstFail = null;
-  for (const id of (vesselIds ?? [])) {
+  const fails = [];                                 // [{ vesselId, reason }] — WSZYSTKIE pominięte
+  for (const id of ids) {
     const r = mos?.issueOrder?.(id, { type: 'dock', targetBodyId: bodyId, targetName: name, targetPoint: pos });
-    if (r?.ok) okCount++;
-    else if (!firstFail) firstFail = r?.reason ?? null;
+    if (r?.ok) { okCount++; continue; }
+    // ⚠ `?? 'unknown'`, NIE `?? null`: odmowa BEZ powodu zostawiała `firstFail = null`, przez co
+    //   warunek raportu (`okCount === 0 && firstFail`) nie zachodził i odmowa była CAŁKOWICIE CICHA
+    //   (zmierzone). To ta sama klasa co `if (!res) return` w anonsach rozkazów floty (Finding 255).
+    const reason = r?.reason ?? 'unknown';
+    fails.push({ vesselId: id, reason });
+    if (!firstFail) firstFail = reason;
   }
-  if (okCount === 0 && firstFail) {
-    EventBus.emit('ui:toast', { text: t('fleetGroup.dockFailed', firstFail), color: '#ff4466', durationMs: 3500 });
+  // ── Finding 256 / D4 — ODMOWA MUSI MÓWIĆ, I MÓWIĆ NAZWAMI ─────────────────────────────────
+  // Przed naprawą raport szedł WYŁĄCZNIE gdy NIKT nie ruszył, więc „2 z 3 zadokowały" było ciche
+  // (zmierzone) — a po zamknięciu admisji (D-256a) to jest właśnie TYPOWY wynik dla grupy
+  // rozpiętej na dwa układy. Kanał i klucze IDENTYCZNE jak w odmowie ruchu (255): ten sam powód ma
+  // się czytać tak samo niezależnie od tego, którym przyciskiem gracz go wywołał.
+  if (fails.length > 0) {
+    const skipped = fails.map(describeOrderFail).join(', ');
+    window.KOSMOS?.eventLogSystem?.push?.({
+      text: okCount > 0
+        ? t('vessel.orderPartial', okCount, ids.length, skipped)
+        : t('vessel.orderNoneMoved', skipped),
+      channel: 'fleet',
+      severity: 'warn',
+      entityRef: fails[0].vesselId,
+    });
+  }
+  // ⚠ Finding 271 — toast niósł SUROWY SLUG (`Cannot dock: target_other_system`). Kadencja bez
+  //   zmian (tylko gdy NIKT nie ruszył), ale treść to teraz nazwa statku + PRZETŁUMACZONY powód.
+  //   Zero nowych kluczy: `fleetGroup.dockFailed` zostaje, zmienia się to, co w nie wstawiamy.
+  if (okCount === 0 && fails.length > 0) {
+    EventBus.emit('ui:toast', {
+      text: t('fleetGroup.dockFailed', fails.map(describeOrderFail).join(', ')),
+      color: '#ff4466', durationMs: 3500,
+    });
   }
   return { okCount, firstFail };
 }

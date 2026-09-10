@@ -491,12 +491,37 @@ export class MovementOrderSystem {
    * Slice 8b — Dock: lecisz do ciała (STATYCZNY targetPoint, by order się ZAKOŃCZYŁ) + marker
    * `_pendingDock`. Przy `vessel:orderCompleted` FleetSystem._maybeDockOnArrival woła
    * `dockAtTarget` (stacja→hangar; planeta z portem→hangar; bez portu→orbita). Wzór Powrót
-   * (_pendingReturnDock), ale wynik = DOK, nie orbita. targetBodyId NIE używany (tracking nie kończy się).
+   * (_pendingReturnDock), ale wynik = DOK, nie orbita. `targetBodyId` NIE jest przekazywany
+   * do `_issueMoveToPoint` (tracking nie kończy się) — patrz bramka niżej.
    * `bypassFuelCheck`: rozkaz gracza — NIE odrzucaj cicho za paliwo (origin pozycji orbitującego
    * statku bywa nieaktualny → zawyżony dystans → fałszywy insufficient_fuel; snap przy dotarciu i tak
    * koryguje pozycję). Stranding nie grozi (dock = baza/stacja gracza).
    */
   _issueDock(vessel, spec) {
+    // ── Finding 256, połowa ADMISYJNA (D-256a) — TERMIN UKŁADU ───────────────────────────
+    // Bramka W3-4b w `_issueMoveToPoint` NIGDY tego celu nie oglądała, bo ta metoda przebudowuje
+    // spec na `moveToPoint` i ZRZUCA `targetBodyId` (świadomie — z nim rozkaz wchodziłby w tryb
+    // śledzenia ciała i nie kończyłby się, a dock potrzebuje ZAKOŃCZENIA, żeby odpalił marker).
+    // ZMIERZONE: `dock` statkiem z `sys_020` na kolonię w `sys_home` dawał `{ok:true}`
+    // i `_pendingDock=p_home`, podczas gdy TEN SAM cel jako `moveToPoint` z `targetBodyId`
+    // dostawał `{ok:false, reason:'target_other_system'}`. Bramka była poprawna — omijał ją spec.
+    //
+    // ⚠ TO JEST PREDYKAT (statek, CIAŁO) — rodzina `SystemScope`, NIE `CameraFrame`.
+    //   Dock ma PRAWDZIWE ciało w spec-u, więc nie ma czego wnioskować z kamery; termin kamery
+    //   (Finding 255) odrzucałby tu flotę dokującą legalnie we własnym układzie, gdy gracz patrzy
+    //   na inny. Ta sama miara, ten sam idiom co `_issueAttack` / `_issueMoveToPoint` /
+    //   `_issuePursueOrIntercept` / `_issueEngage`.
+    // ⚠ `isSameSystem` (fail-OPEN), nie `isSameSystemStrict`: encja bez stempla `systemId` to stary
+    //   zapis i MUSI dokować jak dotąd. Fail-closed byłby regresją, nie ostrożnością (kanon 263).
+    // ⚠ Bramka STOI PRZED `_issueMoveToPoint`, więc odmowa jest STRICTE NO-OPEM: nie powstaje ani
+    //   rozkaz, ani misja, ani marker — a przy okazji `_preemptCommit` nie zdąży zabić poprzedniego.
+    const bodyId = spec.targetBodyId ?? null;
+    if (bodyId) {
+      const bodyEnt = this._vm._findEntity?.(bodyId) ?? EntityManager.get(bodyId);
+      if (bodyEnt && !isSameSystem(vessel, bodyEnt)) {
+        return { ok: false, reason: 'target_other_system' };
+      }
+    }
     const result = this._issueMoveToPoint(vessel, {
       type: ORDER_TYPES.moveToPoint,
       targetPoint: spec.targetPoint,

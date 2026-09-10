@@ -47,7 +47,7 @@
 //        `vessel_in_warp_transit` z MOS + kontrola `systemIdOf(v) === null`
 //   F9   POWRÓT NIETKNIĘTY — `_handleFleetReturnBase` i `_fleetReturn` wysyłają flotę
 //        spoza ramki kamery + marker `_pendingReturnDock` (D-255b)
-//   F10  256 NIETKNIĘTY — `dock` wydany POZA mapą dalej przechodzi
+//   F10  `dock` W SWOIM UKŁADZIE wydany POZA mapą dalej przechodzi (+ rodzeństwo cross-system)
 //   F11  i18n — trzy reużyte klucze żyją w PL i EN, powód ramki ≠ powód warp
 //   F12  ŹRÓDŁO — producenci używają WYŁĄCZNIE istniejących kluczy (zero nowych)
 //        + D-89b: predykat ma JEDNO źródło (`utils/CameraFrame.js`), trzech konsumentów,
@@ -398,14 +398,22 @@ header('F9  „Powrót do bazy" działa dla floty spoza ramki — obie powierzch
 }
 
 // ═══ F10 — 256 NIETKNIĘTY ════════════════════════════════════════════════════
-header('F10 dock POZA mapą dalej przechodzi (Finding 256 zostaje otwarty)');
+header('F10 dock POZA mapą: w swoim układzie PRZECHODZI, cross-system ODRZUCANY (256)');
 {
   scene({ camera: 'sys_home' });
   const v = ship({ sys: 'sys_020', auX: 2, name: 'Żmija' });
   const fa = EntityManager.get('f_a');
   const r = mos.issueOrder(v.id, { type: 'dock', targetBodyId: 'f_a', targetPoint: { x: fa.x, y: fa.y } });
   assert(r?.ok === true,
-    `F10a dock wydany POZA mapą przechodzi (ok=${r?.ok}, reason=${r?.reason ?? '—'})`);
+    `F10a dock W SWOIM UKŁADZIE wydany POZA mapą przechodzi (ok=${r?.ok}, reason=${r?.reason ?? '—'})`);
+
+  // ⚠ Rodzeństwo — Finding 256 ZAMKNIĘTY (D-256a). Fixture F10a jest SAME-SYSTEM, więc
+  //   ta asercja nie miała prawa paść; pinę uzupełnia druga strona tej samej monety.
+  const home = EntityManager.get('p_home');
+  const rx = mos.issueOrder(v.id, { type: 'dock', targetBodyId: 'p_home',
+    targetPoint: { x: home.x, y: home.y } });
+  assert(rx?.ok === false && rx?.reason === 'target_other_system',
+    `F10b dock CROSS-SYSTEM ODRZUCANY (ok=${rx?.ok}, reason=${rx?.reason})`);
 }
 
 // ═══ F11 — i18n (zero nowych kluczy) ═════════════════════════════════════════
