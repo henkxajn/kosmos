@@ -438,9 +438,17 @@ export class FleetGroupPanel extends BaseOverlay {
         // Dock — picker celów: kolonie z PORTEM + orbitalne stacje gracza.
         // ⚠ Slice 258: JEDNO źródło (`VesselGroupActions.openDockPicker`). Ta logika istniała
         //   w DWÓCH niemal znak-w-znak kopiach (tu i `FleetCommandPanel.bgDock`) — teraz w jednej.
-        // ⚠ `sameSystemOnly` CELOWO POMINIĘTE (=false): ta powierzchnia zachowuje zachowanie
-        //   sprzed 258 BIT W BIT. Zawężenie do własnego układu to Finding 256, nie ten slice.
-        openDockPicker(this._liveVessels().map((v) => v.id), { onDone: () => this._markDirty() });
+        // ⚠ Finding 256, połowa OFERTOWA — kształt (a) REPREZENTANT (podpis właściciela „A + C").
+        //   Picker jest GRUPOWY, a `filterDockTargets` bierze JEDEN statek, więc ktoś musi być
+        //   reprezentantem. Wybrany jest PIERWSZY ŻYWY — ten sam idiom co „Powrót do bazy"
+        //   (`_fleetReturn` / `_handleFleetReturnBase`). ⚠ ZMIERZONE: „pierwszy żywy" to kolejność
+        //   DODANIA do zbioru, nie odległość ani kamera — więc dla grupy rozpiętej na dwa układy
+        //   oferta jest jednego z nich, a członkowie spoza niego dostają GŁOŚNĄ odmowę przy wysyłce
+        //   (bramka admisyjna D-256a + raport w `dispatchDockTo`). Wariant PRZECIĘCIA odrzucony
+        //   świadomie: pusty picker odbierałby graczowi legalną akcję (dok tych, którzy MOGĄ).
+        const live = this._liveVessels();
+        openDockPicker(live.map((v) => v.id),
+          { sameSystemOnly: true, vessel: live[0] ?? null, onDone: () => this._markDirty() });
         return;
       }
       // 'bg' → swallow (klik w panel nie przelatuje niżej).

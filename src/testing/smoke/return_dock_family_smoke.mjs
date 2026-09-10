@@ -56,8 +56,8 @@
 //   T11  NIE-REGRESJA 147 — statek w skoku dalej odrzucany
 //   T12  NIE-REGRESJA 254 — composite cross-system dalej działa (`getSystem` stubowany TRUTHY)
 //   ── Finding 256 (dock: oferta + admisja) ──
-//   ⚠ D1 (oferta reprezentanta) DOCHODZI W NASTĘPNYM COMMICIE — pinuje kod, którego
-//     ten commit jeszcze nie ma (dwie stare powierzchnie docka). Tu żyje połowa ADMISYJNA.
+//   D1   OFERTA — reprezentant odsiewa ciało z obcego układu (+ KONTROLA: lista bez filtra
+//        JE ZAWIERA) + pin źródłowy: obie stare powierzchnie podają flagę I reprezentanta
 //   D3   🔑 ADMISJA — `dock` cross-system ODRZUCANY: zero rozkazu, zero misji, zero markera
 //        (+ KONTROLA nie-jałowości: ciało naprawdę jest w innym układzie)
 //   D4   🔑 ODMOWA MÓWI — wpis `fleet`/`warn` z NAZWĄ i PRZETŁUMACZONYM powodem; TRZY
@@ -90,7 +90,8 @@ import { nearestOwnColonyBodyInSystem } from '../../utils/RetreatTarget.js';
 import { systemIdOf }          from '../../utils/SystemScope.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { FleetCommandPanel }   from '../../ui/FleetCommandPanel.js';
-import { dispatchDockTo }      from '../../ui/VesselGroupActions.js';
+import { dispatchDockTo, filterDockTargets } from '../../ui/VesselGroupActions.js';
+import { getDockTargets }     from '../../utils/BodyName.js';
 import { isSameSystem }       from '../../utils/SystemScope.js';
 import { fileURLToPath }      from 'node:url';
 import { dirname, join }      from 'node:path';
@@ -444,6 +445,35 @@ header('T11/T12  nie-regresja — 147 (admisja warp) i 254 (composite)');
   delete window.KOSMOS.orderService;
   delete window.KOSMOS.starSystemManager;
   delete window.KOSMOS.warpRouteSystem;
+}
+
+// ═══ D1 — OFERTA: reprezentant odsiewa obcy układ ══════════════════════
+header('D1  oferta docka — reprezentant zawęża listę do swojego układu');
+{
+  world();
+  const near = ship({ sys: 'sys_home', auX: 2, name: 'Sable' });
+  ship({ sys: 'sys_020', auX: 3, name: 'Kestrel' });
+  const all  = getDockTargets().map((b) => b.id);
+  // KONTROLA NIE-JAŁOWOŚCI: bez niej „obcego ciała nie ma na liście" jest prawdą trywialną.
+  assert(all.includes('f_far') && all.includes('p_home'),
+    `D1a KONTROLA: lista BEZ filtra zawiera cel z obcego układu (${JSON.stringify(all)})`);
+  const offered = filterDockTargets(getDockTargets(), near, true).map((b) => b.id);
+  assert(!offered.includes('f_far') && offered.includes('p_home'),
+    `D1b oferta reprezentanta [sys_home] NIE zawiera f_far (${JSON.stringify(offered)})`);
+  // ⚠ Sam `sameSystemOnly` bez reprezentanta jest NO-OPEM — to jest sedno korekty „jednego argumentu".
+  assert(filterDockTargets(getDockTargets(), null, true).length === all.length,
+    'D1c KONTROLA: flaga BEZ reprezentanta niczego nie odsiewa (guard `if (!vessel)`)');
+
+  // Pin źródłowy — obie stare powierzchnie podają OBIE rzeczy. ⚠ Kotwice `\s`, nigdy `\n`
+  //   (Finding 270: świeży checkout jest CRLF, drzewo autora bywa LF).
+  const here  = dirname(fileURLToPath(import.meta.url));
+  const fgp   = readFileSync(join(here, '../../ui/FleetGroupPanel.js'), 'utf-8');
+  const fcp   = readFileSync(join(here, '../../ui/FleetCommandPanel.js'), 'utf-8');
+  const asks  = (src) => /sameSystemOnly:\s*true/.test(src) && /vessel:\s*[A-Za-z_$][\w$]*(\[0\])?/.test(src);
+  assert(asks(fgp) && asks(fcp),
+    'D1d obie stare powierzchnie proszą o zawężenie I podają reprezentanta (kształt A)');
+  assert(!asks('openDockPicker(ids, { sameSystemOnly: true, onDone });'),
+    'D1e KONTROLA PINU: sama flaga bez reprezentanta NIE przechodzi');
 }
 
 // ═══ D3 — 🔑 ADMISJA ═════════════════════════════════════════

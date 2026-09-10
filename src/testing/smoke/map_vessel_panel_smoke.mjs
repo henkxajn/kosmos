@@ -509,9 +509,21 @@ header('P8  PIN — dock: JEDNO źródło, a dwie stare powierzchnie działają 
   ok(fgp.includes('openDockPicker('), 'KONTROLA: FleetGroupPanel woła openDockPicker');
   ok(fcp.includes('openDockPicker('), 'KONTROLA: FleetCommandPanel woła openDockPicker');
   ok(fgp.includes('assignVesselsToFleet('), 'KONTROLA: FleetGroupPanel woła assignVesselsToFleet');
-  // BIT W BIT: stare powierzchnie NIE proszą o zawężenie do własnego układu (to Finding 256).
-  ok(!fgp.includes('sameSystemOnly: true') && !fcp.includes('sameSystemOnly: true'),
-     'stare powierzchnie NIE używają sameSystemOnly:true — zachowanie sprzed 258');
+  // ⚠ PIN PRZECELOWANY (Finding 256 ZAMKNIĘTY, kształt „A + C"). W wersji 258 stał tu pin
+  //   ODWRÓCONY: „stare powierzchnie NIE używają sameSystemOnly:true — zachowanie sprzed 258".
+  //   Pinował DEFEKT (ofertę cross-system) i MIAŁ PAŚĆ przy domknięciu 256 — i padł, co było
+  //   sygnałem, że kształt (a) faktycznie dotknął tych dwóch site'ów. Teraz pinuje INWARIANT.
+  // ⚠ Sam `sameSystemOnly: true` NIE WYSTARCZA i to jest mierzony sedno-fakt 256:
+  //   `filterDockTargets` ma guard `if (!vessel) return list`, więc bez reprezentanta flaga jest
+  //   NO-OPEM (zmierzone: `filterDockTargets(all, null, true)` zwraca WSZYSTKIE trzy ciała).
+  //   Dlatego pin wymaga OBU rzeczy naraz: flagi i przekazanego statku.
+  ok(fgp.includes('sameSystemOnly: true') && /vessel:\s*live\[0\]/.test(fgp),
+     'FleetGroupPanel prosi o sameSystemOnly:true I podaje reprezentanta (Finding 256, kształt a)');
+  ok(fcp.includes('sameSystemOnly: true') && /vessel:\s*first/.test(fcp),
+     'FleetCommandPanel prosi o sameSystemOnly:true I podaje reprezentanta (Finding 256, kształt a)');
+  // KONTROLA PINU — na zmutowanej kopii (flaga bez statku) ten sam pin PADA.
+  ok(!(/vessel:\s*live\[0\]/.test('openDockPicker(ids, { sameSystemOnly: true, onDone });')),
+     'KONTROLA PINU: sama flaga BEZ reprezentanta nie przechodzi (no-op `filterDockTargets`)');
   }
 }
 

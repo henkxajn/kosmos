@@ -491,11 +491,17 @@ export class FleetCommandPanel extends BaseOverlay {
       case 'bgDock': {
         // Dock — picker kolonii gracza → rozkaz dock per członek (issueFleetOrder nie zna 'dock').
         // ⚠ Slice 258: JEDNO źródło (`VesselGroupActions.openDockPicker`) — ta pętla była niemal
-        //   znak-w-znak kopią `FleetGroupPanel.grpDock`. Czysty przerzut, bez zmiany zachowania;
-        //   `sameSystemOnly` CELOWO POMINIĘTE (=false) — patrz Finding 256.
+        //   znak-w-znak kopią `FleetGroupPanel.grpDock`.
+        // ⚠ Finding 256, połowa OFERTOWA — kształt (a) REPREZENTANT (podpis właściciela „A + C"),
+        //   bliźniak `FleetGroupPanel.grpDock`. Reprezentant = PIERWSZY ŻYWY członek, ten sam idiom
+        //   co `_fleetReturn` niżej. Członkowie spoza jego układu dostają GŁOŚNĄ odmowę przy
+        //   wysyłce (D-256a + raport w `dispatchDockTo`), a nie ciche pominięcie.
         const fleet = this._fleet();
         if (!fleet) return;
-        openDockPicker([...(fleet.memberIds ?? [])], { onDone: () => this._markDirty() });
+        const vm = window.KOSMOS?.vesselManager;
+        const ids = [...(fleet.memberIds ?? [])];
+        const first = ids.map((id) => vm?.getVessel?.(id)).find((v) => v && !v.isWreck) ?? null;
+        openDockPicker(ids, { sameSystemOnly: true, vessel: first, onDone: () => this._markDirty() });
         return;
       }
       // 'bg' → swallow
