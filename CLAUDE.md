@@ -4653,9 +4653,14 @@ wrakiem między ofertą a wyborem), wszystkie z przetłumaczonym powodem; **bez 
 `git worktree` (nie `git archive` — Finding 270): 54/14 · 41/1 · 42/1 · 118/2.
 Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 **KOLEJKA (rodzina 255 i dalej):** ~~wiersze 8/9~~ ✅ → ~~**256**~~ ✅ (reguła
-grupowa „A + C”; **271** zamknięty przy okazji) → **266** → **267** (już tylko decyzja UX —
-moment odmowy rozstrzygnięty regułą D-89c)
+grupowa „A + C”; **271** zamknięty przy okazji) → **266** (⚠ kształt **do podpisu**: czy stan
+nierozpoznany ma się renderować jako *nieznany* zamiast „docked” — i pamiętaj, że to DWA
+osobne site'y, logika `?? 'docked'` i widok `?? 'fleetGroup.statusDocked'`) → **267** (już
+tylko decyzja UX — moment odmowy rozstrzygnięty regułą D-89c)
 → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
 pinów źródłowych) → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu
 floty rozpiętej — cel per członek czy cel reprezentanta z głośną odmową) → reszta rejestru
 (**151** / **152** / **153**, **264** / **265**).
+⚠ **Trzy otwarte decyzje właściciela w kolejce: 266 (etykieta fallbacku), 267 (mitygacja UX
+waypointów), 272 (semantyka Powrotu floty rozpiętej).** Każda jest na zapisie w rejestrze —
+żadnej z nich NIE zaczynać od kodu.
