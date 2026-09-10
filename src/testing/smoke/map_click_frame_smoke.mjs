@@ -84,6 +84,20 @@ import { buildOrderSpec, buildPatrolFromWaypoints } from '../../utils/OrderDispa
 import { nearestOwnColonyBodyInSystem } from '../../utils/RetreatTarget.js';
 import { setLocale, getLocale, t } from '../../i18n/i18n.js';
 
+// ⚠ Po D-89b predykat ramki mieszka w `utils/CameraFrame.js` (trzech konsumentów), ale ten
+//   keeper jedzie też na kodzie SPRZED ekstrakcji (fail-first `git archive HEAD`) — statyczny
+//   import wywaliłby CAŁĄ suitę (`ERR_MODULE_NOT_FOUND`) i żaden pin nie miałby koloru.
+//   To ta sama lekcja co „pin białoskrzynkowy musi degradować, nie przerywać", tylko na poziomie
+//   MODUŁU. Resolver sięga po util, a gdy go nie ma — po starą metodę `RightClickMenu`:
+//   obie odpowiadają na to samo pytanie i obie mają być ZIELONE PO OBU STRONACH D-89b
+//   (to są piny legu D, nie slice'u wierszy 8/9).
+let _CF = null;
+try { _CF = await import('../../utils/CameraFrame.js'); } catch { /* kod sprzed D-89b */ }
+const outOfFrame = (rcm, vid) =>
+  (typeof _CF?.outOfCameraFrame === 'function') ? _CF.outOfCameraFrame(vid)
+  : (typeof rcm?._outOfCameraFrame === 'function') ? rcm._outOfCameraFrame(vid)
+  : null;
+
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
 const header = (s) => console.log('\n── ' + s + ' ──');
@@ -354,7 +368,7 @@ header('T5  statek w skoku — powód należy do 147, nie do legu D');
   //   (zmierzone: pierwszy przebieg fail-first urwał się tutaj i T5b-T10 nie miały koloru).
   //   Po naprawie metoda ISTNIEJE, więc pin jest tak samo mocny jak bez tolerancji.
   const rcm = new RightClickMenu();
-  const legDsays = typeof rcm._outOfCameraFrame === 'function' ? rcm._outOfCameraFrame(v.id) : null;
+  const legDsays = outOfFrame(rcm, v.id);
   assert(legDsays === null,
     `T5a leg D PRZEPUSZCZA statek w tranzycie (fail-open; dostano: ${JSON.stringify(legDsays)})`);
 
@@ -409,7 +423,7 @@ header('T7  naprawa NIE jest „odmawiaj wszystkiego"');
                               { type: 'ownVessel', entityId: w.id, worldPoint: { x: 0, y: 0 } }, w.id);
   // ⚠ Tolerancja na BRAK metody — jak w T5a, ale tu pin jest PINEM NAPRAWY, więc bez
   //   metody ma świecić NA CZERWONO, a nie wywalać suity (fail-first musi mieć KOLOR).
-  const wSays = typeof rcm._outOfCameraFrame === 'function' ? rcm._outOfCameraFrame(w.id) : null;
+  const wSays = outOfFrame(rcm, w.id);
   assert(spec?.ok === true && wSays === 'target_other_system',
     `T7b KONTROLA: predykat ODRZUCA ten statek (${JSON.stringify(wSays)}), ale retreat jest POZA zakresem punktowym…`);
   // …co znaczy, że `retreat` w ogóle nie przechodzi przez bramkę — pinowane źródłowo w T8b.
@@ -435,8 +449,11 @@ header('T8  OrderDispatcher.js pozostaje pure (D-LD1) + kontrola pinu');
 
   // Termin MUSI za to istnieć u wołającego.
   const rcmSrc = stripComments(readFileSync(join(here, '../../ui/RightClickMenu.js'), 'utf-8'));
-  assert(/_outOfCameraFrame/.test(rcmSrc) && /POINT_SOURCED_ORDER_TYPES/.test(rcmSrc),
-    'T8d termin legu D siedzi w `RightClickMenu` (caller), zgodnie z D-LD1');
+  // ⚠ Po D-89b predykat MIESZKA w `utils/CameraFrame.js`, ale INWARIANT D-LD1 jest ten sam:
+  //   termin STOSUJE wołający, a nie `OrderDispatcher`. Wzorzec `_?` łapie obie postaci —
+  //   metodę legu D i import utila — więc pin jest zielony po OBU stronach ekstrakcji.
+  assert(/_?outOfCameraFrame/.test(rcmSrc) && /POINT_SOURCED_ORDER_TYPES/.test(rcmSrc),
+    'T8d termin ramki STOSUJE `RightClickMenu` (caller), zgodnie z D-LD1');
   // `retreat`/`escort` NIE mogą wejść do zbioru punktowego (mierzony fałszywy negatyw).
   const setLine = rcmSrc.match(/POINT_SOURCED_ORDER_TYPES\s*=\s*new Set\(\[([^\]]*)\]/)?.[1] ?? '';
   assert(!/retreat|escort|goToPOI|patrol/.test(setLine) && /moveToPoint/.test(setLine) && /dock/.test(setLine),
