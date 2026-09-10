@@ -4592,7 +4592,70 @@ którego przy uzbrajaniu jeszcze nie ma ⇒ uczciwe ostrzeżenie = NOWY klucz PL
 166 na innym site'cie; osiągalność NIEZMIERZONA i to część wpisu) · **269** (⚪ baner pickera
 `GameScene:5148/5150/5158` ma zaszyty polski — klasa 113; ⚠ `check-i18n` tego **nie widzi**) · **270** (⚪ pin źródłowy zależny od checkoutu — PRE-EXISTING, nienaprawiony).
 
-**KOLEJKA (rodzina 255 i dalej):** ~~wiersze 8/9~~ ✅ → **256** (decyzja właściciela o regule
-grupowej) → **266** → **267** (już tylko decyzja UX — moment odmowy rozstrzygnięty regułą D-89c)
+---
+
+## Finding 256 — DOCK: oferta + admisja (save **v101 bez migracji**, live-gate PASS — ZAMKNIĘTY 2026-09-10)
+
+Rodzina 154/255, ale inny producent i inny selektor. Decyzje **D-256a/b/d/e** + **reguła grupowa
+„A + C”** (osobny podpis właściciela). Rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §256 + **271**.
+
+**Jedno zdanie:** picker docka oferował ciała z obcych układów, a `_issueDock` je PRZYJMOWAŁ —
+bo przebudowuje spec na `moveToPoint` i **zrzuca `targetBodyId`**, więc bramka W3-4b nie miała
+na co patrzeć.
+
+⚠ **KONTROLA, KTÓRA CZYNI POMIAR ROZSTRZYGAJĄCYM:** `dock` z `sys_020` na kolonie w `sys_home`
+→ `{ok:true}` + `_pendingDock=p_home`, a **TEN SAM cel jako `moveToPoint` z `targetBodyId`** →
+`{ok:false, reason:'target_other_system'}`. Bramka była poprawna — omijał ją spec.
+
+🔴 **CHIMERA ZMIERZONA OD KOŃCA DO KOŃCA:** `Kestrel systemId=sys_020 colonyId=f_far` → po doku
+na `p_home[sys_home]`: **`colonyId=p_home dockedAt=p_home xy=(110,0)`, `systemId` NIEZMIENIONY**.
+`dockAtColony` przepisuje **całą bazę statku** bez terminu układu — i to szłoby do zapisu.
+
+**D-256a** — jawna bramka `isSameSystem(vessel, bodyEnt)` w `_issueDock` (NIE forwardowanie
+`targetBodyId`: promień rażenia śledzenia ciała). ⚠ **Rodzina predykatu: (statek, CIAŁO) →
+`SystemScope`, NIE `CameraFrame`** — dock ma prawdziwe ciało w spec-u; termin KAMERY (255)
+odrzucałby tu flotę dokującą legalnie we własnym układzie, gdy gracz patrzy na inny. Fail-OPEN.
+
+**D-256b** — lustro u konsumenta (`_maybeDockOnArrival`). ⚠ **Kredyt za 263 = ZERO, zmierzony
+w obie strony:** `_maybeAutoDockOnReturn` ma termin od `9e1e7d8`, a jego bliźniak stał bez terminu
+**jedną funkcję dalej w tym samym pliku**. Marker przeżywa porzucenie rozkazu, więc to obrona
+na tej ścieżce, nie zamiast bramki.
+
+**Reguła grupowa „A + C”.** Oferta = reprezentant (pierwszy żywy), admisja per statek.
+⚠ Reprezentant to **kolejność DODANIA** do zbioru — nie odległość, nie kamera. **Przecięcie
+odrzucone świadomie**: pusty picker odbierałby legalną akcję (dok tych, którzy MOGĄ).
+⚠ **All-or-nothing z D-LD2 NIE przenosi się na dock** — `dispatchDockTo` to zwykła pętla per
+statek bez wspólnego `_arrivalSyncYear`, więc częściowa wysyłka jest poprawna, o ile jest GŁOŚNA.
+
+**D-256d — trzy pułapki ciszy** (wszystkie zmierzone): odmowa BEZ powodu gasiła cały raport
+(`?? null`), odmowa CZĘŚCIOWA nie raportowała wcale, sukces ma milczeć. Kanał i klucze
+identyczne jak w 255 ⇒ **zero nowych kluczy i18n**.
+
+**Finding 271** (zamknięty w tym samym commicie): toast odmowy wypisywał **surowy slug**
+(`Cannot dock: target_other_system`) — `check-i18n` jest na to ślepy, bo klucz istniał; niewidoczny
+aż do chwili, gdy admisja zaczyna odmawiać.
+
+⚠ **PIN DANCE — odwrotnie niż przy T9a:** żaden pin „dock poza mapą przechodzi” nie mógł paść
+(fixture’y SAME-SYSTEM); kłamały ETYKIETY — T4b/F10 przecelowane + rodzeństwo cross-system.
+Jedyny odwrócony pin 256 stał w `map_vessel_panel_smoke` **P8** i **padł jak miał**, co było
+sygnałem, że kształt (a) dotknął obu site’ów; przecelowany na inwariant wymagający **flagi
+I reprezentanta** — bo sama flaga jest NO-OPEM.
+
+✅ **LIVE-GATE 2026-09-10 PASS** (właściciel, klient EN): §0 skan chimer **PUSTY** · §1 oferta
+(wykonana na **`FleetCommandPanel`** DOCK) · §4 dok mieszany `1/2 moved` z NAZWANYM pominiętym ·
+§5 kontrola same-system · **§6 PASS-with-finding → 272**.
+⚠ **§2:** `FleetGroupPanel.grpDock` to INNY GEST (CTRL+klik 2+ luźnych statków) — nie wykonany
+na żywo, stoi na headless D1d + D1b. ⚠ **§3:** ścieżka „wszyscy odmawiają” (toast 271) jest
+OSIĄGALNA — trzy krawędzie ZMIERZONE SONDĄ (reprezentant unieruchomiony / w rezerwie / stał się
+wrakiem między ofertą a wyborem), wszystkie z przetłumaczonym powodem; **bez potwierdzenia na żywo**.
+**Testy:** `return_dock_family` **68/68** · `map_click_frame` **42/42** · `fleet_move_picker_frame`
+**43/43** · `map_vessel_panel` **120/120**. Fail-first **18 pinów na czerwono** w PRAWDZIWYM
+`git worktree` (nie `git archive` — Finding 270): 54/14 · 41/1 · 42/1 · 118/2.
+Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
+**KOLEJKA (rodzina 255 i dalej):** ~~wiersze 8/9~~ ✅ → ~~**256**~~ ✅ (reguła
+grupowa „A + C”; **271** zamknięty przy okazji) → **266** → **267** (już tylko decyzja UX —
+moment odmowy rozstrzygnięty regułą D-89c)
 → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
-pinów źródłowych) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
+pinów źródłowych) → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu
+floty rozpiętej — cel per członek czy cel reprezentanta z głośną odmową) → reszta rejestru
+(**151** / **152** / **153**, **264** / **265**).

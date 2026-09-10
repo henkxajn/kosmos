@@ -1690,7 +1690,8 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      uzbrajania pickera **jeszcze nie ma** ⇒ uczciwe ostrzeżenie wymaga NOWEGO klucza w PL i EN,
      czyli nie mieści się w „trywialne" ani w „zero nowych kluczy i18n". Do rozważenia osobno.
 
-256. 🟠 **`Dokuj` (picker grupowy) przyjmuje cel z OBCEGO ukladu.**
+256. ✅ **ZAMKNIĘTY 2026-09-10 — OBIE POŁOWY** (oferta + admisja), podpis właściciela **„A + C”**. Treść pierwotna poniżej, bo nazywa mechanizm; zamknięcie na końcu wpisu.
+     🟠 **`Dokuj` (picker grupowy) przyjmuje cel z OBCEGO ukladu.**
      Rodzenstwo 154/255, ale **inny producent i inny selektor**, wiec osobny numer.
      `getDockTargets()` (`BodyName.js:47`) listuje `getPlayerColonies()` + stacje gracza **bez terminu
      ukladu**, a `MovementOrderSystem._issueDock:449` **zrzuca `targetBodyId`** przed wywolaniem
@@ -1730,6 +1731,108 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      ⚠ Live-gate 2026-09-09 potwierdził stan zastany: dock picker **nadal oferuje cele
      cross-system** na dwóch starych powierzchniach. To jest ZAPISANE zachowanie, nie regresja.
 
+
+     ---
+
+     ✅ **ZAMKNIĘCIE 2026-09-10 — decyzje D-256a/b/d/e + REGUŁA GRUPOWA „A + C” (podpis właściciela).**
+     **LIVE-GATE PASS 2026-09-10** (log niżej). Zapis **v101 bez migracji**, **zero nowych kluczy i18n**, bez flagi.
+
+     **Inwentarz producentów — zbiór NIE rośnie** (STOP-RULE audytu): JEDNO źródło oferty
+     (`BodyName.getDockTargets`), TRZY powierzchnie (`FleetGroupPanel:443`, `FleetCommandPanel:498`,
+     `FleetManagerOverlay:1594`), DWAJ producenci spec-a (`VesselGroupActions.dispatchDockTo`,
+     `OrderDispatcher:96`), **zero** producentów AI/debug/konsolowych (grep czysty).
+
+     **D-256a — ADMISJA: jawna bramka `isSameSystem(vessel, bodyEnt)` w `_issueDock`.**
+     ⚠ Bramka W3-4b nigdy tego celu nie oglądała, bo `_issueDock` przebudowuje spec na
+     `moveToPoint` i **ZRZUCA `targetBodyId`** (świadomie — z nim rozkaz wchodzi w tryb śledzenia
+     ciała i się nie kończy, a dock potrzebuje ZAKOŃCZENIA, żeby odpalił marker). ZMIERZONE
+     z kontrolą, która czyni to rozstrzygającym: `dock` statkiem z `sys_020` na kolonie
+     w `sys_home` dawał `{ok:true}` + `_pendingDock=p_home`, a **TEN SAM cel jako `moveToPoint`
+     z `targetBodyId` dostawał `{ok:false, reason:'target_other_system'}`** ⇒ bramka była
+     poprawna, omijał ją SPEC. Dlatego jawny guard, nie forwardowanie `targetBodyId`
+     (promień rażenia śledzenia ciała — decyzja właściciela po pomiarze).
+     ⚠ **RODZINA PREDYKATU: (statek, CIAŁO) → `SystemScope`, NIE `CameraFrame`.** Dock ma
+     PRAWDZIWE ciało w spec-u, więc nie ma czego wnioskować z kamery; termin kamery (255)
+     odrzucałby tu flotę dokującą legalnie we własnym układzie, gdy gracz patrzy na inny.
+     Fail-OPEN (`isSameSystem`, nie `isSameSystemStrict`) — encja bez stempla to stary zapis.
+
+     **D-256b — LUSTRO U KONSUMENTA.** `FleetSystem._maybeDockOnArrival` nie miało **żadnego**
+     terminu, a `dockAtColony`/`dockAtStation` przepisują `dockedAt`, `x/y` **i `colonyId`** —
+     czyli CAŁĄ BAZĘ statku. CHIMERA ZMIERZONA OD KOńCA DO KOŃCA: `Kestrel systemId=sys_020
+     colonyId=f_far` → po doku na `p_home[sys_home]` **`colonyId=p_home dockedAt=p_home
+     xy=(110,0)` przy NIEZMIENIONYM `systemId=sys_020`**. ⚠ **KREDYT ZA 263 — ZERO, i to zmierzone
+     w obie strony:** `_maybeAutoDockOnReturn` (marker Powrotu) ma termin od `9e1e7d8` i odmawia
+     tej samej sytuacji, a `_maybeDockOnArrival` (marker Docka) stało BEZ terminu **jedną funkcję
+     dalej w tym samym pliku**. Klasyczny nieutwardzony bliźniak. Pinuje to **D8** (symetria).
+
+     **REGUŁA GRUPOWA — „A + C” (osobny podpis właściciela).** Oferta = REPREZENTANT (pierwszy
+     żywy członek, idiom `_fleetReturn`) + admisja per statek. ⚠ ZMIERZONE, że reprezentant to
+     **kolejność DODANIA** do zbioru, nie odległość ani kamera — dlatego sam kształt (a) byłby
+     dla grupy rozpiętej na dwa układy tylko częściowo uczciwy; naprawia to (c), które NAZYWA
+     pominiętych. **PRZECIĘCIE odrzucone świadomie:** dawałoby pusty picker (`bodyPicker.empty`
+     istnieje, koszt zero), ale **odbierałoby graczowi legalną akcję** — dok tych członków,
+     którzy MOGĄ. W dokumentacji keepera stoi to wprost, żeby brak pinu D2 nie wyglądał na lukę.
+
+     ⚠ **ALL-OR-NOTHING Z D-LD2 NIE PRZENOSI SIĘ NA DOCK — i to jest pomiar, nie preferencja.**
+     Ruch potrzebował go, bo `issueFleetOrder` liczy WSPÓLNY `_arrivalSyncYear` ze wszystkich
+     eligible i nie przyjmuje listy wyjątków. `dispatchDockTo` to **zwykła pętla per statek
+     bez żadnej wspólnej wielkości** ⇒ częściowa wysyłka jest semantycznie poprawna, o ile
+     jest GŁOŚNA. Stąd (c), a nie kopia D-LD2.
+
+     **D-256d / D4 — ODMOWA MUSI MÓWIĆ; TRZY PUŁAPKI CISZY ZMIERZONE I ZAMKNIĘTE:**
+     (i) odmowa **bez powodu** — `firstFail = r?.reason ?? null` zostawiało `null`, więc warunek
+     raportu nie zachodził i odmowa była CAŁKOWICIE cicha (teraz `?? 'unknown'`);
+     (ii) odmowa **częściowa** — raport szedł wyłącznie gdy NIKT nie ruszył, a po zamknięciu
+     admisji to jest TYPOWY wynik dla grupy rozpiętej na dwa układy (teraz `vessel.orderPartial`);
+     (iii) sukces ma milczeć — pinowane, żeby raport nie zamienił się w szum.
+     Kanał i klucze IDENTYCZNE jak w odmowie ruchu (255): `fleet`/`warn`, `vessel.orderNoneMoved`
+     / `vessel.orderPartial` + `describeOrderFail` z `utils/CameraFrame.js`.
+
+     **PIN DANCE — przeciwieństwo lekcji T9a, i warto to zapisać.** Żaden istniejący pin
+     „dock poza mapą PRZECHODZI” nie musiał paść: `map_click_frame` **T4b**,
+     `fleet_move_picker_frame` **F10**, `return_dock_family` **T5b/T8** mają fixture’y
+     **SAME-SYSTEM**, a dok we własnym układzie zostaje legalny na zawsze. Kłamały ETYKIETY
+     („Finding 256 NIETKNIĘTY”) — przecelowane, każdy dostał **rodzeństwo cross-system**
+     (T4b-x, F10b). ⚠ Jedyny **odwrócony** pin 256 mieszkał gdzie indziej:
+     `map_vessel_panel_smoke` **P8** („stare powierzchnie NIE używają sameSystemOnly:true”) —
+     **PADŁ dokładnie tak, jak miał**, i to był sygnał, że kształt (a) naprawdę dotknął obu
+     site’ów. Przecelowany na inwariant, który wymaga **OBU** rzeczy naraz (flagi **i**
+     reprezentanta) — bo sama flaga jest NO-OPEM.
+
+     **Testy:** `return_dock_family_smoke` **68/68** (D1/D3-D9 dopisane; D2 nie istnieje z wyboru
+     kształtu), `map_click_frame` **42/42**, `fleet_move_picker_frame` **43/43**,
+     `map_vessel_panel` **120/120**. **Fail-first — 18 pinów na czerwono** na kodzie sprzed
+     naprawy, zmierzony w **PRAWDZIWYM `git worktree`** (nie `git archive` — Finding 270):
+     `return_dock_family` **54/14**, `map_click_frame` **41/1**, `fleet_move_picker` **42/1**,
+     `map_vessel_panel` **118/2**. Wszystkie kotwice źródłowe na `\s` / `[\s\S]`, nigdy na `\n`.
+     Sweep **223/223 0 FAIL**, `check-i18n` PASS.
+     ✅ **LOG LIVE-GATE 2026-09-10** (właściciel, klient EN). **§0** skan chimer w kampanii:
+     **PUSTY** (czysty zapis — żaden statek nie ma `dockedAt` w innym układzie niż własny).
+     **§1** oferta: PASS. **§4** dok mieszany: PASS — `1/2 moved`, pominięty NAZWANY, bez toasta
+     (kadencja zgodna z projektem). **§5** kontrola same-system: PASS. **§6** PASS-with-finding.
+
+     ⚠ **ODSTĘPSTWO §2 (powierzchnie) — zapisane tak, jak zmierzone:** gate wykonany na
+     **`FleetCommandPanel`** (fleet DOCK, pływający panel nad mapą 3D). `FleetGroupPanel.grpDock`
+     to **INNY GEST** (CTRL+klik multi-select 2+ luźnych statków, `_mapSurface()==='group'`),
+     nie wykonany na żywo; stoi na headless **D1d** (pin źródłowy: obie powierzchnie podają flagę
+     **i** reprezentanta, z kontrolą na zmutowanej kopii) oraz **D1b** (wykonanie obliczenia oferty).
+     **To nie jest luka — to inne wejście do tej samej ścieżki** przez jedno `openDockPicker`.
+
+     ⚠ **§3 (WSZYSCY odmawiają — toast 271): ZMIERZONE SONDĄ, nie na żywo.** Po kształcie (a)
+     odmowa z powodu UKŁADU nie może dotknąć wszystkich (każdy cel jest w układzie reprezentanta),
+     ale ścieżka otwiera się, gdy REPREZENTANT odpada z powodu NIE-układowego — trzy osiągalne
+     krawędzie, każda z przetłumaczonym powodem i BEZ surowego sluga:
+     (a) unieruchomiony (zaległe utrzymanie) → `Cannot dock: Sable (Vessel immobilized — fleet
+     upkeep in arrears (fund the colony)), Kestrel (Target is in another system — warp jump first)`;
+     (b) w REZERWIE (W2 `serviceState`) → `Sable (Hull in reserve — crew it first (Deploy)), …`;
+     (c) stał się wrakiem MIĘDZY ofertą a wyborem (picker to modal async) → `Sable (vessel is
+     a wreck), …`. Pokrycie: headless **D4**. ⚠ Wcześniejsza próba właściciela użyła pickera
+     **RUCHU**, nie docka — to wiersze 8/9 (Dziennik bez toasta = **poprawna kadencja 255**).
+     ⚠ **Bez potwierdzenia NA ŻYWO** — nie nazywać 271 zweryfikowanym w przeglądarce.
+
+     ⚠ **RÓŻNICA, KTÓRA POKAZUJE WAGĘ NAPRAWY** (te same trzy krawędzie, drzewo sprzed vs po):
+     przed — `{okCount:1}`, **Dziennik pusty, toast żaden**, czyli drugi członek dokował
+     CROSS-SYSTEM po cichu (chimera); po — `{okCount:0}` i OBAJ nazwani w Dzienniku i w toaście.
 257. 🟠 **`countActionable` nie ma terminu `isInService`, a handlery `grpX` polykaja wynik `issueOrder`.**
      `FleetGroupPanelLogic.countActionable` (`:106`) liczy `canReturn`/`canRetreat`/`canDock` wylacznie
      z `position.state` i `isImmobilized` ⇒ **kadlub w REZERWIE (`serviceState='stored'`) dostaje
@@ -2334,6 +2437,8 @@ zamknął **GATE B2 / Z2** (wiersz zdjęty z `OPEN_FINDINGS_INDEX.md`).
 | **268** | 🟠 **Picker `Atak` w panelu dowodzenia dobiera wroga z CAŁEJ galaktyki — bliźniak Findingu 166 na INNYM site'cie.** `FleetCommandPanel._armEngagePicker:368` zamienia kliknięty punkt na cel przez `nearestEnemyToPoint(vm.getAllVessels(), point, thresh, isEnemyVessel)` (`FleetCommandPanelLogic:43`) — pełna pętla po rejestrze, **bez ANI JEDNEGO terminu układu**, z progiem `1.5 AU` liczonym surowym `hypot`. Bliźniak w `FleetManagerOverlay._handleFleetEngage:4761` filtruje POPRAWNIE: `(v.systemId ?? 'sys_home') === activeSystemId`. ⇒ gwiazda każdego układu stoi w (0,0), więc wróg z obcego układu leży w tych samych px i może wygrać rankingiem odległości. Klasa „globalne id ≠ położenie", rodzina 138/142/166/255. | ⬜ **OTWARTY — ZGŁOSZONY PRZY AUDYCIE D-89, ŚWIADOMIE POZA ZAKRESEM** (slice zamyka `moveToPoint`, nie `engage`). ⚠ **Osiągalność NIEZMIERZONA i to jest część wpisu**: nie sprawdzono, czy tak dobrany cel przechodzi bramki `MovementOrderSystem._issueEngage` (te mają własne terminy), więc nie wiadomo, czy defekt kończy się złym CELEM, czy tylko cichą odmową — **bramka nie jest odpowiedzią, dowodem jest skutek** (lekcja Findingu 106). Naprawa = ten sam filtr co w bliźniaku FMO, ale **należy do slice'u 166**. |
 | **269** | ⚪ **Baner trybu pickera ma ZASZYTY POLSKI — klasa Findingu 113, w miejscu, które widzi każdy, kto wydaje rozkaz z pickera.** `GameScene._createPickerHUD:5148` i `:5150` piszą `banner.textContent` wprost: „Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ." oraz „Klik aby ustawić punkt. ESC anuluj." — **poza `t()`**, więc gracz EN dostaje polską instrukcję. Gałąź `create_poi` tuż obok (`:5144`/`:5146`) idzie POPRAWNIE przez `t('picker.create.*')`, więc to nie brak klucza, tylko dwa pominięte literały. ⚠ `ui:pickerWaypointAdded` (`:5158`) ma **trzeci** taki literał. | ⬜ **OTWARTY — ZGŁOSZONY PRZY AUDYCIE D-89.** ⚠ **MARTWY KĄT NARZĘDZIA, nie przeoczenie autora:** `check-i18n` pyta „czy klucz użyty w `t()` istnieje w PL i EN", a **nie** „czy każdy widoczny napis przechodzi przez `t()`" — literał w `textContent`/`fillText` jest dla niego NIEWIDZIALNY, więc bramka świeciła na zielono przez cały ten slice. ⇒ kandydat na poprawę **samego narzędzia** (ta sama konkluzja co przy 113 i przy audycie Dziennika), nie tylko tego banera. Same trzy literały da się naprawić w dowolnym slice'ie dotykającym HUD-u — koszt to trzy klucze i18n. |
 | **270** | ⚪ **Pin źródłowy `warp_transit_order_gate_smoke` T11c jest ZALEŻNY OD CHECKOUTU — pada w każdym świeżym klonie, przechodzi tylko w drzewie autora.** Kotwica mutacji `:490` hardkoduje końce linii: `/if \(GAME_CONFIG\.FEATURES\?\.warpTransitOrderGate\)[\s\S]*?\n {4}\}\n/`. ZMIERZONE: repo ma `core.autocrlf = true` i żadnego `.gitattributes`, więc **każdy checkout daje CRLF**, a w drzewie roboczym właściciela `MovementOrderSystem.js` ma **LF** (plik pisany narzędziem, które zapisuje LF, i Git go od tego czasu nie znormalizował). Stąd: sweep u właściciela **223/223**, a `git worktree add` / `git archive` tego SAMEGO commita → **1 FAIL**. ⚠ **PRE-EXISTING — pada identycznie na `beaad55`, czyli PRZED slice’em D-89** (sprawdzone wykonaniem w obu checkoutach). | ⚪ **OTWARTY — ZGŁOSZONY PRZY WERYFIKACJI COMMITÓW D-89, ŚWIADOMIE NIENAPRAWIONY** (poza podpisem; naprawa = `\r?\n` w kotwicy, jedna linia). ⚠ Znaczenie jest większe niż jeden pin: **kontrola pinu, która sama nie umie się wykonać w cudzym środowisku, zostawia pin T11a bez kontroli dokładnie tam, gdzie środowisko różni się od autorskiego** — a przy okazji uczy, że `git archive` **NIE JEST** wiernym odwzorowaniem drzewa w tym repo (dodaje CRLF), więc fail-first kotwiczony na `\n` bywa tam fałszywy w OBIE strony. Rekomendacja: przegląd wszystkich pinów źródłowych pod kątem `\n` w kotwicach + rozważyć `.gitattributes` z `* text=auto eol=lf`. ✅ Keepery tego slice’u sprawdzone POD TYM KĄTEM w świeżym checkoucie: `fleet_move_picker_frame` **42/42**, `map_click_frame` **41/41**. |
+| **271** | ⚪ **Anons odmowy dokowania wypisywał graczowi SUROWY SLUG.** `fleetGroup.dockFailed` dostawał `firstFail` — czyli kod powodu — więc toast brzmiał `Cannot dock: target_other_system` (EN) / `Dokowanie niemożliwe: target_other_system` (PL). ZMIERZONE. ⚠ Rodzina 113/141: klucz ISTNIAł i był przetłumaczony — nieprzetłumaczone było to, co w niego wstawiano, więc `check-i18n` (który pyta o istnienie klucza, nie o treść argumentu) był na to ślepy. ⚠ Defekt był **PRAWIE niewidoczny**, bo toast leciał wyłącznie gdy NIKT nie ruszył, a przed zamknięciem 256 admisja docka nie odrzucała niczego z powodu układu. | ✅ **ZAMKNIĘTY 2026-09-10 — w TYM SAMYM commicie co głośność odmowy (D-256d)**, bo staje się widoczny dokładnie w chwili, gdy admisja zaczyna odmawiać. Lekarstwo było darmowe: `describeOrderFail` z `utils/CameraFrame.js` (nazwa statku + `vessel.reason*`) — **zero nowych kluczy**, klucz `fleetGroup.dockFailed` żyje dalej, zmieniło się to, co w niego wstawiamy: `Cannot dock: Kestrel (Target is in another system — warp jump first)`. Pinuje `D4b` (`!/target_other_system/` + `txt.length > 0`) w PL i EN. |
+| **272** | 🟠 **Powrót floty ROZPIĘTEJ na dwa układy: cel liczony w ramce REPREZENTANTA, a odmowa ginie w liczniku.** `FMO._handleFleetReturnBase` / `FCP._fleetReturn` dobierają cel przez `nearestOwnColonyBodyInSystem(pierwszy żywy członek)` i podają go jako **goły punkt** do `issueFleetOrder`, który fan-outuje do WSZYSTKICH. Członek z innego układu albo leci do bezsensownych współrzędnych we własnej ramce (potem `_maybeAutoDockOnReturn` odmawia doku — 263 — i statek dryfuje), albo zostaje odrzucony przez `issueOrder`. ZMIERZONE: `insufficient_fuel` (równie osiągalne `vessel_immobilized` `MOS:278`, `vessel_in_reserve` `:294`, `vessel_in_warp_transit` `:258`, `vessel_is_wreck` `:207`). ⚠ **W OBU przypadkach jedynym meldunkiem jest `Fleet: 1/2 vessels executing` — SAM LICZNIK, bez nazwy i bez powodu, ZERO wpisów w Dzienniku** (`_announceFleetOrderResult`, ten sam helper, który piny 255 obchodzą jawnym wpisem w bramce — ścieżka Powrotu go NIE obchodzi). ⚠ Reprezentant to KOLEJNOŚĆ DODANIA do floty: odwrócenie kolejności przenosi defekt z jednego statku na drugi (zmierzone: cel `p_home[sys_home]` vs `f_far[sys_020]`). ⚠ A DOKĄD LECI reprezentant: `nearestOwnColonyBodyInSystem` **nie wyklucza własnego ciała**, więc dla statku zadokowanego zwraca JEGO dok (`d=0.000 AU`) — statek odcumowuje, leci do **nieświeżych** współrzędnych swojej planety (ta orbituje dalej) i przy zakończeniu `_maybeAutoDockOnReturn` snapuje go z powrotem: to udokumentowany Bug-F2 `snap to teleport` z `7ea94e8`, nie nowy defekt. | 🟠 **OTWARTY — PRE-EXISTING, ZGŁOSZONY NA LIVE-GATE 256 §6 (PASS-with-finding).** ✅ **Zmierzone BAJT W BAJT na OBU drzewach** (pristine `f574482` i implementacja 256), scenariusz bazowy + sześć wariantów konfiguracji B ⇒ **to NIE jest regresja slice’u 256** (który świadomie nie tknął ścieżki Powrotu: jej cel jest własnoramkowy z definicji — pilnują tego T4/F6 — a to nie jest dock). ⚠ **NAPRAWA MA CZĘŚĆ DECYZYJNĄ WŁAŚCICIELA: semantyka Powrotu floty rozpiętej** — cel PER CZŁONEK we własnym układzie (każdy wraca do siebie) czy cel REPREZENTANTA z głośną odmową per członek? **Decyzja poprzedza kod.** Połowa GLOŚNOŚCI idzie wzorem **D4** niezależnie od wyboru: `describeOrderFail` + `vessel.orderPartial`/`orderNoneMoved`, kanał `fleet`/`warn`, **zero nowych kluczy i18n**. ⚠ Rodzina 255/256, ale **inna ścieżka i inny anons** — osobny numer, jak 256 wobec 255. |
 
 ---
 
