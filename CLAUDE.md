@@ -4504,7 +4504,95 @@ T9b; naprawa wymaga podpisu **co do MOMENTU odmowy** (przed pickerem vs po zebra
 FINALNYMI pinami na pristine HEAD (`git archive` — bez dotykania drzewa roboczego i bez mutacji
 `.git`). ⚠ **T9a/T9b to piny ODWRÓCONE** — pinują DEFEKT (wiersze 8/9 oraz 267) i **mają paść**,
 gdy te zostaną domknięte. Sweep **222/222 0 FAIL** · `check-i18n` PASS.
+⚠ **KOREKTA 2026-09-10 (D-89d): „T9a ma paść" było NIEPRAWDĄ i zostało ZMIERZONE** — patrz
+sekcja niżej. T9b (267) zostaje odwrócony, T9a przecelowany na prawdziwego producenta.
 
-**KOLEJKA (rodzina 255 i dalej):** **wiersze 8/9** (pickery flotowe — teraz z dowodem na żywo)
-→ **256** (decyzja właściciela o regule grupowej) → **266** → **267** (decyzja o momencie odmowy)
-→ reszta rejestru (**151** / **152** / **153**, **264** / **265**).
+---
+
+## Finding 255 — WIERSZE 8/9: pickery flotowe (save **v101 bez migracji**, live-gate PASS 7/7 — **CAŁA TABELA NÓG 255 ZAMKNIĘTA** 2026-09-10)
+
+Domknięcie rodziny 255 zaczętej Findingiem 147 (leg D zamknął PPM mapy, ten slice — dwa pickery
+flotowe). Decyzje **D-89a..D-89d**. Rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §255 (tabela nóg
++ blok „WIERSZE 8/9 ZAMKNIĘTE") + nowe **268/269**.
+
+**Jedno zdanie:** dwa pickery budują spec **własnym literałem w callbacku**, z pominięciem
+`_buildFleetSpec`, więc leg D ich nie widział — `FleetManagerOverlay._handleFleetMoveToPoint:4732`
+(`intent:'fleet_move'`) i `FleetCommandPanel._armMovePicker:348` (`intent:'fleetcmd_move'`).
+
+🔴 **UI NIE MILCZAŁO — UI KŁAMAŁO.** `_announceFleetOrderResult:4855` / `FCP._announce:337`
+emitują wyłącznie `ui:toast` z licznikami: przy rozkazie wysłanym w cudzą ramkę gracz dostawał
+**„Flota: 2/2 statków wykonuje rozkaz"**. ⚠ Ten sam helper ma `if (!res) return`, więc przy
+odmowie **nie powie NIC** — głośność musi być w producencie jawna (pinuje F3 + „zero toastów
+sukcesu"). Kanałem jest Dziennik (`fleet`/`warn`), identycznie jak w legu D.
+
+**D-89a — termin przy FINALIZACJI, w OBU callbackach.** ⚠ ARM-time jest **NIEPEŁNE, i to pomiar**:
+nic nie kasuje pickera na `system:switched` (`GameScene:3435` przełącza kolonię, `FMO:505` resetuje
+pan/zoom) ⇒ gracz uzbraja przy kamerze ZGODNEJ z flotą, przełącza układ i klika. ZMIERZONE:
+picker „NADAL UZBROJONY", oba statki z `sys_020` dostają współrzędne `sys_home`. ARM-time dawałby
+fałszywy pozytyw **i** fałszywy negatyw (odmowa graczowi, który chciał najpierw przełączyć układ).
+Nie doszedł nawet jako ostrzeżenie: jedyny reużywalny tekst mówi o CELU, którego przy uzbrajaniu
+jeszcze nie ma ⇒ byłby to nowy klucz i18n, czyli nie „trywialnie".
+
+**D-89b — jedno źródło predykatu: NEW `src/utils/CameraFrame.js`** (`outOfCameraFrame` /
+`fleetOffendersOutOfFrame` / `describeOrderFail`), trzech konsumentów, zero bliźniaków
+(`RightClickMenu` traci trzy prywatne metody + osierocony `_pascalCase`). ⚠ Pierwszy moduł
+w `src/utils/` importujący `t()` — powód nazwany w nagłówku; „pure" znaczy tu tyle co w kanonie
+(`RetreatTarget.js` importuje pięć modułów, `StationGroup.js` dwa).
+
+**D-89c — REGUŁA, obowiązuje poza slice'em: termin ramki kamery liczy się przy FINALIZACJI,
+NIGDY przy ARM.** Dziedziczy ją **267**; otwarta zostaje tam wyłącznie mitygacja UX (odmowa przy
+pierwszym waypoincie vs po ENTER). `patrol` **nie wchodzi** do `POINT_SOURCED_ORDER_TYPES` (152/T8e).
+
+⚠ **FINALIZATOR MA JEDNĄ ŻYWĄ POWIERZCHNIĘ — ZMIERZONE.** `_finalizeTargetPointPicker` woła
+`GameScene:5934` (klik 3D) i `GameScene:5201` (`ui:targetPointPickerFinalize`); to zdarzenie ma
+jednego producenta — `FMO:1653`, mapa 2D bramkowana `_mapBounds`, którą pisze wyłącznie
+`_drawCenter:4946`, nieosiągalne przy `commandTacticalMap:false` ⇒ **martwe**. Callbacki trybu
+`targetPoint`: `fleet_move`, `fleetcmd_move`, `fleetcmd_engage`, `create_poi`, debug.
+**267 NIE dzieli tego finalizatora** (`patrolWaypoints` → ENTER → `finalizePickerMode`).
+
+⚠ **D-89d — „T9a padnie, gdy 8/9 zostaną domknięte" BYŁO NIEPRAWDĄ, ZMIERZONE.** T9a wołało
+`issueFleetOrder` WPROST — seam, który MUSI zostać przepuszczalny (tędy idzie „Powrót do bazy"
+z celem w ramce STATKU, T4/F6). Ta funkcja dostaje GOŁE LICZBY: `{x:220,y:0}` i
+`{x:15.71,y:−158.94}` są dla niej nie do odróżnienia. Sonda na symulowanej naprawie: producent
+odmawia, a stara asercja dalej zwraca `{ok:true, accepted:2}`. ⇒ T9a **przecelowany na prawdziwego
+producenta** (execution pin), stara asercja została jako **T9a-ctl** (kontrola przepuszczalności
+fan-outu, siostra T4). ⚠ Przy okazji: **T5a przechodziło JAŁOWO** po ekstrakcji (degradowało do
+`null`, a `null` jest tym, czego asertuje) — T5a/T7b/T8d przecelowane na żywą ścieżkę.
+
+**Testy:** NEW `fleet_move_picker_frame_smoke` **42/42**, fail-first **28 PASS / 14 FAIL**;
+`map_click_frame_smoke` **41/41**, fail-first **40/1** (pada dokładnie przecelowany T9a) — oba
+zmierzone FINALNYMI pinami na `git archive HEAD`. Sweep **223/223 0 FAIL** · `check-i18n` PASS ·
+**zero nowych kluczy i18n** · bez flagi (rollback = revert, wzór rodziny 147/154/255).
+⚠ Import `CameraFrame.js` w keeperze legu D jest **dynamiczny w try/catch**: statyczny wywaliłby
+CAŁĄ suitę na kodzie sprzed naprawy i żaden pin nie miałby koloru — lekcja „pin musi degradować,
+nie przerywać", tylko na poziomie MODUŁU.
+
+✅ **LIVE-GATE 2026-09-10 — PASS 7/7** (właściciel, klient EN, `fleet_1` = `v_13` + `v_18`): §1 wiersz 8
+(🎯 Move, overlay zamknięty ✕) · §2 wiersz 9 (`bgMove`) — oba: odmowa, wpis `warn` z OBIEMA nazwami,
+**bez toasta**, `activeOrder:null` · §3 flota mieszana (nazwany tylko winowajca, nikt nie ruszył) ·
+**§4 🔑 uzbrojenie przy zgodnej kamerze → przełączenie układu W TRAKCIE celowania → klik = ODMOWA**
+(reguła D-89c zademonstrowana NA ŻYWO, nie tylko keeperem) · §5 kontrola (rozkaz wydany, toast
+`Fleet: 2/2 vessels executing`, zero wpisów) · §6 Powrót floty spoza ramki na OBU powierzchniach
+(przepuszczalny seam F6/T4 na żywo) · §7 leg D bez zmian.
+⚠ **Dwie notatki z przepisu gate’u:** czytnikiem flot jest **`getAllFleets()`** (`_fleets` zwraca `[]`),
+a wiersz 8 wymaga zamknięcia overlaya **✕, nie Esc** (Esc kasuje NAJPIERW picker; `FMO.close()` pickera
+nie rusza).
+
+⚠ **Ostrzeżenie ARM-time NIE weszło — powód i18n, nie lenistwo:** jedyny reużywalny tekst mówi o CELU,
+którego przy uzbrajaniu jeszcze nie ma ⇒ uczciwe ostrzeżenie = NOWY klucz PL+EN, czyli poza
+„trywialne" i poza „zero nowych kluczy".
+
+⚠ **`git archive` NIE JEST wiernym drzewem tego repo** (`core.autocrlf=true`, brak `.gitattributes`
+⇒ checkout daje CRLF, a stare pliki w drzewie właściciela mają LF). Wyszło przy weryfikacji commitów:
+**Finding 270** — pin `warp_transit_order_gate` T11c pada w KAŻDYM świeżym checkoucie (także na
+`beaad55`, czyli PRE-EXISTING). Keepery tego slice’u sprawdzone pod tym kątem w świeżym checkoucie:
+**42/42** i **41/41**.
+
+**Nowe findingi:** **268** (🟠 `FCP._armEngagePicker` dobiera wroga z całej galaktyki — bliźniak
+166 na innym site'cie; osiągalność NIEZMIERZONA i to część wpisu) · **269** (⚪ baner pickera
+`GameScene:5148/5150/5158` ma zaszyty polski — klasa 113; ⚠ `check-i18n` tego **nie widzi**) · **270** (⚪ pin źródłowy zależny od checkoutu — PRE-EXISTING, nienaprawiony).
+
+**KOLEJKA (rodzina 255 i dalej):** ~~wiersze 8/9~~ ✅ → **256** (decyzja właściciela o regule
+grupowej) → **266** → **267** (już tylko decyzja UX — moment odmowy rozstrzygnięty regułą D-89c)
+→ **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
+pinów źródłowych) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
