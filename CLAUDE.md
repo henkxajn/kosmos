@@ -4460,8 +4460,16 @@ i rozkazy członków też — bo wracamy **PRZED** `issueFleetOrder:118`, które
 floty. Odrzucony klik nie może zepsuć bieżących rozkazów.
 
 **Live-gate 2026-09-09 (właściciel, klient EN) — PASS.** §1 single · §2 anty-jałowość · §4 flota ·
-§5 flota mieszana · §6 dock z mapy · §7 Powrót floty spoza ramki (kontrola wycieku do fan-outu,
-na żywo) · §8 nie-regresja 147. **Dwie dewiacje zapisane, nie wygładzone:**
+§5 flota mieszana · §6 dock z mapy.
+⚠ **KOREKTA 2026-09-10 — §7 i §8 NIE BYŁY URUCHOMIONE NA ŻYWO.** Wpis powstał **warunkowo, przed
+przebiegiem** i przez jeden dzień stał jako „PASS … na żywo". Oba są pokryte **headless i tylko
+headless**: **§7** (Powrót floty spoza ramki = kontrola wycieku do fan-outu) — keeper
+`map_click_frame_smoke` **T4** na PRAWDZIWYM `issueFleetOrder`, z kontrolą nie-jałowości **T4a**
+(cel MUSI pochodzić z układu STATKU, inaczej pin mierzyłby T7); **§8** (nie-regresja 147) — **T5/T5b/T5c**
+(statek w skoku dostaje DOKŁADNIE `vessel_in_warp_transit`, kolejność zmierzona). **Nie nazywać tych
+dwóch zweryfikowanymi na żywo.** ⚠ Reguła: sekcja gate'u wpisana przed przebiegiem jest **hipotezą**,
+nie wynikiem — nieuruchomiona ma zostać nazwana, nie odziedziczyć „PASS" po sąsiadach.
+**Dwie dewiacje zapisane, nie wygładzone:**
 - 🔴 **§5 wszedł najpierw INNYM KANAŁEM i dał PIERWSZE POTWIERDZENIE NA ŻYWO dla wierszy 8/9**:
   picker floty w panelu (`FleetCommandPanel:354` = wiersz 9, znany-otwarty) wysłał OBA statki,
   ten spoza ramki poleciał do klikniętych współrzędnych we WŁASNYM układzie, **zero wpisów

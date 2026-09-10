@@ -1523,6 +1523,15 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      FINALNYMI pinami na kodzie sprzed naprawy (`git archive HEAD` — bez dotykania drzewa
      roboczego i bez mutacji `.git`). Sweep 222/222 0 FAIL, `check-i18n` PASS.
 
+     ⚠ **ZAKRES „LIVE-GATE PASS" — KOREKTA 2026-09-10.** Na żywo przeszły §1 (single), §2
+     (anty-jałowość), §4 (flota), §5 (flota mieszana) i §6 (dock z mapy). **§7 (Powrót floty
+     spoza ramki — kontrola wycieku do fan-outu) i §8 (nie-regresja 147) NIE BYŁY URUCHOMIONE**;
+     ich wpis powstał **warunkowo, przed przebiegiem**. Pokrycie jest **headless i tylko headless**:
+     §7 = **T4** na PRAWDZIWYM `issueFleetOrder` (z kontrolą nie-jałowości **T4a**: cel Powrotu MUSI
+     pochodzić z układu STATKU — inaczej pin mierzyłby T7, nie wyciek), §8 = **T5/T5b/T5c** (dokładny
+     powód `vessel_in_warp_transit`, kolejność zmierzona). ⚠ **Nie nazywać tych dwóch zweryfikowanymi
+     na żywo** — §7 jest w dodatku pinem NAJWAŻNIEJSZYM slice'u, więc jego status musi być prawdziwy.
+
      ⚠ **DWIE LEKCJE Z PISANIA TEGO KEEPERA** (obie kupione pomiarem, obie wychodzą poza slice):
      1. **Pin białoskrzynkowy na metodzie, która przed naprawą NIE ISTNIEJE, WYWALA cały przebieg
         fail-first i ukrywa kolor wszystkich pinów niżej.** Zmierzone dwukrotnie: pierwszy przebieg
