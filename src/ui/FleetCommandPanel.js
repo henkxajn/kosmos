@@ -30,6 +30,7 @@ import { nextFleetId, nextDoctrine, nearestEnemyToPoint } from './FleetCommandPa
 import { openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
+import { fleetOffendersOutOfFrame, describeOrderFail } from '../utils/CameraFrame.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
 const PW           = 340;
@@ -351,6 +352,21 @@ export class FleetCommandPanel extends BaseOverlay {
     if (um.isPickerActive?.()) um.cancelPickerMode?.();
     um.setPickerMode('targetPoint', (point) => {
       if (!point) return;
+      // ── Finding 255, WIERSZ 9 — bliźniak `FMO._handleFleetMoveToPoint` (D-89a/D-89b) ──
+      // Termin ramki kamery przy FINALIZACJI, całą flotą albo wcale, powód nazywa KAŻDEGO
+      // winowajcę. Pełne uzasadnienie: nagłówek `src/utils/CameraFrame.js`.
+      // ⚠ `_announce` ma `if (!res) return` — przy odmowie nie powie NIC, więc głośność
+      //   musi być tutaj jawna (to jest dokładnie ten trap, który pinuje F3).
+      const offenders = fleetOffendersOutOfFrame(fleetId);
+      if (offenders.length > 0) {
+        window.KOSMOS?.eventLogSystem?.push?.({
+          text: t('vessel.orderNoneMoved', offenders.map(describeOrderFail).join(', ')),
+          channel: 'fleet',
+          severity: 'warn',
+          entityRef: offenders[0].vesselId,
+        });
+        return;
+      }
       const res = this._fs()?.issueFleetOrder?.(fleetId, { type: 'moveToPoint', targetPoint: { x: point.x, y: point.y } });
       this._announce(res);
       this._markDirty();

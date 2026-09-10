@@ -58,11 +58,18 @@
 //   T8   PIN ŹRÓDŁOWY — `OrderDispatcher.js` pozostaje CZYSTY (bez `window.KOSMOS`,
 //        `activeSystemId`, `systemIdOf`), na źródle BEZ KOMENTARZY + KONTROLA na
 //        zmutowanej kopii (pin, który nie umie paść, nie jest pinem)
-//   T9   ⚠ PINY ODWRÓCONE — ŚWIADOMIE pinują DEFEKT, żeby gate nie wziął legu D za
-//        pełne domknięcie 255. Rows 8/9 (pickery flotowe, `FMO:4739`/`FleetCommandPanel:354`,
-//        Finding 255 OTWARTY) i row 3 (`patrolManual`, **Finding 267**, NOWY) NADAL
-//        przepuszczają punkt z obcej ramki. Gdy któryś zostanie zamknięty — TEN PIN MA
-//        PAŚĆ, i to jest jego zadanie (wzór `deploy_seams` T1/T2/T4)
+//   T9a  ⚠ PRZECELOWANY (D-89d) — rows 8/9 ZAMKNIĘTE, a stary pin NIE MÓGŁ tego zmierzyć.
+//        Pinował `issueFleetOrder` WPROST, czyli seam, który MUSI zostać przepuszczalny
+//        (pilnuje go T4, bo tędy idzie „Powrót do bazy" z celem w ramce STATKU). Ta funkcja
+//        dostaje GOŁE LICZBY — `{x:220,y:0}` i `{x:15.71,y:−158.94}` są dla niej nie do
+//        odróżnienia. ZMIERZONE na symulowanej naprawie: producent odmawia i nazywa
+//        winowajców, a stara asercja DALEJ zwraca `{ok:true, accepted:2}`. Teraz T9a jedzie
+//        PRAWDZIWYM producentem (execution pin), a stara asercja została jako **T9a-ctl**:
+//        KONTROLA przepuszczalności fan-outu (siostra T4).
+//   T9b  ⚠ PIN ODWRÓCONY — ŚWIADOMIE pinuje DEFEKT: row 3 (`patrolManual`, **Finding 267**)
+//        NADAL przyjmuje trasę z obcej ramki. 267 NIE dzieli finalizatora z wierszami 8/9
+//        (`patrolWaypoints` → ENTER → `finalizePickerMode`), więc ta naprawa go nie tknęła.
+//        Gdy 267 zostanie zamknięty — TEN PIN MA PAŚĆ (wzór `deploy_seams` T1/T2/T4)
 //   T10  i18n — reużyty `vessel.reasonTargetOtherSystem` żyje w PL i EN i NIE jest tym
 //        samym tekstem co powód warp (D-LD3: zero nowych kluczy)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -82,6 +89,7 @@ import { RightClickMenu }      from '../../ui/RightClickMenu.js';
 import { buildMenuOptions }    from '../../data/RightClickMenuOptions.js';
 import { buildOrderSpec, buildPatrolFromWaypoints } from '../../utils/OrderDispatcher.js';
 import { nearestOwnColonyBodyInSystem } from '../../utils/RetreatTarget.js';
+import { FleetManagerOverlay }  from '../../ui/FleetManagerOverlay.js';
 import { setLocale, getLocale, t } from '../../i18n/i18n.js';
 
 // ⚠ Po D-89b predykat ramki mieszka w `utils/CameraFrame.js` (trzech konsumentów), ale ten
@@ -192,6 +200,28 @@ const makeFleet = (...vs) => {
   for (const v of vs) fSys.addMember(id, v.id);
   return id;
 };
+
+// Stub pickera + finalizacja — LUSTRO `GameScene._finalizeTargetPointPicker:5272`
+// (czyta `ps.callback`, kasuje stan, woła callback z punktem). Bez tego nie da się
+// dojechać do wierszy 8/9 WYKONANIEM: producent NIE wydaje rozkazu sam — tylko uzbraja
+// picker, a rozkaz rodzi się dopiero w callbacku, przy kliku.
+function pickerUM() {
+  let st = null;
+  return {
+    isPickerActive: () => st !== null,
+    getPickerState: () => st,
+    setPickerMode: (mode, cb, metadata) => { st = { mode, callback: cb, metadata }; return true; },
+    cancelPickerMode: () => { st = null; return true; },
+  };
+}
+function firePicker(um, point) {
+  const ps = um.getPickerState?.();
+  if (!ps || ps.mode !== 'targetPoint') return false;
+  const cb = ps.callback;
+  um.cancelPickerMode();
+  if (typeof cb === 'function') cb(point);
+  return true;
+}
 
 // Punkt, który gracz kliknął w ramce KAMERY — dosłownie z rejestru (`mo_6`).
 const CLICK  = { x: 15.71, y: -158.94 };
@@ -461,21 +491,37 @@ header('T8  OrderDispatcher.js pozostaje pure (D-LD1) + kontrola pinu');
 }
 
 // ═══ T9 — ⚠ PINY ODWRÓCONE: co leg D ŚWIADOMIE ZOSTAWIA OTWARTE ══════════════
-header('T9  ⚠ ODWRÓCONE — rows 8/9 (255) i patrolManual (267) NADAL przeciekają');
+header('T9  rows 8/9 ZAMKNIĘTE (przecelowany) + T9b ODWRÓCONY (267 nadal przecieka)');
 {
-  // ⚠ TE DWA PINY PINUJĄ DEFEKT. Powód: leg D zamyka WYŁĄCZNIE producenta PPM (rows 1/2),
-  //   a gate nie może wziąć tego za pełne domknięcie 255. Gdy któryś zostanie naprawiony,
-  //   TEN PIN MA PAŚĆ — to jest jego zadanie (wzór `deploy_seams` T1/T2/T4,
-  //   `s34c_z9_transfer_dispose`).
+  // ⚠ T9a BYŁ PINEM ODWRÓCONYM I NIE MÓGŁ PAŚĆ — ZMIERZONE (D-89d). Wołał
+  //   `issueFleetOrder` WPROST, czyli seam, który MUSI zostać przepuszczalny (T4), bo tędy
+  //   idzie „Powrót do bazy" z celem w ramce STATKU. Ta funkcja dostaje GOŁE LICZBY:
+  //   `{x:220,y:0}` (Powrót) i `{x:15.71,y:−158.94}` (klik) są dla niej nie do odróżnienia.
+  //   Sonda na symulowanej naprawie: producent odmawia i nazywa winowajców, a stara asercja
+  //   dalej zwraca `{ok:true, accepted:2}` ⇒ pin świeciłby na zielono przez cały slice.
   scene({ camera: 'sys_home' });
   const a = ship({ sys: 'sys_020', auX: 2, name: 'Alfa' });
   const b = ship({ sys: 'sys_020', auX: 3, name: 'Beta' });
   const fleetId = makeFleet(a, b);
-  // Rows 8/9 — `FMO:4739` (`_handleFleetMoveToPoint`) i `FleetCommandPanel:354`
-  // (`_armMovePicker`) wołają `issueFleetOrder` WPROST, z pominięciem `_buildFleetSpec`.
-  const res = fSys.issueFleetOrder(fleetId, { type: 'moveToPoint', targetPoint: { ...CLICK } });
+
+  // Rows 8/9 — `FMO:4732` (`_handleFleetMoveToPoint`) woła `issueFleetOrder` WPROST,
+  // z pominięciem `_buildFleetSpec`, więc termin musi stać w JEGO callbacku (D-89a).
+  const um = pickerUM();
+  window.KOSMOS.uiManager = { ...window.KOSMOS.uiManager, ...um };
+  Object.create(FleetManagerOverlay.prototype)._handleFleetMoveToPoint(fleetId);
+  firePicker(window.KOSMOS.uiManager, CLICK);
+  assert(mos.getOrder(a.id) == null && mos.getOrder(b.id) == null && pushed.length === 1,
+    `T9a rows 8/9 ZAMKNIĘTE — picker floty odmawia i MÓWI (rozkazy=${mos.getOrder(a.id)?.type ?? 'BRAK'}/${mos.getOrder(b.id)?.type ?? 'BRAK'}, wpisów=${pushed.length})`);
+
+  // ⚠ KONTROLA (siostra T4): ten sam punkt z ramki KAMERY, ale podany `issueFleetOrder`
+  //   WPROST, dalej przechodzi — i TAK MA BYĆ. Fan-out nie zna ramki punktu; gdyby ten pin
+  //   padł, znaczyłoby to, że ktoś przeniósł termin do `FleetSystem` i złamał Powrót (154).
+  scene({ camera: 'sys_home' });
+  const c = ship({ sys: 'sys_020', auX: 2, name: 'Alfa' });
+  const d = ship({ sys: 'sys_020', auX: 3, name: 'Beta' });
+  const res = fSys.issueFleetOrder(makeFleet(c, d), { type: 'moveToPoint', targetPoint: { ...CLICK } });
   assert(res?.ok === true && res.accepted?.length === 2,
-    `T9a ⚠ ODWRÓCONY — pickery flotowe (Finding 255, rows 8/9) NADAL biorą punkt z obcej ramki (accepted=${res?.accepted?.length}). PADNIE, gdy zostaną domknięte — i o to chodzi`);
+    `T9a-ctl KONTROLA: fan-out issueFleetOrder POZOSTAJE przepuszczalny (accepted=${res?.accepted?.length}) — termin należy do producenta, nie do niego`);
 
   scene({ camera: 'sys_home' });
   const v = ship({ sys: 'sys_020', auX: 2, name: 'Żmija' });

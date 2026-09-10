@@ -35,6 +35,7 @@ import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
+import { fleetOffendersOutOfFrame, describeOrderFail } from '../utils/CameraFrame.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
@@ -4735,6 +4736,30 @@ export class FleetManagerOverlay {
     if (um.isPickerActive?.()) um.cancelPickerMode?.();
     um.setPickerMode?.('targetPoint', (point) => {
       if (!point) return;
+      // ── Finding 255, WIERSZ 8 — termin ramki kamery, przy FINALIZACJI (D-89a/D-89c) ──
+      // Punkt przychodzi z kliku w mapę 3D, czyli z ramki KAMERY, a członkowie floty mogą
+      // być gdzie indziej — wtedy te same liczby znaczą u nich zupełnie inne miejsce.
+      // ⚠ TERMIN NIE MOŻE STAĆ PRZY UZBRAJANIU PICKERA: nic nie kasuje pickera na
+      //   `system:switched`, więc gracz uzbraja przy kamerze ZGODNEJ z flotą, przełącza
+      //   układ i klika (zmierzone). Bramka ARM-time przepuściłaby dokładnie ten przypadek.
+      // ⚠ CAŁA flota albo nic (D-LD2): `issueFleetOrder` liczy `_arrivalSyncYear` ze
+      //   WSZYSTKICH eligible i nie przyjmuje listy wyjątków — częściowa wysyłka po cichu
+      //   złamałaby kontrakt zsynchronizowanego przylotu.
+      // ⚠ Wracamy PRZED `issueFleetOrder`, które kasuje poprzedni rozkaz floty (`:118`) —
+      //   odrzucony klik nie ma prawa zepsuć bieżących rozkazów.
+      const offenders = fleetOffendersOutOfFrame(fleetId);
+      if (offenders.length > 0) {
+        // ⚠ `_announceFleetOrderResult` ma `if (!res) return`, więc przy odmowie NIE POWIE NIC.
+        //   Głośność musi tu być jawna — inaczej gracz widzi tylko zniknięcie celownika,
+        //   nieodróżnialne od sukcesu (wcześniej UI wręcz meldowało „2/2 wykonuje rozkaz").
+        window.KOSMOS?.eventLogSystem?.push?.({
+          text: t('vessel.orderNoneMoved', offenders.map(describeOrderFail).join(', ')),
+          channel: 'fleet',
+          severity: 'warn',
+          entityRef: offenders[0].vesselId,
+        });
+        return;
+      }
       const fs = window.KOSMOS?.fleetSystem;
       const res = fs?.issueFleetOrder?.(fleetId, {
         type: 'moveToPoint',
