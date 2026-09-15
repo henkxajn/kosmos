@@ -16,7 +16,8 @@ import { THEME } from '../config/ThemeConfig.js';
 import { buildMenuOptions } from '../data/RightClickMenuOptions.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatcher.js';
-import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail } from '../utils/CameraFrame.js';
+import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail, CAMERA_FRAME_REASON } from '../utils/CameraFrame.js';
+import { systemIdOf } from '../utils/SystemScope.js';
 import { t } from '../i18n/i18n.js';
 
 // ── Leg D (Finding 255, noga MAPY) — typy rozkazu, których cel POCHODZI Z KLIKANEGO
@@ -311,18 +312,48 @@ export class RightClickMenu {
         console.warn('[RightClickMenu] patrol picker: brak uiManager lub selectedVesselId');
         return;
       }
+      // Finding 267 / D-267a — termin ramki KAMERY liczony PER WAYPOINT, w chwili jego POŁOŻENIA
+      //   (per-punktowe odczytanie reguły D-89c: położenie punktu JEST jego finalizacją). Punkt
+      //   z ramki innej niż ramka statku jest odrzucany NATYCHMIAST i GŁOŚNIE (Dziennik `fleet`/
+      //   `warn`, istniejący powód — zero nowych kluczy), a trasa zebrana do tej pory PRZEŻYWA.
+      //   Ramka TRASY = kamera przy PIERWSZYM przyjętym punkcie; kolejne punkty muszą być z tej
+      //   samej ramki (gracz może przełączać układ między klikami — picker tego nie kasuje,
+      //   zmierzone w D-89a). ENTER finalizuje trasę już-w-całości-ważną — z jedną obroną w głąb:
+      //   statek musi NADAL stać w ramce trasy (mógł skończyć skok warp między klikami).
+      // ⚠ Ten producent jest JEDYNYM wejściem `patrolWaypoints` z `vesselId` w metadata; picker
+      //   POI (`intent:'create_poi'`) i debug nie podają weta — POI nie ma `systemId` (Finding
+      //   152), a `patrol` NIE wchodzi do `POINT_SOURCED_ORDER_TYPES` (T8e).
+      let routeSystemId = null;
+      const refuse = (reason) => {
+        window.KOSMOS?.eventLogSystem?.push?.({
+          text: t('log.el.orderRejected', describeOrderFail({ vesselId, reason })),
+          channel: 'fleet', severity: 'warn', entityRef: vesselId,
+        });
+        return reason;
+      };
+      const validateWaypoint = () => {
+        const bad = outOfCameraFrame(vesselId);
+        if (bad) return refuse(bad);
+        const cam = window.KOSMOS?.activeSystemId ?? null;
+        if (routeSystemId != null && cam != null && cam !== routeSystemId) return refuse(CAMERA_FRAME_REASON);
+        if (routeSystemId == null) routeSystemId = cam;
+        return null;
+      };
       um.setPickerMode('patrolWaypoints', (waypoints) => {
         if (!waypoints) return;  // cancelled
+        const vNow = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+        const vSys = systemIdOf(vNow);
+        if (routeSystemId != null && vSys != null && vSys !== routeSystemId) { refuse(CAMERA_FRAME_REASON); return; }
         const built = buildPatrolFromWaypoints(waypoints);
         if (!built.ok) {
-          console.warn(`[RightClickMenu] buildPatrolFromWaypoints: ${built.reason}`);
+          refuse(built.reason);
           return;
         }
         const r = window.KOSMOS?.movementOrderSystem?.issueOrder?.(vesselId, built.spec);
         if (!r || r.ok === false) {
-          console.warn(`[RightClickMenu] patrol issueOrder failed:`, r);
+          refuse(r?.reason ?? 'unknown');
         }
-      }, { vesselId, source: 'rightClickMenu_patrolManual' });
+      }, { vesselId, source: 'rightClickMenu_patrolManual', validateWaypoint });
       return;
     }
 

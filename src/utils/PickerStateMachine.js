@@ -56,6 +56,14 @@ export function addWaypoint(state, point) {
       || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
     return { ok: false, reason: 'invalid_point' };
   }
+  // Finding 267 / D-267a — WETO PER PUNKT, wstrzykiwane przez PRODUCENTA pickera
+  // (`metadata.validateWaypoint(point, index) → powód | null`). Maszyna zostaje czysta: nie zna
+  // ramek, statków ani `window` — woła hook i honoruje odpowiedź. Odrzucony punkt NIE rusza bufora
+  // (trasa zebrana do tej pory PRZEŻYWA); `vetoed: true` odróżnia weto producenta od błędów maszyny.
+  const veto = state.metadata?.validateWaypoint?.({ x: point.x, y: point.y }, state.waypoints.length);
+  if (veto) {
+    return { ok: false, reason: String(veto), vetoed: true };
+  }
   return {
     ok: true,
     newState: {

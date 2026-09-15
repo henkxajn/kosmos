@@ -66,10 +66,13 @@
 //        winowajców, a stara asercja DALEJ zwraca `{ok:true, accepted:2}`. Teraz T9a jedzie
 //        PRAWDZIWYM producentem (execution pin), a stara asercja została jako **T9a-ctl**:
 //        KONTROLA przepuszczalności fan-outu (siostra T4).
-//   T9b  ⚠ PIN ODWRÓCONY — ŚWIADOMIE pinuje DEFEKT: row 3 (`patrolManual`, **Finding 267**)
-//        NADAL przyjmuje trasę z obcej ramki. 267 NIE dzieli finalizatora z wierszami 8/9
-//        (`patrolWaypoints` → ENTER → `finalizePickerMode`), więc ta naprawa go nie tknęła.
-//        Gdy 267 zostanie zamknięty — TEN PIN MA PAŚĆ (wzór `deploy_seams` T1/T2/T4)
+//   T9b  ⚠ PRZECELOWANY (267 ZAMKNIĘTY, D-267a) — dawny pin ODWRÓCONY „ma paść, gdy 267 zostanie
+//        domknięty" NIE MÓGŁ paść sam z siebie, dokładnie jak T9a w D-89d: wołał
+//        `buildPatrolFromWaypoints` + `mos.issueOrder` WPROST, a MOS jest dla tras BEZ RAMKI
+//        z definicji (spec `patrolRoute` = gołe punkty, jak POI — Finding 152). Termin 267 mieszka
+//        u PRODUCENTA (weto per waypoint w chwili położenia), więc T9b jedzie teraz PRAWDZIWYM
+//        producentem + PRAWDZIWĄ maszyną pickera; stara asercja została jako **T9b-ctl** (MOS
+//        pozostaje przepuszczalny — siostra T4/T9a-ctl). Pełny keeper: `patrol_waypoint_frame_smoke`.
 //   T10  i18n — reużyty `vessel.reasonTargetOtherSystem` żyje w PL i EN i NIE jest tym
 //        samym tekstem co powód warp (D-LD3: zero nowych kluczy)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -91,6 +94,7 @@ import { buildOrderSpec, buildPatrolFromWaypoints } from '../../utils/OrderDispa
 import { nearestOwnColonyBodyInSystem } from '../../utils/RetreatTarget.js';
 import { FleetManagerOverlay }  from '../../ui/FleetManagerOverlay.js';
 import { setLocale, getLocale, t } from '../../i18n/i18n.js';
+import { createPickerState, startPicker, addWaypoint } from '../../utils/PickerStateMachine.js';
 
 // ⚠ Po D-89b predykat ramki mieszka w `utils/CameraFrame.js` (trzech konsumentów), ale ten
 //   keeper jedzie też na kodzie SPRZED ekstrakcji (fail-first `git archive HEAD`) — statyczny
@@ -501,7 +505,7 @@ header('T8  OrderDispatcher.js pozostaje pure (D-LD1) + kontrola pinu');
 }
 
 // ═══ T9 — ⚠ PINY ODWRÓCONE: co leg D ŚWIADOMIE ZOSTAWIA OTWARTE ══════════════
-header('T9  rows 8/9 ZAMKNIĘTE (przecelowany) + T9b ODWRÓCONY (267 nadal przecieka)');
+header('T9  rows 8/9 ZAMKNIĘTE (przecelowany) + T9b PRZECELOWANY (267 zamknięty u producenta)');
 {
   // ⚠ T9a BYŁ PINEM ODWRÓCONYM I NIE MÓGŁ PAŚĆ — ZMIERZONE (D-89d). Wołał
   //   `issueFleetOrder` WPROST, czyli seam, który MUSI zostać przepuszczalny (T4), bo tędy
@@ -533,12 +537,32 @@ header('T9  rows 8/9 ZAMKNIĘTE (przecelowany) + T9b ODWRÓCONY (267 nadal przec
   assert(res?.ok === true && res.accepted?.length === 2,
     `T9a-ctl KONTROLA: fan-out issueFleetOrder POZOSTAJE przepuszczalny (accepted=${res?.accepted?.length}) — termin należy do producenta, nie do niego`);
 
+  // T9b — row 3 (`patrolManual`, Finding 267): PRAWDZIWY producent uzbraja picker, PRAWDZIWA
+  //   maszyna dostaje punkt z ramki KAMERY (≠ ramka statku) → weto W CHWILI POŁOŻENIA (D-267a),
+  //   bufor nietknięty, jeden GŁOŚNY wpis. (Pełna tabela T1-T9: `patrol_waypoint_frame_smoke`.)
   scene({ camera: 'sys_home' });
   const v = ship({ sys: 'sys_020', auX: 2, name: 'Żmija' });
+  let armed = null;
+  window.KOSMOS.uiManager = {
+    getSelectedVesselId: () => v.id, getSelectedVesselIds: () => [v.id], getSelectedFleetId: () => null,
+    setPickerMode: (mode, cb, metadata) => { armed = { mode, cb, metadata }; return true; },
+  };
+  const patrolOpt = buildMenuOptions(TARGET(), { vesselId: v.id }).find(o => o.id === 'patrolManual');
+  new RightClickMenu()._handleOptionClick(patrolOpt, TARGET());
+  const st = armed ? startPicker(createPickerState(), armed.mode, armed.cb, armed.metadata) : null;
+  const rw = st?.ok ? addWaypoint(st.newState, { x: 1.0 * AU, y: 0 }) : null;
+  assert(!!armed && rw?.ok === false && rw?.reason === 'target_other_system' && pushed.length === 1,
+    `T9b 267 ZAMKNIĘTE — patrolManual odmawia waypointu spoza ramki W CHWILI POŁOŻENIA i MÓWI (ok=${rw?.ok}, reason=${rw?.reason}, wpisów=${pushed.length})`);
+
+  // T9b-ctl — dawna asercja jako KONTROLA: MOS przyjmuje gołą trasę z dowolnej ramki i TAK MA BYĆ
+  //   (spec `patrolRoute` nie niesie ramki — Finding 152). Gdyby ten pin padł, ktoś przeniósł
+  //   termin do MOS i złamał patrol z POI.
+  scene({ camera: 'sys_home' });
+  const vc = ship({ sys: 'sys_020', auX: 2, name: 'Żmija' });
   const built = buildPatrolFromWaypoints([{ x: 1.0 * AU, y: 0 }, { x: 4.0 * AU, y: 0 }]);
-  const rp = mos.issueOrder(v.id, built.spec);
+  const rp = mos.issueOrder(vc.id, built.spec);
   assert(built.ok === true && rp?.ok === true,
-    `T9b ⚠ ODWRÓCONY — patrolManual (Finding 267, row 3) NADAL przyjmuje trasę z obcej ramki (ok=${rp?.ok}). Nie idzie przez buildOrderSpec, więc leg D go nie dotyka. PADNIE, gdy 267 zostanie domknięty`);
+    `T9b-ctl KONTROLA: MOS POZOSTAJE przepuszczalny dla gołej trasy (ok=${rp?.ok}) — termin 267 należy do producenta`);
 }
 
 // ═══ T10 — i18n (D-LD3: zero nowych kluczy) ══════════════════════════════════

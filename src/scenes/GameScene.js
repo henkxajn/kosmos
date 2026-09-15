@@ -148,6 +148,7 @@ import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
 import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
+import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -5158,6 +5159,14 @@ export class GameScene {
     EventBus.on('ui:pickerWaypointAdded', ({ total }) => {
       const remainder = total < 2 ? ` (min ${2 - total} więcej)` : ' — ENTER zakończ lub klikaj dalej.';
       banner.textContent = `Waypoint ${total} dodany${remainder}`;
+    });
+    // Finding 267 — odrzucony waypoint (weto producenta, np. punkt poza ramką statku): baner
+    // pokazuje NAZWĘ statku + przetłumaczony powód (`describeOrderFail`, zero nowych kluczy);
+    // trasa zebrana do tej pory zostaje, następny przyjęty punkt nadpisze tekst.
+    EventBus.on('ui:pickerWaypointRejected', ({ reason, metadata }) => {
+      banner.textContent = metadata?.vesselId
+        ? describeOrderFail({ vesselId: metadata.vesselId, reason })
+        : String(reason ?? '');
     });
     EventBus.on('ui:pickerModeEnded', () => {
       banner.style.display = 'none';

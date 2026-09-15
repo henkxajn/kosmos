@@ -648,6 +648,17 @@ export class UIManager {
     if (!this._pickerState) return false;
     const result = _addPickerWaypoint(this._pickerState, point);
     if (!result.ok) {
+      // Finding 267 — weto PRODUCENTA (np. punkt poza ramką statku) to nie błąd maszyny, tylko
+      // odmowa dla gracza: HUD pokazuje powód, trasa zebrana do tej pory zostaje nietknięta.
+      if (result.vetoed) {
+        EventBus.emit('ui:pickerWaypointRejected', {
+          point: { x: point.x, y: point.y },
+          reason: result.reason,
+          total: this._pickerState.waypoints.length,
+          metadata: this._pickerState.metadata,
+        });
+        return false;
+      }
       console.warn(`[UIManager] addPickerWaypoint rejected: ${result.reason}`);
       return false;
     }
