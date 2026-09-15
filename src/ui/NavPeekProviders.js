@@ -14,6 +14,7 @@ import { TECHS } from '../data/TechData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { resolveVesselStatus } from '../utils/VesselStatus.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { fmtInt, fmtDec, fmtSigned, fmtPeople, fmtPct } from './NavPeekCardLogic.js';
 
@@ -243,9 +244,14 @@ function _fleet() {
   const all = vm?.getAllVessels?.() ?? [];
   const own = all.filter(v => !isEnemyVessel(v) && !v.isWreck);
   const wrecks = all.filter(v => !isEnemyVessel(v) && v.isWreck).length;
-  const docked = own.filter(v => v.position?.state === 'docked');
-  const inTransit = own.filter(v => v.position?.state === 'in_transit');
-  const orbiting = own.filter(v => v.position?.state === 'orbiting');
+  // Finding 266: KANON — dawniej stan spoza trójki znikał z KAŻDEJ grupy (cicha luka w sumie);
+  // teraz orbita bez ciała i stan nierozpoznany mają własne nagłówki (liczone z tych samych słów).
+  const byTok = (tok) => own.filter(v => resolveVesselStatus(v).token === tok);
+  const docked = byTok('docked');
+  const inTransit = byTok('in_transit');
+  const orbiting = byTok('orbiting');
+  const inSpace = byTok('in_space');
+  const unknown = byTok('unknown');
 
   const rows = [kv(t('navPeek.fleet.ships'), `${own.length}` + (wrecks ? ` (${t('navPeek.fleet.wrecks', wrecks)})` : ''), 'accent')];
 
@@ -283,7 +289,17 @@ function _fleet() {
   // Orbitujące (czekają na rozkaz)
   if (orbiting.length) {
     rows.push(head(t('navPeek.fleet.orbiting', orbiting.length)));
-    for (const v of orbiting.slice(0, 3)) rows.push(kv(_cut(v.name, 12), _cut(_bodyName(v.position?.dockedAt), 12), 'dim'));
+    for (const v of orbiting.slice(0, 3)) rows.push(kv(_cut(v.name, 12), _cut(_bodyName(resolveVesselStatus(v).bodyId), 12), 'dim'));
+  }
+  // W kosmosie (swobodny dryf — bez ciała) i stan nierozpoznany: nagłówek = słowo kanonu + liczba
+  // (te same dwie pary co w panelach; bez osobnego klucza „{0}" — podpis: dwie nowe pary).
+  if (inSpace.length) {
+    rows.push(head(`${t('fleetGroup.statusInSpace')} ${inSpace.length}`));
+    for (const v of inSpace.slice(0, 3)) rows.push(kv(_cut(v.name, 12), '—', 'dim'));
+  }
+  if (unknown.length) {
+    rows.push(head(`${t('fleetGroup.statusUnknown')} ${unknown.length}`));
+    for (const v of unknown.slice(0, 3)) rows.push(kv(_cut(v.name, 12), '—', 'dim'));
   }
 
   const immob = own.filter(v => vm?.isImmobilized?.(v)).length;

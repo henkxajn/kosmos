@@ -32,6 +32,7 @@ import { openDockPicker } from './VesselGroupActions.js';
 import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
 import { fleetOffendersOutOfFrame, describeOrderFail } from '../utils/CameraFrame.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
+import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
 
 const PW           = 340;
 const PAD          = 8;
@@ -46,11 +47,8 @@ const ICON         = 16;
 const BAR_W        = 44;
 const BAR_H        = 6;
 
-const STATUS_KEY = {
-  docked:     'fleetGroup.statusDocked',
-  in_transit: 'fleetGroup.statusTransit',
-  orbiting:   'fleetGroup.statusOrbiting',
-};
+// Finding 266: mapa status→klucz mieszka w KANONIE (`utils/VesselStatus.VESSEL_STATUS_LABEL_KEYS`);
+// prywatna kopia z `?? 'fleetGroup.statusDocked'` była bliźniakiem tej z FleetGroupPanel.
 
 export class FleetCommandPanel extends BaseOverlay {
   constructor() {
@@ -297,9 +295,9 @@ export class FleetCommandPanel extends BaseOverlay {
     ctx.textAlign = 'left';
     ctx.fillText(this._truncate(ctx, row.name, textMaxW), px + PAD, rowY + 11);
 
-    const statusLbl = t(STATUS_KEY[row.statusKey] ?? 'fleetGroup.statusDocked');
+    const statusLbl = t(vesselStatusLabelKey(row.statusKey));
     let sub = `${this._hullName(row.hullId)} · ${statusLbl}`;
-    if ((row.statusKey === 'orbiting' || row.statusKey === 'docked') && row.dockedAt) {
+    if (row.dockedAt) {                   // kanon: bodyId ≠ null TYLKO dla docked/orbiting
       const bn = resolveBodyName(row.dockedAt);
       if (bn) sub += ` ${bn}`;            // np. „Na orbicie Kepler-442b"
     }

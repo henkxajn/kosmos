@@ -16,6 +16,7 @@ import EntityManager       from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
 import { resolveBodyName } from '../utils/BodyName.js';
 import { isSystemExploredData } from '../utils/SystemExploration.js';
+import { VESSEL_STATUS_TOKENS, resolveVesselStatus } from '../utils/VesselStatus.js';
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
@@ -356,18 +357,21 @@ export class Outliner {
       // (ciało) po prawej. Wraki pominięte. Umożliwia zaznaczenie ZADOKOWANYCH (brak sprite'a 3D).
       const vMgr = window.KOSMOS?.vesselManager;
       const selSet = new Set(window.KOSMOS?.uiManager?.getSelectedVesselIds?.() ?? []);
-      const FLEET_GROUPS = [
-        { state: 'in_transit', label: t('outliner.fleetInTransit') },
-        { state: 'orbiting',   label: t('outliner.fleetOrbiting') },
-        { state: 'docked',     label: t('outliner.fleetDocked') },
-      ];
+      // Finding 266: grupy = tokeny KANONU (`utils/VesselStatus`), w jego kolejności; kubełek stanu
+      // nierozpoznanego to 'unknown' (fail-closed), a orbita bez ciała ma własną grupę 'in_space'.
+      // `?? 'docked'` + `?? byState.docked` były dwoma z sześciu miejsc zgadujących „Docked".
+      const GROUP_LABELS = {   // literalne t() — statyczny skan check-i18n widzi każdy klucz
+        in_transit: t('outliner.fleetInTransit'), orbiting: t('outliner.fleetOrbiting'),
+        in_space:   t('fleetGroup.statusInSpace'), docked:   t('outliner.fleetDocked'),
+        unknown:    t('fleetGroup.statusUnknown'),
+      };
+      const FLEET_GROUPS = VESSEL_STATUS_TOKENS.map((token) => ({ state: token, label: GROUP_LABELS[token] }));
       if (fleet) {
-        const byState = { in_transit: [], orbiting: [], docked: [] };
+        const byState = Object.fromEntries(VESSEL_STATUS_TOKENS.map((k) => [k, []]));
         for (const vid of fleet) {
           const vessel = vMgr?.getVessel(vid);
           if (!vessel || vessel.isWreck) continue;
-          const st = vessel.position?.state ?? 'docked';
-          (byState[st] ?? byState.docked).push(vessel);
+          byState[resolveVesselStatus(vessel).token].push(vessel);
         }
         for (const g of FLEET_GROUPS) {
           const ships = byState[g.state];

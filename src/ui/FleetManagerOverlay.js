@@ -71,6 +71,7 @@ import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getDesc, getShort, getLocale } from '../i18n/i18n.js';
+import { resolveVesselStatus } from '../utils/VesselStatus.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
@@ -255,10 +256,13 @@ const TIME_STRIP_H = 20;   // = BottomControlBar.STRIP_H (pasek czasu nad nawiga
 const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 
 // Kolory statusów statków
+// Finding 266: klucz = TOKEN KANONU (`utils/VesselStatus`), nie surowy `position.state`.
 const STATUS_COLORS = {
   docked:     () => THEME.success,
   in_transit: () => THEME.warning,
   orbiting:   () => THEME.mint,
+  in_space:   () => THEME.mint,
+  unknown:    () => THEME.textDim,
 };
 
 const STATUS_ICONS = {
@@ -3625,9 +3629,14 @@ export class FleetManagerOverlay {
           ctx.textAlign = 'left';
 
           // Wiersz 2: stan (orbituje / w locie / cumuje) + typ kadłuba
-          const stateLabel = vessel.position?.state === 'docked'   ? '◈ w hangarze'
-                           : vessel.position?.state === 'orbiting' ? '⊙ na orbicie'
-                           : '→ w locie';
+          // Finding 266: rozstrzyga KANON (in_space/unknown mają własne słowa). Trzy polskie
+          // literały ZOSTAJĄ — Finding 269 (klasa 113), nie ten slice.
+          const eTok = resolveVesselStatus(vessel).token;
+          const stateLabel = eTok === 'docked'     ? '◈ w hangarze'
+                           : eTok === 'orbiting'   ? '⊙ na orbicie'
+                           : eTok === 'in_transit' ? '→ w locie'
+                           : eTok === 'in_space'   ? `◌ ${t('fleetGroup.statusInSpace')}`
+                           : `? ${t('fleetGroup.statusUnknown')}`;
           const roleLabel = ship2?.namePL ?? ship2?.nameEN ?? ship2?.name ?? vessel.shipId ?? '?';
           ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = ENEMY_COLOR;
@@ -3714,15 +3723,24 @@ export class FleetManagerOverlay {
         // sec.key='ungrouped' lub 'fleet_<id>', nie 'hangar/orbit/flight'). Bez tego
         // docked vessel w sekcji floty/ungrouped wpadał w fallback "W locie → ???".
         ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        const vState = vessel.position?.state;
+        // Finding 266: token KANONU — orbita bez ciała to 'in_space' (dawniej „⊙ ???"), stan
+        // nierozpoznany to 'unknown'; oba mają własne wiersze zamiast wpadać w gałąź lotu.
+        const vStatus = resolveVesselStatus(vessel);
+        const vState = vStatus.token;
         const subX = x + pad + 2 + fleetGutter;   // lewa krawędź wierszy 2 i 3
         const missionColX = x + pad + 95 + fleetGutter;   // kolumna typu misji (wiersz 2)
         if (vState === 'docked') {
           ctx.fillStyle = THEME.success;
-          ctx.fillText(`◈ ${_fitText(ctx, _resolveName(vessel.position.dockedAt), w - (subX - x) - pad - 12)}`, subX, ry + 28);
+          ctx.fillText(`◈ ${_fitText(ctx, _resolveName(vStatus.bodyId), w - (subX - x) - pad - 12)}`, subX, ry + 28);
         } else if (vState === 'orbiting') {
           ctx.fillStyle = THEME.mint;
-          ctx.fillText(`⊙ ${_fitText(ctx, _resolveName(vessel.position.dockedAt), w - (subX - x) - pad - 12)}`, subX, ry + 28);
+          ctx.fillText(`⊙ ${_fitText(ctx, _resolveName(vStatus.bodyId), w - (subX - x) - pad - 12)}`, subX, ry + 28);
+        } else if (vState === 'in_space') {
+          ctx.fillStyle = THEME.mint;
+          ctx.fillText(`◌ ${_fitText(ctx, t('fleetGroup.statusInSpace'), w - (subX - x) - pad - 12)}`, subX, ry + 28);
+        } else if (vState === 'unknown') {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`? ${_fitText(ctx, t('fleetGroup.statusUnknown'), w - (subX - x) - pad - 12)}`, subX, ry + 28);
         } else {
           // W locie: → cel + typ misji
           const targetName = vessel.mission?.targetName ?? _resolveName(vessel.mission?.targetId);
@@ -3758,7 +3776,7 @@ export class FleetManagerOverlay {
         // w hangarze/na orbicie nie ma ETA — zamiast zostawiać pustkę (kafel wyglądałby
         // na uszkodzony) pokazujemy klasę kadłuba, której lista statków gracza dotąd nie
         // pokazywała wcale (wiersz wroga pokazuje ją od zawsze).
-        if (vState === 'docked' || vState === 'orbiting') {
+        if (vState !== 'in_transit') {   // docked / orbiting / in_space / unknown — bez ETA
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textDim;
           const clsName = ship ? getName(ship, 'ship') : (vessel.shipId ?? '?');
@@ -3820,12 +3838,13 @@ export class FleetManagerOverlay {
   }
 
   _getLocationText(vessel) {
-    if (vessel.position.state === 'docked') {
-      return t('fleet.locationHangar', _resolveName(vessel.position.dockedAt));
-    }
-    if (vessel.position.state === 'orbiting') {
-      return t('fleet.locationOrbit', _resolveName(vessel.position.dockedAt));
-    }
+    // Finding 266: KANON — orbita bez ciała była „Orbit: ???" (`_resolveName(null)`), teraz ma
+    // własne słowo; stan nierozpoznany nie udaje lotu.
+    const st = resolveVesselStatus(vessel);
+    if (st.token === 'docked')   return t('fleet.locationHangar', _resolveName(st.bodyId));
+    if (st.token === 'orbiting') return t('fleet.locationOrbit', _resolveName(st.bodyId));
+    if (st.token === 'in_space') return t('fleetGroup.statusInSpace');
+    if (st.token === 'unknown')  return t('fleetGroup.statusUnknown');
     if (vessel.mission?.targetId) {
       return `→ ${vessel.mission.targetName ?? _resolveName(vessel.mission.targetId)}`;
     }
@@ -4144,7 +4163,7 @@ export class FleetManagerOverlay {
       if (cy + ROW > listMaxY) break;
       const v = vMgr?.getVessel?.(vid);
       const vName = v?.name ?? vid;
-      const statusCol = v ? (STATUS_COLORS[v.position?.state]?.() ?? THEME.textSecondary) : THEME.textDim;
+      const statusCol = v ? (STATUS_COLORS[resolveVesselStatus(v).token]?.() ?? THEME.textSecondary) : THEME.textDim;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = statusCol;
       const dispName = vName.length > 14 ? vName.slice(0, 13) + '…' : vName;
@@ -5297,9 +5316,7 @@ export class FleetManagerOverlay {
       const color = isSel ? THEME.accent
         : isWreck ? '#808080'
         : isEnemy ? '#ff4466'
-        : v.position.state === 'docked' ? THEME.success
-        : v.position.state === 'orbiting' ? THEME.mint
-        : THEME.warning;
+        : (STATUS_COLORS[resolveVesselStatus(v).token] ?? (() => THEME.warning))();
 
       ctx.beginPath(); ctx.arc(vx, vy, r, 0, Math.PI * 2);
       ctx.fillStyle = color;
@@ -6901,7 +6918,8 @@ export class FleetManagerOverlay {
       case 'in_transit':  return t('fleet.warpStatusInTransit');
       case 'immobilized': return t('fleet.warpStatusImmobilized');
       case 'docked':
-      case 'orbiting':    return t('fleet.warpStatusIdle');
+      case 'orbiting':
+      case 'in_space':    return t('fleet.warpStatusIdle');   // 266: dryf = orbiting dla dyspozytora warp
       default:            return t('fleet.warpStatusBusy');
     }
   }
@@ -6964,7 +6982,7 @@ export class FleetManagerOverlay {
       ctx.fillStyle = act ? THEME.textSecondary : THEME.textDim;
       const statusLabel = act
         ? `${wr > 0 ? wr.toFixed(1) : '?'} ly`
-        : this._warpStatusLabel(wrs?.canOrder ? wrs.canOrder(v).reason : v.position?.state);
+        : this._warpStatusLabel(wrs?.canOrder ? wrs.canOrder(v).reason : resolveVesselStatus(v).token);
       ctx.fillText(statusLabel, lx + PAD, ry + 26);
 
       const warpPct = v.warpFuel?.max > 0 ? Math.max(0, Math.min(1, v.warpFuel.current / v.warpFuel.max)) : 0;
@@ -7309,9 +7327,13 @@ export class FleetManagerOverlay {
     cy += 10;
 
     // Stan + pozycja + dystans od Home
-    const stateTxt = vessel.position?.state === 'docked'   ? 'W hangarze'
-                   : vessel.position?.state === 'orbiting' ? 'Na orbicie'
-                   : 'W locie';
+    // Finding 266: KANON; trzy polskie literały zostają (Finding 269, klasa 113).
+    const dTok = resolveVesselStatus(vessel).token;
+    const stateTxt = dTok === 'docked'     ? 'W hangarze'
+                   : dTok === 'orbiting'   ? 'Na orbicie'
+                   : dTok === 'in_transit' ? 'W locie'
+                   : dTok === 'in_space'   ? t('fleetGroup.statusInSpace')
+                   : t('fleetGroup.statusUnknown');
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(`Stan: ${stateTxt}`, x + pad, cy + 14); cy += 18;
@@ -7506,7 +7528,7 @@ export class FleetManagerOverlay {
 
     // ── Przegląd: status + doświadczenie (rząd 1), baza (rząd 2) ──
     {
-      const statusColor = (STATUS_COLORS[vessel.position.state] ?? (() => THEME.textSecondary))();
+      const statusColor = (STATUS_COLORS[resolveVesselStatus(vessel).token] ?? (() => THEME.textSecondary))();
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = statusColor;
       ctx.fillText(this._truncate(ctx, `● ${this._statusText(vessel)}`, w - pad * 2 - 60), x + pad, cy + 12);
@@ -8488,13 +8510,17 @@ export class FleetManagerOverlay {
     // B2 (F4 live-gate): pasażer czekający na wolny habitat ma PIERWSZEŃSTWO nad etykietami paliwa —
     // inaczej auto-tankowanie przy stacji (depot bez power_cells) fałszywie pokazuje „Czeka na paliwo".
     if (vessel._awaitingHousing) return t('fleet.statusTextAwaitingHousing');
-    if (vessel.position.state === 'docked') {
+    // Finding 266: KANON — 'in_space' dzieli gałąź orbity (test „utknął z dala od bazy" dotyczy
+    // go tym bardziej), 'unknown' nie udaje lotu.
+    const stTok = resolveVesselStatus(vessel).token;
+    if (stTok === 'unknown') return t('fleetGroup.statusUnknown');
+    if (stTok === 'docked') {
       if (vessel.status === 'idle') return t('fleet.statusTextHangar');
       // Fix C: rozróżnij "czeka na paliwo" (brak fuel w kolonii) od aktywnego tankowania.
       if (vessel._awaitingFuel) return t('fleet.statusTextAwaitingFuel');
       return t('fleet.statusTextRefueling');
     }
-    if (vessel.position.state === 'orbiting') {
+    if (stTok === 'orbiting' || stTok === 'in_space') {
       // (d) Luka D — orbitujący bez paliwa na powrót: czytelny sygnał zamiast cichego
       // "Orbituje". Stan WYLICZANY (bez nowego pola/migracji). Nie alarmuj przy własnej
       // kolonii/placówce (tam można dotankować) — tylko gdy utknął z dala od bazy.
@@ -8509,7 +8535,7 @@ export class FleetManagerOverlay {
           return t('fleet.statusTextStranded');
         }
       }
-      return t('fleet.statusTextOrbiting');
+      return t(stTok === 'in_space' ? 'fleetGroup.statusInSpace' : 'fleet.statusTextOrbiting');
     }
     return t('fleet.statusTextInFlight');
   }

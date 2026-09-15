@@ -4,6 +4,7 @@
 // liczby/KLUCZE (status/rozkaz), więc moduł jest locale-free (lokalizacja w widoku).
 
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { resolveVesselStatus } from '../utils/VesselStatus.js';
 
 // Czy statek ma jakikolwiek moduł broni. Inline (mirror Vessel.hasWeapons) — nie ciągniemy
 // łańcucha i18n z Vessel.js do czystej logiki; ShipModulesData to czyste dane.
@@ -64,10 +65,14 @@ export function summarizeFleetGroup(vessels, { vesselManager } = {}) {
 /**
  * Wiersze rostera — po jednym na statek. statusKey/orderKey to KLUCZE (widok → t()),
  * fuelPct/warpPct znormalizowane 0..1. hullId = shipId (widok rozwiązuje nazwę kadłuba).
+ *
+ * ⚠ Finding 266: statusKey to TOKEN KANONU (`utils/VesselStatus.resolveVesselStatus`), nie
+ *   surowy `position.state` z domyślnym `'docked'`. Stan nierozpoznany = 'unknown' (fail-closed),
+ *   orbita bez ciała = 'in_space'. `dockedAt` też idzie z kanonu (null dla in_transit/in_space).
  * @param {Array<object>} vessels
  * @param {{ vesselManager? }} deps
  * @returns {Array<{ id:string, name:string, hullId:string,
- *            statusKey:('docked'|'in_transit'|'orbiting'), fuelPct:number,
+ *            statusKey:('docked'|'in_transit'|'orbiting'|'in_space'|'unknown'), fuelPct:number,
  *            warpPct:number, orderKey:(string|null), immobilized:boolean,
  *            hasWeapons:boolean, dockedAt:(string|null) }>}
  */
@@ -76,17 +81,18 @@ export function buildRosterRows(vessels, { vesselManager } = {}) {
   return list.map((v) => {
     const fMax = v?.fuel?.max ?? 0;
     const wMax = v?.warpFuel?.max ?? 0;
+    const st = resolveVesselStatus(v);
     return {
       id:          v.id,
       name:        v.name ?? v.id,
       hullId:      v.shipId,
-      statusKey:   v?.position?.state ?? 'docked',
+      statusKey:   st.token,
       fuelPct:     fMax > 0 ? (v.fuel.current / fMax) : 0,
       warpPct:     wMax > 0 ? (v.warpFuel.current / wMax) : 0,
       orderKey:    v?.movementOrder?.type ?? v?.mission?.type ?? null,
       immobilized: !!vesselManager?.isImmobilized?.(v),
       hasWeapons:  _hasWeapons(v),
-      dockedAt:    v?.position?.dockedAt ?? null,
+      dockedAt:    st.bodyId,
     };
   });
 }

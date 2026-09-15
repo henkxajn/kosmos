@@ -13,6 +13,10 @@ export const STATE_LABEL_KEYS = Object.freeze({
   docked:     'fleetPicture.state.docked',
   orbiting:   'fleetPicture.state.orbiting',
   in_transit: 'fleetPicture.state.inTransit',
+  // Finding 266: dwa tokeny kanonu (`utils/VesselStatus`) — słowa DZIELONE z rodziną panelową
+  // (podpis: dokładnie dwie nowe pary i18n w całym slice'ie).
+  in_space:   'fleetGroup.statusInSpace',
+  unknown:    'fleetGroup.statusUnknown',
 });
 
 // Kolumny tabeli (id → czy sortowalna); szerokości/etykiety to sprawa widoku.
@@ -91,7 +95,7 @@ export function buildRegistryRows(vessels, ctx = {}) {
       role: e.role,
       glyph: e.glyph,
       tone: e.tone,
-      stateKey: STATE_LABEL_KEYS[e.state] ?? 'fleetPicture.state.idle',
+      stateKey: STATE_LABEL_KEYS[e.state] ?? 'fleetGroup.statusUnknown',   // fail-closed (266), nie „Idle"
       activityKey: e.activityKey,
       activityArgs: e.activityArgs,
       eta: e.eta,

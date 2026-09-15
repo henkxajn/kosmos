@@ -23,6 +23,7 @@ import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
 import { resolveBodyName } from '../utils/BodyName.js';
 import { summarizeFleetGroup, buildRosterRows, countActionable } from './FleetGroupPanelLogic.js';
+import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
@@ -40,11 +41,9 @@ const ICON         = 16;   // ikona akcji per-statek
 const BAR_W        = 46;   // mini-pasek paliwa
 const BAR_H        = 6;
 
-const STATUS_KEY = {
-  docked:     'fleetGroup.statusDocked',
-  in_transit: 'fleetGroup.statusTransit',
-  orbiting:   'fleetGroup.statusOrbiting',
-};
+// Finding 266: mapa status→klucz mieszka w KANONIE (`utils/VesselStatus.VESSEL_STATUS_LABEL_KEYS`);
+// prywatna kopia z `?? 'fleetGroup.statusDocked'` była jednym z sześciu miejsc, które nazywały
+// stan nierozpoznany „Docked". `vesselStatusLabelKey` jest fail-closed (→ „Unknown").
 
 export class FleetGroupPanel extends BaseOverlay {
   constructor() {
@@ -342,9 +341,9 @@ export class FleetGroupPanel extends BaseOverlay {
     ctx.fillText(this._truncate(ctx, row.name, textMaxW - (nameX - (px + PAD))), nameX, rowY + 13);
 
     // Linia 2: kadłub · status[ ciało] · rozkaz (dim, mniejsza czcionka).
-    const statusLbl = t(STATUS_KEY[row.statusKey] ?? 'fleetGroup.statusDocked');
+    const statusLbl = t(vesselStatusLabelKey(row.statusKey));
     let sub = `${this._hullName(row.hullId)} · ${statusLbl}`;
-    if ((row.statusKey === 'orbiting' || row.statusKey === 'docked') && row.dockedAt) {
+    if (row.dockedAt) {                   // kanon: bodyId ≠ null TYLKO dla docked/orbiting
       const bn = resolveBodyName(row.dockedAt);
       if (bn) sub += ` ${bn}`;            // np. „Na orbicie Kepler-442b" / „Dok Stolica"
     }

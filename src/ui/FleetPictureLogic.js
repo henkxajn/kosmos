@@ -20,6 +20,7 @@
 // zwraca PEŁNY wpis z `isWreck:true` (3f); powierzchnie filtrują po tym polu.
 
 import { getPrimaryRole, isEnemyVessel } from '../entities/Vessel.js';
+import { resolveVesselStatus } from '../utils/VesselStatus.js';
 
 // ── Słownik: rola → glif ─────────────────────────────────────────────────────
 // Mapowanie 7 ról getPrimaryRole() → 5 glifów koncepcji (wiele-do-jednego,
@@ -236,7 +237,10 @@ export function buildShipEntry(vessel, ctx = {}) {
 
   const order       = vessel.movementOrder;
   const orderActive = order?.status === 'active';
-  const state       = vessel.position?.state ?? 'docked';
+  // Finding 266: token KANONU (`utils/VesselStatus`) zamiast surowego stanu z domyślnym 'docked'.
+  // 'orbiting' bez ciała = 'in_space'; stan nierozpoznany = 'unknown' (fail-closed, nie „Idle").
+  const physical    = resolveVesselStatus(vessel);
+  const state       = physical.token;
   const mission     = vessel.mission ?? null;
 
   // Ton — JEDNA funkcja priorytetów (plan §2): combat > alert > move > mission > idle.
@@ -266,8 +270,10 @@ export function buildShipEntry(vessel, ctx = {}) {
     activityKey = 'fleetPicture.state.orbiting';
   } else if (state === 'in_transit') {
     activityKey = 'fleetPicture.state.inTransit';
+  } else if (state === 'in_space') {
+    activityKey = 'fleetGroup.statusInSpace';     // D-266b — słowo dzielone z rodziną panelową
   } else {
-    activityKey = 'fleetPicture.state.idle';
+    activityKey = 'fleetGroup.statusUnknown';     // D-266a — zbiór zamknięty; nic tu nie zgaduje
   }
 
   // ETA (lata GRY, spójne z timeSystem.gameTime): mission.arrivalYear /
@@ -308,9 +314,8 @@ export function buildShipEntry(vessel, ctx = {}) {
     toId = order.targetBodyId ?? null;                 // ruch do ciała (punkt → null)
   }
 
-  // Ciało bazowania: dockedAt istotne tylko przy docked/orbiting (w locie → null).
-  const dockedAt = (state === 'docked' || state === 'orbiting')
-    ? (vessel.position?.dockedAt ?? null) : null;
+  // Ciało bazowania: z kanonu — bodyId ≠ null TYLKO dla docked/orbiting (in_space/in_transit → null).
+  const dockedAt = physical.bodyId;
 
   return {
     id:          vessel.id,
@@ -320,7 +325,7 @@ export function buildShipEntry(vessel, ctx = {}) {
     role,
     glyph,
     tone,
-    state,       // surowy token stanu fizycznego (kolumna „Stan" rejestru K3)
+    state,       // token KANONU statusu fizycznego (kolumna „Stan" rejestru K3; Finding 266)
     activityKey,
     activityArgs,
     eta:         { year: etaYear, confidence: moving ? 'moving' : 'firm' },

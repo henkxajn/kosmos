@@ -40,6 +40,7 @@ import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
+import { resolveVesselStatus } from '../utils/VesselStatus.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
@@ -3492,8 +3493,14 @@ export class ThreeRenderer {
         html += `<br><span style="color:#b0c4b0">Etap: ${legLabel}</span>`;
       }
     } else {
-      const stateLabel = vessel.position?.state === 'docked' ? 'W hangarze'
-                       : vessel.position?.state === 'orbiting' ? 'Na orbicie' : 'Bezczynny';
+      // Finding 266: KANON — orbita bez ciała i stan nierozpoznany mają własne słowa; trzy polskie
+      // literały zostają (Finding 269, klasa 113 — cały tooltip jest po polsku).
+      const ttTok = resolveVesselStatus(vessel).token;
+      const stateLabel = ttTok === 'docked'   ? 'W hangarze'
+                       : ttTok === 'orbiting' ? 'Na orbicie'
+                       : ttTok === 'in_space' ? t('fleetGroup.statusInSpace')
+                       : ttTok === 'unknown'  ? t('fleetGroup.statusUnknown')
+                       : 'Bezczynny';
       html += `<br><span style="opacity:0.7">${stateLabel}</span>`;
     }
 
