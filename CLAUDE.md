@@ -4654,14 +4654,14 @@ wrakiem między ofertą a wyborem), wszystkie z przetłumaczonym powodem; **bez 
 Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 **KOLEJKA (rodzina 255 i dalej):** ~~wiersze 8/9~~ ✅ → ~~**256**~~ ✅ (reguła
 grupowa „A + C”; **271** zamknięty przy okazji) → ~~**266**~~ ✅ (KANON `VesselStatus.js`,
-D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → **267** (już
-tylko decyzja UX — moment odmowy rozstrzygnięty regułą D-89c)
-→ **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
+D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → ~~**267**~~ ✅ (D-267a = weto
+per waypoint W CHWILI POŁOŻENIA, trasa przeżywa — sekcja niżej; live-gate PASS)
+→ **273** (🔴 NOWY z gate'u 267: sprite statku pod `patrol`/`escort` nie rusza się — `_updatePositions` nie wrzuca ich do `moving[]`; własny slice z własnym gate'em) → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
 pinów źródłowych; ⚠ 269 ma od 266 **trzy nowe site'y**) → **272** (⚠ **DECYZJA WŁAŚCICIELA
 POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta
 z głośną odmową) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
-⚠ **Dwie otwarte decyzje właściciela w kolejce: 267 (mitygacja UX waypointów), 272 (semantyka
-Powrotu floty rozpiętej).** Każda jest na zapisie w rejestrze — żadnej z nich NIE zaczynać od kodu.
+⚠ **Jedna otwarta decyzja właściciela w kolejce: 272 (semantyka Powrotu floty rozpiętej).**
+Jest na zapisie w rejestrze — NIE zaczynać jej od kodu.
 
 ---
 
@@ -4737,3 +4737,67 @@ plików CRLF) — liczyć bajty `\r` (`tr -cd '\r' | wc -c`), inaczej patch z ko
 Stan realny: `FleetCommandPanel`/`FleetGroupPanel`/`FleetGroupPanelLogic`/`Outliner`/FMO/
 `ThreeRenderer`/`en.js`/`pl.js` = **CRLF**, `FleetPictureLogic`/`FleetRegistryLogic`/`NavPeekProviders`
 = LF (repo mieszany, `autocrlf=true`, brak `.gitattributes` — Finding 270).
+
+---
+
+## Finding 267 — `patrolManual`: waypoint spoza ramki odrzucany W CHWILI POŁOŻENIA, trasa przeżywa (save **v101 bez migracji**, live-gate PASS: §2/§4/§5, §1/§3 PASS-with-finding → 273, re-run §3 A=3/B=2 — ZAMKNIĘTE 2026-09-15)
+
+Trzeci producent punktu z ramki KAMERY (po legu D i wierszach 8/9). Decyzja właściciela
+**D-267a = (A)**: każdy waypoint oceniany **przy położeniu, w ramce SWOJEGO kliku** — per-punktowe
+odczytanie reguły D-89c (położenie punktu JEST jego finalizacją); odmowa natychmiastowa i GŁOŚNA,
+trasa zebrana do tej pory **PRZEŻYWA**; ENTER finalizuje trasę już-w-całości-ważną. Rejestr:
+`docs/design/VESSEL_ORDERS_PLAN.md` §267 (wdrożone, live-gate PENDING).
+
+**STOP-klauzula NIE zaszła (zmierzone):** przy kliku picker ma OBIE strony pytania — `metadata.vesselId`
+(stawia producent) i kamerę (`activeSystemId` w tej chwili); bufor trasy żyje w
+`UIManager._pickerState.waypoints`. Placement-time jest strukturalnie możliwe, więc (B) nie było potrzebne.
+
+**Kształt — trzy warstwy, JEDEN termin:** producent `RightClickMenu` (JEDYNE wejście `patrolWaypoints`
+z `vesselId`; picker POI `create_poi` i debug NIE podają weta — POI bez `systemId`, Finding 152)
+wstrzykuje `metadata.validateWaypoint` → CZYSTA maszyna `PickerStateMachine.addWaypoint` woła hook
+i przy wecie NIE rusza bufora (`{ok:false, reason, vetoed:true}`; maszyna nadal nie zna `window`) →
+`UIManager.addPickerWaypoint` zamienia weto na `ui:pickerWaypointRejected` → HUD
+(`GameScene._createPickerHUD`) pokazuje nazwę statku + powód przez `describeOrderFail`. Dziennik:
+`log.el.orderRejected` + `vessel.reasonTargetOtherSystem` — **zero nowych kluczy i18n**. `patrol`
+NADAL poza `POINT_SOURCED_ORDER_TYPES` (T8e).
+
+⚠ **Dwie obrony w głąb, obie osiągalne** (picker NIE kasuje się na `system:switched`, a czas płynie
+podczas klikania): **(a)** ramka TRASY = kamera przy PIERWSZYM przyjętym punkcie — punkt z innej ramki
+odrzucany nawet, gdy statek „przyleciał" tam i kamera poszła za nim (inaczej trasa mieszałaby dwie
+ramki); **(b)** przy ENTER statek musi NADAL stać w ramce trasy — inaczej odmowa bez rozkazu. Przy
+okazji trzy dotąd CICHE porażki tego callbacku (`buildPatrolFromWaypoints`, `issueOrder`) idą tą samą
+głośną ścieżką.
+
+⚠ **T9b (`map_click_frame_smoke`) NIE MÓGŁ PAŚĆ SAM Z SIEBIE** — ta sama klasa co T9a w D-89d: wołał
+`buildPatrolFromWaypoints` + `mos.issueOrder` WPROST, a MOS jest dla tras bez ramki z definicji
+(spec `patrolRoute` = gołe punkty, jak POI). Przecelowany na producenta + prawdziwą maszynę
+(execution pin); stara asercja została jako **T9b-ctl** (MOS pozostaje przepuszczalny — siostra
+T4/T9a-ctl). ⇒ **reguła:** pin „ma paść, gdy X zostanie zamknięty" jest hipotezą o MIEJSCU naprawy;
+gdy naprawa ląduje piętro wyżej, pin trzeba przecelować, nie „naprawić" tak, by padł.
+
+**Keeper NEW `patrol_waypoint_frame_smoke` 42/42** (T1-T9: T3 = P1 ✓ → zmiana układu → P2 ✗ →
+powrót → P3 ✓ → ENTER → `patrol` z DOKŁADNIE [P1, P3]; T4 ramka trasy stała; T5 obrona przy ENTER;
+T6 kontrole POI/debug/jedna ramka; T7 piny źródłowe CRLF-safe; T8 PL+EN bez sluga; T9 kontrola MOS).
+**Fail-first w REALNYM `git worktree` na `e087507`: 21 PASS / 21 FAIL** — czerwone T1 (1) · T2 (5) ·
+T3 (6) · T4 (2) · T5 (2) · T7 (3) · T8 (2 piny tekstu wpisu); T6/T9 zielone. `map_click_frame` **42/1**
+(pada dokładnie przecelowany T9b) → **43/43**. Sweep **225/225 0 FAIL** · `check-i18n` PASS. Zapis v101,
+bez flagi (rollback = revert). Baner pickera nadal po polsku (Finding 269, nietknięty).
+
+**Live-gate 2026-09-15 (właściciel, klient EN):** §2 PASS (odmowa przy położeniu: baner + jedna linia
+Dziennika, `waypoints.length` 0) · §4 PASS (picker POI nietknięty) · §5 PASS (stan bajt w bajt po
+odrzuconym kliku) · **§1/§3 PASS-with-finding**: semantyka rozkazu poprawna (rozkaz, „In flight", trasa),
+ale **sprite 3D nie ruszył**, a po „Anuluj rozkaz" statek „nagle" stanął przy waypoincie 2/3.
+⚠ **To NIE jest regresja 267 — Finding 273, PRE-EXISTING od M2b (2026-04-27), zmierzony bajt w bajt na
+`e087507` i na drzewie 267:** `VesselManager._updatePositions` wrzuca do `moving[]` (jedyne źródło
+`vessel:positionUpdate`, którym renderer rusza sprite `in_transit`) tylko `pursue|intercept|engage`;
+`patrol`/`escort` mutują x/y wprost w MOS przy ZAWIESZONEJ misji ⇒ statek nie trafia w żadną gałąź ⇒
+**0/200** ładunków (kontrola `moveToPoint` 200/200), identycznie przy 2 AU i 30 AU — odległość nie jest
+przyczyną (brak cullingu sprite'ów). „Nagłe pojawienie się" = `cancelOrder` → `orbiting`+`dockedAt=null` →
+`_tickOrbitingVessels` czyta realne x/y (poprawka desync z M4) — pierwszy kontakt renderera z pozycją,
+którą symulacja miała od dawna. Mapa taktyczna czyta x/y wprost, dlatego przeżyło pięć miesięcy.
+Diff 267 w `GameScene`/`UIManager` = jeden import + jeden listener banera + jedna gałąź emitu weta — zero
+kontaktu z pętlą renderu. Błędy konsoli podczas §1: **nie sprawdzone** (zapisane dosłownie).
+✅ **Celowany re-run §3** (właściciel, semantyka rozkazu, sprite ignorowany): **A** jedna ramka,
+3 waypointy → `patrolRoute.length` = **3** · **B** scenariusz przeżycia (P1 ✓ / klik obcy ✗ / P3 ✓ /
+ENTER) → `patrolRoute.length` = **2**, dokładnie jedna linia odmowy w Dzienniku. Commity: `fix(267)` +
+`docs(267)`.
