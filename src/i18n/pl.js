@@ -1215,6 +1215,11 @@ export default {
   'fleetGroup.statusDocked': 'Dok',
   'fleetGroup.statusTransit': 'W drodze',
   'fleetGroup.statusOrbiting': 'Na orbicie',
+  // Finding 266 (D-266a/b) — dwie ŚWIADOMIE nowe pary (przerwana seria „zero nowych kluczy"):
+  // 'in_space' = orbiting bez ciała (swobodny dryf; brzmienie za `navPeek.fleet.inSpace`),
+  // 'unknown' = stan nierozpoznany (fail-closed, klucz dedykowany — nie `vessel.unknown`).
+  'fleetGroup.statusInSpace': 'W kosmosie',
+  'fleetGroup.statusUnknown': 'Nieznany',
   'fleetGroup.actionRefuel': 'Tankuj',
   'fleetGroup.actionStop': 'Stop',
   'fleetGroup.actionRetreat': 'Odwrót',
