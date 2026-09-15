@@ -4653,14 +4653,87 @@ wrakiem między ofertą a wyborem), wszystkie z przetłumaczonym powodem; **bez 
 `git worktree` (nie `git archive` — Finding 270): 54/14 · 41/1 · 42/1 · 118/2.
 Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 **KOLEJKA (rodzina 255 i dalej):** ~~wiersze 8/9~~ ✅ → ~~**256**~~ ✅ (reguła
-grupowa „A + C”; **271** zamknięty przy okazji) → **266** (⚠ kształt **do podpisu**: czy stan
-nierozpoznany ma się renderować jako *nieznany* zamiast „docked” — i pamiętaj, że to DWA
-osobne site'y, logika `?? 'docked'` i widok `?? 'fleetGroup.statusDocked'`) → **267** (już
+grupowa „A + C”; **271** zamknięty przy okazji) → ~~**266**~~ ✅ (KANON `VesselStatus.js`,
+D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → **267** (już
 tylko decyzja UX — moment odmowy rozstrzygnięty regułą D-89c)
 → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
-pinów źródłowych) → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu
-floty rozpiętej — cel per członek czy cel reprezentanta z głośną odmową) → reszta rejestru
-(**151** / **152** / **153**, **264** / **265**).
-⚠ **Trzy otwarte decyzje właściciela w kolejce: 266 (etykieta fallbacku), 267 (mitygacja UX
-waypointów), 272 (semantyka Powrotu floty rozpiętej).** Każda jest na zapisie w rejestrze —
-żadnej z nich NIE zaczynać od kodu.
+pinów źródłowych; ⚠ 269 ma od 266 **trzy nowe site'y**) → **272** (⚠ **DECYZJA WŁAŚCICIELA
+POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta
+z głośną odmową) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
+⚠ **Dwie otwarte decyzje właściciela w kolejce: 267 (mitygacja UX waypointów), 272 (semantyka
+Powrotu floty rozpiętej).** Każda jest na zapisie w rejestrze — żadnej z nich NIE zaczynać od kodu.
+
+---
+
+## Finding 266 — „Docked" przestaje być DOMYŚLNĄ etykietą: kanon statusu statku (save **v101 bez migracji**, live-gate §1/§2/§4 PASS, §3 headless — ZAMKNIĘTE 2026-09-15)
+
+Decyzje właściciela **D-266a…d** (2026-09-15). Rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §266
+(zamknięty, **ze SPROSTOWANĄ przesłanką**) + §269 (dopisane trzy site'y klasy 113).
+
+**Jedno zdanie:** sześć powierzchni nazywało stan nierozpoznany „Docked", cztery inne zgadywały dla
+tego samego nieznanego INNE słowo — teraz o etykiecie rozstrzyga JEDEN czysty predykat.
+
+⚠ **POMIAR ZMIENIŁ WAGĘ FINDINGU, NIE POTWIERDZIŁ GO.** Silnik produkuje **dokładnie trzy** tokeny
+`position.state` (48 pisarzy literałów: 'docked' ×3, 'in_transit' ×16, 'orbiting' ×29; fabryka
+`Vessel.js:158`), a **każdy pisarz 'docked' ustawia `dockedAt` w tym samym statemencie** ⇒ stan
+`undefined`/nieznany jest osiągalny **wyłącznie** z zapisu bez pola (`VesselManager.restore` robi
+`{ ...vd.position }` → `{}`, bez leczenia — wykonane) albo z przyszłego czwartego tokena. Fallback
+„Docked" był więc **LATENTNY**. ⇒ leg-D-owy „docked at Mstow" **NIE pochodził z etykiety statusu**:
+jedynym napisem tej postaci w obu słownikach jest `vessel.docked: 'Docked at {0}'` — **linia dziennika
+misji** z ostatniego dokowania (`VesselManager:725`), renderowana w detalu statku w Command (ostatnie 8);
+drugim „Mstow" na tym detalu jest `_baseText` (kolonia macierzysta). **Historia stała tam, gdzie czyta
+się status** — obserwacja bez numeru (numer = decyzja właściciela).
+**Jedynym OSIĄGALNYM kłamstwem było 'orbiting' PRZECIĄŻONE**: orbita ciała ALBO swobodny dryf
+(`dockedAt=null`; ≥8 żywych producentów — `MOS:1264` engage, `:1637` lot w pusty punkt, `VM:2818`
+przylot międzygwiezdny na obrzeże, `ReturnJump`, DSCS/VCS) — panele pisały „Orbiting" niczego,
+a Command **„Orbit: ???"** / „⊙ ???".
+
+**Kanon — NEW `src/utils/VesselStatus.js`** (zero importów, fail-CLOSED, wzór `ColonyOwnership`/
+`SystemExploration`): `resolveVesselStatus(vessel) → { token, bodyId }`, zbiór `VESSEL_STATUS_TOKENS`
+= `in_transit · orbiting · in_space · docked · unknown` (kolejność = kolejność list grupowanych),
+`vesselStatusLabelKey(token)` → `fleetGroup.status*`. `docked` bez `dockedAt` (niemożliwe z konstrukcji)
+→ **'unknown'**, nie zgadywane. ⚠ **`in_space` NIE jest stanem silnika** — nie wolno go zapisać do
+`position.state`; kanon jest **wyłącznie dla etykiet**. Logika (`countActionable`, `manualRefuel`,
+`undockToOrbit`, stożek wydechu, `VesselManager`) czyta SUROWY stan i tak ma zostać (pin T6).
+
+**Konsumenci (8 plików):** `FleetGroupPanelLogic.buildRosterRows` · `FleetGroupPanel` /
+`FleetCommandPanel` (prywatne `STATUS_KEY` USUNIĘTE) · `FleetPictureLogic.buildShipEntry` (⇒ K3,
+Dok taktyczny, plakietki) · `FleetRegistryLogic` (fallback „Idle" → „Unknown") · `Outliner` (grupy =
+tokeny kanonu, własne nagłówki „In space"/„Unknown") · `FleetManagerOverlay` (`STATUS_COLORS` po tokenie,
+`◌ In space` / `? Unknown` w liście, `_getLocationText`, `_statusText`, `_warpStatusLabel`, detal wroga)
+· `ThreeRenderer` (tooltip) · `NavPeekProviders` (nagłówki komponowane — bez nowego klucza `{0}`).
+
+**i18n: DOKŁADNIE dwie nowe pary** — `fleetGroup.statusUnknown` ('Unknown'/'Nieznany'; **nie**
+`vessel.unknown`, którego dom to „nieznany STATEK") i `fleetGroup.statusInSpace` ('In space'/
+'W kosmosie', brzmienie za `navPeek.fleet.inSpace`). Seria „zero nowych kluczy" **przerwana świadomie**.
+Rejestr K3 dzieli te dwa słowa z rodziną panelową (własne klucze zostawia dla trzech stanów silnika).
+`fleetPicture.state.idle` stracił jedynego producenta — zostaje w słowniku jako nieużyty. **Trzy polskie
+literały** w przepiętych łańcuchach ZOSTAJĄ (dopisane do 269). Zapadka `check-i18n` bez zmian, PASS.
+
+**Keeper `vessel_status_label_smoke` 84/84** (T0-T7): **T0 enumeruje pisarzy `position.state` ZE
+ŹRÓDŁA** regexem `\s`-tolerantnym (Finding 270) — ≥3 pliki, ≥40 trafień, zbiór ≡ trójce; **czwarty
+token w silniku pali keeper GŁOŚNO**; T1 bierze zbiór Z T0 (tabela oczekiwanych etykiet ma trzy wpisy
+— czwarty nie znajdzie wpisu); T2/T4 stan nierozpoznany na obu panelach, w K3, w `buildShipEntry`
+i w kubełku Outlinera (wykonanie prawdziwego `draw()` na atrapie ctx z przechwytem `fillText`);
+T3 leg-D z kontrolą `dockedAt:'h2'` + `_getLocationText` bez „???" + NavPeek; **T5 zgoda nagłówka
+z rosterem NIEZALEŻNA od wybranego słowa** (`dockedCount == #„Docked"` — na HEAD 1 vs 2); T6 logika
+bit w bit jak na HEAD; T7 `map_vessel_panel_smoke` w procesie potomnym (120/120).
+**Fail-first w REALNYM `git worktree` na `9127f14`: 44 PASS / 40 FAIL** — czerwone dokładnie T2 (17),
+T3 (9), T4 (12), T5 (1) + jedna kontrola zależna od kanonu w T0; T1/T6/T7 zielone (kontrole).
+Sweep **224/224 0 FAIL**. Zapis v101, bez flagi (rollback = revert).
+
+**Live-gate 2026-09-15 PASS** (właściciel, na żywo, klient EN): **§1** zdrowa trójka bez zmiany
+wizualnej (Docked+ciało · In orbit+„Stacja Mstow" · In flight na kursach międzyukładowych);
+⚠ **obserwacja, nie defekt:** statek **w skoku warp** (`orbiting`+`dockedAt:null` na czas tranzytu)
+renderuje „In space" z aktywnością „Warp jump" obok — kanon prawdomównie raportuje POZYCJĘ, kolumna
+aktywności rozstrzyga (dwie osie: status fizyczny ≠ misja). **§2** słowo dryfu PASS na wszystkich
+powierzchniach i z konsoli (`v_18`: `{state:'orbiting', dockedAt:null}` → `{token:'in_space'}`).
+**§3** „Unknown" — **NIE ćwiczone na żywo** (populacja pusta z konstrukcji), stoi na **T2 headless**
+(wzór uczciwości 271). **§4** `JSON.stringify(v.position)` identyczne przed/po każdej powierzchni —
+kanon tylko czyta. Commity: C1 kanon+i18n · C2 konsumenci+keeper · C3 docs.
+
+⚠ **Lekcja z harnessu:** `grep -q $'\r'` w tym środowisku NIE wykrywa CRLF (zwrócił „LF" dla ośmiu
+plików CRLF) — liczyć bajty `\r` (`tr -cd '\r' | wc -c`), inaczej patch z kotwicą `\n` nie trafia.
+Stan realny: `FleetCommandPanel`/`FleetGroupPanel`/`FleetGroupPanelLogic`/`Outliner`/FMO/
+`ThreeRenderer`/`en.js`/`pl.js` = **CRLF**, `FleetPictureLogic`/`FleetRegistryLogic`/`NavPeekProviders`
+= LF (repo mieszany, `autocrlf=true`, brak `.gitattributes` — Finding 270).
