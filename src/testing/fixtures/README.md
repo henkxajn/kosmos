@@ -61,3 +61,21 @@ restore: twardo ustawia `window.KOSMOS.savedData = null` (`:130`) i zawsze gener
 > ⚠ **PREREKWIZYT ZAPARKOWANY (krok 3, świadomie NIEZACZĘTY):** headless replay wymaga wyciągnięcia
 > łańcucha restore z `GameScene` do modułu importowalnego pod node albo napisania shimu restore
 > tylko-headless. To jest **slice z własnym podpisem**, nie zadanie poboczne.
+
+## `traces/` — nagrane ŚLADY WYKONANIA (nie zapisy gry)
+
+> Powołane 2026-09-15 (Finding 273). Inny rodzaj artefaktu niż zapis: **ślad symulacji nagrany przez
+> keeper na drzewie SPRZED naprawy**, żeby pin „naprawa nie zmienia symulacji" porównywał z tym, co
+> silnik NAPRAWDĘ produkował, a nie ze stałą wyprowadzoną z tej samej formuły (stałą przeszłoby też
+> zdublowanie obu stron).
+
+```
+traces/<FINDING>-<nazwa>-baseline.json   — ślad (nagrany przez keeper z `--record`)
+traces/<FINDING>-<nazwa>-baseline.md     — metryczka (obowiązkowa: commit nagrania, keeper, schemat)
+```
+
+Reguły: (1) nagrywa **TEN SAM plik keepera**, który potem porównuje (`--record`) — recorder i porównanie
+nie mogą się rozjechać; (2) nagranie wykonuje się na **REALNYM `git worktree`** przy commicie sprzed
+naprawy (hash w metryczce **i** w polu `recordedFrom`); (3) keeper sprawdza schemat (DT, N, jednostki)
+PRZED porównaniem, żeby zmiana konfiguracji nie udawała regresji; (4) porównanie jest **bajt w bajt**
+(`===`), bez tolerancji — determinizm ścieżki jest częścią pinu.

@@ -2310,12 +2310,22 @@ export class VesselManager {
       //   Idempotentne i tanie; NIE rusza znacznika tranzytu (want===null → no-op).
       this._reconcileSystemId(vessel);
 
-      // M1 Targeting — pursue/intercept są zarządzane przez MovementOrderSystem.
+      // M1 Targeting — pursue/intercept/engage/patrol/escort są zarządzane przez MovementOrderSystem.
       //   MOS ustawia vessel.position i vessel.velocity bezpośrednio przed tym call'em;
       //   tu pomijamy całą logikę interpolacji, tylko push do moving (sprite update).
+      // ⚠ Finding 273 — `patrol` i `escort` NIE były na tej liście: MOS ruszał nimi (x/y wprost,
+      //   misja ZAWIESZONA ⇒ `in_transit && m` niżej nie łapało), więc statek nie trafiał do
+      //   `moving[]`, a `vessel:positionUpdate` to JEDYNY kanał, którym `ThreeRenderer` rusza
+      //   sprite `in_transit` ⇒ symulacja jechała, sprite stał (ZMIERZONE 0/200 ładunków).
+      //   Ta gałąź jest TYLKO emisją: pozycji nie całkuje (MOS zrobił to przed nami), a wkład
+      //   `_updatePositions` w przesunięcie patrolu/eskorty = 0 px przed i po (keeper
+      //   `patrol_render_sync_smoke`). Skutek uboczny listy: MOS-owe `velocity` przeżywa tik
+      //   (jak przy pursue) zamiast być zerowane niżej — zgodnie z §2.1 (zero TYLKO dla
+      //   docked/orbiting/wrak); pole nie jest serializowane.
       const mo = vessel.movementOrder;
       const isOrderControlled = mo?.status === 'active' &&
-        (mo.type === 'pursue' || mo.type === 'intercept' || mo.type === 'engage');
+        (mo.type === 'pursue' || mo.type === 'intercept' || mo.type === 'engage' ||
+         mo.type === 'patrol' || mo.type === 'escort');
 
       if (isOrderControlled) {
         // Velocity już ustawione przez MOS. Nie zerujemy.
