@@ -4656,7 +4656,7 @@ Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 grupowa „A + C”; **271** zamknięty przy okazji) → ~~**266**~~ ✅ (KANON `VesselStatus.js`,
 D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → ~~**267**~~ ✅ (D-267a = weto
 per waypoint W CHWILI POŁOŻENIA, trasa przeżywa — sekcja niżej; live-gate PASS)
-→ **273** (🔴 NOWY z gate'u 267: sprite statku pod `patrol`/`escort` nie rusza się — `_updatePositions` nie wrzuca ich do `moving[]`; własny slice z własnym gate'em) → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
+→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
 pinów źródłowych; ⚠ 269 ma od 266 **trzy nowe site'y**) → **272** (⚠ **DECYZJA WŁAŚCICIELA
 POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta
 z głośną odmową) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
@@ -4801,3 +4801,58 @@ kontaktu z pętlą renderu. Błędy konsoli podczas §1: **nie sprawdzone** (zap
 3 waypointy → `patrolRoute.length` = **3** · **B** scenariusz przeżycia (P1 ✓ / klik obcy ✗ / P3 ✓ /
 ENTER) → `patrolRoute.length` = **2**, dokładnie jedna linia odmowy w Dzienniku. Commity: `fix(267)` +
 `docs(267)`.
+
+---
+
+## Finding 273 — patrol/escort: sprite 3D rusza się z symulacją (save **v101 bez migracji**, live-gate PASS 5/5 — ZAMKNIĘTE 2026-09-16, commit `7ab18f1`)
+
+Domknięcie findingu z gate'u 267. Rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §273 (zamknięty)
++ nowy **274** (obserwacja UX z gate'u). Keeper `patrol_render_sync_smoke` 42/42.
+
+**Jedno zdanie:** `VesselManager._updatePositions` wrzucał do `moving[]` (jedyne źródło
+`vessel:positionUpdate`, którym `ThreeRenderer` rusza sprite `in_transit`) statki sterowane rozkazem
+**tylko** dla `pursue | intercept | engage`; `patrol` i `escort` mutują `x/y` wprost w MOS przy
+ZAWIESZONEJ misji, więc nie trafiały w żadną gałąź — symulacja jechała, sprite stał, a „Anuluj rozkaz"
+wyglądał jak teleport. Naprawa = **dwa tokeny na liście** `isOrderControlled`. PRE-EXISTING od M2b
+(`4929b39`/`28cd5c6`, 2026-04-27); mapa taktyczna czyta `x/y` wprost, dlatego przeżyło pięć miesięcy.
+
+**⚠ PYTANIE BRAMKUJĄCE ZMIERZONE PRZED KODEM — emit-only, NIE całkowanie.** Gałąź `isOrderControlled`
+to `moving.push(vessel); continue;`, a `MOS._tick` całkuje pozycję PRZED `_updatePositions`. Sonda na
+prawdziwym łańcuchu `time:tick → VM._tick → MOS._tick → _updatePositions` (200 tików × 0,01 gy,
+pristine `git worktree --detach b52f724` vs po naprawie): wkład `_updatePositions` w przesunięcie
+patrolu/POI/eskorty **0,000000 AU przed i po** (owinięcie metody — dla `moveToPoint` = 2,000 AU, VM JEST
+tam integratorem, więc instrument widzi całkowanie); ślad pozycji 9 statków × 200 tików **bajt w bajt**;
+krok 0,0100 AU = speedAU×DT (zdublowanie dałoby 0,0200). Emisja **0/200 → 200/200** (patrol manualny,
+patrol POI przez prawdziwy `POIRegistry`, eskorta). Gdyby gałąź całkowała, one-liner byłby błędem
+PODWÓJNEJ prędkości — dlatego pomiar PRZED kodem, nie po.
+
+**⚠ JEDYNY SKUTEK UBOCZNY — wariant A, podpisany, pinowany (T5).** `continue` omija zerowanie
+`vessel.velocity` niżej w pętli ⇒ MOS-owe velocity patrolu/eskorty PRZEŻYWA tik (jak przy pursue; M1 §2.1:
+zero TYLKO dla docked/orbiting/wrak). Jedyni czytelnicy pola: `MOS._computeInterceptPoint` + stożek
+predykcji — czytają velocity **CELU**. ZMIERZONE: przed naprawą wynik przechwycenia PATROLUJĄCEGO celu
+zależał od **kolejności wydania rozkazów** (interceptor wydany PRZED patrolem tikał przed nim i czytał
+zero ⇒ pościg, tik 185; wydany PO ⇒ prawdziwe przechwycenie, tik 165); po naprawie oba 165. Osiągalność
+w grze **zero** (patrol/escort wydaje tylko gracz; intercept/engage tylko gracz i tylko na wroga; doktryna
+AI = tylko `moveToPoint`). Pole nieserializowane. ⚠ Pierwsza sonda tego NIE widziała: przy równych
+prędkościach `a = 0` i przechwycenie degeneruje do pościgu — **fixture, który przez konstrukcję nie może
+pokazać różnicy, świeci „bez zmian" dokładnie tam, gdzie zmiana jest** (interceptor 2,0 AU/rok ją ujawnił).
+
+**Pin „brak podwójnego całkowania" porównuje z NAGRANYM baselinem, nie ze stałą.** Stałą `speedAU×dt`
+przeszłoby też zdublowanie obu stron. NEW `src/testing/fixtures/traces/F273-patrol-trace-baseline.json`
+(+ metryczka `.md` z hashem) — nagrany **TYM SAMYM keeperem** (`--record`) na realnym worktree `b52f724`,
+porównanie `===` bez tolerancji; nowa sub-konwencja `fixtures/traces/` (ślady wykonania, NIE zapisy gry)
+w `fixtures/README.md`. Fail-first w realnym worktree: **34 PASS / 8 FAIL** — czerwone dokładnie T1 (3),
+T5 (2), T6 (2), T7 (1); T0/T2/T3/T4 zielone po obu stronach (kontrole). Sweep **226/226** (drzewo LF);
+⚠ worktree CRLF `7ab18f1` **225/226** — jedyny FAIL to **Finding 270** (`warp_transit_order_gate` T11c,
+pada identycznie na pre-273 `b52f724`; na LF 49/49). `check-i18n` PASS, zero kluczy, bez flagi.
+
+**Live-gate 2026-09-16 PASS 5/5** (właściciel, klient EN): §1 patrol manualny płynie po trasie, plume,
+ping-pong (GLB bez obrotu dziobu = pre-existing, jak pursue) · §2 patrol POI (⇒ **274**: zaznaczenie
+statku na mapie 3D = blokada kamery na nim — `vessel:focus` jest JEDNYM sygnałem zaznaczenia i śledzenia
+co klatkę (`ThreeRenderer:1102`) — więc PPM na POI łapie się na ruchomym kadrze; obserwacja, najpierw
+pomiar) · §3 eskorta ~0,1 AU za liderem · §4 **Anuluj bez teleportu** (pierwotny objaw, martwy) ·
+§5 konsola: `v_18` **601/601** ładunków, sprite (−222,568, 0,174) → (−170,636, 100,259).
+⚠ **`0/0` w odczycie konsolowym = CZAS GRY ZATRZYMANY, nie defekt** — zero tików, sprite i symulacja
+zgodne; pristine przy płynącym czasie daje `0/N`. Na każdym przyszłym gate'cie mierzącym emisję per tik:
+**najpierw sprawdź, że `t > 0`**. One-liner zwalidowany wykonaniem na prawdziwym łańcuchu (renderer =
+atrapa): pristine `0/N`, po naprawie `19/19`.
