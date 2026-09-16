@@ -4656,7 +4656,7 @@ Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 grupowa „A + C”; **271** zamknięty przy okazji) → ~~**266**~~ ✅ (KANON `VesselStatus.js`,
 D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → ~~**267**~~ ✅ (D-267a = weto
 per waypoint W CHWILI POŁOŻENIA, trasa przeżywa — sekcja niżej; live-gate PASS)
-→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → **268** (razem z 166) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
+→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → ~~**166 (ENGAGE)**~~ ✅ (D-E1…D-E4 — lista `engage` keyed na FLOCIE + głośna odmowa rozkazu floty, sekcja niżej; live-gate PASS; **275** = odmowa kasuje poprzedni rozkaz floty, D-E3 własny audyt; **276/277** = obserwacje z gate'u) → **268** (NASTĘPNY: rodzina CameraFrame, zmierzony end-to-end — M2b DOCHODZI DO WALKI) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
 pinów źródłowych; ⚠ 269 ma od 266 **trzy nowe site'y**) → **272** (⚠ **DECYZJA WŁAŚCICIELA
 POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta
 z głośną odmową) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
@@ -4856,3 +4856,70 @@ pomiar) · §3 eskorta ~0,1 AU za liderem · §4 **Anuluj bez teleportu** (pierw
 zgodne; pristine przy płynącym czasie daje `0/N`. Na każdym przyszłym gate'cie mierzącym emisję per tik:
 **najpierw sprawdź, że `t > 0`**. One-liner zwalidowany wykonaniem na prawdziwym łańcuchu (renderer =
 atrapa): pristine `0/N`, po naprawie `19/19`.
+
+---
+
+## Finding 166 (ENGAGE) — lista celów `engage` keyed na FLOCIE, nie na KAMERZE + D-E2 głośna odmowa rozkazu floty (save **v101 bez migracji**, live-gate PASS — ZAMKNIĘTE 2026-09-16)
+
+⚠ **Kolizja numeracji:** w `VESSEL_ORDERS_PLAN.md` istnieją DWA „166" — wiersz Dziennika (zamknięty `ffc72fb`) i ten
+(`_handleFleetEngage`, zgłoszony przy D-SS6). Nierozstrzygnięta (renumeracja wciąż wykonalna); tu i w commitach **„166 (ENGAGE)"**.
+Rejestr + pomiar + decyzje D-E1…D-E4: `docs/design/VESSEL_ORDERS_PLAN.md` §„Finding 166 (ENGAGE)" (+ 268 skorygowany,
+264/151 dopisane, NEW **275**). Audyt wejściowy: odpowiedź 2026-09-16 (probe 166/268 w scratchpadzie, nie w repo).
+
+**Jedno zdanie:** popup „Wybierz cel ataku" w Dowództwie budował listę wrogów po `activeSystemId` (**kamera**) — wprowadzone
+ŚWIADOMIE w `c5077ef` (2026-07-16, „spójność z mapą"), gdy nie było jeszcze bramki MOS; po `369adfc` (W3-4b) filtr był
+już tylko defektem UX o **dwóch twarzach**: flota w `sys_020` przy kamerze na `sys_home` dostawała listę wrogów z domu (każdy
+pick → `target_other_system` bez powodu, a `issueFleetOrder:119` kasował jej poprzedni rozkaz), a przy kamerze bez wrogów
+**nie mogła zaatakować wroga w SWOIM układzie** („Brak wykrytych wrogów" — fałszywy negatyw, klasa 142).
+
+⚠ **Rodzina ENGAGE ROZSZCZEPIONA po STOP-ie audytu** (wszystkie trzy warunki STOP zaszły): 166 = lista bez punktu →
+rodzina **(statek, ciało)/`SystemScope`**, klucz = układ FLOTY; **268** (`FleetCommandPanel._armEngagePicker`, pick z kliku po
+CAŁYM rejestrze) = punkt z ramki KAMERY → rodzina **(statek, kamera)/`CameraFrame`** (D-89c) — **zmierzone, że dochodzi do
+WALKI** (M2b: pusta kamera, wróg w układzie floty pod współrzędnymi kliknięcia → „2/2 wykonuje" → encounter DSCS z celem,
+którego gracz nie widział). Osobny slice.
+
+**Kształt (D-E1/D-E4):** `firstMember` (pierwszy żywy członek — precedens `_handleFleetReturnBase`; flota rozpięta = **272**)
+→ `fleetSys = systemIdOf(firstMember)` → lista `systemIdOf(v) === fleetSys` (kanon listowy `bodiesInSystemOf`/
+`_findBodyNearPoint`: brak stempla → `sys_home`, tranzyt po stronie floty ⇒ pusto, po stronie kandydata ⇒ pominięty — dawne
+`?? 'sys_home'` oferowało wroga W SKOKU przy kamerze na domu, klasa 151). Kolumna AU popupu liczy `hypot(wróg, firstMember)`
+— po przecelowaniu obie strony w JEDNEJ ramce ⇒ liczba mieszana („0.50 AU" z 2,5 − 2,0 w dwóch ramkach) znika z konstrukcji.
+**D-E2:** `FMO._announceFleetOrderResult` + `FCP._announce` → Dziennik `fleet`/`warn` przez JEDNO źródło
+`CameraFrame.describeFleetOrderRefusal(res)` (`vessel.orderPartial`/`orderNoneMoved` — klucze fan-outu PPM; `log.el.orderRejected`
+dla odmowy na poziomie floty) — dla KAŻDEGO typu rozkazu floty na obu panelach; toast liczbowy zostaje; sukces milczy (D-256d).
+Zero nowych kluczy i18n (powód bez klucza spada do sluga jak w PPM — klasa 271, pre-existing).
+
+⚠ **ZAKRES ZWĘŻONY WOBEC PODPISU (zmierzony, nie urósł):** podpis liczył „#2 `enemyVisible:760` tym samym filtrem, #3 za darmo".
+Zmierzone: `enemyVisible:761` zasila wyłącznie `_drawLeft`, `_drawCenter` ma własny filtr — oba to **listy MAPY**, oba **utajone**
+(`commandTacticalMap:false`; żywy Rejestr K3 **nie pushuje hit-zony `'vessel'` dla kontaktów**, `:4517`), więc pick-mode fallback
+nie ma dziś żadnej powierzchni. Zostają keyed na kamerze **z zamiaru** (pin T12c/d/f); gdyby wróciły — ich `engage` odpada
+w MOS i od D-E2 jest GŁOŚNY. Toast `fleet.noDetectedEnemies` obiecuje powierzchnię, której nie ma (obserwacja, i18n → poza).
+
+⚠ **Dwie rzeczy, które pomiar ZMIENIŁ, nie potwierdził:** (1) „prawdopodobnie bramka strict zatrzyma skutek, ale rozkaz zostanie
+wydany" (audyt 138/142 §4.2) było błędne w OBIE strony — rozkaz **nie jest wydawany** (MOS odmawia), a strict jest decydująca
+tylko dla celu `null` i odpala w **`VesselCombatSystem:135`**, nie w DSCS; (2) wpis 268 nazywał ten site „filtruje POPRAWNIE"
+— porównywał z kamerą, czyli był Findingiem 166. **Rejestr opisywał pułapkę, nie defekt** (wzór 87).
+
+**Testy:** NEW keeper `src/testing/smoke/fleet_engage_scope_smoke.mjs` **51/51** (T1-T12; popup przez stub DOM budowany PRAWDZIWĄ
+`_showEnemyPickPopup`, real `FleetSystem→MOS→VCS→DSCS`; T3 = starcie DSCS jako kontrola anty-jałowości; T9 = odrzucony fleet
+MOVE z powodem na OBU panelach; T12 piny źródłowe CRLF-safe z komentarzami zdjętymi). Fail-first w REALNYM
+`git worktree --detach 16151b2`: **25 PASS / 26 FAIL** (czerwone dokładnie piny naprawy; kontrole zielone po obu stronach);
+patch w świeżym checkoucie CRLF (270): 51/51. Sweep **227/227 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
+
+**Live-gate 2026-09-16 — PASS** (właściciel, klient EN): §1 popup wylistował rajdera z układu FLOTY przy kamerze na innym
+układzie, **AU = 36 w ramce floty** (przed: „No detected enemies"); §3 pick przez kamerę → walka we własnym układzie, wygrana;
+§4 kontrola D-E2 na odrzuconym fleet MOVE: „No vessel moved — Gladiator (Target is in another system — warp jump first)"
+(powód inny niż w przepisie, kryterium spełnione); §5/§6 PASS; §2 n/d (brak wrogów pod kamerą). ⚠ **Widoczna granica slice'ów
+zapisana na gate'cie:** panel FCP na mapie 3D w tej samej chwili pokazał pick-mode „No detected enemies…" — to producent #4 = **268**.
+
+⚠ **Trzy obserwacje z przygotowania gate'u (żadna nie jest naprawą):** **276** baner zwycięstwa ×4-5 na jedno starcie
+(kandydat: jeden baner na CZŁONKA floty; rodzina 150/156/161; NIEZMIERZONE) · **277** `spawnEnemyRaider` — `systemId` bez
+walidacji (placeholder `'<X>'` przyjęty), spawn w `sys_032` mimo `'sys_044'` (kandydat: `autoOrder` domyślnie `true` =
+natychmiastowy skok ataku — NIEZMIERZONE), odmowa domu z zamiaru · **efekt uboczny bez numeru:** wywołanie bez `empireId` i bez
+wojny woła `spawnTestEnemy()` ⇒ imperium „Rój Testowy" **z kolonią naziemną i 3 marines na najbliższym ciele od planety
+macierzystej gracza** (`SpawnTestEnemy.js:612-618`) — wrogie imperium w domu jako skutek uboczny dźwigni od czegoś innego.
+
+**Otwarte po tym slice'ie:** **275** (odmowa kasuje poprzedni rozkaz floty — D-E3, własny audyt, blast radius = każdy typ
+rozkazu floty) · **268** (następny; kształt podpisany: CameraFrame przy finalizacji + zakres szukania jednym układem + uczciwe
+„pusto" z M2d) · **276/277** · **264** (osiągalność ZMIERZONA M5 + bliźniak per-tik `_tickEngageOrder`/`_tickEscortOrder`)
+· **151** (trzy `?? 'sys_home'` w FMO `:658/:760/:5284` + fantom M3: wróg w warpie przyjęty do `engage`, 105 emitów/120 tików
+odrzuconych przez VCS, rozkaz nigdy nie gaśnie) · **272** (flota rozpięta — 166 dziedziczy „pierwszy żywy członek").

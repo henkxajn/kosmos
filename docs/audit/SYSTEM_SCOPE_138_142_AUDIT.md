@@ -238,8 +238,17 @@ w tym repo powtarzalny (`removeColony:667`, `ReturnJump`, `_launchFoundOutpost`)
 
 `:4544` filtruje wrogów po `activeSystemId`, a nie po układzie **floty**, po czym sortuje ich surowym
 `hypot` od pierwszego członka floty (`:4553-4557`). Flota w innym układzie niż oglądany dostanie listę
-celów, których nie widzi. **NIE ZMIERZONE end-to-end** — bramka `isSameSystemStrict` w DSCS
-(`131cc2e`) prawdopodobnie zatrzyma skutek w warstwie walki, ale rozkaz i tak zostanie wydany.
+celów, których nie widzi. ~~**NIE ZMIERZONE end-to-end** — bramka `isSameSystemStrict` w DSCS
+(`131cc2e`) prawdopodobnie zatrzyma skutek w warstwie walki, ale rozkaz i tak zostanie wydany.~~
+
+> ✅ **ZMIERZONE i ZAMKNIĘTE 2026-09-16 (Finding 166 (ENGAGE), keeper `fleet_engage_scope_smoke`).** „Prawdopodobnie"
+> było błędne w OBIE strony: dla oferowanego obcego wroga rozkaz **nie jest wydawany w ogóle** — `MovementOrderSystem._issueEngage`
+> odmawia każdemu członkowi `target_other_system` (bramka W3-4b, `369adfc`), więc DSCS nigdy go nie widzi; realny skutek to
+> **cicha utrata rozkazu, który flota właśnie wykonywała** (`issueFleetOrder:119` kasuje `activeOrder` PRZED fan-outem —
+> Finding 275) i **wyrzucony powód** (announcery obu paneli czytały `res.rejected[].reason` zero razy — D-E2). Bramka strict
+> jest decydująca wyłącznie dla celu ze stemplem `null` (tranzyt warp) — i odpala tam kopia w `VesselCombatSystem:135`, nie DSCS
+> (dopisane do 151). Anchory dzisiaj: `_handleFleetEngage:4794`, filtr `:4804-4808`. Bliźniak `FleetCommandPanel._armEngagePicker`
+> = **268** (inna rodzina predykatu — CameraFrame; następny slice).
 
 ### 4.3 ⚪ Korekta do rejestru: odnośniki 154 są przesunięte
 
