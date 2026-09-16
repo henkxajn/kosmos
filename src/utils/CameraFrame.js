@@ -90,11 +90,51 @@ export function fleetOffendersOutOfFrame(fleetId) {
  * inaczej zależnie od tego, którym przyciskiem gracz go wywołał.
  */
 export function describeOrderFail(f) {
-  const key    = `vessel.reason${_pascalCase(f?.reason ?? 'unknown')}`;
-  const rt     = t(key);
-  const reason = rt !== key ? rt : (f?.reason ?? 'unknown');
+  const reason = _reasonText(f?.reason);
   const nm     = window.KOSMOS?.vesselManager?.getVessel?.(f?.vesselId)?.name ?? f?.vesselId;
   return `${nm} (${reason})`;
+}
+
+/**
+ * D-E2 (Finding 166) — POWÓD odmowy rozkazu FLOTOWEGO dla Dziennika. Składa `describeOrderFail`
+ * per odrzucony członek w TE SAME klucze, których używa fan-out PPM (`RightClickMenu`):
+ * `vessel.orderPartial` (część poleciała) / `vessel.orderNoneMoved` (nikt). Odmowa na poziomie floty
+ * BEZ wpisów per statek (`fleet_empty`, `invalid_spec`, `no_target_point`…) → `log.el.orderRejected`
+ * z przetłumaczonym powodem. Zwraca `{ text, entityRef }` albo `null`, gdy nie ma czego meldować
+ * (sukces MILCZY — D-256d). Zero nowych kluczy i18n.
+ * ⚠ ZMIERZONE (probe 166/268, 2026-09-16): oba panele wołały `t('fleet.orderResultFailed', n, m)`
+ *   i WYRZUCAŁY `res.rejected[].reason` (grep: 0 odczytów) — gracz widział „0/2 wykonuje (część
+ *   odrzucona)” i nic więcej, dla KAŻDEGO typu rozkazu floty (move/engage/return).
+ * ⚠ JEDNO ź ródło dla DWÓCH konsumentów (`FleetManagerOverlay._announceFleetOrderResult`,
+ *   `FleetCommandPanel._announce`) — legi mają być jednolinijkowcami, nie bliźniakami (lekcja `removeColony:667`).
+ * @param {{ok?:boolean, reason?:string, accepted?:string[], rejected?:{vesselId:string, reason:string}[]}|null} res
+ * @returns {{ text: string, entityRef: string|null } | null}
+ */
+export function describeFleetOrderRefusal(res) {
+  if (!res) return null;
+  const rejected  = Array.isArray(res.rejected) ? res.rejected : [];
+  const acceptedN = res.accepted?.length ?? 0;
+  if (rejected.length > 0) {
+    const skipped = rejected.map(describeOrderFail).join(', ');
+    const totalN  = acceptedN + rejected.length;
+    return {
+      text: acceptedN > 0
+        ? t('vessel.orderPartial', acceptedN, totalN, skipped)
+        : t('vessel.orderNoneMoved', skipped),
+      entityRef: rejected[0]?.vesselId ?? null,
+    };
+  }
+  if (res.ok === false && res.reason) {
+    return { text: t('log.el.orderRejected', _reasonText(res.reason)), entityRef: null };
+  }
+  return null;
+}
+
+/** Przetłumaczony powód (`vessel.reason<PascalCase>`), z fallbackiem na surowy slug gdy klucza brak. */
+function _reasonText(reason) {
+  const key = `vessel.reason${_pascalCase(reason ?? 'unknown')}`;
+  const rt  = t(key);
+  return rt !== key ? rt : (reason ?? 'unknown');
 }
 
 function _pascalCase(s) {

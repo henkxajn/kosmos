@@ -30,7 +30,7 @@ import { nextFleetId, nextDoctrine, nearestEnemyToPoint } from './FleetCommandPa
 import { openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
-import { fleetOffendersOutOfFrame, describeOrderFail } from '../utils/CameraFrame.js';
+import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
 
@@ -342,6 +342,10 @@ export class FleetCommandPanel extends BaseOverlay {
       color: res.ok ? (THEME.accent) : '#ff4466',
       durationMs: 2500,
     });
+    // D-E2 (Finding 166) — ODMOWA NIESIE POWÓD (bliźniak `FleetManagerOverlay._announceFleetOrderResult`,
+    //   jedno źródło `describeFleetOrderRefusal`). Sukces nadal MILCZY (D-256d).
+    const refusal = describeFleetOrderRefusal(res);
+    if (refusal) window.KOSMOS?.eventLogSystem?.push?.({ channel: 'fleet', severity: 'warn', ...refusal });
   }
 
   _armMovePicker(fleetId) {

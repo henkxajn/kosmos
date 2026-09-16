@@ -35,7 +35,9 @@ import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
-import { fleetOffendersOutOfFrame, describeOrderFail } from '../utils/CameraFrame.js';
+import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
+// Finding 166 — lista celów `engage` keyed na UKŁADZIE FLOTY (kanon `SystemScope`, forma listowa).
+import { systemIdOf } from '../utils/SystemScope.js';
 import { launchFuelMultiplierForVessel } from '../utils/SpaceportCheck.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
@@ -4799,17 +4801,34 @@ export class FleetManagerOverlay {
     }
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) return;
-    // Lista wykrytych enemy vesseli (active, nie wraki) — engage tylko w obrębie oglądanego
-    // układu (walka jest wewnątrzukładowa; wróg z innego układu nie jest legalnym celem).
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    const enemies = vm.getAllVessels().filter(v =>
-      isEnemyVessel(v) && !v.isWreck && _isEnemyTracked(v)
-      && (v.systemId ?? 'sys_home') === sysId
-    );
-    // Sortuj po dystansie od pierwszego membera floty
+    // ── Finding 166 (rodzina 138/142/255) — lista celów keyed na UKŁADZIE FLOTY, nie na KAMERZE ──
+    // `c5077ef` (2026-07-16) świadomie zawęził tę listę do `activeSystemId` („spójność z mapą”), myląc
+    // „widzę na mapie” z „legalny cel dla floty”. Bramka MOS (`_issueEngage`, W3-4b) doszła dopiero
+    // miesiąc później i odtąd ten filtr był już tylko defektem UX. ZMIERZONE (probe 166/268, 2026-09-16):
+    //   flota `sys_020`, kamera `sys_home` ⇒ popup oferował WYŁĄCZNIE wroga z `sys_home` (z liczbą „0.50 AU”
+    //   liczoną z DWÓCH ramek naraz), każdy członek odpadał w MOS na `target_other_system`, a
+    //   `issueFleetOrder:119` ZDĄŻYŁ skasować poprzedni rozkaz floty (osobny finding, D-E3);
+    //   odwrotnie: kamera bez wrogów + wróg w układzie floty ⇒ „Brak wykrytych wrogów” (fałszywy negatyw,
+    //   klasa 142 — naprawa w OBIE strony). Powodu odmowy toast nie niósł (D-E2: `_announceFleetOrderResult`).
+    // Kanon = `SystemScope.systemIdOf` w formie LISTOWEJ (`bodiesInSystemOf`, `_findBodyNearPoint`):
+    //   brak stempla → `sys_home` (fail-open, stary zapis); `null` (tranzyt warp) po stronie FLOTY ⇒ zbiór
+    //   pusty (nie ma „tutaj”), po stronie KANDYDATA ⇒ pominięty (statek między układami nie jest celem;
+    //   dawne `?? 'sys_home'` oferowało go przy kamerze na domu — klasa 151, ten site z niej wypada).
+    // Układ floty = układ PIERWSZEGO żywego członka (precedens `_handleFleetReturnBase`; flota rozpięta =
+    //   decyzja właściciela, Finding 272) — członek spoza tego układu odpada w MOS GŁOŚNO (D-E2).
+    // D-E4: kolumna AU w popupie liczy `hypot(wróg, firstMember)` — po przecelowaniu listy OBIE strony
+    //   są w ramce floty, więc liczba mieszana znika Z KONSTRUKCJI (popup nietknięty).
+    // ⚠ `enemyVisible` (`draw`, lewa lista 2D) i pętla statków w `_drawCenter` ZOSTAJĄ keyed na kamerze:
+    //   to listy MAPY (utajone za `commandTacticalMap`), a mapa ma pokazywać OGLĄDANY układ.
     const fs = window.KOSMOS?.fleetSystem;
     const fleet = fs?.getFleet?.(fleetId);
     const firstMember = fleet?.memberIds?.map(vid => vm.getVessel(vid)).find(v => v && !v.isWreck);
+    const fleetSys = systemIdOf(firstMember);
+    const enemies = fleetSys == null ? [] : vm.getAllVessels().filter(v =>
+      isEnemyVessel(v) && !v.isWreck && _isEnemyTracked(v)
+      && systemIdOf(v) === fleetSys
+    );
+    // Sortuj po dystansie od pierwszego membera floty (ta sama ramka — patrz wyżej)
     if (firstMember) {
       enemies.sort((a, b) => {
         const dA = Math.hypot(a.position.x - firstMember.position.x, a.position.y - firstMember.position.y);
@@ -4906,6 +4925,12 @@ export class FleetManagerOverlay {
       ? t('fleet.orderResult', acceptedN, totalN)
       : t('fleet.orderResultFailed', acceptedN, totalN);
     EventBus.emit('ui:toast', { text: msg, color, durationMs: 2500 });
+    // D-E2 (Finding 166) — ODMOWA NIESIE POWÓD. Toast jest ulotny i liczy tylko sztuki; powód per statek
+    //   (`res.rejected[].reason`) był tu WYRZUCANY (grep: 0 odczytów) dla KAŻDEGO typu rozkazu floty
+    //   (move/engage/return). Dziennik `fleet`/`warn` przez `describeFleetOrderRefusal` (te same klucze co
+    //   fan-out PPM w `RightClickMenu`); sukces nadal MILCZY (D-256d). Bliźniak: `FleetCommandPanel._announce`.
+    const refusal = describeFleetOrderRefusal(res);
+    if (refusal) window.KOSMOS?.eventLogSystem?.push?.({ channel: 'fleet', severity: 'warn', ...refusal });
   }
 
   async _handleDisbandFleet(fleetId) {
