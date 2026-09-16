@@ -4656,7 +4656,7 @@ Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 grupowa „A + C”; **271** zamknięty przy okazji) → ~~**266**~~ ✅ (KANON `VesselStatus.js`,
 D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → ~~**267**~~ ✅ (D-267a = weto
 per waypoint W CHWILI POŁOŻENIA, trasa przeżywa — sekcja niżej; live-gate PASS)
-→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → ~~**166 (ENGAGE)**~~ ✅ (D-E1…D-E4 — lista `engage` keyed na FLOCIE + głośna odmowa rozkazu floty, sekcja niżej; live-gate PASS; **275** = odmowa kasuje poprzedni rozkaz floty, D-E3 własny audyt; **276/277** = obserwacje z gate'u) → **268** (NASTĘPNY: rodzina CameraFrame, zmierzony end-to-end — M2b DOCHODZI DO WALKI) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
+→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → ~~**166 (ENGAGE)**~~ ✅ (D-E1…D-E4 — lista `engage` keyed na FLOCIE + głośna odmowa rozkazu floty, sekcja niżej; live-gate PASS; **275** = odmowa kasuje poprzedni rozkaz floty, D-E3 własny audyt; **276/277** = obserwacje z gate'u) → **268** (NASTĘPNY; kształt podpisany: CameraFrame przy FINALIZACJI + zakres szukania układem KAMERY + uczciwe „pusto" z M2d; rodzina CameraFrame, zmierzony end-to-end — M2b DOCHODZI DO WALKI) → **275** (utrata rozkazu przy odmowie — `issueFleetOrder:119`, D-E3) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
 pinów źródłowych; ⚠ 269 ma od 266 **trzy nowe site'y**) → **272** (⚠ **DECYZJA WŁAŚCICIELA
 POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta
 z głośną odmową) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
@@ -4919,7 +4919,7 @@ wojny woła `spawnTestEnemy()` ⇒ imperium „Rój Testowy" **z kolonią naziem
 macierzystej gracza** (`SpawnTestEnemy.js:612-618`) — wrogie imperium w domu jako skutek uboczny dźwigni od czegoś innego.
 
 **Otwarte po tym slice'ie:** **275** (odmowa kasuje poprzedni rozkaz floty — D-E3, własny audyt, blast radius = każdy typ
-rozkazu floty) · **268** (następny; kształt podpisany: CameraFrame przy finalizacji + zakres szukania jednym układem + uczciwe
+rozkazu floty) · **268** (następny; kształt podpisany: CameraFrame przy finalizacji + zakres szukania układem KAMERY + uczciwe
 „pusto" z M2d) · **276/277** · **264** (osiągalność ZMIERZONA M5 + bliźniak per-tik `_tickEngageOrder`/`_tickEscortOrder`)
 · **151** (trzy `?? 'sys_home'` w FMO `:658/:760/:5284` + fantom M3: wróg w warpie przyjęty do `engage`, 105 emitów/120 tików
 odrzuconych przez VCS, rozkaz nigdy nie gaśnie) · **272** (flota rozpięta — 166 dziedziczy „pierwszy żywy członek").
