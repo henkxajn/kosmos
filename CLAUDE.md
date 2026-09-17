@@ -2829,7 +2829,7 @@ OSOBNA domena — proximity/sensor-lock ruszają tylko ją i **nie podnoszą poz
 ⚠ `_onVesselArrived` nie filtruje właściciela statku; chroni go tylko `mission == null` u emitentów
 AI — osiągalność NIEZMIERZONA, zapisane jako obserwacja.
 
-**🔴 Finding 193 (OTWARTY, wypłynął przy okazji):** `IntelSystem._tickPassiveListening` jest **MARTWY
+**🔴 Finding 193 (OTWARTY, wypłynął przy okazji):** `IntelSystem._passiveTick` (⚠ korekta 2026-09-17: wcześniej pisano `_tickPassiveListening` — takiej metody NIE MA; `:288`, wołana z `:82`) jest **MARTWY
 od napisania** — iteruje `emp.colonies` (tablica **stringów**) i czyta `col.systemId` ⇒ `undefined`
 ⇒ `inRange` zawsze `false` ⇒ mechanika „8 lat w promieniu 10 ly → `rumor`" **nie odpaliła ani razu**.
 Trzecia gałąź klasy **Findingu 87**, przy poprawnym wzorze dwa miejsca dalej w tym samym pliku.
@@ -4981,4 +4981,62 @@ stronie Claude'a) — obecność celu dowodzą kliki B/E.
   id statku jest KLUCZEM `_byVessel`: `[...KOSMOS.movementOrderSystem._byVessel].map(([vid,o])=>({vid,t:o.type,id:o.id}))`.
   Czytnikiem flot jest **`listFleets()`** — `getAllFleets()` z notatki 8/9 **nie istnieje** (skorygowane wyżej).
 
-**NASTĘPNE:** **275** (`FleetSystem:119` — odmowa kasuje istniejący rozkaz; **D-E3, AUDIT-FIRST** — pomiar semantyki `replaced` przed kodem, blast radius = każdy typ rozkazu floty) **+ read-only weryfikacja statusów 217/216/223/195/95/65/193** (reguła W3-32: uruchom keeper + `git log -S` PRZED planowaniem — indeks nie jest prawdą) → 269 + 270 → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta; ŻADNEJ z tych pozycji nie zaczynać od kodu) → 151 / 152 / 153, 264 / 265.
+**NASTĘPNE (stan po 268):** ~~**275**~~ ✅ ZAMKNIĘTY 2026-09-17 (sekcja niżej) · ~~read-only weryfikacja 217/216/223/195/95/65/193~~ ✅ wykonana (wynik w sekcji 275) → 269 + 270 → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta; ŻADNEJ z tych pozycji nie zaczynać od kodu) → 151 / 152 / 153, 264 / 265, 279, 280.
+
+---
+
+## Finding 275 — odrzucony rozkaz FLOTY nie kasuje rozkazu, który flota właśnie wykonywała: preempcja dwufazowa w `issueFleetOrder` (D-E3, save **v101 bez migracji**, live-gate PASS §1-§5 — ZAMKNIĘTY 2026-09-17, commit `2ddc115`)
+
+Slice **audit-first** (audyt w odpowiedzi, zero zapisu; sondy poza repo) po 268. Rejestr + zapis wykonania + log gate'u:
+`docs/design/VESSEL_ORDERS_PLAN.md` §Finding 275 (+ nowe **278/279/280**, korekty 217/223/227/193/216).
+
+**Jedno zdanie:** `FleetSystem.issueFleetOrder:119` kasowało poprzedni rozkaz floty (`cancelFleetOrder(fleetId,'replaced')`)
+PRZED bramką doktryny, PRZED `no_eligible_members` i PRZED fan-outem do MOS — **jednofazowa** preempcja na poziomie floty,
+residuum świata sprzed D-VO3a (`6b8b28c`, 2026-05-20, krok 1 algorytmu P2 „fleet ma tylko 1 active order"); po `62caac7`
+(VO-3 dwufazowe na poziomie STATKU) była to **jedyna pozostała jednofazowa preempcja w stosie rozkazów**.
+
+⚠ **ADMISJE 255 / 8-9 / 268 POKRYWAŁY JEDNĄ KLASĘ ODMOWY** (ramka kamery, rozkazy punktowe). Odmowy MOS (`no_weapons`,
+`vessel_immobilized`, `vessel_in_reserve`, `vessel_in_warp_transit`, fuel) i **bramka doktryny `hold_position`** (`:138`,
+gracz ustawia z FCP `:502` / FMO `:2061` — **zero udziału MOS**) docierały do `:119` z **każdego** z 11 producentów.
+ZMIERZONE przed kodem: pełna odmowa ⇒ `activeOrder → null`, członkowie `orbiting/idle/null` **w połowie lotu** (Δx = 0),
+a każdy re-order emitował **fałszywe `fleet:orderCompleted(cancelled)`** („— zakończone" w Dzienniku dla rozkazu, który
+nie został wykonany) z `_onMemberOrderEnded`, gdy eager cancel zdejmował ostatniego śledzonego członka.
+⚠ **Semantyka partial NIE była podpisaną decyzją** — konsekwencja inwariantu + jednofazowego cancelu; wymierzona (A1 vs A2
+wrapperem) i dopiero wtedy podpisana. ⚠ Korekta wpisu: przez `issueFleetOrder` idą **TRZY typy** (moveToPoint/engage/pursue),
+nie osiem — dock (`dispatchDockTo`), retreat doktrynalny i patrol/escort nigdy tędy nie przechodzą; blast radius = wszyscy producenci.
+
+**Kształt (12 linii kodu, podpis D-275-1..4):** `:119` skasowane → `prevOrder = fleet.activeOrder; fleet.activeOrder = null`
+**TUŻ przed pętlą fan-out** (D-275-4: wczesne odmowy no-op z konstrukcji; ukrycie = `_onMemberOrderEnded` nie widzi starego rekordu,
+gdy MOS supersede'uje rozkazy przyjętych — stąd znika fałszywe „completed", D-275-2) → fan-out → **rollback** przy `accepted===0`
+(MOS dwufazowy niczego nie ruszył: rekord TEN SAM, stan bit w bit, zero zdarzeń) / **commit A2** (D-275-1) przy ≥1: odrzuceni,
+którzy NADAL trzymają rozkaz **starej floty** (tożsamość po id — override gracza przeżywa, jak gałąź `tracked !== orderId`)
+dostają `cancelOrder(vid,'replaced')`, potem `fleet:orderCancelled(replaced)` PRZED `fleet:orderIssued` (kolejność jak dotąd).
+Bez flagi (D-275-3; interakcja `unifiedVesselOrders=false` nazwana i pinowana: stare rozkazy przyjętych osierocone jak przy
+re-orderze pojedynczego statku pod tą flagą). `cancelFleetOrder` (Stop) nietknięte. Zero i18n, zero migracji.
+
+**Keeper** `fleet_order_two_phase_smoke` **48/48**; fail-first w PRAWDZIWYM `git worktree --detach 5bbe6a0` (checkout CRLF):
+**21 PASS / 27 FAIL** — czerwone dokładnie piny naprawy, kontrole (T1k/T5/T3b) zielone po obu stronach; patch w checkoucie CRLF
+48/48. Siblingi zielone (`fleet_engage_picker_frame` **T2b: przeżycie rozkazu idzie DWIEMA drogami** — druga zmierzona na seamie:
+`target_other_system` ×2 ⇒ no-op). Sweep **229/229 0 FAIL** · `check-i18n` PASS. One-linery gate'u WYKONANE headless przed wpisaniem.
+**Live-gate 2026-09-17 PASS §1-§5** (klient EN, na pauzie): §1 pełna odmowa MOS na seamie przez PPM (FLEET przed == po, EV = `[]`,
+Δx −0,445 → −0,711 AU) · §2 doktryna (0 zdarzeń) + T5 na żywo · §3 partial 2/3 z nazwanym pominiętym (**EV nieprzechwycony —
+dewiacja protokołu, pokrycie §4 + T3 headless + LOG**) · §4 EV dokładnie `[cancelled(replaced), issued]` · §5 Stop nietknięty
+(`[completed(cancelled), cancelled(manual)]` — **278 żywe na żywo**). ⚠ Korekta protokołu: pierwsza odmowa sesji poszła przez
+picker FCP (admisja 268) — to dowód 268, nie `:119`; pin finalny na PPM.
+
+**Read-only weryfikacja statusów (reguła W3-32, ta sama sesja):** **217** ✅ i **223** ✅ były ZAMKNIĘTE KODEM od 2026-09-01
+(`c73ab33`+`ff614ba` / `8226dcc`), a kolumny statusu rejestru mówiły „🔴 OTWARTY" — flipnięte; ⚠ **227** jest od dziś WIĄŻĄCĄ
+blokadą obserwabla 223 (`launch_pad` poza `BUILD_PRIORITY` ⇒ `tradingColonies` puste). **216** 🟠 do pomiaru
+(`KOSMOS.debug.colonies()` na `GATE-S4-fresh-gy60` — mechanizm żywy, otoczenie zmienione przez R4/S1/S4a). Żywe w kodzie:
+**195** (bez terminu własności; nowa HIPOTEZA osiągalności przez `colony:captured` + druga fala AI w locie), **95** (hipoteza ze
+źródła: `StationSystem._resolveHomeColony` bez terminu własności ⇒ statek ze stacji trafia do floty WROGA po utracie stolicy —
+tłumaczy objaw (a), nie (b)), **65**, **193** (korekta nazwy: `_passiveTick`).
+
+**Otwarte po slice'ie:** **278** (O1: podwójny wpis Stop + surowy slug `replaced/manual`, rodzina 271/113, pasażer 269) ·
+**279** (O3: `dispatchDockTo` zostawia stale `fleet.activeOrder`) · **280** (picker FCP engage celuje w NIEWYKRYTEGO wroga —
+asymetria producentów, decyzja o semantyce detekcji, własny slice) · O2 bez numeru (członek odrzucony w partial staje w dryfie —
+zachowane świadomie).
+
+**NASTĘPNE:** **269 + 270** (razem z 113 / poprawką `check-i18n` i przeglądem pinów źródłowych; 269 ma pasażera 278) → **272**
+(⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta) → 151 / 152 /
+153, 264 / 265, 279, 280.
