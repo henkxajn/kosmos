@@ -4574,7 +4574,7 @@ nie przerywać", tylko na poziomie MODUŁU.
 (reguła D-89c zademonstrowana NA ŻYWO, nie tylko keeperem) · §5 kontrola (rozkaz wydany, toast
 `Fleet: 2/2 vessels executing`, zero wpisów) · §6 Powrót floty spoza ramki na OBU powierzchniach
 (przepuszczalny seam F6/T4 na żywo) · §7 leg D bez zmian.
-⚠ **Dwie notatki z przepisu gate’u:** czytnikiem flot jest **`getAllFleets()`** (`_fleets` zwraca `[]`),
+⚠ **Dwie notatki z przepisu gate’u:** czytnikiem flot jest **`listFleets()`** (⚠ korekta z gate'u 268: `getAllFleets()` **nie istnieje** w `FleetSystem` — grep `src/` = 0; `_fleets` to prywatna `Map`),
 a wiersz 8 wymaga zamknięcia overlaya **✕, nie Esc** (Esc kasuje NAJPIERW picker; `FMO.close()` pickera
 nie rusza).
 
@@ -4656,7 +4656,7 @@ Sweep **223/223 0 FAIL** · `check-i18n` PASS · bez flagi (rollback = revert).
 grupowa „A + C”; **271** zamknięty przy okazji) → ~~**266**~~ ✅ (KANON `VesselStatus.js`,
 D-266a…d — sekcja niżej; ⚠ było **sześć** site'ów, nie dwa) → ~~**267**~~ ✅ (D-267a = weto
 per waypoint W CHWILI POŁOŻENIA, trasa przeżywa — sekcja niżej; live-gate PASS)
-→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → ~~**166 (ENGAGE)**~~ ✅ (D-E1…D-E4 — lista `engage` keyed na FLOCIE + głośna odmowa rozkazu floty, sekcja niżej; live-gate PASS; **275** = odmowa kasuje poprzedni rozkaz floty, D-E3 własny audyt; **276/277** = obserwacje z gate'u) → **268** (NASTĘPNY; kształt podpisany: CameraFrame przy FINALIZACJI + zakres szukania układem KAMERY + uczciwe „pusto" z M2d; rodzina CameraFrame, zmierzony end-to-end — M2b DOCHODZI DO WALKI) → **275** (utrata rozkazu przy odmowie — `issueFleetOrder:119`, D-E3) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
+→ ~~**273**~~ ✅ (`patrol`/`escort` w `isOrderControlled` — emit-only zmierzone, sekcja niżej; live-gate PASS 5/5; **274** = obserwacja UX z gate'u, rodzina 269, NAJPIERW POMIAR) → ~~**166 (ENGAGE)**~~ ✅ (D-E1…D-E4 — lista `engage` keyed na FLOCIE + głośna odmowa rozkazu floty, sekcja niżej; live-gate PASS; **275** = odmowa kasuje poprzedni rozkaz floty, D-E3 własny audyt; **276/277** = obserwacje z gate'u) → ~~**268**~~ ✅ (admisja floty PRZED szukaniem zawężonym do układu KAMERY + `noEnemyHere` + PPM `fleet.engage` przez D-E2 — sekcja niżej; live-gate PASS A-E; **277** skorygowany, obserwacja o `DirectorRecall` = kandydat na numer w triage) → **275** (NASTĘPNY) (utrata rozkazu przy odmowie — `issueFleetOrder:119`, D-E3) → **269** + **270** (razem z 113 / poprawką `check-i18n` i przeglądem
 pinów źródłowych; ⚠ 269 ma od 266 **trzy nowe site'y**) → **272** (⚠ **DECYZJA WŁAŚCICIELA
 POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta
 z głośną odmową) → reszta rejestru (**151** / **152** / **153**, **264** / **265**).
@@ -4919,7 +4919,67 @@ wojny woła `spawnTestEnemy()` ⇒ imperium „Rój Testowy" **z kolonią naziem
 macierzystej gracza** (`SpawnTestEnemy.js:612-618`) — wrogie imperium w domu jako skutek uboczny dźwigni od czegoś innego.
 
 **Otwarte po tym slice'ie:** **275** (odmowa kasuje poprzedni rozkaz floty — D-E3, własny audyt, blast radius = każdy typ
-rozkazu floty) · **268** (następny; kształt podpisany: CameraFrame przy finalizacji + zakres szukania układem KAMERY + uczciwe
-„pusto" z M2d) · **276/277** · **264** (osiągalność ZMIERZONA M5 + bliźniak per-tik `_tickEngageOrder`/`_tickEscortOrder`)
+rozkazu floty) · ~~**268**~~ ✅ (ZAMKNIĘTY 2026-09-17 — sekcja niżej) · **276/277** (⚠ 277 skorygowany na gate'cie 268: odmowa
+domu = BRAK spawnu, nie „ignoruje `systemId`") · **264** (osiągalność ZMIERZONA M5 + bliźniak per-tik `_tickEngageOrder`/`_tickEscortOrder`)
 · **151** (trzy `?? 'sys_home'` w FMO `:658/:760/:5284` + fantom M3: wróg w warpie przyjęty do `engage`, 105 emitów/120 tików
 odrzuconych przez VCS, rozkaz nigdy nie gaśnie) · **272** (flota rozpięta — 166 dziedziczy „pierwszy żywy członek").
+
+---
+
+## Finding 268 — picker „Atak" panelu dowodzenia: admisja floty przy FINALIZACJI + zakres szukania układem KAMERY (save **v101 bez migracji**, live-gate PASS A-E — ZAMKNIĘTE 2026-09-17, commit `00945c7`)
+
+Trzeci producent rodziny CameraFrame (D-89c) po legu D (PPM mapy) i wierszach 8/9 (pickery ruchu). Rejestr + pomiar + log
+gate'u + obserwacje sceny: `docs/design/VESSEL_ORDERS_PLAN.md` §„Finding 268" (+ wiersze 276/277 dopisane). ⚠ Baza slice'u
+= `e409268` (docs-only close-out 166; kod identyczny z `75afde5`) — kotwica w handoverze była sprzed close-outu.
+
+**Jedno zdanie:** `FleetCommandPanel._armEngagePicker` zamieniał kliknięty punkt (ramka KAMERY) na cel przez
+`nearestEnemyToPoint` po CAŁYM płaskim rejestrze, bez terminu układu i bez admisji floty — klik w PUSTĄ kamerę potrafił wysłać
+flotę w **STARCIE DSCS z wrogiem, którego gracz nie widział** (M2b), obcy wróg przejmował legalny pick (M2c), a odmowa kosztowała
+poprzedni rozkaz floty (M2a, instancja 275).
+
+**Kształt (podpisany + dwie decyzje w ramach podpisu, obie zaakceptowane):** **(b) admisja floty PRZED (a) szukaniem** — blok
+znak-w-znak jak `_armMovePicker` (D-LD2; `return` PRZED `issueFleetOrder`, więc klik odrzucony tą bramką nie kasuje bieżącego
+rozkazu — 275 zostaje żywy dla odmów MOS niżej); przy flocie poza ramką KAŻDY klik dostaje odpowiedź nazywającą przyczynę zamiast
+„No enemy there", które zachęcałoby do dalszego klikania · **(a)** `getAllVessels().filter(v => systemIdOf(v) === cam)` — kanon
+listowy jak `_handleFleetEngage`; **nieznana kamera ⇒ pusty zbiór**, nie cały rejestr; helper `nearestEnemyToPoint` NIETKNIĘTY
+(termin u wołającego, klasa D-LD1) · **(c)** pusto ⇒ istniejący **`fleetCmd.noEnemyHere`**, NIE `fleet.noDetectedEnemies` nazwany
+w briefie — tamten klucz należy do pustego POPUPU FMO i obiecuje „kliknij wroga na mapie", powierzchnię, której pick-mode nie ma
+(166 M1b) · **(d) producent #5** (PPM „Flota: zaangażuj", `RightClickMenu`) — ZMIERZONE na e409268 PRZED kodem: helper D-E2 go
+NIE pokrywał (surowy slug TYLKO pierwszego powodu, bez nazw; odmowa częściowa CICHA) ⇒ 7-liniowy blok → `describeFleetOrderRefusal`.
+Zero nowych kluczy i18n, bez flagi (rollback = revert). Nietknięte: `CameraFrame.js`, `FleetSystem` (275), MOS, FMO, słowniki.
+
+⚠ **Skutek uboczny kanonu, NIE naprawa 151:** kandydat w tranzycie (`systemId === null`) pod kliknięciem przestaje być wybierany
+(jak 166 T5b). 151 (koercje `?? 'sys_home'` w FMO) ZOSTAJE OTWARTY — pin T8 nazywa granicę.
+
+**Keeper** NEW `fleet_engage_picker_frame_smoke` **52/52**; fail-first w PRAWDZIWYM `git worktree --detach e409268` (checkout
+CRLF): **32 PASS / 20 FAIL** — czerwone dokładnie T1d/e/f/g (M2b: na pristine toast „2/2" + **1 encounter DSCS**), T2b/c, T3b/c,
+T4b/c/d, T6c, T8b, T9b-en/pl/e, T11a/b/c/h; kontrole zielone po obu stronach. ⚠ **T1g („zero encounterów") ma kontrolę T5**: ta
+sama geometria z kamerą na fladze floty DAJE starcie — inaczej pin mierzyłby martwy łańcuch. Patch w świeżym checkoucie CRLF
+52/52. Sweep **228/228 0 FAIL**; sweep w świeżym checkoucie CRLF (po dołożeniu gitignorowanego stuba `three`) **227/228 — jedyny
+FAIL = `warp_transit_order_gate` T11c (270)**. `check-i18n` PASS. Brak starego bezpośredniego assertu na tym producencie — nie
+było czego zachować jako control.
+
+**Live-gate 2026-09-17 PASS A-E** (właściciel, klient EN, scena na PAUZIE): A/M2d toast `No enemy there` + zero wpisu ·
+B/#5 „No vessel moved · Gladiator (Target is in another system — warp jump first)", zero sluga · C/M2a nazwana odmowa bez toastu,
+poprzedni rozkaz floty PRZEŻYŁ (2× `moveToPoint`, zero `engage`) · **D/M2b nazwana odmowa, zero rozkazu, encounters = 0 po 10 s** ·
+E kontrola 1v1, zwycięstwo. ⚠ Caveat protokołu: pulsy misji w przepisie szły na `v_23` zamiast `v_25` (błąd szablonu komend po
+stronie Claude'a) — obecność celu dowodzą kliki B/E.
+
+### ⚠ Obserwacje ze sceny (żadna nie jest regresją 268) — czytaj przed następnym gate'em z debug-rajderem
+
+- **277 SKORYGOWANY:** odmowa układu domowego = **BRAK spawnu** — zwrotka to sam bootstrap kolonii (`spawnTestEnemy`) bez
+  `vesselId`; narzędzie NIE „ignoruje `systemId`" (kod honoruje parametr).
+- **`DirectorRecall` (Z2) odwołuje BEZCZYNNEGO rajdera `emp_test_enemy` do jedynej kolonii imperium (Wezen g-II,
+  `entity_193`/`sys_059`) już na 1. ticku, mimo `autoOrder:false`** — zamiatacz działa z projektu (bez guardu wojny), ale koliduje
+  z narzędziem gate'u: **scena z debug-rajderem jest stabilna TYLKO na pauzie**. Kandydat na numer w triage — nie naprawiać.
+- `KOSMOS.debug.teleportVessel(vesselId, x, y)` ustawia TYLKO `position.x/y`, bez `systemId` (`GameScene:648-655`) — **zakaz
+  używania do stawiania scen** (klasa „globalne id ≠ położenie"). `KOSMOS.debug.simulateVesselArrival` = stub bramki dyplomacji
+  S3.4, nie ruch statku.
+- **147 potwierdzone na żywo** (`systemId: null` w `warp_transit`). **276 NIE odtworzyło się** przy 1v1 z debug-rajderem
+  (baner ×1) — zostaje otwarte z tą notatką.
+- **`MovementOrderSystem.listActive()` zwraca OBIEKTY ROZKAZÓW** (`id` = `mo_N`, pola `vesselId` NIE MA — zmierzone headless);
+  id statku jest KLUCZEM `_byVessel`: `[...KOSMOS.movementOrderSystem._byVessel].map(([vid,o])=>({vid,t:o.type,id:o.id}))`.
+  Czytnikiem flot jest **`listFleets()`** — `getAllFleets()` z notatki 8/9 **nie istnieje** (skorygowane wyżej).
+
+**NASTĘPNE:** **275** (`FleetSystem:119` — odmowa kasuje istniejący rozkaz; D-E3, blast radius = każdy typ rozkazu floty)
+→ 269 + 270 → 272 (decyzja właściciela) → 151 / 152 / 153, 264 / 265.
