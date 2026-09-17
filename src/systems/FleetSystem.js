@@ -115,8 +115,13 @@ export class FleetSystem {
     const mos = window.KOSMOS?.movementOrderSystem;
     if (!mos) return { ok: false, reason: 'mos_not_ready', accepted: [], rejected: [] };
 
-    // Anuluj poprzedni active order floty (jeśli był) — fleet ma tylko 1 active order.
-    if (fleet.activeOrder) this.cancelFleetOrder(fleetId, 'replaced');
+    // ⚠ Finding 275 (D-E3, D-275-4) — stało tu `cancelFleetOrder(fleetId, 'replaced')`, czyli
+    //   JEDNOFAZOWA preempcja na poziomie floty: poprzedni rozkaz kasowany PRZED bramką doktryny,
+    //   PRZED `no_eligible_members` i PRZED fan-outem do MOS. Odmowa całej floty (np. `no_weapons`
+    //   na obu członkach, `hold_position` + pursue) zostawiała ją BEZ rozkazu, w dryfie w połowie
+    //   lotu (ZMIERZONE: `in_transit/move_to_point` → `orbiting/idle/null`, Δx = 0). Inwariant
+    //   „flota ma jeden active order" jest teraz domykany DWUFAZOWO tuż przy fan-oucie (niżej),
+    //   wzorem D-VO3a na poziomie statku: snapshot → fan-out → commit/rollback.
 
     // Filtruj eligible members: żywi + nie wraki + istniejący w VM.
     const eligible = [];
@@ -201,6 +206,15 @@ export class FleetSystem {
       perMemberSpec = { ...specBase };
     }
 
+    // ── Finding 275 — FAZA 1: snapshot poprzedniego rozkazu floty (D-275-4: TUŻ przed fan-outem,
+    //   za WSZYSTKIMI walidacjami, więc wczesne odmowy wyżej są no-opem z konstrukcji).
+    //   Rekord CHOWAMY na czas fan-outu: MOS przy przyjęciu członka domyka jego stary rozkaz przez
+    //   VO-3 (`vessel:orderCancelled` z reason `superseded`), a `_onMemberOrderEnded` odczytałby to
+    //   na STARYM `activeOrder` i po ostatnim członku emitował `fleet:orderCompleted` — fałszywe
+    //   „zakończone" w Dzienniku przy każdym re-orderze (D-275-2: znika jako naprawa).
+    const prevOrder = fleet.activeOrder;
+    fleet.activeOrder = null;
+
     // Fan-out per member.
     const accepted = [];
     const memberOrderIds = {};
@@ -212,6 +226,28 @@ export class FleetSystem {
       } else {
         rejected.push({ vesselId: v.id, reason: res?.reason ?? 'unknown' });
       }
+    }
+
+    // ── Finding 275 — FAZA 2: rollback albo commit.
+    //   ROLLBACK (nikt nie przyjął): MOS jest dwufazowy (D-VO3a), więc odmowa niczego nie ruszyła —
+    //   przywracamy TEN SAM rekord i stan floty jest bit w bit jak przed wywołaniem, zero zdarzeń.
+    //   COMMIT (≥1 przyjęty, D-275-1 = A2): przyjęci mają już nowe rozkazy (stare `superseded`
+    //   przez MOS); członkom, którzy NIE przyjęli nowego i NADAL trzymają rozkaz starej floty,
+    //   kasujemy go `replaced` — dokładnie jak dotąd (członek bez wykonalnego rozkazu floty staje).
+    //   ⚠ Sprawdzamy TOŻSAMOŚĆ rozkazu (`getOrder(vid)?.id === stare id`): rozkaz nadany statkowi
+    //   osobno (override gracza) nie należy do floty i przeżywa — tak samo traktuje go
+    //   `_onMemberOrderEnded` (gałąź `tracked !== orderId`).
+    //   ⚠ Przy `unifiedVesselOrders=false` (VO-3 OFF) stare rozkazy PRZYJĘTYCH członków zostają
+    //   osierocone dokładnie jak przy re-orderze pojedynczego statku pod tą flagą (D-275-3,
+    //   nazwane i zaakceptowane) — commit nie zależy od flagi.
+    if (accepted.length === 0) {
+      fleet.activeOrder = prevOrder;
+    } else if (prevOrder) {
+      for (const [vid, oldOrderId] of Object.entries(prevOrder.memberOrderIds ?? {})) {
+        if (accepted.includes(vid)) continue;
+        if (mos.getOrder?.(vid)?.id === oldOrderId) mos.cancelOrder?.(vid, 'replaced');
+      }
+      EventBus.emit('fleet:orderCancelled', { fleetId, reason: 'replaced' });
     }
 
     // Debug trace — gated przez KOSMOS.debug.enableTargetingTrace flag (P2 polish).
