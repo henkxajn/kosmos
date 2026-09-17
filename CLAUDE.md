@@ -5037,6 +5037,41 @@ tłumaczy objaw (a), nie (b)), **65**, **193** (korekta nazwy: `_passiveTick`).
 asymetria producentów, decyzja o semantyce detekcji, własny slice) · O2 bez numeru (członek odrzucony w partial staje w dryfie —
 zachowane świadomie).
 
-**NASTĘPNE:** **269 + 270** (razem z 113 / poprawką `check-i18n` i przeglądem pinów źródłowych; 269 ma pasażera 278) → **272**
-(⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel reprezentanta) → 151 / 152 /
-153, 264 / 265, 279, 280.
+**NASTĘPNE (stan po 275):** ~~**270**~~ ✅ (sekcja niżej) · **269 = A-MIN PODPISANY** (implementacja w następnej sesji PO decyzji
+(i)/(ii)) → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel
+reprezentanta) → 151 / 152 / 153, 264 / 265, 279, 280.
+
+---
+
+## Finding 270 — koniec pinów zależnych od checkoutu: `.gitattributes eol=lf` + świeży checkout = 0 FAIL twardo (save **v101 bez migracji**, ZAMKNIĘTY 2026-09-17, commity `0e940bc` + `444af73`); 269 = A-MIN PODPISANY (implementacja w następnej sesji)
+
+**Jedno zdanie:** repo miało `core.autocrlf=true` BEZ `.gitattributes` ⇒ świeży klon dawał CRLF, drzewo autora LF, a pin
+`warp_transit_order_gate` T11c z kotwicą `\}\n` padał w każdym cudzym środowisku („jedyny dozwolony czerwony").
+
+**Co weszło:** (1) T11c — normalizacja `\r\n→\n` na WEJŚCIU pinu + kotwica `\r?\n`; (2) **`.gitattributes`**
+`* text=auto eol=lf` + binaria (`png webp glb mp4 mp3 woff2 pdf gz`) — zmierzone PRZED dodaniem: indeks 100 % LF (986 plików),
+`git status` po dodaniu = **0 zmian** (drzewo autora 677 LF / 305 CRLF / 4 mixed; całkowicie-CRLF worktree też 0),
+`git checkout -- <niezmieniony>` = no-op (istniejące CRLF zostają do ponownej materializacji), świeży checkout → LF wszędzie;
+(3) audyt hurtowy 229 keeperów: 33 mają `\n` w kotwicach, **32 CRLF-odporne z konstrukcji** (`\n` na POCZĄTKU kotwicy, po
+`\s*`/`[\s\S]*?`, w `[^\n]` — `\n  }` jest podciągiem `\r\n  }`), 1 = T11c.
+
+⚠ **DRUGA TWARZ 270 — odsłonięta dopiero przez dowód końcowy.** Świeży checkout z `0e940bc` (= LF) dał **225/229**: cztery keepery
+kodowały CRLF drzewa autora jako FAKT — `atmosphere_logic`/`sun_animation_logic` liczyły **złote sumy GLSL z bajtami `\r`**
+(„dysk z dyskiem", V2/V3; ATMO_VERT 724→707, STAR_CORE_FRAG 1114→1084), a `fleet_engage_picker_frame` T11-ctl / `fleet_engage_scope`
+T12-ctl asertowały „plik na dysku JEST CRLF". Naprawa `444af73`: sumy po normalizacji (identyczne w obu drzewach; GLSL traktuje
+`\r` jak biały znak; stare wartości w komentarzu) + kontrole „ctl" WYKONANIOWE (`stripComments` na syntetycznej kopii CRLF ≡ LF).
+**Dowód końcowy z `444af73`: świeży checkout 987 plików LF, sweep 229/229, `check-i18n` PASS; drzewo autora 229/229.**
+⚠ **REGUŁA WIĄŻĄCA:** pin zależny od checkoutu pada w OBIE strony — keeper czyta źródło **po normalizacji** i **nigdy nie pyta
+o EOL dysku**; kanoniczny checkout jest LF, drzewo autora bywa mieszane, keepery muszą przechodzić w obu.
+
+**269 — A-MIN PODPISANY (audyt 2026-09-17, kod w następnej sesji):** picker ×5 kluczy (brzmienia PL bez zmian) + **278a** ×2
+(`fleet.cancelReason.replaced/manual`, fallback na slug; połówka „podwójny wpis Stop" zostaje pod 278) + 3 site'y statusów z 266 —
+⚠ **wariant (i) kanon `vesselStatusLabelKey` (PL `W hangarze`→`Dok`, `W locie`→`W drodze`) vs (ii) 4 klucze zachowujące
+brzmienie = DECYZJA WŁAŚCICIELA, żadnej implementacji przed nią** + `check-i18n`: sink `.textContent|.innerText =` + wykluczenie
+CSS + baseline + advisory (bez zapadki). ⚠ **Klasa 113 ZMIERZONA** (tokenizer, poza komentarzami): `src/ui`+GameScene+ThreeRenderer =
+**247 literałów z diakrytykami / 28 plików** (martwe 16, flaga OFF 6, konsola 54, CSS/GLSL 5, dwujęzyczne 3, **widoczne ~163**:
+ColonyOverlay 49, GameScene ~35 realnie UI, CargoLoadModal 8, BattleIntroModal 6 = 158, …); literały BEZ ogonków (`W hangarze`)
+są poza tym licznikiem ⇒ **osobny przyszły arc**, nie ten slice.
+
+**NASTĘPNE:** decyzja (i)/(ii) → implementacja 269 A-MIN (commit i18n+278a + commit check-i18n) → **272** (⚠ decyzja właściciela
+poprzedza kod) → 151 / 152 / 153, 264 / 265, 279, 280.

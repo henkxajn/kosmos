@@ -29,6 +29,11 @@
 > mówiły „🔴 OTWARTY" — flipnięte. ⚠ **227** jest od dziś WIĄŻĄCĄ blokadą obserwabla 223 (`launch_pad` poza `BUILD_PRIORITY` ⇒
 > `tradingColonies` puste dla kolonii AI) — indeks go nie miał, dopisany w A8. **216** zostaje 🟠 z notatką pomiarową; **193** —
 > korekta nazwy metody (`_passiveTick`, NIE `_tickPassiveListening`). Żywe potwierdzone w kodzie: **195**, **95**, **65**, **193**.
+> • **Close-out 2026-09-17 (późny):** **270** ✅ (`0e940bc` + `444af73`: T11c CRLF-safe, **`.gitattributes` `text=auto eol=lf`**, cztery
+> keepery zależne od checkoutu W DRUGĄ STRONĘ; **świeży checkout = 229/229 twardo**) · **269** 📋 A-MIN PODPISANY (picker ×5 + 278a ×2 +
+> 3 statusy z 266 — wariant (i)/(ii) = DECYZJA WŁAŚCICIELA, implementacja w następnej sesji; `check-i18n` sink `textContent` + advisory) ·
+> **klasa 113 ZMIERZONA**: 247 literałów z diakrytykami w 28 plikach (`src/ui`+GameScene+ThreeRenderer), ~163 widoczne dla gracza
+> (ColonyOverlay 49, GameScene ~35) ⇒ osobny przyszły arc. Rejestr: `VESSEL_ORDERS_PLAN.md` §269/§270/§278.
 
 ---
 
