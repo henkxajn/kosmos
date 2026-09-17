@@ -16,7 +16,7 @@ import { THEME } from '../config/ThemeConfig.js';
 import { buildMenuOptions } from '../data/RightClickMenuOptions.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatcher.js';
-import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail, CAMERA_FRAME_REASON } from '../utils/CameraFrame.js';
+import { outOfCameraFrame, fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal, CAMERA_FRAME_REASON } from '../utils/CameraFrame.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 import { t } from '../i18n/i18n.js';
 
@@ -284,13 +284,13 @@ export class RightClickMenu {
         }
       }
       const res = fSys.issueFleetOrder(fleetId, spec);
-      if (!res?.ok) {
-        const reason = res?.rejected?.[0]?.reason ?? res?.reason ?? 'unknown';
-        window.KOSMOS?.eventLogSystem?.push?.({
-          text: t('log.el.orderRejected', reason),
-          channel: 'fleet', severity: 'warn',
-        });
-      }
+      // Finding 268 (d) — producent #5 przez JEDNO źródło D-E2 (`describeFleetOrderRefusal`, jak
+      //   oba announcery po 166). ZMIERZONE na e409268: ten blok pisał SUROWY slug tylko PIERWSZEGO
+      //   powodu („⚠ Fleet order rejected: target_other_system"), bez nazw statków, a odmowę
+      //   CZĘŚCIOWĄ (ok:true, ktoś odrzucony — np. członek unieruchomiony) przemilczał w ogóle.
+      //   Teraz: nazwy + przetłumaczony powód (`orderNoneMoved`/`orderPartial`), sukces MILCZY (D-256d).
+      const refusal = describeFleetOrderRefusal(res);
+      if (refusal) window.KOSMOS?.eventLogSystem?.push?.({ channel: 'fleet', severity: 'warn', ...refusal });
       return;
     }
 

@@ -31,6 +31,7 @@ import { openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
 import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
+import { systemIdOf }      from '../utils/SystemScope.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
 
@@ -381,9 +382,44 @@ export class FleetCommandPanel extends BaseOverlay {
     if (um.isPickerActive?.()) um.cancelPickerMode?.();
     um.setPickerMode('targetPoint', (point) => {
       if (!point) return;
-      const vm = window.KOSMOS?.vesselManager;
+      // ── Finding 268 (rodzina CameraFrame, D-89c) — punkt pochodzi z kliku w mapę 3D, czyli z ramki
+      //   KAMERY, a szukanie wroga szło po CAŁYM rejestrze (`vm.getAllVessels()`), bez terminu układu.
+      //   Gwiazda każdego układu stoi w (0,0), więc ZMIERZONE (probe 166/268, 2026-09-16):
+      //   (M2a) flota `sys_020`, kamera `sys_home`, wrogowie w OBU ⇒ pick brał wroga z ramki kamery,
+      //         MOS odrzucał obu (`target_other_system`), a `issueFleetOrder:119` ZDĄŻYŁ skasować
+      //         poprzedni rozkaz floty (Finding 275);
+      //   (M2b) 🔴 kamera PUSTA, wróg w układzie FLOTY pod współrzędnymi kliknięcia ⇒ pick trafiał
+      //         w NIEGO, `isSameSystem` prawdziwe, „2/2 wykonuje" ⇒ STARCIE DSCS z celem, którego
+      //         gracz NIE widział — z kliknięcia w cudzej ramce (bramka strict poprawnie milczy);
+      //   (M2c) kamera == flota: obcy wróg 0,2 AU od kliku (w SWOJEJ ramce) PRZEJMOWAŁ pick nad
+      //         legalnym 1,0 AU ⇒ odmowa zamiast rozkazu;
+      //   (M2d) tylko obcy w 1,5 AU ⇒ „0/1 (część odrzucona)" zamiast „Brak wroga w tym miejscu".
+      // Dwie bramki, obie przy FINALIZACJI (nigdy przy ARM — nic nie kasuje pickera na
+      //   `system:switched`; pełne uzasadnienie: nagłówek `src/utils/CameraFrame.js`):
+      //   (b) ADMISJA FLOTY — bliźniak `_armMovePicker` (D-LD2: cała flota albo nic, powód nazywa
+      //       KAŻDEGO winowajcę; wracamy PRZED `issueFleetOrder`, więc klik odrzucony TĄ bramką nie
+      //       kasuje bieżącego rozkazu floty — 275 zostaje żywy dla odmów MOS niżej). ⚠ `_announce` ma
+      //       `if (!res) return` — głośność musi być tu jawna.
+      //   (a) ZAKRES SZUKANIA = układ KAMERY — to picker KAMEROWY (punkt jest z definicji w jej ramce),
+      //       więc tylko wróg z tej ramki jest „pod kliknięciem". Kanon `systemIdOf` w formie listowej
+      //       (jak `_handleFleetEngage`): brak stempla → `sys_home`; `null` (tranzyt warp) ⇒ pominięty.
+      //       Nieznana kamera ⇒ pusty zbiór (punkt bez ramki nie ma „tutaj"), nie cały rejestr.
+      //   Pusto ⇒ istniejący `fleetCmd.noEnemyHere`, zero rozkazu (M2d). Zero nowych kluczy i18n.
+      const offenders = fleetOffendersOutOfFrame(fleetId);
+      if (offenders.length > 0) {
+        window.KOSMOS?.eventLogSystem?.push?.({
+          text: t('vessel.orderNoneMoved', offenders.map(describeOrderFail).join(', ')),
+          channel: 'fleet',
+          severity: 'warn',
+          entityRef: offenders[0].vesselId,
+        });
+        return;
+      }
+      const vm  = window.KOSMOS?.vesselManager;
+      const cam = window.KOSMOS?.activeSystemId ?? null;
       const thresh = (GAME_CONFIG.AU_TO_PX ?? 110) * 1.5;   // ~1.5 AU tolerancji kliknięcia
-      const targetId = nearestEnemyToPoint(vm?.getAllVessels?.() ?? [], point, thresh, isEnemyVessel);
+      const inFrame = cam == null ? [] : (vm?.getAllVessels?.() ?? []).filter(v => systemIdOf(v) === cam);
+      const targetId = nearestEnemyToPoint(inFrame, point, thresh, isEnemyVessel);
       if (!targetId) {
         EventBus.emit('ui:toast', { text: t('fleetCmd.noEnemyHere'), color: '#ffaa22', durationMs: 2500 });
         return;
