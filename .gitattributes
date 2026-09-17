@@ -1,0 +1,16 @@
+# Finding 270 — JEDNO źródło prawdy o końcach linii: LF w indeksie i w KAŻDYM checkoucie.
+# Repo miało `core.autocrlf=true` bez .gitattributes ⇒ świeży klon dawał CRLF, a drzewo autora LF;
+# pin źródłowy z kotwicą `\}\n` padał w cudzym środowisku (T11c). Zmierzone przed dodaniem:
+# indeks = 100 % LF (986 plików tekstowych), `git status` po dodaniu tego pliku = 0 zmian,
+# `git checkout -- <niezmieniony plik>` = no-op (istniejące CRLF zostają do ponownej materializacji).
+* text=auto eol=lf
+
+# Binaria — nigdy nie normalizuj.
+*.png   binary
+*.webp  binary
+*.glb   binary
+*.mp4   binary
+*.mp3   binary
+*.woff2 binary
+*.pdf   binary
+*.gz    binary

@@ -459,7 +459,12 @@ header('T10  kontrola D-FDk — ucieczka z bitwy nietknięta');
 header('T11  pin źródłowy — termin nad `isRetreat`, poza `_dispatchByType`');
 {
   const MOS_PATH = new URL('../../systems/MovementOrderSystem.js', import.meta.url);
-  const raw = readFileSync(MOS_PATH, 'utf8');
+  // ⚠ Finding 270 — CRLF-safe: `core.autocrlf=true` bez `.gitattributes` ⇒ każdy ŚWIEŻY checkout
+  //   daje CRLF, a drzewo autora ma LF. Kotwica mutacji T11c (`\}\n`) padała w każdym świeżym
+  //   klonie (`}\r\n` ≠ `}\n`) — JEDYNY taki pin w całym sweepie (skan 229 keeperów: `\n` na
+  //   POCZĄTKU kotwicy, po `\s*` albo w `[^\n]` jest odporne; `\n` PO literale nie jest).
+  //   Normalizujemy na wejściu, żeby każdy pin niżej czytał to samo źródło niezależnie od checkoutu.
+  const raw = readFileSync(MOS_PATH, 'utf8').replace(/\r\n/g, '\n');
   // ⚠ KOMENTARZE ZDJĘTE — inaczej pin trafiałby w opis, nie w kod (reguła
   //   `source-pin-strip-comments`). Ten plik JEST gęsto komentowany i wymienia
   //   `vessel_in_warp_transit` w komentarzu GameConfig-owym stylu kilka razy.
@@ -487,7 +492,7 @@ header('T11  pin źródłowy — termin nad `isRetreat`, poza `_dispatchByType`'
 
   // ⚠ KONTROLA PINU — przenieś blok pod `isRetreat` i sprawdź, że checker ODRZUCA.
   //   Bez tego T11a jest zgadywaniem: przechodziłby też dla kodu, którego nie umie ocenić.
-  const guardBlock = code.match(/if \(GAME_CONFIG\.FEATURES\?\.warpTransitOrderGate\)[\s\S]*?\n {4}\}\n/);
+  const guardBlock = code.match(/if \(GAME_CONFIG\.FEATURES\?\.warpTransitOrderGate\)[\s\S]*?\r?\n {4}\}\r?\n/);   // \r?\n — Finding 270
   assert(!!guardBlock, 'T11c KONTROLA: blok bramki wycięty ze źródła (kotwica mutacji istnieje)');
   if (guardBlock) {
     const moved = code.replace(guardBlock[0], '')
