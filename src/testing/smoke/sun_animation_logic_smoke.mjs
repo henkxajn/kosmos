@@ -52,7 +52,9 @@ const near = (a, b, eps) => Math.abs(a - b) <= eps;
 // ── T0 ───────────────────────────────────────────────────────────────────────
 console.log('\nT0 — GLSL przeniesiony verbatim (sumy kontrolne)');
 const BT = String.fromCharCode(96);
-const shaderSrc = fs.readFileSync(new URL('../../renderer/SunShader.js', import.meta.url), 'utf8');
+// ⚠ Finding 270 — NORMALIZACJA CRLF→LF przed ekstrakcją GLSL (jak `atmosphere_logic_smoke`):
+//   złote sumy liczone z bajtami \r drzewa autora padały w każdym świeżym checkoucie.
+const shaderSrc = fs.readFileSync(new URL('../../renderer/SunShader.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const pullGlsl = (name) => {
   const open = name + ' = /* glsl */ ' + BT;
   const k = shaderSrc.indexOf(open);
@@ -71,10 +73,10 @@ const sha = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex').s
 //   Dlatego te cztery sumy mają przechodzić przez CAŁY arc — jeśli któraś padnie, ktoś
 //   ruszył ścieżkę OFF i to jest wtedy defekt, a nie planowana zmiana.
 const GOLDEN = {
-  STAR_CORE_VERT:   { len: 367,  sha: '1698e482ec6d2219' },
-  STAR_CORE_FRAG:   { len: 1114, sha: '6b6d6b694a39b94d' },
-  STAR_CORONA_VERT: { len: 185,  sha: 'e65a2e6c636d9a8f' },
-  STAR_CORONA_FRAG: { len: 324,  sha: 'c768e3449c1aabdb' },
+  STAR_CORE_VERT:   { len: 356,  sha: 'b41b19df5760993b' },   // LF (Finding 270); CRLF było 367 / 1698e482ec6d2219
+  STAR_CORE_FRAG:   { len: 1084, sha: '70d63008208bd7e8' },   // LF (Finding 270); CRLF było 1114 / 6b6d6b694a39b94d
+  STAR_CORONA_VERT: { len: 179,  sha: '2f8c6cb13bddeecc' },   // LF (Finding 270); CRLF było 185 / e65a2e6c636d9a8f
+  STAR_CORONA_FRAG: { len: 315,  sha: '9e98c59f96f20ee8' },   // LF (Finding 270); CRLF było 324 / c768e3449c1aabdb
 };
 for (const [name, g] of Object.entries(GOLDEN)) {
   const src = pullGlsl(name);

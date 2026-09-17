@@ -412,7 +412,13 @@ header('T12 ŹRÓDŁO — CRLF-safe, komentarze zdjęte');
   const fmoSrc = readSrc('ui/FleetManagerOverlay.js');
   const fcpSrc = readSrc('ui/FleetCommandPanel.js');
   const cfSrc  = readSrc('utils/CameraFrame.js');
-  assert(/\r\n/.test(fmoSrc) && /\r\n/.test(fcpSrc), 'T12-ctl KONTROLA: FMO i FCP są CRLF (piny muszą być \\r?\\n-safe)');
+  // ⚠ Finding 270 — kontrola NIE pyta o stan dysku (zależny od checkoutu), tylko WYKONUJE `stripComments`
+  //   na syntetycznych kopiach CRLF obu plików i wymaga równoważności z kopiami LF.
+  {
+    const eq = (src) => { const lf = src.replace(/\r\n/g, '\n'); return stripComments(lf.replace(/\n/g, '\r\n')).replace(/\r\n/g, '\n') === stripComments(lf); };
+    assert(eq(fmoSrc) && eq(fcpSrc),
+      'T12-ctl KONTROLA: stripComments równoważne na kopiach CRLF i LF dla FMO i FCP (Finding 270 — niezależne od checkoutu)');
+  }
   const engageBody = stripComments(FleetManagerOverlay.prototype._handleFleetEngage.toString());
   assert(!/activeSystemId/.test(engageBody) && /systemIdOf\(/.test(engageBody) && /systemIdOf\(firstMember\)/.test(engageBody),
     'T12a `_handleFleetEngage` nie czyta `activeSystemId`; klucz = `systemIdOf(firstMember)`');

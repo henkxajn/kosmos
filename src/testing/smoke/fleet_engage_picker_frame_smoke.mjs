@@ -435,7 +435,14 @@ header('T11 ŹRÓDŁO — admisja PRZED szukaniem, zakres = układ KAMERY, helpe
 {
   const fcpSrc  = readSrc('ui/FleetCommandPanel.js');
   const logic   = stripComments(readSrc('ui/FleetCommandPanelLogic.js'));
-  assert(/\r\n/.test(fcpSrc), 'T11-ctl KONTROLA: FleetCommandPanel.js jest CRLF (piny muszą być \\r?\\n-safe)');
+  // ⚠ Finding 270 — kontrola NIE pyta o stan dysku (zależny od checkoutu: po `.gitattributes eol=lf`
+  //   świeży klon jest LF, drzewo autora bywa CRLF). WYKONUJE `stripComments` na syntetycznej kopii
+  //   CRLF i wymaga wyniku równoważnego kopii LF — dowód \r?\n-safety niezależny od tego, co leży na dysku.
+  {
+    const asLf = fcpSrc.replace(/\r\n/g, '\n'), asCrlf = asLf.replace(/\n/g, '\r\n');
+    assert(/\r\n/.test(asCrlf) && stripComments(asCrlf).replace(/\r\n/g, '\n') === stripComments(asLf),
+      'T11-ctl KONTROLA: stripComments daje TEN SAM wynik na kopii CRLF i LF (pin \\r?\\n-safe niezależnie od checkoutu — Finding 270)');
+  }
   const body = stripComments(FleetCommandPanel.prototype._armEngagePicker.toString());
   const iAdm = body.search(/fleetOffendersOutOfFrame\(\s*fleetId\s*\)/);
   const iSrc = body.search(/nearestEnemyToPoint\(/);

@@ -46,7 +46,12 @@ const near = (a, b, eps) => Math.abs(a - b) <= eps;
 const BT = String.fromCharCode(96);
 const read = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
 
-const shaderSrc   = read('../../renderer/AtmosphereShader.js');
+// ⚠ Finding 270 — źródło shadera NORMALIZOWANE (CRLF→LF) PRZED ekstrakcją GLSL: złote sumy
+//   liczone „dysk z dyskiem" zawierały bajty \r drzewa autora i padały w KAŻDYM świeżym
+//   checkoucie (po `.gitattributes eol=lf` świeży klon jest LF; drzewo autora bywa CRLF do
+//   ponownej materializacji). GLSL traktuje \r jak biały znak — suma po normalizacji pinuje
+//   TREŚĆ shadera, a nie końce linii checkoutu. Sumy niżej = LF (identyczne w obu drzewach).
+const shaderSrc   = read('../../renderer/AtmosphereShader.js').replace(/\r\n/g, '\n');
 const rendererSrc = read('../../renderer/ThreeRenderer.js');
 const logicSrc    = read('../../renderer/AtmosphereLogic.js');
 const configSrc   = read('../../config/GameConfig.js');
@@ -66,14 +71,14 @@ const rendererCode = stripComments(rendererSrc);
 // ── T0 ───────────────────────────────────────────────────────────────────────
 console.log('\nT0 — GLSL ścieżki OFF przeniesiony verbatim (sumy kontrolne)');
 // ⚠ Sumy wzięte z GLSL, który stał w ThreeRenderer.addPlanetMesh w commicie e9f12b7 i został
-//   przeniesiony bez zmiany ani jednego znaku — z końcami linii CRLF włącznie, CELOWO bez
-//   normalizacji: dla dowodu „co widzi przeglądarka" porównuje się dysk z dyskiem.
+//   przeniesiony bez zmiany ani jednego znaku. ⚠ Finding 270: sumy liczone po normalizacji
+//   CRLF→LF (dawniej „dysk z dyskiem", co czyniło pin zależnym od checkoutu — patrz wyżej).
 // ⚠ Te dwie sumy mają przechodzić przez CAŁY slice. A1 dopisał ATMO_FRAG_LIVE OBOK i tych
 //   literałów NIE RUSZYŁ — bo kontrakt kill-switcha wymaga, żeby OFF było stanem sprzed
 //   slice'u co do bajtu. Jeśli któraś padnie, ktoś ruszył ścieżkę OFF i to jest defekt.
 const GOLDEN = {
-  ATMO_VERT: { len: 724,  sha: 'ebd45ef871ce3b13' },
-  ATMO_FRAG: { len: 1465, sha: 'c7e1481ae9c07468' },
+  ATMO_VERT: { len: 707,  sha: '79d8d9652663017f' },   // LF (Finding 270); CRLF było 724 / ebd45ef871ce3b13
+  ATMO_FRAG: { len: 1427, sha: '6b800f1b8e313439' },   // LF (Finding 270); CRLF było 1465 / c7e1481ae9c07468
 };
 for (const [name, g] of Object.entries(GOLDEN)) {
   const src = pullGlsl(name);
