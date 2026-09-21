@@ -5037,9 +5037,9 @@ tłumaczy objaw (a), nie (b)), **65**, **193** (korekta nazwy: `_passiveTick`).
 asymetria producentów, decyzja o semantyce detekcji, własny slice) · O2 bez numeru (członek odrzucony w partial staje w dryfie —
 zachowane świadomie).
 
-**NASTĘPNE (stan po 275):** ~~**270**~~ ✅ (sekcja niżej) · **269 = A-MIN PODPISANY** (implementacja w następnej sesji PO decyzji
-(i)/(ii)) → **272** (⚠ **DECYZJA WŁAŚCICIELA POPRZEDZA KOD**: semantyka Powrotu floty rozpiętej — cel per członek czy cel
-reprezentanta) → 151 / 152 / 153, 264 / 265, 279, 280.
+**NASTĘPNE (stan po 275):** ~~**270**~~ ✅ (sekcja niżej) · ~~**269**~~ ✅ ZAMKNIĘTY 2026-09-18 (`d363019`, sekcja niżej) →
+**272** (⚠ **DECYZJA WŁAŚCICIELA PODPISANA 2026-09-18: opcja A — Powrót PER CZŁONEK**; audit-first, D-272-x do podpisu PRZED
+kodem) → 151 / 152 / 153, 264 / 265, 279, 280, 281.
 
 ---
 
@@ -5073,5 +5073,56 @@ CSS + baseline + advisory (bez zapadki). ⚠ **Klasa 113 ZMIERZONA** (tokenizer,
 ColonyOverlay 49, GameScene ~35 realnie UI, CargoLoadModal 8, BattleIntroModal 6 = 158, …); literały BEZ ogonków (`W hangarze`)
 są poza tym licznikiem ⇒ **osobny przyszły arc**, nie ten slice.
 
-**NASTĘPNE:** decyzja (i)/(ii) → implementacja 269 A-MIN (commit i18n+278a + commit check-i18n) → **272** (⚠ decyzja właściciela
-poprzedza kod) → 151 / 152 / 153, 264 / 265, 279, 280.
+**NASTĘPNE:** ~~decyzja (i)/(ii) → implementacja 269 A-MIN~~ ✅ **ZROBIONE 2026-09-18** (sekcja niżej; jeden commit `d363019`,
+nie dwa — bramka i baseline zależą od naprawionego `GameScene`) → **272** (decyzja właściciela PODPISANA: opcja A, audit-first)
+→ 151 / 152 / 153, 264 / 265, 279, 280, 281.
+
+---
+
+## Finding 269 — baner pickera, powód anulowania floty (278a) i trzy statusy z 266 przez t() + `check-i18n` widzi sink DOM (A-MIN, decyzja (i) KANON, save **v101 bez migracji**, live-gate PASS 3/3 — ZAMKNIĘTY 2026-09-18, commit `d363019`)
+
+Rejestr: `docs/design/VESSEL_ORDERS_PLAN.md` §269 (zamknięty, pełny log gate'u) + §278 (278a odhaczone, **278b otwarte**)
++ NEW **281**. Decyzja właściciela (2026-09-18, po podglądzie renderu obu wariantów na trzech site'ach): **(i) KANON**
+`vesselStatusLabelKey` — zero nowych kluczy dla statusów, PL brzmienie na tych site'ach = słowa kanonu („Dok"/„W drodze").
+
+**Co weszło (jeden commit — bramka `check-i18n` i jej baseline zależą od naprawionego `GameScene`, rozbicie na dwa
+zostawiłoby jeden czerwony):** picker ×5 (`GameScene._createPickerHUD`, PL bit w bit jak dawne literały — pin T1) ·
+**278a** ×2 (`UIManager:969-977`: `t(\`fleet.cancelReason.${reason}\`)` z fallbackiem na surowy slug; `replaced`/`manual`
+= jedyne powody, zmierzone) · statusy: FMO wiersz wroga `ENEMY_STATE_GLYPH[tok] + t(vesselStatusLabelKey(tok))`, FMO detal
+`Stan:`, ThreeRenderer tooltip — kod FMO/ThreeRenderer **bez** literałów `hangarze/locie/Bezczynny/Na orbicie` (zmierzone);
+`Stan:`/`Imperium:`/reszta tooltipa zostają po polsku (klasa 113, osobny arc) · `tools/check-i18n.mjs`: sink **`dom`**
+(`.textContent =` / `.innerText =`, nie `==`), `CSS_TEXT`, advisory diakrytyków (tokenizer, bez zapadki), rodzaj sinku
+w liniach FAIL, próbka **2 per plik**; baseline 62/11 → **76/17** (DOM 14 w 6 plikach; `GameScene` 3 → 0).
+
+**⚠ Trzy rzeczy, których pomiar nie potwierdził, tylko zmienił:**
+1. **Sygnowane wykluczenie CSS `^\s*[@#.]…{` było NIEPEŁNE** — 3 z 12 arkuszy wstrzykiwanych przez `style.textContent`
+   zaczynają się polskim komentarzem `/* Delikatna poświata … */` i wpadałyby jako „T1 polski". `CSS_TEXT` zdejmuje
+   WIODĄCE komentarze, zanim spojrzy na pierwszy znak. Realny stan sinku DOM: **17 w 7 plikach** (nie „+28/14").
+2. **Bramka czyta `t('…')` także w KOMENTARZACH** — reguła ZNANA (memory `i18n-checker-reads-t-calls-in-tests`)
+   ugryzła po raz trzeci: przykład wywołania w komentarzu keepera = klucz „użyty-a-niezdefiniowany". Klucz kontrolny
+   (`zonk`) składany dynamicznie; mechanizm opisany SŁOWAMI, bez cytowania wywołania.
+3. **Próbka raportu FAIL („pierwsze 12 trafień") była ślepa na pliki DOM** — zawsze `src/scenes/…`; teraz 2 przykłady
+   per zgłoszony plik. Advisory liczy TEŻ debug/konsolę (**494 w 87**; `GameScene` 102 vs ~35 UI z pomiaru 17.09) —
+   rozdział „ekran vs konsola" należy do arca 113, zapisane w komentarzu narzędzia.
+
+**Keepery:** NEW `i18n_269_amin_smoke` **61/61** — fail-first w realnym `git worktree --detach 59cbc2c` **14 PASS / 47 FAIL**
+(T3 = `FleetManagerOverlay._drawEnemyDetails` WYKONANIEM w PL i EN na atrapie ctx — FMO importuje się pod node;
+ThreeRenderer nie ⇒ pin źródłowy; T4 = kontrola nie-jałowości sinku DOM przez CargoLoadModal) · `i18n_hardcoded_gate_smoke`
+20 → **24/24**, fail-first **17/7** (⚠ z nowym keeperem 269 w drzewie wychodziło 13/11 — jego literały `t('picker.…')`
+paliły STARĄ bramkę: artefakt setupu, odjęty od liczby). Sweep **230/230** (drzewo autora CRLF) · **świeży checkout LF +
+`git apply` patcha: 230/230, `check-i18n` PASS** (pl=en=3352, +7 kluczy). Bez flagi (rollback = revert).
+
+**Live-gate 2026-09-18 (właściciel, klient EN) PASS 3/3:** banery pickera EN (waypoint 1/2, oba ESC-flow) · **na FLOCIE**
+„⚑ www: order cancelled (replaced by a new order)" + „(manually)" — zero slugów · tooltip „Orbiting" + kontrola słów kanonu
+z konsoli; wiersz wroga niećwiczony (brak wroga w kampanii) — pokrycie keeperem T3. ⚠ **Protokół:** pierwsza próba §2 szła
+na POJEDYNCZYM statku (Dziennik pisze tam log per-vessel, 278a nie gra) — powtórka na flocie rozstrzygnęła.
+
+**Obserwacje z gate'u (bez naprawiania):** NEW **281** — linia Dziennika przy starcie rozkazu w PUSTY PUNKT: „🚀 Kurier → ?
+(⛏ Move to point)" — `UIManager:993-998` `mission?.targetName ?? '?'` (MOS `:1033` daje `targetName: null` dla gołego
+punktu) + mapa ikon zna tylko colony/transport/recon ⇒ kilof dla rozkazu ruchu; mechanizm ze źródła, klasa 271/113 ·
+**bez numeru:** sporadyczne „statek leci gdzie indziej niż klik" — bez kroków repro, NIE przypisywać do znanej rodziny
+(255/267/151/152/264) bez pomiaru.
+
+**NASTĘPNE:** **272** — audit-first (decyzja właściciela PODPISANA 2026-09-18: **opcja A, Powrót PER CZŁONEK** — cel
+= najbliższa WŁASNA kolonia w układzie CZŁONKA, fallback = cel reprezentanta; D-272-x do podpisu PRZED kodem) → 151 / 152 /
+153, 264 / 265, 279, 280, 281.
