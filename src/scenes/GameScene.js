@@ -5147,18 +5147,22 @@ export class GameScene {
         const typeLabel = t(`poi.type.label.${metadata?.poiType ?? 'waypoint'}`);
         banner.textContent = t('picker.create.point.instructions', typeLabel);
       } else if (mode === 'patrolWaypoints') {
-        banner.textContent = 'Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ.';
+        banner.textContent = t('picker.patrol.instructions');
       } else if (mode === 'targetPoint') {
-        banner.textContent = 'Klik aby ustawić punkt. ESC anuluj.';
+        banner.textContent = t('picker.point.instructions');
       } else {
         return;  // unknown mode — don't show banner
       }
       banner.style.display = 'block';
       document.body.style.cursor = 'crosshair';
     });
+    // Finding 269 (A-MIN): trzy literały banera szły POZA t() — gracz EN dostawał polską instrukcję
+    // (klasa 113; `check-i18n` nie widział sinku `textContent`). Kompozycja bez zmian kształtu:
+    // `waypointAdded {0}{1}` + sufiks `waypointNeedMore {0}` (ile brakuje do minimum 2) albo
+    // `waypointEnterHint` — ten sam tekst, co dawny template, tylko przez słownik.
     EventBus.on('ui:pickerWaypointAdded', ({ total }) => {
-      const remainder = total < 2 ? ` (min ${2 - total} więcej)` : ' — ENTER zakończ lub klikaj dalej.';
-      banner.textContent = `Waypoint ${total} dodany${remainder}`;
+      const remainder = total < 2 ? t('picker.waypointNeedMore', 2 - total) : t('picker.waypointEnterHint');
+      banner.textContent = t('picker.waypointAdded', total, remainder);
     });
     // Finding 267 — odrzucony waypoint (weto producenta, np. punkt poza ramką statku): baner
     // pokazuje NAZWĘ statku + przetłumaczony powód (`describeOrderFail`, zero nowych kluczy);

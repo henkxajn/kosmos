@@ -73,7 +73,7 @@ import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getDesc, getShort, getLocale } from '../i18n/i18n.js';
-import { resolveVesselStatus } from '../utils/VesselStatus.js';
+import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
@@ -259,6 +259,10 @@ const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 
 // Kolory statusów statków
 // Finding 266: klucz = TOKEN KANONU (`utils/VesselStatus`), nie surowy `position.state`.
+// Finding 269 (A-MIN, decyzja (i)): glif per token KANONU dla wiersza wroga w liście Command —
+// słowo bierze `vesselStatusLabelKey` (jedno słowo dla jednego stanu na każdej powierzchni).
+const ENEMY_STATE_GLYPH = Object.freeze({ docked: '◈', orbiting: '⊙', in_transit: '→', in_space: '◌', unknown: '?' });
+
 const STATUS_COLORS = {
   docked:     () => THEME.success,
   in_transit: () => THEME.warning,
@@ -3631,14 +3635,10 @@ export class FleetManagerOverlay {
           ctx.textAlign = 'left';
 
           // Wiersz 2: stan (orbituje / w locie / cumuje) + typ kadłuba
-          // Finding 266: rozstrzyga KANON (in_space/unknown mają własne słowa). Trzy polskie
-          // literały ZOSTAJĄ — Finding 269 (klasa 113), nie ten slice.
+          // Finding 266: rozstrzyga KANON; Finding 269 (A-MIN, decyzja (i)): słowo TEŻ z kanonu
+          // (`vesselStatusLabelKey`) — dawne trzy polskie literały zdjęte, glif per token.
           const eTok = resolveVesselStatus(vessel).token;
-          const stateLabel = eTok === 'docked'     ? '◈ w hangarze'
-                           : eTok === 'orbiting'   ? '⊙ na orbicie'
-                           : eTok === 'in_transit' ? '→ w locie'
-                           : eTok === 'in_space'   ? `◌ ${t('fleetGroup.statusInSpace')}`
-                           : `? ${t('fleetGroup.statusUnknown')}`;
+          const stateLabel = `${ENEMY_STATE_GLYPH[eTok] ?? '?'} ${t(vesselStatusLabelKey(eTok))}`;
           const roleLabel = ship2?.namePL ?? ship2?.nameEN ?? ship2?.name ?? vessel.shipId ?? '?';
           ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = ENEMY_COLOR;
@@ -7352,13 +7352,10 @@ export class FleetManagerOverlay {
     cy += 10;
 
     // Stan + pozycja + dystans od Home
-    // Finding 266: KANON; trzy polskie literały zostają (Finding 269, klasa 113).
-    const dTok = resolveVesselStatus(vessel).token;
-    const stateTxt = dTok === 'docked'     ? 'W hangarze'
-                   : dTok === 'orbiting'   ? 'Na orbicie'
-                   : dTok === 'in_transit' ? 'W locie'
-                   : dTok === 'in_space'   ? t('fleetGroup.statusInSpace')
-                   : t('fleetGroup.statusUnknown');
+    // Finding 266: KANON; Finding 269 (A-MIN, decyzja (i)): słowo z kanonu (`vesselStatusLabelKey`).
+    // ⚠ Etykieta `Stan:` i sąsiedztwo (`Imperium:`, `Wywiad:`, `Typ:`) zostają po polsku — klasa 113,
+    //   osobny arc (poza podpisem A-MIN).
+    const stateTxt = t(vesselStatusLabelKey(resolveVesselStatus(vessel).token));
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(`Stan: ${stateTxt}`, x + pad, cy + 14); cy += 18;

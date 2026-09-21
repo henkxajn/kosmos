@@ -20,6 +20,11 @@
 //   T2  zapadka PŁONIE, gdy baseline nie pokrywa stanu (dowód, że nie mierzy ciszy)
 //   T3  ubytek długu jest RAPORTOWANY (baseline do obniżenia) — zapadka działa w obie strony
 //   T4  pin ŹRÓDŁOWY — dev-loggery odsiewane przez WYKRYCIE, nie przez listę plików
+//   T5  (Finding 269) sink DOM `.textContent =` / `.innerText =` MIERZY (CargoLoadModal wymieniony jako
+//       `dom:`), a CSS przez `style.textContent` jest ODSIANY (`src/main.js` — jedyny jego literał
+//       w tym sinku to arkusz — NIE jest wymieniony; licznik „CSS wykluczone" > 0 = odsiew się wykonał)
+//   T6  (Finding 269) ADVISORY diakrytyków: sekcja jest, liczy ponad sto literałów w wielu plikach,
+//       NIE zawiera `src/i18n/`/`src/data/`/`src/testing/`, i NIE wpływa na wynik (T1 = PASS mimo długu)
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { spawnSync } from 'node:child_process';
@@ -50,6 +55,9 @@ console.log('\nT1 — bramka przechodzi na obecnym drzewie');
   assert(/WYNIK: PASS/.test(out), 'T1: WYNIK: PASS');
   assert(/Brak NOWYCH napisów zaszytych w kodzie/.test(out),
     'T1: zapadka trzyma — zero napisów ponad baseline');
+  // Finding 269: sekcja sinku DOM też się wykonała (bez tego T5 mógłby mierzyć ciszę wyciętego sinku).
+  assert(/Sink DOM \(\.textContent\/\.innerText\): \d+ trafień/.test(out),
+    'T1: KONTROLA PINU — statystyka sinku DOM obecna w raporcie');
 }
 
 console.log('\nT2 — zapadka PŁONIE, gdy baseline nie pokrywa stanu');
@@ -100,6 +108,37 @@ console.log('\nT4 — dev-loggery odsiewane przez WYKRYCIE, nie przez listę (pi
   //   wpaść w odsiew, bo wtedy bramka przestałaby patrzeć na najważniejszy plik.
   assert(!DEV.test(readFileSync(join(ROOT, 'src/scenes/UIManager.js'), 'utf8')),
     'T4: KONTROLA ODWROTNA — UIManager NIE jest uznany za dev-logger (jego `_log` pisze do Dziennika)');
+}
+
+console.log('\nT5 — (269) sink DOM mierzy, CSS przez style.textContent odsiany');
+{
+  const { out } = run({ KOSMOS_I18N_BASELINE: '{}' });
+  assert(/src\/ui\/CargoLoadModal\.js: \d+ \(baseline 0, \+\d+\) — [^\n]*dom:\d+/.test(out),
+    'T5: CargoLoadModal wymieniony ponad baseline z RODZAJEM sinku `dom:` (sink DOM naprawdę mierzy)');
+  assert(/\[T[12] dom\]/.test(out),
+    'T5: próbka podaje plik:linię z rodzajem `dom` (odpowiedź wykonalna)');
+  const css = /CSS wykluczone: (\d+)/.exec(out);
+  assert(!!css && Number(css[1]) > 0,
+    `T5: KONTROLA — odsiew CSS wykonał się na realnych arkuszach (wykluczone: ${css?.[1] ?? 'brak'})`);
+  // `src/main.js` ma w sinku DOM WYŁĄCZNIE arkusz (`#loading-screen { … }` przez style.textContent) —
+  // gdyby odsiew nie działał, przy pustym baseline stałby na liście NOWYCH.
+  assert(!/src\/main\.js: \d+ \(baseline/.test(out),
+    'T5: src/main.js NIE jest wymieniony — arkusz CSS przez textContent to nie napis dla gracza');
+}
+
+console.log('\nT6 — (269) ADVISORY diakrytyków: jest, liczy, nie bramkuje, nie liczy data/i18n/testing');
+{
+  const { code, out } = run();
+  const m = /ADVISORY \(bez zapadki\)[^\n]*: (\d+) w (\d+) plikach/.exec(out);
+  assert(!!m, 'T6: sekcja ADVISORY obecna w raporcie');
+  assert(!!m && Number(m[1]) >= 100 && Number(m[2]) >= 10,
+    `T6: advisory liczy REALNY dług (≥100 literałów w ≥10 plikach; jest ${m?.[1]} w ${m?.[2]})`);
+  const adv = out.slice(out.indexOf('ADVISORY (bez zapadki)'));
+  assert(!/src\/(i18n|data|testing)\//.test(adv.split('WYNIK:')[0]),
+    'T6: advisory NIE liczy src/i18n/, src/data/ ani src/testing/ (dane i słowniki to nie dług UI)');
+  assert(/src\/ui\/ColonyOverlay\.js: \d+/.test(adv) && /src\/scenes\/GameScene\.js: \d+/.test(adv),
+    'T6: KONTROLA — ColonyOverlay i GameScene (znane z pomiaru 2026-09-17) są na liście');
+  assert(code === 0, `T6: advisory NIE bramkuje — exit 0 mimo długu (dostano ${code})`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

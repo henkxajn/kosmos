@@ -3295,6 +3295,12 @@ export default {
   // Picker mode HUD banner — M3 P2.3
   'picker.create.point.instructions':  'Klik aby ustawić pozycję {0}. ESC anuluj.',
   'picker.create.patrol.instructions': 'Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ.',
+  // Finding 269 (A-MIN) — baner pickera ROZKAZU (patrol z PPM / punkt): dawniej trzy literały poza t()
+  'picker.patrol.instructions':        'Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ.',
+  'picker.point.instructions':         'Klik aby ustawić punkt. ESC anuluj.',
+  'picker.waypointAdded':              'Waypoint {0} dodany{1}',
+  'picker.waypointNeedMore':           ' (min {0} więcej)',
+  'picker.waypointEnterHint':          ' — ENTER zakończ lub klikaj dalej.',
   // Coord tooltip (empty hover, mapa 3D + tactical) — M3 P2.3
   'coord.tooltip.label':          'Pozycja: ({0}, {1})',
   // POI Modal — M3 P2.2 (create + edit)
@@ -3726,6 +3732,9 @@ export default {
   'log.el.fleetOrderCap':        " (limit {0} AU/r)",
   'log.el.fleetOrderDone':       "⚑ {0}: {1} — zakończone",
   'log.el.fleetOrderCancel':     "⚑ {0}: rozkaz anulowany ({1})",
+  // Finding 278a (pasażer 269) — powód anulowania rozkazu floty (dawniej surowy slug w nawiasie)
+  'fleet.cancelReason.replaced':  "zastąpiony nowym rozkazem",
+  'fleet.cancelReason.manual':    "ręcznie",
   'log.el.fleetVesselSkipped':   "⚑ {0}: {1}",
   'log.el.vesselLaunched':       "{0} {1} → {2} ({3} {4})",
   'log.el.vesselReturned':       "↩ {0} — powrót do bazy",

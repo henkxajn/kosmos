@@ -20,6 +20,15 @@
 //       zaszytych napisów (26 polskich). Ta sama klasa co Finding 113 (ekran końca gry).
 //       Skan sinków napisów + ZAPADKA na baseline: nowy literał = FAIL, ubytek = podpowiedź
 //       obniżenia progu. Szczegóły przy `HARDCODED_BASELINE` niżej.
+//       ⚠ Finding 269 (2026-09-21): do sinków doszedł DOM — `.textContent =` / `.innerText =`
+//       (baner pickera i modale DOM były dla bramki NIEWIDZIALNE: 17 napisów w 7 plikach, w tym
+//       3 polskie w `GameScene._createPickerHUD`). CSS wstrzykiwany przez `style.textContent`
+//       jest ODSIEWANY (patrz `CSS_TEXT`). `innerHTML` świadomie POZA sinkami — to markup
+//       (+19 plików szumu przy pomiarze).
+//   (e) ADVISORY (Finding 269, bez zapadki): liczba literałów z polskim diakrytykiem GDZIEKOLWIEK
+//       w kodzie (tokenizer, poza komentarzami) per plik — pełny obraz klasy 113, którego sinki
+//       nie widzą (literał w zmiennej, w tablicy, w mapie). Informacja, nie bramka: pełna klasa
+//       113 to osobny arc (~247 literałów w `src/ui`+GameScene+ThreeRenderer, zmierzone 2026-09-17).
 //   (c) raportuje:
 //       - [BŁĄD]  użyte-a-niezdefiniowane (w pl i/lub en) — to blokuje (exit 1)
 //       - [i]     zdefiniowane-a-nieużyte (informacyjnie; NIC nie kasujemy)
@@ -185,7 +194,16 @@ const TEXT_SINKS = [
   { re: /\.(?:fillText|strokeText)\s*\(/g, kind: 'fillText' },
   { re: /\b(?:_log|_addNotification|addInfo|_pushLog)\s*\(/g, kind: 'log' },
   { re: /\b(?:text|headline|title|subtitle|label|msg|tooltip|placeholder)\s*:\s*/g, kind: 'prop' },
+  // Finding 269 — DOM: przypisanie (nie porównanie `==`) do textContent/innerText. Baner pickera
+  // (`GameScene._createPickerHUD`) i modale DOM (CargoLoadModal, DropTroopsModal, BattleIntroModal…)
+  // omijały bramkę w całości, bo żaden dotychczasowy sink ich nie widział.
+  { re: /\.(?:textContent|innerText)\s*=(?!=)/g, kind: 'dom' },
 ];
+// ⚠ CSS wstrzykiwany przez `style.textContent = \`…\`` to NIE napis dla gracza. Rozpoznanie: po
+//    zdjęciu WIODĄCYCH komentarzy `/* … */` literał zaczyna się od at-rule/selektora (`@`, `#`, `.`)
+//    i ma blok `{…}`. Zdjęcie komentarza jest konieczne: 3 z 12 zmierzonych arkuszy zaczynają się
+//    polskim komentarzem CSS („/* Delikatna poświata … */") i bez tego wpadałyby jako „T1 polski".
+const CSS_TEXT = /^\s*(?:\/\*[\s\S]*?\*\/\s*)*[@#.][^{]*\{/;
 const PL_DIACRITIC = /[ĄĆĘŁŃÓŚŹŻąćęłńóśźż]/;
 const TWO_WORDS    = /[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]{2,}\s+[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]{2,}/;
 const DOTTED_KEY   = /^[a-zA-Z_]\w*(\.\w+)+$/;
@@ -218,6 +236,7 @@ function readStringLiteral(s, i) {
 }
 
 const hardcoded = [];   // { rel, line, kind, tier, sample }
+let cssExcluded = 0;    // arkusze CSS przez textContent — odsiane (kontrola w keeperze: musi być > 0)
 for (const file of walk(SRC)) {
   if (EXCLUDE_USAGE.has(file)) continue;
   const rel  = path.relative(ROOT, file).replace(/\\/g, '/');
@@ -236,6 +255,7 @@ for (const file of walk(SRC)) {
     for (const m of text.matchAll(re)) {
       const raw = readStringLiteral(text, m.index + m[0].length);
       if (raw == null) continue;                           // zmienna / t(...) / wyrażenie
+      if (kind === 'dom' && CSS_TEXT.test(raw)) { cssExcluded++; continue; }   // arkusz stylów, nie napis
       const s = raw.trim();
       if (!/[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]{3,}/.test(s)) continue;   // symbole, emoji, liczby
       if (DOTTED_KEY.test(s)) continue;                    // to klucz i18n, nie napis
@@ -248,6 +268,87 @@ for (const file of walk(SRC)) {
 
 const hardcodedByFile = new Map();
 for (const h of hardcoded) hardcodedByFile.set(h.rel, (hardcodedByFile.get(h.rel) ?? 0) + 1);
+const hardcodedKindsByFile = new Map();   // rel → { kind: n } (raport FAIL nazywa RODZAJ sinku)
+for (const h of hardcoded) {
+  const k = hardcodedKindsByFile.get(h.rel) ?? {};
+  k[h.kind] = (k[h.kind] ?? 0) + 1;
+  hardcodedKindsByFile.set(h.rel, k);
+}
+
+// ══ 3c. ADVISORY — diakrytyki GDZIEKOLWIEK w literałach (Finding 269, bez zapadki) ═══════════
+//
+// ⚠ CO TO MIERZY: KAŻDY literał stringowy z polskim diakrytykiem poza komentarzami — także taki,
+//    który nie trafia w żaden znany sink (zmienna, mapa, tablica, argument własnej funkcji).
+//    Sinki wyżej odpowiadają „co na pewno ląduje na ekranie"; to odpowiada „ile polskiego w ogóle
+//    siedzi w kodzie". Bez zapadki: pełna klasa 113 to OSOBNY arc, a próg tu zamieniłby bramkę
+//    w czerwoną lampkę. Heurystyka nie widzi literałów bez ogonków („W hangarze") — klasa jest większa.
+// ⚠ Tokenizer jest heurystyczny (regex-literał rozpoznawany po poprzednim znaczącym znaku/słowie);
+//    to wystarcza dla liczby ADVISORY — pojedynczy błędny odczyt przesuwa licznik, nie bramkę.
+// ⚠ LICZY TEŻ komunikaty debug/konsoli (`KOSMOS.debug.*`, walidatory reguł Directora) — dlatego
+//    `GameScene` ma tu ~100, choć realnie widocznych dla gracza jest ~35 (pomiar 2026-09-17 dzielił
+//    konsolę osobno). Rozdział „ekran vs konsola" należy do przyszłego arca 113, nie do tej liczby.
+// ⚠ `src/data/` wykluczone: encje trzymają `namePL`/`descPL` JAKO DANE (konwencja repo) —
+//    to nie jest dług i18n, a zdominowałoby tabelę.
+const ADVISORY_EXCLUDE = ['src/testing/', 'src/i18n/', 'src/data/'];
+const REGEX_PREV_CHAR = /[(,=:\[!&|?{};+\-*%<>~^]/;
+const REGEX_PREV_WORD = new Set(['return', 'typeof', 'case', 'in', 'of', 'delete', 'void', 'throw', 'instanceof', 'new']);
+function stringLiteralsOutsideComments(text) {
+  const out = [];
+  const n = text.length;
+  let i = 0, prev = '', prevWord = '';
+  while (i < n) {
+    const c = text[i], d = text[i + 1];
+    if (c === '/' && d === '/') { const e = text.indexOf('\n', i); i = e < 0 ? n : e; continue; }
+    if (c === '/' && d === '*') { const e = text.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; continue; }
+    if (c === "'" || c === '"' || c === '`') {
+      const q = c; let j = i + 1, buf = '';
+      while (j < n) {
+        const ch = text[j];
+        if (ch === '\\') { buf += ch + (text[j + 1] ?? ''); j += 2; continue; }
+        if (ch === q) break;
+        if (q !== '`' && ch === '\n') break;                       // niedomknięty — przerwij
+        if (q === '`' && ch === '$' && text[j + 1] === '{') {         // wnętrze ${…} pomijane
+          let depth = 1; j += 2;
+          while (j < n && depth > 0) { if (text[j] === '{') depth++; else if (text[j] === '}') depth--; j++; }
+          buf += ' '; continue;
+        }
+        buf += ch; j++;
+      }
+      out.push(buf); i = j + 1; prev = q; prevWord = ''; continue;
+    }
+    if (c === '/' && (prev === '' || REGEX_PREV_CHAR.test(prev) || REGEX_PREV_WORD.has(prevWord))) {
+      let j = i + 1, inClass = false;                                 // literał regex — pomiń
+      while (j < n) {
+        const ch = text[j];
+        if (ch === '\\') { j += 2; continue; }
+        if (ch === '\n') break;
+        if (inClass) { if (ch === ']') inClass = false; }
+        else if (ch === '[') inClass = true;
+        else if (ch === '/') break;
+        j++;
+      }
+      j++; while (j < n && /[a-z]/.test(text[j])) j++;                // flagi
+      i = j; prev = '/'; prevWord = ''; continue;
+    }
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[A-Za-z_$]/.test(c)) {
+      let j = i; while (j < n && /[\w$]/.test(text[j])) j++;
+      prevWord = text.slice(i, j); prev = text[j - 1]; i = j; continue;
+    }
+    prev = c; prevWord = ''; i++;
+  }
+  return out;
+}
+const advisoryByFile = new Map();
+let advisoryTotal = 0;
+for (const file of walk(SRC)) {
+  if (EXCLUDE_USAGE.has(file)) continue;
+  const rel = path.relative(ROOT, file).replace(/\\/g, '/');
+  if (ADVISORY_EXCLUDE.some(p => rel.startsWith(p))) continue;
+  const lits = stringLiteralsOutsideComments(fs.readFileSync(file, 'utf8'));
+  const k = lits.filter(s => PL_DIACRITIC.test(s)).length;
+  if (k > 0) { advisoryByFile.set(rel, k); advisoryTotal += k; }
+}
 
 // ⚠ ZAPADKA, NIE PRÓG ZEROWY. Dług jest PRE-EXISTING (~50 napisów w 12 plikach po naprawie
 //    Dziennika), a bramka z progiem 0 byłaby czerwona od pierwszego uruchomienia i przestałaby
@@ -266,16 +367,25 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
   ? JSON.parse(process.env.KOSMOS_I18N_BASELINE)
   : {
   // Zmierzone 2026-08-27, PO naprawie Dziennika. Suma 62 (T1 32 + T2 30) w 11 plikach UI.
+  // Finding 269 (2026-09-21): sink DOM dołożył 14 napisów w 6 plikach (suma 76 w 17 plikach).
+  //   ⚠ `GameScene` NIE wchodzi do tabeli: jego 3 literały banera pickera (jedyne w sinku DOM)
+  //   przeszły na `t()` w tym samym slice'ie — zmierzone 3 → 0.
   'src/scenes/PlanetScene.js':       9,  // ⚠ LEGACY — `.open`/`.show` NIGDY nie wołane (CLAUDE.md).
                                          //    Napisy NIEOSIĄGALNE; znikną razem z plikiem.
   'src/scenes/TitleScene.js':        5,  // nazwy presetów motywu („AMBER NOIR", „COLD BLUE") —
                                          //    nazwy własne, świadomie nietłumaczone.
   'src/scenes/UIManager.js':        16,  // ⚠ w tym EKRAN KOŃCA GRY — Finding 113, otwarty.
+  'src/ui/BattleGroupPanel.js':      1,  // DOM (269): nagłówek grupy bojowej.
+  'src/ui/BattleIntroModal.js':      3,  // DOM (269): Finding 158 — zaszyty polski + angielski nagłówek.
+  'src/ui/BattleReportModal.js':     1,  // DOM (269): stopka „Kliknij aby zamknąć".
+  'src/ui/CargoLoadModal.js':        5,  // DOM (269): nagłówki sekcji ładowni (klasa 113).
   'src/ui/ColonyOverlay.js':        17,  // ⚠ w tym 3 flashe budowy — znane z arca BRAMKA WŁASNOŚCI.
+  'src/ui/DropTroopsModal.js':       3,  // DOM (269): nagłówek + podpowiedzi zrzutu (klasa 113).
   'src/ui/EconomyOverlay.js':        1,
   'src/ui/FleetManagerOverlay.js':   5,
   'src/ui/GroundUnitPanel.js':       1,
   'src/ui/IntelOverlay.js':          2,
+  'src/ui/POIModal.js':              1,  // DOM (269): „[unsupported field: …]" — komunikat dev w DOM.
   'src/ui/PopulationOverlay.js':     1,
   'src/ui/UnitCardPanel.js':         4,
   'src/ui/WarOverlay.js':            1,
@@ -284,7 +394,10 @@ const HARDCODED_BASELINE = process.env.KOSMOS_I18N_BASELINE
 const hardcodedNew = [];
 for (const [rel, n] of [...hardcodedByFile].sort()) {
   const base = HARDCODED_BASELINE[rel] ?? 0;
-  if (n > base) hardcodedNew.push(`${rel}: ${n} (baseline ${base}, +${n - base})`);
+  if (n > base) {
+    const kinds = Object.entries(hardcodedKindsByFile.get(rel) ?? {}).map(([k, v]) => `${k}:${v}`).join(' ');
+    hardcodedNew.push(`${rel}: ${n} (baseline ${base}, +${n - base}) — ${kinds}`);
+  }
 }
 const hardcodedDropped = [];
 for (const [rel, base] of Object.entries(HARDCODED_BASELINE)) {
@@ -325,16 +438,31 @@ block('[i] Dynamiczne wywołania t() — niesprawdzalne ({n}):', dynamicCalls.ma
 // ── Napisy zaszyte w kodzie (Finding 177) ──
 const t1 = hardcoded.filter(h => h.tier === 1).length;
 const t2 = hardcoded.filter(h => h.tier === 2).length;
+const tDom = hardcoded.filter(h => h.kind === 'dom').length;
 console.log(`Napisy ZASZYTE w kodzie (poza t()):  ${hardcoded.length}  (T1 polskie: ${t1}, T2 zdania: ${t2})`);
+console.log(`Sink DOM (.textContent/.innerText): ${tDom} trafień  ·  CSS wykluczone: ${cssExcluded}`);
 console.log(`Pliki: ${hardcodedByFile.size}  ·  baseline: ${Object.keys(HARDCODED_BASELINE).length}\n`);
 if (hardcodedNew.length) {
   block('[BŁĄD] NOWE napisy zaszyte w kodzie — przenieś do t() albo podnieś baseline świadomie ({n}):', hardcodedNew);
-  const worst = hardcoded.filter(h => hardcodedNew.some(n => n.startsWith(h.rel + ':')));
-  block('   ↳ próbka z tych plików ({n}):', worst.slice(0, 12).map(h => `${h.rel}:${h.line} [T${h.tier} ${h.kind}] "${h.sample}"`));
+  // Próbka PER PLIK (do 2 na plik, do 12 plików): każdy zgłoszony plik dostaje przykład. Dawne
+  //   „pierwsze 12 trafień" pokazywało wyłącznie pierwsze pliki w kolejności skanu (`src/scenes/…`),
+  //   więc plik zgłoszony niżej na liście (np. modal DOM w `src/ui/`) nie miał żadnego przykładu.
+  const worst = [];
+  for (const n of hardcodedNew.slice(0, 12)) {
+    const rel = n.slice(0, n.indexOf(': '));
+    worst.push(...hardcoded.filter(h => h.rel === rel).slice(0, 2));
+  }
+  block('   ↳ próbka z tych plików ({n}):', worst.map(h => `${h.rel}:${h.line} [T${h.tier} ${h.kind}] "${h.sample}"`));
 } else {
   console.log('[OK] Brak NOWYCH napisów zaszytych w kodzie (zapadka trzyma).\n');
 }
 if (hardcodedDropped.length) block('[i] Baseline do obniżenia — dług spłacony ({n}):', hardcodedDropped, 20);
+
+// ── Advisory (Finding 269): diakrytyki gdziekolwiek w literałach — informacja, NIE bramka ──
+console.log(`[i] ADVISORY (bez zapadki) — literały z polskim diakrytykiem GDZIEKOLWIEK w kodzie: ${advisoryTotal} w ${advisoryByFile.size} plikach (bez data/, i18n/, testing/)`);
+for (const [rel, k] of [...advisoryByFile].sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`   ${rel}: ${k}`);
+if (advisoryByFile.size > 15) console.log(`   … (+${advisoryByFile.size - 15} plików)`);
+console.log('');
 
 console.log(sep);
 console.log(fail

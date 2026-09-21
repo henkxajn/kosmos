@@ -3294,6 +3294,12 @@ export default {
   // Picker mode HUD banner — M3 P2.3
   'picker.create.point.instructions':  'Click to set {0} position. ESC to cancel.',
   'picker.create.patrol.instructions': 'Click patrol waypoints (min 2). ESC to cancel, ENTER to finalize.',
+  // Finding 269 (A-MIN) — ORDER picker banner (patrol via RMB / point): formerly three literals outside t()
+  'picker.patrol.instructions':        'Click patrol waypoints (min 2). ESC to cancel, ENTER to finalize.',
+  'picker.point.instructions':         'Click to set the point. ESC to cancel.',
+  'picker.waypointAdded':              'Waypoint {0} added{1}',
+  'picker.waypointNeedMore':           ' ({0} more needed)',
+  'picker.waypointEnterHint':          ' — ENTER to finalize or keep clicking.',
   // Coord tooltip (empty hover, 3D map + tactical) — M3 P2.3
   'coord.tooltip.label':          'Position: ({0}, {1})',
   // POI Modal — M3 P2.2 (create + edit)
@@ -3723,6 +3729,9 @@ export default {
   'log.el.fleetOrderCap':        " (cap {0} AU/yr)",
   'log.el.fleetOrderDone':       "⚑ {0}: {1} — completed",
   'log.el.fleetOrderCancel':     "⚑ {0}: order cancelled ({1})",
+  // Finding 278a (269 passenger) — fleet order cancel reason (formerly a raw slug in parentheses)
+  'fleet.cancelReason.replaced':  "replaced by a new order",
+  'fleet.cancelReason.manual':    "manually",
   'log.el.fleetVesselSkipped':   "⚑ {0}: {1}",
   'log.el.vesselLaunched':       "{0} {1} → {2} ({3} {4})",
   'log.el.vesselReturned':       "↩ {0} — returned to base",

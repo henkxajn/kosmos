@@ -968,7 +968,13 @@ export class UIManager {
     });
     EventBus.on('fleet:orderCancelled', ({ fleetId, reason }) => {
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
-      this._addNotification(t('log.el.fleetOrderCancel', fname, reason), 'fleet', 'info');
+      // Finding 278a (pasażer 269): powód przez klucz i18n zamiast surowego sluga w nawiasie.
+      // `replaced` / `manual` to JEDYNE powody w grze (zmierzone: `disbandFleet`/`removeMember`
+      // nie wołają `cancelFleetOrder`); nieznany slug przechodzi SUROWO — brak klucza nie może
+      // wyciszyć powodu (klasa 271: odmowa bez powodu czyta się jak „naprawa nie działa").
+      const rKey = `fleet.cancelReason.${reason}`;
+      const rTxt = t(rKey);
+      this._addNotification(t('log.el.fleetOrderCancel', fname, rTxt !== rKey ? rTxt : (reason ?? 'unknown')), 'fleet', 'info');
     });
     // P3 — retreat_at_50 doctrine triggered auto-retreat.
     EventBus.on('fleet:retreatTriggered', ({ fleetId, aggregateHpPct, memberCount, retreatedIds }) => {
