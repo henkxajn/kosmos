@@ -34,7 +34,7 @@ import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
-import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
+import { buildFleetReturnPlan } from '../utils/FleetReturnPlan.js';
 import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
 // Finding 166 — lista celów `engage` keyed na UKŁADZIE FLOTY (kanon `SystemScope`, forma listowa).
 import { systemIdOf } from '../utils/SystemScope.js';
@@ -4862,35 +4862,35 @@ export class FleetManagerOverlay {
   //      6.00 AU dalej. Rozkaz przechodził (bramka `if (bodyId)` w MOS widzi tylko cele-CIAŁA,
   //      a tu leci GOŁY PUNKT), statek leciał do tych współrzędnych we WŁASNEJ ramce, a marker
   //      `_pendingReturnDock` dokował go potem przy ciele, którego w jego układzie NIE MA.
-  //   Teraz: `nearestOwnColonyBodyInSystem` (`utils/RetreatTarget.js`, D-FDh) — ta sama zwrotka
-  //   `{ colony, planet, distanceAU }`, ten sam filtr własności, ta sama preferencja pełnych
-  //   kolonii nad placówkami, PLUS termin układu. Brak własnej kolonii w układzie ⇒ `null`
-  //   ⇒ UCZCIWA ODMOWA z komunikatem (niżej), a nie lot w cudzą ramkę.
+  //   Od 154: `nearestOwnColonyBodyInSystem` (`utils/RetreatTarget.js`, D-FDh) — filtr własności,
+  //   preferencja pełnych kolonii nad placówkami, PLUS termin układu.
+  // ⚠ Finding 272 (opcja A, D-272-1…9) — cel PER CZŁONEK, nie reprezentanta. Jeden cel fan-outowany
+  //   do wszystkich wysyłał członka z INNEGO układu do bezsensownych współrzędnych we własnej ramce
+  //   (MOS to PRZYJMUJE — goły punkt nie ma czego porównać z układem), 263 odmawiał doku i statek
+  //   dryfował BEZGŁOŚNIE; reprezentant w tranzycie warp abortował całą flotę (ZMIERZONE M1-M5).
+  //   Plan liczy `utils/FleetReturnPlan` (ten sam resolver, wołany N razy; jedno źródło dla obu
+  //   producentów — bliźniak `FleetCommandPanel._fleetReturn`): członek bez celu jest ODMAWIANY GŁOŚNIE
+  //   (`memberRefusals` → `rejected` → Dziennik przez D-E2), nie wysyłany w cudzą ramkę.
+  //   Brak celu u WSZYSTKICH ⇒ toast jak dotąd (D-272-9).
   _handleFleetReturnBase(fleetId) {
     const fs = window.KOSMOS?.fleetSystem;
     const fleet = fs?.getFleet?.(fleetId);
     if (!fleet || fleet.memberIds.length === 0) return;
     const vm = window.KOSMOS?.vesselManager;
-    const firstMember = fleet.memberIds
+    const members = fleet.memberIds
       .map(vid => vm?.getVessel?.(vid))
-      .find(v => v && !v.isWreck);
-    if (!firstMember) return;
-    const nearest = nearestOwnColonyBodyInSystem(firstMember, window.KOSMOS?.colonyManager);
-    if (!nearest) {
-      EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
-      return;
-    }
-    // Zwrotka to `{ colony, planet, distanceAU }` — unwrap przez `.planet` (nie `.x`).
-    const planet = nearest.planet;
-    const tx = planet?.x ?? planet?.position?.x ?? 0;
-    const ty = planet?.y ?? planet?.position?.y ?? 0;
-    if (!tx && !ty) {
+      .filter(v => v && !v.isWreck);
+    if (members.length === 0) return;
+    const plan = buildFleetReturnPlan(members, window.KOSMOS?.colonyManager);
+    if (!plan.representative) {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
     }
     const res = fs.issueFleetOrder(fleetId, {
       type: 'moveToPoint',
-      targetPoint: { x: tx, y: ty },
+      targetPoint:    { ...plan.representative.targetPoint },   // INFORMACYJNE (D-272-3); prawda = memberTargets
+      memberTargets:  plan.memberTargets,
+      memberRefusals: plan.memberRefusals,
     });
     // Auto-dock flag: `FleetSystem._maybeAutoDockOnReturn` (listener `vessel:orderCompleted`)
     // snapuje pozycję do AKTUALNEJ pozycji planety i dokuje. Bez tego statek stoi w statycznym
@@ -4901,9 +4901,11 @@ export class FleetManagerOverlay {
     //   ODRZUCONO, zostawał z markerem, który odpalał się przy domknięciu dowolnego NASTĘPNEGO
     //   rozkazu; (b) `MovementOrderSystem.issueOrder` nie mógł sprzątać starych markerów na
     //   wejściu, bo wycierałby ten świeżo postawiony. Teraz sprzątanie ma jednoznaczny moment.
+    // ⚠ Finding 272 (D-272-7) — marker celuje w WŁASNE ciało członka (re-home per członek: flota może
+    //   skończyć z różnymi bazami — to jest znaczenie „wróć do najbliższej WŁASNEJ kolonii").
     for (const memberId of (res?.accepted ?? [])) {
       const member = vm.getVessel(memberId);
-      if (member) member._pendingReturnDock = planet.id;
+      if (member) member._pendingReturnDock = plan.memberTargets[memberId]?.targetBodyId ?? null;
     }
     this._announceFleetOrderResult(res, fleetId, 'returnBase');
   }

@@ -90,6 +90,7 @@ function _cloneActiveOrder(ao) {
   const clone = { ...ao };
   if (ao.targetPoint)    clone.targetPoint    = { ...ao.targetPoint };
   if (ao.memberOrderIds) clone.memberOrderIds = { ...ao.memberOrderIds };
+  if (ao.memberTargets)  clone.memberTargets  = { ...ao.memberTargets };   // Finding 272 (opcjonalne)
   return clone;
 }
 

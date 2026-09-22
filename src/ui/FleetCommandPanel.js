@@ -29,7 +29,7 @@ import { summarizeFleetGroup, buildRosterRows } from './FleetGroupPanelLogic.js'
 import { nextFleetId, nextDoctrine, nearestEnemyToPoint } from './FleetCommandPanelLogic.js';
 import { openDockPicker } from './VesselGroupActions.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
-import { nearestOwnColonyBodyInSystem } from '../utils/RetreatTarget.js';
+import { buildFleetReturnPlan } from '../utils/FleetReturnPlan.js';
 import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
@@ -435,27 +435,30 @@ export class FleetCommandPanel extends BaseOverlay {
   //   gwiazdach stojących w (0,0) wygrywała dystansem kolonia z OBCEGO układu (zmierzone:
   //   „2.00 AU" do `sys_home` dla statku w `sys_020`). Ta powierzchnia miała ten defekt
   //   znak-w-znak jak `FleetManagerOverlay._handleFleetReturnBase` — i to był jej PIERWSZY pomiar.
+  // ⚠ Finding 272 (opcja A) — cel PER CZŁONEK przez `utils/FleetReturnPlan` (jedno źródło dla obu
+  //   producentów; pełny opis przy `FleetManagerOverlay._handleFleetReturnBase`).
   _fleetReturn(fleetId) {
     const fs = this._fs();
     const vm = window.KOSMOS?.vesselManager;
     const fleet = fs?.getFleet?.(fleetId);
     if (!fleet || !vm) return;
-    const firstMember = fleet.memberIds.map((id) => vm.getVessel(id)).find((v) => v && !v.isWreck);
-    const planet = firstMember
-      ? nearestOwnColonyBodyInSystem(firstMember, window.KOSMOS?.colonyManager)?.planet
-      : null;
-    if (!planet) {
+    const members = fleet.memberIds.map((id) => vm.getVessel(id)).filter((v) => v && !v.isWreck);
+    const plan = buildFleetReturnPlan(members, window.KOSMOS?.colonyManager);
+    if (!plan.representative) {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
     }
-    const tx = planet.x ?? planet.position?.x ?? 0;
-    const ty = planet.y ?? planet.position?.y ?? 0;
-    const res = fs.issueFleetOrder(fleetId, { type: 'moveToPoint', targetPoint: { x: tx, y: ty } });
-    // ⚠ D-255b (Finding 263) — marker PO rozkazie i tylko dla PRZYJĘTYCH (bliźniak
-    //   `FleetManagerOverlay._handleFleetReturnBase`; powód opisany tam).
+    const res = fs.issueFleetOrder(fleetId, {
+      type: 'moveToPoint',
+      targetPoint:    { ...plan.representative.targetPoint },   // INFORMACYJNE (D-272-3)
+      memberTargets:  plan.memberTargets,
+      memberRefusals: plan.memberRefusals,
+    });
+    // ⚠ D-255b (Finding 263) — marker PO rozkazie i tylko dla PRZYJĘTYCH; Finding 272 (D-272-7) —
+    //   w WŁASNE ciało członka (bliźniak `FleetManagerOverlay._handleFleetReturnBase`; powód opisany tam).
     for (const id of (res?.accepted ?? [])) {
       const m = vm.getVessel(id);
-      if (m) m._pendingReturnDock = planet.id;   // auto-dock przy dotarciu (FleetSystem listener)
+      if (m) m._pendingReturnDock = plan.memberTargets[id]?.targetBodyId ?? null;   // auto-dock przy dotarciu
     }
     this._announce(res);
     this._markDirty();

@@ -100,7 +100,14 @@ export class FleetSystem {
    *  - applyDoctrine (P3) — w P2 pass-through
    *
    * @param {string} fleetId
-   * @param {object} spec — { type, targetEntityId?, targetPoint?, ... } jak MOS
+   * @param {object} spec — { type, targetEntityId?, targetPoint?, ... } jak MOS; opcjonalnie (Finding 272):
+   *   `memberTargets`  { vid: { targetBodyId, targetPoint, targetName? } } — cel PER CZŁONEK (nadpisuje
+   *                     `targetPoint` w fan-oucie; `targetPoint` zostaje polem INFORMACYJNYM rekordu),
+   *   `memberRefusals` { vid: reason } — członkowie odmówieni PRZEZ PRODUCENTA (trafiają do `rejected`
+   *                     z własnym powodem, więc anons D-E2 nazywa ich bez żadnej zmiany).
+   *   ⚠ KONTRAKT: gdy `memberTargets` jest podane, KAŻDY żywy członek ma wpis w jednej z dwóch map
+   *   (gwarantuje to `utils/FleetReturnPlan`; keeper `fleet_return_per_member_smoke` T9). FleetSystem
+   *   NIE ma gałęzi obronnej na brak wpisu — zero nowych powodów odmowy, zero nowych kluczy i18n.
    * @returns {{ ok, accepted: vesselId[], rejected: [{vesselId, reason}], orderType, fleetEta?, speedCap? }}
    */
   issueFleetOrder(fleetId, spec) {
@@ -130,6 +137,10 @@ export class FleetSystem {
       const v = this._vm._vessels?.get?.(vid);
       if (!v) { rejected.push({ vesselId: vid, reason: 'vessel_not_found' }); continue; }
       if (v.isWreck) { rejected.push({ vesselId: vid, reason: 'wrecked' }); continue; }
+      // Finding 272 — odmowa PRODUCENTA per członek (np. brak własnej kolonii w jego układzie):
+      // do `rejected` z jego powodem, poza fan-outem; nie ma czym lecieć, więc nie ma czego wydawać.
+      const preRefusal = spec.memberRefusals?.[vid];
+      if (preRefusal) { rejected.push({ vesselId: vid, reason: preRefusal }); continue; }
       eligible.push(v);
     }
     if (eligible.length === 0) {
@@ -154,7 +165,13 @@ export class FleetSystem {
     let speedCap = null;
     let perMemberSpec = null;
 
-    if (spec.type === 'moveToPoint') {
+    if (spec.type === 'moveToPoint' && spec.memberTargets) {
+      // Finding 272 (D-272-5) — cele PER CZŁONEK (różne ciała, bywa: różne układy): BEZ sync ETA.
+      // Sync ma sens, gdy flota ląduje RAZEM w jednym punkcie; przy celach per członek zmuszałby
+      // statek 0,5 AU od własnej kolonii do pełzania przez 20 lat za członkiem 20 AU od swojej.
+      // Każdy leci własnym tempem; `fleetEta`/`arrivalSyncYear` zostają null.
+      perMemberSpec = { ...specBase };
+    } else if (spec.type === 'moveToPoint') {
       // Sync ETA — wszyscy lądują w tej samej chwili.
       const target = spec.targetPoint;
       if (!target) return { ok: false, reason: 'no_target_point', accepted: [], rejected };
@@ -218,11 +235,16 @@ export class FleetSystem {
     // Fan-out per member.
     const accepted = [];
     const memberOrderIds = {};
+    const memberTargets = {};
     for (const v of eligible) {
-      const res = mos.issueOrder(v.id, { ...perMemberSpec }, { fromFleet: fleet.id });
+      // Finding 272 (D-272-6) — cel per członek nadpisuje wspólny: jawny `targetBodyId` + `targetPoint`
+      // (+ `targetName` dla linii Dziennika). Brak `memberTargets` ⇒ ścieżka bit w bit jak dotąd.
+      const mt = spec.memberTargets?.[v.id] ?? null;
+      const res = mos.issueOrder(v.id, { ...perMemberSpec, ...(mt ?? {}) }, { fromFleet: fleet.id });
       if (res?.ok && res.orderId) {
         accepted.push(v.id);
         memberOrderIds[v.id] = res.orderId;
+        if (mt?.targetBodyId) memberTargets[v.id] = mt.targetBodyId;
       } else {
         rejected.push({ vesselId: v.id, reason: res?.reason ?? 'unknown' });
       }
@@ -269,6 +291,9 @@ export class FleetSystem {
         arrivalSyncYear: (typeof fleetEta === 'number') ? (gameYear + fleetEta) : null,
         speedCapAU:     speedCap,
         memberOrderIds,
+        // Finding 272 — { vid: targetBodyId } przyjętych członków przy celach per członek; inaczej null.
+        // Pole INFORMACYJNE (jak `targetPoint`): źródłem prawdy o celu jest rozkaz statku w MOS.
+        memberTargets:  spec.memberTargets ? memberTargets : null,
         _retreatTriggered: false,
         _inCombat:         false,
       };
