@@ -34,6 +34,21 @@
 > 3 statusy z 266 — wariant (i)/(ii) = DECYZJA WŁAŚCICIELA, implementacja w następnej sesji; `check-i18n` sink `textContent` + advisory) ·
 > **klasa 113 ZMIERZONA**: 247 literałów z diakrytykami w 28 plikach (`src/ui`+GameScene+ThreeRenderer), ~163 widoczne dla gracza
 > (ColonyOverlay 49, GameScene ~35) ⇒ osobny przyszły arc. Rejestr: `VESSEL_ORDERS_PLAN.md` §269/§270/§278.
+>
+> **Aktualizacja 2026-09-19 — slice 272 ZAMKNIĘTY; RODZINA 255 DOMKNIĘTA W CAŁOŚCI.** Sweep: **231/231 OK, 0 FAIL**.
+> • **272** ✅ (`fc81fb8`, live-gate PASS §1-§3) — Powrót floty **per CZŁONEK** (opcja A właściciela): każdy do
+> najbliższej WŁASNEJ kolonii w SWOIM układzie, członek bez celu **odmawiany GŁOŚNO** zamiast wysyłany w cudzą ramkę
+> (cicha była ścieżka PRZYJĘTA, nie odrzucona — MOS goły punkt przyjmuje, 263 odmawia doku, statek dryfuje).
+> ⚠ **D-272-1 = korekta podpisu PO POMIARZE**: sygnowany fallback „cel reprezentanta” jest ZBIOREM PUSTYM realnych
+> celów ⇒ był tym samym defektem pod inną nazwą. NOWE z tego slice’u: **282** (etykieta „Skok warp” po PRZYLOCIE —
+> ⚠ hipoteza „brak `mission = null`” **OBALONA źródłem**: misja jest po przylocie NOŚNA (`_redirectInterstellarVessel`
+> jej wymaga), defekt siedzi w mapowaniu etykiety bez terminu `phase`; ⚠ powierzchnia zgłoszona jako „Outliner” tego
+> napisu **nie produkuje**). Rejestr: `VESSEL_ORDERS_PLAN.md` §272/§282.
+> • **RODZINA 255 (ramka układu w rozkazach floty) ZAMKNIĘTA W CAŁOŚCI**: **147** · **154** · **263** · **255**
+> (leg D + wiersze 8/9) · **256** · **266** · **267** · **273** · **166 (ENGAGE)** · **268** · **275** · **270** ·
+> **269** · **272**. Otwarte drobne z całego arca: **227**, **278b**, **279**, **280**, **281**, **282**.
+> • Dalej wg planu właściciela: pivot **D4-slim → W4-simple** (Wojna i Pokój uproszczona) + żywe 🔴 **195** / **95** /
+> **65** / **193** + pomiar **216** jako przerywniki.
 
 ---
 

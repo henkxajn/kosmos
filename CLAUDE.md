@@ -5123,6 +5123,93 @@ punktu) + mapa ikon zna tylko colony/transport/recon ⇒ kilof dla rozkazu ruchu
 **bez numeru:** sporadyczne „statek leci gdzie indziej niż klik" — bez kroków repro, NIE przypisywać do znanej rodziny
 (255/267/151/152/264) bez pomiaru.
 
-**NASTĘPNE:** **272** — audit-first (decyzja właściciela PODPISANA 2026-09-18: **opcja A, Powrót PER CZŁONEK** — cel
-= najbliższa WŁASNA kolonia w układzie CZŁONKA, fallback = cel reprezentanta; D-272-x do podpisu PRZED kodem) → 151 / 152 /
-153, 264 / 265, 279, 280, 281.
+**NASTĘPNE:** ~~**272**~~ ✅ **ZAMKNIĘTY 2026-09-19** (sekcja niżej) → 151 / 152 / 153, 264 / 265, 279, 280, 281, 282.
+
+---
+
+## Finding 272 — Powrót floty: cel PER CZŁONEK, głośna odmowa zamiast lotu w cudzą ramkę (opcja A, save **v101 bez migracji**, live-gate PASS §1-§3 — ZAMKNIĘTY 2026-09-19, commit `fc81fb8`)
+
+**Ostatnia noga rodziny 255.** Plan + decyzje **D-272-1…9** + pełny log gate’u:
+`docs/design/VESSEL_ORDERS_PLAN.md` §272 (zamknięty) + NEW **282**.
+
+**Jedno zdanie:** oba producenty Powrotu floty (`FMO._handleFleetReturnBase`, `FCP._fleetReturn`) dobierały JEDEN cel —
+najbliższą własną kolonię PIERWSZEGO żywego członka — i podawały go jako **goły punkt** do `issueFleetOrder`, który
+fan-outował go WSZYSTKIM; współrzędne są LOKALNE dla układu, więc członek z innego układu leciał do bezsensownych
+współrzędnych we WŁASNEJ ramce.
+
+⚠ **CICHA BYŁA ŚCIEŻKA PRZYJĘTA, NIE ODRZUCONA.** Odmowy MOS nazywa już D-E2 (zmierzone M3). Defektem było to, co
+**przechodzi**: MOS goły punkt **PRZYJMUJE** (bramka `target_other_system` patrzy na cele-CIAŁA), statek leciał,
+`_maybeAutoDockOnReturn` (termin układu, **263**) odmawiał doku i statek **DRYFOWAŁ BEZGŁOŚNIE**. Reprezentant
+w tranzycie warp abortował **CAŁĄ** flotę (M5).
+
+**Kształt:** NEW `src/utils/FleetReturnPlan.js` — czysty helper (zero `window`/`EventBus`, wzór `CameraFrame.js`),
+**jedno źródło dla obu producentów**: każdy członek dostaje WŁASNY cel = najbliższą własną kolonię w JEGO układzie
+(ten sam resolver, którym **154** naprawiło oba producenty — `nearestOwnColonyBodyInSystem`, wołany N razy zamiast raz).
+`FleetSystem.issueFleetOrder` dostaje **generyczne** pola `spec.memberTargets` / `spec.memberRefusals`; bez nich ścieżka
+jest **bit w bit jak dotąd** (kontrola w keeperze: zwykły `moveToPoint` floty NADAL synchronizuje ETA).
+
+⚠ **D-272-1 — KOREKTA PODPISU PO POMIARZE (najważniejsza rzecz w tym slice’ie).** Podpis mówił „fallback = cel
+reprezentanta (jak dziś)”. Pomiar M4: resolver zwraca `null` w **dokładnie dwóch** stanach — tranzyt warp (MOS i tak
+odmawia) albo układ **BEZ** kolonii gracza — a w tym drugim cel reprezentanta leży **z definicji** w innej ramce
+(gdyby leżał w tej samej, resolver by go znalazł). „Fallback” był więc **zbiorem pustym realnych celów** i dokładnie
+dzisiejszym defektem pod inną nazwą ⇒ **głośna odmowa** (`no_friendly_planet` / `vessel_in_warp_transit`) istniejącym
+kanałem D-E2, **zero nowych kluczy i18n**.
+⚠ **Reguła, która z tego zostaje:** *podpisany fallback też jest hipotezą* — policz, w jakich stanach się uruchamia;
+fallback odpalający się wyłącznie tam, gdzie jest defekt, **jest** tym defektem.
+
+**Pozostałe decyzje:** D-272-2 tranzyt warp ⇒ `vessel_in_warp_transit` (ten sam powód co bramka MOS) · D-272-3
+reprezentant = **pierwszy członek Z CELEM** (statek w warpie nie abortuje floty) · D-272-5 przy `memberTargets`
+**BEZ syncu ETA** (sync ma sens, gdy flota ląduje RAZEM; tu zmuszałby statek 0,5 AU od swojej kolonii do pełzania za
+członkiem 20 AU od swojej) · D-272-6 cel **JAWNY** `targetBodyId`+`targetPoint`+`targetName` (bramka MOS staje się
+obroną w głąb; **281** domknięte dla Powrotu za darmo — Dziennik pokazuje nazwę, nie „?”) · D-272-7 **re-home per
+członek** (`_pendingReturnDock` = własne ciało; flota może skończyć z różnymi bazami — to jest znaczenie „wróć do
+najbliższej WŁASNEJ kolonii”) · D-272-9 brak celu u WSZYSTKICH ⇒ toast jak dotąd.
+
+**KONTRAKT:** dla KAŻDEGO żywego członka plan ma **DOKŁADNIE JEDEN** wpis — w `memberTargets` ALBO w `memberRefusals`.
+`FleetSystem` na tym polega i **NIE ma gałęzi obronnej** — zero nowych powodów odmowy, zero nowych kluczy (odmowa idzie
+istniejącym kanałem D-E2: `Order: 1/2 moved · skipped: <nazwa> (<powód>)` + linia per statek).
+
+### ⚠ Granice dowodu — nazwane
+
+* **`retreat_at_50` (doktryna) jest POZA slice’em i nie jest jego luką:** nie idzie przez `issueFleetOrder` —
+  `FleetSystem._tickCivYears` wydaje odwrót **per statek** przez `mos.issueOrder`, a cel dobiera `resolveShelterOrderSpec`
+  (RETREAT_TARGET), czyli **jest już per członek, inną drogą**. Klasa wspólna z **279**, nie z 272.
+* **`activeOrder.targetPoint` reprezentanta jest INFORMACYJNY** — zmierzone grepem: **zero czytelników** w `src/` poza
+  `FleetSystem`. Źródłem prawdy są `memberTargets` (i sam rozkaz w MOS).
+* **Caveat gate’u §1:** domiar `colonyId` (re-home, D-272-7) **przepadł na żywo** — właściciel zresetował zapis przed
+  odczytem; pokrycie = **pin T7** + sonda M1. Nie nazywać tego zweryfikowanym na żywo.
+* **281 domknięte TYLKO dla Powrotu**; pozostałe `moveToPoint` w goły punkt dalej drukują „→ ?” i kilof.
+
+**Live-gate 2026-09-18/19 (klient EN) PASS §1-§3:** §1 plan per członek (`Furia → Wancerzów`, `Gladiator → Colony
+Alioth`, `memberRefusals: {}`, `sync: null`, markery per członek, oba *In orbit*) · **§2** `Gladiator` stojący
+w `sys_032` bez kolonii: podgląd planu ⇒ `{v_18: "no_friendly_planet"}`, Dziennik `Order: 1/2 moved · skipped:
+Gladiator (No friendly planet in range)`, `order: null` / `marker: null` w dwóch odczytach, statek stoi · §3
+nie-regresja w jednym układzie.
+
+**Testy:** keeper NEW `fleet_return_per_member_smoke` **52/52** (fail-first **25 PASS / 27 FAIL** w realnym
+`git worktree --detach 493b1e0`); siblingi **0 zmian**; sweep **231/231 0 FAIL** (drzewo autora **i** świeży checkout LF);
+`check-i18n` PASS (pl=en=3352). Bez flagi — rollback = `git revert`.
+
+**NOWY FINDING 282 (otwarty, NIE naprawiany tutaj):** statek **po PRZYLOCIE** ze skoku pokazuje w kolumnie aktywności
+„Skok warp” / „Warp jump” bezterminowo. ZMIERZONE na żywo (odczyt PRZED kliknięciem Powrotu: `sys_032`, `orbiting`,
+`galProgress` 0,9988, misja `interstellar_jump` żywa) ⇒ **zero związku z 272**.
+⚠ **Hipoteza „brak `mission = null` w handlerze przylotu” została OBALONA źródłem:** `_tickInterstellar:2827-2832`
+trzyma misję **z projektu** (komentarz: „nadal na misji — gracz musi zdecydować co dalej”), a jest ona po przylocie
+**NOŚNA** — `_redirectInterstellarVessel:3050` wymaga `type === 'interstellar_jump' && phase === 'in_system'`, więc
+wyzerowanie misji zabiłoby przekierowanie w nowym układzie. Defekt siedzi w ETYKIECIE:
+`FleetPictureLogic.buildShipEntry:259-262` pyta w gałęzi misji **wyłącznie** o `phase === 'returning'`, po czym mapuje
+`type` → `fleetPicture.activity.warp` — **bez terminu na `phase === 'in_system'`**. Kaskada `rozkaz > misja > stan
+fizyczny` tłumaczy, czemu widział to tylko członek ODMÓWIONY (przyjęty ma rozkaz, jego etykieta wygrywa).
+⚠ **Korekta powierzchni:** zgłoszono „Outliner”, ale `Outliner.js` **nie ma kolumny aktywności** i nie woła
+`buildShipEntry`; producentami są `TacticalDock`, `FleetRegistryLogic` (K3), `MapLabelLogic`, `ThreeRenderer` —
+**którą właściciel widział, NIEUSTALONE**. Cross-ref: obserwacja z gate’u **266 §1** opisywała statek REALNIE
+w tranzycie (odczyt PRAWDZIWY, dwie osie); tu statek już przyleciał, więc ta sama etykieta jest FAŁSZEM.
+
+### ⚠ RODZINA 255 — DOMKNIĘTA W CAŁOŚCI
+
+`147` · `154` · `263` · `255` (leg D + wiersze 8/9) · `256` · `266` · `267` · `273` · `166 (ENGAGE)` · `268` · `275` ·
+`270` · `269` · **`272`**.
+
+**NASTĘPNE (plan właściciela):** pivot **D4-slim → W4-simple** (Wojna i Pokój uproszczona), z żywymi 🔴 **195** /
+**95** / **65** / **193** oraz pomiarem **216** jako przerywnikami. Otwarte drobne z arca: **227**, **278b**, **279**,
+**280**, **281**, **282**.
