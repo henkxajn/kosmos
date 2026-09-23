@@ -5213,3 +5213,103 @@ w tranzycie (odczyt PRAWDZIWY, dwie osie); tu statek już przyleciał, więc ta 
 **NASTĘPNE (plan właściciela):** pivot **D4-slim → W4-simple** (Wojna i Pokój uproszczona), z żywymi 🔴 **195** /
 **95** / **65** / **193** oraz pomiarem **216** jako przerywnikami. Otwarte drobne z arca: **227**, **278b**, **279**,
 **280**, **281**, **282**.
+
+---
+
+## DESANT DA SIĘ ODNALEŹĆ — wojska gracza na CUDZYM ciele wracają do zasięgu gracza (save **v101 bez migracji**, live-gate PENDING)
+
+Zgłoszenie właściciela: *„ekran planety, na którą desantuję, znika po zrzuceniu wszystkich jednostek
+i nie mogę potem wrócić do tego widoku, żeby poruszać wojskami"*. Objaw jeden, przyczyny **TRZY** —
+każda wystarczająca sama, każda w innej warstwie.
+
+⚠ **MECHANIKA DOWODZENIA NIE BYŁA ZEPSUTA — brakowało WYŁĄCZNIE drogi powrotnej.** Panel obcej
+planety jest ZAPROJEKTOWANY (`ColonyOverlay._openAsColonyPanel`: „dla konkretnej planety (własnej
+LUB obcej)"), `ColonyOrderGuard.ALWAYS_ALLOWED_HITS` ma świadomie wpuszczoną całą rodzinę
+**„WARSTWA DOWODZENIA DESANTEM"** (`unit*`, `army*`, `stack*`, `drawer*` — zakresowane po
+`unit.owner`, NIE po koloni), a rozkaz ruchu (`GameScene:5427-5450`) bramkuje **po właścicielu
+JEDNOSTKI**, nie po właścicielu kolonii. Dlatego naprawa jest mała, a keeper pilnuje **DRZWI**,
+nie mechaniki. To jest zarazem „prostsza metoda" z pytania: nie trzeba niczego budować, trzeba
+przestać zamykać drzwi.
+
+**Trzy przyczyny, wszystkie ZMIERZONE na żywym silniku:**
+1. **`ColonyOverlay._finishDropMode`** — po opróżnieniu kolejki `setTimeout(openPanel('fleet'), 1500)`.
+   Zamysł („gracz kontynuuje zarządzanie flotą") kłócił się z faktem, że to JEDYNA chwila, gdy mapa
+   obcej planety jest otwarta.
+2. **`UIManager` (kolektor Outlinera)** — lista jednostek iterowała `allColonies`, czyli
+   `getAllColonies()` przefiltrowane do **kolonii GRACZA**, więc oddział na planecie AI nie trafiał
+   na listę NIGDY. Zmierzone: dwie żywe jednostki gracza, lista widzi **jedną**. ⚠ Pojawiał się
+   dopiero po ZDOBYCIU kolonii — czyli w chwili, gdy przestawał być potrzebny.
+3. **`Outliner` klik + `BottomContext._doAction`** — oba wołały `switchActiveColony(planetId)` +
+   `openPanel('colony')` **BEZ `colonyId`**. Zmierzone: `hasColony(koloniaAI)` = **`true`**,
+   `switchActiveColony(koloniaAI)` = **`false`** (bramka własności D1), a gołe `openPanel` spada
+   w `show()` na `activePlanetId` ⇒ otwierała się **WŁASNA kolonia**. To domyka udokumentowaną
+   **„Obserwację UX z GATE OG-3 §3"** (`COLONY_OWNERSHIP_GUARD_PLAN.md` §128) po stronie
+   `BottomContext`.
+
+**Kształt (3 decyzje właściciela, podpisane przed kodem):**
+- **Zostajemy na planecie** — auto-powrót usunięty razem z polem `_dropReturnOverlay`. Wyjście: ✕
+  albo Esc (drugi Esc — pierwszy anuluje sam tryb zrzutu).
+- **NEW `src/ui/OutlinerGroundLogic.js`** (czysty, importuje tylko kanon własności) —
+  `collectPlayerGroundUnits` (jednostki gracza z **KAŻDEGO** ciała) + `groupGroundUnitsByBody`.
+  Powód wydzielenia: `UIManager` **nie importuje się pod node**, więc jedyny defekt, jaki miał, był
+  pinowalny wyłącznie źródłowo; tu jest pinowalny **WYKONANIEM**.
+- **Sekcja JEDN. NAZIEMNE grupowana po CIELE** (wzór sekcji FLOTA, która grupuje po stanie):
+  sub-nagłówek = ciało + licznik, **klikalny** → mapa tego ciała; nazwa jednostki dostaje pełne
+  150 px zamiast dzielić je z 6-znakowym skrótem planety.
+- **Druga droga** — `BottomContext` („mapa ciała" po kliku planety na mapie 3D): **biletem do
+  powierzchni obcego ciała są WŁASNE BUTY na nim**, nie sam fakt istnienia kolonii.
+
+⚠ **FILTR `in_cargo` JEST OBOWIĄZKOWY, nie ostrożnościowy.** Stary kolektor dostawał go ZA DARMO od
+`GroundUnitManager.getUnitsOnPlanet:236`; przejście na `getAllUnits()` go zdejmuje, a jednostka
+w ładowni **ZACHOWUJE `planetId`** planety załadunku ⇒ bez niego desant lecący w kosmosie
+renderowałby się jako stojący na powierzchni.
+
+⚠ **Polityka nazw jest decyzją o mgle wojny:** własna kolonia → **nazwa KOLONII** (zachowanie sprzed
+zmiany), obce ciało → **nazwa CIAŁA**, nigdy nazwa cudzej kolonii. Moje buty na powierzchni nie są
+biletem do nazwy nadanej przez wroga.
+
+⚠ **Kolejność grup jest decyzją, nie przypadkiem:** ciała BEZ mojej kolonii **PIERWSZE** (siły
+ekspedycyjne / desant nie mają żadnego innego wejścia), potem własne kolonie; w obu grupach
+alfabetycznie, żeby lista nie skakała między klatkami.
+
+**Etykiety (przy okazji, zmierzone):** `Outliner` robił `t('groundUnit.' + unit.type)`, a w słowniku
+był **jeden** klucz (`groundUnit.science_rover`) — `t()` przy braku klucza zwraca **sam klucz**, więc
+KAŻDA jednostka archetypowa renderowała się jako **`groundUni…`** (truncate do 10 znaków). Lista,
+która właśnie staje się głównym wejściem do wojsk, była nieczytelna. Doszło **12 par kluczy PL+EN**
+(7 archetypów + 3 legacy `infantry`/`mech`/`garrison` — brzmienia wprost z `GROUND_UNITS.namePL/nameEN`
+— oraz `drop.finished`/`drop.cancelled`, dotąd twarde polskie literały flashy).
+`ARCHETYPE_ICONS` **PRZENIESIONE** z `GroundUnitPanel.js` do `data/unitArchetypes.js`: ikona jest
+cechą archetypu, a panel ciągnie THREE (`GlbSnapshotRenderer`), więc import z niego wywróciłby
+node'owy import Outlinera — duplikat mapy byłby nieutwardzonym bliźniakiem.
+
+### ⚠ Trzy lekcje z pisania keepera (wychodzą poza ten slice)
+
+1. **Statyczny import symbolu, który POWSTAJE w tym slice, wywraca CAŁĄ suitę przy fail-first**
+   (`SyntaxError: does not provide an export named …`) i żaden pin nie ma koloru. Lekarstwo:
+   **namespace import** (`import * as ArchData`) albo dynamiczny `import()` w `try/catch` — to
+   ta sama lekcja co „pin musi DEGRADOWAĆ, nie PRZERYWAĆ", tylko na poziomie **symbolu**.
+2. **Fixture, który nie rozróżnia dwóch polityk, świeci zielono dokładnie tam, gdzie jest defekt.**
+   Pin „obce ciało → nazwa CIAŁA, nie nazwa cudzej koloni" przechodził JAŁOWO, bo bootstrap nazywa
+   kolonię AI **tak samo jak ciało** (`Thuban b` == `Thuban b`). Fixture musi rozjechać obie nazwy.
+3. **Pin wykluczający na pustym zbiorze to fałszywa zieleń.** Pierwszy pomiar fail-first dał
+   **18/36**; po dołożeniu ŚWIADKA do każdego pinu wykluczającego (`ids.has(drop.id) && !ids.has(X)`)
+   i zamianie „nie otwiera" na mierzalny SKUTEK (`planet:previewMap` emitowany raz) — **12/43**.
+   Sześć zielonych było jałowych.
+
+**Świadomie przyjęte konsekwencje:** obca kolonia **bez** moich wojsk, ale `analyzed`, otwiera teraz
+read-only podgląd terenu zamiast przeskakiwać na moją kolonię (dla nie-`analyzed` — jak dotąd nic) ·
+ikona Sci. Rovera `🤖 → 🛰` (tak deklarują dane `GROUND_UNITS`, dotąd **bez ani jednego konsumenta**).
+
+**Poza zakresem (do rejestru, NIE naprawiane):** `ColonyOverlay:3339` nazywa jednostki
+`arch.descriptionPL.split('.')[0]` i sięga po `arch.icon`, którego archetypy **nie mają** ⇒ zawsze
+🪖 i zawsze po polsku (klasa 113). Szersze niż etykieta w Outlinerze — własny slice.
+
+**Pliki:** NEW `src/ui/OutlinerGroundLogic.js`; `UIManager` (kolektor + 2 importy), `Outliner`
+(grupowanie, klik, hover `_hoveredGroundBodyId`), `BottomContext` (druga droga), `ColonyOverlay`
+(`_finishDropMode`), `data/unitArchetypes.js` (+`ARCHETYPE_ICONS`), `GroundUnitPanel` (import zamiast
+kopii), i18n pl/en. Keeper NEW `src/testing/smoke/ground_troops_reachable_smoke.mjs` **55/55**
+(T1-T6; `Outliner` i `BottomContext` **importują się pod node**, więc obie połowy pinowane
+**WYKONANIEM** — prawdziwy `draw` na atrapie ctx i prawdziwy `hitTest`; `_finishDropMode` pinem
+źródłowym, bo `ColonyOverlay` nie importuje się pod node). Fail-first w prawdziwym
+`git worktree --detach HEAD`: **12 PASS / 43 FAIL**, wszystkie 12 zielonych to autentyczne kontrole
+pinu. Sweep **234/234 0 FAIL** · `check-i18n` PASS (pl=en=3364) · bez flagi (rollback = `git revert`).

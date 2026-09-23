@@ -1645,6 +1645,17 @@ jako **kolonia gracza**. Dziś tylko ścieżki debug/sandbox.
      NEUTRALNEGO — stąd obserwacja UX z GATE OG-3 §3 (klik na kolonię AI przekierowuje na własną).
      Naprawa = przepiąć te wejścia na zaprojektowany podgląd `show({colonyId})`. Osobny podpis.
 
+     ✅ **CZĘŚCIOWO ZAMKNIĘTE 2026-09-23** (slice „DESANT DA SIĘ ODNALEŹĆ", `CLAUDE.md`): dwa
+     z czterech wejść przepięte na `openPanel('colony', { colonyId })`, czyli na zaprojektowany
+     podgląd — **`BottomContext:424`** („mapa ciała"; wpuszcza obce ciało TYLKO gdy stoją na nim
+     jednostki GRACZA — biletem są własne buty, nie sam fakt kolonii) oraz **klik jednostki
+     naziemnej w Outlinerze** (wcześniej niewidoczny dla desantu, bo kolektor `UIManager` iterował
+     wyłącznie kolonie gracza). Zmierzone przy okazji: `hasColony(koloniaAI)` = **`true`**,
+     `switchActiveColony(koloniaAI)` = **`false`** ⇒ gołe `openPanel('colony')` spadało na
+     `activePlanetId`. ⚠ **NADAL OTWARTE:** `GameScene:3302` (`system:switched`),
+     `CivilizationOverlay:730`, `EventLogOverlay:368` — żadne nie oferuje stanu NEUTRALNEGO.
+     Keeper: `src/testing/smoke/ground_troops_reachable_smoke.mjs` T4.
+
 ---
 
 ## Gdzie to stawia arc
