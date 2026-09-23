@@ -5,6 +5,7 @@
 //   startYear, fronts: [{systemId, controller}],
 //   exhaustion: {player, empireId},
 //   battles: [battleId],
+//   captures: [{bodyId, systemId, fromEmpireId, toEmpireId, year, via}],   ← WP-1
 //   active: bool,
 // }
 //
@@ -55,6 +56,19 @@ const EXHAUSTION_LOSER_SHARE  = 7;   // DODATKOWO dla przegranego starcia (⇒ p
 const SKIRMISH_TENSION = 12;
 const AUTO_PEACE_EXHAUSTION = 100;  // próg auto-peace
 
+// WP-1 — etykieta sposobu zmiany rąk w księdze zdobyczy.
+//
+// Dziś JEDYNYM mechanizmem jest desant, a oba produkcyjne wołania podają `invasion`
+// (`InvasionSystem._captureColony`) albo `ground_invasion` (`InvasionSystem._tryPlayerCapture`) —
+// i to, że są DOKŁADNIE DWA, pinuje `wp_peace_seams_smoke` T2a/T2c.
+// ⚠ MAPA, A NIE LITERAŁ `'invasion'`: drugi producent JEST zaplanowany (cesja przy stole pokoju,
+//   WP-2/WP-5) i zahardkodowana etykieta zaksięgowałaby jego oddanie ciała jako PODBÓJ. Nieznany
+//   powód zapisuje się DOSŁOWNIE — księga woli powiedzieć „nie wiem, co to było" niż skłamać.
+const CAPTURE_VIA_BY_REASON = {
+  invasion:        'invasion',
+  ground_invasion: 'invasion',
+};
+
 export class WarSystem {
   constructor() {
     this._tickAccum = 0;
@@ -65,6 +79,21 @@ export class WarSystem {
     // (zaksięgowana / w stanie wojny → księguj / potyczka) i dopiero po W3-2 jest naprawdę
     // wyczerpujący. Do W3-2 środkowa gałąź była cichym `return` — patrz `_classifyBattle`.
     EventBus.on('battle:resolved', (p) => this._classifyBattle(p));
+
+    // WP-1 — KSIĘGA ZDOBYCZY. Subskrypcja po stronie WOJNY, nie wpis przy wołającym:
+    //   1. każde z tych zdarzeń ma DOKŁADNIE JEDNEGO emitenta (ColonyManager) — pinowane
+    //      w `wp_peace_seams_smoke` T2d — więc szew nie może zaksięgować zdobyczy dwa razy;
+    //   2. `gameState.wars` jest domeną TEGO systemu, a repo zabrania pisania po cudzej
+    //      domenie (InvasionSystem musiałby sięgnąć do `gameState.wars` wprost);
+    //   3. jedyny dzisiejszy wołający (`InvasionSystem`) w punkcie wołania zna STRONY, ale
+    //      NIE ZNA rekordu wojny — musiałby i tak zapytać ten system, czyli o jedno ogniwo dalej.
+    // ⚠ `toEmpireId: 'player'` przy drugim zdarzeniu to DERYWACJA, nie odczyt: payload nie ma
+    //   `newOwner`, a metoda-emitent z konstrukcji oddaje ciało GRACZOWI (guard
+    //   `ColonyManager.captureColonyForPlayer:986`). Pinowane wykonaniem w keeperze.
+    EventBus.on('colony:captured', ({ planetId, previousOwner, newOwner, reason }) =>
+      this._recordCapture(planetId, previousOwner, newOwner, reason));
+    EventBus.on('colony:capturedByPlayer', ({ planetId, previousOwner, reason }) =>
+      this._recordCapture(planetId, previousOwner, 'player', reason));
 
     EventBus.on('time:tick', ({ civDeltaYears }) => {
       if (!civDeltaYears) return;
@@ -94,12 +123,36 @@ export class WarSystem {
   getBattleRecord(battleId) { return gameState.get(`battles.${battleId}`) ?? null; }
 
   /** Zwraca aktywną wojnę z danym imperium (gracz jako agresor lub obrońca) */
-  getWarWith(empireId) {
+  getWarWith(empireId) { return this.getWarBetween('player', empireId); }
+
+  /**
+   * WP-1 — aktywna wojna MIĘDZY DWIEMA DOWOLNYMI STRONAMI, symetrycznie.
+   *
+   * ⚠ ISTNIEJE, BO `getWarWith` JEST GRACZ-CENTRYCZNE. Księga zdobyczy pyta o parę
+   * (tracący, zdobywca), a `transferColony` obsługuje TAKŻE przerzuty AI→AI (dowiedzione
+   * na żywo w W3 GATE 1 §7[5]). Zamiast dopisywać drugą kopię tego samego predykatu przy
+   * wołającym, `getWarWith` DELEGUJE tutaj — jedna definicja pytania „czy trwa wojna
+   * między A i B". Dla pary bez gracza odpowiedź jest dziś zawsze `null` (DiplomacySystem
+   * tworzy wyłącznie wojny z graczem) i to jest POPRAWNE: nie ma wojny ⇒ nie ma zdobyczy.
+   */
+  getWarBetween(a, b) {
+    if (!a || !b || a === b) return null;
     return this.listActive().find(w =>
-      (w.aggressor === 'player' && w.defender === empireId) ||
-      (w.defender === 'player' && w.aggressor === empireId)
+      (w.aggressor === a && w.defender === b) ||
+      (w.aggressor === b && w.defender === a)
     ) ?? null;
   }
+
+  /**
+   * WP-1 — księga zdobyczy wojny (append-only, read-only na zewnątrz).
+   *
+   * ⚠ TU MIESZKA `?? []` #1 z DWÓCH. `GameState.restore` merguje WYŁĄCZNIE klucze najwyższego
+   * poziomu (`GameState.js:146-157`), więc rekord wojny wraca z zapisu DOSŁOWNIE — wojna
+   * zapisana przed WP-1 nie ma tego pola i nigdy go nie dostanie. Zapis zostaje **v101 bez
+   * migracji**: pusta księga jest POPRAWNĄ wartością dla starej wojny, nieodróżnialną od
+   * wojny bez zdobyczy (test z `verbCooldowns`, nie z `bordersOpen`).
+   */
+  getCaptures(warId) { return this.getWar(warId)?.captures ?? []; }
 
   // ── Intent methods ───────────────────────────────────────────
 
@@ -119,6 +172,7 @@ export class WarSystem {
       fronts:     [],
       exhaustion: { [aggressor]: 0, [defender]: 0 },
       battles:    [],
+      captures:   [],   // WP-1 — co w tej wojnie zmieniło właściciela (append-only)
       active:     true,
     };
     gameState.set(`wars.${warId}`, war, 'war_created');
@@ -134,6 +188,55 @@ export class WarSystem {
     const next = { ...war, fronts: [...war.fronts, { systemId, controller }] };
     gameState.set(`wars.${warId}`, next, 'front_added');
     return true;
+  }
+
+  /**
+   * WP-1 — dopisuje zdobycz do księgi wojny. Wołane WYŁĄCZNIE z dwóch subskrypcji
+   * w konstruktorze (patrz tam po uzasadnienie wyboru szwu).
+   *
+   * ZASADY (D-WP-2 = C + A-lite):
+   *   • wpis TYLKO gdy między stronami trwa AKTYWNA wojna — zmiana rąk w pokoju (skrypt dev,
+   *     przyszła cesja, sandbox) NIE jest zdobyczą wojenną i cicho przechodzi bokiem;
+   *   • append-only, BEZ deduplikacji: odbicie tego samego ciała dopisuje KOLEJNY wpis.
+   *     Stan bieżący („kto trzyma co teraz") wyprowadzi konsument w WP-3 — księga ma być
+   *     HISTORIĄ, a nie migawką, inaczej stół pokoju nie odróżni „oddaj, co zdobyłeś"
+   *     od „oddaj, co właśnie odbiłem";
+   *   • brak wojny NIE rzuca — to normalny stan gry, nie błąd wpięcia.
+   *
+   * ⚠ `year` i `systemId` NIE PRZYCHODZĄ W PAYLOADZIE (zmierzone: `colony:captured` niesie
+   *   {planetId, colonyName, newOwner, previousOwner, reason, population, wasHomePlanet,
+   *   destroyedVesselIds}, a `colony:capturedByPlayer` {planetId, colonyName, previousOwner,
+   *   isOutpost, reason}). Oba są jednoznacznie wyprowadzalne u odbiorcy:
+   *     year     — emisja jest SYNCHRONICZNA ze zmianą właściciela, więc „teraz" JEST rokiem zdobyczy;
+   *     systemId — DOSŁOWNE lustro rozwiązania, którego używa sam emitent
+   *                (`ColonyManager.transferColony:939` = encja → fallback na pole kolonii).
+   *                Kolonia w chwili emisji WCIĄŻ jest w `_colonies` (obie metody to przerzut
+   *                własności W MIEJSCU, nie usunięcie), więc fallback jest żywy.
+   *   ⚠ ŚWIADOMIE NIE `SystemScope.systemIdOf`: ten kanon mapuje brak stempla na `'sys_home'`
+   *     (fail-open dla bramek rozkazów). W KSIĘDZE zgadywanie układu byłoby kłamstwem — tu
+   *     nierozstrzygnięty układ zapisuje się jako `null`, a tożsamością wpisu jest `bodyId`.
+   *
+   * @returns {Object|null} zapisany wpis albo null (brak wojny / niekompletne strony)
+   */
+  _recordCapture(bodyId, fromEmpireId, toEmpireId, reason) {
+    if (!bodyId || !fromEmpireId || !toEmpireId || fromEmpireId === toEmpireId) return null;
+    const war = this.getWarBetween(fromEmpireId, toEmpireId);
+    if (!war) return null;
+
+    const entry = {
+      bodyId,
+      systemId: EntityManager.get(bodyId)?.systemId
+        ?? window.KOSMOS?.colonyManager?.getColony?.(bodyId)?.systemId
+        ?? null,
+      fromEmpireId,
+      toEmpireId,
+      year: this._year(),
+      via:  CAPTURE_VIA_BY_REASON[reason] ?? String(reason ?? 'unknown'),
+    };
+    // `?? []` #2 z DWÓCH (patrz `getCaptures`) — wojna ze starego zapisu nie ma tego pola.
+    const next = { ...war, captures: [...(war.captures ?? []), entry] };
+    gameState.set(`wars.${war.id}`, next, 'capture_recorded');
+    return entry;
   }
 
   changeExhaustion(warId, side, delta, reason = '') {

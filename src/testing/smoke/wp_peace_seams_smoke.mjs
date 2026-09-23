@@ -17,10 +17,13 @@
 //   T3  war.fronts[] jest MARTWY (addFront zero wołających) i CAPTURE_GRACE_YEARS zero czytelników
 //       ⚠ ZŁAMIE TO: ktokolwiek ożywi fronty albo karencję. W4-simple ich NIE RUSZA
 //         (sprzątanie martwego kodu to nie ten slice).
-//   T4  rekord wojny NIE MA pola `captures`
-//       ⚠ ZŁAMIE TO: **WP-1 w tym samym slice'ie** — księga zdobyczy `war.captures[]`.
-//         To jedyna sekcja pomyślana jako do-odwrócenia-natychmiast; przy WP-1 aktualizujemy
-//         ją ŚWIADOMIE i opisujemy odwrócenie w raporcie (wzór `deploy_seams` T1/T2/T4).
+//   T4  rekord wojny MA księgę zdobyczy `captures` — ⚠ SEKCJA ŚWIADOMIE ODWRÓCONA W WP-1
+//       Do WP-1 brzmiała „rekord wojny NIE MA pola `captures`" i była pinem BRAKU. WP-1 to
+//       pole dodał, więc pin przecelowano na nowy inwariant (10 pól, `captures: []` na starcie).
+//       Odwrócenie było ZAPOWIEDZIANE w tym nagłówku przed napisaniem WP-1 i ZMIERZONE:
+//       na drzewie WP-1 stary pin padał na T4a i T4b, i TYLKO na nich (27 PASS / 2 FAIL) —
+//       czyli mierzył dokładnie to, co miał, a WP-1 nie ruszył nic poza zapowiedzianym.
+//       Wzór odwracania pinu z powodem: `deploy_seams` T1/T2/T4, `ai_capture_last_stand` T4/T5.
 //   T5  rekord traktatu = {id, signedYear}; NAP nie ma daty wygaśnięcia
 //       ⚠ ZŁAMIE TO: DS-1 / WP-7 (rozejm i wymuszony NAP o skończonym czasie trwania).
 //
@@ -216,22 +219,22 @@ console.log('T3 — addFront zero wołających; CAPTURE_GRACE_YEARS zero czyteln
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// T4 — rekord wojny: kształt BEZ księgi zdobyczy
-//   ⚠ SEKCJA POMYŚLANA DO ODWRÓCENIA PRZEZ WP-1 (patrz nagłówek pliku).
+// T4 — rekord wojny: kształt Z księgą zdobyczy (ODWRÓCONE W WP-1 — patrz nagłówek pliku)
 // ════════════════════════════════════════════════════════════════════════════
-console.log('T4 — rekord wojny nie ma pola `captures` (WP-1 to odwróci ŚWIADOMIE)');
+console.log('T4 — rekord wojny ma `captures` (sekcja odwrócona w WP-1)');
 {
   const warSys = new WarSystem();
   const war = warSys.createWar('player', 'emp_wp0_war', 'border_incident');
 
-  const EXPECTED = ['id', 'aggressor', 'defender', 'casusBelli', 'startYear', 'fronts', 'exhaustion', 'battles', 'active'];
+  const EXPECTED = ['id', 'aggressor', 'defender', 'casusBelli', 'startYear', 'fronts', 'exhaustion', 'battles', 'captures', 'active'];
   assert(JSON.stringify(Object.keys(war).sort()) === JSON.stringify([...EXPECTED].sort()),
-    'T4a: `createWar` zwraca DOKŁADNIE te pola: ' + EXPECTED.join(', ') +
+    'T4a (ODWRÓCONE w WP-1): `createWar` zwraca DOKŁADNIE te 10 pól: ' + EXPECTED.join(', ') +
     ' (zwrócone: ' + Object.keys(war).join(', ') + ')');
 
-  assert(!('captures' in war),
-    'T4b: rekord wojny NIE MA `captures` — dziś nikt nie wie, co w tej wojnie zmieniło właściciela, ' +
-    'więc stół pokoju nie ma czym handlować (to naprawia WP-1)');
+  assert(Array.isArray(war.captures) && war.captures.length === 0,
+    'T4b (ODWRÓCONE w WP-1): rekord wojny MA księgę zdobyczy i startuje PUSTY — wojna wie, ' +
+    'co w niej zmieniło właściciela, więc stół pokoju (D-WP-1 = a+c) ma czym handlować. ' +
+    'Zachowanie księgi pinuje w całości `wp_captures_ledger_smoke`');
 
   const stored = gameState.get('wars.' + war.id);
   assert(stored && JSON.stringify(Object.keys(stored).sort()) === JSON.stringify(Object.keys(war).sort()),
