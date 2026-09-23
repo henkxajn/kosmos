@@ -228,6 +228,21 @@ export const UNIT_ARCHETYPES = {
   },
 };
 
+// ── Ikony emoji per archetyp (fallback gdy sprite jeszcze ładuje albo brak PNG) ──────────────
+// ⚠ PRZENIESIONE z `GroundUnitPanel.js` (był tam lokalny `const`). Powód: Outliner potrzebuje
+//   tej samej mapy, a `GroundUnitPanel` ciągnie THREE (GlbSnapshotRenderer) — import z panelu
+//   wywróciłby node'owy import Outlinera. Duplikat byłby nieutwardzonym bliźniakiem; ikona jest
+//   cechą archetypu, więc jej dom jest tutaj.
+export const ARCHETYPE_ICONS = {
+  shock_infantry:     '🪖',
+  rocket_artillery:   '🚀',
+  garrison_unit:      '🛡',
+  aa_platform:        '🎯',
+  medic_unit:         '⚕',
+  recon_drone:        '🛰',
+  ground_supply_unit: '📦',
+};
+
 // ── Wymagania gating (Opcja C v3) ────────────────────────────────────────────
 // Barracks Lv + tech required to BUILD each archetype.
 // Używane przez ColonyManager.startGroundUnitBuild() + GroundUnitPanel UI lock overlay.

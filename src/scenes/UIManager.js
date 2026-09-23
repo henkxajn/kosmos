@@ -28,6 +28,8 @@ import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 import { OverlayManager }  from '../ui/OverlayManager.js';
 import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
 import { resolveMapSelectionSurface, resolveVesselPanelAnchor } from '../ui/MapVesselPanelLogic.js';
+import { collectPlayerGroundUnits } from '../ui/OutlinerGroundLogic.js';  // lista jedn. naziemnych — WSZYSTKIE ciała
+import { resolveBodyName }       from '../utils/BodyName.js';
 import { FloatingPanel }        from '../ui/FloatingPanel.js';
 import { EventLogOverlay }    from '../ui/EventLogOverlay.js';
 import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
@@ -2195,21 +2197,18 @@ export class UIManager {
         const v = vMgrOut.getVessel(exp.vesselId);
         return v && v.colonyId === activePid;
       });
-      // Zbierz jednostki naziemne ze wszystkich kolonii.
-      // Outliner pokazuje tylko WŁASNE, ŻYWE jednostki — wrogów widać na mapie,
-      // ale nie chcemy ich na liście gracza (zabite pozostawałyby widoczne).
+      // Jednostki naziemne gracza z KAŻDEGO ciała — także z planet, na których NIE MAM kolonii
+      // (desant). Pętla po `allColonies` (kolonie GRACZA) czyniła oddział desantowy niewidzialnym
+      // dokładnie wtedy, gdy był jedyną rzeczą wymagającą rozkazów; widać go było dopiero po
+      // zdobyciu kolonii. Filtry (wróg / `in_cargo` / martwy) i polityka nazw siedzą w
+      // `OutlinerGroundLogic` — czyste, pinowane WYKONANIEM (ten plik nie importuje się pod node).
       const guMgr = window.KOSMOS?.groundUnitManager;
-      const groundUnits = [];
-      if (guMgr) {
-        for (const col of allColonies) {
-          const units = guMgr.getUnitsOnPlanet(col.planetId);
-          for (const u of units) {
-            if (u.owner && u.owner !== 'player') continue;  // ukryj wrogów
-            if ((u.hp ?? 0) <= 0) continue;                 // ukryj martwych (defensywa)
-            groundUnits.push({ ...u, planetName: col.name });
-          }
-        }
-      }
+      const groundUnits = guMgr
+        ? collectPlayerGroundUnits(guMgr.getAllUnits(), {
+            getColony:   (pid) => colMgr?.getColony?.(pid),
+            getBodyName: resolveBodyName,
+          })
+        : [];
       // Zbierz dane kolejek aktywnej kolonii
       let constructionQueue = [], pendingBuilds = [], pendingShipOrders = [];
       let pendingOutpostOrders = [], factoryQueue = [], factoryAllocations = [];

@@ -14,6 +14,7 @@ import EventBus            from '../core/EventBus.js';
 import { CIV_SIDEBAR_W }  from '../ui/CivPanelDrawer.js';
 import { t }              from '../i18n/i18n.js';
 import { computeFloatingPlacement } from '../ui/BottomContextLogic.js';
+import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { FloatingPanel }  from '../ui/FloatingPanel.js';
 
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;    // 46px
@@ -421,9 +422,27 @@ export class BottomContext {
       return;
     }
     if (civMode && (isHome || colMgr?.hasColony(entity.id))) {
-      if (colMgr) colMgr.switchActiveColony(entity.id);
-      window.KOSMOS?.overlayManager?.openPanel('colony');
-      return;
+      const col = colMgr?.getColony?.(entity.id);
+      if (!col || isPlayerColony(col)) {                 // własne — bez zmian
+        if (colMgr) colMgr.switchActiveColony(entity.id);
+        window.KOSMOS?.overlayManager?.openPanel('colony');
+        return;
+      }
+      // ⚠ CUDZA KOLONIA. Dotąd wpadała w gałąź wyżej i kończyła MYLĄCO: `hasColony` jest dla niej
+      //   `true` (zmierzone), `switchActiveColony` zwraca `false` (bramka własności D1), a gołe
+      //   `openPanel('colony')` spada w `show()` na `activePlanetId` → otwierała się WŁASNA
+      //   kolonia. To udokumentowana „Obserwacja UX z GATE OG-3 §3".
+      // Biletem do powierzchni obcego ciała są WŁASNE BUTY na nim — nie sam fakt istnienia
+      // kolonii. Dzięki temu gracz wraca do desantu klikając planetę na mapie 3D.
+      const gum = window.KOSMOS?.groundUnitManager;
+      const mine = (gum?.getUnitsOnPlanet?.(entity.id) ?? [])
+        .some(u => !u.owner || u.owner === 'player');
+      if (mine) {
+        window.KOSMOS?.overlayManager?.openPanel('colony', { colonyId: entity.id });
+        return;
+      }
+      // Bez moich wojsk — NIE przeskakujemy na własną kolonię. Spadamy do read-only podglądu
+      // niżej (ma własną bramkę `analyzed`, więc dla niezbadanych nie stanie się nic).
     }
     if (civMode && entity.analyzed && entity.type !== 'star') {
       EventBus.emit('planet:previewMap', { planet: entity });

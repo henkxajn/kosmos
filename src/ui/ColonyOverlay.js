@@ -332,8 +332,6 @@ export class ColonyOverlay extends BaseOverlay {
         ? unitIds.filter(id => vessel.groundUnits.includes(id))
         : [...vessel.groundUnits];
 
-      // Zapamiętaj skąd wracać po zakończeniu desantu (zwykle 'fleet').
-      this._dropReturnOverlay = window.KOSMOS?.overlayManager?.active ?? 'fleet';
       this._dropMode = true;
       this._dropVesselId = vesselId;
       this._dropPlanetId = targetId;
@@ -845,24 +843,22 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   /**
-   * Zakończ tryb desantu: wyczyść stan, flash + po 1.5s wróć do poprzedniego overlay'a
-   * (zwykle 'fleet'), żeby gracz mógł kontynuować zarządzanie flotą.
+   * Zakończ tryb desantu: wyczyść stan i ZOSTAW gracza na mapie planety.
+   *
+   * ⚠ BYŁ TU AUTO-POWRÓT do poprzedniego overlaya (`setTimeout(openPanel('fleet'), 1500)`).
+   *   Zamysł („gracz kontynuuje zarządzanie flotą") kłócił się z faktem, że to JEDYNA chwila,
+   *   gdy mapa obcej planety jest otwarta: panel gasł 1,5 s po ostatnim zrzucie, a drogi
+   *   powrotnej nie było ŻADNEJ — Outliner nie widział jednostek na obcym ciele (iterował
+   *   wyłącznie kolonie gracza), a „mapa ciała" przeskakiwała na kolonię gracza. Desant kończył
+   *   się utratą dowodzenia nad desantem. Wyjście z panelu: ✕ albo Esc (drugi Esc — pierwszy
+   *   anuluje sam tryb zrzutu).
    */
-  _finishDropMode(flashMsg = '⚔ Desant zakończony') {
+  _finishDropMode(flashMsg = t('drop.finished')) {
     this._dropMode = false;
     this._dropVesselId = null;
     this._dropPlanetId = null;
     this._dropQueue = [];
     this._showFlash(flashMsg);
-
-    const returnTo = this._dropReturnOverlay;
-    this._dropReturnOverlay = null;
-    if (returnTo && returnTo !== 'colony') {
-      setTimeout(() => {
-        const om = window.KOSMOS?.overlayManager;
-        if (om) om.openPanel(returnTo);
-      }, 1500);
-    }
   }
 
   /**
@@ -4690,7 +4686,7 @@ export class ColonyOverlay extends BaseOverlay {
         if (this._dropQueue.length > 0) {
           this._showDropPrompt();
         } else {
-          this._finishDropMode('⚔ Desant zakończony');
+          this._finishDropMode(t('drop.finished'));
         }
         return true;
       }
@@ -5600,7 +5596,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (key === 'Escape') {
       // Priorytet: anuluj tryby specjalne zamiast zamykać overlay
-      if (this._dropMode)    { this._finishDropMode('⚔ Desant anulowany'); return true; }
+      if (this._dropMode)    { this._finishDropMode(t('drop.cancelled')); return true; }
       if (this._strikeMode)  { this._strikeMode = false; this._strikeVesselId = null; this._strikePlanetId = null; this._showFlash('💥 Ostrzał anulowany'); return true; }
       if (this._supportMode) { this._supportMode = false; this._supportSourceUnitId = null; this._showFlash('🎯 Wybór wsparcia anulowany'); return true; }
       if (this._landingMode) { this._landingMode = false; this._landingVesselId = null; this._showFlash('🤖 Away Team anulowany'); return true; }

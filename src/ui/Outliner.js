@@ -17,6 +17,10 @@ import { t, getName }     from '../i18n/i18n.js';
 import { resolveBodyName } from '../utils/BodyName.js';
 import { isSystemExploredData } from '../utils/SystemExploration.js';
 import { VESSEL_STATUS_TOKENS, resolveVesselStatus } from '../utils/VesselStatus.js';
+import { isPlayerColony }  from '../utils/ColonyOwnership.js';
+import { ARCHETYPE_ICONS } from '../data/unitArchetypes.js';
+import { GROUND_UNITS }    from '../data/GroundUnitData.js';
+import { groupGroundUnitsByBody } from './OutlinerGroundLogic.js';
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
@@ -86,6 +90,7 @@ export class Outliner {
     this._hoveredColonyId = null;
     this._hoveredVesselId = null;
     this._hoveredGroundUnitId = null;
+    this._hoveredGroundBodyId = null;   // sub-nagłówek ciała w sekcji JEDN. NAZIEMNE
     this._hoveredStationId = null;
     this._colonyTooltip   = null;
     this._tooltipX        = 0;
@@ -546,37 +551,59 @@ export class Outliner {
         return ITEM_H;
       }
 
+      // Grupowanie po CIELE (wzór sekcji FLOTA, która grupuje po stanie). Ciało jest osobnym,
+      // KLIKALNYM wierszem — dla planety obcej to jedyne wejście do mapy, na której stoją moje
+      // oddziały. Zwalnia to też prawą kolumnę: nazwa jednostki dostaje pełne 150 px zamiast
+      // dzielić je z 6-znakowym skrótem nazwy planety.
       let dy = 0;
-      for (const unit of groundUnits) {
-        const iy = startY + dy;
-        const icon = unit.type === 'science_rover' ? '🤖' : '🔧';
-        const statusIco = unit.status === 'moving' ? '→'
-                        : unit.status === 'scanning' ? '🔍'
-                        : unit.status === 'working' ? '⚙' : '';
-
-        // Hover highlight
-        const isHov = unit.id === this._hoveredGroundUnitId;
-        if (isHov) {
+      const colMgrOut = window.KOSMOS?.colonyManager;
+      const groups = groupGroundUnitsByBody(groundUnits, {
+        isOwnBody: (pid) => { const c = colMgrOut?.getColony?.(pid); return !!c && isPlayerColony(c); },
+      });
+      for (const g of groups) {
+        // Sub-nagłówek: ciało + licznik (klik → mapa TEGO ciała)
+        const hy = startY + dy;
+        const isHovBody = g.planetId === this._hoveredGroundBodyId;
+        if (isHovBody) {
           ctx.fillStyle = THEME.accentDim;
-          ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
+          ctx.fillRect(x, hy, OUTLINER_W, SECTION_HDR_H - 2);
         }
-
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = isHov ? C.bright : C.text;
-        const label = _truncate(t(`groundUnit.${unit.type}`) ?? unit.type, 10);
-        ctx.fillText(`${icon} ${statusIco}${label}`, x + PAD, iy + 14);
-
-        // Nazwa planety po prawej
-        ctx.fillStyle = C.label;
-        ctx.textAlign = 'right';
-        ctx.fillText(_truncate(unit.planetName ?? '', 6), x + OUTLINER_W - PAD, iy + 14);
-        ctx.textAlign = 'left';
-
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = isHovBody ? C.bright : C.label;
+        ctx.fillText(`${_truncate(g.planetName, 17)} (${g.units.length})`, x + PAD, hy + 12);
         this._clickTargets.push({
-          type: 'groundUnit', unitId: unit.id, planetId: unit.planetId,
-          x, y: iy, w: OUTLINER_W, h: ITEM_H,
+          type: 'groundBody', planetId: g.planetId,
+          x, y: hy, w: OUTLINER_W, h: SECTION_HDR_H - 2,
         });
-        dy += ITEM_H;
+        dy += SECTION_HDR_H - 2;
+
+        for (const unit of g.units) {
+          const iy = startY + dy;
+          // Ikona: archetyp (dane) → legacy (dane) → fallback. `unit.type` to dla archetypów
+          // `archetypeId` (LEGACY MIRROR w GroundUnitFactory), więc jedna mapa obsługuje oba.
+          const icon = ARCHETYPE_ICONS[unit.type] ?? GROUND_UNITS[unit.type]?.icon ?? '🪖';
+          const statusIco = unit.status === 'moving' ? '→'
+                          : unit.status === 'scanning' ? '🔍'
+                          : unit.status === 'working' ? '⚙' : '';
+
+          // Hover highlight
+          const isHov = unit.id === this._hoveredGroundUnitId;
+          if (isHov) {
+            ctx.fillStyle = THEME.accentDim;
+            ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
+          }
+
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = isHov ? C.bright : C.text;
+          const label = _truncate(t(`groundUnit.${unit.type}`), 15);
+          ctx.fillText(`${icon} ${statusIco}${label}`, x + PAD, iy + 14);
+
+          this._clickTargets.push({
+            type: 'groundUnit', unitId: unit.id, planetId: unit.planetId,
+            x, y: iy, w: OUTLINER_W, h: ITEM_H,
+          });
+          dy += ITEM_H;
+        }
       }
       return Math.max(ITEM_H, dy);
     });
@@ -744,14 +771,20 @@ export class Outliner {
           }
           return true;
         }
-        if (t.type === 'groundUnit') {
-          // Przełącz na kolonię jednostki i otwórz ColonyOverlay z zaznaczeniem jednostki
+        if (t.type === 'groundUnit' || t.type === 'groundBody') {
+          // Otwórz mapę TEGO ciała (i zaznacz jednostkę, gdy klik był w jej wiersz).
+          // ⚠ BYŁO: `switchActiveColony(planetId)` + `openPanel('colony')` BEZ id. Po bramce
+          //   własności D1 `switchActiveColony` dla koloni AI zwraca `false` (zmierzone), a gołe
+          //   `openPanel` spada w `show()` na `activePlanetId` → otwierała się WŁASNA kolonia.
+          //   Ta sama klasa co „Obserwacja UX z GATE OG-3 §3".
+          // Panel obcej planety jest ZAPROJEKTOWANY (`ColonyOverlay._openAsColonyPanel`), a rozkaz
+          // ruchu bramkuje po `unit.owner`, nie po właścicielu kolonii (`GameScene:5427`) — więc
+          // dowodzenie desantem na cudzym terenie działa, brakowało tylko drogi powrotnej.
           const colMgr = window.KOSMOS?.colonyManager;
-          if (colMgr) colMgr.switchActiveColony(t.planetId);
-          const om = window.KOSMOS?.overlayManager;
-          if (om) om.openPanel('colony');
-          // Zaznacz jednostkę w ColonyOverlay
-          EventBus.emit('groundUnit:select', { unitId: t.unitId });
+          const col = colMgr?.getColony?.(t.planetId);
+          if (col && isPlayerColony(col)) colMgr.switchActiveColony(t.planetId);  // własna → HUD też
+          window.KOSMOS?.overlayManager?.openPanel('colony', { colonyId: t.planetId });
+          if (t.unitId) EventBus.emit('groundUnit:select', { unitId: t.unitId });
           return true;
         }
       }
@@ -824,12 +857,14 @@ export class Outliner {
     if (mx < ox || my < CHIP_CLEAR_H || my > H - BOTTOM_RESERVED) {
       this._hoveredColonyId = null;
       this._hoveredGroundUnitId = null;
+      this._hoveredGroundBodyId = null;
       this._hoveredStationId = null;
       this._colonyTooltip = null;
       return;
     }
     let foundVessel = null;
     let foundGroundUnit = null;
+    let foundGroundBody = null;
     let foundStation = null;
     for (const t of this._clickTargets) {
       if (mx >= t.x && mx <= t.x + t.w && my >= t.y && my <= t.y + t.h) {
@@ -840,6 +875,7 @@ export class Outliner {
           }
           this._hoveredVesselId = null;
           this._hoveredGroundUnitId = null;
+          this._hoveredGroundBodyId = null;
           this._hoveredStationId = null;
           return;
         }
@@ -849,6 +885,9 @@ export class Outliner {
         if (t.type === 'groundUnit') {
           foundGroundUnit = t.unitId;
         }
+        if (t.type === 'groundBody') {
+          foundGroundBody = t.planetId;
+        }
         if (t.type === 'station') {
           foundStation = t.stationId;
         }
@@ -856,6 +895,7 @@ export class Outliner {
     }
     this._hoveredVesselId = foundVessel;
     this._hoveredGroundUnitId = foundGroundUnit;
+    this._hoveredGroundBodyId = foundGroundBody;
     this._hoveredStationId = foundStation;
     this._hoveredColonyId = null;
     this._colonyTooltip = null;

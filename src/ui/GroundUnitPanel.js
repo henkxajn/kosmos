@@ -12,7 +12,7 @@
 //   - EventBus: brak bezpośrednich emitów (manager emituje za nas)
 
 import { THEME }                    from '../config/ThemeConfig.js';
-import { UNIT_ARCHETYPES, checkArchetypeUnlocked, GROUND_UNIT_CAP_EXEMPT } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, checkArchetypeUnlocked, GROUND_UNIT_CAP_EXEMPT, ARCHETYPE_ICONS } from '../data/unitArchetypes.js';
 import { GROUND_ABILITIES }         from '../data/groundAbilities.js';
 import { HUMANITY_UNITS }           from '../data/factions/humanity.js';
 import { GroundUnitFactory }        from '../systems/GroundUnitFactory.js';
@@ -33,15 +33,9 @@ const ACTIONS_H      = 30;
 
 const DEFAULT_ARCHETYPE = 'shock_infantry';
 
-// Emoji fallback icons per archetype (gdy sprite jeszcze ładuje lub brak PNG)
-const ARCHETYPE_ICONS = {
-  shock_infantry:   '🪖',
-  rocket_artillery: '🚀',
-  garrison_unit:    '🛡',
-  aa_platform:      '🎯',
-  medic_unit:       '⚕',
-  recon_drone:      '🛰',
-};
+// Emoji fallback icons per archetype — ŹRÓDŁO: `data/unitArchetypes.js` (ikona jest cechą
+// archetypu). Lokalna kopia zdjęta, żeby Outliner mógł czytać tę samą mapę bez ciągnięcia THREE
+// przez ten plik.
 
 // Ikony statystyk
 const STAT_ICONS = { hp: '❤', ac: '🛡', dmg: '⚔', rng: '🎯', mov: '👣', supply: '📦', org: '🎖', morale: '🔥' };
