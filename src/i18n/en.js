@@ -3505,6 +3505,7 @@ export default {
   'diplo.term.recentRefusal': 'Recent refusal',
   'diplo.term.thirdParty':    'Web of alliances',
   'diplo.term.erraticNoise':  'Unpredictability',
+  'diplo.term.territorialTerms': 'Territorial terms',
   // Reasons for a HARD block (the proposal never reached evaluation).
   // D2/E4 — refusal modal ("why NOT"): first consumer of the acceptance breakdown.
   'diploRefusal.barTitle':       'DIPLOMATIC DISPATCH',
@@ -3530,6 +3531,8 @@ export default {
   'diplo.reject.notAtWar':      'We are not at war',
   'diplo.reject.alreadySigned': 'That treaty is already in force',
   'diplo.reject.natureForbids': 'Our nature does not allow it',
+  'diplo.reject.capitalNotNegotiable':   'We will not cede our capital',
+  'diplo.reject.territoryNotNegotiable': 'You ask for more than we would cede at the table',
 
   'diplo.btn.declareWar':   '⚔ DECLARE WAR',
   'diplo.btn.offerPeace':   '☮ OFFER PEACE',

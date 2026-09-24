@@ -9,8 +9,16 @@
 //    ma być ZIELONY od pierwszego uruchomienia. Czerwony znaczy „ktoś zmienił szew".
 //
 //   T0  kontrola narzędzia — bez niej piny negatywne (T1f, T3a) są jałową zielenią
-//   T1  offer_peace niesie WYŁĄCZNIE {verb, offer:{credits}} — kanału warunków pokoju NIE MA
-//       ⚠ ZŁAMIE TO: WP-2/WP-5 (warunki pokoju = cesja ciał, decyzja D-WP-1 = a+c).
+//   T1  offer_peace NIESIE WARUNKI POKOJU — ⚠ SEKCJA ŚWIADOMIE ODWRÓCONA W WP-2
+//       Do WP-2 brzmiała „kanału warunków pokoju NIE MA" i była pinem BRAKU. WP-2 ten kanał
+//       otworzył (`proposal.terms.cessions` → `ctx.terms`), więc pin przecelowano na nowy
+//       inwariant: kanał ISTNIEJE, jest JEDEN i MIERZALNIE rusza wynikiem.
+//       ZMIERZONE na drzewie WP-2 — stary T1 dawał: ✗T1a ✓T1b ✓T1c ✓T1d ✗T1e ✗T1f.
+//       ⚠ T1b BYŁ WTEDY JAŁOWO ZIELONY i to jest sedno tej korekty: jego fixture
+//       (`{cedeBodies, forcedNap}`) NIE MA pola `cessions`, którego nowy kod szuka, więc
+//       „wynik identyczny" wychodziło nie dlatego, że kanału nie ma, tylko dlatego, że fixture
+//       mówił do niego nie tym słowem. Stary kształt ZOSTAJE — jako KONTROLA JAŁOWOŚCI (T1b-ctl).
+//       Wzór odwracania pinu z powodem: T4 niżej, `deploy_seams` T1/T2/T4.
 //   T2  transferColony i captureColonyForPlayer mają PO JEDNYM produkcyjnym wołającym,
 //       a zdarzenia zmiany rąk PO JEDNYM emitencie
 //       ⚠ ZŁAMIE TO: slice, który doda cesję terytorialną przy stole pokoju (drugi wołający).
@@ -107,9 +115,9 @@ console.log('T0 — kontrola narzędzia: regexy trafiają w syntetyczne pozytywy
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// T1 — offer_peace: kanał WARUNKÓW POKOJU nie istnieje (tylko {verb, offer:{credits}})
+// T1 — offer_peace: kanał WARUNKÓW POKOJU istnieje i jest JEDEN (⚠ odwrócone w WP-2)
 // ════════════════════════════════════════════════════════════════════════════
-console.log('T1 — offer_peace niesie wyłącznie {verb, offer:{credits}}; proposal.terms jest nieczytany');
+console.log('T1 — offer_peace niesie warunki pokoju; proposal.terms.cessions rusza wynikiem');
 {
   GAME_CONFIG.FEATURES.lightDiplomacy = true;
   GAME_CONFIG.FEATURES.diplomacyDecay = false;
@@ -138,16 +146,31 @@ console.log('T1 — offer_peace niesie wyłącznie {verb, offer:{credits}}; prop
   const engine = new AcceptanceEngine();         // ten sam kształt, którego używa gra (leniwy KOSMOS)
   const TERMS  = { cedeBodies: ['h2'], forcedNap: true };   // warunki, jakich chce D-WP-1
 
-  const ctx = engine.buildContext('player', E, { verb: 'offer_peace', terms: TERMS });
-  assert(!('terms' in ctx),
-    'T1a: snapshot silnika NIE MA pola `terms` — `buildContext` przepisuje z propozycji WYŁĄCZNIE ' +
-    '`verb` i `offer`, więc warunki pokoju nie mają dziś JAK dojechać do oceny');
+  // Kształt, którego nowy kod SZUKA. ⚠ Ciało bez kolonii wycenia się na samo
+  // TERRITORIAL_BASE_VALUE — to wystarczy, żeby term ruszył wynikiem.
+  const REAL = { cessions: [{ bodyId: 'h2', fromEmpireId: E, toEmpireId: 'player' }] };
+
+  const ctx = engine.buildContext('player', E, { verb: 'offer_peace', terms: REAL });
+  assert('terms' in ctx && ctx.terms?.cessions?.length === 1 && ctx.terms.cessions[0].bodyId === 'h2',
+    'T1a (⚠ ODWRÓCONE w WP-2): snapshot silnika MA pole `terms` i niesie ROZWIĄZANE cesje — ' +
+    'warunki pokoju dojeżdżają do oceny, czego do WP-2 nie było');
 
   const bare  = engine.evaluateProposal('player', E, { verb: 'offer_peace' });
-  const withT = engine.evaluateProposal('player', E, { verb: 'offer_peace', terms: TERMS });
-  assert(bare.score === withT.score && bare.decision === withT.decision,
-    'T1b: wynik z warunkami i bez warunków jest IDENTYCZNY — `terms` jest dziś kanałem ' +
-    'NIEISTNIEJĄCYM, nie tylko nieważonym');
+  const withT = engine.evaluateProposal('player', E, { verb: 'offer_peace', terms: REAL });
+  assert(withT.score !== bare.score,
+    'T1b (⚠ ODWRÓCONE w WP-2): warunki MIERZALNIE ruszają wynik (' + bare.score + ' → ' +
+    withT.score + ') — kanał nie jest już ani nieistniejący, ani nieważony');
+
+  const withOld = engine.evaluateProposal('player', E, { verb: 'offer_peace', terms: TERMS });
+  assert(withOld.score === bare.score,
+    'T1b-ctl (KONTROLA JAŁOWOŚCI): STARY fixture `{cedeBodies, forcedNap}` NIE rusza wyniku, ' +
+    'bo nie ma pola `cessions` — dlatego pin w dawnym kształcie przechodził po WP-2 na ZIELONO, ' +
+    'nie mierząc niczego. Zostaje tutaj jako dowód, dlaczego trzeba go było przecelować');
+
+  const bareCtx = engine.buildContext('player', E, { verb: 'offer_peace' });
+  assert(bareCtx.terms === null,
+    'T1c2: propozycja BEZ warunków ma `terms === null` — szew jest widoczny, ale nic nie jest ' +
+    'liczone (regresja zero dla wszystkich dzisiejszych wołających)');
 
   const withOffer = engine.evaluateProposal('player', E, { verb: 'offer_peace', offer: { credits: 5000 } });
   assert(withOffer.score !== bare.score,
@@ -160,14 +183,18 @@ console.log('T1 — offer_peace niesie wyłącznie {verb, offer:{credits}}; prop
     'wkład jest zerowy (kontrola: 500 Kr daje wkład dodatni)');
 
   const diplSrc = readClean('systems', 'DiplomacySystem.js');
-  assert(/evaluateProposal\(\s*PLAYER\s*,\s*empireId\s*,\s*\{\s*verb:\s*'offer_peace'\s*\}\s*\)/.test(diplSrc),
-    'T1e (pin ŹRÓDŁOWY): `DiplomacySystem.evaluatePeace` podaje silnikowi DOKŁADNIE ' +
-    "{ verb: 'offer_peace' } — bez oferty i bez warunków");
+  assert(/evaluatePeace\(\s*empireId\s*,\s*terms\s*=\s*null\s*\)/.test(diplSrc)
+    && /evaluateProposal\(\s*PLAYER\s*,\s*empireId\s*,\s*\{\s*verb:\s*'offer_peace'\s*,\s*terms\s*\}\s*\)/.test(diplSrc),
+    'T1e (pin ŹRÓDŁOWY, ⚠ ODWRÓCONY w WP-2): `evaluatePeace(empireId, terms = null)` przekazuje ' +
+    'warunki TĄ SAMĄ propozycją — kanał jest jeden i opcjonalny, więc dotychczasowi wołający ' +
+    'zostają bez zmian');
 
   const termsHits = hitsIn(TERMS_RE);
-  assert(termsHits.length === 0,
-    'T1f (pin ŹRÓDŁOWY): ŻADEN plik produkcyjny nie czyta `proposal.terms` ani `ctx.terms` — ' +
-    'zero czytelników w całym drzewie (znalezione: ' + JSON.stringify(termsHits) + ')');
+  const ALLOWED = ['AcceptanceEngine.js', 'AcceptanceWeightData.js'];
+  assert(termsHits.length > 0 && termsHits.every(h => ALLOWED.includes(h.file)),
+    'T1f (pin ŹRÓDŁOWY, ⚠ ODWRÓCONY w WP-2): czytelnicy `proposal.terms`/`ctx.terms` ISTNIEJĄ ' +
+    'i mieszkają WYŁĄCZNIE w silniku akceptacji oraz w katalogu wag — drugi kanał warunków ' +
+    'pokoju gdziekolwiek indziej ma ten pin zapalić (znalezione: ' + JSON.stringify(termsHits) + ')');
 }
 
 // ════════════════════════════════════════════════════════════════════════════

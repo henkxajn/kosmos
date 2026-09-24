@@ -193,6 +193,17 @@ const TERM_PROBES = {
                    { thirdParty: { isOurAlly: false, alliesOfOurEnemies: 0, atWarWithOurEnemy: 10 } }],
   erratic_noise:  [{ traits: ['erratic'], erraticSeed: 1 }, { traits: ['erratic'], erraticSeed: 7 },
                    { traits: ['erratic'], erraticSeed: 99 }, { traits: ['erratic'], erraticSeed: 12345 }],
+  // WP-2 — skrajne wejścia termu terytorialnego: oddajemy wszystko / dostajemy wszystko.
+  // ⚠ `heldValue: null` jest OBOWIĄZKOWE: to degradacja „brak świata", przy której pre-warunek
+  //   `territorial_ceiling` przepuszcza. Gdyby tu stało `0`, sonda mierzyłaby BLOKADĘ
+  //   (`probeTermImpact` pomija `r.blocked`) i term wyglądałby na bezczynny — dokładnie ta
+  //   pułapka, którą opisuje nagłówek TERM_PROBES, tylko o piętro wyżej.
+  territorial_terms: [
+    { terms: { cessions: [{ bodyId: 'probe', fromEmpireId: 'emp_probe', toEmpireId: 'player',
+                            devValue: 1e6, recaptured: false, capital: false }], heldValue: null } },
+    { terms: { cessions: [{ bodyId: 'probe', fromEmpireId: 'player', toEmpireId: 'emp_probe',
+                            devValue: 1e6, recaptured: false, capital: false }], heldValue: null } },
+  ],
 };
 
 /**

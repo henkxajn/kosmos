@@ -3506,6 +3506,7 @@ export default {
   'diplo.term.recentRefusal': 'Niedawna odmowa',
   'diplo.term.thirdParty':    'Układ sojuszy',
   'diplo.term.erraticNoise':  'Nieobliczalność',
+  'diplo.term.territorialTerms': 'Warunki terytorialne',
   // Powody TWARDEJ blokady (propozycja nie doszła nawet do oceny).
   // D2/E4 — modal odmowy („dlaczego NIE"): pierwszy konsument rozbicia akceptacji.
   'diploRefusal.barTitle':       'KOMUNIKAT DYPLOMATYCZNY',
@@ -3531,6 +3532,8 @@ export default {
   'diplo.reject.notAtWar':      'Nie jesteśmy w stanie wojny',
   'diplo.reject.alreadySigned': 'Taki traktat już obowiązuje',
   'diplo.reject.natureForbids': 'Nasza natura na to nie pozwala',
+  'diplo.reject.capitalNotNegotiable':   'Stolicy nie oddamy',
+  'diplo.reject.territoryNotNegotiable': 'Żądasz więcej, niż oddamy przy stole',
 
   'diplo.btn.declareWar':   '⚔ WYPOWIEDZ WOJNĘ',
   'diplo.btn.offerPeace':   '☮ ZAPROPONUJ POKÓJ',

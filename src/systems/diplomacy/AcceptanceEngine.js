@@ -27,6 +27,8 @@ import {
   ARCHETYPE_WEIGHT_OVERRIDES, OBJECTIVE_WEIGHT_OVERRIDES,
   MEMORY_EVIDENCE_WEIGHTS, THIRD_PARTY_WEIGHTS,
   OFFER_HALF_KR, RECENT_REFUSAL_YEARS, ERRATIC_EPOCH_YEARS, MEMORY_WINDOW,
+  TERRITORIAL_BASE_VALUE, TERRITORIAL_HALF, TERRITORIAL_RECAPTURE_MULT,
+  TERRITORIAL_FATIGUE_RELIEF, TERRITORIAL_MAX_SHARE,
 } from '../../data/AcceptanceWeightData.js';
 import {
   clampUnit, diminishingReturns, noiseUnit, hashStringToInt,
@@ -37,9 +39,16 @@ import {
 import { CASUS_BELLI } from '../../data/CasusBelliData.js';
 // W1-3 — JEDNA formuła przewagi siły, wspólna z doktrynami (czysty util, nie system).
 import { relativePowerRaw } from '../../utils/ThreatMath.js';
+// WP-2 — JEDNA miara rozwoju ciała, wspólna ze strefami wpływów (wariant C planu).
+import { colonyDevScore } from '../../utils/ColonyDevScore.js';
 
 // Środek skali osi osobowości — brak osi / brak imperium ma dawać wkład 0, nie karę.
 const PERSONALITY_NEUTRAL = 0.5;
+
+// WP-2 — id strony GRACZA. Silnik jest SYMETRYCZNY (ocenia i gracz, i AI), więc potrzebuje
+// własnego miejsca na ten literał. DiplomacySystem ma swój PLAYER, ale to FASADA
+// gracz-centryczna — import stamtąd odwróciłby zależność (silnik nie zna fasady).
+const PLAYER_ID = 'player';
 
 // ── Rejestr termów ──────────────────────────────────────────────────────────
 //
@@ -183,6 +192,46 @@ export const TERM_EVALUATORS = {
     if (!Array.isArray(ctx.traits) || !ctx.traits.includes('erratic')) return 0;
     return clampUnit(noiseUnit(ctx.erraticSeed));
   },
+
+  /**
+   * WP-2 — warunki TERYTORIALNE propozycji pokoju. Ile boli to, co zmienia właściciela.
+   *
+   * ⚠ To jest GRADACJA, nie granica. „Czy w ogóle jest na stole" rozstrzygają pre-warunki
+   *   `territorial_capital` / `territorial_ceiling` — rachunek, dlaczego waga tego nie
+   *   uniesie, stoi w nocie katalogu przy tym termie.
+   *
+   * ⚠ CZYSTY: cały odczyt świata (wycena ciał, pula oddawalna, księga zdobyczy) siedzi
+   *   w `_buildTermsContext`. Tutaj jest wyłącznie arytmetyka na gotowym snapshocie —
+   *   dzięki temu telemetria E7 rusza term literałem, bez stawiania świata.
+   *
+   * ⚠ Cesja BEZ stron (`fromEmpireId`/`toEmpireId`) nie liczy się do ŻADNEJ strony.
+   *   Kierunek jest własnością wołającego; zgadywanie go tutaj zamieniłoby błąd wołającego
+   *   w cichą zmianę ceny pokoju.
+   */
+  territorial_terms: (ctx) => {
+    const cessions = ctx.terms?.cessions;
+    if (!Array.isArray(cessions) || cessions.length === 0) return 0;
+
+    const self = ctx.toId;
+    let demand = 0, gain = 0;
+    for (const c of cessions) {
+      // Zwrot ZDOBYCZY liczy się taniej — patrz TERRITORIAL_RECAPTURE_MULT.
+      const v = (Number(c?.devValue) || 0) * (c?.recaptured ? TERRITORIAL_RECAPTURE_MULT : 1);
+      if (c?.fromEmpireId === self)    demand += v;
+      else if (c?.toEmpireId === self) gain   += v;
+    }
+
+    // Ulga wyczerpania: wojna ponad cenę pokoju obniża ODCZUWANĄ cenę cesji. Poniżej ceny
+    // pokoju ulga jest UJEMNA (żądanie boli bardziej) — świadomie, lustro `war_status`.
+    const relief = clampUnit(
+      ((Number(ctx.war?.exhaustionSelf) || 0) - (Number(ctx.war?.peaceCost) || 0)) / 100,
+    ) * TERRITORIAL_FATIGUE_RELIEF;
+
+    return clampUnit(
+      diminishingReturns(gain, TERRITORIAL_HALF)
+      - diminishingReturns(demand * (1 - relief), TERRITORIAL_HALF),
+    );
+  },
 };
 
 // ── Pre-warunki ─────────────────────────────────────────────────────────────
@@ -208,6 +257,50 @@ const PRECONDITION_CHECKS = {
     if (floor.min != null && v < floor.min) return false;
     if (floor.max != null && v > floor.max) return false;
     return true;
+  },
+
+  /**
+   * WP-2 (D-WP-8) — ciało DOMOWE nigdy nie jest na stole. Całe imperium można wziąć
+   * wyłącznie podbojem; przy stole nie ma czego o nie licytować.
+   * Chronimy to, co oceniającemu się ZABIERA — znacznik na ciele płynącym w jego stronę
+   * nie blokuje niczego.
+   */
+  territorial_capital: (ctx) => {
+    const cessions = ctx.terms?.cessions;
+    if (!Array.isArray(cessions) || cessions.length === 0) return true;
+    return !cessions.some(c => c?.capital === true && c?.fromEmpireId === ctx.toId);
+  },
+
+  /**
+   * WP-2 (D-WP-8) — SUFIT CESJI. Oceniający oddaje co najwyżej TERRITORIAL_MAX_SHARE swojej
+   * puli ODDAWALNEJ; żądanie ponad tę część odpada NIEZALEŻNIE od wyczerpania.
+   *
+   * ⚠ `demand_own` liczy WYŁĄCZNIE ciała z puli własnej oceniającego. Zwroty zdobyczy
+   *   wypadają PO OBU STRONACH nierówności (z żądania i z puli) — to jedna zasada, nie dwa
+   *   wyjątki: sufit rządzi wyłącznie WŁASNYM, nie-stołecznym terytorium.
+   *
+   * ⚠ `demand_own === 0` ⇒ sufit NIGDY nie blokuje, także przy pustej puli. Inaczej AI
+   *   sprowadzone do samej stolicy nie mogłoby nawet ODDAĆ tego, co zabrało graczowi.
+   *
+   * ⚠ `heldValue == null` (nierozwiązywalne — brak ColonyManager) PRZEPUSZCZA, a `0`
+   *   (rozwiązane, pusto) BLOKUJE. To NIE jest ta sama wartość: fail-closed przy `null`
+   *   zaciemniłby `probeTermImpact`, który pomija `blocked` i zmierzyłby ten term jako
+   *   bezczynny — czyli przyrząd strojenia wag zacząłby kłamać o działającej mechanice.
+   */
+  territorial_ceiling: (ctx) => {
+    const cessions = ctx.terms?.cessions;
+    if (!Array.isArray(cessions) || cessions.length === 0) return true;
+
+    let demandOwn = 0;
+    for (const c of cessions) {
+      if (c?.fromEmpireId !== ctx.toId || c?.recaptured) continue;
+      demandOwn += Number(c?.devValue) || 0;
+    }
+    if (demandOwn <= 0) return true;
+
+    const held = ctx.terms?.heldValue;
+    if (held == null) return true;
+    return demandOwn <= TERRITORIAL_MAX_SHARE * held;
   },
 };
 
@@ -323,6 +416,10 @@ export class AcceptanceEngine {
 
     const pairRel = rel.getOrNull(fromId, toId);
 
+    // WP-2 — kontekst wojny liczony RAZ: czyta go term `war_status` i (przez `war.warId`)
+    // wycena warunków terytorialnych. Dwa odczyty rozjechałyby się przy pierwszej zmianie.
+    const war = this._buildWarContext(K, fromId, toId);
+
     return {
       verb,
       fromId,
@@ -341,7 +438,8 @@ export class AcceptanceEngine {
 
       proposerAggression: dipl.getReputation?.(fromId)?.aggression ?? 0,
 
-      war:         this._buildWarContext(K, fromId, toId),
+      war,
+      terms:       this._buildTermsContext(K, fromId, toId, proposal, war),
       thirdParty:  this._buildThirdPartyContext(rel, fromId, toId),
       strength:    this._buildStrengthContext(K, fromId, toId),
 
@@ -400,6 +498,107 @@ export class AcceptanceEngine {
       // war.exhaustion jest kluczowane ID STRONY ('player' | empireId), nie rolą.
       exhaustionSelf:  Number(war.exhaustion?.[toId])   || 0,
       exhaustionOther: Number(war.exhaustion?.[fromId]) || 0,
+    };
+  }
+
+  /**
+   * WP-2 — snapshot WARUNKÓW TERYTORIALNYCH propozycji. JEDYNE miejsce, które dla tej
+   * mechaniki dotyka żywych systemów; term i pre-warunki dostają gotowe liczby.
+   *
+   * ⚠ LICZONE WYŁĄCZNIE, GDY PROPOZYCJA NIESIE CESJE. Zwracamy `null` dla każdej
+   *   propozycji bez `terms.cessions` — i to jest cała regresja zero tego slice'u:
+   *   zwykły `offer_peace` nie wykonuje ANI JEDNEGO dodatkowego odczytu świata
+   *   (pinowane licznikami wywołań w keeperze, T9c/T9d).
+   *
+   * Kształt: { cessions: [{ bodyId, fromEmpireId, toEmpireId, devValue, recaptured, capital }],
+   *            heldValue: number|null }
+   *
+   * @returns {Object|null}
+   */
+  _buildTermsContext(K, fromId, toId, proposal, war) {
+    const cessions = proposal?.terms?.cessions;
+    if (!Array.isArray(cessions) || cessions.length === 0) return null;
+
+    const colMgr = K?.colonyManager ?? null;
+    const capitalBodyId = this._capitalBodyIdOf(K, toId);
+    const wasTakenByEvaluator = this._captureResolver(K, war, fromId, toId);
+
+    const devValueOf = (bodyId) =>
+      TERRITORIAL_BASE_VALUE + colonyDevScore(colMgr?.getColony?.(bodyId) ?? null);
+
+    const rows = cessions.map(c => ({
+      bodyId:       c?.bodyId ?? null,
+      fromEmpireId: c?.fromEmpireId ?? null,
+      toEmpireId:   c?.toEmpireId ?? null,
+      devValue:     devValueOf(c?.bodyId),
+      recaptured:   wasTakenByEvaluator(c?.bodyId),
+      capital:      c?.bodyId != null && c?.bodyId === capitalBodyId,
+    }));
+
+    // Pula ODDAWALNA oceniającego (definicja (B) — patrz TERRITORIAL_MAX_SHARE):
+    // jego własne ciała BEZ domu i BEZ tego, co w tej wojnie zabrał proponującemu.
+    const own = this._ownColoniesOf(K, toId);
+    const heldValue = own == null ? null : own.reduce((sum, col) => {
+      const id = col?.planetId;
+      if (id == null || id === capitalBodyId || wasTakenByEvaluator(id)) return sum;
+      return sum + TERRITORIAL_BASE_VALUE + colonyDevScore(col);
+    }, 0);
+
+    return { cessions: rows, heldValue };
+  }
+
+  /**
+   * WP-2 — ciało DOMOWE właściciela. Kanon, nie trzecia definicja:
+   *   AI    → `DirectorProduction.capitalOf` (to samo źródło, co produkcja, doktryny,
+   *           mobilizacja, recall i IntelSystem);
+   *   gracz → `colony.isHomePlanet` (jedyny znacznik domu, jaki gra stawia).
+   *
+   * ⚠ Imperium BEZ rozwiązanej stolicy (same placówki) nie ma ciała chronionego — wszystko
+   *   jest wtedy oddawalne DO SUFITU. Świadome (podpis D-WP-8), nie przeoczenie.
+   */
+  _capitalBodyIdOf(K, ownerId) {
+    if (ownerId === PLAYER_ID) {
+      const cols = K?.colonyManager?.getPlayerColonies?.() ?? null;
+      return cols?.find(c => c?.isHomePlanet)?.planetId ?? null;
+    }
+    return K?.directorProduction?.capitalOf?.(ownerId)?.planetId ?? null;
+  }
+
+  /**
+   * WP-2 — ciała, które oceniający TRZYMA. `null` = nierozwiązywalne (brak ColonyManager),
+   * co JEST czymś innym niż pusta lista — patrz pre-warunek `territorial_ceiling`.
+   */
+  _ownColoniesOf(K, ownerId) {
+    const colMgr = K?.colonyManager;
+    if (!colMgr) return null;
+    if (ownerId === PLAYER_ID) return colMgr.getPlayerColonies?.() ?? null;
+    return K?.empireRegistry?.getColoniesByEmpire?.(ownerId) ?? null;
+  }
+
+  /**
+   * WP-2 — predykat „czy OCENIAJĄCY zdobył to ciało na PROPONUJĄCYM w tej wojnie".
+   *
+   * ⚠ ROZSTRZYGA OSTATNI WPIS KSIĘGI, NIE JAKIKOLWIEK. `WarSystem` mówi to wprost:
+   *   księga `captures` jest append-only BEZ deduplikacji i ma być HISTORIĄ, a nie
+   *   migawką — „inaczej stół pokoju nie odróżni «oddaj, co zdobyłeś» od «oddaj, co właśnie
+   *   odbiłem»". Ciało, które zmieniło ręce dwa razy, ma dwa wpisy: `some()` odpowiedziałoby
+   *   `true` także wtedy, gdy oceniający już go NIE trzyma.
+   *
+   * ⚠ `getCaptures` przez `?.` — atrapy `warSystem` w testach nie mają tej metody
+   *   (dwie w repo) i mają degradować do pustej księgi, a nie wywalać oceny.
+   */
+  _captureResolver(K, war, fromId, toId) {
+    const warId = war?.warId ?? null;
+    const captures = warId ? (K?.warSystem?.getCaptures?.(warId) ?? []) : [];
+    if (!Array.isArray(captures) || captures.length === 0) return () => false;
+    return (bodyId) => {
+      if (bodyId == null) return false;
+      for (let i = captures.length - 1; i >= 0; i--) {
+        const e = captures[i];
+        if (e?.bodyId !== bodyId) continue;
+        return e.toEmpireId === toId && e.fromEmpireId === fromId;
+      }
+      return false;
     };
   }
 

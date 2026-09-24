@@ -16,6 +16,11 @@ import { ARCHETYPES } from '../data/EmpireData.js';
 // kanonu poza systemy — to była cała treść ograniczenia 1 z D6.
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 
+// WP-2 — wzór rozwoju wyprowadzony z tej pętli do wspólnego helpera. Powód: stół pokoju
+// wycenia tym samym rozwojem ciała, które zmienia właściciela, a druga kopia wzoru
+// rozjechałaby strefę wpływów z ceną kolonii. Pin równości WYKONANIOWEJ: keeper WP-2 T14c.
+import { colonyDevScore } from '../utils/ColonyDevScore.js';
+
 // devScore dla samej stacji (posterunek bez kolonii) — stały, niski.
 const STATION_DEV_SCORE = 1;
 
@@ -79,7 +84,7 @@ export class TerritoryService {
       const systemId = c.systemId ?? 'sys_home';
       const owner = isPlayerColony(c) ? 'player' : c.ownerEmpireId;
       const kind  = c.isOutpost ? 'outpost' : 'colony';
-      const dev   = (c.civSystem?.population ?? 0) + (c.buildingSystem?._active?.size ?? 0);
+      const dev   = colonyDevScore(c);
       let rec = idx.get(systemId);
       if (!rec) {
         idx.set(systemId, { owner, kind, devScore: dev, colonyIds: [c.planetId] });

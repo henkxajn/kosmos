@@ -168,7 +168,7 @@ console.log('--- T4: sonda wrażliwości termów (Decyzja 2 fazy) ---');
   // ZDJĘTY w E5 (rzut cechy w EmpireGenerator) — oba są LIVE. Sonda dalej je rusza; pilnuje
   // ich asercja wyżej („termy DZIAŁAJĄCE dają się ruszyć"). Lista trzyma już tylko K-2/K-4/K-5.
   ok('termy bez paliwa LICZĄ poprawnie — to jest treść markerów K-2/K-4/K-5',
-    ['reputation', 'offer', 'third_party']
+    ['reputation', 'offer', 'third_party', 'territorial_terms']
       .every(id => PROBE[id].maxAbs > 0 && ACCEPTANCE_TERMS[id].status !== TERM_STATUS.LIVE));
   // Rozróżnienie „nie da się ruszyć" vs „brak paliwa" pozostaje sednem przyrządu — zmienia się
   // tylko OKAZ. Po W1-3 `relative_power` nie jest już przykładem pierwszej kategorii (rusza się

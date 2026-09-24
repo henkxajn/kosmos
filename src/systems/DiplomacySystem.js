@@ -90,6 +90,10 @@ const REJECT_REASON_BY_KEY = {
   'diplo.reject.atWar':         'at_war',
   'diplo.reject.notAtWar':      'not_at_war',
   'diplo.reject.natureForbids': 'nature_forbids',
+  // WP-2 — dwa powody terytorialne. Bez wiersza tutaj nowa blokada meldowałaby się
+  // słuchaczom jako generyczne 'blocked' i gracz nie wiedziałby, CO odrzucono.
+  'diplo.reject.capitalNotNegotiable':   'capital_not_negotiable',
+  'diplo.reject.territoryNotNegotiable': 'territory_not_negotiable',
 };
 
 export class DiplomacySystem {
@@ -342,9 +346,17 @@ export class DiplomacySystem {
    * w kodzie ANI JEDNEGO czytelnika. Casus belli wybrał `inferCasusBelli` z okna
    * CB_MEMORY_WINDOW pamięci relacji (D1/C-3), więc cena pokoju wynika z tego,
    * co się między nami DZIAŁO, a nie z parametru wojny wziętego znikąd.
+   *
+   * WP-2 — `terms` to WARUNKI propozycji ({ cessions: [{ bodyId, fromEmpireId, toEmpireId }] }).
+   * Parametr jest OPCJONALNY i domyślnie `null`, więc wszyscy dotychczasowi wołający zostają
+   * bez zmian, a silnik dla propozycji bez cesji nie wykonuje ANI JEDNEGO dodatkowego odczytu
+   * świata (regresja zero z konstrukcji — patrz `AcceptanceEngine._buildTermsContext`).
+   *
+   * @param {string} empireId
+   * @param {Object|null} [terms] — warunki terytorialne albo null
    */
-  evaluatePeace(empireId) {
-    return this._acceptance().evaluateProposal(PLAYER, empireId, { verb: 'offer_peace' });
+  evaluatePeace(empireId, terms = null) {
+    return this._acceptance().evaluateProposal(PLAYER, empireId, { verb: 'offer_peace', terms });
   }
 
   /** Ocena przyjęcia delegacji. Cel MOŻE odmówić — pierwszy raz w historii gry. */
@@ -431,6 +443,18 @@ export class DiplomacySystem {
     if (this.getStatus(empireId) !== 'war') return false;
 
     const result = this.evaluatePeace(empireId);
+
+    // WP-2 — BLOKADA PRE-WARUNKU. Lustro `proposeTreaty` (ta sama gałąź, ten sam powód):
+    // blokada NIE jest odmową ocenianą punktami, więc nie stempluje `recent_refusal` ani nie
+    // zapisuje `peace_refused` — nikt nas nie odrzucił, propozycja w ogóle nie doszła do oceny.
+    // ⚠ Do WP-2 ta gałąź BYŁA NIEOSIĄGALNA (jedynym pre-warunkiem pokoju był `at_war`, a wyżej
+    //   stoi wczesny `return` na braku wojny) i dlatego jej BRAK nie bolał. Sufit cesji czyni
+    //   ją osiągalną PO RAZ PIERWSZY — utwardzenie wchodzi w tym samym commicie, co jego powód.
+    if (result.blocked) {
+      EventBus.emit('diplomacy:peaceRejected', { empireId, reason, result, playerInitiated });
+      return false;
+    }
+
     if (!result.decision) {
       this.addMemory(empireId, 'peace_refused', { reason });
       if (playerInitiated) this.noteRefusal(empireId, 'offer_peace');
@@ -498,6 +522,16 @@ export class DiplomacySystem {
         // do zera i całe odblokowanie z W1-3 jest martwe, po cichu. Dokładnie tak się stało
         // przy pierwszym podejściu; złapał to `acceptance_relpower_smoke` T5.
         get threatAssessment(){ return window.KOSMOS?.threatAssessment; },
+        // WP-2 — źródła WARUNKÓW TERYTORIALNYCH: wycena ciał i pula oddawalna
+        // (`colonyManager`) oraz kanon ciała domowego (`directorProduction.capitalOf`).
+        // ⚠ DRUGI RAZ TA SAMA PUŁAPKA, o której ostrzega komentarz wyżej: bez tych dwóch
+        //   wierszy `_buildTermsContext` widzi `undefined`, więc KAŻDE ciało wycenia się na
+        //   samo TERRITORIAL_BASE_VALUE, pula schodzi do `null` (sufit przestaje blokować),
+        //   a stolica przestaje być rozpoznawana — cały D-WP-8 umiera PO CICHU, przy zielonych
+        //   testach czystego silnika. Złapał to keeper WP-2 (T12c/T12d), tak jak W1-3 złapał
+        //   `acceptance_relpower_smoke` T5.
+        get colonyManager()   { return window.KOSMOS?.colonyManager; },
+        get directorProduction(){ return window.KOSMOS?.directorProduction; },
       });
     }
     return this._acceptanceEngine;

@@ -135,6 +135,25 @@ export const ACCEPTANCE_TERMS = {
           'traits[] na puste i E5 tego NIE cofa, więc zapisy sprzed E5 nie mają nieobliczalnych ' +
           'imperiów. Świadome: backfill wymagałby rzutu z seeda, którego stary zapis nie zna.',
   },
+  territorial_terms: {
+    id: 'territorial_terms', labelKey: 'diplo.term.territorialTerms', status: TERM_STATUS.UNFED,
+    unit: '+1 = otrzymujemy nieskończenie dużo terytorium; −1 = oddajemy nieskończenie dużo',
+    note: 'WP-2. Ciała, które przy stole pokoju zmieniają właściciela — wycenione ROZWOJEM ' +
+          '(`ColonyDevScore` = populacja + budynki, plus TERRITORIAL_BASE_VALUE za sam fakt ' +
+          'posiadania ciała), z malejącymi przyrostami (TERRITORIAL_HALF): dziesiąta kolonia boli ' +
+          'mniej niż pierwsza. Zwrot ciała ZDOBYTEGO w tej wojnie kosztuje TERRITORIAL_RECAPTURE_MULT ' +
+          'taniej — oddanie cudzego nie jest tą samą stratą co oddanie własnego. Wyczerpanie daje ' +
+          'ULGĘ (TERRITORIAL_FATIGUE_RELIEF), ale NIE nieograniczoną: „ile oddamy w ogóle" ' +
+          'rozstrzygają PRE-WARUNKI, nie ten term. ' +
+          '⚠ STATUS UNFED do WP-5: kanał `proposal.terms` istnieje w silniku, ale nie karmi go ' +
+          'jeszcze ŻADNE UI. Term liczy poprawnie — wejście jest puste. NIE stroić wag pod niego ' +
+          'przed pojawieniem się stołu pokoju. ' +
+          '⚠ DLACZEGO TO NIE JEST WETO (zmierzone, FAZA A-bis): przy tle 48,50 (exh 100) waga 35 ' +
+          'odejmuje najwyżej 35 punktów, więc nawet NIESKOŃCZONE żądanie kończy się +13,50 ≥ 0. ' +
+          'Weto w termie wymagałoby wagi > 187,6 (dziś osiągalne maksimum tła), a przy > 135,4 ' +
+          'przestaje przechodzić zwykła cesja dojrzałej kolonii — okno jest PUSTE. Dlatego granica ' +
+          '„ile w ogóle" mieszka w PRECONDITIONS.territorial_ceiling, nie w tej wadze.',
+  },
 };
 
 export const ACCEPTANCE_TERM_IDS = Object.keys(ACCEPTANCE_TERMS);
@@ -148,6 +167,14 @@ export const PRECONDITIONS = {
   not_already_signed: { id: 'not_already_signed', reasonKey: 'diplo.reject.alreadySigned' },
   // ⚠ E2 — „nasza natura na to nie pozwala". Patrz `personalityFloor` przy czasownikach.
   personality_floor:  { id: 'personality_floor',  reasonKey: 'diplo.reject.natureForbids' },
+  // ── WP-2 (D-WP-8): „wyczerpanie NIE daje graczowi wszystkiego" ─────────────
+  // Oba są BLOKADAMI, nie termami, i to jest cała treść decyzji: term da się przeważyć sumą,
+  // blokady nie. „Odrzucane NIEZALEŻNIE od wyczerpania" jest w modelu sumacyjnym nieosiągalne
+  // żadną skończoną wagą — rachunek stoi w nocie przy termie `territorial_terms`.
+  // ⚠ KOLEJNOŚĆ w `offer_peace.preconditions` JEST KONTRAKTEM: `checkPreconditions` zwraca
+  //   PIERWSZY warunek, który padł, więc żądanie łamiące oba naraz melduje STOLICĘ.
+  territorial_capital: { id: 'territorial_capital', reasonKey: 'diplo.reject.capitalNotNegotiable' },
+  territorial_ceiling: { id: 'territorial_ceiling', reasonKey: 'diplo.reject.territoryNotNegotiable' },
 };
 
 // ── Czasowniki ──────────────────────────────────────────────────────────────
@@ -241,12 +268,13 @@ export const VERB_ACCEPTANCE = {
   offer_peace: {
     id: 'offer_peace',
     threshold: 0,
-    preconditions: ['at_war'],
+    // ⚠ WP-2: `territorial_capital` PRZED `territorial_ceiling` — patrz nota w PRECONDITIONS.
+    preconditions: ['at_war', 'territorial_capital', 'territorial_ceiling'],
     personalityAxes: { aggression: -1 },
     terms: {
       war_status: 55, opinion: 20, personality: 25, tension: +10, memory: 15,
       reputation: 10, third_party: 10, recent_refusal: 20, offer: 25, relative_power: 30,
-      erratic_noise: 15,
+      erratic_noise: 15, territorial_terms: 35,
     },
   },
 
@@ -331,6 +359,35 @@ export const OBJECTIVE_WEIGHT_OVERRIDES = {
 };
 
 // ── Skala i stałe strojenia ─────────────────────────────────────────────────
+
+// ── WP-2 — warunki terytorialne pokoju (D-WP-2 + D-WP-8) ────────────────────
+//
+// ⚠ TE LICZBY SĄ ZMIERZONE I PODPISANE, nie dobrane na oko (FAZA A-bis, sondy poza repo).
+// Wartość ciała = BASE + devScore (`ColonyDevScore`); dojrzała stolica ≈ 195 ⇒ devValue ≈ 197.
+
+// Ile warte jest SAMO posiadanie ciała, niezależnie od rozwoju (goła skała ≠ nic).
+export const TERRITORIAL_BASE_VALUE = 2;
+
+// Wartość terytorium dająca POŁOWĘ maksymalnego wkładu (malejące przyrosty, jak OFFER_HALF_KR).
+// 200 ≈ jedna dojrzała kolonia — pierwsza kolonia boli „pół skali", a nie całą.
+export const TERRITORIAL_HALF = 200;
+
+// Mnożnik dla ciała ZDOBYTEGO przez oceniającego w TEJ wojnie: oddanie cudzego nie jest
+// tą samą stratą co oddanie własnego.
+export const TERRITORIAL_RECAPTURE_MULT = 0.5;
+
+// Ile wyczerpanie PONAD cenę pokoju obniża odczuwaną cenę cesji (ułamek, nie całość).
+export const TERRITORIAL_FATIGUE_RELIEF = 0.5;
+
+// SUFIT CESJI (D-WP-8): jaką część swojej puli ODDAWALNEJ oceniający jest gotów oddać przy
+// stole. Pula oddawalna = jego własne ciała BEZ ciała domowego i BEZ ciał zdobytych w tej
+// wojnie na proponującym (zwrot zdobyczy nie jest cesją terytorium).
+//
+// ⚠ DEFINICJA PULI JEST CZĘŚCIĄ TEJ LICZBY. Wariant „wszystko, co trzyma" ZMIERZONO
+//   i ODRZUCONO: stolica oraz ciała zabrane graczowi pompowały sufit, więc im większa stolica
+//   AI i im więcej zabrało, tym WIĘCEJ jego kolonii dało się wziąć przy stole — przy 0,5
+//   przechodziło CAŁE terytorium poza stolicą, czyli sufit nie robił nic.
+export const TERRITORIAL_MAX_SHARE = 0.5;
 
 // Ile kredytów daje POŁOWĘ maksymalnego wkładu termu `offer` (malejące przyrosty).
 export const OFFER_HALF_KR = 500;
