@@ -3608,6 +3608,10 @@ export default {
   'peaceTable.clear':            'Clear table',
   'peaceTable.hint':             'Click a body to add it to the terms',
 
+  // === Occupation badge (WP-4 C2) — read from the active war's capture ledger ===
+  'body.occupied':               '🏴 Occupied',
+  'body.occupiedBy':             '🏴 Occupied by {0}',
+
   // === SaveFile — save/load a file on the player's disk ===
   'saveFile.confirmLoadTitle': 'Load save from file?',
   'saveFile.confirmLoadMsg':   'The current game will be replaced by the save from the file, and the game will reload.\n\nA copy of the current state will be kept as a backup.',

@@ -3609,6 +3609,10 @@ export default {
   'peaceTable.clear':            'Wyczyść stół',
   'peaceTable.hint':             'Kliknij ciało, aby dodać je do warunków',
 
+  // === Odznaka okupacji (WP-4 C2) — czytana z księgi zdobyczy aktywnej wojny ===
+  'body.occupied':               '🏴 Okupowana',
+  'body.occupiedBy':             '🏴 Okupowana przez {0}',
+
   // === SaveFile — zapis/odczyt pliku na dysku gracza ===
   'saveFile.confirmLoadTitle': 'Wczytać zapis z pliku?',
   'saveFile.confirmLoadMsg':   'Bieżąca gra zostanie zastąpiona zapisem z pliku, a gra przeładowana.\n\nKopia bieżącego stanu trafi do kopii zapasowej.',

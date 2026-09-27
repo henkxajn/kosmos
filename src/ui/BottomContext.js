@@ -15,6 +15,7 @@ import { CIV_SIDEBAR_W }  from '../ui/CivPanelDrawer.js';
 import { t }              from '../i18n/i18n.js';
 import { computeFloatingPlacement } from '../ui/BottomContextLogic.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
+import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { FloatingPanel }  from '../ui/FloatingPanel.js';
 
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;    // 46px
@@ -321,7 +322,30 @@ export class BottomContext {
   }
 
   // ── Linie informacyjne (bez zmian względem starego panelu) ──
+  /**
+   * WP-4 C2 — wiersze karty z odznaką okupacji NA SZCZYCIE. Osobny wrapper, bo `_getInfoLinesRaw`
+   * ma wczesne `return` w każdej zakładce; wstawianie odznaki w każdej gałęzi byłoby czterema
+   * kopiami tej samej decyzji.
+   */
   _getInfoLines(entity) {
+    const occ = this._occupationLine(entity);
+    const rows = this._getInfoLinesRaw(entity);
+    return occ ? [occ, ...rows] : rows;
+  }
+
+  /**
+   * Odznaka „Okupowana" — stan NADRZĘDNY nad orbitą i składem, bo mówi, że posiadanie jest
+   * wynikiem trwającej wojny. Reguła mieszka w `OccupationLedger` (jeden kanon dla tej karty
+   * i tooltipa mapy 3D); tutaj jest wyłącznie prezentacja.
+   */
+  _occupationLine(entity) {
+    const who = readOccupier(entity?.id);
+    if (!who) return null;
+    const label = readOccupierName(who, t('warOverlay.player')) ?? '???';
+    return { k: t('body.occupied'), v: label, c: C.orange, vc: C.orange };
+  }
+
+  _getInfoLinesRaw(entity) {
     const tab = this._tab;
 
     // Gwiazda — specjalne info (brak zakładek orbit/physics/composition)

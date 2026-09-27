@@ -41,6 +41,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
+import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
@@ -3355,6 +3356,22 @@ export class ThreeRenderer {
     const freePops = Math.floor(civ?.freePops ?? 0);   // getter netuje syntetyki + locki (Faza 4 fix)
 
     let html = `<b>${colony.planet?.name ?? entityId}</b>`;
+
+    // WP-4 C2 — ODZNAKA OKUPACJI. Reguła z kanonu `OccupationLedger` (ten sam, który czyta
+    // karta ciała), więc obie powierzchnie nie mogą się rozjechać. ⚠ Sama odznaka idzie przez
+    // słownik; reszta tego tooltipa zostaje po polsku — klasa 113, precedens Findingu 269.
+    //
+    // ⚠ ZAKRES: to jest tooltip KOLONIJNY, czyli w praktyce kolonie GRACZA. Obce ciało (np.
+    //   kolonia oddana imperium) dostaje na mapie INNY tooltip — PLANETARNY, osobną ścieżką
+    //   i z angielskim na sztywno — i ten świadomie NIE ma tej wstawki (decyzja właściciela
+    //   na gate'cie C1+C2, zapisana w rejestrze obok F-b). Okupację obcych ciał pokazuje
+    //   KARTA ciała (`BottomContext._occupationLine`). Brak odznaki w tooltipie planetarnym
+    //   NIE jest defektem tej wstawki — to nazwany zakres.
+    const occupier = readOccupier(entityId);
+    if (occupier) {
+      const occName = readOccupierName(occupier, t('warOverlay.player')) ?? '???';
+      html += `<br><b style="color:#D8A030">${t('body.occupiedBy', occName)}</b>`;
+    }
     html += `<br>👤 POP: ${pop}/${housing} (wolne: ${freePops})`;
 
     // Lista budynków
