@@ -35,7 +35,7 @@ import { RelationsModel } from './diplomacy/RelationsModel.js';
 import { ReputationLedger } from './diplomacy/ReputationLedger.js';
 import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
 import { visibleBreakdown } from '../utils/AcceptanceMath.js';
-import { RECENT_REFUSAL_YEARS } from '../data/AcceptanceWeightData.js';
+import { RECENT_REFUSAL_YEARS, TERRITORIAL_MAX_SHARE } from '../data/AcceptanceWeightData.js';
 // WP-3 — czysta re-walidacja warunków pokoju (zero importów, świat wstrzykiwany).
 import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
@@ -414,6 +414,85 @@ export class DiplomacySystem {
    */
   getVisibleBreakdown(result) {
     return visibleBreakdown(result?.breakdown ?? []);
+  }
+
+  /**
+   * WP-4 (C1) — PROJEKCJA STOŁU POKOJU dla panelu Wojny: co da się ZAŻĄDAĆ, co da się
+   * ZAOFEROWAĆ, ile to warte i gdzie stoi sufit. Lustro `getVisibleBreakdown`: panel nie
+   * importuje silnika, a decyzja „ile co jest warte" zostaje w jednym miejscu.
+   *
+   * ⚠ ISTNIEJE Z POWODU PINU P14, nie z wygody. `acceptance_engine_smoke` trzyma import
+   *   `Acceptance*` — RÓWNIEŻ `AcceptanceWeightData.js` — wyłącznie w tym pliku. Panel nie
+   *   może więc ani zaimportować `TERRITORIAL_BASE_VALUE`, ani policzyć `colonyDevScore`:
+   *   pierwsze łamie pin, drugie tworzy DRUGĄ definicję wyceny obok silnika.
+   *
+   * ⚠ WYCENA NIE JEST TU LICZONA. Budujemy propozycję ze WSZYSTKICH kandydujących ciał
+   *   i czytamy gotowy snapshot `_buildTermsContext` (`ctx.terms`) — ten sam, którym ocenia
+   *   się realną propozycję. Dzięki temu „ile to boli" i „co widzi gracz" nie mogą się
+   *   rozjechać (keeper T1 pinuje to RÓWNOŚCIĄ WYKONANIOWĄ, nie obietnicą).
+   *
+   * ⚠ DWA ŹRÓDŁA ZNACZNIKA `capital`, i to jest konieczne: silnik liczy `capital` wyłącznie
+   *   wobec OCENIAJĄCEGO (`_capitalBodyIdOf(K, toId)`), więc dla ciał GRACZA wracałoby zawsze
+   *   `false`. Dom gracza bierzemy z `colony.isHomePlanet` — tego SAMEGO pola, którym kanon
+   *   silnika rozwiązuje dom gracza. Jedno pole, dwie ścieżki odczytu, nie dwie definicje.
+   *
+   * ⚠ `countsToCeiling` to LUSTRO pre-warunku `territorial_ceiling` (własne, nie-odbite ciała
+   *   oceniającego). Panel sumuje tę flagę i NIE zna reguły; keeper T3 pinuje równoważność
+   *   „suma > ceiling ⟺ blokada `territoryNotNegotiable`", więc zmiana reguły w silniku
+   *   zapala czerwone światło tutaj, a nie po cichu rozjeżdża pasek w UI.
+   *
+   * ⚠ KOSZTOWNE (czyta kolonie, księgę zdobyczy, opinię, siłę) — wołający MUSI cache'ować.
+   *   `WarOverlay` przelicza przy otwarciu / zmianie wojny / zmianie zaznaczenia / roku ≥ 1,
+   *   NIGDY w `draw()`.
+   *
+   * @param {string} empireId
+   * @returns {{ demand: Array, offer: Array, heldValue: number|null, ceiling: number|null }}
+   */
+  getPeaceTable(empireId) {
+    const K = window.KOSMOS;
+    const colMgr = K?.colonyManager;
+    const reg = K?.empireRegistry;
+    const empty = { demand: [], offer: [], heldValue: null, ceiling: null };
+    if (!colMgr || !reg || !empireId) return empty;
+
+    const aiCols = reg.getColoniesByEmpire?.(empireId) ?? [];
+    const plCols = colMgr.getPlayerColonies?.() ?? [];
+    const aiIds = aiCols.map(c => c?.planetId).filter(Boolean);
+    const plIds = plCols.map(c => c?.planetId).filter(Boolean);
+    if (aiIds.length === 0 && plIds.length === 0) return empty;
+
+    const cessions = [
+      ...aiIds.map(bodyId => ({ bodyId, fromEmpireId: empireId, toEmpireId: PLAYER })),
+      ...plIds.map(bodyId => ({ bodyId, fromEmpireId: PLAYER, toEmpireId: empireId })),
+    ];
+    const ctx = this._acceptance().buildContext(PLAYER, empireId, { verb: 'offer_peace', terms: { cessions } });
+    const rows = ctx?.terms?.cessions ?? [];
+    const heldValue = ctx?.terms?.heldValue ?? null;
+    const playerHomeId = plCols.find(c => c?.isHomePlanet)?.planetId ?? null;
+
+    // Nazwa: WŁASNE ciało nazywa się kolonią gracza, CUDZE — samym ciałem. Nie pokazujemy
+    // graczowi nazwy, którą wróg nadał swojej koloni (ta sama polityka co odznaki na mapie).
+    const nameOf = (bodyId, own) => (own ? colMgr.getColony?.(bodyId)?.name : null)
+      ?? EntityManager.get(bodyId)?.name ?? bodyId;
+
+    const decorate = (r) => {
+      const own = r.fromEmpireId === PLAYER;
+      return {
+        bodyId:          r.bodyId,
+        name:            nameOf(r.bodyId, own),
+        devValue:        r.devValue,
+        capital:         own ? (r.bodyId != null && r.bodyId === playerHomeId) : r.capital === true,
+        recaptured:      r.recaptured === true,
+        countsToCeiling: !own && r.recaptured !== true,
+      };
+    };
+
+    return {
+      demand:    rows.filter(r => r.fromEmpireId === empireId).map(decorate),
+      offer:     rows.filter(r => r.fromEmpireId === PLAYER).map(decorate),
+      heldValue,
+      ceiling:   heldValue == null ? null : TERRITORIAL_MAX_SHARE * heldValue,
+    };
   }
 
   /**

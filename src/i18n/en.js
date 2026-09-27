@@ -3595,6 +3595,19 @@ export default {
   'warOverlay.btnForceBattle':   '⚡ FORCE BATTLE (debug)',
   'warOverlay.btnForceInvasion': '🪖 FORCE INVASION (debug — skips space battle)',
 
+  // === Peace table (WP-4 C1) — territorial terms of a proposal ===
+  'peaceTable.title':            'Peace table',
+  'peaceTable.demand':           'DEMAND',
+  'peaceTable.offer':            'OFFER',
+  'peaceTable.capitalLocked':    'Capital — not negotiable',
+  'peaceTable.ceiling':          'Demand: {0} / cap {1}',
+  'peaceTable.ceilingExceeded':  'Above cap — they will refuse',
+  'peaceTable.recaptured':       'taken from you — cheaper',
+  'peaceTable.empty':            'Empty table = peace without terms',
+  'peaceTable.devValue':         'Value: {0}',
+  'peaceTable.clear':            'Clear table',
+  'peaceTable.hint':             'Click a body to add it to the terms',
+
   // === SaveFile — save/load a file on the player's disk ===
   'saveFile.confirmLoadTitle': 'Load save from file?',
   'saveFile.confirmLoadMsg':   'The current game will be replaced by the save from the file, and the game will reload.\n\nA copy of the current state will be kept as a backup.',

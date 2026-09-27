@@ -3596,6 +3596,19 @@ export default {
   'warOverlay.btnForceBattle':   '⚡ WYMUŚ STARCIE (debug)',
   'warOverlay.btnForceInvasion': '🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)',
 
+  // === Stół pokoju (WP-4 C1) — warunki terytorialne propozycji ===
+  'peaceTable.title':            'Stół pokoju',
+  'peaceTable.demand':           'ŻĄDAM',
+  'peaceTable.offer':            'OFERUJĘ',
+  'peaceTable.capitalLocked':    'Stolica — nie podlega negocjacji',
+  'peaceTable.ceiling':          'Żądanie: {0} / sufit {1}',
+  'peaceTable.ceilingExceeded':  'Ponad sufit — odmówią',
+  'peaceTable.recaptured':       'zdobyte na tobie — taniej',
+  'peaceTable.empty':            'Pusty stół = pokój bez warunków',
+  'peaceTable.devValue':         'Wartość: {0}',
+  'peaceTable.clear':            'Wyczyść stół',
+  'peaceTable.hint':             'Kliknij ciało, aby dodać je do warunków',
+
   // === SaveFile — zapis/odczyt pliku na dysku gracza ===
   'saveFile.confirmLoadTitle': 'Wczytać zapis z pliku?',
   'saveFile.confirmLoadMsg':   'Bieżąca gra zostanie zastąpiona zapisem z pliku, a gra przeładowana.\n\nKopia bieżącego stanu trafi do kopii zapasowej.',
