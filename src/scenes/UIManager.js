@@ -1359,9 +1359,16 @@ export class UIManager {
     // Invalidacja cache kolonii przy zmianie listy
     EventBus.on('colony:destroyed', () => { this._coloniesDirty = true; this._dirty = true; });
     EventBus.on('outpost:founded',  () => { this._coloniesDirty = true; this._dirty = true; });
-    EventBus.on('colony:capturedByPlayer', ({ colonyName, isOutpost }) => {
+    EventBus.on('colony:capturedByPlayer', ({ colonyName, isOutpost, reason }) => {
       this._coloniesDirty = true;
       this._dirty = true;
+      // ⚠ WP-3 — kolonia OTRZYMANA przy stole pokoju to nie zdobycz z desantu. Ten sam szew,
+      //   inny akt: bez ⚔, kanałem dyplomacji. Bez tej gałęzi cesja meldowała się graczowi
+      //   jako „⚔ Przejęto kolonię", czyli jako coś, czego nie zrobił.
+      if (reason === 'cession') {
+        this._log(t('log.colonyReceivedCession', colonyName), 'diplomacy');
+        return;
+      }
       this._log(t(isOutpost ? 'log.outpostCaptured' : 'log.colonyCaptured', colonyName), 'new_planet');
     });
 

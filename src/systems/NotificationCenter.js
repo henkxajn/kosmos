@@ -378,8 +378,26 @@ export class NotificationCenter {
    * (§Findings 22). Bramka własności siedzi u nadawcy i tutaj — jedno bez drugiego
    * zostawia następnego konsumenta na tej samej minie.
    */
-  _handleColonyCaptured({ colonyName, planetId, newOwner, previousOwner, wasHomePlanet }) {
+  _handleColonyCaptured({ colonyName, planetId, newOwner, previousOwner, wasHomePlanet, reason }) {
     if ((previousOwner ?? 'player') !== 'player') return;      // nie nasza strata — cisza
+
+    // ⚠ WP-3 — cesja przy stole pokoju idzie kanałem DYPLOMACJI z severity `info`.
+    //   Do WP-3 dziedziczyła po utracie w walce: `alert` + kanał `combat` (Walka) + tytuł
+    //   „⚠ Kolonia utracona". Podpisany pokój nie jest zdarzeniem bojowym i nie ma prawa
+    //   wyglądać jak desant — to jest cała treść tej gałęzi.
+    if (reason === 'cession') {
+      this.add({
+        type: 'colonyCeded',
+        severity: 'info',
+        source: 'diplomacySystem',
+        title: t('notif.colonyCededTitle', colonyName ?? planetId),
+        subtitle: t('notif.colonyCededSubtitle', this._empireLabel(newOwner)),
+        logChannel: 'diplomacy',
+        logText: t('log.cession', colonyName ?? planetId, this._empireLabel(newOwner)),
+        payload: { planetId, newOwner, reason },
+      });
+      return;
+    }
     this.add({
       type: 'colonyLost',
       severity: 'alert',

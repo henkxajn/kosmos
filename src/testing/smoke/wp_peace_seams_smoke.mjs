@@ -19,9 +19,14 @@
 //       „wynik identyczny" wychodziło nie dlatego, że kanału nie ma, tylko dlatego, że fixture
 //       mówił do niego nie tym słowem. Stary kształt ZOSTAJE — jako KONTROLA JAŁOWOŚCI (T1b-ctl).
 //       Wzór odwracania pinu z powodem: T4 niżej, `deploy_seams` T1/T2/T4.
-//   T2  transferColony i captureColonyForPlayer mają PO JEDNYM produkcyjnym wołającym,
-//       a zdarzenia zmiany rąk PO JEDNYM emitencie
-//       ⚠ ZŁAMIE TO: slice, który doda cesję terytorialną przy stole pokoju (drugi wołający).
+//   T2  zmiana rąk ma DOKŁADNIE DWÓCH produkcyjnych wołających (desant + cesja), a zdarzenia
+//       PO JEDNYM emitencie — ⚠ SEKCJA ŚWIADOMIE ODWRÓCONA W WP-3
+//       Do WP-3 brzmiała „po JEDNYM wołającym" i zapowiadała, że złamie ją slice cesji.
+//       WP-3 dołożył drugiego (`DiplomacySystem`), więc pin przecelowano na ALLOWLISTĘ.
+//       ZMIERZONE na drzewie WP-3 — stary T2 dawał: ✗T2a ✓T2b ✗T2c ✓T2d.
+//       ⚠ T2d ZOSTAJE NIETKNIĘTY i to on jest dowodem NIE-JAŁOWOŚCI całej sekcji: WP-3 dołożył
+//       WOŁAJĄCYCH, a NIE EMITENTÓW. Drugi emitent zdublowałby każdy wpis w księdze zdobyczy,
+//       więc jego brak trzeba pinować osobno — i on dalej świeci na zielono.
 //   T3  war.fronts[] jest MARTWY (addFront zero wołających) i CAPTURE_GRACE_YEARS zero czytelników
 //       ⚠ ZŁAMIE TO: ktokolwiek ożywi fronty albo karencję. W4-simple ich NIE RUSZA
 //         (sprzątanie martwego kodu to nie ten slice).
@@ -202,19 +207,23 @@ console.log('T1 — offer_peace niesie warunki pokoju; proposal.terms.cessions r
 // ════════════════════════════════════════════════════════════════════════════
 console.log('T2 — transferColony / captureColonyForPlayer: jeden wołający, jeden emitent');
 {
+  const CHANGE_HANDS_CALLERS = ['InvasionSystem.js', 'DiplomacySystem.js'];
   const transferCalls = hitsIn(callRe('transferColony'));
-  assert(transferCalls.length === 1 && transferCalls[0].file === 'InvasionSystem.js' && transferCalls[0].n === 1,
-    'T2a: `transferColony` ma DOKŁADNIE JEDNEGO produkcyjnego wołającego (InvasionSystem) — ' +
-    'cesja przy stole pokoju będzie drugim (znalezione: ' + JSON.stringify(transferCalls) + ')');
+  assert(transferCalls.length === 2 && transferCalls.every(h => CHANGE_HANDS_CALLERS.includes(h.file) && h.n === 1),
+    'T2a (⚠ ODWRÓCONE w WP-3): `transferColony` ma DOKŁADNIE DWÓCH produkcyjnych wołających — ' +
+    'desant (InvasionSystem) i cesja przy stole pokoju (DiplomacySystem), po jednym wywołaniu ' +
+    'każdy. TRZECI wołający ma ten pin zapalić (znalezione: ' + JSON.stringify(transferCalls) + ')');
 
   const colMgr = readClean('systems', 'ColonyManager.js');
   assert(/^\s*transferColony\s*\(/m.test(colMgr) && /^\s*captureColonyForPlayer\s*\(/m.test(colMgr),
     'T2b (KONTROLA PINU): obie definicje SĄ w ColonyManager — regex wołań nie jest po prostu zepsuty');
 
   const captureCalls = hitsIn(callRe('captureColonyForPlayer'));
-  assert(captureCalls.length === 1 && captureCalls[0].file === 'InvasionSystem.js' && captureCalls[0].n === 1,
-    'T2c: lustro — `captureColonyForPlayer` też ma DOKŁADNIE JEDNEGO produkcyjnego wołającego ' +
-    '(InvasionSystem) ⇒ cesja w obie strony już istnieje (znalezione: ' + JSON.stringify(captureCalls) + ')');
+  assert(captureCalls.length === 2 && captureCalls.every(h => CHANGE_HANDS_CALLERS.includes(h.file) && h.n === 1),
+    'T2c (⚠ ODWRÓCONE w WP-3): lustro — `captureColonyForPlayer` ma tych samych DWÓCH ' +
+    'wołających. ⚠ Kierunek NIE jest wymienny: cesja AI→gracz MUSI iść tędy, bo TYLKO ta metoda ' +
+    'woła `EmpireRegistry.removeColony` — ZMIERZONE, że `transferColony(bodyId, null)` ' +
+    'zostawia oddane ciało w `emp.colonies` (znalezione: ' + JSON.stringify(captureCalls) + ')');
 
   const emitCaptured = hitsIn(/emit\(\s*'colony:captured'/g);
   const emitByPlayer = hitsIn(/emit\(\s*'colony:capturedByPlayer'/g);

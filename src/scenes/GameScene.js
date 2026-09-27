@@ -2428,9 +2428,22 @@ export class GameScene {
     // odpalał się TAKŻE przy przerzutach AI→AI (§Findings 22: gracz dowiadywał się, że
     // stracił kolonię, która nigdy nie była jego). Teraz: bramka WŁASNOŚCI + auto-slow
     // + powiadomienie z dzwonka (`NotificationCenter._handleColonyCaptured`, kanał Walka).
-    EventBus.on('colony:captured', ({ colonyName, newOwner, previousOwner, wasHomePlanet }) => {
+    EventBus.on('colony:captured', ({ colonyName, newOwner, previousOwner, wasHomePlanet, reason }) => {
       if (!window.KOSMOS?.civMode) return;
       if ((previousOwner ?? 'player') !== 'player') return;    // cudza kolonia — nie nasza sprawa
+
+      // ⚠ WP-3 — CESJA TO NIE NAJAZD, a do WP-3 ta ścieżka w ogóle nie patrzyła na `reason`.
+      //   ZMIERZONE przed zmianą: kolonia oddana przy stole pokoju dostawała czerwony toast
+      //   „⚠ Kolonia utracona" (przy stolicy: „⚠ STOLICA ZDOBYTA") i auto-slow „utrata kolonii"
+      //   — czyli grę zatrzymywał alarm bitewny po DOBROWOLNYM podpisie. Ton dyplomatyczny,
+      //   bez auto-slow; kolor z palety Dziennika dla kanału dyplomacji (`THEME.yellow`).
+      if (reason === 'cession') {
+        EventBus.emit('ui:toast', {
+          text: t('notif.colonyCededTitle', colonyName ?? '?'),
+          color: THEME.yellow, durationMs: 6000,
+        });
+        return;
+      }
       // Utrata kolonii to jedno z najgłośniejszych zdarzeń w grze — zwolnij czas, żeby gracz
       // zdążył zareagować (ten sam mechanizm co przy pierwszym kontakcie i bitwie).
       this.uiManager?._triggerAutoSlowIfTime?.(t('log.autoSlowColonyLost'));

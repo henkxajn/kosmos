@@ -67,6 +67,10 @@ const AUTO_PEACE_EXHAUSTION = 100;  // próg auto-peace
 const CAPTURE_VIA_BY_REASON = {
   invasion:        'invasion',
   ground_invasion: 'invasion',
+  // WP-3 — TRZECI sposób, w jaki ciało zmienia właściciela: podpis pokoju. Wpis jest
+  // zbędny mechanicznie (nieznany `reason` i tak zapisuje się dosłownie), ale katalog ma
+  // NAZYWAĆ wszystkie drogi — inaczej czytelnik nie wie, że cesja w ogóle tędy przechodzi.
+  cession:         'cession',
 };
 
 export class WarSystem {

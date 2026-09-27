@@ -28,7 +28,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
-import { hasWeapons, canDoScience, canDoEnvoy } from '../entities/Vessel.js';
+import { hasWeapons, canDoScience, canDoEnvoy, isEnemyVessel } from '../entities/Vessel.js';
 import { TREATY_TYPES } from '../data/TreatyData.js';
 import { t } from '../i18n/i18n.js';
 import { RelationsModel } from './diplomacy/RelationsModel.js';
@@ -36,6 +36,8 @@ import { ReputationLedger } from './diplomacy/ReputationLedger.js';
 import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
 import { visibleBreakdown } from '../utils/AcceptanceMath.js';
 import { RECENT_REFUSAL_YEARS } from '../data/AcceptanceWeightData.js';
+// WP-3 — czysta re-walidacja warunków pokoju (zero importów, świat wstrzykiwany).
+import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
@@ -94,6 +96,9 @@ const REJECT_REASON_BY_KEY = {
   // słuchaczom jako generyczne 'blocked' i gracz nie wiedziałby, CO odrzucono.
   'diplo.reject.capitalNotNegotiable':   'capital_not_negotiable',
   'diplo.reject.territoryNotNegotiable': 'territory_not_negotiable',
+  // WP-3 — odmowy RE-WALIDACJI (bramka wykonania, nie bramka silnika D2).
+  'diplo.reject.cessionTermsStale': 'cession_terms_stale',
+  'diplo.reject.cessionHomeWorld':  'cession_home_world',
 };
 
 export class DiplomacySystem {
@@ -439,10 +444,10 @@ export class DiplomacySystem {
    *   nie jest niczyim klikaniem, tylko konsekwencją wyczerpania. Z tego samego powodu
    *   nie pauzuje gry modalem w środku serii bitew.
    */
-  offerPeace(empireId, reason = '', { playerInitiated = true } = {}) {
+  offerPeace(empireId, reason = '', { playerInitiated = true, terms = null } = {}) {
     if (this.getStatus(empireId) !== 'war') return false;
 
-    const result = this.evaluatePeace(empireId);
+    const result = this.evaluatePeace(empireId, terms);
 
     // WP-2 — BLOKADA PRE-WARUNKU. Lustro `proposeTreaty` (ta sama gałąź, ten sam powód):
     // blokada NIE jest odmową ocenianą punktami, więc nie stempluje `recent_refusal` ani nie
@@ -462,6 +467,31 @@ export class DiplomacySystem {
       return false;
     }
 
+    // ⚠ WP-3 — RE-WALIDACJA PRZED JAKĄKOLWIEK MUTACJĄ (D-WP-9 = ABORT, fail-closed).
+    //   Akceptacja AI dotyczyła PEŁNEGO zestawu warunków; wykonanie „części" podpisałoby
+    //   pokój na warunkach, których nikt nie zaakceptował. Powód jedzie KANAŁEM BLOKADY
+    //   (`result.blocked` + `reasonKey`), bo modal odmowy renderuje wyłącznie
+    //   `result.reasonKey` — inaczej gracz zobaczyłby „nieznany powód".
+    //   Stempla NIE ma z tego samego powodu co przy blokadzie: nikt nas nie odrzucił.
+    const plan = planCessions(terms?.cessions, this._cessionWorld(empireId));
+    if (!plan.ok) {
+      EventBus.emit('diplomacy:peaceRejected', {
+        empireId, reason, playerInitiated,
+        result: {
+          verb: result.verb, fromId: result.fromId, toId: result.toId, threshold: result.threshold,
+          score: 0, decision: false, blocked: true, reasonKey: plan.reasonKey,
+          breakdown: [], counterHint: null,
+        },
+      });
+      return false;
+    }
+
+    // ⚠ WP-3 — WYKONANIE PRZED ZAMKNIĘCIEM WOJNY (D-WP-11). Wojna zamyka się dopiero na
+    //   `emit('diplomacy:peaceSigned')` (`WarSystem._onPeaceSigned` → `active:false`), a księga
+    //   zdobyczy zapisuje WYŁĄCZNIE przy aktywnej wojnie. ZMIERZONE: cesja przed emitem daje
+    //   wpis `via:'cession'`, po emicie — ZERO wpisów. To nie jest kwestia gustu.
+    this._executeCessions(plan.steps);
+
     const until = this._year() + TRUCE_YEARS;
     this.relations.setStatus(PLAYER, empireId, 'truce', { truceUntilYear: until }, `peace_${reason}`);
     this.relations.setTension(PLAYER, empireId, Math.min(this.getTension(empireId), TRUCE_TENSION_CAP), 'peace');
@@ -469,9 +499,96 @@ export class DiplomacySystem {
     this.removeOpinionModifier(empireId, PLAYER, 'at_war');
     this.addOpinionModifier(empireId, PLAYER, 'recent_war', { source: `peace_${reason}` });
     this.addMemory(empireId, 'peace_offered', { reason });
+
+    // ⚠ WP-3 — WYMUSZONY NAP (D-WP-1 + D-WP-10): każdy pokój niesie pakt o nieagresji.
+    //   `signTreaty` jest czystym mutatorem — ŚWIADOMIE omija ocenę D2, bo to WARUNEK
+    //   pokoju, nie propozycja do rozważenia. Idempotentny: `addTreaty` odrzuca duplikat id.
+    //   ⚠ Co to realnie daje (ZMIERZONE): NAP BRAMKUJE `declareWar` z inicjatywy AI/auto,
+    //     czego rozejm dziś NIE robi. Gracza nie wiąże (`player_action` omija bramkę) —
+    //     złamanie kosztuje +15 napięcia przez `breakTreaty`. Czas trwania: DS-1.
+    this.signTreaty(empireId, TREATY_TYPES.non_aggression);
+
     EventBus.emit('diplomacy:peaceSigned', { empireId, reason, result });
     EventBus.emit('diplomacy:relationChanged', { empireId, tension: this.getTension(empireId), status: 'truce', reason });
     return true;
+  }
+
+  /**
+   * WP-3 — świat dla czystej re-walidacji (`CessionPlan.planCessions`). JEDYNE miejsce,
+   * które dla cesji dotyka żywych systemów; sama reguła zostaje czysta i node-testowalna.
+   *
+   * ⚠ NORMALIZACJA WŁAŚCICIELA: kolonia gracza ma `ownerEmpireId === null`, a księga zdobyczy
+   *   i propozycje mówią stringiem `'player'`. Tłumaczymy TUTAJ, żeby `planCessions`
+   *   porównywał wyłącznie stringi (ten sam kanon co `WarSystem._recordCapture`).
+   */
+  _cessionWorld(empireId) {
+    const K = () => window.KOSMOS;
+    return {
+      sides: [PLAYER, empireId],
+      ownerOf: (bodyId) => {
+        const col = K()?.colonyManager?.getColony?.(bodyId);
+        if (!col) return null;                          // ciało bez kolonii — nie ma czego oddawać
+        return col.ownerEmpireId ?? PLAYER_SIDE;
+      },
+      isHomeBody: (bodyId, ownerId) => {
+        if (ownerId === PLAYER_SIDE) {
+          return !!K()?.colonyManager?.getColony?.(bodyId)?.isHomePlanet;
+        }
+        // Kanon stolicy AI — ten sam, którego używa WP-2, produkcja, doktryny i mobilizacja.
+        return K()?.directorProduction?.capitalOf?.(ownerId)?.planetId === bodyId;
+      },
+    };
+  }
+
+  /**
+   * WP-3 — wykonanie cesji istniejącą mechaniką zmiany rąk. Wołane WYŁĄCZNIE po udanej
+   * re-walidacji i WYŁĄCZNIE przy wciąż aktywnej wojnie (patrz D-WP-11 w `offerPeace`).
+   *
+   * ⚠ KIERUNEK NIE JEST SYMETRYCZNY I TO JEST ZMIERZONE, NIE STYLISTYCZNE:
+   *   AI→gracz  → `captureColonyForPlayer`, bo TYLKO ona woła `EmpireRegistry.removeColony`;
+   *   gracz→AI  → `transferColony`, bo gracz nie ma wpisu w rejestrze imperiów.
+   *   Użycie `transferColony(bodyId, null)` dla kierunku AI→gracz zostawiłoby oddane ciało
+   *   w `emp.colonies` (ZMIERZONE) — a `heldValue` i `capitalOf` z WP-2 czytają
+   *   dokładnie tę listę, więc AI liczyłoby do swojej puli ciało, którego już nie ma.
+   *
+   * ⚠ `reason: 'cession'` jest NOŚNY: `CAPTURE_VIA_BY_REASON` mapuje go na `via:'cession'`
+   *   w księdze zdobyczy, a narracja (toast / dzwonek / Dziennik) rozgałęzia się na nim, żeby
+   *   cesja nie dziedziczyła czerwonego alarmu „Kolonia utracona".
+   */
+  _executeCessions(steps) {
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+    for (const step of steps) {
+      if (!step.toPlayer) this._undockOwnFleet(step.bodyId);
+      if (step.toPlayer) colMgr.captureColonyForPlayer?.(step.bodyId, 'cession');
+      else               colMgr.transferColony?.(step.bodyId, step.to, 'cession');
+    }
+  }
+
+  /**
+   * WP-3 / D-WP-12 — flota GRACZA zadokowana przy oddawanym ciele wychodzi na orbitę.
+   *
+   * ⚠ BEZ TEGO CESJA NISZCZY FLOTĘ. `transferColony` kasuje każdy statek z hangaru w stanie
+   *   `docked` (ZMIERZONE: 2/2 zniszczone) — przy desancie to jest poprawne, przy podpisie
+   *   pokoju byłoby ukrytą ceną, której gracz nigdzie nie widzi. `undockToOrbit` to istniejące
+   *   API (trzech wołających w UI), instant, bez paliwa; po nim statek ma `orbiting`, więc
+   *   `transferColony` go pomija, a `VesselManager` re-homuje go na `colony:captured` (W3-1).
+   *
+   * ⚠ WYPYCHAMY WYŁĄCZNIE FLOTĘ GRACZA. Cudzy statek zadokowany przy tym samym ciele ginie
+   *   jak dotąd — cesja jest umową o terytorium, nie amnestią dla obcych hangarów.
+   */
+  _undockOwnFleet(bodyId) {
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    const fleet = K?.colonyManager?.getColony?.(bodyId)?.fleet;
+    if (!vm || !Array.isArray(fleet)) return;
+    for (const vesselId of [...fleet]) {
+      const v = vm.getVessel?.(vesselId);
+      if (!v || v.position?.state !== 'docked') continue;
+      if (isEnemyVessel(v)) continue;
+      vm.undockToOrbit?.(vesselId);
+    }
   }
 
   // ── Mutacje: traktaty ─────────────────────────────────────────────────────

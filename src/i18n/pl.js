@@ -705,6 +705,8 @@ export default {
   "notif.colonyLostTitle": "⚠ Kolonia utracona: {0}",
   "notif.capitalLostTitle": "⚠ STOLICA ZDOBYTA: {0}",
   "notif.colonyLostSubtitle": "Przeszła pod kontrolę: {0}",
+  "notif.colonyCededTitle": "Kolonia oddana na mocy pokoju: {0}",
+  "notif.colonyCededSubtitle": "Przeszła pod kontrolę: {0}",
   "notif.tileLostTitle": "Tracisz teren: {0}",
   "notif.tileLostSubtitle": "Wróg przejął kafli: {0} ({1})",
   "notif.invasionRepelledTitle": "Desant odparty: {0}",
@@ -1104,6 +1106,8 @@ export default {
   'log.skirmish': '⚔ Potyczka z {0} — bez stanu wojny (napięcie rośnie, wyczerpanie bez zmian)',
   'log.colonyCaptured': '⚔ Przejęto kolonię: {0}',
   'log.outpostCaptured': '⚔ Przejęto placówkę: {0}',
+  'log.cession': 'Cesja: {0} → {1}',
+  'log.colonyReceivedCession': 'Kolonia otrzymana na mocy pokoju: {0}',
   'log.tradeExecuted': '📦 Droga handlowa: transfer wykonany',
   'log.migration': '👤 Migracja: {0} POP z {1} → {2}',
   // Prosperity i epoki
@@ -3534,6 +3538,8 @@ export default {
   'diplo.reject.natureForbids': 'Nasza natura na to nie pozwala',
   'diplo.reject.capitalNotNegotiable':   'Stolicy nie oddamy',
   'diplo.reject.territoryNotNegotiable': 'Żądasz więcej, niż oddamy przy stole',
+  'diplo.reject.cessionTermsStale':      'Warunki straciły ważność — stan posiadania zmienił się od złożenia oferty',
+  'diplo.reject.cessionHomeWorld':       'Ciało domowe nie podlega cesji',
 
   'diplo.btn.declareWar':   '⚔ WYPOWIEDZ WOJNĘ',
   'diplo.btn.offerPeace':   '☮ ZAPROPONUJ POKÓJ',

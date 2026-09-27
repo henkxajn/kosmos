@@ -705,6 +705,8 @@ export default {
   "notif.colonyLostTitle": "⚠ Colony lost: {0}",
   "notif.capitalLostTitle": "⚠ CAPITAL TAKEN: {0}",
   "notif.colonyLostSubtitle": "Now controlled by: {0}",
+  "notif.colonyCededTitle": "Colony ceded under the peace treaty: {0}",
+  "notif.colonyCededSubtitle": "Now under the control of: {0}",
   "notif.tileLostTitle": "Losing ground: {0}",
   "notif.tileLostSubtitle": "Enemy took {0} tile(s) ({1})",
   "notif.invasionRepelledTitle": "Invasion repelled: {0}",
@@ -1104,6 +1106,8 @@ export default {
   'log.skirmish': '⚔ Skirmish with {0} — no state of war (tension rises, exhaustion unchanged)',
   'log.colonyCaptured': '⚔ Colony captured: {0}',
   'log.outpostCaptured': '⚔ Outpost captured: {0}',
+  'log.cession': 'Cession: {0} → {1}',
+  'log.colonyReceivedCession': 'Colony received under the peace treaty: {0}',
   'log.tradeExecuted': '📦 Trade route: transfer completed',
   'log.migration': '👤 Migration: {0} POP from {1} → {2}',
   // Prosperity and epochs
@@ -3533,6 +3537,8 @@ export default {
   'diplo.reject.natureForbids': 'Our nature does not allow it',
   'diplo.reject.capitalNotNegotiable':   'We will not cede our capital',
   'diplo.reject.territoryNotNegotiable': 'You ask for more than we would cede at the table',
+  'diplo.reject.cessionTermsStale':      'The terms are no longer valid — holdings have changed since the offer was made',
+  'diplo.reject.cessionHomeWorld':       'A home world cannot be ceded',
 
   'diplo.btn.declareWar':   '⚔ DECLARE WAR',
   'diplo.btn.offerPeace':   '☮ OFFER PEACE',
