@@ -34,8 +34,8 @@ import { t } from '../i18n/i18n.js';
 import { RelationsModel } from './diplomacy/RelationsModel.js';
 import { ReputationLedger } from './diplomacy/ReputationLedger.js';
 import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
-import { visibleBreakdown } from '../utils/AcceptanceMath.js';
-import { RECENT_REFUSAL_YEARS, TERRITORIAL_MAX_SHARE } from '../data/AcceptanceWeightData.js';
+import { visibleBreakdown, refusalWindowYears } from '../utils/AcceptanceMath.js';
+import { VERB_ACCEPTANCE, TERRITORIAL_MAX_SHARE } from '../data/AcceptanceWeightData.js';
 // WP-3 — czysta re-walidacja warunków pokoju (zero importów, świat wstrzykiwany).
 import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
@@ -392,15 +392,36 @@ export class DiplomacySystem {
   }
 
   /**
-   * Ile lat GRY świeża odmowa jeszcze obciąża ten czasownik (0 = już nie).
-   * Liczone TUTAJ, bo stała okna mieszka w katalogu wag, którego UI nie importuje
-   * (pin P14). Modal odmowy zamienia to na „spróbuj ponownie za N lat" — bez tego
-   * `recent_refusal` karze gracza, nie mówiąc mu, jak długo.
+   * Ile lat GRY świeża odmowa jeszcze obciąża ten czasownik albo blokuje ponowną próbę
+   * (0 = już nie). Liczone TUTAJ, bo okno mieszka w katalogu wag, którego UI nie
+   * importuje (pin P14). Modal odmowy i przycisk pokoju zamieniają to na licznik lat —
+   * bez tego gracz dostaje blokadę, nie wiedząc, jak długo potrwa.
+   *
+   * ⚠ WP-4 / C4: okno jest PER CZASOWNIK (`refusalCooldownYears`; D-WP-4 dał
+   *   `offer_peace` jeden rok zamiast dwóch). Rachunek reużywa `refusalWindowYears` —
+   *   tej samej funkcji, z której czyta ewaluator termu.
    */
   getRefusalYearsLeft(empireId, verb) {
     const year = this.getRefusedYear(empireId, verb);
     if (year == null) return 0;
-    return Math.max(0, (year + RECENT_REFUSAL_YEARS) - this._year());
+    return Math.max(0, (year + refusalWindowYears(VERB_ACCEPTANCE[verb])) - this._year());
+  }
+
+  /**
+   * Czy świeża odmowa tego czasownika kosztuje PUNKTY, czy tylko blokuje ponowną próbę.
+   *
+   * ⚠ WŁASNOŚĆ CZASOWNIKA, NIE PARY — i to jest zmierzone, nie założone: `resolveWeights`
+   *   mnoży wagę przez nadpisania archetypu i celu, a 0 jest pochłaniające
+   *   (0 × cokolwiek = 0), więc waga wyzerowana w KATALOGU nie wróci dla żadnej pary.
+   *   Dlatego brak tu argumentu `empireId` i dlatego nie ma go po co dokładać.
+   *
+   * Istnieje dla modalu odmowy: po D-WP-4 `offer_peace` NIC nie obciąża, więc zdanie
+   * „świeża odmowa obciąża kolejną próbę" byłoby tam po prostu nieprawdą. Nieznany
+   * czasownik ⇒ `false`: nie udajemy kary, której katalog nie zna (dotyczy klucza
+   * `ai_peace_offer`, którym C3 zapisuje cooldown depeszy AI).
+   */
+  isRefusalPenalised(verb) {
+    return (Number(VERB_ACCEPTANCE[verb]?.terms?.recent_refusal) || 0) !== 0;
   }
 
   /**
@@ -522,8 +543,18 @@ export class DiplomacySystem {
    *   właśnie otworzył. `recent_refusal` ma kończyć SPAMOWANIE PRZYCISKIEM; auto-pokój
    *   nie jest niczyim klikaniem, tylko konsekwencją wyczerpania. Z tego samego powodu
    *   nie pauzuje gry modalem w środku serii bitew.
+   *
+   * @param {boolean} [opts.stampRefusal=playerInitiated] — czy ocena odmowna ma zapisać
+   *   cooldown (D-WP-16). OSOBNA dźwignia od `playerInitiated`, choć domyślnie ta sama
+   *   wartość: propozycja może być w pełni świadoma (modal, rozbicie, wpis pamięci)
+   *   i JEDNOCZEŚNIE nie zasługiwać na cooldown. Tego potrzebuje przyjęcie oferty pokoju
+   *   OD AI: gracz nie spamuje przyciskiem, tylko odpowiada na depeszę, a gdy świat zdążył
+   *   się zmienić i ocena wypadnie odmownie, blokowanie mu WŁASNEGO przycisku byłoby karą
+   *   za cudzą propozycję.
    */
-  offerPeace(empireId, reason = '', { playerInitiated = true, terms = null } = {}) {
+  offerPeace(empireId, reason = '', {
+    playerInitiated = true, terms = null, stampRefusal = playerInitiated,
+  } = {}) {
     if (this.getStatus(empireId) !== 'war') return false;
 
     const result = this.evaluatePeace(empireId, terms);
@@ -541,7 +572,9 @@ export class DiplomacySystem {
 
     if (!result.decision) {
       this.addMemory(empireId, 'peace_refused', { reason });
-      if (playerInitiated) this.noteRefusal(empireId, 'offer_peace');
+      // WP-4 / C4: stempel ZOSTAJE, ale od D-WP-4 jest zapisem COOLDOWNU, nie kary
+      // punktowej (waga `recent_refusal` dla pokoju = 0). `stampRefusal` — patrz D-WP-16.
+      if (stampRefusal) this.noteRefusal(empireId, 'offer_peace');
       EventBus.emit('diplomacy:peaceRejected', { empireId, reason, result, playerInitiated });
       return false;
     }

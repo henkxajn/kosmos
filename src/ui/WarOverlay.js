@@ -342,8 +342,21 @@ export class WarOverlay extends BaseOverlay {
     const btnH = 28;
     if (war.active) {
       // Propose peace — od C1 niesie WARUNKI ze stołu (pusty stół ⇒ `terms === null`).
-      this._drawActionButton(ctx, x + pad, iy, btnW, btnH, t('warOverlay.btnProposePeace'), true, 'primary');
-      this._addHit(x + pad, iy, btnW, btnH, 'offer_peace', { empireId });
+      //
+      // ⚠ WP-4 / C4 (D-WP-4): odrzucona propozycja nie kosztuje już punktów — blokuje
+      //   przycisk na rok. Kanon „widoczny + zablokowany" (tech-gate, `fleet.
+      //   requiresOrbitalShipyard`): przycisk zostaje na miejscu, niesie LICZNIK lat
+      //   i ma ZDJĘTĄ hit-zonę. Szary, ale klikalny przycisk jest gorszy od braku
+      //   przycisku: obiecuje akcję, która po cichu nic nie robi.
+      //   Lata liczy FASADA — pin P14 zabrania UI importować `Acceptance*`, więc okno
+      //   per czasownik mieszka w silniku, nie tutaj.
+      const peaceCdYears = window.KOSMOS?.diplomacySystem
+        ?.getRefusalYearsLeft?.(empireId, 'offer_peace') ?? 0;
+      const peaceReady = peaceCdYears <= 0;
+      this._drawActionButton(ctx, x + pad, iy, btnW, btnH,
+        peaceReady ? t('warOverlay.btnProposePeace') : t('warOverlay.btnPeaceCooldown', peaceCdYears),
+        peaceReady, 'primary');
+      if (peaceReady) this._addHit(x + pad, iy, btnW, btnH, 'offer_peace', { empireId });
 
       // Debug: wymuszone starcie (dev tool)
       this._drawActionButton(ctx, x + pad + btnW + pad, iy, btnW, btnH, t('warOverlay.btnForceBattle'), true, 'danger');

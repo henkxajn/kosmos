@@ -3530,6 +3530,7 @@ export default {
   'diploRefusal.unknownReason':  'Nieznana przeszkoda',
   'diploRefusal.cooldown':       'Świeża odmowa',
   'diploRefusal.cooldownYears':  'obciąża kolejną próbę jeszcze przez {0} l.',
+  'diploRefusal.cooldownBlocks': 'ponowna propozycja dopiero za {0} l.',
   'diploRefusal.ok':             '[ENTER] ROZUMIEM',
 
   'diplo.reject.atWar':         'Trwa wojna',
@@ -3593,6 +3594,7 @@ export default {
   'warOverlay.winnerLine':       'Zwycięzca: {0}',
   'warOverlay.battleLosses':     'Straty: obcy {0}, gracz {1} (tur: {2})',
   'warOverlay.btnProposePeace':  '☮ ZAPROPONUJ POKÓJ',
+  'warOverlay.btnPeaceCooldown': '☮ POKÓJ — ZA {0} L.',
   'warOverlay.btnForceBattle':   '⚡ WYMUŚ STARCIE (debug)',
   'warOverlay.btnForceInvasion': '🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)',
 

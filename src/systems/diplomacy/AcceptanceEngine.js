@@ -26,13 +26,14 @@ import {
   ACCEPTANCE_TERMS, VERB_ACCEPTANCE, PRECONDITIONS,
   ARCHETYPE_WEIGHT_OVERRIDES, OBJECTIVE_WEIGHT_OVERRIDES,
   MEMORY_EVIDENCE_WEIGHTS, THIRD_PARTY_WEIGHTS,
-  OFFER_HALF_KR, RECENT_REFUSAL_YEARS, ERRATIC_EPOCH_YEARS, MEMORY_WINDOW,
+  OFFER_HALF_KR, ERRATIC_EPOCH_YEARS, MEMORY_WINDOW,
   TERRITORIAL_BASE_VALUE, TERRITORIAL_HALF, TERRITORIAL_RECAPTURE_MULT,
   TERRITORIAL_FATIGUE_RELIEF, TERRITORIAL_MAX_SHARE,
 } from '../../data/AcceptanceWeightData.js';
 import {
   clampUnit, diminishingReturns, noiseUnit, hashStringToInt,
   resolveWeights, buildAcceptanceBreakdown, sumScore, decide, counterHintFor,
+  refusalWindowYears,
 } from '../../utils/AcceptanceMath.js';
 // Czyste dane (plik bez importów) — statyczny import NIE psuje czystości modułu.
 // To jest miejsce, w którym `peaceCost` dostaje swojego PIERWSZEGO czytelnika w kodzie.
@@ -157,16 +158,28 @@ export const TERM_EVALUATORS = {
 
   /**
    * „Właśnie powiedzieliśmy nie" — koniec spamowania przyciskiem.
-   * Liniowo od −1 tuż po odmowie do 0 po RECENT_REFUSAL_YEARS. Stan (`verbCooldowns`
-   * na rekordzie pary) pisze od E4 `RelationsModel.noteVerbRefusal` — jedyny pisarz.
+   * Liniowo od −1 tuż po odmowie do 0 po upływie OKNA TEGO CZASOWNIKA. Stan
+   * (`verbCooldowns` na rekordzie pary) pisze od E4 `RelationsModel.noteVerbRefusal` —
+   * jedyny pisarz.
+   *
+   * ⚠ WP-4 / C4: okno jest PER CZASOWNIK (`refusalCooldownYears`, D-WP-4 dał
+   *   `offer_peace` jeden rok), a rachunek mieszka w `refusalWindowYears` — tej samej
+   *   funkcji, z której czyta fasada. Dwie kopie tego rachunku rozjechałyby liczbę
+   *   pokazywaną graczowi z liczbą, którą liczy silnik.
+   *
+   * ⚠ Waga 0 (D-WP-4 dla pokoju) NIE jest obsługiwana tutaj: term dalej zwraca surowy
+   *   raw, a zerowanie robi WAGA w katalogu. Gdyby term sam zwracał 0, telemetria E7
+   *   straciłaby informację „stempel jest, tylko nic nie waży".
    */
   recent_refusal: (ctx) => {
     const refusedYear = Number(ctx.verbCooldowns?.[ctx.verb]);
     if (!Number.isFinite(refusedYear)) return 0;
     const elapsed = (Number(ctx.year) || 0) - refusedYear;
     if (!(elapsed >= 0)) return 0;                       // odmowa „z przyszłości" (wczytany zapis) — ignoruj
-    const left = RECENT_REFUSAL_YEARS - elapsed;
-    return left <= 0 ? 0 : -clampUnit(left / RECENT_REFUSAL_YEARS);
+    const windowYears = refusalWindowYears(VERB_ACCEPTANCE[ctx.verb]);
+    if (!(windowYears > 0)) return 0;                    // okno zerowe ⇒ nie ma czego wygaszać
+    const left = windowYears - elapsed;
+    return left <= 0 ? 0 : -clampUnit(left / windowYears);
   },
 
   /**

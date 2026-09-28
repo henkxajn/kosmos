@@ -3529,6 +3529,7 @@ export default {
   'diploRefusal.unknownReason':  'Unknown obstacle',
   'diploRefusal.cooldown':       'Fresh refusal',
   'diploRefusal.cooldownYears':  'weighs on the next attempt for another {0} y.',
+  'diploRefusal.cooldownBlocks': 'a new proposal only in {0} y.',
   'diploRefusal.ok':             '[ENTER] UNDERSTOOD',
 
   'diplo.reject.atWar':         'A war is under way',
@@ -3592,6 +3593,7 @@ export default {
   'warOverlay.winnerLine':       'Winner: {0}',
   'warOverlay.battleLosses':     'Losses: alien {0}, player {1} (turns: {2})',
   'warOverlay.btnProposePeace':  '☮ OFFER PEACE',
+  'warOverlay.btnPeaceCooldown': '☮ PEACE — IN {0} Y.',
   'warOverlay.btnForceBattle':   '⚡ FORCE BATTLE (debug)',
   'warOverlay.btnForceInvasion': '🪖 FORCE INVASION (debug — skips space battle)',
 

@@ -171,11 +171,22 @@ console.log('--- R4: auto-pokój z wyczerpania NIE stempluje (ochrona retry z E3
   ok('zdarzenie niesie `playerInitiated: true` (modal E4 ma się otworzyć)',
     evt?.playerInitiated === true);
 
-  // Retry przy kolejnej bitwie nadal działa i nie jest karany stemplem gracza…
+  // ⚠ PIN PRZECELOWANY ŚWIADOMIE — WP-4 / C4, podpis D-WP-4 (27.09).
+  //   Do C4 pinował, że po wygaśnięciu stempla wynik POKOJU wraca w górę, czyli że kara
+  //   jest CZASOWA. Po C4 kary nie ma WCALE (`offer_peace.terms.recent_refusal` = 0), więc
+  //   stary kształt mierzyłby wzrost, którego nie ma, i padłby z powodu POPRAWNEGO
+  //   zachowania. Intencja „kara jest czasowa" żyje dalej tam, gdzie kara istnieje:
+  //   R2 wyżej mierzy ją na `trade_agreement` (piny `at(...)`). Tutaj pinujemy to, co
+  //   D-WP-4 wprowadza: stempel JEST, a punktów nie ma — ani teraz, ani po upływie okna.
+  //   Pełne pokrycie nowego zachowania: `wp_peace_cooldown_smoke`.
+  const peaceRow = () => dipl.evaluatePeace(E).breakdown
+    .find(r => r.term === 'recent_refusal')?.value;
   const withStamp = dipl.evaluatePeace(E).score;
+  ok('…a stempel POKOJU nie kosztuje punktów (wiersz `recent_refusal` = 0)',
+    peaceRow() === 0);
   timeSys.gameTime = 400 + RECENT_REFUSAL_YEARS;
-  ok('…a po wygaśnięciu stempla wynik wraca w górę (kara jest CZASOWA)',
-    dipl.evaluatePeace(E).score > withStamp);
+  ok('…i po upływie okna nadal 0, a wynik ani drgnął — czas nie ma czego wygaszać (D-WP-4)',
+    peaceRow() === 0 && dipl.evaluatePeace(E).score === withStamp);
 }
 
 // ── R5: emisariusz odprawiony ───────────────────────────────────────────────
@@ -234,8 +245,20 @@ console.log('--- R7: term jest LIVE, a pisarz dokładnie jeden ---');
 {
   ok('`recent_refusal` ma status LIVE (E4 dołożył paliwo)',
     ACCEPTANCE_TERMS.recent_refusal.status === TERM_STATUS.LIVE);
-  ok('każdy czasownik nadal waży ten term (E1 rozdał wagi, E4 ich nie ruszał)',
-    Object.values(VERB_ACCEPTANCE).every(v => (v.terms.recent_refusal ?? 0) > 0));
+  // ⚠ PIN ODWRÓCONY ŚWIADOMIE — WP-4 / C4, podpis D-WP-4 (27.09).
+  //   Do C4 pinował, że KAŻDY czasownik waży ten term. Po C4 `offer_peace` waży go na 0,
+  //   bo odrzucenie pokoju nie kosztuje już punktów, tylko blokuje przycisk na rok
+  //   (`refusalCooldownYears`). Stary kształt pinowałby od dziś DEFEKT. Intencja zostaje
+  //   i jest teraz MOCNIEJSZA: zero jest DOKŁADNIE jedno i wiemy, które — przypadkowo
+  //   wyzerowana waga w pozostałych czterech czasownikach dalej zapala czerwone światło.
+  const zeroWeighted = Object.values(VERB_ACCEPTANCE)
+    .filter(v => (v.terms.recent_refusal ?? 0) === 0).map(v => v.id);
+  ok('`offer_peace` waży ten term na 0 — D-WP-4: kara zastąpiona cooldownem przycisku — ' +
+     'a pozostałe czasowniki ważą go > 0',
+    zeroWeighted.length === 1 && zeroWeighted[0] === 'offer_peace'
+    && Object.values(VERB_ACCEPTANCE)
+        .filter(v => v.id !== 'offer_peace')
+        .every(v => (v.terms.recent_refusal ?? 0) > 0));
 
   // Kto W OGÓLE dotyka pola — wzór pinu P14 z acceptance_engine_smoke. Dozwolone są
   // DOKŁADNIE dwie role i każda ma inną: RelationsModel PISZE (jedyny pisarz, przez

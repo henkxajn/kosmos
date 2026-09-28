@@ -271,9 +271,28 @@ export const VERB_ACCEPTANCE = {
     // ⚠ WP-2: `territorial_capital` PRZED `territorial_ceiling` — patrz nota w PRECONDITIONS.
     preconditions: ['at_war', 'territorial_capital', 'territorial_ceiling'],
     personalityAxes: { aggression: -1 },
+    // ⚠ WP-4 / C4 (podpis D-WP-4, 27.09) — ODRZUCENIE POKOJU NIE KOSZTUJE PUNKTÓW.
+    //   `recent_refusal` ważył 20, więc jedno „nie" AI zabierało −20 na KAŻDĄ kolejną
+    //   propozycję przez 2 lata. Od stołu pokoju (C1) gracz negocjuje SERIĄ propozycji
+    //   o różnych warunkach — a seria była karana dokładnie jak spamowanie przyciskiem.
+    //   ZMIERZONE (FAZA A): kara −20 blokuje negocjację przy stole, a komentarz w
+    //   `offerPeace` mówi wprost, że ten term ma kończyć SPAM. Cooldown przycisku robi
+    //   to samo BEZ kary punktowej, więc kara schodzi do zera, a jej rolę przejmuje okno.
+    //
+    //   OKNO JEST PER CZASOWNIK. Brak klucza ⇒ `RECENT_REFUSAL_YEARS` (pozostałe cztery
+    //   czasowniki zostają na dwóch latach). Rachunek okna ma JEDNO miejsce —
+    //   `refusalWindowYears` w `AcceptanceMath` — bo liczyły go dwie ścieżki (fasada
+    //   `getRefusalYearsLeft` i ewaluator termu), a per-czasownikowe okno w dwóch kopiach
+    //   byłoby nieutwardzonym bliźniakiem.
+    //
+    //   ⚠ `resolveWeights` MNOŻY wagi przez nadpisania archetypu i celu, a 0 jest
+    //     POCHŁANIAJĄCE (0 × cokolwiek = 0) ⇒ żadna para gracz↔imperium nie wskrzesi tej
+    //     kary. Dlatego „czy odmowa kosztuje punkty" jest własnością CZASOWNIKA i fasada
+    //     wystawia ją jako `isRefusalPenalised(verb)`, bez argumentu imperium.
+    refusalCooldownYears: 1,
     terms: {
       war_status: 55, opinion: 20, personality: 25, tension: +10, memory: 15,
-      reputation: 10, third_party: 10, recent_refusal: 20, offer: 25, relative_power: 30,
+      reputation: 10, third_party: 10, recent_refusal: 0, offer: 25, relative_power: 30,
       erratic_noise: 15, territorial_terms: 35,
     },
   },

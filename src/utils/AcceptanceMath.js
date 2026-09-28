@@ -14,7 +14,7 @@
 // nie żyły w dwóch miejscach.
 
 import {
-  OFFER_HALF_KR, COUNTER_HINT_MAX_GAP, COUNTER_HINT_KR_STEP,
+  OFFER_HALF_KR, COUNTER_HINT_MAX_GAP, COUNTER_HINT_KR_STEP, RECENT_REFUSAL_YEARS,
 } from '../data/AcceptanceWeightData.js';
 
 // ── Skala ───────────────────────────────────────────────────────────────────
@@ -98,6 +98,28 @@ export function resolveWeights(verbCfg, overrides = []) {
     threshold += Number(ov.thresholdDelta) || 0;
   }
   return { terms, threshold };
+}
+
+// ── Okno świeżej odmowy ─────────────────────────────────────────────────────
+
+/**
+ * Ile LAT GRY świeża odmowa danego czasownika jeszcze go obciąża albo blokuje.
+ *
+ * ⚠ ISTNIEJE PO TO, ŻEBY BYŁA JEDNA DEFINICJA. Do WP-4 okno liczyły DWA miejsca własną
+ *   arytmetyką: `DiplomacySystem.getRefusalYearsLeft` (dla UI) i ewaluator `recent_refusal`
+ *   (dla wyniku). Dopóki okno było jedną globalną stałą, rozjazd był niemożliwy; z chwilą
+ *   gdy stało się PER CZASOWNIK (D-WP-4: `offer_peace` = 1 rok), dwie kopie rachunku byłyby
+ *   nieutwardzonym bliźniakiem — panel mówiłby graczowi inną liczbę, niż liczy silnik.
+ *
+ * Bierze DEFINICJĘ czasownika, nie jego id: katalog jest w tym module WSTRZYKIWANY, a nie
+ * importowany (patrz nota na górze pliku), więc lookup należy do wołającego.
+ *
+ * Brak klucza / wartość nieliczbowa / ujemna ⇒ `RECENT_REFUSAL_YEARS`. ZERO jest poprawną
+ * wartością (czasownik bez cooldownu), więc fallback pyta o skończoność i znak, nie o prawdziwość.
+ */
+export function refusalWindowYears(verbCfg) {
+  const y = Number(verbCfg?.refusalCooldownYears);
+  return Number.isFinite(y) && y >= 0 ? y : RECENT_REFUSAL_YEARS;
 }
 
 // ── Rozbicie i wynik ────────────────────────────────────────────────────────

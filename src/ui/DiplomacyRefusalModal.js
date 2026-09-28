@@ -56,11 +56,17 @@ const _fmt  = (v) => `${_sign(v)}${_mag(v)}`;
  *
  * @param {Object} result — zwrotka `evaluateProposal` (score/threshold/breakdown/blocked/reasonKey)
  * @param {Object} [opts]
- * @param {number} [opts.cooldownYearsLeft] — ile lat świeża odmowa jeszcze obciąża
+ * @param {number} [opts.cooldownYearsLeft] — ile lat świeża odmowa jeszcze obciąża/blokuje
+ * @param {boolean} [opts.cooldownPenalised=true] — czy ta odmowa kosztuje PUNKTY (WP-4 / C4).
+ *   Po D-WP-4 `offer_peace` nic nie obciąża, tylko blokuje przycisk, więc zdanie „obciąża
+ *   kolejną próbę" byłoby dla pokoju nieprawdą. Domyślnie `true` = brzmienie sprzed WP-4,
+ *   żeby wołający, który flagi nie podaje, zachował dotychczasowy komunikat.
  * @param {Function} [opts.translate] — wstrzykiwane `t` (headless test bez i18n runtime)
  * @param {Array}  [opts.rows] — gotowe wiersze widoczne (fasada je filtruje); brak ⇒ liczone tu
  */
-export function buildRefusalContent(result, { cooldownYearsLeft = 0, translate = t, rows = null } = {}) {
+export function buildRefusalContent(result, {
+  cooldownYearsLeft = 0, cooldownPenalised = true, translate = t, rows = null,
+} = {}) {
   const tr = translate;
   let html = '';
 
@@ -88,7 +94,11 @@ export function buildRefusalContent(result, { cooldownYearsLeft = 0, translate =
 
   // „Kolejna próba jest droższa" — bez tego `recent_refusal` karze, nie mówiąc za co.
   if (cooldownYearsLeft > 0) {
-    html += formatStatLine(tr('diploRefusal.cooldown'), tr('diploRefusal.cooldownYears', _mag(cooldownYearsLeft)), 'at-stat-neu');
+    // WP-4 / C4: dwa RÓŻNE fakty, więc dwa różne zdania. Czasownik z karą punktową —
+    // „obciąża kolejną próbę"; czasownik bez kary (D-WP-4 → `offer_peace`) — „ponowna
+    // propozycja dopiero za N lat". Jedno brzmienie dla obu kłamałoby w jednym z przypadków.
+    const cdKey = cooldownPenalised ? 'diploRefusal.cooldownYears' : 'diploRefusal.cooldownBlocks';
+    html += formatStatLine(tr('diploRefusal.cooldown'), tr(cdKey, _mag(cooldownYearsLeft)), 'at-stat-neu');
   }
   return html;
 }
@@ -113,6 +123,9 @@ function _show({ empireId, verb, result, headlineKey, descKey, descArg }) {
       // DiplomacySystem.getVisibleBreakdown); brak fasady ⇒ czysty fallback w builderze.
       rows: dipl?.getVisibleBreakdown ? dipl.getVisibleBreakdown(result) : null,
       cooldownYearsLeft: dipl?.getRefusalYearsLeft?.(empireId, verb) ?? 0,
+      // WP-4 / C4: „czy ta odmowa w ogóle kosztuje punkty" jest własnością CZASOWNIKA i zna
+      // ją katalog wag, którego UI nie importuje (pin P14) — więc pytamy fasadę.
+      cooldownPenalised: dipl?.isRefusalPenalised?.(verb) ?? true,
     }),
     buttons: [{ label: t('diploRefusal.ok'), primary: true }],
   });
