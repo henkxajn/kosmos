@@ -3624,6 +3624,8 @@ export default {
   'log.diplo.aiPeaceOffer':         '☮ {0} proposes peace',
   'log.diplo.aiPeaceOfferRejected': '⚔ Rejected peace offer from {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Peace offer from {0} expired',
+  // WP-4 / C5 — a report that OUR OWN empire is worn down (once per war, no proposal)
+  'log.war.playerExhausted':        'Empire worn down by war — time to consider peace',
 
   // === Occupation badge (WP-4 C2) — read from the active war's capture ledger ===
   'body.occupied':               '🏴 Occupied',

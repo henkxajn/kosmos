@@ -3625,6 +3625,8 @@ export default {
   'log.diplo.aiPeaceOffer':         '☮ {0} proponuje pokój',
   'log.diplo.aiPeaceOfferRejected': '⚔ Odrzucono propozycję pokoju od {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Propozycja pokoju od {0} wygasła',
+  // WP-4 / C5 — meldunek o wyczerpaniu WŁASNEGO imperium (raz na wojnę, bez propozycji)
+  'log.war.playerExhausted':        'Imperium wyczerpane wojną — czas rozważyć pokój',
 
   // === Odznaka okupacji (WP-4 C2) — czytana z księgi zdobyczy aktywnej wojny ===
   'body.occupied':               '🏴 Okupowana',

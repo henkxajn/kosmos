@@ -265,7 +265,7 @@ export class WarSystem {
       // BEZWARUNKOWY, nie miało to znaczenia — pierwsza próba zawsze kończyła wojnę.
       // Odkąd decyduje silnik (i może ODMÓWIĆ), jednorazowy strzał zamykałby wojnę
       // na zawsze w stanie „nie da się zakończyć". Każda kolejna bitwa próbuje ponownie.
-      if (delta > 0 && oldV >= AUTO_PEACE_EXHAUSTION) this._triggerAutoPeace(warId, side);
+      if (delta > 0 && oldV >= AUTO_PEACE_EXHAUSTION) this._onExhaustionCeiling(warId, side);
       // WP-4 / C3 — ta sama ścieżka RETRY musi obsłużyć depeszę AI: wyczerpanie stoi na
       // suficie, więc bez tego pierwsza depesza byłaby JEDYNĄ w całej wojnie.
       if (delta > 0) this._maybeAiPeaceOffer(warId, side);
@@ -279,9 +279,10 @@ export class WarSystem {
     // dopiero na suficie. Patrz `_maybeAiPeaceOffer`.
     if (delta > 0) this._maybeAiPeaceOffer(warId, side);
 
-    // Auto-peace gdy któryś przekroczy próg
+    // Sufit wyczerpania — patrz `_onExhaustionCeiling`. Po WP-4 (C3 + C5) nie zamyka on
+    // wojny po ŻADNEJ ze stron: AI dostaje depeszę, gracz meldunek, a decyzja jest klikiem.
     if (newV >= AUTO_PEACE_EXHAUSTION) {
-      this._triggerAutoPeace(warId, side);
+      this._onExhaustionCeiling(warId, side);
     }
   }
 
@@ -303,7 +304,7 @@ export class WarSystem {
    * @returns {boolean} czy depesza poszła
    */
   _maybeAiPeaceOffer(warId, side) {
-    if (side === 'player') return false;               // to gałąź GRACZA, patrz `_triggerAutoPeace`
+    if (side === 'player') return false;               // gałąź GRACZA: `_onExhaustionCeiling`
     if (this._aiOfferOpen.has(warId)) return false;    // depesza już wisi na ekranie
     const war = this.getWar(warId);
     if (!war || !war.active) return false;
@@ -610,35 +611,49 @@ export class WarSystem {
     EventBus.emit('war:peaceSigned', { warId: war.id, empireId });
   }
 
-  _triggerAutoPeace(warId, exhaustedSide) {
+  /**
+   * Reakcja na SUFIT WYCZERPANIA (`AUTO_PEACE_EXHAUSTION`).
+   *
+   * ⚠ NAZWA ZMIENIONA Z `_triggerAutoPeace`, BO STARA PO WP-4 KŁAMAŁABY: ta ścieżka nie
+   *   wyzwala już żadnego pokoju. C3 zamienił gałąź AI na DEPESZĘ do gracza, C5 gałąź
+   *   gracza na MELDUNEK — auto-pokój przestał w tej grze istnieć po OBU stronach.
+   *   Metoda zostaje, bo sufit wyczerpania nadal jest zdarzeniem, na które ktoś reaguje.
+   *
+   * ⚠ CO STĄD USUNĄŁ C5 (podpis D-WP-14 = a) i dlaczego:
+   *     const accepted = dipl.offerPeace(empireId, `exhaustion_${side}`,
+   *                                      { playerInitiated: false });
+   *     if (!accepted) EventBus.emit('war:autoPeaceRefused', { ... });
+   *   GRA SKŁADAŁA PROPOZYCJĘ POKOJU W IMIENIU GRACZA. Przy AI nieskłonnym do pokoju
+   *   jedynym efektem był wpis „wojna trwa mimo wyczerpania"; przy skłonnym — pokój
+   *   ZAWIERANY BEZ PYTANIA, czyli najdonośniejsza decyzja w konflikcie zapadała bez
+   *   udziału gracza. Teraz mówimy mu, że imperium jest wyczerpane, i zostawiamy decyzję
+   *   jemu: klika ☮ w panelu Wojny i widzi tam stół pokoju (C1).
+   *
+   * ⚠ DWA SKUTKI UBOCZNE, OBA ZMIERZONE PRZED ZMIANĄ, OBA ZAMIERZONE:
+   *   1. `war:autoPeaceRefused` straciło JEDYNEGO emitenta ⇒ jego konsument w `UIManager`
+   *      usunięty w tym samym commicie. Zdarzenie bez emitenta, ale z konsumentem, to
+   *      martwa gałąź, która wygląda na żywą.
+   *   2. `playerInitiated: false` straciło JEDYNEGO produkcyjnego wołającego. Parametr
+   *      zostaje (jego domyślne `true` niesie dwie żywe konsekwencje), a kontrakt
+   *      „propozycja nieświadoma nie stempluje" pinują dalej testy.
+   */
+  _onExhaustionCeiling(warId, exhaustedSide) {
     const war = this.getWar(warId);
     if (!war || !war.active) return;
-    const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
-    const dipl = window.KOSMOS?.diplomacySystem;
-    if (!dipl) return;
-    // ⚠ WP-4 / C3 (podpis D-WP-3) — GAŁĄŹ AI ZASTĄPIONA DEPESZĄ, i to jest PODPISANA
-    //   REGRESJA: przy wyczerpaniu AI na 100 wojna NIE kończy się już sama. Dawniej ta
-    //   ścieżka podpisywała pokój w imieniu gracza — bez pytania i bez możliwości odmowy,
-    //   więc najdonośniejsza decyzja w konflikcie zapadała w tle. Teraz wysyła ją
-    //   `_maybeAiPeaceOffer` jako depeszę, a wojnę zamyka dopiero kliknięcie gracza.
-    //   Gałąź GRACZA zostaje nietknięta (jej przeprojektowanie to C5).
+    // ⚠ GAŁĄŹ AI (C3): depeszę wysyła `_maybeAiPeaceOffer` — przy KAŻDYM wzroście
+    //   wyczerpania, nie tylko na suficie, bo jej próg to `casusBelli.peaceCost`.
+    //   Po tej stronie nie ma tu nic do roboty.
     if (exhaustedSide !== 'player') return;
-    // ⚠ D2/E3: to NIE JEST już wymuszenie. Dawniej „exhaustion >= 100 ⇒ pokój" omijało
-    // jakąkolwiek ocenę; teraz `offerPeace` przechodzi przez Acceptance Engine, w którym
-    // wyczerpanie jest WIELKIM TERMEM (55 pkt) mierzonym względem `casusBelli.peaceCost`.
-    // Skutek zamierzony: wojna eksterminacyjna (peaceCost 100) nie kończy się sama —
-    // katalog casus belli od zawsze to obiecywał, a nikt tego nie egzekwował.
-    // ⚠ `playerInitiated: false` — patrz DiplomacySystem.offerPeace. Ta ścieżka PONAWIA
-    // się przy każdej kolejnej bitwie (bo wyczerpanie stoi na suficie i samo nic nie ruszy),
-    // więc stemplowanie `recent_refusal` dałoby parze w praktyce stałe −20 i zakleszczyło
-    // wojnę dokładnie tak, jak przed dołożeniem tego retry. Ta sama flaga trzyma modal
-    // odmowy (E4) z dala od serii bitew — gracz niczego tu nie klikał.
-    const accepted = dipl.offerPeace(empireId, `exhaustion_${exhaustedSide}`, { playerInitiated: false });
-    if (!accepted) {
-      EventBus.emit('war:autoPeaceRefused', {
-        warId, empireId, exhaustedSide, casusBelli: war.casusBelli ?? null,
-      });
-    }
+    // ⚠ RAZ NA WOJNĘ. Wyczerpanie stoi na suficie, a każda kolejna bitwa wraca tu ścieżką
+    //   CLAMPOWANĄ; bez flagi Dziennik dostawałby ten sam meldunek po każdej bitwie.
+    //   Flaga siedzi na rekordzie wojny, więc round-trip przez `gameState` jest darmowy
+    //   i NIE wymaga migracji zapisu (`?? false` — stara wojna jej nie ma).
+    if (war.playerExhaustedNotified ?? false) return;
+    const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
+    // Zapis PRZED emitem: konsument, który odczyta rekord wojny, ma widzieć stan PO fakcie.
+    gameState.set(`wars.${warId}`,
+      { ...war, playerExhaustedNotified: true }, 'player_exhausted_notified');
+    EventBus.emit('war:playerExhausted', { warId, empireId, casusBelli: war.casusBelli ?? null });
   }
 
   // ── Ticker ───────────────────────────────────────────────────

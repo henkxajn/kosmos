@@ -566,10 +566,12 @@ export class DiplomacySystem {
    * eksterminacyjna (peaceCost 100) jest praktycznie nie do zakończenia rozmową, dokładnie
    * jak opisuje ją katalog.
    *
-   * ⚠ Ta sama ścieżka obsługuje AUTO-POKÓJ z `WarSystem._triggerAutoPeace`. To było obejście
-   * („exhaustion 100 ⇒ pokój"), teraz jest propozycją jak każda inna — wyczerpanie jest
-   * WIELKIM TERMEM, nie bypassem. Konsekwencja jest zamierzona: przy drogim casus belli
-   * wojna potrafi NIE zakończyć się sama.
+   * ⚠ HISTORIA, KTÓRA JUŻ SIĘ ZAMKNĘŁA — i trzeba ją znać, czytając `playerInitiated`.
+   *   Do D2/E3 „exhaustion 100 ⇒ pokój" było obejściem; E3 zamienił je w propozycję jak
+   *   każdą inną (wyczerpanie = WIELKI TERM, nie bypass). W WP-4 auto-pokój PRZESTAŁ
+   *   ISTNIEĆ PO OBU STRONACH: C3 zamienił gałąź AI na depeszę do gracza, a C5 gałąź
+   *   gracza na jeden meldunek („czas rozważyć pokój"). Skutek dla TEJ metody: od C5
+   *   `playerInitiated: false` NIE MA ŻADNEGO produkcyjnego wołającego — zmierzone.
    *
    * @param {Object} [opts]
    * @param {boolean} [opts.playerInitiated=true] — czy to ŚWIADOMA propozycja gracza.
@@ -577,14 +579,15 @@ export class DiplomacySystem {
    *     1. tylko świadoma propozycja STEMPLUJE `recent_refusal`,
    *     2. tylko świadoma propozycja zasługuje na modal odmowy (E4 czyta to z payloadu).
    *
-   *   ⚠ AUTO-POKÓJ PODAJE `false` I TO JEST WARUNEK BRAKU ZAKLESZCZENIA. E3 dołożył
-   *   ponawianie auto-pokoju przy KAŻDEJ kolejnej bitwie, bo wyczerpanie stoi na suficie
-   *   i samo nic już nie ruszy. Gdyby każde takie ponowienie stemplowało odmowę, para
-   *   dostałaby w praktyce STAŁE −20 na `offer_peace` (term wygasa przez 2 lata, a bitwy
-   *   odświeżają go szybciej) — czyli E4 zatrzasnąłby dokładnie tę pułapkę, którą E3
-   *   właśnie otworzył. `recent_refusal` ma kończyć SPAMOWANIE PRZYCISKIEM; auto-pokój
-   *   nie jest niczyim klikaniem, tylko konsekwencją wyczerpania. Z tego samego powodu
-   *   nie pauzuje gry modalem w środku serii bitew.
+   *   ⚠ PO C5 `false` NIE MA PRODUKCYJNEGO WOŁAJĄCEGO (zmierzone: jedynym był
+   *   `WarSystem` w gałęzi gracza, usunięty w C5). Kontrakt ZOSTAJE, bo opisuje regułę,
+   *   nie jednego klienta: propozycja, której gracz nie złożył świadomie, nie ma prawa
+   *   ani stemplować cooldownu, ani pauzować gry modalem. Pinują go testy
+   *   (`acceptance_refusal_smoke` R3/R4). Powód historyczny, wart zapamiętania: gdy
+   *   auto-pokój ponawiał się przy KAŻDEJ bitwie, stemplowanie dałoby parze w praktyce
+   *   STAŁE −20 na `offer_peace` i zakleszczyłoby wojnę. Od C4 ta kara i tak jest zerowa
+   *   (D-WP-4), a cooldown trwa rok — ale reguła „nieświadoma propozycja nie stempluje"
+   *   jest szersza niż okoliczności, które ją wymusiły.
    *
    * @param {boolean} [opts.stampRefusal=playerInitiated] — czy ocena odmowna ma zapisać
    *   cooldown (D-WP-16). OSOBNA dźwignia od `playerInitiated`, choć domyślnie ta sama

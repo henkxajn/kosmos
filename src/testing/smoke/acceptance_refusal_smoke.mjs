@@ -144,8 +144,14 @@ console.log('--- R3: blokada pre-warunku to NIE odmowa ---');
     cooldowns(E).trade_agreement === undefined);
 }
 
-// ── R4: auto-pokój nie zakleszcza wojny ─────────────────────────────────────
-console.log('--- R4: auto-pokój z wyczerpania NIE stempluje (ochrona retry z E3) ---');
+// ── R4: propozycja NIEŚWIADOMA nie stempluje ────────────────────────────────
+//
+// ⚠ NOTA PO WP-4 / C5: `playerInitiated: false` nie ma od C5 ŻADNEGO produkcyjnego
+//   wolajacego — jedynym byl `WarSystem` w galezi gracza („auto-pokoj"), usuniety w C5.
+//   Kontrakt pinowany nizej ZOSTAJE, bo opisuje regule, nie jednego klienta: propozycja,
+//   ktorej gracz nie zlozyl swiadomie, nie stempluje cooldownu i nie pauzuje gry modalem.
+//   Od C5 produkuja ja WYLACZNIE testy — i to jest swiadomy stan, nie przeoczenie.
+console.log('--- R4: propozycja z `playerInitiated:false` NIE stempluje (kontrakt, nie klient) ---');
 {
   timeSys.gameTime = 400;
   const E = addEmpire('emp_r4', 'xenophage');
@@ -456,7 +462,13 @@ console.log('--- R10: komplet wpisów Dziennika dla wyników dyplomatycznych ---
     { event: 'diplomacy:peaceRejected',  key: 'log.diplo.peaceRejected',  kind: 'odmowa' },
     { event: 'diplomacy:treatyRejected', key: 'log.diplo.treatyRejected', kind: 'odmowa' },
     { event: 'diplomacy:envoyRefused',   key: 'log.diplo.envoyRefused',   kind: 'odmowa' },
-    { event: 'war:autoPeaceRefused',     key: 'log.diplo.autoPeaceRefused', kind: 'odmowa' },
+    // ⚠ WIERSZ PODMIENIONY w WP-4 / C5: `war:autoPeaceRefused` stracilo JEDYNEGO emitenta
+    //   (gra nie sklada juz propozycji pokoju za gracza), wiec jego konsument w Dzienniku
+    //   zostal usuniety. Glosem „wojna doszla do sufitu i sie nie skonczyla" jest teraz
+    //   MELDUNEK o wyczerpaniu wlasnego imperium. `kind` uczciwie „meldunek", nie „odmowa" —
+    //   nikt nam nie odmowil. Asercja koncowa tej sekcji filtruje tylko `sukces`, wiec
+    //   trzeci rodzaj jej nie rusza, a macierz nadal ma OSIEM wierszy.
+    { event: 'war:playerExhausted',      key: 'log.war.playerExhausted',  kind: 'meldunek' },
   ];
 
   for (const o of OUTCOMES) {
@@ -530,8 +542,12 @@ console.log('--- R11: E4e — zero bez znaku (A) + cudza odmowa bez wpisu (B) --
       /\{\s*empireId\s*,\s*playerInitiated\s*\}/.test(handler));
     ok('bramka jest DODATNIA (brak pola ⇒ cisza — lustro bramki modala)',
       /playerInitiated\s*!==\s*true\s*\)\s*return/.test(handler));
-    ok('`war:autoPeaceRefused` zostaje JEDYNYM głosem o wojnie, która się nie skończyła',
-      uiSrc.includes("EventBus.on('war:autoPeaceRefused'"));
+    // ⚠ PRZECELOWANE w WP-4 / C5: glosem „wojna doszla do sufitu i sie nie skonczyla" jest
+    //   od teraz meldunek o wyczerpaniu wlasnego imperium. Stary kanal nie ma ani emitenta,
+    //   ani konsumenta (pinowane u zrodla w `wp_ai_peace_offer_smoke` T9l).
+    ok('głosem o wojnie, która się nie skończyła, jest MELDUNEK o wyczerpaniu',
+      uiSrc.includes("EventBus.on('war:playerExhausted'")
+      && !uiSrc.includes("EventBus.on('war:autoPeaceRefused'"));
   }
 }
 

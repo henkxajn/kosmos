@@ -60,7 +60,6 @@ import { BottomControlBar }    from '../ui/BottomControlBar.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 import { ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY,
          MISSION_ACTIVITY_KEYS, MISSION_ACTIVITY_FALLBACK_KEY } from '../ui/FleetPictureLogic.js';
-import { CASUS_BELLI }         from '../data/CasusBelliData.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -1688,7 +1687,12 @@ export class UIManager {
       // destrukturyzował samo `{ empireId }`. Skutek: auto-pokój z wyczerpania (ponawiany
       // przy KAŻDEJ bitwie, bo wyczerpanie stoi na suficie) dokładał wpis „odrzucili
       // propozycję pokoju" PLUS toast za ofertę, której gracz nigdy nie złożył.
-      // Ten sam fakt mówi uczciwie `war:autoPeaceRefused` kilka linii niżej — i tylko on ma prawo.
+      // ⚠ WP-4 / C5 — BRAMKA ZOSTAJE, choć jej pierwotny sprawca ZNIKŁ: auto-pokoju z
+      //   wyczerpania nie ma już wcale, a `war:autoPeaceRefused` (do którego odsyłał ten
+      //   komentarz) stracił emitenta i konsumenta. Bramka opisuje REGUŁĘ, nie tamten jeden
+      //   przypadek: Dziennik melduje wyłącznie odmowę propozycji, którą gracz ZŁOŻYŁ
+      //   ŚWIADOMIE. Od C3 produkuje takie propozycje przyjęcie depeszy pokojowej AI —
+      //   i tamta ścieżka jest właśnie powodem, dla którego bramka nadal ma co odsiewać.
       if (playerInitiated !== true) return;
       const nm = _empName(empireId);
       this._log(t('log.diplo.peaceRejected', nm), 'diplomacy_warn');
@@ -1699,16 +1703,16 @@ export class UIManager {
       this._log(t('log.diplo.envoyRefused', nm), 'diplomacy_warn');
       EventBus.emit('ui:toast', { text: t('log.diplo.envoyRefused', nm), color: '#D8A030' });
     });
-    EventBus.on('war:autoPeaceRefused',     ({ empireId, casusBelli }) => {
-      // Wojna doszła do sufitu wyczerpania i NIE zakończyła się sama — to jest nowość
-      // w grze i gracz musi o tym wiedzieć, inaczej wygląda jak zawieszony system.
-      // ⚠ `casusBelli` szedł tu jako SUROWY SLUG (`border_incident`), mimo że `CASUS_BELLI`
-      // ma `namePL`/`nameEN` od pierwszego commita dyplomacji — `getName` czyta te pola bez
-      // potrzeby nowych kluczy i18n.
-      const cbDef = CASUS_BELLI[casusBelli];
-      const cbName = cbDef ? getName(cbDef, 'casusBelli') : (casusBelli ?? '?');
-      this._log(t('log.diplo.autoPeaceRefused', _empName(empireId), String(cbName)), 'diplomacy_warn');
-    });
+    // ⚠ WP-4 / C5 — `war:autoPeaceRefused` USUNIĘTE: straciło JEDYNEGO emitenta, bo gałąź
+    //   gracza nie składa już propozycji pokoju, więc nie ma odmowy, o której mogłaby
+    //   meldować. Zdarzenie bez emitenta, ale z konsumentem, to martwa gałąź wyglądająca
+    //   na żywą. Klucz `log.diplo.autoPeaceRefused` zostaje w słownikach jako nieużywany
+    //   (precedens `fleetPicture.state.idle`) — `check-i18n` pyta o klucze UŻYTE, nie
+    //   o zdefiniowane, więc sierota jest niema i nie ma czego zepsuć.
+    //   W jego miejsce wchodzi MELDUNEK o wyczerpaniu WŁASNEGO imperium (D-WP-14 = a):
+    //   nie „ktoś nam odmówił", a „czas rozważyć pokój" — raz na wojnę, decyzja gracza.
+    EventBus.on('war:playerExhausted', () =>
+      this._log(t('log.war.playerExhausted'), 'diplomacy_warn'));
     // WP-4 / C3 — depesza pokojowa AI. Trzy różne fakty, trzy różne wpisy:
     //   przyszła / gracz ją odrzucił / straciła ważność, zanim gracz kliknął.
     // ⚠ Przyjęcia NIE logujemy tutaj: pokój melduje `diplomacy:peaceSigned` kilka linii

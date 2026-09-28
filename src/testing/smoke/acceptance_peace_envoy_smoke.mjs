@@ -128,8 +128,15 @@ console.log('--- P2: casusBelli.peaceCost — pierwszy czytelnik w grze ---');
   })());
 }
 
-// ── P3: auto-pokój przestał być obejściem ───────────────────────────────────
-console.log('--- P3: WarSystem._triggerAutoPeace przez silnik ---');
+// ── P3: sufit wyczerpania gracza — od C5 MELDUNEK, nie propozycja ────────────
+//
+// ⚠ PRZECELOWANE W WP-4 / C5 (podpis D-WP-14 = a). Do C5 ta sekcja mierzyła auto-pokój
+//   z wyczerpania GRACZA: gra skladala propozycje w jego imieniu, a odmowa AI wracala
+//   zdarzeniem `war:autoPeaceRefused`. C5 zdjal te propozycje (gra nie prosi za gracza),
+//   wiec tamto zdarzenie stracilo JEDYNEGO emitenta i wszystkie trzy piny nizej mierzylyby
+//   cisze — a pierwszy z nich wywalilby CALY plik `TypeError`em na `refusedEvt.casusBelli`.
+//   Intencje zostaly, tylko obserwablem jest teraz MELDUNEK `war:playerExhausted`.
+console.log('--- P3: WarSystem._onExhaustionCeiling — meldunek o wyczerpaniu gracza ---');
 {
   const { WarSystem } = await import('../../systems/WarSystem.js');
   const warSys = new WarSystem();
@@ -138,20 +145,27 @@ console.log('--- P3: WarSystem._triggerAutoPeace przez silnik ---');
   addEmpire('emp_auto', 'xenophage');
   dipl.declareWar('emp_auto', 'player_action');
   const war = warSys.createWar('player', 'emp_auto', 'extermination');
-  let refusedEvt = null;
-  const offRef = EventBus.on('war:autoPeaceRefused', (e) => { refusedEvt = e; });
+  let beatEvt = null;
+  const offRef = EventBus.on('war:playerExhausted', (e) => { beatEvt = e; });
 
   warSys.changeExhaustion(war.id, 'player', 100, 'test');
-  ok('sufit wyczerpania NIE kończy już wojny automatycznie (eksterminacja + xenofag)',
-    dipl.getStatus('emp_auto') === 'war' && refusedEvt?.warId === war.id);
-  ok('odmowa auto-pokoju jest OGŁASZANA (inaczej wygląda jak zawieszony system)',
-    refusedEvt.casusBelli === 'extermination');
+  ok('sufit wyczerpania NIE kończy wojny automatycznie (eksterminacja + xenofag)',
+    dipl.getStatus('emp_auto') === 'war' && beatEvt?.warId === war.id);
+  ok('wyczerpanie WŁASNEGO imperium jest OGŁASZANE (inaczej wygląda jak zawieszony system)',
+    beatEvt?.casusBelli === 'extermination');   // ⚠ `?.` — bez niego brak meldunku wywala
+                                               //   CALY plik i piny nizej traca kolor
 
-  // ⚠ Wyczerpanie jest clampowane do 100 — bez retry pierwsza odmowa zamykałaby wojnę
-  // w stanie „nie da się zakończyć" na zawsze (wczesny return w changeExhaustion).
-  refusedEvt = null;
+  // ⚠ PIN ODWRÓCONY ŚWIADOMIE — WP-4 / C5, podpis D-WP-14 (= a).
+  //   Pinowal: „kolejna bitwa na suficie PONAWIA probe (brak zakleszczenia)". Ponawianie
+  //   istnialo, bo gra PROSILA o pokoj za gracza i przy clampowanym wyczerpaniu musiala
+  //   probowac znow — jednorazowy strzal zamykalby wojne w stanie „nie da sie zakonczyc".
+  //   Po C5 gra nie prosi wcale, wiec NIE MA CZEGO PONAWIAC, a meldunek jest RAZ NA WOJNE
+  //   (inaczej Dziennik dostawalby go po kazdej bitwie na suficie). Zakleszczenie zniklo
+  //   nie przez retry, tylko przez oddanie decyzji graczowi — on klika ☮, kiedy chce.
+  beatEvt = null;
   warSys.changeExhaustion(war.id, 'player', 15, 'kolejna bitwa');
-  ok('kolejna bitwa na suficie PONAWIA próbę (brak zakleszczenia)', refusedEvt !== null);
+  ok('kolejna bitwa na suficie NIE dokłada meldunku — raz na wojnę (D-WP-14)',
+    beatEvt === null && dipl.getStatus('emp_auto') === 'war');
 
   // Ta sama ścieżka, ale wojna do wygaszenia: tani casus belli i spokojny archetyp.
   //
@@ -176,9 +190,19 @@ console.log('--- P3: WarSystem._triggerAutoPeace przez silnik ---');
   //   gałąź AI w ogóle nie podpisuje pokoju. Dlatego odwrócenie kolejności jest bezpieczne.
   ok('samo wyczerpanie AI nie zamyka wojny (przed C3: MIN z obu; po C3: brak gałęzi AI)',
     dipl.getStatus('emp_auto2') === 'war');
+  // ⚠ PIN WYCOFANY — WP-4 / C5, podpis D-WP-14 (= a).
+  //   Pinował: „tani casus belli + spokojny archetyp ⇒ auto-pokój dalej DZIAŁA". Ten
+  //   inwariant PRZESTAŁ ISTNIEĆ — po C3 (gałąź AI) i C5 (gałąź gracza) auto-pokoju nie
+  //   ma w grze wcale, po ŻADNEJ stronie, więc nie ma czego pinować. Sam KOSZT casus belli
+  //   dalej waży, ale w `evaluatePeace` (term `war_status`) i tam jest pinowany
+  //   (`acceptance_engine_smoke`) — nie tutaj.
+  //   Na tym site'cie mierzymy to, co weszło w jego miejsce, i to jest cała treść D-WP-14:
+  //   pokój JEST do wzięcia (wyrocznia mówi tak), a wojna i tak czeka na klik gracza.
   warSys.changeExhaustion(war2.id, 'player', 100, 'test');
-  ok('tani casus belli + spokojny archetyp ⇒ auto-pokój dalej DZIAŁA',
-    dipl.getStatus('emp_auto2') === 'truce');
+  ok('tani casus belli + spokojny archetyp: silnik PRZYJĄŁBY pokój…',
+    dipl.evaluatePeace('emp_auto2', null).decision === true);
+  ok('…a wojna i tak czeka na klik gracza (D-WP-14: gra nie prosi w jego imieniu)',
+    dipl.getStatus('emp_auto2') === 'war' && warSys.getWar(war2.id)?.active === true);
   if (typeof offRef === 'function') offRef();
   window.KOSMOS.warSystem = { getWarWith: (empireId) => wars.get(empireId) ?? null };
 }

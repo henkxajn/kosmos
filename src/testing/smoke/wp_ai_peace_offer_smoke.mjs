@@ -54,7 +54,7 @@
 // Uruchom: node src/testing/smoke/wp_ai_peace_offer_smoke.mjs
 
 import '../headless/env.js';           // MUSI być pierwszy (window/localStorage/THREE)
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { GameCore } from '../headless/GameCore.js';
@@ -280,11 +280,22 @@ console.log('T2 — REGRESJA PODPISANA: gałąź AI nie podpisuje pokoju sama');
     'T2c: status pary to nadal wojna (nie `truce`) — auto-pokój po stronie AI zniknął');
 }
 {
-  // KONTROLA: gałąź GRACZA nietknięta (C5 to zmieni, C3 nie).
+  // ⚠ PIN PRZECELOWANY — WP-4 / C5, podpis D-WP-14 (= a).
+  //   Do C5 pinował, że gałąź GRACZA dalej prowadzi do auto-pokoju, i służył jako dowód,
+  //   że C3 ZAWĘZIŁ zmianę do gałęzi AI. Etykieta sama zapowiadała własną śmierć („C5 to
+  //   zmieni, C3 nie") — i C5 ją wykonał: wyczerpanie gracza też nie podpisuje już pokoju,
+  //   tylko MELDUJE. Cel pinu (zakres) zostaje, ale mierzy go teraz ROZDZIELNOŚĆ dwóch
+  //   mechanizmów, nie kontrast „jeden jeszcze działa" — bo po WP-4 nie działa żaden.
   const K = boot(); const w = warWith(K, 99, 100);
+  const beats = [];
+  EventBus.on('war:playerExhausted', (p) => beats.push(p));
+  const offers = spyOffers();
   K.warSystem.changeExhaustion(w.id, 'player', 1, 'test');
-  assert(K.diplomacySystem.getStatus(EMP) === 'truce',
-    'T2d (KONTROLA PINU): wyczerpanie GRACZA dalej prowadzi do auto-pokoju — C3 tej gałęzi nie tyka');
+  assert(K.diplomacySystem.getStatus(EMP) === 'war' && K.warSystem.getWar(w.id)?.active === true,
+    'T2d: wyczerpanie GRACZA nie podpisuje pokoju — po WP-4 nie robi tego ŻADNA strona');
+  assert(beats.length === 1 && offers.length === 0,
+    'T2e: …i idzie WŁASNYM kanałem: meldunek gracza (' + beats.length + '), NIE depesza AI ('
+    + offers.length + ') — dwa mechanizmy, rozdzielne');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -534,6 +545,114 @@ console.log('T8 — i18n: trzynaście par, brzmienia dosłownie jak podpisane');
   const modal = readClean('ui/PeaceOfferModal.js');
   assert(modal !== '' && !/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(modal),
     'T8f: ZERO polskich literałów w kodzie modalu (klasa 113)');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// WP-4 / C5 (podpis D-WP-14 = a) — GAŁĄŹ GRACZA: gra przestaje prosić o pokój ZA gracza.
+//
+// Do C5 wyczerpanie gracza na 100 wołało `offerPeace(empireId, 'exhaustion_player',
+// { playerInitiated: false })` — czyli GRA składała propozycję w imieniu gracza. Przy AI
+// nieskłonnym do pokoju jedynym efektem był wpis `war:autoPeaceRefused`; przy skłonnym —
+// pokój ZAWIERANY BEZ PYTANIA. C5 zastępuje to JEDNYM meldunkiem („czas rozważyć pokój"),
+// raz na wojnę, a decyzję zostawia graczowi: to on klika ☮ w panelu Wojny.
+//
+// ⚠ RAZEM Z C3 OZNACZA TO, ŻE AUTO-POKÓJ PRZESTAJE ISTNIEĆ W GRZE. C3 zdjęło go z gałęzi
+//   AI (depesza), C5 z gałęzi gracza (meldunek). Obie strony wymagają teraz kliknięcia.
+//   Dlatego `war:autoPeaceRefused` traci JEDYNEGO emitenta, a `playerInitiated: false`
+//   JEDYNEGO produkcyjnego wołającego — oba ZMIERZONE przed kodem, oba pinowane niżej.
+console.log('T9 — C5: gałąź GRACZA melduje, nie podpisuje (D-WP-14)');
+{
+  const K = boot(); const w = warWith(K, 99, 0);
+  const ds = K.diplomacySystem;
+  const beats = [], refused = [];
+  EventBus.on('war:playerExhausted', (p) => beats.push(p));
+  EventBus.on('war:autoPeaceRefused', (p) => refused.push(p));
+  // Szpieg na fasadzie — „czy gra złożyła propozycję ZA gracza" mierzymy LICZNIKIEM
+  // WYWOŁAŃ, nie skutkiem: przy AI nieskłonnym do pokoju skutek jest identyczny
+  // (wojna trwa), więc sam status nie odróżniłby „nie pytała" od „pytała i dostała nie".
+  const realOfferPeace = ds.offerPeace.bind(ds);
+  let calls = 0;
+  ds.offerPeace = (...a) => { calls++; return realOfferPeace(...a); };
+
+  K.warSystem.changeExhaustion(w.id, 'player', 1, 'test');
+  assert(K.warSystem.getWar(w.id)?.exhaustion?.player === 100,
+    'T9a (KONTROLA PINU): wyczerpanie gracza REALNIE dobiło sufitu — bez tego reszta T9 mierzyłaby ciszę');
+  assert(calls === 0,
+    'T9b: gra NIE składa propozycji pokoju za gracza (wywołań `offerPeace`: ' + calls + ')');
+  assert(beats.length === 1,
+    'T9c: dokładnie JEDEN meldunek `war:playerExhausted` (' + beats.length + ')');
+  assert(beats[0]?.warId === w.id,
+    'T9d: meldunek niesie `warId` — Dziennik mówi o KONKRETNEJ wojnie');
+  assert(refused.length === 0,
+    'T9e: `war:autoPeaceRefused` NIE leci — nie ma już odmowy, o której mógłby meldować');
+  assert(ds.getStatus(EMP) === 'war' && K.warSystem.getWar(w.id)?.active === true,
+    'T9f: wojna trwa, status pary nietknięty — próg 100 nic nie zamyka');
+  assert(K.warSystem.getWar(w.id)?.playerExhaustedNotified === true,
+    'T9g: flaga „już zameldowano" zapisana na REKORDZIE WOJNY (round-trip przez gameState, bez migracji)');
+
+  // RAZ NA WOJNĘ — kolejne bitwy na suficie nie dokładają meldunków.
+  K.warSystem.changeExhaustion(w.id, 'player', 5, 'kolejna bitwa');
+  assert(beats.length === 1,
+    'T9h: drugi bump na suficie ⇒ ZERO nowych meldunków (' + beats.length + ') — raz na wojnę');
+  assert(calls === 0,
+    'T9i: …i nadal żadnego `offerPeace` (' + calls + ')');
+
+  // KONTROLA NIE-JAŁOWOŚCI SZPIEGA: gdy propozycja REALNIE idzie, licznik ją widzi.
+  // ⚠ PRZYROST, nie wartość bezwzględna — pierwsza wersja asertowała `calls === 1` i padała
+  //   na kodzie sprzed C5 z powodu POPRAWNEGO zachowania (dwa bumpy zdążyły już wywołać
+  //   `offerPeace`, więc licznik stał na 2). Kontrola pinu nie może zależeć od stanu, który
+  //   mierzy pin obok niej.
+  const before = calls;
+  ds.offerPeace(EMP, 'kontrola_pinu', { playerInitiated: true });
+  assert(calls === before + 1,
+    'T9j (KONTROLA PINU): szpieg łapie prawdziwe wywołanie (' + before + ' → ' + calls
+    + ') — T9b/T9i nie mierzą zepsutego instrumentu');
+  ds.offerPeace = realOfferPeace;
+}
+{
+  // KONTROLA: C3 nietknięte — AI dalej proponuje przy obu wyczerpanych.
+  const K = boot(); const w = warWith(K, 100, 99);
+  const offers = spyOffers();
+  bumpAi(K, w);
+  assert(offers.length === 1,
+    'T9k (KONTROLA PINU): depesza AI wg C3 działa dalej (' + offers.length + ') — C5 tyka WYŁĄCZNIE gałęzi gracza');
+}
+{
+  // Pin ŹRÓDŁOWY: martwe zdarzenie nie ma ani emitenta, ani konsumenta w kodzie gry.
+  const walk = (dir, out = []) => {
+    for (const e of readdirSync(dir)) {
+      const p = join(dir, e);
+      if (statSync(p).isDirectory()) { if (e !== 'testing') walk(p, out); }
+      else if (e.endsWith('.js')) out.push(p);
+    }
+    return out;
+  };
+  const hits = walk(SRC).filter(p => stripComments(norm(readFileSync(p, 'utf8'))).includes('war:autoPeaceRefused'));
+  assert(hits.length === 0,
+    'T9l (pin ŹRÓDŁOWY): `war:autoPeaceRefused` nie ma w kodzie gry ANI emitenta, ANI konsumenta ' +
+    '(znalezione: ' + hits.map(p => p.slice(SRC.length)).join(', ') + ')');
+  const uiSrc = readClean('scenes/UIManager.js');
+  assert(uiSrc.includes("EventBus.on('war:playerExhausted'"),
+    'T9m (pin ŹRÓDŁOWY): meldunek ma subskrybenta Dziennika — inaczej gracz nie dowiedziałby się niczego');
+  // ⚠ ŚWIADEK, nie KONTROLA — musi być CZERWONY przed C5. Kontrole trzymają po obu
+  //   stronach; ten pin dowodzi, że funkcję PRZENIEŚLIŚMY, a nie usunęli: gdyby nowego
+  //   kanału nie było, T9l świeciłby zielono przy wyciętym meldunku.
+  assert(hits.length === 0 && uiSrc.includes('war:playerExhausted'),
+    'T9n (ŚWIADEK): nowy kanał ISTNIEJE — T9l nie mierzy nieobecności czegoś, czego nie ma nigdzie');
+  const wsSrc = readClean('systems/WarSystem.js');
+  assert(/AUTO_PEACE_EXHAUSTION\s*=\s*100/.test(wsSrc),
+    'T9o: próg `AUTO_PEACE_EXHAUSTION` nietknięty (100) — C5 zmienia REAKCJĘ na próg, nie sam próg');
+  assert(!wsSrc.includes("'exhaustion_player'") && !wsSrc.includes('playerInitiated: false'),
+    'T9p: gałąź gracza nie woła już `offerPeace` — ani z etykietą `exhaustion_player`, ani z `playerInitiated: false`');
+}
+{
+  // i18n — brzmienia DOSŁOWNIE jak podpisane.
+  const pl = dictValue('pl.js', 'log.war.playerExhausted');
+  const en = dictValue('en.js', 'log.war.playerExhausted');
+  assert(pl === 'Imperium wyczerpane wojną — czas rozważyć pokój',
+    'T9q: brzmienie PL dosłownie jak podpisano (' + JSON.stringify(pl) + ')');
+  assert(en === 'Empire worn down by war — time to consider peace',
+    'T9r: brzmienie EN dosłownie jak podpisano (' + JSON.stringify(en) + ')');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
