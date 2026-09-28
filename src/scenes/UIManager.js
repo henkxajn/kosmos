@@ -1709,6 +1709,19 @@ export class UIManager {
       const cbName = cbDef ? getName(cbDef, 'casusBelli') : (casusBelli ?? '?');
       this._log(t('log.diplo.autoPeaceRefused', _empName(empireId), String(cbName)), 'diplomacy_warn');
     });
+    // WP-4 / C3 — depesza pokojowa AI. Trzy różne fakty, trzy różne wpisy:
+    //   przyszła / gracz ją odrzucił / straciła ważność, zanim gracz kliknął.
+    // ⚠ Przyjęcia NIE logujemy tutaj: pokój melduje `diplomacy:peaceSigned` kilka linii
+    //   wyżej i dwa wpisy o jednym fakcie to klasa, którą ten plik już raz naprawiał.
+    EventBus.on('war:aiPeaceOffer', ({ empireId }) =>
+      this._log(t('log.diplo.aiPeaceOffer', _empName(empireId)), 'diplomacy'));
+    EventBus.on('war:aiPeaceOfferResolved', ({ empireId, choice }) => {
+      if (choice === 'reject') {
+        this._log(t('log.diplo.aiPeaceOfferRejected', _empName(empireId)), 'diplomacy_warn');
+      } else if (choice === 'stale') {
+        this._log(t('log.diplo.aiPeaceOfferExpired', _empName(empireId)), 'diplomacy_warn');
+      }
+    });
     EventBus.on('diplomacy:treatyAccepted', ({ empireId }) => this._log(t('log.diplo.treatyAccepted', _empName(empireId)), 'diplomacy'));
     EventBus.on('diplomacy:treatyRejected', ({ empireId, reason }) => {
       if (reason === 'already_signed') return;

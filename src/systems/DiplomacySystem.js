@@ -35,7 +35,10 @@ import { RelationsModel } from './diplomacy/RelationsModel.js';
 import { ReputationLedger } from './diplomacy/ReputationLedger.js';
 import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
 import { visibleBreakdown, refusalWindowYears } from '../utils/AcceptanceMath.js';
-import { VERB_ACCEPTANCE, TERRITORIAL_MAX_SHARE } from '../data/AcceptanceWeightData.js';
+import {
+  VERB_ACCEPTANCE, TERRITORIAL_MAX_SHARE,
+  NON_VERB_COOLDOWN_YEARS, AI_PEACE_OFFER_COOLDOWN_KEY,
+} from '../data/AcceptanceWeightData.js';
 // WP-3 — czysta re-walidacja warunków pokoju (zero importów, świat wstrzykiwany).
 import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
@@ -404,7 +407,46 @@ export class DiplomacySystem {
   getRefusalYearsLeft(empireId, verb) {
     const year = this.getRefusedYear(empireId, verb);
     if (year == null) return 0;
-    return Math.max(0, (year + refusalWindowYears(VERB_ACCEPTANCE[verb])) - this._year());
+    return Math.max(0, (year + refusalWindowYears(this._cooldownCfg(verb))) - this._year());
+  }
+
+  /**
+   * Konfiguracja OKNA dla klucza księgi cooldownów — jedna ścieżka odczytu dla obu rodzin.
+   *
+   * Księga `verbCooldowns` trzyma rok zdarzenia dla czasowników (odmowa propozycji) ORAZ dla
+   * kluczy nie-czasownikowych (WP-4 / C3: cooldown depeszy pokojowej AI). Te drugie nie mają
+   * progu ani wag, więc nie mogą mieszkać w `VERB_ACCEPTANCE` — mają własną, płaską mapę
+   * okien. Nieznany klucz ⇒ `null` ⇒ `refusalWindowYears` daje `RECENT_REFUSAL_YEARS`.
+   */
+  _cooldownCfg(verb) {
+    if (VERB_ACCEPTANCE[verb]) return VERB_ACCEPTANCE[verb];
+    const years = NON_VERB_COOLDOWN_YEARS[verb];
+    return years == null ? null : { refusalCooldownYears: years };
+  }
+
+  /**
+   * Ile lat GRY AI milczy po odpowiedzianej depeszy pokojowej (0 = może prosić znów).
+   *
+   * ⚠ ISTNIEJE, ŻEBY KLUCZ NIE WYCIEKŁ Z FASADY. Pin P14 (`acceptance_engine_smoke`)
+   *   dopuszcza import modułów `Acceptance*` WYŁĄCZNIE w tym pliku, a klucz i okno depeszy
+   *   mieszkają w katalogu wag. `WarSystem` (który decyduje, kiedy wysłać depeszę) i panel
+   *   depeszy (który ją zamyka) pytają więc TUTAJ, zamiast trzymać trzecią i czwartą kopię
+   *   literału `ai_peace_offer`.
+   */
+  getAiPeaceOfferCooldown(empireId) {
+    return this.getRefusalYearsLeft(empireId, AI_PEACE_OFFER_COOLDOWN_KEY);
+  }
+
+  /**
+   * Depesza pokojowa ODPOWIEDZIANA (odrzucona albo skierowana do stołu) — zapisz cooldown.
+   *
+   * ⚠ NIE dotyka `offer_peace`: odmowa CUDZEJ oferty nie jest spamowaniem własnym
+   *   przyciskiem. Przyjęcie oferty i zamknięcie bez odpowiedzi cooldownu NIE zapisują
+   *   (podpis D-WP-3) — inaczej gracz płaciłby za cudzy ruch, a AI nie mogłoby poprosić
+   *   znów, gdy jego własna oferta straciła ważność w drodze.
+   */
+  noteAiPeaceOfferAnswered(empireId) {
+    return this.noteRefusal(empireId, AI_PEACE_OFFER_COOLDOWN_KEY);
   }
 
   /**

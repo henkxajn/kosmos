@@ -3610,6 +3610,21 @@ export default {
   'peaceTable.clear':            'Clear table',
   'peaceTable.hint':             'Click a body to add it to the terms',
 
+  // === Peace dispatch (WP-4 C3) — a war-worn AI asks for peace itself ===
+  'peaceOffer.barTitle':   'DIPLOMATIC DISPATCH',
+  'peaceOffer.headline':   '{0} PROPOSES PEACE',
+  'peaceOffer.desc':       'Worn down by the war, they ask to end it.',
+  'peaceOffer.termsTitle': 'Terms',
+  'peaceOffer.statusQuo':  'No territorial change — holdings stay',
+  'peaceOffer.napNote':    'Peace carries a non-aggression pact',
+  'peaceOffer.accept':     '☮ Accept',
+  'peaceOffer.reject':     '⚔ Reject',
+  'peaceOffer.counter':    '⇄ Counter-offer',
+  'peaceOffer.staleTitle': 'Offer no longer valid',
+  'log.diplo.aiPeaceOffer':         '☮ {0} proposes peace',
+  'log.diplo.aiPeaceOfferRejected': '⚔ Rejected peace offer from {0}',
+  'log.diplo.aiPeaceOfferExpired':  '☮ Peace offer from {0} expired',
+
   // === Occupation badge (WP-4 C2) — read from the active war's capture ledger ===
   'body.occupied':               '🏴 Occupied',
   'body.occupiedBy':             '🏴 Occupied by {0}',

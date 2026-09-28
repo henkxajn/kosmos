@@ -154,11 +154,29 @@ console.log('--- P3: WarSystem._triggerAutoPeace przez silnik ---');
   ok('kolejna bitwa na suficie PONAWIA próbę (brak zakleszczenia)', refusedEvt !== null);
 
   // Ta sama ścieżka, ale wojna do wygaszenia: tani casus belli i spokojny archetyp.
+  //
+  // ⚠ KOLEJNOŚĆ WYCZERPAŃ ODWRÓCONA ŚWIADOMIE — WP-4 / C3, podpis D-WP-3 (27.09).
+  //   Pin pytał „czy auto-pokój DALEJ działa przy tanim CB i spokojnym archetypie" i robił
+  //   to przez stronę AI jako ostatnią. C3 zdjęło auto-pokój z gałęzi AI: wyczerpane AI
+  //   wysyła teraz DEPESZĘ, a wojnę zamyka kliknięcie gracza (podpisana regresja, pinowana
+  //   w `wp_ai_peace_offer_smoke` T2). Intencja tego pinu dotyczy KOSZTU CASUS BELLI
+  //   I ARCHETYPU, nie tego, która strona wyczerpie się druga — więc mierzymy ją gałęzią,
+  //   której C3 nie tyka: wyczerpaniem GRACZA jako ostatnim. (Tę gałąź przeprojektuje C5.)
+  //
+  //   ⚠ Po tej zmianie pin przechodzi PO OBU STRONACH C3 i to jest zamierzone: jest
+  //     strażnikiem NIE-REGRESJI, nie dyskryminatorem. Sama regresja (gałąź AI nie podpisuje
+  //     już pokoju) jest mierzona tam, gdzie da się ją zmierzyć — `wp_ai_peace_offer_smoke`
+  //     T2a-T2c, trzy piny czerwone na kodzie sprzed C3.
   addEmpire('emp_auto2', 'industrialist');
   dipl.declareWar('emp_auto2', 'player_action');
   const war2 = warSys.createWar('player', 'emp_auto2', 'border_incident');
-  warSys.changeExhaustion(war2.id, 'player', 100, 'test');
   warSys.changeExhaustion(war2.id, 'emp_auto2', 100, 'test');
+  // ⚠ KONTROLA, PRAWDZIWA PO OBU STRONACH — i z DWÓCH RÓŻNYCH POWODÓW: przed C3 silnik
+  //   odmawiał, bo `war_status` liczy MIN z obu wyczerpań (`min(0, 100) − 30` < 0), a po C3
+  //   gałąź AI w ogóle nie podpisuje pokoju. Dlatego odwrócenie kolejności jest bezpieczne.
+  ok('samo wyczerpanie AI nie zamyka wojny (przed C3: MIN z obu; po C3: brak gałęzi AI)',
+    dipl.getStatus('emp_auto2') === 'war');
+  warSys.changeExhaustion(war2.id, 'player', 100, 'test');
   ok('tani casus belli + spokojny archetyp ⇒ auto-pokój dalej DZIAŁA',
     dipl.getStatus('emp_auto2') === 'truce');
   if (typeof offRef === 'function') offRef();

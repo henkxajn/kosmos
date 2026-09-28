@@ -38,9 +38,20 @@ export class WarOverlay extends BaseOverlay {
     this._contentHRight = null;
   }
 
-  show() {
+  show(opts = {}) {
     super.show();
     const ws = window.KOSMOS?.warSystem;
+    // ⚠ WP-4 / C3: „Kontrpropozycja" w depeszy pokojowej otwiera panel NA TEJ WOJNIE.
+    //   Bez tego `show()` wybrałby PIERWSZĄ aktywną z listy, więc przy dwóch wojnach gracz
+    //   siadałby do stołu z innym imperium, niż to, które właśnie o pokój poprosiło.
+    //   Zmiana wojny czyści stół — lustro gałęzi `case 'select'` w `_onHit`.
+    if (opts?.warId && this._selectedId !== opts.warId) {
+      this._selectedId = opts.warId;
+      this._selected.clear();
+      this._tableKey = null;
+      this._evalKey = null;
+      this._scrollRight = 0;
+    }
     if (!this._selectedId && ws) {
       const active = ws.listActive();
       if (active.length > 0) this._selectedId = active[0].id;

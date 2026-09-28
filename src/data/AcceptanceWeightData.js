@@ -415,6 +415,25 @@ export const OFFER_HALF_KR = 500;
 // obciąża kolejną próbę. Backbone: −20 przez 2 lata; tu 2 lata × waga 25 ⇒ −25 tuż po odmowie.
 export const RECENT_REFUSAL_YEARS = 2;
 
+// ── Cooldowny kluczy NIE-CZASOWNIKOWYCH (WP-4 / C3, podpis D-WP-3) ──────────
+//
+// Księga `verbCooldowns` na rekordzie pary trzyma ROK ZDARZENIA — jedna semantyka dla
+// WSZYSTKICH kluczy, a okno dokłada czytelnik (`refusalWindowYears`). C3 wpisuje do niej
+// klucz, który NIE jest czasownikiem: cooldown DEPESZY pokojowej AI. Nie może nim być
+// wpis w `VERB_ACCEPTANCE`, bo ten katalog opisuje propozycje DO OCENY (próg, termy, wagi),
+// a depesza oceny nie przechodzi — jest skutkiem oceny, która już padła.
+//
+// ⚠ 1 ROK, SYMETRYCZNIE do przycisku ☮ gracza (D-WP-4): obie strony milczą tyle samo.
+//   Gdyby ten klucz nie miał tu wpisu, `refusalWindowYears` dałby mu fallback 2 lat i AI
+//   milczałoby dwa razy dłużej niż gracz — przy podpisie mówiącym wprost „symetryczny".
+//
+// ⚠ Term `recent_refusal` czyta `ctx.verbCooldowns[ctx.verb]`, a `ctx.verb` jest ZAWSZE
+//   czasownikiem katalogu, więc klucz stąd nie ma jak zatruć żadnego wyniku. Zmierzone.
+export const AI_PEACE_OFFER_COOLDOWN_KEY = 'ai_peace_offer';
+export const NON_VERB_COOLDOWN_YEARS = {
+  [AI_PEACE_OFFER_COOLDOWN_KEY]: 1,
+};
+
 // Ile OSTATNICH wpisów pamięci relacji widzi term `memory`.
 // ⚠ ŚWIADOMIE OSOBNA GAŁKA od `CB_MEMORY_WINDOW` (D1, też 10), mimo tej samej wartości:
 // tamto okno wybiera casus belli LICZĄC wystąpienia typów, więc jego poszerzenie po cichu

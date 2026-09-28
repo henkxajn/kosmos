@@ -73,6 +73,7 @@ import { showIntroSequence }     from '../ui/IntroModal.js';
 import { setCrtHidden }          from '../ui/CrtOverlay.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { initDiplomacyRefusals } from '../ui/DiplomacyRefusalModal.js';
+import { initPeaceOffers } from '../ui/PeaceOfferModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
@@ -3047,6 +3048,8 @@ export class GameScene {
     initMissionEvents();
     // D2/E4 — modal odmowy dyplomatycznej z rozbiciem akceptacji („dlaczego NIE")
     initDiplomacyRefusals();
+    // WP-4 / C3 — depesza pokojowa: wyczerpane AI samo prosi o pokój (trzy wybory gracza)
+    initPeaceOffers();
     // Modal wyborów konsularnych (Poszukiwacze co 15 lat)
     initConsulElection();
     // Toast auto-pauzy (krótki komunikat 3s przy auto-pauzie)

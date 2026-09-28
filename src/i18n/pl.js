@@ -3611,6 +3611,21 @@ export default {
   'peaceTable.clear':            'Wyczyść stół',
   'peaceTable.hint':             'Kliknij ciało, aby dodać je do warunków',
 
+  // === Depesza pokojowa (WP-4 C3) — wyczerpane AI samo prosi o pokój ===
+  'peaceOffer.barTitle':   'DEPESZA DYPLOMATYCZNA',
+  'peaceOffer.headline':   '{0} PROPONUJE POKÓJ',
+  'peaceOffer.desc':       'Wyczerpani wojną, proszą o jej zakończenie.',
+  'peaceOffer.termsTitle': 'Warunki',
+  'peaceOffer.statusQuo':  'Bez zmian terytorialnych — zdobycze zostają',
+  'peaceOffer.napNote':    'Pokój niesie pakt o nieagresji',
+  'peaceOffer.accept':     '☮ Akceptuj',
+  'peaceOffer.reject':     '⚔ Odrzuć',
+  'peaceOffer.counter':    '⇄ Kontrpropozycja',
+  'peaceOffer.staleTitle': 'Oferta straciła ważność',
+  'log.diplo.aiPeaceOffer':         '☮ {0} proponuje pokój',
+  'log.diplo.aiPeaceOfferRejected': '⚔ Odrzucono propozycję pokoju od {0}',
+  'log.diplo.aiPeaceOfferExpired':  '☮ Propozycja pokoju od {0} wygasła',
+
   // === Odznaka okupacji (WP-4 C2) — czytana z księgi zdobyczy aktywnej wojny ===
   'body.occupied':               '🏴 Okupowana',
   'body.occupiedBy':             '🏴 Okupowana przez {0}',

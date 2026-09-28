@@ -77,6 +77,17 @@ export class WarSystem {
   constructor() {
     this._tickAccum = 0;
 
+    // ⚠ WP-4 / C3 — BRAMKA „ŻADNA DEPESZA NIE JEST OTWARTA" (podpis D-WP-3) i jest NOŚNA,
+    //   nie ozdobna. Cooldown depeszy zapisują dopiero ODRZUĆ i KONTRPROPOZYCJA; przyjęcie
+    //   oferty oraz zamknięcie bez odpowiedzi go NIE zapisują (żeby AI mogło poprosić znów),
+    //   więc dopóki depesza wisi na ekranie, TO JEST jedyna rzecz trzymająca kolejne emisje.
+    //   Runtime-only: stan UI nie należy do zapisu, a nowa sesja startuje z pustym zbiorem.
+    this._aiOfferOpen = new Set();
+    // Gaśnie na KAŻDEJ ścieżce zamknięcia depeszy (panel emituje to także przy ESC) oraz
+    // przy końcu wojny — inaczej kolejny konflikt z tym imperium byłby cichy na zawsze.
+    EventBus.on('war:aiPeaceOfferResolved', ({ warId }) => { this._aiOfferOpen.delete(warId); });
+    EventBus.on('war:peaceSigned',          ({ warId }) => { this._aiOfferOpen.delete(warId); });
+
     EventBus.on('diplomacy:warDeclared', ({ empireId, reason }) => this._onWarDeclared(empireId, reason));
     EventBus.on('diplomacy:peaceSigned', ({ empireId }) => this._onPeaceSigned(empireId));
     // W1-4 / W3-2 — KLASYFIKACJA przy szwie księgowania (decyzja 10). Widelec ma TRZY gałęzie
@@ -255,15 +266,60 @@ export class WarSystem {
       // Odkąd decyduje silnik (i może ODMÓWIĆ), jednorazowy strzał zamykałby wojnę
       // na zawsze w stanie „nie da się zakończyć". Każda kolejna bitwa próbuje ponownie.
       if (delta > 0 && oldV >= AUTO_PEACE_EXHAUSTION) this._triggerAutoPeace(warId, side);
+      // WP-4 / C3 — ta sama ścieżka RETRY musi obsłużyć depeszę AI: wyczerpanie stoi na
+      // suficie, więc bez tego pierwsza depesza byłaby JEDYNĄ w całej wojnie.
+      if (delta > 0) this._maybeAiPeaceOffer(warId, side);
       return;
     }
     const next = { ...war, exhaustion: { ...war.exhaustion, [side]: newV } };
     gameState.set(`wars.${warId}`, next, `exhaustion_${side}_${delta}_${reason}`);
 
+    // WP-4 / C3 — depesza pokojowa AI. Próg jest INNY niż auto-peace (`casusBelli.peaceCost`,
+    // dla domyślnego CB 30), więc sprawdzamy przy KAŻDYM wzroście wyczerpania AI, a nie
+    // dopiero na suficie. Patrz `_maybeAiPeaceOffer`.
+    if (delta > 0) this._maybeAiPeaceOffer(warId, side);
+
     // Auto-peace gdy któryś przekroczy próg
     if (newV >= AUTO_PEACE_EXHAUSTION) {
       this._triggerAutoPeace(warId, side);
     }
+  }
+
+  /**
+   * WP-4 / C3 (podpis D-WP-3) — czy wyczerpane AI właśnie prosi gracza o pokój.
+   *
+   * ⚠ DWA WARUNKI, NIE JEDEN. Próg `casusBelli.peaceCost` na wyczerpaniu AI to TANIA BRAMKA
+   *   WSTĘPNA; rozstrzyga `evaluatePeace`, w którym term `war_status` liczy MIN Z OBU
+   *   wyczerpań minus `peaceCost`. Dlatego „AI na 100, gracz na 0" NIE wysyła depeszy —
+   *   ZMIERZONE (FAZA A): przy opinii −40 i napięciu 80 taki stan daje wynik −6,5, a oba
+   *   wyczerpania po 30 dają +10. Sama desperacja AI nie wystarcza; pokój musi być rozsądny
+   *   dla OBU stron, inaczej gracz dostawałby depeszę po każdej przegranej przez AI bitwie.
+   *
+   * ⚠ COOLDOWNU TU NIE ZAPISUJEMY. Robią to dopiero ODRZUĆ i KONTRPROPOZYCJA w panelu
+   *   depeszy; przyjęcie oferty i zamknięcie bez odpowiedzi mają go NIE zapisywać, bo
+   *   pierwsze kończy wojnę, a drugie nie jest odpowiedzią. Ciszę w czasie wyświetlania
+   *   trzyma `_aiOfferOpen`.
+   *
+   * @returns {boolean} czy depesza poszła
+   */
+  _maybeAiPeaceOffer(warId, side) {
+    if (side === 'player') return false;               // to gałąź GRACZA, patrz `_triggerAutoPeace`
+    if (this._aiOfferOpen.has(warId)) return false;    // depesza już wisi na ekranie
+    const war = this.getWar(warId);
+    if (!war || !war.active) return false;
+    const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
+    if (side !== empireId) return false;               // zmiana dotyczyła innej strony
+    const dipl = window.KOSMOS?.diplomacySystem;
+    if (!dipl) return false;
+    const cb = CASUS_BELLI[war.casusBelli] ?? CASUS_BELLI.border_incident;
+    if ((war.exhaustion?.[empireId] ?? 0) < (Number(cb?.peaceCost) || 0)) return false;
+    if ((dipl.getAiPeaceOfferCooldown?.(empireId) ?? 0) > 0) return false;
+    // `terms: null` — oferta AI to zawsze STATUS QUO (D-WP-13). Warunki terytorialne
+    // negocjuje gracz przy stole pokoju (C1), po kliknięciu „Kontrpropozycja".
+    if (dipl.evaluatePeace(empireId, null)?.decision !== true) return false;
+    this._aiOfferOpen.add(warId);
+    EventBus.emit('war:aiPeaceOffer', { empireId, warId });
+    return true;
   }
 
   /**
@@ -560,6 +616,13 @@ export class WarSystem {
     const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
     const dipl = window.KOSMOS?.diplomacySystem;
     if (!dipl) return;
+    // ⚠ WP-4 / C3 (podpis D-WP-3) — GAŁĄŹ AI ZASTĄPIONA DEPESZĄ, i to jest PODPISANA
+    //   REGRESJA: przy wyczerpaniu AI na 100 wojna NIE kończy się już sama. Dawniej ta
+    //   ścieżka podpisywała pokój w imieniu gracza — bez pytania i bez możliwości odmowy,
+    //   więc najdonośniejsza decyzja w konflikcie zapadała w tle. Teraz wysyła ją
+    //   `_maybeAiPeaceOffer` jako depeszę, a wojnę zamyka dopiero kliknięcie gracza.
+    //   Gałąź GRACZA zostaje nietknięta (jej przeprojektowanie to C5).
+    if (exhaustedSide !== 'player') return;
     // ⚠ D2/E3: to NIE JEST już wymuszenie. Dawniej „exhaustion >= 100 ⇒ pokój" omijało
     // jakąkolwiek ocenę; teraz `offerPeace` przechodzi przez Acceptance Engine, w którym
     // wyczerpanie jest WIELKIM TERMEM (55 pkt) mierzonym względem `casusBelli.peaceCost`.
