@@ -52,6 +52,7 @@ import { GameCore } from '../headless/GameCore.js';
 import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 import EntityManager from '../../core/EntityManager.js';
 import EventBus from '../../core/EventBus.js';
+import { OverlayManager } from '../../ui/OverlayManager.js';
 import {
   VERB_ACCEPTANCE, RECENT_REFUSAL_YEARS, ACCEPTANCE_TERMS, TERM_STATUS,
 } from '../../data/AcceptanceWeightData.js';
@@ -152,6 +153,7 @@ const OTHER_VERBS = ['trade_agreement', 'non_aggression', 'alliance', 'improve_r
 const KEY_BTN_CD  = 'warOverlay.btnPeaceCooldown';
 const KEY_CD_BLK  = 'diploRefusal.cooldownBlocks';
 const KEY_CD_PEN  = 'diploRefusal.cooldownYears';
+const KEY_HINT    = 'warOverlay.declareHint';
 
 // ════════════════════════════════════════════════════════════════════════════
 console.log('T0 — kontrola narzędzia i mierzonych faktów o silniku');
@@ -412,6 +414,51 @@ console.log('T7 — i18n: nowe klucze w OBU słownikach, bez literałów w UI');
   const body = methodBody(readClean('ui/WarOverlay.js'), '_drawRight');
   assert(body !== '' && !/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(body),
     'T7d: brak polskiego literału w rysowanej ścieżce `_drawRight` (klasa 113)');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// T8 — PODPOWIEDŹ NAZYWA KLAWISZ, KTÓRY ISTNIEJE.
+//
+// ⚠ Podpowiedź pustej listy wojen mówiła graczowi „Diplomacy panel (Y)" / „panelu
+//   Dyplomacji (Y)", a `y` NIE JEST ZWIĄZANE Z NICZYM — dyplomacja siedzi pod `d`
+//   (`OverlayManager._keyMap`). Kłamała w OBU językach, a `check-i18n` tego NIE WIDZI:
+//   pyta „czy klucz użyty w `t()` istnieje w pl i en", a nie „czy treść jest prawdziwa"
+//   (ten sam martwy kąt narzędzia co Finding 113/269). Złapane przy pisaniu instrukcji
+//   gate'u WP-5 — podpowiedź leży dokładnie na ścieżce „wypowiedz wojnę".
+//
+// ⚠ PIN JEST WYKONANIOWY PO STRONIE KLAWIATURY: `OverlayManager` importuje się pod node,
+//   więc czytamy ŻYWĄ keymapę zamiast regexa na źródle. Gdy ktoś przeniesie dyplomację na
+//   inny klawisz, pin spadnie RAZEM z podpowiedzią — i o to chodzi.
+console.log('\nT8 — litera w podpowiedzi === klawisz dyplomacji (PL + EN)');
+{
+  const om = new OverlayManager();
+  const diploKeys = Object.keys(om._keyMap)
+    .filter(k => om._keyMap[k] === 'diplomacy' || om._keyMap[k]?.id === 'diplomacy');
+  assert(diploKeys.length === 1,
+    'T8a: dyplomacja ma DOKŁADNIE jeden klawisz w żywej keymapie — ' + JSON.stringify(diploKeys));
+  const diploKey = diploKeys[0] ?? null;
+
+  // JEDEN ekstraktor dla obu języków I dla kontroli pinu — inaczej kontrola mierzyłaby
+  // inny rachunek niż pin (lekcja „kontrola grepująca literał dowodzi napisu, nie kształtu").
+  const letterOf = (v) => (typeof v === 'string' ? (v.match(/\(([A-Za-z])\)/)?.[1] ?? null) : null);
+
+  for (const file of ['pl.js', 'en.js']) {
+    const val = dictValue(file, KEY_HINT);
+    const letter = letterOf(val);
+    // ANTY-JAŁOWOŚĆ: brak litery NIE jest cichym zaliczeniem. Podpowiedź ma nazywać klawisz,
+    // więc usunięcie nawiasu też musi wymusić świadomą decyzję, a nie przejść bokiem.
+    assert(letter !== null,
+      'T8b[' + file + ']: podpowiedź nazywa klawisz w nawiasie — ' + JSON.stringify(val));
+    assert(letter !== null && diploKey !== null && letter.toLowerCase() === diploKey.toLowerCase(),
+      'T8c[' + file + ']: litera „' + letter + '" === klawisz dyplomacji „' + diploKey + '"');
+  }
+
+  // KONTROLA PINU — ten sam ekstraktor i to samo porównanie na syntetycznym brzmieniu
+  // z literą SPRZED naprawy. Zielone po OBU stronach naprawy; gdyby porównanie było ślepe,
+  // ta asercja by padła.
+  const bogus = letterOf('Declare war from the Diplomacy panel (Y).');
+  assert(bogus === 'Y' && diploKey !== null && bogus.toLowerCase() !== diploKey.toLowerCase(),
+    'T8d (kontrola pinu): syntetyczne „(Y)" wykrywane jako NIEZGODNE z „' + diploKey + '"');
 }
 
 // ════════════════════════════════════════════════════════════════════════════

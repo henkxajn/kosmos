@@ -3576,7 +3576,7 @@ export default {
   // === WarOverlay ===
   'warOverlay.title':            '⚔ WARS',
   'warOverlay.noActiveWars':     'You are not waging any active wars.',
-  'warOverlay.declareHint':      'Declare war from the Diplomacy panel (Y).',
+  'warOverlay.declareHint':      'Declare war from the Diplomacy panel (D).',
   'warOverlay.statusActive':     '⚔ ACTIVE',
   'warOverlay.statusEnded':      '☮ ENDED',
   'warOverlay.selectWar':        'Select a war from the list',
