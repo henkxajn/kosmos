@@ -42,9 +42,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { GameCore } from '../headless/GameCore.js';
-import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 import EntityManager from '../../core/EntityManager.js';
-import EventBus from '../../core/EventBus.js';
 
 // Moduł POWSTAJE w tym slice — dynamicznie, żeby fail-first miał kolory.
 let OL = null;
@@ -162,9 +160,6 @@ console.log('T4 — PANEL CIAŁA: wiersz odznaki w karcie (WYKONANIOWO)');
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization', aiEmpires: true });
   const K = window.KOSMOS;
-  K.entityManager = EntityManager;
-  K.directorProduction = new DirectorProduction();
-  K.eventBus = EventBus;
   const cm = K.colonyManager;
 
   const psys = cm.getPlayerColonies()[0].systemId;

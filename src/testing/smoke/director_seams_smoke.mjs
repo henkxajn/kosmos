@@ -12,7 +12,8 @@
 //   T3  startShipBuild przyjmuje kadłub WOJENNY na kolonii AI (bramka S3.4d zwalnia AI)
 //   T4  niedobór surowców ⇒ zlecenie CZEKA w pendingShipOrders (nie ginie)
 //   T5  bramka załogi jest TWARDA (brak wolnych POPów ⇒ odmowa, nie kolejka)
-//   T6  ⚠ PIN LUKI: okręt zbudowany przez kolonię AI NIE MA właściciela (S4 to naprawia)
+//   T6  ⚠ ODWRÓCONY w WP-5/C1: okręt kolonii AI WYCHODZI ZE STEMPLEM właściciela (S4 go dokłada;
+//       do C1 headless nie montował `DirectorProduction`, więc pin opisywał harness, nie grę)
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { GameCore } from '../headless/GameCore.js';
@@ -138,10 +139,17 @@ console.log('T3-T6 — startShipBuild na kolonii AI: kadłub wojenny, kolejka, z
     assert((col.shipQueues ?? []).length === qBefore + 1,
       'T3: kolejka stoczni WIDOCZNA — intel ma w co zajrzeć („scripts order, economy executes")');
 
-    // T6 — ⚠ PIN LUKI, NIE POPRAWNOŚCI. Dziś okręt AI wychodzi ze stoczni bez właściciela,
-    // bo jedyny stempel (`EmpireLogisticsSystem._onVesselCreatedClaim`) filtruje `hull_small`.
-    // Gdy S4 doda własny stempel, TA ASERCJA MA PAŚĆ i zostać świadomie odwrócona.
-    // Wzór: `MEMORY_EVIDENCE_WEIGHTS = {}` z D2 (pin pustki z instrukcją, kiedy go zaktualizować).
+    // T6 — ⚠ PIN ODWRÓCONY ŚWIADOMIE W WP-5 / C1, DOKŁADNIE WEDŁUG WŁASNEJ INSTRUKCJI.
+    //
+    // Stara treść brzmiała: „PIN LUKI — okręt AI wychodzi BEZ ownerEmpireId (S4 musi dołożyć
+    // stempel; wtedy ten pin odwrócić)". S4 stempel DOŁOŻYŁ — `DirectorProduction` subskrybuje
+    // `vessel:created` w konstruktorze (`:104`) i pisze `vessel.ownerEmpireId` (`:223`).
+    //
+    // ⚠ LUKA BYŁA ARTEFAKTEM HARNESSU, NIE STANEM GRY. `GameScene:348` konstruuje
+    // `DirectorProduction` ZAWSZE, więc w grze okręt AI był stemplowany od S4; zielony pin
+    // opisywał wyłącznie świat headlessu, który tej instancji nie montował. C1 wpina ją
+    // w `GameCore.boot()` — i dlatego pin pada właśnie teraz, a nie przy S4.
+    // To jest cały sens tego slice'u: keeper mierzył harness, nie grę.
     const seen = [];
     const onCreated = ({ vessel }) => seen.push(vessel);
     EventBus.on('vessel:created', onCreated);
@@ -150,8 +158,12 @@ console.log('T3-T6 — startShipBuild na kolonii AI: kadłub wojenny, kolejka, z
     const frigate = seen.find(v => v?.shipId === 'hull_frigate');
     assert(!!frigate, 'T6: fregata faktycznie powstaje na kolonii AI (ścieżka end-to-end działa)');
     if (frigate) {
-      assert(frigate.ownerEmpireId == null,
-        'T6: PIN LUKI — okręt AI wychodzi BEZ ownerEmpireId (S4 musi dołożyć stempel; wtedy ten pin odwrócić)');
+      assert(frigate.ownerEmpireId === col.ownerEmpireId,
+        'T6: okręt AI wychodzi ZE STEMPLEM właściciela (' + frigate.ownerEmpireId
+        + ') — stempel S4 z `DirectorProduction._onVesselCreated`');
+      // KONTROLA PINU: stempel niesie KONKRETNE imperium, nie samą „nie-nullowość".
+      assert(typeof frigate.ownerEmpireId === 'string' && frigate.ownerEmpireId.length > 0,
+        'T6 (kontrola pinu): `ownerEmpireId` to realne id imperium, nie pusta prawda');
     }
 
     // T5 — ⚠ ODWRÓCONE W W2-4. Do W2-3 ten test pinował TWARDĄ odmowę `startShipBuild` przy

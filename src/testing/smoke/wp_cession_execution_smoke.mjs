@@ -27,7 +27,6 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 import { GameCore } from '../headless/GameCore.js';
-import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 import EntityManager from '../../core/EntityManager.js';
 import EventBus from '../../core/EventBus.js';
 import { TREATY_TYPES } from '../../data/TreatyData.js';
@@ -72,14 +71,11 @@ function hitsIn(re) {
 // ── Fixture: ŻYWY silnik (GameCore), bo cesja spina cztery systemy naraz ────
 const EMP = 'emp_001';
 
-/** Boot + montaż globali, których headless nie wpina, a `GameScene` wpina. */
+/** Boot. Cztery globale parytetu z `GameScene` montuje od C1 sam `GameCore.boot()`. */
 function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization', aiEmpires: true });
   const K = window.KOSMOS;
-  K.entityManager = EntityManager;                  // GameScene:396
-  K.directorProduction = new DirectorProduction();  // GameScene:459
-  K.eventBus = EventBus;                            // GameScene:510
   return K;
 }
 /** Wolne ciała w układzie `sysId` (bez kolonii). */

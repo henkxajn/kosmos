@@ -58,8 +58,6 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { GameCore } from '../headless/GameCore.js';
-import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
-import EntityManager from '../../core/EntityManager.js';
 import EventBus from '../../core/EventBus.js';
 import { CASUS_BELLI } from '../../data/CasusBelliData.js';
 import { VERB_ACCEPTANCE } from '../../data/AcceptanceWeightData.js';
@@ -98,9 +96,6 @@ function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization', aiEmpires: true });
   const K = window.KOSMOS;
-  K.entityManager = EntityManager;
-  K.directorProduction = new DirectorProduction();
-  K.eventBus = EventBus;
   K.acceptanceEngine = K.diplomacySystem._acceptance();
   return K;
 }

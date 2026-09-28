@@ -66,6 +66,11 @@ import { WarSystem }         from '../../systems/WarSystem.js';
 import { ThreatAssessment }  from '../../systems/ThreatAssessment.js';
 import { InvasionSystem }    from '../../systems/InvasionSystem.js';
 import { StarSystemManager } from '../../systems/StarSystemManager.js';
+// Parytet z `GameScene` dla czterech globali, ktorych headless dotad NIE montowal —
+// patrz blok `window.KOSMOS` nizej. `DirectorProduction` wchodzi SAMA INSTANCJA,
+// bez `registerProductionGuards` (powod przy wpieciu).
+import { TerritoryService }  from '../../systems/TerritoryService.js';
+import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
 
 import { SystemGenerator }   from '../../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../../generators/GalaxyGenerator.js';
@@ -241,6 +246,41 @@ export class GameCore {
     K.threatAssessment = this.threatAssessment;
     K.overlayManager = null; // brak UI w headless
     K.threeRenderer = null;  // brak renderera w headless
+
+    // ── Cztery globale, ktore MONTUJE `GameScene`, a headless dotad pomijal ──────
+    // Parytet: GameScene:397 (entityManager), :457 (territoryService),
+    // :460 (directorProduction), :511 (eventBus).
+    //
+    // ⚠ TO NIE JEST KOSMETYKA. Bez `directorProduction` `AcceptanceEngine._capitalBodyIdOf`
+    //   czyta `undefined?.capitalOf?.(...)` ⇒ `null`, wiec dla imperium AI stolica
+    //   PRZESTAJE ISTNIEC: pre-warunek `capital_never_ceded` nie ma czego rozpoznac,
+    //   a `heldValue` liczy ja do puli oddawalnej. ZMIERZONE na imperium z jedna kolonia:
+    //   goly boot dawal heldValue 44 / capital false / sufit 22, gra — 0 / true / 0.
+    //   Testy widzialy wiec swiat, w ktorym CALY D-WP-8 jest bezwladny.
+    //
+    // ⚠ TO BYLO JUZ OBEJSCIE PRZEPISANE PIEC RAZY — `wp_ai_peace_offer`,
+    //   `wp_cession_execution`, `wp_occupied_badge`, `wp_peace_cooldown`, `wp_peace_table`
+    //   kopiowaly ten blok recznie, z komentarzami cytujacymi numery linii GameScene.
+    //   Kanon usuwa piec kopii; szosty keeper, ktory by o nim zapomnial, dostawalby
+    //   zielone testy na swiecie bez ochrony stolicy.
+    //
+    // ⚠ `registerProductionGuards` NIE JEST TU WOLANE, i to jest decyzja, nie przeoczenie:
+    //   (1) `capitalOf` nie zalezy od guardow (czyta `empireRegistry` wprost);
+    //   (2) `DirectorRegistry._register:35` RZUCA przy duplikacie bez `allowOverride`,
+    //       a `director_production_foundation_smoke:182` wola rejestracje WLASNIE bez niej —
+    //       rejestr jest singletonem modulu, wiec rejestrowanie w boocie byloby mina;
+    //   (3) `DirectorHarness:111-112` rejestruje je z `allowOverride: true` tam, gdzie
+    //       sa potrzebne (pelny stos Directora), i nadpisuje te instancje wlasna.
+    K.entityManager = EntityManager;
+    K.eventBus      = EventBus;
+    // TerritoryService subskrybuje wylacznie 10 zdarzen wlasnosciowych (zero `time:tick`),
+    // a `_invalidate` ustawia flage — koszt per-tik zerowy. Konstruowany PO `EventBus.clear()`
+    // z poczatku `boot()`, wiec subskrypcje nie gina. `InfluenceMap` zada go GLOSNO (R12),
+    // stad `DirectorHarness:99` montowal go defensywnie — teraz ma go z bootu.
+    this.territoryService   = new TerritoryService();
+    K.territoryService      = this.territoryService;
+    this.directorProduction = new DirectorProduction();
+    K.directorProduction    = this.directorProduction;
 
     // ── Reactive store ──
     gameState.reset();

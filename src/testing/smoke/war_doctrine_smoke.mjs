@@ -24,6 +24,7 @@ import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import EntityManager from '../../core/EntityManager.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -57,8 +58,17 @@ function setupCapital(core, empireId) {
 }
 
 function spawnAiWarship(core, empireId, capitalId, name) {
+  // ⚠ UKŁAD BIERZEMY ZE STOLICY, nie ze sztywnego `'sys_home'`. Okręt AI stojący przy swojej
+  //   stolicy jest W JEJ UKŁADZIE — tak wygląda gra. Fixture trzymał `'sys_home'` i przechodził
+  //   WYŁĄCZNIE dlatego, że headless nie montował `entityManager`: `DirectorDoctrine._capitalBody`
+  //   zwracał wtedy `null`, a `_patrolBodyId:286` spadało na `vessel.systemId`. Po kanonie C1
+  //   (`GameCore.boot` montuje cztery globale parytetu z `GameScene`) doktryna rozwiązuje
+  //   PRAWDZIWY układ stolicy, więc rozkaz patrolu leciałby cross-system i MOS odmawiałby
+  //   z `target_other_system` (bramka W3-4b). ZMIERZONE: stolica `emp_001` siedzi w `sys_061`,
+  //   a fixture stawiał okręt w `sys_home` — sprzeczność, którą maskowała luka harnessu.
+  const sysId = EntityManager.get(capitalId)?.systemId ?? 'sys_home';
   const v = createVessel('hull_frigate', capitalId, {
-    name, modules: [...WARSHIP], x: 0, y: 0, systemId: 'sys_home',
+    name, modules: [...WARSHIP], x: 0, y: 0, systemId: sysId,
   });
   v.ownerEmpireId = empireId; v.owner = empireId; v.isEnemy = true;
   v.position.state = 'orbiting'; v.position.dockedAt = capitalId;
@@ -135,8 +145,21 @@ console.log('T3/T4 — patrol RUSZA; rozkaz pochodzi od DOKTRYNY, nie od AutoRet
   const tp = v.movementOrder?.targetPoint;
   assert(!!tp && Number.isFinite(tp.x) && Number.isFinite(tp.y),
     `T3: rozkaz niesie rozwiązany punkt docelowy (${JSON.stringify(tp)})`);
-  const planets = EntityManager.getByTypeInSystem('planet', 'sys_home') ?? [];
-  const outermost = Math.max(0, ...planets.map(p2 => Math.hypot(p2.x ?? 0, p2.y ?? 0)));
+  // ⚠ PORÓWNUJEMY W UKŁADZIE PATROLU, nie w `'sys_home'`. Każdy układ ma własną ramkę
+  //   współrzędnych z gwiazdą w (0,0) (klasa „globalne id ≠ położenie"), więc mierzenie celu
+  //   z `sys_061` skalą planet `sys_home` daje liczbę bez znaczenia — ZMIERZONE po kanonie C1:
+  //   1103,0 wobec 1,5 × 595,0. Do C1 oba układy były przypadkiem tym samym, bo fixture
+  //   trzymał okręt w `sys_home`.
+  //
+  // ⚠ SKALĘ LICZYMY Z `orbital.a`, NIE Z `x/y`. `PhysicsSystem` pozycjonuje wyłącznie układ
+  //   AKTYWNY, więc planety układu AI mają `x = y = 0` (ZMIERZONE: `sys_061` → maxR 0,0 przy
+  //   maxOrbital.a 10,364 AU). Cel patrolu i tak powstaje z PREDYKCJI Keplera, więc jedynym
+  //   uczciwym odniesieniem jest promień orbity przeliczony na piksele gameplayu.
+  //   Dawny komentarz chwalił się „skalo-agnostycznością" — to było prawdziwe tylko dopóty,
+  //   dopóki porównanie zostawało w układzie aktywnym.
+  const planets = EntityManager.getByTypeInSystem('planet', v.systemId) ?? [];
+  const maxOrbitalAU = Math.max(0, ...planets.map(p2 => Number(p2?.orbital?.a) || 0));
+  const outermost = maxOrbitalAU * GAME_CONFIG.AU_TO_PX;
   const dist = Math.hypot(tp?.x ?? 0, tp?.y ?? 0);
   assert(outermost > 0, `T3: układ ma planety do porównania (najdalsza na ${outermost.toFixed(1)})`);
   assert(dist <= outermost * 1.5,

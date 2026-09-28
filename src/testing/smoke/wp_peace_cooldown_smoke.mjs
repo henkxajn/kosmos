@@ -49,9 +49,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { GameCore } from '../headless/GameCore.js';
-import { DirectorProduction } from '../../systems/director/DirectorProduction.js';
-import EntityManager from '../../core/EntityManager.js';
-import EventBus from '../../core/EventBus.js';
 import { OverlayManager } from '../../ui/OverlayManager.js';
 import {
   VERB_ACCEPTANCE, RECENT_REFUSAL_YEARS, ACCEPTANCE_TERMS, TERM_STATUS,
@@ -108,9 +105,6 @@ function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization', aiEmpires: true });
   const K = window.KOSMOS;
-  K.entityManager = EntityManager;                       // GameScene:396
-  K.directorProduction = new DirectorProduction();       // GameScene:459
-  K.eventBus = EventBus;                                 // GameScene:510
   K.acceptanceEngine = K.diplomacySystem._acceptance();  // GameScene:445
   return K;
 }
