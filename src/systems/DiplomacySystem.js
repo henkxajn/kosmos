@@ -663,7 +663,17 @@ export class DiplomacySystem {
     //   ⚠ Co to realnie daje (ZMIERZONE): NAP BRAMKUJE `declareWar` z inicjatywy AI/auto,
     //     czego rozejm dziś NIE robi. Gracza nie wiąże (`player_action` omija bramkę) —
     //     złamanie kosztuje +15 napięcia przez `breakTreaty`. Czas trwania: DS-1.
-    this.signTreaty(empireId, TREATY_TYPES.non_aggression);
+    //
+    // ⚠ DS-1 / C0 — PODAJEMY SAMO `id`, nie cały obiekt katalogu. `addTreaty` robi
+    //   `{ ...treaty, signedYear }`, więc przekazanie `TREATY_TYPES.non_aggression`
+    //   wnosiło do ZAPISU sześć pól (id, namePL, nameEN, descPL, descEN, signedYear)
+    //   zamiast dwóch — a cztery z nich są MARTWE: slot panelu renderuje `tr.id`
+    //   (`DiplomacyOverlay:459`), nie `tr.namePL`. Rekord miał więc DWA kształty zależnie
+    //   od producenta (`proposeTreaty` podawał `{ id }`), co przy dokładaniu `expiresYear`
+    //   w C1 oznaczałoby nowe pole w dwóch różnych rekordach. Teraz kształt jest jeden.
+    //   ⚠ Stare zapisy zostają sześciopolowe i mają prawo takie zostać — `hasTreaty` pyta
+    //   wyłącznie o `id`, a slot o `id`/`signedYear`; oba są w obu kształtach (pin T5h).
+    this.signTreaty(empireId, { id: TREATY_TYPES.non_aggression.id });
 
     EventBus.emit('diplomacy:peaceSigned', { empireId, reason, result });
     EventBus.emit('diplomacy:relationChanged', { empireId, tension: this.getTension(empireId), status: 'truce', reason });

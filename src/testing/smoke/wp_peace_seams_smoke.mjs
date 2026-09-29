@@ -37,7 +37,8 @@
 //       na drzewie WP-1 stary pin padał na T4a i T4b, i TYLKO na nich (27 PASS / 2 FAIL) —
 //       czyli mierzył dokładnie to, co miał, a WP-1 nie ruszył nic poza zapowiedzianym.
 //       Wzór odwracania pinu z powodem: `deploy_seams` T1/T2/T4, `ai_capture_last_stand` T4/T5.
-//   T5  rekord traktatu = {id, signedYear}; NAP nie ma daty wygaśnięcia
+//   T5  rekord traktatu = {id, signedYear} u OBU producentów (C0); NAP nie ma daty wygaśnięcia
+//       + zgodność wstecz: stary, sześciopolowy rekord czyta się bez zmian (T5i, wykonaniowo)
 //       ⚠ ZŁAMIE TO: DS-1 / WP-7 (rozejm i wymuszony NAP o skończonym czasie trwania).
 //
 // Uruchom: node src/testing/smoke/wp_peace_seams_smoke.mjs
@@ -53,6 +54,7 @@ import { WarSystem } from '../../systems/WarSystem.js';
 import { AcceptanceEngine, TERM_EVALUATORS } from '../../systems/diplomacy/AcceptanceEngine.js';
 import { TREATY_TYPES } from '../../data/TreatyData.js';
 import { ARCHETYPES } from '../../data/EmpireData.js';
+import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -298,7 +300,7 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
 
   const tr = dipl.relations.getTreaties('player', N)[0] ?? {};
   assert(JSON.stringify(Object.keys(tr).sort()) === JSON.stringify(['id', 'signedYear']),
-    'T5b: zapisany rekord traktatu ma DOKŁADNIE {id, signedYear} (zapisane: ' + Object.keys(tr).join(', ') + ')');
+    'T5b: rekord ze ścieżki `proposeTreaty` ma DOKŁADNIE {id, signedYear} (zapisane: ' + Object.keys(tr).join(', ') + ')');
   assert(tr.expiresYear === undefined,
     'T5c: traktat NIE MA daty wygaśnięcia — rozejm/wymuszony NAP o skończonym czasie (DS-1/WP-7) ' +
     'nie ma dziś gdzie zapisać końca');
@@ -312,9 +314,129 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
     '(pola: ' + Object.keys(napDef).join(', ') + ')');
 
   const diplSrc = readClean('systems', 'DiplomacySystem.js');
-  assert(/signTreaty\(\s*empireId\s*,\s*\{\s*id:\s*treatyId\s*\}\s*\)/.test(diplSrc),
-    'T5f (pin ŹRÓDŁOWY): produkcyjna ścieżka `proposeTreaty` przekazuje do `signTreaty` WYŁĄCZNIE ' +
-    '`{ id: treatyId }` — poza id i stemplem roku do rekordu nic nie wchodzi');
+  // ⚠ WZMOCNIONY w C0: do WP-0 pin pytał o JEDNEGO producenta (`proposeTreaty`) i był przez to
+  //   połową prawdy — drugi (`signPeace`) podawał cały obiekt katalogu. Teraz liczymy OBU
+  //   i żądamy, żeby każdy podawał literal z samym `id`. Liczba producentów jest częścią pinu:
+  //   trzeci, dopisany bez tej dyscypliny, zapali ten wiersz.
+  const signCalls = (diplSrc.match(/this\.signTreaty\(/g) ?? []).length;
+  const bareCalls = (diplSrc.match(/this\.signTreaty\(\s*empireId\s*,\s*\{\s*id:\s*[^{}]*?\}\s*\)/g) ?? []).length;
+  assert(signCalls === 2,
+    'T5f (KONTROLA PINU): `DiplomacySystem` ma DOKŁADNIE dwóch producentów traktatu (' + signCalls + ')');
+  assert(bareCalls === signCalls,
+    'T5f (pin ŹRÓDŁOWY): OBAJ producenci przekazują do `signTreaty` literal z samym `id` ' +
+    '(' + bareCalls + '/' + signCalls + ') — poza id i stemplem roku do rekordu nic nie wchodzi');
+
+
+  // ── C0 (DS-1) — REKORD MA JEDEN KSZTAŁT, NIEZALEŻNIE OD PRODUCENTA ──────────
+  //
+  // ⚠ T5b wyżej pinuje ścieżkę `proposeTreaty`. DRUGI producent — wymuszony NAP z pokoju
+  //   (`signPeace`) — podawał do `signTreaty` CAŁY obiekt katalogu, a `addTreaty` robi
+  //   `{ ...treaty, signedYear }`, więc do zapisu wchodziło SZEŚĆ pól:
+  //     id, namePL, nameEN, descPL, descEN, signedYear
+  //   Cztery z nich są MARTWE — slot panelu renderuje `tr.id`, nie `tr.namePL` (ZMIERZONE
+  //   wykonaniem w T5i). Każdy pokój wnosił więc do zapisu dwa opisy w dwóch językach,
+  //   których nikt nie czyta. C0 ujednolica kształt PRZED dołożeniem `expiresYear` (C1),
+  //   żeby nowe pole nie lądowało w dwóch różnych rekordach.
+  //
+  // ⚠ PIN JEST WYKONANIOWY NA ŚCIEŻCE PRODUKCYJNEJ, nie na własnym wywołaniu `signTreaty`:
+  //   keeper odpala PRAWDZIWY `offerPeace`, więc mierzy to, co robi gra, a nie to, co
+  //   napisał test. Świat T5 nie ma map z T1 w zasięgu, więc atrapy `empireRegistry`
+  //   i `warSystem` podmieniamy TUTAJ i przywracamy na końcu bloku.
+  {
+    const P = 'emp_wp0_nap_peace';
+    const regBefore = window.KOSMOS.empireRegistry;
+    const warBefore = window.KOSMOS.warSystem;
+    const emps = new Map([[P, { id: P, name: 'Pokojowe', archetype: 'militarist', personality: {}, traits: [] }]]);
+    const wr   = { id: 'w_wp0_peace', aggressor: 'player', defender: P, active: true,
+                   casusBelli: 'border_incident', exhaustion: { player: 60, [P]: 60 }, captures: [] };
+    window.KOSMOS.empireRegistry = { get: (id) => emps.get(id), listAll: () => [...emps.values()] };
+    window.KOSMOS.warSystem = { getWarWith: (id) => (id === P ? wr : null), getCaptures: () => [] };
+    window.KOSMOS.timeSystem.gameTime = 141;
+
+    dipl.declareWar(P, 'player_action');
+    const peaceOk = dipl.offerPeace(P, 'player_action');
+    assert(peaceOk === true && dipl.hasTreaty(P, 'non_aggression'),
+      'T5h (KONTROLA PINU): realny `offerPeace` przeszedł i wymusił NAP — jest co mierzyć');
+
+    const napFromPeace = dipl.relations.getTreaties('player', P).find(x => x.id === 'non_aggression') ?? {};
+    assert(JSON.stringify(Object.keys(napFromPeace).sort()) === JSON.stringify(['id', 'signedYear']),
+      'T5h: NAP z POKOJU ma ten sam kształt co z `proposeTreaty` — {id, signedYear} '
+      + '(zapisane: ' + Object.keys(napFromPeace).join(', ') + ')');
+    assert(napFromPeace.signedYear === 141,
+      'T5h (KONTROLA PINU): `signedYear` na tej ścieżce też jest ŻYWY (' + napFromPeace.signedYear + ')');
+
+    window.KOSMOS.empireRegistry = regBefore;
+    window.KOSMOS.warSystem = warBefore;
+  }
+
+  // ── C0 — STARY ZAPIS (sześciopolowy NAP) CZYTA SIĘ BEZ ZMIAN ────────────────
+  //
+  // ⚠ To jest pin ZGODNOŚCI WSTECZ i ma być ZIELONY PO OBU STRONACH C0: rekordy zapisane
+  //   przed ujednoliceniem zostają w zapisach graczy na zawsze (brak migracji, v101).
+  //   Obaj konsumenci muszą je unieść:
+  //     `hasTreaty` — pyta WYŁĄCZNIE o `id` (9 konsumentów w `src/`, w tym bramka
+  //                   `declareWar:331` i bramka ultimatum `:1020`);
+  //     slot panelu — renderuje `tr.id` i `tr.signedYear`, a te są w OBU kształtach.
+  //
+  // ⚠ SLOT MIERZONY WYKONANIEM, nie regexem: `DiplomacyOverlay` importuje się pod node,
+  //   więc przepuszczamy PRAWDZIWY `_drawRight` przez atrapę `ctx` i czytamy, co poszło do
+  //   `fillText`. Pin źródłowy powiedziałby tylko, że kod zawiera napis.
+  {
+    const L = 'emp_wp0_legacy';
+    const regBefore = window.KOSMOS.empireRegistry;
+    const emps = new Map([[L, { id: L, name: 'Zaszłość', archetype: 'militarist', personality: {}, traits: [] }]]);
+    window.KOSMOS.empireRegistry = { get: (id) => emps.get(id), listAll: () => [...emps.values()] };
+    window.KOSMOS.timeSystem.gameTime = 137;
+
+    // Kształt SPRZED C0, odtworzony dosłownie (tak wygląda każdy NAP z pokoju w starym zapisie).
+    dipl.relations.addTreaty('player', L, {
+      id: 'non_aggression',
+      namePL: 'Pakt o Nieagresji', nameEN: 'Non-Aggression Pact',
+      descPL: 'opis', descEN: 'desc',
+    });
+    const legacy = dipl.relations.getTreaties('player', L).find(x => x.id === 'non_aggression') ?? {};
+    assert(Object.keys(legacy).length === 6,
+      // ⚠ BEZ polskiego słowa zakończonego na `t` tuż przed nawiasem: `check-i18n` ma `T_CALL = /(?<![\w$.])t\s*\(/`,
+      //   a `\w` w JS jest TYLKO ASCII — `ł` nie blokuje lookbehind, więc polskie słowo kończące się
+      //   na `t` tuż przed `(` czyta się jako wywołanie `t()`. Zmierzone: bramka padała na kluczu
+      //   „+ Object.keys(legacy).length +”. Siostra reguły `i18n-checker-reads-t-calls-in-tests`.
+      'T5i (KONTROLA PINU): fixture NAPRAWDĘ niesie stary, sześciopolowy rekord — pól: '
+      + Object.keys(legacy).length + ' (inaczej ten pin mierzyłby nowy rekord)');
+
+    assert(dipl.hasTreaty(L, 'non_aggression') === true,
+      'T5i: `hasTreaty` widzi stary rekord — pyta wyłącznie o `id`, więc 9 konsumentów '
+      + '(w tym bramka `declareWar`) jest poprawnych bez zmian');
+
+    const painted = [];
+    const ctxStub = new Proxy({}, {
+      get: (_t, k) => {
+        if (k === 'fillText' || k === 'strokeText') return (s) => painted.push(String(s));
+        if (k === 'measureText') return () => ({ width: 10 });
+        if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
+        if (typeof k === 'string'
+          && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) {
+          return () => {};
+        }
+        return undefined;
+      },
+      set: () => true,
+    });
+    const ov = new DiplomacyOverlay();
+    ov._selectedId = L;
+    let threw = null;
+    try { ov._drawRight(ctxStub, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
+    assert(threw === null,
+      'T5i (KONTROLA PINU): `_drawRight` przeszedł na starym rekordzie bez wyjątku'
+      + (threw ? ' — ' + threw : ''));
+    assert(painted.length > 0,
+      'T5i (KONTROLA PINU): panel REALNIE coś narysował (' + painted.length + ' wywołań `fillText`) — '
+      + 'inaczej brak wiersza slotu myliłby się z brakiem rysowania');
+    const slotRow = painted.find(s => s.includes('non_aggression'));
+    assert(!!slotRow && /137/.test(slotRow),
+      'T5i: slot traktatu renderuje stary rekord (id + rok podpisania) — ' + JSON.stringify(slotRow ?? null));
+
+    window.KOSMOS.empireRegistry = regBefore;
+  }
 
   // Zasięg zawężony do warstwy dyplomacji ŚWIADOMIE: `DirectorProduction` ma własne,
   // NIEZWIĄZANE pole `expiresYear` (okno oczekiwania na stempel produkcji).
