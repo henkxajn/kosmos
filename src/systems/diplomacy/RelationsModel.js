@@ -24,7 +24,7 @@
 import gameState from '../../core/GameState.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
 import {
-  OPINION_MODIFIERS, MEMORY_MAX, COMBINE,
+  OPINION_MODIFIERS, MEMORY_MAX, COMBINE, NAP_YEARS,
 } from '../../data/OpinionModifierData.js';
 import {
   pairKey, sideOf, opinionOf, buildBreakdown,
@@ -33,6 +33,12 @@ import {
 } from '../../utils/OpinionMath.js';
 
 const RELATIONS_PATH = 'diplomacy.relations';
+
+// DS-1 — JEDYNY traktat z terminem. Literal zamiast importu `TREATY_TYPES`: model nie zna
+// katalogu i nie ma po co go poznawać (`addTreaty` przyjmuje dowolny rekord z `id`).
+// ⚠ TERMIN MA WYŁĄCZNIE PAKT. Stemplowanie bezwarunkowe zrobiłoby z umowy handlowej
+//   i sojuszu traktaty terminowe — zmianę balansu, której nikt nie podpisywał (pin T1f).
+const TREATY_WITH_TERM = 'non_aggression';
 
 export class RelationsModel {
   /**
@@ -236,7 +242,12 @@ export class RelationsModel {
     if (!treaty?.id) return false;
     const rel = this.ensure(a, b);
     if ((rel.treaties ?? []).some(t => t?.id === treaty.id)) return false;
-    const treaties = [...(rel.treaties ?? []), { ...treaty, signedYear: this._year() }];
+    const signedYear = this._year();
+    const entry = { ...treaty, signedYear };
+    // DS-1 / D-WP-5 — pakt dostaje KONIEC. Jeden pisarz: obaj producenci (`proposeTreaty`
+    // i wymuszony NAP z pokoju) przechodzą tędy, więc termin nie ma drugiego źródła.
+    if (treaty.id === TREATY_WITH_TERM) entry.expiresYear = signedYear + NAP_YEARS;
+    const treaties = [...(rel.treaties ?? []), entry];
     this._write(this.key(a, b), { ...rel, treaties }, `treaty_${treaty.id}`);
     return true;
   }
@@ -339,6 +350,34 @@ export class RelationsModel {
    * status→'peace' (+ modyfikator recent_war, + event) należy do DiplomacySystem.
    * @returns {Array<{key, a, b}>}
    */
+  /**
+   * DS-1 — traktaty, których termin minął. Lustro `tickTruces`: sam ZNAJDUJE, efekty robi system.
+   *
+   * ⚠ OSOBNO OD `tickTruces`, świadomie. Zmierzone: `listPairs().length` = 2 przy dwóch
+   *   imperiach (max 6 w grze), raz na rok cywilizacyjny — „drugi przebieg po parach” kosztuje
+   *   tyle, ile nic. Scalenie zlałoby dwa różne pytania w jedną funkcję i zabrałoby
+   *   `tickTruces` jego keeperom.
+   *
+   * ⚠ D-DS-3 — BRAK `expiresYear` JEST CZYTANY, NIE DOPISYWANY. Rekordy sprzed DS-1 nie mają
+   *   tego pola i nikt ich nie migruje (zapis zostaje v101); termin wyprowadzamy w locie
+   *   z `signedYear + NAP_YEARS`. Dzięki temu stary pakt wygasa w swoim roku i dostaje jeden
+   *   beat, a format zapisu pozostaje nietknięty. Ta metoda NICZEGO nie zapisuje (pin T3d).
+   */
+  tickTreatyExpiry(year) {
+    const out = [];
+    for (const rel of this.listPairs()) {
+      for (const tr of (rel.treaties ?? [])) {
+        if (tr?.id !== TREATY_WITH_TERM) continue;
+        const expires = Number.isFinite(tr.expiresYear)
+          ? tr.expiresYear
+          : (Number(tr.signedYear) || 0) + NAP_YEARS;
+        if (year < expires) continue;
+        out.push({ key: rel.key, a: rel.a, b: rel.b, treatyId: tr.id, expiresYear: expires });
+      }
+    }
+    return out;
+  }
+
   tickTruces(year) {
     const out = [];
     for (const rel of this.listPairs()) {

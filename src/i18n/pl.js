@@ -3622,6 +3622,7 @@ export default {
   'peaceOffer.reject':     '⚔ Odrzuć',
   'peaceOffer.counter':    '⇄ Kontrpropozycja',
   'peaceOffer.staleTitle': 'Oferta straciła ważność',
+  'log.diplo.napExpired':           '☮ Pakt o nieagresji z {0} wygasł',
   'log.diplo.aiPeaceOffer':         '☮ {0} proponuje pokój',
   'log.diplo.aiPeaceOfferRejected': '⚔ Odrzucono propozycję pokoju od {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Propozycja pokoju od {0} wygasła',

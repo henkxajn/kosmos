@@ -39,7 +39,10 @@
 //       Wzór odwracania pinu z powodem: `deploy_seams` T1/T2/T4, `ai_capture_last_stand` T4/T5.
 //   T5  rekord traktatu = {id, signedYear} u OBU producentów (C0); NAP nie ma daty wygaśnięcia
 //       + zgodność wstecz: stary, sześciopolowy rekord czyta się bez zmian (T5i, wykonaniowo)
-//       ⚠ ZŁAMIE TO: DS-1 / WP-7 (rozejm i wymuszony NAP o skończonym czasie trwania).
+//       ⚠ ZŁAMANE PRZEZ DS-1/C1 — ZGODNIE Z ZAPOWIEDZIĄ. T5b/T5c/T5g/T5h/T5i przecelowane
+//       świadomie (powody przy każdym): pakt MA termin `expiresYear = signedYear + NAP_YEARS`,
+//       a T5g z „warstwa nie zna tego słowa” zmienił rolę na „termin mieszka w MODELU, nie
+//       w katalogu”. T5e zostaje NIETKNIĘTY jako kontrola tego rozstrzygnięcia.
 //
 // Uruchom: node src/testing/smoke/wp_peace_seams_smoke.mjs
 
@@ -53,6 +56,11 @@ import { DiplomacySystem } from '../../systems/DiplomacySystem.js';
 import { WarSystem } from '../../systems/WarSystem.js';
 import { AcceptanceEngine, TERM_EVALUATORS } from '../../systems/diplomacy/AcceptanceEngine.js';
 import { TREATY_TYPES } from '../../data/TreatyData.js';
+// ⚠ NAMESPACE, NIE NAZWANY IMPORT: `NAP_YEARS` rodzi się w DS-1/C1, a statyczny import
+//   nieistniejącego eksportu wywala CAŁY plik na linkowaniu ESM i żADEN pin nie dostaje
+//   koloru przy fail-first (lekcja `ground_troops_reachable` / `wp_territorial_terms`).
+import * as OMD_DS1 from '../../data/OpinionModifierData.js';
+const NAP_YEARS = OMD_DS1.NAP_YEARS ?? null;
 import { ARCHETYPES } from '../../data/EmpireData.js';
 import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
 
@@ -299,11 +307,17 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
   assert(dipl.signTreaty(N, { id: 'non_aggression' }) === true, 'T5a (KONTROLA PINU): pakt podpisany');
 
   const tr = dipl.relations.getTreaties('player', N)[0] ?? {};
-  assert(JSON.stringify(Object.keys(tr).sort()) === JSON.stringify(['id', 'signedYear']),
-    'T5b: rekord ze ścieżki `proposeTreaty` ma DOKŁADNIE {id, signedYear} (zapisane: ' + Object.keys(tr).join(', ') + ')');
-  assert(tr.expiresYear === undefined,
-    'T5c: traktat NIE MA daty wygaśnięcia — rozejm/wymuszony NAP o skończonym czasie (DS-1/WP-7) ' +
-    'nie ma dziś gdzie zapisać końca');
+  // ⚠ PRZECELOWANE w DS-1/C1, DOKŁADNIE WEDŁUG ZAPOWIEDZI z nagłówka tego pliku. Do C1 rekord
+  //   miał dwa pola; D-WP-5 dokłada TRZECIE (`expiresYear`) i to jest cała zmiana kształtu.
+  //   Pin nadal jest DOKŁADNY (równość zbiorów, nie „zawiera”), więc czwarte pole go zapali.
+  assert(JSON.stringify(Object.keys(tr).sort()) === JSON.stringify(['expiresYear', 'id', 'signedYear']),
+    'T5b: rekord ze ścieżki `proposeTreaty` ma DOKŁADNIE {id, signedYear, expiresYear} (zapisane: ' + Object.keys(tr).join(', ') + ')');
+  // ⚠ ODWRÓCONY w DS-1/C1 ŚWIADOMIE. Stara treść: „traktat NIE MA daty wygaśnięcia — nie ma dziś
+  //   gdzie zapisać końca”, z adnotacją w nagłówku, że DS-1 ma prawo to złamać. D-WP-5 złamał:
+  //   pakt ma termin, liczony od roku podpisu ze stałej balansu.
+  assert(tr.expiresYear === tr.signedYear + NAP_YEARS,
+    'T5c: pakt MA termin = signedYear + NAP_YEARS (' + tr.signedYear + ' + ' + NAP_YEARS
+    + ' = ' + tr.expiresYear + ')');
   assert(tr.signedYear === 137,
     'T5d (KONTROLA PINU): `signedYear` jest ŻYWY (stemplowany bieżącym rokiem), więc T5b mierzy ' +
     'realny kształt, a nie pustą zaślepkę');
@@ -359,9 +373,11 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
       'T5h (KONTROLA PINU): realny `offerPeace` przeszedł i wymusił NAP — jest co mierzyć');
 
     const napFromPeace = dipl.relations.getTreaties('player', P).find(x => x.id === 'non_aggression') ?? {};
-    assert(JSON.stringify(Object.keys(napFromPeace).sort()) === JSON.stringify(['id', 'signedYear']),
-      'T5h: NAP z POKOJU ma ten sam kształt co z `proposeTreaty` — {id, signedYear} '
+    assert(JSON.stringify(Object.keys(napFromPeace).sort()) === JSON.stringify(['expiresYear', 'id', 'signedYear']),
+      'T5h: NAP z POKOJU ma ten sam kształt co z `proposeTreaty` — {id, signedYear, expiresYear} '
       + '(zapisane: ' + Object.keys(napFromPeace).join(', ') + ')');
+    assert(napFromPeace.expiresYear === napFromPeace.signedYear + NAP_YEARS,
+      'T5h: … i ten sam termin — jeden pisarz stempluje OBU producentów (' + napFromPeace.expiresYear + ')');
     assert(napFromPeace.signedYear === 141,
       'T5h (KONTROLA PINU): `signedYear` na tej ścieżce też jest ŻYWY (' + napFromPeace.signedYear + ')');
 
@@ -395,6 +411,10 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
       descPL: 'opis', descEN: 'desc',
     });
     const legacy = dipl.relations.getTreaties('player', L).find(x => x.id === 'non_aggression') ?? {};
+    // ⚠ Od C1 `addTreaty` stempluje `expiresYear`, więc stary kształt trzeba ODTWORZYĆ usuwając
+    //   to pole — inaczej ten pin mierzyłby rekord NOWY i byłby jałowy (ta sama poprawka co T3a
+    //   w `wp_nap_expiry_smoke`).
+    delete legacy.expiresYear;
     assert(Object.keys(legacy).length === 6,
       // ⚠ BEZ polskiego słowa zakończonego na `t` tuż przed nawiasem: `check-i18n` ma `T_CALL = /(?<![\w$.])t\s*\(/`,
       //   a `\w` w JS jest TYLKO ASCII — `ł` nie blokuje lookbehind, więc polskie słowo kończące się
@@ -446,9 +466,18 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
     readClean('data', 'TreatyData.js'),
     readClean('ui', 'DiplomacyOverlay.js'),
   ].join('\n');
-  assert(!/expiresYear/.test(diploLayer),
-    'T5g (pin ŹRÓDŁOWY): warstwa dyplomacji (system + model + dane + panel) nie zna słowa ' +
-    '`expiresYear` — traktat dziś NIE WYGASA, bo nie ma czego czytać');
+  // ⚠ ODWRÓCONY w DS-1/C1 ŚWIADOMIE. Stara treść: „warstwa dyplomacji nie zna słowa
+  //   `expiresYear` — traktat NIE WYGASA, bo nie ma czego czytać”. D-WP-5 to złamał i pin
+  //   zmienia rolę: pilnuje teraz, że termin jest czytany w MODELU (stempel + ticker),
+  //   a NIE rozłazi się po panelu ani po katalogu.
+  assert(/expiresYear/.test(diploLayer),
+    'T5g (pin ŹRÓDŁOWY): warstwa dyplomacji ZNA `expiresYear` — traktat ma termin (D-WP-5)');
+  const modelOnly = readClean('systems', 'diplomacy', 'RelationsModel.js');
+  assert((modelOnly.match(/expiresYear/g) ?? []).length >= 3,
+    'T5g: termin czytany i stemplowany w MODELU (' + (modelOnly.match(/expiresYear/g) ?? []).length + ' wystąpień)');
+  assert(!/expiresYear/.test(readClean('data', 'TreatyData.js')),
+    'T5g (KONTROLA PINU): katalog traktatów NADAL nie zna terminu — czas mieszka w pliku balansu '
+    + '(`NAP_YEARS`), nie w opisie traktatu; to jest to samo rozstrzygnięcie co T5e');
 }
 
 console.log('\n=== WYNIK: ' + pass + ' PASS / ' + fail + ' FAIL ===');

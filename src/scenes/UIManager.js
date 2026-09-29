@@ -1717,6 +1717,13 @@ export class UIManager {
     //   przyszła / gracz ją odrzucił / straciła ważność, zanim gracz kliknął.
     // ⚠ Przyjęcia NIE logujemy tutaj: pokój melduje `diplomacy:peaceSigned` kilka linii
     //   wyżej i dwa wpisy o jednym fakcie to klasa, którą ten plik już raz naprawiał.
+    // DS-1 / D-WP-5 — pakt o nieagresji ma koniec. Kanał `diplomacy` (info), nie `warn`:
+    // to FAKT, a nie ostrzeżenie — i jedyny sygnał, po którym gracz wie, że AI znowu może
+    // wypowiedzieć mu wojnę (bramka `declareWar:331` przestała go chronić).
+    EventBus.on('diplomacy:treatyExpired', ({ empireId, treatyId }) => {
+      if (treatyId !== 'non_aggression') return;
+      this._log(t('log.diplo.napExpired', _empName(empireId)), 'diplomacy');
+    });
     EventBus.on('war:aiPeaceOffer', ({ empireId }) =>
       this._log(t('log.diplo.aiPeaceOffer', _empName(empireId)), 'diplomacy'));
     EventBus.on('war:aiPeaceOfferResolved', ({ empireId, choice }) => {

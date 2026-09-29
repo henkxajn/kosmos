@@ -138,6 +138,7 @@ export class DiplomacySystem {
       this.relations.tickModifiers(dy);
       this.reputation.tick(dy);
       this._tickTruces();
+      this._tickTreatyExpiry();
       // Kolejność decay → ultimatum → zaleganie zachowana ze stanu sprzed D1.
       this._tickTensionDecay(dy);
       this._tickUltimatumExpiry();
@@ -1008,6 +1009,30 @@ export class DiplomacySystem {
   }
 
   /** @param {number} dy — lata WYŚWIETLANE od ostatniego wywołania (D2/E6). */
+  /**
+   * DS-1 / D-WP-5 — traktaty o skończonym czasie trwania (dziś: wyłącznie pakt o nieagresji).
+   *
+   * ⚠ WYGAŚNIĘCIE = USUNIĘCIE REKORDU, nie zmiana predykatu. To jest cała oszczędność slice'u:
+   *   `hasTreaty` pyta WYŁĄCZNIE o `id`, więc dziewięciu konsumentów w `src/` — w tym bramka
+   *   `declareWar:331` i bramka ultimatum `:1020` — jest poprawnych BEZ JEDNEJ LINII ZMIANY.
+   *   Gdyby wygasanie było predykatem („ma traktat, ale przeterminowany”), trzeba by dotknąć
+   *   wszystkich dziewięciu — a każdy pominięty byłby cichą dziurą w bramce wojny.
+   *
+   * ⚠ Beat idzie kanałem `diplomacy` (info), nie `diplomacy_warn`: wygaśnięcie paktu to FAKT,
+   *   a nie ostrzeżenie. `warn` zostaje dla „czas rozważyć pokój” (D-WP-14).
+   */
+  _tickTreatyExpiry() {
+    const year = this._year();
+    for (const { a, b, treatyId } of this.relations.tickTreatyExpiry(year)) {
+      // `removeTreaty` sam sortuje parę, więc podajemy strony dosłownie — działa też dla par
+      // bez gracza (D5), których dziś nie ma.
+      if (!this.relations.removeTreaty(a, b, treatyId)) continue;
+      const empireId = a === PLAYER ? b : a;
+      // Zdarzenie dla DS-2 (odnowienie) — pełny komplet, żeby konsument nie musiał dopytywać.
+      EventBus.emit('diplomacy:treatyExpired', { empireId, treatyId, year });
+    }
+  }
+
   _tickTensionDecay(dy) {
     const currentYear = this._year();
     for (const rel of this.relations.listPairsWith(PLAYER)) {

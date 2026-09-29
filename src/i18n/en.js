@@ -3621,6 +3621,7 @@ export default {
   'peaceOffer.reject':     '⚔ Reject',
   'peaceOffer.counter':    '⇄ Counter-offer',
   'peaceOffer.staleTitle': 'Offer no longer valid',
+  'log.diplo.napExpired':           '☮ The non-aggression pact with {0} has expired',
   'log.diplo.aiPeaceOffer':         '☮ {0} proposes peace',
   'log.diplo.aiPeaceOfferRejected': '⚔ Rejected peace offer from {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Peace offer from {0} expired',

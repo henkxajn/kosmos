@@ -192,3 +192,11 @@ export const CB_MEMORY_WINDOW = 10;
 // Po upływie status wraca do 'peace' — bez tego rozejm był stanem terminalnym
 // i decay napięcia zamierał na zawsze po pierwszej wojnie (audyt R7).
 export const TRUCE_YEARS = 10;
+
+// DS-1 / D-WP-5 — ile lat trwa PAKT O NIEAGRESJI. Do DS-1 pakt był WIECZNY, a ponieważ
+// każdy pokój wymusza go z definicji (D-WP-1), znaczyło to „już nigdy wojny z inicjatywy AI”:
+// `declareWar:331` odmawia każdemu powodowi poza `player_action`, dopóki pakt stoi.
+// ⚠ Termin mieszka TUTAJ, a nie w `TREATY_TYPES` — katalog opisuje, CZYM jest traktat,
+// plik balansu, JAK DŁUGO. Dwa źródła jednej gałki byłyby długiem (ta sama zasada, która
+// wyłączyła `yearlyTrust` z katalogu).
+export const NAP_YEARS = 10;
