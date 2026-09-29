@@ -9,6 +9,7 @@ import { ARCHETYPES } from '../data/EmpireData.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canDoEnvoy, hasWeapons } from '../entities/Vessel.js';
+import { treatyExpiryYear } from '../systems/diplomacy/RelationsModel.js';
 
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -77,6 +78,18 @@ function opinionColor(op) {
   const ch = (i) => Math.round(from[i] + (to[i] - from[i]) * tt);
   return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
 }
+
+// DS-1 / C3 — JEDNO miejsce, w którym id traktatu spotyka się ze swoją nazwą.
+// Do C3 slot renderował SUROWY SLUG („• non_aggression (od 100)”), bo nazwy z katalogu
+// (`namePL`/`nameEN`) nie miały ANI JEDNEGO czytelnika, a kluczy `treaty.*` nie było
+// w słownikach w ogóle (klasa 271/113).
+// ⚠ Katalogowe `namePL`/`nameEN` ZOSTAJą MARTWE — świadomie, poza zakresem DS-1
+//   (rejestr ⚪). Nazwa widoczna dla gracza idzie przez `t()`, jak reszta UI.
+const TREATY_NAME_KEY = {
+  non_aggression:  'treaty.nonAggression',
+  trade_agreement: 'treaty.tradeAgreement',
+  alliance:        'treaty.alliance',
+};
 
 export class DiplomacyOverlay extends BaseOverlay {
   constructor() {
@@ -457,7 +470,15 @@ export class DiplomacyOverlay extends BaseOverlay {
     } else {
       for (const tr of treaties) {
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(t('diplo.treatyItem', tr.id, (tr.signedYear ?? 0).toFixed(0)), x + pad + 4, iy);
+        // Nazwa przez `t()`; brak wpisu w mapie degraduje do id, zamiast rysować pusto.
+        const nameKey = TREATY_NAME_KEY[tr.id];
+        const name = nameKey ? t(nameKey) : (tr.id ?? '?');
+        // ⚠ TERMIN Z TEJ SAMEJ FUNKCJI, KTÓREJ UŻYWA TICKER (`treatyExpiryYear`). `null` =
+        //   traktat bez terminu (handel, sojusz) — wtedy BRAK sufiksu, bo panel nie ma prawa
+        //   obiecywać końca, którego silnik nie egzekwuje.
+        const expires = treatyExpiryYear(tr);
+        const until = expires == null ? '' : ', ' + t('diplo.treatyUntil', Math.round(expires));
+        ctx.fillText(t('diplo.treatyItem', name, (tr.signedYear ?? 0).toFixed(0), until), x + pad + 4, iy);
         iy += 14;
       }
     }
@@ -534,7 +555,13 @@ export class DiplomacyOverlay extends BaseOverlay {
     const canAlly  = canPropose('alliance');
 
     // Wiersz 1: wojna / pokój
-    this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.declareWar'), canWar, 'danger');
+    // ⚠ Przycisk MÓWI, dlaczego nie można — wzór ☮ z WP-4/C4 (`warOverlay.btnPeaceCooldown`).
+    //   Licznik CAŁKOWITY: `t()` nie formatuje liczb, więc surowy float wylałby się na
+    //   przycisk jako „9.9166666 L.” (ZMIERZONE).
+    const truceLeftYears = Math.max(1, Math.ceil(Number(rel.truceYearsLeft) || 0));
+    this._drawActionButton(ctx, colL, iy, btnW2, btnH,
+      inTruce ? t('diplo.btn.declareWarTruce', truceLeftYears) : t('diplo.btn.declareWar'),
+      canWar, 'danger');
     if (canWar) this._addHit(colL, iy, btnW2, btnH, 'declare_war', { empireId: this._selectedId });
     this._drawActionButton(ctx, colR, iy, btnW2, btnH, t('diplo.btn.offerPeace'), canPeace, 'primary');
     if (canPeace) this._addHit(colR, iy, btnW2, btnH, 'offer_peace', { empireId: this._selectedId });

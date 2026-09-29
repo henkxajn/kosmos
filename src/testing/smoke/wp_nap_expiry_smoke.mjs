@@ -245,12 +245,14 @@ console.log('\nT6 — dyscyplina: plik balansu i i18n');
   const exports = (balRaw.match(/^export const [A-Z_]+/gm) ?? []).map(s => s.replace('export const ', ''));
   assert(exports.includes('NAP_YEARS') && exports.includes('TRUCE_YEARS'),
     'T6a: plik balansu eksportuje `NAP_YEARS` obok `TRUCE_YEARS`');
-  // ⚠ Liczba eksportów jest CZĘŚCIĄ pinu. C1 dołożył `NAP_YEARS` (10 → 11), C2 dokłada
-  //   `TRUCE_TENSION_FLOOR` (11 → 12) — podniesione ŚWIADOMIE, dokładnie tak, jak zapowiadał
-  //   ten komentarz przed C2. Kolejna stała bez podpisu zapali ten wiersz.
-  assert(exports.length === 12,
-    'T6b: plik balansu ma 12 eksportów (10 wyjściowych + `NAP_YEARS` z C1 + `TRUCE_TENSION_FLOOR` '
-    + 'z C2) — jest: ' + exports.length + ' [' + exports.join(', ') + ']');
+  // ⚠ LICZNIK EKSPORTÓW MIESZKA W JEDNYM KEEPERZE, nie w dwóch. Do C2 pilnował go ten plik
+  //   (10 → 11 → 12), ale C3 przeniósł tu `TRUCE_TENSION_CAP` i utrzymywanie tej samej liczby
+  //   w dwóch miejscach znaczyłoby dwie aktualizacje przy każdej stałej — czyli gotowy rozjazd.
+  //   Licznik przejął `wp_treaty_slot_smoke` T5e (najnowszy właściciel pliku balansu); tutaj
+  //   zostaje to, co należy do C1: że `NAP_YEARS` JEST i że nie ruszył sąsiadów.
+  assert(exports.indexOf('NAP_YEARS') === exports.indexOf('TRUCE_YEARS') + 1,
+    'T6b: `NAP_YEARS` stoi BEZPOŚREDNIO obok `TRUCE_YEARS` — czasy dyplomacji trzymają się razem '
+    + '[' + exports.join(', ') + ']');
   assert(OMD.TRUCE_YEARS === 10,
     'T6c (KONTROLA PINU): `TRUCE_YEARS` nietknięty (' + OMD.TRUCE_YEARS + ')');
 

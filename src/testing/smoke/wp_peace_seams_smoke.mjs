@@ -451,9 +451,13 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
     assert(painted.length > 0,
       'T5i (KONTROLA PINU): panel REALNIE coś narysował (' + painted.length + ' wywołań `fillText`) — '
       + 'inaczej brak wiersza slotu myliłby się z brakiem rysowania');
-    const slotRow = painted.find(s => s.includes('non_aggression'));
-    assert(!!slotRow && /137/.test(slotRow),
-      'T5i: slot traktatu renderuje stary rekord (id + rok podpisania) — ' + JSON.stringify(slotRow ?? null));
+    // ⚠ PRZECELOWANE w DS-1/C3: slot pokazał do tej pory SUROWY SLUG (`non_aggression`),
+    //   a C3 zamienił go na nazwę przez `t()`. Inwariant tego pinu się NIE zmienia — stary,
+    //   sześciopolowy rekord ma się wyrenderować — zmienia się to, CZEGO szukamy w napisie.
+    const slotRow = painted.find(s => s.trim().startsWith('•'));
+    assert(!!slotRow && /137/.test(slotRow) && !/non_aggression/.test(slotRow),
+      'T5i: slot renderuje stary rekord po NAZWIE (nie po slugu), z rokiem podpisania — '
+      + JSON.stringify(slotRow ?? null));
 
     window.KOSMOS.empireRegistry = regBefore;
   }

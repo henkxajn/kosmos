@@ -3475,7 +3475,11 @@ export default {
   'diplo.aiStance':         'AI Stance',
   'diplo.treaties':         'Treaties',
   'diplo.noTreaties':       '  (no treaties)',
-  'diplo.treatyItem':       '  • {0} (since {1})',
+  'diplo.treatyItem':       '  • {0} (since {1}{2})',
+  'diplo.treatyUntil':      'until year {0}',
+  'treaty.nonAggression':   'Non-aggression pact',
+  'treaty.tradeAgreement':  'Trade agreement',
+  'treaty.alliance':        'Alliance',
   'diplo.memory':           'Relationship memory',
   'diplo.none':             '  (none)',
   // D1 — opinion (modifier stack) + "why" breakdown
@@ -3542,6 +3546,7 @@ export default {
   'diplo.reject.cessionTermsStale':      'The terms are no longer valid — holdings have changed since the offer was made',
   'diplo.reject.cessionHomeWorld':       'A home world cannot be ceded',
 
+  'diplo.btn.declareWarTruce': '⚔ TRUCE — {0} Y',
   'diplo.btn.declareWar':   '⚔ DECLARE WAR',
   'diplo.btn.offerPeace':   '☮ OFFER PEACE',
 

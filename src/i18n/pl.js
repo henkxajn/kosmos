@@ -3476,7 +3476,11 @@ export default {
   'diplo.aiStance':         'Postawa AI',
   'diplo.treaties':         'Traktaty',
   'diplo.noTreaties':       '  (brak umów)',
-  'diplo.treatyItem':       '  • {0} (od {1})',
+  'diplo.treatyItem':       '  • {0} (od {1}{2})',
+  'diplo.treatyUntil':      'do roku {0}',
+  'treaty.nonAggression':   'Pakt o nieagresji',
+  'treaty.tradeAgreement':  'Umowa handlowa',
+  'treaty.alliance':        'Sojusz',
   'diplo.memory':           'Pamięć relacji',
   'diplo.none':             '  (brak)',
   // D1 — opinia (stos modyfikatorów) + rozbicie „dlaczego"
@@ -3543,6 +3547,7 @@ export default {
   'diplo.reject.cessionTermsStale':      'Warunki straciły ważność — stan posiadania zmienił się od złożenia oferty',
   'diplo.reject.cessionHomeWorld':       'Ciało domowe nie podlega cesji',
 
+  'diplo.btn.declareWarTruce': '⚔ ROZEJM — {0} L.',
   'diplo.btn.declareWar':   '⚔ WYPOWIEDZ WOJNĘ',
   'diplo.btn.offerPeace':   '☮ ZAPROPONUJ POKÓJ',
 

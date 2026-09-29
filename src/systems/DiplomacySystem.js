@@ -44,7 +44,7 @@ import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
-  TRUCE_TENSION_FLOOR,
+  TRUCE_TENSION_FLOOR, TRUCE_TENSION_CAP,
 } from '../data/OpinionModifierData.js';
 
 // Id gracza jako strony relacji (dosłowne, nie prefiks).
@@ -73,7 +73,6 @@ const PEACE_QUIET_YEARS = 2.0;
 const ULTIMATUM_GRACE_YEARS = 3.0;
 
 // Napięcie, do którego schodzi relacja po zawarciu rozejmu.
-const TRUCE_TENSION_CAP = 30;
 
 // Kara za zaleganie statku badawczego w obcym układzie — co ile lat naliczana.
 // ⚠ Komentarz mówił „lat cyw." i KŁAMAŁ: i stempel (`entry.year`), i porównanie jadą

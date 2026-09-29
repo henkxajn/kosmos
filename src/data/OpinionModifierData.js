@@ -209,3 +209,7 @@ export const NAP_YEARS = 10;
 // wyświetlanego — siedem i pół roku PRZED końcem rozejmu. Rozejm ma stygnąć, nie udawać,
 // że wojny nie było.
 export const TRUCE_TENSION_FLOOR = 15;
+
+// DS-1 / C3 — SUFIT napięcia przy podpisaniu pokoju. PRZENIESIONY z `DiplomacySystem`,
+// żeby para pokręteł rozejmu (sufit + podłoga) miała JEDEN dom. Wartość bez zmian.
+export const TRUCE_TENSION_CAP = 30;

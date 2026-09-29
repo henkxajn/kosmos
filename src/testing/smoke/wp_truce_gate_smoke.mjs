@@ -281,10 +281,12 @@ console.log('\nT8 — dyscyplina: plik balansu, i18n, konsument powodu');
   const exports = (balRaw.match(/^export const [A-Z_]+/gm) ?? []).map(s => s.replace('export const ', ''));
   assert(exports.includes('TRUCE_TENSION_FLOOR'),
     'T8a: plik balansu eksportuje `TRUCE_TENSION_FLOOR`');
-  // ⚠ C1 podniósł tę liczbę do 11 (`NAP_YEARS`); C2 dokłada DOKŁADNIE jedną stałą.
-  assert(exports.length === 12,
-    'T8b: plik balansu ma 12 eksportów (11 po C1 + `TRUCE_TENSION_FLOOR`) — jest: '
-    + exports.length + ' [' + exports.join(', ') + ']');
+  // ⚠ LICZNIK EKSPORTÓW MA JEDNEGO WŁAŚCICIELA — `wp_treaty_slot_smoke` T5e. Ta sama liczba
+  //   w trzech keeperach (tu, w `wp_nap_expiry` i tam) znaczyłaby trzy aktualizacje przy każdej
+  //   stałej, czyli gotowy rozjazd; C3 pokazał to od razu, przenosząc `TRUCE_TENSION_CAP`.
+  //   Tutaj zostaje to, co należy do C2: że podłoga stoi OBOK sufitu, a nie gdzie indziej.
+  assert(exports.includes('TRUCE_TENSION_FLOOR'),
+    'T8b: podłoga jest w pliku balansu [' + exports.join(', ') + ']');
 
   for (const f of ['pl.js', 'en.js']) {
     assert(/'diplo\.reject\.truceHolds':/.test(readRaw('i18n', f)),

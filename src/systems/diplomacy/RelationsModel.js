@@ -40,6 +40,23 @@ const RELATIONS_PATH = 'diplomacy.relations';
 //   i sojuszu traktaty terminowe — zmianę balansu, której nikt nie podpisywał (pin T1f).
 const TREATY_WITH_TERM = 'non_aggression';
 
+/**
+ * DS-1 — JEDNA odpowiedź na pytanie „kiedy ten traktat się kończy”. `null` = nie kończy się.
+ *
+ * ⚠ WOŁAJĄ JĄ DWAJ: ticker (`tickTreatyExpiry`) i PANEL (`DiplomacyOverlay`, slot traktatu).
+ *   Druga kopia tego rachunku rozjechałaby to, co panel POKAZUJE, z tym, co ticker ROBI —
+ *   klasa nieutwardzonego bliźniaka (`removeColony:667`). Pin: `wp_treaty_slot_smoke` T2c-T2f.
+ *
+ * ⚠ D-DS-3: brak `expiresYear` (rekord sprzed DS-1) wyprowadzamy z `signedYear + NAP_YEARS`
+ *   W LOCIE, bez zapisu — format zapisu zostaje nietknięty (v101, zero migracji).
+ */
+export function treatyExpiryYear(treaty) {
+  if (treaty?.id !== TREATY_WITH_TERM) return null;
+  return Number.isFinite(treaty.expiresYear)
+    ? treaty.expiresYear
+    : (Number(treaty.signedYear) || 0) + NAP_YEARS;
+}
+
 export class RelationsModel {
   /**
    * @param {Object} store  — reactive store (domyślnie singleton gameState)
@@ -367,11 +384,8 @@ export class RelationsModel {
     const out = [];
     for (const rel of this.listPairs()) {
       for (const tr of (rel.treaties ?? [])) {
-        if (tr?.id !== TREATY_WITH_TERM) continue;
-        const expires = Number.isFinite(tr.expiresYear)
-          ? tr.expiresYear
-          : (Number(tr.signedYear) || 0) + NAP_YEARS;
-        if (year < expires) continue;
+        const expires = treatyExpiryYear(tr);   // JEDNO źródło — to samo, co czyta panel
+        if (expires == null || year < expires) continue;
         out.push({ key: rel.key, a: rel.a, b: rel.b, treatyId: tr.id, expiresYear: expires });
       }
     }
