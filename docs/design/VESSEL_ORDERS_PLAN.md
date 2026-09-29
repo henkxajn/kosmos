@@ -3352,3 +3352,189 @@ panel stałym elementem), ale `foreignColonize` / `foreignUnload` / `foreign_ret
 
 **Świadomie NIEZMIERZONE:** wpływ ~3787 encji na rozmiar zapisu wobec limitu localStorage
 (`SaveSystem` próg 3,5 mln znaków) — istotne tylko dla odrzuconego wariantu eager-generacji.
+
+---
+
+## Findingi z arca WOJNA I POKÓJ / W4-simple (#283-#298, zebrane 2026-09-29)
+
+⚠ **Zasada wpisu:** każdy niesie MECHANIZM i linie **zweryfikowane w drzewie na `c858639`**. Trzy wpisy
+(#288 liczba, #293 całość) noszą jawny znacznik, że pochodzą ze **zgłoszenia**, nie z mojego pomiaru —
+ta sama ostrożność, co przy regule W3-32 („rejestr nie jest źródłem prawdy").
+⚠ Numeracja: to **gołe** numery ciągu globalnego (nie przestrzeń `V-`).
+
+---
+
+### 🟠 283 — `transferColony` dopisuje kolonię do imperium, ale nigdy nie odpisuje jej poprzedniemu
+
+`ColonyManager.transferColony` woła `empireReg.addColony(newOwnerEmpireId, planetId)` (`:942`) i **nie ma
+ani jednego** wywołania `removeColony`. Lustro po drugiej stronie **ma je**:
+`captureColonyForPlayer:992-993` robi `empireReg?.removeColony?.(previousOwner, planetId)`.
+**Dziś nieszkodliwe**, bo produkcyjnie przerzuca się gracz → AI, a gracz nie jest w rejestrze imperiów.
+**Uzbraja się przy AI↔AI** (a `transferColony` tę parę obsługuje — dowiedzione na żywo w W3 GATE 1 §7[5]):
+tracące imperium zachowa id kolonii na swojej liście ⇒ wyciek rejestru, a przez `getColoniesByEmpire`
+także zafałszowany `heldValue` i sufit cesji.
+**Gdzie domknąć:** jedna linia w `transferColony` obok `addColony`, w slice'ie **D5**.
+
+### 🟠 284 — przejęcie kolonii przez gracza zostawia w niej zadokowane statki AI (rodzina 95)
+
+Asymetria zmierzona: `transferColony` **niszczy** statki zadokowane w hangarze przejmowanej kolonii
+(`ColonyManager:862-870`, `destroyVessel` w `:867`); `captureColonyForPlayer` (`:982`+) nie ma **ANI
+JEDNEGO** odwołania do `vesselManager` — grep po `fleet|vessel|vMgr|destroyVessel` w jej ciele jest pusty.
+⇒ po desancie gracza wrogi kadłub zostaje w `colony.fleet` teraz już **gracza**, ze stemplem wroga.
+Rodzina **95** („statek ze stoczni wychodzi jako obcy kontakt").
+**Gdzie domknąć:** wspólny helper „co się dzieje z hangarem przy zmianie właściciela", wołany przez obie
+ścieżki — nie druga kopia pętli (lekcja `removeColony:667`).
+
+### 🟠 285 — stacja-sierota nie wraca do matki po ODBICIU kolonii
+
+`StationSystem` woła `_tryAdoptStation` z trzech miejsc: `colony:founded` i `outpost:founded`
+(`:33-34` → `_onColonyFounded:185`) oraz przy restore (`:171`). **`colony:capturedByPlayer` nie jest
+subskrybowane.** ⇒ gracz odbija ciało, na którym stoi jego stacja z `depotDetached`, a stacja zostaje
+odcięta od zaopatrzenia do najbliższego wczytania zapisu.
+**Gdzie domknąć:** czwarty trigger obok dwóch istniejących; `_tryAdoptStation` jest już idempotentne
+(S3.4c / Z8), więc dołożenie subskrypcji nie wymaga nowej logiki.
+
+### ⚪ 286 — `colony.fleet` po cesji trzyma id statków, które już tam nie stoją
+
+`DiplomacySystem:741-748` (D-WP-12) iteruje `colony.fleet` i wypycha statki gracza na orbitę
+(`undockToOrbit:747`), ale **listy nie czyści**. `undockToOrbit` (`VesselManager:737`) przecelowuje statek,
+a `fleet` zostaje z jego id.
+**Gdzie domknąć:** albo `undockToOrbit` zdejmuje id z `fleet` (wtedy zysk mają też dwaj inni wołający:
+`FleetCommandPanel:527`, `FleetGroupPanel:433`), albo pętla cesji sprząta po sobie. ⚠ Pierwsza opcja
+zmienia zachowanie **trzech** ścieżek — wymaga pomiaru konsumentów `colony.fleet`.
+
+### 🟠 287 — „wojna bez wojny": druga wojna z tą samą parą w tym samym roku nie powstaje
+
+`WarSystem.createWar:179` kluczuje id jako `war_<agresor>_<obrońca>_<rok>` i przy trafieniu
+**zwraca istniejący rekord** (`:180`) — również **nieaktywny**. `getWarBetween:155` filtruje po `active`.
+⇒ wypowiedzenie wojny w TYM SAMYM roku, w którym poprzednia wojna tej pary została zamknięta, daje
+stan: relacja mówi `'war'`, a `getWarWith` zwraca **`null`**. Wszystko, co stoi na uchwycie wojny
+(wyczerpanie, księga zdobyczy, stół pokoju, depesza), jest wtedy nieosiągalne.
+**Gdzie domknąć:** licznik w kluczu (`_0`, `_1`) albo wskrzeszenie rekordu przy ponownej deklaracji —
+**decyzja projektowa**, bo druga opcja skleja dwie wojny w jedną historię. Obejście na gate'cie: rok+1.
+
+### ⚪ 288 — `DEV_FULL` saturuje strefy wpływów
+
+`GAME_CONFIG.TERRITORY.DEV_FULL = 20` (`GameConfig:617`), a `TerritoryField:66/:80` liczy
+`clamp(devScore / DEV_FULL, 0, 1)` ⇒ każda rozwinięta stolica siedzi na `R_MAX` i strefy przestają
+różnicować imperia. ⚠ **Liczba „devScore stolicy ≈ 195" pochodzi ze zgłoszenia, nie z mojego pomiaru** —
+przed strojeniem zmierzyć rozkład `getSystemDevScore` na żywej partii.
+**Gdzie domknąć:** BALANS, nie higiena — to jest kalibracja.
+
+### ⚪ 289 — dwa odczyty pól wojny bez `?? []`
+
+`WarSystem.addFront:202-203` czyta `war.fronts` (`some` + spread), `recordBattle:462` i `:478` czytają
+`war.battles` (`.length` + spread) — **bez** `?? []`. Ta sama klasa, przed którą broni się
+`getCaptures:169` (tam `?? []` jest, z komentarzem wyjaśniającym dlaczego: `GameState.restore` merguje
+wyłącznie klucze najwyższego poziomu, więc stary rekord wojny wraca dosłownie).
+⇒ wojna zapisana przed dodaniem któregoś z pól wywróci obie funkcje.
+**Gdzie domknąć:** dwa `?? []`, jeden commit, razem z pinem na kształt starego rekordu.
+
+### ⚪ 290 — `war.fronts[]` i `CAPTURE_GRACE_YEARS` są martwe
+
+`war.fronts` nie ma **ani jednego** czytelnika poza `WarSystem` (grep czysty).
+`CAPTURE_GRACE_YEARS = 3.0` (`InvasionSystem:32`) jest zadeklarowane i nieczytane — mówi to wprost
+komentarz dwa wiersze wyżej (`:20`): „BRAK JAKIEJKOLWIEK KARENCJI CZASOWEJ".
+**Gdzie domknąć:** albo Krok 0 następnego slice'u wojennego (usunięcie), albo świadome ożywienie —
+ale stała bez konsumenta jest miną dokładnie tej klasy co `RETURN_DOCK_THRESHOLD_AU` (Finding 263).
+
+### 🟠 291 — rozejm nie bramkuje niczego, a napięcie w nim zamarza (→ DS-1)
+
+Dwa zmierzone fakty, jeden wpis:
+(a) status `'truce'` gatuje **0 z 4** dróg do wojny — jego jedyni czytelnicy to `AlienCivSystem:176`
+(FSM → NEGOTIATING) i chip `DiplomacyOverlay:303`. Bramkuje natomiast **wymuszony NAP**, i to
+**3 z 4**: `hostility_threshold` (`DiplomacySystem:316`), `ultimatum_expired` (`:1021`),
+`enemy_attack_arrived` (`EnemyAttackHandler:134`) — bo `declareWar:331` przepuszcza wyłącznie
+`reason === 'player_action'`. Czwarta droga to przycisk gracza, otwarty **z projektu**
+(komentarz `:664-667` mówi to wprost).
+(b) `_tickTensionDecay:1004` robi `if (rel.status !== 'peace') continue`, a `signPeace:654` capuje
+napięcie na `TRUCE_TENSION_CAP = 30` ⇒ przez `TRUCE_YEARS = 10` napięcie **nie opada wcale**.
+**Gdzie domknąć:** **DS-1**, i to jako **decyzja właściciela** (czy przycisk gracza zostaje otwarty;
+czy rozejm ma odmrażać napięcie), nie jako higiena.
+
+### ⚪ 292 — okno odmowy: globalne 2 lata vs per-czasownik 1 rok
+
+`RECENT_REFUSAL_YEARS = 2` (`AcceptanceWeightData:416`) jest domyślnym oknem dla czterech czasowników;
+`offer_peace` ma po D-WP-4 własne okno **1 roku**, rozwiązywane przez `refusalWindowYears`
+(`AcceptanceMath:117-122`). Rachunek jest **jednoźródłowy** (to była poprawka C4), więc to nie defekt —
+tylko **miejsce, w którym łatwo pomylić się przy czytaniu**: liczba w stałej nie opisuje pokoju.
+**Gdzie domknąć:** nic do naprawy; wpis istnieje, żeby następny czytelnik nie wziął `2` za cenę pokoju.
+
+### ⚪ 293 — tooltip planetarny obcych ciał: zgłoszenie **NIE potwierdziło się w pierwszym pomiarze**
+
+Zgłoszono: „angielski na sztywno, klasa 113, bez okupacji". ⚠ **Mój pomiar przeczy drugiej połowie**:
+`ThreeRenderer:3373` renderuje `t('body.occupiedBy', occName)`, czyli okupacja **jest** w tooltipie 3D
+i **idzie przez słownik**. Nie wykluczam, że chodziło o **inną powierzchnię** (plakietka mapy / karta
+ciała), ale nie umiem jej wskazać bez wskazania pliku.
+**Gdzie domknąć:** najpierw **pomiar** — który dokładnie tooltip, na jakim ciele, w jakim trybie.
+Wpis zostaje otwarty jako *obserwacja niezweryfikowana*, nie jako defekt.
+
+### ⚪ 294 — dwa różne stringi na „akcję gracza" w jednej fasadzie
+
+`WarOverlay:656` woła `offerPeace(empireId, 'player_war_panel', …)`, a `DiplomacyOverlay:603/606`
+wołają `declareWar`/`offerPeace` z `'player_action'`. Oba znaczą „to zrobił gracz", ale tylko drugi
+jest rozpoznawany przez bramkę `declareWar:331`. Dziś nieszkodliwe (ta bramka dotyczy wypowiedzenia
+wojny, nie pokoju), ale każdy przyszły test „czy to akcja gracza" ma **dwie** prawidłowe odpowiedzi.
+**Gdzie domknąć:** jedna stała w module, dwa call-site'y — przy okazji DS-1, który i tak dotyka `declareWar`.
+
+### 🟠 295 — nazwa imperium w Dzienniku jest ZAWSZE polska (korekta zgłoszenia)
+
+Zgłoszono „gałąź `namePL` martwa". ⚠ **Pomiar mówi coś innego i gorszego**: `EmpireRegistry:76-77`
+ustawia **i `name`, i `namePL`** (a komentarz `:12` wymienia też `nameEN`), więc gałąź jest **żywa** —
+`UIManager._empName:1641-1643` zwraca `emp?.namePL ?? emp?.name ?? empireId`. Problem polega na tym, że
+**`nameEN` nie jest czytane nigdy**, więc gracz EN widzi polską nazwę imperium w każdym wpisie
+dyplomatycznym Dziennika. To klasa **113**, w lustrzanym odbiciu: niewidoczna dla gracza PL.
+**Gdzie domknąć:** `_empName` pyta o locale (jak reszta warstwy i18n) albo o `nameEN` z fallbackiem —
+razem z przeglądem klasy 113 (Finding 269/113).
+
+### ⚪ 296 — `log.diplo.autoPeaceRefused` jest sierotą w obu słownikach
+
+Klucz żyje w `pl.js`/`en.js`, a jego jedyny emitent (`war:autoPeaceRefused`) został zdjęty w WP-4/C5 —
+mówią to wprost komentarze `UIManager:1706-1709` i `WarSystem:625-633`. `check-i18n` sieroty nie zgłasza
+(pyta o klucze **użyte**, nie o nieużywane).
+**Gdzie domknąć:** usunąć przy najbliższym sprzątaniu słowników, albo zostawić świadomie — ale wpisany,
+żeby nie wyglądał na przeoczenie.
+
+### ✅ 297 — ZAMKNIĘTY w WP-5/C0 (`e617869`): podpowiedź wojny nazywała klawisz, którego nie ma
+
+`warOverlay.declareHint` mówiło „Diplomacy panel (Y)" / „panelu Dyplomacji (Y)", a `y` **nie jest
+związane z niczym** — dyplomacja siedzi pod `d` (`OverlayManager._keyMap`). Kłamało w **obu** językach;
+`check-i18n` tego nie widzi, bo pyta o istnienie klucza, nie o prawdziwość treści (klasa 113/269).
+Pin `wp_peace_cooldown_smoke` **T8** jest **wykonaniowy po stronie keymapy** (czyta żywe
+`_keyMap`, nie regex na źródle), więc przeniesienie dyplomacji na inny klawisz zgasi pin razem
+z podpowiedzią. Fail-first 65/2.
+
+### 🟠 298 — pokój status quo **pierze zdobycze**: odzysk liczy tylko księgę BIEŻĄCEJ wojny
+
+**Zmierzone na żywo** (gate close-outu, 2026-09-29, realny zapis „Liga Trzech Słońc"): gracz traci
+stolicę w wojnie nr 1, zawiera pokój **status quo** (pusty stół), a w wojnie nr 2 ta sama stolica —
+`dev 100` — jest przy stole **zwykłym ciałem AI**: liczy się do sufitu (**79,5**), więc pojedyncze
+żądanie ją przekracza i pokój jej nie odda. W wojnie nr 1 była jeszcze **`recaptured`** („zdobyte na
+tobie — taniej", zwolnione z sufitu).
+
+**Mechanizm — jedna linia zakresu.** `AcceptanceEngine._captureResolver:603-616` bierze księgę
+**jednej** wojny:
+
+```js
+const warId = war?.warId ?? null;                                   // :604  ← zakres = TA wojna
+const captures = warId ? (K?.warSystem?.getCaptures?.(warId) ?? []) : [];
+…
+for (let i = captures.length - 1; i >= 0; i--) { … }                // :609  ← findLast po księdze
+```
+
+Pętla od końca jest **poprawna i konieczna** (ciało, które zmieniło ręce dwa razy, ma dwa wpisy;
+`some()` odpowiadałoby „zdobyte" także o ciele już oddanym). Defekt nie jest w niej — jest w tym, że
+`getCaptures(warId)` widzi **wyłącznie wojnę bieżącą**, a `war.captures[]` nie ma żadnego łącznika
+z poprzednią wojną tej samej pary.
+
+⚠ **To nie jest błąd D-WP-13.** Depesza AI jest status quo **z projektu**, a „zdobycze zostają" to
+dosłowne brzmienie jej warunków (`peaceOffer.statusQuo`). Pytanie brzmi: czy pokój ma **kasować
+pamięć o tym, czyje to było**.
+
+**Gdzie domknąć — DECYZJA WŁAŚCICIELA, odłożona:** czy `recaptured` ma patrzeć w **historię wojen
+pary**, a nie tylko w bieżącą księgę. Za: utracona stolica przestaje być nieodzyskiwalna przy stole.
+Przeciw: „odzysk" stałby się bezterminowy, a wtedy sufit przestaje cokolwiek chronić w długiej
+kampanii (ciało raz utracone byłoby na zawsze tanie). Kształt pośredni — okno lat albo wygasanie
+roszczenia — jest **trzecią opcją, nie kompromisem**: wymaga własnego pomiaru tempa wojen.
+⚠ Każdy wariant dotyka **sufitu** (`territorial_ceiling`), czyli rdzenia D-WP-8 — więc nie jest to
+poprawka jednolinijkowa, tylko slice z własnym gate'em.

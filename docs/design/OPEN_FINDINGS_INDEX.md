@@ -49,6 +49,69 @@
 > **269** · **272**. Otwarte drobne z całego arca: **227**, **278b**, **279**, **280**, **281**, **282**.
 > • Dalej wg planu właściciela: pivot **D4-slim → W4-simple** (Wojna i Pokój uproszczona) + żywe 🔴 **195** / **95** /
 > **65** / **193** + pomiar **216** jako przerywniki.
+>
+> **Aktualizacja 2026-09-29 — arc WOJNA I POKÓJ / W4-simple ZAMKNIĘTY (pokój terytorialny).** Sweep: **241/241 OK,
+> 0 FAIL, 31 advisory** · `check-i18n` PASS (pl=en=**3402**) · save **v101 bez migracji** przez cały arc.
+> • **Dowieziona pętla:** księga zdobyczy (`war.captures[]`) → term `territorial_terms` + **dwa pre-warunki**
+> (stolica nigdy; sufit = połowa puli ODDAWALNEJ, D-WP-8) → wykonanie cesji z re-walidacją fail-closed
+> + **wymuszony NAP** → stół pokoju i odznaka **Okupowana** → **depesza AI** (AI samo prosi o pokój)
+> i **zero kary za odmowę** (cooldown 1 rok, symetryczny). ⚠ **Wypadkowa D-WP-14: auto-pokoju nie ma już
+> po ŻADNEJ ze stron** — próg wyczerpania gracza to MELDUNEK, nie podpis w jego imieniu.
+> Commity: `d08ded2` · `af7591b` · `34ad9b0` · `0afb02c` · `7c84a55`+`3920aa9` · `016dd46`+`de68900`+`6d957a1`
+> · **WP-5**: `e617869` (C0) + `c858639` (C1) + docs. Plan/decyzje D-WP-1..17: `WOJNA_I_POKOJ_MASTER_PLAN.md`
+> §„W4-simple — delivered"; sekcja arcu w `CLAUDE.md`.
+> • **NOWE findingi z close-outu: #283-#298** (rejestr: `VESSEL_ORDERS_PLAN.md` §283-298).
+> 🟠 **283** (`transferColony:942` dopisuje kolonię do imperium, nigdy nie odpisuje poprzedniemu — lustro
+> `captureColonyForPlayer:992-993` odpisuje; uzbraja się przy **D5**) · 🟠 **284** (przejęcie przez gracza
+> zostawia zadokowane statki AI w hangarze — `transferColony:867` je niszczy, `captureColonyForPlayer` nie
+> ma ANI JEDNEGO odwołania do `vesselManager`; rodzina **95**) · 🟠 **285** (`_tryAdoptStation` bez triggera
+> `colony:capturedByPlayer` — stacja-sierota nie wraca do matki po odbiciu ciała) · ⚪ **286**
+> (`colony.fleet` po cesji trzyma id statków wypchniętych na orbitę, `DiplomacySystem:741-748`) ·
+> 🟠 **287** („wojna bez wojny" — `createWar:179-180` zwraca ISTNIEJĄCY, także nieaktywny rekord przy
+> kolizji `war_<a>_<b>_<rok>`, a `getWarBetween:155` filtruje po `active` ⇒ `getWarWith` = `null` przy
+> „trwającej" wojnie) · ⚪ **288** (`DEV_FULL = 20` saturuje strefy wpływów; ⚠ liczba „devScore ≈ 195"
+> jest ZE ZGŁOSZENIA, nie z pomiaru) · ⚪ **289** (`addFront:202-203` i `recordBattle:462/:478` czytają
+> `war.fronts`/`war.battles` bez `?? []` — ta sama klasa, przed którą broni się `getCaptures:169`) ·
+> ⚪ **290** (`war.fronts[]` i `CAPTURE_GRACE_YEARS` martwe — zero czytelników) · 🟠 **291** (rozejm
+> bramkuje **0 z 4** dróg do wojny, wymuszony NAP **3 z 4**, przycisk gracza otwarty Z PROJEKTU;
+> napięcie zamrożone na `TRUCE_TENSION_CAP = 30`, bo `_tickTensionDecay:1004` pomija pary spoza `'peace'`
+> ⇒ **DS-1**, decyzja właściciela) · ⚪ **292** (`RECENT_REFUSAL_YEARS = 2` nie opisuje pokoju — ten ma
+> per-czasownikowe okno 1 roku) · ⚪ **293** (tooltip planetarny — ⚠ **zgłoszenie NIE potwierdziło się
+> w pierwszym pomiarze**: `ThreeRenderer:3373` renderuje okupację przez `t()`; wpis zostaje jako
+> OBSERWACJA do pomiaru, nie defekt) · ⚪ **294** (dwa stringi „akcja gracza": `'player_war_panel'`
+> w `WarOverlay:656` vs `'player_action'` w `DiplomacyOverlay:603/606`) · 🟠 **295** (⚠ **korekta
+> zgłoszenia**: gałąź `namePL` NIE jest martwa — `EmpireRegistry:76-77` ustawia `name` I `namePL`;
+> defekt jest gorszy i odwrotny: `nameEN` **nie jest czytane nigdy**, więc gracz EN widzi polską nazwę
+> imperium w każdym wpisie dyplomatycznym Dziennika — klasa **113** w lustrzanym odbiciu) ·
+> ⚪ **296** (`log.diplo.autoPeaceRefused` sierota po WP-4/C5) · ✅ **297 ZAMKNIĘTY** w C0 (`e617869`):
+> `warOverlay.declareHint` obiecywało klawisz **(Y)**, którego nie ma — dyplomacja siedzi pod **(D)**.
+> 🟠 **298** (**pokój status quo PIERZE ZDOBYCZE** — `recaptured` liczy WYŁĄCZNIE księgę BIEŻĄCEJ wojny,
+> `AcceptanceEngine:604`; stolica gracza utracona w wojnie #1 jest w wojnie #2 zwykłym ciałem AI
+> liczonym do sufitu — zmierzone na gate'cie: `dev 100` vs sufit **79,5** ⇒ nieodzyskiwalna przy stole.
+> ⚠ **Decyzja właściciela ODŁOŻONA**: czy `recaptured` ma patrzeć w historię wojen pary; każdy wariant
+> dotyka `territorial_ceiling`, czyli rdzenia D-WP-8 ⇒ slice z własnym gate'em, nie jednolinijkowiec).
+> • ✅ **GATE PEŁNEJ PĘTLI PASS (2026-09-29)** na KOPII realnego zapisu („Liga Trzech Słońc", `emp_001`,
+> `border_incident`, `peaceCost 30`), zero błędów w konsoli: wojna → desant AI na stolicę → księga
+> `{entity_2 player→emp_001 via invasion}` → 🏴 → **staging 29/29 = 0 depesz, `changeExhaustion +2` =
+> 1 depesza** → depesza status quo → ⇄ kontrpropozycja → **odmowa przy 29/31** z `recent_refusal` **0.0**
+> (D-WP-4 na żywo: kara nie istnieje) + „ponowna propozycja za 1 l." → pokój status quo + NAP + rozejm 10
+> (D-WP-13 na żywo) → druga wojna → **cesja wykonana** (`via: 'cession'`, właściciel = gracz, NAP + rozejm).
+> ⚠ **`isHomePlanet` przeżywa pełną pętlę — NIE MA findingu**: zmierzone headless `true → false → true`
+> (`transferColony` kasuje `ColonyManager:910`, cesja AI→gracz idzie przez `captureColonyForPlayer`
+> `DiplomacySystem:721` i przywraca `ColonyManager:1013`, **bramkowane tożsamością** z
+> `window.KOSMOS.homePlanet.id`; kontrola: przejęcie CUDZEJ kolonii zostawia `false` i dokładnie jeden dom)
+> ⇒ odzyskana stolica **jest** chroniona przez `cessionHomeWorld` przy kolejnym stole.
+
+> • ⚠ **Dwie reguły warsztatu z tej rundy:** `node --check` **w potoku z `head` zwraca exit `head`, nie
+> `node`** — kontrolą jest URUCHOMIENIE keepera (zmierzone: plik przeszedł `--check`, a literał JS był
+> rozcięty prawdziwym przełamem linii); **heredoc w tym harnessie zwija `\\` → `\`** i przy większym
+> pliku rozjeżdża parsowanie ⇒ złożone pliki pisać `Write`em, skrypty łatające trzymać na JEDNYM
+> poziomie escapingu.
+> • **Otwarte po arcu:** **DS-1** (NAP `expiresYear` + ticker + beat; dwie decyzje właściciela z §291) ·
+> **DS-2** (odnowienie traktatu + 4. rząd) · **DS-3** (`gift`) · **WP-R** (reparacje jako debuff produkcji
+> wojennej: `reparationsUntilYear` + guard na istniejącej akcji `pressureResponse`,
+> `DirectorRuleData:109/:137`). Poza 1.0: `threaten`, pełna okupacja, reparacje w kredytach, **D5**.
+
 
 ---
 

@@ -2268,7 +2268,7 @@ walce, z których część kłamała o tym, kto wygrał.
 (pyta o klucze w `t()`, nie o literały) — gracz EN dostawał polski meldunek o najgłośniejszym
 zdarzeniu w grze. Siedem kluczy PL+EN (`log.battleLine`, `battle.player/unknownForce/homeSystem/
 deepSpaceIn/retreatPlayer/retreatEnemy`). ⚠ **Prefiks `⚔` zostaje w OBU językach** — to językowo
-neutralny uchwyt filtra na gate'cie (właściciel gra po EN).
+neutralny uchwyt filtra na gate'cie (⚠ KOREKTA 2026-09-29: właściciel gra po PL — to znaczy, że Finding 295 jest dla niego NIEWIDOCZNY, dokładnie jak (Y)→(D) było niewidoczne dla gracza EN).
 
 **⚠ Środowisko headless:** `node_modules/` zniknęło z maszyny, a łańcuch `GameCore → GroundUnitManager
 → GroundUnitFactory → GlbSnapshotRenderer` importuje `three`, które **nie jest zależnością
@@ -5313,3 +5313,95 @@ kopii), i18n pl/en. Keeper NEW `src/testing/smoke/ground_troops_reachable_smoke.
 źródłowym, bo `ColonyOverlay` nie importuje się pod node). Fail-first w prawdziwym
 `git worktree --detach HEAD`: **12 PASS / 43 FAIL**, wszystkie 12 zielonych to autentyczne kontrole
 pinu. Sweep **234/234 0 FAIL** · `check-i18n` PASS (pl=en=3364) · bez flagi (rollback = `git revert`).
+
+---
+
+## WOJNA I POKÓJ — W4-simple: pokój terytorialny (save **v101 bez migracji**, ARC ZAMKNIĘTY 2026-09-29)
+
+Slice D1 horyzontu W3 został rozszczepiony: **pokój terytorialny odszedł do W4**, bo stół pokojowy
+przed podbojem wyceniałby towar, którego nie ma. Po AI_CAPTURE towar istnieje. Plan + decyzje
+D-WP-1..17 + pozostały plan: `docs/design/WOJNA_I_POKOJ_MASTER_PLAN.md` §„W4-simple — delivered".
+Rejestr findingów: `docs/design/VESSEL_ORDERS_PLAN.md` §283+.
+Commity: `d08ded2` (WP-0 keeper szwów) · `af7591b` (WP-1 `war.captures[]`) · `34ad9b0` (WP-2 term +
+sufit) · `0afb02c` (WP-3 wykonanie cesji) · `7c84a55`+`3920aa9` (WP-4a stół + odznaka) ·
+`016dd46`+`de68900`+`6d957a1` (WP-4b zero kary / depesza AI / meldunek) · `e617869`+`c858639` (WP-5).
+
+**Jedno zdanie:** wyczerpanie przestało znaczyć „gracz dostaje wszystko" — pokój oddaje **konkretne
+ciała**, AI **samo** prosi o zakończenie wojny, a **auto-pokoju nie ma już po żadnej ze stron**.
+
+### Szwy — sześć, i każdy odpowiada na inne pytanie
+
+| szew | gdzie | za co odpowiada |
+|---|---|---|
+| **księga zdobyczy** | `war.captures[]`, `WarSystem.getCaptures:169` | JEDYNE źródło „co zmieniło ręce w TEJ wojnie" — czyta je sufit, zniżka za odzysk i odznaka. Append-only, **bez deduplikacji**: rozstrzyga OSTATNI wpis, nigdy `some()` |
+| **kanał `terms`** | `proposal.terms.cessions` → `AcceptanceEngine._buildTermsContext:529` | Liczony **wyłącznie** gdy propozycja niesie cesje; `offer_peace` bez nich nie wykonuje ANI JEDNEGO dodatkowego odczytu świata |
+| **pre-warunki** | `PRECONDITION_CHECKS.capital_never_ceded` / `territorial_ceiling` | Blokada, nie waga. ⚠ Okno dla wagi jest **PUSTE** (zmierzone w WP-2): przy tle 48,50 żadna waga nie wetuje niezawodnie, nie zabijając zwykłej cesji |
+| **`CessionPlan`** | `DiplomacySystem._cessionWorld` + `planCessions` | Re-walidacja **fail-closed**; ciało bez stempla ABORTUJE deal |
+| **depesza AI** | `WarSystem._maybeAiPeaceOffer:306` | DWA warunki: próg `casusBelli.peaceCost` to tania bramka wstępna, **rozstrzyga `evaluatePeace`** |
+| **cooldowny** | `verbCooldowns` na rekordzie pary | Po D-WP-4 to **zapis cooldownu, nie kara punktowa** (waga `recent_refusal` dla pokoju = 0) |
+
+### Keepery arca
+
+`wp_peace_seams` · `wp_captures_ledger` · `wp_territorial_terms` · `wp_cession_execution` **55** ·
+`wp_peace_table` **50** · `wp_occupied_badge` **32** · `wp_peace_cooldown` **67** ·
+`wp_ai_peace_offer` **92** · NEW `wp_test_infra` **34**. Piątka bootująca razem **296 zielonych**.
+Sweep **241/241 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl=en=**3402**).
+
+### ⚠ Pułapki — siedem, każda kupiona pomiarem
+
+1. **BIAŁA LISTA `_acceptance()` UGRYZŁA DWA RAZY.** `AcceptanceEngine._kosmos()` zwraca `this._deps`,
+   czyli **białą listę**, nie przezroczyste proxy na `window.KOSMOS`. Klucz pominięty **nie rzuca** —
+   `buildContext` widzi `undefined` i wstrzykuje wartość zdegradowaną, więc mechanika umiera **po cichu
+   przy zielonych testach czystego silnika**. W1-3: brak `threatAssessment` ⇒ `relative_power` martwy.
+   WP-2: brak `colonyManager` + `directorProduction` ⇒ wycena i sufit martwe. Od C1 pilnują tego **dwa**
+   piny (`wp_test_infra` T4 refleksja / T5 parsowanie) — bo odpowiadają na różne pytania: refleksja łapie
+   odczyt tym samym mechanizmem co defekt, ale tylko na wykonanej gałęzi; parsowanie widzi każdy
+   `K.<klucz>` niezależnie od gałęzi, ale nie dowodzi, że kod biegnie.
+2. **HEADLESS NIE WIDZIAŁ TEGO, CO GRA.** `GameCore.boot()` nie montował czterech globali
+   (`entityManager`, `territoryService`, `directorProduction`, `eventBus`). Bez `directorProduction`
+   **stolica AI przestawała istnieć** dla silnika: zmierzone na imperium z jedną kolonią — goły boot
+   `heldValue 44 / capital false / sufit 22`, gra `0 / true / 0`. **Pięć** keeperów `wp_*` obchodziło to
+   ręcznie (⚠ **trzy z pięciu kopii były nienośne** — rytuał, nie potrzeba). Kanon w C1.
+3. **`changeExhaustion` WYZWALA DEPESZĘ** — na obu ścieżkach (`WarSystem:271` sufit, `:280` po zapisie).
+   Scenę stawia się `gameState.set(...)`, odpala **jednym** `changeExhaustion(+δ)`.
+4. **`listActive()[0]` NIE JEST „TĄ WOJNĄ"** — `:126` zwraca kolejność wstawienia. Uchwyt to
+   `getWarWith(empireId)`.
+5. **„WOJNA BEZ WOJNY".** `createWar:179` kluczuje id jako `war_<a>_<b>_<rok>` i przy trafieniu
+   **zwraca istniejący rekord** (`:180`) — także **nieaktywny**. Wypowiedzenie wojny tej samej parze
+   w tym samym roku, w którym poprzednia się zakończyła, nie tworzy nowej wojny, a `getWarBetween:155`
+   filtruje po `active` ⇒ **`getWarWith` zwraca `null` przy „trwającej" wojnie**. Obejście na gate'cie:
+   rok+1 albo wskrzeszenie rekordu.
+6. **`node --check` W POTOKU Z `head` ZWRACA EXIT `head`, NIE `node`.** Kontrolą jest **uruchomienie**
+   keepera. Zmierzone w C0: plik przeszedł `--check`, a literał JS był rozcięty prawdziwym przełamem linii.
+7. **HEREDOC W TYM HARNESSIE ZWIJA `\\` → `\`** (zmierzone) i przy większym pliku rozjeżdża parsowanie
+   („unexpected EOF"). ⇒ złożone pliki pisać `Write`em; skrypty łatające trzymać na **jednym** poziomie
+   escapingu (backslash przez `chr(92)`).
+
+### Gate pełnej pętli — PASS (2026-09-29, KOPIA realnego zapisu)
+
+„Liga Trzech Słońc", `emp_001`, `border_incident` (`peaceCost 30`), **zero błędów w konsoli**.
+Wojna z panelu → desant AI na stolicę gracza → księga `{entity_2 player→emp_001 via invasion}` → 🏴 na
+karcie ciała → **staging 29/29 = 0 depesz, `changeExhaustion +2` = 1 depesza** (exh 31) → depesza status
+quo z trzema wyborami → ⇄ kontrpropozycja → stół (Pik1 „zdobyte na tobie — taniej" **poza** żądaniem,
+stolica 🔒, żądanie ≈11/30) → **odmowa przy 29/31** (opinion −18,8 · war_status −0,6 · territorial −5,4 ·
+**`recent_refusal` 0,0 — D-WP-4 na żywo, kara NIE ISTNIEJE**) + „ponowna propozycja za 1 l.", ☮ szary →
+po roku staging 60/60 → pusty stół = **pokój status quo** + NAP + rozejm 10, Pik1 zostaje Ligi
+(**D-WP-13 na żywo, regresja zero**) → druga wojna (rok 64) → **cesja wykonana**: toast „Kolonia
+otrzymana na mocy pokoju", wpis `via: 'cession'`, właściciel = gracz, NAP + rozejm 10.
+
+⚠ **Dwie obserwacje z przebiegu:** 🟠 **298** — pokój status quo **pierze zdobycze** (`recaptured` liczy
+tylko księgę BIEŻĄCEJ wojny, `AcceptanceEngine:604`; stolica `dev 100` vs sufit **79,5** w wojnie #2),
+decyzja właściciela **odłożona**. ✅ **`isHomePlanet` przeżywa pełną pętlę — brak findingu**: zmierzone
+headless `true → false → true`, bo cesja AI→gracz idzie przez `captureColonyForPlayer`
+(`DiplomacySystem:721`), a `ColonyManager:1013` przywraca flagę **bramkowany tożsamością** z
+`window.KOSMOS.homePlanet.id` (kontrola: przejęcie CUDZEJ kolonii zostawia `false`, dom nadal jeden).
+
+### ⚠ Świadomie POZA 1.0
+
+`threaten` · pełna okupacja · reparacje w kredytach · **D5** (pary AI↔AI).
+**Pozostały plan:** DS-1 (NAP `expiresYear` + ticker + beat; ⚠ **korekta pomiarowa**: rozejm bramkuje
+**0 z 4** dróg do wojny, wymuszony NAP **3 z 4**, przycisk gracza otwarty **z projektu** — a napięcie
+stoi zamrożone na `TRUCE_TENSION_CAP = 30`, bo `_tickTensionDecay:1004` pomija pary spoza `'peace'`;
+obie sprawy to **decyzje właściciela**) · DS-2 (odnowienie traktatu + 4. rząd) · DS-3 (`gift`) ·
+WP-R (reparacje jako **debuff produkcji wojennej**: `reparationsUntilYear` + guard na istniejącej akcji
+`pressureResponse`, `DirectorRuleData:109/:137`).

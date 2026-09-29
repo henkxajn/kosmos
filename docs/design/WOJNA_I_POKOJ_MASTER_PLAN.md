@@ -285,6 +285,118 @@ objective empires, ramping treaties, threats, (later) a Galactic Council endgame
   game year** (finding 3 above). (d) **ship repair is dead for everyone** (`_tickRepair`, finding 1).
   Five further findings from the GATE 3 close-out are recorded as `W2_PLAN.md` §Findings filed 11-15.
 
+
+### W4-simple — delivered (2026-09-22 … 2026-09-29)
+
+**Territorial peace, shipped.** D1 of the W3 horizon was split: peace with territory waited until
+conquest existed, because a peace table before conquest would price a good that does not exist.
+It exists now. Save **v101, no migration** across the whole arc.
+
+| slice | commits | what changed in play |
+|---|---|---|
+| **WP-0** | `d08ded2` | Seam keeper first — the five places peace would have to touch, pinned before any of them moved. |
+| **WP-1** | `af7591b` | `war.captures[]` — an append-only **ledger of what changed hands in THIS war**. Everything downstream (ceiling, recapture discount, occupation badge) reads it. |
+| **WP-2** | `34ad9b0` | `territorial_terms` (12th acceptance term) + **two preconditions**: the capital is never on the table, and an empire cedes at most `TERRITORIAL_MAX_SHARE` of its *cedable* pool (D-WP-8). Exhaustion stopped meaning "the player gets everything". |
+| **WP-3** | `0afb02c` | Cessions **execute**: fail-closed re-validation, bodies change hands through the existing mechanism, every peace carries a forced non-aggression pact (D-WP-9…12). |
+| **WP-4a** | `7c84a55`, `3920aa9` | The peace **table** in the War panel (projection from `getPeaceTable`, terms built from the table) and the **Occupied** badge on the body card and colony tooltip, read live from the active war's ledger. |
+| **WP-4b** | `016dd46`, `de68900`, `6d957a1` | Refusing peace costs **nothing** (symmetric 1-year cooldown instead of a points penalty); a worn-down AI **asks for peace itself** (dispatch with Accept / Reject / Counter-offer); the player's exhaustion threshold became a **report**, not a peace signed on his behalf. Net effect: **auto-peace no longer exists on either side**. |
+| **WP-5** | `e617869` (C0), `c858639` (C1), this commit (docs) | Close-out. C0: the war panel stopped naming a key that does not exist. C1: the harness stopped seeing a world in which D-WP-8 is inert. |
+
+#### Decisions (D-WP-1 … D-WP-17), in the operational phrasing they were signed in
+
+1. **(a+c)** Peace = **ceded bodies + a forced NAP**. Reparations are a separate slice (**WP-R**) and land as a
+   *war-production debuff* on the AI, **not** as credits.
+2. **(C + A-lite)** The capture ledger is the foundation; "status quo" means *current holdings*; the **Occupied**
+   badge shows only for an **active** war. Full occupation mechanics are post-1.0.
+3. AI proposes peace when `exhaustion[AI] ≥ peaceCost` **and** the acceptance engine says yes — the *same* engine
+   that judges the player's proposals. The threshold is a cheap pre-gate; the verdict belongs to the engine.
+4. **Zero penalty for refusing.** A symmetric **1-year cooldown** per verb replaces it (player button / AI dispatch).
+5. NAP lasts **10 years**, with a beat — see **DS-1**.
+6. Wordings (PL + EN) are signed together with the mechanic, never after.
+7. A truce gates `declareWar` — **superseded by measurement, see DS-1 below**.
+8. **Ceiling**: the evaluator cedes at most **half** its *cedable* pool (capital excluded, and excluded again
+   are bodies it took from the proposer in this war). The capital is **never** cedable. This is a
+   **pre-condition**, not a weight — no amount of war weariness buys it.
+9. Re-validation before execution is **fail-closed**: an unstamped body aborts the deal.
+10. **Every** peace signs a real NAP (`signTreaty`), not a flag.
+11. Cessions execute **before** the war closes (`via:'cession'`) — the ledger only records while the war is active.
+12. Player ships sitting in the hangar of a ceded colony are **undocked to orbit** first; a peace must not
+    quietly cost the player a fleet.
+13. The AI's own dispatch is **always status quo**. Territory is negotiated by the player, at the table,
+    behind **Counter-offer**.
+14. The player's exhaustion threshold produces a **report**, never a signature.
+15. The table shows **validity**, not the score breakdown (`counterHint` is D4's business).
+16. `opts.stampRefusal` is a **separate lever** from `playerInitiated` — C3 needs a refusing evaluation that
+    does **not** stamp a cooldown.
+17. A dispatch does **not** expire on a timer; its validity is re-checked at **Accept**.
+
+#### Explicitly out of 1.0
+
+`threaten` verb · full occupation mechanics · reparations paid in credits · **D5** (AI↔AI pairs).
+
+#### What remains
+
+- **DS-1 — the NAP needs an end and the truce needs a decision.**
+  ⚠ The registry phrasing "a truce gates nothing, three live roads to war" is **too strong; measured**:
+  the `'truce'` *status* gates **0 of 4** roads (its only readers are `AlienCivSystem:176` and the chip in
+  `DiplomacyOverlay:303`), but the **forced NAP gates 3 of 4** — `hostility_threshold`
+  (`DiplomacySystem:316`), `ultimatum_expired` (`:1021`) and `enemy_attack_arrived`
+  (`EnemyAttackHandler:134`) — because `declareWar:331` lets through only `reason === 'player_action'`.
+  The fourth road is the player's own button, open **by design**. The code already says this at
+  `DiplomacySystem:664-667`.
+  Work: give the NAP an `expiresYear` + a ticker + a beat before it lapses. **Owner decisions:**
+  (a) does the player's button stay open, and (b) **tension is frozen at `TRUCE_TENSION_CAP = 30`
+  for the whole truce** — `_tickTensionDecay:1004` skips every pair that is not `'peace'`. That is a
+  balance question, not hygiene.
+- **DS-2** — treaty renewal + the 4th row in the diplomacy panel.
+- **DS-3** — the `gift` verb (optional; the `offer` term already exists and is always 0 without it).
+- **WP-R** — reparations as a **debuff**: a `reparationsUntilYear` stamp on the war/relation plus a guard on
+  the existing `pressureResponse` action (`DirectorRuleData:109/:137`), so a defeated AI cannot immediately
+  re-arm. ⚠ `reparationsUntilYear` does **not** exist yet; `pressureResponse` does.
+
+#### Gate protocol for peace scenes (pinned in `wp_test_infra_smoke`)
+
+1. **Stage exhaustion through `gameState`, never through `changeExhaustion`.** `WarSystem.changeExhaustion`
+   calls `_maybeAiPeaceOffer` on **both** paths — after the state write (`:280`) and in the ceiling
+   early-return (`:271`). Staging with it fires the dispatch mid-setup.
+2. **Trigger with `changeExhaustion`, and only with it.** It is the single producer of `_maybeAiPeaceOffer`;
+   a `gameState` write emits nothing. So: set the scene with `gameState.set(...)`, fire it with one
+   `changeExhaustion(+δ)`.
+3. **Take the war handle by empire: `getWarWith(empireId)`.** `listActive():126` returns
+   `Object.values(wars).filter(active)`, so with two wars `[0]` is insertion order, not "the war I asked about".
+4. **Throw test saves away.** Everything measured under a staged exhaustion is a fixture, not a campaign.
+
+#### Close-out gate — full loop, PASS (2026-09-29)
+
+Run on a **copy of a real save** ("Liga Trzech Słońc"), `emp_001`, casus belli `border_incident`
+(`peaceCost 30`). Zero console errors.
+
+War from the panel → **AI drop on the player's capital** → ledger
+`{entity_2, player → emp_001, via: 'invasion'}` → 🏴 on the body card → **staging 29/29 = 0 dispatches**,
+`changeExhaustion +2` = **1 dispatch** (exh 31) → status-quo dispatch with three choices →
+**Counter-offer** → table: Pik1 marked *"taken from you — cheaper"* and **outside** the ceiling, capital
+🔒, demand ≈11 / 30 → **refusal at 29/31** (opinion −18.8 · war_status −0.6 · territorial −5.4 ·
+**`recent_refusal` 0.0 — the penalty does not exist**), *"another proposal in 1 y."*, ☮ greyed → after a
+year, staging 60/60 → **empty table (misclick) = status-quo peace** + NAP + 10-y truce, **Pik1 stays with
+the League** (D-WP-13 confirmed live, zero regression) → second war (year 64) → staging 60/60 → table:
+Pik1 `dev 100` **above the 79.5 ceiling** (no longer `recaptured` in the *new* war), `entity_208` `dev 4`
+→ ☮ → **cession executed**: toast *"Kolonia otrzymana na mocy pokoju"*, ledger entry `via: 'cession'`,
+owner = player, NAP + 10-y truce.
+
+**Two observations from this run:**
+
+1. 🟠 **Status-quo peace launders conquest** — filed as **298**. `recaptured` is scoped to the **current
+   war's** ledger (`AcceptanceEngine:604`), so a capital lost in war #1 is an ordinary AI body in war #2:
+   it counts toward the ceiling and a single demand exceeds it. Owner decision deferred: should
+   `recaptured` look into the **history of the pair's wars**? Every variant touches `territorial_ceiling`,
+   i.e. the core of D-WP-8 — a slice with its own gate, not a one-liner.
+2. ✅ **`isHomePlanet` survives the round trip — no finding.** Measured headless:
+   `true → false → true` across `transferColony` (clears it, `ColonyManager:910`) and the cession path,
+   which for AI→player goes through `captureColonyForPlayer` (`DiplomacySystem:721`) and restores the
+   flag at `ColonyManager:1013` — **guarded by identity** against `window.KOSMOS.homePlanet.id`.
+   Control: capturing a *foreign* colony leaves `isHomePlanet === false` and the player still has exactly
+   one home. ⇒ a recovered capital **is** protected by `cessionHomeWorld` at the next table.
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
