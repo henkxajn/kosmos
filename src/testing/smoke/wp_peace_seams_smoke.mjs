@@ -43,6 +43,12 @@
 //       świadomie (powody przy każdym): pakt MA termin `expiresYear = signedYear + NAP_YEARS`,
 //       a T5g z „warstwa nie zna tego słowa” zmienił rolę na „termin mieszka w MODELU, nie
 //       w katalogu”. T5e zostaje NIETKNIĘTY jako kontrola tego rozstrzygnięcia.
+//       ⚠ PRZECELOWANE PONOWNIE W DS-2/C0: **T5c i T5h** mówiły „rekord ma `expiresYear = signedYear
+//       + NAP_YEARS`” jako niezmiennik REKORDU. D-DS-4(b) wprowadza ODNOWIENIE, które rusza
+//       WYŁĄCZNIE `expiresYear` i ZOSTAWIA `signedYear` — od tej chwili równość jest niezmiennikiem
+//       CHWILI PODPISU, nie rekordu. Oba piny mierzą świeżo podpisany rekord i dokładnie to teraz
+//       mówią; NEW **T5j** jest ich kontrolą. ⚠ **T5g NIE jest ruszany** — pinuje, GDZIE mieszka
+//       termin (`>= 3` wystąpień w modelu), a odnowienie tylko dokłada wystąpienia.
 //
 // Uruchom: node src/testing/smoke/wp_peace_seams_smoke.mjs
 
@@ -62,6 +68,11 @@ import { TREATY_TYPES } from '../../data/TreatyData.js';
 import * as OMD_DS1 from '../../data/OpinionModifierData.js';
 const NAP_YEARS = OMD_DS1.NAP_YEARS ?? null;
 import { ARCHETYPES } from '../../data/EmpireData.js';
+// ⚠ IMPORT STATYCZNY jest tu POPRAWNY, mimo reguły „re-aim importuje namespace'owo”:
+//   `treatyExpiryYear` istnieje od DS-1/C3 (`3b5039c`), a fail-first DS-2/C0 biegnie na
+//   `2afcf35`, więc plik linkuje się po obu stronach. Reguła dotyczy symboli, które DOPIERO
+//   POWSTAJą w mierzonym commicie (tak jak `NAP_YEARS` wyżej).
+import { treatyExpiryYear } from '../../systems/diplomacy/RelationsModel.js';
 import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
 
 let pass = 0, fail = 0;
@@ -315,12 +326,54 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
   // ⚠ ODWRÓCONY w DS-1/C1 ŚWIADOMIE. Stara treść: „traktat NIE MA daty wygaśnięcia — nie ma dziś
   //   gdzie zapisać końca”, z adnotacją w nagłówku, że DS-1 ma prawo to złamać. D-WP-5 złamał:
   //   pakt ma termin, liczony od roku podpisu ze stałej balansu.
+  // ⚠ ZAWĘŻONY w DS-2/C0: to jest niezmiennik **CHWILI PODPISU**, nie rekordu. Odnowienie
+  //   (D-DS-4b) rusza WYŁĄCZNIE `expiresYear`, więc na odnowionym pakcie ta równość jest
+  //   FAŁSZEM — i tak ma być. Rekord mierzony niżej jest ŚwieŻO podpisany (kontrola: T5d),
+  //   a moc rozstrzygająca zawężonego twierdzenia — T5j.
   assert(tr.expiresYear === tr.signedYear + NAP_YEARS,
-    'T5c: pakt MA termin = signedYear + NAP_YEARS (' + tr.signedYear + ' + ' + NAP_YEARS
+    'T5c: W CHWILI PODPISU pakt ma termin = signedYear + NAP_YEARS (' + tr.signedYear + ' + ' + NAP_YEARS
     + ' = ' + tr.expiresYear + ')');
   assert(tr.signedYear === 137,
     'T5d (KONTROLA PINU): `signedYear` jest ŻYWY (stemplowany bieżącym rokiem), więc T5b mierzy ' +
     'realny kształt, a nie pustą zaślepkę');
+
+  // ── DS-2/C0 — KONTROLA PRZECELOWANIA T5c/T5h ────────────────────────
+  //
+  // ⚠ PO CO: zawężenie twierdzenia jest warte tyle, ile dowód, że zawężona wersja NADAL
+  //   ROZSTRZYGA. Ten pin pokazuje, że na rekordzie PO ODNOWIENIU (D-DS-4b: rusza się
+  //   `expiresYear`, `signedYear` zostaje) równość z T5c jest FAŁSZEM — czyli T5c mierzy
+  //   chwilę podpisu, a nie „cokolwiek, co ma trzy pola”.
+  //
+  // ⚠ I PRZY OKAZJI PINUJE PRZESŁANKĘ, NA KTÓREJ STOI CAŁE D-DS-4(b), A KTÓREJ DOTĄD
+  //   NIE PINOWAŁ NIKT: `treatyExpiryYear` WOLI POLE ZAPISANE od derywacji. Bez tej
+  //   gałęzi odnowienie byłoby niewidoczne — ticker i panel dalej liczyłyby
+  //   `signedYear + NAP_YEARS` i pakt wygasałby w starym roku mimo odnowienia.
+  //   ⚠ Gałąź ODWROTNA (brak pola ⇒ derywacja, D-DS-3) jest pinowana w
+  //   `wp_nap_expiry` T3a-T3d i NIE jest tu duplikowana.
+  //
+  // ⚠ Wartość po odnowieniu liczymy TYM SAMYM helperem, którego użyje C1 (podpis:
+  //   „termin przez wspólny helper”, kontrola T2f w `wp_treaty_slot`) — więc fixture
+  //   demonstruje też RECEPTĘ, a nie tylko skutek.
+  {
+    const RENEW_AT = 144;                       // 3 lata przed końcem paktu z 137 (okno D-DS-4b)
+    const renewedExpiry = treatyExpiryYear({ id: 'non_aggression', signedYear: RENEW_AT });
+    const renewed = { id: 'non_aggression', signedYear: 137, expiresYear: renewedExpiry };
+    assert(renewedExpiry === RENEW_AT + NAP_YEARS,
+      'T5j (KONTROLA PINU): recepta C1 — helper liczy nowy termin od roku odnowienia ('
+      + RENEW_AT + ' + ' + NAP_YEARS + ' = ' + renewedExpiry + ')');
+    assert(renewed.expiresYear !== renewed.signedYear + NAP_YEARS,
+      'T5j (KONTROLA PINU): na rekordzie PO ODNOWIENIU równość z T5c jest FAŁSZEM ('
+      + renewed.expiresYear + ' ≠ ' + renewed.signedYear + ' + ' + NAP_YEARS
+      + ') — zawężone twierdzenie nadal rozstrzyga');
+    assert(treatyExpiryYear(renewed) === renewed.expiresYear,
+      'T5j: `treatyExpiryYear` WOLI POLE ZAPISANE od derywacji (zwrócił '
+      + treatyExpiryYear(renewed) + ', zapisane ' + renewed.expiresYear
+      + ', derywacja ' + (renewed.signedYear + NAP_YEARS) + ') — przesłanka D-DS-4(b)');
+    assert(treatyExpiryYear({ id: 'trade_agreement', signedYear: 137, expiresYear: 999 }) === null,
+      'T5j (KONTROLA PINU): … ale WYŁĄCZNIE dla traktatu z terminem — umowa handlowa '
+      + 'z podrzuconym `expiresYear` wciąż zwraca null, więc odnowienie też musi być '
+      + 'bramkowane `TREATY_WITH_TERM`');
+  }
 
   const napDef = TREATY_TYPES.non_aggression ?? {};
   assert(!Object.keys(napDef).some(k => /duration|expire|years|until/i.test(k)),
@@ -376,8 +429,9 @@ console.log('T5 — rekord traktatu = {id, signedYear}; pakt o nieagresji nie wy
     assert(JSON.stringify(Object.keys(napFromPeace).sort()) === JSON.stringify(['expiresYear', 'id', 'signedYear']),
       'T5h: NAP z POKOJU ma ten sam kształt co z `proposeTreaty` — {id, signedYear, expiresYear} '
       + '(zapisane: ' + Object.keys(napFromPeace).join(', ') + ')');
+    // ⚠ ZAWĘŻONY w DS-2/C0 razem z T5c — ten sam powód: po odnowieniu równość nie obowiązuje.
     assert(napFromPeace.expiresYear === napFromPeace.signedYear + NAP_YEARS,
-      'T5h: … i ten sam termin — jeden pisarz stempluje OBU producentów (' + napFromPeace.expiresYear + ')');
+      'T5h: … i W CHWILI PODPISU ten sam termin — jeden pisarz stempluje OBU producentów (' + napFromPeace.expiresYear + ')');
     assert(napFromPeace.signedYear === 141,
       'T5h (KONTROLA PINU): `signedYear` na tej ścieżce też jest ŻYWY (' + napFromPeace.signedYear + ')');
 
