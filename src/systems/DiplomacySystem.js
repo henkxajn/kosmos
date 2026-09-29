@@ -44,6 +44,7 @@ import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
+  TRUCE_TENSION_FLOOR,
 } from '../data/OpinionModifierData.js';
 
 // Id gracza jako strony relacji (dosłowne, nie prefiks).
@@ -328,6 +329,32 @@ export class DiplomacySystem {
 
   declareWar(empireId, reason = '') {
     if (this.getStatus(empireId) === 'war') return false;
+    // ── D-WP-7 / D-DS-1 (b) — ROZEJM JEST ZOBOWIĄZANIEM ───────────────────────
+    //
+    // ⚠ BLOKUJE KAŻDY POWÓD, nie tylko `player_action`. Trzy drogi AI w rozejmie i tak
+    //   odbijały się o NAP (ten sam okres: `TRUCE_YEARS` = `NAP_YEARS` = 10), więc dla nich
+    //   nic się nie zmienia. Zmienia się dla stanu „NAP zerwany/wygasły, rozejm wciąż trwa”,
+    //   który JEST osiągalny (gracz łamie pakt przez `breakTreaty`, albo stary zapis ma NAP
+    //   podpisany wcześniej niż rozejm) — wtedy odbijają się o ROZEJM.
+    //
+    // ⚠ BRAMKA SIEDZI TUTAJ, NIE W PANELU, i to nie jest ostrożność: `DiplomacyOverlay:515-522`
+    //   zapisuje własną zasadę — „Szare zostaje WYŁĄCZNIE to, co strukturalnie niemożliwe”.
+    //   Wyszarzenie przycisku nad silnikiem, który klik PRZEPUSZCZA, łamałoby tę zasadę.
+    //   `canWar` jest LUSTREM tej odmowy, tak jak `canPeace` jest lustrem bramki pokoju.
+    //
+    // ⚠ ZERO omijającego `reason`. Gate/konsola, która chce wojny w rozejmie, prosi o coś,
+    //   czego gra zabrania — uczciwa droga to ZAKOŃCZYĆ ROZEJM
+    //   (`relations.setStatus(pair, 'peace')`), nie trzeci magiczny string obok
+    //   `player_action` i `player_war_panel` (rejestr #294).
+    if (this.getStatus(empireId) === 'truce') {
+      // Powód emitujemy WYŁĄCZNIE dla akcji gracza: odmowy AI lecą co tik i zalałyby Dziennik.
+      if (reason === 'player_action') {
+        EventBus.emit('diplomacy:warRefused', {
+          empireId, reason: 'truce_holds', yearsLeft: this.getTruceYearsLeft(empireId),
+        });
+      }
+      return false;
+    }
     // Pakt o nieagresji blokuje wojnę z inicjatywy AI/auto (gracz może mimo to).
     if (reason !== 'player_action' && this.hasTreaty(empireId, 'non_aggression')) return false;
 
@@ -1033,15 +1060,29 @@ export class DiplomacySystem {
     }
   }
 
+  /**
+   * D-DS-2 (c) — napięcie stygnie TAKŻE W ROZEJMIE, ale do PODŁOGI, nie do zera.
+   *
+   * ⚠ Do DS-1 ta pętla pomijała każdą parę spoza `'peace'`, więc napięcie zapisane capem przy
+   *   pokoju stało zamrożone całe `TRUCE_YEARS`. Pełny decay byłby jednak drugą skrajnością:
+   *   ZMIERZONE — `PEACE_DECAY` = 60/rok wyświetlany to 5 na krok tickera, więc 30 znikałoby
+   *   w pół roku wyświetlanego, siedem i pół roku PRZED końcem rozejmu.
+   *
+   * ⚠ `Math.min(krok, cur - floor)` jest KONIECZNE, nie kosmetyczne: bez niego ostatni krok
+   *   przebijałby podłogę i „30 → 15 i stoi” nie byłoby prawdą co do liczby.
+   */
   _tickTensionDecay(dy) {
     const currentYear = this._year();
     for (const rel of this.relations.listPairsWith(PLAYER)) {
-      if (rel.status !== 'peace') continue;
+      const isTruce = rel.status === 'truce';
+      if (rel.status !== 'peace' && !isTruce) continue;
+      const floor = isTruce ? TRUCE_TENSION_FLOOR : 0;
       const lastMemoryYear = (rel.memory ?? []).at(-1)?.year ?? null;
       if (lastMemoryYear != null && (currentYear - lastMemoryYear) < PEACE_QUIET_YEARS) continue;
-      if ((rel.tension ?? 0) <= 0) continue;
+      const cur = rel.tension ?? 0;
+      if (cur <= floor) continue;
       const empireId = rel.a === PLAYER ? rel.b : rel.a;
-      this.changeTension(empireId, -PEACE_DECAY * dy, 'peace_decay');
+      this.changeTension(empireId, -Math.min(PEACE_DECAY * dy, cur - floor), 'peace_decay');
     }
   }
 

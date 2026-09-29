@@ -498,7 +498,11 @@ export class DiplomacyOverlay extends BaseOverlay {
     const vMgr = window.KOSMOS?.vesselManager;
     const hasEnvoyVessel = !!vMgr?.getAllVessels?.().find(v => v.status === 'idle' && canDoEnvoy(v));
     const notWar   = rel.status !== 'war';
-    const canWar   = notWar && isContact;
+    // ⚠ LUSTRO bramki silnika (D-WP-7 / D-DS-1 b), nie druga decyzja. `declareWar` odmawia
+    //   w rozejmie NAPRAWDĘ, więc wyszarzenie spełnia zasadę z komentarza niżej: szare zostaje
+    //   wyłącznie to, co strukturalnie niemożliwe. Licznik lat na przycisku dokłada C3.
+    const inTruce  = rel.status === 'truce';
+    const canWar   = notWar && isContact && !inTruce;
     const canPeace = rel.status === 'war' && isContact;
     const canEnvoy = isContact && hasEnvoyVessel;
     // ── D2/E2 — dostępność przycisku pyta SILNIK, nie własną kopię progów ──

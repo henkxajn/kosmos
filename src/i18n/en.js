@@ -3536,6 +3536,7 @@ export default {
   'diplo.reject.notAtWar':      'We are not at war',
   'diplo.reject.alreadySigned': 'That treaty is already in force',
   'diplo.reject.natureForbids': 'Our nature does not allow it',
+  'diplo.reject.truceHolds':            'A truce is in force — {0} y',
   'diplo.reject.capitalNotNegotiable':   'We will not cede our capital',
   'diplo.reject.territoryNotNegotiable': 'You ask for more than we would cede at the table',
   'diplo.reject.cessionTermsStale':      'The terms are no longer valid — holdings have changed since the offer was made',

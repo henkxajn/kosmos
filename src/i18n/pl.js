@@ -3537,6 +3537,7 @@ export default {
   'diplo.reject.notAtWar':      'Nie jesteśmy w stanie wojny',
   'diplo.reject.alreadySigned': 'Taki traktat już obowiązuje',
   'diplo.reject.natureForbids': 'Nasza natura na to nie pozwala',
+  'diplo.reject.truceHolds':            'Obowiązuje rozejm — {0} lat',
   'diplo.reject.capitalNotNegotiable':   'Stolicy nie oddamy',
   'diplo.reject.territoryNotNegotiable': 'Żądasz więcej, niż oddamy przy stole',
   'diplo.reject.cessionTermsStale':      'Warunki straciły ważność — stan posiadania zmienił się od złożenia oferty',

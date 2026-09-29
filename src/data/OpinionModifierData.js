@@ -200,3 +200,12 @@ export const TRUCE_YEARS = 10;
 // plik balansu, JAK DŁUGO. Dwa źródła jednej gałki byłyby długiem (ta sama zasada, która
 // wyłączyła `yearlyTrust` z katalogu).
 export const NAP_YEARS = 10;
+
+// DS-1 / D-DS-2 — PODŁOGA napięcia w ROZEJMIE. Do DS-1 napięcie w rozejmie stało
+// ZAMROŻONE: `_tickTensionDecay` pomijał każdą parę spoza `'peace'`, więc wartość zapisana
+// capem przy pokoju (30) trwała całe `TRUCE_YEARS`.
+// ⚠ PODŁOGA, NIE ZERO — i to jest decyzja, nie ostrożność. ZMIERZONE: `PEACE_DECAY` = 60/rok
+// wyświetlany, czyli 5 na krok tickera, więc pełny decay skasowałby 30 w pół roku
+// wyświetlanego — siedem i pół roku PRZED końcem rozejmu. Rozejm ma stygnąć, nie udawać,
+// że wojny nie było.
+export const TRUCE_TENSION_FLOOR = 15;

@@ -1717,6 +1717,15 @@ export class UIManager {
     //   przyszła / gracz ją odrzucił / straciła ważność, zanim gracz kliknął.
     // ⚠ Przyjęcia NIE logujemy tutaj: pokój melduje `diplomacy:peaceSigned` kilka linii
     //   wyżej i dwa wpisy o jednym fakcie to klasa, którą ten plik już raz naprawiał.
+    // DS-1 / D-WP-7 — rozejm odmówił wojny. Emitowane WYŁĄCZNIE dla akcji gracza (odmowy AI
+    // lecą co tik), więc wpis jest rzadki i zawsze o czymś, co gracz właśnie próbował zrobić.
+    // Po C3 przycisk jest wyszarzony, więc tędy przechodzi już tylko konsola — i to też ma
+    // zostawiać ślad, bo cicha odmowa czyta się jak zepsuta gra.
+    EventBus.on('diplomacy:warRefused', ({ empireId, reason, yearsLeft }) => {
+      if (reason !== 'truce_holds') return;
+      const years = Math.max(1, Math.ceil(Number(yearsLeft) || 0));
+      this._log(_empName(empireId) + ': ' + t('diplo.reject.truceHolds', years), 'diplomacy_warn');
+    });
     // DS-1 / D-WP-5 — pakt o nieagresji ma koniec. Kanał `diplomacy` (info), nie `warn`:
     // to FAKT, a nie ostrzeżenie — i jedyny sygnał, po którym gracz wie, że AI znowu może
     // wypowiedzieć mu wojnę (bramka `declareWar:331` przestała go chronić).

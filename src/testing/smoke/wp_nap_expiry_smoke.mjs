@@ -245,12 +245,12 @@ console.log('\nT6 — dyscyplina: plik balansu i i18n');
   const exports = (balRaw.match(/^export const [A-Z_]+/gm) ?? []).map(s => s.replace('export const ', ''));
   assert(exports.includes('NAP_YEARS') && exports.includes('TRUCE_YEARS'),
     'T6a: plik balansu eksportuje `NAP_YEARS` obok `TRUCE_YEARS`');
-  // ⚠ Liczba eksportów jest CZĘŚCIĄ pinu: C1 ma dołożyć DOKŁADNIE jedną stałą.
-  //   C2 (D-DS-2) ma prawo podnieść tę liczbę do 12 wraz z `TRUCE_TENSION_FLOOR` — wtedy
-  //   ten wiersz aktualizujemy ŚWIADOMIE, a nie przy okazji.
-  assert(exports.length === 11,
-    'T6b: plik balansu ma 11 eksportów (10 sprzed C1 + `NAP_YEARS`) — jest: ' + exports.length
-    + ' [' + exports.join(', ') + ']');
+  // ⚠ Liczba eksportów jest CZĘŚCIĄ pinu. C1 dołożył `NAP_YEARS` (10 → 11), C2 dokłada
+  //   `TRUCE_TENSION_FLOOR` (11 → 12) — podniesione ŚWIADOMIE, dokładnie tak, jak zapowiadał
+  //   ten komentarz przed C2. Kolejna stała bez podpisu zapali ten wiersz.
+  assert(exports.length === 12,
+    'T6b: plik balansu ma 12 eksportów (10 wyjściowych + `NAP_YEARS` z C1 + `TRUCE_TENSION_FLOOR` '
+    + 'z C2) — jest: ' + exports.length + ' [' + exports.join(', ') + ']');
   assert(OMD.TRUCE_YEARS === 10,
     'T6c (KONTROLA PINU): `TRUCE_YEARS` nietknięty (' + OMD.TRUCE_YEARS + ')');
 
