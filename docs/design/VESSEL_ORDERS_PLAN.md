@@ -3438,7 +3438,7 @@ komentarz dwa wiersze wyżej (`:20`): „BRAK JAKIEJKOLWIEK KARENCJI CZASOWEJ".
 **Gdzie domknąć:** albo Krok 0 następnego slice'u wojennego (usunięcie), albo świadome ożywienie —
 ale stała bez konsumenta jest miną dokładnie tej klasy co `RETURN_DOCK_THRESHOLD_AU` (Finding 263).
 
-### 🟠 291 — rozejm nie bramkuje niczego, a napięcie w nim zamarza (→ DS-1)
+### ✅ 291 — ZAMKNIĘTY w DS-1/C2 (`71e0d24`) — rozejm nie bramkował niczego, a napięcie w nim zamarzało
 
 Dwa zmierzone fakty, jeden wpis:
 (a) status `'truce'` gatuje **0 z 4** dróg do wojny — jego jedyni czytelnicy to `AlienCivSystem:176`
@@ -3449,8 +3449,18 @@ Dwa zmierzone fakty, jeden wpis:
 (komentarz `:664-667` mówi to wprost).
 (b) `_tickTensionDecay:1004` robi `if (rel.status !== 'peace') continue`, a `signPeace:654` capuje
 napięcie na `TRUCE_TENSION_CAP = 30` ⇒ przez `TRUCE_YEARS = 10` napięcie **nie opada wcale**.
-**Gdzie domknąć:** **DS-1**, i to jako **decyzja właściciela** (czy przycisk gracza zostaje otwarty;
-czy rozejm ma odmrażać napięcie), nie jako higiena.
+✅ **ZAMKNIĘTE 2026-09-29 w DS-1/C2 (`71e0d24`), obie połówki, obie jako decyzja właściciela.**
+**(a)** `declareWar:348` odmawia w rozejmie **każdemu powodowi**, a `canWar` (`DiplomacyOverlay:558`) jest
+LUSTREM tej odmowy, nie drugą decyzją — bramka siedzi w SILNIKU, bo panel zapisuje własną zasadę
+(`:515-522`): „szare zostaje WYŁĄCZNIE to, co strukturalnie niemożliwe”. **Przycisk gracza zostaje otwarty
+POZA rozejmem** i jest zamknięty w nim — to jest odpowiedź na pytanie (a). ⚠ Trzy drogi AI i tak
+odbijały się o NAP (`TRUCE_YEARS = NAP_YEARS = 10`), więc realna zmiana dotyczy stanu **„NAP zerwany
+albo wygasły, rozejm wciąż trwa”** — osiągalnego przez `breakTreaty` i przez stary zapis.
+**(b)** Napięcie stygnie także w rozejmie, ale do **`TRUCE_TENSION_FLOOR = 15`**, nie do zera (D-DS-2c):
+pełny decay skasowałby 30 w pół roku wyświetlanego, siedem i pół roku PRZED końcem rozejmu.
+`TRUCE_TENSION_CAP` przeniesiony do pliku balansu obok podłogi — para pokręteł ma jeden dom.
+⚠ **Pomiar decayu wymaga ODWOŁANIA FLOT** — patrz protokół gate'ów czasowych w `WOJNA_I_POKOJ_MASTER_PLAN.md`
+§„DS-1 — delivered”. Keeper: `wp_truce_gate_smoke` **40/40** (fail-first 22/18).
 
 ### ⚪ 292 — okno odmowy: globalne 2 lata vs per-czasownik 1 rok
 
@@ -3538,3 +3548,183 @@ kampanii (ciało raz utracone byłoby na zawsze tanie). Kształt pośredni — o
 roszczenia — jest **trzecią opcją, nie kompromisem**: wymaga własnego pomiaru tempa wojen.
 ⚠ Każdy wariant dotyka **sufitu** (`territorial_ceiling`), czyli rdzenia D-WP-8 — więc nie jest to
 poprawka jednolinijkowa, tylko slice z własnym gate'em.
+---
+
+## Findingi z DS-1 (#299-#305, zebrane 2026-09-29)
+
+⚠ **Zasada wpisu:** jak w bloku #283-298 — każdy niesie MECHANIZM i linie **zweryfikowane w drzewie
+na `3b5039c`**. **#299-#302** wyszły z kodu DS-1 przy close-oucie; **#303-#305 pochodzą z listy
+właściciela** i mają mechanizm **zmierzony przy wpisywaniu** (regex #304 URUCHOMIONY, nie przeczytany).
+⚠ **Nie ma #306.** Zgłoszone „HUD nie odświeża roku przy ręcznym `gameTime`” to **istniejący finding 168**:
+`time:display` ma **dokładnie jednego producenta** (`TimeSystem.update:84`), a `update` wychodzi na `:70`
+przy `isPaused || multiplier === 0` — ten sam mechanizm, który 168 nazwał i którego `0aacf8c` **nie zmienił**
+(tamten commit zasiał `EventLogSystem._currentYear`, nie ruszył HUD-u). Zamiast duplikatu — odwołanie
+w protokole gate'ów czasowych. ⚠ Numeracja: **gołe** numery ciągu globalnego (nie przestrzeń `V-`).
+
+---
+
+### ⚪ 299 — wygaśnięcie traktatu omija `breakTreaty`, więc nie sprząta sprzężonego modyfikatora opinii
+
+`DiplomacySystem._tickTreatyExpiry:1055` woła `this.relations.removeTreaty(a, b, treatyId)`
+**bezpośrednio**. Sprzątaniem modyfikatora sprzężonego z traktatem zajmuje się `breakTreaty:807-808`
+(`TREATY_TO_MODIFIER[treatyId]` → `removeOpinionModifier`), a wygaśnięcie tamtędy **nie przechodzi**.
+
+⚠ **Pominięcie kary `changeTension(+15)` (`:809`) jest POPRAWNE i celowe** — wygaśnięcie nie jest
+złamaniem umowy. Wpis dotyczy **wyłącznie** modyfikatora.
+
+**Dziś nieszkodliwe — i to jest zmierzone, nie założone.** `TREATY_TO_MODIFIER` (`:85-87`) jest
+budowane z `OPINION_MODIFIERS` po polu `treatyId`, a to pole występuje w całym
+`OpinionModifierData.js` **dokładnie raz** (`:130`, `trade_partner` ← `trade_agreement`). Jedynym
+traktatem z terminem jest `non_aggression` (`RelationsModel:41`, `TREATY_WITH_TERM`). Zbiory
+„traktaty z modyfikatorem" i „traktaty z terminem" są dziś **rozłączne**.
+
+**Uzbraja się** w dniu, w którym którykolwiek traktat niosący modyfikator dostanie termin: modyfikator
+przeżyje wtedy traktat i będzie dalej narastał (`rampPerYear: +12`, `rampMax: +50`) bez umowy, która
+go uzasadnia — a jedynym sposobem, żeby go zdjąć, zostanie zerwanie traktatu, którego już nie ma.
+**Gdzie domknąć:** albo wspólny helper sprzątający (`breakTreaty` minus kara napięcia), wołany z obu
+ścieżek, albo pin przy `TREATY_WITH_TERM`, że traktat z terminem nie może mieć modyfikatora.
+
+### ⚪ 300 — nazwa traktatu ma DWA źródła, a katalogowe jest martwe (12 napisów bez czytelnika)
+
+`TREATY_TYPES` (`TreatyData.js:20-43`) niesie dla każdego z trzech traktatów `namePL`/`nameEN`/
+`descPL`/`descEN` — **12 napisów**. Zmierzone: **zero czytelników** w `src/` (jedyne trafienie grepu
+poza plikiem danych to komentarz `DiplomacyOverlay:84`, który sam to stwierdza). C3 dołożył **drugie,
+żywe** źródło nazwy — `TREATY_NAME_KEY` (`DiplomacyOverlay:88-93`) → `t('treaty.nonAggression'` /
+`.tradeAgreement` / `.alliance'`) — i tak ma być: napis widoczny dla gracza idzie przez słownik, jak
+reszta UI. Opisy (`descPL`/`descEN`) nie mają dziś **żadnej** powierzchni.
+
+⚠ **To jest dokładnie ta operacja, którą D1 wykonało już raz na tym samym pliku**: skasowało cztery
+martwe pola (`minTrust`/`accept`/`blocksWar`/`yearlyTrust`, `TreatyData.js:10-17`) z uzasadnieniem
+„dwa źródła jednej gałki byłyby długiem". Nazwa jest gałką tej samej klasy.
+**Gdzie domknąć:** albo skasować cztery pola tekstowe z katalogu (ta sama chirurgia co D1), albo dać
+opisom powierzchnię (tooltip slotu) — i wtedy też przez `t()`. Nie zostawiać obu źródeł.
+
+### ⚪ 301 — dwie nowe bramki wojny AI są NIEWIDOCZNE w audycie
+
+`declareWar` zwraca **goły `false`** w trzech miejscach: `:329` (już trwa wojna), `:348` (rozejm),
+`:358` (NAP). Powód wychodzi na zewnątrz w **jednym** z nich i **tylko dla gracza** —
+`diplomacy:warRefused` (`:351`) jest emitowane pod warunkiem `reason === 'player_action'`, i to jest
+świadome: odmowy AI lecą co tik i zalałyby Dziennik. Gałąź NAP `:358` nie emituje **niczego, nigdy**.
+
+**Zmierzone:** ani `diplomacy:warRefused`, ani `diplomacy:treatyExpired` nie są w
+`DebugLog.TRACKED_EVENTS` (`DebugLog.js:25-34` — są tam `diplomacy:treatyOffered`, `:ultimatum`,
+`:warDeclared`). A `DebugLog` to **ring buffer zbudowany dokładnie pod audyt decyzji AI**, więc nie
+grozi mu zalanie: to jest kanał, w którym odmowa AI ma prawo być głośna.
+
+⚠ **Precedens stoi w tym samym pliku, trzy linie niżej.** Komentarz przy `invasion:blocked` mówi
+wprost, że **brak śledzenia ODMOWY kosztował GATE 3 §2 jedną sesję** („gracz zmierzył zero"). To samo
+zapisuje reguła stojąca z W3: *nowy powód odmowy dołącza do `TRACKED_EVENTS` w TYM SAMYM commicie*.
+DS-1 dołożył **dwie** bramki wojny AI i nie dopisał ani jednej.
+
+**Skutek dla przyszłego gate'u:** pytanie „dlaczego AI nie wypowiada wojny" czyta **CISZĘ** i nie
+odróżnia „nie chciało" od „zostało odmówione" — a po DS-1 są już trzy różne powody odmowy.
+**Gdzie domknąć:** `warRefused` i `treatyExpired` do `TRACKED_EVENTS`; gałąź NAP `:358` potrzebuje
+**własnego wpisu** do `DebugLog` (nie emitu na EventBus — tam byłaby szumem).
+
+### ⚪ 302 — ta sama liczba lat rozejmu jest w jednym panelu zaokrąglana DWOMA sposobami
+
+`rel.truceYearsLeft` (`DiplomacySystem:248` ← `getTruceYearsLeft:209`, zwraca surowe
+`until − gameTime`, czyli **float**) renderuje się w `DiplomacyOverlay` dwa razy, dwiema formułami:
+
+| site | formuła | dla `truceYearsLeft = 9.4` |
+|---|---|---|
+| chip statusu `:317` | `truceLeft.toFixed(0)` — do najbliższej | `[ROZEJM — 9 lat]` |
+| przycisk ⚔ `:561` | `Math.max(1, Math.ceil(...))` — w górę, podłoga 1 | `⚔ ROZEJM — 10 L.` |
+
+Trzeci konsument — wpis Dziennika `UIManager:1726` — używa formuły **przycisku**. Oba napisy stoją
+w tym samym panelu, jeden nad drugim, i rozjeżdżają się zawsze, gdy część ułamkowa jest `< 0,5` —
+czyli przez **połowę każdego roku**, częściej niż się zgadzają.
+
+⚠ **Odstający jest CHIP, nie przycisk.** Zaokrąglenie w górę z podłogą 1 jest tym poprawnym dla
+licznika blokady: rozejm z 0,2 roku nie może pokazać „0 lat", bo przycisk jest wtedy nadal szary.
+**Gdzie domknąć:** jedna funkcja zaokrąglająca licznik rozejmu, wołana przez wszystkie trzy site'y —
+ta sama chirurgia, którą C3 zrobił dla terminu paktu (`treatyExpiryYear`: jedno źródło rachunku dla
+tickera i panelu, żeby panel nie POKAZYWAŁ czegoś innego, niż silnik ROBI).
+
+### ⚪ 303 — `t()` nie formatuje liczb: przycisk pokoju w panelu Wojny pokazuje graczowi surowy float
+
+`WarOverlay:368` podaje `peaceCdYears` do `t('warOverlay.btnPeaceCooldown', peaceCdYears)` **bez
+zaokrąglenia**, a źródło jest floatem: `DiplomacySystem.getRefusalYearsLeft` zwraca
+`Math.max(0, (year + refusalWindowYears(cfg)) − this._year())`. Klucz brzmi
+`'☮ POKÓJ — ZA {0} L.'` / `'☮ PEACE — IN {0} Y.'`, więc gracz dostaje **„☮ POKÓJ — ZA 0.8333 L."**.
+
+⚠ **Lekarstwo jest już w repo i pochodzi z tego samego slice'u.** ⚔ w `DiplomacyOverlay:561` robi
+`Math.max(1, Math.ceil(...))` **właśnie dlatego**, że `t()` nie formatuje liczb (zmierzone w C3).
+Ten site został pominięty, bo C3 dotykał panelu Dyplomacji — mimo że to WarOverlay był **wzorem**
+dla licznika na ⚔ (`warOverlay.btnPeaceCooldown`, WP-4/C4). Wystarczy `Math.ceil`; podłoga `1` jest
+tu zbędna, bo gałąź wykonuje się wyłącznie dla `peaceCdYears > 0` (`:366`).
+
+**Spokrewniony z 302** — ta sama klasa: liczba dla gracza musi być zaokrąglona **w miejscu
+wywołania**, bo warstwa i18n tego nie zrobi. Po 302 i 303 są już **trzy** takie liczniki (⚔ rozejm,
+☮ cooldown, wpis Dziennika `UIManager:1726`) i **dwie różne formuły**.
+**Gdzie domknąć:** `Math.ceil` w `:368`; docelowo jedna funkcja „licznik lat na przycisku" na wszystkie
+trzy site'y — razem z 302, bo to jedna operacja.
+
+### ⚪ 304 — `check-i18n` czyta polskie słowo jako wywołanie `t(`: lookbehind jest ASCII-only
+
+`tools/check-i18n.mjs:115` — `const T_CALL = /(?<![\w$.])t\s*\(/g`. W JavaScripcie `\w` to
+**`[A-Za-z0-9_]`**, więc polska litera diakrytyczna **nie jest** `\w`, lookbehind jej nie blokuje
+i każde słowo kończące się na taką literę + `t` przed `(` czyta się jako wywołanie i18n.
+
+**ZMIERZONE — regex URUCHOMIONY, nie przeczytany:**
+
+| wejście | wynik |
+|---|---|
+| `kształt (rekord)` | **MATCH** ⇒ fałszywe wywołanie |
+| `kształt(x)` | **MATCH** |
+| `komplet (dwa)` · `wart (mniej)` · `element(x)` · `format(x)` · `.at(0)` | no match (poprawnie) |
+
+Dyskryminatorem jest **wyłącznie** litera niewidoczna dla `\w` bezpośrednio przed `t`. Skutek: klucz
+„użyty-a-niezdefiniowany" wyprodukowany przez **komentarz albo prozę**, czyli czerwień bramki
+w miejscu, w którym nie ma żadnego napisu. Złapane w **DS-1/C0** (slice o *kształcie* rekordu);
+**obejściem było przeredagowanie tekstu**, nie poprawka narzędzia.
+
+⚠ To **czwarty raz**, kiedy `T_CALL` czyta coś, co nie jest wywołaniem — trzy poprzednie to `t()`
+w komentarzach (reguła zapisana przy **269**, memory `i18n-checker-reads-t-calls-in-tests`).
+**Gdzie domknąć:** lookbehind na klasę Unicode — `(?<![\p{L}\p{N}_$.])t\s*\(` z flagą `u`.
+**Sprawdzone wykonaniem na całej tabeli wyżej**: `kształt (` i `kształt(` przestają pasować, a
+`= t('a.b')`, `  t("x")` i `żółty t(` nadal pasują (to ostatnie poprawnie — tam `t(` JEST wywołaniem).
+⚠ Jedna linia, ale **dotyka bramki**, więc z własnym pomiarem baseline'u (dziś 76/17).
+
+### ⚪ 305 — obecność floty unieważnia odwilż: jeden zwiadowca trzyma napięcie na capie przez cały rozejm
+
+Statek gracza zdolny do nauki (`canDoScience`), **orbitujący** w układzie obcego imperium, po
+`TRESPASS_YEARS = 1.0` roku wyświetlanego dokłada modyfikator `trespassing` **i wpis pamięci**
+(`DiplomacySystem:1008-1009`), po czym zegar zbroi się ponownie (`entry.year = currentYear`).
+`_tickTensionDecay:1080` pomija każdą parę, której ostatni wpis pamięci jest młodszy niż
+`PEACE_QUIET_YEARS = 2.0` (`:68`).
+
+⚠ **1,0 < 2,0 ⇒ tłumienie jest TRWAŁE, nie opóźnione.** Wpis odnawia się **szybciej**, niż okno ciszy
+zdąży się zamknąć, więc napięcie **nigdy** nie zaczyna opadać — ani w pokoju, ani (po DS-1/C2)
+w rozejmie do `TRUCE_TENSION_FLOOR = 15`. Nie trzeba floty: wystarczy **jeden** zaparkowany zwiadowca.
+
+**To jest ZAPROJEKTOWANE i nie jest defektem kodu** — obecność floty ma kosztować. Wpis istnieje, bo
+skutek jest ostrzejszy, niż wynika z przepisu: jeden statek **unieważnia w całości odwilż, którą
+DS-1/C2 właśnie wprowadził**, robi to bezterminowo, i gracz **nie dostaje o tym żadnego sygnału** —
+modyfikator `trespassing` widać w rozbiciu opinii, **zamrożonego decayu nie widać nigdzie**.
+
+⚠ Ten sam mechanizm jest **pułapką pomiarową** — patrz protokół gate'ów czasowych, punkt 4
+(`WOJNA_I_POKOJ_MASTER_PLAN.md` §„DS-1 — delivered").
+**Gdzie domknąć — BALANS INCYDENTÓW, decyzja właściciela, nie higiena:** albo
+`TRESPASS_YEARS > PEACE_QUIET_YEARS` (odwilż łapie okno między naliczeniami), albo okno ciszy liczone
+**per typ pamięci** (incydent powtarzalny nie blokuje decayu tak jak wojna), albo sygnał dla gracza
+(„napięcie nie opada — twój statek stoi w ich układzie"). Trzeci wariant nie zmienia balansu, tylko
+przestaje ukrywać, co się dzieje.
+
+---
+
+**Reguły wychodzące poza slice:**
+- **Pin na liczbie eksportów WSPÓLNEGO pliku ma mieć DOKŁADNIE JEDNEGO właściciela.** Przeniesienie
+  jednej stałej (`TRUCE_TENSION_CAP` → `OpinionModifierData`, żeby para pokręteł rozejmu miała jeden
+  dom) zapaliło **trzy** keepery z **trzech różnych slice'ów** — każdy pinował „ile eksportów ma ten
+  plik" jako kontrolę własnego. Taki pin nie mierzy niczego, co należy do pinującego slice'u: mierzy
+  **tempo rozwoju cudzego pliku**, więc pada przy każdej zmianie, która go nie dotyczy, i uczy czytać
+  czerwień jako szum. Jeden właściciel (tu: `wp_treaty_slot` T5e), reszta pinuje SWOJE stałe **po
+  nazwie**, nie po liczbie sąsiadów.
+- **Re-aim istniejącego keepera na NOWY eksport importuje go NAMESPACE'OWO, z `?? null`.** Statyczny
+  import symbolu, który **dopiero powstaje w tym commicie**, wywala **cały plik** keepera na linkowaniu
+  ESM (`SyntaxError: does not provide an export named …`) — a to znaczy, że w przebiegu **fail-first
+  żaden pin nie dostaje koloru**, także te, które miały być ZIELONYMI KONTROLAMI. Złapał to worktree
+  w **DS-1/C1** (re-aim `wp_peace_seams` na `treatyExpiryYear`). To ta sama lekcja co „pin musi DEGRADOWAĆ,
+  nie PRZERYWAĆ”, tylko na poziomie **modułu**: `import * as RM from '…'` + `RM.treatyExpiryYear ?? null`
+  gasi POJEDYNCZY pin zamiast kasować przebieg.

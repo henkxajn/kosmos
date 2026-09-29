@@ -112,6 +112,71 @@
 > wojennej: `reparationsUntilYear` + guard na istniejącej akcji `pressureResponse`,
 > `DirectorRuleData:109/:137`). Poza 1.0: `threaten`, pełna okupacja, reparacje w kredytach, **D5**.
 
+> **Aktualizacja 2026-09-29 (późna) — slice DS-1 ZAMKNIĘTY: pakt ma koniec, rozejm ma zęby.**
+> Sweep: **244/244 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl=en=**3409**, +7 kluczy) ·
+> save **v101 bez migracji** · bez flagi (rollback = `git revert`).
+> • **Dowieziony kształt** — C0 `9cb1e4e` (rekord traktatu ma JEDEN kształt niezależnie od producenta;
+> wymuszony NAP wnosił do zapisu SZEŚĆ pól zamiast dwóch, cztery martwe) → C1 `602500c` (**pakt wygasa**:
+> `NAP_YEARS = 10` + ticker + beat, **D-WP-5**) → C2 `71e0d24` (**rozejm bramkuje `declareWar`** dla
+> KAŻDEGO powodu, `canWar` = LUSTRO bramki; napięcie stygnie także w rozejmie, ale do
+> `TRUCE_TENSION_FLOOR = 15`, **D-WP-7 / D-DS-1b / D-DS-2c**) → C3 `3b5039c` (panel mówi prawdę: nazwa
+> przez `t()` zamiast sluga `non_aggression`, rok końca w slocie, licznik lat na wyszarzonym ⚔).
+> ⚠ **Cała oszczędność slice'u: WYGAŚNIĘCIE = USUNIĘCIE REKORDU, NIE ZMIANA PREDYKATU.** `hasTreaty`
+> pyta wyłącznie o `id`, więc KAŻDY konsument (8 bezpośrednich wywołań predykatu — 6 na fasadzie, 2 na modelu — + 7 przez `hasTradeAgreement`, w tym
+> bramka wojny `declareWar:358` i bramka ultimatum `:1095`) jest poprawny bez jednej linii zmiany;
+> predykat „ma traktat, ale przeterminowany" zrobiłby z każdego pominiętego konsumenta cichą dziurę
+> w bramce wojny. Termin stempluje JEDEN pisarz (`RelationsModel.addTreaty:266`) i **warunkowo** —
+> bezwarunkowy zrobiłby z handlu i sojuszu traktaty terminowe (balans, którego nikt nie podpisywał).
+> **D-DS-3**: brak `expiresYear` w starym zapisie jest CZYTANY (`signedYear + NAP_YEARS`), nie dopisywany.
+> • ✅ **291 ZAMKNIĘTY** (obie połówki, obie jako decyzja właściciela): przycisk gracza **zostaje otwarty
+> POZA rozejmem** i jest zamknięty w nim; rozejm **odmraża** napięcie, ale do podłogi 15, nie do zera
+> (pełny decay skasowałby 30 w pół roku wyświetlanego — siedem i pół roku PRZED końcem rozejmu).
+> • **NOWE findingi z DS-1: #299-#305** (rejestr: `VESSEL_ORDERS_PLAN.md` §299-305), wszystkie ⚪.
+> ⚪ **299** (`_tickTreatyExpiry:1055` woła `removeTreaty` z pominięciem `breakTreaty:807-808`, więc
+> wygaśnięcie **nie sprząta sprzężonego modyfikatora opinii**; pominięcie kary +15 jest POPRAWNE —
+> wygaśnięcie nie jest złamaniem umowy. Dziś nieszkodliwe i **zmierzone**: zbiory „traktat z modyfikatorem"
+> `{trade_agreement}` i „traktat z terminem" `{non_aggression}` są rozłączne; uzbraja się przy pierwszym
+> traktacie z terminem I modyfikatorem) · ⚪ **300** (nazwa traktatu ma **DWA źródła**: katalogowe
+> `namePL`/`nameEN`/`descPL`/`descEN` = **12 napisów z zerem czytelników** obok żywego `t('treaty.*')`
+> z C3 — ta sama chirurgia, którą D1 wykonało na `minTrust`/`accept`/`blocksWar`/`yearlyTrust` w TYM
+> SAMYM pliku) · ⚪ **301** (**dwie nowe bramki wojny AI są NIEWIDOCZNE w audycie**: `declareWar` zwraca
+> goły `false` w `:348`/`:358`, `diplomacy:warRefused` leci wyłącznie dla `player_action`, a ani ono, ani
+> `diplomacy:treatyExpired` nie są w `DebugLog.TRACKED_EVENTS` — przy czym precedens stoi trzy linie
+> niżej w tym samym pliku: brak śledzenia `invasion:blocked` kosztował **GATE 3 §2 jedną sesję**.
+> Przyszły gate „czemu AI nie wypowiada wojny" czyta CISZĘ) · ⚪ **302** (ta sama `rel.truceYearsLeft` ma
+> w JEDNYM panelu **dwa zaokrąglenia**: chip `:317` `toFixed(0)` vs przycisk `:561` `Math.ceil` — dla 9,4
+> „ROZEJM — 9 lat" nad „⚔ ROZEJM — 10 L."; rozjazd przez połowę każdego roku. Odstający jest CHIP).
+> • **Z listy właściciela, mechanizm zmierzony przy wpisywaniu:** ⚪ **303** (`WarOverlay:368` podaje
+> `peaceCdYears` do `t()` **bez zaokrąglenia** ⇒ gracz widzi „☮ POKÓJ — ZA 0.8333 L.”; lekarstwo `Math.ceil`
+> stoi już obok, na ⚔ z C3 — rodzina **302**, po obu wpisach są **trzy** liczniki lat i **dwie** formuły) ·
+> ⚪ **304** (`tools/check-i18n.mjs:115` — `(?<![\w$.])t\s*\(` z **ASCII-only `\w`**: polska litera diakrytyczna
+> nie blokuje lookbehinda, więc `kształt (` czyta się jako wywołanie `t(`. **Regex URUCHOMIONY**: `kształt (rekord)`
+> i `kształt(x)` MATCH, a `komplet (` / `wart (` / `element(` / `format(` / `.at(` — nie. Złapane w C0, **obejściem
+> było przeredagowanie tekstu**, nie poprawka narzędzia; to **czwarty** fałszywy pozytyw `T_CALL` po trzech z komentarzy.
+> Lekarstwo `(?<![\p{L}\p{N}_$.])…/u` **sprawdzone wykonaniem**) · ⚪ **305** (**obecność floty unieważnia odwilż**:
+> `TRESPASS_YEARS = 1.0` < `PEACE_QUIET_YEARS = 2.0`, więc jeden orbitujący zwiadowca odnawia wpis pamięci szybciej,
+> niż okno ciszy zdąży się zamknąć ⇒ `_tickTensionDecay:1080` **nigdy** nie rusza. ZAPROJEKTOWANE, nie defekt kodu —
+> ale kasuje w całości odwilż z C2, bezterminowo i **bez żadnego sygnału dla gracza**; balans incydentów, decyzja
+> właściciela).
+> ⚠ **#306 NIE POWSTAŁ:** zgłoszone „HUD nie odświeża roku przy ręcznym `gameTime`” to **istniejący 168** —
+> `time:display` ma DOKŁADNIE JEDNEGO producenta (`TimeSystem.update:84`), bramkowanego na `:70` przez
+> `isPaused || multiplier === 0`; `0aacf8c` zasiał `EventLogSystem._currentYear` i HUD-u nie ruszył (z projektu).
+> Zamiast duplikatu — odwołanie w protokole gate'ów czasowych (pkt 3).
+> • ⚠ **Reguła warsztatu z tej rundy:** **pin na liczbie eksportów WSPÓLNEGO pliku ma mieć DOKŁADNIE
+> JEDNEGO właściciela** — przeniesienie jednej stałej (`TRUCE_TENSION_CAP` → `OpinionModifierData`)
+> zapaliło TRZY keepery z trzech różnych slice'ów, bo każdy pinował „ile eksportów ma ten plik" jako
+> kontrolę własnego. Taki pin mierzy tempo rozwoju CUDZEGO pliku i uczy czytać czerwień jako szum.
+> ⚠ **Druga:** **re-aim keepera na NOWY eksport importuje go NAMESPACE'OWO, z `?? null`** — statyczny import
+> symbolu, który dopiero powstaje w tym commicie, wywala CAŁY plik keepera na linkowaniu ESM, więc
+> w fail-first **żaden pin nie dostaje koloru**, także zielone kontrole (złapał worktree w C1, re-aim
+> `wp_peace_seams` na `treatyExpiryYear`). Lekcja „pin musi DEGRADOWAĆ, nie PRZERYWAĆ” na poziomie MODUŁU.
+> • **Otwarte po DS-1:** **DS-2** (odnowienie paktu + przycisk; `diplomacy:treatyExpired` emitowane
+> z pełnym ładunkiem i **czeka** — jedyny konsument to beat Dziennika `UIManager:1732`) · **DS-3**
+> (`gift`; term `offer` jest w silniku KOMPLETNY — `AcceptanceEngine:143`, `OFFER_HALF_KR = 500`, wagi
+> 10-25 per archetyp, `counterHintFor` już liczy lukę w kredytach — **nikt go nie karmi**, bo żadne UI
+> nie wkłada `offer` do propozycji; kanał kredytów `spendFromTreasury` też już istnieje) · **WP-R** ·
+> **298** (decyzja właściciela nadal odłożona).
+
 
 ---
 

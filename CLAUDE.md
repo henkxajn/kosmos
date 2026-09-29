@@ -5405,3 +5405,92 @@ stoi zamrożone na `TRUCE_TENSION_CAP = 30`, bo `_tickTensionDecay:1004` pomija 
 obie sprawy to **decyzje właściciela**) · DS-2 (odnowienie traktatu + 4. rząd) · DS-3 (`gift`) ·
 WP-R (reparacje jako **debuff produkcji wojennej**: `reparationsUntilYear` + guard na istniejącej akcji
 `pressureResponse`, `DirectorRuleData:109/:137`).
+---
+
+## DS-1 — pakt ma koniec, rozejm ma zęby (save **v101 bez migracji**, live-gate PASS — SLICE ZAMKNIĘTY 2026-09-29)
+
+Domknięcie dwóch pytań, które arc W4-simple zostawił za findingiem **291**, i oba były **decyzjami
+właściciela, nie higieną**: czy rozejm kogokolwiek zobowiązuje i czy napięcie w nim w ogóle stygnie.
+Plan + decyzje **D-DS-1/2/3** + protokół gate'ów czasowych:
+`docs/design/WOJNA_I_POKOJ_MASTER_PLAN.md` §„DS-1 — delivered". Rejestr: `VESSEL_ORDERS_PLAN.md`
+§291 (ZAMKNIĘTY) + #299-#302. Commity: `9cb1e4e` (C0 kształt rekordu) · `602500c` (C1 termin + ticker
++ beat) · `71e0d24` (C2 bramka rozejmu + podłoga napięcia) · `3b5039c` (C3 panel mówi prawdę).
+Bez flagi — rollback = `git revert`.
+
+**Jedno zdanie:** pakt o nieagresji przestał być WIECZNY, a rozejm przestał być etykietą — i obie te
+zmiany dało się zrobić bez dotykania ani jednego konsumenta `hasTreaty`.
+
+### Szwy — cztery, i każdy odpowiada na inne pytanie
+
+| szew | gdzie | za co odpowiada |
+|---|---|---|
+| **kształt rekordu** | `RelationsModel.addTreaty:259-268` | JEDEN pisarz, przez którego przechodzą OBAJ producenci (`proposeTreaty` i wymuszony NAP z pokoju). Od C0 obaj podają `{ id }`, więc `expiresYear` dokłada się do JEDNEGO kształtu, nie do dwóch |
+| **termin** | `RelationsModel.treatyExpiryYear:53` | JEDNA odpowiedź na „kiedy ten traktat się kończy"; `null` = nie kończy się. Wołają ją **ticker I panel** — druga kopia rachunku rozjechałaby to, co panel POKAZUJE, z tym, co ticker ROBI (klasa `removeColony:667`) |
+| **bramka wojny** | `DiplomacySystem.declareWar:348` (rozejm, KAŻDY powód) + `:358` (NAP, poza `player_action`) | Bramka siedzi w SILNIKU; `DiplomacyOverlay:558` `canWar` jest jej **LUSTREM**, nie drugą decyzją — bo panel zapisuje własną zasadę: „szare zostaje WYŁĄCZNIE to, co strukturalnie niemożliwe" |
+| **podłoga napięcia** | `DiplomacySystem._tickTensionDecay:1075-1085` | Rozejm stygnie, ale do `TRUCE_TENSION_FLOOR = 15`, nie do zera. `Math.min(krok, cur − floor)` jest NOŚNE — bez niego ostatni krok przebija podłogę |
+
+### Keepery slice'u
+
+`wp_peace_seams` **43** · `wp_nap_expiry` **28** · `wp_truce_gate` **40** · `wp_treaty_slot` **29** —
+**140 zielonych**. Fail-first, każdy w prawdziwym `git worktree --detach` na poprzednim commicie,
+FINALNYMI pinami: C0 **38/2** · C1 `wp_nap_expiry` **9/19** + `wp_peace_seams` **37/6** (dowód
+nie-jałowości re-aimów) · C2 `wp_truce_gate` **22/18** + `wp_nap_expiry` **27/1** · C3
+`wp_treaty_slot` **12/17** + `wp_peace_seams` **42/1**. Sweep **241 → 244/244, 0 FAIL, 31 advisory** ·
+`check-i18n` PASS, pl = en **3402 → 3409** (**7 nowych kluczy**: 1 w C1, 1 w C2, 5 w C3).
+
+### ⚠ Pułapki — siedem, każda kupiona pomiarem
+
+1. **WYGAŚNIĘCIE = USUNIĘCIE REKORDU, NIE ZMIANA PREDYKATU — i to jest cała oszczędność slice'u.**
+   `hasTreaty` pyta **wyłącznie o `id`**, więc KAŻDY konsument
+   (osiem bezpośrednich wywołań predykatu w `src/` — sześć na fasadzie systemu, dwa na modelu — plus
+   siedem przez `hasTradeAgreement`, w tym bramka wojny `declareWar:358` i bramka ultimatum
+   `:1095`) jest poprawny **BEZ JEDNEJ LINII ZMIANY**. Gdyby wygasanie było predykatem („ma traktat,
+   ale przeterminowany"), każdy pominięty konsument byłby **cichą dziurą w bramce wojny**.
+2. **Stempel terminu jest WARUNKOWY, i to nie jest ostrożność.** Bezwarunkowy `entry.expiresYear`
+   w `addTreaty` zrobiłby z umowy handlowej i sojuszu **traktaty terminowe** — czyli zmianę balansu,
+   której nikt nie podpisywał. Pilnuje tego pin `wp_nap_expiry` T1f; `TREATY_WITH_TERM`
+   (`RelationsModel:41`) jest literałem, bo model nie zna katalogu i nie ma po co go poznawać.
+3. **`t()` NIE FORMATUJE LICZB (zmierzone).** Licznik lat na ⚔ musi być całkowity **w miejscu
+   wywołania**, inaczej surowy float wylewa się graczowi na przycisk jako „9.9166666 L.".
+   ⚠ Ta sama liczba ma dziś w panelu **dwa zaokrąglenia** (finding **302**), a przycisk pokoju w panelu
+   Wojny wylewa surowy float „☮ POKÓJ — ZA 0.8333 L.” (finding **303**) — mimo że to on był WZOREM dla ⚔.
+4. **Pin na liczbie eksportów WSPÓLNEGO pliku ma mieć JEDNEGO właściciela.** Przeniesienie
+   `TRUCE_TENSION_CAP` z `DiplomacySystem` do pliku balansu (żeby para pokręteł rozejmu miała jeden
+   dom) ujawniło, że licznik eksportów `OpinionModifierData` był pinowany w **TRZECH** keeperach
+   z trzech różnych slice'ów — jedna przeniesiona stała paliła trzy suity naraz. Właścicielem jest
+   od C3 `wp_treaty_slot` T5e; pozostałe dwa pinują to, co należy do ICH slice'u.
+5. **Bramka rozejmu blokuje KAŻDY powód, ale zmienia coś tylko dla JEDNEGO stanu.** Trzy drogi AI
+   (`hostility_threshold`, `ultimatum_expired`, `enemy_attack_arrived`) i tak odbijały się o NAP, bo
+   `TRUCE_YEARS = NAP_YEARS = 10`. Realna zmiana dotyczy stanu **„NAP zerwany albo wygasły, rozejm
+   wciąż trwa"** — osiągalnego przez `breakTreaty` i przez stary zapis. ⚠ **Zero omijającego `reason`**:
+   uczciwa droga dla gate'u to ZAKOŃCZYĆ ROZEJM (`relations.setStatus(pair, 'peace')`), nie trzeci
+   magiczny string obok `player_action` i `player_war_panel` (rejestr **294**).
+6. **Pomiar decayu wymaga ODWOŁANIA FLOT — inaczej mierzy się ciszę.** Statek gracza zdolny do nauki,
+   zostawiony **na orbicie** w układzie AI, odpala `_tickTrespassing` → `addMemory`, a
+   `_tickTensionDecay:1080` pomija każdą parę, której ostatni wpis pamięci jest młodszy niż
+   `PEACE_QUIET_YEARS = 2.0`; zegar trespassu zbroi się co `TRESPASS_YEARS = 1.0`. ⚠ **1,0 < 2,0, więc
+   tłumienie jest TRWAŁE, nie opóźnione** — decay **nigdy nie rusza**, a gate czyta działającą podłogę jako
+   defekt. Ten sam pomiar jest pytaniem o BALANS (finding **305**): jeden zaparkowany zwiadowca kasuje
+   w całości odwilż, którą wprowadził C2, i gracz nie dostaje o tym żadnego sygnału.
+7. **Re-aim keepera na NOWY eksport importuje go NAMESPACE'OWO, z `?? null`.** Statyczny import symbolu,
+   który dopiero powstaje w tym commicie, wywala **cały plik** keepera na linkowaniu ESM — czyli
+   w przebiegu fail-first **żaden pin nie dostaje koloru**, także zielone kontrole. Złapał to worktree
+   w C1 (re-aim `wp_peace_seams` na `treatyExpiryYear`). Lekcja „pin musi DEGRADOWAĆ, nie PRZERYWAĆ”,
+   tylko na poziomie MODUŁU.
+
+### Live gate — PASS (zapis testowy, „Konsorcjum")
+
+Pokój przy 100/100 → slot „Pakt o nieagresji (od 120, do roku 130)", chip ROZEJM 10 lat, ⚔ szary
+z licznikiem; `declareWar('player_action')` = `false` + wpis w Dzienniku; wygaśnięcie w **130.26**
+z **JEDNYM** beatem (drugi tick milczy), slot pusty, status POKÓJ, ⚔ znowu aktywny; napięcie
+**136.9 → 15 i stoi** (`border_pressure` nie zbija poniżej podłogi); stary rekord **bez** `expiresYear`
+→ slot „do roku 140", wygaśnięcie w **140.26**, znowu jeden beat. Konsola czysta.
+
+### ⚠ Świadomie POZA DS-1
+
+**DS-2** (odnowienie paktu + przycisk; `diplomacy:treatyExpired` jest już emitowane z pełnym ładunkiem
+i **czeka** — jedyny konsument to dziś beat Dziennika, `UIManager:1732`) · **DS-3** (`gift` — term
+`offer` jest w silniku KOMPLETNY, `AcceptanceEngine:143` + `OFFER_HALF_KR = 500` + wagi 10-25 per
+archetyp + `trader` ×1,5, a `counterHintFor` już liczy, ile kredytów domknęłoby lukę; **nikt go nie
+karmi**, bo żadne UI nie wkłada `offer` do propozycji) · **WP-R** (reparacje jako debuff produkcji
+wojennej) · **298** (pokój status quo pierze zdobycze — decyzja właściciela odłożona).

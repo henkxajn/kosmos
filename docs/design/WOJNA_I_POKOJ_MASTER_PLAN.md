@@ -311,9 +311,9 @@ It exists now. Save **v101, no migration** across the whole arc.
 3. AI proposes peace when `exhaustion[AI] ≥ peaceCost` **and** the acceptance engine says yes — the *same* engine
    that judges the player's proposals. The threshold is a cheap pre-gate; the verdict belongs to the engine.
 4. **Zero penalty for refusing.** A symmetric **1-year cooldown** per verb replaces it (player button / AI dispatch).
-5. NAP lasts **10 years**, with a beat — see **DS-1**.
+5. NAP lasts **10 years**, with a beat — ✅ **delivered in DS-1/C1** (`602500c`); the term lives in `OpinionModifierData.NAP_YEARS`, not in the treaty catalogue.
 6. Wordings (PL + EN) are signed together with the mechanic, never after.
-7. A truce gates `declareWar` — **superseded by measurement, see DS-1 below**.
+7. A truce gates `declareWar` — ✅ **delivered in DS-1/C2** (`71e0d24`). The W4 phrasing “superseded by measurement” is resolved there: the `'truce'` *status* gated 0 of 4 roads to war while the forced NAP gated 3, and C2 makes the status itself a gate — which bites exactly in the state the NAP does not cover (pact broken or expired, truce still running).
 8. **Ceiling**: the evaluator cedes at most **half** its *cedable* pool (capital excluded, and excluded again
    are bodies it took from the proposer in this war). The capital is **never** cedable. This is a
    **pre-condition**, not a weight — no amount of war weariness buys it.
@@ -336,19 +336,16 @@ It exists now. Save **v101, no migration** across the whole arc.
 
 #### What remains
 
-- **DS-1 — the NAP needs an end and the truce needs a decision.**
-  ⚠ The registry phrasing "a truce gates nothing, three live roads to war" is **too strong; measured**:
-  the `'truce'` *status* gates **0 of 4** roads (its only readers are `AlienCivSystem:176` and the chip in
-  `DiplomacyOverlay:303`), but the **forced NAP gates 3 of 4** — `hostility_threshold`
-  (`DiplomacySystem:316`), `ultimatum_expired` (`:1021`) and `enemy_attack_arrived`
-  (`EnemyAttackHandler:134`) — because `declareWar:331` lets through only `reason === 'player_action'`.
-  The fourth road is the player's own button, open **by design**. The code already says this at
-  `DiplomacySystem:664-667`.
-  Work: give the NAP an `expiresYear` + a ticker + a beat before it lapses. **Owner decisions:**
-  (a) does the player's button stay open, and (b) **tension is frozen at `TRUCE_TENSION_CAP = 30`
-  for the whole truce** — `_tickTensionDecay:1004` skips every pair that is not `'peace'`. That is a
-  balance question, not hygiene.
-- **DS-2** — treaty renewal + the 4th row in the diplomacy panel.
+- **DS-1 — ✅ DELIVERED 2026-09-29**, see §“DS-1 — delivered” above. The NAP has an `expiresYear`,
+  a ticker and a beat; the truce gates `declareWar` for **every** reason; tension cools
+  inside a truce down to a floor of 15. Both owner questions from finding **291** are answered:
+  (a) the player's button stays open **outside** a truce and is closed **inside** it, and (b) the truce
+  no longer freezes tension. ⚠ The measured correction that stood in this bullet keeps its value as a
+  record of what was true before C2: the `'truce'` *status* gated **0 of 4** roads to war, the forced
+  NAP gated **3 of 4** (`DiplomacySystem:316`, `:1021`, `EnemyAttackHandler:134`), and the fourth road
+  — the player's own button — was open by design.
+- **DS-2** — treaty renewal + the button. `diplomacy:treatyExpired` is already emitted with the full
+  payload and **waits**: its only consumer today is the journal beat (`UIManager:1732`).
 - **DS-3** — the `gift` verb (optional; the `offer` term already exists and is always 0 without it).
 - **WP-R** — reparations as a **debuff**: a `reparationsUntilYear` stamp on the war/relation plus a guard on
   the existing `pressureResponse` action (`DirectorRuleData:109/:137`), so a defeated AI cannot immediately
@@ -396,6 +393,109 @@ owner = player, NAP + 10-y truce.
    flag at `ColonyManager:1013` — **guarded by identity** against `window.KOSMOS.homePlanet.id`.
    Control: capturing a *foreign* colony leaves `isHomePlanet === false` and the player still has exactly
    one home. ⇒ a recovered capital **is** protected by `cessionHomeWorld` at the next table.
+
+### DS-1 — delivered (2026-09-29)
+
+**The pact got an end, and the truce got teeth.** W4-simple left two questions open behind finding
+**291**, and both were owner decisions rather than hygiene: does a truce oblige anyone, and does
+tension ever cool while it holds. Save **v101, no migration**, no feature flag (rollback = `git revert`).
+
+| slice | commit | what changed in play |
+|---|---|---|
+| **C0** | `9cb1e4e` | The treaty record has **one shape regardless of producer**. `signPeace` handed the whole catalogue object to `signTreaty`, and `addTreaty` does `{ ...treaty, signedYear }` — so a forced NAP wrote **six** fields into the save (`id`, `namePL`, `nameEN`, `descPL`, `descEN`, `signedYear`) where `proposeTreaty` wrote two, and **four of them are dead** (the panel slot renders `tr.id`). A precondition, not a cleanup: `expiresYear` had to land in *one* record, not two. |
+| **C1** | `602500c` | **The pact expires** — `NAP_YEARS = 10`, a ticker, and a beat before the player is exposed again (**D-WP-5**). Until DS-1 the NAP was eternal, and since every peace forces one (D-WP-1/WP-3), that read as *"never again a war on the AI's initiative"*: `declareWar:358` lets through only `player_action` while the pact stands. |
+| **C2** | `71e0d24` | **A truce is an obligation** (**D-WP-7 / D-DS-1b**). `declareWar` refuses inside a truce — for **every** reason — and the panel's `canWar` is a **mirror** of that refusal, not a second decision. Tension **cools inside a truce too** (**D-DS-2c**), down to `TRUCE_TENSION_FLOOR = 15`, never to zero. |
+| **C3** | `3b5039c` | The panel **tells the truth about treaties**: the name through `t()` instead of the raw slug `• non_aggression (od 100)`, the pact's end year in the slot, and a **years counter on the greyed-out ⚔** — so a blocked button says *why* and *for how long*. |
+
+#### Decisions, in the operational phrasing they were signed in
+
+- **D-DS-1 (b)** — the truce gates `declareWar` **in the engine**, for every reason; the panel greys the
+  button as a *mirror* of that refusal. The player's own button is closed **inside a truce** and stays
+  open outside it. The gate sits in the engine because the panel writes its own rule at
+  `DiplomacyOverlay:515-522` — *"greyed out is reserved for what is structurally impossible"* — and
+  greying a button above an engine that lets the click through would break it.
+- **D-DS-2 (c)** — tension decays inside a truce down to a **floor**, never to zero. Measured:
+  `PEACE_DECAY = 60`/displayed year is 5 per ticker step, so a full decay would erase 30 in **half a
+  displayed year** — seven and a half years *before* the truce ends. A truce should cool down, not
+  pretend the war never happened. `Math.min(step, cur − floor)` is load-bearing: without it the last
+  step punches through the floor and *"30 → 15 and holds"* stops being true to the number.
+- **D-DS-3** — a missing `expiresYear` (any record written before DS-1) is **read, not written**: the
+  term is derived in flight from `signedYear + NAP_YEARS`. The save format is untouched
+  (**v101, zero migration**), an old pact expires in its own year and gets exactly one beat, and the
+  ticker writes nothing (pin `wp_nap_expiry` T3d).
+- **D-WP-5 — ✅ delivered here.** The NAP lasts 10 years, with a beat.
+- **D-WP-7 — ✅ delivered here.** The W4 close-out had marked it *"superseded by measurement"*, because
+  the `'truce'` *status* gated 0 of 4 roads to war while the forced NAP gated 3. C2 makes the status
+  itself a gate, which matters exactly in the state the NAP does **not** cover: *pact broken or expired,
+  truce still running* — reachable through `breakTreaty` or an old save.
+
+#### The one structural saving — expiry removes the RECORD, it does not change the PREDICATE
+
+`hasTreaty` asks **only about `id`**, so every consumer — eight direct call-sites of the `hasTreaty` predicate in `src/` (six on the system facade, two on the model) plus seven
+more through the `hasTradeAgreement` wrapper, including the war gate `declareWar:358` and the ultimatum
+gate `:1095` — is correct **without a single line of change**. Had expiry been a predicate ("has a
+treaty, but a stale one"), every missed consumer would have been a silent hole in the war gate.
+The term is stamped by **one writer** (`RelationsModel.addTreaty:266`), through which both producers
+pass, and **conditionally** — only the pact has one. An unconditional stamp would have turned the trade
+agreement and the alliance into fixed-term treaties, i.e. a balance change nobody signed (pin T1f).
+
+#### Measured
+
+Keepers: `wp_peace_seams` **43** · `wp_nap_expiry` **28** · `wp_truce_gate` **40** · `wp_treaty_slot`
+**29** — **140 green**. Fail-first, each in a real `git worktree --detach` on the previous commit, with
+the final pins: C0 **38/2** · C1 `wp_nap_expiry` **9/19** + `wp_peace_seams` **37/6** (proof the re-aims
+are not idle) · C2 `wp_truce_gate` **22/18** + `wp_nap_expiry` **27/1** · C3 `wp_treaty_slot` **12/17** +
+`wp_peace_seams` **42/1**. Sweep **241 → 244/244, 0 FAIL, 31 advisory** · `check-i18n` PASS,
+pl = en **3402 → 3409** (**7 new keys**: 1 in C1, 1 in C2, 5 in C3).
+
+**Live gate — PASS (test save, "Konsorcjum").** Peace at 100/100 → slot *"Pakt o nieagresji (od 120, do
+roku 130)"*, chip *ROZEJM 10 lat*, ⚔ greyed with its counter; `declareWar('player_action')` returns
+`false` and leaves a journal entry; expiry at **130.26** with **one** beat (the next tick is silent),
+empty slot, status *POKÓJ*, ⚔ active again; tension **136.9 → 15 and holds** (`border_pressure` does not
+push it under the floor); an old record **without** `expiresYear` → slot *"do roku 140"*, expiry at
+**140.26**, again one beat. Console clean.
+
+#### Gate protocol for time-based gates (DS-1 addendum to the peace-scene protocol above)
+
+1. **Diplomacy's clock is `timeSystem.gameTime` — displayed years.** `DiplomacySystem._year()` reads it
+   directly, and every term in this slice (`NAP_YEARS`, `TRUCE_YEARS`, `RECENT_REFUSAL_YEARS`) is
+   measured in it. Writing a year into the save and reading it back is not the same thing as letting
+   the clock move.
+2. **Nothing expires while the game is paused.** The ticker hangs off `time:tick` and accumulates
+   `civDeltaYears` to a full civ year (1/12 of a displayed year, `DiplomacySystem:120-140`), so an
+   expiry gate must let the game **run**; setting `gameTime` by hand advances no ticker.
+3. **The HUD year does not refresh on pause — and a hand-written `gameTime` never reaches it.**
+   `time:display` has **exactly one producer** (`TimeSystem.update:84`), and `update` returns at `:70`
+   when `isPaused || multiplier === 0`. So a gate that reads the year off the screen can be reading a
+   stale number: read `KOSMOS.timeSystem.gameTime`. ⚠ This is **finding 168**, not a new one — 168
+   named this exact mechanism, and its fix (`0aacf8c`) seeded `EventLogSystem._currentYear` without
+   touching the HUD, which is the intended behaviour (no tick, no display).
+4. **Recall the fleets before measuring tension decay.** A science-capable player ship left *orbiting*
+   in the AI's system trips `_tickTrespassing`, which writes a memory entry (`DiplomacySystem:1008-1009`);
+   `_tickTensionDecay:1080` skips any pair whose last memory entry is younger than
+   `PEACE_QUIET_YEARS = 2.0`, and the trespass clock rearms every `TRESPASS_YEARS = 1.0`.
+   ⚠ **1.0 < 2.0, so the suppression is PERMANENT, not delayed** — the entry renews faster than the
+   quiet window can close, and the decay never starts at all. The gate then reads a working floor as a
+   defect. Filed as **305**: the same measurement is a balance question, because one parked scout
+   silently cancels the whole thaw C2 introduced.
+
+#### What remains after DS-1
+
+- **DS-2 — treaty renewal + the button.** `diplomacy:treatyExpired` is already emitted with the full
+  payload (`{ empireId, treatyId, year }`) and **waits**: its only consumer today is the journal beat.
+  Open questions, all measured in the DS-2 phase-A audit: whether renewal is offered only *after* the
+  pact lapses (`proposeTreaty` already works then, because `canPropose` asks `hasTreaty`) or also
+  *before* it (which needs `addTreaty` to learn how to refresh, since it is idempotent today), and
+  whether the button is one PACT slot with two states or a fourth row.
+- **DS-3 — the `gift` verb.** The `offer` term is fully wired in the engine
+  (`AcceptanceEngine:143`, `OFFER_HALF_KR = 500`, weights 10-25 per archetype, `trader` ×1.5) and
+  `counterHintFor` already computes how many credits would close a gap — it is simply **never fed**,
+  because no UI puts `offer` into a proposal. `CivilianTradeSystem.spendFromTreasury` is the credit
+  channel and already exists (all-or-nothing, imperial, `getPlayerColonies()`).
+- **WP-R — reparations as a debuff** (unchanged: `reparationsUntilYear` + a guard on the existing
+  `pressureResponse` action, `DirectorRuleData:109/:137`).
+- **298 — status-quo peace launders conquest.** Owner decision still deferred; every variant touches
+  `territorial_ceiling`, i.e. the core of D-WP-8.
 
 ## Workstreams
 
