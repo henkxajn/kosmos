@@ -47,7 +47,7 @@
 > • **RODZINA 255 (ramka układu w rozkazach floty) ZAMKNIĘTA W CAŁOŚCI**: **147** · **154** · **263** · **255**
 > (leg D + wiersze 8/9) · **256** · **266** · **267** · **273** · **166 (ENGAGE)** · **268** · **275** · **270** ·
 > **269** · **272**. Otwarte drobne z całego arca: **227**, **278b**, **279**, **280**, **281**, **282**.
-> • Dalej wg planu właściciela: pivot **D4-slim → W4-simple** (Wojna i Pokój uproszczona) + żywe 🔴 **195** / **95** /
+> • ~~Dalej wg planu właściciela: pivot **D4-slim → W4-simple**~~ — ✅ **ARC ZAMKNIĘTY 2026-09-30** (W4-simple → DS-1 → DS-2 → DS-3; nota na końcu tego bloku). Zostają żywe 🔴 **195** / **95** /
 > **65** / **193** + pomiar **216** jako przerywniki.
 >
 > **Aktualizacja 2026-09-29 — arc WOJNA I POKÓJ / W4-simple ZAMKNIĘTY (pokój terytorialny).** Sweep: **241/241 OK,
@@ -176,6 +176,49 @@
 > 10-25 per archetyp, `counterHintFor` już liczy lukę w kredytach — **nikt go nie karmi**, bo żadne UI
 > nie wkłada `offer` do propozycji; kanał kredytów `spendFromTreasury` też już istnieje) · **WP-R** ·
 > **298** (decyzja właściciela nadal odłożona).
+>
+> **Aktualizacja 2026-09-30 — DS-2 + DS-3 ZAMKNIĘTE; ARC „D4-slim → W4-simple" ZAMKNIĘTY W CAŁOŚCI.**
+> Sweep: **246/246 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3417** · save **v101 bez migracji**.
+> • **DS-2** ✅ (`02de4a5` C1 + `8821f93` C2) — **pakt da się ODNOWIĆ w oknie 3 lat przed końcem**
+> (`NAP_RENEW_WINDOW_YEARS`), a slot PAKT ma TRZY etykiety: „ODNÓW PAKT" (aktywny) / „PAKT — ODNÓW ZA {0} L."
+> (poza oknem) / „PAKT — ODMÓWILI, ZA {0} L." (świeża odmowa). ⚠ Okno **3 jest WYPROWADZONE**, nie wybrane:
+> `RECENT_REFUSAL_YEARS = 2`, więc okno ≤ 2 znaczyłoby, że PIERWSZA odmowa zjada całe okno. `signedYear`
+> NIETKNIĘTY; odnowienie idzie przez MODEL, nie `signTreaty`, więc producentów traktatu zostaje DWA.
+> • **DS-3** ✅ (`acc7547`) — **dar dołączony do propozycji** (D-DS-7 kształt B, D-DS-8, D-DS-9). ⚠ Kształt
+> **wymuszony POMIAREM**: kara `recent_refusal` waży 25, a `offer` **nasyca się na +20**, więc po stemplu
+> dar był bezsilny przy **każdej** kwocie (zmierzone: MILION Kr → score −5 przy progu 10), a modal odmowy
+> otwiera się PO stemplu ⇒ **dar uchyla świeżą odmowę, na jedną ocenę**; odmowa osłodzonej propozycji
+> stempluje normalnie (jedna PŁATNA próba). ⚠ Nasycenie +20 jest GRANICĄ PROJEKTU: `opinion` waży 40, więc
+> imperium, które nas naprawdę nienawidzi, **nie jest do kupienia**.
+> • ✅ **306 ZAMKNIĘTY** (`counterHint` produkowany od E1 i nigdy nieczytany — modal daru jest jego pierwszym
+> konsumentem). ⚠ **SPROSTOWANIE NUMERACJI:** wpis §299-305 mówi „Nie ma #306" — to prawda o INNYM
+> kandydacie (HUD/rok = duplikat 168, numeru nie dostał). Numer #306 przydzielił findingowi `counterHint`
+> blok przekazania DS-2 i w tym kształcie wszedł do commita `acc7547`; zostaje przy `counterHint`.
+> • **NOWY finding: ⚪ 307** — beaty traktatowe (`napRenewed`, `giftSent`) idą **tylko** do Dziennika, choć
+> rodzina dyplomatyczna jest rozjechana na pół: **cztery** zdarzenia mają toast (`aiEnvoy` — jawnie jako
+> „BUG6 — widoczny toast", `peaceSigned`, `peaceRejected`, `envoyRefused`), **sześć** nie. Brakuje REGUŁY,
+> które zdarzenie zasługuje na toast; kandydat opisany w rejestrze, NIEPODPISANY.
+> • ⚠ **Reguła warsztatu z tej rundy, najdroższa z trzech ostatnich: ŚWIADEK W KAŻDYM PINIE, KTÓRY MOŻE BYĆ
+> PRAWDZIWY BEZ MIERZONEJ FUNKCJI.** Zmierzone fail-firstem **trzy razy pod rząd**: 13/41 → **5/49** (C1) ·
+> 68/20 → **63/25** (C2) · 25/38 → **19/44** (DS-3). ⇒ kontrola pinu musi być zielona po OBU stronach;
+> **pin, który na bazie PADA, nie jest kontrolą i nie wolno go tak etykietować** (w C2 trzy takie były).
+> • ⚠ **Druga:** `TRACKED_EVENTS` **nie jest eksportowane** z `DebugLog.js` — audyt czyta się przez
+> `KOSMOS.debugLog.query({kind})`. Złapała to walidacja jednolinijkowców gate'u na żywym silniku, PO tym jak
+> mój własny wrapper zamaskował błąd, nie awaitując wyniku: **wrapper walidacji też wymaga kontroli.**
+> • **Otwarte po tym arcu:** **WP-R** (reparacje — tam dar przestaje być jednorazowy i dziedziczy regułę
+> kolejności D-DS-8) · **298** (pokój status quo pierze zdobycze) · **301** (`warRefused`/`treatyExpired`
+> nadal poza `TRACKED_EVENTS` — DS-2/C1 zamknął tylko połowę sąsiednią; zmierzone: `query` zwraca **0**) ·
+> **307**. Rejestr: `VESSEL_ORDERS_PLAN.md` §306-307; plan: `WOJNA_I_POKOJ_MASTER_PLAN.md` §„DS-2 / DS-3 — delivered".
+> • ⚠ **OBSERWACJA BEZ NUMERU (do rozstrzygnięcia właściciela, czy zasługuje na #308):** live-gate zgłosił
+> „panel to **D**, nie Y" — i po pomiarze jest to **gorsze, niż brzmi**. `OverlayManager._keyMap:24` ma
+> `'d': 'diplomacy'` i klawisza `'y'` w tej mapie NIE MA, ale `GameScene:4752` (`case 'KeyY'`)
+> **TOGGLUJE TRYB TAKTYCZNY** przy `FEATURES.tacticalMode = true` (default ON) i `civMode`. Stara instrukcja
+> „klawisz Y" nie jest więc bezczynna — **przestawia graczowi kamerę**. Zasięg: `CLAUDE.md:3181` (poprawione
+> w tym commicie) + `src/ui/DiplomacyOverlay.js:1` (komentarz w KODZIE, świadomie nietknięty — inny temat
+> commita). ⚠ To ta sama rodzina co **ZAMKNIĘTY #297** (`warOverlay.declareHint` obiecywał (Y)); tamto
+> zamknięcie naprawiło **napis dla gracza**, nie komentarze. ⚠ Przy okazji: komentarz keepera
+> `wp_peace_cooldown_smoke:417` twierdzi, że „`y` NIE JEST ZWIĄZANE Z NICZYM" — prawda o mapie OVERLAYÓW,
+> nieprawda o grze.
 
 
 ---

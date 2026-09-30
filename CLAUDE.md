@@ -3178,7 +3178,7 @@ nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed cras
 - [x] **Faza 0** — GameState reactive store + DebugLog (ring buffer) + SaveMigration v51→v52
 - [x] **Faza 1** — EmpireRegistry + EmpireGenerator + 5 archetypów, 3-6 obcych imperiów na GalaxyMap
 - [x] **Faza 2** — IntelSystem (unknown→rumor→contact→detailed) + IntelOverlay (klawisz I)
-- [x] **Faza 3** — DiplomacySystem (hostility 0-100) + AlienCivSystem FSM + DiplomacyOverlay (klawisz Y)
+- [x] **Faza 3** — DiplomacySystem (hostility 0-100) + AlienCivSystem FSM + DiplomacyOverlay (klawisz **D**)
 - [x] **Faza 4** — WarSystem + BattleSystem (deterministic seeded) + moduły bojowe + WarOverlay (klawisz W)
 - [x] **Faza 5** — BattleView3D cinematic (proceduralne statki, timeline, laser/flash) + BattleIntroModal
 - [x] **Faza 6** — InvasionSystem + ColonyOverlay combat (desant, HP bars, przycisk ⚔ ATAKUJ)
@@ -5494,3 +5494,77 @@ i **czeka** — jedyny konsument to dziś beat Dziennika, `UIManager:1732`) · *
 archetyp + `trader` ×1,5, a `counterHintFor` już liczy, ile kredytów domknęłoby lukę; **nikt go nie
 karmi**, bo żadne UI nie wkłada `offer` do propozycji) · **WP-R** (reparacje jako debuff produkcji
 wojennej) · **298** (pokój status quo pierze zdobycze — decyzja właściciela odłożona).
+
+---
+
+## DS-2 / DS-3 — pakt da się ODNOWIĆ, a dar potrafi otworzyć rozmowę (save **v101 bez migracji**, live-gate PASS — ZAMKNIĘTE 2026-09-30)
+
+Domknięcie dwóch pozycji, które DS-1 zostawił na liście „poza zakresem". Plan + decyzje **D-DS-4…D-DS-9**
++ pomiary: `docs/design/WOJNA_I_POKOJ_MASTER_PLAN.md` §„DS-2 / DS-3 — delivered".
+Commity: `02de4a5` (DS-2/C1 — okno, model, fasada) · `8821f93` (DS-2/C2 — slot) · `acc7547` (DS-3/C1 — dar).
+Bez flagi (rollback = `git revert`). **#306 ZAMKNIĘTY**; #301 i #298 otwarte, #307 nowy.
+
+**Jedno zdanie:** DS-1 dał paktowi koniec i żadnego sposobu, żeby go przedłużyć, a term `offer` liczył
+poprawnie od E1 **dla nikogo** — te dwa braki zamykają się razem, bo dar jest tym, co ratuje odnowienie
+odrzucone przez AI.
+
+### Szwy — pięć, każdy odpowiada na inne pytanie
+
+| szew | gdzie | za co odpowiada |
+|---|---|---|
+| **odnowienie** | `RelationsModel.renewTreaty:290` | JEDYNE miejsce, które przedłuża termin. Bramka `TREATY_WITH_TERM` siedzi **w ciele metody** (kontrakt należy do modelu), nowy termin liczy `treatyExpiryYear` — ten sam helper co ticker i panel; w ciele **nie ma** drugiego `+ NAP_YEARS`, więc kontrola `wp_treaty_slot` T2f („formuła w warstwie dokładnie raz") zostaje prawdziwa. `map`, nie `push` ⇒ duplikat rekordu niemożliwy |
+| **tryb renew** | `renewable: true` (katalog) **∧** `ctx.renew === true` (propozycja), sprawdzane w `not_already_signed` | KONIUNKCJA, nie flaga. Sama flaga przepuściłaby ponowne podpisanie sojuszu. ⚠ Pre-warunek ZOSTAJE na liście czasownika — wyjątek żyje w CHECKU, dlatego `acceptance_engine` :90 jest cały, a próg i dziewięć wag mają jedno źródło |
+| **dostępność** | `canRenewTreaty` | LUSTRO bramki w `renewTreaty`, nie druga kopia progów. Panel (C2) wyszarza przycisk **tą samą funkcją**, którą silnik odmawia; `opts.offer` uchyla tylko term odmowy, **okno i istnienie paktu obowiązują dalej** |
+| **dar** | term `recent_refusal` w `AcceptanceEngine` | Wyjątek mieszka w **CHECKU TERMU**, nie w nowym czasowniku ani w bramce UI: `ctx.offer.credits > 0` ⇒ term zwraca 0. Zasięg zakresowany przez to, **kto karmi `offer`** — dziś wyłącznie modal odmowy traktatu |
+| **pieniądze** | `DiplomacySystem._payGift` | JEDEN księgowy dla dwóch fasad. Wołany **wyłącznie po `decision === true`** i **przed** mutacją traktatu — tylko ta kolejność daje symetrię all-or-nothing (TRIPWIRE `wp_gift_offer` T13e) |
+
+**Kanał popupów naprawiony (weszło poza zakres, bez tego przycisk nie mógłby działać):** `_hasCustomClick`
+istniało w `MissionEventModal` **od zawsze i nie miało pisarza**, więc każdy przycisk w tym kanale był
+wyłącznie zamykający — `DiplomacyRefusalModal` zapisał to wprost w nagłówku („gdyby kiedyś potrzebował,
+trzeba najpierw naprawić kanał"). Kanał czyta teraz `onClick` z konfiguracji przycisku, a
+`buildScheduledEventPopup` — `disabled`. Naprawa **ogólna**, z zachowaniem kolejkowania i pauzy;
+alternatywa (przepisanie modala na builder wprost, wzór `PeaceOfferModal`) odebrałaby kolejkę TRZEM
+ścieżkom odmowy, z których dwie nie są mierzone. `wp_ai_peace_offer` T7c zostaje zielony, bo pętla zostaje.
+
+### ⚠ Pomiar, który zmienił kształt — dar po odmowie był bezsilny przy KAŻDEJ kwocie
+
+Pakt, próg 10. **Przed** stemplem: score 0, hint 500 Kr, 500 Kr → 10 = TAK. **Po** stemplu
+`recent_refusal`: 0 Kr → −25 · 500 → −15 · 2000 → −6,25 · 10 000 → −5 · **MILION → −5**. Przyczyna jest
+strukturalna: kara waży **25**, a `offer` **nasyca się na +20**, więc 25 punktów nie da się pokryć
+**żadną** kwotą — w obu ścieżkach (odnowienie i zwykła propozycja; `offer_peace` ma 25/25, też
+niemożliwe). A modal odmowy otwiera się **PO** stemplu. Dlatego **dar uchyla świeżą odmowę, na jedną
+ocenę** (D-DS-9). ⚠ **Nasycenie +20 jest GRANICĄ PROJEKTU:** `opinion` waży 40, więc imperium, które nas
+naprawdę nienawidzi, **nie jest do kupienia** — dar przesuwa decyzję na styku, nie łamie jej. Odmowa
+osłodzonej propozycji stempluje **normalnie** ⇒ jedna PŁATNA próba, nie darmowy łańcuch.
+
+### ⚠ Trzy rzeczy z tego slice'u, które wychodzą poza niego
+
+1. **ŚWIADEK W KAŻDYM PINIE, KTÓRY MOŻE BYĆ PRAWDZIWY BEZ MIERZONEJ FUNKCJI.** Kosztowało to trzy
+   rundy poprawek keeperów, wszystkie zmierzone fail-firstem: **13/41 → 5/49** (C1: „signedYear
+   nietknięty" i „brak duplikatu" były prawdą, bo nic się nie działo; najgorszy pin porównywał stan PO
+   round-tripie ze stanem PRZED zapisem, `610 === 610`) · **68/20 → 63/25** (C2: trzy piny nosiły
+   etykietę „KONTROLA PINU", a na bazie padały, czyli były pinami naprawy; pięć zieleni było jałowych,
+   bo bez C2 etykieta brzmi „Pakt o nieagresji") · **25/38 → 19/44** (DS-3: na drzewie bez naprawy dar
+   jest **w ogóle niewidziany**, więc „nie kupuje okna", „nie domyka luki", „nic nie schodzi" i „pokój
+   nie ma retry" przechodziły z niczego). ⇒ **kontrola musi być zielona po OBU stronach; pin, który na
+   bazie pada, NIE JEST kontrolą i nie wolno go tak etykietować.**
+2. **Wiersz rozbicia niesie `term`, a NIE `id`/`termId`, i rozbicie ZAWIERA wiersze zerowe** — filtruje
+   je dopiero widok (`buildRefusalContent`). Pin na OBECNOŚCI wiersza jest więc dwuznaczny: mierzy
+   WARTOŚĆ (`valOf`), nie obecność.
+3. **Popup rysuje się RAZ NA PROCES.** `MissionEventModal._active` jest prywatne, a `dismiss`
+   nieosiągalne z zewnątrz (atrapa DOM ma `click()` jako no-op), więc drugi `queueMissionEvent` trafia
+   do kolejki i nic nie rysuje. Dwa scenariusze popupu = dwa **procesy potomne**
+   (`execFileSync(process.execPath, ['--input-type=module', '-e', …])` — bez powłoki, więc bez cytowania).
+
+⚠ **Czwarta, proceduralna:** `TRACKED_EVENTS` **nie jest eksportowane** z `DebugLog.js` — jednolinijkowiec
+gate'u czytający ten symbol jest niewykonalny; audyt czyta się przez `KOSMOS.debugLog.query({kind})`.
+Złapała to **walidacja linii gate'u na żywym silniku**, i to po tym, jak mój własny wrapper zamaskował
+błąd, nie awaitując wyniku. **Wrapper walidacji też wymaga kontroli.**
+
+### ⚠ Świadomie POZA DS-2/DS-3
+
+**WP-R** (reparacje jako debuff — tam dar przestaje być jednorazowy i dziedziczy regułę kolejności
+D-DS-8) · **298** (pokój status quo pierze zdobycze) · **301** (`diplomacy:warRefused` i
+`diplomacy:treatyExpired` nadal poza `TRACKED_EVENTS`; DS-2/C1 zamknął tylko połowę sąsiednią —
+zmierzone: `query({kind:'diplomacy:warRefused'})` zwraca **0**) · **307** (beaty traktatowe mają wpis
+w Dzienniku, ale **bez toastu** — polerka UI, z tego gate'u) · **D-DS-5** (depesza AI o odnowieniu).

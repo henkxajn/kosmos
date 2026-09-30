@@ -3728,3 +3728,88 @@ przestaje ukrywać, co się dzieje.
   w **DS-1/C1** (re-aim `wp_peace_seams` na `treatyExpiryYear`). To ta sama lekcja co „pin musi DEGRADOWAĆ,
   nie PRZERYWAĆ”, tylko na poziomie **modułu**: `import * as RM from '…'` + `RM.treatyExpiryYear ?? null`
   gasi POJEDYNCZY pin zamiast kasować przebieg.
+
+---
+
+## Findingi z DS-2/DS-3 (#306 zamknięty, #307 nowy, zebrane 2026-09-30)
+
+⚠ **NUMER #306 ZOSTAŁ JEDNAK UŻYTY — i to jest sprostowanie wpisu wyżej.** Blok §299-305 mówi „Nie ma
+#306", bo pod tym numerem zgłoszono wtedy „HUD nie odświeża roku przy ręcznym `gameTime`", co okazało
+się **istniejącym findingiem 168** i numeru nie dostało (odwołanie zostało w protokole gate'ów
+czasowych, pkt 3 — i ono nadal obowiązuje). Numer **#306 przydzielił następnie blok przekazania DS-2**
+findingowi `counterHint` — i w tym kształcie wszedł do wiadomości commita `acc7547` oraz do podpisu
+właściciela. Zostaje przy `counterHint`; kandydat HUD-owy numeru nie ma i mieć nie będzie.
+
+⚠ **Zasada wpisu:** jak w blokach wyżej — mechanizm i linie zweryfikowane w drzewie na `acc7547`.
+
+⚠ **REGUŁA WARSZTATU Z TEJ RUNDY (najdroższa z trzech ostatnich): ŚWIADEK W KAŻDYM PINIE, KTÓRY MOŻE
+BYĆ PRAWDZIWY BEZ MIERZONEJ FUNKCJI.** Zmierzone fail-firstem trzy razy pod rząd, za każdym razem na
+finalnych pinach: **13/41 → 5/49** (C1) · **68/20 → 63/25** (C2) · **25/38 → 19/44** (DS-3). Wzorce
+jałowej zieleni, wszystkie prawdziwe „z niczego" na drzewie bez naprawy: „pole X nietknięte" tam, gdzie
+nic się nie dzieje · „brak duplikatu" · „rekord bez zmian po odmowie" · porównanie stanu PO round-tripie
+ze stanem PRZED zapisem (`610 === 610`) · „etykieta NIE mówi Y" tam, gdzie etykieta brzmi zupełnie
+inaczej · „ścieżka Z nie ma pola `retry`" tam, gdzie SŁOWA `retry` nie ma w pliku ani razu.
+⇒ **Kontrola pinu musi być zielona po OBU stronach. Pin, który na bazie PADA, nie jest kontrolą i nie
+wolno go tak etykietować** — w C2 trzy piny nosiły etykietę „KONTROLA PINU" i padały, co fałszywie
+sugerowało zepsuty fixture zamiast działającej naprawy.
+
+---
+
+### ✅ 306 — ZAMKNIĘTY w DS-3/C1 (`acc7547`): `counterHint` produkowany od E1 i nigdy nieczytany
+
+`AcceptanceEngine:407` liczył `counterHintFor(...)` przy KAŻDEJ odmowie i oddawał
+`{ addOffer: { credits } }` — kwotę, która domknęłaby lukę. Konsumentów w `src/`: **zero**. Także
+`DiplomacyRefusalModal`, który rysuje pełne rozbicie decyzji, tego pola nie czytał. Komentarz przy
+emisji nazywał stan wprost: *„Emitowane od E1, świadomie bez konsumenta — UI kontrofert jest poza 1.0"*.
+
+**Zamknięte:** modal pokazuje linię `Dołączona oferta | {0} Kr zamknęłoby lukę` i przycisk
+`💰 Ponów z darem {0} Kr`, a kwota pochodzi **z silnika** — pin T6a porównuje ją z bezpośrednim
+wywołaniem `counterHintFor`, a TRIPWIRE T6c pilnuje, żeby w modalu nie było literału `500`.
+
+⚠ **Wpis był ZA WĄSKI o jedną rzecz i dlatego warto go czytać do końca:** samo podanie kwoty **nie
+wystarczało**, bo `counterHint` liczy się PRZED stemplem `recent_refusal`, a modal otwiera się PO nim —
+więc podpowiedź byłaby w chwili wyświetlenia **nieprawdziwa** (patrz pomiar: po stemplu żadna kwota nie
+domyka luki). Zamknięcie wymagało decyzji projektowej **D-DS-9**, nie jednej linii w UI.
+⚠ Latencja: `counterHintFor` **sam zwraca `null`**, gdy luki nie da się domknąć (`neededRaw >= 1`) — więc
+przycisk nie obiecuje czegoś, czego dar nie załatwi. Pokazuje się wyłącznie tam, gdzie zadziała.
+
+---
+
+### ⚪ 307 — beaty traktatowe idą TYLKO do Dziennika, choć połowa rodziny dyplomatycznej ma toast
+
+**Zgłoszone z live-gate'u DS-2/DS-3 przez właściciela.** Odnowienie paktu (`log.diplo.napRenewed`,
+`UIManager:1739`) i przekazanie daru (`log.diplo.giftSent`, `UIManager:1747`) wołają **wyłącznie**
+`this._log(…, 'diplomacy')`. Gracz, który nie ma w tej chwili otwartego Dziennika, nie dostaje
+**żadnego** sygnału, że kliknięcie zadziałało — a przy darze schodzą realne kredyty.
+
+⚠ **PIERWSZA WERSJA TEGO WPISU BYŁA BŁĘDNA i pomiar ją obalił.** Napisałem, że `ui:toast` jest w tym
+pliku używany „tylko przez ścieżki floty i handlu". Zmierzone (10 emisji w `UIManager`): **cztery
+z nich to DYPLOMACJA** — `diplomacy:aiEnvoy` (:1648), `diplomacy:peaceSigned` (:1674),
+`diplomacy:peaceRejected` (:1699), `diplomacy:envoyRefused` (:1704). To czyni finding **mocniejszym**,
+nie słabszym.
+
+**Rodzina jest ROZJECHANA NA PÓŁ, i to jest treść wpisu:**
+
+| zdarzenie | Dziennik | toast |
+|---|---|---|
+| `diplomacy:aiEnvoy` | tak | **tak** — komentarz w kodzie: „BUG6 — widoczny toast" |
+| `diplomacy:peaceSigned` | tak | **tak** |
+| `diplomacy:peaceRejected` | tak | **tak** |
+| `diplomacy:envoyRefused` | tak | **tak** |
+| `diplomacy:treatyRenewed` (DS-2/C1) | tak | **nie** |
+| `diplomacy:giftSent` (DS-3/C1) | tak | **nie** |
+| `diplomacy:treatyAccepted` (:1758) | tak | **nie** |
+| `diplomacy:treatyRejected` (:1759) | tak | **nie** (ma za to MODAL) |
+| `diplomacy:treatyExpired` → `napExpired` (:1734) | tak | **nie** |
+| `diplomacy:envoyArrived` (:1650) | tak | **nie** |
+
+⚠ **Precedens `BUG6` jest tu wiążący:** brak toastu w tej rodzinie został JUŻ RAZ uznany za defekt
+i naprawiony punktowo — na jednym zdarzeniu, komentarzem, bez reguly dla reszty. Dlatego to nie jest
+defekt DS-2/DS-3 (te dwa beaty zachowują się jak większość rodziny), ale też nie jest kosmetyka:
+**brakuje REGUŁY, które zdarzenie dyplomatyczne zasługuje na toast.**
+
+⚠ **Kandydat na regułę, NIEPODPISANY:** toast dostaje to, co jest **skutkiem kliknięcia gracza** (odnowienie,
+dar, przyjęty traktat) albo **zaskoczeniem z zewnątrz** (depesza AI, wygaśnięcie); nie dostaje tego, co
+i tak otwiera MODAL (`treatyRejected` → `DiplomacyRefusalModal`) — inaczej gracz czyta ten sam fakt
+dwa razy. ⚠ Rodzina **269/113 nie jest tu właściwym adresem** (tam chodzi o napisy poza `t()`); to
+pytanie o KANAŁ, nie o tłumaczenie. Osiągalności nie trzeba mierzyć — jest stuprocentowa.

@@ -497,6 +497,129 @@ push it under the floor); an old record **without** `expiresYear` → slot *"do 
 - **298 — status-quo peace launders conquest.** Owner decision still deferred; every variant touches
   `territorial_ceiling`, i.e. the core of D-WP-8.
 
+### DS-2 / DS-3 — delivered (2026-09-30)
+
+**The pact can be renewed, and money can reopen a conversation.** DS-1 gave the pact an end but no
+way to extend it — and since the pact is the only thing that stops the AI from declaring war on its
+own initiative (`declareWar:358` lets through only `player_action` while it stands), the player could
+do nothing but watch the term run out. DS-3 gave the `offer` term its **first consumer**: it had been
+computing correctly since E1, and `counterHintFor` had been naming the exact price of a refusal, for
+nobody. Save **v101, no migration**, no feature flag (rollback = `git revert`).
+
+| slice | commit | what changed in play |
+|---|---|---|
+| **DS-2/C1** | `02de4a5` | **The pact can be renewed inside a window.** `NAP_RENEW_WINDOW_YEARS = 3`, `getTreatyYearsLeft` / `canRenewTreaty` / `renewTreaty` on the facade, `RelationsModel.renewTreaty` in the model, `renewable: true` on exactly one verb, the beat `log.diplo.napRenewed`, and `diplomacy:treatyRenewed` in `DebugLog.TRACKED_EVENTS`. |
+| **DS-2/C2** | `8821f93` | **The PACT slot has three labels and one clickable path.** Until C2 a standing pact left a **dead** "propose" button in the slot, because `proposeTreaty` is blocked then by `not_already_signed`. |
+| **DS-3/C1** | `acc7547` | **A gift can be attached to a proposal** — `offer` passthrough on both facades, the waiver of a fresh refusal, `_payGift` (one bookkeeper, payment strictly after a YES and strictly before the mutation), the hint line and the working retry button in the refusal modal, `diplomacy:giftSent` + beat. **#306 closed.** |
+
+#### Decisions, in the operational phrasing they were signed in
+
+- **D-DS-4 (b)** — renewal happens **before** the pact lapses, inside a window. The window `= 3` is
+  **derived, not chosen**: a failed proposal stamps `recent_refusal` for `RECENT_REFUSAL_YEARS = 2`
+  displayed years, so a window of ≤ 2 would mean the **first** refusal eats the whole window and the
+  pact expires against the player's will. At 3 there is exactly one year left for a second attempt.
+  `signedYear` is **untouched** — the slot reads *"from N, until year M"*, so rewriting the signing
+  year would turn an extended pact into an apparently **new** one and erase the only visible trace of
+  continuity. Renewal goes **through the model**, not through `signTreaty`, so the number of treaty
+  producers stays **two** (pin `wp_peace_seams` T5f). A renewal counts **from the year of renewal** —
+  pacts do not stack.
+- **D-DS-5** — an AI dispatch about renewal: **not in 1.0.**
+- **D-DS-6** — **one PACT slot with several states, no fourth row.** `ACTIONS_H` holds three rows and
+  the content above the band is clipped to `contentBottom`; a fourth row would eat it from below. The
+  pattern was already in the file: the right slot of row 2 has switched its *meaning* since S3.5b
+  (trade agreement ⇄ auto-trade toggle) for exactly this reason.
+- **D-DS-7 (B)** — **a gift waives a fresh refusal, for one evaluation.** See the measurement below:
+  without the waiver a gift is structurally powerless, and the refusal modal opens *after* the stamp.
+- **D-DS-8** — **money moves only after `decision === true`, and strictly before the treaty mutates.**
+  All-or-nothing on the whole bill (`spendFromTreasury`, the treasury canon from finding 97). A
+  refused gift **costs nothing**; the journal beat fires only on acceptance.
+- **D-DS-9** — the effective criterion is **gift ≥ hint**, and the engine expresses it as *"the
+  proposal carries credits"*: a symbolic amount buys the waiver but still has to close the **base**
+  gap on its own (measured — 100 Kr against a gap of 10 is still a NO, pin T5a). The **+20 saturation
+  is a design limit**: `opinion` weighs 40, so an empire that genuinely hates us **is not for sale** —
+  a gift shifts a decision that is already close, it does not break one. A refused *sweetened* proposal
+  stamps `recent_refusal` **normally**, so the player gets **one paid attempt, not a free chain**.
+
+#### The measurement that changed the shape — a gift after a refusal was powerless, at any price
+
+The brief prescribed *refusal → modal with the hint → retry with a gift → acceptance*. A probe on the
+live engine says that sequence was **impossible in the current balance** (pact, threshold 10):
+
+| offer | score **before** the refusal | score **after** the `recent_refusal` stamp |
+|---|---|---|
+| 0 Kr | 0 | −25 |
+| 500 Kr | **10 → YES** | −15 |
+| 2 000 Kr | — | −6.25 |
+| 10 000 Kr | — | −5 |
+| **1 000 000 Kr** | — | **−5** |
+
+The reason is structural, not a fixture artefact: the penalty weighs **25** while `offer` **saturates
+at +20**, so 25 points of penalty cannot be covered by **any** amount. It holds for both paths
+(renewal *and* an ordinary proposal; `offer_peace` is 25/25, equally impossible). And the modal opens
+**after** the stamp, so the button would either have died silently on the cooldown gate or produced a
+second refusal — while the line *"another proposal only in 2 years"* sat right next to it. Hence B.
+
+The **scope** of the waiver is bounded by *who feeds* `offer`: today only the treaty refusal modal.
+The peace table submits no offer (reparations = WP-R) and an envoy is a **mission**, not a proposal, so
+"retry" would mean dispatching a second ship there. Pins T11a-T11c hold that separation.
+
+#### The channel repair nobody asked for, and why it could not be avoided
+
+`_hasCustomClick` had existed in `MissionEventModal` **from the start and had no writer**, so every
+button in that channel was purely dismissive — `DiplomacyRefusalModal` said so in its own header:
+*"should it ever need more than OK, the channel has to be fixed first."* It needed more. The channel
+now reads `onClick` from the button config and the builder reads `disabled`. The repair is **general**
+and **keeps the queueing and the pause**; the alternative (rewriting the modal onto
+`buildScheduledEventPopup` directly, the `PeaceOfferModal` pattern) would have taken the queue away
+from **three** refusal paths, two of which this slice does not measure. The smaller blast radius won,
+and `wp_ai_peace_offer` T7c (the loop that glues `dismiss` to buttons **without** the marker) stays
+green, because the loop stays.
+
+#### Measured
+
+Keepers: `wp_nap_renew` **54 → 88** · `wp_gift_offer` **63** (new) — and the whole diplomacy family
+green, including `acceptance_engine` **213** and `wp_ai_peace_offer` **92**. Fail-first, each in a real
+`git worktree --detach` with the final pins: C1 **5/49** · C2 **63/25** (base = C1) · DS-3 **19/44**
+(base = C1+C2). Sweep **245 → 246/246, 0 FAIL, 31 advisory** · `check-i18n` PASS, pl = en
+**3410 → 3417** (**7 new keys**: 3 in C2, 4 in DS-3).
+
+⚠ **Boundary of proof, named in the keeper header.** The headless DOM stub has `addEventListener` and
+`click()` as **no-ops**, so a click cannot be dispatched under node. The proof is split: the button's
+existence, label and `disabled` state — **by execution** (a real emit → `initDiplomacyRefusals` →
+`queueMissionEvent` → walking the DOM tree, in **child processes**, because a popup draws once per
+process: `_active` is private and `dismiss` unreachable); the builder's `disabled` contract — by
+execution; **the click-to-facade binding — from source**; what the facade does — by execution. The DOM
+stub was deliberately **not** upgraded: it is shared infrastructure for dozens of keepers, and "inert
+listeners" may be their silent assumption.
+
+**Live gate — PASS (test save, "Liga Trzech Słońc", `emp_001`, nature 0.3, contact).** §1 pact,
+10 years left, out of window, slot *"ODNÓW ZA 7 L."* greyed · §2 year 67.17, in window, *"ODNÓW PAKT"*
+active · §3 click from the panel → refusal (score **−8.55**, threshold **4**), slot *"ODMÓWILI, ZA
+2 L."*, cooldown 2, modal showing *Świeża odmowa* **and** *"750 Kr zamknęłoby lukę"* **and** the gift
+button · §4 *Ponów z darem 750* → accepted: `expiresYear` **70.17 → 77.17** (year + 10), `signedYear`
+**60.17 unchanged**, treasury **103 048 → 102 298**, `giftSent` ×1, `treatyRenewed` ×1, both journal
+entries · §5 at 62 Kr (hint 600) the button is **visible and greyed** plus *"Za mało kredytów w
+skarbcu"*, zero mutation · §6 skipped (both empires at nature 0.3; `personality_floor` is pinned in the
+keeper) · §7 save/load OK · console clean.
+
+⚠ Note the gate numbers differ from the headless fixture (threshold 4, hint 750/600 instead of 10/500):
+the live opinion and archetype move both the threshold and the gap. The **shape** is what the keeper
+pins; the **numbers** belong to the save.
+
+#### What remains after DS-2/DS-3
+
+- **WP-R — reparations as a debuff** (unchanged: `reparationsUntilYear` + a guard on the existing
+  `pressureResponse` action, `DirectorRuleData:109/:137`). This is where a gift stops being a one-off
+  and becomes a stream, so it inherits D-DS-8's ordering rule.
+- **298 — status-quo peace launders conquest.** Owner decision still deferred; every variant touches
+  `territorial_ceiling`, i.e. the core of D-WP-8.
+- **301 — the two new AI war gates are invisible to the audit.** DS-2/C1 closed only the neighbouring
+  half (it added `diplomacy:treatyRenewed` to `TRACKED_EVENTS`); `diplomacy:warRefused` and
+  `diplomacy:treatyExpired` are **still untracked**, and the NAP branch at `declareWar:358` emits
+  nothing at all. Verified by execution on this tree: `debugLog.query({kind:'diplomacy:warRefused'})`
+  returns **0**. A future gate asking *"why doesn't the AI declare war"* will read silence.
+- **307 — treaty beats have a journal entry but no toast** (new, from this gate; UI polish).
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5
