@@ -3549,6 +3549,9 @@ export default {
   'diplo.btn.declareWarTruce': '⚔ TRUCE — {0} Y',
   'diplo.btn.declareWar':   '⚔ DECLARE WAR',
   'diplo.btn.offerPeace':   '☮ OFFER PEACE',
+  'diplo.btn.pactRenew':         '🛡 RENEW PACT',
+  'diplo.btn.pactRenewIn':       '🛡 PACT — RENEW IN {0} Y.',
+  'diplo.btn.pactRenewCooldown': '🛡 PACT — DECLINED, {0} Y',
 
   // === IntelOverlay ===
   'intel.levelUnknown':     'UNKNOWN',

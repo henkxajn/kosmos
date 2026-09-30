@@ -26,6 +26,21 @@
 //   koloru, także te, które miały być zielonymi kontrolami. To ta sama lekcja co „pin musi
 //   DEGRADOWAĆ, nie PRZERYWAĆ" (reguła warsztatu z close-outu DS-1), tylko na poziomie METODY.
 //
+// ⚠ C2 DOKŁADA WARSTWĘ PANELU (T10) — DO TEGO SAMEGO PLIKU, nie do nowego: cała mechanika
+//   odnowienia mieszka tutaj, a slot jest jej jedyną powierzchnią. `DiplomacyOverlay` IMPORTUJE
+//   się pod node, więc panel pinujemy WYKONANIEM (prawdziwy `_drawRight` + prawdziwy
+//   `handleClick` na atrapie `ctx`) — wzór `wp_treaty_slot` T1/T4. Pin źródłowy powiedziałby
+//   tylko, że kod zawiera napis; tu mierzymy, co gracz WIDZI i co robi jego klik.
+//
+// ⚠ SLOT MA TRZY ETYKIETY, NIE DWIE. Stan „poza oknem” i stan „odmówili” to RÓŻNE FAKTY
+//   (pierwszy: pakt ma jeszcze czas; drugi: pakt JEST w oknie, ale świeża odmowa blokuje),
+//   więc jedno brzmienie dla obu kłamałoby w jednym z przypadków. T10d/T10e pinują rozdział.
+//
+// ⚠ TRZY NOWE KLUCZE i18n PINUJE TEN keeper (T10h/T10i), NIE `wp_treaty_slot` T6a. Tamten pin
+//   należy do DS-1/C3 i mówi „pięć nowych kluczy” o SWOIM slice'ie; doklejenie tam kluczy C2
+//   dałoby DRUGIEGO właściciela tej samej listy — dokładnie pułapka, którą close-out DS-1 opisał
+//   przy liczniku eksportów pliku balansu.
+//
 // Uruchom: node src/testing/smoke/wp_nap_renew_smoke.mjs
 
 import '../headless/env.js';           // MUSI być pierwszy (window/localStorage/THREE)
@@ -37,6 +52,9 @@ import gameState from '../../core/GameState.js';
 import { GAME_CONFIG } from '../../config/GameConfig.js';
 import { DiplomacySystem } from '../../systems/DiplomacySystem.js';
 import { TREATY_TYPES } from '../../data/TreatyData.js';
+// ⚠ Panel istnieje na obu drzewach (C1 go nie tworzy), więc import NAZWANY jest bezpieczny —
+//   inaczej niż przy `NAP_RENEW_WINDOW_YEARS` niżej, który rodzi się w tym slice'ie.
+import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
 import { VERB_ACCEPTANCE, RECENT_REFUSAL_YEARS } from '../../data/AcceptanceWeightData.js';
 
 // ⚠ NAMESPACE, NIE NAZWANY IMPORT: `NAP_RENEW_WINDOW_YEARS` rodzi się w DS-2/C1, a fail-first
@@ -76,6 +94,10 @@ function world(year) {
     empireRegistry: { get: (id) => empires.get(id), listAll: () => [...empires.values()] },
     galaxyData: { seed: 4242, systems: [] },
     warSystem: { getWarWith: () => null, getCaptures: () => [] },
+    // ⚠ Bez intelu panel nie wystawia ŻADNEGO przycisku (`isContact` bramkuje całe pasmo akcji),
+    //   więc piny T10 przechodziłyby jałowo. Dla T1-T9 (silnik) ten stub jest BEZCZYNNY:
+    //   `DiplomacySystem` czyta intel WYŁĄCZNIE w `listVisiblePlayerRelations`, której nie wołamy.
+    intelSystem: { getLevel: () => 'contact' },
   };
   const dipl = new DiplomacySystem();
   window.KOSMOS.diplomacySystem = dipl;
@@ -382,6 +404,198 @@ console.log('\nT9 — piny źródłowe: liczba producentów i jedno źródło ra
     + '`wp_treaty_slot` T2f („formuła w warstwie dokładnie raz") zostaje prawdziwa');
   assert(/TREATY_WITH_TERM/.test(body),
     'T9d: bramka `TREATY_WITH_TERM` jest W CIELE metody modelu, nie u wołającego');
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\nT10 — PANEL: slot paktu ma trzy etykiety i jedną klikalną ścieżkę (C2)');
+{
+  // Atrapa `ctx` + prawdziwy `_drawRight` — wzór `wp_treaty_slot`. NIE wołamy `draw()`, bo
+  // `_drawLeft` sięga po `intelSys.isAtLeast`, którego ten stub nie ma (i nie musi).
+  const ctxStub = new Proxy({}, {
+    get: (_t, k) => {
+      if (k === 'measureText') return () => ({ width: 10 });
+      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
+      if (typeof k === 'string' && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) return () => {};
+      return undefined;
+    },
+    set: () => true,
+  });
+  const render = (ov, id) => {
+    const texts = [];
+    ov._selectedId = id;
+    ov._hitZones = [];
+    ov.visible = true;                    // `handleClick` wraca `false`, gdy overlay niewidoczny
+    const ctx = new Proxy(ctxStub, {
+      get: (target, k) => (k === 'fillText' || k === 'strokeText') ? ((s) => texts.push(String(s))) : Reflect.get(target, k),
+      set: () => true,
+    });
+    let threw = null;
+    try { ov._drawRight(ctx, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
+    return { texts, zones: ov._hitZones.map(z => z.type), hits: ov._hitZones, threw };
+  };
+  // Przycisk paktu poznajemy po glifie 🛡 — chip statusu i pozostałe przyciski mają inne glify
+  // (lekcja `wp_treaty_slot` T4: szukanie po SŁOWIE trafiało w chip, nie w przycisk).
+  const pactBtn = (r) => r.texts.find(s => s.includes('🛡')) ?? null;
+
+  // ── stan 1: BRAK paktu (KONTROLA — zachowanie sprzed C2) ──
+  {
+    const dipl = world(600);
+    addEmpire('p_none');
+    // ⚠ Rekord relacji MUSI istnieć: `_drawRight` wychodzi wcześniej, gdy `listPlayerRelations`
+    //   nie zna pary (`listPairsWith` enumeruje rekordy store'u, a `addEmpire` żadnego nie tworzy).
+    //   Pozostałe bloki dostają rekord za darmo od `signTreaty` — ten go NIE ma.
+    dipl.relations.setStatus('player', 'p_none', 'peace', {}, 'fixture_no_pact');
+    assert(dipl.listPlayerRelations().some(r => r.empireId === 'p_none'),
+      'T10a0 (KONTROLA PINU): fixture stworzył rekord relacji — panel ma co rysować');
+    const r = render(new DiplomacyOverlay(), 'p_none');
+    assert(r.threw === null, 'T10a (KONTROLA PINU): `_drawRight` przeszedł bez wyjątku' + (r.threw ? ' — ' + r.threw : ''));
+    assert(r.texts.length > 0 && r.zones.length > 0,
+      'T10a2 (KONTROLA PINU): panel REALNIE narysował (' + r.texts.length + ' napisów, '
+      + r.zones.length + ' stref) — inaczej brak etykiety myliłby się z brakiem rysowania');
+    const b = pactBtn(r);
+    assert(!!b && /Pakt o nieagresji/.test(b) && !/ODNÓW/.test(b),
+      'T10b: bez paktu slot mówi „zaproponuj”, jak dotąd — ' + JSON.stringify(b));
+    assert(r.zones.includes('propose_pact') && !r.zones.includes('renew_pact'),
+      'T10b2: … i wystawia strefę `propose_pact`, a `renew_pact` NIE ISTNIEJE (' + r.zones.join(', ') + ')');
+  }
+
+  // ── stan 2: pakt W OKNIE, bez odmowy → AKTYWNE odnowienie ──
+  let geom = null;
+  {
+    const dipl = world(600);
+    addEmpire('p_win');
+    makeAgreeable(dipl, 'p_win');
+    dipl.signTreaty('p_win', { id: TREATY_TYPES.non_aggression.id });
+    travel(600 + NAP_YEARS - WIN);
+    assert(call(dipl, 'canRenewTreaty', 'p_win') === true,
+      'T10c (KONTROLA PINU): fixture NAPRAWDĘ jest w oknie — silnik puszcza odnowienie');
+    const r = render(new DiplomacyOverlay(), 'p_win');
+    const b = pactBtn(r);
+    assert(!!b && /ODNÓW PAKT/.test(b) && !/ZA \d/.test(b),
+      'T10c2: slot mówi „ODNÓW PAKT”, bez licznika — ' + JSON.stringify(b));
+    assert(r.zones.includes('renew_pact') && !r.zones.includes('propose_pact'),
+      'T10c3: strefa `renew_pact` JEST, a `propose_pact` znika — jeden slot, nie dwa ('
+      + r.zones.join(', ') + ')');
+    geom = r.hits.find(z => z.type === 'renew_pact') ?? null;
+    assert(!!geom && geom.w > 0 && geom.h > 0,
+      'T10c4: strefa ma realną geometrię — jest co klikać');
+  }
+
+  // ── stan 2': pakt POZA oknem → szary licznik „ile do otwarcia okna” ──
+  {
+    const dipl = world(600);
+    addEmpire('p_far');
+    dipl.signTreaty('p_far', { id: TREATY_TYPES.non_aggression.id });
+    const left = call(dipl, 'getTreatyYearsLeft', 'p_far');
+    assert(left === NAP_YEARS && call(dipl, 'canRenewTreaty', 'p_far') === false,
+      'T10d (KONTROLA PINU): świeży pakt ma ' + NAP_YEARS + ' lat i jest POZA oknem (jest: ' + left + ')');
+    const r = render(new DiplomacyOverlay(), 'p_far');
+    const b = pactBtn(r);
+    assert(!!b && new RegExp('ODNÓW ZA ' + (NAP_YEARS - WIN) + ' L').test(b),
+      'T10d2: slot mówi, ILE jeszcze do otwarcia okna (' + (NAP_YEARS - WIN) + ') — ' + JSON.stringify(b));
+    // ⚠ ŚWIADEK `ODNÓW ZA`: bez niego pin przechodzi JAŁOWO na drzewie bez C2 (etykieta brzmi tam
+    //   „Pakt o nieagresji”, więc „nie mówi odmówili” jest prawdą z niczego). Zmierzone fail-firstem.
+    assert(!!b && /ODNÓW ZA/.test(b) && !/ODMÓWILI/.test(b),
+      'T10d3: … i NIE mówi „odmówili” — to inny fakt, więc inna etykieta');
+    assert(!!b && /ODNÓW ZA/.test(b) && !r.zones.includes('renew_pact') && !r.zones.includes('propose_pact'),
+      'T10d4: kanon „widoczny+zablokowany” — napis JEST (świadek), strefy nie ma ('
+      + r.zones.join(', ') + ')');
+
+    // Klik W TO SAMO MIEJSCE, w którym stan 2 MIAŁ strefę: prawdziwy `handleClick`, zero skutku.
+    const before = JSON.stringify(dipl.relations.getTreaties('player', 'p_far'));
+    let clicked = null;
+    if (geom) {
+      const ov = new DiplomacyOverlay();
+      render(ov, 'p_far');
+      clicked = ov.handleClick(geom.x + geom.w / 2, geom.y + geom.h / 2);
+    }
+    assert(clicked === false && JSON.stringify(dipl.relations.getTreaties('player', 'p_far')) === before,
+      'T10d5: klik w SZARY przycisk (te same współrzędne, w których stan 2 ma strefę) nie robi NIC — '
+      + 'handleClick=' + clicked + ', rekord bit w bit');
+  }
+
+  // ── stan 2'': pakt w oknie, ale ŚWIEŻA ODMOWA ──
+  {
+    const dipl = world(600);
+    addEmpire('p_cd');
+    dipl.signTreaty('p_cd', { id: TREATY_TYPES.non_aggression.id });
+    travel(600 + NAP_YEARS - WIN);
+    assert(call(dipl, 'renewTreaty', 'p_cd') === false
+      && dipl.getRefusalYearsLeft('p_cd', 'non_aggression') === RECENT_REFUSAL_YEARS,
+      'T10e (KONTROLA PINU): odmowa ZASZŁA i stempel leży na ' + RECENT_REFUSAL_YEARS + ' lata');
+    const r = render(new DiplomacyOverlay(), 'p_cd');
+    const b = pactBtn(r);
+    assert(!!b && /ODMÓWILI/.test(b) && new RegExp(String(RECENT_REFUSAL_YEARS) + ' L').test(b),
+      'T10e2: slot mówi „odmówili” i ile lat blokady — ' + JSON.stringify(b));
+    assert(!!b && /ODMÓWILI/.test(b) && !/ODNÓW ZA/.test(b),
+      'T10e3: … i NIE udaje „jeszcze za wcześnie” — pakt JEST w oknie, blokuje odmowa');
+    assert(!!b && /ODMÓWILI/.test(b) && !r.zones.includes('renew_pact'),
+      'T10e4: strefa zdjęta, a napis JEST (świadek) — (' + r.zones.join(', ') + ')');
+  }
+
+  // ── licznik CAŁKOWITY przy wejściu UŁAMKOWYM ──
+  {
+    const dipl = world(600);
+    addEmpire('p_frac');
+    dipl.signTreaty('p_frac', { id: TREATY_TYPES.non_aggression.id });
+    travel(600 + 2.5);                       // zostaje 7,5 roku ⇒ 7,5 − 3 = 4,5 → ceil 5
+    const left = call(dipl, 'getTreatyYearsLeft', 'p_frac');
+    assert(typeof left === 'number' && left % 1 !== 0,
+      'T10f (KONTROLA PINU): wejście jest UŁAMKOWE (' + left + ') — inaczej pin mierzyłby całość z niczego');
+    const b = pactBtn(render(new DiplomacyOverlay(), 'p_frac'));
+    assert(!!b && !/\d[.,]\d/.test(b) && /ZA 5 L/.test(b),
+      'T10f2: licznik zaokrąglony W GÓRĘ do całości (5), zero surowego floata — ' + JSON.stringify(b));
+  }
+
+  // ── klik w AKTYWNY przycisk NAPRAWDĘ odnawia (pełna ścieżka: _hitTest → _onHit → fasada) ──
+  {
+    const dipl = world(600);
+    addEmpire('p_click');
+    makeAgreeable(dipl, 'p_click');
+    dipl.signTreaty('p_click', { id: TREATY_TYPES.non_aggression.id });
+    const RENEW_AT = 600 + NAP_YEARS - WIN;
+    travel(RENEW_AT);
+    const before = dipl.relations.getTreaties('player', 'p_click')[0]?.expiresYear;
+    const ov = new DiplomacyOverlay();
+    const r = render(ov, 'p_click');
+    const z = r.hits.find(zz => zz.type === 'renew_pact');
+    const took = !!z && ov.handleClick(z.x + z.w / 2, z.y + z.h / 2);
+    const after = dipl.relations.getTreaties('player', 'p_click')[0] ?? {};
+    assert(took === true, 'T10g: klik TRAFIŁ w strefę (handleClick=' + took + ')');
+    assert(took === true && before === 600 + NAP_YEARS && after.expiresYear === RENEW_AT + NAP_YEARS,
+      'T10g2: klik ODNOWIŁ pakt przez fasadę — ' + before + ' → ' + after.expiresYear
+      + ' (rok odnowienia ' + RENEW_AT + ' + ' + NAP_YEARS + ')');
+    assert(took === true && after.signedYear === 600,
+      'T10g3: … i NIE ruszył roku podpisu (' + after.signedYear + ') — slot dalej pokazuje ciągłość');
+  }
+
+  // ── i18n + pin lustra ──
+  const KEYS = ['diplo.btn.pactRenew', 'diplo.btn.pactRenewIn', 'diplo.btn.pactRenewCooldown'];
+  for (const f of ['pl', 'en']) {
+    const dict = readRaw('i18n', f + '.js');
+    const miss = KEYS.filter(k => !new RegExp("'" + k.replace(/\./g, '\\.') + "':").test(dict));
+    assert(miss.length === 0, 'T10h[' + f + ']: wszystkie ' + KEYS.length + ' nowych kluczy w słowniku'
+      + (miss.length ? ' — brakuje: ' + miss.join(', ') : ''));
+    for (const k of ['diplo.btn.pactRenewIn', 'diplo.btn.pactRenewCooldown']) {
+      const line = (dict.match(new RegExp("'" + k.replace(/\./g, '\\.') + "':[^\n]*")) ?? [''])[0];
+      assert(/\{0\}/.test(line), 'T10i[' + f + '/' + k + ']: klucz niesie podstawienie {0} ('
+        + line.trim().slice(0, 70) + ')');
+    }
+    const plain = (dict.match(/'diplo\.btn\.pactRenew':[^\n]*/) ?? [''])[0];
+    assert(plain.length > 0 && !/\{0\}/.test(plain),
+      'T10i2[' + f + ']: aktywna etykieta NIE ma licznika — nie ma czego liczyć');
+  }
+  const uiSrc = readClean('ui', 'DiplomacyOverlay.js');
+  assert(/canRenewTreaty\s*\?\.\(|canRenewTreaty\(/.test(uiSrc),
+    'T10j: panel PYTA silnik (`canRenewTreaty`) — dostępność jest LUSTREM bramki, nie drugą kopią progów');
+  assert(/NAP_RENEW_WINDOW_YEARS/.test(uiSrc),
+    'T10j2: … a okno czyta z JEDNEGO źródła wartości (import stałej), nie z literału');
+  const rowStart = uiSrc.indexOf("const hasPact");
+  const row3 = rowStart < 0 ? '' : uiSrc.slice(rowStart, uiSrc.indexOf("'renew_pact'") + 200);
+  assert(row3.length > 0 && !/>\s*3\b/.test(row3),
+    'T10j3 (TRIPWIRE): w slocie NIE MA porównania z liczbą 3 — gdyby było, przesunięcie okna '
+    + 'w pliku balansu rozjechałoby panel z silnikiem');
 }
 
 console.log('\n=== WYNIK: ' + pass + ' PASS / ' + fail + ' FAIL (z ' + (pass + fail) + ') ===');

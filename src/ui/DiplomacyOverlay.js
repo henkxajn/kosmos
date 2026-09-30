@@ -10,6 +10,9 @@ import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canDoEnvoy, hasWeapons } from '../entities/Vessel.js';
 import { treatyExpiryYear } from '../systems/diplomacy/RelationsModel.js';
+// DS-2 / C2 — okno odnowienia paktu. Panel liczy z niego „ile jeszcze do otwarcia okna”,
+// czytając JEDNO źródło wartości (pin P14 trzyma poza UI katalog `Acceptance*`, nie ten plik).
+import { NAP_RENEW_WINDOW_YEARS } from '../data/OpinionModifierData.js';
 
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -554,6 +557,22 @@ export class DiplomacyOverlay extends BaseOverlay {
     const canPact  = canPropose('non_aggression');
     const canAlly  = canPropose('alliance');
 
+    // ── DS-2 / C2 — SLOT PAKTU MA DWA STANY (D-DS-6) ──────────────────────────
+    // Wzór: prawy slot 2. rzędu (umowa handlowa ⇄ toggle auto-handlu) — gdy traktat STOI,
+    // przycisk „zaproponuj” jest MARTWY (`not_already_signed`), więc slot zmienia sens.
+    // Bez 4. rzędu: `ACTIONS_H` ma trzy wiersze, a treść nad pasmem jest clipowana.
+    //
+    // ⚠ `canRenewPact` jest LUSTREM `canRenewTreaty`, nie drugą kopią progów. Panel dokłada
+    //   WYŁĄCZNIE `isContact` — ten sam term, którym komentarz wyżej bramkuje całe pasmo
+    //   („nieznanego imperium nie ma do czego zagadnąć”).
+    // ⚠ TRZY POWODY ⇒ TRZY ETYKIETY. „Poza oknem” i „odmówili” to RÓŻNE fakty: pierwszy mówi
+    //   „pakt ma jeszcze czas”, drugi „pakt JEST w oknie, ale oni właśnie odmówili”. Jedno
+    //   brzmienie dla obu kłamałoby w jednym z przypadków (precedens `btnPeaceCooldown` obok
+    //   `declareWarTruce`, WP-4/C4).
+    const hasPact      = dipl.hasTreaty(this._selectedId, 'non_aggression');
+    const canRenewPact = isContact && dipl.canRenewTreaty?.(this._selectedId, 'non_aggression') === true;
+    const pactLeft     = hasPact ? dipl.getTreatyYearsLeft?.(this._selectedId, 'non_aggression') : null;
+
     // Wiersz 1: wojna / pokój
     // ⚠ Przycisk MÓWI, dlaczego nie można — wzór ☮ z WP-4/C4 (`warOverlay.btnPeaceCooldown`).
     //   Licznik CAŁKOWITY: `t()` nie formatuje liczb, więc surowy float wylałby się na
@@ -584,9 +603,23 @@ export class DiplomacyOverlay extends BaseOverlay {
     }
     iy += btnH + 6;
 
-    // Wiersz 3: pakt o nieagresji / sojusz
-    this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.pact'), canPact, 'primary');
-    if (canPact) this._addHit(colL, iy, btnW2, btnH, 'propose_pact', { empireId: this._selectedId });
+    // Wiersz 3: pakt o nieagresji (propozycja LUB odnowienie) / sojusz
+    if (hasPact) {
+      // ⚠ Liczniki CAŁKOWITE, `Math.ceil` W MIEJSCU WYWOŁANIA: `t()` nie formatuje liczb, a oba
+      //   wejścia są floatami (rok gry) — findingi 302/303, wzór ⚔ z DS-1/C3 wyżej. `Math.max(1, …)`
+      //   jak przy rozejmie: gracz nigdy nie widzi „ZA 0 L.”.
+      const pactLbl = canRenewPact
+        ? t('diplo.btn.pactRenew')
+        : (pactLeft != null && pactLeft > NAP_RENEW_WINDOW_YEARS
+            ? t('diplo.btn.pactRenewIn', Math.max(1, Math.ceil(pactLeft - NAP_RENEW_WINDOW_YEARS)))
+            : t('diplo.btn.pactRenewCooldown',
+                Math.max(1, Math.ceil(dipl.getRefusalYearsLeft?.(this._selectedId, 'non_aggression') ?? 0))));
+      this._drawActionButton(ctx, colL, iy, btnW2, btnH, pactLbl, canRenewPact, 'primary');
+      if (canRenewPact) this._addHit(colL, iy, btnW2, btnH, 'renew_pact', { empireId: this._selectedId });
+    } else {
+      this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.pact'), canPact, 'primary');
+      if (canPact) this._addHit(colL, iy, btnW2, btnH, 'propose_pact', { empireId: this._selectedId });
+    }
     this._drawActionButton(ctx, colR, iy, btnW2, btnH, t('diplo.btn.alliance'), canAlly, 'primary');
     if (canAlly) this._addHit(colR, iy, btnW2, btnH, 'propose_alliance', { empireId: this._selectedId });
 
@@ -656,6 +689,12 @@ export class DiplomacyOverlay extends BaseOverlay {
       }
       case 'propose_pact':
         if (dipl) dipl.proposeTreaty(zone.data.empireId, 'non_aggression');
+        break;
+      case 'renew_pact':
+        // D-DS-4(b) — odnowienie idzie fasadą `renewTreaty`, NIE `proposeTreaty`: ta druga jest
+        // przy stojącym pakcie blokowana przez `not_already_signed` (tryb renew nie wycieka poza
+        // fasadę — pin `wp_nap_renew` T4b). Odmowę tłumaczy modal, jak przy każdej propozycji.
+        if (dipl) dipl.renewTreaty(zone.data.empireId, 'non_aggression');
         break;
       case 'propose_alliance':
         if (dipl) dipl.proposeTreaty(zone.data.empireId, 'alliance');
