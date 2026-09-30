@@ -32,6 +32,11 @@ const TRACKED_EVENTS = [
   //   nadal nie są śledzone, a to ONE są powodami odmowy wojny.
   'diplomacy:treatyRenewed',
   'diplomacy:giftSent',
+  // WP-R — reparacje BLOKUJĄ produkcję i mobilizację AI, więc audyt, który ich nie widzi,
+  // kłamie o tym, dlaczego imperium nie zbroi się po przegranej wojnie (reguła W3: nowy
+  // powód odmowy dołącza do TRACKED_EVENTS w TYM SAMYM commicie).
+  'diplomacy:reparationsImposed',
+  'diplomacy:reparationsExpired',
   'diplomacy:ultimatum',
   'diplomacy:warDeclared',
   'ai:fsmTransition',

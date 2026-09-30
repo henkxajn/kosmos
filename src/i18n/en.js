@@ -3514,6 +3514,7 @@ export default {
   'diplo.term.thirdParty':    'Web of alliances',
   'diplo.term.erraticNoise':  'Unpredictability',
   'diplo.term.territorialTerms': 'Territorial terms',
+  'diplo.term.reparations':   'Reparations',
   // Reasons for a HARD block (the proposal never reached evaluation).
   // D2/E4 — refusal modal ("why NOT"): first consumer of the acceptance breakdown.
   'diploRefusal.barTitle':       'DIPLOMATIC DISPATCH',

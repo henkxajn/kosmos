@@ -44,7 +44,7 @@ import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
-  TRUCE_TENSION_FLOOR, TRUCE_TENSION_CAP, NAP_RENEW_WINDOW_YEARS,
+  TRUCE_TENSION_FLOOR, TRUCE_TENSION_CAP, NAP_RENEW_WINDOW_YEARS, REPARATIONS_YEARS,
 } from '../data/OpinionModifierData.js';
 
 // Id gracza jako strony relacji (dosłowne, nie prefiks).
@@ -139,6 +139,7 @@ export class DiplomacySystem {
       this.reputation.tick(dy);
       this._tickTruces();
       this._tickTreatyExpiry();
+      this._tickReparations();
       // Kolejność decay → ultimatum → zaleganie zachowana ze stanu sprzed D1.
       this._tickTensionDecay(dy);
       this._tickUltimatumExpiry();
@@ -210,6 +211,26 @@ export class DiplomacySystem {
     const until = this.relations.getTruceUntilYear(PLAYER, empireId);
     if (until == null) return 0;
     return Math.max(0, until - this._year());
+  }
+
+  /**
+   * WP-R — ile lat WYŚWIETLANYCH zostało z blokady zbrojeń (0 = brak blokady). Lustro
+   * `getTruceYearsLeft`, ten sam zegar.
+   */
+  getReparationsYearsLeft(empireId) {
+    const until = this.relations.getReparationsUntilYear(PLAYER, empireId);
+    if (until == null) return 0;
+    return Math.max(0, until - this._year());
+  }
+
+  /**
+   * WP-R / D-WPR-1 — PYTANIE GUARDÓW: czy to imperium ma teraz zakaz zbrojeń.
+   *
+   * ⚠ To JEDYNE źródło odpowiedzi dla obu bramek (`queueWarships` i `mobilize_reserve`).
+   *   Dwie kopie „czy minął rok X" rozjechałyby produkcję z mobilizacją po cichu.
+   */
+  isUnderReparations(empireId) {
+    return this.getReparationsYearsLeft(empireId) > 0;
   }
 
   /**
@@ -678,6 +699,23 @@ export class DiplomacySystem {
 
     const until = this._year() + TRUCE_YEARS;
     this.relations.setStatus(PLAYER, empireId, 'truce', { truceUntilYear: until }, `peace_${reason}`);
+
+    // ⚠ WP-R / D-WPR-1(c) — REPARACJE: BLOKADA PRODUKCJI WOJENNEJ, nie kredyty. Warunek pokoju
+    //   obok cesji, więc wykonanie stoi TUTAJ: po `_executeCessions`, przed emitem (ta sama
+    //   kolejność i ten sam powód co wymuszony NAP niżej — wojna zamyka się na emicie).
+    // ⚠ `terms === null` NIE USTAWIA TIMERA i to jest D-WP-13: pokój status quo (w tym KAŻDA
+    //   akceptacja depeszy AI, która podaje dosłownie `terms: null`) zostaje bit w bit jak przed
+    //   WP-R. Blokada jest zawsze CZYNNYM żądaniem gracza, nigdy skutkiem ubocznym pokoju.
+    // ⚠ BEZ RE-WALIDACJI, świadomie: cesje sprawdza `planCessions`, bo dotyczą świata, który mógł
+    //   się zmienić między oceną a wykonaniem — reparacje to czysty timer na rekordzie pary,
+    //   a jedyny warunek (aktywna wojna) sprawdził wczesny `return` na wejściu metody.
+    if (Number(terms?.reparations?.years) > 0) {
+      const repUntil = this._year() + REPARATIONS_YEARS;
+      this.relations.setReparationsUntilYear(PLAYER, empireId, repUntil, `peace_${reason}`);
+      EventBus.emit('diplomacy:reparationsImposed', {
+        empireId, untilYear: repUntil, years: REPARATIONS_YEARS,
+      });
+    }
     this.relations.setTension(PLAYER, empireId, Math.min(this.getTension(empireId), TRUCE_TENSION_CAP), 'peace');
     // Koniec strzelaniny: at_war ustępuje miejsca śladowi po wojnie.
     this.removeOpinionModifier(empireId, PLAYER, 'at_war');
@@ -1127,6 +1165,22 @@ export class DiplomacySystem {
       EventBus.emit('diplomacy:relationChanged', {
         empireId, tension: this.getTension(empireId), status: 'peace', delta: 0, reason: 'truce_expired',
       });
+    }
+  }
+
+  /**
+   * WP-R — koniec blokady zbrojeń. Lustro `_tickTruces`: model ZNAJDUJE, fasada ROBI.
+   *
+   * ⚠ Czyścimy pole, zamiast zostawiać przeszły rok: `isUnderReparations` odpowiedziałby
+   *   poprawnie w obu wariantach, ale chip w panelu i audyt czytają ISTNIENIE terminu, a nie
+   *   jego porównanie z zegarem. Martwy rok w zapisie byłby dokładnie tym „lustrem stanu",
+   *   przed którym ostrzega reguła z arca 186/187.
+   */
+  _tickReparations() {
+    for (const { a, b } of this.relations.tickReparations(this._year())) {
+      const empireId = a === PLAYER ? b : a;
+      this.relations.setReparationsUntilYear(PLAYER, empireId, null, 'reparations_expired');
+      EventBus.emit('diplomacy:reparationsExpired', { empireId });
     }
   }
 

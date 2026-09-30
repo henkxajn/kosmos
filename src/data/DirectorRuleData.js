@@ -212,7 +212,8 @@ export const DIRECTOR_RULES = {
   mobilize_reserve: {
     id:       'mobilize_reserve',
     trigger:  { kind: 'poll', probe: 'storedWarshipsAtCapital', gte: 1 },
-    guard:    ['empireHasFreeCrew', 'empireOutgunnedByPlayer'],
+    // WP-R — reparacje blokują TAKŻE obsadzanie rezerwy (D-WPR-1: dwie bramki).
+    guard:    ['empireHasFreeCrew', 'empireOutgunnedByPlayer', 'empireNotUnderReparations'],
     roll:     { startPct: 40, stepPct: 30, capPct: 100, unit: 'displayedYear' },
     delay:    0,
     response: { action: 'mobilizeVessels', params: { count: 2 } },

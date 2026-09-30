@@ -209,6 +209,14 @@ export const NAP_YEARS = 10;
 //   ZMIERZONE w fazie A DS-2: score 0.00 → −25.00 po odmowie, `getRefusalYearsLeft` = 2.
 export const NAP_RENEW_WINDOW_YEARS = 3;
 
+// WP-R / D-WPR-2 — ILE LAT trwa BLOKADA ZBROJEŃ nałożona na AI przy stole pokoju.
+// ⚠ JEDEN ZEGAR z `NAP_YEARS` i `TRUCE_YEARS`, świadomie: pokój niesie naraz rozejm, wymuszony
+//   pakt i (opcjonalnie) reparacje, więc trzy różne terminy kazałyby graczowi pilnować trzech
+//   liczników dla jednego traktatu. Wygaśnięcie wszystkich trzech w tym samym roku jest CECHĄ.
+// ⚠ Termin mieszka TUTAJ, nie w katalogu wag — ta sama zasada, która wyłączyła `NAP_YEARS`
+//   z `TREATY_TYPES`: katalog mówi CZYM jest warunek, plik balansu JAK DŁUGO.
+export const REPARATIONS_YEARS = 10;
+
 // DS-1 / D-DS-2 — PODŁOGA napięcia w ROZEJMIE. Do DS-1 napięcie w rozejmie stało
 // ZAMROŻONE: `_tickTensionDecay` pomijał każdą parę spoza `'peace'`, więc wartość zapisana
 // capem przy pokoju (30) trwała całe `TRUCE_YEARS`.

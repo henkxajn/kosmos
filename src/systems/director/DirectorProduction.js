@@ -371,6 +371,21 @@ export class DirectorProduction {
     const cm = this._require('colonyManager');
     if ((cm._getShipyardLevel?.(capital) ?? 0) <= 0) return reject('no_shipyard');
 
+    // ⚠ WP-R / D-WPR-1 — REPARACJE. Bramka POLITYCZNA, więc stoi PO strukturalnych (nie ma
+    //   gdzie budować) i PRZED żetonem — kolejność sprawdzeń = kolejność diagnozy (patrz nota
+    //   wyżej). To jedna z DWÓCH bramek reparacji; druga siedzi na mobilizacji rezerwy, bo
+    //   zablokowanie samej produkcji zostawiłoby AI prawo uzbroić wszystko, co już zeszło ze
+    //   stoczni do rezerwy — a ta reguła odpala dokładnie wtedy, gdy gracz jest silniejszy.
+    // ⚠ ODCZYT OPCJONALNY, NIE `_require`, i to jest rozstrzygnięcie pomiarowe: cztery keepery
+    //   Directora (`director_ai_production`, `director_production_foundation`,
+    //   `w3_director_mounting`, `director_harness`) NIE wpinają `diplomacySystem`, a rzucenie
+    //   zamieniłoby „fixture bez warstwy dyplomacji" w „produkcja niemożliwa". Blokada musi być
+    //   POZYTYWNYM stwierdzeniem („reparacje trwają"), nigdy wnioskiem z nieobecności — dokładnie
+    //   dlatego `pressureResponse` kilka linii dalej też czyta dyplomację przez `?.`.
+    if (window.KOSMOS?.diplomacySystem?.isUnderReparations?.(empireId) === true) {
+      return reject('reparations');
+    }
+
     // R-3: żeton uprawnienia. Guard reguły już to sprawdził, ale akcja jest publiczna
     // (devtools, przyszłe reguły) — bramka musi obowiązywać także wtedy.
     if (!this.hasOrbitalStation(empireId)) return reject('no_orbital_station');

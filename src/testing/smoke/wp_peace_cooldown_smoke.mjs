@@ -202,6 +202,10 @@ console.log('T1 — KATALOG: waga 0 + okno 1 rok, diff ograniczony do dwóch klu
     war_status: 55, opinion: 20, personality: 25, tension: 10, memory: 15,
     reputation: 10, third_party: 10, offer: 25, relative_power: 30,
     erratic_noise: 15, territorial_terms: 35,
+    // WP-R/C1 — NOWA waga, podpisana (D-WPR-3). Kotwica uczy się jej JAWNIE: `drift` i tak
+    // był pusty (żadna stara waga się nie ruszyła), a padł licznik kluczy — czyli pin zrobił
+    // dokładnie to, po co istnieje: zauważył NOWY klucz w `offer_peace`.
+    reparations: 25,
   };
   const drift = Object.entries(expect).filter(([k, v]) => p.terms[k] !== v).map(([k]) => k);
   assert(drift.length === 0 && Object.keys(p.terms).length === Object.keys(expect).length + 1,

@@ -154,6 +154,27 @@ export const ACCEPTANCE_TERMS = {
           'przestaje przechodzić zwykła cesja dojrzałej kolonii — okno jest PUSTE. Dlatego granica ' +
           '„ile w ogóle" mieszka w PRECONDITIONS.territorial_ceiling, nie w tej wadze.',
   },
+  reparations: {
+    id: 'reparations', labelKey: 'diplo.term.reparations', status: TERM_STATUS.UNFED,
+    unit: '−1 = pełne REPARATIONS_YEARS blokady zbrojeń; 0 = brak warunku (term nigdy nie jest dodatni)',
+    note: 'WP-R / D-WPR-3. Blokada produkcji okrętów wojennych jako warunek pokoju — NIE kredyty ' +
+          '(fikcja „AI płaci" odrzucona w D-WP-1). raw ∝ `years / REPARATIONS_YEARS`, z tą samą ' +
+          'ULGĄ WYCZERPANIA co `territorial_terms` (TERRITORIAL_FATIGUE_RELIEF): imperium, które ' +
+          'wojna zmęczyła ponad cenę pokoju, ODCZUWA blokadę słabiej. ' +
+          '⚠ Term jest JEDNOSTRONNY — reparacji żąda wyłącznie gracz (D-WPR-5: depesza AI ' +
+          'akceptuje dosłownie `terms: null`, więc symetria to nowy kanał, nie parametr). ' +
+          '⚠ WAGA 25 JEST WYPROWADZONA, nie wybrana (ZMIERZONE, faza A): tło `offer_peace` ' +
+          'to 10,00 / 21,00 / 48,50 przy wyczerpaniu 30 / 50 / 100, a punkt przewrotu to ' +
+          '`u = (w−10)/(55+0,5w)` ⇒ waga 25 przewraca decyzję przy exh ≈ 52, czyli WYRAŹNIE ' +
+          'ponad `peaceCost` 30 („pokój możesz mieć od 30, reparacje kosztują drugie tyle ' +
+          'mielenia"), a przy exh 100 zostaje +32 zapasu, więc rozbite AI NIGDY nie zablokuje ' +
+          'zakończenia wojny o reparacje — to byłby najgorszy tryb awarii. Skala odniesienia: ' +
+          'jedna dojrzała kolonia AI (devValue 34) kosztuje −3,89 pkt, więc 25 ≈ sześć kolonii. ' +
+          '⚠ STATUS UNFED w C1: silnik liczy poprawnie, ale karmi go dopiero stół pokoju (C2). ' +
+          'NIE stroić wagi przed pojawieniem się przełącznika. ' +
+          '⚠ To NIE jest weto i nie ma nim być — ta sama arytmetyka, którą opisuje ' +
+          '`territorial_terms` wyżej: przy tle 48,50 żadna sensowna waga nie zeruje decyzji.',
+  },
 };
 
 export const ACCEPTANCE_TERM_IDS = Object.keys(ACCEPTANCE_TERMS);
@@ -301,6 +322,8 @@ export const VERB_ACCEPTANCE = {
       war_status: 55, opinion: 20, personality: 25, tension: +10, memory: 15,
       reputation: 10, third_party: 10, recent_refusal: 0, offer: 25, relative_power: 30,
       erratic_noise: 15, territorial_terms: 35,
+      // WP-R — patrz wyprowadzenie wagi w ACCEPTANCE_TERMS.reparations (przewrót ≈ exh 52).
+      reparations: 25,
     },
   },
 

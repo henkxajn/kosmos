@@ -3515,6 +3515,7 @@ export default {
   'diplo.term.thirdParty':    'Układ sojuszy',
   'diplo.term.erraticNoise':  'Nieobliczalność',
   'diplo.term.territorialTerms': 'Warunki terytorialne',
+  'diplo.term.reparations':   'Reparacje',
   // Powody TWARDEJ blokady (propozycja nie doszła nawet do oceny).
   // D2/E4 — modal odmowy („dlaczego NIE"): pierwszy konsument rozbicia akceptacji.
   'diploRefusal.barTitle':       'KOMUNIKAT DYPLOMATYCZNY',

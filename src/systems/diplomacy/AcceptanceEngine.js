@@ -38,6 +38,10 @@ import {
 // Czyste dane (plik bez importów) — statyczny import NIE psuje czystości modułu.
 // To jest miejsce, w którym `peaceCost` dostaje swojego PIERWSZEGO czytelnika w kodzie.
 import { CASUS_BELLI } from '../../data/CasusBelliData.js';
+// WP-R — czas blokady zbrojeń. ⚠ Plik balansu dyplomacji jest CZYSTYMI DANYMI (zero importów),
+// więc statyczny import nie psuje czystości modułu — ten sam argument, co przy `CASUS_BELLI`
+// wyżej. Termin mieszka tam, gdzie `NAP_YEARS` i `TRUCE_YEARS` (D-WPR-2), a nie w katalogu wag.
+import { REPARATIONS_YEARS } from '../../data/OpinionModifierData.js';
 // W1-3 — JEDNA formuła przewagi siły, wspólna z doktrynami (czysty util, nie system).
 import { relativePowerRaw } from '../../utils/ThreatMath.js';
 // WP-2 — JEDNA miara rozwoju ciała, wspólna ze strefami wpływów (wariant C planu).
@@ -253,6 +257,29 @@ export const TERM_EVALUATORS = {
       diminishingReturns(gain, TERRITORIAL_HALF)
       - diminishingReturns(demand * (1 - relief), TERRITORIAL_HALF),
     );
+  },
+
+  /**
+   * WP-R / D-WPR-3 — REPARACJE: ile boli oddanie prawa do zbrojeń.
+   *
+   * ⚠ ZAWSZE ≤ 0. Reparacji żąda wyłącznie gracz (D-WPR-5), więc term nie ma gałęzi „zysku" —
+   *   w odróżnieniu od `territorial_terms`, gdzie cesja może iść w OBIE strony.
+   * ⚠ ULGA WYCZERPANIA liczona TĄ SAMĄ formułą co `territorial_terms` wyżej, i to jest
+   *   podpisane (D-WPR-3: „modulowany wyczerpaniem jak territorial"). Osią jest
+   *   `exhaustionSelf` — wyczerpanie OCENIAJĄCEGO, nie minimum obu stron (to drugie jest osią
+   *   `war_status`). W grze obie rosną razem (`recordBattle` podnosi symetrycznie), więc tabela
+   *   decyzyjna z fazy A obowiązuje; asymetrię z WAR_BACKBONE ten term przeżyje.
+   * ⚠ CZYTA WYŁĄCZNIE `ctx.terms.reparations` i `ctx.war` — zero nowych odczytów świata, więc
+   *   biała lista `AcceptanceEngine._kosmos()` zostaje NIETKNIĘTA (pułapka, która ugryzła W1-3
+   *   i WP-2: klucz pominięty w tej liście nie rzuca, tylko cicho degraduje term do zera).
+   */
+  reparations: (ctx) => {
+    const years = Number(ctx.terms?.reparations?.years) || 0;
+    if (years <= 0) return 0;
+    const relief = clampUnit(
+      ((Number(ctx.war?.exhaustionSelf) || 0) - (Number(ctx.war?.peaceCost) || 0)) / 100,
+    ) * TERRITORIAL_FATIGUE_RELIEF;
+    return -clampUnit((years / REPARATIONS_YEARS) * (1 - relief));
   },
 };
 
@@ -553,7 +580,21 @@ export class AcceptanceEngine {
    */
   _buildTermsContext(K, fromId, toId, proposal, war) {
     const cessions = proposal?.terms?.cessions;
-    if (!Array.isArray(cessions) || cessions.length === 0) return null;
+    const hasCessions = Array.isArray(cessions) && cessions.length > 0;
+    // WP-R — REPARACJE SĄ OSOBNYM WARUNKIEM, więc snapshot musi powstać także BEZ cesji.
+    // ⚠ To był jedyny realny defekt znaleziony w fazie A: wczesny `return null` na braku cesji
+    //   czynił pokój „status quo + blokada zbrojeń" NIEWIDZIALNYM dla silnika (ZMIERZONE:
+    //   `terms: { reparations: { years: 10 } }` → `ctx.terms === null`), a to najbardziej
+    //   prawdopodobny ruch gracza.
+    // ⚠ Regresja zero: propozycja BEZ żadnych warunków nadal daje `null` (pin `wp_peace_seams`
+    //   T1c2), a `territorial_terms` przy `cessions: []` zwraca 0 (pin `wp_territorial_terms`).
+    //   Oba pre-warunki terytorialne wychodzą wtedy wczesnym `true`.
+    const repYears = Number(proposal?.terms?.reparations?.years) || 0;
+    if (!hasCessions && repYears <= 0) return null;
+    const reparations = repYears > 0 ? { years: repYears } : null;
+    // Bez cesji NIE liczymy puli oddawalnej — `heldValue` jest wejściem wyłącznie dla sufitu,
+    // a sufit przy pustej liście i tak wychodzi wczesnym `true`.
+    if (!hasCessions) return { cessions: [], heldValue: null, reparations };
 
     const colMgr = K?.colonyManager ?? null;
     const capitalBodyId = this._capitalBodyIdOf(K, toId);
@@ -580,7 +621,7 @@ export class AcceptanceEngine {
       return sum + TERRITORIAL_BASE_VALUE + colonyDevScore(col);
     }, 0);
 
-    return { cessions: rows, heldValue };
+    return { cessions: rows, heldValue, reparations };
   }
 
   /**

@@ -104,6 +104,18 @@ export class DirectorMobilization {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!empireId || !vMgr?.deployVessel) return;
 
+    // ⚠ WP-R / D-WPR-1 — DRUGA bramka reparacji. Guard reguły (`empireNotUnderReparations`) już
+    //   to sprawdził, ale akcja jest PUBLICZNA (devtools, przyszłe reguły) — ten sam argument
+    //   i ta sama konstrukcja, co żeton R-3 w `queueWarships`.
+    // ⚠ Blokujemy TUTAJ, a NIE w `VesselManager.deployVessel`: tamtędy chodzi gracz, a reparacje
+    //   nałożone na AI nie mają prawa dotknąć rozmieszczania jego własnej floty (D-WPR-1).
+    // ⚠ Odczyt opcjonalny (fail-open) z tego samego powodu co w produkcji: brak warstwy
+    //   dyplomacji w fixture'cie nie jest dowodem, że reparacje trwają.
+    if (window.KOSMOS?.diplomacySystem?.isUnderReparations?.(empireId) === true) {
+      EventBus.emit('director:mobilizeRejected', { empireId, reason: 'reparations' });
+      return;
+    }
+
     let started = 0;
     const refused = [];
     try {
@@ -154,6 +166,17 @@ export function registerMobilizationBehaviors(instance, { allowOverride = false 
 
   DirectorGuards.register('empireOutgunnedByPlayer',
     ({ empireId }) => instance.isOutgunnedByPlayer(empireId), { allowOverride });
+
+  // WP-R / D-WPR-1 — bramka reparacji na REGULE. Lustro sprawdzenia w akcji; guard oszczędza
+  // rzut i cooldown (`DirectorSystem._evaluate` stempluje `lastFiredYear` PRZED akcją), a akcja
+  // trzyma bramkę dla wywołań spoza katalogu.
+  // ⚠ Fail-OPEN przy braku dyplomacji — inaczej fixture bez tej warstwy blokowałby mobilizację.
+  //   Świadomie INACZEJ niż `empireNotAtWarWithPlayer`, który rzuca: tam brak odpowiedzi znaczy
+  //   „nie wiem, czy trwa wojna" i milczenie jest groźne; tutaj znaczy „nie ma kto nałożyć
+  //   reparacji", a to jest odpowiedź NEGATYWNA, nie brak odpowiedzi.
+  DirectorGuards.register('empireNotUnderReparations',
+    ({ empireId }) => window.KOSMOS?.diplomacySystem?.isUnderReparations?.(empireId) !== true,
+    { allowOverride });
 
   DirectorActions.register('mobilizeVessels',
     (ctx, params) => instance.mobilizeVessels(ctx, params), { allowOverride });

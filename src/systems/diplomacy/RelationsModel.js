@@ -107,6 +107,11 @@ export class RelationsModel {
       tension:            0,
       status:             'peace',
       truceUntilYear:     null,
+      // WP-R — rok, do którego imperium jest pod REPARACJAMI (blokada zbrojeń). `null` = brak.
+      // ⚠ Zasiewane TUTAJ, ale NIE w migracji: `null` da się bezpiecznie dopowiedzieć przy
+      //   odczycie (`?? null`), więc stare zapisy nie potrzebują bumpu wersji — dokładnie jak
+      //   `verbCooldowns` i jak `expiresYear` traktatu w DS-1. Zapis zostaje v101.
+      reparationsUntilYear: null,
       // Konsument w D3 (granice + incydenty naruszenia). Zasiewane tutaj i w migracji,
       // bo domyślnej wartości per strona nie da się bezpiecznie dopowiedzieć później.
       bordersOpen:        { a: true, b: true },
@@ -217,6 +222,38 @@ export class RelationsModel {
   }
 
   getTruceUntilYear(a, b) { return this.getOrNull(a, b)?.truceUntilYear ?? null; }
+
+  // ── Reparacje (WP-R) ──────────────────────────────────────────────────────
+  //
+  // ⚠ OSOBNE POLE, nie `verbCooldowns`. Kusi, bo kształt ten sam („rok, po którym coś wolno"),
+  //   ale tamta księga odpowiada na pytanie „kiedy znów wolno PROSIĆ", a ta na „do kiedy
+  //   imperium nie wolno SIĘ ZBROIĆ". Wspólne pole zlałoby dwa różne zegary w jeden klucz.
+
+  getReparationsUntilYear(a, b) { return this.getOrNull(a, b)?.reparationsUntilYear ?? null; }
+
+  /** `null` kasuje blokadę (wygaśnięcie). Nie rusza statusu ani traktatów. */
+  setReparationsUntilYear(a, b, year, reason = '') {
+    const rel = this.ensure(a, b);
+    this._write(this.key(a, b), { ...rel, reparationsUntilYear: year }, reason || 'reparations');
+    return year;
+  }
+
+  /**
+   * Pary, którym blokada zbrojeń właśnie minęła. Lustro `tickTruces`/`tickTreatyExpiry`:
+   * sam ZNAJDUJE, efekty (wyczyszczenie pola, beat) robi system.
+   *
+   * ⚠ OSOBNO od tamtych dwóch — z tego samego powodu, dla którego one są osobno: trzy zegary
+   *   pokoju wygasają w tym samym roku, ale każdy ma własny skutek i własny komunikat.
+   */
+  tickReparations(year) {
+    const out = [];
+    for (const rel of this.listPairs()) {
+      const until = rel.reparationsUntilYear;
+      if (until == null || year < until) continue;
+      out.push({ key: rel.key, a: rel.a, b: rel.b, untilYear: until });
+    }
+    return out;
+  }
 
   // ── Ultimatum (drabina eskalacji — port 1:1 ze starego hostility) ─────────
 
