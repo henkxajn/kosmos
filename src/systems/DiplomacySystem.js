@@ -31,7 +31,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import { hasWeapons, canDoScience, canDoEnvoy, isEnemyVessel } from '../entities/Vessel.js';
 import { TREATY_TYPES } from '../data/TreatyData.js';
 import { t } from '../i18n/i18n.js';
-import { RelationsModel } from './diplomacy/RelationsModel.js';
+import { RelationsModel, treatyExpiryYear } from './diplomacy/RelationsModel.js';
 import { ReputationLedger } from './diplomacy/ReputationLedger.js';
 import { AcceptanceEngine } from './diplomacy/AcceptanceEngine.js';
 import { visibleBreakdown, refusalWindowYears } from '../utils/AcceptanceMath.js';
@@ -44,7 +44,7 @@ import { planCessions, PLAYER_SIDE } from '../utils/CessionPlan.js';
 import { TENSION_THRESHOLDS, crossedUp } from '../utils/OpinionMath.js';
 import {
   OPINION_MODIFIERS, OPINION_HOSTILE_MAX, OPINION_FRIENDLY_MIN, TRUCE_YEARS, CB_MEMORY_WINDOW,
-  TRUCE_TENSION_FLOOR, TRUCE_TENSION_CAP,
+  TRUCE_TENSION_FLOOR, TRUCE_TENSION_CAP, NAP_RENEW_WINDOW_YEARS,
 } from '../data/OpinionModifierData.js';
 
 // Id gracza jako strony relacji (dosłowne, nie prefiks).
@@ -852,8 +852,65 @@ export class DiplomacySystem {
    * Ocena propozycji BEZ jej składania — dla UI (dostępność przycisku) i dla AI.
    * Zwraca pełny wynik silnika razem z rozbiciem; nic nie zmienia.
    */
-  evaluateTreaty(empireId, treatyId) {
-    return this._acceptance().evaluateProposal(PLAYER, empireId, { verb: treatyId });
+  /**
+   * @param {Object} [opts] — `{ renew: true }` prosi o ocenę W TRYBIE ODNOWIENIA.
+   *   ⚠ Domyślnie `false`, więc `proposeTreaty` (jedyny drugi wołający) jest przy stojącym
+   *   pakcie blokowany jak dotąd — tryb NIE przecieka poza fasadę `renewTreaty`.
+   */
+  evaluateTreaty(empireId, treatyId, opts = {}) {
+    return this._acceptance().evaluateProposal(PLAYER, empireId, {
+      verb: treatyId, renew: opts?.renew === true,
+    });
+  }
+
+  /** Ile lat WYŚWIETLANYCH zostało traktatowi terminowemu (null = nie ma terminu / nie ma traktatu). */
+  getTreatyYearsLeft(empireId, treatyId = TREATY_TYPES.non_aggression.id) {
+    const tr = this.relations.getTreaties(PLAYER, empireId).find(x => x?.id === treatyId);
+    const expires = tr ? treatyExpiryYear(tr) : null;
+    return expires == null ? null : Math.max(0, expires - this._year());
+  }
+
+  /**
+   * D-DS-4(b) — czy pakt WOLNO teraz odnowić. LUSTRO bramki w `renewTreaty`, nie druga
+   * decyzja: panel (C2) wyszarza przycisk tą samą funkcją, którą silnik odmawia.
+   * ⚠ To jest bramka DOSTĘPNOŚCI, nie ocena — „powiedzieliby nie” rozstrzyga dopiero D2.
+   */
+  canRenewTreaty(empireId, treatyId = TREATY_TYPES.non_aggression.id) {
+    const left = this.getTreatyYearsLeft(empireId, treatyId);
+    if (left == null) return false;                                   // nie ma paktu / nie ma terminu
+    if (left > NAP_RENEW_WINDOW_YEARS) return false;                  // jeszcze za wcześnie
+    return this.getRefusalYearsLeft(empireId, treatyId) <= 0;         // świeża odmowa blokuje
+  }
+
+  /**
+   * D-DS-4(b) — ODNOWIENIE paktu przez gracza.
+   *
+   * ⚠ NIE WOŁA `signTreaty`. Odnowienie idzie prosto do MODELU, więc liczba producentów
+   *   traktatu zostaje DWA (`proposeTreaty` + wymuszony NAP z pokoju) — pin
+   *   `wp_peace_seams` T5f pilnuje tej liczby i ma zostać zielony.
+   * ⚠ Odmowa kosztuje DOKŁADNIE tyle, co odmowa zwykłej propozycji traktatu: stempel
+   *   `recent_refusal` na tym samym kluczu czasownika. Jeden akt — jedna księga.
+   */
+  renewTreaty(empireId, treatyId = TREATY_TYPES.non_aggression.id) {
+    if (!this.canRenewTreaty(empireId, treatyId)) return false;
+    const result = this.evaluateTreaty(empireId, treatyId, { renew: true });
+    if (result.blocked) {
+      const reason = REJECT_REASON_BY_KEY[result.reasonKey] ?? 'blocked';
+      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason, result });
+      return false;
+    }
+    if (!result.decision) {
+      this.noteRefusal(empireId, treatyId);
+      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined', result });
+      return false;
+    }
+    const year = this._year();
+    if (!this.relations.renewTreaty(PLAYER, empireId, treatyId, year)) return false;
+    const tr = this.relations.getTreaties(PLAYER, empireId).find(x => x?.id === treatyId);
+    EventBus.emit('diplomacy:treatyRenewed', {
+      empireId, treatyId, year, expiresYear: tr?.expiresYear ?? null,
+    });
+    return true;
   }
 
   /**

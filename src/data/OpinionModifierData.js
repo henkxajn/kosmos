@@ -201,6 +201,14 @@ export const TRUCE_YEARS = 10;
 // wyłączyła `yearlyTrust` z katalogu).
 export const NAP_YEARS = 10;
 
+// DS-2 / D-DS-4(b) — OKNO ODNOWIENIA paktu: ile lat PRZED końcem gracz może go przedłużyć.
+// ⚠ 3 nie jest „jakąś małą liczbą” — jest WYPROWADZONE. Nieudana propozycja stempluje
+//   `recent_refusal` (waga 25 przy progu 10 dla paktu) na `RECENT_REFUSAL_YEARS` = 2 lata,
+//   więc okno krótsze lub równe 2 znaczyłoby, że PIERWSZA odmowa zjada CAŁE okno i pakt
+//   wygasa mimo woli gracza. Przy 3 zostaje dokładnie jeden rok na drugą próbę.
+//   ZMIERZONE w fazie A DS-2: score 0.00 → −25.00 po odmowie, `getRefusalYearsLeft` = 2.
+export const NAP_RENEW_WINDOW_YEARS = 3;
+
 // DS-1 / D-DS-2 — PODŁOGA napięcia w ROZEJMIE. Do DS-1 napięcie w rozejmie stało
 // ZAMROŻONE: `_tickTensionDecay` pomijał każdą parę spoza `'peace'`, więc wartość zapisana
 // capem przy pokoju (30) trwała całe `TRUCE_YEARS`.

@@ -1733,6 +1733,14 @@ export class UIManager {
       if (treatyId !== 'non_aggression') return;
       this._log(t('log.diplo.napExpired', _empName(empireId)), 'diplomacy');
     });
+    // DS-2/C1 — pakt odnowiony. ⚠ ROK CAŁKOWITY: `expiresYear` jest floatem (`gameTime`
+    // + NAP_YEARS), a `t()` NIE FORMATUJE LICZB — bez `Math.round` w Dzienniku wylądałoby
+    // „do roku 130.2583” (ta sama klasa co findingi 302/303; lekcja zastosowana przy narodzinach).
+    EventBus.on('diplomacy:treatyRenewed', ({ empireId, treatyId, expiresYear }) => {
+      if (treatyId !== 'non_aggression') return;
+      this._log(t('log.diplo.napRenewed', _empName(empireId), Math.round(Number(expiresYear) || 0)),
+        'diplomacy');
+    });
     EventBus.on('war:aiPeaceOffer', ({ empireId }) =>
       this._log(t('log.diplo.aiPeaceOffer', _empName(empireId)), 'diplomacy'));
     EventBus.on('war:aiPeaceOfferResolved', ({ empireId, choice }) => {

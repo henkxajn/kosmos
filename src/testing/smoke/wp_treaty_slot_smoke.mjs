@@ -224,8 +224,12 @@ console.log('\nT5 — para pokręteł rozejmu w JEDNYM pliku (przeniesienie CAP)
   assert(exports.includes('TRUCE_TENSION_CAP') && exports.includes('TRUCE_TENSION_FLOOR'),
     'T5d: cap i podłoga stoją obok siebie w pliku balansu');
   // ⚠ 12 po C2 + PRZENIESIONA stała = 13. C3 nie WYMYŚLA nowego pokrętła, tylko przenosi.
-  assert(exports.length === 13,
-    'T5e: plik balansu ma 13 eksportów (12 po C2 + przeniesiony `TRUCE_TENSION_CAP`) — jest: '
+  // ⚠ 14 od DS-2/C1: `NAP_RENEW_WINDOW_YEARS` (okno odnowienia paktu). Ten pin jest
+  //   JEDYNYM właścicielem licznika eksportów tego pliku — do DS-1/C3 ta sama liczba była
+  //   pinowana w TRZECH keeperach z trzech slice'ów i jedna przeniesiona stała paliła
+  //   wszystkie naraz (reguła warsztatu z close-outu DS-1).
+  assert(exports.length === 14,
+    'T5e: plik balansu ma 14 eksportów (13 po DS-1 + `NAP_RENEW_WINDOW_YEARS`) — jest: '
     + exports.length);
 }
 

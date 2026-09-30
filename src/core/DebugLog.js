@@ -25,6 +25,12 @@ const TRACKED_EVENTS = [
   'diplomacy:relationChanged',
   'diplomacy:opinionChanged',
   'diplomacy:treatyOffered',
+  // DS-2/C1 — ODNOWIENIE paktu jest zmianą stanu tej samej klasy co jego PODPISANIE,
+  // a pakt to jedyna rzecz bramkująca wojnę z inicjatywy AI (`declareWar:358`). Audyt,
+  // który widzi podpis i nie widzi przedłużenia, kłamie o tym, dlaczego AI milczy.
+  // ⚠ Finding 301 ZOSTAJE OTWARTY: `diplomacy:warRefused` i `diplomacy:treatyExpired`
+  //   nadal nie są śledzone, a to ONE są powodami odmowy wojny.
+  'diplomacy:treatyRenewed',
   'diplomacy:ultimatum',
   'diplomacy:warDeclared',
   'ai:fsmTransition',

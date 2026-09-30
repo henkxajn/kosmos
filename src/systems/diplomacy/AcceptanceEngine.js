@@ -253,7 +253,17 @@ export const TERM_EVALUATORS = {
 const PRECONDITION_CHECKS = {
   not_at_war:         (ctx) => ctx.status !== 'war',
   at_war:             (ctx) => ctx.status === 'war',
+  /**
+   * ⚠ DS-2/C1 — WYJĄTEK ODNOWIENIA, bramkowany DWOMA warunkami NARAZ:
+   *   `ctx.renew === true`        — wołający JAWNIE prosi o odnowienie (fasada
+   *                                 `DiplomacySystem.renewTreaty`, nigdy `proposeTreaty`),
+   *   `verbCfg.renewable === true`— i ten traktat W OGÓLE wolno odnawiać (dziś: pakt).
+   * Sama flaga w propozycji NIE wystarcza — inaczej `renew:true` przepuściłoby ponowne
+   * podpisanie sojuszu, które nie znaczy nic. Pre-warunek zostaje na liście czasownika,
+   * więc `acceptance_engine` :90 („czasowniki traktatowe deklarują tę bramkę”) jest cały.
+   */
   not_already_signed: (ctx, verbCfg) =>
+    (ctx.renew === true && verbCfg?.renewable === true) ||
     !verbCfg?.treatyId || !(ctx.treaties ?? []).some(t => t?.id === verbCfg.treatyId),
   /**
    * „Nasza natura na to nie pozwala" — podłoga osobowości (E2).
@@ -462,6 +472,10 @@ export class AcceptanceEngine {
       verbCooldowns: pairRel?.verbCooldowns ?? {},
 
       offer: proposal.offer ?? null,
+
+      // DS-2/C1 — intencja ODNOWIENIA, nie stan świata. Domyślnie `false`, więc każda
+      // ścieżka, która o nią nie prosi (w tym `proposeTreaty`), jest bramkowana jak dotąd.
+      renew: proposal.renew === true,
 
       // Ziarno szumu: para × czasownik × EPOKA × seed galaktyki. Epoka sprawia, że
       // „humor" imperium trzyma się przez ERRATIC_EPOCH_YEARS zamiast losować co klik.

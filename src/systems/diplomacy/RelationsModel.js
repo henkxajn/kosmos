@@ -269,6 +269,39 @@ export class RelationsModel {
     return true;
   }
 
+  /**
+   * DS-2 / D-DS-4(b) — ODNOWIENIE traktatu terminowego: przesuwa WYŁĄCZNIE `expiresYear`.
+   *
+   * ⚠ `signedYear` ZOSTAJE NIETKNIĘTY, i to jest decyzja, nie oszczędność. Slot panelu
+   *   pokazuje „od N, do roku M” — przepisanie roku podpisu zamieniłoby odnowiony pakt
+   *   w pozornie NOWY i skasowało jedyny widoczny dla gracza ślad ciągłości. Ceną jest to,
+   *   że równość `expiresYear === signedYear + NAP_YEARS` przestaje być niezmiennikiem
+   *   rekordu — piny `wp_peace_seams` T5c/T5h zostały na to zawężone w DS-2/C0 (T5j).
+   *
+   * ⚠ NOWY TERMIN LICZY `treatyExpiryYear`, TEN SAM, KTÓRY CZYTA TICKER I PANEL — na
+   *   wirtualnym rekordzie podpisanym W ROKU ODNOWIENIA. Drugi rachunek (`year + NAP_YEARS`
+   *   wprost) byłby trzecią kopią tej samej formuły i złamał kontrolę `wp_treaty_slot` T2f.
+   *
+   * ⚠ Odnowienie liczy się OD ROKU ODNOWIENIA, nie od dotychczasowego końca — przedłużenie
+   *   trzy lata przed czasem daje 10 lat od dziś, a nie 13. Pakty się NIE STACKUJĄ.
+   *
+   * @returns {boolean} false, gdy traktat nie ma terminu albo go nie ma — BEZ mutacji.
+   */
+  renewTreaty(a, b, treatyId, year = this._year()) {
+    // Bramka jest TUTAJ, nie u wołającego: kontrakt należy do modelu (lekcja `_findBodyNearPoint`).
+    if (treatyId !== TREATY_WITH_TERM) return false;
+    const rel = this.ensure(a, b);
+    const list = rel.treaties ?? [];
+    const idx = list.findIndex(tr => tr?.id === treatyId);
+    if (idx < 0) return false;
+    const expiresYear = treatyExpiryYear({ id: treatyId, signedYear: year });
+    if (expiresYear == null) return false;
+    // `map`, nie `push` — duplikat rekordu jest niemożliwy Z KONSTRUKCJI.
+    const treaties = list.map((tr, i) => (i === idx ? { ...tr, expiresYear } : tr));
+    this._write(this.key(a, b), { ...rel, treaties }, `treaty_renew_${treatyId}`);
+    return true;
+  }
+
   /** Usuwa traktat. @returns {boolean} czy coś usunięto. */
   removeTreaty(a, b, treatyId) {
     const rel = this.getOrNull(a, b);

@@ -239,6 +239,13 @@ export const VERB_ACCEPTANCE = {
   non_aggression: {
     id: 'non_aggression',
     treatyId: 'non_aggression',
+    // DS-2 / D-DS-4(b) — JEDYNY czasownik, który wolno ODNOWIĆ. Flaga jest tu, a nie
+    // w silniku, bo „czy ten traktat da się przedłużyć” to własność TRAKTATU.
+    // ⚠ Sama nie wystarcza: `not_already_signed` przepuszcza dopiero KONIUNKCJĘ tej flagi
+    //   i `proposal.renew === true`, więc zwykła propozycja przy stojącym pakcie nadal jest
+    //   blokowana. ⚠ Pre-warunek ZOSTAJE na liście — osobny czasownik `renew_*` złamałby
+    //   pin `acceptance_engine` :90 i zduplikowałby próg oraz wagi (dwa źródła jednej gałki).
+    renewable: true,
     threshold: 10,
     preconditions: ['not_at_war', 'not_already_signed', 'personality_floor'],
     personalityFloor: { axis: 'aggression', max: 0.4 },
