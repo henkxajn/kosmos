@@ -9,6 +9,10 @@ import { ARCHETYPES } from '../data/EmpireData.js';
 import { CASUS_BELLI } from '../data/CasusBelliData.js';
 import { clampScroll, scrollThumb, pruneZones } from './InfoPanelLayoutLogic.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
+// WP-R — długość blokady zbrojeń. Panel CZYTA stałą, nie wpisuje liczby: przełącznik jest
+// binarny (D-WPR-4), więc gracz dostaje dokładnie tyle lat, ile nałoży silnik. Precedens
+// importu pokrętła balansu do UI: `DiplomacyOverlay` i `NAP_RENEW_WINDOW_YEARS` (DS-2/C2).
+import { REPARATIONS_YEARS } from '../data/OpinionModifierData.js';
 
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -28,6 +32,9 @@ export class WarOverlay extends BaseOverlay {
 
     // Warunki na stole — TRANSIENTNE (nie idą do zapisu): zbiór `bodyId` zaznaczonych ciał.
     this._selected = new Set();
+    // WP-R — druga połowa warunków: blokada zbrojeń. Też TRANSIENTNA i też per WOJNA,
+    // więc kasowana dokładnie tam, gdzie zaznaczenie (zmiana wojny, „Wyczyść stół").
+    this._reparations = false;
     // Cache projekcji i oceny. `getPeaceTable`/`evaluatePeace` czytają świat, więc NIE MOGĄ
     // lecieć z `draw()` (60×/s). Klucz projekcji = wojna + rok gry; klucz oceny = wojna
     // + podpis zaznaczenia. Rok w kluczu łapie dryf świata (podbój w trakcie otwartego panelu).
@@ -48,6 +55,7 @@ export class WarOverlay extends BaseOverlay {
     if (opts?.warId && this._selectedId !== opts.warId) {
       this._selectedId = opts.warId;
       this._selected.clear();
+      this._reparations = false;
       this._tableKey = null;
       this._evalKey = null;
       this._scrollRight = 0;
@@ -488,8 +496,27 @@ export class WarOverlay extends BaseOverlay {
       iy += 14;
     }
 
+    // ── WP-R / D-WPR-4 — REPARACJE: JEDNA LINIA, nie trzecia kolumna ──────────────
+    // ⚠ POZA SUFITEM, świadomie: pasek „Żądanie / sufit" wyżej filtruje po
+    //   `countsToCeiling` na wierszach CIAŁ, a blokada zbrojeń nie jest ciałem. Sufit
+    //   D-WP-8 odpowiada na „ile terytorium w ogóle oddamy", a reparacje są osobnym
+    //   kanałem (D-WPR-4) — dlatego ta linia stoi POD paskiem, nie w nim.
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = this._reparations ? THEME.accent : THEME.textDim;
+    const repLabel = this._reparations
+      ? t('peaceTable.reparations', String(REPARATIONS_YEARS))
+      : t('peaceTable.reparationsOff');
+    ctx.fillText(repLabel, leftX, iy);
+    this._addHit(leftX, iy - 11, ctx.measureText(repLabel).width + 6, 15, 'reparations_toggle');
+    if (this._reparations) {
+      // Podpowiedź TYLKO gdy warunek stoi — przy „brak" zdanie o sufcie nie ma o czym mówić.
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('peaceTable.reparationsHint'), rightX, iy);
+    }
+    iy += 16;
+
     // Wyczyść stół + podpowiedź
-    if (this._selected.size > 0) {
+    if (this._selected.size > 0 || this._reparations) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.accent;
       const label = `✕ ${t('peaceTable.clear')}`;
@@ -556,7 +583,10 @@ export class WarOverlay extends BaseOverlay {
   /** Ocena aktualnego zestawu warunków — cache po (wojna, podpis zaznaczenia). */
   _ensureEval(war, empireId) {
     const sig = [...this._selected].sort().join(',');
-    const key = `${war?.id}|${sig}`;
+    // ⚠ WP-R — PRZEŁĄCZNIK W KLUCZU. Bez tego przestawienie reparacji nie unieważniałoby
+    //   cache'u, więc linia ważności warunków (`✗ powód`) pokazywałaby ocenę POPRZEDNIEGO
+    //   zestawu — a to jest jedyne miejsce, w którym gracz widzi, że AI odmówi.
+    const key = `${war?.id}|${sig}|${this._reparations ? 'R' : '-'}`;
     if (this._evalKey !== key) {
       const terms = this._buildTerms();
       this._eval = window.KOSMOS?.diplomacySystem?.evaluatePeace?.(empireId, terms) ?? null;
@@ -574,17 +604,27 @@ export class WarOverlay extends BaseOverlay {
    *   nie liczy się do żadnej strony, więc pomyłka wołającego byłaby cichą zmianą ceny pokoju).
    */
   _buildTerms() {
-    if (this._selected.size === 0 || !this._table) return null;
     const empireId = this._empireOfWar();
     if (!empireId) return null;
     const cessions = [];
-    for (const r of this._table.demand) {
-      if (this._selected.has(r.bodyId)) cessions.push({ bodyId: r.bodyId, fromEmpireId: empireId, toEmpireId: 'player' });
+    if (this._table && this._selected.size > 0) {
+      for (const r of this._table.demand) {
+        if (this._selected.has(r.bodyId)) cessions.push({ bodyId: r.bodyId, fromEmpireId: empireId, toEmpireId: 'player' });
+      }
+      for (const r of this._table.offer) {
+        if (this._selected.has(r.bodyId)) cessions.push({ bodyId: r.bodyId, fromEmpireId: 'player', toEmpireId: empireId });
+      }
     }
-    for (const r of this._table.offer) {
-      if (this._selected.has(r.bodyId)) cessions.push({ bodyId: r.bodyId, fromEmpireId: 'player', toEmpireId: empireId });
-    }
-    return cessions.length > 0 ? { cessions } : null;
+    // ⚠ WP-R — DWIE NIEZALEŻNE POŁOWY stołu, więc `null` dopiero gdy OBIE są puste.
+    //   Pokój „status quo + blokada zbrojeń" jest najprawdopodobniejszym ruchem gracza,
+    //   a stary warunek (`_selected.size === 0` ⇒ `null`) odciąłby go bez śladu.
+    // ⚠ PUSTY STÓŁ nadal daje `null` BIT W BIT — to dosłownie dzisiejsze wywołanie
+    //   `offerPeace` (regresja zero), a `_buildTermsContext` nie wykonuje wtedy ANI JEDNEGO
+    //   odczytu świata.
+    const terms = {};
+    if (cessions.length > 0) terms.cessions = cessions;
+    if (this._reparations) terms.reparations = { years: REPARATIONS_YEARS };
+    return Object.keys(terms).length > 0 ? terms : null;
   }
 
   /** Imperium wybranej wojny (druga strona pary — fasady są gracz-centryczne). */
@@ -628,6 +668,7 @@ export class WarOverlay extends BaseOverlay {
         // Zmiana wojny czyści stół: warunki dotyczą KONKRETNEJ pary, a nie panelu.
         if (this._selectedId !== zone.data.warId) {
           this._selected.clear();
+          this._reparations = false;
           this._tableKey = null;
           this._evalKey = null;
           this._scrollRight = 0;
@@ -644,7 +685,15 @@ export class WarOverlay extends BaseOverlay {
       }
       case 'peace_clear':
         this._selected.clear();
+        // WP-R — „Wyczyść stół" czyści CAŁY stół, a reparacje są jego drugą połową.
+        this._reparations = false;
         this._evalKey = null;
+        break;
+      case 'reparations_toggle':
+        // D-WPR-4 — przełącznik BINARNY: pełne `REPARATIONS_YEARS` albo nic. Gałka lat jest
+        // w silniku gotowa (raw ∝ lata), ale na 1.0 nie ma widżetu — wpis ⚪ „po 1.0".
+        this._reparations = !this._reparations;
+        this._evalKey = null;    // zmiana warunków = ponowna ocena (jak `peace_toggle`)
         break;
       case 'peace_bg':
         // Absorber tła stołu — świadomy no-op: zatrzymuje klik w panelu, żeby nie leciał

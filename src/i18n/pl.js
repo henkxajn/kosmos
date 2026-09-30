@@ -3489,6 +3489,7 @@ export default {
   'diplo.fadesIn':          '(zanika za {0} l. gry)',   // D2/E6 — jednostka: lata GRY (wyświetlane)
   'diplo.breakdownMore':    '  + {0} więcej…',
   'diplo.truceYearsLeft':   'ROZEJM — {0} lat',
+  'diplo.reparationsUntil': 'Reparacje do roku {0}',
   'diplo.mod.legacyRelations':   'Dotychczasowe stosunki',
   'diplo.mod.envoyGoodwill':     'Nasi emisariusze',
   'diplo.mod.theirEnvoy':        'Ich delegacja',
@@ -3623,6 +3624,9 @@ export default {
   'peaceTable.devValue':         'Wartość: {0}',
   'peaceTable.clear':            'Wyczyść stół',
   'peaceTable.hint':             'Kliknij ciało, aby dodać je do warunków',
+  'peaceTable.reparations':      '⚙ Reparacje: blokada zbrojeń na {0} lat',
+  'peaceTable.reparationsOff':   '⚙ Reparacje: brak',
+  'peaceTable.reparationsHint':  'Nie liczą się do sufitu — osobny warunek',
 
   // === Depesza pokojowa (WP-4 C3) — wyczerpane AI samo prosi o pokój ===
   'peaceOffer.barTitle':   'DEPESZA DYPLOMATYCZNA',
@@ -3638,6 +3642,8 @@ export default {
   'log.diplo.napExpired':           '☮ Pakt o nieagresji z {0} wygasł — możesz go odnowić',
   'log.diplo.napRenewed':           '🛡 Pakt o nieagresji z {0} odnowiony do roku {1}',
   'log.diplo.giftSent':            '💰 Przekazano {0} Kr — {1}',
+  'log.diplo.reparationsImposed':  '⚙ {0} — reparacje do roku {1}',
+  'log.diplo.reparationsExpired':  '⚙ Reparacje nałożone na {0} wygasły',
   'log.diplo.aiPeaceOffer':         '☮ {0} proponuje pokój',
   'log.diplo.aiPeaceOfferRejected': '⚔ Odrzucono propozycję pokoju od {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Propozycja pokoju od {0} wygasła',

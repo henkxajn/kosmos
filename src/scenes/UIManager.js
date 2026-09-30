@@ -1746,6 +1746,15 @@ export class UIManager {
     // czego meldować. Kwota jest CAŁKOWITA z konstrukcji (hint silnika chodzi krokiem Kr).
     EventBus.on('diplomacy:giftSent', ({ empireId, credits }) =>
       this._log(t('log.diplo.giftSent', Math.round(Number(credits) || 0), _empName(empireId)), 'diplomacy'));
+    // WP-R / D-WPR-6 — reparacje: nałożenie i wygaśnięcie. Kanał `diplomacy` (Dziennik),
+    // BEZ toastu — brak toastu w tej rodzinie jest znany i obejmie ją CAŁĄ naraz (#307),
+    // a dokładanie go tu jednemu zdarzeniu pogłębiłoby rozjazd, który #307 opisuje.
+    // ⚠ ROK CAŁKOWITY: `untilYear` jest floatem, a `t()` nie formatuje liczb (302/303).
+    EventBus.on('diplomacy:reparationsImposed', ({ empireId, untilYear }) =>
+      this._log(t('log.diplo.reparationsImposed', _empName(empireId),
+        Math.round(Number(untilYear) || 0)), 'diplomacy'));
+    EventBus.on('diplomacy:reparationsExpired', ({ empireId }) =>
+      this._log(t('log.diplo.reparationsExpired', _empName(empireId)), 'diplomacy'));
     EventBus.on('war:aiPeaceOffer', ({ empireId }) =>
       this._log(t('log.diplo.aiPeaceOffer', _empName(empireId)), 'diplomacy'));
     EventBus.on('war:aiPeaceOfferResolved', ({ empireId, choice }) => {

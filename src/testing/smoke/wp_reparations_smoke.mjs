@@ -40,6 +40,11 @@ import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { DirectorGuards } from '../../systems/director/DirectorRegistry.js';
 import DirectorProduction from '../../systems/director/DirectorProduction.js';
 import DirectorMobilization, { registerMobilizationBehaviors } from '../../systems/director/DirectorMobilization.js';
+// ⚠ OBA overlaye IMPORTUJĄ SIĘ pod node (zmierzone) — dlatego warstwa UI jest pinowana
+//   WYKONANIEM, a nie źródłowo: przepuszczamy prawdziwy `_drawPeaceTable` / `_drawRight`
+//   przez atrapę `ctx` i czytamy, co poszło do `fillText`.
+import { WarOverlay } from '../../ui/WarOverlay.js';
+import { DiplomacyOverlay } from '../../ui/DiplomacyOverlay.js';
 
 // ⚠ NAMESPACE + `?? null`: `REPARATIONS_YEARS` RODZI SIĘ w tym commicie, a fail-first biegnie na
 //   kotwicy — statyczny import nieistniejącego eksportu wywala plik na linkowaniu ESM i ŻADEN pin
@@ -60,6 +65,7 @@ const stripComments = (src) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 const readClean = (...p) => stripComments(norm(readFileSync(join(SRC, ...p), 'utf8')));
+const readRaw = (...p) => norm(readFileSync(join(SRC, ...p), 'utf8'));
 
 // ── Świat dyplomatyczny ─────────────────────────────────────────────────────
 const empires = new Map(); const colonies = new Map(); const wars = new Map();
@@ -416,6 +422,240 @@ console.log('\nT9 — piny źródłowe: biała lista, audyt, zasięg bramki');
   const exec = dipl.slice(dipl.indexOf('setReparationsUntilYear(PLAYER, empireId, repUntil'));
   assert(exec.length > 0 && dipl.indexOf('planCessions(terms?.cessions') < dipl.indexOf('setReparationsUntilYear(PLAYER, empireId, repUntil'),
     'T9e: timer stawiany PO re-walidacji cesji — pokój, który się nie wykona, nie zostawia blokady');
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\nT10 — STÓŁ POKOJU: przełącznik, terms, sufit nietknięty (C2)');
+{
+  // ⚠ Panel pinowany WYKONANIEM — `WarOverlay` importuje się pod node, więc przepuszczamy
+  //   PRAWDZIWY `_drawPeaceTable` przez atrapę `ctx` i czytamy, co poszło do `fillText`.
+  // ⚠ FIXTURE MUSI MIEĆ KOLONIE PO OBU STRONACH. `_drawPeaceTable` ma wczesny `return` przy
+  //   PUSTYM stole (`n === 0`), a wtedy przełącznik w ogóle się nie rysuje. ZMIERZONE: pusty
+  //   stół wymaga, żeby ŻADNA strona nie miała kolonii — `getPeaceTable` bierze WSZYSTKIE
+  //   ciała obu stron, ze stolicą i domem włącznie (te tylko oznacza 🔒). W realnej wojnie
+  //   jest więc nieosiągalny; w fixturze bez kolonii byłby CICHYM fałszywym negatywem.
+  const ctxStub = new Proxy({}, {
+    get: (_t, k) => {
+      if (k === 'measureText') return () => ({ width: 60 });
+      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
+      if (typeof k === 'string' && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) return () => {};
+      return undefined;
+    },
+    set: () => true,
+  });
+  const paint = (ov, fn) => {
+    const texts = [];
+    ov._hitZones = [];
+    ov.visible = true;
+    const ctx = new Proxy(ctxStub, {
+      get: (t2, k) => (k === 'fillText' || k === 'strokeText') ? ((s) => texts.push(String(s))) : Reflect.get(t2, k),
+      set: () => true,
+    });
+    let threw = null;
+    try { fn(ctx); } catch (e) { threw = e?.message ?? 'throw'; }
+    return { texts, zones: ov._hitZones.map(z => z.type), hits: ov._hitZones, threw };
+  };
+
+  const war = { id: 'w1', aggressor: 'player', defender: 'emp_001', active: true,
+    casusBelli: 'border_incident', exhaustion: { player: 100, emp_001: 100 }, captures: [],
+    startYear: 995, battles: [] };
+  const cols = new Map([
+    ['b_ai', { planetId: 'b_ai', name: 'Alfa', ownerEmpireId: 'emp_001',
+      civSystem: { population: 20 }, buildingSystem: { _active: new Map([[1, {}], [2, {}]]) } }],
+    ['b_pl', { planetId: 'b_pl', name: 'Dom', isHomePlanet: true,
+      civSystem: { population: 30 }, buildingSystem: { _active: new Map([[1, {}]]) } }],
+  ]);
+  const emp = { id: 'emp_001', name: 'Liga', archetype: 'militarist',
+    personality: { aggression: 0.3, trade: 0.5 }, traits: [], colonies: [] };
+  gameState.reset?.(); EventBus.clear?.();
+  window.KOSMOS = {
+    timeSystem: { gameTime: 1000 },
+    empireRegistry: { get: () => emp, listAll: () => [emp],
+      getColoniesByEmpire: (id) => [...cols.values()].filter(c => c.ownerEmpireId === id) },
+    galaxyData: { seed: 4242, systems: [] },
+    intelSystem: { getLevel: () => 'contact', isAtLeast: () => true },
+    colonyManager: { getColony: (id) => cols.get(id), getAllColonies: () => [...cols.values()],
+      getPlayerColonies: () => [...cols.values()].filter(c => !c.ownerEmpireId) },
+    warSystem: { getWarWith: () => war, getWar: (id) => (id === 'w1' ? war : null),
+      listActive: () => [war], getCaptures: () => [] },
+  };
+  const dipl = new DiplomacySystem();
+  window.KOSMOS.diplomacySystem = dipl;
+  dipl.relations.setStatus('player', 'emp_001', 'war', {}, 'fixture');
+
+  const ov = new WarOverlay();
+  ov.show({ warId: 'w1' });
+  const draw = () => paint(ov, (ctx) => ov._drawPeaceTable(ctx, 0, 200, 700, 18, war, 'emp_001'));
+  // ⚠ Klik DEGRADUJE: na drzewie bez C2 strefy `reparations_toggle` NIE MA, a
+  //   `_onHit(undefined)` rzuca i zabija CAŁY przebieg — wtedy żaden pin niżej nie
+  //   dostaje koloru. TRZECIE wystąpienie tej lekcji w tym slice'ie: po `getReparationsUntilYear`
+  //   (T6d) i po guardzie (T8). Wzorzec zawsze ten sam — NOWY symbol wołany WPROST.
+  const hit = (z) => { if (z) ov._onHit(z); return !!z; };
+  const gearOf = (r) => r.texts.find(s => s.includes('⚙')) ?? null;
+  const ceilOf = (r) => r.texts.find(s => /sufit/i.test(s)) ?? null;
+
+  const off = draw();
+  assert(off.threw === null && off.texts.length > 3,
+    'T10a (KONTROLA PINU): stół REALNIE się narysował (' + off.texts.length + ' napisów)'
+    + (off.threw ? ' — ' + off.threw : ''));
+  assert(off.zones.includes('peace_toggle'),
+    'T10b (KONTROLA PINU): fixture ma CIAŁA na stole (strefa `peace_toggle`) — inaczej '
+    + '`_drawPeaceTable` wychodzi wczesnym `return` i przełącznik nie ma się gdzie narysować');
+  assert(/brak/i.test(String(gearOf(off))),
+    'T10c: domyślnie przełącznik mówi „Reparacje: brak" — ' + JSON.stringify(gearOf(off)));
+  assert(off.zones.includes('reparations_toggle'),
+    'T10d: … i MA własną hit-zonę `reparations_toggle` (' + off.zones.join(', ') + ')');
+  assert(ov._buildTerms() === null,
+    'T10e: pusty stół ⇒ `terms === null` BIT W BIT — regresja zero dla dzisiejszego `offerPeace`');
+
+  const zone = off.hits.find(h => h.type === 'reparations_toggle');
+  hit(zone);
+  const on = draw();
+  assert(new RegExp(String(YEARS)).test(String(gearOf(on))) && !/brak/i.test(String(gearOf(on))),
+    'T10f: po kliknięciu etykieta niesie LICZBĘ LAT z silnika — ' + JSON.stringify(gearOf(on)));
+  assert(on.texts.some(s => /sufitu/i.test(s)),
+    'T10g: … i pojawia się podpowiedź „nie liczą się do sufitu" (tylko przy włączonym warunku)');
+  const terms = ov._buildTerms();
+  assert(terms?.reparations?.years === YEARS && terms.cessions === undefined,
+    'T10h: `_buildTerms()` niesie SAME reparacje, bez cesji — ' + JSON.stringify(terms));
+
+  // ⚠ SUFIT NIETKNIĘTY: reparacje są OSOBNYM kanałem (D-WPR-4), więc pasek „Żądanie / sufit"
+  //   musi być identyczny co do znaku przed i po przełączeniu.
+  // ⚠ ŚWIADEK `ov._reparations`: bez niego pin przechodzi JAŁOWO tam, gdzie klik nic nie zmienia
+  //   (dwa identyczne renderowania są wtedy identyczne z niczego). Zmierzone fail-firstem.
+  assert(ov._reparations === true && ceilOf(off) != null && ceilOf(off) === ceilOf(on),
+    'T10i: przy WŁĄCZONYCH reparacjach pasek sufitu jest IDENTYCZNY — ' + JSON.stringify(ceilOf(off))
+    + ' vs ' + JSON.stringify(ceilOf(on)));
+
+  // Reset: „Wyczyść stół" czyści OBIE połowy.
+  const clear = on.hits.find(h => h.type === 'peace_clear');
+  assert(!!clear,
+    'T10j: „Wyczyść stół" jest klikalne także przy SAMYCH reparacjach — '
+    + 'inaczej gracz nie miałby jak cofnąć warunku bez cesji');
+  hit(clear);
+  assert(ov._buildTerms() === null && ov._reparations === false,
+    'T10k: po „Wyczyść stół" znikają OBIE połowy (terms: ' + JSON.stringify(ov._buildTerms()) + ')');
+
+  // Reset przy zmianie wojny — lustro zaznaczenia.
+  hit(off.hits.find(h => h.type === 'reparations_toggle'));
+  const armed = ov._reparations === true;
+  hit({ type: 'select', data: { warId: 'w_other' } });
+  assert(armed && ov._reparations === false,
+    'T10l: zmiana wojny CZYŚCI przełącznik — warunki dotyczą KONKRETNEJ pary, nie panelu');
+
+  // Klucz oceny musi znać przełącznik — inaczej linia ważności pokazuje stary werdykt.
+  const evalSrc = readClean('ui', 'WarOverlay.js');
+  // ⚠ Anchor na DEFINICJI (z klamra), nie na '_ensureEval(war, empireId)' — ten wzorzec trafia
+  //   najpierw w WYWOłANIE kilkadziesiąt linii wyżej (zmierzone). Ta sama pomyłka co przy
+  //   '_payGift' w C1 — dlatego pin czytałby nie to ciało.
+  const keyAt = evalSrc.indexOf('_ensureEval(war, empireId) {');
+  const keyLine = keyAt < 0 ? '' : evalSrc.slice(keyAt, keyAt + 400);
+  assert(keyLine.length > 0 && /_reparations/.test(keyLine),
+    'T10m: przełącznik jest W KLUCZU cache oceny — bez tego linia ważności warunków '
+    + 'pokazywałaby werdykt POPRZEDNIEGO zestawu');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\nT11 — CHIP w panelu Dyplomacji: jest, gdy blokada trwa; znika, gdy minie');
+{
+  const dipl = world(1100, { exh: 100 });
+  const ctxStub = new Proxy({}, {
+    get: (_t, k) => {
+      if (k === 'measureText') return () => ({ width: 60 });
+      if (k === 'createLinearGradient') return () => ({ addColorStop: () => {} });
+      if (typeof k === 'string' && /^(save|restore|beginPath|closePath|fillRect|strokeRect|clearRect|moveTo|lineTo|arc|fill|stroke|rect|clip|translate|scale|setLineDash|roundRect|quadraticCurveTo|bezierCurveTo|ellipse)$/.test(k)) return () => {};
+      return undefined;
+    },
+    set: () => true,
+  });
+  const ov = new DiplomacyOverlay();
+  ov._selectedId = 'emp_001';
+  const paint = () => {
+    const texts = [];
+    ov._hitZones = [];
+    ov.visible = true;
+    const ctx = new Proxy(ctxStub, {
+      get: (t2, k) => (k === 'fillText' || k === 'strokeText') ? ((s) => texts.push(String(s))) : Reflect.get(t2, k),
+      set: () => true,
+    });
+    let threw = null;
+    try { ov._drawRight(ctx, 0, 0, 640, 720); } catch (e) { threw = e?.message ?? 'throw'; }
+    return { texts, threw };
+  };
+  const chipOf = (r) => r.texts.find(s => s.includes('⚙')) ?? null;
+
+  const before = paint();
+  assert(before.threw === null && before.texts.length > 0,
+    'T11a (KONTROLA PINU): panel Dyplomacji REALNIE się narysował (' + before.texts.length + ' napisów)'
+    + (before.threw ? ' — ' + before.threw : ''));
+  assert(chipOf(before) === null,
+    'T11b (KONTROLA PINU): bez blokady NIE MA wiersza ⚙ — inaczej pin niżej byłby jałowy');
+
+  dipl.offerPeace('emp_001', 'fixture', { terms: REP() });
+  const after = paint();
+  assert(chipOf(after) != null && new RegExp(String(1100 + YEARS)).test(String(chipOf(after))),
+    'T11c: po nałożeniu wiersz mówi ROK KOŃCA (' + (1100 + YEARS) + ') — ' + JSON.stringify(chipOf(after)));
+  assert(chipOf(after) != null && !/\d+\.\d/.test(String(chipOf(after))),
+    'T11d: rok jest CAŁKOWITY — `reparationsUntilYear` to float, a `t()` nie formatuje liczb '
+    + '(findingi 302/303) — ' + JSON.stringify(chipOf(after)));
+
+  // Wygaśnięcie: chip znika SAM, bo ticker czyści pole.
+  window.KOSMOS.timeSystem.gameTime = 1100 + YEARS + 0.1;
+  for (let i = 0; i < 13; i++) {
+    EventBus.emit('time:tick', { deltaYears: 1 / GAME_CONFIG.CIV_TIME_SCALE, civDeltaYears: 1 });
+  }
+  const expiredPaint = paint();
+  // ⚠ ŚWIADEK `chipOf(after)`: „znika" ma sens tylko wtedy, gdy wcześniej BYŁO co usunąć.
+  assert(chipOf(after) != null && call(dipl, 'isUnderReparations', 'emp_001') === false
+    && chipOf(expiredPaint) === null,
+    'T11e: po wygaśnięciu wiersz ZNIKA sam — panel nie ma własnego „czy jeszcze trwa", tylko '
+    + 'czyta pole, które ticker wyczyścił');
+
+  // Panel NIE sięga do modelu — pole jedzie PROJEKCJĄ (inwariant zmierzony: 0 wystąpień).
+  const panelSrc = readClean('ui', 'DiplomacyOverlay.js');
+  assert(!/\.relations\./.test(panelSrc) && /reparationsUntilYear/.test(panelSrc),
+    'T11f: panel czyta `reparationsUntilYear` z PROJEKCJI i ani razu nie dotyka `relations` — '
+    + 'kształt rekordu pary zostaje prywatny (audyt R9/R12)');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\nT12 — beaty i i18n');
+{
+  const ui = readClean('scenes', 'UIManager.js');
+  assert(/diplomacy:reparationsImposed/.test(ui) && /diplomacy:reparationsExpired/.test(ui),
+    'T12a (pin ŹRÓDŁOWY): `UIManager` subskrybuje OBA zdarzenia — beat ma realnego konsumenta');
+  assert(/log\.diplo\.reparationsImposed/.test(ui) && /log\.diplo\.reparationsExpired/.test(ui),
+    'T12b: … i pisze je WŁASNYMI kluczami');
+  const beat = ui.slice(ui.indexOf('diplomacy:reparationsImposed'),
+    ui.indexOf('diplomacy:reparationsImposed') + 420);
+  assert(/Math\.round/.test(beat),
+    'T12c: rok w beacie CAŁKOWITY (`untilYear` jest floatem — ta sama klasa co 302/303)');
+  assert(beat.length > 40 && !/ui:toast/.test(beat),
+    'T12d: BEZ toastu (blok ' + beat.length + ' zn.) — brak toastu w rodzinie traktatowej jest '
+    + 'znany i obejmie ją CAŁĄ naraz '
+    + '(#307); dokładanie go jednemu zdarzeniu pogłębiłoby rozjazd, który ten finding opisuje');
+
+  const KEYS = ['peaceTable.reparations', 'peaceTable.reparationsOff', 'peaceTable.reparationsHint',
+    'diplo.term.reparations', 'diplo.reparationsUntil',
+    'log.diplo.reparationsImposed', 'log.diplo.reparationsExpired'];
+  for (const f of ['pl', 'en']) {
+    const dict = readRaw('i18n', f + '.js');
+    const miss = KEYS.filter(k => !new RegExp("'" + k.replace(/\./g, '\\.') + "':").test(dict));
+    assert(miss.length === 0, 'T12e[' + f + ']: wszystkie ' + KEYS.length + ' kluczy w słowniku'
+      + (miss.length ? ' — brakuje: ' + miss.join(', ') : ''));
+    for (const k of ['peaceTable.reparations', 'diplo.reparationsUntil', 'log.diplo.reparationsExpired']) {
+      const line = (dict.match(new RegExp("'" + k.replace(/\./g, '\\.') + "':[^\n]*")) ?? [''])[0];
+      assert(/\{0\}/.test(line), 'T12f[' + f + '/' + k + ']: niesie podstawienie {0} ('
+        + line.trim().slice(0, 62) + ')');
+    }
+    const imposed = (dict.match(/'log\.diplo\.reparationsImposed':[^\n]*/) ?? [''])[0];
+    assert(/\{0\}/.test(imposed) && /\{1\}/.test(imposed),
+      'T12g[' + f + ']: beat nałożenia niesie OBA podstawienia — imperium {0} i rok {1}');
+    const off = (dict.match(/'peaceTable\.reparationsOff':[^\n]*/) ?? [''])[0];
+    assert(off.length > 0 && !/\{0\}/.test(off),
+      'T12h[' + f + ']: etykieta „brak" NIE ma licznika — nie ma czego liczyć');
+  }
 }
 
 console.log('\n=== WYNIK: ' + pass + ' PASS / ' + fail + ' FAIL (z ' + (pass + fail) + ') ===');

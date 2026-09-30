@@ -267,6 +267,10 @@ export class DiplomacySystem {
         tension:            rel.tension ?? 0,
         status:             rel.status ?? 'peace',
         truceYearsLeft:     this.getTruceYearsLeft(empireId),
+        // WP-R — rok końca blokady zbrojeń dla chipa w panelu. ⚠ Idzie PROJEKCJĄ, bo
+        // ŻADEN panel nie sięga do `relations` wprost (zmierzone: 0 wystąpień w obu
+        // overlayach) — kształt rekordu pary ma zostać prywatny (audyt R9/R12).
+        reparationsUntilYear: this.relations.getReparationsUntilYear(PLAYER, empireId),
         treaties:           rel.treaties ?? [],
         memory:             rel.memory ?? [],
         ultimatumStartYear: rel.ultimatumStartYear ?? null,

@@ -486,6 +486,18 @@ export class DiplomacyOverlay extends BaseOverlay {
       }
     }
 
+    // WP-R / D-WPR-6 — REPARACJE jako wiersz obok traktatów, wzorem slotu traktatu.
+    // ⚠ Rok CAŁKOWITY (`Math.round`): `reparationsUntilYear` jest floatem (`gameTime` +
+    //   `REPARATIONS_YEARS`), a `t()` NIE FORMATUJE LICZB — findingi 302/303.
+    // ⚠ Wiersz pojawia się TYLKO gdy blokada trwa i znika sam, bo ticker CZYŚCI pole
+    //   (`_tickReparations`), a nie zostawia przeszłego roku.
+    const repUntil = rel.reparationsUntilYear;
+    if (repUntil != null) {
+      ctx.fillStyle = '#D8A030';
+      ctx.fillText(`  ⚙ ${t('diplo.reparationsUntil', Math.round(repUntil))}`, x + pad + 4, iy);
+      iy += 14;
+    }
+
     // Separator
     iy += 4;
     ctx.strokeStyle = THEME.border;

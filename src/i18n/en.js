@@ -3488,6 +3488,7 @@ export default {
   'diplo.fadesIn':          '(fades in {0} game y)',   // D2/E6 — unit: GAME (displayed) years
   'diplo.breakdownMore':    '  + {0} more…',
   'diplo.truceYearsLeft':   'TRUCE — {0} y',
+  'diplo.reparationsUntil': 'Reparations until year {0}',
   'diplo.mod.legacyRelations':   'Standing relations',
   'diplo.mod.envoyGoodwill':     'Our envoys',
   'diplo.mod.theirEnvoy':        'Their delegation',
@@ -3622,6 +3623,9 @@ export default {
   'peaceTable.devValue':         'Value: {0}',
   'peaceTable.clear':            'Clear table',
   'peaceTable.hint':             'Click a body to add it to the terms',
+  'peaceTable.reparations':      '⚙ Reparations: arms ban for {0} years',
+  'peaceTable.reparationsOff':   '⚙ Reparations: none',
+  'peaceTable.reparationsHint':  'Not counted toward the ceiling — a separate term',
 
   // === Peace dispatch (WP-4 C3) — a war-worn AI asks for peace itself ===
   'peaceOffer.barTitle':   'DIPLOMATIC DISPATCH',
@@ -3637,6 +3641,8 @@ export default {
   'log.diplo.napExpired':           '☮ The non-aggression pact with {0} has expired — you can renew it',
   'log.diplo.napRenewed':           '🛡 Non-aggression pact with {0} renewed until year {1}',
   'log.diplo.giftSent':            '💰 Sent {0} Kr — {1}',
+  'log.diplo.reparationsImposed':  '⚙ {0} — reparations until year {1}',
+  'log.diplo.reparationsExpired':  '⚙ Reparations on {0} have expired',
   'log.diplo.aiPeaceOffer':         '☮ {0} proposes peace',
   'log.diplo.aiPeaceOfferRejected': '⚔ Rejected peace offer from {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Peace offer from {0} expired',
