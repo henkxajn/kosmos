@@ -427,7 +427,9 @@ function _setMultilineText(el, str) {
  * @param {string[]} [config.videoSrc]   — tablica src do proby (fallback chain)
  * @param {number}   [config.gameYear]   — rok gry (masthead)
  * @param {Array}    [config.options]    — [{ label, cost, effectDesc }] do wyswietlenia
- * @param {Array}    [config.buttons]    — [{ label, primary }]
+ * @param {Array}    [config.buttons]    — [{ label, primary, disabled?, onClick? }]
+ *   ⚠ `onClick` czyta i podpina KANAŁ (`MissionEventModal`), nie ten builder — tutaj jest
+ *   tylko udokumentowane, że pole istnieje. `disabled` obsługujemy NA MIEJSCU (niżej).
  * @param {Function} [config.onDismiss]  — callback po zamknieciu
  * @returns {{ overlay: HTMLElement, dismiss: Function, btnElements: HTMLElement[] }}
  */
@@ -660,8 +662,18 @@ export function buildScheduledEventPopup(config) {
       border: `1px solid ${btnCfg.primary ? _rgba(sev.borderColor, 0.6) : _rgba(sev.borderColor, 0.25)}`,
       color:  sev.accentColor,
     });
-    btn.addEventListener('mouseenter', () => { btn.style.background = sev.borderColor; });
-    btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+    // DS-3 — kanon „widoczny+zablokowany": przycisk, którego nie wolno kliknąć, ZOSTAJE na
+    // ekranie i mówi o sobie wyglądem. Powodu NIE pisze tu builder — niesie go treść karty
+    // (wołający zna ten powodód, builder nie). `disabled` blokuje też doklejenie `dismiss`
+    // w `MissionEventModal`, bo wyłączony przycisk nie emituje `click`.
+    if (btnCfg.disabled) {
+      btn.disabled = true;
+      btn.style.opacity = '0.45';
+      btn.style.cursor = 'not-allowed';
+    } else {
+      btn.addEventListener('mouseenter', () => { btn.style.background = sev.borderColor; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+    }
 
     wrap.appendChild(btn);
 

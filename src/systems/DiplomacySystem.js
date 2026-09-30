@@ -853,13 +853,16 @@ export class DiplomacySystem {
    * Zwraca pełny wynik silnika razem z rozbiciem; nic nie zmienia.
    */
   /**
-   * @param {Object} [opts] — `{ renew: true }` prosi o ocenę W TRYBIE ODNOWIENIA.
-   *   ⚠ Domyślnie `false`, więc `proposeTreaty` (jedyny drugi wołający) jest przy stojącym
-   *   pakcie blokowany jak dotąd — tryb NIE przecieka poza fasadę `renewTreaty`.
+   * @param {Object} [opts] — `{ renew: true }` prosi o ocenę W TRYBIE ODNOWIENIA;
+   *   `{ offer: { credits } }` dołącza DAR (DS-3).
+   *   ⚠ Domyślnie `renew: false`, więc `proposeTreaty` jest przy stojącym pakcie blokowany
+   *   jak dotąd — tryb NIE przecieka poza fasadę `renewTreaty`.
+   *   ⚠ `offer` idzie DALEJ BEZ ZMIAN: `buildContext` ma już pole (`proposal.offer ?? null`),
+   *   a term `offer` je czyta od E1 — brakowało WYŁĄCZNIE drogi z fasady (finding #306).
    */
   evaluateTreaty(empireId, treatyId, opts = {}) {
     return this._acceptance().evaluateProposal(PLAYER, empireId, {
-      verb: treatyId, renew: opts?.renew === true,
+      verb: treatyId, renew: opts?.renew === true, offer: opts?.offer ?? null,
     });
   }
 
@@ -875,10 +878,14 @@ export class DiplomacySystem {
    * decyzja: panel (C2) wyszarza przycisk tą samą funkcją, którą silnik odmawia.
    * ⚠ To jest bramka DOSTĘPNOŚCI, nie ocena — „powiedzieliby nie” rozstrzyga dopiero D2.
    */
-  canRenewTreaty(empireId, treatyId = TREATY_TYPES.non_aggression.id) {
+  canRenewTreaty(empireId, treatyId = TREATY_TYPES.non_aggression.id, opts = {}) {
     const left = this.getTreatyYearsLeft(empireId, treatyId);
     if (left == null) return false;                                   // nie ma paktu / nie ma terminu
     if (left > NAP_RENEW_WINDOW_YEARS) return false;                  // jeszcze za wcześnie
+    // DS-3 / D-DS-7(B): propozycja z DAREM przechodzi mimo świeżej odmowy — lustro wyjątku,
+    // który term `recent_refusal` robi w silniku. Okno i istnienie paktu obowiązują NADAL.
+    // ⚠ Panel (C2) woła BEZ `opts`, więc szary przycisk z licznikiem odmowy zostaje bez zmian.
+    if (Number(opts?.offer?.credits) > 0) return true;
     return this.getRefusalYearsLeft(empireId, treatyId) <= 0;         // świeża odmowa blokuje
   }
 
@@ -891,19 +898,20 @@ export class DiplomacySystem {
    * ⚠ Odmowa kosztuje DOKŁADNIE tyle, co odmowa zwykłej propozycji traktatu: stempel
    *   `recent_refusal` na tym samym kluczu czasownika. Jeden akt — jedna księga.
    */
-  renewTreaty(empireId, treatyId = TREATY_TYPES.non_aggression.id) {
-    if (!this.canRenewTreaty(empireId, treatyId)) return false;
-    const result = this.evaluateTreaty(empireId, treatyId, { renew: true });
+  renewTreaty(empireId, treatyId = TREATY_TYPES.non_aggression.id, opts = {}) {
+    if (!this.canRenewTreaty(empireId, treatyId, opts)) return false;
+    const result = this.evaluateTreaty(empireId, treatyId, { renew: true, offer: opts?.offer ?? null });
     if (result.blocked) {
       const reason = REJECT_REASON_BY_KEY[result.reasonKey] ?? 'blocked';
-      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason, result });
+      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason, result, renew: true });
       return false;
     }
     if (!result.decision) {
       this.noteRefusal(empireId, treatyId);
-      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined', result });
+      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined', result, renew: true });
       return false;
     }
+    if (!this._payGift(empireId, opts?.offer, treatyId, true)) return false;
     const year = this._year();
     if (!this.relations.renewTreaty(PLAYER, empireId, treatyId, year)) return false;
     const tr = this.relations.getTreaties(PLAYER, empireId).find(x => x?.id === treatyId);
@@ -929,11 +937,11 @@ export class DiplomacySystem {
    * dopasować do dawnej KONIUNKCJI dwóch bramek bez zgniecenia wszystkich pozostałych
    * termów do szumu.
    */
-  proposeTreaty(empireId, treatyId) {
+  proposeTreaty(empireId, treatyId, opts = {}) {
     const def = TREATY_TYPES[treatyId];
     if (!def) return false;
 
-    const result = this.evaluateTreaty(empireId, treatyId);
+    const result = this.evaluateTreaty(empireId, treatyId, { offer: opts?.offer ?? null });
 
     if (result.blocked) {
       // Mapowanie klucza pre-warunku na string powodu (kontrakt słuchaczy).
@@ -950,6 +958,7 @@ export class DiplomacySystem {
       return false;
     }
     if (result.decision) {
+      if (!this._payGift(empireId, opts?.offer, treatyId, false)) return false;
       this.signTreaty(empireId, { id: treatyId });
       EventBus.emit('diplomacy:treatyAccepted', { empireId, treatyId, result });
       return true;
@@ -958,6 +967,36 @@ export class DiplomacySystem {
     this.noteRefusal(empireId, treatyId);
     EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined', result });
     return false;
+  }
+
+  /**
+   * D-DS-8 — ZAPŁATA ZA DAR. Jedna ścieżka pieniędzy dla obu fasad (propozycja i odnowienie).
+   *
+   * ⚠ WOŁANE WYŁĄCZNIE PO `decision === true` i PRZED mutacją traktatu — w tej kolejności,
+   *   bo tylko ona daje symetrię all-or-nothing: nie ma traktatu bez zapłaty ANI zapłaty bez
+   *   traktatu. Odrzucony dar NIE KOSZTUJE (gracz nie płaci za „nie").
+   * ⚠ `spendFromTreasury` jest all-or-nothing NA CAŁYM RACHUNKU (kanon skarbca, Finding 97):
+   *   jeśli suma kolonii GRACZA nie pokrywa kwoty, nie schodzi ani grosz i deal przepada.
+   * ⚠ Nieopłacony dar odmawia Z POWODEM (syntetyczna blokada `notEnoughCredits`), a nie po
+   *   cichu: cisza czytałaby się jak „przycisk nie działa" (klasa 271, memory
+   *   `reasonless-failure-reads-as-unfixed`). Ścieżka jest przy modalu NIEOSIĄGALNA (gra stoi na
+   *   pauzie, a przycisk jest szary bez środków) — zostaje jako obrona w głąb.
+   *
+   * @returns {boolean} true = opłacono (albo nie było czego opłacać)
+   */
+  _payGift(empireId, offer, treatyId, renew) {
+    const credits = Number(offer?.credits) || 0;
+    if (credits <= 0) return true;
+    const trade = window.KOSMOS?.civilianTradeSystem;
+    if (trade?.spendFromTreasury?.(credits, 'diplomatic_gift') !== true) {
+      EventBus.emit('diplomacy:treatyRejected', {
+        empireId, treatyId, reason: 'insufficient_credits', renew,
+        result: { blocked: true, reasonKey: 'diplo.reject.notEnoughCredits', breakdown: [], score: 0, threshold: 0 },
+      });
+      return false;
+    }
+    EventBus.emit('diplomacy:giftSent', { empireId, treatyId, credits });
+    return true;
   }
 
   // ── Automatyczne handlery ─────────────────────────────────────────────────

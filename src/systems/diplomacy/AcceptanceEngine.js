@@ -172,6 +172,15 @@ export const TERM_EVALUATORS = {
    *   straciłaby informację „stempel jest, tylko nic nie waży".
    */
   recent_refusal: (ctx) => {
+    // ── DS-3 / D-DS-7(B) — DAR OTWIERA ROZMOWĘ PONOWNIE ────────────────────────────
+    // Propozycja niosąca kredyty NIE płaci za świeżą odmowę. Bez tego wyjątku dar jest
+    // STRUKTURALNIE bezsilny: kara `recent_refusal` ma wagę 25, a `offer` nasyca się na +20,
+    // więc ZMIERZONO, że po odmowie nawet MILION Kr daje score −5 przy progu 10 (sonda DS-3).
+    // ⚠ To NIE jest obejście anty-spamu: sam dar musi i tak domknąć lukę BAZOWĄ, a odmowa
+    //   osłodzonej propozycji stempluje normalnie — gracz dostaje JEDNĄ płatną próbę, nie łańcuch.
+    // ⚠ Zasięg jest zakresowany przez to, KTO karmi `offer`: dziś wyłącznie modal odmowy
+    //   traktatu. Stół pokoju oferty nie składa (reparacje = WP-R), więc `offer_peace` nietknięty.
+    if (Number(ctx.offer?.credits) > 0) return 0;
     const refusedYear = Number(ctx.verbCooldowns?.[ctx.verb]);
     if (!Number.isFinite(refusedYear)) return 0;
     const elapsed = (Number(ctx.year) || 0) - refusedYear;

@@ -1741,6 +1741,11 @@ export class UIManager {
       this._log(t('log.diplo.napRenewed', _empName(empireId), Math.round(Number(expiresYear) || 0)),
         'diplomacy');
     });
+    // DS-3 — dar przekazany. Meldunek TYLKO przy akceptacji (D-DS-8): `_payGift` emituje to
+    // zdarzenie dopiero po udanym pobraniu, a odrzucona propozycja nie kosztuje, więc nie ma
+    // czego meldować. Kwota jest CAŁKOWITA z konstrukcji (hint silnika chodzi krokiem Kr).
+    EventBus.on('diplomacy:giftSent', ({ empireId, credits }) =>
+      this._log(t('log.diplo.giftSent', Math.round(Number(credits) || 0), _empName(empireId)), 'diplomacy'));
     EventBus.on('war:aiPeaceOffer', ({ empireId }) =>
       this._log(t('log.diplo.aiPeaceOffer', _empName(empireId)), 'diplomacy'));
     EventBus.on('war:aiPeaceOfferResolved', ({ empireId, choice }) => {

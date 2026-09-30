@@ -3535,6 +3535,9 @@ export default {
   'diploRefusal.cooldownYears':  'weighs on the next attempt for another {0} y.',
   'diploRefusal.cooldownBlocks': 'a new proposal only in {0} y.',
   'diploRefusal.ok':             '[ENTER] UNDERSTOOD',
+  'diplo.gift.hint':               '{0} Kr would close the gap',
+  'diplo.btn.retryWithGift':       '💰 Retry with a {0} Kr gift',
+  'diplo.reject.notEnoughCredits': 'Not enough credits in the treasury',
 
   'diplo.reject.atWar':         'A war is under way',
   'diplo.reject.notAtWar':      'We are not at war',
@@ -3632,6 +3635,7 @@ export default {
   'peaceOffer.staleTitle': 'Offer no longer valid',
   'log.diplo.napExpired':           '☮ The non-aggression pact with {0} has expired — you can renew it',
   'log.diplo.napRenewed':           '🛡 Non-aggression pact with {0} renewed until year {1}',
+  'log.diplo.giftSent':            '💰 Sent {0} Kr — {1}',
   'log.diplo.aiPeaceOffer':         '☮ {0} proposes peace',
   'log.diplo.aiPeaceOfferRejected': '⚔ Rejected peace offer from {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Peace offer from {0} expired',

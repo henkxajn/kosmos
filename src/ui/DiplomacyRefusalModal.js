@@ -12,10 +12,12 @@
 //
 // Kanał: `queueMissionEvent` → `buildScheduledEventPopup` (jedyny popup z listą opcji;
 // backbone §3.3 wskazał go jako kanał odpowiedzi dyplomatycznych).
-// ⚠ Przyciski w tym kanale są WYŁĄCZNIE zamykające: `buildScheduledEventPopup` nie czyta
-// `onClick` z konfiguracji przycisku, a `MissionEventModal` podpina `dismiss()` każdemu,
-// który nie ma znacznika `_hasCustomClick` (a nic go nie ustawia). Modal odmowy niczego
-// nie potrzebuje ponad OK — gdyby kiedyś potrzebował, trzeba najpierw naprawić kanał.
+//
+// ⚠ DS-3 — KANAŁ ZOSTAŁ NAPRAWIONY, dokładnie tak, jak ten nagłówek zapowiadał. Do DS-3 przyciski
+// były WYŁĄCZNIE zamykające: `_hasCustomClick` istniało w `MissionEventModal`, ale NIE MIAŁO
+// PISARZA. Teraz kanał czyta `onClick` z konfiguracji przycisku (a builder `disabled`), więc
+// modal odmowy ma DZIAŁAJĄCE ponowienie z darem — bez utraty kolejkowania i pauzy, które ten
+// kanał daje pozostałym dwóm ścieżkom odmowy.
 
 import EventBus from '../core/EventBus.js';
 import { t, getName } from '../i18n/i18n.js';
@@ -63,9 +65,12 @@ const _fmt  = (v) => `${_sign(v)}${_mag(v)}`;
  *   żeby wołający, który flagi nie podaje, zachował dotychczasowy komunikat.
  * @param {Function} [opts.translate] — wstrzykiwane `t` (headless test bez i18n runtime)
  * @param {Array}  [opts.rows] — gotowe wiersze widoczne (fasada je filtruje); brak ⇒ liczone tu
+ * @param {number} [opts.giftCredits=0] — DS-3: ile kredytów domknęłoby lukę (`counterHint`)
+ * @param {boolean} [opts.giftAffordable=true] — czy skarbiec to pokrywa; `false` dokleja POWÓD
  */
 export function buildRefusalContent(result, {
   cooldownYearsLeft = 0, cooldownPenalised = true, translate = t, rows = null,
+  giftCredits = 0, giftAffordable = true,
 } = {}) {
   const tr = translate;
   let html = '';
@@ -100,13 +105,42 @@ export function buildRefusalContent(result, {
     const cdKey = cooldownPenalised ? 'diploRefusal.cooldownYears' : 'diploRefusal.cooldownBlocks';
     html += formatStatLine(tr('diploRefusal.cooldown'), tr(cdKey, _mag(cooldownYearsLeft)), 'at-stat-neu');
   }
+
+  // DS-3 — CENA, KTÓRĄ SILNIK SAM PODAJE. `counterHint` był produkowany od E1 i nie miał ANI
+  // JEDNEGO czytelnika (finding #306); to jest jego pierwszy. Kwoty NIE liczymy tutaj —
+  // przychodzi z `counterHintFor`, więc modal nie ma drugiej kopii rachunku.
+  // ⚠ Linia stoi POD cooldownem świadomie: gracz czyta „świeża odmowa blokuje przez 2 lata", a
+  //   zaraz pod tym „{0} Kr zamknęłoby lukę" — i to jest prawda DOKŁADNIE dlatego, że dar UCHYLA
+  //   świeżą odmowę (D-DS-7 B). Bez tego wyjątku te dwie linie kłóciłyby się ze sobą.
+  if (giftCredits > 0) {
+    html += formatStatLine(tr('diplo.term.offer'), tr('diplo.gift.hint', _mag(giftCredits)),
+      giftAffordable ? 'at-stat-pos' : 'at-stat-neu');
+    if (!giftAffordable) {
+      html += formatStatLine(tr('diploRefusal.reason'), tr('diplo.reject.notEnoughCredits'), 'at-stat-neg');
+    }
+  }
   return html;
 }
 
-/** Wspólne wystawienie popupu — jedna ścieżka dla wszystkich trzech odmów. */
-function _show({ empireId, verb, result, headlineKey, descKey, descArg }) {
+/**
+ * Wspólne wystawienie popupu — jedna ścieżka dla wszystkich trzech odmów.
+ *
+ * @param {Function} [retry] — DS-3: akcja ponowienia Z DAREM. Podają ją WYŁĄCZNIE ścieżki, które
+ *   umieją dar zanieść do silnika (dziś: traktaty). Stół pokoju i emisariusz go NIE MAJĄ — pokój
+ *   nie składa oferty (reparacje = WP-R), a emisariusz to MISJA, nie propozycja, więc
+ *   „ponowienie" znaczyłoby tam wysłanie drugiego statku.
+ */
+function _show({ empireId, verb, result, headlineKey, descKey, descArg, retry = null }) {
   const dipl = window.KOSMOS?.diplomacySystem;
   const name = _empName(empireId);
+  // Kwota z SILNIKA (`counterHint`), nie z modala. `null` przy blokadzie pre-warunku ORAZ wtedy,
+  // gdy żadna kwota nie domyka luki — `counterHintFor` sam to rozstrzyga (`neededRaw >= 1`), więc
+  // przycisk nie obiecuje czegoś, czego dar nie załatwi.
+  const giftCredits = retry ? Number(result?.counterHint?.addOffer?.credits) || 0 : 0;
+  // Skarbiec czytamy TYM SAMYM getterem, którym płaci `_payGift` → `spendFromTreasury` (kanon:
+  // liczba na ekranie nie może skłamać wobec tego, co realnie da się opłacić).
+  const affordable = giftCredits > 0
+    && (window.KOSMOS?.civilianTradeSystem?.getTreasuryCredits?.() ?? 0) >= giftCredits;
   queueMissionEvent({
     severity:    'warning',
     // ⚠ BEZ WIDEO, świadomie. Pusta tablica omija auto-dobór z `svgKey`
@@ -126,8 +160,21 @@ function _show({ empireId, verb, result, headlineKey, descKey, descArg }) {
       // WP-4 / C4: „czy ta odmowa w ogóle kosztuje punkty" jest własnością CZASOWNIKA i zna
       // ją katalog wag, którego UI nie importuje (pin P14) — więc pytamy fasadę.
       cooldownPenalised: dipl?.isRefusalPenalised?.(verb) ?? true,
+      giftCredits,
+      giftAffordable: affordable,
     }),
-    buttons: [{ label: t('diploRefusal.ok'), primary: true }],
+    // ⚠ Bez środków przycisk ZOSTAJE, wyszarzony — kanon „widoczny+zablokowany". Powodu nie pisze
+    //   przycisk (nie ma gdzie), pisze go treść karty wyżej.
+    buttons: giftCredits > 0
+      ? [
+        { label: t('diploRefusal.ok'), primary: true },
+        {
+          label: t('diplo.btn.retryWithGift', giftCredits),
+          disabled: !affordable,
+          onClick: affordable ? ({ dismiss }) => { dismiss(); retry(giftCredits); } : undefined,
+        },
+      ]
+      : [{ label: t('diploRefusal.ok'), primary: true }],
   });
 }
 
@@ -139,7 +186,7 @@ function _show({ empireId, verb, result, headlineKey, descKey, descArg }) {
  * trzech kopii — i przyszłe ścieżki (propozycje AI w D4/D5) wpinają się bez zmian tutaj.
  */
 export function initDiplomacyRefusals() {
-  EventBus.on('diplomacy:treatyRejected', ({ empireId, treatyId, result }) => {
+  EventBus.on('diplomacy:treatyRejected', ({ empireId, treatyId, result, renew }) => {
     // `already_signed` to nie odmowa, tylko klik w nic — Dziennik też go pomija.
     if (result?.reasonKey === 'diplo.reject.alreadySigned') return;
     if (!result) return;
@@ -148,6 +195,16 @@ export function initDiplomacyRefusals() {
       headlineKey: 'diploRefusal.headlineTreaty',
       descKey:     'diploRefusal.descTreaty',
       descArg:     getName(TREATY_TYPES[treatyId] ?? {}) || treatyId,
+      // DS-3 — ODNOWIENIE I PROPOZYCJA TO DWIE RÓŻNE FASADY, a zdarzenie jest jedno: `renew`
+      // (dokładany przez `renewTreaty`) rozstrzyga, którą wołamy. Wnioskowanie z `hasTreaty` dałoby
+      // dziś tę samą odpowiedź, ale PRZEZ PRZYPADEK — jawne pole nie zależy od tego, że
+      // `proposeTreaty` przy stojącym traktacie jest blokowane pre-warunkiem.
+      retry: (credits) => {
+        const d = window.KOSMOS?.diplomacySystem;
+        const opts = { offer: { credits } };
+        if (renew === true) d?.renewTreaty?.(empireId, treatyId, opts);
+        else d?.proposeTreaty?.(empireId, treatyId, opts);
+      },
     });
   });
 

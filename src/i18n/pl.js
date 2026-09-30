@@ -3536,6 +3536,9 @@ export default {
   'diploRefusal.cooldownYears':  'obciąża kolejną próbę jeszcze przez {0} l.',
   'diploRefusal.cooldownBlocks': 'ponowna propozycja dopiero za {0} l.',
   'diploRefusal.ok':             '[ENTER] ROZUMIEM',
+  'diplo.gift.hint':               '{0} Kr zamknęłoby lukę',
+  'diplo.btn.retryWithGift':       '💰 Ponów z darem {0} Kr',
+  'diplo.reject.notEnoughCredits': 'Za mało kredytów w skarbcu',
 
   'diplo.reject.atWar':         'Trwa wojna',
   'diplo.reject.notAtWar':      'Nie jesteśmy w stanie wojny',
@@ -3633,6 +3636,7 @@ export default {
   'peaceOffer.staleTitle': 'Oferta straciła ważność',
   'log.diplo.napExpired':           '☮ Pakt o nieagresji z {0} wygasł — możesz go odnowić',
   'log.diplo.napRenewed':           '🛡 Pakt o nieagresji z {0} odnowiony do roku {1}',
+  'log.diplo.giftSent':            '💰 Przekazano {0} Kr — {1}',
   'log.diplo.aiPeaceOffer':         '☮ {0} proponuje pokój',
   'log.diplo.aiPeaceOfferRejected': '⚔ Odrzucono propozycję pokoju od {0}',
   'log.diplo.aiPeaceOfferExpired':  '☮ Propozycja pokoju od {0} wygasła',

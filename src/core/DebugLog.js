@@ -31,6 +31,7 @@ const TRACKED_EVENTS = [
   // ⚠ Finding 301 ZOSTAJE OTWARTY: `diplomacy:warRefused` i `diplomacy:treatyExpired`
   //   nadal nie są śledzone, a to ONE są powodami odmowy wojny.
   'diplomacy:treatyRenewed',
+  'diplomacy:giftSent',
   'diplomacy:ultimatum',
   'diplomacy:warDeclared',
   'ai:fsmTransition',

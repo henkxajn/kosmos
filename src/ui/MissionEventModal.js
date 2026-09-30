@@ -205,6 +205,24 @@ function _showNext() {
     },
   });
 
+  // DS-3 — NAPRAWA KANAŁU. `_hasCustomClick` istniało tu od zawsze i NIE MIAŁO PISARZA, więc
+  // każdy przycisk w tym kanale był wyłącznie zamykający — `DiplomacyRefusalModal` zapisał to
+  // wprost w nagłówku („gdyby kiedyś potrzebował, trzeba najpierw naprawić kanał"). Modal odmowy
+  // potrzebuje teraz przycisku, który DZIAŁA (ponowienie z darem), a wołający nie widzi
+  // `btnElements` — więc akcję przekazuje w konfiguracji przycisku.
+  //
+  // ⚠ Naprawa jest OGÓLNA i zachowuje KOLEJKOWANIE oraz pauzę tego kanału. Alternatywa —
+  //   przepisanie modala odmowy na `buildScheduledEventPopup` wprost (wzór `PeaceOfferModal`) —
+  //   odbrałaby kolejkę TRZEM ścieżkom odmowy, z których dwie (pokój, emisariusz) nie są w tym
+  //   slice'ie mierzone. Mniejszy promień rażenia wygrywa.
+  const cfgButtons = config.buttons ?? [];
+  btnElements.forEach((btn, i) => {
+    const onClick = cfgButtons[i]?.onClick;
+    if (typeof onClick !== 'function') return;
+    btn._hasCustomClick = true;                     // ← PIERWSZY pisarz tego znacznika
+    btn.addEventListener('click', () => onClick({ dismiss }));
+  });
+
   // Podlacz domyslne zachowanie przyciskow do dismiss
   for (const btn of btnElements) {
     if (!btn._hasCustomClick) {
