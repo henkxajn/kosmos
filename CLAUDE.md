@@ -5568,3 +5568,88 @@ D-DS-8) · **298** (pokój status quo pierze zdobycze) · **301** (`diplomacy:wa
 `diplomacy:treatyExpired` nadal poza `TRACKED_EVENTS`; DS-2/C1 zamknął tylko połowę sąsiednią —
 zmierzone: `query({kind:'diplomacy:warRefused'})` zwraca **0**) · **307** (beaty traktatowe mają wpis
 w Dzienniku, ale **bez toastu** — polerka UI, z tego gate'u) · **D-DS-5** (depesza AI o odnowieniu).
+
+---
+
+## WP-R — REPARACJE: blokada zbrojeń AI, nie rachunek (save **v101 bez migracji**, live-gate PASS — ZAMKNIĘTE 2026-09-30)
+
+Druga połowa podpisu **D-WP-1(c)**: reparacje jako **blokada produkcji wojennej**, nie kredyty
+(„AI płaci" odrzucone jako fikcja — AI nie ma powtarzalnego dochodu ani jednej bramki
+kredytowej w zachowaniu). Plan + decyzje **D-WPR-1…6** + tabela decyzyjna:
+`docs/design/WOJNA_I_POKOJ_MASTER_PLAN.md` §„WP-R — delivered".
+Commity: `61e3abc` (C1 silnik) · `87d692d` (C2 stół + chip + beaty). Bez flagi (rollback = revert).
+**Rozdział Wojna i Pokój ma po tym slice'ie JEDNĄ otwartą pozycję: #298.**
+
+**Jedno zdanie:** blokada zamyka **dwie** drogi AI do nowej siły bojowej, bo zamknięcie tylko
+produkcji znaczyłoby „nie wolno wam budować, ale wolno uzbroić wszystko, co macie" — i to
+dokładnie w chwili, w której druga reguła i tak by odpaliła.
+
+### Szwy — pięć, każdy odpowiada na inne pytanie
+
+| szew | gdzie | za co odpowiada |
+|---|---|---|
+| **termin** | `REPARATIONS_YEARS` w `OpinionModifierData` | JEDEN ZEGAR z `NAP_YEARS`/`TRUCE_YEARS` — pokój niesie wszystkie trzy naraz, więc trzy terminy kazałyby pilnować trzech liczników dla jednego traktatu |
+| **stan** | `reparationsUntilYear` na REKORDZIE PARY | wzorzec `expiresYear` z DS-1: `_write` zapisuje cały rekord ⇒ pole jedzie za darmo, `?? null` dla starych zapisów, **v101 bez migracji**. Ticker **CZYŚCI** pole, nie zostawia przeszłego roku (lustro stanu = dług, arc 186/187) |
+| **ocena** | term `reparations` w `AcceptanceEngine` | czyta **WYŁĄCZNIE** `ctx.terms.reparations` + `ctx.war` ⇒ **biała lista `_kosmos()` NIETKNIĘTA**. To ta pułapka, która ugryzła W1-3 i WP-2: klucz pominięty w tamtej liście nie rzuca, tylko **cicho degraduje term do zera** |
+| **bramka ×2** | `queueWarships` (drabina `reject`) + `empireNotUnderReparations` (reguła **i** akcja `mobilizeVessels`) | produkcja i mobilizacja. ⚠ NIE w `deployVessel` — tamtędy chodzi GRACZ. Jedno źródło odpowiedzi: `isUnderReparations` (dwie kopie „czy minął rok X" rozjechałyby się po cichu) |
+| **chip** | `reparationsUntilYear` w PROJEKCJI `listPlayerRelations` | ⚠ ZMIERZONE: **żaden** z obu overlayów nie dotyka `relations` (0 wystąpień) — kształt rekordu pary zostaje prywatny (audyt R9/R12), więc panel czyta projekcję, lustrem `truceYearsLeft` |
+
+**Poprawka `_buildTermsContext` — jedyny realny defekt z fazy A:** wczesny `return null` na braku
+cesji czynił pokój „status quo + blokada zbrojeń" **niewidzialnym dla silnika** (ZMIERZONE:
+`terms: { reparations: { years: 10 } }` → `ctx.terms === null`), a to najprawdopodobniejszy ruch
+gracza. Teraz `null` dopiero gdy brak cesji **I** brak reparacji; `territorial_terms` przy
+`cessions: []` zwraca 0, oba pre-warunki terytorialne wychodzą wczesnym `true`.
+
+**Waga 25 wyprowadzona, nie wybrana:** tło `offer_peace` 10,00 / 21,00 / 48,50 przy exh 30/50/100
+(wyczerpanie **symetryczne** — `war_status` bierze `min` obu stron; pierwsza sonda miała złą oś),
+przewrót `u = (w−10)/(55+0,5w)` ⇒ **exh ≈ 52**, wyraźnie ponad `peaceCost` 30, a przy exh 100
+zostaje **+32** zapasu, bo rozbite AI nie może blokować **końca wojny**. Skala: dojrzała kolonia
+(devValue 34) = −3,89 pkt, więc 25 ≈ sześć kolonii.
+
+### ⚠ Cztery reguły warsztatu z tego slice'u
+
+1. **SKRYPT ŁATAJĄCY = PLIK, i zawsze `open(p,'wb')`.** Doraźny `io.open(p,'w',encoding=...)`
+   zamienił **cały** keeper LF→CRLF (402 linie), po czym kolejne skrypty przestały trafiać
+   w kotwice — a diagnoza była myląca, bo `io.open(...,encoding=...)` przy CZYTANIU robi
+   universal-newlines i pokazywał LF. Do tego **dwa razy** backticki w inline-pythonie zostały
+   wykonane przez powłokę jako podstawienia komend i wyżarły fragmenty komentarzy.
+2. **NOWY SYMBOL WOŁANY WPROST ZABIJA CAŁY PRZEBIEG — trzy razy w jednym slice'ie.**
+   `getReparationsUntilYear` (T6d), guard (T8), `_onHit(undefined)` (T10). Za każdym razem
+   fail-first pokazywał crash zamiast kolorów, także dla ZIELONYCH kontroli. Wzorzec jest zawsze
+   ten sam; lekarstwem `call()` / `askGuard()` / `hit()` — **pin musi DEGRADOWAĆ, nie PRZERYWAĆ**.
+3. **PRZYRZĄD GATE'U NIE MOŻE PISAĆ ZEGARA NA PODSTAWIE FALLBACKU.** Linia §7 miała
+   `?? 0` przy odczycie roku końca; gdy reparacje wygasły NATURALNIE, pole było już `null`, więc
+   fallback ustawił `gameTime` na **0,2**. Nic nie zepsuł w grze, ale przyrząd, który przy braku
+   danych PISZE stan świata, potrafi zmyślić scenę gate'u.
+
+4. **GREP UCIĘTY PRZEZ `head` NIE JEST POMIAREM.** `grep … | head -5` kazał mi napisać
+   w raporcie i w wiadomości commita, że `directorMobilization` nie jest wystawiony — odpowiedź
+   stała na szóstej pozycji. To ta sama rodzina co pin celujący w martwą ścieżkę: **zwraca wynik,
+   więc czyta się jak odpowiedź**. Przy pytaniu „czy X istnieje" licznik jest częścią pomiaru.
+
+⚠ **Piąta, znana i zapłacona po raz drugi:** wrapper walidacji jednolinijkowców też wymaga
+kontroli — mój harness nie wpiął `KOSMOS.debugLog` (gra robi to w `GameScene:2044`) i cztery
+poprawne linie gate'u zgłosiły rzut.
+
+### ⚠ Granice dowodu — jedna realna, druga byla MOIM błędem
+
+- **Przełącznik żyje w gałęzi „są ciała"**: `_drawPeaceTable` ma wczesny `return` przy PUSTYM
+  stole. Zmierzone: pusty stół wymaga, by **żadna strona nie miała kolonii** (`getPeaceTable`
+  bierze wszystkie ciała obu stron, stolicę i dom tylko **oznacza** 🔒) ⇒ w realnej wojnie
+  nieosiągalny. W fixturze bez kolonii byłby **cichym fałszywym negatywem** (kontrola T10b).
+- ⚠ **DRUGA „granica" BYŁA PO PROSTU NIEPRAWDĄ — sprostowanie.** Napisałem, że połowa mobilizacyjna
+  jest niedostępna z konsoli, bo `window.KOSMOS` nie wystawia `directorMobilization`.
+  **Zmierzone po gate'cie: wystawia.** `GameScene` wystawia WSZYSTKIE SIEDEM systemów Directora
+  (:460-464 + `directorOffensive` :471, `directorRecall` :476, `directorSystem` :477); mój
+  wcześniejszy grep miał `| head -5`, a odpowiedź stała na szóstej pozycji. Dwie konsekwencje,
+  obie zapisane zamiast po cichu naprawione: linia §6 gate'u czytała WEJŚCIE guardu, choć mogła
+  wołać `KOSMOS.directorMobilization.mobilizeVessels(…)`, a **wiadomość commita `87d692d`
+  niesie ten błąd**. Sam mechanizm gate potwierdził i tak, bo reguła odpaliła sama
+  (`director:mobilizeRejected` ×1 przy `director:mobilized` 0).
+
+### ⚠ Świadomie POZA WP-R
+
+⚪ **308** gałka lat zamiast przełącznika binarnego (silnik gotowy: raw ∝ lata) · **307** toasty dla
+CAŁEJ rodziny traktatowej naraz · **298** pokój status quo pierze zdobycze (**jedyna otwarta pozycja
+rozdziału**, decyzja właściciela). ⚠ Dla ekspozycji Directora findingu NIE MA — patrz sprostowanie
+wyżej: błąd był mój, nie kodu.

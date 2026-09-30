@@ -620,6 +620,137 @@ pins; the **numbers** belong to the save.
   returns **0**. A future gate asking *"why doesn't the AI declare war"* will read silence.
 - **307 — treaty beats have a journal entry but no toast** (new, from this gate; UI polish).
 
+### WP-R — delivered (2026-09-30)
+
+**Reparations are a ban on rearmament, not a bill.** D-WP-1 had signed them as a *blockade of AI war
+production* rather than credits — "the AI pays" was rejected as fiction, because the AI has no
+repeatable income and no credit gate anywhere in its behaviour. This slice is the second half of that
+signature. Save **v101, no migration**, no feature flag (rollback = `git revert`).
+
+| slice | commit | what changed in play |
+|---|---|---|
+| **C1** | `61e3abc` | **The engine.** `REPARATIONS_YEARS = 10`, `reparationsUntilYear` on the pair record, a ticker, the `reparations` term (weight 25), the `_buildTermsContext` fix, execution in `offerPeace`, **two gates** (`queueWarships` + `mobilize_reserve`), both events in `TRACKED_EVENTS`. |
+| **C2** | `87d692d` | **One click and two readouts.** A single-line toggle on the peace table, the chip in the Diplomacy panel, two journal beats, 6 i18n pairs. |
+
+#### Decisions, in the operational phrasing they were signed in
+
+- **D-WPR-1 — the blockade closes TWO doors, and that is the whole point.** Phase A measured that
+  **exactly one** production path to a new AI warship exists in normal play
+  (`pressureResponse` → `queueWarships` → `startShipBuild`); the courier builds `hull_small` with a
+  hold, AI never reaches `queueStationShip` at all, and the AI's orbital station is created
+  `starterModules: false` — it is a *permission token*, not a factory. But every AI hull leaves the
+  yard into **reserve** (`serviceState: 'stored'`), and `mobilize_reserve` crews it under the guard
+  `empireOutgunnedByPlayer` — i.e. it fires exactly when the player is stronger, which is exactly
+  after a won war. Blocking only production would have meant *"you may not build, but you may arm
+  everything you already have"*, in the one moment the second rule would fire anyway.
+  ⚠ A structural bonus: both pressure rules carry `empireNotAtWarWithPlayer`, so the only warship
+  production channel runs **in peacetime only** — precisely when reparations are in force.
+- **D-WPR-2** — `REPARATIONS_YEARS = 10` lives next to `NAP_YEARS`/`TRUCE_YEARS`: **one clock** with
+  the truce and the pact, because a peace carries all three at once and three separate terms would
+  make the player watch three counters for one treaty. The timer sits on the **pair record**
+  (`_ensurePair` + `?? null`) — the `expiresYear` pattern from DS-1, so the field rides for free and
+  the save stays **v101 with zero migration**. The ticker **clears** the field rather than leaving a
+  past year: a dead term in the save is the "mirror of state" the 186/187 arc warns about, and both
+  the chip and the audit read the term's *existence*.
+- **D-WPR-3 — a TERM, not a precondition.** A precondition gives a block **without a breakdown**;
+  reparations are meant to be negotiable, and `raw ∝ years / REPARATIONS_YEARS` makes the number of
+  years a natural dial while the player sees the price as a row in the refusal modal. Fatigue relief
+  uses the same formula as `territorial_terms`. ⚠ The term reads **only** `ctx.terms.reparations` and
+  `ctx.war` — zero new world reads, so the `AcceptanceEngine._kosmos()` whitelist stays **untouched**
+  (the trap that bit W1-3 and WP-2: a key missing from that list does not throw, it silently degrades
+  the term to zero).
+- **D-WPR-4** — a **binary** toggle on 1.0, one line, not a third column; it does **not** count toward
+  the ceiling (that bar filters `countsToCeiling` on *body* rows, and an arms ban is not a body). The
+  years dial is ready in the engine and filed as ⚪ for after 1.0.
+- **D-WPR-5** — the AI cannot demand reparations from the player on 1.0: measured, the AI dispatch
+  accepts with literally `terms: null`, so symmetry is a new channel, not a parameter.
+- **D-WPR-6** — chip + two beats on the `diplomacy` channel, **without toasts**: the missing toast in
+  the treaty family is known (**307**) and will be addressed for the whole family at once.
+
+#### Why 25 — derived, not chosen
+
+Background score of `offer_peace` with **symmetric** exhaustion (`war_status` takes the `min` of both
+sides — the first probe had the wrong axis and was corrected):
+
+| exh | background | relief | raw (10 y) | w=15 | w=20 | **w=25** | w=30 |
+|---|---|---|---|---|---|---|---|
+| 30 | 10.00 | 0.00 | −1.00 | no | no | **no (−15.0)** | no |
+| 50 | 21.00 | 0.10 | −0.90 | yes | yes | **no (−1.5)** | no |
+| 100 | 48.50 | 0.35 | −0.65 | yes | yes | **yes (+32.3)** | yes |
+
+Flip point `u = (w−10)/(55+0.5w)`, `exh = 30 + 100u` ⇒ **w=25 flips at exh ≈ 52**, well above
+`peaceCost` 30 ("peace is available from 30; reparations cost you another 22 points of grinding"),
+while at exh 100 it still passes with **+32** to spare — a broken empire must never be able to block
+the *end of a war* over this term, which would be the worst failure mode. Scale of reference: one
+mature AI colony (devValue 34) costs **−3.89**, so 25 ≈ six colonies. The keeper reproduces the row
+exactly: **−15.00 / −1.50 / +32.25**.
+⚠ The background `10.00` belongs to a neutral fixture (opinion 0, tension 0, aggression 0.3); real
+flip points move with opinion and personality, which is why the gate measures on a real save.
+
+#### The one real defect phase A found
+
+`_buildTermsContext` returned `null` whenever there were no cessions, which made a peace of
+*"status quo + arms ban"* **invisible to the engine** (measured: `terms: { reparations: { years: 10 } }`
+→ `ctx.terms === null`) — and that is the most likely player move. Now `null` only when there are
+neither cessions nor reparations; `territorial_terms` returns 0 on `cessions: []`, both territorial
+preconditions exit early on `true`, and the pin `wp_peace_seams` T1c2 stays green.
+
+#### Measured
+
+Keeper `wp_reparations_smoke` **57 → 92/92**; fail-first in a real `git worktree`: C1 **11/46** on the
+docs anchor, C2 **62/30** on pristine C1, zero failing controls either time. Sweep **246 → 247/247,
+0 FAIL, 31 advisory** · `check-i18n` PASS, pl = en **3417 → 3424** (7 new keys, split 1 + 6 — see
+below).
+
+⚠ **Two forced re-aims that the phase-A audit did not predict** (reported, not patched — both pins
+were right and neither had its logic touched): `acceptance_engine` pins that **every** term's
+`labelKey` exists in pl **and** en, so the term's own label had to ship with the term (1 of the 7
+signed i18n pairs moved to C1); and `wp_peace_cooldown` T1g is an anti-drift anchor on `offer_peace`
+weights whose `drift` list was **empty** while the **key count** failed — the pin did exactly what it
+exists for. A third candidate (`balans_diplomacy_telemetry`) was checked and clean.
+
+#### Boundaries of proof — one real, one of them my own error
+
+1. **`_drawPeaceTable` early-returns on an empty table**, so the toggle lives in the "there are
+   bodies" branch. Measured: an empty table requires that **neither side owns a colony**
+   (`getPeaceTable` takes all bodies of both sides and merely *marks* the capital and home 🔒) ⇒
+   unreachable in a real war. In a colony-less fixture it would be a **silent false negative**, hence
+   a dedicated control (T10b) that demands the `peace_toggle` zone.
+2. **A boundary I declared that was simply FALSE — corrected here, after the gate.** I wrote that
+   the mobilization half was browser-unreachable because `window.KOSMOS` does not expose
+   `directorMobilization`. **Measured afterwards: it does.** `GameScene` exposes **all seven**
+   Director systems — :460-464 plus `directorOffensive` (:471), `directorRecall` (:476) and
+   `directorSystem` (:477). My earlier grep carried `| head -5` and the answer sat at position six.
+   ⚠ Two consequences, both recorded rather than quietly fixed: the §6 gate line I wrote was
+   **needlessly weak** (it read the guard's *input* instead of calling
+   `KOSMOS.directorMobilization.mobilizeVessels(…)`), and **the C2 commit message carries this
+   error** — `87d692d` states the exposure is missing. It is not. The gate measured the half
+   anyway, because the rule fired on its own: `director:mobilizeRejected` ×1 with
+   `director:mobilized` 0.
+   ⚠ **Workshop rule bought here: a grep truncated by `head` is not a measurement.** Same family as
+   a pin aimed at a dead path — it returns something, so it reads like an answer.
+
+**Live gate — PASS (test save, "Liga Trzech Słońc", `border_incident`, staging 100/100).** §2 the gear
+line goes grey → accent with its hint while the ceiling bar stays at `held 59 / ceiling 29.5`
+**unchanged** · §3 peace → 9.95 years, truce + forced NAP, `rokKonca` 70.47, one
+`reparationsImposed`, journal entry · §4 chip *"Reparacje do roku 70"* · §5 `queueWarships` →
+`{ok:false, reason:'reparations'}` plus the audit row · §6 the mobilization guard live (above) ·
+§7 reparations expired **naturally** on the live clock: 0 years, field `null`, production
+`{ok:true, started:1}`, one `reparationsExpired`, chip gone · §8 zero regression: a table without the
+gear gives a peace without reparations and `imposed` stays 1. Console clean.
+⚠ **Protocol note from the gate:** the `?? 0` fallback in the §7 one-liner set `gameTime` to **0.2**
+after reparations had already expired naturally (the field was `null`, so `until` came out 0). An
+instrument bug, not a game bug — but recorded, because **a gate instrument must never write the clock
+off a fallback**.
+
+#### What remains after WP-R
+
+The **Wojna i Pokój** chapter has one open item: **298** — status-quo peace launders conquest, an
+owner decision still deferred, and every variant touches `territorial_ceiling`, i.e. the core of
+D-WP-8. Filed small: ⚪ **308** (years dial after 1.0) and **307** (toasts for the whole treaty
+family). ⚠ No finding was filed for the Director exposure — see boundary 2 above: the claim was
+mine and it was wrong, not the code's.
+
 ## Workstreams
 
 ### A. Diplomacy backbone (D1–D5) — see DIPLOMACY_BACKBONE.md §5

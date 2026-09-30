@@ -178,6 +178,7 @@
 > **298** (decyzja właściciela nadal odłożona).
 >
 > **Aktualizacja 2026-09-30 — DS-2 + DS-3 ZAMKNIĘTE; ARC „D4-slim → W4-simple" ZAMKNIĘTY W CAŁOŚCI.**
+> ➕ **Po WP-R (nota niżej) cały rozdział Wojna i Pokój ma JEDNĄ otwartą pozycję: #298.**
 > Sweep: **246/246 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3417** · save **v101 bez migracji**.
 > • **DS-2** ✅ (`02de4a5` C1 + `8821f93` C2) — **pakt da się ODNOWIĆ w oknie 3 lat przed końcem**
 > (`NAP_RENEW_WINDOW_YEARS`), a slot PAKT ma TRZY etykiety: „ODNÓW PAKT" (aktywny) / „PAKT — ODNÓW ZA {0} L."
@@ -219,6 +220,46 @@
 > zamknięcie naprawiło **napis dla gracza**, nie komentarze. ⚠ Przy okazji: komentarz keepera
 > `wp_peace_cooldown_smoke:417` twierdzi, że „`y` NIE JEST ZWIĄZANE Z NICZYM" — prawda o mapie OVERLAYÓW,
 > nieprawda o grze.
+>
+> **Aktualizacja 2026-09-30 (późna) — WP-R ZAMKNIĘTE; ROZDZIAŁ WOJNA I POKÓJ: otwarte tylko #298.**
+> Sweep: **247/247 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3424** · save **v101 bez migracji**.
+> • **WP-R** ✅ (`61e3abc` C1 silnik + `87d692d` C2 stół/chip/beaty, live-gate PASS) — **reparacje jako
+> BLOKADA PRODUKCJI WOJENNEJ AI**, druga połowa podpisu D-WP-1(c). Kredyty odrzucone jako fikcja
+> („AI płaci" — AI nie ma powtarzalnego dochodu ani jednej bramki kredytowej).
+> ⚠ **BLOKADA ZAMYKA DWIE DROGI, i to jest sedno D-WPR-1** (zmierzone w fazie A): produkcja
+> (`pressureResponse` → `queueWarships` → `startShipBuild` — JEDYNA produkcyjna ścieżka okrętu AI
+> w normalnej grze) **oraz** mobilizacja rezerwy (`mobilize_reserve`, guard `empireOutgunnedByPlayer`,
+> czyli odpala dokładnie po wygranej gracza). Zamknięcie samej produkcji znaczyłoby „nie wolno wam
+> budować, ale wolno uzbroić wszystko, co macie".
+> ⚠ **WAGA 25 WYPROWADZONA**, nie wybrana: tło `offer_peace` 10,00 / 21,00 / 48,50 przy exh 30/50/100,
+> przewrót `u = (w−10)/(55+0,5w)` ⇒ **exh ≈ 52** (ponad `peaceCost` 30), a przy exh 100 **+32** zapasu —
+> rozbite AI nie może blokować KOŃCA WOJNY o ten warunek. Skala: dojrzała kolonia = −3,89 pkt ⇒ 25 ≈
+> sześć kolonii.
+> ⚠ **Jedyny realny defekt fazy A:** `_buildTermsContext` zwracał `null` przy braku cesji, czyniąc pokój
+> „status quo + blokada zbrojeń" NIEWIDZIALNYM dla silnika — a to najprawdopodobniejszy ruch gracza.
+> • **NOWY finding: ⚪ 308** — przełącznik jest BINARNY, a silnik od pierwszego dnia umie gałkę lat
+> (`raw ∝ years / REPARATIONS_YEARS`); brakuje wyłącznie widżetu, a gałka ma cenę PROJEKTOWĄ (1 rok
+> kosztowałby −2,5 pkt, mniej niż jedna kolonia) ⇒ po 1.0. Rejestr: `VESSEL_ORDERS_PLAN.md` §308.
+> • ⚠ **SPROSTOWANIE, KTÓRE NIE DOSTAŁO NUMERU:** planowałem #309 „`directorMobilization` nie jest na
+> `window.KOSMOS`" — **nieprawda**, `GameScene` wystawia WSZYSTKIE SIEDEM systemów Directora
+> (:460-464, :471, :476-477). Mój grep miał `| head -5`, a odpowiedź stała na szóstej pozycji. Błąd
+> wszedł do raportu i do **wiadomości commita `87d692d`**; docs go poprawiają. Reguła warsztatu:
+> **grep ucięty przez `head` NIE JEST POMIAREM** — zwraca wynik, więc czyta się jak odpowiedź (ta sama
+> rodzina co pin celujący w martwą ścieżkę).
+> • ⚠ **Dwa WYMUSZONE re-aimy, których audyt fazy A nie przewidział** (raport, nie łata — oba piny
+> miały RACJĘ): `acceptance_engine` pinuje etykietę KAŻDEGO termu w pl I en (⇒ 1 z 7 par i18n musiała
+> wejść w C1, podział 1 + 6), a `wp_peace_cooldown` T1g to anti-drift anchor wag `offer_peace`, gdzie
+> `drift` był PUSTY, a padł LICZNIK KLUCZY. Trzeci kandydat (`balans_diplomacy_telemetry`) czysty.
+> • ⚠ **Trzecie w jednym slice'ie wystąpienie: NOWY SYMBOL WOŁANY WPROST ZABIJA CAŁY PRZEBIEG**
+> (`getReparationsUntilYear`, guard, `_onHit(undefined)`) — za każdym razem fail-first pokazywał crash
+> zamiast kolorów, także dla ZIELONYCH kontroli. Plus: **skrypt łatający = PLIK i zawsze
+> `open(p,'wb')`** (tryb tekstowy na Windows zamienił CAŁY keeper LF→CRLF), oraz **przyrząd gate'u nie
+> może pisać zegara na podstawie fallbacku** (`?? 0` ustawiło `gameTime` na 0,2 po naturalnym
+> wygaśnięciu reparacji).
+> • **STAN ROZDZIAŁU WOJNA I POKÓJ:** W4-simple → DS-1 → DS-2 → DS-3 → **WP-R** zamknięte. Otwarte
+> **wyłącznie #298** (pokój status quo pierze zdobycze — decyzja właściciela, każdy wariant dotyka
+> `territorial_ceiling`, czyli rdzenia D-WP-8). Drobne poza rozdziałem: **307** (toasty dla całej
+> rodziny traktatowej), **308**.
 
 
 ---

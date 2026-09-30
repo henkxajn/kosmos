@@ -3813,3 +3813,38 @@ dar, przyjęty traktat) albo **zaskoczeniem z zewnątrz** (depesza AI, wygaśni�
 i tak otwiera MODAL (`treatyRejected` → `DiplomacyRefusalModal`) — inaczej gracz czyta ten sam fakt
 dwa razy. ⚠ Rodzina **269/113 nie jest tu właściwym adresem** (tam chodzi o napisy poza `t()`); to
 pytanie o KANAŁ, nie o tłumaczenie. Osiągalności nie trzeba mierzyć — jest stuprocentowa.
+
+---
+
+## Finding z WP-R (#308, zebrany 2026-09-30)
+
+⚠ **Zasada wpisu:** jak w blokach wyżej — mechanizm i linie zweryfikowane w drzewie na `87d692d`.
+Wpis jest ⚪ i **świadomie POZA zakresem** WP-R, nie długiem, który się wymknął.
+
+⚠ **DRUGIEGO WPISU NIE MA, I TO JEST CZĘŚĆ POMIARU.** Planowałem #309 „`directorMobilization` nie
+jest na `window.KOSMOS`” — **nieprawda**: `GameScene` wystawia wszystkie siedem systemów Directora
+(:460-464, :471, :476-477). Mój grep miał `| head -5`, a odpowiedź stała na szóstej pozycji. Błąd
+wszedł do raportu i do wiadomości commita `87d692d`; sprostowanie stoi w CLAUDE.md i w MASTER_PLAN.
+Reguła: **grep ucięty przez `head` nie jest pomiarem**.
+
+---
+
+### ⚪ 308 — przełącznik reparacji jest binarny, a silnik od pierwszego dnia umie gałkę lat
+
+`TERM_EVALUATORS.reparations` liczy `raw ∝ years / REPARATIONS_YEARS`, a `_buildTermsContext`
+przepuszcza dowolną liczbę lat z `proposal.terms.reparations.years`. Cała ścieżka — ocena, tabela
+decyzyjna, wykonanie (`offerPeace` czyta `Number(terms?.reparations?.years) > 0`) — jest więc gotowa
+na **negocjowanie długości blokady**. Brakuje wyłącznie widżetu: `WarOverlay` wstawia stałą
+(`terms.reparations = { years: REPARATIONS_YEARS }`), bo D-WPR-4 podpisał na 1.0 przełącznik BINARNY.
+
+⚠ **To nie jest „TODO w kodzie", tylko podpisana granica zakresu.** Gałka jest tańsza niż wygląda
+(stepper `[− n +]` wzorem focusu w zakładce Załoga), ale ma cenę PROJEKTOWĄ, której 1.0 nie płaci:
+gracz mógłby zjechać do 1 roku i kupić „reparacje" za −2,5 pkt, czyli za mniej niż jedna kolonia
+(−3,89). Sensowna gałka potrzebuje albo dolnej granicy, albo progresji nieliniowej — a to jest
+strojenie, nie widżet.
+
+⚠ Przy okazji: **wykonanie stawia PEŁNE `REPARATIONS_YEARS`, nie to, co przyszło w `terms`**
+(`offerPeace` używa stałej). Gdyby gałka weszła, ta linia jest drugim miejscem do zmiany — i dopóki
+przełącznik jest binarny, oba miejsca mówią to samo, więc rozjazd jest niemożliwy z konstrukcji.
+
+---
