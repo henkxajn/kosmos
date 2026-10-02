@@ -301,6 +301,16 @@
 > (`KOSMOS_backlog_niezrealizowane.md` §„🔴 Podwójne pobranie Kr za jednostki naziemne”), nie nowy finding.
 > • **Krok G1c** (rodzina „utrata POP”: **333**, **330**, **328**, **329**; kierunek 333/330 podpisany 2026-10-02)
 > stoi w kolejce **po G3**: G2-K1 → G2-2 → G2-3 → G2-4 → G2b → G3 → **G1c** (`AI_GARRISON_PLAN.md` §3).
+>
+> **Aktualizacja 2026-10-03 — AI GARRISON: G2-K1 ZROBIONY (commity 2026-10-02; stolice na oceanie + bliźniak AI).**
+> Sweep: **253/253 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3426** · save **v101 bez migracji**.
+> • ✅ **336** (`8ea5af3` + `44967a3`) — zamknięcie w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersz zdjęty z A6.
+> • **NOWE: #343–#347** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 **343** (zwykłe budynki AI na oceanie — martwy test
+> `tile.buildable`, 46 z 476 na 14 ziarnach; osobny, późniejszy slice), **344** (desant AI na krawędzi bez drogi do
+> stolicy), **347** (`HexGrid.getNeighbors` asymetryczne — plik krytyczny) · ⚪ **345** (uśpiony nadpis typów kafli
+> z `_biome.png`), **346** (stolice AI na (−1,2), także na lodzie — obserwacja).
+> • Odpowiedzi właściciela z sesji G2-K1 (bliźniak AI w G2-K1, slice dla 343, próg D9 10–24 = `garrison_unit`,
+> rejestracja 344): `AI_GARRISON_PLAN.md` §5h.
 
 
 ---
@@ -378,7 +388,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-342** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1) |
+| **309-347** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -488,6 +498,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **330** | 🟠 | ręczne rozwiązanie (`UnitCardPanel.js:203`, przycisk-literał) emituje `groundUnit:destroyed` ⇒ idzie przez tabelę ŚMIERCI (szturm odzyskuje 0,3 z 0,6 po 2 civY, reszta → **333**), choć utrzymanie i rozpad oddają pełny koszt od razu |
 | **333** | 🟠 | **nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana NA ZAWSZE i liczy się do populacji** — zmierzone (+0,3 po 27 mies., zero wywołań usuwających ludzi); wzorzec poprawny: `killCrew` (W2). Rekoncyliacja A0, **nienaprawiony** |
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
+| **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -509,7 +520,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **318** | 🟠 | kafle kolonii AI mają `owner = null` — stempel daje dopiero otwarcie mapy w `ColonyOverlay.js:584-588` | rodzina **54**/**58**; czytane przez okupację i przejęcie (G2). `AI_GARRISON_PLAN.md` §6 |
 | **319** | 🟠 | jednostki naziemne **osierocone** przy zniszczeniu ciała i **nietknięte** przez `transferColony`/`captureColonyForPlayer` | rozszerza **59**; decyzja **D6** (G2) |
 | **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
-| **336** | 🔴 | **stolica AI na kaflu oceanu — kolonii nie da się przejąć z ziemi**: bootstrap testuje `tile.buildable` (`EmpireColonyBootstrap.js:723`), którego kafel nie ma; wszystkie stolice AI na (-1,2), 6 z 28 na oceanie (14 ziaren), w fixture stolica emp_002 | → **G2-K1** (D17). `AI_GARRISON_PLAN.md` §6 |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -596,6 +606,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **339** | 🟠 | `launchInvasion` i oba predykaty przejęcia nie pytają o wojnę (pin G2-0 P5); **żaden** z 6 keeperów przejęcia nie ustawia wojny | D13 przestawi te keepery — świadomie w **G2-2** |
 | **340** | ⚪ | `INVASION_UNIT_POOLS` (`GroundUnitData.js:97`) nie ma kluczy `industrialist` / `expansionist` ⇒ desant bez ładunku zawsze `['infantry','infantry']` (`InvasionSystem.js:112`) | → **G2b** (D7) |
 | **341** | ⚪ | uprząż headless: POP imperiów AI przy gy 60 2,2–3,1× niższy niż w fixture GATE-S4 (limit 3–5 wobec 11); przyczyna nieznana, ziarnistość ticka wykluczona | instrument ⇒ **D18** (kalibracja na fixture) |
+| **343** | 🟠 | zwykłe budynki AI stają na **oceanie** — martwy test `tile.buildable` (`EmpireColonyBootstrap.js:731`); 46 z 476 na 14 ziarnach (`research_station`, `shipyard`, `launch_pad`); takiego budynku nie da się okupować | osobny, późniejszy slice (zmienia rozmieszczenie budynków AI) |
+| **344** | 🟠 | desant AI ląduje na krawędzi **bez drogi do stolicy** — `_findLandingHexes` (`InvasionSystem.js:500`) nie sprawdza osiągalności; 33 z 486 kafli strefy na koloniach AI (czapa polarna odcięta oceanem albo asymetria **347**), 0 z 249 na koloniach gracza | bez kroku; istotne dla G2-3 i G2b |
+| **346** | ⚪ | stolice AI na jednej współrzędnej (−1,2) — remis punktacji, wygrywa pierwszy kafel rzędu 2; w fixture 5 z 11 na `ice_sheet` | obserwacja; rodzina **322** |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -609,6 +622,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **331** | ⚪ | walka naziemna **AI-vs-AI**: zero ognia (strony nie-graczy scalone, `CombatSystem.js:188-194`, `:295`), a `GameScene.js:5473` / `:5487` loguje graczowi „bitwę” i pokazuje raport | dawny wiersz „niezweryfikowane”: mechanizm potwierdzony w kodzie, osiągalność niezmierzona (**D5**) |
 | **334** | ⚪ | karta jednostki w `ColonyOverlay`: polskie literały (statusy `:2660-2667`, przyciski `:2858`/`:2880`, flash `:5449`) i surowe id w tytule (`unit.type.toUpperCase()`, `:2641`) — klasa **113**, `check-i18n` ślepy | obserwacja z bramki G1b (ekran mieszał EN i PL) |
 | **342** | ⚪ | `homeColonyId: null` jednostki AI wraca z zapisu jako id ciała (`GroundUnitManager.js:1459`, `:1522`) | dziś nieszkodliwe (`_ownedHomeColony` sprawdza właściciela, `popCost` 0); `null` zostaje decyzją właściciela |
+| **345** | ⚪ | **uśpiony** nadpis `tile.type` z `_biome.png` w `ColonyOverlay._applyBiomeMap` — na siatce współdzielonej z silnikiem zmieniałby teren od samego otwarcia mapy; plików 0 na 216 | uzbraja się przy generowaniu tekstur z `--biome-map` / `--all-maps` |
 
 ---
 

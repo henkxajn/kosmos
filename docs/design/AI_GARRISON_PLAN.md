@@ -1,19 +1,22 @@
 # AI GARRISON — obrona naziemna kolonii AI
 
-> **Status:** ✅ **G1 i G1b ZAMKNIĘTE 2026-10-02 — obie bramki live właściciela PASS.** ✅ **G2-0 i G2-1 ZROBIONE
-> 2026-10-02** (§5f). Dalej: **G2-K1** (stolice na oceanie) → **G2-2** → **G2-3** → **G2-4** → **G2b** → **G3** → **G1c** (§3).
+> **Status:** ✅ **G1 i G1b ZAMKNIĘTE 2026-10-02 — obie bramki live właściciela PASS.** ✅ **G2-0, G2-1 i G2-K1 ZROBIONE
+> 2026-10-02** (§5f, §5g). Dalej: **G2-2** (bramka wojny) → **G2-3** → **G2-4** → **G2b** → **G3** → **G1c** (§3).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
-> kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e).
-> Save **v101, zero migracji** w G1, w G1b i w G2-0/G2-1.
+> kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
+> odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h).
+> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1 i w G2-K1.
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
-> **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f.
+> **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
+> (G2-K1, stolice na oceanie + bliźniak AI) — §5g.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
-> `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **26/26** · `g2_create_ai_unit_smoke` **26/26** ·
-> sweep **252/252 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3426**).
-> **Rejestr macierzysty findingów #309–#342:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
+> `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **28/28** · `g2_create_ai_unit_smoke` **26/26** ·
+> `g2_ocean_capital_smoke` **28/28** · sweep **253/253 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3426**).
+> **Rejestr macierzysty findingów #309–#347:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
-> `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`) · `[measured]` — wykonane i policzone · `[git]` — historia
+> `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`) · `[measured]` — wykonane
+> i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
 > fazy A G2 (2026-10-02, na `2a97bfe`), którego nie ma w repo.
 
@@ -64,7 +67,8 @@ naziemna się nie rozstrzygała (G1), nie było czego materializować — garniz
 | 35–44 | 100 | jw. | × 1,25 |
 | 45 i więcej | 100 | jw. | × 1,5 |
 
-¹ Podpis wymienia dla tego progu tylko morale; skład czytam jako ciągłość progu niższego — do potwierdzenia.
+¹ **Potwierdzone przez właściciela 2026-10-02 (§5h (c)):** próg 10–24 = wyłącznie `garrison_unit` (podpis wymieniał
+dla tego progu tylko morale).
 ⚠ Wszystko powyżej 20 jest tymczasowe (brak pomiaru po gy 60); morale 30 niezmierzone — do zmierzenia w G2-3;
 `aa_platform` poza garnizonami.
 
@@ -97,7 +101,7 @@ naziemna się nie rozstrzygała (G1), nie było czego materializować — garniz
 | **G1b** | **ogień naprawdę jednoczesny** zamiast „wróg strzela pierwszy” · **zwolnienie zablokowanych POP** przy `morale_collapse` · wpis w Dzienniku przy rozwiązaniu · reintegracja do kolonii macierzystej | **309** · **310** · **312** · **326** ✅ | ✅ **2026-10-02** (§5a) |
 | **G2-0** | piny dzisiejszych szwów, które kolejne kroki zmienią świadomie (`g2_seams_smoke`) | **317** · **318** · **319** · **323** · **324** · **336** | ✅ **2026-10-02** (`4d6ac63`, §5f) |
 | **G2-1** | **jedna wspólna funkcja „utwórz jednostkę AI z zadanym morale”** — `GroundUnitManager.createAIUnit` | **323** · **324** | ✅ **2026-10-02** (`82c9196`, §5f) |
-| **G2-K1** | **stolice na oceanie (D17):** generowanie stawia stolicę AI na kaflu, na którym da się stanąć · stare zapisy — reguła placówki w predykacie przejęcia | **336** | w sesji 2026-10-02 |
+| **G2-K1** | **stolice na oceanie (D17):** generowanie stawia stolicę AI na kaflu, na którym da się stanąć · stare zapisy — reguła placówki w predykacie przejęcia · bliźniak AI: marsz terytorialny omija stolicę, na której nie da się stanąć | **336** ✅ | ✅ **2026-10-02** (`8ea5af3` + `44967a3`, §5g) |
 | **G2-2** | **bramka wojny (D13):** lądowanie gracza (kapsuły, „Wyładuj”, away team), `launchInvasion`, oba predykaty przejęcia | **317** · **337** · **338** · **339** | do zrobienia — **bramka w przeglądarce** |
 | **G2-3** | **mobilizacja (D15)** z rozmieszczeniem (**D10**, **D11**, **D12**), drabiną (**D9**) i stanem; usuwanie jednostek (**D6**, **D16**); stempel kafli (**318**) | **318** · **319** · **320** · **322** · **324** | do zrobienia — **bramka w przeglądarce** |
 | **G2-4** | **wycofanie po pokoju (D14)** | — | do zrobienia — **bramka w przeglądarce** |
@@ -116,6 +120,11 @@ garnizonu gracza bez zwolnienia POP (**310**) to trwała utrata ludności. **Dot
 
 ⚠ **Przydział findingów G2 (#336–#342, §6):** **336** → **G2-K1** · **337** · **338** · **339** → **G2-2** · **340** → **G2b** ·
 **341** → bez kroku (instrument; **D18**) · **342** → bez kroku (`homeColonyId: null` zostaje decyzją właściciela).
+
+⚠ **Przydział findingów z sesji G2-K1 (#343–#347, §6):** **343** → osobny, późniejszy slice (zmienia rozmieszczenie
+budynków AI; §5h (b)) · **344** → zarejestrowany, bez kroku (§5h (d)) · **345** → bez kroku (uśpiony) · **346** →
+obserwacja, bez kroku · **347** → bez kroku (plik krytyczny `HexGrid.js` — naprawa wymaga planu). **344** i **347**
+są istotne dla **G2-3** (rozstawienie garnizonu wokół stolicy) i **G2b** (desant AI).
 
 ---
 
@@ -461,7 +470,7 @@ kluczy żywych archetypów · **341** uprząż kontra fixture · rozszerzenie **
 | **G2-0** | `4d6ac63` | piny dzisiejszych szwów, które kolejne kroki zmienią świadomie: **P1** `createUnit` (domyślne `'humanity'` / `'player'` / `'mobile'`; forma 5-argumentowa daje jednostkę gracza) · **P2** `{ owner }` na kolonii z 0 Kr → `offline` w 1. civY, znika w 5. · **P3** kafle AI z `owner: null` · **P4** gdzie staje pierwsza jednostka (stolica lądowa / oceaniczna / placówka) · **P5** przejęcia i `launchInvasion` w pokoju · **P6** przejęcie, transfer i usunięcie kolonii zostawiają jednostki | NEW `g2_seams_smoke` **26/26**; czułość: preload spoza repo odwraca po kolei każdy szew — pada dokładnie jego pin (przy P1 także P2, który stoi na domyślnym `factionId`) `[measured]` |
 | **G2-1** | `82c9196` | `GroundUnitManager.createAIUnit({ archetypeId, empireId, planetId, q, r, morale, deployed = true })` → `{ ok: true, unit }` albo `{ ok: false, reason }` | NEW `g2_create_ai_unit_smoke` **26/26**; fail-first na HEAD-owym `GroundUnitManager`: **4 PASS / 22 FAIL** (zielone tylko świadek i trzy kontrole) `[measured]` |
 
-**Kontrakt `createAIUnit`** (`GroundUnitManager.js:200`) `[code]`:
+**Kontrakt `createAIUnit`** (`GroundUnitManager.js:200` na `82c9196`; od G2-K1 `:191`) `[code]`:
 - `owner` **i** `factionId` = imperium — poza utrzymaniem i limitem rekrutacji gracza;
 - rozkładany archetyp stoi `'deployed'` od utworzenia (te same staty co po `deploy()`); `deployed: false` → `'mobile'`;
 - `morale` = `maxMorale` = podana wartość przycięta do [0, 100]; archetyp bez morale dostaje 0;
@@ -482,19 +491,50 @@ Sweep po G2-1: **252/252 OK, 0 FAIL, 31 advisory** (lista advisory bez zmian); `
 
 ---
 
-## 6. Rejestr findingów arca (#309–#342, zebrane 2026-10-02)
+## 5g. G2-K1 — dostarczone (2026-10-02)
+
+| commit | zawartość | keeper |
+|---|---|---|
+| `8ea5af3` | **C-S1 generowanie:** stolica AI (`building.isCapital`) pomija kafle, na których nie da się stanąć (`EmpireColonyBootstrap.js:732`) — obie ścieżki: kolonia macierzysta i ekspansja (`bootstrapColony`). **C-S2 stare zapisy:** `InvasionSystem.holdsDecisiveGround` — stolica nie do stania nie decyduje, działa reguła placówki (`:417`); stolicy nie przenosimy, bez migracji. **Jedno źródło „da się stanąć”:** tabela kosztu ruchu przeniesiona z `GroundUnitManager` do danych bez zmiany wartości — `GROUND_MOVE_COST` (`GroundUnitData.js:110`) + `isStandableTile` (`:131`); ruch czyta ją przez `MOVE_COST = GROUND_MOVE_COST` (`GroundUnitManager.js:22`) | NEW `g2_ocean_capital_smoke` 23/23; fail-first w czystym worktree 16 PASS / 7 FAIL (T0a–d, T1 — 6 stolic na oceanie, T2, T5c) `[doc: komunikat 8ea5af3]`; `g2_seams_smoke` P4b przebudowany (zgoda właściciela) na skonstruowanej stolicy na oceanie — 27/27 przed naprawą, 28/28 po `[doc: komunikat 8ea5af3]` |
+| `44967a3` | **Bliźniak AI** (§5h (a)): `GroundUnitManager._findTerritorialGoal` (`:1147`) — stolica jest celem marszu tylko wtedy, gdy da się na niej stanąć; inaczej najbliższy kafel z budynkiem, jak dla placówki (lustro `holdsDecisiveGround`) | `g2_ocean_capital_smoke` + T6 → **28/28**; fail-first w czystym worktree na `8ea5af3`: **26 PASS / 2 FAIL** (T6a — brak celu marszu, T6b — przejęcia nigdy) `[measured]` |
+
+**T6** (prawdziwe `launchInvasion`, marsz, okupacja i `_tickCaptureChecks`; wojna wypowiedziana jawnie): kolonia gracza
+ze stolicą na oceanie (kolonia macierzysta emp_002 przejęta przez gracza), desant emp_001 — przed bliźniakiem cel
+marszu = stolica, `no_path`, przejęcia **nigdy** (24 civY); po naprawie cel = kafel z budynkiem (1,2), przejęcie
+w **9. civY**. Kontrola, stolica lądowa: marsz na stolicę i przejęcie w **11. civY** przed i po zmianie `[measured]`.
+
+Sweep po G2-K1: **253/253 OK, 0 FAIL, 31 advisory** (lista advisory bez zmian); `check-i18n` PASS 3426 `[measured]`.
+
+**Zostaje po G2-K1** (§6): martwy test `tile.buildable` dla zwykłych budynków AI (**343**); jedna z dwóch jednostek
+desantu w T6 ląduje na krawędzi bez drogi do jakiegokolwiek celu (**344**); stolice AI na jednej współrzędnej (**346**).
+
+---
+
+## 5h. Odpowiedzi właściciela z sesji G2-K1 (2026-10-02)
+
+| | pytanie | odpowiedź |
+|---|---|---|
+| (a) | bliźniak AI: `_findTerritorialGoal` maszeruje na stolicę, na której nie da się stanąć — AI nigdy nie przejmuje takiej kolonii | **część G2-K1** — osobny commit `44967a3` (§5g) |
+| (b) | martwy test `tile.buildable` dla zwykłych budynków AI (46 z 476 na oceanie) | **osobny, późniejszy slice** — zmienia rozmieszczenie budynków AI (Finding **343**) |
+| (c) | skład progu 10–24 drabiny D9 | **tylko `garrison_unit`** (przypis ¹ pod D9, §1) |
+| (d) | desant AI, który kończy się na krawędzi bez drogi do stolicy | **zarejestrować** (Finding **344**) |
+
+---
+
+## 6. Rejestr findingów arca (#309–#347, zebrane 2026-10-02)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
-#336–#342 na `82c9196` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
+#336–#342 na `82c9196`, #343–#347 na `44967a3` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
 (`VESSEL_ORDERS_PLAN.md` §308; #309 był tam planowany i świadomie **nieprzydzielony**), więc ten arc zaczyna
 od **#309**; przed nadaniem #327+ sprawdzono, że w żadnym rejestrze nie ma numeru wyższego niż #325, a #326
 istniał tylko w komunikacie `c7c5a74`; przed nadaniem #336+ sprawdzono grepem wszystkie rejestry — najwyższy
-był #335. Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
+był #335; przed nadaniem #343+ — najwyższy był #342. Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
 ⚪ obserwacja/higiena · ✅ zamknięty.
 ⚠ Źródło: **309–316** z sesji G1 · **317–325** z audytu G0 (mechanizmy przemierzone w źródle teraz;
 liczby z G0 oznaczone `[doc: raport G0]`) · **326** nadany przy podpisie zakresu G1b · **327–332** kandydaci
 sesji G1b (§5b (e)) · **333** z rekoncyliacji A0 (§5c.1 (c)) · **334–335** z obserwacji bramki G1b (§5c.2) ·
-**336–341** z fazy A G2 (§5e; liczby powtórzone na `82c9196` mają `[measured]`) · **342** z sesji G2-1 (§5f).
+**336–341** z fazy A G2 (§5e; liczby powtórzone na `82c9196` mają `[measured]`) · **342** z sesji G2-1 (§5f) ·
+**343–347** z sesji G2-K1 (§5g; wszystkie liczby powtórzone na `44967a3`; **347** znaleziony przy weryfikacji **344**).
 
 ### ✅ 309 — salwa wroga rozstrzygana PRZED salwą gracza; zabici gracza nie odpowiadają — ZAMKNIĘTY 2026-10-02 (`c0a3d5c`, G1b/S1)
 
@@ -786,19 +826,29 @@ w końcu się rozpadł `[measured: bramka]`. Udział regeneracji morale jednoste
 Rozszerza **313** (ten sam `_tryRetreat`). Istotne dla G2: materializowany garnizon będzie walczył
 z jednostkami, które tak wracają.
 
-### 🔴 336 — stolica kolonii AI może stać na kaflu oceanu — takiej kolonii nie da się przejąć z ziemi (→ G2-K1 / D17)
+### ✅ 336 — stolica kolonii AI może stać na kaflu oceanu — takiej kolonii nie da się przejąć z ziemi — ZAMKNIĘTY 2026-10-02 (`8ea5af3` + `44967a3`, G2-K1)
 
 `EmpireColonyBootstrap._placeBuildingSmart` odrzuca kafle warunkiem `tile.buildable === false`
 (`EmpireColonyBootstrap.js:723`), ale kafel siatki takiego pola nie ma: `buildable` żyje wyłącznie w danych terenu
 (`TERRAIN_TYPES.ocean.buildable: false`, `HexTile.js:57`), a w `HexTile.js` nie ma ani jednego zapisu
 `this.buildable` `[code]`. `colony_base` ma `terrainOnly: null` i `terrainAny: true` (`BuildingsData.js:44-45`),
 więc punktacja kafli remisuje i wygrywa pierwszy przeskanowany kafel `[code]` — wszystkie stolice AI stoją na (-1,2)
-`[measured]`. Na oceanie nie da się stanąć (`MOVE_COST.ocean = Infinity`, `GroundUnitManager.js:30`; zrzut
+`[measured]`. Na oceanie nie da się stanąć (`MOVE_COST.ocean = Infinity`, `GroundUnitManager.js:30` na `82c9196` — od
+G2-K1 tabela mieszka w danych: `GROUND_MOVE_COST.ocean`, `GroundUnitData.js:120`; zrzut
 odmawia na oceanie, `ColonyOverlay.js:4643`) ⇒ `_tickOccupation` nigdy nie ruszy kafla stolicy, a
 `holdsDecisiveGround` (`InvasionSystem.js:404`) żąda właśnie tego kafla ⇒ **kolonii nie da się przejąć**
 `[code]`. Zmierzone na `82c9196`: 14 ziaren, 28 stolic AI, **6 na oceanie**, wszystkie na (-1,2); w fixture
 GATE-S4 stolica emp_002 „Regulus c” (pop 158) stoi na oceanie `[measured]`. Pin `g2_seams_smoke` P4b.
 Kierunek: **D17**.
+**Zamknięcie** (na `44967a3`): generowanie — stolica pomija kafle, na których nie da się stanąć
+(`EmpireColonyBootstrap.js:732`; obie ścieżki bootstrapu); stare zapisy — `holdsDecisiveGround` stosuje do stolicy nie
+do stania regułę placówki (`InvasionSystem.js:417`); bliźniak AI — `_findTerritorialGoal` (`GroundUnitManager.js:1147`)
+nie maszeruje na taką stolicę. Jedno źródło „da się stanąć”: `GROUND_MOVE_COST` (`GroundUnitData.js:110`) +
+`isStandableTile` (`:131`), czytane przez ruch, bootstrap i oba predykaty `[code]`. Na 14 ziarnach 28/28 stolic AI na
+kaflu, na którym da się stanąć (keeper T1); zapis ze stolicą na oceanie wczytuje się bez zmian i przechodzi regułą
+placówki (T5) `[measured]`. Fixture GATE-S4 powstał przed naprawą — „Regulus c” ma dalej stolicę na oceanie i od
+G2-K1 jest zdobywalna regułą placówki. Zostają: **343** (martwy test dla zwykłych budynków) i **346** (jedna
+współrzędna stolic). §5g.
 
 ### 🔴 337 — łazik badawczy (away team) przejmuje kolonię AI w czasie POKOJU (rozszerza 317; → G2-2)
 
@@ -846,6 +896,68 @@ a `serialize` zapisuje `homeColonyId ?? planetId` (`GroundUnitManager.js:1459`; 
 `[code]`. Zmierzone: jednostka AI utworzona na kolonii gracza — `null` w pamięci, `entity_5` (kolonia gracza)
 w zapisie `[measured]`. Dziś nieszkodliwe: `_ownedHomeColony` sprawdza właściciela kolonii, a `popCost` jednostki
 AI = 0 (`ColonyManager.js:1680`, `:1701`) `[code]`. Bez przypisanego kroku.
+
+### 🟠 343 — zwykłe budynki AI stają na kaflach oceanu: martwy test `tile.buildable` w bootstrapie (→ osobny slice)
+
+`EmpireColonyBootstrap._placeBuildingSmart` odrzuca kafle warunkiem `tile.buildable === false`
+(`EmpireColonyBootstrap.js:731`), a kafel siatki nie ma pola `buildable` — żyje ono wyłącznie w `TERRAIN_TYPES`
+(`HexTile.js:57`); w `src/` poza testami czyta `tile.buildable` tylko ta linia, reszta pyta `TERRAIN_TYPES[…]?.buildable`
+`[code: grep]`. Od G2-K1 bramkuje to tylko stolicę (`:732`); zwykłe budynki AI dalej mogą stanąć na oceanie. Zmierzone
+na `44967a3`, 14 ziaren, kolonie macierzyste AI: **46 z 476** budynków na oceanie — `research_station` 26, `shipyard`
+11, `launch_pad` 9 `[measured]`; w fixture GATE-S4 „Regulus c” 4 z 49 `[measured]`. Skutki `[code]`: na kafel oceanu
+nie da się wejść, więc takiego budynku nie da się okupować — placówka, której wszystkie budynki stoją na oceanie, jest
+niezdobywalna regułą placówki dla obu stron; cel marszu terytorialnego AI (`_findTerritorialGoal`, najbliższy kafel
+z budynkiem) nie filtruje terenu, więc może wskazać kafel, do którego nie ma drogi (`no_path`). Drugiego skutku nie
+mierzono. Kierunek: **osobny, późniejszy slice**, bo zmienia rozmieszczenie budynków AI (§5h (b)).
+
+### 🟠 344 — desant AI ląduje na krawędzi bez drogi do celu: `_findLandingHexes` nie sprawdza osiągalności (→ rejestr, §5h (d))
+
+`InvasionSystem._findLandingHexes` (`InvasionSystem.js:500`) bierze kafle brzegowe (mniej niż 6 sąsiadów — rzędy
+polarne), bez oceanu, bez stolicy i bez cudzej jednostki, i je tasuje; nie pyta, czy z kafla da się dojść do stolicy
+`[code]`. Jednostka bez drogi zgłasza `groundUnit:territorialBlocked { reason: 'no_path' }` (`GroundUnitManager.js:1106`)
+i stoi `[code]`. Zmierzone na `44967a3`, 14 ziaren: na koloniach macierzystych AI jako celach (kształt kolonii AI
+odbitej przez gracza) **33 z 486** kafli strefy lądowania nie ma drogi do stolicy, w **4 z 28** kolonii; 31 z 33 to
+`ice_sheet` w rzędzie polarnym. Na koloniach macierzystych gracza **0 z 249** `[measured]`. Dwa mechanizmy
+(domyślne ziarno) `[measured]`: (a) **czapa polarna odcięta oceanem** — `entity_79`: ląd w dwóch składowych (9 i 117
+kafli), 7 z 14 kafli strefy w składowej bez stolicy; (b) **asymetria sąsiedztwa** (**347**) — `entity_188`: z 10 kafli
+rzędu 15 ani BFS po `getNeighbors`, ani A* bez limitu iteracji nie dochodzą do stolicy (`_aStar` ma limit 2000,
+`GroundUnitManager.js:1308`, ale nie on decyduje — przy 25–28 iteracjach kolejka się wyczerpuje). Skutek: w sesji
+G2-K1 desant emp_002 na odbitą kolonię `entity_79` — obie jednostki `no_path`, przejęcia nigdy, także przy stolicy
+lądowej `[measured]`. Bez przypisanego kroku; istotne dla **G2-3** i **G2b**.
+
+### ⚪ 345 — uśpiony nadpis typów kafli z mapy biomów: `ColonyOverlay._applyBiomeMap` rozjechałby siatkę silnika, gdyby powstały pliki `_biome.png`
+
+`ColonyOverlay._loadBiomeMap` (`ColonyOverlay.js:5647`) ładuje `assets/planet-textures/<typ>_<wariant>_biome.png`,
+a `_applyBiomeMap` (`:5675`) nadpisuje `tile.type` KAŻDEGO kafla siatki (`:5727`) — także stolicy i kafli z budynkami
+— asynchronicznie, przy otwarciu mapy `[code]`. Dla kolonii obcej i kolonii z zapisu jest to TA SAMA instancja siatki,
+której używa silnik (`shouldReuseColonyGrid`, `:561`; `_loadBiomeMap` na niej, `:571`) ⇒ teren — a z nim „da się
+stanąć”, ruch, okupacja i warunek przejęcia z D17 — zmieniałby się od samego otwarcia mapy, różnie dla kolonii
+oglądanych i nieoglądanych `[code]`. **Uśpione:** w `assets/planet-textures/` jest 0 plików `_biome.png` na 216
+`[measured]`, więc `onerror` zostawia biomy `PlanetMapGenerator`; generator pisze je wyłącznie z flagą `--biome-map`
+albo `--all-maps` (`generate-planets.js:87`, `:540`, `:1181`) `[code]`. Uzbraja się z chwilą wygenerowania tekstur z tą
+flagą. Mechanizm od `43c01ba` `[git]`. Bez przypisanego kroku.
+
+### ⚪ 346 — stolice AI stoją na jednej współrzędnej (−1,2), także na lodzie (obserwacja)
+
+Punktacja kafli dla stolicy remisuje (kara polarna dla rzędów 0–1 i dwóch ostatnich, `EmpireColonyBootstrap.js:741-743`;
+`score > bestS` ściśle), więc wygrywa pierwszy przeskanowany kafel rzędu 2 `[code]`. G2-K1 dołożył tylko warunek, że na
+kaflu da się stanąć. Zmierzone na `44967a3`, 14 ziaren, kolonie macierzyste AI: **22 z 28** stolic na (−1,2), reszta
+na (6,2), (1,2), (0,2), (2,2) — zawsze rząd 2; teren: równiny 10, góry 9, tundra 5, pustynia 3, pustkowie 1, lód 0
+`[measured]`. W fixture GATE-S4 (gy 60, `bee26cf`, także kolonie ekspansji AI na ciałach lodowych): **11 z 11** stolic
+AI na (−1,2), **5 z 11 na `ice_sheet`**, 1 na oceanie („Regulus c”, sprzed G2-K1) `[measured]`. Na lodzie da się stanąć
+(`GROUND_MOVE_COST.ice_sheet = 3`), więc to nie jest defekt przejęcia — obserwacja o jakości rozmieszczenia. Bez
+przypisanego kroku; rodzina **322**.
+
+### 🟠 347 — `HexGrid.getNeighbors` nie jest symetryczne: na siatce o rzędach różnej szerokości A→B bywa sąsiedztwem, a B→A nie
+
+Zmierzone na `44967a3` (domyślne ziarno): siatka 164 kafli (`entity_79`) — **64 z 956** par sąsiedztwa bez pary
+zwrotnej; siatki 300 kafli (`entity_188` i kolonia macierzysta gracza `entity_5`) — **82 z 1760** `[measured]`.
+Asymetria siedzi przy zawijaniu poziomym liczonym per rząd (`getRowWidth`, `HexGrid.js:123-145`) — przykłady:
+(−1,2)→(6,1) i (−1,2)→(15,3) bez par zwrotnych `[measured]`. Skutek zmierzony: drugi mechanizm **344** (z rzędu 15
+`entity_188` nie da się dojść do stolicy). Każda logika naziemna oparta na sąsiedztwie — A*, ucieczka, rozstawienie
+garnizonu po pierścieniach (**D10**) — dziedziczy kierunkowość `[code]`; poza desantem skutków nie mierzono.
+⚠ `src/map/HexGrid.js` jest na liście plików krytycznych (`CLAUDE.md`) — naprawa wymaga planu. Bez przypisanego
+kroku; istotne dla **G2-3**.
 
 ---
 

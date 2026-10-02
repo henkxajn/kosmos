@@ -5728,8 +5728,17 @@ defensywnych przy morale 0 ZOSTAJE · D9 drabina sumy poziomów fabryk (jedna ta
 rozstawiony, nie w stosie · D11/D12 podział między ciałami, stolica = `capitalOf` · D13 bramka wojny (status
 relacji `'war'`, zaczep `diplomacy:warDeclared`) · D14 wycofanie po pokoju (6 mies.) · D15 mobilizacja raz na
 imperium · D16 zniszczenie ciała usuwa WSZYSTKIE jednostki · D17 stolice na oceanie · D18 kalibracja na fixture.
-Nowe findingi **336–342**: 🔴 **336** stolica AI na oceanie (nie do przejęcia z ziemi) · 🔴 **337** łazik przejmuje
+Nowe findingi **336–342**: ✅ **336** stolica AI na oceanie (nie do przejęcia z ziemi; zamknięty w G2-K1) · 🔴 **337** łazik przejmuje
 kolonię AI w pokoju · 🟠 **338** „Wyładuj” bez bramek · 🟠 **339** przejęcia ślepe na wojnę · ⚪ **340** pule desantu ·
 ⚪ **341** uprząż vs fixture · ⚪ **342** `homeColonyId: null` po zapisie.
-**Dalej:** G2-K1 (stolice na oceanie) → G2-2 (bramka wojny) → G2-3 (mobilizacja) → G2-4 (wycofanie po pokoju) →
-G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02).
+✅ **G2-K1** (`8ea5af3` + `44967a3`, D17): stolica AI staje WYŁĄCZNIE na kaflu, na którym da się stanąć
+(`EmpireColonyBootstrap._placeBuildingSmart`); w starych zapisach stolica nie do stania nie decyduje o przejęciu —
+reguła placówki (`InvasionSystem.holdsDecisiveGround`); bliźniak AI — marsz terytorialny (`_findTerritorialGoal`)
+omija taką stolicę. ⚠ **Jedno źródło „da się stanąć”:** tabela kosztu ruchu mieszka w DANYCH —
+`GroundUnitData.GROUND_MOVE_COST` + `isStandableTile`; `GroundUnitManager` ją czyta (`MOVE_COST = GROUND_MOVE_COST`),
+bez własnej kopii. Keeper `g2_ocean_capital_smoke` **28/28**; sweep **253/253**. Nowe findingi **343–347**:
+🟠 **343** zwykłe budynki AI na oceanie (martwy test `tile.buildable`, 46/476 — osobny slice) · 🟠 **344** desant AI
+na krawędzi bez drogi do stolicy · ⚪ **345** uśpiony nadpis typów kafli z `_biome.png` · ⚪ **346** stolice AI na
+(−1,2), także na lodzie · 🟠 **347** `HexGrid.getNeighbors` asymetryczne (plik krytyczny).
+**Dalej:** G2-2 (bramka wojny) → G2-3 (mobilizacja) → G2-4 (wycofanie po pokoju) → G2b → G3 → **G1c** (rodzina
+„utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02).
