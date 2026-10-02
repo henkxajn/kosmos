@@ -170,6 +170,59 @@ export class GroundUnitManager {
     return unit;
   }
 
+  /**
+   * G2-1 (AI GARRISON, D6/D7) — JEDYNE wejście tworzenia jednostki naziemnej IMPERIUM AI.
+   *
+   * Po co osobno: `createUnit` ma wartości domyślne GRACZA (`factionId 'humanity'`, `owner 'player'`,
+   * rozkładany archetyp `'mobile'`), a forma 5-argumentowa zastępuje `opts` przez `{ factionId }`, więc
+   * jednostka trafia wtedy do gracza (Finding 323, 324). Jednostka AI z samym `{ owner }` jest liczona
+   * do utrzymania jak jednostka gracza i na kolonii z 0 Kr w 1. civY przechodzi w `offline` — przestaje
+   * bronić i do 5. civY znika (pin `g2_seams_smoke` P2).
+   *
+   * Kontrakt (D6, D7, „AI niczego nie buduje”):
+   *   • `owner` I `factionId` = imperium — to wyłącza jednostkę z utrzymania i z limitu rekrutacji
+   *     gracza (`ColonyManager._tickGroundUnitUpkeep`, `_canRecruitMoreUnits`), a fabryka mapuje
+   *     imperium na frakcję obcych;
+   *   • rozkładany archetyp z `deployed` (domyślnie true) stoi `'deployed'` od utworzenia — te same
+   *     staty, co po zakończonym rozkładaniu (`_applyDeployStateStats`); `deployed: false` ⇒ `'mobile'`;
+   *   • `morale` = `maxMorale` = podana wartość, przycięta do [0, 100] (górna granica jak u gracza
+   *     w `ColonyManager.startGroundUnitBuild`); archetyp bez morale (`noMorale`) dostaje 0;
+   *   • `org` i `supply` — bazowe i pełne (z fabryki); `popCost` 0 — AI nie płaci POP;
+   *   • `homeColonyId` = kolonia imperium na tym ciele (pełna albo placówka), inaczej `null`.
+   *     ⚠ `serialize` zapisuje `homeColonyId ?? planetId`, więc `null` wraca z zapisu jako id ciała.
+   * Odmowa — NIC nie powstaje: nieznany archetyp (także legacy `infantry`/`mech`/`garrison`), imperium
+   * spoza `empireRegistry` (także `'player'`), morale niebędące liczbą.
+   *
+   * @param {{ archetypeId: string, empireId: string, planetId: string, q: number, r: number,
+   *           morale: number, deployed?: boolean }} spec
+   * @returns {{ ok: true, unit: Object } | { ok: false, reason: 'unknown_archetype'|'unknown_empire'|'invalid_morale' }}
+   */
+  createAIUnit({ archetypeId, empireId, planetId, q, r, morale, deployed = true } = {}) {
+    const arch = UNIT_ARCHETYPES[archetypeId];
+    if (!arch) return { ok: false, reason: 'unknown_archetype' };
+    if (!empireId || empireId === 'player' || !window.KOSMOS?.empireRegistry?.get?.(empireId)) {
+      return { ok: false, reason: 'unknown_empire' };
+    }
+    if (!Number.isFinite(morale)) return { ok: false, reason: 'invalid_morale' };
+
+    // Forma z OBIEKTEM `opts` jako 5. argumentem — nigdy 5-argumentowa (archetyp, frakcja, ciało, q, r),
+    // która zastępuje `opts` przez `{ factionId }` i oddaje jednostkę graczowi.
+    const unit = this.createUnit(archetypeId, planetId, q, r, {
+      owner:       empireId,
+      factionId:   empireId,
+      deployState: deployed ? 'deployed' : 'mobile',
+    });
+    if (!unit) return { ok: false, reason: 'unknown_archetype' };
+
+    const m = arch.noMorale === true ? 0 : Math.max(0, Math.min(100, morale));
+    unit.morale    = m;
+    unit.maxMorale = m;
+    unit.popCost   = 0;
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+    unit.homeColonyId = colony && colony.ownerEmpireId === empireId ? colony.planetId : null;
+    return { ok: true, unit };
+  }
+
   removeUnit(unitId) {
     const unit = this._units.get(unitId);
     if (!unit) return false;
