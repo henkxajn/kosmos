@@ -272,6 +272,19 @@
 > • **Korekty:** **49** zamknięty po stronie DANYCH (`transport_assault` od `0e6ea0d`, nikt go nie
 > zamawia ⇒ reszta = **201**) · **50** zaniżony (znikały OBIE strony) i **zastąpiony przez D7**
 > (archetypy wszędzie, krok G2b).
+>
+> **Aktualizacja 2026-10-02 (późna) — AI GARRISON G1b ZAMKNIĘTY: ogień jednoczesny, POP jednostek wracają do domu.**
+> Sweep: **250/250 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3426** · save **v101 bez migracji**.
+> • ✅ **309** (`c0a3d5c`) · **310** (`a42ec93`) · **312** (`03688f0`) · **326** (`c7c5a74`; numer nadany przy
+> podpisie zakresu) — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze 309/310/312 zdjęte
+> z A5. Bramka live właściciela PASS (`AI_GARRISON_PLAN.md` §5c).
+> • **NOWE: #327–#335** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 **328**, **329**, **330**, **333**, **335** ·
+> ⚪ **327**, **331**, **334**; **332** ✅ zamknięty w commicie dokumentacji G1b (tabela zdarzeń `groundUnit:*`
+> w `CLAUDE.md` poprawiona do stanu z grepa).
+> ⚠ **333 to defekt z rekoncyliacji A0:** nieoddana część POP po śmierci jednostki z `rate < 1` zostaje
+> zablokowana NA ZAWSZE i dalej liczy się do populacji (zmierzone: +0,3 po 27 miesiącach, zero wywołań
+> usuwających ludzi). **Nienaprawiony — do decyzji właściciela.** Wiersz A9 „niezweryfikowane” (AI-vs-AI)
+> dostał numer **331**: mechanizm potwierdzony w kodzie, osiągalność dalej niezmierzona.
 
 
 ---
@@ -349,7 +362,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-325** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02) |
+| **309-335** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02; 326-335 z sesji G1b) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -449,14 +462,16 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **164** | 🟠 | przełącznik auto-slow **nie ma producenta** — `time:autoSlowToggle` zero nadawców, pole nieserializowane ⇒ gracz **nie może** tego wyłączyć; resztki w `time:display` i `BottomBar` |
 | **165a** | 🟠 | obrona orbitalna **nie ma PRZEBIEGU** — jedno `resolveBattle`, brak `vessel:engaged`, brak rund ⇒ walka o stolicę jest wyłącznie wynikiem po fakcie |
 | **W3-26** | 🟠 | `playerVesselsToBattleUnit([])` fabrykuje obrońcę `{hp:100, weapons:[]}`; fantom pinowany jako zachowanie silnika, kandydat do balansu |
-| **309** | 🟠 | **salwa wroga rozstrzygana PRZED salwą gracza** (`CombatSystem.js:212` przed `:217`, zabici pomijani `:279`) — wbrew komentarzowi „Simultaneous”; AI wygrywa 84–94% w parach symetrycznych, potwierdzone na żywo ⇒ **G1b**. `AI_GARRISON_PLAN.md` §6 |
-| **310** | 🟠 | `morale_collapse` (`CombatSystem.js:246-250`) **nie zwalnia zablokowanych POP** — ani `unlockPops`, ani `groundUnit:destroyed` (reintegracja); po G1 typowa utrata jednostki defensywnej ⇒ **G1b** |
 | **311** | 🟠 | `SupplyCoverageSystem.js:162` zapisuje legacy jednostce gracza `supply = 0` przez `?? 0` ⇒ zero obrażeń + atrycja (klasa 65, inne pole) |
-| **312** | ⚪ | `groundUnit:disbanded` — **zero subskrybentów**; Dziennik milczy przy rozpadzie i przy rozwiązaniu z braku utrzymania |
 | **313** | ⚪ | `_tryRetreat` zostawia `_path`, zawsze ucieka w +q, wchodzi na obcy kafel — rozszerza **56** |
 | **314** | ⚪ | martwe człony `_scoreTarget` `'scout'`/`'ranged'` (`CombatSystem.js:361`, `:364`) — instancje noszą lustro legacy |
 | **315** | ⚪ | `GroundUnitManager.attackUnit` martwa (zero wołających); komentarze `GroundUnitFactory.js:10`, `:139` mówią inaczej |
 | **316** | ⚪ | `ColonyOverlay.js:2706` — `NaN` morale dla jednostki z `supply`, bez `morale` (wąska ścieżka) |
+| **327** | ⚪ | śmierć na minie: `groundUnit:destroyed` bez `popCost`/`archetypeId` (`GroundUnitManager.js:965-967`) ⇒ reintegracja odpada na bramce (`ColonyManager.js:1627`), POP zablokowane na zawsze — **latentny** (jedyny producent min to martwe `lay_minefield.execute`) |
+| **328** | 🟠 | kolejka reintegracji `_pendingPopReturns` poza zapisem (`ColonyManager.js:2526-2550`), a blokady POP w zapisie ⇒ zapis i wczytanie w oknie zwłoki (1–2 wyświetlane miesiące) kasuje należny zwrot na zawsze |
+| **330** | 🟠 | ręczne rozwiązanie (`UnitCardPanel.js:203`, przycisk-literał) emituje `groundUnit:destroyed` ⇒ idzie przez tabelę ŚMIERCI (szturm odzyskuje 0,3 z 0,6 po 2 civY, reszta → **333**), choć utrzymanie i rozpad oddają pełny koszt od razu |
+| **333** | 🟠 | **nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana NA ZAWSZE i liczy się do populacji** — zmierzone (+0,3 po 27 mies., zero wywołań usuwających ludzi); wzorzec poprawny: `killCrew` (W2). Rekoncyliacja A0, **nienaprawiony** |
+| **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -477,6 +492,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **72 · 73 · 84 · 85 · 91 · 92 · 93 · 94** | ⚪ | filed przy audycie własności; po D1-D6 prawdopodobnie **latentne albo higiena** | ⚠ **nie weryfikowane po kolei** |
 | **318** | 🟠 | kafle kolonii AI mają `owner = null` — stempel daje dopiero otwarcie mapy w `ColonyOverlay.js:584-588` | rodzina **54**/**58**; czytane przez okupację i przejęcie (G2). `AI_GARRISON_PLAN.md` §6 |
 | **319** | 🟠 | jednostki naziemne **osierocone** przy zniszczeniu ciała i **nietknięte** przez `transferColony`/`captureColonyForPlayer` | rozszerza **59**; decyzja **D6** (G2) |
+| **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -568,7 +584,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **159** | ⬜ | `map_body` ma tę samą klasę co 109, ale `commandTacticalMap:false` ⇒ **utajony**, wraca z flagą | NIE planować |
 | **dług baseline `check-i18n`** | 🟠 | **62 napisy w 11 plikach UI** siedzą w zapadce Findingu 177 (w tym 112/113/126 i 9 w martwym `PlanetScene`) | zapadka nie pozwala go **powiększyć**; spłata = osobna praca |
 | **76 · 93** | ⚪ | `BuildingSystem.deployFromCargo()` z `CLAUDE.md` **nie istnieje** · liczba keeperów w `CLAUDE.md` nieaktualna (dziś **186**) | Załącznik A przy sprzątaniu |
-| **niezweryfikowane** | ⚪ | czy `combat:round` / `combat:hexResolved` mogą odpalić dla walki **AI-vs-AI** (handler zakłada udział gracza) | |
+| **331** | ⚪ | walka naziemna **AI-vs-AI**: zero ognia (strony nie-graczy scalone, `CombatSystem.js:188-194`, `:295`), a `GameScene.js:5473` / `:5487` loguje graczowi „bitwę” i pokazuje raport | dawny wiersz „niezweryfikowane”: mechanizm potwierdzony w kodzie, osiągalność niezmierzona (**D5**) |
+| **334** | ⚪ | karta jednostki w `ColonyOverlay`: polskie literały (statusy `:2660-2667`, przyciski `:2858`/`:2880`, flash `:5449`) i surowe id w tytule (`unit.type.toUpperCase()`, `:2641`) — klasa **113**, `check-i18n` ślepy | obserwacja z bramki G1b (ekran mieszał EN i PL) |
 
 ---
 
@@ -681,7 +698,8 @@ obudzi. `54`/`58` to warunki wstępne uczciwego pomiaru (kto w ogóle ma jednost
 (morale) i R13 (RNG) z wcześniejszych rejestrów.
 ⚠ **Aktualizacja 2026-10-02:** `65` ✅ zamknięty w **AI GARRISON G1** razem z S12 (morale); `50`
 **zastąpiony przez D7** (archetypy wszędzie — krok G2b); `56` rozszerzony przez **313**. Dalsza praca nad
-tą grupą idzie w `AI_GARRISON_PLAN.md` (G1b → G2 → G2b → G3), nie w osobnym slice'ie GROUND.
+tą grupą idzie w `AI_GARRISON_PLAN.md` (G1b ✅ 2026-10-02 → G2 → G2b → G3), nie w osobnym slice'ie GROUND. `313` rozszerzony dalej przez
+**335** (pętla odwrotu AI, bramka G1b).
 
 ### ④ `141` + `145` + `127` — slice **ORDER_TRUTHFULNESS** (już uzasadniony w §7a)
 Jeden chokepoint (`MOS.issueOrder:181-246` — wszystkie 9 gałęzi `_issueX` wychodzi tym samym

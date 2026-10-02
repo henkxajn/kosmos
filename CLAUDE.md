@@ -394,7 +394,7 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `observatory:collisionAlert { bodyA, bodyB, yearsUntil, margin }` | CollisionForecast | EventLog, GameScene |
 | `observatory:alertCleared { alertId }` | CollisionForecast | UIManager |
 | `groundUnit:capturingBuilding { unitId, planetId, q, r, progress }` | GroundUnitManager | ⛔ **MARTWY — producent bez wywołań; ZERO subskrybentów** (ColonyOverlay go NIE słucha) |
-| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | ⛔ **MARTWY U ŹRÓDŁA** — InvasionSystem subskrybuje (`:57-59`), ale event nigdy nie leci |
+| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | ⛔ **MARTWY U ŹRÓDŁA** — InvasionSystem subskrybuje (`:64`), ale event nigdy nie leci |
 | `colony:capturedByPlayer { planetId, colonyName, previousOwner, isOutpost, reason }` | ColonyManager (`captureColonyForPlayer`) | GameScene (switchActiveColony), UIManager (EventLog + odśwież listę) |
 | `groundUnit:captureInterrupted { unitId, planetId, q, r }` | GroundUnitManager | ⛔ **MARTWY — producent bez wywołań; ZERO subskrybentów** |
 | ⚠ **Dlaczego te trzy są martwe** (raz, dla wszystkich): `GroundUnitManager.capture()` jest wołane WYŁĄCZNIE z `GROUND_ABILITIES.capture_building.execute` (`groundAbilities.js:28`), a `.execute` żadnej zdolności naziemnej nie jest w `src/` wywoływane. **Realna okupacja emituje `tile:ownerChanged`** (wiersz niżej), nie te trzy. Zmierzone: 600 civYears pełnej autonomii ⇒ `buildingCaptured = 0`, `capturingBuilding = 0`, przy `tileOwnerChanged = 26`. ||
@@ -405,23 +405,26 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `station:orphaned { stationId, … }` | StationSystem (`:223`) | ⛔ **ZERO konsumentów** |
 | `empire:colonyAdded { empireId, colonyId }` | EmpireRegistry (`:127`) | TerritoryService, DebugLog |
 | `empire:colonyRemoved { empireId, colonyId }` | EmpireRegistry (`:144`) | TerritoryService; ⚠ **BRAK w `DebugLog.TRACKED_EVENTS`** (asymetria wobec `colonyAdded` — utrata kolonii przez imperium jest w audycie AI niewidoczna) |
-| `groundUnit:orbitalStrike { unitId, planetId, q, r, hits, friendlyFireHits, placeholder }` | GroundAbilities (orbital_support) | BattleSystem (placeholder) |
-| `groundUnit:minefieldLaid { planetId, q, r, ownerId }` | GroundAbilities (lay_minefield) | ColonyOverlay, GameState |
-| `groundUnit:mineTrigger { planetId, q, r, unitId, damage }` | GroundUnitManager | ColonyOverlay, EventLog |
-| `groundUnit:fogRevealed { unitId, planetId, hexes[] }` | GroundUnitManager | FogSystem (TBD) |
-| `groundUnit:healed { medicId, targetId, amount }` | GroundUnitManager | ColonyOverlay |
-| `groundUnit:expired { unitId, planetId, reason }` | GroundUnitManager | ColonyOverlay |
-| `groundUnit:stealthRevealed { unitId }` | GroundUnitManager | ColonyOverlay |
-| `groundUnit:stealthHidden { unitId }` | GroundUnitManager | ColonyOverlay |
+| ⚠ **Konsumenci `groundUnit:*` niżej = stan z grepa 2026-10-02** (`c7c5a74`, Finding **332**): 37 zdarzeń, 98 trafień; poza `EventBus.on` z dosłowną nazwą subskrybuje pośrednio WYŁĄCZNIE `DebugLog` (`TRACKED_EVENTS`: `territorialIntent`, `territorialBlocked`). Wiersze podawały konsumentów, których nie ma (`ColonyOverlay`, `UIManager`/`EventLog`, `GameState`, `FogSystem`, `BattleSystem`). ||
+| `groundUnit:orbitalStrike { vesselId, planetId, q, r, damage, ownerId }` | ColonyOverlay (tryb ostrzału z orbity, `:4622`); GroundAbilities (`orbital_support`, `:61` — ⛔ martwe: `.execute` bez wołających) | GroundUnitManager (`:51` → `_onOrbitalStrike`: obrażenia dla wszystkich jednostek na heksie) |
+| `groundUnit:minefieldLaid { planetId, q, r, ownerId }` | GroundAbilities (`lay_minefield`, `:102` — ⛔ martwe: `.execute` bez wołających) | ⛔ **ZERO subskrybentów** (stan miny zapisuje sam emitent: `gs.set`, `groundAbilities.js:94-100`) |
+| `groundUnit:mineTrigger { planetId, q, r, unitId, damage }` | GroundUnitManager (`:956`) | ⛔ **ZERO subskrybentów** |
+| `groundUnit:fogRevealed { unitId, planetId, hexes[] }` | GroundUnitManager (`:893`) | ⛔ **ZERO subskrybentów** (`FogSystem` nie istnieje) |
+| `groundUnit:healed { medicId, targetId, amount }` | GroundUnitManager (`:873`) | ⛔ **ZERO subskrybentów** |
+| `groundUnit:expired { unitId, planetId, reason }` | GroundUnitManager (`:847`) | ⛔ **ZERO subskrybentów** |
+| `groundUnit:stealthRevealed { unitId }` | GroundUnitManager (`:729`) | ⛔ **ZERO subskrybentów** |
+| `groundUnit:stealthHidden { unitId }` | GroundUnitManager (`:905`) | ⛔ **ZERO subskrybentów** |
 | `groundUnit:buildStarted { planetId, archetypeId, factionId }` | ColonyManager | — (emit-only; GroundUnitPanel czyta zwrotkę `startGroundUnitBuild`) |
 | `groundUnit:buildCompleted { unitId, archetypeId, factionId, planetId, q, r }` | ColonyManager | — (emit-only) |
 | `groundUnit:buildFailed { planetId, archetypeId, reason }` | ColonyManager | — (emit-only) |
-| `groundUnit:supplyChanged { unitId, supply, max }` | SupplyCoverageSystem | ColonyOverlay |
-| `groundUnit:orgChanged { unitId, org, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
-| `groundUnit:moraleChanged { unitId, morale, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
-| `groundUnit:starved { unitId, planetId }` | SupplyCoverageSystem | UIManager (EventLog) |
-| `groundUnit:disbanded { unitId, planetId, reason, archetypeId }` | ColonyManager (upkeep), CombatSystem (`morale_collapse`) | ⛔ **ZERO subskrybentów** (Finding **312**) — Dziennik milczy; ta tabela twierdziła „UIManager, EventLog” (sprostowane 2026-10-02) |
-| `groundUnit:resumed { unitId, planetId }` | ColonyManager (upkeep) | ColonyOverlay |
+| `groundUnit:supplyChanged { unitId, supply, max }` | SupplyCoverageSystem | ⛔ **ZERO subskrybentów** |
+| `groundUnit:orgChanged { unitId, org, max }` | GroundUnitManager, SupplyCoverageSystem, CombatSystem | ⛔ **ZERO subskrybentów** |
+| `groundUnit:moraleChanged { unitId, morale, max }` | GroundUnitManager, SupplyCoverageSystem, CombatSystem | ⛔ **ZERO subskrybentów** |
+| `groundUnit:starved { unitId, planetId }` | SupplyCoverageSystem (`:194`) | ⛔ **ZERO subskrybentów** — Dziennik milczy przy śmierci głodowej |
+| `groundUnit:disbanded { unitId, planetId, reason, archetypeId, owner, type, customName }` | ColonyManager (utrzymanie, `:1570`), CombatSystem (`morale_collapse`, `:263`) | NotificationCenter (`:67` → wpis TYLKO w Dzienniku, tylko jednostki gracza, bez dzwonka; G1b/S3, Finding **312** ✅). ⚠ Subskrybent NIE zwalnia POP — robi to emitent (utrzymanie inline `:1566-1568`, rozpad przez `releaseGroundUnitPops`) |
+| `groundUnit:resumed { unitId, planetId }` | ColonyManager (utrzymanie, `:1558`) | ⛔ **ZERO subskrybentów** |
+| `groundUnit:destroyed { unitId, planetId, archetypeId, popCost, cause, owner \| ownerId }` | CombatSystem (`:239`), GroundUnitManager (ostrzał `:73`; mina `:965` — BEZ `popCost`/`archetypeId`, Finding **327**), SupplyCoverageSystem (głód, `:200`), VesselManager (`:1137`), UnitCardPanel (ręczne rozwiązanie, `:214`, Finding **330**); `GroundUnitManager:743` w martwej `attackUnit` | ColonyManager (`:1625` → reintegracja POP do kolonii MACIERZYSTEJ z terminem właściciela, G1b/S4, Finding **326** ✅), ArmySystem (`:46`). ⚠ Każdy żywy emitent emituje PRZED `removeUnit` — handler czyta jednostkę z rejestru |
+| `groundUnit:popsLost { unitId, owner, type, customName, planetId, homeColonyId, amount, cause }` | ColonyManager (`_reportPopsLost`, `:1714`) — brak kolonii właściciela przy zwolnieniu albo reintegracji (G1b) | NotificationCenter (`:64` → wpis TYLKO w Dzienniku, tylko gracz, bez dzwonka) |
 | `supply:coverageChanged {}` | SupplyCoverageSystem | ColonyOverlay |
 | `vessel:orderIssued { vesselId, order }` | MovementOrderSystem | UIManager (FleetManagerOverlay), VesselManager (suspend mission) |
 | `vessel:orderCompleted { vesselId, orderId, type, completedYear }` | MovementOrderSystem | UIManager, VesselManager (resume mission), EventLog |
@@ -5661,10 +5664,11 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1: walka naziemna się rozstrzyga (save **v101 bez migracji**, live-gate PASS — G1 ZAMKNIĘTY 2026-10-02)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02)
 
-Plan, decyzje **D1–D7** i rejestr findingów **#309–#325**: `docs/design/AI_GARRISON_PLAN.md`.
-Commity: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
+Plan, decyzje **D1–D7** i rejestr findingów **#309–#335**: `docs/design/AI_GARRISON_PLAN.md`.
+Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
+Commity G1b: `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326).
 
 **Jedno zdanie:** świeże jednostki uciekały przy spawnie (próg 20 > `baseMorale` 10–20), wyjątek
 „jednostka defensywna nie ucieka” był martwy (`'defense'` wobec lustra `'defensive'`), a jednostki
@@ -5675,14 +5679,41 @@ odczycie) — więc walka naziemna się nie rozstrzygała.
 - **D5b** `DEFAULT_MORALE = 100` (`unitArchetypes.js`) w 12 miejscach (silnik + dwa miejsca UI); tripwire T7.
 - **D5c** `export const MORALE_RETREAT_THRESHOLD = 5` (`CombatSystem.js`) — ucieczka po ⌈(M − 5)/3⌉ trafieniach.
 
-⚠ Garnizon przy bazowym morale (10) nie ucieka, ale **po 4 trafieniach rozpada się** — przyjęte dla G1.
+⚠ Garnizon przy bazowym morale (10) nie ucieka, ale **po 4 trafieniach rozpada się** — przyjęte dla G1;
+czy jednostka defensywna ma się w ogóle rozpadać od morale — **niepodpisane, do G2**.
 ⚠ Fale legacy AI wygrywają 84–100% z archetypami gracza przy +0 ⇒ **D7**: AI na modelu archetypów
-wszędzie, także w pulach desantu (G2b).
-⚠ AI strzela w rundzie pierwsze (**309**, potwierdzone na żywo), a `morale_collapse` nie zwalnia
-zablokowanych POP (**310**) — oba w **G1b**. 🔴 **317**: lądowanie i podbój w czasie POKOJU (D4 ⇒ G2).
-⚠ `groundUnit:disbanded` nie ma subskrybenta (**312**) — tabela zdarzeń wyżej sprostowana.
+wszędzie, także w pulach desantu (G2b). 🔴 **317**: lądowanie i podbój w czasie POKOJU (D4 ⇒ G2).
 
-Keeper `ground_morale_resolution_smoke` **35/35** (rośnie z commitami: 11 → 22 → 35). Sweep
-**248/248 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = 3424).
-**Dalej:** G1b → G2 (bramka wojny dla lądowania, materializacja garnizonu, wspólna funkcja „utwórz
+**G1b — jedno zdanie:** strona AI strzelała w rundzie pierwsza, rozpad morale nie zwalniał zablokowanych
+POP, rozwiązanie jednostki było nieme, a reintegracja po śmierci szła do kolonii ciała, na którym jednostka
+zginęła.
+- **S1 (#309)** — ogień naprawdę jednoczesny: migawka stanu z początku rundy dla OBU stron
+  (`CombatSystem._runBattleRound`), strzelec czytany z migawki; kolejność RNG bez zmian. Szturm vs szturm
+  97/4/0 → 14/13/74 % (AI / gracz / wspólne zabicie) — wspólne zabicia **przyjęte**.
+- **S2 (#310)** — NEW `ColonyManager.releaseGroundUnitPops(unit, cause)`: pełny koszt POP do kolonii
+  MACIERZYSTEJ z terminem właściciela, wołane w gałęzi rozpadu PRZED emisją i `removeUnit` (synchronicznie —
+  zmierzone przez prawdziwy `time:tick`), dokładnie raz (`_popsReleased`). Brak kolonii właściciela ⇒ NEW
+  `groundUnit:popsLost` + wpis.
+- **S3 (#312)** — `NotificationCenter` subskrybuje `groundUnit:disbanded` i `groundUnit:popsLost`: wpis
+  **tylko w Dzienniku** (bez dzwonka), tylko jednostki gracza; NEW klucze `event.groundUnit.disbandedMorale`
+  i `event.groundUnit.popsLost` PL+EN. Subskrybent NIE zwalnia POP.
+- **S4 (#326)** — reintegracja po śmierci do kolonii MACIERZYSTEJ (`_ownedHomeColony`), z ponownym
+  sprawdzeniem właściciela przy wypłacie po zwłoce. Tabela reintegracji bez zmian.
+
+⚠ **REGUŁA WŁAŚCICIELA dla POP jednostek naziemnych:** zwolnienie i zwrot idą WYŁĄCZNIE do kolonii
+macierzystej należącej do właściciela jednostki (`_colonyBelongsTo`) — nigdy do ciała, na którym jednostka
+stoi. ⚠ Ścieżka UTRZYMANIA jeszcze jej nie używa (**329**).
+⚠ **Odczyt z bramki, który wyglądał na asynchroniczne zwolnienie, był ścieżką ŚMIERCI:** garnizon z morale
+podniesionym technologiami ginie od obrażeń, nie od rozpadu ⇒ `garrison_unit` `{rate 1.0, delay 1.0}` =
+pełne 1,2 dokładnie miesiąc później. Rekoncyliacja: plan §5c.1.
+⚠ **Otwarte z G1b (#327–#335):** 🟠 **333** nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana
+NA ZAWSZE i liczy się do populacji · 🟠 **330** ręczne rozwiązanie idzie przez tabelę śmierci · 🟠 **328**
+kolejka reintegracji poza zapisem · 🟠 **329** utrzymanie bez terminu właściciela · 🟠 **335** pętla odwrotu
+AI (rodzina 313) · ⚪ **327** mina (latentny) · ⚪ **331** AI-vs-AI · ⚪ **334** literały karty jednostki.
+**332** ✅ — tabela zdarzeń `groundUnit:*` wyżej poprawiona do stanu z grepa.
+
+Keepery: `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
+`ground_unit_loss_smoke` **29/29**. Sweep **250/250 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS
+(pl = en = 3426).
+**Dalej:** G2 (bramka wojny dla lądowania, materializacja garnizonu, wspólna funkcja „utwórz
 jednostkę AI z zadanym morale”) → G2b → G3.
