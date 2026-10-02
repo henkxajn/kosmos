@@ -3008,6 +3008,7 @@ export default {
   'event.groundUnit.starved':    'Jednostka {0} głoduje na {1}',
   'event.groundUnit.disbanded':  'Jednostka {0} rozwiązana (brak utrzymania)',
   'event.groundUnit.popsLost':   'Utracono {0} POP jednostki {1} (brak kolonii macierzystej)',
+  'event.groundUnit.disbandedMorale': 'Jednostka {0} rozwiązana (załamanie morale)',
   'event.groundUnit.resumed':    'Jednostka {0} aktywna',
   'event.colony.suppliesLow':    'Niski stan military_supplies w {0}',
 

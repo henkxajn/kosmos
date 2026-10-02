@@ -3007,6 +3007,7 @@ export default {
   'event.groundUnit.starved':    'Unit {0} is starving on {1}',
   'event.groundUnit.disbanded':  'Unit {0} disbanded (no upkeep)',
   'event.groundUnit.popsLost':   'Lost {0} POP of unit {1} (no home colony)',
+  'event.groundUnit.disbandedMorale': 'Unit {0} disbanded (morale collapse)',
   'event.groundUnit.resumed':    'Unit {0} resumed',
   'event.colony.suppliesLow':    'Military supplies low in {0}',
 

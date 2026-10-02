@@ -1571,6 +1571,8 @@ export class ColonyManager {
               unitId: u.id, planetId: u.planetId, homeColonyId: homeId,
               reason: 'no_credits',
               archetypeId: u.archetypeId ?? null,
+              // G1b/S3 (Finding 312): wpis w Dzienniku potrzebuje właściciela i etykiety jednostki
+              owner: u.owner ?? null, type: u.type ?? null, customName: u.customName ?? null,
             });
             mgr.removeUnit?.(u.id);
           }

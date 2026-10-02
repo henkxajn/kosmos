@@ -11,6 +11,13 @@
 //   T-E  ścieżka utrzymania (brak kredytów) dalej zwalnia DOKŁADNIE RAZ. Kontrola pinu: subskrybent
 //        `groundUnit:disbanded` bez filtra zwolniłby drugi raz — i ten test by to złapał.
 //
+//   S3 (Finding 312) — rozwiązanie jednostki GRACZA zostawia wpis w Dzienniku z powodem; subskrybent
+//        Dziennika NIE zwalnia POP-ów.
+//
+//   T-G  rozpad morale i brak utrzymania zostawiają po JEDNYM wpisie w Dzienniku przez prawdziwy
+//        subskrybent (`NotificationCenter`); syntetyczne `groundUnit:disbanded` daje wpis, a blokada POP
+//        stoi (subskrybent nie zwalnia); rozwiązanie jednostki AI nie trafia do Dziennika gracza.
+//
 // ⚠ Harness: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu) + własne
 //   `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; konstruowane PO boocie,
 //   bo boot czyści EventBus). Rekrutacja PRAWDZIWĄ ścieżką `startGroundUnitBuild` → `_tickGroundUnitBuilds`
@@ -198,6 +205,61 @@ console.log('T-E — rozwiązanie z braku utrzymania dalej zwalnia POP-y DOKŁAD
   const c = runUpkeep(true);
   assert(Math.abs(c.after - (c.before - 2 * c.cost)) < EPS,
     `T-E KONTROLA PINU: subskrybent bez filtra zwolniłby DRUGI raz (${c.before} → ${c.after}) — pin wyżej to widzi`);
+}
+
+// ── T-G — S3: rozwiązanie zostawia JEDEN wpis w Dzienniku ────────────────────────────────
+console.log('T-G — rozwiązanie jednostki gracza zostawia JEDEN wpis w Dzienniku (prawdziwy subskrybent, bez zwalniania POP)');
+{
+  // T-G1 — załamanie morale
+  const w = boot();
+  const g = recruit(w, w.home, 'garrison_unit');
+  collapseGarrison(w, g);
+  const want = t('event.groundUnit.disbandedMorale', t('groundUnit.garrison_unit'));
+  const got = w.log.getEntries().filter(x => x.text === want);
+  assert(w.ev.disbanded.some(e => e.unitId === g.id && e.reason === 'morale_collapse'),
+    'T-G1: garnizon rozpadł się (scena mierzy właściwą ścieżkę)');
+  assert(got.length === 1 && got[0].channel === 'combat' && got[0].entityRef === g.planetId,
+    `T-G1 SEDNO: JEDEN wpis „${want}" (kanał ${got[0]?.channel ?? '—'}, ciało ${got[0]?.entityRef ?? '—'}; wpisów ${got.length}) — ` +
+    'przed naprawą zero: `groundUnit:disbanded` nie miał subskrybenta');
+}
+{
+  // T-G2 — brak utrzymania (klucz `event.groundUnit.disbanded` istniał, nikt go nie czytał)
+  const w = boot();
+  const s = recruit(w, w.home, 'shock_infantry');
+  w.home.credits = 0;
+  for (let i = 0; i < ColonyManager.UPKEEP_GRACE_CIVYEARS; i++) w.cm._tickGroundUnitUpkeep(1.0);
+  const want = t('event.groundUnit.disbanded', t('groundUnit.shock_infantry'));
+  const got = w.log.getEntries().filter(x => x.text === want);
+  assert(w.ev.disbanded.some(e => e.unitId === s.id && e.reason === 'no_credits'),
+    'T-G2: szturm rozwiązany z braku utrzymania (scena mierzy właściwą ścieżkę)');
+  assert(got.length === 1 && got[0].channel === 'combat',
+    `T-G2 SEDNO: JEDEN wpis „${want}" (wpisów ${got.length}) — przed naprawą zero`);
+}
+{
+  // T-G3 — subskrybent Dziennika NIE zwalnia POP-ów: samo zdarzenie (bez ścieżki, która zwalnia) daje
+  //   wpis, a blokada stoi. Bez tego pinu wpis mógłby „przy okazji" oddawać POP-y drugi raz.
+  const w = boot();
+  const g = recruit(w, w.home, 'garrison_unit');
+  const before = lockOf(w.home);
+  EventBus.emit('groundUnit:disbanded', { unitId: g.id, planetId: g.planetId, reason: 'morale_collapse',
+    archetypeId: g.archetypeId, owner: g.owner, type: g.type, customName: null });
+  const want = t('event.groundUnit.disbandedMorale', t('groundUnit.garrison_unit'));
+  assert(w.log.getEntries().filter(x => x.text === want).length === 1 && Math.abs(lockOf(w.home) - before) < EPS,
+    `T-G3: wpis jest, a blokada POP stoi (${before} → ${lockOf(w.home)}) — subskrybent Dziennika niczego nie zwalnia`);
+}
+{
+  // T-G4 — KONTROLA: rozpad jednostki AI w walce z graczem NIE trafia do Dziennika gracza.
+  const w = boot();
+  const spot = w.cm._findGroundUnitSpawn(w.home);
+  const aiG = w.gum.createUnit('garrison_unit', w.home.planetId, spot.q, spot.r, { owner: w.emp, factionId: w.emp });
+  aiG.deployState = 'deployed'; aiG.stateTimer = 0; w.gum._applyDeployStateStats(aiG);
+  const p = w.gum.createUnit('shock_infantry', w.home.planetId, spot.q, spot.r, { owner: 'player', factionId: 'humanity', hp: 400 });
+  p.morale = 100; p.maxMorale = 100;
+  withFixedRng(() => drive(w, 20, (ww) => !ww.gum._units.has(aiG.id)));
+  const want = t('event.groundUnit.disbandedMorale', t('groundUnit.garrison_unit'));
+  assert(w.ev.disbanded.some(e => e.unitId === aiG.id && e.reason === 'morale_collapse') &&
+         w.log.getEntries().filter(x => x.text === want).length === 0,
+    'T-G4 KONTROLA: garnizon AI rozpadł się, a w Dzienniku gracza nie ma wpisu o jego rozwiązaniu');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

@@ -263,6 +263,8 @@ export class CombatSystem {
         EventBus.emit('groundUnit:disbanded', {
           unitId: unit.id, planetId: unit.planetId, reason: 'morale_collapse',
           archetypeId: unit.archetypeId ?? null,
+          // S3 (G1b, Finding 312): wpis w Dzienniku potrzebuje właściciela i etykiety jednostki
+          owner: unit.owner ?? null, type: unit.type ?? null, customName: unit.customName ?? null,
         });
         gum.removeUnit(unit.id);
       } else if (morale <= MORALE_RETREAT_THRESHOLD && !isDefensiveUnit(unit)) {

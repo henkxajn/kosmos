@@ -16,6 +16,12 @@ import { t } from '../i18n/i18n.js';
 
 const MAX_ITEMS = 50;
 
+// G1b/S3 — powód rozwiązania jednostki naziemnej → klucz wpisu w Dzienniku. Powód spoza mapy = brak wpisu.
+const DISBAND_JOURNAL_KEYS = {
+  no_credits:      'event.groundUnit.disbanded',          // „… rozwiązana (brak utrzymania)" — klucz istniał, bez czytelnika
+  morale_collapse: 'event.groundUnit.disbandedMorale',
+};
+
 export class NotificationCenter {
   /**
    * AC-9 — okno zbiorcze meldunków o utracie kafli, w latach WYŚWIETLANYCH.
@@ -56,6 +62,9 @@ export class NotificationCenter {
     // G1b — POP-y jednostki naziemnej PRZEPADŁY, bo jej kolonia macierzysta nie należy już do
     //   właściciela jednostki (albo jej nie ma). Bez tego wpisu strata byłaby cicha.
     EventBus.on('groundUnit:popsLost', e => this._handleGroundUnitPopsLost(e));
+    // G1b/S3 (Finding 312) — `groundUnit:disbanded` nie miał ANI JEDNEGO subskrybenta: rozwiązanie
+    //   jednostki (brak utrzymania, załamanie morale) nie zostawiało śladu w Dzienniku.
+    EventBus.on('groundUnit:disbanded', e => this._handleGroundUnitDisbanded(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -493,6 +502,20 @@ export class NotificationCenter {
     if (!(amount > 0)) return;
     this._journal(t('event.groundUnit.popsLost', amount.toFixed(1), this._groundUnitLabel(type, customName)),
       'combat', 'warn', planetId ?? null);
+  }
+
+  /**
+   * G1b/S3 (Finding 312) — jednostka naziemna GRACZA rozwiązana: z braku utrzymania (`no_credits`) albo
+   * przez załamanie morale (`morale_collapse`). SAM WPIS W DZIENNIKU, bez dzwonka, z powodem w treści.
+   * ⚠ Ten handler NIGDY nie zwalnia POP-ów: utrzymanie zwalnia inline PRZED emisją, a rozpad morale —
+   *   `CombatSystem` przez `ColonyManager.releaseGroundUnitPops`. Zwalnianie tutaj = podwójny zwrot.
+   * ⚠ Powód spoza mapy ⇒ brak wpisu (żaden tekst nie może kłamać o przyczynie).
+   */
+  _handleGroundUnitDisbanded({ owner, type, customName, planetId, reason }) {
+    if ((owner ?? 'player') !== 'player') return;                 // rozwiązanie jednostki AI to nie nasz meldunek
+    const key = DISBAND_JOURNAL_KEYS[reason];
+    if (!key) return;
+    this._journal(t(key, this._groundUnitLabel(type, customName)), 'combat', 'warn', planetId ?? null);
   }
 
   // ── Helpery ──────────────────────────────────────────────────────────────
