@@ -19,6 +19,10 @@
 //   T4  kontrola: placówka AI przejmowana dokładnie jak dotąd.
 //   T5  zapis ze stolicą na oceanie wczytuje się bez zmian (stolica nie przenoszona, bez migracji),
 //       a T2 trzyma po wczytaniu.
+//   T6  bliźniak AI (`GroundUnitManager._findTerritorialGoal`): kolonia GRACZA ze stolicą, na której
+//       nie da się stanąć, bez obrońców — desant AI maszeruje na kafel z budynkiem i przejmuje ją
+//       regułą placówki (przed naprawą: marsz na stolicę = `no_path`, nigdy). Kontrola: stolica
+//       lądowa — marsz na stolicę i przejęcie dokładnie jak przed zmianą.
 //
 // ⚠ Wyrocznia „da się stanąć” w T1–T5 to literał `type !== 'ocean'`; T0 wiąże ją z tabelą ruchu
 //   (gdyby doszedł drugi teren nie do przejścia, T0 padnie pierwszy i powie, co zmienić).
@@ -30,6 +34,7 @@
 
 import '../headless/env.js';           // MUSI być pierwszy
 import EntityManager from '../../core/EntityManager.js';
+import EventBus from '../../core/EventBus.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import { HEADLESS_GALAXY_SEED } from '../headless/GameCore.js';
 import { SaveSystem } from '../../systems/SaveSystem.js';
@@ -46,6 +51,7 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 // ── Harness ──────────────────────────────────────────────────────────────────────────────
 
 const OUTPOST_CAPTURE_CIVY = 8;                          // T4: zmierzone przed G2-K1
+const TWIN_LAND_CAPTURE_CIVY = 11;                       // T6 kontrola: zmierzone przed bliźniakiem AI
 const canStand  = (t) => !!t && t.type !== 'ocean';      // wyrocznia — T0 wiąże ją z tabelą ruchu
 const capitalOf = (col) => col?.grid?.toArray?.().find(t => t?.capitalBase) ?? null;
 const hexDist   = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs((-a.q - a.r) - (-b.q - b.r))) / 2;
@@ -292,6 +298,64 @@ function roundTrip(cm) {
     `świadek: po wczytaniu jednostka gracza trzyma kafel z budynkiem (${r?.tile?.q},${r?.tile?.r})`);
   assert(r?.took === true,
     `T5c: po wczytaniu kolonia przechodzi na gracza regułą placówki (przejęta: ${r?.took}${r?.at ? ' w ' + r.at + '. civY' : ''})`);
+}
+
+// ── T6 — bliźniak AI: marsz terytorialny omija stolicę, na której nie da się stanąć ──────
+/**
+ * Kolonia GRACZA ze stolicą „jak u AI” (kolonia macierzysta emp_002 przejęta przez gracza — kształt
+ * np. cesji), atakowana desantem DRUGIEGO imperium w stanie wojny, bez obrońców gracza na ciele.
+ * Prawdziwe ścieżki: `launchInvasion`, marsz `_tickCombatAI`, okupacja, `_tickCaptureChecks`.
+ * ⚠ Wojna jest wypowiedziana JAWNIE: przejęcie przez AI jest aktem wojny (D13, G2-2), więc ten
+ *   test nie może zależeć od tego, czy bramka wojny już istnieje.
+ * ⚠ Kolonia `aiFull[1]` i dwie jednostki desantu: na domyślnym ziarnie jedna ląduje na krawędzi
+ *   bez drogi do żadnego celu (`no_path` — osobny finding), druga ma drogę. Zmierzone przed zmianą.
+ */
+function aiRetakeRun(capitalOnOcean) {
+  const w = world();
+  const col = w.aiFull[1] ?? null;
+  const agg = w.aiFull[0]?.ownerEmpireId ?? null;
+  const cap = capitalOf(col);
+  if (capitalOnOcean && cap) cap.type = 'ocean';
+  const owned = !!col && w.cm.captureColonyForPlayer(col.planetId, 'g2_k1_twin') === true;
+  // Migawka PRZED desantem — po udanym przejęciu `col.ownerEmpireId` to już agresor.
+  const playerOwnedBefore = owned && !col.ownerEmpireId;
+  const war = !!agg && w.K.diplomacySystem.declareWar(agg, 'g2_k1_twin') === true;
+  const playerUnits = col ? w.gum.getUnitsOnPlanet(col.planetId).filter(u => (u.owner ?? 'player') === 'player').length : -1;
+  const goals = [];
+  EventBus.on('groundUnit:territorialIntent', (e) => { if (e?.planetId === col?.planetId) goals.push(e); });
+  const res = (col && agg) ? w.K.invasionSystem.launchInvasion(agg, col.planetId, 2) : null;
+  let at = null;
+  for (let y = 1; y <= 24 && col; y++) {
+    w.ticker.run(1, { tickSize: 1.0 });
+    if (w.cm.getColony(col.planetId)?.ownerEmpireId === agg) { at = y; break; }
+  }
+  return {
+    col, agg, cap, owned, playerOwnedBefore, war, playerUnits, goals, res,
+    status: agg ? w.K.diplomacySystem.getStatus(agg) : null,
+    took: at !== null, at,
+  };
+}
+{
+  console.log('\nT6 — bliźniak AI: kolonia gracza ze stolicą nie do stania — desant AI przejmuje ją regułą placówki');
+  const o = aiRetakeRun(true);
+  assert(o.playerOwnedBefore && o.cap?.type === 'ocean' && o.war && o.status === 'war' &&
+         o.playerUnits === 0 && o.res?.success === true && (o.res?.landed?.length ?? 0) === 2,
+    `świadek: kolonia gracza ${o.col?.planetId} ze stolicą na oceanie (${o.cap?.q},${o.cap?.r}), wojna z ${o.agg} (${o.status}), ` +
+    `0 jednostek gracza na ciele, desant ${o.res?.landed?.length ?? 0} jednostek`);
+  const onCapital = o.goals.filter(g => g.goalQ === o.cap?.q && g.goalR === o.cap?.r).length;
+  assert(onCapital === 0 && o.goals.some(g => g.goalKind === 'building'),
+    `T6a: cel marszu AI to kafel z budynkiem, nie stolica na oceanie (na stolicę: ${onCapital}; ` +
+    `cele: ${o.goals.map(g => `${g.goalQ},${g.goalR}:${g.goalKind}`).join(' ') || '—'})`);
+  assert(o.took === true,
+    `T6b: AI przejmuje kolonię gracza ze stolicą nie do stania (przejęta: ${o.took}${o.at ? ' w ' + o.at + '. civY' : ''})`);
+
+  const l = aiRetakeRun(false);
+  assert(l.playerOwnedBefore && canStand(l.cap) && l.war && l.playerUnits === 0 && l.res?.success === true,
+    `świadek: ta sama kolonia ze stolicą lądową (${l.cap?.q},${l.cap?.r}: ${l.cap?.type}), wojna, 0 obrońców`);
+  assert(l.goals.some(g => g.goalKind === 'capital' && g.goalQ === l.cap?.q && g.goalR === l.cap?.r) &&
+         l.took === true && l.at === TWIN_LAND_CAPTURE_CIVY,
+    `T6c kontrola: stolica lądowa — marsz na stolicę i przejęcie w ${TWIN_LAND_CAPTURE_CIVY}. civY, jak przed zmianą ` +
+    `(przejęta: ${l.took}${l.at ? ' w ' + l.at + '. civY' : ''})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

@@ -12,7 +12,7 @@
 import EventBus from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
-import { getUnitStats, GROUND_MOVE_COST } from '../data/GroundUnitData.js';
+import { getUnitStats, GROUND_MOVE_COST, isStandableTile } from '../data/GroundUnitData.js';
 import { UNIT_ARCHETYPES, getTransportSize, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 
@@ -1133,16 +1133,21 @@ export class GroundUnitManager {
    * ⚠ To CZYSTA geometria po kaflach — świadomie NIE iteruje po `this._units` i NIE jest wołana
    *   z `tick()`. Reguła i bramki zostają w ciele `_tickCombatAI` (D1b=W1b); tu mieszka tylko
    *   wybór kafla, żeby dało się go pinować osobno.
+   *
+   * ⚠ D17 (G2-K1, bliźniak AI) — stolica, na której NIE DA SIĘ STANĄĆ, nie jest celem: marsz na
+   *   nią kończył się `no_path` i AI nigdy nie przejmowało takiej kolonii. Wtedy cel jak dla
+   *   placówki (najbliższy kafel z budynkiem) — lustro `InvasionSystem.holdsDecisiveGround`,
+   *   który dla takiej stolicy też stosuje regułę placówki.
    * @returns {{q:number, r:number, kind:'capital'|'building'}|null}
    */
   _findTerritorialGoal(unit, colony) {
     const tiles = colony?.grid?.toArray?.() ?? [];
 
     const capital = tiles.find(t => t?.capitalBase);
-    if (capital) return { q: capital.q, r: capital.r, kind: 'capital' };
+    if (capital && isStandableTile(capital)) return { q: capital.q, r: capital.r, kind: 'capital' };
 
-    // Fallback — ciało BEZ stolicy (placówka). To jedyna droga do warunku zwycięstwa z AC-6,
-    // który pyta o kafel z BUDYNKIEM, nie o stolicę.
+    // Fallback — ciało BEZ stolicy (placówka) albo stolica nie do stania (D17). To jedyna droga
+    // do warunku zwycięstwa z AC-6, który pyta o kafel z BUDYNKIEM, nie o stolicę.
     let bestTile = null, bestDist = Infinity;
     for (const t of tiles) {
       if (!t || !t.buildingId) continue;
