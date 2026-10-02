@@ -1583,8 +1583,10 @@ export class ColonyManager {
 
   /**
    * Tick opóźnionej reintegracji POPów po śmierci jednostek (Opcja C v3).
-   * colony._pendingPopReturns = [{ amount, strata, readyAt }] — akumulowane
-   * przez handler `groundUnit:destroyed` w _subscribeGroundUnitDestroyed().
+   * colony._pendingPopReturns = [{ amount, strata, readyAt, owner, unitId, type, customName }] —
+   * akumulowane przez handler `groundUnit:destroyed` w _subscribeGroundUnitDestroyed(), od G1b/S4
+   * na kolonii MACIERZYSTEJ jednostki (nie na kolonii ciała śmierci). Kolejka jest runtime-only
+   * (nie trafia do zapisu).
    */
   _tickPendingPopReturns(civDeltaYears) {
     if (!civDeltaYears || civDeltaYears <= 0) return;
@@ -1597,8 +1599,16 @@ export class ColonyManager {
       for (let i = list.length - 1; i >= 0; i--) {
         const entry = list[i];
         if (this._pendingPopClock >= entry.readyAt) {
-          colony.civSystem?.unlockPops?.(entry.amount, entry.strata ?? 'laborer');
           list.splice(i, 1);
+          // ⚠ S4 (G1b, Finding 326): kolonia mogła zmienić właściciela w czasie zwłoki (1-2 civY) — wtedy
+          //   POP-y PRZEPADAJĄ z meldunkiem, a nie trafiają do nowego właściciela.
+          if ('owner' in entry && !this._colonyBelongsTo(colony, entry.owner)) {
+            this._reportPopsLost({ id: entry.unitId, owner: entry.owner, type: entry.type,
+              customName: entry.customName, planetId: colony.planetId, homeColonyId: colony.planetId },
+              entry.amount, 'reintegration');
+            continue;
+          }
+          colony.civSystem?.unlockPops?.(entry.amount, entry.strata ?? 'laborer');
         }
       }
     }
@@ -1612,15 +1622,29 @@ export class ColonyManager {
     if (this._groundUnitDestroyedSubscribed) return;
     this._groundUnitDestroyedSubscribed = true;
 
-    EventBus.on('groundUnit:destroyed', ({ unitId, planetId, popCost, archetypeId, cause }) => {
+    EventBus.on('groundUnit:destroyed', (payload) => {
+      const { unitId, planetId, popCost, archetypeId, cause } = payload;
       if (!planetId || !(popCost > 0) || !archetypeId) return;
-      const colony = this.getColony(planetId);
-      if (!colony) return;
 
       const ri = ColonyManager.GROUND_UNIT_POP_REINTEGRATION[archetypeId];
       if (!ri || ri.rate <= 0) return;
 
       const returnAmount = popCost * ri.rate;
+
+      // ⚠ S4 (G1b, Finding 326): reintegracja trafia do kolonii MACIERZYSTEJ jednostki, z terminem
+      //   właściciela — nie do kolonii ciała, na którym zginęła. Dawniej śmierć na ciele AI oddawała
+      //   POP-y koloni AI (zdejmowała jej blokady), a dom gracza nie odzyskiwał nic. Jednostkę czytamy
+      //   z rejestru: KAŻDY emitent `groundUnit:destroyed` emituje PRZED `removeUnit`. Ładunek to tylko
+      //   zapas (emitenci różnią się nawet nazwą pola właściciela: `owner` / `ownerId`).
+      const unit = window.KOSMOS?.groundUnitManager?.getUnit?.(unitId)
+        ?? { id: unitId, planetId, archetypeId, type: archetypeId,
+             homeColonyId: payload.homeColonyId ?? null, owner: payload.owner ?? payload.ownerId ?? null };
+      const colony = this._ownedHomeColony(unit);
+      if (!colony) {
+        this._reportPopsLost(unit, returnAmount, cause ?? 'death');
+        return;
+      }
+
       const readyAt = (this._pendingPopClock ?? 0) + (ri.delay ?? 0);
 
       if (!colony._pendingPopReturns) colony._pendingPopReturns = [];
@@ -1628,6 +1652,11 @@ export class ColonyManager {
         amount:  returnAmount,
         strata:  'laborer',
         readyAt,
+        // S4: wypłata po zwłoce sprawdza właściciela jeszcze raz; etykieta do ewentualnego meldunku
+        owner:      unit.owner ?? null,
+        unitId,
+        type:       unit.type ?? archetypeId,
+        customName: unit.customName ?? null,
       });
     });
   }

@@ -18,6 +18,14 @@
 //        subskrybent (`NotificationCenter`); syntetyczne `groundUnit:disbanded` daje wpis, a blokada POP
 //        stoi (subskrybent nie zwalnia); rozwiązanie jednostki AI nie trafia do Dziennika gracza.
 //
+//   S4 (Finding 326) — reintegracja POP po ŚMIERCI trafia do kolonii MACIERZYSTEJ jednostki (z terminem
+//        właściciela), nie do kolonii ciała, na którym zginęła. Tabela reintegracji bez zmian.
+//
+//   T-F  zrekrutowana jednostka ginie na ciele AI: wpis reintegracji na kolonii macierzystej, kolonia AI
+//        bez zmian (przed naprawą: odwrotnie). Kontrola: śmierć na własnym ciele — jak dawniej.
+//        T-F2 dom przejęty przed śmiercią ⇒ nic nigdzie + meldunek. T-F3 dom przejęty w CZASIE ZWŁOKI
+//        wypłaty ⇒ wypłata przepada z meldunkiem, nowy właściciel nie dostaje nic.
+//
 // ⚠ Harness: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu) + własne
 //   `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; konstruowane PO boocie,
 //   bo boot czyści EventBus). Rekrutacja PRAWDZIWĄ ścieżką `startGroundUnitBuild` → `_tickGroundUnitBuilds`
@@ -260,6 +268,84 @@ console.log('T-G — rozwiązanie jednostki gracza zostawia JEDEN wpis w Dzienni
   assert(w.ev.disbanded.some(e => e.unitId === aiG.id && e.reason === 'morale_collapse') &&
          w.log.getEntries().filter(x => x.text === want).length === 0,
     'T-G4 KONTROLA: garnizon AI rozpadł się, a w Dzienniku gracza nie ma wpisu o jego rozwiązaniu');
+}
+
+// ── T-F — S4: reintegracja po śmierci na kolonii macierzystej ────────────────────────────
+console.log('T-F — zrekrutowana jednostka ginie na obcym ciele: reintegracja POP na kolonii macierzystej, nie obcej');
+const RI = ColonyManager.GROUND_UNIT_POP_REINTEGRATION.shock_infantry;
+const SHOCK_COST = ColonyManager.GROUND_UNIT_POP_COSTS.shock_infantry;
+const pendingOf = (colony) => (colony?._pendingPopReturns ?? []).map(x => x.amount);
+
+/** Przenieś jednostkę na ciało `colony` (jak po desancie) i zabij ją w jednej rundzie szturmem AI. */
+function killOn(w, unit, colony) {
+  const spot = w.cm._findGroundUnitSpawn(colony);
+  unit.planetId = colony.planetId; unit.q = spot.q; unit.r = spot.r;
+  unit.hp = 1; if (unit.currentHP != null) unit.currentHP = 1;
+  const e = w.gum.createUnit('shock_infantry', colony.planetId, spot.q, spot.r, { owner: w.emp, factionId: w.emp, hp: 400 });
+  e.morale = 100; e.maxMorale = 100;
+  withFixedRng(() => drive(w, 2, (ww) => !ww.gum._units.has(unit.id)));
+}
+{
+  const w = boot();
+  const s = recruit(w, w.home, 'shock_infantry');
+  w.home.civSystem.lockPops(EXTRA_LOCK, 'laborer');
+  w.ai.civSystem.lockPops(EXTRA_LOCK, 'laborer');    // bez tego błędne zwolnienie na AI zginęłoby w klampie do 0
+  const homeL = lockOf(w.home), aiL = lockOf(w.ai), aiPend = pendingOf(w.ai).length;
+  killOn(w, s, w.ai);
+  const d = w.ev.destroyed.filter(e => e.unitId === s.id);
+  assert(d.length === 1 && d[0].planetId === w.ai.planetId && d[0].cause === 'combat',
+    `T-F1: jednostka gracza zginęła w walce NA CIELE AI ${w.ai.planetId} (${JSON.stringify(d.map(e => e.planetId))})`);
+  const want = SHOCK_COST * RI.rate;
+  assert(pendingOf(w.home).length === 1 && Math.abs(pendingOf(w.home)[0] - want) < EPS && pendingOf(w.ai).length === aiPend,
+    `T-F1 SEDNO: wpis reintegracji ${want} na kolonii MACIERZYSTEJ (dom: ${JSON.stringify(pendingOf(w.home))}, ` +
+    `AI: ${JSON.stringify(pendingOf(w.ai))}) — przed naprawą trafiał do koloni ciała śmierci`);
+  w.cm._tickPendingPopReturns(RI.delay + 0.01);
+  assert(Math.abs(lockOf(w.home) - (homeL - want)) < EPS && Math.abs(lockOf(w.ai) - aiL) < EPS,
+    `T-F1: po zwłoce dom odzyskał ${want} (${homeL} → ${lockOf(w.home)}), kolonia AI bez zmian (${aiL} → ${lockOf(w.ai)})`);
+}
+{
+  // KONTROLA: śmierć na WŁASNYM ciele — reintegracja na kolonii macierzystej, jak przed naprawą.
+  const w = boot();
+  const s = recruit(w, w.home, 'shock_infantry');
+  killOn(w, s, w.home);
+  assert(pendingOf(w.home).length === 1 && Math.abs(pendingOf(w.home)[0] - SHOCK_COST * RI.rate) < EPS,
+    `T-F KONTROLA: śmierć na własnym ciele — wpis na kolonii macierzystej (${JSON.stringify(pendingOf(w.home))}), jak dawniej`);
+}
+{
+  // T-F2 — dom przejęty PRZED śmiercią: nikt nic nie dostaje, jest meldunek.
+  const w = boot();
+  const s = recruit(w, w.home, 'shock_infantry');
+  w.cm.transferColony(w.home.planetId, w.emp, 'invasion');
+  w.ai.civSystem.lockPops(EXTRA_LOCK, 'laborer');
+  const all = w.cm.getAllColonies();
+  const locksBefore = snapLocks(all);
+  killOn(w, s, w.ai);
+  const anyPending = all.filter(c => pendingOf(c).length > 0).map(c => c.planetId);
+  const lost = w.ev.popsLost.filter(e => e.unitId === s.id);
+  assert(w.ev.destroyed.some(e => e.unitId === s.id) && anyPending.length === 0,
+    `T-F2 SEDNO: dom przejęty — ŻADNA kolonia nie dostaje wpisu reintegracji (z wpisem: ${JSON.stringify(anyPending)})`);
+  assert(lost.length === 1 && Math.abs(lost[0].amount - SHOCK_COST * RI.rate) < EPS,
+    `T-F2: meldunek \`groundUnit:popsLost\` (${JSON.stringify(lost.map(e => ({ amount: e.amount, cause: e.cause })))})`);
+  w.cm._tickPendingPopReturns(RI.delay + 0.01);
+  assert(unchanged(locksBefore, all),
+    'T-F2: po zwłoce żadna kolonia nie zmieniła blokady — POP-y nie trafiły do żadnego obcego właściciela');
+}
+{
+  // T-F3 — dom przejęty W CZASIE ZWŁOKI: wypłata przepada z meldunkiem, nowy właściciel nie dostaje nic.
+  const w = boot();
+  const s = recruit(w, w.home, 'shock_infantry');
+  killOn(w, s, w.ai);
+  const queued = pendingOf(w.home).length;
+  w.cm.transferColony(w.home.planetId, w.emp, 'invasion');
+  w.home.civSystem.lockPops(EXTRA_LOCK, 'laborer');
+  const before = lockOf(w.home);
+  w.cm._tickPendingPopReturns(RI.delay + 0.01);
+  const lost = w.ev.popsLost.filter(e => e.unitId === s.id && e.cause === 'reintegration');
+  assert(queued === 1 && pendingOf(w.home).length === 0 && Math.abs(lockOf(w.home) - before) < EPS,
+    `T-F3 SEDNO: wpis czekał na domu (${queued}), dom przejęty w czasie zwłoki — wypłata NIE trafiła do nowego ` +
+    `właściciela (blokada ${before} → ${lockOf(w.home)}, kolejka ${pendingOf(w.home).length})`);
+  assert(lost.length === 1,
+    `T-F3: meldunek o przepadłej wypłacie (\`popsLost\`, przyczyna reintegration: ${lost.length})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
