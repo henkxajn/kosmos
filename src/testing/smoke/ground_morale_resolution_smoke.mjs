@@ -20,8 +20,19 @@
 //   T2  D5b — legacy piechota vs legacy piechota: po rundzie 1 nikt nie znika z `morale_collapse`,
 //       starcie kończy się śmiercią od obrażeń, a para „świeża" i para „po serialize→restore"
 //       walczą IDENTYCZNIE (dziura determinizmu z `w3_seams_smoke` T6 zamknięta).
+//   T3  D5c — dwa archetypy NIE-defensywne przy bazowym morale: brak ucieczki w rundzie 1,
+//       ucieczka (jeśli jest) dopiero po skumulowanych trafieniach, bitwa się rozstrzyga
+//       (śmierć albo zwycięzca trzymający heks) i NIE zamarza (żadnego wspólnego porzucenia heksu).
+//       T3a z pościgiem AI (szturm vs szturm), T3b bez pościgu (szturm vs jednostka zaopatrzenia
+//       AI, rola `civilian`) — przed naprawą T3b to dokładnie „obie uciekają w rundzie 1, potem
+//       zero obrażeń na zawsze".
 //   T4  KONTROLA — pary z morale 100 rozstrzygają się IDENTYCZNIE przed i po naprawie (wartości
 //       zmierzone na HEAD ffb7b10 tym samym harnessem i tym samym stubem RNG).
+//   T5  D5c — morale dalej ma znaczenie: przy równych statystykach jednostka z wyższym morale
+//       wytrzymuje WIĘCEJ trafień przed ucieczką.
+//   T6  D5c — pin progu: `MORALE_RETREAT_THRESHOLD` < najniższe `baseMorale` archetypu niosącego
+//       morale (czytane z DANYCH, nie z literału) + zachowanie: jednostka przy najniższym bazowym
+//       morale nie ucieka ani z samej obecności wroga (0 trafień), ani po PIERWSZYM trafieniu.
 //   T7  D5b — tripwire źródłowy: w kodzie walki naziemnej nie zostało żadne `morale ?? <liczba>`
 //       (każdy default idzie przez `DEFAULT_MORALE`), a stała jest faktycznie używana.
 //
@@ -274,6 +285,59 @@ console.log('T2 — D5b: legacy piechota vs legacy piechota — brak morale_coll
     `(świeża: ${f.trace.slice(0, 4).join(' ')} … ; po zapisie: ${g.trace.slice(0, 4).join(' ')} …)`);
 }
 
+// ── T3 — D5c: dwa archetypy nie-defensywne przy bazowym morale ───────────────────────────
+console.log('T3 — D5c: brak ucieczki „przy spawnie", rozstrzygnięcie po skumulowanych trafieniach, brak zamarzania');
+{
+  const scene = (attackerType) => withFixedRng(() => {
+    const w = makeWorld();
+    const p = spawn(w, 'shock_infantry', PLAYER);
+    const e = spawn(w, attackerType, AI);
+    const fledTogether = [];   // bitwa skończona bez zwycięzcy przy OBU żywych = wspólne porzucenie heksu
+    drive(w, 30, (ww) => {
+      for (const r of ww.log.resolved) {
+        if (r._seen) continue;
+        r._seen = true;
+        if (r.winnerId == null && alive(ww, p) && alive(ww, e)) fledTogether.push(r.round);
+      }
+      return bothGone(ww, p, e);
+    });
+    const decisive = w.log.destroyed.length + w.log.disbanded.length > 0 ||
+                     w.log.resolved.some(r => r.winnerId != null);
+    const dmgAfterR1 = w.log.attacked.filter(x => x.round > 1).length;
+    const routR1 = w.log.routed.filter(x => x.round === 1).length;
+    const earlyRouts = w.log.routed
+      .map(x => ({ x, hits: hitsOn(w, x.unitId === p.id ? p : e, x.round) }))
+      .filter(o => o.hits < 2);
+    return { w, p, e, fledTogether, decisive, dmgAfterR1, routR1, earlyRouts };
+  });
+
+  // T3a — z pościgiem AI (szturm vs szturm).
+  const a = scene('shock_infantry');
+  assert(a.routR1 === 0,
+    `T3a SEDNO: w RUNDZIE 1 nikt nie ucieka (ucieczek w r1: ${a.routR1}) — przed naprawą uciekały obie strony`);
+  assert(a.earlyRouts.length === 0,
+    `T3a: każda ucieczka po ≥ 2 trafieniach (za wcześnie: ${JSON.stringify(a.earlyRouts.map(o => ({ r: o.x.round, hits: o.hits })))})`);
+  assert(a.fledTogether.length === 0,
+    `T3a: żadna bitwa nie skończyła się wspólnym porzuceniem heksu przy obu żywych (rundy: ${JSON.stringify(a.fledTogether)})`);
+  assert(a.decisive,
+    `T3a: starcie się ROZSTRZYGA (destroyed=${a.w.log.destroyed.length}, disbanded=${a.w.log.disbanded.length}, ` +
+    `zwycięzcy heksu=${JSON.stringify(a.w.log.resolved.filter(r => r.winnerId).map(r => r.winnerId))})`);
+
+  // T3b — BEZ pościgu: jednostka zaopatrzenia AI (rola legacy `civilian`) nie wraca do bitwy.
+  const b = scene('ground_supply_unit');
+  assert(b.e.role === 'civilian',
+    `T3b: przeciwnik ma rolę \`${b.e.role}\` — AI go nie prowadzi do pościgu (scena „bez drugiej szansy")`);
+  assert(b.routR1 === 0 && b.fledTogether.length === 0,
+    `T3b SEDNO: brak ucieczki w r1 (${b.routR1}) i brak wspólnego porzucenia heksu (${JSON.stringify(b.fledTogether)}) — ` +
+    'przed naprawą: obie uciekały w r1, a potem ZERO obrażeń do końca okna');
+  assert(b.decisive && b.dmgAfterR1 > 0,
+    `T3b: walka trwa po rundzie 1 (trafień po r1: ${b.dmgAfterR1}) i kończy się rozstrzygnięciem ` +
+    `(zwycięzca heksu: ${JSON.stringify(b.w.log.resolved.filter(r => r.winnerId).map(r => r.winnerId))}, ` +
+    `destroyed=${b.w.log.destroyed.length})`);
+  assert(b.earlyRouts.length === 0,
+    `T3b: ucieczka (jeśli jest) dopiero po ≥ 2 trafieniach (za wcześnie: ${b.earlyRouts.length})`);
+}
+
 // ── T4 — KONTROLA: pary z morale 100 bez zmian ───────────────────────────────────────────
 console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie przed i po naprawie');
 {
@@ -299,6 +363,62 @@ console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie p
       `T4 [${got.label}]: runda ${got.round}, ginie ${got.dead}, ocalały hp ${got.survivorHp}, ucieczek ${got.routs} ` +
       `(baseline HEAD: runda ${exp.round}, ginie ${exp.dead}, hp ${exp.survivorHp}, 0 ucieczek)`);
   }
+}
+
+// ── T5 — D5c: morale dalej ma znaczenie ──────────────────────────────────────────────────
+console.log('T5 — D5c: przy równych statystykach wyższe morale = więcej trafień przed ucieczką');
+{
+  // Gracz: szturm z HP 400 (nie zginie w oknie), różni się WYŁĄCZNIE morale.
+  // AI: szturm z HP 400 i morale 100 (nie ucieka i nie ginie — jest stałym „źródłem trafień").
+  const hitsBeforeRout = (morale) => withFixedRng(() => {
+    const w = makeWorld();
+    const p = spawn(w, 'shock_infantry', PLAYER, { hp: 400, morale });
+    spawn(w, 'shock_infantry', AI, { hp: 400, morale: 100 });
+    drive(w, 60, (ww) => routsOf(ww, p).length > 0);
+    const r = routsOf(w, p)[0];
+    return r ? hitsOn(w, p, r.round) : null;
+  });
+  const low = hitsBeforeRout(15), high = hitsBeforeRout(45);
+  assert(low != null && high != null && high > low,
+    `T5: morale 15 → ucieczka po ${low} trafieniach, morale 45 → po ${high} — więcej morale, dłużej trzyma linię`);
+}
+
+// ── T6 — D5c: pin progu (dane) + zachowanie przy najniższym bazowym morale ───────────────
+console.log('T6 — D5c: próg odwrotu poniżej najniższego baseMorale (czytane z danych)');
+{
+  const thr = CombatMod.MORALE_RETREAT_THRESHOLD;
+  const bearers = Object.values(ArchData.UNIT_ARCHETYPES).filter(a => a.noMorale !== true);
+  const minBase = Math.min(...bearers.map(a => a.baseMorale ?? Infinity));
+  const minIds = bearers.filter(a => a.baseMorale === minBase).map(a => a.id);
+  assert(Number.isFinite(thr),
+    `T6: \`MORALE_RETREAT_THRESHOLD\` jest eksportowanym numerem (${thr})`);
+  assert(Number.isFinite(thr) && thr < minBase,
+    `T6 SEDNO: próg ${thr} < najniższe baseMorale archetypu niosącego morale = ${minBase} (${minIds.join(', ')}; ` +
+    `${bearers.length} archetypów, drony z \`noMorale\` pominięte)`);
+
+  // Zachowanie 1: sama obecność wroga (0 trafień) nie wywołuje ucieczki przy najniższym morale.
+  const z = withFixedRng(() => {
+    const w = makeWorld();
+    const art = spawn(w, 'rocket_artillery', PLAYER);           // baseMorale 10 = minimum
+    spawn(w, 'garrison_unit', AI);                              // mobile → dmg 0, nigdy nie trafia
+    drive(w, 1.0);
+    return { w, art };
+  });
+  assert(z.art.morale === minBase && hitsOn(z.w, z.art) === 0 && routsOf(z.w, z.art).length === 0,
+    `T6: artyleria (morale ${z.art.morale}) po rundzie 1 BEZ trafienia (${hitsOn(z.w, z.art)}) nie ucieka ` +
+    `(${routsOf(z.w, z.art).length}) — przed naprawą uciekała od samej obecności wroga`);
+
+  // Zachowanie 2: pierwsze TRAFIENIE nie wywołuje ucieczki przy najniższym bazowym morale.
+  const h = withFixedRng(() => {
+    const w = makeWorld();
+    const art = spawn(w, 'rocket_artillery', PLAYER, { hp: 100 });
+    spawn(w, 'shock_infantry', AI);
+    drive(w, 1.0);
+    return { w, art };
+  });
+  assert(hitsOn(h.w, h.art) === 1 && routsOf(h.w, h.art).length === 0,
+    `T6: artyleria po PIERWSZYM trafieniu (morale ${h.art.morale}) nie ucieka (${routsOf(h.w, h.art).length}) — ` +
+    'warunek STOP z planu: jednostka przy bazowym morale nie może uciekać od pierwszego trafienia');
 }
 
 // ── T7 — D5b: tripwire źródłowy — każdy default morale przez `DEFAULT_MORALE` ────────────

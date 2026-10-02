@@ -38,8 +38,13 @@ const ORG_COST_PER_ATTACK = 5;
 const ORG_COST_WHEN_HIT   = 5;
 const MORALE_COST_WHEN_HIT = 3;
 
-// Retreat threshold
-const MORALE_RETREAT_THRESHOLD = 20;
+// Retreat threshold — D5c (AI GARRISON G1, podpisane 2026-10-01): PONIŻEJ najniższego `baseMorale`
+// archetypu niosącego morale (10: rocket_artillery, garrison_unit, aa_platform). Przy dawnym progu 20
+// sześć z siedmiu archetypów (baseMorale 10–20) uciekało już przy spawnie, więc starcie świeżych
+// jednostek się nie rozstrzygało. Morale dalej ma znaczenie: przy MORALE_COST_WHEN_HIT = 3 jednostka
+// z morale M ucieka po ⌈(M − 5) / 3⌉ trafieniach (10 → 2, 15 → 4, 20 → 5, 100 → 32).
+// Eksport: `ground_morale_resolution_smoke` T6 porównuje próg z DANYMI archetypów, nie z literałem.
+export const MORALE_RETREAT_THRESHOLD = 5;
 
 export class CombatSystem {
   constructor() {
