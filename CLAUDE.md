@@ -5715,5 +5715,21 @@ AI (rodzina 313) · ⚪ **327** mina (latentny) · ⚪ **331** AI-vs-AI · ⚪ *
 Keepery: `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 `ground_unit_loss_smoke` **29/29**. Sweep **250/250 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS
 (pl = en = 3426).
-**Dalej:** G2 (bramka wojny dla lądowania, materializacja garnizonu, wspólna funkcja „utwórz
-jednostkę AI z zadanym morale”) → G2b → G3.
+
+**G2 — stan 2026-10-02:** ✅ **G2-0** (`4d6ac63`, `g2_seams_smoke` 26/26 — piny szwów, które kolejne kroki zmienią
+świadomie) · ✅ **G2-1** (`82c9196`, NEW `GroundUnitManager.createAIUnit({ archetypeId, empireId, planetId, q, r,
+morale, deployed = true })` → `{ ok, unit | reason }`; `owner` I `factionId` = imperium, rozkładany archetyp
+`deployed` od utworzenia, morale przycięte do [0, 100], `popCost` 0; `g2_create_ai_unit_smoke` 26/26).
+⚠ **Jednostkę AI tworzy się WYŁĄCZNIE przez `createAIUnit`.** `createUnit` z samym `{ owner }` daje
+`factionId 'humanity'` i przy 0 Kr jednostka przechodzi w `offline` i znika (pin P2), a forma 5-argumentowa oddaje
+ją graczowi (pin P1d).
+Decyzje **D8–D18** (podpis 2026-10-02, `AI_GARRISON_PLAN.md` §1; faza A G2 — §5e): D8 rozpad jednostek
+defensywnych przy morale 0 ZOSTAJE · D9 drabina sumy poziomów fabryk (jedna tabela danych) · D10 garnizon
+rozstawiony, nie w stosie · D11/D12 podział między ciałami, stolica = `capitalOf` · D13 bramka wojny (status
+relacji `'war'`, zaczep `diplomacy:warDeclared`) · D14 wycofanie po pokoju (6 mies.) · D15 mobilizacja raz na
+imperium · D16 zniszczenie ciała usuwa WSZYSTKIE jednostki · D17 stolice na oceanie · D18 kalibracja na fixture.
+Nowe findingi **336–342**: 🔴 **336** stolica AI na oceanie (nie do przejęcia z ziemi) · 🔴 **337** łazik przejmuje
+kolonię AI w pokoju · 🟠 **338** „Wyładuj” bez bramek · 🟠 **339** przejęcia ślepe na wojnę · ⚪ **340** pule desantu ·
+⚪ **341** uprząż vs fixture · ⚪ **342** `homeColonyId: null` po zapisie.
+**Dalej:** G2-K1 (stolice na oceanie) → G2-2 (bramka wojny) → G2-3 (mobilizacja) → G2-4 (wycofanie po pokoju) →
+G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02).

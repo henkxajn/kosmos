@@ -285,6 +285,22 @@
 > zablokowana NA ZAWSZE i dalej liczy się do populacji (zmierzone: +0,3 po 27 miesiącach, zero wywołań
 > usuwających ludzi). **Nienaprawiony — do decyzji właściciela.** Wiersz A9 „niezweryfikowane” (AI-vs-AI)
 > dostał numer **331**: mechanizm potwierdzony w kodzie, osiągalność dalej niezmierzona.
+>
+> **Aktualizacja 2026-10-02 (wieczór) — AI GARRISON: G2-0 i G2-1 ZROBIONE, decyzje D8–D18, krok G1c.**
+> Sweep: **252/252 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3426** · save **v101 bez migracji**.
+> • ✅ **G2-0** (`4d6ac63`, `g2_seams_smoke` 26/26 — piny szwów, które kolejne kroki zmienią świadomie) · ✅ **G2-1**
+> (`82c9196`, `GroundUnitManager.createAIUnit`, `g2_create_ai_unit_smoke` 26/26). Decyzje **D8–D18** (podpis
+> 2026-10-02): `AI_GARRISON_PLAN.md` §1; faza A G2 (audyt i pomiar na `2a97bfe`, raport poza repo): §5e.
+> • **NOWE: #336–#342** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🔴 **336** (stolica AI na oceanie — kolonii nie da
+> się przejąć z ziemi), **337** (łazik przejmuje kolonię AI w pokoju) · 🟠 **338** („Wyładuj” bez kapsuł, dominacji
+> i wojny), **339** (przejęcia nie pytają o wojnę; żaden keeper przejęcia nie ustawia wojny) · ⚪ **340**
+> (`INVASION_UNIT_POOLS` bez kluczy żywych archetypów), **341** (uprząż vs fixture: 2,2–3,1× mniej POP AI),
+> **342** (`homeColonyId: null` wraca z zapisu jako id ciała).
+> • **323** rozszerzony o zmierzony skutek (jednostka z samym `{ owner }` → `offline` → rozwiązana), bez nowego
+> numeru. Podwójne potrącenie utrzymania jednostek naziemnych to istniejący wpis backlogu
+> (`KOSMOS_backlog_niezrealizowane.md` §„🔴 Podwójne pobranie Kr za jednostki naziemne”), nie nowy finding.
+> • **Krok G1c** (rodzina „utrata POP”: **333**, **330**, **328**, **329**; kierunek 333/330 podpisany 2026-10-02)
+> stoi w kolejce **po G3**: G2-K1 → G2-2 → G2-3 → G2-4 → G2b → G3 → **G1c** (`AI_GARRISON_PLAN.md` §3).
 
 
 ---
@@ -362,7 +378,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-335** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02; 326-335 z sesji G1b) |
+| **309-342** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -493,6 +509,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **318** | 🟠 | kafle kolonii AI mają `owner = null` — stempel daje dopiero otwarcie mapy w `ColonyOverlay.js:584-588` | rodzina **54**/**58**; czytane przez okupację i przejęcie (G2). `AI_GARRISON_PLAN.md` §6 |
 | **319** | 🟠 | jednostki naziemne **osierocone** przy zniszczeniu ciała i **nietknięte** przez `transferColony`/`captureColonyForPlayer` | rozszerza **59**; decyzja **D6** (G2) |
 | **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
+| **336** | 🔴 | **stolica AI na kaflu oceanu — kolonii nie da się przejąć z ziemi**: bootstrap testuje `tile.buildable` (`EmpireColonyBootstrap.js:723`), którego kafel nie ma; wszystkie stolice AI na (-1,2), 6 z 28 na oceanie (14 ziaren), w fixture stolica emp_002 | → **G2-K1** (D17). `AI_GARRISON_PLAN.md` §6 |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -571,9 +588,14 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **320** | ⚪ | `diplomacy:warDeclared` nie niesie `declaredBy`, a `UIManager.js:1624` go czyta | istotne dla G2 (materializacja przy wypowiedzeniu) |
 | **321** | 🟠 | wydobycie kopalń (`receive` wprost, `BuildingSystem.js:2598`) niewidoczne dla `getPerYear`/`getGrossPerYear` | powód D1/D3; wpływ na UI niezmierzony |
 | **322** | ⚪ | trzy definicje stolicy AI: `capitalOf`, bliźniaczy `_pickCapital`, statyczne `homeSystemId` | wybrać jedno źródło przed G2 |
-| **323** | 🟠 | `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` wciąga jednostkę AI do utrzymania i limitu GRACZA (`ColonyManager.js:1372`, `:1515`, `:1528`) | rozszerza **60**; wiążące dla wspólnej funkcji G2 |
+| **323** | 🟠 | `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` wciąga jednostkę AI do utrzymania i limitu GRACZA (`ColonyManager.js:1372`, `:1515`, `:1528`) | rozszerza **60**; zmierzone (pin G2-0 P2): z samym `{ owner }` przy 0 Kr `offline` w 1. civY, rozwiązana w 5.; nowe wywołania przez `createAIUnit` (G2-1, `82c9196`), `InvasionSystem.js:130` → G2b |
 | **324** | ⚪ | świeży `garrison_unit` = `mobile` (`dmg 0`), odtworzenie bez pola = `deployed` | **D6**: garnizon AI `deployed` od utworzenia |
 | **325** | ⚪ | żaden archetyp AI nie bada technologii morale (ani `ground_warfare`); bonusy przy rekrutacji i tak czytają drzewo GRACZA | rodzina **185**; zastąpione przez **D7** |
+| **337** | 🔴 | **łazik badawczy (away team) przejmuje kolonię AI w POKOJU** — bez dominacji, kapsuł i wojny; zmierzone: przejęcie w 8. civY | rozszerza **317**; → **G2-2** (D13) |
+| **338** | 🟠 | „Wyładuj” z ładowni (`CargoLoadModal.js:388`) ląduje wojsko na kolonii DOWOLNEGO właściciela, przy której statek orbituje (`FleetManagerOverlay.js:3059`) — bez kapsuł, dominacji i wojny | niemierzone (DOM); → **G2-2** |
+| **339** | 🟠 | `launchInvasion` i oba predykaty przejęcia nie pytają o wojnę (pin G2-0 P5); **żaden** z 6 keeperów przejęcia nie ustawia wojny | D13 przestawi te keepery — świadomie w **G2-2** |
+| **340** | ⚪ | `INVASION_UNIT_POOLS` (`GroundUnitData.js:97`) nie ma kluczy `industrialist` / `expansionist` ⇒ desant bez ładunku zawsze `['infantry','infantry']` (`InvasionSystem.js:112`) | → **G2b** (D7) |
+| **341** | ⚪ | uprząż headless: POP imperiów AI przy gy 60 2,2–3,1× niższy niż w fixture GATE-S4 (limit 3–5 wobec 11); przyczyna nieznana, ziarnistość ticka wykluczona | instrument ⇒ **D18** (kalibracja na fixture) |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -586,6 +608,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **76 · 93** | ⚪ | `BuildingSystem.deployFromCargo()` z `CLAUDE.md` **nie istnieje** · liczba keeperów w `CLAUDE.md` nieaktualna (dziś **186**) | Załącznik A przy sprzątaniu |
 | **331** | ⚪ | walka naziemna **AI-vs-AI**: zero ognia (strony nie-graczy scalone, `CombatSystem.js:188-194`, `:295`), a `GameScene.js:5473` / `:5487` loguje graczowi „bitwę” i pokazuje raport | dawny wiersz „niezweryfikowane”: mechanizm potwierdzony w kodzie, osiągalność niezmierzona (**D5**) |
 | **334** | ⚪ | karta jednostki w `ColonyOverlay`: polskie literały (statusy `:2660-2667`, przyciski `:2858`/`:2880`, flash `:5449`) i surowe id w tytule (`unit.type.toUpperCase()`, `:2641`) — klasa **113**, `check-i18n` ślepy | obserwacja z bramki G1b (ekran mieszał EN i PL) |
+| **342** | ⚪ | `homeColonyId: null` jednostki AI wraca z zapisu jako id ciała (`GroundUnitManager.js:1459`, `:1522`) | dziś nieszkodliwe (`_ownedHomeColony` sprawdza właściciela, `popCost` 0); `null` zostaje decyzją właściciela |
 
 ---
 
