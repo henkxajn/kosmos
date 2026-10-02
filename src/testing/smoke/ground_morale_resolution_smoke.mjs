@@ -46,9 +46,9 @@
 // ⚠ RNG: walka używa gołego `Math.random`. Każdy scenariusz podmienia go na stały stub 0.5
 //   (wariancja obrażeń = 1.0, jitter celowania stały) i PRZYWRACA w `finally` — wynik zależy
 //   wyłącznie od arytmetyki, nie od liczby wywołań losowania gdzie indziej.
-// ⚠ Strona AI strzela w rundzie PIERWSZA (`_runBattleRound` rozstrzyga ogień wroga przed ogniem
-//   gracza, a jednostka zabita w pierwszej salwie nie oddaje strzału). Asercje uwzględniają to
-//   jako stan zastany — to NIE jest przedmiot tego slice'u.
+// ⚠ Do G1b strona AI strzelała w rundzie PIERWSZA (Finding 309). Od G1b/S1 ogień jest jednoczesny
+//   (salwy obu stron ze stanu z początku rundy) — pinuje to `ground_round_fairness_smoke`. Jedyny pin
+//   tego pliku, który od tego zależał, to T4 `shock_vs_shock` (przestawiony w G1b, wartości niżej).
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -342,8 +342,12 @@ console.log('T3 — D5c: brak ucieczki „przy spawnie", rozstrzygnięcie po sku
 console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie przed i po naprawie');
 {
   // Wartości zmierzone na HEAD ffb7b10 (przed naprawą) tym harnessem i stubem RNG 0.5.
+  // ⚠ G1b/S1 (Finding 309, zmiana podpisana z góry): `shock_vs_shock` pinował DEFEKT — przy ogniu
+  //   „wróg pierwszy" gracz ginął w r2, a AI przeżywało z hp 7. Przy ogniu jednoczesnym równa para
+  //   ginie RAZEM w tej samej rundzie (stary wpis: { round: 2, dead: 'P', survivorHp: 7 }).
+  //   `garrisonDep_vs_shock` się nie zmienił (zaokrąglenie przykrywa różnicę mnożnika) — dalej pinuje G1.
   const BASE = {
-    'shock_vs_shock':    { round: 2, dead: 'P', survivorHp: 7 },
+    'shock_vs_shock':    { round: 2, dead: 'both', survivorHp: null },
     'garrisonDep_vs_shock': { round: 4, dead: 'AI', survivorHp: 9 },
   };
   const run = (label, playerType, deployed) => withFixedRng(() => {
@@ -351,7 +355,7 @@ console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie p
     const p = spawn(w, playerType, PLAYER, { deployed, morale: 100 });
     const e = spawn(w, 'shock_infantry', AI, { morale: 100 });
     drive(w, 30, (ww) => bothGone(ww, p, e));
-    const dead = !alive(w, p) ? 'P' : (!alive(w, e) ? 'AI' : null);
+    const dead = !alive(w, p) && !alive(w, e) ? 'both' : (!alive(w, p) ? 'P' : (!alive(w, e) ? 'AI' : null));
     return { label, round: w.log.destroyed[0]?.round ?? null, dead,
              survivorHp: dead === 'P' ? e.hp : (dead === 'AI' ? p.hp : null),
              routs: w.log.routed.length, disb: w.log.disbanded.length };
@@ -361,7 +365,7 @@ console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie p
     assert(got.round === exp.round && got.dead === exp.dead && got.survivorHp === exp.survivorHp &&
            got.routs === 0 && got.disb === 0,
       `T4 [${got.label}]: runda ${got.round}, ginie ${got.dead}, ocalały hp ${got.survivorHp}, ucieczek ${got.routs} ` +
-      `(baseline HEAD: runda ${exp.round}, ginie ${exp.dead}, hp ${exp.survivorHp}, 0 ucieczek)`);
+      `(oczekiwane: runda ${exp.round}, ginie ${exp.dead}, hp ${exp.survivorHp}, 0 ucieczek)`);
   }
 }
 

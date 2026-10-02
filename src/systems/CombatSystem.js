@@ -209,15 +209,28 @@ export class CombatSystem {
     }
 
     // Simultaneous fire exchange
+    // ⚠ S1 (G1b, Finding 309): ogień jest NAPRAWDĘ jednoczesny. Każdy strzelec obu stron strzela ze stanu
+    //   z POCZĄTKU rundy (migawka hp/org/morale/supply zrobiona przed pierwszym strzałem). Dawniej salwa
+    //   wroga szła pierwsza, więc jednostka gracza zabita w niej nie odpowiadała ogniem (`hp ≤ 0`),
+    //   a trafiona strzelała z mnożnikiem po trafieniu (−5 org, −3 morale). Kolejność losowań RNG
+    //   zostaje (salwa wroga, potem gracza). Kolejny strzelec TEJ SAMEJ strony dalej widzi trafienia
+    //   swoich poprzedników i nie strzela w trupa — po obu stronach tak samo, więc nikt nie jest
+    //   uprzywilejowany. Zmiana stanu (hp, org, morale) i tak trafia do żywych jednostek.
+    const roundStart = new Map();
+    for (const u of [...playerSide, ...enemyUnits, ...playerSupporters, ...enemySupporters]) {
+      roundStart.set(u, { ...u });
+    }
     const playerLosses = this._resolveFire(
       [...enemyUnits, ...enemySupporters],  // atakujący: wrogowie + ich supporterzy
       playerSide,                            // broniący: gracz na hexie
-      defBonus
+      defBonus,
+      roundStart
     );
     const enemyLosses = this._resolveFire(
       [...playerSide, ...playerSupporters],  // atakujący: gracz + jego supporterzy
       enemyUnits,                            // broniący: wrogowie na hexie
-      defBonus
+      defBonus,
+      roundStart
     );
 
     // Usuń zabite jednostki
@@ -271,13 +284,16 @@ export class CombatSystem {
     });
   }
 
-  _resolveFire(attackers, defenders, defenderBonus) {
+  _resolveFire(attackers, defenders, defenderBonus, roundStart = null) {
     const summary = { dmgDealt: 0, hits: 0, killed: 0 };
     if (attackers.length === 0 || defenders.length === 0) return { summary };
 
     for (const atk of attackers) {
-      if (atk.hp <= 0) continue;
-      if (atk.status === 'offline') continue;
+      // S1 (Finding 309): strzelec czytany z migawki początku rundy — trafienie z tej samej rundy nie
+      //   odbiera mu strzału i nie osłabia salwy. Bez migawki (inny wołający) — stan żywy, jak dawniej.
+      const shooter = roundStart?.get(atk) ?? atk;
+      if (shooter.hp <= 0) continue;
+      if (shooter.status === 'offline') continue;
       // Cooldown — skip if on cooldown (zostawione z starego systemu, ale w stack combat
       // nie powinno być restrykcyjne; każda runda = nowy atak)
       // Resetujemy cooldown na 0 żeby każdy mógł strzelać co rundę
@@ -291,8 +307,8 @@ export class CombatSystem {
       if (!target) continue;
 
       const dmgRaw = GroundUnitFactory.getEffectiveDmg
-        ? GroundUnitFactory.getEffectiveDmg(atk, target)
-        : (atk.dmg ?? atk.attack ?? 0);
+        ? GroundUnitFactory.getEffectiveDmg(shooter, target)
+        : (shooter.dmg ?? shooter.attack ?? 0);
 
       // AC obrońcy + bonus terenu
       const ac = (target.ac ?? target.defense ?? 0) * defenderBonus;
