@@ -101,3 +101,34 @@ export const INVASION_UNIT_POOLS = {
   trader:       ['infantry', 'garrison'],                // defensywny
   isolationist: ['garrison', 'infantry'],                // preferuje obronę
 };
+
+// ── Teren a jednostki naziemne — JEDNO źródło (G2-K1, Finding 336) ───────────────────────────
+// Koszt ruchu per typ terenu (`TERRAIN_TYPES`); `Infinity` = na kafel nie da się wejść ani na nim
+// stanąć. Czyta go ruch jednostek (`GroundUnitManager`: cel ruchu, A*, tempo kroku) i predykat
+// `isStandableTile` (bootstrap stolic AI, predykat przejęcia) — jedna tabela, żeby „gdzie można
+// stanąć” i „co trzeba zająć, żeby przejąć kolonię” nie mogły się rozjechać.
+export const GROUND_MOVE_COST = {
+  plains:    1,
+  forest:    2,
+  desert:    2,
+  tundra:    2,
+  mountains: 3,
+  volcano:   4,
+  crater:    2,
+  ice_sheet: 3,
+  wasteland: 1,
+  ocean:     Infinity,  // nieprzejezdny
+};
+
+/**
+ * Czy jednostka naziemna może stanąć na kaflu (wejść na niego i go okupować)?
+ * Teren spoza tabeli ma koszt 1 — tak samo jak w ruchu (`MOVE_COST[type] ?? 1`).
+ * ⚠ To NIE jest „da się budować” (`evaluatePlacement`, `HexTile.js`): kafel zniszczony jest
+ *   niebudowalny, a da się na nim stanąć. Dziś oba pojęcia odrzucają z terenów wyłącznie ocean.
+ * @param {{type: string}|null} tile
+ * @returns {boolean}
+ */
+export function isStandableTile(tile) {
+  if (!tile) return false;
+  return Number.isFinite(GROUND_MOVE_COST[tile.type] ?? 1);
+}

@@ -23,6 +23,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
+import { isStandableTile } from '../data/GroundUnitData.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem } from './DepositSystem.js';
@@ -702,6 +703,10 @@ export class EmpireColonyBootstrap {
     const allowed = building.terrainOnly;
     const totalRows = grid.height ?? this._inferRows(grid);
     const category = building.category;
+    // D17 / Finding 336 (G2-K1): stolica staje WYŁĄCZNIE na kaflu, na którym da się stanąć —
+    //   okupacja wymaga stania na kaflu stolicy, więc stolica na oceanie robiła kolonię
+    //   niezdobywalną z ziemi.
+    const isCapital = !!building.isCapital;
 
     // Reguła terenu AI (współdzielona z AutoExpander). HARD (mine/farm/well) =
     //   twardy filtr; bez niego well/farm lądowały na mountains przez scoring
@@ -720,7 +725,11 @@ export class EmpireColonyBootstrap {
         if (tile.underConstruction) return;
         if (tile.pendingBuild) return;
         if (allowed && !allowed.includes(tile.type)) return;
+        // ⚠ Martwy test (od `0acd7d9`): kafel siatki nie ma pola `buildable` — żyje ono wyłącznie
+        //   w `TERRAIN_TYPES`. Zwykłe budynki AI mogą więc stanąć na oceanie; naprawa dla nich jest
+        //   poza zakresem G2-K1 (Finding 336). Stolicę bramkuje warunek niżej.
         if (tile.buildable === false) return;
+        if (isCapital && !isStandableTile(tile)) return;     // D17: stolica tylko tam, gdzie da się stanąć
         if (enforceAiHard && aiHard && !aiHard.includes(tile.type)) return; // twarda reguła AI
 
         let score = 0;
@@ -775,7 +784,6 @@ export class EmpireColonyBootstrap {
     // Finalizacja — kopia z BuildingSystem.autoPlaceBuilding linie 1206-1219.
     // Bezpośrednie wywołanie _activateBuilding bypassuje koszt/tech/POPy
     // (bootstrap = handicap startowy, jak istniejący autoPlaceBuilding flow).
-    const isCapital = !!building.isCapital;
     if (isCapital) {
       bestTile.capitalBase = true;
     } else {

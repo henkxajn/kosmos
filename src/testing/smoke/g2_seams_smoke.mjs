@@ -18,8 +18,9 @@
 //   P4  `_findGroundUnitSpawn`: pełna kolonia AI z lądową stolicą — pierwsza jednostka staje NA kaflu
 //       stolicy; stolica na oceanie — na lądowym kaflu z pierścienia 1; placówka (bez `capitalBase`) —
 //       na PIERWSZYM lądowym kaflu siatki w kolejności `toArray()`, niezależnie od budynków.
-//       → zmieni go: reguła rozmieszczenia garnizonu (G2-3) albo naprawa stolic na oceanie
-//         (`EmpireColonyBootstrap._placeBuildingSmart` sprawdza `tile.buildable`, którego kafel nie ma).
+//       ⚠ Od G2-K1 (Finding 336) generowanie nie stawia stolic AI na oceanie — P4b stoi na kolonii
+//         SKONSTRUOWANEJ (kafel stolicy przestawiony na ocean: kształt zapisu sprzed G2-K1).
+//       → zmieni go: reguła rozmieszczenia garnizonu (G2-3).
 //   P5  predykaty przejęcia i `launchInvasion` nie pytają o wojnę: w stanie POKOJU gracz przejmuje
 //       kolonię AI (`_tryPlayerCapture`), AI ląduje (`launchInvasion`) i przejmuje kolonię gracza
 //       (`_tickCaptureChecks`) (Finding 317).
@@ -29,7 +30,8 @@
 //       → zmieni go: usuwanie jednostek przy zmianie właściciela/zniszczeniu (D6, G2-3).
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwy `GameCore` z imperiami AI i stosem Directora, domyślne
-//   ziarno galaktyki — w nim stolica emp_001 stoi na OCEANIE, a emp_002 na równinie). Upływ czasu
+//   ziarno galaktyki — do G2-K1 stolica emp_001 stała w nim na OCEANIE; od G2-K1 obie stolice AI
+//   są lądowe). Upływ czasu
 //   w P2 przez prawdziwy `time:tick` (`Ticker`), czyli przez to samo
 //   `ColonyManager._tickGroundUnitUpkeep`, co w grze.
 // ⚠ Każdy pin ma ŚWIADKA (np. „status relacji = peace”, „siatka ma kafle”, „jednostka istnieje”) —
@@ -153,23 +155,28 @@ function bootstrapAiOutpost(w, empireId) {
 {
   console.log('\nP4 — _findGroundUnitSpawn: kolonia AI i placówka AI');
   const w = boot();
-  let land = 0, ocean = 0;
+  let land = 0;
   for (const col of w.aiFull) {
     const cap = capitalOf(col);
+    if (cap.type === 'ocean') continue;          // od G2-K1 generowanie takich nie daje — P4b niżej
+    land++;
     const sp = w.cm._findGroundUnitSpawn(col);
-    if (cap.type !== 'ocean') {
-      land++;
-      assert(sp?.q === cap.q && sp?.r === cap.r,
-        `P4a: ${col.planetId} — lądowa stolica (${cap.type}) ⇒ spawn NA kaflu stolicy (${sp?.q},${sp?.r})`);
-    } else {
-      ocean++;
-      const t = col.grid.get(sp?.q, sp?.r);
-      assert(!!t && t.type !== 'ocean' && hexDist(sp, cap) === 1,
-        `P4b: ${col.planetId} — stolica na oceanie ⇒ spawn na lądowym kaflu pierścienia 1 (${sp?.q},${sp?.r}: ${t?.type})`);
-    }
+    assert(sp?.q === cap.q && sp?.r === cap.r,
+      `P4a: ${col.planetId} — lądowa stolica (${cap.type}) ⇒ spawn NA kaflu stolicy (${sp?.q},${sp?.r})`);
   }
-  assert(land >= 1 && ocean >= 1,
-    `świadek: kolonie AI z lądową i z oceaniczną stolicą (lądowe ${land}, oceaniczne ${ocean})`);
+  assert(land >= 1, `świadek: kolonie AI z lądową stolicą (${land})`);
+
+  // P4b — stolica na oceanie, SKONSTRUOWANA (G2-K1): kafel stolicy przestawiony na ocean, klucz
+  //   `capital_q,r` bez zmian — kształt zapisu sprzed naprawy generowania.
+  const oc = w.aiFull[0];
+  const ocap = capitalOf(oc);
+  ocap.type = 'ocean';
+  const osp = w.cm._findGroundUnitSpawn(oc);
+  const ot = oc.grid.get(osp?.q, osp?.r);
+  assert(ocap.type === 'ocean' && oc.grid.getNeighbors(ocap.q, ocap.r).some(n => n && n.type !== 'ocean'),
+    `świadek: ${oc.planetId} — stolica przestawiona na ocean (${ocap.q},${ocap.r}), w pierścieniu 1 jest ląd`);
+  assert(!!ot && ot.type !== 'ocean' && hexDist(osp, ocap) === 1,
+    `P4b: ${oc.planetId} — stolica na oceanie ⇒ spawn na lądowym kaflu pierścienia 1 (${osp?.q},${osp?.r}: ${ot?.type})`);
 
   const out = bootstrapAiOutpost(w, w.aiFull[0].ownerEmpireId);
   const tiles = out?.grid?.toArray?.() ?? [];

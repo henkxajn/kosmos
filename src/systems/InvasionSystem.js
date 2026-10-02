@@ -26,7 +26,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
-import { INVASION_UNIT_POOLS } from '../data/GroundUnitData.js';
+import { INVASION_UNIT_POOLS, isStandableTile } from '../data/GroundUnitData.js';
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 
 const CAPTURE_GRACE_YEARS = 3.0;
@@ -344,8 +344,9 @@ export class InvasionSystem {
 
   // Warunek podboju ciała AI przez gracza (jedno źródło prawdy dla eventu i skanu):
   //   • brak żywych wrogich jednostek naziemnych, ORAZ
-  //   • kolonia MA stolicę → gracz jest właścicielem hexa capitalBase
-  //   • kolonia NIE ma stolicy (outpost) → gracz kontroluje ≥1 hex z budynkiem
+  //   • kolonia MA stolicę, na której da się stanąć → gracz jest właścicielem hexa capitalBase
+  //   • kolonia NIE ma stolicy (outpost) ALBO stolica stoi tam, gdzie nie da się stanąć
+  //     (D17, G2-K1) → gracz kontroluje ≥1 hex z budynkiem
   // Zwraca true jeśli przejęto.
   _tryPlayerCapture(planetId) {
     const colMgr = window.KOSMOS?.colonyManager;
@@ -399,14 +400,22 @@ export class InvasionSystem {
   // ⚠ Placówka bez ŻADNEGO budynku nie da się zdobyć żadnej ze stron — nie ma czego trzymać.
   //   To jest symetryczne i zamierzone, a nie luka: ta sama funkcja odpowiada `false` obu stronom.
   //
+  // ── D17 (G2-K1, Finding 336) — STOLICA, NA KTÓREJ NIE DA SIĘ STANĄĆ ──────────
+  //
+  // Okupacja kafla wymaga STANIA na nim (`GroundUnitManager._tickOccupation`), a na ocean nie wejdzie
+  // żadna jednostka. Do G2-K1 bootstrap AI stawiał stolicę także na oceanie (martwy test
+  // `tile.buildable` w `EmpireColonyBootstrap._placeBuildingSmart`), więc taka kolonia była
+  // niezdobywalna dla OBU stron. Generowanie jest naprawione; w zapisach sprzed naprawy stolica
+  // nie do stania NIE decyduje — działa reguła placówki. Stolicy nie przenosimy, niczego nie migrujemy.
+  //
   // @param {Array} tiles — kafle siatki ciała
   // @param {string} conquerorId — 'player' albo id imperium
   static holdsDecisiveGround(tiles, conquerorId) {
     const list = tiles ?? [];
     const capital = list.find(t => t?.capitalBase);
-    // Pełna kolonia: decyduje WYŁĄCZNIE kafel stolicy.
-    if (capital) return capital.owner === conquerorId;
-    // Ciało bez stolicy (placówka): wystarczy ≥1 własny kafel z budynkiem.
+    // Pełna kolonia ze stolicą, na której da się stanąć: decyduje WYŁĄCZNIE kafel stolicy.
+    if (capital && isStandableTile(capital)) return capital.owner === conquerorId;
+    // Ciało bez stolicy (placówka) albo stolica nie do stania (D17): ≥1 własny kafel z budynkiem.
     return list.some(t => t && t.owner === conquerorId && (t.buildingId || t.capitalBase));
   }
 
@@ -454,8 +463,8 @@ export class InvasionSystem {
       // ⚠ AC-6 (D2=W2): warunek (1) też przeszedł na WSPÓLNY predykat. Stało tu
       //   `if (!capital) continue;`, czyli ciało bez stolicy (PLACÓWKA) było dla AI
       //   niezdobywalne na zawsze — a gracz placówki AI zdobywał, bo miał gałąź zapasową.
-      //   Teraz `holdsDecisiveGround` odpowiada obu stronom tak samo: stolica, gdy jest,
-      //   inaczej ≥1 własny kafel z budynkiem.
+      //   Teraz `holdsDecisiveGround` odpowiada obu stronom tak samo: stolica, gdy jest
+      //   (i da się na niej stanąć — D17, G2-K1), inaczej ≥1 własny kafel z budynkiem.
       const colony = colMgr.getColony(inv.planetId);
       const grid = colony?.grid;
       if (!grid) continue;

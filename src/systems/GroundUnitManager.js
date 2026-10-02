@@ -12,23 +12,14 @@
 import EventBus from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
-import { getUnitStats } from '../data/GroundUnitData.js';
+import { getUnitStats, GROUND_MOVE_COST } from '../data/GroundUnitData.js';
 import { UNIT_ARCHETYPES, getTransportSize, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 
 // ── Koszty ruchu po terenie ──────────────────────────────────────────────────
-const MOVE_COST = {
-  plains:    1,
-  forest:    2,
-  desert:    2,
-  tundra:    2,
-  mountains: 3,
-  volcano:   4,
-  crater:    2,
-  ice_sheet: 3,
-  wasteland: 1,
-  ocean:     Infinity,  // nieprzejezdny
-};
+// Tabela mieszka w danych (`GROUND_MOVE_COST`, GroundUnitData) — wspólna z predykatem „da się
+// stanąć” (`isStandableTile`), którego używają bootstrap stolic AI i predykat przejęcia (G2-K1).
+const MOVE_COST = GROUND_MOVE_COST;
 
 // Prędkość ruchu: 3 hexy na rok cywilizacyjny
 const MOVE_SPEED = 3.0;
