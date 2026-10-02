@@ -950,6 +950,13 @@ path instead). Next live run can settle it in one read — the first record shou
     live landing on this gate was produced by a debug lever, not by the AI's own production.
     ⇒ **The missing piece is a CATALOG entry plus a rule that wants it**, not code in the invasion
     path. Full data: `docs/audit/AI_DROP_HULL_AUDIT.md`. Assigned to its own future slice.
+    ⚠ **CORRECTED 2026-10-02 (AI GARRISON G1 close-out) — closed on the DATA side.**
+    `transport_assault` is in the catalog since `0e6ea0d` (2026-08-19, `ShipTemplateData.js:218`);
+    **nothing orders it** — the only `template:` in the rule catalog is `science_probe`
+    (`DirectorRuleData.js:85`), and `DirectorPressure` orders frigates only (`:117`, `:121`). The
+    remainder (no weapon slot ⇒ excluded from strikes; no rule wants it; its modules need
+    `fleet_logistics` / `ground_warfare`, which no AI archetype researches — Finding 325) lives as
+    **201**. See `docs/design/AI_GARRISON_PLAN.md` §7.
 50. **The AI's landing force runs on the LEGACY ground model, not on archetypes — a different
     game with a different balance.** `INVASION_UNIT_POOLS` points exclusively at legacy
     `GROUND_UNITS` types (60 HP / 12 attack) while the player's archetype units are a separate,
@@ -959,6 +966,13 @@ path instead). Next live run can settle it in one read — the first record shou
     been reloaded since the landing.** Switching the pool to archetypes is a ground-combat balance
     change, so it belongs to the **GROUND** slice next to the S12 morale defect and R13 RNG
     seeding — not to a visibility commit. Full data: `docs/audit/GROUND_UNITS_AUDIT.md`.
+    ⚠ **CORRECTED 2026-10-02 (AI GARRISON G1) — understated, and SUPERSEDED by D7.** The legacy
+    defect did not hit only the AI's landing force: legacy units were removed on **both** sides in
+    round 1 (measured: legacy vs legacy — both disbanded by `morale_collapse` at HP 52/60). Its
+    cause, Finding 65, is closed (`f5e30e5`); legacy units now fight, and win 84–100% against every
+    player archetype at +0. The owner's **D7** (2026-10-02) replaces the GROUND-slice plan for this
+    entry: the AI uses the player's archetype model everywhere, including invasion pools (step
+    **G2b**). See `docs/design/AI_GARRISON_PLAN.md`.
 51. ⚠ **CORRECTED 2026-08-19 (AI_CAPTURE AC-1) — the original wording named the wrong cause.**
     *Stood here:* „`InvasionSystem` has `_tryPlayerCapture` … with **no** mirror for the AI
     direction, so the last step of the conquest loop … is missing."

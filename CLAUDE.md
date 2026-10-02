@@ -420,7 +420,7 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `groundUnit:orgChanged { unitId, org, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
 | `groundUnit:moraleChanged { unitId, morale, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
 | `groundUnit:starved { unitId, planetId }` | SupplyCoverageSystem | UIManager (EventLog) |
-| `groundUnit:disbanded { unitId, planetId, reason, archetypeId }` | ColonyManager (upkeep) | UIManager, EventLog |
+| `groundUnit:disbanded { unitId, planetId, reason, archetypeId }` | ColonyManager (upkeep), CombatSystem (`morale_collapse`) | ⛔ **ZERO subskrybentów** (Finding **312**) — Dziennik milczy; ta tabela twierdziła „UIManager, EventLog” (sprostowane 2026-10-02) |
 | `groundUnit:resumed { unitId, planetId }` | ColonyManager (upkeep) | ColonyOverlay |
 | `supply:coverageChanged {}` | SupplyCoverageSystem | ColonyOverlay |
 | `vessel:orderIssued { vesselId, order }` | MovementOrderSystem | UIManager (FleetManagerOverlay), VesselManager (suspend mission) |
@@ -1552,10 +1552,12 @@ tika).
 
 **⚠ TRZY WARUNKI GATE 3 — każdy z osobną, przypisaną PRZYSZŁĄ pracą** (`W3_PLAN.md` §Findings 49-51;
 numeracja orkiestratora 42-44): **(49)** katalog AI (`SHIP_TEMPLATES`) NIE MA roli transportowej ⇒
-`no_drop_capable_hull` to jedyna osiągalna odpowiedź złącza bitwa→desant (`docs/audit/AI_DROP_HULL_AUDIT.md`)
+`no_drop_capable_hull` to jedyna osiągalna odpowiedź złącza bitwa→desant (`docs/audit/AI_DROP_HULL_AUDIT.md`;
+⚠ korekta 2026-10-02: **zamknięty po stronie DANYCH** — `transport_assault` od `0e6ea0d`, nikt go nie zamawia ⇒ reszta = **201**)
 · **(50)** desant AI biegnie na modelu **LEGACY** (`GROUND_UNITS`), nie archetypach — inny balans
 (60 HP/12 atak vs 15 HP/7), brak morale/zaopatrzenia, sprzeczne domyślne morale ⇒ jednostka rozpada
-się po pierwszym trafieniu, chyba że grę przeładowano (`docs/audit/GROUND_UNITS_AUDIT.md`) ·
+się po pierwszym trafieniu, chyba że grę przeładowano (`docs/audit/GROUND_UNITS_AUDIT.md`; ⚠ korekta 2026-10-02:
+znikały OBIE strony; przyczyna — Finding 65 — zamknięta w AI GARRISON G1, a 50 **zastąpiony przez D7**) ·
 **(51)** **desant AI NIGDY nie kończy się przejęciem kolonii** — `_tryPlayerCapture` nie ma lustra po
 stronie AI; §4/§5 gate'u zweryfikowane OBEJŚCIEM przez `transferColony`.
 
@@ -1584,6 +1586,8 @@ Keepery W3: `w3_dominance_persist` 16 · `w3_attack_dispatch` 35 · `w3_cross_sy
 `WAR_BACKBONE.md` §6a + addendum po W3) · nowy gate **„AI przejmuje kolonię"** (Finding 51) ·
 **katalog transportowca AI** (Finding 49) · slice **GROUND** (S12 morale → R13 RNG → pule desantu na
 archetypy, Finding 50).
+⚠ **Stan 2026-10-02:** katalog ma `transport_assault` od `0e6ea0d` (reszta = **201**); slice GROUND
+zastąpił arc **AI GARRISON** — S12 (morale) ✅ w G1, pule desantu na archetypy = G2b (D7). Sekcja na końcu pliku.
 
 ---
 
@@ -1618,7 +1622,8 @@ realnie osiągalna** (zmierzone end-to-end trasą warp: `getPlayerColonies()` 0 
 wczytania zapisu**. Domknięte arciem **BRAMKA WŁASNOŚCI, blok P0** (sekcja niżej).
 
 ⚠ **ŚWIADOMIE OTWARTE (nie blokuje zamknięcia):** **Finding 49** — katalog AI **nie ma kadłuba
-transportowego**, więc *produkcyjne* wejście AI w desant pozostaje zamknięte (gate wchodził dźwignią
+transportowego** (⚠ korekta 2026-10-02: ma — `transport_assault` od `0e6ea0d`; **nikt go nie zamawia**,
+reszta = **201**), więc *produkcyjne* wejście AI w desant pozostaje zamknięte (gate wchodził dźwignią
 `WarOverlay force_invasion`) · **Finding 50** — desant AI biegnie na modelu **LEGACY**, nie archetypach ·
 ✅ **Finding 111 (P1)** — `canReverseFate` liczył *istnienie* kolonizatora, nie *zdolność*;
 **ZAMKNIĘTY 2026-08-20** (sekcja niżej).
@@ -5653,3 +5658,31 @@ poprawne linie gate'u zgłosiły rzut.
 CAŁEJ rodziny traktatowej naraz · **298** pokój status quo pierze zdobycze (**jedyna otwarta pozycja
 rozdziału**, decyzja właściciela). ⚠ Dla ekspozycji Directora findingu NIE MA — patrz sprostowanie
 wyżej: błąd był mój, nie kodu.
+
+---
+
+## AI GARRISON — G1: walka naziemna się rozstrzyga (save **v101 bez migracji**, live-gate PASS — G1 ZAMKNIĘTY 2026-10-02)
+
+Plan, decyzje **D1–D7** i rejestr findingów **#309–#325**: `docs/design/AI_GARRISON_PLAN.md`.
+Commity: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
+
+**Jedno zdanie:** świeże jednostki uciekały przy spawnie (próg 20 > `baseMorale` 10–20), wyjątek
+„jednostka defensywna nie ucieka” był martwy (`'defense'` wobec lustra `'defensive'`), a jednostki
+legacy znikały od pierwszego trafienia (Finding **65**: `?? 0` przy odejmowaniu vs `?? 100` przy
+odczycie) — więc walka naziemna się nie rozstrzygała.
+
+- **D5a** `isDefensiveUnit` (`unitArchetypes.js`) — oba modele; **rozpad przy morale 0 zostaje**.
+- **D5b** `DEFAULT_MORALE = 100` (`unitArchetypes.js`) w 12 miejscach (silnik + dwa miejsca UI); tripwire T7.
+- **D5c** `export const MORALE_RETREAT_THRESHOLD = 5` (`CombatSystem.js`) — ucieczka po ⌈(M − 5)/3⌉ trafieniach.
+
+⚠ Garnizon przy bazowym morale (10) nie ucieka, ale **po 4 trafieniach rozpada się** — przyjęte dla G1.
+⚠ Fale legacy AI wygrywają 84–100% z archetypami gracza przy +0 ⇒ **D7**: AI na modelu archetypów
+wszędzie, także w pulach desantu (G2b).
+⚠ AI strzela w rundzie pierwsze (**309**, potwierdzone na żywo), a `morale_collapse` nie zwalnia
+zablokowanych POP (**310**) — oba w **G1b**. 🔴 **317**: lądowanie i podbój w czasie POKOJU (D4 ⇒ G2).
+⚠ `groundUnit:disbanded` nie ma subskrybenta (**312**) — tabela zdarzeń wyżej sprostowana.
+
+Keeper `ground_morale_resolution_smoke` **35/35** (rośnie z commitami: 11 → 22 → 35). Sweep
+**248/248 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = 3424).
+**Dalej:** G1b → G2 (bramka wojny dla lądowania, materializacja garnizonu, wspólna funkcja „utwórz
+jednostkę AI z zadanym morale”) → G2b → G3.

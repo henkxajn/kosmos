@@ -1015,6 +1015,11 @@ gate'u** ⇒ **D7**.
     `unit.role !== 'defense'`) jest **martwy** — instancje noszą rolę LEGACY (`defensive`), nie
     archetypową (`defense`), bo `GroundUnitFactory:148` zapisuje `mapRoleToLegacy(arch.role)`. Warunek jest
     zawsze prawdziwy, więc garnizony podlegają routowi jak każda inna jednostka.
+    ✅ **ZAMKNIĘTY 2026-10-02 (AI GARRISON G1, bramka live PASS).** Wspólny `DEFAULT_MORALE = 100`
+    we wszystkich miejscach odczytu/odejmowania/dodawania morale — `f5e30e5` (D5b); martwy wyjątek
+    garnizonu → `isDefensiveUnit` (oba modele) — `85411d0` (D5a); próg odwrotu 20 → 5 — `f868ae8`
+    (D5c). Keeper `ground_morale_resolution_smoke` 35/35; pin `w3_seams_smoke` T6 świadomie odwrócony.
+    Nowe findingi z tego arca (#309–#325) i plan: `docs/design/AI_GARRISON_PLAN.md`.
 66. ⚠ **`ColonyOverlay._autoSpawnRover` — samonaprawiający się darmowy cywil na stolicy.** Wołane
     z `show():443` przy **każdym** otwarciu panelu kolonii bez jawnego `colonyId`; bramki: planeta
     macierzysta (`:449`) + **„na planecie nie ma ŻADNEJ jednostki"** (`:452`). Znalezione w cross-checku

@@ -260,6 +260,18 @@
 > **wyłącznie #298** (pokój status quo pierze zdobycze — decyzja właściciela, każdy wariant dotyka
 > `territorial_ceiling`, czyli rdzenia D-WP-8). Drobne poza rozdziałem: **307** (toasty dla całej
 > rodziny traktatowej), **308**.
+>
+> **Aktualizacja 2026-10-02 — AI GARRISON G1 ZAMKNIĘTY: walka naziemna się rozstrzyga.**
+> Sweep: **248/248 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3424** · save **v101 bez migracji**.
+> • **65** ✅ (`f5e30e5` D5b — wspólny `DEFAULT_MORALE`; `85411d0` D5a — martwy wyjątek garnizonu;
+> `f868ae8` D5c — próg odwrotu 20 → 5). Bramka live właściciela PASS. Rejestr macierzysty 65:
+> `AI_CAPTURE_PLAN.md` §65; plan, decyzje D1–D7 i nowe findingi: **`AI_GARRISON_PLAN.md`**.
+> • **NOWE: #309–#325** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🔴 **317** (lądowanie i podbój w czasie
+> POKOJU) · 🟠 **309**, **310** (→ G1b), **311**, **318**, **319**, **321**, **323** · ⚪ **312-316**,
+> **320**, **322**, **324**, **325**.
+> • **Korekty:** **49** zamknięty po stronie DANYCH (`transport_assault` od `0e6ea0d`, nikt go nie
+> zamawia ⇒ reszta = **201**) · **50** zaniżony (znikały OBIE strony) i **zastąpiony przez D7**
+> (archetypy wszędzie, krok G2b).
 
 
 ---
@@ -337,6 +349,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
+| **309-325** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -436,6 +449,14 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **164** | 🟠 | przełącznik auto-slow **nie ma producenta** — `time:autoSlowToggle` zero nadawców, pole nieserializowane ⇒ gracz **nie może** tego wyłączyć; resztki w `time:display` i `BottomBar` |
 | **165a** | 🟠 | obrona orbitalna **nie ma PRZEBIEGU** — jedno `resolveBattle`, brak `vessel:engaged`, brak rund ⇒ walka o stolicę jest wyłącznie wynikiem po fakcie |
 | **W3-26** | 🟠 | `playerVesselsToBattleUnit([])` fabrykuje obrońcę `{hp:100, weapons:[]}`; fantom pinowany jako zachowanie silnika, kandydat do balansu |
+| **309** | 🟠 | **salwa wroga rozstrzygana PRZED salwą gracza** (`CombatSystem.js:212` przed `:217`, zabici pomijani `:279`) — wbrew komentarzowi „Simultaneous”; AI wygrywa 84–94% w parach symetrycznych, potwierdzone na żywo ⇒ **G1b**. `AI_GARRISON_PLAN.md` §6 |
+| **310** | 🟠 | `morale_collapse` (`CombatSystem.js:246-250`) **nie zwalnia zablokowanych POP** — ani `unlockPops`, ani `groundUnit:destroyed` (reintegracja); po G1 typowa utrata jednostki defensywnej ⇒ **G1b** |
+| **311** | 🟠 | `SupplyCoverageSystem.js:162` zapisuje legacy jednostce gracza `supply = 0` przez `?? 0` ⇒ zero obrażeń + atrycja (klasa 65, inne pole) |
+| **312** | ⚪ | `groundUnit:disbanded` — **zero subskrybentów**; Dziennik milczy przy rozpadzie i przy rozwiązaniu z braku utrzymania |
+| **313** | ⚪ | `_tryRetreat` zostawia `_path`, zawsze ucieka w +q, wchodzi na obcy kafel — rozszerza **56** |
+| **314** | ⚪ | martwe człony `_scoreTarget` `'scout'`/`'ranged'` (`CombatSystem.js:361`, `:364`) — instancje noszą lustro legacy |
+| **315** | ⚪ | `GroundUnitManager.attackUnit` martwa (zero wołających); komentarze `GroundUnitFactory.js:10`, `:139` mówią inaczej |
+| **316** | ⚪ | `ColonyOverlay.js:2706` — `NaN` morale dla jednostki z `supply`, bez `morale` (wąska ścieżka) |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -454,6 +475,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **127o** | ⬜ | backlog: lazy-init loadera w `PlanetTextureUtils:16` odblokowałby `ColonyOverlay` pod node | **największa luka testowa repo** |
 | **128o** | 🟠 | cztery wejścia nawigacyjne wołają `switchActiveColony` wprost — bezpieczne **przez odmowę**, ale żadne nie oferuje **stanu neutralnego** | stąd UX z GATE OG-3 §3 |
 | **72 · 73 · 84 · 85 · 91 · 92 · 93 · 94** | ⚪ | filed przy audycie własności; po D1-D6 prawdopodobnie **latentne albo higiena** | ⚠ **nie weryfikowane po kolei** |
+| **318** | 🟠 | kafle kolonii AI mają `owner = null` — stempel daje dopiero otwarcie mapy w `ColonyOverlay.js:584-588` | rodzina **54**/**58**; czytane przez okupację i przejęcie (G2). `AI_GARRISON_PLAN.md` §6 |
+| **319** | 🟠 | jednostki naziemne **osierocone** przy zniszczeniu ciała i **nietknięte** przez `transferColony`/`captureColonyForPlayer` | rozszerza **59**; decyzja **D6** (G2) |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -473,9 +496,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **49** | 🔴 | katalog AI **nie ma roli transportowej** ⇒ `no_drop_capable_hull` to jedyna osiągalna odpowiedź złącza bitwa→desant | `AI_DROP_HULL_AUDIT.md` |
-| **50** | 🔴 | desant AI biegnie na modelu **LEGACY** (60 HP / 12 atak vs 15 / 7), bez morale i zaopatrzenia | `GROUND_UNITS_AUDIT.md` |
-| **65** | 🔴 | **przyczyna 50, w dwóch liniach**: morale legacy `?? 0` przy odejmowaniu vs `?? 100` przy odczycie ⇒ **pierwsze trafienie usuwa jednostkę z gry**. Dotyczy też startowej piechoty gracza | + martwy wyjątek „garnizon się nie wycofuje" |
+| **49** | 🟠 | ⚠ **KOREKTA 2026-10-02 — zamknięty po stronie DANYCH**: `transport_assault` jest w katalogu od `0e6ea0d`; **nikt go nie zamawia** (jedyny `template:` w regułach to `science_probe`) ⇒ reszta żyje jako **201** | `W3_PLAN.md` §49 · `AI_GARRISON_PLAN.md` §7 |
+| **50** | ⬜ | ⚠ **KOREKTA 2026-10-02 — zaniżony i ZASTĄPIONY przez D7**: jednostki legacy znikały w r1 po OBU stronach; przyczyna (65) zamknięta; AI przechodzi na archetypy wszędzie (krok **G2b**) | `W3_PLAN.md` §50 · `AI_GARRISON_PLAN.md` |
 | **53** | 🟠 | „wieczna inwazja" na placówce gracza — rekord `active:true` nie może wygasnąć i trafia do **każdego** zapisu | |
 | **54** | 🟠 | startowy garnizon gracza wisi na **efekcie ubocznym UI**; kolonie wtórne i placówki: 0 jednostek na zawsze | |
 | **55** | 🟠 | kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy ⇒ `launchInvasion` zwraca `no_grid` | |
@@ -529,6 +551,13 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **183** | 🟡 | **wyciek drzewa technologii gracza do placówek AI** (`EmpireColonyBootstrap:385-390`) — ZMIERZONE tożsamościowo: **każda placówka AI** czyta `window.KOSMOS.techSystem` (drzewo GRACZA), pełne kolonie czytają własne `aiTech` | trop z diagnozy (c); zakres skutku niezmierzony (czy placówki w ogóle czytają techy) — **do sprawdzenia PRZED slice'em (c)** |
 | **184** | 🟡 | **deklarowana bramka tech ≠ egzekwowana — 4 z 12 towarów, u GRACZA tak samo jak u AI** — `isRecipeAvailable` to OR trzech gałęzi, a `isCommodityUnlocked` przebija `requiresTech`: `android_worker`←`robotics` (w `startingTechs` AI, więc otwarte od pierwszej tury), `antimatter_cells`←`antimatter_containment`, `quantum_processors`←`quantum_physics`, `warp_cores`←`warp_drive` | **pytanie PROJEKTOWE, nie bug** — która strona jest prawdą, rozstrzyga projektant. ⚠ `requiresTech` **nie jest wiarygodnym opisem bramki**; efektywną czytać z OBU źródeł |
 | **185** | 🟠 | **`military_supplies` nieosiągalne dla OBU archetypów AI** — wydzielone z 181 przy jego zamykaniu. `military_logistics` (150 rp) nie ma w żadnym planie badań, a jej prereq **`ground_warfare` też jest spoza kolejki**, więc koszt to cała gałąź, nie 150 rp. Brak obejścia przez `unlockCommodity`. Towar zasila zaopatrzenie naziemne (`BuildingsData:765`) i magazyn statku zaopatrzeniowego (`ShipsData:132`) | **świadomie poza zakresem** (F4). ⚠ Należy do slice'u **GROUND** (rodzina 49/50), nie do ekonomii AI. ⚠ Wycenić dopiero po sprawdzeniu, czy jednostki naziemne AI w ogóle czytają ten towar — legacy model z 50 może go omijać |
+| **317** | 🔴 | **lądowanie i podbój w czasie POKOJU** — desant bramkuje tylko dominacja orbitalna (pusty układ = dominacja, `WarSystem.js:982-990`), a `launchInvasion` i `_tryPlayerCapture` nie mają warunku wojny | decyzja **D4** ⇒ G2. `AI_GARRISON_PLAN.md` §6 |
+| **320** | ⚪ | `diplomacy:warDeclared` nie niesie `declaredBy`, a `UIManager.js:1624` go czyta | istotne dla G2 (materializacja przy wypowiedzeniu) |
+| **321** | 🟠 | wydobycie kopalń (`receive` wprost, `BuildingSystem.js:2598`) niewidoczne dla `getPerYear`/`getGrossPerYear` | powód D1/D3; wpływ na UI niezmierzony |
+| **322** | ⚪ | trzy definicje stolicy AI: `capitalOf`, bliźniaczy `_pickCapital`, statyczne `homeSystemId` | wybrać jedno źródło przed G2 |
+| **323** | 🟠 | `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` wciąga jednostkę AI do utrzymania i limitu GRACZA (`ColonyManager.js:1372`, `:1515`, `:1528`) | rozszerza **60**; wiążące dla wspólnej funkcji G2 |
+| **324** | ⚪ | świeży `garrison_unit` = `mobile` (`dmg 0`), odtworzenie bez pola = `deployed` | **D6**: garnizon AI `deployed` od utworzenia |
+| **325** | ⚪ | żaden archetyp AI nie bada technologii morale (ani `ground_warfare`); bonusy przy rekrutacji i tak czytają drzewo GRACZA | rodzina **185**; zastąpione przez **D7** |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -642,12 +671,17 @@ PRZED planowaniem, nie po.
 Różne przyczyny, **identyczny widoczny skutek**: AI nigdy nie wystawia transportowca. Sam wpis
 w katalogu i tak umrze na głodzie komodytów i TTL 3 lat ⇒ **naprawa pojedyncza wyglądałaby jak brak
 naprawy**. Idą razem albo wcale.
+⚠ **Aktualizacja 2026-10-02:** wpis w katalogu już JEST (`transport_assault`, `0e6ea0d`) — `49` zamknięty
+po stronie danych; to, czego brakuje (nikt go nie zamawia, brak gniazda broni), żyje jako **201**.
 
 ### ③ `50` + `65` + `56` + `54` + `58` + `67` + `68` — slice **GROUND**
 `65` jest **przyczyną** `50` (dwie linie: `?? 0` vs `?? 100`). `56` to drugi mover, który GROUND
 obudzi. `54`/`58` to warunki wstępne uczciwego pomiaru (kto w ogóle ma jednostki, czyj jest kafel).
 `67`/`68` to redesign katalogu. **Jeden slice balansowy, nie siedem poprawek.** Dołącza tu S12
 (morale) i R13 (RNG) z wcześniejszych rejestrów.
+⚠ **Aktualizacja 2026-10-02:** `65` ✅ zamknięty w **AI GARRISON G1** razem z S12 (morale); `50`
+**zastąpiony przez D7** (archetypy wszędzie — krok G2b); `56` rozszerzony przez **313**. Dalsza praca nad
+tą grupą idzie w `AI_GARRISON_PLAN.md` (G1b → G2 → G2b → G3), nie w osobnym slice'ie GROUND.
 
 ### ④ `141` + `145` + `127` — slice **ORDER_TRUTHFULNESS** (już uzasadniony w §7a)
 Jeden chokepoint (`MOS.issueOrder:181-246` — wszystkie 9 gałęzi `_issueX` wychodzi tym samym
