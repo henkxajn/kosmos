@@ -13,7 +13,7 @@ import EventBus from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getUnitStats } from '../data/GroundUnitData.js';
-import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, getTransportSize, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 
 // ── Koszty ruchu po terenie ──────────────────────────────────────────────────
@@ -714,7 +714,7 @@ export class GroundUnitManager {
     atk.org = Math.max(0, (atk.org ?? 0) - 5);
     if (damage > 0) {
       tgt.org = Math.max(0, (tgt.org ?? 0) - 5);
-      if (!tgt.noMorale) tgt.morale = Math.max(0, (tgt.morale ?? 0) - 3);
+      if (!tgt.noMorale) tgt.morale = Math.max(0, (tgt.morale ?? DEFAULT_MORALE) - 3);
       EventBus.emit('groundUnit:orgChanged',    { unitId: tgt.id, org: tgt.org, max: tgt.maxOrg ?? 100 });
       if (!tgt.noMorale) EventBus.emit('groundUnit:moraleChanged', { unitId: tgt.id, morale: tgt.morale, max: tgt.maxMorale ?? 100 });
     }
@@ -1383,7 +1383,7 @@ export class GroundUnitManager {
         baseStats:   u.baseStats ?? null,
         currentHP:   u.currentHP ?? u.hp,
         experience:  u.experience ?? 0,
-        morale:      u.morale ?? 100,
+        morale:      u.morale ?? DEFAULT_MORALE,
         turnsAlive:  u.turnsAlive ?? 0,
         abilityId:   u.abilityId ?? null,
         abilityCooldownRemaining: u.abilityCooldownRemaining ?? 0,
@@ -1443,7 +1443,7 @@ export class GroundUnitManager {
         rebuilt.status     = u.status ?? 'idle';
         rebuilt.mission    = u.mission ? { ...u.mission } : null;
         rebuilt.experience = u.experience ?? 0;
-        rebuilt.morale     = u.morale ?? 100;
+        rebuilt.morale     = u.morale ?? DEFAULT_MORALE;
         rebuilt.turnsAlive = u.turnsAlive ?? 0;
         rebuilt.abilityCooldownRemaining = u.abilityCooldownRemaining ?? 0;
         rebuilt._stealthState    = u.stealthState ?? (arch.ability === 'stealth' ? 'hidden' : null);

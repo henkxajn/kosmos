@@ -25,6 +25,14 @@
 //   transportSize      — ładowność jednostki w troop_bay (1=piechota, 2=wóz, 3=ciężki sprzęt)
 //   Frakcje (humanity/UNE/Syndykat) NIE nadpisują tego pola — to cecha archetypu.
 
+// ── Domyślne morale jednostki BEZ pola `morale` (D5b, Finding 65 — AI GARRISON G1, 2026-10-01) ──
+// Jednostki legacy (`GROUND_UNITS`, w tym desant AI z `INVASION_UNIT_POOLS`) nie niosą pola `morale`.
+// Każde miejsce, które je CZYTA, ODEJMUJE albo DODAJE, bierze ten jeden default — 100, czyli wartość,
+// której używały już odczyt w walce i serialize. ⚠ Dawniej odejmowanie brało `?? 0`, a odczyt `?? 100`:
+// pierwsze trafienie zapisywało 0 i jednostka znikała z `morale_collapse` z pełnym HP, a ta sama
+// jednostka po serialize→restore (`morale: 100`) — już nie. Archetypy niosą `morale` od spawnu.
+export const DEFAULT_MORALE = 100;
+
 export const UNIT_ARCHETYPES = {
   // ── Szturm: szybka piechota, zajmuje budynki, bonus w mieście ──
   shock_infantry: {

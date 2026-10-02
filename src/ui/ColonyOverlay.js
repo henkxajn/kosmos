@@ -7,7 +7,7 @@
 import { BaseOverlay, HEADER_H }  from './BaseOverlay.js';
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';   // Slice 5C.1: FEATURES.popAllocation2 (zakładka Załoga v2)
-import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { STRATA_META } from '../systems/CivilizationSystem.js';   // Faza 3: nazwy warstw w tooltipach
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -2710,7 +2710,7 @@ export class ColonyOverlay extends BaseOverlay {
       // damageMult live (breakdown)
       const supFac = (unit.supply ?? 0) <= 0 ? 0 : Math.min((unit.supply ?? 0) / 20, 1);
       const noMor  = unit.noMorale === true;
-      const coreSum = (unit.org ?? 0) + (noMor ? 0 : (unit.morale ?? 0));
+      const coreSum = (unit.org ?? 0) + (noMor ? 0 : (unit.morale ?? DEFAULT_MORALE));
       const coreDiv = noMor ? 100 : 200;
       const coreBonus = coreSum / coreDiv;
       const dmgMult = supFac * (1 + coreBonus);

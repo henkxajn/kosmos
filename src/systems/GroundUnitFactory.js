@@ -9,7 +9,7 @@
 //   2. Legacy mirror: type, hp/hpMax, attack/defense/range, speedHex, role — kompatybilne
 //      z istniejącym combat/save/renderer (GroundUnitManager.attackUnit, ColonyOverlay._drawUnits).
 
-import { UNIT_ARCHETYPES, mapRoleToLegacy } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, mapRoleToLegacy, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GROUND_ABILITIES, getAbility }     from '../data/groundAbilities.js';
 import { HUMANITY_UNITS }                   from '../data/factions/humanity.js';
 import { UNE_UNITS }                        from '../data/factions/UNE.js';
@@ -254,7 +254,7 @@ export const GroundUnitFactory = {
 
     const noMor   = unit.noMorale === true;
     const orgTerm = (unit.org ?? 0);
-    const morTerm = noMor ? 0 : (unit.morale ?? 0);
+    const morTerm = noMor ? 0 : (unit.morale ?? DEFAULT_MORALE);
     const coreDiv = noMor ? 100 : 200;  // drone — tylko org liczy się do bonusu
     const coreBonus = (orgTerm + morTerm) / coreDiv;
 

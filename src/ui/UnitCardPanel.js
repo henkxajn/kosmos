@@ -4,7 +4,7 @@
 // z zaznaczoną jednostką. Pokazuje wszystkie staty, counters, umiejętności,
 // tagi, aktualny supply/org/morale/dmg mult. Akcje: rename, disband.
 
-import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GROUND_ABILITIES } from '../data/groundAbilities.js';
 import { GroundUnitFactory } from '../systems/GroundUnitFactory.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
@@ -118,7 +118,7 @@ export function showUnitCard(unit) {
         _addBarRow(rows, 'Supply', unit.supply, unit.supplyCap ?? 100, '#D88040');
         _addBarRow(rows, 'Org',    unit.org ?? 0, unit.maxOrg ?? 100, '#40B0D8');
         if (!unit.noMorale) {
-          _addBarRow(rows, 'Morale', unit.morale ?? 0, unit.maxMorale ?? 100, '#80D840');
+          _addBarRow(rows, 'Morale', unit.morale ?? DEFAULT_MORALE, unit.maxMorale ?? 100, '#80D840');
         }
         rows.push({ label: 'DMG mult', value: `×${dmgMult.toFixed(2)}` });
         return rows;

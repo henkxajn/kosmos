@@ -20,7 +20,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
-import { UNIT_ARCHETYPES, isDefensiveUnit } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, isDefensiveUnit, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 
 // Priorytety targetowania — bonusy do score (wyższy = preferowany cel)
@@ -236,7 +236,7 @@ export class CombatSystem {
     for (const unit of [...playerSide, ...enemyUnits]) {
       if (unit.hp <= 0) continue;
       if (unit.noMorale) continue;
-      const morale = unit.morale ?? 100;
+      const morale = unit.morale ?? DEFAULT_MORALE;
       if (morale <= 0) {
         EventBus.emit('groundUnit:disbanded', {
           unitId: unit.id, planetId: unit.planetId, reason: 'morale_collapse',
@@ -304,7 +304,9 @@ export class CombatSystem {
         // Dezorganizacja + morale penalty (zachowuje existing Opcja C v3)
         target.org = Math.max(0, (target.org ?? 0) - ORG_COST_WHEN_HIT);
         if (!target.noMorale) {
-          target.morale = Math.max(0, (target.morale ?? 0) - MORALE_COST_WHEN_HIT);
+          // D5b (Finding 65): brak pola = DEFAULT_MORALE, jak przy odczycie. Dawne `?? 0` zerowało
+          //   morale jednostki legacy od pierwszego trafienia (→ morale_collapse z pełnym HP).
+          target.morale = Math.max(0, (target.morale ?? DEFAULT_MORALE) - MORALE_COST_WHEN_HIT);
           EventBus.emit('groundUnit:moraleChanged', {
             unitId: target.id, morale: target.morale, max: target.maxMorale ?? 100,
           });
@@ -417,7 +419,7 @@ export class CombatSystem {
     const fromQ = unit.q, fromR = unit.r;
     unit.q = best.q;
     unit.r = best.r;
-    unit.morale = Math.min((unit.maxMorale ?? 100), (unit.morale ?? 0) + 10); // małe morale recovery po odwrocie
+    unit.morale = Math.min((unit.maxMorale ?? 100), (unit.morale ?? DEFAULT_MORALE) + 10); // małe morale recovery po odwrocie
     EventBus.emit('groundUnit:routed', {
       unitId: unit.id, planetId: unit.planetId,
       fromQ, fromR, toQ: best.q, toR: best.r,

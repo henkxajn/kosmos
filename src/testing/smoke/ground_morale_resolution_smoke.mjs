@@ -17,8 +17,13 @@
 //   T1  D5a — jednostka defensywna przy bazowym morale NIE ucieka, w OBU modelach (archetyp
 //       `garrison_unit`/`aa_platform` i legacy `garrison`). Kontrola: jednostka NIE-defensywna
 //       o tym samym HP i morale w tej samej scenie UCIEKA (inaczej pin mierzyłby ciszę).
+//   T2  D5b — legacy piechota vs legacy piechota: po rundzie 1 nikt nie znika z `morale_collapse`,
+//       starcie kończy się śmiercią od obrażeń, a para „świeża" i para „po serialize→restore"
+//       walczą IDENTYCZNIE (dziura determinizmu z `w3_seams_smoke` T6 zamknięta).
 //   T4  KONTROLA — pary z morale 100 rozstrzygają się IDENTYCZNIE przed i po naprawie (wartości
 //       zmierzone na HEAD ffb7b10 tym samym harnessem i tym samym stubem RNG).
+//   T7  D5b — tripwire źródłowy: w kodzie walki naziemnej nie zostało żadne `morale ?? <liczba>`
+//       (każdy default idzie przez `DEFAULT_MORALE`), a stała jest faktycznie używana.
 //
 // ⚠ Plik rośnie razem z commitami slice'u — każdy commit przypina WŁASNĄ decyzję:
 //   C1 (D5a) — T1, T4 · C2 (D5b) — + T2, T7 · C3 (D5c) — + T3, T5, T6.
@@ -219,6 +224,56 @@ console.log('T1 — D5a: jednostka DEFENSYWNA przy bazowym morale nie ucieka (ar
     'T1d: …i false dla szturmu, artylerii, medyka, legacy piechoty i łazika (wyjątek nie rozlewa się na resztę)');
 }
 
+// ── T2 — D5b: legacy vs legacy (Finding 65) ───────────────────────────────────────────────
+console.log('T2 — D5b: legacy piechota vs legacy piechota — brak morale_collapse, determinizm przed/po zapisie');
+{
+  // Przebieg starcia legacy; `reload` = obie jednostki przechodzą serialize→restore przed walką.
+  const runLegacy = (reload) => withFixedRng(() => {
+    const w = makeWorld();
+    let a = spawn(w, 'infantry', PLAYER);
+    let b = spawn(w, 'infantry', AI);
+    if (reload) {
+      const blob = JSON.parse(JSON.stringify(w.gum.serialize()));
+      w.gum.restore(blob);
+      a = w.gum._units.get(a.id); b = w.gum._units.get(b.id);
+    }
+    const fresh = { aMor: a.morale, bMor: b.morale };
+    const trace = [];
+    let r1 = null;
+    drive(w, 40, (ww) => {
+      if (r1 === null && ww.round >= 1) {
+        r1 = { aAlive: alive(ww, a), bAlive: alive(ww, b), aHp: a.hp, bHp: b.hp, aMor: a.morale, bMor: b.morale,
+               disb: ww.log.disbanded.length };
+      }
+      const key = `${ww.round}:${a.hp}/${b.hp}`;
+      if (trace[trace.length - 1] !== key) trace.push(key);
+      return bothGone(ww, a, b);
+    });
+    return { w, a, b, r1, trace, fresh };
+  });
+
+  const f = runLegacy(false);
+  assert(f.fresh.aMor === undefined && f.fresh.bMor === undefined,
+    'T2: świeże jednostki legacy NIE MAJĄ pola `morale` (to jest cały mechanizm Findingu 65)');
+  assert(f.r1 && f.r1.disb === 0 && f.r1.aAlive && f.r1.bAlive,
+    `T2 SEDNO: po RUNDZIE 1 nikt nie zniknął z morale_collapse (rozwiązań=${f.r1?.disb}, ` +
+    `żywe=${f.r1?.aAlive}/${f.r1?.bAlive}) — przed naprawą znikały OBIE, z pełnym HP`);
+  const expectMor = (ArchData.DEFAULT_MORALE ?? NaN) - 3;
+  assert(f.r1 && f.r1.aMor === expectMor && f.r1.bMor === expectMor,
+    `T2: po pierwszym trafieniu morale = DEFAULT_MORALE − 3 = ${expectMor} (jest ${f.r1?.aMor}/${f.r1?.bMor})`);
+  assert(f.w.log.disbanded.length === 0 && f.w.log.destroyed.length >= 1 &&
+         f.w.log.destroyed.every(d => d.cause === 'combat'),
+    `T2: starcie kończy się ŚMIERCIĄ OD OBRAŻEŃ (destroyed=${f.w.log.destroyed.length}, ` +
+    `disbanded=${f.w.log.disbanded.length}) w rundzie ${f.w.log.destroyed[0]?.round ?? '—'}`);
+
+  const g = runLegacy(true);
+  assert(g.fresh.aMor === 100 && g.fresh.bMor === 100,
+    'T2 KONTROLA: po serialize→restore jednostka legacy NIESIE `morale: 100` (serialize zapisuje default)');
+  assert(f.trace.join('|') === g.trace.join('|'),
+    `T2 SEDNO: para świeża i para po zapisie walczą IDENTYCZNIE ` +
+    `(świeża: ${f.trace.slice(0, 4).join(' ')} … ; po zapisie: ${g.trace.slice(0, 4).join(' ')} …)`);
+}
+
 // ── T4 — KONTROLA: pary z morale 100 bez zmian ───────────────────────────────────────────
 console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie przed i po naprawie');
 {
@@ -244,6 +299,61 @@ console.log('T4 — KONTROLA: pary z morale 100 rozstrzygają się identycznie p
       `T4 [${got.label}]: runda ${got.round}, ginie ${got.dead}, ocalały hp ${got.survivorHp}, ucieczek ${got.routs} ` +
       `(baseline HEAD: runda ${exp.round}, ginie ${exp.dead}, hp ${exp.survivorHp}, 0 ucieczek)`);
   }
+}
+
+// ── T7 — D5b: tripwire źródłowy — każdy default morale przez `DEFAULT_MORALE` ────────────
+console.log('T7 — D5b: brak `morale ?? <liczba>` w kodzie walki naziemnej; DEFAULT_MORALE faktycznie użyty');
+{
+  // Komentarze zdejmowane (pin czyta KOD), końce linii normalizowane (Finding 270 — pin nie pyta o EOL dysku).
+  // Komentarz blokowy zamieniany na spacje Z ZACHOWANIEM nowych linii — numery linii w raporcie zostają prawdziwe.
+  const strip = (s) => s.replace(/\r\n/g, '\n')
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, ' ');
+  const LITERAL_DEFAULT = /\bmorale\s*\?\?\s*-?\d/;
+  // ⚠ WYKLUCZENIE z powodem: `BattleSystem.js` to walka FLOT — tam `morale` to MNOŻNIK 0.1–2.0
+  //   z defaultem 1.0 (inna domena, inny sens). Kontrola niżej dowodzi, że wykluczenie jest potrzebne.
+  const EXCLUDED = new Set(['systems/BattleSystem.js']);
+  const walk = (dir) => readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    if (statSync(p).isDirectory()) return n === 'testing' ? [] : walk(p);
+    return n.endsWith('.js') ? [p] : [];
+  });
+  const hits = [];
+  for (const file of walk(SRC)) {
+    const rel = relative(SRC, file).replace(/\\/g, '/');
+    if (EXCLUDED.has(rel)) continue;
+    strip(readFileSync(file, 'utf8')).split('\n').forEach((line, i) => {
+      if (LITERAL_DEFAULT.test(line)) hits.push(`${rel}:${i + 1} ${line.trim().slice(0, 70)}`);
+    });
+  }
+  assert(hits.length === 0,
+    `T7 SEDNO: zero \`morale ?? <liczba>\` poza wykluczeniem (znaleziono ${hits.length}${hits.length ? ': ' + hits.join(' | ') : ''})`);
+
+  assert(ArchData.DEFAULT_MORALE === 100,
+    `T7: \`DEFAULT_MORALE\` = ${ArchData.DEFAULT_MORALE} — wartość, której używały już miejsca odczytu`);
+
+  // Stała musi być UŻYTA w każdym pliku, który miał literał — inaczej „naprawa" mogła po prostu
+  // skasować default (`target.morale - 3` → NaN), a tripwire wyżej i tak by przeszedł.
+  const MUST_USE = {
+    'systems/CombatSystem.js': 3, 'systems/GroundUnitManager.js': 3, 'systems/SupplyCoverageSystem.js': 3,
+    'systems/GroundUnitFactory.js': 1, 'ui/ColonyOverlay.js': 1, 'ui/UnitCardPanel.js': 1,
+  };
+  const uses = Object.fromEntries(Object.keys(MUST_USE).map((rel) => {
+    const code = strip(readFileSync(join(SRC, ...rel.split('/')), 'utf8'))
+      .split('\n').filter(l => !/^\s*import\b/.test(l)).join('\n');
+    return [rel, (code.match(/\bDEFAULT_MORALE\b/g) ?? []).length];
+  }));
+  assert(Object.entries(MUST_USE).every(([rel, n]) => uses[rel] >= n),
+    `T7: \`DEFAULT_MORALE\` użyty w kodzie (poza importem): ${JSON.stringify(uses)}`);
+
+  // KONTROLA PINU: regex łapie literał i nie łapie stałej ani `maxMorale`; wykluczenie jest potrzebne.
+  const ctl = ['(u.morale ?? 0) - 3', 'morale:      u.morale ?? 100', 'x.morale??-1'];
+  const ok = ['(u.morale ?? DEFAULT_MORALE) - 3', 'max: u.maxMorale ?? 100', 'noMor ? 0 : (u.morale ?? rebuilt.maxMorale)'];
+  assert(ctl.every(s => LITERAL_DEFAULT.test(s)) && ok.every(s => !LITERAL_DEFAULT.test(s)),
+    'T7 KONTROLA PINU: regex łapie `morale ?? 0/100/-1` i NIE łapie `?? DEFAULT_MORALE`, `maxMorale ?? 100`, `?? rebuilt.maxMorale`');
+  const battle = strip(readFileSync(join(SRC, 'systems', 'BattleSystem.js'), 'utf8'));
+  assert(LITERAL_DEFAULT.test(battle),
+    'T7 KONTROLA PINU: `BattleSystem.js` naprawdę ma `morale ?? 1.0` (flotowy mnożnik) — wykluczenie nie jest martwe');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

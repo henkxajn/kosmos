@@ -17,6 +17,7 @@
 //            (argument: civDeltaYears)
 
 import EventBus from '../core/EventBus.js';
+import { DEFAULT_MORALE } from '../data/unitArchetypes.js';
 
 // Consumption mnożniki per status jednostki (§4 planu)
 const CONSUMPTION_BY_STATUS = {
@@ -173,7 +174,7 @@ export class SupplyCoverageSystem {
 
         // Morale -10/civY (jeśli nie noMorale)
         if (!u.noMorale) {
-          const newMor = Math.max(0, (u.morale ?? 0) - ATTRITION_MORALE_PER_CIVY * civDeltaYears);
+          const newMor = Math.max(0, (u.morale ?? DEFAULT_MORALE) - ATTRITION_MORALE_PER_CIVY * civDeltaYears);
           if (newMor !== u.morale) {
             u.morale = newMor;
             EventBus.emit('groundUnit:moraleChanged', { unitId: u.id, morale: u.morale, max: u.maxMorale ?? 100 });
@@ -228,8 +229,8 @@ export class SupplyCoverageSystem {
         }
         if (!u.noMorale && (u.org ?? 0) > MORALE_REGEN_ORG_THRESHOLD) {
           const maxMor = u.maxMorale ?? 100;
-          if ((u.morale ?? 0) < maxMor) {
-            u.morale = Math.min(maxMor, (u.morale ?? 0) + MORALE_REGEN_RATE * civDeltaYears);
+          if ((u.morale ?? DEFAULT_MORALE) < maxMor) {
+            u.morale = Math.min(maxMor, (u.morale ?? DEFAULT_MORALE) + MORALE_REGEN_RATE * civDeltaYears);
             EventBus.emit('groundUnit:moraleChanged', { unitId: u.id, morale: u.morale, max: maxMor });
           }
         }

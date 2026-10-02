@@ -33,10 +33,11 @@
 //              ⚠ Scena od W3-4b stoi w układzie WŁASNEJ stolicy — powrót garnizonu jest
 //              rozkazem wewnątrzukładowym i wersja „okręt AI w `sys_home`" była fizycznie
 //              niemożliwa (przechodziła tylko dzięki defektowi, który złapał GATE 2).
-//   T6  S12:   jednostka legacy ginie od PIERWSZEGO trafienia (brak pola `morale`), a po
-//              serialize→restore dostaje `morale: 100` i już nie ginie. Dziura determinizmu
-//              WIĘKSZA niż R13. ⚠ NIE odwraca jej żaden commit W3 — to pin przekazany
-//              slice'owi „GROUND" (decyzja D5), zapisany tu, żeby nie wyparował między slice'ami.
+//   T6  S12:   ⚠ ODWRÓCONE W G1 (AI GARRISON, D5b, 2026-10-01). Do G1 pinował DEFEKT: jednostka
+//              legacy (brak pola `morale`) ginęła od PIERWSZEGO trafienia (`?? 0` przy odejmowaniu
+//              vs `?? 100` przy odczycie), a po serialize→restore (`morale: 100`) — już nie. Teraz
+//              pinuje STAN SZWU: wspólny `DEFAULT_MORALE` ⇒ po rundzie nikt nie znika, a wczytanie
+//              daje tę samą wartość (kontrola). Pełne pokrycie: `ground_morale_resolution_smoke` T2/T7.
 //
 // ⚠ Harness NIE montuje: `stationSystem`, `Director*`, `MovementOrderSystem`,
 //    `DeepSpaceCombatSystem`, `EnemyAttackHandler`, `CombatSystem`. Każdy z nich stawiamy tu
@@ -57,6 +58,7 @@ import { MovementOrderSystem } from '../../systems/MovementOrderSystem.js';
 import { DeepSpaceCombatSystem } from '../../systems/DeepSpaceCombatSystem.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
+import * as ArchData from '../../data/unitArchetypes.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../../systems/director/DirectorDoctrine.js';
 
 let pass = 0, fail = 0;
@@ -328,8 +330,8 @@ console.log('T5 — C-2 naprawione: `_holdAtHome` niesie `targetPoint` i rozkaz 
     'siedzi w `DirectorDoctrine`, a walidator został tak samo surowy');
 }
 
-// ── T6 — S12: jednostka legacy ginie od pierwszego trafienia; po wczytaniu nie ──
-console.log('T6 — S12: jednostka legacy pada od PIERWSZEGO trafienia, a po serialize→restore już nie');
+// ── T6 — S12: jednostka legacy NIE ginie od pierwszego trafienia (⚠ odwrócone w G1/D5b) ──
+console.log('T6 — S12 (odwrócone w G1): jednostka legacy NIE pada od pierwszego trafienia; świeża = wczytana');
 {
   const core = boot();
   const empireId = empireOf(core);
@@ -338,13 +340,16 @@ console.log('T6 — S12: jednostka legacy pada od PIERWSZEGO trafienia, a po ser
 
   window.KOSMOS.combatSystem = new CombatSystem();
 
+  // ⚠ Przestrzeń nazw, nie nazwany import: na drzewie bez D5b symbolu nie ma — pin ma się
+  //   zaczerwienić na ASERCJACH, a nie wywrócić całego pliku na linkowaniu ESM.
+  const DEFAULT_MORALE = ArchData.DEFAULT_MORALE;
   const a = gum.createUnit('infantry', planetId, 0, 0);
   const b = gum.createUnit('infantry', planetId, 0, 0, { owner: empireId });
 
   assert(!!a && !!b, 'T6: dwie jednostki legacy stoją na tym samym heksie');
   assert(a.morale === undefined && b.morale === undefined,
     'T6: jednostka legacy NIE MA pola `morale` (archetypy z INVASION_UNIT_POOLS nie niosą ' +
-    'morale/org/supply) — i to jest cały mechanizm defektu');
+    'morale/org/supply) — to był cały mechanizm defektu, a pole dalej nie powstaje przy spawnie');
   assert(a.hp > 1 && b.hp > 1, `T6: obie mają zapas HP (${a.hp}/${b.hp}) — więc śmierć nie będzie „od obrażeń"`);
 
   const disbanded = [];
@@ -355,23 +360,16 @@ console.log('T6 — S12: jednostka legacy pada od PIERWSZEGO trafienia, a po ser
 
   EventBus.off('groundUnit:disbanded', onDisband);
 
-  assert(disbanded.length > 0,
-    `T6: po JEDNEJ rundzie rozwiązano ${disbanded.length} jednostk(i) — `.trim() +
-    '`morale ?? 0` po trafieniu daje 0, a ten sam przebieg zamiata wszystko z morale ≤ 0 ' +
-    '(CombatSystem.js:302-303 → :232-241)');
-  // ⚠ Mierzymy HP ROZWIĄZANYCH, nie ocalałych: przy pełnym zamiecie lista ocalałych jest PUSTA,
-  //   a `[].every(...)` przechodzi VACUOUSLY — czyli pin nie sprawdzałby niczego. Referencje
-  //   `a`/`b` żyją dalej po usunięciu z rejestru, więc czytamy ich ostatnie HP wprost.
-  const goneIds = new Set(disbanded.map(d => d.unitId));
-  const goneHp = [a, b].filter(u => goneIds.has(u.id)).map(u => u.hp);
-  assert(goneHp.length > 0 && goneHp.every(hp => hp > 0),
-    `T6: …a rozwiązane jednostki miały PEŁNE HP w chwili rozwiązania (${goneHp.join(', ') || '—'}) — ` +
-    'to nie jest śmierć w walce, tylko natychmiastowy rozpad morale');
-  assert([a, b].every(u => !gum._units.has(u.id)),
-    'T6: obie zniknęły z rejestru po jednej rundzie — wzajemny zamiot, bo defekt dotyka OBU stron ' +
-    '(jednostek desantowych AI i własnej piechoty startowej gracza)');
+  assert(disbanded.length === 0,
+    `T6: po JEDNEJ rundzie rozwiązano ${disbanded.length} jednostek — odejmowanie bierze wspólny ` +
+    '`DEFAULT_MORALE` (G1/D5b), nie `?? 0`. Do G1 znikały tu OBIE z morale_collapse, z pełnym HP');
+  // ⚠ Dowód, że runda się ODBYŁA — inaczej „nikt nie zniknął" byłoby ciszą (pusty przebieg).
+  assert([a, b].every(u => gum._units.has(u.id)) && a.hp < a.hpMax && b.hp < b.hpMax,
+    `T6: obie ŻYJĄ i realnie oberwały (hp ${a.hp}/${a.hpMax}, ${b.hp}/${b.hpMax})`);
+  assert(a.morale === DEFAULT_MORALE - 3 && b.morale === DEFAULT_MORALE - 3,
+    `T6: morale po pierwszym trafieniu = DEFAULT_MORALE − 3 = ${DEFAULT_MORALE - 3} (jest ${a.morale}/${b.morale})`);
 
-  // Druga połowa — i groźniejsza: TA SAMA jednostka po podróży przez zapis zachowuje się inaczej.
+  // Druga połowa — KONTROLA: wczytanie dalej daje ten sam default, który walka przyjmuje dla świeżej.
   const fresh = gum.createUnit('infantry', planetId, 5, 5);
   assert(fresh.morale === undefined, 'T6: świeża jednostka legacy nadal bez `morale`');
 
@@ -380,11 +378,11 @@ console.log('T6 — S12: jednostka legacy pada od PIERWSZEGO trafienia, a po ser
   const reloaded = gum._units.get(fresh.id);
 
   assert(!!reloaded, 'T6: jednostka przeżyła serialize→restore');
-  assert(reloaded?.morale === 100,
-    `T6: …i WRÓCIŁA Z MORALE 100 (${reloaded?.morale}) — `.trim() +
-    '`serialize` zapisuje `morale: u.morale ?? 100` (GroundUnitManager.js:1281). Ta sama jednostka ' +
-    'przed wczytaniem ginie od pierwszego trafienia, a po wczytaniu NIE. Walka naziemna rozstrzyga ' +
-    'się inaczej przed i po zapisie — dziura determinizmu WIĘKSZA niż niezasiane RNG (R13).');
+  assert(reloaded?.morale === DEFAULT_MORALE,
+    `T6: …i WRÓCIŁA Z MORALE ${DEFAULT_MORALE} (${reloaded?.morale}) — `.trim() +
+    '`serialize` zapisuje `morale: u.morale ?? DEFAULT_MORALE`, czyli TĘ SAMĄ wartość, którą walka ' +
+    'przyjmuje dla świeżej jednostki. Dziura determinizmu (przed/po zapisie) domknięta w G1; ' +
+    'pełne pokrycie: `ground_morale_resolution_smoke` T2.');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
