@@ -303,3 +303,20 @@ export function mapRoleToLegacy(role) {
   if (role === 'scout' || role === 'drone') return 'drone';
   return 'civilian';
 }
+
+/**
+ * Czy jednostka jest DEFENSYWNA — nie wycofuje się z bitwy (D5a, AI GARRISON G1, podpisane 2026-10-01).
+ * Jedno źródło odpowiedzi dla OBU modeli jednostek naziemnych:
+ *   • archetyp z rolą `'defense'` (garrison_unit, aa_platform) — instancja niesie lustro legacy
+ *     `'defensive'` (`mapRoleToLegacy`), więc pytamy o rolę ARCHETYPU, nie o samo lustro;
+ *   • legacy `GROUND_UNITS` z rolą `'defensive'` (garnizon) — bez archetypu, rola jest w danych.
+ * ⚠ Dawny warunek `unit.role !== 'defense'` w CombatSystem był MARTWY: żadna instancja nie nosi
+ *   roli `'defense'`, więc garnizony uciekały jak każda inna jednostka.
+ * @param {Object} unit
+ * @returns {boolean}
+ */
+export function isDefensiveUnit(unit) {
+  if (!unit) return false;
+  if (UNIT_ARCHETYPES[unit.archetypeId]?.role === 'defense') return true;
+  return unit.role === 'defensive';
+}

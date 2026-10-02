@@ -20,7 +20,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
-import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, isDefensiveUnit } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 
 // Priorytety targetowania — bonusy do score (wyższy = preferowany cel)
@@ -229,6 +229,10 @@ export class CombatSystem {
     }
 
     // Morale collapse → auto retreat
+    // ⚠ D5a (AI GARRISON G1): jednostka DEFENSYWNA nigdy się nie wycofuje. `isDefensiveUnit` pyta
+    //   o OBA modele (rola archetypu `'defense'` + legacy `'defensive'`). Dawne `unit.role !== 'defense'`
+    //   było zawsze prawdziwe — instancje noszą lustro `'defensive'` — więc garnizony uciekały jak
+    //   każda inna jednostka. Rozpad przy morale 0 (`morale_collapse`) dotyczy jej nadal.
     for (const unit of [...playerSide, ...enemyUnits]) {
       if (unit.hp <= 0) continue;
       if (unit.noMorale) continue;
@@ -239,7 +243,7 @@ export class CombatSystem {
           archetypeId: unit.archetypeId ?? null,
         });
         gum.removeUnit(unit.id);
-      } else if (morale <= MORALE_RETREAT_THRESHOLD && unit.role !== 'defense') {
+      } else if (morale <= MORALE_RETREAT_THRESHOLD && !isDefensiveUnit(unit)) {
         this._tryRetreat(gum, unit);
       }
     }
