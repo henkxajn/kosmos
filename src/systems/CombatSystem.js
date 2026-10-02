@@ -256,6 +256,10 @@ export class CombatSystem {
       if (unit.noMorale) continue;
       const morale = unit.morale ?? DEFAULT_MORALE;
       if (morale <= 0) {
+        // ⚠ S2 (G1b, Finding 310): rozpad zwalnia zablokowane POP-y W CAŁOŚCI do kolonii macierzystej
+        //   (jak ścieżka utrzymania) — TUTAJ, w gałęzi, która usuwa jednostkę, więc dokładnie raz.
+        //   Nie przez subskrybenta `groundUnit:disbanded`: utrzymanie zwalnia inline przed emisją.
+        window.KOSMOS?.colonyManager?.releaseGroundUnitPops?.(unit, 'morale_collapse');
         EventBus.emit('groundUnit:disbanded', {
           unitId: unit.id, planetId: unit.planetId, reason: 'morale_collapse',
           archetypeId: unit.archetypeId ?? null,

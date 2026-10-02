@@ -53,6 +53,9 @@ export class NotificationCenter {
     // dokładnie tym sygnałem, którego brak sprawiał, że marsz najeźdźcy wyglądał jak cisza.
     EventBus.on('tile:ownerChanged',  e => this._handleTileOwnerChanged(e));
     EventBus.on('invasion:repelled',  e => this._handleInvasionRepelled(e));
+    // G1b — POP-y jednostki naziemnej PRZEPADŁY, bo jej kolonia macierzysta nie należy już do
+    //   właściciela jednostki (albo jej nie ma). Bez tego wpisu strata byłaby cicha.
+    EventBus.on('groundUnit:popsLost', e => this._handleGroundUnitPopsLost(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -480,7 +483,33 @@ export class NotificationCenter {
     });
   }
 
+  /**
+   * G1b (S2/S4) — POP-y jednostki GRACZA przepadły: jej kolonia macierzysta została zniszczona albo
+   * przejęta (albo jednostka jej nie ma). SAM WPIS W DZIENNIKU, bez dzwonka — i NICZEGO nie zwalnia:
+   * zwalnianie należy do `ColonyManager`, ten handler tylko melduje.
+   */
+  _handleGroundUnitPopsLost({ owner, type, customName, planetId, amount }) {
+    if ((owner ?? 'player') !== 'player') return;                 // POP-y imperium AI to nie nasza sprawa
+    if (!(amount > 0)) return;
+    this._journal(t('event.groundUnit.popsLost', amount.toFixed(1), this._groundUnitLabel(type, customName)),
+      'combat', 'warn', planetId ?? null);
+  }
+
   // ── Helpery ──────────────────────────────────────────────────────────────
+
+  /**
+   * G1b — wpis WYŁĄCZNIE do Dziennika, bez dzwonka (`add()` dubluje do obu). Dla zdarzeń, które
+   * mają zostawić ślad w historii, ale nie wołać gracza.
+   */
+  _journal(text, channel, severity, entityRef = null) {
+    window.KOSMOS?.eventLogSystem?.push({ text, channel, severity, entityRef });
+  }
+
+  /** G1b — etykieta jednostki naziemnej: nazwa nadana przez gracza albo nazwa typu (jak w Outlinerze). */
+  _groundUnitLabel(type, customName) {
+    if (customName) return customName;
+    return type ? t(`groundUnit.${type}`) : '?';
+  }
 
   /**
    * Nazwa imperium wg drabiny ujawnienia: pełna dopiero przy `detailed`, wcześniej anonim.

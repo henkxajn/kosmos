@@ -1631,6 +1631,68 @@ export class ColonyManager {
   }
 
   /**
+   * G1b — czy kolonia należy do właściciela jednostki naziemnej (gracz: `isPlayerColony`;
+   * imperium AI: `ownerEmpireId === owner`). Brak `owner` = jednostka gracza (legacy, stary zapis).
+   */
+  _colonyBelongsTo(colony, owner) {
+    if (!colony) return false;
+    const who = owner ?? 'player';
+    return who === 'player' ? isPlayerColony(colony) : colony.ownerEmpireId === who;
+  }
+
+  /**
+   * G1b — kolonia macierzysta jednostki naziemnej Z TERMINEM WŁAŚCICIELA: `unit.homeColonyId`,
+   * WYŁĄCZNIE gdy należy do właściciela jednostki. Inaczej `null` (zniszczona, przejęta albo brak
+   * pola). ⚠ NIGDY nie spadamy na ciało, na którym jednostka akurat stoi — to byłoby oddanie
+   * POP-ów cudzej koloni.
+   */
+  _ownedHomeColony(unit) {
+    const homeId = unit?.homeColonyId;
+    if (!homeId) return null;
+    const colony = this.getColony(homeId);
+    return this._colonyBelongsTo(colony, unit.owner) ? colony : null;
+  }
+
+  /**
+   * G1b/S2 (Finding 310) — zwolnij zablokowane POP-y jednostki naziemnej W CAŁOŚCI, jak ścieżka
+   * utrzymania: `unlockPops(popCost, 'laborer')` — ten sam typ, którym `startGroundUnitBuild`
+   * je zablokował — na kolonii macierzystej z terminem właściciela (`_ownedHomeColony`).
+   * ⚠ DOKŁADNIE RAZ na jednostkę: woła to gałąź, która jednostkę USUWA (rozpad morale
+   *   w `CombatSystem`), a nie subskrybent `groundUnit:disbanded` — ścieżka utrzymania zwalnia
+   *   inline PRZED emisją, więc subskrybent bez filtra zwolniłby ją drugi raz. Znacznik
+   *   `_popsReleased` zamyka ponowne wywołanie dla tej samej jednostki.
+   * ⚠ Brak kolonii właściciela ⇒ POP-y PRZEPADAJĄ i leci `groundUnit:popsLost` (wpis w Dzienniku),
+   *   a nie cisza.
+   * @returns {{ released: number, lost: number, colonyId: string|null }}
+   */
+  releaseGroundUnitPops(unit, cause = null) {
+    const popCost = unit?.popCost ?? 0;
+    if (!(popCost > 0) || unit._popsReleased) return { released: 0, lost: 0, colonyId: null };
+    unit._popsReleased = true;
+    const home = this._ownedHomeColony(unit);
+    if (!home?.civSystem) {
+      this._reportPopsLost(unit, popCost, cause);
+      return { released: 0, lost: popCost, colonyId: null };
+    }
+    home.civSystem.unlockPops(popCost, 'laborer');
+    return { released: popCost, lost: 0, colonyId: home.planetId };
+  }
+
+  /** G1b — POP-y jednostki przepadły (brak kolonii jej właściciela). Meldunek, nie cisza. */
+  _reportPopsLost(unit, amount, cause = null) {
+    EventBus.emit('groundUnit:popsLost', {
+      unitId:       unit?.id ?? null,
+      owner:        unit?.owner ?? null,
+      type:         unit?.type ?? unit?.archetypeId ?? null,
+      customName:   unit?.customName ?? null,
+      planetId:     unit?.planetId ?? null,
+      homeColonyId: unit?.homeColonyId ?? null,
+      amount,
+      cause,
+    });
+  }
+
+  /**
    * Spawnuje jednostkę na hexie sąsiadującym z Capital.
    * @param {object} colony
    * @param {object} queueItem — { archetypeId, factionId, popCost, krCost,
