@@ -5664,7 +5664,7 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03)
 
 Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#357**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
@@ -5724,7 +5724,7 @@ morale, deployed = true })` → `{ ok, unit | reason }`; `owner` I `factionId` =
 `factionId 'humanity'` i przy 0 Kr jednostka przechodzi w `offline` i znika (pin P2), a forma 5-argumentowa oddaje
 ją graczowi (pin P1d).
 Decyzje **D8–D18** (podpis 2026-10-02, `AI_GARRISON_PLAN.md` §1; faza A G2 — §5e): D8 rozpad jednostek
-defensywnych przy morale 0 ZOSTAJE · D9 drabina sumy poziomów fabryk (jedna tabela danych) · D10 garnizon
+defensywnych przy morale 0 ZOSTAJE · D9 drabina sumy poziomów fabryk (jedna tabela danych; zrewidowana 2026-10-03) · D10 garnizon
 rozstawiony, nie w stosie · D11/D12 podział między ciałami, stolica = `capitalOf` · D13 bramka wojny (status
 relacji `'war'`, zaczep `diplomacy:warDeclared`) · D14 wycofanie po pokoju (6 mies.) · D15 mobilizacja raz na
 imperium · D16 zniszczenie ciała usuwa WSZYSTKIE jednostki · D17 stolice na oceanie · D18 kalibracja na fixture.
@@ -5759,6 +5759,15 @@ nad ciałem bez kolonii celem dom · 🟠 **353** zabranie wojsk z cudzego ciał
 **blokuje D14** · 🟠 **354** płatnik utrzymania = kolonia CIAŁA: kolonia AI płaci za jednostkę gracza (rodzina 329) ·
 ⚪ **350** / **351** surowe slugi i ciche odmowy (polerka UI) · ⚪ **352** `force_invasion` tylko w konsoli · ⚪ **355**
 opóźnienie mapy w trybie zrzutu (345 wykluczony) · ⚪ **356** „undefined” w oknie ładowni · ⚪ **357** „Player Empire”
-w dymku ciała wroga. ⚠ **Otwarte:** przepięcie pinu W9d poza pre-approval D13a (plan §5k).
-**Dalej:** G2-3 (mobilizacja) → G2-4 (wycofanie po pokoju) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 ·
+w dymku ciała wroga. Przepięcie pinu W9d poza pre-approval D13a — **zostaje** (odpowiedź (a) z 2026-10-03, plan §5m).
+✅ **G2-3a — planer garnizonu** (`053fcc0`, plan §5l–§5m): NEW `src/data/GarrisonData.js` (JEDYNE miejsce liczb D1/D9/D10/D11)
++ NEW `src/utils/GarrisonPlanner.js` — czyste funkcje: limit `max(2, floor(POP imperium / 16))` × mnożnik szczebla (floor PO
+klamrze), szczebel, skład **na ciało**, podział (stolica `ceil(limit/2)`, reszta po jednej, pełne kolonie przed placówkami
+z `Xe`/`Nt`), heksy w spirali wokół kotwicy (jeden na heks; brak miejsca = `missing`, NIGDY stos). Planer niczego nie
+tworzy; odczyt `KOSMOS.debug.garrisonPlan()`. **D9 po rewizji 2026-10-03** (suma fabryk zatrzymuje się na 20 — fixture
+20/20 przy gy 60, uprząż najwyżej 24 przy gy 100): <6 → morale 30 · 6–13 → 50 · 14–19 → 100 + co trzecia jednostka ciała
+`rocket_artillery` · 20+ → jw. × 1,25. Plan fixture'u GATE-S4: limit 13, stolica 7 (2× artyleria), po jednej na sześciu
+ciałach. ⚠ **Kotwica:** stolica tylko wtedy, gdy da się na niej stanąć; inaczej — i dla placówki — pierwszy kafel z budynkiem,
+na którym da się stanąć (odpowiedź (d)). Keeper `g2_planner_smoke` **77/77**; sweep **255/255**.
+**Dalej:** G2-3b (mobilizacja) → G2-4 (wycofanie po pokoju) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 ·
 329, teraz także 354; kierunek 333/330 podpisany 2026-10-02).

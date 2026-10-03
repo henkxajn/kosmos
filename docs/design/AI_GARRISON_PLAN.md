@@ -2,24 +2,27 @@
 
 > **Status:** ✅ **G1 i G1b ZAMKNIĘTE 2026-10-02 — obie bramki live właściciela PASS.** ✅ **G2-0, G2-1 i G2-K1 ZROBIONE
 > 2026-10-02** (§5f, §5g). ✅ **G2-2 (bramka wojny, D13 + D13a) ZAMKNIĘTY 2026-10-03 — bramka live właściciela PASS**
-> (§5i–§5k). Dalej: **G2-3** → **G2-4** → **G2b** → **G3** → **G1c** (§3).
+> (§5i–§5k). ✅ **G2-3a (planer garnizonu, czyste funkcje) ZROBIONY 2026-10-03** (`053fcc0`, §5l) — z drabiną **D9 po
+> rewizji** (§1). Dalej: **G2-3b** (mobilizacja) → **G2-4** → **G2b** → **G3** → **G1c** (§3).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
-> odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k).
-> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1 i w G2-2.
+> odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k);
+> **rewizja D9** i odpowiedzi (a)–(g) z sesji G2-3a — **2026-10-03** (§1, §5m).
+> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2 i w G2-3a.
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
 > (G2-K1, stolice na oceanie + bliźniak AI) — §5g · `6391b23` (G2-2, keepery: wojna w setupie) + `48c94dd`
-> (G2-2, bramka wojny D13) + `dbfbbd6` (D13a, „Wyładuj” nigdy na cudzym ciele) — §5i.
+> (G2-2, bramka wojny D13) + `dbfbbd6` (D13a, „Wyładuj” nigdy na cudzym ciele) — §5i · `053fcc0` (G2-3a, planer
+> garnizonu) — §5l.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 > `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
-> `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · sweep **254/254 OK, 0 FAIL, 31 advisory** ·
-> `check-i18n` PASS (pl = en = **3428**).
+> `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · `g2_planner_smoke` **77/77** · sweep
+> **255/255 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3428**).
 > **Rejestr macierzysty findingów #309–#357:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
 > `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
-> `dbfbbd6`) · `[measured]` — wykonane
+> `dbfbbd6`; §5l–§5m na `053fcc0`) · `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
 > fazy A G2 (2026-10-02, na `2a97bfe`), którego nie ma w repo · `[doc: bramka G2-2]` — z relacji właściciela
@@ -51,7 +54,7 @@ naziemna się nie rozstrzygała (G1), nie było czego materializować — garniz
 | **D6** | **Domyślne:** `garrison_unit` stoi `deployed` od utworzenia · placówka dostaje garnizon **tylko**, gdy ciało ma złoże `Xe` albo `Nt` · przy zmianie właściciela lub zniszczeniu ciała **jednostki poprzedniego właściciela są usuwane** · liczebność garnizonu widać na poziomie wywiadu `'detailed'` · garnizon **nie wchodzi** do `ThreatAssessment`. | Findingi **324** (stan `mobile` przy tworzeniu) i **319** (jednostki osierocone). Identyfikatory surowców: `Xe` (Ksenon), `Nt` (Neutronium), `ResourcesData.js:22-23` `[code]`. |
 | **D7** (2026-10-02) | **AI używa modelu jednostek GRACZA (archetypów) wszędzie, także w pulach desantu.** Jedna gałka AI: **morale nadawane przy tworzeniu**, powiązane z progami fabryk z D2. AI wystawia wyłącznie typy proste: `shock_infantry`, `garrison_unit`, `aa_platform`, `rocket_artillery`. **Jednostki legacy zostają w danych** dla starych zapisów i `science_rover`. | Zastępuje Finding **50** (§7). Wymaga wspólnej funkcji tworzenia jednostki AI (Finding **323**). |
 | **D8** (2026-10-02) | **Pytanie (f) zamknięte: jednostka defensywna nadal rozpada się przy morale 0** — reguła (i), bez zmiany kodu. | Z regułą „walka do końca” (ii) garnizon 10 jednostek przy morale 10 przechodził ze **100 %** przejęć na **0–6 %** `[doc: raport G2-A]`, a morale przestawało być gałką z D7. Powtórzone na `82c9196` (50 prób, 4 i 6 szturmowców): reguła (i) **100 %** i **100 %**, reguła (ii) **0 %** i **0 %** `[measured]` (§5e). |
-| **D9** (2026-10-02) | **Drabina zamiast „liczb do zaproponowania” z D2** — tabela pod decyzjami. Wejście: **suma poziomów fabryk imperium w chwili tworzenia jednostki**. `aa_platform` **nie wchodzi** do garnizonów (w walce naziemnej obojętna). **Wszystko powyżej 20 jest tymczasowe** (brak pomiaru po gy 60); **morale 30 jest niezmierzone** i musi zostać zmierzone w G2-3. Wszystkie liczby żyją w **jednej tabeli danych**. | Suma poziomów fabryk przy gy 60: uprząż 5–20, fixture 20 i 20 `[measured]`. Na `82c9196`: z `aa_platform` 100 %/11 mies. wobec 100 %/15 bez niej (garnizon 4, morale 50, 6 szturmowców) oraz 100 %/18 wobec 100 %/16 (garnizon 10, morale 10, 4 szturmowców); z `rocket_artillery` **28 %** i **0 %** w tych samych komórkach `[measured]`. |
+| **D9** (2026-10-02; **rewizja 2026-10-03**) | **Drabina zamiast „liczb do zaproponowania” z D2** — tabela pod decyzjami. Wejście: **suma poziomów fabryk imperium w chwili tworzenia jednostki**. `aa_platform` **nie wchodzi** do garnizonów (w walce naziemnej obojętna). Wszystkie liczby żyją w **jednej tabeli danych** (`src/data/GarrisonData.js`, od `053fcc0`). **Rewizja 2026-10-03** (odpowiedź właściciela (g), §5m): progi 10 / 25 / 35 / 45 zastąpione przez **6 / 14 / 20**, bo suma fabryk zatrzymuje się na 20 — stare szczeble 25 / 35 / 45 nie były w praktyce osiągane. Morale 30 zmierzone w G2-3a (M1, §5l). | Pomiar **M2** (§5l): suma poziomów fabryk przy gy 60 — fixture GATE-S4 **20 i 20**, uprząż **5, 6, 16, 20**; uprząż do gy 100 najwyżej **24** (płaskowyż 20) `[measured]`. Na `82c9196`: z `aa_platform` 100 %/11 mies. wobec 100 %/15 bez niej (garnizon 4, morale 50, 6 szturmowców) oraz 100 %/18 wobec 100 %/16 (garnizon 10, morale 10, 4 szturmowców); z `rocket_artillery` **28 %** i **0 %** w tych samych komórkach `[measured]`. |
 | **D10** (2026-10-02) | **Wewnątrz ciała garnizon jest ROZSTAWIONY wokół kafla stolicy, jedna jednostka na heks** — nie w stosie. | Na `82c9196` (garnizon 4, morale 50, 6 szturmowców, 50 prób): rozstawienie **100 %** przejęć, mediana 15 mies.; stos na kaflu stolicy **0 %**, napastnik traci **6 z 6**, obrońca średnio **0,1** `[measured]`. Rozstawienie = spirala `_findGroundUnitSpawn` (`ColonyManager.js:1799`) `[code]`. |
 | **D11** (2026-10-02) | **Między ciałami:** stolica dostaje `ceil(limit / 2)`; reszta **po jednej jednostce na ciało**, malejąco wg `colonyDevScore`, **pełne kolonie przed placówkami**, remisy wg kolejności w `empire.colonies`; **nadwyżka wraca do stolicy**; bez kandydatów **wszystko idzie do stolicy**. Filtr `Xe`/`Nt` z D6 zostaje, choć dziś niczego nie wyklucza. | Zamyka niejednoznaczności rozmieszczenia z fazy A (nieparzysty limit, remisy, więcej ciał niż jednostek, więcej jednostek niż ciał, brak kandydatów) `[doc: raport G2-A]`. `colonyDevScore` = populacja + liczba aktywnych budynków (`src/utils/ColonyDevScore.js:28-30`) `[code]`. Placówki AI z `Xe` **i** `Nt`: fixture 10/10, uprząż 14/14 przy gy 60 `[measured]`. |
 | **D12** (2026-10-02) | **Stolica imperium AI = `DirectorProduction.capitalOf`** — pierwsza pełna kolonia z `resourceSystem` w kolejności `empire.colonies`. | `DirectorProduction.js:132-139` `[code]`; zamyka wybór z Findingu **322**. |
@@ -63,20 +66,23 @@ naziemna się nie rozstrzygała (G1), nie było czego materializować — garniz
 | **D17** (2026-10-02) | **Stolice na oceanie:** poprawić generowanie; w istniejących zapisach kolonia, której kafla stolicy nie da się zająć, jest przejmowana **regułą placówki** (dowolny własny kafel z budynkiem). | Finding **336**. |
 | **D18** (2026-10-02) | **Kalibracja na żywej grze (fixture), nie na uprzęży.** | Finding **341**. |
 
-**D9 — drabina** (wejście: suma poziomów fabryk imperium w chwili tworzenia jednostki; wszystkie liczby w jednej tabeli danych):
+**D9 — drabina po rewizji 2026-10-03** (wejście: suma poziomów fabryk imperium w chwili tworzenia jednostki; wszystkie
+liczby w jednej tabeli danych `src/data/GarrisonData.js`):
 
 | suma poziomów fabryk | morale przy tworzeniu | skład | limit jednostek (D1) |
 |---|---|---|---|
-| poniżej 10 | 30 | tylko `garrison_unit` | × 1 |
-| 10–24 | 50 | tylko `garrison_unit` ¹ | × 1 |
-| 25–34 | 100 | co trzecia jednostka `rocket_artillery` | × 1 |
-| 35–44 | 100 | jw. | × 1,25 |
-| 45 i więcej | 100 | jw. | × 1,5 |
+| poniżej 6 | 30 | tylko `garrison_unit` | × 1 |
+| 6–13 | 50 | tylko `garrison_unit` ¹ | × 1 |
+| 14–19 | 100 | co trzecia jednostka **ciała** `rocket_artillery` ² | × 1 |
+| 20 i więcej | 100 | jw. | × 1,25 ³ |
 
-¹ **Potwierdzone przez właściciela 2026-10-02 (§5h (c)):** próg 10–24 = wyłącznie `garrison_unit` (podpis wymieniał
-dla tego progu tylko morale).
-⚠ Wszystko powyżej 20 jest tymczasowe (brak pomiaru po gy 60); morale 30 niezmierzone — do zmierzenia w G2-3;
-`aa_platform` poza garnizonami.
+¹ Wiersz morale 50 = wyłącznie `garrison_unit` — potwierdzenie właściciela dla tego wiersza z 2026-10-02 (§5h (c));
+rewizja wymienia dla progu 6–13 tylko morale.
+² Liczone **na ciało** (odpowiedź (b), §5m): ciało z jedną jednostką nie dostaje samotnej artylerii.
+³ **floor PO klamrze minimum 2** (odpowiedź (c), §5m). Przy ×1,25 kolejność „klamra, potem mnożnik” i odwrotna dają ten
+sam wynik dla każdego POP (0 rozjazdów dla POP 0–100 000; przy ×1,5 byłyby 32) `[measured]`.
+⚠ **Przed rewizją** (2026-10-02): poniżej 10 → 30 · 10–24 → 50 · 25–34 → 100 + artyleria · 35–44 → × 1,25 ·
+45+ → × 1,5. `aa_platform` poza garnizonami — bez zmian.
 
 **Również podpisane:**
 - **brak losowania** rozmiaru garnizonu;
@@ -109,7 +115,8 @@ dla tego progu tylko morale).
 | **G2-1** | **jedna wspólna funkcja „utwórz jednostkę AI z zadanym morale”** — `GroundUnitManager.createAIUnit` | **323** · **324** | ✅ **2026-10-02** (`82c9196`, §5f) |
 | **G2-K1** | **stolice na oceanie (D17):** generowanie stawia stolicę AI na kaflu, na którym da się stanąć · stare zapisy — reguła placówki w predykacie przejęcia · bliźniak AI: marsz terytorialny omija stolicę, na której nie da się stanąć | **336** ✅ | ✅ **2026-10-02** (`8ea5af3` + `44967a3`, §5g) |
 | **G2-2** | **bramka wojny (D13):** lądowanie gracza (kapsuły, „Wyładuj”, away team), `launchInvasion`, oba predykaty przejęcia · **D13a:** „Wyładuj” nigdy na cudzym ciele | **317** · **337** · **338** · **339** ✅ | ✅ **2026-10-03** (`6391b23` + `48c94dd` + `dbfbbd6`, §5i–§5k) |
-| **G2-3** | **mobilizacja (D15)** z rozmieszczeniem (**D10**, **D11**, **D12**), drabiną (**D9**) i stanem; usuwanie jednostek (**D6**, **D16**); stempel kafli (**318**) | **318** · **319** · **320** · **322** · **324** | do zrobienia — **bramka w przeglądarce** |
+| **G2-3a** | **planer garnizonu** — czyste funkcje nad jedną tabelą danych: limit (**D1** × **D9**), szczebel, skład, podział (**D11**), stolica (**D12**), heksy (**D10**); odczyt `KOSMOS.debug.garrisonPlan()`; niczego nie tworzy | **322** (stolica = `capitalOf`) | ✅ **2026-10-03** (`053fcc0`, §5l) |
+| **G2-3b** | **mobilizacja (D15)** wg planera; usuwanie jednostek (**D6**, **D16**); stempel kafli (**318**) | **318** · **319** · **320** · **324** | do zrobienia — **bramka w przeglądarce** |
 | **G2-4** | **wycofanie po pokoju (D14)** | — | do zrobienia — **bramka w przeglądarce** |
 | **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia |
 | **G3** | odrastanie strat · widoczność (`'detailed'`) | — | do zrobienia |
@@ -130,7 +137,7 @@ garnizonu gracza bez zwolnienia POP (**310**) to trwała utrata ludności. **Dot
 ⚠ **Przydział findingów z sesji G2-K1 (#343–#347, §6):** **343** → osobny, późniejszy slice (zmienia rozmieszczenie
 budynków AI; §5h (b)) · **344** → zarejestrowany, bez kroku (§5h (d)) · **345** → bez kroku (uśpiony) · **346** →
 obserwacja, bez kroku · **347** → bez kroku (plik krytyczny `HexGrid.js` — naprawa wymaga planu). **344** i **347**
-są istotne dla **G2-3** (rozstawienie garnizonu wokół stolicy) i **G2b** (desant AI).
+są istotne dla **G2-3b** (rozstawienie garnizonu wokół stolicy) i **G2b** (desant AI).
 
 ⚠ **Przydział findingów z sesji G2-2 (#348–#357, §6):** **350** · **351** → etap polerki UI (odpowiedzi (e) i (f),
 §5k) · **348** → **G2-4** (D14: brak ognia i okupacji w oknie wycofania) · **353** → audyt **G2-4** — **blokuje D14**
@@ -596,7 +603,90 @@ wroga).
 | (e) | ciche odmowy away team | zarejestrowane na **etap polerki UI**, bez naprawy teraz — **351** |
 | (f) | surowe slugi pozostałych odmów zrzutu | zarejestrowane na **etap polerki UI**, bez naprawy teraz — **350** |
 | D13a | poprawka 2026-10-03 | jedyną drogą wojsk na cudze ciało są kapsuły; „Wyładuj” nigdy na cudzym ciele — `dbfbbd6` (§1). **Pre-approval:** asercja W2 „„Wyładuj” działa w wojnie” zastąpiona |
-| **otwarte** | `g2_war_gate_smoke` **W9d** (pin źródłowy `CargoLoadModal`) wymagał w oknie ładowni bramki wojny i powodu wojny — D13a każe pokazać przy „Wyładuj” powód WŁASNY, więc pin został **przepięty** na bramkę ładowni i jej powód (fail-first: pada na kodzie sprzed D13a). Przepięcie **wyszło poza pre-approval** (obejmował tylko W2) | **do decyzji właściciela** — przyjąć albo wycofać jeden hunk (wtedy D13a wymaga innego kształtu okna) |
+| ~~otwarte~~ | `g2_war_gate_smoke` **W9d** (pin źródłowy `CargoLoadModal`) wymagał w oknie ładowni bramki wojny i powodu wojny — D13a każe pokazać przy „Wyładuj” powód WŁASNY, więc pin został **przepięty** na bramkę ładowni i jej powód (fail-first: pada na kodzie sprzed D13a). Przepięcie **wyszło poza pre-approval** (obejmował tylko W2) | ✅ **rozstrzygnięte 2026-10-03: przepięcie W9d ZOSTAJE** (odpowiedź (a), §5m) |
+
+---
+
+## 5l. G2-3a — dostarczone (2026-10-03)
+
+| commit | zawartość | keeper |
+|---|---|---|
+| `053fcc0` | NEW `src/data/GarrisonData.js` — **jedyne miejsce liczb**: D1 (16 POP na jednostkę, minimum 2), drabina **D9 po rewizji**, archetypy (D7), połowa limitu do stolicy (D11), złoża `Xe`/`Nt` (D6), promień spirali 5 (D10). NEW `src/utils/GarrisonPlanner.js` — czyste funkcje `garrisonBaseLimit` · `garrisonTier` · `garrisonLimit` · `garrisonComposition` · `garrisonAllocation` · `garrisonAnchor` · `garrisonHexes` · `planEmpireGarrison` oraz czytnik żywego świata `readEmpireGarrisonSnapshot` (termin właściciela na liście `empire.colonies` — rodzina 283; stolica = `capitalOf`, D12) · `readGarrisonBodyContext` · `planAllEmpires` · `printGarrisonPlans`. Planer **niczego nie tworzy**, nie emituje i nie sięga po `window` (usługi dostaje argumentem). `GameScene`: `KOSMOS.debug.garrisonPlan()` — tylko odczyt | NEW `g2_planner_smoke` **77/77** (P0–P8) |
+
+- **Fail-first zmienionych pinów** (nowy keeper na planerze sprzed rewizji D9 i odpowiedzi (d), worktree poza repo):
+  **59 PASS / 18 FAIL** — padają dokładnie piny zmienione: P0b, P1b, P1c, P2 (pięć granic), P3 (szczeble 14 i 20),
+  P5c, P6 (przydział ×2, skład ×2, złote heksy ×2, kotwica emp_002). Kontrole — tripwire liczb P0e z kontrolą,
+  zapas zdegenerowany P5c, stolica lądowa P5c i P6 — zielone po obu stronach `[measured]`.
+- **Bateria 13 mutantów** (worktree): **12 zabitych**. Ocalały — „mnożnik przed klamrą minimum” — jest **równoważny**
+  przy jedynym mnożniku drabiny ×1,25: 0 rozjazdów dla POP 0–100 000 (przy ×1,5 byłyby 32), więc kolejność klamry nie
+  jest obserwowalna; widoczny jest kierunek zaokrąglenia (floor(13,75) = 13, floor(2,5) = 2) i ten pinują P1b/P1c `[measured]`.
+- Sweep **255/255 OK, 0 FAIL, 31 advisory**; `check-i18n` PASS 3428 `[measured]`.
+
+**Plan fixture'u GATE-S4 (gy 60) po rewizji D9** — wyprowadzony ręcznie z D1/D9/D11 i danych zapisu (keeper P6),
+zgodny z wyjściem planera; heksy stolic sprawdzone osobną sondą bez kodu planera `[measured]`:
+
+| | emp_001 — stolica `entity_115` „Propus b” | emp_002 — stolica `entity_232` „Regulus c” |
+|---|---|---|
+| POP · suma fabryk | 185 · 20 | 178 · 20 |
+| szczebel · morale | „20 i więcej” · **100** (było: 10–24 · 50) | jw. |
+| limit | **13** = floor(11 × 1,25) (było 11) | **13** (było 11) |
+| stolica | **7** = 5× `garrison_unit` + 2× `rocket_artillery` (G G A G G A G) (było 6× G) | jw. |
+| pozostałe ciała, po 1× `garrison_unit` | 117, 118, 119, 116, 208, **200** (nowe) | 231, 234, 236, 233, 235, **313** (nowe) |
+| pominięte | 403, 401, 490 | 312, 571, 566, 657 |
+| heksy stolicy | (−1,2) (−1,3) (0,2) (0,1) (−2,4) (−1,4) **(0,3)** | kotwica **(3,2)** habitat, 4 heksy od stolicy na oceanie (−1,2) — odpowiedź (d): (3,2) (2,3) (3,3) (4,2) (4,1) (3,1) (1,4) (było: wokół stolicy na oceanie) |
+
+Każde ciało dostaje tyle heksów, ile jednostek (`missing` 0). Razem na imperium **13 jednostek = 11× `garrison_unit` +
+2× `rocket_artillery`**. ⚠ Trzy pierwsze kafle z budynkiem w siatce `entity_232` (launch_pad, shipyard, research_station)
+stoją na oceanie (Finding **343**), dlatego kotwicą jest dopiero habitat (3,2).
+
+**M1 — morale 30** (szczebel „poniżej 6”), 100 prób na komórkę `[measured]`. Sonda poza repo: prawdziwe
+`GroundUnitManager` + `CombatSystem` + predykaty `InvasionSystem.holdsDecisiveGround` / `hasLivingDefender`, siatka
+prawdziwej stolicy AI (`bootWithDirector`, ziarno domyślne: `entity_79`, stolica (6,2) na równinie), okno 60 civY, krok
+0,25 civY; garnizon przez `createAIUnit` (`deployed`, morale 30) na heksach planera (D10); gracz ląduje na pierwszym wolnym
+heksie spirali obok stolicy, idzie stosem na stolicę, potem dobija obrońców po kolei; PRNG z `headless/env.js`; bez
+zaopatrzenia i utrzymania (jak faza A). Technologia +90 = morale i organizacja +90, zapas +60 (pełne drzewo gracza).
+% przejęć / mediana w miesiącach:
+
+| garnizon · technologia gracza | 2 szturmowców | 4 | 6 |
+|---|---|---|---|
+| 2 · +0 | 75 / 17 | 100 / 12 | 100 / 10 |
+| 4 · +0 | 0 | 100 / 18 | 100 / 14 |
+| 10 · +0 | 0 | 0 | 100 / 33 |
+| 2 · +90 | 100 / 10 | 100 / 8 | 100 / 8 |
+| 4 · +90 | 94 / 15 | 100 / 10 | 100 / 10 |
+| 10 · +90 | 0 | 100 / 26 | 100 / 22 |
+
+Kalibracja tej samej sondy na macierzy fazy A (§5e; morale 10 / 50 / 100, technologia +0, 100 prób; faza A miała 50 prób
+`[doc: raport G2-A]`): z 27 komórek **26 w tych samych skrajnościach** (0 % albo 100 %), jedna pośrednia (garnizon 4,
+morale 50, 4 szturmowców): 27 % wobec 20 %; mediany późniejsze o 0–6 miesięcy `[measured]`. Odczyt: morale 30 leży między
+wierszami 10 i 50 — garnizon 2 przeciw 2 szturmowcom: 100 % (morale 10) → **75 %** (30) → 0 % (50); garnizon 10 przeciw 4:
+100 % → **0 %** → 0 %.
+
+**M2 — suma poziomów fabryk imperiów AI w uprzęży** (`bootWithDirector`, dwa imperia AI, pasywny gracz; czytnik planera;
+sumy powtórzone 2026-10-03 bit w bit z przebiegiem z sesji G2-3a) `[measured]`:
+
+| ziarno · imperium | gy 0 | 20 | 40 | 60 | 80 | 100 |
+|---|---|---|---|---|---|---|
+| `HEADLESS_GALAXY_SEED` · emp_001 | 1 | 3 | 3 | 6 | 14 | 20 |
+| `HEADLESS_GALAXY_SEED` · emp_002 | 1 | 6 | 7 | 16 | 20 | 20 |
+| 987654321 · emp_001 | 1 | 5 | 5 | 5 | 14 | **24** |
+| 987654321 · emp_002 | 1 | 6 | 10 | 20 | 20 | 20 |
+
+Szczeble po rewizji przy gy 60: 1 i 2 (ziarno domyślne), 0 i 3 (987654321); fixture — 3 i 3.
+
+---
+
+## 5m. Odpowiedzi właściciela z sesji G2-3a (2026-10-03)
+
+| | pytanie | odpowiedź |
+|---|---|---|
+| (a) | przepięcie pinu `g2_war_gate_smoke` W9d poza pre-approval D13a | **zostaje** (§5k) |
+| (b) | „co trzecia jednostka `rocket_artillery`” — na ciało czy na imperium | **na ciało** |
+| (c) | zaokrąglenie limitu przy mnożniku drabiny | **floor PO klamrze minimum 2** |
+| (d) | kolonia, której kafla stolicy nie da się zająć (stary zapis, D17) — gdzie kotwica garnizonu | **na kaflu z budynkiem, regułą placówki — nie na stolicy**; wdrożone w `053fcc0` (`garrisonAnchor`) |
+| (e) | „ma złoże `Xe`/`Nt`” | **`remaining > 0`** |
+| (f) | jednostki, dla których nie ma wolnego heksu, na którym da się stanąć | **nie powstają i zostają w rezerwie; bez stosu** — planer liczy `missing`, tworzenie (G2-3b) to respektuje |
+| (g) | drabina D9 — szczeble 25 / 35 / 45 nieosiągane (M2) | **rekalibracja**: progi 6 / 14 / 20 (§1) |
 
 ---
 

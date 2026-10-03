@@ -327,6 +327,17 @@
 > wroga + populacja bez mgły wojny).
 > • ⚠ **Otwarte pytanie do właściciela:** przepięcie pinu `g2_war_gate_smoke` **W9d** wyszło poza pre-approval D13a
 > (obejmował tylko W2) — `AI_GARRISON_PLAN.md` §5k.
+>
+> **Aktualizacja 2026-10-03 (wieczór) — AI GARRISON: G2-3a ZROBIONY (planer garnizonu) + rewizja drabiny D9.**
+> Sweep: **255/255 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3428** · save **v101 bez migracji**.
+> • ✅ **G2-3a** (`053fcc0`) — planer garnizonu: czyste funkcje nad jedną tabelą danych (`src/data/GarrisonData.js`),
+> odczyt `KOSMOS.debug.garrisonPlan()`; niczego nie tworzy (mobilizacja = **G2-3b**). Keeper `g2_planner_smoke` 77/77.
+> • **D9 po rewizji** (2026-10-03): poniżej 6 → morale 30 · 6–13 → 50 · 14–19 → 100 + co trzecia jednostka CIAŁA
+> `rocket_artillery` · 20 i więcej → jw. × 1,25 — bo suma fabryk zatrzymuje się na 20 (fixture 20 i 20 przy gy 60,
+> uprząż najwyżej 24 przy gy 100). Plan fixture'u GATE-S4: limit 13, stolica 7 (w tym 2× artyleria), po jednej
+> jednostce na sześciu innych ciałach — `AI_GARRISON_PLAN.md` §5l.
+> • Odpowiedzi właściciela (a)–(g) — `AI_GARRISON_PLAN.md` §5m; **otwarte pytanie W9d zamknięte** (przepięcie zostaje).
+> • Bez nowych findingów.
 
 
 ---
