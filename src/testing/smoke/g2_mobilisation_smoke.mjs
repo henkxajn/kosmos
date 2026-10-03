@@ -21,6 +21,8 @@
 //       na nim znikają, inne ciała nietknięte; ślad audytu `garrison:unitsRemoved`.
 //   M8  (C-S2, D16) ciało zniszczone: nie zostaje na nim żadna jednostka imperium AI (właściciela ani trzeciej
 //       strony). ⚠ Jednostka GRACZA zostaje jak dziś — jej los to decyzja właściciela (pin „otwarte”).
+//   M9  (C-S3, Finding 318) kafle kolonii AI niosą id imperium od bootstrapu (dom, ekspansja, placówka); stary zapis
+//       stemplowany na pierwszym ticku (kafel zajęty przez gracza zostaje jego); czas okupacji przed / po stemplu.
 //   M10 żywy fixture GATE-S4, wypowiedziana wojna: utworzony garnizon = tabela planera (13 na imperium).
 //
 // ⚠ `GarrisonSystem` ładowany DYNAMICZNIE: przed G2-3b go nie ma, a import statyczny wywróciłby plik i żaden
@@ -394,6 +396,76 @@ function matchesPlan(units, plan, emp) {
   // ⚠ OTWARTE (decyzja właściciela, raport G2-3b): jednostka GRACZA na zniszczonym ciele zostaje jak dziś.
   assert(w.gum.getUnit(pl.id)?.planetId === c1.planetId,
     'M8 otwarte: jednostka gracza zostaje zarejestrowana na zniszczonym ciele — dzisiejsze zachowanie, los do decyzji właściciela');
+}
+
+// ── M9 — stempel kafli (Finding 318) ────────────────────────────────────────────────────
+{
+  console.log('\nM9 — kafle kolonii AI niosą id imperium (bootstrap: dom, ekspansja, placówka; stary zapis: pierwszy tick)');
+  const w = boot();
+  const [e1] = w.emps;
+  const notOwned = (col) => (col?.grid?.toArray?.() ?? []).filter(t => t.owner !== col.ownerEmpireId).length;
+  const home = w.K.directorProduction.capitalOf(e1);
+  const sysId = w.K.empireRegistry.get(e1)?.homeSystemId;
+  const EntityManager = w.K.entityManager;
+  const freePlanet = (EntityManager.getByTypeInSystem('planet', sysId) ?? []).find(p => !w.cm.getColony(p.id));
+  let exp = null;
+  try { exp = quiet(() => w.K.empireColonyBootstrap.bootstrapColony(e1, sysId, freePlanet?.id)); } catch { exp = null; }
+  const body = (EntityManager.getByTypeInSystem('planetoid', sysId) ?? []).find(b => !w.cm.getColony(b.id));
+  let out = null;
+  try {
+    quiet(() => w.K.empireColonyBootstrap.bootstrapAutonomousOutpost(e1, sysId, body?.id, 'autonomous_solar_farm'));
+    out = w.cm.getColony(body?.id);
+  } catch { out = null; }
+  assert(!!home?.grid && !!exp?.grid && !exp.isOutpost && !!out?.grid && out.isOutpost,
+    `świadek: kolonia macierzysta ${home?.planetId}, ekspansja ${exp?.planetId}, placówka ${out?.planetId} — wszystkie z siatką`);
+  assert(notOwned(home) === 0 && notOwned(exp) === 0 && notOwned(out) === 0,
+    `M9a: od bootstrapu każdy kafel niesie ${e1} (bez właściciela/obcy: dom ${notOwned(home)}, ekspansja ${notOwned(exp)}, placówka ${notOwned(out)})`);
+
+  // stary zapis: kafle kolonii AI bez właściciela, jeden kafel zajęty już przez gracza — PIERWSZY tick stempluje
+  const w2 = boot();
+  const ai = w2.cm.getAllColonies().filter(c => c.ownerEmpireId && c.grid);
+  for (const c of ai) for (const t of c.grid.toArray()) t.owner = null;
+  const occ = ai[0].grid.toArray().find(t => !t.capitalBase && !t.buildingId);
+  occ.owner = 'player';
+  const nullBefore = ai.reduce((s, c) => s + c.grid.toArray().filter(t => t.owner == null).length, 0);
+  run(w2, 1);
+  const leftNull = ai.reduce((s, c) => s + c.grid.toArray().filter(t => t.owner == null).length, 0);
+  const wrong = ai.reduce((s, c) => s + c.grid.toArray().filter(t => t !== occ && t.owner !== c.ownerEmpireId).length, 0);
+  assert(nullBefore > 0 && leftNull === 0 && wrong === 0 && occ.owner === 'player',
+    `M9b: stary zapis (${nullBefore} kafli bez właściciela w ${ai.length} koloniach AI) — po pierwszym ticku 0 bez właściciela, ` +
+    `kafel zajęty przez gracza zostaje przy graczu (${occ.owner})`);
+
+  // czas okupacji przed / po stemplu (prawdziwe ticki; headless bez walki — obie jednostki stoją)
+  function occupy({ nullTiles, defenderOnCapital }) {
+    const v = boot();
+    const [emp] = v.emps;
+    declare(v.K, emp);
+    run(v, 1);                                                   // zatrzask pierwszego ticku zużyty
+    const col = v.K.directorProduction.capitalOf(emp);
+    const cap = col.grid.toArray().find(t => t.capitalBase);
+    if (nullTiles) for (const t of col.grid.toArray()) t.owner = null;   // stan sprzed C-S3
+    if (!defenderOnCapital) {
+      for (const u of v.gum.getUnitsOnPlanet(col.planetId)) if (u.q === cap.q && u.r === cap.r) v.gum.removeUnit(u.id);
+    }
+    const ev = [];
+    EventBus.on('tile:ownerChanged', (e) => { if (e.planetId === col.planetId) ev.push(`${e.oldOwner}->${e.newOwner}`); });
+    const onCap = v.gum.getUnitsOnPlanet(col.planetId).filter(u => u.owner === emp && u.q === cap.q && u.r === cap.r).length;
+    v.gum.createUnit('shock_infantry', col.planetId, cap.q, cap.r, { owner: 'player', factionId: 'humanity' });
+    let at = null;
+    for (let y = 1; y <= 12; y++) { run(v, 1); if (cap.owner === 'player') { at = y; break; } }
+    return { at, onCap, selfOcc: ev.filter(e => e === `null->${emp}`).length };
+  }
+  const bC = occupy({ nullTiles: true,  defenderOnCapital: true });
+  const aC = occupy({ nullTiles: false, defenderOnCapital: true });
+  const bA = occupy({ nullTiles: true,  defenderOnCapital: false });
+  const aA = occupy({ nullTiles: false, defenderOnCapital: false });
+  assert(bC.onCap === 1 && aC.onCap === 1 && bC.at === null && aC.at === 7,
+    `M9c: obrońca AI na kaflu stolicy — PRZED stemplem licznik gracza resetowany co tick (kafel nie przechodzi przez 12 civY: ${bC.at}), ` +
+    `PO stemplu biegnie mimo obrońcy (kafel w ${aC.at}. civY)`);
+  assert(bA.onCap === 0 && aA.onCap === 0 && bA.at === 7 && aA.at === 7,
+    `M9d: gracz sam na kaflu stolicy — 7. civY przed i po stemplu (${bA.at} / ${aA.at})`);
+  assert(bC.selfOcc >= 1 && aC.selfOcc === 0 && aA.selfOcc === 0,
+    `M9e: przed stemplem garnizon „zajmuje” własne kafle (tile:ownerChanged null→imperium: ${bC.selfOcc}); po stemplu — 0 (${aC.selfOcc}/${aA.selfOcc})`);
 }
 
 // ── M10 — żywy fixture GATE-S4 ─────────────────────────────────────────────────────────

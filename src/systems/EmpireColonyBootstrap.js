@@ -24,6 +24,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
+import { stampUnownedTiles } from '../utils/TileOwnership.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 import { DepositSystem } from './DepositSystem.js';
@@ -173,6 +174,9 @@ export class EmpireColonyBootstrap {
     colony.buildingSystem._grid       = grid;
     colony.buildingSystem._gridHeight = grid.height ?? 10;
     colony.grid                       = grid;
+    // G2-3b C-S3 (Finding 318) — kafle kolonii AI niosą właściciela od urodzenia; bez tego `owner == null`
+    //   był dla okupacji „obcym” kaflem także dla WŁASNYCH jednostek imperium (`TileOwnership.js`).
+    stampUnownedTiles(grid, empireId);
 
     // 6. Re-sync deposits (już ustawione w createColony, ale defensywne — homePlanet
     //    ma realne deposits z SystemGenerator._generateDepositsForAll).
@@ -380,6 +384,9 @@ export class EmpireColonyBootstrap {
     colony.buildingSystem._grid       = grid;
     colony.buildingSystem._gridHeight = grid.height ?? 10;
     colony.grid                       = grid;
+    // G2-3b C-S3 (Finding 318) — kafle kolonii AI niosą właściciela od urodzenia; bez tego `owner == null`
+    //   był dla okupacji „obcym” kaflem także dla WŁASNYCH jednostek imperium (`TileOwnership.js`).
+    stampUnownedTiles(grid, empireId);
     colony.buildingSystem.setDeposits(planetEntity.deposits ?? []);
 
     // 7. TechSystem WSPÓŁDZIELONY — reuse z istniejącej kolonii imperium.
@@ -493,6 +500,11 @@ export class EmpireColonyBootstrap {
       if (!outpost) throw new Error(`[bootstrapAutonomousOutpost] createOutpost failed dla ${planetId}`);
       outpost.ownerEmpireId = empireId;  // defensywne — już ustawione w createOutpost
     }
+
+    // G2-3b C-S3 (Finding 318) — kafle placówki AI niosą właściciela od urodzenia; bez tego `owner == null`
+    //   był dla okupacji „obcym” kaflem także dla WŁASNYCH jednostek imperium (`TileOwnership.js`).
+    //   Idempotentny (tylko kafle bez właściciela) — także w gałęzi ponownego użycia placówki.
+    stampUnownedTiles(outpost.grid, empireId);
 
     // #14 (Slice 2 save/restore): zarejestruj outpost w imperium — by przeżył save
     //   (emp.colonies round-trip przez gameState) i był liczony przez getColoniesByEmpire.

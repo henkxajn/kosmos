@@ -13,8 +13,9 @@
 //       jak jednostka gracza, w 1. civY przechodzi w `offline`, przestaje być obrońcą i zostaje
 //       rozwiązana do 5. civY (Finding 323). Kontrola: z `factionId` imperium zostaje aktywna.
 //       → zmieni go: przejście `launchInvasion` na `createAIUnit` (G2b) albo zmiana filtra utrzymania (329).
-//   P3  kafle kolonii AI po bootstrapie mają `owner === null` — stolica i placówka (Finding 318).
-//       → zmieni go: stempel kafli przy bootstrapie/materializacji.
+//   P3  kafle kolonii AI po bootstrapie niosą id imperium — stolica i placówka (Finding 318).
+//       ⚠ ODWRÓCONY ŚWIADOMIE w G2-3b C-S3 (zgoda właściciela 2026-10-03): do G2-3b kafle kolonii AI miały
+//         `owner === null`; od C-S3 bootstrap stempluje je id imperium (`TileOwnership.stampUnownedTiles`).
 //   P4  `_findGroundUnitSpawn`: pełna kolonia AI z lądową stolicą — pierwsza jednostka staje NA kaflu
 //       stolicy; stolica na oceanie — na lądowym kaflu z pierścienia 1; placówka (bez `capitalBase`) —
 //       na PIERWSZYM lądowym kaflu siatki w kolejności `toArray()`, niezależnie od budynków.
@@ -138,20 +139,20 @@ function bootstrapAiOutpost(w, empireId) {
 
 // ── P3 — kafle kolonii AI po bootstrapie mają owner null ────────────────────────────────
 {
-  console.log('\nP3 — kafle kolonii AI: owner null po bootstrapie (stolica i placówka)');
+  console.log('\nP3 — kafle kolonii AI: id imperium po bootstrapie (stolica i placówka)');
   const w = boot();
   const col = w.aiFull[0];
   const tiles = col?.grid?.toArray?.() ?? [];
   assert(tiles.length > 0, `świadek: siatka kolonii AI ${col?.planetId} ma ${tiles.length} kafli`);
-  const notNull = tiles.filter(t => t.owner != null).length;
-  assert(notNull === 0, `P3a: wszystkie kafle pełnej kolonii AI mają owner null (niepustych: ${notNull})`);
+  const notEmp = tiles.filter(t => t.owner !== col.ownerEmpireId).length;
+  assert(notEmp === 0, `P3a: wszystkie kafle pełnej kolonii AI niosą id imperium ${col?.ownerEmpireId} (innych: ${notEmp})`);
 
   const out = bootstrapAiOutpost(w, col.ownerEmpireId);
   const otiles = out?.grid?.toArray?.() ?? [];
   assert(!!out && out.isOutpost && otiles.length > 0,
     `świadek: placówka AI ${out?.planetId} (isOutpost=${out?.isOutpost}), ${otiles.length} kafli`);
-  const onotNull = otiles.filter(t => t.owner != null).length;
-  assert(onotNull === 0, `P3b: wszystkie kafle placówki AI mają owner null (niepustych: ${onotNull})`);
+  const onotEmp = otiles.filter(t => t.owner !== out.ownerEmpireId).length;
+  assert(onotEmp === 0, `P3b: wszystkie kafle placówki AI niosą id imperium ${out?.ownerEmpireId} (innych: ${onotEmp})`);
 }
 
 // ── P4 — gdzie staje pierwsza jednostka (_findGroundUnitSpawn) ──────────────────────────

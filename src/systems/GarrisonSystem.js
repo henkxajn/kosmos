@@ -25,6 +25,11 @@
 //     to DECYZJA WŁAŚCICIELA, niepodjęta (raport G2-3b). Pin dzisiejszego zachowania: `g2_seams_smoke` P6b;
 //   • ładownia statku na orbicie (`in_cargo`) nie jest „na ciele” — `getUnitsOnPlanet` ją pomija.
 //
+// C-S3 — STEMPEL KAFLI (Finding 318): kafle kolonii AI niosą właściciela — od bootstrapu
+// (`EmpireColonyBootstrap`), a w starych zapisach od PIERWSZEGO ticku (`reconcile` → `stampAiColonyTiles`, ten sam
+// helper `TileOwnership.stampUnownedTiles`). Stemplujemy WYŁĄCZNIE kafle bez właściciela — kafel zajęty okupacją
+// zostaje przy zajmującym. Uzgodnienie stempluje PRZED mobilizacją (mobilizacja z właścicieli kafli nie korzysta).
+//
 // ⚠ Determinizm: żadnego losowania — plan jest funkcją stanu świata (D1/D9/D10/D11/D12).
 // ⚠ Jednostki AI powstają WYŁĄCZNIE przez `createAIUnit` (owner I factionId = imperium, popCost 0) —
 //   `createUnit` z samym `{ owner }` wciągałby je w utrzymanie gracza (Finding 323, pin G2-0 P2).
@@ -35,6 +40,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { planEmpireGarrison, readEmpireGarrisonSnapshot, readGarrisonBodyContext } from '../utils/GarrisonPlanner.js';
+import { stampUnownedTiles } from '../utils/TileOwnership.js';
 
 export class GarrisonSystem {
   constructor() {
@@ -208,11 +214,13 @@ export class GarrisonSystem {
   }
 
   /**
-   * Pierwszy tick po starcie sceny (nowa gra albo wczytanie): mobilizuje każde imperium, które JEST
-   * w stanie wojny, a flagi nie ma (zapis sprzed G2-3b albo status ustawiony bez zdarzenia).
-   * @returns {{mobilized:string[]}}
+   * Pierwszy tick po starcie sceny (nowa gra albo wczytanie): (C-S3) stempluje kafle kolonii AI bez właściciela,
+   * potem mobilizuje każde imperium, które JEST w stanie wojny, a flagi nie ma (zapis sprzed G2-3b albo status
+   * ustawiony bez zdarzenia).
+   * @returns {{trigger:string, stampedTiles:number, mobilized:string[]}}
    */
   reconcile(trigger = 'first_tick') {
+    const stampedTiles = this.stampAiColonyTiles();
     const reg = this._K()?.empireRegistry;
     const mobilized = [];
     for (const emp of reg?.listAll?.() ?? []) {
@@ -220,7 +228,20 @@ export class GarrisonSystem {
       const res = this.mobilizeEmpire(emp.id, 'reconcile_at_war');
       if (res.ok) mobilized.push(emp.id);
     }
-    return { trigger, mobilized };
+    return { trigger, stampedTiles, mobilized };
+  }
+
+  /**
+   * C-S3 (Finding 318) — stempel właściciela na kaflach BEZ właściciela we wszystkich koloniach AI.
+   * @returns {number} ile kafli ostemplowano
+   */
+  stampAiColonyTiles() {
+    let stamped = 0;
+    for (const colony of this._K()?.colonyManager?.getAllColonies?.() ?? []) {
+      if (!colony?.ownerEmpireId || colony.ownerEmpireId === 'player') continue;
+      stamped += stampUnownedTiles(colony.grid, colony.ownerEmpireId);
+    }
+    return stamped;
   }
 }
 
