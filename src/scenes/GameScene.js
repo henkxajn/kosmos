@@ -150,6 +150,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do au
 import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
+import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -812,6 +813,9 @@ export class GameScene {
                   + 'działa osobna mechanika (military_presence).');
         return snap;
       },
+      // KOSMOS.debug.garrisonPlan() — G2-3a: plan garnizonu KAŻDEGO imperium AI (limit D1×D9, szczebel, podział D11,
+      //   skład, morale, heksy D10), wiersz na ciało. TYLKO ODCZYT — niczego nie tworzy (mobilizacja = G2-3b).
+      garrisonPlan: () => printGarrisonPlans(window.KOSMOS),
       // KOSMOS.debug.colonies() — tabela WSZYSTKICH skolonizowanych ciał (gracz + AI):
       //   nazwa, właściciel, pop (humans/capacity), bezrobotni, satysfakcja, prosperity,
       //   wzrost/rok, liczba budynków. Do obserwacji zdrowia AI w dłuższych sesjach
