@@ -311,6 +311,22 @@
 > z `_biome.png`), **346** (stolice AI na (−1,2), także na lodzie — obserwacja).
 > • Odpowiedzi właściciela z sesji G2-K1 (bliźniak AI w G2-K1, slice dla 343, próg D9 10–24 = `garrison_unit`,
 > rejestracja 344): `AI_GARRISON_PLAN.md` §5h.
+>
+> **Aktualizacja 2026-10-03 (późna) — AI GARRISON: G2-2 ZAMKNIĘTY (bramka wojny D13 + D13a).**
+> Sweep: **254/254 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3428** · save **v101 bez migracji**.
+> • ✅ **317** · **337** · **338** · **339** (`6391b23` keepery: wojna w setupie · `48c94dd` bramka wojny · `dbfbbd6` D13a)
+> — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze zdjęte z A8. Bramka live właściciela PASS
+> (`AI_GARRISON_PLAN.md` §5j). **D13a** (2026-10-03): jedyną drogą wojsk na ciało innego imperium są kapsuły
+> desantowe — „Wyładuj” z ładowni nigdy, także w wojnie (`cargoUnloadRefusal`, `WarGate.js`).
+> • **NOWE: #348–#357** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 **348** (okupacja i walka trwają w pokoju → G2-4/D14),
+> **349** („Wyładuj” bez terenu; nad ciałem bez kolonii celem jest dom), **353** (zabranie wojsk z cudzego ciała: sukces
+> w UI, jednostki na ziemi — **blokuje D14**, audyt G2-4), **354** (płatnik utrzymania = kolonia CIAŁA: kolonia AI płaci
+> za jednostkę gracza albo jej brak ją rozwiązuje — rodzina **329**) · ⚪ **350** (surowe slugi odmów zrzutu), **351**
+> (ciche odmowy away team), **352** (`force_invasion` — odmowa tylko w konsoli), **355** (opóźnienie mapy w trybie
+> zrzutu; **345** wykluczony w kodzie), **356** („undefined” w oknie ładowni), **357** („Player Empire” w dymku ciała
+> wroga + populacja bez mgły wojny).
+> • ⚠ **Otwarte pytanie do właściciela:** przepięcie pinu `g2_war_gate_smoke` **W9d** wyszło poza pre-approval D13a
+> (obejmował tylko W2) — `AI_GARRISON_PLAN.md` §5k.
 
 
 ---
@@ -388,7 +404,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-347** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1) |
+| **309-357** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–03; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -499,6 +515,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **333** | 🟠 | **nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana NA ZAWSZE i liczy się do populacji** — zmierzone (+0,3 po 27 mies., zero wywołań usuwających ludzi); wzorzec poprawny: `killCrew` (W2). Rekoncyliacja A0, **nienaprawiony** |
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
+| **348** | 🟠 | okupacja kafli i walka naziemna trwają w **POKOJU** — `_tickOccupation` (`GroundUnitManager.js:616-666`) i `_findContestedHexes` (`CombatSystem.js:152-171`) nie mają terminu wojny; G2-2 zamknął tylko lądowanie i przejęcie KOLONII ⇒ → **G2-4** (D14). `AI_GARRISON_PLAN.md` §6 |
+| **353** | 🟠 | zabranie wojsk z cudzego ciała: UI zgłasza sukces, jednostki zostają na ziemi (bramka live G2-2) — kandydat zmierzony headless: utrzymanie nadpisuje `status` z `in_cargo` na `offline` (`ColonyManager.js:1561`) ⇒ **blokuje D14**, prześledzić w audycie **G2-4**. `AI_GARRISON_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -520,6 +538,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **318** | 🟠 | kafle kolonii AI mają `owner = null` — stempel daje dopiero otwarcie mapy w `ColonyOverlay.js:584-588` | rodzina **54**/**58**; czytane przez okupację i przejęcie (G2). `AI_GARRISON_PLAN.md` §6 |
 | **319** | 🟠 | jednostki naziemne **osierocone** przy zniszczeniu ciała i **nietknięte** przez `transferColony`/`captureColonyForPlayer` | rozszerza **59**; decyzja **D6** (G2) |
 | **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
+| **354** | 🟠 | płatnik utrzymania jednostki bez `homeColonyId` = kolonia CIAŁA (`ColonyManager.js:1529`) ⇒ kolonia AI **płaci** za jednostkę gracza (zmierzone 1000 → 952 Kr w 12 civY) albo, bez kredytów, rozwiązuje ją w 5. civY (bramka: dwa „disbanded (no upkeep)” po `debug.spawnMyUnit`) | rodzina **329** (krok G1c) |
+| **357** | ⚪ | dymek ciała na mapie 3D: „Player Empire” przy KAŻDEJ kolonii, także wroga, i jej populacja bez mgły wojny (`TooltipContent.js:147-155`, od `670d027`) | naprawa przez kanon `SystemReveal` (**188**), nie jednolinijkowiec |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -594,21 +614,18 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **183** | 🟡 | **wyciek drzewa technologii gracza do placówek AI** (`EmpireColonyBootstrap:385-390`) — ZMIERZONE tożsamościowo: **każda placówka AI** czyta `window.KOSMOS.techSystem` (drzewo GRACZA), pełne kolonie czytają własne `aiTech` | trop z diagnozy (c); zakres skutku niezmierzony (czy placówki w ogóle czytają techy) — **do sprawdzenia PRZED slice'em (c)** |
 | **184** | 🟡 | **deklarowana bramka tech ≠ egzekwowana — 4 z 12 towarów, u GRACZA tak samo jak u AI** — `isRecipeAvailable` to OR trzech gałęzi, a `isCommodityUnlocked` przebija `requiresTech`: `android_worker`←`robotics` (w `startingTechs` AI, więc otwarte od pierwszej tury), `antimatter_cells`←`antimatter_containment`, `quantum_processors`←`quantum_physics`, `warp_cores`←`warp_drive` | **pytanie PROJEKTOWE, nie bug** — która strona jest prawdą, rozstrzyga projektant. ⚠ `requiresTech` **nie jest wiarygodnym opisem bramki**; efektywną czytać z OBU źródeł |
 | **185** | 🟠 | **`military_supplies` nieosiągalne dla OBU archetypów AI** — wydzielone z 181 przy jego zamykaniu. `military_logistics` (150 rp) nie ma w żadnym planie badań, a jej prereq **`ground_warfare` też jest spoza kolejki**, więc koszt to cała gałąź, nie 150 rp. Brak obejścia przez `unlockCommodity`. Towar zasila zaopatrzenie naziemne (`BuildingsData:765`) i magazyn statku zaopatrzeniowego (`ShipsData:132`) | **świadomie poza zakresem** (F4). ⚠ Należy do slice'u **GROUND** (rodzina 49/50), nie do ekonomii AI. ⚠ Wycenić dopiero po sprawdzeniu, czy jednostki naziemne AI w ogóle czytają ten towar — legacy model z 50 może go omijać |
-| **317** | 🔴 | **lądowanie i podbój w czasie POKOJU** — desant bramkuje tylko dominacja orbitalna (pusty układ = dominacja, `WarSystem.js:982-990`), a `launchInvasion` i `_tryPlayerCapture` nie mają warunku wojny | decyzja **D4** ⇒ G2. `AI_GARRISON_PLAN.md` §6 |
 | **320** | ⚪ | `diplomacy:warDeclared` nie niesie `declaredBy`, a `UIManager.js:1624` go czyta | istotne dla G2 (materializacja przy wypowiedzeniu) |
 | **321** | 🟠 | wydobycie kopalń (`receive` wprost, `BuildingSystem.js:2598`) niewidoczne dla `getPerYear`/`getGrossPerYear` | powód D1/D3; wpływ na UI niezmierzony |
 | **322** | ⚪ | trzy definicje stolicy AI: `capitalOf`, bliźniaczy `_pickCapital`, statyczne `homeSystemId` | wybrać jedno źródło przed G2 |
 | **323** | 🟠 | `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` wciąga jednostkę AI do utrzymania i limitu GRACZA (`ColonyManager.js:1372`, `:1515`, `:1528`) | rozszerza **60**; zmierzone (pin G2-0 P2): z samym `{ owner }` przy 0 Kr `offline` w 1. civY, rozwiązana w 5.; nowe wywołania przez `createAIUnit` (G2-1, `82c9196`), `InvasionSystem.js:130` → G2b |
 | **324** | ⚪ | świeży `garrison_unit` = `mobile` (`dmg 0`), odtworzenie bez pola = `deployed` | **D6**: garnizon AI `deployed` od utworzenia |
 | **325** | ⚪ | żaden archetyp AI nie bada technologii morale (ani `ground_warfare`); bonusy przy rekrutacji i tak czytają drzewo GRACZA | rodzina **185**; zastąpione przez **D7** |
-| **337** | 🔴 | **łazik badawczy (away team) przejmuje kolonię AI w POKOJU** — bez dominacji, kapsuł i wojny; zmierzone: przejęcie w 8. civY | rozszerza **317**; → **G2-2** (D13) |
-| **338** | 🟠 | „Wyładuj” z ładowni (`CargoLoadModal.js:388`) ląduje wojsko na kolonii DOWOLNEGO właściciela, przy której statek orbituje (`FleetManagerOverlay.js:3059`) — bez kapsuł, dominacji i wojny | niemierzone (DOM); → **G2-2** |
-| **339** | 🟠 | `launchInvasion` i oba predykaty przejęcia nie pytają o wojnę (pin G2-0 P5); **żaden** z 6 keeperów przejęcia nie ustawia wojny | D13 przestawi te keepery — świadomie w **G2-2** |
 | **340** | ⚪ | `INVASION_UNIT_POOLS` (`GroundUnitData.js:97`) nie ma kluczy `industrialist` / `expansionist` ⇒ desant bez ładunku zawsze `['infantry','infantry']` (`InvasionSystem.js:112`) | → **G2b** (D7) |
 | **341** | ⚪ | uprząż headless: POP imperiów AI przy gy 60 2,2–3,1× niższy niż w fixture GATE-S4 (limit 3–5 wobec 11); przyczyna nieznana, ziarnistość ticka wykluczona | instrument ⇒ **D18** (kalibracja na fixture) |
 | **343** | 🟠 | zwykłe budynki AI stają na **oceanie** — martwy test `tile.buildable` (`EmpireColonyBootstrap.js:731`); 46 z 476 na 14 ziarnach (`research_station`, `shipyard`, `launch_pad`); takiego budynku nie da się okupować | osobny, późniejszy slice (zmienia rozmieszczenie budynków AI) |
 | **344** | 🟠 | desant AI ląduje na krawędzi **bez drogi do stolicy** — `_findLandingHexes` (`InvasionSystem.js:500`) nie sprawdza osiągalności; 33 z 486 kafli strefy na koloniach AI (czapa polarna odcięta oceanem albo asymetria **347**), 0 z 249 na koloniach gracza | bez kroku; istotne dla G2-3 i G2b |
 | **346** | ⚪ | stolice AI na jednej współrzędnej (−1,2) — remis punktacji, wygrywa pierwszy kafel rzędu 2; w fixture 5 z 11 na `ice_sheet` | obserwacja; rodzina **322** |
+| **349** | 🟠 | „Wyładuj” bez sprawdzenia terenu (`CargoLoadModal.js:405` → `Vessel.js:743-745`); nad ciałem BEZ kolonii celem jest kolonia MACIERZYSTA (`FleetManagerOverlay.js:3074-3075`) — reszta **338** dla ciał własnych i niczyich | niemierzone (DOM); bez kroku |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -623,6 +640,11 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **334** | ⚪ | karta jednostki w `ColonyOverlay`: polskie literały (statusy `:2660-2667`, przyciski `:2858`/`:2880`, flash `:5449`) i surowe id w tytule (`unit.type.toUpperCase()`, `:2641`) — klasa **113**, `check-i18n` ślepy | obserwacja z bramki G1b (ekran mieszał EN i PL) |
 | **342** | ⚪ | `homeColonyId: null` jednostki AI wraca z zapisu jako id ciała (`GroundUnitManager.js:1459`, `:1522`) | dziś nieszkodliwe (`_ownedHomeColony` sprawdza właściciela, `popCost` 0); `null` zostaje decyzją właściciela |
 | **345** | ⚪ | **uśpiony** nadpis `tile.type` z `_biome.png` w `ColonyOverlay._applyBiomeMap` — na siatce współdzielonej z silnikiem zmieniałby teren od samego otwarcia mapy; plików 0 na 216 | uzbraja się przy generowaniu tekstur z `--biome-map` / `--all-maps` |
+| **350** | ⚪ | pozostałe odmowy zrzutu pokazują surowy slug — `t('drop.failed', reason)` (`ColonyOverlay.js:4683`) | klasa **271**/**113**; etap polerki UI (odpowiedź właściciela G2-2 (f)) |
+| **351** | ⚪ | ciche odmowy away team — powód tylko dla `not_at_war` (`ColonyOverlay.js:4608-4609`); `no_vessel` / `no_gum` / `create_failed` bez słowa; literał `🤖 Away Team wylądował` (`:4611`) | etap polerki UI (odpowiedź (e)) |
+| **352** | ⚪ | odmowa dźwigni `force_invasion` tylko w `console.warn` (`WarOverlay.js:729`) | rodzina **287** („wojna bez wojny”) |
+| **355** | ⚪ | mapa kolonii cudzego ciała otwiera się z opóźnieniem przy wejściu w tryb zrzutu — **345 wykluczony w kodzie** (`_loadBiomeMap` asynchroniczne, nic na nie nie czeka) | przyczyna niezmierzona |
+| **356** | ⚪ | okno ładowni: „undefined” jako nazwa łazika (`CargoLoadModal.js:328`, brak fallbacku `?? u.type`, który ma `ColonyOverlay.js:3339`) + nazwy archetypów z `descriptionPL` | klasa **113** |
 
 ---
 

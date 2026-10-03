@@ -5664,9 +5664,9 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03)
 
-Plan, decyzje **D1–D7** i rejestr findingów **#309–#335**: `docs/design/AI_GARRISON_PLAN.md`.
+Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#357**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 Commity G1b: `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326).
 
@@ -5682,7 +5682,7 @@ odczycie) — więc walka naziemna się nie rozstrzygała.
 ⚠ Garnizon przy bazowym morale (10) nie ucieka, ale **po 4 trafieniach rozpada się** — przyjęte dla G1;
 czy jednostka defensywna ma się w ogóle rozpadać od morale — **niepodpisane, do G2**.
 ⚠ Fale legacy AI wygrywają 84–100% z archetypami gracza przy +0 ⇒ **D7**: AI na modelu archetypów
-wszędzie, także w pulach desantu (G2b). 🔴 **317**: lądowanie i podbój w czasie POKOJU (D4 ⇒ G2).
+wszędzie, także w pulach desantu (G2b). ✅ **317**: lądowanie i podbój w czasie POKOJU — zamknięty w G2-2 (niżej).
 
 **G1b — jedno zdanie:** strona AI strzelała w rundzie pierwsza, rozpad morale nie zwalniał zablokowanych
 POP, rozwiązanie jednostki było nieme, a reintegracja po śmierci szła do kolonii ciała, na którym jednostka
@@ -5728,8 +5728,8 @@ defensywnych przy morale 0 ZOSTAJE · D9 drabina sumy poziomów fabryk (jedna ta
 rozstawiony, nie w stosie · D11/D12 podział między ciałami, stolica = `capitalOf` · D13 bramka wojny (status
 relacji `'war'`, zaczep `diplomacy:warDeclared`) · D14 wycofanie po pokoju (6 mies.) · D15 mobilizacja raz na
 imperium · D16 zniszczenie ciała usuwa WSZYSTKIE jednostki · D17 stolice na oceanie · D18 kalibracja na fixture.
-Nowe findingi **336–342**: ✅ **336** stolica AI na oceanie (nie do przejęcia z ziemi; zamknięty w G2-K1) · 🔴 **337** łazik przejmuje
-kolonię AI w pokoju · 🟠 **338** „Wyładuj” bez bramek · 🟠 **339** przejęcia ślepe na wojnę · ⚪ **340** pule desantu ·
+Nowe findingi **336–342**: ✅ **336** stolica AI na oceanie (nie do przejęcia z ziemi; zamknięty w G2-K1) · ✅ **337** łazik przejmuje
+kolonię AI w pokoju · ✅ **338** „Wyładuj” bez bramek · ✅ **339** przejęcia ślepe na wojnę (trzy zamknięte w G2-2) · ⚪ **340** pule desantu ·
 ⚪ **341** uprząż vs fixture · ⚪ **342** `homeColonyId: null` po zapisie.
 ✅ **G2-K1** (`8ea5af3` + `44967a3`, D17): stolica AI staje WYŁĄCZNIE na kaflu, na którym da się stanąć
 (`EmpireColonyBootstrap._placeBuildingSmart`); w starych zapisach stolica nie do stania nie decyduje o przejęciu —
@@ -5740,5 +5740,25 @@ bez własnej kopii. Keeper `g2_ocean_capital_smoke` **28/28**; sweep **253/253**
 🟠 **343** zwykłe budynki AI na oceanie (martwy test `tile.buildable`, 46/476 — osobny slice) · 🟠 **344** desant AI
 na krawędzi bez drogi do stolicy · ⚪ **345** uśpiony nadpis typów kafli z `_biome.png` · ⚪ **346** stolice AI na
 (−1,2), także na lodzie · 🟠 **347** `HexGrid.getNeighbors` asymetryczne (plik krytyczny).
-**Dalej:** G2-2 (bramka wojny) → G2-3 (mobilizacja) → G2-4 (wycofanie po pokoju) → G2b → G3 → **G1c** (rodzina
-„utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02).
+✅ **G2-2 — bramka wojny** (`6391b23` keepery · `48c94dd` D13 · `dbfbbd6` D13a; live-gate właściciela PASS 2026-10-03,
+plan §5i–§5k). NEW `src/utils/WarGate.js` — **jedno źródło** odpowiedzi „czy strona może wylądować na tym ciele albo je
+przejąć”: `warGateRefusal(actor, planetId)` → `null | 'not_at_war'`. Źródło prawdy = **status relacji `'war'`**, nie
+rekord wojny; rozejm i NAP blokują; ciało niczyje i własne **nie pytają dyplomacji**; obce ciało **fail-closed**. Sprawdzane
+**w chwili lądowania** na każdej ścieżce (`unloadGroundUnit`, `dropTroop`, `deployAwayTeam`, `launchInvasion`) i w **obu
+predykatach przejęcia** (gracza i AI); UI wyszarza z powodem `fleet.reason.notAtWar`. **D13a:** jedyną drogą wojsk na ciało
+innego imperium są **kapsuły** — „Wyładuj” z ładowni nigdy, także w wojnie (`cargoUnloadRefusal`, powód własny
+`fleet.reason.unloadForeignBody`).
+⚠ **Bramka D13a siedzi w ŚCIEŻCE ŁADOWNI (`CargoLoadModal`), nie w `unloadGroundUnit`** — tę metodę wołają też kapsuły.
+⚠ **Keeper testujący przejęcie lub desant MUSI wypowiedzieć wojnę w setupie** (`declareWar(e.id, 'keeper_setup')`; siedem
+keeperów dostało to w `6391b23`); pokój pinują `g2_war_gate_smoke` i `g2_seams_smoke` P5 (odwrócony świadomie).
+⚠ **`CargoLoadModal` wykonuje się pod node** na atrapie DOM z `headless/env.js` (nie importuje THREE) — klik prawdziwego
+„Wyładuj” jest pinowalny WYKONANIEM (`g2_war_gate_smoke` W11).
+Keeper `g2_war_gate_smoke` **70/70** (fail-first D13a 58/12) · `g2_seams_smoke` **31/31**; sweep **254/254**, `check-i18n`
+3428. Nowe findingi **348–357**: 🟠 **348** okupacja i walka trwają w pokoju (→ G2-4/D14) · 🟠 **349** „Wyładuj” bez terenu,
+nad ciałem bez kolonii celem dom · 🟠 **353** zabranie wojsk z cudzego ciała zgłasza sukces, a jednostki zostają —
+**blokuje D14** · 🟠 **354** płatnik utrzymania = kolonia CIAŁA: kolonia AI płaci za jednostkę gracza (rodzina 329) ·
+⚪ **350** / **351** surowe slugi i ciche odmowy (polerka UI) · ⚪ **352** `force_invasion` tylko w konsoli · ⚪ **355**
+opóźnienie mapy w trybie zrzutu (345 wykluczony) · ⚪ **356** „undefined” w oknie ładowni · ⚪ **357** „Player Empire”
+w dymku ciała wroga. ⚠ **Otwarte:** przepięcie pinu W9d poza pre-approval D13a (plan §5k).
+**Dalej:** G2-3 (mobilizacja) → G2-4 (wycofanie po pokoju) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 ·
+329, teraz także 354; kierunek 333/330 podpisany 2026-10-02).

@@ -1,24 +1,29 @@
 # AI GARRISON — obrona naziemna kolonii AI
 
 > **Status:** ✅ **G1 i G1b ZAMKNIĘTE 2026-10-02 — obie bramki live właściciela PASS.** ✅ **G2-0, G2-1 i G2-K1 ZROBIONE
-> 2026-10-02** (§5f, §5g). Dalej: **G2-2** (bramka wojny) → **G2-3** → **G2-4** → **G2b** → **G3** → **G1c** (§3).
+> 2026-10-02** (§5f, §5g). ✅ **G2-2 (bramka wojny, D13 + D13a) ZAMKNIĘTY 2026-10-03 — bramka live właściciela PASS**
+> (§5i–§5k). Dalej: **G2-3** → **G2-4** → **G2b** → **G3** → **G1c** (§3).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
-> odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h).
-> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1 i w G2-K1.
+> odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k).
+> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1 i w G2-2.
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
-> (G2-K1, stolice na oceanie + bliźniak AI) — §5g.
+> (G2-K1, stolice na oceanie + bliźniak AI) — §5g · `6391b23` (G2-2, keepery: wojna w setupie) + `48c94dd`
+> (G2-2, bramka wojny D13) + `dbfbbd6` (D13a, „Wyładuj” nigdy na cudzym ciele) — §5i.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
-> `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **28/28** · `g2_create_ai_unit_smoke` **26/26** ·
-> `g2_ocean_capital_smoke` **28/28** · sweep **253/253 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3426**).
-> **Rejestr macierzysty findingów #309–#347:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
+> `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
+> `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · sweep **254/254 OK, 0 FAIL, 31 advisory** ·
+> `check-i18n` PASS (pl = en = **3428**).
+> **Rejestr macierzysty findingów #309–#357:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
-> `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`) · `[measured]` — wykonane
+> `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
+> `dbfbbd6`) · `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
-> fazy A G2 (2026-10-02, na `2a97bfe`), którego nie ma w repo.
+> fazy A G2 (2026-10-02, na `2a97bfe`), którego nie ma w repo · `[doc: bramka G2-2]` — z relacji właściciela
+> z bramki live 2026-10-03, bez ponownego pomiaru.
 
 ---
 
@@ -50,7 +55,8 @@ naziemna się nie rozstrzygała (G1), nie było czego materializować — garniz
 | **D10** (2026-10-02) | **Wewnątrz ciała garnizon jest ROZSTAWIONY wokół kafla stolicy, jedna jednostka na heks** — nie w stosie. | Na `82c9196` (garnizon 4, morale 50, 6 szturmowców, 50 prób): rozstawienie **100 %** przejęć, mediana 15 mies.; stos na kaflu stolicy **0 %**, napastnik traci **6 z 6**, obrońca średnio **0,1** `[measured]`. Rozstawienie = spirala `_findGroundUnitSpawn` (`ColonyManager.js:1799`) `[code]`. |
 | **D11** (2026-10-02) | **Między ciałami:** stolica dostaje `ceil(limit / 2)`; reszta **po jednej jednostce na ciało**, malejąco wg `colonyDevScore`, **pełne kolonie przed placówkami**, remisy wg kolejności w `empire.colonies`; **nadwyżka wraca do stolicy**; bez kandydatów **wszystko idzie do stolicy**. Filtr `Xe`/`Nt` z D6 zostaje, choć dziś niczego nie wyklucza. | Zamyka niejednoznaczności rozmieszczenia z fazy A (nieparzysty limit, remisy, więcej ciał niż jednostek, więcej jednostek niż ciał, brak kandydatów) `[doc: raport G2-A]`. `colonyDevScore` = populacja + liczba aktywnych budynków (`src/utils/ColonyDevScore.js:28-30`) `[code]`. Placówki AI z `Xe` **i** `Nt`: fixture 10/10, uprząż 14/14 przy gy 60 `[measured]`. |
 | **D12** (2026-10-02) | **Stolica imperium AI = `DirectorProduction.capitalOf`** — pierwsza pełna kolonia z `resourceSystem` w kolejności `empire.colonies`. | `DirectorProduction.js:132-139` `[code]`; zamyka wybór z Findingu **322**. |
-| **D13** (2026-10-02) | **Bramka wojny.** Każde lądowanie jednostki naziemnej GRACZA na ciele należącym do innego imperium — kapsuły desantowe, „Wyładuj” z ładowni, away team — wymaga **wojny z właścicielem ciała**, sprawdzanej **w chwili lądowania**. Ciała niczyje i własne są zwolnione; **rozejm i pakt o nieagresji blokują**. `launchInvasion` dostaje to samo sprawdzenie. **Oba predykaty przejęcia wymagają wojny.** Źródło prawdy: **status relacji `'war'`**; zaczep mobilizacji: **`diplomacy:warDeclared`**. **Ładowanie wojsk na statki jest zawsze dozwolone.** | Findingi **317**, **337**, **338**, **339**. Status relacji: `DiplomacySystem.getStatus` (`:204`); na nim bramkuje sam `declareWar` (`:355`) `[code]`. Rekord wojny może się z nim rozjechać: `createWar` przy tym samym id zwraca istniejący rekord, także nieaktywny, bez emisji (`WarSystem.js:178-180`) `[code]`. |
+| **D13** (2026-10-02) | **Bramka wojny.** Każde lądowanie jednostki naziemnej GRACZA na ciele należącym do innego imperium — kapsuły desantowe, „Wyładuj” z ładowni, away team — wymaga **wojny z właścicielem ciała**, sprawdzanej **w chwili lądowania**. Ciała niczyje i własne są zwolnione; **rozejm i pakt o nieagresji blokują**. `launchInvasion` dostaje to samo sprawdzenie. **Oba predykaty przejęcia wymagają wojny.** Źródło prawdy: **status relacji `'war'`**; zaczep mobilizacji: **`diplomacy:warDeclared`**. **Ładowanie wojsk na statki jest zawsze dozwolone.** | Findingi **317**, **337**, **338**, **339**. Status relacji: `DiplomacySystem.getStatus` (`:204`); na nim bramkuje sam `declareWar` (`:355`) `[code]`. Rekord wojny może się z nim rozjechać: `createWar` przy tym samym id zwraca istniejący rekord, także nieaktywny, bez emisji (`WarSystem.js:178-180`) `[code]`. Wdrożone w G2-2 (`48c94dd`, §5i); dla „Wyładuj” zaostrzone przez **D13a**. |
+| **D13a** (2026-10-03) | **Jedyną drogą wojsk naziemnych na ciało innego imperium są kapsuły desantowe.** „Wyładuj” z ładowni **nigdy** nie ląduje na cudzym ciele — ani w wojnie, ani w pokoju. „Wyładuj” na własnych ciałach — bez zmian. Away team zachowuje swoją ścieżkę (dozwoloną w wojnie). Gracz widzi „Wyładuj” wyszarzony z **powodem własnym** (nowy klucz PL i EN), innym niż powód wojny. | Kapsuły (`dropTroop`) wołają `unloadGroundUnit` wewnętrznie (`Vessel.js:781` na `dbfbbd6`), więc odmowa należy do **ścieżki ładowni**, nie do tej metody: `cargoUnloadRefusal` (`WarGate.js:88`) wołane w `CargoLoadModal` przy wyszarzeniu (`:388`) i w chwili kliknięcia (`:401`) `[code]`. Klucz `fleet.reason.unloadForeignBody`. Wdrożone w `dbfbbd6` (§5i). |
 | **D14** (2026-10-02) | **Wycofanie po pokoju (projekt właściciela).** Przy podpisaniu pokoju jednostki gracza na ciałach drugiej strony dostają **flagę wycofania z terminem 6 wyświetlanych miesięcy**. Do terminu **nie ma ognia ani okupacji kafli** między byłymi wrogami na tym ciele. Jednostki, które zostaną po terminie, są **usuwane i traktowane jak polegli** (POP wg tabeli śmierci). **Wpis w Dzienniku przy pokoju i ostrzeżenie miesiąc przed terminem.** Jednostki AI na ciałach gracza są **usuwane od razu** przy podpisaniu pokoju. | Dziś przy pokoju jednostki zostają: słuchacze `diplomacy:peaceSigned` (`UIManager.js:1669`, `AlienCivSystem.js:71`, `WarSystem.js:92`) ich nie ruszają, a `CombatSystem._findContestedHexes` grupuje jednostki wyłącznie po właścicielu, bez wojny (`CombatSystem.js:152-171`) `[code]`. |
 | **D15** (2026-10-02) | **Mobilizacja raz na imperium**, przy jego **pierwszej wojnie** (flaga wewnątrz `empires.<id>`); potem tylko odrastanie strat (G3). **Zapis wczytany już w stanie wojny mobilizuje się na pierwszym ticku.** | Przy wczytaniu nie leci żadne zdarzenie wojny — emitują je wyłącznie `declareWar` i `createWar` `[code]`. `empires` jest zadeklarowanym kluczem `GameState` (`GameState.js:22`), a `restore` przywraca klucze najwyższego poziomu w całości (`:146-157`) ⇒ pole wewnątrz przeżywa zapis bez migracji `[code]`. |
 | **D16** (2026-10-02) | **Zniszczenie ciała usuwa WSZYSTKIE jednostki naziemne na nim** (rozszerza D6). | D6 mówiło tylko o jednostkach poprzedniego właściciela; przy zniszczeniu osierocone zostają także jednostki trzeciej strony. Dziś `removeColony` nie rusza żadnej (Finding **319**; pin `g2_seams_smoke` P6c) `[measured]`. |
@@ -102,7 +108,7 @@ dla tego progu tylko morale).
 | **G2-0** | piny dzisiejszych szwów, które kolejne kroki zmienią świadomie (`g2_seams_smoke`) | **317** · **318** · **319** · **323** · **324** · **336** | ✅ **2026-10-02** (`4d6ac63`, §5f) |
 | **G2-1** | **jedna wspólna funkcja „utwórz jednostkę AI z zadanym morale”** — `GroundUnitManager.createAIUnit` | **323** · **324** | ✅ **2026-10-02** (`82c9196`, §5f) |
 | **G2-K1** | **stolice na oceanie (D17):** generowanie stawia stolicę AI na kaflu, na którym da się stanąć · stare zapisy — reguła placówki w predykacie przejęcia · bliźniak AI: marsz terytorialny omija stolicę, na której nie da się stanąć | **336** ✅ | ✅ **2026-10-02** (`8ea5af3` + `44967a3`, §5g) |
-| **G2-2** | **bramka wojny (D13):** lądowanie gracza (kapsuły, „Wyładuj”, away team), `launchInvasion`, oba predykaty przejęcia | **317** · **337** · **338** · **339** | do zrobienia — **bramka w przeglądarce** |
+| **G2-2** | **bramka wojny (D13):** lądowanie gracza (kapsuły, „Wyładuj”, away team), `launchInvasion`, oba predykaty przejęcia · **D13a:** „Wyładuj” nigdy na cudzym ciele | **317** · **337** · **338** · **339** ✅ | ✅ **2026-10-03** (`6391b23` + `48c94dd` + `dbfbbd6`, §5i–§5k) |
 | **G2-3** | **mobilizacja (D15)** z rozmieszczeniem (**D10**, **D11**, **D12**), drabiną (**D9**) i stanem; usuwanie jednostek (**D6**, **D16**); stempel kafli (**318**) | **318** · **319** · **320** · **322** · **324** | do zrobienia — **bramka w przeglądarce** |
 | **G2-4** | **wycofanie po pokoju (D14)** | — | do zrobienia — **bramka w przeglądarce** |
 | **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia |
@@ -125,6 +131,11 @@ garnizonu gracza bez zwolnienia POP (**310**) to trwała utrata ludności. **Dot
 budynków AI; §5h (b)) · **344** → zarejestrowany, bez kroku (§5h (d)) · **345** → bez kroku (uśpiony) · **346** →
 obserwacja, bez kroku · **347** → bez kroku (plik krytyczny `HexGrid.js` — naprawa wymaga planu). **344** i **347**
 są istotne dla **G2-3** (rozstawienie garnizonu wokół stolicy) i **G2b** (desant AI).
+
+⚠ **Przydział findingów z sesji G2-2 (#348–#357, §6):** **350** · **351** → etap polerki UI (odpowiedzi (e) i (f),
+§5k) · **348** → **G2-4** (D14: brak ognia i okupacji w oknie wycofania) · **353** → audyt **G2-4** — **blokuje D14**
+(wycofanie po pokoju wymaga zabrania wojsk z cudzego ciała) · **354** → rodzina **329** (krok **G1c**) · **349** ·
+**352** · **355** · **356** · **357** → bez przypisanego kroku.
 
 ---
 
@@ -521,20 +532,91 @@ desantu w T6 ląduje na krawędzi bez drogi do jakiegokolwiek celu (**344**); st
 
 ---
 
-## 6. Rejestr findingów arca (#309–#347, zebrane 2026-10-02)
+## 5i. G2-2 — dostarczone (2026-10-03)
+
+| commit | zawartość | keeper |
+|---|---|---|
+| `6391b23` | **test** — siedem keeperów MECHANIKI przejęcia i desantu wypowiada wojnę w setupie (`declareWar(e.id, 'keeper_setup')`): `ai_capture_army` · `ai_capture_ledger` · `ai_capture_outpost` (+ nieaktualny nagłówek i etykieta T3 „`launchInvasion` niebramkowane” — tylko tekst) · `ai_capture_seams` · `g2_ocean_capital` (wojna PO świadkach — T2 pinuje pokój stanu wejściowego) · `invasion_player_capture` (prawdziwy `RelationsModel` ze statusem `'war'`; keeper bez `GameCore`) · `w3_ai_invasion` (te same trzy linie w `boot()`) | zielony SAM: worktree na `37c94ea` + diff = sweep **253/253, 0 FAIL**; `check-i18n` PASS `[measured]` |
+| `48c94dd` | **fix — bramka wojny (D13):** NEW `src/utils/WarGate.js` — `warGateRefusal` / `areAtWar` / `bodyOwnerOf` / `NOT_AT_WAR`. Chwila lądowania: `Vessel.unloadGroundUnit` (`Vessel.js:741`) i powód w `dropTroop` (`:778`), `VesselManager.deployAwayTeam` (`VesselManager.js:1362`, zwrotka `{ok, reason, unitId}`), `InvasionSystem.launchInvasion` (`InvasionSystem.js:102`, odmowa melduje `invasion:blocked`). Przejęcie: `_tryPlayerCapture` (`:375`) i `_tickCaptureChecks` (`:490` — kampania nie gaśnie, tylko nie przejmuje). Dostępność akcji: `send_away_team` (`FleetActions.js:510`) i `drop_troops` (`:550`, PRZED dominacją). UI: `ColonyOverlay` — wejście w tryb zrzutu (`:320`), klik zrzutu kończy tryb Z POWODEM (`:4681`; dotąd nadpisywało go „zakończono”), klik away team (`:4609`); `CargoLoadModal` — wyszarzenie z powodem. i18n `fleet.reason.notAtWar` PL+EN | NEW `g2_war_gate_smoke` (W0–W10); `g2_seams_smoke` P5 **odwrócony świadomie** (do G2-2 pinował przejęcia i desant w pokoju; każde zdanie z kontrolą w wojnie) — 31/31; sweep **254/254**, `check-i18n` 3427 `[measured]` |
+| `dbfbbd6` | **fix — D13a:** NEW `cargoUnloadRefusal` + `FOREIGN_BODY_UNLOAD` (`WarGate.js:77`, `:88`) — „Wyładuj” na ciele innego imperium odmawia zawsze, niezależnie od wojny; `CargoLoadModal` — wyszarzenie z powodem WŁASNYM (`:388`) i ponowna ocena w chwili kliknięcia (`:401`); `unloadGroundUnit` NIETKNIĘTY (wołają go kapsuły, `Vessel.js:781`) — tylko notka w komentarzu. i18n `fleet.reason.unloadForeignBody` PL+EN | `g2_war_gate_smoke`: W2b **odwrócony świadomie** (pre-approval właściciela), W9d **przepięty** (⚠ poza pre-approval — pytanie otwarte, §5k), NEW W11 (prawdziwe `showCargoLoadModal` na atrapie DOM z `env.js`) i W12 (i18n); fail-first **58 PASS / 12 FAIL** → **70/70**; sweep **254/254**, `check-i18n` 3428 `[measured]` |
+
+**Kontrakt bramki** (`src/utils/WarGate.js` na `dbfbbd6`) `[code]`:
+- `warGateRefusal(actor, planetId)` → `null` | `'not_at_war'`. Ciało niczyje (bez kolonii) i własne — zwolnione i **nie
+  pytają dyplomacji**; obce — wolno wyłącznie przy statusie relacji `'war'` (rozejm i pakt o nieagresji blokują).
+  Brak systemu dyplomacji albo rekordu relacji ⇒ „nie ma wojny” (fail-closed dla obcego ciała). Jedna funkcja dla
+  obu stron: gracz pyta `'player'`, AI — id imperium; status pary jest symetryczny.
+- `cargoUnloadRefusal(actor, planetId)` → `null` | `'foreign_body_unload'` (D13a). Ciało innego imperium — zawsze;
+  własne i niczyje — wolno. Osobna reguła ŚCIEŻKI ŁADOWNI: nie wchodzi do `warGateRefusal`, bo `unloadGroundUnit`
+  (który pyta bramkę wojny) wołają też kapsuły.
+
+**W11 — prawdziwe okno ładowni pod node** `[measured]`: `CargoLoadModal` nie importuje THREE, więc wykonuje się na
+atrapie DOM z `headless/env.js`. Przed D13a w wojnie nad kolonią AI „Wyładuj” był aktywny, w oknie nie było linii ⚠,
+a klik wysadzał jednostkę na `entity_79`; po D13a — przycisk wyszarzony, powód D13a (nie powód wojny), klik zwykły
+i wymuszony nie wysadzają jednostki; to samo w pokoju i rozejmie. Kontrole zielone po obu stronach: kapsuły w wojnie
+lądują (W11e), „Wyładuj” na własnym ciele ląduje (W11f), sama METODA `unloadGroundUnit` w wojnie ląduje (W11g — treść
+dawnego W2b, z prawdziwą etykietą).
+
+---
+
+## 5j. Bramka live G2-2 — 2026-10-03, właściciel: **PASS**
+
+Gra po angielsku; wróg testowy `emp_test_enemy` na HD-4177 b-I (`entity_12`); statek `v_30` z ładownią wojsk,
+kapsułami desantowymi i away team `[doc: bramka G2-2]`.
+
+| scena | co zrobiono | wynik |
+|---|---|---|
+| **pokój** | desant i away team wyszarzone; na ciele 0 jednostek gracza | **PASS** |
+| **chwila lądowania** | tryb zrzutu otwarty w WOJNIE, status przestawiony na pokój, klik kafla: komunikat, że potrzebna jest wojna; jednostka została w ładowni | **PASS** |
+| **wojna** | kapsuły wysadziły dwie jednostki; away team wylądował | **PASS** |
+| **rozejm** | wszystko wyszarzone poza ładowaniem wojsk i zbieraniem away team; w oknie ładowni czerwona linia „Landing requires war with the owner of this body” i „Wyładuj” wyszarzony | **PASS** |
+| **przejęcie** | łazik badawczy trzymał kafel stolicy niebronionej kolonii przez cały rozejm; przy `gameTime` 65,70 kolonia nadal należała do `emp_test_enemy` | **PASS dla 337 i 339** |
+| **strona AI** | `launchInvasion` w pokoju zwrócił `{ success:false, reason:'not_at_war' }`; w wojnie wylądowały 2 | **PASS** |
+| **konsola** | bez błędów | — |
+
+⚠ **Niepotwierdzone w przeglądarce:** przejęcie po przywróceniu wojny (kontrola „w wojnie przejmuje” stoi na keeperach:
+`g2_war_gate_smoke` W5, `g2_seams_smoke` P5a/P5c) — dopóki właściciel nie powie inaczej. **Wariant NAP nieuruchamiany**
+(pokrycie: `g2_war_gate_smoke` W0h, W3).
+⚠ **Bramka poprzedza D13a:** czerwona linia w oknie ładowni w rozejmie była jeszcze powodem WOJNY. Od `dbfbbd6` okno
+ładowni nad cudzym ciałem pokazuje powód D13a (`fleet.reason.unloadForeignBody`) w KAŻDYM stanie relacji — tego
+wariantu przeglądarka nie widziała (pokrycie: `g2_war_gate_smoke` W2b, W11).
+**Obserwacje z bramki → rejestr §6:** **353** (zabranie wojsk z cudzego ciała) · **354** (rozwiązanie „no upkeep”) ·
+**355** (opóźnienie mapy w trybie zrzutu) · **356** („undefined” w oknie ładowni) · **357** („Player Empire” na ciele
+wroga).
+
+---
+
+## 5k. Odpowiedzi właściciela z sesji G2-2 (2026-10-03)
+
+| | pytanie | odpowiedź |
+|---|---|---|
+| (a) | `w3_ai_invasion_smoke` padał po bramce wojny (jedyny FAIL sweepu) | te same trzy linie wojny w `boot()` co pozostałe keepery przejęć — `6391b23` |
+| (b) | jeden czy dwa commity G2-2 | **dwa, każdy zielony** — `6391b23` (keepery) + `48c94dd` (bramka) |
+| (c) | nieaktualny nagłówek i etykieta T3 w `ai_capture_outpost_smoke` | poprawione, **tylko tekst** — `6391b23` |
+| (d) | `WarGate` fail-closed przy braku systemu dyplomacji | **potwierdzone** |
+| (e) | ciche odmowy away team | zarejestrowane na **etap polerki UI**, bez naprawy teraz — **351** |
+| (f) | surowe slugi pozostałych odmów zrzutu | zarejestrowane na **etap polerki UI**, bez naprawy teraz — **350** |
+| D13a | poprawka 2026-10-03 | jedyną drogą wojsk na cudze ciało są kapsuły; „Wyładuj” nigdy na cudzym ciele — `dbfbbd6` (§1). **Pre-approval:** asercja W2 „„Wyładuj” działa w wojnie” zastąpiona |
+| **otwarte** | `g2_war_gate_smoke` **W9d** (pin źródłowy `CargoLoadModal`) wymagał w oknie ładowni bramki wojny i powodu wojny — D13a każe pokazać przy „Wyładuj” powód WŁASNY, więc pin został **przepięty** na bramkę ładowni i jej powód (fail-first: pada na kodzie sprzed D13a). Przepięcie **wyszło poza pre-approval** (obejmował tylko W2) | **do decyzji właściciela** — przyjąć albo wycofać jeden hunk (wtedy D13a wymaga innego kształtu okna) |
+
+---
+
+## 6. Rejestr findingów arca (#309–#357, zebrane 2026-10-02–03)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
-#336–#342 na `82c9196`, #343–#347 na `44967a3` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
+#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
 (`VESSEL_ORDERS_PLAN.md` §308; #309 był tam planowany i świadomie **nieprzydzielony**), więc ten arc zaczyna
 od **#309**; przed nadaniem #327+ sprawdzono, że w żadnym rejestrze nie ma numeru wyższego niż #325, a #326
 istniał tylko w komunikacie `c7c5a74`; przed nadaniem #336+ sprawdzono grepem wszystkie rejestry — najwyższy
-był #335; przed nadaniem #343+ — najwyższy był #342. Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
+był #335; przed nadaniem #343+ — najwyższy był #342; przed nadaniem #348+ — najwyższy był #347 (grep rejestrów,
+`CLAUDE.md` i historii commitów, 2026-10-03). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
 ⚪ obserwacja/higiena · ✅ zamknięty.
 ⚠ Źródło: **309–316** z sesji G1 · **317–325** z audytu G0 (mechanizmy przemierzone w źródle teraz;
 liczby z G0 oznaczone `[doc: raport G0]`) · **326** nadany przy podpisie zakresu G1b · **327–332** kandydaci
 sesji G1b (§5b (e)) · **333** z rekoncyliacji A0 (§5c.1 (c)) · **334–335** z obserwacji bramki G1b (§5c.2) ·
 **336–341** z fazy A G2 (§5e; liczby powtórzone na `82c9196` mają `[measured]`) · **342** z sesji G2-1 (§5f) ·
-**343–347** z sesji G2-K1 (§5g; wszystkie liczby powtórzone na `44967a3`; **347** znaleziony przy weryfikacji **344**).
+**343–347** z sesji G2-K1 (§5g; wszystkie liczby powtórzone na `44967a3`; **347** znaleziony przy weryfikacji **344**) ·
+**348–352** — „znalezione, nienaprawione” sesji G2-2 · **353–357** — obserwacje z bramki live G2-2 (§5j); wszystkie
+miejsca sprawdzone grepem na `dbfbbd6`, sondy headless 353/354 poza repo.
 
 ### ✅ 309 — salwa wroga rozstrzygana PRZED salwą gracza; zabici gracza nie odpowiadają — ZAMKNIĘTY 2026-10-02 (`c0a3d5c`, G1b/S1)
 
@@ -616,7 +698,7 @@ dla spójności (zmiana neutralna).
 ale bez `morale` (legacy gracza po uzupełnieniu przy stolicy) daje `NaN/undefined` `[code]`. Ścieżka
 wąska, w przeglądarce niesprawdzona. W G1 świadomie nietknięte (miejsce bez `??` — poza regułą D5b).
 
-### 🔴 317 — lądowanie i podbój w czasie POKOJU (→ G2 / D4)
+### ✅ 317 — lądowanie i podbój w czasie POKOJU — ZAMKNIĘTY 2026-10-03 (`48c94dd` + `dbfbbd6`, G2-2)
 
 - Desant gracza bramkuje wyłącznie dominacja orbitalna (`ColonyOverlay.js:325`, `FleetActions.js:554`,
   `:589`), a `WarSystem.playerHasOrbitalDominance` (`WarSystem.js:982-990`) przy braku kontrolera zwraca
@@ -628,6 +710,13 @@ wąska, w przeglądarce niesprawdzona. W G1 świadomie nietknięte (miejsce bez 
 - Niebroniona kolonia AI pada po 6 civY stania jednej jednostki `[doc: raport G0]`.
 
 Kierunek: D4 — lądowanie na obcym ciele wymaga wojny, garnizon materializuje się przy wypowiedzeniu (G2).
+**Zamknięcie** (na `dbfbbd6`): bramka wojny **D13** w chwili lądowania na każdej ścieżce gracza — kapsuły
+(`Vessel.js:741`/`:778`; dostępność akcji `FleetActions.js:550` PRZED dominacją), away team (`VesselManager.js:1362`),
+„Wyładuj” (od **D13a** nigdy na cudzym ciele, `CargoLoadModal.js:388`/`:401`) — oraz w `launchInvasion`
+(`InvasionSystem.js:102`) i w obu predykatach przejęcia (`:375`, `:490`) `[code]`. Źródło prawdy: status relacji
+`'war'` (`WarGate.js:68`); rozejm i NAP blokują. Keeper `g2_war_gate_smoke` W1/W3/W5/W6 (+ kontrole w wojnie),
+pin `g2_seams_smoke` P5 odwrócony świadomie `[measured]`; bramka live PASS (§5j). **Garnizon przy wypowiedzeniu
+(druga połowa D4) — G2-3.** Zostaje: okupacja i walka trwają w pokoju (**348** → G2-4).
 
 ### 🟠 318 — kafle kolonii AI mają `owner` = `null`
 
@@ -850,7 +939,7 @@ placówki (T5) `[measured]`. Fixture GATE-S4 powstał przed naprawą — „Regu
 G2-K1 jest zdobywalna regułą placówki. Zostają: **343** (martwy test dla zwykłych budynków) i **346** (jedna
 współrzędna stolic). §5g.
 
-### 🔴 337 — łazik badawczy (away team) przejmuje kolonię AI w czasie POKOJU (rozszerza 317; → G2-2)
+### ✅ 337 — łazik badawczy (away team) przejmuje kolonię AI w czasie POKOJU (rozszerza 317) — ZAMKNIĘTY 2026-10-03 (`48c94dd`, G2-2)
 
 `send_away_team` wymaga tylko orbity, statusu `idle` i modułu (`FleetActions.js:493-516`); lądowanie wybiera
 kafel bez oceanu i bez budynku (`ColonyOverlay.js:4591-4607`), a `deployAwayTeam` tworzy `science_rover`
@@ -859,22 +948,40 @@ z właścicielem gracza (`VesselManager.js:1353-1360`) — bez dominacji, bez ka
 (prawdziwe ticki, relacja `peace`): łazik przesunięty na kafel stolicy przejmuje kolonię AI w **8. civY**.
 Kontrole: łazik obok stolicy — nic przez 14 civY; z żywym garnizonem — kafel stolicy przechodzi na gracza,
 kolonia nie `[measured]`. Kierunek: **D13**.
+**Zamknięcie** (na `dbfbbd6`): `send_away_team` odmawia na ciele innego imperium bez wojny (`FleetActions.js:510`),
+`deployAwayTeam` sprawdza wojnę w chwili lądowania i zwraca powód (`VesselManager.js:1362`), a `_tryPlayerCapture`
+wymaga wojny (`InvasionSystem.js:375`) `[code]`. Keeper `g2_war_gate_smoke` W1d/W1e (odmowa w pokoju) i W5
+(łazik na stolicy AI w pokoju nie przejmuje przez 14 civY; w wojnie przejmuje) `[measured]`. Bramka live: łazik
+trzymał kafel stolicy niebronionej kolonii przez cały rozejm, kolonia została przy `emp_test_enemy`
+`[doc: bramka G2-2]`. Zostaje: sam kafel przechodzi na łazik w rozejmie (**348**).
 
-### 🟠 338 — „Wyładuj” z ładowni ląduje wojsko bez kapsuł, dominacji i wojny (→ G2-2)
+### ✅ 338 — „Wyładuj” z ładowni ląduje wojsko bez kapsuł, dominacji i wojny — ZAMKNIĘTY 2026-10-03 (`48c94dd` + `dbfbbd6`, G2-2 + D13a)
 
 Dla statku na orbicie `_getVesselColony` zwraca kolonię ciała **dowolnego właściciela**
 (`FleetManagerOverlay.js:3059`). Okno ładowni otwiera akcja `load_troops` (`:2786`) i przycisk 📦 (`:7739`),
 a „Wyładuj” woła `unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0)` (`CargoLoadModal.js:388`) —
 bez sprawdzenia kapsuł, dominacji i wojny; jednostka staje na współrzędnych heksu, z którego ją załadowano
 `[code]`. Niemierzone (DOM). Kierunek: **D13**.
+**Zamknięcie:** `48c94dd` — bramka wojny w `unloadGroundUnit` (`Vessel.js:741`) i wyszarzenie w oknie ładowni;
+`dbfbbd6` — **D13a**: „Wyładuj” na ciele innego imperium odmawia ZAWSZE, także w wojnie (`cargoUnloadRefusal`,
+`WarGate.js:88`; `CargoLoadModal.js:388` wyszarzenie z powodem własnym, `:401` ocena w chwili kliknięcia), więc
+jedyną drogą wojsk na cudze ciało są kapsuły — z dominacją i wojną `[code]`. Zmierzone na prawdziwym oknie ładowni
+pod node (W11): przed D13a w wojnie klik wysadzał jednostkę na kolonii AI, po — jednostka zostaje w ładowni
+`[measured]`. Zostaje (własne i niczyje ciała): brak sprawdzenia terenu i cel = kolonia macierzysta nad ciałem bez
+kolonii (**349**).
 
-### 🟠 339 — predykaty przejęcia nie pytają o wojnę, a żaden keeper przejęcia nie ustawia wojny (→ G2-2)
+### ✅ 339 — predykaty przejęcia nie pytają o wojnę, a żaden keeper przejęcia nie ustawia wojny — ZAMKNIĘTY 2026-10-03 (`6391b23` + `48c94dd`, G2-2)
 
 `launchInvasion` (`InvasionSystem.js:89`), `_tryPlayerCapture` (`:350`) i `_tickCaptureChecks` (`:427`) nie mają
 terminu wojny `[code]`; pin `g2_seams_smoke` P5: przejęcie przez gracza, desant AI i przejęcie przez AI w stanie
 **pokoju** `[measured]`. Sześć keeperów przejęcia i desantu (`ai_capture_army`, `ai_capture_outpost`,
 `ai_capture_seams`, `ai_capture_ledger`, `invasion_player_capture`, `startup_units_zero`) ma **zero** wywołań
 `declareWar` / `createWar` `[code: grep]` ⇒ warunek wojny z D13 przestawi je wszystkie. Kierunek: **D13**.
+**Zamknięcie:** termin wojny w `launchInvasion` (`InvasionSystem.js:102`), `_tryPlayerCapture` (`:375`)
+i `_tickCaptureChecks` (`:490`) — `48c94dd` `[code]`. Keepery mechaniki przejęcia dostały wojnę w setupie
+(`6391b23`): pięć z listy wyżej **oraz** `g2_ocean_capital` i `w3_ai_invasion` (padał jako jedyny w sweepie po
+bramce); ⚠ `startup_units_zero` wojny **nie potrzebował** — zielony bez zmian `[measured]`. Pin P5 odwrócony
+świadomie z kontrolą w wojnie przy każdym zdaniu `[measured]`.
 
 ### ⚪ 340 — `INVASION_UNIT_POOLS` nie ma kluczy archetypów żywych imperiów (→ G2b)
 
@@ -958,6 +1065,99 @@ Asymetria siedzi przy zawijaniu poziomym liczonym per rząd (`getRowWidth`, `Hex
 garnizonu po pierścieniach (**D10**) — dziedziczy kierunkowość `[code]`; poza desantem skutków nie mierzono.
 ⚠ `src/map/HexGrid.js` jest na liście plików krytycznych (`CLAUDE.md`) — naprawa wymaga planu. Bez przypisanego
 kroku; istotne dla **G2-3**.
+
+### 🟠 348 — okupacja kafli i walka naziemna trwają w POKOJU; G2-2 bramkuje tylko lądowanie i przejęcie kolonii (→ G2-4 / D14)
+
+`GroundUnitManager._tickOccupation` (`GroundUnitManager.js:616-666`) zmienia `tile.owner` — pusty kafel od razu, kafel
+z budynkiem po 6 wyświetlanych miesiącach — bez terminu wojny, a `CombatSystem._findContestedHexes`
+(`CombatSystem.js:152-171`) grupuje jednostki wyłącznie po właścicielu `[code]`. Po G2-2 jednostka, która JUŻ stoi na
+cudzym ciele, w pokoju, rozejmie i przy NAP dalej okupuje kafle (`tile:ownerChanged` → meldunek AC-9 przy kolonii
+gracza) i walczy; zamknięte jest tylko przejęcie KOLONII (`InvasionSystem.js:375`, `:490`). Bramka live: łazik trzymał
+kafel stolicy przez cały rozejm `[doc: bramka G2-2]`. Znalezione w sesji G2-2, nienaprawione. Kierunek: **D14** (G2-4) —
+okno wycofania bez ognia i okupacji, po terminie usunięcie.
+
+### 🟠 349 — „Wyładuj” bez sprawdzenia terenu; nad ciałem BEZ kolonii celem jest kolonia macierzysta (reszta 338 dla ciał własnych i niczyich)
+
+- „Wyładuj” podaje współrzędne zapamiętane przy załadunku (`unit.q ?? 0, unit.r ?? 0`, `CargoLoadModal.js:405`),
+  a `unloadGroundUnit` przypisuje je bez `isStandableTile` i bez sprawdzenia, czy kafel istnieje w siatce celu
+  (`Vessel.js:743-745`) `[code]` ⇒ na innym ciele jednostka może stanąć na oceanie albo poza siatką.
+- Statek na orbicie ciała bez kolonii: `_getVesselColony` spada na kolonię macierzystą (`FleetManagerOverlay.js:3074-3075`),
+  więc okno ładowni dostaje kolonię DOMU — „Wyładuj” stawia jednostkę na ciele domu, a lista „Załaduj” pokazuje garnizon
+  domu, gdziekolwiek statek jest (także w innym układzie) `[code]`. D13a tego nie dotyka (dom jest własny).
+Niemierzone (DOM). Znalezione w sesji G2-2, nienaprawione. Bez przypisanego kroku.
+
+### ⚪ 350 — pozostałe odmowy zrzutu pokazują surowy slug
+
+`ColonyOverlay.js:4683`: `t('drop.failed', res?.reason ?? 'unknown')` dla każdej odmowy `dropTroop` innej niż
+`not_at_war` — `invalid_args` / `no_drop_pods` / `not_loaded` (`Vessel.js:773-775`) ⇒ gracz widzi „Drop failed:
+not_loaded” `[code]`. Klasa **271**/**113**; `check-i18n` jest na to ślepy (klucz istnieje). Odpowiedź właściciela
+(f): etap polerki UI.
+
+### ⚪ 351 — ciche odmowy away team
+
+`ColonyOverlay.js:4608-4609` pokazuje powód wyłącznie dla `not_at_war`; pozostałe odmowy `deployAwayTeam` —
+`no_vessel` / `no_gum` / `create_failed` (`VesselManager.js:1357`, `:1366`, `:1378`) — kończą tryb lądowania bez słowa
+`[code]`. W tym samym bloku literał `'🤖 Away Team wylądował'` (`:4611`, klasa **113**). Odpowiedź właściciela (e):
+etap polerki UI.
+
+### ⚪ 352 — odmowa dźwigni `force_invasion` widoczna tylko w konsoli
+
+`WarOverlay → force_invasion` (`WarOverlay.js:719-733`) przy odmowie `launchInvasion` pisze wyłącznie `console.warn`
+(`:729`) — gracz nie widzi ani powodu, ani tego, że desant się nie odbył `[code]`. Od G2-2 typowym powodem jest
+`not_at_war`: rekord wojny może być aktywny przy statusie relacji innym niż `'war'` („wojna bez wojny”, **287**).
+Dźwignia debugowa, ale stoi na niej GATE 1 AI_CAPTURE. Znalezione w sesji G2-2, nienaprawione. Bez przypisanego kroku.
+
+### 🟠 353 — zabranie wojsk z cudzego ciała: UI zgłasza sukces, jednostki zostają na ziemi (blokuje D14; → audyt G2-4)
+
+Bramka live: dwa `shock_infantry` gracza na `entity_12` — po załadunku UI zgłosiło sukces, a jednostki zostały na ziemi
+`[doc: bramka G2-2]`. `loadGroundUnit` (`Vessel.js:692-718`) zmienia wyłącznie `status` (→ `'in_cargo'`),
+`transportStatus` i listę ładowni; `getUnitsOnPlanet` ukrywa jednostkę po `status === 'in_cargo'`
+(`GroundUnitManager.js:277-283`) `[code]`.
+**Kandydat mechanizmu — zmierzony headless, NIEPOTWIERDZONY na scenie bramki:** `_tickGroundUnitUpkeep` przy
+nieopłaconym utrzymaniu nadpisuje `u.status = 'offline'` każdej jednostce gracza, także w ładowni
+(`ColonyManager.js:1561`), a przy wznowieniu — `'idle'` (`:1557`) ⇒ jednostka wraca „na ziemię” (widoczna
+w `getUnitsOnPlanet`), choć nadal jest na liście ładowni. Sonda poza repo (jednostka gracza na kolonii AI z 0 Kr,
+załadowana): civY 1 — `offline`, widoczna na ciele i na liście ładowni; civY 5 — rozwiązana `[measured]`. Ten sam
+płatnik co **354**. Pełne prześledzenie → audyt **G2-4**: wycofanie po pokoju (**D14**) wymaga zabrania wojsk z cudzego
+ciała.
+
+### 🟠 354 — jednostki postawione `debug.spawnMyUnit` rozwiązane „no upkeep” po ok. pół roku (rodzina 329)
+
+Bramka live: te same dwa `shock_infantry` rozwiązane po ok. sześciu miesiącach, w Dzienniku dwa razy „Unit Shock Inf.
+disbanded (no upkeep)” `[doc: bramka G2-2]` — przy okazji potwierdzenie w przeglądarce wpisu Dziennika o rozwiązaniu
+z G1b (S3, **312**). Mechanizm `[code]`: `debug.spawnMyUnit` (`GameScene.js:1327-1335`) tworzy jednostkę ścieżką fabryki,
+która nie ustawia `homeColonyId` (zero wystąpień w `GroundUnitFactory.js`), a płatnik utrzymania to
+`u.homeColonyId ?? u.planetId` (`ColonyManager.js:1529`) ⇒ jednostce stojącej na ciele AI płaci kolonia AI.
+Zmierzone headless `[measured]`: kolonia AI z kredytami **płaci** utrzymanie jednostki gracza (1000 → 952 Kr w 12 civY);
+przy 0 Kr — `offline` w 1. civY, rozwiązanie w 5. (`UPKEEP_GRACE_CIVYEARS = 5`, `ColonyManager.js:1309`; 5 civY =
+5 wyświetlanych miesięcy — zgodne z „ok. sześciu”). Rodzina **329** (płatnik bez terminu właściciela, krok **G1c**);
+wejście z debugowego spawnu, ale ten sam fallback dotyczy każdej jednostki bez `homeColonyId`.
+
+### ⚪ 355 — mapa kolonii cudzego ciała otwiera się z dużym opóźnieniem przy wejściu w tryb zrzutu (obserwacja)
+
+Bramka live `[doc: bramka G2-2]`. Hipoteza „przyczyną jest nieudane ładowanie `_biome.png` (**345**)” — **wykluczona
+w kodzie**: `_loadBiomeMap` (`ColonyOverlay.js:5663-5687`) jest asynchroniczne (`Image` z `onload`/`onerror`),
+`onerror` jest pusty, a żadna ścieżka rysowania na nie nie czeka — wołające (`:553`, `:575`, `:595`) zwracają siatkę od
+razu `[code]`. Przyczyna niezmierzona; kandydaci do pomiaru, bez dowodu: tworzenie globusa panelu informacji (kontekst
+WebGL niszczony przy każdym zamknięciu panelu, rodzina **V-252**), generowanie siatki ciała bez siatki w cache. Bez
+przypisanego kroku.
+
+### ⚪ 356 — okno ładowni pokazuje „undefined” jako nazwę łazika badawczego
+
+`CargoLoadModal.js:328`: `const name = arc?.descriptionPL?.split('.')[0] ?? unit.archetypeId` — jednostka legacy
+(`science_rover` ze ścieżki legacy `createUnit`, bez `archetypeId`) nie ma wpisu w `UNIT_ARCHETYPES`, więc wiersz brzmi
+„undefined (x/y HP)” `[code]`; bramka live `[doc: bramka G2-2]`. Bliźniak w `ColonyOverlay.js:3339` ma dodatkowy
+fallback `?? u.type`, okno ładowni go nie ma. Archetypy dostają pierwsze zdanie `descriptionPL` — po polsku także
+w grze EN (klasa **113**). Bez przypisanego kroku.
+
+### ⚪ 357 — dymek ciała na mapie 3D pisze „Player Empire” przy KAŻDEJ kolonii, także wroga, i pokazuje jej populację
+
+`TooltipContent._planetContent` (`TooltipContent.js:147-155`): gdy ciało ma kolonię, właściciel to zawsze
+`t('tooltip.empire.player')`; komentarz `:148` „colony zawsze player (gracz zarządza własnymi koloniami)” był prawdą
+sprzed W3-1 — od W3-1 kolonie AI żyją w `ColonyManager`; kod od `670d027` (M3 P1.5) `[code]` `[git]`. Bramka live:
+ciało wroga testowego z etykietą „player empire” `[doc: bramka G2-2]`. Ten sam blok pokazuje populację kolonii (`:151-154`)
+bez mgły wojny — kanon `SystemReveal` (**188**) odsłania tożsamość właściciela od `contact`, populację od `detailed`.
+Naprawa nie jest jednolinijkowa (mgła wojny). Bez przypisanego kroku.
 
 ---
 
