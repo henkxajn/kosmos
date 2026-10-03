@@ -39,6 +39,9 @@ const WARSHIP = ['engine_ion', 'armor_standard', 'weapon_kinetic'];
 function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization' });
+  // D13 (G2-2) — przejęcie i desant na ciele innej strony wymagają WOJNY. Ten keeper testuje
+  //   mechanikę desantu, nie desant w pokoju — setup wypowiada wojnę każdemu imperium AI.
+  for (const e of window.KOSMOS.empireRegistry.listAll()) window.KOSMOS.diplomacySystem.declareWar(e.id, 'keeper_setup');
   const inv = new InvasionSystem();
   window.KOSMOS.invasionSystem = inv;
   const empireId = core.empireRegistry.listAll()[0]?.id;

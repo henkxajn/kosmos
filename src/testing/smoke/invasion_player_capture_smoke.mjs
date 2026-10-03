@@ -59,6 +59,12 @@ window.KOSMOS.galaxyData = { systems: [{ id: 'sys_home', empireId: 'empire_ai' }
 const gumUnits = {};
 window.KOSMOS.groundUnitManager = { getUnitsOnPlanet: (pid) => gumUnits[pid] ?? [] };
 window.KOSMOS.civMode = true;
+// D13 (G2-2) — przejęcie wymaga WOJNY z właścicielem kolonii. Ten keeper testuje mechanikę przejęcia,
+//   nie przejęcie w pokoju — setup ustawia prawdziwy status relacji 'war' gracz–'empire_ai'.
+const { RelationsModel } = await import('../../systems/diplomacy/RelationsModel.js');
+const relations = new RelationsModel();
+relations.setStatus('player', 'empire_ai', 'war', {}, 'keeper_setup');
+window.KOSMOS.diplomacySystem = { relations };
 
 const techMock = { isResearched: () => true };
 const cm = new ColonyManager(techMock);

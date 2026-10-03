@@ -73,6 +73,9 @@ function stampPlayerOwnership(colony) {
 function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization' });
+  // D13 (G2-2) — przejęcie i desant na ciele innej strony wymagają WOJNY. Ten keeper testuje
+  //   mechanikę przejęcia, nie przejęcie w pokoju — setup wypowiada wojnę każdemu imperium AI.
+  for (const e of window.KOSMOS.empireRegistry.listAll()) window.KOSMOS.diplomacySystem.declareWar(e.id, 'keeper_setup');
   const home = window.KOSMOS.homePlanet;
   const colony = core.colonyManager.getColony(home.id);
   stampPlayerOwnership(colony);

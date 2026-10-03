@@ -14,8 +14,9 @@
 //   T2  `ColonyManager.getPlayerColonies()` zwraca placówkę — to wspólny helper ~40 konsumentów
 //       UI/ekonomii i pomost NIGDY go nie dotykał (plan zabraniał tego wprost). Gdyby ktoś
 //       kiedyś wracał do filtrowania placówek, ma to zrobić LOKALNIE, nie tutaj.
-//   T3  `launchInvasion` ZOSTAJE niebramkowane — na tej metodzie stoi dźwignia
-//       `WarOverlay → force_invasion`, na której z kolei stoi GATE 1 tego slice'u.
+//   T3  `launchInvasion` nie ma bramek KAMPANII (dominacja, kadłub, wybór celu) — na tej metodzie
+//       stoi dźwignia `WarOverlay → force_invasion`, na której z kolei stoi GATE 1 tego slice'u.
+//       Od G2-2 (D13) ma JEDNĄ bramkę: wojnę z właścicielem ciała (setup tego pliku ją wypowiada).
 //   T4  ⚠ SEDNO AC-6: placówka Z BUDYNKIEM naprawdę PADA — pełny łańcuch marsz → okupacja →
 //       `colony_captured`, bez jednego strzału.
 //   T5  Placówka BEZ żadnego budynku nie pada — i ta sama funkcja mówi to SAMO graczowi
@@ -47,6 +48,9 @@ const DROPPER = ['engine_ion', 'armor_standard', 'weapon_kinetic', 'troop_bay_s'
 function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization' });
+  // D13 (G2-2) — przejęcie i desant na ciele innej strony wymagają WOJNY. Ten keeper testuje
+  //   mechanikę przejęcia, nie przejęcie w pokoju — setup wypowiada wojnę każdemu imperium AI.
+  for (const e of window.KOSMOS.empireRegistry.listAll()) window.KOSMOS.diplomacySystem.declareWar(e.id, 'keeper_setup');
   return { core, cm: core.colonyManager, inv: core.invasionSystem, home: window.KOSMOS.homePlanet };
 }
 
@@ -150,7 +154,7 @@ console.log('T2 — pomost NIGDY nie dotykał `getPlayerColonies` (wspólny help
 }
 
 // ── T3 — dźwignia GATE 1 musi przeżyć ───────────────────────────────────────────────────────
-console.log('T3 — `launchInvasion` NIEBRAMKOWANE (na nim stoi `WarOverlay → force_invasion`)');
+console.log('T3 — `launchInvasion` bez bramek KAMPANII (na nim stoi `WarOverlay → force_invasion`); od G2-2 jedyna bramka = wojna');
 {
   const { core, cm, inv } = boot();
   const empireId = core.empireRegistry.listAll()[0].id;

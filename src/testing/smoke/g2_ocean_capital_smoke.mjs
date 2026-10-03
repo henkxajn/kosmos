@@ -86,6 +86,9 @@ function bootstrapAiOutpost(w, empireId) {
  * stolicy, prawdziwe `time:tick`. Zwraca, czy i w którym civY kolonia przeszła na gracza.
  */
 function holdOneBuildingTile(w, col, years = 24) {
+  // D13 (G2-2) — przejęcie wymaga WOJNY z właścicielem; ten plik testuje regułę terenu, nie pokój.
+  //   Wojna wypowiadana TUTAJ, po świadkach bloków (T2 przypina „pokój” stanu wejściowego).
+  w.K.diplomacySystem.declareWar(col.ownerEmpireId, 'keeper_setup');
   const cap = capitalOf(col);
   const pick = col.grid.toArray()
     .filter(t => t && t.buildingId && !t.capitalBase && canStand(t))
