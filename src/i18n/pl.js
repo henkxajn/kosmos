@@ -1595,6 +1595,7 @@ export default {
   'fleet.reason.holdEmpty': 'Ładownia pusta',
   'fleet.reason.noOrbitalDominance': 'Brak dominacji orbitalnej',
   'fleet.reason.notAtWar': 'Lądowanie wymaga wojny z właścicielem tego ciała',
+  'fleet.reason.unloadForeignBody': 'Nie można wyładować wojsk na ciele innego imperium — tylko kapsuły desantowe',
   'fleet.reason.noStrikeBattery': 'Brak baterii ostrzału',
   'fleet.reason.noAmmo': 'Brak amunicji',
   'fleet.reason.lowFuel': 'Mało paliwa ({0}/{1} pc)',

@@ -18,6 +18,10 @@
 // ⚠ MIEJSCE: util, nie system — wołają go encja (`Vessel.js`), systemy (`VesselManager`,
 //   `InvasionSystem`), dane akcji (`FleetActions`) i UI; zero importów między systemami, odczyt
 //   przez `window.KOSMOS` (wzór `ColonyOwnership.isPlayerColonyId`).
+// ⚠ D13a (poprawka właściciela, 2026-10-03): „Wyładuj” z ładowni NIGDY nie ląduje na ciele innego
+//   imperium — ani w wojnie, ani w pokoju; jedyną drogą wojsk na cudze ciało są kapsuły desantowe.
+//   To osobna reguła ŚCIEŻKI ŁADOWNI (`cargoUnloadRefusal`), niezależna od wojny — nie wchodzi do
+//   `warGateRefusal`, bo `unloadGroundUnit` (który pyta bramkę wojny) wołają też kapsuły (`dropTroop`).
 
 import { isPlayerColony } from './ColonyOwnership.js';
 
@@ -67,4 +71,22 @@ export function warGateRefusal(actorId, planetId) {
   const actor = actorId || 'player';
   if (owner === actor) return null;                // własne ciało — zwolnione
   return areAtWar(actor, owner) ? null : NOT_AT_WAR;
+}
+
+/** Powód odmowy „Wyładuj” z ładowni na ciele innego imperium (D13a) — niezależny od wojny. */
+export const FOREIGN_BODY_UNLOAD = 'foreign_body_unload';
+
+/**
+ * D13a — czy `actorId` może WYŁADOWAĆ jednostki z ładowni („Wyładuj”) na ciele `planetId`.
+ * Ciało innego imperium: NIGDY — w wojnie i w pokoju jedyną drogą wojsk na cudze ciało są kapsuły
+ * desantowe (`dropTroop`, bramka wojny D13). Ciało własne i niczyje: dozwolone (jak dotąd).
+ * ⚠ Bramka ŚCIEŻKI ŁADOWNI (`CargoLoadModal`), nie `unloadGroundUnit` — tę metodę wołają też kapsuły.
+ * @param {string} actorId — `'player'` albo id imperium (brak ⇒ gracz)
+ * @param {string} planetId
+ * @returns {null|string} `null` = wolno; `FOREIGN_BODY_UNLOAD` = ciało innego imperium
+ */
+export function cargoUnloadRefusal(actorId, planetId) {
+  const owner = bodyOwnerOf(planetId);
+  if (!owner) return null;                         // ciało niczyje — bez zmian
+  return owner === (actorId || 'player') ? null : FOREIGN_BODY_UNLOAD;
 }

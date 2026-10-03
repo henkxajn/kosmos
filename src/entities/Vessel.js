@@ -736,6 +736,8 @@ export function unloadGroundUnit(vessel, unit, planetId, q, r) {
   //   wyłącznie w stanie wojny z jego właścicielem (ciało niczyje i własne — zwolnione). Tędy idą
   //   OBA wejścia: „Wyładuj” z ładowni (`CargoLoadModal`) i zrzut kapsułami (`dropTroop`).
   //   Odmowa niczego nie rusza — jednostka zostaje w ładowni.
+  //   ⚠ D13a: „Wyładuj” na ciele innego imperium odmawia WCZEŚNIEJ, w ścieżce ładowni
+  //   (`cargoUnloadRefusal`), także w wojnie — na cudze ciało dochodzą tutaj tylko kapsuły.
   if (warGateRefusal(unit.owner ?? 'player', planetId ?? unit.planetId)) return false;
 
   unit.planetId = planetId ?? unit.planetId;

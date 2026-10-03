@@ -11,7 +11,7 @@ import { loadCargo, unloadCargo, loadGroundUnit, unloadGroundUnit, loadOrbitalSh
 import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { t, getName } from '../i18n/i18n.js';
-import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — „Wyładuj” na ciele innego imperium
+import { cargoUnloadRefusal } from '../utils/WarGate.js';   // D13a / G2-2 — „Wyładuj” nigdy na ciele innego imperium
 
 // Ikony zasobów (wszystkie kategorie)
 const RES_ICONS = {};
@@ -381,13 +381,15 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
           empty.textContent = '(ładownia pusta)';
           loadedList.appendChild(empty);
         } else {
-          // D13 (G2-2) — wyładunek na ciele innego imperium wymaga wojny z jego właścicielem.
-          //   Przycisk wyszarzony z powodem; samą bramkę trzyma `unloadGroundUnit` (chwila lądowania).
-          const unloadBlocked = !!warGateRefusal('player', colony?.planetId ?? vessel.colonyId);
+          // D13a (G2-2, poprawka właściciela 2026-10-03) — „Wyładuj” z ładowni NIGDY nie ląduje na ciele
+          //   innego imperium, ani w wojnie, ani w pokoju: jedyną drogą wojsk na cudze ciało są kapsuły
+          //   desantowe (`dropTroop`, bramka wojny D13). Własne i niczyje ciało — bez zmian. Bramka siedzi
+          //   TUTAJ, w ścieżce ładowni — `unloadGroundUnit` wołają też kapsuły. Powód własny, nie powód wojny.
+          const unloadBlocked = !!cargoUnloadRefusal('player', colony?.planetId ?? vessel.colonyId);
           if (unloadBlocked) {
             const why = document.createElement('div');
             why.style.cssText = `font-size: 10px; color: ${THEME.danger ?? '#ff4444'}; padding: 2px 0;`;
-            why.textContent = `⚠ ${t('fleet.reason.notAtWar')}`;
+            why.textContent = `⚠ ${t('fleet.reason.unloadForeignBody')}`;
             loadedList.appendChild(why);
           }
           for (const unitId of vessel.groundUnits) {
@@ -395,8 +397,13 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
             if (!unit) continue;
             const btnUnload = _makeBtn('Wyładuj', THEME.yellow, () => {
               const planetId = colony?.planetId ?? vessel.colonyId;
+              // D13a — ocena W CHWILI kliknięcia: właściciel ciała mógł się zmienić od odświeżenia sekcji.
+              if (cargoUnloadRefusal('player', planetId)) {
+                refreshTroopSection();          // odmowa D13a — sekcja pokaże powód
+                return;
+              }
               if (!unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0)) {
-                refreshTroopSection();          // odmowa bramki — sekcja pokaże powód
+                refreshTroopSection();          // odmowa metody (bramka wojny, brak argumentów) — odśwież sekcję
                 return;
               }
               changed = true;
@@ -406,7 +413,7 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
               btnUnload.disabled = true;
               btnUnload.style.opacity = '0.3';
               btnUnload.style.cursor = 'default';
-              btnUnload.title = t('fleet.reason.notAtWar');
+              btnUnload.title = t('fleet.reason.unloadForeignBody');
             }
             loadedList.appendChild(_unitRow(unit, btnUnload));
           }

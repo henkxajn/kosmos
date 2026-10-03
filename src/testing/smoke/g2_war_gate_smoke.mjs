@@ -7,11 +7,20 @@
 // zdobywcą a właścicielem. Źródło prawdy: status relacji `'war'` (nie rekord wojny). Ładowanie wojsk
 // na statki — zawsze dozwolone. Spawny debugowe — zwolnione.
 //
+// D13a (poprawka właściciela, 2026-10-03): JEDYNĄ drogą wojsk na ciało innego imperium są kapsuły
+// desantowe. „Wyładuj” z ładowni NIGDY nie ląduje na cudzym ciele — ani w wojnie, ani w pokoju; na
+// własnym ciele bez zmian; away team zachowuje swoją ścieżkę (dozwoloną w wojnie). Bramka D13a siedzi
+// w ŚCIEŻCE ŁADOWNI (`CargoLoadModal` → `cargoUnloadRefusal`), nie w `unloadGroundUnit` — tę metodę
+// wołają też kapsuły (`dropTroop`).
+//
 //   W0  jeden predykat (`src/utils/WarGate.js`): tabela stanów — niczyje, własne, wojna, pokój, rozejm,
 //       NAP, brak rekordu relacji, strona AI, brak systemu dyplomacji (fail-closed dla obcego ciała).
 //   W1  pokój: każda ścieżka lądowania gracza na ciało AI odmawia i na ciele NIE pojawia się jednostka
 //       (przed naprawą: ląduje). Kontrola: spawn debugowy (`createUnit`) nie jest bramkowany.
-//   W2  wojna: każda ścieżka działa jak przed zmianą.
+//   W2  wojna: kapsuły i away team działają jak przed zmianą; „Wyładuj” z ładowni — odmowa (D13a).
+//       ⚠ W2b ODWRÓCONY ŚWIADOMIE w D13a (pre-approval właściciela): do D13a pinował, że „Wyładuj”
+//       ląduje w wojnie. Treść dawnego W2b (sama METODA `unloadGroundUnit` w wojnie ląduje) żyje
+//       dalej jako kontrola W11g, z prawdziwą etykietą.
 //   W3  rozejm i NAP: odmowa.
 //   W4  ciało niczyje i własne: dozwolone w pokoju.
 //   W5  pokój: jednostka gracza stojąca na kolonii AI bez obrońcy NIE przejmuje jej — szturmowiec
@@ -23,11 +32,20 @@
 //       W CHWILI LĄDOWANIA.
 //   W9  ścieżki DOM (ColonyOverlay: zrzut i away team; CargoLoadModal: „Wyładuj”) — piny źródłowe:
 //       wołają bramkę i pokazują powód przez i18n. Co pokazuje dopiero przeglądarka — w raporcie bramki.
+//       ⚠ W9d PRZEPIĘTY w D13a: okno ładowni pyta bramkę ŁADOWNI i pokazuje powód WŁASNY (D13a każe
+//       pokazać przy „Wyładuj” powód inny niż powód wojny — dawny W9d wymagał właśnie powodu wojny).
 //   W10 i18n: powód odmowy istnieje w PL i EN.
+//   W11 D13a: „Wyładuj” przez PRAWDZIWE okno ładowni (`showCargoLoadModal` na atrapie DOM z `env.js`)
+//       na ciele innego imperium — przycisk wyszarzony z powodem D13a (nie powodem wojny), klik nie
+//       wysadza jednostki: w wojnie, w pokoju i w rozejmie (przed naprawą: w wojnie ląduje).
+//       Kontrole: kapsuły w wojnie lądują; „Wyładuj” na WŁASNYM ciele ląduje; sama metoda
+//       `unloadGroundUnit` w wojnie dalej ląduje (wołają ją kapsuły). Tabela predykatu ładowni.
+//   W12 i18n: powód D13a istnieje w PL i EN i różni się od powodu wojny.
 //
-// ⚠ Ścieżki DOM (`ColonyOverlay`, `CargoLoadModal`) nie są tu wykonywane: `ColonyOverlay` nie importuje
-//   się pod node (`THREE.TextureLoader`), a modal ładowni to czysty DOM. Wykonaniem pinujemy funkcje,
-//   które one wołają (`dropTroop`, `unloadGroundUnit`, `VesselManager.deployAwayTeam`, `canExecute`).
+// ⚠ `ColonyOverlay` nie jest tu wykonywany: nie importuje się pod node (`THREE.TextureLoader`) —
+//   wykonaniem pinujemy funkcje, które woła (`dropTroop`, `VesselManager.deployAwayTeam`, `canExecute`).
+//   Okno ładowni (`CargoLoadModal`) to czysty DOM — od D13a wykonywane NAPRAWDĘ (W2b, W11), z
+//   kliknięciem prawdziwego handlera „Wyładuj”.
 // ⚠ Moduł bramki ładowany DYNAMICZNIE: przed naprawą go nie ma, a import statyczny wywróciłby cały plik
 //   i żaden pin nie dostałby koloru (lekcja „pin musi degradować, nie przerywać”).
 // ⚠ Każdy pin wykluczający ma ŚWIADKA (jednostka istnieje, jest w ładowni, ciało ma właściciela),
@@ -39,6 +57,7 @@ import EventBus from '../../core/EventBus.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import { loadGroundUnit, unloadGroundUnit, dropTroop } from '../../entities/Vessel.js';
 import { FLEET_ACTIONS } from '../../data/FleetActions.js';
+import { showCargoLoadModal } from '../../ui/CargoLoadModal.js';
 import plDict from '../../i18n/pl.js';
 import enDict from '../../i18n/en.js';
 import { readFileSync } from 'node:fs';
@@ -51,6 +70,8 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 
 const REASON_KEY = 'fleet.reason.notAtWar';
 const reasonPL = plDict[REASON_KEY] ?? null;
+const UNLOAD_KEY = 'fleet.reason.unloadForeignBody';      // D13a — powód WŁASNY „Wyładuj”
+const unloadReasonPL = plDict[UNLOAD_KEY] ?? null;
 
 // ── Harness ──────────────────────────────────────────────────────────────────────────────
 
@@ -154,6 +175,41 @@ function tryAllPaths(w, bodyId, q, r) {
   return out;
 }
 
+/**
+ * „Wyładuj” przez PRAWDZIWE okno ładowni (`showCargoLoadModal`, tryb wojsk) na atrapie DOM z
+ * `headless/env.js` (D13a). Świeży statek gracza z jednostką w ładowni, na orbicie ciała `col`; okno
+ * dostaje kolonię tego ciała — tak jak `FleetManagerOverlay._getVesselColony` dla statku na orbicie
+ * ciała z kolonią. Klik „jak w przeglądarce”: wyszarzony przycisk nie odpala handlera; `force` odpala
+ * go mimo to (handler sam ocenia W CHWILI kliknięcia — wyszarzenie z poprzedniego odświeżenia sekcji
+ * nie jest jedyną zaporą; atrapa nie egzekwuje `disabled`).
+ * ⚠ Etykieta przycisku to dziś literał `'Wyładuj'` (`CargoLoadModal`) — gdy przejdzie przez i18n,
+ *   wyszukiwanie przycisku trzeba przepiąć, inaczej `witness` padnie (głośno, nie jałowo).
+ */
+function cargoUnloadClick(w, col, { force = false } = {}) {
+  const v = playerShip(w);
+  const { u, loaded } = loadedUnit(w, v);
+  orbit(v, col.planetId);
+  const before = document.body.children.length;
+  showCargoLoadModal(v, col, { troopsOnly: true });
+  const overlay = document.body.children[before] ?? null;     // okno dokleja JEDEN overlay
+  const nodes = [];
+  const walk = (n) => { if (!n || typeof n !== 'object') return; nodes.push(n); for (const c of n.children ?? []) walk(c); };
+  walk(overlay);
+  const btn = nodes.find(n => n.tagName === 'BUTTON' && n.textContent === 'Wyładuj') ?? null;
+  const texts = nodes.map(n => n.textContent).filter(s => typeof s === 'string' && s.length > 0);
+  const disabled = btn?.disabled === true;
+  const title = btn?.title ?? '';
+  if (btn && (force || !btn.disabled)) btn.onclick();
+  return {
+    witness: loaded && !!overlay && !!btn,
+    disabled, title,
+    unloadReason: !!unloadReasonPL && texts.some(s => s.includes(unloadReasonPL)),
+    warReason:    !!reasonPL && texts.some(s => s.includes(reasonPL)),
+    landed: isOnBody(w, col.planetId, u.id),
+    inHold: u.status === 'in_cargo' && v.groundUnits.includes(u.id),
+  };
+}
+
 // ── W0 — jeden predykat ──────────────────────────────────────────────────────────────────
 {
   console.log('\nW0 — predykat bramki wojny (src/utils/WarGate.js): tabela stanów');
@@ -232,7 +288,7 @@ function tryAllPaths(w, bodyId, q, r) {
 
 // ── W2 — wojna: każda ścieżka działa jak przed zmianą ───────────────────────────────────
 {
-  console.log('\nW2 — wojna: kapsuły, „Wyładuj” i away team na ciało AI — działają');
+  console.log('\nW2 — wojna: kapsuły i away team na ciało AI — działają; „Wyładuj” z ładowni — odmowa (D13a)');
   const w = world();
   const col = w.aiFull[0];
   const emp = col.ownerEmpireId;
@@ -242,8 +298,13 @@ function tryAllPaths(w, bodyId, q, r) {
   const o = tryAllPaths(w, col.planetId, t.q, t.r);
   assert(o.dropCan?.ok === true && o.drop?.ok === true && o.dropLanded,
     `W2a: kapsuły — canExecute ok, dropTroop ok, jednostka na ciele (${JSON.stringify(o.dropCan)}, ${JSON.stringify(o.drop)})`);
-  assert(o.unload === true && o.unloadLanded,
-    `W2b: „Wyładuj” — jednostka na ciele (${o.unload})`);
+  // ⚠ W2b ODWRÓCONY ŚWIADOMIE w D13a (pre-approval właściciela, 2026-10-03): do D13a pinował, że
+  //   „Wyładuj” ląduje w wojnie. Teraz — prawdziwe okno ładowni: odmowa, jednostka zostaje w ładowni.
+  //   (`o.unload` to sama METODA `unloadGroundUnit`, wspólna z kapsułami — ta w wojnie dalej ląduje: W11g.)
+  const cw = cargoUnloadClick(w, col);
+  assert(cw.witness && cw.disabled && !cw.landed && cw.inHold,
+    `W2b (D13a): „Wyładuj” z ładowni na ciało AI w WOJNIE — przycisk wyszarzony, jednostka zostaje w ładowni ` +
+    `(wyszarzony: ${cw.disabled}, na ciele: ${cw.landed}, w ładowni: ${cw.inHold})`);
   assert(o.awayCan?.ok === true && o.awayLanded === 1 && !!o.awayTeamId,
     `W2c: away team — canExecute ok, łazik ląduje (${JSON.stringify(o.awayCan)}, +${o.awayLanded})`);
 }
@@ -456,9 +517,14 @@ function standOnCapital(war, archetypeId) {
   assert(landBlk.length > 0 && /deployAwayTeam\(/.test(landBlk) && /\.ok\s*===\s*false/.test(landBlk) && msg.test(landBlk),
     'W9c: ColonyOverlay — klik away team: odmowa deployAwayTeam pokazuje powód zamiast komunikatu o lądowaniu');
 
-  assert(/warGateRefusal\(/.test(cl) && msg.test(cl) && /unloadGroundUnit\(/.test(cl) &&
+  // ⚠ W9d PRZEPIĘTY w D13a: do D13a wymagał w oknie ładowni bramki WOJNY i powodu wojny
+  //   (`t('fleet.reason.notAtWar')`). D13a każe pokazać przy „Wyładuj” powód WŁASNY, inny niż powód
+  //   wojny — pin pyta więc o bramkę ŁADOWNI i jej powód, a powodu wojny w oknie ładowni zabrania.
+  const unloadMsg = /t\('fleet\.reason\.unloadForeignBody'\)/;
+  assert(/cargoUnloadRefusal\(/.test(cl) && unloadMsg.test(cl) && !msg.test(cl) &&
          /if\s*\(\s*!\s*unloadGroundUnit\(/.test(cl),
-    'W9d: CargoLoadModal — „Wyładuj” pyta bramkę, sprawdza wynik unloadGroundUnit i pokazuje powód');
+    'W9d (D13a): CargoLoadModal — „Wyładuj” pyta bramkę ładowni (cargoUnloadRefusal), pokazuje powód D13a ' +
+    '(nie powód wojny) i sprawdza wynik unloadGroundUnit');
   // Kontrola pinu: wycięcie komentarzy nie zjada kodu (w źródle zostaje wołanie dropTroop i deployAwayTeam).
   assert(/dropTroop\(/.test(co) && /deployAwayTeam\(/.test(co) && /unloadGroundUnit\(/.test(cl),
     'W9 kontrola pinu: po wycięciu komentarzy kod ścieżek nadal jest widoczny');
@@ -470,6 +536,98 @@ function standOnCapital(war, archetypeId) {
   const pl = plDict[REASON_KEY], en = enDict[REASON_KEY];
   assert(typeof pl === 'string' && pl.length > 0 && typeof en === 'string' && en.length > 0 && pl !== en,
     `W10: ${REASON_KEY} istnieje w PL i EN i różni się (PL „${pl ?? '—'}”, EN „${en ?? '—'}”)`);
+}
+
+// ── W11 — D13a: „Wyładuj” z ładowni nigdy nie ląduje na ciele innego imperium ───────────
+{
+  console.log('\nW11 — D13a: „Wyładuj” (prawdziwe okno ładowni) na ciele innego imperium — nigdy; kapsuły — w wojnie');
+  // W11a–c, e, g: WOJNA z właścicielem ciała.
+  {
+    const w = world();
+    const col = w.aiFull[0];
+    const emp = col.ownerEmpireId;
+    const t = landTile(col);
+    w.dipl.declareWar(emp, 'g2_2_w11');
+    assert(w.dipl.getStatus(emp) === 'war' && !!t,
+      `świadek: wojna z ${emp}, ciało ${col.planetId}, kafel lądowy (${t?.q},${t?.r})`);
+    const a = cargoUnloadClick(w, col);
+    assert(a.witness && a.disabled && a.unloadReason && !a.warReason && !!unloadReasonPL && a.title === unloadReasonPL,
+      `W11a: WOJNA — „Wyładuj” wyszarzony, w oknie powód D13a („${unloadReasonPL ?? '—'}”), NIE powód wojny ` +
+      `(wyszarzony ${a.disabled}, powód D13a ${a.unloadReason}, powód wojny ${a.warReason}, title „${a.title}”)`);
+    assert(a.witness && !a.landed && a.inHold,
+      `W11b: WOJNA — klik jak w przeglądarce nie wysadza jednostki (na ciele: ${a.landed}, w ładowni: ${a.inHold})`);
+    const f = cargoUnloadClick(w, col, { force: true });
+    assert(f.witness && !f.landed && f.inHold,
+      `W11c: WOJNA — klik mimo wyszarzenia (handler oceniany W CHWILI kliknięcia) nie wysadza jednostki ` +
+      `(na ciele: ${f.landed}, w ładowni: ${f.inHold})`);
+    // W11e kontrola: w tej samej wojnie kapsuły lądują — jedyna droga wojsk na cudze ciało.
+    const vd = playerShip(w);
+    const { u: ud, loaded: ld } = loadedUnit(w, vd);
+    orbit(vd, col.planetId);
+    const canD = canDrop(w, vd);
+    const rd = dropTroop(vd, ud, col.planetId, t.q, t.r);
+    assert(ld && canD?.ok === true && rd?.ok === true && isOnBody(w, col.planetId, ud.id),
+      `W11e kontrola: w tej samej WOJNIE kapsuły lądują (canExecute ${JSON.stringify(canD)}, dropTroop ${JSON.stringify(rd)})`);
+    // W11g kontrola: sama METODA `unloadGroundUnit` w wojnie dalej ląduje — wołają ją kapsuły, a bramka
+    //   D13a siedzi w ścieżce ładowni, nie w metodzie (treść dawnego W2b, z prawdziwą etykietą).
+    const vg = playerShip(w);
+    const { u: ug, loaded: lg } = loadedUnit(w, vg);
+    orbit(vg, col.planetId);
+    const rg = unloadGroundUnit(vg, ug, col.planetId, t.q, t.r);
+    assert(lg && rg === true && isOnBody(w, col.planetId, ug.id),
+      `W11g kontrola: unloadGroundUnit (metoda wspólna z kapsułami) w WOJNIE dalej ląduje (${rg})`);
+  }
+  // W11d: POKÓJ i ROZEJM — ten sam powód D13a (nie powód wojny), klik nie wysadza jednostki.
+  for (const mode of ['peace', 'truce']) {
+    const w = world();
+    const col = w.aiFull[0];
+    const emp = col.ownerEmpireId;
+    if (mode === 'truce') w.rel.setStatus('player', emp, 'truce', { truceUntilYear: 999 }, 'g2_2_w11');
+    const st = w.dipl.getStatus(emp);
+    const r = cargoUnloadClick(w, col, { force: true });
+    assert(st === mode && r.witness && r.disabled && r.unloadReason && !r.warReason && !r.landed && r.inHold,
+      `W11d (${mode}): „Wyładuj” wyszarzony z powodem D13a (nie powodem wojny), klik nie wysadza jednostki ` +
+      `(status ${st}, wyszarzony ${r.disabled}, powód D13a ${r.unloadReason}, powód wojny ${r.warReason}, ` +
+      `na ciele ${r.landed}, w ładowni ${r.inHold})`);
+  }
+  // W11f kontrola: „Wyładuj” na WŁASNYM ciele — przycisk aktywny, jednostka ląduje.
+  {
+    const w = world();
+    const r = cargoUnloadClick(w, w.home);
+    assert(r.witness && !r.disabled && !r.unloadReason && !r.warReason && r.landed && !r.inHold,
+      `W11f kontrola: „Wyładuj” na WŁASNYM ciele — przycisk aktywny, jednostka ląduje ` +
+      `(wyszarzony ${r.disabled}, na ciele ${r.landed}, w ładowni ${r.inHold})`);
+  }
+  // W11h: predykat ścieżki ładowni — tabela stanów (niezależny od wojny).
+  {
+    const w = world();
+    const has = !!WG && typeof WG.cargoUnloadRefusal === 'function';
+    const C = (a, p) => has ? WG.cargoUnloadRefusal(a, p) : 'BRAK';
+    const [c1] = w.aiFull;
+    const e1 = c1.ownerEmpireId;
+    const free = unownedBody(w, e1);
+    assert(has && WG.FOREIGN_BODY_UNLOAD === 'foreign_body_unload' && !!free,
+      `W11h: moduł eksportuje cargoUnloadRefusal i FOREIGN_BODY_UNLOAD (${has ? 'jest' : 'brak'}); świadek: ciało niczyje ${free?.id}`);
+    const peaceRes = C('player', c1.planetId);
+    w.dipl.declareWar(e1, 'g2_2_w11h');
+    const warRes = C('player', c1.planetId);
+    assert(peaceRes === 'foreign_body_unload' && warRes === 'foreign_body_unload' && w.dipl.getStatus(e1) === 'war',
+      `W11h: ciało innego imperium ⇒ odmowa w POKOJU i w WOJNIE (${peaceRes}, ${warRes})`);
+    assert(C('player', w.home.planetId) === null && C('player', free?.id) === null && C('player', null) === null,
+      `W11h: własne, niczyje i brak ciała ⇒ wolno (${C('player', w.home.planetId)}, ${C('player', free?.id)}, ${C('player', null)})`);
+    assert(C(e1, w.home.planetId) === 'foreign_body_unload' && C(e1, c1.planetId) === null,
+      `W11h: symetria — imperium na ciele gracza ⇒ odmowa, na własnym ⇒ wolno (${C(e1, w.home.planetId)}, ${C(e1, c1.planetId)})`);
+  }
+}
+
+// ── W12 — i18n powodu D13a ───────────────────────────────────────────────────────────────
+{
+  console.log('\nW12 — i18n: powód D13a w PL i EN, inny niż powód wojny');
+  const pl = plDict[UNLOAD_KEY], en = enDict[UNLOAD_KEY];
+  assert(typeof pl === 'string' && pl.length > 0 && typeof en === 'string' && en.length > 0 && pl !== en &&
+         pl !== plDict[REASON_KEY] && en !== enDict[REASON_KEY],
+    `W12: ${UNLOAD_KEY} istnieje w PL i EN, różni się między językami i od powodu wojny ` +
+    `(PL „${pl ?? '—'}”, EN „${en ?? '—'}”)`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
