@@ -115,6 +115,8 @@ const TRACKED_EVENTS = [
   // „wojna bez garnizonu” byłaby nie do odróżnienia od „zaczepu nikt nie podłączył” (reguła W3).
   'garrison:mobilized',
   'garrison:mobilizeSkipped',
+  // G2-3b C-S2 (D6, D16) — jednostki AI usunięte przy zmianie właściciela ciała albo jego zniszczeniu.
+  'garrison:unitsRemoved',
 ];
 
 class DebugLog {

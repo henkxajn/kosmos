@@ -17,6 +17,10 @@
 //   M5  brak wolnego heksu: nadwyżka nie powstaje (rezerwa w rekordzie flagi), nic nie stoi w stosie.
 //   M6  utworzone jednostki przeżywają 10 civY przy 0 Kr (prawdziwe utrzymanie i `SupplyCoverageSystem`),
 //       są żywymi obrońcami; desant gracza w wojnie — stolica nie przechodzi, dopóki żyje obrońca.
+//   M7  (C-S2, D6) ciało zmienia właściciela przez przejęcie, cesję i przerzut: jednostki POPRZEDNIEGO właściciela
+//       na nim znikają, inne ciała nietknięte; ślad audytu `garrison:unitsRemoved`.
+//   M8  (C-S2, D16) ciało zniszczone: nie zostaje na nim żadna jednostka imperium AI (właściciela ani trzeciej
+//       strony). ⚠ Jednostka GRACZA zostaje jak dziś — jej los to decyzja właściciela (pin „otwarte”).
 //   M10 żywy fixture GATE-S4, wypowiedziana wojna: utworzony garnizon = tabela planera (13 na imperium).
 //
 // ⚠ `GarrisonSystem` ładowany DYNAMICZNIE: przed G2-3b go nie ma, a import statyczny wywróciłby plik i żaden
@@ -313,6 +317,83 @@ function matchesPlan(units, plan, emp) {
   const tookAfter = w.K.invasionSystem._tryPlayerCapture(capCol.planetId);
   assert(tookAfter === true && !w.cm.getColony(capCol.planetId)?.ownerEmpireId,
     `M6 kontrola: po zdjęciu obrońców ta sama scena daje przejęcie (${tookAfter})`);
+}
+
+// ── M7 — zmiana właściciela: przejęcie, cesja, przerzut ─────────────────────────────────
+{
+  console.log('\nM7 — zmiana właściciela (przejęcie, cesja, przerzut): jednostki poprzedniego właściciela znikają, inne ciała nietknięte');
+  const w = boot();
+  run(w, 40 * 12);
+  const [e1, e2] = w.emps;
+  declare(w.K, e1);
+  declare(w.K, e2);
+  const on = (pid, emp) => w.gum.getUnitsOnPlanet(pid).filter(u => u.owner === emp).map(u => u.id);
+  const snap = () => new Map(w.gum.getAllUnits().map(u => [u.id, `${u.owner}@${u.planetId}`]));
+  const untouched = (before, gone) => [...before].every(([id, where]) => gone.includes(id) || snap().get(id) === where);
+  const cap1 = w.K.directorProduction.capitalOf(e1)?.planetId;
+  const cap2 = w.K.directorProduction.capitalOf(e2)?.planetId;
+  const other1 = [...new Set(aiUnits(w, e1).map(u => u.planetId))].find(p => p !== cap1);
+  const other2 = [...new Set(aiUnits(w, e2).map(u => u.planetId))].find(p => p !== cap2);
+  assert(!!cap1 && !!other1 && !!cap2 && !!other2 && on(cap1, e1).length >= 2 && on(other1, e1).length >= 1 &&
+         on(other2, e2).length >= 1 && w.cm.getColony(other2)?.isOutpost === true,
+    `świadek gy 40: ${e1} na ${cap1} (${on(cap1, e1).length}) i ${other1} (${on(other1, e1).length}); ` +
+    `${e2} na ${cap2} i placówce ${other2} (${on(other2, e2).length})`);
+
+  // (a) przejęcie przez gracza — metoda, którą kończy się desant (`captureColonyForPlayer`)
+  let before = snap();
+  const goneA = on(cap1, e1);
+  const tookA = w.cm.captureColonyForPlayer(cap1, 'ground_invasion');
+  assert(tookA === true && !w.cm.getColony(cap1)?.ownerEmpireId && on(cap1, e1).length === 0 && untouched(before, goneA),
+    `M7a: przejęcie ${cap1} przez gracza — ${goneA.length} jednostek ${e1} na nim znika, reszta (${before.size - goneA.length}) nietknięta`);
+  // (b) cesja AI → gracz — prawdziwe wykonanie warunków pokoju
+  before = snap();
+  const goneB = on(other2, e2);
+  quiet(() => w.K.diplomacySystem._executeCessions([{ bodyId: other2, toPlayer: true }]));
+  assert(!w.cm.getColony(other2)?.ownerEmpireId && goneB.length >= 1 && on(other2, e2).length === 0 && untouched(before, goneB),
+    `M7b: cesja ${other2} (${e2} → gracz) — ${goneB.length} jednostka ${e2} znika, reszta nietknięta`);
+  // (c) przerzut AI → AI (`transferColony`)
+  before = snap();
+  const goneC = on(other1, e1);
+  const tookC = w.cm.transferColony(other1, e2, 'invasion');
+  assert(tookC === true && w.cm.getColony(other1)?.ownerEmpireId === e2 && goneC.length >= 1 && on(other1, e1).length === 0 &&
+         untouched(before, goneC),
+    `M7c: przerzut ${other1} (${e1} → ${e2}) — ${goneC.length} jednostka ${e1} znika, jednostki ${e2} gdzie indziej nietknięte`);
+  const audit = debugLog.query({ kind: 'garrison:unitsRemoved' }).map(e => `${e.data?.cause}/${e.data?.via}:${e.data?.count}`);
+  const want = [`owner_change/ground_invasion:${goneA.length}`, `owner_change/cession:${goneB.length}`, `owner_change/invasion:${goneC.length}`];
+  assert(JSON.stringify(audit) === JSON.stringify(want),
+    `M7d: ślad audytu — garrison:unitsRemoved ×3 w kolejności przejęcie · cesja · przerzut (${audit.join(' · ') || '—'})`);
+}
+
+// ── M8 — zniszczenie ciała ──────────────────────────────────────────────────────────────
+{
+  console.log('\nM8 — ciało zniszczone: żadna jednostka imperium AI na nim nie zostaje');
+  const w = boot();
+  const [e1, e2] = w.emps;
+  declare(w.K, e1);
+  declare(w.K, e2);
+  const c1 = w.K.directorProduction.capitalOf(e1);
+  const c2 = w.K.directorProduction.capitalOf(e2);
+  const taken = new Set(w.gum.getUnitsOnPlanet(c1.planetId).map(u => `${u.q},${u.r}`));
+  const free = c1.grid.toArray().filter(t => isStandableTile(t) && !taken.has(`${t.q},${t.r}`));
+  // trzecia strona: jednostka e2 na ciele e1 (createAIUnit nie pyta o wojnę) + jednostka gracza
+  const third = w.gum.createAIUnit({ archetypeId: G, empireId: e2, planetId: c1.planetId, q: free[0].q, r: free[0].r, morale: 50 })?.unit;
+  const pl = w.gum.createUnit('shock_infantry', c1.planetId, free[1].q, free[1].r, { owner: 'player', factionId: 'humanity' });
+  const e2home = w.gum.getUnitsOnPlanet(c2.planetId).filter(u => u.owner === e2).map(u => u.id);
+  const aiOn1 = () => w.gum.getUnitsOnPlanet(c1.planetId).filter(u => u.owner && u.owner !== 'player');
+  assert(aiOn1().length >= 3 && !!third && !!pl && e2home.length >= 2,
+    `świadek: na ${c1.planetId} ${aiOn1().length} jednostek AI (${[...new Set(aiOn1().map(u => u.owner))].join('+')}) + jednostka gracza; ${e2} u siebie: ${e2home.length}`);
+  // `removeColony` — punkt zbieżny trzech wyzwalaczy zniszczenia (`body:collision`, `planet:ejected`, `entity:removed`)
+  w.cm.removeColony(c1.planetId, 'collision');
+  assert(!w.cm.getColony(c1.planetId) && aiOn1().length === 0,
+    `M8a: po zniszczeniu ${c1.planetId} nie zostaje ŻADNA jednostka imperium AI (${aiOn1().length}) — ani właściciela, ani trzeciej strony`);
+  assert(JSON.stringify(w.gum.getUnitsOnPlanet(c2.planetId).filter(u => u.owner === e2).map(u => u.id)) === JSON.stringify(e2home),
+    `M8b: jednostki ${e2} na jego własnym ciele nietknięte (${e2home.length})`);
+  const ev = debugLog.query({ kind: 'garrison:unitsRemoved' }).map(e => e.data).find(d => d?.planetId === c1.planetId);
+  assert(ev?.cause === 'body_destroyed' && ev?.via === 'collision' && ev?.count === 3 && JSON.stringify([...ev.owners].sort()) === JSON.stringify([e1, e2].sort()),
+    `M8c: ślad audytu — body_destroyed/collision, 3 jednostki, właściciele ${JSON.stringify(ev?.owners)}`);
+  // ⚠ OTWARTE (decyzja właściciela, raport G2-3b): jednostka GRACZA na zniszczonym ciele zostaje jak dziś.
+  assert(w.gum.getUnit(pl.id)?.planetId === c1.planetId,
+    'M8 otwarte: jednostka gracza zostaje zarejestrowana na zniszczonym ciele — dzisiejsze zachowanie, los do decyzji właściciela');
 }
 
 // ── M10 — żywy fixture GATE-S4 ─────────────────────────────────────────────────────────

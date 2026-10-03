@@ -25,9 +25,12 @@
 //       kolonii AI (`_tryPlayerCapture`), AI nie ląduje (`launchInvasion`) i nie przejmuje kolonii gracza
 //       (`_tickCaptureChecks`); każde zdanie z kontrolą w WOJNIE (Finding 317).
 //       ⚠ ODWRÓCONY ŚWIADOMIE w G2-2 — do G2-2 pinował przejęcia i desant w POKOJU.
-//   P6  `captureColonyForPlayer`, `transferColony` i `removeColony` nie ruszają jednostek naziemnych
-//       na ciele — jednostki poprzedniego właściciela zostają (Finding 319).
-//       → zmieni go: usuwanie jednostek przy zmianie właściciela/zniszczeniu (D6, G2-3).
+//   P6  zmiana właściciela / zniszczenie ciała a jednostki naziemne na nim (Finding 319).
+//       ⚠ P6a i P6c ODWRÓCONE ŚWIADOMIE w G2-3b C-S2 (zgoda właściciela 2026-10-03): do G2-3b jednostka
+//         POPRZEDNIEGO właściciela (imperium AI) zostawała na ciele po `captureColonyForPlayer` i po
+//         `removeColony`; od D6/D16 znika (`GarrisonSystem.removeOnOwnerChange` / `removeOnBodyDestroyed`).
+//       ⚠ P6b NIE odwrócony: jednostka GRACZA na ciele przekazanym AI (`transferColony`) zostaje — los jednostki
+//         gracza przy zmianie właściciela lub zniszczeniu ciała to decyzja właściciela, niepodjęta (raport G2-3b).
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwy `GameCore` z imperiami AI i stosem Directora, domyślne
 //   ziarno galaktyki — do G2-K1 stolica emp_001 stała w nim na OCEANIE; od G2-K1 obie stolice AI
@@ -262,16 +265,17 @@ function bootstrapAiOutpost(w, empireId) {
 
 // ── P6 — zmiana właściciela / zniszczenie ciała nie rusza jednostek ─────────────────────
 {
-  console.log('\nP6 — captureColonyForPlayer / transferColony / removeColony zostawiają jednostki');
+  console.log('\nP6 — captureColonyForPlayer / removeColony usuwają jednostki AI (D6, D16); transferColony zostawia jednostkę gracza');
   const w = boot();
   const col = landCapital(w);
   const emp = col?.ownerEmpireId;
   const cap = capitalOf(col);
 
   const g = w.gum.createUnit('garrison_unit', col.planetId, cap.q, cap.r, { owner: emp, factionId: emp });
+  const gBefore = w.gum.getUnit(g?.id)?.owner === emp;               // MIGAWKA sprzed przejęcia
   w.cm.captureColonyForPlayer(col.planetId, 'g2_seams');
-  assert(!w.cm.getColony(col.planetId)?.ownerEmpireId && w.gum.getUnit(g.id)?.owner === emp,
-    `P6a: po captureColonyForPlayer jednostka poprzedniego właściciela (${emp}) zostaje na ciele`);
+  assert(gBefore && !w.cm.getColony(col.planetId)?.ownerEmpireId && !w.gum.getUnit(g.id),
+    `P6a: po captureColonyForPlayer jednostka poprzedniego właściciela (${emp}) ZNIKA z ciała (D6; przed przejęciem stała: ${gBefore})`);
 
   const hcap = capitalOf(w.home);
   const p = w.gum.createUnit('shock_infantry', w.home.planetId, hcap.q, hcap.r, { owner: 'player', factionId: 'humanity' });
@@ -283,9 +287,10 @@ function bootstrapAiOutpost(w, empireId) {
   const ocap = capitalOf(other);
   const o = w.gum.createUnit('garrison_unit', other.planetId, ocap.q, ocap.r,
     { owner: other.ownerEmpireId, factionId: other.ownerEmpireId });
+  const oBefore = w.gum.getUnit(o?.id)?.planetId === other.planetId;   // MIGAWKA sprzed zniszczenia
   w.cm.removeColony(other.planetId, 'destroyed');
-  assert(!w.cm.getColony(other.planetId) && w.gum.getUnit(o.id)?.planetId === other.planetId,
-    `P6c: po removeColony jednostka zostaje zarejestrowana na ciele bez kolonii (osierocona)`);
+  assert(oBefore && !w.cm.getColony(other.planetId) && !w.gum.getUnit(o.id),
+    `P6c: po removeColony jednostka imperium AI ZNIKA z ciała (D16; przed zniszczeniem stała: ${oBefore})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

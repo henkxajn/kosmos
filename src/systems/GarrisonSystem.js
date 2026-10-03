@@ -17,6 +17,14 @@
 //   • każda wojna, w której imperium bierze udział, się liczy (`isAtWar` — dowolna para relacji `'war'`);
 //   • po wojnie jednostki zostają; drugiej mobilizacji nie ma (odrastanie strat = G3).
 //
+// C-S2 — USUWANIE (D6, D16; Finding 319): przy zmianie właściciela ciała (przejęcie przez gracza, cesja,
+// przerzut `transferColony`) znikają jednostki POPRZEDNIEGO właściciela na tym ciele; przy zniszczeniu ciała
+// (`colony:destroyed` — kolizja, wyrzucenie z układu, `entity:removed`) znikają jednostki WSZYSTKICH imperiów AI.
+//   • jednostki AI nie mają POP (`popCost` 0, G2-1), więc usunięcie to samo `removeUnit` — bez tabeli śmierci;
+//   • ⚠ jednostki GRACZA na takim ciele zostają jak dotąd — los jednostki gracza (zwrot POP? śmierć? ewakuacja?)
+//     to DECYZJA WŁAŚCICIELA, niepodjęta (raport G2-3b). Pin dzisiejszego zachowania: `g2_seams_smoke` P6b;
+//   • ładownia statku na orbicie (`in_cargo`) nie jest „na ciele” — `getUnitsOnPlanet` ją pomija.
+//
 // ⚠ Determinizm: żadnego losowania — plan jest funkcją stanu świata (D1/D9/D10/D11/D12).
 // ⚠ Jednostki AI powstają WYŁĄCZNIE przez `createAIUnit` (owner I factionId = imperium, popCost 0) —
 //   `createUnit` z samym `{ owner }` wciągałby je w utrzymanie gracza (Finding 323, pin G2-0 P2).
@@ -38,6 +46,14 @@ export class GarrisonSystem {
     this._onFirstTick   = () => this._firstTick();
     EventBus.on('diplomacy:warDeclared', this._onWarDeclared);
     EventBus.on('time:tick', this._onFirstTick);
+
+    // C-S2 — zmiana właściciela (oba emitenty to `ColonyManager`) i zniszczenie ciała.
+    EventBus.on('colony:capturedByPlayer', ({ planetId, previousOwner, reason } = {}) =>
+      this.removeOnOwnerChange(planetId, previousOwner, reason ?? 'capture'));
+    EventBus.on('colony:captured', ({ planetId, previousOwner, reason } = {}) =>
+      this.removeOnOwnerChange(planetId, previousOwner, reason ?? 'transfer'));
+    EventBus.on('colony:destroyed', ({ planetId, reason } = {}) =>
+      this.removeOnBodyDestroyed(planetId, reason ?? 'destroyed'));
   }
 
   /** Usługi gry (w grze `window.KOSMOS`). */
@@ -144,6 +160,42 @@ export class GarrisonSystem {
     reg.markGarrisonMobilized(empireId, record);
     EventBus.emit('garrison:mobilized', { empireId, ...record, perBody });
     return { ok: true, empireId, unitIds, reserve, plan };
+  }
+
+  // ── Usuwanie (D6, D16) ───────────────────────────────────────────────────────────────
+
+  /**
+   * D6 — ciało zmieniło właściciela: jednostki POPRZEDNIEGO właściciela na nim znikają (jeśli to imperium AI).
+   * Jednostki gracza zostają (decyzja właściciela niepodjęta — nagłówek). Inne ciała — nietknięte.
+   * @returns {number} ile jednostek usunięto
+   */
+  removeOnOwnerChange(planetId, previousOwner, via = 'owner_change') {
+    if (!planetId || !previousOwner || previousOwner === 'player') return 0;
+    return this._removeUnits(planetId, (u) => u.owner === previousOwner, 'owner_change', via);
+  }
+
+  /**
+   * D16 — ciało zniszczone: znikają jednostki WSZYSTKICH imperiów AI na nim. Jednostki gracza zostają
+   * (decyzja właściciela niepodjęta — nagłówek).
+   * @returns {number} ile jednostek usunięto
+   */
+  removeOnBodyDestroyed(planetId, via = 'destroyed') {
+    if (!planetId) return 0;
+    return this._removeUnits(planetId, (u) => !!u.owner && u.owner !== 'player', 'body_destroyed', via);
+  }
+
+  _removeUnits(planetId, pick, cause, via) {
+    const gum = this._K()?.groundUnitManager;
+    if (typeof gum?.getUnitsOnPlanet !== 'function') return 0;
+    const doomed = gum.getUnitsOnPlanet(planetId).filter(pick);
+    for (const u of doomed) gum.removeUnit(u.id);   // `groundUnit:removed` → ArmySystem sprząta armie
+    if (doomed.length > 0) {
+      EventBus.emit('garrison:unitsRemoved', {
+        planetId, cause, via, count: doomed.length,
+        owners: [...new Set(doomed.map(u => u.owner))], unitIds: doomed.map(u => u.id),
+      });
+    }
+    return doomed.length;
   }
 
   // ── Uzgodnienie na pierwszym ticku ───────────────────────────────────────────────────
