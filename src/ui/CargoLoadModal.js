@@ -11,6 +11,7 @@ import { loadCargo, unloadCargo, loadGroundUnit, unloadGroundUnit, loadOrbitalSh
 import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { t, getName } from '../i18n/i18n.js';
+import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — „Wyładuj” na ciele innego imperium
 
 // Ikony zasobów (wszystkie kategorie)
 const RES_ICONS = {};
@@ -380,15 +381,33 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
           empty.textContent = '(ładownia pusta)';
           loadedList.appendChild(empty);
         } else {
+          // D13 (G2-2) — wyładunek na ciele innego imperium wymaga wojny z jego właścicielem.
+          //   Przycisk wyszarzony z powodem; samą bramkę trzyma `unloadGroundUnit` (chwila lądowania).
+          const unloadBlocked = !!warGateRefusal('player', colony?.planetId ?? vessel.colonyId);
+          if (unloadBlocked) {
+            const why = document.createElement('div');
+            why.style.cssText = `font-size: 10px; color: ${THEME.danger ?? '#ff4444'}; padding: 2px 0;`;
+            why.textContent = `⚠ ${t('fleet.reason.notAtWar')}`;
+            loadedList.appendChild(why);
+          }
           for (const unitId of vessel.groundUnits) {
             const unit = gum?.getUnit(unitId);
             if (!unit) continue;
             const btnUnload = _makeBtn('Wyładuj', THEME.yellow, () => {
               const planetId = colony?.planetId ?? vessel.colonyId;
-              unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0);
+              if (!unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0)) {
+                refreshTroopSection();          // odmowa bramki — sekcja pokaże powód
+                return;
+              }
               changed = true;
               refreshTroopSection();
             });
+            if (unloadBlocked) {
+              btnUnload.disabled = true;
+              btnUnload.style.opacity = '0.3';
+              btnUnload.style.cursor = 'default';
+              btnUnload.title = t('fleet.reason.notAtWar');
+            }
             loadedList.appendChild(_unitRow(unit, btnUnload));
           }
         }

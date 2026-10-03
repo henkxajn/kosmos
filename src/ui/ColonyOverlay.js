@@ -29,6 +29,7 @@ import { anyFullBoundsModalOpen, closeFullBoundsModals } from './ColonyModalLogi
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
+import { warGateRefusal, NOT_AT_WAR } from '../utils/WarGate.js';                        // D13/G2-2 — bramka wojny przy lądowaniu
 import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
 import { showConfirmModal } from './ConfirmModal.js';
@@ -314,6 +315,9 @@ export class ColonyOverlay extends BaseOverlay {
       if (!vessel) return;
       if (!vessel.canDropTroops) { this._showFlash(t('drop.noPods')); return; }
       if ((vessel.groundUnits ?? []).length === 0) { this._showFlash(t('drop.bayEmpty')); return; }
+
+      // D13 (G2-2) — ciało innego imperium: desant tylko w stanie wojny z jego właścicielem.
+      if (warGateRefusal('player', targetId)) { this._showFlash(t('fleet.reason.notAtWar')); return; }
 
       // Dominacja orbitalna: wymagana dla wrogich celów (własne kolonie OK).
       // Wroga kolonia = ta która ma ownerEmpireId lub isTestEnemy (debug spawn).
@@ -4599,8 +4603,13 @@ export class ColonyOverlay extends BaseOverlay {
           // Deploy rovera
           const vMgr = window.KOSMOS?.vesselManager;
           if (vMgr && this._landingVesselId) {
-            vMgr.deployAwayTeam(this._landingVesselId, colony.planetId, tile.q, tile.r);
-            this._showFlash('🤖 Away Team wylądował');
+            const res = vMgr.deployAwayTeam(this._landingVesselId, colony.planetId, tile.q, tile.r);
+            // D13 (G2-2) — odmowa (brak wojny z właścicielem ciała) z powodem, nie komunikat o lądowaniu.
+            if (res?.ok === false) {
+              if (res.reason === NOT_AT_WAR) this._showFlash(t('fleet.reason.notAtWar'));
+            } else {
+              this._showFlash('🤖 Away Team wylądował');
+            }
           }
           this._landingMode = false;
           this._landingVesselId = null;
@@ -4665,8 +4674,15 @@ export class ColonyOverlay extends BaseOverlay {
         if (unit) {
           const res = dropTroop(vessel, unit, this._dropPlanetId, tile.q, tile.r);
           if (!res?.ok) {
-            this._showFlash(t('drop.failed', res?.reason ?? 'unknown'));
-            this._dropQueue = [];
+            // Odmowa kończy tryb zrzutu Z POWODEM — dotąd komunikat nadpisywało od razu
+            // `_finishDropMode(t('drop.finished'))` niżej, więc gracz widział „zakończono”.
+            // D13 (G2-2): bramka wojny sprawdzana w chwili zrzutu (właściciel ciała mógł się
+            // zmienić od wejścia w tryb zrzutu).
+            const msg = res?.reason === NOT_AT_WAR
+              ? t('fleet.reason.notAtWar')
+              : t('drop.failed', res?.reason ?? 'unknown');
+            this._finishDropMode(msg);
+            return true;
           } else if (hasHostile) {
             // Penalty HP za wrogi hex — jednostka wchodzi w bitwę osłabiona
             const beforeHp = unit.hp ?? 0;

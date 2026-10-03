@@ -1594,6 +1594,7 @@ export default {
   'fleet.reason.noDropPods': 'Brak Kapsuł Desantowych',
   'fleet.reason.holdEmpty': 'Ładownia pusta',
   'fleet.reason.noOrbitalDominance': 'Brak dominacji orbitalnej',
+  'fleet.reason.notAtWar': 'Lądowanie wymaga wojny z właścicielem tego ciała',
   'fleet.reason.noStrikeBattery': 'Brak baterii ostrzału',
   'fleet.reason.noAmmo': 'Brak amunicji',
   'fleet.reason.lowFuel': 'Mało paliwa ({0}/{1} pc)',

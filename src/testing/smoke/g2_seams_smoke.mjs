@@ -21,10 +21,10 @@
 //       ⚠ Od G2-K1 (Finding 336) generowanie nie stawia stolic AI na oceanie — P4b stoi na kolonii
 //         SKONSTRUOWANEJ (kafel stolicy przestawiony na ocean: kształt zapisu sprzed G2-K1).
 //       → zmieni go: reguła rozmieszczenia garnizonu (G2-3).
-//   P5  predykaty przejęcia i `launchInvasion` nie pytają o wojnę: w stanie POKOJU gracz przejmuje
-//       kolonię AI (`_tryPlayerCapture`), AI ląduje (`launchInvasion`) i przejmuje kolonię gracza
-//       (`_tickCaptureChecks`) (Finding 317).
-//       → zmieni go: bramka wojny D4 (G2-2).
+//   P5  predykaty przejęcia i `launchInvasion` WYMAGAJĄ WOJNY (D13): w stanie POKOJU gracz nie przejmuje
+//       kolonii AI (`_tryPlayerCapture`), AI nie ląduje (`launchInvasion`) i nie przejmuje kolonii gracza
+//       (`_tickCaptureChecks`); każde zdanie z kontrolą w WOJNIE (Finding 317).
+//       ⚠ ODWRÓCONY ŚWIADOMIE w G2-2 — do G2-2 pinował przejęcia i desant w POKOJU.
 //   P6  `captureColonyForPlayer`, `transferColony` i `removeColony` nie ruszają jednostek naziemnych
 //       na ciele — jednostki poprzedniego właściciela zostają (Finding 319).
 //       → zmieni go: usuwanie jednostek przy zmianie właściciela/zniszczeniu (D6, G2-3).
@@ -190,14 +190,18 @@ function bootstrapAiOutpost(w, empireId) {
     `odległość do najbliższego budynku ${sp && blds.length ? Math.min(...blds.map(b => hexDist(sp, b))) : '?'}`);
 }
 
-// ── P5 — przejęcia i desant AI bez terminu wojny ─────────────────────────────────────────
+// ── P5 — przejęcia i desant AI wymagają wojny (odwrócone w G2-2) ─────────────────────────
+// ⚠ PIN ODWRÓCONY ŚWIADOMIE w G2-2 (D13): do G2-2 ten blok pinował przejęcie przez gracza, desant AI
+//   i przejęcie przez AI w stanie POKOJU (Finding 317). Każde zdanie ma kontrolę — ta sama scena
+//   w WOJNIE przechodzi — więc pin mierzy wojnę, a nie „przejęcie nigdy nie działa”.
+//   Pełny dowód bramki: `g2_war_gate_smoke`.
 {
-  console.log('\nP5 — przejęcie i launchInvasion nie pytają o wojnę');
+  console.log('\nP5 — przejęcie i launchInvasion wymagają wojny (odwrócone w G2-2)');
   const w = boot();
   const inv = w.K.invasionSystem;
   const dipl = w.K.diplomacySystem;
 
-  // P5a — gracz przejmuje kolonię AI w stanie pokoju
+  // P5a — gracz NIE przejmuje kolonii AI w stanie pokoju; w wojnie przejmuje
   const col = landCapital(w);
   const emp = col?.ownerEmpireId;
   const cap = capitalOf(col);
@@ -205,27 +209,52 @@ function bootstrapAiOutpost(w, empireId) {
   cap.owner = 'player';                       // okupacja stolicy już zakończona (stan wejściowy)
   assert(st === 'peace' && w.gum.getUnitsOnPlanet(col.planetId).length === 0,
     `świadek: relacja z ${emp} = ${st}, na ciele 0 jednostek`);
-  const took = inv._tryPlayerCapture(col.planetId);
-  assert(took === true && !w.cm.getColony(col.planetId)?.ownerEmpireId && dipl.getStatus(emp) === 'peace',
-    `P5a: _tryPlayerCapture przejmuje kolonię AI w POKOJU (wynik ${took}, ` +
+  const tookPeace = inv._tryPlayerCapture(col.planetId);
+  assert(tookPeace === false && w.cm.getColony(col.planetId)?.ownerEmpireId === emp,
+    `P5a: _tryPlayerCapture w POKOJU nie przejmuje kolonii AI (wynik ${tookPeace}, ` +
     `właściciel ${w.cm.getColony(col.planetId)?.ownerEmpireId ?? 'gracz'})`);
 
-  // P5b — AI ląduje na kolonii gracza w stanie pokoju
+  // P5b — AI NIE ląduje na kolonii gracza w stanie pokoju; w wojnie ląduje
   const other = w.aiFull.find(c => c !== col)?.ownerEmpireId ?? emp;
   const st2 = dipl.getStatus(other);
+  const otherOnHome = () => w.gum.getUnitsOnPlanet(w.home.planetId).filter(u => u.owner === other).length;
+  const resPeace = inv.launchInvasion(other, w.home.planetId, 2);
+  assert(st2 === 'peace' && resPeace?.success === false && resPeace?.reason === 'not_at_war' && otherOnHome() === 0,
+    `P5b: launchInvasion w POKOJU (${st2}) odmawia (${resPeace?.reason ?? 'ok'}); jednostek ${other} na ${w.home.planetId}: ${otherOnHome()}`);
+  dipl.declareWar(other, 'g2_seams_p5');
   const res = inv.launchInvasion(other, w.home.planetId, 2);
   const landed = (res?.landed ?? []).map(id => w.gum.getUnit(id)).filter(Boolean);
-  assert(st2 === 'peace' && res?.success === true && landed.length === 2 && landed.every(u => u.owner === other),
-    `P5b: launchInvasion w POKOJU (${st2}) ląduje ${landed.length} jednostek ${other} na ${w.home.planetId}`);
+  assert(res?.success === true && landed.length === 2 && landed.every(u => u.owner === other),
+    `P5b kontrola: w WOJNIE launchInvasion ląduje ${landed.length} jednostek ${other}`);
 
-  // P5c — AI przejmuje kolonię gracza w stanie pokoju (aktywny rekord inwazji, stolica w ręku AI)
+  // P5c — AI NIE przejmuje kolonii gracza, gdy relacja nie jest wojną; w wojnie przejmuje
+  //   (aktywny rekord inwazji z P5b, stolica w ręku AI, zero jednostek gracza)
   const hcap = capitalOf(w.home);
   hcap.owner = other;
   const playerAlive = w.gum.getUnitsOnPlanet(w.home.planetId).filter(u => (u.owner ?? 'player') === 'player').length;
+  dipl.relations.setStatus('player', other, 'peace', {}, 'g2_seams_p5');
   inv._tickCaptureChecks(1);
-  assert(playerAlive === 0 && w.cm.getColony(w.home.planetId)?.ownerEmpireId === other && dipl.getStatus(other) === 'peace',
-    `P5c: _tickCaptureChecks przejmuje kolonię GRACZA w POKOJU (jednostek gracza ${playerAlive}, ` +
-    `właściciel ${w.cm.getColony(w.home.planetId)?.ownerEmpireId})`);
+  assert(playerAlive === 0 && !w.cm.getColony(w.home.planetId)?.ownerEmpireId && dipl.getStatus(other) === 'peace',
+    `P5c: _tickCaptureChecks przy POKOJU nie przejmuje kolonii GRACZA (jednostek gracza ${playerAlive}, ` +
+    `właściciel ${w.cm.getColony(w.home.planetId)?.ownerEmpireId ?? 'gracz'})`);
+  dipl.relations.setStatus('player', other, 'war', {}, 'g2_seams_p5');
+  inv._tickCaptureChecks(1);
+  assert(w.cm.getColony(w.home.planetId)?.ownerEmpireId === other,
+    `P5c kontrola: ten sam stan w WOJNIE — kolonia przechodzi na ${other} (${w.cm.getColony(w.home.planetId)?.ownerEmpireId})`);
+
+  // P5a kontrola — na ŚWIEŻYM świecie i NA KOŃCU bloku: przed naprawą próba w pokoju już przejęła
+  //   `col`, więc ta sama kolonia nie dałaby kontroli zielonej po OBU stronach; a nowy boot podmienia
+  //   `window.KOSMOS`, więc w środku bloku zepsułby świat `w` dla P5b/P5c.
+  {
+    const wk = boot();
+    const colK = landCapital(wk);
+    const empK = colK?.ownerEmpireId;
+    capitalOf(colK).owner = 'player';
+    wk.K.diplomacySystem.declareWar(empK, 'g2_seams_p5');
+    const tookWar = wk.K.invasionSystem._tryPlayerCapture(colK.planetId);
+    assert(wk.K.diplomacySystem.getStatus(empK) === 'war' && tookWar === true && !wk.cm.getColony(colK.planetId)?.ownerEmpireId,
+      `P5a kontrola: ta sama scena w WOJNIE — kolonia przechodzi na gracza (wynik ${tookWar})`);
+  }
 }
 
 // ── P6 — zmiana właściciela / zniszczenie ciała nie rusza jednostek ─────────────────────

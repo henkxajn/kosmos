@@ -47,6 +47,7 @@ import { isSameSystem, systemIdOf } from '../utils/SystemScope.js';
 import { markSystemExplored } from '../utils/SystemExploration.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
+import { warGateRefusal } from '../utils/WarGate.js';           // D13 / G2-2 — bramka wojny (away team)
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -1349,13 +1350,20 @@ export class VesselManager {
     });
   }
 
-  // Wywoływane gdy gracz wybrał hex lądowania
+  // Wywoływane gdy gracz wybrał hex lądowania.
+  // @returns {{ok:boolean, reason?:string, unitId?:string}} — odmowa niczego nie tworzy
   deployAwayTeam(vesselId, planetId, q, r) {
     const vessel = this._vessels.get(vesselId);
-    if (!vessel) return;
+    if (!vessel) return { ok: false, reason: 'no_vessel' };
+
+    // D13 (G2-2) — BRAMKA WOJNY W CHWILI LĄDOWANIA: łazik na ciele innego imperium ląduje wyłącznie
+    //   w stanie wojny z jego właścicielem (Finding 337: łazik przejmował kolonię AI w pokoju).
+    //   Ciało niczyje i własne — zwolnione.
+    const warRefusal = warGateRefusal(vessel.ownerEmpireId ?? 'player', planetId);
+    if (warRefusal) return { ok: false, reason: warRefusal };
 
     const mgr = window.KOSMOS?.groundUnitManager;
-    if (!mgr) return;
+    if (!mgr) return { ok: false, reason: 'no_gum' };
 
     const unit = mgr.createUnit('science_rover', planetId, q, r);
     if (unit) {
@@ -1365,7 +1373,9 @@ export class VesselManager {
         unitId:   unit.id,
         planetId, q, r,
       });
+      return { ok: true, unitId: unit.id };
     }
+    return { ok: false, reason: 'create_failed' };
   }
 
   _collectAwayTeam(vesselId) {

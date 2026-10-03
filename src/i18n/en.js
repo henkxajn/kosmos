@@ -1593,6 +1593,7 @@ export default {
   'fleet.reason.noDropPods': 'No Drop Pods',
   'fleet.reason.holdEmpty': 'Hold empty',
   'fleet.reason.noOrbitalDominance': 'No orbital dominance',
+  'fleet.reason.notAtWar': 'Landing requires war with the owner of this body',
   'fleet.reason.noStrikeBattery': 'No strike battery',
   'fleet.reason.noAmmo': 'No ammunition',
   'fleet.reason.lowFuel': 'Low fuel ({0}/{1} pc)',

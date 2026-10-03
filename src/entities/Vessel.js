@@ -12,6 +12,7 @@ import { HULLS } from '../data/HullsData.js';
 import { calcShipStats, getModuleCapabilities, SHIP_MODULES } from '../data/ShipModulesData.js';
 import { getNextName } from '../data/VesselNames.js';
 import { getTransportSize } from '../data/unitArchetypes.js';
+import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny w chwili lądowania
 import EntityManager from '../core/EntityManager.js';
 
 let _nextVesselId = 1;
@@ -727,9 +728,15 @@ export function loadGroundUnit(vessel, unit) {
  * @param {string} planetId
  * @param {number} q
  * @param {number} r
+ * @returns {boolean} `true` = wyładowano; `false` = brak argumentów albo odmowa bramki wojny (D13)
  */
 export function unloadGroundUnit(vessel, unit, planetId, q, r) {
   if (!vessel || !unit) return false;
+  // D13 (G2-2) — BRAMKA WOJNY W CHWILI LĄDOWANIA: na ciele innego imperium jednostka wysiada
+  //   wyłącznie w stanie wojny z jego właścicielem (ciało niczyje i własne — zwolnione). Tędy idą
+  //   OBA wejścia: „Wyładuj” z ładowni (`CargoLoadModal`) i zrzut kapsułami (`dropTroop`).
+  //   Odmowa niczego nie rusza — jednostka zostaje w ładowni.
+  if (warGateRefusal(unit.owner ?? 'player', planetId ?? unit.planetId)) return false;
 
   unit.planetId = planetId ?? unit.planetId;
   if (q != null) unit.q = q;
@@ -749,7 +756,8 @@ export function unloadGroundUnit(vessel, unit, planetId, q, r) {
 
 /**
  * Zrzut desantowy jednostki z ładowni na wrogą planetę.
- * Wymaga: canDropTroops (moduł drop_pods) + dominacji orbitalnej (sprawdza caller).
+ * Wymaga: canDropTroops (moduł drop_pods) + dominacji orbitalnej (sprawdza caller)
+ * + wojny z właścicielem ciała, jeśli należy do innego imperium (D13 — sprawdzane TUTAJ, w chwili zrzutu).
  * Garrison zostaje w trybie mobile — deploy ręczny po zrzucie (2 civY).
  *
  * @param {object} vessel
@@ -763,6 +771,10 @@ export function dropTroop(vessel, unit, planetId, q, r) {
   if (!vessel || !unit) return { ok: false, reason: 'invalid_args' };
   if (!vessel.canDropTroops) return { ok: false, reason: 'no_drop_pods' };
   if (!vessel.groundUnits?.includes(unit.id)) return { ok: false, reason: 'not_loaded' };
+  // D13 (G2-2) — powód odmowy dla wołającego (ColonyOverlay pokazuje go graczowi); samą bramkę
+  //   powtarza `unloadGroundUnit`, więc ścieżka nie ma obejścia.
+  const warRefusal = warGateRefusal(unit.owner ?? 'player', planetId);
+  if (warRefusal) return { ok: false, reason: warRefusal };
 
   unloadGroundUnit(vessel, unit, planetId, q, r);
   return { ok: true };

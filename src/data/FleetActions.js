@@ -20,6 +20,7 @@ import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canColonize } from '../entities/Vessel.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
+import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny (desant, away team)
 
 // Helper: czy statek wymaga wyrzutni (spaceport)?
 // Małe kadłuby (size === 'small') nie wymagają — mogą startować/lądować wszędzie
@@ -505,6 +506,8 @@ const ACTIONS = {
       if (!hasAT) return { ok: false, reason: t('fleet.reason.noAwayTeamModule') };
       // Nie może mieć już aktywnego away team
       if (vessel.awayTeamUnitId) return { ok: false, reason: t('fleet.reason.awayTeamDeployed') };
+      // D13 (G2-2) — ciało innego imperium: lądowanie tylko w stanie wojny z jego właścicielem.
+      if (warGateRefusal('player', vessel.position.dockedAt)) return { ok: false, reason: t('fleet.reason.notAtWar') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -542,6 +545,9 @@ const ACTIONS = {
       if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
       if (!vessel.canDropTroops) return { ok: false, reason: t('fleet.reason.noDropPods') };
       if ((vessel.groundUnits?.length ?? 0) === 0) return { ok: false, reason: t('fleet.reason.holdEmpty') };
+      // D13 (G2-2) — ciało innego imperium: desant tylko w stanie wojny z właścicielem (rozejm i pakt
+      //   o nieagresji to nie wojna). PRZED dominacją: bez wojny dominacja niczego nie otwiera.
+      if (warGateRefusal('player', vessel.position.dockedAt)) return { ok: false, reason: t('fleet.reason.notAtWar') };
       // Dominacja orbitalna wymagana dla wrogich ciał (własne kolonie OK bez bitwy).
       // Wrogie = kolonia z ownerEmpireId LUB isTestEnemy (debug spawn), lub brak kolonii w colMgr.
       const targetId = vessel.position.dockedAt;

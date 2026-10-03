@@ -12,6 +12,7 @@
 //
 // Capture (STAN FAKTYCZNY — opis poprawiony 2026-08-19, AI_CAPTURE AC-1):
 //   Raz na 1 civYear, dla każdego AKTYWNEGO rekordu inwazji (`listActive()`), jeśli:
+//     • (od G2-2, D13) agresor jest w stanie WOJNY z właścicielem ciała (`warGateRefusal`), ORAZ
 //     • kafel `capitalBase` należy do agresora (`:379-382`), ORAZ
 //     • na planecie NIE MA żywej jednostki gracza o roli `military` (`:358-362`)
 //       ⚠ `defensive`/`support`/`drone`/`civilian` NIE blokują — predykat GRACZA
@@ -27,6 +28,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { INVASION_UNIT_POOLS, isStandableTile } from '../data/GroundUnitData.js';
+import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 
 const CAPTURE_GRACE_YEARS = 3.0;
@@ -93,6 +95,15 @@ export class InvasionSystem {
     const reg = window.KOSMOS?.empireRegistry;
     const emp = reg?.get(empireId);
     if (!emp) return { success: false, reason: 'no_empire' };
+
+    // D13 (G2-2) — BRAMKA WOJNY W CHWILI LĄDOWANIA, ta sama co dla gracza: desant na ciele innej
+    //   strony wymaga wojny z jej właścicielem (status relacji `'war'`). Odmowa niczego nie tworzy
+    //   i melduje się w audycie AI (`invasion:blocked` jest w `DebugLog.TRACKED_EVENTS`).
+    const warRefusal = warGateRefusal(empireId, planetId);
+    if (warRefusal) {
+      EventBus.emit('invasion:blocked', { empireId, systemId: body.systemId ?? null, planetId, reason: warRefusal });
+      return { success: false, reason: warRefusal };
+    }
 
     const gum = window.KOSMOS?.groundUnitManager;
     if (!gum) return { success: false, reason: 'no_gum' };
@@ -243,8 +254,9 @@ export class InvasionSystem {
     //    celem — pomost byłby już tylko blokadą mechaniki, którą właśnie odblokowaliśmy.
     //    ⚠ Gdyby ktoś kiedyś przywracał filtr: MUSI siedzieć TUTAJ, lokalnie.
     //      `ColonyManager.getPlayerColonies` to wspólny helper ~40 konsumentów UI/ekonomii.
-    //    ⚠ `launchInvasion` ZOSTAJE NIEBRAMKOWANE — to metoda intencji, z której korzysta
-    //      dźwignia `WarOverlay → force_invasion` (GATE 1 tego slice'u stoi na niej wprost).
+    //    ⚠ `launchInvasion` nie ma bramek KAMPANII (dominacja, kadłub, cel) — to metoda intencji,
+    //      z której korzysta dźwignia `WarOverlay → force_invasion` (GATE 1 tego slice'u stoi na niej
+    //      wprost). Od G2-2 (D13) ma JEDNĄ bramkę: wojnę z właścicielem ciała (`warGateRefusal`).
     const colMgr = window.KOSMOS?.colonyManager;
     const targets = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
       EntityManager.get(c.planetId)?.systemId === systemId);
@@ -343,6 +355,7 @@ export class InvasionSystem {
   }
 
   // Warunek podboju ciała AI przez gracza (jedno źródło prawdy dla eventu i skanu):
+  //   • gracz jest w stanie WOJNY z właścicielem kolonii (D13, G2-2; rozejm i NAP to nie wojna), ORAZ
   //   • brak żywych wrogich jednostek naziemnych, ORAZ
   //   • kolonia MA stolicę, na której da się stanąć → gracz jest właścicielem hexa capitalBase
   //   • kolonia NIE ma stolicy (outpost) ALBO stolica stoi tam, gdzie nie da się stanąć
@@ -357,6 +370,9 @@ export class InvasionSystem {
     if (!colony) return false;
     // Już nasza (lub nie należy do imperium) — nic do przejęcia
     if (!colony.ownerEmpireId || colony.ownerEmpireId === 'player') return false;
+
+    // D13 (G2-2) — przejęcie wymaga WOJNY z właścicielem kolonii (Findingi 317, 337, 339).
+    if (warGateRefusal('player', planetId)) return false;
 
     // Muszą zginąć wszyscy wrodzy obrońcy naziemni — JEDEN predykat dla obu kierunków (D3=W3).
     if (InvasionSystem.hasLivingDefender(gum.getUnitsOnPlanet(planetId), 'player')) return false;
@@ -468,6 +484,10 @@ export class InvasionSystem {
       const colony = colMgr.getColony(inv.planetId);
       const grid = colony?.grid;
       if (!grid) continue;
+
+      // D13 (G2-2) — przejęcie wymaga WOJNY agresora z OBECNYM właścicielem ciała (Finding 339).
+      //   Kampania nie gaśnie: bez wojny tylko nie przejmuje (wycofanie po pokoju to D14, G2-4).
+      if (warGateRefusal(inv.aggressor, inv.planetId)) continue;
 
       if (InvasionSystem.holdsDecisiveGround(grid.toArray(), inv.aggressor)
           && !InvasionSystem.hasLivingDefender(units, inv.aggressor)) {
