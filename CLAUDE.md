@@ -5664,7 +5664,7 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03)
 
 Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#357**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
@@ -5769,5 +5769,25 @@ tworzy; odczyt `KOSMOS.debug.garrisonPlan()`. **D9 po rewizji 2026-10-03** (suma
 `rocket_artillery` · 20+ → jw. × 1,25. Plan fixture'u GATE-S4: limit 13, stolica 7 (2× artyleria), po jednej na sześciu
 ciałach. ⚠ **Kotwica:** stolica tylko wtedy, gdy da się na niej stanąć; inaczej — i dla placówki — pierwszy kafel z budynkiem,
 na którym da się stanąć (odpowiedź (d)). Keeper `g2_planner_smoke` **77/77**; sweep **255/255**.
-**Dalej:** G2-3b (mobilizacja) → G2-4 (wycofanie po pokoju) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 ·
-329, teraz także 354; kierunek 333/330 podpisany 2026-10-02).
+✅ **G2-3b — mobilizacja** (`6fc2c8d` C-S1 · `24beea4` C-S2 · `2437725` C-S3; live-gate właściciela PASS 2026-10-03, plan
+§5n–§5p). NEW `src/systems/GarrisonSystem.js` (`window.KOSMOS.garrisonSystem`) wykonuje plan G2-3a **wyłącznie** przez
+`createAIUnit`: zaczep `diplomacy:warDeclared`, **raz na imperium** (flaga `empires.<id>.garrison` — `EmpireRegistry`
+`isGarrisonMobilized` / `markGarrisonMobilized`; v101 bez migracji), zapis wczytany już w wojnie mobilizuje się na
+**pierwszym ticku** (`reconcile`); imperium bez pełnej kolonii — nic i bez flagi; brak wolnego heksu — rezerwa, nigdy stos.
+C-S2: przy zmianie właściciela ciała znikają jednostki POPRZEDNIEGO właściciela-AI, przy zniszczeniu — wszystkich imperiów
+AI (D6/D16, **319**); **jednostki gracza zostają** (→ **358**, G2-4). C-S3: NEW `src/utils/TileOwnership.js` —
+`stampUnownedTiles`: kafle kolonii AI niosą id imperium od bootstrapu i od pierwszego ticku w starych zapisach (**318**).
+Odczyt: `KOSMOS.garrisonSystem.listUnits('emp_…')`; audyt `garrison:mobilized` / `mobilizeSkipped` / `unitsRemoved`
+w `DebugLog.TRACKED_EVENTS`.
+⚠ **Keeper przejęcia, który potrzebuje NIEBRONIONEJ kolonii AI w wojnie, wyłącza mobilizację w setupie**
+(`garrisonSystem.enabled = false`; pole instancji tylko dla keeperów — odpowiedź (a), §5p; w grze zawsze `true`).
+⚠ **Stempel kafli ma skutek dla okupacji:** obrońca AI na własnym kaflu nie resetuje już licznika gracza — licznik biegnie
+mimo żywego obrońcy (**359**, → G2-4 R2).
+Keeper `g2_mobilisation_smoke` **56/56** · `g2_seams_smoke` **31/31** (P6a/P6c i P3a/P3b odwrócone świadomie, P6b nie);
+sweep **256/256**. Nowe findingi **358–362**: 🟠 **358** los jednostki gracza na ciele zniszczonym albo oddanym AI · 🟠 **359**
+licznik okupacji przy żywym wrogu · ⚪ **360** imperium bez pełnej kolonii mobilizuje się dopiero przy następnej wojnie
+albo wczytaniu (→ G3: uzgadnianie co rok) · ⚪ **361** martwe `rocket_artillery.terrainModifiers` · ⚪ **362** kopia
+przedimportowa nie mieści się przy dużym zapisie (fixture GATE-S4 2,09 mln znaków; limit ok. 5,24 mln na wszystkie klucze);
+**345**/**355** rozszerzone o widoczny `GET 404` na `_biome.png`. **Zakres G2-4 (R1–R7) podpisany 2026-10-03** — plan §5p.
+**Dalej:** G2-4 (wycofanie po pokoju, R1–R7) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329, z 354 poza
+płatnikiem jednostki gracza; kierunek 333/330 podpisany 2026-10-02).

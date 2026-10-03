@@ -338,6 +338,21 @@
 > jednostce na sześciu innych ciałach — `AI_GARRISON_PLAN.md` §5l.
 > • Odpowiedzi właściciela (a)–(g) — `AI_GARRISON_PLAN.md` §5m; **otwarte pytanie W9d zamknięte** (przepięcie zostaje).
 > • Bez nowych findingów.
+>
+> **Aktualizacja 2026-10-03 (noc) — AI GARRISON: G2-3b ZAMKNIĘTY (mobilizacja garnizonów AI + usuwanie jednostek AI
+> + stempel kafli).** Sweep: **256/256 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3428** · save **v101 bez migracji**.
+> • ✅ **318** (`2437725`) · **319** dla jednostek imperiów AI (`24beea4`; jednostki gracza → **358**) · **324** w zakresie D6
+> (`6fc2c8d`) — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze zdjęte z A6/A8. Mobilizacja (D15):
+> `6fc2c8d`. Bramka live właściciela PASS (`AI_GARRISON_PLAN.md` §5o).
+> • **NOWE: #358–#362** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 **358** (los jednostki gracza na ciele zniszczonym albo
+> oddanym AI → G2-4: R3/R7), **359** (licznik okupacji biegnie przy żywym wrogu → G2-4: R2) · ⚪ **360** (imperium bez pełnej
+> kolonii mobilizuje się dopiero przy następnej wojnie albo wczytaniu → G3: uzgadnianie co rok), **361** (martwe pole
+> `rocket_artillery.terrainModifiers`), **362** (kopia przedimportowa nie mieści się przy dużym zapisie — tylko
+> `console.warn`; pomiar: uprząż 0,97 mln znaków przy gy 60–100, fixture GATE-S4 2,09 mln; limit ok. 5,24 mln znaków na
+> wszystkie klucze).
+> • Rozszerzone bez nowego numeru: **345** / **355** (widoczny `GET 404` na `_biome.png` przy każdym otwarciu mapy kolonii).
+> • **Zakres G2-4 (R1–R7) podpisany 2026-10-03** — `AI_GARRISON_PLAN.md` §5p; **354** wchodzi do G2-4 w zakresie płatnika
+> jednostki gracza (R6), reszta rodziny **329** zostaje w G1c.
 
 
 ---
@@ -528,6 +543,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
 | **348** | 🟠 | okupacja kafli i walka naziemna trwają w **POKOJU** — `_tickOccupation` (`GroundUnitManager.js:616-666`) i `_findContestedHexes` (`CombatSystem.js:152-171`) nie mają terminu wojny; G2-2 zamknął tylko lądowanie i przejęcie KOLONII ⇒ → **G2-4** (D14). `AI_GARRISON_PLAN.md` §6 |
 | **353** | 🟠 | zabranie wojsk z cudzego ciała: UI zgłasza sukces, jednostki zostają na ziemi (bramka live G2-2) — kandydat zmierzony headless: utrzymanie nadpisuje `status` z `in_cargo` na `offline` (`ColonyManager.js:1561`) ⇒ **blokuje D14**, prześledzić w audycie **G2-4**. `AI_GARRISON_PLAN.md` §6 |
+| **359** | 🟠 | licznik okupacji biegnie na heksie, na którym stoi żywy wróg — `_tickOccupation` (`GroundUnitManager.js:616-665`) nie pyta o sporny heks; stempel **318** wyrównał kolonie AI do kolonii gracza (kafel stolicy z obrońcą: przed — nie przez 12 civY, po — 7. civY) ⇒ → **G2-4** (R2: licznik stoi, dla obu stron). `AI_GARRISON_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -546,11 +562,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **127o** | ⬜ | backlog: lazy-init loadera w `PlanetTextureUtils:16` odblokowałby `ColonyOverlay` pod node | **największa luka testowa repo** |
 | **128o** | 🟠 | cztery wejścia nawigacyjne wołają `switchActiveColony` wprost — bezpieczne **przez odmowę**, ale żadne nie oferuje **stanu neutralnego** | stąd UX z GATE OG-3 §3 |
 | **72 · 73 · 84 · 85 · 91 · 92 · 93 · 94** | ⚪ | filed przy audycie własności; po D1-D6 prawdopodobnie **latentne albo higiena** | ⚠ **nie weryfikowane po kolei** |
-| **318** | 🟠 | kafle kolonii AI mają `owner = null` — stempel daje dopiero otwarcie mapy w `ColonyOverlay.js:584-588` | rodzina **54**/**58**; czytane przez okupację i przejęcie (G2). `AI_GARRISON_PLAN.md` §6 |
-| **319** | 🟠 | jednostki naziemne **osierocone** przy zniszczeniu ciała i **nietknięte** przez `transferColony`/`captureColonyForPlayer` | rozszerza **59**; decyzja **D6** (G2) |
 | **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
-| **354** | 🟠 | płatnik utrzymania jednostki bez `homeColonyId` = kolonia CIAŁA (`ColonyManager.js:1529`) ⇒ kolonia AI **płaci** za jednostkę gracza (zmierzone 1000 → 952 Kr w 12 civY) albo, bez kredytów, rozwiązuje ją w 5. civY (bramka: dwa „disbanded (no upkeep)” po `debug.spawnMyUnit`) | rodzina **329** (krok G1c) |
+| **354** | 🟠 | płatnik utrzymania jednostki bez `homeColonyId` = kolonia CIAŁA (`ColonyManager.js:1529`) ⇒ kolonia AI **płaci** za jednostkę gracza (zmierzone 1000 → 952 Kr w 12 civY) albo, bez kredytów, rozwiązuje ją w 5. civY (bramka: dwa „disbanded (no upkeep)” po `debug.spawnMyUnit`) | płatnik jednostki gracza → **G2-4** (R6, podpis 2026-10-03); reszta rodziny **329** → G1c |
 | **357** | ⚪ | dymek ciała na mapie 3D: „Player Empire” przy KAŻDEJ kolonii, także wroga, i jej populacja bez mgły wojny (`TooltipContent.js:147-155`, od `670d027`) | naprawa przez kanon `SystemReveal` (**188**), nie jednolinijkowiec |
+| **358** | 🟠 | los jednostki GRACZA na ciele zniszczonym albo oddanym AI — `GarrisonSystem` usuwa tylko jednostki AI (`GarrisonSystem.js:179`, `:190`): na zniszczonym ciele jednostka zostaje (dom płaci utrzymanie, 4 POP zablokowane na zawsze), po cesji gracz→AI odbija kafle w rozejmie, a płaci kolonia już AI | reszta **319**; decyzja właściciela 2026-10-03 → **G2-4** (R3 — flaga wycofania, R7 — usunięcie z pełnym zwrotem POP) |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -629,7 +644,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **321** | 🟠 | wydobycie kopalń (`receive` wprost, `BuildingSystem.js:2598`) niewidoczne dla `getPerYear`/`getGrossPerYear` | powód D1/D3; wpływ na UI niezmierzony |
 | **322** | ⚪ | trzy definicje stolicy AI: `capitalOf`, bliźniaczy `_pickCapital`, statyczne `homeSystemId` | wybrać jedno źródło przed G2 |
 | **323** | 🟠 | `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` wciąga jednostkę AI do utrzymania i limitu GRACZA (`ColonyManager.js:1372`, `:1515`, `:1528`) | rozszerza **60**; zmierzone (pin G2-0 P2): z samym `{ owner }` przy 0 Kr `offline` w 1. civY, rozwiązana w 5.; nowe wywołania przez `createAIUnit` (G2-1, `82c9196`), `InvasionSystem.js:130` → G2b |
-| **324** | ⚪ | świeży `garrison_unit` = `mobile` (`dmg 0`), odtworzenie bez pola = `deployed` | **D6**: garnizon AI `deployed` od utworzenia |
 | **325** | ⚪ | żaden archetyp AI nie bada technologii morale (ani `ground_warfare`); bonusy przy rekrutacji i tak czytają drzewo GRACZA | rodzina **185**; zastąpione przez **D7** |
 | **340** | ⚪ | `INVASION_UNIT_POOLS` (`GroundUnitData.js:97`) nie ma kluczy `industrialist` / `expansionist` ⇒ desant bez ładunku zawsze `['infantry','infantry']` (`InvasionSystem.js:112`) | → **G2b** (D7) |
 | **341** | ⚪ | uprząż headless: POP imperiów AI przy gy 60 2,2–3,1× niższy niż w fixture GATE-S4 (limit 3–5 wobec 11); przyczyna nieznana, ziarnistość ticka wykluczona | instrument ⇒ **D18** (kalibracja na fixture) |
@@ -637,6 +651,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **344** | 🟠 | desant AI ląduje na krawędzi **bez drogi do stolicy** — `_findLandingHexes` (`InvasionSystem.js:500`) nie sprawdza osiągalności; 33 z 486 kafli strefy na koloniach AI (czapa polarna odcięta oceanem albo asymetria **347**), 0 z 249 na koloniach gracza | bez kroku; istotne dla G2-3 i G2b |
 | **346** | ⚪ | stolice AI na jednej współrzędnej (−1,2) — remis punktacji, wygrywa pierwszy kafel rzędu 2; w fixture 5 z 11 na `ice_sheet` | obserwacja; rodzina **322** |
 | **349** | 🟠 | „Wyładuj” bez sprawdzenia terenu (`CargoLoadModal.js:405` → `Vessel.js:743-745`); nad ciałem BEZ kolonii celem jest kolonia MACIERZYSTA (`FleetManagerOverlay.js:3074-3075`) — reszta **338** dla ciał własnych i niczyich | niemierzone (DOM); bez kroku |
+| **360** | ⚪ | imperium bez pełnej kolonii w chwili wybuchu wojny mobilizuje się dopiero przy następnej wojnie albo wczytaniu — `no_capital` bez flagi (`GarrisonSystem.js:128-133`), uzgodnienie tylko na pierwszym ticku (`:209-214`) | → **G3**: uzgadnianie co rok (odpowiedź właściciela 2026-10-03) |
+| **361** | ⚪ | martwe pole `rocket_artillery.terrainModifiers` (`unitArchetypes.js:72`, `mountains: Infinity`) — zero czytelników; planer stawia artylerię na górach (fixture GATE-S4: emp_001 heks (0,2)) | bez kroku |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -650,12 +666,13 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **331** | ⚪ | walka naziemna **AI-vs-AI**: zero ognia (strony nie-graczy scalone, `CombatSystem.js:188-194`, `:295`), a `GameScene.js:5473` / `:5487` loguje graczowi „bitwę” i pokazuje raport | dawny wiersz „niezweryfikowane”: mechanizm potwierdzony w kodzie, osiągalność niezmierzona (**D5**) |
 | **334** | ⚪ | karta jednostki w `ColonyOverlay`: polskie literały (statusy `:2660-2667`, przyciski `:2858`/`:2880`, flash `:5449`) i surowe id w tytule (`unit.type.toUpperCase()`, `:2641`) — klasa **113**, `check-i18n` ślepy | obserwacja z bramki G1b (ekran mieszał EN i PL) |
 | **342** | ⚪ | `homeColonyId: null` jednostki AI wraca z zapisu jako id ciała (`GroundUnitManager.js:1459`, `:1522`) | dziś nieszkodliwe (`_ownedHomeColony` sprawdza właściciela, `popCost` 0); `null` zostaje decyzją właściciela |
-| **345** | ⚪ | **uśpiony** nadpis `tile.type` z `_biome.png` w `ColonyOverlay._applyBiomeMap` — na siatce współdzielonej z silnikiem zmieniałby teren od samego otwarcia mapy; plików 0 na 216 | uzbraja się przy generowaniu tekstur z `--biome-map` / `--all-maps` |
+| **345** | ⚪ | **uśpiony** nadpis `tile.type` z `_biome.png` w `ColonyOverlay._applyBiomeMap` — na siatce współdzielonej z silnikiem zmieniałby teren od samego otwarcia mapy; plików 0 na 216 | uzbraja się przy generowaniu tekstur z `--biome-map` / `--all-maps`; **widoczny `GET 404`** przy każdym otwarciu mapy kolonii (bramka G2-3b) |
 | **350** | ⚪ | pozostałe odmowy zrzutu pokazują surowy slug — `t('drop.failed', reason)` (`ColonyOverlay.js:4683`) | klasa **271**/**113**; etap polerki UI (odpowiedź właściciela G2-2 (f)) |
 | **351** | ⚪ | ciche odmowy away team — powód tylko dla `not_at_war` (`ColonyOverlay.js:4608-4609`); `no_vessel` / `no_gum` / `create_failed` bez słowa; literał `🤖 Away Team wylądował` (`:4611`) | etap polerki UI (odpowiedź (e)) |
 | **352** | ⚪ | odmowa dźwigni `force_invasion` tylko w `console.warn` (`WarOverlay.js:729`) | rodzina **287** („wojna bez wojny”) |
-| **355** | ⚪ | mapa kolonii cudzego ciała otwiera się z opóźnieniem przy wejściu w tryb zrzutu — **345 wykluczony w kodzie** (`_loadBiomeMap` asynchroniczne, nic na nie nie czeka) | przyczyna niezmierzona |
+| **355** | ⚪ | mapa kolonii cudzego ciała otwiera się z opóźnieniem przy wejściu w tryb zrzutu — **345 wykluczony w kodzie** (`_loadBiomeMap` asynchroniczne, nic na nie nie czeka) | przyczyna niezmierzona; `GET 404` z bramki G2-3b zgodny z wykluczeniem |
 | **356** | ⚪ | okno ładowni: „undefined” jako nazwa łazika (`CargoLoadModal.js:328`, brak fallbacku `?? u.type`, który ma `ColonyOverlay.js:3339`) + nazwy archetypów z `descriptionPL` | klasa **113** |
+| **362** | ⚪ | kopia przedimportowa nie mieści się przy dużym zapisie (`SaveSystem.js:462-465`, best-effort, tylko `console.warn`) — od ok. 2,6 mln znaków na zapis; ostrzeżenie o dużym zapisie dopiero od 3,5 mln (`:136`) | zaprojektowane (W2 GATE 1); pomiar: uprząż 0,97 mln znaków, fixture GATE-S4 2,09 mln. `AI_GARRISON_PLAN.md` §6 |
 
 ---
 
