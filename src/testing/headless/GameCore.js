@@ -65,6 +65,7 @@ import { AlienCivSystem }    from '../../systems/AlienCivSystem.js';
 import { WarSystem }         from '../../systems/WarSystem.js';
 import { ThreatAssessment }  from '../../systems/ThreatAssessment.js';
 import { InvasionSystem }    from '../../systems/InvasionSystem.js';
+import { GarrisonSystem }    from '../../systems/GarrisonSystem.js';   // G2-3b — parytet z GameScene
 import { StarSystemManager } from '../../systems/StarSystemManager.js';
 // Parytet z `GameScene` dla czterech globali, ktorych headless dotad NIE montowal —
 // patrz blok `window.KOSMOS` nizej. `DirectorProduction` wchodzi SAMA INSTANCJA,
@@ -201,6 +202,9 @@ export class GameCore {
     this.alienCivSystem = new AlienCivSystem();
     this.warSystem = new WarSystem();
     this.invasionSystem = new InvasionSystem();
+    // G2-3b (AI GARRISON, D15) — mobilizacja garnizonów AI. Parytet z GameScene: bez tej instancji
+    // headless widziałby wojnę bez garnizonu, czyli świat, którego w grze nie ma.
+    this.garrisonSystem = new GarrisonSystem();
     // W1-2 — wspólny odczyt siły z realnych kadłubów. MUSI być też w harnessie: jego
     // konsumenci (estymatory, milRatio, intel) biegają headless, a brak instancji dałby
     // ciche zero zamiast liczby — dokładnie ten rodzaj no-opu, który zakazuje R12.
@@ -243,6 +247,7 @@ export class GameCore {
     K.alienCivSystem = this.alienCivSystem;
     K.warSystem = this.warSystem;
     K.invasionSystem = this.invasionSystem;
+    K.garrisonSystem = this.garrisonSystem;
     K.threatAssessment = this.threatAssessment;
     K.overlayManager = null; // brak UI w headless
     K.threeRenderer = null;  // brak renderera w headless

@@ -98,6 +98,7 @@ import { EmpireLogisticsSystem } from '../systems/EmpireLogisticsSystem.js';
 import { EmpireResearchSystem } from '../systems/EmpireResearchSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
+import { GarrisonSystem }    from '../systems/GarrisonSystem.js';   // G2-3b — garnizony naziemne AI (D15)
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
@@ -323,6 +324,11 @@ export class GameScene {
     this.empireResearchSystem = new EmpireResearchSystem();
     this.warSystem            = new WarSystem();
     this.invasionSystem       = new InvasionSystem();
+    // G2-3b (AI GARRISON, D15) — mobilizacja garnizonów naziemnych AI przy pierwszej wojnie imperium
+    // (`diplomacy:warDeclared`) i uzgodnienie na PIERWSZYM ticku (zapis wczytany już w wojnie). Czyta
+    // planer i usługi leniwie przez `window.KOSMOS`, więc kolejność konstrukcji jest dowolna — ale MUSI
+    // powstać przed `restore` niżej (subskrypcja pierwszego ticku), co ten blok gwarantuje.
+    this.garrisonSystem       = new GarrisonSystem();
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
     this.stationSystem        = new StationSystem();
     this.enemyAttackHandler   = new EnemyAttackHandler();
@@ -452,6 +458,9 @@ export class GameScene {
     window.KOSMOS.empireResearchSystem = this.empireResearchSystem;
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
+    // ⚠ G2-3b — wpis OBOWIĄZKOWY (lekcja W3-5b „skonstruowany ≠ zamontowany”): odczyty gate'u
+    //   (`KOSMOS.garrisonSystem.listUnits(...)`) idą przez lokator. Pin: `g2_mobilisation_smoke` M0.
+    window.KOSMOS.garrisonSystem   = this.garrisonSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
     window.KOSMOS.stationSystem      = this.stationSystem;
     window.KOSMOS.threatAssessment   = this.threatAssessment;

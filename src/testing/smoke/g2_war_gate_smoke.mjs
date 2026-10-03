@@ -359,6 +359,9 @@ function standOnCapital(war, archetypeId) {
   const col = w.aiFull[0];
   const emp = col.ownerEmpireId;
   const cap = capitalOf(col);
+  // G2-3b (D15) — od mobilizacji wojna wystawia garnizon AI; W5 mierzy bramkę WOJNY na stolicy „bez
+  //   obrońców”, więc setup wyłącza mobilizację (zgoda właściciela 2026-10-03; asercje bez zmian).
+  if (war && w.K.garrisonSystem) w.K.garrisonSystem.enabled = false;
   if (war) w.dipl.declareWar(emp, 'g2_2_w5');
   // Kształt Findingu 337: łazik (forma 4-argumentowa jak w `deployAwayTeam`) albo szturmowiec gracza.
   const u = archetypeId === 'science_rover'

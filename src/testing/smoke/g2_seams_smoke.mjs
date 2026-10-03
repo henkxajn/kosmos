@@ -250,6 +250,9 @@ function bootstrapAiOutpost(w, empireId) {
     const colK = landCapital(wk);
     const empK = colK?.ownerEmpireId;
     capitalOf(colK).owner = 'player';
+    // G2-3b (D15) — od mobilizacji wojna wystawia garnizon AI; ta kontrola mierzy bramkę WOJNY na
+    //   niebronionej kolonii, więc setup wyłącza mobilizację (zgoda właściciela 2026-10-03; asercja bez zmian).
+    if (wk.K.garrisonSystem) wk.K.garrisonSystem.enabled = false;
     wk.K.diplomacySystem.declareWar(empK, 'g2_seams_p5');
     const tookWar = wk.K.invasionSystem._tryPlayerCapture(colK.planetId);
     assert(wk.K.diplomacySystem.getStatus(empK) === 'war' && tookWar === true && !wk.cm.getColony(colK.planetId)?.ownerEmpireId,

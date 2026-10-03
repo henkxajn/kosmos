@@ -88,6 +88,9 @@ function bootstrapAiOutpost(w, empireId) {
 function holdOneBuildingTile(w, col, years = 24) {
   // D13 (G2-2) — przejęcie wymaga WOJNY z właścicielem; ten plik testuje regułę terenu, nie pokój.
   //   Wojna wypowiadana TUTAJ, po świadkach bloków (T2 przypina „pokój” stanu wejściowego).
+  // G2-3b (D15) — od mobilizacji wojna wystawia garnizon AI; reguła terenu mierzona na NIEBRONIONEJ
+  //   kolonii, więc setup wyłącza mobilizację (zgoda właściciela 2026-10-03; asercje bez zmian).
+  if (w.K.garrisonSystem) w.K.garrisonSystem.enabled = false;
   w.K.diplomacySystem.declareWar(col.ownerEmpireId, 'keeper_setup');
   const cap = capitalOf(col);
   const pick = col.grid.toArray()

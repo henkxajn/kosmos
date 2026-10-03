@@ -43,6 +43,9 @@ function boot() {
   core.boot({ quiet: true, scenario: 'civilization' });
   // D13 (G2-2) — przejęcie i desant na ciele innej strony wymagają WOJNY. Ten keeper testuje
   //   mechanikę przejęcia, nie przejęcie w pokoju — setup wypowiada wojnę każdemu imperium AI.
+  // G2-3b (D15) — od mobilizacji wojna wystawia garnizon AI; ten keeper testuje przejęcie NIEBRONIONEJ
+  //   kolonii, więc setup wyłącza mobilizację (zgoda właściciela 2026-10-03; asercje bez zmian).
+  if (window.KOSMOS.garrisonSystem) window.KOSMOS.garrisonSystem.enabled = false;
   for (const e of window.KOSMOS.empireRegistry.listAll()) window.KOSMOS.diplomacySystem.declareWar(e.id, 'keeper_setup');
   const home = window.KOSMOS.homePlanet;
   const colony = core.colonyManager.getColony(home.id);

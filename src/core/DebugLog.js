@@ -110,6 +110,11 @@ const TRACKED_EVENTS = [
   'logistics:routeAborted',
   // 240 / C2 — odzysk kadłuba z pozy, z której zadna galaz maszyny stanow go nie zdejmie.
   'logistics:courierRecovered',
+  // G2-3b (AI GARRISON, D15) — mobilizacja garnizonu i jej ODMOWA. Imperium bez pełnej kolonii nie
+  // mobilizuje NICZEGO i nie dostaje flagi (`mobilizeSkipped`, `reason: 'no_capital'`) — bez tej pary
+  // „wojna bez garnizonu” byłaby nie do odróżnienia od „zaczepu nikt nie podłączył” (reguła W3).
+  'garrison:mobilized',
+  'garrison:mobilizeSkipped',
 ];
 
 class DebugLog {

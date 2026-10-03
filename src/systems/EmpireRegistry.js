@@ -15,7 +15,9 @@
 //     colonies: [colonyId, ...],       // string array — planetId z ColonyManager
 //     currentStrategy: { focus, startedYear },  // Faza 2: EmpireStrategicAI
 //     fleets: [...],
-//     createdYear
+//     createdYear,
+//     garrison?: { mobilized, year, reason, tier, morale, limit, created, reserve, refused }
+//                                      // G2-3b (D15) — flaga mobilizacji garnizonu; brak pola = „nie”
 //   }
 //
 // Faza 1: brak time:tick subscription — kolonie tickują przez własne systemy.
@@ -35,6 +37,12 @@ export class EmpireRegistry {
   listAll()        { return Object.values(gameState.get('empires') ?? {}); }
   listIds()        { return Object.keys(gameState.get('empires') ?? {}); }
   count()          { return this.listIds().length; }
+
+  /**
+   * G2-3b (D15) — czy imperium zmobilizowało już garnizon. Zapis bez pola `garrison` (sprzed G2-3b)
+   * daje `false` — dlatego wystarcza bez migracji (save v101).
+   */
+  isGarrisonMobilized(empireId) { return this.get(empireId)?.garrison?.mobilized === true; }
 
   /**
    * Zwraca żywe obiekty kolonii imperium (z ColonyManager), nie same id.
@@ -169,6 +177,20 @@ export class EmpireRegistry {
   updateMilitaryPower(_empireId, _delta, _reason = '') { /* no-op */ }
   updateResource(_empireId, _key, _delta, _reason = '') { /* no-op */ }
   changeTechLevel(_empireId, _delta, _reason = '')      { /* no-op */ }
+
+  /**
+   * G2-3b (D15) — zapisuje flagę mobilizacji garnizonu w `empires.<id>.garrison`. Jedynym wołającym
+   * jest `GarrisonSystem.mobilizeEmpire`. `empires` jest zadeklarowanym kluczem `GameState`, a `restore`
+   * przywraca klucze najwyższego poziomu w całości — pole przeżywa zapis bez migracji.
+   * @param {string} empireId
+   * @param {Object} record — { year, reason, tier, morale, limit, created, reserve, refused }
+   * @returns {boolean}
+   */
+  markGarrisonMobilized(empireId, record = {}) {
+    if (!this.get(empireId)) return false;
+    gameState.set(`empires.${empireId}.garrison`, { ...record, mobilized: true }, 'garrison_mobilized');
+    return true;
+  }
 
   /**
    * Ustawia strategic focus imperium (Faza 2: EmpireStrategicAI).
