@@ -30,8 +30,10 @@
 //       ⚠ P6a i P6c ODWRÓCONE ŚWIADOMIE w G2-3b C-S2 (zgoda właściciela 2026-10-03): do G2-3b jednostka
 //         POPRZEDNIEGO właściciela (imperium AI) zostawała na ciele po `captureColonyForPlayer` i po
 //         `removeColony`; od D6/D16 znika (`GarrisonSystem.removeOnOwnerChange` / `removeOnBodyDestroyed`).
-//       ⚠ P6b NIE odwrócony: jednostka GRACZA na ciele przekazanym AI (`transferColony`) zostaje — los jednostki
-//         gracza przy zmianie właściciela lub zniszczeniu ciała to decyzja właściciela, niepodjęta (raport G2-3b).
+//       ⚠ P6b NIE odwrócony: jednostka GRACZA na ciele przekazanym AI (`transferColony`) zostaje. Los jednostki
+//         gracza rozstrzygnął G2-4 (§5p (b) planu): flagę wycofania nadaje dopiero PODPISANIE POKOJU (R3,
+//         `WithdrawalSystem.onPeaceSigned`), a ZNISZCZENIE ciała usuwa ją z pełnym zwrotem POP (R7,
+//         `GarrisonSystem.removeOnBodyDestroyed`); sam `transferColony` jej nie rusza, więc P6b dalej prawdziwy.
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwy `GameCore` z imperiami AI i stosem Directora, domyślne
 //   ziarno galaktyki — do G2-K1 stolica emp_001 stała w nim na OCEANIE; od G2-K1 obie stolice AI
