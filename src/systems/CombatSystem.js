@@ -6,7 +6,7 @@
 //   Brak przycisku ATAKUJ. Ranged unit z sąsiedniego hexu może wspierać wybraną bitwę.
 //
 // Architektura:
-//   - tick() co 1 civYear znajduje "contested hexes" (hexy z jednostkami >1 właściciela)
+//   - tick() co 1 civYear znajduje "contested hexes" (hexy z parą WROGÓW — R1, G2-4: bez wojny nie ma bitwy)
 //   - Dla każdego hexa: _runBattleRound() resolve simultaneous fire exchange
 //   - Każdy atakujący wybiera cel przez priority picker (counter > support > low HP > closest)
 //   - Terrain bonus dla obrońców (mountains +20%, forest +10%, itd.)
@@ -22,6 +22,22 @@ import EventBus from '../core/EventBus.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { UNIT_ARCHETYPES, isDefensiveUnit, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
+import { groundOwnersHostile } from '../utils/WarGate.js';   // R1 (G2-4) — bez wojny nie ma bitwy
+
+/**
+ * R1 (G2-4, Finding 348) — czy wśród właścicieli jednostek na heksie jest para WROGÓW. Bitwa toczy się tylko
+ * wtedy; jednostki właścicieli, którzy nie są w wojnie, stoją obok siebie bez ognia.
+ * @param {Iterable<string>} owners
+ */
+function hasHostilePair(owners) {
+  const list = [...owners];
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (groundOwnersHostile(list[i], list[j])) return true;
+    }
+  }
+  return false;
+}
 
 // Priorytety targetowania — bonusy do score (wyższy = preferowany cel)
 const SCORE_COUNTER      = 100;
@@ -74,9 +90,8 @@ export class CombatSystem {
       if (u.hp <= 0) continue;
       // Null owner traktujemy jako 'player' (legacy units)
       owners.add(u.owner ?? 'player');
-      if (owners.size >= 2) return true;
     }
-    return false;
+    return owners.size >= 2 && hasHostilePair(owners);   // R1 (G2-4): dwóch właścicieli to jeszcze nie bitwa
   }
 
   // ── Stan bitwy do tooltip'a ─────────────────────────────────────────────
@@ -86,7 +101,7 @@ export class CombatSystem {
     const units = gum.getUnitsAtHex?.(planetId, q, r) ?? [];
     if (units.length === 0) return null;
     const sides = this._groupByOwner(units);
-    if (Object.keys(sides).length < 2) return null;
+    if (!hasHostilePair(Object.keys(sides))) return null;   // R1 (G2-4)
     const key = `${planetId}_${q}_${r}`;
     const round = this._battleRounds.get(key) ?? 0;
 
@@ -164,7 +179,8 @@ export class CombatSystem {
     }
     const out = [];
     for (const [key, owners] of groups.entries()) {
-      if (owners.size < 2) continue;
+      // R1 (G2-4, Finding 348): bitwa tylko przy parze WROGÓW (status relacji `'war'`), nie przy dwóch właścicielach.
+      if (owners.size < 2 || !hasHostilePair(owners)) continue;
       const [planetId, qS, rS] = key.split('|');
       out.push({ planetId, q: Number(qS), r: Number(rS) });
     }
@@ -179,17 +195,20 @@ export class CombatSystem {
     );
     const sides = this._groupByOwner(unitsAtHex);
     const owners = Object.keys(sides);
-    if (owners.length < 2) return;
+    if (owners.length < 2 || !hasHostilePair(owners)) return;   // R1 (G2-4)
 
     // Increment round counter
     const round = (this._battleRounds.get(key) ?? 0) + 1;
     this._battleRounds.set(key, round);
 
     // MVP 2-stronne: gracz vs wszyscy wrogowie jako jedna strona (merge)
+    // ⚠ R1 (G2-4): stroną przeciwną gracza są WYŁĄCZNIE właściciele z nim w wojnie — jednostki imperium w pokoju
+    //   z graczem stoją na tym samym heksie bez ognia w obie strony. Bez gracza na heksie (AI-vs-AI) — jak dotąd.
     const playerSide = sides['player'] ?? [];
+    const enemyOfPlayer = (o) => playerSide.length === 0 || groundOwnersHostile('player', o);
     const enemyUnits = [];
     for (const o of owners) {
-      if (o === 'player') continue;
+      if (o === 'player' || !enemyOfPlayer(o)) continue;
       enemyUnits.push(...sides[o]);
     }
 
@@ -204,7 +223,7 @@ export class CombatSystem {
     const playerSupporters = this._findSupporters(gum, planetId, q, r, 'player');
     const enemySupporters = [];
     for (const o of owners) {
-      if (o === 'player') continue;
+      if (o === 'player' || !enemyOfPlayer(o)) continue;
       enemySupporters.push(...this._findSupporters(gum, planetId, q, r, o));
     }
 
@@ -437,7 +456,7 @@ export class CombatSystem {
       const tile = grid.get(nq, nr);
       if (!tile || tile.type === 'ocean') continue;
       const occupants = gum.getUnitsAtHex(unit.planetId, nq, nr);
-      const hasEnemy = occupants.some(u => (u.owner ?? 'player') !== (unit.owner ?? 'player'));
+      const hasEnemy = occupants.some(u => groundOwnersHostile(u.owner, unit.owner));   // R1 (G2-4)
       if (hasEnemy) continue;
       best = { q: nq, r: nr };
       break;

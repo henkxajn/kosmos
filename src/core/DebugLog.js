@@ -59,7 +59,8 @@ const TRACKED_EVENTS = [
   // AI_CAPTURE AC-4 — intencja terytorialna desantu. Ta sama zasada, co wyżej i ta sama cena
   // za jej złamanie: „najeźdźca stoi" musi dać się odróżnić od „reguły nikt nie podłączył".
   // `territorialBlocked` niesie POWÓD (`no_colony`/`own_colony`/`no_goal`/`holding`/
-  // `unit_immobile`/`no_path`) i jest emitowany raz na ZMIANĘ powodu, nie co tik.
+  // `unit_immobile`/`no_path`; od G2-4 także `not_at_war` — R1, marsz bez wojny stoi) i jest emitowany raz
+  // na ZMIANĘ powodu, nie co tik.
   'groundUnit:territorialIntent',
   'groundUnit:territorialBlocked',
   // AC-8 (D9=W3) — koniec gry z powodu podboju. `player:noReversalPossible` niesie POWÓD

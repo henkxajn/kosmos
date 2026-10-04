@@ -22,6 +22,8 @@
 //   imperium — ani w wojnie, ani w pokoju; jedyną drogą wojsk na cudze ciało są kapsuły desantowe.
 //   To osobna reguła ŚCIEŻKI ŁADOWNI (`cargoUnloadRefusal`), niezależna od wojny — nie wchodzi do
 //   `warGateRefusal`, bo `unloadGroundUnit` (który pyta bramkę wojny) wołają też kapsuły (`dropTroop`).
+// ⚠ R1 (G2-4): ogień i okupacja na ziemi też wymagają wojny — `groundOwnersHostile`, jedno źródło dla
+//   `CombatSystem` i `GroundUnitManager` (inna polityka braku dyplomacji niż lądowanie — opis przy funkcji).
 
 import { isPlayerColony } from './ColonyOwnership.js';
 
@@ -57,6 +59,33 @@ export function areAtWar(a, b) {
   } catch {
     return false;          // `pairKey` rzuca na niepoprawne id — dla bramki to „nie ma wojny”
   }
+}
+
+/**
+ * R1 (G2-4, D14, Finding 348) — czy jednostki naziemne właścicieli `a` i `b` są dla siebie WROGAMI: tylko wtedy
+ * walczą (ogień, przechwycenie w ruchu, pościg AI, kara za wyjście z bitwy), tylko wtedy jednostka `a` zajmuje kafel
+ * właściciela `b`, i tylko żywy wróg wstrzymuje licznik okupacji (R2, Finding 359).
+ *
+ * ⚠ GRACZ↔IMPERIUM: wyłącznie status relacji `'war'` (`areAtWar`, jak D13) — rozejm i pakt o nieagresji to NIE wojna.
+ * ⚠ IMPERIUM↔IMPERIUM: zawsze „wrogowie”, jak przed G2-4. Walka naziemna AI-vs-AI jest poza zakresem G2-4 (Finding
+ *   331; relacje nie znają par AI↔AI — D5), więc `areAtWar` dawałby tu zawsze „pokój” i po cichu zmieniał zachowanie,
+ *   którego ten krok nie dotyczy.
+ * ⚠ BRAK MODUŁU DYPLOMACJI (uprząż bez `diplomacySystem`): „wrogowie”, jak przed G2-4. W grze dyplomacja jest zawsze;
+ *   bez niej nie istnieje pokój, który trzeba by honorować. To ODWROTNIE niż `warGateRefusal` (lądowanie fail-closed),
+ *   świadomie: tam ceną fałszywego „wolno” jest lądowanie bez wojny, tutaj ceną fałszywego „nie” byłby cichy paraliż
+ *   całej walki naziemnej.
+ * @param {string|null} a — właściciel (`null`/brak = gracz, kanon jednostek legacy)
+ * @param {string|null} b — właściciel
+ * @returns {boolean}
+ */
+export function groundOwnersHostile(a, b) {
+  const A = a || 'player';
+  const B = b || 'player';
+  if (A === B) return false;
+  if (A !== 'player' && B !== 'player') return true;
+  const rel = (typeof window !== 'undefined') ? window.KOSMOS?.diplomacySystem?.relations : null;
+  if (typeof rel?.getStatus !== 'function') return true;
+  return areAtWar(A, B);
 }
 
 /**

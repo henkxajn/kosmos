@@ -15,6 +15,7 @@ import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getUnitStats, GROUND_MOVE_COST, isStandableTile } from '../data/GroundUnitData.js';
 import { UNIT_ARCHETYPES, getTransportSize, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
+import { groundOwnersHostile } from '../utils/WarGate.js';   // R1/R2 (G2-4) — wróg = właściciel w wojnie
 
 // ── Koszty ruchu po terenie ──────────────────────────────────────────────────
 // Tabela mieszka w danych (`GROUND_MOVE_COST`, GroundUnitData) — wspólna z predykatem „da się
@@ -315,7 +316,18 @@ export class GroundUnitManager {
     if (!unit || unit.hp <= 0) return false;
     const ownerId = unit.owner ?? 'player';
     const occupants = this.getUnitsAtHex(unit.planetId, unit.q, unit.r);
-    return occupants.some(u => (u.owner ?? 'player') !== ownerId);
+    // R1 (G2-4, Finding 348): w bitwie jest tylko jednostka stojąca z WROGIEM (właściciel w wojnie), nie z każdym obcym.
+    return occupants.some(u => groundOwnersHostile(u.owner, ownerId));
+  }
+
+  /**
+   * R2 (G2-4, Finding 359) — czy na heksie jednostki stoi ŻYWY wróg. Wtedy licznik okupacji stoi — dla OBU stron.
+   * Wróg wg R1 (`groundOwnersHostile`); jednostka `offline` nie trzyma terenu (jak `InvasionSystem.hasLivingDefender`).
+   */
+  _hexHasLivingEnemy(unit) {
+    const owner = unit.owner ?? 'player';
+    return this.getUnitsAtHex(unit.planetId, unit.q, unit.r).some(u =>
+      u.id !== unit.id && (u.hp ?? 0) > 0 && u.status !== 'offline' && groundOwnersHostile(u.owner, owner));
   }
 
   // ── Rozkaz ruchu (A* pathfinding) ────────────────────────────────────────
@@ -602,6 +614,8 @@ export class GroundUnitManager {
   //   - Jednostka innego ownera na pustym hexie → instant owner change
   //   - Jednostka na hexie z budynkiem → progresja **6 WYŚWIETLANYCH miesięcy** (patrz niżej)
   //   - Jednostka odchodzi przed ukończeniem → reset timera
+  //   - R1 (G2-4, Finding 348): obcy kafel zajmuje się WYŁĄCZNIE w wojnie z jego właścicielem (`groundOwnersHostile`)
+  //   - R2 (G2-4, Finding 359): na heksie z żywym wrogiem licznik STOI (dla obu stron), pusty kafel nie przechodzi
   //
   // ⚠ JEDNOSTKA CZASU — jedno brzmienie, powtórzone spójnie w całym pliku (sprostowanie
   //   AI_CAPTURE AC-1; wcześniej sześć deklaracji mówiło trzy różne rzeczy):
@@ -615,6 +629,14 @@ export class GroundUnitManager {
 
   _tickOccupation(dt) {
     const OCCUPY_DURATION = 6 / 12; // 6 WYŚWIETLANYCH miesięcy = 6 civYears (CIV_TIME_SCALE 12)
+
+    // R2 (G2-4, Finding 359) — przyrost czasu WYŚWIETLANEGO od poprzedniego wywołania. O tyle przesuwamy start
+    //   licznika kafla, na którym stoi żywy wróg, więc „elapsed” STOI (nie zeruje się) i rusza dalej, gdy wroga
+    //   nie ma. Pole runtime-only: pierwsze wywołanie (także po wczytaniu) daje 0.
+    const now = this._year();
+    const dYear = this._occupationClock == null ? 0 : Math.max(0, now - this._occupationClock);
+    this._occupationClock = now;
+    const frozen = new Set();   // kafle już wstrzymane w tym ticku (stos jednostek jednego właściciela)
 
     // Indeks: planetId → Set 'q,r' zajętych przez jednostkę nie-właściciela
     const occupiedByForeigner = new Map();
@@ -630,6 +652,9 @@ export class GroundUnitManager {
 
       const tileOwner = tile.owner; // null/player/empireId
       if (tileOwner === owner) continue; // swój hex — nic nie robimy
+      // R1 (G2-4, Finding 348) — obcy kafel zajmuje się WYŁĄCZNIE w wojnie z jego właścicielem (status relacji
+      //   `'war'`; rozejm i NAP to nie wojna). Kafel bez właściciela — jak dotąd.
+      if (tileOwner != null && !groundOwnersHostile(owner, tileOwner)) continue;
 
       // Zanotuj że foreigner jest na tym hexie (żeby potem nie resetować jego timera)
       const key = `${unit.q},${unit.r}`;
@@ -637,19 +662,28 @@ export class GroundUnitManager {
       occupiedByForeigner.get(unit.planetId).set(key, owner);
 
       const hasBuilding = tile.buildingId !== null || tile.capitalBase === true;
+      // R2 — żywy wróg na tym heksie: licznik stoi (dla obu stron), a pusty kafel nie przechodzi.
+      const contested = this._hexHasLivingEnemy(unit);
 
       if (!hasBuilding) {
-        // Pusty hex — instant przejęcie
-        this._changeTileOwner(tile, unit.planetId, owner);
+        // Pusty hex — instant przejęcie (R2: nie przy żywym wrogu)
+        if (!contested) this._changeTileOwner(tile, unit.planetId, owner);
       } else {
         // Budynek — progres 6 WYŚWIETLANYCH miesięcy (nota jednostki nad `_tickOccupation`)
         if (tile.occupyEmpireId !== owner) {
           // Inny okupant — reset i start
           tile.occupyEmpireId = owner;
-          tile.occupyStart = this._year();
+          tile.occupyStart = now;
+        } else if (contested) {
+          // R2 — licznik stoi: start przesunięty o czas tego ticku (raz na kafel, nie raz na jednostkę stosu)
+          const fk = `${unit.planetId}|${key}`;
+          if (!frozen.has(fk)) {
+            frozen.add(fk);
+            tile.occupyStart = (tile.occupyStart ?? now) + dYear;
+          }
         } else {
           // Kontynuuj progres
-          const elapsed = this._year() - (tile.occupyStart ?? this._year());
+          const elapsed = now - (tile.occupyStart ?? now);
           if (elapsed >= OCCUPY_DURATION) {
             this._changeTileOwner(tile, unit.planetId, owner);
             tile.occupyEmpireId = null;
@@ -681,8 +715,10 @@ export class GroundUnitManager {
     const tile = grid.get(unit.q, unit.r);
     if (!tile) return;
     if (tile.owner === owner) return;
+    if (tile.owner != null && !groundOwnersHostile(owner, tile.owner)) return;   // R1 (G2-4) — bez wojny nie zajmuje
     const hasBuilding = tile.buildingId !== null || tile.capitalBase === true;
     if (hasBuilding) return; // wymaga stop + timer
+    if (this._hexHasLivingEnemy(unit)) return;                                    // R2 (G2-4) — nie przy żywym wrogu
     this._changeTileOwner(tile, unit.planetId, owner);
   }
 
@@ -965,7 +1001,7 @@ export class GroundUnitManager {
     const occupants = this.getUnitsAtHex(unit.planetId, unit.q, unit.r);
     const enemy = occupants.find(u => u.id !== unit.id
       && u.hp > 0
-      && (u.owner ?? 'player') !== ownerId);
+      && groundOwnersHostile(u.owner, ownerId));   // R1 (G2-4) — obcy w pokoju nie zatrzymuje marszu
     if (!enemy) return false;
 
     // Porzuć pozostałą ścieżkę, zatrzymaj się
@@ -1050,7 +1086,7 @@ export class GroundUnitManager {
       let bestDist = Infinity;
       for (const u of this._units.values()) {
         if (u.planetId !== atk.planetId || u.status === 'in_cargo') continue;
-        if ((u.owner ?? 'player') === atk.owner) continue;
+        if (!groundOwnersHostile(u.owner, atk.owner)) continue;   // R1 (G2-4) — pościg tylko za wrogiem (wojna)
         if (u.hp <= 0) continue;
         if (u._stealthState === 'hidden') continue;
         const d = this._hexDistance(atk.q, atk.r, u.q, u.r);
@@ -1076,6 +1112,12 @@ export class GroundUnitManager {
         if (!colony) { this._noteTerritorialBlock(atk, 'no_colony'); continue; }
         if ((colony.ownerEmpireId ?? 'player') === atk.owner) {
           this._noteTerritorialBlock(atk, 'own_colony');       // R-1 — już nasze, nie ma po co iść
+          continue;
+        }
+        // R1 (G2-4) — marsz terytorialny służy okupacji, a obcego kafla bez wojny z właścicielem kolonii się nie
+        //   zajmuje; jednostka stoi (powód jawny w audycie, jak pozostałe blokady).
+        if (!groundOwnersHostile(atk.owner, colony.ownerEmpireId ?? 'player')) {
+          this._noteTerritorialBlock(atk, 'not_at_war');
           continue;
         }
 

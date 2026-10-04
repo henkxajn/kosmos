@@ -459,9 +459,13 @@ function matchesPlan(units, plan, emp) {
   const aC = occupy({ nullTiles: false, defenderOnCapital: true });
   const bA = occupy({ nullTiles: true,  defenderOnCapital: false });
   const aA = occupy({ nullTiles: false, defenderOnCapital: false });
-  assert(bC.onCap === 1 && aC.onCap === 1 && bC.at === null && aC.at === 7,
-    `M9c: obrońca AI na kaflu stolicy — PRZED stemplem licznik gracza resetowany co tick (kafel nie przechodzi przez 12 civY: ${bC.at}), ` +
-    `PO stemplu biegnie mimo obrońcy (kafel w ${aC.at}. civY)`);
+  // ⚠ M9c ODWRÓCONY ŚWIADOMIE w G2-4 (R2, Finding 359 — decyzja właściciela 2026-10-03): do G2-4 druga połowa
+  //   pinowała „PO stemplu licznik gracza biegnie mimo żywego obrońcy” (kafel w 7. civY) — czyli DEFEKT 359. Od R2
+  //   licznik STOI na heksie z żywym wrogiem (dla obu stron), więc kafel nie przechodzi, dopóki obrońca żyje.
+  //   Pierwsza połowa (przed stemplem: nie przechodzi) bez zmian; M9d (gracz sam — 7. civY) i M9e — bez zmian.
+  assert(bC.onCap === 1 && aC.onCap === 1 && bC.at === null && aC.at === null,
+    `M9c: obrońca AI na kaflu stolicy — PRZED stemplem kafel nie przechodzi przez 12 civY (${bC.at}); ` +
+    `PO stemplu licznik gracza STOI przy żywym obrońcy (R2) — kafel nie przechodzi przez 12 civY (${aC.at})`);
   assert(bA.onCap === 0 && aA.onCap === 0 && bA.at === 7 && aA.at === 7,
     `M9d: gracz sam na kaflu stolicy — 7. civY przed i po stemplu (${bA.at} / ${aA.at})`);
   assert(bC.selfOcc >= 1 && aC.selfOcc === 0 && aA.selfOcc === 0,
