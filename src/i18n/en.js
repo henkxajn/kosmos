@@ -3020,6 +3020,7 @@ export default {
   'event.groundUnit.resumed':    'Unit {0} resumed',
   // G2-4 (D14, R5) — troop withdrawal after peace
   'event.withdrawal.ordered':    '⚑ Peace with {0}: {1} ground unit(s) on {2} must withdraw by {3}',
+  'event.withdrawal.orderedLoad': '⚑ {1} ground unit(s) on {2}, a body of {0}, must withdraw by {3}',
   'event.withdrawal.warning':    '⚑ Withdrawal deadline in one month: {0} unit(s) on {1} (by {2})',
   'event.withdrawal.expired':    '⚑ Withdrawal deadline passed: {0} ground unit(s) on {1} lost',
   'event.withdrawal.aiRemoved':  '☮ Peace with {0}: its troops ({1} unit(s)) have left {2}',

@@ -3021,6 +3021,7 @@ export default {
   'event.groundUnit.resumed':    'Jednostka {0} aktywna',
   // G2-4 (D14, R5) — wycofanie wojsk po pokoju
   'event.withdrawal.ordered':    '⚑ Pokój z imperium {0}: {1} jedn. naziemnych na {2} musi się wycofać do {3}',
+  'event.withdrawal.orderedLoad': '⚑ {1} jedn. naziemnych na {2}, ciele imperium {0}, musi się wycofać do {3}',
   'event.withdrawal.warning':    '⚑ Za miesiąc mija termin wycofania: {0} jedn. na {1} (do {2})',
   'event.withdrawal.expired':    '⚑ Minął termin wycofania: {0} jedn. naziemnych na {1} utracono',
   'event.withdrawal.aiRemoved':  '☮ Pokój z imperium {0}: jego wojska ({1} jedn.) opuściły {2}',

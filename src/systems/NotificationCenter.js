@@ -533,10 +533,13 @@ export class NotificationCenter {
    * KTÓRE ciało, TERMIN. Sam wpis w Dzienniku (kanał dyplomacji — to skutek traktatu), bez dzwonka; dzwonek dopiero
    * przy ostrzeżeniu. Ciało nazwą CIAŁA, nie cudzej kolonii (wzór Outlinera — moje buty to nie bilet do nazwy wroga).
    * G2-4 F6 — imperium nazwą STRONY TRAKTATU (`empireLogName`, jak wpis pokoju), nie regułą mgły wojny `_empireLabel`.
+   * G2-4 (f) — uzgodnienie przy WCZYTANIU (F3, `reason: 'load'`) nie jest podpisaniem pokoju: własne brzmienie, bez
+   *   „Peace with …” — N jednostek na ciele nazwanego imperium musi się wycofać do daty. Glif ⚑ i kanał bez zmian.
    */
-  _handleWithdrawalOrdered({ empireId, planetId, count, deadlineYear }) {
+  _handleWithdrawalOrdered({ empireId, planetId, count, deadlineYear, reason }) {
     if (!planetId || !(count > 0)) return;
-    this._journal(t('event.withdrawal.ordered', empireLogName(empireId), count, this._bodyName(planetId),
+    const key = reason === 'load' ? 'event.withdrawal.orderedLoad' : 'event.withdrawal.ordered';
+    this._journal(t(key, empireLogName(empireId), count, this._bodyName(planetId),
       this._dateLabel(deadlineYear)), 'diplomacy', 'warn', planetId);
   }
 

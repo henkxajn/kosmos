@@ -4,10 +4,25 @@
 //   Zb  (b) — polski wpis pokoju (`log.diplo.peaceSigned`) po „z” gramatyczny dla każdej nazwy: „Pokój z imperium {0}”
 //       (ta sama forma co wpis wycofania po F6); angielski bez zmian; wpis pokoju w Dzienniku bierze tekst z tego klucza
 //       (pin źródłowy — `UIManager` nie importuje się pod node).
+//   Zf  (f) — wpis w Dzienniku z uzgodnienia F3 przy WCZYTANIU ma własne brzmienie, bez „Peace with”: N jednostek na
+//       ciele nazwanego imperium musi się wycofać do daty (prawdziwy `serialize` → `restore` → `armLoadReconcile`, jak
+//       blok wczytania `GameScene`); kontrola: wpis przy podpisaniu pokoju zostaje „⚑ Peace with …”.
 //
+// ⚠ Harness jak `g2_peace_followups_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny
+//   `CombatSystem`, Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus); mobilizacja
+//   garnizonów AI wyłączona (wojna stawiałaby jednostki planu).
+// ⚠ Każdy pin wykluczający ma ŚWIADKA (zdarzenie albo stan, który dowodzi, że scena się odbyła).
 // ⚠ Źródło bez komentarzy (pin nie może łapać własnego wyjaśnienia) i z LF (pin niezależny od checkoutu).
 
 import '../headless/env.js';           // MUSI być pierwszy
+import gameState from '../../core/GameState.js';
+import EntityManager from '../../core/EntityManager.js';
+import { isStandableTile } from '../../data/GroundUnitData.js';
+import { bootWithDirector } from '../headless/DirectorHarness.js';
+import { CombatSystem } from '../../systems/CombatSystem.js';
+import { EventLogSystem } from '../../systems/EventLogSystem.js';
+import { NotificationCenter } from '../../systems/NotificationCenter.js';
+import { empireLogName } from '../../utils/EmpireName.js';
 import { readFileSync } from 'node:fs';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 
@@ -16,6 +31,59 @@ const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { 
 
 const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
 const src = (rel) => strip(readFileSync(new URL(rel, import.meta.url), 'utf8'));
+
+// ── Harness ──────────────────────────────────────────────────────────────────────────────
+function quiet(fn) {
+  const log = console.log, warn = console.warn;
+  console.log = () => {}; console.warn = () => {};
+  try { return fn(); } finally { console.log = log; console.warn = warn; }
+}
+/** Świat: domyślne ziarno, gracz w pokoju z AI, mobilizacja wyłączona, prawdziwy CombatSystem, Dziennik i dzwonek. */
+function boot({ garrison = false } = {}) {
+  const { core, K, ticker } = quiet(() => bootWithDirector({ quiet: true }));
+  if (!garrison && K.garrisonSystem) K.garrisonSystem.enabled = false;
+  K.combatSystem = new CombatSystem();
+  K.eventLogSystem = new EventLogSystem();
+  K.notificationCenter = new NotificationCenter();
+  const cm = core.colonyManager;
+  const aiFull = cm.getAllColonies().filter(c => c.ownerEmpireId && !c.isOutpost);
+  const home = cm.getColony(K.homePlanet.id);
+  home.credits = 1e6;
+  // Kafle kolonii gracza niosą 'player' — w grze stempluje je `ColonyOverlay._ensureGrid` / założenie kolonii.
+  for (const t0 of tilesOf(home)) if (t0.owner == null) t0.owner = 'player';
+  const col = aiFull[0], emp = col?.ownerEmpireId;
+  return { core, K, ticker, cm, gum: K.groundUnitManager, dipl: K.diplomacySystem, home, aiFull, col, emp };
+}
+const run = (w, civY) => quiet(() => w.ticker.run(civY, { tickSize: 1.0 }));
+const declare = (w, emp = w.emp) => quiet(() => w.dipl.declareWar(emp, 'keeper_setup'));
+/** Pokój PRAWDZIWĄ ścieżką `offerPeace` (wyczerpanie obu stron 100 ⇒ akceptacja). */
+function signPeace(w, emp = w.emp) {
+  const war = w.K.warSystem.getWarWith(emp);
+  if (war) gameState.set('wars.' + war.id, { ...war, exhaustion: { player: 100, [emp]: 100 } }, 'g2_4_closing');
+  return quiet(() => w.dipl.offerPeace(emp, 'keeper_setup', { terms: null, playerInitiated: false }));
+}
+const tilesOf = (col) => (col?.grid?.toArray?.() ?? []).filter(Boolean);
+function freeTiles(w, col, { building = null } = {}) {
+  return tilesOf(col).filter(t0 => isStandableTile(t0) && !t0.capitalBase
+    && (building === null || (building ? !!t0.buildingId : !t0.buildingId))
+    && w.gum.getUnitsAtHex(col.planetId, t0.q, t0.r).length === 0);
+}
+function playerUnit(w, planetId, t0, { arch = 'shock_infantry' } = {}) {
+  const u = w.gum.createUnit(arch, planetId, t0.q, t0.r, { owner: 'player', factionId: 'humanity' });
+  u.homeColonyId = w.home.planetId;
+  u.morale = u.maxMorale = 100;
+  return u;
+}
+const journal = (w, channel, re) => (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.channel === channel && re.test(e.text));
+/** Wczytanie jak blok wczytania `GameScene`: prawdziwy zapis i odtworzenie jednostek, uzbrojenie uzgodnienia, tick. */
+function loadAndTick(w) {
+  const data = JSON.parse(JSON.stringify(w.gum.serialize()));
+  w.gum.restore(data);
+  const loadYear = w.K.timeSystem.gameTime;
+  w.K.withdrawalSystem.armLoadReconcile();
+  run(w, 1);
+  return loadYear;
+}
 
 // ── Zb — (b): polski wpis pokoju po „z” ───────────────────────────────────────────────────
 {
@@ -36,6 +104,57 @@ const src = (rel) => strip(readFileSync(new URL(rel, import.meta.url), 'utf8'));
   const iPeace = um.indexOf("EventBus.on('diplomacy:peaceSigned'");
   assert(iPeace > 0 && /t\(\s*'log\.diplo\.peaceSigned'/.test(um.slice(iPeace, iPeace + 400)),
     'Zb kontrola pinu: wpis pokoju w Dzienniku (UIManager, diplomacy:peaceSigned) bierze tekst z log.diplo.peaceSigned — pin celuje w żywą ścieżkę');
+}
+
+// ── Zf — (f): wpis uzgodnienia F3 przy wczytaniu ──────────────────────────────────────────
+{
+  console.log('\nZf — (f) wpis z uzgodnienia przy WCZYTANIU: własne brzmienie bez „Peace with” — N jednostek na ciele imperium X do daty');
+  const prev = getLocale();
+  setLocale('en');
+  const w = boot();
+  const free = freeTiles(w, w.col, { building: false });
+  const p1 = playerUnit(w, w.col.planetId, free[0]);
+  playerUnit(w, w.col.planetId, free[1]);
+  run(w, 1);
+  const loadYear = loadAndTick(w);
+  const f1 = w.gum.getUnit(p1.id)?.withdrawal ?? null;
+  const name = empireLogName(w.emp);
+  const body = EntityManager.get(w.col.planetId)?.name;
+  const date = w.K.timeSystem.formatTime(f1?.deadline ?? 0);
+  const jr = journal(w, 'diplomacy', /⚑/);
+  const expected = t('event.withdrawal.orderedLoad', name, 2, body, date);
+  const keyEn = expected !== 'event.withdrawal.orderedLoad';
+  setLocale('pl');
+  const plText = t('event.withdrawal.orderedLoad', 'Liga Trzech Słońc', 2, 'Thuban d', '07/01/121');
+  setLocale(prev);
+  assert(!!f1 && Math.abs(f1.deadline - (loadYear + 0.5)) < 1e-9 && jr.length === 1 && w.dipl.getStatus(w.emp) !== 'war'
+      && !!body && !!name,
+    `świadek: wczytanie w pokoju (${w.dipl.getStatus(w.emp)}) — flaga z terminem wczytanie + 0,5 i JEDEN wpis ⚑ w Dyplomacji (${jr.length})`);
+  assert(keyEn && plText !== 'event.withdrawal.orderedLoad' && !/\{\d\}/.test(expected) && !/\{\d\}/.test(plText),
+    'Zf: klucz event.withdrawal.orderedLoad istnieje w EN i PL, wszystkie wstawki podstawione');
+  assert(jr.length === 1 && jr[0].text === expected && !/Peace with/.test(jr[0].text),
+    `Zf: wpis przy wczytaniu bez „Peace with”: ${jr[0]?.text ?? '—'}`);
+  assert(jr.length === 1 && jr[0].text.includes(name) && jr[0].text.includes(body) && jr[0].text.includes(date)
+      && /\b2\b/.test(jr[0].text),
+    'Zf kontrola: wpis nadal nazywa imperium, ciało, liczbę jednostek i datę terminu (zmienia się brzmienie, nie treść)');
+  assert(!/Pokój z/.test(plText) && plText.includes('ciele imperium Liga Trzech Słońc') && plText.includes('Thuban d'),
+    `Zf: PL bez „Pokój z”, ciało nazwanego imperium: ${plText}`);
+}
+{
+  console.log('\nZf kontrola — wpis przy PODPISANIU pokoju zostaje „⚑ Peace with …” (brzmienie zależy od powodu, nie od sesji)');
+  const prev = getLocale();
+  setLocale('en');
+  const w = boot();
+  declare(w);
+  const u = playerUnit(w, w.col.planetId, freeTiles(w, w.col, { building: false })[0]);
+  const ok = signPeace(w);
+  const f = w.gum.getUnit(u.id)?.withdrawal ?? null;
+  const expected = t('event.withdrawal.ordered', empireLogName(w.emp), 1, EntityManager.get(w.col.planetId)?.name,
+    w.K.timeSystem.formatTime(f?.deadline ?? 0));
+  const jr = journal(w, 'diplomacy', /⚑/);
+  setLocale(prev);
+  assert(ok === true && !!f && jr.length === 1 && jr[0].text === expected && /^⚑ Peace with /.test(jr[0].text),
+    `Zf kontrola: pokój — wpis „⚑ Peace with …” bez zmian: ${jr[0]?.text ?? '—'}`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
