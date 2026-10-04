@@ -41,6 +41,11 @@ const EMP = 'emp_001';
 function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization' });
+  // G2-4 (R1, D14): marsz i okupacja kafli gracza przez najeźdźcę toczą się TYLKO w wojnie — scena desantu jest
+  //   sceną wojenną, więc wojna w setupie (asercje bez zmian). Mobilizacja garnizonów AI (G2-3b) wyłączona, żeby
+  //   wojna nie stawiała na koloniach AI jednostek, których ten keeper nie mierzy.
+  if (window.KOSMOS.garrisonSystem) window.KOSMOS.garrisonSystem.enabled = false;
+  core.diplomacySystem.declareWar(EMP, 'keeper_setup');
   const home = window.KOSMOS.homePlanet;
   const colony = core.colonyManager.getColony(home.id);
   for (const t of colony.grid?.toArray?.() ?? []) if (t) t.owner = 'player';

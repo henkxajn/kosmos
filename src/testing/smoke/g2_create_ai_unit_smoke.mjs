@@ -276,6 +276,10 @@ function withFixedRng(fn) {
 {
   console.log('\nT8 — garrison_unit pod ogniem: rozpad przy trafieniu ⌈M/3⌉');
   const w = boot();
+  // G2-4 (R1, D14): ogień na ziemi tylko w wojnie — scena ostrzału jest sceną wojenną, więc wojna w setupie
+  //   (asercje bez zmian). Mobilizacja (G2-3b) wyłączona: garnizon planu stanąłby na heksach tej sceny.
+  if (w.K.garrisonSystem) w.K.garrisonSystem.enabled = false;
+  w.K.diplomacySystem.declareWar(w.emp, 'keeper_setup');
   const cs = new CombatSystem();
   w.K.combatSystem = cs;
   const tiles = landTiles(w.ai);

@@ -65,6 +65,11 @@ function boot() {
   cm._getBarracksSlots = () => 3;
   const home = cm.getColony(K.homePlanet.id);
   const ai   = cm.getAllColonies().find(c => c.ownerEmpireId);
+  // G2-4 (R1, D14): ogień na ziemi tylko w wojnie — sceny walki tego pliku są sceną wojenną, więc wojna w setupie
+  //   (asercje bez zmian). Mobilizacja (G2-3b) wyłączona: garnizon planu stanąłby na kolonii AI, na której giną
+  //   jednostki gracza w T-F1, i dołożyłby strzelców, których ten keeper nie liczy.
+  if (K.garrisonSystem) K.garrisonSystem.enabled = false;
+  K.diplomacySystem.declareWar(ai.ownerEmpireId, 'keeper_setup');
   const w = { core, K, cs, log, nc, cm, gum: K.groundUnitManager, home, ai, emp: ai.ownerEmpireId,
               ev: { disbanded: [], destroyed: [], popsLost: [] } };
   EventBus.on('groundUnit:disbanded', (e) => w.ev.disbanded.push(e));

@@ -337,6 +337,10 @@ console.log('T6 — S12 (odwrócone w G1): jednostka legacy NIE pada od pierwsze
   const empireId = empireOf(core);
   const gum = core.groundUnitManager;
   const planetId = window.KOSMOS.homePlanet.id;
+  // G2-4 (R1, D14): ogień na ziemi tylko w wojnie — wojna w setupie (asercje bez zmian); mobilizacja (G2-3b)
+  //   wyłączona, żeby wojna nie stawiała garnizonu, którego ta scena nie mierzy.
+  if (window.KOSMOS.garrisonSystem) window.KOSMOS.garrisonSystem.enabled = false;
+  window.KOSMOS.diplomacySystem.declareWar(empireId, 'keeper_setup');
 
   window.KOSMOS.combatSystem = new CombatSystem();
 
