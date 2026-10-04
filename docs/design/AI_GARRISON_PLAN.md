@@ -5,15 +5,21 @@
 > (§5i–§5k). ✅ **G2-3a (planer garnizonu, czyste funkcje) ZROBIONY 2026-10-03** (`053fcc0`, §5l) — z drabiną **D9 po
 > rewizji** (§1). ✅ **G2-3b (mobilizacja, usuwanie jednostek AI, stempel kafli) ZAMKNIĘTY 2026-10-03 — bramka live
 > właściciela PASS** (§5n–§5p). ✅ **G2-4 (po pokoju, R1–R7) ZAMKNIĘTY 2026-10-04 — bramka live właściciela: silnik PASS,
-> trzy wady widoku** (§5q–§5s). Dalej: **follow-upy G2-4** (F1–F4 podpisane 2026-10-03, F5–F7 z bramki; §5s) → **G2b** →
-> **G3** → **G1c** (§3).
+> trzy wady widoku** (§5q–§5s). ✅ **Follow-upy G2-4 (F1–F7) ZAMKNIĘTE 2026-10-04 — bramka live właściciela PASS**
+> (§5t–§5u). Poprawki po bramce **(b) (d) (e) (f) (g)** — 2026-10-04, bez osobnej bramki (zgoda właściciela), §5v;
+> **(a)** — łatka gotowa, **wstrzymana**: zaczerwienia trzy istniejące asercje (reguła 8), decyzja właściciela (§5v);
+> **(c)** — etap polerki UI (**372**). ✅ **G2 ZAMKNIĘTE.** Pozostałe kroki arca (§3): **G3** (odrastanie strat,
+> widoczność garnizonu, uzgadnianie mobilizacji co rok — **360**) · **G1c** (rodzina „utrata POP”: **333** · **330** ·
+> **328** · **329**) · **G2b** (pule desantu na archetypy).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
 > odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k);
 > **rewizja D9** i odpowiedzi (a)–(g) z sesji G2-3a — **2026-10-03** (§1, §5m); odpowiedzi z sesji G2-3b i **zakres G2-4
 > (R1–R7)** — **2026-10-03** (§5p); odpowiedzi po G2-4 (notatka przekazania) — **2026-10-03**, wpisane **2026-10-04**,
-> i zakres wad z bramki G2-4 — **2026-10-04** (§5s).
-> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b i w G2-4.
+> i zakres wad z bramki G2-4 — **2026-10-04** (§5s); odpowiedzi po bramce follow-upów — poprawki **(a)–(g)** —
+> **2026-10-04** (§5v).
+> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b, w G2-4 i w follow-upach G2-4
+> (F1–F7, (b)–(g)).
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
@@ -21,16 +27,20 @@
 > (G2-2, bramka wojny D13) + `dbfbbd6` (D13a, „Wyładuj” nigdy na cudzym ciele) — §5i · `053fcc0` (G2-3a, planer
 > garnizonu) — §5l · `6fc2c8d` (G2-3b C-S1, mobilizacja) + `24beea4` (C-S2, usuwanie jednostek AI) + `2437725`
 > (C-S3, stempel kafli) — §5n · `edd6fd1` (G2-4 C1a, keepery: wojna w setupie) + `cd1fc46` (C1b, R1/R2) + `1a41c62`
-> (C2, wycofanie po pokoju R3–R5) + `8c82cf7` (C3, R6) + `39c9227` (C4, R7) + `1fefcdc` (komentarz P6b) — §5q.
+> (C2, wycofanie po pokoju R3–R5) + `8c82cf7` (C3, R6) + `39c9227` (C4, R7) + `1fefcdc` (komentarz P6b) — §5q ·
+> `39e2df6` (F1, #363) + `4c60e5b` (F2, #364) + `86a6d2a` (F3, #366) + `8785b41` (F6) + `30bc68c` (F4, #367) + `f8f9cdb`
+> (F5) + `f90bc14` (F7) — §5t · `cafd6e8` ((b), #371) + `2c9511f` ((f), #376) + `5fefe33` ((d), #368) + `8427b0a`
+> ((e), #369) + `96c636f` ((g), #365) — §5v.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 > `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
 > `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · `g2_planner_smoke` **77/77** ·
-> `g2_mobilisation_smoke` **56/56** · `g2_after_peace_smoke` **73/73** · sweep **257/257 OK, 0 FAIL, 31 advisory** ·
-> `check-i18n` PASS (pl = en = **3440**).
-> **Rejestr macierzysty findingów #309–#367:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
+> `g2_mobilisation_smoke` **56/56** · `g2_after_peace_smoke` **73/73** · `g2_peace_followups_smoke` **67/67** ·
+> `g2_peace_closing_smoke` **38/38** · sweep **259/259 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3448**).
+> **Rejestr macierzysty findingów #309–#378:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
 > `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
-> `dbfbbd6`; §5l–§5m na `053fcc0`; #358–#362 oraz §5n–§5p na `2437725`; #363–#367 oraz §5q–§5s na `1fefcdc`) ·
+> `dbfbbd6`; §5l–§5m na `053fcc0`; #358–#362 oraz §5n–§5p na `2437725`; #363–#367 oraz §5q–§5s na `1fefcdc`;
+> #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`) ·
 > `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
@@ -38,7 +48,10 @@
 > z bramki live 2026-10-03, bez ponownego pomiaru · `[doc: raport G2-3b]` — z raportu sesji G2-3b (2026-10-03),
 > którego nie ma w repo · `[doc: bramka G2-3b]` — z relacji właściciela z bramki live G2-3b (2026-10-03), bez
 > ponownego pomiaru · `[doc: notatka G2-4]` — z notatki przekazania G2-4 (2026-10-03, `kosmos-handover/g2-4`, poza
-> repo) · `[doc: bramka G2-4]` — z relacji właściciela z bramki live G2-4 (2026-10-04), bez ponownego pomiaru.
+> repo) · `[doc: bramka G2-4]` — z relacji właściciela z bramki live G2-4 (2026-10-04), bez ponownego pomiaru ·
+> `[doc: bramka follow-upów]` — z relacji właściciela z bramki live follow-upów G2-4 (2026-10-04), bez ponownego pomiaru ·
+> `[doc: notatka follow-upów]` — z notatki przekazania follow-upów G2-4 (2026-10-04, `kosmos-handover/g2-4-followups`,
+> poza repo).
 
 ---
 
@@ -130,7 +143,8 @@ sam wynik dla każdego POP (0 rozjazdów dla POP 0–100 000; przy ×1,5 byłyby
 | **G2-3a** | **planer garnizonu** — czyste funkcje nad jedną tabelą danych: limit (**D1** × **D9**), szczebel, skład, podział (**D11**), stolica (**D12**), heksy (**D10**); odczyt `KOSMOS.debug.garrisonPlan()`; niczego nie tworzy | **322** (stolica = `capitalOf`) | ✅ **2026-10-03** (`053fcc0`, §5l) |
 | **G2-3b** | **mobilizacja (D15)** wg planera; usuwanie jednostek AI (**D6**, **D16**); stempel kafli (**318**) | **318** ✅ · **319** ✅ (jednostki AI; jednostki gracza → **358**) · **324** ✅ (zakres D6) · **320** (zostaje, niepotrzebny) | ✅ **2026-10-03** (`6fc2c8d` + `24beea4` + `2437725`, §5n–§5p) |
 | **G2-4** | **wycofanie po pokoju (D14)** — zakres **R1–R7** podpisany 2026-10-03 (§5p): bez wojny brak ognia i okupacji · licznik okupacji stoi przy żywym wrogu · flaga wycofania 6 mies. · jednostki AI z ciał gracza usuwane przy pokoju · meldunki · zabranie wojsk z cudzego ciała i płatnik utrzymania · jednostka gracza na zniszczonym ciele | **348** ✅ · **353** ✅ · **354** ✅ (płatnik jednostki gracza) · **358** ✅ · **359** ✅ | ✅ **2026-10-04** (`edd6fd1` … `39c9227`, §5q–§5r) |
-| **G2-4 po bramce** | **F1** pokój cofa okupację kafli (obie strony) · **F2** ostrzał z orbity na obce ciało tylko w wojnie · **F3** stare zapisy: flaga przy wczytaniu · **F4** wpisy w Dzienniku dla R4 i R7 · **F5** meldunek o utracie wojsk w terminie (Dziennik i dzwonek) · **F6** nazwa imperium we wpisach wycofania · **F7** „duch” jednostki na mapie kolonii | **363** · **364** · **366** · **367** (F5–F7 — wady z bramki, §5r) | do zrobienia — zakres §5s; **bramka w przeglądarce** |
+| **G2-4 po bramce** | **F1** pokój cofa okupację kafli (obie strony) · **F2** ostrzał z orbity na obce ciało tylko w wojnie · **F3** stare zapisy: flaga przy wczytaniu · **F4** wpisy w Dzienniku dla R4 i R7 · **F5** meldunek o utracie wojsk w terminie (Dziennik i dzwonek) · **F6** nazwa imperium we wpisach wycofania · **F7** „duch” jednostki na mapie kolonii | **363** ✅ · **364** ✅ · **366** ✅ · **367** ✅ (F5–F7 — wady z bramki, §5r) | ✅ **2026-10-04** (`39e2df6` … `f90bc14`, §5t; bramka live PASS, §5u) |
+| **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ((a)) | ✅ **2026-10-04** bez (a) (`cafd6e8` … `96c636f`, §5v); **(a)** — łatka gotowa, decyzja właściciela (reguła 8) |
 | **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia |
 | **G3** | odrastanie strat · widoczność (`'detailed'`) · **uzgadnianie mobilizacji co rok** (odpowiedź (d), §5p) | **360** | do zrobienia |
 | **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji poza zapisem (328) · utrzymanie bez terminu właściciela (329) | **333** · **330** · **328** · **329** | **po G3** (kolejność z 2026-10-02, przy podpisie D8–D18; wcześniej „po G2”, §5d (b)); kierunek 333 i 330 podpisany 2026-10-02, niezaimplementowany |
@@ -165,6 +179,11 @@ przypisanego kroku. Rozszerzone bez nowego numeru: **345** i **355** (widoczny `
 
 ⚠ **Przydział findingów z sesji G2-4 (#363–#367, §6):** **363** → F1 · **364** → F2 · **366** → F3 · **367** → F4
 (decyzje właściciela, §5s) · **365** → bez decyzji. Wady widoku z bramki G2-4 (§5r) → F5, F6, F7 (§5s).
+⚠ **Korekta 2026-10-04 (sesja zamykająca G2-4):** **363** · **364** · **366** · **367** ✅ (F1–F4) · **365** ✅ (poprawka (g)).
+
+⚠ **Przydział findingów z sesji zamykającej G2-4 (#368–#378, §6):** **368** · **369** · **371** · **376** ✅ (poprawki (d),
+(e), (b), (f)) · **370** → poprawka **(a)**, łatka czeka na decyzję właściciela (§5v) · **372** · **374** · **375** · **377** →
+etap polerki UI · **373** → później · **378** → bez przypisanego kroku (obejście „Zbierz”).
 
 ---
 
@@ -872,10 +891,115 @@ miesiąc 30,44 dnia, `TimeSystem.js:98-123`) — zostaje. **365** — bez decyzj
 
 ---
 
-## 6. Rejestr findingów arca (#309–#367, zebrane 2026-10-02–04)
+## 5t. G2-4 po bramce (follow-upy F1–F7) — dostarczone (łatki i commity 2026-10-04)
+
+| commit | zawartość | keeper `g2_peace_followups_smoke` |
+|---|---|---|
+| `39e2df6` | **F1 (#363)** — NEW `TileOwnership.revertPeaceOccupation` (jedno źródło „co pokój cofa”); `WithdrawalSystem.revertOccupationAtPeace` (`:132`) na początku `onPeaceSigned`: kafle zajęte w wojnie wracają do właściciela kolonii na koloniach OBU stron, liczniki okupacji stron pokoju zerowane; `tile:ownerChanged` na kafel, audyt `withdrawal:tilesReverted` | B1 **14/14**; fail-first 3/11 `[doc: notatka follow-upów]` |
+| `4c60e5b` | **F2 (#364)** — ostrzał z orbity na ciało innego imperium wymaga wojny: dostępność akcji (`FleetActions.js:591`, powód NEW `fleet.reason.strikeNotAtWar`), żądanie w `ColonyOverlay`, wystrzał `Vessel.fireOrbitalStrike` (`Vessel.js:795`; bramka w chwili wystrzału, przed zużyciem amunicji), strażnik silnika `GroundUnitManager._onOrbitalStrike` (`:53`; audyt `groundUnit:orbitalStrikeRefused`) | + B2 **24/24**; fail-first 18/6 |
+| `86a6d2a` | **F3 (#366)** — `WithdrawalSystem.armLoadReconcile` (`:158`, wołane z bloku wczytania `GameScene.js:2317`) + `reconcileAfterLoad` (`:174`) na pierwszym ticku: jednostki gracza w pokoju na ciele innego imperium dostają flagę z terminem wczytanie + 0,5 roku; istniejące flagi bez zmian; sesja bez wczytania — nic | + B3 **33/33**; fail-first 29/4 |
+| `8785b41` | **F6** — NEW `src/utils/EmpireName.js` (`empireLogName`, `:19`: nazwa STRONY TRAKTATU, bez warunku wywiadu); wpis pokoju i wpisy wycofania z jednego źródła; PL „⚑ Pokój z imperium {0}: …” | + B4 **41/41**; fail-first 37/4 |
+| `30bc68c` | **F4 (#367)** — wpisy w Dzienniku dla R4 (Dyplomacja, glif ☮) i R7 (Walka); nazwa ciała z ładunku (`colony:destroyed` → `bodyName`) | + B5 **49/49**; fail-first 45/4 |
+| `f8f9cdb` | **F5** — utrata wojsk w terminie: wpis w Dzienniku I w dzwonku, raz na ciało (typ `withdrawalExpired`, grupa „Troops lost after peace” / „Wojska utracone po pokoju”) | + B6 **59/59**; fail-first 53/6 |
+| `f90bc14` | **F7** — NEW `src/ui/ColonySelectionLogic.js` (`pruneUnitSelection`): zaznaczenie mapy kolonii trzyma tylko jednostki stojące na tej mapie; `GroundUnitManager.moveUnit` odmawia jednostce `'in_cargo'` | + B7 **67/67**; fail-first 61/6 |
+
+**Weryfikacja przy commitowaniu (2026-10-04)** `[measured]`: notatka przekazania i łatki zgodne z `SHA256SUMS` (75/75);
+kotwica HEAD `103a868`, indeks = drzewo `37681bc`; łańcuch `git read-tree HEAD` + `git apply --cached` c1…c7 — każdy commit
+dał dokładnie drzewo z notatki (`9c2c59b` · `fe3ed00` · `4f8e511` · `d41131f` · `139703a` · `6f9b297` · `37681bc`); żaden
+commit nie przewraca całego pliku (numstat); drzewo główne po C7 — sweep **258/258 OK, 0 FAIL, 31 advisory** (lista advisory
+identyczna jak przed follow-upami), `check-i18n` PASS 3446. Każdy stan zbudowany wcześniej jako osobny worktree na świeżym
+checkoucie LF — sweep 258/258 w każdym, `check-i18n` 3440 → 3446 `[doc: notatka follow-upów]`.
+
+**Sprostowania do §5s** (notatka follow-upów §8): **(3)** powód odmowy ostrzału to NOWY klucz `fleet.reason.strikeNotAtWar`
+(„Orbital strike requires war with the owner of this body”), nie `fleet.reason.notAtWar` — tamten mówi o lądowaniu i dla
+ostrzału kłamałby o czynności; **(4)** F3 nie powtarza wzoru `GarrisonSystem._firstTick` — uzgodnienie uzbraja WCZYTANIE
+(`armLoadReconcile`, `GameScene.js:2317`), bo pierwszy tick KAŻDEJ sesji oflagowałby sceny keeperów z jednostkami w pokoju
+(`g2_after_peace_smoke` A2); **(5)** wpis R4 ma glif ☮, nie ⚑ — z ⚑ padał `g2_after_peace_smoke` A4e (liczy wpisy ⚑
+w kanale dyplomacji przy pokoju).
+
+---
+
+## 5u. Bramka live follow-upów G2-4 — 2026-10-04, właściciel: **PASS**
+
+Właściciel, język gry **angielski**, zapis w wojnie z emp_001, `gameTime` ok. **120,39** w chwili pokoju
+`[doc: bramka follow-upów]`. Stan wyjściowy: Thuban e (emp_001) miał już **8 kafli należących do gracza** z wcześniejszej
+okupacji.
+
+| | co zrobiono | wynik |
+|---|---|---|
+| **F1** | jednostki gracza `gu_88` na (0,0) i `gu_89` na (1,0) na Thuban d (`entity_56`); po ok. 5 dniach kafel pod `gu_88` należał do gracza; jeden kafel stolicy gracza (Nowa Ziemia) oddany emp_001; pokój | status `truce`; oba kafle wróciły do właścicieli swoich kolonii; nigdzie obcych kafli — także 8 starych na Thuban e; audyt `tilesReverted` 3 — **PASS** |
+| **F2** | w wojnie: akcja dostępna, ostrzał zdjął garnizonowi `gu_64` HP 30 → 27, odmów 0; w pokoju: `{ ok:false, reason:"Orbital strike requires war with the owner of this body" }`, HP 27 → 27, odmów 1 | **PASS** (sam przycisk nieopisany) |
+| **F4 i F6** | Dziennik: „⚑ Peace with Konsorcjum Siódmego Kręgu: 2 ground unit(s) on Thuban d must withdraw by 23/11/120”, to samo dla 8 jednostek na Thuban e; „☮ Peace with Konsorcjum Siódmego Kręgu: its troops (1 unit(s)) have left Nowa Ziemia” | jednostka AI `gu_90` zniknęła ze stolicy — **PASS** |
+| **F7** | obie jednostki załadowane zwykłym oknem ładowni statku `v_54` „Odkrywca” | nic na heksie, w szufladzie ani w panelu jednostki; PPM niczego nie rusza; silnik `[false,"in_cargo",true,false]` — **PASS** |
+| **F3** | 10 flag zdjętych, ok. miesiąc gry, zapis, przeładowanie strony | osiem jednostek na `entity_57` z flagą i terminem 120,997 (odczyt przy `gameTime` 120,541); jednostki na pokładzie bez flagi; mapa kolonii — data wycofania 30/12/120 — **PASS** |
+| **F5** | 30/11/120 — ostrzeżenie w dzwonku i w Dzienniku; czas przez 30/12/120 | dzwonek: typ `withdrawalExpired`, „Troops lost on Thuban e — withdrawal deadline passed” / „8 ground unit(s) were not withdrawn in time”; Dziennik „[combat] ⚑ Withdrawal deadline passed: 8 ground unit(s) on Thuban e lost”; przy `gameTime` 121,002 na `entity_57` zero jednostek gracza. **Właściciel zauważył utratę w grze, bez konsoli** — **PASS** |
+| **R7** | księżyc Kepler-4799 i-I (`entity_8`) usunięty z jedną `shock_infantry` gracza | jednostka zniknęła; Dziennik „[combat] ⚔ 1 ground unit(s) lost together with Kepler-4799 i-I” — **PASS** |
+| **konsola** | — | błędów nie zgłoszono |
+
+⚠ **Granica dowodu tej bramki:** wyszarzony przycisk „Orbital strike” z powodem nie został opisany — F2 potwierdzone
+dostępnością akcji (`getAvailableActions`) i strażnikiem silnika.
+
+---
+
+## 5v. Odpowiedzi właściciela po bramce follow-upów (2026-10-04) i poprawki (a)–(g)
+
+| | pytanie (notatka follow-upów §9) | odpowiedź | wykonanie |
+|---|---|---|---|
+| (a) | ostrzeżenie „został miesiąc” zostaje w dzwonku po terminie, po załadunku i po powrocie wojny (**370**) | gaśnie samo: po terminie ciała, gdy na ciele nie została żadna oflagowana jednostka (załadowane albo flaga zdjęta), gdy wojna z właścicielem wraca | ⚠ **WSTRZYMANE** — łatka gotowa, niezacommitowana (niżej) |
+| (b) | PL `log.diplo.peaceSigned` „Pokój z {0}” (**371**) | poprawić jak F6 | ✅ `cafd6e8` |
+| (c) | trzy reguły nazwy imperium (**372**) | ujednolicić — etap polerki UI | nie wdrożone w tym arcu |
+| (d) | stare zapisy: jednostki AI stojące w pokoju na ciałach gracza (**368**) | usuwać przy wczytaniu, w tym samym uzgodnieniu co F3, jeden wpis w Dzienniku na ciało | ✅ `5fefe33` |
+| (e) | stare zapisy: kafle zajęte w wojnie zakończonej przed F1 (**369**) | cofać przy wczytaniu do właściciela kolonii, liczniki okupacji zerowane | ✅ `8427b0a` |
+| (f) | wpis F3 przy wczytaniu brzmi jak wpis pokoju (**376**) | własne brzmienie, bez „Peace with”: N jednostek na ciele nazwanego imperium musi się wycofać do daty | ✅ `2c9511f` |
+| (g) | **365** — łazik a `awayTeamUnitId` | przy usunięciu łazika (termin, zniszczone ciało, śmierć) odnośnik statku znika — „Zbierz” nie jest oferowane, ruch nie jest blokowany | ✅ `96c636f` |
+
+Właściciel zwolnił poprawki z osobnej bramki w przeglądarce; każda ma test fail-first i zielony sweep. NEW keeper
+`g2_peace_closing_smoke` (rośnie z commitami) `[measured]`:
+
+| commit | poprawka | keeper | fail-first: finalna wersja keepera na kodzie poprzedniego commitu (czysty worktree) | sweep · i18n |
+|---|---|---|---|---|
+| `cafd6e8` | (b) — PL „☮ Pokój z imperium {0} — rozejm na {1} l.” (`pl.js:1830`) | Zb **4/4** | 3 PASS / 1 FAIL (pin PL) | 259/259 · 3446 |
+| `2c9511f` | (f) — NEW `event.withdrawal.orderedLoad` PL+EN; `_handleWithdrawalOrdered` (`NotificationCenter.js:539`) wybiera brzmienie po `reason: 'load'` | + Zf **10/10** | 7 / 3 | 259/259 · 3447 |
+| `5fefe33` | (d) — `reconcileAfterLoad` (`WithdrawalSystem.js:174`): jednostka imperium na ciele gracza bez wojny znika (jak R4); NEW `event.withdrawal.aiRemovedLoad` PL+EN | + Zd **16/16** | 13 / 3 | 259/259 · 3448 |
+| `8427b0a` | (e) — NEW `WithdrawalSystem.revertOccupationAfterLoad` (`:223`) przez `revertPeaceOccupation` (reguła F1) | + Ze **26/26** | 22 / 4 | 259/259 · 3448 |
+| `96c636f` | (g) — `GroundUnitManager._pruneFromVessels` (`:243`, wołane przez `removeUnit`) zeruje `awayTeamUnitId`; `VesselManager._collectAwayTeam` (`:1381`) czyta id PRZED `removeUnit` | + Zg **38/38** | 31 / 7; mutant bez przestawienia odczytu w `_collectAwayTeam` — 37 / 1 (łapie kontrola) | 259/259 · 3448 |
+
+Sonda reszt z notatki follow-upów (`probe_residuals_old_saves.mjs`) `[measured]`: (a)/**368** `aiUnitAfterLoadAnd12civY`
+**true → false** (po `5fefe33`); (b)/**369** `capitalAfterLoad` **player → emp_001** i `colonyOwnerAfterNewWar2civY`
+**player → emp_001** (po `8427b0a`).
+
+**Decyzje w ramach podpisanego zakresu** (do wglądu właściciela):
+- **(d)** „jeden wpis na ciało” jest w praktyce jednym wpisem na ciało **i imperium** — wpis nazywa imperium, więc jednostki
+  dwóch imperiów na jednym ciele dają dwa wpisy; brzmienie bez „Peace with” (`event.withdrawal.aiRemovedLoad`, wzór (f)).
+- **(d)** i **(e)**: „nie w wojnie” = `groundOwnersHostile` (R1, ten sam predykat co ogień i okupacja) — para
+  gracz↔imperium przy żywej dyplomacji = status relacji; para **AI↔AI** zawsze „wrogowie”, więc (e) jej nie dotyka (poza
+  zakresem, **331**/D5); bez modułu dyplomacji nic nie znika i nic nie wraca.
+- **(e)** bez wpisu w Dzienniku (F1 przy pokoju też go nie ma); `tile:ownerChanged` jak przy F1 — `NotificationCenter` milczy
+  (odzysk albo cudze ciało).
+- **(e)** liczniki okupacji pinowane bezpośrednio po `reconcileAfterLoad`, przed tickiem okupacji:
+  `GroundUnitManager._cleanupStaleOccupations` zeruje w każdym ticku licznik bez okupanta, więc pin po ticku byłby jałowy.
+- **(g)** jedno miejsce obejmuje wszystkie drogi usunięcia jednostki (`_units.delete` wyłącznie w `removeUnit`,
+  `GroundUnitManager.js:227-237`): termin wycofania, zniszczone ciało, ostrzał (`:82`), walka (`CombatSystem.js:264`, `:288`),
+  mina (`:1064`), głód (`SupplyCoverageSystem.js:206`), ręczne rozwiązanie (`UnitCardPanel.js:233`) `[code]`.
+
+**(a) — dlaczego wstrzymane** `[measured]`: łatka (kod `NotificationCenter` + sekcja Za keepera **47/47**; fail-first 43 / 4)
+zrobiona i zweryfikowana w osobnym worktree na `96c636f`, ale sweep z nią daje **257/259** — padają trzy ISTNIEJĄCE asercje,
+które mierzą ostrzeżenie PO terminie, bo do (a) ono nigdy nie gasło: `g2_after_peace_smoke` **A6b** („ostrzeżenie w dzwonku
+(0)” po 8 civY, termin w 6.), `g2_peace_followups_smoke` **B6b** (plakietka przed terminem 2, w ticku terminu **2** — przyrost
+0 zamiast ≥ 2) i świadek **B6c** („ostrzeżenie w dzwonku (0)” po 7 civY). Reguła 8 polecenia: istniejącego keepera nie
+przestawia się na zielono samodzielnie. **Propozycja przecelowania** (intencja każdej asercji zostaje: ostrzeżenie TRAFIŁO
+do dzwonka — zdarzenie `notify:added`; w ticku terminu dzwonek trzyma meldunki o utracie i ani jednego ostrzeżenia) — z nią
+sweep **259/259**, `check-i18n` 3448 `[measured]`. ⚠ **Skutek UX do decyzji:** w ticku terminu meldunki o utracie ZASTĘPUJĄ
+ostrzeżenia, więc liczba na plakietce dzwonka może nie wzrosnąć (zmierzone: **2 → 2**), a dzwonek nie ma innego sygnału
+„nowe” niż liczba (`BottomControlBar._drawBell`, `:163`) `[code]`. Łatki (kod + keeper, propozycja przecelowania, wersja
+łączona) — notatka przekazania sesji zamykającej (`kosmos-handover/g2-4-closing`, poza repo).
+
+---
+
+## 6. Rejestr findingów arca (#309–#378, zebrane 2026-10-02–04)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
-#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
+#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
 (`VESSEL_ORDERS_PLAN.md` §308; #309 był tam planowany i świadomie **nieprzydzielony**), więc ten arc zaczyna
 od **#309**; przed nadaniem #327+ sprawdzono, że w żadnym rejestrze nie ma numeru wyższego niż #325, a #326
 istniał tylko w komunikacie `c7c5a74`; przed nadaniem #336+ sprawdzono grepem wszystkie rejestry — najwyższy
@@ -883,7 +1007,9 @@ był #335; przed nadaniem #343+ — najwyższy był #342; przed nadaniem #348+ �
 `CLAUDE.md` i historii commitów, 2026-10-03); #358–#361 nadane w raporcie sesji G2-3b, gdy najwyższy był #357, a przed
 wpisaniem ich i nadaniem #362 grep rejestrów, `CLAUDE.md` i historii commitów znów dał #357 (2026-10-03); #363–#367
 nadane w notatce przekazania G2-4 (2026-10-03), gdy najwyższy wpisany był #362, a przed ich wpisaniem grep rejestrów,
-`CLAUDE.md`, pamięci i historii commitów znów dał #362 (2026-10-04). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
+`CLAUDE.md`, pamięci i historii commitów znów dał #362 (2026-10-04); #368–#378 nadane przy wpisie w sesji zamykającej G2-4 —
+przed nadaniem grep rejestrów, `CLAUDE.md`, pamięci i historii commitów dał #367, kontrola: #367 widoczny w trzech dokumentach
+i jednym commicie (2026-10-04). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
 ⚪ obserwacja/higiena · ✅ zamknięty.
 ⚠ Źródło: **309–316** z sesji G1 · **317–325** z audytu G0 (mechanizmy przemierzone w źródle teraz;
 liczby z G0 oznaczone `[doc: raport G0]`) · **326** nadany przy podpisie zakresu G1b · **327–332** kandydaci
@@ -895,7 +1021,9 @@ miejsca sprawdzone grepem na `dbfbbd6`, sondy headless 353/354 poza repo · **35
 sesji G2-3b (raport 2026-10-03; numery nadane w raporcie, wpisane po bramce) · **362** — obserwacja z bramki live G2-3b
 (§5o); miejsca sprawdzone grepem na `2437725`, pomiar rozmiaru zapisu w sesji zamykającej G2-3b · **363–367** —
 „znalezione, nienaprawione” sesji G2-4 (notatka przekazania 2026-10-03; numery nadane w notatce, wpisane po bramce);
-miejsca sprawdzone grepem na `1fefcdc`, liczby z sond headless sesji G2-4 oznaczone `[doc: notatka G2-4]`.
+miejsca sprawdzone grepem na `1fefcdc`, liczby z sond headless sesji G2-4 oznaczone `[doc: notatka G2-4]` · **368–376** —
+„znalezione, nienaprawione” sesji follow-upów (notatka przekazania follow-upów §7 i §9 pytanie 6, 2026-10-04; numery nadane
+przy wpisie) · **377–378** — znalezione w sesji zamykającej G2-4; miejsca sprawdzone grepem na `96c636f`.
 
 ### ✅ 309 — salwa wroga rozstrzygana PRZED salwą gracza; zabici gracza nie odpowiadają — ZAMKNIĘTY 2026-10-02 (`c0a3d5c`, G1b/S1)
 
@@ -1545,7 +1673,7 @@ Ostrzeżenie `game:saveLargeWarning` od 3,5 mln znaków (`:136-138`).
 milczy — jedynym śladem jest `console.warn`. Gwarantowaną ścieżką ratunkową jest plik `.json` (menu ☰). Bez przypisanego
 kroku.
 
-### 🟠 363 — pokój nie cofa okupacji kafli, a nowa wojna daje przejęcie kolonii AI bez jednej jednostki (→ F1)
+### ✅ 363 — pokój nie cofa okupacji kafli, a nowa wojna daje przejęcie kolonii AI bez jednej jednostki — ZAMKNIĘTY 2026-10-04 (`39e2df6`, F1)
 
 Pokój nie rusza `tile.owner` ani liczników okupacji (`occupyEmpireId`/`occupyStart`) — `WithdrawalSystem.onPeaceSigned`
 (`WithdrawalSystem.js:68`) flaguje jednostki i zdejmuje jednostki AI, kafli nie dotyka; **R1** zakazuje ich odbicia w pokoju
@@ -1554,8 +1682,13 @@ i `holdsDecisiveGround` (`:451`) — **nie wymaga żywej jednostki zdobywcy** `[
 stolicy AI = gracz, zero jednostek na ciele, wypowiedzenie wojny → przejęcie w 1. civY bez wojsk `[doc: notatka G2-4]`.
 Kafel stolicy przechodzi na gracza wyłącznie okupacją w wojnie (6 civY stania na kaflu z budynkiem). Osiągalność stanu
 wyjściowego w grze niezmierzona. Decyzja właściciela (§5s (2)): **F1**.
+**Zamknięcie** (na `96c636f`): **F1** — `WithdrawalSystem.revertOccupationAtPeace` (`WithdrawalSystem.js:132`) przez
+`TileOwnership.revertPeaceOccupation` (`TileOwnership.js:43`) przy każdym pokoju, na koloniach obu stron; strony trzecie
+nietknięte `[code]`. Keeper `g2_peace_followups_smoke` B1 `[doc: notatka follow-upów]`. Bramka follow-upów: oba kafle wróciły
+do właścicieli kolonii, także osiem starych kafli na Thuban e, audyt `tilesReverted` 3 — **PASS** `[doc: bramka follow-upów]`.
+Reszta dla zapisów z pokojem sprzed F1 — **369** ✅ (`8427b0a`).
 
-### 🟠 364 — ostrzał z orbity bez bramki wojny (→ F2)
+### ✅ 364 — ostrzał z orbity bez bramki wojny — ZAMKNIĘTY 2026-10-04 (`4c60e5b`, F2)
 
 Dostępność akcji `orbital_strike` (`FleetActions.js:575-598`) sprawdza orbitę, baterię, amunicję, cooldown i dominację
 orbitalną; żądanie ostrzału w `ColonyOverlay` (`:253-273`) — amunicję i dominację; strażnik silnika `_onOrbitalStrike`
@@ -1563,26 +1696,129 @@ orbitalną; żądanie ostrzału w `ColonyOverlay` (`:253-273`) — amunicję i d
 w pokoju (brak kontrolera, brak floty wroga) `[code]` ⇒ ostrzał ciała AI przechodzi w pokoju; silnik zniszczył jednostkę
 garnizonu w pokoju `[doc: notatka G2-4]`. Bliźniak bramki desantu D13 (`ColonyOverlay.js:320`), którego tu zabrakło.
 Decyzja właściciela (§5s (3)): **F2**.
+**Zamknięcie** (na `96c636f`): dostępność akcji (`FleetActions.js:591`, powód `fleet.reason.strikeNotAtWar`), wystrzał
+`Vessel.fireOrbitalStrike` (`Vessel.js:795`) i strażnik silnika `GroundUnitManager._onOrbitalStrike` (`:53`) pytają
+`warGateRefusal` `[code]`. Bramka follow-upów: wojna — HP 30 → 27, odmów 0; pokój — odmowa z powodem, HP 27 → 27, odmów 1 —
+**PASS** `[doc: bramka follow-upów]`.
 
-### ⚪ 365 — łazik zwiadu usunięty w terminie (R3) albo razem z ciałem (R7) zostawia `vessel.awayTeamUnitId`
+### ✅ 365 — łazik zwiadu usunięty w terminie (R3) albo razem z ciałem (R7) zostawia `vessel.awayTeamUnitId` — ZAMKNIĘTY 2026-10-04 (`96c636f`, (g))
 
 Usunięcie jednostki przez `WithdrawalSystem` (termin) albo `GarrisonSystem.removeOnBodyDestroyed` (R7) nie czyści
 `vessel.awayTeamUnitId`, które ustawia `VesselManager.deployAwayTeam` (`VesselManager.js:1370`), a zeruje wyłącznie
 „Zbierz” (`:1391`) `[code]`. Zmierzone: łazika nie ma, pole wskazuje `gu_1` `[doc: notatka G2-4]`. „Zbierz” zostaje
 aktywne, a „Powrót” blokuje „najpierw zbierz” (`FleetActions.js:331`) `[code]`. Obejście: kliknąć „Zbierz”. Bez decyzji.
+**Zamknięcie** (odpowiedź właściciela §5v (g)): `GroundUnitManager._pruneFromVessels` (`:243`, wołane przez `removeUnit` —
+jedyną drogę usunięcia jednostki) zeruje `vessel.awayTeamUnitId` równy id usuwanej jednostki; `VesselManager._collectAwayTeam`
+(`:1381`) czyta id PRZED `removeUnit` `[code]`. Zmierzone na `8427b0a`: po usunięciu łazika odnośnik `gu_1`, „Zbierz”
+w ofercie, „Wyślij zespół” odmawia; po poprawce odnośnik `null` na trzech drogach (termin, R7, ostrzał), „Zbierz” poza
+ofertą, „Wyślij zespół” dostępne, `return_home` bez „najpierw zbierz” `[measured]`; keeper `g2_peace_closing_smoke` Zg.
+Bez bramki w przeglądarce (zgoda właściciela). Reszta: zapisy z martwym odnośnikiem — **378**.
 
-### ⚪ 366 — jednostki gracza stojące już w pokoju na ciele innego imperium (zapisy sprzed G2-4) nigdy nie dostają flagi (→ F3)
+### ✅ 366 — jednostki gracza stojące już w pokoju na ciele innego imperium (zapisy sprzed G2-4) nigdy nie dostają flagi — ZAMKNIĘTY 2026-10-04 (`86a6d2a`, F3)
 
 Flagę wycofania stawia wyłącznie `diplomacy:peaceSigned` (`WithdrawalSystem.js:43`) `[code]`; zapis sprzed G2-4 z jednostkami
 gracza na ciele AI w pokoju (rozejm, NAP) wczytuje się bez flagi, a R1 trzyma je tam bez walki i bez terminu, na zawsze.
 Decyzja właściciela (§5s (4)): **F3**.
+**Zamknięcie** (na `96c636f`): `armLoadReconcile` (`WithdrawalSystem.js:158`) z bloku wczytania `GameScene.js:2317`,
+`reconcileAfterLoad` (`:174`) na pierwszym ticku `[code]`. Bramka follow-upów: osiem jednostek na `entity_57` z terminem
+wczytanie + 0,5 roku, jednostki na pokładzie bez flagi — **PASS** `[doc: bramka follow-upów]`. Brzmienie wpisu przy
+wczytaniu — **376** ✅ (`2c9511f`).
 
-### ⚪ 367 — usunięcia R4 (jednostki AI przy pokoju) i R7 (jednostka gracza razem z ciałem) są ciche — tylko audyt (→ F4)
+### ✅ 367 — usunięcia R4 (jednostki AI przy pokoju) i R7 (jednostka gracza razem z ciałem) są ciche — tylko audyt — ZAMKNIĘTY 2026-10-04 (`30bc68c`, F4)
 
 `withdrawal:aiRemoved` (`WithdrawalSystem.js:89`) i `garrison:unitsRemoved` (`GarrisonSystem.js` — `_removeUnits`) trafiają
 wyłącznie do `DebugLog`; `NotificationCenter` subskrybuje z rodziny wycofania tylko `ordered`, `warning` i `expired`
 (`NotificationCenter.js:70-72`) `[code]`. Gracz nie dowiaduje się, że wojska AI zeszły z jego kolonii ani że jego oddział
 zginął razem z ciałem. Decyzja właściciela (§5s (5)): **F4**.
+**Zamknięcie** (na `96c636f`): `NotificationCenter._handleWithdrawalAiRemoved` (`:596`) i `_handleGarrisonUnitsRemoved`
+(`:607`) `[code]`. Bramka follow-upów: „☮ Peace with Konsorcjum Siódmego Kręgu: its troops (1 unit(s)) have left Nowa Ziemia”
+i „⚔ 1 ground unit(s) lost together with Kepler-4799 i-I” — **PASS** `[doc: bramka follow-upów]`.
+
+### ✅ 368 — stare zapisy: jednostki AI stojące w pokoju na ciałach gracza zostają po wczytaniu — ZAMKNIĘTY 2026-10-04 (`5fefe33`, (d))
+
+R4 zdejmuje jednostki imperium z ciał gracza wyłącznie przy podpisaniu pokoju (`WithdrawalSystem.onPeaceSigned`), a F3
+uzgadniał przy wczytaniu tylko jednostki gracza. Sonda notatki follow-upów (kandydat (a)) na `f90bc14`: jednostka AI
+w pokoju na ciele gracza stoi po wczytaniu i 12 civY (`aiUnitAfterLoadAnd12civY: true`) `[measured]`. Odpowiedź właściciela
+(§5v (d)): usuwać przy wczytaniu, w tym samym uzgodnieniu co F3, jeden wpis na ciało.
+**Zamknięcie:** `reconcileAfterLoad` (`WithdrawalSystem.js:174`) — jednostka imperium (żywa, nie w ładowni) na ciele gracza,
+gdy `groundOwnersHostile` mówi „nie wrogowie”, znika (`removeUnit`); `withdrawal:aiRemoved` z `reason: 'load'` raz na ciało
+i imperium; wpis `event.withdrawal.aiRemovedLoad` bez „Peace with” (`NotificationCenter.js:596`) `[code]`. Sonda po poprawce:
+`false` `[measured]`; keeper `g2_peace_closing_smoke` Zd.
+
+### ✅ 369 — stare zapisy: kafle zajęte w wojnie zakończonej pokojem przed F1 zostają przy zajmującym — ZAMKNIĘTY 2026-10-04 (`8427b0a`, (e))
+
+F1 cofa okupację wyłącznie w chwili pokoju (`WithdrawalSystem.revertOccupationAtPeace`, `:132`), a `_tryPlayerCapture` nie
+wymaga żywej jednostki zdobywcy (rodzina **363**). Sonda notatki follow-upów (kandydat (b)) na `f90bc14`: kafel stolicy AI po
+wczytaniu `player`, nowa wojna — przejęcie kolonii w 2 civY bez jednej jednostki na ciele (`colonyOwnerAfterNewWar2civY:
+player`) `[measured]`. Odpowiedź właściciela (§5v (e)): cofać przy wczytaniu, liczniki zerowane.
+**Zamknięcie:** NEW `WithdrawalSystem.revertOccupationAfterLoad` (`:223`), wołane na początku `reconcileAfterLoad`: strony
+obce na siatce kolonii (właściciel kafla albo licznik okupacji), które nie są w wojnie z właścicielem kolonii
+(`groundOwnersHostile`), idą przez `revertPeaceOccupation` — regułę F1 `[code]`; pary AI↔AI bez zmian (**331**/D5). Sonda po
+poprawce: `emp_001` i `emp_001` `[measured]`; keeper Ze.
+
+### 🟠 370 — ostrzeżenie „został miesiąc” nie gaśnie: zostaje w dzwonku po terminie, po załadunku i po powrocie wojny
+
+`_handleWithdrawalWarning` (`NotificationCenter.js:547`) dodaje wpis typu `withdrawalWarning`, a odrzuca go wyłącznie gracz
+z listy dzwonka (`NotificationDropdown.js:276`, `:295`, `:304`) `[code]`. Trzy istniejące asercje mierzą ostrzeżenie PO
+terminie i na tym zachowaniu stoją: `g2_after_peace_smoke` A6b, `g2_peace_followups_smoke` B6b (przyrost plakietki ≥ 2
+w ticku terminu) i świadek B6c `[code]`. Odpowiedź właściciela (§5v (a)): gasić samo — po terminie ciała, gdy nie została
+żadna oflagowana jednostka, gdy wojna wraca. **Poprawka (a) gotowa jako łatka, niezacommitowana** — zaczerwienia te trzy
+asercje (sweep 257/259 `[measured]`), a reguła 8 zakazuje przestawiania istniejących keeperów samodzielnie; propozycja
+przecelowania i skutek UX (plakietka 2 → 2) — §5v. **Decyzja właściciela.**
+
+### ✅ 371 — polski wpis pokoju „Pokój z {0}” — mianownik po „z” — ZAMKNIĘTY 2026-10-04 (`cafd6e8`, (b))
+
+`log.diplo.peaceSigned` PL brzmiał „☮ Pokój z {0} — rozejm na {1} l.” od `56de88d` `[git]` — ta sama gramatyka, którą F6
+poprawił we wpisie wycofania. **Zamknięcie:** „☮ Pokój z imperium {0} — rozejm na {1} l.” (`pl.js:1830`) `[code]`; EN bez
+zmian; keeper Zb. Reszta rodziny — **377**.
+
+### ⚪ 372 — trzy reguły nazwy imperium w tekstach dla gracza (→ etap polerki UI)
+
+(1) strona traktatu — `empireLogName` (`EmpireName.js:19`: `namePL ?? name ?? id`, bez warunku wywiadu; wpis pokoju, wpisy
+wycofania, R4); (2) obserwacja imperium — `NotificationCenter._empireLabel` (`:645`: `name` dopiero przy `detailed`, inaczej
+„Unknown empire”); (3) panel dyplomacji — `DiplomacyOverlay.js:231`, `:311` (`name` od `contact`, inaczej maska) `[code]`.
+Czwarta kopia reguły (1) bez helpera: `log.skirmish` (`UIManager.js:1638`) `[code]`. Odpowiedź właściciela (§5v (c)):
+ujednolicić — **etap polerki UI**.
+
+### ⚪ 373 — akcje silnika bez bramki `'in_cargo'` (→ później)
+
+`GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`) nie sprawdzają, czy
+jednostka siedzi w ładowni; `moveUnit` (`:348`) ma tę bramkę od F7 (`f90bc14`) `[code]`. Z UI nieosiągalne: zaznaczenie mapy
+kolonii trzyma od F7 wyłącznie jednostki stojące na tej mapie `[doc: notatka follow-upów]`. **Później.**
+
+### ⚪ 374 — martwy `FleetTabPanel` — drugi słuchacz `vessel:openCargoModal` (→ etap polerki UI)
+
+`FleetTabPanel.js:206` słucha `vessel:openCargoModal`, a pliku nie importuje nic w `src/` `[code]`. Jedyny emitent to
+`FleetActions.load_troops.execute` (`FleetActions.js:286`), a Dowództwo omija go i otwiera okno ładowni wprost
+(`FleetManagerOverlay.js:2786-2789`) `[code]` — zdarzenie nie ma żywego konsumenta. **Etap polerki UI.**
+
+### ⚪ 375 — polskie literały w `ColonyOverlay` i `CargoLoadModal` (klasa 113, → etap polerki UI)
+
+`ColonyOverlay.js:4677` — flash „Błąd ostrzału: ${reason}” (literał i surowy slug); `CargoLoadModal.js:125` („Ładownia
+desantowa…”), `:358` („⚔ TRANSPORT WOJSK…”, „(bez kapsuł desantowych)”), `:381` („(ładownia pusta)”), `:398` („Wyładuj”),
+`:439` („Aby załadować z innej planety…”), `:445` („Załaduj”), `:500` („💥 BATERIA ORBITALNA…”) `[code]`. Gracz EN widzi te
+napisy po polsku. **Etap polerki UI** (arc literałów 113). ⚠ `g2_war_gate_smoke` szuka przycisku po tekście „Wyładuj” — przy
+przejściu przez i18n trzeba go przepiąć (komentarz przy `cargoUnloadClick`).
+
+### ✅ 376 — wpis F3 przy wczytaniu brzmi jak wpis podpisania pokoju — ZAMKNIĘTY 2026-10-04 (`2c9511f`, (f))
+
+`reconcileAfterLoad` emituje `withdrawal:ordered` z `reason: 'load'` (od `86a6d2a` `[git]`), a `_handleWithdrawalOrdered` pisał
+„⚑ Peace with …: … must withdraw by …” bez względu na powód — przy wczytaniu żaden pokój nie zapada. **Zamknięcie:** NEW
+`event.withdrawal.orderedLoad` PL+EN („⚑ {1} ground unit(s) on {2}, a body of {0}, must withdraw by {3}”);
+`_handleWithdrawalOrdered` (`NotificationCenter.js:539`) wybiera brzmienie po `reason` `[code]`; keeper Zf.
+
+### ⚪ 377 — polska gramatyka „z {0}” przy nazwie imperium w trzech innych wpisach (rodzina 371, → etap polerki UI)
+
+`log.diplo.napExpired` („☮ Pakt o nieagresji z {0} wygasł…”, `pl.js:3667`; `UIManager.js:1733`), `log.diplo.napRenewed`
+(`pl.js:3668`; `:1740`), `log.skirmish` („⚔ Potyczka z {0} — …”, `pl.js:1112`; `:1638`) — nazwa imperium w mianowniku po „z”
+`[code]`. Znalezione przy (b), poza jej zakresem. **Etap polerki UI.**
+
+### ⚪ 378 — zapis wykonany, gdy 365 był żywy, niesie martwy `vessel.awayTeamUnitId`
+
+`VesselManager.restore` bierze pole bez sprawdzenia, czy łazik istnieje (`VesselManager.js:1605`) `[code]` — (g) czyści
+odnośnik przy usunięciu łazika, nie w zapisie wykonanym wcześniej. Zmierzone (sonda poza repo): po wczytaniu odnośnik do
+nieistniejącego łazika zostaje, „Zbierz” jest dostępne, a po nim odnośnik `null` i „Wyślij zespół” znów dostępne
+`[measured]`. Obejście: „Zbierz”. Bez przypisanego kroku.
 
 ---
 

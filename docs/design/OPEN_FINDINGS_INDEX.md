@@ -367,6 +367,19 @@
 > **367** (R4 i R7 bez wpisu w Dzienniku).
 > • Odpowiedzi właściciela po G2-4 (§5s): **363** → F1, **364** → F2, **366** → F3, **367** → F4; wady z bramki → F5–F7;
 > **365** bez decyzji.
+>
+> **Aktualizacja 2026-10-04 (wieczór) — AI GARRISON: follow-upy G2-4 (F1–F7) ZAMKNIĘTE + poprawki po bramce; G2
+> ZAMKNIĘTE.** Sweep: **259/259 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3448** · save **v101 bez migracji**.
+> • ✅ **363** (`39e2df6`, F1) · **364** (`4c60e5b`, F2) · **366** (`86a6d2a`, F3) · **367** (`30bc68c`, F4) · **365**
+> (`96c636f`, poprawka (g)) — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze zdjęte z A5/A9.
+> F5–F7: `f8f9cdb` · `8785b41` · `f90bc14` (§5t). Bramka live właściciela follow-upów 2026-10-04 **PASS** (§5u).
+> • **NOWE: #368–#378** (rejestr: `AI_GARRISON_PLAN.md` §6) — ✅ zamknięte od razu poprawkami po bramce: **368**
+> (`5fefe33`, (d)), **369** (`8427b0a`, (e)), **371** (`cafd6e8`, (b)), **376** (`2c9511f`, (f)) · 🟠 **370** (ostrzeżenie
+> „został miesiąc” nie gaśnie — poprawka (a) gotowa jako łatka, **wstrzymana**: zaczerwienia trzy istniejące asercje;
+> decyzja właściciela, §5v) · ⚪ **372** (trzy reguły nazwy imperium), **374** (martwy `FleetTabPanel`), **375** (polskie
+> literały w `ColonyOverlay`/`CargoLoadModal`), **377** (polska gramatyka „z {0}” w trzech innych wpisach) — etap polerki UI ·
+> **373** (akcje silnika bez bramki `in_cargo`) — później · **378** (zapisy z martwym `awayTeamUnitId`; obejście „Zbierz”).
+> • Pozostałe kroki arca: **G3** · **G1c** · **G2b** (`AI_GARRISON_PLAN.md` §3).
 
 
 ---
@@ -444,7 +457,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-367** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–04; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4) |
+| **309-378** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–04; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -555,8 +568,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **333** | 🟠 | **nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana NA ZAWSZE i liczy się do populacji** — zmierzone (+0,3 po 27 mies., zero wywołań usuwających ludzi); wzorzec poprawny: `killCrew` (W2). Rekoncyliacja A0, **nienaprawiony** |
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
-| **363** | 🟠 | pokój nie cofa okupacji kafli (`WithdrawalSystem.onPeaceSigned` kafli nie dotyka), a `_tryPlayerCapture` (`InvasionSystem.js:386-405`) nie wymaga żywej jednostki zdobywcy ⇒ kafel stolicy AI trzymany przez gracza przeżywa pokój i nowa wojna daje przejęcie bez wojsk ⇒ → **F1** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
-| **364** | 🟠 | ostrzał z orbity bez bramki wojny — `FleetActions.js:575-598`, `ColonyOverlay.js:253-273` i `_onOrbitalStrike` (`GroundUnitManager.js:51`) sprawdzają dominację, której pokój nie odbiera (`WarSystem.js:982-990`) ⇒ → **F2** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
+| **373** | ⚪ | akcje silnika bez bramki `'in_cargo'` — `GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`); `moveUnit` ma ją od F7 (`f90bc14`); z UI nieosiągalne po przycinaniu zaznaczenia (F7) — później. `AI_GARRISON_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -684,9 +696,12 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **355** | ⚪ | mapa kolonii cudzego ciała otwiera się z opóźnieniem przy wejściu w tryb zrzutu — **345 wykluczony w kodzie** (`_loadBiomeMap` asynchroniczne, nic na nie nie czeka) | przyczyna niezmierzona; `GET 404` z bramki G2-3b zgodny z wykluczeniem |
 | **356** | ⚪ | okno ładowni: „undefined” jako nazwa łazika (`CargoLoadModal.js:328`, brak fallbacku `?? u.type`, który ma `ColonyOverlay.js:3339`) + nazwy archetypów z `descriptionPL` | klasa **113** |
 | **362** | ⚪ | kopia przedimportowa nie mieści się przy dużym zapisie (`SaveSystem.js:462-465`, best-effort, tylko `console.warn`) — od ok. 2,6 mln znaków na zapis; ostrzeżenie o dużym zapisie dopiero od 3,5 mln (`:136`) | zaprojektowane (W2 GATE 1); pomiar: uprząż 0,97 mln znaków, fixture GATE-S4 2,09 mln. `AI_GARRISON_PLAN.md` §6 |
-| **365** | ⚪ | łazik zwiadu usunięty w terminie wycofania (R3) albo razem z ciałem (R7) zostawia `vessel.awayTeamUnitId` (`VesselManager.js:1370`/`:1391`) — „Zbierz” aktywne, „Powrót” zablokowany (`FleetActions.js:331`) | obejście: „Zbierz”; bez decyzji. `AI_GARRISON_PLAN.md` §6 |
-| **366** | ⚪ | jednostki gracza stojące już w pokoju na ciele innego imperium (zapisy sprzed G2-4) nie dostają flagi wycofania — flaga tylko na `diplomacy:peaceSigned` (`WithdrawalSystem.js:43`) | → **F3** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
-| **367** | ⚪ | R4 (jednostki AI zdjęte z ciał gracza przy pokoju) i R7 (jednostka gracza razem z ciałem) — tylko audyt `DebugLog`, zero wpisów w Dzienniku (`NotificationCenter.js:70-72`) | → **F4** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
+| **370** | 🟠 | ostrzeżenie „został miesiąc” (`withdrawalWarning`, `NotificationCenter.js:547`) nie gaśnie samo — po terminie, po załadunku ani po powrocie wojny; odrzuca je wyłącznie gracz (`NotificationDropdown.js:276`, `:295`, `:304`) | poprawka **(a)** gotowa jako łatka, **wstrzymana**: zaczerwienia trzy istniejące asercje (A6b, B6b, B6c); decyzja właściciela — `AI_GARRISON_PLAN.md` §5v, §6 |
+| **372** | ⚪ | trzy reguły nazwy imperium: strona traktatu bez warunku wywiadu (`EmpireName.js:19`), obserwacja — pełna przy `detailed` (`NotificationCenter.js:645`), panel dyplomacji — od `contact` (`DiplomacyOverlay.js:231`, `:311`); czwarta kopia pierwszej w `UIManager.js:1638` | **(c)** — etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **374** | ⚪ | martwy `FleetTabPanel`: słucha `vessel:openCargoModal` (`FleetTabPanel.js:206`), a nikt go nie importuje; okno ładowni otwiera Dowództwo wprost (`FleetManagerOverlay.js:2786-2789`) | etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **375** | ⚪ | polskie literały: „Błąd ostrzału: …” z surowym slugiem (`ColonyOverlay.js:4677`) i okno ładowni (`CargoLoadModal.js:125`, `:358`, `:381`, `:398`, `:439`, `:445`, `:500`) | klasa **113**; etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **377** | ⚪ | polska gramatyka „z {0}” przy nazwie imperium w trzech innych wpisach: `log.diplo.napExpired` (`UIManager.js:1733`), `log.diplo.napRenewed` (`:1740`), `log.skirmish` (`:1638`) | rodzina **371** (✅ `cafd6e8`); etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **378** | ⚪ | zapis wykonany, gdy **365** był żywy, niesie martwy `vessel.awayTeamUnitId` — `VesselManager.restore` bierze pole bez sprawdzenia (`VesselManager.js:1605`) | obejście: „Zbierz” (zmierzone: odnośnik zerowany, „Wyślij zespół” znów dostępne). `AI_GARRISON_PLAN.md` §6 |
 
 ---
 

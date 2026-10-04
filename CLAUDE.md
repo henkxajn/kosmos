@@ -5664,9 +5664,9 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE)
 
-Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#357**: `docs/design/AI_GARRISON_PLAN.md`.
+Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#378**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 Commity G1b: `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326).
 
@@ -5812,5 +5812,32 @@ przejęcie kolonii AI bez wojsk) · 🟠 **364** ostrzał z orbity bez bramki wo
 z ciałem zostawia `awayTeamUnitId` · ⚪ **366** stare zapisy: jednostki gracza w pokoju na cudzym ciele bez flagi · ⚪ **367**
 R4 i R7 bez wpisu w Dzienniku. Wady widoku z bramki: brak meldunku o utracie wojsk w terminie (F5), „Unknown empire” we
 wpisach wycofania (F6), „duch” jednostki na mapie kolonii (F7).
-**Dalej:** follow-upy G2-4 (F1–F7, plan §5s) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329;
-kierunek 333/330 podpisany 2026-10-02).
+✅ **Follow-upy G2-4 (F1–F7)** (`39e2df6` F1 · `4c60e5b` F2 · `86a6d2a` F3 · `8785b41` F6 · `30bc68c` F4 · `f8f9cdb` F5 ·
+`f90bc14` F7; bramka live właściciela 2026-10-04 **PASS**; plan §5t–§5u). **F1** (**363**) — pokój cofa okupację kafli na
+koloniach OBU stron (`TileOwnership.revertPeaceOccupation` — jedno źródło „co pokój cofa”). **F2** (**364**) — ostrzał
+z orbity na ciało innego imperium tylko w wojnie (akcja, żądanie, wystrzał, strażnik silnika; powód
+`fleet.reason.strikeNotAtWar`). **F3** (**366**) — stary zapis: flaga wycofania przy WCZYTANIU (`armLoadReconcile` z bloku
+wczytania `GameScene`, uzgodnienie na pierwszym ticku; sesja bez wczytania — nic). **F4** (**367**) — wpisy w Dzienniku dla
+R4 (☮) i R7. **F5** — utrata wojsk w terminie: Dziennik I dzwonek, raz na ciało. **F6** — NEW `src/utils/EmpireName.js`
+(`empireLogName`: nazwa STRONY TRAKTATU). **F7** — NEW `src/ui/ColonySelectionLogic.js` (zaznaczenie bez „duchów”);
+`moveUnit` odmawia jednostce `'in_cargo'`.
+✅ **Poprawki po bramce follow-upów** (odpowiedzi właściciela 2026-10-04, bez osobnej bramki; plan §5v): (b) `cafd6e8`
+PL „☮ Pokój z imperium {0}” (**371**) · (f) `2c9511f` wpis F3 przy wczytaniu bez „Peace with” (**376**) · (d) `5fefe33`
+stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu (**368**) · (e) `8427b0a` stare zapisy: kafle
+zajęte przez stronę bez wojny wracają przy wczytaniu (**369**, reguła F1) · (g) `96c636f` łazik usunięty dowolną drogą
+zdejmuje `awayTeamUnitId` (**365**). ⚠ **(a)** (**370**, ostrzeżenie „został miesiąc” gaśnie samo) — łatka gotowa,
+**NIEZACOMMITOWANA**: zaczerwienia trzy istniejące asercje (`g2_after_peace_smoke` A6b, `g2_peace_followups_smoke` B6b
+i świadek B6c — mierzą ostrzeżenie PO terminie), a istniejącego keepera nie przestawia się na zielono samodzielnie; decyzja
+właściciela (przecelowanie + skutek UX: plakietka dzwonka w ticku terminu 2 → 2). Łatki: `kosmos-handover/g2-4-closing`.
+⚠ **Uzgodnienie przy wczytaniu (`WithdrawalSystem.reconcileAfterLoad`) robi trzy rzeczy, w tej kolejności:** kafle (e) →
+jednostki AI (d) → flagi jednostek gracza (F3). „Nie w wojnie” dla (d)/(e) = `groundOwnersHostile` — pary AI↔AI nietknięte.
+⚠ **Odnośnik łazika:** `removeUnit` (→ `_pruneFromVessels`) czyści `vessel.awayTeamUnitId` — id łazika czytać PRZED
+`removeUnit`.
+Keepery `g2_peace_followups_smoke` **67/67** · `g2_peace_closing_smoke` **38/38**; sweep **259/259**, `check-i18n` 3448.
+Findingi **368–378** (plan §6): ✅ **368** · **369** · **371** · **376** (poprawki) · 🟠 **370** ((a), decyzja właściciela) ·
+⚪ **372** trzy reguły nazwy imperium · **374** martwy `FleetTabPanel` · **375** polskie literały (`ColonyOverlay`,
+`CargoLoadModal`) · **377** polska gramatyka „z {0}” w trzech innych wpisach — etap polerki UI · **373** akcje silnika bez
+bramki `in_cargo` — później · **378** zapisy z martwym `awayTeamUnitId` (obejście „Zbierz”).
+**G2 ZAMKNIĘTE.** Pozostałe kroki arca: **G3** (odrastanie strat, widoczność garnizonu, uzgadnianie mobilizacji co rok —
+**360**) · **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02) · **G2b** (pule
+desantu na archetypy).
