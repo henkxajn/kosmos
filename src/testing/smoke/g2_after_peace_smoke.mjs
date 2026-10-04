@@ -43,6 +43,8 @@ let WSmod = null;
 try { WSmod = await import('../../systems/WithdrawalSystem.js'); } catch { WSmod = null; }
 let UCmod = null;
 try { UCmod = await import('../../ui/UnitCardPanel.js'); } catch { UCmod = null; }
+let VSmod = null;
+try { VSmod = await import('../../entities/Vessel.js'); } catch { VSmod = null; }
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -530,6 +532,80 @@ function domTexts(el, out = []) {
   run(w, 2);
   assert(hits.length === 0 && mine.every(u => !w.gum.getUnit(u.id)) && garrison.every(g => !!w.gum.getUnit(g.id)),
     `A10b: w terminie znikają wyłącznie jednostki gracza; garnizon stoi (trafień przez całe okno: ${hits.length})`);
+}
+
+// ── A5 — R6 (Findings 353, 354): zabranie wojsk z cudzego ciała; płatnik żołdu ────────────
+/**
+ * Jednostka gracza na kolonii AI ładowana na statek (prawdziwe `loadGroundUnit`), potem `civY` prawdziwych ticków.
+ * `homeOf`: null = jednostka bez domu (`debug.spawnMyUnit`), 'ai' = dom wskazuje kolonię AI (zapis jednostki bez domu:
+ * `serialize` pisze `homeColonyId ?? planetId`).
+ * ⚠ Płatnika mierzymy ZDARZENIEM płatności (`trade:spendCredits`, cel `ground_unit_upkeep`), nie saldem: saldo kolonii
+ *   ruszają też podatki i płace (Population 2.0 F3), a pierwszy tick utrzymania wypada albo nie zależnie od zaokrągleń
+ *   sumy `civDeltaYears` (0,999…) — liczba płatności w oknie 3 civY to 2 albo 3.
+ */
+function cargoScene({ aiCredits, homeCredits = 1000, flagged = true, homeOf = null, civY = 3 }) {
+  const w = boot();
+  declare(w);
+  const t = freeTiles(w, w.col, { building: false })[0];
+  const u = w.gum.createUnit('shock_infantry', w.col.planetId, t.q, t.r, { owner: 'player', factionId: 'humanity' });
+  u.homeColonyId = homeOf === 'ai' ? w.col.planetId : null;
+  if (flagged) signPeace(w);
+  const flag0 = !!flagOf(w, u.id);
+  w.col.credits = aiCredits;
+  w.home.credits = homeCredits;
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  const res = VSmod?.loadGroundUnit?.(v, u);
+  const cleared = [], paid = [];
+  EventBus.on('withdrawal:cleared', (e) => { if (e.unitId === u.id) cleared.push(e.reason); });
+  EventBus.on('trade:spendCredits', (e) => { if (e.purpose === 'ground_unit_upkeep') paid.push(e); });
+  if (civY > 0) run(w, civY);
+  const now = w.gum.getUnit(u.id);
+  return {
+    w, unitId: u.id, vessel: v, flag0, loaded: res?.ok === true,
+    homePaid: paid.filter(e => e.colonyId === w.home.planetId), aiPaid: paid.filter(e => e.colonyId === w.col.planetId),
+    status: now?.status ?? null, aboard: v.groundUnits.includes(u.id),
+    onBody: w.gum.getUnitsOnPlanet(w.col.planetId).some(x => x.id === u.id),
+    flag1: !!flagOf(w, u.id), cleared, perCivY: ColonyManager.GROUND_UNIT_UPKEEP.shock_infantry.credits,
+  };
+}
+const paidOk = (s) => s.homePaid.length >= 2 && s.homePaid.every(e => e.amount === s.perCivY) && s.aiPaid.length === 0;
+const paidStr = (s) => `dom ${s.homePaid.length}× ${JSON.stringify(s.homePaid.map(e => e.amount))}, AI ${s.aiPaid.length}×`;
+{
+  console.log('\nA5 — R6: załadunek z cudzego ciała zostaje w ładowni; żołd płaci kolonia gracza, nigdy AI');
+  const a = cargoScene({ aiCredits: 0 });
+  assert(a.flag0 && a.loaded,
+    `świadek (353): oflagowana jednostka gracza bez domu na ${a.w.col.planetId}, kolonia AI bez kredytów, załadunek ok`);
+  assert(a.status === 'in_cargo' && a.aboard && !a.onBody,
+    `A5a (353): po 3 civY jednostka jest w ładowni (status ${a.status}, na liście ładowni: ${a.aboard}) i NIE stoi na ciele ` +
+    `(${a.onBody}) — przed R6 utrzymanie nadpisywało status na 'offline' i jednostka „wracała na ziemię”`);
+  assert(!a.flag1 && a.cleared.includes('loaded'),
+    `A5a: flaga zdjęta przy załadunku (powód: ${JSON.stringify(a.cleared)})`);
+  assert(paidOk(a), `A5a: żołd ${a.perCivY} Kr/civY płaci kolonia gracza, kolonia AI nic (${paidStr(a)})`);
+  const b = cargoScene({ aiCredits: 1000 });
+  assert(paidOk(b) && b.status === 'in_cargo',
+    `A5b (354): kolonia AI Z KREDYTAMI nie płaci za jednostkę gracza — płaci dom (${paidStr(b)}; status ${b.status})`);
+  const c = cargoScene({ aiCredits: 1000, flagged: false, homeOf: 'ai' });
+  assert(paidOk(c),
+    `A5c (354): dom jednostki wskazuje kolonię AI (stary zapis) — płaci kolonia macierzysta gracza (${paidStr(c)})`);
+
+  // A5d — „offline” w ładowni: bez żołdu jednostka ZOSTAJE w ładowni; prawdziwe `_tickGroundUnitUpkeep`, kredyty zerowane
+  //   przed każdym rozliczeniem (inaczej podatki z ticków dosypałyby domowi kredytów i żołd by się zapłacił).
+  const d = cargoScene({ aiCredits: 0, homeCredits: 0, civY: 0 });
+  const steps = [];
+  for (let i = 0; i < 3; i++) {
+    d.w.home.credits = 0; d.w.col.credits = 0;
+    quiet(() => d.w.cm._tickGroundUnitUpkeep(1.0));
+    const x = d.w.gum.getUnit(d.unitId);
+    steps.push({ status: x?.status, prev: x?.prevStatus, unpaid: x?.unpaidYears,
+                 onBody: d.w.gum.getUnitsOnPlanet(d.w.col.planetId).some(y => y.id === d.unitId) });
+  }
+  const last = steps[steps.length - 1];
+  assert(steps.every(st => st.status === 'in_cargo' && !st.onBody) && last.prev === 'offline' && last.unpaid === 3,
+    `A5d: bez żołdu jednostka w ładowni ZOSTAJE w ładowni przez 3 rozliczenia (${JSON.stringify(steps)})`);
+  for (let i = 0; i < 2; i++) { d.w.home.credits = 0; d.w.col.credits = 0; quiet(() => d.w.cm._tickGroundUnitUpkeep(1.0)); }
+  assert(!d.w.gum.getUnit(d.unitId) && !d.vessel.groundUnits.includes(d.unitId),
+    'A5d: po karencji (5 rozliczeń bez żołdu) rozwiązana jak dotąd — znika z rejestru i z ładowni');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

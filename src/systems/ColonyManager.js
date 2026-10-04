@@ -1526,7 +1526,7 @@ export class ColonyManager {
       const up = ColonyManager.GROUND_UNIT_UPKEEP[u.archetypeId];
       if (!up) continue;
 
-      const homeId = u.homeColonyId ?? u.planetId;
+      const homeId = this._groundUnitPayerId(u);   // R6 (G2-4, Finding 354) — nigdy kolonia innego właściciela
       const krBucket = krByHome.get(homeId) ?? { total: 0, units: [] };
       krBucket.total += up.credits ?? 0;
       krBucket.units.push(u);
@@ -1536,7 +1536,7 @@ export class ColonyManager {
     // ── Sprawdź credits per home colony → zapłać atomowo albo wszystkich z tego home
     //    przenieś w offline ──
     for (const [homeId, bucket] of krByHome) {
-      const home = this.getColony(homeId);
+      const home = homeId ? this.getColony(homeId) : null;
       const hasCredits = home && (home.credits ?? 0) >= bucket.total;
 
       if (hasCredits && bucket.total > 0) {
@@ -1556,15 +1556,27 @@ export class ColonyManager {
           if (wasOffline) {
             u.status = 'idle';
             EventBus.emit('groundUnit:resumed', { unitId: u.id, planetId: u.planetId });
+          } else if (u.status === 'in_cargo' && u.prevStatus === 'offline') {
+            // R6 (G2-4, Finding 353) — w ładowni brak żołdu siedzi w `prevStatus`; wznowienie też tam
+            u.prevStatus = 'idle';
+            EventBus.emit('groundUnit:resumed', { unitId: u.id, planetId: u.planetId });
           }
         } else {
-          u.status      = 'offline';
+          // R6 (G2-4, Finding 353) — ŁADOWNIA WYGRYWA. Nadpisanie `status` na 'offline' wyrzucało jednostkę z ładowni
+          //   „na ziemię”: `getUnitsOnPlanet` przestawał ją ukrywać (filtruje wyłącznie `in_cargo`), więc stała na ciele
+          //   załadunku, choć była na liście ładowni — to był „sukces w UI, jednostki na ziemi” z bramki G2-2. Brak żołdu
+          //   jedzie w `prevStatus` (wyładunek go przywróci); rozwiązanie po karencji działa jak dotąd (`removeUnit`
+          //   czyści też ładownię).
+          if (u.status === 'in_cargo') u.prevStatus = 'offline';
+          else u.status = 'offline';
           u.unpaidYears = (u.unpaidYears ?? 0) + 1;
 
           if (u.unpaidYears >= ColonyManager.UPKEEP_GRACE_CIVYEARS) {
             // Disband — pełen zwrot POPów do HOME colony (gdzie były zablokowane)
+            // ⚠ Zwrot NIE idzie za płatnikiem (R6 zmienił tylko płatnika): kolonia macierzysta jednostki albo ciało, jak
+            //   przed G2-4. Termin właściciela przy zwrocie to Finding 329 (krok G1c).
             if ((u.popCost ?? 0) > 0) {
-              const homeForPop = home ?? this.getColony(u.planetId);
+              const homeForPop = this.getColony(u.homeColonyId ?? u.planetId) ?? this.getColony(u.planetId);
               homeForPop?.civSystem?.unlockPops?.(u.popCost, 'laborer');
             }
             EventBus.emit('groundUnit:disbanded', {
@@ -1579,6 +1591,25 @@ export class ColonyManager {
         }
       }
     }
+  }
+
+  /**
+   * R6 (G2-4, Finding 354) — kto płaci żołd jednostki naziemnej.
+   * Jednostka GRACZA: jej kolonia macierzysta, jeśli należy do gracza; inaczej kolonia macierzysta gracza (`homePlanet`,
+   * też z terminem własności — wzór `VesselManager._resolvePayHomeId`, Finding 97); inaczej nikt (żołd niezapłacony,
+   * jak dotąd przy braku domu). NIGDY kolonia innego właściciela: dawny fallback `homeColonyId ?? planetId` obciążał
+   * kolonię CIAŁA, więc kolonia AI płaciła za jednostkę gracza stojącą na jej ciele (zmierzone: 1000 → 952 Kr w 12 civY),
+   * a bez kredytów rozwiązywała ją w 5. civY (bramka G2-2: dwa „disbanded (no upkeep)” po `debug.spawnMyUnit`).
+   * Jednostka IMPERIUM, która trafia tu przez `factionId 'humanity'` (desant legacy, Finding 323) — bez zmian (→ G2b).
+   * @returns {string|null} planetId płatnika
+   */
+  _groundUnitPayerId(u) {
+    if ((u?.owner ?? 'player') !== 'player') return u.homeColonyId ?? u.planetId;
+    const home = u.homeColonyId ? this.getColony(u.homeColonyId) : null;
+    if (home && isPlayerColony(home)) return home.planetId;
+    const hp = window.KOSMOS?.homePlanet;
+    const hc = hp ? this.getColony(hp.id) : null;
+    return (hc && isPlayerColony(hc)) ? hc.planetId : null;
   }
 
   /**
