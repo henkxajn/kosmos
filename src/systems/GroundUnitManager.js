@@ -345,6 +345,13 @@ export class GroundUnitManager {
     const unit = this._units.get(unitId);
     if (!unit) return false;
 
+    // G2-4 F7 — jednostka w ładowni statku nie chodzi po ciele. Rozkaz z nieaktualnego zaznaczenia mapy kolonii
+    //   zdejmował jej 'in_cargo' (status → 'moving') — wracała na mapę, wciąż figurując w ładowni (zmierzone: duplikat).
+    if (unit.status === 'in_cargo') {
+      EventBus.emit('groundUnit:pathBlocked', { unitId, targetQ, targetR, reason: 'in_cargo' });
+      return false;
+    }
+
     // Deployable unit w trybie deployed/deploying/packing nie może się ruszać —
     // tylko Mobile. Dodatkowo speedHex=0 w tych stanach blokuje ruch w AI.
     if (unit.deployState && unit.deployState !== 'mobile') {

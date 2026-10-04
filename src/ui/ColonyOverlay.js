@@ -29,6 +29,7 @@ import { anyFullBoundsModalOpen, closeFullBoundsModals } from './ColonyModalLogi
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
+import { pruneUnitSelection } from './ColonySelectionLogic.js';   // G2-4 F7 — zaznaczenie bez „duchów”
 import { warGateRefusal, NOT_AT_WAR } from '../utils/WarGate.js';                        // D13/G2-2 — bramka wojny przy lądowaniu
 import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
@@ -805,6 +806,22 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   /**
+   * G2-4 F7 — z zaznaczenia wypadają jednostki, których na tej mapie nie ma: w ładowni statku (okno ładowni zamyka mapę,
+   * zbiór przeżywał powrót), usunięte (termin wycofania, R4, śmierć) albo na innym ciele. Zbiór zmieniany W MIEJSCU —
+   * kto trzyma referencję (`GameScene` przy PPM, grupa bojowa), widzi to samo; jednostka główna → pierwsza pozostała.
+   */
+  _pruneUnitSelection(planetId) {
+    if (!this._selectedUnit && this._selectedUnits.size === 0) return;
+    const gum = window.KOSMOS?.groundUnitManager;
+    if (!gum) return;
+    const res = pruneUnitSelection(this._selectedUnits, this._selectedUnit?.id ?? null,
+      (id) => gum.getUnit?.(id) ?? null, planetId);
+    if (res.pruned.length === 0) return;
+    for (const id of res.pruned) this._selectedUnits.delete(id);
+    this._selectedUnit = res.primaryId ? (gum.getUnit?.(res.primaryId) ?? null) : null;
+  }
+
+  /**
    * Wyczyść wszystkie zaznaczenia.
    */
   _clearSelection() {
@@ -923,6 +940,8 @@ export class ColonyOverlay extends BaseOverlay {
     if (!colony?.isPreview) this._drawBuildingsBar(ctx, ox, colTop, mapW, BUILD_BAR_H, colony);
     const mapY = colTop + BUILD_BAR_H;
     const mapH = oh - HDR_H - BUILD_BAR_H;
+    // G2-4 F7 — zaznaczenie trzyma tylko jednostki stojące na TEJ mapie (przed mapą, panelem jednostki i szufladą).
+    if (colony) this._pruneUnitSelection(colony.planetId);
     if (grid) {
       ctx.save();
       ctx.beginPath(); ctx.rect(ox, mapY, mapW, mapH); ctx.clip();

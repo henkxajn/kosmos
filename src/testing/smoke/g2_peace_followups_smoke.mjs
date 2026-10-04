@@ -23,6 +23,10 @@
 //       z nazwą ciała i liczbą utraconych; na warstwie UI, którą montuje gra (plakietka dzwonka `BottomControlBar`,
 //       lista `NotificationDropdown`); utrata nie ginie w deduplikacji, gdy ostrzeżenie tego samego ciała padło
 //       kilkadziesiąt ms wcześniej (wysoka prędkość czasu); kontrola: załadunek przed terminem — bez meldunku.
+//   B7  F7 (bramka 2026-10-04) — „duch” na mapie kolonii: zaznaczenie trzyma wyłącznie jednostki stojące na TEJ mapie
+//       (załadowana, usunięta w terminie, usunięta przez R4, z innego ciała — wypadają; czysty helper na prawdziwym
+//       `GroundUnitManager`); rozkaz ruchu nie zdejmuje jednostki z ładowni (zmierzone przed poprawką: wracała na mapę,
+//       wciąż figurując w ładowni); `ColonyOverlay` (nie importuje się pod node) — pin podłączenia.
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem`, Dziennik i dzwonek
 //   (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). Mobilizacja garnizonów AI WYŁĄCZONA w scenach,
@@ -48,6 +52,8 @@ import * as FA from '../../data/FleetActions.js';
 import * as VS from '../../entities/Vessel.js';
 import { BottomControlBar } from '../../ui/BottomControlBar.js';
 import * as ND from '../../ui/NotificationDropdown.js';
+let SLmod = null;
+try { SLmod = await import('../../ui/ColonySelectionLogic.js'); } catch { SLmod = null; }
 let ENmod = null;
 try { ENmod = await import('../../utils/EmpireName.js'); } catch { ENmod = null; }
 
@@ -574,6 +580,72 @@ function bellListHtml() {
   const j = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.channel === 'combat' && /⚑/.test(e.text));
   assert(ok === true && loaded && !!w.gum.getUnit(u.id) && !w.gum.getUnit(u.id)?.withdrawal && lost.length === 0 && j.length === 0,
     `B6d kontrola: załadowana jednostka żyje bez flagi; meldunków o utracie: dzwonek ${lost.length}, Dziennik ${j.length}`);
+}
+
+// ── B7 — F7: „duch” jednostki na mapie kolonii ────────────────────────────────────────────
+{
+  console.log('\nB7a — silnik: rozkaz ruchu nie zdejmuje jednostki z ładowni (kontrola: jednostka na ziemi rusza)');
+  const w = boot();
+  const land = freeTiles(w, w.home, { building: false });
+  const a = playerUnit(w, w.home.planetId, land[0]);
+  const g = playerUnit(w, w.home.planetId, land[1]);
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  const loaded = VS.loadGroundUnit(v, a)?.ok === true;
+  const far = land.find(x => Math.abs(x.q - land[0].q) + Math.abs(x.r - land[0].r) >= 2 && x !== land[1]) ?? land[2];
+  const movedA = w.gum.moveUnit(a.id, far.q, far.r);
+  run(w, 2);
+  const onBody = w.gum.getUnitsOnPlanet(w.home.planetId).some(u => u.id === a.id);
+  assert(loaded && movedA === false && a.status === 'in_cargo' && !onBody && v.groundUnits.includes(a.id),
+    `B7a: jednostka w ładowni — moveUnit odmawia (${movedA}), status ${a.status}, na ciele: ${onBody}, w ładowni: ${v.groundUnits.includes(a.id)}`);
+  const movedG = w.gum.moveUnit(g.id, far.q, far.r);
+  assert(movedG === true, `B7a kontrola: jednostka na ziemi przyjmuje rozkaz ruchu (${movedG})`);
+}
+{
+  console.log('\nB7b — zaznaczenie mapy kolonii (pruneUnitSelection, prawdziwy GroundUnitManager): wypadają jednostki, których na tej mapie nie ma');
+  const w = boot();
+  declare(w);
+  const land = freeTiles(w, w.col, { building: false });
+  const onMap = playerUnit(w, w.col.planetId, land[0]);
+  const loaded = playerUnit(w, w.col.planetId, land[1]);
+  const doomed = playerUnit(w, w.col.planetId, land[2]);
+  const other = playerUnit(w, w.home.planetId, freeTiles(w, w.home, { building: false })[0]);
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  VS.loadGroundUnit(v, loaded);
+  w.gum.removeUnit(doomed.id);                          // jak usunięcie w terminie wycofania / przez R4
+  const prune = SLmod?.pruneUnitSelection;
+  const getUnit = (id) => w.gum.getUnit(id) ?? null;
+  let res = null;
+  try { res = prune([loaded.id, onMap.id, doomed.id, other.id], loaded.id, getUnit, w.col.planetId); } catch { res = null; }
+  assert(typeof prune === 'function' && !!res && same(res.ids, [onMap.id]) && res.primaryId === onMap.id
+      && same([...res.pruned].sort(), [loaded.id, doomed.id, other.id].sort()),
+    `B7b: zostaje tylko jednostka na tej mapie (${JSON.stringify(res?.ids)}), primary → ${res?.primaryId}; wypadają: załadowana, usunięta, z innego ciała`);
+  let keep = null;
+  try { keep = prune([onMap.id], onMap.id, getUnit, w.col.planetId); } catch { keep = null; }
+  assert(!!keep && same(keep.ids, [onMap.id]) && keep.primaryId === onMap.id && keep.pruned.length === 0,
+    'B7b: zaznaczenie jednostek stojących na tej mapie zostaje nietknięte (bez nadgorliwości)');
+  let empty = null;
+  try { empty = prune([loaded.id], loaded.id, getUnit, w.col.planetId); } catch { empty = null; }
+  assert(!!empty && empty.ids.length === 0 && empty.primaryId === null,
+    'B7b: zaznaczenie samych „duchów” znika w całości (primary = null)');
+}
+{
+  console.log('\nB7c — pin źródłowy ColonyOverlay: przycinanie zaznaczenia przed rysowaniem mapy i paneli, w miejscu (bez podmiany zbioru)');
+  const co = src('../../ui/ColonyOverlay.js');
+  const iCall = co.search(/this\._pruneUnitSelection\(\s*colony\.planetId\s*\)/);
+  const iMap = co.indexOf('this._drawMap(ctx, ox, mapY, mapW, mapH, grid, colony?.planet)');
+  const iPanel = co.indexOf('this._drawUnitPanel(ctx, ox, oy, mapW, oh)');
+  const iDrawer = co.indexOf('this._drawBottomDrawer(ctx, ox, oy, mapW, oh)');
+  assert(/import\s*\{\s*pruneUnitSelection\s*\}\s*from\s*'\.\/ColonySelectionLogic\.js'/.test(co)
+      && iCall > 0 && iCall < iMap && iCall < iPanel && iCall < iDrawer,
+    `B7c: _pruneUnitSelection(colony.planetId) wołane przed mapą, panelem jednostki i szufladą (${iCall} < ${iMap}, ${iPanel}, ${iDrawer})`);
+  const iDef = co.search(/\n\s*_pruneUnitSelection\(planetId\)\s*\{/);
+  const body = iDef >= 0 ? co.slice(iDef, co.indexOf('\n  }', iDef + 10)) : '';
+  assert(/pruneUnitSelection\(/.test(body) && /this\._selectedUnits\.delete\(/.test(body) && !/this\._selectedUnits\s*=/.test(body),
+    'B7c: _pruneUnitSelection woła helper i usuwa id ze zbioru w miejscu (kto trzyma referencję zbioru, widzi to samo)');
+  assert(iMap > 0 && iPanel > 0 && iDrawer > 0,
+    'B7c kontrola pinu: kotwice rysowania mapy, panelu i szuflady istnieją — pin celuje w żywą ścieżkę');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
