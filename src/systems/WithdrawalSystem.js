@@ -19,6 +19,9 @@
 // (d) (odpowiedź właściciela 2026-10-04) — w tym samym uzgodnieniu jednostki IMPERIUM stojące na ciele GRACZA, gdy ich
 //      imperium nie jest z graczem w wojnie, znikają jak przy R4 (zapisy sprzed G2-4: R4 działa tylko przy podpisaniu
 //      pokoju); jeden meldunek na ciało i imperium (`withdrawal:aiRemoved`, `reason: 'load'`).
+// (e) (odpowiedź właściciela 2026-10-04) — w tym samym uzgodnieniu kafle kolonii zajęte przez stronę, która NIE jest
+//      w wojnie z właścicielem kolonii, wracają do właściciela, a jej liczniki okupacji są zerowane — reguła F1 dla wojen
+//      zakończonych pokojem PRZED F1 (F1 działa w chwili pokoju, więc kafle z tamtych wojen zostawały przy zajmującym).
 // F1 (Finding 363, decyzja właściciela 2026-10-03) — przy pokoju kafle zajęte w wojnie wracają do właściciela kolonii,
 //      na koloniach OBU stron, a liczniki okupacji są zerowane (`TileOwnership.revertPeaceOccupation`). Bez tego kafel
 //      stolicy AI trzymany przez gracza przeżywał pokój i nowa wojna dawała przejęcie bez jednej jednostki na ciele.
@@ -165,11 +168,13 @@ export class WithdrawalSystem {
    * z graczem w wojnie, znikają jak przy R4 (AI nie ma POP — bez reintegracji); `withdrawal:aiRemoved` raz na ciało
    * i imperium, z `reason: 'load'`. Predykat „nie w wojnie” to `groundOwnersHostile` (R1 — ten sam, który decyduje o ogniu
    * i okupacji): przy żywej dyplomacji to samo co `areAtWar`, a bez modułu dyplomacji „wrogowie”, więc nic nie znika.
-   * @returns {{flagged:number, removed:number}}
+   * (e) — przed jednostkami: okupacja kafli stron bez wojny cofnięta (`revertOccupationAfterLoad`), jak F1 przy pokoju.
+   * @returns {{flagged:number, removed:number, reverted:number}}
    */
   reconcileAfterLoad(loadYear = this._now()) {
+    const reverted = this.revertOccupationAfterLoad();
     const gum = this._K()?.groundUnitManager;
-    if (typeof gum?.getAllUnits !== 'function') return { flagged: 0, removed: 0 };
+    if (typeof gum?.getAllUnits !== 'function') return { flagged: 0, removed: 0, reverted };
     const deadline = loadYear + WITHDRAWAL_YEARS;
     const flagged = new Map();     // planetId → { empireId, unitIds }
     const doomed = [];
@@ -203,7 +208,48 @@ export class WithdrawalSystem {
         empireId, planetId, unitIds, count: unitIds.length, deadlineYear: deadline, reason: 'load',
       });
     }
-    return { flagged: total, removed: doomed.length };
+    return { flagged: total, removed: doomed.length, reverted };
+  }
+
+  /**
+   * (e) — stary zapis: na siatce każdej kolonii kafle należące do strony, która NIE jest w wojnie z właścicielem kolonii,
+   * wracają do właściciela, a liczniki okupacji tej strony są zerowane — reguła F1 (`revertPeaceOccupation`, jedno źródło
+   * „co pokój cofa”) dla pokoi zawartych PRZED F1. „Nie w wojnie” = `groundOwnersHostile` (R1): para gracz↔imperium —
+   * status relacji; para AI↔AI — zawsze wrogowie, więc bez zmian (poza zakresem, 331/D5); bez modułu dyplomacji — bez
+   * zmian. Emisje jak przy F1: `tile:ownerChanged` na cofnięty kafel, audyt `withdrawal:tilesReverted` raz na kolonię
+   * i stronę, z `reason: 'load'` (`empireId` = imperium tej pary).
+   * @returns {number} ile kafli wróciło do właściciela kolonii
+   */
+  revertOccupationAfterLoad() {
+    const cm = this._K()?.colonyManager;
+    if (typeof cm?.getAllColonies !== 'function') return 0;
+    let total = 0;
+    for (const col of cm.getAllColonies()) {
+      const owner = bodyOwnerOf(col?.planetId);
+      const tiles = col?.grid?.toArray?.() ?? [];
+      if (!owner || tiles.length === 0) continue;
+      const others = new Set();
+      for (const tile of tiles) {
+        if (!tile) continue;
+        if (tile.owner != null && tile.owner !== owner) others.add(tile.owner);
+        if (tile.occupyEmpireId != null && tile.occupyEmpireId !== owner) others.add(tile.occupyEmpireId);
+      }
+      for (const occupier of others) {
+        if (groundOwnersHostile(owner, occupier)) continue;            // wojna trwa albo para AI↔AI — bez zmian
+        const res = revertPeaceOccupation(col.grid, owner, occupier);
+        for (const t of res.reverted) {
+          EventBus.emit('tile:ownerChanged', { planetId: col.planetId, q: t.q, r: t.r, oldOwner: t.oldOwner, newOwner: owner });
+        }
+        if (res.reverted.length > 0 || res.reset > 0) {
+          EventBus.emit('withdrawal:tilesReverted', {
+            empireId: owner === 'player' ? occupier : owner, planetId: col.planetId, owner,
+            count: res.reverted.length, reset: res.reset, reason: 'load',
+          });
+        }
+        total += res.reverted.length;
+      }
+    }
+    return total;
   }
 
   /** Dlaczego flaga przestała obowiązywać — `null` = nadal obowiązuje. */

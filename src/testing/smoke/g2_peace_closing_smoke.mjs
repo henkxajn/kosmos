@@ -10,6 +10,10 @@
 //   Zd  (d) — stary zapis: jednostki AI stojące na ciele GRACZA, gdy ich imperium nie jest z graczem w wojnie, znikają
 //       w tym samym uzgodnieniu przy wczytaniu co F3 (R4 dla zapisów sprzed G2-4); JEDEN wpis w Dzienniku na ciało, bez
 //       „Peace with”; kontrole: imperium w WOJNIE z graczem, jednostka AI na własnym ciele, sesja bez wczytania.
+//   Ze  (e) — stary zapis: kafle kolonii zajęte przez stronę, która NIE jest w wojnie z właścicielem kolonii (wojna
+//       zakończona pokojem PRZED F1), wracają przy wczytaniu do właściciela kolonii, a liczniki okupacji tej strony są
+//       zerowane (reguła F1 — `revertPeaceOccupation`); skutek: nowa wojna nie daje przejęcia kolonii AI bez wojsk;
+//       kontrole: strona w WOJNIE (kafle i liczniki zostają), para AI↔AI (poza zakresem, 331), sesja bez wczytania.
 //
 // ⚠ Harness jak `g2_peace_followups_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny
 //   `CombatSystem`, Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus); mobilizacja
@@ -83,6 +87,13 @@ function aiUnit(w, emp, planetId, t0, arch = 'garrison_unit') {
   return w.gum.createAIUnit({ archetypeId: arch, empireId: emp, planetId, q: t0.q, r: t0.r, morale: 100, deployed: true })?.unit ?? null;
 }
 const journal = (w, channel, re) => (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.channel === channel && re.test(e.text));
+const counter = (t0) => [t0?.occupyEmpireId ?? null, t0?.occupyStart ?? null];
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Nowa wojna po rozejmie: rozejm kończony UCZCIWĄ drogą (status relacji), potem wypowiedzenie gracza. */
+function warAgain(w, emp = w.emp) {
+  w.dipl.relations.setStatus('player', emp, 'peace');
+  return quiet(() => w.dipl.declareWar(emp, 'player_action'));
+}
 const auditOf = (kind) => debugLog.query({ kind });
 /** Wczytanie jak blok wczytania `GameScene`: prawdziwy zapis i odtworzenie jednostek, uzbrojenie uzgodnienia, tick. */
 function loadAndTick(w) {
@@ -208,6 +219,86 @@ function loadAndTick(w) {
   run(w, 3);
   assert(!!a && !!w.gum.getUnit(a.id) && w.dipl.getStatus(w.emp) !== 'war',
     'Zd kontrola: bez wczytania jednostka AI stoi dalej (zachowanie sesji bez zmian)');
+}
+
+// ── Ze — (e): stary zapis — kafle zajęte w wojnie zakończonej przed F1 ────────────────────
+/**
+ * Świat „zapisu sprzed F1”: rozejm z `emp` po wojnie, w której gracz zajął kafel stolicy AI, a `emp` — kafel kolonii
+ * gracza; liczniki okupacji obu stron zawieszone; z `emp2` trwa wojna (kafle i liczniki tej pary — kontrola); kafel
+ * kolonii `emp` należący do `emp2` (para AI↔AI — kontrola).
+ */
+function preF1Scene() {
+  const w = boot();
+  const col2 = w.aiFull.find(c => c.ownerEmpireId && c.ownerEmpireId !== w.emp);
+  const emp2 = col2?.ownerEmpireId ?? null;
+  declare(w, emp2);                                                   // z drugim imperium trwa wojna
+  w.dipl.relations.setStatus('player', w.emp, 'truce');               // pokój zawarty PRZED F1 (stan zapisu)
+  const cap = tilesOf(w.col).find(t0 => t0.capitalBase);
+  cap.owner = 'player';                                               // kafel stolicy AI zajęty w tamtej wojnie
+  const hTiles = freeTiles(w, w.home, { building: false });
+  const hEmp = hTiles[0]; hEmp.owner = w.emp;                          // kafel kolonii gracza zajęty przez emp
+  const hCnt = hTiles[1]; hCnt.occupyEmpireId = w.emp; hCnt.occupyStart = 0;   // zawieszony licznik emp na kolonii gracza
+  const eCnt = freeTiles(w, w.col, { building: true })[0] ?? freeTiles(w, w.col)[0];
+  eCnt.occupyEmpireId = 'player'; eCnt.occupyStart = 0;              // zawieszony licznik gracza na kolonii emp
+  const hWar = hTiles[2]; hWar.owner = emp2;                          // kontrola: emp2 (wojna) na kolonii gracza
+  const hWarCnt = hTiles[3]; hWarCnt.occupyEmpireId = emp2; hWarCnt.occupyStart = 0;
+  const wTile = freeTiles(w, col2, { building: false })[0]; wTile.owner = 'player';   // kontrola: gracz na kolonii emp2 (wojna)
+  const aiai = freeTiles(w, w.col, { building: false }).find(t0 => t0 !== eCnt); aiai.owner = emp2;   // kontrola: para AI↔AI
+  return { w, emp2, col2, cap, hEmp, hCnt, eCnt, hWar, hWarCnt, wTile, aiai };
+}
+{
+  // ⚠ Liczniki mierzone BEZPOŚREDNIO po `reconcileAfterLoad` (to on biegnie na pierwszym ticku po wczytaniu), przed
+  //   jakimkolwiek tickiem okupacji: `GroundUnitManager._cleanupStaleOccupations` zeruje w każdym ticku licznik, przy
+  //   którym nie stoi okupant, więc pin po ticku przechodziłby bez poprawki (jałowo).
+  console.log('\nZe — (e) uzgodnienie przy wczytaniu: liczniki okupacji stron bez wojny zerowane (pomiar przed tickiem okupacji)');
+  const s = preF1Scene();
+  const { w } = s;
+  const before = [counter(s.hCnt), counter(s.eCnt), counter(s.hWarCnt)];
+  w.K.withdrawalSystem.reconcileAfterLoad(w.K.timeSystem.gameTime);
+  assert(same(before, [[w.emp, 0], ['player', 0], [s.emp2, 0]]),
+    'świadek: przed uzgodnieniem liczniki obu stron rozejmu i strony w wojnie są zawieszone');
+  assert(same(counter(s.hCnt), [null, null]) && same(counter(s.eCnt), [null, null]),
+    `Ze: liczniki okupacji stron bez wojny wyzerowane (${JSON.stringify(counter(s.hCnt))}, ${JSON.stringify(counter(s.eCnt))})`);
+  assert(same(counter(s.hWarCnt), [s.emp2, 0]),
+    `Ze kontrola: licznik strony w WOJNIE (${s.emp2}) nietknięty (${JSON.stringify(counter(s.hWarCnt))})`);
+}
+{
+  console.log('\nZe — (e) wczytanie: kafle zajęte przez stronę bez wojny z właścicielem kolonii wracają do właściciela kolonii');
+  const s = preF1Scene();
+  const { w } = s;
+  const before = [s.cap.owner, s.hEmp.owner];
+  const status0 = w.dipl.getStatus(w.emp);
+  debugLog.clear();
+  loadAndTick(w);
+  const audit = auditOf('withdrawal:tilesReverted');
+  const onCol = audit.filter(x => x.data?.planetId === w.col.planetId && x.data?.reason === 'load');
+  const onHome = audit.filter(x => x.data?.planetId === w.home.planetId && x.data?.reason === 'load');
+  assert(same(before, ['player', w.emp]) && status0 === 'truce' && w.dipl.getStatus(s.emp2) === 'war',
+    `świadek: zapis sprzed F1 — rozejm z ${w.emp} (${status0}), kafel stolicy AI należy do gracza, kafel kolonii gracza do ${w.emp}`);
+  assert(s.cap.owner === w.emp && s.hEmp.owner === 'player',
+    `Ze: po wczytaniu kafel stolicy AI wrócił do ${w.emp} (${s.cap.owner}), kafel kolonii gracza do gracza (${s.hEmp.owner})`);
+  assert(onCol.length === 1 && onCol[0].data?.empireId === w.emp && onCol[0].data?.owner === w.emp
+      && onHome.length === 1 && onHome[0].data?.empireId === w.emp && onHome[0].data?.owner === 'player',
+    `Ze: audyt withdrawal:tilesReverted z reason 'load' raz na kolonię (kolonia ${w.emp}: ${onCol.length}, kolonia gracza: ${onHome.length})`);
+  assert(s.hWar.owner === s.emp2 && s.wTile.owner === 'player',
+    `Ze kontrola: para w WOJNIE — kafel ${s.emp2} na kolonii gracza i kafel gracza na kolonii ${s.emp2} zostają`);
+  assert(s.aiai.owner === s.emp2,
+    `Ze kontrola: para AI↔AI (kafel ${s.emp2} na kolonii ${w.emp}) — bez zmian (poza zakresem, 331)`);
+  const war = warAgain(w);
+  run(w, 2);
+  assert(war !== false && w.gum.getUnitsOnPlanet(w.col.planetId).length === 0 && w.cm.getColony(w.col.planetId)?.ownerEmpireId === w.emp,
+    `Ze: skutek — nowa wojna z ${w.emp} bez jednej jednostki na ciele nie daje przejęcia kolonii (właściciel po 2 civY: ${w.cm.getColony(w.col.planetId)?.ownerEmpireId ?? 'player'})`);
+}
+{
+  console.log('\nZe kontrola — sesja BEZ wczytania: kafle zajęte przed F1 zostają (uzgodnienie należy do wczytania), mechanizm przejęcia żywy');
+  const s = preF1Scene();
+  const { w } = s;
+  run(w, 1);
+  const kept = s.cap.owner === 'player' && s.hEmp.owner === w.emp;
+  const war = warAgain(w);
+  run(w, 2);
+  assert(kept && war !== false && !w.cm.getColony(w.col.planetId)?.ownerEmpireId,
+    `Ze kontrola: bez wczytania kafle zostają (${s.cap.owner}, ${s.hEmp.owner}), a nowa wojna daje przejęcie bez wojsk — scena mierzy realny mechanizm (#363)`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
