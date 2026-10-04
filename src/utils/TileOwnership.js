@@ -8,6 +8,7 @@
 //
 // Wołają: `EmpireColonyBootstrap` (dom, ekspansja, placówka — od urodzenia kolonii) i `GarrisonSystem.reconcile`
 // (pierwszy tick — stare zapisy). Jedno źródło reguły „co stemplujemy”.
+// G2-4 F1 (Finding 363): `revertPeaceOccupation` — jedno źródło reguły „co pokój cofa” (woła `WithdrawalSystem`).
 //
 // ⚠ ZERO importów — moduł node-testowalny.
 
@@ -25,4 +26,36 @@ export function stampUnownedTiles(grid, ownerId) {
     if (tile && tile.owner == null) { tile.owner = ownerId; stamped++; }
   }
   return stamped;
+}
+
+/**
+ * G2-4 F1 (Finding 363, decyzja właściciela 2026-10-03) — POKÓJ COFA OKUPACJĘ na siatce jednej kolonii: kafle należące
+ * do `occupier` (drugiej strony pokoju) wracają do `colonyOwner`, a licznik okupacji (`occupyEmpireId`/`occupyStart`)
+ * jest zerowany, gdy należy do drugiej strony — albo do właściciela kolonii na kaflu, który właśnie wrócił.
+ * Kafle i liczniki STRON TRZECICH (wojna z nimi trwa) — bez zmian, także licznik właściciela odbijającego kafel
+ * zajęty przez stronę trzecią.
+ * ⚠ Bez zdarzeń — emisję `tile:ownerChanged` robi wołający (`WithdrawalSystem`), ten moduł zostaje bez importów.
+ * @param {HexGrid|null} grid
+ * @param {string} colonyOwner — właściciel kolonii (`'player'` albo id imperium)
+ * @param {string} occupier — druga strona pokoju (`'player'` albo id imperium)
+ * @returns {{reverted: Array<{q:number, r:number, oldOwner:string}>, reset:number}}
+ */
+export function revertPeaceOccupation(grid, colonyOwner, occupier) {
+  const out = { reverted: [], reset: 0 };
+  if (!grid || !colonyOwner || !occupier || colonyOwner === occupier) return out;
+  for (const tile of grid.toArray?.() ?? []) {
+    if (!tile) continue;
+    const taken = tile.owner === occupier;
+    if (taken) {
+      out.reverted.push({ q: tile.q, r: tile.r, oldOwner: tile.owner });
+      tile.owner = colonyOwner;
+    }
+    const occ = tile.occupyEmpireId ?? null;
+    if (occ !== null && (occ === occupier || (taken && occ === colonyOwner))) {
+      tile.occupyEmpireId = null;
+      tile.occupyStart = null;
+      out.reset++;
+    }
+  }
+  return out;
 }

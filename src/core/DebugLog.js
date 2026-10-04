@@ -126,6 +126,9 @@ const TRACKED_EVENTS = [
   'withdrawal:warning',
   'withdrawal:expired',
   'withdrawal:cleared',
+  // G2-4 F1 (Finding 363) — pokój cofa okupację kafli: jeden wpis na kolonię strony pokoju (`count` kafli, `reset`
+  //   liczników) — bez niego odczyt bramki nie odróżniłby „nic nie było zajęte” od „cofnięcie się nie wykonało”.
+  'withdrawal:tilesReverted',
 ];
 
 class DebugLog {

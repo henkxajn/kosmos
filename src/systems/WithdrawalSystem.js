@@ -12,6 +12,9 @@
 // R5 — meldunki jako zdarzenia: `withdrawal:ordered` (pokój: ile jednostek, które ciało, termin),
 //      `withdrawal:warning` (miesiąc przed terminem), `withdrawal:expired` (po terminie). Teksty, Dziennik i dzwonek
 //      — `NotificationCenter`; karta jednostki czyta flagę wprost z jednostki.
+// F1 (Finding 363, decyzja właściciela 2026-10-03) — przy pokoju kafle zajęte w wojnie wracają do właściciela kolonii,
+//      na koloniach OBU stron, a liczniki okupacji są zerowane (`TileOwnership.revertPeaceOccupation`). Bez tego kafel
+//      stolicy AI trzymany przez gracza przeżywał pokój i nowa wojna dawała przejęcie bez jednej jednostki na ciele.
 //
 // ⚠ Stan flagi siedzi NA JEDNOSTCE (`unit.withdrawal = { empireId, orderedYear, deadline, warned }`) i jedzie z nią
 //   przez zapis (`GroundUnitManager.serialize/restore`); ten system nie ma własnego stanu.
@@ -22,6 +25,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { bodyOwnerOf, areAtWar } from '../utils/WarGate.js';
+import { revertPeaceOccupation } from '../utils/TileOwnership.js';
 
 /** Termin wycofania w latach WYŚWIETLANYCH (6 miesięcy = 6 civY przy CIV_TIME_SCALE 12). */
 export const WITHDRAWAL_YEARS = 0.5;
@@ -62,12 +66,15 @@ export class WithdrawalSystem {
   }
 
   /**
-   * R3 + R4 — pokój z imperium `empireId` został podpisany (po wykonaniu cesji).
-   * @returns {{flagged:number, removed:number}}
+   * R3 + R4 (+ F1) — pokój z imperium `empireId` został podpisany (po wykonaniu cesji).
+   * @returns {{flagged:number, removed:number, reverted:number}}
    */
   onPeaceSigned(empireId) {
     const gum = this._K()?.groundUnitManager;
-    if (!empireId || empireId === 'player' || typeof gum?.getAllUnits !== 'function') return { flagged: 0, removed: 0 };
+    if (!empireId || empireId === 'player' || typeof gum?.getAllUnits !== 'function') {
+      return { flagged: 0, removed: 0, reverted: 0 };
+    }
+    const reverted = this.revertOccupationAtPeace(empireId);
     const now = this._now();
     const deadline = now + WITHDRAWAL_YEARS;
     const flagged = new Map();     // planetId → unitIds
@@ -93,7 +100,36 @@ export class WithdrawalSystem {
       total += unitIds.length;
       EventBus.emit('withdrawal:ordered', { empireId, planetId, unitIds, count: unitIds.length, deadlineYear: deadline });
     }
-    return { flagged: total, removed: doomed.length };
+    return { flagged: total, removed: doomed.length, reverted };
+  }
+
+  /**
+   * F1 (Finding 363) — pokój z `empireId` cofa okupację kafli na koloniach OBU stron: na kolonii gracza kafle imperium
+   * wracają do gracza, na kolonii imperium kafle gracza wracają do imperium; liczniki okupacji stron pokoju zerowane.
+   * Kolonie stron trzecich — nietknięte. Każdy cofnięty kafel emituje `tile:ownerChanged` (jedyny pisarz właściciela
+   * kafla w silniku też emituje); audyt per kolonia: `withdrawal:tilesReverted`.
+   * @returns {number} ile kafli wróciło do właściciela kolonii
+   */
+  revertOccupationAtPeace(empireId) {
+    const cm = this._K()?.colonyManager;
+    if (!empireId || empireId === 'player' || typeof cm?.getAllColonies !== 'function') return 0;
+    let total = 0;
+    for (const col of cm.getAllColonies()) {
+      const owner = bodyOwnerOf(col?.planetId);
+      const occupier = owner === 'player' ? empireId : (owner === empireId ? 'player' : null);
+      if (!occupier) continue;
+      const res = revertPeaceOccupation(col.grid, owner, occupier);
+      for (const t of res.reverted) {
+        EventBus.emit('tile:ownerChanged', { planetId: col.planetId, q: t.q, r: t.r, oldOwner: t.oldOwner, newOwner: owner });
+      }
+      if (res.reverted.length > 0 || res.reset > 0) {
+        EventBus.emit('withdrawal:tilesReverted', {
+          empireId, planetId: col.planetId, owner, count: res.reverted.length, reset: res.reset,
+        });
+      }
+      total += res.reverted.length;
+    }
+    return total;
   }
 
   /** Dlaczego flaga przestała obowiązywać — `null` = nadal obowiązuje. */
