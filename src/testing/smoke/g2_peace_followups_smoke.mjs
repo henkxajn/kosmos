@@ -16,6 +16,9 @@
 //       pokoju tej samej chwili (bez „Unknown empire”); `UIManager._empName` deleguje do tego samego źródła (pin
 //       źródłowy — `UIManager` nie importuje się pod node); polski tekst po „z” gramatycznie dla każdej nazwy; reguła mgły
 //       wojny dla obserwacji imperium (mobilizacja W2-7) — nietknięta (kontrola).
+//   B5  F4 #367 — wpisy w Dzienniku: R4 (jednostki AI zdjęte z ciał gracza przy pokoju — kanał Dyplomacja, nazwa strony
+//       traktatu i ciała) i R7 (jednostka gracza utracona razem z ciałem — kanał Walka, NAZWA ciała także wtedy, gdy
+//       encji już nie ma: ciało z kolonią i bez); kontrola: usunięcie wyłącznie jednostek AI nie daje wpisu.
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem`, Dziennik i dzwonek
 //   (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). Mobilizacja garnizonów AI WYŁĄCZONA w scenach,
@@ -28,6 +31,7 @@ import '../headless/env.js';           // MUSI być pierwszy
 import EventBus from '../../core/EventBus.js';
 import gameState from '../../core/GameState.js';
 import debugLog from '../../core/DebugLog.js';
+import EntityManager from '../../core/EntityManager.js';
 import { isStandableTile } from '../../data/GroundUnitData.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
@@ -413,6 +417,66 @@ function oldSaveScene() {
   assert(pl.includes('z imperium Liga Trzech Słońc') && !/\bz Liga\b/.test(pl),
     `B4c: PL — „z imperium {0}” (nazwa w mianowniku jako dopowiedzenie): ${pl}`);
   assert(en.startsWith('⚑ Peace with Liga Trzech Słońc'), `B4c kontrola: EN bez zmian — ${en}`);
+}
+
+// ── B5 — F4 #367: wpisy w Dzienniku dla R4 i R7 ───────────────────────────────────────────
+const journalAt = (w, channel, re) => (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.channel === channel && re.test(e.text));
+const reEsc = (s) => new RegExp(String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+{
+  console.log('\nB5a — R4: pokój zdejmuje jednostki AI z kolonii gracza — wpis w Dzienniku (Dyplomacja): kto, ile, z którego ciała');
+  const w = boot();
+  declare(w);
+  const tH = freeTiles(w, w.home, { building: false });
+  const a1 = aiUnit(w, w.emp, w.home.planetId, tH[0]);
+  const a2 = aiUnit(w, w.emp, w.home.planetId, tH[1]);
+  const rec = w.K.empireRegistry?.get?.(w.emp);
+  const empName = rec?.namePL ?? rec?.name;
+  const bodyName = EntityManager.get(w.home.planetId)?.name;
+  const ok = signPeace(w);
+  const audit = debugLog.query({ kind: 'withdrawal:aiRemoved' });
+  assert(ok === true && !!a1 && !!a2 && !w.gum.getUnit(a1.id) && !w.gum.getUnit(a2.id) && audit.length === 1 && audit[0].data?.count === 2,
+    `świadek: pokój przyjęty, dwie jednostki ${w.emp} zdjęte z kolonii gracza (audyt aiRemoved: ${audit.length}, ${audit[0]?.data?.count})`);
+  const e = journalAt(w, 'diplomacy', reEsc(bodyName)).filter(x => x.text.includes(empName));
+  assert(e.length === 1 && /\b2\b/.test(e[0].text) && e[0].text !== 'event.withdrawal.aiRemoved',
+    `B5a: JEDEN wpis (Dyplomacja) z nazwą strony traktatu, liczbą jednostek i ciałem: ${e[0]?.text ?? '—'}`);
+}
+{
+  console.log('\nB5b — R7: ciało z kolonią zniszczone (EntityManager.remove — encji już nie ma) — wpis (Walka) z NAZWĄ ciała, nie id');
+  const w = boot();
+  declare(w);
+  const land = freeTiles(w, w.col, { building: false });
+  const u = playerUnit(w, w.col.planetId, land[0]);
+  const ai = aiUnit(w, w.emp, w.col.planetId, land[1]);
+  const bodyName = EntityManager.get(w.col.planetId)?.name;
+  quiet(() => EntityManager.remove(w.col.planetId));
+  await new Promise((r) => queueMicrotask(r));         // po mikrozadaniu ColonyManagera (`colony:destroyed`)
+  const audit = debugLog.query({ kind: 'garrison:unitsRemoved' }).filter(x => x.data?.planetId === w.col.planetId);
+  assert(!EntityManager.get(w.col.planetId) && !w.cm.getColony(w.col.planetId) && !w.gum.getUnit(u.id) && !w.gum.getUnit(ai?.id)
+      && audit.length === 2 && !!bodyName && bodyName !== w.col.planetId,
+    `świadek: ciało ${w.col.planetId} („${bodyName}”) i kolonia usunięte, jednostka gracza i ${w.emp} zniknęły (audyt: ${audit.length})`);
+  const e = journalAt(w, 'combat', reEsc(bodyName));
+  const raw = journalAt(w, 'combat', reEsc(w.col.planetId));
+  assert(e.length === 1 && /\b1\b/.test(e[0].text) && raw.length === 0,
+    `B5b: JEDEN wpis (Walka) z nazwą ciała i liczbą 1 — bez surowego id (${e[0]?.text ?? '—'})`);
+  assert(audit.some(x => (x.data?.owners ?? []).every(o => o && o !== 'player')) && e.length <= 1,
+    `B5b kontrola: jednostki AI usunięte z tym samym ciałem (osobny ślad audytu) NIE dają drugiego wpisu (${e.length} ≤ 1)`);
+  assert(audit.every(x => x.data?.bodyName === bodyName),
+    `B5b: ślad audytu niesie nazwę ciała (${JSON.stringify(audit.map(x => x.data?.bodyName))})`);
+}
+{
+  console.log('\nB5c — R7: ciało BEZ kolonii zniszczone — wpis (Walka) z nazwą ciała');
+  const w = boot();
+  const sys = EntityManager.get(w.home.planetId)?.systemId;
+  const b1 = ['moon', 'planet', 'planetoid'].flatMap(tp => EntityManager.getByType(tp))
+    .find(b => b.systemId === sys && b.id !== w.home.planetId && !w.cm.getColony(b.id));
+  const u = playerUnit(w, b1?.id, { q: 0, r: 0 });
+  const bodyName = b1?.name;
+  quiet(() => EntityManager.remove(b1.id));
+  assert(!!b1 && !EntityManager.get(b1.id) && !w.gum.getUnit(u.id) && !!bodyName,
+    `świadek: ciało bez kolonii ${b1?.id} („${bodyName}”) usunięte, jednostka gracza zniknęła`);
+  const e = journalAt(w, 'combat', reEsc(bodyName));
+  assert(e.length === 1 && /\b1\b/.test(e[0].text) && journalAt(w, 'combat', reEsc(b1.id)).length === 0,
+    `B5c: JEDEN wpis (Walka) z nazwą ciała (${e[0]?.text ?? '—'})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

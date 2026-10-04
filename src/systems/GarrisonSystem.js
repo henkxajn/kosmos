@@ -60,15 +60,15 @@ export class GarrisonSystem {
       this.removeOnOwnerChange(planetId, previousOwner, reason ?? 'capture'));
     EventBus.on('colony:captured', ({ planetId, previousOwner, reason } = {}) =>
       this.removeOnOwnerChange(planetId, previousOwner, reason ?? 'transfer'));
-    EventBus.on('colony:destroyed', ({ planetId, reason } = {}) =>
-      this.removeOnBodyDestroyed(planetId, reason ?? 'destroyed'));
+    EventBus.on('colony:destroyed', ({ planetId, reason, bodyName } = {}) =>
+      this.removeOnBodyDestroyed(planetId, reason ?? 'destroyed', bodyName ?? null));
     // R7 (G2-4) — ciało BEZ kolonii zniszczone (każde `EntityManager.remove`: kolizja, absorpcja, osierocony księżyc):
     //   `colony:destroyed` nie leci, więc jednostka gracza stojąca na nim (łazik zwiadu, desant na ciele niczyim)
     //   zostawała zarejestrowana na nieistniejącym ciele (zmierzone). Ciało Z kolonią idzie ścieżką wyżej — ColonyManager
     //   usuwa kolonię w mikrozadaniu i emituje `colony:destroyed`; stąd bramka `hasColony` (bez podwójnego usunięcia).
     EventBus.on('entity:removed', ({ entity } = {}) => {
       if (!entity?.id || this._K()?.colonyManager?.hasColony?.(entity.id)) return;
-      this.removeOnBodyDestroyed(entity.id, 'entity_removed');
+      this.removeOnBodyDestroyed(entity.id, 'entity_removed', entity.name ?? null);
     });
   }
 
@@ -193,22 +193,24 @@ export class GarrisonSystem {
 
   /**
    * D16 — ciało zniszczone: znikają WSZYSTKIE jednostki naziemne na nim — imperiów AI i (R7, G2-4) gracza.
+   * G2-4 F4 (Finding 367) — `bodyName` jedzie do śladu `garrison:unitsRemoved` (meldunek R7 nazywa ciało, którego encji
+   * może już nie być).
    * @returns {number} ile jednostek usunięto
    */
-  removeOnBodyDestroyed(planetId, via = 'destroyed') {
+  removeOnBodyDestroyed(planetId, via = 'destroyed', bodyName = null) {
     if (!planetId) return 0;
-    const ai = this._removeUnits(planetId, (u) => !!u.owner && u.owner !== 'player', 'body_destroyed', via);
+    const ai = this._removeUnits(planetId, (u) => !!u.owner && u.owner !== 'player', 'body_destroyed', via, null, bodyName);
     // R7 (G2-4, Finding 358 — decyzja właściciela 2026-10-03): jednostki GRACZA też znikają razem z ciałem, a ich POP
     //   wracają do domu W CAŁOŚCI (`releaseGroundUnitPops` — kolonia macierzysta z terminem właściciela; brak domu ⇒
     //   meldunek `groundUnit:popsLost`). Tak do G1c (potem rodzina „utrata POP”, kierunek 333). Osobny wpis audytu
     //   (`owners: ['player']`), żeby ślad jednostek AI został taki jak w C-S2.
     const cm = this._K()?.colonyManager;
     const pl = this._removeUnits(planetId, (u) => (u.owner ?? 'player') === 'player', 'body_destroyed', via,
-      (u) => cm?.releaseGroundUnitPops?.(u, 'body_destroyed'));
+      (u) => cm?.releaseGroundUnitPops?.(u, 'body_destroyed'), bodyName);
     return ai + pl;
   }
 
-  _removeUnits(planetId, pick, cause, via, beforeRemove = null) {
+  _removeUnits(planetId, pick, cause, via, beforeRemove = null, bodyName = null) {
     const gum = this._K()?.groundUnitManager;
     if (typeof gum?.getUnitsOnPlanet !== 'function') return 0;
     const doomed = gum.getUnitsOnPlanet(planetId).filter(pick);
@@ -218,7 +220,7 @@ export class GarrisonSystem {
     }
     if (doomed.length > 0) {
       EventBus.emit('garrison:unitsRemoved', {
-        planetId, cause, via, count: doomed.length,
+        planetId, cause, via, count: doomed.length, bodyName: bodyName ?? null,
         owners: [...new Set(doomed.map(u => u.owner))], unitIds: doomed.map(u => u.id),
       });
     }

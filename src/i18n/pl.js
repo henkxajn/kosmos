@@ -3020,6 +3020,8 @@ export default {
   'event.withdrawal.ordered':    '⚑ Pokój z imperium {0}: {1} jedn. naziemnych na {2} musi się wycofać do {3}',
   'event.withdrawal.warning':    '⚑ Za miesiąc mija termin wycofania: {0} jedn. na {1} (do {2})',
   'event.withdrawal.expired':    '⚑ Minął termin wycofania: {0} jedn. naziemnych na {1} utracono',
+  'event.withdrawal.aiRemoved':  '☮ Pokój z imperium {0}: jego wojska ({1} jedn.) opuściły {2}',
+  'event.groundUnit.lostWithBody': '⚔ Utracono {0} jedn. naziemnych wraz z ciałem {1}',
   'unitCard.withdrawalTitle':    '⚑ WYCOFANIE PO POKOJU',
   'unitCard.withdrawalDeadline': 'Termin',
   'unitCard.withdrawalLeft':     'Pozostało',

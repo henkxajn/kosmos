@@ -772,6 +772,9 @@ export class ColonyManager {
     }
 
     const colonyName = colony.name ?? planetId;
+    // G2-4 F4 (Finding 367) — nazwa CIAŁA dla meldunków: po `entity:removed` (kolizja) encji już nie ma w
+    //   `EntityManager`, a nazwa kolonii AI to nazwa nadana przez wroga (wzór Outlinera — nazwą ciała, nie cudzej kolonii).
+    const bodyName   = colony.planet?.name ?? null;
     const isOutpost  = colony.isOutpost ?? false;
     const population = colony.civSystem?.population ?? 0;
 
@@ -794,6 +797,7 @@ export class ColonyManager {
     EventBus.emit('colony:destroyed', {
       planetId,
       colonyName,
+      bodyName,
       reason,
       isOutpost,
       population,

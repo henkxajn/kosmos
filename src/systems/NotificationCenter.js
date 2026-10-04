@@ -71,6 +71,10 @@ export class NotificationCenter {
     EventBus.on('withdrawal:ordered', e => this._handleWithdrawalOrdered(e));
     EventBus.on('withdrawal:warning', e => this._handleWithdrawalWarning(e));
     EventBus.on('withdrawal:expired', e => this._handleWithdrawalExpired(e));
+    // G2-4 F4 (Finding 367) — R4 i R7 szły WYŁĄCZNIE do audytu: gracz nie wiedział, że wojska AI zeszły z jego kolonii
+    //   przy pokoju, ani że jego oddział zginął razem z ciałem. Oba — sam wpis w Dzienniku, bez dzwonka.
+    EventBus.on('withdrawal:aiRemoved',   e => this._handleWithdrawalAiRemoved(e));
+    EventBus.on('garrison:unitsRemoved',  e => this._handleGarrisonUnitsRemoved(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -559,6 +563,28 @@ export class NotificationCenter {
   _handleWithdrawalExpired({ planetId, count }) {
     if (!planetId || !(count > 0)) return;
     this._journal(t('event.withdrawal.expired', count, this._bodyName(planetId)), 'combat', 'warn', planetId);
+  }
+
+  /**
+   * G2-4 F4 (R4, Finding 367) — pokój zdjął jednostki imperium z ciała GRACZA. Sam wpis w Dzienniku, kanał dyplomacji
+   * (skutek traktatu), z nazwą strony traktatu (`empireLogName`, jak wpis pokoju) i ciała.
+   */
+  _handleWithdrawalAiRemoved({ empireId, planetId, count }) {
+    if (!planetId || !(count > 0)) return;
+    this._journal(t('event.withdrawal.aiRemoved', empireLogName(empireId), count, this._bodyName(planetId)),
+      'diplomacy', 'info', planetId);
+  }
+
+  /**
+   * G2-4 F4 (R7, Finding 367) — jednostki GRACZA zniknęły razem ze zniszczonym ciałem. Sam wpis w Dzienniku, kanał
+   * walki. Ślad jednostek AI (osobna emisja `GarrisonSystem`) i zmiana właściciela ciała — bez wpisu.
+   * Nazwa ciała z ładunku: po zniszczeniu encji zwykle już nie ma.
+   */
+  _handleGarrisonUnitsRemoved({ planetId, cause, owners, count, bodyName }) {
+    if (cause !== 'body_destroyed' || !planetId || !(count > 0)) return;
+    if (!(owners ?? []).some(o => (o ?? 'player') === 'player')) return;
+    this._journal(t('event.groundUnit.lostWithBody', count, bodyName ?? this._bodyName(planetId)),
+      'combat', 'warn', planetId);
   }
 
   // ── Helpery ──────────────────────────────────────────────────────────────
