@@ -14,7 +14,12 @@
 //       wpis w Dzienniku (ile, gdzie, termin); karta jednostki pokazuje flagę i termin; montaż i audyt.
 //   A6  R3/R5 — termin: miesiąc wcześniej JEDNO ostrzeżenie (Dziennik + dzwonek), w terminie jednostka usunięta jak
 //       polegli — POP ścieżką śmierci do kolonii macierzystej, JEDEN wpis w Dzienniku.
+//   A5  R6 (Findings 353, 354) — załadunek z cudzego ciała zostaje w ładowni (także bez żołdu), flaga zdjęta;
+//       żołd płaci kolonia gracza (dom jednostki albo kolonia macierzysta gracza), nigdy kolonia AI.
 //   A7  R3 (Finding 358) — cesja ciała z jednostką gracza na rzecz AI: flaga.
+//   A8  R7 (Finding 358) — zniszczone ciało: jednostka gracza znika, pełny koszt POP wraca do domu od razu.
+//   A8d R7 — ciało BEZ kolonii (zniszczenie przez `EntityManager.remove`): jednostka gracza znika, POP do domu;
+//       ciało Z kolonią zniszczone tą samą drogą — jedno usunięcie (bez podwójnego śladu).
 //   A9  zapis → wczytanie zachowuje flagę i termin (archetyp i legacy); starszy zapis bez pola — czysto.
 //   A10 garnizon zmobilizowanego imperium i oflagowane jednostki gracza na tych samych heksach — przez 6 civY pokoju
 //       zero ognia; w terminie znikają tylko jednostki gracza.
@@ -30,6 +35,7 @@ import { readFileSync } from 'node:fs';
 import EventBus from '../../core/EventBus.js';
 import gameState from '../../core/GameState.js';
 import debugLog from '../../core/DebugLog.js';
+import EntityManager from '../../core/EntityManager.js';
 import { isStandableTile } from '../../data/GroundUnitData.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
@@ -606,6 +612,80 @@ const paidStr = (s) => `dom ${s.homePaid.length}× ${JSON.stringify(s.homePaid.m
   for (let i = 0; i < 2; i++) { d.w.home.credits = 0; d.w.col.credits = 0; quiet(() => d.w.cm._tickGroundUnitUpkeep(1.0)); }
   assert(!d.w.gum.getUnit(d.unitId) && !d.vessel.groundUnits.includes(d.unitId),
     'A5d: po karencji (5 rozliczeń bez żołdu) rozwiązana jak dotąd — znika z rejestru i z ładowni');
+}
+
+// ── A8 — R7 (Finding 358): zniszczone ciało — jednostka gracza znika, pełny koszt POP wraca do domu ─────
+{
+  console.log('\nA8 — zniszczone ciało: jednostka gracza znika, jej pełny koszt POP odblokowany w domu');
+  const w = boot();
+  declare(w);
+  const land = freeTiles(w, w.col, { building: false });
+  const u = moveTo(recruit(w), w.col, land[0]);
+  const ai = aiUnit(w, w.emp, w.col.planetId, land[1]);
+  // kontrola: druga jednostka gracza w ŁADOWNI statku nad tym ciałem (planetId = ciało załadunku) — nie jest „na ciele”
+  const carried = playerUnit(w, w.col.planetId, land[2]);
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  const loaded = VSmod?.loadGroundUnit?.(v, carried)?.ok === true;
+  const popCost = u.popCost ?? 0;
+  const lock0 = lockOf(w.home);
+  const lost = [], removedEv = [];
+  EventBus.on('groundUnit:popsLost', (e) => lost.push(e));
+  EventBus.on('garrison:unitsRemoved', (e) => { if (e.planetId === w.col.planetId) removedEv.push(e); });
+  assert(popCost > 0 && lock0 >= popCost && !!ai && loaded,
+    `świadek: jednostka gracza z POP ${popCost} (dom ${u.homeColonyId}, blokada w domu ${lock0}) i jednostka ${w.emp} na ` +
+    `${w.col.planetId}; trzecia jednostka gracza w ładowni statku`);
+  quiet(() => w.cm.removeColony(w.col.planetId, 'collision'));
+  assert(!w.cm.getColony(w.col.planetId) && !w.gum.getUnit(u.id) && !w.gum.getUnit(ai.id),
+    `A8a: po zniszczeniu ${w.col.planetId} znika jednostka gracza i jednostka ${w.emp} (D16 „wszystkie”)`);
+  assert(Math.abs((lock0 - lockOf(w.home)) - popCost) < 1e-9 && lost.length === 0,
+    `A8b: pełny koszt POP odblokowany w domu OD RAZU (${lock0} → ${lockOf(w.home)}, koszt ${popCost}); meldunków „POP utracone”: ${lost.length}`);
+  assert(!!w.gum.getUnit(carried.id) && v.groundUnits.includes(carried.id),
+    'A8 kontrola: jednostka w ładowni statku nad zniszczonym ciałem zostaje (nie stoi na ciele)');
+  assert(removedEv.some(e => JSON.stringify(e.owners) === JSON.stringify(['player']) && e.count === 1 && e.cause === 'body_destroyed'),
+    `A8c: ślad audytu jednostek gracza osobno od AI (${JSON.stringify(removedEv.map(e => ({ owners: e.owners, count: e.count })))})`);
+}
+
+// ── A8d — R7 (Finding 358): ciało BEZ kolonii zniszczone (każde `EntityManager.remove`) ──────────────────
+{
+  console.log('\nA8d — zniszczone ciało bez kolonii: jednostka gracza znika, pełny koszt POP do domu; ciało z kolonią — jedno usunięcie');
+  const w = boot();
+  const sys = EntityManager.get(w.home.planetId)?.systemId;
+  const neutral = ['moon', 'planet', 'planetoid'].flatMap(tp => EntityManager.getByType(tp))
+    .filter(b => b.systemId === sys && b.id !== w.home.planetId && !w.cm.getColony(b.id));
+  const [b1, b2] = neutral;
+  const u = recruit(w);
+  u.planetId = b1?.id; u.q = 0; u.r = 0;
+  const keep = playerUnit(w, b2?.id, { q: 0, r: 0 });
+  const popCost = u.popCost ?? 0;
+  const lock0 = lockOf(w.home);
+  const removedEv = [], lost = [];
+  EventBus.on('garrison:unitsRemoved', (e) => removedEv.push(e));
+  EventBus.on('groundUnit:popsLost', (e) => lost.push(e));
+  assert(!!b1 && !!b2 && popCost > 0 && lock0 >= popCost && w.gum.getUnitsOnPlanet(b1.id).some(x => x.id === u.id),
+    `świadek: dwa ciała bez kolonii w układzie domu (${b1?.id}, ${b2?.id}); na pierwszym jednostka gracza z POP ${popCost} ` +
+    `(blokada w domu ${lock0}), na drugim — druga jednostka gracza`);
+  quiet(() => EntityManager.remove(b1.id));
+  assert(!EntityManager.get(b1.id) && !w.gum.getUnit(u.id),
+    `A8d: po zniszczeniu ${b1?.id} (ciało bez kolonii) jednostka gracza znika — przed naprawą zostawała zarejestrowana na nieistniejącym ciele`);
+  assert(Math.abs((lock0 - lockOf(w.home)) - popCost) < 1e-9 && lost.length === 0,
+    `A8e: pełny koszt POP odblokowany w domu od razu (${lock0} → ${lockOf(w.home)}, koszt ${popCost}); meldunków „POP utracone”: ${lost.length}`);
+  assert(!!w.gum.getUnit(keep.id) && keep.planetId === b2.id,
+    `A8d kontrola: jednostka gracza na innym ciele bez kolonii (${b2?.id}) zostaje`);
+  const evB1 = removedEv.filter(e => e.planetId === b1.id);
+  assert(evB1.length === 1 && evB1[0].via === 'entity_removed' && evB1[0].count === 1 && JSON.stringify(evB1[0].owners) === JSON.stringify(['player']),
+    `A8f: ślad audytu zniszczenia ciała bez kolonii (${JSON.stringify(evB1.map(e => ({ via: e.via, n: e.count, owners: e.owners })))})`);
+  // Ciało Z kolonią zniszczone tą samą drogą (kolizja = `EntityManager.remove`): ColonyManager usuwa kolonię
+  // w mikrozadaniu → `colony:destroyed` → R7; nowa subskrypcja `entity:removed` NIE może usunąć drugi raz.
+  const t0 = freeTiles(w, w.col, { building: false })[0];
+  const onCol = playerUnit(w, w.col.planetId, t0);
+  const before = removedEv.length;
+  quiet(() => EntityManager.remove(w.col.planetId));
+  await new Promise((r) => queueMicrotask(r));         // po mikrozadaniu ColonyManagera (setTimeout 0 czeka w uprzęży na tick)
+  const evCol = removedEv.slice(before).filter(e => e.planetId === w.col.planetId && (e.owners ?? []).includes('player'));
+  assert(!w.cm.getColony(w.col.planetId) && !w.gum.getUnit(onCol.id) && evCol.length === 1 && evCol[0].via === 'destroyed',
+    `A8g: ciało z kolonią (${w.col.planetId}) zniszczone przez EntityManager.remove — kolonia usunięta, jednostka gracza znika, ` +
+    `JEDEN ślad audytu jednostek gracza, ze ścieżki kolonii (${JSON.stringify(evCol.map(e => e.via))}; bez bramki hasColony: 'entity_removed')`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

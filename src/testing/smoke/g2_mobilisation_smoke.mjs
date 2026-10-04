@@ -20,7 +20,7 @@
 //   M7  (C-S2, D6) ciało zmienia właściciela przez przejęcie, cesję i przerzut: jednostki POPRZEDNIEGO właściciela
 //       na nim znikają, inne ciała nietknięte; ślad audytu `garrison:unitsRemoved`.
 //   M8  (C-S2, D16) ciało zniszczone: nie zostaje na nim żadna jednostka imperium AI (właściciela ani trzeciej
-//       strony). ⚠ Jednostka GRACZA zostaje jak dziś — jej los to decyzja właściciela (pin „otwarte”).
+//       strony). ⚠ Od G2-4 (R7) znika też jednostka GRACZA (pin „otwarte” odwrócony — decyzja właściciela 2026-10-03).
 //   M9  (C-S3, Finding 318) kafle kolonii AI niosą id imperium od bootstrapu (dom, ekspansja, placówka); stary zapis
 //       stemplowany na pierwszym ticku (kafel zajęty przez gracza zostaje jego); czas okupacji przed / po stemplu.
 //   M10 żywy fixture GATE-S4, wypowiedziana wojna: utworzony garnizon = tabela planera (13 na imperium).
@@ -393,9 +393,11 @@ function matchesPlan(units, plan, emp) {
   const ev = debugLog.query({ kind: 'garrison:unitsRemoved' }).map(e => e.data).find(d => d?.planetId === c1.planetId);
   assert(ev?.cause === 'body_destroyed' && ev?.via === 'collision' && ev?.count === 3 && JSON.stringify([...ev.owners].sort()) === JSON.stringify([e1, e2].sort()),
     `M8c: ślad audytu — body_destroyed/collision, 3 jednostki, właściciele ${JSON.stringify(ev?.owners)}`);
-  // ⚠ OTWARTE (decyzja właściciela, raport G2-3b): jednostka GRACZA na zniszczonym ciele zostaje jak dziś.
-  assert(w.gum.getUnit(pl.id)?.planetId === c1.planetId,
-    'M8 otwarte: jednostka gracza zostaje zarejestrowana na zniszczonym ciele — dzisiejsze zachowanie, los do decyzji właściciela');
+  // ⚠ ODWRÓCONY w G2-4 (R7, Finding 358 — decyzja właściciela 2026-10-03): do G2-4 ten pin („otwarte”) pinował, że jednostka
+  //   GRACZA zostaje zarejestrowana na zniszczonym ciele. Od R7 znika razem z ciałem (POP do domu w całości — pin:
+  //   `g2_after_peace_smoke` A8). M8c (ślad audytu jednostek AI) bez zmian — gracz dostaje osobny wpis.
+  assert(!w.gum.getUnit(pl.id),
+    'M8d (R7, G2-4): jednostka gracza znika razem ze zniszczonym ciałem (do G2-4: zostawała zarejestrowana na nieistniejącym ciele)');
 }
 
 // ── M9 — stempel kafli (Finding 318) ────────────────────────────────────────────────────

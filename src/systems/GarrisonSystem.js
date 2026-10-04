@@ -19,10 +19,12 @@
 //
 // C-S2 — USUWANIE (D6, D16; Finding 319): przy zmianie właściciela ciała (przejęcie przez gracza, cesja,
 // przerzut `transferColony`) znikają jednostki POPRZEDNIEGO właściciela na tym ciele; przy zniszczeniu ciała
-// (`colony:destroyed` — kolizja, wyrzucenie z układu, `entity:removed`) znikają jednostki WSZYSTKICH imperiów AI.
+// (`colony:destroyed` — kolizja, wyrzucenie z układu, `entity:removed`) znikają jednostki WSZYSTKICH imperiów AI;
+// ciało BEZ kolonii zgłasza zniszczenie wyłącznie przez `entity:removed` (R7, G2-4).
 //   • jednostki AI nie mają POP (`popCost` 0, G2-1), więc usunięcie to samo `removeUnit` — bez tabeli śmierci;
-//   • ⚠ jednostki GRACZA na takim ciele zostają jak dotąd — los jednostki gracza (zwrot POP? śmierć? ewakuacja?)
-//     to DECYZJA WŁAŚCICIELA, niepodjęta (raport G2-3b). Pin dzisiejszego zachowania: `g2_seams_smoke` P6b;
+//   • jednostki GRACZA (decyzja właściciela 2026-10-03, Finding 358): na ciele ZNISZCZONYM znikają razem z nim, a ich POP
+//     wracają do domu W CAŁOŚCI (R7, G2-4 — do G1c); na ciele, które zmieniło właściciela, zostają — przy oddaniu
+//     ciała AI w traktacie obejmuje je flaga wycofania po pokoju (`WithdrawalSystem`, R3). Pin: `g2_seams_smoke` P6b;
 //   • ładownia statku na orbicie (`in_cargo`) nie jest „na ciele” — `getUnitsOnPlanet` ją pomija.
 //
 // C-S3 — STEMPEL KAFLI (Finding 318): kafle kolonii AI niosą właściciela — od bootstrapu
@@ -60,6 +62,14 @@ export class GarrisonSystem {
       this.removeOnOwnerChange(planetId, previousOwner, reason ?? 'transfer'));
     EventBus.on('colony:destroyed', ({ planetId, reason } = {}) =>
       this.removeOnBodyDestroyed(planetId, reason ?? 'destroyed'));
+    // R7 (G2-4) — ciało BEZ kolonii zniszczone (każde `EntityManager.remove`: kolizja, absorpcja, osierocony księżyc):
+    //   `colony:destroyed` nie leci, więc jednostka gracza stojąca na nim (łazik zwiadu, desant na ciele niczyim)
+    //   zostawała zarejestrowana na nieistniejącym ciele (zmierzone). Ciało Z kolonią idzie ścieżką wyżej — ColonyManager
+    //   usuwa kolonię w mikrozadaniu i emituje `colony:destroyed`; stąd bramka `hasColony` (bez podwójnego usunięcia).
+    EventBus.on('entity:removed', ({ entity } = {}) => {
+      if (!entity?.id || this._K()?.colonyManager?.hasColony?.(entity.id)) return;
+      this.removeOnBodyDestroyed(entity.id, 'entity_removed');
+    });
   }
 
   /** Usługi gry (w grze `window.KOSMOS`). */
@@ -172,7 +182,8 @@ export class GarrisonSystem {
 
   /**
    * D6 — ciało zmieniło właściciela: jednostki POPRZEDNIEGO właściciela na nim znikają (jeśli to imperium AI).
-   * Jednostki gracza zostają (decyzja właściciela niepodjęta — nagłówek). Inne ciała — nietknięte.
+   * Jednostki gracza zostają — przy oddaniu ciała AI w traktacie obejmuje je flaga wycofania (R3, `WithdrawalSystem`).
+   * Inne ciała — nietknięte.
    * @returns {number} ile jednostek usunięto
    */
   removeOnOwnerChange(planetId, previousOwner, via = 'owner_change') {
@@ -181,20 +192,30 @@ export class GarrisonSystem {
   }
 
   /**
-   * D16 — ciało zniszczone: znikają jednostki WSZYSTKICH imperiów AI na nim. Jednostki gracza zostają
-   * (decyzja właściciela niepodjęta — nagłówek).
+   * D16 — ciało zniszczone: znikają WSZYSTKIE jednostki naziemne na nim — imperiów AI i (R7, G2-4) gracza.
    * @returns {number} ile jednostek usunięto
    */
   removeOnBodyDestroyed(planetId, via = 'destroyed') {
     if (!planetId) return 0;
-    return this._removeUnits(planetId, (u) => !!u.owner && u.owner !== 'player', 'body_destroyed', via);
+    const ai = this._removeUnits(planetId, (u) => !!u.owner && u.owner !== 'player', 'body_destroyed', via);
+    // R7 (G2-4, Finding 358 — decyzja właściciela 2026-10-03): jednostki GRACZA też znikają razem z ciałem, a ich POP
+    //   wracają do domu W CAŁOŚCI (`releaseGroundUnitPops` — kolonia macierzysta z terminem właściciela; brak domu ⇒
+    //   meldunek `groundUnit:popsLost`). Tak do G1c (potem rodzina „utrata POP”, kierunek 333). Osobny wpis audytu
+    //   (`owners: ['player']`), żeby ślad jednostek AI został taki jak w C-S2.
+    const cm = this._K()?.colonyManager;
+    const pl = this._removeUnits(planetId, (u) => (u.owner ?? 'player') === 'player', 'body_destroyed', via,
+      (u) => cm?.releaseGroundUnitPops?.(u, 'body_destroyed'));
+    return ai + pl;
   }
 
-  _removeUnits(planetId, pick, cause, via) {
+  _removeUnits(planetId, pick, cause, via, beforeRemove = null) {
     const gum = this._K()?.groundUnitManager;
     if (typeof gum?.getUnitsOnPlanet !== 'function') return 0;
     const doomed = gum.getUnitsOnPlanet(planetId).filter(pick);
-    for (const u of doomed) gum.removeUnit(u.id);   // `groundUnit:removed` → ArmySystem sprząta armie
+    for (const u of doomed) {
+      beforeRemove?.(u);                              // R7 — zwolnienie POP gracza PRZED usunięciem (czyta jednostkę)
+      gum.removeUnit(u.id);                           // `groundUnit:removed` → ArmySystem sprząta armie
+    }
     if (doomed.length > 0) {
       EventBus.emit('garrison:unitsRemoved', {
         planetId, cause, via, count: doomed.length,
