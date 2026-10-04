@@ -4,6 +4,10 @@
 //   B1  F1 #363 — przy POKOJU kafle zajęte w wojnie wracają do właściciela kolonii, po OBU stronach, a liczniki
 //       okupacji są zerowane; kolonie i okupanci STRON TRZECICH nietknięci; nowa wojna nie daje przejęcia kolonii AI
 //       bez wojsk (kontrola: ten sam świat z kaflem stolicy gracza — daje, czyli scena mierzy realny mechanizm).
+//   B2  F2 #364 — ostrzał z orbity na ciało INNEGO imperium wymaga wojny z jego właścicielem: dostępność akcji (powód
+//       widoczny dla gracza), wystrzał (`fireOrbitalStrike` — odmowa PRZED zużyciem amunicji), strażnik silnika
+//       (`groundUnit:orbitalStrike` w pokoju nie zadaje obrażeń, odmowa w audycie); wojna i własne ciało — kontrole.
+//       Żądanie ostrzału w `ColonyOverlay` (nie importuje się pod node) — pin źródłowy z kontrolą na bramce desantu.
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem`, Dziennik i dzwonek
 //   (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). Mobilizacja garnizonów AI WYŁĄCZONA w scenach,
@@ -22,6 +26,10 @@ import { CombatSystem } from '../../systems/CombatSystem.js';
 import { EventLogSystem } from '../../systems/EventLogSystem.js';
 import { NotificationCenter } from '../../systems/NotificationCenter.js';
 import * as TO from '../../utils/TileOwnership.js';
+import { readFileSync } from 'node:fs';
+import { t } from '../../i18n/i18n.js';
+import * as FA from '../../data/FleetActions.js';
+import * as VS from '../../entities/Vessel.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -78,6 +86,22 @@ function playerUnit(w, planetId, t, { arch = 'shock_infantry', morale = 100 } = 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const bell = (w, type) => (w.K.notificationCenter?.getActive?.() ?? []).filter(n => n.type === type);
 const counter = (t) => [t?.occupyEmpireId ?? null, t?.occupyStart ?? null];
+/** Źródło bez komentarzy (pin nie może łapać własnego wyjaśnienia) i z LF (pin niezależny od checkoutu). */
+const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
+const src = (rel) => strip(readFileSync(new URL(rel, import.meta.url), 'utf8'));
+/** Statek z baterią ostrzału na orbicie ciała `planetId` (moduł `orbital_strike_battery` — kształt `Vessel.js:222-226`). */
+function strikeVessel(w, planetId, ammo = 5) {
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.orbitalStrike = { damage: 20, cooldownYears: 0.5, ammoCapacity: 10, ammoType: 'orbital_shells', ammoCurrent: ammo,
+                      cooldownUntilYear: 0 };
+  v.position.state = 'orbiting';
+  v.position.dockedAt = planetId;
+  return v;
+}
+/** Jednostka imperium (jedyne wejście `createAIUnit`). */
+function aiUnit(w, emp, planetId, t0, arch = 'garrison_unit') {
+  return w.gum.createAIUnit({ archetypeId: arch, empireId: emp, planetId, q: t0.q, r: t0.r, morale: 100, deployed: true })?.unit ?? null;
+}
 
 // ── B1 — F1 #363: pokój cofa okupację kafli, po obu stronach ─────────────────────────────
 {
@@ -174,6 +198,88 @@ const counter = (t) => [t?.occupyEmpireId ?? null, t?.occupyStart ?? null];
   const units = w.gum.getUnitsOnPlanet(w.col.planetId).length;
   assert(ok === true && again !== false && units === 0 && !w.cm.getColony(w.col.planetId)?.ownerEmpireId,
     `B1h kontrola: przy kaflu stolicy gracza i zerze jednostek (${units}) kolonia przechodzi w 2 civY — mechanizm #363 jest żywy`);
+}
+
+// ── B2 — F2 #364: ostrzał z orbity na obce ciało tylko w wojnie ────────────────────────
+{
+  console.log('\nB2a — dostępność „Ostrzał z orbity”: ciało imperium w pokoju — odmowa z powodem; wojna i własne ciało — dostępna');
+  const w = boot();
+  // Dominacja orbitalna to INNA bramka (w pokoju i tak `true` — #364); tu mierzymy wyłącznie wojnę.
+  w.K.warSystem.playerHasOrbitalDominance = () => true;
+  const act = FA.FLEET_ACTIONS?.orbital_strike;
+  const state = { colonyManager: w.cm };
+  const V = strikeVessel(w, w.col.planetId);
+  const Vh = strikeVessel(w, w.home.planetId);
+  const peace = act?.canExecute?.(V, state);
+  const own = act?.canExecute?.(Vh, state);
+  declare(w);
+  const war = act?.canExecute?.(V, state);
+  const notAtWar = t('fleet.reason.strikeNotAtWar');
+  assert(w.dipl.getStatus(w.emp) === 'war' && peace?.ok === false && peace?.reason === notAtWar,
+    `B2a: pokój z ${w.emp} — akcja niedostępna z powodem „${notAtWar}” (${JSON.stringify(peace)})`);
+  assert(war?.ok === true && own?.ok === true,
+    `B2a kontrola: wojna — dostępna (${JSON.stringify(war)}); własne ciało w pokoju — dostępna (${JSON.stringify(own)})`);
+  // ⚠ Klucz lądowania (fleet.reason.notAtWar) mówi o LĄDOWANIU — dla ostrzału kłamałby o czynności.
+  assert(t('fleet.reason.strikeNotAtWar') !== 'fleet.reason.strikeNotAtWar' && t('fleet.reason.strikeNotAtWar') !== t('fleet.reason.notAtWar'),
+    'B2a: powód ostrzału ma własny klucz, różny od powodu lądowania');
+}
+{
+  console.log('\nB2b — wystrzał (fireOrbitalStrike): w pokoju odmowa PRZED zużyciem amunicji i cooldownu; wojna i własne ciało — strzela');
+  const w = boot();
+  const fire = VS.fireOrbitalStrike;
+  const V = strikeVessel(w, w.col.planetId, 5);
+  const Vw = strikeVessel(w, w.col.planetId, 5);         // kontrola wojny — statek nietknięty strzałem w pokoju
+  const Vh = strikeVessel(w, w.home.planetId, 5);
+  const year = w.K.timeSystem.gameTime;
+  let peace = null, own = null, war = null;
+  try { peace = fire(V, year, w.col.planetId); } catch (e) { peace = { thrown: e.message }; }
+  const afterPeace = [V.orbitalStrike.ammoCurrent, V.orbitalStrike.cooldownUntilYear];
+  try { own = fire(Vh, year, w.home.planetId); } catch (e) { own = { thrown: e.message }; }
+  declare(w);
+  try { war = fire(Vw, year, w.col.planetId); } catch (e) { war = { thrown: e.message }; }
+  assert(peace?.ok === false && peace?.reason === 'not_at_war' && same(afterPeace, [5, 0]),
+    `B2b: pokój — odmowa „not_at_war” (${JSON.stringify(peace)}), amunicja i cooldown nietknięte (${afterPeace})`);
+  assert(war?.ok === true && Vw.orbitalStrike.ammoCurrent === 4 && own?.ok === true && Vh.orbitalStrike.ammoCurrent === 4,
+    `B2b kontrola: wojna — strzela (amunicja 5 → ${Vw.orbitalStrike.ammoCurrent}); własne ciało w pokoju — strzela (${Vh.orbitalStrike.ammoCurrent})`);
+}
+{
+  console.log('\nB2c — strażnik silnika: groundUnit:orbitalStrike na ciele imperium w pokoju nie zadaje obrażeń (odmowa w audycie); wojna i własne ciało — zadaje');
+  const w = boot();
+  const tAI = freeTiles(w, w.col, { building: false })[0];
+  const tH = freeTiles(w, w.home, { building: false })[0];
+  const g = aiUnit(w, w.emp, w.col.planetId, tAI);
+  const p = playerUnit(w, w.home.planetId, tH);
+  const hpG0 = g?.hp, hpP0 = p?.hp;
+  const strike = (planetId, t0) => EventBus.emit('groundUnit:orbitalStrike',
+    { vesselId: 'b2c_probe', planetId, q: t0.q, r: t0.r, damage: 3, ownerId: 'player' });
+  strike(w.col.planetId, tAI);
+  const hpPeace = g?.hp;
+  strike(w.home.planetId, tH);
+  const refused = debugLog.query({ kind: 'groundUnit:orbitalStrikeRefused' });
+  declare(w);
+  const hpPreWar = g?.hp;
+  strike(w.col.planetId, tAI);
+  assert(!!g && hpG0 > 3 && hpPeace === hpG0 && refused.length === 1 && refused[0].data?.reason === 'not_at_war',
+    `B2c: pokój — garnizon ${w.emp} nietknięty (${hpG0} → ${hpPeace}), odmowa w audycie: ${refused.length} (${refused[0]?.data?.reason ?? '—'})`);
+  assert(g?.hp === hpPreWar - 3 && p?.hp === hpP0 - 3,
+    `B2c kontrola: wojna — garnizon ${hpPreWar} → ${g?.hp}; własne ciało w pokoju (ogień bratobójczy dozwolony) — ${hpP0} → ${p?.hp}`);
+}
+{
+  console.log('\nB2d — pin źródłowy ColonyOverlay: żądanie ostrzału pyta bramkę wojny PRZED wejściem w tryb; wystrzał podaje ciało i tłumaczy odmowę');
+  const co = src('../../ui/ColonyOverlay.js');
+  const iReq = co.indexOf("EventBus.on('vessel:orbitalStrikeRequest'");
+  const req = iReq >= 0 ? co.slice(iReq, co.indexOf('this._strikeMode = true', iReq)) : '';
+  assert(/warGateRefusal\(\s*'player'\s*,\s*targetId\s*\)/.test(req) && /t\(\s*'fleet\.reason\.strikeNotAtWar'\s*\)/.test(req),
+    'B2d: handler vessel:orbitalStrikeRequest pyta warGateRefusal(player, targetId) i pokazuje fleet.reason.strikeNotAtWar PRZED trybem ostrzału');
+  const iClick = co.indexOf('if (this._strikeMode && tile)');
+  const click = iClick >= 0 ? co.slice(iClick, iClick + 1600) : '';
+  assert(/fireOrbitalStrike\(\s*vessel\s*,\s*gameYear\s*,\s*this\._strikePlanetId\s*\)/.test(click)
+      && /NOT_AT_WAR/.test(click) && /t\(\s*'fleet\.reason\.strikeNotAtWar'\s*\)/.test(click),
+    'B2d: klik w trybie ostrzału podaje ciało do fireOrbitalStrike i tłumaczy odmowę NOT_AT_WAR przez t()');
+  const iDrop = co.indexOf("EventBus.on('vessel:dropTroopsRequest'");
+  const drop = iDrop >= 0 ? co.slice(iDrop, iDrop + 1200) : '';
+  assert(/warGateRefusal\(\s*'player'\s*,\s*targetId\s*\)/.test(drop),
+    'B2d kontrola pinu: ten sam wzorzec łapie bramkę desantu (G2-2) w tym pliku — pin nie jest ślepy');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

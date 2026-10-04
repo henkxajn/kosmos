@@ -256,6 +256,8 @@ export class ColonyOverlay extends BaseOverlay {
       const vessel = vMgr?.getVessel?.(vesselId);
       if (!vessel?.orbitalStrike) return;
       if ((vessel.orbitalStrike.ammoCurrent ?? 0) <= 0) { this._showFlash('Brak amunicji'); return; }
+      // G2-4 F2 (Finding 364) — ciało innego imperium: ostrzał tylko w wojnie z jego właścicielem (wzór desantu niżej).
+      if (warGateRefusal('player', targetId)) { this._showFlash(t('fleet.reason.strikeNotAtWar')); return; }
 
       // Sprawdź dominację (jeśli obca kolonia). Obca = brak w colMgr LUB ma ownerEmpireId/isTestEnemy.
       const colMgr = window.KOSMOS?.colonyManager;
@@ -4639,7 +4641,8 @@ export class ColonyOverlay extends BaseOverlay {
           return true;
         }
         const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-        const res = fireOrbitalStrike(vessel, gameYear);
+        // G2-4 F2 — bramka wojny w CHWILI wystrzału (pokój mógł zapaść od wejścia w tryb); odmowa nie zużywa amunicji.
+        const res = fireOrbitalStrike(vessel, gameYear, this._strikePlanetId);
         if (res?.ok) {
           EventBus.emit('groundUnit:orbitalStrike', {
             vesselId: vessel.id,
@@ -4649,6 +4652,8 @@ export class ColonyOverlay extends BaseOverlay {
             ownerId: 'player',
           });
           this._showFlash(`💥 Ostrzał (${tile.q},${tile.r}) — ${res.damage} dmg`);
+        } else if (res?.reason === NOT_AT_WAR) {
+          this._showFlash(t('fleet.reason.strikeNotAtWar'));
         } else {
           this._showFlash(`Błąd ostrzału: ${res?.reason ?? 'unknown'}`);
         }

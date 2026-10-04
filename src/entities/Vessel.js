@@ -12,7 +12,7 @@ import { HULLS } from '../data/HullsData.js';
 import { calcShipStats, getModuleCapabilities, SHIP_MODULES } from '../data/ShipModulesData.js';
 import { getNextName } from '../data/VesselNames.js';
 import { getTransportSize } from '../data/unitArchetypes.js';
-import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny w chwili lądowania
+import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny w chwili lądowania (G2-4 F2 — i ostrzału)
 import EntityManager from '../core/EntityManager.js';
 
 let _nextVesselId = 1;
@@ -784,16 +784,21 @@ export function dropTroop(vessel, unit, planetId, q, r) {
 
 /**
  * Wystrzel ostrzał orbitalny na hex docelowy.
- * Zużywa 1 orbital_shells, ustawia cooldown. Sprawdza: ammo > 0, cooldown OK.
+ * Zużywa 1 orbital_shells, ustawia cooldown. Sprawdza: wojnę z właścicielem ciała, ammo > 0, cooldown OK.
  * Caller musi sprawdzić dominację orbitalną przed wywołaniem.
  *
  * @param {object} vessel
  * @param {number} currentYear — aktualny rok gry (do cooldownu)
+ * @param {string|null} [planetId] — ciało celu (domyślnie ciało, nad którym statek orbituje)
  * @returns {{ok:boolean, reason?:string, damage?:number}}
  */
-export function fireOrbitalStrike(vessel, currentYear) {
+export function fireOrbitalStrike(vessel, currentYear, planetId = vessel?.position?.dockedAt ?? null) {
   const os = vessel.orbitalStrike;
   if (!os) return { ok: false, reason: 'no_battery' };
+  // G2-4 F2 (Finding 364) — ciało innego imperium: ostrzał tylko w wojnie z jego właścicielem; odmowa PRZED zużyciem
+  //   amunicji i cooldownu (wzór `dropTroop`). Ciało własne i niczyje — bez zmian (ogień bratobójczy dozwolony).
+  const warRefusal = warGateRefusal(vessel.ownerEmpireId ?? 'player', planetId);
+  if (warRefusal) return { ok: false, reason: warRefusal };
   if ((os.ammoCurrent ?? 0) <= 0) return { ok: false, reason: 'no_ammo' };
   if (currentYear < (os.cooldownUntilYear ?? 0)) return { ok: false, reason: 'cooldown' };
 

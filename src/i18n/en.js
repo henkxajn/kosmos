@@ -1597,6 +1597,7 @@ export default {
   'fleet.reason.holdEmpty': 'Hold empty',
   'fleet.reason.noOrbitalDominance': 'No orbital dominance',
   'fleet.reason.notAtWar': 'Landing requires war with the owner of this body',
+  'fleet.reason.strikeNotAtWar': 'Orbital strike requires war with the owner of this body',
   'fleet.reason.unloadForeignBody': 'Cannot unload troops onto a body owned by another empire — drop pods only',
   'fleet.reason.noStrikeBattery': 'No strike battery',
   'fleet.reason.noAmmo': 'No ammunition',

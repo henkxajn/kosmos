@@ -15,7 +15,7 @@ import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getUnitStats, GROUND_MOVE_COST, isStandableTile } from '../data/GroundUnitData.js';
 import { UNIT_ARCHETYPES, getTransportSize, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
-import { groundOwnersHostile } from '../utils/WarGate.js';   // R1/R2 (G2-4) — wróg = właściciel w wojnie
+import { groundOwnersHostile, warGateRefusal } from '../utils/WarGate.js';   // R1/R2 (G2-4) — wróg = właściciel w wojnie; F2 — ostrzał
 
 // ── Koszty ruchu po terenie ──────────────────────────────────────────────────
 // Tabela mieszka w danych (`GROUND_MOVE_COST`, GroundUnitData) — wspólna z predykatem „da się
@@ -47,9 +47,18 @@ export class GroundUnitManager {
    * Odbiór ostrzału orbitalnego — damage dla WSZYSTKICH jednostek na hexie
    * (nie filtrujemy po ownerze — kinetyczny pocisk nie widzi flagi).
    * Friendly fire jest cenną decyzją taktyczną gracza.
+   * G2-4 F2 (Finding 364) — ciało INNEGO imperium: ostrzał tylko w wojnie z jego właścicielem (strażnik silnika za
+   *   bramkami UI); odmowa trafia do audytu (`groundUnit:orbitalStrikeRefused`), obrażeń brak.
    */
-  _onOrbitalStrike({ planetId, q, r, damage }) {
+  _onOrbitalStrike({ vesselId, planetId, q, r, damage, ownerId }) {
     if (!planetId || damage == null) return;
+    const refusal = warGateRefusal(ownerId ?? 'player', planetId);
+    if (refusal) {
+      EventBus.emit('groundUnit:orbitalStrikeRefused', {
+        vesselId: vesselId ?? null, planetId, q, r, ownerId: ownerId ?? 'player', reason: refusal,
+      });
+      return;
+    }
     const dmg = Math.max(0, damage);
     if (dmg === 0) return;
     const toKill = [];

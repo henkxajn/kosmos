@@ -20,7 +20,7 @@ import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canColonize } from '../entities/Vessel.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
-import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny (desant, away team)
+import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny (desant, away team; G2-4 F2 — ostrzał)
 
 // Helper: czy statek wymaga wyrzutni (spaceport)?
 // Małe kadłuby (size === 'small') nie wymagają — mogą startować/lądować wszędzie
@@ -586,6 +586,9 @@ const ACTIONS = {
         return { ok: false, reason: t('fleet.reason.cooldown', (os.cooldownUntilYear - gameYear).toFixed(1)) };
       }
       const targetId = vessel.position.dockedAt;
+      // G2-4 F2 (Finding 364) — ciało innego imperium: ostrzał tylko w wojnie z jego właścicielem (bliźniak `drop_troops`).
+      //   PRZED dominacją: w pokoju `playerHasOrbitalDominance` daje `true` (brak kontrolera i floty wroga).
+      if (warGateRefusal('player', targetId)) return { ok: false, reason: t('fleet.reason.strikeNotAtWar') };
       const colMgr = state.colonyManager;
       const warSys = window.KOSMOS?.warSystem;
       const targetColony = colMgr?.getColony?.(targetId);
