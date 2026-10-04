@@ -5825,19 +5825,24 @@ R4 (☮) i R7. **F5** — utrata wojsk w terminie: Dziennik I dzwonek, raz na ci
 PL „☮ Pokój z imperium {0}” (**371**) · (f) `2c9511f` wpis F3 przy wczytaniu bez „Peace with” (**376**) · (d) `5fefe33`
 stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu (**368**) · (e) `8427b0a` stare zapisy: kafle
 zajęte przez stronę bez wojny wracają przy wczytaniu (**369**, reguła F1) · (g) `96c636f` łazik usunięty dowolną drogą
-zdejmuje `awayTeamUnitId` (**365**). ⚠ **(a)** (**370**, ostrzeżenie „został miesiąc” gaśnie samo) — łatka gotowa,
-**NIEZACOMMITOWANA**: zaczerwienia trzy istniejące asercje (`g2_after_peace_smoke` A6b, `g2_peace_followups_smoke` B6b
-i świadek B6c — mierzą ostrzeżenie PO terminie), a istniejącego keepera nie przestawia się na zielono samodzielnie; decyzja
-właściciela (przecelowanie + skutek UX: plakietka dzwonka w ticku terminu 2 → 2). Łatki: `kosmos-handover/g2-4-closing`.
+zdejmuje `awayTeamUnitId` (**365**). ✅ **(a) w wersji OGRANICZONEJ** `dcc4c6f` (**370**, decyzja właściciela 2026-10-04,
+plan §5w): ostrzeżenie „został miesiąc” gaśnie samo PRZED terminem, gdy straciło przedmiot (żadna oflagowana jednostka nie
+stoi już na ciele — załadowane, flaga zdjęta, usunięte inną drogą — albo wróciła wojna); **w terminie NIE gaśnie** — obok
+staje meldunek o utracie i plakietka rośnie; od terminu gasi je wyłącznie gracz. Pełną wersję odrzucono (meldunek zastępował
+ostrzeżenie, plakietka 2 → 2). Jeden próg terminu dla usunięcia jednostek i dzwonka: `withdrawalDeadlineReached`
+(`WithdrawalSystem`). ✅ **378** `5c49b36`: `GroundUnitManager.restore` na końcu zeruje `vessel.awayTeamUnitId` wskazujący
+jednostkę spoza rejestru.
 ⚠ **Uzgodnienie przy wczytaniu (`WithdrawalSystem.reconcileAfterLoad`) robi trzy rzeczy, w tej kolejności:** kafle (e) →
 jednostki AI (d) → flagi jednostek gracza (F3). „Nie w wojnie” dla (d)/(e) = `groundOwnersHostile` — pary AI↔AI nietknięte.
 ⚠ **Odnośnik łazika:** `removeUnit` (→ `_pruneFromVessels`) czyści `vessel.awayTeamUnitId` — id łazika czytać PRZED
-`removeUnit`.
-Keepery `g2_peace_followups_smoke` **67/67** · `g2_peace_closing_smoke` **38/38**; sweep **259/259**, `check-i18n` 3448.
-Findingi **368–378** (plan §6): ✅ **368** · **369** · **371** · **376** (poprawki) · 🟠 **370** ((a), decyzja właściciela) ·
+`removeUnit`. Przy wczytaniu sprzątanie martwych odnośników siedzi na końcu `GroundUnitManager.restore` — wymaga, by blok
+wczytania `GameScene` odtwarzał statki PRZED jednostkami (pin Z378).
+Keepery `g2_peace_followups_smoke` **67/67** · `g2_peace_closing_smoke` **64/64**; sweep **259/259**, `check-i18n` 3448.
+Findingi **368–378** (plan §6): ✅ **368** · **369** · **371** · **376** (poprawki) · ✅ **370** ((a) ograniczona) · ✅ **378** ·
 ⚪ **372** trzy reguły nazwy imperium · **374** martwy `FleetTabPanel` · **375** polskie literały (`ColonyOverlay`,
 `CargoLoadModal`) · **377** polska gramatyka „z {0}” w trzech innych wpisach — etap polerki UI · **373** akcje silnika bez
-bramki `in_cargo` — później · **378** zapisy z martwym `awayTeamUnitId` (obejście „Zbierz”).
-**G2 ZAMKNIĘTE.** Pozostałe kroki arca: **G3** (odrastanie strat, widoczność garnizonu, uzgadnianie mobilizacji co rok —
-**360**) · **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02) · **G2b** (pule
-desantu na archetypy).
+bramki `in_cargo` — później. (d) — „jeden wpis na ciało” = jeden na ciało i imperium — **zostaje** (odpowiedź właściciela
+2026-10-04).
+**G2 ZAMKNIĘTE.** Pozostałe kroki arca, w kolejności **G3 → G1c → G2b** (odpowiedź właściciela 2026-10-04): **G3**
+(odrastanie strat, widoczność garnizonu, uzgadnianie mobilizacji co rok — **360**) · **G1c** (rodzina „utrata POP”: 333 ·
+330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02) · **G2b** (pule desantu na archetypy).

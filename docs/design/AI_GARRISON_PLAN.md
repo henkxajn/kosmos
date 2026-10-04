@@ -7,19 +7,21 @@
 > właściciela PASS** (§5n–§5p). ✅ **G2-4 (po pokoju, R1–R7) ZAMKNIĘTY 2026-10-04 — bramka live właściciela: silnik PASS,
 > trzy wady widoku** (§5q–§5s). ✅ **Follow-upy G2-4 (F1–F7) ZAMKNIĘTE 2026-10-04 — bramka live właściciela PASS**
 > (§5t–§5u). Poprawki po bramce **(b) (d) (e) (f) (g)** — 2026-10-04, bez osobnej bramki (zgoda właściciela), §5v;
-> **(a)** — łatka gotowa, **wstrzymana**: zaczerwienia trzy istniejące asercje (reguła 8), decyzja właściciela (§5v);
-> **(c)** — etap polerki UI (**372**). ✅ **G2 ZAMKNIĘTE.** Pozostałe kroki arca (§3): **G3** (odrastanie strat,
-> widoczność garnizonu, uzgadnianie mobilizacji co rok — **360**) · **G1c** (rodzina „utrata POP”: **333** · **330** ·
-> **328** · **329**) · **G2b** (pule desantu na archetypy).
+> **(a)** — w wersji **ograniczonej** (`dcc4c6f`) i **378** (`5c49b36`) — 2026-10-04, decyzje właściciela, §5w;
+> **(c)** — etap polerki UI (**372**). ✅ **G2 ZAMKNIĘTE.** Pozostałe kroki arca (§3), w kolejności **G3 → G1c → G2b**
+> (odpowiedź właściciela 2026-10-04, §5w): **G3** (odrastanie strat, widoczność garnizonu, uzgadnianie mobilizacji co
+> rok — **360**) · **G1c** (rodzina „utrata POP”: **333** · **330** · **328** · **329**) · **G2b** (pule desantu na
+> archetypy).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
 > odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k);
 > **rewizja D9** i odpowiedzi (a)–(g) z sesji G2-3a — **2026-10-03** (§1, §5m); odpowiedzi z sesji G2-3b i **zakres G2-4
 > (R1–R7)** — **2026-10-03** (§5p); odpowiedzi po G2-4 (notatka przekazania) — **2026-10-03**, wpisane **2026-10-04**,
 > i zakres wad z bramki G2-4 — **2026-10-04** (§5s); odpowiedzi po bramce follow-upów — poprawki **(a)–(g)** —
-> **2026-10-04** (§5v).
+> **2026-10-04** (§5v); odpowiedzi do notatki zamykającej G2-4 — (a) w wersji ograniczonej, (d), kolejność kroków,
+> **378** — **2026-10-04** (§5w).
 > Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b, w G2-4 i w follow-upach G2-4
-> (F1–F7, (b)–(g)).
+> (F1–F7, (a)–(g), 378).
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
@@ -30,17 +32,17 @@
 > (C2, wycofanie po pokoju R3–R5) + `8c82cf7` (C3, R6) + `39c9227` (C4, R7) + `1fefcdc` (komentarz P6b) — §5q ·
 > `39e2df6` (F1, #363) + `4c60e5b` (F2, #364) + `86a6d2a` (F3, #366) + `8785b41` (F6) + `30bc68c` (F4, #367) + `f8f9cdb`
 > (F5) + `f90bc14` (F7) — §5t · `cafd6e8` ((b), #371) + `2c9511f` ((f), #376) + `5fefe33` ((d), #368) + `8427b0a`
-> ((e), #369) + `96c636f` ((g), #365) — §5v.
+> ((e), #369) + `96c636f` ((g), #365) — §5v · `dcc4c6f` ((a) w wersji ograniczonej, #370) + `5c49b36` (#378) — §5w.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 > `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
 > `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · `g2_planner_smoke` **77/77** ·
 > `g2_mobilisation_smoke` **56/56** · `g2_after_peace_smoke` **73/73** · `g2_peace_followups_smoke` **67/67** ·
-> `g2_peace_closing_smoke` **38/38** · sweep **259/259 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3448**).
+> `g2_peace_closing_smoke` **64/64** · sweep **259/259 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3448**).
 > **Rejestr macierzysty findingów #309–#378:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
 > `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
 > `dbfbbd6`; §5l–§5m na `053fcc0`; #358–#362 oraz §5n–§5p na `2437725`; #363–#367 oraz §5q–§5s na `1fefcdc`;
-> #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`) ·
+> #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`; zamknięcia #370 i #378 oraz §5w na `5c49b36`) ·
 > `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
@@ -144,9 +146,9 @@ sam wynik dla każdego POP (0 rozjazdów dla POP 0–100 000; przy ×1,5 byłyby
 | **G2-3b** | **mobilizacja (D15)** wg planera; usuwanie jednostek AI (**D6**, **D16**); stempel kafli (**318**) | **318** ✅ · **319** ✅ (jednostki AI; jednostki gracza → **358**) · **324** ✅ (zakres D6) · **320** (zostaje, niepotrzebny) | ✅ **2026-10-03** (`6fc2c8d` + `24beea4` + `2437725`, §5n–§5p) |
 | **G2-4** | **wycofanie po pokoju (D14)** — zakres **R1–R7** podpisany 2026-10-03 (§5p): bez wojny brak ognia i okupacji · licznik okupacji stoi przy żywym wrogu · flaga wycofania 6 mies. · jednostki AI z ciał gracza usuwane przy pokoju · meldunki · zabranie wojsk z cudzego ciała i płatnik utrzymania · jednostka gracza na zniszczonym ciele | **348** ✅ · **353** ✅ · **354** ✅ (płatnik jednostki gracza) · **358** ✅ · **359** ✅ | ✅ **2026-10-04** (`edd6fd1` … `39c9227`, §5q–§5r) |
 | **G2-4 po bramce** | **F1** pokój cofa okupację kafli (obie strony) · **F2** ostrzał z orbity na obce ciało tylko w wojnie · **F3** stare zapisy: flaga przy wczytaniu · **F4** wpisy w Dzienniku dla R4 i R7 · **F5** meldunek o utracie wojsk w terminie (Dziennik i dzwonek) · **F6** nazwa imperium we wpisach wycofania · **F7** „duch” jednostki na mapie kolonii | **363** ✅ · **364** ✅ · **366** ✅ · **367** ✅ (F5–F7 — wady z bramki, §5r) | ✅ **2026-10-04** (`39e2df6` … `f90bc14`, §5t; bramka live PASS, §5u) |
-| **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ((a)) | ✅ **2026-10-04** bez (a) (`cafd6e8` … `96c636f`, §5v); **(a)** — łatka gotowa, decyzja właściciela (reguła 8) |
-| **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia |
-| **G3** | odrastanie strat · widoczność (`'detailed'`) · **uzgadnianie mobilizacji co rok** (odpowiedź (d), §5p) | **360** | do zrobienia |
+| **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ✅ ((a) w wersji ograniczonej) · **378** ✅ | ✅ **2026-10-04** (`cafd6e8` … `96c636f`, §5v; (a) w wersji ograniczonej `dcc4c6f` i **378** `5c49b36`, §5w) |
+| **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia — **po G1c** (kolejność G3 → G1c → G2b, §5w) |
+| **G3** | odrastanie strat · widoczność (`'detailed'`) · **uzgadnianie mobilizacji co rok** (odpowiedź (d), §5p) | **360** | do zrobienia — **następny** (kolejność G3 → G1c → G2b, §5w) |
 | **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji poza zapisem (328) · utrzymanie bez terminu właściciela (329) | **333** · **330** · **328** · **329** | **po G3** (kolejność z 2026-10-02, przy podpisie D8–D18; wcześniej „po G2”, §5d (b)); kierunek 333 i 330 podpisany 2026-10-02, niezaimplementowany |
 | później | limit floty · odbicie kolonii · przyczółek | — | — |
 
@@ -184,6 +186,8 @@ przypisanego kroku. Rozszerzone bez nowego numeru: **345** i **355** (widoczny `
 ⚠ **Przydział findingów z sesji zamykającej G2-4 (#368–#378, §6):** **368** · **369** · **371** · **376** ✅ (poprawki (d),
 (e), (b), (f)) · **370** → poprawka **(a)**, łatka czeka na decyzję właściciela (§5v) · **372** · **374** · **375** · **377** →
 etap polerki UI · **373** → później · **378** → bez przypisanego kroku (obejście „Zbierz”).
+⚠ **Korekta 2026-10-04 (odpowiedzi do notatki zamykającej, §5w):** **370** ✅ — (a) w wersji ograniczonej (`dcc4c6f`) ·
+**378** ✅ — leczony przy wczytaniu (`5c49b36`). Kolejność pozostałych kroków: **G3 → G1c → G2b**.
 
 ---
 
@@ -996,6 +1000,39 @@ ostrzeżenia, więc liczba na plakietce dzwonka może nie wzrosnąć (zmierzone:
 
 ---
 
+## 5w. Odpowiedzi właściciela do notatki zamykającej G2-4 (2026-10-04) — (a) w wersji ograniczonej, 378, kolejność
+
+| | pytanie (notatka zamykająca G2-4, §5) | odpowiedź | wykonanie |
+|---|---|---|---|
+| 1 | (a) — przecelowanie A6b, B6b, B6c i plakietka w ticku terminu (2 → 2) | **wersja OGRANICZONA**: ostrzeżenie „został miesiąc” gaśnie samo, gdy PRZED terminem na ciele nie została żadna oflagowana jednostka (załadowane albo flaga zdjęta) i gdy wraca wojna z właścicielem ciała; **w terminie NIE gaśnie** — obok staje meldunek o utracie i plakietka rośnie, żeby gracz zauważył stratę. A6b, B6b i B6c zostają nietknięte | ✅ `dcc4c6f` |
+| 2 | kolejność pozostałych kroków (G3 → G1c → G2b czy G2b → G3 → G1c) | **G3 → G1c → G2b** | §3 |
+| 3 | (d) — „jeden wpis na ciało” jest jednym na ciało i imperium | **zostaje** | bez zmian kodu |
+| 4 | **378** — leczyć martwy odnośnik łazika przy wczytaniu, czy zostaje obejście „Zbierz” | **leczyć przy wczytaniu** | ✅ `5c49b36` |
+
+**Dlaczego nie pełna wersja (a)** `[measured]`: w ticku terminu meldunki o utracie ZASTĘPOWAŁY ostrzeżenia, więc liczba na
+plakietce dzwonka nie rosła (**2 → 2**), a dzwonek nie ma innego sygnału „nowe” niż liczba (`BottomControlBar._drawBell`)
+`[code]`; do tego zaczerwieniała trzy istniejące asercje (A6b, B6b, B6c — §5v). Wersja ograniczona: plakietka w ticku
+terminu **2 → 4** (B6b), **1 → 2** dla jednego ciała (Za1).
+
+| commit | zawartość | keeper `g2_peace_closing_smoke` | fail-first: finalna wersja keepera na kodzie poprzedniego commitu (czysty worktree) | sweep · i18n |
+|---|---|---|---|---|
+| `dcc4c6f` | (a) w wersji ograniczonej (#370) — NEW `WithdrawalSystem.withdrawalDeadlineReached` (jeden próg terminu dla usunięcia jednostek w `_tick`, semantyka bez zmian, i dla dzwonka); `NotificationCenter._withdrawalWarningMoot` + `_retireMootWithdrawalWarnings` na `withdrawal:cleared`, `groundUnit:removed`, `diplomacy:warDeclared` (od razu, także na pauzie) i `time:tick` (ostrzeżenie odtworzone z zapisu) | + Za1–Za7 **59/59** | 52 PASS / 7 FAIL (padają wyłącznie piny poprawki; kontrole Za1, Za2, Za5, Za6, Za7 zielone po obu stronach) | 259/259 · 3448 |
+| `5c49b36` | **378** — `GroundUnitManager.restore` na końcu (po odtworzeniu jednostek) zeruje `vessel.awayTeamUnitId` wskazujący jednostkę spoza rejestru (NEW `_pruneDanglingAwayTeams`); blok wczytania `GameScene` odtwarza statki PRZED jednostkami | + Z378 **64/64** | 62 / 2; mutant „sprzątanie przed odtworzeniem jednostek” — 63 / 1 (łapie kontrola żywego łazika) | 259/259 · 3448 |
+
+**Decyzje w ramach podpisu** (do wglądu właściciela):
+- **Od terminu ostrzeżenie jest rozstrzygnięte** — gasi je wyłącznie gracz, także gdy wojna wróci PO terminie (kontrola Za6).
+  Podpis wymienia powrót wojny bez zastrzeżenia; tu czytany jako warunek sprzed terminu (po terminie wojsk już nie ma,
+  a meldunek o utracie stoi obok). **Pytanie do właściciela.**
+- „Nie została żadna oflagowana jednostka” obejmuje też jednostkę usuniętą przed terminem inną drogą (rozwiązanie, ciało
+  zniszczone — R7): wtedy ostrzeżenie też gaśnie (Za4).
+- **Granica:** ostatnia jednostka załadowana w tym samym ticku, który przeskakuje termin, zostawia ostrzeżenie (zachowanie
+  sprzed (a)) — tick widzi już termin, a strat nie było.
+- **378:** sprzątanie siedzi w `GroundUnitManager.restore`, nie w `VesselManager.restore` — przy odtwarzaniu statków rejestr
+  jednostek jest jeszcze stary (albo pusty) i wyzerowałby odnośniki żywych łazików (mutant). Zapis bez
+  `civ4x.groundUnitManager` (sprzed jednostek naziemnych) nie przechodzi tej ścieżki — nie sprawdzane.
+
+---
+
 ## 6. Rejestr findingów arca (#309–#378, zebrane 2026-10-02–04)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
@@ -1756,7 +1793,7 @@ obce na siatce kolonii (właściciel kafla albo licznik okupacji), które nie s�
 (`groundOwnersHostile`), idą przez `revertPeaceOccupation` — regułę F1 `[code]`; pary AI↔AI bez zmian (**331**/D5). Sonda po
 poprawce: `emp_001` i `emp_001` `[measured]`; keeper Ze.
 
-### 🟠 370 — ostrzeżenie „został miesiąc” nie gaśnie: zostaje w dzwonku po terminie, po załadunku i po powrocie wojny
+### ✅ 370 — ostrzeżenie „został miesiąc” nie gaśnie: zostaje w dzwonku po terminie, po załadunku i po powrocie wojny — ZAMKNIĘTY 2026-10-04 w wersji ograniczonej (`dcc4c6f`)
 
 `_handleWithdrawalWarning` (`NotificationCenter.js:547`) dodaje wpis typu `withdrawalWarning`, a odrzuca go wyłącznie gracz
 z listy dzwonka (`NotificationDropdown.js:276`, `:295`, `:304`) `[code]`. Trzy istniejące asercje mierzą ostrzeżenie PO
@@ -1765,6 +1802,9 @@ w ticku terminu) i świadek B6c `[code]`. Odpowiedź właściciela (§5v (a)): g
 żadna oflagowana jednostka, gdy wojna wraca. **Poprawka (a) gotowa jako łatka, niezacommitowana** — zaczerwienia te trzy
 asercje (sweep 257/259 `[measured]`), a reguła 8 zakazuje przestawiania istniejących keeperów samodzielnie; propozycja
 przecelowania i skutek UX (plakietka 2 → 2) — §5v. **Decyzja właściciela.**
+**Zamknięcie (decyzja właściciela 2026-10-04, §5w):** wersja ograniczona — gaśnie PRZED terminem, gdy na ciele nie została
+oflagowana jednostka albo wróciła wojna; w terminie zostaje obok meldunku o utracie (plakietka rośnie); A6b, B6b i B6c
+nietknięte `[measured]`. Jeden próg terminu `withdrawalDeadlineReached` (`WithdrawalSystem.js`) `[code]`; keeper Za1–Za7.
 
 ### ✅ 371 — polski wpis pokoju „Pokój z {0}” — mianownik po „z” — ZAMKNIĘTY 2026-10-04 (`cafd6e8`, (b))
 
@@ -1813,12 +1853,15 @@ przejściu przez i18n trzeba go przepiąć (komentarz przy `cargoUnloadClick`).
 (`pl.js:3668`; `:1740`), `log.skirmish` („⚔ Potyczka z {0} — …”, `pl.js:1112`; `:1638`) — nazwa imperium w mianowniku po „z”
 `[code]`. Znalezione przy (b), poza jej zakresem. **Etap polerki UI.**
 
-### ⚪ 378 — zapis wykonany, gdy 365 był żywy, niesie martwy `vessel.awayTeamUnitId`
+### ✅ 378 — zapis wykonany, gdy 365 był żywy, niesie martwy `vessel.awayTeamUnitId` — ZAMKNIĘTY 2026-10-04 (`5c49b36`)
 
 `VesselManager.restore` bierze pole bez sprawdzenia, czy łazik istnieje (`VesselManager.js:1605`) `[code]` — (g) czyści
 odnośnik przy usunięciu łazika, nie w zapisie wykonanym wcześniej. Zmierzone (sonda poza repo): po wczytaniu odnośnik do
 nieistniejącego łazika zostaje, „Zbierz” jest dostępne, a po nim odnośnik `null` i „Wyślij zespół” znów dostępne
 `[measured]`. Obejście: „Zbierz”. Bez przypisanego kroku.
+**Zamknięcie (odpowiedź właściciela 2026-10-04, §5w):** `GroundUnitManager.restore` na końcu zeruje odnośnik do jednostki
+spoza rejestru (`_pruneDanglingAwayTeams`) `[code]`; po wczytaniu „Zbierz” nie jest oferowane, „Wyślij zespół” dostępne,
+odnośnik żywego łazika zostaje `[measured]`; keeper Z378.
 
 ---
 
