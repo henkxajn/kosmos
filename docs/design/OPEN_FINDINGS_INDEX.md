@@ -353,6 +353,20 @@
 > • Rozszerzone bez nowego numeru: **345** / **355** (widoczny `GET 404` na `_biome.png` przy każdym otwarciu mapy kolonii).
 > • **Zakres G2-4 (R1–R7) podpisany 2026-10-03** — `AI_GARRISON_PLAN.md` §5p; **354** wchodzi do G2-4 w zakresie płatnika
 > jednostki gracza (R6), reszta rodziny **329** zostaje w G1c.
+>
+> **Aktualizacja 2026-10-04 — AI GARRISON: G2-4 ZAMKNIĘTY (wycofanie po pokoju, R1–R7).** Sweep: **257/257 OK, 0 FAIL,
+> 31 advisory** · `check-i18n` PASS pl = en **3440** · save **v101 bez migracji**.
+> • ✅ **348** · **359** (`cd1fc46`, R1/R2) · **358** (`1a41c62` + `39c9227`, R3/R7) · **353** · **354** dla jednostek gracza
+> (`8c82cf7`, R6) — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze zdjęte z A5/A6. Commity:
+> `edd6fd1` · `cd1fc46` · `1a41c62` · `8c82cf7` · `39c9227` · `1fefcdc` (§5q). Bramka live właściciela 2026-10-04:
+> **silnik PASS, trzy wady widoku** (§5r) — brak meldunku o utracie wojsk w terminie, „Unknown empire” we wpisach
+> wycofania obok nazwy imperium we wpisie pokoju, „duch” jednostki na otwartej mapie kolonii.
+> • **NOWE: #363–#367** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 **363** (pokój nie cofa okupacji kafli; nowa wojna daje
+> przejęcie kolonii AI bez wojsk), **364** (ostrzał z orbity bez bramki wojny) · ⚪ **365** (łazik usunięty w terminie
+> albo z ciałem zostawia `awayTeamUnitId`), **366** (stare zapisy: jednostki gracza w pokoju na cudzym ciele bez flagi),
+> **367** (R4 i R7 bez wpisu w Dzienniku).
+> • Odpowiedzi właściciela po G2-4 (§5s): **363** → F1, **364** → F2, **366** → F3, **367** → F4; wady z bramki → F5–F7;
+> **365** bez decyzji.
 
 
 ---
@@ -430,7 +444,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-357** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–03; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2) |
+| **309-367** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–04; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -541,9 +555,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **333** | 🟠 | **nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana NA ZAWSZE i liczy się do populacji** — zmierzone (+0,3 po 27 mies., zero wywołań usuwających ludzi); wzorzec poprawny: `killCrew` (W2). Rekoncyliacja A0, **nienaprawiony** |
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
-| **348** | 🟠 | okupacja kafli i walka naziemna trwają w **POKOJU** — `_tickOccupation` (`GroundUnitManager.js:616-666`) i `_findContestedHexes` (`CombatSystem.js:152-171`) nie mają terminu wojny; G2-2 zamknął tylko lądowanie i przejęcie KOLONII ⇒ → **G2-4** (D14). `AI_GARRISON_PLAN.md` §6 |
-| **353** | 🟠 | zabranie wojsk z cudzego ciała: UI zgłasza sukces, jednostki zostają na ziemi (bramka live G2-2) — kandydat zmierzony headless: utrzymanie nadpisuje `status` z `in_cargo` na `offline` (`ColonyManager.js:1561`) ⇒ **blokuje D14**, prześledzić w audycie **G2-4**. `AI_GARRISON_PLAN.md` §6 |
-| **359** | 🟠 | licznik okupacji biegnie na heksie, na którym stoi żywy wróg — `_tickOccupation` (`GroundUnitManager.js:616-665`) nie pyta o sporny heks; stempel **318** wyrównał kolonie AI do kolonii gracza (kafel stolicy z obrońcą: przed — nie przez 12 civY, po — 7. civY) ⇒ → **G2-4** (R2: licznik stoi, dla obu stron). `AI_GARRISON_PLAN.md` §6 |
+| **363** | 🟠 | pokój nie cofa okupacji kafli (`WithdrawalSystem.onPeaceSigned` kafli nie dotyka), a `_tryPlayerCapture` (`InvasionSystem.js:386-405`) nie wymaga żywej jednostki zdobywcy ⇒ kafel stolicy AI trzymany przez gracza przeżywa pokój i nowa wojna daje przejęcie bez wojsk ⇒ → **F1** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
+| **364** | 🟠 | ostrzał z orbity bez bramki wojny — `FleetActions.js:575-598`, `ColonyOverlay.js:253-273` i `_onOrbitalStrike` (`GroundUnitManager.js:51`) sprawdzają dominację, której pokój nie odbiera (`WarSystem.js:982-990`) ⇒ → **F2** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -563,9 +576,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **128o** | 🟠 | cztery wejścia nawigacyjne wołają `switchActiveColony` wprost — bezpieczne **przez odmowę**, ale żadne nie oferuje **stanu neutralnego** | stąd UX z GATE OG-3 §3 |
 | **72 · 73 · 84 · 85 · 91 · 92 · 93 · 94** | ⚪ | filed przy audycie własności; po D1-D6 prawdopodobnie **latentne albo higiena** | ⚠ **nie weryfikowane po kolei** |
 | **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
-| **354** | 🟠 | płatnik utrzymania jednostki bez `homeColonyId` = kolonia CIAŁA (`ColonyManager.js:1529`) ⇒ kolonia AI **płaci** za jednostkę gracza (zmierzone 1000 → 952 Kr w 12 civY) albo, bez kredytów, rozwiązuje ją w 5. civY (bramka: dwa „disbanded (no upkeep)” po `debug.spawnMyUnit`) | płatnik jednostki gracza → **G2-4** (R6, podpis 2026-10-03); reszta rodziny **329** → G1c |
 | **357** | ⚪ | dymek ciała na mapie 3D: „Player Empire” przy KAŻDEJ kolonii, także wroga, i jej populacja bez mgły wojny (`TooltipContent.js:147-155`, od `670d027`) | naprawa przez kanon `SystemReveal` (**188**), nie jednolinijkowiec |
-| **358** | 🟠 | los jednostki GRACZA na ciele zniszczonym albo oddanym AI — `GarrisonSystem` usuwa tylko jednostki AI (`GarrisonSystem.js:179`, `:190`): na zniszczonym ciele jednostka zostaje (dom płaci utrzymanie, 4 POP zablokowane na zawsze), po cesji gracz→AI odbija kafle w rozejmie, a płaci kolonia już AI | reszta **319**; decyzja właściciela 2026-10-03 → **G2-4** (R3 — flaga wycofania, R7 — usunięcie z pełnym zwrotem POP) |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
 
@@ -673,6 +684,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **355** | ⚪ | mapa kolonii cudzego ciała otwiera się z opóźnieniem przy wejściu w tryb zrzutu — **345 wykluczony w kodzie** (`_loadBiomeMap` asynchroniczne, nic na nie nie czeka) | przyczyna niezmierzona; `GET 404` z bramki G2-3b zgodny z wykluczeniem |
 | **356** | ⚪ | okno ładowni: „undefined” jako nazwa łazika (`CargoLoadModal.js:328`, brak fallbacku `?? u.type`, który ma `ColonyOverlay.js:3339`) + nazwy archetypów z `descriptionPL` | klasa **113** |
 | **362** | ⚪ | kopia przedimportowa nie mieści się przy dużym zapisie (`SaveSystem.js:462-465`, best-effort, tylko `console.warn`) — od ok. 2,6 mln znaków na zapis; ostrzeżenie o dużym zapisie dopiero od 3,5 mln (`:136`) | zaprojektowane (W2 GATE 1); pomiar: uprząż 0,97 mln znaków, fixture GATE-S4 2,09 mln. `AI_GARRISON_PLAN.md` §6 |
+| **365** | ⚪ | łazik zwiadu usunięty w terminie wycofania (R3) albo razem z ciałem (R7) zostawia `vessel.awayTeamUnitId` (`VesselManager.js:1370`/`:1391`) — „Zbierz” aktywne, „Powrót” zablokowany (`FleetActions.js:331`) | obejście: „Zbierz”; bez decyzji. `AI_GARRISON_PLAN.md` §6 |
+| **366** | ⚪ | jednostki gracza stojące już w pokoju na ciele innego imperium (zapisy sprzed G2-4) nie dostają flagi wycofania — flaga tylko na `diplomacy:peaceSigned` (`WithdrawalSystem.js:43`) | → **F3** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
+| **367** | ⚪ | R4 (jednostki AI zdjęte z ciał gracza przy pokoju) i R7 (jednostka gracza razem z ciałem) — tylko audyt `DebugLog`, zero wpisów w Dzienniku (`NotificationCenter.js:70-72`) | → **F4** (decyzja właściciela). `AI_GARRISON_PLAN.md` §6 |
 
 ---
 

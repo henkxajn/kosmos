@@ -5664,7 +5664,7 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04)
 
 Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#357**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
@@ -5789,5 +5789,28 @@ licznik okupacji przy żywym wrogu · ⚪ **360** imperium bez pełnej kolonii m
 albo wczytaniu (→ G3: uzgadnianie co rok) · ⚪ **361** martwe `rocket_artillery.terrainModifiers` · ⚪ **362** kopia
 przedimportowa nie mieści się przy dużym zapisie (fixture GATE-S4 2,09 mln znaków; limit ok. 5,24 mln na wszystkie klucze);
 **345**/**355** rozszerzone o widoczny `GET 404` na `_biome.png`. **Zakres G2-4 (R1–R7) podpisany 2026-10-03** — plan §5p.
-**Dalej:** G2-4 (wycofanie po pokoju, R1–R7) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329, z 354 poza
-płatnikiem jednostki gracza; kierunek 333/330 podpisany 2026-10-02).
+✅ **G2-4 — po pokoju** (`edd6fd1` C1a · `cd1fc46` C1b · `1a41c62` C2 · `8c82cf7` C3 · `39c9227` C4 · `1fefcdc` komentarz P6b;
+bramka live właściciela 2026-10-04: **silnik PASS, trzy wady widoku**; plan §5q–§5s). **R1/R2** — NEW
+`WarGate.groundOwnersHostile` jedynym źródłem „czy te strony walczą na ziemi”: gracz↔imperium tylko przy statusie `'war'`
+(ogień, przechwycenie, pościg, marsz, okupacja); na heksie z żywym wrogiem licznik okupacji STOI dla obu stron (**348**,
+**359**). **R3–R5** — NEW `src/systems/WithdrawalSystem.js` (`window.KOSMOS.withdrawalSystem`): przy `diplomacy:peaceSigned`
+jednostki gracza na ciałach drugiej strony (także ciało oddane w cesji) dostają flagę `withdrawal` z terminem 6 mies.
+(`WITHDRAWAL_YEARS = 0.5`), ostrzeżenie miesiąc wcześniej, w terminie usunięcie jak polegli (`groundUnit:destroyed`,
+`withdrawal_deadline`); jednostki imperium z ciał gracza znikają od razu (**R4**); flaga gaśnie przy załadunku, przejęciu
+ciała i powrocie wojny; flaga w zapisie (v101 bez migracji). **R6** — ładownia wygrywa z utrzymaniem (`prevStatus`), żołd
+jednostki gracza nigdy nie obciąża kolonii innego właściciela (`_groundUnitPayerId`; **353**, **354**). **R7** — jednostka
+gracza na zniszczonym ciele znika z pełnym zwrotem POP, także ciało bez kolonii (`entity:removed`; **358**). Odczyt:
+`KOSMOS.withdrawalSystem.listFlagged()`; audyt `withdrawal:ordered/aiRemoved/warning/expired/cleared`.
+⚠ **Keepery ze sceną walki lub okupacji na ziemi muszą wypowiedzieć wojnę w setupie** — od R1 w pokoju nie ma ognia ani
+okupacji (C1a: cztery keepery, asercje bez zmian; odwrócone świadomie `g2_mobilisation_smoke` M9c i M8 — zgoda
+właściciela, §5s (1)).
+⚠ **`withdrawal:expired` leci raz na CIAŁO**, nie na jednostkę — na bramce `expired: 2` oznaczało usunięcie B na Thuban d
+i ośmiu jednostek na Thuban e.
+Keeper `g2_after_peace_smoke` **73/73** · `g2_mobilisation_smoke` **56/56** · `g2_seams_smoke` **31/31**; sweep
+**257/257**, `check-i18n` 3440. Nowe findingi **363–367**: 🟠 **363** pokój nie cofa okupacji kafli (nowa wojna daje
+przejęcie kolonii AI bez wojsk) · 🟠 **364** ostrzał z orbity bez bramki wojny · ⚪ **365** łazik usunięty w terminie albo
+z ciałem zostawia `awayTeamUnitId` · ⚪ **366** stare zapisy: jednostki gracza w pokoju na cudzym ciele bez flagi · ⚪ **367**
+R4 i R7 bez wpisu w Dzienniku. Wady widoku z bramki: brak meldunku o utracie wojsk w terminie (F5), „Unknown empire” we
+wpisach wycofania (F6), „duch” jednostki na mapie kolonii (F7).
+**Dalej:** follow-upy G2-4 (F1–F7, plan §5s) → G2b → G3 → **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329;
+kierunek 333/330 podpisany 2026-10-02).
