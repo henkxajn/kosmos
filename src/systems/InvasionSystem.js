@@ -66,6 +66,28 @@ export class InvasionSystem {
     EventBus.on('groundUnit:buildingCaptured', (ev) => {
       if (ev?.newOwner === 'player') this._tryPlayerCapture(ev.planetId);
     });
+
+    // G2-4 (D14, R4) — pokój zamyka kampanie desantowe imperium, z którym go zawarto (patrz `closeCampaignsAtPeace`).
+    EventBus.on('diplomacy:peaceSigned', ({ empireId } = {}) => this.closeCampaignsAtPeace(empireId));
+  }
+
+  /**
+   * G2-4 (D14, R4) — pokój zamyka AKTYWNE kampanie desantowe imperium `empireId`. Jego jednostki na ciałach gracza
+   * znikają przy podpisaniu (`WithdrawalSystem`), a kampania bez jednostek gasłaby na najbliższym ticku jako
+   * „odparta” (`defenders_repelled` + `invasion:repelled` → meldunek „Desant odparty”) — co byłoby nieprawdą.
+   * Tu gaśnie z powodem `peace_signed`, bez meldunku; zmiana stanu i tak trafia do audytu (`gameState:changed`).
+   * @returns {number} ile kampanii zamknięto
+   */
+  closeCampaignsAtPeace(empireId) {
+    if (!empireId || empireId === 'player') return 0;
+    const year = this._year();
+    let closed = 0;
+    for (const inv of this.listActive()) {
+      if (inv.aggressor !== empireId) continue;
+      gameState.set(`invasions.${inv.id}`, { ...inv, active: false, endYear: year, endReason: 'peace_signed' }, 'invasion_peace');
+      closed++;
+    }
+    return closed;
   }
 
   // ── Read-only ────────────────────────────────────────────────

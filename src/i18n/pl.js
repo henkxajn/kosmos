@@ -713,6 +713,9 @@ export default {
   "notif.invasionRepelledSubtitle": "Najeźdźcy wybici — kolonia broniona.",
   "notif.group.tileLost": "Utrata terenu",
   "notif.group.invasionRepelled": "Desant odparty",
+  "notif.withdrawalWarningTitle": "Wycofanie z {0} — został miesiąc",
+  "notif.withdrawalWarningSubtitle": "{0} jedn. naziemnych, termin {1} — załaduj je na statek",
+  "notif.group.withdrawalWarning": "Wycofanie wojsk",
   "log.autoSlowColonyLost": "utrata kolonii",
   "drop.noPods": "Brak Kapsł Desantowych",
   "drop.bayEmpty": "Ładownia pusta",
@@ -3012,6 +3015,16 @@ export default {
   'event.groundUnit.popsLost':   'Utracono {0} POP jednostki {1} (brak kolonii macierzystej)',
   'event.groundUnit.disbandedMorale': 'Jednostka {0} rozwiązana (załamanie morale)',
   'event.groundUnit.resumed':    'Jednostka {0} aktywna',
+  // G2-4 (D14, R5) — wycofanie wojsk po pokoju
+  'event.withdrawal.ordered':    '⚑ Pokój z {0}: {1} jedn. naziemnych na {2} musi się wycofać do {3}',
+  'event.withdrawal.warning':    '⚑ Za miesiąc mija termin wycofania: {0} jedn. na {1} (do {2})',
+  'event.withdrawal.expired':    '⚑ Minął termin wycofania: {0} jedn. naziemnych na {1} utracono',
+  'unitCard.withdrawalTitle':    '⚑ WYCOFANIE PO POKOJU',
+  'unitCard.withdrawalDeadline': 'Termin',
+  'unitCard.withdrawalLeft':     'Pozostało',
+  'unitCard.withdrawalMonths':   '{0} mies.',
+  'unitCard.withdrawalHint':     'Załaduj na statek — po terminie jednostka przepada',
+  'unitPanel.withdrawal':        '⚑ Wycofanie do {0} ({1} mies.)',
   'event.colony.suppliesLow':    'Niski stan military_supplies w {0}',
 
   // === ObservatoryOverlay ===

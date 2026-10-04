@@ -65,6 +65,11 @@ export class NotificationCenter {
     // G1b/S3 (Finding 312) — `groundUnit:disbanded` nie miał ANI JEDNEGO subskrybenta: rozwiązanie
     //   jednostki (brak utrzymania, załamanie morale) nie zostawiało śladu w Dzienniku.
     EventBus.on('groundUnit:disbanded', e => this._handleGroundUnitDisbanded(e));
+    // G2-4 (D14, R5) — wycofanie wojsk po pokoju (producent: `WithdrawalSystem`). Pokój i utrata po terminie —
+    //   wpis w Dzienniku; ostrzeżenie miesiąc przed terminem — Dziennik I dzwonek.
+    EventBus.on('withdrawal:ordered', e => this._handleWithdrawalOrdered(e));
+    EventBus.on('withdrawal:warning', e => this._handleWithdrawalWarning(e));
+    EventBus.on('withdrawal:expired', e => this._handleWithdrawalExpired(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -518,7 +523,54 @@ export class NotificationCenter {
     this._journal(t(key, this._groundUnitLabel(type, customName)), 'combat', 'warn', planetId ?? null);
   }
 
+  /**
+   * G2-4 (D14, R5) — pokój podpisany, jednostki gracza na ciele drugiej strony muszą się wycofać: ILE jednostek,
+   * KTÓRE ciało, TERMIN. Sam wpis w Dzienniku (kanał dyplomacji — to skutek traktatu), bez dzwonka; dzwonek dopiero
+   * przy ostrzeżeniu. Ciało nazwą CIAŁA, nie cudzej kolonii (wzór Outlinera — moje buty to nie bilet do nazwy wroga).
+   */
+  _handleWithdrawalOrdered({ empireId, planetId, count, deadlineYear }) {
+    if (!planetId || !(count > 0)) return;
+    this._journal(t('event.withdrawal.ordered', this._empireLabel(empireId), count, this._bodyName(planetId),
+      this._dateLabel(deadlineYear)), 'diplomacy', 'warn', planetId);
+  }
+
+  /** G2-4 (R5) — miesiąc do terminu wycofania: Dziennik I dzwonek (gracz ma jeszcze czas zabrać wojska). */
+  _handleWithdrawalWarning({ empireId, planetId, unitIds, count, deadlineYear }) {
+    if (!planetId || !(count > 0)) return;
+    const body = this._bodyName(planetId);
+    const date = this._dateLabel(deadlineYear);
+    this.add({
+      type: 'withdrawalWarning',
+      severity: 'warn',
+      source: 'withdrawalSystem',
+      title: t('notif.withdrawalWarningTitle', body),
+      subtitle: t('notif.withdrawalWarningSubtitle', count, date),
+      logChannel: 'combat',
+      logText: t('event.withdrawal.warning', count, body, date),
+      // `bodyId` — wpis w Dzienniku dostaje odnośnik do ciała (`add()` → `entityRef`)
+      payload: { bodyId: planetId, planetId, empireId: empireId ?? null, unitIds: [...(unitIds ?? [])],
+                 deadlineYear: deadlineYear ?? null },
+    });
+  }
+
+  /** G2-4 (R5) — termin minął, jednostki przepadły (jak polegli). Sam wpis w Dzienniku, jak rozwiązanie jednostki. */
+  _handleWithdrawalExpired({ planetId, count }) {
+    if (!planetId || !(count > 0)) return;
+    this._journal(t('event.withdrawal.expired', count, this._bodyName(planetId)), 'combat', 'warn', planetId);
+  }
+
   // ── Helpery ──────────────────────────────────────────────────────────────
+
+  /** G2-4 — nazwa CIAŁA (nie kolonii) albo id, gdy ciała nie ma. */
+  _bodyName(planetId) {
+    return this._findBody(planetId)?.name ?? planetId;
+  }
+
+  /** G2-4 — data w formacie zegara gry (`TimeSystem.formatTime`); bez systemu czasu — rok z dwoma miejscami. */
+  _dateLabel(years) {
+    if (!Number.isFinite(years)) return '?';
+    return window.KOSMOS?.timeSystem?.formatTime?.(years) ?? years.toFixed(2);
+  }
 
   /**
    * G1b — wpis WYŁĄCZNIE do Dziennika, bez dzwonka (`add()` dubluje do obu). Dla zdarzeń, które

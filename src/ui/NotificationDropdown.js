@@ -24,6 +24,7 @@ const GROUP_ICONS = {
   tileLost:         '🚩',   // AC-9 — gracz traci teren na własnej koloni
   invasionRepelled: '🛡',   // AC-9 — desant odparty
   collision_alert:  '☄',   // Finding 190 — prognoza kolizji (dawniej twarda pauza)
+  withdrawalWarning: '⚑',  // G2-4 (D14, R5) — miesiąc do terminu wycofania wojsk po pokoju
 };
 
 function _groupTitle(type) {
@@ -34,6 +35,7 @@ function _groupTitle(type) {
     case 'mobilization':   return t('notif.group.mobilization');
     case 'tileLost':         return t('notif.group.tileLost');
     case 'invasionRepelled': return t('notif.group.invasionRepelled');
+    case 'withdrawalWarning': return t('notif.group.withdrawalWarning');
     default:               return type;
   }
 }

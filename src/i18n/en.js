@@ -713,6 +713,9 @@ export default {
   "notif.invasionRepelledSubtitle": "Invaders wiped out — the colony holds.",
   "notif.group.tileLost": "Ground lost",
   "notif.group.invasionRepelled": "Invasion repelled",
+  "notif.withdrawalWarningTitle": "Withdrawal from {0} — one month left",
+  "notif.withdrawalWarningSubtitle": "{0} ground unit(s), deadline {1} — load them onto a ship",
+  "notif.group.withdrawalWarning": "Troop withdrawal",
   "log.autoSlowColonyLost": "colony lost",
   "drop.noPods": "No drop pods",
   "drop.bayEmpty": "Troop bay empty",
@@ -3011,6 +3014,16 @@ export default {
   'event.groundUnit.popsLost':   'Lost {0} POP of unit {1} (no home colony)',
   'event.groundUnit.disbandedMorale': 'Unit {0} disbanded (morale collapse)',
   'event.groundUnit.resumed':    'Unit {0} resumed',
+  // G2-4 (D14, R5) — troop withdrawal after peace
+  'event.withdrawal.ordered':    '⚑ Peace with {0}: {1} ground unit(s) on {2} must withdraw by {3}',
+  'event.withdrawal.warning':    '⚑ Withdrawal deadline in one month: {0} unit(s) on {1} (by {2})',
+  'event.withdrawal.expired':    '⚑ Withdrawal deadline passed: {0} ground unit(s) on {1} lost',
+  'unitCard.withdrawalTitle':    '⚑ WITHDRAWAL AFTER PEACE',
+  'unitCard.withdrawalDeadline': 'Deadline',
+  'unitCard.withdrawalLeft':     'Time left',
+  'unitCard.withdrawalMonths':   '{0} mo.',
+  'unitCard.withdrawalHint':     'Load onto a ship — after the deadline the unit is lost',
+  'unitPanel.withdrawal':        '⚑ Withdraw by {0} ({1} mo.)',
   'event.colony.suppliesLow':    'Military supplies low in {0}',
 
   // === ObservatoryOverlay ===

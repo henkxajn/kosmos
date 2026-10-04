@@ -9,6 +9,15 @@
 //       gracza — też; wojna (kontrola): zajmuje.
 //   A3  R2 — heks z żywym wrogiem: licznik okupacji stoi dla OBU stron (i rusza dalej od miejsca, w którym stanął,
 //       gdy wroga nie ma); pusty kafel z żywym wrogiem nie przechodzi.
+//   A4  R3/R4/R5 — pokój (prawdziwe `offerPeace`): jednostki gracza na ciele drugiej strony dostają flagę z terminem
+//       6 miesięcy, jednostki AI na ciałach gracza znikają od razu, kampania desantu gaśnie bez „Desant odparty”,
+//       wpis w Dzienniku (ile, gdzie, termin); karta jednostki pokazuje flagę i termin; montaż i audyt.
+//   A6  R3/R5 — termin: miesiąc wcześniej JEDNO ostrzeżenie (Dziennik + dzwonek), w terminie jednostka usunięta jak
+//       polegli — POP ścieżką śmierci do kolonii macierzystej, JEDEN wpis w Dzienniku.
+//   A7  R3 (Finding 358) — cesja ciała z jednostką gracza na rzecz AI: flaga.
+//   A9  zapis → wczytanie zachowuje flagę i termin (archetyp i legacy); starszy zapis bez pola — czysto.
+//   A10 garnizon zmobilizowanego imperium i oflagowane jednostki gracza na tych samych heksach — przez 6 civY pokoju
+//       zero ognia; w terminie znikają tylko jednostki gracza.
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem` (GameCore go nie montuje).
 //   Mobilizacja garnizonów AI (G2-3b) WYŁĄCZONA w scenach, które jej nie mierzą — wojna stawiałaby jednostki planu.
@@ -17,12 +26,23 @@
 //   plik i żaden pin nie dostałby koloru (lekcja „pin musi degradować, nie przerywać”).
 
 import '../headless/env.js';           // MUSI być pierwszy
+import { readFileSync } from 'node:fs';
 import EventBus from '../../core/EventBus.js';
 import gameState from '../../core/GameState.js';
+import debugLog from '../../core/DebugLog.js';
 import { isStandableTile } from '../../data/GroundUnitData.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
+import { EventLogSystem } from '../../systems/EventLogSystem.js';
+import { NotificationCenter } from '../../systems/NotificationCenter.js';
+import { ColonyManager } from '../../systems/ColonyManager.js';
+import { t } from '../../i18n/i18n.js';
 import * as WG from '../../utils/WarGate.js';
+
+let WSmod = null;
+try { WSmod = await import('../../systems/WithdrawalSystem.js'); } catch { WSmod = null; }
+let UCmod = null;
+try { UCmod = await import('../../ui/UnitCardPanel.js'); } catch { UCmod = null; }
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -38,6 +58,9 @@ function boot({ garrison = false } = {}) {
   const { core, K, ticker } = quiet(() => bootWithDirector({ quiet: true }));
   if (!garrison && K.garrisonSystem) K.garrisonSystem.enabled = false;
   K.combatSystem = new CombatSystem();
+  // Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus — wzór `ground_unit_loss_smoke`).
+  K.eventLogSystem = new EventLogSystem();
+  K.notificationCenter = new NotificationCenter();
   const cm = core.colonyManager;
   const aiFull = cm.getAllColonies().filter(c => c.ownerEmpireId && !c.isOutpost);
   const home = cm.getColony(K.homePlanet.id);
@@ -273,6 +296,240 @@ function counterScene({ side, before = 3, hold = 5, building = true }) {
   const c = counterScene({ side: 'player', before: 0, hold: 0 });
   assert(c.after !== null && c.after >= 6 && c.after <= 8,
     `A3 kontrola: bez wroga licznik biegnie normalnie — kafel z budynkiem przechodzi w ${c.after}. civY (od zera)`);
+}
+
+// ── Narzędzia R3–R5 ──────────────────────────────────────────────────────────────────────
+const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
+const flagOf = (w, id) => w.gum.getUnit(id)?.withdrawal ?? null;
+const journal = (w, re) => (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => re.test(e.text));
+const bell = (w, type) => (w.K.notificationCenter?.getActive?.() ?? []).filter(n => n.type === type);
+const lockOf = (colony) => colony?.civSystem?._lockedPerStrata?.laborer ?? 0;
+/** Jednostka gracza zrekrutowana PRAWDZIWĄ ścieżką (POP zablokowane w domu, `homeColonyId`) — wzór `ground_unit_loss`. */
+function recruit(w, archetypeId = 'shock_infantry') {
+  const cm = w.cm, colony = w.home;
+  cm._getBarracksLevel = () => 1;                       // bramki koszar — nie są przedmiotem testu
+  cm._getBarracksSlots = () => 3;
+  const cost = { ...(ColonyManager.GROUND_UNIT_BUILD_COSTS[archetypeId] ?? {}),
+                 ...(ColonyManager.GROUND_UNIT_COMMODITY_COSTS[archetypeId] ?? {}) };
+  for (const [k, v] of Object.entries(cost)) colony.resourceSystem.receive({ [k]: v });
+  const before = new Set(w.gum._units.keys());
+  const r = quiet(() => cm.startGroundUnitBuild(colony.planetId, archetypeId));
+  if (!r?.ok) throw new Error(`rekrutacja ${archetypeId} odrzucona: ${JSON.stringify(r)}`);
+  quiet(() => cm._tickGroundUnitBuilds(ColonyManager.GROUND_UNIT_BUILD_TIMES[archetypeId] ?? 5));
+  const id = [...w.gum._units.keys()].find(k => !before.has(k));
+  if (!id) throw new Error(`rekrutacja ${archetypeId}: jednostka nie powstała`);
+  const u = w.gum.getUnit(id);
+  u.morale = u.maxMorale = 100;
+  return u;
+}
+const moveTo = (u, col, t) => { u.planetId = col.planetId; u.q = t.q; u.r = t.r; return u; };
+function domTexts(el, out = []) {
+  if (!el) return out;
+  if (typeof el.textContent === 'string' && el.textContent) out.push(el.textContent);
+  for (const c of el.children ?? []) domTexts(c, out);
+  return out;
+}
+
+// ── A4 — R3/R4/R5: pokój ustawia flagę, zdejmuje jednostki AI, zamyka desant ─────────────
+{
+  console.log('\nA4 — pokój: flaga z terminem na jednostkach gracza, jednostki AI z ciał gracza znikają, desant gaśnie bez „odparty”');
+  const w = boot();
+  const WS = WSmod?.WithdrawalSystem;
+  assert(typeof WS === 'function' && w.K.withdrawalSystem instanceof WS,
+    `A4a: GameCore montuje K.withdrawalSystem (instancja WithdrawalSystem: ${!!WS && w.K.withdrawalSystem instanceof WS})`);
+  const gsrc = strip(readFileSync(new URL('../../scenes/GameScene.js', import.meta.url), 'utf8'));
+  const iImp = gsrc.search(/import\s*\{\s*WithdrawalSystem\s*\}\s*from\s*'\.\.\/systems\/WithdrawalSystem\.js'/);
+  const iNew = gsrc.search(/this\.withdrawalSystem\s*=\s*new\s+WithdrawalSystem\(\s*\)/);
+  const iMnt = gsrc.search(/window\.KOSMOS\.withdrawalSystem\s*=\s*this\.withdrawalSystem/);
+  const iRes = gsrc.search(/gameState\.restore\(\s*c4x\.gameState\s*\)/);
+  assert(iImp >= 0 && iNew >= 0 && iMnt >= 0 && iRes > 0 && iNew < iRes && iMnt < iRes,
+    `A4a: GameScene importuje, konstruuje i wystawia withdrawalSystem przed blokiem wczytania (${iImp}/${iNew}/${iMnt} < ${iRes})`);
+
+  declare(w);
+  const land = freeTiles(w, w.col, { building: false });
+  const p1 = playerUnit(w, w.col.planetId, land[0]);
+  const p2 = playerUnit(w, w.col.planetId, land[1]);
+  const pHome = playerUnit(w, w.home.planetId, freeTiles(w, w.home, { building: false })[0]);
+  const inv = quiet(() => w.K.invasionSystem.launchInvasion(w.emp, w.home.planetId, 2));
+  const aiBefore = w.gum.getUnitsOnPlanet(w.home.planetId).filter(u => u.owner === w.emp).map(u => u.id);
+  const campaign = () => w.K.invasionSystem.listAll().find(i => i.planetId === w.home.planetId && i.aggressor === w.emp) ?? null;
+  const repelled = [];
+  EventBus.on('invasion:repelled', (e) => repelled.push(e));
+  assert(inv?.success === true && aiBefore.length >= 1 && campaign()?.active === true && !flagOf(w, p1.id),
+    `świadek: wojna, ${aiBefore.length} jednostek ${w.emp} na kolonii gracza (aktywny desant), 2 jednostki gracza na ${w.col.planetId}, bez flag`);
+
+  const t0 = w.K.timeSystem.gameTime;
+  const ok = signPeace(w);
+  const f1 = flagOf(w, p1.id), f2 = flagOf(w, p2.id);
+  assert(ok === true && w.dipl.getStatus(w.emp) === 'truce',
+    `świadek: pokój przez offerPeace przyjęty (${ok}), status ${w.dipl.getStatus(w.emp)}`);
+  assert(!!f1 && !!f2 && f1.empireId === w.emp && Math.abs(f1.deadline - (t0 + 0.5)) < 1e-9 && f1.warned === false
+      && f2.deadline === f1.deadline,
+    `A4b: obie jednostki gracza na ${w.col.planetId} mają flagę ${JSON.stringify(f1)} — termin = podpis + 0,5 roku (6 mies.)`);
+  assert(!flagOf(w, pHome.id),
+    'A4b kontrola: jednostka gracza na WŁASNYM ciele flagi nie dostaje');
+  const aiAfter = w.gum.getUnitsOnPlanet(w.home.planetId).filter(u => u.owner === w.emp).length;
+  assert(aiAfter === 0 && aiBefore.every(id => !w.gum.getUnit(id)),
+    `A4c: jednostki ${w.emp} na kolonii gracza znikają od razu przy podpisaniu (było ${aiBefore.length}, jest ${aiAfter})`);
+  run(w, 2);
+  const c = campaign();
+  assert(c?.active === false && c?.endReason === 'peace_signed' && repelled.length === 0,
+    `A4d: desant ${w.emp} gaśnie z powodem ${c?.endReason ?? '—'}; po 2 civY meldunków „Desant odparty”: ${repelled.length}`);
+  const ord = journal(w, /⚑/).filter(e => e.channel === 'diplomacy');
+  const bodyName = w.K.entityManager?.get?.(w.col.planetId)?.name ?? w.col.planetId;
+  assert(ord.length === 1 && ord[0].text.includes(bodyName) && /\b2\b/.test(ord[0].text),
+    `A4e: JEDEN wpis w Dzienniku przy pokoju (kanał dyplomacji): ${JSON.stringify(ord.map(e => e.text))}`);
+  const dateStr = w.K.timeSystem.formatTime?.(f1?.deadline ?? 0) ?? '';
+  assert(ord.length === 1 && dateStr.length > 0 && ord[0].text.includes(dateStr),
+    `A4e: wpis podaje termin w formacie zegara (${dateStr})`);
+
+  // R5 — karta jednostki: flaga i termin (prawdziwe showUnitCard na atrapie DOM z env.js)
+  const kids0 = document.body.children.length;
+  try { UCmod?.showUnitCard?.(w.gum.getUnit(p1.id)); } catch { /* raport niżej */ }
+  const card = document.body.children.slice(kids0);
+  const texts = card.flatMap(el => domTexts(el));
+  const monthsLeft = Math.max(0, Math.ceil(((f1?.deadline ?? 0) - w.K.timeSystem.gameTime) * 12 - 1e-9));   // po 2 civY: 4
+  assert(texts.includes(t('unitCard.withdrawalTitle')) && texts.includes(dateStr) && texts.includes(t('unitCard.withdrawalMonths', monthsLeft)),
+    `A4f: karta jednostki pokazuje sekcję „${t('unitCard.withdrawalTitle')}”, termin ${dateStr} i ${t('unitCard.withdrawalMonths', monthsLeft)}`);
+  const kids1 = document.body.children.length;
+  try { UCmod?.showUnitCard?.(w.gum.getUnit(pHome.id)); } catch { /* */ }
+  const card2 = document.body.children.slice(kids1).flatMap(el => domTexts(el));
+  assert(card2.length > 0 && !card2.includes(t('unitCard.withdrawalTitle')),
+    'A4f kontrola: karta jednostki BEZ flagi nie ma tej sekcji (karta się narysowała)');
+  const osrc = strip(readFileSync(new URL('../../ui/ColonyOverlay.js', import.meta.url), 'utf8'));
+  const iDef = osrc.search(/\n\s*_drawUnitPanel\(ctx,\s*ox,\s*oy,\s*ow,\s*oh\)\s*\{/);   // DEFINICJA, nie wywołanie
+  const panel = iDef >= 0 ? osrc.slice(iDef, iDef + 12000) : '';
+  assert(/unit\.withdrawal/.test(panel) && /t\('unitPanel\.withdrawal'/.test(panel),
+    'A4g: pin źródłowy — panel jednostki na mapie kolonii (`_drawUnitPanel`) czyta flagę i pokazuje termin przez t()');
+
+  for (const k of ['withdrawal:ordered', 'withdrawal:aiRemoved', 'withdrawal:warning', 'withdrawal:expired', 'withdrawal:cleared']) {
+    EventBus.emit(k, { empireId: 'a4_probe' });
+  }
+  EventBus.emit('withdrawal:a4_untracked', { empireId: 'a4_probe' });
+  const seen = (k) => debugLog.query({ kind: k, empireId: 'a4_probe' }).length;
+  assert(['ordered', 'aiRemoved', 'warning', 'expired', 'cleared'].every(s => seen('withdrawal:' + s) === 1),
+    'A4h: DebugLog śledzi withdrawal:ordered / aiRemoved / warning / expired / cleared');
+  assert(seen('withdrawal:a4_untracked') === 0, 'A4h kontrola: zdarzenie spoza listy NIE trafia do DebugLog — pin nie jest ślepy');
+}
+
+// ── A6 — R3/R5: termin — ostrzeżenie miesiąc wcześniej, potem usunięcie jak polegli ──────
+{
+  console.log('\nA6 — termin: jedno ostrzeżenie miesiąc wcześniej (Dziennik + dzwonek), w terminie usunięcie jak polegli');
+  const w = boot();
+  declare(w);
+  const u = moveTo(recruit(w), w.col, freeTiles(w, w.col, { building: false })[0]);
+  const popCost = u.popCost ?? 0;
+  const ri = ColonyManager.GROUND_UNIT_POP_REINTEGRATION[u.archetypeId];
+  const destroyed = [], warnEv = [];
+  EventBus.on('groundUnit:destroyed', (e) => { if (e.unitId === u.id) destroyed.push(e); });
+  EventBus.on('withdrawal:warning', (e) => warnEv.push({ ...e, at: w.K.timeSystem.gameTime }));
+  const ok = signPeace(w);
+  const deadline = flagOf(w, u.id)?.deadline ?? null;
+  assert(ok === true && popCost > 0 && deadline !== null && !!ri,
+    `świadek: jednostka gracza z POP (${popCost}, dom ${u.homeColonyId}) na ${w.col.planetId}, pokój, termin ${deadline?.toFixed?.(4)}`);
+  const lock0 = lockOf(w.home);
+  const bodyName = w.K.entityManager?.get?.(w.col.planetId)?.name ?? w.col.planetId;
+  const dateStr = w.K.timeSystem.formatTime?.(deadline ?? 0) ?? '';
+  let goneAt = null, warnAt = null;
+  for (let y = 1; y <= 8; y++) {
+    run(w, 1);
+    if (warnAt === null && warnEv.length > 0) warnAt = y;
+    if (goneAt === null && !w.gum.getUnit(u.id)) goneAt = y;
+  }
+  // ⚠ Pin na CZASIE ostrzeżenia względem terminu nominalnego, nie tylko „przed usunięciem”: bez tolerancji progu
+  //   (`WithdrawalSystem` EPS) oba progi spóźniały się o tick i ostrzeżenie wypadało W terminie, a usunięcie miesiąc po nim.
+  assert(warnEv.length === 1 && warnAt !== null && warnEv[0].at >= deadline - 1 / 12 - 1e-6 && warnEv[0].at < deadline - 1 / 24
+      && goneAt === warnAt + 1,
+    `A6a: JEDNO ostrzeżenie (${warnEv.length}) w ${warnAt}. civY — miesiąc przed terminem (czas ${warnEv[0]?.at?.toFixed?.(4)}, ` +
+    `termin ${deadline?.toFixed?.(4)}), usunięcie tick później (${goneAt}. civY)`);
+  const warnText = t('event.withdrawal.warning', 1, bodyName, dateStr);
+  const warnLog = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.text === warnText && e.channel === 'combat');
+  assert(bell(w, 'withdrawalWarning').length === 1 && warnLog.length === 1,
+    `A6b: ostrzeżenie w dzwonku (${bell(w, 'withdrawalWarning').length}) i JEDEN wpis w Dzienniku: „${warnText}” (${warnLog.length})`);
+  assert(goneAt === 6 && destroyed.length === 1 && destroyed[0].cause === 'withdrawal_deadline',
+    `A6c: w terminie jednostka usunięta (w ${goneAt}. civY) jako polegli — groundUnit:destroyed ×${destroyed.length}, ` +
+    `przyczyna ${destroyed[0]?.cause ?? '—'}`);
+  const exp = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.text === t('event.withdrawal.expired', 1, bodyName));
+  assert(exp.length === 1, `A6d: JEDEN wpis w Dzienniku o utracie po terminie (${exp.length})`);
+  run(w, 4);                                             // zwłoka reintegracji (`ri.delay`) po śmierci w 6.–7. civY
+  const due = popCost * ri.rate;
+  const lockAfterDelay = lockOf(w.home);
+  assert(Math.abs((lock0 - lockAfterDelay) - due) < 1e-6,
+    `A6e: POP ścieżką śmierci do kolonii macierzystej — blokada w domu ${lock0} → ${lockAfterDelay} ` +
+    `(zwrot ${due} = ${popCost} × ${ri.rate} po zwłoce ${ri.delay} civY)`);
+}
+
+// ── A7 — R3 (Finding 358): cesja ciała z jednostką gracza na rzecz AI ────────────────────
+{
+  console.log('\nA7 — cesja ciała z jednostką gracza na rzecz AI: flaga');
+  const w = boot();
+  const sys = w.home.systemId ?? w.K.entityManager?.get?.(w.home.planetId)?.systemId;
+  const free = (w.K.entityManager?.getAll?.() ?? []).find(b => (b.systemId || 'sys_home') === (sys || 'sys_home')
+    && (b.type === 'planet' || b.type === 'moon') && !w.cm.getColony(b.id));
+  const ceded = quiet(() => w.cm.createColony(free.id, { minerals: 100 }, 10, 0, null));
+  for (const t of tilesOf(ceded)) if (t.owner == null) t.owner = 'player';
+  const spot = freeTiles(w, ceded, { building: false })[0] ?? { q: 0, r: 0 };   // kolonia bez siatki — heks bez znaczenia
+  const u = ceded ? playerUnit(w, ceded.planetId, spot) : null;
+  declare(w);
+  const ok = signPeace(w, w.emp, { cessions: [{ bodyId: ceded.planetId, fromEmpireId: 'player', toEmpireId: w.emp }] });
+  const f = u ? flagOf(w, u.id) : null;
+  assert(!!u && ok === true && w.cm.getColony(ceded.planetId)?.ownerEmpireId === w.emp,
+    `świadek: kolonia gracza ${ceded.planetId} z jednostką oddana ${w.emp} w traktacie (przyjęty: ${ok}, właściciel ${w.cm.getColony(ceded.planetId)?.ownerEmpireId})`);
+  assert(!!f && f.empireId === w.emp && !!w.gum.getUnit(u.id),
+    `A7: jednostka gracza na oddanym ciele dostaje flagę wycofania (${JSON.stringify(f)}) i stoi dalej — znika dopiero w terminie`);
+}
+
+// ── A9 — zapis → wczytanie ───────────────────────────────────────────────────────────────
+{
+  console.log('\nA9 — zapis → wczytanie: flaga i termin zostają; starszy zapis bez pola — czysto');
+  const w = boot();
+  declare(w);
+  const land = freeTiles(w, w.col, { building: false });
+  const a = playerUnit(w, w.col.planetId, land[0]);
+  const rover = w.gum.createUnit('science_rover', w.col.planetId, land[1].q, land[1].r);   // legacy (forma away team)
+  signPeace(w);
+  const fa = flagOf(w, a.id), fr = flagOf(w, rover.id);
+  assert(!!fa && !!fr, `świadek: flaga na archetypie (${!!fa}) i na jednostce legacy (${!!fr})`);
+  const blob = JSON.parse(JSON.stringify(w.gum.serialize()));
+  w.gum.restore(blob);
+  const ra = flagOf(w, a.id), rr = flagOf(w, rover.id);
+  assert(!!ra && !!rr && same(ra, fa) && same(rr, fr),
+    `A9a: po wczytaniu flagi identyczne (archetyp ${JSON.stringify(ra)}, legacy ${JSON.stringify(rr)})`);
+  const old = JSON.parse(JSON.stringify(blob));
+  for (const x of old.units) delete x.withdrawal;
+  w.gum.restore(old);
+  const before = w.gum.getAllUnits().length;
+  let threw = null;
+  const ticks = typeof w.K.withdrawalSystem?._tick === 'function';
+  try { w.K.withdrawalSystem?._tick?.(); } catch (e) { threw = e; }
+  assert(ticks && !flagOf(w, a.id) && !flagOf(w, rover.id) && !!w.gum.getUnit(a.id) && w.gum.getAllUnits().length === before
+      && threw === null,
+    `A9b: starszy zapis bez pola — jednostki bez flagi, tick systemu wycofania (${ticks}) bez błędu i bez usunięć`);
+}
+
+// ── A10 — garnizon i oflagowane jednostki gracza obok siebie przez 6 civY pokoju ──────────
+{
+  console.log('\nA10 — garnizon zmobilizowanego imperium i oflagowane jednostki gracza na tych samych heksach: 6 civY bez ognia');
+  const w = boot({ garrison: true });
+  declare(w);
+  const capCol = w.K.directorProduction.capitalOf(w.emp);
+  const garrison = w.gum.getUnitsOnPlanet(capCol.planetId).filter(u => u.owner === w.emp);
+  // Młode imperium domyślnego ziarna ma garnizon 2 (D1: minimum 2) — po jednej jednostce gracza na KAŻDYM heksie garnizonu.
+  const mine = garrison.slice(0, 3).map(g => playerUnit(w, capCol.planetId, { q: g.q, r: g.r }));
+  const ids = new Set([...garrison.map(u => u.id), ...mine.map(u => u.id)]);
+  const hits = [];
+  EventBus.on('groundUnit:attacked', (e) => { if (ids.has(e.targetId)) hits.push(e); });
+  const ok = signPeace(w);
+  const snap0 = [...garrison, ...mine].map(snap);
+  assert(garrison.length >= 2 && mine.length === Math.min(3, garrison.length) && ok === true && mine.every(u => !!flagOf(w, u.id)),
+    `świadek: garnizon ${w.emp} na ${capCol.planetId} (${garrison.length} jedn.), ${mine.length} jednostki gracza na jego heksach, pokój, flagi`);
+  run(w, 5);
+  const snap5 = [...garrison, ...mine].map(u => snap(w.gum.getUnit(u.id)));
+  assert(hits.length === 0 && same(snap0, snap5),
+    `A10a: 5 civY pokoju — trafień ${hits.length}, hp/morale/pozycje bez zmian po obu stronach`);
+  run(w, 2);
+  assert(hits.length === 0 && mine.every(u => !w.gum.getUnit(u.id)) && garrison.every(g => !!w.gum.getUnit(g.id)),
+    `A10b: w terminie znikają wyłącznie jednostki gracza; garnizon stoi (trafień przez całe okno: ${hits.length})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

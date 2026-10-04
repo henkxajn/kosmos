@@ -99,6 +99,7 @@ import { EmpireResearchSystem } from '../systems/EmpireResearchSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { GarrisonSystem }    from '../systems/GarrisonSystem.js';   // G2-3b — garnizony naziemne AI (D15)
+import { WithdrawalSystem }  from '../systems/WithdrawalSystem.js'; // G2-4 — wycofanie wojsk po pokoju (D14)
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
@@ -329,6 +330,9 @@ export class GameScene {
     // planer i usługi leniwie przez `window.KOSMOS`, więc kolejność konstrukcji jest dowolna — ale MUSI
     // powstać przed `restore` niżej (subskrypcja pierwszego ticku), co ten blok gwarantuje.
     this.garrisonSystem       = new GarrisonSystem();
+    // G2-4 (D14, R3–R5) — wycofanie wojsk po pokoju: flaga z terminem na jednostkach gracza na ciałach drugiej strony,
+    // jednostki AI z ciał gracza znikają przy podpisaniu. Stan siedzi na jednostkach (zapis `GroundUnitManager`).
+    this.withdrawalSystem     = new WithdrawalSystem();
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
     this.stationSystem        = new StationSystem();
     this.enemyAttackHandler   = new EnemyAttackHandler();
@@ -461,6 +465,8 @@ export class GameScene {
     // ⚠ G2-3b — wpis OBOWIĄZKOWY (lekcja W3-5b „skonstruowany ≠ zamontowany”): odczyty gate'u
     //   (`KOSMOS.garrisonSystem.listUnits(...)`) idą przez lokator. Pin: `g2_mobilisation_smoke` M0.
     window.KOSMOS.garrisonSystem   = this.garrisonSystem;
+    // G2-4 — wpis obowiązkowy (odczyt bramki: `KOSMOS.withdrawalSystem.listFlagged()`). Pin: `g2_after_peace_smoke` A4.
+    window.KOSMOS.withdrawalSystem = this.withdrawalSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
     window.KOSMOS.stationSystem      = this.stationSystem;
     window.KOSMOS.threatAssessment   = this.threatAssessment;

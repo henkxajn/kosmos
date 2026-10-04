@@ -97,6 +97,19 @@ export function showUnitCard(unit) {
     const body = document.createElement('div');
     body.style.cssText = 'flex: 1; overflow-y: auto; padding: 12px 14px;';
 
+    // ── G2-4 (D14, R5) — flaga wycofania po pokoju: termin i ile zostało ─────
+    if (!isEnemy && unit.withdrawal) {
+      const wd = unit.withdrawal;
+      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const left = Math.max(0, Math.ceil((wd.deadline - now) * 12 - 1e-9));   // miesiące WYŚWIETLANE do terminu
+      const date = window.KOSMOS?.timeSystem?.formatTime?.(wd.deadline) ?? Number(wd.deadline).toFixed(2);
+      _addSection(body, t('unitCard.withdrawalTitle'), () => [
+        { label: t('unitCard.withdrawalDeadline'), value: date },
+        { label: t('unitCard.withdrawalLeft'), value: t('unitCard.withdrawalMonths', left) },
+        { label: '', value: t('unitCard.withdrawalHint') },
+      ]);
+    }
+
     // ── Stats section ────────────────────────────────────────────
     _addSection(body, '📊 STATYSTYKI', () => {
       const stats = arch?.baseStats ?? {};

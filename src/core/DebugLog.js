@@ -118,6 +118,14 @@ const TRACKED_EVENTS = [
   'garrison:mobilizeSkipped',
   // G2-3b C-S2 (D6, D16) — jednostki AI usunięte przy zmianie właściciela ciała albo jego zniszczeniu.
   'garrison:unitsRemoved',
+  // G2-4 (D14, R3–R5) — wycofanie po pokoju: flaga z terminem na jednostkach gracza (`ordered`), jednostki AI zdjęte
+  // z ciał gracza (`aiRemoved`), ostrzeżenie (`warning`), utrata po terminie (`expired`) i zdjęcie flagi z POWODEM
+  // (`cleared`: loaded / body_owned / war_resumed / body_neutral) — bez `cleared` gate nie odróżniłby załadunku od ciszy.
+  'withdrawal:ordered',
+  'withdrawal:aiRemoved',
+  'withdrawal:warning',
+  'withdrawal:expired',
+  'withdrawal:cleared',
 ];
 
 class DebugLog {

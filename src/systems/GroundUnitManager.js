@@ -1500,6 +1500,8 @@ export class GroundUnitManager {
         stateTimer:          u.stateTimer        ?? 0,
         // Victoria 2 stack combat: support target dla ranged
         supportTarget:       u.supportTarget     ?? null,
+        // G2-4 (D14, R3) — flaga wycofania po pokoju { empireId, orderedYear, deadline, warned } albo null
+        withdrawal:          u.withdrawal ? { ...u.withdrawal } : null,
       })),
       nextId: this._nextId,
       // Ground Unit System: progres zajmowania budynków
@@ -1569,6 +1571,8 @@ export class GroundUnitManager {
           rebuilt.stateTimer  = 0;
         }
         rebuilt.supportTarget = u.supportTarget ?? null;
+        // G2-4 (R3) — flaga wycofania; zapis sprzed G2-4 pola nie ma ⇒ brak flagi (bez migracji, save v101)
+        rebuilt.withdrawal = u.withdrawal ? { ...u.withdrawal } : null;
         this._units.set(u.id, rebuilt);
       } else {
         // Legacy jednostka (infantry/mech/garrison/science_rover)
@@ -1586,6 +1590,7 @@ export class GroundUnitManager {
           role:       stats.role,
           _atkCooldown: 0,
           supportTarget: u.supportTarget ?? null,
+          withdrawal: u.withdrawal ? { ...u.withdrawal } : null,   // G2-4 (R3) — jak gałąź archetypów
           _path:      [],
           _animT:     0,
           _fromPixel: null,

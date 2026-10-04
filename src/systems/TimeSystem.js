@@ -90,6 +90,13 @@ export class TimeSystem {
     });
   }
 
+  /**
+   * Data gry w formacie zegara (DD/MM/RRRR) — publiczny odczyt dla meldunków z terminem (G2-4: termin wycofania
+   * wojsk po pokoju w Dzienniku, dzwonku i na karcie jednostki). Jedno źródło formatu z wyświetlaczem czasu.
+   * @param {number} years — czas gry w latach WYŚWIETLANYCH (`gameTime`)
+   */
+  formatTime(years) { return this._formatTime(years); }
+
   // Formatuj czas gry do czytelnej postaci
   _formatTime(years) {
     // Duże skale czasowe — format skrócony (i18n)

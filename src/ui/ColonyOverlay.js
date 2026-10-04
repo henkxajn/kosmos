@@ -2527,6 +2527,8 @@ export class ColonyOverlay extends BaseOverlay {
     const pw = 200;
     let ph = 96;  // baza: nazwa + status + hex + HP
     if (isEnemy) ph += 14;                         // banner "ROZPOZNANIE"
+    const withdrawal = !isEnemy ? (unit.withdrawal ?? null) : null;   // G2-4 (D14, R5) — flaga wycofania po pokoju
+    if (withdrawal) ph += 14;                      // linia „⚑ Wycofanie do …”
     const multiSelect = this._selectedUnits.size > 1;
     if (multiSelect) ph += 18;                    // banner "Zaznaczono N"
     if (hasSiblings) ph += 22;                    // stack navigator
@@ -2671,6 +2673,17 @@ export class ColonyOverlay extends BaseOverlay {
     };
     ctx.fillText(statusLabels[unit.status] ?? unit.status, px + 8, ly);
     ly += 14;
+
+    // G2-4 (D14, R5) — flaga wycofania po pokoju: termin i miesiące WYŚWIETLANE do niego
+    if (withdrawal) {
+      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const left = Math.max(0, Math.ceil((withdrawal.deadline - now) * 12 - 1e-9));
+      const date = window.KOSMOS?.timeSystem?.formatTime?.(withdrawal.deadline) ?? Number(withdrawal.deadline).toFixed(2);
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#FFB040';
+      ctx.fillText(t('unitPanel.withdrawal', date, left), px + 8, ly);
+      ly += 14;
+    }
 
     // HP bar
     if (unit.hpMax) {
