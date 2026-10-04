@@ -590,11 +590,13 @@ export class NotificationCenter {
   /**
    * G2-4 F4 (R4, Finding 367) — pokój zdjął jednostki imperium z ciała GRACZA. Sam wpis w Dzienniku, kanał dyplomacji
    * (skutek traktatu), z nazwą strony traktatu (`empireLogName`, jak wpis pokoju) i ciała.
+   * G2-4 (d) — to samo przy WCZYTANIU starego zapisu (`reason: 'load'`): bez podpisania pokoju, więc własne brzmienie,
+   *   bez „Peace with …” (wzór wpisu F3 przy wczytaniu, (f)).
    */
-  _handleWithdrawalAiRemoved({ empireId, planetId, count }) {
+  _handleWithdrawalAiRemoved({ empireId, planetId, count, reason }) {
     if (!planetId || !(count > 0)) return;
-    this._journal(t('event.withdrawal.aiRemoved', empireLogName(empireId), count, this._bodyName(planetId)),
-      'diplomacy', 'info', planetId);
+    const key = reason === 'load' ? 'event.withdrawal.aiRemovedLoad' : 'event.withdrawal.aiRemoved';
+    this._journal(t(key, empireLogName(empireId), count, this._bodyName(planetId)), 'diplomacy', 'info', planetId);
   }
 
   /**

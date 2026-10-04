@@ -7,6 +7,9 @@
 //   Zf  (f) — wpis w Dzienniku z uzgodnienia F3 przy WCZYTANIU ma własne brzmienie, bez „Peace with”: N jednostek na
 //       ciele nazwanego imperium musi się wycofać do daty (prawdziwy `serialize` → `restore` → `armLoadReconcile`, jak
 //       blok wczytania `GameScene`); kontrola: wpis przy podpisaniu pokoju zostaje „⚑ Peace with …”.
+//   Zd  (d) — stary zapis: jednostki AI stojące na ciele GRACZA, gdy ich imperium nie jest z graczem w wojnie, znikają
+//       w tym samym uzgodnieniu przy wczytaniu co F3 (R4 dla zapisów sprzed G2-4); JEDEN wpis w Dzienniku na ciało, bez
+//       „Peace with”; kontrole: imperium w WOJNIE z graczem, jednostka AI na własnym ciele, sesja bez wczytania.
 //
 // ⚠ Harness jak `g2_peace_followups_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny
 //   `CombatSystem`, Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus); mobilizacja
@@ -16,6 +19,7 @@
 
 import '../headless/env.js';           // MUSI być pierwszy
 import gameState from '../../core/GameState.js';
+import debugLog from '../../core/DebugLog.js';
 import EntityManager from '../../core/EntityManager.js';
 import { isStandableTile } from '../../data/GroundUnitData.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
@@ -74,7 +78,12 @@ function playerUnit(w, planetId, t0, { arch = 'shock_infantry' } = {}) {
   u.morale = u.maxMorale = 100;
   return u;
 }
+/** Jednostka imperium (jedyne wejście `createAIUnit`). */
+function aiUnit(w, emp, planetId, t0, arch = 'garrison_unit') {
+  return w.gum.createAIUnit({ archetypeId: arch, empireId: emp, planetId, q: t0.q, r: t0.r, morale: 100, deployed: true })?.unit ?? null;
+}
 const journal = (w, channel, re) => (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.channel === channel && re.test(e.text));
+const auditOf = (kind) => debugLog.query({ kind });
 /** Wczytanie jak blok wczytania `GameScene`: prawdziwy zapis i odtworzenie jednostek, uzbrojenie uzgodnienia, tick. */
 function loadAndTick(w) {
   const data = JSON.parse(JSON.stringify(w.gum.serialize()));
@@ -155,6 +164,50 @@ function loadAndTick(w) {
   setLocale(prev);
   assert(ok === true && !!f && jr.length === 1 && jr[0].text === expected && /^⚑ Peace with /.test(jr[0].text),
     `Zf kontrola: pokój — wpis „⚑ Peace with …” bez zmian: ${jr[0]?.text ?? '—'}`);
+}
+
+// ── Zd — (d): stary zapis — jednostki AI na ciałach gracza bez wojny ──────────────────────
+{
+  console.log('\nZd — (d) wczytanie: jednostki AI stojące bez wojny na ciele gracza znikają (R4 dla starych zapisów), jeden wpis na ciało');
+  const prev = getLocale();
+  setLocale('en');
+  const w = boot();
+  const col2 = w.aiFull.find(c => c.ownerEmpireId && c.ownerEmpireId !== w.emp);
+  const emp2 = col2?.ownerEmpireId ?? null;
+  declare(w, emp2);                                                  // z drugim imperium trwa wojna (kontrola)
+  const tH = freeTiles(w, w.home, { building: false });
+  const a1 = aiUnit(w, w.emp, w.home.planetId, tH[0]);               // stan zapisu sprzed G2-4: pokój, wojska AI na ciele gracza
+  const a2 = aiUnit(w, w.emp, w.home.planetId, tH[1]);
+  const aWar = aiUnit(w, emp2, w.home.planetId, tH[2]);              // kontrola: imperium w WOJNIE z graczem
+  const aOwn = aiUnit(w, w.emp, w.col.planetId, freeTiles(w, w.col, { building: false })[0]);   // kontrola: własne ciało
+  run(w, 1);
+  const alive0 = !!a1 && !!a2 && !!w.gum.getUnit(a1.id) && !!w.gum.getUnit(a2.id);
+  const status0 = w.dipl.getStatus(w.emp);
+  debugLog.clear();
+  loadAndTick(w);
+  const audit = auditOf('withdrawal:aiRemoved').filter(x => x.data?.planetId === w.home.planetId);
+  const body = EntityManager.get(w.home.planetId)?.name;
+  const expected = t('event.withdrawal.aiRemovedLoad', empireLogName(w.emp), 2, body);
+  const jr = journal(w, 'diplomacy', /☮/).filter(e => e.text.includes(body));
+  setLocale(prev);
+  assert(alive0 && status0 !== 'war' && !!aWar && !!aOwn && w.dipl.getStatus(emp2) === 'war' && !!body,
+    `świadek: przed wczytaniem dwie jednostki ${w.emp} stoją bez wojny (${status0}) na ciele gracza; ${emp2} w wojnie z graczem`);
+  assert(!w.gum.getUnit(a1.id) && !w.gum.getUnit(a2.id),
+    'Zd: po wczytaniu jednostki imperium bez wojny zniknęły z ciała gracza');
+  assert(audit.length === 1 && audit[0].data?.count === 2 && audit[0].data?.reason === 'load' && audit[0].data?.empireId === w.emp,
+    `Zd: audyt withdrawal:aiRemoved raz na ciało (${audit.length}), jednostek ${audit[0]?.data?.count}, powód ${audit[0]?.data?.reason}`);
+  assert(jr.length === 1 && jr[0].text === expected && !/Peace with/.test(jr[0].text) && /\b2\b/.test(jr[0].text),
+    `Zd: JEDEN wpis w Dzienniku (Dyplomacja) na ciało, bez „Peace with”: ${jr[0]?.text ?? '—'}`);
+  assert(!!w.gum.getUnit(aWar.id) && !!w.gum.getUnit(aOwn.id),
+    'Zd kontrola: jednostka imperium w WOJNIE z graczem i jednostka AI na własnym ciele — zostają');
+}
+{
+  console.log('\nZd kontrola — sesja BEZ wczytania: jednostka AI bez wojny na ciele gracza zostaje (uzgodnienie należy do wczytania)');
+  const w = boot();
+  const a = aiUnit(w, w.emp, w.home.planetId, freeTiles(w, w.home, { building: false })[0]);
+  run(w, 3);
+  assert(!!a && !!w.gum.getUnit(a.id) && w.dipl.getStatus(w.emp) !== 'war',
+    'Zd kontrola: bez wczytania jednostka AI stoi dalej (zachowanie sesji bez zmian)');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

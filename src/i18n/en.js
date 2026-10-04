@@ -3024,6 +3024,7 @@ export default {
   'event.withdrawal.warning':    '⚑ Withdrawal deadline in one month: {0} unit(s) on {1} (by {2})',
   'event.withdrawal.expired':    '⚑ Withdrawal deadline passed: {0} ground unit(s) on {1} lost',
   'event.withdrawal.aiRemoved':  '☮ Peace with {0}: its troops ({1} unit(s)) have left {2}',
+  'event.withdrawal.aiRemovedLoad': '☮ Troops of {0} ({1} unit(s)) have left {2}',
   'event.groundUnit.lostWithBody': '⚔ {0} ground unit(s) lost together with {1}',
   'unitCard.withdrawalTitle':    '⚑ WITHDRAWAL AFTER PEACE',
   'unitCard.withdrawalDeadline': 'Deadline',

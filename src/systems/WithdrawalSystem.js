@@ -16,6 +16,9 @@
 //      imperium, bez flagi, dostają ją przy WCZYTANIU (`GameScene` uzbraja po `groundUnitManager.restore`, uzgodnienie
 //      biegnie na pierwszym ticku — własność kolonii i relacje są już odtworzone); termin = chwila wczytania + 0,5 roku.
 //      Sesja bez wczytania (nowa gra, uprząż keeperów) — nic: uzgodnienie należy do WCZYTANIA, nie do pierwszego ticku.
+// (d) (odpowiedź właściciela 2026-10-04) — w tym samym uzgodnieniu jednostki IMPERIUM stojące na ciele GRACZA, gdy ich
+//      imperium nie jest z graczem w wojnie, znikają jak przy R4 (zapisy sprzed G2-4: R4 działa tylko przy podpisaniu
+//      pokoju); jeden meldunek na ciało i imperium (`withdrawal:aiRemoved`, `reason: 'load'`).
 // F1 (Finding 363, decyzja właściciela 2026-10-03) — przy pokoju kafle zajęte w wojnie wracają do właściciela kolonii,
 //      na koloniach OBU stron, a liczniki okupacji są zerowane (`TileOwnership.revertPeaceOccupation`). Bez tego kafel
 //      stolicy AI trzymany przez gracza przeżywał pokój i nowa wojna dawała przejęcie bez jednej jednostki na ciele.
@@ -28,7 +31,7 @@
 // ⚠ Kolaboratorzy leniwie przez `window.KOSMOS` (zero importów systemów).
 
 import EventBus from '../core/EventBus.js';
-import { bodyOwnerOf, areAtWar } from '../utils/WarGate.js';
+import { bodyOwnerOf, areAtWar, groundOwnersHostile } from '../utils/WarGate.js';
 import { revertPeaceOccupation } from '../utils/TileOwnership.js';
 
 /** Termin wycofania w latach WYŚWIETLANYCH (6 miesięcy = 6 civY przy CIV_TIME_SCALE 12). */
@@ -158,20 +161,40 @@ export class WithdrawalSystem {
    * z którym gracz NIE jest w wojnie, dostaje flagę wycofania z terminem `loadYear + WITHDRAWAL_YEARS`. Flagi już
    * istniejące zostają z własnym terminem (bez dublowania). Meldunek jak przy pokoju: `withdrawal:ordered` raz na ciało,
    * z `reason: 'load'`.
-   * @returns {{flagged:number}}
+   * (d) — w tym samym przebiegu jednostki IMPERIUM stojące na ciele GRACZA (nie w ładowni), gdy ich imperium nie jest
+   * z graczem w wojnie, znikają jak przy R4 (AI nie ma POP — bez reintegracji); `withdrawal:aiRemoved` raz na ciało
+   * i imperium, z `reason: 'load'`. Predykat „nie w wojnie” to `groundOwnersHostile` (R1 — ten sam, który decyduje o ogniu
+   * i okupacji): przy żywej dyplomacji to samo co `areAtWar`, a bez modułu dyplomacji „wrogowie”, więc nic nie znika.
+   * @returns {{flagged:number, removed:number}}
    */
   reconcileAfterLoad(loadYear = this._now()) {
     const gum = this._K()?.groundUnitManager;
-    if (typeof gum?.getAllUnits !== 'function') return { flagged: 0 };
+    if (typeof gum?.getAllUnits !== 'function') return { flagged: 0, removed: 0 };
     const deadline = loadYear + WITHDRAWAL_YEARS;
     const flagged = new Map();     // planetId → { empireId, unitIds }
+    const doomed = [];
     for (const u of gum.getAllUnits()) {
-      if (!u || !isPlayerUnit(u) || u.withdrawal || u.status === 'in_cargo' || (u.hp ?? 0) <= 0) continue;
+      if (!u || u.status === 'in_cargo' || (u.hp ?? 0) <= 0) continue;
       const owner = bodyOwnerOf(u.planetId);
-      if (!owner || owner === 'player' || areAtWar('player', owner)) continue;
+      if (!owner) continue;
+      if (!isPlayerUnit(u)) {
+        if (owner === 'player' && !groundOwnersHostile(u.owner, 'player')) doomed.push(u);   // (d)
+        continue;
+      }
+      if (u.withdrawal || owner === 'player' || areAtWar('player', owner)) continue;
       u.withdrawal = { empireId: owner, orderedYear: loadYear, deadline, warned: false };
       if (!flagged.has(u.planetId)) flagged.set(u.planetId, { empireId: owner, unitIds: [] });
       flagged.get(u.planetId).unitIds.push(u.id);
+    }
+    const removed = new Map();     // `planetId|empireId` → { planetId, empireId, unitIds }
+    for (const u of doomed) {
+      gum.removeUnit(u.id);
+      const key = `${u.planetId}|${u.owner}`;
+      if (!removed.has(key)) removed.set(key, { planetId: u.planetId, empireId: u.owner, unitIds: [] });
+      removed.get(key).unitIds.push(u.id);
+    }
+    for (const { planetId, empireId, unitIds } of removed.values()) {
+      EventBus.emit('withdrawal:aiRemoved', { empireId, planetId, unitIds, count: unitIds.length, reason: 'load' });
     }
     let total = 0;
     for (const [planetId, { empireId, unitIds }] of flagged) {
@@ -180,7 +203,7 @@ export class WithdrawalSystem {
         empireId, planetId, unitIds, count: unitIds.length, deadlineYear: deadline, reason: 'load',
       });
     }
-    return { flagged: total };
+    return { flagged: total, removed: doomed.length };
   }
 
   /** Dlaczego flaga przestała obowiązywać — `null` = nadal obowiązuje. */
