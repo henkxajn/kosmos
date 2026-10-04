@@ -559,10 +559,29 @@ export class NotificationCenter {
     });
   }
 
-  /** G2-4 (R5) — termin minął, jednostki przepadły (jak polegli). Sam wpis w Dzienniku, jak rozwiązanie jednostki. */
-  _handleWithdrawalExpired({ planetId, count }) {
+  /**
+   * G2-4 (R5) — termin minął, jednostki przepadły (jak polegli): Dziennik I dzwonek, raz na ciało, z nazwą ciała i liczbą.
+   * ⚠ F5 (bramka live 2026-10-04): był tu SAM wpis w Dzienniku — powstawał (kanał Walka, nieukryty), ale jedyną
+   *   warstwą bez kliknięcia jest dzwonek, a w nim wisiało już tylko „został miesiąc” dla ciała, z którego jednostek nie
+   *   było; Dziennik to wysuwana szuflada, która zamknięta nie rysuje ani linii ⇒ gracz nie wiedział, że stracił wojska.
+   *   Jeden wpis w Dzienniku daje `add()` (`logText`) — bez drugiego `_journal`.
+   * ⚠ Typ `withdrawalExpired`, NIE `withdrawalWarning`: `add()` odrzuca ten sam typ i to samo ciało w ciągu 200 ms
+   *   czasu realnego, a przy wysokiej prędkości ostrzeżenie i termin dzieli kilkadziesiąt ms — wspólny typ zjadłby utratę.
+   */
+  _handleWithdrawalExpired({ empireId, planetId, unitIds, count }) {
     if (!planetId || !(count > 0)) return;
-    this._journal(t('event.withdrawal.expired', count, this._bodyName(planetId)), 'combat', 'warn', planetId);
+    const body = this._bodyName(planetId);
+    this.add({
+      type: 'withdrawalExpired',
+      severity: 'warn',
+      source: 'withdrawalSystem',
+      title: t('notif.withdrawalExpiredTitle', body),
+      subtitle: t('notif.withdrawalExpiredSubtitle', count),
+      logChannel: 'combat',
+      logText: t('event.withdrawal.expired', count, body),
+      // `bodyId` — wpis w Dzienniku dostaje odnośnik do ciała (`add()` → `entityRef`)
+      payload: { bodyId: planetId, planetId, empireId: empireId ?? null, unitIds: [...(unitIds ?? [])], count },
+    });
   }
 
   /**

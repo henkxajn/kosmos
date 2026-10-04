@@ -19,6 +19,10 @@
 //   B5  F4 #367 — wpisy w Dzienniku: R4 (jednostki AI zdjęte z ciał gracza przy pokoju — kanał Dyplomacja, nazwa strony
 //       traktatu i ciała) i R7 (jednostka gracza utracona razem z ciałem — kanał Walka, NAZWA ciała także wtedy, gdy
 //       encji już nie ma: ciało z kolonią i bez); kontrola: usunięcie wyłącznie jednostek AI nie daje wpisu.
+//   B6  F5 (bramka 2026-10-04) — termin wycofania usuwa jednostki: JEDEN wpis w Dzienniku i JEDEN w dzwonku NA CIAŁO,
+//       z nazwą ciała i liczbą utraconych; na warstwie UI, którą montuje gra (plakietka dzwonka `BottomControlBar`,
+//       lista `NotificationDropdown`); utrata nie ginie w deduplikacji, gdy ostrzeżenie tego samego ciała padło
+//       kilkadziesiąt ms wcześniej (wysoka prędkość czasu); kontrola: załadunek przed terminem — bez meldunku.
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem`, Dziennik i dzwonek
 //   (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). Mobilizacja garnizonów AI WYŁĄCZONA w scenach,
@@ -42,6 +46,8 @@ import { readFileSync } from 'node:fs';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 import * as FA from '../../data/FleetActions.js';
 import * as VS from '../../entities/Vessel.js';
+import { BottomControlBar } from '../../ui/BottomControlBar.js';
+import * as ND from '../../ui/NotificationDropdown.js';
 let ENmod = null;
 try { ENmod = await import('../../utils/EmpireName.js'); } catch { ENmod = null; }
 
@@ -477,6 +483,97 @@ const reEsc = (s) => new RegExp(String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const e = journalAt(w, 'combat', reEsc(bodyName));
   assert(e.length === 1 && /\b1\b/.test(e[0].text) && journalAt(w, 'combat', reEsc(b1.id)).length === 0,
     `B5c: JEDEN wpis (Walka) z nazwą ciała (${e[0]?.text ?? '—'})`);
+}
+
+// ── B6 — F5: meldunek o utracie wojsk w terminie ─────────────────────────────────────────
+/** Plakietka dzwonka tak, jak rysuje ją gra (`BottomControlBar._drawBell`) — tekst liczby albo '' bez plakietki. */
+function bellBadge() {
+  const sink = [];
+  const ctx = new Proxy({}, { get: (o, k) => k === 'measureText' ? (() => ({ width: 10 }))
+    : k === 'fillText' ? ((s) => sink.push(String(s))) : (k in o ? o[k] : (o[k] = () => {})),
+    set: (o, k, v) => { o[k] = v; return true; } });
+  new BottomControlBar()._drawBell(ctx, { x: 0, y: 0, w: 24, h: 20 }, 10);
+  return sink.filter(s => s !== '🔔').join('');
+}
+/** Lista dzwonka tak, jak renderuje ją gra (`NotificationDropdown`, atrapa DOM z env.js) — surowy HTML. */
+function bellListHtml() {
+  ND.openNotificationDropdown({ anchorX: 100, scale: 1, barH: 30 });
+  const root = document.body.children.find(el => el.className === 'kosmos-notification-dropdown');
+  const html = String(root?.innerHTML ?? '');
+  ND.closeNotificationDropdown();
+  return html;
+}
+{
+  console.log('\nB6a — termin wycofania na dwóch ciałach: JEDEN wpis w Dzienniku i JEDEN w dzwonku na ciało (nazwa ciała, liczba)');
+  const w = boot();
+  const col2 = w.aiFull.find(c => c.ownerEmpireId && c.ownerEmpireId !== w.emp);
+  const emp2 = col2?.ownerEmpireId;
+  declare(w); declare(w, emp2);
+  const l1 = freeTiles(w, w.col, { building: false });
+  const l2 = freeTiles(w, col2, { building: false });
+  const a1 = playerUnit(w, w.col.planetId, l1[0]), a2 = playerUnit(w, w.col.planetId, l1[1]);
+  const b1 = playerUnit(w, col2.planetId, l2[0]);
+  const ok1 = signPeace(w), ok2 = signPeace(w, emp2);
+  const n1 = EntityManager.get(w.col.planetId)?.name, n2 = EntityManager.get(col2.planetId)?.name;
+  let badgeBefore = null, badgeAfter = null, cntBefore = null, cntAfter = null, goneAt = null;
+  for (let y = 1; y <= 7; y++) {
+    run(w, 1);
+    if (y === 5) { badgeBefore = bellBadge(); cntBefore = w.K.notificationCenter.getActiveCount(); }
+    if (goneAt === null && !w.gum.getUnit(a1.id) && !w.gum.getUnit(b1.id)) {
+      goneAt = y; badgeAfter = bellBadge(); cntAfter = w.K.notificationCenter.getActiveCount();
+    }
+  }
+  assert(ok1 === true && ok2 === true && goneAt === 6 && !w.gum.getUnit(a2.id) && !!n1 && !!n2,
+    `świadek: pokój z ${w.emp} i ${emp2} w tej samej chwili; termin usunął 2 jednostki z „${n1}” i 1 z „${n2}” w ${goneAt}. civY`);
+  const lost = w.K.notificationCenter.getActive().filter(n => n.type === 'withdrawalExpired');
+  const forBody = (pid) => lost.filter(n => n.payload?.planetId === pid);
+  assert(lost.length === 2 && forBody(w.col.planetId).length === 1 && forBody(col2.planetId).length === 1,
+    `B6a: dzwonek — JEDEN meldunek o utracie na ciało (${lost.length}: ${lost.map(n => n.title).join(' | ')})`);
+  const t1 = forBody(w.col.planetId)[0], t2 = forBody(col2.planetId)[0];
+  assert(!!t1 && t1.title.includes(n1) && /\b2\b/.test(t1.subtitle) && !!t2 && t2.title.includes(n2) && /\b1\b/.test(t2.subtitle),
+    `B6a: meldunek nazywa ciało i liczbę utraconych („${t1?.title}” / „${t1?.subtitle}”; „${t2?.title}” / „${t2?.subtitle}”)`);
+  const j1 = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.text === t('event.withdrawal.expired', 2, n1) && e.channel === 'combat');
+  const j2 = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.text === t('event.withdrawal.expired', 1, n2) && e.channel === 'combat');
+  assert(j1.length === 1 && j2.length === 1,
+    `B6a kontrola: Dziennik — JEDEN wpis o utracie na ciało (${j1.length}, ${j2.length}), bez podwójnego zapisu`);
+  assert(cntBefore >= 2 && badgeBefore === String(cntBefore) && badgeAfter === String(cntAfter) && cntAfter - cntBefore >= 2,
+    `B6b: plakietka dzwonka, jak ją rysuje gra — przed terminem ${badgeBefore}, w ticku terminu ${badgeAfter} (przyrost ≥ 2: meldunki o utracie)`);
+  const html = bellListHtml();
+  assert(html.includes(t('notif.group.withdrawalExpired')) && html.includes(t1?.title ?? '∅') && html.includes(t2?.title ?? '∅'),
+    `B6b: lista dzwonka (NotificationDropdown) pokazuje grupę „${t('notif.group.withdrawalExpired')}” i oba meldunki`);
+  assert(t('notif.group.withdrawalExpired') !== 'notif.group.withdrawalExpired' && t('notif.withdrawalExpiredTitle', 'X') !== 'notif.withdrawalExpiredTitle',
+    'B6b: klucze meldunku istnieją (bez surowego klucza w UI)');
+}
+{
+  console.log('\nB6c — wysoka prędkość czasu: ostrzeżenie i termin TEGO SAMEGO ciała w jednym ciągu ticków — utrata nie ginie w deduplikacji');
+  const w = boot();
+  declare(w);
+  const u = playerUnit(w, w.col.planetId, freeTiles(w, w.col, { building: false })[0]);
+  const ok = signPeace(w);
+  const t0 = Date.now();
+  run(w, 7);                                            // ostrzeżenie (5. civY) i termin (6.) w kilkudziesięciu ms czasu realnego
+  const dt = Date.now() - t0;
+  const warn = w.K.notificationCenter.getActive().filter(n => n.type === 'withdrawalWarning' && n.payload?.planetId === w.col.planetId);
+  const lost = w.K.notificationCenter.getActive().filter(n => n.type === 'withdrawalExpired' && n.payload?.planetId === w.col.planetId);
+  assert(ok === true && !w.gum.getUnit(u.id) && warn.length === 1,
+    `świadek: pokój, ostrzeżenie w dzwonku (${warn.length}), jednostka usunięta w terminie; 7 civY w ${dt} ms czasu realnego`);
+  assert(lost.length === 1,
+    `B6c: meldunek o utracie w dzwonku mimo ostrzeżenia tego samego ciała tuż przed nim (${lost.length})`);
+}
+{
+  console.log('\nB6d — kontrola: jednostka załadowana przed terminem — flaga zdjęta, bez meldunku o utracie');
+  const w = boot();
+  declare(w);
+  const u = playerUnit(w, w.col.planetId, freeTiles(w, w.col, { building: false })[0]);
+  const ok = signPeace(w);
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  const loaded = VS.loadGroundUnit(v, u)?.ok === true;
+  run(w, 7);
+  const lost = w.K.notificationCenter.getActive().filter(n => n.type === 'withdrawalExpired');
+  const j = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => e.channel === 'combat' && /⚑/.test(e.text));
+  assert(ok === true && loaded && !!w.gum.getUnit(u.id) && !w.gum.getUnit(u.id)?.withdrawal && lost.length === 0 && j.length === 0,
+    `B6d kontrola: załadowana jednostka żyje bez flagi; meldunków o utracie: dzwonek ${lost.length}, Dziennik ${j.length}`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
