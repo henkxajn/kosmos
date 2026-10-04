@@ -14,6 +14,8 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { t } from '../i18n/i18n.js';
 import { empireLogName } from '../utils/EmpireName.js';   // G2-4 F6 — nazwa strony traktatu (jak wpis pokoju)
+import { areAtWar } from '../utils/WarGate.js';             // G2-4 (a) — ostrzeżenie gaśnie, gdy wraca wojna
+import { withdrawalDeadlineReached } from './WithdrawalSystem.js';   // G2-4 (a) — ten sam próg terminu co usunięcie
 
 const MAX_ITEMS = 50;
 
@@ -75,6 +77,18 @@ export class NotificationCenter {
     //   przy pokoju, ani że jego oddział zginął razem z ciałem. Oba — sam wpis w Dzienniku, bez dzwonka.
     EventBus.on('withdrawal:aiRemoved',   e => this._handleWithdrawalAiRemoved(e));
     EventBus.on('garrison:unitsRemoved',  e => this._handleGarrisonUnitsRemoved(e));
+    // G2-4 (a) w wersji OGRANICZONEJ (decyzja właściciela 2026-10-04, Finding 370) — ostrzeżenie „został miesiąc” gaśnie
+    //   samo PRZED terminem, gdy straciło przedmiot: na ciele nie została żadna oflagowana jednostka z ostrzeżenia
+    //   (załadowane, flaga zdjęta albo jednostki usunięte inną drogą) albo wróciła wojna z właścicielem ciała. Zdarzenia —
+    //   od razu, także na pauzie; tick — ostrzeżenie odtworzone z zapisu (jednostki wracają z zapisu PO dzwonku).
+    //   ⚠ W TERMINIE NIE GAŚNIE: obok staje meldunek o utracie i plakietka rośnie — tak gracz zauważa stratę. Pełną wersję
+    //   (gaśnie także w terminie) właściciel odrzucił: meldunek ZASTĘPOWAŁ ostrzeżenie, plakietka stała (2 → 2), a dzwonek
+    //   nie ma innego sygnału „nowe” niż liczba. Od terminu wpis jest rozstrzygnięty — gasi go wyłącznie gracz.
+    const retire = () => this._retireMootWithdrawalWarnings();
+    EventBus.on('withdrawal:cleared',    retire);
+    EventBus.on('groundUnit:removed',    retire);
+    EventBus.on('diplomacy:warDeclared', retire);
+    EventBus.on('time:tick',             retire);
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -560,6 +574,35 @@ export class NotificationCenter {
       payload: { bodyId: planetId, planetId, empireId: empireId ?? null, unitIds: [...(unitIds ?? [])],
                  deadlineYear: deadlineYear ?? null },
     });
+  }
+
+  /**
+   * G2-4 (a) w wersji ograniczonej (Finding 370) — czy ostrzeżenie „został miesiąc” straciło przedmiot PRZED terminem:
+   * wróciła wojna z właścicielem ciała albo żadna jednostka z ostrzeżenia nie stoi już na tym ciele z flagą wycofania
+   * (nie w ładowni). Od terminu (`withdrawalDeadlineReached` — ten sam próg co usunięcie jednostek) — NIE: wpis jest
+   * rozstrzygnięty, obok stoi meldunek o utracie. Bez rejestru jednostek — nie zgadujemy (zostaje).
+   * ⚠ Granica: ostatnia jednostka załadowana w tym samym ticku, który przeskakuje termin, zostawia ostrzeżenie
+   *   (zachowanie sprzed (a)) — tick widzi już termin, a strat nie było.
+   */
+  _withdrawalWarningMoot(n) {
+    const p = n?.payload ?? {};
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    if (Number.isFinite(p.deadlineYear) && withdrawalDeadlineReached(now, p.deadlineYear)) return false;
+    if (p.empireId && areAtWar('player', p.empireId)) return true;
+    const gum = window.KOSMOS?.groundUnitManager;
+    if (typeof gum?.getUnit !== 'function') return false;
+    return !(p.unitIds ?? []).some(id => {
+      const u = gum.getUnit(id);
+      return !!u?.withdrawal && u.planetId === p.planetId && u.status !== 'in_cargo';
+    });
+  }
+
+  /** G2-4 (a) — gasi (odrzuca) każde aktywne ostrzeżenie „został miesiąc”, które straciło przedmiot przed terminem. */
+  _retireMootWithdrawalWarnings() {
+    for (const n of this._items) {
+      if (n.dismissed || n.type !== 'withdrawalWarning') continue;
+      if (this._withdrawalWarningMoot(n)) this.dismiss(n.id);
+    }
   }
 
   /**

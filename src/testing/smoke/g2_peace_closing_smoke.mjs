@@ -18,6 +18,12 @@
 //       zdejmuje `vessel.awayTeamUnitId`: „Zbierz” znika z akcji statku, „Wyślij zespół” i „Powrót” nie są blokowane
 //       (oferta akcji liczona `getAvailableActions` — tą samą funkcją co panel statku); kontrole: zwykłe „Zbierz” zgłasza
 //       id łazika (`vessel:awayTeamCollected`), żywy łazik trzyma odnośnik.
+//   Za  (a) w wersji OGRANICZONEJ (decyzja właściciela 2026-10-04, Finding 370) — ostrzeżenie „został miesiąc”
+//       (`withdrawalWarning`) gaśnie samo PRZED terminem, gdy straciło przedmiot: załadunek ostatniej oflagowanej
+//       jednostki (częściowy — zostaje), jednostka usunięta inną drogą, powrót wojny (od razu, bez ticku), nieaktualne
+//       ostrzeżenie z zapisu (na pierwszym ticku). W TERMINIE nie gaśnie: obok staje meldunek o utracie, a liczba
+//       aktywnych w dzwonku rośnie; od terminu gasi je wyłącznie gracz — także gdy wojna wróci później (kontrole).
+//       Jeden próg terminu dla usunięcia jednostek i dla dzwonka: `withdrawalDeadlineReached` (pin wykonaniowy + źródłowy).
 //
 // ⚠ Harness jak `g2_peace_followups_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny
 //   `CombatSystem`, Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus); mobilizacja
@@ -37,6 +43,10 @@ import { NotificationCenter } from '../../systems/NotificationCenter.js';
 import { empireLogName } from '../../utils/EmpireName.js';
 import EventBus from '../../core/EventBus.js';
 import * as FA from '../../data/FleetActions.js';
+import * as VS from '../../entities/Vessel.js';
+// Namespace, nie import nazwany: na kodzie sprzed (a) eksportu `withdrawalDeadlineReached` nie ma, a import nazwany
+// wywróciłby linkowanie CAŁEJ suity — żaden pin nie dostałby koloru.
+import * as WSmod from '../../systems/WithdrawalSystem.js';
 import { readFileSync } from 'node:fs';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 
@@ -393,6 +403,126 @@ function neutralBody(w, skip = []) {
   assert(kept, `Zg kontrola: żywy łazik po 2 civY — odnośnik ${keptId ?? '—'} zostaje, „Zbierz” w ofercie`);
   assert(got.length === 1 && got[0].unitId === roverId && v.awayTeamUnitId == null && !w.gum.getUnit(roverId),
     `Zg kontrola: „Zbierz” — vessel:awayTeamCollected z id łazika (${got[0]?.unitId}), łazik zdjęty, odnośnik wyzerowany`);
+}
+
+// ── Za — (a) w wersji ograniczonej (Finding 370): ostrzeżenie „został miesiąc” gaśnie samo PRZED terminem ─────────
+const warningsOn = (w, planetId) => (w.K.notificationCenter?.getActive?.() ?? [])
+  .filter(n => n.type === 'withdrawalWarning' && n.payload?.planetId === planetId);
+const lossesOn = (w, planetId) => (w.K.notificationCenter?.getActive?.() ?? [])
+  .filter(n => n.type === 'withdrawalExpired' && n.payload?.planetId === planetId);
+const step = (w, civY) => quiet(() => w.ticker.run(civY, { tickSize: civY }));
+/** Jednostka gracza do ładowni świeżego statku (prawdziwe `loadGroundUnit`). */
+function loadIntoShip(w, u) {
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  return VS.loadGroundUnit(v, u)?.ok === true;
+}
+/** Scena: wojna, jednostki gracza na kolonii AI, pokój (flaga), 5 civY — ostrzeżenie w dzwonku, termin w 6. civY. */
+function warnedScene(n = 1) {
+  const w = boot();
+  declare(w);
+  const free = freeTiles(w, w.col, { building: false });
+  const units = Array.from({ length: n }, (_, i) => playerUnit(w, w.col.planetId, free[i]));
+  const ok = signPeace(w);
+  const deadline = w.gum.getUnit(units[0].id)?.withdrawal?.deadline ?? null;
+  run(w, 5);
+  return { w, units, ok, deadline, before: warningsOn(w, w.col.planetId).length };
+}
+{
+  console.log('\nZa1 — (a) W TERMINIE ostrzeżenie NIE gaśnie: obok staje meldunek o utracie, liczba w dzwonku rośnie');
+  const s = warnedScene(1);
+  const { w } = s;
+  const cntBefore = w.K.notificationCenter.getActiveCount();
+  run(w, 1);                                                          // termin w 6. civY
+  const cntAfter = w.K.notificationCenter.getActiveCount();
+  assert(s.ok === true && s.before === 1 && !w.gum.getUnit(s.units[0].id) && lossesOn(w, w.col.planetId).length === 1,
+    `świadek: pokój, ostrzeżenie przed terminem (${s.before}); w terminie jednostka usunięta, meldunek o utracie (${lossesOn(w, w.col.planetId).length})`);
+  assert(warningsOn(w, w.col.planetId).length === 1, 'Za1 kontrola: w terminie ostrzeżenie zostaje obok meldunku o utracie');
+  assert(cntAfter === cntBefore + 1, `Za1 kontrola: liczba aktywnych w dzwonku rośnie o meldunek (${cntBefore} → ${cntAfter})`);
+  run(w, 2);
+  assert(warningsOn(w, w.col.planetId).length === 1, 'Za1 kontrola: po terminie ostrzeżenie czeka na gracza — samo nie gaśnie');
+}
+{
+  console.log('\nZa2 — (a) załadunek: przy częściowym ostrzeżenie zostaje, po ostatniej oflagowanej jednostce gaśnie przed terminem');
+  const s = warnedScene(2);
+  const { w } = s;
+  const [u1, u2] = s.units;
+  const l1 = loadIntoShip(w, u1);
+  step(w, 0.25);
+  const partial = warningsOn(w, w.col.planetId).length;
+  const f2 = !!w.gum.getUnit(u2.id)?.withdrawal;
+  const l2 = loadIntoShip(w, u2);
+  step(w, 0.25);
+  assert(s.ok === true && s.before === 1 && l1 && l2 && !w.gum.getUnit(u1.id)?.withdrawal && !w.gum.getUnit(u2.id)?.withdrawal
+      && s.deadline !== null && w.K.timeSystem.gameTime < s.deadline,
+    `świadek: pokój, ostrzeżenie (${s.before}); obie jednostki załadowane przed terminem (${w.K.timeSystem.gameTime.toFixed(3)} < ${s.deadline?.toFixed?.(3)}), flagi zdjęte`);
+  assert(partial === 1 && f2, `Za2 kontrola: po załadunku jednej z dwóch ostrzeżenie zostaje (${partial}) — druga stoi z flagą (${f2})`);
+  assert(warningsOn(w, w.col.planetId).length === 0, 'Za2: po załadunku ostatniej oflagowanej jednostki ostrzeżenie zgasło');
+  run(w, 2);
+  assert(lossesOn(w, w.col.planetId).length === 0,
+    'Za2 kontrola: po terminie bez meldunku o utracie — wojska zabrane w czasie');
+}
+{
+  console.log('\nZa3 — (a) wojna z właścicielem ciała wraca: ostrzeżenie gaśnie od razu (bez ticku — także na pauzie)');
+  const s = warnedScene(1);
+  const { w } = s;
+  const war = warAgain(w);
+  assert(s.ok === true && s.before === 1 && war !== false && w.dipl.getStatus(w.emp) === 'war' && !w.gum.getUnit(s.units[0].id)?.withdrawal,
+    `świadek: pokój, ostrzeżenie (${s.before}); wojna wróciła (${w.dipl.getStatus(w.emp)}), flaga zdjęta`);
+  assert(warningsOn(w, w.col.planetId).length === 0, 'Za3: wojna wróciła — ostrzeżenie zgasło bez czekania na tick');
+}
+{
+  console.log('\nZa4 — (a) jednostka z ostrzeżenia usunięta inną drogą przed terminem (np. rozwiązanie): ostrzeżenie gaśnie');
+  const s = warnedScene(1);
+  const { w } = s;
+  const removed = w.gum.removeUnit(s.units[0].id);
+  assert(s.ok === true && s.before === 1 && removed === true && w.K.timeSystem.gameTime < s.deadline,
+    `świadek: pokój, ostrzeżenie (${s.before}); jednostka zdjęta z rejestru przed terminem`);
+  assert(warningsOn(w, w.col.planetId).length === 0, 'Za4: na ciele nie została oflagowana jednostka — ostrzeżenie zgasło');
+}
+{
+  console.log('\nZa5 — (a) zapis: nieaktualne ostrzeżenie sprzed terminu gaśnie na pierwszym ticku; ostrzeżenie po terminie zostaje');
+  const w = boot();
+  run(w, 1);
+  const nc = w.K.notificationCenter;
+  const now = w.K.timeSystem.gameTime;
+  const item = (id, deadlineYear) => ({ id, type: 'withdrawalWarning', severity: 'warn', source: 'withdrawalSystem',
+    timestamp: 0, year: now, title: 'x', subtitle: 'x',
+    payload: { bodyId: w.col.planetId, planetId: w.col.planetId, empireId: w.emp, unitIds: ['gu_nie_ma'], deadlineYear } });
+  nc.restore({ nextId: 9, items: [item('notif_7', now + 0.4), item('notif_8', now - 0.01)] });
+  const before = [nc.getById('notif_7')?.dismissed, nc.getById('notif_8')?.dismissed];
+  run(w, 1);
+  assert(same(before, [false, false]) && w.K.timeSystem.gameTime < now + 0.4,
+    `świadek: oba ostrzeżenia odtworzone z zapisu jako aktywne; czas przed terminem pierwszego`);
+  assert(nc.getById('notif_7')?.dismissed === true, 'Za5: ostrzeżenie sprzed terminu bez oflagowanych jednostek zgasło na pierwszym ticku');
+  assert(nc.getById('notif_8')?.dismissed === false, 'Za5 kontrola: ostrzeżenie po terminie zostaje (od terminu gasi je gracz)');
+}
+{
+  console.log('\nZa6 — (a) po terminie wraca wojna: rozstrzygnięte ostrzeżenie zostaje (gasi je wyłącznie gracz)');
+  const s = warnedScene(1);
+  const { w } = s;
+  run(w, 2);                                                          // termin w 6. civY
+  const after = warningsOn(w, w.col.planetId).length;
+  const war = warAgain(w);
+  assert(s.ok === true && after === 1 && lossesOn(w, w.col.planetId).length === 1 && war !== false && w.dipl.getStatus(w.emp) === 'war',
+    `świadek: termin minął (meldunek o utracie), ostrzeżenie w dzwonku (${after}); wojna wróciła (${w.dipl.getStatus(w.emp)})`);
+  assert(warningsOn(w, w.col.planetId).length === 1, 'Za6 kontrola: po terminie powrót wojny ostrzeżenia nie gasi');
+}
+{
+  console.log('\nZa7 — (a) jeden próg terminu dla usunięcia jednostek i dla dzwonka');
+  const fn = WSmod.withdrawalDeadlineReached;
+  const exec = typeof fn === 'function'
+    ? [fn(0.5, 0.5), fn(0.5 - 1e-10, 0.5), fn(0.5 - 1e-6, 0.5), fn(0.6, 0.5)] : null;
+  assert(same(exec, [true, true, false, true]),
+    `Za7: withdrawalDeadlineReached — termin, tolerancja 1e-9 jak usunięcie, przed terminem nie (${JSON.stringify(exec)})`);
+  const ws = src('../../systems/WithdrawalSystem.js');
+  const nc = src('../../systems/NotificationCenter.js');
+  assert(/withdrawalDeadlineReached\(now,\s*w\.deadline\)/.test(ws) && !/now\s*>=\s*w\.deadline\s*-\s*EPS\)/.test(ws),
+    'Za7: usunięcie po terminie (`WithdrawalSystem._tick`) pyta wspólnego predykatu');
+  assert(/withdrawalDeadlineReached\(now,\s*p\.deadlineYear\)/.test(nc),
+    'Za7: dzwonek (`NotificationCenter`) pyta tego samego predykatu');
+  assert(/now\s*>=\s*w\.deadline\s*-\s*WITHDRAWAL_WARNING_YEARS\s*-\s*EPS/.test(ws),
+    'Za7 kontrola pinu: źródło czytane bez komentarzy, próg ostrzeżenia na swoim miejscu — pin nie jest ślepy');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

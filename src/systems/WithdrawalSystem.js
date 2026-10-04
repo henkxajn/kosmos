@@ -45,6 +45,18 @@ export const WITHDRAWAL_WARNING_YEARS = 1 / 12;
 // (zmierzone: ostrzeżenie i usunięcie spóźnione o jeden tick). Tolerancja jest o rzędy mniejsza od kroku (1/12 roku).
 const EPS = 1e-9;
 
+/**
+ * Czy termin wycofania `deadline` nadszedł w chwili `now` (lata WYŚWIETLANE, tolerancja `EPS`). JEDNO źródło odpowiedzi:
+ * czyta je usunięcie jednostki po terminie (`_tick`) i dzwonek — ostrzeżenie „został miesiąc” od terminu nie gaśnie
+ * samo (G2-4 (a), Finding 370, `NotificationCenter`). Dwie kopie progu rozjechałyby się na granicy ticku.
+ * @param {number} now
+ * @param {number} deadline
+ * @returns {boolean}
+ */
+export function withdrawalDeadlineReached(now, deadline) {
+  return now >= deadline - EPS;
+}
+
 const isPlayerUnit = (u) => (u?.owner ?? 'player') === 'player';
 const pushTo = (map, key, value) => { if (!map.has(key)) map.set(key, []); map.get(key).push(value); };
 
@@ -286,7 +298,7 @@ export class WithdrawalSystem {
         w.warned = true;
         pushTo(warn, u.planetId, u);
       }
-      if (now >= w.deadline - EPS) pushTo(dead, u.planetId, u);
+      if (withdrawalDeadlineReached(now, w.deadline)) pushTo(dead, u.planetId, u);
     }
     for (const [planetId, units] of warn) {
       EventBus.emit('withdrawal:warning', {
