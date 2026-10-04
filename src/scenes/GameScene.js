@@ -2312,6 +2312,9 @@ export class GameScene {
       // Przywróć GroundUnitManager
       if (c4x.groundUnitManager) {
         this.groundUnitManager.restore(c4x.groundUnitManager);
+        // G2-4 F3 (Finding 366) — stary zapis: jednostki gracza w pokoju na ciele innego imperium dostają flagę wycofania
+        //   (uzgodnienie na pierwszym ticku, termin od chwili wczytania). Pin: `g2_peace_followups_smoke` B3f.
+        this.withdrawalSystem?.armLoadReconcile?.();
       }
       // Przywróć ArmySystem (Paradox-style grupy)
       if (c4x.armySystem) {

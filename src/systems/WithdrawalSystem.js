@@ -12,6 +12,10 @@
 // R5 — meldunki jako zdarzenia: `withdrawal:ordered` (pokój: ile jednostek, które ciało, termin),
 //      `withdrawal:warning` (miesiąc przed terminem), `withdrawal:expired` (po terminie). Teksty, Dziennik i dzwonek
 //      — `NotificationCenter`; karta jednostki czyta flagę wprost z jednostki.
+// F3 (Finding 366, decyzja właściciela 2026-10-03) — stary zapis: jednostki gracza stojące w POKOJU na ciele innego
+//      imperium, bez flagi, dostają ją przy WCZYTANIU (`GameScene` uzbraja po `groundUnitManager.restore`, uzgodnienie
+//      biegnie na pierwszym ticku — własność kolonii i relacje są już odtworzone); termin = chwila wczytania + 0,5 roku.
+//      Sesja bez wczytania (nowa gra, uprząż keeperów) — nic: uzgodnienie należy do WCZYTANIA, nie do pierwszego ticku.
 // F1 (Finding 363, decyzja właściciela 2026-10-03) — przy pokoju kafle zajęte w wojnie wracają do właściciela kolonii,
 //      na koloniach OBU stron, a liczniki okupacji są zerowane (`TileOwnership.revertPeaceOccupation`). Bez tego kafel
 //      stolicy AI trzymany przez gracza przeżywał pokój i nowa wojna dawała przejęcie bez jednej jednostki na ciele.
@@ -43,7 +47,16 @@ export class WithdrawalSystem {
     this._onPeace = ({ empireId } = {}) => { this.onPeaceSigned(empireId); };
     // Wojna wraca albo ciało przechodzi na gracza — flagi zdejmowane od razu, bez czekania na tick (także na pauzie).
     this._onReconcile = () => { this._tick({ expire: false }); };
-    this._onTick = () => { this._tick(); };
+    /** F3 — rok wczytania czekający na pierwszy tick (`null` = brak wczytania do uzgodnienia). */
+    this._loadReconcileYear = null;
+    this._onTick = () => {
+      if (this._loadReconcileYear !== null) {
+        const loadYear = this._loadReconcileYear;
+        this._loadReconcileYear = null;                          // jednorazowo — przed pracą, bez ponowień
+        this.reconcileAfterLoad(loadYear);
+      }
+      this._tick();
+    };
     EventBus.on('diplomacy:peaceSigned', this._onPeace);
     EventBus.on('diplomacy:warDeclared', this._onReconcile);
     EventBus.on('colony:capturedByPlayer', this._onReconcile);
@@ -130,6 +143,44 @@ export class WithdrawalSystem {
       total += res.reverted.length;
     }
     return total;
+  }
+
+  /**
+   * F3 (Finding 366) — scena odtworzyła jednostki z zapisu: uzgodnienie wykona się na pierwszym ticku, z terminem
+   * liczonym od TEJ chwili (`gameTime` jest już odtworzony). Woła `GameScene` po `groundUnitManager.restore`.
+   */
+  armLoadReconcile() {
+    this._loadReconcileYear = this._now();
+  }
+
+  /**
+   * F3 (Finding 366) — stary zapis: każda żywa jednostka gracza (nie w ładowni, BEZ flagi) stojąca na ciele imperium,
+   * z którym gracz NIE jest w wojnie, dostaje flagę wycofania z terminem `loadYear + WITHDRAWAL_YEARS`. Flagi już
+   * istniejące zostają z własnym terminem (bez dublowania). Meldunek jak przy pokoju: `withdrawal:ordered` raz na ciało,
+   * z `reason: 'load'`.
+   * @returns {{flagged:number}}
+   */
+  reconcileAfterLoad(loadYear = this._now()) {
+    const gum = this._K()?.groundUnitManager;
+    if (typeof gum?.getAllUnits !== 'function') return { flagged: 0 };
+    const deadline = loadYear + WITHDRAWAL_YEARS;
+    const flagged = new Map();     // planetId → { empireId, unitIds }
+    for (const u of gum.getAllUnits()) {
+      if (!u || !isPlayerUnit(u) || u.withdrawal || u.status === 'in_cargo' || (u.hp ?? 0) <= 0) continue;
+      const owner = bodyOwnerOf(u.planetId);
+      if (!owner || owner === 'player' || areAtWar('player', owner)) continue;
+      u.withdrawal = { empireId: owner, orderedYear: loadYear, deadline, warned: false };
+      if (!flagged.has(u.planetId)) flagged.set(u.planetId, { empireId: owner, unitIds: [] });
+      flagged.get(u.planetId).unitIds.push(u.id);
+    }
+    let total = 0;
+    for (const [planetId, { empireId, unitIds }] of flagged) {
+      total += unitIds.length;
+      EventBus.emit('withdrawal:ordered', {
+        empireId, planetId, unitIds, count: unitIds.length, deadlineYear: deadline, reason: 'load',
+      });
+    }
+    return { flagged: total };
   }
 
   /** Dlaczego flaga przestała obowiązywać — `null` = nadal obowiązuje. */

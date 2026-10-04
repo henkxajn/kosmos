@@ -8,6 +8,10 @@
 //       widoczny dla gracza), wystrzał (`fireOrbitalStrike` — odmowa PRZED zużyciem amunicji), strażnik silnika
 //       (`groundUnit:orbitalStrike` w pokoju nie zadaje obrażeń, odmowa w audycie); wojna i własne ciało — kontrole.
 //       Żądanie ostrzału w `ColonyOverlay` (nie importuje się pod node) — pin źródłowy z kontrolą na bramce desantu.
+//   B3  F3 #366 — stary zapis: jednostki gracza stojące w POKOJU na ciele innego imperium, bez flagi, dostają ją przy
+//       WCZYTANIU (prawdziwy `serialize` → `restore`, uzbrojenie jak w `GameScene`), termin = chwila wczytania + 0,5 roku;
+//       bez dublowania (istniejąca flaga i jej termin nietknięte); kontrole: wojna, ładownia, własne ciało, sesja BEZ
+//       wczytania (sceny keeperów z jednostkami w pokoju — np. `g2_after_peace_smoke` A2 — zostają nietknięte).
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem`, Dziennik i dzwonek
 //   (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). Mobilizacja garnizonów AI WYŁĄCZONA w scenach,
@@ -280,6 +284,81 @@ function aiUnit(w, emp, planetId, t0, arch = 'garrison_unit') {
   const drop = iDrop >= 0 ? co.slice(iDrop, iDrop + 1200) : '';
   assert(/warGateRefusal\(\s*'player'\s*,\s*targetId\s*\)/.test(drop),
     'B2d kontrola pinu: ten sam wzorzec łapie bramkę desantu (G2-2) w tym pliku — pin nie jest ślepy');
+}
+
+// ── B3 — F3 #366: stary zapis — flaga przy wczytaniu ─────────────────────────────────────
+/** Świat „zapisu sprzed G2-4”: jednostki gracza w pokoju na ciele AI bez flagi, ciało drugiej strony w wojnie itd. */
+function oldSaveScene() {
+  const w = boot();
+  const emp = w.emp;
+  const col2 = w.aiFull.find(c => c.ownerEmpireId && c.ownerEmpireId !== emp) ?? null;
+  const emp2 = col2?.ownerEmpireId ?? null;
+  const free1 = freeTiles(w, w.col, { building: false });
+  const p1 = playerUnit(w, w.col.planetId, free1[0]);
+  const p2 = playerUnit(w, w.col.planetId, free1[1]);
+  const pOld = playerUnit(w, w.col.planetId, free1[2]);              // już z flagą (zapis z G2-4)
+  pOld.withdrawal = { empireId: emp, orderedYear: 0, deadline: 0.4, warned: false };
+  const pCargo = playerUnit(w, w.col.planetId, free1[3]);            // w ładowni nad tym ciałem
+  pCargo.status = 'in_cargo';
+  const pHome = playerUnit(w, w.home.planetId, freeTiles(w, w.home, { building: false })[0]);
+  const pWar = col2 ? playerUnit(w, col2.planetId, freeTiles(w, col2, { building: false })[0]) : null;
+  if (emp2) quiet(() => w.dipl.declareWar(emp2, 'keeper_setup'));     // z drugim imperium trwa wojna
+  return { w, emp, emp2, col2, p1, p2, pOld, pCargo, pHome, pWar };
+}
+{
+  console.log('\nB3a — wczytanie starego zapisu: jednostki gracza w pokoju na ciele imperium dostają flagę (termin = wczytanie + 0,5)');
+  const s = oldSaveScene();
+  const { w, emp } = s;
+  const WS = w.K.withdrawalSystem;
+  run(w, 1);
+  const before = [s.p1, s.p2].map(u => w.gum.getUnit(u.id)?.withdrawal ?? null);
+  // Wczytanie: prawdziwy zapis i odtworzenie jednostek, potem uzbrojenie — dokładnie jak blok wczytania `GameScene`.
+  const data = JSON.parse(JSON.stringify(w.gum.serialize()));
+  w.gum.restore(data);
+  const loadYear = w.K.timeSystem.gameTime;
+  const ordered = [];
+  EventBus.on('withdrawal:ordered', (e) => ordered.push(e));
+  let armed = true;
+  try { WS.armLoadReconcile(); } catch { armed = false; }
+  run(w, 1);
+  const f1 = w.gum.getUnit(s.p1.id)?.withdrawal ?? null;
+  const f2 = w.gum.getUnit(s.p2.id)?.withdrawal ?? null;
+  assert(same(before, [null, null]) && w.dipl.getStatus(emp) !== 'war' && !!w.gum.getUnit(s.p1.id),
+    `świadek: przed wczytaniem jednostki gracza stoją w pokoju (${w.dipl.getStatus(emp)}) na ciele ${emp} BEZ flagi i bez terminu (stan #366)`);
+  assert(armed && !!f1 && !!f2 && f1.empireId === emp && Math.abs(f1.deadline - (loadYear + 0.5)) < 1e-9
+      && Math.abs(f1.orderedYear - loadYear) < 1e-9 && f1.warned === false && f2.deadline === f1.deadline,
+    `B3a: obie jednostki z flagą ${JSON.stringify(f1)} — termin = chwila wczytania (${loadYear.toFixed(4)}) + 0,5`);
+  const mine = ordered.filter(e => e.planetId === w.col.planetId);
+  const jr = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => /⚑/.test(e.text) && e.channel === 'diplomacy');
+  assert(mine.length === 1 && mine[0].count === 2 && mine[0].reason === 'load' && jr.length === 1,
+    `B3a: JEDEN meldunek na ciało (${mine.length}, jednostek ${mine[0]?.count}, powód ${mine[0]?.reason}) i jeden wpis w Dzienniku (${jr.length})`);
+  const fo = w.gum.getUnit(s.pOld.id)?.withdrawal ?? null;
+  assert(!!fo && fo.deadline === 0.4 && fo.orderedYear === 0,
+    `B3b kontrola: bez dublowania — flaga już obecna zostaje z WŁASNYM terminem (${fo?.deadline}), nie dostaje drugiego`);
+  const pc = w.gum.getUnit(s.pCargo.id), ph = w.gum.getUnit(s.pHome.id), pw = s.pWar ? w.gum.getUnit(s.pWar.id) : null;
+  assert(!pc?.withdrawal && !ph?.withdrawal && !!s.pWar && !pw?.withdrawal && w.dipl.getStatus(s.emp2) === 'war',
+    `B3c kontrola: bez flagi — w ładowni (${!!pc?.withdrawal}), na własnym ciele (${!!ph?.withdrawal}), na ciele ${s.emp2} w WOJNIE (${!!pw?.withdrawal})`);
+  run(w, 2);
+  const again = ordered.filter(e => e.planetId === w.col.planetId);
+  assert(again.length === 1 && w.gum.getUnit(s.p1.id)?.withdrawal?.deadline === f1?.deadline,
+    `B3d: uzgodnienie jednorazowe — kolejne ticki bez nowych meldunków (${again.length}) i bez zmiany terminu`);
+}
+{
+  console.log('\nB3e — kontrola: sesja BEZ wczytania (nowa gra, sceny keeperów) — jednostki w pokoju na ciele imperium nie dostają flagi');
+  const s = oldSaveScene();
+  run(s.w, 3);
+  assert(!s.w.gum.getUnit(s.p1.id)?.withdrawal && !s.w.gum.getUnit(s.p2.id)?.withdrawal && !!s.w.gum.getUnit(s.p1.id),
+    'B3e: bez uzbrojenia przy wczytaniu flagi nie ma (uzgodnienie należy do WCZYTANIA, nie do pierwszego ticku sesji)');
+}
+{
+  console.log('\nB3f — pin źródłowy GameScene: uzbrojenie uzgodnienia stoi w bloku wczytania, PO odtworzeniu jednostek');
+  const gs = src('../../scenes/GameScene.js');
+  const iRes = gs.indexOf('this.groundUnitManager.restore(c4x.groundUnitManager)');
+  const iArm = gs.search(/this\.withdrawalSystem\??\.armLoadReconcile\??\.?\(\s*\)/);
+  assert(iRes > 0 && iArm > iRes && iArm - iRes < 600,
+    `B3f: armLoadReconcile wołane zaraz po groundUnitManager.restore (${iRes} < ${iArm})`);
+  assert(iRes > 0 && gs.indexOf('this.groundUnitManager.restore(', iRes + 1) < 0,
+    'B3f kontrola pinu: jedno odtworzenie jednostek w scenie — pin wskazuje właściwe miejsce');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
