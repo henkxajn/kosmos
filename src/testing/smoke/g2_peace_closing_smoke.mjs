@@ -24,6 +24,10 @@
 //       ostrzeżenie z zapisu (na pierwszym ticku). W TERMINIE nie gaśnie: obok staje meldunek o utracie, a liczba
 //       aktywnych w dzwonku rośnie; od terminu gasi je wyłącznie gracz — także gdy wojna wróci później (kontrole).
 //       Jeden próg terminu dla usunięcia jednostek i dla dzwonka: `withdrawalDeadlineReached` (pin wykonaniowy + źródłowy).
+//   Z378 Finding 378 — zapis wykonany, gdy 365 był żywy, niesie `vessel.awayTeamUnitId` łazika, którego nie ma: po
+//       wczytaniu (prawdziwe `serialize` → `vesselManager.restore` → `groundUnitManager.restore`, kolejność bloku
+//       wczytania `GameScene`) odnośnik jest wyzerowany — „Zbierz” znika, „Wyślij zespół” dostępne; kontrola: odnośnik
+//       żywego łazika zostaje; pin źródłowy kolejności w `GameScene`.
 //
 // ⚠ Harness jak `g2_peace_followups_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny
 //   `CombatSystem`, Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus); mobilizacja
@@ -523,6 +527,44 @@ function warnedScene(n = 1) {
     'Za7: dzwonek (`NotificationCenter`) pyta tego samego predykatu');
   assert(/now\s*>=\s*w\.deadline\s*-\s*WITHDRAWAL_WARNING_YEARS\s*-\s*EPS/.test(ws),
     'Za7 kontrola pinu: źródło czytane bez komentarzy, próg ostrzeżenia na swoim miejscu — pin nie jest ślepy');
+}
+
+// ── Z378 — zapis z martwym `awayTeamUnitId`: odnośnik zerowany przy wczytaniu ───────────────────────────────
+{
+  console.log('\nZ378 — zapis z martwym `awayTeamUnitId`: po wczytaniu odnośnik wyzerowany, „Zbierz” znika; żywy łazik zostaje');
+  const w = boot();
+  const b = neutralBody(w);
+  const live = roverShip(w, b?.id, { q: 0, r: 0 });
+  const deadShip = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  deadShip.modules = [...(deadShip.modules ?? []), 'science_away_team'];
+  deadShip.systemId = EntityManager.get(b?.id)?.systemId ?? deadShip.systemId;
+  deadShip.status = 'idle';
+  deadShip.position.state = 'orbiting';
+  deadShip.position.dockedAt = b?.id;
+  const vBlob = JSON.parse(JSON.stringify(w.K.vesselManager.serialize()));
+  const gBlob = JSON.parse(JSON.stringify(w.gum.serialize()));
+  const rec = vBlob.vessels?.find?.(x => x.id === deadShip.id) ?? null;
+  if (rec) rec.awayTeamUnitId = 'gu_nie_ma';
+  w.K.vesselManager.restore(vBlob);
+  const vDead = w.K.vesselManager.getVessel(deadShip.id);
+  const refAfterVm = vDead?.awayTeamUnitId ?? null;
+  const offerAfterVm = vDead ? ids(offer(w, vDead)) : [];
+  w.gum.restore(gBlob);
+  const vLive = w.K.vesselManager.getVessel(live.v.id);
+  const after = vDead ? offer(w, vDead) : [];
+  assert(!!b && live.res?.ok === true && !!rec && refAfterVm === 'gu_nie_ma' && !w.gum.getUnit('gu_nie_ma')
+      && offerAfterVm.includes('collect_away_team'),
+    `świadek: zapis z martwym odnośnikiem — po vesselManager.restore statek wskazuje ${refAfterVm}, jednostki nie ma, „Zbierz” w ofercie (stan 378)`);
+  assert(vDead?.awayTeamUnitId == null, `Z378: po groundUnitManager.restore odnośnik wyzerowany (${vDead?.awayTeamUnitId})`);
+  assert(!ids(after).includes('collect_away_team') && after.find(a => a.action.id === 'send_away_team')?.ok === true,
+    `Z378: „Zbierz” nie jest oferowane, „Wyślij zespół” dostępne (${reasonOf(after, 'send_away_team') || 'ok'})`);
+  assert(vLive?.awayTeamUnitId === live.roverId && !!w.gum.getUnit(live.roverId),
+    `Z378 kontrola: odnośnik żywego łazika zostaje (${vLive?.awayTeamUnitId}), łazik w rejestrze`);
+  const gs = src('../../scenes/GameScene.js');
+  const iVm = gs.indexOf('this.vesselManager.restore(c4x.vesselManager)');
+  const iGu = gs.indexOf('this.groundUnitManager.restore(c4x.groundUnitManager)');
+  assert(iVm > 0 && iGu > 0 && iVm < iGu,
+    `Z378 kontrola (warunek): blok wczytania GameScene odtwarza statki PRZED jednostkami (${iVm} < ${iGu}) — sprzątanie widzi odtworzone statki`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

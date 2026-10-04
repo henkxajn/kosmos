@@ -1631,5 +1631,29 @@ export class GroundUnitManager {
         progress:   cap.progress ?? 0,
       });
     }
+
+    // G2-4, Finding 378 — zapis wykonany, gdy 365 był żywy, niesie `vessel.awayTeamUnitId` łazika, którego już nie ma
+    //   (`VesselManager.restore` bierze pole bez sprawdzenia). Tu jednostki są odtworzone w komplecie, a statki —
+    //   wcześniej (blok wczytania `GameScene`: `vesselManager.restore` przed `groundUnitManager.restore`).
+    this._pruneDanglingAwayTeams();
+  }
+
+  /**
+   * G2-4, Finding 378 — zeruje `vessel.awayTeamUnitId` wskazujący jednostkę spoza rejestru (jak `_pruneFromVessels`
+   * przy usunięciu łazika, 365): „Zbierz” znika z akcji statku, „Wyślij zespół” i „Powrót” nie są blokowane.
+   * ⚠ Wołane PO odtworzeniu jednostek — przed nim pusty rejestr wyzerowałby także odnośniki żywych łazików.
+   * @returns {number} ile odnośników wyzerowano
+   */
+  _pruneDanglingAwayTeams() {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?.getAllVessels) return 0;
+    let cleared = 0;
+    for (const v of vMgr.getAllVessels()) {
+      if (v.awayTeamUnitId && !this._units.has(v.awayTeamUnitId)) {
+        v.awayTeamUnitId = null;
+        cleared++;
+      }
+    }
+    return cleared;
   }
 }
