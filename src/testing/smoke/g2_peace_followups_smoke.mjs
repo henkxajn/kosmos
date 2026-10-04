@@ -12,6 +12,10 @@
 //       WCZYTANIU (prawdziwy `serialize` → `restore`, uzbrojenie jak w `GameScene`), termin = chwila wczytania + 0,5 roku;
 //       bez dublowania (istniejąca flaga i jej termin nietknięte); kontrole: wojna, ładownia, własne ciało, sesja BEZ
 //       wczytania (sceny keeperów z jednostkami w pokoju — np. `g2_after_peace_smoke` A2 — zostają nietknięte).
+//   B4  F6 (bramka 2026-10-04) — wpis wycofania nazywa imperium tym samym źródłem i tą samą regułą wywiadu co wpis
+//       pokoju tej samej chwili (bez „Unknown empire”); `UIManager._empName` deleguje do tego samego źródła (pin
+//       źródłowy — `UIManager` nie importuje się pod node); polski tekst po „z” gramatycznie dla każdej nazwy; reguła mgły
+//       wojny dla obserwacji imperium (mobilizacja W2-7) — nietknięta (kontrola).
 //
 // ⚠ Harness: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny `CombatSystem`, Dziennik i dzwonek
 //   (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). Mobilizacja garnizonów AI WYŁĄCZONA w scenach,
@@ -31,9 +35,11 @@ import { EventLogSystem } from '../../systems/EventLogSystem.js';
 import { NotificationCenter } from '../../systems/NotificationCenter.js';
 import * as TO from '../../utils/TileOwnership.js';
 import { readFileSync } from 'node:fs';
-import { t } from '../../i18n/i18n.js';
+import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 import * as FA from '../../data/FleetActions.js';
 import * as VS from '../../entities/Vessel.js';
+let ENmod = null;
+try { ENmod = await import('../../utils/EmpireName.js'); } catch { ENmod = null; }
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -359,6 +365,54 @@ function oldSaveScene() {
     `B3f: armLoadReconcile wołane zaraz po groundUnitManager.restore (${iRes} < ${iArm})`);
   assert(iRes > 0 && gs.indexOf('this.groundUnitManager.restore(', iRes + 1) < 0,
     'B3f kontrola pinu: jedno odtworzenie jednostek w scenie — pin wskazuje właściwe miejsce');
+}
+
+// ── B4 — F6: nazwa imperium we wpisach wycofania ──────────────────────────────────────────
+{
+  console.log('\nB4a — pokój (prawdziwe offerPeace) przy wywiadzie poniżej detailed: wpis wycofania nazywa imperium jak wpis pokoju');
+  const w = boot();
+  declare(w);
+  playerUnit(w, w.col.planetId, freeTiles(w, w.col, { building: false })[0]);
+  const emp = w.emp;
+  const rec = w.K.empireRegistry?.get?.(emp);
+  const name = rec?.namePL ?? rec?.name ?? null;              // źródło i reguła wpisu pokoju (`UIManager._empName`)
+  const detailed = w.K.intelSystem?.isAtLeast?.(emp, 'detailed') === true;
+  const ok = signPeace(w);
+  const ord = (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => /⚑/.test(e.text) && e.channel === 'diplomacy');
+  assert(ok === true && !detailed && !!name && ord.length === 1,
+    `świadek: pokój przyjęty, wywiad o ${emp} poniżej detailed (stara reguła ukryłaby nazwę), jeden wpis wycofania (${ord.length})`);
+  assert(ord.length === 1 && ord[0].text.includes(name) && !ord[0].text.includes(t('intel.unknownEmpire')),
+    `B4a: wpis wycofania nazywa imperium „${name}”, bez „${t('intel.unknownEmpire')}” (${ord[0]?.text})`);
+  const fn = ENmod?.empireLogName;
+  assert(typeof fn === 'function' && fn(emp) === name && fn(null) === '?' && fn('emp_nie_ma') === 'emp_nie_ma',
+    'B4b: EmpireName.empireLogName — jedno źródło nazwy imperium w meldunkach o traktacie (namePL ?? name ?? id ?? „?”)');
+  // Mgła wojny dla OBSERWACJI imperium (mobilizacja W2-7, utrata kafli) zostaje w NotificationCenter._empireLabel.
+  assert(w.K.notificationCenter._empireLabel(emp) === t('intel.unknownEmpire'),
+    'B4d kontrola: reguła mgły wojny dla obserwacji imperium (_empireLabel, detailed) nietknięta');
+}
+{
+  console.log('\nB4b — pin źródłowy UIManager: wpis pokoju bierze nazwę z tego samego źródła (EmpireName.empireLogName)');
+  const um = src('../../scenes/UIManager.js');
+  const iDef = um.search(/const\s+_empName\s*=/);
+  const def = iDef >= 0 ? um.slice(iDef, um.indexOf(';', iDef) + 1) : '';
+  assert(/import\s*\{\s*empireLogName\s*\}\s*from\s*'\.\.\/utils\/EmpireName\.js'/.test(um)
+      && /empireLogName\s*\(/.test(def) && !/namePL/.test(def),
+    `B4b: UIManager._empName deleguje do empireLogName, bez własnej kopii wyrażenia (${def.replace(/\s+/g, ' ').slice(0, 90)})`);
+  const iPeace = um.indexOf("EventBus.on('diplomacy:peaceSigned'");
+  assert(iDef >= 0 && iPeace > 0 && /_empName\(\s*empireId\s*\)/.test(um.slice(iPeace, iPeace + 400)),
+    'B4b kontrola pinu: wpis pokoju (diplomacy:peaceSigned) woła _empName — pin celuje w żywą ścieżkę');
+}
+{
+  console.log('\nB4c — gramatyka: polski wpis wycofania po „z” poprawny dla każdej nazwy; angielski bez zmian');
+  const prev = getLocale();
+  setLocale('pl');
+  const pl = t('event.withdrawal.ordered', 'Liga Trzech Słońc', 2, 'Thuban d', '07/01/121');
+  setLocale('en');
+  const en = t('event.withdrawal.ordered', 'Liga Trzech Słońc', 2, 'Thuban d', '07/01/121');
+  setLocale(prev);
+  assert(pl.includes('z imperium Liga Trzech Słońc') && !/\bz Liga\b/.test(pl),
+    `B4c: PL — „z imperium {0}” (nazwa w mianowniku jako dopowiedzenie): ${pl}`);
+  assert(en.startsWith('⚑ Peace with Liga Trzech Słońc'), `B4c kontrola: EN bez zmian — ${en}`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

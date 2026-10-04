@@ -30,6 +30,7 @@ import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
 import { resolveMapSelectionSurface, resolveVesselPanelAnchor } from '../ui/MapVesselPanelLogic.js';
 import { collectPlayerGroundUnits } from '../ui/OutlinerGroundLogic.js';  // lista jedn. naziemnych — WSZYSTKIE ciała
 import { resolveBodyName }       from '../utils/BodyName.js';
+import { empireLogName }         from '../utils/EmpireName.js';   // G2-4 F6 — nazwa imperium w meldunkach o traktacie
 import { FloatingPanel }        from '../ui/FloatingPanel.js';
 import { EventLogOverlay }    from '../ui/EventLogOverlay.js';
 import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
@@ -1638,10 +1639,8 @@ export class UIManager {
     });
 
     // S3.4 — log dyplomacji: AI envoy, emisariusz gracza, odpowiedź na traktat.
-    const _empName = (empireId) => {
-      const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
-      return emp?.namePL ?? emp?.name ?? empireId ?? '?';
-    };
+    // G2-4 F6 — jedno źródło z meldunkami wycofania wojsk (`NotificationCenter`): ta sama nazwa i ta sama reguła wywiadu.
+    const _empName = (empireId) => empireLogName(empireId);
     EventBus.on('diplomacy:aiEnvoy',        ({ empireId }) => {
       const nm = _empName(empireId);
       this._log(t('log.diplo.aiEnvoy', nm), 'diplomacy');

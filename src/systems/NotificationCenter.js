@@ -13,6 +13,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { t } from '../i18n/i18n.js';
+import { empireLogName } from '../utils/EmpireName.js';   // G2-4 F6 — nazwa strony traktatu (jak wpis pokoju)
 
 const MAX_ITEMS = 50;
 
@@ -527,10 +528,11 @@ export class NotificationCenter {
    * G2-4 (D14, R5) — pokój podpisany, jednostki gracza na ciele drugiej strony muszą się wycofać: ILE jednostek,
    * KTÓRE ciało, TERMIN. Sam wpis w Dzienniku (kanał dyplomacji — to skutek traktatu), bez dzwonka; dzwonek dopiero
    * przy ostrzeżeniu. Ciało nazwą CIAŁA, nie cudzej kolonii (wzór Outlinera — moje buty to nie bilet do nazwy wroga).
+   * G2-4 F6 — imperium nazwą STRONY TRAKTATU (`empireLogName`, jak wpis pokoju), nie regułą mgły wojny `_empireLabel`.
    */
   _handleWithdrawalOrdered({ empireId, planetId, count, deadlineYear }) {
     if (!planetId || !(count > 0)) return;
-    this._journal(t('event.withdrawal.ordered', this._empireLabel(empireId), count, this._bodyName(planetId),
+    this._journal(t('event.withdrawal.ordered', empireLogName(empireId), count, this._bodyName(planetId),
       this._dateLabel(deadlineYear)), 'diplomacy', 'warn', planetId);
   }
 
