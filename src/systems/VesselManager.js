@@ -1382,12 +1382,13 @@ export class VesselManager {
     const vessel = this._vessels.get(vesselId);
     if (!vessel || !vessel.awayTeamUnitId) return;
 
+    // G2-4 (g) — id PRZED usunięciem: `removeUnit` sam zeruje odnośnik statku (Finding 365).
+    const unitId = vessel.awayTeamUnitId;
     const mgr = window.KOSMOS?.groundUnitManager;
     if (mgr) {
-      mgr.removeUnit(vessel.awayTeamUnitId);
+      mgr.removeUnit(unitId);
     }
 
-    const unitId = vessel.awayTeamUnitId;
     vessel.awayTeamUnitId = null;
 
     EventBus.emit('vessel:awayTeamCollected', {

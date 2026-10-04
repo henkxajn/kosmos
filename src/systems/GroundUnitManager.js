@@ -237,10 +237,14 @@ export class GroundUnitManager {
   }
 
   // Usuń ID jednostki z `vessel.groundUnits` wszystkich statków i przelicz troopBayUsed.
+  // G2-4 (g), Finding 365 — także odnośnik łazika zwiadu (`vessel.awayTeamUnitId`): łazik znika każdą drogą przez
+  //   `removeUnit` (termin wycofania, zniszczone ciało, śmierć), a dotąd zerowało go wyłącznie „Zbierz” — statek
+  //   zostawał z „Zbierz” w akcjach, „Wyślij zespół” odmawiało, a „Powrót” czekał na zbiórkę.
   _pruneFromVessels(unitId) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr?.getAllVessels) return;
     for (const v of vMgr.getAllVessels()) {
+      if (v.awayTeamUnitId === unitId) v.awayTeamUnitId = null;
       const list = v.groundUnits;
       if (!Array.isArray(list) || !list.includes(unitId)) continue;
       v.groundUnits = list.filter(id => id !== unitId);

@@ -14,6 +14,10 @@
 //       zakończona pokojem PRZED F1), wracają przy wczytaniu do właściciela kolonii, a liczniki okupacji tej strony są
 //       zerowane (reguła F1 — `revertPeaceOccupation`); skutek: nowa wojna nie daje przejęcia kolonii AI bez wojsk;
 //       kontrole: strona w WOJNIE (kafle i liczniki zostają), para AI↔AI (poza zakresem, 331), sesja bez wczytania.
+//   Zg  (g) Finding 365 — łazik zwiadu usunięty dowolną drogą (termin wycofania, zniszczone ciało, śmierć od ostrzału)
+//       zdejmuje `vessel.awayTeamUnitId`: „Zbierz” znika z akcji statku, „Wyślij zespół” i „Powrót” nie są blokowane
+//       (oferta akcji liczona `getAvailableActions` — tą samą funkcją co panel statku); kontrole: zwykłe „Zbierz” zgłasza
+//       id łazika (`vessel:awayTeamCollected`), żywy łazik trzyma odnośnik.
 //
 // ⚠ Harness jak `g2_peace_followups_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna i pokój) + własny
 //   `CombatSystem`, Dziennik i dzwonek (GameCore ich nie montuje; po boocie, bo boot czyści EventBus); mobilizacja
@@ -31,6 +35,8 @@ import { CombatSystem } from '../../systems/CombatSystem.js';
 import { EventLogSystem } from '../../systems/EventLogSystem.js';
 import { NotificationCenter } from '../../systems/NotificationCenter.js';
 import { empireLogName } from '../../utils/EmpireName.js';
+import EventBus from '../../core/EventBus.js';
+import * as FA from '../../data/FleetActions.js';
 import { readFileSync } from 'node:fs';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 
@@ -299,6 +305,94 @@ function preF1Scene() {
   run(w, 2);
   assert(kept && war !== false && !w.cm.getColony(w.col.planetId)?.ownerEmpireId,
     `Ze kontrola: bez wczytania kafle zostają (${s.cap.owner}, ${s.hEmp.owner}), a nowa wojna daje przejęcie bez wojsk — scena mierzy realny mechanizm (#363)`);
+}
+
+// ── Zg — (g) Finding 365: łazik zwiadu a odnośnik statku ──────────────────────────────────
+/** Statek gracza z modułem zespołu badawczego na orbicie ciała `planetId`; łazik na powierzchni — prawdziwe `deployAwayTeam`. */
+function roverShip(w, planetId, t0) {
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.modules = [...(v.modules ?? []), 'science_away_team'];
+  v.systemId = EntityManager.get(planetId)?.systemId ?? v.systemId;
+  v.status = 'idle';
+  v.position.state = 'orbiting';
+  v.position.dockedAt = planetId;
+  const res = w.K.vesselManager.deployAwayTeam(v.id, planetId, t0.q, t0.r);
+  return { v, res, roverId: res?.unitId ?? null };
+}
+/** Oferta akcji statku tak, jak liczy ją panel statku (`getAvailableActions`). */
+const offer = (w, v) => FA.getAvailableActions(v, { colonyManager: w.cm });
+const ids = (list) => list.map(a => a.action.id);
+const reasonOf = (list, id) => list.find(a => a.action.id === id)?.reason ?? null;
+/** Ciało bez kolonii w układzie domowym (niczyje — łazik ląduje bez wojny). */
+function neutralBody(w, skip = []) {
+  const sys = EntityManager.get(w.home.planetId)?.systemId;
+  return ['moon', 'planet', 'planetoid'].flatMap(tp => EntityManager.getByType(tp))
+    .find(b => b.systemId === sys && b.id !== w.home.planetId && !w.cm.getColony(b.id) && !skip.includes(b.id)) ?? null;
+}
+{
+  console.log('\nZg — (g) łazik usunięty w TERMINIE wycofania: statek traci odnośnik, „Zbierz” znika, „Powrót” nie czeka na zbiórkę');
+  const w = boot();
+  declare(w);
+  const { v, res, roverId } = roverShip(w, w.col.planetId, freeTiles(w, w.col, { building: false })[0]);
+  const deployed = res?.ok === true && v.awayTeamUnitId === roverId && ids(offer(w, v)).includes('collect_away_team');
+  const ok = signPeace(w);
+  const flagged = !!w.gum.getUnit(roverId)?.withdrawal;
+  run(w, 7);
+  const after = offer(w, v);
+  assert(deployed && ok && flagged && !w.gum.getUnit(roverId) && v.position.state === 'orbiting' && ids(after).includes('send_away_team'),
+    `świadek: łazik ${roverId} na ciele ${w.emp} (wojna), pokój z flagą, w terminie usunięty; statek dalej na orbicie, gałąź zespołu w ofercie`);
+  assert(v.awayTeamUnitId == null, `Zg: odnośnik statku wyzerowany (awayTeamUnitId: ${v.awayTeamUnitId})`);
+  assert(!ids(after).includes('collect_away_team'), `Zg: „Zbierz” nie jest oferowane (${ids(after).join(', ')})`);
+  assert(FA.FLEET_ACTIONS.return_home.canExecute(v, {}).reason !== t('fleet.reason.collectAwayFirst'),
+    'Zg: „Powrót” nie jest blokowany przez „najpierw zbierz zespół” (FleetActions.return_home)');
+}
+{
+  console.log('\nZg — (g) łazik usunięty razem ze ZNISZCZONYM ciałem (R7): statek traci odnośnik');
+  const w = boot();
+  const b = neutralBody(w);
+  const { v, res, roverId } = roverShip(w, b?.id, { q: 0, r: 0 });
+  const deployed = res?.ok === true && v.awayTeamUnitId === roverId;
+  quiet(() => EntityManager.remove(b.id));
+  assert(!!b && deployed && !EntityManager.get(b.id) && !w.gum.getUnit(roverId),
+    `świadek: łazik ${roverId} na ciele niczyim ${b?.id}, ciało usunięte, łazik zniknął (R7)`);
+  assert(v.awayTeamUnitId == null, `Zg: odnośnik statku wyzerowany (awayTeamUnitId: ${v.awayTeamUnitId})`);
+  assert(FA.FLEET_ACTIONS.collect_away_team.canExecute({ ...v, position: { ...v.position, state: 'orbiting' } }, {}).reason
+      === t('fleet.reason.noAwayTeamDeployed'),
+    'Zg: „Zbierz” odmawia „brak zespołu na powierzchni” (nie ma czego zbierać)');
+}
+{
+  console.log('\nZg — (g) łazik ZGINĄŁ (ostrzał z orbity na ciało niczyje): statek traci odnośnik, „Wyślij zespół” znów dostępne');
+  const w = boot();
+  const b = neutralBody(w);
+  const { v, res, roverId } = roverShip(w, b?.id, { q: 0, r: 0 });
+  const deployed = res?.ok === true && v.awayTeamUnitId === roverId;
+  const sendBefore = reasonOf(offer(w, v), 'send_away_team');
+  const dead = [];
+  EventBus.on('groundUnit:destroyed', (e) => { if (e.unitId === roverId) dead.push(e.cause); });
+  EventBus.emit('groundUnit:orbitalStrike', { vesselId: v.id, planetId: b.id, q: 0, r: 0, damage: 9999, ownerId: 'player' });
+  const after = offer(w, v);
+  assert(!!b && deployed && sendBefore === t('fleet.reason.awayTeamDeployed') && dead.length === 1 && dead[0] === 'orbital_strike'
+      && !w.gum.getUnit(roverId) && v.position.state === 'orbiting',
+    `świadek: łazik ${roverId} na ${b?.id}; przed ostrzałem „Wyślij” odmawia „${sendBefore}”; łazik zginął (${dead.join(',')})`);
+  assert(v.awayTeamUnitId == null && !ids(after).includes('collect_away_team'),
+    `Zg: odnośnik wyzerowany (${v.awayTeamUnitId}), „Zbierz” nie jest oferowane`);
+  assert(after.find(a => a.action.id === 'send_away_team')?.ok === true,
+    `Zg: „Wyślij zespół” znów dostępne (${reasonOf(after, 'send_away_team') || 'ok'})`);
+}
+{
+  console.log('\nZg kontrole — zwykłe „Zbierz” zgłasza id łazika; żywy łazik trzyma odnośnik');
+  const w = boot();
+  const b = neutralBody(w);
+  const { v, res, roverId } = roverShip(w, b?.id, { q: 0, r: 0 });
+  run(w, 2);
+  const keptId = v.awayTeamUnitId ?? null;
+  const kept = res?.ok === true && keptId === roverId && !!w.gum.getUnit(roverId) && ids(offer(w, v)).includes('collect_away_team');
+  const got = [];
+  EventBus.on('vessel:awayTeamCollected', (e) => got.push(e));
+  EventBus.emit('vessel:collectAwayTeam', { vesselId: v.id });
+  assert(kept, `Zg kontrola: żywy łazik po 2 civY — odnośnik ${keptId ?? '—'} zostaje, „Zbierz” w ofercie`);
+  assert(got.length === 1 && got[0].unitId === roverId && v.awayTeamUnitId == null && !w.gum.getUnit(roverId),
+    `Zg kontrola: „Zbierz” — vessel:awayTeamCollected z id łazika (${got[0]?.unitId}), łazik zdjęty, odnośnik wyzerowany`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
