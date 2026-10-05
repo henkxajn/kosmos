@@ -16,8 +16,10 @@
 //     currentStrategy: { focus, startedYear },  // Faza 2: EmpireStrategicAI
 //     fleets: [...],
 //     createdYear,
-//     garrison?: { mobilized, year, reason, tier, morale, limit, created, reserve, refused }
+//     garrison?: { mobilized, year, reason, tier, morale, limit, created, reserve, refused, regrowthYear }
 //                                      // G2-3b (D15) — flaga mobilizacji garnizonu; brak pola = „nie”
+//                                      // G3-1 — `regrowthYear`: ostatni rok kalendarzowy gry rozliczony przez
+//                                      //   odrastanie; brak pola (zapis sprzed G3) = rok pierwszej kontroli
 //   }
 //
 // Faza 1: brak time:tick subscription — kolonie tickują przez własne systemy.
@@ -189,6 +191,21 @@ export class EmpireRegistry {
   markGarrisonMobilized(empireId, record = {}) {
     if (!this.get(empireId)) return false;
     gameState.set(`empires.${empireId}.garrison`, { ...record, mobilized: true }, 'garrison_mobilized');
+    return true;
+  }
+
+  /**
+   * G3-1 — zapisuje w rekordzie mobilizacji rok kalendarzowy gry rozliczony przez odrastanie strat (`regrowthYear`).
+   * Jedynym wołającym jest `GarrisonSystem` (kontrola roczna). Pole wewnątrz `empires.<id>.garrison` przeżywa zapis
+   * bez migracji (save v101), jak sama flaga. Bez mobilizacji — nic.
+   * @param {string} empireId
+   * @param {number} year — rok kalendarzowy gry (floor `gameTime`)
+   * @returns {boolean}
+   */
+  setGarrisonRegrowthYear(empireId, year) {
+    const rec = this.get(empireId)?.garrison;
+    if (rec?.mobilized !== true || !Number.isFinite(year)) return false;
+    gameState.set(`empires.${empireId}.garrison`, { ...rec, regrowthYear: year }, 'garrison_regrowth');
     return true;
   }
 

@@ -17,6 +17,23 @@
 //   • każda wojna, w której imperium bierze udział, się liczy (`isAtWar` — dowolna para relacji `'war'`);
 //   • po wojnie jednostki zostają; drugiej mobilizacji nie ma (odrastanie strat = G3).
 //
+// G3-1 — ODRASTANIE STRAT (podpis właściciela, plan §1; domyślne potwierdzone 2026-10-04): po pierwszej mobilizacji
+// imperium odzyskuje JEDNĄ jednostkę na rok gry (`GARRISON_REGROWTH_PER_YEAR`), w wojnie i w pokoju, do limitu
+// liczonego W CHWILI tworzenia (planer — szczebel, morale i archetyp drabiny z tej chwili). Jednostka staje tam, gdzie
+// bieżący plan ma największy niedobór (remis — stolica pierwsza); bez wolnego heksu na tym ciele — następne ciało wg
+// tego rankingu; bez miejsca nigdzie — w tym roku nic. Limit poniżej żywych — nic nie powstaje i nic nie jest
+// rozwiązywane. Ciała, których imperium już nie ma, nie dostają nic. Tworzenie wyłącznie przez `createAIUnit`.
+// G3-2 (Finding 360) — UZGADNIANIE CO ROK: przy tej samej kontroli rocznej imperium w wojnie bez mobilizacji (brak
+// pełnej kolonii w chwili wybuchu wojny albo wojna bez zdarzenia) mobilizuje się (`reason: 'reconcile_yearly'`).
+//   • ROK GRY = 1,0 na zegarze `timeSystem.gameTime` (lata WYŚWIETLANE — ten sam, którym flaga zapisuje `year`;
+//     = 12 civY); granica roku = wzrost `floor(gameTime)` (data w zegarze przechodzi na 01/01).
+//   • DOKŁADNIE RAZ NA ROK, także przez zapis, pauzę i wysoką prędkość: rekord flagi niesie `regrowthYear` — ostatni
+//     rozliczony rok kalendarzowy (intencja `EmpireRegistry.setGarrisonRegrowthYear`); kontrola co tick rozlicza
+//     każdy rok od `regrowthYear + 1` do bieżącego (jeden tick może przeskoczyć kilka lat), pauza nie tyka. Zapis
+//     z tego samego ticku co granica (autozapis słucha `time:tick` WCZEŚNIEJ niż ten system) rozlicza się po wczytaniu.
+//   • Zapis sprzed G3 (flaga bez `regrowthYear`) — pierwsza kontrola tylko ustawia bieżący rok; odrastanie od
+//     następnej granicy roku, bez nadrabiania lat sprzed wczytania (bez migracji, save v101).
+//
 // C-S2 — USUWANIE (D6, D16; Finding 319): przy zmianie właściciela ciała (przejęcie przez gracza, cesja,
 // przerzut `transferColony`) znikają jednostki POPRZEDNIEGO właściciela na tym ciele; przy zniszczeniu ciała
 // (`colony:destroyed` — kolizja, wyrzucenie z układu, `entity:removed`) znikają jednostki WSZYSTKICH imperiów AI;
@@ -41,19 +58,34 @@
 //   `garrison:mobilizeSkipped` w `DebugLog.TRACKED_EVENTS` (reguła W3: nowy powód odmowy w tym samym commicie).
 
 import EventBus from '../core/EventBus.js';
-import { planEmpireGarrison, readEmpireGarrisonSnapshot, readGarrisonBodyContext } from '../utils/GarrisonPlanner.js';
+import {
+  planEmpireGarrison, readEmpireGarrisonSnapshot, readGarrisonBodyContext,
+  garrisonHexes, garrisonShortfall, garrisonRegrowthArchetype, readEmpireGarrisonUnits,
+} from '../utils/GarrisonPlanner.js';
+import { GARRISON_REGROWTH_PER_YEAR } from '../data/GarrisonData.js';
 import { stampUnownedTiles } from '../utils/TileOwnership.js';
+
+// `gameTime` to suma zmiennoprzecinkowych kroków: dwanaście kroków po 1/12 daje 0,9999999999999999, nie 1 — bez
+// tolerancji granica roku spóźniałaby się o tick (ta sama klasa co próg terminu w `WithdrawalSystem`).
+const YEAR_EPS = 1e-9;
+const calendarYear = (gameTime) => Math.floor(gameTime + YEAR_EPS);
 
 export class GarrisonSystem {
   constructor() {
     /** Wyłącznik mobilizacji — tylko dla setupu keeperów (patrz nagłówek). */
     this.enabled = true;
     this._reconciled = false;
+    /** G3-2 — ostatni rok kalendarzowy uzgodnienia rocznego w tej sesji (`null` = jeszcze nie ustawiony). */
+    this._reconciledYear = null;
 
     this._onWarDeclared = ({ empireId } = {}) => { this.mobilizeEmpire(empireId, 'war_declared'); };
     this._onFirstTick   = () => this._firstTick();
+    this._onTick        = () => this._yearlyCheck();
     EventBus.on('diplomacy:warDeclared', this._onWarDeclared);
     EventBus.on('time:tick', this._onFirstTick);
+    // G3-1 + G3-2 — kontrola roczna; zarejestrowana PO zatrzasku pierwszego ticku, więc w pierwszym ticku sesji
+    //   uzgodnienie z wczytania mobilizuje przed nią.
+    EventBus.on('time:tick', this._onTick);
 
     // C-S2 — zmiana właściciela (oba emitenty to `ColonyManager`) i zniszczenie ciała.
     EventBus.on('colony:capturedByPlayer', ({ planetId, previousOwner, reason } = {}) =>
@@ -162,9 +194,12 @@ export class GarrisonSystem {
       perBody.push({ planetId: body.planetId, role: body.role, planned: body.count, created });
     }
 
+    const now = K?.timeSystem?.gameTime;
     const record = {
       mobilized: true,
-      year:      K?.timeSystem?.gameTime ?? null,
+      year:      now ?? null,
+      // G3-1 — rok mobilizacji jest rozliczony: pierwsze odrastanie przy NASTĘPNEJ granicy roku.
+      regrowthYear: Number.isFinite(now) ? calendarYear(now) : null,
       reason,
       tier:      plan.tier.index,
       morale:    plan.tier.morale,
@@ -176,6 +211,92 @@ export class GarrisonSystem {
     reg.markGarrisonMobilized(empireId, record);
     EventBus.emit('garrison:mobilized', { empireId, ...record, perBody });
     return { ok: true, empireId, unitIds, reserve, plan };
+  }
+
+  // ── Odrastanie strat (G3-1) i uzgadnianie co rok (G3-2) ──────────────────────────────
+
+  /**
+   * G3-1 — jedna próba odrastania imperium (wołana przez kontrolę roczną; z konsoli — tylko do pomiaru).
+   * @param {string} empireId
+   * @param {number|null} [year] — rozliczany rok kalendarzowy (do śladu audytu)
+   * @returns {{ok:true, unitId:string, planetId:string, archetypeId:string, morale:number, tier:number}
+   *          | {ok:false, reason:string, alive?:number, limit?:number}}
+   *   powody: `disabled` · `unknown_empire` · `no_ground_unit_manager` · `not_mobilized` · `no_capital` ·
+   *   `at_limit` (żywe ≥ limit — nic nie powstaje, nic nie jest rozwiązywane) · `no_free_hex` / `create_failed`
+   *   (ślad `garrison:regrowthSkipped`)
+   */
+  regrowEmpire(empireId, year = null) {
+    if (!this.enabled) return { ok: false, reason: 'disabled' };
+    const K = this._K();
+    const gum = K?.groundUnitManager;
+    if (!empireId || empireId === 'player' || !K?.empireRegistry?.get?.(empireId)) return { ok: false, reason: 'unknown_empire' };
+    if (typeof gum?.createAIUnit !== 'function') return { ok: false, reason: 'no_ground_unit_manager' };
+    if (!this.isMobilized(empireId)) return { ok: false, reason: 'not_mobilized' };
+
+    const snap = readEmpireGarrisonSnapshot(K, empireId);
+    if (!snap.capitalId) return { ok: false, reason: 'no_capital' };
+    const plan = planEmpireGarrison(snap);
+    const alive = readEmpireGarrisonUnits(K, empireId, snap.bodies.map(b => b.planetId));
+    const count = new Map([...alive].map(([pid, list]) => [pid, list.length]));
+    const aliveTotal = [...count.values()].reduce((s, n) => s + n, 0);
+    if (aliveTotal >= plan.limit) return { ok: false, reason: 'at_limit', alive: aliveTotal, limit: plan.limit };
+
+    let refused = 0;
+    for (const cand of garrisonShortfall(plan, count)) {
+      const body = plan.perBody.find(b => b.planetId === cand.planetId);
+      const hex = garrisonHexes(readGarrisonBodyContext(K, cand.planetId), 1).hexes[0];
+      if (!hex) continue;                         // brak wolnego heksu na tym ciele — następne ciało wg rankingu
+      const archetypeId = garrisonRegrowthArchetype(body?.composition, alive.get(cand.planetId));
+      if (!archetypeId) continue;
+      const res = gum.createAIUnit({
+        archetypeId, empireId, planetId: cand.planetId, q: hex.q, r: hex.r, morale: plan.tier.morale, deployed: true,
+      });
+      if (!res?.ok) { refused++; continue; }
+      const out = { ok: true, unitId: res.unit.id, planetId: cand.planetId, archetypeId,
+                    morale: plan.tier.morale, tier: plan.tier.index };
+      EventBus.emit('garrison:regrown', {
+        empireId, year, ...out, limit: plan.limit, alive: aliveTotal + 1, shortfall: cand.shortfall,
+      });
+      return out;
+    }
+    const reason = refused > 0 ? 'create_failed' : 'no_free_hex';
+    EventBus.emit('garrison:regrowthSkipped', { empireId, year, reason, alive: aliveTotal, limit: plan.limit });
+    return { ok: false, reason, alive: aliveTotal, limit: plan.limit };
+  }
+
+  /**
+   * G3-1 + G3-2 — kontrola roczna (co tick, tanio: porównanie roku). Najpierw odrastanie każdego zmobilizowanego
+   * imperium — raz na każdy rok od `regrowthYear + 1` do bieżącego — potem, przy granicy roku, uzgodnienie:
+   * imperium w wojnie bez mobilizacji mobilizuje się.
+   */
+  _yearlyCheck() {
+    if (!this.enabled) return;
+    const K = this._K();
+    const reg = K?.empireRegistry;
+    const now = K?.timeSystem?.gameTime;
+    if (typeof reg?.listAll !== 'function' || !Number.isFinite(now)) return;
+    const year = calendarYear(now);
+
+    for (const emp of reg.listAll()) {
+      if (!emp?.id || !this.isMobilized(emp.id)) continue;
+      const last = emp.garrison?.regrowthYear;
+      if (!Number.isFinite(last)) { reg.setGarrisonRegrowthYear?.(emp.id, year); continue; }   // zapis sprzed G3
+      if (last >= year) continue;
+      for (let y = last + 1; y <= year; y++) {
+        for (let k = 0; k < GARRISON_REGROWTH_PER_YEAR; k++) {
+          if (!this.regrowEmpire(emp.id, y).ok) break;
+        }
+      }
+      reg.setGarrisonRegrowthYear?.(emp.id, year);
+    }
+
+    if (this._reconciledYear === null) { this._reconciledYear = year; return; }
+    if (year <= this._reconciledYear) return;
+    this._reconciledYear = year;
+    for (const emp of reg.listAll()) {
+      if (!emp?.id || this.isMobilized(emp.id) || !this.isAtWar(emp.id)) continue;
+      this.mobilizeEmpire(emp.id, 'reconcile_yearly');
+    }
   }
 
   // ── Usuwanie (D6, D16) ───────────────────────────────────────────────────────────────

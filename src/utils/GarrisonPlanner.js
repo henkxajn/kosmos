@@ -12,6 +12,8 @@
 //       (stolica nie do stania → reguła placówki, odp. (d))
 //   D11 podział między ciałami                              → `garrisonAllocation`
 //   D12 stolica = `DirectorProduction.capitalOf`            → `readEmpireGarrisonSnapshot`
+//   G3-1 odrastanie: ranking niedoboru, archetyp, żywe       → `garrisonShortfall`, `garrisonRegrowthArchetype`,
+//        jednostki imperium na jego ciałach                    `readEmpireGarrisonUnits` (wykonuje `GarrisonSystem`)
 //
 // ⚠ ZAOKRĄGLENIE LIMITU (odp. właściciela (c), 2026-10-03): floor PO klamrze minimum 2 — floor(limit D1 ×
 //   mnożnik D9). Ten sam kierunek co floor w D1 (reguła nie daje jednostki, której nie „zarobiła” w całości);
@@ -216,7 +218,61 @@ export function planEmpireGarrison(empire, bodyContext = null) {
   };
 }
 
+// ── G3-1 — odrastanie strat ──────────────────────────────────────────────────────────────
+
+/**
+ * G3-1 — ciała do odrastania: ciała planu z NIEDOBOREM (planowane − żywe > 0), malejąco wg niedoboru, remis —
+ * kolejność planu (stolica pierwsza, dalej kolejność D11). Plan liczony W TEJ CHWILI (`planEmpireGarrison`), więc
+ * ciała utracone od mobilizacji nie dostają nic, a zdobyte wchodzą wg D11.
+ * @param {{perBody:Array<{planetId:string, role:string, count:number}>}} plan
+ * @param {Map<string,number>} aliveCount — planetId → liczba żywych jednostek imperium na ciele
+ * @returns {Array<{planetId:string, role:string, planned:number, alive:number, shortfall:number}>}
+ */
+export function garrisonShortfall(plan, aliveCount) {
+  return (plan?.perBody ?? [])
+    .map((b, order) => {
+      const alive = nonNegative(aliveCount?.get?.(b.planetId));
+      return { planetId: b.planetId, role: b.role, planned: b.count, alive, shortfall: b.count - alive, order };
+    })
+    .filter(b => b.shortfall > 0)
+    .sort((a, b) => (b.shortfall - a.shortfall) || (a.order - b.order))
+    .map(({ order, ...b }) => b);
+}
+
+/**
+ * G3-1 — archetyp odrastającej jednostki: pierwsza pozycja składu ciała (drabina W TEJ CHWILI, `garrisonComposition`),
+ * której nie pokrywa żywa jednostka tego archetypu — żywe jednostki zajmują po kolei pozycje swojego archetypu. Po
+ * stracie artylerii odrasta artyleria, po stracie garnizonu — garnizon.
+ * @param {string[]} composition — skład ciała (id archetypów)
+ * @param {string[]} aliveArchetypes — archetypy żywych jednostek imperium na ciele
+ * @returns {string|null} `null` — skład pokryty
+ */
+export function garrisonRegrowthArchetype(composition, aliveArchetypes) {
+  const left = Object.create(null);
+  for (const a of aliveArchetypes ?? []) left[a] = (left[a] ?? 0) + 1;
+  for (const arch of composition ?? []) {
+    if ((left[arch] ?? 0) > 0) { left[arch] -= 1; continue; }
+    return arch;
+  }
+  return null;
+}
+
 // ── Czytnik żywego świata (tylko odczyt) ─────────────────────────────────────────────────
+
+/**
+ * G3-1 — żywe jednostki imperium na podanych ciałach (tylko odczyt): planetId → archetypy. Ładownia statku
+ * (`in_cargo`) nie jest „na ciele” (`getUnitsOnPlanet` ją pomija); jednostki imperium na CUDZYCH ciałach (desant)
+ * nie są garnizonem i do limitu się nie liczą — wołający podaje ciała imperium.
+ * @param {object} K — usługi gry
+ * @param {string} empireId
+ * @param {string[]} planetIds
+ * @returns {Map<string,string[]>}
+ */
+export function readEmpireGarrisonUnits(K, empireId, planetIds) {
+  return new Map((planetIds ?? []).map(pid => [pid, (K?.groundUnitManager?.getUnitsOnPlanet?.(pid) ?? [])
+    .filter(u => u?.owner === empireId && nonNegative(u?.hp) > 0)
+    .map(u => u.archetypeId ?? u.type)]));
+}
 
 /** Suma poziomów fabryk kolonii — lustro `BuildingSystem._recalcFactoryPoints`. */
 function factoryLevelsOf(colony) {

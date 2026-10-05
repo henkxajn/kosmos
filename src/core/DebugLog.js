@@ -118,6 +118,11 @@ const TRACKED_EVENTS = [
   'garrison:mobilizeSkipped',
   // G2-3b C-S2 (D6, D16) — jednostki AI usunięte przy zmianie właściciela ciała albo jego zniszczeniu.
   'garrison:unitsRemoved',
+  // G3-1 — odrastanie strat: jednostka odtworzona (`regrown`) i rok z niedoborem, w którym nic nie powstało
+  //   (`regrowthSkipped`: brak wolnego heksu na każdym ciele z niedoborem) — bez tej pary gate nie odróżniłby
+  //   „limit osiągnięty” od „odrastanie się nie wykonało” (reguła W3).
+  'garrison:regrown',
+  'garrison:regrowthSkipped',
   // G2-4 (D14, R3–R5) — wycofanie po pokoju: flaga z terminem na jednostkach gracza (`ordered`), jednostki AI zdjęte
   // z ciał gracza (`aiRemoved`), ostrzeżenie (`warning`), utrata po terminie (`expired`) i zdjęcie flagi z POWODEM
   // (`cleared`: loaded / body_owned / war_resumed / body_neutral) — bez `cleared` gate nie odróżniłby załadunku od ciszy.

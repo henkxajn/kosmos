@@ -58,3 +58,11 @@ export const GARRISON_OUTPOST_DEPOSITS = Object.freeze(['Xe', 'Nt']);
  * zajętości”: D10 zakazuje stosu, a jednostka bez wolnego heksu nie powstaje i zostaje w rezerwie (odp. (f)).
  */
 export const GARRISON_SPREAD_MAX_RADIUS = 5;
+
+/**
+ * G3-1 — odrastanie strat (podpis właściciela, plan §1 „straty odrastają po 1 na rok”; domyślne potwierdzone
+ * 2026-10-04): po pierwszej mobilizacji imperium odzyskuje tyle jednostek na ROK GRY (1,0 na zegarze
+ * `timeSystem.gameTime` — tym samym, którym flaga mobilizacji zapisuje `year`; = 12 civY), w wojnie i w pokoju, do
+ * bieżącego limitu. Liczba prób na rok, nie gwarancja: próba bez wolnego heksu w danym roku przepada.
+ */
+export const GARRISON_REGROWTH_PER_YEAR = 1;
