@@ -5664,9 +5664,9 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE · G3 ZAMKNIĘTY 2026-10-05)
 
-Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#378**: `docs/design/AI_GARRISON_PLAN.md`.
+Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#379**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 Commity G1b: `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326).
 
@@ -5828,8 +5828,9 @@ zajęte przez stronę bez wojny wracają przy wczytaniu (**369**, reguła F1) ·
 zdejmuje `awayTeamUnitId` (**365**). ✅ **(a) w wersji OGRANICZONEJ** `dcc4c6f` (**370**, decyzja właściciela 2026-10-04,
 plan §5w): ostrzeżenie „został miesiąc” gaśnie samo PRZED terminem, gdy straciło przedmiot (żadna oflagowana jednostka nie
 stoi już na ciele — załadowane, flaga zdjęta, usunięte inną drogą — albo wróciła wojna); **w terminie NIE gaśnie** — obok
-staje meldunek o utracie i plakietka rośnie; od terminu gasi je wyłącznie gracz. Pełną wersję odrzucono (meldunek zastępował
-ostrzeżenie, plakietka 2 → 2). Jeden próg terminu dla usunięcia jednostek i dzwonka: `withdrawalDeadlineReached`
+staje meldunek o utracie i plakietka rośnie; od terminu gasi je gracz albo powrót wojny — **`8cd8d7c`** (odpowiedź (a)
+właściciela 2026-10-05: wojna gasi ostrzeżenie ZAWSZE, także po terminie; meldunek o utracie zostaje; plan §5z). Pełną
+wersję odrzucono (meldunek zastępował ostrzeżenie, plakietka 2 → 2). Jeden próg terminu dla usunięcia jednostek i dzwonka: `withdrawalDeadlineReached`
 (`WithdrawalSystem`). ✅ **378** `5c49b36`: `GroundUnitManager.restore` na końcu zeruje `vessel.awayTeamUnitId` wskazujący
 jednostkę spoza rejestru.
 ⚠ **Uzgodnienie przy wczytaniu (`WithdrawalSystem.reconcileAfterLoad`) robi trzy rzeczy, w tej kolejności:** kafle (e) →
@@ -5837,12 +5838,36 @@ jednostki AI (d) → flagi jednostek gracza (F3). „Nie w wojnie” dla (d)/(e)
 ⚠ **Odnośnik łazika:** `removeUnit` (→ `_pruneFromVessels`) czyści `vessel.awayTeamUnitId` — id łazika czytać PRZED
 `removeUnit`. Przy wczytaniu sprzątanie martwych odnośników siedzi na końcu `GroundUnitManager.restore` — wymaga, by blok
 wczytania `GameScene` odtwarzał statki PRZED jednostkami (pin Z378).
-Keepery `g2_peace_followups_smoke` **67/67** · `g2_peace_closing_smoke` **64/64**; sweep **259/259**, `check-i18n` 3448.
+Keepery `g2_peace_followups_smoke` **67/67** · `g2_peace_closing_smoke` **64/64** (**65/65** po `8cd8d7c`); sweep
+**259/259**, `check-i18n` 3448.
 Findingi **368–378** (plan §6): ✅ **368** · **369** · **371** · **376** (poprawki) · ✅ **370** ((a) ograniczona) · ✅ **378** ·
 ⚪ **372** trzy reguły nazwy imperium · **374** martwy `FleetTabPanel` · **375** polskie literały (`ColonyOverlay`,
-`CargoLoadModal`) · **377** polska gramatyka „z {0}” w trzech innych wpisach — etap polerki UI · **373** akcje silnika bez
-bramki `in_cargo` — później. (d) — „jeden wpis na ciało” = jeden na ciało i imperium — **zostaje** (odpowiedź właściciela
-2026-10-04).
-**G2 ZAMKNIĘTE.** Pozostałe kroki arca, w kolejności **G3 → G1c → G2b** (odpowiedź właściciela 2026-10-04): **G3**
-(odrastanie strat, widoczność garnizonu, uzgadnianie mobilizacji co rok — **360**) · **G1c** (rodzina „utrata POP”: 333 ·
-330 · 328 · 329; kierunek 333/330 podpisany 2026-10-02) · **G2b** (pule desantu na archetypy).
+`CargoLoadModal`; od G3 także `DropTroopsModal`) · **377** polska gramatyka „z {0}” w trzech innych wpisach — etap polerki
+UI · **373** akcje silnika bez bramki `in_cargo` — później. (d) — „jeden wpis na ciało” = jeden na ciało i imperium —
+**zostaje** (odpowiedź właściciela 2026-10-04).
+**G2 ZAMKNIĘTE.**
+✅ **G3 — odrastanie i widoczność garnizonu** (`47b1b96` G3-1/G3-2 · `b3fe807` G3-3 · `92d1b8e` G3-4; bramka live właściciela
+2026-10-05 **PASS** na istniejącym zapisie przy gy 60; plan §5x–§5z). **G3-1** — `GarrisonSystem.regrowEmpire` + kontrola
+roczna `_yearlyCheck` (`time:tick`): po pierwszej mobilizacji imperium odzyskuje **1 jednostkę na rok gry**
+(`GARRISON_REGROWTH_PER_YEAR`), w wojnie i w pokoju, do limitu liczonego w chwili tworzenia (szczebel, morale i archetyp
+z tej chwili); ciało z największym niedoborem planu (remis — stolica), bez wolnego heksu — następne ciało, bez miejsca
+nigdzie — nic w tym roku; wyłącznie `createAIUnit`. Dokładnie raz na rok przez zapis, pauzę i prędkość — `regrowthYear`
+w rekordzie flagi (`EmpireRegistry.setGarrisonRegrowthYear`); zapis sprzed G3 — bez nadrabiania lat (v101 bez migracji).
+**G3-2** (**360** ✅) — ta sama kontrola na granicy roku mobilizuje imperium w wojnie bez mobilizacji (`reason:
+'reconcile_yearly'`). **G3-3** — NEW `src/utils/GarrisonReadout.js` (jedno źródło odczytu i tekstu): wiersz „Garnizon”
+na karcie ciała (`BottomContext`) i „Garnizon celu” w oknie zrzutu (`DropTroopsModal`) — liczba przy wywiadzie `detailed`,
+rezerwa planu przed pierwszą mobilizacją, poniżej `detailed` — „nieznany”. **G3-4** — jeden wpis w Dzienniku (kanał Wywiad,
+bez dzwonka) przy mobilizacji imperium, z którym gracz ma kontakt; nazwa i liczba dopiero przy `detailed`; odrastanie wpisu
+nie daje.
+⚠ **Rok gry odrastania = 1,0 na zegarze `gameTime` (= 12 civY);** granica roku = wzrost `floor(gameTime)` z tolerancją 1e-9.
+Na bramce pomocnik `__year()` przesuwał zegar o więcej niż rok na wywołanie — reguła „jedna jednostka na granicę roku, nic
+ponad limit” się utrzymała.
+⚠ **Bramka G3 nie ćwiczy G3-2** — mobilizację w jej krokach robi `diplomacy:warDeclared` (G2-3b); G3-2 stoi wyłącznie na
+keeperze R7. Karta ciała sprawdzona na imperium testowym (`spawnTestEnemy`) — stolic realnych imperiów gracz nie mógł kliknąć.
+Keeper `g3_regrowth_smoke` **64/64** · `g2_peace_closing_smoke` **65/65**; sweep **260/260**, `check-i18n` 3455. Odpowiedzi
+właściciela (a)–(h) 2026-10-05 — plan §5z: (b)–(d), (f), (g) potwierdzają kod; (e) wiersz garnizonu w nagłówku
+`ColonyOverlay` — etap polerki UI; **(a)** → `8cd8d7c`; **(h) = Finding 379** — wroga jednostka naziemna na mapie ciała jest
+rysowana, zaznaczalna i wypisywana tylko, gdy ciało jest kolonią gracza, gracz ma na nim własne jednostki albo ma wywiad
+`detailed` o jej właścicielu; karta ciała tą samą regułą — follow-up z osobną bramką w przeglądarce.
+**G3 ZAMKNIĘTE.** Pozostałe kroki arca: **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany
+2026-10-02) → **G2b** (pule desantu na archetypy).

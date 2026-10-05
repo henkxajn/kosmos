@@ -8,9 +8,11 @@
 > trzy wady widoku** (§5q–§5s). ✅ **Follow-upy G2-4 (F1–F7) ZAMKNIĘTE 2026-10-04 — bramka live właściciela PASS**
 > (§5t–§5u). Poprawki po bramce **(b) (d) (e) (f) (g)** — 2026-10-04, bez osobnej bramki (zgoda właściciela), §5v;
 > **(a)** — w wersji **ograniczonej** (`dcc4c6f`) i **378** (`5c49b36`) — 2026-10-04, decyzje właściciela, §5w;
-> **(c)** — etap polerki UI (**372**). ✅ **G2 ZAMKNIĘTE.** Pozostałe kroki arca (§3), w kolejności **G3 → G1c → G2b**
-> (odpowiedź właściciela 2026-10-04, §5w): **G3** (odrastanie strat, widoczność garnizonu, uzgadnianie mobilizacji co
-> rok — **360**) · **G1c** (rodzina „utrata POP”: **333** · **330** · **328** · **329**) · **G2b** (pule desantu na
+> **(c)** — etap polerki UI (**372**). ✅ **G2 ZAMKNIĘTE.** ✅ **G3 (odrastanie strat, uzgadnianie mobilizacji co rok —
+> **360**, widoczność garnizonu, wpis o mobilizacji) ZAMKNIĘTY 2026-10-05 — bramka live właściciela PASS** (§5x–§5z);
+> poprawka **(a) po terminie** (`8cd8d7c`, **370**) — odpowiedź właściciela 2026-10-05, §5z; **(h)** = **379** — follow-up
+> z osobną bramką w przeglądarce. Pozostałe kroki arca (§3), w kolejności **G1c → G2b** (odpowiedź właściciela
+> 2026-10-04, §5w): **G1c** (rodzina „utrata POP”: **333** · **330** · **328** · **329**) · **G2b** (pule desantu na
 > archetypy).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
@@ -19,9 +21,11 @@
 > (R1–R7)** — **2026-10-03** (§5p); odpowiedzi po G2-4 (notatka przekazania) — **2026-10-03**, wpisane **2026-10-04**,
 > i zakres wad z bramki G2-4 — **2026-10-04** (§5s); odpowiedzi po bramce follow-upów — poprawki **(a)–(g)** —
 > **2026-10-04** (§5v); odpowiedzi do notatki zamykającej G2-4 — (a) w wersji ograniczonej, (d), kolejność kroków,
-> **378** — **2026-10-04** (§5w).
-> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b, w G2-4 i w follow-upach G2-4
-> (F1–F7, (a)–(g), 378).
+> **378** — **2026-10-04** (§5w); odpowiedzi do notatki G3 — **(a)–(h)** — **2026-10-05** (§5z), w tym reguła widoczności
+> **379** (trzy warunki, karta ciała tą samą regułą).
+> Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b, w G2-4, w follow-upach G2-4
+> (F1–F7, (a)–(g), 378), w G3 (rok rozliczony `regrowthYear` w rekordzie flagi — zapis sprzed G3 bez nadrabiania lat)
+> i w poprawce (a) po terminie.
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
@@ -33,16 +37,20 @@
 > `39e2df6` (F1, #363) + `4c60e5b` (F2, #364) + `86a6d2a` (F3, #366) + `8785b41` (F6) + `30bc68c` (F4, #367) + `f8f9cdb`
 > (F5) + `f90bc14` (F7) — §5t · `cafd6e8` ((b), #371) + `2c9511f` ((f), #376) + `5fefe33` ((d), #368) + `8427b0a`
 > ((e), #369) + `96c636f` ((g), #365) — §5v · `dcc4c6f` ((a) w wersji ograniczonej, #370) + `5c49b36` (#378) — §5w.
+> **Commity G3:** `47b1b96` (G3-1 odrastanie + G3-2 uzgadnianie co rok, #360) · `b3fe807` (G3-3 widoczność garnizonu) ·
+> `92d1b8e` (G3-4 wpis o mobilizacji) — §5x · `8cd8d7c` ((a) po terminie, #370) — §5z.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 > `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
 > `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · `g2_planner_smoke` **77/77** ·
 > `g2_mobilisation_smoke` **56/56** · `g2_after_peace_smoke` **73/73** · `g2_peace_followups_smoke` **67/67** ·
-> `g2_peace_closing_smoke` **64/64** · sweep **259/259 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3448**).
-> **Rejestr macierzysty findingów #309–#378:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
+> `g2_peace_closing_smoke` **65/65** · `g3_regrowth_smoke` **64/64** · sweep **260/260 OK, 0 FAIL, 31 advisory** ·
+> `check-i18n` PASS (pl = en = **3455**).
+> **Rejestr macierzysty findingów #309–#379:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
 > `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
 > `dbfbbd6`; §5l–§5m na `053fcc0`; #358–#362 oraz §5n–§5p na `2437725`; #363–#367 oraz §5q–§5s na `1fefcdc`;
-> #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`; zamknięcia #370 i #378 oraz §5w na `5c49b36`) ·
+> #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`; zamknięcia #370 i #378 oraz §5w na `5c49b36`; #379,
+> zamknięcie #360, dopisek #370, rozszerzenie #375 oraz §5x–§5z na `8cd8d7c`) ·
 > `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
@@ -53,7 +61,9 @@
 > repo) · `[doc: bramka G2-4]` — z relacji właściciela z bramki live G2-4 (2026-10-04), bez ponownego pomiaru ·
 > `[doc: bramka follow-upów]` — z relacji właściciela z bramki live follow-upów G2-4 (2026-10-04), bez ponownego pomiaru ·
 > `[doc: notatka follow-upów]` — z notatki przekazania follow-upów G2-4 (2026-10-04, `kosmos-handover/g2-4-followups`,
-> poza repo).
+> poza repo) · `[doc: notatka G3]` — z notatki przekazania G3 (2026-10-05, `kosmos-handover/g3`, poza repo; pomiary
+> stanów w worktree sesji G3) · `[doc: bramka G3]` — z relacji właściciela z bramki live G3 (2026-10-05), bez ponownego
+> pomiaru.
 
 ---
 
@@ -146,10 +156,10 @@ sam wynik dla każdego POP (0 rozjazdów dla POP 0–100 000; przy ×1,5 byłyby
 | **G2-3b** | **mobilizacja (D15)** wg planera; usuwanie jednostek AI (**D6**, **D16**); stempel kafli (**318**) | **318** ✅ · **319** ✅ (jednostki AI; jednostki gracza → **358**) · **324** ✅ (zakres D6) · **320** (zostaje, niepotrzebny) | ✅ **2026-10-03** (`6fc2c8d` + `24beea4` + `2437725`, §5n–§5p) |
 | **G2-4** | **wycofanie po pokoju (D14)** — zakres **R1–R7** podpisany 2026-10-03 (§5p): bez wojny brak ognia i okupacji · licznik okupacji stoi przy żywym wrogu · flaga wycofania 6 mies. · jednostki AI z ciał gracza usuwane przy pokoju · meldunki · zabranie wojsk z cudzego ciała i płatnik utrzymania · jednostka gracza na zniszczonym ciele | **348** ✅ · **353** ✅ · **354** ✅ (płatnik jednostki gracza) · **358** ✅ · **359** ✅ | ✅ **2026-10-04** (`edd6fd1` … `39c9227`, §5q–§5r) |
 | **G2-4 po bramce** | **F1** pokój cofa okupację kafli (obie strony) · **F2** ostrzał z orbity na obce ciało tylko w wojnie · **F3** stare zapisy: flaga przy wczytaniu · **F4** wpisy w Dzienniku dla R4 i R7 · **F5** meldunek o utracie wojsk w terminie (Dziennik i dzwonek) · **F6** nazwa imperium we wpisach wycofania · **F7** „duch” jednostki na mapie kolonii | **363** ✅ · **364** ✅ · **366** ✅ · **367** ✅ (F5–F7 — wady z bramki, §5r) | ✅ **2026-10-04** (`39e2df6` … `f90bc14`, §5t; bramka live PASS, §5u) |
-| **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ✅ ((a) w wersji ograniczonej) · **378** ✅ | ✅ **2026-10-04** (`cafd6e8` … `96c636f`, §5v; (a) w wersji ograniczonej `dcc4c6f` i **378** `5c49b36`, §5w) |
+| **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ✅ ((a) w wersji ograniczonej) · **378** ✅ | ✅ **2026-10-04** (`cafd6e8` … `96c636f`, §5v; (a) w wersji ograniczonej `dcc4c6f` i **378** `5c49b36`, §5w); **(a) po terminie** — `8cd8d7c` (2026-10-05, §5z) |
+| **G3** | odrastanie strat (G3-1) · **uzgadnianie mobilizacji co rok** (G3-2, odpowiedź (d), §5p) · widoczność (`'detailed'`) na karcie ciała i w oknie zrzutu (G3-3) · wpis w Dzienniku o mobilizacji (G3-4) | **360** ✅ · **379** (znaleziony przy G3-3 → follow-up (h)) | ✅ **2026-10-05** (`47b1b96` + `b3fe807` + `92d1b8e`, §5x; bramka live PASS, §5y; odpowiedzi (a)–(h), §5z) |
+| **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji poza zapisem (328) · utrzymanie bez terminu właściciela (329) | **333** · **330** · **328** · **329** | do zrobienia — **następny** (kolejność G3 → G1c → G2b, §5w; wcześniej „po G2”, §5d (b)); kierunek 333 i 330 podpisany 2026-10-02, niezaimplementowany |
 | **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia — **po G1c** (kolejność G3 → G1c → G2b, §5w) |
-| **G3** | odrastanie strat · widoczność (`'detailed'`) · **uzgadnianie mobilizacji co rok** (odpowiedź (d), §5p) | **360** | do zrobienia — **następny** (kolejność G3 → G1c → G2b, §5w) |
-| **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji poza zapisem (328) · utrzymanie bez terminu właściciela (329) | **333** · **330** · **328** · **329** | **po G3** (kolejność z 2026-10-02, przy podpisie D8–D18; wcześniej „po G2”, §5d (b)); kierunek 333 i 330 podpisany 2026-10-02, niezaimplementowany |
 | później | limit floty · odbicie kolonii · przyczółek | — | — |
 
 ⚠ **Kolejność G1b przed G2 jest celowa:** materializacja garnizonu w świecie, w którym AI zawsze
@@ -188,6 +198,10 @@ przypisanego kroku. Rozszerzone bez nowego numeru: **345** i **355** (widoczny `
 etap polerki UI · **373** → później · **378** → bez przypisanego kroku (obejście „Zbierz”).
 ⚠ **Korekta 2026-10-04 (odpowiedzi do notatki zamykającej, §5w):** **370** ✅ — (a) w wersji ograniczonej (`dcc4c6f`) ·
 **378** ✅ — leczony przy wczytaniu (`5c49b36`). Kolejność pozostałych kroków: **G3 → G1c → G2b**.
+
+⚠ **Przydział findingów z sesji G3 (#379, §6):** **360** ✅ (G3-2, `47b1b96`) · **379** → follow-up **(h)** (odpowiedź
+właściciela (h), §5z; osobna bramka w przeglądarce) · **370** — dopisek „po terminie” (`8cd8d7c`, odpowiedź (a)) ·
+**375** — rozszerzony bez nowego numeru o `DropTroopsModal` (etap polerki UI).
 
 ---
 
@@ -1022,7 +1036,8 @@ terminu **2 → 4** (B6b), **1 → 2** dla jednego ciała (Za1).
 **Decyzje w ramach podpisu** (do wglądu właściciela):
 - **Od terminu ostrzeżenie jest rozstrzygnięte** — gasi je wyłącznie gracz, także gdy wojna wróci PO terminie (kontrola Za6).
   Podpis wymienia powrót wojny bez zastrzeżenia; tu czytany jako warunek sprzed terminu (po terminie wojsk już nie ma,
-  a meldunek o utracie stoi obok). **Pytanie do właściciela.**
+  a meldunek o utracie stoi obok). **Pytanie do właściciela.** → **Odpowiedź (a) 2026-10-05:** powrót wojny gasi
+  ostrzeżenie ZAWSZE, także po terminie — `8cd8d7c`, Za6 odwrócona za zgodą (§5z).
 - „Nie została żadna oflagowana jednostka” obejmuje też jednostkę usuniętą przed terminem inną drogą (rozwiązanie, ciało
   zniszczone — R7): wtedy ostrzeżenie też gaśnie (Za4).
 - **Granica:** ostatnia jednostka załadowana w tym samym ticku, który przeskakuje termin, zostawia ostrzeżenie (zachowanie
@@ -1033,10 +1048,90 @@ terminu **2 → 4** (B6b), **1 → 2** dla jednego ciała (Za1).
 
 ---
 
-## 6. Rejestr findingów arca (#309–#378, zebrane 2026-10-02–04)
+## 5x. G3 — dostarczone (łatki 2026-10-04/05, commity 2026-10-05)
+
+Zakres: plan §1 („straty odrastają po 1 na rok”), D6 (liczebność przy wywiadzie `'detailed'`), odpowiedź (d) z §5p
+(uzgadnianie mobilizacji co rok — **360**); domyślne potwierdzone przez właściciela 2026-10-04. Keeper NEW
+`g3_regrowth_smoke` rośnie z commitami. Linie `[code]` na `8cd8d7c`.
+
+| commit | zawartość | keeper `g3_regrowth_smoke` | fail-first: finalna wersja keepera na stanie poprzednim | mutanty | sweep · i18n |
+|---|---|---|---|---|---|
+| `47b1b96` | **G3-1** — `GarrisonSystem.regrowEmpire` (`GarrisonSystem.js:228`) + kontrola roczna `_yearlyCheck` (`:272`, na `time:tick`): po pierwszej mobilizacji imperium odzyskuje `GARRISON_REGROWTH_PER_YEAR` = **1** jednostkę na rok gry (`GarrisonData.js:68`), w wojnie i w pokoju, do limitu liczonego W CHWILI tworzenia (szczebel, morale i archetyp z tej chwili); ciało z największym niedoborem bieżącego planu, remis — stolica; bez wolnego heksu — następne ciało; bez miejsca nigdzie — nic w tym roku (`garrison:regrowthSkipped`); limit poniżej żywych — nic nie powstaje i nic nie znika; wyłącznie `createAIUnit`. Rok gry = 1,0 na zegarze `gameTime` (= 12 civY); granica roku = wzrost `floor(gameTime)` z tolerancją 1e-9; dokładnie raz na rok przez zapis, pauzę i prędkość — `regrowthYear` w rekordzie flagi (NEW `EmpireRegistry.setGarrisonRegrowthYear`, `EmpireRegistry.js:205`), kontrola rozlicza każdy rok od `regrowthYear + 1`; zapis sprzed G3 — pierwsza kontrola tylko ustawia bieżący rok (`GarrisonSystem.js:283`). **G3-2 (#360)** — ta sama kontrola na granicy roku mobilizuje imperium w wojnie bez mobilizacji (`reason: 'reconcile_yearly'`, `:298`). Czyste funkcje: `garrisonShortfall` (`GarrisonPlanner.js:231`), `garrisonRegrowthArchetype` (`:250`), `readEmpireGarrisonUnits` (`:271`); audyt `garrison:regrown` i `garrison:regrowthSkipped` (`DebugLog.js:124-125`) `[code]` | R0–R7 **42/42** | **12 PASS / 30 FAIL** na `2e845cf` (zielone wyłącznie świadkowie i kontrole) | 9/9 zabite | 260/260 · 3448 |
+| `b3fe807` | **G3-3** — NEW `src/utils/GarrisonReadout.js`: `readGarrisonReadout` (`:27`) i `formatGarrisonReadout` (`:48`), próg `GARRISON_READOUT_INTEL = 'detailed'` (`:19`) — jedno źródło odczytu i tekstu dla dwóch powierzchni: kolonia gracza i ciało bez kolonii — brak odczytu; wywiad o właścicielu poniżej `detailed` — „nieznany” (fail-closed bez `IntelSystem`); `detailed` po mobilizacji — żywe jednostki właściciela na tym ciele; `detailed` przed pierwszą mobilizacją — liczba planera dla ciała, oznaczona jako rezerwa. Wiersz „Garnizon” na karcie ciała (`BottomContext._garrisonLine`, `:343`) i linia „Garnizon celu” w oknie zrzutu desantu (`DropTroopsModal.js:58`); i18n `garrison.readout.label` / `units` / `reserve` / `unknown` / `dropLine` PL+EN `[code]` | + R8 **57/57** | **45 / 12** | 5/5 | 260/260 · 3453 |
+| `92d1b8e` | **G3-4** — `NotificationCenter._handleGarrisonMobilized` (`:670`) na `garrison:mobilized`: wpis w Dzienniku (kanał Wywiad, bez dzwonka) raz na mobilizację — także przy uzgodnieniu przy wczytaniu i co rok; wyłącznie przy kontakcie; nazwa imperium i liczba jednostek dopiero przy `detailed`; odrastanie wpisu nie daje; i18n `event.garrison.mobilized` / `mobilizedCount` PL+EN `[code]` | + R9 **64/64** | **60 / 4** | 3/3 | 260/260 · 3455 |
+
+Liczby keepera, fail-first, mutantów oraz sweep i i18n NA STANACH POŚREDNICH — z worktree sesji G3 (LF) `[doc: notatka G3]`.
+
+**Weryfikacja przy commitowaniu (2026-10-05)** `[measured]`: notatka i łatki zgodne z `SHA256SUMS` (90/90); kotwica HEAD
+`2e845cf`, indeks = drzewo `6616dca`; łańcuch `git read-tree HEAD` + `git apply --cached` — każdy commit dał dokładnie drzewo
+z notatki (`d473dc7` · `e529c90` · `6616dca`); żaden commit nie przewraca całego pliku (numstat: najwięcej `123 / 2`
+w `GarrisonSystem.js`); drzewo główne po G3-4 — sweep **260/260 OK, 0 FAIL, 31 advisory** (lista advisory identyczna jak
+w przebiegu z notatki), `check-i18n` PASS **3455**.
+
+**Decyzje w ramach podpisu** (potwierdzone odpowiedziami (b)–(d), §5z): odrastanie liczone na granicy roku kalendarzowego
+gry, nie po kroczącym roku od straty (`_yearlyCheck`, `GarrisonSystem.js:272`) · desant imperium na cudzym ciele nie liczy
+się do limitu garnizonu — `readEmpireGarrisonUnits` (`GarrisonPlanner.js:271`) czyta wyłącznie ciała podane przez
+wołającego, czyli ciała imperium · „następne ciało” bez wolnego heksu = następne w tym samym rankingu niedoboru
+(`garrisonShortfall`, `:231`: niedobór malejąco, remis — kolejność planu ze stolicą pierwszą) `[code]`.
+⚠ **Znalezione przy G3-3, nienaprawione w tym kroku:** mapa kolonii obcego ciała rysuje jednostki bez względu na wywiad —
+karta ciała mówi „nieznany”, a mapa tego samego ciała pokazuje cały garnizon (**379**, §6).
+
+---
+
+## 5y. Bramka live G3 — 2026-10-05, właściciel: **PASS**
+
+Właściciel, język gry **angielski**, **istniejący zapis przy gy 60** (nie nowa gra), oba imperia w pokoju i bez flagi
+mobilizacji `[doc: bramka G3]`.
+
+| | co sprawdzono | wynik |
+|---|---|---|
+| **plan** | `emp_001`: POP 185, suma poziomów fabryk 20, szczebel 3, limit 13, stolica `entity_115` „Propus b” — 7 jednostek (5 × `garrison_unit` + 2 × `rocket_artillery`, morale 100); `emp_002`: POP 178, limit 13, stolica `entity_232` „Regulus c” — 7 jednostek | te same liczby co plan fixture'u GATE-S4 w §5l (limit 13, stolica 7, w tym 2 × artyleria) |
+| **wybór ciała do kontroli karty** | stolic obu realnych imperiów nie dało się kliknąć — gracz nie ma dostępu do tych układów; kontrole karty wykonane na imperium testowym `emp_test_enemy` (`spawnTestEnemy`) na HD-4177 b-I (`entity_12`) w układzie domowym: POP 6, suma poziomów fabryk 1, szczebel 0, limit 2, morale 30 | — |
+| **rezerwa (G3-3)** | przy `detailed` karta ciała: „Garrison: reserve: 2 unit(s)” | **PASS** |
+| **poniżej `detailed` (G3-3)** | „Garrison: unknown” | **PASS** |
+| **G3-4 przy kontakcie** | wojna z `emp_002` przy `contact` — jeden wpis „[intel] 🛡 Unknown empire mobilises its ground garrisons” | **PASS** |
+| **G3-4 przy `detailed` + karta (G3-3)** | wojna z `emp_test_enemy` — „[intel] 🛡 Rój Testowy mobilises its ground garrisons: 2 unit(s)”; na stolicy 5 jednostek (2 z mobilizacji + 3 postawione przez `spawnTestEnemy`), `regrowthYear` 60; karta „Garrison: 5 unit(s)” | **PASS** |
+| **okno zrzutu (G3-3)** | okno pokazało liczbę wrogich jednostek na celu | **PASS** |
+| **odrastanie (G3-1)** | wszystkie 5 jednostek usunięte, odczyt `[0, []]`, karta „0 unit(s)”; po pomocniku `__year()`: `gameTime` 61,926 → 1 jednostka („61:entity_12:garrison_unit:m30”); 63,553 → 2 jednostki (drugi wpis — za rok 62); 64,678 → nadal 2 | **PASS** — pomocnik przesuwał w przeglądarce zegar o więcej niż rok na wywołanie; reguła „jedna jednostka na granicę roku” utrzymała się i nic nie powstało ponad limit (2) |
+| **konsola** | — | bez błędów |
+
+⚠ **Granice dowodu tej bramki:** **G3-2 nie był ćwiczony na żywo** — w krokach wojny mobilizację robi
+`diplomacy:warDeclared` (G2-3b); G3-2 stoi wyłącznie na keeperze R7 `[doc: notatka G3]`. Karta ciała sprawdzona na imperium
+testowym (szczebel 0, morale 30, sam `garrison_unit`) — skład z artylerią szczebla 3 widziany wyłącznie w odczycie planu.
+Pozostałe napisy okna zrzutu są po polsku także w EN — znane (**375**, rozszerzenie z sesji G3).
+
+---
+
+## 5z. Odpowiedzi właściciela do notatki G3 (2026-10-05) — (a)–(h)
+
+| | pytanie (notatka G3) | odpowiedź | wykonanie |
+|---|---|---|---|
+| (a) | po terminie powrót wojny nie gasi ostrzeżenia „został miesiąc” (kontrola Za6, §5w) | powrót wojny gasi wpis „został miesiąc” w dzwonku **zawsze, także po terminie**; meldunek o utracie zostaje | ✅ `8cd8d7c` (niżej) |
+| (b) | odrastanie na granicy roku kalendarzowego czy rok kroczący od straty | **zostaje na granicy roku kalendarzowego** (tak jest w kodzie) | bez zmian kodu |
+| (c) | desant imperium na cudzym ciele a limit garnizonu | **nie liczy się do limitu** (tak jest w kodzie) | bez zmian kodu |
+| (d) | „następne ciało”, gdy brak wolnego heksu | **następne w tym samym rankingu** (tak jest w kodzie) | bez zmian kodu |
+| (e) | wiersz garnizonu w nagłówku `ColonyOverlay` | **nie teraz** — etap polerki UI | nie wdrożone |
+| (f) | kształt wpisu o mobilizacji | **zostaje jak zbudowany**: kanał Wywiad, bez dzwonka, nazwa i liczba dopiero przy `detailed` | bez zmian kodu |
+| (g) | roczny rekord audytu `garrison:mobilizeSkipped` | **w porządku** | bez zmian kodu |
+| (h) | mapa kolonii obcego ciała rysuje wrogie jednostki bez względu na wywiad (**379**) | **naprawić przy zamknięciu G3**: wrogie jednostki naziemne na mapie obcego ciała rysowane wyłącznie przy wywiadzie `detailed` o właścicielu ALBO gdy gracz ma na tym ciele własne jednostki. **Reguła doprecyzowana 2026-10-05:** wroga jednostka naziemna jest rysowana, zaznaczalna i wypisywana tylko, gdy zachodzi co najmniej jedno — ciało jest kolonią gracza · gracz ma na tym ciele własne jednostki naziemne · gracz ma wywiad `detailed` o właścicielu tej jednostki (ciała bez kolonii obejmują warunki drugi i trzeci). Karta ciała G3-3 tą samą regułą: liczba przy `detailed` ALBO własnych jednostkach na ciele, inaczej „nieznany”. Jeden czysty predykat dla mapy i odczytu | follow-up **(h)** — osobny krok z bramką w przeglądarce (render i klik na mapie kolonii są niesprawdzalne headless) |
+
+**Poprawka (a) po terminie** `[measured]`:
+
+| commit | zawartość | keeper `g2_peace_closing_smoke` | fail-first: keeper po zmianie na kodzie poprzedniego commitu | sweep · i18n |
+|---|---|---|---|---|
+| `8cd8d7c` | `NotificationCenter._withdrawalWarningMoot` (`:593`): sprawdzenie wojny z właścicielem ciała (`:596`) PRZED sprawdzeniem terminu (`:597`); wyzwalacze bez zmian (`diplomacy:warDeclared` — od razu, także na pauzie; `time:tick`); gaśnie wyłącznie `withdrawalWarning`, meldunek o utracie (`withdrawalExpired`) zostaje; dwa komentarze „od terminu gasi je wyłącznie gracz” poprawione `[code]` | Za6 **odwrócona za zgodą** (odpowiedź (a)) + NEW kontrola Za6 (meldunek o utracie przeżywa powrót wojny, 1 → 1) — **65/65** | **64 PASS / 1 FAIL** na kodzie `92d1b8e` — pada wyłącznie odwrócona Za6; świadek i nowa kontrola zielone po obu stronach | 260/260 · 3455 |
+
+Nietknięte i zielone: kontrole Za1 i Za5 (`g2_peace_closing_smoke`), **A6b** (`g2_after_peace_smoke` 73/73), **B6b** i **B6c**
+(`g2_peace_followups_smoke` 67/67) `[measured]`. Bez wojny zachowanie bez zmian: w terminie ostrzeżenie zostaje obok
+meldunku o utracie, po terminie gasi je gracz. Osobna bramka w przeglądarce niepotrzebna — ta sama ścieżka gaszenia co
+wojna przed terminem, bez nowego UI (notatka G3 §6).
+
+---
+
+## 6. Rejestr findingów arca (#309–#379, zebrane 2026-10-02–05)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
-#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
+#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f`, #379, zamknięcie #360 i dopiski #370/#375 na `8cd8d7c` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
 (`VESSEL_ORDERS_PLAN.md` §308; #309 był tam planowany i świadomie **nieprzydzielony**), więc ten arc zaczyna
 od **#309**; przed nadaniem #327+ sprawdzono, że w żadnym rejestrze nie ma numeru wyższego niż #325, a #326
 istniał tylko w komunikacie `c7c5a74`; przed nadaniem #336+ sprawdzono grepem wszystkie rejestry — najwyższy
@@ -1046,7 +1141,9 @@ wpisaniem ich i nadaniem #362 grep rejestrów, `CLAUDE.md` i historii commitów 
 nadane w notatce przekazania G2-4 (2026-10-03), gdy najwyższy wpisany był #362, a przed ich wpisaniem grep rejestrów,
 `CLAUDE.md`, pamięci i historii commitów znów dał #362 (2026-10-04); #368–#378 nadane przy wpisie w sesji zamykającej G2-4 —
 przed nadaniem grep rejestrów, `CLAUDE.md`, pamięci i historii commitów dał #367, kontrola: #367 widoczny w trzech dokumentach
-i jednym commicie (2026-10-04). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
+i jednym commicie (2026-10-04); #379 nadany w notatce przekazania G3 i w komunikacie `b3fe807` — przed wpisem tutaj grep
+rejestrów, `CLAUDE.md`, pamięci i historii commitów dał #379 jako najwyższy zapisany (komunikat `b3fe807`, notatka G3,
+pamięć), a #380+ nieużyte jako numery findingów (2026-10-05). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
 ⚪ obserwacja/higiena · ✅ zamknięty.
 ⚠ Źródło: **309–316** z sesji G1 · **317–325** z audytu G0 (mechanizmy przemierzone w źródle teraz;
 liczby z G0 oznaczone `[doc: raport G0]`) · **326** nadany przy podpisie zakresu G1b · **327–332** kandydaci
@@ -1060,7 +1157,8 @@ sesji G2-3b (raport 2026-10-03; numery nadane w raporcie, wpisane po bramce) · 
 „znalezione, nienaprawione” sesji G2-4 (notatka przekazania 2026-10-03; numery nadane w notatce, wpisane po bramce);
 miejsca sprawdzone grepem na `1fefcdc`, liczby z sond headless sesji G2-4 oznaczone `[doc: notatka G2-4]` · **368–376** —
 „znalezione, nienaprawione” sesji follow-upów (notatka przekazania follow-upów §7 i §9 pytanie 6, 2026-10-04; numery nadane
-przy wpisie) · **377–378** — znalezione w sesji zamykającej G2-4; miejsca sprawdzone grepem na `96c636f`.
+przy wpisie) · **377–378** — znalezione w sesji zamykającej G2-4; miejsca sprawdzone grepem na `96c636f` · **379** —
+znaleziony w sesji G3 przy G3-3 (komunikat `b3fe807`, notatka G3 §7); miejsca sprawdzone grepem na `8cd8d7c`.
 
 ### ✅ 309 — salwa wroga rozstrzygana PRZED salwą gracza; zabici gracza nie odpowiadają — ZAMKNIĘTY 2026-10-02 (`c0a3d5c`, G1b/S1)
 
@@ -1670,13 +1768,19 @@ tak samo jak bez obrońcy `[doc: raport G2-3b]`. Decyzja właściciela 2026-10-0
 wrogiem (`:666`), pusty kafel nie przechodzi (`:721`) `[code]`. Keeper `g2_after_peace_smoke` A3; `g2_mobilisation_smoke`
 M9c odwrócony świadomie `[doc: notatka G2-4]`. Bramka: niećwiczone osobno na żywo.
 
-### ⚪ 360 — imperium bez pełnej kolonii w chwili wybuchu wojny mobilizuje się dopiero przy następnej wojnie albo wczytaniu (→ G3)
+### ✅ 360 — imperium bez pełnej kolonii w chwili wybuchu wojny mobilizuje się dopiero przy następnej wojnie albo wczytaniu — ZAMKNIĘTY 2026-10-05 (`47b1b96`, G3-2)
 
 `mobilizeEmpire` bez stolicy emituje `garrison:mobilizeSkipped` z `no_capital` i nie ustawia flagi
 (`GarrisonSystem.js:128-133`), a uzgodnienie biegnie raz, na pierwszym ticku (`_firstTick`, `:209-214`) `[code]`. Tak samo
 status `'war'` ustawiony w trakcie sesji bez zdarzenia (konsola) — złapie go dopiero następne wczytanie
 `[doc: raport G2-3b]`. Propozycja z raportu: uzgadnianie także na `colony:captured`. Decyzja właściciela 2026-10-03
 (§5p (d)): **uzgadnianie co rok** zamiast wyłącznie na pierwszym ticku — krok **G3**.
+**Zamknięcie** (na `8cd8d7c`): kontrola roczna `_yearlyCheck` (`GarrisonSystem.js:272`) na granicy roku gry mobilizuje
+imperium, które jest w wojnie z graczem, a nie ma flagi mobilizacji (`reason: 'reconcile_yearly'`, `:298`) — obejmuje
+imperium bez pełnej kolonii w chwili wybuchu wojny (gdy ją zdobędzie) i status `'war'` bez zdarzenia; uzgodnienie przy
+wczytaniu (pierwszy tick) bez zmian `[code]`. Dowód: keeper `g3_regrowth_smoke` R7 (wojna bez zdarzenia i imperium bez
+pełnej kolonii) `[doc: notatka G3]`. ⚠ **Bramka G3 tego NIE ćwiczy** — w jej krokach wojny mobilizację robi
+`diplomacy:warDeclared` (G2-3b); G3-2 stoi wyłącznie na keeperze (§5y).
 
 ### ⚪ 361 — martwe pole `rocket_artillery.terrainModifiers`
 
@@ -1805,6 +1909,10 @@ przecelowania i skutek UX (plakietka 2 → 2) — §5v. **Decyzja właściciela.
 **Zamknięcie (decyzja właściciela 2026-10-04, §5w):** wersja ograniczona — gaśnie PRZED terminem, gdy na ciele nie została
 oflagowana jednostka albo wróciła wojna; w terminie zostaje obok meldunku o utracie (plakietka rośnie); A6b, B6b i B6c
 nietknięte `[measured]`. Jeden próg terminu `withdrawalDeadlineReached` (`WithdrawalSystem.js`) `[code]`; keeper Za1–Za7.
+**Zmiana po terminie (odpowiedź (a) właściciela 2026-10-05, `8cd8d7c`, §5z):** powrót wojny gasi ostrzeżenie ZAWSZE, także
+PO terminie — `_withdrawalWarningMoot` sprawdza wojnę (`NotificationCenter.js:596`) przed terminem (`:597`) `[code]`;
+meldunek o utracie (`withdrawalExpired`) zostaje; bez wojny po terminie gasi je dalej wyłącznie gracz. Za6 odwrócona za zgodą,
+NEW kontrola Za6 (meldunek przeżywa wojnę); fail-first 64 / 1; A6b, B6b, B6c, Za1 i Za5 nietknięte i zielone `[measured]`.
 
 ### ✅ 371 — polski wpis pokoju „Pokój z {0}” — mianownik po „z” — ZAMKNIĘTY 2026-10-04 (`cafd6e8`, (b))
 
@@ -1839,6 +1947,10 @@ desantowa…”), `:358` („⚔ TRANSPORT WOJSK…”, „(bez kapsuł desantow
 `:439` („Aby załadować z innej planety…”), `:445` („Załaduj”), `:500` („💥 BATERIA ORBITALNA…”) `[code]`. Gracz EN widzi te
 napisy po polsku. **Etap polerki UI** (arc literałów 113). ⚠ `g2_war_gate_smoke` szuka przycisku po tekście „Wyładuj” — przy
 przejściu przez i18n trzeba go przepiąć (komentarz przy `cargoUnloadClick`).
+**Rozszerzenie (sesja G3, bez nowego numeru):** `DropTroopsModal` jest po polsku także w EN — „⚔ ZRZUT DESANTU — …”
+(`DropTroopsModal.js:49`), „HP … · ładowność … pkt” (`:121`), „Wszystkie” (`:142`), „Żadne” (`:146`), „Anuluj” (`:157`),
+„Zrzuć” (`:159`), „Zaznaczono: N/M” (`:171`); linia `info` „Zaznacz jednostki do zrzutu (N w ładowni)” (`:54`) jest od razu
+nadpisywana przez `updateFooter()` (`:175`) i nigdy jej nie widać `[code]`. Linia „Garnizon celu” z G3-3 idzie przez `t()`.
 
 ### ✅ 376 — wpis F3 przy wczytaniu brzmi jak wpis podpisania pokoju — ZAMKNIĘTY 2026-10-04 (`2c9511f`, (f))
 
@@ -1862,6 +1974,18 @@ nieistniejącego łazika zostaje, „Zbierz” jest dostępne, a po nim odnośni
 **Zamknięcie (odpowiedź właściciela 2026-10-04, §5w):** `GroundUnitManager.restore` na końcu zeruje odnośnik do jednostki
 spoza rejestru (`_pruneDanglingAwayTeams`) `[code]`; po wczytaniu „Zbierz” nie jest oferowane, „Wyślij zespół” dostępne,
 odnośnik żywego łazika zostaje `[measured]`; keeper Z378.
+
+### 🟠 379 — mapa kolonii obcego ciała pokazuje wrogie jednostki naziemne bez względu na wywiad (→ follow-up (h))
+
+`ColonyOverlay._drawUnits` (`ColonyOverlay.js:3028`) rysuje każdą jednostkę z `getUnitsOnPlanet` (`:3033`) — w pętli
+rysowania i w pętli stacków i plakietek, które iterują tę samą listę — a jedynym filtrem jednostek wroga jest stealth (`:3041`,
+`:3227`) `[code]`. Klik na heks (`:4776`) bierze `mgr.getUnitAt(...)` — pierwszą jednostkę dowolnego właściciela, bez
+stealth i bez wywiadu — i zaznacza ją, a karta wrogiej jednostki ma przełącznik jednostek heksu (`:2540-2544`), który bierze
+„wszystkich nie-graczy” — przy dwóch imperiach na jednym ciele i `detailed` tylko o jednym pokazałby jednostki drugiego `[code]`.
+Skutek: karta ciała i okno zrzutu (G3-3) mówią „nieznany” poniżej `detailed`, a mapa tego samego ciała pokazuje cały
+garnizon. Klik zaznaczający niewidoczną albo ukrytą wrogą jednostkę — z kodu, niezmierzone. Odpowiedź właściciela (h)
+(§5z): reguła trzech warunków (kolonia gracza · własne jednostki gracza na ciele · `detailed` o właścicielu jednostki), karta
+ciała tą samą regułą — follow-up (h), osobna bramka w przeglądarce.
 
 ---
 

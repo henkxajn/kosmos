@@ -380,6 +380,21 @@
 > literały w `ColonyOverlay`/`CargoLoadModal`), **377** (polska gramatyka „z {0}” w trzech innych wpisach) — etap polerki UI ·
 > **373** (akcje silnika bez bramki `in_cargo`) — później · **378** (zapisy z martwym `awayTeamUnitId`; obejście „Zbierz”).
 > • Pozostałe kroki arca: **G3** · **G1c** · **G2b** (`AI_GARRISON_PLAN.md` §3).
+>
+> **Aktualizacja 2026-10-05 — AI GARRISON: G3 ZAMKNIĘTY (odrastanie strat, uzgadnianie mobilizacji co rok, widoczność
+> garnizonu, wpis o mobilizacji).** Sweep: **260/260 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3455** ·
+> save **v101 bez migracji**.
+> • ✅ **360** (`47b1b96`, G3-2 — uzgadnianie mobilizacji na granicy roku gry) — zamknięcie w rejestrze macierzystym
+> `AI_GARRISON_PLAN.md` §6; wiersz zdjęty z A8. Commity G3: `47b1b96` · `b3fe807` · `92d1b8e` (§5x). Bramka live
+> właściciela 2026-10-05 **PASS** (§5y); G3-2 nie był ćwiczony na żywo (keeper R7).
+> • **370** — poprawka (a) **po terminie** (`8cd8d7c`, odpowiedź właściciela 2026-10-05): powrót wojny gasi „został
+> miesiąc” zawsze, także po terminie; meldunek o utracie zostaje (§5z). ⚠ Wiersze **370** i **378** zdjęte z A9 dopiero
+> teraz — oba zamknięto 2026-10-04 (`dcc4c6f`, `5c49b36`), a commit dokumentacji `2e845cf` tego indeksu nie dotknął.
+> • **NOWY: #379** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 mapa kolonii obcego ciała rysuje wrogie jednostki naziemne
+> bez względu na wywiad (karta ciała mówi „nieznany”, mapa pokazuje garnizon) → follow-up **(h)** z osobną bramką
+> w przeglądarce.
+> • **375** rozszerzony bez nowego numeru o `DropTroopsModal` (polskie literały także w EN).
+> • Pozostałe kroki arca: **G1c** → **G2b** (`AI_GARRISON_PLAN.md` §3).
 
 
 ---
@@ -457,7 +472,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-378** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–04; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4) |
+| **309-379** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–05; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -674,8 +689,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **344** | 🟠 | desant AI ląduje na krawędzi **bez drogi do stolicy** — `_findLandingHexes` (`InvasionSystem.js:500`) nie sprawdza osiągalności; 33 z 486 kafli strefy na koloniach AI (czapa polarna odcięta oceanem albo asymetria **347**), 0 z 249 na koloniach gracza | bez kroku; istotne dla G2-3 i G2b |
 | **346** | ⚪ | stolice AI na jednej współrzędnej (−1,2) — remis punktacji, wygrywa pierwszy kafel rzędu 2; w fixture 5 z 11 na `ice_sheet` | obserwacja; rodzina **322** |
 | **349** | 🟠 | „Wyładuj” bez sprawdzenia terenu (`CargoLoadModal.js:405` → `Vessel.js:743-745`); nad ciałem BEZ kolonii celem jest kolonia MACIERZYSTA (`FleetManagerOverlay.js:3074-3075`) — reszta **338** dla ciał własnych i niczyich | niemierzone (DOM); bez kroku |
-| **360** | ⚪ | imperium bez pełnej kolonii w chwili wybuchu wojny mobilizuje się dopiero przy następnej wojnie albo wczytaniu — `no_capital` bez flagi (`GarrisonSystem.js:128-133`), uzgodnienie tylko na pierwszym ticku (`:209-214`) | → **G3**: uzgadnianie co rok (odpowiedź właściciela 2026-10-03) |
 | **361** | ⚪ | martwe pole `rocket_artillery.terrainModifiers` (`unitArchetypes.js:72`, `mountains: Infinity`) — zero czytelników; planer stawia artylerię na górach (fixture GATE-S4: emp_001 heks (0,2)) | bez kroku |
+| **379** | 🟠 | mapa kolonii obcego ciała rysuje wrogie jednostki naziemne bez względu na wywiad — `ColonyOverlay._drawUnits` (`:3028`, lista z `:3033`, jedyny filtr stealth `:3041`/`:3227`), klik `getUnitAt` (`:4776`), przełącznik heksu na karcie wroga (`:2540-2544`) ⇒ karta ciała (G3-3) mówi „nieznany”, a mapa pokazuje garnizon | → follow-up **(h)**: reguła trzech warunków (kolonia gracza · własne jednostki na ciele · `detailed` o właścicielu), karta ciała tą samą regułą; osobna bramka w przeglądarce. `AI_GARRISON_PLAN.md` §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -696,12 +711,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **355** | ⚪ | mapa kolonii cudzego ciała otwiera się z opóźnieniem przy wejściu w tryb zrzutu — **345 wykluczony w kodzie** (`_loadBiomeMap` asynchroniczne, nic na nie nie czeka) | przyczyna niezmierzona; `GET 404` z bramki G2-3b zgodny z wykluczeniem |
 | **356** | ⚪ | okno ładowni: „undefined” jako nazwa łazika (`CargoLoadModal.js:328`, brak fallbacku `?? u.type`, który ma `ColonyOverlay.js:3339`) + nazwy archetypów z `descriptionPL` | klasa **113** |
 | **362** | ⚪ | kopia przedimportowa nie mieści się przy dużym zapisie (`SaveSystem.js:462-465`, best-effort, tylko `console.warn`) — od ok. 2,6 mln znaków na zapis; ostrzeżenie o dużym zapisie dopiero od 3,5 mln (`:136`) | zaprojektowane (W2 GATE 1); pomiar: uprząż 0,97 mln znaków, fixture GATE-S4 2,09 mln. `AI_GARRISON_PLAN.md` §6 |
-| **370** | 🟠 | ostrzeżenie „został miesiąc” (`withdrawalWarning`, `NotificationCenter.js:547`) nie gaśnie samo — po terminie, po załadunku ani po powrocie wojny; odrzuca je wyłącznie gracz (`NotificationDropdown.js:276`, `:295`, `:304`) | poprawka **(a)** gotowa jako łatka, **wstrzymana**: zaczerwienia trzy istniejące asercje (A6b, B6b, B6c); decyzja właściciela — `AI_GARRISON_PLAN.md` §5v, §6 |
 | **372** | ⚪ | trzy reguły nazwy imperium: strona traktatu bez warunku wywiadu (`EmpireName.js:19`), obserwacja — pełna przy `detailed` (`NotificationCenter.js:645`), panel dyplomacji — od `contact` (`DiplomacyOverlay.js:231`, `:311`); czwarta kopia pierwszej w `UIManager.js:1638` | **(c)** — etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
 | **374** | ⚪ | martwy `FleetTabPanel`: słucha `vessel:openCargoModal` (`FleetTabPanel.js:206`), a nikt go nie importuje; okno ładowni otwiera Dowództwo wprost (`FleetManagerOverlay.js:2786-2789`) | etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
-| **375** | ⚪ | polskie literały: „Błąd ostrzału: …” z surowym slugiem (`ColonyOverlay.js:4677`) i okno ładowni (`CargoLoadModal.js:125`, `:358`, `:381`, `:398`, `:439`, `:445`, `:500`) | klasa **113**; etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **375** | ⚪ | polskie literały: „Błąd ostrzału: …” z surowym slugiem (`ColonyOverlay.js:4677`) i okno ładowni (`CargoLoadModal.js:125`, `:358`, `:381`, `:398`, `:439`, `:445`, `:500`); od G3 także okno zrzutu desantu (`DropTroopsModal.js:49`, `:121`, `:142`, `:146`, `:157`, `:159`, `:171`) | klasa **113**; etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
 | **377** | ⚪ | polska gramatyka „z {0}” przy nazwie imperium w trzech innych wpisach: `log.diplo.napExpired` (`UIManager.js:1733`), `log.diplo.napRenewed` (`:1740`), `log.skirmish` (`:1638`) | rodzina **371** (✅ `cafd6e8`); etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
-| **378** | ⚪ | zapis wykonany, gdy **365** był żywy, niesie martwy `vessel.awayTeamUnitId` — `VesselManager.restore` bierze pole bez sprawdzenia (`VesselManager.js:1605`) | obejście: „Zbierz” (zmierzone: odnośnik zerowany, „Wyślij zespół” znów dostępne). `AI_GARRISON_PLAN.md` §6 |
 
 ---
 
