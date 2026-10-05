@@ -85,7 +85,9 @@ export class NotificationCenter {
     //   od razu, także na pauzie; tick — ostrzeżenie odtworzone z zapisu (jednostki wracają z zapisu PO dzwonku).
     //   ⚠ W TERMINIE NIE GAŚNIE: obok staje meldunek o utracie i plakietka rośnie — tak gracz zauważa stratę. Pełną wersję
     //   (gaśnie także w terminie) właściciel odrzucił: meldunek ZASTĘPOWAŁ ostrzeżenie, plakietka stała (2 → 2), a dzwonek
-    //   nie ma innego sygnału „nowe” niż liczba. Od terminu wpis jest rozstrzygnięty — gasi go wyłącznie gracz.
+    //   nie ma innego sygnału „nowe” niż liczba. Od terminu wpis jest rozstrzygnięty — gasi go gracz albo powrót wojny
+    //   z właścicielem ciała (odpowiedź (a) właściciela 2026-10-05: wojna gasi ostrzeżenie ZAWSZE, także po terminie;
+    //   meldunek o utracie zostaje).
     const retire = () => this._retireMootWithdrawalWarnings();
     EventBus.on('withdrawal:cleared',    retire);
     EventBus.on('groundUnit:removed',    retire);
@@ -579,18 +581,20 @@ export class NotificationCenter {
   }
 
   /**
-   * G2-4 (a) w wersji ograniczonej (Finding 370) — czy ostrzeżenie „został miesiąc” straciło przedmiot PRZED terminem:
-   * wróciła wojna z właścicielem ciała albo żadna jednostka z ostrzeżenia nie stoi już na tym ciele z flagą wycofania
-   * (nie w ładowni). Od terminu (`withdrawalDeadlineReached` — ten sam próg co usunięcie jednostek) — NIE: wpis jest
-   * rozstrzygnięty, obok stoi meldunek o utracie. Bez rejestru jednostek — nie zgadujemy (zostaje).
+   * G2-4 (a) w wersji ograniczonej (Finding 370) — czy ostrzeżenie „został miesiąc” straciło przedmiot. Powrót wojny
+   * z właścicielem ciała — ZAWSZE, także po terminie (odpowiedź (a) właściciela 2026-10-05; meldunek o utracie to inny
+   * typ wpisu i zostaje). Poza wojną — tylko PRZED terminem: żadna jednostka z ostrzeżenia nie stoi już na tym ciele
+   * z flagą wycofania (nie w ładowni). Od terminu (`withdrawalDeadlineReached` — ten sam próg co usunięcie jednostek)
+   * bez wojny — NIE: wpis jest rozstrzygnięty, obok stoi meldunek o utracie. Bez rejestru jednostek — nie zgadujemy
+   * (zostaje).
    * ⚠ Granica: ostatnia jednostka załadowana w tym samym ticku, który przeskakuje termin, zostawia ostrzeżenie
    *   (zachowanie sprzed (a)) — tick widzi już termin, a strat nie było.
    */
   _withdrawalWarningMoot(n) {
     const p = n?.payload ?? {};
     const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    if (Number.isFinite(p.deadlineYear) && withdrawalDeadlineReached(now, p.deadlineYear)) return false;
     if (p.empireId && areAtWar('player', p.empireId)) return true;
+    if (Number.isFinite(p.deadlineYear) && withdrawalDeadlineReached(now, p.deadlineYear)) return false;
     const gum = window.KOSMOS?.groundUnitManager;
     if (typeof gum?.getUnit !== 'function') return false;
     return !(p.unitIds ?? []).some(id => {

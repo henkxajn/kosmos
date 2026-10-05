@@ -22,7 +22,9 @@
 //       (`withdrawalWarning`) gaśnie samo PRZED terminem, gdy straciło przedmiot: załadunek ostatniej oflagowanej
 //       jednostki (częściowy — zostaje), jednostka usunięta inną drogą, powrót wojny (od razu, bez ticku), nieaktualne
 //       ostrzeżenie z zapisu (na pierwszym ticku). W TERMINIE nie gaśnie: obok staje meldunek o utracie, a liczba
-//       aktywnych w dzwonku rośnie; od terminu gasi je wyłącznie gracz — także gdy wojna wróci później (kontrole).
+//       aktywnych w dzwonku rośnie; od terminu bez wojny gasi je wyłącznie gracz (kontrole). Powrót wojny gasi je
+//       ZAWSZE, także po terminie (odpowiedź (a) właściciela 2026-10-05 — Za6 odwrócona za zgodą); meldunek o utracie
+//       zostaje (kontrola Za6).
 //       Jeden próg terminu dla usunięcia jednostek i dla dzwonka: `withdrawalDeadlineReached` (pin wykonaniowy + źródłowy).
 //   Z378 Finding 378 — zapis wykonany, gdy 365 był żywy, niesie `vessel.awayTeamUnitId` łazika, którego nie ma: po
 //       wczytaniu (prawdziwe `serialize` → `vesselManager.restore` → `groundUnitManager.restore`, kolejność bloku
@@ -502,15 +504,21 @@ function warnedScene(n = 1) {
   assert(nc.getById('notif_8')?.dismissed === false, 'Za5 kontrola: ostrzeżenie po terminie zostaje (od terminu gasi je gracz)');
 }
 {
-  console.log('\nZa6 — (a) po terminie wraca wojna: rozstrzygnięte ostrzeżenie zostaje (gasi je wyłącznie gracz)');
+  // ⚠ Odwrócona za zgodą właściciela (odpowiedź (a), 2026-10-05): przed nią pinowała „po terminie powrót wojny
+  //   ostrzeżenia nie gasi”. Powrót wojny gasi ostrzeżenie ZAWSZE, także po terminie; meldunek o utracie zostaje.
+  console.log('\nZa6 — (a) po terminie wraca wojna: ostrzeżenie gaśnie od razu (także po terminie), meldunek o utracie zostaje');
   const s = warnedScene(1);
   const { w } = s;
   run(w, 2);                                                          // termin w 6. civY
   const after = warningsOn(w, w.col.planetId).length;
+  const lossBefore = lossesOn(w, w.col.planetId).length;
   const war = warAgain(w);
   assert(s.ok === true && after === 1 && lossesOn(w, w.col.planetId).length === 1 && war !== false && w.dipl.getStatus(w.emp) === 'war',
     `świadek: termin minął (meldunek o utracie), ostrzeżenie w dzwonku (${after}); wojna wróciła (${w.dipl.getStatus(w.emp)})`);
-  assert(warningsOn(w, w.col.planetId).length === 1, 'Za6 kontrola: po terminie powrót wojny ostrzeżenia nie gasi');
+  assert(warningsOn(w, w.col.planetId).length === 0, 'Za6: po terminie powrót wojny gasi ostrzeżenie (bez czekania na tick)');
+  const lossAfter = lossesOn(w, w.col.planetId).length;
+  assert(lossBefore === 1 && lossAfter === 1,
+    `Za6 kontrola: meldunek o utracie przeżywa powrót wojny (${lossBefore} → ${lossAfter})`);
 }
 {
   console.log('\nZa7 — (a) jeden próg terminu dla usunięcia jednostek i dla dzwonka');
