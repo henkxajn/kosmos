@@ -16,6 +16,7 @@ import { t }              from '../i18n/i18n.js';
 import { computeFloatingPlacement } from '../ui/BottomContextLogic.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
+import { readGarrisonReadout, formatGarrisonReadout } from '../utils/GarrisonReadout.js';   // G3-3
 import { FloatingPanel }  from '../ui/FloatingPanel.js';
 
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;    // 46px
@@ -329,8 +330,24 @@ export class BottomContext {
    */
   _getInfoLines(entity) {
     const occ = this._occupationLine(entity);
+    const gar = this._garrisonLine(entity);
     const rows = this._getInfoLinesRaw(entity);
-    return occ ? [occ, ...rows] : rows;
+    return [...(occ ? [occ] : []), ...(gar ? [gar] : []), ...rows];
+  }
+
+  /**
+   * G3-3 — garnizon OBCEJ kolonii: liczba jednostek przy wywiadzie `detailed`, przed pierwszą mobilizacją rezerwa planu
+   * (oznaczona), poniżej `detailed` — nieznany. Reguła i tekst z `GarrisonReadout` (to samo źródło co okno zrzutu
+   * desantu); tu wyłącznie prezentacja. Kolonia gracza i ciało bez kolonii — bez wiersza.
+   */
+  _garrisonLine(entity) {
+    const readout = readGarrisonReadout(window.KOSMOS, entity?.id);
+    if (!readout) return null;
+    return {
+      k: t('garrison.readout.label'),
+      v: formatGarrisonReadout(readout),
+      vc: readout.kind === 'units' ? C.bright : C.dim,
+    };
   }
 
   /**

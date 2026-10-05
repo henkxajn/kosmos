@@ -7,6 +7,8 @@
 
 import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
+import { readGarrisonReadout, formatGarrisonReadout } from '../utils/GarrisonReadout.js';   // G3-3
 
 /**
  * @param {object} vessel — VesselInstance z groundUnits
@@ -51,6 +53,15 @@ export function showDropTroopsModal(vessel, targetName = '???') {
     info.style.cssText = `font-size: 10px; color: ${THEME.textSecondary}; margin-top: 4px; text-align: center;`;
     info.textContent = `Zaznacz jednostki do zrzutu (${unitIds.length} w ładowni)`;
     header.appendChild(info);
+
+    // G3-3 — garnizon celu (ciało, nad którym statek stoi): ta sama reguła i tekst co karta ciała (`GarrisonReadout`).
+    const garrisonText = formatGarrisonReadout(readGarrisonReadout(window.KOSMOS, vessel.position?.dockedAt));
+    if (garrisonText) {
+      const garrison = document.createElement('div');
+      garrison.style.cssText = `font-size: 10px; color: ${THEME.textSecondary}; margin-top: 2px; text-align: center;`;
+      garrison.textContent = t('garrison.readout.dropLine', garrisonText);
+      header.appendChild(garrison);
+    }
     panel.appendChild(header);
 
     // Lista jednostek

@@ -3033,6 +3033,12 @@ export default {
   'unitCard.withdrawalMonths':   '{0} mies.',
   'unitCard.withdrawalHint':     'Załaduj na statek — po terminie jednostka przepada',
   'unitPanel.withdrawal':        '⚑ Wycofanie do {0} ({1} mies.)',
+  // G3-3 — garnizon obcej kolonii (karta ciała, okno zrzutu desantu)
+  'garrison.readout.label':      'Garnizon',
+  'garrison.readout.units':      '{0} jedn.',
+  'garrison.readout.reserve':    'rezerwa {0} jedn.',
+  'garrison.readout.unknown':    'nieznany',
+  'garrison.readout.dropLine':   'Garnizon celu: {0}',
   'event.colony.suppliesLow':    'Niski stan military_supplies w {0}',
 
   // === ObservatoryOverlay ===

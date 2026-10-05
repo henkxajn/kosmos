@@ -1,4 +1,5 @@
-// G3 — AI GARRISON: odrastanie strat (G3-1) i uzgadnianie mobilizacji co rok (G3-2, Finding 360).
+// G3 — AI GARRISON: odrastanie strat (G3-1), uzgadnianie mobilizacji co rok (G3-2, Finding 360) i widoczność
+// garnizonu (G3-3).
 //
 // Decyzje (`docs/design/AI_GARRISON_PLAN.md` §1 i §3; G3 podpisane, domyślne potwierdzone przez właściciela 2026-10-04):
 //   G3-1 po pierwszej mobilizacji imperium odzyskuje JEDNĄ jednostkę na rok gry (1,0 na zegarze `gameTime`), w wojnie
@@ -8,6 +9,9 @@
 //        żywych — nic nie powstaje i nic nie jest rozwiązywane; ciała, których imperium nie ma, nic nie dostają;
 //        wyłącznie `createAIUnit`; deterministycznie.
 //   G3-2 przy tej samej kontroli rocznej imperium w wojnie, a bez mobilizacji, mobilizuje się.
+//   G3-3 przy wywiadzie „detailed” o imperium gracz widzi liczbę jednostek garnizonu na każdym jego ciele; przed pierwszą
+//        mobilizacją — rezerwę planu dla ciała, oznaczoną jako rezerwa; poniżej „detailed” — nieznany. Karta ciała
+//        (gdzie gracz ogląda obcą kolonię) i okno zrzutu desantu. PL i EN.
 //
 //   R0  czyste funkcje planera (ranking niedoboru, archetyp odrastania) i ślad audytu w DebugLog.
 //   R1  strata N jednostek: dokładnie jedna na rok gry aż do limitu, nigdy więcej; imperium niezmobilizowane — nic.
@@ -20,6 +24,11 @@
 //   R6  zapis sprzed G3 (flaga bez `regrowthYear`): odrastanie rusza bez migracji i bez nadrabiania lat.
 //   R7  wojna bez mobilizacji mobilizuje się przy kontroli rocznej, raz: wojna bez zdarzenia; imperium bez pełnej
 //       kolonii w chwili wybuchu wojny (Finding 360).
+//   R8  (G3-3) odczyt, który woła UI (`GarrisonReadout`): „detailed” — jednostki naprawdę stojące na ciele (także po
+//       stracie i odrośnięciu); przed mobilizacją — rezerwa planera dla ciała; poniżej — nieznany; kolonia gracza i ciało
+//       bez kolonii — bez odczytu; bez modułu wywiadu — nieznany. Powierzchnie WYKONANIEM: karta ciała
+//       (`BottomContext.draw` na atrapie ctx) i okno zrzutu (`showDropTroopsModal` na atrapie DOM z env.js); PL i EN.
+//       ⚠ Tylko przeglądarka pokaże układ wiersza na karcie i w oknie.
 //
 // ⚠ Planer i GarrisonSystem ładowane PRZESTRZENIĄ NAZW, nie importem nazwanym: na kodzie sprzed G3 nowych eksportów
 //   nie ma, a import nazwany wywróciłby linkowanie całej suity — żaden pin nie dostałby koloru.
@@ -33,9 +42,16 @@ import gameState from '../../core/GameState.js';
 import debugLog from '../../core/DebugLog.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
 import * as GP from '../../utils/GarrisonPlanner.js';
+import EntityManager from '../../core/EntityManager.js';
+import * as VS from '../../entities/Vessel.js';
+import { BottomContext } from '../../ui/BottomContext.js';
+import { showDropTroopsModal } from '../../ui/DropTroopsModal.js';
+import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 
 let GSmod = null;
 try { GSmod = await import('../../systems/GarrisonSystem.js'); } catch { GSmod = null; }
+let ROmod = null;                      // G3-3 — przed G3-3 modułu nie ma
+try { ROmod = await import('../../utils/GarrisonReadout.js'); } catch { ROmod = null; }
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -396,6 +412,152 @@ function reload(gsSave, guSave, t) {
   run(w, 30);
   assert(w.K.diplomacySystem.getStatus(e1) !== 'war' && flagOf(w.K, e1) === null && flagOf(w.K, e2) === null && aiUnits(w, e1).length === 0,
     `R7 kontrola: ${yearOf(w)} granice roku w pokoju — bez flagi i bez jednostek`);
+}
+
+// ── R8 — G3-3: widoczność garnizonu (funkcja, którą woła UI) ────────────────────────────
+const readout = (K, pid) => (typeof ROmod?.readGarrisonReadout === 'function' ? ROmod.readGarrisonReadout(K, pid) : undefined);
+const readoutText = (r) => (typeof ROmod?.formatGarrisonReadout === 'function' ? ROmod.formatGarrisonReadout(r) : undefined);
+/** Poziom wywiadu jak `KOSMOS.debug.setIntel` (`GameScene`): surowe zejście do `unknown`, potem `advanceIntel`. */
+function setIntel(K, emp, level) {
+  gameState.set(`intel.${emp}`, { level: 'unknown', knownColonies: [], knownTech: [], lastIncidents: [],
+    knownMilitary: null, knownReserve: null, knownCrewCapacity: null }, 'keeper_set_intel_reset');
+  if (level !== 'unknown') K.intelSystem.advanceIntel(emp, level, 'keeper_set_intel');
+  return K.intelSystem.getLevel(emp);
+}
+/** Ciało bez kolonii w układzie domowym (niczyje). */
+function neutralBody(w) {
+  const sys = EntityManager.get(w.K.homePlanet.id)?.systemId;
+  return ['moon', 'planet', 'planetoid'].flatMap(tp => EntityManager.getByType(tp))
+    .find(b => b.systemId === sys && b.id !== w.K.homePlanet.id && !w.cm.getColony(b.id)) ?? null;
+}
+{
+  console.log('\nR8 — odczyt garnizonu: „detailed” = jednostki na ciele; przed mobilizacją — rezerwa planu; poniżej — nieznany');
+  const w = boot();
+  run(w, 40 * 12);
+  const [e1] = w.emps;
+  const plan = planFor(w.K, e1);
+  const cap = w.K.directorProduction.capitalOf(e1)?.planetId;
+  const other = plan.perBody.find(b => b.role !== 'capital')?.planetId;
+  const capPlanned = plan.perBody.find(b => b.planetId === cap)?.count;
+  const lv = [setIntel(w.K, e1, 'unknown'), readout(w.K, cap)];
+  const lvC = [setIntel(w.K, e1, 'contact'), readout(w.K, cap)];
+  assert(lv[0] === 'unknown' && lvC[0] === 'contact' && !!cap && !!other,
+    `świadek: wywiad o ${e1}: ${lv[0]} → ${lvC[0]}; stolica ${cap} (plan ${capPlanned}), ${other}`);
+  assert(typeof ROmod?.readGarrisonReadout === 'function' && typeof ROmod?.formatGarrisonReadout === 'function',
+    'R8 moduł: GarrisonReadout eksportuje readGarrisonReadout i formatGarrisonReadout (jedno źródło karty i okna zrzutu)');
+  assert(lv[1]?.kind === 'unknown' && lv[1]?.count === null && lvC[1]?.kind === 'unknown'
+      && readoutText(lvC[1]) === t('garrison.readout.unknown'),
+    `R8a: poniżej „detailed” — nieznany (unknown: ${lv[1]?.kind}, contact: ${lvC[1]?.kind}, tekst „${readoutText(lvC[1])}”)`);
+  setIntel(w.K, e1, 'detailed');
+  const rc = readout(w.K, cap), ro = readout(w.K, other);
+  assert(flagOf(w.K, e1) === null && aiUnits(w, e1).length === 0 && rc?.kind === 'reserve' && rc?.count === capPlanned
+      && ro?.kind === 'reserve' && ro?.count === 1 && readoutText(rc) === t('garrison.readout.reserve', capPlanned),
+    `R8b: „detailed” przed mobilizacją — rezerwa planu, oznaczona (stolica ${rc?.kind}:${rc?.count}, ${other} ${ro?.kind}:${ro?.count}; „${readoutText(rc)}”)`);
+  declare(w.K, e1);
+  const actual = onBody(w, e1, cap).length;
+  const ru = readout(w.K, cap);
+  assert(ru?.kind === 'units' && ru?.count === actual && actual === capPlanned && readoutText(ru) === t('garrison.readout.units', actual),
+    `R8c: po mobilizacji — liczba jednostek na ciele (${ru?.kind}:${ru?.count} = ${actual}; „${readoutText(ru)}”)`);
+  w.gum.removeUnit(onBody(w, e1, cap)[0]?.id);
+  const rd = readout(w.K, cap);
+  run(w, stepsToYearEnd(w));
+  const rr = readout(w.K, cap);
+  assert(rd?.count === actual - 1 && rr?.count === actual && rr?.count === onBody(w, e1, cap).length,
+    `R8d: odczyt = jednostki naprawdę stojące na ciele — po stracie ${rd?.count}, po odrośnięciu ${rr?.count}`);
+  const hx = GP.garrisonHexes(GP.readGarrisonBodyContext(w.K, cap), 1).hexes[0];
+  const pu = hx ? w.gum.createUnit('shock_infantry', cap, hx.q, hx.r, { owner: 'player', factionId: 'humanity' }) : null;
+  const rp = readout(w.K, cap);
+  assert(!!pu && w.gum.getUnitsOnPlanet(cap).length === actual + 1 && rp?.count === actual,
+    `R8d': jednostka gracza na tym ciele nie liczy się do garnizonu (na ciele ${w.gum.getUnitsOnPlanet(cap).length}, odczyt ${rp?.count})`);
+  const nb = neutralBody(w);
+  assert(readout(w.K, w.K.homePlanet.id) === null && !!nb && readout(w.K, nb.id) === null,
+    `R8e: kolonia gracza i ciało bez kolonii (${nb?.id}) — bez odczytu (null)`);
+  const intelSys = w.K.intelSystem;
+  w.K.intelSystem = null;
+  const rn = readout(w.K, cap);
+  w.K.intelSystem = intelSys;
+  assert(rn?.kind === 'unknown', `R8f: bez modułu wywiadu — nieznany, nie liczba (fail-closed: ${rn?.kind})`);
+}
+/** Karta ciała tak, jak rysuje ją gra (`BottomContext.draw` na atrapie ctx) — wszystkie napisy drugiej klatki. */
+function renderCard(entity) {
+  const texts = () => {
+    const out = [];
+    const noop = () => {};
+    return {
+      out, canvas: { width: 1280, height: 720 }, measureText: (s) => ({ width: String(s).length * 6 }),
+      save: noop, restore: noop, beginPath: noop, moveTo: noop, lineTo: noop, stroke: noop, fill: noop, clip: noop,
+      rect: noop, fillRect: noop, strokeRect: noop, closePath: noop, arc: noop, translate: noop, setLineDash: noop,
+      roundRect: noop, ellipse: noop, createLinearGradient: () => ({ addColorStop: noop }),
+      fillText: (s) => out.push(String(s)), strokeText: (s) => out.push(String(s)),
+      font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: 'left', globalAlpha: 1, shadowColor: '', shadowBlur: 0,
+    };
+  };
+  const bc = new BottomContext();
+  bc.draw(texts(), 1280, 720, entity);                 // pierwsza klatka = fade-in
+  const ctx2 = texts();
+  bc.draw(ctx2, 1280, 720, entity);
+  return ctx2.out;
+}
+/** Okno zrzutu desantu tak, jak otwiera je gra (`showDropTroopsModal` na atrapie DOM z env.js) — wszystkie napisy. */
+function dropModalTexts(w, dockedAt) {
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.K.homePlanet.id);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  const home = w.cm.getColony(w.K.homePlanet.id);
+  const land = home.grid.toArray().find(t0 => t0 && !t0.capitalBase && !t0.buildingId && t0.type !== 'ocean'
+    && w.gum.getUnitsAtHex(home.planetId, t0.q, t0.r).length === 0);
+  const u = w.gum.createUnit('shock_infantry', home.planetId, land.q, land.r, { owner: 'player', factionId: 'humanity' });
+  const loaded = VS.loadGroundUnit(v, u)?.ok === true;
+  v.position.dockedAt = dockedAt;
+  const before = document.body.children.length;
+  showDropTroopsModal(v, 'X');
+  const overlay = document.body.children[before] ?? null;
+  const nodes = [];
+  const walk = (n) => { if (!n || typeof n !== 'object') return; nodes.push(n); for (const c of n.children ?? []) walk(c); };
+  walk(overlay);
+  if (overlay?.parentNode) overlay.parentNode.removeChild(overlay);
+  return { loaded, opened: !!overlay, texts: nodes.map(n => n.textContent).filter(s => typeof s === 'string' && s.length > 0) };
+}
+{
+  console.log('\nR8 — powierzchnie: karta ciała i okno zrzutu desantu pokazują ten sam odczyt (PL i EN)');
+  const w = boot();
+  run(w, 40 * 12);
+  const [e1] = w.emps;
+  const cap = w.K.directorProduction.capitalOf(e1)?.planetId;
+  const body = EntityManager.get(cap);
+  const label = t('garrison.readout.label') + ': ';
+  setIntel(w.K, e1, 'contact');
+  const cardUnknown = renderCard(body);
+  const dropUnknown = dropModalTexts(w, cap);
+  assert(cardUnknown.length > 3 && dropUnknown.opened && dropUnknown.loaded,
+    `świadek: karta ciała ${body?.name} narysowana (${cardUnknown.length} napisów), okno zrzutu otwarte z jednostką w ładowni`);
+  assert(cardUnknown.includes(label) && cardUnknown.includes(t('garrison.readout.unknown'))
+      && dropUnknown.texts.includes(t('garrison.readout.dropLine', t('garrison.readout.unknown'))),
+    `R8g: poniżej „detailed” — karta „${label}${t('garrison.readout.unknown')}”, okno „${t('garrison.readout.dropLine', t('garrison.readout.unknown'))}”`);
+  setIntel(w.K, e1, 'detailed');
+  const cardReserve = renderCard(body);
+  const capPlanned = planFor(w.K, e1).perBody.find(b => b.planetId === cap)?.count;
+  assert(cardReserve.includes(t('garrison.readout.reserve', capPlanned)),
+    `R8h: „detailed” przed mobilizacją — karta pokazuje rezerwę (${t('garrison.readout.reserve', capPlanned)})`);
+  declare(w.K, e1);
+  const n = onBody(w, e1, cap).length;
+  const cardUnits = renderCard(body);
+  const dropUnits = dropModalTexts(w, cap);
+  assert(n >= 1 && cardUnits.includes(t('garrison.readout.units', n))
+      && dropUnits.texts.includes(t('garrison.readout.dropLine', t('garrison.readout.units', n))),
+    `R8i: po mobilizacji — karta „${t('garrison.readout.units', n)}”, okno „${t('garrison.readout.dropLine', t('garrison.readout.units', n))}”`);
+  const own = renderCard(EntityManager.get(w.K.homePlanet.id));
+  const dropOwn = dropModalTexts(w, w.K.homePlanet.id);
+  assert(own.length > 3 && !own.includes(label) && dropOwn.opened && !dropOwn.texts.some(s => s.startsWith(t('garrison.readout.dropLine', '').trim())),
+    'R8j kontrola: karta i okno zrzutu nad WŁASNĄ kolonią — bez wiersza garnizonu (pin nie łapie każdego ciała)');
+  const prev = getLocale();
+  const both = {};
+  for (const loc of ['pl', 'en']) {
+    setLocale(loc);
+    both[loc] = ['label', 'units', 'reserve', 'unknown', 'dropLine'].map(k => t(`garrison.readout.${k}`, 3));
+  }
+  setLocale(prev);
+  assert(['pl', 'en'].every(loc => both[loc].every((s, i) => s && !s.startsWith('garrison.readout.'))) && both.pl.join() !== both.en.join(),
+    `R8k: klucze PL i EN istnieją i się różnią (PL: ${both.pl.join(' | ')}; EN: ${both.en.join(' | ')})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

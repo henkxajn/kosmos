@@ -3032,6 +3032,12 @@ export default {
   'unitCard.withdrawalMonths':   '{0} mo.',
   'unitCard.withdrawalHint':     'Load onto a ship — after the deadline the unit is lost',
   'unitPanel.withdrawal':        '⚑ Withdraw by {0} ({1} mo.)',
+  // G3-3 — garrison of a foreign colony (body card, troop drop dialog)
+  'garrison.readout.label':      'Garrison',
+  'garrison.readout.units':      '{0} unit(s)',
+  'garrison.readout.reserve':    'reserve: {0} unit(s)',
+  'garrison.readout.unknown':    'unknown',
+  'garrison.readout.dropLine':   'Target garrison: {0}',
   'event.colony.suppliesLow':    'Military supplies low in {0}',
 
   // === ObservatoryOverlay ===
