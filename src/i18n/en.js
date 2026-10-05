@@ -3026,6 +3026,9 @@ export default {
   'event.withdrawal.aiRemoved':  '☮ Peace with {0}: its troops ({1} unit(s)) have left {2}',
   'event.withdrawal.aiRemovedLoad': '☮ Troops of {0} ({1} unit(s)) have left {2}',
   'event.groundUnit.lostWithBody': '⚔ {0} ground unit(s) lost together with {1}',
+  // G3-4 — an empire mobilises its ground garrisons (Journal entry with contact)
+  'event.garrison.mobilized':      '🛡 {0} mobilises its ground garrisons',
+  'event.garrison.mobilizedCount': '🛡 {0} mobilises its ground garrisons: {1} unit(s)',
   'unitCard.withdrawalTitle':    '⚑ WITHDRAWAL AFTER PEACE',
   'unitCard.withdrawalDeadline': 'Deadline',
   'unitCard.withdrawalLeft':     'Time left',

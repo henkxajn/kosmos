@@ -77,6 +77,8 @@ export class NotificationCenter {
     //   przy pokoju, ani że jego oddział zginął razem z ciałem. Oba — sam wpis w Dzienniku, bez dzwonka.
     EventBus.on('withdrawal:aiRemoved',   e => this._handleWithdrawalAiRemoved(e));
     EventBus.on('garrison:unitsRemoved',  e => this._handleGarrisonUnitsRemoved(e));
+    // G3-4 — imperium, z którym gracz ma kontakt, mobilizuje garnizony naziemne: jeden wpis w Dzienniku (bez dzwonka).
+    EventBus.on('garrison:mobilized',     e => this._handleGarrisonMobilized(e));
     // G2-4 (a) w wersji OGRANICZONEJ (decyzja właściciela 2026-10-04, Finding 370) — ostrzeżenie „został miesiąc” gaśnie
     //   samo PRZED terminem, gdy straciło przedmiot: na ciele nie została żadna oflagowana jednostka z ostrzeżenia
     //   (załadowane, flaga zdjęta albo jednostki usunięte inną drogą) albo wróciła wojna z właścicielem ciała. Zdarzenia —
@@ -652,6 +654,24 @@ export class NotificationCenter {
     if (!(owners ?? []).some(o => (o ?? 'player') === 'player')) return;
     this._journal(t('event.groundUnit.lostWithBody', count, bodyName ?? this._bodyName(planetId)),
       'combat', 'warn', planetId);
+  }
+
+  /**
+   * G3-4 — imperium mobilizuje garnizony naziemne (`GarrisonSystem.mobilizeEmpire` — D15: raz na imperium, także przez
+   * uzgodnienie przy wczytaniu i co rok): JEDEN wpis w Dzienniku na mobilizację, kanał wywiadu, bez dzwonka.
+   * ⚠ Bramka mgły wojny u odbiorcy, jak W2-7 (`_handleMobilized`): wpis wyłącznie przy kontakcie (`contact`); nazwa
+   *   imperium dopiero przy `detailed` (`_empireLabel`), liczba jednostek też dopiero przy `detailed` — ten sam próg co
+   *   odczyt garnizonu na karcie ciała (G3-3). Odrastanie strat (`garrison:regrown`) wpisu nie daje.
+   */
+  _handleGarrisonMobilized({ empireId, created } = {}) {
+    if (!empireId || empireId === 'player') return;
+    const intel = window.KOSMOS?.intelSystem;
+    if (!intel?.isAtLeast?.(empireId, 'contact')) return;           // fail-closed: brak modułu ⇒ brak wpisu
+    const name = this._empireLabel(empireId);
+    const text = intel.isAtLeast(empireId, 'detailed') && Number.isFinite(created)
+      ? t('event.garrison.mobilizedCount', name, created)
+      : t('event.garrison.mobilized', name);
+    this._journal(text, 'intel', 'warn', null);
   }
 
   // ── Helpery ──────────────────────────────────────────────────────────────

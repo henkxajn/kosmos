@@ -1,5 +1,5 @@
-// G3 — AI GARRISON: odrastanie strat (G3-1), uzgadnianie mobilizacji co rok (G3-2, Finding 360) i widoczność
-// garnizonu (G3-3).
+// G3 — AI GARRISON: odrastanie strat (G3-1), uzgadnianie mobilizacji co rok (G3-2, Finding 360), widoczność
+// garnizonu (G3-3) i wpis w Dzienniku przy mobilizacji (G3-4).
 //
 // Decyzje (`docs/design/AI_GARRISON_PLAN.md` §1 i §3; G3 podpisane, domyślne potwierdzone przez właściciela 2026-10-04):
 //   G3-1 po pierwszej mobilizacji imperium odzyskuje JEDNĄ jednostkę na rok gry (1,0 na zegarze `gameTime`), w wojnie
@@ -12,6 +12,7 @@
 //   G3-3 przy wywiadzie „detailed” o imperium gracz widzi liczbę jednostek garnizonu na każdym jego ciele; przed pierwszą
 //        mobilizacją — rezerwę planu dla ciała, oznaczoną jako rezerwa; poniżej „detailed” — nieznany. Karta ciała
 //        (gdzie gracz ogląda obcą kolonię) i okno zrzutu desantu. PL i EN.
+//   G3-4 jeden wpis w Dzienniku, gdy imperium, z którym gracz ma kontakt, mobilizuje garnizony.
 //
 //   R0  czyste funkcje planera (ranking niedoboru, archetyp odrastania) i ślad audytu w DebugLog.
 //   R1  strata N jednostek: dokładnie jedna na rok gry aż do limitu, nigdy więcej; imperium niezmobilizowane — nic.
@@ -29,6 +30,8 @@
 //       bez kolonii — bez odczytu; bez modułu wywiadu — nieznany. Powierzchnie WYKONANIEM: karta ciała
 //       (`BottomContext.draw` na atrapie ctx) i okno zrzutu (`showDropTroopsModal` na atrapie DOM z env.js); PL i EN.
 //       ⚠ Tylko przeglądarka pokaże układ wiersza na karcie i w oknie.
+//   R9  (G3-4) jeden wpis w Dzienniku na mobilizację, tylko przy kontakcie (nazwa i liczba dopiero przy „detailed”);
+//       bez kontaktu — nic; druga wojna i odrastanie — bez wpisu; mobilizacja przy kontroli rocznej — jeden wpis; PL i EN.
 //
 // ⚠ Planer i GarrisonSystem ładowane PRZESTRZENIĄ NAZW, nie importem nazwanym: na kodzie sprzed G3 nowych eksportów
 //   nie ma, a import nazwany wywróciłby linkowanie całej suity — żaden pin nie dostałby koloru.
@@ -47,6 +50,8 @@ import * as VS from '../../entities/Vessel.js';
 import { BottomContext } from '../../ui/BottomContext.js';
 import { showDropTroopsModal } from '../../ui/DropTroopsModal.js';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
+import { NotificationCenter } from '../../systems/NotificationCenter.js';
+import { EventLogSystem } from '../../systems/EventLogSystem.js';
 
 let GSmod = null;
 try { GSmod = await import('../../systems/GarrisonSystem.js'); } catch { GSmod = null; }
@@ -558,6 +563,71 @@ function dropModalTexts(w, dockedAt) {
   setLocale(prev);
   assert(['pl', 'en'].every(loc => both[loc].every((s, i) => s && !s.startsWith('garrison.readout.'))) && both.pl.join() !== both.en.join(),
     `R8k: klucze PL i EN istnieją i się różnią (PL: ${both.pl.join(' | ')}; EN: ${both.en.join(' | ')})`);
+}
+
+// ── R9 — G3-4: jeden wpis w Dzienniku przy mobilizacji, tylko przy kontakcie ────────────
+/** Świat z Dziennikiem i dzwonkiem (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). */
+function bootJournal(years = 40) {
+  const w = boot();
+  if (years > 0) run(w, years * 12);
+  w.K.eventLogSystem = new EventLogSystem();
+  w.K.notificationCenter = new NotificationCenter();
+  return w;
+}
+const mobLines = (w) => (w.K.eventLogSystem?.getEntries?.() ?? []).filter(e => /🛡/.test(e.text));
+{
+  console.log('\nR9 — mobilizacja garnizonów imperium z kontaktem: JEDEN wpis w Dzienniku; bez kontaktu — nic');
+  const w = bootJournal();
+  const [e1, e2] = w.emps;
+  setIntel(w.K, e1, 'contact');
+  setIntel(w.K, e2, 'rumor');
+  const bell0 = w.K.notificationCenter.getActiveCount();
+  declare(w.K, e1);
+  declare(w.K, e2);
+  const lines = mobLines(w);
+  const want1 = t('event.garrison.mobilized', t('intel.unknownEmpire'));
+  const mob = (emp) => debugLog.query({ kind: 'garrison:mobilized', empireId: emp }).length;
+  assert(mob(e1) === 1 && mob(e2) === 1,
+    `świadek: oba imperia zmobilizowane (garrison:mobilized ${e1} ×${mob(e1)}, ${e2} ×${mob(e2)})`);
+  assert(lines.length === 1 && lines[0].text === want1 && lines[0].channel === 'intel' && lines[0].severity === 'warn',
+    `R9a: jeden wpis — ${e1} (kontakt, nazwa dopiero przy „detailed”): „${lines[0]?.text}” [${lines[0]?.channel}/${lines[0]?.severity}]`);
+  assert(!lines.some(l => l.text !== want1) && w.K.notificationCenter.getActiveCount() === bell0,
+    `R9b: ${e2} (rumor) — bez wpisu; dzwonek bez zmian (${bell0} → ${w.K.notificationCenter.getActiveCount()})`);
+  w.K.diplomacySystem.relations.setStatus('player', e1, 'peace', {}, 'keeper_peace');
+  w.gum.removeUnit(aiUnits(w, e1)[0]?.id);
+  declare(w.K, e1);
+  run(w, stepsToYearEnd(w));
+  assert(mobLines(w).length === 1 && regrown(e1).length === 1,
+    `R9c: druga wojna i odrośnięta jednostka (garrison:regrown ×${regrown(e1).length}) — bez drugiego wpisu (${mobLines(w).length})`);
+}
+{
+  console.log('\nR9 — „detailed”: wpis z nazwą imperium i liczbą jednostek; mobilizacja przy kontroli rocznej — też jeden wpis');
+  const w = bootJournal();
+  const [e1] = w.emps;
+  setIntel(w.K, e1, 'detailed');
+  run(w, 1);
+  w.K.diplomacySystem.relations.setStatus('player', e1, 'war', {}, 'keeper_no_event');
+  run(w, stepsToYearEnd(w));
+  const f = flagOf(w.K, e1);
+  const name = w.K.empireRegistry.get(e1)?.name;
+  const lines = mobLines(w);
+  assert(f?.reason === 'reconcile_yearly' && Number.isFinite(f?.created) && !!name,
+    `świadek: mobilizacja przy kontroli rocznej (${f?.reason}, ${f?.created} jedn.)`);
+  assert(lines.length === 1 && lines[0].text === t('event.garrison.mobilizedCount', name, f.created),
+    `R9d: jeden wpis z nazwą i liczbą („${lines[0]?.text}”)`);
+}
+{
+  console.log('\nR9 — teksty PL i EN');
+  const prev = getLocale();
+  const both = {};
+  for (const loc of ['pl', 'en']) {
+    setLocale(loc);
+    both[loc] = [t('event.garrison.mobilized', 'X'), t('event.garrison.mobilizedCount', 'X', 3)];
+  }
+  setLocale(prev);
+  assert(['pl', 'en'].every(loc => both[loc].every(s => s.includes('X') && !s.startsWith('event.garrison.'))) && both.pl[0] !== both.en[0]
+      && both.pl[1].includes('3') && both.en[1].includes('3'),
+    `R9e: PL „${both.pl.join(' | ')}”; EN „${both.en.join(' | ')}”`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

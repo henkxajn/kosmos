@@ -3027,6 +3027,9 @@ export default {
   'event.withdrawal.aiRemoved':  '☮ Pokój z imperium {0}: jego wojska ({1} jedn.) opuściły {2}',
   'event.withdrawal.aiRemovedLoad': '☮ Wojska imperium {0} ({1} jedn.) opuściły {2}',
   'event.groundUnit.lostWithBody': '⚔ Utracono {0} jedn. naziemnych wraz z ciałem {1}',
+  // G3-4 — mobilizacja garnizonów imperium (wpis w Dzienniku przy kontakcie)
+  'event.garrison.mobilized':      '🛡 {0} mobilizuje garnizony naziemne',
+  'event.garrison.mobilizedCount': '🛡 {0} mobilizuje garnizony naziemne: {1} jedn.',
   'unitCard.withdrawalTitle':    '⚑ WYCOFANIE PO POKOJU',
   'unitCard.withdrawalDeadline': 'Termin',
   'unitCard.withdrawalLeft':     'Pozostało',
