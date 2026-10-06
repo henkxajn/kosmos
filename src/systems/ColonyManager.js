@@ -920,6 +920,7 @@ export class ColonyManager {
 
     // ── Przerzut własności W MIEJSCU (lustro captureColonyForPlayer) ──
     colony.ownerEmpireId = newOwnerEmpireId;
+    this._severGroundBondsOnOwnerChange(colony, prevOwnerId);   // Finding 380 (Q2) — przed emisją `colony:captured`
 
     // Hexy → nowy właściciel (dokładne lustro :752-757)
     if (colony.grid?.toArray) {
@@ -1007,6 +1008,7 @@ export class ColonyManager {
     // Zdejmij oznaczenia wroga → getPlayerColonies() zacznie widzieć ciało
     colony.ownerEmpireId = null;
     colony.isTestEnemy   = false;
+    this._severGroundBondsOnOwnerChange(colony, previousOwner);   // Finding 380 (Q2) — przed emisją `colony:capturedByPlayer`
 
     // ⚠ P0-C=W2 (symetria do `transferColony`) — ODBICIE WŁASNEJ STOLICY PRZYWRACA JEJ RANGĘ.
     //   `transferColony` czyści `isHomePlanet` przy utracie; bez lustra tutaj gracz, który
@@ -1806,6 +1808,41 @@ export class ColonyManager {
     });
     gum.removeUnit(unit.id);
     return { ok: true, ...pops };
+  }
+
+  /**
+   * Finding 380 (odpowiedź właściciela Q2 2026-10-05, potwierdzenie 2026-10-06) — kolonia zmieniła właściciela: więzi POP
+   * jednostek naziemnych POPRZEDNIEGO właściciela z tą kolonią zostają zerwane. Wołane w OBU punktach zmiany właściciela
+   * (`transferColony`, `captureColonyForPlayer`) zaraz po zapisie nowego właściciela, PRZED emisją zdarzenia.
+   *   • Jednostki poprzedniego właściciela z domem w tej kolonii, które trzymają w niej blokadę (`popCost > 0`; na ciele,
+   *     gdziekolwiek indziej, także w ładowni): blokada zwolniona W TEJ KOLONII (`unlockPops(popCost, 'laborer')` — ten sam
+   *     typ, którym zablokowała ją rekrutacja), jednostka dostaje `popCost` 0 i brak domu — walczy dalej bez więzi POP,
+   *     więc przy śmierci, rozwiązaniu i braku utrzymania nic już nie wraca.
+   *   • Opóźnione zwroty poprzedniego właściciela czekające w kolejce tej kolonii — zwolnione w miejscu i zdjęte z kolejki
+   *     (inaczej wypłata po zwłoce szłaby na meldunek, a blokada zostawała w kolonii na zawsze).
+   * Ludzie zostają z kolonią. Dotykana jest WYŁĄCZNIE ta kolonia. Jednostki AI (`createAIUnit`: `popCost` 0) nie trzymają
+   * blokad, więc kierunek AI→gracz nic tu nie zmienia.
+   */
+  _severGroundBondsOnOwnerChange(colony, prevOwner) {
+    const pid = colony?.planetId;
+    if (!pid) return;
+    const prev = prevOwner ?? 'player';
+    const civ = colony.civSystem;
+    for (const u of window.KOSMOS?.groundUnitManager?.getAllUnits?.() ?? []) {
+      if (u.homeColonyId !== pid || (u.owner ?? 'player') !== prev || !(u.popCost > 0)) continue;
+      if (!u._popsReleased) civ?.unlockPops?.(u.popCost, 'laborer');
+      u.popCost = 0;
+      u.homeColonyId = null;
+      u._popsReleased = true;
+    }
+    const pending = colony._pendingPopReturns;
+    if (pending?.length) {
+      colony._pendingPopReturns = pending.filter(e => {
+        if ('owner' in e && (e.owner ?? 'player') !== prev) return true;   // nie poprzedniego właściciela — wypłata sprawdzi
+        civ?.unlockPops?.(e.amount, e.strata ?? 'laborer');
+        return false;
+      });
+    }
   }
 
   /** G1b — POP-y jednostki przepadły (brak kolonii jej właściciela). Meldunek, nie cisza. */

@@ -6,8 +6,9 @@
 //
 //   T-D  zrekrutowany garnizon rozpada się w walce (morale 0): pełny koszt POP odblokowany na kolonii
 //        macierzystej, żadna inna kolonia się nie zmienia. Przed naprawą: zablokowany na zawsze.
-//   T-D2 kolonia macierzysta PRZEJĘTA przed rozpadem: nic nie wraca nigdzie (ani na przejętą kolonię,
-//        ani na żadną inną), leci `groundUnit:popsLost` i powstaje wpis w Dzienniku.
+//   T-D2 kolonia macierzysta PRZEJĘTA przed rozpadem: od Q2 (Finding 380) przejęcie zrywa więź POP — blokada zwolniona
+//        w przejętej kolonii, jednostka bez kosztu POP i bez domu; rozpad nic nie rozlicza (żadna kolonia nic nie dostaje,
+//        bez `groundUnit:popsLost` i bez wpisu w Dzienniku). Przed Q2: nic nie wracało nigdzie, był meldunek i wpis.
 //   T-E  ścieżka utrzymania (brak kredytów) dalej zwalnia DOKŁADNIE RAZ. Kontrola pinu: subskrybent
 //        `groundUnit:disbanded` bez filtra zwolniłby drugi raz — i ten test by to złapał.
 //
@@ -23,8 +24,9 @@
 //
 //   T-F  zrekrutowana jednostka ginie na ciele AI: wpis reintegracji na kolonii macierzystej, kolonia AI
 //        bez zmian (przed naprawą: odwrotnie). Kontrola: śmierć na własnym ciele — jak dawniej.
-//        T-F2 dom przejęty przed śmiercią ⇒ nic nigdzie + meldunek. T-F3 dom przejęty w CZASIE ZWŁOKI
-//        wypłaty ⇒ wypłata przepada z meldunkiem, nowy właściciel nie dostaje nic.
+//        T-F2 dom przejęty przed śmiercią ⇒ nic nigdzie, bez meldunku (więź POP zerwana przy przejęciu, Q2/380).
+//        T-F3 dom przejęty w CZASIE ZWŁOKI wypłaty ⇒ od Q2 zwrot zwolniony W MIEJSCU w chwili przejęcia (ludzie zostają
+//        z kolonią), kolejka pusta, po zwłoce nic, bez meldunku. Przed Q2: oba z meldunkiem `popsLost`.
 //
 // ⚠ Harness: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu) + własne
 //   `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; konstruowane PO boocie,
@@ -157,9 +159,14 @@ console.log('T-D2 — kolonia macierzysta przejęta przed rozpadem: POP-y przepa
   const w = boot();
   const g = recruit(w, w.home, 'garrison_unit');
   const cost = ColonyManager.GROUND_UNIT_POP_COSTS.garrison_unit;
+  const lockAtRecruit = lockOf(w.home);
   w.cm.transferColony(w.home.planetId, w.emp, 'invasion');
-  assert(w.home.ownerEmpireId === w.emp && g.homeColonyId === w.home.planetId,
-    `T-D2: kolonia macierzysta ${w.home.planetId} należy teraz do ${w.home.ownerEmpireId} (jednostka dalej wskazuje ją jako dom)`);
+  // ⚠ Q2 (Finding 380; zgoda w poleceniu sesji zamykającej G1c, 2026-10-06 — piny T-D2 z czułością, T-F2 i T-F3 mogą
+  //   się odwrócić). Przed Q2 jednostka dalej wskazywała przejętą kolonię jako dom, a jej blokada w niej zostawała.
+  assert(w.home.ownerEmpireId === w.emp && g.homeColonyId === null && g.popCost === 0
+      && Math.abs(lockOf(w.home) - (lockAtRecruit - cost)) < EPS,
+    `T-D2: kolonia macierzysta ${w.home.planetId} należy teraz do ${w.home.ownerEmpireId}; przejęcie zerwało więź POP ` +
+    `(dom ${g.homeColonyId}, popCost ${g.popCost}), blokada zwolniona w przejętej kolonii (${lockAtRecruit} → ${lockOf(w.home)})`);
   const all = w.cm.getAllColonies();
   const locksBefore = snapLocks(all);
   collapseGarrison(w, g);
@@ -170,25 +177,28 @@ console.log('T-D2 — kolonia macierzysta przejęta przed rozpadem: POP-y przepa
     `(blokada ${locksBefore.get(w.home.planetId)} → ${lockOf(w.home)}). Zielony także przed naprawą (wtedy nie ` +
     'zwalniało się nic) — pada dopiero przy naprawie, która oddałaby POP-y koloni nienależącej do właściciela');
   const lost = w.ev.popsLost.filter(e => e.unitId === g.id);
-  assert(lost.length === 1 && Math.abs(lost[0].amount - cost) < EPS && lost[0].cause === 'morale_collapse',
-    `T-D2: jeden meldunek \`groundUnit:popsLost\` (${JSON.stringify(lost.map(e => ({ amount: e.amount, cause: e.cause })))})`);
+  assert(lost.length === 0,
+    `T-D2: bez meldunku \`groundUnit:popsLost\` — po przejęciu jednostka nie miała już POP do stracenia ` +
+    `(${JSON.stringify(lost.map(e => ({ amount: e.amount, cause: e.cause })))})`);
   const expected = t('event.groundUnit.popsLost', cost.toFixed(1), t('groundUnit.garrison_unit'));
-  assert(journalTexts(w).filter(x => x === expected).length === 1,
-    `T-D2: w Dzienniku jest wpis o utracie („${expected}") — strata nie jest cicha`);
+  assert(journalTexts(w).filter(x => x === expected).length === 0,
+    `T-D2: w Dzienniku nie ma wpisu o utracie („${expected}") — ludzie zostali z kolonią w chwili przejęcia`);
 }
 {
-  // Czułość strażnika: ta sama scena z „naprawą" BEZ terminu właściciela (dom = dowolna kolonia o tym id)
-  // oddałaby POP-y przejętej koloni — i strażnik wyżej by to zobaczył. Wymaga mechanizmu S2 (przed nim
-  // nic się nie zwalnia, więc nie ma czego podmienić) — to NIE jest kontrola zielona po obu stronach.
+  // Czułość strażnika — ⚠ Q2 (Finding 380): przed Q2 ta scena („naprawa" BEZ terminu właściciela) oddawała POP-y
+  //   przejętej koloni przy rozpadzie i strażnik wyżej by to zobaczył. Od Q2 na tej ścieżce NIE MA czego zwolnić:
+  //   przejęcie zerwało więź POP (popCost 0, brak domu), więc nawet bez terminu właściciela przejęta kolonia nie dostaje
+  //   nic przy rozpadzie. Regułę właściciela z jej czułością pinuje dziś scena zapisu sprzed Q2: `g1c_pop_loss_smoke` L7e.
   const w = boot();
   const g = recruit(w, w.home, 'garrison_unit');
-  const cost = ColonyManager.GROUND_UNIT_POP_COSTS.garrison_unit;
   w.cm.transferColony(w.home.planetId, w.emp, 'invasion');
   w.cm._ownedHomeColony = (u) => w.cm.getColony(u?.homeColonyId) ?? null;   // termin właściciela USUNIĘTY
   const before = lockOf(w.home);
   collapseGarrison(w, g);
-  assert(Math.abs(lockOf(w.home) - (before - cost)) < EPS,
-    `T-D2 CZUŁOŚĆ STRAŻNIKA: bez terminu właściciela przejęta kolonia dostałaby ${cost} POP (${before} → ${lockOf(w.home)})`);
+  assert(w.ev.disbanded.some(e => e.unitId === g.id && e.reason === 'morale_collapse')
+      && Math.abs(lockOf(w.home) - before) < EPS,
+    `T-D2 CZUŁOŚĆ (po Q2): garnizon rozpadł się, a przejęta kolonia nie dostała nic nawet bez terminu właściciela ` +
+    `(${before} → ${lockOf(w.home)}) — więź POP zerwana w chwili przejęcia`);
 }
 
 // ── T-E — utrzymanie zwalnia dokładnie raz ───────────────────────────────────────────────
@@ -320,7 +330,7 @@ function killOn(w, unit, colony) {
     `T-F KONTROLA: śmierć na własnym ciele — wpis na kolonii macierzystej (${JSON.stringify(pendingOf(w.home))}), jak dawniej`);
 }
 {
-  // T-F2 — dom przejęty PRZED śmiercią: nikt nic nie dostaje, jest meldunek.
+  // T-F2 — dom przejęty PRZED śmiercią: nikt nic nie dostaje; od Q2 (Finding 380) bez meldunku — więź POP zerwana.
   const w = boot();
   const s = recruit(w, w.home, 'shock_infantry');
   w.cm.transferColony(w.home.planetId, w.emp, 'invasion');
@@ -332,28 +342,35 @@ function killOn(w, unit, colony) {
   const lost = w.ev.popsLost.filter(e => e.unitId === s.id);
   assert(w.ev.destroyed.some(e => e.unitId === s.id) && anyPending.length === 0,
     `T-F2 SEDNO: dom przejęty — ŻADNA kolonia nie dostaje wpisu reintegracji (z wpisem: ${JSON.stringify(anyPending)})`);
-  assert(lost.length === 1 && Math.abs(lost[0].amount - SHOCK_COST * RI.rate) < EPS,
-    `T-F2: meldunek \`groundUnit:popsLost\` (${JSON.stringify(lost.map(e => ({ amount: e.amount, cause: e.cause })))})`);
+  // ⚠ Q2 (Finding 380) — przed Q2 pin oczekiwał meldunku o utraconym zwrocie (SHOCK_COST × rate).
+  assert(lost.length === 0 && s.popCost === 0 && s.homeColonyId === null,
+    `T-F2: bez meldunku \`groundUnit:popsLost\` — więź POP zerwana przy przejęciu (popCost ${s.popCost}, dom ` +
+    `${s.homeColonyId}; meldunki ${JSON.stringify(lost.map(e => ({ amount: e.amount, cause: e.cause })))})`);
   w.cm._tickPendingPopReturns(RI.delay + 0.01);
   assert(unchanged(locksBefore, all),
     'T-F2: po zwłoce żadna kolonia nie zmieniła blokady — POP-y nie trafiły do żadnego obcego właściciela');
 }
 {
-  // T-F3 — dom przejęty W CZASIE ZWŁOKI: wypłata przepada z meldunkiem, nowy właściciel nie dostaje nic.
+  // T-F3 — dom przejęty W CZASIE ZWŁOKI. ⚠ Q2 (Finding 380, potwierdzenie właściciela 2026-10-06): zwrot czekający
+  //   w kolejce domu zwalnia się W MIEJSCU w chwili przejęcia — ludzie zostają z kolonią — i znika z kolejki; po zwłoce
+  //   nic, bez meldunku. Przed Q2: wypłata po zwłoce przepadała z meldunkiem, a jej blokada zostawała w kolonii na zawsze.
   const w = boot();
   const s = recruit(w, w.home, 'shock_infantry');
   killOn(w, s, w.ai);
-  const queued = pendingOf(w.home).length;
+  const queued = pendingOf(w.home);
+  const atCapture = lockOf(w.home);
   w.cm.transferColony(w.home.planetId, w.emp, 'invasion');
+  const afterCapture = lockOf(w.home);
   w.home.civSystem.lockPops(EXTRA_LOCK, 'laborer');
   const before = lockOf(w.home);
   w.cm._tickPendingPopReturns(RI.delay + 0.01);
-  const lost = w.ev.popsLost.filter(e => e.unitId === s.id && e.cause === 'reintegration');
-  assert(queued === 1 && pendingOf(w.home).length === 0 && Math.abs(lockOf(w.home) - before) < EPS,
-    `T-F3 SEDNO: wpis czekał na domu (${queued}), dom przejęty w czasie zwłoki — wypłata NIE trafiła do nowego ` +
-    `właściciela (blokada ${before} → ${lockOf(w.home)}, kolejka ${pendingOf(w.home).length})`);
-  assert(lost.length === 1,
-    `T-F3: meldunek o przepadłej wypłacie (\`popsLost\`, przyczyna reintegration: ${lost.length})`);
+  const lost = w.ev.popsLost.filter(e => e.unitId === s.id);
+  assert(queued.length === 1 && pendingOf(w.home).length === 0
+      && Math.abs(afterCapture - (atCapture - queued[0])) < EPS && Math.abs(lockOf(w.home) - before) < EPS,
+    `T-F3 SEDNO: wpis ${JSON.stringify(queued)} czekał na domu; w chwili przejęcia zwolniony w miejscu (blokada ` +
+    `${atCapture} → ${afterCapture}), kolejka pusta, po zwłoce bez zmian (${before} → ${lockOf(w.home)})`);
+  assert(lost.length === 0,
+    `T-F3: bez meldunku o przepadłej wypłacie (\`popsLost\`: ${lost.length})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

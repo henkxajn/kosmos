@@ -9,21 +9,26 @@
 //   P4 (Finding 329) żadna kolonia innego właściciela nie płaci ani nie dostaje nic za jednostkę.
 //   P5 (Finding 327) jednostka zabita przez minę idzie tą samą drogą śmierci co każda inna.
 //   P6 (R7) jednostka gracza utracona razem ze zniszczonym ciałem — jak polegli (tabela śmierci), nie pełny zwrot.
+//   Q2 (Finding 380; odpowiedź właściciela 2026-10-05, potwierdzenie 2026-10-06) przejęcie kolonii zrywa więzi POP
+//      poprzedniego właściciela: blokady jego jednostek z domem w tej kolonii i zwroty czekające w jej kolejce zwalniane
+//      w tej kolonii (ludzie zostają z kolonią); jednostki walczą dalej bez kosztu POP i bez domu.
 //
 //   L1  (P1) śmierć: w chwili śmierci ginie część nieoddana przez tabelę — populacja i blokada domu spadają o nią; zwrot
 //       czeka w kolejce i po zwłoce blokada wraca do stanu sprzed rekrutacji (nic zablokowanego na zawsze). Kontrole:
-//       tabela oddaje całość (garnizon) — nic nie ginie; dom przejęty — kolonia innego właściciela nietknięta, meldunek.
+//       tabela oddaje całość (garnizon) — nic nie ginie; dom przejęty — kolonia innego właściciela nietknięta, od Q2 bez
+//       meldunku (więź POP zerwana przy przejęciu).
 //       Archetyp spoza tabeli — ginie całość. Przyczyna `civ:popDied` = `ground_unit_lost`; okręty bez zmian; Dziennik
 //       (`UIManager`) bez osobnej linii (pin źródłowy).
 //   L2  (P2) ręczne rozwiązanie (`ColonyManager.disbandGroundUnit`): pełny koszt wraca od razu (populacja bez zmian,
 //       blokada do stanu sprzed rekrutacji, kolejka pusta), jedno `groundUnit:disbanded` (manual), zero
-//       `groundUnit:destroyed`; dom przejęty — meldunek, kolonia innego właściciela nietknięta; jednostka AI — odmowa.
+//       `groundUnit:destroyed`; dom przejęty — kolonia innego właściciela nietknięta, od Q2 bez meldunku; jednostka AI — odmowa.
 //       Karta jednostki (`UnitCardPanel`) woła tę metodę i nie emituje śmierci (pin źródłowy).
 //   L3  (P3) zapis → wczytanie w połowie zwłoki (prawdziwe `ColonyManager.serialize` → `restore`): zwrot wypłacony
 //       DOKŁADNIE RAZ, w terminie (nie wcześniej, nie drugi raz); w zapisie termin jako pozostały czas; starszy zapis
 //       bez kolejki wczytuje się czysto (pusta kolejka).
 //   L4  (P4) żadna kolonia innego właściciela nie płaci ani nie dostaje: rozwiązanie z braku utrzymania przy przejętym
-//       domu — przejęty dom nietknięty, meldunek; jednostka bez wskazania domu na kolonii AI — kolonia AI nic nie dostaje.
+//       domu — przejęty dom nietknięty, od Q2 bez meldunku; jednostka bez wskazania domu na kolonii AI — kolonia AI nic
+//       nie dostaje.
 //       Kontrole: płatnik żołdu (354/R6) nigdy kolonia innego właściciela; własny dom — pełny zwrot jak dotąd.
 //   L5  (P5) mina (`GroundUnitManager._checkMineTrigger`): zdarzenie śmierci niesie koszt, archetyp i przyczynę `mine`;
 //       rozliczenie jak każda śmierć (część ginie od razu, zwrot po zwłoce). Ładunek bez kosztu (rejestr jako źródło)
@@ -31,11 +36,18 @@
 //       zdarzenie śmierci, a poległa — przez zwolnienie.
 //   L6  (P6) zniszczone ciało (`removeColony` → R7; ciało bez kolonii — `EntityManager.remove`): jednostka gracza jak
 //       polegli — część ginie od razu, zwrot po zwłoce; dom na zniszczonym ciele — meldunek o utracie ZWROTU.
+//   L7  (Q2) przejęcie kolonii (invasion i cesja gracz→AI): blokady jednostek gracza z domem w tej kolonii (na jej ciele,
+//       na innym ciele, w ładowni) i zwrot czekający w jej kolejce zwolnione W MIEJSCU w chwili przejęcia — populacja bez
+//       zmian, kolejka pusta; jednostki żyją z `popCost` 0 i bez domu, a potem śmierć, rozwiązanie, brak utrzymania
+//       i upływ zwłoki nic nie rozliczają (zero `popsLost`). Kontrole: jednostka z domem w INNEJ kolonii gracza na
+//       przejętym ciele nietknięta; kierunek AI→gracz — żadna blokada się nie zmienia; zapis i wczytanie nie wskrzeszają
+//       więzi; zapis sprzed Q2 (więź niezerwana, właściciel ostemplowany przy wczytaniu) — reguła właściciela dalej
+//       chroni kolonię innego właściciela (z czułością).
 //   L0  wszystkie drogi wyjścia jednostki gracza (walka, mina, głód, ostrzał, termin wycofania, zniszczone ciało, utrata
 //       transportu, brak utrzymania, rozpad morale, ręczne rozwiązanie): po zwłokach blokada domu wraca do stanu sprzed
 //       rekrutacji (żadna POP na zawsze), populacja spada wyłącznie o część poległą (rozwiązania — 0), inne kolonie
-//       nietknięte. Przejęcie ciała, na którym jednostka stoi: w chwili przejęcia POP się nie ruszają (blokada zostaje
-//       w kolonii, która rekrutowała — po przejęciu cudzej; rejestr, nowy finding).
+//       nietknięte. Przejęcie ciała, na którym jednostka stoi (L0d): od Q2 (Finding 380) blokada zwolniona w przejętej
+//       kolonii, populacja bez zmian, jednostka bez więzi POP (przed Q2 blokada zostawała w tej kolonii na zawsze).
 //
 // ⚠ Harness jak `ground_unit_loss_smoke`: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu)
 //   + własne `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; po boocie, bo boot czyści
@@ -241,7 +253,7 @@ function moraleCollapse(w, g) {
     `po zwłoce blokada ${L1} → ${lockOf(w.home)} (= ${L0})`);
 }
 {
-  console.log('\nL1c — STRAŻNIK (P4): dom przejęty przed śmiercią — kolonia innego właściciela nie płaci ludźmi, meldunek o utracie');
+  console.log('\nL1c — STRAŻNIK (P4): dom przejęty przed śmiercią — kolonia innego właściciela nie płaci ludźmi; od Q2 bez meldunku');
   const w = boot();
   const u = recruit(w, w.home, 'shock_infantry');
   const back = COST.shock_infantry * RI.shock_infantry.rate;
@@ -257,7 +269,11 @@ function moraleCollapse(w, g) {
   assert(near(lockOf(w.home), capL) && near(humansOf(w.home), capH) && othersUnchanged(w, others),
     `L1c STRAŻNIK: przejęty dom nietknięty (blokada ${capL} → ${lockOf(w.home)}, populacja ${capH} → ${humansOf(w.home)}), ` +
     'inne kolonie też — zielony także przed G1c; pada przy naprawie, która zabijałaby ludzi w cudzej kolonii');
-  assert(lost.length === 1 && near(lost[0].amount, back), `L1c kontrola: meldunek o utracie zwrotu ${back} (${JSON.stringify(lost.map(e => e.amount))})`);
+  // ⚠ Q2 (Finding 380; zgoda w poleceniu sesji zamykającej G1c, 2026-10-06 — L0d, L1c, L2b, L4a mogą się odwrócić): przed
+  //   Q2 pin oczekiwał meldunku o utraconym zwrocie; od Q2 przejęcie zerwało więź POP, więc nie było czego stracić.
+  assert(lost.length === 0 && u.popCost === 0 && u.homeColonyId === null,
+    `L1c: bez meldunku o utracie — więź POP zerwana przy przejęciu (popCost ${u.popCost}, dom ${u.homeColonyId}; meldunki ` +
+    `${JSON.stringify(lost.map(e => e.amount))}; przed Q2 zwrot ${back} przepadał z meldunkiem)`);
 }
 {
   console.log('\nL1d — śmierć pełnej osoby: `civ:popDied` z przyczyną ground_unit_lost; okręty bez zmian (ship_crew_lost)');
@@ -325,7 +341,7 @@ function moraleCollapse(w, g) {
   assert(othersUnchanged(w, others), 'L2a kontrola: żadna inna kolonia się nie zmieniła');
 }
 {
-  console.log('\nL2b — dom przejęty: POP przepadają z meldunkiem, kolonia innego właściciela nic nie dostaje');
+  console.log('\nL2b — dom przejęty: kolonia innego właściciela nic nie dostaje; od Q2 więź POP zerwana przy przejęciu — bez meldunku');
   const w = boot();
   const u = recruit(w, w.home, 'shock_infantry');
   quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
@@ -333,11 +349,14 @@ function moraleCollapse(w, g) {
   const existed = !!w.gum.getUnit(u.id);
   const res = call(w.cm, 'disbandGroundUnit', u.id);
   const lost = lostOf(w, u.id);
-  assert(w.home.ownerEmpireId === w.emp && existed && u.homeColonyId === w.home.planetId,
-    `świadek: dom ${w.home.planetId} należy do ${w.home.ownerEmpireId}; jednostka ${u.id} wskazuje go jako dom`);
+  // ⚠ Q2 (Finding 380) — przed Q2 jednostka dalej wskazywała przejęty dom, a rozwiązanie kończyło się meldunkiem o utracie
+  //   pełnego kosztu (disband_manual). Od Q2 więź zerwana w chwili przejęcia.
+  assert(w.home.ownerEmpireId === w.emp && existed && u.homeColonyId === null && u.popCost === 0,
+    `świadek: dom ${w.home.planetId} należy do ${w.home.ownerEmpireId}; jednostka ${u.id} bez więzi POP (dom ` +
+    `${u.homeColonyId}, popCost ${u.popCost})`);
   assert(res?.ok === true && !w.gum.getUnit(u.id) && near(lockOf(w.home), capL) && near(humansOf(w.home), capH)
-      && lost.length === 1 && near(lost[0].amount, COST.shock_infantry) && lost[0].cause === 'disband_manual',
-    `L2b: przejęty dom nietknięty (blokada ${capL} → ${lockOf(w.home)}), meldunek ${JSON.stringify(lost.map(e => [e.amount, e.cause]))}`);
+      && lost.length === 0,
+    `L2b: przejęty dom nietknięty (blokada ${capL} → ${lockOf(w.home)}), bez meldunku (${JSON.stringify(lost.map(e => [e.amount, e.cause]))})`);
 }
 {
   console.log('\nL2c — jednostka AI: odmowa, nic się nie zmienia');
@@ -412,7 +431,7 @@ function reloadColonies(w, data) {
 
 // ── L4 — P4 (Finding 329): termin właściciela przy zwrocie POP z braku utrzymania ─────────────────────────────
 {
-  console.log('\nL4a — brak utrzymania przy przejętym domu: przejęty dom nic nie dostaje, POP przepadają z meldunkiem');
+  console.log('\nL4a — brak utrzymania przy przejętym domu: przejęty dom nic nie dostaje; od Q2 bez meldunku (więź POP zerwana)');
   const w = boot();
   const u = recruit(w, w.home, 'shock_infantry');
   quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
@@ -425,8 +444,10 @@ function reloadColonies(w, data) {
     `świadek: dom ${w.home.planetId} należy do ${w.home.ownerEmpireId}; jednostka rozwiązana z braku utrzymania`);
   assert(near(lockOf(w.home), capL) && near(humansOf(w.home), capH),
     `L4a SEDNO: przejęty dom nic nie dostaje (blokada ${capL} → ${lockOf(w.home)}, populacja ${capH} → ${humansOf(w.home)})`);
-  assert(lost.length === 1 && near(lost[0].amount, COST.shock_infantry) && lost[0].cause === 'no_credits',
-    `L4a: meldunek o utracie ${JSON.stringify(lost.map(e => [e.amount, e.cause]))}`);
+  // ⚠ Q2 (Finding 380) — przed Q2 pin oczekiwał meldunku o utracie pełnego kosztu (no_credits).
+  assert(lost.length === 0 && u.popCost === 0,
+    `L4a: bez meldunku o utracie — więź POP zerwana przy przejęciu (popCost ${u.popCost}; meldunki ` +
+    `${JSON.stringify(lost.map(e => [e.amount, e.cause]))})`);
   assert(near(w.home.credits ?? 0, 5000),
     `L4a kontrola (354/R6): przejęty dom z kredytami nie płacił żołdu (${w.home.credits}) — jednostka rozwiązana bez płatnika`);
 }
@@ -582,6 +603,156 @@ function reloadColonies(w, data) {
     `L6c: jak polegli — populacja ${H0} → ${humansOf(w.home)}, zwrot ${back} w kolejce (${JSON.stringify(pend)})`);
 }
 
+// ── L7 — Q2 (Finding 380): przejęcie kolonii zrywa więzi POP poprzedniego właściciela ──────────────────────────────
+/** Jednostka w ładowni statku gracza NA ORBICIE domu (przejęcie niszczy wyłącznie statki zadokowane w hangarze). */
+function stowOnOrbit(w, u) {
+  const v = w.K.vesselManager.createAndRegister('hull_small', w.home.planetId);
+  v.troopCapacity = 12; v.troopBayUsed = 0; v.groundUnits = [];
+  const loaded = VS.loadGroundUnit(v, u)?.ok === true;
+  quiet(() => w.K.vesselManager.undockToOrbit(v.id));
+  return loaded && u.status === 'in_cargo' && v.position?.state === 'orbiting';
+}
+/** Druga kolonia gracza z siatką (jak L6b): kolonia AI przejęta przez gracza. */
+function secondPlayerColony(w) {
+  quiet(() => w.cm.captureColonyForPlayer(w.ai.planetId, 'keeper_setup'));
+  return w.cm.getColony(w.ai.planetId);
+}
+/** Cesja gracz→AI PRAWDZIWĄ ścieżką wykonania (`DiplomacySystem._executeCessions` → `transferColony(…, 'cession')`). */
+const cedeToAI = (w, colony) =>
+  quiet(() => w.K.diplomacySystem._executeCessions([{ bodyId: colony.planetId, toPlayer: false, to: w.emp }]));
+{
+  console.log('\nL7a — przejęcie (invasion): blokady jednostek i zwrot w kolejce zwolnione w miejscu; jednostki bez więzi POP');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const cost = COST.shock_infantry, back = cost * RI.shock_infantry.rate;
+  const fallen = recruit(w, w.home);                // poległa — zwrot czeka w kolejce domu
+  bombard(w, fallen);
+  const pend = pendingOf(w.home, fallen.id);
+  const onBody = recruit(w, w.home);                // zostaje na ciele domu
+  const away = recruit(w, w.home);                  // na innym ciele (niczyim)
+  const nb = neutralBody(w);
+  away.planetId = nb.id; away.q = 0; away.r = 0;
+  const cargo = recruit(w, w.home);                 // w ładowni statku na orbicie domu
+  const stowed = stowOnOrbit(w, cargo);
+  const alive = [onBody, away, cargo];
+  const Lb = lockOf(w.home), Hb = humansOf(w.home);
+  const others = snapOthers(w, [w.home]);
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  assert(w.home.ownerEmpireId === w.emp && stowed && !w.gum.getUnit(fallen.id) && pend.length === 1 && near(pend[0], back)
+      && alive.every(u => !!w.gum.getUnit(u.id)) && near(Lb, L0 + 3 * cost + back),
+    `świadek: dom ${w.home.planetId} należy do ${w.home.ownerEmpireId}; żyją trzy jednostki (ciało domu, ${nb?.id}, ładownia ` +
+    `na orbicie), poległa czeka na zwrot ${back}; blokada przed przejęciem ${Lb} (= ${L0} + 3×${cost} + ${back})`);
+  assert(near(lockOf(w.home), L0) && near(humansOf(w.home), Hb) && pendingOf(w.home).length === 0,
+    `L7a SEDNO: w chwili przejęcia blokada ${Lb} → ${lockOf(w.home)} (= ${L0}) zwolniona W MIEJSCU, populacja bez zmian ` +
+    `(${Hb} → ${humansOf(w.home)}), kolejka zwrotów pusta (${JSON.stringify(pendingOf(w.home))}) — przed Q2 zostawała na zawsze`);
+  assert(alive.every(u => u.popCost === 0 && u.homeColonyId === null && u.owner === 'player'),
+    `L7a: jednostki gracza walczą dalej bez więzi POP (${JSON.stringify(alive.map(u => [u.id, u.popCost, u.homeColonyId]))})`);
+  assert(othersUnchanged(w, others), 'L7a: żadna inna kolonia się nie zmieniła');
+  const La = lockOf(w.home), Ha = humansOf(w.home);
+  bombard(w, onBody);
+  const disb = call(w.cm, 'disbandGroundUnit', away.id);
+  for (let i = 0; i < ColonyManager.UPKEEP_GRACE_CIVYEARS; i++) quiet(() => w.cm._tickGroundUnitUpkeep(1.0));
+  w.cm._tickPendingPopReturns(3);
+  const lost = [...alive, fallen].flatMap(u => lostOf(w, u.id));
+  assert(!w.gum.getUnit(onBody.id) && disb?.ok === true && !w.gum.getUnit(away.id) && !w.gum.getUnit(cargo.id),
+    'świadek: potem jednostka na ciele zginęła od ostrzału, druga rozwiązana ręcznie, trzecia (ładownia, bez płatnika ' +
+    'żołdu) rozwiązana z braku utrzymania');
+  assert(near(lockOf(w.home), La) && near(humansOf(w.home), Ha) && othersUnchanged(w, others) && lost.length === 0,
+    `L7a: śmierć, rozwiązanie, brak utrzymania i upływ zwłoki nic nie rozliczają — blokada ${La} → ${lockOf(w.home)}, ` +
+    `populacja ${Ha} → ${humansOf(w.home)}, inne kolonie nietknięte, meldunków o utracie ${lost.length}`);
+}
+{
+  console.log('\nL7b — cesja (gracz→AI): ta sama reguła — blokada zwolniona w oddanej kolonii, jednostka bez więzi POP');
+  const w = boot();
+  const col = secondPlayerColony(w);
+  const Lc0 = lockOf(col);
+  const u = recruit(w, col);
+  const homeBefore = u.homeColonyId;
+  const Lc1 = lockOf(col), Hc1 = humansOf(col);
+  const others = snapOthers(w, [col]);
+  cedeToAI(w, col);
+  assert(col.ownerEmpireId === w.emp && !!w.gum.getUnit(u.id) && homeBefore === col.planetId
+      && near(Lc1, Lc0 + COST.shock_infantry),
+    `świadek: kolonia gracza ${col.planetId} oddana w cesji (${col.ownerEmpireId}); jednostka ${u.id} z domem ${homeBefore} żyje`);
+  assert(near(lockOf(col), Lc0) && near(humansOf(col), Hc1) && u.popCost === 0 && u.homeColonyId === null
+      && othersUnchanged(w, others),
+    `L7b: blokada ${Lc1} → ${lockOf(col)} (= ${Lc0}) zwolniona w oddanej kolonii, populacja bez zmian, jednostka bez więzi ` +
+    `POP (popCost ${u.popCost}, dom ${u.homeColonyId}), inne kolonie nietknięte`);
+}
+{
+  console.log('\nL7c — kontrola: jednostka z domem w INNEJ kolonii gracza, stojąca na przejętym ciele — nietknięta');
+  const w = boot();
+  const col = secondPlayerColony(w);
+  const u = recruit(w, col);
+  placeOn(w, u, w.home);
+  const Lc = lockOf(col), Hc = humansOf(col), Lh = lockOf(w.home), Hh = humansOf(w.home);
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  assert(w.home.ownerEmpireId === w.emp && !!w.gum.getUnit(u.id) && u.planetId === w.home.planetId,
+    `świadek: jednostka ${u.id} (dom ${col.planetId}) stoi na przejętym ciele ${w.home.planetId}`);
+  assert(u.popCost === COST.shock_infantry && u.homeColonyId === col.planetId && near(lockOf(col), Lc) && near(humansOf(col), Hc)
+      && near(lockOf(w.home), Lh) && near(humansOf(w.home), Hh),
+    `L7c kontrola: więź z kolonią ${col.planetId} nietknięta (popCost ${u.popCost}, blokada ${Lc} → ${lockOf(col)}); ` +
+    `przejęta kolonia bez zmian (blokada ${Lh} → ${lockOf(w.home)})`);
+}
+{
+  console.log('\nL7d — kontrola: kierunek AI→gracz (captureColonyForPlayer) — żadna blokada ani populacja się nie zmienia');
+  const w = boot();
+  const spot = w.cm._findGroundUnitSpawn(w.ai);
+  const a = w.gum.createAIUnit({ archetypeId: 'garrison_unit', empireId: w.emp, planetId: w.ai.planetId, q: spot.q, r: spot.r,
+    morale: 50, deployed: true })?.unit;
+  const all = snapOthers(w, []);
+  quiet(() => w.cm.captureColonyForPlayer(w.ai.planetId, 'ground_invasion'));
+  assert(!!a && a.popCost === 0 && !w.ai.ownerEmpireId,
+    `świadek: kolonia ${w.ai.planetId} przejęta przez gracza; jednostka ${a?.id} imperium ${w.emp} (popCost ${a?.popCost})`);
+  assert(othersUnchanged(w, all) && w.ev.popsLost.length === 0,
+    'L7d kontrola: żadna kolonia nie zmieniła blokady ani populacji, zero meldunków o utracie');
+}
+{
+  console.log('\nL7e — kontrola: zapis sprzed Q2 (więź niezerwana, właściciel ostemplowany przy wczytaniu) — reguła właściciela chroni');
+  // Kolonię przejęto przed Q2, a zapis wczytano: jednostka ma dalej koszt POP i dom w tej kolonii, a właściciela kolonii
+  //   wyprowadza wczytanie z `empires[].colonies` (`EmpireColonyBootstrap`), z pominięciem `transferColony`.
+  const scene = (noOwnerTerm) => {
+    const w = boot();
+    const u = recruit(w, w.home);
+    w.home.ownerEmpireId = w.emp;                   // stempel jak przy wczytaniu — bez przejścia przez transferColony
+    if (noOwnerTerm) w.cm._ownedHomeColony = (x) => w.cm.getColony(x?.homeColonyId) ?? null;
+    const L = lockOf(w.home), H = humansOf(w.home);
+    const others = snapOthers(w, [w.home]);
+    bombard(w, u);
+    w.cm._tickPendingPopReturns(RI.shock_infantry.delay + 0.01);
+    return { w, u, L, H, others, lost: lostOf(w, u.id) };
+  };
+  const back = COST.shock_infantry * RI.shock_infantry.rate;
+  const s = scene(false);
+  assert(!s.w.gum.getUnit(s.u.id) && s.u.popCost === COST.shock_infantry && s.u.homeColonyId === s.w.home.planetId,
+    `świadek: jednostka z kosztem ${s.u.popCost} i domem ${s.u.homeColonyId} (więź niezerwana) zginęła`);
+  assert(near(lockOf(s.w.home), s.L) && near(humansOf(s.w.home), s.H) && othersUnchanged(s.w, s.others)
+      && s.lost.length === 1 && near(s.lost[0].amount, back),
+    `L7e kontrola: kolonia innego właściciela nietknięta (blokada ${s.L} → ${lockOf(s.w.home)}), meldunek o utracie zwrotu ` +
+    `${back} (${JSON.stringify(s.lost.map(e => e.amount))})`);
+  const c = scene(true);
+  assert(!near(lockOf(c.w.home), c.L),
+    `L7e CZUŁOŚĆ: bez terminu właściciela kolonia innego właściciela zmieniłaby blokadę (${c.L} → ${lockOf(c.w.home)}) — pin wyżej to widzi`);
+}
+{
+  console.log('\nL7f — zapis i wczytanie po przejęciu: więź POP nie wraca');
+  const w = boot();
+  const col = secondPlayerColony(w);
+  const u = recruit(w, w.home);
+  placeOn(w, u, col);                                // stoi na INNEJ kolonii gracza — wczytanie wpisze ją jako dom (Finding 342)
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  const data = JSON.parse(JSON.stringify(w.gum.serialize()));
+  quiet(() => w.gum.restore(data));
+  const u2 = w.gum.getUnit(u.id);
+  const all = snapOthers(w, []);
+  bombard(w, u2);
+  w.cm._tickPendingPopReturns(3);
+  assert(!!u2 && u2 !== u && !w.gum.getUnit(u.id),
+    `świadek: jednostka ${u.id} odtworzona z zapisu (nowy obiekt, dom po wczytaniu ${u2?.homeColonyId}) i zginęła na ${col.planetId}`);
+  assert(u2?.popCost === 0 && othersUnchanged(w, all) && lostOf(w, u.id).length === 0,
+    `L7f: po wczytaniu popCost ${u2?.popCost} — śmierć nic nie rozlicza (żadna kolonia bez zmian, meldunków ${lostOf(w, u.id).length})`);
+}
+
 // ── L0 — wszystkie drogi wyjścia jednostki gracza ─────────────────────────────────────────────────────────────
 const PATHS = [
   { name: 'walka', arch: 'shock_infantry', fallen: true, run: (w, u) => combatKill(w, u, w.ai) },
@@ -621,15 +792,20 @@ const PATHS = [
   assert(rows.every(r => r.othersOk), `L0c: inne kolonie nietknięte na każdej drodze (odstaje: ${rows.filter(r => !r.othersOk).map(r => r.name).join(', ') || '—'})`);
 }
 {
-  console.log('\nL0d — przejęcie ciała, na którym stoi jednostka: w chwili przejęcia POP się nie ruszają');
+  console.log('\nL0d — przejęcie ciała, na którym stoi jednostka: blokada zwolniona w przejętej kolonii, więź POP zerwana (Q2)');
   const w = boot();
+  const L0 = lockOf(w.home);
   const u = recruit(w, w.home, 'shock_infantry');
   const L1 = lockOf(w.home), H1 = humansOf(w.home);
   quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
   assert(!!w.gum.getUnit(u.id) && u.planetId === w.home.planetId && w.home.ownerEmpireId === w.emp,
     `świadek: jednostka gracza stoi dalej na przejętym ciele ${w.home.planetId} (${w.home.ownerEmpireId})`);
-  assert(near(lockOf(w.home), L1) && near(humansOf(w.home), H1) && lostOf(w, u.id).length === 0,
-    `L0d: przejęcie nie rusza POP (blokada ${L1} → ${lockOf(w.home)} — zostaje w kolonii, która rekrutowała, teraz cudzej)`);
+  // ⚠ Q2 (Finding 380; zgoda w poleceniu sesji zamykającej G1c, 2026-10-06): przed Q2 pin oczekiwał, że blokada ZOSTAJE
+  //   (L1) w kolonii, która rekrutowała — po przejęciu cudzej, na zawsze.
+  assert(near(lockOf(w.home), L0) && near(humansOf(w.home), H1) && u.popCost === 0 && u.homeColonyId === null
+      && lostOf(w, u.id).length === 0,
+    `L0d: blokada ${L1} → ${lockOf(w.home)} (= ${L0}) zwolniona w przejętej kolonii, populacja bez zmian; jednostka bez ` +
+    `więzi POP (popCost ${u.popCost}, dom ${u.homeColonyId})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
