@@ -245,8 +245,17 @@ export class InvasionSystem {
     if (!systemId) return;
 
     // 1) DOMINACJA ORBITALNA nad układem celu.
-    const controller = window.KOSMOS?.warSystem?.getOrbitalController?.(systemId);
-    if (controller !== empireId) {
+    // ⚠ S0-3 (Findingi 393, 394) — ta sama reguła co po stronie gracza
+    //   (`WarSystem.hasOrbitalDominanceInSystem`): kontroler-zwycięzca trzyma orbitę; bez kontrolera
+    //   dominację odbiera tylko kadłub gracza, z którym da się walczyć (w służbie, w locie albo na
+    //   orbicie) — zadokowany ani rezerwowy nie. Na tej ścieżce dziś bez skutku: zaczep biegnie PO
+    //   wygranej AI, a `recordBattle` ustawia kontrolera przed emisją (W3-6b). Bez metody (atrapa
+    //   `warSystem` w keeperach) — stary odczyt kontrolera.
+    const warSys = window.KOSMOS?.warSystem;
+    const holdsOrbit = typeof warSys?.hasOrbitalDominanceInSystem === 'function'
+      ? warSys.hasOrbitalDominanceInSystem(empireId, systemId)
+      : warSys?.getOrbitalController?.(systemId) === empireId;
+    if (!holdsOrbit) {
       EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'no_orbital_dominance' });
       return;
     }

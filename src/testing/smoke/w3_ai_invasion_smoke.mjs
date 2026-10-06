@@ -108,6 +108,15 @@ console.log('T2 — ⚠ bez DOMINACJI ORBITALNEJ nie ma desantu (parity z bramk�
 {
   const { core, inv, empireId } = boot();
   setDominance('player');                                  // orbitę trzyma GRACZ
+  // ⚠ S0-3b (Finding 394) — PRZECELOWANE ZA ZGODĄ WŁAŚCICIELA: od S0-3b kontroler sam nie odmawia —
+  //   orbitę „trzyma" gracz, który ma na niej okręt, z którym da się walczyć. Dokładamy go; ta sama
+  //   scena z okrętem gracza ZADOKOWANYM ląduje (pinuje to `sb0_fleet_defects_smoke` T7).
+  const home = window.KOSMOS.homePlanet;
+  const holder = createVessel('hull_medium', home.id, {
+    name: 'Obrońca', modules: [...WARSHIP], x: home.x ?? 0, y: home.y ?? 0, systemId: 'sys_home',
+  });
+  holder.position.state = 'orbiting'; holder.position.dockedAt = home.id;
+  core.vesselManager._vessels.set(holder.id, holder);
   const dropper = spawnHull(core, empireId, DROPPER, 'Transportowiec');
 
   const blocked = [];

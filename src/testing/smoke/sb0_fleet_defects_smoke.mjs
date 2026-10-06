@@ -8,6 +8,15 @@
 //   T3  392 — załoga AI nie kosztuje POP (SB2): reguła `mobilize_reserve` bez guardu załogowego, pełny
 //       stos Directora zdejmuje kadłub z rezerwy przy `freePops = 0` stolicy, kadłub AI rozmieszcza się
 //       bez załogi i bez płatnika; GRACZ dalej płaci dokładnie `crewCost` i dostaje `no_crew_pops`
+//   T4  393/394 — strona GRACZA: kadłub AI w rezerwie / zadokowany / w trakcie mobilizacji / w tranzycie
+//       warp NIE odbiera dominacji (zrzut dozwolony); w locie albo na orbicie odbiera, dopóki nie zostanie
+//       pokonany; wygrana gracza (kontroler) daje dominację jak dotąd
+//   T5  393/394 — strona AI (lustro): zadokowany albo rezerwowy kadłub GRACZA nie odbiera dominacji
+//       imperium, na orbicie — odbiera; także przez prawdziwą bramkę desantu `_onVesselGroupVictory`
+//   T6  reguła komunikatu: odmowa dominacji ⇔ uzbrojony wrogi kadłub, z którym da się walczyć (36 stanów,
+//       oczekiwanie spisane z warstwy walki, nie z kanonu); tripwire — kanon `isFightableInSpace` jest
+//       lustrem `ProximitySystem` i DSCS; UI pokazuje „wygraj bitwę” wyłącznie przy odmowie predykatu
+//   T7  S0-3b — kontroler INNEJ strony bez kadłuba do walki nie odbiera dominacji (obie strony)
 //
 // ⚠ Fail-first: `isFightableInSpace` i `hasOrbitalDominanceInSystem` powstają w S0-3 — import przestrzeni
 //   nazw i wywołania opcjonalne, żeby na kodzie sprzed poprawki piny DEGRADOWAŁY, a nie przerywały suitę.
@@ -24,6 +33,10 @@ import { HULLS } from '../../data/HullsData.js';
 import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { DirectorGuards } from '../../systems/director/DirectorRegistry.js';
 import { bootWithDirector } from '../headless/DirectorHarness.js';
+import { FLEET_ACTIONS } from '../../data/FleetActions.js';
+import { InvasionSystem } from '../../systems/InvasionSystem.js';
+import { t } from '../../i18n/i18n.js';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -278,6 +291,233 @@ console.log('T3 — 392: załoga AI nie kosztuje POP (SB2); gracz bez zmian');
   assert(r5?.ok === true,
     `T3h SEDNO: przy TEJ SAMEJ wyczerpanej pojemności kadłub AI się rozmieszcza (ok=${r5?.ok}, ` +
     `reason=${r5?.reason ?? '—'}) — przed S0-2: \`no_crew_pops\``);
+}
+
+// ── T4 — 393/394: strona GRACZA ──────────────────────────────────────────────────────────────
+console.log('T4 — 393/394: dominację gracza odbiera tylko kadłub AI, z którym da się walczyć');
+{
+  const core = boot();
+  const K = window.KOSMOS;
+  const ws = core.warSystem;
+  const emp = core.empireRegistry.listAll()[0]?.id;
+  K.diplomacySystem.declareWar(emp, 'keeper_setup');
+  const cap = capitalOf(core, emp);
+  const C = EntityManager.get(cap.planetId);
+  const S = C.systemId;
+  const dropper = playerHull(core, C, { shipId: 'hull_medium', modules: DROPPER, state: 'orbiting', systemId: S });
+  dropper.groundUnits = ['gu_probe'];
+  const canDrop = () => FLEET_ACTIONS.drop_troops.canExecute(dropper, { colonyManager: core.colonyManager });
+  const dom = () => ws.playerHasOrbitalDominance(C.id);
+  const NO_DOM = t('fleet.reason.noOrbitalDominance');
+  assert(dropper.canDropTroops === true && dom() === true && canDrop().ok === true,
+    'T4 KONTROLA PINU: bez kadłubów AI w układzie dominacja jest gracza, a zrzut dozwolony — bramka ma z czego spaść');
+
+  const g = aiHull(core, emp, C, { service: 'stored', state: 'docked' });
+  const r0 = canDrop();
+  assert(dom() === true && r0.ok === true,
+    `T4a SEDNO (393): kadłub AI w REZERWIE nie odbiera dominacji — zrzut dozwolony (${r0.reason ?? 'ok'})`);
+  g.serviceState = 'active';
+  assert(dom() === true && canDrop().ok === true,
+    'T4b SEDNO (394): kadłub AI w SŁUŻBIE, ale ZADOKOWANY, nie odbiera — warstwa walki z nim nie walczy');
+  g.serviceState = 'mobilizing';
+  assert(dom() === true, 'T4c: kadłub AI w trakcie mobilizacji (nie w służbie) nie odbiera');
+  g.serviceState = 'active'; g.position.state = 'orbiting';
+  const r1 = canDrop();
+  assert(dom() === false && r1.ok === false && r1.reason === NO_DOM,
+    `T4d KONTROLA: kadłub AI w służbie NA ORBICIE dalej odbiera — zrzut odmówiony (${r1.reason ?? 'ok'})`);
+  g.position.state = 'in_transit';
+  assert(dom() === false, 'T4e KONTROLA: kadłub AI w LOCIE w tym układzie też odbiera');
+  g.position.state = 'orbiting'; g.modules = [...UNARMED];
+  assert(dom() === true, 'T4f KONTROLA: bezbronny kadłub na orbicie nie odbiera (próg uzbrojenia bez zmian)');
+  g.modules = [...WARSHIP]; g.isWreck = true;
+  assert(dom() === true && canDrop().ok === true, 'T4g KONTROLA: pokonany (wrak) przestaje odbierać — zrzut znów dozwolony');
+  g.isWreck = false;
+  gameState.set(`orbitalDominance.${S}`, { controllerId: 'player', year: 1 }, 'sb0_keeper');
+  assert(dom() === true, 'T4h KONTROLA: wygrana gracza (kontroler = gracz) trzyma orbitę mimo kadłuba na niej — bez zmian');
+  gameState.set(`orbitalDominance.${S}`, null, 'sb0_keeper');
+
+  const home = K.homePlanet;
+  const homeSys = home.systemId ?? 'sys_home';
+  const before = ws.playerHasOrbitalDominance(home.id);
+  const warp = aiHull(core, emp, C, { service: 'active', state: 'in_transit', dockedAt: null });
+  warp.systemId = null;                                  // tranzyt warp: między układami
+  assert(before === true && homeSys === 'sys_home',
+    `T4 ŚWIADEK: orbita domu (${homeSys}) wolna przed tranzytem (${before})`);
+  assert(ws.playerHasOrbitalDominance(home.id) === true,
+    'T4i: kadłub AI w TRANZYCIE WARP nie stoi w żadnym układzie — nie odbiera dominacji w domu ' +
+    "(przed S0-3: `?? 'sys_home'` liczyło go jako obecny w sys_home)");
+}
+
+// ── T5 — 393/394: strona AI (lustro) ─────────────────────────────────────────────────────────
+console.log('T5 — lustro AI: dominację imperium odbiera tylko kadłub GRACZA, z którym da się walczyć');
+{
+  const core = boot();
+  const K = window.KOSMOS;
+  const ws = core.warSystem;
+  for (const e of core.empireRegistry.listAll()) K.diplomacySystem.declareWar(e.id, 'keeper_setup');
+  const emp = core.empireRegistry.listAll()[0]?.id;
+  const home = K.homePlanet;
+  const S = home.systemId ?? 'sys_home';
+  const inv = new InvasionSystem();
+  K.invasionSystem = inv;
+  const aiDom = () => ws.hasOrbitalDominanceInSystem?.(emp, S);
+  const dropper = aiHull(core, emp, home, { shipId: 'hull_medium', modules: DROPPER, service: 'active', state: 'orbiting', systemId: S });
+  const guardP = playerHull(core, home, { state: 'docked', systemId: S });
+  assert(dropper.canDropTroops === true && ws.getOrbitalController(S) == null,
+    'T5 ŚWIADEK: zrzutowiec AI na orbicie domu, w układzie nie było bitwy (brak kontrolera)');
+
+  assert(aiDom() === true, 'T5a SEDNO: zadokowany okręt GRACZA nie odbiera dominacji imperium');
+  guardP.serviceState = 'stored';
+  assert(aiDom() === true, 'T5b: okręt gracza w rezerwie też nie');
+  guardP.serviceState = 'active'; guardP.position.state = 'orbiting';
+  assert(aiDom() === false, 'T5c: okręt gracza w służbie NA ORBICIE odbiera (lustro T4d)');
+  guardP.isWreck = true;
+  assert(aiDom() === true, 'T5d: pokonany (wrak) przestaje odbierać');
+  guardP.isWreck = false;
+
+  const battle = () => ({
+    warId: 'war_probe', battleId: 'b_probe',
+    result: {
+      winner: 'A',
+      participantA: { type: 'vessel_group', empireId: emp, vesselIds: [dropper.id], count: 1, strength: 0 },
+      participantB: { type: 'player', systemId: S },
+      location: { systemId: S, planetId: null, point: { x: 0, y: 0 } },
+    },
+  });
+  const ev1 = capture(['invasion:blocked', 'invasion:troopsLanded']);
+  inv._onBattleResolved(battle());                     // okręt gracza NA ORBICIE
+  ev1.stop();
+  assert(ev1.seen.some(e => e.ev === 'invasion:blocked' && e.reason === 'no_orbital_dominance')
+      && !ev1.seen.some(e => e.ev === 'invasion:troopsLanded'),
+    `T5e KONTROLA: okręt gracza na orbicie — bramka desantu AI odmawia (${ev1.seen.map(e => e.reason ?? e.ev).join(', ') || '—'})`);
+  guardP.position.state = 'docked';
+  const ev2 = capture(['invasion:blocked', 'invasion:troopsLanded']);
+  inv._onBattleResolved(battle());                     // okręt gracza ZADOKOWANY
+  ev2.stop();
+  assert(ev2.seen.some(e => e.ev === 'invasion:troopsLanded'),
+    `T5f SEDNO: okręt gracza zadokowany — desant AI ląduje (${ev2.seen.map(e => e.reason ?? e.ev).join(', ') || '—'}) — ` +
+    'przed S0-3: `no_orbital_dominance`, bo strona AI czytała wyłącznie kontrolera');
+}
+
+// ── T6 — reguła komunikatu + tripwire kanonu ────────────────────────────────────────────────
+console.log('T6 — odmowa dominacji ⇔ uzbrojony wrogi kadłub, z którym da się walczyć');
+{
+  const core = boot();
+  const ws = core.warSystem;
+  const emp = core.empireRegistry.listAll()[0]?.id;
+  const cap = capitalOf(core, emp);
+  const C = EntityManager.get(cap.planetId);
+  const g = aiHull(core, emp, C);
+  // Oczekiwanie spisane z WARSTWY WALKI, nie z kanonu (inaczej pin byłby tautologią):
+  // Proximity pomija rezerwę i dok, DSCS walczy tylko `in_transit`/`orbiting`, wrak nie walczy, a orbity
+  // „trzyma" tylko uzbrojony kadłub (próg bez zmian).
+  const expectDenied = (st, svc, armed, wreck) => !wreck && svc === 'active' && (st === 'orbiting' || st === 'in_transit') && armed;
+  let combos = 0;
+  const bad = [];
+  for (const st of ['docked', 'orbiting', 'in_transit']) {
+    for (const svc of ['active', 'stored', 'mobilizing']) {
+      for (const armed of [true, false]) {
+        for (const wreck of [false, true]) {
+          g.position.state = st; g.serviceState = svc; g.modules = armed ? [...WARSHIP] : [...UNARMED]; g.isWreck = wreck;
+          const denied = ws.playerHasOrbitalDominance(C.id) === false;
+          combos++;
+          if (denied !== expectDenied(st, svc, armed, wreck)) bad.push(`${st}/${svc}/${armed ? 'uzbr' : 'bez'}${wreck ? '/wrak' : ''}`);
+        }
+      }
+    }
+  }
+  assert(combos === 36 && bad.length === 0,
+    `T6a SEDNO: brak kontrolera — odmowa ⇔ uzbrojony kadłub AI w służbie, w locie albo na orbicie (${combos} stanów; ` +
+    `rozjazdy: ${bad.join('; ') || 'brak'})`);
+
+  const fight = VesselNS.isFightableInSpace;
+  const canonBad = [];
+  if (typeof fight === 'function') {
+    for (const st of ['docked', 'orbiting', 'in_transit']) {
+      for (const svc of ['active', 'stored', 'mobilizing']) {
+        for (const wreck of [false, true]) {
+          const v = { isWreck: wreck, serviceState: svc, position: { state: st } };
+          if (fight(v) !== expectDenied(st, svc, true, wreck)) canonBad.push(`${st}/${svc}${wreck ? '/wrak' : ''}`);
+        }
+      }
+    }
+  }
+  assert(typeof fight === 'function' && canonBad.length === 0,
+    `T6b: kanon \`isFightableInSpace\` (Vessel.js) = lustro warstwy walki (rozjazdy: ${canonBad.join('; ') || (typeof fight === 'function' ? 'brak' : 'brak kanonu')})`);
+
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const prox = strip(readFileSync('src/systems/ProximitySystem.js', 'utf8'));
+  const dscs = strip(readFileSync('src/systems/DeepSpaceCombatSystem.js', 'utf8'));
+  const valid = prox.match(/function _isValidForProximity\(v\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+  const inCombat = dscs.match(/function _inCombatState\(v\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+  assert(/if \(!isInService\(v\)\) return false;/.test(valid),
+    'T6c TRIPWIRE: `ProximitySystem._isValidForProximity` dalej pomija kadłuby spoza służby — inaczej kanon kłamie');
+  assert(/v1\.position\?\.state === 'docked' \|\| v2\.position\?\.state === 'docked'/.test(prox),
+    'T6c TRIPWIRE: `ProximitySystem._checkPair` dalej nie zgłasza starcia z kadłubem zadokowanym');
+  const states = [...inCombat.matchAll(/st === '([a-z_]+)'\) return true/g)].map(m => m[1]).sort().join(',');
+  assert(states === 'in_transit,orbiting' && /return false;\s*\}$/.test(inCombat.trim()),
+    `T6c TRIPWIRE: DSCS \`_inCombatState\` walczy wyłącznie ze stanami in_transit i orbiting (${states || '—'})`);
+
+  const co = strip(readFileSync('src/ui/ColonyOverlay.js', 'utf8'));
+  const msgAt = co.indexOf("t('drop.noDominance')");
+  const gateAt = co.lastIndexOf('!warSys.playerHasOrbitalDominance(targetId)', msgAt);
+  assert(msgAt > 0 && gateAt > 0 && msgAt - gateAt < 200 && co.split("t('drop.noDominance')").length === 2,
+    'T6d ŚWIADEK: jedyny komunikat „wygraj bitwę” (`drop.noDominance`) stoi wyłącznie pod odmową predykatu — ' +
+    'więc razem z T6a pojawia się tylko, gdy istnieje kadłub, z którym da się walczyć');
+}
+
+// ── T7 — S0-3b: kontroler innej strony bez kadłuba do walki ─────────────────────────────────
+console.log('T7 — S0-3b: zapamiętany kontroler INNEJ strony sam nie odbiera dominacji');
+{
+  const core = boot();
+  const K = window.KOSMOS;
+  const ws = core.warSystem;
+  const emp = core.empireRegistry.listAll()[0]?.id;
+  K.diplomacySystem.declareWar(emp, 'keeper_setup');
+  const cap = capitalOf(core, emp);
+  const C = EntityManager.get(cap.planetId);
+  const S = C.systemId;
+  const dropper = playerHull(core, C, { shipId: 'hull_medium', modules: DROPPER, state: 'orbiting', systemId: S });
+  dropper.groundUnits = ['gu_probe'];
+  const canDrop = () => FLEET_ACTIONS.drop_troops.canExecute(dropper, { colonyManager: core.colonyManager });
+  gameState.set(`orbitalDominance.${S}`, { controllerId: emp, year: 2 }, 'sb0_keeper');
+  const g = aiHull(core, emp, C, { service: 'active', state: 'docked' });
+  assert(ws.getOrbitalController(S) === emp, `T7 ŚWIADEK: imperium wygrało tu bitwę (kontroler ${ws.getOrbitalController(S)})`);
+  assert(ws.playerHasOrbitalDominance(C.id) === true && canDrop().ok === true,
+    'T7a SEDNO: zwycięzca zszedł do doku — kontroler-imperium bez kadłuba do walki nie zamyka orbity na zawsze ' +
+    '(przed S0-3b: „wygraj bitwę”, której nie ma z kim stoczyć)');
+  g.position.state = 'orbiting';
+  assert(ws.playerHasOrbitalDominance(C.id) === false && canDrop().reason === t('fleet.reason.noOrbitalDominance'),
+    'T7b KONTROLA: kontroler-imperium + kadłub na orbicie — odmowa');
+  g.position.state = 'docked';
+
+  // 36 stanów także z kontrolerem-imperium (T6a z innym wejściem).
+  const expectDenied = (st, svc, armed, wreck) => !wreck && svc === 'active' && (st === 'orbiting' || st === 'in_transit') && armed;
+  const bad = [];
+  for (const st of ['docked', 'orbiting', 'in_transit']) {
+    for (const svc of ['active', 'stored', 'mobilizing']) {
+      for (const armed of [true, false]) {
+        for (const wreck of [false, true]) {
+          g.position.state = st; g.serviceState = svc; g.modules = armed ? [...WARSHIP] : [...UNARMED]; g.isWreck = wreck;
+          if ((ws.playerHasOrbitalDominance(C.id) === false) !== expectDenied(st, svc, armed, wreck)) bad.push(`${st}/${svc}/${armed ? 'uzbr' : 'bez'}${wreck ? '/wrak' : ''}`);
+        }
+      }
+    }
+  }
+  assert(bad.length === 0, `T7c: z kontrolerem-imperium odmowa ⇔ kadłub, z którym da się walczyć (rozjazdy: ${bad.join('; ') || 'brak'})`);
+
+  // Lustro AI: kontroler-gracz bez kadłuba gracza do walki nie zamyka orbity imperium.
+  const home = K.homePlanet;
+  const HS = home.systemId ?? 'sys_home';
+  gameState.set(`orbitalDominance.${HS}`, { controllerId: 'player', year: 3 }, 'sb0_keeper');
+  const pg = playerHull(core, home, { state: 'docked', systemId: HS });
+  assert(ws.hasOrbitalDominanceInSystem?.(emp, HS) === true,
+    'T7d SEDNO: kontroler-gracz, okręt gracza zadokowany — imperium trzyma orbitę (lustro T7a)');
+  pg.position.state = 'orbiting';
+  // ⚠ NIE kontrola: na kodzie sprzed S0-3 metody `hasOrbitalDominanceInSystem` nie ma, więc ten pin
+  //   pada (fail-first na C2). Kontrolą jest wyłącznie względem samego S0-3b — przechodzi z nim i bez niego.
+  assert(ws.hasOrbitalDominanceInSystem?.(emp, HS) === false,
+    'T7e (nie-jałowość T7d): kontroler-gracz + okręt gracza na orbicie — odmowa imperium');
 }
 
 console.log(`\n[sb0_fleet_defects_smoke] PASS ${pass} / FAIL ${fail}`);

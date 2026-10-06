@@ -338,6 +338,22 @@ export function isInService(vessel) {
   return (vessel?.serviceState ?? 'active') === 'active';
 }
 
+/**
+ * S0-3 (Findingi 393, 394) — czy z tym kadłubem DA SIĘ walczyć w przestrzeni. LUSTRO warstwy walki,
+ * nie nowa reguła: `ProximitySystem` nie zgłasza par z kadłubem spoza służby (`_isValidForProximity`
+ * → `isInService`) ani zadokowanym (`_checkPair`, `state === 'docked'`), a DSCS walczy wyłącznie
+ * ze stanami `in_transit` i `orbiting` (`_inCombatState`). Wrak nie walczy. Nie mówi nic
+ * o uzbrojeniu ani o stronie — to dokładają wołający.
+ * ⚠ Gdy warstwa walki zmieni któryś z tych warunków, ten predykat musi pójść za nią — pilnuje tego
+ *   tripwire w `sb0_fleet_defects_smoke`.
+ */
+export function isFightableInSpace(vessel) {
+  if (!vessel || vessel.isWreck) return false;
+  if (!isInService(vessel)) return false;
+  const st = vessel.position?.state;
+  return st === 'in_transit' || st === 'orbiting';
+}
+
 // ── Metody operujące na instancji vessel ─────────────────────────────────────
 
 /**

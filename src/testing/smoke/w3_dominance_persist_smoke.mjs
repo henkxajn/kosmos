@@ -31,6 +31,7 @@
 import '../headless/env.js';           // MUSI być pierwszy
 import { GameCore } from '../headless/GameCore.js';
 import gameState from '../../core/GameState.js';
+import { createVessel } from '../../entities/Vessel.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -97,16 +98,29 @@ console.log('T3 — ⚠ SEDNO: bramka desantu widzi wroga na orbicie także PO r
     'T3 KONTROLA PINU: bez wpisu i bez wrogiej floty bramka desantu jest OTWARTA ' +
     '(pusta orbita = brak oporu) — więc ma z czego spaść');
 
-  gameState.set('orbitalDominance.sys_home', { controllerId: empireId, year: 30 }, 'w3_dominance_test');
+  // ⚠ S0-3b (Finding 394) — PRZECELOWANE ZA ZGODĄ WŁAŚCICIELA. Od S0-3b zapamiętany kontroler-WRÓG sam nie
+  //   zamyka orbity (zamyka ją tylko kadłub, z którym da się walczyć), więc „bramka czyta WCZYTANĄ wartość"
+  //   mierzymy kierunkiem, w którym kontroler dalej rozstrzyga: wygrana GRACZA trzyma orbitę mimo wrogiego
+  //   okrętu na niej — i musi ją trzymać także PO reloadzie (zgubiony klucz = bramka zamknięta przez okręt).
+  const raider = createVessel('hull_frigate', home.id, {
+    name: 'Rajder', modules: ['engine_ion', 'armor_standard', 'weapon_kinetic'],
+    x: home.x ?? 0, y: home.y ?? 0, systemId: 'sys_home',
+  });
+  raider.ownerEmpireId = empireId; raider.owner = empireId; raider.isEnemy = true;
+  raider.position.state = 'orbiting'; raider.position.dockedAt = home.id;
+  core.vesselManager._vessels.set(raider.id, raider);
   assert(core.warSystem.playerHasOrbitalDominance(home.id) === false,
-    'T3: wróg wygrał bitwę ⇒ bramka desantu ZAMKNIĘTA (tak było i przed W3-3 — w RUNTIME)');
+    'T3 KONTROLA PINU: wrogi okręt na orbicie, bez wygranej gracza, ZAMYKA bramkę — kontroler ma co rozstrzygać');
+
+  gameState.set('orbitalDominance.sys_home', { controllerId: 'player', year: 30 }, 'w3_dominance_test');
+  assert(core.warSystem.playerHasOrbitalDominance(home.id) === true,
+    'T3: gracz wygrał bitwę ⇒ bramka desantu OTWARTA mimo wrogiego okrętu na orbicie (w RUNTIME)');
 
   saveLoadRoundTrip();
 
-  assert(core.warSystem.playerHasOrbitalDominance(home.id) === false,
-    'T3 SEDNO: po zapisie i wczytaniu bramka DALEJ zamknięta. Przed W3-3 wracała do `true` — ' +
-    'reload po cichu oddawał graczowi orbitę, której nie odbił, bo `getOrbitalController` ' +
-    'trafiał na pustkę i spadał do gałęzi „brak wrogiej floty = orbita wolna"');
+  assert(core.warSystem.playerHasOrbitalDominance(home.id) === true,
+    'T3 SEDNO: po zapisie i wczytaniu bramka DALEJ otwarta. Przed W3-3 klucz ginął przy wczytaniu — ' +
+    'zgubiony kontroler oddałby orbitę wrogiemu okrętowi, którego gracz już pokonał w bitwie');
 }
 
 // ── T4 — stary zapis bez klucza ─────────────────────────────────────────────

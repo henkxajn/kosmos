@@ -34,7 +34,8 @@ import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { CB_MEMORY_WINDOW } from '../data/OpinionModifierData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { isEnemyVessel, hasWeapons, isInService } from '../entities/Vessel.js';
+import { isEnemyVessel, hasWeapons, isInService, isFightableInSpace } from '../entities/Vessel.js';
+import { systemIdOf } from '../utils/SystemScope.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
 // W1-4b — WYCZERPANIE JEST ASYMETRYCZNE, zależnie od WYNIKU bitwy (orzeczenie właściciela).
@@ -938,18 +939,13 @@ export class WarSystem {
   _hasHostileFleetInSystem(systemId) {
     if (!systemId) return false;
 
-    // 1) REALNE kadłuby — wrogi, UZBROJONY, żywy statek w tym układzie.
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (vMgr?._vessels) {
-      for (const v of vMgr._vessels.values()) {
-        if (!v || v.isWreck) continue;
-        if (!isEnemyVessel(v)) continue;
-        if ((v.systemId ?? 'sys_home') !== systemId) continue;
-        // Bezbronny transportowiec nie „trzyma" orbity — ten sam próg, co bramka walki DSCS.
-        if (!hasWeapons(v)) continue;
-        return true;
-      }
-    }
+    // 1) REALNE kadłuby — wrogi, UZBROJONY statek w tym układzie, Z KTÓRYM DA SIĘ WALCZYĆ.
+    // ⚠ S0-3 (Findingi 393, 394) — kadłub w REZERWIE (393) albo ZADOKOWANY (394) nie odbiera już
+    //   dominacji: warstwa walki nie nawiąże z nim starcia (Proximity pomija dok i rezerwę, DSCS
+    //   walczy tylko `in_transit`/`orbiting`), więc „wygraj bitwę" było nie do spełnienia —
+    //   audyt fazy A AI STRIKES BACK zmierzył 0 bitew w 3 latach gry, a `engage` wisiał 0,86 AU
+    //   od celu.
+    if (this._hasFightableHostileHull(systemId, 'player')) return true;
 
     // 2) Księga abstrakcyjna — pusta w normalnej grze, żywa dla flot debugowych/legacy.
     const reg = window.KOSMOS?.empireRegistry;
@@ -966,12 +962,61 @@ export class WarSystem {
   }
 
   /**
+   * S0-3 (Findingi 393, 394) — czy w układzie stoi UZBROJONY kadłub WROGI stronie `sideId`, z którym
+   * da się walczyć (`isFightableInSpace`: w służbie, w locie albo na orbicie). Wroga stronie GRACZA
+   * = kadłub dowolnego imperium AI; wroga imperium = kadłub gracza (walka AI↔AI jest poza zakresem
+   * arca AI STRIKES BACK). Układ kadłuba z `systemIdOf`: tranzyt warp (`null`) nie stoi w ŻADNYM
+   * układzie — dawne `?? 'sys_home'` liczyło go jako obecny w domu (klasa Findingu 151).
+   * @param {string} systemId
+   * @param {string} sideId — 'player' albo id imperium
+   */
+  _hasFightableHostileHull(systemId, sideId = 'player') {
+    if (!systemId || !sideId) return false;
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?._vessels) return false;
+    for (const v of vMgr._vessels.values()) {
+      if (!isFightableInSpace(v)) continue;
+      // Bezbronny transportowiec nie „trzyma" orbity — ten sam próg, co bramka walki DSCS.
+      if (!hasWeapons(v)) continue;
+      if (systemIdOf(v) !== systemId) continue;
+      const hostile = sideId === 'player' ? isEnemyVessel(v) : !isEnemyVessel(v);
+      if (hostile) return true;
+    }
+    return false;
+  }
+
+  /**
+   * S0-3 — dominacja orbitalna strony `sideId` ('player' albo id imperium) w układzie. JEDNA reguła
+   * dla obu stron (po stronie AI czyta ją bramka desantu `InvasionSystem._onVesselGroupVictory`):
+   *  (a) kontroler układu (wynik ostatniej bitwy) == ta strona ⇒ TAK;
+   *  (b) w każdym innym przypadku ⇒ TAK, chyba że w układzie stoi wroga siła, z którą da się
+   *      walczyć (strona gracza dolicza jeszcze legacy księgę flot abstrakcyjnych —
+   *      `_hasHostileFleetInSystem`).
+   * ⚠ S0-3b — kontroler INNEJ strony nie odbiera dominacji SAM. Zwycięzca, który odleciał (powrót
+   *   Z2) albo zszedł do doku, zostawiał orbitę zamkniętą bezterminowo: `orbitalDominance` zmienia
+   *   się wyłącznie w bitwie, a bitwy nie było z kim stoczyć — ta sama klasa co Finding 394.
+   * @param {string} sideId
+   * @param {string} systemId
+   * @returns {boolean}
+   */
+  hasOrbitalDominanceInSystem(sideId, systemId) {
+    if (!systemId || !sideId) return false;
+    const ctrl = this.getOrbitalController(systemId);
+    if (ctrl === sideId) return true;
+    return sideId === 'player'
+      ? !this._hasHostileFleetInSystem(systemId)
+      : !this._hasFightableHostileHull(systemId, sideId);
+  }
+
+  /**
    * Czy gracz ma dominację orbitalną nad planetą?
    * Używane przez ColonyOverlay (drop mode, orbital strike UI) i dropTroop().
    *
    * Dominacja gracza obowiązuje gdy:
    *  (a) explicit: controller == 'player' (po wygranej bitwie), LUB
-   *  (b) domyślnie: w systemie NIE MA wrogiej floty z strength > 0.
+   *  (b) w każdym innym przypadku: w systemie NIE MA wrogiej floty, z którą da się walczyć
+   *      (S0-3: kadłub zadokowany albo w rezerwie dominacji nie odbiera; S0-3b: kontroler-imperium
+   *      bez takiej floty też nie).
    *
    * Pusty system = brak oporu = orbita bezpieczna. Jeśli flota wroga przybędzie,
    * dominacja znika automatycznie i gracz musi wygrać walkę, by znowu móc desantować.
@@ -980,13 +1025,8 @@ export class WarSystem {
    * @returns {boolean}
    */
   playerHasOrbitalDominance(planetId) {
-    const sysId = this._getBodySystemId(planetId);
-    if (!sysId) return false;
-    const ctrl = this.getOrbitalController(sysId);
-    if (ctrl === 'player') return true;
-    if (ctrl) return false; // kontroler to wrogie imperium → player nie ma
-    // Brak explicit controller — sprawdź czy w systemie jest wroga flota
-    return !this._hasHostileFleetInSystem(sysId);
+    // S0-3 — jedna reguła dla obu stron, patrz `hasOrbitalDominanceInSystem`.
+    return this.hasOrbitalDominanceInSystem('player', this._getBodySystemId(planetId));
   }
 
   /**
