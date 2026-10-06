@@ -1062,8 +1062,13 @@ export class GroundUnitManager {
     gs.set(path, null, 'mine_consumed');
 
     if (unit.hp <= 0) {
+      // G1c/P5 (Finding 327): ten sam ładunek co każda inna śmierć — bez `popCost`/`archetypeId` reintegracja POP
+      //   odpadała na bramce `ColonyManager`, a koszt POP zostawał zablokowany NA ZAWSZE.
       EventBus.emit('groundUnit:destroyed', {
         unitId: unit.id, planetId: unit.planetId, owner: unit.owner, killedBy: 'minefield',
+        archetypeId: unit.archetypeId ?? null,
+        popCost:     unit.popCost ?? 0,
+        cause:       'mine',
       });
       this.removeUnit(unit.id);
       return true; // unit died

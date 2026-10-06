@@ -25,6 +25,10 @@
 //   L4  (P4) żadna kolonia innego właściciela nie płaci ani nie dostaje: rozwiązanie z braku utrzymania przy przejętym
 //       domu — przejęty dom nietknięty, meldunek; jednostka bez wskazania domu na kolonii AI — kolonia AI nic nie dostaje.
 //       Kontrole: płatnik żołdu (354/R6) nigdy kolonia innego właściciela; własny dom — pełny zwrot jak dotąd.
+//   L5  (P5) mina (`GroundUnitManager._checkMineTrigger`): zdarzenie śmierci niesie koszt, archetyp i przyczynę `mine`;
+//       rozliczenie jak każda śmierć (część ginie od razu, zwrot po zwłoce). Ładunek bez kosztu (rejestr jako źródło)
+//       — to samo rozliczenie. Rozliczenie DOKŁADNIE RAZ: rozwiązana jednostka nie jest rozliczana drugi raz przez
+//       zdarzenie śmierci, a poległa — przez zwolnienie.
 //
 // ⚠ Harness jak `ground_unit_loss_smoke`: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu)
 //   + własne `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; po boocie, bo boot czyści
@@ -453,6 +457,66 @@ function reloadColonies(w, data) {
   upkeepDisband(w, u);
   assert(!w.gum.getUnit(u.id) && near(lockOf(w.home), L0) && near(humansOf(w.home), H0) && lostOf(w, u.id).length === 0,
     `L4d kontrola: pełny zwrot od razu (blokada → ${lockOf(w.home)} = ${L0}, populacja bez zmian)`);
+}
+
+// ── L5 — P5 (Finding 327): mina tą samą drogą śmierci; rozliczenie dokładnie raz ───────────────────────────────
+{
+  console.log('\nL5a — mina: ta sama droga śmierci co każda inna');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const u = recruit(w, w.home, 'shock_infantry');
+  const cost = COST.shock_infantry, ri = RI.shock_infantry, back = cost * ri.rate, dead = cost - back;
+  const H0 = humansOf(w.home), L1 = lockOf(w.home);
+  const died = mineKill(w, u);
+  const ev = w.ev.destroyed.find(e => e.unitId === u.id);
+  assert(died === true && !w.gum.getUnit(u.id) && !!ev && ev.killedBy === 'minefield',
+    `świadek: szturm ${u.id} wszedł na minę ${w.emp} i zginął (killedBy ${ev?.killedBy})`);
+  assert(ev?.popCost === cost && ev?.archetypeId === 'shock_infantry' && ev?.cause === 'mine',
+    `L5a: zdarzenie śmierci z miny niesie koszt, archetyp i przyczynę (${JSON.stringify({ popCost: ev?.popCost, archetypeId: ev?.archetypeId, cause: ev?.cause })})`);
+  const pend = pendingOf(w.home, u.id);
+  assert(near(humansOf(w.home), H0 - dead) && near(lockOf(w.home), L1 - dead) && pend.length === 1 && near(pend[0], back),
+    `L5a SEDNO: jak każda śmierć — ginie ${dead} (populacja ${H0} → ${humansOf(w.home)}), zwrot ${back} w kolejce ` +
+    `(${JSON.stringify(pend)}); przed naprawą koszt zostawał zablokowany na zawsze`);
+  w.cm._tickPendingPopReturns(ri.delay + 0.01);
+  assert(near(lockOf(w.home), L0), `L5a: po zwłoce blokada ${lockOf(w.home)} = ${L0} — nic na zawsze`);
+}
+{
+  console.log('\nL5b — ładunek bez kosztu i archetypu: rozliczenie z rejestru (każdy emitent emituje PRZED usunięciem)');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  const back = COST.shock_infantry * RI.shock_infantry.rate, dead = COST.shock_infantry - back;
+  const H0 = humansOf(w.home);
+  EventBus.emit('groundUnit:destroyed', { unitId: u.id, planetId: u.planetId });
+  w.gum.removeUnit(u.id);
+  const pend = pendingOf(w.home, u.id);
+  assert(near(humansOf(w.home), H0 - dead) && pend.length === 1 && near(pend[0], back),
+    `L5b: goły ładunek — rozliczenie z rejestru (populacja ${H0} → ${humansOf(w.home)}, kolejka ${JSON.stringify(pend)})`);
+}
+{
+  console.log('\nL5c — rozliczenie dokładnie raz: zwolniona jednostka nie ginie drugi raz; poległej nie zwalnia się drugi raz');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const a = recruit(w, w.home, 'shock_infantry');
+  const H0 = humansOf(w.home);
+  const rel = w.cm.releaseGroundUnitPops(a, 'test');
+  const afterRelease = [lockOf(w.home), humansOf(w.home)];
+  EventBus.emit('groundUnit:destroyed', { unitId: a.id, planetId: a.planetId, owner: a.owner,
+    archetypeId: a.archetypeId, popCost: a.popCost, cause: 'combat' });
+  w.gum.removeUnit(a.id);
+  assert(rel?.released === COST.shock_infantry && near(afterRelease[0], L0) && near(afterRelease[1], H0),
+    `świadek: pełny koszt zwolniony (blokada → ${afterRelease[0]} = ${L0})`);
+  assert(near(humansOf(w.home), H0) && near(lockOf(w.home), L0) && pendingOf(w.home, a.id).length === 0,
+    `L5c: zdarzenie śmierci po zwolnieniu niczego nie rozlicza drugi raz (populacja ${H0} → ${humansOf(w.home)}, ` +
+    `kolejka ${JSON.stringify(pendingOf(w.home, a.id))})`);
+  const b = recruit(w, w.home, 'shock_infantry');
+  const Lb = lockOf(w.home);
+  EventBus.emit('groundUnit:destroyed', { unitId: b.id, planetId: b.planetId, owner: b.owner,
+    archetypeId: b.archetypeId, popCost: b.popCost, cause: 'combat' });
+  const rel2 = w.cm.releaseGroundUnitPops(b, 'test');
+  w.gum.removeUnit(b.id);
+  const back = COST.shock_infantry * RI.shock_infantry.rate;
+  assert(rel2?.released === 0 && near(lockOf(w.home), Lb - (COST.shock_infantry - back)),
+    `L5c: zwolnienie po śmierci nie zwalnia drugi raz (zwolniono ${rel2?.released}, blokada ${Lb} → ${lockOf(w.home)})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

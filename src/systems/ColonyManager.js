@@ -1682,8 +1682,16 @@ export class ColonyManager {
     this._groundUnitDestroyedSubscribed = true;
 
     EventBus.on('groundUnit:destroyed', (payload) => {
-      const { unitId, planetId, popCost, archetypeId, cause } = payload;
+      const { unitId, planetId, cause } = payload;
+      // ⚠ G1c/P5 (Finding 327): koszt POP i archetyp z REJESTRU (każdy emitent emituje PRZED `removeUnit`), ładunek to
+      //   zapas — każda śmierć idzie tą samą drogą bez względu na kształt ładunku (mina go nie niosła). Jednostka już
+      //   rozliczona (`_popsReleased` — rozpad, rozwiązanie albo ta ścieżka) nie jest rozliczana drugi raz.
+      const reg = window.KOSMOS?.groundUnitManager?.getUnit?.(unitId) ?? null;
+      const popCost = reg?.popCost ?? payload.popCost ?? 0;
+      const archetypeId = reg?.archetypeId ?? payload.archetypeId ?? null;
       if (!planetId || !(popCost > 0) || !archetypeId) return;
+      if (reg?._popsReleased) return;
+      if (reg) reg._popsReleased = true;
 
       // ⚠ G1c/P1 (Finding 333): tabela mówi, ILE POP-ów wraca (`rate`) i PO JAKIM CZASIE (`delay`); RESZTA GINIE —
       //   znika z populacji kolonii macierzystej razem ze swoją blokadą (niżej, `killCrew`). Dawniej zostawała
@@ -1698,7 +1706,7 @@ export class ColonyManager {
       //   POP-y koloni AI (zdejmowała jej blokady), a dom gracza nie odzyskiwał nic. Jednostkę czytamy
       //   z rejestru: KAŻDY emitent `groundUnit:destroyed` emituje PRZED `removeUnit`. Ładunek to tylko
       //   zapas (emitenci różnią się nawet nazwą pola właściciela: `owner` / `ownerId`).
-      const unit = window.KOSMOS?.groundUnitManager?.getUnit?.(unitId)
+      const unit = reg
         ?? { id: unitId, planetId, archetypeId, type: archetypeId,
              homeColonyId: payload.homeColonyId ?? null, owner: payload.owner ?? payload.ownerId ?? null };
       const colony = this._ownedHomeColony(unit);
