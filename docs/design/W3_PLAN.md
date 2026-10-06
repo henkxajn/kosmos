@@ -973,6 +973,14 @@ path instead). Next live run can settle it in one read — the first record shou
     player archetype at +0. The owner's **D7** (2026-10-02) replaces the GROUND-slice plan for this
     entry: the AI uses the player's archetype model everywhere, including invasion pools (step
     **G2b**). See `docs/design/AI_GARRISON_PLAN.md`.
+    ✅ **CLOSED 2026-10-06 (AI STRIKES BACK, decision SB12) — D7 shipped in full in AI GARRISON G2b.**
+    The AI's landing force no longer runs on the legacy model: `launchInvasion` creates every landing
+    unit through `createAIUnit` (`InvasionSystem.js:165`) with the empire's D9 tier composition and
+    morale (`980043f`), the explicit list goes the same way (`f027e7c`, Finding 323), and
+    `INVASION_UNIT_POOLS` is gone (`23a87e5`, Finding 340); owner's live gate PASS 2026-10-06
+    (`AI_GARRISON_PLAN.md` §5ze). Not covered by this closure, filed separately: legacy AI units in OLD
+    saves stay legacy (387, no migration); landing size moves to AI STRIKES BACK (SB8,
+    `docs/design/AI_STRIKES_BACK_PLAN.md`); the AI still orders no drop-capable hull (49 → 201).
 51. ⚠ **CORRECTED 2026-08-19 (AI_CAPTURE AC-1) — the original wording named the wrong cause.**
     *Stood here:* „`InvasionSystem` has `_tryPlayerCapture` … with **no** mirror for the AI
     direction, so the last step of the conquest loop … is missing."

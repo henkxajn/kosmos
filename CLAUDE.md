@@ -5923,3 +5923,43 @@ dwa `Math.random()` zastępują losowania dawnej puli — **388**); sweep **263/
 ⌈n⌉ → ⌊n⌋ · **390** nieaktualne teksty o puli w dwóch keeperach.
 **G2b ZAMKNIĘTE. ARC AI GARRISON ZAMKNIĘTY** (G1, G1b, G2, G3, G1c, G2b). Poza arciem: limit floty, odbicie kolonii,
 przyczółek — następny arc (zakres właściciela 2026-10-06).
+
+---
+
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 w toku)
+
+Plan, decyzje **SB1–SB12** i rejestr findingów **#391–#396**: `docs/design/AI_STRIKES_BACK_PLAN.md`; audyt fazy A
+(pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy i wyniki poza repo,
+`kosmos-handover/ai-strikes-back/`).
+
+**Jedno zdanie:** po AI GARRISON imperium AI broni swoich ciał na ziemi, ale w przestrzeni nie ma zębów — bez nacisku
+gracza **0** okrętów w 100 lat gry, każdy kadłub ze stoczni stoi w rezerwie, a w wojnie produkcja okrętów staje — więc
+arc daje AI flotę z puli, strażnika na orbicie, odbijanie utraconych kolonii i wojnę z własnej inicjatywy.
+
+**Zakres (kolejność właściciela):** (1) limit floty z siły imperium + źródło okrętów · (2) strażnik przy stolicy i przy
+jednym cennym ciele · (3) odbijanie utraconych kolonii · (4) wojna z inicjatywy AI. **Poza:** AI-vs-AI, liczba imperiów AI.
+
+**Decyzje (2026-10-06):** **SB1** okręty z PULI tworzonej przy mobilizacji, straty odrastają 1 kadłub/rok; prawdziwa
+produkcja nietknięta i liczy się do tego samego limitu · **SB2** kadłuby z puli bez POP na załogę (jak garnizon) ·
+**SB3** limit = max(2, ⌊POP imperium / 32⌋) × mnożnik szczebla garnizonu (×1,25 od 20 poziomów fabryk); liczą się
+wszystkie uzbrojone kadłuby · **SB4** zaległość floty gracza nie blokuje kadłubów AI (S0) · **SB5** strażnik stoi NA
+ORBICIE; zadokowane i rezerwa nie odbierają dominacji · **SB6** drugie strzeżone ciało = najcenniejsze poza stolicą
+w porządku planera garnizonu, jego strażnik LECI ze stolicy · **SB7** żadnych magicznych lądowań — realny lot,
+transportowiec z eskortą, desant tylko po wygranej orbicie i gdy transportowiec przetrwał · **SB8** desant = część
+limitu garnizonu (domyślnie połowa), obcięta do ładowni, falami · **SB9** jedna tabela strojenia + komenda konsoli +
+odczyt per imperium · **SB10** ofensywa układ po układzie, od najbliższego stolicy AI; stolica gracza nie jest
+preferowanym pierwszym celem · **SB11** reguły odbijania i wojny z inicjatywy — przy S3/S4, na zmierzonych liczbach ·
+**SB12** Finding **50** zamknięty w `W3_PLAN.md` §50.
+
+**Slice'y:** **S0** trzy defekty (391, 392, 393 + 394) · **S1** tabela strojenia, limit floty, pula · **S2** strażnik ·
+**S3** eskadra z transportowcem, desant po wygranej orbicie, odbijanie, fale · **S4** wojna z inicjatywy AI i kampania
+układ po układzie. Estymata audytu: ~8–11 dni (wariant puli).
+
+⚠ **Otwarte do audytu S3:** transportowiec szybszy od eskorty (42,9 vs 6,6 AU/rok) · co detekcja gracza pokazuje
+z tranzytu międzyukładowego i przylotu · czy zadokowane okręty gracza bronią kolonii przy przylocie eskadry AI (dziś:
+w bitwie `EnemyAttackHandler` bronią — `_buildPlayerBattleUnit` bierze okręty w służbie bez względu na dok — a warstwa
+walki w przestrzeni, Proximity + DSCS, zadokowanych nie widzi).
+⚠ **Findingi #391–#396** (rejestr: plan §6): 🔴 **391** `deployVessel` odmawia kadłubowi AI (także kurierowi), gdy
+zalega flota GRACZA · 🟠 **392** guard `empireHasFreeCrew` martwy dla AI · 🟠 **393** rezerwa AI odbiera graczowi
+dominację orbitalną · 🟠 **394** zadokowany kadłub AI odbiera dominację, a walki z nim nie ma · ⚪ **395** adnotacja
+`directorOrigin` na złym kadłubie · 🟠 **396** desant z bitwy liczy pojemność, nie ładunek (rodzina 384).
