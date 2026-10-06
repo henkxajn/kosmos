@@ -1576,13 +1576,11 @@ export class ColonyManager {
           u.unpaidYears = (u.unpaidYears ?? 0) + 1;
 
           if (u.unpaidYears >= ColonyManager.UPKEEP_GRACE_CIVYEARS) {
-            // Disband — pełen zwrot POPów do HOME colony (gdzie były zablokowane)
-            // ⚠ Zwrot NIE idzie za płatnikiem (R6 zmienił tylko płatnika): kolonia macierzysta jednostki albo ciało, jak
-            //   przed G2-4. Termin właściciela przy zwrocie to Finding 329 (krok G1c).
-            if ((u.popCost ?? 0) > 0) {
-              const homeForPop = this.getColony(u.homeColonyId ?? u.planetId) ?? this.getColony(u.planetId);
-              homeForPop?.civSystem?.unlockPops?.(u.popCost, 'laborer');
-            }
+            // Disband — pełen zwrot POPów do kolonii macierzystej (gdzie były zablokowane).
+            // ⚠ G1c/P4 (Finding 329): zwrot z TERMINEM WŁAŚCICIELA (`releaseGroundUnitPops`, jak rozpad morale i ręczne
+            //   rozwiązanie) — kolonia innego właściciela nie dostaje nic, POP-y przepadają z meldunkiem. Dawny fallback
+            //   `homeColonyId ?? planetId` oddawał je przejętej kolonii macierzystej albo kolonii CIAŁA. Płatnik — R6.
+            this.releaseGroundUnitPops(u, 'no_credits');
             EventBus.emit('groundUnit:disbanded', {
               unitId: u.id, planetId: u.planetId, homeColonyId: homeId,
               reason: 'no_credits',

@@ -22,6 +22,9 @@
 //   L3  (P3) zapis → wczytanie w połowie zwłoki (prawdziwe `ColonyManager.serialize` → `restore`): zwrot wypłacony
 //       DOKŁADNIE RAZ, w terminie (nie wcześniej, nie drugi raz); w zapisie termin jako pozostały czas; starszy zapis
 //       bez kolejki wczytuje się czysto (pusta kolejka).
+//   L4  (P4) żadna kolonia innego właściciela nie płaci ani nie dostaje: rozwiązanie z braku utrzymania przy przejętym
+//       domu — przejęty dom nietknięty, meldunek; jednostka bez wskazania domu na kolonii AI — kolonia AI nic nie dostaje.
+//       Kontrole: płatnik żołdu (354/R6) nigdy kolonia innego właściciela; własny dom — pełny zwrot jak dotąd.
 //
 // ⚠ Harness jak `ground_unit_loss_smoke`: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu)
 //   + własne `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; po boocie, bo boot czyści
@@ -394,6 +397,62 @@ function reloadColonies(w, data) {
   try { home2 = reloadColonies(w, data); } catch { ok = false; }
   assert(ok && !!home2 && pendingOf(home2).length === 0 && w.cm.getAllColonies().length === data.colonies.length,
     `L3b kontrola: zapis bez \`pendingPopReturns\` — wczytanie bez błędu, kolonie ${w.cm.getAllColonies().length}/${data.colonies.length}, kolejka pusta`);
+}
+
+// ── L4 — P4 (Finding 329): termin właściciela przy zwrocie POP z braku utrzymania ─────────────────────────────
+{
+  console.log('\nL4a — brak utrzymania przy przejętym domu: przejęty dom nic nie dostaje, POP przepadają z meldunkiem');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  w.home.credits = 5000;                           // przejęty dom ma kredyty — i nie wolno mu płacić (354/R6)
+  const capL = lockOf(w.home), capH = humansOf(w.home);
+  for (let i = 0; i < ColonyManager.UPKEEP_GRACE_CIVYEARS; i++) quiet(() => w.cm._tickGroundUnitUpkeep(1.0));
+  const lost = lostOf(w, u.id);
+  assert(w.home.ownerEmpireId === w.emp && !w.gum.getUnit(u.id)
+      && w.ev.disbanded.some(e => e.unitId === u.id && e.reason === 'no_credits'),
+    `świadek: dom ${w.home.planetId} należy do ${w.home.ownerEmpireId}; jednostka rozwiązana z braku utrzymania`);
+  assert(near(lockOf(w.home), capL) && near(humansOf(w.home), capH),
+    `L4a SEDNO: przejęty dom nic nie dostaje (blokada ${capL} → ${lockOf(w.home)}, populacja ${capH} → ${humansOf(w.home)})`);
+  assert(lost.length === 1 && near(lost[0].amount, COST.shock_infantry) && lost[0].cause === 'no_credits',
+    `L4a: meldunek o utracie ${JSON.stringify(lost.map(e => [e.amount, e.cause]))}`);
+  assert(near(w.home.credits ?? 0, 5000),
+    `L4a kontrola (354/R6): przejęty dom z kredytami nie płacił żołdu (${w.home.credits}) — jednostka rozwiązana bez płatnika`);
+}
+{
+  console.log('\nL4b — jednostka bez wskazania domu na kolonii AI: kolonia CIAŁA nic nie dostaje');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  placeOn(w, u, w.ai);
+  u.homeColonyId = null;
+  w.ai.civSystem.lockPops(5, 'laborer');          // bez tego błędne zwolnienie na AI zginęłoby w klampie do zera
+  const aiL = lockOf(w.ai), aiH = humansOf(w.ai);
+  upkeepDisband(w, u);
+  const lost = lostOf(w, u.id);
+  assert(!w.gum.getUnit(u.id) && w.ev.disbanded.some(e => e.unitId === u.id && e.reason === 'no_credits'),
+    `świadek: jednostka bez domu na ${w.ai.planetId} (${w.ai.ownerEmpireId}) rozwiązana z braku utrzymania`);
+  assert(near(lockOf(w.ai), aiL) && near(humansOf(w.ai), aiH) && lost.length === 1,
+    `L4b SEDNO: kolonia AI nic nie dostaje (blokada ${aiL} → ${lockOf(w.ai)}); meldunek ${lost.length}`);
+}
+{
+  console.log('\nL4c — kontrola (354/R6): żołd jednostki gracza nigdy z kolonii innego właściciela');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  placeOn(w, u, w.ai);
+  w.ai.credits = 1000; w.home.credits = 1000;
+  quiet(() => w.cm._tickGroundUnitUpkeep(1.0));
+  assert(near(w.ai.credits, 1000) && w.home.credits < 1000 && u.status !== 'offline',
+    `L4c kontrola: jednostka na kolonii AI — płaci dom (${w.home.credits}), kolonia AI ${w.ai.credits}`);
+}
+{
+  console.log('\nL4d — kontrola: własny dom — brak utrzymania oddaje pełny koszt od razu, jak dotąd');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const u = recruit(w, w.home, 'shock_infantry');
+  const H0 = humansOf(w.home);
+  upkeepDisband(w, u);
+  assert(!w.gum.getUnit(u.id) && near(lockOf(w.home), L0) && near(humansOf(w.home), H0) && lostOf(w, u.id).length === 0,
+    `L4d kontrola: pełny zwrot od razu (blokada → ${lockOf(w.home)} = ${L0}, populacja bez zmian)`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
