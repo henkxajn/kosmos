@@ -421,10 +421,10 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `groundUnit:orgChanged { unitId, org, max }` | GroundUnitManager, SupplyCoverageSystem, CombatSystem | ⛔ **ZERO subskrybentów** |
 | `groundUnit:moraleChanged { unitId, morale, max }` | GroundUnitManager, SupplyCoverageSystem, CombatSystem | ⛔ **ZERO subskrybentów** |
 | `groundUnit:starved { unitId, planetId }` | SupplyCoverageSystem (`:194`) | ⛔ **ZERO subskrybentów** — Dziennik milczy przy śmierci głodowej |
-| `groundUnit:disbanded { unitId, planetId, reason, archetypeId, owner, type, customName }` | ColonyManager (utrzymanie, `:1570`), CombatSystem (`morale_collapse`, `:263`) | NotificationCenter (`:67` → wpis TYLKO w Dzienniku, tylko jednostki gracza, bez dzwonka; G1b/S3, Finding **312** ✅). ⚠ Subskrybent NIE zwalnia POP — robi to emitent (utrzymanie inline `:1566-1568`, rozpad przez `releaseGroundUnitPops`) |
+| `groundUnit:disbanded { unitId, planetId, reason, archetypeId, owner, type, customName }` | ColonyManager (utrzymanie, `:1586`; ręczne rozwiązanie `disbandGroundUnit`, `:1804`, G1c/P2), CombatSystem (`morale_collapse`, `:282`) | NotificationCenter (`:70` → wpis TYLKO w Dzienniku, tylko jednostki gracza, bez dzwonka; G1b/S3, Finding **312** ✅; `manual` bez wpisu). ⚠ Subskrybent NIE zwalnia POP — robi to emitent, zawsze przez `releaseGroundUnitPops` z terminem właściciela (utrzymanie od G1c/P4, rozpad, ręczne rozwiązanie) |
 | `groundUnit:resumed { unitId, planetId }` | ColonyManager (utrzymanie, `:1558`) | ⛔ **ZERO subskrybentów** |
-| `groundUnit:destroyed { unitId, planetId, archetypeId, popCost, cause, owner \| ownerId }` | CombatSystem (`:239`), GroundUnitManager (ostrzał `:73`; mina `:965` — BEZ `popCost`/`archetypeId`, Finding **327**), SupplyCoverageSystem (głód, `:200`), VesselManager (`:1137`), UnitCardPanel (ręczne rozwiązanie, `:214`, Finding **330**); `GroundUnitManager:743` w martwej `attackUnit` | ColonyManager (`:1625` → reintegracja POP do kolonii MACIERZYSTEJ z terminem właściciela, G1b/S4, Finding **326** ✅), ArmySystem (`:46`). ⚠ Każdy żywy emitent emituje PRZED `removeUnit` — handler czyta jednostkę z rejestru |
-| `groundUnit:popsLost { unitId, owner, type, customName, planetId, homeColonyId, amount, cause }` | ColonyManager (`_reportPopsLost`, `:1714`) — brak kolonii właściciela przy zwolnieniu albo reintegracji (G1b) | NotificationCenter (`:64` → wpis TYLKO w Dzienniku, tylko gracz, bez dzwonka) |
+| `groundUnit:destroyed { unitId, planetId, archetypeId, popCost, cause, owner \| ownerId }` | CombatSystem (`:258`), GroundUnitManager (ostrzał `:74`; mina `:1067` — z `popCost`/`archetypeId`/`cause: 'mine'` od G1c/P5, Finding **327** ✅), SupplyCoverageSystem (głód, `:200`), VesselManager (`:1138`), WithdrawalSystem (termin wycofania, `:314`), GarrisonSystem (zniszczone ciało, `:330`, G1c/P6); `GroundUnitManager:843` w martwej `attackUnit`. ⚠ `UnitCardPanel` śmierci NIE emituje — od G1c/P2 woła `ColonyManager.disbandGroundUnit` (`UnitCardPanel.js:227`, Finding **330** ✅) | ColonyManager (`:1686` → zwrot `rate` po zwłoce do kolonii MACIERZYSTEJ z terminem właściciela, G1b/S4, Finding **326** ✅; reszta ginie od razu z blokadą, G1c/P1; koszt i archetyp z rejestru, rozliczenie dokładnie raz `_popsReleased`, G1c/P5), ArmySystem (`:46`). ⚠ Każdy żywy emitent emituje PRZED `removeUnit` — handler czyta jednostkę z rejestru |
+| `groundUnit:popsLost { unitId, owner, type, customName, planetId, homeColonyId, amount, cause }` | ColonyManager (`_reportPopsLost`, `:1860`) — brak kolonii właściciela przy zwolnieniu albo reintegracji (G1b); od **380** jednostka, której dom przejęto, nie ma już więzi POP — meldunku nie ma | NotificationCenter (`:67` → wpis TYLKO w Dzienniku, tylko gracz, bez dzwonka) |
 | `supply:coverageChanged {}` | SupplyCoverageSystem | ColonyOverlay |
 | `vessel:orderIssued { vesselId, order }` | MovementOrderSystem | UIManager (FleetManagerOverlay), VesselManager (suspend mission) |
 | `vessel:orderCompleted { vesselId, orderId, type, completedYear }` | MovementOrderSystem | UIManager, VesselManager (resume mission), EventLog |
@@ -5664,7 +5664,7 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE · G3 ZAMKNIĘTY 2026-10-05)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE · G3 ZAMKNIĘTY 2026-10-05 · G1c ZAMKNIĘTY 2026-10-06)
 
 Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#379**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
@@ -5702,11 +5702,11 @@ zginęła.
 
 ⚠ **REGUŁA WŁAŚCICIELA dla POP jednostek naziemnych:** zwolnienie i zwrot idą WYŁĄCZNIE do kolonii
 macierzystej należącej do właściciela jednostki (`_colonyBelongsTo`) — nigdy do ciała, na którym jednostka
-stoi. ⚠ Ścieżka UTRZYMANIA jeszcze jej nie używa (**329**).
+stoi. ⚠ Ścieżka UTRZYMANIA używa jej od G1c/P4 (**329** ✅).
 ⚠ **Odczyt z bramki, który wyglądał na asynchroniczne zwolnienie, był ścieżką ŚMIERCI:** garnizon z morale
 podniesionym technologiami ginie od obrażeń, nie od rozpadu ⇒ `garrison_unit` `{rate 1.0, delay 1.0}` =
 pełne 1,2 dokładnie miesiąc później. Rekoncyliacja: plan §5c.1.
-⚠ **Otwarte z G1b (#327–#335):** 🟠 **333** nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana
+⚠ **Otwarte z G1b (#327–#335; stan 2026-10-02 — 327, 328, 329, 330 i 333 ✅ w G1c 2026-10-06):** 🟠 **333** nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana
 NA ZAWSZE i liczy się do populacji · 🟠 **330** ręczne rozwiązanie idzie przez tabelę śmierci · 🟠 **328**
 kolejka reintegracji poza zapisem · 🟠 **329** utrzymanie bez terminu właściciela · 🟠 **335** pętla odwrotu
 AI (rodzina 313) · ⚪ **327** mina (latentny) · ⚪ **331** AI-vs-AI · ⚪ **334** literały karty jednostki.
@@ -5869,5 +5869,31 @@ właściciela (a)–(h) 2026-10-05 — plan §5z: (b)–(d), (f), (g) potwierdza
 `ColonyOverlay` — etap polerki UI; **(a)** → `8cd8d7c`; **(h) = Finding 379** — wroga jednostka naziemna na mapie ciała jest
 rysowana, zaznaczalna i wypisywana tylko, gdy ciało jest kolonią gracza, gracz ma na nim własne jednostki albo ma wywiad
 `detailed` o jej właścicielu; karta ciała tą samą regułą — follow-up z osobną bramką w przeglądarce.
-**G3 ZAMKNIĘTE.** Pozostałe kroki arca: **G1c** (rodzina „utrata POP”: 333 · 330 · 328 · 329; kierunek 333/330 podpisany
-2026-10-02) → **G2b** (pule desantu na archetypy).
+**G3 ZAMKNIĘTE.**
+✅ **Follow-up (h) i G1c — utrata POP jednostek gracza i widoczność wrogich jednostek** (`ad0a615` 379 · `b1eac7a` P1 ·
+`0fbbd59` P2 · `4a4f909` P3 · `732507d` P4 · `4d625a9` P5 · `790f3b7` P6; follow-upy `b926d81` 380 · `1c90ea4` 381; bramka
+live właściciela 2026-10-06 **PASS**; plan §5za–§5zc). **(h) / 379** — NEW `src/utils/GroundVisibility.js` (jedno źródło
+reguły): cudza jednostka naziemna jest rysowana, zaznaczalna i wypisywana na mapie ciała tylko, gdy ciało jest kolonią
+gracza, gracz ma na nim własne żywe jednostki (nie w ładowni) albo ma wywiad `detailed` o jej właścicielu; własne zawsze,
+ukryte cudze nigdy; karta ciała i okno zrzutu (`GarrisonReadout`) tą samą regułą. **P1 (333)** — część POP poległej
+jednostki, której tabela śmierci nie oddaje, ginie OD RAZU w kolonii macierzystej z terminem właściciela
+(`killCrew(…, 'ground_unit_lost')`), zwrot po zwłoce jak dotąd; archetyp spoza tabeli — ginie całość (Q3); bez osobnej linii
+w Dzienniku (Q4). **P2 (330)** — NEW `ColonyManager.disbandGroundUnit`: ręczne rozwiązanie oddaje pełny koszt POP od razu;
+karta jednostki woła tę metodę i nie emituje śmierci. **P3 (328)** — kolejka opóźnionych zwrotów w zapisie kolonii
+(`pendingPopReturns`, termin jako pozostały czas; zapis sprzed G1c — pusta kolejka). **P4 (329)** — rozwiązanie z braku
+utrzymania przez `releaseGroundUnitPops` (termin właściciela). **P5 (327)** — mina niesie pełny ładunek śmierci; rozliczenie
+dokładnie raz (`_popsReleased`). **P6 (zmiana R7)** — jednostka gracza na zniszczonym ciele — jak polegli, nie pełny zwrot.
+**380 (Q2)** / **381 (Q5)** — NEW `ColonyManager._severGroundBondsOnOwnerChange`, wołany w `transferColony`
+i `captureColonyForPlayer` zaraz po zapisie nowego właściciela, przed emisją zdarzenia: blokady POP jednostek poprzedniego
+właściciela z domem w tej kolonii i zwroty w jej kolejce zwalniane W MIEJSCU (ludzie zostają z kolonią), jednostki walczą
+dalej z `popCost` 0 i bez domu; kolejka rekrutacji tej kolonii anulowana (blokady wracają, surowce i Kr przepadają).
+⚠ **Reguła właściciela dla POP jednostek naziemnych obejmuje teraz WSZYSTKIE drogi wyjścia** (śmierć, ręczne rozwiązanie,
+brak utrzymania, rozpad morale, mina, zniszczone ciało, termin wycofania) i zmianę właściciela kolonii — żadna blokada nie
+zostaje na zawsze, żadna kolonia innego właściciela nic nie dostaje.
+⚠ **Keeper testujący przejęcie kolonii z jednostką gracza:** od 380 przejęcie zrywa więź POP — meldunek `popsLost` przy
+późniejszej śmierci już nie leci; regułę właściciela dla zapisów sprzed 380 pinuje `g1c_pop_loss` L7e (stempel właściciela
+jak przy wczytaniu).
+Keepery `g1c_pop_loss_smoke` **86/86** · `g3_ground_visibility_smoke` **49/49** · `ground_unit_loss_smoke` **29/29**; sweep
+**262/262**, `check-i18n` 3455. Nowe findingi **382** (karta ciała liczy ukryte drony — uśpiony) i **383** (panel kafla obcej
+kolonii bez reguły widoczności — decyzja właściciela).
+**G1c ZAMKNIĘTE.** Pozostały krok arca: **G2b** (pule desantu na archetypy).

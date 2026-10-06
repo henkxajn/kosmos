@@ -395,6 +395,17 @@
 > w przeglądarce.
 > • **375** rozszerzony bez nowego numeru o `DropTroopsModal` (polskie literały także w EN).
 > • Pozostałe kroki arca: **G1c** → **G2b** (`AI_GARRISON_PLAN.md` §3).
+>
+> **Aktualizacja 2026-10-06 — AI GARRISON: G1c ZAMKNIĘTY (rodzina „utrata POP”) + follow-up (h) (379) + follow-upy 380/381.**
+> Sweep: **262/262 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3455** · save **v101 bez migracji**.
+> • ✅ **379** (`ad0a615`, follow-up (h)) · **333** (`b1eac7a`) · **330** (`0fbbd59`) · **328** (`4a4f909`) · **329** (`732507d`) ·
+> **327** (`4d625a9`) · zmiana R7 (`790f3b7`) — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze zdjęte
+> z A5/A6/A8. Bramka live właściciela 2026-10-06 **PASS** (`AI_GARRISON_PLAN.md` §5zb).
+> • **NOWE: #380–#383** (rejestr: `AI_GARRISON_PLAN.md` §6) — ✅ **380** (`b926d81`, Q2: przejęcie kolonii zrywa więzi POP
+> jednostek poprzedniego właściciela) · ✅ **381** (`1c90ea4`, Q5: przejęcie anuluje kolejkę rekrutacji) · ⚪ **382** (karta
+> ciała liczy ukryte jednostki — uśpiony) · 🟠 **383** (mapa obcej kolonii: panel kafla — budynek z danymi albo menu budowy —
+> bez względu na wywiad; decyzja właściciela).
+> • Pozostały krok arca: **G2b** (`AI_GARRISON_PLAN.md` §3).
 
 
 ---
@@ -577,10 +588,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **314** | ⚪ | martwe człony `_scoreTarget` `'scout'`/`'ranged'` (`CombatSystem.js:361`, `:364`) — instancje noszą lustro legacy |
 | **315** | ⚪ | `GroundUnitManager.attackUnit` martwa (zero wołających); komentarze `GroundUnitFactory.js:10`, `:139` mówią inaczej |
 | **316** | ⚪ | `ColonyOverlay.js:2706` — `NaN` morale dla jednostki z `supply`, bez `morale` (wąska ścieżka) |
-| **327** | ⚪ | śmierć na minie: `groundUnit:destroyed` bez `popCost`/`archetypeId` (`GroundUnitManager.js:965-967`) ⇒ reintegracja odpada na bramce (`ColonyManager.js:1627`), POP zablokowane na zawsze — **latentny** (jedyny producent min to martwe `lay_minefield.execute`) |
-| **328** | 🟠 | kolejka reintegracji `_pendingPopReturns` poza zapisem (`ColonyManager.js:2526-2550`), a blokady POP w zapisie ⇒ zapis i wczytanie w oknie zwłoki (1–2 wyświetlane miesiące) kasuje należny zwrot na zawsze |
-| **330** | 🟠 | ręczne rozwiązanie (`UnitCardPanel.js:203`, przycisk-literał) emituje `groundUnit:destroyed` ⇒ idzie przez tabelę ŚMIERCI (szturm odzyskuje 0,3 z 0,6 po 2 civY, reszta → **333**), choć utrzymanie i rozpad oddają pełny koszt od razu |
-| **333** | 🟠 | **nieoddana część POP po śmierci (`rate < 1`) zostaje zablokowana NA ZAWSZE i liczy się do populacji** — zmierzone (+0,3 po 27 mies., zero wywołań usuwających ludzi); wzorzec poprawny: `killCrew` (W2). Rekoncyliacja A0, **nienaprawiony** |
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
 | **373** | ⚪ | akcje silnika bez bramki `'in_cargo'` — `GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`); `moveUnit` ma ją od F7 (`f90bc14`); z UI nieosiągalne po przycinaniu zaznaczenia (F7) — później. `AI_GARRISON_PLAN.md` §6 |
@@ -602,7 +609,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **127o** | ⬜ | backlog: lazy-init loadera w `PlanetTextureUtils:16` odblokowałby `ColonyOverlay` pod node | **największa luka testowa repo** |
 | **128o** | 🟠 | cztery wejścia nawigacyjne wołają `switchActiveColony` wprost — bezpieczne **przez odmowę**, ale żadne nie oferuje **stanu neutralnego** | stąd UX z GATE OG-3 §3 |
 | **72 · 73 · 84 · 85 · 91 · 92 · 93 · 94** | ⚪ | filed przy audycie własności; po D1-D6 prawdopodobnie **latentne albo higiena** | ⚠ **nie weryfikowane po kolei** |
-| **329** | 🟠 | utrzymanie jednostek naziemnych: płatnik Kr i zwrot POP bez terminu właściciela (`ColonyManager.js:1529`, `:1539`, `:1567`) ⇒ po przejęciu domu płaci kolonia WROGA i ona dostaje POP-y przy rozwiązaniu | siostra **97** (flota, zamknięty w OG-3b); rozpad i śmierć mają już `_ownedHomeColony` (G1b) |
 | **357** | ⚪ | dymek ciała na mapie 3D: „Player Empire” przy KAŻDEJ kolonii, także wroga, i jej populacja bez mgły wojny (`TooltipContent.js:147-155`, od `670d027`) | naprawa przez kanon `SystemReveal` (**188**), nie jednolinijkowiec |
 
 ## A7 — Kolonizacja (98-107, BEZ decyzji o zakresie)
@@ -690,7 +696,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **346** | ⚪ | stolice AI na jednej współrzędnej (−1,2) — remis punktacji, wygrywa pierwszy kafel rzędu 2; w fixture 5 z 11 na `ice_sheet` | obserwacja; rodzina **322** |
 | **349** | 🟠 | „Wyładuj” bez sprawdzenia terenu (`CargoLoadModal.js:405` → `Vessel.js:743-745`); nad ciałem BEZ kolonii celem jest kolonia MACIERZYSTA (`FleetManagerOverlay.js:3074-3075`) — reszta **338** dla ciał własnych i niczyich | niemierzone (DOM); bez kroku |
 | **361** | ⚪ | martwe pole `rocket_artillery.terrainModifiers` (`unitArchetypes.js:72`, `mountains: Infinity`) — zero czytelników; planer stawia artylerię na górach (fixture GATE-S4: emp_001 heks (0,2)) | bez kroku |
-| **379** | 🟠 | mapa kolonii obcego ciała rysuje wrogie jednostki naziemne bez względu na wywiad — `ColonyOverlay._drawUnits` (`:3028`, lista z `:3033`, jedyny filtr stealth `:3041`/`:3227`), klik `getUnitAt` (`:4776`), przełącznik heksu na karcie wroga (`:2540-2544`) ⇒ karta ciała (G3-3) mówi „nieznany”, a mapa pokazuje garnizon | → follow-up **(h)**: reguła trzech warunków (kolonia gracza · własne jednostki na ciele · `detailed` o właścicielu), karta ciała tą samą regułą; osobna bramka w przeglądarce. `AI_GARRISON_PLAN.md` §6 |
+| **382** | ⚪ | karta ciała liczy ukryte (stealth) jednostki wroga, których mapa nie pokazuje — `readGarrisonReadout` bez filtra stealth (`GarrisonReadout.js:40-41`) wobec `isGroundUnitVisibleToPlayer` (`GroundVisibility.js:60`); dron ukryty + garnizon ⇒ mapa 1, karta 2 | uśpiony (garnizony AI bez dronów); bez decyzji. `AI_GARRISON_PLAN.md` §6 |
+| **383** | 🟠 | mapa obcej kolonii: klik na kafel otwiera panel kafla bez względu na wywiad (`ColonyOverlay.js:961`, `:4835`) — budynek z produkcją z żywych stawek tej kolonii albo menu budowy gracza (wygaszone, D4=W3); osiągalne bez własnych jednostek w trybach zrzutu, ostrzału i away teamu | decyzja właściciela: czy panel kafla idzie regułą **379**. `AI_GARRISON_PLAN.md` §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 

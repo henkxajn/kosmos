@@ -10,10 +10,10 @@
 > **(a)** — w wersji **ograniczonej** (`dcc4c6f`) i **378** (`5c49b36`) — 2026-10-04, decyzje właściciela, §5w;
 > **(c)** — etap polerki UI (**372**). ✅ **G2 ZAMKNIĘTE.** ✅ **G3 (odrastanie strat, uzgadnianie mobilizacji co rok —
 > **360**, widoczność garnizonu, wpis o mobilizacji) ZAMKNIĘTY 2026-10-05 — bramka live właściciela PASS** (§5x–§5z);
-> poprawka **(a) po terminie** (`8cd8d7c`, **370**) — odpowiedź właściciela 2026-10-05, §5z; **(h)** = **379** — follow-up
-> z osobną bramką w przeglądarce. Pozostałe kroki arca (§3), w kolejności **G1c → G2b** (odpowiedź właściciela
-> 2026-10-04, §5w): **G1c** (rodzina „utrata POP”: **333** · **330** · **328** · **329**) · **G2b** (pule desantu na
-> archetypy).
+> poprawka **(a) po terminie** (`8cd8d7c`, **370**) — odpowiedź właściciela 2026-10-05, §5z; **(h)** = **379** ✅.
+> ✅ **G1c (rodzina „utrata POP”: 333 · 330 · 328 · 329 · 327, zmiana R7) i follow-up (h) (379) ZAMKNIĘTE 2026-10-06 —
+> bramka live właściciela PASS** (§5za–§5zb); follow-upy **380** (Q2) i **381** (Q5) — 2026-10-06, na dowodzie headless,
+> bez osobnej bramki (§5zc). Pozostały krok arca (§3): **G2b** (pule desantu na archetypy).
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
 > odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k);
@@ -22,10 +22,12 @@
 > i zakres wad z bramki G2-4 — **2026-10-04** (§5s); odpowiedzi po bramce follow-upów — poprawki **(a)–(g)** —
 > **2026-10-04** (§5v); odpowiedzi do notatki zamykającej G2-4 — (a) w wersji ograniczonej, (d), kolejność kroków,
 > **378** — **2026-10-04** (§5w); odpowiedzi do notatki G3 — **(a)–(h)** — **2026-10-05** (§5z), w tym reguła widoczności
-> **379** (trzy warunki, karta ciała tą samą regułą).
+> **379** (trzy warunki, karta ciała tą samą regułą); odpowiedzi do notatki zamykającej G3 — **Q1–Q5** — **2026-10-05**
+> i potwierdzenia do **380** / **381** — **2026-10-06** (§5zc).
 > Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b, w G2-4, w follow-upach G2-4
-> (F1–F7, (a)–(g), 378), w G3 (rok rozliczony `regrowthYear` w rekordzie flagi — zapis sprzed G3 bez nadrabiania lat)
-> i w poprawce (a) po terminie.
+> (F1–F7, (a)–(g), 378), w G3 (rok rozliczony `regrowthYear` w rekordzie flagi — zapis sprzed G3 bez nadrabiania lat),
+> w poprawce (a) po terminie, w follow-upie (h), w G1c (pole `pendingPopReturns` w zapisie kolonii — zapis sprzed G1c:
+> pusta kolejka) i w follow-upach 380/381.
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
@@ -39,18 +41,22 @@
 > ((e), #369) + `96c636f` ((g), #365) — §5v · `dcc4c6f` ((a) w wersji ograniczonej, #370) + `5c49b36` (#378) — §5w.
 > **Commity G3:** `47b1b96` (G3-1 odrastanie + G3-2 uzgadnianie co rok, #360) · `b3fe807` (G3-3 widoczność garnizonu) ·
 > `92d1b8e` (G3-4 wpis o mobilizacji) — §5x · `8cd8d7c` ((a) po terminie, #370) — §5z.
+> **Commity follow-upu (h) i G1c:** `ad0a615` (D, #379) · `b1eac7a` (P1, #333) · `0fbbd59` (P2, #330) · `4a4f909` (P3, #328) ·
+> `732507d` (P4, #329) · `4d625a9` (P5, #327) · `790f3b7` (P6, zmiana R7) — §5za · `b926d81` (#380, Q2) · `1c90ea4` (#381,
+> Q5) — §5zc.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 > `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
 > `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · `g2_planner_smoke` **77/77** ·
 > `g2_mobilisation_smoke` **56/56** · `g2_after_peace_smoke` **73/73** · `g2_peace_followups_smoke` **67/67** ·
-> `g2_peace_closing_smoke` **65/65** · `g3_regrowth_smoke` **64/64** · sweep **260/260 OK, 0 FAIL, 31 advisory** ·
-> `check-i18n` PASS (pl = en = **3455**).
-> **Rejestr macierzysty findingów #309–#379:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
+> `g2_peace_closing_smoke` **65/65** · `g3_regrowth_smoke` **64/64** · `g3_ground_visibility_smoke` **49/49** ·
+> `g1c_pop_loss_smoke` **86/86** · sweep **262/262 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3455**).
+> **Rejestr macierzysty findingów #309–#383:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
 > `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
 > `dbfbbd6`; §5l–§5m na `053fcc0`; #358–#362 oraz §5n–§5p na `2437725`; #363–#367 oraz §5q–§5s na `1fefcdc`;
 > #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`; zamknięcia #370 i #378 oraz §5w na `5c49b36`; #379,
-> zamknięcie #360, dopisek #370, rozszerzenie #375 oraz §5x–§5z na `8cd8d7c`) ·
+> zamknięcie #360, dopisek #370, rozszerzenie #375 oraz §5x–§5z na `8cd8d7c`; #380–#383, zamknięcia #327–#330, #333,
+> #379 oraz §5za–§5zc na `1c90ea4`) ·
 > `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
@@ -63,7 +69,9 @@
 > `[doc: notatka follow-upów]` — z notatki przekazania follow-upów G2-4 (2026-10-04, `kosmos-handover/g2-4-followups`,
 > poza repo) · `[doc: notatka G3]` — z notatki przekazania G3 (2026-10-05, `kosmos-handover/g3`, poza repo; pomiary
 > stanów w worktree sesji G3) · `[doc: bramka G3]` — z relacji właściciela z bramki live G3 (2026-10-05), bez ponownego
-> pomiaru.
+> pomiaru · `[doc: notatka G3-closing]` — z notatki przekazania zamknięcia G3 (2026-10-05, `kosmos-handover/g3-closing`,
+> poza repo; pomiary stanów pośrednich w worktree i klonie tamtej sesji) · `[doc: bramka G1c]` — z relacji właściciela
+> z bramki live follow-upu (h) i G1c (2026-10-06), bez ponownego pomiaru.
 
 ---
 
@@ -157,9 +165,9 @@ sam wynik dla każdego POP (0 rozjazdów dla POP 0–100 000; przy ×1,5 byłyby
 | **G2-4** | **wycofanie po pokoju (D14)** — zakres **R1–R7** podpisany 2026-10-03 (§5p): bez wojny brak ognia i okupacji · licznik okupacji stoi przy żywym wrogu · flaga wycofania 6 mies. · jednostki AI z ciał gracza usuwane przy pokoju · meldunki · zabranie wojsk z cudzego ciała i płatnik utrzymania · jednostka gracza na zniszczonym ciele | **348** ✅ · **353** ✅ · **354** ✅ (płatnik jednostki gracza) · **358** ✅ · **359** ✅ | ✅ **2026-10-04** (`edd6fd1` … `39c9227`, §5q–§5r) |
 | **G2-4 po bramce** | **F1** pokój cofa okupację kafli (obie strony) · **F2** ostrzał z orbity na obce ciało tylko w wojnie · **F3** stare zapisy: flaga przy wczytaniu · **F4** wpisy w Dzienniku dla R4 i R7 · **F5** meldunek o utracie wojsk w terminie (Dziennik i dzwonek) · **F6** nazwa imperium we wpisach wycofania · **F7** „duch” jednostki na mapie kolonii | **363** ✅ · **364** ✅ · **366** ✅ · **367** ✅ (F5–F7 — wady z bramki, §5r) | ✅ **2026-10-04** (`39e2df6` … `f90bc14`, §5t; bramka live PASS, §5u) |
 | **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ✅ ((a) w wersji ograniczonej) · **378** ✅ | ✅ **2026-10-04** (`cafd6e8` … `96c636f`, §5v; (a) w wersji ograniczonej `dcc4c6f` i **378** `5c49b36`, §5w); **(a) po terminie** — `8cd8d7c` (2026-10-05, §5z) |
-| **G3** | odrastanie strat (G3-1) · **uzgadnianie mobilizacji co rok** (G3-2, odpowiedź (d), §5p) · widoczność (`'detailed'`) na karcie ciała i w oknie zrzutu (G3-3) · wpis w Dzienniku o mobilizacji (G3-4) | **360** ✅ · **379** (znaleziony przy G3-3 → follow-up (h)) | ✅ **2026-10-05** (`47b1b96` + `b3fe807` + `92d1b8e`, §5x; bramka live PASS, §5y; odpowiedzi (a)–(h), §5z) |
-| **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji poza zapisem (328) · utrzymanie bez terminu właściciela (329) | **333** · **330** · **328** · **329** | do zrobienia — **następny** (kolejność G3 → G1c → G2b, §5w; wcześniej „po G2”, §5d (b)); kierunek 333 i 330 podpisany 2026-10-02, niezaimplementowany |
-| **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia — **po G1c** (kolejność G3 → G1c → G2b, §5w) |
+| **G3** | odrastanie strat (G3-1) · **uzgadnianie mobilizacji co rok** (G3-2, odpowiedź (d), §5p) · widoczność (`'detailed'`) na karcie ciała i w oknie zrzutu (G3-3) · wpis w Dzienniku o mobilizacji (G3-4) | **360** ✅ · **379** ✅ (znaleziony przy G3-3; follow-up (h) `ad0a615`, §5za) | ✅ **2026-10-05** (`47b1b96` + `b3fe807` + `92d1b8e`, §5x; bramka live PASS, §5y; odpowiedzi (a)–(h), §5z) |
+| **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji w zapisie (328) · utrzymanie z terminem właściciela (329) · mina tą samą drogą śmierci (327) · jednostka gracza na zniszczonym ciele jak polegli (zmiana R7) · przy zmianie właściciela kolonii więzi POP poprzedniego właściciela zerwane, a jego kolejka rekrutacji anulowana (380, 381) | **333** ✅ · **330** ✅ · **328** ✅ · **329** ✅ · **327** ✅ · **380** ✅ · **381** ✅ | ✅ **2026-10-06** (`b1eac7a` … `790f3b7`, §5za; bramka live PASS, §5zb; follow-upy `b926d81` i `1c90ea4`, §5zc) |
+| **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia — **następny** (jedyny pozostały krok arca) |
 | później | limit floty · odbicie kolonii · przyczółek | — | — |
 
 ⚠ **Kolejność G1b przed G2 jest celowa:** materializacja garnizonu w świecie, w którym AI zawsze
@@ -202,6 +210,10 @@ etap polerki UI · **373** → później · **378** → bez przypisanego kroku (
 ⚠ **Przydział findingów z sesji G3 (#379, §6):** **360** ✅ (G3-2, `47b1b96`) · **379** → follow-up **(h)** (odpowiedź
 właściciela (h), §5z; osobna bramka w przeglądarce) · **370** — dopisek „po terminie” (`8cd8d7c`, odpowiedź (a)) ·
 **375** — rozszerzony bez nowego numeru o `DropTroopsModal` (etap polerki UI).
+
+⚠ **Przydział findingów z sesji zamykającej G3 (#380–#383, §6):** **379** ✅ (follow-up (h), `ad0a615`) · **327** · **328** ·
+**329** · **330** · **333** ✅ (G1c) · **380** ✅ (`b926d81`, Q2) · **381** ✅ (`1c90ea4`, Q5) · **382** → bez kroku (uśpiony,
+bez decyzji) · **383** → bez kroku (decyzja właściciela: czy panel kafla obcej kolonii idzie regułą widoczności **379**).
 
 ---
 
@@ -1128,10 +1140,99 @@ wojna przed terminem, bez nowego UI (notatka G3 §6).
 
 ---
 
-## 6. Rejestr findingów arca (#309–#379, zebrane 2026-10-02–05)
+## 5za. Follow-up (h) i G1c — dostarczone (łatki 2026-10-05, commity 2026-10-06)
+
+Zakres: odpowiedź właściciela (h) z §5z (**379** — reguła trzech warunków dla mapy kolonii i karty ciała) i krok **G1c**
+(rodzina „utrata POP”: **333**, **330**, **328**, **329** oraz **327** i zmiana R7; kierunek dla 333 i 330 podpisany
+2026-10-02, §5d (a)). Łatki przygotowane i zestagowane 2026-10-05, zacommitowane 2026-10-06 po bramce live (§5zb). Keeper NEW
+`g1c_pop_loss_smoke` rośnie z commitami. Linie `[code]` na `1c90ea4`.
+
+| commit | zawartość | keeper | fail-first: keeper po zmianie na stanie poprzednim | sweep · i18n |
+|---|---|---|---|---|
+| `ad0a615` | **(h) / #379** — NEW `src/utils/GroundVisibility.js` (jedno źródło reguły): cudza jednostka naziemna jest rysowana, zaznaczalna i wypisywana wyłącznie, gdy ciało jest kolonią gracza, gracz ma na nim własne żywe jednostki (nie w ładowni) albo ma wywiad `detailed` o jej właścicielu (fail-closed bez `IntelSystem`); własne zawsze, ukryte cudze nigdy (`foreignGroundUnitsVisible` `:46`, `isGroundUnitVisibleToPlayer` `:60`, `visibleGroundUnits` `:73`, `visibleGroundUnitAt` `:86`). `ColonyOverlay`: lista rysowanych jednostek (`:3040`), przełącznik heksu (`:2545`), klik na heks (`:4784`), przycinanie zaznaczenia (`:821`); `GarrisonReadout` (karta ciała i okno zrzutu) tą samą regułą (`:36`). `g3_regrowth_smoke` R8f przecelowany za zgodą (Q1, §5zc) `[code]` | NEW `g3_ground_visibility_smoke` **49/49** | **18 PASS / 31 FAIL** na `9ffa668`; mutanty 9/10 zabite, M3 równoważny (`getUnitsOnPlanet` pomija `in_cargo`) | 261/261 · 3455 |
+| `b1eac7a` | **P1 / #333** — subskrybent `groundUnit:destroyed`: część nieoddana przez tabelę (`popCost × (1 − rate)`) ginie OD RAZU w kolonii macierzystej z terminem właściciela — `killCrew({ laborer }, 'ground_unit_lost')` (`ColonyManager.js:1723`); zwrot po zwłoce jak dotąd; archetyp spoza tabeli — ginie całość. `CivilizationSystem.killCrew` dostaje przyczynę parametrem; `UIManager` — bez osobnej linii w Dzienniku dla `ground_unit_lost` `[code]` | NEW `g1c_pop_loss_smoke` L1 — **16/16** | **11 / 5** na `9ffa668`; przewrócone za zgodą: `ground_unit_loss` T-F1, `g2_after_peace` A6e | 262/262 · 3455 |
+| `0fbbd59` | **P2 / #330** — NEW `ColonyManager.disbandGroundUnit` (`:1798`): ręczne rozwiązanie jednostki gracza oddaje pełny koszt POP od razu (`releaseGroundUnitPops`, termin właściciela), jedno `groundUnit:disbanded` (`manual`), zero `groundUnit:destroyed`; karta jednostki woła tę metodę (`UnitCardPanel.js:227`) `[code]` | + L2 — **26/26** | **21 / 5** | 262/262 · 3455 |
+| `4a4f909` | **P3 / #328** — kolejka opóźnionych zwrotów w zapisie kolonii (`pendingPopReturns`, `:2694`), termin jako POZOSTAŁY czas (`_serializePendingPopReturns` `:1657`, `_restorePendingPopReturns` `:1667`); zapis bez pola — pusta kolejka `[code]` | + L3 — **31/31** | **29 / 2** | 262/262 · 3455 |
+| `732507d` | **P4 / #329** — rozwiązanie z braku utrzymania przez `releaseGroundUnitPops(u, 'no_credits')` (`:1585`) — kolonia innego właściciela nie dostaje nic; **354** (płatnik) sprawdzony, bez zmian `[code]` | + L4 — **39/39** | **36 / 3** | 262/262 · 3455 |
+| `4d625a9` | **P5 / #327** — śmierć od miny niesie `archetypeId`, `popCost`, `cause: 'mine'` (`GroundUnitManager.js:1067-1072`); subskrybent czyta koszt i archetyp z rejestru i rozlicza każdą jednostkę dokładnie raz (`_popsReleased`, `ColonyManager.js:1695`) `[code]` | + L5 — **47/47** | **41 / 6** | 262/262 · 3455 |
+| `790f3b7` | **P6 / zmiana R7** — jednostka gracza na zniszczonym ciele zgłaszana jak polegli (`groundUnit:destroyed`, przyczyna `body_destroyed`) PRZED usunięciem (`GarrisonSystem.js:330`), nie pełny zwrot od razu `[code]` | + L6, L0 — **61/61** | **56 / 5**; przewrócone za zgodą: `g2_after_peace` A8b, A8e | 262/262 · 3455 |
+
+Liczby keepera, fail-first, mutantów oraz sweep i i18n NA STANACH POŚREDNICH — z worktree sesji zamykającej G3
+`[doc: notatka G3-closing]`.
+
+**Weryfikacja przy commitowaniu (2026-10-06)** `[measured]`: notatka i łatki zgodne z `SHA256SUMS` (122/122); kotwica HEAD
+`9ffa668`, indeks = drzewo `41cd8c1`, drzewo robocze = indeks; skrypt `commit_D_E.sh r8f` — każdy commit dał dokładnie drzewo
+z notatki (`6ac15ba` · `a5131f4` · `c486c89` · `cc063cd` · `98cbae3` · `4be63a6` · `a8f49bd`); żaden commit nie przewraca
+całego pliku (numstat zgodny z notatką). ⚠ Ostatni krok skryptu (commit E6) padł raz na `unable to write file
+.git/objects/c5/… Permission denied` — Windows odrzucił zmianę nazwy pliku tymczasowego obiektu; równoległego `gc` nie było
+(`gc.pid` z 2026-09-30, żadnego procesu git). Indeks był już drzewem `a8f49bd`, więc commit E6 powtórzono ręcznie tym samym
+plikiem wiadomości (`790f3b7`). Drzewo główne po E6 — sweep **262/262 OK, 0 FAIL, 31 advisory**, `check-i18n` PASS **3455**.
+
+---
+
+## 5zb. Bramka live follow-upu (h) i G1c — 2026-10-06, właściciel: **PASS**
+
+Właściciel, język gry **angielski** `[doc: bramka G1c]`. Scenariusz: `GATE_G3_CLOSING.md` z notatki zamykającej G3 (poza
+repo); każda linia konsoli wykonana wcześniej dosłownie headless na kodzie z indeksu `[doc: notatka G3-closing]`.
+
+| | co sprawdzono | wynik |
+|---|---|---|
+| **379 — `contact`, bez jednostek gracza** | imperium testowe `emp_test_enemy`, HD-4177 b-I (`entity_12`), 3 jednostki wroga na (0,1), (1,1), (0,3): odczyt `{ enemyUnits: 3, visibleOnMap: 0, card: "unknown" }`; mapa bez jednostek wroga; karta ciała „Garrison: unknown” | **PASS** |
+| **379 — własna jednostka na ciele** | `shock_infantry` gracza `gu_4` postawiona na (−1,2): `{ 3, 3, "3 unit(s)" }`; mapa — trzy jednostki wroga i jednostka gracza; karta „Garrison: 3 unit(s)” | **PASS** |
+| **379 — jednostka zdjęta** | `{ 3, 0, "unknown" }`; jednostki wroga zniknęły z otwartej mapy | **PASS** |
+| **379 — `detailed`, bez jednostek gracza** | `{ 3, 3, "reserve: 2 unit(s)" }`; mapa pokazała trzy jednostki | **PASS** — karta podaje rezerwę planu, bo imperium testowe nie było zmobilizowane (G3-3, `GarrisonReadout.js:39-46`); trzy jednostki na ciele postawił `spawnTestEnemy` (`SpawnTestEnemy.js:148`) `[code]` |
+| **G1c — kolonia gracza `entity_2`** | koszary 2, wolne POP 23; kredyty podniesione debugiem z 17 do 1017. Odniesienie `{ humans: 67.886, lock: 0, pending: [] }` → rekrutacja `gu_5` (dom `entity_2`, `popCost` 0,6): `{ 67.891, 0.6, [] }` → zabita ostrzałem własnego heksu: jednostki brak, `{ 67.591, 0.3, jeden wpis }` → `game:save`, F5, „Continue”: `{ 67.591, 0.3, [[0.3, 1.734]] }` → po `_tickPendingPopReturns(2.01)`: `{ 67.591, 0, [] }` → rekrutacja `gu_6` na (10,8): `{ 67.591, 0.6, [] }` → ręczne rozwiązanie przez kartę jednostki i okno potwierdzenia: `[false, { 67.591, 0, [] }]` | **PASS** |
+
+⚠ **Granice dowodu tej bramki:** właściciel nie opisał wypadania jednostek wroga z zaznaczenia po zdjęciu własnej jednostki
+ani karty jednostki wroga pod klawiszem `I`; nie zgłosił stanu Dziennika ani konsoli. R7 (zniszczone ciało) i mina —
+wyłącznie keepery (L6, L5, L0). Follow-upy **380** i **381** — bez bramki w przeglądarce (decyzja właściciela, §5zc).
+⚠ **Obserwacja z bramki → 383** (§6): na mapie obcej kolonii klik na kafel otwiera menu budowy (zablokowane), a kafel
+z budynkiem pokazuje panel informacji o budynku — przy wywiadzie `contact`.
+
+---
+
+## 5zc. Odpowiedzi właściciela do notatki zamykającej G3 (Q1–Q5, 2026-10-05), potwierdzenia (2026-10-06) i follow-upy 380, 381
+
+| | pytanie (notatka zamykająca G3) | odpowiedź | wykonanie |
+|---|---|---|---|
+| Q1 | retarget R8f w `g3_regrowth_smoke` (jednostka gracza na ciele odsłania garnizon pod regułą 379) | **zatwierdzony** — jednostka gracza zdjęta przed pomiarem, asercja bez zmian | ✅ `ad0a615` (zgoda nazwana w komunikacie) |
+| Q2 | blokady POP jednostek poprzedniego właściciela w kolonii, która zmienia właściciela (**380**) | zwalniane w tej kolonii; ludzie zostają z kolonią; jednostki walczą dalej bez więzi POP (bez kosztu POP, bez kolonii macierzystej) — przy śmierci i rozwiązaniu nic nie wraca; żadna blokada nie zostaje na zawsze, żadna kolonia innego właściciela nie jest dotykana. **Potwierdzenie 2026-10-06:** opóźnione zwroty czekające w kolejce tej kolonii — także zwalniane w miejscu i zdejmowane z kolejki | ✅ `b926d81` (niżej) |
+| Q3 | archetyp spoza tabeli śmierci | ginie całe jego POP — jak w E1 | bez zmian kodu |
+| Q4 | osobna linia w Dzienniku o śmierci POP żołnierzy | **bez osobnej linii** — jak w E1 | bez zmian kodu |
+| Q5 | kolejka rekrutacji w kolonii, która zmienia właściciela (**381**) | kolejka poprzedniego właściciela anulowana. **Potwierdzenie 2026-10-06:** surowce i kredyty wydane na zlecenie przepadają razem z kolonią, bez zwrotu | ✅ `1c90ea4` (niżej) |
+
+**Follow-upy 380 i 381** — jeden helper `ColonyManager._severGroundBondsOnOwnerChange` (`:1831`), wołany w obu punktach zmiany
+właściciela zaraz po zapisie nowego właściciela, przed emisją zdarzenia: `transferColony` (`:923`; przejęcie przez AI, cesja
+gracz→AI, przerzut AI→AI) i `captureColonyForPlayer` (`:1011`; przejęcie przez gracza, cesja AI→gracz) `[code]`. Commity
+na dowodzie headless, bez osobnej bramki w przeglądarce (decyzja właściciela) `[measured]`.
+
+| commit | zawartość | keeper | fail-first | sweep · i18n |
+|---|---|---|---|---|
+| `b926d81` | **#380 (Q2)** — jednostki poprzedniego właściciela z domem w tej kolonii, które trzymają w niej blokadę (`popCost > 0`; na ciele, na innym ciele, w ładowni): `unlockPops(popCost, 'laborer')` w tej kolonii, `popCost` 0, `homeColonyId` null (`:1836-1842`); zwroty poprzedniego właściciela w kolejce tej kolonii zwolnione w miejscu i zdjęte (`:1843-1850`) `[code]` | `g1c_pop_loss` + L7a–L7f — **78/78**; `ground_unit_loss` **29/29** | keepery po zmianie na `790f3b7`: **68 / 10** i **22 / 7** — czerwone wyłącznie piny poprawki; kontrole L7c, L7d, L7e (z czułością) zielone po obu stronach; stare keepery na kodzie z poprawką: **56 / 5** i **23 / 6** — padają dokładnie piny z listy zgody | 262/262 · 3455 |
+| `1c90ea4` | **#381 (Q5)** — kolejka rekrutacji tej kolonii anulowana: `unlockPops(item.popCost, 'laborer')` dla każdego zlecenia, kolejka pusta, żadna jednostka nie powstaje; surowce i Kr bez zwrotu (`:1851-1855`) `[code]` | + L8a–L8c — **86/86** | **84 / 2** na `b926d81` (L8a SEDNO, L8b); kontrola L8c zielona po obu stronach | 262/262 · 3455 |
+
+**Piny przewrócone za zgodą** (polecenie sesji zamykającej G1c, 2026-10-06: piny z notatki przekazania objęte Q2):
+`ground_unit_loss_smoke` T-D2 (świadek domu, meldunek `popsLost`, wpis w Dzienniku), czułość strażnika T-D2 (po Q2 nie ma
+czego zwolnić; czułość reguły właściciela przeniesiona do `g1c_pop_loss` L7e), T-F2, T-F3 (zwrot zwolniony w miejscu w chwili
+przejęcia); `g1c_pop_loss_smoke` L0d, L1c, L2b (świadek i asercja), L4a. Przy **381** — bez przewróconych pinów.
+
+⚠ **Granice dowodu:** zapis sprzed `b926d81` z jednostką gracza, której dom już przejęto — blokada w tej kolonii zostaje (bez
+migracji); reguła właściciela nadal nie oddaje jej POP kolonii innego właściciela (L7e). Zapis sprzed `1c90ea4` z kolejką
+rekrutacji już na przejętej kolonii — budowa skończy się jak dotąd; helper wyczyści kolejkę przy następnej zmianie właściciela.
+Po zapisie i wczytaniu jednostka bez domu wraca z `homeColonyId` = id ciała (**342**) — z `popCost` 0 nic nie rozlicza (L7f).
+
+**Kandydaci bez numeru** (notatka zamykająca G3 §8; przed nadaniem numeru — pomiar) `[doc: notatka G3-closing]`:
+`_spawnGroundUnit` — ścieżki porażki (`no_manager`, `no_spawn_hex`, `create_failed`) zdejmują wpis z kolejki bez zwolnienia
+blokady POP (prawdopodobnie nieosiągalne) · kolejka statków (`shipQueues` / `pendingShipOrders`) przeżywa `transferColony`
+(rodzina 381, możliwy związek z **95**) · załogi okrętów W2 (`crewColonyId`) w kolonii, która zmienia właściciela (klasa 380)
+· podwójne pobranie Kr za jednostki naziemne — znane w backlogu, świadomie bez numeru.
+
+---
+
+## 6. Rejestr findingów arca (#309–#383, zebrane 2026-10-02–06)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
-#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f`, #379, zamknięcie #360 i dopiski #370/#375 na `8cd8d7c` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
+#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f`, #379, zamknięcie #360 i dopiski #370/#375 na `8cd8d7c`, #380–#383 oraz zamknięcia #327–#330, #333 i #379 na `1c90ea4` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
 (`VESSEL_ORDERS_PLAN.md` §308; #309 był tam planowany i świadomie **nieprzydzielony**), więc ten arc zaczyna
 od **#309**; przed nadaniem #327+ sprawdzono, że w żadnym rejestrze nie ma numeru wyższego niż #325, a #326
 istniał tylko w komunikacie `c7c5a74`; przed nadaniem #336+ sprawdzono grepem wszystkie rejestry — najwyższy
@@ -1143,7 +1244,10 @@ nadane w notatce przekazania G2-4 (2026-10-03), gdy najwyższy wpisany był #362
 przed nadaniem grep rejestrów, `CLAUDE.md`, pamięci i historii commitów dał #367, kontrola: #367 widoczny w trzech dokumentach
 i jednym commicie (2026-10-04); #379 nadany w notatce przekazania G3 i w komunikacie `b3fe807` — przed wpisem tutaj grep
 rejestrów, `CLAUDE.md`, pamięci i historii commitów dał #379 jako najwyższy zapisany (komunikat `b3fe807`, notatka G3,
-pamięć), a #380+ nieużyte jako numery findingów (2026-10-05). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
+pamięć), a #380+ nieużyte jako numery findingów (2026-10-05); #380–#382 nadane w notatce przekazania zamknięcia G3 (§8,
+2026-10-05) i wpisane tutaj PRZED nadaniem kolejnego numeru — przed nadaniem #383 grep rejestrów, `CLAUDE.md`, pamięci
+i historii commitów dał #382 jako najwyższy (notatka, pamięć; #380 i #381 także w komunikatach `b926d81`, `1c90ea4`), a #383+
+nieużyte (2026-10-06). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
 ⚪ obserwacja/higiena · ✅ zamknięty.
 ⚠ Źródło: **309–316** z sesji G1 · **317–325** z audytu G0 (mechanizmy przemierzone w źródle teraz;
 liczby z G0 oznaczone `[doc: raport G0]`) · **326** nadany przy podpisie zakresu G1b · **327–332** kandydaci
@@ -1158,7 +1262,9 @@ sesji G2-3b (raport 2026-10-03; numery nadane w raporcie, wpisane po bramce) · 
 miejsca sprawdzone grepem na `1fefcdc`, liczby z sond headless sesji G2-4 oznaczone `[doc: notatka G2-4]` · **368–376** —
 „znalezione, nienaprawione” sesji follow-upów (notatka przekazania follow-upów §7 i §9 pytanie 6, 2026-10-04; numery nadane
 przy wpisie) · **377–378** — znalezione w sesji zamykającej G2-4; miejsca sprawdzone grepem na `96c636f` · **379** —
-znaleziony w sesji G3 przy G3-3 (komunikat `b3fe807`, notatka G3 §7); miejsca sprawdzone grepem na `8cd8d7c`.
+znaleziony w sesji G3 przy G3-3 (komunikat `b3fe807`, notatka G3 §7); miejsca sprawdzone grepem na `8cd8d7c` · **380–382** —
+notatka przekazania zamknięcia G3 (§8; 380 i 381 z odpowiedzi Q2 i Q5); miejsca sprawdzone grepem na `1c90ea4` · **383** —
+obserwacja z bramki live 2026-10-06 (§5zb), sprawdzona w kodzie na `1c90ea4`.
 
 ### ✅ 309 — salwa wroga rozstrzygana PRZED salwą gracza; zabici gracza nie odpowiadają — ZAMKNIĘTY 2026-10-02 (`c0a3d5c`, G1b/S1)
 
@@ -1371,7 +1477,7 @@ kolejki niesie właściciela, wypłata sprawdza go ponownie (`:1605`) ⇒ koloni
 wypłata przepada z meldunkiem `groundUnit:popsLost`. Tabela reintegracji bez zmian. Bramka G1b: kolejka domu
 [0,3], kolejka AI [] `[measured: bramka]`.
 
-### ⚪ 327 — śmierć na minie gubi POP-y (latentny: jedyny producent min jest martwy)
+### ✅ 327 — śmierć na minie gubi POP-y (latentny: jedyny producent min jest martwy) — ZAMKNIĘTY 2026-10-06 (`4d625a9`, G1c/P5)
 
 Emisja `groundUnit:destroyed` przy minie (`GroundUnitManager.js:965-967`) niesie `{ unitId, planetId, owner,
 killedBy }` — bez `popCost` i `archetypeId` — więc handler reintegracji odpada na bramce
@@ -1380,8 +1486,12 @@ killedBy }` — bez `popCost` i `archetypeId` — więc handler reintegracji odp
 a `.execute` żadnej zdolności naziemnej nie ma wołających w `src/` (wszystkie `.execute(` to akcje floty
 i `UtilityAI`); `GameState.minefields` startuje pusty (`GameState.js:41`) `[code]`. Uzbraja się z chwilą
 ożywienia zdolności naziemnych.
+**Zamknięcie (G1c/P5, 2026-10-06):** emitent dokłada `archetypeId`, `popCost` i `cause: 'mine'` (`GroundUnitManager.js:1067-1072`);
+subskrybent czyta koszt i archetyp z rejestru i rozlicza każdą jednostkę dokładnie raz (`_popsReleased`, `ColonyManager.js:1695`)
+`[code]` — śmierć od miny idzie tą samą drogą co każda inna (P1: część ginie, zwrot po zwłoce); keeper `g1c_pop_loss` L5. Mina
+dalej latentna (producent martwy) — sprawdzona wyłącznie keeperem.
 
-### 🟠 328 — kolejka reintegracji `_pendingPopReturns` nie trafia do zapisu
+### ✅ 328 — kolejka reintegracji `_pendingPopReturns` nie trafia do zapisu — ZAMKNIĘTY 2026-10-06 (`4a4f909`, G1c/P3)
 
 Kolejka żyje na obiekcie kolonii (`ColonyManager.js:1650-1651`), a `serialize` buduje białą listę pól kolonii
 bez niej (`:2526-2550`; `_pendingPopReturns` i `_pendingPopClock` poza `:1586-1651` nie występują) `[code]`.
@@ -1390,8 +1500,12 @@ Blokady POP są w zapisie (`CivilizationSystem.js:908`, `:961-962`) ⇒ zapis i 
 co **333**, inną drogą `[code]`; skutku nie mierzono wykonaniem. Komentarz `ColonyManager.js:1586-1590`
 stwierdza „runtime-only”, ale tego nie uzasadnia.
 **→ G1c** (§5d (b)).
+**Zamknięcie (G1c/P3, 2026-10-06):** pole `pendingPopReturns` w zapisie kolonii (`ColonyManager.js:2694`), termin jako
+POZOSTAŁY czas (`_serializePendingPopReturns` `:1657`, `_restorePendingPopReturns` `:1667`); zapis bez pola — pusta kolejka
+(v101 bez migracji) `[code]`; keeper `g1c_pop_loss` L3. Bramka 2026-10-06 (§5zb): zapis → F5 → „Continue” — kolejka
+`[[0.3, 1.734]]` przeżyła, a wypłata po zwłoce zdjęła blokadę do 0 `[doc: bramka G1c]`.
 
-### 🟠 329 — utrzymanie jednostek naziemnych: płatnik i zwrot POP bez terminu właściciela (siostra 97)
+### ✅ 329 — utrzymanie jednostek naziemnych: płatnik i zwrot POP bez terminu właściciela (siostra 97) — ZAMKNIĘTY 2026-10-06 (`732507d`, G1c/P4; płatnik — `8c82cf7`, G2-4/R6)
 
 `_tickGroundUnitUpkeep`: płatnik Kr = `getColony(u.homeColonyId ?? u.planetId)` (`ColonyManager.js:1529`,
 `:1539`) — bez sprawdzenia, czyja jest ta kolonia; przy rozwiązaniu zwrot POP idzie na
@@ -1402,8 +1516,12 @@ jednostka stoi `[code]`. To ta sama reguła, którą S2/S4 zamknęły dla rozpad
 `:1680`) — ścieżka utrzymania jej nie używa. Siostra Findingu **97** (flota, zamknięty w OG-3b). Skutku nie
 mierzono wykonaniem.
 **→ G1c** (§5d (b)).
+**Zamknięcie (G1c/P4, 2026-10-06):** rozwiązanie z braku utrzymania przez `releaseGroundUnitPops(u, 'no_credits')`
+(`ColonyManager.js:1585`) — zwrot z terminem właściciela, kolonia innego właściciela nie dostaje nic (brak kolonii właściciela
+⇒ meldunek `popsLost`) `[code]`; płatnik żołdu zamknięty wcześniej w G2-4/R6 (`_groundUnitPayerId`, `8c82cf7`, **354**); keeper
+`g1c_pop_loss` L4. Od **380** jednostka, której dom przejęto, nie ma już więzi POP — przy rozwiązaniu nie ma czego zwracać.
 
-### 🟠 330 — ręczne rozwiązanie jednostki idzie przez tabelę ŚMIERCI; przycisk to polski literał
+### ✅ 330 — ręczne rozwiązanie jednostki idzie przez tabelę ŚMIERCI; przycisk to polski literał — ZAMKNIĘTY 2026-10-06 (`0fbbd59`, G1c/P2); literały karty → 334
 
 `UnitCardPanel.js:203` — przycisk `'💔 Rozwiąż'` (literał, klasa **113**) emituje `groundUnit:destroyed`
 z `cause: 'disband_manual'` i `popCost` (`:214-219`) ⇒ handler reintegracji (`ColonyManager.js:1625`) traktuje
@@ -1414,6 +1532,11 @@ i rozpad (`CombatSystem.js:262`) — oddają pełny koszt od razu. Na tej samej 
 `:130`, `:152`, `:170`, `:176`) `[code]`.
 **→ G1c.** Kierunek podpisany 2026-10-02 (§5d (a)): ręczne rozwiązanie zwraca **pełny koszt**, jak utrzymanie
 i rozpad; niezaimplementowany. Literały karty — poza G1c (klasa **113**).
+**Zamknięcie (G1c/P2, 2026-10-06):** NEW `ColonyManager.disbandGroundUnit` (`:1798`) — pełny koszt POP od razu przez
+`releaseGroundUnitPops` (termin właściciela), jedno `groundUnit:disbanded` (`manual`), zero `groundUnit:destroyed`; karta
+jednostki woła tę metodę (`UnitCardPanel.js:227`) `[code]`; keeper `g1c_pop_loss` L2. Bramka 2026-10-06 (§5zb): rozwiązanie
+z karty i okna potwierdzenia — blokada 0,6 → 0 od razu, populacja bez zmian `[doc: bramka G1c]`. Literały karty (przycisk
+`'💔 Rozwiąż'`, `UnitCardPanel.js:215`) — dalej poza zakresem (**334**, klasa **113**).
 
 ### ⚪ 331 — walka naziemna AI-vs-AI: zero ognia, a gracz dostaje wpis „bitwy” i raport
 
@@ -1436,7 +1559,7 @@ pośrednio wyłącznie `DebugLog` (`TRACKED_EVENTS`, `:63-64`); `FogSystem` nie 
 poprawione do stanu z grepa w tym samym commicie dokumentacji; dopisane `groundUnit:destroyed`
 i `groundUnit:popsLost`. Otwarcie i zamknięcie w jednym commicie dokumentacji — **przyjęte** (§5d (d)).
 
-### 🟠 333 — nieoddana część POP po śmierci jednostki zostaje zablokowana NA ZAWSZE i liczy się do populacji (rekoncyliacja A0)
+### ✅ 333 — nieoddana część POP po śmierci jednostki zostaje zablokowana NA ZAWSZE i liczy się do populacji (rekoncyliacja A0) — ZAMKNIĘTY 2026-10-06 (`b1eac7a`, G1c/P1)
 
 Tabela reintegracji (`ColonyManager.js:1299-1307`) oddaje `popCost × rate` po zwłoce; dla `rate < 1`
 (`shock_infantry`, `rocket_artillery`, `aa_platform` — 0,5; `medic_unit`, `ground_supply_unit` — 0,75) reszta
@@ -1451,6 +1574,10 @@ Wzorzec poprawnej śmierci w repo: `killCrew` (`CivilizationSystem.js:461`, W2) 
 i zdejmuje blokadę typowaną. Kumuluje się przy każdej śmierci; tą samą drogą idzie ręczne rozwiązanie (**330**).
 **Nienaprawiony. → G1c.** Kierunek podpisany 2026-10-02 (§5d (a)): nieoddana część **naprawdę ginie** —
 usuwana z populacji razem ze swoją blokadą; niezaimplementowany.
+**Zamknięcie (G1c/P1, 2026-10-06):** część nieoddana przez tabelę ginie OD RAZU w kolonii macierzystej z terminem właściciela —
+`killCrew({ laborer }, 'ground_unit_lost')` (`ColonyManager.js:1723`), zwrot po zwłoce jak dotąd; archetyp spoza tabeli — ginie
+całość (Q3); bez osobnej linii w Dzienniku (Q4) `[code]`; keepery `g1c_pop_loss` L1 i L0. Bramka 2026-10-06 (§5zb): śmierć
+`gu_5` (0,6) — populacja 67,891 → 67,591, blokada 0,6 → 0,3, jeden wpis zwrotu; po zwłoce blokada 0 `[doc: bramka G1c]`.
 
 ### ⚪ 334 — karta jednostki w `ColonyOverlay`: polskie literały i surowe id w tytule (klasa 113)
 
@@ -1975,7 +2102,7 @@ nieistniejącego łazika zostaje, „Zbierz” jest dostępne, a po nim odnośni
 spoza rejestru (`_pruneDanglingAwayTeams`) `[code]`; po wczytaniu „Zbierz” nie jest oferowane, „Wyślij zespół” dostępne,
 odnośnik żywego łazika zostaje `[measured]`; keeper Z378.
 
-### 🟠 379 — mapa kolonii obcego ciała pokazuje wrogie jednostki naziemne bez względu na wywiad (→ follow-up (h))
+### ✅ 379 — mapa kolonii obcego ciała pokazuje wrogie jednostki naziemne bez względu na wywiad — ZAMKNIĘTY 2026-10-06 (`ad0a615`, follow-up (h))
 
 `ColonyOverlay._drawUnits` (`ColonyOverlay.js:3028`) rysuje każdą jednostkę z `getUnitsOnPlanet` (`:3033`) — w pętli
 rysowania i w pętli stacków i plakietek, które iterują tę samą listę — a jedynym filtrem jednostek wroga jest stealth (`:3041`,
@@ -1986,6 +2113,62 @@ Skutek: karta ciała i okno zrzutu (G3-3) mówią „nieznany” poniżej `detai
 garnizon. Klik zaznaczający niewidoczną albo ukrytą wrogą jednostkę — z kodu, niezmierzone. Odpowiedź właściciela (h)
 (§5z): reguła trzech warunków (kolonia gracza · własne jednostki gracza na ciele · `detailed` o właścicielu jednostki), karta
 ciała tą samą regułą — follow-up (h), osobna bramka w przeglądarce.
+**Zamknięcie (follow-up (h), 2026-10-06):** NEW `src/utils/GroundVisibility.js` — reguła trzech warunków w jednym miejscu
+(`foreignGroundUnitsVisible` `:46`, `isGroundUnitVisibleToPlayer` `:60`, `visibleGroundUnits` `:73`, `visibleGroundUnitAt`
+`:86`); `ColonyOverlay`: rysowanie (`:3040`), przełącznik heksu (`:2545`), klik (`:4784`), przycinanie zaznaczenia (`:821`);
+`GarrisonReadout` tą samą regułą (`:36`) `[code]`; keeper `g3_ground_visibility_smoke` 49/49. Bramka live 2026-10-06 (§5zb) —
+cztery sceny PASS `[doc: bramka G1c]`. Reszta: karta liczy ukryte jednostki, których mapa nie pokazuje — **382**; panel kafla
+obcej kolonii bez reguły widoczności — **383**.
+
+### ✅ 380 — przejęcie kolonii zostawia w niej blokadę POP jednostki gracza na zawsze — ZAMKNIĘTY 2026-10-06 (`b926d81`, Q2)
+
+Jednostka gracza ma dom w kolonii, która ją zrekrutowała (`homeColonyId`, `ColonyManager.js:1471`), a jej blokada POP siedzi
+w tej kolonii (`startGroundUnitBuild`, `:1450`) `[code]`. `transferColony` przerzuca kolonię w miejscu i jednostek nie dotykał,
+więc po przejęciu blokada zostawała w kolonii nowego właściciela na zawsze, a śmierć albo rozwiązanie jednostki kończyły się
+meldunkiem `groundUnit:popsLost` `[measured: g1c_pop_loss L0d, L1c, L2b, L4a na 790f3b7]`; zwrot czekający w kolejce domu
+przepadał po zwłoce z meldunkiem (`ground_unit_loss` T-F3) `[measured]`. Nadany w notatce zamykającej G3 (§8, 2026-10-05).
+Decyzja: odpowiedź właściciela **Q2** (§5zc).
+**Zamknięcie:** `_severGroundBondsOnOwnerChange` (`ColonyManager.js:1831`), wołany w `transferColony` (`:923`)
+i `captureColonyForPlayer` (`:1011`) przed emisją zdarzenia: blokady jednostek poprzedniego właściciela z domem w tej kolonii
+zwalniane w niej, jednostki dostają `popCost` 0 i brak domu (`:1836-1842`); zwroty poprzedniego właściciela w kolejce tej
+kolonii zwalniane w miejscu i zdejmowane (`:1843-1850`) `[code]`. Keeper `g1c_pop_loss` L7a–L7f; piny przewrócone za zgodą —
+§5zc.
+
+### ✅ 381 — kolejka rekrutacji przeżywa przejęcie kolonii: budowa kończy się jednostką GRACZA na ciele AI — ZAMKNIĘTY 2026-10-06 (`1c90ea4`, Q5)
+
+Kolejkę rekrutacji zasila wyłącznie gracz (`startGroundUnitBuild`, `ColonyManager.js:1460`), a tik budowy (`:1492`) nie
+sprawdza właściciela kolonii `[code]`. Zmierzone sondą poza repo (worktree HEAD + E1…E6): zlecenie blokuje 0,6 POP, po
+`transferColony` kolonia należy do `emp_001`, a budowa kończy się jednostką GRACZA (`owner: player`, `homeColonyId` =
+przejęta kolonia, `popCost` 0,6) `[doc: notatka G3-closing]`; blokada zostaje w kolonii AI — przechodzi na jednostkę
+(`_spawnGroundUnit` jej nie zwalnia) `[code]`. Nadany w notatce zamykającej G3 (§8). Decyzja: odpowiedź właściciela **Q5**
+(§5zc).
+**Zamknięcie:** ten sam helper co **380** anuluje kolejkę tej kolonii — blokada POP każdego zlecenia wraca w niej, żadna
+jednostka nie powstaje, surowce i Kr bez zwrotu (`ColonyManager.js:1851-1855`) `[code]`. Keeper `g1c_pop_loss` L8a–L8c:
+z kodem sprzed poprawki przejęta kolonia kończy dwa zlecenia dwiema jednostkami, z poprawką — zero
+`groundUnit:buildCompleted` `[measured]`.
+
+### ⚪ 382 — karta ciała liczy ukryte (stealth) jednostki wroga, których mapa nie pokazuje (uśpiony)
+
+`readGarrisonReadout` liczy jednostki właściciela na ciele bez filtra stealth (`GarrisonReadout.js:40-41`), a mapa ukrywa
+cudze jednostki w stealth (`GroundVisibility.isGroundUnitVisibleToPlayer`, `:60`) `[code]`. Zmierzone sondą poza repo na
+drzewie z D: dron `recon_drone` ukryty + `garrison_unit` ⇒ mapa 1, karta „2 unit(s)” `[doc: notatka G3-closing]`. Uśpiony:
+garnizony AI nie mają dronów (typy z `GarrisonData.js:40-41`), Rój Testowy stawia `shock_infantry` (`SpawnTestEnemy.js:148`)
+`[code]`. Nadany w notatce zamykającej G3 (§8). Bez decyzji, bez kroku.
+
+### 🟠 383 — mapa obcej kolonii: klik na kafel pokazuje panel kafla — budynek z jego danymi albo menu budowy — bez względu na wywiad (obserwacja z bramki 2026-10-06)
+
+Klik na dowolny kafel mapy kolonii, która nie jest podglądem, ustawia `_selectedHex` (`ColonyOverlay.js:4835`), a panel kafla
+rysuje się pod jedynym warunkiem `!colony.isPreview` (`:961` → `_drawFloatingPanel` `:992`, `:3823`) — bez terminu właściciela
+i bez wywiadu `[code]`. Na kaflu z budynkiem panel pokazuje nazwę, poziom i produkcję z żywych stawek tej kolonii
+(`buildingSystem._active` → `effectiveRates`, `:3848-3849`), utrzymanie, etaty i mieszkania; na pustym kaflu — menu budowy
+gracza z rozkazami wygaszonymi przez `canIssueColonyOrders` (`:3827`; D4=W3 z arca BRAMKA WŁASNOŚCI) `[code]`. Komentarz `:3824`
+mówi wprost: „Panel ZOSTAJE (jest też wywiadem o kaflu)” — decyzja z OG-4, sprzed reguły **379**. Zaobserwowane na bramce
+2026-10-06 przy wywiadzie `contact` (imperium testowe, mapa otwarta z konsoli) `[doc: bramka G1c]`. W normalnej grze mapę
+obcej kolonii bez własnych jednostek na ciele otwierają trzy tryby z wojną: zrzut desantu (`:333-347`, wojna i dominacja
+orbitalna), ostrzał z orbity (`:255-278`) i lądowanie away teamu (`:234-238`) `[code]` — budynki przeciwnika są wtedy czytelne
+bez wywiadu, a jednostki (379) i karta ciała mówią „nieznany”. Skutku w żywej grze poza bramką nie mierzono.
+**Bez kroku — decyzja właściciela:** czy panel kafla obcej kolonii ma iść regułą widoczności 379 (i co ma pokazywać pusty kafel
+cudzej kolonii — dziś menu budowy gracza).
 
 ---
 
