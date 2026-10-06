@@ -967,6 +967,9 @@ export class VesselManager {
   /**
    * Rozmieść okręt: rezerwa → służba. Załoga (POP) pobierana NATYCHMIAST, stan przechodzi
    * w `mobilizing` na jeden wyświetlany miesiąc.
+   * ⚠ S0-2 (Finding 392, decyzja SB2) — kadłub AI NIE pobiera POP na załogę (tak jak garnizon AI
+   *   nie pobiera) i nie potrzebuje kolonii-płatnika; miesiąc przejścia obowiązuje obie strony.
+   *   Dla kadłuba AI `colonyId` w zwrotce bywa więc `null`.
    * @returns {{ ok: boolean, reason?: string, crew?: number, colonyId?: string }}
    *   `reason` to KOD (snake_case), nie tekst — tłumaczy dopiero warstwa UI.
    */
@@ -977,8 +980,10 @@ export class VesselManager {
     if (vessel.serviceState === 'active')     return { ok: false, reason: 'already_in_service' };
     if (vessel.serviceState === 'mobilizing') return { ok: false, reason: 'already_mobilizing' };
 
+    // S0-2 (SB2) — kadłub AI: bez załogi, więc i bez płatnika załogi. Strona gracza bez zmian.
+    const aiHull = isEnemyVessel(vessel);
     const colony = this._resolveCrewColony(vessel);
-    if (!colony?.civSystem) return { ok: false, reason: 'no_crew_colony' };
+    if (!aiHull && !colony?.civSystem) return { ok: false, reason: 'no_crew_colony' };
 
     // W2-5 (decyzja 17) + B — FLOTA z długiem utrzymania NIE rozmieszcza. Rezerwa nie zalega,
     // więc bez tej bramki gracz obchodziłby spiralę utrzymania, wypuszczając ze schowka
@@ -992,11 +997,16 @@ export class VesselManager {
     //   (`EmpireLogisticsSystem`) — w uprzęży 4 392–4 498 odmów `courier_deploy_refused` na imperium
     //   w 100 lat gry. Imperium AI utrzymania nie płaci (W2 decyzja 14, `_tickVesselMaintenance`),
     //   więc NIGDY nie zalega i ta bramka go nie dotyczy.
-    if (!isEnemyVessel(vessel) && this.fleetInArrears()) {
+    if (!aiHull && this.fleetInArrears()) {
       return { ok: false, reason: 'fleet_in_arrears' };
     }
 
-    const crewCost = _getHullDef(vessel.shipId)?.crewCost ?? 0;
+    // ⚠ S0-2 (Finding 392) — dla AI znika POBÓR, nie tylko guard reguły `mobilize_reserve`: guard
+    //   czytał `freePops` stolicy (u AI 0 na stałe — rodzina 215), a pobór tutaj był drugą połową
+    //   tego samego kosztu. Księga statku zostaje pusta, więc wycofanie i strata kadłuba AI
+    //   (`_settleCrewOnLoss`) są dla niego no-opem; kadłub AI ze starego zapisu z załogą rozlicza
+    //   się dalej z własnej księgi.
+    const crewCost = aiHull ? 0 : (_getHullDef(vessel.shipId)?.crewCost ?? 0);
     if (crewCost > 0) {
       const res = colony.civSystem.commitCrew(crewCost);
       if (!res.ok) return { ok: false, reason: 'no_crew_pops', crew: crewCost };
@@ -1010,10 +1020,10 @@ export class VesselManager {
     vessel.mobilizeProgress = 0;
     EventBus.emit('vessel:mobilizationStarted', {
       vesselId: vessel.id, vessel, target: 'active',
-      crew: vessel.crewLocked ?? 0, colonyId: colony.planetId,
+      crew: vessel.crewLocked ?? 0, colonyId: colony?.planetId ?? null,
       durationCivYears: DEPLOY_DURATION_CIVYEARS,
     });
-    return { ok: true, crew: vessel.crewLocked ?? 0, colonyId: colony.planetId };
+    return { ok: true, crew: vessel.crewLocked ?? 0, colonyId: colony?.planetId ?? null };
   }
 
   /**

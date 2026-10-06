@@ -1165,6 +1165,8 @@ export class ColonyManager {
     //   nie liczyła załogi (`StationSystem.js:331`) — nie płacił nic. Teraz nie płaci nikt
     //   przy budowie i płacą OBAJ przy rozmieszczeniu. Klucz `fleet.noCrewPops` żyje dalej —
     //   przeniesiony na odmowę rozmieszczenia.
+    //   ⚠ S0-2 (Finding 392, decyzja SB2) — przy rozmieszczeniu płaci już wyłącznie GRACZ: załoga
+    //   kadłuba AI nie kosztuje POP (jak garnizon AI), więc „płacą OBAJ” przestało być prawdą.
 
     // Sprawdź czy stać na koszt (surowce + commodities + moduły)
     const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };

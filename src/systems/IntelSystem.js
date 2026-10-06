@@ -278,6 +278,9 @@ export class IntelSystem {
     // ⚠ To jest zdolność załogowa STOLICY, nie całego imperium — ta sama kolonia, którą czyta
     //   guard `empireHasFreeCrew`, więc liczba odpowiada na pytanie „ilu ludzi realnie bramkuje
     //   mobilizację". Brak Directora ⇒ null (patrz wyżej), nie zero.
+    // ⚠ S0-2 (Finding 392, decyzja SB2) — guard zdjęty z `mobilize_reserve`, a załoga AI nie kosztuje
+    //   POP: ta liczba NIE bramkuje już mobilizacji AI. Odczyt (panel wywiadu „wolna załoga”) zostaje
+    //   bez zmian — co z nim zrobić, to decyzja poza S0.
     const dp = window.KOSMOS?.directorProduction;
     const capital = dp?.capitalOf?.(empireId) ?? null;
     const freePops = capital?.civSystem?.freePops;

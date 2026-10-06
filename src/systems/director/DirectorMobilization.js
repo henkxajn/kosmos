@@ -1,7 +1,8 @@
 // DirectorMobilization — decyzja mobilizacyjna AI (WOJNA I POKÓJ 1.0, workstream B, W2-7).
 //
 // PO CO TEN PLIK ISTNIEJE. Po W2-2 każdy kadłub schodzący ze stoczni ląduje w REZERWIE, a po
-// W2-4 wyjście z rezerwy kosztuje POP i trwa miesiąc. Gracz ma na to przycisk (W2-6); AI nie
+// W2-4 wyjście z rezerwy trwa miesiąc (i kosztuje POP — od S0-2 / decyzji SB2 wyłącznie
+// GRACZA; załoga AI jest darmowa jak garnizon AI). Gracz ma na to przycisk (W2-6); AI nie
 // miało NIC — jego floty stały w magazynie bezterminowo. Ten plik jest brakującą decyzją:
 // KIEDY obce imperium uznaje, że warto zdjąć ludzi z hali fabrycznej i obsadzić okręty.
 //
@@ -159,6 +160,7 @@ export class DirectorMobilization {
  * ⚠ `empireHasFreeCrew` NIE jest tu rejestrowany — istnieje od Slice'u 1 w
  * `DirectorProduction` (zarejestrowany, a do dziś nieużywany przez żadną regułę). W2-7 jest
  * jego pierwszym konsumentem; podwójna rejestracja RZUCIŁABY (rejestr zabrania kolizji nazw).
+ * S0-2 (decyzja SB2) zdjął go z `mobilize_reserve` — patrz `DirectorRuleData`.
  */
 export function registerMobilizationBehaviors(instance, { allowOverride = false } = {}) {
   DirectorProbes.register('storedWarshipsAtCapital',

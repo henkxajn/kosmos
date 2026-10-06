@@ -167,8 +167,12 @@ console.log('T4 — `delay: 0` w CAŁYM katalogu; `roll` jako jedyna przepustnic
   assert(validateRule(rule, 'mobilize_reserve').length === 0, 'T4: przechodzi walidator katalogu');
   assert(rule.trigger?.probe === 'storedWarshipsAtCapital' && rule.trigger?.gte === 1,
     'T4: wyzwalacz to OBECNOŚĆ kadłubów (gte 1), nie strojony próg');
-  assert((rule.guard ?? []).includes('empireHasFreeCrew'),
-    'T4: guard załogowy ze Slice 1 jest wreszcie użyty (był zarejestrowany i martwy)');
+  // ⚠ S0-2 (Finding 392, decyzja SB2) — PIN ODWRÓCONY ZA ZGODĄ WŁAŚCICIELA: guard załogowy ZDJĘTY.
+  //   Czytał `freePops` stolicy, a ta u AI stoi na 0 (rodzina 215), więc reguła nie mogła odpalić;
+  //   od SB2 załoga AI nie kosztuje POP. Zachowanie (mobilizacja przy `freePops = 0`) pinuje
+  //   `sb0_fleet_defects_smoke` T3.
+  assert(!(rule.guard ?? []).includes('empireHasFreeCrew'),
+    'T4 (S0-2/SB2): guard załogowy NIE stoi w regule — załoga AI nie kosztuje POP');
   assert((rule.guard ?? []).includes('empireOutgunnedByPlayer'),
     'T4: decyzję niesie odczyt ThreatAssessment, nie autorska liczba');
   assert(!!rule.roll && rule.roll.unit === 'displayedYear',

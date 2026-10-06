@@ -244,18 +244,22 @@ console.log('T4 — C-3/R-C: strata okrętu ZWALNIA blokadę i ZABIJA załogę (
   const core = boot();
   const cm = core.colonyManager;
   const crew = HULLS.hull_frigate.crewCost ?? 0;
-  const col = cm.getAllColonies().find(c => c.ownerEmpireId && c.civSystem && c.resourceSystem) ?? null;
-  assert(!!col, 'T4: jest kolonia AI z żywym civSystem');
+  // ⚠ S0-2 (Finding 392, decyzja SB2) — PRZECELOWANE ZA ZGODĄ WŁAŚCICIELA. Kadłub z kolonijnej stoczni AI
+  //   jest kadłubem AI (stempel `DirectorProduction._claimVessel`), a kadłub AI od S0-2 nie ma załogi —
+  //   więc rozliczenie straty mierzymy na kadłubie GRACZA w rezerwie przy jego kolonii. Fregaty gracz
+  //   w stoczni kolonijnej nie zbuduje (bramka kadłubów S3.4d), dlatego kadłub stawiamy wprost w rejestrze
+  //   (wzór `w2_crew_ledger_smoke`). Intencja pinu bez zmian; zero załogi kadłuba AI pinuje
+  //   `sb0_fleet_defects_smoke` T3.
+  const col = cm.getColony(window.KOSMOS.homePlanet?.id) ?? null;
+  assert(!!col?.civSystem && !col.ownerEmpireId, 'T4: jest kolonia GRACZA z żywym civSystem');
 
   if (col) {
-    equipYard(core, col);
-    const res = cm.startShipBuild(col.planetId, 'hull_frigate', [...WARSHIP]);
-    assert(res?.ok === true, 'T4: fregata zamówiona');
-
-    // Doprowadź budowę do końca.
-    new Ticker(core.timeSystem).run(200, { tickSize: 1.0, stopOnCrash: true });
-    const hull = core.vesselManager.getAllVessels().find(v => v.shipId === 'hull_frigate');
-    assert(!!hull, 'T4: fregata zeszła ze stoczni');
+    const hull = createVessel('hull_frigate', col.planetId, {
+      name: 'Fregata gracza', modules: [...WARSHIP], x: 0, y: 0, systemId: 'sys_home', serviceState: 'stored',
+    });
+    hull.position.state = 'docked'; hull.position.dockedAt = col.planetId;
+    core.vesselManager._vessels.set(hull.id, hull);
+    assert(hull.serviceState === 'stored' && !hull.ownerEmpireId, 'T4: fregata GRACZA stoi w rezerwie przy kolonii');
 
     if (hull) {
       // Kadłub schodzi ze stoczni do REZERWY i nie ma jeszcze żadnej załogi — dopiero

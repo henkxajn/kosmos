@@ -182,8 +182,9 @@ export const DIRECTOR_RULES = {
   /**
    * MOBILIZACJA REZERWY (W2-7) — „obsadzamy okręty, bo sami przestaliśmy być silniejsi".
    *
-   * Po W2-2 każdy kadłub AI schodzi ze stoczni do REZERWY, a po W2-4 wyjście z niej kosztuje
-   * POP i trwa miesiąc. Bez tej reguły floty obcych stałyby w magazynie do końca partii —
+   * Po W2-2 każdy kadłub AI schodzi ze stoczni do REZERWY, a po W2-4 wyjście z niej trwa
+   * miesiąc (POP kosztuje od S0-2 wyłącznie GRACZA — decyzja SB2). Bez tej reguły floty obcych
+   * stałyby w magazynie do końca partii —
    * i tak było między W2-2 a tym commitem (świadomy stan przejściowy, opisany w §0b GATE 2).
    *
    * ⚠ ZERO AUTORSKICH PROGÓW (decyzja 22). Nie ma tu liczby „mobilizuj przy sile 0.8×", bo
@@ -193,11 +194,12 @@ export const DIRECTOR_RULES = {
    * wyścig SAM, bo przestaje być prawdą — punkt równowagi jest własnością modelu, nie
    * wartością do wystrojenia.
    *
-   * ⚠ `empireHasFreeCrew` — pierwszy konsument guardu zarejestrowanego w Slice 1 i do dziś
-   * nieużywanego. Hamuje mobilizację w imperium, które nie ma ludzi do oddania. Zmierzone na
-   * czystym boocie: z dwóch imperiów jedno trzyma 8-12 wolnych POP przez 400 lat cyw., drugie
-   * siedzi na zerze przez lata 50-200 i odbija do 5 — guard realnie bramkuje mniej więcej
-   * połowę czasu, więc NIE jest teatrem.
+   * ⚠ S0-2 (Finding 392, decyzja SB2) — guard `empireHasFreeCrew` ZDJĘTY. W W2-7 był pierwszym
+   * konsumentem guardu ze Slice 1 i czytał `freePops` STOLICY, a ta u AI klamruje się do 0
+   * (etatów więcej niż POPów — rodzina 215): audyt fazy A AI STRIKES BACK zmierzył 0 od gy 20 do
+   * gy 100 w 6 z 6 przebiegów uprzęży i 0–1 mobilizacji na 100 gy przy 5–8 kadłubach w rezerwie.
+   * Od SB2 załoga AI nie kosztuje POP (jak garnizon AI), więc guard nie miał już czego strzec.
+   * Rejestracja w `DirectorProduction` zostaje — w katalogu reguł guard nie ma dziś konsumenta.
    *
    * ⚠ `delay: 0` — OBOWIĄZKOWO. `_firePending` biegnie POZA per-regułowym try/catch, a
    * `AlienCivSystem` woła `tickEmpire` poza własnym: odroczona odpowiedź, która rzuci, zabija
@@ -213,7 +215,7 @@ export const DIRECTOR_RULES = {
     id:       'mobilize_reserve',
     trigger:  { kind: 'poll', probe: 'storedWarshipsAtCapital', gte: 1 },
     // WP-R — reparacje blokują TAKŻE obsadzanie rezerwy (D-WPR-1: dwie bramki).
-    guard:    ['empireHasFreeCrew', 'empireOutgunnedByPlayer', 'empireNotUnderReparations'],
+    guard:    ['empireOutgunnedByPlayer', 'empireNotUnderReparations'],
     roll:     { startPct: 40, stepPct: 30, capPct: 100, unit: 'displayedYear' },
     delay:    0,
     response: { action: 'mobilizeVessels', params: { count: 2 } },

@@ -334,6 +334,8 @@ export class EmpireLogisticsSystem {
         //   • koszt płaci ROZMIESZCZENIE — `deployVessel` niżej w tej samej funkcji pobiera
         //     `crewCost` (`hull_small` = 0,2) przez `commitCrew`, którego pojemność to
         //     `_unemployed` **+ hostable ZATRUDNIENI**, więc **płaci nawet przy `freePops = 0`**;
+        //     ⚠ od S0-2 (Finding 392, decyzja SB2) kadłub AI — także kurier — nie płaci załogi
+        //     WCALE: `deployVessel` pomija `commitCrew` dla AI, zostaje sam miesiąc przejścia;
         //   • a `freePops` u AI jest 0 NA STAŁE (etatów więcej niż POPów) ⇒ pre-check żądał 0,05
         //     z puli strukturalnie zerowej i **kurier NIE BYŁ NIGDY ZAMAWIANY**
         //     (ZMIERZONE: `logistics:shipBuildRequested = 0`, `built/dispatched/delivered = 0/0/0`,
@@ -437,8 +439,8 @@ export class EmpireLogisticsSystem {
       //
       // ⚠ Mobilizacja trwa miesiąc (wyświetlany), więc `deployVessel` NIE dispatchuje od razu:
       //   kurier przechodzi w `mobilizing`, a wysyłka złapie go przy którymś z kolejnych
-      //   przebiegów dyspozytora (biegnie co LOGISTICS_INTERVAL_CIVYEARS). Logistyka AI płaci
-      //   więc za kuriera tę samą cenę co gracz — POP i czas — zamiast dostawać zwolnienie.
+      //   przebiegów dyspozytora (biegnie co LOGISTICS_INTERVAL_CIVYEARS). Od S0-2 (decyzja SB2)
+      //   kurier AI płaci tylko CZAS — załoga AI nie kosztuje POP (jak garnizon AI).
       if (v.serviceState && v.serviceState !== 'active') {
         if (v.serviceState === 'mobilizing') return;             // już w drodze do służby
         const dep = vm.deployVessel?.(cid);

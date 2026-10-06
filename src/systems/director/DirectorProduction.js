@@ -21,6 +21,9 @@
 //     POPów. Sam `hasFreeCrew` żyje jako bramka MOBILIZACYJNA (guard `empireHasFreeCrew`,
 //     regułę dostaje w W2-7) — pomiar „połowa kolonii AI stoi na `freePops = 0`" jest tam
 //     równie wiążący, tylko na innym szczeblu.
+//     ⚠ S0-2 (Finding 392, decyzja SB2) — guard ZDJĘTY z reguły `mobilize_reserve`: załoga AI
+//     nie kosztuje POP, a `freePops` stolicy AI stoi na 0, więc guard był martwy. Metoda
+//     i rejestracja ZOSTAJĄ; w katalogu reguł guard nie ma dziś konsumenta.
 //
 //  3. GUARD STOCZNI (decyzja 6). Brak stoczni = brak produkcji, odsiewane **cicho, ale
 //     z wpisem w DebugLogu** — nigdy po cichu-po cichu.
@@ -472,6 +475,7 @@ export function registerProductionGuards(production, { allowOverride = false } =
     (ctx) => production.hasOrbitalStation(ctx.empireId), opts);
   // Załoga: próg zależy od kadłuba, więc guard sprawdza NAJTAŃSZY sensowny przypadek
   // (jeden POP). Twardy próg per kadłub liczy dopiero akcja, gdy zna wynik resolvera.
+  // ⚠ S0-2 (decyzja SB2) — od zdjęcia z `mobilize_reserve` guard nie ma konsumenta w katalogu.
   DirectorGuards.register('empireHasFreeCrew',
     (ctx) => production.hasFreeCrew(ctx.empireId, 1), opts);
   DirectorActions.register('queueWarships',
