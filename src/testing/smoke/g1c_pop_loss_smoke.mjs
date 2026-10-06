@@ -12,6 +12,9 @@
 //   Q2 (Finding 380; odpowiedź właściciela 2026-10-05, potwierdzenie 2026-10-06) przejęcie kolonii zrywa więzi POP
 //      poprzedniego właściciela: blokady jego jednostek z domem w tej kolonii i zwroty czekające w jej kolejce zwalniane
 //      w tej kolonii (ludzie zostają z kolonią); jednostki walczą dalej bez kosztu POP i bez domu.
+//   Q5 (Finding 381; odpowiedź właściciela 2026-10-05, potwierdzenie 2026-10-06) przejęcie kolonii anuluje kolejkę
+//      rekrutacji poprzedniego właściciela: blokada POP każdego zlecenia wraca w tej kolonii, żadna jednostka nie powstaje,
+//      surowce i Kr zlecenia przepadają (bez zwrotu).
 //
 //   L1  (P1) śmierć: w chwili śmierci ginie część nieoddana przez tabelę — populacja i blokada domu spadają o nią; zwrot
 //       czeka w kolejce i po zwłoce blokada wraca do stanu sprzed rekrutacji (nic zablokowanego na zawsze). Kontrole:
@@ -43,6 +46,9 @@
 //       przejętym ciele nietknięta; kierunek AI→gracz — żadna blokada się nie zmienia; zapis i wczytanie nie wskrzeszają
 //       więzi; zapis sprzed Q2 (więź niezerwana, właściciel ostemplowany przy wczytaniu) — reguła właściciela dalej
 //       chroni kolonię innego właściciela (z czułością).
+//   L8  (Q5) przejęcie kolonii (invasion i cesja gracz→AI) ze zleceniami rekrutacji w toku: kolejka pusta, blokada wraca
+//       do stanu sprzed zleceń, żadna jednostka nie powstaje (zero `groundUnit:buildCompleted` dla tej kolonii), surowce
+//       i Kr bez zwrotu. Kontrola: zlecenie w INNEJ kolonii gracza przeżywa przejęcie domu i kończy się jednostką gracza.
 //   L0  wszystkie drogi wyjścia jednostki gracza (walka, mina, głód, ostrzał, termin wycofania, zniszczone ciało, utrata
 //       transportu, brak utrzymania, rozpad morale, ręczne rozwiązanie): po zwłokach blokada domu wraca do stanu sprzed
 //       rekrutacji (żadna POP na zawsze), populacja spada wyłącznie o część poległą (rozwiązania — 0), inne kolonie
@@ -751,6 +757,81 @@ const cedeToAI = (w, colony) =>
     `świadek: jednostka ${u.id} odtworzona z zapisu (nowy obiekt, dom po wczytaniu ${u2?.homeColonyId}) i zginęła na ${col.planetId}`);
   assert(u2?.popCost === 0 && othersUnchanged(w, all) && lostOf(w, u.id).length === 0,
     `L7f: po wczytaniu popCost ${u2?.popCost} — śmierć nic nie rozlicza (żadna kolonia bez zmian, meldunków ${lostOf(w, u.id).length})`);
+}
+
+// ── L8 — Q5 (Finding 381): przejęcie kolonii anuluje jej kolejkę rekrutacji ──────────────────────────────────────
+/** Zlecenie rekrutacji PRAWDZIWĄ ścieżką BEZ ukończenia: blokada POP, surowce i Kr pobrane przy zleceniu. */
+function order(w, colony, archetypeId = 'shock_infantry') {
+  const cost = { ...(ColonyManager.GROUND_UNIT_BUILD_COSTS[archetypeId] ?? {}),
+                 ...(ColonyManager.GROUND_UNIT_COMMODITY_COSTS[archetypeId] ?? {}) };
+  colony.credits = Math.max(colony.credits ?? 0, 10000);
+  for (const [k, v] of Object.entries(cost)) colony.resourceSystem.receive({ [k]: v });
+  const r = quiet(() => w.cm.startGroundUnitBuild(colony.planetId, archetypeId));
+  if (!r?.ok) throw new Error(`zlecenie ${archetypeId} odrzucone: ${JSON.stringify(r)}`);
+  return Object.keys(cost);
+}
+const stockOf = (c, keys) => Object.fromEntries(keys.map(k => [k, c.resourceSystem.getAmount(k)]));
+const sameStock = (a, b) => Object.keys(a).every(k => near(a[k], b[k]));
+/** Rejestr ukończonych rekrutacji (po `boot` — boot czyści EventBus). */
+const buildsOn = () => { const out = []; EventBus.on('groundUnit:buildCompleted', (e) => out.push(e)); return out; };
+{
+  console.log('\nL8a — przejęcie ze zleceniami w toku: kolejka anulowana, blokada wraca, żadna jednostka nie powstaje, bez zwrotu');
+  const w = boot();
+  const built = buildsOn();
+  const L0 = lockOf(w.home);
+  const keys = [...new Set([...order(w, w.home, 'shock_infantry'), ...order(w, w.home, 'garrison_unit')])];
+  const queued = w.home.groundUnitQueues.length;
+  const L1 = lockOf(w.home), H1 = humansOf(w.home), kr1 = w.home.credits, st1 = stockOf(w.home, keys);
+  const units0 = w.gum.getAllUnits().length;
+  const others = snapOthers(w, [w.home]);
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  const Lt = lockOf(w.home), qt = w.home.groundUnitQueues.length;
+  quiet(() => w.cm._tickGroundUnitBuilds(10));
+  const mine = built.filter(e => e.planetId === w.home.planetId);
+  assert(w.home.ownerEmpireId === w.emp && queued === 2 && near(L1, L0 + COST.shock_infantry + COST.garrison_unit),
+    `świadek: dwa zlecenia w kolejce domu (${queued}), blokada ${L0} → ${L1}; dom należy teraz do ${w.home.ownerEmpireId}`);
+  assert(qt === 0 && near(Lt, L0) && near(humansOf(w.home), H1) && mine.length === 0 && w.gum.getAllUnits().length === units0,
+    `L8a SEDNO: kolejka anulowana (${queued} → ${qt}), blokada ${L1} → ${Lt} (= ${L0}), populacja bez zmian, żadna jednostka ` +
+    `nie powstała (buildCompleted ${mine.length}, jednostek ${units0} → ${w.gum.getAllUnits().length}) — przed Q5 budowa ` +
+    'kończyła się jednostką GRACZA na ciele AI');
+  assert(near(w.home.credits, kr1) && sameStock(stockOf(w.home, keys), st1),
+    `L8a: surowce i Kr zlecenia przepadają z kolonią — bez zwrotu (Kr ${kr1} → ${w.home.credits})`);
+  assert(othersUnchanged(w, others), 'L8a: żadna inna kolonia się nie zmieniła');
+}
+{
+  console.log('\nL8b — cesja (gracz→AI) ze zleceniem w toku: kolejka anulowana, blokada wraca w oddanej kolonii');
+  const w = boot();
+  const col = secondPlayerColony(w);
+  const built = buildsOn();
+  const L0 = lockOf(col);
+  order(w, col);
+  const queued = col.groundUnitQueues.length, L1 = lockOf(col);
+  cedeToAI(w, col);
+  const qc = col.groundUnitQueues.length, Lc = lockOf(col);
+  quiet(() => w.cm._tickGroundUnitBuilds(10));
+  const mine = built.filter(e => e.planetId === col.planetId);
+  assert(col.ownerEmpireId === w.emp && queued === 1 && near(L1, L0 + COST.shock_infantry),
+    `świadek: zlecenie w kolejce kolonii ${col.planetId} (blokada ${L0} → ${L1}), kolonia oddana w cesji (${col.ownerEmpireId})`);
+  assert(qc === 0 && near(Lc, L0) && mine.length === 0,
+    `L8b: kolejka anulowana (${queued} → ${qc}), blokada ${L1} → ${Lc} (= ${L0}), żadna jednostka nie powstała ` +
+    `(${mine.length})`);
+}
+{
+  console.log('\nL8c — kontrola: zlecenie w INNEJ kolonii gracza przeżywa przejęcie domu i kończy się jednostką gracza');
+  const w = boot();
+  const col = secondPlayerColony(w);
+  const built = buildsOn();
+  order(w, col);
+  const L1 = lockOf(col);
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  const q = col.groundUnitQueues.length, Lq = lockOf(col);
+  quiet(() => w.cm._tickGroundUnitBuilds(10));
+  const mine = built.filter(e => e.planetId === col.planetId);
+  const u = mine[0] ? w.gum.getUnit(mine[0].unitId) : null;
+  assert(w.home.ownerEmpireId === w.emp && q === 1 && near(Lq, L1),
+    `świadek: dom przejęty (${w.home.ownerEmpireId}); zlecenie w ${col.planetId} nadal w kolejce (${q}), blokada ${L1} → ${Lq}`);
+  assert(mine.length === 1 && u?.owner === 'player' && u?.homeColonyId === col.planetId && u?.popCost === COST.shock_infantry,
+    `L8c kontrola: zlecenie ukończone jednostką gracza (${u?.id}, dom ${u?.homeColonyId}, popCost ${u?.popCost})`);
 }
 
 // ── L0 — wszystkie drogi wyjścia jednostki gracza ─────────────────────────────────────────────────────────────

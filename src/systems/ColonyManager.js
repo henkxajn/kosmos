@@ -1820,6 +1820,11 @@ export class ColonyManager {
    *     więc przy śmierci, rozwiązaniu i braku utrzymania nic już nie wraca.
    *   • Opóźnione zwroty poprzedniego właściciela czekające w kolejce tej kolonii — zwolnione w miejscu i zdjęte z kolejki
    *     (inaczej wypłata po zwłoce szłaby na meldunek, a blokada zostawała w kolonii na zawsze).
+   *   • Finding 381 (Q5, potwierdzenie 2026-10-06) — kolejka rekrutacji tej kolonii jest anulowana: blokada POP każdego
+   *     zlecenia wraca w tej kolonii, żadna jednostka nie powstaje; surowce i Kr pobrane przy zleceniu przepadają razem
+   *     z kolonią (bez zwrotu — zwrot do jej magazynu oddałby je nowemu właścicielowi). Kolejkę zasila wyłącznie gracz
+   *     (`startGroundUnitBuild`; AI tworzy jednostki przez `createAIUnit`), a każda zmiana właściciela ją opróżnia, więc
+   *     w chwili zmiany należy ona zawsze do poprzedniego właściciela.
    * Ludzie zostają z kolonią. Dotykana jest WYŁĄCZNIE ta kolonia. Jednostki AI (`createAIUnit`: `popCost` 0) nie trzymają
    * blokad, więc kierunek AI→gracz nic tu nie zmienia.
    */
@@ -1842,6 +1847,11 @@ export class ColonyManager {
         civ?.unlockPops?.(e.amount, e.strata ?? 'laborer');
         return false;
       });
+    }
+    const queue = colony.groundUnitQueues;
+    if (queue?.length) {
+      for (const item of queue) if (item?.popCost > 0) civ?.unlockPops?.(item.popCost, 'laborer');
+      queue.length = 0;
     }
   }
 
