@@ -262,7 +262,7 @@ console.log('T7 — logistyka AI: kurier w rezerwie idzie do mobilizacji, nie na
   assert(/serviceState/.test(code),
     'T7: dyspozytor logistyki w ogóle PATRZY na stan służby (bez tego kurier w rezerwie jest niewidzialny)');
   assert(/deployVessel/.test(code),
-    'T7: …i woła `deployVessel` — czyli AI płaci za kuriera tę samą cenę co gracz');
+    'T7: …i woła `deployVessel` — kurier AI przechodzi ten sam miesiąc mobilizacji co gracz (od SB2 bez poboru POP)');
   assert(/director:mobilizeRejected/.test(code),
     'T7: odmowa dla kuriera trafia na ścieżkę audytu (stall logistyki był dotąd CAŁKOWICIE cichy)');
 }

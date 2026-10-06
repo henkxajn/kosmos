@@ -107,8 +107,10 @@ export const GAME_CONFIG = {
     defenseScope: true,
     // 215 — BRAMKI `freePops` NA SCIEZCE AI (D-215-2: JEDNA flaga na OBIE polowy).
     // ON  = kolonizacja AI pyta o `laborer >= popTransferSize + MOTHER_RESERVE` (pula, z ktorej
-    //       `removePop` NAPRAWDE placi), a kurier nie ma pre-checku POP (prawdziwy straznik to
-    //       `deployVessel` → `commitCrew`, ktory placi nawet przy freePops = 0).
+    //       `removePop` NAPRAWDE placi), a kurier nie ma pre-checku POP. Od S0-2 (SB2, Finding 392)
+    //       zaloga AI nie kosztuje POP: `deployVessel` pomija `commitCrew` dla kadluba AI, wiec kurier
+    //       AI nie ma straznika POP wcale — zostaje sam miesiac mobilizacji (przed S0-2 straznikiem byl
+    //       `commitCrew`, ktory placil nawet przy freePops = 0).
     // OFF = zachowanie sprzed slice'u: `freePops >= minFreePops` (8) i `>= 0.05` — czyli progi
     //       NIEOSIAGALNE, bo `freePops` u AI klamruje sie do 0 na stale (etatow wiecej niz POPow).
     // ⚠ JEDNA flaga, nie dwie: dwie dalyby stan, ktorego nikt nie wypuscil — AI z koloniami bez
