@@ -1651,7 +1651,7 @@ export class ColonyManager {
 
   /**
    * Lazy subscribe do 'groundUnit:destroyed' — jednorazowo (z constructora).
-   * Kolejkuje reintegrację POPów wg tabeli GROUND_UNIT_POP_REINTEGRATION.
+   * Kolejkuje reintegrację POPów wg tabeli GROUND_UNIT_POP_REINTEGRATION; część nieoddana ginie (G1c/P1).
    */
   _subscribeGroundUnitDestroyed() {
     if (this._groundUnitDestroyedSubscribed) return;
@@ -1661,10 +1661,13 @@ export class ColonyManager {
       const { unitId, planetId, popCost, archetypeId, cause } = payload;
       if (!planetId || !(popCost > 0) || !archetypeId) return;
 
+      // ⚠ G1c/P1 (Finding 333): tabela mówi, ILE POP-ów wraca (`rate`) i PO JAKIM CZASIE (`delay`); RESZTA GINIE —
+      //   znika z populacji kolonii macierzystej razem ze swoją blokadą (niżej, `killCrew`). Dawniej zostawała
+      //   zablokowana NA ZAWSZE i dalej liczyła się do populacji. Archetyp spoza tabeli — nic nie wraca, ginie całość.
       const ri = ColonyManager.GROUND_UNIT_POP_REINTEGRATION[archetypeId];
-      if (!ri || ri.rate <= 0) return;
-
-      const returnAmount = popCost * ri.rate;
+      const rate = Math.max(0, Math.min(1, ri?.rate ?? 0));
+      const returnAmount = popCost * rate;
+      const deadShare = popCost - returnAmount;
 
       // ⚠ S4 (G1b, Finding 326): reintegracja trafia do kolonii MACIERZYSTEJ jednostki, z terminem
       //   właściciela — nie do kolonii ciała, na którym zginęła. Dawniej śmierć na ciele AI oddawała
@@ -1676,11 +1679,17 @@ export class ColonyManager {
              homeColonyId: payload.homeColonyId ?? null, owner: payload.owner ?? payload.ownerId ?? null };
       const colony = this._ownedHomeColony(unit);
       if (!colony) {
-        this._reportPopsLost(unit, returnAmount, cause ?? 'death');
+        if (returnAmount > 0) this._reportPopsLost(unit, returnAmount, cause ?? 'death');
         return;
       }
 
-      const readyAt = (this._pendingPopClock ?? 0) + (ri.delay ?? 0);
+      // G1c/P1 — część, której tabela nie oddaje, ginie mechanizmem śmierci załogi W2 (`killCrew`: akumulator ułamka,
+      //   blokada TYPOWANA jak przy rekrutacji — `lockPops(popCost, 'laborer')`). Wyłącznie kolonia macierzysta z terminem
+      //   właściciela: kolonia innego właściciela nie płaci ludźmi za cudzą jednostkę.
+      if (deadShare > 1e-9) colony.civSystem?.killCrew?.({ laborer: deadShare }, 'ground_unit_lost');
+      if (!(returnAmount > 0)) return;
+
+      const readyAt = (this._pendingPopClock ?? 0) + (ri?.delay ?? 0);
 
       if (!colony._pendingPopReturns) colony._pendingPopReturns = [];
       colony._pendingPopReturns.push({

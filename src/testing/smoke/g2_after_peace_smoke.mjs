@@ -462,9 +462,12 @@ function domTexts(el, out = []) {
   run(w, 4);                                             // zwłoka reintegracji (`ri.delay`) po śmierci w 6.–7. civY
   const due = popCost * ri.rate;
   const lockAfterDelay = lockOf(w.home);
-  assert(Math.abs((lock0 - lockAfterDelay) - due) < 1e-6,
-    `A6e: POP ścieżką śmierci do kolonii macierzystej — blokada w domu ${lock0} → ${lockAfterDelay} ` +
-    `(zwrot ${due} = ${popCost} × ${ri.rate} po zwłoce ${ri.delay} civY)`);
+  // ⚠ G1c/P1 (Finding 333; zgoda w poleceniu G1c — piny „część nieoddana zostaje w blokadzie” mogą się odwrócić):
+  //   przed P1 blokada schodziła o sam zwrot (`due`), reszta zostawała zablokowana na zawsze. Od P1 reszta ginie
+  //   razem z blokadą, więc po zwłoce blokada schodzi o PEŁNY koszt.
+  assert(Math.abs((lock0 - lockAfterDelay) - popCost) < 1e-6,
+    `A6e: POP ścieżką śmierci do kolonii macierzystej — blokada w domu ${lock0} → ${lockAfterDelay}: zwrot ${due} ` +
+    `(= ${popCost} × ${ri.rate}) po zwłoce ${ri.delay} civY, reszta ${popCost - due} zginęła (pełny koszt ${popCost})`);
 }
 
 // ── A7 — R3 (Finding 358): cesja ciała z jednostką gracza na rzecz AI ────────────────────

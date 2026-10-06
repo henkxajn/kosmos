@@ -305,8 +305,11 @@ function killOn(w, unit, colony) {
     `T-F1 SEDNO: wpis reintegracji ${want} na kolonii MACIERZYSTEJ (dom: ${JSON.stringify(pendingOf(w.home))}, ` +
     `AI: ${JSON.stringify(pendingOf(w.ai))}) — przed naprawą trafiał do koloni ciała śmierci`);
   w.cm._tickPendingPopReturns(RI.delay + 0.01);
-  assert(Math.abs(lockOf(w.home) - (homeL - want)) < EPS && Math.abs(lockOf(w.ai) - aiL) < EPS,
-    `T-F1: po zwłoce dom odzyskał ${want} (${homeL} → ${lockOf(w.home)}), kolonia AI bez zmian (${aiL} → ${lockOf(w.ai)})`);
+  // ⚠ G1c/P1 (Finding 333; zgoda w poleceniu G1c — piny „część nieoddana zostaje w blokadzie” mogą się odwrócić):
+  //   przed P1 pin oczekiwał `homeL - want` — reszta zostawała zablokowana NA ZAWSZE. Od P1 ginie z blokadą przy śmierci.
+  assert(Math.abs(lockOf(w.home) - (homeL - SHOCK_COST)) < EPS && Math.abs(lockOf(w.ai) - aiL) < EPS,
+    `T-F1: po zwłoce dom odzyskał ${want}, reszta (${SHOCK_COST - want}) zginęła razem z blokadą — blokada ${homeL} → ` +
+    `${lockOf(w.home)}; kolonia AI bez zmian (${aiL} → ${lockOf(w.ai)})`);
 }
 {
   // KONTROLA: śmierć na WŁASNYM ciele — reintegracja na kolonii macierzystej, jak przed naprawą.

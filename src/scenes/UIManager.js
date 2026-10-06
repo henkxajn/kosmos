@@ -1164,6 +1164,9 @@ export class UIManager {
       // event leci wtedy tylko dla mechaniki (koniec gry, przeliczenie stawek). Bez tego
       // pominięcia gracz dostawałby dwie linie o jednym zdarzeniu.
       if (cause === 'ship_crew_lost') return;
+      // G1c/P1: część POP poległej jednostki naziemnej ginie razem z nią (`killCrew` w `ColonyManager`) — jednostkę
+      //   zgłasza walka; osobnej linii o POP nie ma (zdarzenie nie niesie nazwy kolonii — wpis brzmiałby „POP lost in —”).
+      if (cause === 'ground_unit_lost') return;
       const name = colonyName ?? '—';
       const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';
       this._log(t(key, name, population), 'pop_died', planetId);

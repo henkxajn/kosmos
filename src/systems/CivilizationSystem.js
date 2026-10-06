@@ -456,9 +456,10 @@ export class CivilizationSystem {
    * W2 (R-C) — załoga GINIE razem z okrętem. Zwalnia blokadę (etat wraca na rynek) i zabija
    * dokładnie tylu ludzi, ilu było w załodze — z ułamkiem włącznie (pułapka 1 wyżej).
    * @param {Object<string,number>} byStrata — rozkład z `commitCrew`
+   * @param {string} [cause] — przyczyna w `civ:popDied` (G1c/P1: część POP poległej jednostki naziemnej — `'ground_unit_lost'`)
    * @returns {{ crew: number, wholeDied: number }} crew = ubytek `humans`, wholeDied = pełne osoby
    */
-  killCrew(byStrata) {
+  killCrew(byStrata, cause = 'ship_crew_lost') {
     const crew = this.releaseCrew(byStrata);
     if (crew <= 0) return { crew: 0, wholeDied: 0 };
 
@@ -474,9 +475,10 @@ export class CivilizationSystem {
     if (wholeDied > 0) {
       // Zdarzenie potrzebne mechanice, nie Dziennikowi: pilnuje warunku końca gry
       // (`GameScene`) i wymusza przeliczenie stawek (`BuildingSystem`). Wpis do Dziennika
-      // robi `civ:crewLost` z nazwą okrętu — inaczej gracz dostałby dwie linie o jednym zdarzeniu.
+      // robi `civ:crewLost` z nazwą okrętu — inaczej gracz dostałby dwie linie o jednym zdarzeniu. G1c/P1: część POP
+      // poległej jednostki naziemnej (`'ground_unit_lost'`) — też bez wpisu (`UIManager` pomija obie przyczyny).
       EventBus.emit('civ:popDied', {
-        cause: 'ship_crew_lost', population: this.population, planetId: this.planet?.id ?? null,
+        cause, population: this.population, planetId: this.planet?.id ?? null,
       });
     }
     EventBus.emit('civ:populationChanged', this._popSnapshot());
