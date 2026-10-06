@@ -5926,11 +5926,12 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 w toku)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06, następny S1)
 
-Plan, decyzje **SB1–SB12** i rejestr findingów **#391–#396**: `docs/design/AI_STRIKES_BACK_PLAN.md`; audyt fazy A
-(pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy i wyniki poza repo,
-`kosmos-handover/ai-strikes-back/`).
+Plan, decyzje **SB1–SB19** i rejestr findingów **#391–#406**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
+`kosmos-handover/ai-strikes-back-s0/`).
 
 **Jedno zdanie:** po AI GARRISON imperium AI broni swoich ciał na ziemi, ale w przestrzeni nie ma zębów — bez nacisku
 gracza **0** okrętów w 100 lat gry, każdy kadłub ze stoczni stoi w rezerwie, a w wojnie produkcja okrętów staje — więc
@@ -5949,17 +5950,41 @@ transportowiec z eskortą, desant tylko po wygranej orbicie i gdy transportowiec
 limitu garnizonu (domyślnie połowa), obcięta do ładowni, falami · **SB9** jedna tabela strojenia + komenda konsoli +
 odczyt per imperium · **SB10** ofensywa układ po układzie, od najbliższego stolicy AI; stolica gracza nie jest
 preferowanym pierwszym celem · **SB11** reguły odbijania i wojny z inicjatywy — przy S3/S4, na zmierzonych liczbach ·
-**SB12** Finding **50** zamknięty w `W3_PLAN.md` §50.
+**SB12** Finding **50** zamknięty w `W3_PLAN.md` §50. Przy zamknięciu S0 (tego samego dnia): **SB13** mobilizacja
+wojenna budzi CAŁĄ rezerwę; guard parytetu hamuje tylko w pokoju · **SB14** pula dopełnia do limitu, licząc wszystkie
+uzbrojone kadłuby (fixture `emp_001`: 6 z 6 — nowych nie ma, budzą się śpiący) · **SB15** odrastanie jak w garnizonie:
+od mobilizacji jeden kadłub na granicy roku kalendarzowego, do bieżącego limitu, także w pokoju · **SB16** wartości
+strojenia zmienione z konsoli trafiają do zapisu; odczyt oznacza wartości różne od domyślnych; komenda resetu ·
+**SB17** skład puli = wzorzec w tabeli strojenia; domyślny proponuje CC z pomiaru szablonów, właściciel zatwierdza ·
+**SB18** w S1 kadłuby z puli w służbie i ZADOKOWANE przy stolicy (orbita = S2); doktryny bez zmian, CC mierzy, co robią
+z kadłubami w służbie w wojnie · **SB19** w S1 odczyt wywiadu „wolna załoga” zastąpiony odczytem floty / limitu.
 
 **Slice'y:** **S0** trzy defekty (391, 392, 393 + 394) · **S1** tabela strojenia, limit floty, pula · **S2** strażnik ·
 **S3** eskadra z transportowcem, desant po wygranej orbicie, odbijanie, fale · **S4** wojna z inicjatywy AI i kampania
-układ po układzie. Estymata audytu: ~8–11 dni (wariant puli).
+układ po układzie. Estymata uzgodniona z właścicielem: ~9–13 dni (S3 3–4, S4 2–3; audyt fazy A liczył ~8–11).
+
+✅ **S0 (2026-10-06):** `9c73023` S0-1 (391: `deployVessel` pyta o zaległość floty tylko przy statku gracza) · `e73c890`
+S0-2 (392, SB2: załoga AI bez POP, guard `empireHasFreeCrew` zdjęty z `mobilize_reserve`) · `cf2a598` S0-3a+b (393, 394:
+NEW `isFightableInSpace` w `Vessel.js` — lustro warstwy walki; `WarSystem.hasOrbitalDominanceInSystem` — jedna reguła dla
+obu stron, także bramka desantu AI; kontroler innej strony sam nie zamyka orbity) · `eb6c06e` trzy poprawki tekstowe.
+Keeper NEW `sb0_fleet_defects_smoke` 60/60; przecelowane za zgodą właściciela: `w2_ai_mobilization` T4, `deploy_seams` T4,
+`w3_dominance_persist` T3, `w3_ai_invasion` T2 (+ tekst `w2_ai_mobilization` T7). Sweep **264/264**, `check-i18n` 3455,
+v101 bez migracji. Bramka live PASS: w zapisie GATE-S4 w służbę weszły 2 fregaty `emp_001` (`v_24`, `v_25`), 4 zatrzymał
+parytet (w pokoju — zmienia to SB13).
+⚠ **Spośród kadłubów dominację orbitalną odbiera wyłącznie uzbrojony wrogi kadłub w służbie, w locie albo na orbicie
+w tym układzie** (`isFightableInSpace`); zadokowany i rezerwowy — nie, po OBU stronach. Strona-kontroler trzyma orbitę
+zawsze; strona gracza dolicza jeszcze księgę flot abstrakcyjnych (401). ⚠ **Odmowę zrzutu pokazuje panel statku
+i wyszarzony przycisk**; flash `drop.noDominance` jest w praktyce niewidoczny (405). ⚠ **Otwarty tryb zrzutu zrzuca także
+po utracie dominacji** (406).
 
 ⚠ **Otwarte do audytu S3:** transportowiec szybszy od eskorty (42,9 vs 6,6 AU/rok) · co detekcja gracza pokazuje
 z tranzytu międzyukładowego i przylotu · czy zadokowane okręty gracza bronią kolonii przy przylocie eskadry AI (dziś:
 w bitwie `EnemyAttackHandler` bronią — `_buildPlayerBattleUnit` bierze okręty w służbie bez względu na dok — a warstwa
-walki w przestrzeni, Proximity + DSCS, zadokowanych nie widzi).
-⚠ **Findingi #391–#396** (rejestr: plan §6): 🔴 **391** `deployVessel` odmawia kadłubowi AI (także kurierowi), gdy
-zalega flota GRACZA · 🟠 **392** guard `empireHasFreeCrew` martwy dla AI · 🟠 **393** rezerwa AI odbiera graczowi
-dominację orbitalną · 🟠 **394** zadokowany kadłub AI odbiera dominację, a walki z nim nie ma · ⚪ **395** adnotacja
-`directorOrigin` na złym kadłubie · 🟠 **396** desant z bitwy liczy pojemność, nie ładunek (rodzina 384).
+walki w przestrzeni, Proximity + DSCS, zadokowanych nie widzi; od S0 po stronie AI zadokowany okręt gracza nie odbiera
+dominacji imperium — dziś bez skutku, bo czytelnik AI biegnie po wygranej AI).
+⚠ **Findingi #391–#406** (rejestr: plan §6): ✅ **391** · ✅ **392** · ✅ **393** · ✅ **394** (S0) · ⚪ **395** adnotacja
+`directorOrigin` na złym kadłubie · 🟠 **396** desant z bitwy liczy pojemność, nie ładunek (rodzina 384) · ✅ **397**,
+**399**, **402** (poprawki tekstowe) · ⚪ **398** odczyt „wolna załoga” (→ S1, SB19) · ⚪ **400** guard
+`empireHasFreeCrew` bez konsumenta · ⚪ **401** księga abstrakcyjna odbiera dominację · ⚪ **403**
+`getPlanetOrbitalController` bez konsumenta · ⚪ **404** dwa polskie literały ostrzału · ⚪ **405** flash
+`drop.noDominance` niewidoczny · 🟠 **406** tryb zrzutu po utracie dominacji.

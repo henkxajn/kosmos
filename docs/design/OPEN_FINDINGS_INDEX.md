@@ -429,6 +429,17 @@
 > UI każe „wygrać bitwę”) · ⚪ **395** (adnotacja `directorOrigin` na złym kadłubie) · 🟠 **396** (desant z bitwy liczy
 > pojemność, nie ładunek — rodzina 384). **391–394** → slice **S0**.
 > • ✅ **50** — zamknięty w rejestrze macierzystym `W3_PLAN.md` §50 (decyzja SB12: D7 wdrożone w G2b); wiersz zdjęty z A8.
+>
+> **Aktualizacja 2026-10-06 (noc, później) — AI STRIKES BACK: S0 ZAMKNIĘTY (bramka live PASS).**
+> Commity `9c73023` (S0-1) · `e73c890` (S0-2 + przecelowanie R1/R2) · `cf2a598` (S0-3a+b + przecelowanie R3/R4) ·
+> `eb6c06e` (poprawki tekstowe). Rejestr: `AI_STRIKES_BACK_PLAN.md` §6; zapis bramki §5a, wynik §5b; decyzje **SB13–SB19**
+> (zakres S1) w §2.
+> • ✅ **391** · **392** · **393** · **394** — zamknięte; wiersze zdjęte z A8. **395**, **396** bez zmian.
+> • **NOWE: #397–#406** — ✅ **397** · **399** · **402** (poprawki tekstowe, `eb6c06e`) · ⚪ **398** (odczyt „wolna
+> załoga” → S1, SB19) · ⚪ **400** (guard `empireHasFreeCrew` bez konsumenta) · ⚪ **401** (księga abstrakcyjna odbiera
+> dominację) · ⚪ **403** (`getPlanetOrbitalController` bez konsumenta) · ⚪ **404** (dwa polskie literały ostrzału) ·
+> ⚪ **405** (flash `drop.noDominance` w praktyce niewidoczny) · 🟠 **406** (tryb zrzutu zrzuca po utracie dominacji).
+> • Następny: **S1** (pula, limit floty, tabela strojenia; SB1–SB3, SB9, SB13–SB19).
 
 
 ---
@@ -507,7 +518,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
-| **391-396** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06; kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`) |
+| **391-406** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -724,12 +735,13 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **386** | ⚪ | `SpawnTestEnemy` stawia marines przez `createUnit` z pominięciem `createAIUnit` (`SpawnTestEnemy.js:148`) — właściciel i frakcja poprawne, morale archetypu (15) zamiast szczebla D9 | tylko debug (bramki z imperium testowym). `AI_GARRISON_PLAN.md` §6 |
 | **387** | ⚪ | jednostki legacy AI ze starych zapisów praktycznie nie do zabicia w walce z garnizonem — w pomiarze G2b strata 0,0 w każdej z 18 komórek, przejęcie 96–100 % także przy 4 obrońcach z morale +90 | tylko stare zapisy (bez migracji); mechanizm z kodu: morale `?? DEFAULT_MORALE`, `hp: 60`. `AI_GARRISON_PLAN.md` §6 |
 | **389** | ⚪ | ułamkowy `troopCount`: dawna pętla dawała ⌈n⌉ jednostek, skład szczebla daje ⌊n⌋ (`GarrisonPlanner.js:88`, `:123`) | żywi wołający podają liczby całkowite; różnica tylko w gałęzi `_onBattleResolved` bez producenta (`InvasionSystem.js:354`). `AI_GARRISON_PLAN.md` §6 |
-| **391** | 🔴 | `deployVessel` bramkuje `fleetInArrears()` (`VesselManager.js:989`) dla KAŻDEGO kadłuba, a predykat liczy wyłącznie statki gracza (`:2198-2205`) ⇒ dług floty gracza zatrzymuje mobilizację okrętów AI (`DirectorMobilization.js:124`) i kurierów AI (`EmpireLogisticsSystem.js:444`); uprząż `press`: 4 392–4 498 odmów na imperium w 100 gy | → **S0-1**. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **392** | 🟠 | guard `empireHasFreeCrew` (`DirectorProduction.js:154-158`, `:475`) czyta `freePops` stolicy — u AI 0 od gy 20 w 6/6 przebiegach uprzęży; jedyny konsument `mobilize_reserve` (`DirectorRuleData.js:216`) | → **S0-2** (SB2: załoga AI bez POP). `AI_STRIKES_BACK_PLAN.md` §6 |
-| **393** | 🟠 | `_hasHostileFleetInSystem` (`WarSystem.js:938-958`) liczy kadłuby AI w REZERWIE — luka zbioru wykluczeń W2; pomiar G3: dominacja gracza `false` przez 3 lata, 0 bitew | → **S0-3**. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **394** | 🟠 | zadokowany kadłub AI odbiera dominację, a nie da się z nim walczyć (Proximity pomija dok `ProximitySystem.js:284`, DSCS walczy tylko `in_transit`/`orbiting` `:1535`); UI każe „wygrać bitwę” (`ColonyOverlay.js:334`) | → **S0-3**. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **395** | ⚪ | adnotacja `directorOrigin` trafia na zły kadłub — `_awaitingClaim` zdejmowane `shift()` przy każdym ukończonym kadłubie kolonii (`DirectorProduction.js:202-203`, `:237-241`); fixture: `v_28` | diagnostyka, bez wpływu na walkę. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **396** | 🟠 | desant z bitwy liczy POJEMNOŚĆ, nie ładunek (`InvasionSystem.js:294-295`, `:307`) — pusta ładownia daje do 6 jednostek z każdej wygranej bitwy; D2: 12 z 0 przewiezionych | uśpiony (49/201); rodzina **384**; → **S3** (SB7, SB8). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **398** | ⚪ | odczyt wywiadu „wolna załoga: {0} POP” (`IntelOverlay.js:296-298`) pokazuje `freePops` stolicy AI, który od S0-2 nie bramkuje mobilizacji AI | → **S1** (SB19: odczyt floty / limitu). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **400** | ⚪ | guard `empireHasFreeCrew` zarejestrowany (`DirectorProduction.js:479`), a od S0-2 bez konsumenta w katalogu reguł | martwy, nieszkodliwy; decyzja przy S1. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **401** | ⚪ | gałąź księgi abstrakcyjnej `_hasHostileFleetInSystem` (`WarSystem.js:950-962`) odbiera dominację flotą o `strength > 0` także w drodze (`destSystemId`), bez pojęcia „da się walczyć” | stare zapisy i floty debugowe (producentów brak od W3-8). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **403** | ⚪ | `WarSystem.getPlanetOrbitalController` (`:1039`) — zero konsumentów | martwy. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **406** | 🟠 | tryb zrzutu otwarty przy dominacji zrzuca także po jej utracie — klik heksu (`ColonyOverlay.js:4693-4745`) → `dropTroop` (`Vessel.js:788`) → `unloadGroundUnit` (`:749`) nie sprawdzają dominacji ani położenia statku; dominacja tylko przy wejściu w tryb (`:333`) | z bramki S0; osiągalność niezmierzona; kandydat do **S3**. `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -756,6 +768,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **377** | ⚪ | polska gramatyka „z {0}” przy nazwie imperium w trzech innych wpisach: `log.diplo.napExpired` (`UIManager.js:1733`), `log.diplo.napRenewed` (`:1740`), `log.skirmish` (`:1638`) | rodzina **371** (✅ `cafd6e8`); etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
 | **388** | ⚪ | T6c `g2_ocean_capital_smoke` zależny od strumienia `Math.random` — tasowanie heksów lądowania (`InvasionSystem.js:566`); setup S1 dokłada dwa losowania (`g2_ocean_capital_smoke.mjs:336`) | pin kruchy — przewróci się przy zmianie liczby losowań w ścieżce desantu. `AI_GARRISON_PLAN.md` §6 |
 | **390** | ⚪ | nieaktualne teksty o `INVASION_UNIT_POOLS`: komunikat `w3_seams_smoke.mjs:355`, nagłówek `ground_morale_resolution_smoke.mjs:11` | asercje zielone; tekst historyczny, nieedytowany. `AI_GARRISON_PLAN.md` §6 |
+| **404** | ⚪ | dwa polskie literały ostrzału z orbity w `ColonyOverlay`: `'Brak amunicji'` (`:260`), `'Brak dominacji orbitalnej'` (`:269`) | klasa 113/375; polerka UI. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **405** | ⚪ | flash `drop.noDominance` w praktyce niewidoczny — rysuje go tylko otwarta mapa kolonii (`ColonyOverlay.js:917`, `:1052-1064`), gałąź odmowy (`:333-335`) wraca przed otwarciem mapy (`:347`), a na pauzie pętla UI nie rysuje bez `_dirty` (`UIManager.js:2184-2196`); przy wyszarzonym przycisku żadna ścieżka UI do niej nie dochodzi | z bramki S0; widoczna odmowa = panel statku. `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ---
 
