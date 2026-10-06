@@ -19,6 +19,9 @@
 //       blokada do stanu sprzed rekrutacji, kolejka pusta), jedno `groundUnit:disbanded` (manual), zero
 //       `groundUnit:destroyed`; dom przejęty — meldunek, kolonia innego właściciela nietknięta; jednostka AI — odmowa.
 //       Karta jednostki (`UnitCardPanel`) woła tę metodę i nie emituje śmierci (pin źródłowy).
+//   L3  (P3) zapis → wczytanie w połowie zwłoki (prawdziwe `ColonyManager.serialize` → `restore`): zwrot wypłacony
+//       DOKŁADNIE RAZ, w terminie (nie wcześniej, nie drugi raz); w zapisie termin jako pozostały czas; starszy zapis
+//       bez kolejki wczytuje się czysto (pusta kolejka).
 //
 // ⚠ Harness jak `ground_unit_loss_smoke`: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu)
 //   + własne `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; po boocie, bo boot czyści
@@ -340,6 +343,57 @@ function moraleCollapse(w, g) {
     'L2d kontrola pinu: przycisk rozwiązania z potwierdzeniem przeczytany');
   assert(/colonyManager\?\.disbandGroundUnit\?\.\(unit\.id,\s*'manual'\)/.test(ucp) && !/groundUnit:destroyed/.test(ucp),
     'L2d: karta woła `ColonyManager.disbandGroundUnit(unit.id, \'manual\')` i nie emituje `groundUnit:destroyed`');
+}
+
+// ── L3 — P3 (Finding 328): kolejka zwrotów przeżywa zapis i wczytanie ──────────────────────────────────────────
+/** Wczytanie jak nowa sesja: kolonie z zapisu w świeże obiekty, zegar zwrotów od zera (`_pendingPopClock` nie w zapisie). */
+function reloadColonies(w, data) {
+  w.cm._colonies.clear();
+  w.cm._pendingPopClock = undefined;
+  quiet(() => w.cm.restore(JSON.parse(JSON.stringify(data))));
+  return w.cm.getColony(w.home.planetId);
+}
+{
+  console.log('\nL3a — zapis i wczytanie w połowie zwłoki: zwrot wypłacony dokładnie raz, w terminie');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const u = recruit(w, w.home, 'shock_infantry');
+  const ri = RI.shock_infantry, back = COST.shock_infantry * ri.rate;
+  bombard(w, u);
+  const half = ri.delay / 2;
+  w.cm._tickPendingPopReturns(half);
+  const lockSaved = lockOf(w.home);
+  const data = JSON.parse(JSON.stringify(w.cm.serialize()));
+  const rec = data.colonies.find(c => c.planetId === w.home.planetId);
+  assert(!w.gum.getUnit(u.id) && pendingOf(w.home, u.id).length === 1 && near(lockSaved, L0 + back),
+    `świadek: jednostka zginęła, zwrot ${back} czeka; zapis w połowie zwłoki (${half} z ${ri.delay} civY), blokada ${lockSaved}`);
+  assert(Array.isArray(rec?.pendingPopReturns) && rec.pendingPopReturns.length === 1
+      && near(rec.pendingPopReturns[0].amount, back) && near(rec.pendingPopReturns[0].remaining, ri.delay - half),
+    `L3a: kolejka w zapisie z terminem jako POZOSTAŁY czas (${JSON.stringify(rec?.pendingPopReturns)})`);
+  const home2 = reloadColonies(w, data);
+  const afterLoad = [lockOf(home2), pendingOf(home2).length];
+  w.cm._tickPendingPopReturns(ri.delay - half - 0.01);
+  const beforeDue = lockOf(home2);
+  w.cm._tickPendingPopReturns(0.02);
+  const atDue = lockOf(home2);
+  w.cm._tickPendingPopReturns(5);
+  const later = lockOf(home2);
+  assert(home2 && home2 !== w.home && near(afterLoad[0], lockSaved),
+    `świadek: kolonia odtworzona z zapisu (nowy obiekt), blokada ${afterLoad[0]} = zapisana ${lockSaved}`);
+  assert(afterLoad[1] === 1 && near(beforeDue, lockSaved) && near(atDue, L0) && near(later, L0),
+    `L3a SEDNO: po wczytaniu kolejka ma wpis (${afterLoad[1]}); przed terminem blokada ${beforeDue}, w terminie ${atDue} ` +
+    `(= ${L0}), później ${later} — wypłata DOKŁADNIE RAZ`);
+}
+{
+  console.log('\nL3b — kontrola: starszy zapis bez kolejki wczytuje się czysto');
+  const w = boot();
+  recruit(w, w.home, 'shock_infantry');
+  const data = JSON.parse(JSON.stringify(w.cm.serialize()));
+  for (const c of data.colonies) { delete c.pendingPopReturns; delete c._pendingPopReturns; }
+  let ok = true, home2 = null;
+  try { home2 = reloadColonies(w, data); } catch { ok = false; }
+  assert(ok && !!home2 && pendingOf(home2).length === 0 && w.cm.getAllColonies().length === data.colonies.length,
+    `L3b kontrola: zapis bez \`pendingPopReturns\` — wczytanie bez błędu, kolonie ${w.cm.getAllColonies().length}/${data.colonies.length}, kolejka pusta`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

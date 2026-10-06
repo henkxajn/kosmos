@@ -1620,8 +1620,8 @@ export class ColonyManager {
    * Tick opóźnionej reintegracji POPów po śmierci jednostek (Opcja C v3).
    * colony._pendingPopReturns = [{ amount, strata, readyAt, owner, unitId, type, customName }] —
    * akumulowane przez handler `groundUnit:destroyed` w _subscribeGroundUnitDestroyed(), od G1b/S4
-   * na kolonii MACIERZYSTEJ jednostki (nie na kolonii ciała śmierci). Kolejka jest runtime-only
-   * (nie trafia do zapisu).
+   * na kolonii MACIERZYSTEJ jednostki (nie na kolonii ciała śmierci). Kolejka trafia do zapisu (G1c/P3, Finding 328):
+   * termin jako POZOSTAŁY czas — `_pendingPopClock` w zapisie nie jest i po wczytaniu biegnie od zera.
    */
   _tickPendingPopReturns(civDeltaYears) {
     if (!civDeltaYears || civDeltaYears <= 0) return;
@@ -1647,6 +1647,32 @@ export class ColonyManager {
         }
       }
     }
+  }
+
+  /**
+   * G1c/P3 (Finding 328) — kolejka opóźnionych zwrotów POP kolonii do zapisu. Termin jako POZOSTAŁY czas (civY), nie
+   * odczyt zegara: `_pendingPopClock` nie trafia do zapisu. Wcześniej kolejka była runtime-only, a blokady POP — w
+   * zapisie, więc zapis i wczytanie w oknie zwłoki kasowały należny zwrot NA ZAWSZE.
+   */
+  _serializePendingPopReturns(colony) {
+    const clock = this._pendingPopClock ?? 0;
+    return (colony?._pendingPopReturns ?? []).map(e => ({
+      amount: e.amount, strata: e.strata ?? 'laborer', remaining: Math.max(0, (e.readyAt ?? 0) - clock),
+      ...('owner' in e ? { owner: e.owner ?? null } : {}),
+      unitId: e.unitId ?? null, type: e.type ?? null, customName: e.customName ?? null,
+    }));
+  }
+
+  /** G1c/P3 — odtworzenie kolejki z zapisu; zapis bez niej (sprzed G1c) — pusta kolejka (v101, bez migracji). */
+  _restorePendingPopReturns(list) {
+    const clock = this._pendingPopClock ?? 0;
+    return (Array.isArray(list) ? list : [])
+      .filter(e => e && Number.isFinite(e.amount) && e.amount > 0)
+      .map(e => ({
+        amount: e.amount, strata: e.strata ?? 'laborer', readyAt: clock + Math.max(0, Number(e.remaining) || 0),
+        ...('owner' in e ? { owner: e.owner ?? null } : {}),
+        unitId: e.unitId ?? null, type: e.type ?? null, customName: e.customName ?? null,
+      }));
   }
 
   /**
@@ -2612,6 +2638,7 @@ export class ColonyManager {
         fleet:            col.fleet ?? [],
         shipQueues:       col.shipQueues ?? [],
         groundUnitQueues: col.groundUnitQueues ?? [],
+        pendingPopReturns: this._serializePendingPopReturns(col),   // G1c/P3 (Finding 328)
         pendingShipOrders: col.pendingShipOrders ?? [],
         pendingOutpostOrders: col.pendingOutpostOrders ?? [],
         pendingStationOrders: col.pendingStationOrders ?? [],
@@ -2730,6 +2757,7 @@ export class ColonyManager {
         fleet:            colData.fleet ?? [],
         shipQueues:       colData.shipQueues ?? [],
         groundUnitQueues: colData.groundUnitQueues ?? [],
+        _pendingPopReturns: this._restorePendingPopReturns(colData.pendingPopReturns),   // G1c/P3 (Finding 328)
         pendingShipOrders: colData.pendingShipOrders ?? [],
         pendingOutpostOrders: colData.pendingOutpostOrders ?? [],
         pendingStationOrders: colData.pendingStationOrders ?? [],
