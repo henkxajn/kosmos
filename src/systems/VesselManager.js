@@ -986,7 +986,13 @@ export class VesselManager {
     // wypuścić okrętu, niż oddać sparaliżowany.
     // ⚠ Zatrzask jest IMPERIALNY (B): pyta o flotę, nie o imienną kolonię-płatnika, bo takiej
     //   już nie ma. `colonyId` w zwrotce byłoby odtąd fikcją, więc go NIE podajemy.
-    if (this.fleetInArrears()) {
+    // ⚠ S0-1 (Finding 391) — zaległość jest własnością floty WŁAŚCICIELA statku. `fleetInArrears`
+    //   liczy WYŁĄCZNIE statki gracza, a ta bramka stała przed KAŻDYM kadłubem, więc dług floty
+    //   gracza zatrzymywał mobilizację okrętów AI (`DirectorMobilization`) i budzenie kurierów AI
+    //   (`EmpireLogisticsSystem`) — w uprzęży 4 392–4 498 odmów `courier_deploy_refused` na imperium
+    //   w 100 lat gry. Imperium AI utrzymania nie płaci (W2 decyzja 14, `_tickVesselMaintenance`),
+    //   więc NIGDY nie zalega i ta bramka go nie dotyczy.
+    if (!isEnemyVessel(vessel) && this.fleetInArrears()) {
       return { ok: false, reason: 'fleet_in_arrears' };
     }
 
