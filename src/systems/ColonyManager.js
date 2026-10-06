@@ -1753,6 +1753,29 @@ export class ColonyManager {
     return { released: popCost, lost: 0, colonyId: home.planetId };
   }
 
+  /**
+   * G1c/P2 (Finding 330) — ręczne rozwiązanie jednostki naziemnej GRACZA (karta jednostki). Rozwiązanie to nie śmierć:
+   * pełny koszt POP wraca OD RAZU do kolonii macierzystej z terminem właściciela (`releaseGroundUnitPops`) — jak przy
+   * braku utrzymania i rozpadzie morale; brak kolonii właściciela ⇒ meldunek `groundUnit:popsLost`. Dawniej karta
+   * emitowała `groundUnit:destroyed`, więc rozwiązanie szło przez tabelę ŚMIERCI (zwrot części po zwłoce).
+   * Jednostka innego właściciela — odmowa, nic się nie zmienia.
+   * @returns {{ ok: boolean, reason?: string, released?: number, lost?: number, colonyId?: string|null }}
+   */
+  disbandGroundUnit(unitId, reason = 'manual') {
+    const gum = window.KOSMOS?.groundUnitManager;
+    const unit = gum?.getUnit?.(unitId) ?? null;
+    if (!unit) return { ok: false, reason: 'no_unit' };
+    if ((unit.owner ?? 'player') !== 'player') return { ok: false, reason: 'not_player_unit' };
+    const pops = this.releaseGroundUnitPops(unit, `disband_${reason}`);
+    EventBus.emit('groundUnit:disbanded', {
+      unitId: unit.id, planetId: unit.planetId, reason,
+      archetypeId: unit.archetypeId ?? null,
+      owner: unit.owner ?? null, type: unit.type ?? null, customName: unit.customName ?? null,
+    });
+    gum.removeUnit(unit.id);
+    return { ok: true, ...pops };
+  }
+
   /** G1b — POP-y jednostki przepadły (brak kolonii jej właściciela). Meldunek, nie cisza. */
   _reportPopsLost(unit, amount, cause = null) {
     EventBus.emit('groundUnit:popsLost', {

@@ -8,7 +8,6 @@ import { UNIT_ARCHETYPES, DEFAULT_MORALE } from '../data/unitArchetypes.js';
 import { GROUND_ABILITIES } from '../data/groundAbilities.js';
 import { GroundUnitFactory } from '../systems/GroundUnitFactory.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
-import EventBus from '../core/EventBus.js';
 import { showConfirmModal } from './ConfirmModal.js';
 import { t } from '../i18n/i18n.js';
 
@@ -222,16 +221,10 @@ export function showUnitCard(unit) {
           danger:       true,
         }).then((confirmed) => {
           if (!confirmed) return;
-          const gum = window.KOSMOS?.groundUnitManager;
-          if (gum?.removeUnit) {
-            EventBus.emit('groundUnit:destroyed', {
-              unitId: unit.id, planetId: unit.planetId, owner: unit.owner,
-              archetypeId: unit.archetypeId ?? null,
-              popCost: unit.popCost ?? 0,
-              cause: 'disband_manual',
-            });
-            gum.removeUnit(unit.id);
-          }
+          // G1c/P2 (Finding 330): rozwiązanie to nie śmierć — pełny koszt POP wraca od razu do kolonii macierzystej
+          //   (`ColonyManager.disbandGroundUnit` → `releaseGroundUnitPops`, termin właściciela), jak przy braku
+          //   utrzymania i rozpadzie morale. Dawniej `groundUnit:destroyed` prowadziło przez tabelę śmierci.
+          window.KOSMOS?.colonyManager?.disbandGroundUnit?.(unit.id, 'manual');
           close();
         });
       });

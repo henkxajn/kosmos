@@ -15,6 +15,10 @@
 //       tabela oddaje całość (garnizon) — nic nie ginie; dom przejęty — kolonia innego właściciela nietknięta, meldunek.
 //       Archetyp spoza tabeli — ginie całość. Przyczyna `civ:popDied` = `ground_unit_lost`; okręty bez zmian; Dziennik
 //       (`UIManager`) bez osobnej linii (pin źródłowy).
+//   L2  (P2) ręczne rozwiązanie (`ColonyManager.disbandGroundUnit`): pełny koszt wraca od razu (populacja bez zmian,
+//       blokada do stanu sprzed rekrutacji, kolejka pusta), jedno `groundUnit:disbanded` (manual), zero
+//       `groundUnit:destroyed`; dom przejęty — meldunek, kolonia innego właściciela nietknięta; jednostka AI — odmowa.
+//       Karta jednostki (`UnitCardPanel`) woła tę metodę i nie emituje śmierci (pin źródłowy).
 //
 // ⚠ Harness jak `ground_unit_loss_smoke`: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu)
 //   + własne `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; po boocie, bo boot czyści
@@ -281,6 +285,61 @@ function moraleCollapse(w, g) {
     'L1f kontrola pinu: handler `civ:popDied` w UIManager przeczytany (pomija załogę okrętu, jak w W2)');
   assert(/cause === 'ground_unit_lost'\) return;/.test(handler),
     'L1f: handler pomija też `ground_unit_lost` — bez wpisu „POP lost in —” (zdarzenie nie niesie nazwy kolonii)');
+}
+
+// ── L2 — P2 (Finding 330): ręczne rozwiązanie oddaje pełny koszt od razu ─────────────────────────────────────
+{
+  console.log('\nL2a — ręczne rozwiązanie: pełny koszt POP wraca OD RAZU, nie przez tabelę śmierci');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const u = recruit(w, w.home, 'shock_infantry');
+  const H0 = humansOf(w.home), L1 = lockOf(w.home);
+  const others = snapOthers(w, [w.home]);
+  const res = call(w.cm, 'disbandGroundUnit', u.id);
+  assert(near(L1, L0 + COST.shock_infantry) && u.homeColonyId === w.home.planetId,
+    `świadek: szturm ${u.id} zrekrutowany w domu (blokada ${L0} → ${L1})`);
+  assert(res?.ok === true && !w.gum.getUnit(u.id) && near(lockOf(w.home), L0) && near(humansOf(w.home), H0)
+      && pendingOf(w.home, u.id).length === 0,
+    `L2a SEDNO: pełny koszt wrócił od razu — blokada ${L1} → ${lockOf(w.home)} (= ${L0}), populacja ${H0} → ` +
+    `${humansOf(w.home)}, kolejka zwrotów pusta (${JSON.stringify(pendingOf(w.home, u.id))})`);
+  assert(w.ev.disbanded.filter(e => e.unitId === u.id && e.reason === 'manual').length === 1
+      && !w.ev.destroyed.some(e => e.unitId === u.id),
+    `L2a: jedno \`groundUnit:disbanded\` (manual) i zero \`groundUnit:destroyed\` — rozwiązanie to nie śmierć`);
+  assert(othersUnchanged(w, others), 'L2a kontrola: żadna inna kolonia się nie zmieniła');
+}
+{
+  console.log('\nL2b — dom przejęty: POP przepadają z meldunkiem, kolonia innego właściciela nic nie dostaje');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  const capL = lockOf(w.home), capH = humansOf(w.home);
+  const existed = !!w.gum.getUnit(u.id);
+  const res = call(w.cm, 'disbandGroundUnit', u.id);
+  const lost = lostOf(w, u.id);
+  assert(w.home.ownerEmpireId === w.emp && existed && u.homeColonyId === w.home.planetId,
+    `świadek: dom ${w.home.planetId} należy do ${w.home.ownerEmpireId}; jednostka ${u.id} wskazuje go jako dom`);
+  assert(res?.ok === true && !w.gum.getUnit(u.id) && near(lockOf(w.home), capL) && near(humansOf(w.home), capH)
+      && lost.length === 1 && near(lost[0].amount, COST.shock_infantry) && lost[0].cause === 'disband_manual',
+    `L2b: przejęty dom nietknięty (blokada ${capL} → ${lockOf(w.home)}), meldunek ${JSON.stringify(lost.map(e => [e.amount, e.cause]))}`);
+}
+{
+  console.log('\nL2c — jednostka AI: odmowa, nic się nie zmienia');
+  const w = boot();
+  const spot = w.cm._findGroundUnitSpawn(w.ai);
+  const a = w.gum.createAIUnit({ archetypeId: 'garrison_unit', empireId: w.emp, planetId: w.ai.planetId, q: spot.q, r: spot.r,
+    morale: 50, deployed: true })?.unit;
+  const res = call(w.cm, 'disbandGroundUnit', a?.id);
+  assert(!!a, `świadek: jednostka ${a?.id} imperium ${w.emp}`);
+  assert(res?.ok === false && res?.reason === 'not_player_unit' && !!w.gum.getUnit(a.id),
+    `L2c: odmowa (${JSON.stringify(res)}), jednostka AI stoi dalej`);
+}
+{
+  console.log('\nL2d — karta jednostki woła disbandGroundUnit i nie emituje śmierci (pin źródłowy)');
+  const ucp = src('../../ui/UnitCardPanel.js');
+  assert(/t\('unit\.disband\.title'\)/.test(ucp) && /showConfirmModal\(/.test(ucp),
+    'L2d kontrola pinu: przycisk rozwiązania z potwierdzeniem przeczytany');
+  assert(/colonyManager\?\.disbandGroundUnit\?\.\(unit\.id,\s*'manual'\)/.test(ucp) && !/groundUnit:destroyed/.test(ucp),
+    'L2d: karta woła `ColonyManager.disbandGroundUnit(unit.id, \'manual\')` i nie emituje `groundUnit:destroyed`');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);
