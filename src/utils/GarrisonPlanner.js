@@ -31,7 +31,7 @@
 import {
   GARRISON_POP_PER_UNIT, GARRISON_MIN_UNITS, GARRISON_LADDER, GARRISON_FACTORY_BUILDING,
   GARRISON_BASE_ARCHETYPE, GARRISON_ARTILLERY_ARCHETYPE, GARRISON_CAPITAL_SHARE_DIVISOR,
-  GARRISON_OUTPOST_DEPOSITS, GARRISON_SPREAD_MAX_RADIUS, INVASION_BASE_ARCHETYPE,
+  GARRISON_OUTPOST_DEPOSITS, GARRISON_SPREAD_MAX_RADIUS, INVASION_BASE_ARCHETYPE, AI_FIELDED_ARCHETYPES,
 } from '../data/GarrisonData.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
 import { colonyDevScore } from './ColonyDevScore.js';
@@ -106,6 +106,23 @@ export function garrisonComposition(count, tier) {
  */
 export function invasionComposition(count, tier) {
   return garrisonComposition(count, tier).map(a => (a === GARRISON_BASE_ARCHETYPE ? INVASION_BASE_ARCHETYPE : a));
+}
+
+/**
+ * G2b (D7) — typy jednostek fali desantu. Bez listy — `invasionComposition(count, tier)`. Z jawną listą (`embarkedTroops`)
+ * — jej pierwsze min(długość, `count`) wpisów, jak dotąd; wpis spoza typów prostych AI (`AI_FIELDED_ARCHETYPES`, np.
+ * legacy `infantry` ze starego zapisu) zastępuje typ ze składu szczebla na tej samej pozycji — liczba jednostek zostaje,
+ * a AI nie wystawia ani jednostki legacy, ani typu spoza D7.
+ * @param {string[]|null} list
+ * @param {number} count
+ * @param {{artilleryEvery:number}} tier
+ * @returns {string[]}
+ */
+export function invasionTroops(list, count, tier) {
+  if (!Array.isArray(list) || list.length === 0) return invasionComposition(count, tier);
+  const n = Math.min(list.length, Math.floor(nonNegative(count)));
+  const slots = invasionComposition(n, tier);
+  return list.slice(0, n).map((type, i) => (AI_FIELDED_ARCHETYPES.includes(type) ? type : slots[i]));
 }
 
 // ── D11 — podział między ciałami ─────────────────────────────────────────────────────────

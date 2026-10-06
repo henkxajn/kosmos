@@ -47,6 +47,12 @@ export const GARRISON_ARTILLERY_ARCHETYPE = 'rocket_artillery';
  */
 export const INVASION_BASE_ARCHETYPE = 'shock_infantry';
 
+/**
+ * D7 — typy proste, które AI wystawia (garnizon i desant). Wpis spoza tej listy w jawnej liście desantu (np. legacy
+ * `infantry` ze starego zapisu) zastępuje typ ze składu szczebla na tej pozycji (`GarrisonPlanner.invasionTroops`).
+ */
+export const AI_FIELDED_ARCHETYPES = Object.freeze(['shock_infantry', 'garrison_unit', 'aa_platform', 'rocket_artillery']);
+
 /** D11 — stolica dostaje ceil(limit / GARRISON_CAPITAL_SHARE_DIVISOR); reszta po jednej na ciało. */
 export const GARRISON_CAPITAL_SHARE_DIVISOR = 2;
 

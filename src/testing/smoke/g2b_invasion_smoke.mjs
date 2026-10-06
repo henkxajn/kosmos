@@ -10,9 +10,14 @@
 //   I0  (S1) skład wg szczebla: szczeble bez artylerii — sama `shock_infantry`; szczeble z artylerią — co trzecia
 //       jednostka fali to `rocket_artillery` (2 → bez artylerii, 3 → jedna, 6 → dwie); czysta funkcja i prawdziwy desant.
 //   I2  KONTROLA: liczba jednostek = dzisiejsza — pula: `troopCount` (2, 6, domyślnie 3);
+//       lista jawna: min(długość listy, `troopCount`).
 //   I4  KONTROLA: bramka wojny G2-2 dalej odmawia w pokoju (zero jednostek, zero rekordów inwazji).
 //   I5  KONTROLA: desant nie zmienia limitu garnizonu imperium, liczby jego jednostek garnizonu ani odrastania.
 //   I6  R4 (G2-4) dalej usuwa jednostki desantu przy pokoju (świadek: jednostki archetypowe).
+//   I3  (S2) lista jawna `embarkedTroops` — przez `createAIUnit`: właściciel i frakcja imperium, morale szczebla; przy
+//       0 Kr we wszystkich koloniach przez 10 civY aktywne (dawniej `{ owner }` ⇒ `factionId 'humanity'` ⇒ utrzymanie
+//       gracza ⇒ `offline` i rozwiązanie — Finding 323); wpis spoza typów prostych AI (np. legacy `infantry`) —
+//       typ ze składu szczebla na tej pozycji.
 //
 // ⚠ Harness: prawdziwy `GameCore` (kolonie AI z bootstrapu, `GroundUnitManager`, `InvasionSystem`, `GarrisonSystem`,
 //   `DiplomacySystem`, `WarSystem`) + własny `CombatSystem`. Szczebel imperium ustawiany przez poziomy wpisów `factory`
@@ -135,6 +140,8 @@ function signPeace(w) {
   const n = (count, list) => { const w = boot(); return launch(w, count, list)?.landed?.length ?? null; };
   const pool = [n(2), n(6), n(undefined)];
   assert(same(pool, [2, 6, 3]), `I2a: pula — troopCount 2 → ${pool[0]}, 6 → ${pool[1]}, domyślnie → ${pool[2]} (oczekiwane 2, 6, 3)`);
+  const list = [n(2, [S, S, S, S]), n(6, [S, A])];
+  assert(same(list, [2, 2]), `I2b: lista jawna — 4 wpisy przy troopCount 2 → ${list[0]}, 2 wpisy przy troopCount 6 → ${list[1]} (oczekiwane 2, 2)`);
 }
 
 // ── I4 — kontrola: bramka wojny G2-2 ────────────────────────────────────────────────────
@@ -181,6 +188,28 @@ function signPeace(w) {
     `świadek: desant archetypowy imperium (${typesOf(us).join(', ')})`);
   assert(ok === true && onHome(w).length === 0 && us.every(u => !w.gum.getUnit(u?.id)),
     `I6: pokój (${ok}) — jednostek imperium na ciele gracza ${onHome(w).length}, wszystkie jednostki desantu usunięte`);
+}
+
+// ── I3 — S2: lista jawna przez createAIUnit ─────────────────────────────────────────────
+{
+  console.log('\nI3 — lista jawna: przez createAIUnit — imperium, morale szczebla; przy 0 Kr 10 civY aktywna; legacy → typ ze składu');
+  const w = boot();
+  const mid = LADDER[1];
+  setFactoryLevels(w, mid.minFactoryLevels);
+  for (const c of w.cm.getAllColonies()) c.credits = 0;
+  const res = launch(w, 3, [S, A, 'infantry']);
+  const us = landed(w, res);
+  const t0 = typesOf(us);
+  for (let i = 0; i < 10; i++) quiet(() => w.cm._tickGroundUnitUpkeep(1.0));
+  const alive = us.filter(u => !!w.gum.getUnit(u?.id));
+  assert(res?.success === true && us.length === 3 && us.every(Boolean),
+    `świadek: desant z listy [${S}, ${A}, infantry] — ${us.length} jednostki, wszystkie kolonie na 0 Kr`);
+  assert(same(t0, [S, A, S]) && us.every(u => isArchAI(u, w.emp) && u.morale === mid.morale),
+    `I3a SEDNO: typy ${JSON.stringify(t0)} (legacy \`infantry\` → typ ze składu szczebla), imperium i morale ${mid.morale} ` +
+    `(${us.map(u => `${u?.owner}/${u?.factionId}/${u?.morale}`).join(', ')})`);
+  assert(alive.length === 3 && alive.every(u => u.status !== 'offline' && (u.unpaidYears ?? 0) === 0),
+    `I3b: po 10 civY przy 0 Kr wszystkie 3 aktywne (żyje ${alive.length}, statusy ${alive.map(u => u.status).join(',')}) — ` +
+    'dawniej `{ owner }` ⇒ utrzymanie gracza ⇒ offline i rozwiązanie (Finding 323)');
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

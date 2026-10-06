@@ -93,9 +93,11 @@ console.log('T2 KONTROLA PINU — trzy ścieżki „za decyzję gracza / przeciw
   assert(/createUnit\('science_rover',\s*planetId/.test(vessels),
     'T2: GRUPA BADAWCZA (`VesselManager.deployAwayTeam`) dalej tworzy rovera — gracz sam wybiera ' +
     'kafel lądowania, więc to decyzja, nie prezent');
-  assert(/gum\.createUnit\(type,\s*planetId,\s*hex\.q,\s*hex\.r/.test(invasion),
+  // G2b (zgoda właściciela — przecelowanie pinu): od G2b/S2 desant tworzy jednostki wyłącznie przez `createAIUnit`
+  //   (model archetypów, D7); dawny kształt `gum.createUnit(type, planetId, hex.q, hex.r` zniknął. Intencja bez zmian.
+  assert(/gum\.createAIUnit\(\{/.test(invasion),
     'T2: DESANT AI (`InvasionSystem.launchInvasion`) dalej tworzy jednostki — to przeciwnik, ' +
-    'a nie darmowe wojsko gracza');
+    'a nie darmowe wojsko gracza (od G2b przez `createAIUnit`)');
   assert(/gum\.createUnit\(archetypeId,\s*pid/.test(scene),
     'T2: dźwignia debug (`KOSMOS.debug.spawnMyUnit`) zostaje — jawne wywołanie z konsoli');
 }

@@ -28,7 +28,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
-import { garrisonTier, readEmpireGarrisonSnapshot, invasionComposition } from '../utils/GarrisonPlanner.js';   // G2b (D7, D9)
+import { garrisonTier, readEmpireGarrisonSnapshot, invasionTroops } from '../utils/GarrisonPlanner.js';   // G2b (D7, D9)
 import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 
@@ -109,7 +109,8 @@ export class InvasionSystem {
    * @param {string} empireId — agresor
    * @param {string} planetId — cel (planeta gracza)
    * @param {number} troopCount — fallback ile jednostek gdy brak fleet.embarkedTroops
-   * @param {string[]} [embarkedTroops] — konkretne archetypy do desantu (parity z graczem)
+   * @param {string[]} [embarkedTroops] — konkretne archetypy do desantu (parity z graczem); wpis spoza typów prostych AI
+   *   (D7) zastępuje typ ze składu szczebla na tej pozycji (`invasionTroops`)
    */
   launchInvasion(empireId, planetId, troopCount = TROOPS_PER_LANDING, embarkedTroops = null) {
     const body = EntityManager.get(planetId);
@@ -142,10 +143,10 @@ export class InvasionSystem {
     //   `rocket_artillery` (`invasionComposition`). Liczba jednostek — jak dotąd `troopCount` (ustala wołający).
     //   Dawna pula `INVASION_UNIT_POOLS[emp.archetype]` nie jest czytana: jej klucze nie należą do żadnego imperium
     //   z generatora (`industrialist`, `expansionist`), więc ich desant był zawsze legacy `infantry` (Finding 340).
-    // Lista jawna (`embarkedTroops`) — jeszcze dawna ścieżka; przepina ją G2b/S2.
+    // Lista jawna (`embarkedTroops`, G2b/S2) — ta sama droga: pierwsze min(długość listy, `troopCount`) wpisów, wpis spoza
+    //   typów prostych AI (np. legacy `infantry`) zastępuje typ ze składu szczebla na tej pozycji (`invasionTroops`).
     const tier = garrisonTier(readEmpireGarrisonSnapshot(window.KOSMOS, empireId));
-    const fromList = Array.isArray(embarkedTroops) && embarkedTroops.length > 0;
-    const troops = fromList ? embarkedTroops.slice(0, troopCount) : invasionComposition(troopCount, tier);
+    const troops = invasionTroops(embarkedTroops, troopCount, tier);
 
     // Znajdź hexy landing: brzeg siatki, nie ocean, nie capital, nie pod wrogą jednostką
     const landingHexes = this._findLandingHexes(grid, colony);
@@ -158,11 +159,6 @@ export class InvasionSystem {
     for (let i = 0; i < troops.length; i++) {
       const hex = landingHexes[i % landingHexes.length];
       const type = troops[i];
-      if (fromList) {
-        const unit = gum.createUnit(type, planetId, hex.q, hex.r, { owner: empireId });
-        landed.push(unit.id);
-        continue;
-      }
       // Jednostka AI wyłącznie przez `createAIUnit` (G2-1): `owner` i `factionId` = imperium (poza utrzymaniem i limitem
       //   gracza), morale szczebla, `popCost` 0, bez domu na cudzym ciele. Desant ląduje w szyku marszowym
       //   (`deployed: false`) — rozkładany archetyp nie staje okopany na krawędzi mapy.
