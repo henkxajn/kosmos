@@ -31,7 +31,7 @@
 import {
   GARRISON_POP_PER_UNIT, GARRISON_MIN_UNITS, GARRISON_LADDER, GARRISON_FACTORY_BUILDING,
   GARRISON_BASE_ARCHETYPE, GARRISON_ARTILLERY_ARCHETYPE, GARRISON_CAPITAL_SHARE_DIVISOR,
-  GARRISON_OUTPOST_DEPOSITS, GARRISON_SPREAD_MAX_RADIUS,
+  GARRISON_OUTPOST_DEPOSITS, GARRISON_SPREAD_MAX_RADIUS, INVASION_BASE_ARCHETYPE,
 } from '../data/GarrisonData.js';
 import { isStandableTile } from '../data/GroundUnitData.js';
 import { colonyDevScore } from './ColonyDevScore.js';
@@ -92,6 +92,20 @@ export function garrisonComposition(count, tier) {
     out.push(every > 0 && i % every === 0 ? GARRISON_ARTILLERY_ARCHETYPE : GARRISON_BASE_ARCHETYPE);
   }
   return out;
+}
+
+/**
+ * G2b (D7, D9) — skład DESANTU imperium: `count` jednostek, baza `INVASION_BASE_ARCHETYPE`, na szczeblach drabiny
+ * z artylerią co `artilleryEvery`-ta jednostka fali to `rocket_artillery`. Ta sama reguła co skład garnizonu ciała
+ * (`garrisonComposition`), liczona na jedną falę desantu — fala z jedną albo dwiema jednostkami nie dostaje artylerii.
+ * Szczebel czyta wołający w chwili desantu (`garrisonTier(readEmpireGarrisonSnapshot(…))`); `limitMult` desantu nie
+ * dotyczy — liczbę jednostek ustala wołający.
+ * @param {number} count — liczba jednostek fali
+ * @param {{artilleryEvery:number}} tier — wynik `garrisonTier`
+ * @returns {string[]} id archetypów, długość = count
+ */
+export function invasionComposition(count, tier) {
+  return garrisonComposition(count, tier).map(a => (a === GARRISON_BASE_ARCHETYPE ? INVASION_BASE_ARCHETYPE : a));
 }
 
 // ── D11 — podział między ciałami ─────────────────────────────────────────────────────────

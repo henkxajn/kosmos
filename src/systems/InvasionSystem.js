@@ -27,7 +27,8 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
-import { INVASION_UNIT_POOLS, isStandableTile } from '../data/GroundUnitData.js';
+import { isStandableTile } from '../data/GroundUnitData.js';
+import { garrisonTier, readEmpireGarrisonSnapshot, invasionComposition } from '../utils/GarrisonPlanner.js';   // G2b (D7, D9)
 import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 
@@ -136,18 +137,15 @@ export class InvasionSystem {
     const grid = colony?.grid;
     if (!grid) return { success: false, reason: 'no_grid' };
 
-    // Lista archetypów do desantu: preferuj konkretne embarkedTroops (parity z graczem),
-    // fallback na losowanie z puli archetypu imperium.
-    let troops;
-    if (Array.isArray(embarkedTroops) && embarkedTroops.length > 0) {
-      troops = embarkedTroops.slice(0, troopCount);
-    } else {
-      const pool = INVASION_UNIT_POOLS[emp.archetype] ?? ['infantry', 'infantry'];
-      troops = [];
-      for (let i = 0; i < troopCount; i++) {
-        troops.push(pool[Math.floor(Math.random() * pool.length)]);
-      }
-    }
+    // G2b (D7, D9) — jedna gałka AI: morale ze szczebla drabiny imperium W CHWILI desantu (suma poziomów fabryk);
+    //   skład z tej samej drabiny — `shock_infantry`, na szczeblach z artylerią co `artilleryEvery`-ta jednostka fali
+    //   `rocket_artillery` (`invasionComposition`). Liczba jednostek — jak dotąd `troopCount` (ustala wołający).
+    //   Dawna pula `INVASION_UNIT_POOLS[emp.archetype]` nie jest czytana: jej klucze nie należą do żadnego imperium
+    //   z generatora (`industrialist`, `expansionist`), więc ich desant był zawsze legacy `infantry` (Finding 340).
+    // Lista jawna (`embarkedTroops`) — jeszcze dawna ścieżka; przepina ją G2b/S2.
+    const tier = garrisonTier(readEmpireGarrisonSnapshot(window.KOSMOS, empireId));
+    const fromList = Array.isArray(embarkedTroops) && embarkedTroops.length > 0;
+    const troops = fromList ? embarkedTroops.slice(0, troopCount) : invasionComposition(troopCount, tier);
 
     // Znajdź hexy landing: brzeg siatki, nie ocean, nie capital, nie pod wrogą jednostką
     const landingHexes = this._findLandingHexes(grid, colony);
@@ -160,8 +158,18 @@ export class InvasionSystem {
     for (let i = 0; i < troops.length; i++) {
       const hex = landingHexes[i % landingHexes.length];
       const type = troops[i];
-      const unit = gum.createUnit(type, planetId, hex.q, hex.r, { owner: empireId });
-      landed.push(unit.id);
+      if (fromList) {
+        const unit = gum.createUnit(type, planetId, hex.q, hex.r, { owner: empireId });
+        landed.push(unit.id);
+        continue;
+      }
+      // Jednostka AI wyłącznie przez `createAIUnit` (G2-1): `owner` i `factionId` = imperium (poza utrzymaniem i limitem
+      //   gracza), morale szczebla, `popCost` 0, bez domu na cudzym ciele. Desant ląduje w szyku marszowym
+      //   (`deployed: false`) — rozkładany archetyp nie staje okopany na krawędzi mapy.
+      const res = gum.createAIUnit({
+        archetypeId: type, empireId, planetId, q: hex.q, r: hex.r, morale: tier.morale, deployed: false,
+      });
+      if (res?.ok) landed.push(res.unit.id);
     }
 
     // ── Zarejestruj w gameState.invasions — JEDNA KAMPANIA NA (CIAŁO, AGRESOR) (D4/AC-7) ──
@@ -291,7 +299,7 @@ export class InvasionSystem {
     const troopCount = Math.max(1, Math.min(MAX_TROOPS_PER_VESSEL_LANDING, Math.floor(capacity)));
 
     // Konkretne jednostki w ładowniach mają pierwszeństwo (parity z graczem); gdy pusto —
-    // `launchInvasion` dobiera archetypy z puli imperium.
+    // `launchInvasion` składa falę ze szczebla drabiny D9 imperium (G2b, `invasionComposition`).
     const embarked = [];
     for (const v of droppers) {
       for (const uid of (v.groundUnits ?? [])) {
@@ -348,7 +356,7 @@ export class InvasionSystem {
 
     // Pojemność desantu zależy od floty (troopCapacity) z fallbackiem na stałą
     const troopCount = fleet.troopCapacity ?? TROOPS_PER_LANDING;
-    // Konkretne archetypy załadowane na flocie (parity z graczem): jeśli puste — losowanie z puli
+    // Konkretne archetypy załadowane na flocie (parity z graczem): jeśli puste — skład ze szczebla drabiny D9 (G2b)
     const embarked = (fleet.embarkedTroops ?? []).slice();
     const res = this.launchInvasion(empireId, target.planetId, troopCount, embarked);
 

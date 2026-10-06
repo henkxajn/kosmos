@@ -40,6 +40,13 @@ export const GARRISON_LADDER = Object.freeze([
 export const GARRISON_BASE_ARCHETYPE      = 'garrison_unit';
 export const GARRISON_ARTILLERY_ARCHETYPE = 'rocket_artillery';
 
+/**
+ * G2b (D7, D9) — DESANT AI czyta tę samą drabinę (D7: jedna gałka AI — morale przy tworzeniu ze szczebla imperium
+ * w chwili desantu): baza fali to `INVASION_BASE_ARCHETYPE`, a na szczeblach z artylerią co `artilleryEvery`-ta
+ * jednostka fali to `GARRISON_ARTILLERY_ARCHETYPE` (`GarrisonPlanner.invasionComposition`).
+ */
+export const INVASION_BASE_ARCHETYPE = 'shock_infantry';
+
 /** D11 — stolica dostaje ceil(limit / GARRISON_CAPITAL_SHARE_DIVISOR); reszta po jednej na ciało. */
 export const GARRISON_CAPITAL_SHARE_DIVISOR = 2;
 

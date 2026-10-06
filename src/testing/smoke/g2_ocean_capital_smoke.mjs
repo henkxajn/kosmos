@@ -329,6 +329,11 @@ function aiRetakeRun(capitalOnOcean) {
   const playerUnits = col ? w.gum.getUnitsOnPlanet(col.planetId).filter(u => (u.owner ?? 'player') === 'player').length : -1;
   const goals = [];
   EventBus.on('groundUnit:territorialIntent', (e) => { if (e?.planetId === col?.planetId) goals.push(e); });
+  // G2b (setup, asercje bez zmian): desant archetypowy nie losuje typów z puli — dawny desant legacy robił tu 2 losowania
+  //   `Math.random` przed wyborem heksów lądowania. Te dwa losowania zostają w setupie, żeby heksy lądowania, a z nimi
+  //   zmierzony czas przejęcia (T6c), były te same co przed G2b. Zmierzone: bez nich heksy (−7,15) i (0,0), przejęcie
+  //   w 9. civY; z nimi (2,15) i (3,0), przejęcie w 11. civY — jak legacy na tych samych heksach.
+  Math.random(); Math.random();
   const res = (col && agg) ? w.K.invasionSystem.launchInvasion(agg, col.planetId, 2) : null;
   let at = null;
   for (let y = 1; y <= 24 && col; y++) {
