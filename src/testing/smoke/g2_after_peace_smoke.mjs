@@ -641,8 +641,15 @@ const paidStr = (s) => `dom ${s.homePaid.length}× ${JSON.stringify(s.homePaid.m
   quiet(() => w.cm.removeColony(w.col.planetId, 'collision'));
   assert(!w.cm.getColony(w.col.planetId) && !w.gum.getUnit(u.id) && !w.gum.getUnit(ai.id),
     `A8a: po zniszczeniu ${w.col.planetId} znika jednostka gracza i jednostka ${w.emp} (D16 „wszystkie”)`);
-  assert(Math.abs((lock0 - lockOf(w.home)) - popCost) < 1e-9 && lost.length === 0,
-    `A8b: pełny koszt POP odblokowany w domu OD RAZU (${lock0} → ${lockOf(w.home)}, koszt ${popCost}); meldunków „POP utracone”: ${lost.length}`);
+  // ⚠ G1c/P6 (zmiana R7, podpis właściciela; zgoda w poleceniu G1c — piny pełnego zwrotu R7 mogą się odwrócić): przed P6
+  //   pin oczekiwał PEŁNEGO kosztu od razu. Od P6 jednostka na zniszczonym ciele to polegli: zwrot wg tabeli po zwłoce,
+  //   reszta ginie z blokadą.
+  const due8 = popCost * ColonyManager.GROUND_UNIT_POP_REINTEGRATION[u.archetypeId].rate;
+  const pend8 = (w.home._pendingPopReturns ?? []).filter(e => e.unitId === u.id).map(e => e.amount);
+  assert(Math.abs((lock0 - lockOf(w.home)) - (popCost - due8)) < 1e-9 && pend8.length === 1 && Math.abs(pend8[0] - due8) < 1e-9
+      && lost.length === 0,
+    `A8b: jak polegli — od razu ginie ${popCost - due8} z blokadą (${lock0} → ${lockOf(w.home)}), zwrot ${due8} czeka w kolejce ` +
+    `(${JSON.stringify(pend8)}); meldunków „POP utracone”: ${lost.length}`);
   assert(!!w.gum.getUnit(carried.id) && v.groundUnits.includes(carried.id),
     'A8 kontrola: jednostka w ładowni statku nad zniszczonym ciałem zostaje (nie stoi na ciele)');
   assert(removedEv.some(e => JSON.stringify(e.owners) === JSON.stringify(['player']) && e.count === 1 && e.cause === 'body_destroyed'),
@@ -671,8 +678,13 @@ const paidStr = (s) => `dom ${s.homePaid.length}× ${JSON.stringify(s.homePaid.m
   quiet(() => EntityManager.remove(b1.id));
   assert(!EntityManager.get(b1.id) && !w.gum.getUnit(u.id),
     `A8d: po zniszczeniu ${b1?.id} (ciało bez kolonii) jednostka gracza znika — przed naprawą zostawała zarejestrowana na nieistniejącym ciele`);
-  assert(Math.abs((lock0 - lockOf(w.home)) - popCost) < 1e-9 && lost.length === 0,
-    `A8e: pełny koszt POP odblokowany w domu od razu (${lock0} → ${lockOf(w.home)}, koszt ${popCost}); meldunków „POP utracone”: ${lost.length}`);
+  // ⚠ G1c/P6 (jak A8b): przed P6 — pełny koszt od razu; od P6 — jak polegli.
+  const due8e = popCost * ColonyManager.GROUND_UNIT_POP_REINTEGRATION[u.archetypeId].rate;
+  const pend8e = (w.home._pendingPopReturns ?? []).filter(e => e.unitId === u.id).map(e => e.amount);
+  assert(Math.abs((lock0 - lockOf(w.home)) - (popCost - due8e)) < 1e-9 && pend8e.length === 1 && Math.abs(pend8e[0] - due8e) < 1e-9
+      && lost.length === 0,
+    `A8e: jak polegli — od razu ginie ${popCost - due8e} z blokadą (${lock0} → ${lockOf(w.home)}), zwrot ${due8e} w kolejce ` +
+    `(${JSON.stringify(pend8e)}); meldunków „POP utracone”: ${lost.length}`);
   assert(!!w.gum.getUnit(keep.id) && keep.planetId === b2.id,
     `A8d kontrola: jednostka gracza na innym ciele bez kolonii (${b2?.id}) zostaje`);
   const evB1 = removedEv.filter(e => e.planetId === b1.id);

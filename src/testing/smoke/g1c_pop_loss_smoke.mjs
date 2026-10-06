@@ -29,6 +29,13 @@
 //       rozliczenie jak każda śmierć (część ginie od razu, zwrot po zwłoce). Ładunek bez kosztu (rejestr jako źródło)
 //       — to samo rozliczenie. Rozliczenie DOKŁADNIE RAZ: rozwiązana jednostka nie jest rozliczana drugi raz przez
 //       zdarzenie śmierci, a poległa — przez zwolnienie.
+//   L6  (P6) zniszczone ciało (`removeColony` → R7; ciało bez kolonii — `EntityManager.remove`): jednostka gracza jak
+//       polegli — część ginie od razu, zwrot po zwłoce; dom na zniszczonym ciele — meldunek o utracie ZWROTU.
+//   L0  wszystkie drogi wyjścia jednostki gracza (walka, mina, głód, ostrzał, termin wycofania, zniszczone ciało, utrata
+//       transportu, brak utrzymania, rozpad morale, ręczne rozwiązanie): po zwłokach blokada domu wraca do stanu sprzed
+//       rekrutacji (żadna POP na zawsze), populacja spada wyłącznie o część poległą (rozwiązania — 0), inne kolonie
+//       nietknięte. Przejęcie ciała, na którym jednostka stoi: w chwili przejęcia POP się nie ruszają (blokada zostaje
+//       w kolonii, która rekrutowała — po przejęciu cudzej; rejestr, nowy finding).
 //
 // ⚠ Harness jak `ground_unit_loss_smoke`: prawdziwy `GameCore` (ColonyManager, GroundUnitManager, kolonie AI z bootstrapu)
 //   + własne `CombatSystem`, `EventLogSystem`, `NotificationCenter` (GameCore ich nie montuje; po boocie, bo boot czyści
@@ -517,6 +524,112 @@ function reloadColonies(w, data) {
   const back = COST.shock_infantry * RI.shock_infantry.rate;
   assert(rel2?.released === 0 && near(lockOf(w.home), Lb - (COST.shock_infantry - back)),
     `L5c: zwolnienie po śmierci nie zwalnia drugi raz (zwolniono ${rel2?.released}, blokada ${Lb} → ${lockOf(w.home)})`);
+}
+
+// ── L6 — P6 (zmiana R7): jednostka gracza na zniszczonym ciele — jak polegli ─────────────────────────────────
+{
+  console.log('\nL6a — zniszczona kolonia AI z jednostką gracza: jak polegli (część ginie, zwrot po zwłoce)');
+  const w = boot();
+  const L0 = lockOf(w.home);
+  const u = recruit(w, w.home, 'shock_infantry');
+  const cost = COST.shock_infantry, ri = RI.shock_infantry, back = cost * ri.rate, dead = cost - back;
+  const H0 = humansOf(w.home), L1 = lockOf(w.home);
+  const aiId = w.ai.planetId;
+  bodyDestroyed(w, u);
+  const pend = pendingOf(w.home, u.id);
+  assert(!w.cm.getColony(aiId) && !w.gum.getUnit(u.id) && u.homeColonyId === w.home.planetId,
+    `świadek: kolonia ${aiId} zniszczona, jednostka gracza (dom ${u.homeColonyId}) zniknęła razem z nią`);
+  assert(w.ev.destroyed.filter(e => e.unitId === u.id && e.cause === 'body_destroyed').length === 1,
+    `L6a: jednostka zgłoszona JEDEN raz jako polegli (\`groundUnit:destroyed\`, body_destroyed)`);
+  assert(near(humansOf(w.home), H0 - dead) && near(lockOf(w.home), L1 - dead) && pend.length === 1 && near(pend[0], back)
+      && lostOf(w, u.id).length === 0,
+    `L6a SEDNO: ginie ${dead} (populacja ${H0} → ${humansOf(w.home)}, blokada ${L1} → ${lockOf(w.home)}), zwrot ${back} ` +
+    `w kolejce (${JSON.stringify(pend)}) — przed G1c pełny zwrot od razu`);
+  w.cm._tickPendingPopReturns(ri.delay + 0.01);
+  assert(near(lockOf(w.home), L0), `L6a kontrola: po zwłoce blokada ${lockOf(w.home)} = ${L0} (przed G1c — od razu)`);
+}
+{
+  console.log('\nL6b — dom na zniszczonym ciele: meldunek o utracie zwrotu (część poległa nie jest „zwrotem”)');
+  const w = boot();
+  // Dom jednostki = kolonia gracza, która NIE jest planetą macierzystą (tej `removeColony` nie usuwa): kolonia AI
+  //   przejęta przez gracza — ma siatkę z bootstrapu, więc rekrutacja idzie prawdziwą ścieżką.
+  quiet(() => w.cm.captureColonyForPlayer(w.ai.planetId, 'keeper_setup'));
+  const col = w.cm.getColony(w.ai.planetId);
+  const u = recruit(w, col, 'shock_infantry');
+  const back = COST.shock_infantry * RI.shock_infantry.rate;
+  const homeId = col.planetId;
+  const others = snapOthers(w, [col]);
+  quiet(() => w.cm.removeColony(homeId, 'collision'));
+  const lost = lostOf(w, u.id);
+  assert(!col.ownerEmpireId && u.homeColonyId === homeId && u.planetId === homeId && !w.cm.getColony(homeId) && !w.gum.getUnit(u.id)
+      && othersUnchanged(w, others),
+    `świadek: kolonia gracza ${homeId} (dom jednostki, nie planeta macierzysta) zniszczona razem z jednostką; inne kolonie nietknięte`);
+  assert(lost.length === 1 && near(lost[0].amount, back) && lost[0].cause === 'body_destroyed',
+    `L6b: meldunek o utracie ZWROTU ${back} (${JSON.stringify(lost.map(e => [e.amount, e.cause]))}) — przed G1c pełny koszt`);
+}
+{
+  console.log('\nL6c — ciało BEZ kolonii zniszczone (EntityManager.remove): jak polegli');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  const back = COST.shock_infantry * RI.shock_infantry.rate, dead = COST.shock_infantry - back;
+  const nb = neutralBody(w);
+  u.planetId = nb.id; u.q = 0; u.r = 0;
+  const H0 = humansOf(w.home);
+  quiet(() => EntityManager.remove(nb.id));
+  const pend = pendingOf(w.home, u.id);
+  assert(!EntityManager.get(nb.id) && !w.gum.getUnit(u.id), `świadek: ciało ${nb.id} bez kolonii zniszczone z jednostką gracza`);
+  assert(near(humansOf(w.home), H0 - dead) && pend.length === 1 && near(pend[0], back),
+    `L6c: jak polegli — populacja ${H0} → ${humansOf(w.home)}, zwrot ${back} w kolejce (${JSON.stringify(pend)})`);
+}
+
+// ── L0 — wszystkie drogi wyjścia jednostki gracza ─────────────────────────────────────────────────────────────
+const PATHS = [
+  { name: 'walka', arch: 'shock_infantry', fallen: true, run: (w, u) => combatKill(w, u, w.ai) },
+  { name: 'mina', arch: 'shock_infantry', fallen: true, run: (w, u) => mineKill(w, u) },
+  { name: 'głód', arch: 'shock_infantry', fallen: true, run: (w, u) => starve(w, u) },
+  { name: 'ostrzał', arch: 'shock_infantry', fallen: true, run: (w, u) => bombard(w, u) },
+  { name: 'termin wycofania', arch: 'shock_infantry', fallen: true, war: false, run: (w, u) => withdrawalKill(w, u) },
+  { name: 'zniszczone ciało', arch: 'shock_infantry', fallen: true, run: (w, u) => bodyDestroyed(w, u) },
+  { name: 'utrata transportu', arch: 'shock_infantry', fallen: true, run: (w, u) => transportLost(w, u) },
+  { name: 'brak utrzymania', arch: 'shock_infantry', fallen: false, run: (w, u) => upkeepDisband(w, u) },
+  { name: 'rozpad morale', arch: 'garrison_unit', fallen: false, run: (w, u) => moraleCollapse(w, u) },
+  { name: 'ręczne rozwiązanie', arch: 'shock_infantry', fallen: false, run: (w, u) => call(w.cm, 'disbandGroundUnit', u.id) },
+];
+{
+  console.log('\nL0 — każda droga wyjścia: blokada domu wraca do stanu sprzed rekrutacji, populacja spada tylko o poległą część');
+  const rows = [];
+  for (const p of PATHS) {
+    const w = boot({ war: p.war !== false });
+    const L0 = lockOf(w.home);
+    const u = recruit(w, w.home, p.arch);
+    const H0 = humansOf(w.home);
+    const others = snapOthers(w, [w.home, w.ai]);
+    p.run(w, u);
+    w.cm._tickPendingPopReturns(3);
+    const dead = p.fallen ? COST[p.arch] * (1 - (RI[p.arch]?.rate ?? 0)) : 0;
+    rows.push({
+      name: p.name, gone: !w.gum.getUnit(u.id), lockOk: near(lockOf(w.home), L0),
+      popOk: near(humansOf(w.home), H0 - dead), othersOk: othersUnchanged(w, others), lost: lostOf(w, u.id).length,
+      lock: +(lockOf(w.home) - L0).toFixed(3), pop: +(humansOf(w.home) - H0).toFixed(3), dead: +dead.toFixed(3),
+    });
+  }
+  const bad = (k) => rows.filter(r => !r[k]).map(r => `${r.name}(blokada +${r.lock}, populacja ${r.pop}, poległa ${r.dead})`);
+  assert(rows.every(r => r.gone && r.lost === 0),
+    `świadek: wszystkie ${rows.length} dróg usunęły jednostkę bez meldunku o utracie (${rows.filter(r => !r.gone || r.lost).map(r => r.name).join(', ') || 'OK'})`);
+  assert(rows.every(r => r.lockOk), `L0a: po zwłokach blokada domu = stan sprzed rekrutacji na każdej drodze (odstaje: ${bad('lockOk').join(' · ') || '—'})`);
+  assert(rows.every(r => r.popOk), `L0b: populacja domu spada wyłącznie o część poległą (odstaje: ${bad('popOk').join(' · ') || '—'})`);
+  assert(rows.every(r => r.othersOk), `L0c: inne kolonie nietknięte na każdej drodze (odstaje: ${rows.filter(r => !r.othersOk).map(r => r.name).join(', ') || '—'})`);
+}
+{
+  console.log('\nL0d — przejęcie ciała, na którym stoi jednostka: w chwili przejęcia POP się nie ruszają');
+  const w = boot();
+  const u = recruit(w, w.home, 'shock_infantry');
+  const L1 = lockOf(w.home), H1 = humansOf(w.home);
+  quiet(() => w.cm.transferColony(w.home.planetId, w.emp, 'invasion'));
+  assert(!!w.gum.getUnit(u.id) && u.planetId === w.home.planetId && w.home.ownerEmpireId === w.emp,
+    `świadek: jednostka gracza stoi dalej na przejętym ciele ${w.home.planetId} (${w.home.ownerEmpireId})`);
+  assert(near(lockOf(w.home), L1) && near(humansOf(w.home), H1) && lostOf(w, u.id).length === 0,
+    `L0d: przejęcie nie rusza POP (blokada ${L1} → ${lockOf(w.home)} — zostaje w kolonii, która rekrutowała, teraz cudzej)`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

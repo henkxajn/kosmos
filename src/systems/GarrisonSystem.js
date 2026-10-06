@@ -321,13 +321,16 @@ export class GarrisonSystem {
   removeOnBodyDestroyed(planetId, via = 'destroyed', bodyName = null) {
     if (!planetId) return 0;
     const ai = this._removeUnits(planetId, (u) => !!u.owner && u.owner !== 'player', 'body_destroyed', via, null, bodyName);
-    // R7 (G2-4, Finding 358 — decyzja właściciela 2026-10-03): jednostki GRACZA też znikają razem z ciałem, a ich POP
-    //   wracają do domu W CAŁOŚCI (`releaseGroundUnitPops` — kolonia macierzysta z terminem właściciela; brak domu ⇒
-    //   meldunek `groundUnit:popsLost`). Tak do G1c (potem rodzina „utrata POP”, kierunek 333). Osobny wpis audytu
-    //   (`owners: ['player']`), żeby ślad jednostek AI został taki jak w C-S2.
-    const cm = this._K()?.colonyManager;
+    // R7 (G2-4, Finding 358) zmieniony w G1c/P6 (podpis właściciela 2026-10-02/03): jednostki GRACZA znikają razem
+    //   z ciałem i są traktowane jak POLEGLI — `groundUnit:destroyed` (przyczyna `body_destroyed`) PRZED usunięciem,
+    //   więc POP idą ścieżką śmierci `ColonyManager`: zwrot wg tabeli po zwłoce do kolonii macierzystej z terminem
+    //   właściciela, reszta ginie razem z blokadą (P1); brak domu ⇒ meldunek `groundUnit:popsLost`. Do G1c — pełny
+    //   zwrot od razu. Osobny wpis audytu (`owners: ['player']`), żeby ślad jednostek AI został taki jak w C-S2.
     const pl = this._removeUnits(planetId, (u) => (u.owner ?? 'player') === 'player', 'body_destroyed', via,
-      (u) => cm?.releaseGroundUnitPops?.(u, 'body_destroyed'), bodyName);
+      (u) => EventBus.emit('groundUnit:destroyed', {
+        unitId: u.id, planetId: u.planetId, owner: u.owner ?? 'player',
+        archetypeId: u.archetypeId ?? null, popCost: u.popCost ?? 0, cause: 'body_destroyed',
+      }), bodyName);
     return ai + pl;
   }
 
@@ -336,7 +339,7 @@ export class GarrisonSystem {
     if (typeof gum?.getUnitsOnPlanet !== 'function') return 0;
     const doomed = gum.getUnitsOnPlanet(planetId).filter(pick);
     for (const u of doomed) {
-      beforeRemove?.(u);                              // R7 — zwolnienie POP gracza PRZED usunięciem (czyta jednostkę)
+      beforeRemove?.(u);                              // R7 — śmierć jednostki gracza zgłoszona PRZED usunięciem (G1c/P6)
       gum.removeUnit(u.id);                           // `groundUnit:removed` → ArmySystem sprząta armie
     }
     if (doomed.length > 0) {
