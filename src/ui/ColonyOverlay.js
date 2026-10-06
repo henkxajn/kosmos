@@ -30,6 +30,7 @@ import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
 import { pruneUnitSelection } from './ColonySelectionLogic.js';   // G2-4 F7 — zaznaczenie bez „duchów”
+import { visibleGroundUnits, visibleGroundUnitAt, isGroundUnitVisibleToPlayer } from '../utils/GroundVisibility.js';   // Finding 379
 import { warGateRefusal, NOT_AT_WAR } from '../utils/WarGate.js';                        // D13/G2-2 — bramka wojny przy lądowaniu
 import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
@@ -814,8 +815,11 @@ export class ColonyOverlay extends BaseOverlay {
     if (!this._selectedUnit && this._selectedUnits.size === 0) return;
     const gum = window.KOSMOS?.groundUnitManager;
     if (!gum) return;
+    // Finding 379 — cudza jednostka, której gracz już nie widzi (np. jego ostatnia jednostka opuściła ciało), wypada
+    //   z zaznaczenia jak jednostka spoza mapy: karta „ROZPOZNANIE” nie zostaje nad jednostką, której mapa nie rysuje.
     const res = pruneUnitSelection(this._selectedUnits, this._selectedUnit?.id ?? null,
-      (id) => gum.getUnit?.(id) ?? null, planetId);
+      (id) => { const u = gum.getUnit?.(id) ?? null; return isGroundUnitVisibleToPlayer(window.KOSMOS, u) ? u : null; },
+      planetId);
     if (res.pruned.length === 0) return;
     for (const id of res.pruned) this._selectedUnits.delete(id);
     this._selectedUnit = res.primaryId ? (gum.getUnit?.(res.primaryId) ?? null) : null;
@@ -2537,7 +2541,8 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Stack navigator: jeśli na hexie jest >1 jednostek tej samej strony,
     // pokaż pasek cyklowania ◄ current/total ► (mały przycisk nawigacji)
-    const hexSiblings = gum?.getUnitsAtHex?.(unit.planetId, unit.q, unit.r) ?? [];
+    // Finding 379 — dla karty wroga przełącznik wypisuje wyłącznie cudze jednostki, które gracz widzi.
+    const hexSiblings = visibleGroundUnits(window.KOSMOS, gum?.getUnitsAtHex?.(unit.planetId, unit.q, unit.r) ?? []);
     const ownerFilter = isEnemy
       ? (u => u.owner && u.owner !== 'player')
       : (u => !u.owner || u.owner === 'player');
@@ -3030,7 +3035,9 @@ export class ColonyOverlay extends BaseOverlay {
     const colony = this._getColony();
     if (!mgr || !colony) return;
 
-    const units = mgr.getUnitsOnPlanet(colony.planetId);
+    // Finding 379 — cudze jednostki tylko te, które gracz widzi (kolonia gracza · własne jednostki na ciele · wywiad
+    //   `detailed` o właścicielu); ta sama lista karmi sprite'y niżej i plakietki stosów.
+    const units = visibleGroundUnits(window.KOSMOS, mgr.getUnitsOnPlanet(colony.planetId));
     const hs = this._hexSize;
     const cx = ox + ow / 2 - this._camX;
     const cy = oy + oh / 2 - this._camY;
@@ -4772,8 +4779,9 @@ export class ColonyOverlay extends BaseOverlay {
       }
 
       if (tile) {
-        const mgr = window.KOSMOS?.groundUnitManager;
-        const unitOnTile = mgr?.getUnitAt(colony?.planetId, tile.q, tile.r);
+        // Finding 379 — klik zaznacza wyłącznie jednostkę, którą gracz widzi; filtry jak `getUnitAt` (nie `moving`,
+        //   nie `in_cargo`). Niewidoczna albo ukryta cudza jednostka — klik jak w pusty heks.
+        const unitOnTile = visibleGroundUnitAt(window.KOSMOS, colony?.planetId, tile.q, tile.r);
         const mods = this._lastMouseMods ?? { shift: false, ctrl: false };
         const isMultiSelectMod = mods.shift || mods.ctrl;
 

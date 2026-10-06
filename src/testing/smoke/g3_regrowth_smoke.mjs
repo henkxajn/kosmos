@@ -477,6 +477,9 @@ function neutralBody(w) {
   const nb = neutralBody(w);
   assert(readout(w.K, w.K.homePlanet.id) === null && !!nb && readout(w.K, nb.id) === null,
     `R8e: kolonia gracza i ciało bez kolonii (${nb?.id}) — bez odczytu (null)`);
+  // Finding 379 (odpowiedź (h) właściciela 2026-10-05): własne jednostki gracza na ciele odsłaniają garnizon także
+  //   bez wywiadu — fail-closed wywiadu mierzymy bez nich (jednostka gracza z R8d' zdjęta).
+  w.gum.removeUnit(pu?.id);
   const intelSys = w.K.intelSystem;
   w.K.intelSystem = null;
   const rn = readout(w.K, cap);

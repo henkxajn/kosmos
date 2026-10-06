@@ -4,19 +4,23 @@
 // Jedna funkcja odpowiada na pytanie, jedna zamienia odpowiedź na tekst; obie czytają karta ciała (`BottomContext`) i okno
 // zrzutu desantu (`DropTroopsModal`), więc te powierzchnie nie mogą się rozjechać:
 //   • ciało bez kolonii albo kolonia gracza                → `null` (brak wiersza);
-//   • wywiad o właścicielu poniżej `detailed`              → `unknown` (fail-closed: bez `IntelSystem` — nieznany);
+//   • gracz nie widzi jednostek właściciela na tym ciele   → `unknown` (fail-closed: bez `IntelSystem` — nieznany,
+//     o ile gracz nie ma na ciele własnych jednostek);
+//   • widzi, bo ma na ciele własne jednostki, bez `detailed` → `units`: żywe jednostki właściciela na tym ciele;
 //   • `detailed`, imperium zmobilizowane                   → `units`: żywe jednostki właściciela na tym ciele;
 //   • `detailed`, przed pierwszą mobilizacją               → `reserve`: liczba planera dla tego ciała, oznaczona jako rezerwa.
+// ⚠ Finding 379 (odpowiedź (h) właściciela 2026-10-05): „czy gracz widzi” to TA SAMA reguła co na mapie kolonii —
+//   `GroundVisibility.foreignGroundUnitsVisible` (`detailed` ALBO własne jednostki gracza na ciele); próg wywiadu
+//   `GARRISON_READOUT_INTEL` mieszka tam (jedno źródło), tu jest re-eksportowany.
 // ⚠ To odczyt, nie nowa mechanika wywiadu: próg `detailed` czytają już `NotificationCenter` i `SystemReveal`.
-// ⚠ Mapa kolonii obcego ciała (`ColonyOverlay._drawUnits`) rysuje jednostki BEZ względu na wywiad — tego ten odczyt nie
-//   zmienia (rejestr, Finding 379).
 // ⚠ Usługi gry dostaje argumentem (`K`, w grze `window.KOSMOS`) — działa na prawdziwym świecie w keeperze.
 
 import { t } from '../i18n/i18n.js';
 import { planEmpireGarrison, readEmpireGarrisonSnapshot } from './GarrisonPlanner.js';
+import { foreignGroundUnitsVisible, GARRISON_READOUT_INTEL } from './GroundVisibility.js';
 
-/** Poziom wywiadu o imperium, od którego gracz zna liczebność jego garnizonu (D6). */
-export const GARRISON_READOUT_INTEL = 'detailed';
+/** Poziom wywiadu o imperium, od którego gracz zna liczebność jego garnizonu (D6) — źródło: `GroundVisibility`. */
+export { GARRISON_READOUT_INTEL };
 
 /**
  * Odczyt garnizonu ciała dla gracza.
@@ -29,8 +33,10 @@ export function readGarrisonReadout(K, planetId) {
   const owner = colony?.ownerEmpireId ?? null;
   if (!colony || !owner || owner === 'player') return null;
   const base = { planetId, empireId: owner };
-  if (K?.intelSystem?.isAtLeast?.(owner, GARRISON_READOUT_INTEL) !== true) return { ...base, kind: 'unknown', count: null };
-  if (K?.empireRegistry?.isGarrisonMobilized?.(owner) === true) {
+  if (!foreignGroundUnitsVisible(K, planetId, owner)) return { ...base, kind: 'unknown', count: null };
+  const detailed = K?.intelSystem?.isAtLeast?.(owner, GARRISON_READOUT_INTEL) === true;
+  // Bez `detailed` gracz widzi wyłącznie to, co stoi na ciele (własne jednostki na nim) — rezerwa planu to wiedza wywiadu.
+  if (!detailed || K?.empireRegistry?.isGarrisonMobilized?.(owner) === true) {
     const count = (K?.groundUnitManager?.getUnitsOnPlanet?.(planetId) ?? [])
       .filter(u => u?.owner === owner && (u.hp ?? 0) > 0).length;
     return { ...base, kind: 'units', count };
