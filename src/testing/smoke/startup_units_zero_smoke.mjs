@@ -20,8 +20,9 @@
 //       token, który JEST, jest znajdowany).
 //   T4  WYKONANIE — świeży boot: zero jednostek naziemnych na koloni gracza, a fabryka jednostek
 //       ŻYJE (ręczne `createUnit` działa) ⇒ zero nie bierze się z zepsutego `GroundUnitManager`.
-//   T5  WYKONANIE — typ `infantry` ZOSTAJE w katalogu (`INVASION_UNIT_POOLS` używa go dla pięciu
-//       archetypów imperiów). D8 zdejmuje darmowe jednostki GRACZA, a nie zdolność desantową AI.
+//   T5  WYKONANIE — typ `infantry` ZOSTAJE w katalogu legacy (stare zapisy), a pula desantu legacy
+//       `INVASION_UNIT_POOLS` zniknęła w G2b (desant AI na archetypach — `g2b_invasion_smoke`). D8 zdejmuje
+//       darmowe jednostki GRACZA, a nie zdolność desantową AI.
 //
 // ⚠ Dlaczego T1 jest pinem ŹRÓDŁOWYM, a nie wykonaniowym: `src/scenes/GameScene.js` i
 //    `src/ui/ColonyOverlay.js` NIE IMPORTUJĄ SIĘ pod node (GameScene ciągnie
@@ -39,7 +40,7 @@
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { GameCore } from '../headless/GameCore.js';
-import { INVASION_UNIT_POOLS } from '../../data/GroundUnitData.js';
+import * as GUD from '../../data/GroundUnitData.js';
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -139,16 +140,17 @@ console.log('T4 WYKONANIE — świeży boot: zero jednostek gracza, przy ŻYWEJ 
     'PRODUCENTÓW, a nie z zepsutego `GroundUnitManager`');
 }
 
-// ── T5 — katalog jednostek AI nietknięty ────────────────────────────────────────────────────
-console.log('T5 — typ `infantry` ZOSTAJE w katalogu (D8 nie rozbraja AI)');
+// ── T5 — katalog legacy nietknięty; pula desantu legacy usunięta (G2b) ─────────────────────
+console.log('T5 — typ `infantry` ZOSTAJE w katalogu legacy (stare zapisy); pula desantu legacy usunięta (G2b)');
 {
-  const users = Object.entries(INVASION_UNIT_POOLS)
-    .filter(([, pool]) => Array.isArray(pool) && pool.includes('infantry'))
-    .map(([arch]) => arch);
-  assert(users.length >= 5,
-    `T5: \`INVASION_UNIT_POOLS\` używa \`infantry\` dla ${users.length} archetypów imperiów ` +
-    `(${users.join(', ')}). Skasowanie tego typu ODEBRAŁOBY AI zdolność desantu — należy do ` +
-    'slice\'u GROUND (Findings 67-68), nie do D8');
+  // ⚠ G2b (D7; zgoda w poleceniu sesji G2b, 2026-10-06 — pin „legacy infantry w pulach desantu” przewrócony): przed G2b
+  //   T5 wymagał `infantry` w `INVASION_UNIT_POOLS` dla ≥ 5 archetypów imperiów. Od G2b desant AI idzie przez
+  //   `createAIUnit` (archetypy, skład i morale ze szczebla D9), a pula nie ma czytelnika — usunięta (Finding 340).
+  //   Zdolność desantu AI pinuje `g2b_invasion_smoke`; tu zostaje typ legacy w katalogu (stare zapisy, łazik).
+  assert(GUD.INVASION_UNIT_POOLS === undefined,
+    'T5a: `INVASION_UNIT_POOLS` nie istnieje — desant AI nie czyta puli typów legacy (G2b, D7)');
+  assert(!!GUD.GROUND_UNITS?.infantry && GUD.getUnitStats?.('infantry')?.role === 'military',
+    'T5b KONTROLA: typ `infantry` ZOSTAJE w katalogu legacy `GROUND_UNITS` — stare zapisy wczytują piechotę legacy');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

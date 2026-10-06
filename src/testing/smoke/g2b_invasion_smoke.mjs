@@ -18,6 +18,8 @@
 //       0 Kr we wszystkich koloniach przez 10 civY aktywne (dawniej `{ owner }` ⇒ `factionId 'humanity'` ⇒ utrzymanie
 //       gracza ⇒ `offline` i rozwiązanie — Finding 323); wpis spoza typów prostych AI (np. legacy `infantry`) —
 //       typ ze składu szczebla na tej pozycji.
+//   I7  (S3) `INVASION_UNIT_POOLS` usunięte (nikt go nie czyta); `InvasionSystem` nie tworzy jednostek z pominięciem
+//       `createAIUnit`; jednostki legacy zostają w danych (`GROUND_UNITS`) dla starych zapisów i łazika.
 //
 // ⚠ Harness: prawdziwy `GameCore` (kolonie AI z bootstrapu, `GroundUnitManager`, `InvasionSystem`, `GarrisonSystem`,
 //   `DiplomacySystem`, `WarSystem`) + własny `CombatSystem`. Szczebel imperium ustawiany przez poziomy wpisów `factory`
@@ -210,6 +212,22 @@ function signPeace(w) {
   assert(alive.length === 3 && alive.every(u => u.status !== 'offline' && (u.unpaidYears ?? 0) === 0),
     `I3b: po 10 civY przy 0 Kr wszystkie 3 aktywne (żyje ${alive.length}, statusy ${alive.map(u => u.status).join(',')}) — ` +
     'dawniej `{ owner }` ⇒ utrzymanie gracza ⇒ offline i rozwiązanie (Finding 323)');
+}
+
+// ── I7 — S3: pula legacy usunięta, jednostki legacy w danych ────────────────────────────
+{
+  console.log('\nI7 — INVASION_UNIT_POOLS usunięte; InvasionSystem tworzy jednostki wyłącznie przez createAIUnit; legacy zostaje w danych');
+  const inv = src('../../systems/InvasionSystem.js');
+  const gud = src('../../data/GroundUnitData.js');
+  assert(/launchInvasion\s*\(/.test(inv) && /createAIUnit\s*\(/.test(inv),
+    'I7 kontrola pinu: źródło `InvasionSystem` przeczytane (`launchInvasion`, `createAIUnit`)');
+  assert(GUD.INVASION_UNIT_POOLS === undefined && !/INVASION_UNIT_POOLS/.test(gud) && !/INVASION_UNIT_POOLS/.test(inv),
+    'I7a: `INVASION_UNIT_POOLS` nie istnieje (eksport, definicja, import) — klucze nie należały do żadnego imperium z generatora (Finding 340)');
+  assert(!/\.createUnit\s*\(/.test(inv),
+    'I7b: `InvasionSystem` nie tworzy jednostek z pominięciem `createAIUnit`');
+  const legacy = ['infantry', 'mech', 'garrison', 'science_rover'];
+  assert(legacy.every(t => !!GUD.GROUND_UNITS?.[t]) && GUD.getUnitStats?.('infantry')?.hp === GUD.GROUND_UNITS?.infantry?.hp,
+    `I7c KONTROLA: jednostki legacy zostają w danych dla starych zapisów i łazika (${legacy.filter(t => !!GUD.GROUND_UNITS?.[t]).join(', ')})`);
 }
 
 console.log(`\n${pass} PASS / ${fail} FAIL`);

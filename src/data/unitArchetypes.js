@@ -26,7 +26,7 @@
 //   Frakcje (humanity/UNE/Syndykat) NIE nadpisują tego pola — to cecha archetypu.
 
 // ── Domyślne morale jednostki BEZ pola `morale` (D5b, Finding 65 — AI GARRISON G1, 2026-10-01) ──
-// Jednostki legacy (`GROUND_UNITS`, w tym desant AI z `INVASION_UNIT_POOLS`) nie niosą pola `morale`.
+// Jednostki legacy (`GROUND_UNITS`; do G2b także desant AI) nie niosą pola `morale`.
 // Każde miejsce, które je CZYTA, ODEJMUJE albo DODAJE, bierze ten jeden default — 100, czyli wartość,
 // której używały już odczyt w walce i serialize. ⚠ Dawniej odejmowanie brało `?? 0`, a odczyt `?? 100`:
 // pierwsze trafienie zapisywało 0 i jednostka znikała z `morale_collapse` z pełnym HP, a ta sama

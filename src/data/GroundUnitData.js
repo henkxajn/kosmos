@@ -2,7 +2,9 @@
 //
 // Jednostki żyją na HexGrid planety. Dwa typy ownera:
 //   owner=null / 'player' — gracz (spawn z colony_base, budynków kolonizacyjnych)
-//   owner=empireId        — obcy (spawn z InvasionSystem przy lądowaniu floty)
+//   owner=empireId        — obcy (do G2b desant InvasionSystem tworzył tu jednostki legacy; od G2b — D7 — desant
+//                           i garnizon AI to archetypy przez `GroundUnitManager.createAIUnit`, a ten katalog zostaje
+//                           dla starych zapisów i łazika badawczego)
 //
 // Statystyki:
 //   hp       — punkty życia
@@ -90,17 +92,14 @@ export function getUnitStats(type) {
   return def;
 }
 
-/** Lista dostępna dla gracza (bez obcych — obcy są wybierani przez InvasionSystem). */
+/** Lista legacy dla gracza. Obcy (AI) od G2b — archetypy przez `GroundUnitManager.createAIUnit` (D7). */
 export const PLAYER_UNITS = ['science_rover', 'infantry', 'mech', 'garrison'];
 
-/** Pula dla lądowania obcych — wagi zależą od archetypu (Faza 6 uproszczona). */
-export const INVASION_UNIT_POOLS = {
-  xenophage:    ['infantry', 'infantry', 'mech'],        // szybko-agresywny
-  swarm:        ['infantry', 'infantry', 'infantry'],    // ilość zamiast jakości
-  hegemon:      ['infantry', 'mech', 'mech'],            // ciężkozbrojny
-  trader:       ['infantry', 'garrison'],                // defensywny
-  isolationist: ['garrison', 'infantry'],                // preferuje obronę
-};
+// G2b (D7) — dawna pula desantu `INVASION_UNIT_POOLS` USUNIĘTA: po przepięciu desantu na archetypy (skład i morale
+//   ze szczebla drabiny D9 — `GarrisonPlanner.invasionComposition` / `invasionTroops`) nie miała czytelnika, a jej klucze
+//   (xenophage, swarm, hegemon, trader, isolationist) nie należały do żadnego imperium z generatora (`industrialist`,
+//   `expansionist`) — ich desant był zawsze legacy `infantry`; pulę czytał wyłącznie debugowy Rój Testowy (`xenophage`)
+//   (Finding 340).
 
 // ── Teren a jednostki naziemne — JEDNO źródło (G2-K1, Finding 336) ───────────────────────────
 // Koszt ruchu per typ terenu (`TERRAIN_TYPES`); `Infinity` = na kafel nie da się wejść ani na nim
