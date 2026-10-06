@@ -406,6 +406,20 @@
 > ciała liczy ukryte jednostki — uśpiony) · 🟠 **383** (mapa obcej kolonii: panel kafla — budynek z danymi albo menu budowy —
 > bez względu na wywiad; decyzja właściciela).
 > • Pozostały krok arca: **G2b** (`AI_GARRISON_PLAN.md` §3).
+>
+> **Aktualizacja 2026-10-06 (wieczór) — AI GARRISON: G2b ZAMKNIĘTY (desant AI na archetypach); ARC AI GARRISON ZAMKNIĘTY.**
+> Sweep: **263/263 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS pl = en **3455** · save **v101 bez migracji**.
+> • ✅ **323** (`f027e7c`, S2 — ostatnia ścieżka AI przez `createAIUnit`) · ✅ **340** (`980043f` + `23a87e5`, S1 + S3 — pula
+> desantu usunięta) — zamknięcia w rejestrze macierzystym `AI_GARRISON_PLAN.md` §6; wiersze zdjęte z A8. **50** — D7
+> wdrożone (wiersz A8 zaktualizowany; rejestr macierzysty `W3_PLAN.md` §50 nietknięty). Bramka live właściciela 2026-10-06
+> **PASS** (`AI_GARRISON_PLAN.md` §5ze).
+> • **NOWE: #384–#390** (rejestr: `AI_GARRISON_PLAN.md` §6) — 🟠 **384** (desant z ładowni AI duplikuje ładunek — uśpiony,
+> uzbraja się z desantem z ładowni) · ⚪ **385** (bramki mobilności AI czytają tabelę legacy) · **386** (`SpawnTestEnemy`
+> omija `createAIUnit` — debug) · **387** (jednostki legacy AI ze starych zapisów nie do zabicia — pomiar) · **388** (T6c
+> `g2_ocean_capital_smoke` zależny od `Math.random`) · **389** (ułamkowy `troopCount`: ⌈n⌉ → ⌊n⌋) · **390** (nieaktualne
+> teksty o puli w dwóch keeperach).
+> • **383** — kierunek właściciela: reguła widoczności **379**, etap polerki UI.
+> • Poza arciem: limit floty, odbicie kolonii, przyczółek — następny arc (faza A — audyt, poza repo).
 
 
 ---
@@ -483,7 +497,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **81-114 · 126-128 · 159-160** | `COLONY_OWNERSHIP_GUARD_PLAN.md` |
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
-| **309-379** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–05; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3) |
+| **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -630,7 +644,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | # | | opis | uwaga |
 |---|---|---|---|
 | **49** | 🟠 | ⚠ **KOREKTA 2026-10-02 — zamknięty po stronie DANYCH**: `transport_assault` jest w katalogu od `0e6ea0d`; **nikt go nie zamawia** (jedyny `template:` w regułach to `science_probe`) ⇒ reszta żyje jako **201** | `W3_PLAN.md` §49 · `AI_GARRISON_PLAN.md` §7 |
-| **50** | ⬜ | ⚠ **KOREKTA 2026-10-02 — zaniżony i ZASTĄPIONY przez D7**: jednostki legacy znikały w r1 po OBU stronach; przyczyna (65) zamknięta; AI przechodzi na archetypy wszędzie (krok **G2b**) | `W3_PLAN.md` §50 · `AI_GARRISON_PLAN.md` |
+| **50** | ⬜ | ⚠ **KOREKTA 2026-10-02 — zaniżony i ZASTĄPIONY przez D7**: jednostki legacy znikały w r1 po OBU stronach; przyczyna (65) zamknięta; AI przechodzi na archetypy wszędzie — **D7 wdrożone w G2b** (2026-10-06: `980043f` · `f027e7c` · `23a87e5`; wpis w `W3_PLAN.md` §50 — niezmieniony) | `W3_PLAN.md` §50 · `AI_GARRISON_PLAN.md` §5zd |
 | **53** | 🟠 | „wieczna inwazja" na placówce gracza — rekord `active:true` nie może wygasnąć i trafia do **każdego** zapisu | |
 | **54** | 🟠 | startowy garnizon gracza wisi na **efekcie ubocznym UI**; kolonie wtórne i placówki: 0 jednostek na zawsze | |
 | **55** | 🟠 | kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy ⇒ `launchInvasion` zwraca `no_grid` | |
@@ -687,9 +701,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **320** | ⚪ | `diplomacy:warDeclared` nie niesie `declaredBy`, a `UIManager.js:1624` go czyta | istotne dla G2 (materializacja przy wypowiedzeniu) |
 | **321** | 🟠 | wydobycie kopalń (`receive` wprost, `BuildingSystem.js:2598`) niewidoczne dla `getPerYear`/`getGrossPerYear` | powód D1/D3; wpływ na UI niezmierzony |
 | **322** | ⚪ | trzy definicje stolicy AI: `capitalOf`, bliźniaczy `_pickCapital`, statyczne `homeSystemId` | wybrać jedno źródło przed G2 |
-| **323** | 🟠 | `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` wciąga jednostkę AI do utrzymania i limitu GRACZA (`ColonyManager.js:1372`, `:1515`, `:1528`) | rozszerza **60**; zmierzone (pin G2-0 P2): z samym `{ owner }` przy 0 Kr `offline` w 1. civY, rozwiązana w 5.; nowe wywołania przez `createAIUnit` (G2-1, `82c9196`), `InvasionSystem.js:130` → G2b |
 | **325** | ⚪ | żaden archetyp AI nie bada technologii morale (ani `ground_warfare`); bonusy przy rekrutacji i tak czytają drzewo GRACZA | rodzina **185**; zastąpione przez **D7** |
-| **340** | ⚪ | `INVASION_UNIT_POOLS` (`GroundUnitData.js:97`) nie ma kluczy `industrialist` / `expansionist` ⇒ desant bez ładunku zawsze `['infantry','infantry']` (`InvasionSystem.js:112`) | → **G2b** (D7) |
 | **341** | ⚪ | uprząż headless: POP imperiów AI przy gy 60 2,2–3,1× niższy niż w fixture GATE-S4 (limit 3–5 wobec 11); przyczyna nieznana, ziarnistość ticka wykluczona | instrument ⇒ **D18** (kalibracja na fixture) |
 | **343** | 🟠 | zwykłe budynki AI stają na **oceanie** — martwy test `tile.buildable` (`EmpireColonyBootstrap.js:731`); 46 z 476 na 14 ziarnach (`research_station`, `shipyard`, `launch_pad`); takiego budynku nie da się okupować | osobny, późniejszy slice (zmienia rozmieszczenie budynków AI) |
 | **344** | 🟠 | desant AI ląduje na krawędzi **bez drogi do stolicy** — `_findLandingHexes` (`InvasionSystem.js:500`) nie sprawdza osiągalności; 33 z 486 kafli strefy na koloniach AI (czapa polarna odcięta oceanem albo asymetria **347**), 0 z 249 na koloniach gracza | bez kroku; istotne dla G2-3 i G2b |
@@ -697,7 +709,12 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **349** | 🟠 | „Wyładuj” bez sprawdzenia terenu (`CargoLoadModal.js:405` → `Vessel.js:743-745`); nad ciałem BEZ kolonii celem jest kolonia MACIERZYSTA (`FleetManagerOverlay.js:3074-3075`) — reszta **338** dla ciał własnych i niczyich | niemierzone (DOM); bez kroku |
 | **361** | ⚪ | martwe pole `rocket_artillery.terrainModifiers` (`unitArchetypes.js:72`, `mountains: Infinity`) — zero czytelników; planer stawia artylerię na górach (fixture GATE-S4: emp_001 heks (0,2)) | bez kroku |
 | **382** | ⚪ | karta ciała liczy ukryte (stealth) jednostki wroga, których mapa nie pokazuje — `readGarrisonReadout` bez filtra stealth (`GarrisonReadout.js:40-41`) wobec `isGroundUnitVisibleToPlayer` (`GroundVisibility.js:60`); dron ukryty + garnizon ⇒ mapa 1, karta 2 | uśpiony (garnizony AI bez dronów); bez decyzji. `AI_GARRISON_PLAN.md` §6 |
-| **383** | 🟠 | mapa obcej kolonii: klik na kafel otwiera panel kafla bez względu na wywiad (`ColonyOverlay.js:961`, `:4835`) — budynek z produkcją z żywych stawek tej kolonii albo menu budowy gracza (wygaszone, D4=W3); osiągalne bez własnych jednostek w trybach zrzutu, ostrzału i away teamu | decyzja właściciela: czy panel kafla idzie regułą **379**. `AI_GARRISON_PLAN.md` §6 |
+| **383** | 🟠 | mapa obcej kolonii: klik na kafel otwiera panel kafla bez względu na wywiad (`ColonyOverlay.js:961`, `:4835`) — budynek z produkcją z żywych stawek tej kolonii albo menu budowy gracza (wygaszone, D4=W3); osiągalne bez własnych jednostek w trybach zrzutu, ostrzału i away teamu | kierunek właściciela 2026-10-06: reguła **379**, etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **384** | 🟠 | desant z ładowni zrzutowców AI duplikuje ładunek — `_onVesselGroupVictory` przekazuje `launchInvasion` TYPY jednostek z `v.groundUnits` (`InvasionSystem.js:300-307`), a ta tworzy nowe; w `InvasionSystem` zero `removeUnit`/rozładunku ⇒ oryginały zostają w ładowni | uśpiony (Findingi **49**, **201**); uzbraja się z desantem AI z ładowni. `AI_GARRISON_PLAN.md` §6 |
+| **385** | ⚪ | bramki mobilności `_tickCombatAI` (`GroundUnitManager.js:1160`, `:1180`) czytają tabelę legacy `getUnitStats`, która dla archetypu zwraca domyślne `speedHex: 1.5` (`GroundUnitData.js:86-91`) ⇒ każdy archetyp „mobilny”, także `garrison_unit` | bez skutku w G2b (fala bez listy — typy ruchome). `AI_GARRISON_PLAN.md` §6 |
+| **386** | ⚪ | `SpawnTestEnemy` stawia marines przez `createUnit` z pominięciem `createAIUnit` (`SpawnTestEnemy.js:148`) — właściciel i frakcja poprawne, morale archetypu (15) zamiast szczebla D9 | tylko debug (bramki z imperium testowym). `AI_GARRISON_PLAN.md` §6 |
+| **387** | ⚪ | jednostki legacy AI ze starych zapisów praktycznie nie do zabicia w walce z garnizonem — w pomiarze G2b strata 0,0 w każdej z 18 komórek, przejęcie 96–100 % także przy 4 obrońcach z morale +90 | tylko stare zapisy (bez migracji); mechanizm z kodu: morale `?? DEFAULT_MORALE`, `hp: 60`. `AI_GARRISON_PLAN.md` §6 |
+| **389** | ⚪ | ułamkowy `troopCount`: dawna pętla dawała ⌈n⌉ jednostek, skład szczebla daje ⌊n⌋ (`GarrisonPlanner.js:88`, `:123`) | żywi wołający podają liczby całkowite; różnica tylko w gałęzi `_onBattleResolved` bez producenta (`InvasionSystem.js:354`). `AI_GARRISON_PLAN.md` §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -722,6 +739,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **374** | ⚪ | martwy `FleetTabPanel`: słucha `vessel:openCargoModal` (`FleetTabPanel.js:206`), a nikt go nie importuje; okno ładowni otwiera Dowództwo wprost (`FleetManagerOverlay.js:2786-2789`) | etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
 | **375** | ⚪ | polskie literały: „Błąd ostrzału: …” z surowym slugiem (`ColonyOverlay.js:4677`) i okno ładowni (`CargoLoadModal.js:125`, `:358`, `:381`, `:398`, `:439`, `:445`, `:500`); od G3 także okno zrzutu desantu (`DropTroopsModal.js:49`, `:121`, `:142`, `:146`, `:157`, `:159`, `:171`) | klasa **113**; etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
 | **377** | ⚪ | polska gramatyka „z {0}” przy nazwie imperium w trzech innych wpisach: `log.diplo.napExpired` (`UIManager.js:1733`), `log.diplo.napRenewed` (`:1740`), `log.skirmish` (`:1638`) | rodzina **371** (✅ `cafd6e8`); etap polerki UI. `AI_GARRISON_PLAN.md` §6 |
+| **388** | ⚪ | T6c `g2_ocean_capital_smoke` zależny od strumienia `Math.random` — tasowanie heksów lądowania (`InvasionSystem.js:566`); setup S1 dokłada dwa losowania (`g2_ocean_capital_smoke.mjs:336`) | pin kruchy — przewróci się przy zmianie liczby losowań w ścieżce desantu. `AI_GARRISON_PLAN.md` §6 |
+| **390** | ⚪ | nieaktualne teksty o `INVASION_UNIT_POOLS`: komunikat `w3_seams_smoke.mjs:355`, nagłówek `ground_morale_resolution_smoke.mjs:11` | asercje zielone; tekst historyczny, nieedytowany. `AI_GARRISON_PLAN.md` §6 |
 
 ---
 

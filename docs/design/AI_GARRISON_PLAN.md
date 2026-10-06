@@ -13,7 +13,8 @@
 > poprawka **(a) po terminie** (`8cd8d7c`, **370**) — odpowiedź właściciela 2026-10-05, §5z; **(h)** = **379** ✅.
 > ✅ **G1c (rodzina „utrata POP”: 333 · 330 · 328 · 329 · 327, zmiana R7) i follow-up (h) (379) ZAMKNIĘTE 2026-10-06 —
 > bramka live właściciela PASS** (§5za–§5zb); follow-upy **380** (Q2) i **381** (Q5) — 2026-10-06, na dowodzie headless,
-> bez osobnej bramki (§5zc). Pozostały krok arca (§3): **G2b** (pule desantu na archetypy).
+> bez osobnej bramki (§5zc). ✅ **G2b (desant AI na modelu archetypów, D7 + D9) ZAMKNIĘTY 2026-10-06 — bramka live
+> właściciela PASS** (§5zd–§5zf). ✅ **ARC AI GARRISON ZAMKNIĘTY 2026-10-06** — G1, G1b, G2, G3, G1c, G2b.
 > Decyzje **D1–D7** podpisane przez właściciela **2026-10-01** (D7: **2026-10-02**); zakres G1b (S1–S4) — **2026-10-02**;
 > kierunek dla **333** i **330** — **2026-10-02** (§5d (a), niezaimplementowany); **D8–D18** — **2026-10-02** (§1; faza A G2 — §5e);
 > odpowiedzi właściciela z sesji G2-K1 — **2026-10-02** (§5h); **D13a** i odpowiedzi z sesji G2-2 — **2026-10-03** (§1, §5k);
@@ -23,11 +24,13 @@
 > **2026-10-04** (§5v); odpowiedzi do notatki zamykającej G2-4 — (a) w wersji ograniczonej, (d), kolejność kroków,
 > **378** — **2026-10-04** (§5w); odpowiedzi do notatki G3 — **(a)–(h)** — **2026-10-05** (§5z), w tym reguła widoczności
 > **379** (trzy warunki, karta ciała tą samą regułą); odpowiedzi do notatki zamykającej G3 — **Q1–Q5** — **2026-10-05**
-> i potwierdzenia do **380** / **381** — **2026-10-06** (§5zc).
+> i potwierdzenia do **380** / **381** — **2026-10-06** (§5zc); odpowiedzi do notatki G2b — **Q-T2**, **Q-G2b-1…4**
+> i kierunek dla **383** — **2026-10-06** (§5zf).
 > Save **v101, zero migracji** w G1, w G1b, w G2-0/G2-1, w G2-K1, w G2-2, w G2-3a, w G2-3b, w G2-4, w follow-upach G2-4
 > (F1–F7, (a)–(g), 378), w G3 (rok rozliczony `regrowthYear` w rekordzie flagi — zapis sprzed G3 bez nadrabiania lat),
 > w poprawce (a) po terminie, w follow-upie (h), w G1c (pole `pendingPopReturns` w zapisie kolonii — zapis sprzed G1c:
-> pusta kolejka) i w follow-upach 380/381.
+> pusta kolejka), w follow-upach 380/381 i w G2b (bez nowych pól w zapisie; jednostki legacy AI ze starych zapisów
+> zostają legacy).
 > **Commity G1:** `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 > **Commity G1b:** `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326) — §5a.
 > **Commity G2:** `4d6ac63` (G2-0, piny szwów) · `82c9196` (G2-1, `createAIUnit`) — §5f · `8ea5af3` + `44967a3`
@@ -44,19 +47,23 @@
 > **Commity follow-upu (h) i G1c:** `ad0a615` (D, #379) · `b1eac7a` (P1, #333) · `0fbbd59` (P2, #330) · `4a4f909` (P3, #328) ·
 > `732507d` (P4, #329) · `4d625a9` (P5, #327) · `790f3b7` (P6, zmiana R7) — §5za · `b926d81` (#380, Q2) · `1c90ea4` (#381,
 > Q5) — §5zc.
+> **Commity G2b:** `980043f` (S1, D7 + D9 — desant przez `createAIUnit`, skład i morale szczebla) · `f027e7c` (S2, #323 —
+> jawna lista przez `createAIUnit`; przecelowanie pinu `startup_units_zero_smoke` T2 za zgodą właściciela, Q-T2) ·
+> `23a87e5` (S3, #340 — `INVASION_UNIT_POOLS` usunięte) — §5zd.
 > Keepery `ground_morale_resolution_smoke` **35/35** · `ground_round_fairness_smoke` **12/12** ·
 > `ground_unit_loss_smoke` **29/29** · `g2_seams_smoke` **31/31** · `g2_create_ai_unit_smoke` **26/26** ·
 > `g2_ocean_capital_smoke` **28/28** · `g2_war_gate_smoke` **70/70** · `g2_planner_smoke` **77/77** ·
 > `g2_mobilisation_smoke` **56/56** · `g2_after_peace_smoke` **73/73** · `g2_peace_followups_smoke` **67/67** ·
 > `g2_peace_closing_smoke` **65/65** · `g3_regrowth_smoke` **64/64** · `g3_ground_visibility_smoke` **49/49** ·
-> `g1c_pop_loss_smoke` **86/86** · sweep **262/262 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3455**).
-> **Rejestr macierzysty findingów #309–#383:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
+> `g1c_pop_loss_smoke` **86/86** · `g2b_invasion_smoke` **22/22** · `startup_units_zero_smoke` **19/19** · sweep
+> **263/263 OK, 0 FAIL, 31 advisory** · `check-i18n` PASS (pl = en = **3455**).
+> **Rejestr macierzysty findingów #309–#390:** ten plik, §6. Korekty cudzych rejestrów (65 · 49 · 50): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#309–#325 na `f868ae8`; #326–#335 oraz §5a–§5c na
 > `c7c5a74`; #336–#342 oraz §5e–§5f na `82c9196`; #343–#347 oraz §5g–§5h na `44967a3`; #348–#357 oraz §5i–§5k na
 > `dbfbbd6`; §5l–§5m na `053fcc0`; #358–#362 oraz §5n–§5p na `2437725`; #363–#367 oraz §5q–§5s na `1fefcdc`;
 > #368–#378, zamknięcia #363–#367 oraz §5t–§5v na `96c636f`; zamknięcia #370 i #378 oraz §5w na `5c49b36`; #379,
 > zamknięcie #360, dopisek #370, rozszerzenie #375 oraz §5x–§5z na `8cd8d7c`; #380–#383, zamknięcia #327–#330, #333,
-> #379 oraz §5za–§5zc na `1c90ea4`) ·
+> #379 oraz §5za–§5zc na `1c90ea4`; #384–#390, zamknięcia #323 i #340 oraz §5zd–§5zf na `23a87e5`) ·
 > `[measured]` — wykonane
 > i policzone · `[git]` — historia
 > commitów · `[doc]` — przepisane z dokumentu/raportu, bez ponownego pomiaru · `[doc: raport G2-A]` — z raportu
@@ -71,7 +78,9 @@
 > stanów w worktree sesji G3) · `[doc: bramka G3]` — z relacji właściciela z bramki live G3 (2026-10-05), bez ponownego
 > pomiaru · `[doc: notatka G3-closing]` — z notatki przekazania zamknięcia G3 (2026-10-05, `kosmos-handover/g3-closing`,
 > poza repo; pomiary stanów pośrednich w worktree i klonie tamtej sesji) · `[doc: bramka G1c]` — z relacji właściciela
-> z bramki live follow-upu (h) i G1c (2026-10-06), bez ponownego pomiaru.
+> z bramki live follow-upu (h) i G1c (2026-10-06), bez ponownego pomiaru · `[doc: notatka G2b]` — z notatki przekazania
+> G2b (2026-10-06, `kosmos-handover/g2b`, poza repo; pomiary stanów pośrednich w klonie tamtej sesji) · `[doc: bramka G2b]` —
+> z relacji właściciela z bramki live G2b (2026-10-06), bez ponownego pomiaru.
 
 ---
 
@@ -167,8 +176,8 @@ sam wynik dla każdego POP (0 rozjazdów dla POP 0–100 000; przy ×1,5 byłyby
 | **G2-4 zamknięcie** | poprawki po bramce follow-upów (odpowiedzi 2026-10-04): **(a)** ostrzeżenie „został miesiąc” gaśnie samo · **(b)** polski wpis pokoju „z imperium {0}” · **(d)** stare zapisy: jednostki AI bez wojny na ciałach gracza znikają przy wczytaniu · **(e)** stare zapisy: kafle zajęte przez stronę bez wojny wracają przy wczytaniu · **(f)** wpis F3 przy wczytaniu bez „Peace with” · **(g)** usunięty łazik zdejmuje `awayTeamUnitId`; **(c)** trzy reguły nazwy imperium → etap polerki UI | **365** ✅ · **368** ✅ · **369** ✅ · **371** ✅ · **376** ✅ · **370** ✅ ((a) w wersji ograniczonej) · **378** ✅ | ✅ **2026-10-04** (`cafd6e8` … `96c636f`, §5v; (a) w wersji ograniczonej `dcc4c6f` i **378** `5c49b36`, §5w); **(a) po terminie** — `8cd8d7c` (2026-10-05, §5z) |
 | **G3** | odrastanie strat (G3-1) · **uzgadnianie mobilizacji co rok** (G3-2, odpowiedź (d), §5p) · widoczność (`'detailed'`) na karcie ciała i w oknie zrzutu (G3-3) · wpis w Dzienniku o mobilizacji (G3-4) | **360** ✅ · **379** ✅ (znaleziony przy G3-3; follow-up (h) `ad0a615`, §5za) | ✅ **2026-10-05** (`47b1b96` + `b3fe807` + `92d1b8e`, §5x; bramka live PASS, §5y; odpowiedzi (a)–(h), §5z) |
 | **G1c** | **rodzina „utrata POP”:** nieoddana część POP zmarłej jednostki **naprawdę ginie** — usuwana z populacji razem ze swoją blokadą (333) · ręczne rozwiązanie **zwraca pełny koszt**, jak utrzymanie i rozpad (330) · kolejka reintegracji w zapisie (328) · utrzymanie z terminem właściciela (329) · mina tą samą drogą śmierci (327) · jednostka gracza na zniszczonym ciele jak polegli (zmiana R7) · przy zmianie właściciela kolonii więzi POP poprzedniego właściciela zerwane, a jego kolejka rekrutacji anulowana (380, 381) | **333** ✅ · **330** ✅ · **328** ✅ · **329** ✅ · **327** ✅ · **380** ✅ · **381** ✅ | ✅ **2026-10-06** (`b1eac7a` … `790f3b7`, §5za; bramka live PASS, §5zb; follow-upy `b926d81` i `1c90ea4`, §5zc) |
-| **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7) | **50** (zastąpiony) · **311** (zostaje dla jednostek legacy gracza) · **340** | do zrobienia — **następny** (jedyny pozostały krok arca) |
-| później | limit floty · odbicie kolonii · przyczółek | — | — |
+| **G2b** | pule desantu (`INVASION_UNIT_POOLS`) na archetypy **przez `createAIUnit`** (D7): skład i morale ze szczebla D9 w chwili desantu · jawna lista tą samą drogą · pula usunięta | **50** (zastąpiony — D7 wdrożone) · **323** ✅ · **340** ✅ · **311** (zostaje dla jednostek legacy gracza) | ✅ **2026-10-06** (`980043f` + `f027e7c` + `23a87e5`, §5zd; bramka live PASS, §5ze; odpowiedzi, §5zf) |
+| później | limit floty · odbicie kolonii · przyczółek | — | → następny arc (zakres właściciela 2026-10-06; faza A — audyt, poza repo) |
 
 ⚠ **Kolejność G1b przed G2 jest celowa:** materializacja garnizonu w świecie, w którym AI zawsze
 strzela pierwsze (**309**), mierzyłaby balans skrzywiony na korzyść atakującego AI; a każdy rozpad
@@ -214,6 +223,10 @@ właściciela (h), §5z; osobna bramka w przeglądarce) · **370** — dopisek �
 ⚠ **Przydział findingów z sesji zamykającej G3 (#380–#383, §6):** **379** ✅ (follow-up (h), `ad0a615`) · **327** · **328** ·
 **329** · **330** · **333** ✅ (G1c) · **380** ✅ (`b926d81`, Q2) · **381** ✅ (`1c90ea4`, Q5) · **382** → bez kroku (uśpiony,
 bez decyzji) · **383** → bez kroku (decyzja właściciela: czy panel kafla obcej kolonii idzie regułą widoczności **379**).
+
+⚠ **Przydział findingów z sesji G2b (#384–#390, §6):** **323** ✅ (S2, `f027e7c`) · **340** ✅ (S3, `23a87e5`) · **383** →
+etap polerki UI (odpowiedź właściciela 2026-10-06, §5zf) · **384**–**390** → bez przypisanego kroku; **384** i **385** uzbrajają
+się, gdy AI zacznie lądować z ładowni (Findingi **49**, **201** — następny arc).
 
 ---
 
@@ -1229,10 +1242,97 @@ blokady POP (prawdopodobnie nieosiągalne) · kolejka statków (`shipQueues` / `
 
 ---
 
-## 6. Rejestr findingów arca (#309–#383, zebrane 2026-10-02–06)
+## 5zd. G2b — dostarczone (łatki i commity 2026-10-06)
+
+Zakres: krok **G2b** z §3 — desant AI na modelu jednostek gracza (**D7**) ze szczeblem drabiny **D9** imperium w chwili
+desantu. Łatki przygotowane i zestagowane 2026-10-06, zacommitowane tego samego dnia po bramce live (§5ze) skryptem
+`commit_G2b.sh t2` z notatki przekazania G2b (poza repo). Keeper NEW `g2b_invasion_smoke` rośnie z commitami. Linie `[code]`
+na `23a87e5`.
+
+| commit | zawartość | keeper | fail-first: keeper po zmianie na stanie poprzednim | sweep · i18n |
+|---|---|---|---|---|
+| `980043f` | **S1 — D7 + D9** — `launchInvasion`, fala bez listy: szczebel imperium w chwili desantu (`garrisonTier(readEmpireGarrisonSnapshot(…))`), skład `invasionComposition` (`GarrisonPlanner.js:107`; `shock_infantry`, na szczeblach z artylerią — od 14 i od 20 poziomów fabryk — co trzecia jednostka fali `rocket_artillery`), każda jednostka przez `createAIUnit` (`InvasionSystem.js:165`) z morale szczebla (30 / 50 / 100 / 100), `owner` i `factionId` = imperium, `popCost` 0, bez domu, `deployed: false`; NEW `GarrisonData.INVASION_BASE_ARCHETYPE` `[code]` | NEW `g2b_invasion_smoke` v1 — **14/14**; `g2_ocean_capital_smoke` — adaptacja SETUPU (dwa `Math.random()` przed `launchInvasion`, asercje nietknięte; zgoda w poleceniu sesji G2b) | **8 / 6** na `f588b1c` (I1a SEDNO, I1b, I1c, I0a, I0b SEDNO, świadek I6 — desant `infantry`, `factionId` undefined) | 263/263 · 3455 |
+| `f027e7c` | **S2 — #323** — jawna lista (`embarkedTroops`) tą samą drogą: NEW `GarrisonPlanner.invasionTroops` (`:121`) — pierwsze min(długość, `troopCount`) wpisów, wpis spoza typów prostych AI (NEW `GarrisonData.AI_FIELDED_ARCHETYPES` — D7) dostaje typ ze składu szczebla na tej pozycji; potem `createAIUnit` `[code]`. Pin `startup_units_zero_smoke` T2 przecelowany z `gum.createUnit(type, planetId, hex.q, hex.r` na `gum.createAIUnit(` — **zgoda właściciela Q-T2** (§5zf), nazwana w komunikacie | + I2b, I3 — **18/18** | **16 / 2** na S1 (I3a SEDNO — `emp_001/humanity/15`, `emp_001/humanity/10`, `emp_001/undefined/undefined`; I3b — po 10 civY żyje 1 z 3) | 263/263 · 3455 |
+| `23a87e5` | **S3 — #340** — eksport `INVASION_UNIT_POOLS` usunięty, w jego miejscu komentarz z powodem (`GroundUnitData.js:98`); katalog legacy `GROUND_UNITS` zostaje (stare zapisy, łazik); komentarz `unitArchetypes.js:29` `[code]`. Pin `startup_units_zero_smoke` T5 przewrócony (zgoda w poleceniu sesji G2b), import przez przestrzeń nazw | + I7, I7a–I7c — **22/22** | **21 / 1** na S2 (I7a) | 263/263 · 3455 |
+
+Liczby keepera, fail-first oraz sweep i i18n NA STANACH POŚREDNICH — z klonu łańcucha sesji G2b `[doc: notatka G2b]`.
+
+**Weryfikacja przy commitowaniu (2026-10-06)** `[measured]`: folder przekazania zgodny z `SHA256SUMS` (88/88); kotwica HEAD
+`f588b1c`, indeks = drzewo `6599cd3` (`diff-index --cached`, bez `write-tree` na indeksie głównym), drzewo robocze = indeks
+poza `.claude/settings.local.json`; znacznik `<<T2_ANSWER>>` w wiadomości S2 wypełniony decyzją właściciela; skrypt
+`commit_G2b.sh t2` — każdy krok dał dokładnie drzewo z notatki (`519a99e` · `80b9d0f` · `cb383e4`); żaden commit nie
+przewraca całego pliku (numstat zgodny z notatką). Drzewo główne po S3 — sweep **263/263 OK, 0 FAIL, 31 advisory**,
+`check-i18n` PASS **3455**; `g2b_invasion_smoke` **22/22**, `startup_units_zero_smoke` **19/19**, `g2_ocean_capital_smoke`
+**28/28**, `g2_seams_smoke` **31/31**.
+
+**Pomiar (tylko raport, bez zmiany kodu)** — sonda `probe_g2b_landing.mjs`: prawdziwy `CombatSystem`,
+`GroundUnitManager.tick` co 0,25 civY, `_tickCaptureChecks` co 1 civY, horyzont 60 civY, 50 prób na komórkę; obrońcy —
+`garrison_unit` gracza rozstawione spiralą D10 wokół stolicy, morale min(100, 10 + tech); desant `launchInvasion` bez listy
+`[doc: notatka G2b]`. Odsetek prób, w których kolonia zmieniła właściciela w 60 civY; zakres = cztery szczeble D9; w nawiasie
+model legacy (kod `f588b1c`, te same ziarna):
+
+| tech obrońców | obrońcy | desant 2 | desant 4 | desant 6 |
+|---|---|---|---|---|
+| +0 | 0 | 100 % (100 %) | 100 % (100 %) | 100 % (100 %) |
+| +0 | 2 | 98–100 % (100 %) | 100 % (100 %) | 100 % (100 %) |
+| +0 | 4 | 28–46 % (100 %) | 100 % (100 %) | 100 % (100 %) |
+| +90 | 0 | 100 % (100 %) | 100 % (100 %) | 100 % (100 %) |
+| +90 | 2 | 0–14 % (100 %) | 28–100 % (100 %) | 100 % (100 %) |
+| +90 | 4 | 0 % (98 %) | 0–32 % (96 %) | 18–100 % (100 %) |
+
+Model legacy nie stracił jednostki w żadnej komórce (→ **387**). Szczeble 2 i 3 mają ten sam skład i morale — różnice między
+nimi to rozrzut ziaren. Pełna tabela (mediana miesięcy, straty obu stron): `kosmos-handover/g2b/verify/measure_table.md`
+(poza repo). Pomiar na uprzęży `GameCore`, nie na fixture (**D18**) — wielkość desantu i szczebel ustawiane wprost.
+
+⚠ **Finding 50** (rejestr macierzysty `W3_PLAN.md` §50; zastąpiony przez **D7**, §7) — D7 wdrożone w całości tym krokiem;
+wpis w `W3_PLAN.md` nie był w zakresie sesji i nie został zmieniony.
+
+---
+
+## 5ze. Bramka live G2b — 2026-10-06, właściciel: **PASS**
+
+Scenariusz `GATE_G2B.md` z notatki przekazania G2b (poza repo): dziewięć kroków konsoli, każda linia wykonana wcześniej
+headless na kodzie z indeksu `6599cd3` `[doc: notatka G2b]`. Wyniki `[doc: bramka G2b]`:
+
+| | co sprawdzono | wynik |
+|---|---|---|
+| **krok 2 — pokój** | `emp_001` w pokoju: `launchInvasion` → `{ success: false, reason: 'not_at_war' }` | **PASS** (bramka wojny G2-2) |
+| **krok 3 — szczebel** | plan garnizonu `emp_001`: szczebel **3**, suma poziomów fabryk **20**, morale **100** | odczyt |
+| **krok 4 — obrońcy** | dwie jednostki `garrison_unit` gracza z dźwigni debug (`gu_6`, `gu_7`, morale 10) rozstawione na kaflu stolicy (10,8) `entity_2` | setup |
+| **kroki 5–7 — wojna, desant, model** | po `declareWar` desant: `gu_21` i `gu_22` `shock_infantry`, `gu_23` `rocket_artillery`; właściciel i frakcja `emp_001`, morale **100**; lądowanie na (0,0), (2,15), (8,0) | **PASS** — skład szczebla z artylerią, morale szczebla, żadnej jednostki legacy |
+| **kroki 8–9 — walka i wynik** | jednostki imperium doszły do (10,8); garnizony (HP/morale) 30/10 → 23/7 i 24/7 → oba zniszczone; najeźdźcy skończyli z HP 9, 11 i 6, morale 94–97; przy ostatnim odczycie kolonia nadal gracza, a właściciel widział kafel stolicy zajęty | **PASS** — walka zachodzi, obie strony tracą HP i morale |
+
+⚠ **Granice dowodu tej bramki:** stanu konsoli właściciel nie zgłosił — kryterium PASS „konsola bez błędów” niepotwierdzone.
+Przejęcia kolonii bramka nie doczekała: przy ostatnim odczycie kolonia była gracza mimo zajętego kafla stolicy (przejęcie
+sprawdza skan co 1 civY, `InvasionSystem._tickCaptureChecks`, `:478`) `[code]`; czas przejęcia — wyłącznie headless
+(walidator bramki: 11 civY przy szczeblu 3, 22 przy szczeblu 0) `[doc: notatka G2b]`. Meldunek o desancie w dzwonku
+i Dzienniku (W3-7) oraz auto-slow — niezgłoszone. Obrońcy z morale 10 wobec desantu z morale 100 to komórka „2 obrońców,
+tech +0” pomiaru (§5zd): przejęcie 98–100 %.
+
+---
+
+## 5zf. Odpowiedzi właściciela do notatki G2b (2026-10-06)
+
+| | pytanie (notatka G2b §8) | odpowiedź | wykonanie |
+|---|---|---|---|
+| Q-T2 | przecelowanie pinu `startup_units_zero_smoke` T2 z kształtu `gum.createUnit(type, planetId, hex.q, hex.r` na `gum.createAIUnit(` | **zatwierdzone** — intencja pinu (desant AI dalej tworzy jednostki, to przeciwnik, nie darmowe wojsko gracza) bez zmian | ✅ `f027e7c` (zgoda nazwana w komunikacie) |
+| Q-G2b-1 | „najwyższy szczebel jakości” | **oba szczeble z artylerią** — od 14 i od 20 poziomów fabryk (morale 100) | bez zmian kodu (S1 tak liczy) |
+| Q-G2b-2 | wpis jawnej listy spoza typów prostych AI | **dostaje typ ze składu szczebla** na tej samej pozycji | bez zmian kodu (S2, `invasionTroops`) |
+| Q-G2b-3 | `deployed: false` przy lądowaniu | **przyjęte** — działa wyłącznie dla `garrison_unit` z jawnej listy | bez zmian kodu |
+| Q-G2b-4 | osobny krok balansu dla desantu archetypowego (słabszego od legacy przy obrońcach +90, §5zd) | **bez osobnego kroku** — wielkość desantu ustali następny arc | bez zmian kodu |
+| Q-G2b-5 | adaptacja setupu `g2_ocean_capital_smoke` | bez osobnej odpowiedzi — zgoda na adaptację setupu była w poleceniu sesji G2b | ✅ `980043f` |
+| 383 | kierunek dla panelu kafla obcej kolonii | **ta sama reguła widoczności co jednostki (379)** — etap polerki UI | bez kroku w tym arcu (§6 **383**) |
+
+✅ **Arc AI GARRISON zamknięty** — G1, G1b, G2 (G2-0 … G2-4 z zamknięciem), G3, G1c, G2b. Poza arciem (§3 „później”):
+limit floty, odbicie kolonii, przyczółek — zakres następnego arca podpisany przez właściciela 2026-10-06 (faza A — audyt,
+poza repo).
+
+---
+
+## 6. Rejestr findingów arca (#309–#390, zebrane 2026-10-02–06)
 
 ⚠ **Zasada wpisu:** każde `plik:linia` sprawdzone grepem — #309–#325 na `f868ae8`, #326–#335 na `c7c5a74`,
-#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f`, #379, zamknięcie #360 i dopiski #370/#375 na `8cd8d7c`, #380–#383 oraz zamknięcia #327–#330, #333 i #379 na `1c90ea4` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
+#336–#342 na `82c9196`, #343–#347 na `44967a3`, #348–#357 na `dbfbbd6`, #358–#362 i zamknięcia G2-3b na `2437725`, #363–#367 na `1fefcdc`, #368–#378 i zamknięcia #363–#367 na `96c636f`, #379, zamknięcie #360 i dopiski #370/#375 na `8cd8d7c`, #380–#383 oraz zamknięcia #327–#330, #333 i #379 na `1c90ea4`, #384–#390 oraz zamknięcia #323 i #340 na `23a87e5` (stare wpisy zachowują numery linii sprzed G1b). Numeracja globalna: najwyższy istniejący numer to **#308**
 (`VESSEL_ORDERS_PLAN.md` §308; #309 był tam planowany i świadomie **nieprzydzielony**), więc ten arc zaczyna
 od **#309**; przed nadaniem #327+ sprawdzono, że w żadnym rejestrze nie ma numeru wyższego niż #325, a #326
 istniał tylko w komunikacie `c7c5a74`; przed nadaniem #336+ sprawdzono grepem wszystkie rejestry — najwyższy
@@ -1247,6 +1347,8 @@ rejestrów, `CLAUDE.md`, pamięci i historii commitów dał #379 jako najwyższy
 pamięć), a #380+ nieużyte jako numery findingów (2026-10-05); #380–#382 nadane w notatce przekazania zamknięcia G3 (§8,
 2026-10-05) i wpisane tutaj PRZED nadaniem kolejnego numeru — przed nadaniem #383 grep rejestrów, `CLAUDE.md`, pamięci
 i historii commitów dał #382 jako najwyższy (notatka, pamięć; #380 i #381 także w komunikatach `b926d81`, `1c90ea4`), a #383+
+nieużyte (2026-10-06); przed nadaniem #384–#390 grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów dał
+#383 jako najwyższy numer findingu (trafienia ≥ 384 to numery linii, ceny i liczebności — sprawdzone po kolei), a #384+
 nieużyte (2026-10-06). Znaczniki: 🔴 żywy i dotkliwy · 🟠 realny, ograniczony ·
 ⚪ obserwacja/higiena · ✅ zamknięty.
 ⚠ Źródło: **309–316** z sesji G1 · **317–325** z audytu G0 (mechanizmy przemierzone w źródle teraz;
@@ -1264,7 +1366,9 @@ miejsca sprawdzone grepem na `1fefcdc`, liczby z sond headless sesji G2-4 oznacz
 przy wpisie) · **377–378** — znalezione w sesji zamykającej G2-4; miejsca sprawdzone grepem na `96c636f` · **379** —
 znaleziony w sesji G3 przy G3-3 (komunikat `b3fe807`, notatka G3 §7); miejsca sprawdzone grepem na `8cd8d7c` · **380–382** —
 notatka przekazania zamknięcia G3 (§8; 380 i 381 z odpowiedzi Q2 i Q5); miejsca sprawdzone grepem na `1c90ea4` · **383** —
-obserwacja z bramki live 2026-10-06 (§5zb), sprawdzona w kodzie na `1c90ea4`.
+obserwacja z bramki live 2026-10-06 (§5zb), sprawdzona w kodzie na `1c90ea4` · **384–390** — „defekty znalezione,
+nienaprawione” sesji G2b (notatka przekazania G2b §10; numery nadane przy wpisie, w kolejności tamtej listy); miejsca
+sprawdzone grepem na `23a87e5`.
 
 ### ✅ 309 — salwa wroga rozstrzygana PRZED salwą gracza; zabici gracza nie odpowiadają — ZAMKNIĘTY 2026-10-02 (`c0a3d5c`, G1b/S1)
 
@@ -1424,7 +1528,7 @@ i `EmpireLogisticsSystem.js:250`) `[code]`. `DirectorRecall.js:43` zapisuje wpro
 `empire.homeSystemId` — pole istnieje, ale nie jest kanonem” `[code]`. Po utracie stolicy pojęcia mogą
 się rozjechać. Istotne dla G2 („połowa limitu do stolicy”) — wybrać JEDNO źródło.
 
-### 🟠 323 — `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` przypisuje jednostkę do utrzymania i limitu GRACZA
+### ✅ 323 — `createUnit`: forma 5-argumentowa gubi `owner`, a `factionId 'humanity'` przypisuje jednostkę do utrzymania i limitu GRACZA — ZAMKNIĘTY 2026-10-06 dla wszystkich ścieżek AI (`f027e7c`, G2b/S2)
 
 Forma 5-argumentowa (`GroundUnitManager.js:93-100`) zastępuje `opts` przez `{ factionId }`, więc
 `owner` spada do `'player'` (`:112`) `[code]` — mechanizm AI_CAPTURE 60. Forma z obiektem `opts` daje
@@ -1444,6 +1548,16 @@ wykonaniem.
 `KOSMOS_backlog_niezrealizowane.md` §„🔴 Podwójne pobranie Kr za jednostki naziemne”, bez nowego numeru
 `[measured]`. **Dla nowych wywołań zamyka to `createAIUnit` (G2-1, `82c9196`)**; `InvasionSystem.js:130` dalej
 tworzy jednostki z samym `{ owner }` (→ G2b).
+**Zamknięcie (G2b/S2, `f027e7c`):** `launchInvasion` — ostatnia produkcyjna ścieżka AI z samym `{ owner }` — tworzy
+jednostki wyłącznie przez `createAIUnit` (`InvasionSystem.js:165`), także z jawnej listy (`invasionTroops`,
+`GarrisonPlanner.js:121-126`); `owner` i `factionId` = imperium `[code]`. Keeper `g2b_invasion_smoke` I3: lista
+[shock_infantry, rocket_artillery, infantry] przy 0 Kr we wszystkich koloniach — trzy jednostki imperium z morale szczebla,
+po 10 civY wszystkie trzy aktywne; fail-first na S1: `emp_001/humanity/15`, po 10 civY żyje 1 z 3 `[doc: notatka G2b]`.
+Produkcyjni wołający `createUnit` po G2b (grep na `23a87e5`, poza testami): gracz — `ColonyManager.js:1897` (rekrutacja,
+forma 5-argumentowa z frakcją gracza), `VesselManager.js:1368` (łazik); debug — `GameScene.js:1351` (`spawnMyUnit`),
+`SpawnTestEnemy.js:148` (jawny `owner` i `factionId` imperium — bez tej pułapki, ale z morale archetypu → **386**);
+`createAIUnit` woła `createUnit` z obiektem `opts` (`GroundUnitManager.js:211`) `[code]`. Pułapka formy 5-argumentowej
+zostaje w API (pin `g2_seams_smoke` P1d) — żaden wołający AI jej nie używa.
 
 ### ✅ 324 — świeży `garrison_unit` jest `mobile`, a odtworzenie bez pola daje `deployed` — ZAMKNIĘTY w zakresie D6 2026-10-03 (`6fc2c8d`, G2-3b)
 
@@ -1670,11 +1784,16 @@ i `_tickCaptureChecks` (`:490`) — `48c94dd` `[code]`. Keepery mechaniki przej�
 bramce); ⚠ `startup_units_zero` wojny **nie potrzebował** — zielony bez zmian `[measured]`. Pin P5 odwrócony
 świadomie z kontrolą w wojnie przy każdym zdaniu `[measured]`.
 
-### ⚪ 340 — `INVASION_UNIT_POOLS` nie ma kluczy archetypów żywych imperiów (→ G2b)
+### ✅ 340 — `INVASION_UNIT_POOLS` nie ma kluczy archetypów żywych imperiów — ZAMKNIĘTY 2026-10-06 (`980043f` + `23a87e5`, G2b/S1 + S3)
 
 Klucze puli to `xenophage`, `swarm`, `hegemon`, `trader`, `isolationist` (`GroundUnitData.js:97-103`), a grają
 `industrialist` i `expansionist` (`EmpireGenerator.js:19`) `[code]` ⇒ `launchInvasion` bez jednostek w ładowni
 zawsze spada na `['infantry', 'infantry']` (`InvasionSystem.js:112`) `[code]`. Kierunek: **D7**.
+**Zamknięcie:** S1 (`980043f`) — fala bez listy składana ze szczebla D9 imperium w chwili desantu (`invasionComposition`,
+`GarrisonPlanner.js:107`), pula nie jest czytana; S3 (`23a87e5`) — eksport usunięty, w jego miejscu komentarz z powodem
+(`GroundUnitData.js:98`); katalog legacy `GROUND_UNITS` zostaje (stare zapisy, łazik) `[code]`. Piny: `g2b_invasion_smoke`
+I7a (pula nie istnieje — eksport, definicja, import), `startup_units_zero_smoke` T5a (przewrócony za zgodą) `[measured]`.
+Linie `[code]` wpisu wyżej — sprzed G2b.
 
 ### ⚪ 341 — uprząż headless daje imperiom AI 2,2–3,1× mniej POP niż żywy fixture
 
@@ -2155,7 +2274,7 @@ drzewie z D: dron `recon_drone` ukryty + `garrison_unit` ⇒ mapa 1, karta „2 
 garnizony AI nie mają dronów (typy z `GarrisonData.js:40-41`), Rój Testowy stawia `shock_infantry` (`SpawnTestEnemy.js:148`)
 `[code]`. Nadany w notatce zamykającej G3 (§8). Bez decyzji, bez kroku.
 
-### 🟠 383 — mapa obcej kolonii: klik na kafel pokazuje panel kafla — budynek z jego danymi albo menu budowy — bez względu na wywiad (obserwacja z bramki 2026-10-06)
+### 🟠 383 — mapa obcej kolonii: klik na kafel pokazuje panel kafla — budynek z jego danymi albo menu budowy — bez względu na wywiad (obserwacja z bramki 2026-10-06) → etap polerki UI (reguła 379, kierunek 2026-10-06)
 
 Klik na dowolny kafel mapy kolonii, która nie jest podglądem, ustawia `_selectedHex` (`ColonyOverlay.js:4835`), a panel kafla
 rysuje się pod jedynym warunkiem `!colony.isPreview` (`:961` → `_drawFloatingPanel` `:992`, `:3823`) — bez terminu właściciela
@@ -2169,6 +2288,70 @@ orbitalna), ostrzał z orbity (`:255-278`) i lądowanie away teamu (`:234-238`) 
 bez wywiadu, a jednostki (379) i karta ciała mówią „nieznany”. Skutku w żywej grze poza bramką nie mierzono.
 **Bez kroku — decyzja właściciela:** czy panel kafla obcej kolonii ma iść regułą widoczności 379 (i co ma pokazywać pusty kafel
 cudzej kolonii — dziś menu budowy gracza).
+**Odpowiedź właściciela 2026-10-06 (§5zf):** panel kafla obcej kolonii idzie **tą samą regułą widoczności co jednostki
+(379)**; wykonanie — **etap polerki UI**. Co ma pokazywać pusty kafel cudzej kolonii, gdy reguła mówi „widoczne” —
+nierozstrzygnięte.
+
+### 🟠 384 — desant z ładowni zrzutowców AI duplikuje ładunek: typy idą do `launchInvasion`, oryginały zostają w ładowni (uśpiony)
+
+`_onVesselGroupVictory` zbiera z ładowni ocalałych zrzutowców (`v.groundUnits`, `InvasionSystem.js:300-305`) **typy**
+jednostek (`u.archetypeId ?? u.type`) i przekazuje je jako jawną listę do `launchInvasion` (`:307`), a ta tworzy NOWE
+jednostki (`createAIUnit`, `:165`); w `InvasionSystem` nie ma ani jednego `removeUnit` ani rozładunku (grep na `23a87e5`: 0)
+`[code]` ⇒ oryginały zostają w ładowni i mogą wylądować ponownie przy następnym zwycięstwie. Sprzed G2b (ta sama pętla na
+`f588b1c`, `:295-299`) `[git]`. Dziś bez wejścia: katalog AI nie zamawia kadłuba z ładownią (Findingi **49**, **201**).
+⚠ Uzbraja się w chwili, gdy AI zacznie lądować z ładowni. Notatka G2b §10 (1).
+
+### ⚪ 385 — bramki mobilności AI w `_tickCombatAI` czytają tabelę legacy: każdy archetyp jest „mobilny”
+
+`_tickCombatAI` pyta o prędkość `getUnitStats(atk.type)` w marszu terytorialnym (`GroundUnitManager.js:1160`) i w pościgu
+(`:1180`) `[code]`. `getUnitStats` czyta wyłącznie katalog legacy `GROUND_UNITS`, a dla typu spoza niego zwraca domyślne
+`speedHex: 1.5` (`GroundUnitData.js:86-91`) `[code]` ⇒ bramkę przechodzi każdy archetyp, także `garrison_unit` (legacy
+`garrison` ma `speedHex 0`, `GroundUnitData.js:77`; komentarz `GroundUnitManager.js:1161`). W G2b bez skutku: fala bez listy
+to `shock_infantry` i `rocket_artillery`, a `garrison_unit` wchodzi do desantu wyłącznie z jawnej listy (S2, Q-G2b-3) — dziś
+bez wejścia (**384**). Notatka G2b §10 (2).
+
+### ⚪ 386 — `SpawnTestEnemy` tworzy jednostki z pominięciem `createAIUnit`: morale archetypu zamiast szczebla (debug)
+
+`spawnTestEnemy` stawia marines przez `gum.createUnit('shock_infantry', …, { factionId: TEST_ENEMY_ID, owner: TEST_ENEMY_ID })`
+(`src/debug/SpawnTestEnemy.js:148-151`) `[code]` — właściciel i frakcja poprawne (bez pułapki **323**), ale morale to bazowe
+morale archetypu (`shock_infantry` 15, `unitArchetypes.js:56`; `GroundUnitFactory.js:109`), nie morale szczebla D9 `[code]`.
+Jedyny omijacz `createAIUnit` po stronie AI po G2b (lista wołających — **323**). Tylko debug; istotne dla bramek, które
+stawiają imperium testowe (G3, G1c). Notatka G2b §10 (3).
+
+### ⚪ 387 — jednostki legacy AI ze starych zapisów są w walce z garnizonem praktycznie nie do zabicia
+
+Pomiar sesji G2b (sonda `probe_g2b_landing.mjs`, 50 prób na komórkę; model legacy na kodzie `f588b1c`): desant legacy
+`infantry` nie stracił jednostki w ŻADNEJ z 18 komórek (straty 0,0), także przy 4 obrońcach `garrison_unit` z morale +90,
+gdzie przejmował kolonię w 96–100 % prób; desant archetypowy przy tych samych obrońcach — 0 % (2 jednostki), 0–32 % (4),
+18–100 % (6) (§5zd) `[doc: notatka G2b]`. Mechanizm wg kodu, bez pomiaru rozbicia na czynniki: jednostka legacy nie ma pola
+`morale`, odczyt `?? DEFAULT_MORALE` daje 100 (`CombatSystem.js:276`, `:355`), a `infantry` ma `hp: 60`
+(`GroundUnitData.js:41`) `[code]`. Po G2b żadna ścieżka produkcyjna nie tworzy jednostki legacy dla AI — dotyczy wyłącznie
+jednostek legacy w starych zapisach (gałąź legacy `GroundUnitManager.restore`), bez migracji (v101). Notatka G2b §10 (4).
+
+### ⚪ 388 — T6c `g2_ocean_capital_smoke` zależy od strumienia `Math.random`
+
+`_findLandingHexes` tasuje kandydatów przez `Math.random()` (`InvasionSystem.js:566`) `[code]`, więc liczba losowań wykonanych
+przed wyborem heksów przesuwa heksy lądowania i zmierzony czas przejęcia, który pinuje T6c (`TWIN_LAND_CAPTURE_CIVY`).
+Zmierzone w sesji G2b: bez dawnych dwóch losowań typów z puli — heksy (−7,15) i (0,0) i przejęcie w 9. civY, z nimi — (2,15)
+i (3,0) i 11. civY; S1 dodał w setupie dwa `Math.random()` przed `launchInvasion` (`g2_ocean_capital_smoke.mjs:333-336`)
+`[doc: notatka G2b]`. Pin kruchy: każda zmiana liczby losowań w ścieżce desantu przewróci go bez zmiany zachowania.
+Notatka G2b §10 (5).
+
+### ⚪ 389 — ułamkowy `troopCount`: dawna pętla dawała ⌈n⌉ jednostek, skład szczebla daje ⌊n⌋
+
+Na `f588b1c` fala bez listy powstawała pętlą `for (let i = 0; i < troopCount; i++)` (`InvasionSystem.js:147`) — dla ułamka
+⌈n⌉ jednostek `[git]`; od G2b `garrisonComposition` i `invasionTroops` liczą `Math.floor` (`GarrisonPlanner.js:88`, `:123`)
+— ⌊n⌋ `[code]`. Żywi wołający podają liczby całkowite: `_onVesselGroupVictory` — `Math.floor` (`InvasionSystem.js:295`),
+dźwignia `force_invasion` — 3 (`WarOverlay.js:727`), domyślne `TROOPS_PER_LANDING = 3` (`InvasionSystem.js:37`) `[code]`;
+różnica tylko dla ułamkowego `fleet.troopCapacity` w gałęzi `_onBattleResolved` (`:354`), bez producenta od W3-8 `[code]`.
+Notatka G2b §10 (6).
+
+### ⚪ 390 — nieaktualne teksty o `INVASION_UNIT_POOLS` w dwóch keeperach
+
+Komunikat asercji `w3_seams_smoke` T6 („archetypy z INVASION_UNIT_POOLS nie niosą…”, `w3_seams_smoke.mjs:355`) i nagłówek
+`ground_morale_resolution_smoke` („desant AI z `INVASION_UNIT_POOLS`”, `:11`) opisują pulę usuniętą w S3 `[code]`; asercje
+zielone — 38/38 i 35/35 na `23a87e5` `[measured]`. Tekst historyczny w istniejących keeperach — nieedytowany. Notatka G2b §10
+(7) wymieniała tylko `w3_seams_smoke`; drugi plik znaleziony grepem przy wpisie.
 
 ---
 

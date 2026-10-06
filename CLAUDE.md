@@ -5664,9 +5664,9 @@ wyżej: błąd był mój, nie kodu.
 
 ---
 
-## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE · G3 ZAMKNIĘTY 2026-10-05 · G1c ZAMKNIĘTY 2026-10-06)
+## AI GARRISON — G1 + G1b: walka naziemna się rozstrzyga, a utrata jednostki nie gubi ludzi (save **v101 bez migracji**, live-gate PASS — G1 i G1b ZAMKNIĘTE 2026-10-02 · G2-2 ZAMKNIĘTY 2026-10-03 · G2-3a ZROBIONY 2026-10-03 · G2-3b ZAMKNIĘTY 2026-10-03 · G2-4 ZAMKNIĘTY 2026-10-04 · follow-upy G2-4 ZAMKNIĘTE 2026-10-04 — G2 ZAMKNIĘTE · G3 ZAMKNIĘTY 2026-10-05 · G1c ZAMKNIĘTY 2026-10-06 · G2b ZAMKNIĘTY 2026-10-06 — ARC ZAMKNIĘTY)
 
-Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#379**: `docs/design/AI_GARRISON_PLAN.md`.
+Plan, decyzje **D1–D18** (+ **D13a**) i rejestr findingów **#309–#390**: `docs/design/AI_GARRISON_PLAN.md`.
 Commity G1: `85411d0` (D5a) · `f5e30e5` (D5b + świadome odwrócenie `w3_seams_smoke` T6) · `f868ae8` (D5c).
 Commity G1b: `c0a3d5c` (S1, #309) · `a42ec93` (S2, #310) · `03688f0` (S3, #312) · `c7c5a74` (S4, #326).
 
@@ -5896,4 +5896,30 @@ jak przy wczytaniu).
 Keepery `g1c_pop_loss_smoke` **86/86** · `g3_ground_visibility_smoke` **49/49** · `ground_unit_loss_smoke` **29/29**; sweep
 **262/262**, `check-i18n` 3455. Nowe findingi **382** (karta ciała liczy ukryte drony — uśpiony) i **383** (panel kafla obcej
 kolonii bez reguły widoczności — decyzja właściciela).
-**G1c ZAMKNIĘTE.** Pozostały krok arca: **G2b** (pule desantu na archetypy).
+**G1c ZAMKNIĘTE.**
+✅ **G2b — desant AI na modelu jednostek gracza (D7, D9)** (`980043f` S1 · `f027e7c` S2 · `23a87e5` S3; bramka live
+właściciela 2026-10-06 **PASS**; plan §5zd–§5zf). **S1** — `InvasionSystem.launchInvasion` tworzy każdą jednostkę desantu
+przez `createAIUnit`: skład i morale ze szczebla drabiny D9 imperium w chwili desantu (`garrisonTier`
++ `GarrisonPlanner.invasionComposition`: `shock_infantry`, na szczeblach od 14 i od 20 poziomów fabryk co trzecia jednostka
+fali `rocket_artillery`; morale 30 / 50 / 100 / 100), `owner` i `factionId` = imperium, `popCost` 0, bez domu,
+`deployed: false`. **S2 (323)** — jawna lista (`embarkedTroops`) tą samą drogą (`invasionTroops`): wpis spoza typów prostych
+AI (`GarrisonData.AI_FIELDED_ARCHETYPES`) dostaje typ ze składu szczebla na tej pozycji. **S3 (340)** — `INVASION_UNIT_POOLS`
+usunięte (klucze puli nie należały do żadnego imperium z generatora — desant był zawsze legacy `infantry`); katalog legacy
+`GROUND_UNITS` zostaje (stare zapisy, łazik).
+⚠ **Jednostkę naziemną AI tworzy się WYŁĄCZNIE przez `createAIUnit` — także desant;** jedyny omijacz po stronie AI to
+debugowy `SpawnTestEnemy` (**386**). Jednostki legacy AI zostają tylko w starych zapisach (bez migracji) i są w walce
+praktycznie nie do zabicia (**387**).
+⚠ **Pin `startup_units_zero_smoke` T2 przecelowany za zgodą właściciela (Q-T2)** — z `gum.createUnit(type, planetId, hex.q,
+hex.r` na `gum.createAIUnit(`; T5 przewrócony (pula nie istnieje).
+Pomiar (uprząż, 50 prób na komórkę): bez obrońców przejęcie 100 % na każdym szczeblu; przy 4 obrońcach z morale +90 desant
+2 jednostek nie przejmuje (0 %), 4 — 0–32 %, 6 — 18–100 % (legacy 96–100 %). Odpowiedzi właściciela 2026-10-06: najwyższy
+szczebel = oba szczeble z artylerią; wpis listy spoza typów prostych — typ ze składu szczebla; `deployed: false` tylko dla
+`garrison_unit` z listy; **bez osobnego kroku balansu — wielkość desantu ustali następny arc**; **383** — panel kafla obcej
+kolonii tą samą regułą co jednostki (379), etap polerki UI.
+Keeper NEW `g2b_invasion_smoke` **22/22** · `startup_units_zero_smoke` **19/19** · `g2_ocean_capital_smoke` **28/28** (setup:
+dwa `Math.random()` zastępują losowania dawnej puli — **388**); sweep **263/263**, `check-i18n` 3455. Nowe findingi
+**384–390** (plan §6): 🟠 **384** desant z ładowni AI duplikuje ładunek (uśpiony — uzbraja się z desantem z ładowni, Findingi
+49/201) · ⚪ **385** bramki mobilności AI czytają tabelę legacy · **386** · **387** · **388** · **389** ułamkowy `troopCount`
+⌈n⌉ → ⌊n⌋ · **390** nieaktualne teksty o puli w dwóch keeperach.
+**G2b ZAMKNIĘTE. ARC AI GARRISON ZAMKNIĘTY** (G1, G1b, G2, G3, G1c, G2b). Poza arciem: limit floty, odbicie kolonii,
+przyczółek — następny arc (zakres właściciela 2026-10-06).
