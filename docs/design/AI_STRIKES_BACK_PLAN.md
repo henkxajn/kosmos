@@ -1,17 +1,22 @@
 # AI STRIKES BACK — flota, strażnik i desant AI
 
 > **Status:** 📋 **PLAN PODPISANY 2026-10-06** — zakres (cztery pozycje, w kolejności właściciela) i decyzje
-> **SB1–SB12** podpisane przez właściciela **2026-10-06**; **SB13–SB19** — tego samego dnia, przy zamknięciu S0 (§2).
+> **SB1–SB12** podpisane przez właściciela **2026-10-06**; **SB13–SB19** — tego samego dnia, przy zamknięciu S0;
+> **SB20–SB25** — **2026-10-07**, odpowiedzi na pytania sesji 1 S1 (§2).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
 > ✅ **S1 — sesja 1 z 2 ZAMKNIĘTA 2026-10-07** (tabela strojenia + limit floty, bez bramki — zachowanie gry bez zmian;
-> wynik, audyt, pomiary M1/M2 — §5c): `eb17f97` · `8abe84d`. **Następna: S1, sesja 2** (pula, odrastanie, SB13, SB19).
+> wynik, audyt, pomiary M1/M2 — §5c): `eb17f97` · `8abe84d`.
+> ⏳ **S1 — sesja 2 z 2 (2026-10-08): KOD PRZYGOTOWANY I ZASTAGOWANY, NIE ZACOMMITOWANY** — leczenie Findingu 407 przy
+> wczytaniu, pula okrętów, mobilizacja całej rezerwy w wojnie, odrastanie, odczyt wywiadu „flota / limit” (decyzje
+> **SB20–SB25** — §2; wynik, pomiar M3, bramka — §5d). Czeka na zgodę właściciela na trzy przecelowania pinów
+> (R-B2a, R-B2b, R-B5 — §5d.4) i na bramkę w przeglądarce (`kosmos-handover/ai-strikes-back-s1/gate/GATE_S1.md`).
 > **S2–S4** — nierozpoczęte.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
-> **Rejestr macierzysty findingów #391–#408:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
+> **Rejestr macierzysty findingów #391–#411:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#391–#396 na `8b72c47`, #397–#406 na `eb6c06e`) ·
 > `[measured]` — wykonane i policzone ·
 > `[git]` — historia commitów · `[doc]` — przepisane z dokumentu, bez ponownego pomiaru · `[doc: audyt fazy A]` —
@@ -76,6 +81,12 @@ W kolejności właściciela:
 | **SB17** | **Skład puli jest wzorcem w tabeli strojenia;** domyślny proponuje CC z pomiaru szablonów (siła, zasięg, bak warp), właściciel zatwierdza. | Uzupełnia SB1 i SB9. |
 | **SB18** | **W S1 kadłuby z puli są w służbie i ZADOKOWANE przy stolicy** (orbita to S2). Doktryn S1 nie zmienia; CC mierzy, co istniejące doktryny robią z kadłubami w służbie podczas wojny. | S2 (SB5) przenosi strażnika na orbitę. |
 | **SB19** | **W S1 odczyt wywiadu „wolna załoga” zostaje zastąpiony odczytem floty / limitu.** | Finding **398** (§6). |
+| **SB20** | **Domyślny skład puli: `frigate_system_defender`, potem trzy `frigate_missile_escort` — wzorzec D, E, E, E powtarzany do limitu** (limit 2 → D, E; 6 → D, E, E, E, D, E). Odpowiedź na pytanie 1 sesji 1 (§5c.5), **2026-10-07**. | Propozycja z pomiaru M1 (§5c.2). Klucz `fleetPoolPattern` tabeli strojenia — wyłącznie UZBROJONE szablony katalogu, 1–24 pozycji (§5d). |
+| **SB21** | **Minimum 2 kadłubów z bakiem warp — także PONAD limitem:** pula dokłada brakujące eskorty z bakiem, nawet gdy limit jest pełny; 2 to wartość strojenia. **Zmienia SB14.** Odpowiedź na pytanie 2 (Finding **408**), **2026-10-07**. | Klucz `fleetMinWarpHulls` (domyślnie 2, zakres 0–100). Fixture `emp_001`: 6 defenderów przy limicie 6 → w wojnie +2 eskorty ponad limit, 8 w służbie (§5d) `[measured]`. |
+| **SB22** | **Kadłuby puli rozwiązywane „wszystko zbadane”** — jak sonda pierwszego kontaktu (`DirectorFirstContact.js:113`), bez techu imperium. Odpowiedź na pytanie 3, **2026-10-07**. | §5d (`FleetPoolPlanner`). |
+| **SB23** | **Transportowiec jest nieuzbrojony i poza limitem;** jego liczba i źródło rozstrzyga S3. Odpowiedź na pytanie 4, **2026-10-07**. | Predykat `isFleetLimitHull` (`hasWeapons`); wzorzec puli odrzuca szablony nieuzbrojone (§5d). |
+| **SB24** | **Finding 407 leczony przy wczytaniu — w sesji 2, osobnym commitem.** Odpowiedź na pytanie 5, **2026-10-07**. | §5d (B1). |
+| **SB25** | **Flota zachowuje własny klucz mnożnika szczebla** (`fleetRungMult`); progi szczebli wspólne z garnizonem (`garrisonTier`). Odpowiedź na pytanie 6, **2026-10-07**. | Stan S1-2 bez zmian. |
 
 ---
 
@@ -89,7 +100,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | slice | zawartość | findingi / decyzje | estymata | keepery zagrożone (audyt P6) | bramka |
 |---|---|---|---|---|---|
 | **S0** | trzy defekty: zaległość gracza blokuje kadłuby AI · martwy guard załogi AI i pobór POP na załogę AI · dominację odbierają wyłącznie kadłuby, z którymi da się walczyć (obie strony predykatu) | **391** · **392** · **393** · **394** · SB2 · SB4 · SB5 | 1 dzień — ✅ zamknięty 2026-10-06 (§5b) | `fleet_upkeep_imperial`, `w2_deploy_ui`, `w2_reserve_upkeep`, `w2_ai_mobilization`, `director_*` (6); z audytowego S2: `w3_dominance_persist`, `g2_peace_followups`, `combat_system_scope` | tak — **PASS 2026-10-06** (§5a): z 6 kadłubów `emp_001` w służbę weszły **2** (`v_24`, `v_25`), **4** zatrzymał parytet (`empireOutgunnedByPlayer`, 1 314 > 618) |
-| **S1** | tabela strojenia + komenda konsoli + odczyt (SB9, SB16) · limit floty (SB3, SB14) · pula: kadłuby przy mobilizacji, w służbie i zadokowane przy stolicy, odrastanie 1 kadłub/rok, bez załogi (SB1, SB2, SB15, SB17, SB18) · mobilizacja wojenna całej rezerwy (SB13) · odczyt floty / limitu w wywiadzie (SB19). ⓘ Kandydat 9 notatki przekazania S0 (parytet zatrzymuje mobilizację po pierwszej porcji — 4 z 6 fregat GATE-S4 zostaje w rezerwie) NIE jest findingiem: odpowiada na niego SB13. | SB1 · SB2 · SB3 · SB9 · SB13–SB19 | 2–3 dni | Director 6–10; `deploy_seams`, `w2_deploy_model` | tak — po sesji 2. Sesja 1 ✅ 2026-10-07 (§5c): tabela strojenia i limit floty bez bramki (nic w grze ich nie czyta); jednolinijkowce części „tabela” zwalidowane w prawdziwej grze na fixture |
+| **S1** | tabela strojenia + komenda konsoli + odczyt (SB9, SB16) · limit floty (SB3, SB14) · pula: kadłuby przy mobilizacji, w służbie i zadokowane przy stolicy, odrastanie 1 kadłub/rok, bez załogi (SB1, SB2, SB15, SB17, SB18) · mobilizacja wojenna całej rezerwy (SB13) · odczyt floty / limitu w wywiadzie (SB19). ⓘ Kandydat 9 notatki przekazania S0 (parytet zatrzymuje mobilizację po pierwszej porcji — 4 z 6 fregat GATE-S4 zostaje w rezerwie) NIE jest findingiem: odpowiada na niego SB13. | SB1 · SB2 · SB3 · SB9 · SB13–SB25 · 398 · 407 · 408 | 2–3 dni | Director 6–10; `deploy_seams`, `w2_deploy_model` | tak — po sesji 2. Sesja 1 ✅ 2026-10-07 (§5c): tabela strojenia i limit floty bez bramki (nic w grze ich nie czyta); jednolinijkowce części „tabela” zwalidowane w prawdziwej grze na fixture · Sesja 2 (§5d): scenariusz całego S1 (`GATE_S1.md`, poza repo) zwalidowany w prawdziwej grze na kodzie sesji i na kontroli `45ee9d2`; bramka właściciela po zgodzie na przecelowania |
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11) | **396** · **406** · 384 · 344 · 55 · SB7 · SB8 · SB11 | 3–4 dni | `w3_ai_invasion`, `g2b_invasion`, `ai_capture_*` (4), `battle_announce_once`, `g2_war_gate` | tak |
 | **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11) | SB10 · SB11 | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams` | tak |
@@ -315,6 +326,131 @@ kontrola: na `825f541` każdy krok `KOSMOS.debug.sb*` rzuca „not a function”
 6. **Mnożnik szczebla floty:** dziś osobna lista w tabeli SB (domyślnie równa `limitMult` garnizonu, pilnowana keeperem) —
    ma tak zostać, czy limit floty ma brać mnożnik wprost z drabiny garnizonu (bez osobnego pokrętła)?
 
+→ **Odpowiedzi właściciela 2026-10-07: SB20–SB25 (§2)**, w kolejności pytań 1–6; każda odpowiada na pytanie tak, jak je
+zadano (sprawdzone na początku sesji 2).
+
+### 5d. S1 — sesja 2 z 2 (2026-10-08): leczenie 407, pula, mobilizacja rezerwy, odrastanie, wywiad — kod PRZYGOTOWANY
+
+Zakres sesji (polecenie właściciela, decyzje SB20–SB25): część A — audyt bez edycji; część B — pięć przygotowanych
+commitów (B1 leczenie 407 · B2 pula · B3 mobilizacja wojenna całej rezerwy · B4 odrastanie · B5 odczyt wywiadu);
+część C — pomiar M3; część D — scenariusz bramki w przeglądarce; część E — ta dokumentacja (commit bezpośrednio).
+**Kod jest ZASTAGOWANY w repo (stan „B5 kod”), NIE zacommitowany:** trzy podpisane decyzje odwracają piny istniejących
+keeperów, a reguła sesji każe je zostawić czerwone, przygotować przecelowanie z dowodem mutacyjnym i zapytać (§5d.4).
+Save **v101 bez migracji** (flaga puli w `empires.<id>.fleetPool`, pochodzenie kadłuba na białej liście statku).
+**Poza zakresem (tylko raport):** stanowisko strażnika na orbicie (S2), reguły doktryn i produkcji, transportowiec
+(S3), odbijanie kolonii, Findingi 405 i 406, DSCS. Sondy, wyniki, łatki, skrypt commitów i notatka przekazania:
+`kosmos-handover/ai-strikes-back-s1/p2/` i `HANDOVER_S1_PART2.md` (poza repo).
+
+#### 5d.1 Audyt (część A) — odczyt kodu na `45ee9d2`
+
+| pytanie | odpowiedź `[code]` |
+|---|---|
+| 407: gdzie siedzi naprawa 256 | WYŁĄCZNIE w czasie gry, na dwóch ścieżkach dokowania: admisja `MovementOrderSystem._issueDock` (D-256a) i konsument `FleetSystem._maybeDockOnArrival` (D-256b) z bliźniakiem `_maybeAutoDockOnReturn` (263); `[git]` `10eab7e` |
+| 407: czemu wczytanie nie leczy | `VesselManager.restore` przepisuje `systemId` z zapisu i woła wyłącznie `_reconcileSystemId` (Slice A, `f072da0`), który leczy WYŁĄCZNIE misje międzygwiezdne — dla statku w doku bez misji zwraca jego własny `systemId`, także co tick |
+| 407: co kluczuje się na `vessel.systemId` | wyłącznie odczyty liczone na żywo, bez trwałych indeksów: `getVesselsInSystem`, `OrderService.getTraffic`, Outliner, `ProximitySystem._checkPair`, `WarSystem._playerVesselsInSystem` → `_buildPlayerBattleUnit` / `hasPlayerPresenceInSystem`, `DirectorOffensive.isDefended` / `estimateDefenderHp`, sonda nacisku `DirectorPressure`, ETA `FleetSystem`, renderer |
+| 407: bezpieczne miejsce zmiany | pętla `VesselManager.restore`, PO `_reconcileSystemId`: ciała są już w `EntityManager` (`GameScene._restoreSystem` w `create()`), DebugLog podpięty, żaden indeks na `systemId` jeszcze nie powstał; stacje wracają później — dok przy stacji pominięty (w fixture 0 stacji) |
+| mobilizacja garnizonu | `GarrisonSystem`: `diplomacy:warDeclared` → `mobilizeEmpire('war_declared')`; zapis w wojnie → pierwszy tick → `'reconcile_at_war'`; granica roku → `'reconcile_yearly'`; raz na imperium; bez stolicy — odmowa `no_capital` BEZ flagi; flaga `empires.<id>.garrison` (bez migracji) |
+| ścieżka sondy pierwszego kontaktu | `DirectorFirstContact.scienceFlyby`: `resolveTemplate(…, { isResearched: () => true })` → `createVessel` → stempel właściciela PRZED `vessel:created` ⇒ `DirectorProduction._claimVessel` wraca od razu, kolejka adnotacji (mechanizm Findingu **395**) nietknięta |
+| powiadomienie o mobilizacji | `director:mobilized` → `NotificationCenter._handleMobilized`: bramka `contact`, nazwa imperium przy `detailed`, dzwonek + Dziennik (kanał Wywiad), klucze `notif.mobilization*`; garnizon — sam wpis w Dzienniku |
+| odrastanie garnizonu | rok gry = 1,0 `gameTime`, granica = wzrost `floor`; rozliczany każdy rok od `regrowthYear + 1`; bez stolicy rok przepada (bez nadrabiania); rekord bez `regrowthYear` — tylko ustawia rok |
+
+#### 5d.2 Przygotowany łańcuch (część B)
+
+| commit (przygotowany) | treść | decyzje · findingi |
+|---|---|---|
+| **B1** — S1-3 | `VesselManager._healDockedSystemId`: przy wczytaniu statek w DOKU (nie wrak, nie w skoku międzygwiezdnym), którego ciało doku leży w innym układzie, bierze układ ciała; jeden wpis `vessel:systemIdHealed` na statek (`DebugLog.TRACKED_EVENTS`); nic poza `systemId` | SB24 · **407** |
+| **B2** — S1-4 | NEW `src/utils/FleetPoolPlanner.js` — plan puli: miejsce = max(limit − uzbrojone, minimum z bakiem − z bakiem, 0); sloty wzorca do limitu, istniejące kadłuby pokrywają sloty swojej klasy, niepokryte w kolejności wzorca, dopełnienie minimum — pierwszy szablon z bakiem; NEW `src/systems/FleetPoolSystem.js` (`window.KOSMOS.fleetPoolSystem`) — pula RAZ na imperium przy mobilizacji, trzy wejścia jak garnizon, flaga `empires.<id>.fleetPool`, bez stolicy / pod reparacjami — nic i bez flagi; `VesselManager.createAIVessel` — JEDNA funkcja tworzenia (dok stolicy, w służbie, załoga 0, bez POP, bez utrzymania; `origin: 'pool'` i właściciel ostemplowane PRZED `vessel:created`, więc 395 się nie powtarza); klucze `fleetPoolPattern` i `fleetMinWarpHulls` z konsumentem i walidacją; odczyt `sbTuning()` + kolumny `zBakiem`, `pula`, `pulaDoda`; powiadomienie — istniejące `_handleMobilized`, bez nowych kluczy | SB1 · SB2 · SB14 · SB18 · SB20 · SB21 · SB22 |
+| **B3** — S1-5 | mobilizacja wojenna budzi CAŁĄ uzbrojoną rezerwę imperium (`deployVessel`, bez guardu parytetu); liczba w powiadomieniu = pula + obudzona rezerwa; reguła pokojowa `mobilize_reserve` (guard parytetu, porcja 2) bez zmian | SB13 |
+| **B4** — S1-6 | odrastanie: po mobilizacji jeden kadłub na granicę roku kalendarzowego (`fleetRegrowthPerYear`, domyślnie 1), ta sama reguła miejsca i wzorca, także w pokoju; bez stolicy — rok przepada (jak garnizon); pod reparacjami — pominięte ze śladem audytu | SB15 |
+| **B5** — S1-7 | wywiad przy „detailed”: linia `okręty uzbrojone: A / limit floty: L` (klucz `intel.fleetVsLimit` PL + EN) zamiast `wolna załoga: N POP` (`intel.crewCapacity` usunięty z obu słowników); brak systemu puli ⇒ `null`, nigdy 0 | SB19 · **398** |
+
+#### 5d.3 Weryfikacja `[measured]`
+
+- Keepery NEW: `sb1_dock_heal_smoke` **14/14** (fail-first na `45ee9d2` 2 / 12) · `sb1_fleet_pool_smoke` **79/79** (fail-first:
+  część B2 na B1 6 / 54, część B3 61 / 6, część B4 68 / 11) · `sb1_intel_fleet_smoke` **13/13** (fail-first 2 / 11). Każdy
+  pin wykluczający ma świadka; kontrole zielone po obu stronach.
+- Sweep: B1 **266/266**; B2, B3, B4 „kod” **262/267**, B5 „kod” **262/268** — czerwone WYŁĄCZNIE piny odwrócone przez
+  podpisane decyzje (§5d.4); z przecelowaniami **267/267**, **267/267**, **267/267**, **268/268**; `check-i18n` PASS,
+  pl = en = **3455** po każdym kroku (B5: +1 klucz, −1 klucz).
+- 407 w prawdziwej grze na fixture (izolowany headless Chrome): jednolinijkowiec właściciela przed — trzy chimery, po —
+  `""` i trzy wpisy audytu; obrona domu gracza: `WarSystem._buildPlayerBattleUnit('sys_home', 'entity_2')` HP **30 → 360**,
+  `DirectorOffensive.isDefended` false → **true**, `estimateDefenderHp` 30 → **360**, obecność gracza w `sys_060` true →
+  false; sonda nacisku `emp_001` 3 → 3 (oba układy w powłoce). Konsola: 0 wyjątków.
+
+#### 5d.4 Przecelowania pinów — CZEKAJĄ NA ZGODĘ (pin czerwony, propozycja + dowód mutacyjny)
+
+| przecelowanie | keeper · piny czerwone na kodzie | propozycja | dowód mutacyjny |
+|---|---|---|---|
+| **R-B2a** (SB1, SB20, SB21) | `sb1_fleet_tuning_smoke` — 10 asercji (T1a, T1e, T2i, T3, T4b, T5b, T8a, T8e, T11a, T12a): pinują stan sesji 1 (dokładnie 3 klucze, limit czyta tylko konsola, 13 kolumn) | klucze S1-1 jako PREFIKS tabeli + literalne wartości domyślne, „wszystko domyślne” po CAŁEJ tabeli; konsumenci limitu: konsola i pula; kolumny + `zBakiem`, `pula`, `pulaDoda` | 4 / 4 zabite: wartość domyślna 32 → 33 (10 asercji czerwonych), klucz przed prefiksem (T1a, T3), trzeci importer `FleetLimit` (T11a), brak kolumny `pulaDoda` (T12a) |
+| **R-B2b** (SB1) | `w3_target_selection` (7: T4 ×5, T6, T8) · `wp_ai_peace_offer` (T1f) · `wp_test_infra` (T7a, T7b) · `g3_regrowth` (R9b): wojna tworzy pulę, więc scena keeperów (siła AI w służbie, dzwonek) się zmienia; pinują wybór celu, depeszę pokojową i Dziennik garnizonu, nie pulę | pula WYŁĄCZONA w setupie (`fleetPoolSystem.enabled = false`, wzór `garrisonSystem.enabled`); asercje bez zmian | 5 / 5 zabite: pula ignoruje wyłącznik — wszystkie cztery keepery czerwone dokładnie jak na kodzie (wyłącznik jest NOŚNY); eskadra stała 1 (T4), `war_status` ślepy na drugą stronę (T1f), depesza nie wychodzi (T7a), mobilizacja garnizonu dzwoni (R9b) |
+| **R-B5** (SB19) | `w2_ai_mobilization_smoke` T5 (2 asercje: `knownCrewCapacity === 7` i null / null) | ta sama struktura pinu (odczyt z kolaboratora; brak kolaboratora ⇒ null, nie 0), nowe pola `knownArmedHulls` / `knownFleetLimit` | 2 / 2 zabite: limit = liczba kadłubów; brak systemu puli ⇒ 0 |
+
+Kontrola: każdy z sześciu keeperów bez mutacji zielony; drzewo po każdej mutacji przywrócone bajt w bajt.
+⚠ R9b mierzy dzwonek GLOBALNIE: na kodzie dzwoni powiadomienie o mobilizacji imperium z KONTAKTEM (`emp_001`) — zgodnie
+z podpisem („istniejące powiadomienie”); bramkę `contact` pinuje `sb1_fleet_pool_smoke` T8 (plotka — nic).
+
+#### 5d.5 Plan puli — przypadki właściciela (`sb1_fleet_pool_smoke` T4) `[measured]`
+
+| limit · kadłuby przed | pula dodaje | uwagi |
+|---|---|---|
+| 2 · 0 | D, E | minimum 2 z bakiem dopełnia dopiero odrastanie (rok później) — pytanie 3, §5d.8 |
+| 6 · 0 | D, E, E, E, D, E | wzorzec do limitu |
+| 6 · 6 defenderów | E, E — PONAD limit | SB21 (fixture `emp_001`) |
+| 6 · 3 defendery | E, E, E | 3 sloty D pokryte, 3 sloty E niepokryte |
+| kontrola dyskryminacji | — | reguła „tylko do limitu” dałaby inne wyniki w dwóch ostatnich wierszach (T4g) |
+
+#### 5d.6 M3 — pula i mobilizacja w wojnie, 10 lat gry `[measured]`
+
+Scenariusz (wspólny kod w node i w przeglądarce): wojna z każdym imperium AI PRAWDZIWĄ ścieżką `declareWar` (pula +
+obudzona rezerwa + garnizon), 10 lat gry; kontrola — ten sam świat w pokoju. Fixture: prawdziwa gra (kontrola
+rozruchu: gy 60,117 · `entity_115` · 6 · 618 / 450 ✓; konsola 0 wyjątków). Wariant dodatkowy „dom bez obrony”: przed wojną
+trzy fregaty gracza idą do rezerwy produkcyjną ścieżką `withdrawVessel`. Uprząż: `bootWithDirector` + nacisk `pressPaid`
+(kontrola: liczba kadłubów przy gy 60 = tabela C1 audytu ✓).
+
+| świat · wariant | imperium · limit | mobilizacja (pula · obudzone) | najwięcej uzbrojonych | doktryny | uderzenie | bitwy · straty · desant |
+|---|---|---|---|---|---|---|
+| fixture · wojna | `emp_001` · 6 | +2 E · 6 | 8 (8 w służbie od 1. miesiąca) | `defend_home` ×3, `patrol_border` ×2 (do `entity_124`, 24 AU, własny układ) | 2 × odmowa `target_beyond_reach` (gy 64,2 i 69,3: dom gracza broniony, 360 HP) | 0 · 0 · 0 |
+| fixture · wojna | `emp_002` · 6 | +6 (D, E, E, E, D, E) · 0 | 6 | `defend_home` ×3, `patrol_border` ×1 (10,5 AU) | brak celu w zasięgu (sonda 0 / 121) | 0 · 0 · 0 |
+| fixture · wojna, dom bez obrony | `emp_001` · 6 | +2 E · 6 | 8 | jw. | **UDERZENIE** 2 eskortami (`v_30`, `v_31`) gy 64,45 → `sys_home`; skok 0,6 roku, potem ~4,8 roku lotu od krawędzi układu | 2 bitwy przy `entity_2` (gy 69,9 i 70,2) — wygrywa `emp_001` (obrona kolonii 30 HP, okrętów gracza w służbie brak); desant odmówiony `no_drop_capable_hull` ×2; odwołanie 1 eskorty; 0 wraków |
+| fixture · pokój (kontrola) | `emp_001` · 6 | puli brak; `mobilize_reserve` raz (2 w służbę, gy 60,5) | 9 (produkcja: 8 przy gy 68, 9 przy 69; w służbie 2) | `defend_home` ×1 | guard `empireAtWarWithPlayer` 121 / 121 | 0 · 0 · 0 |
+| fixture · pokój (kontrola) | `emp_002` · 6 | puli brak | 0 | — | — | 0 · 0 · 0 |
+| uprząż `default` gy 60 · wojna | `emp_001` · 2 / `emp_002` · 2 | D, E · 0 / E, E · 4 | 3 / 7 | `defend_home`, `patrol_border` ×1 (`emp_002`, 7 AU) | brak celu w zasięgu | 0 · 0 · 0; odrastanie: `emp_001` +E przy roku 61 (minimum z bakiem) |
+| uprząż `987654321` gy 60 · wojna | `emp_001` · 2 / `emp_002` · 2 | E, E · 1 / E, E · 2 | 4 / 5 | `defend_home` | `emp_002`: **UDERZENIE** 2 eskortami gy 61,25 → `sys_home` | 1 bitwa przy `entity_5` (gy 66,6) — wygrywa `emp_002`; desant odmówiony `no_drop_capable_hull`; odwołanie i powrót |
+| uprząż · pokój (kontrola) | oba ziarna | puli brak | `default` 0 / 6, `987654321` 4 / 5 (w służbie 1) | — | guard `empireAtWarWithPlayer` | 0 · 0 · 0 |
+
+**Co zobaczy właściciel w swojej grze (stan jak fixture, 3 fregaty w domu):** po wypowiedzeniu wojny — w dzwonku 🔔
+dwa wpisy mobilizacji (przy kontakcie: „⚓ Nieznane imperium obsadza okręty załogami — Rezerwa wchodzi do służby: 8”
+i „…: 6”); stolica `emp_001` z 8 fregatami w doku, stolica `emp_002` z 6; jedna–dwie fregaty patrolują własny układ.
+**Ataku nie będzie, dopóki trzy fregaty stoją w domu:** `emp_001` dwa razy w 10 lat wybiera cel i odmawia
+(`target_beyond_reach` — obrona 360 HP przekracza eskadrę, a skakać umieją tylko 2 kadłuby), `emp_002` nie sięga
+domu (19,5 LY). **Gdy fregaty opuszczą dom:** ~4 lata po wypowiedzeniu wojny `emp_001` wysyła 2 eskorty; po skoku widać
+je przez ~5 lat, jak lecą od krawędzi układu domowego; wygrywają orbitę nad domem z obroną kolonii, ale wylądować nie
+mogą (brak transportowca — S3), jedna wraca, druga zostaje na orbicie do następnego odwołania (≤ 1 rok).
+
+#### 5d.7 Bramka w przeglądarce (część D)
+
+Scenariusz: `kosmos-handover/ai-strikes-back-s1/gate/GATE_S1.md` (poza repo; zastępuje szkic sesji 1). Kopia fixture'u
+GATE-S4, gra na pauzie poza jednym krokiem czasu, jedna komenda na krok, jeden obiekt albo napis na wynik. Kroki:
+jednolinijkowiec 407 (twój odczyt z 2026-10-07 ma wrócić `""`) i ślad leczenia · tabela strojenia i limit · wojna → pula
+i obudzona rezerwa (6 „w mobilizacji” na pauzie) · dzwonek · strojenie w trwającej grze · rok do przodu → odrastanie ·
+panel WYWIAD (klawisz I → imperium → blok „Siła wojskowa” → `okręty uzbrojone: 9 / limit floty: 13`) · zapis → F5 →
+„Kontynuuj” (flaga puli, rok odrastania i strojenie przeżywają, pula nie tworzy się drugi raz) · reset. **Każda komenda
+wykonana w prawdziwej grze** (izolowany headless Chrome) na kodzie sesji i na KONTROLI `45ee9d2` (krok 1 zwraca trzy
+chimery, puli nie ma, panel pokazuje „wolna załoga”, krok 17 rzuca) `[measured]`.
+
+#### 5d.8 Pytania do właściciela (otwarte po sesji 2)
+
+1. **Przecelowania R-B2a, R-B2b, R-B5 (§5d.4):** zgoda? Od niej zależy tryb skryptu commitów (wszystkie / do B4 / tylko B1).
+2. **Reparacje a pula:** pula i odrastanie są wstrzymane pod reparacjami (WP-R: blokada nowej siły AI) — dodane bez
+   osobnego podpisu (pin T6g, T12h). Zostawić?
+3. **Limit 2 przy zerze kadłubów:** pula daje D, E (twój przypadek), więc minimum 2 kadłubów z bakiem dopełnia dopiero
+   odrastanie rok później (uprząż `default`: `emp_001` +E przy roku 61). Tak ma być, czy dokładać brakującą eskortę od razu?
+4. **Wzorzec bez szablonu z bakiem** przy minimum > 0 jest dziś przyjmowany, a minimum nie da się spełnić (T4f). Odmawiać
+   takiego wzorca w walidacji?
+5. **Finding 409:** nowy klucz PL + EN dla liczby z puli w powiadomieniu, czy zostaje „Rezerwa wchodzi do służby”?
+6. **Finding 411:** kadłub ukończony w wojnie po mobilizacji — budzić go mimo parytetu (dosłowne SB13), czy zostaje
+   `mobilize_reserve` z guardem (polecenie sesji)?
+
 ---
 
 ## 6. Rejestr findingów arca (#391–#396, zebrane 2026-10-06)
@@ -408,6 +544,7 @@ S0-2 (SB2) `deployVessel` pomija `commitCrew` dla kadłuba AI `[code, 7bfefd3 �
 stolicy AI (`IntelSystem.js:288`); od S0-2 ta liczba nie bramkuje mobilizacji AI, a gracz może ją czytać jako limit
 `[code]`. Nagłówek `_reserveReadout` (`IntelSystem.js:268-270`) nadal opisuje ją jako ogranicznik mobilizacji; adnotacja
 S0-2 stoi przy `:281-283` `[code]`. → **S1** (SB19: odczyt floty / limitu zamiast „wolnej załogi”).
+**Sesja 2 (2026-10-08):** ⏳ zamknięcie przygotowane w B5 (§5d.2) — czeka na commit.
 
 ### ✅ 399 — tekst asercji `w2_ai_mobilization_smoke` T7 nieaktualny po SB2 (kandydat 3)
 
@@ -484,6 +621,11 @@ czyli przed tą naprawą `[doc]`. **Skutki dla arca:** obrona gracza liczona po 
 `AI_STRIKES_BACK_AUDIT.md:185` („Dom gracza `sys_060`”), `FE_SUPPLY_PLAN.md:1098` i `CLAUDE.md` („3 uzbrojone fregaty
 gracza w `sys_060`”) — wniosek audytu „dom gracza w powłoce `emp_001`” zostaje prawdziwy (`sys_home`, 9,19 LY od `sys_059`).
 → bez kroku w S1; decyzja właściciela przed S3 / S4 (§5c, pytanie 5).
+**Odczyt właściciela na żywo (2026-10-07, jego jednolinijkowiec — bramka S1, krok 1):** `'v_21:Bellator:sys_060->sys_home |
+v_22:Gladiator:sys_060->sys_home | v_23:Furia:sys_060->sys_home'` — identyczny z pomiarem sesji 2 na `45ee9d2` `[measured]`.
+**SB24 (2026-10-07):** ⏳ leczenie przy wczytaniu przygotowane w B1 (§5d) — po nim jednolinijkowiec zwraca `""`, a obrona
+domu gracza liczy trzy fregaty (HP 30 → 360). Opisy „dom gracza `sys_060`” (`AI_STRIKES_BACK_AUDIT.md:185`) i „fregaty
+w `sys_060`” (`FE_SUPPLY_PLAN.md:1098`, `CLAUDE.md`) poprawione 2026-10-08. Producent chimer — Finding **410**.
 
 ### 🟠 408 — przy SB14 limit fixture'owego `emp_001` wypełniają kadłuby bez baku warp: pula nie doda kadłuba, uderzenie niemożliwe
 
@@ -495,6 +637,40 @@ licząc WSZYSTKIE uzbrojone kadłuby — więc nie doda eskorty z bakiem, a bez 
 strażnika do ciała w innym układzie (SB6; w fixture drugie ciało D11 leży akurat w układzie stolicy — S2 nie jest
 zablokowany). Konsekwencja dwóch podpisanych decyzji (SB14 + produkcja nacisku zamawia defendery), nie defekt kodu.
 → decyzja właściciela przy składzie puli (§5c, pytanie 2).
+**SB21 (2026-10-07):** minimum 2 kadłubów z bakiem także ponad limitem — ⏳ przygotowane w B2: w wojnie fixture'owy
+`emp_001` dostaje +2 eskorty z bakiem (8 w służbie przy limicie 6) i uderza, gdy dom gracza nie jest broniony (M3, §5d.6)
+`[measured]`.
+
+### #409–#411 — S1, sesja 2 (2026-10-08)
+
+⚠ **Registry-first (2026-10-08):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#408**; trafienia „409”–„411” w `docs/` to wartości tabel i numery linii (BALANS: koszt kursu
+0,409; wiersze 410 i 411 w tabelach cen i AI; `:409` w audytach rozkazów), nie findingi `[measured]`.
+
+### ⚪ 409 — powiadomienie o mobilizacji mówi „Rezerwa wchodzi do służby: N”, a N liczy też kadłuby z puli
+
+`[measured]` bramka S1, krok 9: `emp_002` — „⚓ Nieznane imperium obsadza okręty załogami — Rezerwa wchodzi do służby: 6”
+przy ZERZE kadłubów w rezerwie (6 z puli). Pula podpina się pod ISTNIEJĄCE powiadomienie (`notif.mobilizationSubtitle`)
+zgodnie z poleceniem sesji („bez nowych kluczy, jeśli się da”); liczba = pula + obudzona rezerwa. → decyzja właściciela
+(§5d.8, pytanie 5): nowy klucz PL + EN albo zostaje.
+
+### ⚪ 410 — `KOSMOS.debug.spawnMyVessel` z `opts.systemId` tworzy chimerę doku (producent Findingu 407)
+
+`[measured]` prawdziwa gra na fixture: `spawnMyVessel('hull_frigate', { modules: ['weapon_laser'], systemId: 'sys_060' })`
+→ statek `docked` przy `entity_2` (`sys_home`) z `systemId` `sys_060`; to samo wywołanie bez `systemId` — statek zgodny
+(KONTROLA). Na `45ee9d2` chimera przeżywa zapis i wczytanie; na kodzie sesji 2 (B1) wczytanie ją leczy (jeden wpis
+audytu), ale do wczytania żyje w bieżącej sesji. `[code]` `GameScene.js:1428-1477` przekazuje `opts` do
+`createAndRegister(…, home.id, { modules, ...opts })` — dok przy domu, `systemId` z opcji (`Vessel.js:143-156`). Trzy
+chimery fixture'u (moduły jawne `['weapon_laser']`, pusty dziennik misji) pasują do takiego wywołania — to HIPOTEZA
+producenta, nie dowód. Tylko narzędzie debug. → bez kroku.
+
+### ⚪ 411 — kadłub ukończony w wojnie PO mobilizacji puli budzi wyłącznie `mobilize_reserve` z guardem parytetu
+
+`[code]` B3 budzi całą uzbrojoną rezerwę RAZ — przy mobilizacji (SB13); reguła `mobilize_reserve` zachowuje guard parytetu
+(polecenie sesji). Kadłub, który trafi do rezerwy w trakcie wojny (zlecenie stoczni sprzed wojny ukończone w wojnie —
+produkcja nacisku staje w wojnie na `empireNotAtWarWithPlayer`), wejdzie do służby tylko, gdy gracz jest silniejszy —
+rozjazd z dosłownym SB13 („guard hamuje wyłącznie w pokoju”). Niezaobserwowany w M3 (w żadnym świecie żaden kadłub nie
+ukończył się w wojnie). → decyzja właściciela (§5d.8, pytanie 6).
 
 ---
 

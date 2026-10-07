@@ -3732,7 +3732,8 @@ W `docs/design/` stoi dwanaście `*_GATE*_CHECKLIST.md` — **następny gate zac
 trzynastego, PRZED przebiegiem.**
 
 **NOWY KANONICZNY FIXTURE: `GATE-S4-fresh-gy60`** — dwie żywe, bogate stolice AI (pop **170/158**,
-Fe 14 tys.+, pełne warstwy), stała presja produkcyjna (3 uzbrojone fregaty gracza w `sys_060`),
+Fe 14 tys.+, pełne warstwy), stała presja produkcyjna (3 uzbrojone fregaty gracza zadokowane w domu — `entity_2` /
+`sys_home`; ⚠ korekta 2026-10-08: w zapisie z `systemId` `sys_060`, chimera doku, Finding 407),
 pokój, żywa postawa. **Zastępuje martwe zapisy `GATE-Fe-*`** — tamte nie mają żyjącej stolicy, więc
 każdy pomiar łańcucha warp na nich mierzył ciszę.
 
@@ -5926,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 sesja 1 z 2 ZAMKNIĘTA 2026-10-07, następna sesja 2)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 sesja 1 z 2 ZAMKNIĘTA 2026-10-07 · S1 sesja 2 z 2 — KOD PRZYGOTOWANY, NIE ZACOMMITOWANY 2026-10-08)
 
-Plan, decyzje **SB1–SB19** i rejestr findingów **#391–#408**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB25** i rejestr findingów **#391–#411**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -5958,6 +5959,10 @@ strojenia zmienione z konsoli trafiają do zapisu; odczyt oznacza wartości ró�
 **SB17** skład puli = wzorzec w tabeli strojenia; domyślny proponuje CC z pomiaru szablonów, właściciel zatwierdza ·
 **SB18** w S1 kadłuby z puli w służbie i ZADOKOWANE przy stolicy (orbita = S2); doktryny bez zmian, CC mierzy, co robią
 z kadłubami w służbie w wojnie · **SB19** w S1 odczyt wywiadu „wolna załoga” zastąpiony odczytem floty / limitu.
+Odpowiedzi na pytania sesji 1 (2026-10-07): **SB20** domyślny wzorzec puli D, E, E, E (defender + trzy eskorty rakietowe)
+powtarzany do limitu · **SB21** minimum 2 kadłubów z bakiem warp także PONAD limitem (zmienia SB14) · **SB22** kadłuby
+puli „wszystko zbadane” · **SB23** transportowiec nieuzbrojony, poza limitem (liczba i źródło — S3) · **SB24** Finding 407
+leczony przy wczytaniu · **SB25** flota ma własny klucz mnożnika szczebla, progi wspólne z garnizonem.
 
 **Slice'y:** **S0** trzy defekty (391, 392, 393 + 394) · **S1** tabela strojenia, limit floty, pula · **S2** strażnik ·
 **S3** eskadra z transportowcem, desant po wygranej orbicie, odbijanie, fale · **S4** wojna z inicjatywy AI i kampania
@@ -6005,3 +6010,26 @@ fixture i walidowano jednolinijkowce bramki.
 `entity_2` w `sys_home`; „dom gracza `sys_060`” i „fregaty w `sys_060`” w dokumentach są błędne; obrona gracza liczona po
 układzie statku idzie do `sys_060`) · 🟠 **408** — przy SB14 limit `emp_001` wypełniają kadłuby bez baku warp, pula nie doda
 eskorty, uderzenie niemożliwe. Następna: **S1, sesja 2** (pula, odrastanie, SB13, SB19) po decyzjach z planu §5c.
+(Opisy „dom gracza `sys_060`” / „fregaty w `sys_060`” poprawione 2026-10-08.)
+
+⏳ **S1, sesja 2 z 2 (2026-10-08) — KOD PRZYGOTOWANY I ZASTAGOWANY, NIE ZACOMMITOWANY** (plan §5d; łańcuch, skrypt
+commitów i notatka: `kosmos-handover/ai-strikes-back-s1/p2/`, `HANDOVER_S1_PART2.md`): **B1** `VesselManager._healDockedSystemId`
+— statek w doku bierze przy wczytaniu układ ciała doku (407, SB24) · **B2** pula: NEW `src/utils/FleetPoolPlanner.js`, NEW
+`src/systems/FleetPoolSystem.js` (`window.KOSMOS.fleetPoolSystem`), JEDNA funkcja tworzenia `VesselManager.createAIVessel`
+(dok stolicy, w służbie, załoga 0, bez POP i utrzymania, `origin: 'pool'`, stempel PRZED `vessel:created`), flaga
+`empires.<id>.fleetPool`, klucze `fleetPoolPattern` / `fleetMinWarpHulls` (SB1, SB20–SB22) · **B3** wojna budzi CAŁĄ
+uzbrojoną rezerwę (SB13; `mobilize_reserve` w pokoju bez zmian) · **B4** odrastanie 1 kadłub na granicę roku,
+`fleetRegrowthPerYear` (SB15) · **B5** wywiad „okręty uzbrojone: A / limit floty: L” zamiast „wolna załoga” (SB19, 398).
+Keepery NEW `sb1_dock_heal` 14, `sb1_fleet_pool` 79, `sb1_intel_fleet` 13. ⚠ **Podpisane decyzje odwracają piny**
+(`sb1_fleet_tuning`, `w3_target_selection`, `wp_ai_peace_offer`, `wp_test_infra`, `g3_regrowth` R9b, `w2_ai_mobilization` T5)
+— przecelowania R-B2a / R-B2b / R-B5 jako `*.PROPOSED` z dowodem mutacyjnym 11/11, **czekają na zgodę**; sweep „kod”
+262/268, z przecelowaniami 268/268; `check-i18n` 3455. M3 (fixture, wojna, 10 lat): `emp_001` +2 eskorty z puli i 6
+obudzonych (8 w służbie), `emp_002` +6 z puli; przy 3 fregatach gracza w domu uderzenie `emp_001` odmawia
+(`target_beyond_reach`), bez nich 2 eskorty po ~5 latach wygrywają orbitę nad domem gracza, desantu brak
+(`no_drop_capable_hull`). Bramka: `kosmos-handover/ai-strikes-back-s1/gate/GATE_S1.md` (zwalidowana w prawdziwej grze na
+kodzie sesji i na `45ee9d2`). Nowe: ⚪ **409** napis „Rezerwa wchodzi do służby” liczy pulę · ⚪ **410**
+`spawnMyVessel({ systemId })` tworzy chimerę doku · ⚪ **411** kadłub ukończony w wojnie po mobilizacji budzi tylko
+reguła z parytetem.
+⚠ **Kadłub AI z puli tworzy się WYŁĄCZNIE przez `VesselManager.createAIVessel`**, wołane tylko z `FleetPoolSystem`
+(pin `sb1_fleet_pool_smoke` T10e). ⚠ Po zatwierdzeniu R-B2b: **keeper, który wypowiada wojnę, a nie pinuje puli,
+wyłącza ją w setupie** (`fleetPoolSystem.enabled = false`, wzór `garrisonSystem.enabled`).

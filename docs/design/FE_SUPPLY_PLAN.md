@@ -1095,7 +1095,7 @@ pracy). Oś główna 178 („podaż Fe") **jest zaspokojona jako PODAŻ i ustęp
 **Zapis `GATE-S4-fresh-gy60` zostaje KANONICZNYM FIXTURE'M** — zastępuje martwe zapisy `GATE-Fe-*`
 (tamte nie mają żyjącej stolicy, więc każdy pomiar łańcucha warp na nich mierzył ciszę). Zawartość:
 dwie żywe, bogate stolice AI (pop **170/158**, Fe 14 tys.+, pełne warstwy), **stała presja
-produkcyjna** (3 uzbrojone fregaty gracza w `sys_060`), **pokój**, żywa postawa.
+produkcyjna** (3 uzbrojone fregaty gracza zadokowane w domu, `entity_2` / `sys_home` — ⚠ korekta 2026-10-08: w zapisie z `systemId` `sys_060`, chimera doku, Finding 407 w `AI_STRIKES_BACK_PLAN.md` §6), **pokój**, żywa postawa.
 
 **Obserwacja do rejestru (bez numeru, bez akcji):** `U` (bezrobotni) sięga w gy 60 **67 / 20** —
 w stolicach powstała **nadwyżkowa pula pracy**. Przy zamkniętym budżecie (`33/33`) i płaskim

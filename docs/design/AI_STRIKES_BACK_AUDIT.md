@@ -182,7 +182,9 @@ siła liczona TĄ SAMĄ funkcją co `ThreatAssessment` (`aggregateCombatValue`, 
 Reguły Directora emp_001: L1 12 prób (ostatnio gy 55,10), L2 12 (gy 56,35), **`mobilize_reserve` 9 prób, ostatnio gy 57,43
 — odpaliła, a wszystkie 6 kadłubów stoi w rezerwie**; postawa L2 od gy 56,35, `vessels: 3`. Zero wojen, zero wpisów
 dominacji, zero jednostek naziemnych. Wszystkie pełne kolonie obu imperiów leżą w układzie stolicy; poza nim AI ma wyłącznie
-placówki (Xe/Nt). Dom gracza `sys_060` leży w powłoce emp_001 — nacisk wywołują 3 fregaty gracza **zadokowane w domu**.
+placówki (Xe/Nt). Dom gracza (`sys_home`, 9,19 LY od `sys_059`) leży w powłoce emp_001 — nacisk wywołują 3 fregaty gracza
+**zadokowane w domu**. ⚠ Korekta 2026-10-08 (Finding **407**, `AI_STRIKES_BACK_PLAN.md` §6): w zapisie te fregaty mają
+`systemId` `sys_060` — chimera doku; zapis „dom gracza `sys_060`” był błędny, wniosek „dom w powłoce emp_001” zostaje.
 
 **Pomiar — uprząż** `probe_c1_harness.mjs`: `bootWithDirector` (kalibracja D-178-3, pełny stos Directora, stub żetonu stacji),
 2 ziarna (`HEADLESS_GALAXY_SEED`, `987654321`), 100 gy, warianty: **passive** (gracz nic nie robi), **press** (po jednej

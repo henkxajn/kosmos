@@ -448,6 +448,15 @@
 > fazy A jest błędny) · 🟠 **408** (przy SB14 limit `emp_001` w fixture wypełniają kadłuby bez baku warp — pula nie doda
 > kadłuba, uderzenie niemożliwe).
 > • Następna: **S1, sesja 2** (pula, odrastanie, SB13, SB19; decyzje właściciela — plan §5c, pytania).
+>
+> **Aktualizacja 2026-10-08 — AI STRIKES BACK: S1, sesja 2 z 2 — kod PRZYGOTOWANY i zastagowany, NIE zacommitowany.**
+> Decyzje **SB20–SB25** (odpowiedzi na pytania sesji 1); wynik, M3, bramka i przecelowania: `AI_STRIKES_BACK_PLAN.md` §5d.
+> • ⏳ **398** (B5) · **407** (B1, SB24) · **408** (B2, SB21) — zamknięcia przygotowane; wiersze zostają do commitu.
+> • **NOWE: #409–#411** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — ⚪ **409** (powiadomienie „Rezerwa wchodzi do służby: N”
+> liczy też kadłuby z puli) · ⚪ **410** (`KOSMOS.debug.spawnMyVessel({ systemId })` tworzy chimerę doku — producent 407) ·
+> ⚪ **411** (kadłub ukończony w wojnie po mobilizacji budzi wyłącznie `mobilize_reserve` z guardem parytetu — latentny).
+> • Opisy „dom gracza `sys_060`” / „fregaty w `sys_060`” poprawione (`AI_STRIKES_BACK_AUDIT.md:185`, `FE_SUPPLY_PLAN.md:1098`,
+> `CLAUDE.md`).
 
 
 ---
@@ -526,7 +535,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
-| **391-408** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–07; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1) |
+| **391-411** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–08; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -745,12 +754,13 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **389** | ⚪ | ułamkowy `troopCount`: dawna pętla dawała ⌈n⌉ jednostek, skład szczebla daje ⌊n⌋ (`GarrisonPlanner.js:88`, `:123`) | żywi wołający podają liczby całkowite; różnica tylko w gałęzi `_onBattleResolved` bez producenta (`InvasionSystem.js:354`). `AI_GARRISON_PLAN.md` §6 |
 | **395** | ⚪ | adnotacja `directorOrigin` trafia na zły kadłub — `_awaitingClaim` zdejmowane `shift()` przy każdym ukończonym kadłubie kolonii (`DirectorProduction.js:202-203`, `:237-241`); fixture: `v_28` | diagnostyka, bez wpływu na walkę. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **396** | 🟠 | desant z bitwy liczy POJEMNOŚĆ, nie ładunek (`InvasionSystem.js:294-295`, `:307`) — pusta ładownia daje do 6 jednostek z każdej wygranej bitwy; D2: 12 z 0 przewiezionych | uśpiony (49/201); rodzina **384**; → **S3** (SB7, SB8). `AI_STRIKES_BACK_PLAN.md` §6 |
-| **398** | ⚪ | odczyt wywiadu „wolna załoga: {0} POP” (`IntelOverlay.js:296-298`) pokazuje `freePops` stolicy AI, który od S0-2 nie bramkuje mobilizacji AI | → **S1** (SB19: odczyt floty / limitu). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **398** | ⚪ | odczyt wywiadu „wolna załoga: {0} POP” (`IntelOverlay.js:296-298`) pokazuje `freePops` stolicy AI, który od S0-2 nie bramkuje mobilizacji AI | → **S1** (SB19: odczyt floty / limitu); ⏳ sesja 2: zamknięcie przygotowane w B5, czeka na commit. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **400** | ⚪ | guard `empireHasFreeCrew` zarejestrowany (`DirectorProduction.js:479`), a od S0-2 bez konsumenta w katalogu reguł | martwy, nieszkodliwy; decyzja przy S1. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **401** | ⚪ | gałąź księgi abstrakcyjnej `_hasHostileFleetInSystem` (`WarSystem.js:950-962`) odbiera dominację flotą o `strength > 0` także w drodze (`destSystemId`), bez pojęcia „da się walczyć” | stare zapisy i floty debugowe (producentów brak od W3-8). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **403** | ⚪ | `WarSystem.getPlanetOrbitalController` (`:1039`) — zero konsumentów | martwy. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **406** | 🟠 | tryb zrzutu otwarty przy dominacji zrzuca także po jej utracie — klik heksu (`ColonyOverlay.js:4693-4745`) → `dropTroop` (`Vessel.js:788`) → `unloadGroundUnit` (`:749`) nie sprawdzają dominacji ani położenia statku; dominacja tylko przy wejściu w tryb (`:333`) | z bramki S0; osiągalność niezmierzona; kandydat do **S3**. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **408** | 🟠 | przy SB14 limit floty fixture'owego `emp_001` (6) wypełniają kadłuby bez baku warp (5 defenderów + 1 z modułami defendera, K5/395) — miejsce dla puli 0, więc pula nie doda kadłuba z bakiem warp; M2: wyzwalacz `strike_player_target` przechodzi, guard `empireHasStrikeForce` odmawia 121/121 | konsekwencja podpisanych SB14 + produkcji nacisku (defendery), nie defekt kodu; decyzja właściciela przy składzie puli. `AI_STRIKES_BACK_PLAN.md` §5c, §6 |
+| **408** | 🟠 | przy SB14 limit floty fixture'owego `emp_001` (6) wypełniają kadłuby bez baku warp (5 defenderów + 1 z modułami defendera, K5/395) — miejsce dla puli 0, więc pula nie doda kadłuba z bakiem warp; M2: wyzwalacz `strike_player_target` przechodzi, guard `empireHasStrikeForce` odmawia 121/121 | konsekwencja podpisanych SB14 + produkcji nacisku (defendery), nie defekt kodu; ⏳ **SB21** (2026-10-07: minimum 2 z bakiem ponad limitem) — przygotowane w B2; M3: `emp_001` +2 eskorty. `AI_STRIKES_BACK_PLAN.md` §5c, §5d, §6 |
+| **411** | ⚪ | kadłub ukończony w wojnie PO mobilizacji puli trafia do rezerwy i budzi go wyłącznie `mobilize_reserve` z guardem parytetu (rozjazd z dosłownym SB13) | latentny (w M3 żaden kadłub nie ukończył się w wojnie); decyzja właściciela. `AI_STRIKES_BACK_PLAN.md` §5d.8, §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -779,7 +789,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **390** | ⚪ | nieaktualne teksty o `INVASION_UNIT_POOLS`: komunikat `w3_seams_smoke.mjs:355`, nagłówek `ground_morale_resolution_smoke.mjs:11` | asercje zielone; tekst historyczny, nieedytowany. `AI_GARRISON_PLAN.md` §6 |
 | **404** | ⚪ | dwa polskie literały ostrzału z orbity w `ColonyOverlay`: `'Brak amunicji'` (`:260`), `'Brak dominacji orbitalnej'` (`:269`) | klasa 113/375; polerka UI. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **405** | ⚪ | flash `drop.noDominance` w praktyce niewidoczny — rysuje go tylko otwarta mapa kolonii (`ColonyOverlay.js:917`, `:1052-1064`), gałąź odmowy (`:333-335`) wraca przed otwarciem mapy (`:347`), a na pauzie pętla UI nie rysuje bez `_dirty` (`UIManager.js:2184-2196`); przy wyszarzonym przycisku żadna ścieżka UI do niej nie dochodzi | z bramki S0; widoczna odmowa = panel statku. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **407** | 🟠 | kanoniczny fixture `GATE-S4-fresh-gy60` niesie trzy fregaty-chimery gracza (`v_21`–`v_23`: `systemId` `sys_060`, dok przy `entity_2` w `sys_home`), wczytanie tego nie leczy; obrona gracza liczona po `v.systemId` (`WarSystem.js:765`) idzie do `sys_060`, nie do domu; opisy „dom gracza `sys_060`” (`AI_STRIKES_BACK_AUDIT.md:185`) i „fregaty w `sys_060`” (`FE_SUPPLY_PLAN.md:1098`, `CLAUDE.md`) są błędne | fixture sprzed naprawy 256 (2026-09-03); bez kroku w S1 — decyzja: odświeżyć fixture / leczyć chimery przy wczytaniu / obejść w bramkach S3–S4. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **407** | 🟠 | kanoniczny fixture `GATE-S4-fresh-gy60` niesie trzy fregaty-chimery gracza (`v_21`–`v_23`: `systemId` `sys_060`, dok przy `entity_2` w `sys_home`), wczytanie tego nie leczy; obrona gracza liczona po `v.systemId` (`WarSystem.js:765`) idzie do `sys_060`, nie do domu; opisy „dom gracza `sys_060`” (`AI_STRIKES_BACK_AUDIT.md:185`) i „fregaty w `sys_060`” (`FE_SUPPLY_PLAN.md:1098`, `CLAUDE.md`) są błędne | fixture sprzed naprawy 256 (2026-09-03); ⏳ **SB24** (2026-10-07): leczenie przy wczytaniu przygotowane w B1 (sesja 2); opisy poprawione 2026-10-08; producent — **410**. `AI_STRIKES_BACK_PLAN.md` §5d, §6 |
+| **409** | ⚪ | powiadomienie o mobilizacji (`notif.mobilizationSubtitle`, „Rezerwa wchodzi do służby: N”) liczy też kadłuby z puli — bramka S1, krok 9: `emp_002` „…: 6” przy zerze w rezerwie | decyzja właściciela (nowy klucz PL + EN albo zostaje). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **410** | ⚪ | `KOSMOS.debug.spawnMyVessel(hull, { systemId })` tworzy chimerę doku (dok przy domu, `systemId` z opcji) — zmierzone w prawdziwej grze; na kodzie sesji 2 leczy ją dopiero wczytanie | tylko narzędzie debug; hipoteza producenta 407. `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ---
 
