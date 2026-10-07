@@ -137,6 +137,9 @@ const TRACKED_EVENTS = [
   // G2-4 F2 (Finding 364) — strażnik silnika odmówił ostrzału z orbity ciała innego imperium bez wojny (powód odmowy
   //   w audycie w TYM SAMYM commicie — reguła W3).
   'groundUnit:orbitalStrikeRefused',
+  // AI STRIKES BACK (SB16) — wartość tabeli strojenia z zapisu POMINIĘTA przy wczytaniu (nieznany klucz albo wartość spoza
+  //   typu/zakresu). Bez tego wpisu zapis z błędną wartością cicho wracałby do domyślnej.
+  'sbTuning:storedValueIgnored',
 ];
 
 class DebugLog {

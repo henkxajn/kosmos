@@ -153,6 +153,7 @@ import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
+import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -831,6 +832,14 @@ export class GameScene {
       // KOSMOS.debug.garrisonPlan() — G2-3a: plan garnizonu KAŻDEGO imperium AI (limit D1×D9, szczebel, podział D11,
       //   skład, morale, heksy D10), wiersz na ciało. TYLKO ODCZYT — niczego nie tworzy (mobilizacja = G2-3b).
       garrisonPlan: () => printGarrisonPlans(window.KOSMOS),
+      // KOSMOS.debug.sbTuning() — AI STRIKES BACK (SB9, SB16): tabela strojenia arca — klucz, wartość domyślna, bieżąca,
+      //   „*” przy każdej wartości różnej od domyślnej. TYLKO ODCZYT. Zwraca wiersze.
+      sbTuning: () => printTuningTable(),
+      // KOSMOS.debug.sbSet('fleetPopPerHull', 40) — zmienia JEDNĄ wartość w trwającej grze; wartość jedzie w zapisie gry.
+      //   Nieznany klucz, zły typ albo wartość poza zakresem ⇒ odmowa z listą kluczy albo zakresem, nic się nie zmienia.
+      sbSet: (key, value) => consoleSetTuning(key, value),
+      // KOSMOS.debug.sbReset('fleetPopPerHull') — wartość domyślna jednego klucza; KOSMOS.debug.sbReset() — całej tabeli.
+      sbReset: (key) => consoleResetTuning(key),
       // KOSMOS.debug.colonies() — tabela WSZYSTKICH skolonizowanych ciał (gracz + AI):
       //   nazwa, właściciel, pop (humans/capacity), bezrobotni, satysfakcja, prosperity,
       //   wzrost/rok, liczba budynków. Do obserwacji zdrowia AI w dłuższych sesjach
@@ -2144,6 +2153,9 @@ export class GameScene {
 
       // Faza 0: reactive store (empires/intel/diplomacy/wars/battles/invasions)
       if (c4x.gameState) gameState.restore(c4x.gameState);
+      // AI STRIKES BACK (SB16) — tabela strojenia z zapisu: nieznany klucz albo wartość spoza typu/zakresu jest pomijana
+      //   (wpis `sbTuning:storedValueIgnored` w DebugLog). Brak klucza w zapisie (np. fixture GATE-S4) = wartości domyślne.
+      sanitizeTuningAfterRestore();
       // Faza 1: po restore — odśwież empireId na galaxyData (na wypadek save
       // sprzed Fazy 1 lub gdyby galaxyData była starsza od gameState.empires)
       this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);

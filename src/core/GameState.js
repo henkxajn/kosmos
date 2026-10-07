@@ -62,6 +62,10 @@ function createDefaultState() {
     // realny defekt: `orbitalDominance` był pisany i czytany w runtime, a kasowany przy
     // każdym load — do W3-3, które po prostu dopisało go wyżej (patrz tam).
     director:         { rules: {}, pending: {} },
+    // AI STRIKES BACK (SB9, SB16) — tabela strojenia arca: klucz → wartość ZMIENIONA z konsoli (`KOSMOS.debug.sbSet`).
+    // Brak wpisu = wartość domyślna z `src/data/StrikesBackData.js`; pusta mapa = zapis sprzed S1 (save v101 bez migracji).
+    // Właściciel stanu: `src/utils/StrikesBackTuning.js` (intencje set/reset; sprzątanie po wczytaniu).
+    strikesBackTuning: {},
   };
 }
 
