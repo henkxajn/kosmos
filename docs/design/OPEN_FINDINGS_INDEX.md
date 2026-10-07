@@ -440,6 +440,14 @@
 > dominację) · ⚪ **403** (`getPlanetOrbitalController` bez konsumenta) · ⚪ **404** (dwa polskie literały ostrzału) ·
 > ⚪ **405** (flash `drop.noDominance` w praktyce niewidoczny) · 🟠 **406** (tryb zrzutu zrzuca po utracie dominacji).
 > • Następny: **S1** (pula, limit floty, tabela strojenia; SB1–SB3, SB9, SB13–SB19).
+>
+> **Aktualizacja 2026-10-07 — AI STRIKES BACK: S1, sesja 1 z 2 (tabela strojenia + limit floty).**
+> Commity `eb17f97` (S1-1, SB9/SB16) · `8abe84d` (S1-2, SB3/SB14); wynik, audyt i pomiary M1/M2: `AI_STRIKES_BACK_PLAN.md` §5c.
+> • **NOWE: #407–#408** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — 🟠 **407** (kanoniczny fixture GATE-S4 niesie trzy
+> fregaty-chimery gracza: `systemId` `sys_060`, dok przy `entity_2` w `sys_home`; opis „dom gracza `sys_060`” w audycie
+> fazy A jest błędny) · 🟠 **408** (przy SB14 limit `emp_001` w fixture wypełniają kadłuby bez baku warp — pula nie doda
+> kadłuba, uderzenie niemożliwe).
+> • Następna: **S1, sesja 2** (pula, odrastanie, SB13, SB19; decyzje właściciela — plan §5c, pytania).
 
 
 ---
@@ -518,7 +526,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
-| **391-406** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0) |
+| **391-408** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–07; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -742,6 +750,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **401** | ⚪ | gałąź księgi abstrakcyjnej `_hasHostileFleetInSystem` (`WarSystem.js:950-962`) odbiera dominację flotą o `strength > 0` także w drodze (`destSystemId`), bez pojęcia „da się walczyć” | stare zapisy i floty debugowe (producentów brak od W3-8). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **403** | ⚪ | `WarSystem.getPlanetOrbitalController` (`:1039`) — zero konsumentów | martwy. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **406** | 🟠 | tryb zrzutu otwarty przy dominacji zrzuca także po jej utracie — klik heksu (`ColonyOverlay.js:4693-4745`) → `dropTroop` (`Vessel.js:788`) → `unloadGroundUnit` (`:749`) nie sprawdzają dominacji ani położenia statku; dominacja tylko przy wejściu w tryb (`:333`) | z bramki S0; osiągalność niezmierzona; kandydat do **S3**. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **408** | 🟠 | przy SB14 limit floty fixture'owego `emp_001` (6) wypełniają kadłuby bez baku warp (5 defenderów + 1 z modułami defendera, K5/395) — miejsce dla puli 0, więc pula nie doda kadłuba z bakiem warp; M2: wyzwalacz `strike_player_target` przechodzi, guard `empireHasStrikeForce` odmawia 121/121 | konsekwencja podpisanych SB14 + produkcji nacisku (defendery), nie defekt kodu; decyzja właściciela przy składzie puli. `AI_STRIKES_BACK_PLAN.md` §5c, §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
@@ -770,6 +779,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **390** | ⚪ | nieaktualne teksty o `INVASION_UNIT_POOLS`: komunikat `w3_seams_smoke.mjs:355`, nagłówek `ground_morale_resolution_smoke.mjs:11` | asercje zielone; tekst historyczny, nieedytowany. `AI_GARRISON_PLAN.md` §6 |
 | **404** | ⚪ | dwa polskie literały ostrzału z orbity w `ColonyOverlay`: `'Brak amunicji'` (`:260`), `'Brak dominacji orbitalnej'` (`:269`) | klasa 113/375; polerka UI. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **405** | ⚪ | flash `drop.noDominance` w praktyce niewidoczny — rysuje go tylko otwarta mapa kolonii (`ColonyOverlay.js:917`, `:1052-1064`), gałąź odmowy (`:333-335`) wraca przed otwarciem mapy (`:347`), a na pauzie pętla UI nie rysuje bez `_dirty` (`UIManager.js:2184-2196`); przy wyszarzonym przycisku żadna ścieżka UI do niej nie dochodzi | z bramki S0; widoczna odmowa = panel statku. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **407** | 🟠 | kanoniczny fixture `GATE-S4-fresh-gy60` niesie trzy fregaty-chimery gracza (`v_21`–`v_23`: `systemId` `sys_060`, dok przy `entity_2` w `sys_home`), wczytanie tego nie leczy; obrona gracza liczona po `v.systemId` (`WarSystem.js:765`) idzie do `sys_060`, nie do domu; opisy „dom gracza `sys_060`” (`AI_STRIKES_BACK_AUDIT.md:185`) i „fregaty w `sys_060`” (`FE_SUPPLY_PLAN.md:1098`, `CLAUDE.md`) są błędne | fixture sprzed naprawy 256 (2026-09-03); bez kroku w S1 — decyzja: odświeżyć fixture / leczyć chimery przy wczytaniu / obejść w bramkach S3–S4. `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ---
 

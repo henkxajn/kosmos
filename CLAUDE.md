@@ -5926,10 +5926,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06, następny S1)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 sesja 1 z 2 ZAMKNIĘTA 2026-10-07, następna sesja 2)
 
-Plan, decyzje **SB1–SB19** i rejestr findingów **#391–#406**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB19** i rejestr findingów **#391–#408**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -5988,3 +5988,20 @@ dominacji imperium — dziś bez skutku, bo czytelnik AI biegnie po wygranej AI)
 `empireHasFreeCrew` bez konsumenta · ⚪ **401** księga abstrakcyjna odbiera dominację · ⚪ **403**
 `getPlanetOrbitalController` bez konsumenta · ⚪ **404** dwa polskie literały ostrzału · ⚪ **405** flash
 `drop.noDominance` niewidoczny · 🟠 **406** tryb zrzutu po utracie dominacji.
+
+✅ **S1, sesja 1 z 2 (2026-10-07):** `eb17f97` S1-1 (SB9, SB16: NEW `src/data/StrikesBackData.js` — jedna tabela liczb
+arca; NEW `src/utils/StrikesBackTuning.js` — odczyt w chwili użycia, zmiana z walidacją, reset, sprzątanie po wczytaniu;
+klucz `gameState.strikesBackTuning`, v101 bez migracji; konsola `KOSMOS.debug.sbTuning()` / `sbSet(klucz, wartość)` /
+`sbReset(klucz?)`) · `8abe84d` S1-2 (SB3, SB14: NEW `src/utils/FleetLimit.js` — limit floty z tym samym źródłem POP,
+szczeblem i zaokrągleniem co garnizon; NEW `isFleetLimitHull` w `Vessel.js`). Nic w grze nie czyta jeszcze limitu —
+zachowanie gry bez zmian (uprząż C1 bajt w bajt). Fixture GATE-S4: limit 6 / 6, `emp_001` ma 6 uzbrojonych (miejsce 0).
+Keeper NEW `sb1_fleet_tuning_smoke` 71/71; sweep **265/265**, `check-i18n` 3455. Plan §5c: audyt, M1 (szablony + propozycja
+składu puli — oczekuje na właściciela), M2 (wojna nie zmienia doktryn; `defend_home` wciela całą rezerwę, patrol co
+najwyżej raz, żaden kadłub nie opuszcza układu stolicy, uderzenie blokuje brak baku warp albo brak celu).
+⚠ **Prawdziwa gra na fixture headless:** `kosmos-handover/ai-strikes-back-s1/tools/kosmos_cdp.mjs` — izolowany Chrome
+(własny profil i serwer tylko-do-odczytu), fixture wczytany produkcyjnym `importSave` → „Kontynuuj”; nim mierzono M2 na
+fixture i walidowano jednolinijkowce bramki.
+⚠ **Nowe findingi:** 🟠 **407** — fixture GATE-S4 niesie trzy fregaty-chimery gracza (`systemId` `sys_060`, dok przy
+`entity_2` w `sys_home`; „dom gracza `sys_060`” i „fregaty w `sys_060`” w dokumentach są błędne; obrona gracza liczona po
+układzie statku idzie do `sys_060`) · 🟠 **408** — przy SB14 limit `emp_001` wypełniają kadłuby bez baku warp, pula nie doda
+eskorty, uderzenie niemożliwe. Następna: **S1, sesja 2** (pula, odrastanie, SB13, SB19) po decyzjach z planu §5c.
