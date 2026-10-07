@@ -154,6 +154,7 @@ import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
+import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -833,8 +834,9 @@ export class GameScene {
       //   skład, morale, heksy D10), wiersz na ciało. TYLKO ODCZYT — niczego nie tworzy (mobilizacja = G2-3b).
       garrisonPlan: () => printGarrisonPlans(window.KOSMOS),
       // KOSMOS.debug.sbTuning() — AI STRIKES BACK (SB9, SB16): tabela strojenia arca — klucz, wartość domyślna, bieżąca,
-      //   „*” przy każdej wartości różnej od domyślnej. TYLKO ODCZYT. Zwraca wiersze.
-      sbTuning: () => printTuningTable(),
+      //   „*” przy każdej wartości różnej od domyślnej — oraz (SB3, SB14) limit floty KAŻDEGO imperium AI: POP, fabryki,
+      //   szczebel, mnożnik, limit, uzbrojone kadłuby wg służby i położenia, miejsce dla puli. TYLKO ODCZYT.
+      sbTuning: () => ({ tabela: printTuningTable(), flota: printFleetLimits(window.KOSMOS) }),
       // KOSMOS.debug.sbSet('fleetPopPerHull', 40) — zmienia JEDNĄ wartość w trwającej grze; wartość jedzie w zapisie gry.
       //   Nieznany klucz, zły typ albo wartość poza zakresem ⇒ odmowa z listą kluczy albo zakresem, nic się nie zmienia.
       sbSet: (key, value) => consoleSetTuning(key, value),

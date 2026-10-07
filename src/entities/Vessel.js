@@ -555,6 +555,20 @@ export function hasWeapons(vessel) {
 }
 
 /**
+ * AI STRIKES BACK (SB3, SB14) — czy kadłub liczy się do LIMITU FLOTY imperium `empireId`. JEDEN predykat dla odczytu
+ * limitu (S1) i puli (kolejne kroki): uzbrojony wg istniejącego testu `hasWeapons`, nie wrak, ostemplowany jako kadłub
+ * tego imperium — w KAŻDYM stanie służby (służba, rezerwa, mobilizacja) i położenia (dok, orbita, lot, tranzyt warp).
+ * ⚠ Właściciel jak w `ThreatAssessment._ownerOf` i w Directorze: NAJPIERW `isEnemyVessel` (kadłub bez stempla jest
+ *   kadłubem gracza), potem `ownerEmpireId ?? owner`. Dla gracza (`'player'`) zawsze `false` — limit dotyczy imperiów AI.
+ */
+export function isFleetLimitHull(vessel, empireId) {
+  if (!vessel || vessel.isWreck || !empireId) return false;
+  if (!isEnemyVessel(vessel)) return false;
+  if ((vessel.ownerEmpireId ?? vessel.owner) !== empireId) return false;
+  return hasWeapons(vessel);
+}
+
+/**
  * Prymarna rola statku — używana do wyboru puli nazw i etykiety UI.
  * Priorytet: colony > warship(z troop_bay) > transport > warship > science > cargo > scout.
  */

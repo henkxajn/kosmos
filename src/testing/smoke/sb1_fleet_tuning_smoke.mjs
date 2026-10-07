@@ -17,6 +17,13 @@
 //   T7  wpięcie w `GameScene` (pin źródłowy, komentarze zdjęte): komendy `sbTuning` / `sbSet` / `sbReset`, sprzątanie
 //       PO `gameState.restore(c4x.gameState)` (KONTROLA PINU na zmutowanej kopii); zdarzenie w `TRACKED_EVENTS`
 //   T8  wyjście konsoli: tabela (klucz, domyślna, bieżąca, `*`), odmowa z listą kluczy / zakresem
+//   T9  limit: fixture GATE-S4 — 6 dla obu imperiów (świadkowie POP 185 / 178 i fabryk 20 / 20); `fleetPopPerHull`
+//       zmieniony z konsoli zmienia limit OD RAZU; minimum 2; mnożnik 1 poniżej 20 poziomów fabryk; to samo
+//       zaokrąglenie, szczebel i źródło POP co limit garnizonu (wykonanie na siatce POP × fabryk, KONTROLA dyskryminacji)
+//   T10 liczenie kadłubów: rezerwa, mobilizacja, służba, dok i przestrzeń — TAK; wrak, frachtowiec bez broni, kadłub
+//       innego imperium i gracza — NIE; podział wg służby i położenia, miejsce dla puli
+//   T11 nic poza odczytem konsoli nie czyta limitu (pin źródłowy importów w `src/` poza `testing/`)
+//   T12 odczyt per imperium w konsoli i jego wpięcie w `KOSMOS.debug.sbTuning()`
 //
 // ⚠ Fail-first: moduły S1 powstają w tym slice — import dynamiczny w try/catch i wywołania przez pomocnika, żeby
 //   na kodzie sprzed zmiany piny DEGRADOWAŁY (czerwone), a nie przerywały suitę.
@@ -42,6 +49,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const DATA = await import('../../data/StrikesBackData.js').catch(() => null);
 const TUN  = await import('../../utils/StrikesBackTuning.js').catch(() => null);
 const tun  = (name, ...args) => (typeof TUN?.[name] === 'function' ? TUN[name](...args) : undefined);
+const FL   = await import('../../utils/FleetLimit.js').catch(() => null);
+const fl   = (name, ...args) => (typeof FL?.[name] === 'function' ? FL[name](...args) : undefined);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC  = path.resolve(here, '../..');
@@ -266,6 +275,135 @@ console.log('\nT8 — wyjście konsoli');
   const rs = capture(() => tun('consoleResetTuning'));
   assert(rs.ret?.ok === true && same(tun('readTuningValues'), { fleetMinHulls: 2, fleetPopPerHull: 32, fleetRungMult: [1, 1, 1, 1.25] }),
     'T8e: sbReset() przywraca całą tabelę');
+}
+
+// ── T9 — limit floty ───────────────────────────────────────────────────────────────────────────
+console.log('\nT9 — limit floty');
+{
+  // świadkowie z fixture'u (odczyt statyczny = odczyt żywej gry `readEmpireGarrisonSnapshot`, sonda M1-żywa S1)
+  const c4x = FIXTURE.civ4x;
+  const byId = new Map(c4x.colonies.map((c) => [c.planetId, c]));
+  const wit = {};
+  for (const [eid, e] of Object.entries(c4x.gameState.empires)) {
+    const owned = (e.colonies ?? []).map((id) => byId.get(id)).filter(Boolean);
+    wit[eid] = {
+      pop: owned.filter((c) => !c.isOutpost).reduce((s, c) => s + Math.floor(c.civ?.population ?? 0), 0),
+      factoryLevels: owned.reduce((s, c) => s + (c.buildings ?? []).filter((b) => b.buildingId === 'factory').reduce((a, b) => a + (b.level ?? 1), 0), 0),
+    };
+  }
+  assert(same(wit, { emp_001: { pop: 185, factoryLevels: 20 }, emp_002: { pop: 178, factoryLevels: 20 } }),
+    `T9a (świadkowie): fixture — POP 185 / 178, fabryki 20 / 20 (${JSON.stringify(wit)})`);
+  assert(fl('fleetLimit', wit.emp_001) === 6 && fl('fleetLimit', wit.emp_002) === 6,
+    `T9b: limit floty w fixture = 6 dla obu imperiów (${fl('fleetLimit', wit.emp_001)} / ${fl('fleetLimit', wit.emp_002)})`);
+  tun('setTuning', 'fleetPopPerHull', 16);
+  assert(fl('fleetLimit', wit.emp_001) === 13, `T9c: fleetPopPerHull 16 z konsoli — limit od razu 13 (${fl('fleetLimit', wit.emp_001)})`);
+  tun('resetTuning', 'fleetPopPerHull');
+  assert(fl('fleetLimit', wit.emp_001) === 6, 'T9d: reset — limit od razu z powrotem 6');
+  assert(fl('fleetLimit', { pop: 0, factoryLevels: 0 }) === 2 && fl('fleetLimit', { pop: 63, factoryLevels: 0 }) === 2
+    && fl('fleetLimit', { pop: 95, factoryLevels: 0 }) === 2 && fl('fleetLimit', { pop: 96, factoryLevels: 0 }) === 3,
+    'T9e: minimum 2 (POP 0 / 63 / 95 → 2), POP 96 → 3');
+  tun('setTuning', 'fleetMinHulls', 3);
+  assert(fl('fleetLimit', { pop: 0, factoryLevels: 0 }) === 3, 'T9f: minimum 3 z konsoli — POP 0 → 3 (klamra czyta tabelę)');
+  tun('resetTuning', 'fleetMinHulls');
+  assert([0, 6, 13, 14, 19].every((f) => fl('fleetLimit', { pop: 185, factoryLevels: f }) === 5)
+    && fl('fleetLimit', { pop: 185, factoryLevels: 20 }) === 6,
+    'T9g: mnożnik 1 poniżej 20 poziomów fabryk (POP 185 → 5), od 20 — ×1,25 (→ 6)');
+  // to samo zaokrąglenie, szczebel i formuła co garnizon: parametry garnizonu ⇒ `garrisonLimit` na całej siatce
+  const gTun = { fleetMinHulls: 2, fleetPopPerHull: 16, fleetRungMult: GARRISON_LADDER.map((r) => r.limitMult) };
+  const grid = [];
+  for (let pop = 0; pop <= 400; pop++) for (const f of [0, 5, 6, 13, 14, 19, 20, 24]) grid.push({ pop, factoryLevels: f });
+  const mism = grid.filter((e) => fl('fleetLimit', e, gTun) !== garrisonLimit(e));
+  assert(grid.length === 3208 && FL && mism.length === 0,
+    `T9h: parametry garnizonu ⇒ ta sama liczba co garrisonLimit dla ${grid.length} punktów (rozjazdy: ${mism.length})`);
+  const altCeil = (e) => Math.ceil(Math.max(2, Math.floor(e.pop / 16)) * garrisonTier(e).limitMult);
+  assert(grid.some((e) => altCeil(e) !== garrisonLimit(e)), 'T9i (KONTROLA dyskryminacji): zaokrąglenie w górę dałoby inną liczbę — siatka rozróżnia');
+}
+
+// ── T10 — liczenie kadłubów ────────────────────────────────────────────────────────────────────
+console.log('\nT10 — kadłuby liczone do limitu');
+const WARSHIP = ['engine_ion', 'armor_standard', 'weapon_kinetic'];
+const FREIGHT = ['engine_chemical', 'cargo_small'];
+{
+  restoreWorld();
+  const [A, B] = K.empireRegistry.listAll().map((e) => e.id);
+  const capA = K.directorProduction.capitalOf(A);
+  const body = K.entityManager.get(capA.planetId);
+  const mk = (owner, modules, service, state, extra = {}) => {
+    const v = VesselNS.createVessel('hull_frigate', body.id, { modules: [...modules], systemId: body.systemId, x: body.x, y: body.y, serviceState: service });
+    if (owner) { v.ownerEmpireId = owner; v.owner = owner; v.isEnemy = true; }
+    v.position.state = state; v.position.dockedAt = state === 'docked' ? body.id : null;
+    Object.assign(v, extra);
+    core.vesselManager._vessels.set(v.id, v);
+    return v;
+  };
+  const counted = [
+    mk(A, WARSHIP, 'stored', 'docked'), mk(A, WARSHIP, 'active', 'docked'), mk(A, WARSHIP, 'mobilizing', 'docked'),
+    mk(A, WARSHIP, 'active', 'orbiting'), mk(A, WARSHIP, 'active', 'in_transit'),
+  ];
+  const wreck = mk(A, WARSHIP, 'active', 'orbiting', { isWreck: true });
+  const freighter = mk(A, FREIGHT, 'active', 'docked');
+  const freighterStored = mk(A, FREIGHT, 'stored', 'docked');
+  const other = mk(B, WARSHIP, 'active', 'docked');
+  const player = mk(null, WARSHIP, 'active', 'docked');
+  const pred = VesselNS.isFleetLimitHull;
+  assert(typeof pred === 'function' && counted.every((v) => pred(v, A)),
+    'T10a: rezerwa, mobilizacja, służba w doku, na orbicie i w locie — liczone (wspólny predykat `isFleetLimitHull`)');
+  assert(typeof pred === 'function' && ![wreck, freighter, freighterStored, other, player].some((v) => pred(v, A)),
+    'T10b: wrak, frachtowiec bez broni (służba i rezerwa), kadłub innego imperium i gracza — NIE liczone');
+  wreck.isWreck = false;
+  assert(typeof pred === 'function' && pred(wreck, A), 'T10c (nie-jałowość wykluczenia): ten sam kadłub bez flagi wraku jest liczony');
+  wreck.isWreck = true;
+  assert(!VesselNS.hasWeapons(freighter) && VesselNS.hasWeapons(counted[0]), 'T10d (KONTROLA): test uzbrojenia to istniejący `hasWeapons`');
+  const pre = core.vesselManager.getAllVessels().filter((v) => v !== wreck && !v.isWreck && VesselNS.isEnemyVessel(v)
+    && (v.ownerEmpireId ?? v.owner) === A && VesselNS.hasWeapons(v) && !counted.includes(v));
+  const exp = { active: 3, stored: 1, mobilizing: 1, docked: 3, inSpace: 2 };
+  for (const v of pre) {
+    const svc = v.serviceState ?? 'active'; exp[svc] = (exp[svc] ?? 0) + 1;
+    if (v.position?.state === 'docked') exp.docked++; else exp.inSpace++;
+  }
+  const s = fl('readEmpireFleetSnapshot', K, A);
+  assert(s && s.armed === counted.length + pre.length
+    && s.service.active === exp.active && s.service.stored === exp.stored && s.service.mobilizing === exp.mobilizing
+    && s.position.docked === exp.docked && s.position.inSpace === exp.inSpace,
+    `T10e: podział — służba ${JSON.stringify(s?.service)}, położenie ${JSON.stringify(s?.position)} (uzbrojonych imperium sprzed testu: ${pre.length})`);
+  assert(s && s.room === Math.max(0, s.limit - s.armed), `T10f: miejsce dla puli = max(0, limit − kadłuby) (${s?.limit} − ${s?.armed} → ${s?.room})`);
+  const g = readEmpireGarrisonSnapshot(K, A);
+  assert(s && s.pop === g.pop && s.factoryLevels === g.factoryLevels && s.rung === garrisonTier(g).index && s.limit === fl('fleetLimit', g),
+    `T10g: to samo źródło POP i szczebel co garnizon (POP ${s?.pop}, fabryki ${s?.factoryLevels}, szczebel ${s?.rung})`);
+  tun('setTuning', 'fleetPopPerHull', 1);
+  const s2 = fl('readEmpireFleetSnapshot', K, A);
+  assert(s2 && s2.limit === fl('fleetLimit', { pop: g.pop, factoryLevels: g.factoryLevels }) && s2.limit !== s.limit,
+    `T10h: zmiana z konsoli działa w odczycie żywego świata od razu (limit ${s?.limit} → ${s2?.limit})`);
+  tun('resetTuning');
+}
+
+// ── T11 — nic poza odczytem konsoli nie czyta limitu ───────────────────────────────────────────
+console.log('\nT11 — konsumenci limitu w grze (tylko konsola)');
+{
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) { if (!p.includes(`${path.sep}testing`)) walk(p); } else if (/\.(m?js)$/.test(n)) files.push(p); } };
+  walk(SRC);
+  const importers = (mod) => files.filter((f) => new RegExp(`from\\s*'[^']*${mod}'`).test(stripComments(readFileSync(f, 'utf8'))))
+    .map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
+  assert(same(importers('FleetLimit\\.js'), ['scenes/GameScene.js']), `T11a: FleetLimit importuje wyłącznie GameScene (konsola): ${JSON.stringify(importers('FleetLimit\\.js'))}`);
+  assert(same(importers('StrikesBackTuning\\.js'), ['scenes/GameScene.js', 'utils/FleetLimit.js']),
+    `T11b: StrikesBackTuning importują GameScene i FleetLimit: ${JSON.stringify(importers('StrikesBackTuning\\.js'))}`);
+  const users = files.filter((f) => /\bisFleetLimitHull\b/.test(stripComments(readFileSync(f, 'utf8')))).map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
+  assert(same(users, ['entities/Vessel.js', 'utils/FleetLimit.js']), `T11c: predykat kadłuba używany tylko przez limit: ${JSON.stringify(users)}`);
+}
+
+// ── T12 — odczyt per imperium w konsoli ────────────────────────────────────────────────────────
+console.log('\nT12 — odczyt per imperium');
+{
+  const t = capture(() => fl('printFleetLimits', K));
+  const table = t.out.find(([k]) => k === 'table');
+  const rows = table ? JSON.parse(table[1]) : [];
+  const cols = ['imperium', 'pop', 'fabryki', 'szczebel', 'mnoznik', 'limit', 'uzbrojone', 'sluzba', 'rezerwa', 'mobilizacja', 'dok', 'przestrzen', 'miejsce'];
+  assert(rows.length === K.empireRegistry.listAll().length && rows.every((r) => same(Object.keys(r), cols)),
+    `T12a: wiersz na imperium z kolumnami ${cols.join(', ')}`);
+  const gsSrc = stripComments(read('scenes/GameScene.js'));
+  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\)\s*\}\)/.test(gsSrc),
+    'T12b: `KOSMOS.debug.sbTuning()` drukuje tabelę strojenia i limit floty każdego imperium');
 }
 
 console.log(`\n[sb1_fleet_tuning_smoke] PASS ${pass} / FAIL ${fail}`);
