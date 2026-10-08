@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 sesja 1 z 2 ZAMKNIĘTA 2026-10-07 · S1 sesja 2 z 2 — KOD PRZYGOTOWANY, NIE ZACOMMITOWANY 2026-10-08)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08, poza S1-8 czekającym na zgodę R-B6)
 
-Plan, decyzje **SB1–SB25** i rejestr findingów **#391–#411**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB29** i rejestr findingów **#391–#413**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -5963,6 +5963,10 @@ Odpowiedzi na pytania sesji 1 (2026-10-07): **SB20** domyślny wzorzec puli D, E
 powtarzany do limitu · **SB21** minimum 2 kadłubów z bakiem warp także PONAD limitem (zmienia SB14) · **SB22** kadłuby
 puli „wszystko zbadane” · **SB23** transportowiec nieuzbrojony, poza limitem (liczba i źródło — S3) · **SB24** Finding 407
 leczony przy wczytaniu · **SB25** flota ma własny klucz mnożnika szczebla, progi wspólne z garnizonem.
+Odpowiedzi na pytania sesji 2 (2026-10-08): **SB26** reparacje wstrzymują tworzenie puli i odrastanie (zostaje, jak
+zbudowano) · **SB27** pula osiąga minimum z bakiem w chwili utworzenia (limit 2 przy zerze kadłubów → D, E, E) ·
+**SB28** tabela strojenia odmawia wzorca bez szablonu z bakiem przy minimum > 0 (i odwrotnej kolejności) · **SB29** SB13
+dosłownie: w wojnie guard parytetu nie hamuje — kadłub ukończony w wojnie po mobilizacji wchodzi do służby (zamyka 411).
 
 **Slice'y:** **S0** trzy defekty (391, 392, 393 + 394) · **S1** tabela strojenia, limit floty, pula · **S2** strażnik ·
 **S3** eskadra z transportowcem, desant po wygranej orbicie, odbijanie, fale · **S4** wojna z inicjatywy AI i kampania
@@ -6012,7 +6016,7 @@ układzie statku idzie do `sys_060`) · 🟠 **408** — przy SB14 limit `emp_00
 eskorty, uderzenie niemożliwe. Następna: **S1, sesja 2** (pula, odrastanie, SB13, SB19) po decyzjach z planu §5c.
 (Opisy „dom gracza `sys_060`” / „fregaty w `sys_060`” poprawione 2026-10-08.)
 
-⏳ **S1, sesja 2 z 2 (2026-10-08) — KOD PRZYGOTOWANY I ZASTAGOWANY, NIE ZACOMMITOWANY** (plan §5d; łańcuch, skrypt
+✅ **S1, sesja 2 z 2 (2026-10-08) — zacommitowana po bramce i zgodzie na R-B2a / R-B2b / R-B5** (plan §5d, §5e; łańcuch, skrypt
 commitów i notatka: `kosmos-handover/ai-strikes-back-s1/p2/`, `HANDOVER_S1_PART2.md`): **B1** `VesselManager._healDockedSystemId`
 — statek w doku bierze przy wczytaniu układ ciała doku (407, SB24) · **B2** pula: NEW `src/utils/FleetPoolPlanner.js`, NEW
 `src/systems/FleetPoolSystem.js` (`window.KOSMOS.fleetPoolSystem`), JEDNA funkcja tworzenia `VesselManager.createAIVessel`
@@ -6022,8 +6026,8 @@ uzbrojoną rezerwę (SB13; `mobilize_reserve` w pokoju bez zmian) · **B4** odra
 `fleetRegrowthPerYear` (SB15) · **B5** wywiad „okręty uzbrojone: A / limit floty: L” zamiast „wolna załoga” (SB19, 398).
 Keepery NEW `sb1_dock_heal` 14, `sb1_fleet_pool` 79, `sb1_intel_fleet` 13. ⚠ **Podpisane decyzje odwracają piny**
 (`sb1_fleet_tuning`, `w3_target_selection`, `wp_ai_peace_offer`, `wp_test_infra`, `g3_regrowth` R9b, `w2_ai_mobilization` T5)
-— przecelowania R-B2a / R-B2b / R-B5 jako `*.PROPOSED` z dowodem mutacyjnym 11/11, **czekają na zgodę**; sweep „kod”
-262/268, z przecelowaniami 268/268; `check-i18n` 3455. M3 (fixture, wojna, 10 lat): `emp_001` +2 eskorty z puli i 6
+— przecelowania R-B2a / R-B2b / R-B5 (dowód mutacyjny 11/11) zatwierdzone 2026-10-08 i zacommitowane razem z kodem;
+sweep 268/268; `check-i18n` 3455. M3 (fixture, wojna, 10 lat): `emp_001` +2 eskorty z puli i 6
 obudzonych (8 w służbie), `emp_002` +6 z puli; przy 3 fregatach gracza w domu uderzenie `emp_001` odmawia
 (`target_beyond_reach`), bez nich 2 eskorty po ~5 latach wygrywają orbitę nad domem gracza, desantu brak
 (`no_drop_capable_hull`). Bramka: `kosmos-handover/ai-strikes-back-s1/gate/GATE_S1.md` (zwalidowana w prawdziwej grze na
@@ -6031,5 +6035,27 @@ kodzie sesji i na `45ee9d2`). Nowe: ⚪ **409** napis „Rezerwa wchodzi do słu
 `spawnMyVessel({ systemId })` tworzy chimerę doku · ⚪ **411** kadłub ukończony w wojnie po mobilizacji budzi tylko
 reguła z parytetem.
 ⚠ **Kadłub AI z puli tworzy się WYŁĄCZNIE przez `VesselManager.createAIVessel`**, wołane tylko z `FleetPoolSystem`
-(pin `sb1_fleet_pool_smoke` T10e). ⚠ Po zatwierdzeniu R-B2b: **keeper, który wypowiada wojnę, a nie pinuje puli,
-wyłącza ją w setupie** (`fleetPoolSystem.enabled = false`, wzór `garrisonSystem.enabled`).
+(pin `sb1_fleet_pool_smoke` T10e). ⚠ **Keeper, który wypowiada wojnę, a nie pinuje puli, wyłącza ją w setupie**
+(`fleetPoolSystem.enabled = false`, wzór `garrisonSystem.enabled`; R-B2b zatwierdzone) — wyłącznik jest narzędziem
+testów: w grze zawsze `true`, poza zapisem (pin `sb1_pool_switch_smoke`).
+
+✅ **S1 ZAMKNIĘTY 2026-10-08** (bramka właściciela w przeglądarce PASS na fixture GATE-S4, gra po angielsku; zapis i
+wynik: plan §5e; notatka `kosmos-handover/ai-strikes-back-s1/HANDOVER_S1_CLOSED.md`). Łańcuch sesji 2 zacommitowany po
+zgodzie na R-B2a / R-B2b / R-B5: `d4f43a8` S1-3 · `a1143fc` S1-4 · `a8ebbfe` S1-5 · `d707e3e` S1-6 · `1a9f95b` S1-7.
+Domknięcie: `8d13485` S1-9 (**SB28**: `StrikesBackTuning.checkWarpPair` — odmowa pary „wzorzec bez baku” ↔ „minimum
+z bakiem > 0” w obu kolejnościach, także reset minimum; odmowa nazywa klucz do zmiany najpierw) · `5dc04d0` S1-10
+(**SB29**, 411: `DirectorMobilization.parityGuardAllows` — guard `empireOutgunnedByPlayer` reguły `mobilize_reserve`
+przepuszcza imperium w wojnie ze zmobilizowaną pulą; w pokoju porównanie sił bez zmian; kadłub ukończony w wojnie
+w służbie po 2–15 miesiącach; przed — po 10 latach dalej w rezerwie) · `1444184` S1-11 (test: wyłącznik `fleetPoolSystem.enabled` w grze `true`,
+poza zapisem). Keepery NEW `sb1_tuning_warp_pair` 14, `sb1_war_reserve` 11, `sb1_pool_switch` 6 (dowód mutacyjny 3/3).
+Sweep **271/271**, `check-i18n` 3455; uprząż C1 (pokój, 100 lat, oba ziarna) bajt w bajt jak w sesji 1. Decyzje
+**SB26** (reparacje wstrzymują pulę i odrastanie — zostaje) · **SB27** (minimum z bakiem w chwili utworzenia: limit 2 przy
+zerze → D, E, E) · **SB28** · **SB29**. Zamknięte: ✅ **398** · **407** · **408** · **411**; ⚪ **409** zostaje (tekst —
+polerka). Nowe: ⚪ **412** (panel WYWIAD w grze EN: polskie „Ostatnie incydenty — (brak)”, `IntelOverlay.js:346`, `:356`)
+· ⚪ **413** (plan puli dokłada kadłub bez baku ponad limit przy minimum strojonym ponad sloty z bakiem; nieosiągalne
+przy domyślnym strojeniu). ⏳ **S1-8 (SB27) PRZYGOTOWANY, NIE ZACOMMITOWANY**: plan liczony do skutku przewraca poza
+z góry zatwierdzonym T4a 17 asercji (`sb1_fleet_pool` 15, `sb1_intel_fleet` 2) — przecelowanie **R-B6** (dowód mutacyjny
+4/4) czeka na zgodę; skrypt `kosmos-handover/ai-strikes-back-s1/p3/tools/commit_B6.sh` (test na sucho: drzewo
+`ec1bb83`, sweep 272/272). **Następny: S2** (strażnik na orbicie, SB5, SB6).
+⚠ **Po S1-8 (jeśli R-B6):** pula w świecie keeperów (limit 2) to D, E, E od razu, a odrastanie dla minimum potrzebuje
+STRATY — keeper, który mierzy „pulę z 2 kadłubów” albo „+E na granicy roku”, koduje stan sprzed SB27.
