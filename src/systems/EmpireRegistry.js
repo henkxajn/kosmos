@@ -20,6 +20,9 @@
 //                                      // G2-3b (D15) — flaga mobilizacji garnizonu; brak pola = „nie”
 //                                      // G3-1 — `regrowthYear`: ostatni rok kalendarzowy gry rozliczony przez
 //                                      //   odrastanie; brak pola (zapis sprzed G3) = rok pierwszej kontroli
+//     fleetPool?: { mobilized, year, regrowthYear, reason, limit, armedBefore, warpBefore, planned, created, refused,
+//                   missingWarpTemplate }
+//                                      // AI STRIKES BACK S1 (SB1) — flaga puli okrętów; brak pola = „nie”
 //   }
 //
 // Faza 1: brak time:tick subscription — kolonie tickują przez własne systemy.
@@ -45,6 +48,12 @@ export class EmpireRegistry {
    * daje `false` — dlatego wystarcza bez migracji (save v101).
    */
   isGarrisonMobilized(empireId) { return this.get(empireId)?.garrison?.mobilized === true; }
+
+  /**
+   * AI STRIKES BACK S1 (SB1) — czy imperium dostało już pulę okrętów. Zapis bez pola `fleetPool` daje `false` — bez
+   * migracji (save v101).
+   */
+  isFleetPoolMobilized(empireId) { return this.get(empireId)?.fleetPool?.mobilized === true; }
 
   /**
    * Zwraca żywe obiekty kolonii imperium (z ColonyManager), nie same id.
@@ -206,6 +215,19 @@ export class EmpireRegistry {
     const rec = this.get(empireId)?.garrison;
     if (rec?.mobilized !== true || !Number.isFinite(year)) return false;
     gameState.set(`empires.${empireId}.garrison`, { ...rec, regrowthYear: year }, 'garrison_regrowth');
+    return true;
+  }
+
+  /**
+   * AI STRIKES BACK S1 (SB1) — zapisuje flagę puli okrętów w `empires.<id>.fleetPool`. Jedynym wołającym jest
+   * `FleetPoolSystem.mobilizeEmpire`. Pole przeżywa zapis bez migracji (klucz `empires` zadeklarowany w `GameState`).
+   * @param {string} empireId
+   * @param {Object} record
+   * @returns {boolean}
+   */
+  markFleetPoolMobilized(empireId, record = {}) {
+    if (!this.get(empireId)) return false;
+    gameState.set(`empires.${empireId}.fleetPool`, { ...record, mobilized: true }, 'fleet_pool_mobilized');
     return true;
   }
 

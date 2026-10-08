@@ -96,6 +96,9 @@ function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization', aiEmpires: true });
   const K = window.KOSMOS;
+  // ⚠ AI STRIKES BACK S1 (SB1, przecelowanie R-B2b za zgodą właściciela) — wojna tworzy PULĘ okrętów imperium, co zmienia
+  //   scenę tego keepera; pinuje on co innego, więc pula jest wyłączona w setupie (wzór `garrisonSystem.enabled`).
+  if (K.fleetPoolSystem) K.fleetPoolSystem.enabled = false;
   K.acceptanceEngine = K.diplomacySystem._acceptance();
   return K;
 }

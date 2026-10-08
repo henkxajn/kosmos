@@ -99,6 +99,7 @@ import { EmpireResearchSystem } from '../systems/EmpireResearchSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { GarrisonSystem }    from '../systems/GarrisonSystem.js';   // G2-3b — garnizony naziemne AI (D15)
+import { FleetPoolSystem }   from '../systems/FleetPoolSystem.js';  // AI STRIKES BACK S1 — pula okrętów AI (SB1)
 import { WithdrawalSystem }  from '../systems/WithdrawalSystem.js'; // G2-4 — wycofanie wojsk po pokoju (D14)
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
@@ -332,6 +333,9 @@ export class GameScene {
     // planer i usługi leniwie przez `window.KOSMOS`, więc kolejność konstrukcji jest dowolna — ale MUSI
     // powstać przed `restore` niżej (subskrypcja pierwszego ticku), co ten blok gwarantuje.
     this.garrisonSystem       = new GarrisonSystem();
+    // AI STRIKES BACK S1 (SB1) — pula okrętów imperium AI przy mobilizacji (te same trzy wejścia co garnizon, własna
+    // flaga). Usługi czyta leniwie przez `window.KOSMOS`; MUSI powstać przed `restore` (subskrypcja pierwszego ticku).
+    this.fleetPoolSystem      = new FleetPoolSystem();
     // G2-4 (D14, R3–R5) — wycofanie wojsk po pokoju: flaga z terminem na jednostkach gracza na ciałach drugiej strony,
     // jednostki AI z ciał gracza znikają przy podpisaniu. Stan siedzi na jednostkach (zapis `GroundUnitManager`).
     this.withdrawalSystem     = new WithdrawalSystem();
@@ -467,6 +471,8 @@ export class GameScene {
     // ⚠ G2-3b — wpis OBOWIĄZKOWY (lekcja W3-5b „skonstruowany ≠ zamontowany”): odczyty gate'u
     //   (`KOSMOS.garrisonSystem.listUnits(...)`) idą przez lokator. Pin: `g2_mobilisation_smoke` M0.
     window.KOSMOS.garrisonSystem   = this.garrisonSystem;
+    // AI STRIKES BACK S1 — wpis obowiązkowy (odczyty bramki i wywiadu idą przez lokator: `KOSMOS.fleetPoolSystem`).
+    window.KOSMOS.fleetPoolSystem  = this.fleetPoolSystem;
     // G2-4 — wpis obowiązkowy (odczyt bramki: `KOSMOS.withdrawalSystem.listFlagged()`). Pin: `g2_after_peace_smoke` A4.
     window.KOSMOS.withdrawalSystem = this.withdrawalSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;

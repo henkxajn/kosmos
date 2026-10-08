@@ -48,6 +48,7 @@ import { markSystemExplored } from '../utils/SystemExploration.js';
 import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/TransferStore.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
 import { warGateRefusal } from '../utils/WarGate.js';           // D13 / G2-2 — bramka wojny (away team)
+import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -215,6 +216,49 @@ export class VesselManager {
 
     EventBus.emit('vessel:created', { vessel });
     return vessel;
+  }
+
+  /**
+   * AI STRIKES BACK S1 (SB1, SB2, SB18, SB22) — JEDYNE wejście tworzenia kadłuba PULI imperium AI (wzór
+   * `GroundUnitManager.createAIUnit`). Kadłub powstaje przy ciele `planetId` (kolonia TEGO imperium — w grze stolica),
+   * w DOKU i W SŁUŻBIE (SB18), bez załogi i bez POP (SB2: `crewLocked` 0, żadna kolonia nie płaci), z szablonu
+   * rozwiązanego „wszystko zbadane” jak sonda pierwszego kontaktu (SB22), z archetypem imperium; pełny bak paliwa
+   * w układzie, bak warp pusty (AI skacze bez sprawdzania paliwa). Utrzymania nie płaci (AI — `_tickVesselMaintenance`).
+   * ⚠ Stempel właściciela i pochodzenia PRZED `vessel:created` — `DirectorProduction._claimVessel` wraca wtedy od razu
+   *   i nie zdejmuje adnotacji zamówienia z kolejki stoczni tej kolonii (Finding 395 — adnotacja na złym kadłubie).
+   *   Pochodzenie: `origin: 'pool'` (w zapisie) + `directorOrigin` = id szablonu.
+   * ⚠ Kadłub trafia do `colony.fleet` kolonii, jak kadłub ze stoczni (`_onShipCompleted`) — przejęcie albo zniszczenie
+   *   kolonii traktuje go tak samo.
+   * @param {{templateId:string, empireId:string, planetId:string, origin?:string}} spec
+   * @returns {{ok:true, vessel:object} | {ok:false, reason:string, detail?:any}}
+   *   powody: `not_ai_empire` · `unknown_empire` · `not_own_body` · `unknown_template` / `no_hull` / `no_module` /
+   *   `no_capacity` (resolver) · `create_failed`
+   */
+  createAIVessel({ templateId, empireId, planetId, origin = 'pool' } = {}) {
+    if (!empireId || empireId === 'player') return { ok: false, reason: 'not_ai_empire' };
+    const emp = window.KOSMOS?.empireRegistry?.get?.(empireId) ?? null;
+    if (!emp) return { ok: false, reason: 'unknown_empire' };
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId) ?? null;
+    const body = this._findEntity(planetId);
+    if (!colony || colony.ownerEmpireId !== empireId || !body) return { ok: false, reason: 'not_own_body' };
+    const r = resolveTemplate(templateId, { isResearched: () => true, archetype: emp.archetype ?? null });
+    if (!r?.ok) return { ok: false, reason: r?.reason ?? 'resolve_failed', detail: r?.detail ?? null };
+    let vessel;
+    try {
+      vessel = createVessel(r.hullId, planetId, { modules: r.modules, x: body.x ?? 0, y: body.y ?? 0, serviceState: 'active' });
+    } catch (e) {
+      return { ok: false, reason: 'create_failed', detail: String(e?.message ?? e) };
+    }
+    vessel._baseFuelPerAU = vessel.fuel.consumption;   // jak `createAndRegister` — baza mnożników techu przy starcie
+    vessel.ownerEmpireId  = empireId;
+    vessel.owner          = empireId;
+    vessel.isEnemy        = true;
+    vessel.origin         = origin;
+    vessel.directorOrigin = templateId;
+    this._vessels.set(vessel.id, vessel);
+    if (Array.isArray(colony.fleet) && !colony.fleet.includes(vessel.id)) colony.fleet.push(vessel.id);
+    EventBus.emit('vessel:created', { vessel });
+    return { ok: true, vessel };
   }
 
   /**
@@ -1524,6 +1568,7 @@ export class VesselManager {
         owner:         v.owner ?? null,
         ownerEmpireId: v.ownerEmpireId ?? null,
         directorOrigin: v.directorOrigin ?? null,   // GATE 1 — adnotacja szablonu Directora
+        origin:        v.origin ?? null,             // AI STRIKES BACK S1 (SB1) — 'pool' = kadłub z puli imperium AI
         isWreck:       v.isWreck ?? false,
         wreckedAt:     v.wreckedAt ?? null,
         // M2a: pozycja wraku w deep-space (gdy dockedAt===null). null dla wraków orbitujących ciała.
@@ -1663,6 +1708,7 @@ export class VesselManager {
         ownerEmpireId:  vd.ownerEmpireId ?? null,
         isWreck:        vd.isWreck ?? false,
         directorOrigin: vd.directorOrigin ?? null,
+        origin:         vd.origin ?? null,
         wreckedAt:      vd.wreckedAt ?? null,
         // M2a: deep-space wrak pozycja (null dla żywych i wraków orbitujących ciała)
         wreckLocation:  vd.wreckLocation ?? null,

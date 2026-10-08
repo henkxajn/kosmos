@@ -55,6 +55,9 @@ const DEFENDER = ['engine_ion', 'armor_standard', 'weapon_kinetic'];   // bez ba
 function boot() {
   const core = new GameCore();
   core.boot({ quiet: true, scenario: 'civilization' });
+  // ⚠ AI STRIKES BACK S1 (SB1, przecelowanie R-B2b za zgodą właściciela) — wojna tworzy PULĘ okrętów imperium, co zmienia
+  //   scenę tego keepera; pinuje on co innego, więc pula jest wyłączona w setupie (wzór `garrisonSystem.enabled`).
+  if (window.KOSMOS.fleetPoolSystem) window.KOSMOS.fleetPoolSystem.enabled = false;
   window.KOSMOS.movementOrderSystem = new MovementOrderSystem(core.vesselManager);
   window.KOSMOS.orderService = new OrderService();
   const off = new DirectorOffensive();

@@ -7,8 +7,10 @@
 // ⚠ ZASADA KLUCZA (polecenie S1): klucz bez konsumenta nie wchodzi do tabeli. Kolejne slice'y (S2–S4) dokładają swoje
 //   klucze RAZEM z kodem, który je czyta.
 // ⚠ ZERO importów — moduł danych, node-testowalny. Kształt wpisu:
-//   { default, type: 'int' | 'numberList', min, max, length?, unit }
+//   { default, type: 'int' | 'numberList' | 'templateList', min?, max?, length?, minLength?, maxLength?, unit }
 //   'numberList' — lista liczb o stałej długości `length`; każdy element w [min, max].
+//   'templateList' — lista od `minLength` do `maxLength` id szablonów okrętów; każdy ZNANY i UZBROJONY (walidacja
+//   w `StrikesBackTuning`, cechy szablonu — `FleetPoolPlanner.templateTraits`).
 
 export const SB_TUNING = Object.freeze({
   /**
@@ -27,4 +29,20 @@ export const SB_TUNING = Object.freeze({
    * a zmiana drabiny garnizonu wymaga tu świadomej decyzji.
    */
   fleetRungMult: Object.freeze({ default: Object.freeze([1, 1, 1, 1.25]), type: 'numberList', length: 4, min: 0, max: 10, unit: 'mnoznik' }),
+
+  /**
+   * SB17, SB20 — WZORZEC składu puli okrętów: szablony z `SHIP_TEMPLATES`, wyłącznie znane i UZBROJONE, powtarzane do
+   * limitu floty (limit 2 → D, E; limit 6 → D, E, E, E, D, E). Istniejące uzbrojone kadłuby pokrywają sloty swojej
+   * klasy (z bakiem warp / bez baku). Konsument: `FleetLimit.readEmpirePoolPlan` → pula (`FleetPoolSystem`).
+   */
+  fleetPoolPattern: Object.freeze({
+    default: Object.freeze(['frigate_system_defender', 'frigate_missile_escort', 'frigate_missile_escort', 'frigate_missile_escort']),
+    type: 'templateList', minLength: 1, maxLength: 24, unit: 'szablony',
+  }),
+
+  /**
+   * SB21 — MINIMUM kadłubów z bakiem warp imperium, TAKŻE PONAD LIMITEM floty: gdy imperium ma ich mniej, pula dokłada
+   * brakujące (pierwszy szablon z bakiem we wzorcu). Konsument: `FleetLimit.readEmpirePoolPlan`.
+   */
+  fleetMinWarpHulls: Object.freeze({ default: 2, type: 'int', min: 0, max: 100, unit: 'kadluby z bakiem' }),
 });

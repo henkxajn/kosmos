@@ -79,6 +79,10 @@ export class NotificationCenter {
     EventBus.on('garrison:unitsRemoved',  e => this._handleGarrisonUnitsRemoved(e));
     // G3-4 — imperium, z którym gracz ma kontakt, mobilizuje garnizony naziemne: jeden wpis w Dzienniku (bez dzwonka).
     EventBus.on('garrison:mobilized',     e => this._handleGarrisonMobilized(e));
+    // AI STRIKES BACK S1 (SB1) — pula okrętów przy mobilizacji imperium: TO SAMO powiadomienie co obsadzanie rezerwy
+    //   (`_handleMobilized`: bramka `contact`, nazwa przy `detailed`, klucze `notif.mobilization*`), liczba = kadłuby,
+    //   które w tej chwili wchodzą do służby. Bez nowych kluczy.
+    EventBus.on('fleetPool:mobilized',    e => this._handleMobilized({ empireId: e?.empireId, count: e?.created ?? 0 }));
     // G2-4 (a) w wersji OGRANICZONEJ (decyzja właściciela 2026-10-04, Finding 370) — ostrzeżenie „został miesiąc” gaśnie
     //   samo PRZED terminem, gdy straciło przedmiot: na ciele nie została żadna oflagowana jednostka z ostrzeżenia
     //   (załadowane, flaga zdjęta albo jednostki usunięte inną drogą) albo wróciła wojna z właścicielem ciała. Zdarzenia —

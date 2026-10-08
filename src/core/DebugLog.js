@@ -143,6 +143,12 @@ const TRACKED_EVENTS = [
   // AI STRIKES BACK S1 (SB24, Finding 407) — statek w doku wyleczony przy wczytaniu (`systemId` → układ ciała doku).
   //   Jeden wpis na statek (`from`, `to`, `dockedAt`, właściciel) — bez niego leczenie byłoby ciche.
   'vessel:systemIdHealed',
+  // AI STRIKES BACK S1 (SB1) — pula okrętów imperium AI: utworzona (`mobilized`), odmowa mobilizacji z powodem
+  //   (`mobilizeSkipped`: already_mobilized / no_capital / reparations) i kadłub, którego nie dało się utworzyć
+  //   (`createRefused`) — bez tej trójki „wojna bez puli” byłaby nie do odróżnienia od „zaczepu nikt nie podłączył”.
+  'fleetPool:mobilized',
+  'fleetPool:mobilizeSkipped',
+  'fleetPool:createRefused',
 ];
 
 class DebugLog {

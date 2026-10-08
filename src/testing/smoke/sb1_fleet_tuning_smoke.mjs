@@ -22,8 +22,12 @@
 //       zaokrąglenie, szczebel i źródło POP co limit garnizonu (wykonanie na siatce POP × fabryk, KONTROLA dyskryminacji)
 //   T10 liczenie kadłubów: rezerwa, mobilizacja, służba, dok i przestrzeń — TAK; wrak, frachtowiec bez broni, kadłub
 //       innego imperium i gracza — NIE; podział wg służby i położenia, miejsce dla puli
-//   T11 nic poza odczytem konsoli nie czyta limitu (pin źródłowy importów w `src/` poza `testing/`)
-//   T12 odczyt per imperium w konsoli i jego wpięcie w `KOSMOS.debug.sbTuning()`
+//   T11 limit czytają wyłącznie konsola i pula okrętów (pin źródłowy importów w `src/` poza `testing/`)
+//   T12 odczyt per imperium w konsoli (z kolumnami puli) i jego wpięcie w `KOSMOS.debug.sbTuning()`
+//
+// ⚠ PRZECELOWANIE S1 sesja 2 (R-B2a, zgoda właściciela): tabela rośnie o klucze puli (SB20/SB21) RAZEM z konsumentem —
+//   klucze S1-1 pinowane jako PREFIKS tabeli z literalnymi wartościami domyślnymi, „wszystko domyślne” liczone po CAŁEJ
+//   tabeli; nowe klucze pinuje `sb1_fleet_pool_smoke` (T1c: każdy klucz ma konsumenta).
 //
 // ⚠ Fail-first: moduły S1 powstają w tym slice — import dynamiczny w try/catch i wywołania przez pomocnika, żeby
 //   na kodzie sprzed zmiany piny DEGRADOWAŁY (czerwone), a nie przerywały suitę.
@@ -79,22 +83,29 @@ const stateOf = () => JSON.stringify(gameState.get('strikesBackTuning') ?? null)
 // Stan świata GameCore — T4–T6 podmieniają `gameState` (zapis, fixture), T10 potrzebuje z powrotem tego świata.
 const WORLD_GS = JSON.stringify(gameState.serialize());
 const restoreWorld = () => gameState.restore(JSON.parse(WORLD_GS));
+const S11 = ['fleetMinHulls', 'fleetPopPerHull', 'fleetRungMult'];
+/** Wartości S1-1 literałem (SB3) i KAŻDY klucz tabeli na wartości domyślnej. */
+const allDefault = () => {
+  const cur = tun('readTuningValues') ?? {};
+  const T = DATA?.SB_TUNING ?? {};
+  return cur.fleetMinHulls === 2 && cur.fleetPopPerHull === 32 && same(cur.fleetRungMult, [1, 1, 1, 1.25])
+    && Object.keys(T).length >= 3 && same(Object.keys(cur), Object.keys(T)) && Object.keys(T).every((k) => same(cur[k], T[k].default));
+};
 const stateLogCount = () => debugLog.query((e) => e.kind === 'state' && e.data?.path === 'strikesBackTuning').length;
 
 // ── T1 — dane ──────────────────────────────────────────────────────────────────────────────────
 console.log('\nT1 — tabela: klucze i wartości domyślne');
 {
   const T = DATA?.SB_TUNING;
-  assert(same(Object.keys(T ?? {}), ['fleetMinHulls', 'fleetPopPerHull', 'fleetRungMult']),
-    `T1a: tabela S1 ma dokładnie klucze limitu floty (${JSON.stringify(Object.keys(T ?? {}))})`);
+  assert(same(Object.keys(T ?? {}).slice(0, 3), S11),
+    `T1a: tabela zaczyna się kluczami limitu floty S1-1, w tej kolejności (${JSON.stringify(Object.keys(T ?? {}))})`);
   assert(T?.fleetMinHulls?.default === 2 && T?.fleetPopPerHull?.default === 32 && same(T?.fleetRungMult?.default, [1, 1, 1, 1.25]),
     'T1b: wartości domyślne 2 / 32 / [1, 1, 1, 1.25] (SB3)');
   assert(GARRISON_LADDER.length === 4, 'T1c (KONTROLA): drabina garnizonu ma 4 szczeble');
   assert(T?.fleetRungMult?.length === GARRISON_LADDER.length
     && GARRISON_LADDER.every((row, i) => T.fleetRungMult.default[i] === row.limitMult),
     'T1d (tripwire): mnożniki szczebli floty = `limitMult` drabiny garnizonu, szczebel po szczeblu');
-  assert(same(tun('readTuningValues'), { fleetMinHulls: 2, fleetPopPerHull: 32, fleetRungMult: [1, 1, 1, 1.25] }),
-    'T1e: świeża gra — bieżące wartości = domyślne');
+  assert(allDefault(), 'T1e: świeża gra — bieżące wartości = domyślne (S1-1: 2 / 32 / [1, 1, 1, 1.25])');
 }
 
 // ── T2 — zmiana, odczyt, reset ─────────────────────────────────────────────────────────────────
@@ -124,8 +135,7 @@ console.log('\nT2 — zmiana, odczyt, reset');
     && same(tun('getTuning', 'fleetRungMult'), [1, 1, 1, 1.5]), 'T2h: sbReset(klucz) — tylko ten klucz wraca do domyślnej');
   tun('setTuning', 'fleetPopPerHull', 40);
   const ra = tun('resetTuning');
-  assert(ra?.ok === true && same([...(ra.reset ?? [])].sort(), ['fleetPopPerHull', 'fleetRungMult'])
-    && same(tun('readTuningValues'), { fleetMinHulls: 2, fleetPopPerHull: 32, fleetRungMult: [1, 1, 1, 1.25] }),
+  assert(ra?.ok === true && same([...(ra.reset ?? [])].sort(), ['fleetPopPerHull', 'fleetRungMult']) && allDefault(),
     `T2i: sbReset() — cała tabela domyślna (zdjęte: ${JSON.stringify(ra?.reset)})`);
 }
 
@@ -134,7 +144,7 @@ console.log('\nT3 — odmowy: lista kluczy albo zakres, stan bez zmian');
 {
   tun('setTuning', 'fleetPopPerHull', 40);                    // stan niedomyślny — odmowa ma czego NIE zmienić
   const cases = [
-    ['bogus', 1, 'unknown_key', (r) => same(r.validKeys, ['fleetMinHulls', 'fleetPopPerHull', 'fleetRungMult'])],
+    ['bogus', 1, 'unknown_key', (r) => same(r.validKeys, tun('tuningKeys')) && same(r.validKeys.slice(0, 3), S11)],
     ['fleetPopPerHull', '40', 'wrong_type', (r) => same(r.range, [1, 10000])],
     ['fleetPopPerHull', 40.5, 'wrong_type', (r) => same(r.range, [1, 10000])],
     ['fleetPopPerHull', NaN, 'wrong_type', (r) => same(r.range, [1, 10000])],
@@ -173,8 +183,7 @@ console.log('\nT4 — zapis → wczytanie (SaveSystem._serializeCiv4x → JSON �
   const json = JSON.stringify({ civ4x: c4x });
   assert(json.includes('"strikesBackTuning"'), 'T4a: zapis gry niesie klucz `strikesBackTuning`');
   gameState.reset();                                          // nowa sesja
-  assert(same(tun('readTuningValues'), { fleetMinHulls: 2, fleetPopPerHull: 32, fleetRungMult: [1, 1, 1, 1.25] }),
-    'T4b (nie-jałowość wczytania): po resecie wartości domyślne — to wczytanie ma je przywrócić');
+  assert(allDefault(), 'T4b (nie-jałowość wczytania): po resecie wartości domyślne — to wczytanie ma je przywrócić');
   const parsed = JSON.parse(json).civ4x;
   gameState.restore(parsed.gameState);                        // to samo wywołanie co GameScene (blok wczytania)
   const san = tun('sanitizeTuningAfterRestore');
@@ -201,9 +210,8 @@ console.log('\nT5 — fixture GATE-S4 (bez klucza) → wartości domyślne');
   const pre = tun('getTuning', 'fleetPopPerHull');
   gameState.restore(JSON.parse(JSON.stringify(gs)));
   const san = tun('sanitizeTuningAfterRestore');
-  assert(pre === 40 && san && same(san.ignored, [])
-    && same(tun('readTuningValues'), { fleetMinHulls: 2, fleetPopPerHull: 32, fleetRungMult: [1, 1, 1, 1.25] })
-    && (tun('tuningRows') ?? []).length === 3 && (tun('tuningRows') ?? []).every((x) => x.zmiana === ''),
+  assert(pre === 40 && san && same(san.ignored, []) && allDefault()
+    && (tun('tuningRows') ?? []).length === (tun('tuningKeys') ?? []).length && (tun('tuningRows') ?? []).every((x) => x.zmiana === ''),
     'T5b: po wczytaniu fixture’u — wszystkie wartości domyślne, bez znaczników (przed wczytaniem: 40)');
 }
 
@@ -260,7 +268,7 @@ console.log('\nT8 — wyjście konsoli');
   const table = t.out.find(([k]) => k === 'table');
   const rows = table ? JSON.parse(table[1]) : [];
   const row = rows.find((x) => x.klucz === 'fleetPopPerHull');
-  assert(rows.length === 3 && row?.domyslna === '32' && row?.biezaca === '40' && row?.zmiana === '*'
+  assert(rows.length === (tun('tuningKeys') ?? []).length && rows.length >= 3 && row?.domyslna === '32' && row?.biezaca === '40' && row?.zmiana === '*'
     && rows.find((x) => x.klucz === 'fleetRungMult')?.domyslna === '[1, 1, 1, 1.25]',
     `T8a: tabela: klucz, domyślna, bieżąca, znacznik (${JSON.stringify(row)})`);
   const s = capture(() => tun('consoleSetTuning', 'fleetPopPerHull', 50));
@@ -273,8 +281,7 @@ console.log('\nT8 — wyjście konsoli');
   assert(z.ret?.ok === false && z.out.some(([k, line]) => k === 'warn' && line.includes('0..100')),
     `T8d: odmowa wypisuje zakres (${JSON.stringify(z.out)})`);
   const rs = capture(() => tun('consoleResetTuning'));
-  assert(rs.ret?.ok === true && same(tun('readTuningValues'), { fleetMinHulls: 2, fleetPopPerHull: 32, fleetRungMult: [1, 1, 1, 1.25] }),
-    'T8e: sbReset() przywraca całą tabelę');
+  assert(rs.ret?.ok === true && allDefault(), 'T8e: sbReset() przywraca całą tabelę');
 }
 
 // ── T9 — limit floty ───────────────────────────────────────────────────────────────────────────
@@ -378,14 +385,15 @@ const FREIGHT = ['engine_chemical', 'cargo_small'];
 }
 
 // ── T11 — nic poza odczytem konsoli nie czyta limitu ───────────────────────────────────────────
-console.log('\nT11 — konsumenci limitu w grze (tylko konsola)');
+console.log('\nT11 — konsumenci limitu w grze (konsola i pula)');
 {
   const files = [];
   const walk = (d) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) { if (!p.includes(`${path.sep}testing`)) walk(p); } else if (/\.(m?js)$/.test(n)) files.push(p); } };
   walk(SRC);
   const importers = (mod) => files.filter((f) => new RegExp(`from\\s*'[^']*${mod}'`).test(stripComments(readFileSync(f, 'utf8'))))
     .map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
-  assert(same(importers('FleetLimit\\.js'), ['scenes/GameScene.js']), `T11a: FleetLimit importuje wyłącznie GameScene (konsola): ${JSON.stringify(importers('FleetLimit\\.js'))}`);
+  assert(same(importers('FleetLimit\\.js'), ['scenes/GameScene.js', 'systems/FleetPoolSystem.js']),
+    `T11a: FleetLimit importują wyłącznie GameScene (konsola) i FleetPoolSystem (pula): ${JSON.stringify(importers('FleetLimit\\.js'))}`);
   assert(same(importers('StrikesBackTuning\\.js'), ['scenes/GameScene.js', 'utils/FleetLimit.js']),
     `T11b: StrikesBackTuning importują GameScene i FleetLimit: ${JSON.stringify(importers('StrikesBackTuning\\.js'))}`);
   const users = files.filter((f) => /\bisFleetLimitHull\b/.test(stripComments(readFileSync(f, 'utf8')))).map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
@@ -398,7 +406,8 @@ console.log('\nT12 — odczyt per imperium');
   const t = capture(() => fl('printFleetLimits', K));
   const table = t.out.find(([k]) => k === 'table');
   const rows = table ? JSON.parse(table[1]) : [];
-  const cols = ['imperium', 'pop', 'fabryki', 'szczebel', 'mnoznik', 'limit', 'uzbrojone', 'sluzba', 'rezerwa', 'mobilizacja', 'dok', 'przestrzen', 'miejsce'];
+  const cols = ['imperium', 'pop', 'fabryki', 'szczebel', 'mnoznik', 'limit', 'uzbrojone', 'sluzba', 'rezerwa', 'mobilizacja', 'dok', 'przestrzen', 'miejsce',
+    'zBakiem', 'pula', 'pulaDoda'];
   assert(rows.length === K.empireRegistry.listAll().length && rows.every((r) => same(Object.keys(r), cols)),
     `T12a: wiersz na imperium z kolumnami ${cols.join(', ')}`);
   const gsSrc = stripComments(read('scenes/GameScene.js'));

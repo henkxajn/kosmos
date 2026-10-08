@@ -66,6 +66,7 @@ import { WarSystem }         from '../../systems/WarSystem.js';
 import { ThreatAssessment }  from '../../systems/ThreatAssessment.js';
 import { InvasionSystem }    from '../../systems/InvasionSystem.js';
 import { GarrisonSystem }    from '../../systems/GarrisonSystem.js';   // G2-3b — parytet z GameScene
+import { FleetPoolSystem }   from '../../systems/FleetPoolSystem.js';  // AI STRIKES BACK S1 — parytet z GameScene
 import { WithdrawalSystem }  from '../../systems/WithdrawalSystem.js'; // G2-4 — parytet z GameScene
 import { StarSystemManager } from '../../systems/StarSystemManager.js';
 // Parytet z `GameScene` dla czterech globali, ktorych headless dotad NIE montowal —
@@ -206,6 +207,9 @@ export class GameCore {
     // G2-3b (AI GARRISON, D15) — mobilizacja garnizonów AI. Parytet z GameScene: bez tej instancji
     // headless widziałby wojnę bez garnizonu, czyli świat, którego w grze nie ma.
     this.garrisonSystem = new GarrisonSystem();
+    // AI STRIKES BACK S1 (SB1) — pula okrętów AI przy mobilizacji. Parytet z GameScene: bez tej instancji headless
+    // widziałby wojnę bez puli, czyli świat, którego w grze nie ma.
+    this.fleetPoolSystem = new FleetPoolSystem();
     // G2-4 (D14) — wycofanie wojsk po pokoju. Parytet z GameScene: bez tej instancji headless widziałby pokój,
     // po którym jednostki zostają na cudzych ciałach na zawsze.
     this.withdrawalSystem = new WithdrawalSystem();
@@ -252,6 +256,7 @@ export class GameCore {
     K.warSystem = this.warSystem;
     K.invasionSystem = this.invasionSystem;
     K.garrisonSystem = this.garrisonSystem;
+    K.fleetPoolSystem = this.fleetPoolSystem;
     K.withdrawalSystem = this.withdrawalSystem;
     K.threatAssessment = this.threatAssessment;
     K.overlayManager = null; // brak UI w headless

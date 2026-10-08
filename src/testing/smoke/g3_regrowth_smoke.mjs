@@ -572,6 +572,9 @@ function dropModalTexts(w, dockedAt) {
 /** Świat z Dziennikiem i dzwonkiem (GameCore ich nie montuje; po boocie, bo boot czyści EventBus). */
 function bootJournal(years = 40) {
   const w = boot();
+  // ⚠ AI STRIKES BACK S1 (SB1, przecelowanie R-B2b za zgodą właściciela) — wojna tworzy PULĘ okrętów imperium, co zmienia
+  //   scenę tego keepera; pinuje on co innego, więc pula jest wyłączona w setupie (wzór `garrisonSystem.enabled`).
+  if (w.K.fleetPoolSystem) w.K.fleetPoolSystem.enabled = false;
   if (years > 0) run(w, years * 12);
   w.K.eventLogSystem = new EventLogSystem();
   w.K.notificationCenter = new NotificationCenter();

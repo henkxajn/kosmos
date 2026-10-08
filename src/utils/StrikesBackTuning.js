@@ -18,6 +18,7 @@
 import gameState from '../core/GameState.js';
 import EventBus from '../core/EventBus.js';
 import { SB_TUNING } from '../data/StrikesBackData.js';
+import { armedTemplateIds } from './FleetPoolPlanner.js';
 
 /** Klucz najwyższego poziomu w `gameState` (deklaracja: `GameState.createDefaultState`). */
 export const SB_TUNING_STATE_KEY = 'strikesBackTuning';
@@ -40,8 +41,9 @@ export function tuningDefault(key) {
 
 /**
  * Walidacja wartości dla klucza. Nie zmienia niczego.
- * @returns {{ok:true, value:any} | {ok:false, key:string, reason:'unknown_key'|'wrong_type'|'out_of_range',
- *           validKeys?:string[], expected?:string, range?:[number,number], index?:number}}
+ * @returns {{ok:true, value:any} | {ok:false, key:string, reason:'unknown_key'|'wrong_type'|'out_of_range'|'unknown_template',
+ *           validKeys?:string[], expected?:string, range?:[number,number], index?:number, template?:string,
+ *           validTemplates?:string[]}}
  */
 export function validateTuning(key, value) {
   const def = SB_TUNING[key];
@@ -62,6 +64,20 @@ export function validateTuning(key, value) {
       const x = value[i];
       if (typeof x !== 'number' || !Number.isFinite(x)) return { ok: false, key, reason: 'wrong_type', expected, range: [def.min, def.max], index: i };
       if (x < def.min || x > def.max) return { ok: false, key, reason: 'out_of_range', range: [def.min, def.max], index: i };
+    }
+    return { ok: true, value: [...value] };
+  }
+  if (def.type === 'templateList') {
+    // AI STRIKES BACK S1 (SB20) — wzorzec puli: wyłącznie ZNANE i UZBROJONE szablony (rozwiązane „wszystko zbadane”).
+    const expected = `lista ${def.minLength}..${def.maxLength} szablonow`;
+    if (!Array.isArray(value) || value.length < def.minLength || value.length > def.maxLength) {
+      return { ok: false, key, reason: 'wrong_type', expected };
+    }
+    const valid = armedTemplateIds();
+    for (let i = 0; i < value.length; i++) {
+      const x = value[i];
+      if (typeof x !== 'string') return { ok: false, key, reason: 'wrong_type', expected, index: i };
+      if (!valid.includes(x)) return { ok: false, key, reason: 'unknown_template', index: i, template: x, validTemplates: valid };
     }
     return { ok: true, value: [...value] };
   }
@@ -177,6 +193,9 @@ export function describeRefusal(r) {
   }
   if (r.reason === 'out_of_range') {
     return `[sb] odmowa: ${r.key} poza zakresem ${r.range[0]}..${r.range[1]}${r.index != null ? ` (pozycja ${r.index})` : ''}`;
+  }
+  if (r.reason === 'unknown_template') {
+    return `[sb] odmowa: ${r.key} — "${r.template}" (pozycja ${r.index}) nie jest znanym uzbrojonym szablonem. Szablony: ${r.validTemplates.join(', ')}`;
   }
   return `[sb] odmowa: ${r.key} (${r.reason})`;
 }
