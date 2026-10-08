@@ -36,7 +36,7 @@
 // ⚠ Wyłącznik `enabled` wyłącznie dla setupu keeperów (wzór `GarrisonSystem.enabled`). W grze zawsze `true`.
 
 import EventBus from '../core/EventBus.js';
-import { readEmpirePoolPlan, empireFleetHulls, fleetRegrowthPerYear } from '../utils/FleetLimit.js';
+import { readEmpirePoolPlan, empireFleetHulls, fleetRegrowthPerYear, readEmpireFleetSnapshot } from '../utils/FleetLimit.js';
 
 // Lustro `GarrisonSystem`: `gameTime` to suma kroków zmiennoprzecinkowych — bez tolerancji granica roku spóźniałaby się.
 const YEAR_EPS = 1e-9;
@@ -85,6 +85,16 @@ export class FleetPoolSystem {
   /** Plan puli imperium TERAZ (tylko odczyt). */
   plan(empireId) {
     return readEmpirePoolPlan(this._K(), empireId);
+  }
+
+  /**
+   * SB19 — odczyt floty / limitu dla wywiadu (`IntelSystem._reserveReadout`): uzbrojone kadłuby imperium (każdy stan
+   * służby i położenia) i jego limit floty — ta sama migawka co odczyt konsoli. Tylko odczyt.
+   * @returns {{armed:number, limit:number}}
+   */
+  fleetSnapshot(empireId) {
+    const s = readEmpireFleetSnapshot(this._K(), empireId);
+    return { armed: s.armed, limit: s.limit };
   }
 
   // ── Mobilizacja (SB1) ────────────────────────────────────────────────────────────────

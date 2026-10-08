@@ -149,9 +149,9 @@ export class IntelSystem {
       const power = ta ? ta.getStrength(empireId) : (emp.military?.power ?? 0);
       updated.knownMilitary = Math.round(power);
       // W2-7 — SIŁA to nie POTENCJAŁ. `knownMilitary` mówi, ile imperium ma OBSADZONYCH
-      // okrętów; `knownReserve` — ile trzyma w magazynie, a `knownCrewCapacity` — ilu ludzi
-      // ma jeszcze do oddania. Dopiero te trzy liczby razem odpowiadają na pytanie „co on
-      // może wystawić, jeśli zechce", czyli na to, po co w ogóle powstał rozdział z W2-2.
+      // okrętów; `knownReserve` — ile trzyma w magazynie, a `knownArmedHulls` / `knownFleetLimit`
+      // (AI STRIKES BACK S1, SB19) — ile ma uzbrojonych kadłubów i jaki ma limit floty. Te liczby
+      // razem odpowiadają na pytanie „co on może wystawić, jeśli zechce".
       Object.assign(updated, this._reserveReadout(empireId, ta));
     }
 
@@ -255,19 +255,19 @@ export class IntelSystem {
       const res = this._reserveReadout(emp.id, ta);
       if (fresh === rec.knownMilitary
           && res.knownReserve === rec.knownReserve
-          && res.knownCrewCapacity === rec.knownCrewCapacity) continue;   // bez churnu w gameState
+          && res.knownArmedHulls === rec.knownArmedHulls
+          && res.knownFleetLimit === rec.knownFleetLimit) continue;   // bez churnu w gameState
       gameState.set(`intel.${emp.id}`, { ...rec, knownMilitary: fresh, ...res }, 'intel_military_refresh');
     }
   }
 
   /**
-   * W2-7 — odczyt REZERWY imperium: ile kadłubów czeka na załogę i ilu ludzi imperium ma
-   * jeszcze wolnych. JEDNO źródło dla obu ścieżek zapisu (`advanceIntel` + `_refreshKnownMilitary`),
-   * żeby nie rozjechały się jak rozjechały się dwa liczniki `knownMilitary` przed W1-3c.
+   * W2-7 — odczyt REZERWY imperium (ile kadłubów czeka na załogę) i — od AI STRIKES BACK S1 (SB19) — FLOTY / LIMITU
+   * (ile uzbrojonych kadłubów imperium ma i jaki ma limit floty). JEDNO źródło dla obu ścieżek zapisu (`advanceIntel` +
+   * `_refreshKnownMilitary`), żeby nie rozjechały się jak rozjechały się dwa liczniki `knownMilitary` przed W1-3c.
    *
-   * ⚠ To jest odczyt WYWIADU, więc świadomie zgrubny: siła rezerwy w tych samych jednostkach
-   *   co `knownMilitary` (HP), a zdolność załogowa w POP wolnych w stolicy — dokładnie to, co
-   *   ogranicza mobilizację (`empireHasFreeCrew`). Nie udajemy, że gracz zna listę kadłubów.
+   * ⚠ To jest odczyt WYWIADU, więc świadomie zgrubny: siła rezerwy w tych samych jednostkach co `knownMilitary` (HP),
+   *   flota jako liczba kadłubów i limit. Nie udajemy, że gracz zna listę kadłubów.
    */
   _reserveReadout(empireId, ta = window.KOSMOS?.threatAssessment) {
     // ⚠ BRAK KOLABORATORA ⇒ `null`, NIGDY 0. „Nie wiem" i „wiem, że zero" to dla gracza dwie
@@ -275,17 +275,15 @@ export class IntelSystem {
     //   defekt „Siła wojskowa ≈ 0 dla KAŻDEGO imperium" opisany kilkadziesiąt linii wyżej.
     //   Ma to praktyczne znaczenie — headless `GameCore` NIE montuje Directora w ogóle.
     const reserve = ta?.getReserveStrength ? Math.round(ta.getReserveStrength(empireId)) : null;
-    // ⚠ To jest zdolność załogowa STOLICY, nie całego imperium — ta sama kolonia, którą czyta
-    //   guard `empireHasFreeCrew`, więc liczba odpowiada na pytanie „ilu ludzi realnie bramkuje
-    //   mobilizację". Brak Directora ⇒ null (patrz wyżej), nie zero.
-    // ⚠ S0-2 (Finding 392, decyzja SB2) — guard zdjęty z `mobilize_reserve`, a załoga AI nie kosztuje
-    //   POP: ta liczba NIE bramkuje już mobilizacji AI. Odczyt (panel wywiadu „wolna załoga”) zostaje
-    //   bez zmian — co z nim zrobić, to decyzja poza S0.
-    const dp = window.KOSMOS?.directorProduction;
-    const capital = dp?.capitalOf?.(empireId) ?? null;
-    const freePops = capital?.civSystem?.freePops;
-    const crew = (dp && typeof freePops === 'number') ? Math.round(freePops * 10) / 10 : null;
-    return { knownReserve: reserve, knownCrewCapacity: crew };
+    // ⚠ AI STRIKES BACK S1 (SB19, Finding 398) — zamiast „wolnej załogi” (freePops stolicy: od S0-2 nie bramkuje
+    //   mobilizacji AI, więc nie przewidywał niczego) odczyt FLOTY / LIMITU: uzbrojone kadłuby imperium i jego limit
+    //   floty (`fleetPoolSystem.fleetSnapshot` — ta sama migawka co odczyt konsoli). Brak systemu puli ⇒ null / null
+    //   („nie wiem”, patrz wyżej), nigdy 0.
+    const fps = window.KOSMOS?.fleetPoolSystem;
+    const snap = typeof fps?.fleetSnapshot === 'function' ? fps.fleetSnapshot(empireId) : null;
+    const armed = Number.isFinite(snap?.armed) ? snap.armed : null;
+    const limit = Number.isFinite(snap?.limit) ? snap.limit : null;
+    return { knownReserve: reserve, knownArmedHulls: armed, knownFleetLimit: limit };
   }
 
   _passiveTick(yearsPassed) {
@@ -606,7 +604,8 @@ export class IntelSystem {
       // „nie wiem" i „wiem, że zero" to dla gracza dwie różne informacje. Stary zapis bez tych
       // pól czyta się jako `undefined` → panel pokazuje „?", nie fałszywe zero. Bez migracji.
       knownReserve:      null,
-      knownCrewCapacity: null,
+      knownArmedHulls:   null,
+      knownFleetLimit:   null,
       knownColonies:  [],
       lastIncidents:  [],
     };

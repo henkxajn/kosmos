@@ -1204,7 +1204,7 @@ export class GameScene {
       // ⚠ MECHANIZM: kasuje rekord do `unknown` SUROWYM zapisem, a potem PODNOSI go PRAWDZIWĄ
       //   ścieżką produkcyjną (`advanceIntel`). Dzięki temu stan po `setIntel` jest bit w bit tym,
       //   co gra wyprodukowałaby naturalnie — łącznie z polami pochodnymi (`knownColonies` na
-      //   `contact`, `knownMilitary`/`knownReserve`/`knownCrewCapacity` na `detailed`). Helper,
+      //   `contact`, `knownMilitary`/`knownReserve`/`knownArmedHulls`/`knownFleetLimit` na `detailed`). Helper,
       //   który produkuje stan nieosiągalny w grze, czyniłby gate bezwartościowym.
       setIntel: (empireId = 'emp_001', level = 'rumor') => {
         const intel = window.KOSMOS?.intelSystem;
@@ -1224,7 +1224,7 @@ export class GameScene {
         // pokazywałby siłę wojskową imperium, o którym „nic nie wiemy").
         gameState.set(`intel.${empireId}`, {
           level: 'unknown', knownColonies: [], knownTech: [], lastIncidents: [],
-          knownMilitary: null, knownReserve: null, knownCrewCapacity: null,
+          knownMilitary: null, knownReserve: null, knownArmedHulls: null, knownFleetLimit: null,
         }, 'debug_set_intel_reset');
         if (level !== 'unknown') intel.advanceIntel(empireId, level, 'debug_set_intel');
         const after = intel.getLevel(empireId);

@@ -83,7 +83,7 @@ export function resolveSystemReveal(sys, deps = {}) {
     hostility: ownerIdentity,
 
     // D-188-5: populacja obcego imperium to LICZBA O IMPERIUM, a wszystkie takie liczby
-    //   (`knownMilitary`, `knownReserve`, `knownCrewCapacity`) siedzą na `detailed`.
+    //   (`knownMilitary`, `knownReserve`, `knownArmedHulls`, `knownFleetLimit`) siedzą na `detailed`.
     // ⚠ Gałąź `!hasOwner` jest KONIECZNA, nie kosmetyczna: układ skolonizowany przez GRACZA nie
     //   ma `empireId`, więc bez niej gracz przestałby widzieć populację WŁASNEJ kolonii poza
     //   domem. Tam populacja jest faktem o miejscu, nie o obcym wywiadzie.

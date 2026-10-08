@@ -3608,10 +3608,10 @@ export default {
   'intel.capital':          'capital',
   'intel.militaryStrength': 'Military strength',
   'intel.combatUnits':      '{0} combat units',
-  // W2-7 — potential beside force. {0} reserve in the same units as strength; crew capacity
-  //   in POP free at the capital (that is what gates mobilization).
+  // W2-7 — potential beside force. {0} reserve in the same units as strength.
+  // AI STRIKES BACK S1 (SB19) — fleet / limit: {0} armed hulls of the empire (any service state), {1} fleet limit.
   'intel.reserveHulls':     '+ {0} in reserve (uncrewed)',
-  'intel.crewCapacity':     'free crew: {0} POP',
+  'intel.fleetVsLimit':     'armed warships: {0} / fleet limit: {1}',
   // W1-3c — continuous balance-of-power readout in the intel panel (answers BEFORE the decision).
   'intel.powerBalance':           'Balance of power',
   'intel.powerBalanceDominant':   'you dominate (+{0}%)',

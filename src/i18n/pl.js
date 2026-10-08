@@ -3609,10 +3609,10 @@ export default {
   'intel.capital':          'stolica',
   'intel.militaryStrength': 'Siła wojskowa',
   'intel.combatUnits':      '{0} jednostek bojowych',
-  // W2-7 — potencjał obok siły. {0} rezerwy w tych samych jednostkach co siła; zdolność
-  //   załogowa w POP wolnych w stolicy (to ona bramkuje mobilizację).
+  // W2-7 — potencjał obok siły. {0} rezerwy w tych samych jednostkach co siła.
+  // AI STRIKES BACK S1 (SB19) — flota / limit: {0} uzbrojonych kadłubów imperium (każdy stan służby), {1} limit floty.
   'intel.reserveHulls':     '+ {0} w rezerwie (bez załóg)',
-  'intel.crewCapacity':     'wolna załoga: {0} POP',
+  'intel.fleetVsLimit':     'okręty uzbrojone: {0} / limit floty: {1}',
   // W1-3c — ciągły odczyt układu sił w panelu intelu (odpowiedź PRZED decyzją, nie po).
   'intel.powerBalance':           'Układ sił',
   'intel.powerBalanceDominant':   'miażdżysz ich (+{0}%)',

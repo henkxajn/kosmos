@@ -293,9 +293,11 @@ export class IntelOverlay extends BaseOverlay {
         ctx.fillText(`  ${t('intel.reserveHulls', intel.knownReserve)}`, x + pad + 4, iy);
         iy += 14;
       }
-      if (intel.knownCrewCapacity != null) {
+      // AI STRIKES BACK S1 (SB19, Finding 398) — FLOTA / LIMIT zamiast „wolnej załogi” (freePops stolicy, który od S0-2
+      //   nie bramkuje mobilizacji AI): ile uzbrojonych kadłubów imperium ma (każdy stan służby) i jaki ma limit floty.
+      if (intel.knownArmedHulls != null && intel.knownFleetLimit != null) {
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`  ${t('intel.crewCapacity', intel.knownCrewCapacity.toFixed(1))}`, x + pad + 4, iy);
+        ctx.fillText(`  ${t('intel.fleetVsLimit', intel.knownArmedHulls, intel.knownFleetLimit)}`, x + pad + 4, iy);
         iy += 14;
       }
 

@@ -363,7 +363,7 @@ export class NotificationCenter {
    *   rzut raz na rok wyświetlany po stronie reguły.
    *
    * ⚠ DWA SZCZEBLE UJAWNIENIA — to jest ROZBIEŻNOŚĆ ZAMIERZONA, nie przeoczenie. Ten wpis
-   *   wymaga `contact`, a liczby rezerwy w panelu wywiadu (`knownReserve`/`knownCrewCapacity`)
+   *   wymaga `contact`, a liczby floty w panelu wywiadu (`knownReserve`/`knownArmedHulls`/`knownFleetLimit`)
    *   piszą się dopiero na `detailed`. Na `contact` gracz wie WIĘC, ŻE przeciwnik obsadza
    *   okręty — bo to jest zdarzenie, które da się zaobserwować — ale nie wie ILE ich ma
    *   w magazynie, bo to wynik rozpoznania, nie obserwacji. Wyrównanie obu do jednego szczebla

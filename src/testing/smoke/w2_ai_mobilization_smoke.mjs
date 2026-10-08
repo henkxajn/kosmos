@@ -201,17 +201,22 @@ console.log('T5 — rezerwa w intelu: bramka `detailed`, odświeżanie, brak mod
   const intel = new IntelSystem();
 
   stubWorld([], { strengths: { [EMP]: 100, [`${EMP}:reserve`]: 250 } });
+  // ⚠ AI STRIKES BACK S1 (SB19, przecelowanie R-B5 za zgodą właściciela) — odczyt „wolnej załogi” (freePops stolicy)
+  //   zastąpiony odczytem FLOTY / LIMITU z systemu puli; struktura pinu bez zmian (kolaborator → liczba, brak → null).
+  window.KOSMOS.fleetPoolSystem = { fleetSnapshot: (id) => (id === EMP ? { armed: 3, limit: 6 } : null) };
   const readout = intel._reserveReadout(EMP);
   assert(readout.knownReserve === 250, `T5: siła rezerwy czytana z ThreatAssessment (${readout.knownReserve})`);
-  assert(readout.knownCrewCapacity === 7, `T5: zdolność załogowa = wolne POPy STOLICY (${readout.knownCrewCapacity})`);
+  assert(readout.knownArmedHulls === 3 && readout.knownFleetLimit === 6 && !('knownCrewCapacity' in readout),
+    `T5: flota / limit z systemu puli (${readout.knownArmedHulls} / ${readout.knownFleetLimit}); „wolnej załogi” brak (SB19)`);
 
   // Brak kolaboratora ⇒ „nie wiem", a nie „wiem, że zero". To ta sama klasa co udokumentowany
   // defekt „Siła wojskowa ≈ 0 dla KAŻDEGO imperium".
   window.KOSMOS.threatAssessment = null;
   window.KOSMOS.directorProduction = null;
+  window.KOSMOS.fleetPoolSystem = null;
   const blind = intel._reserveReadout(EMP);
-  assert(blind.knownReserve === null && blind.knownCrewCapacity === null,
-    `T5: brak modułów ⇒ null/null (jest ${blind.knownReserve}/${blind.knownCrewCapacity}) — pewne zero byłoby kłamstwem`);
+  assert(blind.knownReserve === null && blind.knownArmedHulls === null && blind.knownFleetLimit === null,
+    `T5: brak modułów ⇒ null (jest ${blind.knownReserve}/${blind.knownArmedHulls}/${blind.knownFleetLimit}) — pewne zero byłoby kłamstwem`);
 }
 
 // ── T6 — powiadomienie bramkowane jakością kontaktu ──────────────────────────────────────────
