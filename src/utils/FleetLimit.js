@@ -84,6 +84,11 @@ export function readEmpireFleetSnapshot(K, empireId, tuning = readTuningValues()
   };
 }
 
+/** SB15 — ile kadłubów puli imperium odrasta na granicy roku (z tabeli strojenia, odczyt W CHWILI UŻYCIA). */
+export function fleetRegrowthPerYear(tuning = readTuningValues()) {
+  return tuning.fleetRegrowthPerYear;
+}
+
 /**
  * Plan puli imperium TERAZ (SB14 zmienione przez SB21, SB20, SB22) — co pula dołożyłaby w tej chwili: limit i kadłuby
  * z migawki wyżej, wzorzec i minimum kadłubów z bakiem z tabeli strojenia (odczyt W CHWILI UŻYCIA), cechy szablonów

@@ -232,6 +232,20 @@ export class EmpireRegistry {
   }
 
   /**
+   * AI STRIKES BACK S1 (SB15) — zapisuje w rekordzie puli rok kalendarzowy gry rozliczony przez odrastanie
+   * (`regrowthYear`). Jedynym wołającym jest `FleetPoolSystem` (kontrola roczna). Bez mobilizacji — nic.
+   * @param {string} empireId
+   * @param {number} year — rok kalendarzowy gry (floor `gameTime`)
+   * @returns {boolean}
+   */
+  setFleetPoolRegrowthYear(empireId, year) {
+    const rec = this.get(empireId)?.fleetPool;
+    if (rec?.mobilized !== true || !Number.isFinite(year)) return false;
+    gameState.set(`empires.${empireId}.fleetPool`, { ...rec, regrowthYear: year }, 'fleet_pool_regrowth');
+    return true;
+  }
+
+  /**
    * Ustawia strategic focus imperium (Faza 2: EmpireStrategicAI).
    */
   setStrategicFocus(empireId, focus, reason = '') {

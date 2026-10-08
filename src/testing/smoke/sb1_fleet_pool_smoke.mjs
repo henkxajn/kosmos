@@ -23,6 +23,10 @@
 //       nieuzbrojony kadłub i rezerwa innego imperium — bez zmian; scena fixture'u (6 D w rezerwie, limit pełny):
 //       +2 eskorty z puli i 6 obudzonych; reguła pokojowa `mobilize_reserve` z guardem parytetu; powiadomienie liczy
 //       pulę i rezerwę
+//   T12 (SB15) odrastanie: od mobilizacji jeden kadłub na granicę roku wg reguły miejsca i wzorca (także ponad limit dla
+//       minimum z bakiem), także w pokoju; strata odrasta rok po roku w kolejności wzorca; jeden tick przez kilka lat —
+//       po jednym na rok; `fleetRegrowthPerYear` 2 / 0; bez stolicy — nic i bez nadrabiania; reparacje — nic (ślad);
+//       bez mobilizacji — nic; `regrowthYear` w zapisie; rekord bez `regrowthYear` — bez nadrabiania
 //
 // ⚠ Fail-first: moduły puli powstają w tym slice — import przestrzeni nazw / dynamiczny w try/catch i wywołania przez
 //   pomocnika, żeby na kodzie sprzed puli piny DEGRADOWAŁY (czerwone), a nie przerywały suitę.
@@ -453,6 +457,135 @@ console.log('\nT11 — mobilizacja wojenna budzi całą uzbrojoną rezerwę (SB1
   const rule = DIRECTOR_RULES.mobilize_reserve;
   assert((rule?.guard ?? []).includes('empireOutgunnedByPlayer') && rule?.response?.action === 'mobilizeVessels' && rule?.response?.params?.count === 2,
     'T11g (KONTROLA): reguła pokojowa `mobilize_reserve` — guard parytetu i porcja 2 bez zmian');
+}
+
+// ── T12 — SB15: odrastanie puli ─────────────────────────────────────────────────────────────────
+console.log('\nT12 — odrastanie: jeden kadłub na granicę roku, reguła miejsca i wzorca, także w pokoju (SB15)');
+{
+  const now = (w) => w.K.timeSystem.gameTime;
+  const yearOf = (w) => Math.floor(now(w) + 1e-9);
+  const toYearEnd = (w) => run(w, Math.round((yearOf(w) + 1 - now(w)) * 12));
+  const poolOf = (w, emp) => armedOf(w, emp).filter((v) => v.origin === 'pool');
+  const regrownLog = (emp) => debugLog.query({ kind: 'fleetPool:regrown', empireId: emp });
+  // (a) limit 2: mobilizacja D, E (z bakiem 1) → na granicy roku +E (minimum 2 z bakiem, ponad limit); potem nic
+  const w = boot();
+  const [e1] = w.emps;
+  declare(w.K, e1);
+  run(w, 11);
+  const before = poolOf(w, e1).length;
+  run(w, 1);
+  const y1 = poolOf(w, e1);
+  assert(before === 2 && y1.length === 3 && y1[2]?.directorOrigin === E && yearOf(w) === 1
+    && regrownLog(e1).length === 1 && regrownLog(e1)[0].data?.year === 1 && flagOf(w.K, e1)?.regrowthYear === 1,
+    `T12a: limit 2 — rok 0: ${before} kadłuby; granica roku 1: +1 eskorta ponad limit (${y1.map((v) => v.directorOrigin.split('_')[1]).join(', ')})`);
+  toYearEnd(w);
+  assert(poolOf(w, e1).length === 3 && regrownLog(e1).length === 1 && flagOf(w.K, e1)?.regrowthYear === 2,
+    'T12b: granica roku 2 — plan pusty (limit pełny, minimum z bakiem spełnione): nic; rok rozliczony');
+  // (b) pokój: strata eskorty odrasta także w pokoju
+  w.K.diplomacySystem.relations.setStatus('player', e1, 'peace', {}, 'keeper_peace');
+  y1[1].isWreck = true;
+  toYearEnd(w);
+  const live = poolOf(w, e1);
+  assert(w.K.diplomacySystem.getStatus(e1) === 'peace' && live.length === 3 && live[2]?.directorOrigin === E && regrownLog(e1).length === 2,
+    `T12c: w POKOJU strata eskorty odrasta na granicy roku (${live.map((v) => v.directorOrigin.split('_')[1]).join(', ')})`);
+  // (c) limit 6: strata D i E → odrasta D, potem E — po jednym na rok, w kolejności wzorca
+  const w2 = boot();
+  const [g1] = w2.emps;
+  tun('setTuning', 'fleetMinHulls', 6);                        // limit 6 STAŁY (POP < 224) — POP rośnie przez lata
+  declare(w2.K, g1);
+  const six = poolOf(w2, g1);
+  six[0].isWreck = true; six[1].isWreck = true;                 // D i E
+  toYearEnd(w2);
+  const r1 = regrownLog(g1).map((e) => e.data?.templateId);
+  toYearEnd(w2);
+  const r2 = regrownLog(g1).map((e) => e.data?.templateId);
+  toYearEnd(w2);
+  const r3 = regrownLog(g1).map((e) => e.data?.templateId);
+  assert(six.length === 6 && same(r1, [D]) && same(r2, [D, E]) && same(r3, [D, E]),
+    `T12d: limit 6, strata D i E — rok 1: ${JSON.stringify(r1)}, rok 2: ${JSON.stringify(r2)}, rok 3: bez zmian (${JSON.stringify(r3)})`);
+  // (d) jeden tick przez trzy lata — po jednym na rok
+  const lost3 = poolOf(w2, g1).slice(0, 3);
+  for (const v of lost3) v.isWreck = true;
+  const n0 = regrownLog(g1).length, yA = yearOf(w2);
+  quiet(() => w2.ticker.run(36, { tickSize: 36 }));
+  assert(yearOf(w2) === yA + 3 && regrownLog(g1).length === n0 + 3 && same(regrownLog(g1).slice(n0).map((e) => e.data?.year), [yA + 1, yA + 2, yA + 3]),
+    `T12e: jeden tick przez 3 lata (${yA} → ${yearOf(w2)}) — dokładnie 3 kadłuby, po jednym na rok (${JSON.stringify(regrownLog(g1).slice(n0).map((e) => e.data?.year))})`);
+  // (e) fleetRegrowthPerYear: 2 i 0
+  for (const v of poolOf(w2, g1).slice(0, 4)) v.isWreck = true;
+  tun('setTuning', 'fleetRegrowthPerYear', 2);
+  const nA = regrownLog(g1).length;
+  toYearEnd(w2);
+  const two = regrownLog(g1).length - nA;
+  tun('setTuning', 'fleetRegrowthPerYear', 0);
+  toYearEnd(w2);
+  const zero = regrownLog(g1).length - nA - two;
+  tun('resetTuning', 'fleetRegrowthPerYear');
+  toYearEnd(w2);
+  const one = regrownLog(g1).length - nA - two - zero;
+  assert(two === 2 && zero === 0 && one === 1, `T12f: fleetRegrowthPerYear 2 → ${two}, 0 → ${zero}, domyślne 1 → ${one} na granicę roku`);
+  tun('resetTuning');
+  // (f) bez stolicy — w tym roku nic, bez nadrabiania
+  const w3 = boot();
+  const [h1] = w3.emps;
+  declare(w3.K, h1);
+  poolOf(w3, h1)[1].isWreck = true;                             // E — miejsce dla 1 (minimum z bakiem) + nic więcej
+  const orig = w3.K.directorProduction.capitalOf.bind(w3.K.directorProduction);
+  w3.K.directorProduction.capitalOf = (id) => (id === h1 ? null : orig(id));
+  toYearEnd(w3);
+  const noCap = regrownLog(h1).length;
+  const ryNoCap = flagOf(w3.K, h1)?.regrowthYear;
+  w3.K.directorProduction.capitalOf = orig;
+  toYearEnd(w3);
+  assert(noCap === 0 && ryNoCap === 1 && regrownLog(h1).length === 1 && flagOf(w3.K, h1)?.regrowthYear === 2,
+    `T12g: bez stolicy — rok 1 nic, rozliczony (regrowthYear ${ryNoCap}); ze stolicą rok 2 — jeden kadłub, bez nadrabiania (${regrownLog(h1).length})`);
+  // (g) reparacje — nic, ślad z powodem; po ich końcu odrasta
+  for (const v of poolOf(w3, h1)) v.isWreck = true;
+  w3.K.diplomacySystem.relations.setReparationsUntilYear('player', h1, now(w3) + 10, 'keeper');
+  toYearEnd(w3);
+  const repSkip = debugLog.query({ kind: 'fleetPool:regrowthSkipped', empireId: h1 }).filter((e) => e.data?.reason === 'reparations').length;
+  const repN = regrownLog(h1).length;
+  w3.K.diplomacySystem.relations.setReparationsUntilYear('player', h1, null, 'keeper');
+  toYearEnd(w3);
+  assert(repSkip === 1 && repN === 1 && regrownLog(h1).length === 2,
+    `T12h: pod reparacjami — nic (ślad regrowthSkipped: reparations ×${repSkip}); po ich końcu — kadłub (${regrownLog(h1).length - repN})`);
+  // (h) bez mobilizacji — nic
+  const w4 = boot();
+  const [k1, k2] = w4.emps;
+  run(w4, 24);
+  assert(fps(w4.K)?.regrowEmpire?.(k1)?.reason === 'not_mobilized' && regrownLog(k1).length === 0 && regrownLog(k2).length === 0
+    && armedOf(w4, k1).length === 0, 'T12i: bez mobilizacji — regrowEmpire odmawia (not_mobilized), w dwa lata nic');
+  // (i) zapis: regrowthYear przeżywa; rekord bez regrowthYear — bez nadrabiania
+  const w5 = boot();
+  const [m1] = w5.emps;
+  declare(w5.K, m1);
+  run(w5, 30);                                                  // rok 2,5
+  const gs = JSON.parse(JSON.stringify(gameState.serialize()));
+  gameState.restore(gs);
+  const ry = flagOf(w5.K, m1)?.regrowthYear;
+  const rec = { ...flagOf(w5.K, m1) };
+  delete rec.regrowthYear;
+  gameState.set(`empires.${m1}.fleetPool`, rec, 'keeper_pre_b4');
+  for (const v of poolOf(w5, m1)) v.isWreck = true;             // miejsce na 2 + minimum — gdyby nadrabiało, byłoby 3
+  const nB = regrownLog(m1).length;
+  run(w5, 1);
+  const set = flagOf(w5.K, m1)?.regrowthYear;
+  toYearEnd(w5);
+  assert(ry === 2 && set === 2 && regrownLog(m1).length - nB === 1,
+    `T12j: regrowthYear w zapisie (${ry}); rekord bez pola — pierwsza kontrola ustawia rok (${set}), na granicy 1 kadłub (${regrownLog(m1).length - nB}), bez nadrabiania`);
+  // KONTROLA mechanizmu straty używanego wyżej: wrak nie liczy się do limitu (predykat S1-2), ten sam kadłub bez flagi — tak
+  const probe = VS.createVessel('hull_frigate', capOf(w5.K, m1), { modules: ['engine_ion', 'weapon_kinetic'] });
+  probe.ownerEmpireId = m1; probe.owner = m1; probe.isEnemy = true;
+  const asWreck = (probe.isWreck = true, VS.isFleetLimitHull(probe, m1));
+  const asLive = (probe.isWreck = false, VS.isFleetLimitHull(probe, m1));
+  assert(asWreck === false && asLive === true,
+    'T12k (KONTROLA): strata w tych pinach = `isWreck` — wrak nie liczy się do limitu, ten sam kadłub bez flagi — liczy się');
+  // (j) audyt i tabela
+  const T = DATA?.SB_TUNING ?? {};
+  const dl = stripComments(read('core/DebugLog.js'));
+  const tracked = dl.slice(dl.indexOf('const TRACKED_EVENTS = ['), dl.indexOf('];', dl.indexOf('const TRACKED_EVENTS = [')));
+  assert(T.fleetRegrowthPerYear?.default === 1 && T.fleetRegrowthPerYear?.type === 'int'
+    && ['fleetPool:regrown', 'fleetPool:regrowthSkipped'].every((e) => tracked.includes(`'${e}'`)),
+    'T12l: klucz fleetRegrowthPerYear (domyślnie 1, int); fleetPool:regrown / regrowthSkipped w DebugLog.TRACKED_EVENTS');
 }
 
 console.log(`\n[sb1_fleet_pool_smoke] PASS ${pass} / FAIL ${fail}`);

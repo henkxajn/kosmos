@@ -45,4 +45,11 @@ export const SB_TUNING = Object.freeze({
    * brakujące (pierwszy szablon z bakiem we wzorcu). Konsument: `FleetLimit.readEmpirePoolPlan`.
    */
   fleetMinWarpHulls: Object.freeze({ default: 2, type: 'int', min: 0, max: 100, unit: 'kadluby z bakiem' }),
+
+  /**
+   * SB15 — ODRASTANIE puli: ile kadłubów imperium dostaje na granicy roku kalendarzowego (od mobilizacji, w wojnie
+   * i w pokoju), wg tej samej reguły miejsca i wzorca co mobilizacja. Konsument: `FleetLimit.fleetRegrowthPerYear` →
+   * `FleetPoolSystem._yearlyCheck`.
+   */
+  fleetRegrowthPerYear: Object.freeze({ default: 1, type: 'int', min: 0, max: 100, unit: 'kadluby na rok' }),
 });

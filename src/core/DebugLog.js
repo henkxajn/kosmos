@@ -149,6 +149,10 @@ const TRACKED_EVENTS = [
   'fleetPool:mobilized',
   'fleetPool:mobilizeSkipped',
   'fleetPool:createRefused',
+  // AI STRIKES BACK S1 (SB15) — odrastanie puli: kadłub odtworzony (`regrown`) i rok, w którym nic nie powstało z powodem
+  //   (`regrowthSkipped`: reparations / create_failed) — bez tej pary gate nie odróżniłby „limit pełny” od „nie wykonało się”.
+  'fleetPool:regrown',
+  'fleetPool:regrowthSkipped',
 ];
 
 class DebugLog {

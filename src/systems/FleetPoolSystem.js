@@ -20,6 +20,12 @@
 // który hamuje WYŁĄCZNIE regułę pokojową `mobilize_reserve` (ta zostaje bez zmian). Miejsce dla puli liczone PRZED
 // obudzeniem — rezerwa liczy się do limitu tak samo (SB14).
 //
+// ODRASTANIE (SB15, wzór `GarrisonSystem` G3-1): od mobilizacji, na granicy roku kalendarzowego, `fleetRegrowthPerYear`
+// kadłubów (domyślnie 1) na imperium na rok — ta sama reguła miejsca i wzorca co mobilizacja (plan TERAZ), w wojnie
+// i w pokoju. Rok gry = 1,0 `gameTime`; DOKŁADNIE RAZ na rok także przez zapis, pauzę i prędkość: rekord flagi niesie
+// `regrowthYear` (`EmpireRegistry.setFleetPoolRegrowthYear`), jeden tick może rozliczyć kilka lat. Bez stolicy — w tym
+// roku nic i bez nadrabiania (lustro garnizonu). Plan pusty (limit pełny, minimum z bakiem spełnione) — nic.
+//
 // ⚠ Flaga: `gameState.empires.<id>.fleetPool` (intencja `EmpireRegistry.markFleetPoolMobilized`) — klucz `empires`
 //   zadeklarowany w `GameState`, więc pole przeżywa zapis bez migracji (save v101); zapis bez pola = „nie zmobilizowano”.
 // ⚠ Reparacje (WP-R, „blokada zbrojeń”): imperium pod reparacjami nie dostaje puli — odmowa `reparations` BEZ flagi
@@ -30,7 +36,7 @@
 // ⚠ Wyłącznik `enabled` wyłącznie dla setupu keeperów (wzór `GarrisonSystem.enabled`). W grze zawsze `true`.
 
 import EventBus from '../core/EventBus.js';
-import { readEmpirePoolPlan, empireFleetHulls } from '../utils/FleetLimit.js';
+import { readEmpirePoolPlan, empireFleetHulls, fleetRegrowthPerYear } from '../utils/FleetLimit.js';
 
 // Lustro `GarrisonSystem`: `gameTime` to suma kroków zmiennoprzecinkowych — bez tolerancji granica roku spóźniałaby się.
 const YEAR_EPS = 1e-9;
@@ -161,9 +167,50 @@ export class FleetPoolSystem {
     return { woken, refused };
   }
 
+  // ── Odrastanie (SB15) ────────────────────────────────────────────────────────────────
+
   /**
-   * Kontrola roczna (co tick, tanio: porównanie roku). Przy granicy roku kalendarzowego: imperium w wojnie bez
-   * mobilizacji mobilizuje się (`'reconcile_yearly'`) — trzecie wejście, jak w garnizonie.
+   * Jedna próba odrastania imperium (kontrola roczna; z konsoli — tylko do pomiaru): pierwszy kadłub planu TERAZ
+   * (`readEmpirePoolPlan` — reguła miejsca i wzorca jak przy mobilizacji) powstaje przy stolicy przez `createAIVessel`.
+   * @param {string} empireId
+   * @param {number|null} [year] — rozliczany rok kalendarzowy (do śladu audytu)
+   * @returns {{ok:true, vesselId:string, templateId:string} | {ok:false, reason:string, armed?:number, limit?:number}}
+   *   powody: `disabled` · `unknown_empire` · `no_vessel_manager` · `not_mobilized` · `no_capital` (bez zdarzenia, jak
+   *   garnizon) · `reparations` · `at_limit` (plan pusty) · `no_warp_template` (minimum z bakiem, a wzorzec bez baku) ·
+   *   `create_failed` (ślad `fleetPool:regrowthSkipped`)
+   */
+  regrowEmpire(empireId, year = null) {
+    if (!this.enabled) return { ok: false, reason: 'disabled' };
+    const K = this._K();
+    const vm = K?.vesselManager;
+    if (!empireId || empireId === 'player' || !K?.empireRegistry?.get?.(empireId)) return { ok: false, reason: 'unknown_empire' };
+    if (typeof vm?.createAIVessel !== 'function') return { ok: false, reason: 'no_vessel_manager' };
+    if (!this.isMobilized(empireId)) return { ok: false, reason: 'not_mobilized' };
+    const plan = readEmpirePoolPlan(K, empireId);
+    if (!plan.capitalId) return { ok: false, reason: 'no_capital' };
+    if (K?.diplomacySystem?.isUnderReparations?.(empireId) === true) {
+      EventBus.emit('fleetPool:regrowthSkipped', { empireId, year, reason: 'reparations', armed: plan.armed, limit: plan.limit });
+      return { ok: false, reason: 'reparations', armed: plan.armed, limit: plan.limit };
+    }
+    const templateId = plan.add[0];
+    if (!templateId) {
+      return { ok: false, reason: plan.missingWarpTemplate > 0 ? 'no_warp_template' : 'at_limit', armed: plan.armed, limit: plan.limit };
+    }
+    const res = vm.createAIVessel({ templateId, empireId, planetId: plan.capitalId, origin: 'pool' });
+    if (!res?.ok) {
+      EventBus.emit('fleetPool:regrowthSkipped', { empireId, year, reason: 'create_failed', detail: res?.reason ?? null, templateId });
+      return { ok: false, reason: 'create_failed', armed: plan.armed, limit: plan.limit };
+    }
+    EventBus.emit('fleetPool:regrown', {
+      empireId, year, vesselId: res.vessel.id, templateId, limit: plan.limit, armed: plan.armed + 1,
+    });
+    return { ok: true, vesselId: res.vessel.id, templateId };
+  }
+
+  /**
+   * Kontrola roczna (co tick, tanio: porównanie roku). Najpierw odrastanie każdego imperium z pulą — raz na każdy rok od
+   * `regrowthYear + 1` do bieżącego (SB15) — potem, przy granicy roku, uzgodnienie: imperium w wojnie bez mobilizacji
+   * mobilizuje się (`'reconcile_yearly'`) — trzecie wejście, jak w garnizonie.
    */
   _yearlyCheck() {
     if (!this.enabled) return;
@@ -172,6 +219,21 @@ export class FleetPoolSystem {
     const now = K?.timeSystem?.gameTime;
     if (typeof reg?.listAll !== 'function' || !Number.isFinite(now)) return;
     const year = calendarYear(now);
+
+    for (const emp of reg.listAll()) {
+      if (!emp?.id || !this.isMobilized(emp.id)) continue;
+      const last = emp.fleetPool?.regrowthYear;
+      if (!Number.isFinite(last)) { reg.setFleetPoolRegrowthYear?.(emp.id, year); continue; }
+      if (last >= year) continue;
+      const perYear = Math.max(0, Math.floor(Number(fleetRegrowthPerYear()) || 0));
+      for (let y = last + 1; y <= year; y++) {
+        for (let k = 0; k < perYear; k++) {
+          if (!this.regrowEmpire(emp.id, y).ok) break;
+        }
+      }
+      reg.setFleetPoolRegrowthYear?.(emp.id, year);
+    }
+
     if (this._reconciledYear === null) { this._reconciledYear = year; return; }
     if (year <= this._reconciledYear) return;
     this._reconciledYear = year;
