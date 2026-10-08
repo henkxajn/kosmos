@@ -15,6 +15,11 @@
 // (`VesselManager.createAIVessel`): przy stolicy, w doku, w służbie, bez załogi i bez POP (SB2, SB18), szablon
 // rozwiązany „wszystko zbadane” (SB22), pochodzenie `origin: 'pool'` w zapisie.
 //
+// REZERWA (SB13): w tej samej chwili KAŻDY uzbrojony kadłub imperium w rezerwie (`serviceState: 'stored'`, gdziekolwiek
+// stoi) wchodzi do służby przez `VesselManager.deployVessel` — bez względu na guard parytetu (`empireOutgunnedByPlayer`),
+// który hamuje WYŁĄCZNIE regułę pokojową `mobilize_reserve` (ta zostaje bez zmian). Miejsce dla puli liczone PRZED
+// obudzeniem — rezerwa liczy się do limitu tak samo (SB14).
+//
 // ⚠ Flaga: `gameState.empires.<id>.fleetPool` (intencja `EmpireRegistry.markFleetPoolMobilized`) — klucz `empires`
 //   zadeklarowany w `GameState`, więc pole przeżywa zapis bez migracji (save v101); zapis bez pola = „nie zmobilizowano”.
 // ⚠ Reparacje (WP-R, „blokada zbrojeń”): imperium pod reparacjami nie dostaje puli — odmowa `reparations` BEZ flagi
@@ -25,7 +30,7 @@
 // ⚠ Wyłącznik `enabled` wyłącznie dla setupu keeperów (wzór `GarrisonSystem.enabled`). W grze zawsze `true`.
 
 import EventBus from '../core/EventBus.js';
-import { readEmpirePoolPlan } from '../utils/FleetLimit.js';
+import { readEmpirePoolPlan, empireFleetHulls } from '../utils/FleetLimit.js';
 
 // Lustro `GarrisonSystem`: `gameTime` to suma kroków zmiennoprzecinkowych — bez tolerancji granica roku spóźniałaby się.
 const YEAR_EPS = 1e-9;
@@ -113,6 +118,7 @@ export class FleetPoolSystem {
       refused++;
       EventBus.emit('fleetPool:createRefused', { empireId, templateId, reason: res?.reason ?? 'unknown', trigger: reason });
     }
+    const wake = this._wakeReserve(empireId);
 
     const now = K?.timeSystem?.gameTime;
     const record = {
@@ -127,10 +133,32 @@ export class FleetPoolSystem {
       created:     vesselIds.length,
       refused,
       missingWarpTemplate: plan.missingWarpTemplate,
+      woken:       wake.woken.length,
+      wakeRefused: wake.refused,
     };
     reg.markFleetPoolMobilized(empireId, record);
-    EventBus.emit('fleetPool:mobilized', { empireId, ...record, capitalId: plan.capitalId, vesselIds, templates: [...plan.add] });
-    return { ok: true, empireId, vesselIds, refused, plan };
+    EventBus.emit('fleetPool:mobilized', {
+      empireId, ...record, capitalId: plan.capitalId, vesselIds, templates: [...plan.add], wokenIds: wake.woken,
+    });
+    return { ok: true, empireId, vesselIds, refused, plan, wokenIds: wake.woken };
+  }
+
+  /**
+   * SB13 — każdy UZBROJONY kadłub imperium w rezerwie wchodzi do służby (`deployVessel`: miesiąc przejścia, bez załogi
+   * — SB2). Bez guardu parytetu. Kadłub w trakcie przejścia (`mobilizing`) i nieuzbrojony (kurier) — bez zmian.
+   * @returns {{woken:string[], refused:string[]}} id obudzonych; odmowy `id:powód`
+   */
+  _wakeReserve(empireId) {
+    const K = this._K();
+    const vm = K?.vesselManager;
+    const woken = [], refused = [];
+    if (typeof vm?.deployVessel !== 'function') return { woken, refused };
+    for (const v of empireFleetHulls(K, empireId)) {
+      if (v.serviceState !== 'stored') continue;
+      const res = vm.deployVessel(v.id);
+      if (res?.ok) woken.push(v.id); else refused.push(`${v.id}:${res?.reason ?? 'unknown'}`);
+    }
+    return { woken, refused };
   }
 
   /**

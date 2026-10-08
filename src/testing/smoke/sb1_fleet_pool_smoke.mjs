@@ -19,6 +19,10 @@
 //   T8  powiadomienie: istniejące `_handleMobilized` (bramka `contact`, liczba = utworzone), bez nowych kluczy
 //   T9  odczyt konsoli: z bakiem, pula tak/nie, co pula dołoży teraz
 //   T10 wpięcie: GameScene + lokator, parytet GameCore, audyt w `TRACKED_EVENTS`, jedno wejście tworzenia
+//   T11 (SB13) mobilizacja wojenna budzi CAŁĄ uzbrojoną rezerwę imperium — także gdy guard parytetu odmawia (świadek);
+//       nieuzbrojony kadłub i rezerwa innego imperium — bez zmian; scena fixture'u (6 D w rezerwie, limit pełny):
+//       +2 eskorty z puli i 6 obudzonych; reguła pokojowa `mobilize_reserve` z guardem parytetu; powiadomienie liczy
+//       pulę i rezerwę
 //
 // ⚠ Fail-first: moduły puli powstają w tym slice — import przestrzeni nazw / dynamiczny w try/catch i wywołania przez
 //   pomocnika, żeby na kodzie sprzed puli piny DEGRADOWAŁY (czerwone), a nie przerywały suitę.
@@ -33,6 +37,7 @@ import { bootWithDirector } from '../headless/DirectorHarness.js';
 import * as VS from '../../entities/Vessel.js';
 import { SHIP_TEMPLATES } from '../../data/ShipTemplateData.js';
 import { ARCHETYPES } from '../../data/EmpireData.js';
+import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { NotificationCenter } from '../../systems/NotificationCenter.js';
 import { VesselManager } from '../../systems/VesselManager.js';
 import { t } from '../../i18n/i18n.js';
@@ -391,6 +396,63 @@ console.log('\nT10 — wpięcie: GameScene, GameCore, DebugLog, NotificationCent
   const pool = stripComments(read('systems/FleetPoolSystem.js'));
   assert(same(callers, ['systems/FleetPoolSystem.js']) && pool.length > 0 && !/_vessels\.set|createVessel\(|createAndRegister\(/.test(pool),
     `T10e: kadłuby puli powstają wyłącznie przez createAIVessel, wołane tylko z FleetPoolSystem (${JSON.stringify(callers)})`);
+}
+
+// ── T11 — SB13: mobilizacja wojenna budzi CAŁĄ rezerwę ─────────────────────────────────────────
+console.log('\nT11 — mobilizacja wojenna budzi całą uzbrojoną rezerwę (SB13)');
+{
+  const MODS_D = ['engine_ion', 'armor_standard', 'weapon_kinetic'];
+  const stored = (w, emp, planetId, modules = MODS_D) => {
+    const body = w.K.entityManager.get(planetId);
+    const v = VS.createVessel('hull_frigate', planetId, { modules: [...modules], systemId: body.systemId, x: body.x, y: body.y, serviceState: 'stored' });
+    v.ownerEmpireId = emp; v.owner = emp; v.isEnemy = true;
+    w.vm._vessels.set(v.id, v);
+    return v;
+  };
+  // (a) rezerwa przy stolicy, kurier w rezerwie, rezerwa drugiego imperium; guard parytetu ODMAWIA
+  const w = boot();
+  const [e1, e2] = w.emps;
+  const cap1 = capOf(w.K, e1), cap2 = capOf(w.K, e2);
+  const res = [stored(w, e1, cap1), stored(w, e1, cap1), stored(w, e1, cap1)];
+  const courier = stored(w, e1, cap1, ['engine_chemical', 'cargo_small']);
+  const other = stored(w, e2, cap2);
+  const parity = w.K.directorMobilization.isOutgunnedByPlayer(e1);
+  quiet(() => w.K.intelSystem.advanceIntel(e1, 'contact', 'keeper'));
+  const nc = new NotificationCenter();
+  declare(w.K, e1);
+  const mid = res.map((v) => v.serviceState);
+  assert(parity === false && mid.every((s) => s === 'mobilizing'),
+    `T11a: guard parytetu odmawia (gracz silniejszy: ${parity}), a wojna rusza CAŁĄ rezerwę (${mid.join(', ')})`);
+  run(w, 1);
+  assert(res.every((v) => v.serviceState === 'active' && v.position.state === 'docked' && (v.crewLocked ?? 0) === 0),
+    `T11b: po miesiącu wszystkie trzy w służbie, w doku, bez załogi (${res.map((v) => v.serviceState).join(', ')})`);
+  assert(courier.serviceState === 'stored' && other.serviceState === 'stored' && res[0].serviceState === 'active',
+    'T11c: nieuzbrojony kadłub i rezerwa INNEGO imperium bez zmian; świadek: rezerwa imperium w wojnie obudzona');
+  const f = flagOf(w.K, e1);
+  const pool = armedOf(w, e1).filter((v) => v.origin === 'pool');
+  assert(f?.woken === 3 && same(f?.wakeRefused, []) && f?.created === 2 && same(pool.map((v) => v.directorOrigin), [E, E]),
+    `T11d: rekord — obudzono 3, z puli 2 eskorty (limit 2: 3 D w rezerwie pokrywają slot D, minimum 2 z bakiem) (${JSON.stringify({ w: f?.woken, c: f?.created })})`);
+  const act = nc.getActive().filter((n) => n.type === 'mobilization');
+  assert(act.length === 1 && act[0].subtitle === t('notif.mobilizationSubtitle', 5),
+    `T11e: jedno powiadomienie — liczba = pula + rezerwa = 5 (${act[0]?.subtitle ?? '—'})`);
+  // (b) scena fixture'u GATE-S4 emp_001: limit 6, sześć defenderów w rezerwie
+  const w2 = boot();
+  const [g1] = w2.emps;
+  tun('setTuning', 'fleetPopPerHull', 4);                       // POP 24 / 4 → limit 6 (mnożnik szczebla 1)
+  const six = Array.from({ length: 6 }, () => stored(w2, g1, capOf(w2.K, g1)));
+  const lim = fl('readEmpireFleetSnapshot', w2.K, g1)?.limit;
+  declare(w2.K, g1);
+  run(w2, 1);
+  const all = armedOf(w2, g1);
+  assert(lim === 6 && six.every((v) => v.serviceState === 'active') && all.length === 8
+    && all.filter((v) => v.origin === 'pool').map((v) => v.directorOrigin).join() === `${E},${E}`
+    && all.filter((v) => (v.warpFuel?.max ?? 0) > 0).length === 2 && all.every((v) => v.serviceState === 'active'),
+    `T11f: limit ${lim}, 6 D w rezerwie → wojna: 6 obudzonych + 2 eskorty z puli PONAD limit = ${all.length} w służbie, 2 z bakiem`);
+  tun('resetTuning');
+  // (c) reguła pokojowa bez zmian
+  const rule = DIRECTOR_RULES.mobilize_reserve;
+  assert((rule?.guard ?? []).includes('empireOutgunnedByPlayer') && rule?.response?.action === 'mobilizeVessels' && rule?.response?.params?.count === 2,
+    'T11g (KONTROLA): reguła pokojowa `mobilize_reserve` — guard parytetu i porcja 2 bez zmian');
 }
 
 console.log(`\n[sb1_fleet_pool_smoke] PASS ${pass} / FAIL ${fail}`);
