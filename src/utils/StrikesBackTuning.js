@@ -10,6 +10,10 @@
 // ⚠ MUTACJE wyłącznie przez `setTuning` / `resetTuning` (intencje właściciela stanu). Każda zmiana idzie jednym
 //   `gameState.set` całej mapy — `gameState:changed` daje wpis audytu w `DebugLog` (rodzaj `state`).
 // ⚠ ODMOWA niczego nie zmienia: walidacja PRZED zapisem; odmowa zwraca powód i listę kluczy albo zakres.
+// ⚠ PARA wzorzec ↔ minimum z bakiem (SB28): wzorzec bez szablonu z bakiem warp przy `fleetMinWarpHulls` > 0 — odmowa;
+//   minimum > 0 (także reset do domyślnej 2) przy wzorcu bez baku — odmowa. Odmowa NAZYWA klucz do zmiany najpierw
+//   (`changeFirst`). Sprawdzane przy ZMIANIE (`setTuning`, `resetTuning`), nie przy odczycie: odczyt wartości zapisanych
+//   (`getTuning`, `sanitizeTuningAfterRestore`) zostaje bez zmian.
 // ⚠ PO WCZYTANIU (`sanitizeTuningAfterRestore`, wołane z bloku wczytania `GameScene` zaraz po `gameState.restore`):
 //   nieznany klucz albo wartość spoza typu/zakresu jest pomijana i zdejmowana z mapy, a każde takie pominięcie
 //   zostawia wpis `sbTuning:storedValueIgnored` w `DebugLog.TRACKED_EVENTS`.
@@ -18,7 +22,7 @@
 import gameState from '../core/GameState.js';
 import EventBus from '../core/EventBus.js';
 import { SB_TUNING } from '../data/StrikesBackData.js';
-import { armedTemplateIds } from './FleetPoolPlanner.js';
+import { armedTemplateIds, templateTraits } from './FleetPoolPlanner.js';
 
 /** Klucz najwyższego poziomu w `gameState` (deklaracja: `GameState.createDefaultState`). */
 export const SB_TUNING_STATE_KEY = 'strikesBackTuning';
@@ -112,13 +116,42 @@ export function readTuningValues() {
   return out;
 }
 
+/** SB28 — szablony wzorca z bakiem warp (rozwiązane „wszystko zbadane” — ten sam test co plan puli). */
+export function warpTemplateIds(pattern) {
+  return (Array.isArray(pattern) ? pattern : []).filter((id) => templateTraits(id).warp);
+}
+
+/**
+ * SB28 — spójność pary wzorzec ↔ minimum z bakiem PO zmianie `key` na `value` (wartość już po walidacji klucza).
+ * @returns {{ok:true} | {ok:false, key:string, reason:'pattern_without_warp'|'min_warp_without_tank', changeFirst:string,
+ *           minWarp?:number, pattern?:string[], warpTemplates:string[]}}
+ */
+export function checkWarpPair(key, value) {
+  const warpTemplates = armedTemplateIds().filter((id) => templateTraits(id).warp);
+  if (key === 'fleetPoolPattern') {
+    const minWarp = getTuning('fleetMinWarpHulls');
+    if (minWarp > 0 && warpTemplateIds(value).length === 0) {
+      return { ok: false, key, reason: 'pattern_without_warp', changeFirst: 'fleetMinWarpHulls', minWarp, warpTemplates };
+    }
+  }
+  if (key === 'fleetMinWarpHulls') {
+    const pattern = getTuning('fleetPoolPattern');
+    if (value > 0 && warpTemplateIds(pattern).length === 0) {
+      return { ok: false, key, reason: 'min_warp_without_tank', changeFirst: 'fleetPoolPattern', minWarp: value, pattern, warpTemplates };
+    }
+  }
+  return { ok: true };
+}
+
 /**
  * Ustaw jedną wartość. Odmowa nie zmienia niczego.
- * @returns {{ok:true, key:string, value:any, previous:any, default:any} | ReturnType<validateTuning>}
+ * @returns {{ok:true, key:string, value:any, previous:any, default:any} | ReturnType<validateTuning> | ReturnType<checkWarpPair>}
  */
 export function setTuning(key, value) {
   const v = validateTuning(key, value);
   if (!v.ok) return v;
+  const pair = checkWarpPair(key, v.value);
+  if (!pair.ok) return pair;
   const previous = getTuning(key);
   const next = { ...overrides() };
   if (sameValue(v.value, tuningDefault(key))) delete next[key];   // wartość domyślna = brak wpisu (bez fałszywego znacznika)
@@ -129,7 +162,7 @@ export function setTuning(key, value) {
 
 /**
  * Reset jednego klucza do domyślnej (z kluczem) albo całej tabeli (bez argumentu).
- * @returns {{ok:true, reset:string[]} | {ok:false, key:string, reason:'unknown_key', validKeys:string[]}}
+ * @returns {{ok:true, reset:string[]} | {ok:false, key:string, reason:'unknown_key', validKeys:string[]} | ReturnType<checkWarpPair>}
  */
 export function resetTuning(key = undefined) {
   if (key === undefined) {
@@ -138,6 +171,8 @@ export function resetTuning(key = undefined) {
     return { ok: true, reset: was };
   }
   if (!SB_TUNING[key]) return { ok: false, key, reason: 'unknown_key', validKeys: tuningKeys() };
+  const pair = checkWarpPair(key, tuningDefault(key));
+  if (!pair.ok) return pair;
   const next = { ...overrides() };
   const had = Object.prototype.hasOwnProperty.call(next, key);
   delete next[key];
@@ -196,6 +231,12 @@ export function describeRefusal(r) {
   }
   if (r.reason === 'unknown_template') {
     return `[sb] odmowa: ${r.key} — "${r.template}" (pozycja ${r.index}) nie jest znanym uzbrojonym szablonem. Szablony: ${r.validTemplates.join(', ')}`;
+  }
+  if (r.reason === 'pattern_without_warp') {
+    return `[sb] odmowa: ${r.key} — wzorzec bez szablonu z bakiem warp, a fleetMinWarpHulls = ${r.minWarp}. Najpierw: sbSet('${r.changeFirst}', 0). Szablony z bakiem: ${r.warpTemplates.join(', ')}`;
+  }
+  if (r.reason === 'min_warp_without_tank') {
+    return `[sb] odmowa: ${r.key} = ${r.minWarp} wymaga szablonu z bakiem warp we wzorcu (fleetPoolPattern = ${fmt(r.pattern)}). Najpierw: sbSet('${r.changeFirst}', [...]) z jednym z: ${r.warpTemplates.join(', ')}`;
   }
   return `[sb] odmowa: ${r.key} (${r.reason})`;
 }
