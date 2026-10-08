@@ -288,6 +288,38 @@ export class VesselManager {
   }
 
   /**
+   * AI STRIKES BACK S1 (SB24, Finding 407) — przy WCZYTANIU statek w DOKU (nie wrak) bierze `systemId` ciała, przy
+   * którym stoi. Zmienia WYŁĄCZNIE `systemId`; każde leczenie zostawia jeden wpis `vessel:systemIdHealed` w audycie
+   * (`DebugLog.TRACKED_EVENTS`).
+   * ⚠ Po co: naprawa 256 (`MovementOrderSystem._issueDock`, `FleetSystem._maybeDockOnArrival`) zamyka ścieżki dokowania
+   *   W CZASIE GRY, a wczytanie przepisuje `systemId` z zapisu bez porównania z ciałem doku — chimera z zapisu (fixture
+   *   GATE-S4, gra właściciela: trzy fregaty gracza w doku przy planecie domowej z `systemId` obcego układu) żyła
+   *   wiecznie, a obrona gracza liczona po układzie statku (`WarSystem._playerVesselsInSystem`) szła do obcego układu.
+   * ⚠ Wołane w pętli `restore` PO `_reconcileSystemId`: ciała są już w `EntityManager` (wracają przed statkami), stacje
+   *   — NIE (wracają później), więc dok przy stacji nie ma tu ciała do porównania i zostaje bez zmian. Fail-safe:
+   *   nieznane ciało albo ciało bez `systemId` ⇒ nic. Statek w przestrzeni (orbita, lot) — bez zmian.
+   * ⚠ Tick (`_reconcileSystemId` w `_updatePositions`) nie cofa leczenia: dla statku bez misji międzygwiezdnej zwraca
+   *   jego własne `systemId`. Statek w doku z misją międzygwiezdną (stan niespójny) jest pomijany — tick by go cofał.
+   * @returns {boolean} czy wyleczono
+   */
+  _healDockedSystemId(vessel) {
+    if (!vessel || vessel.isWreck) return false;
+    if (vessel.position?.state !== 'docked') return false;
+    if (vessel.mission?.type === 'interstellar_jump') return false;
+    const bodyId = vessel.position.dockedAt;
+    if (!bodyId) return false;
+    const to = this._findEntity(bodyId)?.systemId;
+    if (typeof to !== 'string' || !to || vessel.systemId === to) return false;
+    const from = vessel.systemId ?? null;
+    vessel.systemId = to;
+    EventBus.emit('vessel:systemIdHealed', {
+      vesselId: vessel.id, name: vessel.name ?? null,
+      owner: vessel.ownerEmpireId ?? vessel.owner ?? 'player', from, to, dockedAt: bodyId,
+    });
+    return true;
+  }
+
+  /**
    * Statki dostępne do misji (docked + idle + wystarczające paliwo opcjonalnie).
    * @param {string} colonyId
    * @param {string} [shipId] — filtruj po typie statku
@@ -1763,6 +1795,8 @@ export class VesselManager {
       // Slice A — inwariant systemId: lecz statki interstellar, których systemId
       // zwinął się do 'sys_home' w starym save (arrival hook :2197 już się nie odpali).
       this._reconcileSystemId(vessel);
+      // AI STRIKES BACK S1 (SB24, Finding 407) — statek w DOKU bierze układ ciała, przy którym stoi.
+      this._healDockedSystemId(vessel);
 
       this._vessels.set(vessel.id, vessel);
     }

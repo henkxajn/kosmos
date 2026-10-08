@@ -140,6 +140,9 @@ const TRACKED_EVENTS = [
   // AI STRIKES BACK (SB16) — wartość tabeli strojenia z zapisu POMINIĘTA przy wczytaniu (nieznany klucz albo wartość spoza
   //   typu/zakresu). Bez tego wpisu zapis z błędną wartością cicho wracałby do domyślnej.
   'sbTuning:storedValueIgnored',
+  // AI STRIKES BACK S1 (SB24, Finding 407) — statek w doku wyleczony przy wczytaniu (`systemId` → układ ciała doku).
+  //   Jeden wpis na statek (`from`, `to`, `dockedAt`, właściciel) — bez niego leczenie byłoby ciche.
+  'vessel:systemIdHealed',
 ];
 
 class DebugLog {
