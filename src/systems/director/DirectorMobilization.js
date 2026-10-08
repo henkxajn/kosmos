@@ -89,6 +89,21 @@ export class DirectorMobilization {
   }
 
   /**
+   * Guard parytetu reguły `mobilize_reserve` (rejestracja `empireOutgunnedByPlayer`).
+   *
+   * AI STRIKES BACK SB29 (SB13 dosłownie, Finding 411): guard parytetu hamuje WYŁĄCZNIE w pokoju. Imperium w wojnie,
+   * którego pula jest zmobilizowana (`fleetPoolSystem.isMobilized` + `isAtWar` — te same odczyty co mobilizacja puli),
+   * obsadza rezerwę bez względu na parytet — także kadłub ukończony w wojnie po mobilizacji. W pokoju (i bez puli) —
+   * porównanie sił bez zmian (`isOutgunnedByPlayer`). Reparacje blokuje drugi guard reguły i bramka akcji (WP-R) — bez
+   * zmian. Brak systemu puli ⇒ porównanie sił (fail-closed dla wyjątku wojennego).
+   */
+  parityGuardAllows(empireId) {
+    const pool = window.KOSMOS?.fleetPoolSystem;
+    if (pool?.isMobilized?.(empireId) === true && pool?.isAtWar?.(empireId) === true) return true;
+    return this.isOutgunnedByPlayer(empireId);
+  }
+
+  /**
    * Akcja `mobilizeVessels` — obsadź do `params.count` kadłubów z rezerwy stolicy.
    *
    * ⚠ Porcjami, nie hurtem. Mobilizacja podnosi `getStrength` imperium, a to jest LICZNIK
@@ -166,8 +181,9 @@ export function registerMobilizationBehaviors(instance, { allowOverride = false 
   DirectorProbes.register('storedWarshipsAtCapital',
     ({ empireId }) => instance.countStoredWarshipsAtCapital(empireId), { allowOverride });
 
+  // ⚠ SB29 — nazwa katalogowa bez zmian (reguła `mobilize_reserve`); w wojnie z mobilizacją puli guard nie hamuje.
   DirectorGuards.register('empireOutgunnedByPlayer',
-    ({ empireId }) => instance.isOutgunnedByPlayer(empireId), { allowOverride });
+    ({ empireId }) => instance.parityGuardAllows(empireId), { allowOverride });
 
   // WP-R / D-WPR-1 — bramka reparacji na REGULE. Lustro sprawdzenia w akcji; guard oszczędza
   // rzut i cooldown (`DirectorSystem._evaluate` stempluje `lastFiredYear` PRZED akcją), a akcja

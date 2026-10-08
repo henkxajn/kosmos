@@ -194,6 +194,10 @@ export const DIRECTOR_RULES = {
    * wyścig SAM, bo przestaje być prawdą — punkt równowagi jest własnością modelu, nie
    * wartością do wystrojenia.
    *
+   * ⚠ AI STRIKES BACK SB29 (SB13 dosłownie, Finding 411) — parytet hamuje WYŁĄCZNIE w pokoju: w wojnie imperium ze
+   * zmobilizowaną pulą przechodzi ten guard bez porównania sił (`DirectorMobilization.parityGuardAllows`), więc kadłub
+   * ukończony w wojnie wchodzi do służby tą regułą. Reparacje blokują jak dotąd (drugi guard).
+   *
    * ⚠ S0-2 (Finding 392, decyzja SB2) — guard `empireHasFreeCrew` ZDJĘTY. W W2-7 był pierwszym
    * konsumentem guardu ze Slice 1 i czytał `freePops` STOLICY, a ta u AI klamruje się do 0
    * (etatów więcej niż POPów — rodzina 215): audyt fazy A AI STRIKES BACK zmierzył 0 od gy 20 do
