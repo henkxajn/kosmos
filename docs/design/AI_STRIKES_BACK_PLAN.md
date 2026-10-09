@@ -719,19 +719,24 @@ drzewach. Wyniki: `results/m4/` (zestawienie `m4_summary.txt`).
   (patrol odbierał dominację od 1. miesiąca) — zmienia, KTO ją odbiera: kod `v_26, v_27, v_28` / `v_32, v_36`; kontrola
   `v_26` (+ `v_29` od m49) / `v_34`. **Pokój:** bez puli i stanowisk, dominacja `true` 120 / 120 miesięcy (oba drzewa).
 - **Doktryny:** `emp_002` traci patrol — oba defendery są strażnikami, `defend_home` bierze eskorty (`v_33`, `v_34`),
-  `patrol_border` przez 10 lat nie dostaje kadłuba (kontrola: patrol `v_34` od 60,20). `emp_001` — jak w kontroli
-  (`defend_home` `v_24`, `v_25`, patrol `v_26`).
+  `patrol_border` przez 10 lat nie dostaje kadłuba (kontrola: patrol `v_34` od 60,20). `emp_001` — start jak w kontroli
+  (`defend_home` `v_24`, `v_25`, patrol `v_26` przy 60,20); drugi patrol kontroli (`v_29` od 64,20) w kodzie nie powstaje
+  — `v_29` w `defend_home` od 63,20 (`v_27`, `v_28` to strażnicy).
 - **Uderzenie:** strażników w puli uderzenia 0 w każdym ze 120 odczytów (pula `emp_001` = 2 eskorty, `emp_002` = 4);
   `director:strikeRefused` `target_beyond_reach` przy 64,20 i 69,28 — tak samo w kontroli. Wykluczenie strażników nie
   zmienia decyzji uderzenia na tym zapisie.
 - **Bitwy** (10 powtórzeń; 3 fregaty gracza `hull_frigate + weapon_laser` 2 AU od stolicy `emp_001`, rozkaz na stolicę;
   w starciu krok 1/270 civY na ~112 ms — auto-slow; przeglądarka losuje bez ziarna): pierwsza bitwa po 0,25–1,83 roku;
   **39 bitew**, wraki gracza **22 / 30**, wraki strażników **9**; kontroler orbity na końcu: `emp_001` **9 / 10**, gracz
-  1 / 10. Strażnik przegrywający wycofuje się (`AutoRetreatSystem`) na ciało układu i wraca na stanowisko kontrolą
-  miesięczną; drugi strażnik (`entity_117`) w żadnym przebiegu nie wszedł do bitwy przy stolicy.
-- **Zastępstwo:** 14 utrat w bitwach + scena bez fregat (wrak `v_27` przy 60,28 → utrata odnotowana 60,37 → zastępca
-  `v_29` przy 61,03): każda zastąpiona na najbliższej granicy roku, **0,25–0,92 roku** po utracie; zastępcy z doku
-  stolicy (`v_29`, `v_24`, `v_25`).
+  1 / 10. Strażnik przegrywający wycofuje się (`AutoRetreatSystem`) na ciało układu (`entity_116`, `entity_117`,
+  `entity_115`); w M4 każdy wycofany strażnik zginął albo wrócił kolejnym odwrotem, zanim kontrola miesięczna wydała mu
+  powrót — **0** zdarzeń `fleetGuard:returnOrdered` w 10 przebiegach (powrót zepchniętego strażnika pokazują keeper
+  `sb2_capital_guard_smoke` G4 i bramka S2, kroki 19–21). Drugi strażnik (`v_28` przy `entity_117`) w żadnym przebiegu nie
+  został wrakiem i na koniec stał na stanowisku.
+- **Zastępstwo:** 9 utrat w bitwach, 5 wraków sondy (przebiegi bez utraty strażnika — r0, r1, r4, r5, r6: strażnik
+  stolicy zniszczony produkcyjną ścieżką wraku po fazie bitwy) i scena bez fregat (wrak `v_27` przy 60,28 → utrata
+  odnotowana 60,37 → zastępca `v_29` przy 61,03): każda z 15 zastąpiona na najbliższej granicy roku, **0,25–0,92 roku**
+  po utracie; zastępcy z doku stolicy (`v_29`, `v_24`, `v_25`).
 - **Zapis i wczytanie** (po 2 miesiącach wojny): stanowiska, orbity i trwające loty identyczne przed i po; loty dokończone
   po wczytaniu (+2 i +3 miesiące); **0** zdarzeń `fleetGuard:*` po wczytaniu.
 - **Co zobaczy właściciel:** przy wojnie dwa istniejące wpisy dzwonka „⚓ … is crewing warships” (Finding 409); strażników
@@ -1065,9 +1070,10 @@ bez statku. `[doc: audyt S2]` od `8da65ed`. → **SB36: wyłącznie raport.**
 ### ⚪ 416 — po bitwie z obrońcą stolicy ocalałe okręty gracza zostają `in_transit` i nie docierają do celu
 
 `[measured]` M4 (fixture, prawdziwa gra; 3 fregaty gracza utworzone sondą `createVessel` 2 AU od stolicy `emp_001`, rozkaz
-`moveToPoint` na `entity_115`, prędkość 1,11 AU/rok — dolot ~1,8 roku): po bitwie 2 ocalałe fregaty — `in_transit`, rozkaz
-`moveToPoint`, misja `move_to_point`, nie unieruchomione — w odczycie 3 lata po rozkazie 0,49 / 0,94 AU od stolicy (r0,
-jedna bitwa przy 60,54) i 0,64 / 0,50 AU (r5, bitwy przy 61,70 i 62,29); bez kolejnej bitwy. Przyczyna niezmierzona;
+`moveToPoint` na `entity_115`, prędkość 1,11 AU/rok — dolot ~1,8 roku): w powtórzeniach diagnostycznych przebiegów r0 i r5
+(z odczytem pozycji; przeglądarka bez ziarna, więc przebiegi różnią się od pierwszych) po bitwie 2 ocalałe fregaty —
+`in_transit`, rozkaz `moveToPoint`, misja `move_to_point`, nie unieruchomione — w odczycie 3 lata po rozkazie 0,49 / 0,94 AU
+od stolicy (jedna bitwa przy 60,54) i 0,64 / 0,50 AU (bitwy przy 61,70 i 62,29); bez kolejnej bitwy. Przyczyna niezmierzona;
 osiągalność w normalnej grze niezmierzona (fregaty postawione sondą w układzie AI). Liczba bitw w M4 (§5f.5) od tego
 zależy. → audyt (pytanie 5, §5f.7).
 
