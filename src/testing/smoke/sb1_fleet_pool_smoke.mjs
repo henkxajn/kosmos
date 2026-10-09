@@ -7,7 +7,7 @@
 //       minimum z zakresem; zapis z błędnym wzorcem — pominięty przy wczytaniu, poprawna wartość obok zostaje
 //   T3  cechy szablonów „wszystko zbadane” (SB22): D bez baku, E z bakiem, sonda i transportowiec nieuzbrojone;
 //       dla KAŻDEGO archetypu wzorzec rozwiązuje się na `hull_frigate` (nie `hull_small` — ścieżka kuriera nietknięta)
-//   T4  plan — przypadki właściciela: limit 2 / 0 → D, E · 6 / 0 → D, E, E, E, D, E · 6 / 6 D → +2 E ponad limit ·
+//   T4  plan — przypadki właściciela: limit 2 / 0 → D, E, E (SB27) · 6 / 0 → D, E, E, E, D, E · 6 / 6 D → +2 E ponad limit ·
 //       6 / 3 D → +3 E; dodatkowe: minimum ponad limitem przy pełnym limicie, limit wypełniony, wzorzec bez baku
 //   T5  `VesselManager.createAIVessel` — JEDYNE wejście: przy stolicy, w doku, w służbie, załoga 0, stempel i pochodzenie
 //       PRZED `vessel:created`; adnotacja zamówienia stoczni NIE zdjęta (Finding 395 — KONTROLA: ścieżka stoczni ją
@@ -171,7 +171,8 @@ console.log('\nT4 — plan puli (przypadki właściciela)');
 {
   const P = [D, E, E, E];
   const plan = (limit, warpHulls, noWarpHulls, pattern = P, minWarp = 2) => pl('planPool', { limit, pattern, minWarp, warpHulls, noWarpHulls })?.add ?? null;
-  assert(same(plan(2, 0, 0), [D, E]), `T4a: limit 2, 0 kadłubów → D, E (${JSON.stringify(plan(2, 0, 0))})`);
+  // ⚠ SB27 (podpis właściciela 2026-10-08) — przecelowanie z góry zatwierdzone: minimum z bakiem od razu, nie rok później.
+  assert(same(plan(2, 0, 0), [D, E, E]), `T4a: limit 2, 0 kadłubów → D, E, E — minimum z bakiem od razu (SB27) (${JSON.stringify(plan(2, 0, 0))})`);
   assert(same(plan(6, 0, 0), [D, E, E, E, D, E]), `T4b: limit 6, 0 → D, E, E, E, D, E (${JSON.stringify(plan(6, 0, 0))})`);
   assert(same(plan(6, 0, 6), [E, E]), `T4c: limit 6, 6 defenderów → +2 eskorty PONAD limit (${JSON.stringify(plan(6, 0, 6))})`);
   assert(same(plan(6, 0, 3), [E, E, E]), `T4d: limit 6, 3 defendery → +3 eskorty (${JSON.stringify(plan(6, 0, 3))})`);
@@ -248,17 +249,18 @@ console.log('\nT6 — mobilizacja puli');
   declare(w.K, e1);
   const f1 = flagOf(w.K, e1);
   const hulls1 = armedOf(w, e1);
-  assert(f1?.mobilized === true && f1.reason === 'war_declared' && f1.created === 2 && f1.limit === 2 && f1.planned === 2
+  // ⚠ SB27 (przecelowanie R-B6 za zgodą właściciela) — minimum z bakiem od razu: limit 2 → D, E, E (3 kadłuby).
+  assert(f1?.mobilized === true && f1.reason === 'war_declared' && f1.created === 3 && f1.limit === 2 && f1.planned === 3
     && f1.armedBefore === 0 && f1.regrowthYear === Math.floor(w.K.timeSystem.gameTime + 1e-9),
     `T6b: wojna → flaga puli (${JSON.stringify(f1)})`);
-  assert(same(hulls1.map((v) => v.directorOrigin), [D, E]) && hulls1.every((v) => v.origin === 'pool' && v.serviceState === 'active'
+  assert(same(hulls1.map((v) => v.directorOrigin), [D, E, E]) && hulls1.every((v) => v.origin === 'pool' && v.serviceState === 'active'
     && v.position.state === 'docked' && v.position.dockedAt === capOf(w.K, e1)) && !flagOf(w.K, e2) && armedOf(w, e2).length === 0,
-    `T6c: pula D, E w doku stolicy, w służbie; drugie imperium (bez wojny) — nic (${hulls1.map((v) => v.directorOrigin).join(', ')})`);
+    `T6c: pula D, E, E (SB27) w doku stolicy, w służbie; drugie imperium (bez wojny) — nic (${hulls1.map((v) => v.directorOrigin).join(', ')})`);
   const logged = debugLog.query({ kind: 'fleetPool:mobilized', empireId: e1 });
-  assert(logged.length === 1 && hulls1.length === 2 && same(logged[0].data?.vesselIds, hulls1.map((v) => v.id)),
+  assert(logged.length === 1 && hulls1.length === 3 && same(logged[0].data?.vesselIds, hulls1.map((v) => v.id)),
     'T6d: jeden wpis audytu fleetPool:mobilized z id kadłubów');
   const again = quiet(() => fps(w.K)?.mobilizeEmpire(e1, 'war_declared'));
-  assert(again?.ok === false && again.reason === 'already_mobilized' && armedOf(w, e1).length === 2
+  assert(again?.ok === false && again.reason === 'already_mobilized' && armedOf(w, e1).length === 3
     && debugLog.query({ kind: 'fleetPool:mobilizeSkipped', empireId: e1 }).some((x) => x.data?.reason === 'already_mobilized'),
     'T6e: druga mobilizacja — odmowa already_mobilized, nic nowego, ślad audytu');
   // (b) bez stolicy — nic i bez flagi; nie-jałowość: ze stolicą — pula
@@ -269,7 +271,7 @@ console.log('\nT6 — mobilizacja puli');
     && debugLog.query({ kind: 'fleetPool:mobilizeSkipped', empireId: e2 }).some((x) => x.data?.reason === 'no_capital');
   w.K.directorProduction.capitalOf = orig;
   const withCap = quiet(() => fps(w.K)?.mobilizeEmpire(e2, 'reconcile_yearly'));
-  assert(noCap && withCap?.ok === true && flagOf(w.K, e2)?.created === 2,
+  assert(noCap && withCap?.ok === true && flagOf(w.K, e2)?.created === 3,
     'T6f: bez stolicy — nic i bez flagi (no_capital); świadek: ze stolicą ta sama mobilizacja tworzy pulę');
   // (c) reparacje — nic i bez flagi
   const w2 = boot();
@@ -280,7 +282,7 @@ console.log('\nT6 — mobilizacja puli');
     && debugLog.query({ kind: 'fleetPool:mobilizeSkipped', empireId: r1 }).some((x) => x.data?.reason === 'reparations');
   w2.K.diplomacySystem.relations.setReparationsUntilYear('player', r1, null, 'keeper');
   const afterRep = quiet(() => fps(w2.K)?.mobilizeEmpire(r1, 'reconcile_yearly'));
-  assert(blocked && afterRep?.ok === true && armedOf(w2, r1).length === 2,
+  assert(blocked && afterRep?.ok === true && armedOf(w2, r1).length === 3,
     'T6g: pod reparacjami — nic i bez flagi (reparations); świadek: po ich końcu pula powstaje');
   // (d) pierwszy tick: wojna bez zdarzenia → reconcile_at_war
   const w3 = boot();
@@ -288,7 +290,7 @@ console.log('\nT6 — mobilizacja puli');
   w3.K.diplomacySystem.relations.setStatus('player', a1, 'war', {}, 'keeper_no_event');
   const pre = flagOf(w3.K, a1);
   run(w3, 1);
-  assert(!pre && flagOf(w3.K, a1)?.reason === 'reconcile_at_war' && armedOf(w3, a1).length === 2,
+  assert(!pre && flagOf(w3.K, a1)?.reason === 'reconcile_at_war' && armedOf(w3, a1).length === 3,
     `T6h: zapis „w wojnie” bez zdarzenia — pula na PIERWSZYM ticku (${flagOf(w3.K, a1)?.reason}); świadek: przed tickiem bez flagi`);
   // (e) granica roku: wojna bez zdarzenia po pierwszym ticku → reconcile_yearly
   const w4 = boot();
@@ -298,7 +300,7 @@ console.log('\nT6 — mobilizacja puli');
   run(w4, 10);
   const mid = flagOf(w4.K, b1);
   run(w4, 1);
-  assert(!mid && flagOf(w4.K, b1)?.reason === 'reconcile_yearly' && armedOf(w4, b1).length === 2,
+  assert(!mid && flagOf(w4.K, b1)?.reason === 'reconcile_yearly' && armedOf(w4, b1).length === 3,
     `T6i: wojna bez zdarzenia w trakcie roku — pula na granicy roku (${flagOf(w4.K, b1)?.reason}); świadek: rok przed granicą bez flagi`);
   // (f) pokój — nic
   const w5 = boot();
@@ -335,9 +337,9 @@ console.log('\nT7 — flaga i pochodzenie przeżywają zapis');
   const empty = vm2.getAllVessels().length;
   quiet(() => vm2.restore(JSON.parse(vmJson)));
   const pool = vm2.getAllVessels().filter((v) => v.origin === 'pool');
-  assert(!blank && flagOf(w.K, e1)?.mobilized === true && flagOf(w.K, e1)?.created === 2,
+  assert(!blank && flagOf(w.K, e1)?.mobilized === true && flagOf(w.K, e1)?.created === 3,
     'T7a: flaga empires.<id>.fleetPool przeżywa zapis i wczytanie (świadek: świeży stan bez flagi)');
-  assert(empty === 0 && pool.length === 2 && same(pool.map((v) => v.directorOrigin), [D, E])
+  assert(empty === 0 && pool.length === 3 && same(pool.map((v) => v.directorOrigin), [D, E, E])
     && pool.every((v) => v.ownerEmpireId === e1 && v.serviceState === 'active'),
     `T7b: origin 'pool' i adnotacja przeżywają zapis VesselManager (${pool.length})`);
 }
@@ -373,10 +375,11 @@ console.log('\nT9 — odczyt konsoli per imperium');
   console.table = (r) => { rows = r; };
   try { fl('printFleetLimits', w.K); } finally { console.table = tb; }
   const r1 = rows.find((r) => r.imperium === e1), r2 = rows.find((r) => r.imperium === e2);
-  assert(r1?.zBakiem === 1 && r1?.pula === 'tak' && r1?.pulaDoda === `${E} x1`,
-    `T9a: imperium z pulą — z bakiem 1, pula tak, dołoży ${E} x1 (minimum 2) (${JSON.stringify({ z: r1?.zBakiem, p: r1?.pula, d: r1?.pulaDoda })})`);
-  assert(r2?.zBakiem === 0 && r2?.pula === 'nie' && r2?.pulaDoda === `${D} x1, ${E} x1`,
-    `T9b: imperium bez puli — pula nie, dołoży ${D} x1, ${E} x1 (${JSON.stringify({ z: r2?.zBakiem, p: r2?.pula, d: r2?.pulaDoda })})`);
+  // ⚠ SB27 (R-B6) — po mobilizacji minimum z bakiem spełnione od razu: plan pusty; bez puli plan D, E, E.
+  assert(r1?.zBakiem === 2 && r1?.pula === 'tak' && r1?.pulaDoda === '-',
+    `T9a: imperium z pulą — z bakiem 2, pula tak, plan pusty (SB27) (${JSON.stringify({ z: r1?.zBakiem, p: r1?.pula, d: r1?.pulaDoda })})`);
+  assert(r2?.zBakiem === 0 && r2?.pula === 'nie' && r2?.pulaDoda === `${D} x1, ${E} x2`,
+    `T9b: imperium bez puli — pula nie, dołoży ${D} x1, ${E} x2 (${JSON.stringify({ z: r2?.zBakiem, p: r2?.pula, d: r2?.pulaDoda })})`);
 }
 
 // ── T10 — wpięcie ──────────────────────────────────────────────────────────────────────────────
@@ -467,17 +470,21 @@ console.log('\nT12 — odrastanie: jeden kadłub na granicę roku, reguła miejs
   const toYearEnd = (w) => run(w, Math.round((yearOf(w) + 1 - now(w)) * 12));
   const poolOf = (w, emp) => armedOf(w, emp).filter((v) => v.origin === 'pool');
   const regrownLog = (emp) => debugLog.query({ kind: 'fleetPool:regrown', empireId: emp });
-  // (a) limit 2: mobilizacja D, E (z bakiem 1) → na granicy roku +E (minimum 2 z bakiem, ponad limit); potem nic
+  // (a) limit 2: mobilizacja D, E, E (SB27 — minimum od razu); strata eskorty przed granicą roku (R-B6) → na granicy
+  //     roku +E (minimum 2 z bakiem, ponad limit); potem nic
   const w = boot();
   const [e1] = w.emps;
   declare(w.K, e1);
+  const made = poolOf(w, e1).length;
+  const lostE = poolOf(w, e1)[2];                               // brak trzeciego kadłuba (plan sprzed SB27) — pin czerwony, nie wyjątek
+  if (lostE) lostE.isWreck = true;
   run(w, 11);
   const before = poolOf(w, e1).length;
   run(w, 1);
   const y1 = poolOf(w, e1);
-  assert(before === 2 && y1.length === 3 && y1[2]?.directorOrigin === E && yearOf(w) === 1
+  assert(made === 3 && before === 2 && y1.length === 3 && y1[2]?.directorOrigin === E && yearOf(w) === 1
     && regrownLog(e1).length === 1 && regrownLog(e1)[0].data?.year === 1 && flagOf(w.K, e1)?.regrowthYear === 1,
-    `T12a: limit 2 — rok 0: ${before} kadłuby; granica roku 1: +1 eskorta ponad limit (${y1.map((v) => v.directorOrigin.split('_')[1]).join(', ')})`);
+    `T12a: limit 2 — rok 0: ${made} kadłuby, po stracie ${before}; granica roku 1: +1 eskorta ponad limit (${y1.map((v) => v.directorOrigin.split('_')[1]).join(', ')})`);
   toYearEnd(w);
   assert(poolOf(w, e1).length === 3 && regrownLog(e1).length === 1 && flagOf(w.K, e1)?.regrowthYear === 2,
     'T12b: granica roku 2 — plan pusty (limit pełny, minimum z bakiem spełnione): nic; rok rozliczony');

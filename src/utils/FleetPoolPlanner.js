@@ -9,6 +9,10 @@
 //          klasy (z bakiem warp / bez baku), w kolejności slotów; niepokryte sloty dochodzą w kolejności wzorca (do
 //          `room`); kadłuby dodawane WYŁĄCZNIE dla minimum z bakiem (gdy `room` > liczby niepokrytych slotów) to PIERWSZY
 //          szablon z bakiem we wzorcu (SB20, SB21).
+//   do skutku (SB27): przebieg powtarza się na stanie PO dołożeniu, dopóki zostaje miejsce — pula osiąga minimum z bakiem
+//          w chwili utworzenia, nie rok później (limit 2, 0 kadłubów: przebieg 1 → D, E; przebieg 2 — z bakiem 1 z 2
+//          wymaganych → E; razem D, E, E). Pierwszy przebieg jest tym samym planem co przed SB27, więc gdy wypełnia
+//          wszystko (limit 6 → D, E, E, E, D, E), wynik się nie zmienia; pierwszy kadłub planu — też (odrastanie).
 //
 // ⚠ Klasa KADŁUBA = posiadanie baku warp (`warpFuel.max > 0` — D4: własność, nigdy id szablonu); klasa SLOTU = czy szablon
 //   rozwiązany „wszystko zbadane” (SB22 — jak sonda pierwszego kontaktu, `DirectorFirstContact.js:113`) ma pojemność baku.
@@ -52,17 +56,35 @@ export function poolSlots(limit, pattern) {
   return Array.from({ length: n }, (_, i) => pattern[i % pattern.length]);
 }
 
+/** SB27 — bezpiecznik pętli przebiegów (każdy przebieg z dołożeniem podnosi liczbę kadłubów; realnie ≤ 3 przebiegi). */
+const MAX_PLAN_PASSES = 64;
+
 /**
- * Plan puli.
+ * Plan puli (SB27: do skutku). Przebieg `planPass` powtarzany na stanie po dołożeniu, dopóki dokłada; wynik — suma.
  * @param {{limit:number, pattern:string[], minWarp:number, warpHulls:number, noWarpHulls:number,
  *          traitsOf?:(id:string)=>{warp:boolean}}} p
  * @returns {{room:number, slots:string[], uncovered:string[], add:string[], tankTemplate:string|null, missingWarpTemplate:number}}
+ *   `room` — ile kadłubów plan potrzebuje (dołożone + brakujące z bakiem); `slots` / `uncovered` — z pierwszego
+ *   przebiegu; `missingWarpTemplate` — ile kadłubów z bakiem zostaje brakujących po ostatnim przebiegu.
  */
 export function planPool({ limit, pattern, minWarp, warpHulls, noWarpHulls, traitsOf = templateTraits }) {
-  const w0 = Math.max(0, Math.floor(Number(warpHulls) || 0));
-  const n0 = Math.max(0, Math.floor(Number(noWarpHulls) || 0));
   const lim = Math.max(0, Math.floor(Number(limit) || 0));
   const minW = Math.max(0, Math.floor(Number(minWarp) || 0));
+  let w = Math.max(0, Math.floor(Number(warpHulls) || 0));
+  let n = Math.max(0, Math.floor(Number(noWarpHulls) || 0));
+  const first = planPass({ lim, pattern, minW, w0: w, n0: n, traitsOf });
+  const add = [];
+  let pass = first;
+  for (let i = 0; i < MAX_PLAN_PASSES && pass.add.length > 0; i++) {
+    for (const id of pass.add) { add.push(id); if (traitsOf(id).warp) w++; else n++; }
+    pass = planPass({ lim, pattern, minW, w0: w, n0: n, traitsOf });
+  }
+  return { room: add.length + pass.missingWarpTemplate, slots: first.slots, uncovered: first.uncovered, add,
+    tankTemplate: first.tankTemplate, missingWarpTemplate: pass.missingWarpTemplate };
+}
+
+/** Jeden przebieg planu (plan sprzed SB27): miejsce TERAZ, sloty, niepokryte, dokładane w tym przebiegu. */
+function planPass({ lim, pattern, minW, w0, n0, traitsOf }) {
   const room = Math.max(lim - (w0 + n0), minW - w0, 0);
   const slots = poolSlots(lim, pattern);
   let w = w0, n = n0;

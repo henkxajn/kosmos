@@ -44,8 +44,9 @@ console.log('\nI1 — odczyt wywiadu: flota / limit z migawki');
 {
   const snap = FL?.readEmpireFleetSnapshot?.(K, E1);
   const r = intel._reserveReadout(E1);
-  assert(snap?.armed === 2 && snap?.limit === 2,
-    `I1a (świadek): po wojnie imperium ma 2 uzbrojone kadłuby z puli przy limicie 2 (${snap?.armed} / ${snap?.limit})`);
+  // ⚠ SB27 (przecelowanie R-B6 za zgodą właściciela) — pula D, E, E od razu: 3 kadłuby przy limicie 2.
+  assert(snap?.armed === 3 && snap?.limit === 2,
+    `I1a (świadek): po wojnie imperium ma 3 uzbrojone kadłuby z puli przy limicie 2 (${snap?.armed} / ${snap?.limit})`);
   assert(r.knownArmedHulls === snap?.armed && r.knownFleetLimit === snap?.limit && !('knownCrewCapacity' in r),
     `I1b: odczyt — okręty ${r.knownArmedHulls} / limit ${r.knownFleetLimit}; pola „wolnej załogi” brak (${JSON.stringify(Object.keys(r))})`);
 }
@@ -68,16 +69,22 @@ console.log('\nI3 — bramka `detailed` i odświeżanie');
   const atContact = gameState.get(`intel.${E1}`);
   quiet(() => intel.advanceIntel(E1, 'detailed', 'keeper'));
   const atDetailed = gameState.get(`intel.${E1}`);
-  assert(atContact?.level === 'contact' && atContact?.knownArmedHulls == null && atDetailed?.knownArmedHulls === 2 && atDetailed?.knownFleetLimit === 2,
-    `I3a: kontakt — brak liczb floty; „detailed” — okręty 2 / limit 2 (${atDetailed?.knownArmedHulls} / ${atDetailed?.knownFleetLimit})`);
-  quiet(() => ticker.run(12, { tickSize: 1.0 }));                // granica roku: odrastanie +1 eskorta (minimum z bakiem)
+  assert(atContact?.level === 'contact' && atContact?.knownArmedHulls == null && atDetailed?.knownArmedHulls === 3 && atDetailed?.knownFleetLimit === 2,
+    `I3a: kontakt — brak liczb floty; „detailed” — okręty 3 / limit 2 (${atDetailed?.knownArmedHulls} / ${atDetailed?.knownFleetLimit})`);
+  // SB27 (R-B6) — minimum z bakiem od chwili utworzenia: odrastanie potrzebuje STRATY. Eskorta z puli zniszczona przed
+  // granicą roku — odczyt najpierw schodzi do 2 (świadek odświeżenia po stracie), po odrośnięciu wraca do 3.
+  const lost = K.vesselManager.getAllVessels().find((v) => (v.ownerEmpireId ?? v.owner) === E1 && v.origin === 'pool' && (v.warpFuel?.max ?? 0) > 0);
+  if (lost) lost.isWreck = true;
+  quiet(() => ticker.run(1, { tickSize: 1.0 }));
+  const afterLoss = gameState.get(`intel.${E1}`)?.knownArmedHulls;
+  quiet(() => ticker.run(11, { tickSize: 1.0 }));                // granica roku: odrastanie +1 eskorta (minimum z bakiem)
   const atBoundary = FL?.readEmpireFleetSnapshot?.(K, E1)?.armed;
   // Odświeżenie wywiadu biegnie co 1 civY (`_passiveTick`), w tym samym ticku PRZED kontrolą roczną puli (kolejność
   // subskrypcji) — rekord dogania flotę w następnym kroku, czyli najpóźniej miesiąc po granicy roku.
   quiet(() => ticker.run(1, { tickSize: 1.0 }));
   const after = gameState.get(`intel.${E1}`);
-  assert(atBoundary === 3 && after?.knownArmedHulls === 3 && after?.knownFleetLimit === 2,
-    `I3b: po odrośnięciu kadłuba (flota ${atBoundary}) odczyt odświeżony najpóźniej miesiąc później — okręty ${after?.knownArmedHulls} / limit ${after?.knownFleetLimit}`);
+  assert(!!lost && afterLoss === 2 && atBoundary === 3 && after?.knownArmedHulls === 3 && after?.knownFleetLimit === 2,
+    `I3b: po stracie odczyt ${afterLoss}; po odrośnięciu kadłuba (flota ${atBoundary}) odczyt odświeżony najpóźniej miesiąc później — okręty ${after?.knownArmedHulls} / limit ${after?.knownFleetLimit}`);
   const writes = () => debugLog.query((e) => e.kind === 'state' && e.data?.path === `intel.${E1}`).length;
   quiet(() => intel._refreshKnownMilitary());
   const w0 = writes();
