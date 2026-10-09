@@ -6,9 +6,10 @@
 //
 //   ile:   room = max(limit − uzbrojone, minimum z bakiem − z bakiem, 0)                         (SB14 zmienione przez SB21)
 //   które: wzorzec powtarzany do limitu = sloty (limit 6 → D, E, E, E, D, E); istniejące kadłuby pokrywają sloty SWOJEJ
-//          klasy (z bakiem warp / bez baku), w kolejności slotów; niepokryte sloty dochodzą w kolejności wzorca (do
-//          `room`); kadłuby dodawane WYŁĄCZNIE dla minimum z bakiem (gdy `room` > liczby niepokrytych slotów) to PIERWSZY
-//          szablon z bakiem we wzorcu (SB20, SB21).
+//          klasy (z bakiem warp / bez baku), w kolejności slotów; miejsce z LIMITU (limit − uzbrojone) wypełniają
+//          niepokryte sloty w kolejności wzorca; miejsce PONAD nim — wynikające wyłącznie z minimum z bakiem — wypełniają
+//          WYŁĄCZNIE kadłuby z bakiem: dalsze niepokryte sloty z bakiem, potem PIERWSZY szablon z bakiem we wzorcu
+//          (SB20, SB21; Finding 413 — kadłub bez baku nigdy nie wchodzi ponad limit dla minimum z bakiem).
 //   do skutku (SB27): przebieg powtarza się na stanie PO dołożeniu, dopóki zostaje miejsce — pula osiąga minimum z bakiem
 //          w chwili utworzenia, nie rok później (limit 2, 0 kadłubów: przebieg 1 → D, E; przebieg 2 — z bakiem 1 z 2
 //          wymaganych → E; razem D, E, E). Pierwszy przebieg jest tym samym planem co przed SB27, więc gdy wypełnia
@@ -83,9 +84,16 @@ export function planPool({ limit, pattern, minWarp, warpHulls, noWarpHulls, trai
     tankTemplate: first.tankTemplate, missingWarpTemplate: pass.missingWarpTemplate };
 }
 
-/** Jeden przebieg planu (plan sprzed SB27): miejsce TERAZ, sloty, niepokryte, dokładane w tym przebiegu. */
+/**
+ * Jeden przebieg planu: miejsce TERAZ, sloty, niepokryte, dokładane w tym przebiegu.
+ * ⚠ Finding 413: część z LIMITU (`limRoom`) — niepokryte sloty w kolejności wzorca (każdej klasy); część ponad nią
+ *   (miejsce wynikające wyłącznie z minimum z bakiem) — tylko kadłuby z bakiem. Przy strojeniu domyślnym (wzorzec
+ *   D, E, E, E, minimum 2, limit ≥ 2) plan jest identyczny z planem sprzed tej poprawki (keeper
+ *   `sb1_pool_tank_only_smoke` K3).
+ */
 function planPass({ lim, pattern, minW, w0, n0, traitsOf }) {
-  const room = Math.max(lim - (w0 + n0), minW - w0, 0);
+  const limRoom = Math.max(lim - (w0 + n0), 0);
+  const room = Math.max(limRoom, minW - w0, 0);
   const slots = poolSlots(lim, pattern);
   let w = w0, n = n0;
   const uncovered = [];
@@ -93,7 +101,11 @@ function planPass({ lim, pattern, minW, w0, n0, traitsOf }) {
     if (traitsOf(id).warp) { if (w > 0) w--; else uncovered.push(id); }
     else { if (n > 0) n--; else uncovered.push(id); }
   }
-  const add = uncovered.slice(0, room);
+  const add = uncovered.slice(0, limRoom);
+  for (const id of uncovered.slice(limRoom)) {
+    if (add.length >= room) break;
+    if (traitsOf(id).warp) add.push(id);
+  }
   const tankTemplate = (Array.isArray(pattern) ? pattern : []).find((id) => traitsOf(id).warp) ?? null;
   let missingWarpTemplate = 0;
   if (add.length < room) {
