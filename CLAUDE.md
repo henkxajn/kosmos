@@ -5927,7 +5927,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08, poza S1-8 czekającym na zgodę R-B6)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 sesja 1 — kod PRZYGOTOWANY, NIE zacommitowany)
 
 Plan, decyzje **SB1–SB29** i rejestr findingów **#391–#413**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
 §5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
@@ -6059,3 +6059,22 @@ z góry zatwierdzonym T4a 17 asercji (`sb1_fleet_pool` 15, `sb1_intel_fleet` 2) 
 `ec1bb83`, sweep 272/272). **Następny: S2** (strażnik na orbicie, SB5, SB6).
 ⚠ **Po S1-8 (jeśli R-B6):** pula w świecie keeperów (limit 2) to D, E, E od razu, a odrastanie dla minimum potrzebuje
 STRATY — keeper, który mierzy „pulę z 2 kadłubów” albo „+E na granicy roku”, koduje stan sprzed SB27.
+
+✅ **S1-8 zacommitowany 2026-10-09** po zgodzie na R-B6: `6b40c30` (SB27 — limit 2 przy zerze kadłubów → D, E, E od razu);
+✅ **413** — `dab5e2a` (miejsce z minimum kadłubów z bakiem wypełniane wyłącznie szablonami z bakiem; keeper
+`sb1_pool_tank_only` 10). Sweep **273/273**, `check-i18n` 3455.
+⏳ **S2, sesja 1 (2026-10-09) — kod PRZYGOTOWANY i zastagowany, NIE zacommitowany** (plan §5f; decyzje **SB30–SB36**;
+notatka `kosmos-handover/ai-strikes-back-s2/HANDOVER_S2_PART1.md`). Łańcuch B1–B5: **B1** — 414 (`IntelSystem._onVesselArrived`
+tylko dla statku gracza) · **B2** — 406 (`dropTroop` odmawia `no_orbital_dominance`; klucz `drop.lostDominance` PL + EN —
+pl = en = 3456) · **B3** — strażnik stolicy: NEW `src/utils/GuardPostPlanner.js`, `FleetPoolSystem.stationGuards`
+(mobilizacja + kontrola miesięczna), roster `director.doctrine.<id>.guard` (`DirectorDoctrine.doctrineRoleOf` / `isGuard`
+/ `setGuardRoster`), pula uderzenia pomija strażnika, klucz `fleetGuardsPerBody` · **B4** — drugie ciało w układzie stolicy,
+lot `moveToPoint` · **B5** — zastępstwo na granicy roku, rozwiązywanie stanowisk, odczyt `KOSMOS.fleetPoolSystem.guardPosts(id)`.
+Przecelowanie **R-S2-3** (13 asercji w 4 keeperach, dowód mutacyjny 8/8) czeka na zgodę; z nim sweep **278/278**.
+M4 (fixture): strażnicy przy mobilizacji (`emp_002`) albo miesiąc później (`emp_001`), lot drugiego 3–4 miesiące, 3 fregaty
+gracza na stolicę `emp_001` — AI trzyma orbitę 9 / 10, zastępstwo zawsze na granicy roku. Nowe: ⏳ **414**, ⚪ **415**
+(tylko raport), ⚪ **416** (po bitwie ocalałe okręty gracza nie docierają do celu — do audytu).
+⚠ **Strażnik to kadłub uzbrojony w służbie BEZ baku warp, NA ORBICIE** — wypada z doktryn i z puli uderzenia (SB31);
+dominacja orbitalna dalej per UKŁAD (SB34), więc strażnik odbiera graczowi dominację w całym układzie stolicy.
+⚠ **Keeper, który wypowiada wojnę i mierzy dominację albo zrzut w układzie stolicy AI, wyłącza pulę w setupie** (od S2
+pula stawia strażnika na orbicie w chwili mobilizacji) — wzór R-B2b / R-S2-3a.

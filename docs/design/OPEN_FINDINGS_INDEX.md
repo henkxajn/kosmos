@@ -468,6 +468,16 @@
 > incydenty” i „(brak)”, surowy slug incydentu) · ⚪ **413** (plan puli dokłada kadłub BEZ baku ponad limit, gdy miejsce
 > wynika z minimum z bakiem — nieosiągalne przy domyślnym strojeniu).
 > • Następny: **S2** (strażnik na orbicie, SB5, SB6).
+>
+> **Aktualizacja 2026-10-09 — AI STRIKES BACK: S1-8 i 413 zacommitowane; S2, sesja 1 — kod PRZYGOTOWANY i zastagowany, NIE
+> zacommitowany.** `6b40c30` (S1-8, SB27, zgoda na R-B6) · `dab5e2a` (413). Decyzje **SB30–SB36**; łańcuch B1–B5, M4 i
+> bramka: `AI_STRIKES_BACK_PLAN.md` §5f.
+> • ✅ **413** (`dab5e2a`) — zamknięty; wiersz zdjęty z A8.
+> • ⏳ **406** (B2, SB35) · **414** (B1, SB36) — poprawki przygotowane; wiersze zostają do commitu.
+> • **NOWE: #414–#416** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — ⏳ **414** (przylot statku spoza floty gracza podnosi
+> wywiad gracza) · ⚪ **415** (pierścień ruchu dla każdego statku w oglądanym układzie — tylko raport, SB36) · ⚪ **416**
+> (po bitwie ocalałe okręty gracza zostają `in_transit` i nie docierają do celu — do audytu).
+> • Następny: decyzja o przecelowaniu **R-S2-3**, bramka S2, commit łańcucha; potem **S3**.
 
 
 ---
@@ -546,7 +556,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
-| **391-413** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–08; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki) |
+| **391-416** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–09; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -654,6 +664,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
 | **373** | ⚪ | akcje silnika bez bramki `'in_cargo'` — `GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`); `moveUnit` ma ją od F7 (`f90bc14`); z UI nieosiągalne po przycinaniu zaznaczenia (F7) — później. `AI_GARRISON_PLAN.md` §6 |
+| **416** | ⚪ | po bitwie z obrońcą stolicy ocalałe okręty gracza zostają `in_transit` z rozkazem `moveToPoint` i nie docierają do celu — M4 (fixture): 2 ocalałe fregaty 0,49–0,94 AU od stolicy 3 lata po rozkazie (dolot ~1,8 roku), bez kolejnej bitwy | przyczyna i osiągalność w normalnej grze niezmierzone (fregaty postawione sondą). `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -769,7 +780,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **401** | ⚪ | gałąź księgi abstrakcyjnej `_hasHostileFleetInSystem` (`WarSystem.js:950-962`) odbiera dominację flotą o `strength > 0` także w drodze (`destSystemId`), bez pojęcia „da się walczyć” | stare zapisy i floty debugowe (producentów brak od W3-8). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **403** | ⚪ | `WarSystem.getPlanetOrbitalController` (`:1039`) — zero konsumentów | martwy. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **406** | 🟠 | tryb zrzutu otwarty przy dominacji zrzuca także po jej utracie — klik heksu (`ColonyOverlay.js:4693-4745`) → `dropTroop` (`Vessel.js:788`) → `unloadGroundUnit` (`:749`) nie sprawdzają dominacji ani położenia statku; dominacja tylko przy wejściu w tryb (`:333`) | z bramki S0; osiągalność niezmierzona; kandydat do **S3**. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **413** | ⚪ | plan puli dokłada kadłub BEZ baku ponad limit, gdy miejsce wynika z minimum z bakiem, a pierwszy niepokryty slot wzorca jest bez baku (`FleetPoolPlanner.js` `add = uncovered.slice(0, room)`) — zmierzone: limit 2, minimum 3, dwie eskorty → plan `[D]` (po SB27: `[D, E]`) | nieosiągalne przy domyślnym strojeniu (wzorzec D, E, E, E i minimum 2); od `a1143fc`; decyzja właściciela. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **414** | ⏳ | przylot statku, który NIE jest statkiem gracza, podnosi wywiad gracza o imperium układu — `IntelSystem._onVesselArrived` (`:199-206`) nie pyta o właściciela statku; zmierzone: przylot kadłuba AI z misją `unknown → contact` (audyt S2), bramka S2 krok 18b na `d055a05` `rumor→contact (vessel_arrived:entity_208)` | ⏳ poprawka B1 (SB36) przygotowana, nie zacommitowana. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **415** | ⚪ | pierścień ruchu `ThreeRenderer._spawnMovementPulse` (`:6452`, subskrypcje `:1098-1100`) dla KAŻDEGO statku, w scenie oglądanego układu, we współrzędnych statku — bez terminu właściciela, wywiadu i układu; zmierzone (bramka S2, krok 22, kamera na `sys_home`): 12 pierścieni od statków AI na kodzie S2, 5 na `d055a05` | SB36: tylko raport; zjawisko sprzed S2 (od `8da65ed`), S2 dokłada źródła. `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
