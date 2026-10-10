@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 sesja 1 — kod PRZYGOTOWANY, NIE zacommitowany)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10)
 
-Plan, decyzje **SB1–SB29** i rejestr findingów **#391–#413**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB38** i rejestr findingów **#391–#419**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6063,8 +6063,16 @@ STRATY — keeper, który mierzy „pulę z 2 kadłubów” albo „+E na granic
 ✅ **S1-8 zacommitowany 2026-10-09** po zgodzie na R-B6: `6b40c30` (SB27 — limit 2 przy zerze kadłubów → D, E, E od razu);
 ✅ **413** — `dab5e2a` (miejsce z minimum kadłubów z bakiem wypełniane wyłącznie szablonami z bakiem; keeper
 `sb1_pool_tank_only` 10). Sweep **273/273**, `check-i18n` 3455.
-⏳ **S2, sesja 1 (2026-10-09) — kod PRZYGOTOWANY i zastagowany, NIE zacommitowany** (plan §5f; decyzje **SB30–SB36**;
-notatka `kosmos-handover/ai-strikes-back-s2/HANDOVER_S2_PART1.md`). Łańcuch B1–B5: **B1** — 414 (`IntelSystem._onVesselArrived`
+✅ **S2 ZAMKNIĘTY 2026-10-10** (bramka właściciela w przeglądarce PASS; plan §5f–§5g; decyzje **SB30–SB38**; notatki
+`kosmos-handover/ai-strikes-back-s2/HANDOVER_S2_PART1.md`, `HANDOVER_S2_CLOSED.md`). Commity: `bf498d1` (414) · `013fd75`
+(406) · `d3fc782` (strażnik stolicy + przecelowanie R-S2-3, zgoda 2026-10-10) · `17c60f3` (drugie ciało) · `0eaa105`
+(zastępstwo, odczyt); sweep **278/278**, `check-i18n` 3456. **SB37** — zepchnięty strażnik wraca na orbitę na granicy
+miesiąca; **SB38** — przy obsadzaniu pierwszeństwo ma stolica (oba: zostaje, jak zbudowano). Zamknięte: ✅ **406**,
+**414**. **416** obalony pomiarem i przepisany: rozkaz ruchu na ciało szybsze od statku — przylot liczony z trasy do
+punktu przewidzianego na inną chwilę, przeskok na ciało przy przylocie (osiągalne rozkazem gracza; plan §5g.3). Nowe:
+🟠 **417** (wrak wznawia wstrzymaną misję i leci) · 🟠 **418** (jednostki w ładowni wraku żyją, wrak zrzuca) · 🟠 **419**
+(starcia tej samej pary w tym samym 0,01 roku — ten sam id, statki pierwszego zamrożone). Zapis sesji 1 niżej.
+Łańcuch B1–B5 (sesja 1, 2026-10-09): **B1** — 414 (`IntelSystem._onVesselArrived`
 tylko dla statku gracza) · **B2** — 406 (`dropTroop` odmawia `no_orbital_dominance`; klucz `drop.lostDominance` PL + EN —
 pl = en = 3456) · **B3** — strażnik stolicy: NEW `src/utils/GuardPostPlanner.js`, `FleetPoolSystem.stationGuards`
 (mobilizacja + kontrola miesięczna), roster `director.doctrine.<id>.guard` (`DirectorDoctrine.doctrineRoleOf` / `isGuard`
@@ -6078,3 +6086,7 @@ gracza na stolicę `emp_001` — AI trzyma orbitę 9 / 10, zastępstwo zawsze na
 dominacja orbitalna dalej per UKŁAD (SB34), więc strażnik odbiera graczowi dominację w całym układzie stolicy.
 ⚠ **Keeper, który wypowiada wojnę i mierzy dominację albo zrzut w układzie stolicy AI, wyłącza pulę w setupie** (od S2
 pula stawia strażnika na orbicie w chwili mobilizacji) — wzór R-B2b / R-S2-3a.
+⚠ **Walka DSCS potrzebuje czasu ciągłego:** krok miesięczny przyrządu (`__sbTick(1)`) i pętla rAF gry w izolowanym
+headless Chrome (rzadkie, duże klatki) jej nie odtworzą — scenę z walką prowadzić klatkami ~16 ms (`TimeSystem.update(dt)`,
+plan §5g.4, C1). ⚠ **Kolejność `time:tick` przy końcu mobilizacji** (`VesselManager` → Director → stanowiska) zależy
+w czasie ciągłym od fazy akumulatora Directora — który kadłub zostanie strażnikiem, nie jest stałe (C3).

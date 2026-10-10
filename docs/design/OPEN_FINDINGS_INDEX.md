@@ -478,6 +478,18 @@
 > wywiad gracza) · ⚪ **415** (pierścień ruchu dla każdego statku w oglądanym układzie — tylko raport, SB36) · ⚪ **416**
 > (po bitwie ocalałe okręty gracza zostają `in_transit` i nie docierają do celu — do audytu).
 > • Następny: decyzja o przecelowaniu **R-S2-3**, bramka S2, commit łańcucha; potem **S3**.
+>
+> **Aktualizacja 2026-10-10 — AI STRIKES BACK: S2 ZAMKNIĘTY** (bramka właściciela PASS). `bf498d1` (414) · `013fd75`
+> (406) · `d3fc782` (strażnik stolicy + R-S2-3) · `17c60f3` (drugie ciało) · `0eaa105` (zastępstwo, odczyt); decyzje
+> **SB37–SB38**; zapis bramki, audyt 416 i ustaleń bramki: `AI_STRIKES_BACK_PLAN.md` §5g. Sweep **278/278**.
+> • ✅ **406** (`013fd75`) · **414** (`bf498d1`) — zamknięte; wiersze zdjęte z A8.
+> • **416** — opis z M4 („ocalali po bitwie nie docierają do celu”) obalony pomiarem: rozkaz ruchu na ciało szybsze od
+>   statku — przylot liczony z trasy do punktu przewidzianego na inną chwilę, przeskok na ciało przy przylocie; osiągalne
+>   własnym rozkazem gracza; wiersz w A5 przepisany.
+> • **NOWE: #417–#419** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — 🟠 **417** (wrak wznawia wstrzymaną misję i leci do
+>   celu) · 🟠 **418** (jednostki w ładowni wraku żyją, wrak dalej zrzuca, sprzątanie wraku zostawia je na zawsze) ·
+>   🟠 **419** (dwa starcia z tym samym imperium w tym samym 0,01 roku — ten sam id, statki pierwszego zamrożone).
+> • Następny: decyzja o 416–419; potem **S3**.
 
 
 ---
@@ -556,7 +568,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
-| **391-416** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–09; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1) |
+| **391-419** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–10; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -664,7 +676,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **335** | 🟠 | rozbita jednostka AI schodzi na sąsiedni heks i wraca w kółko (`_tryRetreat` +10 morale, `CombatSystem.js:449`; pościg AI `GroundUnitManager.js:997`) — rok pata na bramce G1b; rozszerza **313** |
 | **347** | 🟠 | `HexGrid.getNeighbors` **nie jest symetryczne** (zawijanie per rząd, `HexGrid.js:123-145`): 64 z 956 / 82 z 1760 par bez pary zwrotnej — A*, ucieczka i rozstawienie po pierścieniach dziedziczą kierunkowość; plik krytyczny, naprawa wymaga planu. `AI_GARRISON_PLAN.md` §6 |
 | **373** | ⚪ | akcje silnika bez bramki `'in_cargo'` — `GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`); `moveUnit` ma ją od F7 (`f90bc14`); z UI nieosiągalne po przycinaniu zaznaczenia (F7) — później. `AI_GARRISON_PLAN.md` §6 |
-| **416** | ⚪ | po bitwie z obrońcą stolicy ocalałe okręty gracza zostają `in_transit` z rozkazem `moveToPoint` i nie docierają do celu — M4 (fixture): 2 ocalałe fregaty 0,49–0,94 AU od stolicy 3 lata po rozkazie (dolot ~1,8 roku), bez kolejnej bitwy | przyczyna i osiągalność w normalnej grze niezmierzone (fregaty postawione sondą). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **416** | 🟠 | rozkaz ruchu na ciało, które krąży szybciej, niż leci statek — `_issueMoveToPoint` przewiduje pozycję ciała raz, na chwilę dolotu po linii prostej (`MovementOrderSystem.js:940-941`), a `arrivalYear` liczy z trasy (`:994`) ⇒ przylot w innej chwili i przeskok na ciało; fixture: stolica `emp_001` 6,68 AU/rok wobec 1,11 AU/rok fregaty — dolot 0,25–3,78 roku, przeskok 0,20–2,88 AU; własnym rozkazem gracza w układzie domowym — 4,47 roku zamiast 2,47, przeskok 6,53 AU | opis z M4 („ocalali po bitwie nie docierają”) obalony pomiarem; ten sam korzeń co notatka S0 „`engage` zawisa 0,86–0,88 AU”; poprawka — decyzja (osobny slice przed S3?). `AI_STRIKES_BACK_PLAN.md` §5g.3, §6 |
+| **417** | 🟠 | wrak, którego misja była wstrzymana na czas walki, wznawia ją i leci do celu — `vessel:wrecked` → anulowanie rozkazu → `VesselManager._resumeMissionAfterOrder` bez pytania o wrak; fixture: wrak fregaty gracza doleciał 2,79 AU i zadokował przy stolicy `emp_001`; obie strony | decyzja właściciela. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **418** | 🟠 | jednostki w ładowni WRAKU żyją (`_turnIntoWreck` nie dotyka `groundUnits`), wrak dalej zrzuca (`dropTroop` → `{ok: true}` zmierzone), a `_tickWreckCleanup` kasuje wrak z pominięciem `destroyVessel` — jednostki zostają `in_cargo` na zawsze, POP zablokowane | decyzja właściciela. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **419** | 🟠 | dwa starcia gracza z tym samym imperium w tym samym 0,01 roku gry mają ten sam id (`DeepSpaceCombatSystem._makeEncounterId`, `:1429`) — drugie nadpisuje pierwsze, statki gracza z pierwszego zamrożone na zawsze (zmierzone w uprzęży), rekord bitwy nadpisany | osiągalność w normalnej grze niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
@@ -779,9 +794,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **400** | ⚪ | guard `empireHasFreeCrew` zarejestrowany (`DirectorProduction.js:479`), a od S0-2 bez konsumenta w katalogu reguł | martwy, nieszkodliwy; decyzja przy S1. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **401** | ⚪ | gałąź księgi abstrakcyjnej `_hasHostileFleetInSystem` (`WarSystem.js:950-962`) odbiera dominację flotą o `strength > 0` także w drodze (`destSystemId`), bez pojęcia „da się walczyć” | stare zapisy i floty debugowe (producentów brak od W3-8). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **403** | ⚪ | `WarSystem.getPlanetOrbitalController` (`:1039`) — zero konsumentów | martwy. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **406** | 🟠 | tryb zrzutu otwarty przy dominacji zrzuca także po jej utracie — klik heksu (`ColonyOverlay.js:4693-4745`) → `dropTroop` (`Vessel.js:788`) → `unloadGroundUnit` (`:749`) nie sprawdzają dominacji ani położenia statku; dominacja tylko przy wejściu w tryb (`:333`) | z bramki S0; osiągalność niezmierzona; kandydat do **S3**. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **414** | ⏳ | przylot statku, który NIE jest statkiem gracza, podnosi wywiad gracza o imperium układu — `IntelSystem._onVesselArrived` (`:199-206`) nie pyta o właściciela statku; zmierzone: przylot kadłuba AI z misją `unknown → contact` (audyt S2), bramka S2 krok 18b na `d055a05` `rumor→contact (vessel_arrived:entity_208)` | ⏳ poprawka B1 (SB36) przygotowana, nie zacommitowana. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **415** | ⚪ | pierścień ruchu `ThreeRenderer._spawnMovementPulse` (`:6452`, subskrypcje `:1098-1100`) dla KAŻDEGO statku, w scenie oglądanego układu, we współrzędnych statku — bez terminu właściciela, wywiadu i układu; zmierzone (bramka S2, krok 22, kamera na `sys_home`): 12 pierścieni od statków AI na kodzie S2, 5 na `d055a05` | SB36: tylko raport; zjawisko sprzed S2 (od `8da65ed`), S2 dokłada źródła. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **415** | ⚪ | pierścień ruchu `ThreeRenderer._spawnMovementPulse` (`:6452`, subskrypcje `:1098-1100`) dla KAŻDEGO statku, w scenie oglądanego układu, we współrzędnych statku — bez terminu właściciela, wywiadu i układu; zmierzone (bramka S2, krok 22, kamera na `sys_home`): 12 pierścieni od statków AI na kodzie S2, 5 na `d055a05` | SB36: tylko raport; zjawisko sprzed S2 (od `8da65ed`), S2 dokłada źródła; bramka S2: 8 pierścieni, wszystkie od statków AI; kształt poprawki — §5g.4 (C5). `AI_STRIKES_BACK_PLAN.md` §6 |
 
 ## A9 — Higiena dokumentacji / i18n / zapis
 
