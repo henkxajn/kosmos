@@ -28,7 +28,7 @@ import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlob
 import { anyFullBoundsModalOpen, closeFullBoundsModals } from './ColonyModalLogic.js';   // predykat modala pełnoekranowego (globe toggle) + reset na zmianę kolonii
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
-import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
+import { dropTroop, fireOrbitalStrike, NO_ORBITAL_DOMINANCE } from '../entities/Vessel.js';
 import { pruneUnitSelection } from './ColonySelectionLogic.js';   // G2-4 F7 — zaznaczenie bez „duchów”
 import { visibleGroundUnits, visibleGroundUnitAt, isGroundUnitVisibleToPlayer } from '../utils/GroundVisibility.js';   // Finding 379
 import { warGateRefusal, NOT_AT_WAR } from '../utils/WarGate.js';                        // D13/G2-2 — bramka wojny przy lądowaniu
@@ -4722,8 +4722,11 @@ export class ColonyOverlay extends BaseOverlay {
             // `_finishDropMode(t('drop.finished'))` niżej, więc gracz widział „zakończono”.
             // D13 (G2-2): bramka wojny sprawdzana w chwili zrzutu (właściciel ciała mógł się
             // zmienić od wejścia w tryb zrzutu).
+            // SB35 (Finding 406): dominacja utracona po wejściu w tryb zrzutu — odmowa silnika z własnym komunikatem.
             const msg = res?.reason === NOT_AT_WAR
               ? t('fleet.reason.notAtWar')
+              : res?.reason === NO_ORBITAL_DOMINANCE
+              ? t('drop.lostDominance')
               : t('drop.failed', res?.reason ?? 'unknown');
             this._finishDropMode(msg);
             return true;

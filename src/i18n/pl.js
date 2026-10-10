@@ -725,6 +725,7 @@ export default {
   "drop.noDominance": "Brak dominacji orbitalnej — wygraj bitwę najpierw",
   "drop.notOnOcean": "Nie można zrzucić wojsk na ocean",
   "drop.failed": "Błąd zrzutu: {0}",
+  "drop.lostDominance": "Utracono dominację orbitalną — desant przerwany",
   "drop.chaotic": "🔥 Chaotyczne lądowanie ({0},{1}) — -25% HP",
   "drop.ok": "🪖 Zrzucono na ({0},{1})",
   "drop.finished": "⚔ Desant zakończony — planeta zostaje otwarta, dowodź oddziałami",

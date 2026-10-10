@@ -725,6 +725,7 @@ export default {
   "drop.noDominance": "No orbital dominance — win the battle first",
   "drop.notOnOcean": "Cannot drop troops into the ocean",
   "drop.failed": "Drop failed: {0}",
+  "drop.lostDominance": "Orbital dominance lost — landing aborted",
   "drop.chaotic": "🔥 Chaotic landing ({0},{1}) — -25% HP",
   "drop.ok": "🪖 Dropped at ({0},{1})",
   "drop.finished": "⚔ Landing complete — the planet stays open, command your troops",

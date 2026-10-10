@@ -12,7 +12,7 @@ import { HULLS } from '../data/HullsData.js';
 import { calcShipStats, getModuleCapabilities, SHIP_MODULES } from '../data/ShipModulesData.js';
 import { getNextName } from '../data/VesselNames.js';
 import { getTransportSize } from '../data/unitArchetypes.js';
-import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny w chwili lądowania (G2-4 F2 — i ostrzału)
+import { warGateRefusal, bodyOwnerOf } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny w chwili lądowania (G2-4 F2 — i ostrzału); SB35 — właściciel ciała
 import EntityManager from '../core/EntityManager.js';
 
 let _nextVesselId = 1;
@@ -786,10 +786,14 @@ export function unloadGroundUnit(vessel, unit, planetId, q, r) {
   return true;
 }
 
+/** AI STRIKES BACK S2 (SB35, Finding 406) — powód odmowy zrzutu bez dominacji orbitalnej właściciela jednostki. */
+export const NO_ORBITAL_DOMINANCE = 'no_orbital_dominance';
+
 /**
  * Zrzut desantowy jednostki z ładowni na wrogą planetę.
- * Wymaga: canDropTroops (moduł drop_pods) + dominacji orbitalnej (sprawdza caller)
- * + wojny z właścicielem ciała, jeśli należy do innego imperium (D13 — sprawdzane TUTAJ, w chwili zrzutu).
+ * Wymaga: canDropTroops (moduł drop_pods) + wojny z właścicielem ciała, jeśli należy do innego imperium (D13)
+ * + dominacji orbitalnej właściciela jednostki, jeśli ciało nie jest jego (SB35, Finding 406) — OBA sprawdzane TUTAJ,
+ * w chwili zrzutu (wołający sprawdzają dominację także przy wejściu w tryb zrzutu).
  * Garrison zostaje w trybie mobile — deploy ręczny po zrzucie (2 civY).
  *
  * @param {object} vessel
@@ -807,6 +811,20 @@ export function dropTroop(vessel, unit, planetId, q, r) {
   //   powtarza `unloadGroundUnit`, więc ścieżka nie ma obejścia.
   const warRefusal = warGateRefusal(unit.owner ?? 'player', planetId);
   if (warRefusal) return { ok: false, reason: warRefusal };
+  // AI STRIKES BACK S2 (SB35, Finding 406) — DOMINACJA ORBITALNA W CHWILI ZRZUTU. Dotąd sprawdzali ją wyłącznie wołający
+  //   przy WEJŚCIU w tryb zrzutu (FleetActions `drop_troops`, ColonyOverlay), więc otwarty tryb zrzucał także po jej
+  //   utracie. Ta sama reguła co przy wejściu: ciało, które nie należy do właściciela jednostki (cudze albo niczyje),
+  //   wymaga jego dominacji w układzie ciała — `WarSystem.hasOrbitalDominanceInSystem` (jedna reguła dla obu stron,
+  //   dominacja per UKŁAD, SB34); własne ciało — bez dominacji. Bez `WarSystem` albo bez układu ciała — bez bramki
+  //   (lustro wołającego: `warSys && !playerHasOrbitalDominance(…)`).
+  const side = unit.owner ?? 'player';
+  if (bodyOwnerOf(planetId) !== side) {
+    const ws = (typeof window !== 'undefined') ? window.KOSMOS?.warSystem : null;
+    const sys = EntityManager.get(planetId)?.systemId ?? null;
+    if (sys && typeof ws?.hasOrbitalDominanceInSystem === 'function' && !ws.hasOrbitalDominanceInSystem(side, sys)) {
+      return { ok: false, reason: NO_ORBITAL_DOMINANCE };
+    }
+  }
 
   unloadGroundUnit(vessel, unit, planetId, q, r);
   return { ok: true };

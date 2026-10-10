@@ -1011,8 +1011,8 @@ export class WarSystem {
   /**
    * Czy gracz ma dominację orbitalną nad planetą?
    * Używane przez ColonyOverlay (tryb zrzutu, ostrzał z orbity) i FleetActions (`drop_troops`,
-   * `orbital_strike`). ⚠ `dropTroop()` (Vessel.js) dominacji NIE sprawdza — tylko bramkę wojny
-   * (`warGateRefusal`); dominację bramkują wyłącznie wołający wyżej.
+   * `orbital_strike`). Od AI STRIKES BACK S2 (SB35, Finding 406) `dropTroop()` (Vessel.js) sprawdza dominację także
+   * W CHWILI ZRZUTU — `hasOrbitalDominanceInSystem` właściciela jednostki, ta sama reguła co tutaj.
    *
    * Dominacja gracza obowiązuje gdy:
    *  (a) explicit: controller == 'player' (po wygranej bitwie), LUB
