@@ -52,4 +52,10 @@ export const SB_TUNING = Object.freeze({
    * `FleetPoolSystem._yearlyCheck`.
    */
   fleetRegrowthPerYear: Object.freeze({ default: 1, type: 'int', min: 0, max: 100, unit: 'kadluby na rok' }),
+
+  /**
+   * SB30 (S2) — ilu STRAŻNIKÓW stoi przy jednym strzeżonym ciele. Strażnik = uzbrojony kadłub w służbie BEZ baku warp,
+   * NA ORBICIE ciała. 0 = brak strażników. Konsument: `FleetLimit.fleetGuardsPerBody` → `FleetPoolSystem.stationGuards`.
+   */
+  fleetGuardsPerBody: Object.freeze({ default: 1, type: 'int', min: 0, max: 10, unit: 'straznicy na cialo' }),
 });

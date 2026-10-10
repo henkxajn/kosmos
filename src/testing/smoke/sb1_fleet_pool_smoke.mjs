@@ -253,9 +253,11 @@ console.log('\nT6 — mobilizacja puli');
   assert(f1?.mobilized === true && f1.reason === 'war_declared' && f1.created === 3 && f1.limit === 2 && f1.planned === 3
     && f1.armedBefore === 0 && f1.regrowthYear === Math.floor(w.K.timeSystem.gameTime + 1e-9),
     `T6b: wojna → flaga puli (${JSON.stringify(f1)})`);
+  // ⚠ SB33 (przecelowanie R-S2-3b) — defender z puli obejmuje stanowisko strażnika NA ORBICIE stolicy w chwili mobilizacji.
   assert(same(hulls1.map((v) => v.directorOrigin), [D, E, E]) && hulls1.every((v) => v.origin === 'pool' && v.serviceState === 'active'
-    && v.position.state === 'docked' && v.position.dockedAt === capOf(w.K, e1)) && !flagOf(w.K, e2) && armedOf(w, e2).length === 0,
-    `T6c: pula D, E, E (SB27) w doku stolicy, w służbie; drugie imperium (bez wojny) — nic (${hulls1.map((v) => v.directorOrigin).join(', ')})`);
+    && v.position.dockedAt === capOf(w.K, e1) && v.position.state === (v.directorOrigin === D ? 'orbiting' : 'docked'))
+    && !flagOf(w.K, e2) && armedOf(w, e2).length === 0,
+    `T6c: pula D, E, E (SB27) w służbie przy stolicy — defender na orbicie (strażnik, SB33), eskorty w doku; drugie imperium (bez wojny) — nic (${hulls1.map((v) => v.directorOrigin).join(', ')})`);
   const logged = debugLog.query({ kind: 'fleetPool:mobilized', empireId: e1 });
   assert(logged.length === 1 && hulls1.length === 3 && same(logged[0].data?.vesselIds, hulls1.map((v) => v.id)),
     'T6d: jeden wpis audytu fleetPool:mobilized z id kadłubów');

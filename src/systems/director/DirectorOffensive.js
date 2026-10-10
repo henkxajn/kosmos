@@ -144,6 +144,8 @@ export class DirectorOffensive {
       if (v.mission) continue;                   // ma zajęcie
       if (v.movementOrder) continue;             // już pod rozkazem
       if (v.pendingOrder) continue;              // composite w toku (skok→uderzenie)
+      // AI STRIKES BACK S2 (SB31) — strażnik stoi na stanowisku przy ciele imperium i nie uderza (roster `guard`).
+      if (window.KOSMOS?.directorDoctrine?.isGuard?.(empireId, v.id)) continue;
       if (gated && homeSys && (v.systemId ?? 'sys_home') !== homeSys) continue;   // Z2 — poza domem
       if (gated && this._inActiveEncounter(v.id)) continue;                       // Z2 — właśnie się bije
       out.push(v);

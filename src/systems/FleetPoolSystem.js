@@ -26,6 +26,14 @@
 // `regrowthYear` (`EmpireRegistry.setFleetPoolRegrowthYear`), jeden tick może rozliczyć kilka lat. Bez stolicy — w tym
 // roku nic i bez nadrabiania (lustro garnizonu). Plan pusty (limit pełny, minimum z bakiem spełnione) — nic.
 //
+// STRAŻNICY (S2 — SB30, SB31, SB33, SB34): od mobilizacji imperium trzyma przy stolicy `fleetGuardsPerBody` strażników
+// (domyślnie 1) — uzbrojone kadłuby w służbie BEZ baku warp, NA ORBICIE stolicy (`VesselManager.undockToOrbit`).
+// Stanowisko obsadzane w chwili mobilizacji, a gdy żaden kadłub nie jest jeszcze w służbie (rezerwa przechodzi do służby
+// miesiąc) — na pierwszej granicy miesiąca kalendarzowego, na której jest. Strażnik trzyma orbitę i nie ściga: nie dostaje
+// żadnego rozkazu poza powrotem na stanowisko, gdy coś go z niego zepchnęło (kontrola miesięczna). Roster w stanie doktryn
+// (`DirectorDoctrine` — `director.doctrine.<id>.guard`, SB31): doktryny i pula uderzenia go pomijają. Strażnicy zostają
+// także w pokoju. Dominacja orbitalna zostaje per UKŁAD (SB34). Wyłącznik `enabled` obejmuje strażników.
+//
 // ⚠ Flaga: `gameState.empires.<id>.fleetPool` (intencja `EmpireRegistry.markFleetPoolMobilized`) — klucz `empires`
 //   zadeklarowany w `GameState`, więc pole przeżywa zapis bez migracji (save v101); zapis bez pola = „nie zmobilizowano”.
 // ⚠ Reparacje (WP-R, „blokada zbrojeń”): imperium pod reparacjami nie dostaje puli — odmowa `reparations` BEZ flagi
@@ -36,11 +44,15 @@
 // ⚠ Wyłącznik `enabled` wyłącznie dla setupu keeperów (wzór `GarrisonSystem.enabled`). W grze zawsze `true`.
 
 import EventBus from '../core/EventBus.js';
-import { readEmpirePoolPlan, empireFleetHulls, fleetRegrowthPerYear, readEmpireFleetSnapshot } from '../utils/FleetLimit.js';
+import EntityManager from '../core/EntityManager.js';
+import { readEmpirePoolPlan, empireFleetHulls, fleetRegrowthPerYear, readEmpireFleetSnapshot, fleetGuardsPerBody } from '../utils/FleetLimit.js';
+import { isGuardHull, isAtGuardPost, readGuardPosts } from '../utils/GuardPostPlanner.js';
 
 // Lustro `GarrisonSystem`: `gameTime` to suma kroków zmiennoprzecinkowych — bez tolerancji granica roku spóźniałaby się.
 const YEAR_EPS = 1e-9;
 const calendarYear = (gameTime) => Math.floor(gameTime + YEAR_EPS);
+/** Miesiąc kalendarzowy (rok gry / 12 — 1 rok cywilizacyjny) — granica kontroli stanowisk strażników. */
+const calendarMonth = (gameTime) => Math.floor(gameTime * 12 + YEAR_EPS);
 
 export class FleetPoolSystem {
   constructor() {
@@ -49,10 +61,12 @@ export class FleetPoolSystem {
     this._reconciled = false;
     /** Ostatni rok kalendarzowy uzgodnienia rocznego w tej sesji (`null` = jeszcze nie ustawiony). */
     this._reconciledYear = null;
+    /** S2 — ostatni miesiąc kalendarzowy kontroli stanowisk strażników w tej sesji (`null` = jeszcze nie ustawiony). */
+    this._guardMonth = null;
 
     this._onWarDeclared = ({ empireId } = {}) => { this.mobilizeEmpire(empireId, 'war_declared'); };
     this._onFirstTick   = () => this._firstTick();
-    this._onTick        = () => this._yearlyCheck();
+    this._onTick        = () => { this._yearlyCheck(); this._monthlyGuardCheck(); };
     EventBus.on('diplomacy:warDeclared', this._onWarDeclared);
     EventBus.on('time:tick', this._onFirstTick);
     EventBus.on('time:tick', this._onTick);
@@ -156,7 +170,9 @@ export class FleetPoolSystem {
     EventBus.emit('fleetPool:mobilized', {
       empireId, ...record, capitalId: plan.capitalId, vesselIds, templates: [...plan.add], wokenIds: wake.woken,
     });
-    return { ok: true, empireId, vesselIds, refused, plan, wokenIds: wake.woken };
+    // SB33 — strażnicy obejmują stanowiska W CHWILI mobilizacji (kadłub w służbie przy stolicy; brak — pierwszy miesiąc).
+    const guards = this.stationGuards(empireId, 'mobilization');
+    return { ok: true, empireId, vesselIds, refused, plan, wokenIds: wake.woken, guards };
   }
 
   /**
@@ -175,6 +191,144 @@ export class FleetPoolSystem {
       if (res?.ok) woken.push(v.id); else refused.push(`${v.id}:${res?.reason ?? 'unknown'}`);
     }
     return { woken, refused };
+  }
+
+  // ── Strażnicy (S2 — SB30, SB31, SB33, SB34) ──────────────────────────────────────────
+
+  /**
+   * Stanowiska strażników imperium — jedno wejście (mobilizacja, kontrola miesięczna):
+   *  1. stanowisko NIGDY nieobsadzone (mniej wpisów rosteru dla ciała niż `fleetGuardsPerBody`) — kadłub-strażnik
+   *     (`isGuardHull`) zadokowany przy stolicy, bez misji, rozkazu i roli patrolu (najpierw bez roli, potem z garnizonu
+   *     `defend_home`), idzie na stanowisko i wchodzi do rosteru;
+   *  2. strażnik, który zszedł ze stanowiska (dok, inne ciało, dryf — bez misji i rozkazu, poza starciem), wraca na nie;
+   *  0. przed tym — `fleetGuardsPerBody` obniżone: nadmiarowe wpisy ciała zwolnione (`_trimPosts`).
+   * Poza tym strażnik nie dostaje żadnego rozkazu — trzyma orbitę i nie ściga.
+   * @param {string} empireId
+   * @param {string} [trigger] — `'mobilization'` | `'monthly'`
+   * @returns {{ok:true, posted:string[], returned:string[], released:Array<string|null>} | {ok:false, reason:string}}
+   *   powody: `disabled` · `unknown_empire` · `not_mobilized` · `no_doctrine` (brak `directorDoctrine`) · `no_capital`
+   */
+  stationGuards(empireId, trigger = 'monthly') {
+    if (!this.enabled) return { ok: false, reason: 'disabled' };
+    const K = this._K();
+    const dd = K?.directorDoctrine;
+    const vm = K?.vesselManager;
+    if (!empireId || empireId === 'player' || !K?.empireRegistry?.get?.(empireId)) return { ok: false, reason: 'unknown_empire' };
+    if (!this.isMobilized(empireId)) return { ok: false, reason: 'not_mobilized' };
+    if (typeof dd?.guardRoster !== 'function' || typeof vm?.undockToOrbit !== 'function') return { ok: false, reason: 'no_doctrine' };
+    const posts = readGuardPosts(K, empireId, fleetGuardsPerBody());
+    if (!posts.capitalId) return { ok: false, reason: 'no_capital' };
+    const year = K?.timeSystem?.gameTime ?? null;
+    const roster = dd.guardRoster(empireId);
+    const posted = [], returned = [];
+    const released = this._trimPosts(empireId, roster, posts, trigger, year);
+    for (const { bodyId } of posts.bodies) {
+      for (let k = roster.filter((e) => e.bodyId === bodyId).length; k < posts.perBody; k++) {
+        const hull = this._pickGuardHull(empireId, posts.capitalId, roster);
+        if (!hull || !this._sendToPost(hull, bodyId)) break;
+        roster.push({ bodyId, vesselId: hull.id, sinceYear: year, lostYear: null });
+        posted.push(hull.id);
+        EventBus.emit('fleetGuard:posted', { empireId, bodyId, vesselId: hull.id, trigger, year });
+      }
+    }
+    for (const e of roster) {
+      const v = e.vesselId ? vm.getVessel?.(e.vesselId) : null;
+      if (!isGuardHull(v, empireId) || isAtGuardPost(v, e.bodyId) || posted.includes(v.id)) continue;
+      if (v.mission || v.movementOrder || v.pendingOrder || this._inEncounter(v.id)) continue;
+      if (!this._sendToPost(v, e.bodyId)) continue;
+      returned.push(v.id);
+      EventBus.emit('fleetGuard:returnOrdered', { empireId, bodyId: e.bodyId, vesselId: v.id, trigger, year });
+    }
+    dd.setGuardRoster(empireId, roster, `fleet_guard_${trigger}`);
+    return { ok: true, posted, returned, released };
+  }
+
+  /**
+   * `fleetGuardsPerBody` obniżone z konsoli: nadmiarowe wpisy ciała zwolnione — najpierw stanowiska bez żywego strażnika,
+   * potem najnowsze. Kadłub zostaje tam, gdzie stoi, bez roli strażnika (doktryny mogą go wziąć jak każdy inny).
+   * @returns {Array<string|null>} id zwolnionych kadłubów
+   */
+  _trimPosts(empireId, roster, posts, trigger, year) {
+    const vm = this._K()?.vesselManager;
+    const live = (e) => !!e.vesselId && isGuardHull(vm?.getVessel?.(e.vesselId), empireId);
+    const released = [];
+    for (const { bodyId } of posts.bodies) {
+      const mine = roster.filter((e) => e.bodyId === bodyId);
+      const surplus = mine.length - posts.perBody;
+      if (surplus <= 0) continue;
+      const order = [...mine].sort((a, b) => (Number(live(a)) - Number(live(b))) || ((b.sinceYear ?? 0) - (a.sinceYear ?? 0)));
+      for (const e of order.slice(0, surplus)) {
+        roster.splice(roster.indexOf(e), 1);
+        released.push(e.vesselId ?? null);
+        EventBus.emit('fleetGuard:released', { empireId, bodyId, vesselId: e.vesselId ?? null, reason: 'tuning', trigger, year });
+      }
+    }
+    return released;
+  }
+
+  /**
+   * Kadłub na stanowisko: kadłub-strażnik imperium (SB30) zadokowany przy stolicy, bez misji, rozkazu i composite'u, spoza
+   * rosteru strażników i spoza patrolu; najpierw bez roli, potem z garnizonu `defend_home` (stoi w doku przy stolicy).
+   * Kolejność: kolejność rejestru statków (deterministyczna).
+   */
+  _pickGuardHull(empireId, capitalId, roster) {
+    const K = this._K();
+    const dd = K?.directorDoctrine;
+    const taken = new Set(roster.map((e) => e.vesselId).filter(Boolean));
+    const free = [], garrison = [];
+    for (const v of K?.vesselManager?.getAllVessels?.() ?? []) {
+      if (!isGuardHull(v, empireId) || taken.has(v.id)) continue;
+      if (v.position?.state !== 'docked' || v.position?.dockedAt !== capitalId) continue;
+      if (v.mission || v.movementOrder || v.pendingOrder) continue;
+      const role = dd?.doctrineRoleOf?.(empireId, v.id) ?? null;
+      if (role === null) free.push(v);
+      else if (role === 'defend_home') garrison.push(v);
+    }
+    return free[0] ?? garrison[0] ?? null;
+  }
+
+  /**
+   * Strażnik na stanowisko: zadokowany przy ciele stanowiska — orbita (`undockToOrbit`); gdzie indziej — rozkaz
+   * `moveToPoint` na ciało (wzór doktryny `_sendOnPatrol`: ciało + punkt zapasowy, `bypassFuelCheck`, decyzja 12 W1-5).
+   * @returns {boolean}
+   */
+  _sendToPost(v, bodyId) {
+    const K = this._K();
+    if (v.position?.state === 'docked' && v.position?.dockedAt === bodyId) return K?.vesselManager?.undockToOrbit?.(v.id) === true;
+    const mos = K?.movementOrderSystem;
+    const body = EntityManager.get(bodyId);
+    if (typeof mos?.issueOrder !== 'function' || !body) return false;
+    const res = mos.issueOrder(v.id, {
+      type: 'moveToPoint', targetBodyId: bodyId, targetPoint: { x: body.x ?? 0, y: body.y ?? 0 },
+      issuedBy: 'fleet_guard', bypassFuelCheck: true,
+    });
+    return res?.ok === true;
+  }
+
+  /** Czy kadłub jest w AKTYWNYM starciu (leniwy odczyt DSCS — wzór `DirectorOffensive._inActiveEncounter`). */
+  _inEncounter(vesselId) {
+    const dscs = this._K()?.deepSpaceCombatSystem;
+    return typeof dscs?._findActiveEncounterContaining === 'function' && !!dscs._findActiveEncounterContaining(vesselId);
+  }
+
+  /**
+   * Kontrola stanowisk strażników na granicy miesiąca kalendarzowego (rok gry / 12), dla każdego imperium z pulą: obsadza
+   * stanowiska nigdy nieobsadzone (przy mobilizacji mogło nie być kadłuba w służbie) i zawraca strażników na stanowiska.
+   * Pierwszy tick sesji tylko ustawia miesiąc (lustro kontroli rocznej).
+   */
+  _monthlyGuardCheck() {
+    if (!this.enabled) return;
+    const K = this._K();
+    const reg = K?.empireRegistry;
+    const now = K?.timeSystem?.gameTime;
+    if (typeof reg?.listAll !== 'function' || !Number.isFinite(now)) return;
+    const month = calendarMonth(now);
+    if (this._guardMonth === null) { this._guardMonth = month; return; }
+    if (month <= this._guardMonth) return;
+    this._guardMonth = month;
+    for (const emp of reg.listAll()) {
+      if (emp?.id && this.isMobilized(emp.id)) this.stationGuards(emp.id, 'monthly');
+    }
   }
 
   // ── Odrastanie (SB15) ────────────────────────────────────────────────────────────────

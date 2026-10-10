@@ -153,6 +153,12 @@ const TRACKED_EVENTS = [
   //   (`regrowthSkipped`: reparations / create_failed) — bez tej pary gate nie odróżniłby „limit pełny” od „nie wykonało się”.
   'fleetPool:regrown',
   'fleetPool:regrowthSkipped',
+  // AI STRIKES BACK S2 (SB30, SB33) — strażnicy: stanowisko obsadzone (`posted`: kadłub, ciało, wejście) i strażnik
+  //   zawrócony na stanowisko (`returnOrdered`) — bez tej pary gate nie odróżniłby „brak kadłuba” od „nic nie biegnie”.
+  'fleetGuard:posted',
+  'fleetGuard:returnOrdered',
+  // …i stanowisko zwolnione (`released`: obniżone `fleetGuardsPerBody`) — kadłub zostaje, gdzie stoi, bez roli strażnika.
+  'fleetGuard:released',
 ];
 
 class DebugLog {

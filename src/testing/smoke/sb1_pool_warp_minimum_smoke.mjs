@@ -84,9 +84,11 @@ console.log('\nM3 — mobilizacja: pula osiąga minimum z bakiem w chwili utworz
   declare(w.K, e1);
   const pool = poolOf(w, e1);
   const flag = w.K.empireRegistry.get(e1)?.fleetPool ?? null;
+  // ⚠ SB33 (przecelowanie R-S2-3b) — defender z puli obejmuje stanowisko strażnika NA ORBICIE stolicy w chwili mobilizacji.
+  const capM3 = w.K.directorProduction.capitalOf(e1)?.planetId;
   assert(lim === 2 && same(pool.map((v) => v.directorOrigin), [D, E, E]) && pool.filter((v) => (v.warpFuel?.max ?? 0) > 0).length === 2
-    && pool.every((v) => v.serviceState === 'active' && v.position?.state === 'docked'),
-    `M3a: limit ${lim}, wojna → pula D, E, E od razu, 2 z bakiem, w służbie, w doku (${pool.map((v) => v.directorOrigin.split('_')[1]).join(', ')})`);
+    && pool.every((v) => v.serviceState === 'active' && v.position?.dockedAt === capM3 && v.position?.state === (v.directorOrigin === D ? 'orbiting' : 'docked')),
+    `M3a: limit ${lim}, wojna → pula D, E, E od razu, 2 z bakiem, w służbie — defender na orbicie stolicy (strażnik, SB33), eskorty w doku (${pool.map((v) => v.directorOrigin.split('_')[1]).join(', ')})`);
   assert(flag?.planned === 3 && flag?.created === 3 && flag?.missingWarpTemplate === 0,
     `M3b: rekord mobilizacji — planned 3, created 3, brak z bakiem 0 (${JSON.stringify({ p: flag?.planned, c: flag?.created, m: flag?.missingWarpTemplate })})`);
   run(w, 13);                                                   // granica roku 1 (rok 0 → 1,08)

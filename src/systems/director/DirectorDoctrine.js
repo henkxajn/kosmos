@@ -223,14 +223,58 @@ export class DirectorDoctrine {
       { ...prev, defend_home: defend, patrol_border: patrol }, 'director_doctrine_prune');
   }
 
-  /** Czy okręt ma już JAKĄKOLWIEK rolę w doktrynach tego imperium. */
+  /** Czy okręt ma już JAKĄKOLWIEK rolę w doktrynach tego imperium (także strażnika — SB31). */
   _hasAnyDoctrine(empireId, vesselId) {
+    return this.doctrineRoleOf(empireId, vesselId) !== null;
+  }
+
+  // ── Strażnicy (AI STRIKES BACK S2 — SB30, SB31, SB33) ─────────────────────────────────────────
+
+  /**
+   * Rola okrętu w stanie doktryn imperium: `'guard'` | `'defend_home'` | `'patrol_border'` | `null`.
+   * ⚠ Strażnik (SB31) nie dostaje doktryny ani `defend_home`, ani `patrol_border` — `_idleArmedAtCapital` pyta tędy.
+   */
+  doctrineRoleOf(empireId, vesselId) {
     const rec = DirectorDoctrine.get(empireId);
-    if (!rec) return false;
+    if (!rec || !vesselId) return null;
+    if (Array.isArray(rec.guard) && rec.guard.some((e) => e?.vesselId === vesselId)) return 'guard';
     for (const key of ['defend_home', 'patrol_border']) {
-      if (Array.isArray(rec[key]) && rec[key].includes(vesselId)) return true;
+      if (Array.isArray(rec[key]) && rec[key].includes(vesselId)) return key;
     }
-    return false;
+    return null;
+  }
+
+  /**
+   * SB31 — roster STRAŻNIKÓW imperium (`director.doctrine.<id>.guard`) — kopia. Wpis = stanowisko obsadzone kiedykolwiek:
+   * `{ bodyId, vesselId, sinceYear, lostYear }`. Klucz `director` jest zadeklarowany w `GameState`, więc roster jedzie
+   * w zapisie bez migracji (save v101); zapis bez pola = pusty roster.
+   */
+  guardRoster(empireId) {
+    const list = DirectorDoctrine.get(empireId)?.guard;
+    return Array.isArray(list) ? list.map((e) => ({ ...e })) : [];
+  }
+
+  /** Czy okręt jest strażnikiem imperium (stoi w rosterze `guard`). */
+  isGuard(empireId, vesselId) {
+    return this.doctrineRoleOf(empireId, vesselId) === 'guard';
+  }
+
+  /**
+   * SB31 — zapis rosteru strażników (intencja właściciela stanu; wołający: `FleetPoolSystem`). Okręt w rosterze strażników
+   * wypada z rosterów doktryn (`defend_home`, `patrol_border`) — okręt ma NAJWYŻEJ jedną rolę. Zapis tylko przy zmianie.
+   * @returns {boolean} czy coś zapisano
+   */
+  setGuardRoster(empireId, list, reason = 'director_guard') {
+    const prev = DirectorDoctrine.get(empireId) ?? {};
+    const guard = (Array.isArray(list) ? list : []).map((e) => ({ ...e }));
+    const ids = new Set(guard.map((e) => e.vesselId).filter(Boolean));
+    const next = { ...prev, guard };
+    for (const key of ['defend_home', 'patrol_border']) {
+      if (Array.isArray(prev[key])) next[key] = prev[key].filter((id) => !ids.has(id));
+    }
+    if (JSON.stringify(next) === JSON.stringify(prev)) return false;
+    gameState.set(`director.doctrine.${empireId}`, next, reason);
+    return true;
   }
 
   /** Stolica WYŁĄCZNIE przez kanoniczny akcesor — reguła skryptów gate'ów. */

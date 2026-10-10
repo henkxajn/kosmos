@@ -293,6 +293,9 @@ function cargoUnloadClick(w, col, { force = false } = {}) {
   const col = w.aiFull[0];
   const emp = col.ownerEmpireId;
   const t = landTile(col);
+  // AI STRIKES BACK S2 (SB33, SB34; przecelowanie R-S2-3a) — od S2 wojna stawia strażnika NA ORBICIE stolicy AI (to ciało),
+  //   a ten odbiera graczowi dominację w całym układzie; scena mierzy bramkę WOJNY — setup wyłącza pulę (narzędzie testów).
+  w.K.fleetPoolSystem.enabled = false;
   w.dipl.declareWar(emp, 'g2_2_w2');
   assert(w.dipl.getStatus(emp) === 'war', `świadek: wojna z ${emp} (status ${w.dipl.getStatus(emp)})`);
   const o = tryAllPaths(w, col.planetId, t.q, t.r);
@@ -457,6 +460,9 @@ function standOnCapital(war, archetypeId) {
     const [c1, c2] = w.aiFull;
     const e1 = c1.ownerEmpireId, e2 = c2.ownerEmpireId;      // PRZED przerzutem — `c1` mutuje w miejscu
     const t = landTile(c1);
+    // AI STRIKES BACK S2 (SB33, SB34; przecelowanie R-S2-3a) — od S2 wojna stawia strażnika NA ORBICIE stolicy AI (to ciało),
+    //   a ten odbiera graczowi dominację w całym układzie; scena mierzy bramkę WOJNY — setup wyłącza pulę (narzędzie testów).
+    w.K.fleetPoolSystem.enabled = false;
     w.dipl.declareWar(e1, 'g2_2_w8');
     const v = playerShip(w);
     const { u, loaded } = loadedUnit(w, v);
@@ -550,6 +556,9 @@ function standOnCapital(war, archetypeId) {
     const col = w.aiFull[0];
     const emp = col.ownerEmpireId;
     const t = landTile(col);
+    // AI STRIKES BACK S2 (SB33, SB34; przecelowanie R-S2-3a) — od S2 wojna stawia strażnika NA ORBICIE stolicy AI (to ciało),
+    //   a ten odbiera graczowi dominację w całym układzie; scena mierzy bramkę WOJNY — setup wyłącza pulę (narzędzie testów).
+    w.K.fleetPoolSystem.enabled = false;
     w.dipl.declareWar(emp, 'g2_2_w11');
     assert(w.dipl.getStatus(emp) === 'war' && !!t,
       `świadek: wojna z ${emp}, ciało ${col.planetId}, kafel lądowy (${t?.q},${t?.r})`);

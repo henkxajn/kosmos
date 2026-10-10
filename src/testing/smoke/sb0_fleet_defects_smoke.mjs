@@ -300,6 +300,9 @@ console.log('T4 — 393/394: dominację gracza odbiera tylko kadłub AI, z któr
   const K = window.KOSMOS;
   const ws = core.warSystem;
   const emp = core.empireRegistry.listAll()[0]?.id;
+  // AI STRIKES BACK S2 (SB33, SB34; przecelowanie R-S2-3a) — od S2 wojna stawia strażnika z puli NA ORBICIE tej stolicy; scena
+  //   mierzy predykat dominacji na kadłubach stawianych ręcznie (tło: „bez kadłubów AI w układzie”) — setup wyłącza pulę.
+  K.fleetPoolSystem.enabled = false;
   K.diplomacySystem.declareWar(emp, 'keeper_setup');
   const cap = capitalOf(core, emp);
   const C = EntityManager.get(cap.planetId);
@@ -473,6 +476,9 @@ console.log('T7 — S0-3b: zapamiętany kontroler INNEJ strony sam nie odbiera d
   const K = window.KOSMOS;
   const ws = core.warSystem;
   const emp = core.empireRegistry.listAll()[0]?.id;
+  // AI STRIKES BACK S2 (SB33, SB34; przecelowanie R-S2-3a) — od S2 wojna stawia strażnika z puli NA ORBICIE tej stolicy; scena
+  //   mierzy predykat dominacji na kadłubach stawianych ręcznie (tło: „bez kadłubów AI w układzie”) — setup wyłącza pulę.
+  K.fleetPoolSystem.enabled = false;
   K.diplomacySystem.declareWar(emp, 'keeper_setup');
   const cap = capitalOf(core, emp);
   const C = EntityManager.get(cap.planetId);
