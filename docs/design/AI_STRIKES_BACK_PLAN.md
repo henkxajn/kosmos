@@ -4,7 +4,7 @@
 > **SB1–SB12** podpisane przez właściciela **2026-10-06**; **SB13–SB19** — tego samego dnia, przy zamknięciu S0;
 > **SB20–SB25** — **2026-10-07**, odpowiedzi na pytania sesji 1 S1; **SB26–SB29** — **2026-10-08**, odpowiedzi na
 > pytania sesji 2 S1; **SB30–SB36** — **2026-10-08**, podpis S2 (§2); **SB37–SB38** — **2026-10-10**, przy zamknięciu
-> S2 (§2).
+> S2 (§2); **SB39–SB44** — **2026-10-10**, podpis S2b — poprawki przed S3 (§2).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
@@ -19,13 +19,16 @@
 > na przecelowanie **R-S2-3** — `bf498d1` (414, SB36) · `013fd75` (406, SB35) · `d3fc782` (strażnik stolicy + R-S2-3;
 > SB30, SB31, SB33, SB34) · `17c60f3` (drugie ciało, SB32) · `0eaa105` (zastępstwo i odczyt, SB33). Sesja 1 — §5f;
 > zamknięcie, audyt 416 i ustaleń bramki — §5g; decyzje **SB37–SB38**; Findingi **417–419** — §6.
+> ⏳ **S2b — poprawki przed S3 (Findingi 416, 417, 418, 419, 415; SB39–SB44) — PRZYGOTOWANE 2026-10-11, NIE zacommitowane:**
+> łańcuch B1–B5 zestagowany w repo, bramka w przeglądarce `gate/GATE_S2B.md` (poza repo); audyt, pomiary, pytania — §5h;
+> nowe Findingi **420–425** — §6.
 > **S3–S4** — nierozpoczęte.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
-> **Rejestr macierzysty findingów #391–#419:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
+> **Rejestr macierzysty findingów #391–#425:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#391–#396 na `8b72c47`, #397–#406 na `eb6c06e`, #412–#413 na
-> `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`) ·
+> `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`, #420–#425 na `f3fb8e0` i na łańcuchu S2b) ·
 > `[measured]` — wykonane i policzone ·
 > `[git]` — historia commitów · `[doc]` — przepisane z dokumentu, bez ponownego pomiaru · `[doc: audyt fazy A]` —
 > z raportu fazy A (`AI_STRIKES_BACK_AUDIT.md`; sondy i wyniki poza repo,
@@ -108,6 +111,12 @@ W kolejności właściciela:
 | **SB36** | **Rejestracja 414 i 415; 414 naprawiany w S2 osobnym commitem; 415 — wyłącznie raport.** **2026-10-08**. | ✅ `bf498d1` (414); §6. |
 | **SB37** | **Strażnik zepchnięty ze stanowiska wraca na orbitę na granicy miesiąca** (po odwrocie, z doku, z innego ciała) — zostaje tak, jak zbudowano. Odpowiedź na pytanie 2 sesji 1 S2 (§5f.7), **2026-10-10**. | ✅ `d3fc782` (`FleetPoolSystem.stationGuards`, pętla powrotu; keeper `sb2_capital_guard_smoke` G4); bramka S2, kroki 19–21 (§5g.2). |
 | **SB38** | **Przy obsadzaniu stanowisk pierwszeństwo ma stolica:** utracone stanowisko stolicy rezerwuje pierwszy kadłub-strażnik z doku, drugie ciało dostaje kadłub dopiero, gdy jest kolejny — zostaje tak, jak zbudowano. Odpowiedź na pytanie 3, **2026-10-10**. | ✅ `0eaa105` (`_pickGuardHull` z parametrem `skip`, rezerwa w `stationGuards`; keeper `sb2_guard_replacement_smoke`). |
+| **SB39** | **Finding 416 naprawiony przed S3:** lot do ciała przylatuje WTEDY i TAM, gdzie ciało — bez spóźnienia wobec pokazanego ETA i bez przeskoku. Dotyczy rozkazu `moveToPoint`, wznowienia misji po bitwie i pościgu `engage` za celem zadokowanym albo na orbicie (pościg idzie za ruchem ciała). **2026-10-10**. | ⏳ S2b-1 (przygotowane, §5h.2). |
+| **SB40** | **Finding 417:** wrak nigdy się nie rusza, nigdy nie wznawia misji, nigdy nie dokuje. **2026-10-10**. | ⏳ S2b-2 (przygotowane, §5h.2). |
+| **SB41** | **Finding 418:** jednostki naziemne w ładowni giną, gdy statek staje się wrakiem — z tym samym rozliczeniem co każda śmierć jednostki; `dropTroop` odmawia wrakowi; otwarty tryb zrzutu nad wrakiem się zamyka. **2026-10-10**. | ⏳ S2b-3 (przygotowane, §5h.2). |
+| **SB42** | **Finding 419:** każde starcie ma unikalny identyfikator; żaden statek nie zostaje zamrożony po końcu swojego starcia. **2026-10-10**. | ⏳ S2b-4 (przygotowane, §5h.2). |
+| **SB43** | **Finding 415:** pierścień ruchu rysowany wyłącznie dla statku z oglądanego układu, a dla statku spoza floty gracza — tylko gdy wykrycie gracza go pokazuje. **2026-10-10**. | ⏳ S2b-5 (przygotowane, §5h.2). |
+| **SB44** | **Finding 151 NIE w tym slice'ie** — rozstrzygany w S3 razem z ostrzeżeniem o nadlatującej flocie. **2026-10-10**. | Kod nietknięty (§5h.2). |
 
 ---
 
@@ -947,9 +956,142 @@ patrolu **zostaje** · 5 — Finding 416: **audyt teraz** (§5g.3) · 6 — bram
 2. **417, 418, 419** — kiedy (przed S3, razem z 416, czy w S3)?
 3. **Bramka S3** — kroki czasu z walką w trybie klatek (C1)?
 
+→ Odpowiedzi 2026-10-10 (polecenie S2b): 1 — tak, przed S3 (**SB39**); 2 — przed S3, w tym samym slice'ie (**SB40–SB42**);
+3 — tak: w przyrządzie każdy krok czasu, w którym liczy się walka albo ruch, idzie w trybie klatek (§5h).
+
 #### 5g.7 Następny: S3
 
-Eskadra z transportowcem, desant po wygranej orbicie, odbijanie, fale (SB7, SB8, SB11, SB22, SB23) — po decyzji o 416–419.
+Eskadra z transportowcem, desant po wygranej orbicie, odbijanie, fale (SB7, SB8, SB11, SB22, SB23) — po S2b (§5h).
+
+### 5h. S2b — poprawki przed S3 (2026-10-10/11): 416, 417, 418, 419, 415 — łańcuch PRZYGOTOWANY, NIE zacommitowany
+
+Polecenie właściciela (2026-10-10, decyzje **SB39–SB44**): audyt, pięć poprawek jako łańcuch zestagowany (**STOP przed
+commitem**), pomiar, bramka w przeglądarce, dokumentacja. Zapis **v101 bez migracji**; klucze i18n dodane / usunięte:
+**0 / 0** (`drop.failed` i `vessel.reasonVesselIsWreck` istniały). Sondy, wyniki, łatki, skrypty i notatka przekazania:
+`kosmos-handover/ai-strikes-back-s2b/` (poza repo). Kotwica: HEAD `f3fb8e0`, sweep **278/278**, `check-i18n` 3456.
+
+#### 5h.1 Audyt (część A) `[code]` `[git]`
+
+- **416:** rodziny ścieżek wymagające zmiany wg SB39 — **trzy** (próg „więcej niż trzy” nieprzekroczony): **R1** rozkaz
+  `moveToPoint` na ciało (z wariantem floty `_arrivalSyncYear`; producenci: PPM, uderzenie, dok, odwrót, Powrót, dostawa po
+  warpie, recall AI, doktryny, lot strażnika), **R2** wznowienie misji (`_resumeMissionAfterOrder` — po bitwie i po
+  rozkazie), **R3** pościg `engage`. Wspólny korzeń: `_predictPosition` liczy pozycję ciała na JEDNĄ chwilę, żadna ścieżka
+  nie szukała chwili, w której statek i ciało są w tym samym miejscu, a prędkość kadłuba zadokowanego i orbitującego jest
+  co tik zerowana. Poza SB39 — raport, nietknięte: misje `MissionSystem` i kurierzy AI (R4 → **422**), `intercept`
+  (R5 → **423**), eskorta (R6, rodzina 264). Historia: predykcja raz — `5ec0e1f`; `arrivalYear` z trasy i
+  `_arrivalSyncYear` — `113f9a0`; wznowienie — `ed7ea3e`; pościg `engage` — `e91dabc`.
+- **417:** misję wraku wznawia wyłącznie `VesselManager._resumeMissionAfterOrder` (subskrypcje `orderCompleted` /
+  `orderCancelled` / `orderBlocked`; `_onVesselWrecked` w MOS anuluje rozkaz wraku), a `_updatePositions` prowadził wrak
+  z misją jak lot i dokował przy przylocie. Bramki wraku: MOS `issueOrder`, `dispatchOnMission`, `dispatchInterstellar`,
+  utrzymanie; `redispatchFromOrbit` bez bramki — utajone (→ **425**).
+- **418:** jednostki w ładowni giną ze statkiem wyłącznie w `destroyVessel` (`groundUnit:destroyed`, `transport_lost`,
+  `1384452`); wrak tamtędy nie przechodził, `_tickWreckCleanup` (`61756be`) kasował wrak z pominięciem `destroyVessel`.
+- **419:** `_makeEncounterId` = rok z 2 miejscami + strony (`59701be`); bliźniak `VesselCombatSystem._makeBattleId` na
+  ścieżce wycofania (→ **424**).
+- **415:** `_spawnMovementPulse` bez bramki układu i wywiadu (`8da65ed`); wzór bramek: sprite statku (`:797-800`) i jego
+  wywiad (`_applyVesselIntelVisibility`).
+
+#### 5h.2 Łańcuch B1–B5 (część B) — przygotowany, zestagowany, NIE zacommitowany
+
+Zmierzony w świeżym klonie poza repo na `f3fb8e0`; drzewa kroków odtworzone na commicie tej dokumentacji —
+`patches/trees.txt` w folderze przekazania (podrzewo `src` identyczne).
+
+| krok | temat | keeper NEW (asercje) · fail-first na poprzednim kroku `[measured]` | sweep · `check-i18n` `[measured]` |
+|---|---|---|---|
+| B1 | **416** (SB39): `VesselManager._interceptBody` + `_bodyMotionBound` — czas przechwycenia ciała (pierwsza chwila, w której trasa do pozycji ciała mieści się w prędkości statku: przeszukanie w przód krokiem zachowawczym, vMax ciała z Keplera, potem bisekcja; najpierw linia prosta, potem trasa; `notBefore` — przylot floty nie wcześniej niż synchronizacja); `_issueMoveToPoint` i `_resumeMissionAfterOrder` — punkt i `arrivalYear` z przechwycenia; `_tickEngageOrder` + `_bodyChasePoint` — pościg za celem przy ciele z ruchu ciała | `sb2b_body_intercept_smoke` 20 · na `f3fb8e0` 11 / 9 | 279/279 · PASS 3456 |
+| B2 | **417** (SB40): `_resumeMissionAfterOrder` — wrak zdejmuje migawkę i wraca; `_updatePositions` — wrak bez ciała nie jest prowadzony (orbita cmentarna przy ciele bez zmian) | `sb2b_wreck_still_smoke` 11 · 5 / 6 | 280/280 · PASS 3456 |
+| B3 | **418** (SB41): `vessel:wrecked` → `_killCargoGroundUnits` (`groundUnit:destroyed`, `transport_lost`, przed `removeUnit` — rozliczenie POP jak każda śmierć) — ta sama droga w `destroyVessel` i `_tickWreckCleanup`; `dropTroop` odmawia `vessel_is_wreck` (NEW `VESSEL_IS_WRECK`); `ColonyOverlay._closeDropModeOnWreck` zamyka otwarty tryb zrzutu z powodem | `sb2b_wreck_cargo_smoke` 17 · 8 / 9 | 281/281 · PASS 3456 |
+| B4 | **419** (SB42): `_makeEncounterId` — sufiks `_2`, `_3`…, gdy id zajęte w `_activeEncounters` albo w `gameState.battles` (format bez sufiksu bez zmian) | `sb2b_encounter_id_smoke` 8 · 3 / 5 | 282/282 · PASS 3456 |
+| B5 | **415** (SB43): NEW `isMovementPulseVisible` (`VesselFxLogic.js`) + bramka na wejściu `_spawnMovementPulse` — układ statku (w skoku warp: układ startu) = oglądany; statek spoza floty gracza tylko przy wywiadzie ≥ `contact` | `sb2b_pulse_scope_smoke` 10 · 1 / 9 | 283/283 · PASS 3456 |
+
+Czerwone w fail-first — dokładnie piny naprawy; zielone po obu stronach — kontrole. Żaden istniejący keeper nie został
+zmieniony; propozycji przecelowania (`*.PROPOSED`) brak. numstat `[git]` (żaden plik nie jest przewrócony): B1
+`MovementOrderSystem.js` 46/7, `VesselManager.js` 99/2 · B2 `VesselManager.js` 12/0 · B3 `Vessel.js` 5/0,
+`VesselManager.js` 38/21, `ColonyOverlay.js` 16/1 · B4 `DeepSpaceCombatSystem.js` 14/2 · B5 `ThreeRenderer.js` 12/1,
+`VesselFxLogic.js` 13/0; keepery 314 / 176 / 209 / 150 / 81 linii. EOL: pliki CRLF w drzewie właściciela (`Vessel.js`,
+`ColonyOverlay.js`, `ThreeRenderer.js`) zostają CRLF, LF — LF (skrypt stagingu sprawdza).
+⚠ **Korekta w sesji (pomiar przed stagingiem):** pierwsza wersja B1 przy synchronizacji floty nieosiągalnej w chwili
+`_arrivalSyncYear` wracała do WŁASNEGO najwcześniejszego przechwycenia członka — także WCZEŚNIEJ niż synchronizacja (scena
+floty, 4/10 przebiegów, r4: przyloty 0,88–1,03 roku przy synchronizacji 1,795). Kontrakt synchronizacji floty mówi, że nikt
+nie przylatuje przed nią — poprawione (`notBefore`, keeper T6b–T6c) przed stagingiem; łańcuch zawiera wyłącznie wersję
+poprawioną.
+⚠ **B3 — kształt kodu, nie przecelowanie:** pierwsza wersja (warunek wstawiony przy subskrypcjach `ColonyOverlay`)
+czerwieniła dwa źródłowe piny „pierwsze wystąpienie” (`colony_order_guard` G4, `ground_troops_reachable` T5); kod
+przeniesiony do metody po `_finishDropMode` — oba piny zielone bez edycji.
+
+#### 5h.3 Pomiary (część C) — fixture GATE-S4, prawdziwa gra (izolowany headless Chrome), CZAS W TRYBIE KLATEK `[measured]`
+
+Klatka co ~16 ms realnych, `TimeSystem.update(dt)`, `dt` ≤ 100 ms, 1m/s, auto-slow przy walce, okno wyniku = „OK”; nigdy
+krok miesięczny (C1, §5g.4). Przebiegi „po” na łańcuchu S2b; pomiary 12 kątów, `v_21`, `engage`, lotów AI i bitew
+3 fregat — na pierwszej wersji B1, która od ostatecznej różni się WYŁĄCZNIE gałęzią synchronizacji floty (bez
+`_arrivalSyncYear` obie dają tę samą liczbę; B2–B5 identyczne — `patch-id`).
+
+**416 — 12 kątów startu** (fregata 1,114 AU/rok, 2 AU od stolicy `emp_001`, `moveToPoint` na ciało; stolica 6,68 AU/rok):
+
+| | przed (`f3fb8e0`) | po (S2b) |
+|---|---|---|
+| lot (lata) | 0,520–3,809 | 0,276–2,643 |
+| przylot − ETA (lata) | ≤ 0,003 | ≤ 0,004 |
+| przeskok na ciało przy przylocie | **0,722–2,815 AU** | **0,001–0,029 AU** |
+
+11 z 12 lotów krótszych; k2 dłuższy (0,52 → 1,51 roku), bo „przylot” przed był skokiem o 0,87 AU.
+**Rozkaz właściciela** (`v_21` z doku → HD-4177 f, `OrderService.issueMove`, rozkaz w 61,284): przed — ETA 65,753, przylot
+65,753, przeskok **6,562 AU**; po — ETA 66,036, przylot 66,037, przeskok **0,002 AU**.
+**`engage` na strażnika na orbicie** (fregata 2 AU od stolicy, pozostałe kadłuby `emp_001` w układzie — wraki narzędziem):
+przed — kąt 0: **0 bitew w 4,1 roku** (min. 0,46 AU), kąt 0,7: bitwa po 3,93 roku; po — starcie po **2,48** i **2,57** roku.
+**Loty AI w wojnie** (bez izolacji, 4,5 roku): patrol `v_26` → `entity_124` (24 AU) — przed przylot − ETA 0,007 roku,
+przeskok 0,047 AU; po 0,000 / 0,000. Lot drugiego strażnika `v_25` → `entity_117` — przed 0,001 / **0,236 AU**; po
+0,004 / 0,019 AU (ruch ciała w jednej klatce). Kurierzy AI (`MissionSystem`, nietknięte): przylot − ETA ≤ 0,006 roku,
+przeskok ≤ 0,010 AU — przed i po.
+**Flota** (3 fregaty, jeden rozkaz floty z `_arrivalSyncYear`; po — ostateczny B1): przylot wszystkich naraz przed 3/9, po
+3/10; ktoś przed synchronizacją 0 / 0; rozrzut przylotów przed 0–0,879 roku (z przeskokiem do 2,66 AU), po 0–0,227 roku
+(→ **420**).
+**Bitwy — 3 fregaty gracza (osobne rozkazy `moveToPoint`) na strażnika stolicy, izolacja, 10 przebiegów:**
+
+| | przed | po |
+|---|---|---|
+| strażnik zniszczony | 6/10 | **0/10** |
+| fregaty stracone | 19/30 | **30/30** |
+| przyloty wraków (417) | 6 | **0** |
+| przebiegi z powtórzonym id starcia (419) | 7/10 | **0/10** (2 starcia z sufiksem) |
+
+Mechanizm (4 + 4 przebiegi z osią czasu bitwy): po — fregaty gracza oddają **0 strzałów** w każdej bitwie, strażnik strzela
+z **0,255–0,299 AU** (rakiety 0,30 AU), laser fregaty sięga 0,05 AU, a statek z misją wstrzymaną na walkę stoi tam, gdzie
+walka się zaczęła; przed — bitwy po „przylocie” (przeskok na ciało) szły z **0,009–0,021 AU**, laser trafia (9/9, 8/8,
+9/10). Zmiana wyniku walki = usunięcie przeskoku, nie zmiana walki (→ **421**). Wariant floty: strażnik zniszczony przed
+5/9, po 3/10; fregaty stracone 16/27 → 22/30; przyloty wraków 7 → 0.
+**419 — osiągalność:** powtórzone id starcia w **12 z 23** przebiegów przed poprawką (3 fregaty 7/10, flota 3/9,
+diagnostyka 2/4); po — **0 z 24**, 11 starć z sufiksem.
+**C1 — uprząż** (pokój, 100 lat, ziarna `default` i `987654321`, warianty passive / press / pressPaid): przed i po (ostateczny
+łańcuch) — **6/6 identyczne** (json i tekst, po zdjęciu czasu wykonania). Żaden wskaźnik się nie ruszył: gospodarka AI (POP,
+fabryki, kolonie, stocznie), kurierzy (`default`: `emp_001` zbudowani 4 / wysłani 36 / dostarczone 32, `emp_002` 4 / 30 / 26;
+`987654321`: 4 / 20 / 16 i 4 / 26 / 22), odcisk floty, siła, nacisk, zaległość gracza.
+
+#### 5h.4 Bramka (część D) — scenariusz poza repo: `gate/GATE_S2B.md`
+
+Gra po ANGIELSKU, fixture GATE-S4, widok układu domowego przez całą bramkę; 25 kroków (jedno źródło `gate_steps_s2b.mjs`,
+walidator i generator dokumentu); każda linia wykonana w prawdziwej grze w trybie klatek — trzy przebiegi na łańcuchu
+(wszystkie z tą samą własnością w każdym kroku), KONTROLA na `f3fb8e0`, 0 błędów konsoli. Kroki: desantowiec z jednostką nad
+strzeżoną stolicą — zniszczony, tryb zrzutu zamyka się napisem `Drop failed: vessel is a wreck`, jednostka `transport_lost`
+(kontrola: tryb otwarty, jednostka w ładowni wraku) · statek z misją wstrzymaną na walkę — wrak stoi 0 AU od miejsca
+zniszczenia przez 5 miesięcy (kontrola: leci, 0,23 → 0,57 AU) · `engage` na strażnika — starcie po 0,90–0,92 roku
+(kontrola: brak przez 3 lata) · `v_21` → HD-4177 f — koniec trasy na planecie w chwili ETA, przeskok 0,003–0,004 AU
+(kontrola: 4,13 AU i przeskok 4,15 AU) · pierścienie w widoku domowym: 2, oba od `v_21` (kontrola: 29, w tym 25 od statków
+AI z `sys_059`). Desantowca nad strzeżoną orbitą nie da się zostawić żywego (zgodnie z zleceniem bramka nie ma kroku
+z jego przetrwaniem).
+
+#### 5h.5 Pytania do właściciela (otwarte po S2b)
+
+1. **Commit łańcucha B1–B5** (`tools/commit_S2b.sh`, po bramce)?
+2. **420** — synchronizacja floty liczona do bieżącej pozycji ciała: dokładne „lądują razem” wymaga liczenia chwili
+   synchronizacji w `FleetSystem` z przechwyceń członków (czwarta rodzina ścieżek — poza progiem zlecenia). Przed S3
+   (eskadra z transportowcem) czy w S3?
+3. **421** — statek z misją wstrzymaną na walkę stoi tam, gdzie walka się zaczęła; bronią krótszego zasięgu niż odległość
+   startu walki nie strzela. Zostaje (do walki służy `engage`), czy walka ma podciągać statek do zasięgu jego broni?
+   Dotyczy S3 (desant po wygranej orbicie, eskorta transportowca).
+4. **422–425** — raport; kiedy?
+5. **SB40** — wrak na orbicie cmentarnej ciała (ścieżka ciała w `_turnIntoWreck`) dalej jedzie z ciałem (keeper T5,
+   KONTROLA) — zostaje?
 
 ---
 
@@ -1257,6 +1399,10 @@ Bramka S2, przebieg 2, krok 22: **8** pierścieni, wszystkie od statków AI (`v_
 (audyt C5, 2026-10-10) `[code]`: na wejściu `_spawnMovementPulse` ta sama bramka układu co subskrybent sprite'a
 (`vessel.systemId !== activeSystemId → return`, `:797-800`) i dla kadłuba wroga ta sama bramka wywiadu co jego sprite
 (`_applyVesselIntelVisibility`); keeperów zagrożonych brak. Bez poprawki (SB36).
+⏳ **S2b-5 (SB43), przygotowane:** NEW `isMovementPulseVisible` (`VesselFxLogic.js`) + bramka na wejściu
+`_spawnMovementPulse` (układ statku = oglądany, w skoku warp — układ startu; statek spoza floty gracza tylko przy wywiadzie
+≥ `contact`); keeper `sb2b_pulse_scope_smoke` 10/10 (fail-first na S2b-4: 1/9). Bramka S2b, krok 17 (widok `sys_home`):
+narysowane 2 (oba od `v_21`), od statków AI z innego układu 0 przy 24–25 wywołaniach; kontrola `f3fb8e0` — 29 `[measured]`.
 
 ### 🟠 416 — rozkaz ruchu na ciało, które krąży szybciej, niż leci statek: przylot w czasie liczonym z trasy do punktu przewidzianego na inną chwilę, przeskok na ciało przy przylocie (opis z M4 „ocalali po bitwie nie docierają do celu” — obalony pomiarem)
 
@@ -1277,6 +1423,10 @@ gracza w układzie domowym (`v_21`, `OrderService.issueMove`, planeta 3,6 AU/rok
 6,53 AU ⇒ osiągalne w normalnej grze. Ten sam korzeń co notatka S0 „`engage` zawisa 0,86–0,88 AU” (pościg liczy
 przechwycenie z `velocity` celu, zerowanej dla kadłuba zadokowanego i orbitującego). Kadłuby AI — ta sama ścieżka.
 Kształt poprawki, keepery zagrożone, rekomendacja — §5g.3. → decyzja właściciela (§5g.6, pytanie 1).
+⏳ **S2b-1 (SB39), przygotowane:** czas przechwycenia ciała (`VesselManager._interceptBody`) w `_issueMoveToPoint`,
+`_resumeMissionAfterOrder` i pościgu `engage` za celem przy ciele (`_bodyChasePoint`); keeper `sb2b_body_intercept_smoke`
+20/20 (fail-first na `f3fb8e0`: 11/9). Pomiar §5h.3: przeskok przy przylocie 0,722–2,815 → 0,001–0,029 AU (12 kątów),
+`v_21` 6,562 → 0,002 AU, `engage` na strażnika: 0 bitew w 4,1 roku → starcie po 2,48–2,57 roku `[measured]`.
 
 ### #417–#419 — zamknięcie S2 (2026-10-10)
 
@@ -1297,6 +1447,10 @@ uprząż: wrak strażnika AI dokończył rozkaz odwrotu na Thuban c. Przylot wra
 `IntelSystem._onVesselArrived` (wrak gracza przechodzi `_isPlayerVessel`). Kształt poprawki: `_resumeMissionAfterOrder` —
 wrak zdejmuje migawkę i wraca (jedno miejsce dla trzech subskrypcji: `orderCompleted`, `orderCancelled`, `orderBlocked`).
 Keepery zagrożone: `ai_combat_mission_pause`, `player_combat_mission_pause`, `order_blocked_resume`. → decyzja właściciela.
+⏳ **S2b-2 (SB40), przygotowane:** `_resumeMissionAfterOrder` — wrak zdejmuje migawkę i wraca; `_updatePositions` — wrak
+bez ciała nie jest prowadzony; keeper `sb2b_wreck_still_smoke` 11/11 (fail-first na S2b-1: 5/6). Pomiar: przyloty wraków
+w scenie 3 fregat 6 → 0 (10 przebiegów); bramka S2b, kroki 9–10: wrak 0 AU od miejsca zniszczenia przez 5 miesięcy
+(kontrola: 0,23 → 0,57 AU w locie) `[measured]`.
 
 ### 🟠 418 — jednostki w ładowni WRAKU żyją, wrak dalej zrzuca, a sprzątanie wraku zostawia je na zawsze
 
@@ -1309,6 +1463,11 @@ z `gu_27` w ładowni, tryb zrzutu otwarty; po przywróceniu dominacji gracza `dr
 `{ok: true}`, jednostka ląduje. Kształt poprawki: na `vessel:wrecked` jednostki w ładowni giną ścieżką `destroyVessel`
 (`groundUnit:destroyed`, rozliczenie POP), tryb zrzutu się zamyka; `dropTroop` odmawia wrakowi. Keepery zagrożone:
 `sb2_drop_dominance`, `ground_unit_loss`, `g1c_pop_loss`. → decyzja właściciela.
+⏳ **S2b-3 (SB41), przygotowane:** `_killCargoGroundUnits` na `vessel:wrecked`, w `destroyVessel` i w `_tickWreckCleanup`
+(`groundUnit:destroyed`, `transport_lost`); `dropTroop` odmawia `vessel_is_wreck`; `ColonyOverlay._closeDropModeOnWreck`;
+keeper `sb2b_wreck_cargo_smoke` 17/17 (fail-first na S2b-2: 8/9). Bramka S2b, kroki 7–7b: tryb zrzutu zamknięty napisem
+`Drop failed: vessel is a wreck`, jednostka `transport_lost`, ładownia wraku pusta (kontrola: tryb otwarty, jednostka
+`in_cargo` w ładowni wraku) `[measured]`.
 
 ### 🟠 419 — dwa starcia gracza z tym samym imperium w tym samym 0,01 roku gry mają ten sam identyfikator
 
@@ -1320,6 +1479,63 @@ i `_combatPause` wiszą, rozkaz `moveToPoint` aktywny, 2 lata później 3,86 AU 
 roku: dwa wpisy, wznowienie działa. Osiągalność w normalnej grze niezmierzona (warunek: dwa starcia z tym samym imperium
 rozpoczęte w ciągu 0,01 roku gry ≈ 3,65 dnia). Kształt poprawki: unikalny identyfikator (licznik albo id pierwszego statku
 pary). Keepery zagrożone: piny formatu `battle_ds_*`/`encounter_*` (do grepa). → decyzja właściciela.
+⏳ **S2b-4 (SB42), przygotowane:** `_makeEncounterId` — sufiks `_2`, `_3`…, gdy id zajęte w `_activeEncounters` albo
+w `gameState.battles`; keeper `sb2b_encounter_id_smoke` 8/8 (fail-first na S2b-3: 3/5). **Osiągalność zmierzona** (tryb
+klatek, prawdziwa gra): powtórzone id starcia w 12 z 23 przebiegów przed poprawką, po — 0 z 24, 11 starć z sufiksem
+`[measured]`. Bliźniak na ścieżce wycofania — **424**.
+
+### #420–#425 — S2b (2026-10-11)
+
+⚠ **Registry-first (2026-10-11):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#419**; trafienia „420”–„425” w `docs/` i `CLAUDE.md` to numery linii i wymiary, nie findingi
+`[measured]`. Źródło: audyt i pomiary S2b (§5h).
+
+### ⚪ 420 — synchronizacja floty liczona do BIEŻĄCEJ pozycji ciała: przy ciele szybszym od statków flota nie ląduje razem
+
+`[code]` `FleetSystem.issueFleetOrder` (`:175-210`) liczy `_arrivalSyncYear` z trasy do BIEŻĄCEJ pozycji celu i prędkości
+członków. Dla ciała szybszego od statków ta chwila bywa nieosiągalna dla części członków (ciało jest wtedy poza ich
+zasięgiem), więc członek przylatuje w pierwszej późniejszej osiągalnej chwili (S2b-1, `notBefore`) — flota ląduje
+w kilku chwilach. `[measured]` fixture, tryb klatek, 3 fregaty, jeden rozkaz floty: po S2b — razem 3/10, rozrzut do
+0,227 roku, nikt przed synchronizacją; przed S2b — razem 3/9, rozrzut do 0,879 roku, przeskok przy przylocie do 2,66 AU.
+Kształt poprawki: `FleetSystem` liczy synchronizację z przechwyceń członków (wspólna osiągalna chwila nie wcześniejsza niż
+najpóźniejsze z ich najwcześniejszych przechwyceń). Czwarta rodzina ścieżek — poza progiem zlecenia S2b. → decyzja
+właściciela (§5h.5, pytanie 2).
+
+### 🟠 421 — statek z misją wstrzymaną na walkę stoi tam, gdzie walka się zaczęła: broń krótsza niż odległość startu walki nie strzela
+
+`[code]` `DeepSpaceCombatSystem` — strona z misją wstrzymaną na walkę jest zamrożona w miejscu startu starcia
+(`_pauseSideForCombat`); strzał wyłącznie przy `distanceAU ≤ effectiveRangeAU` (`_tickEncounter`). `[measured]` fixture,
+tryb klatek, 3 fregaty z laserem (0,05 AU) na strażnika (rakiety 0,30 AU), oś czasu bitew (4 + 4 przebiegi): po S2b fregaty
+oddają **0 strzałów** w każdej bitwie, strażnik strzela z 0,255–0,299 AU; w 10 przebiegach fregaty stracone 30/30,
+strażnik zniszczony 0/10. Przed S2b — bitwy po przeskoku na ciało z 0,009–0,021 AU, laser trafia, strażnik zniszczony
+6/10. Pościg `engage` dochodzi do zasięgu własnej broni (bramka S2b: starcie z 0,08–0,11 AU). Zmiana wyniku walki to
+skutek usunięcia przeskoku przy przylocie (416), nie zmiana walki. → decyzja właściciela (§5h.5, pytanie 3).
+
+### ⚪ 422 — misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4)
+
+`[code]` `VesselManager.dispatchOnMission` / `redispatchFromOrbit` / `startReturn` / `redirectToTarget` dostają czas lotu od
+wołającego (`MissionSystem` — `travelTime` po linii prostej do BIEŻĄCEJ pozycji; `EmpireLogisticsSystem`), cel przewidziany
+na tę samą chwilę ⇒ przylot na czas i bez przeskoku z konstrukcji (`[measured]` kurierzy AI: przylot − ETA ≤ 0,006 roku,
+przeskok ≤ 0,010 AU — przed i po S2b), ale trasa do punktu przewidzianego pokonywana z prędkością ≠ prędkości statku
+(wariant R2 sprzed S2b). Poza SB39 — raport; prędkości lotu nie zmierzono.
+
+### ⚪ 423 — rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5)
+
+`[code]` `MovementOrderSystem._tickInterceptOrder` → `_computeInterceptPoint` z `target.velocity`, zerowanej co tik dla
+kadłuba zadokowanego i orbitującego — ten sam korzeń co R3 (`engage`, S2b-1). Rozkaz wyłącznie gracza, na wrogi statek.
+Poza SB39 — raport; osiągalność niezmierzona.
+
+### ⚪ 424 — bliźniak 419 w `VesselCombatSystem._makeBattleId` (ścieżka wycofania)
+
+`[code]` `battle_ds_<rok>_<A>_<B>` (`VesselCombatSystem.js:426`, „TODO M3”) — przy `m4DeepSpaceCombat` OFF dwie bitwy tej
+samej pary w tym samym 0,01 roku nadpisują `gameState.battles.<id>`; walka natychmiastowa, bez starć i bez zamrożeń,
+kolizję łagodzi cooldown pary. Flaga w grze ON — utajone.
+
+### ⚪ 425 — `redispatchFromOrbit` bez bramki wraku
+
+`[code]` `VesselManager.redispatchFromOrbit` (`:538-593`) sprawdza `orbiting` i `isInService`, nie `isWreck` (wrak ma stan
+`orbiting`); wołający dziś filtrują (rekordy misji zamykane na `vessel:wrecked` — `MissionSystem:147`,
+`TransportOrderSystem:191`) — utajone. Po S2b-2 wrak z misją i tak się nie rusza (`_updatePositions`).
 
 ---
 

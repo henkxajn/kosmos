@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b PRZYGOTOWANY 2026-10-11, NIE zacommitowany)
 
-Plan, decyzje **SB1–SB38** i rejestr findingów **#391–#419**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB44** i rejestr findingów **#391–#425**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6090,3 +6090,18 @@ pula stawia strażnika na orbicie w chwili mobilizacji) — wzór R-B2b / R-S2-3
 headless Chrome (rzadkie, duże klatki) jej nie odtworzą — scenę z walką prowadzić klatkami ~16 ms (`TimeSystem.update(dt)`,
 plan §5g.4, C1). ⚠ **Kolejność `time:tick` przy końcu mobilizacji** (`VesselManager` → Director → stanowiska) zależy
 w czasie ciągłym od fazy akumulatora Directora — który kadłub zostanie strażnikiem, nie jest stałe (C3).
+⏳ **S2b — poprawki przed S3, PRZYGOTOWANE 2026-10-11, NIE zacommitowane** (plan §5h; decyzje **SB39–SB44**; łańcuch
+zestagowany, bramka `kosmos-handover/ai-strikes-back-s2b/gate/GATE_S2B.md`, notatka `HANDOVER_S2B_PART1.md`): **B1** — 416
+(SB39: czas przechwycenia ciała `VesselManager._interceptBody` w `_issueMoveToPoint`, `_resumeMissionAfterOrder` i pościgu
+`engage` za celem przy ciele; flota — przylot nie wcześniej niż `_arrivalSyncYear`) · **B2** — 417 (SB40: wrak nie wznawia
+misji i nie leci) · **B3** — 418 (SB41: jednostki w ładowni giną z wrakiem, `dropTroop` odmawia `vessel_is_wreck`, tryb
+zrzutu nad wrakiem się zamyka) · **B4** — 419 (SB42: sufiks `_N` przy zajętym id starcia) · **B5** — 415 (SB43: pierścień
+ruchu tylko z oglądanego układu, cudzy przy wywiadzie ≥ `contact`). **SB44** — 151 nietknięty (S3). Keepery NEW `sb2b_*`
+(20 / 11 / 17 / 8 / 10); sweep po łańcuchu **283/283**, `check-i18n` 3456, zero kluczy. Pomiar (tryb klatek): przeskok przy
+przylocie 0,72–2,82 AU → ≤ 0,03 AU; `engage` na strażnika na orbicie: 0 bitew w 4,1 roku → starcie po ~2,5 roku; C1 bajt
+w bajt. Nowe: ⚪ **420** (synchronizacja floty do bieżącej pozycji ciała) · 🟠 **421** (statek z misją wstrzymaną na walkę
+stoi w miejscu startu walki — laser 0,05 AU nie sięga strażnika strzelającego z ~0,3 AU; po usunięciu przeskoku 3 fregaty
+przegrywają 30/30) · ⚪ **422**–**425** (raport).
+⚠ **Lot do ciała ma JEDNO źródło chwili przylotu: `VesselManager._interceptBody`** (punkt i `arrivalYear` razem); nowy
+producent lotu na ruchome ciało nie liczy własnej predykcji. ⚠ **Wrak nie wznawia misji** — migawka wraku zdejmowana
+w `_resumeMissionAfterOrder`; scena testowa z wrakiem „w locie” musi pamiętać, że `_updatePositions` wraku nie prowadzi.
