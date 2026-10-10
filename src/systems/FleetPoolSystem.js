@@ -27,7 +27,9 @@
 // roku nic i bez nadrabiania (lustro garnizonu). Plan pusty (limit pełny, minimum z bakiem spełnione) — nic.
 //
 // STRAŻNICY (S2 — SB30, SB31, SB33, SB34): od mobilizacji imperium trzyma przy stolicy `fleetGuardsPerBody` strażników
-// (domyślnie 1) — uzbrojone kadłuby w służbie BEZ baku warp, NA ORBICIE stolicy (`VesselManager.undockToOrbit`).
+// (domyślnie 1) — uzbrojone kadłuby w służbie BEZ baku warp, NA ORBICIE stolicy (`VesselManager.undockToOrbit`) — i tyle
+// samo przy DRUGIM ciele (SB32: najcenniejsze ciało w układzie stolicy poza stolicą, porządek planera garnizonu), gdy
+// istnieje drugi kadłub-strażnik: pojawia się przy stolicy i LECI tam rozkazem `moveToPoint` (przylot = orbita ciała).
 // Stanowisko obsadzane w chwili mobilizacji, a gdy żaden kadłub nie jest jeszcze w służbie (rezerwa przechodzi do służby
 // miesiąc) — na pierwszej granicy miesiąca kalendarzowego, na której jest. Strażnik trzyma orbitę i nie ściga: nie dostaje
 // żadnego rozkazu poza powrotem na stanowisko, gdy coś go z niego zepchnęło (kontrola miesięczna). Roster w stanie doktryn
@@ -197,9 +199,10 @@ export class FleetPoolSystem {
 
   /**
    * Stanowiska strażników imperium — jedno wejście (mobilizacja, kontrola miesięczna):
-   *  1. stanowisko NIGDY nieobsadzone (mniej wpisów rosteru dla ciała niż `fleetGuardsPerBody`) — kadłub-strażnik
-   *     (`isGuardHull`) zadokowany przy stolicy, bez misji, rozkazu i roli patrolu (najpierw bez roli, potem z garnizonu
-   *     `defend_home`), idzie na stanowisko i wchodzi do rosteru;
+   *  1. stanowisko NIGDY nieobsadzone (mniej wpisów rosteru dla ciała niż `fleetGuardsPerBody`; najpierw stolica, potem
+   *     drugie ciało — SB32) — kadłub-strażnik (`isGuardHull`) zadokowany przy stolicy, bez misji, rozkazu i roli patrolu
+   *     (najpierw bez roli, potem z garnizonu `defend_home`), idzie na stanowisko (stolica — z doku na orbitę; drugie
+   *     ciało — lot ze stolicy) i wchodzi do rosteru;
    *  2. strażnik, który zszedł ze stanowiska (dok, inne ciało, dryf — bez misji i rozkazu, poza starciem), wraca na nie;
    *  0. przed tym — `fleetGuardsPerBody` obniżone: nadmiarowe wpisy ciała zwolnione (`_trimPosts`).
    * Poza tym strażnik nie dostaje żadnego rozkazu — trzyma orbitę i nie ściga.
@@ -216,10 +219,10 @@ export class FleetPoolSystem {
     if (!empireId || empireId === 'player' || !K?.empireRegistry?.get?.(empireId)) return { ok: false, reason: 'unknown_empire' };
     if (!this.isMobilized(empireId)) return { ok: false, reason: 'not_mobilized' };
     if (typeof dd?.guardRoster !== 'function' || typeof vm?.undockToOrbit !== 'function') return { ok: false, reason: 'no_doctrine' };
-    const posts = readGuardPosts(K, empireId, fleetGuardsPerBody());
+    const roster = dd.guardRoster(empireId);
+    const posts = readGuardPosts(K, empireId, fleetGuardsPerBody(), roster);
     if (!posts.capitalId) return { ok: false, reason: 'no_capital' };
     const year = K?.timeSystem?.gameTime ?? null;
-    const roster = dd.guardRoster(empireId);
     const posted = [], returned = [];
     const released = this._trimPosts(empireId, roster, posts, trigger, year);
     for (const { bodyId } of posts.bodies) {
@@ -228,7 +231,7 @@ export class FleetPoolSystem {
         if (!hull || !this._sendToPost(hull, bodyId)) break;
         roster.push({ bodyId, vesselId: hull.id, sinceYear: year, lostYear: null });
         posted.push(hull.id);
-        EventBus.emit('fleetGuard:posted', { empireId, bodyId, vesselId: hull.id, trigger, year });
+        EventBus.emit('fleetGuard:posted', { empireId, bodyId, vesselId: hull.id, trigger, year, flight: bodyId !== posts.capitalId });
       }
     }
     for (const e of roster) {

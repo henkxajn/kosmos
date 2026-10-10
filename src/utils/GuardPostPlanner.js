@@ -8,14 +8,17 @@
 //                    stoi NA ORBICIE strzeżonego ciała (`position.state === 'orbiting'`, `dockedAt === ciało`)
 //   ilu (SB30):      `fleetGuardsPerBody` z tabeli strojenia (domyślnie 1) — czyta go pula (`FleetLimit.fleetGuardsPerBody`,
 //                    odczyt W CHWILI UŻYCIA) i podaje tu argumentem: tabelę strojenia czytają wyłącznie konsola i pula
-//   gdzie (SB32):    stolica (`capitalOf` z terminem właściciela — ten sam odczyt co garnizon i pula)
+//   gdzie (SB32):    stolica (`capitalOf` z terminem właściciela — ten sam odczyt co garnizon i pula), potem DRUGIE ciało —
+//                    najcenniejsze ciało imperium W UKŁADZIE STOLICY poza stolicą, w porządku planera garnizonu (D11:
+//                    pełne kolonie przed placówkami ze złożem Xe / Nt, `devScore` malejąco, kolejność w imperium); ciało
+//                    raz obsadzone (wpis w rosterze) zostaje drugim, dopóki jest kandydatem w układzie stolicy
 //
 // ⚠ Dominacja orbitalna zostaje per UKŁAD (SB34): strażnik na orbicie odbiera graczowi dominację w całym układzie, bo jest
 //   „walczący w przestrzeni” (`isFightableInSpace`) — ta sama reguła co każdy inny uzbrojony kadłub.
 // ⚠ Moduł NIE zna `window`: czytnik żywego świata dostaje obiekt usług (`K`, w grze `window.KOSMOS`) jako argument.
 
 import { isEnemyVessel, hasWeapons, isInService } from '../entities/Vessel.js';
-import { readEmpireGarrisonSnapshot } from './GarrisonPlanner.js';
+import { readEmpireGarrisonSnapshot, garrisonAllocation } from './GarrisonPlanner.js';
 
 /**
  * SB30 — czy kadłub może być strażnikiem imperium: jego, nie wrak, uzbrojony (`hasWeapons`), w służbie (`isInService`),
@@ -43,14 +46,41 @@ export function guardsPerBody(n) {
 }
 
 /**
- * Strzeżone ciała imperium TERAZ (tylko odczyt). SB32: stolica.
+ * SB32 — drugie strzeżone ciało z migawki imperium (`readEmpireGarrisonSnapshot`): kandydaci planera garnizonu
+ * (`garrisonAllocation` — wybrani, potem pominięci: pełna kolejność D11) leżący w układzie stolicy; ciało już obsadzone
+ * (wpis w rosterze, nie stolica) ma pierwszeństwo, dopóki jest wśród nich. Brak — `null`.
+ * @param {object} snapshot — `readEmpireGarrisonSnapshot`
+ * @param {(id:string) => string|null} systemOf — układ ciała
+ * @param {Array<{bodyId:string}>} [roster] — roster strażników
+ * @returns {string|null}
+ */
+export function secondGuardBodyId(snapshot, systemOf, roster = []) {
+  const capitalId = snapshot?.capitalId ?? null;
+  const capSys = capitalId ? systemOf(capitalId) : null;
+  if (!capitalId || !capSys) return null;
+  const alloc = garrisonAllocation(snapshot);
+  const order = [...alloc.perBody.filter((b) => b.planetId !== capitalId).map((b) => b.planetId), ...alloc.skipped];
+  const inSystem = order.filter((id) => systemOf(id) === capSys);
+  const held = (roster ?? []).map((e) => e?.bodyId).find((id) => id && id !== capitalId && inSystem.includes(id));
+  return held ?? inSystem[0] ?? null;
+}
+
+/**
+ * Strzeżone ciała imperium TERAZ (tylko odczyt). SB32: stolica, potem drugie ciało (`secondGuardBodyId`).
  * @param {object} K — usługi gry
  * @param {string} empireId
- * @param {number} perBody — `fleetGuardsPerBody` (podaje pula)
- * @returns {{capitalId:string|null, perBody:number, bodies:Array<{bodyId:string, role:'capital'}>}}
+ * @param {number} n — `fleetGuardsPerBody` (podaje pula)
+ * @param {Array<{bodyId:string}>} [roster] — roster strażników (stabilność drugiego ciała)
+ * @returns {{capitalId:string|null, secondId:string|null, perBody:number,
+ *            bodies:Array<{bodyId:string, role:'capital'|'second'}>}}
  */
-export function readGuardPosts(K, empireId, perBody) {
-  const capitalId = readEmpireGarrisonSnapshot(K, empireId).capitalId ?? null;
-  const bodies = capitalId ? [{ bodyId: capitalId, role: 'capital' }] : [];
-  return { capitalId, perBody: guardsPerBody(perBody), bodies };
+export function readGuardPosts(K, empireId, n, roster = []) {
+  const snap = readEmpireGarrisonSnapshot(K, empireId);
+  const capitalId = snap.capitalId ?? null;
+  const perBody = guardsPerBody(n);
+  if (!capitalId) return { capitalId: null, secondId: null, perBody, bodies: [] };
+  const secondId = secondGuardBodyId(snap, (id) => K?.entityManager?.get?.(id)?.systemId ?? null, roster);
+  const bodies = [{ bodyId: capitalId, role: 'capital' }];
+  if (secondId) bodies.push({ bodyId: secondId, role: 'second' });
+  return { capitalId, secondId, perBody, bodies };
 }
