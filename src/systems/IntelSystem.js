@@ -13,7 +13,8 @@
 //   reportIncident(empireId, type, data)
 //
 // Auto-wykrywanie (subskrypcje EventBus):
-//   vessel:arrived     → statek dotarł do ciała w systemie imperium → contact
+//   vessel:arrived     → statek GRACZA dotarł do ciała w systemie imperium → contact (Finding 414: przylot kadłuba
+//                        innego właściciela — np. AI we własnym układzie — wywiadu gracza nie rusza)
 //   observatory:discovered → skan ciała w systemie imperium → rumor
 //   groundUnit:surveyComplete / anomalyFound → detailed (gdy unit na planecie obcej)
 //
@@ -197,6 +198,10 @@ export class IntelSystem {
   // ── Event handlers ───────────────────────────────────────────
 
   _onVesselArrived(vessel, mission) {
+    // AI STRIKES BACK S2 (SB36, Finding 414) — wywiad GRACZA rośnie wyłącznie z przylotu statku GRACZA. Przylot kadłuba
+    //   AI do ciała w jego WŁASNYM układzie (patrol, powrót, lot strażnika SB32) podnosił graczowi wywiad o tym imperium
+    //   do `contact`, choć żaden statek gracza go nie widział. Predykat — ten sam co obserwacja statków (`_isPlayerVessel`).
+    if (!this._isPlayerVessel(vessel)) return;
     const systemId = this._resolveSystemIdFromMission(vessel, mission);
     if (!systemId) return;
     const empireId = this._findEmpireOfSystem(systemId);
