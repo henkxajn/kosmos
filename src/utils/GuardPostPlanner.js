@@ -13,6 +13,9 @@
 //                    pełne kolonie przed placówkami ze złożem Xe / Nt, `devScore` malejąco, kolejność w imperium); ciało
 //                    raz obsadzone (wpis w rosterze) zostaje drugim, dopóki jest kandydatem w układzie stolicy
 //
+//   odczyt (B5):     `readGuardPostsView` / `describeGuardPosts` — strzeżone ciała i kto trzyma każde stanowisko
+//                    (konsola `KOSMOS.debug.sbTuning()`, bramka `KOSMOS.fleetPoolSystem.guardPosts(id)`)
+//
 // ⚠ Dominacja orbitalna zostaje per UKŁAD (SB34): strażnik na orbicie odbiera graczowi dominację w całym układzie, bo jest
 //   „walczący w przestrzeni” (`isFightableInSpace`) — ta sama reguła co każdy inny uzbrojony kadłub.
 // ⚠ Moduł NIE zna `window`: czytnik żywego świata dostaje obiekt usług (`K`, w grze `window.KOSMOS`) jako argument.
@@ -74,6 +77,37 @@ export function secondGuardBodyId(snapshot, systemOf, roster = []) {
  * @returns {{capitalId:string|null, secondId:string|null, perBody:number,
  *            bodies:Array<{bodyId:string, role:'capital'|'second'}>}}
  */
+/**
+ * B5 — stanowiska imperium do odczytu: dla każdego strzeżonego ciała wpisy rosteru i stanowiska nigdy nieobsadzone.
+ * Imperium bez puli (bez mobilizacji) — pusta lista: przed mobilizacją nic nie stoi.
+ *   status: `orbita` (na stanowisku) · `lot` (rozkaz w toku) · `poza` (żywy, gdzie indziej) · `utracony` (czeka na granicę
+ *   roku) · `wolne` (nigdy nieobsadzone)
+ * @returns {Array<{bodyId:string, role:'capital'|'second', vesselId:string|null, status:string}>}
+ */
+export function readGuardPostsView(K, empireId, n) {
+  if (K?.empireRegistry?.isFleetPoolMobilized?.(empireId) !== true) return [];
+  const roster = K?.directorDoctrine?.guardRoster?.(empireId) ?? [];
+  const posts = readGuardPosts(K, empireId, n, roster);
+  const out = [];
+  for (const { bodyId, role } of posts.bodies) {
+    const mine = roster.filter((e) => e.bodyId === bodyId);
+    for (const e of mine) {
+      const v = e.vesselId ? K?.vesselManager?.getVessel?.(e.vesselId) ?? null : null;
+      const status = !e.vesselId ? 'utracony' : isAtGuardPost(v, bodyId) ? 'orbita' : v?.movementOrder ? 'lot' : 'poza';
+      out.push({ bodyId, role, vesselId: e.vesselId ?? null, status });
+    }
+    for (let k = mine.length; k < posts.perBody; k++) out.push({ bodyId, role, vesselId: null, status: 'wolne' });
+  }
+  return out;
+}
+
+/** B5 — jedna linia odczytu stanowisk (napisy bez polskich znaków — konwencja konsoli): `cialo(rola)=kadlub stan, …`; brak — `-`. */
+export function describeGuardPosts(K, empireId, n) {
+  const view = readGuardPostsView(K, empireId, n);
+  if (view.length === 0) return '-';
+  return view.map((p) => `${p.bodyId}(${p.role === 'capital' ? 'stolica' : 'drugie'})=${p.vesselId ?? '-'} ${p.status}`).join(', ');
+}
+
 export function readGuardPosts(K, empireId, n, roster = []) {
   const snap = readEmpireGarrisonSnapshot(K, empireId);
   const capitalId = snap.capitalId ?? null;

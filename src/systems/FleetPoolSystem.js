@@ -30,6 +30,9 @@
 // (domyślnie 1) — uzbrojone kadłuby w służbie BEZ baku warp, NA ORBICIE stolicy (`VesselManager.undockToOrbit`) — i tyle
 // samo przy DRUGIM ciele (SB32: najcenniejsze ciało w układzie stolicy poza stolicą, porządek planera garnizonu), gdy
 // istnieje drugi kadłub-strażnik: pojawia się przy stolicy i LECI tam rozkazem `moveToPoint` (przylot = orbita ciała).
+// Utracony strażnik (wrak, brak, przejęty, poza służbą) jest zastępowany WYŁĄCZNIE na granicy roku kalendarzowego
+// (po odrastaniu tego roku) kadłubem-strażnikiem zadokowanym przy stolicy; brak takiego — stanowisko czeka. Stanowisko
+// ciała, które przestało być strzeżone (nie jest już imperium albo drugim ciałem układu stolicy), jest rozwiązywane.
 // Stanowisko obsadzane w chwili mobilizacji, a gdy żaden kadłub nie jest jeszcze w służbie (rezerwa przechodzi do służby
 // miesiąc) — na pierwszej granicy miesiąca kalendarzowego, na której jest. Strażnik trzyma orbitę i nie ściga: nie dostaje
 // żadnego rozkazu poza powrotem na stanowisko, gdy coś go z niego zepchnęło (kontrola miesięczna). Roster w stanie doktryn
@@ -48,7 +51,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { readEmpirePoolPlan, empireFleetHulls, fleetRegrowthPerYear, readEmpireFleetSnapshot, fleetGuardsPerBody } from '../utils/FleetLimit.js';
-import { isGuardHull, isAtGuardPost, readGuardPosts } from '../utils/GuardPostPlanner.js';
+import { isGuardHull, isAtGuardPost, readGuardPosts, describeGuardPosts } from '../utils/GuardPostPlanner.js';
 
 // Lustro `GarrisonSystem`: `gameTime` to suma kroków zmiennoprzecinkowych — bez tolerancji granica roku spóźniałaby się.
 const YEAR_EPS = 1e-9;
@@ -101,6 +104,11 @@ export class FleetPoolSystem {
   /** Plan puli imperium TERAZ (tylko odczyt). */
   plan(empireId) {
     return readEmpirePoolPlan(this._K(), empireId);
+  }
+
+  /** S2 — stanowiska strażników imperium (odczyt konsoli i bramki): ciało, rola, kto trzyma, stan. Tylko odczyt. */
+  guardPosts(empireId) {
+    return describeGuardPosts(this._K(), empireId, fleetGuardsPerBody());
   }
 
   /**
@@ -206,12 +214,17 @@ export class FleetPoolSystem {
    *  2. strażnik, który zszedł ze stanowiska (dok, inne ciało, dryf — bez misji i rozkazu, poza starciem), wraca na nie;
    *  0. przed tym — `fleetGuardsPerBody` obniżone: nadmiarowe wpisy ciała zwolnione (`_trimPosts`).
    * Poza tym strażnik nie dostaje żadnego rozkazu — trzyma orbitę i nie ściga.
+   * B5 (SB33) — na każdym wejściu najpierw: stanowiska ciał, które przestały być strzeżone — rozwiązane; strażnik, który
+   * przestał nim być (wrak, brak, przejęty, poza służbą) — utracony (wpis zostaje, `vesselId: null`); zastępstwo
+   * utraconego WYŁĄCZNIE z `replaceLost` (granica roku kalendarzowego, `_yearlyCheck`).
    * @param {string} empireId
-   * @param {string} [trigger] — `'mobilization'` | `'monthly'`
-   * @returns {{ok:true, posted:string[], returned:string[], released:Array<string|null>} | {ok:false, reason:string}}
+   * @param {string} [trigger] — `'mobilization'` | `'monthly'` | `'yearly'`
+   * @param {{replaceLost?:boolean}} [opts]
+   * @returns {{ok:true, posted:string[], returned:string[], released:Array<string|null>, lost:string[], replaced:string[],
+   *            dissolved:string[]} | {ok:false, reason:string, dissolved?:string[]}}
    *   powody: `disabled` · `unknown_empire` · `not_mobilized` · `no_doctrine` (brak `directorDoctrine`) · `no_capital`
    */
-  stationGuards(empireId, trigger = 'monthly') {
+  stationGuards(empireId, trigger = 'monthly', { replaceLost = false } = {}) {
     if (!this.enabled) return { ok: false, reason: 'disabled' };
     const K = this._K();
     const dd = K?.directorDoctrine;
@@ -221,17 +234,40 @@ export class FleetPoolSystem {
     if (typeof dd?.guardRoster !== 'function' || typeof vm?.undockToOrbit !== 'function') return { ok: false, reason: 'no_doctrine' };
     const roster = dd.guardRoster(empireId);
     const posts = readGuardPosts(K, empireId, fleetGuardsPerBody(), roster);
-    if (!posts.capitalId) return { ok: false, reason: 'no_capital' };
     const year = K?.timeSystem?.gameTime ?? null;
-    const posted = [], returned = [];
+    const dissolved = this._dissolvePosts(empireId, roster, posts, trigger, year);
+    if (!posts.capitalId) {
+      dd.setGuardRoster(empireId, roster, `fleet_guard_${trigger}`);
+      return { ok: false, reason: 'no_capital', dissolved };
+    }
+    const posted = [], returned = [], replaced = [];
+    const lost = this._markLost(empireId, roster, trigger, year);
     const released = this._trimPosts(empireId, roster, posts, trigger, year);
     for (const { bodyId } of posts.bodies) {
+      const flight = bodyId !== posts.capitalId;
+      // SB33 — zastępstwo utraconego strażnika: WYŁĄCZNIE na granicy roku (wołający: `_yearlyCheck`), PRZED nowymi
+      //   stanowiskami tego ciała; ciała w kolejności planu (stolica pierwsza). Brak kadłuba — stanowisko czeka.
+      if (replaceLost) {
+        for (const e of roster) {
+          if (e.bodyId !== bodyId || e.vesselId) continue;
+          const hull = this._pickGuardHull(empireId, posts.capitalId, roster);
+          if (!hull || !this._sendToPost(hull, bodyId)) break;
+          e.vesselId = hull.id;
+          e.sinceYear = year;
+          replaced.push(hull.id);
+          posted.push(hull.id);
+          EventBus.emit('fleetGuard:posted', { empireId, bodyId, vesselId: hull.id, trigger: 'replacement', year, flight });
+        }
+      }
+      // Utracone stanowisko stolicy (czeka na granicę roku) rezerwuje pierwszy kadłub-strażnik: inne ciało dostaje kadłub
+      //   dopiero, gdy jest kolejny (SB32 — drugie ciało, gdy istnieje DRUGI kadłub-strażnik).
+      const reserve = flight ? roster.filter((e) => e.bodyId === posts.capitalId && !e.vesselId).length : 0;
       for (let k = roster.filter((e) => e.bodyId === bodyId).length; k < posts.perBody; k++) {
-        const hull = this._pickGuardHull(empireId, posts.capitalId, roster);
+        const hull = this._pickGuardHull(empireId, posts.capitalId, roster, reserve);
         if (!hull || !this._sendToPost(hull, bodyId)) break;
         roster.push({ bodyId, vesselId: hull.id, sinceYear: year, lostYear: null });
         posted.push(hull.id);
-        EventBus.emit('fleetGuard:posted', { empireId, bodyId, vesselId: hull.id, trigger, year, flight: bodyId !== posts.capitalId });
+        EventBus.emit('fleetGuard:posted', { empireId, bodyId, vesselId: hull.id, trigger, year, flight });
       }
     }
     for (const e of roster) {
@@ -243,7 +279,48 @@ export class FleetPoolSystem {
       EventBus.emit('fleetGuard:returnOrdered', { empireId, bodyId: e.bodyId, vesselId: v.id, trigger, year });
     }
     dd.setGuardRoster(empireId, roster, `fleet_guard_${trigger}`);
-    return { ok: true, posted, returned, released };
+    return { ok: true, posted, returned, released, lost, replaced, dissolved };
+  }
+
+  /**
+   * Stanowiska ciał, które przestały być strzeżone (ciało nie należy już do imperium albo nie jest już drugim ciałem
+   * układu stolicy; bez stolicy — wszystkie), są rozwiązywane. Żywy strażnik zostaje tam, gdzie stoi, bez roli.
+   * @returns {string[]} id ciał rozwiązanych stanowisk (z powtórzeniami — jedno na wpis)
+   */
+  _dissolvePosts(empireId, roster, posts, trigger, year) {
+    const keep = new Set(posts.bodies.map((b) => b.bodyId));
+    const dissolved = [];
+    for (let i = roster.length - 1; i >= 0; i--) {
+      const e = roster[i];
+      if (keep.has(e.bodyId)) continue;
+      roster.splice(i, 1);
+      dissolved.push(e.bodyId);
+      EventBus.emit('fleetGuard:dissolved', { empireId, bodyId: e.bodyId, vesselId: e.vesselId ?? null, trigger, year });
+    }
+    return dissolved;
+  }
+
+  /**
+   * Strażnik, który przestał nim być (`isGuardHull` — wrak, brak w rejestrze, inny właściciel, poza służbą), jest
+   * UTRACONY: wpis zostaje (stanowisko obsadzone kiedyś), `vesselId: null`, `lostYear`; zastępstwo — granica roku.
+   * @returns {string[]} id utraconych kadłubów
+   */
+  _markLost(empireId, roster, trigger, year) {
+    const vm = this._K()?.vesselManager;
+    const lost = [];
+    for (const e of roster) {
+      if (!e.vesselId) continue;
+      const v = vm?.getVessel?.(e.vesselId) ?? null;
+      if (isGuardHull(v, empireId)) continue;
+      const reason = !v ? 'missing' : v.isWreck ? 'wreck'
+        : (v.ownerEmpireId ?? v.owner) !== empireId ? 'captured' : 'out_of_service';
+      lost.push(e.vesselId);
+      EventBus.emit('fleetGuard:lost', { empireId, bodyId: e.bodyId, vesselId: e.vesselId, reason, trigger, year });
+      e.lostVesselId = e.vesselId;
+      e.vesselId = null;
+      e.lostYear = year;
+    }
+    return lost;
   }
 
   /**
@@ -272,9 +349,10 @@ export class FleetPoolSystem {
   /**
    * Kadłub na stanowisko: kadłub-strażnik imperium (SB30) zadokowany przy stolicy, bez misji, rozkazu i composite'u, spoza
    * rosteru strażników i spoza patrolu; najpierw bez roli, potem z garnizonu `defend_home` (stoi w doku przy stolicy).
-   * Kolejność: kolejność rejestru statków (deterministyczna).
+   * Kolejność: kolejność rejestru statków (deterministyczna). `skip` — tylu pierwszych kandydatów pomija (rezerwa dla
+   * utraconego stanowiska stolicy, B5).
    */
-  _pickGuardHull(empireId, capitalId, roster) {
+  _pickGuardHull(empireId, capitalId, roster, skip = 0) {
     const K = this._K();
     const dd = K?.directorDoctrine;
     const taken = new Set(roster.map((e) => e.vesselId).filter(Boolean));
@@ -287,7 +365,7 @@ export class FleetPoolSystem {
       if (role === null) free.push(v);
       else if (role === 'defend_home') garrison.push(v);
     }
-    return free[0] ?? garrison[0] ?? null;
+    return [...free, ...garrison][skip] ?? null;
   }
 
   /**
@@ -399,6 +477,9 @@ export class FleetPoolSystem {
         }
       }
       reg.setFleetPoolRegrowthYear?.(emp.id, year);
+      // SB33 — utracony strażnik zastępowany WYŁĄCZNIE na granicy roku kalendarzowego, po odrastaniu tego roku. Rok
+      //   rozliczony w rekordzie flagi (`regrowthYear`), więc zastępstwo jest DOKŁADNIE RAZ na rok, także przez zapis.
+      this.stationGuards(emp.id, 'yearly', { replaceLost: true });
     }
 
     if (this._reconciledYear === null) { this._reconciledYear = year; return; }

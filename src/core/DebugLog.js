@@ -159,6 +159,10 @@ const TRACKED_EVENTS = [
   'fleetGuard:returnOrdered',
   // …i stanowisko zwolnione (`released`: obniżone `fleetGuardsPerBody`) — kadłub zostaje, gdzie stoi, bez roli strażnika.
   'fleetGuard:released',
+  // B5 (SB33) — strażnik utracony (`lost`: wreck / missing / captured / out_of_service; zastępstwo na granicy roku —
+  //   `posted` z trigger `replacement`) i stanowisko rozwiązane (`dissolved`: ciało przestało być strzeżone).
+  'fleetGuard:lost',
+  'fleetGuard:dissolved',
 ];
 
 class DebugLog {

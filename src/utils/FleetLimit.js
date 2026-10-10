@@ -21,6 +21,7 @@ import { readTuningValues } from './StrikesBackTuning.js';
 import { garrisonTier, readEmpireGarrisonSnapshot } from './GarrisonPlanner.js';
 import { isFleetLimitHull } from '../entities/Vessel.js';
 import { templateTraits, planPool, describePoolAdd } from './FleetPoolPlanner.js';
+import { describeGuardPosts } from './GuardPostPlanner.js';
 
 /** Liczba skończona i dodatnia, inaczej 0 (lustro `GarrisonPlanner`). */
 const nonNegative = (x) => (Number.isFinite(x) && x > 0 ? x : 0);
@@ -125,5 +126,9 @@ export function printFleetLimits(K, tuning = readTuningValues()) {
     };
   });
   console.table(rows);
+  // S2 (B5) — strzeżone ciała i kto trzyma każde stanowisko: wiersz na imperium POD tabelą (kolumny tabeli bez zmian).
+  for (const e of K?.empireRegistry?.listAll?.() ?? []) {
+    console.log(`[sb] straze ${e.id}: ${describeGuardPosts(K, e.id, fleetGuardsPerBody(tuning))}`);
+  }
   return rows;
 }
