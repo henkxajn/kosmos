@@ -52,7 +52,7 @@ import {
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
 } from '../config/CombatFxConfig.js';
-import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
+import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
@@ -6451,6 +6451,17 @@ export class ThreeRenderer {
   // ── Slice 6 — puls startu/przybycia statku (FX harness) ──────────────────
   _spawnMovementPulse(vessel, color) {
     if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
+    // SB43 (Finding 415) — pierścień tylko dla statku z OGLĄDANEGO układu (w skoku warp — układu startu), a statku
+    //   nie-gracza tylko przy wykryciu ≥ contact (`isMovementPulseVisible`). Statek z wydarzenia, nie z rejestru:
+    //   `destroyVessel` emituje `vessel:docked` PO usunięciu statku z rejestru.
+    const isEnemy = isEnemyVessel(vessel);
+    if (!isMovementPulseVisible({
+      systemId:       vessel?.systemId,
+      fromSystemId:   vessel?.mission?.fromSystemId ?? null,
+      activeSystemId: window.KOSMOS?.activeSystemId ?? 'sys_home',
+      isEnemy,
+      quality:        isEnemy ? (window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.quality ?? 'unknown') : null,
+    })) return;
     const p = vessel?.position;
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
     const ring = new THREE.Mesh(

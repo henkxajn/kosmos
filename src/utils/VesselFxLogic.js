@@ -12,6 +12,19 @@ export function isEndpointVisibleByQuality(isEnemy, quality) {
   return quality === 'contact' || quality === 'detailed';
 }
 
+// AI STRIKES BACK pre-S3 (SB43, Finding 415) — czy wolno narysować pierścień ruchu statku (start / przylot / dok)
+// w OGLĄDANYM układzie. Współrzędne są lokalne dla układu (gwiazda każdego układu w (0,0)), więc pierścień statku
+// z innego układu stawał w miejscu bez statku; a ruch AI był widoczny bez wykrycia (bramka S2: 8 pierścieni od
+// statków AI z innych układów przy widoku `sys_home`).
+//   • układ statku = oglądany; brak pola (stary zapis) → `sys_home`; `null` (skok warp) → układ startu skoku;
+//   • statek nie-gracza — tylko przy wykryciu pokazującym go W MIEJSCU (wywiad ≥ contact, jak smugi walki).
+// in: { systemId, fromSystemId, activeSystemId, isEnemy, quality }
+export function isMovementPulseVisible({ systemId, fromSystemId = null, activeSystemId, isEnemy, quality }) {
+  const sys = systemId === undefined ? 'sys_home' : (systemId ?? fromSystemId ?? null);
+  if (!sys || sys !== (activeSystemId ?? 'sys_home')) return false;
+  return isEndpointVisibleByQuality(isEnemy, quality);
+}
+
 // Resolver endpointu FX (gameplay coords — renderer aplikuje S()/skalę osobno).
 // own → live; enemy unknown → visible:false (BRAK przecieku); rumor → positionLastKnown
 // (NIE live — fog-of-war); contact/detailed → live.
