@@ -6135,7 +6135,8 @@ zero kluczy, save v101 bez migracji. M5 (fixture GATE-S4, tryb klatek, 60 przebi
 kontrola (te same kadłuby wysłane osobno) — punkty skoku 24–60 AU od siebie, transportowiec sam wygrywa z niebronioną
 kolonią (**435**); uprząż C1 6/6 bez zmian. Nowe: ⚪ **426** (przypięcie DSCS — SB50: zostaje) · 🟠 **427**
 (`ObservatorySystem` — klasa 151, → S3/2) · ⚪ **428**–**433** · ⚪ **434** (transportowiec zostaje na orbicie celu) ·
-⚪ **435** (sam nieuzbrojony transportowiec bierze niebronioną kolonię — fantom W3-26).
+⚪ **435** (sam nieuzbrojony transportowiec wygrywa przewagą HP z obroną symboliczną niebronionej kolonii — 30 HP —
+i ląduje).
 **Następny: zgoda na R-S3 i commity sesji 1; potem S3, sesja 2** (SB56 wielkość eskadry, SB57 odbijanie, SB58 eskorta
 trzyma orbitę, SB59 151 + 427 + wpis dzwonka).
 ⚠ **Eskadrę AI tworzy WYŁĄCZNIE `StrikeSquadronSystem.launchSquadron`** (transportowiec przez `createAIVessel`, fala przez

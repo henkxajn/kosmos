@@ -1348,9 +1348,12 @@ Odwołanie eskorty (DirectorRecall) po desancie: 2_docked 10/10 (0.0–1.0 mies.
 (60 przebiegów, 10 na wariant; liczby z plików przebiegów — `probes/m5/table_m5.mjs`; liczby w tabeli z kropką dziesiętną,
 jak w wynikach sondy.) **KONTROLA M5** (3 przebiegi, `2_ctl`): te same kadłuby — 2 eskorty z bakiem i transportowiec z falą 6 — wysłane OSOBNO
 starą ścieżką `issueAttack`, dom bez statków: punkty skoku rozrzucone o **24,3–59,8 AU** (trzy różne punkty okręgu 30 AU);
-transportowiec dolatuje SAM po 1,19–1,24 roku (eskorta — dopiero ~4 lata później), sam wygrywa bitwę planetarną 3/3
-(30 tur; przewaga HP 180 wobec obrońcy-fantomu 100 — W3-26, D-199-6) i ląduje; dom pada po 11,2–12,0 mies. (Finding
-**435**). Wspólny punkt skoku i wspólna chwila przylotu w tabeli wyżej to więc skutek S3-2, nie sceny.
+transportowiec dolatuje SAM po 1,19–1,24 roku (eskorta w chwili przejęcia kolonii — 2,17–2,26 roku po starcie — wciąż
+w drodze, 18,1–21,4 AU od celu), sam wygrywa bitwę planetarną 3/3 (limit 30 tur, przewaga HP: transportowiec 180 —
+D-199-6 — traci 16–22, obrona 0; obrońcą jest OBRONA SYMBOLICZNA kolonii bez statków i bez budynków obrony —
+`WarSystem._buildPlayerBattleUnit`: 30 HP, broń 2 obrażeń — nie fantom W3-26, który zostaje wyłącznie przy braku
+broniącej kolonii, `_defendingColonies` puste) i ląduje; dom pada po 11,2–12,0 mies. (Finding **435**). Wspólny punkt
+skoku i wspólna chwila przylotu w tabeli wyżej to więc skutek S3-2, nie sceny.
 
 **Uprząż C1** (pokój, 100 lat, ziarna default i 987654321, warianty passive / press / pressPaid) — przed (`2a09ac9`) i po
 (kod S3): **6 / 6 identycznych** (JSON i tekst, po zdjęciu czasu wykonania); żaden wynik nie ma statusu `war`.
@@ -1358,24 +1361,27 @@ transportowiec dolatuje SAM po 1,19–1,24 roku (eskorta — dopiero ~4 lata pó
 **Co zobaczy właściciel:**
 
 - **Start eskadry** (w sesji 1 wyłącznie dźwignią konsoli): po ok. pół roku gry (~6 s przy 1m/s) na obrzeżu układu
-  domowego, ~30 AU od domu, pojawiają się trzy albo cztery statki naraz, w JEDNYM punkcie; okno „Enemy vessel detected” po
-  jednym na statek (bramka S3A: 6 okien przy dwóch eskadrach).
+  domowego, na okręgu 30 AU wokół gwiazdy, pojawiają się trzy albo cztery statki naraz, w JEDNYM punkcie; okno wykrycia
+  („⚔ ENEMY UNIT DETECTED” albo „⚠ UNIDENTIFIED CONTACT” — zależnie od wywiadu o statku; przycisk „[ENTER] Understood”)
+  po jednym na statek (bramka S3A: 6 okien przy dwóch eskadrach).
 - **Lot:** grupa leci do domu razem i dolatuje w jednej chwili 5,1–5,7 roku po starcie (~60–70 s przy 1m/s); transportowiec,
-  choć siedem razy szybszy od eskorty, nie wyprzedza jej w żadnym z 60 przebiegów.
+  choć ~7 razy szybszy od eskorty (42,9 wobec 6,2 AU/rok — audyt, część A), nie wyprzedza jej w żadnym z 47 przebiegów,
+  w których eskadra doleciała (w pozostałych 13 z 60 transportowiec zginął w walce po drodze).
 - **Dom bez statków albo z 3 zadokowanymi fregatami (40 przebiegów):** okno bitwy planetarnej nad domem — AI wygrywa 40/40
-  (bitwa idzie do limitu 30 tur albo do odwrotu gracza; nieuzbrojony transportowiec wnosi do strony AI 180 HP — reguła
+  (dom bez statków: obrona symboliczna kolonii wycofuje się po 1–3 turach; 3 zadokowane fregaty: 21–30 tur, do limitu albo
+  do odwrotu gracza; nieuzbrojony transportowiec wnosi do strony AI 180 HP — reguła
   D-199-6, Finding **200**; w części E (d) dwie eskorty przylatujące RAZEM bez transportowca wygrały 3 z 4 takich bitew,
   pojedynczo — 0 z 12); zadokowane fregaty giną 60/60; zaraz potem alarm „⚔ Troops landing on <dom>!” (6 jednostek);
-  eskorta odlatuje do domu w ciągu miesiąca (odwołanie); transportowiec zostaje na orbicie z pustą ładownią (434); po
-  11–14 miesiącach (mediana ~12; ~12 s przy 1m/s) „⚠ CAPITAL TAKEN” — dom pada 40/40 (obrona naziemna gracza nie zabija
-  jednostek AI — 430).
+  eskorta odlatuje do domu po 0,0–1,1 mies. (odwołanie); transportowiec zostaje na orbicie z pustą ładownią (434); po
+  11–14 miesiącach (mediana ~12; ~12 s przy 1m/s) „⚠ CAPITAL TAKEN: …” — dom pada 40/40 (w scenie gracz nie ma w domu
+  wojsk naziemnych; czy obrona naziemna zatrzymałaby desant — 430, poza S3).
 - **3 fregaty na orbicie domu:** walka w przestrzeni (DSCS), zanim eskadra doleci do planety; przeciw 2 eskortom gracz
   wygrywa 10/10 — cała eskadra z transportowcem idzie na wrak, fala ginie z nim (60 jednostek `transport_lost`), desantu
   nie ma; przeciw 3 eskortom AI wygrywa starcie 7/10 (fregaty gracza giną 24/30), potem bitwa planetarna i desant — dom
   pada 7/10.
 - **Starcie z bronią krótkiego zasięgu (część E):** fregaty z laserem dochodzą do zasięgu i strzelają (scena (a): 94 strzały,
-  przed S3 — 0); ruch zbliżenia jest skokowy — 9 kroków na sekundę po 0,028 AU dla fregaty (~4 px przy domyślnej kamerze,
-  wyraźne „kroki” przy zbliżeniu kamery).
+  przed S3 — 0); ruch zbliżenia jest skokowy — 9 kroków na sekundę po 0,028 AU dla fregaty (~4 px przy domyślnej kamerze;
+  `[derived]` — nie obejrzane w przeglądarce, przy zbliżeniu kamery „kroki” mogą być widoczne).
 
 #### 5j.4 Bramka S3A — scenariusz zwalidowany w prawdziwej grze
 
@@ -1984,11 +1990,14 @@ desancie. Do decyzji przy S3/2 (SB58 — eskorta trzyma orbitę do rozstrzygnię
 ### ⚪ 435 — samotny NIEUZBROJONY transportowiec wygrywa bitwę planetarną z niebronioną kolonią i ląduje
 
 `[code]` bitwa planetarna (`BattleSystem`, `MAX_TURNS` 30) po limicie tur rozstrzyga przewaga HP (`BattleSystem.js:165`);
-obrońca bez statków i bez budynków obrony = `playerVesselsToBattleUnit([])` → `{hp: 100, weapons: []}` (fantom, **W3-26**),
-a nieuzbrojony kadłub wnosi HP (D-199-6, Finding **200**) — `transport_assault` (`hull_large`) 180 HP. `[measured]` kontrola
-M5 (§5j.3): ten sam transportowiec wysłany OSOBNO starą ścieżką `issueAttack` dolatuje sam po 1,19–1,24 roku, wygrywa
-bitwę planetarną 3/3 (30 tur) i ląduje 6 jednostek; dom pada po 11,2–12,0 mies. W eskadrze (S3-2) transportowiec nie
-przylatuje przed eskortą (0 z 60 w M5); przylot samego transportowca po utracie całej eskorty po drodze — niezmierzony.
+obrońcą kolonii gracza bez statków i bez budynków obrony jest OBRONA SYMBOLICZNA (`WarSystem._buildPlayerBattleUnit`,
+gałąź bez floty i bez obrony: 30 HP, broń 2 obrażeń; fantom **W3-26** `{hp: 100, weapons: []}` zostaje wyłącznie przy
+braku broniącej kolonii — `_defendingColonies` puste), a nieuzbrojony kadłub wnosi HP (D-199-6, Finding **200**) —
+`transport_assault` (`hull_large`) 180 HP. `[measured]` kontrola M5 (§5j.3; dom gracza w fixture bez budynków obrony):
+ten sam transportowiec wysłany OSOBNO starą ścieżką `issueAttack` dolatuje sam po 1,19–1,24 roku, wygrywa bitwę
+planetarną 3/3 (limit 30 tur; traci 16–22 HP, obrona 0) i ląduje 6 jednostek; dom pada po 11,2–12,0 mies. W eskadrze
+(S3-2) transportowiec nie przylatuje przed eskortą (0 z 47 przylotów w M5); przylot samego transportowca po utracie
+całej eskorty po drodze — niezmierzony.
 Do decyzji: czy wygrana BEZ broni nad kolonią bez obrony ma dawać dominację (SB7 — „desant dopiero po wygraniu orbity”).
 
 ---

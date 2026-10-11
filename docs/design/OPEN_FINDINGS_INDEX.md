@@ -511,7 +511,8 @@
 >   statek (eskadra AI — wspólny kąt w S3-2) · ⚪ **429** zadokowani obserwatorzy w detekcji · ⚪ **430** obrona naziemna
 >   gracza nie zabija jednostek AI (balans, poza S3 — SB60) · ⚪ **431** zniknięte koszary · ⚪ **432** limit 20 rund → wraki
 >   żywych · ⚪ **433** słabość pinu `w3_ai_invasion` T5 · ⚪ **434** transportowiec zostaje na orbicie celu · ⚪ **435** sam
->   nieuzbrojony transportowiec wygrywa bitwę planetarną z niebronioną kolonią (fantom W3-26) i ląduje.
+>   nieuzbrojony transportowiec wygrywa przewagą HP bitwę planetarną z obroną symboliczną niebronionej kolonii (30 HP)
+>   i ląduje.
 > • Następny: zgoda na R-S3 i commity sesji 1; **S3, sesja 2** (SB56–SB59).
 
 
@@ -692,7 +693,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **164** | 🟠 | przełącznik auto-slow **nie ma producenta** — `time:autoSlowToggle` zero nadawców, pole nieserializowane ⇒ gracz **nie może** tego wyłączyć; resztki w `time:display` i `BottomBar` |
 | **165a** | 🟠 | obrona orbitalna **nie ma PRZEBIEGU** — jedno `resolveBattle`, brak `vessel:engaged`, brak rund ⇒ walka o stolicę jest wyłącznie wynikiem po fakcie |
 | **W3-26** | 🟠 | `playerVesselsToBattleUnit([])` fabrykuje obrońcę `{hp:100, weapons:[]}`; fantom pinowany jako zachowanie silnika, kandydat do balansu |
-| **435** | ⚪ | samotny NIEUZBROJONY transportowiec (`hull_large`, 180 HP) wygrywa bitwę planetarną z niebronioną kolonią (fantom **W3-26** 100 HP, limit 30 tur — przewaga HP; D-199-6) i ląduje — kontrola M5: te same kadłuby wysłane osobno, 3/3, dom pada po 11,2–12,0 mies.; w eskadrze (S3-2) transportowiec nie przylatuje przed eskortą (0 z 60) | do decyzji: czy wygrana bez broni daje dominację (SB7). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **435** | ⚪ | samotny NIEUZBROJONY transportowiec (`hull_large`, 180 HP) wygrywa bitwę planetarną z kolonią bez statków i bez budynków obrony (obrona symboliczna `WarSystem._buildPlayerBattleUnit` 30 HP, broń 2; limit 30 tur — przewaga HP; D-199-6) i ląduje — kontrola M5: te same kadłuby wysłane osobno, 3/3, dom pada po 11,2–12,0 mies.; w eskadrze (S3-2) transportowiec nie przylatuje przed eskortą (0 z 47 przylotów) | do decyzji: czy wygrana bez broni daje dominację (SB7). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **311** | 🟠 | `SupplyCoverageSystem.js:162` zapisuje legacy jednostce gracza `supply = 0` przez `?? 0` ⇒ zero obrażeń + atrycja (klasa 65, inne pole) |
 | **313** | ⚪ | `_tryRetreat` zostawia `_path`, zawsze ucieka w +q, wchodzi na obcy kafel — rozszerza **56** |
 | **314** | ⚪ | martwe człony `_scoreTarget` `'scout'`/`'ranged'` (`CombatSystem.js:361`, `:364`) — instancje noszą lustro legacy |
