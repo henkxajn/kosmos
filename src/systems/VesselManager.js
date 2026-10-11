@@ -549,6 +549,10 @@ export class VesselManager {
   redispatchFromOrbit(vesselId, mission) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
+    // SB47 (Finding 425) — WRAK NIE WYCHODZI NA MISJĘ, ta sama bramka co SB40 (`_resumeMissionAfterOrder`). Wrak ma
+    //   stan `orbiting` i zostaje „w służbie” (`_turnIntoWreck` nie rusza `serviceState`), więc obie bramki niżej go
+    //   przepuszczały: misja, `on_mission`, `in_transit`, `vessel:launched`. `dispatchOnMission` odmawia mu statusem.
+    if (vessel.isWreck) return false;
     if (vessel.position.state !== 'orbiting') return false;
     // ⚠ Finding 259 (D-259-3) — SYMETRIA REZERWY z `dispatchOnMission:400`. Ta bramka była tu
     //   nieobecna, bo do W2 ścieżkę osiągał wyłącznie statek `orbiting` + `on_mission`, a kadłub
