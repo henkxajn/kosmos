@@ -1425,10 +1425,22 @@ export class DeepSpaceCombatSystem {
     return window.KOSMOS?.timeSystem?.gameTime ?? 0;
   }
 
-  /** @private */
+  /**
+   * SB42 (Finding 419) — identyfikator starcia UNIKALNY. Podstawa `encounter_<rok, 2 miejsca>_<A>_<B>` bez zmian; gdy jest
+   * już zajęta — przez trwające starcie (`_activeEncounters`) albo przez zapisaną bitwę (`battles.<battle_ds_…>`) —
+   * dostaje przyrostek `_2`, `_3`, … Dotąd drugie starcie tej samej pary w tym samym 0,01 roku gry NADPISYWAŁO pierwsze:
+   * pierwsze przestawało tykać i nigdy się nie kończyło, więc jego statki zostawały zamrożone na zawsze (migawka misji
+   * i `_combatPause` wisiały), a rekord bitwy był nadpisywany.
+   * @private
+   */
   _makeEncounterId(year, ownerA, ownerB) {
     const yr = Number(year).toFixed(2).replace(/\./g, '_');
-    return `encounter_${yr}_${ownerA}_${ownerB}`;
+    const base = `encounter_${yr}_${ownerA}_${ownerB}`;
+    const taken = (id) => this._activeEncounters.has(id)
+      || gameState.get?.(`battles.${id.replace(/^encounter_/, 'battle_ds_')}`) != null;
+    let id = base;
+    for (let n = 2; taken(id); n++) id = `${base}_${n}`;
+    return id;
   }
 
   // ── Public debug/test API ────────────────────────────────────────────
