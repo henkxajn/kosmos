@@ -2478,6 +2478,9 @@ export class VesselManager {
         }
         continue;
       }
+      // SB40 (Finding 417) — wrak bez ciała stoi tam, gdzie go zniszczono: nie leci i nie dokuje, także gdy zapis
+      //   sprzed SB40 zostawił mu wznowioną misję (wrak już w locie). Wrak na orbicie cmentarnej ciała — wyżej, bez zmian.
+      if (vessel.isWreck) continue;
 
       // Docked statki — synchronizuj pozycję z planetą macierzystą (lub ciałem stacji)
       if (vessel.position.state === 'docked' && vessel.position.dockedAt) {
@@ -2722,6 +2725,15 @@ export class VesselManager {
     if (!vessel) return;
     const snapshot = vessel._suspendedMission;
     if (!snapshot) return;  // brak zawieszonej mission — nic do resume
+
+    // SB40 (Finding 417) — WRAK NIE WZNAWIA MISJI. `vessel:wrecked` → `MovementOrderSystem._onVesselWrecked` anuluje
+    //   aktywny rozkaz (`vessel:orderCancelled`) i wrak trafiał tutaj z migawką pauzy bojowej: dostawał misję,
+    //   `in_transit`, leciał do celu i przy przylocie dokował (S2: wrak `v_33` 2,79 AU do stolicy AI). Jedno miejsce
+    //   dla trzech subskrypcji (`orderCompleted` / `orderCancelled` / `orderBlocked`); migawka znika.
+    if (vessel.isWreck) {
+      delete vessel._suspendedMission;
+      return;
+    }
 
     // S3.5a-1 — immobilized (nieopłacona flota) nie wznawia zawieszonej misji.
     // Statek może tylko wrócić do bazy (startReturn, poza issueOrder) — drop suspended.
