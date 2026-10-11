@@ -789,6 +789,9 @@ export function unloadGroundUnit(vessel, unit, planetId, q, r) {
 /** AI STRIKES BACK S2 (SB35, Finding 406) — powód odmowy zrzutu bez dominacji orbitalnej właściciela jednostki. */
 export const NO_ORBITAL_DOMINANCE = 'no_orbital_dominance';
 
+/** AI STRIKES BACK pre-S3 (SB41, Finding 418) — powód odmowy zrzutu z wraku (ten sam, co odmowy rozkazów wrakowi). */
+export const VESSEL_IS_WRECK = 'vessel_is_wreck';
+
 /**
  * Zrzut desantowy jednostki z ładowni na wrogą planetę.
  * Wymaga: canDropTroops (moduł drop_pods) + wojny z właścicielem ciała, jeśli należy do innego imperium (D13)
@@ -805,6 +808,8 @@ export const NO_ORBITAL_DOMINANCE = 'no_orbital_dominance';
  */
 export function dropTroop(vessel, unit, planetId, q, r) {
   if (!vessel || !unit) return { ok: false, reason: 'invalid_args' };
+  // SB41 (Finding 418) — wrak nie zrzuca, także przy dominacji orbitalnej (ładunek ginie z wrakiem — VesselManager).
+  if (vessel.isWreck) return { ok: false, reason: VESSEL_IS_WRECK };
   if (!vessel.canDropTroops) return { ok: false, reason: 'no_drop_pods' };
   if (!vessel.groundUnits?.includes(unit.id)) return { ok: false, reason: 'not_loaded' };
   // D13 (G2-2) — powód odmowy dla wołającego (ColonyOverlay pokazuje go graczowi); samą bramkę

@@ -28,7 +28,7 @@ import { computeTabRects, clampScroll, scrollThumb, stepperButtonBand, fixedGlob
 import { anyFullBoundsModalOpen, closeFullBoundsModals } from './ColonyModalLogic.js';   // predykat modala pełnoekranowego (globe toggle) + reset na zmianę kolonii
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
-import { dropTroop, fireOrbitalStrike, NO_ORBITAL_DOMINANCE } from '../entities/Vessel.js';
+import { dropTroop, fireOrbitalStrike, NO_ORBITAL_DOMINANCE, VESSEL_IS_WRECK } from '../entities/Vessel.js';
 import { pruneUnitSelection } from './ColonySelectionLogic.js';   // G2-4 F7 — zaznaczenie bez „duchów”
 import { visibleGroundUnits, visibleGroundUnitAt, isGroundUnitVisibleToPlayer } from '../utils/GroundVisibility.js';   // Finding 379
 import { warGateRefusal, NOT_AT_WAR } from '../utils/WarGate.js';                        // D13/G2-2 — bramka wojny przy lądowaniu
@@ -311,6 +311,9 @@ export class ColonyOverlay extends BaseOverlay {
         this._showFlash(`⚔ (${q},${r}) runda ${round}: −${pk} / −${ek}`);
       }
     });
+
+    // SB41 (Finding 418) — statek otwartego trybu zrzutu stał się wrakiem: tryb się zamyka (`_closeDropModeOnWreck`).
+    EventBus.on('vessel:wrecked', ({ vesselId, vessel }) => this._closeDropModeOnWreck(vessel?.id ?? vesselId));
 
     EventBus.on('vessel:dropTroopsRequest', ({ vesselId, targetId, unitIds }) => {
       const vMgr = window.KOSMOS?.vesselManager;
@@ -886,6 +889,16 @@ export class ColonyOverlay extends BaseOverlay {
     this._dropPlanetId = null;
     this._dropQueue = [];
     this._showFlash(flashMsg);
+  }
+
+  /**
+   * SB41 (Finding 418) — statek otwartego trybu zrzutu stał się wrakiem: jednostki z ładowni zginęły razem z nim
+   * (`VesselManager`), więc tryb się zamyka z powodem zamiast czekać na klik, który nie ma czego zrzucić.
+   * @param {string} vesselId
+   */
+  _closeDropModeOnWreck(vesselId) {
+    if (!this._dropMode || this._dropVesselId !== vesselId) return;
+    this._finishDropMode(t('drop.failed', t('vessel.reasonVesselIsWreck')));
   }
 
   /**
@@ -4727,6 +4740,8 @@ export class ColonyOverlay extends BaseOverlay {
               ? t('fleet.reason.notAtWar')
               : res?.reason === NO_ORBITAL_DOMINANCE
               ? t('drop.lostDominance')
+              : res?.reason === VESSEL_IS_WRECK
+              ? t('drop.failed', t('vessel.reasonVesselIsWreck'))
               : t('drop.failed', res?.reason ?? 'unknown');
             this._finishDropMode(msg);
             return true;

@@ -116,8 +116,14 @@ export class VesselManager {
     // przechodzi przez `destroyVessel` w chwili straty; to jedyny szew, który łapie przemoc.
     // Realny producent w grze to `EnemyAttackHandler._turnIntoWreck` (VCS/DSCS/AutoRetreat
     // emitują tylko w gałęzi fallbacku, gdy EAH nie ma) — jeden subskrybent pokrywa wszystkie.
-    EventBus.on('vessel:wrecked', ({ vesselId, vessel }) =>
-      this._settleCrewOnLoss(vessel ?? this._vessels.get(vesselId), 'killed'));
+    // SB41 (Finding 418) — jednostki naziemne w ładowni giną RAZEM z wrakiem, tą samą drogą co przy `destroyVessel`
+    //   (`groundUnit:destroyed`, przyczyna `transport_lost`, rozliczenie POP w `ColonyManager`). Dotąd wrak ich nie
+    //   dotykał: żyły `in_cargo` w ładowni martwego statku, wrak dalej zrzucał, a sprzątanie wraku zostawiało je na zawsze.
+    EventBus.on('vessel:wrecked', ({ vesselId, vessel }) => {
+      const v = vessel ?? this._vessels.get(vesselId);
+      this._settleCrewOnLoss(v, 'killed');
+      this._killCargoGroundUnits(v);
+    });
 
     // Cleanup statków przy zniszczeniu kolonii
     EventBus.on('colony:destroyed', ({ planetId, destroyedVesselIds }) =>
@@ -1227,25 +1233,7 @@ export class VesselManager {
     this._settleCrewOnLoss(vessel, 'released');
 
     // Jednostki naziemne w ładowni giną razem ze statkiem (dramaturgia desantu)
-    if (vessel.groundUnits?.length > 0) {
-      const gum = window.KOSMOS?.groundUnitManager;
-      for (const unitId of [...vessel.groundUnits]) {
-        const unit = gum?.getUnit?.(unitId);
-        if (unit) {
-          EventBus.emit('groundUnit:destroyed', {
-            unitId,
-            planetId: unit.planetId ?? vessel.colonyId,
-            cause: 'transport_lost',
-            archetypeId: unit.archetypeId,
-            popCost: unit.popCost ?? 0,
-            ownerId: unit.owner ?? null,
-          });
-          gum?.removeUnit?.(unitId);
-        }
-      }
-      vessel.groundUnits = [];
-      vessel.troopBayUsed = 0;
-    }
+    this._killCargoGroundUnits(vessel);
 
     // Usuń z colony.fleet
     const colMgr = window.KOSMOS?.colonyManager;
@@ -1259,6 +1247,34 @@ export class VesselManager {
 
     // Usuń sprite z renderera
     EventBus.emit('vessel:docked', { vessel }); // reuse — usunie sprite
+  }
+
+  /**
+   * Jednostki naziemne w ładowni giną ze statkiem: `groundUnit:destroyed` (przyczyna `transport_lost`) PRZED `removeUnit`
+   * — rozliczenie POP robi `ColonyManager` (tabela śmierci, termin właściciela), jak przy każdej śmierci. Wołane przez
+   * `destroyVessel`, przy zostaniu wrakiem (SB41, Finding 418) i przy sprzątaniu wraku (zapis sprzed SB41). Idempotentne:
+   * pusta ładownia — nic.
+   * @param {object} vessel
+   */
+  _killCargoGroundUnits(vessel) {
+    if (!(vessel?.groundUnits?.length > 0)) return;
+    const gum = window.KOSMOS?.groundUnitManager;
+    for (const unitId of [...vessel.groundUnits]) {
+      const unit = gum?.getUnit?.(unitId);
+      if (unit) {
+        EventBus.emit('groundUnit:destroyed', {
+          unitId,
+          planetId: unit.planetId ?? vessel.colonyId,
+          cause: 'transport_lost',
+          archetypeId: unit.archetypeId,
+          popCost: unit.popCost ?? 0,
+          ownerId: unit.owner ?? null,
+        });
+        gum?.removeUnit?.(unitId);
+      }
+    }
+    vessel.groundUnits = [];
+    vessel.troopBayUsed = 0;
   }
 
   /**
@@ -2013,6 +2029,7 @@ export class VesselManager {
       if (currentYear - wreckedAt >= LIFETIME) toRemove.push(vessel.id);
     }
     for (const id of toRemove) {
+      this._killCargoGroundUnits(this._vessels.get(id));   // SB41 — zapis sprzed SB41: wrak z ładunkiem
       this._vessels.delete(id);
       if (tr?._removeVesselSprite) tr._removeVesselSprite(id);
       EventBus.emit('vessel:destroyed', { vesselId: id });
