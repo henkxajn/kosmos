@@ -2300,6 +2300,9 @@ jednostki (`createAIUnit`, `:165`); w `InvasionSystem` nie ma ani jednego `remov
 `[code]` ⇒ oryginały zostają w ładowni i mogą wylądować ponownie przy następnym zwycięstwie. Sprzed G2b (ta sama pętla na
 `f588b1c`, `:295-299`) `[git]`. Dziś bez wejścia: katalog AI nie zamawia kadłuba z ładownią (Findingi **49**, **201**).
 ⚠ Uzbraja się w chwili, gdy AI zacznie lądować z ładowni. Notatka G2b §10 (1).
+→ **AI STRIKES BACK S3, sesja 1 (2026-10-11):** naprawa PRZYGOTOWANA, NIE zacommitowana — desant z ładunku
+(`InvasionSystem._landCargo`, SB52): lądują DOKŁADNIE jednostki z ładowni, nowe nie powstają; zamknięcie przy commicie
+S3-3 (`AI_STRIKES_BACK_PLAN.md` §5j).
 
 ### ⚪ 385 — bramki mobilności AI w `_tickCombatAI` czytają tabelę legacy: każdy archetyp jest „mobilny”
 

@@ -5,7 +5,7 @@
 > **SB20–SB25** — **2026-10-07**, odpowiedzi na pytania sesji 1 S1; **SB26–SB29** — **2026-10-08**, odpowiedzi na
 > pytania sesji 2 S1; **SB30–SB36** — **2026-10-08**, podpis S2 (§2); **SB37–SB38** — **2026-10-10**, przy zamknięciu
 > S2 (§2); **SB39–SB44** — **2026-10-10**, podpis S2b — poprawki przed S3 (§2); **SB45–SB48** — **2026-10-11**, przy
-> zamknięciu S2b (§2).
+> zamknięciu S2b (§2); **SB49–SB60** — **2026-10-11**, podpis S3 (§2).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
@@ -25,14 +25,16 @@
 > poprawki **424** i **425** (SB47) — `5043744` · `7b37a4d`. Audyt, łańcuch, pomiary i bramka — §5h; zamknięcie — §5i;
 > decyzje **SB45–SB48**. Findingi **415–419**, **424**, **425** zamknięte; **420** i **421** → S3; **422**, **423** —
 > raport do zamknięcia arca (§6).
-> **Następny: S3** (pierwszy commit — **421**, SB46; kształt podpisywany po pomiarze części E — §5i.5). **S4** —
-> nierozpoczęty.
+> ⏳ **S3 — sesja 1 z 2 PRZYGOTOWANA 2026-10-11, NIE zacommitowana** (§5j): łańcuch S3-1 (**421**, SB49) · S3-2
+> (**420**, SB54, SB45) · S3-3 (eskadra z ładunkiem, SB51–SB53, SB55; **396**, **384**) ZESTAGOWANY w repo; przecelowanie
+> **R-S3** (PROPOSED) czeka na zgodę właściciela; M5 i bramka S3A (poza repo) — §5j.3, §5j.4; Findingi **426–435** — §6.
+> **Następny: zgoda na R-S3 i commity sesji 1, potem S3, sesja 2** (SB56–SB59). **S4** — nierozpoczęty.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
-> **Rejestr macierzysty findingów #391–#425:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
+> **Rejestr macierzysty findingów #391–#435:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#391–#396 na `8b72c47`, #397–#406 na `eb6c06e`, #412–#413 na
-> `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`, #420–#425 na `f3fb8e0` i na łańcuchu S2b) ·
+> `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`, #420–#425 na `f3fb8e0` i na łańcuchu S2b, #426–#435 na `2a09ac9` i na łańcuchu S3) ·
 > `[measured]` — wykonane i policzone ·
 > `[git]` — historia commitów · `[doc]` — przepisane z dokumentu, bez ponownego pomiaru · `[doc: audyt fazy A]` —
 > z raportu fazy A (`AI_STRIKES_BACK_AUDIT.md`; sondy i wyniki poza repo,
@@ -125,6 +127,18 @@ W kolejności właściciela:
 | **SB46** | **Finding 421 — wyłącznie kierunek:** uzbrojony statek w starciu, który nie ma wroga w zasięgu własnej broni, zbliża się na ten zasięg, zamiast stać tam, gdzie starcie się zaczęło; **strażnik dalej trzyma orbitę**. Kształt podpisywany po pomiarze części E; kod — **pierwszy commit S3**. Odpowiedź na pytanie 3, **2026-10-11**. | Bramka S2b, krok 13: fregata z `engage` skończyła jako wrak 0,108 AU od strażnika, poza zasięgiem lasera 0,05 AU (§5i.2). Pomiar części E — poza repo (§5i.5). |
 | **SB47** | **Findingi 424 i 425 naprawione teraz, na dowodzie bez przeglądarki, po jednym commicie; 422 i 423 zostają w rejestrze — wyłącznie raport, do zamknięcia arca.** Odpowiedź na pytanie 4, **2026-10-11**. | ✅ `5043744` (424) · `7b37a4d` (425) (§5i.1). |
 | **SB48** | **Wrak na orbicie cmentarnej ciała dalej jedzie z ciałem — zostaje.** Odpowiedź na pytanie 5, **2026-10-11**. | Keeper `sb2b_wreck_still_smoke` T5 (KONTROLA) bez zmian. |
+| **SB49** | **Finding 421, kształt O2E:** przed każdą rundą starcia uzbrojony statek, który nie ma wroga w zasięgu własnej broni, zbliża się do celu (cel `engage`, dopóki żyje, inaczej najbliższy wróg) na **0,95 × najdłuższy zasięg własnej broni**; krok na ZEGARZE STARCIA. Statek trzymający orbitę ciała stoi; uciekający — pomijany. Obie strony. Pierwszy commit S3. **2026-10-11**. | Przygotowany S3-1 (§5j.2): `DeepSpaceCombatSystem._closeToWeaponRange`; część E na kodzie S3 — scena (a): strzały gracza **94** (na `2a09ac9` 0), strażnik zniszczony 4/10 (§5j.3). |
+| **SB50** | **„Przypięcie” (kadłub AI w ataku przenoszony na ciało, którego orbitę trzymają statki gracza) zostaje w S3 tak, jak zbudowano;** rejestrowane jako finding. **2026-10-11**. | Finding **426** (§6). |
+| **SB51** | **Transportowiec tworzony na żądanie dla każdej fali przy stolicy AI funkcją tworzenia puli** (`transport_assault`, „wszystko zbadane”), poza limitem floty; jeden transportowiec na falę. **2026-10-11**. | Przygotowany S3-3 (§5j.2): `StrikeSquadronSystem.launchSquadron` → `VesselManager.createAIVessel` (pochodzenie `squadron`). |
+| **SB52** | **Prawdziwy ładunek:** jednostki fali tworzone przy stolicy (`createAIUnit`, skład i morale szczebla imperium) jako NOWE, nie z garnizonu, i ładowane. Desant ląduje dokładnie to, co jest na pokładzie, i nic przy pustej ładowni. Zestrzelony transportowiec zabiera swoje jednostki. **2026-10-11**. | Przygotowany S3-3: `InvasionSystem._landCargo` (`dropTroop`); Findingi **396**, **384** (§6). |
+| **SB53** | **Wielkość fali = ⌊limit garnizonu × udział⌋, obcięta do ładowni transportowca;** udział to klucz strojenia, domyślnie 0,5 (fixture: 6). **2026-10-11**. | Przygotowany S3-3: `StrikeWavePlanner`, klucz `strikeWaveShare` (typ `number`, 0–1); fixture `emp_001`: limit 13 → 6 (S, S, A, S, S, A; ładownia 10/32) `[measured]`. |
+| **SB54** | **Lot razem:** eskadra ma JEDEN punkt przylotu po skoku i JEDNĄ chwilę przylotu do celu, ustalaną przez najwolniejszego członka; transportowiec nigdy nie przylatuje przed eskortą. Ten sam pomocnik obsługuje floty gracza (SB45). Prędkości statków, silniki i okrąg przylotu 30 AU — bez zmian. **2026-10-11**. | Przygotowany S3-2: `GroupArrival.groupArrivalYear`, `OrderService.issueGroupAttack`, `FleetSystem._bodyGroupArrival`; Finding **420**. |
+| **SB55** | **Desant wyłącznie wtedy, gdy imperium eskadry trzyma orbitę i transportowiec żyje. Jedna fala na próbę.** **2026-10-11**. | Przygotowany S3-3: bramka dominacji `_onVesselGroupVictory` bez zmian; `dropTroop` (wrak, wojna, dominacja). |
+| **SB56** | **Wielkość eskadry:** mnożnik `requiredSquadron` **1,0** (było 1,5), sufit **3**; oba jako klucze strojenia. **2026-10-11**. | → **S3, sesja 2** (nie kodowane w sesji 1). |
+| **SB57** | **Odbijanie:** cel = ciało, które gracz przejął w BIEŻĄCEJ wojnie (księga); najpierw utracona stolica, potem porządek planera garnizonu; NOWA reguła Directora na wspólnych częściach reguły uderzenia; strażnicy wyłączeni; jedna próba na ciało na cooldown (klucz strojenia, domyślnie 5 lat); nic po pokoju. **2026-10-11**. | → **S3, sesja 2**. |
+| **SB58** | **Po desancie eskorta trzyma orbitę celu, aż walka naziemna się rozstrzygnie;** potem dotychczasowe odwołanie sprowadza ją do domu. **2026-10-11**. | → **S3, sesja 2**. Dziś odwołanie (`DirectorRecall`) zabiera eskortę zaraz po desancie (M5, §5j.3). |
+| **SB59** | **Ostrzeżenie:** naprawa Findingu **151** i tej samej klasy w `ObservatorySystem`; jeden wpis dzwonka przy pierwszym wykryciu uzbrojonego wrogiego kadłuba w układzie, w którym gracz ma kolonię (nowy klucz PL + EN). **2026-10-11**. | → **S3, sesja 2**; Finding **427** (§6). |
+| **SB60** | **Balans obrony naziemnej nie należy do S3.** Siedmiu kandydatów z notatki przekazania zamknięcia S2b (`HANDOVER_S2B_CLOSED.md` §9.3) rejestrowanych od **426**, w podanej kolejności. **2026-10-11**. | Findingi **426–432** (§6). |
 
 ---
 
@@ -141,7 +155,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S1** | tabela strojenia + komenda konsoli + odczyt (SB9, SB16) · limit floty (SB3, SB14) · pula: kadłuby przy mobilizacji, w służbie i zadokowane przy stolicy, odrastanie 1 kadłub/rok, bez załogi (SB1, SB2, SB15, SB17, SB18) · mobilizacja wojenna całej rezerwy (SB13) · odczyt floty / limitu w wywiadzie (SB19). ⓘ Kandydat 9 notatki przekazania S0 (parytet zatrzymuje mobilizację po pierwszej porcji — 4 z 6 fregat GATE-S4 zostaje w rezerwie) NIE jest findingiem: odpowiada na niego SB13. | SB1 · SB2 · SB3 · SB9 · SB13–SB25 · 398 · 407 · 408 | 2–3 dni | Director 6–10; `deploy_seams`, `w2_deploy_model` | tak — ✅ **PASS 2026-10-08** (§5e.3). Sesja 1 ✅ 2026-10-07 (§5c): tabela strojenia i limit floty bez bramki (nic w grze ich nie czyta); jednolinijkowce części „tabela” zwalidowane w prawdziwej grze na fixture · Sesja 2 (§5d): scenariusz całego S1 (`GATE_S1.md`, poza repo) zwalidowany w prawdziwej grze na kodzie sesji i na kontroli `45ee9d2`; bramka właściciela po zgodzie na przecelowania |
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
-| **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11) | **421** (SB46 — pierwszy commit) · **420** (SB45) · **396** · **406** · 384 · 344 · 55 · SB7 · SB8 · SB11 | 3–4 dni | `w3_ai_invasion`, `g2b_invasion`, `ai_capture_*` (4), `battle_announce_once`, `g2_war_gate` | tak |
+| **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11, §5j): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — PRZYGOTOWANE, NIE zacommitowane; sesja 2: SB56–SB59 | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (PROPOSED, §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]` | tak — sesja 1: scenariusz `GATE_S3A.md` zwalidowany (§5j.4), bramka właściciela czeka |
 | **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11) | SB10 · SB11 | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams` | tak |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
@@ -1207,6 +1221,211 @@ eskadra AI przylatuje razem. **151** (SB44) — z ostrzeżeniem o nadlatującej 
 podpisu S3: eskadra, fale desantu, przelot, ostrzeżenie) — wyłącznie odczyt, w klonie; wyniki i rekomendacje w notatce
 przekazania zamknięcia S2b (`HANDOVER_S2B_CLOSED.md`, poza repo).
 
+### 5j. S3 — sesja 1 z 2 (2026-10-11): 421, 420, eskadra z ładunkiem — łańcuch PRZYGOTOWANY, NIE zacommitowany; M5; bramka
+
+Polecenie właściciela (2026-10-11): sesja 1 S3 — zbliżenie w starciu (421), eskadra lecąca razem (420), transportowiec
+z prawdziwym ładunkiem i desant z ładunku; bez reguły odbijania i bez zmiany detekcji; kod ZESTAGOWANY, NIE zacommitowany.
+Podpis **SB49–SB60** (§2). Kotwica wejścia: HEAD `2a09ac9` (drzewo `efcf55ee`), indeks = HEAD (sprawdzone na kopii
+indeksu), pozycje obce statusu identyczne z wejściem S2b, sweep **285/285**, `check-i18n` PASS pl = en = **3456**,
+SHA256SUMS S2b **918 / 918** `[measured]`. Zapis **v101 bez migracji**; klucze i18n dodane / usunięte: **0 / 0**. Audyt
+(część A), sondy, wyniki, skrypty, bramka, notatka: `kosmos-handover/ai-strikes-back-s3/` (poza repo).
+
+#### 5j.1 Audyt (część A) — ustalenia, które ustawiły kształt `[code]` `[measured]`
+
+- **B1 (SB49):** próba O2E z S2b (`PART_E_421.md`) ruszała statek także przy wrogu w zasięgu (pasmo 0,95–1,0 × zasięg)
+  i zawsze na najbliższego wroga; podpis — ruch WYŁĄCZNIE bez żadnego wroga w zasięgu własnej broni, cel `engage` pierwszy.
+  Kiting `engage` w `MovementOrderSystem` trzyma 0,9025–0,98 × zasięg — 0,95 leży w tym paśmie. Widoczny krok na rundę
+  (co 110 ms): fregata z laserem 0,028 AU (~4 px przy domyślnej kamerze), eskorta 0,154 AU (~21 px) `[derived]`.
+- **B2 (SB54):** siedem mechanizmów „trzymania razem” — żaden nie łączy SKOKU; composite `OrderService` nie zna grupy;
+  punkt przylotu po skoku losowany `Math.random()` osobno dla każdego statku (`VesselManager.js:2975-2976`, Finding
+  **428**). `mission`, `pendingOrder` i `movementOrder` zapisywane kopią płytką ⇒ nowe pola bez migracji.
+- **B3 (SB51–SB53, SB55):** `transport_assault` = `hull_large`, ładownia **32**, **42,894 AU/rok**, bak warp 5,
+  nieuzbrojony (poza limitem floty — SB23); pule Directora (doktryny, uderzenie, odwołanie) wymagają `hasWeapons` —
+  transportowca po desancie nikt nie zabiera (Finding **434**). `_onVesselGroupVictory` liczył POJEMNOŚĆ i TWORZYŁ jednostki
+  (**396**, **384**). Wejścia desantu AI: (1) `_onVesselGroupVictory` ← bitwa `EnemyAttackHandler` (jedyna z graczem po
+  stronie B); (2) gałąź floty abstrakcyjnej (bez producentów od W3-8); (3) dźwignia `WarOverlay force_invasion`.
+- **Próg STOP:** migracja — nie; rodziny ścieżek: B1 — 1, B2 — 3, B3 — 2 + nowe wejście (eskadra) ⇒ kod.
+  Raport: `AUDIT_S3_PART_A.md` (poza repo).
+
+#### 5j.2 Łańcuch — PRZYGOTOWANY, NIE zacommitowany `[git]` `[measured]`
+
+Zbudowany w świeżym klonie z łatek (`tools/build_chain_S3.sh`), zweryfikowany (`tools/verify_chain_S3.sh --sweep`: drzewa,
+fail-first każdego nowego keepera na poprzednim kroku, pełny sweep i `check-i18n` na każdym kroku); drzewa niżej — na
+`2a09ac9`; na commicie tej dokumentacji — `patches/trees.txt` w folderze przekazania.
+
+| krok | treść | drzewo (na `2a09ac9`) | keeper NEW (asercje) · fail-first na poprzednim | sweep · `check-i18n` |
+|---|---|---|---|---|
+| **S3-1** | **421** (SB49) | `8b6a593b` | `sb3_combat_closing_smoke` 28 · 7 / 21 — zielone wyłącznie kontrole (T1-0, T1-0b, T1b, T5a, T5b, T7-0, T8-0) | 286/286 · PASS 3456 |
+| **S3-2** | **420** (SB54, SB45) | `e8d9b759` | `sb3_group_arrival_smoke` 26 · 6 / 20 — zielone wyłącznie kontrole (T2-0, T2c, T4a–d) | 287/287 · PASS 3456 |
+| **S3-3** (kod) | SB51–SB53, SB55 (**396**, **384**) | `a8556f6e` | `sb3_squadron_smoke` 41 · 1 / 40 — zielona wyłącznie kontrola T10a | **283/288** — czerwone wyłącznie 5 keeperów R-S3 · PASS 3456 |
+| **S3-3 + R-S3** | jw. + przecelowanie (PROPOSED) | `21f28f97` | — | **288/288** · PASS 3456 |
+
+- **S3-1 — `DeepSpaceCombatSystem._closeToWeaponRange`**, wołane przed KAŻDĄ rundą (pętla rund `_tick`, przed
+  `_tickEncounter`): uzbrojony statek starcia bez żywego wroga w zasięgu najdłuższej własnej broni (`_resolveWeaponRange`,
+  z mnożnikami techu) zbliża się do celu `engage` (dopóki żyje jako wróg tego starcia), inaczej do najbliższego wroga, na
+  `CLOSE_RANGE_FACTOR` 0,95 × zasięg, krokiem `speedAU × CLOSE_STEP_YEARS` (`CIV_PER_ROUND / CIV_TIME_SCALE` = 0,025 roku
+  gry na rundę). Stoją: statek z `dockedAt` (strażnik trzyma orbitę), uciekający (`_isRetreatingFromCombat` — jedno źródło
+  z `_allOutsideOf`), statek `in_transit` (własna misja), wrak, bezbronny. Scena keepera T1 (3 fregaty z laserem na
+  strażnika z 0,25 AU): 14 rund, 8 strzałów fregat, wszystkie z 0,0475 AU; na `2a09ac9` 0 strzałów.
+- **S3-2 — NEW `src/utils/GroupArrival.js`** (`groupArrivalYear`: najwcześniejsze przechwycenie każdego członka
+  — `_interceptBody`, SB39 — chwila = najpóźniejsze z nich, iteracja z `notBefore` aż każdy dosięga ciała w tej samej
+  chwili; opcjonalna klamra rdzeń / odstający) · `FleetSystem._bodyGroupArrival` (cel-ciało floty gracza, klamra 10×;
+  linia `_arrivalSyncYear: gameYear + fleetEta` bez zmian) · `OrderService.issueGroupAttack` (WYŁĄCZNIE kadłuby AI;
+  wszystko albo nic przed skokiem; JEDEN kąt na grupę → `dispatchInterstellar(…, {arrivalAngle})` → `mission.arrivalAngle`,
+  czytany w `_tickInterstellar`, bez niego — `Math.random`) · `_maybeDeliverGroup` (odcinek w układzie celu, gdy jest tam
+  CAŁA grupa) · `_issueGroupLeg` (rozkaz `attack` każdego członka z `_arrivalSyncYear` = chwila grupy) ·
+  `_regroupAfterBattle` (`battle:resolved` — grupa w locie dostaje znowu jedną chwilę). Audyt `order:groupLegIssued`
+  w `DebugLog.TRACKED_EVENTS`. Keeper T2 (flota gracza 1,114 / 2,0 / 3,5 AU/rok na ciało o okresie 1,406 roku): przylot
+  102,4360 dla wszystkich (na S3-1: 102,4180 / 101,7960 / 101,7960).
+- **S3-3 — NEW `src/systems/StrikeSquadronSystem.js`** (`launchSquadron`: walidacja eskorty przed utworzeniem czegokolwiek;
+  transportowiec `createAIVessel` przy stolicy, pochodzenie `squadron`; fala `createAIUnit` + `loadGroundUnit`; grupa
+  `issueGroupAttack`; rekord `gameState.strikeSquadrons.<id>` `launched` → `landed` / `transport_lost`; odmowa po utworzeniu
+  cofa transportowiec i jednostki; audyt `squadron:launched` / `squadron:launchRefused`) · NEW
+  `src/utils/StrikeWavePlanner.js` (fala i odczyt `printStrikeWaves`) · klucz `strikeWaveShare` (typ `number` 0–1, nowa
+  gałąź walidacji) · `InvasionSystem._landCargo` (desant DOKŁADNIE z ładowni ocalałych zrzutowców przez `dropTroop`; pusta
+  ładownia → `invasion:blocked` `empty_cargo`; klamra `MAX_TROOPS_PER_VESSEL_LANDING` usunięta; rekord kampanii wydzielony
+  do `_recordLanding`) · `GameScene` i `GameCore` (lokator) · konsola `KOSMOS.debug.sbLaunchSquadron`, `sbTuning().fala`.
+  **Z liczby (nie z ładunku) ląduje dalej wyłącznie `launchInvasion`:** dźwignia `WarOverlay force_invasion` i martwa gałąź
+  floty abstrakcyjnej.
+- **numstat** (blob, LF): S3-1 `DeepSpaceCombatSystem.js` 69/2, keeper 294/0 · S3-2 `DebugLog.js` 3/0, `FleetSystem.js` 30/0,
+  `OrderService.js` 140/3, `VesselManager.js` 5/1, `GroupArrival.js` 81/0, keeper 317/0 · S3-3 `DebugLog.js` 4/0,
+  `GameState.js` 4/0, `StrikesBackData.js` 9/1, `GameScene.js` 31/2, `InvasionSystem.js` 63/24, `StrikeSquadronSystem.js`
+  198/0, `GameCore.js` 4/0, `StrikeWavePlanner.js` 110/0, `StrikesBackTuning.js` 8/0, keeper 346/0 · R-S3: 9/1, 8/0, 6/4,
+  2/1, 16/1. Żaden commit nie odwraca całego pliku. **EOL:** `DebugLog.js`, `GameState.js`, `InvasionSystem.js`,
+  `OrderService.js` i `GameCore.js` CRLF w drzewie właściciela zostają CRLF (zapis `tools/eolwrite.py`; test na sucho
+  trzech wariantów commitów na kopiach bajtów właściciela).
+
+**Przecelowanie R-S3 — PROPOSED, czeka na zgodę (piny zostają czerwone na kodzie):**
+
+| przecelowanie | czerwone na kodzie S3-3 (SB52 / SB53) | propozycja |
+|---|---|---|
+| **R-S3-1** | `sb1_fleet_tuning` T11b („StrikesBackTuning importują GameScene i FleetLimit”) | trzeci czytelnik tabeli — planer fali (`utils/StrikeWavePlanner.js`) |
+| **R-S3-2** | `sb1_fleet_tuning` T12b · `sb1_pool_warp_minimum` M4d (dosłowny kształt `sbTuning()`) | `sbTuning()` drukuje też falę: `…, fala: printStrikeWaves(window.KOSMOS)` |
+| **R-S3-3** | `w3_ai_invasion` T1, T3 (kontrola), T4, T5, T7 (kontrola) · `ai_capture_outpost` T1 · `sb0_fleet_defects` T5f — desant z PUSTEJ ładowni (zachowanie 396) | zrzutowiec dostaje w setupie 2 jednostki AI utworzone przy stolicy (`createAIUnit`) i załadowane (`loadGroundUnit`); asercje bez zmian |
+
+**Dowód mutacyjny** (`tools/mutate_RS3.mjs`, `mutate_RS3_extra.mjs` → `results/mutation/`): kontrola bez mutacji zielona
+przed i po, drzewo przywrócone bajt w bajt po każdym mutancie; **8 z 9 mutantów zabitych** od razu — MR1a (czwarty
+czytelnik tabeli) i MR1b (planer nie czyta tabeli) → T11b; MR2a (`sbTuning()` bez fali) i MR2b (bez floty) → T12b i M4d;
+MR3b (bramka dominacji zdjęta) → `w3` T2 SEDNO, `sb0` T5e; MR3c (desant nigdy nie ląduje) → `w3` T1/T3/T4/T5/T7,
+`ai_capture` T1, `sb0` T5f; MR3d (placówka znów poza celami) → `ai_capture` T1 SEDNO. **MR3a** (filtr wraku w
+`_onVesselGroupVictory`) — w S3 RÓWNOWAŻNY: druga bramka SB41 w `dropTroop` odmawia wrakowi; po zdjęciu obu bramek
+`w3` T4 SEDNO pada (4 ≤ 3), na `2a09ac9` pada od samego filtra (6 ≤ 3). **MR3e** (cel z `getAllColonies`) przeżywa
+także na `2a09ac9` — słabość pinu T5 sprzed S3 (Finding **433**).
+
+#### 5j.3 M5 — fixture GATE-S4, prawdziwa gra w izolowanym headless Chrome, tryb klatek `[measured]`
+
+Kod = łańcuch S3-3 (kod) w klonie; gra po angielsku; czas: klatki co ~16 ms realnych (dt ≤ 100 ms), 1 m/s poza walką,
+auto-slow przy walce zostaje; 3 przebiegi równolegle. Sondy `probes/m5/` (poza repo).
+
+**Część E S2b powtórzona na kodzie S3** (10 przebiegów na scenę; baza `2a09ac9` — `PART_E_421.md`):
+
+| scena | strzały GRACZA (trafienia) · odległość | strzały AI | straty gracza (żywe przy limicie 20 rund) | wróg zniszczony | baza `2a09ac9` |
+|---|---|---|---|---|---|
+| (a) 3 fregaty z laserem, `engage` na strażnika stolicy `emp_001` | **94 (87)** · 0,038–0,049 AU | 194 (110) | 25/30 (1) | strażnik **4/10** | 0 · 180 · 30/30 (9) · 0/10 |
+| (b) jw., `moveToPoint` na ciało stolicy | **76 (71)** · 0,030–0,050 AU | 162 (99) | 23/30 (3) | **4/10** | 0 · 182 · 30/30 (9) · 0/10 |
+| (c) 3 fregaty NA ORBICIE domu, 2 eskorty `attack` | 210 (200) · 0,000–0,002 AU | 35 (22) | 1/30 | eskorty 20/20 | 209 (200) · 39 · 1/30 · 20/20 |
+| (d) jw., fregaty ZADOKOWANE (bitwa planetarna) | — | — | 9/30 | 14/20 (AI wygrywa 3/10) | 6/30 · 16/20 (2/10) |
+
+(c) i (d) bez zmian charakteru — (c) to „przypięcie” (426), (d) bitwa planetarna, której S3 nie dotyka (różnica 2/10 → 3/10 to
+losowość chwil przylotu). Jeden przebieg (d) zawisł (odpowiedź CDP nie doszła), drugi padł na zamknięciu karty — oba
+powtórzone; w zestawieniu 10/10 ważnych.
+
+**Eskadra `emp_001` → planeta macierzysta gracza** (dźwignia `sbLaunchSquadron`, transportowiec + 2 albo 3 eskorty; przy
+3 eskortach `fleetMinWarpHulls` 3 przed wojną; uderzenie Directora wyłączone na instancji — eskadra jest jedynym napastnikiem;
+fregaty gracza z fixture'u → rezerwa, obrona sceny = 3 fregaty z laserem):
+
+| eskorty · obrona domu | przebiegi | skok: rozrzut punktu · chwili | lot do ciała (lata, mediana) · rozrzut przylotu (dolecieli) | bitwy (wygrywa) | straty eskadry · fregat gracza | desant (transportowiec żywy · = ładunek) | kolonia upadła (mies. po desancie, mediana) | fala zniszczona |
+|---|---|---|---|---|---|---|---|---|
+| 2 · 3 fregaty ZADOKOWANE | 10/10 | 0.000 AU · 0.0 d | 5.14–5.65 (5.28) · 0.00 d | planetarna AI 10 | 0/30 · 30/30 | 10/10 (10 · 10) | 10/10 (11.0–13.7; 12.0) | 0 |
+| 2 · 3 fregaty NA ORBICIE | 10/10 | 0.000 AU · 0.0 d | — · — | DSCS gracz 17 | 30/30 · 6/30 | 0/10 (0 · 0) | 0/10 | 10 (transport_lost 60) |
+| 2 · brak statków | 10/10 | 0.000 AU · 0.0 d | 5.17–5.64 (5.41) · 0.00 d | planetarna AI 10 | 0/30 · — | 10/10 (10 · 10) | 10/10 (11.1–13.5; 12.6) | 0 |
+| 3 · 3 fregaty ZADOKOWANE | 10/10 | 0.000 AU · 0.0 d | 5.19–5.64 (5.49) · 0.00 d | planetarna AI 10 | 0/40 · 30/30 | 10/10 (10 · 10) | 10/10 (11.9–14.3; 12.7) | 0 |
+| 3 · 3 fregaty NA ORBICIE | 10/10 | 0.000 AU · 0.0 d | 5.11–5.42 (5.22) · 0.00 d | DSCS AI 7, planetarna AI 7, DSCS gracz 3 | 25/40 · 24/30 | 7/10 (7 · 7) | 7/10 (11.2–13.8; 11.6) | 3 (transport_lost 18) |
+| 3 · brak statków | 10/10 | 0.000 AU · 0.0 d | 5.14–5.65 (5.52) · 0.00 d | planetarna AI 10 | 0/40 · — | 10/10 (10 · 10) | 10/10 (11.1–13.2; 12.3) | 0 |
+
+Odwołanie eskorty (DirectorRecall) po desancie: 2_docked 10/10 (0.0–1.0 mies.) · 2_orbit 0/10 · 2_none 10/10 (0.1–1.1 mies.) · 3_docked 10/10 (0.2–0.9 mies.) · 3_orbit 7/10 (0.2–0.9 mies.) · 3_none 10/10 (0.1–1.0 mies.); transportowiec na orbicie celu z pustą ładownią na końcu przebiegu po każdym desancie: 2_docked 10/10 · 2_orbit 0/0 · 2_none 10/10 · 3_docked 10/10 · 3_orbit 7/7 · 3_none 10/10; błędy przebiegu / wpisy konsoli err/exc: 0 / 0.
+
+(60 przebiegów, 10 na wariant; liczby z plików przebiegów — `probes/m5/table_m5.mjs`; liczby w tabeli z kropką dziesiętną,
+jak w wynikach sondy.) **KONTROLA M5** (3 przebiegi, `2_ctl`): te same kadłuby — 2 eskorty z bakiem i transportowiec z falą 6 — wysłane OSOBNO
+starą ścieżką `issueAttack`, dom bez statków: punkty skoku rozrzucone o **24,3–59,8 AU** (trzy różne punkty okręgu 30 AU);
+transportowiec dolatuje SAM po 1,19–1,24 roku (eskorta — dopiero ~4 lata później), sam wygrywa bitwę planetarną 3/3
+(30 tur; przewaga HP 180 wobec obrońcy-fantomu 100 — W3-26, D-199-6) i ląduje; dom pada po 11,2–12,0 mies. (Finding
+**435**). Wspólny punkt skoku i wspólna chwila przylotu w tabeli wyżej to więc skutek S3-2, nie sceny.
+
+**Uprząż C1** (pokój, 100 lat, ziarna default i 987654321, warianty passive / press / pressPaid) — przed (`2a09ac9`) i po
+(kod S3): **6 / 6 identycznych** (JSON i tekst, po zdjęciu czasu wykonania); żaden wynik nie ma statusu `war`.
+
+**Co zobaczy właściciel:**
+
+- **Start eskadry** (w sesji 1 wyłącznie dźwignią konsoli): po ok. pół roku gry (~6 s przy 1m/s) na obrzeżu układu
+  domowego, ~30 AU od domu, pojawiają się trzy albo cztery statki naraz, w JEDNYM punkcie; okno „Enemy vessel detected” po
+  jednym na statek (bramka S3A: 6 okien przy dwóch eskadrach).
+- **Lot:** grupa leci do domu razem i dolatuje w jednej chwili 5,1–5,7 roku po starcie (~60–70 s przy 1m/s); transportowiec,
+  choć siedem razy szybszy od eskorty, nie wyprzedza jej w żadnym z 60 przebiegów.
+- **Dom bez statków albo z 3 zadokowanymi fregatami (40 przebiegów):** okno bitwy planetarnej nad domem — AI wygrywa 40/40
+  (bitwa idzie do limitu 30 tur albo do odwrotu gracza; nieuzbrojony transportowiec wnosi do strony AI 180 HP — reguła
+  D-199-6, Finding **200**; w części E (d) dwie eskorty przylatujące RAZEM bez transportowca wygrały 3 z 4 takich bitew,
+  pojedynczo — 0 z 12); zadokowane fregaty giną 60/60; zaraz potem alarm „⚔ Troops landing on <dom>!” (6 jednostek);
+  eskorta odlatuje do domu w ciągu miesiąca (odwołanie); transportowiec zostaje na orbicie z pustą ładownią (434); po
+  11–14 miesiącach (mediana ~12; ~12 s przy 1m/s) „⚠ CAPITAL TAKEN” — dom pada 40/40 (obrona naziemna gracza nie zabija
+  jednostek AI — 430).
+- **3 fregaty na orbicie domu:** walka w przestrzeni (DSCS), zanim eskadra doleci do planety; przeciw 2 eskortom gracz
+  wygrywa 10/10 — cała eskadra z transportowcem idzie na wrak, fala ginie z nim (60 jednostek `transport_lost`), desantu
+  nie ma; przeciw 3 eskortom AI wygrywa starcie 7/10 (fregaty gracza giną 24/30), potem bitwa planetarna i desant — dom
+  pada 7/10.
+- **Starcie z bronią krótkiego zasięgu (część E):** fregaty z laserem dochodzą do zasięgu i strzelają (scena (a): 94 strzały,
+  przed S3 — 0); ruch zbliżenia jest skokowy — 9 kroków na sekundę po 0,028 AU dla fregaty (~4 px przy domyślnej kamerze,
+  wyraźne „kroki” przy zbliżeniu kamery).
+
+#### 5j.4 Bramka S3A — scenariusz zwalidowany w prawdziwej grze
+
+`kosmos-handover/ai-strikes-back-s3/gate/GATE_S3A.md` (po polsku, gra po ANGIELSKU): 24 kroki — klucz `strikeWaveShare`
+(odczyt, odmowy, zmiana, reset), dwie eskadry przez dźwignię (A — desant, B — transportowiec zestrzelony w drodze), skok
+w jeden punkt, fregaty z laserem na strażnika (SB49), zapis i wczytanie w locie, przylot razem, desant = ładunek, brak
+desantu B. Każda komenda wykonana walidatorem w prawdziwej grze na fixture; kontrola na `2a09ac9` przy każdym kroku;
+tabela WŁASNOŚCI na końcu (nie identyfikatorów).
+
+Walidacja `[measured]` (`results/gate/`, zestawienie `summary_gate_s3a.txt`) — **kod S3 (łańcuch w klonie):** wszystkie
+własności zgodne — fala 6 → 13 (udział 1) → 6 (reset), odmowy `out_of_range` / `wrong_type`; dwie eskadry, każda po skoku
+w JEDNYM punkcie (rozrzut 0 AU, dwa różne punkty); transportowiec B wrakiem, 6 jednostek `transport_lost`, rekord
+`transport_lost`; fregaty z laserem strzelają z 0,047 AU (kontrola: 0 strzałów, strażnik z 0,233–0,250 AU); zapis w roku
+61,66 i wczytanie — chwile przylotu bez zmian (65,2982 / 65,4113); eskadra A dolatuje razem (rozrzut 0 dni, przeskok
+0,01 AU), bitwa planetarna wygrana przez AI, desant = dokładnie 6 jednostek z ładowni, transportowiec żywy z pustą
+ładownią; eskadra B — 0 desantów; 0 błędów konsoli. Przerwania (okna, które zobaczy właściciel): T1 — 6 okien wykrycia
+(po jednym na wrogi statek), T2 — 1 okno bitwy, T3 — 3 okna bitew i alarm desantu, T4 — brak. **Kontrola `2a09ac9`:** brak
+odczytu fali (`unknown_key`), brak dźwigni i systemu eskadr, fregaty 0 strzałów, 0 błędów konsoli. Ustalone przy walidacji:
+po wczytaniu gra rusza BEZ pauzy przy 1 d/s (domyślny zegar) — ujęte w kroku 16. Przebieg na zestagowanym drzewie repo —
+w notatce przekazania. Bramka właściciela — czeka.
+
+#### 5j.5 Pytania do właściciela
+
+1. **Zgoda na przecelowanie R-S3** (R-S3-1, R-S3-2, R-S3-3; §5j.2, dowód mutacyjny) — bez niej S3-3 nie może wejść do
+   historii (kod S3-3 bez przecelowań czerwieni pięć keeperów). S3-1 i S3-2 są zielone same w sobie.
+2. **Zbliżenie (SB49) dotyczy statku ZAMROŻONEGO w miejscu startu starcia** (`orbiting`, `dockedAt == null`); statek
+   `in_transit` (rozkaz ruchu gracza wydany w trakcie walki, strona gracza przy wyłączonej pauzie misji) nie jest
+   przyciągany — czy tak rozumiesz „stoi tam, gdzie zaczęła się walka”?
+3. **Ponowna synchronizacja po bitwie w locie** jest zrobiona dla eskadry AI (wynika z „transportowiec nigdy przed
+   eskortą”); flota GRACZA po bitwie w locie wznawia lot dalej osobno — czy ma też lecieć znowu razem?
+4. **Transportowiec po desancie zostaje na orbicie celu na zawsze** (Finding 434; M5: po każdym desancie) — w sesji 2
+   razem z SB58: wraca z eskortą, zostaje do rozstrzygnięcia walki naziemnej, czy znika?
+5. **Cel desantu przy kilku koloniach gracza w układzie** — dziś bez zmian: „najpierw dom” (`_onVesselGroupVictory`).
+   Przy odbijaniu (SB57) celem jest konkretne ciało — czy desant ma lądować na ciele, nad którym eskadra wygrała orbitę
+   (cel eskadry), zamiast na domu?
+6. **Finding 55** (kolonia gracza bez siatki do pierwszego otwarcia mapy ⇒ `no_grid`) dotyczy także desantu z ładunku —
+   czy w sesji 2?
+7. **Skala (M5):** eskadra 2 eskorty + transportowiec bierze dom bez statków i dom z 3 zadokowanymi fregatami 40/40
+   (przylot razem; transportowiec wnosi 180 HP do bitwy planetarnej — reguła D-199-6), a 3 fregaty na orbicie niszczą
+   eskadrę 2-eskortową 10/10 i przegrywają z 3-eskortową 7/10 — czy to właściwy punkt wyjścia przed SB56 (wielkość
+   eskadry 1,0 × / sufit 3)? I czy bitwa planetarna ma liczyć HP nieuzbrojonego transportowca (dziś tak — D-199-6;
+   kontrola M5: sam transportowiec bierze niebronioną kolonię 3/3 — Finding **435**)?
+8. **Bramka S3A** (`gate/GATE_S3A.md`) — przed commitem czy po?
+
+#### 5j.6 Następny krok
+
+**Sesja 2 S3** (podpisane, nie kodowane): **SB56** wielkość eskadry jako klucze strojenia · **SB57** reguła odbijania ·
+**SB58** eskorta trzyma orbitę do rozstrzygnięcia walki naziemnej · **SB59** Finding **151** + **427** i wpis dzwonka.
+Commity sesji 1 — po zgodzie na R-S3 (`tools/commit_S3.sh`, `commit_S3_B3.sh`; notatka `HANDOVER_S3_PART1.md`).
+
 ---
 
 ## 6. Rejestr findingów arca (#391–#396, zebrane 2026-10-06)
@@ -1279,6 +1498,9 @@ ocalałych zrzutowców są puste, `launchInvasion` dostaje `null` zamiast listy 
 `[code]` ⇒ każda wygrana bitwa orbitalna z ocalałym zrzutowcem to nowa fala do 6 jednostek „z niczego”. Pomiar D2: transport
 z pustą ładownią — **12** jednostek z **0** przewiezionych w dwóch bitwach `[doc: audyt fazy A]`. Rodzina **384**. Dziś
 uśpione: AI nie ma zrzutowca (**49**, **201**). → **S3** (SB7: wojska przylatują na pokładzie; SB8: wielkość desantu).
+→ **S3, sesja 1 (2026-10-11):** naprawa PRZYGOTOWANA, NIE zacommitowana — S3-3 (SB52): desant ląduje DOKŁADNIE
+jednostki z ładowni ocalałych zrzutowców (`InvasionSystem._landCargo`), pusta ładownia — nic (`empty_cargo`); keeper
+`sb3_squadron_smoke` T3, T4 (§5j.2). Zamknięcie — przy commicie S3-3.
 
 ### #397–#406 — zamknięcie S0 (2026-10-06)
 
@@ -1630,6 +1852,10 @@ najpóźniejsze z ich najwcześniejszych przechwyceń). Czwarta rodzina ścieże
 właściciela (§5h.5, pytanie 2).
 → **S3 (SB45, 2026-10-11):** w commicie, w którym eskadra AI przylatuje razem; jeden pomocnik synchronizacji dla flot
 gracza i dla eskadry AI.
+→ **S3, sesja 1 (2026-10-11):** naprawa PRZYGOTOWANA, NIE zacommitowana — S3-2 (SB54): `GroupArrival.groupArrivalYear`
+w `FleetSystem` (cel-ciało) i w eskadrze AI; keeper `sb3_group_arrival_smoke` T2 — flota 1,114 / 2,0 / 3,5 AU/rok na
+ciało o okresie 1,406 roku przylatuje razem (102,4360; na S3-1 102,4180 / 101,7960 / 101,7960) (§5j.2). Zamknięcie —
+przy commicie S3-2.
 
 ### 🟠 421 — statek z misją wstrzymaną na walkę stoi tam, gdzie walka się zaczęła: broń krótsza niż odległość startu walki nie strzela
 
@@ -1644,6 +1870,9 @@ skutek usunięcia przeskoku przy przylocie (416), nie zmiana walki. → decyzja 
 broni zbliża się na ten zasięg; strażnik trzyma orbitę. Kształt podpisywany po pomiarze części E (§5i.5). Bramka S2b,
 krok 13: fregata z rozkazem `engage` skończyła jako wrak **0,108 AU** od strażnika — poza zasięgiem lasera 0,05 AU
 `[measured: odczyt właściciela]`.
+→ **S3, sesja 1 (2026-10-11):** naprawa PRZYGOTOWANA, NIE zacommitowana — S3-1 (SB49, kształt O2E):
+`DeepSpaceCombatSystem._closeToWeaponRange` przed każdą rundą; część E na kodzie S3 — scena (a): strzały fregat **94**
+(87 trafień) z 0,038–0,049 AU, strażnik zniszczony 4/10 (§5j.3). Zamknięcie — przy commicie S3-1.
 
 ### ⚪ 422 — misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4)
 
@@ -1682,6 +1911,85 @@ przekazania identyfikatora — pada strażnik T4a/T4b `[measured]`.
 SB40). Keeper `sb2b_redispatch_wreck_smoke` 8/8 — fail-first na `5043744` 4 / 4 (czerwone dokładnie T1a–T1c i T3a; wrak
 z głębokiej przestrzeni i wrak na orbicie cmentarnej ciała); kontrole T0/T3-0 (wrak przechodzi obie bramki sprzed
 poprawki — `orbiting`, „w służbie”) i T2 (żywy statek wychodzi) zielone po obu stronach `[measured]`.
+
+### #426–#435 — S3, sesja 1 (2026-10-11)
+
+⚠ **Registry-first (2026-10-11):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#425**; trafienia „426”–„437” to numery linii, wartość siły okrętu (`**432**` w tabeli
+szablonów §5c) i zapis „wolny 426” w pamięci, nie findingi `[measured]`. **426–432** — siedmiu kandydatów z notatki
+przekazania zamknięcia S2b (`HANDOVER_S2B_CLOSED.md` §9.3, poza repo), w podanej kolejności (decyzja **SB60**);
+**433–435** — z sesji 1 S3 (§5j).
+
+### ⚪ 426 — „przypięcie” w DSCS: kadłub AI w ataku dostaje `dockedAt` = ciało, którego orbitę trzymają statki gracza, i przeskakuje na nie
+
+`[code]` `DeepSpaceCombatSystem.startEngagement` → `_pauseSideForCombat(strona AI, pin)` z `pin = _findDominantDockedAt(strona
+gracza)`: gdy statki gracza orbitują ciało, kadłub AI dostaje to ciało jako `dockedAt`, a `_updatePositions` przenosi go NA
+ciało. `[measured]` część E S2b, scena (c) (3 fregaty z laserem na orbicie domu, 2 eskorty rakietowe `attack`): skok
+0,245–0,30 AU, potem strzały z 0,000 AU — lasery obrońców trafiają 200/209, eskorty zniszczone 20/20; na kodzie S3 — 210
+strzałów (200 trafień), eskorty 20/20 (§5j.3). Asymetria: gdy obrońcą jest AI (strażnik), pin liczony ze strony gracza
+(w locie) to `null` — gracz nie jest przyciągany.
+**SB50 (2026-10-11):** zostaje w S3 tak, jak zbudowano.
+
+### 🟠 427 — `ObservatorySystem` liczy statek W SKOKU jako obecny w oglądanym układzie (klasa 151)
+
+`[code]` `ObservatorySystem.js:590` (detekcja statków w zasięgu obserwatorium) — statek w tranzycie warp (`systemId`
+`null`) liczony jak statek oglądanego układu, na współrzędnych sprzed skoku; przy obserwatorium poziomu 4+ (zasięg ∞)
+dotyczyłoby KAŻDEGO skoku `[derived: notatka S2b §9.3, F4]`. Ta sama klasa co **151** (`ProximitySystem:187`).
+→ **S3, sesja 2 (SB59):** razem z 151 i wpisem dzwonka o uzbrojonym wrogim kadłubie.
+
+### ⚪ 428 — punkt przylotu po skoku losowany osobno dla każdego statku
+
+`[code]` `VesselManager._tickInterstellar` (`:2975-2976` na `2a09ac9`) — kąt na okręgu 30 AU z `Math.random()` (bez
+ziarna), osobno dla każdego statku: statki skaczące razem pojawiają się w różnych punktach obrzeża. `[measured]` notatka S2b
+§9.2 (F3).
+**Częściowo w S3-2 (SB54):** eskadra AI (`OrderService.issueGroupAttack`) dostaje JEDEN kąt na grupę (`mission.arrivalAngle`)
+— rozrzut punktu 0,000 AU w M5 (§5j.3). Skok statków gracza idzie przez planer `WarpRouteSystem`, który kąta nie zna —
+tam losowanie per statek zostaje.
+
+### ⚪ 429 — wykrywanie (`ProximitySystem`) bierze ZADOKOWANE statki gracza jako obserwatorów
+
+`[measured]` notatka S2b §9.3 (F4): partner pary detekcji to statek gracza w doku. Zachowanie, nie błąd — do potwierdzenia,
+czy zamierzone.
+
+### ⚪ 430 — obrona naziemna gracza przy technologiach fixture'u nie zabija jednostek AI
+
+`[measured]` notatka S2b §9.2 (F2): `garrison_unit` gracza — 0 zabitych jednostek AI w 72 przebiegach. Balans obrony
+naziemnej — **poza S3 (SB60)**. W M5 sesji 1 (§5j.3) każdy desant na dom gracza bez wojsk naziemnych kończy się przejęciem
+kolonii.
+
+### ⚪ 431 — w 1 z 36 przebiegów małej kolonii koszary zniknęły z rejestru aktywnych budynków po ~0,2 roku
+
+`[measured]` notatka S2b §9.2 (F2). Przyczyna niezbadana.
+
+### ⚪ 432 — limit 20 rund starcia: przegrana strona idzie na wrak także żywymi okrętami, które nie mogły strzelać z odległości
+
+`[code]` `DeepSpaceCombatSystem` — koniec starcia po `MAX_ROUNDS` 20: przegrana strona (niższe HP) traci żywe kadłuby jako
+wraki. `[measured]` część E S2b, sceny (a)/(b): po 9 żywych fregat gracza wrakiem przy limicie rund; na kodzie S3 (SB49 —
+zbliżenie przed rundą) 1 i 3 (§5j.3). Obserwacja projektu.
+
+### ⚪ 433 — `w3_ai_invasion_smoke` T5 nie odróżnia celu z `getPlayerColonies` od celu z `getAllColonies`
+
+`[measured]` dowód mutacyjny przecelowań R-S3 (§5j.2): mutant „cel desantu z kolonii WSZYSTKICH właścicieli” przeżywa
+pin T5 na kodzie S3 i na `2a09ac9` — w układzie sceny T5 nie ma kolonii AI, a reguła „najpierw dom” wybiera dom gracza
+z obu list. Słabość pinu sprzed S3 (od reguły „najpierw dom”), nie skutek przecelowania. Naprawa — scena z kolonią AI
+w układzie celu.
+
+### ⚪ 434 — transportowiec eskadry po desancie zostaje na orbicie celu na zawsze
+
+`[code]` żadna ścieżka nie zabiera nieuzbrojonego kadłuba AI z cudzego układu: odwołanie (`DirectorRecall`,
+`strandedWarshipsAwayFromHome`) i pule Directora wymagają `hasWeapons`. `[measured]` M5 (§5j.3): po każdym desancie
+transportowiec stoi na orbicie domu gracza z pustą ładownią do końca przebiegu, eskorta odlatuje (odwołanie) zaraz po
+desancie. Do decyzji przy S3/2 (SB58 — eskorta trzyma orbitę do rozstrzygnięcia walki naziemnej).
+
+### ⚪ 435 — samotny NIEUZBROJONY transportowiec wygrywa bitwę planetarną z niebronioną kolonią i ląduje
+
+`[code]` bitwa planetarna (`BattleSystem`, `MAX_TURNS` 30) po limicie tur rozstrzyga przewaga HP (`BattleSystem.js:165`);
+obrońca bez statków i bez budynków obrony = `playerVesselsToBattleUnit([])` → `{hp: 100, weapons: []}` (fantom, **W3-26**),
+a nieuzbrojony kadłub wnosi HP (D-199-6, Finding **200**) — `transport_assault` (`hull_large`) 180 HP. `[measured]` kontrola
+M5 (§5j.3): ten sam transportowiec wysłany OSOBNO starą ścieżką `issueAttack` dolatuje sam po 1,19–1,24 roku, wygrywa
+bitwę planetarną 3/3 (30 tur) i ląduje 6 jednostek; dom pada po 11,2–12,0 mies. W eskadrze (S3-2) transportowiec nie
+przylatuje przed eskortą (0 z 60 w M5); przylot samego transportowca po utracie całej eskorty po drodze — niezmierzony.
+Do decyzji: czy wygrana BEZ broni nad kolonią bez obrony ma dawać dominację (SB7 — „desant dopiero po wygraniu orbity”).
 
 ---
 
