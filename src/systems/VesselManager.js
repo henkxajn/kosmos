@@ -89,6 +89,11 @@ export class VesselManager {
   // Rozkaz "leć do punktu" wskazujący (blisko) ciała → przejmij ciało jako cel, by statek je
   // ŚLEDZIŁ i orbitował, zamiast zamarznąć w heliocentrycznym punkcie gdy ciało odleci. AU.
   static SNAP_TO_BODY_AU = 0.5;
+  // SB39 (Finding 416) — przeszukanie czasu przechwycenia ciała (`_interceptBody`): najmniejszy krok, dokładność
+  // bisekcji i bezpiecznik liczby kroków (wyczerpany ⇒ `null` ⇒ wołający zostaje przy starej predykcji).
+  static INTERCEPT_MIN_STEP_YR = 0.001;   // lata gry (~0,37 dnia)
+  static INTERCEPT_TOL_YR      = 1e-6;    // lata gry
+  static INTERCEPT_MAX_STEPS   = 5000;
 
   constructor() {
     /** @type {Map<string, object>} vesselId → VesselInstance */
@@ -2756,7 +2761,7 @@ export class VesselManager {
     const baseY = destEntity ? (destEntity.y ?? sy) : snapshot.targetY;
     const distAUEst = Math.hypot(baseX - sx, baseY - sy) / AU_TO_PX;
     const travelYears = distAUEst / Math.max(0.01, speedAU);
-    const arrivalYear = gameYear + travelYears;
+    let arrivalYear = gameYear + travelYears;
 
     // Ciało: predykuj pozycję na arrival (kepler — cel się rusza). Punkt: stałe współrzędne.
     let tx, ty;
@@ -2770,7 +2775,13 @@ export class VesselManager {
     }
 
     const sysId = vessel.systemId ?? destEntity?.systemId ?? 'sys_home';
-    const route = this._calcRoute(sx, sy, tx, ty, sysId);
+    let route = this._calcRoute(sx, sy, tx, ty, sysId);
+    // SB39 (Finding 416) — cel-CIAŁO: chwila i punkt przylotu z CZASU PRZECHWYCENIA (`_interceptBody`): statek leci
+    //   z prędkością statku i jest tam, gdzie ciało, wtedy, kiedy ciało. Wyżej (zostaje dla celu-punktu i braku wyniku)
+    //   czas szedł po linii prostej do BIEŻĄCEJ pozycji ciała, a trasa do pozycji przewidzianej na tę chwilę — przylot
+    //   na czas, ale z prędkością różną od prędkości statku. `?.` — keepery pożyczają tę metodę z prototypu na atrapę VM.
+    const intercept = destEntity ? (this._interceptBody?.(destId, sx, sy, speedAU, { systemId: sysId }) ?? null) : null;
+    if (intercept) ({ arrivalYear, x: tx, y: ty, route } = intercept);
 
     // Zaadaptuj snapshot do resume (outgoing vs returning).
     const m = { ...snapshot };
@@ -3709,6 +3720,92 @@ export class VesselManager {
       x: starX + r * Math.cos(angle) * AU_TO_PX,
       y: starY + r * Math.sin(angle) * AU_TO_PX,
     };
+  }
+
+  /**
+   * SB39 (Finding 416) — CZAS PRZECHWYCENIA CIAŁA: pierwsza chwila `t`, w której statek startujący TERAZ z (sx, sy)
+   * dosięga ciała — długość trasy do pozycji ciała w chwili `t` mieści się w `speedAU × (t − teraz)`. Cel = pozycja ciała
+   * w `t`, przylot = `t`: statek leci z prędkością statku (z dokładnością przeszukania) i jest tam, gdzie ciało, wtedy,
+   * kiedy ciało, więc detekcja przylotu (`_updatePositions`) nie przestawia go już o kilka AU na żywą pozycję.
+   * ⚠ Dotąd predykcja szła RAZ, na chwilę dolotu po linii prostej do BIEŻĄCEJ pozycji ciała; ciało szybsze od statku
+   *   było w chwili przylotu gdzie indziej (Finding 416: przeskok do 9,7 AU w układzie domowym).
+   * Przeszukanie w przód, krok zachowawczy: dopóki g(t) = speed × (t − teraz) − długość(t) < 0, krok −g / (speed + vMax),
+   * gdzie vMax ≥ |d(pozycja ciała)/dt| (`_bodyMotionBound`) — krok nie przeskoczy pierwszego zera funkcji ciągłej
+   * (najmniejszy krok `INTERCEPT_MIN_STEP_YR`); potem bisekcja. Najpierw linia prosta (tanio), dalej trasa — `_calcRoute`
+   * nie jest krótsza od linii prostej, więc pierwsza chwila dla trasy nie leży wcześniej. Horyzont z gwarancją: po
+   * `3 × (odległość teraz + 2 × zasięg orbity) / speed` każda pozycja ciała jest w zasięgu (trasa ≤ 3 × linia prosta).
+   * @param {string} bodyId — planeta / księżyc / planetoida; stacja → jej ciało
+   * @param {number} sx — start (px)
+   * @param {number} sy — start (px)
+   * @param {number} speedAU — AU / rok gry
+   * @param {object} [opts]
+   * @param {string|null} [opts.systemId] — układ trasy (`_calcRoute`); domyślnie układ ciała
+   * @param {boolean} [opts.route=true] — false: linia prosta (pościg `engage` nie omija ciał)
+   * @param {number} [opts.notBefore] — przylot NIE wcześniej niż ta chwila (synchronizacja floty `_arrivalSyncYear`):
+   *          pierwsza chwila ≥ `notBefore`, w której ciało jest w zasięgu — w niej samej, gdy jest wtedy osiągalne
+   * @returns {{arrivalYear:number, x:number, y:number, route:{waypoints:Array, totalDist:number}|null}|null}
+   *          `null` — brak ciała albo pozycji albo przeszukanie bez wyniku
+   */
+  _interceptBody(bodyId, sx, sy, speedAU, opts = {}) {
+    let ent = this._findEntity(bodyId);
+    if (ent?.type === 'station') ent = this._findEntity(ent.bodyId) ?? null;
+    if (!ent || !Number.isFinite(ent.x) || !Number.isFinite(ent.y) || !Number.isFinite(sx) || !Number.isFinite(sy)) return null;
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const speed = Math.max(0.01, speedAU ?? 1.0);
+    const useRoute = opts.route !== false;
+    const sysId = opts.systemId ?? ent.systemId ?? null;
+    const posAt = (t) => this._predictPosition(ent.id, t);
+    const lenAU = (t, viaRoute) => {
+      const P = posAt(t);
+      return (viaRoute ? this._calcRoute(sx, sy, P.x, P.y, sysId).totalDist : Math.hypot(P.x - sx, P.y - sy)) / AU_TO_PX;
+    };
+    const make = (t) => {
+      const P = posAt(t);
+      return { arrivalYear: t, x: P.x, y: P.y, route: useRoute ? this._calcRoute(sx, sy, P.x, P.y, sysId) : null };
+    };
+    const t0 = Math.max(now, Number.isFinite(opts.notBefore) ? opts.notBefore : now);
+    const { vMax, extentAU } = this._bodyMotionBound(ent);
+    if (!(vMax > 0)) return make(Math.max(t0, now + lenAU(now, useRoute) / speed));   // ciało nieruchome — po trasie
+    const rate = speed + vMax;
+    const horizon = Math.max(t0, now + 3 * (lenAU(now, false) + 2 * extentAU) / speed) + VesselManager.INTERCEPT_MIN_STEP_YR;
+    const search = (t0, viaRoute) => {                                       // pierwsza chwila ≥ t0 z g ≥ 0
+      let lo = t0, t = t0, g = speed * (t - now) - lenAU(t, viaRoute);
+      for (let i = 0; g < 0 && t < horizon && i < VesselManager.INTERCEPT_MAX_STEPS; i++) {
+        lo = t;
+        t = Math.min(horizon, t + Math.max(VesselManager.INTERCEPT_MIN_STEP_YR, -g / rate));
+        g = speed * (t - now) - lenAU(t, viaRoute);
+      }
+      return g >= 0 ? { lo, hi: t } : null;
+    };
+    const line = search(t0, false);
+    const hit = line && useRoute ? search(line.hi, true) : line;
+    if (!hit) return null;
+    let { lo, hi } = hit;
+    if (hi === line.hi) lo = line.lo;                                        // trasa wykonalna od razu
+    for (let k = 0; k < 60 && hi - lo > VesselManager.INTERCEPT_TOL_YR; k++) {
+      const mid = (lo + hi) / 2;
+      if (speed * (mid - now) >= lenAU(mid, useRoute)) hi = mid; else lo = mid;
+    }
+    return make(hi);
+  }
+
+  /**
+   * SB39 — górna granica ruchu ciała dla `_interceptBody`: `vMax` (AU / rok gry) ≥ |d(pozycja)/dt| i zasięg orbity
+   * (AU od gwiazdy). Kepler: prędkość w perycentrum = (2πa/T)·√((1+e)/(1−e)) — największa na orbicie (+5 % zapasu);
+   * księżyc dodaje ruch planety-rodzica. Ciało bez orbity — nieruchome (`vMax` 0).
+   */
+  _bodyMotionBound(ent) {
+    const orb = ent?.orbital;
+    const T = Math.abs(orb?.T ?? 0);
+    if (!orb || !(T > 0) || !(orb.a > 0)) return { vMax: 0, extentAU: 0 };
+    const e = Math.min(Math.max(orb.e ?? 0, 0), 0.99);
+    const vPeri = (2 * Math.PI * orb.a / T) * Math.sqrt((1 + e) / (1 - e)) * 1.05;   // AU / rok gry
+    const apoAU = orb.a * (1 + e);
+    if (ent.type === 'moon') {
+      const parent = this._bodyMotionBound(this._findEntity(ent.parentPlanetId));
+      return { vMax: parent.vMax + vPeri, extentAU: parent.extentAU + apoAU };
+    }
+    return { vMax: vPeri, extentAU: apoAU };
   }
 
   /**

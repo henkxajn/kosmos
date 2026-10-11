@@ -943,6 +943,23 @@ export class MovementOrderSystem {
       }
     }
 
+    // SB39 (Finding 416) — cel-CIAŁO: punkt I chwila przylotu z CZASU PRZECHWYCENIA (`VesselManager._interceptBody`):
+    //   statek jest tam, gdzie ciało, wtedy, kiedy ciało — bez przeskoku przy przylocie. Predykcja wyżej liczy punkt na
+    //   chwilę dolotu po linii prostej do BIEŻĄCEJ pozycji ciała, a `arrivalYear` niżej szedł z trasy do tego punktu:
+    //   dwie różne chwile, więc ciało szybsze od statku było przy przylocie gdzie indziej (`v_21`: 4,47 roku zamiast
+    //   2,47 i przeskok 6,53 AU). Flota (`_arrivalSyncYear`): przylot NIE wcześniej niż chwila synchronizacji —
+    //   w niej samej, gdy ciało jest wtedy w zasięgu statku; inaczej w pierwszej późniejszej chwili, w której jest
+    //   (kontrakt synchronizacji: nikt nie przylatuje przed nią). Brak wyniku (VM bez pomocnika, ciało bez pozycji)
+    //   — predykcja wyżej, jak dotąd.
+    let intercept = null;
+    if (bodyId) {
+      const sync = spec._arrivalSyncYear;
+      intercept = this._vm._interceptBody?.(bodyId, vessel.position.x, vessel.position.y,
+        Math.max(0.01, vessel.speedAU ?? 1.0),
+        { systemId: vessel.systemId ?? 'sys_home', notBefore: (typeof sync === 'number') ? sync : undefined }) ?? null;
+      if (intercept) p = { x: intercept.x, y: intercept.y };
+    }
+
     // §8.5 — reject gdy punkt wewnątrz strefy wykluczenia Słońca (nie do obejścia).
     if (Math.hypot(p.x, p.y) < SUN_EXCLUSION_PX) {
       return { ok: false, reason: 'unreachable_target' };
@@ -965,7 +982,7 @@ export class MovementOrderSystem {
     const ty = p.y;
 
     const sysId = vessel.systemId ?? 'sys_home';
-    const route = this._vm._calcRoute(sx, sy, tx, ty, sysId);
+    const route = intercept?.route ?? this._vm._calcRoute(sx, sy, tx, ty, sysId);
     const totalDistPx = route.totalDist;
     const totalDistAU = totalDistPx / AU_TO_PX;
 
@@ -992,7 +1009,8 @@ export class MovementOrderSystem {
     //   niż swoja v_max). Jeśli sync_year < natural → użyj natural (vessel jest
     //   tym najwolniejszym, nie ma czego dopasować).
     const naturalArrival = gameYear + travelYears;
-    const arrivalYear = (typeof spec._arrivalSyncYear === 'number')
+    const arrivalYear = intercept ? intercept.arrivalYear                  // SB39 — chwila przechwycenia (wyżej)
+      : (typeof spec._arrivalSyncYear === 'number')
       ? Math.max(spec._arrivalSyncYear, naturalArrival)
       : naturalArrival;
 
@@ -1394,9 +1412,17 @@ export class MovementOrderSystem {
     //   - Chase (direction=+1, dist > upperBand): waypoint = intercept point
     //   - Kite (direction=-1, dist < lowerBand): naive away from current pos
     //     (enemy w combat już stationary w DSCS, intercept zbędny)
+    // P2: _speedCapAU clamp (member floty leci nie szybciej niż najwolniejszy).
+    const effectiveSpeedAU = (typeof order._speedCapAU === 'number')
+      ? Math.min(vessel.speedAU ?? 1.0, order._speedCapAU)
+      : (vessel.speedAU ?? 1.0);
     let wpX, wpY;
     if (direction === +1) {
-      const ip = this._computeInterceptPoint(vessel, target);
+      // SB39 (Finding 416) — cel ZADOKOWANY albo NA ORBICIE ciała: jego `velocity` jest co tik zerowana
+      //   (`VesselManager._updatePositions`), choć pozycja jedzie z ciałem, więc przechwycenie z prędkości dawało punkt
+      //   BIEŻĄCY i pościg za celem szybszym od statku się nie zamykał (S2: 0 bitew w 2 lata). Punkt pościgu z RUCHU
+      //   CIAŁA (`_bodyChasePoint`); cel w wolnej przestrzeni — przechwycenie z prędkości, jak dotąd.
+      const ip = this._bodyChasePoint(vessel, target, effectiveSpeedAU) ?? this._computeInterceptPoint(vessel, target);
       wpX = ip.x; wpY = ip.y;
     } else {
       wpX = tx; wpY = ty;
@@ -1408,10 +1434,6 @@ export class MovementOrderSystem {
     if (distWpPx < INTERCEPT_EPS) return;
 
     // Krok px. Cap do |dist - optimal| żeby nie overshoot w jednym ticku.
-    // P2: _speedCapAU clamp (member floty leci nie szybciej niż najwolniejszy).
-    const effectiveSpeedAU = (typeof order._speedCapAU === 'number')
-      ? Math.min(vessel.speedAU ?? 1.0, order._speedCapAU)
-      : (vessel.speedAU ?? 1.0);
     const speedPxPerYear = effectiveSpeedAU * AU_TO_PX;
     const optimalPx = optimalDistAU * AU_TO_PX;
     const distanceToOptimalPx = Math.abs(distPx - optimalPx);
@@ -1494,6 +1516,23 @@ export class MovementOrderSystem {
     if (tau === null || !Number.isFinite(tau)) return { x: tx, y: ty };
 
     return { x: tx + tvx * tau, y: ty + tvy * tau };
+  }
+
+  /**
+   * SB39 (Finding 416) — punkt pościgu `engage` za celem ZADOKOWANYM albo NA ORBICIE ciała: pozycja ciała w chwili
+   * przechwycenia (`VesselManager._interceptBody`, linia prosta) + bieżące przesunięcie celu względem ciała.
+   * @returns {{x:number, y:number}|null} `null` — cel nie stoi przy ciele (wolna przestrzeń) albo brak pomocnika / ciała
+   */
+  _bodyChasePoint(vessel, target, speedAU) {
+    const st = target?.position?.state;
+    const bodyId = (st === 'docked' || st === 'orbiting') ? (target.position.dockedAt ?? null) : null;
+    if (!bodyId) return null;
+    let body = this._vm._findEntity?.(bodyId) ?? null;
+    if (body?.type === 'station') body = this._vm._findEntity?.(body.bodyId) ?? null;
+    if (!body || !Number.isFinite(body.x) || !Number.isFinite(body.y)) return null;
+    const ic = this._vm._interceptBody?.(body.id, vessel.position.x, vessel.position.y, speedAU, { route: false }) ?? null;
+    if (!ic) return null;
+    return { x: ic.x + (target.position.x - body.x), y: ic.y + (target.position.y - body.y) };
   }
 
   /**
