@@ -313,7 +313,7 @@ export class VesselCombatSystem {
       seed,
     });
 
-    this._applyOutcome(sideA, sideB, result, location, ownerA, ownerB, year);
+    return this._applyOutcome(sideA, sideB, result, location, ownerA, ownerB, year);
   }
 
   _applyOutcome(sideA, sideB, result, location, ownerA, ownerB, year) {
@@ -360,6 +360,7 @@ export class VesselCombatSystem {
     // przez co pursue na innego wroga z grupy nie wywoływał combat. Anti-spam
     // w tym samym ticku obsługuje teraz B (reset on exit) + zwykły cooldown
     // (1 civYear) tylko dla triggering pair.
+    return battleId;
   }
 
   // ── Wreck placement — delegacja do EnemyAttackHandler._turnIntoWreck ──
@@ -408,8 +409,9 @@ export class VesselCombatSystem {
     };
     const ownerA = _resolveOwner(sideA[0]);
     const ownerB = _resolveOwner(sideB[0]);
-    this._battle(sideA, sideB, mid, ownerA, ownerB);
-    return gameState.get(`battles.${this._makeBattleId(this._year(), ownerA, ownerB)}`) ?? null;
+    // SB47 — identyfikator z zapisu tej bitwy (odtworzony po walce trafiłby w następny wolny).
+    const battleId = this._battle(sideA, sideB, mid, ownerA, ownerB);
+    return battleId ? (gameState.get(`battles.${battleId}`) ?? null) : null;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
@@ -418,14 +420,20 @@ export class VesselCombatSystem {
     return window.KOSMOS?.timeSystem?.gameTime ?? 0;
   }
 
-  // TODO M3: battleId collision w tym samym ticku między tymi samymi stronami.
-  // Currently mitigated by team-up cooldown (wszystkie pary w engagement →
-  // cooldown po _applyOutcome, więc kolejny combatRangeEnter w tym ticku jest
-  // odrzucany przez _handleCombatRangeEnter). Prawdziwy fix: counter/sequence
-  // w _makeBattleId.
+  /**
+   * SB47 (Finding 424, bliźniak 419) — identyfikator bitwy UNIKALNY, ta sama reguła co
+   * `DeepSpaceCombatSystem._makeEncounterId` (SB42). Podstawa `battle_ds_<rok, 2 miejsca>_<A>_<B>` bez zmian; gdy
+   * `battles.<podstawa>` jest już zapisana — przyrostek `_2`, `_3`, … Dotąd druga bitwa tej samej pary w tym samym
+   * 0,01 roku gry NADPISYWAŁA rekord pierwszej, a oba `battle:resolved` niosły ten sam identyfikator (cooldown chroni
+   * tylko parę wyzwalającą, nie dwie RÓŻNE pary tych samych stron).
+   * ⚠ Identyfikator jest liczony RAZ, przy zapisie (`_applyOutcome` go zwraca) — odtworzony po walce trafiłby w wolny.
+   */
   _makeBattleId(year, ownerA, ownerB) {
     const yr = Number(year).toFixed(2).replace(/\./g, '_');
-    return `battle_ds_${yr}_${ownerA}_${ownerB}`;
+    const base = `battle_ds_${yr}_${ownerA}_${ownerB}`;
+    let id = base;
+    for (let n = 2; gameState.get?.(`battles.${id}`) != null; n++) id = `${base}_${n}`;
+    return id;
   }
 }
 
