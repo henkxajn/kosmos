@@ -73,6 +73,15 @@ export const CIV_PER_ROUND = 0.3;
 export const ROUND_INTERVAL_MS = 110;    // ~9 rund/s — szybko, ale wciąż czytelnie
 export const MAX_ROUNDS_PER_TICK = 4;    // catch-up przy spadku klatek / wysokim odświeżaniu
 
+// ── AI STRIKES BACK S3 (SB49, Finding 421) — ZBLIŻENIE PRZED RUNDĄ ──
+// Krok zbliżenia na rundę w LATACH GRY liczony z ZEGARA STARCIA: runda = CIV_PER_ROUND lat cywilizacyjnych (ta sama baza,
+// na której stoją cooldowny broni), a nie z prędkości gry — przy auto-slow do 1 d/s krok z czasu gry wynosił ~0,0003 AU na
+// rundę i laser (0,05 AU) nigdy nie dosięgał strażnika strzelającego z 0,23–0,30 AU (pomiar części E S2b).
+export const CLOSE_STEP_YEARS = CIV_PER_ROUND / (GAME_CONFIG.CIV_TIME_SCALE ?? 12);   // lata gry na rundę (0,025)
+// Zbliżenie kończy się na tym ułamku najdłuższego zasięgu własnej broni — środek pasma kitingu `engage`
+// (`MovementOrderSystem._tickEngageOrder`: 0,9025–0,98 × zasięg), więc oba mechanizmy się nie przepychają.
+export const CLOSE_RANGE_FACTOR = 0.95;
+
 // Celność (fix „strzały przeważnie niecelne", 2026-07-26): mnożnik do tracking. Bazowo kinetyk
 // 0.6 / rakieta 0.5 × (1−evasion) dawało ~40-55% trafień → większość pudeł. ×1.5 podnosi typowe
 // trafienia do ~70-90% (laser clampuje do 0.95); evasion kadłuba dalej różnicuje cele.
@@ -514,6 +523,7 @@ export class DeepSpaceCombatSystem {
         roundsThisTick < MAX_ROUNDS_PER_TICK
       ) {
         encounter._lastRoundMs += ROUND_INTERVAL_MS;
+        this._closeToWeaponRange(encounter);   // SB49 (Finding 421) — przed KAŻDĄ rundą, na zegarze starcia
         this._tickEncounter(encounter, CIV_PER_ROUND);
         roundsThisTick++;
       }
@@ -522,6 +532,59 @@ export class DeepSpaceCombatSystem {
     for (const [id, enc] of this._activeEncounters) {
       if (!enc.isActive) this._activeEncounters.delete(id);
     }
+  }
+
+  /**
+   * AI STRIKES BACK S3 (SB49, Finding 421) — ZBLIŻENIE PRZED RUNDĄ. Uzbrojony statek starcia, który nie ma ŻADNEGO
+   * żywego wroga w zasięgu własnej najdłuższej broni, zbliża się do celu — celu `engage`, dopóki ten żyje jako wróg tego
+   * starcia, inaczej najbliższego żywego wroga — na `CLOSE_RANGE_FACTOR` × ten zasięg, krokiem
+   * `speedAU × CLOSE_STEP_YEARS` na rundę (zegar starcia, nie prędkość gry). Obie strony.
+   * Dotąd statek z misją wstrzymaną na walkę stał tam, gdzie walka się zaczęła, a broń krótsza niż odległość startu nie
+   * strzelała nigdy (S2b, pomiar części E: 0 strzałów fregat z laserem na strażnika, 30/30 strat).
+   * Stoi: statek trzymający orbitę ciała (`dockedAt` — strażnik dalej trzyma orbitę), uciekający (znacznik odwrotu — ten
+   * sam test co `_allOutsideOf`), statek w locie pod własną misją (`in_transit` — rozkaz ruchu wydany w trakcie walki
+   * albo strona gracza bez pauzy misji), wrak, bezbronny.
+   * @returns {number} ile statków przesunięto
+   * @private
+   */
+  _closeToWeaponRange(encounter) {
+    const vids = (side) => [...side.vesselIds, ...side.joinedVesselIds];
+    const sides = [
+      [vids(encounter.sideA), vids(encounter.sideB), encounter.sideA.ownerEmpireId],
+      [vids(encounter.sideB), vids(encounter.sideA), encounter.sideB.ownerEmpireId],
+    ];
+    let moved = 0;
+    for (const [mine, foes, owner] of sides) {
+      for (const id of mine) {
+        const st = encounter.vesselStates.get(id);
+        if (!st || st.hp <= 0 || !(st.weapons?.length > 0)) continue;
+        const v = this._vm?._vessels?.get(id);
+        if (!v?.position || v.isWreck || _isRetreatingFromCombat(v)) continue;
+        if (v.position.state !== 'orbiting' || v.position.dockedAt != null) continue;
+        const range = Math.max(...st.weapons.map(w => this._resolveWeaponRange(w, owner)));
+        const engageId = v.movementOrder?.type === 'engage' ? v.movementOrder.targetEntityId : null;
+        let nearest = null, nearestAU = Infinity, engaged = null, engagedAU = Infinity;
+        for (const fid of foes) {
+          const fs = encounter.vesselStates.get(fid);
+          if (!fs || fs.hp <= 0) continue;
+          const f = this._vm?._vessels?.get(fid);
+          if (!f?.position || f.isWreck) continue;
+          const d = Math.hypot(f.position.x - v.position.x, f.position.y - v.position.y) / AU_TO_PX;
+          if (d < nearestAU) { nearestAU = d; nearest = f; }
+          if (fid === engageId) { engaged = f; engagedAU = d; }
+        }
+        if (!nearest || nearestAU <= range) continue;          // wróg w zasięgu — strzela, nie zbliża się
+        const target = engaged ?? nearest;
+        const distAU = engaged ? engagedAU : nearestAU;
+        const stepAU = Math.min((v.speedAU ?? 1.0) * CLOSE_STEP_YEARS, distAU - range * CLOSE_RANGE_FACTOR);
+        if (!(stepAU > 0)) continue;
+        const k = stepAU / distAU;
+        v.position.x += (target.position.x - v.position.x) * k;
+        v.position.y += (target.position.y - v.position.y) * k;
+        moved++;
+      }
+    }
+    return moved;
   }
 
   /**
@@ -941,8 +1004,7 @@ export class DeepSpaceCombatSystem {
     // ⚠ Wyścig jest realny i zmierzony: przy 1 r/s statek pokonuje ~1,85 AU na jedną rundę
     //   (110 ms), więc potrafi przejść z „wewnątrz" wprost w „zadokowany" między dwoma
     //   sprawdzeniami. Sam bufor odległości w selektorze tego NIE zamyka — dlatego marker.
-    const isRetreating = (v) => v?.movementOrder?._retreatFromCombat === true
-                             || v?.movementOrder?.retreatFromBattleId != null;
+    const isRetreating = _isRetreatingFromCombat;
 
     const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
     let aliveCount = 0;
@@ -1542,6 +1604,11 @@ function _nowMs() {
   return (typeof performance !== 'undefined' && performance.now)
     ? performance.now()
     : Date.now();
+}
+
+// Znacznik odwrotu z bitwy — JEDNO źródło dla `_allOutsideOf` (D-FDd) i zbliżenia przed rundą (SB49).
+function _isRetreatingFromCombat(v) {
+  return v?.movementOrder?._retreatFromCombat === true || v?.movementOrder?.retreatFromBattleId != null;
 }
 
 function _inCombatState(v) {
