@@ -25,6 +25,8 @@ import { isStationId } from '../utils/TransferStore.js';
 // D-255d (Finding 263) — termin układu dla auto-doku po Powrocie. Fail-OPEN, jak każda bramka
 // rozkazowa (`SystemScope.js`): brak stempla `systemId` = stary zapis, dokujemy jak dotąd.
 import { isSameSystem } from '../utils/SystemScope.js';
+// AI STRIKES BACK S3 (SB54, SB45, Finding 420) — wspólna chwila przylotu grupy do ciała; jeden pomocnik z eskadrą AI.
+import { groupArrivalYear } from '../utils/GroupArrival.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 // ⚠ `RETURN_DOCK_THRESHOLD_AU = 0.5` USUNIĘTA (D-255d, Finding 263) — i NIE WOLNO jej wracać.
@@ -204,6 +206,11 @@ export class FleetSystem {
       // Sanity bound — outlier 10× najszybszy nie wpływa absurdalnie.
       const cappedEta = Math.min(maxEta, Math.max(0.001, minEta) * MAX_SYNC_BOOST_FACTOR);
       fleetEta = cappedEta;
+      // SB54 / SB45 (Finding 420) — cel-CIAŁO: chwila z PRZECHWYCEŃ członków (`GroupArrival`), nie z trasy do BIEŻĄCEJ
+      //   pozycji ciała — przy ciele szybszym od statków tamta chwila bywała nieosiągalna dla części członków i flota
+      //   lądowała w kilku chwilach (S2b: razem 3/10). Cel-punkt — jak wyżej, bez zmian.
+      const group = this._bodyGroupArrival(spec, eligible, gameYear);
+      if (group) fleetEta = group.arrivalYear - gameYear;
       // _arrivalSyncYear jest jeden dla wszystkich → MOS._issueMoveToPoint klampuje
       // self per vessel (max(syncYear, naturalArrival)). Outlier vessel poleci na max
       // speed, reszta dostosuje się przez interpolacje liniowa start→target.
@@ -304,6 +311,29 @@ export class FleetSystem {
     }
 
     return { ok: accepted.length > 0, accepted, rejected, orderType: spec.type, fleetEta, speedCap };
+  }
+
+  /**
+   * SB54 / SB45 (Finding 420) — wspólna chwila przylotu floty do CIAŁA (`GroupArrival.groupArrivalYear`), z klamrą
+   * `MAX_SYNC_BOOST_FACTOR` jak dotąd. Ciało: jawne `targetBodyId` albo ciało spod punktu — ten sam zatrzask co
+   * `MovementOrderSystem._issueMoveToPoint` (w układzie pierwszego członka, Finding 138). Liczą się członkowie z układu
+   * ciała (pozostałym MOS i tak odmawia). Brak ciała albo wyniku — `null` (synchronizacja jak dotąd).
+   * @returns {ReturnType<typeof groupArrivalYear>|null}
+   * @private
+   */
+  _bodyGroupArrival(spec, eligible, gameYear) {
+    const vm = this._vm;
+    if (typeof vm?._interceptBody !== 'function' || eligible.length === 0) return null;
+    const p = spec.targetPoint;
+    let bodyId = spec.targetBodyId ?? null;
+    if (!bodyId && p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      bodyId = vm._findBodyNearPoint?.(p.x, p.y, undefined, eligible[0])?.id ?? null;
+    }
+    if (!bodyId) return null;
+    const body = vm._findEntity?.(bodyId) ?? EntityManager.get(bodyId);
+    const members = eligible.filter(v => !body || isSameSystem(v, body));
+    if (members.length === 0) return null;
+    return groupArrivalYear(vm, bodyId, members, { now: gameYear, maxBoost: MAX_SYNC_BOOST_FACTOR });
   }
 
   /**

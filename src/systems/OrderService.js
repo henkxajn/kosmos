@@ -26,6 +26,7 @@ import { t }         from '../i18n/i18n.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { returnJumpTransactional } from '../utils/ReturnJump.js';
+import { groupArrivalYear } from '../utils/GroupArrival.js';   // AI STRIKES BACK S3 (SB54) — chwila przylotu grupy
 
 export class OrderService {
   constructor() {
@@ -33,15 +34,20 @@ export class OrderService {
     this._onArrivedBound   = ({ vessel })  => this._maybeDeliver(vessel?.id);
     this._onCompletedBound = ({ vesselId }) => this._maybeDeliver(vesselId);
     this._onAbortedBound   = ({ vesselId, reason }) => this._abortComposite(vesselId, reason);
+    // SB54 — po bitwie w locie członkowie grupy wznawiają lot osobno (`_resumeMissionAfterOrder`); grupa dostaje znowu
+    //   jedną chwilę przylotu (transportowiec nigdy przed eskortą).
+    this._onBattleBound    = ({ result } = {}) => this._regroupAfterBattle(result);
     EventBus.on('interstellar:arrived', this._onArrivedBound);
     EventBus.on('warpRoute:completed',  this._onCompletedBound);
     EventBus.on('warpRoute:aborted',    this._onAbortedBound);
+    EventBus.on('battle:resolved',      this._onBattleBound);
   }
 
   destroy() {
     EventBus.off('interstellar:arrived', this._onArrivedBound);
     EventBus.off('warpRoute:completed',  this._onCompletedBound);
     EventBus.off('warpRoute:aborted',    this._onAbortedBound);
+    EventBus.off('battle:resolved',      this._onBattleBound);
   }
 
   // ── Kolaboratorzy (leniwie) ────────────────────────────────────────────────
@@ -123,7 +129,7 @@ export class OrderService {
    * Skok warp do układu (single/multi-hop). Forward do WarpRouteSystem.beginJourney
    * z fallbackiem na dispatchInterstellar (parytet ze starą ścieżką Stratcom).
    */
-  issueWarp(vesselId, targetSystemId) {
+  issueWarp(vesselId, targetSystemId, opts = {}) {
     if (!targetSystemId) return { ok: false, reason: 'no_target' };
 
     // ⚠ W3-4c — skok do układu, w którym statek JUŻ JEST, to nie awaria dyspozytora.
@@ -150,7 +156,10 @@ export class OrderService {
     const vessel = this._vm?.getVessel?.(vesselId);
     const aiVessel = !!vessel && isEnemyVessel(vessel);
     if (wrs && !aiVessel) return wrs.beginJourney(vesselId, targetSystemId);
-    const ok = this._vm?.dispatchInterstellar?.(vesselId, targetSystemId);
+    // SB54 — kąt punktu przylotu wspólny dla grupy (`issueGroupAttack`); bez niego wywołanie jak dotąd.
+    const ok = Number.isFinite(opts.arrivalAngle)
+      ? this._vm?.dispatchInterstellar?.(vesselId, targetSystemId, { arrivalAngle: opts.arrivalAngle })
+      : this._vm?.dispatchInterstellar?.(vesselId, targetSystemId);
     return { ok: !!ok, reason: ok ? undefined : 'dispatch_failed' };
   }
 
@@ -188,6 +197,54 @@ export class OrderService {
       });
     }
     return this._beginComposite(vessel, 'attack', { targetId: targetBodyId, targetSystemId: sysId });
+  }
+
+  /**
+   * AI STRIKES BACK S3 (SB54) — GRUPA LECI RAZEM na ciało: JEDEN punkt przylotu po skoku (kąt na okręgu obrzeży losowany
+   * RAZ dla grupy) i JEDNA chwila przylotu do ciała, ustalana przez najwolniejszego członka (`GroupArrival`) — odcinek
+   * w układzie celu dopiero, gdy CAŁA grupa jest w tym układzie (`_maybeDeliver`); po bitwie w locie — ponownie razem
+   * (`_regroupAfterBattle`). Rozkaz każdego członka to `attack` (jak `issueAttack`), z `groupId` w `pendingOrder`,
+   * misji i rozkazie ruchu (kopie płytkie w zapisie — bez migracji).
+   * ⚠ WYŁĄCZNIE kadłuby AI: skok gracza idzie przez planer `WarpRouteSystem`, który kąta przylotu nie zna.
+   * ⚠ Wszystko albo nic przed skokiem: każdy członek w doku albo na orbicie, z bakiem warp (`warpFuel.max > 0` — kanon
+   *   D4) i w tym samym układzie; inaczej grupa nie startuje.
+   * @param {string[]} vesselIds
+   * @param {{targetBodyId:string, targetSystemId?:string|null, groupId:string}} spec
+   * @returns {{ok:boolean, reason?:string, vesselId?:string, composite?:boolean, arrivalYear?:number}}
+   */
+  issueGroupAttack(vesselIds, { targetBodyId, targetSystemId = null, groupId } = {}) {
+    const vm = this._vm;
+    if (!vm) return { ok: false, reason: 'no_vessel_manager' };
+    if (!groupId) return { ok: false, reason: 'no_group' };
+    const body = EntityManager.get(targetBodyId);
+    if (!body) return { ok: false, reason: 'target_not_found' };
+    const sysId = targetSystemId ?? this._resolveTargetSystemId(targetBodyId);
+    const vessels = [];
+    for (const id of vesselIds ?? []) {
+      const v = vm.getVessel?.(id);
+      if (!v || v.isWreck) return { ok: false, reason: 'no_vessel', vesselId: id };
+      if (!isEnemyVessel(v)) return { ok: false, reason: 'not_ai_vessel', vesselId: id };
+      vessels.push(v);
+    }
+    if (vessels.length === 0) return { ok: false, reason: 'empty_group' };
+    const home = vessels[0].systemId ?? 'sys_home';
+    if (vessels.some(v => (v.systemId ?? 'sys_home') !== home)) return { ok: false, reason: 'group_split' };
+    if (this._sameSystem(vessels[0], sysId)) {
+      const r = this._issueGroupLeg(vessels, targetBodyId, groupId, 'order_service_group');
+      return r.ok ? { ok: true, composite: false, arrivalYear: r.arrivalYear } : { ok: false, reason: r.reason ?? 'group_leg_refused' };
+    }
+    for (const v of vessels) {
+      const st = v.position?.state;
+      if (st !== 'docked' && st !== 'orbiting') return { ok: false, reason: 'not_ready_to_jump', vesselId: v.id };
+      if (!(v.warpFuel?.max > 0)) return { ok: false, reason: 'no_warp_tank', vesselId: v.id };
+      if (v.mission || v.movementOrder || v.pendingOrder) return { ok: false, reason: 'vessel_busy', vesselId: v.id };
+    }
+    const arrivalAngle = Math.random() * Math.PI * 2;                       // JEDEN kąt na grupę
+    for (const v of vessels) {
+      const r = this._beginComposite(v, 'attack', { targetId: targetBodyId, targetSystemId: sysId, groupId, arrivalAngle });
+      if (!r?.ok) return { ok: false, reason: r?.reason ?? 'warp_failed', vesselId: v.id };
+    }
+    return { ok: true, composite: true };
   }
 
   /**
@@ -304,7 +361,9 @@ export class OrderService {
 
   _beginComposite(vessel, kind, opts) {
     vessel.pendingOrder = null;                      // redirect safety — jeden composite naraz
-    const r = this.issueWarp(vessel.id, opts.targetSystemId);
+    const r = opts.groupId
+      ? this.issueWarp(vessel.id, opts.targetSystemId, { arrivalAngle: opts.arrivalAngle })   // SB54 — kąt grupy
+      : this.issueWarp(vessel.id, opts.targetSystemId);
     if (!r?.ok) return { ok: false, reason: r?.reason ?? 'warp_failed' };
 
     vessel.pendingOrder = {
@@ -317,6 +376,7 @@ export class OrderService {
       stage:           'awaiting_warp',
       createdYear:     window.KOSMOS?.timeSystem?.gameTime ?? 0,
     };
+    if (opts.groupId) vessel.pendingOrder.groupId = opts.groupId;   // SB54 — odcinek w układzie celu wydaje grupa
     EventBus.emit('order:compositeStarted', { vesselId: vessel.id, kind, targetSystemId: opts.targetSystemId, targetId: opts.targetId });
     return { ok: true, composite: true };
   }
@@ -339,6 +399,8 @@ export class OrderService {
     // i dostawa są inne. Wydajemy dopiero TERAZ, gdy statek jest już w układzie celu —
     // wtedy bramka układu w `MovementOrderSystem` przepuszcza rozkaz.
     if (po.kind === 'attack') {
+      // SB54 — członek GRUPY: odcinek w układzie celu wydaje grupa, gdy jest w nim cała (`_maybeDeliverGroup`).
+      if (po.groupId) { this._maybeDeliverGroup(po.groupId, po.targetId, po.targetSystemId); return; }
       const body = EntityManager.get(po.targetId);
       v.pendingOrder = null;
       if (!body) {
@@ -435,6 +497,81 @@ export class OrderService {
     if (!v?.pendingOrder) return;
     v.pendingOrder = null;
     EventBus.emit('order:compositeFailed', { vesselId, reason: reason ?? 'aborted' });
+  }
+
+  // ── Grupa (AI STRIKES BACK S3, SB54) ───────────────────────────────────────────────────────────────
+
+  /**
+   * Odcinek grupy w układzie celu — wydawany, gdy KAŻDY żywy członek (kadłub z `pendingOrder.groupId`) jest w tym
+   * układzie i poza trasą warp; dotąd członkowie czekają w punkcie przylotu (wspólnym — `arrivalAngle`).
+   * @private
+   */
+  _maybeDeliverGroup(groupId, targetId, targetSystemId) {
+    const members = (this._vm?.getAllVessels?.() ?? []).filter(v => v?.pendingOrder?.groupId === groupId && !v.isWreck);
+    if (members.length === 0) return;
+    for (const m of members) if (m.warpRoute || m.systemId !== targetSystemId) return;   // grupa nie w komplecie
+    for (const m of members) m.pendingOrder = null;
+    if (!EntityManager.get(targetId)) {
+      for (const m of members) EventBus.emit('order:compositeFailed', { vesselId: m.id, reason: 'target_lost' });
+      return;
+    }
+    const r = this._issueGroupLeg(members, targetId, groupId, 'order_service_attack');
+    for (const m of members) {
+      if (r.accepted?.includes(m.id)) EventBus.emit('order:compositeDelivering', { vesselId: m.id, kind: 'attack', targetId });
+      else EventBus.emit('order:compositeFailed', { vesselId: m.id, reason: r.reason ?? 'attack_rejected' });
+    }
+  }
+
+  /**
+   * JEDNA chwila przylotu grupy do ciała (`GroupArrival`, bez klamry — ustala ją najwolniejszy) i rozkaz `attack` każdego
+   * członka z `_arrivalSyncYear` = ta chwila: `_issueMoveToPoint` liczy przechwycenie z `notBefore`, więc każdy członek
+   * przylatuje dokładnie w niej. `groupId` w misji i rozkazie — dla ponownej synchronizacji po bitwie.
+   * @returns {{ok:boolean, reason?:string, arrivalYear?:number, accepted:string[], rejected:Array<{vesselId:string, reason:string}>}}
+   * @private
+   */
+  _issueGroupLeg(vessels, bodyId, groupId, issuedBy) {
+    const mos = this._mos;
+    if (!mos) return { ok: false, reason: 'mos_disabled', accepted: [], rejected: [] };
+    const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const g = groupArrivalYear(this._vm, bodyId, vessels, { now });
+    if (!g) return { ok: false, reason: 'no_intercept', accepted: [], rejected: [] };
+    const accepted = [], rejected = [];
+    for (const v of vessels) {
+      const r = mos.issueOrder(v.id, {
+        type: 'attack', targetBodyId: bodyId, issuedBy, bypassFuelCheck: true, _arrivalSyncYear: g.arrivalYear,
+      });
+      if (r?.ok) {
+        accepted.push(v.id);
+        if (v.mission) v.mission.groupId = groupId;
+        if (v.movementOrder) v.movementOrder.groupId = groupId;
+      } else {
+        rejected.push({ vesselId: v.id, reason: r?.reason ?? 'unknown' });
+      }
+    }
+    EventBus.emit('order:groupLegIssued', { groupId, bodyId, arrivalYear: g.arrivalYear, accepted: [...accepted], rejected: [...rejected] });
+    return { ok: accepted.length > 0, reason: accepted.length > 0 ? undefined : (rejected[0]?.reason ?? 'refused'), arrivalYear: g.arrivalYear, accepted, rejected };
+  }
+
+  /**
+   * Po bitwie członkowie grupy wznawiają lot OSOBNO (`DeepSpaceCombatSystem._resolveMissionsPostBattle` →
+   * `_resumeMissionAfterOrder`, każdy z własnym przechwyceniem) — transportowiec doleciałby pierwszy. Grupa, której członek
+   * brał udział w bitwie i leci (`attack`, `in_transit`), dostaje znowu jedną chwilę przylotu z bieżących pozycji.
+   * @private
+   */
+  _regroupAfterBattle(result) {
+    const vm = this._vm;
+    if (!vm?.getVessel || !result) return;
+    const ids = [...(result.participantA?.vesselIds ?? []), ...(result.participantB?.vesselIds ?? [])];
+    const flying = (v) => !!v && !v.isWreck && v.mission?.type === 'attack' && v.position?.state === 'in_transit' && !!v.mission.groupId;
+    const groups = new Map();
+    for (const id of ids) {
+      const v = vm.getVessel(id);
+      if (flying(v)) groups.set(v.mission.groupId, v.mission.targetId);
+    }
+    for (const [groupId, bodyId] of groups) {
+      const members = (vm.getAllVessels?.() ?? []).filter(v => flying(v) && v.mission.groupId === groupId);
+      if (members.length > 1 && bodyId) this._issueGroupLeg(members, bodyId, groupId, 'order_service_regroup');
+    }
   }
 
   /**

@@ -1002,6 +1002,9 @@ export class VesselManager {
       fromGalX: homeStar.x, fromGalY: homeStar.y,
       toGalX:   targetStar.x, toGalY:   targetStar.y,
     };
+    // AI STRIKES BACK S3 (SB54) — kąt punktu przylotu na okręgu obrzeży, WSPÓLNY dla grupy (`OrderService.issueGroupAttack`
+    //   losuje go RAZ). Jedzie w misji (zapis — kopia płytka). Brak — losowany przy przylocie, jak dotąd.
+    if (Number.isFinite(opts.arrivalAngle)) vessel.mission.arrivalAngle = opts.arrivalAngle;
 
     vessel.status = 'on_mission';
     vessel.position.state = 'in_transit';
@@ -2973,7 +2976,8 @@ export class VesselManager {
 
       // Obrzeża układu (~MAX_ORBIT_AU) zamiast centrum gwiazdy
       const edgeAU = 30; // AU — obrzeża układu
-      const angle = Math.random() * Math.PI * 2;
+      // SB54 — kąt wspólny dla grupy (`mission.arrivalAngle`, ustawiany w `dispatchInterstellar`); bez niego — losowany.
+      const angle = Number.isFinite(m.arrivalAngle) ? m.arrivalAngle : Math.random() * Math.PI * 2;
       const edgePx = edgeAU * AU_TO_PX;
       vessel.systemId = m.toSystemId;
       vessel.position.state = 'orbiting';

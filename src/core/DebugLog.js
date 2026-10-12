@@ -163,6 +163,9 @@ const TRACKED_EVENTS = [
   //   `posted` z trigger `replacement`) i stanowisko rozwiązane (`dissolved`: ciało przestało być strzeżone).
   'fleetGuard:lost',
   'fleetGuard:dissolved',
+  // AI STRIKES BACK S3 (SB54) — odcinek GRUPY w układzie celu: jedna chwila przylotu (`arrivalYear`), członkowie przyjęci
+  //   (`accepted`) i odrzuceni z powodem (`rejected`) — także ponowna synchronizacja po bitwie w locie.
+  'order:groupLegIssued',
 ];
 
 class DebugLog {
