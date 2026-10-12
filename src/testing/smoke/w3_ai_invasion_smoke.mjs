@@ -25,7 +25,7 @@ import { GameCore } from '../headless/GameCore.js';
 import EventBus from '../../core/EventBus.js';
 import gameState from '../../core/GameState.js';
 import EntityManager from '../../core/EntityManager.js';
-import { createVessel } from '../../entities/Vessel.js';
+import { createVessel, loadGroundUnit } from '../../entities/Vessel.js';
 import { InvasionSystem } from '../../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../../systems/EnemyAttackHandler.js';
 import { GroundUnitFactory } from '../../systems/GroundUnitFactory.js';
@@ -56,7 +56,22 @@ function spawnHull(core, empireId, modules, name) {
   v.ownerEmpireId = empireId; v.owner = empireId; v.isEnemy = true;
   v.position.state = 'orbiting'; v.position.dockedAt = home.id;
   core.vesselManager._vessels.set(v.id, v);
+  if (modules.includes('drop_pods')) boardWave(empireId, v);
   return v;
+}
+
+/**
+ * ⚠ PRZECELOWANIE R-S3-3 (AI STRIKES BACK S3, SB52): desant z bitwy kadłubów ląduje to, co jest NA POKŁADZIE
+ *   (pusta ładownia — nic; pinuje to `sb3_squadron_smoke` T4), więc zrzutowiec dostaje w setupie falę: 2 jednostki AI
+ *   utworzone przy stolicy imperium (`createAIUnit`) i załadowane (`loadGroundUnit`). Asercje bez zmian.
+ */
+function boardWave(empireId, v, n = 2) {
+  const K = window.KOSMOS;
+  const cap = K.directorProduction?.capitalOf?.(empireId);
+  for (let i = 0; i < n; i++) {
+    const r = K.groundUnitManager.createAIUnit({ archetypeId: 'shock_infantry', empireId, planetId: cap?.planetId, q: 0, r: 0, morale: 50, deployed: false });
+    if (!r?.ok || loadGroundUnit(v, r.unit)?.ok !== true) throw new Error(`setup: fala nie weszła na pokład (${r?.reason ?? 'ładownia'})`);
+  }
 }
 
 /** Zdarzenie bitwy w kształcie, który emitują DSCS i EnemyAttackHandler. */

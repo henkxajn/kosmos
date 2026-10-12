@@ -100,6 +100,7 @@ import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { GarrisonSystem }    from '../systems/GarrisonSystem.js';   // G2-3b — garnizony naziemne AI (D15)
 import { FleetPoolSystem }   from '../systems/FleetPoolSystem.js';  // AI STRIKES BACK S1 — pula okrętów AI (SB1)
+import { StrikeSquadronSystem } from '../systems/StrikeSquadronSystem.js';  // AI STRIKES BACK S3 — eskadra z falą (SB51–SB55)
 import { WithdrawalSystem }  from '../systems/WithdrawalSystem.js'; // G2-4 — wycofanie wojsk po pokoju (D14)
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
@@ -133,7 +134,7 @@ import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
 import { Moon }              from '../entities/Moon.js';
 import { Planetoid }         from '../entities/Planetoid.js';
-import { isEnemyVessel }     from '../entities/Vessel.js';
+import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
 import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
@@ -156,6 +157,7 @@ import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 �
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
+import { printStrikeWaves } from '../utils/StrikeWavePlanner.js';   // AI STRIKES BACK S3 (SB53) — fala desantu AI (odczyt konsoli)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -336,6 +338,9 @@ export class GameScene {
     // AI STRIKES BACK S1 (SB1) — pula okrętów imperium AI przy mobilizacji (te same trzy wejścia co garnizon, własna
     // flaga). Usługi czyta leniwie przez `window.KOSMOS`; MUSI powstać przed `restore` (subskrypcja pierwszego ticku).
     this.fleetPoolSystem      = new FleetPoolSystem();
+    // AI STRIKES BACK S3 (SB51–SB55) — eskadra uderzeniowa AI (transportowiec z falą + eskorta, lot razem). Wołana wyłącznie
+    // przez `launchSquadron` (w S3/1 — dźwignia debug); sama słucha tylko `vessel:wrecked` i `invasion:troopsLanded`.
+    this.strikeSquadronSystem = new StrikeSquadronSystem();
     // G2-4 (D14, R3–R5) — wycofanie wojsk po pokoju: flaga z terminem na jednostkach gracza na ciałach drugiej strony,
     // jednostki AI z ciał gracza znikają przy podpisaniu. Stan siedzi na jednostkach (zapis `GroundUnitManager`).
     this.withdrawalSystem     = new WithdrawalSystem();
@@ -473,6 +478,8 @@ export class GameScene {
     window.KOSMOS.garrisonSystem   = this.garrisonSystem;
     // AI STRIKES BACK S1 — wpis obowiązkowy (odczyty bramki i wywiadu idą przez lokator: `KOSMOS.fleetPoolSystem`).
     window.KOSMOS.fleetPoolSystem  = this.fleetPoolSystem;
+    // AI STRIKES BACK S3 — wpis obowiązkowy (dźwignia bramki i odczyt rekordów: `KOSMOS.strikeSquadronSystem`).
+    window.KOSMOS.strikeSquadronSystem = this.strikeSquadronSystem;
     // G2-4 — wpis obowiązkowy (odczyt bramki: `KOSMOS.withdrawalSystem.listFlagged()`). Pin: `g2_after_peace_smoke` A4.
     window.KOSMOS.withdrawalSystem = this.withdrawalSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
@@ -842,7 +849,29 @@ export class GameScene {
       // KOSMOS.debug.sbTuning() — AI STRIKES BACK (SB9, SB16): tabela strojenia arca — klucz, wartość domyślna, bieżąca,
       //   „*” przy każdej wartości różnej od domyślnej — oraz (SB3, SB14) limit floty KAŻDEGO imperium AI: POP, fabryki,
       //   szczebel, mnożnik, limit, uzbrojone kadłuby wg służby i położenia, miejsce dla puli. TYLKO ODCZYT.
-      sbTuning: () => ({ tabela: printTuningTable(), flota: printFleetLimits(window.KOSMOS) }),
+      //   S3 (SB53): fala desantu, którą każde imperium wysłałoby teraz (limit garnizonu × udział, skład, morale, ładownia).
+      sbTuning: () => ({ tabela: printTuningTable(), flota: printFleetLimits(window.KOSMOS), fala: printStrikeWaves(window.KOSMOS) }),
+      // KOSMOS.debug.sbLaunchSquadron('emp_001', 'entity_2', ['v_31', 'v_32']) albo (…, 2) — AI STRIKES BACK S3 (SB51–SB55):
+      //   WOŁA wejście produkcyjne eskadry z wybraną eskortą (id) albo z N pierwszymi wolnymi okrętami z bakiem warp przy
+      //   stolicy; transportowiec i falę tworzy gra. Zwraca wynik `launchSquadron` (odmowa z powodem — nic nie powstaje).
+      sbLaunchSquadron: (empireId, targetBodyId, escorts = 2) => {
+        const K = window.KOSMOS;
+        const sq = K?.strikeSquadronSystem;
+        if (!sq) return { ok: false, reason: 'no_squadron_system' };
+        let ids = escorts;
+        if (!Array.isArray(escorts)) {
+          const cap = K?.directorProduction?.capitalOf?.(empireId);
+          const capSys = EntityManager.get(cap?.planetId)?.systemId ?? null;
+          ids = (K?.vesselManager?.getAllVessels?.() ?? [])
+            .filter(v => (v.ownerEmpireId ?? v.owner) === empireId && !v.isWreck && v.serviceState !== 'stored'
+              && hasWeapons(v) && v.warpFuel?.max > 0 && v.systemId === capSys
+              && !v.mission && !v.movementOrder && !v.pendingOrder && !K?.directorDoctrine?.isGuard?.(empireId, v.id))
+            .slice(0, Math.max(0, Number(escorts) || 0)).map(v => v.id);
+        }
+        const r = sq.launchSquadron(empireId, targetBodyId, ids);
+        console.log(`[sb] eskadra ${empireId} -> ${targetBodyId}: ${r.ok ? `${r.squadronId}, transport ${r.transportId}, fala ${r.unitIds.length}, eskorta ${ids.join(',')}` : `odmowa ${r.reason}${r.vesselId ? ` (${r.vesselId})` : ''}`}`);
+        return r;
+      },
       // KOSMOS.debug.sbSet('fleetPopPerHull', 40) — zmienia JEDNĄ wartość w trwającej grze; wartość jedzie w zapisie gry.
       //   Nieznany klucz, zły typ albo wartość poza zakresem ⇒ odmowa z listą kluczy albo zakresem, nic się nie zmienia.
       sbSet: (key, value) => consoleSetTuning(key, value),

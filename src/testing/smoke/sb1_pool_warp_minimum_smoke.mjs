@@ -119,7 +119,8 @@ console.log('\nM4 — konsola `sbTuning().flota` — kolumna pulaDoda = plan');
   assert(a2?.pulaDoda === b2?.pulaDoda && a2?.pula === 'nie',
     `M4c (KONTROLA): imperium bez wojny — pulaDoda bez zmian („${a2?.pulaDoda}”), pula nie`);
   const gs = stripComments(read('scenes/GameScene.js'));
-  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\)\s*\}\)/.test(gs),
+  // ⚠ PRZECELOWANIE R-S3-2 (AI STRIKES BACK S3, SB53): obok floty `sbTuning()` drukuje falę desantu.
+  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\),\s*fala:\s*printStrikeWaves\(window\.KOSMOS\)\s*\}\)/.test(gs),
     'M4d (KONTROLA wpięcia): `KOSMOS.debug.sbTuning()` czyta flotę przez `printFleetLimits` — to samo wywołanie co w M4a–M4c');
 }
 

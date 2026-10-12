@@ -7,7 +7,8 @@
 // ⚠ ZASADA KLUCZA (polecenie S1): klucz bez konsumenta nie wchodzi do tabeli. Kolejne slice'y (S2–S4) dokładają swoje
 //   klucze RAZEM z kodem, który je czyta.
 // ⚠ ZERO importów — moduł danych, node-testowalny. Kształt wpisu:
-//   { default, type: 'int' | 'numberList' | 'templateList', min?, max?, length?, minLength?, maxLength?, unit }
+//   { default, type: 'int' | 'number' | 'numberList' | 'templateList', min?, max?, length?, minLength?, maxLength?, unit }
+//   'number' — liczba skończona w [min, max] (S3: udział fali).
 //   'numberList' — lista liczb o stałej długości `length`; każdy element w [min, max].
 //   'templateList' — lista od `minLength` do `maxLength` id szablonów okrętów; każdy ZNANY i UZBROJONY (walidacja
 //   w `StrikesBackTuning`, cechy szablonu — `FleetPoolPlanner.templateTraits`).
@@ -58,4 +59,11 @@ export const SB_TUNING = Object.freeze({
    * NA ORBICIE ciała. 0 = brak strażników. Konsument: `FleetLimit.fleetGuardsPerBody` → `FleetPoolSystem.stationGuards`.
    */
   fleetGuardsPerBody: Object.freeze({ default: 1, type: 'int', min: 0, max: 10, unit: 'straznicy na cialo' }),
+
+  /**
+   * SB53 (S3) — wielkość FALI desantu eskadry: floor(limit garnizonu imperium × ten udział), obcięta do ładowni
+   * transportowca. 0 = fala pusta (eskadra nie startuje). Fixture GATE-S4 `emp_001`: limit 13 → 6. Konsument:
+   * `StrikeWavePlanner.readEmpireWavePlan` → `StrikeSquadronSystem.launchSquadron`.
+   */
+  strikeWaveShare: Object.freeze({ default: 0.5, type: 'number', min: 0, max: 1, unit: 'udzial limitu garnizonu' }),
 });

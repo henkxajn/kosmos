@@ -36,7 +36,7 @@ import { GameCore } from '../headless/GameCore.js';
 import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import gameState from '../../core/GameState.js';
-import { createVessel } from '../../entities/Vessel.js';
+import { createVessel, loadGroundUnit } from '../../entities/Vessel.js';
 import { Ticker } from '../headless/Ticker.js';
 import { InvasionSystem } from '../../systems/InvasionSystem.js';
 
@@ -62,6 +62,14 @@ function spawnDropper(core, empireId, systemId) {
   });
   v.ownerEmpireId = empireId; v.owner = empireId; v.isEnemy = true;
   core.vesselManager._vessels.set(v.id, v);
+  // ⚠ PRZECELOWANIE R-S3-3 (AI STRIKES BACK S3, SB52): desant z bitwy kadłubów ląduje to, co jest NA POKŁADZIE (pusta
+  //   ładownia — nic; `sb3_squadron_smoke` T4) — zrzutowiec dostaje w setupie 2 jednostki AI utworzone przy stolicy
+  //   imperium i załadowane. Asercje bez zmian.
+  const cap = window.KOSMOS.directorProduction?.capitalOf?.(empireId);
+  for (let i = 0; i < 2; i++) {
+    const r = window.KOSMOS.groundUnitManager.createAIUnit({ archetypeId: 'shock_infantry', empireId, planetId: cap?.planetId, q: 0, r: 0, morale: 50, deployed: false });
+    if (!r?.ok || loadGroundUnit(v, r.unit)?.ok !== true) throw new Error(`setup: fala nie weszła na pokład (${r?.reason ?? 'ładownia'})`);
+  }
   return v;
 }
 

@@ -31,18 +31,13 @@ import { isStandableTile } from '../data/GroundUnitData.js';
 import { garrisonTier, readEmpireGarrisonSnapshot, invasionTroops } from '../utils/GarrisonPlanner.js';   // G2b (D7, D9)
 import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
+import { dropTroop } from '../entities/Vessel.js';      // AI STRIKES BACK S3 (SB52) — desant z ładunku, droga gracza
 
 const CAPTURE_GRACE_YEARS = 3.0;
 const MIN_SURVIVING_STRENGTH_TO_LAND = 30; // flota ABSTRAKCYJNA musi mieć min. siły
 const TROOPS_PER_LANDING = 3;               // ile jednostek desantuje
-/**
- * W3-6 — górna klamra desantu z REALNYCH kadłubów (jedna wygrana orbita = jedna fala).
- * ⚠ Świadomie NIE jest to odpowiednik `MIN_SURVIVING_STRENGTH_TO_LAND`: tamten próg mierzy
- * abstrakcyjną siłę floty i na ścieżce kadłubowej nie ma sensu (`lossesA` liczy tam STATKI,
- * nie HP — kolizja jednostek z W1 §Findings 3). Próg kadłubowy brzmi „czy ktokolwiek ocalały
- * potrafi zrzucić wojsko" i mieszka w `_onVesselGroupVictory`; ta stała ogranicza tylko ROZMIAR.
- */
-const MAX_TROOPS_PER_VESSEL_LANDING = 6;
+// ⚠ `MAX_TROOPS_PER_VESSEL_LANDING` (W3-6, klamra 6 jednostek z POJEMNOŚCI ładowni) USUNIĘTA w S3 (SB52): desant
+//   z bitwy kadłubów ląduje to, co jest NA POKŁADZIE, a wielkość fali ustala eskadra (SB53, `StrikeWavePlanner`).
 
 export class InvasionSystem {
   constructor() {
@@ -168,6 +163,18 @@ export class InvasionSystem {
       if (res?.ok) landed.push(res.unit.id);
     }
 
+    const invId = this._recordLanding(empireId, planetId, landed);
+    return { success: true, invasionId: invId, landed };
+  }
+
+  /**
+   * Rekord kampanii i zdarzenia lądowania — JEDNA ścieżka dla desantu z liczby (`launchInvasion`) i desantu z ładunku
+   * (`_landCargo`, S3/SB52). `vesselIds` (opcjonalne) — kadłuby, z których zeszły jednostki (eskadra rozpoznaje po nich
+   * swój desant); bez nich ładunek zdarzenia jak dotąd.
+   * @returns {string} id kampanii
+   * @private
+   */
+  _recordLanding(empireId, planetId, landed, vesselIds = null) {
     // ── Zarejestruj w gameState.invasions — JEDNA KAMPANIA NA (CIAŁO, AGRESOR) (D4/AC-7) ──
     //
     // ⚠ Do AC-7 identyfikator rekordu zawierał UŁAMKOWY `gameTime`, więc druga fala na to samo
@@ -204,8 +211,44 @@ export class InvasionSystem {
     gameState.set(`invasions.${invId}`, inv, 'invasion_launched');
 
     EventBus.emit('invasion:launched', { invasionId: invId, empireId, planetId, troops: landed.length });
-    EventBus.emit('invasion:troopsLanded', { invasionId: invId, empireId, planetId, unitIds: landed });
+    EventBus.emit('invasion:troopsLanded', vesselIds
+      ? { invasionId: invId, empireId, planetId, unitIds: landed, vesselIds: [...vesselIds] }
+      : { invasionId: invId, empireId, planetId, unitIds: landed });
 
+    return invId;
+  }
+
+  /**
+   * AI STRIKES BACK S3 (SB52, SB55; Findingi 396, 384) — DESANT Z ŁADUNKU: ląduje DOKŁADNIE to, co jest na pokładzie
+   * ocalałych zrzutowców — te same jednostki (nie nowe), przez `dropTroop` (bramki wojny, dominacji i wraku — droga
+   * gracza); pusta ładownia — nic. Heksy lądowania jak w `launchInvasion` (brzeg, bez oceanu, stolicy i zajętych).
+   * @returns {{success:true, invasionId:string, landed:string[]} | {success:false, reason:string}}
+   *   powody: `no_gum` · `no_grid` · `empty_cargo` · `no_landing_zone` · `drop_refused`
+   * @private
+   */
+  _landCargo(empireId, planetId, droppers) {
+    const gum = window.KOSMOS?.groundUnitManager;
+    if (!gum) return { success: false, reason: 'no_gum' };
+    const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
+    if (!colony?.grid) return { success: false, reason: 'no_grid' };
+    const aboard = [];
+    for (const v of droppers) {
+      for (const uid of [...(v.groundUnits ?? [])]) {
+        const u = gum.getUnit?.(uid);
+        if (u) aboard.push({ v, u });
+      }
+    }
+    if (aboard.length === 0) return { success: false, reason: 'empty_cargo' };
+    const hexes = this._findLandingHexes(colony.grid, colony);
+    if (hexes.length === 0) return { success: false, reason: 'no_landing_zone' };
+    const landed = [];
+    for (let i = 0; i < aboard.length; i++) {
+      const { v, u } = aboard[i];
+      const hex = hexes[i % hexes.length];
+      if (dropTroop(v, u, planetId, hex.q, hex.r)?.ok) landed.push(u.id);
+    }
+    if (landed.length === 0) return { success: false, reason: 'drop_refused' };
+    const invId = this._recordLanding(empireId, planetId, landed, droppers.map(v => v.id));
     return { success: true, invasionId: invId, landed };
   }
 
@@ -229,6 +272,10 @@ export class InvasionSystem {
    *
    * ⚠ DOMINACJA ORBITALNA — ta sama bramka co u gracza (`playerHasOrbitalDominance` w UI
    * desantu). Wygrana bitwa nie wystarczy: trzeba TRZYMAĆ orbitę celu.
+   *
+   * ⚠ AI STRIKES BACK S3 (SB52, SB55) — desant Z ŁADUNKU (`_landCargo`): ląduje to, co ocalałe zrzutowce mają na pokładzie,
+   * i nic, gdy ładownie są puste (odmowa `empty_cargo` w `invasion:blocked`). Liczba z pojemności i jednostki tworzone przy
+   * lądowaniu — wyłącznie w `launchInvasion` (gałąź floty abstrakcyjnej, dźwignia `WarOverlay force_invasion`).
    */
   _onVesselGroupVictory({ result }) {
     const pA = result?.participantA;
@@ -298,22 +345,14 @@ export class InvasionSystem {
     if (targets.length === 0) return;
     const target = targets.find(c => c.isHomePlanet) ?? targets[0];
 
-    // 4) SIŁA DESANTU = suma ładowni ocalałych zrzutowców (klamra, żeby jedna wygrana
-    //    nie wysypywała armii; druga fala wymaga kolejnej wygranej orbity).
-    const capacity = droppers.reduce((sum, v) => sum + (v.troopCapacity ?? 0), 0);
-    const troopCount = Math.max(1, Math.min(MAX_TROOPS_PER_VESSEL_LANDING, Math.floor(capacity)));
-
-    // Konkretne jednostki w ładowniach mają pierwszeństwo (parity z graczem); gdy pusto —
-    // `launchInvasion` składa falę ze szczebla drabiny D9 imperium (G2b, `invasionComposition`).
-    const embarked = [];
-    for (const v of droppers) {
-      for (const uid of (v.groundUnits ?? [])) {
-        const u = window.KOSMOS?.groundUnitManager?.getUnit?.(uid);
-        if (u?.archetypeId ?? u?.type) embarked.push(u.archetypeId ?? u.type);
-      }
+    // 4) DESANT Z ŁADUNKU (AI STRIKES BACK S3, SB52, SB55; Findingi 396, 384). Ląduje DOKŁADNIE to, co jest na pokładzie
+    //    ocalałych zrzutowców — te same jednostki, przez `dropTroop`; pusta ładownia — nic. Dotąd liczbę brano
+    //    z POJEMNOŚCI (do 6), a `launchInvasion` tworzyło jednostki NOWE: pusta ładownia dawała falę „z niczego”, a jednostki
+    //    z ładowni zostawały na pokładzie (duplikat). Jedna wygrana orbita = jeden desant — po nim ładownia jest pusta.
+    const res = this._landCargo(empireId, target.planetId, droppers);
+    if (!res.success) {
+      EventBus.emit('invasion:blocked', { empireId, systemId, planetId: target.planetId, reason: res.reason });
     }
-
-    this.launchInvasion(empireId, target.planetId, troopCount, embarked.length > 0 ? embarked : null);
   }
 
   _onBattleResolved({ warId, battleId, result }) {

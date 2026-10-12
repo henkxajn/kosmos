@@ -166,6 +166,10 @@ const TRACKED_EVENTS = [
   // AI STRIKES BACK S3 (SB54) — odcinek GRUPY w układzie celu: jedna chwila przylotu (`arrivalYear`), członkowie przyjęci
   //   (`accepted`) i odrzuceni z powodem (`rejected`) — także ponowna synchronizacja po bitwie w locie.
   'order:groupLegIssued',
+  // AI STRIKES BACK S3 (SB51–SB53) — eskadra: wysłana (`launched`: transportowiec, fala, eskorta) i odmowa z powodem
+  //   (`launchRefused`) — bez tej pary gate nie odróżniłby „brak eskorty” od „nic nie wywołało funkcji”.
+  'squadron:launched',
+  'squadron:launchRefused',
 ];
 
 class DebugLog {

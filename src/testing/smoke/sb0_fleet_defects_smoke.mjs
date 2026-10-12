@@ -365,6 +365,14 @@ console.log('T5 — lustro AI: dominację imperium odbiera tylko kadłub GRACZA,
   K.invasionSystem = inv;
   const aiDom = () => ws.hasOrbitalDominanceInSystem?.(emp, S);
   const dropper = aiHull(core, emp, home, { shipId: 'hull_medium', modules: DROPPER, service: 'active', state: 'orbiting', systemId: S });
+  // ⚠ PRZECELOWANIE R-S3-3 (AI STRIKES BACK S3, SB52): desant z bitwy kadłubów ląduje to, co jest NA POKŁADZIE (pusta
+  //   ładownia — nic; `sb3_squadron_smoke` T4) — zrzutowiec dostaje w setupie 2 jednostki AI utworzone przy stolicy
+  //   imperium i załadowane. Asercje bez zmian.
+  const capW = K.directorProduction?.capitalOf?.(emp);
+  for (let i = 0; i < 2; i++) {
+    const r = K.groundUnitManager.createAIUnit({ archetypeId: 'shock_infantry', empireId: emp, planetId: capW?.planetId, q: 0, r: 0, morale: 50, deployed: false });
+    if (!r?.ok || VesselNS.loadGroundUnit(dropper, r.unit)?.ok !== true) throw new Error(`setup: fala nie weszła na pokład (${r?.reason ?? 'ładownia'})`);
+  }
   const guardP = playerHull(core, home, { state: 'docked', systemId: S });
   assert(dropper.canDropTroops === true && ws.getOrbitalController(S) == null,
     'T5 ŚWIADEK: zrzutowiec AI na orbicie domu, w układzie nie było bitwy (brak kontrolera)');

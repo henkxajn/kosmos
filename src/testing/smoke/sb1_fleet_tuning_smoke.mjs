@@ -394,8 +394,9 @@ console.log('\nT11 — konsumenci limitu w grze (konsola i pula)');
     .map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
   assert(same(importers('FleetLimit\\.js'), ['scenes/GameScene.js', 'systems/FleetPoolSystem.js']),
     `T11a: FleetLimit importują wyłącznie GameScene (konsola) i FleetPoolSystem (pula): ${JSON.stringify(importers('FleetLimit\\.js'))}`);
-  assert(same(importers('StrikesBackTuning\\.js'), ['scenes/GameScene.js', 'utils/FleetLimit.js']),
-    `T11b: StrikesBackTuning importują GameScene i FleetLimit: ${JSON.stringify(importers('StrikesBackTuning\\.js'))}`);
+  // ⚠ PRZECELOWANIE R-S3-1 (AI STRIKES BACK S3, SB53): trzeci czytelnik tabeli — planer fali (`strikeWaveShare`).
+  assert(same(importers('StrikesBackTuning\\.js'), ['scenes/GameScene.js', 'utils/FleetLimit.js', 'utils/StrikeWavePlanner.js']),
+    `T11b: StrikesBackTuning importują GameScene, FleetLimit i planer fali: ${JSON.stringify(importers('StrikesBackTuning\\.js'))}`);
   const users = files.filter((f) => /\bisFleetLimitHull\b/.test(stripComments(readFileSync(f, 'utf8')))).map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
   assert(same(users, ['entities/Vessel.js', 'utils/FleetLimit.js']), `T11c: predykat kadłuba używany tylko przez limit: ${JSON.stringify(users)}`);
 }
@@ -411,8 +412,9 @@ console.log('\nT12 — odczyt per imperium');
   assert(rows.length === K.empireRegistry.listAll().length && rows.every((r) => same(Object.keys(r), cols)),
     `T12a: wiersz na imperium z kolumnami ${cols.join(', ')}`);
   const gsSrc = stripComments(read('scenes/GameScene.js'));
-  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\)\s*\}\)/.test(gsSrc),
-    'T12b: `KOSMOS.debug.sbTuning()` drukuje tabelę strojenia i limit floty każdego imperium');
+  // ⚠ PRZECELOWANIE R-S3-2 (AI STRIKES BACK S3, SB53): `sbTuning()` drukuje też falę desantu każdego imperium.
+  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\),\s*fala:\s*printStrikeWaves\(window\.KOSMOS\)\s*\}\)/.test(gsSrc),
+    'T12b: `KOSMOS.debug.sbTuning()` drukuje tabelę strojenia, limit floty i falę desantu każdego imperium');
 }
 
 console.log(`\n[sb1_fleet_tuning_smoke] PASS ${pass} / FAIL ${fail}`);

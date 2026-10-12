@@ -66,6 +66,10 @@ function createDefaultState() {
     // Brak wpisu = wartość domyślna z `src/data/StrikesBackData.js`; pusta mapa = zapis sprzed S1 (save v101 bez migracji).
     // Właściciel stanu: `src/utils/StrikesBackTuning.js` (intencje set/reset; sprzątanie po wczytaniu).
     strikesBackTuning: {},
+    // AI STRIKES BACK S3 (SB51–SB55) — eskadry uderzeniowe AI: squadronId → { id, empireId, targetBodyId, targetSystemId,
+    //   capitalId, escortIds, transportId, unitIds, wave, launchedYear, stage }. Właściciel stanu: `StrikeSquadronSystem`.
+    //   Pusta mapa = zapis sprzed S3 (save v101 bez migracji).
+    strikeSquadrons: {},
   };
 }
 

@@ -59,6 +59,14 @@ export function validateTuning(key, value) {
     if (value < def.min || value > def.max) return { ok: false, key, reason: 'out_of_range', range: [def.min, def.max] };
     return { ok: true, value };
   }
+  if (def.type === 'number') {
+    // AI STRIKES BACK S3 (SB53) — liczba skończona w [min, max] (udział fali desantu).
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return { ok: false, key, reason: 'wrong_type', expected: 'liczba', range: [def.min, def.max] };
+    }
+    if (value < def.min || value > def.max) return { ok: false, key, reason: 'out_of_range', range: [def.min, def.max] };
+    return { ok: true, value };
+  }
   if (def.type === 'numberList') {
     const expected = `lista ${def.length} liczb`;
     if (!Array.isArray(value) || value.length !== def.length) {
