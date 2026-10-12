@@ -5927,7 +5927,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 PRZYGOTOWANA 2026-10-11, NIE zacommitowana)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12)
 
 Plan, decyzje **SB1–SB60** i rejestr findingów **#391–#435**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
 §5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
@@ -6113,32 +6113,30 @@ z ciałem. **Następny: S3.**
 ⚠ **Lot do ciała ma JEDNO źródło chwili przylotu: `VesselManager._interceptBody`** (punkt i `arrivalYear` razem); nowy
 producent lotu na ruchome ciało nie liczy własnej predykcji. ⚠ **Wrak nie wznawia misji** — migawka wraku zdejmowana
 w `_resumeMissionAfterOrder`; scena testowa z wrakiem „w locie” musi pamiętać, że `_updatePositions` wraku nie prowadzi.
-⏳ **S3 — sesja 1 z 2 (2026-10-11): PRZYGOTOWANA, NIE zacommitowana** (plan §5j; decyzje **SB49–SB60**; łańcuch, sondy,
-bramka `gate/GATE_S3A.md` i notatka `HANDOVER_S3_PART1.md`: `kosmos-handover/ai-strikes-back-s3/`). Kod ZESTAGOWANY w repo
-(S3-1 – S3-3 bez przecelowań); commity — `tools/commit_S3.sh` (+ `commit_S3_B3.sh` po zgodzie na **R-S3**). **S3-1** — 421
+✅ **S3 — sesja 1 z 2 ZAMKNIĘTA 2026-10-12** (bramka S3A w przeglądarce właściciela PASS; plan §5j — przygotowanie, M5,
+scenariusz bramki; §5k — commity i zapis bramki; decyzje **SB49–SB60**, **SB61–SB67**; łańcuch, sondy i bramka:
+`kosmos-handover/ai-strikes-back-s3/`). Commity po zgodzie na **R-S3**: `1cf1d24` · `ee44424` · `c97b73b`. **S3-1** — 421
 (SB49, kształt O2E: `DeepSpaceCombatSystem._closeToWeaponRange` przed każdą rundą — statek bez wroga w zasięgu własnej broni
 zbliża się do celu `engage` albo najbliższego wroga na 0,95 × zasięg, krokiem 0,025 roku gry na rundę; `dockedAt`,
-uciekający, `in_transit`, wrak i bezbronny stoją) · **S3-2** — 420 (SB54, SB45: NEW `src/utils/GroupArrival.js` — jedna
-chwila przylotu grupy do ciała z przechwyceń członków; `FleetSystem` (cel-ciało floty gracza) i `OrderService.issueGroupAttack`
-— eskadra AI: jeden kąt punktu przylotu po skoku, odcinek w układzie celu dopiero, gdy jest tam cała grupa, ponowna
-synchronizacja po bitwie w locie) · **S3-3** — SB51–SB53, SB55 (NEW `src/systems/StrikeSquadronSystem.js`
-— `launchSquadron`: transportowiec `transport_assault` przy stolicy funkcją puli, fala NOWYCH jednostek ⌊limit garnizonu ×
-`strikeWaveShare`⌋ obcięta do ładowni, lot razem z eskortą, rekord `strikeSquadrons`; NEW `src/utils/StrikeWavePlanner.js`;
-`InvasionSystem._landCargo` — desant DOKŁADNIE z ładowni, pusta — nic; zamyka po commicie **396**, **384**; konsola
-`KOSMOS.debug.sbLaunchSquadron`, `sbTuning().fala`). Keepery NEW `sb3_combat_closing` 28, `sb3_group_arrival` 26,
-`sb3_squadron` 41 (fail-first 7/21, 6/20, 1/40 — zielone wyłącznie kontrole); sweep **286 → 287 → 283/288** (kod —
-czerwone wyłącznie `w3_ai_invasion`, `ai_capture_outpost`, `sb0_fleet_defects`, `sb1_fleet_tuning`,
-`sb1_pool_warp_minimum`) → **288/288** z R-S3 (PROPOSED, dowód mutacyjny 8 z 9 zabitych, dziewiąty równoważny); i18n 3456,
-zero kluczy, save v101 bez migracji. M5 (fixture GATE-S4, tryb klatek, 60 przebiegów + 3 kontrolne): eskadra skacze w JEDEN punkt i dolatuje razem
-(rozrzut 0 AU / 0 dni, transportowiec nigdy przed eskortą); dom bez statków albo z 3 zadokowanymi fregatami pada 40/40
-11–14 mies. po desancie, 3 fregaty na orbicie niszczą eskadrę 2-eskortową 10/10 i przegrywają z 3-eskortową 7/10;
-kontrola (te same kadłuby wysłane osobno) — punkty skoku 24–60 AU od siebie, transportowiec sam wygrywa z niebronioną
-kolonią (**435**); uprząż C1 6/6 bez zmian. Nowe: ⚪ **426** (przypięcie DSCS — SB50: zostaje) · 🟠 **427**
-(`ObservatorySystem` — klasa 151, → S3/2) · ⚪ **428**–**433** · ⚪ **434** (transportowiec zostaje na orbicie celu) ·
-⚪ **435** (sam nieuzbrojony transportowiec wygrywa przewagą HP z obroną symboliczną niebronionej kolonii — 30 HP —
-i ląduje).
-**Następny: zgoda na R-S3 i commity sesji 1; potem S3, sesja 2** (SB56 wielkość eskadry, SB57 odbijanie, SB58 eskorta
-trzyma orbitę, SB59 151 + 427 + wpis dzwonka).
+uciekający, `in_transit` (SB61), wrak i bezbronny stoją) · **S3-2** — 420 (SB54, SB45: NEW `src/utils/GroupArrival.js` —
+jedna chwila przylotu grupy do ciała z przechwyceń członków; `FleetSystem` (cel-ciało floty gracza) i
+`OrderService.issueGroupAttack` — eskadra AI: jeden kąt punktu przylotu po skoku, odcinek w układzie celu dopiero, gdy jest
+tam cała grupa, ponowna synchronizacja po bitwie w locie; flota gracza po bitwie w locie — osobno, SB62/**437**) · **S3-3** —
+SB51–SB53, SB55 (NEW `src/systems/StrikeSquadronSystem.js` — `launchSquadron`: transportowiec `transport_assault` przy
+stolicy funkcją puli, fala NOWYCH jednostek ⌊limit garnizonu × `strikeWaveShare`⌋ obcięta do ładowni, lot razem z eskortą,
+rekord `strikeSquadrons`; NEW `src/utils/StrikeWavePlanner.js`; `InvasionSystem._landCargo` — desant DOKŁADNIE z ładowni,
+pusta — nic; zamyka **396**, **384**; konsola `KOSMOS.debug.sbLaunchSquadron`, `sbTuning().fala`). Keepery NEW
+`sb3_combat_closing` 28, `sb3_group_arrival` 26, `sb3_squadron` 41; przecelowane za zgodą (R-S3): `sb1_fleet_tuning`,
+`sb1_pool_warp_minimum`, `w3_ai_invasion`, `ai_capture_outpost`, `sb0_fleet_defects`; sweep **288/288**, i18n 3456, zero
+kluczy, save v101 bez migracji. M5 (fixture GATE-S4, tryb klatek, 60 przebiegów + 3 kontrolne): eskadra skacze w JEDEN punkt
+i dolatuje razem (rozrzut 0 AU / 0 dni, transportowiec nigdy przed eskortą); dom bez statków albo z 3 zadokowanymi fregatami
+pada 40/40 11–14 mies. po desancie, 3 fregaty na orbicie niszczą eskadrę 2-eskortową 10/10 i przegrywają z 3-eskortową 7/10.
+Bramka: desant = dokładnie 6 jednostek z ładowni, przylot razem (rozrzut 0 dni), w drugim starciu fregaty z laserem strzelają
+z 0,045–0,047 AU; starcie przegrane w ok. pół sekundy — ⚪ **436** (SB67). Otwarte: ⚪ **426** (SB50: zostaje) · 🟠 **427**
+(→ S3/2) · ⚪ **428**–**433** · ⚪ **434** (→ SB63) · ⚪ **435** (→ SB66) · ⚪ **436** · ⚪ **437**.
+**Następny: S3, sesja 2** (SB56 wielkość eskadry, SB57 odbijanie, SB58/SB63 eskorta i transportowiec nad celem do
+rozstrzygnięcia walki naziemnej, SB59 151 + 427 + wpis dzwonka, SB64 desant na cel eskadry, SB65 pomiar 55, SB66 eskadra bez
+eskorty przerywana, SB67 czas rundy — pomiar najpierw).
 ⚠ **Eskadrę AI tworzy WYŁĄCZNIE `StrikeSquadronSystem.launchSquadron`** (transportowiec przez `createAIVessel`, fala przez
 `createAIUnit` + `loadGroundUnit`); desant z bitwy kadłubów ląduje WYŁĄCZNIE z ładunku — `launchInvasion` (z liczby) zostaje
 dla dźwigni `force_invasion` i martwej gałęzi floty abstrakcyjnej. ⚠ **Keeper, który mierzy desant AI z bitwy kadłubów,

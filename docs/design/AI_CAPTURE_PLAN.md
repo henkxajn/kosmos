@@ -983,6 +983,8 @@ gate'u** ⇒ **D7**.
 55. **Kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy** (`ColonyManager.js:345`) ⇒
     `launchInvasion` na preferowany cel zwraca `no_grid` (`:97-98`). Wejście do desantu zależy od działania
     gracza w UI.
+    → **AI STRIKES BACK SB65 (2026-10-12):** dotyczy także desantu z ładunku (`InvasionSystem._landCargo`,
+    `c97b73b`); pomiar dla celu odbijania — S3, sesja 2; naprawa — S4 (`AI_STRIKES_BACK_PLAN.md` §2).
 56. **`CombatSystem._tryRetreat:392-423` jest drugim moverem** — teleport o kafel bez sprawdzania budynku,
     właściciela i stolicy; martwy tylko dlatego, że legacy jednostki nie mają `morale` (`:235`
     `morale ?? 100`). Slice GROUND go uruchomi.

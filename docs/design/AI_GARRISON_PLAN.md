@@ -2292,7 +2292,7 @@ cudzej kolonii — dziś menu budowy gracza).
 (379)**; wykonanie — **etap polerki UI**. Co ma pokazywać pusty kafel cudzej kolonii, gdy reguła mówi „widoczne” —
 nierozstrzygnięte.
 
-### 🟠 384 — desant z ładowni zrzutowców AI duplikuje ładunek: typy idą do `launchInvasion`, oryginały zostają w ładowni (uśpiony)
+### ✅ 384 — desant z ładowni zrzutowców AI duplikuje ładunek: typy idą do `launchInvasion`, oryginały zostają w ładowni (uśpiony)
 
 `_onVesselGroupVictory` zbiera z ładowni ocalałych zrzutowców (`v.groundUnits`, `InvasionSystem.js:300-305`) **typy**
 jednostek (`u.archetypeId ?? u.type`) i przekazuje je jako jawną listę do `launchInvasion` (`:307`), a ta tworzy NOWE
@@ -2303,6 +2303,7 @@ jednostki (`createAIUnit`, `:165`); w `InvasionSystem` nie ma ani jednego `remov
 → **AI STRIKES BACK S3, sesja 1 (2026-10-11):** naprawa PRZYGOTOWANA, NIE zacommitowana — desant z ładunku
 (`InvasionSystem._landCargo`, SB52): lądują DOKŁADNIE jednostki z ładowni, nowe nie powstają; zamknięcie przy commicie
 S3-3 (`AI_STRIKES_BACK_PLAN.md` §5j).
+✅ **Zamknięty 2026-10-12 — `c97b73b` (AI STRIKES BACK S3-3, SB52; `AI_STRIKES_BACK_PLAN.md` §5k).**
 
 ### ⚪ 385 — bramki mobilności AI w `_tickCombatAI` czytają tabelę legacy: każdy archetyp jest „mobilny”
 
