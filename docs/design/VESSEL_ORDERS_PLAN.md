@@ -1326,7 +1326,7 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      zewnętrzny `forEach` dojdzie do kolejnego subskrybenta ⇒ **błędna linia trafiała do Dziennika PRZED
      poprawną**. Kolejność nie była przypadkowa.
 
-151. 🟠 **`ProximitySystem:187` ma WLASNA koercje zamiast `systemIdOf`, i ta koercja polyka tranzyt
+151. ✅ **`ProximitySystem:187` ma WLASNA koercje zamiast `systemIdOf`, i ta koercja polyka tranzyt
      warp.** `(v1.systemId ?? 'sys_home') === (v2.systemId ?? 'sys_home')` — a `??` lapie takze `null`,
      ktory w tym repo znaczy SWIADOMIE „statek jest miedzy ukladami" (`VesselManager:842`, inwariant
      pilnowany przez `_resolveSystemId`). Naglowek `SystemScope.js:14-17` ostrzega przed dokladnie tym
@@ -1349,6 +1349,9 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      `FleetManagerOverlay` zostają (utajone za `commandTacticalMap: false`; `fleet_engage_scope_smoke` T12c/T12d pinują je
      dosłownie jako dokument zakresu 166). ⚠ Korekta: `:658` to nie „radar / atlas”, tylko domyślny zakres orbit kamery
      (`_getMaxOrbitAU`). Zamknięcie dwóch żywych miejsc — przy commicie S3-8 (`AI_STRIKES_BACK_PLAN.md` §5l).
+     ✅ **ZAMKNIĘTY 2026-10-13 — `53fb899` (AI STRIKES BACK S3-8, SB59), bramka S3B PASS (`AI_STRIKES_BACK_PLAN.md` §5m).**
+     Dwa żywe miejsca naprawione (`ProximitySystem._checkPair`, `ObservatorySystem._tickVesselDetection`); trzy filtry
+     `FleetManagerOverlay` zostają poza zamknięciem — utajone za `commandTacticalMap: false`.
 
 152. 🟠 **POI nie ma pojecia ukladu — i nie da sie tego zalatac guardem.** `POIRuntimeSystem._tickPicket`
      (`:133`) i `_tickRally` (`:186`) licza `gameplayDistance(center, vessel.position)` po pelnej liscie

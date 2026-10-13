@@ -539,6 +539,14 @@
 > • Bramka S3B (`ai-strikes-back-s3b/gate/GATE_S3B.md`) zwalidowana w prawdziwej grze: dwa przebiegi na kodzie łańcucha —
 >   wszystkie własności, 0 błędów konsoli; kontrola na `055f1b7`.
 > • Następny: zgoda na R-S3b, bramka S3B w przeglądarce właściciela i commity sesji 2; **S4**.
+>
+> **Aktualizacja 2026-10-13 (zamknięcie) — AI STRIKES BACK: S3, sesja 2 z 2 ZAMKNIĘTA** (bramka S3B w przeglądarce
+> właściciela PASS). Commity po zgodzie na R-S3b: `2c33033` (S3-4; 435) · `bf3178c` (S3-5; 434) · `dafea9a` (S3-6 +
+> R-S3b) · `6dd6081` (S3-7) · `53fb899` (S3-8; 427, 151) · `5a47c68` (S3-9); zapis bramki: `AI_STRIKES_BACK_PLAN.md` §5m.
+> Sweep **294/294**, `check-i18n` 3458.
+> • ✅ **435** · **434** · **427** · **151** — zamknięte; wiersze zdjęte (151 — dwa żywe miejsca; trzy utajone filtry
+>   `FleetManagerOverlay` poza zamknięciem).
+> • **S3 ZAMKNIĘTY W CAŁOŚCI.** Następny: odpowiedzi właściciela na pytania §5l.6 i **S4**.
 
 
 ---
@@ -666,8 +674,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **151** | 🟠 | `ProximitySystem:187` ma własną koercję `?? 'sys_home'`, która połyka `null` = tranzyt warp | bramkuje **detekcję i intel**, nie tylko walkę; **S3-8 (S3/2) PRZYGOTOWANE:** `ProximitySystem` przez `isSameSystemStrict` — zamknięcie przy commicie; trzy utajone filtry FMO zostają |
-| **427** | 🟠 | `ObservatorySystem.js:590` — `(v.systemId ?? sysId) !== sysId`: statek w skoku (`systemId` `null`) liczony jak statek oglądanego układu, na współrzędnych sprzed skoku; obserwatorium 4+ (zasięg ∞) — każdy skok `[derived]` | klasa **151**; naprawa PRZYGOTOWANA — S3-8 (S3/2, zestagowana), zamknięcie przy commicie. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **439** | 🟠 | wpis dzwonka `armedContact` (SB59) wymaga wykrycia przez obserwatorium OGLĄDANEGO układu (**191**) albo zmysły statku gracza — M6: eskadra odbicia w układzie stolicy AI, widok domowy, bez okrętów przy celu ⇒ zero wpisów, pierwsza wiadomość = alarm desantu; z widokiem na ten układ — 1,9 mies. przed desantem | do decyzji (rodzina **191**). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **152** | 🟠 | POI **nie ma pola `systemId` w ogóle** | naprawa = nowe pole + **migracja zapisu** |
 | **153** | 🟠 | `EmpireLogisticsSystem:240-242` dobiera outposty bez terminu układu, kurier bez warpu | **osiągalność NIEZMIERZONA** |
@@ -719,7 +725,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **164** | 🟠 | przełącznik auto-slow **nie ma producenta** — `time:autoSlowToggle` zero nadawców, pole nieserializowane ⇒ gracz **nie może** tego wyłączyć; resztki w `time:display` i `BottomBar` |
 | **165a** | 🟠 | obrona orbitalna **nie ma PRZEBIEGU** — jedno `resolveBattle`, brak `vessel:engaged`, brak rund ⇒ walka o stolicę jest wyłącznie wynikiem po fakcie |
 | **W3-26** | 🟠 | `playerVesselsToBattleUnit([])` fabrykuje obrońcę `{hp:100, weapons:[]}`; fantom pinowany jako zachowanie silnika, kandydat do balansu |
-| **435** | ⚪ | samotny NIEUZBROJONY transportowiec (`hull_large`, 180 HP) wygrywa bitwę planetarną z kolonią bez statków i bez budynków obrony (obrona symboliczna `WarSystem._buildPlayerBattleUnit` 30 HP, broń 2; limit 30 tur — przewaga HP; D-199-6) i ląduje — kontrola M5: te same kadłuby wysłane osobno, 3/3, dom pada po 11,2–12,0 mies.; w eskadrze (S3-2) transportowiec nie przylatuje przed eskortą (0 z 47 przylotów) | do decyzji: czy wygrana bez broni daje dominację (SB7); → **SB66** (2026-10-12): eskadra bez eskorty przerywana, transportowiec zawraca — naprawa PRZYGOTOWANA: S3-4 (S3/2, zestagowana), zamknięcie przy commicie. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **311** | 🟠 | `SupplyCoverageSystem.js:162` zapisuje legacy jednostce gracza `supply = 0` przez `?? 0` ⇒ zero obrażeń + atrycja (klasa 65, inne pole) |
 | **313** | ⚪ | `_tryRetreat` zostawia `_path`, zawsze ucieka w +q, wchodzi na obcy kafel — rozszerza **56** |
 | **314** | ⚪ | martwe człony `_scoreTarget` `'scout'`/`'ranged'` (`CombatSystem.js:361`, `:364`) — instancje noszą lustro legacy |
@@ -847,7 +852,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **429** | ⚪ | wykrywanie (`ProximitySystem`) bierze ZADOKOWANE statki gracza jako obserwatorów | zachowanie, nie błąd — do potwierdzenia, czy zamierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **430** | ⚪ | obrona naziemna gracza przy technologiach fixture'u nie zabija jednostek AI (0 w 72 przebiegach `garrison_unit`) | balans — poza S3 (SB60). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **431** | ⚪ | w 1 z 36 przebiegów małej kolonii koszary zniknęły z rejestru aktywnych budynków po ~0,2 roku | przyczyna niezbadana. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **434** | ⚪ | transportowiec eskadry po desancie zostaje na orbicie celu na zawsze — odwołanie i pule Directora wymagają `hasWeapons`; M5: po każdym desancie transportowiec z pustą ładownią na orbicie domu gracza do końca przebiegu | → SB63; naprawa PRZYGOTOWANA — S3-5 (S3/2, zestagowana), zamknięcie przy commicie; M6: transportowiec znika w stolicy po każdej eskadrze. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **389** | ⚪ | ułamkowy `troopCount`: dawna pętla dawała ⌈n⌉ jednostek, skład szczebla daje ⌊n⌋ (`GarrisonPlanner.js:88`, `:123`) | żywi wołający podają liczby całkowite; różnica tylko w gałęzi `_onBattleResolved` bez producenta (`InvasionSystem.js:354`). `AI_GARRISON_PLAN.md` §6 |
 | **395** | ⚪ | adnotacja `directorOrigin` trafia na zły kadłub — `_awaitingClaim` zdejmowane `shift()` przy każdym ukończonym kadłubie kolonii (`DirectorProduction.js:202-203`, `:237-241`); fixture: `v_28` | diagnostyka, bez wpływu na walkę. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **400** | ⚪ | guard `empireHasFreeCrew` zarejestrowany (`DirectorProduction.js:479`), a od S0-2 bez konsumenta w katalogu reguł | martwy, nieszkodliwy; decyzja przy S1. `AI_STRIKES_BACK_PLAN.md` §6 |

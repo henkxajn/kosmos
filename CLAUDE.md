@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 PRZYGOTOWANA 2026-10-13, NIE zacommitowana)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY)
 
 Plan, decyzje **SB1–SB67** i rejestr findingów **#391–#440**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6141,9 +6141,10 @@ eskorty przerywana, SB67 czas rundy — pomiar najpierw).
 `createAIUnit` + `loadGroundUnit`); desant z bitwy kadłubów ląduje WYŁĄCZNIE z ładunku — `launchInvasion` (z liczby) zostaje
 dla dźwigni `force_invasion` i martwej gałęzi floty abstrakcyjnej. ⚠ **Keeper, który mierzy desant AI z bitwy kadłubów,
 ładuje falę w setupie** (wzór R-S3-3) — pusta ładownia nie ląduje.
-⏳ **S3 — sesja 2 z 2 PRZYGOTOWANA 2026-10-13, NIE zacommitowana** (łańcuch S3-4 – S3-9 ZESTAGOWANY w repo bez przecelowań
-R-S3b — cztery keepery czerwone do zgody właściciela; plan §5l; folder `kosmos-handover/ai-strikes-back-s3b/`, notatka
-`HANDOVER_S3_PART2.md`, bramka `gate/GATE_S3B.md`). **S3-4** — SB64 (desant na CELU eskadry: ciało bitwy z
+✅ **S3 — sesja 2 z 2 ZAMKNIĘTA 2026-10-13** (bramka S3B w przeglądarce właściciela PASS; plan §5l — przygotowanie, C6,
+M6, scenariusz bramki; §5m — commity i zapis bramki; folder `kosmos-handover/ai-strikes-back-s3b/`, notatka
+`HANDOVER_S3_PART2.md`, bramka `gate/GATE_S3B.md`). Commity po zgodzie na **R-S3b**: `2c33033` · `bf3178c` · `dafea9a` ·
+`6dd6081` · `53fb899` · `5a47c68`; sweep **294/294**, `check-i18n` 3458. **S3-4** — SB64 (desant na CELU eskadry: ciało bitwy z
 `location.planetId`), SB66 / **435** (eskadra bez eskorty przerywana, transportowiec odwołany do stolicy) · **S3-5** — SB63 /
 **434** (etapy `launched` → `landed` → `returning` → `closed`: eskorta i transportowiec trzymają orbitę celu do rozstrzygnięcia
 walki naziemnej, transportowiec znika w stolicy; pokój zawraca eskadrę) · **S3-6** — SB56 (klucze `squadronHpRatio` 1,0
@@ -6157,6 +6158,8 @@ reguła odpala rok po zdobyciu, eskadra leci razem, desant zawsze na celu, ciał
 obrońców: do końca przebiegu nie wraca, eskadra trzyma orbitę 8,4 roku — **440**), druga próba dokładnie 5 lat po pierwszej; wpis dzwonka nie pojawia się
 w układzie, którego gracz nie ogląda — **439**; ostrzeżenie przed eskadrą na dom: 1,9 mies. (kolonia, 1 AU) do 25,4 mies.
 (obserwatorium poziom 3). Uprząż C1 6/6 identyczna.
+Zamknięte: ✅ **435** · **434** · **427** · **151** (dwa żywe miejsca; trzy utajone filtry `FleetManagerOverlay` poza
+zamknięciem). **S3 ZAMKNIĘTY W CAŁOŚCI.** **Następny: S4.**
 ⚠ **Sonda w prawdziwej grze, która porównuje dwa przebiegi, musi być deterministyczna i mieć kontrolę X = X:** zegar wirtualny
 (`performance.now` / `Date.now`), ziarnisty `Math.random` gry, OSOBNY strumień losowań renderera (renderer losuje w
 wywołaniach zwrotnych ładowania modeli — w czasie rzeczywistym), okno partii bitwy planetarnej na zegarze wirtualnym, stała
