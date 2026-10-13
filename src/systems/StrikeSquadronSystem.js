@@ -14,6 +14,11 @@
 // bitwy (S3/2, SB64). Zestrzelony transportowiec zabiera ładunek ze sobą (SB41). Jedna wygrana orbita = jedna fala.
 // PRZERWANIE (S3/2, SB66, Finding 435): eskadra w drodze, która straciła CAŁĄ eskortę, jest przerywana — transportowiec
 // zawraca do stolicy istniejącym odwołaniem (`OrderService.issueRecall`), desantu nie ma; reguły bitwy planetarnej bez zmian.
+// PO DESANCIE (S3/2, SB58 zmienione przez SB63, Finding 434): eskorta i transportowiec TRZYMAJĄ orbitę celu, aż walka
+// naziemna się rozstrzygnie (ciało zdobyte albo fala zniszczona); potem wszyscy wracają do stolicy tym samym odwołaniem,
+// a transportowiec, który dotarł na orbitę stolicy, jest usuwany (rekord `closed`). Odwołanie Directora
+// (`DirectorRecall`) pomija kadłuby eskadry trzymającej orbitę (`isHolding`). POKÓJ z graczem w trakcie: eskadra wraca,
+// nic nie ląduje. Atak bez desantu (odmowa przy lądowaniu) — eskadra wraca.
 //
 // ⚠ Wszystko albo nic: walidacja eskorty i fali PRZED utworzeniem czegokolwiek; odmowa rozkazu grupy cofa utworzony
 //   transportowiec i jednostki (nic nie zostaje).
@@ -33,25 +38,37 @@ import { systemIdOf } from '../utils/SystemScope.js';
 export const SQUADRON_STATE_KEY = 'strikeSquadrons';
 
 /**
- * Etapy rekordu eskadry: `launched` (w drodze do celu) → `landed` (desant) · `aborted` (S3/2, SB66 — cała eskorta stracona,
- * transportowiec wraca do stolicy) · `transport_lost` (transportowiec wrakiem — koniec). Etapy KOŃCOWE niżej.
+ * Etapy rekordu eskadry:
+ *   `launched` (w drodze do celu) → `landed` (desant; eskorta i transportowiec trzymają orbitę celu — SB63) → `returning`
+ *   (walka naziemna rozstrzygnięta albo pokój albo atak bez desantu — wszyscy wracają do stolicy; `outcome`) → `closed`
+ *   (transportowiec usunięty na orbicie stolicy);
+ *   `launched` → `aborted` (SB66 — cała eskorta stracona; transportowiec wraca) → `closed`;
+ *   `launched` / `aborted` → `transport_lost` (transportowiec wrakiem razem z falą — koniec).
+ * Etapy KOŃCOWE i „w drodze” (S3/2, SB57: reguła odbijania czeka, aż żadna eskadra imperium nie jest w drodze) niżej.
  */
-export const TERMINAL_STAGES = new Set(['transport_lost']);
+export const TERMINAL_STAGES = new Set(['transport_lost', 'closed']);
+export const UNDERWAY_STAGES = new Set(['launched', 'landed', 'aborted', 'returning']);
 
 export class StrikeSquadronSystem {
   constructor() {
     this._onWrecked = ({ vessel } = {}) => this._onVesselWrecked(vessel);
     this._onLanded  = (e = {}) => this._onTroopsLanded(e);
     this._onTick    = () => this._tick();
+    this._onPeace   = ({ empireId } = {}) => this._onPeaceSigned(empireId);
+    this._onBlocked = (e = {}) => this._onLandingBlocked(e);
     EventBus.on('vessel:wrecked', this._onWrecked);
     EventBus.on('invasion:troopsLanded', this._onLanded);
     EventBus.on('time:tick', this._onTick);
+    EventBus.on('diplomacy:peaceSigned', this._onPeace);
+    EventBus.on('invasion:blocked', this._onBlocked);
   }
 
   destroy() {
     EventBus.off('vessel:wrecked', this._onWrecked);
     EventBus.off('invasion:troopsLanded', this._onLanded);
     EventBus.off('time:tick', this._onTick);
+    EventBus.off('diplomacy:peaceSigned', this._onPeace);
+    EventBus.off('invasion:blocked', this._onBlocked);
   }
 
   _K() { return (typeof window !== 'undefined') ? window.KOSMOS : null; }
@@ -82,6 +99,16 @@ export class StrikeSquadronSystem {
       found = found ?? s;
     }
     return found;
+  }
+
+  /** SB63 — czy kadłub należy do eskadry trzymającej orbitę celu po desancie (`landed`). `DirectorRecall` go pomija. */
+  isHolding(vesselId) {
+    return this.squadronOfVessel(vesselId)?.stage === 'landed';
+  }
+
+  /** SB57 — czy imperium ma eskadrę w drodze (etap nie-końcowy). */
+  hasSquadronUnderway(empireId) {
+    return this.listSquadrons(empireId).some((s) => UNDERWAY_STAGES.has(s.stage));
   }
 
   /** Fala, którą imperium wysłałoby teraz (tylko odczyt; ładownia — szablon transportowca). */
@@ -225,12 +252,49 @@ export class StrikeSquadronSystem {
         this._setStage(s.id, 'transport_lost');
         continue;
       }
-      if (s.stage === 'launched' && (s.escortIds ?? []).includes(vessel.id) && this._liveEscorts(s).length === 0) {
+      if (s.transportId === vessel.id && (s.stage === 'landed' || s.stage === 'returning')) {
+        this._setStage(s.id, 'closed', { closeReason: 'transport_lost' });   // fala już na ziemi albo rozstrzygnięta
+        continue;
+      }
+      if (!(s.escortIds ?? []).includes(vessel.id) || this._liveEscorts(s).length > 0) continue;
+      if (s.stage === 'launched') {
         this._setStage(s.id, 'aborted', { abortReason: 'escorts_lost', homeOrdered: false });
         const tr = this._K()?.vesselManager?.getVessel?.(s.transportId);
         if (tr && !tr.isWreck) tr.pendingOrder = null;
         this._returnTransport(this.getSquadron(s.id));
+      } else if (s.stage === 'landed') {
+        // SB66 przy trzymaniu orbity: fala walczy dalej na ziemi, transportowiec wraca.
+        this._toReturning(s, 'escorts_lost');
       }
+    }
+  }
+
+  /** SB63 — `returning` z wynikiem; composite członków zdjęte od razu (przylot ze skoku nie wyda odcinka), powrót. */
+  _toReturning(s, outcome) {
+    this._setStage(s.id, 'returning', { outcome });
+    const vm = this._K()?.vesselManager;
+    for (const id of [s.transportId, ...(s.escortIds ?? [])]) {
+      const v = vm?.getVessel?.(id);
+      if (v && !v.isWreck && v.pendingOrder && v.pendingOrder.kind !== 'recall') v.pendingOrder = null;
+    }
+    this._sendMembersHome(this.getSquadron(s.id));
+  }
+
+  /** POKÓJ z graczem (`diplomacy:peaceSigned`): eskadra w drodze albo trzymająca orbitę wraca; nic nie ląduje. */
+  _onPeaceSigned(empireId) {
+    if (!empireId || empireId === 'player') return;
+    for (const s of this.listSquadrons(empireId)) {
+      if (s.stage === 'launched' || s.stage === 'landed') this._toReturning(s, 'peace');
+    }
+  }
+
+  /** Odmowa desantu (`invasion:blocked`) — powód zapisany na eskadrze imperium lecącej do tego ciała / układu. */
+  _onLandingBlocked({ empireId, systemId, planetId, reason } = {}) {
+    if (!empireId || !reason) return;
+    for (const s of this.listSquadrons(empireId)) {
+      if (s.stage !== 'launched') continue;
+      if (planetId ? s.targetBodyId !== planetId : s.targetSystemId !== systemId) continue;
+      this._patch(s.id, { lastBlockReason: reason });
     }
   }
 
@@ -242,11 +306,106 @@ export class StrikeSquadronSystem {
 
   // ── Powrót do stolicy (SB66) ─────────────────────────────────────────────────────────
 
-  /** Tik czasu: transportowiec eskadry przerwanej, który jeszcze nie dostał rozkazu powrotu, dostaje go. */
+  /**
+   * Tik czasu:
+   *   • `launched` — atak skończony BEZ desantu (transportowiec bezczynny na orbicie celu, bitwa nie czeka w oknie
+   *     `EnemyAttackHandler`) → `returning` (`not_landed`, powód ostatniej odmowy w `lastBlockReason`);
+   *   • `landed` — walka naziemna rozstrzygnięta (`_groundDecision`) → `returning`;
+   *   • `aborted` — transportowiec bez rozkazu powrotu dostaje go; w domu — usunięty, `closed`;
+   *   • `returning` — członek bezczynny poza domem dostaje rozkaz powrotu; transportowiec w domu — usunięty, `closed`.
+   */
   _tick() {
     for (const s of this.listSquadrons()) {
-      if (s.stage === 'aborted' && s.homeOrdered !== true) this._returnTransport(s);
+      if (s.stage === 'launched') {
+        if (this._attackEndedWithoutLanding(s)) this._toReturning(s, 'not_landed');
+      } else if (s.stage === 'landed') {
+        const d = this._groundDecision(s);
+        if (d) this._toReturning(s, d);
+      } else if (s.stage === 'aborted') {
+        if (s.homeOrdered !== true) this._returnTransport(s);
+        this._closeIfHome(this.getSquadron(s.id));
+      } else if (s.stage === 'returning') {
+        this._sendMembersHome(s);
+        this._closeIfHome(this.getSquadron(s.id));
+      }
     }
+  }
+
+  /** Atak skończony bez desantu: transportowiec żywy, bezczynny na orbicie celu, poza starciem i poza oknem bitwy EAH. */
+  _attackEndedWithoutLanding(s) {
+    const K = this._K();
+    const tr = K?.vesselManager?.getVessel?.(s.transportId);
+    if (!tr || tr.isWreck) return false;
+    if (tr.position?.dockedAt !== s.targetBodyId || tr.position?.state !== 'orbiting') return false;
+    if (tr.mission || tr.movementOrder || tr.pendingOrder) return false;
+    if (K?.enemyAttackHandler?._pendingBattles?.has?.(s.targetBodyId)) return false;
+    return !this._inEncounter(tr.id);
+  }
+
+  /**
+   * SB63 — czy walka naziemna o cel się rozstrzygnęła: ciało ZDOBYTE (kolonia imperium eskadry) → `captured`; żadna
+   * jednostka desantu nie żyje na ciele → `wave_destroyed`; ciało albo kolonia zniknęły → `target_lost`; inaczej `null`.
+   */
+  _groundDecision(s) {
+    const K = this._K();
+    const bodyId = s.landedOn ?? s.targetBodyId;
+    if (!EntityManager.get(bodyId)) return 'target_lost';
+    const col = K?.colonyManager?.getColony?.(bodyId);
+    if (!col) return 'target_lost';
+    if (col.ownerEmpireId === s.empireId) return 'captured';
+    const gum = K?.groundUnitManager;
+    const alive = (s.landedUnitIds ?? []).some((uid) => {
+      const u = gum?.getUnit?.(uid);
+      return !!u && (u.hp ?? 0) > 0 && u.planetId === bodyId;
+    });
+    return alive ? null : 'wave_destroyed';
+  }
+
+  /** Kadłub w domu: na orbicie (albo w doku) ciała stolicy, bez misji, rozkazu i composite. */
+  _isHome(v, empireId) {
+    const capitalId = this._K()?.directorProduction?.capitalOf?.(empireId)?.planetId ?? null;
+    if (!v || !capitalId) return false;
+    const st = v.position?.state;
+    return v.position?.dockedAt === capitalId && (st === 'orbiting' || st === 'docked')
+      && !v.mission && !v.movementOrder && !v.pendingOrder;
+  }
+
+  /** Kadłub już w drodze do domu tym odwołaniem: composite `recall` albo odcinek domowy (`ai_recall`). */
+  _homeBound(v) {
+    return v?.pendingOrder?.kind === 'recall' || v?.movementOrder?.issuedBy === 'ai_recall';
+  }
+
+  /** Członkowie eskadry (`returning`: transportowiec i eskorta; `aborted`: transportowiec) — powrót tam, gdzie trzeba. */
+  _sendMembersHome(s) {
+    if (!s) return;
+    const vm = this._K()?.vesselManager;
+    const ids = s.stage === 'returning' ? [s.transportId, ...(s.escortIds ?? [])] : [s.transportId];
+    for (const id of ids) {
+      const v = vm?.getVessel?.(id);
+      if (!v || v.isWreck || this._isHome(v, s.empireId) || this._homeBound(v)) continue;
+      this._sendHome(v, s.empireId);
+    }
+  }
+
+  /**
+   * SB63 — transportowiec na orbicie stolicy: niewylądowana fala (eskadra przerwana albo wracająca po pokoju) znika z nim
+   * CICHO (`removeUnit` — jak przy cofnięciu wysyłki; fala powstała dla tej eskadry), kadłub usunięty (`destroyVessel`),
+   * rekord `closed`. Bez stolicy (imperium bez pełnej kolonii) — to samo, z powodem `no_capital`.
+   */
+  _closeIfHome(s) {
+    if (!s || TERMINAL_STAGES.has(s.stage)) return;
+    const K = this._K();
+    const vm = K?.vesselManager;
+    const tr = vm?.getVessel?.(s.transportId);
+    if (!tr || tr.isWreck) return;
+    const hasCapital = !!K?.directorProduction?.capitalOf?.(s.empireId);
+    if (hasCapital && !this._isHome(tr, s.empireId)) return;
+    const dissolved = [...(tr.groundUnits ?? [])];
+    for (const uid of dissolved) K?.groundUnitManager?.removeUnit?.(uid);
+    vm.destroyVessel?.(tr.id);
+    this._setStage(s.id, 'closed', { closeReason: hasCapital ? 'transport_home' : 'no_capital', dissolvedUnitIds: dissolved });
+    EventBus.emit('squadron:closed', { squadronId: s.id, empireId: s.empireId, outcome: s.outcome ?? s.abortReason ?? null,
+                                       closeReason: hasCapital ? 'transport_home' : 'no_capital', dissolved: dissolved.length });
   }
 
   /** Zawróć transportowiec eskadry do stolicy; zapisuje `homeOrdered`, gdy rozkaz poszedł. */

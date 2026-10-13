@@ -113,6 +113,9 @@ export class DirectorRecall {
       if (v.pendingOrder) continue;                           // composite w toku
       if (this._inActiveEncounter(v.id)) continue;            // ⚠ nie wyciągamy nikogo z bitwy
       if (this._awaitingBatchedBattle(v.id)) continue;        // ⚠ ryzyko R1
+      // AI STRIKES BACK S3/2 (SB63) — kadłub eskadry TRZYMAJĄCEJ orbitę celu po desancie zostaje, aż walka naziemna się
+      //   rozstrzygnie; powrót wydaje wtedy sama eskadra (`StrikeSquadronSystem`) tym samym odwołaniem.
+      if (window.KOSMOS?.strikeSquadronSystem?.isHolding?.(v.id)) continue;
       out.push(v);
     }
     return out;

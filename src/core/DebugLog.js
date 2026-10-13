@@ -170,6 +170,7 @@ const TRACKED_EVENTS = [
   //   (`launchRefused`) — bez tej pary gate nie odróżniłby „brak eskorty” od „nic nie wywołało funkcji”.
   'squadron:launched',
   'squadron:launchRefused',
+  'squadron:closed',          // S3/2 (SB63) — eskadra zamknięta (transportowiec usunięty w domu albo bez stolicy)
 ];
 
 class DebugLog {
