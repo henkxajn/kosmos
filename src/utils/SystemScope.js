@@ -45,7 +45,8 @@ export function isSameSystem(a, b) {
 
 /**
  * WARIANT FAIL-CLOSED — WYŁĄCZNIE DLA WARSTWY WALKI (`DeepSpaceCombatSystem`,
- * `VesselCombatSystem`). Nie używać w bramkach wydawania rozkazów.
+ * `VesselCombatSystem`) I JEJ PRODUCENTA PAR (`ProximitySystem` — detekcja, intel, zasięg walki;
+ * Finding 151). Nie używać w bramkach wydawania rozkazów.
  *
  * ⚠ DLACZEGO ISTNIEJE OSOBNO, ZAMIAST ZMIENIĆ `isSameSystem`: bilans kosztu błędu jest tu
  * ODWROTNY. Przy rozkazie cena fałszywego NEGATYWU to cichy paraliż floty (patrz nagłówek),

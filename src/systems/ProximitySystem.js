@@ -32,6 +32,7 @@ import { isInService } from '../entities/Vessel.js';
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { isSameSystemStrict } from '../utils/SystemScope.js';   // AI STRIKES BACK S3/2 (SB59, Finding 151)
 
 // Stałe — użyte w detection + combat logic.
 //   PROXIMITY_DETECTION_AU (enter), PROXIMITY_EXIT_AU (exit, hysteresis +20%),
@@ -184,7 +185,11 @@ export class ProximitySystem {
     // pokazywała) i groziło fantomową bitwą międzyukładową. Detekcja/walka liczy się WYŁĄCZNIE
     // w obrębie jednego układu. Różne układy = dystans ∞ → gałęzie enter nie odpalą, a pary
     // aktywne (gdy statek zmienił układ) zamkną się przez gałęzie exit poniżej.
-    const sameSystem = (v1.systemId ?? 'sys_home') === (v2.systemId ?? 'sys_home');
+    // ⚠ AI STRIKES BACK S3/2 (SB59, Finding 151): kanon `isSameSystemStrict` (fail-CLOSED). Statek W SKOKU
+    //   (`systemId === null`) nie jest w ŻADNYM układzie — własna koercja `?? 'sys_home'` łapała także `null`, więc
+    //   statek w skoku „był” w domu, na współrzędnych sprzed skoku (detekcja, intel, zasięg walki). Brak pola
+    //   (stary zapis) = `sys_home` — bez zmian.
+    const sameSystem = isSameSystemStrict(v1, v2);
     const dx = v1.position.x - v2.position.x;
     const dy = v1.position.y - v2.position.y;
     const distPx = Math.hypot(dx, dy);

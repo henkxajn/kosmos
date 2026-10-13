@@ -20,6 +20,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';
 import { t }         from '../i18n/i18n.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { systemIdOf } from '../utils/SystemScope.js';   // AI STRIKES BACK S3/2 (SB59, Finding 427)
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SystemGenerator } from '../generators/SystemGenerator.js';
 
@@ -587,7 +588,9 @@ export class ObservatorySystem {
       const allVessels = vMgr.getAllVessels?.() ?? [];
       for (const v of allVessels) {
         if (!isEnemyVessel(v) || v.isWreck) continue;   // wrak nie jest „kontaktem" (znika z listy/skanu)
-        if ((v.systemId ?? sysId) !== sysId) continue;
+        // ⚠ AI STRIKES BACK S3/2 (SB59, Finding 427): statek W SKOKU (`systemId === null`) nie jest w oglądanym
+        //   układzie — koercja `?? sysId` liczyła go tu na współrzędnych sprzed skoku. Kanon `systemIdOf`.
+        if (systemIdOf(v) !== sysId) continue;
 
         for (const col of colonies) {
           const range = this.getVesselDetectionRangeAU(col);
