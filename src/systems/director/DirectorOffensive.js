@@ -55,16 +55,17 @@ import { PLAYER_OWNER_ID } from '../ThreatAssessment.js';
 import { playerVesselsToBattleUnit } from '../BattleSystem.js';
 import { HULLS } from '../../data/HullsData.js';
 import { SHIP_MODULES } from '../../data/ShipModulesData.js';
+// AI STRIKES BACK S3/2 (SB56) — mnożnik i sufit eskadry z tabeli strojenia (odczyt w chwili użycia przez planer eskadry).
+import { SB_TUNING } from '../../data/StrikesBackData.js';
+import { squadronHpRatio, squadronMaxShips } from '../../utils/StrikeWavePlanner.js';
 
 /**
- * ⚠ JEDYNE POKRĘTŁO BALANSU TEGO SLICE'U (D-199-1). Ile razy więcej wytrzymałości musi mieć
- * eskadra od obrońcy, żeby uderzenie miało sens. 1.5 pochodzi z pomiaru, nie z wyczucia:
- * dwa rajdery (240 HP) PRZEGRYWAŁY z obroną 210 HP, trzy (360) wygrywały.
- *
- * ⚠ Nazwana stała, NIGDY literał we wzorze — inaczej przestrojenie balansu wymagałoby czytania
- * formuły, a `grep` nie znalazłby knoba.
+ * ⚠ POKRĘTŁO BALANSU (D-199-1): ile razy więcej wytrzymałości musi mieć eskadra od obrońcy.
+ * Od AI STRIKES BACK S3/2 (SB56) to KLUCZ tabeli strojenia `squadronHpRatio` (domyślnie 1,0; do S3/2 stała 1,5 z pomiaru
+ * D-199-1: dwa rajdery 240 HP przegrywały z obroną 210 HP, trzy 360 wygrywały). Ta stała to WARTOŚĆ DOMYŚLNA klucza —
+ * `requiredSquadron` czyta klucz W CHWILI UŻYCIA (`squadronHpRatio()`), więc zmiana z konsoli działa od następnej decyzji.
  */
-export const SQUADRON_HP_RATIO = 1.5;
+export const SQUADRON_HP_RATIO = SB_TUNING.squadronHpRatio.default;
 /**
  * Wytrzymałość pojedynczego kadłuba używana WYŁĄCZNIE w diagnostyce, gdy pula jest pusta
  * (`strikeReport` na imperium bez okrętów). W realnej decyzji liczymy z KADŁUBÓW, które
@@ -81,8 +82,11 @@ export const STRIKE_HULL_HP_FALLBACK = 120;
  */
 export const SQUADRON_VS_DEFENDED = 2;
 export const SQUADRON_VS_UNDEFENDED = 1;
-/** Górna klamra jednego uderzenia — imperium nie wysyła wszystkiego, co ma. */
-export const MAX_STRIKE_SIZE = 3;
+/**
+ * Górna klamra jednego uderzenia — imperium nie wysyła wszystkiego, co ma. Od S3/2 (SB56) KLUCZ `squadronMaxShips`
+ * (domyślnie 3); ta stała to jego WARTOŚĆ DOMYŚLNA, decyzje czytają klucz (`squadronMaxShips()`).
+ */
+export const MAX_STRIKE_SIZE = SB_TUNING.squadronMaxShips.default;
 
 export class DirectorOffensive {
   // ── Pomocnicze ────────────────────────────────────────────────────────────────────────────
@@ -290,7 +294,7 @@ export class DirectorOffensive {
     }
     const defenderHp = this.estimateDefenderHp(target);
     const perShipHp  = this._avgHullHp(ready);
-    const needed     = Math.max(1, Math.ceil((defenderHp * SQUADRON_HP_RATIO) / perShipHp));
+    const needed     = Math.max(1, Math.ceil((defenderHp * squadronHpRatio()) / perShipHp));   // SB56 — klucz strojenia
     return { needed, defenderHp, perShipHp };
   }
 
@@ -351,7 +355,7 @@ export class DirectorOffensive {
     ranked.sort((a, b) => (b.value - a.value) || (a.needed - b.needed)
                        || String(a.body.id).localeCompare(String(b.body.id)));
 
-    const cap = Math.min(ready.length, MAX_STRIKE_SIZE);
+    const cap = Math.min(ready.length, squadronMaxShips());   // SB56 — sufit z tabeli strojenia
     const fits = (t) => t.needed <= cap;
     // Kill-switch (D-210-5): OFF ⇒ oceniamy WYŁĄCZNIE głowę, czyli zachowanie sprzed 210.
     const pick = (GAME_CONFIG.FEATURES?.defenseScope === false)
@@ -412,7 +416,7 @@ export class DirectorOffensive {
       //     nikt                                ⇒ `target_beyond_reach`   (STRUKTURALNY).
       if (!pick) {
         const scope = (GAME_CONFIG.FEATURES?.defenseScope === false) ? [head] : ranked;
-        const reason = scope.some(t => t.needed <= MAX_STRIKE_SIZE)
+        const reason = scope.some(t => t.needed <= squadronMaxShips())
           ? 'insufficient_squadron' : 'target_beyond_reach';
         return this._refuse(empireId, reason, year, {
           needed: head.needed, available: ready.length, defenderHp: head.defenderHp,
@@ -428,7 +432,8 @@ export class DirectorOffensive {
         needed: head.needed, defenderHp: head.defenderHp,
       };
 
-      const cap = Math.min(Number(params.maxShips ?? MAX_STRIKE_SIZE), MAX_STRIKE_SIZE);
+      const capKey = squadronMaxShips();                                        // SB56 — sufit z tabeli strojenia
+      const cap = Math.min(Number(params.maxShips ?? capKey), capKey);
       const send = ready.slice(0, Math.max(needed, Math.min(cap, ready.length)));
 
       const os = window.KOSMOS?.orderService;

@@ -66,4 +66,19 @@ export const SB_TUNING = Object.freeze({
    * `StrikeWavePlanner.readEmpireWavePlan` → `StrikeSquadronSystem.launchSquadron`.
    */
   strikeWaveShare: Object.freeze({ default: 0.5, type: 'number', min: 0, max: 1, unit: 'udzial limitu garnizonu' }),
+
+  /**
+   * SB56 (S3/2) — MNOŻNIK eskadry: ile razy więcej wytrzymałości ma mieć eskadra od obrońcy celu —
+   * potrzebne = ceil(HP obrońcy × mnożnik / średnie HP kadłuba puli) (`DirectorOffensive.requiredSquadron`). Domyślnie 1,0
+   * (do S3/2 stała 1,5 — D-199-1). Konsument: `StrikeWavePlanner.squadronHpRatio` → uderzenie (`strike_player_target`)
+   * i odbijanie (`retake_lost_colony`).
+   */
+  squadronHpRatio: Object.freeze({ default: 1.0, type: 'number', min: 0.1, max: 10, unit: 'HP eskadry / HP obroncy' }),
+
+  /**
+   * SB56 (S3/2) — SUFIT eskadry: najwięcej okrętów jednego uderzenia albo odbicia; potrzebne ponad sufit = cel poza
+   * zasięgiem (`target_beyond_reach`). Domyślnie 3 (do S3/2 stała `MAX_STRIKE_SIZE`). Konsument:
+   * `StrikeWavePlanner.squadronMaxShips` → uderzenie i odbijanie.
+   */
+  squadronMaxShips: Object.freeze({ default: 3, type: 'int', min: 1, max: 24, unit: 'kadluby' }),
 });

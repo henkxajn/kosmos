@@ -45,6 +45,7 @@ import { DirectorOffensive, registerOffensiveBehaviors,
          MAX_STRIKE_SIZE } from '../../systems/director/DirectorOffensive.js';
 import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 import { rollFires } from '../../utils/DirectorRuleMath.js';
+import { setTuning, resetTuning } from '../../utils/StrikesBackTuning.js';   // R-S3b-2 (SB56) — mnożnik eskadry w T4
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -170,6 +171,9 @@ console.log('T4 — ⚠ przeciw celowi BRONIONEMU: eskadra albo nic');
 
   // Cel BRONIONY — wieża obronna Lv3 (120 HP) w kolonii gracza. ⚠ Poziom dobrany tak, żeby
   // GRADOWANY próg wynosił 2 przy kadłubach `hull_frigate` (120 HP): ceil(120·1.5/120) = 2.
+  // ⚠ PRZECELOWANIE R-S3b-2 (AI STRIKES BACK S3/2, SB56): mnożnik to klucz `squadronHpRatio` (domyślnie 1,0 — przy nim ta
+  //   obrona wymaga JEDNEGO okrętu, pinuje to `sb3_squadron_size_smoke` T4); scena T4 biegnie przy 1,5, asercje bez zmian.
+  setTuning('squadronHpRatio', 1.5);
   const defActives = core.colonyManager.getColony(home.id)?.buildingSystem?._active;
   defActives?.set('def_probe', { building: { id: 'defense_tower' }, level: 3, jobs: 0 });
   const target = off.pickTarget(empireId);
@@ -206,6 +210,7 @@ console.log('T4 — ⚠ przeciw celowi BRONIONEMU: eskadra albo nic');
   assert(weak?.defended === true && sqWeak.needed < 2,
     `T4 KONTROLA: cel DALEJ jest „broniony" (bool ${weak?.defended}), ale gradowanie widzi, ` +
     `że starczy ${sqWeak.needed} okręt(y) przy ${sqWeak.defenderHp} HP obrony — boolean by tego nie odróżnił`);
+  resetTuning('squadronHpRatio');   // R-S3b-2 — klucz wraca do domyślnej
 }
 
 // ── T5 — dobór okrętów po WŁASNOŚCI ─────────────────────────────────────────

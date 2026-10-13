@@ -272,6 +272,12 @@ console.log('T7 — Finding 209: obronca-widmo NAPRAWDE jest bezbronny (komentar
 
 const { DirectorOffensive, SQUADRON_HP_RATIO, MAX_STRIKE_SIZE, SQUADRON_VS_DEFENDED } =
   await import('../../systems/director/DirectorOffensive.js');
+// ⚠ PRZECELOWANIE R-S3b-1 (AI STRIKES BACK S3/2, SB56): mnożnik eskadry jest KLUCZEM tabeli strojenia `squadronHpRatio`
+//   (domyślnie 1,0). Sceny T8–T23 tego keepera skalibrowano przy 1,5 (T10a: 1 < potrzebne ≤ 3 przy siatce Lv1; T17: stolica
+//   ON 3 / OFF 2; T22: siatka Lv1 wymaga > 1 okrętu) — klucz ustawiony na 1,5 przywraca tę kalibrację, asercje bez zmian.
+//   Zachowanie przy domyślnym 1,0 pinuje `sb3_squadron_size_smoke`.
+const { setTuning: setSbTuning, getTuning: getSbTuning } = await import('../../utils/StrikesBackTuning.js');
+setSbTuning('squadronHpRatio', 1.5);
 
 /** Swiat dla decyzji AI: kolonie gracza + rejestr statkow + zasieg imperium. */
 function mkAiWorld({ capDef = [], secDef = [], vessels = [] } = {}) {
@@ -300,9 +306,11 @@ const tgtOf = (planetId) => ({
 // ── T8 — gradowanie ─────────────────────────────────────────────────────────────────────────
 console.log('T8 — `requiredSquadron` GRADUJE: rozna obrona ⇒ rozna liczba okretow');
 {
-  assert(SQUADRON_HP_RATIO === 1.5,
-    `T8 kontrola: \`SQUADRON_HP_RATIO\` jest NAZWANA STALA EKSPORTOWANA (${SQUADRON_HP_RATIO}) — ` +
-    'jedyne pokretlo balansu tego slice\'u nie moze byc literalem we wzorze');
+  // ⚠ PRZECELOWANIE R-S3b-1: pokretlo to KLUCZ tabeli strojenia (`squadronHpRatio`), `SQUADRON_HP_RATIO` = jego wartosc
+  //   domyslna (1,0 — SB56); w tym keeperze klucz = 1,5 (kalibracja scen).
+  assert(SQUADRON_HP_RATIO === 1.0 && getSbTuning('squadronHpRatio') === 1.5,
+    `T8 kontrola: pokretlo eskadry to KLUCZ tabeli strojenia \`squadronHpRatio\` (domyslnie ${SQUADRON_HP_RATIO}, ` +
+    `tu ${getSbTuning('squadronHpRatio')}) — nie literal we wzorze`);
 
   const seen = new Set();
   for (const def of [[], [{ id: 'defense_tower', level: 1 }],

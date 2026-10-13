@@ -256,7 +256,9 @@ export const DIRECTOR_RULES = {
     guard:    ['empireAtWarWithPlayer', 'empireHasStrikeForce'],
     roll:     { startPct: 20, stepPct: 15, capPct: 100, unit: 'displayedYear', saltGalaxySeed: true },
     delay:    0,
-    response: { action: 'launchStrike', params: { maxShips: 3 } },
+    // SB56 (AI STRIKES BACK S3/2) — sufit eskadry z tabeli strojenia (`squadronMaxShips`); parametr `maxShips: 3` zdjęty,
+    //   bo jako stała w danych ograniczałby klucz podniesiony z konsoli.
+    response: { action: 'launchStrike', params: {} },
     personalityMod: { axis: 'aggression', at0: 0.5, at1: 1.5 },
     cooldown: { years: 5.0 },
   },

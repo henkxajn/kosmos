@@ -413,8 +413,9 @@ console.log('\nT12 — odczyt per imperium');
     `T12a: wiersz na imperium z kolumnami ${cols.join(', ')}`);
   const gsSrc = stripComments(read('scenes/GameScene.js'));
   // ⚠ PRZECELOWANIE R-S3-2 (AI STRIKES BACK S3, SB53): `sbTuning()` drukuje też falę desantu każdego imperium.
-  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\),\s*fala:\s*printStrikeWaves\(window\.KOSMOS\)\s*\}\)/.test(gsSrc),
-    'T12b: `KOSMOS.debug.sbTuning()` drukuje tabelę strojenia, limit floty i falę desantu każdego imperium');
+  // ⚠ PRZECELOWANIE R-S3b-3 (AI STRIKES BACK S3/2, SB56): … i eskadrę potrzebną wobec dostępnej (`printSquadronNeeds`).
+  assert(/sbTuning:\s*\(\)\s*=>\s*\(\{\s*tabela:\s*printTuningTable\(\),\s*flota:\s*printFleetLimits\(window\.KOSMOS\),\s*fala:\s*printStrikeWaves\(window\.KOSMOS\),\s*eskadra:\s*printSquadronNeeds\(window\.KOSMOS\)\s*\}\)/.test(gsSrc),
+    'T12b: `KOSMOS.debug.sbTuning()` drukuje tabelę strojenia, limit floty, falę desantu i eskadrę każdego imperium');
 }
 
 console.log(`\n[sb1_fleet_tuning_smoke] PASS ${pass} / FAIL ${fail}`);

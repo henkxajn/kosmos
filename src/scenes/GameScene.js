@@ -114,7 +114,7 @@ import { DirectorFirstContact, registerFirstContactBehaviors } from '../systems/
 import { DirectorPressure, registerPressureBehaviors } from '../systems/director/DirectorPressure.js';
 import { DirectorDoctrine, registerDoctrineBehaviors } from '../systems/director/DirectorDoctrine.js';
 import { DirectorMobilization, registerMobilizationBehaviors } from '../systems/director/DirectorMobilization.js';
-import { DirectorOffensive, registerOffensiveBehaviors, MAX_STRIKE_SIZE } from '../systems/director/DirectorOffensive.js';
+import { DirectorOffensive, registerOffensiveBehaviors } from '../systems/director/DirectorOffensive.js';
 import { DirectorRecall, registerRecallBehaviors } from '../systems/director/DirectorRecall.js';
 import { resolveTemplate }   from '../utils/ShipTemplateResolver.js';
 import { SystemPoolService }  from '../systems/SystemPoolService.js';
@@ -157,7 +157,7 @@ import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 �
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
-import { printStrikeWaves } from '../utils/StrikeWavePlanner.js';   // AI STRIKES BACK S3 (SB53) — fala desantu AI (odczyt konsoli)
+import { printStrikeWaves, printSquadronNeeds, squadronMaxShips } from '../utils/StrikeWavePlanner.js';   // AI STRIKES BACK S3 (SB53) — fala desantu AI (odczyt konsoli)
 
 // Pauza po wjeździe UI na końcu lotu kinowego, ZANIM wejdzie komunikat startowy — gracz
 // ma poczuć, że gra się „zagnieździła", a nie że modal wchodzi na wjeżdżający interfejs. (ms)
@@ -740,7 +740,7 @@ export class GameScene {
           // jako sygnal opisowy, ale to `potrzeba` rozstrzyga o starcie.
           celGlowa: t ? {
             cialo: t.body.id, uklad: t.systemId, wartosc: t.value, bronione: t.defended,
-            hpObroncy: sq?.defenderHp ?? '—', potrzeba: sq?.needed ?? '—', sufit: MAX_STRIKE_SIZE,
+            hpObroncy: sq?.defenderHp ?? '—', potrzeba: sq?.needed ?? '—', sufit: squadronMaxShips(),   // SB56 — sufit z klucza
           } : null,
           cel: att?.pick ? {
             cialo: att.pick.body.id, uklad: att.pick.systemId, wartosc: att.pick.value,
@@ -766,12 +766,12 @@ export class GameScene {
           //   „cel za mocny w ogóle", potem „chwilowo za mało okrętów".
           // ⚠ D-210: werdykt musi odtwarzać DRABINĘ PO FALL-THROUGH, a nie los samej głowy.
           //   Gdy głowa jest poza zasięgiem, ale AI ma w co uderzyć — to NIE jest odmowa.
-          : (att?.pick && sq && sq.needed > MAX_STRIKE_SIZE)
-            ? `głowa (${t.body.id}) ponad zasięg: ${sq.needed} okrętów przy sufcie ${MAX_STRIKE_SIZE} — ` +
+          : (att?.pick && sq && sq.needed > squadronMaxShips())
+            ? `głowa (${t.body.id}) ponad zasięg: ${sq.needed} okrętów przy sufcie ${squadronMaxShips()} — ` +
               `uderzy w OSIĄGALNY cel ${att.pick.body.id} (potrzeba ${sqPick?.needed}); czeka na rzut reguły`
           : att?.pick ? 'wszystkie warunki spełnione — czeka na rzut reguły'
-          : (sq && sq.needed > MAX_STRIKE_SIZE)
-            ? `ŻADEN z ${att?.ranked?.length ?? 0} celów nie mieści się w sufcie ${MAX_STRIKE_SIZE}; ` +
+          : (sq && sq.needed > squadronMaxShips())
+            ? `ŻADEN z ${att?.ranked?.length ?? 0} celów nie mieści się w sufcie ${squadronMaxShips()}; ` +
               `głowa: obrona ${sq.defenderHp} HP wymaga ${sq.needed} okrętów (target_beyond_reach)`
           : (sq && ready.length < sq.needed)
             ? `za mała eskadra: potrzeba ${sq.needed}, gotowych ${ready.length} (insufficient_squadron)`
@@ -850,7 +850,8 @@ export class GameScene {
       //   „*” przy każdej wartości różnej od domyślnej — oraz (SB3, SB14) limit floty KAŻDEGO imperium AI: POP, fabryki,
       //   szczebel, mnożnik, limit, uzbrojone kadłuby wg służby i położenia, miejsce dla puli. TYLKO ODCZYT.
       //   S3 (SB53): fala desantu, którą każde imperium wysłałoby teraz (limit garnizonu × udział, skład, morale, ładownia).
-      sbTuning: () => ({ tabela: printTuningTable(), flota: printFleetLimits(window.KOSMOS), fala: printStrikeWaves(window.KOSMOS) }),
+      //   S3/2 (SB56): eskadra potrzebna wobec dostępnej, per imperium i cel (`squadronHpRatio`, `squadronMaxShips`).
+      sbTuning: () => ({ tabela: printTuningTable(), flota: printFleetLimits(window.KOSMOS), fala: printStrikeWaves(window.KOSMOS), eskadra: printSquadronNeeds(window.KOSMOS) }),
       // KOSMOS.debug.sbLaunchSquadron('emp_001', 'entity_2', ['v_31', 'v_32']) albo (…, 2) — AI STRIKES BACK S3 (SB51–SB55):
       //   WOŁA wejście produkcyjne eskadry z wybraną eskortą (id) albo z N pierwszymi wolnymi okrętami z bakiem warp przy
       //   stolicy; transportowiec i falę tworzy gra. Zwraca wynik `launchSquadron` (odmowa z powodem — nic nie powstaje).
