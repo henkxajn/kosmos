@@ -308,21 +308,30 @@ export class InvasionSystem {
     }
 
     // 2) OCALAŁE kadłuby zdolne do zrzutu — próg wyprowadzony z kadłubów.
+    // ⚠ AI STRIKES BACK S3/2 (SB64, SB66) — ciało bitwy (`location.planetId`) to ciało, nad którym wygrano orbitę:
+    //   `EnemyAttackHandler` toczy bitwę nad CELEM przylotu, więc dla eskadry jest to jej cel. Zrzutowiec eskadry, która
+    //   nie leci już na to ciało (przerwana po utracie całej eskorty — SB66 — albo celująca w inne ciało), nie zrzuca.
+    const battleBodyId = normalizeLocation(result.location).planetId ?? null;
+    const squadrons = window.KOSMOS?.strikeSquadronSystem ?? null;
     const vMgr = window.KOSMOS?.vesselManager;
     const ids = Array.isArray(pA.vesselIds) ? pA.vesselIds : [];
     const droppers = [];
+    let squadronHeld = 0;
     for (const vid of ids) {
       const v = vMgr?.getVessel?.(vid);
       if (!v || v.isWreck) continue;                         // poległ w tej właśnie bitwie
       if ((v.ownerEmpireId ?? v.owner) !== empireId) continue;
       if (!v.canDropTroops) continue;                        // brak modułu drop_pods
       if ((v.troopCapacity ?? 0) <= 0) continue;             // brak ładowni
+      const sq = squadrons?.squadronOfVessel?.(v.id) ?? null;
+      if (sq && (sq.stage !== 'launched' || sq.targetBodyId !== battleBodyId)) { squadronHeld++; continue; }
       droppers.push(v);
     }
     if (droppers.length === 0) {
       // Wygrali orbitę, ale nie mają czym zejść na dół. To ta sama presja projektowa, co
-      // u gracza: flota bojowa ≠ flota desantowa.
-      EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'no_drop_capable_hull' });
+      // u gracza: flota bojowa ≠ flota desantowa. SB66 / SB64 — zrzutowiec eskadry, która tu nie ląduje: własny powód.
+      EventBus.emit('invasion:blocked', { empireId, systemId,
+        reason: squadronHeld > 0 ? 'squadron_not_landing' : 'no_drop_capable_hull' });
       return;
     }
 
@@ -343,7 +352,15 @@ export class InvasionSystem {
     const targets = (colMgr?.getPlayerColonies?.() ?? []).filter(c =>
       EntityManager.get(c.planetId)?.systemId === systemId);
     if (targets.length === 0) return;
-    const target = targets.find(c => c.isHomePlanet) ?? targets[0];
+    // SB64 (AI STRIKES BACK S3/2) — desant na CIAŁO BITWY (cel eskadry), nie „najpierw dom”; ciało bitwy, które nie jest
+    //   kolonią gracza w tym układzie — brak desantu (własny powód). Bez ciała bitwy (wynik bez `planetId`) — jak dotąd:
+    //   najpierw dom.
+    const atBattleBody = battleBodyId ? (targets.find(c => c.planetId === battleBodyId) ?? null) : null;
+    if (battleBodyId && !atBattleBody) {
+      EventBus.emit('invasion:blocked', { empireId, systemId, planetId: battleBodyId, reason: 'target_not_player_colony' });
+      return;
+    }
+    const target = atBattleBody ?? targets.find(c => c.isHomePlanet) ?? targets[0];
 
     // 4) DESANT Z ŁADUNKU (AI STRIKES BACK S3, SB52, SB55; Findingi 396, 384). Ląduje DOKŁADNIE to, co jest na pokładzie
     //    ocalałych zrzutowców — te same jednostki, przez `dropTroop`; pusta ładownia — nic. Dotąd liczbę brano

@@ -10,8 +10,10 @@
 //      jedna chwila przylotu do celu, transportowiec nigdy przed eskortą);
 //   4. REKORD (zapis gry): `gameState.strikeSquadrons.<id>` — klucz w `createDefaultState`, bez migracji (save v101).
 // Desant (SB55) robi istniejąca ścieżka: bitwa z obroną celu (`EnemyAttackHandler`) → `InvasionSystem._onVesselGroupVictory`
-// → dominacja orbity, ocalały zrzutowiec → `_landCargo` (ląduje to, co jest na pokładzie). Zestrzelony transportowiec
-// zabiera ładunek ze sobą (SB41). Jedna wygrana orbita = jedna fala.
+// → dominacja orbity, ocalały zrzutowiec → `_landCargo` (ląduje to, co jest na pokładzie) — na CELU eskadry, czyli ciele
+// bitwy (S3/2, SB64). Zestrzelony transportowiec zabiera ładunek ze sobą (SB41). Jedna wygrana orbita = jedna fala.
+// PRZERWANIE (S3/2, SB66, Finding 435): eskadra w drodze, która straciła CAŁĄ eskortę, jest przerywana — transportowiec
+// zawraca do stolicy istniejącym odwołaniem (`OrderService.issueRecall`), desantu nie ma; reguły bitwy planetarnej bez zmian.
 //
 // ⚠ Wszystko albo nic: walidacja eskorty i fali PRZED utworzeniem czegokolwiek; odmowa rozkazu grupy cofa utworzony
 //   transportowiec i jednostki (nic nie zostaje).
@@ -30,17 +32,26 @@ import { systemIdOf } from '../utils/SystemScope.js';
 /** Klucz najwyższego poziomu w `gameState` (deklaracja: `GameState.createDefaultState`). */
 export const SQUADRON_STATE_KEY = 'strikeSquadrons';
 
+/**
+ * Etapy rekordu eskadry: `launched` (w drodze do celu) → `landed` (desant) · `aborted` (S3/2, SB66 — cała eskorta stracona,
+ * transportowiec wraca do stolicy) · `transport_lost` (transportowiec wrakiem — koniec). Etapy KOŃCOWE niżej.
+ */
+export const TERMINAL_STAGES = new Set(['transport_lost']);
+
 export class StrikeSquadronSystem {
   constructor() {
     this._onWrecked = ({ vessel } = {}) => this._onVesselWrecked(vessel);
     this._onLanded  = (e = {}) => this._onTroopsLanded(e);
+    this._onTick    = () => this._tick();
     EventBus.on('vessel:wrecked', this._onWrecked);
     EventBus.on('invasion:troopsLanded', this._onLanded);
+    EventBus.on('time:tick', this._onTick);
   }
 
   destroy() {
     EventBus.off('vessel:wrecked', this._onWrecked);
     EventBus.off('invasion:troopsLanded', this._onLanded);
+    EventBus.off('time:tick', this._onTick);
   }
 
   _K() { return (typeof window !== 'undefined') ? window.KOSMOS : null; }
@@ -56,6 +67,21 @@ export class StrikeSquadronSystem {
   getSquadron(id) {
     const s = gameState.get(`${SQUADRON_STATE_KEY}.${id}`);
     return s ? { ...s } : null;
+  }
+
+  /**
+   * Eskadra, do której należy kadłub (transportowiec albo eskorta) — rekord nieskończony ma pierwszeństwo przed
+   * zakończonym (kadłub eskorty może latać w kolejnych eskadrach). Kopia; brak — `null`.
+   */
+  squadronOfVessel(vesselId) {
+    if (!vesselId) return null;
+    let found = null;
+    for (const s of this.listSquadrons()) {
+      if (s.transportId !== vesselId && !(s.escortIds ?? []).includes(vesselId)) continue;
+      if (!TERMINAL_STAGES.has(s.stage)) return s;
+      found = found ?? s;
+    }
+    return found;
   }
 
   /** Fala, którą imperium wysłałoby teraz (tylko odczyt; ładownia — szablon transportowca). */
@@ -176,12 +202,93 @@ export class StrikeSquadronSystem {
     gameState.set(`${SQUADRON_STATE_KEY}.${id}`, { ...s, ...extra, stage, stageYear: year }, `squadron_${stage}`);
   }
 
-  /** Transportowiec stał się wrakiem — fala zginęła z nim (SB41); rekord: `transport_lost`. */
+  /** Dopisz pola rekordu bez zmiany etapu. */
+  _patch(id, extra = {}) {
+    const s = gameState.get(`${SQUADRON_STATE_KEY}.${id}`);
+    if (!s) return;
+    gameState.set(`${SQUADRON_STATE_KEY}.${id}`, { ...s, ...extra }, 'squadron_update');
+  }
+
+  /**
+   * Wrak w eskadrze.
+   *   • transportowiec — fala zginęła z nim (SB41); rekord: `transport_lost` (także eskadra przerwana, w drodze do domu);
+   *   • eskorta — gdy w eskadrze lecącej do celu (`launched`) nie został ŻADEN żywy kadłub eskorty, eskadra jest
+   *     PRZERYWANA (SB66, Finding 435): rekord `aborted`, composite grupy transportowca zdjęty natychmiast (przylot ze skoku
+   *     nie wyda mu odcinka do celu), a sam transportowiec zawraca do stolicy — od razu albo na najbliższym ticku, gdy
+   *     wyjdzie ze starcia / skoku (`_tick`). Desantu nie ma (`InvasionSystem._onVesselGroupVictory` pomija zrzutowiec
+   *     eskadry, która nie jest w drodze do tego ciała).
+   */
   _onVesselWrecked(vessel) {
     if (!vessel?.id) return;
     for (const s of this.listSquadrons()) {
-      if (s.transportId === vessel.id && s.stage === 'launched') this._setStage(s.id, 'transport_lost');
+      if (s.transportId === vessel.id && (s.stage === 'launched' || s.stage === 'aborted')) {
+        this._setStage(s.id, 'transport_lost');
+        continue;
+      }
+      if (s.stage === 'launched' && (s.escortIds ?? []).includes(vessel.id) && this._liveEscorts(s).length === 0) {
+        this._setStage(s.id, 'aborted', { abortReason: 'escorts_lost', homeOrdered: false });
+        const tr = this._K()?.vesselManager?.getVessel?.(s.transportId);
+        if (tr && !tr.isWreck) tr.pendingOrder = null;
+        this._returnTransport(this.getSquadron(s.id));
+      }
     }
+  }
+
+  /** Żywe kadłuby eskorty eskadry (nie wraki, w rejestrze). */
+  _liveEscorts(s) {
+    const vm = this._K()?.vesselManager;
+    return (s?.escortIds ?? []).map((id) => vm?.getVessel?.(id)).filter((v) => v && !v.isWreck);
+  }
+
+  // ── Powrót do stolicy (SB66) ─────────────────────────────────────────────────────────
+
+  /** Tik czasu: transportowiec eskadry przerwanej, który jeszcze nie dostał rozkazu powrotu, dostaje go. */
+  _tick() {
+    for (const s of this.listSquadrons()) {
+      if (s.stage === 'aborted' && s.homeOrdered !== true) this._returnTransport(s);
+    }
+  }
+
+  /** Zawróć transportowiec eskadry do stolicy; zapisuje `homeOrdered`, gdy rozkaz poszedł. */
+  _returnTransport(s) {
+    if (!s) return;
+    const tr = this._K()?.vesselManager?.getVessel?.(s.transportId);
+    if (!tr || tr.isWreck) return;
+    const r = this._sendHome(tr, s.empireId);
+    if (r === 'ordered' || r === 'at_home') this._patch(s.id, { homeOrdered: true, homeOrderedYear: this._K()?.timeSystem?.gameTime ?? null });
+  }
+
+  /** Czy kadłub jest w aktywnym starciu (DSCS) — odczyt jak w `DirectorOffensive` / `DirectorRecall`. */
+  _inEncounter(vesselId) {
+    const dscs = this._K()?.deepSpaceCombatSystem;
+    return !!dscs?._findActiveEncounterContaining?.(vesselId);
+  }
+
+  /**
+   * Zatrzymaj kadłub i wyślij go do stolicy istniejącym odwołaniem (`OrderService.issueRecall` — skok warp, potem orbita
+   * ciała stolicy). W starciu albo w skoku — czekamy (`'wait'`): starcie wznawia misje po bitwie, skoku nie da się
+   * przerwać. Zatrzymanie: migawka wstrzymanej misji usunięta PRZED anulowaniem rozkazu (inaczej anulowanie wznowiłoby
+   * atak), composite zdjęty, misja wyzerowana, lot przerwany w miejscu (dryf — jak `MovementOrderSystem._stopVesselMotion`).
+   * @returns {'ordered'|'at_home'|'wait'|'no_capital'|'gone'|string} — `refused:<powód>` przy odmowie odwołania
+   */
+  _sendHome(v, empireId) {
+    if (!v || v.isWreck) return 'gone';
+    if (this._inEncounter(v.id)) return 'wait';
+    if (v.mission?.type === 'interstellar_jump' && v.mission.phase === 'warp_transit') return 'wait';
+    const K = this._K();
+    const capitalId = K?.directorProduction?.capitalOf?.(empireId)?.planetId ?? null;
+    const homeSystemId = capitalId ? (EntityManager.get(capitalId)?.systemId ?? null) : null;
+    if (!capitalId || !homeSystemId) return 'no_capital';
+    if (v.position?.dockedAt === capitalId && !v.mission && !v.movementOrder && !v.pendingOrder) return 'at_home';
+    delete v._suspendedMission;
+    v.pendingOrder = null;
+    if (v.movementOrder?.status === 'active') K?.movementOrderSystem?.cancelOrder?.(v.id, 'squadron_return');
+    v.mission = null;
+    if (v.position?.state === 'in_transit') { v.position.state = 'orbiting'; v.position.dockedAt = null; }
+    if (v.velocity) { v.velocity.vx = 0; v.velocity.vy = 0; }
+    v.status = 'idle';
+    const r = K?.orderService?.issueRecall?.(v.id, { homeSystemId, capitalBodyId: capitalId });
+    return r?.ok ? 'ordered' : `refused:${r?.reason ?? 'unknown'}`;
   }
 
   /** Desant z ładunku transportowca eskadry (`InvasionSystem._landCargo` niesie `vesselIds`); rekord: `landed`. */
