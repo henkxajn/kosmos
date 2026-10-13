@@ -547,6 +547,12 @@
 > • ✅ **435** · **434** · **427** · **151** — zamknięte; wiersze zdjęte (151 — dwa żywe miejsca; trzy utajone filtry
 >   `FleetManagerOverlay` poza zamknięciem).
 > • **S3 ZAMKNIĘTY W CAŁOŚCI.** Następny: odpowiedzi właściciela na pytania §5l.6 i **S4**.
+>
+> **Aktualizacja 2026-10-13 (decyzje) — AI STRIKES BACK: odpowiedzi właściciela na pytania §5l.6 → SB68–SB76**
+> (`AI_STRIKES_BACK_PLAN.md` §2, §5m.4). **438** → SB68 (kierunek (c), osobny krok po S4) · **439** → SB69 (S4, pierwszy
+> kod) · **440** → SB70 (klucz limitu trzymania, S4) · reguła odbijania potwierdzona (SB71) · SB56 przy 1,0 przyjęte, pomiar
+> w S4 (SB72) · trzy utajone filtry FMO zostają (SB73) · brzmienie kluczy S3-9 (SB74) · **298** × SB57 zamierzone (SB75) ·
+> głód garnizonu gracza na zdobytej kolonii — pomiar w S4 (SB76). Następny: **S4, sesja 1**.
 
 
 ---
@@ -674,7 +680,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **439** | 🟠 | wpis dzwonka `armedContact` (SB59) wymaga wykrycia przez obserwatorium OGLĄDANEGO układu (**191**) albo zmysły statku gracza — M6: eskadra odbicia w układzie stolicy AI, widok domowy, bez okrętów przy celu ⇒ zero wpisów, pierwsza wiadomość = alarm desantu; z widokiem na ten układ — 1,9 mies. przed desantem | do decyzji (rodzina **191**). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **439** | 🟠 | wpis dzwonka `armedContact` (SB59) wymaga wykrycia przez obserwatorium OGLĄDANEGO układu (**191**) albo zmysły statku gracza — M6: eskadra odbicia w układzie stolicy AI, widok domowy, bez okrętów przy celu ⇒ zero wpisów, pierwsza wiadomość = alarm desantu; z widokiem na ten układ — 1,9 mies. przed desantem | → **SB69** (2026-10-13): kolonia i obserwatorium wykrywają we własnym układzie niezależnie od widoku — pierwszy element kodu S4 (rodzina **191**). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **152** | 🟠 | POI **nie ma pola `systemId` w ogóle** | naprawa = nowe pole + **migracja zapisu** |
 | **153** | 🟠 | `EmpireLogisticsSystem:240-242` dobiera outposty bez terminu układu, kurier bez warpu | **osiągalność NIEZMIERZONA** |
 | **154** | 🟠 | `AutoRetreatSystem._findNearestFriendlyPlanet` dalej bez terminu układu | **ŻYWA** przez trzy przyciski „Powrót do bazy" (`FMO:4581`, `FleetGroupPanel:445`, `FleetCommandPanel:384`) |
@@ -737,8 +743,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **432** | ⚪ | limit 20 rund starcia DSCS: przegrana strona idzie na wrak także żywymi okrętami poza zasięgiem — część E S2b: 9 żywych w scenach (a)/(b); po S3-1 (SB49): 1 i 3 |
 | **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2); **C6: wynik ZALEŻY od czasu rundy — klucza nie ma (438)**. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **437** | ⚪ | flota GRACZA po bitwie w locie wznawia lot osobno — ponowna synchronizacja (`OrderService._regroupAfterBattle`) obejmuje wyłącznie grupy z `mission.groupId` (eskadra AI) | **SB62**: zostaje, wyłącznie raport; niezmierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; do decyzji: czy czas gry ma płynąć w trakcie starcia. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **440** | ⚪ | eskadra odbicia trzyma orbitę celu przez całą walkę naziemną (SB63) — M6, 24 obrońców: 8,4 roku do końca przebiegu; guard `empireHasNoSquadronUnderway` blokuje w tym czasie każdą inną eskadrę imperium | obserwacja projektu (limit trzymania?). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; → **SB68** (2026-10-13): kierunek (c) — stały krok czasu gry na rundę, osobny krok PO S4 (najpierw audyt). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **440** | ⚪ | eskadra odbicia trzyma orbitę celu przez całą walkę naziemną (SB63) — M6, 24 obrońców: 8,4 roku do końca przebiegu; guard `empireHasNoSquadronUnderway` blokuje w tym czasie każdą inną eskadrę imperium | → **SB70** (2026-10-13): limit trzymania — klucz, domyślnie 3 lata gry (S4); głód obrońców — **SB76**: pomiar w S4. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **422** | ⚪ | misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4) — przylot na czas i bez przeskoku z konstrukcji (kurierzy: przylot − ETA ≤ 0,006 roku, przeskok ≤ 0,010 AU), prędkości lotu nie zmierzono | raport do zamknięcia arca (SB47). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **423** | ⚪ | rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5) — `_computeInterceptPoint` z `target.velocity`, zerowanej dla kadłuba zadokowanego i orbitującego | raport do zamknięcia arca (SB47); osiągalność niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
 
@@ -787,7 +793,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **62 · 63** | ⚪ | kolizje `PhysicsSystem` nie są bramkowane scenariuszem (rozjazd z dokumentacją) · `empire:colonyRemoved` brak w `DebugLog.TRACKED_EVENTS` | |
 | **W3-2** | 🟠 | `_resolveBatchedBattle` **nie filtruje rezerwy**, a `_wreckPlayerVesselsInSystem` **filtruje** ⇒ kadłub rezerwowy AI walczy, kadłub gracza jest zwolniony z wrakowania | ✔ zweryfikowane w źródle |
 | **W3-3** | 🟠 | **AI nigdy nie demobilizuje** — każdy `withdrawVessel` jest po stronie gracza ⇒ rezerwy drenują populację AI monotonicznie | |
-| **191** | 🟠 | prognoza kolizji skanuje `activeSystemId` (KAMERA), a włącza ją `getMaxObservatoryLevel()` liczone po WSZYSTKICH koloniach gracza bez terminu układu ⇒ obserwatorium z układu A działa w układzie B, gdy tam patrzysz | rodzina „brak granicy systemu"; kierunek naprawy **projektowy**, nie techniczny. ⚠ **był WARUNKIEM KONIECZNYM 190** (jak 130+Z2) — 190 domknięto zawężeniem czyszczenia, ale pytanie „czy obserwatorium ma widzieć obce układy” zostaje **projektowe**; ✅ **POTWIERDZONY NA ŻYWO** (1 obserwatorium, alerty z 2 układów) |
+| **191** | 🟠 | prognoza kolizji skanuje `activeSystemId` (KAMERA), a włącza ją `getMaxObservatoryLevel()` liczone po WSZYSTKICH koloniach gracza bez terminu układu ⇒ obserwatorium z układu A działa w układzie B, gdy tam patrzysz | rodzina „brak granicy systemu"; kierunek naprawy **projektowy**, nie techniczny. ⚠ **był WARUNKIEM KONIECZNYM 190** (jak 130+Z2) — 190 domknięto zawężeniem czyszczenia, ale pytanie „czy obserwatorium ma widzieć obce układy” zostaje **projektowe**; ✅ **POTWIERDZONY NA ŻYWO** (1 obserwatorium, alerty z 2 układów); → AI STRIKES BACK **SB69** (2026-10-13): detekcja STATKÓW we własnym układzie niezależnie od widoku (Finding **439**, S4) — zakres prognozy kolizji bez decyzji |
 | **192** | 🟠 | prognoza propaguje **stałe elementy orbitalne** do 700 lat, a świat ma perturbacje; `MARGIN_PERCENT` sztywne niezależnie od horyzontu, a **47 % zagrożeń leży 350+ lat w przyszłość** | zastąpiło **obaloną pomiarem** hipotezę „niepowtarzalność detekcji”; wymaga pomiaru rozjazdu model↔świat |
 | **189** | 🟠 | `CivilizationSystem._updateUnrest:1104` czyta prosperity **AKTYWNEJ** koloni dla KAŻDEJ koloni ⇒ kolonie AI wpadają w niepokój, gdy kryzys ma gracz | zmiana **BALANSU** (niepokój globalny → lokalny), własny pomiar; `CivilizationSystem` nie ma referencji do swojego `ProsperitySystem` |
 | ~~188~~ | ✅ | **ZAMKNIĘTY 2026-08-31** — mgła wojny STRATCOM rozdzielona na oś MIEJSCA i oś WŁAŚCICIELA (kanon `SystemReveal.js`). ⚠ reweali było **sześć**, nie trzy; nazwa w panelu była już poprawna, wyciekała na mapie | `docs/design/STRATCOM_REVEAL_PLAN.md` |

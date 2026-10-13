@@ -6,7 +6,7 @@
 > pytania sesji 2 S1; **SB30–SB36** — **2026-10-08**, podpis S2 (§2); **SB37–SB38** — **2026-10-10**, przy zamknięciu
 > S2 (§2); **SB39–SB44** — **2026-10-10**, podpis S2b — poprawki przed S3 (§2); **SB45–SB48** — **2026-10-11**, przy
 > zamknięciu S2b (§2); **SB49–SB60** — **2026-10-11**, podpis S3 (§2); **SB61–SB67** — **2026-10-12**, przy zamknięciu
-> sesji 1 S3 (§2).
+> sesji 1 S3 (§2); **SB68–SB76** — **2026-10-13**, odpowiedzi na pytania sesji 2 S3 (§2, §5m.4).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
@@ -152,6 +152,15 @@ W kolejności właściciela:
 | **SB65** | **Finding 55 (`no_grid`):** zmierzony w sesji 2 S3 dla celu odbijania; naprawa w S4. Odpowiedź na pytanie 6, **2026-10-12**. | → **S3, sesja 2** (pomiar); **S4** (naprawa). |
 | **SB66** | **Finding 435:** transportowiec, który stracił całą eskortę, zawraca do stolicy, a eskadra jest przerywana; reguły bitwy planetarnej bez zmian. Odpowiedź na pytanie 7, **2026-10-12**. | → **S3, sesja 2**. |
 | **SB67** | **Czas rundy starcia staje się kluczem strojenia (domyślnie dzisiejsza wartość) WYŁĄCZNIE, jeśli pomiar pokaże, że wyniki bitew od niego nie zależą.** Słowa właściciela z bramki: „walki odbywają się zbyt szybko albo czas mamy ustawiony zły do bitew” (bitwa rozstrzygnięta w ok. pół sekundy). **2026-10-12**. | → **S3, sesja 2** (pomiar najpierw); Finding **436** (§6). |
+| **SB68** | **Finding 438 — kierunek (c): stały krok czasu GRY na rundę starcia;** czas rundy staje się wyłącznie kluczem prezentacji, a dzisiejsze wyniki zostają zachowane. **NIE w S3 ani w S4** — osobny mały krok po S4, najpierw audyt; do tego czasu (a) bez zmian. Odpowiedź na pytanie 2 sesji 2 S3 (§5l.6), **2026-10-13**. | Finding **438** (§6); C6 (§5l.3). |
+| **SB69** | **Finding 439: kolonia i obserwatorium wykrywają we WŁASNYM układzie niezależnie od oglądanego układu** (rodzina **191**). Pierwszy element kodu S4. Odpowiedź na pytanie 3, **2026-10-13**. | → **S4, sesja 1**. |
+| **SB70** | **Finding 440: limit trzymania orbity jako klucz strojenia, domyślnie 3 lata gry;** po limicie eskorta i transportowiec wracają do domu, wylądowana fala walczy dalej. W S4. Odpowiedź na pytanie 4, **2026-10-13**. | → **S4, sesja 1**. |
+| **SB71** | **Reguła odbijania — odczytania potwierdzone tak, jak zakodowane:** ocena raz na rok; za mała pula → odmowa i czekanie, bez schodzenia do następnego celu; eskorta dokładnie = potrzebna; placówki bez złoża Xe / Nt na końcu kolejki; niewylądowana fala znika cicho z transportowcem w stolicy; po utracie stolicy eskadra formuje się przy stolicy zastępczej, bez pełnej kolonii — odmowa `no_capital`. Odpowiedź na pytanie 5, **2026-10-13**. | `6dd6081` (S3-7) bez zmian. |
+| **SB72** | **SB56 przy 1,0 przyjęte:** jeden rajder przeciw wieży Lv3 (120 HP) — tak. To klucz: w S4 zmierzyć, czy uderzenia AI przegrywają za często, potem stroić jedną liczbą. Odpowiedź na pytanie 6, **2026-10-13**. | → **S4** (pomiar). |
+| **SB73** | **Trzy utajone filtry `FleetManagerOverlay` (klasa 151, `commandTacticalMap: false`) zostają;** piny `fleet_engage_scope_smoke` T12c / T12d nietknięte. Odpowiedź na pytanie 7, **2026-10-13**. | Finding **151** (`VESSEL_ORDERS_PLAN.md`). |
+| **SB74** | **Brzmienie nowych kluczy i18n S3-9 przyjęte bez zmian.** Odpowiedź na pytanie 8, **2026-10-13**. | `5a47c68` (S3-9). |
+| **SB75** | **298 × SB57 — zamierzone:** ciało zatrzymane pokojem status quo nie jest odbijane w żadnej kolejnej wojnie; w S4 jest zwykłym celem kampanii. Odpowiedź na pytanie 9, **2026-10-13**. | Finding **298** (`VESSEL_ORDERS_PLAN.md`); S4 (SB10). |
+| **SB76** | **Głód garnizonu gracza na zdobytej kolonii** (M6: 4 jednostki zginęły z głodu nawet bez ataku; 7 rozwiązanych `no_credits`) — w S4 ZMIERZYĆ przyczynę (wyłącznie audyt, bez naprawy); decyzja po pomiarze. **2026-10-13**. | → **S4, sesja 1** (pomiar). |
 
 ---
 
@@ -1777,6 +1786,9 @@ klucza czasu rundy nie istnieje.
    BIEŻĄCEJ wojny; kontrola M6) — zamierzone?
 10. **Bramka S3B** — przed commitem czy po?
 
+**Odpowiedzi właściciela (2026-10-13):** §5m.4 — 1 zgoda na R-S3b (§5m.1), 10 bramka przed commitem (§5m.2), pozostałe →
+**SB68–SB76** (§2).
+
 #### 5l.7 Następny krok
 
 Po zgodzie na R-S3b i bramce S3B: commity skryptem (`tools/commit_S3B.sh --with-RS3b "<zgoda>"` albo `commit_S3B.sh`, potem
@@ -1853,6 +1865,32 @@ Konsola — wartość nie podana (w poleceniu właściciela został szablon `<CO
 - **Krok 12** — etap `returning` zamiast `closed` z walidatora: właściciel zapauzował wcześniej; kolejność etapów zgodna
   z S3-5 (§5l.2), zamknięcie potwierdza krok 13.
 - **Krok 19** — wpis dzwonka przy 1,29 AU od domu, przylot za 1,7 mies. (walidator: 1,51–1,55 AU, 1,8 / 8,8 mies.).
+
+#### 5m.4 Odpowiedzi właściciela na pytania §5l.6 (2026-10-13) → decyzje SB68–SB76
+
+Słowa właściciela (z polecenia sesji, dosłownie, po angielsku) i numer decyzji:
+
+| pytanie | słowa właściciela | decyzja |
+|---|---|---|
+| 1 | „R-S3b: consent (Part A).” | zgoda — §5m.1 (treść commitu `dafea9a`) |
+| 2 | „Finding 438 (game time during engagement): direction = (c) fixed game-time step per round, so round duration becomes a pure presentation key and today's outcomes are preserved. NOT in S3/S4: a separate small step after S4, audit first. Today (a) stays unchanged.” | **SB68** |
+| 3 | „Finding 439: colony and observatory detect in their own system regardless of the viewed system (family 191). First code item of S4 (Part D).” | **SB69** |
+| 4 | „Finding 440: orbit-hold time limit as a tuning key, default 3 game years; after the limit escorts and transport return home, the landed wave keeps fighting. In S4 (Part D).” | **SB70** |
+| 5 | „Retake rule readings confirmed as coded: evaluation once a year; too small pool → refuse and wait, no fallback to next target; escort exactly = needed; outposts without Xe/Nt at the end of the queue; unlanded wave vanishes silently with the transport at the capital; after loss of capital the squadron forms at the substitute capital, no_capital otherwise.” | **SB71** |
+| 6 | „SB56 at 1.0: one raider against a Lv3 tower (120 HP) is accepted; it is a key — measure in S4 whether AI strikes lose too often, then tune by one number.” | **SB72** |
+| 7 | „Three latent FleetManagerOverlay filters (class 151, commandTacticalMap: false): stay; pins T12c/T12d untouched.” | **SB73** |
+| 8 | „New i18n keys wording: accepted as is.” | **SB74** |
+| 9 | „298 × SB57: intended — a body kept by status-quo peace is not retaken in a later war; in S4 it is an ordinary campaign target.” | **SB75** |
+| 10 | „Gate before commit: done.” | przebieg — §5m.2 |
+| 11 | „Owner's garrison starving on a captured colony (M6: 4 units died of hunger even without an attack; 7 dissolved no_credits): MEASURE the cause in S4 (audit only, no fix), decision after the measurement.” | **SB76** |
+
+Pytania 1 i 10 bez numeru SB (precedens §5k: zgoda na przecelowanie i chwila bramki nie są decyzjami projektu).
+
+#### 5m.5 Następny krok — S4
+
+S4, sesja 1: **439** (SB69) i **440** (SB70) — kod, STOP przed commitem, bramka w przeglądarce; pomiar głodu garnizonu
+gracza na zdobytej kolonii (SB76, bez naprawy); audyt S4 właściwego (wojna z inicjatywy AI, kampania układ po układzie —
+SB10, SB11; reguła końca wojny; Finding **55**; pula a pokój — §5e.6). **438** (SB68) — osobny krok po S4.
 
 ---
 
@@ -2493,6 +2531,8 @@ i 600 ms ta sama scena kończy się odwrotem strony strażnika i jego zniszczeni
 że wynik zależy od prędkości gry ustawionej przez gracza w trakcie starcia.
 Do decyzji: czy czas gry w trakcie starcia ma płynąć (dziś tak), czy ma stać albo płynąć stałym krokiem na rundę — dopiero
 wtedy czas rundy (tempo dla oka, Finding **436**) da się uczynić kluczem strojenia.
+→ **SB68 (2026-10-13):** kierunek (c) — stały krok czasu gry na rundę; czas rundy wyłącznie kluczem prezentacji, dzisiejsze
+wyniki zachowane. Osobny mały krok PO S4, najpierw audyt; do tego czasu (a) bez zmian.
 
 ### 🟠 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
 
@@ -2503,6 +2543,8 @@ układzie domowym, bez okrętów gracza przy celu — **zero** wpisów „Armed 
 landing on …!” w chwili desantu. Z widokiem na ten układ — wpis 1,9 mies. przed desantem; z 3 fregatami gracza na orbicie
 celu — 2,6 mies.
 Do decyzji: czy obserwatorium (albo sama kolonia) ma wykrywać w swoim układzie niezależnie od widoku (rodzina **191**).
+→ **SB69 (2026-10-13):** kolonia i obserwatorium wykrywają we własnym układzie niezależnie od widoku — pierwszy element
+kodu S4.
 
 ### ⚪ 440 — eskadra odbicia trzyma orbitę celu przez całą walkę naziemną, także przez lata; w tym czasie imperium nie wyśle innej eskadry
 
@@ -2511,6 +2553,8 @@ reguła odbijania ma guard `empireHasNoSquadronUnderway` (etap `landed` to eskad
 jednostki szturmowe gracza na celu: walka naziemna od 61,95; od 64,7 do 69,2 bez strat po żadnej stronie; obrońcy giną
 w końcu z GŁODU (15 jednostek w 69,2–70,0 — korekta po `998851e`, było 14); do końca przebiegu (70,37) ciało nie przejęte — eskadra trzyma orbitę 8,4 roku.
 Obserwacja projektu (czy trzymanie ma mieć limit czasu; czy głód obrońców na własnej kolonii jest zamierzony — niezbadane).
+→ **SB70 (2026-10-13):** limit trzymania orbity — klucz strojenia, domyślnie 3 lata gry; po limicie eskorta i transportowiec
+wracają, wylądowana fala walczy dalej — S4. Głód obrońców — **SB76**: pomiar przyczyny w S4 (bez naprawy).
 
 ---
 

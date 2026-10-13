@@ -5929,7 +5929,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY)
 
-Plan, decyzje **SB1–SB67** i rejestr findingów **#391–#440**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+Plan, decyzje **SB1–SB76** i rejestr findingów **#391–#440**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
 §5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
@@ -6160,6 +6160,14 @@ w układzie, którego gracz nie ogląda — **439**; ostrzeżenie przed eskadrą
 (obserwatorium poziom 3). Uprząż C1 6/6 identyczna.
 Zamknięte: ✅ **435** · **434** · **427** · **151** (dwa żywe miejsca; trzy utajone filtry `FleetManagerOverlay` poza
 zamknięciem). **S3 ZAMKNIĘTY W CAŁOŚCI.** **Następny: S4.**
+Odpowiedzi właściciela na pytania §5l.6 (2026-10-13, plan §5m.4): **SB68** 438 — kierunek (c): stały krok czasu gry na
+rundę, czas rundy wyłącznie kluczem prezentacji; osobny krok PO S4, najpierw audyt · **SB69** 439 — kolonia i obserwatorium
+wykrywają we własnym układzie niezależnie od widoku (S4, pierwszy kod) · **SB70** 440 — limit trzymania orbity, klucz
+strojenia, domyślnie 3 lata gry; po limicie eskorta i transportowiec wracają, fala walczy dalej (S4) · **SB71** odczytania
+reguły odbijania potwierdzone · **SB72** SB56 przy 1,0 przyjęte; w S4 pomiar, czy uderzenia AI przegrywają za często ·
+**SB73** trzy utajone filtry FMO zostają (T12c / T12d nietknięte) · **SB74** brzmienie kluczy S3-9 przyjęte · **SB75**
+298 × SB57 zamierzone (ciało zatrzymane pokojem status quo to w S4 zwykły cel kampanii) · **SB76** głód garnizonu gracza
+na zdobytej kolonii — w S4 wyłącznie pomiar przyczyny.
 ⚠ **Sonda w prawdziwej grze, która porównuje dwa przebiegi, musi być deterministyczna i mieć kontrolę X = X:** zegar wirtualny
 (`performance.now` / `Date.now`), ziarnisty `Math.random` gry, OSOBNY strumień losowań renderera (renderer losuje w
 wywołaniach zwrotnych ładowania modeli — w czasie rzeczywistym), okno partii bitwy planetarnej na zegarze wirtualnym, stała
