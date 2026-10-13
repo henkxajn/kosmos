@@ -553,6 +553,17 @@
 > kod) · **440** → SB70 (klucz limitu trzymania, S4) · reguła odbijania potwierdzona (SB71) · SB56 przy 1,0 przyjęte, pomiar
 > w S4 (SB72) · trzy utajone filtry FMO zostają (SB73) · brzmienie kluczy S3-9 (SB74) · **298** × SB57 zamierzone (SB75) ·
 > głód garnizonu gracza na zdobytej kolonii — pomiar w S4 (SB76). Następny: **S4, sesja 1**.
+>
+> **Aktualizacja 2026-10-13 (S4/1) — AI STRIKES BACK: S4, sesja 1 PRZYGOTOWANA** (łańcuch S4-1 i S4-2 ZESTAGOWANY, NIE
+> zacommitowany; plan §5n). Sweep łańcucha (klon, baza `40b6e54`): 295/295 → **296/296**; `check-i18n` 3458; save v101 bez
+> migracji.
+> • **Naprawy PRZYGOTOWANE (zamknięcie przy commicie):** 🟠 **439** (S4-1, SB69) · ⚪ **440** (S4-2, SB70).
+> • **NOWE: #441–#444** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — ⚪ **441** okno pierwszego wykrycia liczy odległość od domu
+>   bez terminu układu · 🟠 **442** uzupełnianie zaopatrzenia czyta nieistniejące pole (głód poza pierścieniem stolicy / koszar)
+>   · 🟠 **443** jednostka gracza bez domu po wczytaniu płacona przez kolonię ciała (rodzina **342**) · ⚪ **444** kubeł żołdu
+>   atomowy (+ zmierzone podwójne pobranie, backlog bez numeru).
+> • D4 — audyt S4 właściwego: propozycja i pytania (plan §5n.4, §5n.6).
+> • Następny: bramka S4A w przeglądarce właściciela i commity; odpowiedzi na §5n.6 → S4 właściwe.
 
 
 ---
@@ -680,7 +691,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **439** | 🟠 | wpis dzwonka `armedContact` (SB59) wymaga wykrycia przez obserwatorium OGLĄDANEGO układu (**191**) albo zmysły statku gracza — M6: eskadra odbicia w układzie stolicy AI, widok domowy, bez okrętów przy celu ⇒ zero wpisów, pierwsza wiadomość = alarm desantu; z widokiem na ten układ — 1,9 mies. przed desantem | → **SB69** (2026-10-13): kolonia i obserwatorium wykrywają we własnym układzie niezależnie od widoku — pierwszy element kodu S4 (rodzina **191**). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **439** | 🟠 | wpis dzwonka `armedContact` (SB59) wymaga wykrycia przez obserwatorium OGLĄDANEGO układu (**191**) albo zmysły statku gracza — M6: eskadra odbicia w układzie stolicy AI, widok domowy, bez okrętów przy celu ⇒ zero wpisów, pierwsza wiadomość = alarm desantu; z widokiem na ten układ — 1,9 mies. przed desantem | → **SB69** (2026-10-13): kolonia i obserwatorium wykrywają we własnym układzie niezależnie od widoku — naprawa PRZYGOTOWANA: S4-1 (zestagowana), zamknięcie przy commicie (rodzina **191**). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **441** | ⚪ | okno pierwszego wykrycia (`GameScene`, `vessel:firstSighting`) liczy „Distance” od planety macierzystej bez terminu układu i mówi „in our system” — przy widoku na inny układ z kolonią gracza: odległość między współrzędnymi dwóch układów | pytanie 2 §5n.6. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **152** | 🟠 | POI **nie ma pola `systemId` w ogóle** | naprawa = nowe pole + **migracja zapisu** |
 | **153** | 🟠 | `EmpireLogisticsSystem:240-242` dobiera outposty bez terminu układu, kurier bez warpu | **osiągalność NIEZMIERZONA** |
 | **154** | 🟠 | `AutoRetreatSystem._findNearestFriendlyPlanet` dalej bez terminu układu | **ŻYWA** przez trzy przyciski „Powrót do bazy" (`FMO:4581`, `FleetGroupPanel:445`, `FleetCommandPanel:384`) |
@@ -744,7 +756,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2); **C6: wynik ZALEŻY od czasu rundy — klucza nie ma (438)**. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **437** | ⚪ | flota GRACZA po bitwie w locie wznawia lot osobno — ponowna synchronizacja (`OrderService._regroupAfterBattle`) obejmuje wyłącznie grupy z `mission.groupId` (eskadra AI) | **SB62**: zostaje, wyłącznie raport; niezmierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; → **SB68** (2026-10-13): kierunek (c) — stały krok czasu gry na rundę, osobny krok PO S4 (najpierw audyt). `AI_STRIKES_BACK_PLAN.md` §6 |
-| **440** | ⚪ | eskadra odbicia trzyma orbitę celu przez całą walkę naziemną (SB63) — M6, 24 obrońców: 8,4 roku do końca przebiegu; guard `empireHasNoSquadronUnderway` blokuje w tym czasie każdą inną eskadrę imperium | → **SB70** (2026-10-13): limit trzymania — klucz, domyślnie 3 lata gry (S4); głód obrońców — **SB76**: pomiar w S4. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **440** | ⚪ | eskadra odbicia trzyma orbitę celu przez całą walkę naziemną (SB63) — M6, 24 obrońców: 8,4 roku do końca przebiegu; guard `empireHasNoSquadronUnderway` blokuje w tym czasie każdą inną eskadrę imperium | → **SB70** (2026-10-13): limit trzymania — klucz, domyślnie 3 lata gry — naprawa PRZYGOTOWANA: S4-2 (zestagowana), zamknięcie przy commicie; głód obrońców — pomiar D3: **442–444**. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **442** | 🟠 | `SupplyCoverageSystem` uzupełnia z `colony.commodities.military_supplies` — żadna kolonia nie ma pola `commodities` ⇒ uzupełnianie nie działa nigdy; jednostka gracza poza pierścieniem stolicy / koszar głoduje (D3: 8/8 po 4,67 roku na zdobytej kolonii, 7,42 roku na macierzystej) | pytanie 3 §5n.6. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **443** | 🟠 | jednostka GRACZA bez domu (380, debug) po wczytaniu dostaje za dom ciało (`serialize`: `homeColonyId ?? planetId`) ⇒ płaci kolonia ciała — D3: 8/8 rozwiązane `no_credits` 0,42 roku po wczytaniu na zdobytej kolonii z 0 Kr | rozszerza **342**; pytanie 4 §5n.6. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **444** | ⚪ | żołd jednostek naziemnych kubłem atomowym — brak 1 Kr ⇒ wszystkie jednostki płatnika offline, 5 lat cyw. ⇒ rozwiązanie (D3: 24/24 po 0,5 roku); zmierzone podwójne pobranie żołdu (backlog bez numeru) | obserwacja projektu; pytanie 5 §5n.6. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **422** | ⚪ | misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4) — przylot na czas i bez przeskoku z konstrukcji (kurierzy: przylot − ETA ≤ 0,006 roku, przeskok ≤ 0,010 AU), prędkości lotu nie zmierzono | raport do zamknięcia arca (SB47). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **423** | ⚪ | rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5) — `_computeInterceptPoint` z `target.velocity`, zerowanej dla kadłuba zadokowanego i orbitującego | raport do zamknięcia arca (SB47); osiągalność niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
 

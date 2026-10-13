@@ -1809,6 +1809,9 @@ a `serialize` zapisuje `homeColonyId ?? planetId` (`GroundUnitManager.js:1459`; 
 `[code]`. Zmierzone: jednostka AI utworzona na kolonii gracza — `null` w pamięci, `entity_5` (kolonia gracza)
 w zapisie `[measured]`. Dziś nieszkodliwe: `_ownedHomeColony` sprawdza właściciela kolonii, a `popCost` jednostki
 AI = 0 (`ColonyManager.js:1680`, `:1701`) `[code]`. Bez przypisanego kroku.
+→ **AI STRIKES BACK S4/1 (D3, 2026-10-13):** ten sam zapis dotyka jednostek GRACZA bez domu (więź zerwana przy utracie
+kolonii — 380, `debug.spawnMyUnit`) — po wczytaniu płaci kolonia ciała; zmierzone: 8/8 rozwiązane `no_credits` na zdobytej
+kolonii z 0 Kr — Finding **443** (`AI_STRIKES_BACK_PLAN.md` §6).
 
 ### 🟠 343 — zwykłe budynki AI stają na kaflach oceanu: martwy test `tile.buildable` w bootstrapie (→ osobny slice)
 

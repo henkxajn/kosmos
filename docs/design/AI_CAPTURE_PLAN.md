@@ -987,6 +987,10 @@ gate'u** ⇒ **D7**.
     `c97b73b`); pomiar dla celu odbijania — S3, sesja 2; naprawa — S4 (`AI_STRIKES_BACK_PLAN.md` §2).
     → **Pomiar S3/2 (M6, 2026-10-13):** cel odbijania (kolonia pochodzenia AI) ma siatkę od założenia — `no_grid` nie
     wystąpił w żadnym przebiegu (`AI_STRIKES_BACK_PLAN.md` §5l.4); naprawa dla kolonii gracza — S4.
+    → **Audyt S4/1 (D4, 2026-10-13):** siatkę kolonii gracza tworzy okno kolonii przy pierwszym otwarciu (`ColonyOverlay`:
+    generator, stemple właściciela kafli, synchronizacja budynków); fixture GATE-S4: 22 / 22 kolonie mają siatkę; nowa gra —
+    niezmierzona. Kształt naprawy (propozycja): tworzenie siatki wydzielone do jednej funkcji wołanej leniwie z desantu
+    i z okna kolonii (`AI_STRIKES_BACK_PLAN.md` §5n.4).
 56. **`CombatSystem._tryRetreat:392-423` jest drugim moverem** — teleport o kafel bez sprawdzania budynku,
     właściciela i stolicy; martwy tylko dlatego, że legacy jednostki nie mają `morale` (`:235`
     `morale ?? 100`). Slice GROUND go uruchomi.

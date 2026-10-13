@@ -34,7 +34,11 @@
 > po zgodzie na przecelowanie **R-S3b** — `2c33033` (S3-4, SB64, SB66; **435**) · `bf3178c` (S3-5, SB63; **434**) ·
 > `dafea9a` (S3-6 + R-S3b, SB56) · `6dd6081` (S3-7, SB57) · `53fb899` (S3-8, SB59; **427**, **151**) · `5a47c68` (S3-9,
 > SB59). Przygotowanie, C6 (SB67 — STOP), M6 i scenariusz bramki — §5l; zamknięcie — §5m. Findingi **438–440** — §6.
-> **S3 ZAMKNIĘTY W CAŁOŚCI.** **S4** — nierozpoczęty.
+> **S3 ZAMKNIĘTY W CAŁOŚCI.**
+> ⏳ **S4 — sesja 1 PRZYGOTOWANA 2026-10-13** (§5n): łańcuch S4-1 (**439**, SB69 — kolonia i obserwatorium wykrywają we
+> własnym układzie) i S4-2 (**440**, SB70 — limit trzymania orbity) zbudowany i zweryfikowany, ZESTAGOWANY, NIE zacommitowany;
+> pomiar D3 (głód i rozwiązywanie jednostek gracza na zdobytej kolonii — Findingi **442–444**); audyt S4 właściwego (D4 —
+> propozycja i pytania); bramka S4A. Finding **441** — §6.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
@@ -178,7 +182,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
 | **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2 (2026-10-12/13, §5l): desant na cel, eskadra przerwana, trzymanie orbity i powrót, klucze eskadry, odbijanie, statek w skoku poza układem, wpis dzwonka — ✅ zacommitowane 2026-10-13 (`2c33033` · `bf3178c` · `dafea9a` · `6dd6081` · `53fb899` · `5a47c68`; §5m); C6 (SB67) — STOP | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 · sesja 2: **435** · **434** · **427** · **151** · SB56–SB59 · SB63–SB67 · nowe **438–440** | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]`; sesja 2: `defense_scope`, `w3_target_selection`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3b (zgoda 2026-10-13, w `dafea9a`; §5m.1) | tak — sesja 1: **PASS 2026-10-12** (§5k.2); sesja 2: **PASS 2026-10-13** (§5m.2) |
-| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11) | SB10 · SB11 | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams` | tak |
+| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — PRZYGOTOWANE, NIE zacommitowane; pomiar głodu garnizonu (D3); audyt S4 właściwego (D4) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania) | tak — sesja 1: scenariusz `GATE_S4A.md` zwalidowany (§5n.5), bramka właściciela czeka |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
 ⓘ Audyt fazy A (P6) liczył S3 2–3 dni, S4 2 dni, razem ~8–11 `[doc: audyt fazy A, P6]`.
@@ -1892,6 +1896,150 @@ S4, sesja 1: **439** (SB69) i **440** (SB70) — kod, STOP przed commitem, bramk
 gracza na zdobytej kolonii (SB76, bez naprawy); audyt S4 właściwego (wojna z inicjatywy AI, kampania układ po układzie —
 SB10, SB11; reguła końca wojny; Finding **55**; pula a pokój — §5e.6). **438** (SB68) — osobny krok po S4.
 
+### 5n. S4 — sesja 1 (2026-10-13): 439 i 440 — łańcuch PRZYGOTOWANY, NIE zacommitowany; pomiar D3; audyt S4 właściwego (D4); bramka S4A
+
+Polecenie właściciela (2026-10-13): po zamknięciu S3 (§5m) — **D1** (SB69, Finding 439) i **D2** (SB70, Finding 440): kod,
+keepery fail-first, STOP przed commitem (bramka w przeglądarce); **D3** (SB76) — pomiar przyczyny głodu i rozwiązywania
+jednostek gracza na zdobytej kolonii, bez naprawy; **D4** — audyt S4 właściwego (wojna z inicjatywy AI, kampania układ po
+układzie SB10, reguła końca wojny, Finding 55, pula a pokój), propozycja i pytania. Kotwica: HEAD `40b6e54` (drzewo
+`abc69573`), sweep **294/294**, `check-i18n` 3458. Zapis **v101 bez migracji**; klucze i18n dodane / usunięte: **0 / 0**.
+Folder przekazania: `kosmos-handover/ai-strikes-back-s4/` (łatki, drzewa, skrypt commitów z testem na sucho, sondy, wyniki,
+bramka, notatka).
+
+#### 5n.1 Audyt D1 (Finding 439) `[code]` `[measured]`
+
+- **Jedyna detekcja kluczowana widokiem** to `ObservatorySystem._tickVesselDetection` (kolonie i statki wyłącznie oglądanego
+  układu). `ProximitySystem` widoku nie zna (para przez `isSameSystemStrict`).
+- **Konsumenci zbioru wykrytych:** `vessel:detectionChanged` → `ThreeRenderer` (wpis tylko dla statków oglądanego układu —
+  gdzie indziej bez skutku) i wpis dzwonka `armedContact` (dowolny układ z kolonią gracza); `isVesselDetected` → widoczność
+  duszków 3D, echo mapy Dowództwa (oba filtrują oglądany układ), lista „Kontakty” obserwatorium (wszystkie wykryte — od S4-1
+  także z innych układów, bez nazwy układu na liście); `recordSighting` / `advanceIntel` (plotka o statku i imperium — od
+  S4-1 także poza widokiem); skany obserwatorium (trwają po zmianie widoku).
+- **Okno pierwszego wykrycia** (`vessel:firstSighting` → okno z pauzą w `GameScene`, beat pierwszego kontaktu
+  `DirectorFirstContact`) — ZOSTAJE przy oglądanym układzie (najmniejsza zmiana; pytanie „okno także poza widokiem” jest
+  projektowe — §5n.6). Okno liczy „Distance” od planety macierzystej bez terminu układu i mówi „in our system” — przy widoku
+  na inny układ z kolonią gracza pokazuje odległość między współrzędnymi dwóch układów (Finding **441**, `[code]`).
+- **Koszt** `[measured]` (fixture, wojna, zdobyte Propus c — 2 układy z kolonią gracza, 31 statków, w tym 28 wrogich,
+  żaden w zasięgu kolonii; `probes/d1/out/`): jeden tik `_tickVesselDetection` — **0,0076 ms** (przed S4-1: **0,0018 ms**,
+  wyłącznie oglądany układ); koszt = (układy z kolonią gracza) × (wrogie statki) `[code]`, zasięg kolonii liczony raz na tik.
+
+#### 5n.2 Łańcuch — PRZYGOTOWANY, NIE zacommitowany `[git]` `[measured]`
+
+Zbudowany w klonie roboczym na `40b6e54`; na commicie tej dokumentacji — ten sam `src/`, drzewa kroków w `patches/trees.txt`
+folderu przekazania.
+
+| krok | treść | drzewo (na `40b6e54`) | keeper NEW (asercje) · fail-first na poprzednim | sweep · `check-i18n` |
+|---|---|---|---|---|
+| **S4-1** | **439** (SB69): detekcja kolonii i obserwatorium we własnym układzie, niezależnie od widoku; okno pierwszego wykrycia przy widoku | `39144122` | `sb4_own_system_detection_smoke` 19 · **11 PASS / 8 FAIL** (czerwone wyłącznie piny naprawy; zielone — warunki sceny, strażnicy, kontrole) | **295/295** · PASS 3458 |
+| **S4-2** | **440** (SB70): klucz `squadronHoldMaxYears` (domyślnie 3 lata gry, 0,5–20); po limicie `hold_expired`, fala zostaje | `1513670f` | `sb4_hold_limit_smoke` 20 · **6 PASS / 14 FAIL** (zielone — warunek sceny, strażnicy T1b i T3b, kontrole T4, T5b, T5c) | **296/296** · PASS 3458 |
+
+- **S4-1** — `_tickVesselDetection`: sensory = kolonie gracza z zasięgiem > 0 pogrupowane po układzie (ciało, stempel kolonii,
+  brak obu — `sys_home`); para (statek, kolonia) liczona wyłącznie w jednym układzie (pętla po układach z sensorami, filtr
+  `systemIdOf(v) !== sysId` — statek w skoku poza każdym układem, 427); okno pierwszego wykrycia — przebieg „wykryty, w widoku,
+  niezgłoszony” na każdym tiku (przełączenie widoku nie zmienia już zbioru). `sb3_warp_transit_scope` T3e (dosłowny filtr
+  `systemIdOf`) zielony BEZ przecelowania.
+- **S4-2** — `StrikeSquadronSystem._tick` (etap `landed`): `_groundDecision(s) ?? _holdExpired(s)` (rozstrzygnięcie walki
+  naziemnej w tym samym tiku ma pierwszeństwo); limit od desantu (`landedYear` — nowe pole rekordu; rekord sprzed S4 —
+  `stageYear`); klucz czytany w chwili użycia (`StrikeWavePlanner.squadronHoldMaxYears`); powrót istniejącą ścieżką SB63;
+  fala zostaje na ciele; odbijanie liczy próbę jak każdą inną (cooldown od wysyłki — bez zmian w `DirectorRetake`).
+- **Dowód mutacyjny** strażników i kontroli (`tools/mutate_s4a.mjs`): **10 / 10 zabitych** (M1a „każda kolonia, każdy
+  statek”, M1b kolonie AI, M1c zasięg ignorowany, M1d okno poza widokiem, M1e okno tylko dla nowo wykrytych; M2a limit zawsze,
+  M2b limit od wysyłki, M2c powrót zabiera falę, M2d stała zamiast klucza, M2e limit przed rozstrzygnięciem); bajty
+  przywracane i sprawdzane hashem.
+- **numstat** (blob, LF): S4-1 `ObservatorySystem` 88/75, keeper 191/0 · S4-2 `StrikesBackData` 7/0, `StrikeSquadronSystem`
+  24/7, `StrikeWavePlanner` 5/0, keeper 252/0. **EOL:** `ObservatorySystem.js` — CRLF w drzewie właściciela zostaje CRLF
+  (`tools/eolwrite.py`); pozostałe pliki LF.
+- Żaden istniejący keeper nie przewrócony: sweep każdego kroku 0 FAIL, bez przecelowań.
+
+#### 5n.3 D3 — głód i rozwiązywanie jednostek gracza na zdobytej kolonii (SB76, wyłącznie pomiar) `[code]` `[measured]`
+
+Sonda w prawdziwej grze (`probes/d3/`, fixture GATE-S4, gra po angielsku, czas krokiem miesięcznym — bez walki w przestrzeni),
+kod HEAD `40b6e54`. Scena „replika M6”: wojna z emp_001, gracz zdobywa Propus c (`entity_116`, produkcyjne
+`captureColonyForPlayer`), 8 jednostek `shock_infantry` gracza `createUnit` na kaflach do stania w kolejności siatki
+((0,0) … (7,0)); reguła odbijania odsunięta kluczem (`retakeDelayYears` 50), 9 lat. Kontrole: te same jednostki na planecie
+macierzystej gracza; dom jednostek = stolica gracza; zapis i wczytanie po rozstawieniu; 24 jednostki.
+
+- **Głód — uzupełnianie nie działa nigdzie** (Finding **442**): `SupplyCoverageSystem` uzupełnia zaopatrzenie z
+  `colony.commodities.military_supplies` — **żadna kolonia nie ma pola `commodities`** (towary są w `resourceSystem`; w `src/` nie
+  ma żadnego zapisu `colony.commodities`) `[code]`; zmierzone: zdobyta i macierzysta — pola brak, a
+  `military_supplies` w magazynie obu = 0 `[measured]`. Jednostka na kaflu poza pierścieniem 1 heksu wokół stolicy / koszar
+  ZUŻYWA (`shock_infantry` 3 / rok cywilizacyjny; ruch × 1,5, atak × 2); w pierścieniu zużycie jest POMIJANE (nie uzupełniane)
+  `[code]`. Zmierzone: wszystkie 8 jednostek poza pierścieniem (stolica Propus c na (−1,2), koszar 0), zaopatrzenie 100 → 73 → 37
+  → 1 → 0 (rok po roku), śmierć głodowa 8/8 w **64,784 — 4,67 roku** po rozstawieniu. Na planecie macierzystej gracza — też
+  8/8, w **67,534 (7,42 roku)**: zdobyta kolonia nie jest szczególna.
+- **Offline wstrzymuje zużycie:** jednostka bez zapłaconego żołdu (`offline`) zużywa 0 `[code]`; na planecie macierzystej
+  (kasa stolicy 7–21 Kr przy kuble 16 Kr) jednostki bywały offline i głód przyszedł później (zaopatrzenie 79 / 61 / 43 / 28 /
+  13 / 0) `[measured]`.
+- **Żołd — płatnik i kubeł atomowy** (Finding **444**): płaci kolonia macierzysta jednostki, a bez niej stolica gracza
+  (`_groundUnitPayerId`) `[code]`; płatnik płaci CAŁY kubeł albo nikt — wszystkie jednostki płatnika offline, 5 kolejnych lat
+  cywilizacyjnych bez żołdu → rozwiązanie `no_credits` `[code]`. Zmierzone (jedno rozliczenie): kubeł 16 Kr — kasa 15 → 8/8
+  offline; kubeł 48 — kasa 47 → 24/24 offline. Scena 24 jednostek (kubeł 48 Kr, kasa stolicy przy rozstawieniu 48 Kr;
+  próbki kasy co rok — przebiegu kasy między próbkami nie zapisałem): **24/24 rozwiązane `no_credits` po 0,5 roku**.
+  **Podwójne pobranie** (znane — `AI_GARRISON_PLAN.md`: „znane w backlogu, świadomie bez numeru”): przy kasie ≥ 2 × kubeł
+  żołd pobierany dwa razy — 100 → 68 i 40 → 8 przy kuble 16, 100 → 4 przy kuble 48; przy kasie < 2 × kubeł — raz (20 → 4,
+  48 → 0) (bezpośrednie odjęcie + `trade:spendCredits`) `[measured]`.
+- **Dom po wczytaniu** (Finding **443**, rodzina **342**): jednostka gracza BEZ domu (`createUnit` bez domu — sonda M6 i
+  `debug.spawnMyUnit`; w zwykłej grze — więź zerwana przy utracie kolonii, 380) po zapisie i wczytaniu dostaje za dom ciało,
+  na którym stoi (`serialize`: `homeColonyId ?? planetId`) `[code]` ⇒ płaci kolonia tego ciała. Zmierzone: po wczytaniu dom
+  i płatnik = Propus c (0 Kr) → **8/8 rozwiązane `no_credits` 0,42 roku po wczytaniu** `[measured]`.
+- **M6 nie odtworzony w całości** `[doc]`: w M6 U24 obrońcy zginęli z głodu w 69,2–70,0 (8,8–9,6 roku po zdobyciu w 60,37;
+  §5l.4), tu 24 jednostki rozwiązano `no_credits` po 0,5 roku — płatnika i kasy w przebiegu M6 nie mierzyłem. „7
+  rozwiązanych `no_credits`” ze sceny M6 „fala 0,1” §5l.4 przypisuje kasie zdobytej kolonii (jednostki postawione przez
+  sondę) — zgodne z mechanizmem 443 / 444; przebiegu M6 nie powtarzałem.
+
+#### 5n.4 D4 — S4 właściwe: propozycja i pytania (bez kodu) `[code]` `[measured]`
+
+Stan dziś: AI wypowiada wojnę WYŁĄCZNIE z napięcia ≥ 80 / ultimatum / przylotu misji ataku — żadna reguła Directora tego nie
+robi; ofensywa w wojnie (`strike_player_target`) to same eskorty (desantu brak, `no_drop_capable_hull`), cel = najcenniejszy
+osiągalny (stolica gracza bywa pierwsza); koniec wojny — wyłącznie wyczerpanie z bitew (pula ⇒ AI przyjmuje pokój dopiero od
+65 / 65, §5e.6); Finding 55 — siatkę kolonii gracza tworzy okno kolonii przy pierwszym otwarciu (fixture: 22 / 22 kolonie ze
+siatką `[measured]`; nowa gra — niezmierzona).
+**Opcja A (najprostsza, ~1,5–2 dni):** (1) kampania = eskadry z desantem (`launchSquadron`) na kolonie gracza w porządku SB10
+(najbliższy układ, stolica gracza ostatnia), części wspólne z odbijaniem, odbijanie ma pierwszeństwo; (2) wojna z okazji —
+reguła `opportunity_war` (pokój bez rozejmu i NAP, pula zdolna do eskadry na najbliższy cel) → `declareWar(…, 'opportunity')`,
+cooldown jako klucz; (3) koniec wojny — depesza AI także przy wyczerpanej kampanii (status quo albo cesja zdobyczy, maszyneria
+W4); (4) Finding 55 — tworzenie siatki wydzielone z okna kolonii do jednej funkcji, wołanej leniwie z desantu i z okna.
+**Opcja B (szersza):** A + uderzenie eskortą przed eskadrą + droga wojny z napięcia + ocena pokoju z terminem postępu
+kampanii. Pełny tekst: `kosmos-handover/ai-strikes-back-s4/D4_S4_PROPOSAL.md`; pytania — §5n.6 (6–13).
+
+#### 5n.5 Bramka S4A — scenariusz zwalidowany w prawdziwej grze
+
+`gate/GATE_S4A.md` w folderze przekazania (gra po ANGIELSKU, jedna linia konsoli na krok, wartości zmierzone, tryb klatek,
+kontrola na `40b6e54`, własności zamiast identyfikatorów): klucz SB70 i odmowy · wojna · gracz zdobywa Propus c (narzędzie),
+8 obrońców (dom = stolica gracza) · widok na dom · reguła odbijania odpala sama · **wpis dzwonka o uzbrojonym okręcie w układzie
+Propus PRZED desantem, bez okna wykrycia** · okna wykrycia po spojrzeniu na układ · limit trzymania (skrócony kluczem do 0,5
+roku na czas bramki) — powrót `hold_expired`, fala zostaje · zamknięcie w domu, odbijanie `czeka_cooldown` · reset klucza.
+**Walidacja na kodzie łańcucha** (zapisany przebieg — `results/gate/validate_gate_s4a_chain_dev.txt`): wpis „⚠ Armed enemy
+warship in the Propus system” 1,8 mies. przed desantem przy widoku `sys_home`, okien wykrycia 0; po przełączeniu widoku —
+2 okna (widok `sys_059`); `hold_expired` 0,51 roku po desancie, fala 6/6 żywa na ciele, eskorta i transportowiec w drodze do
+domu (2/2), ciało dalej gracza, 7 obrońców żywych; zamknięcie `transport_home`, rozwiązane 0, `czeka_cooldown` (5 jednostek
+fali dalej na ciele); 0 wyjątków i błędów konsoli poza 404. **Kontrola na `40b6e54`** (`…_control_40b6e54.txt`): klucza nie ma
+(`unknown_key`), wpisu dzwonka przed desantem brak (pierwszy — w chwili spojrzenia na układ), eskadra trzyma orbitę do
+przejęcia ciała przez falę (zamknięcie `captured` w 64,11; obrońcy gracza 8/8 polegli); 0 wyjątków i błędów konsoli poza 404.
+
+#### 5n.6 Pytania do właściciela
+
+1. **Commit S4-1 i S4-2** po bramce S4A — przecelowań nie ma (żaden istniejący keeper nie przewrócony).
+2. **441** (okno pierwszego wykrycia: „Distance” od domu bez terminu układu, „in our system”) — naprawa (odległość od kolonii
+   gracza w układzie statku + nazwa układu) w S4 czy w polerce UI?
+3. **442** (uzupełnianie zaopatrzenia czyta nieistniejące pole) — (a) uzupełnianie z magazynu kolonii (`military_supplies` —
+   dziś 0, tech `military_logistics`) · (b) jednostka na WŁASNEJ kolonii nie zużywa (jak w pierścieniu stolicy) · (c) głód
+   poza pierścieniem zostaje jako mechanika, naprawić tylko martwe pole?
+4. **443** (jednostka gracza bez domu po wczytaniu płacona przez kolonię ciała) — (a) płatnik = stolica gracza jak przed
+   wczytaniem · (b) zostaje?
+5. **444** (kubeł żołdu atomowy) — (a) płacić tylu, ilu starczy (najtańsi pierwsi, jak flota) · (b) zostaje; **podwójne
+   pobranie żołdu** (znane, bez numeru) — nadać numer i naprawić?
+6. – 13. **S4 właściwe** (`D4_S4_PROPOSAL.md`): (6) wyzwalacz wojny z inicjatywy: okazja / okazja + napięcie / samo napięcie ·
+   (7) odstęp między wojnami AI: rozejm i NAP czy osobny cooldown · (8) kampania: tylko eskadry z desantem czy także uderzenia
+   eskortą · (9) porządek celów: najbliższy układ, stolica gracza ostatnia, placówki przed koloniami? · (10) koniec wojny:
+   cesja zdobyczy / status quo / bez zmian · (11) pula a pokój (65 / 65) · (12) Finding 55: naprawa leniwa przy desancie ·
+   (13) pomiar SB72 (czy uderzenia AI przegrywają za często) w S4.
+
+#### 5n.7 Następny krok
+
+Bramka S4A w przeglądarce właściciela, potem commity (`tools/commit_S4A.sh` w folderze przekazania — test na sucho PASS);
+odpowiedzi na §5n.6 → S4 właściwe.
+
 ---
 
 ## 6. Rejestr findingów arca (#391–#396, zebrane 2026-10-06)
@@ -2545,6 +2693,9 @@ celu — 2,6 mies.
 Do decyzji: czy obserwatorium (albo sama kolonia) ma wykrywać w swoim układzie niezależnie od widoku (rodzina **191**).
 → **SB69 (2026-10-13):** kolonia i obserwatorium wykrywają we własnym układzie niezależnie od widoku — pierwszy element
 kodu S4.
+⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S4-1 (zestagowana, NIE zacommitowana; §5n.2):** sensory po układach, para
+(statek, kolonia) w jednym układzie; okno pierwszego wykrycia przy widoku; keeper `sb4_own_system_detection_smoke`. Bramka
+S4A (walidacja): wpis dzwonka 1,8 mies. przed desantem przy widoku domowym. Zamknięcie — przy commicie S4-1.
 
 ### ⚪ 440 — eskadra odbicia trzyma orbitę celu przez całą walkę naziemną, także przez lata; w tym czasie imperium nie wyśle innej eskadry
 
@@ -2555,6 +2706,48 @@ w końcu z GŁODU (15 jednostek w 69,2–70,0 — korekta po `998851e`, było 14
 Obserwacja projektu (czy trzymanie ma mieć limit czasu; czy głód obrońców na własnej kolonii jest zamierzony — niezbadane).
 → **SB70 (2026-10-13):** limit trzymania orbity — klucz strojenia, domyślnie 3 lata gry; po limicie eskorta i transportowiec
 wracają, wylądowana fala walczy dalej — S4. Głód obrońców — **SB76**: pomiar przyczyny w S4 (bez naprawy).
+⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S4-2 (zestagowana, NIE zacommitowana; §5n.2):** klucz `squadronHoldMaxYears`,
+wynik `hold_expired`, fala zostaje; keeper `sb4_hold_limit_smoke`. Głód obrońców — pomiar D3 (§5n.3): Findingi **442–444**.
+Zamknięcie — przy commicie S4-2.
+
+### #441–#444 — S4, sesja 1 (2026-10-13)
+
+⚠ **Registry-first (2026-10-13):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#440**; trafienia „441”–„449” w pamięci to zapis „wolny 441” i wartości liczbowe, nie findingi
+`[measured]`. Źródło: audyt D1 (441) i pomiar D3 (442–444) — §5n.
+
+### ⚪ 441 — okno pierwszego wykrycia liczy „Distance” od planety macierzystej bez terminu układu i mówi „in our system”
+
+`[code]` `GameScene` (handler `vessel:firstSighting`): odległość = współrzędne planety macierzystej gracza − współrzędne statku,
+bez sprawdzenia układu; opis „Observatory detected an alien vessel in our system”. Okno idzie WYŁĄCZNIE dla oglądanego układu
+(S4-1 tego nie zmienia) — przy widoku na inny układ z kolonią gracza (np. zdobyte Propus c) liczba jest odległością między
+współrzędnymi dwóch układów. `[measured]` bramka S4A (walidacja): 2 okna przy widoku `sys_059` — wartości „Distance” nie
+odczytywałem. → pytanie 2, §5n.6.
+
+### 🟠 442 — uzupełnianie zaopatrzenia jednostek naziemnych czyta pole, którego żadna kolonia nie ma
+
+`[code]` `SupplyCoverageSystem` (fazy 1–2) uzupełnia z `colony.commodities.military_supplies`; kolonie przechowują towary
+w `resourceSystem`, a w `src/` nie ma żadnego zapisu `colony.commodities` ⇒ uzupełnianie nie działa nigdy.
+Jednostka na kaflu poza pierścieniem 1 heksu wokół stolicy / koszar zużywa zaopatrzenie (w pierścieniu zużycie jest pomijane),
+po zerze traci 5 % HP na rok cywilizacyjny. `[measured]` D3 (§5n.3): pola brak w zdobytej i macierzystej, `military_supplies`
+w magazynie 0; 8 jednostek gracza na zdobytym Propus c — śmierć głodowa 8/8 po 4,67 roku; na planecie macierzystej — 8/8 po
+7,42 roku. Fazy zaopatrzenia dotyczą wyłącznie jednostek gracza. → pytanie 3, §5n.6.
+
+### 🟠 443 — jednostka GRACZA bez domu po wczytaniu dostaje za dom ciało, na którym stoi — płaci kolonia tego ciała (rodzina 342)
+
+`[code]` `GroundUnitManager.serialize` / `restore`: `homeColonyId ?? planetId`; `_groundUnitPayerId` płaci kolonia domu, gdy
+należy do gracza. Jednostki gracza bez domu: więź zerwana przy utracie kolonii (380), `debug.spawnMyUnit`, sonda M6. Przed
+wczytaniem płaci stolica gracza; po wczytaniu — kolonia ciała. `[measured]` D3: po wczytaniu dom i płatnik = Propus c (0 Kr)
+→ 8/8 rozwiązane `no_credits` 0,42 roku po wczytaniu. Rozszerza **342** (tam: jednostki AI, „dziś nieszkodliwe”). → pytanie
+4, §5n.6.
+
+### ⚪ 444 — żołd jednostek naziemnych kubłem atomowym: brak 1 Kr wyłącza wszystkie jednostki płatnika
+
+`[code]` `ColonyManager._tickGroundUnitUpkeep`: płatnik płaci cały kubeł albo nikt — wszystkie jego jednostki `offline`,
+po 5 kolejnych latach cywilizacyjnych — rozwiązanie `no_credits`. `[measured]` D3: kubeł 16 — kasa 15 → 8/8 offline; kubeł 48
+— kasa 47 → 24/24 offline; scena 24 jednostek na zdobytym ciele (kubeł 48 Kr) → 24/24 rozwiązane po 0,5 roku.
+Przy okazji zmierzone podwójne pobranie żołdu (znane — `AI_GARRISON_PLAN.md`: „znane w backlogu, świadomie bez numeru”):
+kasa ≥ 2 × kubeł → pobrane 2 × (100 → 68 przy kuble 16). Obserwacja projektu. → pytanie 5, §5n.6.
 
 ---
 
