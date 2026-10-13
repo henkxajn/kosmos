@@ -289,6 +289,28 @@ export const DIRECTOR_RULES = {
    * `count: 3` to LUSTRO `MAX_STRIKE_SIZE` z `DirectorOffensive` — ściągamy tylu, ilu imperium
    * wysyła w jednym uderzeniu. Nie jest to nowy próg do strojenia.
    */
+  /**
+   * AI STRIKES BACK S3/2 (SB57) — ODBIJANIE UTRACONEJ KOLONII. „To było nasze — wracamy po to.”
+   *
+   * Cel = ciało, które gracz zdobył od imperium w BIEŻĄCEJ wojnie (księga wojny) i nadal trzyma; najpierw utracona
+   * stolica, potem porządek planera garnizonu. Czas: `retakeDelayYears` od straty i `retakeCooldownYears` od ostatniej
+   * próby na to ciało (klucze strojenia). Odpowiedź: eskadra (`StrikeSquadronSystem.launchSquadron`) z eskortą
+   * `requiredSquadron` (SB56). Szczegóły i drabina odmów: `DirectorRetake`.
+   *
+   * ⚠ BEZ RZUTU (decyzja właściciela: „no dice”), więc MUSI mieć `cooldown` (decyzja 11) — `1.0` roku wyświetlanego to
+   *   przepustnica decyzji jak w `recall_strike_force`, nie próg balansowy: po odpaleniu (wysyłka albo odmowa) reguła
+   *   czeka rok. Cooldown CELU (`retakeCooldownYears`) liczy wyłącznie wysłane eskadry.
+   * ⚠ `delay: 0` OBOWIĄZKOWO (pin katalogowy `w3_target_selection` T1).
+   */
+  retake_lost_colony: {
+    id:       'retake_lost_colony',
+    trigger:  { kind: 'poll', probe: 'retakeTargets', gte: 1 },
+    guard:    ['empireAtWarWithPlayer', 'empireHasNoSquadronUnderway'],
+    delay:    0,
+    response: { action: 'launchRetake', params: {} },
+    cooldown: { years: 1.0 },
+  },
+
   recall_strike_force: {
     id:       'recall_strike_force',
     trigger:  { kind: 'poll', probe: 'strandedWarshipsAwayFromHome', gte: 1 },

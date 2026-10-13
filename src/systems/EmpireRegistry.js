@@ -56,6 +56,12 @@ export class EmpireRegistry {
   isFleetPoolMobilized(empireId) { return this.get(empireId)?.fleetPool?.mobilized === true; }
 
   /**
+   * AI STRIKES BACK S3/2 (SB57) — stolice, które imperium UTRACIŁO (`[{bodyId, year}]`, w kolejności utraty): ciało, które
+   * było stolicą (`DirectorProduction.capitalOf`) w chwili usunięcia z imperium. Kopia; brak — pusta lista (zapis sprzed S3/2).
+   */
+  getLostCapitals(empireId) { return [...(this.get(empireId)?.lostCapitals ?? [])]; }
+
+  /**
    * Zwraca żywe obiekty kolonii imperium (z ColonyManager), nie same id.
    * Slice 2: używane przez EmpireColonyBootstrap.bootstrapColony (reuse TechSystem)
    * oraz Warstwę C (decyzje strategiczne per kolonia).
@@ -159,7 +165,14 @@ export class EmpireRegistry {
     const next = emp.colonies.filter(id => id !== colonyId);
     if (next.length === emp.colonies.length) return false;
 
+    // AI STRIKES BACK S3/2 (SB57) — UTRACONA STOLICA. Stolicę (`DirectorProduction.capitalOf` — pierwsza pełna kolonia
+    //   w kolejności imperium) liczymy PRZED usunięciem: po nim `capitalOf` wskazuje już następną kolonię, a zdarzenie
+    //   przejęcia przychodzi po zmianie właściciela. Tu jest jedyny punkt usunięcia — zapis dokładny.
+    let capitalBefore = null;
+    try { capitalBefore = window.KOSMOS?.directorProduction?.capitalOf?.(empireId)?.planetId ?? null; } catch { capitalBefore = null; }
+
     gameState.set(`empires.${empireId}.colonies`, next, 'empire_colony_removed');
+    if (capitalBefore === colonyId) this._recordLostCapital(empireId, colonyId);
     EventBus.emit('empire:colonyRemoved', { empireId, colonyId });
 
     // ⚠ W3-1: imperium bez kolonii, z którym TRWA WOJNA, NIE jest kasowane.
@@ -225,6 +238,15 @@ export class EmpireRegistry {
    * @param {Object} record
    * @returns {boolean}
    */
+  /** SB57 — dopisuje utraconą stolicę (`empires.<id>.lostCapitals`); zdarzenie audytu `empire:capitalLost`. */
+  _recordLostCapital(empireId, bodyId) {
+    const emp = this.get(empireId);
+    if (!emp || !bodyId) return;
+    const year = window.KOSMOS?.timeSystem?.gameTime ?? null;
+    gameState.set(`empires.${empireId}.lostCapitals`, [...(emp.lostCapitals ?? []), { bodyId, year }], 'empire_capital_lost');
+    EventBus.emit('empire:capitalLost', { empireId, bodyId, year });
+  }
+
   markFleetPoolMobilized(empireId, record = {}) {
     if (!this.get(empireId)) return false;
     gameState.set(`empires.${empireId}.fleetPool`, { ...record, mobilized: true }, 'fleet_pool_mobilized');

@@ -110,6 +110,16 @@ export function squadronMaxShips() {
   return getTuning('squadronMaxShips');
 }
 
+/** SB57 — ile lat od utraty ciała przed pierwszą próbą odbicia (`retakeDelayYears`). Odczyt w chwili użycia. */
+export function retakeDelayYears() {
+  return getTuning('retakeDelayYears');
+}
+
+/** SB57 — ile lat od ostatniej próby na to samo ciało (`retakeCooldownYears`). Odczyt w chwili użycia. */
+export function retakeCooldownYears() {
+  return getTuning('retakeCooldownYears');
+}
+
 /** Werdykt eskadry: `start` (potrzebne ≤ dostępne i ≤ sufit) · `za_malo` (≤ sufit, > dostępne) · `poza_zasiegiem` (> sufit). */
 export function squadronVerdict(needed, available, cap) {
   if (needed > cap) return 'poza_zasiegiem';
@@ -129,15 +139,16 @@ export function printSquadronNeeds(K) {
   for (const e of K?.empireRegistry?.listAll?.() ?? []) {
     const ready = off?.strikeReadyVessels?.(e.id) ?? [];
     const targets = off?.reachableTargets?.(e.id) ?? [];
-    const push = (rodzaj, t, need, available) => rows.push({
+    const push = (rodzaj, t, need, available, verdict = null) => rows.push({
       imperium: e.id, rodzaj, cel: t?.body?.id ?? '-', uklad: t?.systemId ?? '-',
       obronaHP: need ? Math.round(need.defenderHp) : '-', kadlubHP: need ? Math.round(need.perShipHp) : '-', mnoznik: ratio,
       potrzebne: need?.needed ?? '-', sufit: cap, dostepne: available,
-      werdykt: need ? squadronVerdict(need.needed, available, cap) : 'brak_celu',
+      werdykt: verdict ?? (need ? squadronVerdict(need.needed, available, cap) : 'brak_celu'),
     });
     if (targets.length === 0) push('uderzenie', null, null, ready.length);
     for (const t of targets) push('uderzenie', t, off.requiredSquadron(t, ready), ready.length);
-    for (const r of K?.directorRetake?.retakeNeeds?.(e.id) ?? []) push('odbicie', r.target, r.need, r.available);
+    // S3/2 (SB57) — cele odbijania z werdyktem reguły (`czeka_delay` / `czeka_cooldown` / `eskadra_w_drodze` / jak wyżej).
+    for (const r of K?.directorRetake?.retakeNeeds?.(e.id) ?? []) push('odbicie', r.target, r.need, r.available, r.verdict);
   }
   console.table(rows);
   return rows;

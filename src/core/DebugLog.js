@@ -171,6 +171,11 @@ const TRACKED_EVENTS = [
   'squadron:launched',
   'squadron:launchRefused',
   'squadron:closed',          // S3/2 (SB63) — eskadra zamknięta (transportowiec usunięty w domu albo bez stolicy)
+  // AI STRIKES BACK S3/2 (SB57) — odbijanie: wysłane (cel, eskorta, fala) i odmowa z powodem (`no_capital`, `no_target`,
+  //   `insufficient_squadron`, `target_beyond_reach`, `launch_refused`); utracona stolica imperium (`empire:capitalLost`).
+  'director:retakeLaunched',
+  'director:retakeRefused',
+  'empire:capitalLost',
 ];
 
 class DebugLog {

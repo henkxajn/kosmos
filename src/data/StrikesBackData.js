@@ -81,4 +81,16 @@ export const SB_TUNING = Object.freeze({
    * `StrikeWavePlanner.squadronMaxShips` → uderzenie i odbijanie.
    */
   squadronMaxShips: Object.freeze({ default: 3, type: 'int', min: 1, max: 24, unit: 'kadluby' }),
+
+  /**
+   * SB57 (S3/2) — ODBIJANIE: ile lat gry od utraty ciała (wpis księgi wojny) imperium czeka przed pierwszą próbą odbicia.
+   * Konsument: `StrikeWavePlanner.retakeDelayYears` → `DirectorRetake`.
+   */
+  retakeDelayYears: Object.freeze({ default: 1, type: 'number', min: 0, max: 50, unit: 'lata gry' }),
+
+  /**
+   * SB57 (S3/2) — ODBIJANIE: ile lat gry od ostatniej próby na to samo ciało (wysłana eskadra) przed następną. Odmowa
+   * (np. za mało okrętów) próbą nie jest. Konsument: `StrikeWavePlanner.retakeCooldownYears` → `DirectorRetake`.
+   */
+  retakeCooldownYears: Object.freeze({ default: 5, type: 'number', min: 0, max: 100, unit: 'lata gry' }),
 });

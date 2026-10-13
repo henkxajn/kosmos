@@ -58,6 +58,8 @@ import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 // AI STRIKES BACK S3/2 (SB56) — mnożnik i sufit eskadry z tabeli strojenia (odczyt w chwili użycia przez planer eskadry).
 import { SB_TUNING } from '../../data/StrikesBackData.js';
 import { squadronHpRatio, squadronMaxShips } from '../../utils/StrikeWavePlanner.js';
+// AI STRIKES BACK S3/2 (SB57) — odbijanie utraconych kolonii (rejestracja w tej samej rodzinie co uderzenie).
+import { DirectorRetake } from './DirectorRetake.js';
 
 /**
  * ⚠ POKRĘTŁO BALANSU (D-199-1): ile razy więcej wytrzymałości musi mieć eskadra od obrońcy.
@@ -498,6 +500,17 @@ export function registerOffensiveBehaviors(instance, { allowOverride = false } =
 
   DirectorActions.register('launchStrike',
     (ctx, params) => instance.launchStrike(ctx, params), { allowOverride });
+
+  // AI STRIKES BACK S3/2 (SB57) — reguła `retake_lost_colony` (odbijanie). Instancja przy uderzeniu (jedno źródło
+  //   `requiredSquadron`), wystawiona jako `instance.retake` (lokator: `KOSMOS.directorRetake` w GameScene).
+  const retake = new DirectorRetake(instance);
+  instance.retake = retake;
+  DirectorProbes.register('retakeTargets',
+    ({ empireId }) => retake.countRetakeTargets(empireId), { allowOverride });
+  DirectorGuards.register('empireHasNoSquadronUnderway',
+    ({ empireId }) => retake.hasNoSquadronUnderway(empireId), { allowOverride });
+  DirectorActions.register('launchRetake',
+    (ctx) => retake.launchRetake(ctx), { allowOverride });
 }
 
 export default DirectorOffensive;

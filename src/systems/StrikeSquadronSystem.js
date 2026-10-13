@@ -22,8 +22,8 @@
 //
 // ⚠ Wszystko albo nic: walidacja eskorty i fali PRZED utworzeniem czegokolwiek; odmowa rozkazu grupy cofa utworzony
 //   transportowiec i jednostki (nic nie zostaje).
-// ⚠ W S3 (sesja 1) jedynym wołającym jest dźwignia debug `KOSMOS.debug.sbLaunchSquadron` — reguła Directora (odbijanie,
-//   SB57) przyjdzie w sesji 2 na tych samych częściach.
+// ⚠ Wołający: reguła Directora `retake_lost_colony` (`DirectorRetake.launchRetake`, S3/2, SB57) i dźwignia debug
+//   `KOSMOS.debug.sbLaunchSquadron`.
 // ⚠ Zero importów systemów — kolaboratorzy leniwie przez `window.KOSMOS` (EventBus, nie importy między systemami).
 
 import EventBus from '../core/EventBus.js';

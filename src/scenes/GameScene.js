@@ -505,6 +505,8 @@ export class GameScene {
     // gate'u i debugu idzie przez `window.KOSMOS`, a wszystkie sa opcjonalne (`?.`) — wiec brak
     // wpisu jest NIEWIDZIALNY. Pin strukturalny: `ai_strike_recall_smoke` / `w3_director_mounting`.
     window.KOSMOS.directorRecall     = this.directorRecall;
+    // AI STRIKES BACK S3/2 (SB57) — odbijanie (instancja rejestrowana przy uderzeniu: `registerOffensiveBehaviors`).
+    window.KOSMOS.directorRetake     = this.directorOffensive.retake ?? null;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;

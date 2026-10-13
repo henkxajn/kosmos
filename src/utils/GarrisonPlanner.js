@@ -139,6 +139,28 @@ export function invasionTroops(list, count, tier) {
  *            perBody:Array<{planetId:string, role:'capital'|'colony'|'outpost', count:number}>,
  *            skipped:string[], excluded:string[], reason:string|null}}
  */
+/** D11 — kandydat planera: pełna kolonia albo placówka ze złożem Xe / Nt. */
+export function isGarrisonCandidate(b) {
+  return !b?.isOutpost || !!b?.hasRequiredDeposit;
+}
+
+/** D11 — porządek kandydatów: pełne kolonie przed placówkami, `devScore` malejąco, kolejność w imperium (`order`). */
+export function compareGarrisonCandidates(a, b) {
+  return (Number(!!a.isOutpost) - Number(!!b.isOutpost))
+      || (nonNegative(b.devScore) - nonNegative(a.devScore))
+      || (a.order - b.order);
+}
+
+/**
+ * AI STRIKES BACK S3/2 (SB57) — porządek planera dla dowolnej listy ciał (rekordy jak w migawce): kandydaci w porządku
+ * D11, potem pozostałe (placówki bez złoża Xe / Nt) w tym samym porządku. Zwraca identyfikatory.
+ */
+export function garrisonCandidateOrder(bodies) {
+  const list = (bodies ?? []).map((b, i) => ({ ...b, order: Number.isFinite(b?.order) ? b.order : i }));
+  return [...list.filter(isGarrisonCandidate).sort(compareGarrisonCandidates),
+          ...list.filter(b => !isGarrisonCandidate(b)).sort(compareGarrisonCandidates)].map(b => b.planetId);
+}
+
 export function garrisonAllocation(empire) {
   const limit = garrisonLimit(empire);
   const capitalId = empire?.capitalId ?? null;
@@ -147,12 +169,8 @@ export function garrisonAllocation(empire) {
   }
   const bodies = (empire?.bodies ?? []).map((b, i) => ({ ...b, order: Number.isFinite(b?.order) ? b.order : i }));
   const others = bodies.filter(b => b.planetId !== capitalId);
-  const excluded = others.filter(b => b.isOutpost && !b.hasRequiredDeposit).map(b => b.planetId);
-  const candidates = others
-    .filter(b => !b.isOutpost || b.hasRequiredDeposit)
-    .sort((a, b) => (Number(!!a.isOutpost) - Number(!!b.isOutpost))
-                 || (nonNegative(b.devScore) - nonNegative(a.devScore))
-                 || (a.order - b.order));
+  const excluded = others.filter(b => !isGarrisonCandidate(b)).map(b => b.planetId);
+  const candidates = others.filter(isGarrisonCandidate).sort(compareGarrisonCandidates);
   const capitalShare = Math.ceil(limit / GARRISON_CAPITAL_SHARE_DIVISOR);
   const rest = Math.max(0, limit - capitalShare);
   const chosen = candidates.slice(0, rest);
@@ -337,11 +355,16 @@ export function readEmpireGarrisonSnapshot(K, empireId) {
     pop: owned.filter(c => !c.isOutpost).reduce((s, c) => s + Math.floor(nonNegative(c.civSystem?.population)), 0),
     factoryLevels: owned.reduce((s, c) => s + factoryLevelsOf(c), 0),
     capitalId: capital?.ownerEmpireId === empireId ? capital.planetId : null,
-    bodies: owned.map((c, order) => ({
-      planetId: c.planetId, order, isOutpost: !!c.isOutpost,
-      devScore: colonyDevScore(c),
-      hasRequiredDeposit: hasOutpostDeposit(c.planet?.deposits),
-    })),
+    bodies: owned.map((c, order) => garrisonBodyRecord(c, order)),
+  };
+}
+
+/** Rekord ciała migawki planera (wejście `garrisonAllocation`) z kolonii — wspólny dla garnizonu i odbijania (S3/2). */
+export function garrisonBodyRecord(c, order) {
+  return {
+    planetId: c.planetId, order, isOutpost: !!c.isOutpost,
+    devScore: colonyDevScore(c),
+    hasRequiredDeposit: hasOutpostDeposit(c.planet?.deposits),
   };
 }
 
