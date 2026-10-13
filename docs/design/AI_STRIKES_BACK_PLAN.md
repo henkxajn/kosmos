@@ -30,13 +30,15 @@
 > po zgodzie na przecelowanie **R-S3** — `1cf1d24` (S3-1, **421**, SB49) · `ee44424` (S3-2, **420**, SB54, SB45) ·
 > `c97b73b` (S3-3 + R-S3: eskadra z ładunkiem, SB51–SB53, SB55; **396**, **384**). Przygotowanie, M5 i scenariusz bramki —
 > §5j; zamknięcie — §5k; decyzje **SB61–SB67**; Findingi **426–437** — §6.
-> **Następny: S3, sesja 2** (SB56–SB59, SB63–SB67). **S4** — nierozpoczęty.
+> ⏳ **S3 — sesja 2 z 2 PRZYGOTOWANA 2026-10-13** (łańcuch S3-4 – S3-9 ZESTAGOWANY, NIE zacommitowany; przecelowanie
+> **R-S3b** czeka na zgodę; C6 (SB67) — STOP: wynik starcia zależy od czasu rundy; M6; bramka S3B — §5l). Findingi
+> **438–440** — §6. **S4** — nierozpoczęty.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
-> **Rejestr macierzysty findingów #391–#437:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
+> **Rejestr macierzysty findingów #391–#440:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#391–#396 na `8b72c47`, #397–#406 na `eb6c06e`, #412–#413 na
-> `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`, #420–#425 na `f3fb8e0` i na łańcuchu S2b, #426–#435 na `2a09ac9` i na łańcuchu S3, #436–#437 na `c97b73b`) ·
+> `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`, #420–#425 na `f3fb8e0` i na łańcuchu S2b, #426–#435 na `2a09ac9` i na łańcuchu S3, #436–#437 na `c97b73b`, #438–#440 na łańcuchu S3/2 `dd31e11`) ·
 > `[measured]` — wykonane i policzone ·
 > `[git]` — historia commitów · `[doc]` — przepisane z dokumentu, bez ponownego pomiaru · `[doc: audyt fazy A]` —
 > z raportu fazy A (`AI_STRIKES_BACK_AUDIT.md`; sondy i wyniki poza repo,
@@ -164,7 +166,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S1** | tabela strojenia + komenda konsoli + odczyt (SB9, SB16) · limit floty (SB3, SB14) · pula: kadłuby przy mobilizacji, w służbie i zadokowane przy stolicy, odrastanie 1 kadłub/rok, bez załogi (SB1, SB2, SB15, SB17, SB18) · mobilizacja wojenna całej rezerwy (SB13) · odczyt floty / limitu w wywiadzie (SB19). ⓘ Kandydat 9 notatki przekazania S0 (parytet zatrzymuje mobilizację po pierwszej porcji — 4 z 6 fregat GATE-S4 zostaje w rezerwie) NIE jest findingiem: odpowiada na niego SB13. | SB1 · SB2 · SB3 · SB9 · SB13–SB25 · 398 · 407 · 408 | 2–3 dni | Director 6–10; `deploy_seams`, `w2_deploy_model` | tak — ✅ **PASS 2026-10-08** (§5e.3). Sesja 1 ✅ 2026-10-07 (§5c): tabela strojenia i limit floty bez bramki (nic w grze ich nie czyta); jednolinijkowce części „tabela” zwalidowane w prawdziwej grze na fixture · Sesja 2 (§5d): scenariusz całego S1 (`GATE_S1.md`, poza repo) zwalidowany w prawdziwej grze na kodzie sesji i na kontroli `45ee9d2`; bramka właściciela po zgodzie na przecelowania |
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
-| **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2: SB56–SB59, SB63–SB67 | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]` | tak — sesja 1: **PASS 2026-10-12** (§5k.2) |
+| **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2 (2026-10-12/13, §5l): desant na cel, eskadra przerwana, trzymanie orbity i powrót, klucze eskadry, odbijanie, statek w skoku poza układem, wpis dzwonka — PRZYGOTOWANE i ZESTAGOWANE, NIE zacommitowane; C6 (SB67) — STOP | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 · sesja 2: **435** · **434** · **427** · **151** · SB56–SB59 · SB63–SB67 · nowe **438–440** | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]`; sesja 2: `defense_scope`, `w3_target_selection`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3b (PROPOSED, §5l.2) | tak — sesja 1: **PASS 2026-10-12** (§5k.2); sesja 2: scenariusz `GATE_S3B.md` zwalidowany (§5l.5), bramka właściciela czeka |
 | **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11) | SB10 · SB11 | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams` | tak |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
@@ -1522,6 +1524,252 @@ i transportowiec nad celem do rozstrzygnięcia walki naziemnej, powrót odwołan
 zamyka **434**) · SB59 (151, 427, wpis dzwonka) · SB64 (desant na cel eskadry) · SB65 (pomiar Findingu 55) · SB66 (eskadra
 bez eskorty przerywana — **435**) · SB67 (czas rundy — pomiar najpierw).
 
+### 5l. S3 — sesja 2 z 2 (2026-10-12/13): odbijanie, trzymanie orbity, eskadra przerwana, wpis dzwonka — łańcuch PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany; C6 — STOP; M6; bramka S3B
+
+Polecenie właściciela (2026-10-12): zamknięcie sesji 1 (część A — commity `1cf1d24` · `ee44424` · `c97b73b`; część B —
+dokumentacja `055f1b7`, §5k) i sesja 2 S3 — SB64 + SB66 (C1), SB58 / SB63 (C2), SB56 (C3), SB57 (C4), SB59 (C5), SB67 (C6),
+pomiar M6, bramka S3B. Odpowiedzi właściciela z 2026-10-12: zgoda na R-S3 (część A), **SB61–SB67** (§2). Folder przekazania
+`ai-strikes-back-s3b` (poza repo): łatki, drzewa kroków, skrypty commitów (test na sucho), sondy, bramka, notatka
+`HANDOVER_S3_PART2.md`.
+
+#### 5l.1 Audyt (część C) — ustalenia, które ustawiły kształt `[code]` `[measured]`
+
+- **SB64:** `InvasionSystem._onVesselGroupVictory` wybierał cel desantu „najpierw dom” (`isHomePlanet` ?? pierwsza kolonia
+  gracza w układzie) — także gdy eskadra wygrała orbitę nad INNYM ciałem. Ciało bitwy jest w wyniku
+  (`result.location.planetId` — `EnemyAttackHandler` toczy bitwę nad celem przylotu) — wystarczy go użyć.
+- **SB66 / 435:** wrak eskorty nie zmieniał niczego w eskadrze — grupa wydawała odcinek jedynemu żywemu członkowi
+  (transportowcowi), a ten wygrywał przewagą HP z obroną symboliczną (30 HP).
+- **SB63 / 434:** odwołanie Directora (`DirectorRecall`) zabierało eskortę w ciągu miesiąca po desancie, a nieuzbrojony
+  transportowiec nie podlegał żadnemu odwołaniu (`hasWeapons`) — zostawał na orbicie celu na zawsze.
+- **SB57:** żadna reguła Directora nie wysyłała eskadry; jedynym wołającym `launchSquadron` była dźwignia konsoli.
+  Księga wojny (`WarSystem.getCaptures`) odpowiada na „co zmieniło ręce w TEJ wojnie”; stolicę w chwili utraty trzeba liczyć
+  PRZED usunięciem kolonii z imperium (`EmpireRegistry.removeColony` — jedyny punkt usunięcia; po nim `capitalOf` wskazuje już
+  następną pełną kolonię). Eskadra po utracie stolicy formuje się przy stolicy zastępczej (`capitalOf` — kolejna pełna
+  kolonia); imperium bez pełnej kolonii — odmowa `no_capital`.
+- **151 / 427:** dwa ŻYWE miejsca klasy „`systemId` `null` = statek w skoku sklejony z układem”: `ProximitySystem._checkPair`
+  (`?? 'sys_home'`) i `ObservatorySystem._tickVesselDetection` (`?? sysId`). Trzy filtry mapy 2D w `FleetManagerOverlay`
+  (utajone za `commandTacticalMap: false`) mają tę samą koercję, ale `fleet_engage_scope_smoke` T12c/T12d pinują je dosłownie
+  jako dokument zakresu 166 — zostawione (zmiana byłaby przecelowaniem spoza zgody). ⚠ Rejestr 151 nazywał `:658` „radarem /
+  atlasem” — to domyślny zakres orbit kamery `_getMaxOrbitAU` (wpis poprawiony w rejestrze macierzystym).
+- **SB59:** dwa źródła wykrycia — obserwatorium (`vessel:detectionChanged`, tylko oglądany układ — Finding **191**) i zmysły
+  statków gracza (`vessel:proximityEnter`). Grupa przylatującej eskadry jest w rozkazie złożonym / misji / rozkazie ruchu
+  (`groupId`).
+- **SB67:** runda DSCS co `ROUND_INTERVAL_MS` 110 ms czasu REALNEGO (`performance.now`), a między rundami gra płynie dalej
+  na zegarze gry (auto-slow przy walce: 1 d/s) — czas gry na rundę zależy od czasu rundy (część C6 niżej).
+
+#### 5l.2 Łańcuch — PRZYGOTOWANY, ZESTAGOWANY w repo, NIE zacommitowany `[git]` `[measured]`
+
+Zbudowany i zweryfikowany w klonie roboczym na `055f1b7` (drzewa niżej); na commicie tej dokumentacji — ten sam kod, drzewa
+w `patches/trees.txt` folderu przekazania. Kolejność stała (C1 → C5b); C6 bez kodu (§5l.3).
+
+| krok | treść | drzewo (na `055f1b7`) | keeper NEW (asercje) · fail-first na poprzednim | sweep · `check-i18n` |
+|---|---|---|---|---|
+| **S3-4** (C1) | SB64, SB66 (**435**) | `840be7bf` | `sb3_landing_abort_smoke` 20 · 6 / 14 — zielone wyłącznie kontrole i warunki sceny | 289/289 · PASS 3456 |
+| **S3-5** (C2) | SB58 → SB63 (**434**) | `c8d377b6` | `sb3_hold_return_smoke` 22 · 6 / 16 | 290/290 · PASS 3456 |
+| **S3-6** (C3, kod) | SB56 | `e8164076` | `sb3_squadron_size_smoke` 18 · 4 / 14 | **286/290** — czerwone wyłącznie 4 keepery R-S3b · PASS 3456 |
+| **S3-6 + R-S3b** | jw. + przecelowanie (PROPOSED) | `4333b412` | — | 291/291 · PASS 3456 |
+| **S3-7** (C4) | SB57 | `dd5d12f2` (kod: `696d3f02`) | `sb3_retake_smoke` 29 · 3 / 26 | 292/292 (kod: 288/292 — te same 4 czerwone) · PASS 3456 |
+| **S3-8** (C5a) | **151**, **427** (SB59) | `7cb78e09` (kod: `d04daba2`) | `sb3_warp_transit_scope_smoke` 16 · 9 / 7 — zielone wyłącznie kontrole i warunki sceny | 293/293 (kod: 289/293 — jw.) · PASS 3456 |
+| **S3-9** (C5b) | SB59 — wpis dzwonka | `f2f13536` (kod: `e67008e4`) | `sb3_armed_contact_smoke` 26 · 2 / 24 | 294/294 (kod: 290/294 — jw.) · PASS **3458** |
+
+- **S3-4** — `InvasionSystem._onVesselGroupVictory`: ciało bitwy = `location.planetId`; desant na nim, gdy jest kolonią gracza
+  w układzie; ciało bitwy, które nią nie jest — brak desantu (`target_not_player_colony`); zrzutowiec eskadry, która nie leci
+  już na to ciało — `squadron_not_landing`. `StrikeSquadronSystem`: wrak ostatniego żywego kadłuba eskorty eskadry w drodze →
+  `aborted` (`escorts_lost`), composite transportowca zdjęty od razu, transportowiec zatrzymany i odwołany do stolicy
+  (`OrderService.issueRecall`).
+- **S3-5** — etapy `launched` → `landed` (eskorta i transportowiec TRZYMAJĄ orbitę celu) → `returning` (wynik: `captured` /
+  `wave_destroyed` / `target_lost` / `escorts_lost` / `peace` / `not_landed`) → `closed` (transportowiec usunięty na orbicie
+  stolicy; niewylądowana fala znika z nim CICHO); pokój: `launched` / `landed` → `returning` (`peace`); `isHolding` (odwołanie
+  pomija trzymających), `hasSquadronUnderway`; audyt `squadron:closed`.
+- **S3-6** — klucze `squadronHpRatio` (0,1–10, domyślnie 1,0) i `squadronMaxShips` (1–24, domyślnie 3); `requiredSquadron`
+  mnoży przez klucz; sufit z klucza w wyborze celu, klasyfikacji odmowy i wysyłce; reguła uderzenia bez `maxShips` w danych;
+  `sbTuning()` → `{ tabela, flota, fala, eskadra }`.
+- **S3-7** — NEW `DirectorRetake` (reguła `retake_lost_colony`, bez rzutu, `delay: 0`, cooldown reguły 1,0 roku); kandydat =
+  ostatni wpis księgi BIEŻĄCEJ wojny „imperium → gracz”, ciało nadal gracza; `retakeDelayYears` (domyślnie 1) od straty,
+  `retakeCooldownYears` (domyślnie 5) od ostatniej WYSŁANEJ eskadry na to ciało; utracona stolica najpierw, potem porządek D11;
+  cel ponad sufit pomijany, przy za małej puli — odmowa `insufficient_squadron` bez spalenia cooldownu celu;
+  `EmpireRegistry.getLostCapitals` (`empire:capitalLost`); `GarrisonPlanner` — jedno źródło porządku D11; audyt
+  `director:retakeLaunched` / `director:retakeRefused`.
+- **S3-8** — `ProximitySystem` przez `isSameSystemStrict` (statek w skoku nie tworzy pary; para zamyka się przy skoku),
+  `ObservatorySystem` przez `systemIdOf` (wykrycie gaśnie przy skoku).
+- **S3-9** — `NotificationCenter`: wpis `armedContact` (warn, Dziennik — kanał wywiadu) przy pierwszym wykryciu uzbrojonego
+  wrogiego kadłuba w układzie z kolonią gracza; jeden na grupę (eskadra: `groupId`) albo na imperium w układzie w oknie
+  1,0 roku; pamięć w zapisie (`armedContact.seen` / `groups`, brak pola = pusta). i18n +2 klucze PL + EN:
+  `notif.armedContactTitle`, `notif.group.armedContact`.
+- **numstat** (blob, LF): S3-4 `InvasionSystem` 20/3, `StrikeSquadronSystem` 111/4, keeper 264/0 · S3-5 `DebugLog` 1/0,
+  `StrikeSquadronSystem` 165/6, `DirectorRecall` 3/0, keeper 262/0 · S3-6 `DirectorRuleData` 3/1, `StrikesBackData` 15/0,
+  `GameScene` 9/8, `DirectorOffensive` 18/13, `StrikeWavePlanner` 48/0, keeper 184/0 · R-S3b 11/3, 3/2, 2/1, 5/0 · S3-7
+  `DebugLog` 5/0, `DirectorRuleData` 22/0, `StrikesBackData` 12/0, `GameScene` 2/0, `EmpireRegistry` 22/0,
+  `StrikeSquadronSystem` 2/2, `DirectorOffensive` 13/0, `DirectorRetake` 193/0, `GarrisonPlanner` 34/11, `StrikeWavePlanner`
+  14/3, keeper 320/0 · S3-8 `ObservatorySystem` 4/1, `ProximitySystem` 6/1, `SystemScope` 2/1, keeper 178/0 · S3-9 `en.js`
+  2/0, `pl.js` 2/0, `NotificationCenter` 85/0, `NotificationDropdown` 2/0, keeper 244/0. Żaden commit nie odwraca całego
+  pliku. **EOL:** `DebugLog.js`, `DirectorRuleData.js`, `InvasionSystem.js`, `ObservatorySystem.js`, `ProximitySystem.js`,
+  `DirectorOffensive.js`, `defense_scope_smoke.mjs` — CRLF w drzewie właściciela zostają CRLF (`tools/eolwrite.py`).
+
+**Przecelowanie R-S3b — PROPOSED, czeka na zgodę** (`proposed/R-S3b.PROPOSED.md`): SB56 zmienia DOMYŚLNY mnożnik eskadry
+z 1,5 na 1,0 i robi z niego klucz — cztery keepery pinowały stan sprzed decyzji: **R-S3b-1** `defense_scope` T8 (stała
+1,5 → wartość domyślna klucza; sceny T10a/T17/T22 przy kluczu 1,5, asercje bez zmian) · **R-S3b-2** `w3_target_selection`
+T4 (scena przy kluczu 1,5) · **R-S3b-3** `sb1_fleet_tuning` T12b i `sb1_pool_warp_minimum` M4d (`sbTuning()` z polem
+`eskadra`). **Dowód mutacyjny** (`tools/mutate_RS3b.mjs`): kontrola zielona przed i po; **5 z 5 mutantów zabitych**.
+Bez zgody: commitowane mogą być wyłącznie S3-4 i S3-5; kod S3-6 – S3-9 zostaje zestagowany (cztery keepery czerwone).
+
+#### 5l.3 C6 — czas rundy (SB67): wynik ZALEŻY od czasu rundy ⇒ STOP, klucza nie ma `[measured]`
+
+Pomiar w prawdziwej grze (fixture GATE-S4, izolowany headless Chrome), czas rundy podmieniany przez serwer sondy (110 / 300 /
+600 ms), **sonda deterministyczna**: zegar `performance.now()` / `Date.now()` wirtualny, `Math.random` gry ziarnisty, osobny
+strumień losowań renderera, okno partii bitwy planetarnej na zegarze wirtualnym, dokładnie jedna klatka rAF na klatkę czasu,
+rysowanie 3D wstrzymane (renderer nie zmienia stanu gry). **Kontrola determinizmu:** ten sam przebieg dwa razy (110 i 110)
+— IDENTYCZNY. ⚠ Pierwsza wersja sondy (rAF i okno partii w czasie rzeczywistym) dała kontrolę NIEIDENTYCZNĄ w jednej scenie
+(losowania renderera w wywołaniach zwrotnych ładowania modeli wraków przesuwały strumień `Math.random` gry) — wyniki tej
+wersji nie są dowodem i nie stoją w tabeli.
+
+Scena (a) — 3 fregaty gracza z laserem, rozkaz `engage` na strażnika stolicy emp_001 (izolowanego), do 5 lat:
+
+| czas rundy | bitwy (rundy, strzały / trafienia, straty A / B, zwycięzca, odwrót) | strażnik |
+|---|---|---|
+| 110 ms | (20, 14/7, 0/0, B) · (11, 8/6, 1/0, B) · (11, 8/6, 1/0, B) | wygrywa trzy starcia, żyje |
+| 110 ms (kontrola) | identycznie | identycznie |
+| 300 ms | (16, 13/9, 1/0, B) · (11, 7/6, 1/0, B) · (10, 6/5, 0/0, A, odwrót B) · (1, 1/1, 0/1, A) | wypchnięty, potem zniszczony |
+| 600 ms | (20, 15/8, 0/0, B) · (13, 10/7, 0/0, A, odwrót B) · (1, 1/1, 0/1, A) | wypchnięty, potem zniszczony |
+
+Scena (c) — 3 fregaty gracza z laserem NA ORBICIE domu, 2 eskorty rakietowe emp_001 w ataku, do 2 lat: **110, 110
+(kontrola) i 600 ms — identycznie** (dwie pary starć: eskorta wycofuje się po 6 rundach, w następnym starciu ginie; 10
+strzałów / 9 trafień w każdym pierwszym starciu). Scena (sq) — eskadra 3 eskort + transportowiec na dom gracza z 3 fregatami
+na orbicie, do 7 lat: 110 i 600 ms — identyczna sygnatura (starcie 65,66: 20 rund, 33 strzały / 27 trafień, straty 1 / 2,
+wygrywa strona B, desant); ⚠ kontrola 110 ms w tej scenie różni się chwilą startu starcia (65,83) i trafieniami (29) przy tym
+samym zwycięzcy, stratach i wrakach — resztkowy niedeterminizm sondy w długim locie (źródło niezbadane), więc scenę (sq)
+porównuję wyłącznie na poziomie wyniku. Wniosek oparty na scenie (a), która ma kontrolę identyczną co do strzału.
+
+**Mechanizm** `[code]` `[measured]`: liczba rund i losowania rundy nie zależą od czasu rundy (ziarno = rok startu starcia +
+numer rundy, odliczanie broni w krokach rundy), ale rundy biegną w czasie RZECZYWISTYM, a między nimi gra płynie dalej na
+zegarze gry (auto-slow przy walce: 1 d/s): 110 ms = 0,11 dnia gry na rundę, 600 ms = 0,6 dnia — zmierzone: pierwsze starcie
+(20 rund) trwa 0,006 roku przy 110 ms i 0,032 roku przy 600 ms. Ruch na zegarze gry (rozkaz `engage` fregat, orbita ciała
+strażnika) przesuwa geometrię między rundami — przy 300 i 600 ms strona strażnika w drugim albo trzecim starciu wycofuje się
+(`odwrót B`) i ginie w następnym. Przebiegu geometrii runda po rundzie nie mierzyłem `[derived]`. Ta sama zależność dotyczy
+prędkości gry, którą gracz ustawi w trakcie starcia (auto-slow można przestawić).
+**Decyzja SB67 nie jest spełniona — klucza czasu rundy NIE MA** (Finding **438**). Celność strażnika (dwie rakiety, tracking
+0,5 × 1,5 × (1 − 0,20) = 0,60 wobec fregaty): 85/135 = 0,63 (pierwsza macierz, 8 przebiegów) i 39/71 = 0,55 (macierz
+deterministyczna, 4 przebiegi) — zgodne z 0,60; 8/9 z bramki S3A to mała próba (P(≥ 8 z 9 | 0,6) ≈ 0,07).
+
+#### 5l.4 M6 — pętla odbijania na fixture `[measured]`
+
+Kod = łańcuch C1–C5b w klonie; gra po angielsku; sonda deterministyczna jak w C6 (render 3D wstrzymany, klatka rAF co 16
+klatek czasu w M6), czas w trybie klatek przy 1 m/s poza walką, auto-slow przy walce zostaje. Scena: wojna z emp_001; gracz
+zdobywa „Propus c” (`entity_116`, pełna kolonia emp_001 w układzie jej stolicy, 2,9–3,3 AU od stolicy) PRODUKCYJNĄ ścieżką
+przejęcia (`captureColonyForPlayer` — wpis w księdze wojny); na ciele U jednostek szturmowych gracza, na orbicie S fregat
+gracza z laserem; 10 lat gry. **19 przebiegów:** 9 komórek odbijania po 10 lat (U × S, w tym powtórka 0 / 0 z innym ziarnem)
+· 1 z widokiem na układ celu (4 lata) · 2 sceny „fala 0,1” (druga to powtórka z dodatkowym rejestratorem) · kontrole pokoju
+i wcześniejszej wojny (po 6 lat) · 5 scen ostrzeżenia (do desantu, najwyżej 6 lat). Sondy: `probes/m6/` (poza repo).
+
+| U / S | reguła (lat po stracie) | eskorta / potrzebne | lot | bitwa w przestrzeni | bitwa planetarna | desant | przejęcie (mies. od desantu) | polegli gracz / AI | eskadra potem |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 / 0 | 1,00 | 1 / 1 | 7 mies. | — | AI wygrywa | na CELU | 11 | 0 / 0 | transportowiec usunięty w stolicy, eskorta na orbicie stolicy |
+| 4 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | 20 | 4 / 1 | jw. |
+| 8 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | 23 | 8 / 3 | jw. |
+| 0 / 3 | 1,00 | 3 / 3 | 6,7 | AI wygrywa (3 fregaty gracza wrakami, 2 eskorty AI wrakami) | AI | na celu | 9,3 | 0 / 0 | jw. (1 eskorta wraca) |
+| 4 / 3 | 1,00 | 3 / 3 | 6,7 | jw. | AI | na celu | 18,3 | 4 / 1 | jw. |
+| 8 / 3 | 1,00 | 3 / 3 | 6,7 | jw. | AI | na celu | 27,3 | 8 / 2 | jw. |
+| 16 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | 70 | 16 (10 w walce, 6 z głodu w 66,2–67,1) / 3 | trzyma orbitę 5,9 roku, potem jw. |
+| 24 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | nie do końca przebiegu | 24 (10 w walce, 14 z głodu w 69,2–70,0) / 2 | trzyma orbitę celu 8,4 roku (etap `landed`) |
+| 8 / 0, fala 0,1 | 1,00 i 6,00 | 1 / 1 (dwa razy) | 7 / 5,9 | — | AI (dwa razy) | na celu (1 jednostka, dwa razy) | pierwsza fala zniszczona po 14 mies.; druga — przejęcie po 13 mies. | 1 w walce + 7 rozwiązanych `no_credits` w 63,87 / 1 | `wave_destroyed` → druga eskadra dokładnie 5 lat po pierwszej → `captured` |
+
+- **Odpalenie:** reguła wysyła eskadrę dokładnie rok po zdobyciu (61,37 przy zdobyciu w 60,37), z eskortą równą potrzebnej
+  (obrona bez statków = obrona symboliczna 30 HP ⇒ 1 kadłub; z 3 fregatami gracza na orbicie ⇒ 3 kadłuby — sufit).
+- **Desant zawsze na CELU** (SB64), nigdy na domu gracza; desant = ładunek (6 jednostek).
+- **Trzymanie orbity (SB63):** eskorta i transportowiec stoją nad celem do rozstrzygnięcia walki naziemnej; transportowiec
+  wraca i znika w stolicy (434 zamknięty w pomiarze), eskorta wraca na orbitę stolicy. Przy 24 obrońcach walka naziemna
+  trwała 8 lat (obrońcy zginęli w końcu z głodu) — eskadra trzymała orbitę cały ten czas, a imperium nie mogło wysłać
+  innej eskadry (Finding **440**).
+- **Druga próba po cooldownie:** przy domyślnej fali (6 jednostek) każda pierwsza eskadra brała ciało — drugiej próby nie
+  było. Scena z kluczem właściciela `strikeWaveShare` 0,1 (fala 1 jednostki) przeciw 8 obrońcom: pierwsza fala zniszczona po
+  14 mies. (eskadra `wave_destroyed` → powrót, transportowiec usunięty), druga eskadra wysłana DOKŁADNIE 5 lat po pierwszej
+  (66,37 wobec 61,37 — `retakeCooldownYears`), przejęcie 13 mies. po drugim desancie. ⚠ Między próbami pozostałe 7 jednostek
+  gracza rozwiązano z braku kredytów (`no_credits`, 63,87 — utrzymanie z kasy zdobytej kolonii; jednostki postawione przez
+  sondę), więc druga fala lądowała na niebronione ciało. Powtórka tej sceny z dodatkowym rejestratorem — przebieg identyczny
+  co do klatki (kontrola determinizmu M6).
+- **Kontrole:** POKÓJ 0,1 roku po zdobyciu — reguła nie odpala przez 6 lat (guard wojny), ciało zostaje gracza. Ciało zdobyte
+  w POPRZEDNIEJ wojnie (pokój, koniec rozejmu, druga wojna) — księga drugiej wojny pusta, reguła nie odpala, ciało zostaje
+  gracza (skutek decyzji SB57 + Findingu **298**: ciało zatrzymane pokojem status quo nie jest odbijane w żadnej kolejnej
+  wojnie).
+- **Finding 55** (`no_grid`): cel odbijania (kolonia pochodzenia AI) ma siatkę od założenia — w żadnym przebiegu desant nie
+  dostał `no_grid` (blokady w M6: wyłącznie `squadron_not_landing` i `no_drop_capable_hull` przy zwykłym uderzeniu na to
+  samo ciało). 55 dotyczy kolonii założonych przez gracza przed pierwszym otwarciem mapy — naprawa w S4 bez zmian.
+- **Wpis dzwonka (SB59) przy odbijaniu:** widok na układzie domowym, bez statków gracza przy celu — wpisu „Armed enemy
+  warship” NIE MA (obserwatorium wykrywa wyłącznie w oglądanym układzie — **191**); pierwsza wiadomość to alarm „⚔ Troops
+  landing on Propus c!” w chwili desantu (Finding **439**). Z 3 fregatami gracza na orbicie celu — wpis 2,6 mies. przed
+  desantem (zmysły fregat); z widokiem na układ Propus — 1,9 mies. przed desantem (kolonia: 1 AU).
+- **Ostrzeżenie przed eskadrą międzyukładową na dom gracza** (widok domowy; 3 eskorty + transportowiec; skok do układu domu
+  0,51 roku po starcie, dolot z obrzeża ~30 AU — 57–62 mies. od skoku do desantu):
+
+| wykrywanie | pierwszy wpis „Armed enemy warship” → desant |
+|---|---|
+| kolonia bez obserwatorium (1 AU), bez okrętów | 1,9 mies. |
+| jw. + 3 fregaty gracza na orbicie domu (zmysły 1,6 AU) | 1,9 mies. (zbliżenie wykryło 0,05 roku przed kolonią) |
+| obserwatorium poziom 1 (3 AU) | 3,6 mies. |
+| obserwatorium poziom 2 (6 AU) | 7,3 mies. |
+| obserwatorium poziom 3 (15 AU) | 25,4 mies. |
+
+  W każdym przebiegu dokładnie JEDEN wpis na przylatującą grupę.
+- **Uprząż C1** (pokój, 100 lat, oba ziarna, trzy warianty) na kodzie łańcucha i na `055f1b7`: **6 / 6 identycznych**.
+- **Poza zakresem sesji (wyłącznie raport):** wojna z inicjatywy AI — S4 · „przypięcie” DSCS (**426**, SB50 — zostaje) ·
+  balans obrony naziemnej: 4–24 jednostki szturmowe gracza nie zatrzymały fali 6 jednostek AI (morale 100, 2 × artyleria
+  rakietowa) w żadnej komórce; obrońcy na zdobytym ciele giną z głodu po ok. 6 latach (16 obrońców) i 9 latach (24) albo są rozwiązywani
+  z braku kredytów (scena „fala 0,1”; utrzymanie z kasy zdobytej kolonii) — rodzina **430** · naprawa **55** — S4 ·
+  ponowna synchronizacja floty gracza po bitwie w locie (**437**, SB62).
+
+**Co zobaczy właściciel:** rok gry (≈ 12 s przy 1 m/s) po zdobyciu kolonii imperium w jego układzie stolicy przy stolicy pojawia
+się transportowiec z eskortą; po ok. 7 miesiącach — okno bitwy planetarnej nad zdobytym ciałem i alarm „⚔ Troops landing on
+…!”; jeśli nie patrzy na ten układ i nie ma tam okrętów, to pierwsza wiadomość o eskadrze. Po 9–27 miesiącach walki naziemnej
+(wpisy „Losing ground: …”) — „⚠ Colony lost: …”; transportowiec znika w stolicy imperium. Wpis dzwonka „⚠ Armed enemy warship
+in the … system” pojawia się raz na grupę — w układzie, który ogląda, albo gdy jego okręty są blisko.
+
+#### 5l.5 Bramka S3B — scenariusz zwalidowany w prawdziwej grze
+
+`gate/GATE_S3B.md` w folderze przekazania (gra po ANGIELSKU, jedna linia konsoli na krok, wartości zmierzone, tryb klatek,
+kontrola na `055f1b7`, własności zamiast identyfikatorów): klucze strojenia SB56/SB57 · gracz zdobywa ciało emp_001
+(narzędzie) · reguła odbijania odpala SAMA · eskadra leci razem · bitwa · desant na CELU · ciało wraca do emp_001 · eskorta
+i transportowiec wracają, transportowiec znika w stolicy · eskadra przerwana po utracie eskorty · wpis dzwonka przy pierwszym
+wykryciu · pokój zawraca eskadrę. **Walidacja na kodzie łańcucha — dwa pełne przebiegi, wszystkie własności spełnione,
+0 wyjątków i błędów konsoli poza 404:** reguła odpala 1,00 i 1,08 roku po zdobyciu (eskorta 1 = potrzebne 1, fala 6); lot
+6,7–6,8 mies., przylot razem (rozrzut 0 dni); bitwa wygrana przez emp_001; desant NA CELU, 6 jednostek z ładowni; ciało
+odbite 9,3 i 10,2 mies. po desancie; transportowiec usunięty w stolicy, eskorta wraca; eskadra po utracie eskorty zamknięta
+w domu (`escorts_lost`, 6 jednostek rozwiązanych, desantu nie było); wpis dzwonka raz na grupę, 1,51–1,55 AU od domu,
+przylot transportowca za 1,8 i 8,8 mies. (położenie domu na orbicie); pokój zawraca eskadrę, zamknięta po 1,23 roku. W
+części IV jedno okno bitwy spoza scenariusza: zwykłe uderzenie emp_001 na ciało, które zostało graczowi po części III —
+desant zablokowany `no_drop_capable_hull`. **Kontrola na `055f1b7`** (ten sam scenariusz): kluczy i reguły nie ma (odmowy
+`unknown_key`), zdobyte ciała zostają gracza i emp_001 bije je zwykłymi uderzeniami (3 bitwy, desant zablokowany), wpisu
+dzwonka brak, a eskadra z dźwigni leci na dom do skutku — pokój jej nie zawraca i ląduje na domu gracza. C6 nie wszedł — krok
+klucza czasu rundy nie istnieje.
+
+#### 5l.6 Pytania do właściciela
+
+1. **Zgoda na przecelowanie R-S3b** (R-S3b-1, R-S3b-2, R-S3b-3; dowód mutacyjny 5/5) — bez niej mogą wejść wyłącznie S3-4
+   i S3-5; S3-6 – S3-9 zostają zestagowane.
+2. **438 — czas gry w trakcie starcia:** dziś płynie (auto-slow 1 d/s) i dlatego wynik zależy od czasu rundy i od prędkości
+   gry. Czy ma (a) płynąć jak dziś (czas rundy zostaje 110 ms, bez klucza), (b) stać na czas starcia, (c) płynąć stałym krokiem
+   na rundę? Przy (b) albo (c) czas rundy da się uczynić kluczem (tempo dla oka, **436**).
+3. **439 — wpis dzwonka poza oglądanym układem:** czy kolonia / obserwatorium ma wykrywać we własnym układzie niezależnie od
+   widoku (rodzina **191**)? Dziś o eskadrze odbicia gracz dowiaduje się z alarmu desantu.
+4. **440 — trzymanie orbity bez limitu czasu:** przy dużej obronie naziemnej eskadra stoi nad celem latami, a imperium nie
+   wyśle w tym czasie innej eskadry — limit (np. powrót po N latach) czy zostaje?
+5. **Reguła odbijania — odczytania zakodowane (proszę potwierdzić):** ocena raz na rok wyświetlany (cooldown reguły 1,0);
+   cel w zasięgu sufitu przy za małej puli → odmowa i czekanie (bez schodzenia do następnego celu); eskorta = dokładnie
+   potrzebna liczba; placówki bez złoża Xe / Nt na końcu kolejki; niewylądowana fala znika CICHO z transportowcem w stolicy;
+   po utracie stolicy eskadra formuje się przy stolicy zastępczej (`capitalOf`), bez pełnej kolonii — odmowa `no_capital`.
+6. **SB56 przy 1,0:** obrona równa HP jednego kadłuba (np. wieża Lv3, 120 HP) dostaje JEDEN rajder zamiast dwóch — tak?
+7. **151 — reszta:** trzy utajone filtry `FleetManagerOverlay` (`commandTacticalMap: false`) mają tę samą koercję; pinuje je
+   dosłownie `fleet_engage_scope_smoke` T12c/T12d (dokument zakresu 166). Zostają czy przecelować te piny (zgoda)?
+8. **Nowe klucze i18n (S3-9):** „⚠ Uzbrojony wrogi okręt w układzie {0}” / „⚠ Armed enemy warship in the {0} system”,
+   „Uzbrojone kontakty” / „Armed contacts” — brzmienie OK?
+9. **298 × SB57:** ciało zatrzymane pokojem status quo nie jest odbijane w żadnej kolejnej wojnie (reguła czyta księgę
+   BIEŻĄCEJ wojny; kontrola M6) — zamierzone?
+10. **Bramka S3B** — przed commitem czy po?
+
+#### 5l.7 Następny krok
+
+Po zgodzie na R-S3b i bramce S3B: commity skryptem (`tools/commit_S3B.sh --with-RS3b "<zgoda>"` albo `commit_S3B.sh`, potem
+`commit_S3B_rest.sh "<zgoda>"`). **S4** — wojna z inicjatywy AI i kampania układ po układzie; Finding **55** (naprawa).
+
 ---
 
 ## 6. Rejestr findingów arca (#391–#396, zebrane 2026-10-06)
@@ -2040,6 +2288,9 @@ strzałów (200 trafień), eskorty 20/20 (§5j.3). Asymetria: gdy obrońcą jest
 `null`) liczony jak statek oglądanego układu, na współrzędnych sprzed skoku; przy obserwatorium poziomu 4+ (zasięg ∞)
 dotyczyłoby KAŻDEGO skoku `[derived: notatka S2b §9.3, F4]`. Ta sama klasa co **151** (`ProximitySystem:187`).
 → **S3, sesja 2 (SB59):** razem z 151 i wpisem dzwonka o uzbrojonym wrogim kadłubie.
+⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S3-8 (zestagowana, NIE zacommitowana; §5l.2):** `systemIdOf(v) !== sysId` —
+statek w skoku nie jest w oglądanym układzie, wykrycie gaśnie przy skoku; keeper `sb3_warp_transit_scope_smoke` T2.
+Zamknięcie — przy commicie S3-8.
 
 ### ⚪ 428 — punkt przylotu po skoku losowany osobno dla każdego statku
 
@@ -2086,6 +2337,10 @@ transportowiec stoi na orbicie domu gracza z pustą ładownią do końca przebie
 desancie. Do decyzji przy S3/2 (SB58 — eskorta trzyma orbitę do rozstrzygnięcia walki naziemnej).
 → **SB63 (2026-10-12):** transportowiec zostaje z eskortą nad celem, aż walka naziemna się rozstrzygnie; potem wszyscy
 wracają do stolicy istniejącym odwołaniem; transportowiec znika, gdy zadokuje przy stolicy — S3, sesja 2.
+⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S3-5 (zestagowana, NIE zacommitowana; §5l.2):** etapy `launched` → `landed`
+(trzymanie orbity) → `returning` → `closed`; transportowiec usuwany na orbicie stolicy. M6 (§5l.4): w każdej eskadrze
+transportowiec znika w stolicy po rozstrzygnięciu walki naziemnej, eskorta wraca na orbitę stolicy `[measured]`.
+Zamknięcie — przy commicie S3-5.
 
 ### ⚪ 435 — samotny NIEUZBROJONY transportowiec wygrywa bitwę planetarną z niebronioną kolonią i ląduje
 
@@ -2101,6 +2356,9 @@ całej eskorty po drodze — niezmierzony.
 Do decyzji: czy wygrana BEZ broni nad kolonią bez obrony ma dawać dominację (SB7 — „desant dopiero po wygraniu orbity”).
 → **SB66 (2026-10-12):** transportowiec, który stracił całą eskortę, zawraca do stolicy, a eskadra jest przerywana;
 reguły bitwy planetarnej bez zmian — S3, sesja 2.
+⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S3-4 (zestagowana, NIE zacommitowana; §5l.2):** wrak ostatniej eskorty eskadry
+w drodze → `aborted` (`escorts_lost`), transportowiec odwołany do stolicy, desantu nie ma; keeper
+`sb3_landing_abort_smoke` T3. Zamknięcie — przy commicie S3-4.
 
 ### #436–#437 — S3, zamknięcie sesji 1 (2026-10-12)
 
@@ -2118,6 +2376,7 @@ ze strażnikiem przegrane w ok. pół sekundy, zanim właściciel zdążył zapa
 właściciela: „walki odbywają się zbyt szybko albo czas mamy ustawiony zły do bitew”.
 → **SB67 (2026-10-12):** czas rundy jako klucz strojenia (domyślnie dzisiejsza wartość) WYŁĄCZNIE, jeśli pomiar pokaże, że
 wyniki bitew od niego nie zależą — S3, sesja 2.
+→ **C6 (S3/2, 2026-10-13; §5l.3):** wynik ZALEŻY od czasu rundy — klucza nie ma; Finding **438**.
 
 ### ⚪ 437 — flota GRACZA po bitwie w locie wznawia lot osobno (SB62)
 
@@ -2127,6 +2386,41 @@ bitwie w locie każdy członek wznawia lot z własnym przechwyceniem (`DeepSpace
 `VesselManager._resumeMissionAfterOrder`) i flota może dolecieć w kilku chwilach. Zachowanie niezmierzone (pytanie 3 sesji 1,
 §5j.5).
 **SB62 (2026-10-12):** zostaje; wyłącznie raport.
+
+### #438–#440 — S3, sesja 2 (2026-10-13)
+
+⚠ **Registry-first (2026-10-13):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#437**; trafienia „438”–„449” to numery linii i wartości tabel, nie findingi `[measured]`.
+Źródło: C6 i M6 sesji 2 (§5l.3, §5l.4).
+
+### ⚪ 438 — wynik starcia w przestrzeni zależy od czasu rundy (i od prędkości gry w trakcie starcia)
+
+`[code]` `DeepSpaceCombatSystem` — runda co `ROUND_INTERVAL_MS` czasu REALNEGO, a między rundami gra płynie dalej na zegarze
+gry (auto-slow przy walce: 1 d/s); ruch na zegarze gry (rozkazy, orbity) działa między rundami. `[measured]` C6 (§5l.3,
+sonda deterministyczna z kontrolą 110 = 110): scena (a) — przy 110 ms strażnik stolicy wygrywa trzy starcia i żyje; przy 300
+i 600 ms ta sama scena kończy się odwrotem strony strażnika i jego zniszczeniem; pierwsze starcie trwa 0,006 roku gry przy
+110 ms i 0,032 roku przy 600 ms. Skutek: **SB67 nie jest spełniony — klucza czasu rundy nie ma**; ten sam mechanizm sprawia,
+że wynik zależy od prędkości gry ustawionej przez gracza w trakcie starcia.
+Do decyzji: czy czas gry w trakcie starcia ma płynąć (dziś tak), czy ma stać albo płynąć stałym krokiem na rundę — dopiero
+wtedy czas rundy (tempo dla oka, Finding **436**) da się uczynić kluczem strojenia.
+
+### 🟠 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
+
+`[code]` wpis `armedContact` (`NotificationCenter`, S3-9) ma dwa źródła wykrycia: obserwatorium — WYŁĄCZNIE w oglądanym
+układzie (`ObservatorySystem._tickVesselDetection` klucza `activeSystemId` — Finding **191**) — i zmysły statków gracza
+(`vessel:proximityEnter`). `[measured]` M6 (§5l.4): eskadra odbicia na zdobyte ciało w układzie stolicy emp_001, widok na
+układzie domowym, bez okrętów gracza przy celu — **zero** wpisów „Armed enemy warship”; pierwsza wiadomość to alarm „⚔ Troops
+landing on …!” w chwili desantu. Z widokiem na ten układ — wpis 1,9 mies. przed desantem; z 3 fregatami gracza na orbicie
+celu — 2,6 mies.
+Do decyzji: czy obserwatorium (albo sama kolonia) ma wykrywać w swoim układzie niezależnie od widoku (rodzina **191**).
+
+### ⚪ 440 — eskadra odbicia trzyma orbitę celu przez całą walkę naziemną, także przez lata; w tym czasie imperium nie wyśle innej eskadry
+
+`[code]` SB63: etap `landed` trwa do rozstrzygnięcia walki naziemnej (ciało zdobyte albo żadna jednostka desantu nie żyje);
+reguła odbijania ma guard `empireHasNoSquadronUnderway` (etap `landed` to eskadra w drodze). `[measured]` M6 (§5l.4), 24
+jednostki szturmowe gracza na celu: walka naziemna od 61,95; od 64,7 do 69,2 bez strat po żadnej stronie; obrońcy giną
+w końcu z GŁODU (14 jednostek w 69,2–70,0); do końca przebiegu (70,37) ciało nie przejęte — eskadra trzyma orbitę 8,4 roku.
+Obserwacja projektu (czy trzymanie ma mieć limit czasu; czy głód obrońców na własnej kolonii jest zamierzony — niezbadane).
 
 ---
 

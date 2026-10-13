@@ -1343,6 +1343,12 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      (lustro `131cc2e` odpala PRZED DSCS) → 0 starć, a rozkaz NIGDY nie gaśnie (`_tickEngageOrder` gasi tylko na
      wrak; po „przylocie" celu w `sys_020` wciąż aktywny, 45 emitów/60 tików). Dla producenta `_handleFleetEngage`
      wejście zamknięte przez 166; ogólna klasa (trzy pozostałe site'y + `ProximitySystem:187`) — dalej TUTAJ.
+     ⏳ **DOPISANE 2026-10-13 (AI STRIKES BACK S3/2, S3-8 — PRZYGOTOWANE i ZESTAGOWANE, NIE zacommitowane):**
+     `ProximitySystem._checkPair` przez kanon `isSameSystemStrict` (statek w skoku nie tworzy pary, aktywna para zamyka się
+     przy skoku) i bliźniak w `ObservatorySystem._tickVesselDetection` (Finding **427**, `systemIdOf`). Trzy filtry
+     `FleetManagerOverlay` zostają (utajone za `commandTacticalMap: false`; `fleet_engage_scope_smoke` T12c/T12d pinują je
+     dosłownie jako dokument zakresu 166). ⚠ Korekta: `:658` to nie „radar / atlas”, tylko domyślny zakres orbit kamery
+     (`_getMaxOrbitAU`). Zamknięcie dwóch żywych miejsc — przy commicie S3-8 (`AI_STRIKES_BACK_PLAN.md` §5l).
 
 152. 🟠 **POI nie ma pojecia ukladu — i nie da sie tego zalatac guardem.** `POIRuntimeSystem._tickPicket`
      (`:133`) i `_tickRally` (`:186`) licza `gameplayDistance(center, vessel.position)` po pelnej liscie

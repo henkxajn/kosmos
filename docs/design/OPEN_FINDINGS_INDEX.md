@@ -523,6 +523,22 @@
 >   sekundy (SB67 — najpierw pomiar, S3/2) · ⚪ **437** flota gracza po bitwie w locie wznawia lot osobno (SB62 — raport).
 > • **434** → SB63 · **435** → SB66 · **55** → SB65 (pomiar w S3/2, naprawa w S4).
 > • Następny: **S3, sesja 2** (SB56–SB59, SB63–SB67).
+>
+> **Aktualizacja 2026-10-13 — AI STRIKES BACK: S3, sesja 2 z 2 PRZYGOTOWANA** (łańcuch S3-4 – S3-9 ZESTAGOWANY, NIE
+> zacommitowany; przecelowanie R-S3b czeka na zgodę właściciela). Audyt, łańcuch, C6, M6 i bramka: `AI_STRIKES_BACK_PLAN.md`
+> §5l. Sweep łańcucha (klon, baza `055f1b7`): 289 → 290 → 286/290 (kod; czerwone wyłącznie 4 keepery R-S3b) → 291 (z R-S3b)
+> → 292 → 293 → 294/294; `check-i18n` 3456 → **3458** (+2 klucze PL + EN); save v101 bez migracji.
+> • **Naprawy PRZYGOTOWANE (zamknięcie przy commicie):** ⚪ **435** (S3-4, SB66) · ⚪ **434** (S3-5, SB63) · 🟠 **427**
+>   i 🟠 **151** (S3-8; 151 — dwa żywe miejsca; trzy utajone filtry `FleetManagerOverlay` zostają, pinowane przez 166).
+> • **C6 (SB67) — STOP:** wynik starcia zależy od czasu rundy — klucza nie ma (Finding **438**).
+> • **NOWE: #438–#440** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — ⚪ **438** wynik starcia zależy od czasu rundy (i od
+>   prędkości gry w trakcie starcia) · 🟠 **439** wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się w układzie,
+>   którego gracz nie ogląda (rodzina **191**) · ⚪ **440** eskadra odbicia trzyma orbitę celu przez całą walkę naziemną
+>   (8,4 roku w M6) i w tym czasie imperium nie wyśle innej eskadry.
+> • **55** (SB65) zmierzony: cel odbijania (kolonia pochodzenia AI) ma siatkę — `no_grid` nie wystąpił w M6; naprawa — S4.
+> • Bramka S3B (`ai-strikes-back-s3b/gate/GATE_S3B.md`) zwalidowana w prawdziwej grze: dwa przebiegi na kodzie łańcucha —
+>   wszystkie własności, 0 błędów konsoli; kontrola na `055f1b7`.
+> • Następny: zgoda na R-S3b, bramka S3B w przeglądarce właściciela i commity sesji 2; **S4**.
 
 
 ---
@@ -650,8 +666,9 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **151** | 🟠 | `ProximitySystem:187` ma własną koercję `?? 'sys_home'`, która połyka `null` = tranzyt warp | bramkuje **detekcję i intel**, nie tylko walkę |
-| **427** | 🟠 | `ObservatorySystem.js:590` — `(v.systemId ?? sysId) !== sysId`: statek w skoku (`systemId` `null`) liczony jak statek oglądanego układu, na współrzędnych sprzed skoku; obserwatorium 4+ (zasięg ∞) — każdy skok `[derived]` | klasa **151**; → S3, sesja 2 (SB59). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **151** | 🟠 | `ProximitySystem:187` ma własną koercję `?? 'sys_home'`, która połyka `null` = tranzyt warp | bramkuje **detekcję i intel**, nie tylko walkę; **S3-8 (S3/2) PRZYGOTOWANE:** `ProximitySystem` przez `isSameSystemStrict` — zamknięcie przy commicie; trzy utajone filtry FMO zostają |
+| **427** | 🟠 | `ObservatorySystem.js:590` — `(v.systemId ?? sysId) !== sysId`: statek w skoku (`systemId` `null`) liczony jak statek oglądanego układu, na współrzędnych sprzed skoku; obserwatorium 4+ (zasięg ∞) — każdy skok `[derived]` | klasa **151**; naprawa PRZYGOTOWANA — S3-8 (S3/2, zestagowana), zamknięcie przy commicie. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **439** | 🟠 | wpis dzwonka `armedContact` (SB59) wymaga wykrycia przez obserwatorium OGLĄDANEGO układu (**191**) albo zmysły statku gracza — M6: eskadra odbicia w układzie stolicy AI, widok domowy, bez okrętów przy celu ⇒ zero wpisów, pierwsza wiadomość = alarm desantu; z widokiem na ten układ — 1,9 mies. przed desantem | do decyzji (rodzina **191**). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **152** | 🟠 | POI **nie ma pola `systemId` w ogóle** | naprawa = nowe pole + **migracja zapisu** |
 | **153** | 🟠 | `EmpireLogisticsSystem:240-242` dobiera outposty bez terminu układu, kurier bez warpu | **osiągalność NIEZMIERZONA** |
 | **154** | 🟠 | `AutoRetreatSystem._findNearestFriendlyPlanet` dalej bez terminu układu | **ŻYWA** przez trzy przyciski „Powrót do bazy" (`FMO:4581`, `FleetGroupPanel:445`, `FleetCommandPanel:384`) |
@@ -702,7 +719,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **164** | 🟠 | przełącznik auto-slow **nie ma producenta** — `time:autoSlowToggle` zero nadawców, pole nieserializowane ⇒ gracz **nie może** tego wyłączyć; resztki w `time:display` i `BottomBar` |
 | **165a** | 🟠 | obrona orbitalna **nie ma PRZEBIEGU** — jedno `resolveBattle`, brak `vessel:engaged`, brak rund ⇒ walka o stolicę jest wyłącznie wynikiem po fakcie |
 | **W3-26** | 🟠 | `playerVesselsToBattleUnit([])` fabrykuje obrońcę `{hp:100, weapons:[]}`; fantom pinowany jako zachowanie silnika, kandydat do balansu |
-| **435** | ⚪ | samotny NIEUZBROJONY transportowiec (`hull_large`, 180 HP) wygrywa bitwę planetarną z kolonią bez statków i bez budynków obrony (obrona symboliczna `WarSystem._buildPlayerBattleUnit` 30 HP, broń 2; limit 30 tur — przewaga HP; D-199-6) i ląduje — kontrola M5: te same kadłuby wysłane osobno, 3/3, dom pada po 11,2–12,0 mies.; w eskadrze (S3-2) transportowiec nie przylatuje przed eskortą (0 z 47 przylotów) | do decyzji: czy wygrana bez broni daje dominację (SB7); → **SB66** (2026-10-12): eskadra bez eskorty przerywana, transportowiec zawraca — S3, sesja 2. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **435** | ⚪ | samotny NIEUZBROJONY transportowiec (`hull_large`, 180 HP) wygrywa bitwę planetarną z kolonią bez statków i bez budynków obrony (obrona symboliczna `WarSystem._buildPlayerBattleUnit` 30 HP, broń 2; limit 30 tur — przewaga HP; D-199-6) i ląduje — kontrola M5: te same kadłuby wysłane osobno, 3/3, dom pada po 11,2–12,0 mies.; w eskadrze (S3-2) transportowiec nie przylatuje przed eskortą (0 z 47 przylotów) | do decyzji: czy wygrana bez broni daje dominację (SB7); → **SB66** (2026-10-12): eskadra bez eskorty przerywana, transportowiec zawraca — naprawa PRZYGOTOWANA: S3-4 (S3/2, zestagowana), zamknięcie przy commicie. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **311** | 🟠 | `SupplyCoverageSystem.js:162` zapisuje legacy jednostce gracza `supply = 0` przez `?? 0` ⇒ zero obrażeń + atrycja (klasa 65, inne pole) |
 | **313** | ⚪ | `_tryRetreat` zostawia `_path`, zawsze ucieka w +q, wchodzi na obcy kafel — rozszerza **56** |
 | **314** | ⚪ | martwe człony `_scoreTarget` `'scout'`/`'ranged'` (`CombatSystem.js:361`, `:364`) — instancje noszą lustro legacy |
@@ -713,8 +730,10 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **373** | ⚪ | akcje silnika bez bramki `'in_cargo'` — `GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`); `moveUnit` ma ją od F7 (`f90bc14`); z UI nieosiągalne po przycinaniu zaznaczenia (F7) — później. `AI_GARRISON_PLAN.md` §6 |
 | **426** | ⚪ | „przypięcie” DSCS: kadłub AI w ataku dostaje `dockedAt` = ciało, którego orbitę trzymają statki gracza, i przeskakuje na nie (0,245–0,30 AU); asymetria — gracz nie jest przyciągany do strażnika AI; SB50: zostaje w S3 |
 | **432** | ⚪ | limit 20 rund starcia DSCS: przegrana strona idzie na wrak także żywymi okrętami poza zasięgiem — część E S2b: 9 żywych w scenach (a)/(b); po S3-1 (SB49): 1 i 3 |
-| **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2); **C6: wynik ZALEŻY od czasu rundy — klucza nie ma (438)**. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **437** | ⚪ | flota GRACZA po bitwie w locie wznawia lot osobno — ponowna synchronizacja (`OrderService._regroupAfterBattle`) obejmuje wyłącznie grupy z `mission.groupId` (eskadra AI) | **SB62**: zostaje, wyłącznie raport; niezmierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; do decyzji: czy czas gry ma płynąć w trakcie starcia. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **440** | ⚪ | eskadra odbicia trzyma orbitę celu przez całą walkę naziemną (SB63) — M6, 24 obrońców: 8,4 roku do końca przebiegu; guard `empireHasNoSquadronUnderway` blokuje w tym czasie każdą inną eskadrę imperium | obserwacja projektu (limit trzymania?). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **422** | ⚪ | misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4) — przylot na czas i bez przeskoku z konstrukcji (kurierzy: przylot − ETA ≤ 0,006 roku, przeskok ≤ 0,010 AU), prędkości lotu nie zmierzono | raport do zamknięcia arca (SB47). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **423** | ⚪ | rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5) — `_computeInterceptPoint` z `target.velocity`, zerowanej dla kadłuba zadokowanego i orbitującego | raport do zamknięcia arca (SB47); osiągalność niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
 
@@ -758,7 +777,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **49** | 🟠 | ⚠ **KOREKTA 2026-10-02 — zamknięty po stronie DANYCH**: `transport_assault` jest w katalogu od `0e6ea0d`; **nikt go nie zamawia** (jedyny `template:` w regułach to `science_probe`) ⇒ reszta żyje jako **201** | `W3_PLAN.md` §49 · `AI_GARRISON_PLAN.md` §7 |
 | **53** | 🟠 | „wieczna inwazja" na placówce gracza — rekord `active:true` nie może wygasnąć i trafia do **każdego** zapisu | |
 | **54** | 🟠 | startowy garnizon gracza wisi na **efekcie ubocznym UI**; kolonie wtórne i placówki: 0 jednostek na zawsze | |
-| **55** | 🟠 | kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy ⇒ `launchInvasion` zwraca `no_grid` | dotyczy też desantu z ładunku; → **SB65** (2026-10-12): pomiar w S3/2, naprawa w S4 |
+| **55** | 🟠 | kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy ⇒ `launchInvasion` zwraca `no_grid` | dotyczy też desantu z ładunku; → **SB65** (2026-10-12): pomiar w S3/2, naprawa w S4; **M6 (S3/2):** cel odbijania (kolonia pochodzenia AI) ma siatkę — `no_grid` nie wystąpił |
 | **56 · 57 · 58 · 59 · 60 · 61 · 64 · 66 · 67 · 68** | 🟠/⚪ | drugi mover (`CombatSystem._tryRetreat`) · martwa dysjunkcja `capitalBase` · kafle placówki **nigdy** nie dostają stempla `owner` · najeźdźcy zostają po przejęciu · `startGroundUnitBuild` bez guardu właściciela · `autoPlaceBuilding` bez guardu placówki · kłamliwy komentarz `HexTile:321` · `_autoSpawnRover` · legacy `infantry` w katalogu · redesign `INVASION_UNIT_POOLS` | |
 | **62 · 63** | ⚪ | kolizje `PhysicsSystem` nie są bramkowane scenariuszem (rozjazd z dokumentacją) · `empire:colonyRemoved` brak w `DebugLog.TRACKED_EVENTS` | |
 | **W3-2** | 🟠 | `_resolveBatchedBattle` **nie filtruje rezerwy**, a `_wreckPlayerVesselsInSystem` **filtruje** ⇒ kadłub rezerwowy AI walczy, kadłub gracza jest zwolniony z wrakowania | ✔ zweryfikowane w źródle |
@@ -828,7 +847,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **429** | ⚪ | wykrywanie (`ProximitySystem`) bierze ZADOKOWANE statki gracza jako obserwatorów | zachowanie, nie błąd — do potwierdzenia, czy zamierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **430** | ⚪ | obrona naziemna gracza przy technologiach fixture'u nie zabija jednostek AI (0 w 72 przebiegach `garrison_unit`) | balans — poza S3 (SB60). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **431** | ⚪ | w 1 z 36 przebiegów małej kolonii koszary zniknęły z rejestru aktywnych budynków po ~0,2 roku | przyczyna niezbadana. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **434** | ⚪ | transportowiec eskadry po desancie zostaje na orbicie celu na zawsze — odwołanie i pule Directora wymagają `hasWeapons`; M5: po każdym desancie transportowiec z pustą ładownią na orbicie domu gracza do końca przebiegu | → S3, sesja 2 (SB58, SB63). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **434** | ⚪ | transportowiec eskadry po desancie zostaje na orbicie celu na zawsze — odwołanie i pule Directora wymagają `hasWeapons`; M5: po każdym desancie transportowiec z pustą ładownią na orbicie domu gracza do końca przebiegu | → SB63; naprawa PRZYGOTOWANA — S3-5 (S3/2, zestagowana), zamknięcie przy commicie; M6: transportowiec znika w stolicy po każdej eskadrze. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **389** | ⚪ | ułamkowy `troopCount`: dawna pętla dawała ⌈n⌉ jednostek, skład szczebla daje ⌊n⌋ (`GarrisonPlanner.js:88`, `:123`) | żywi wołający podają liczby całkowite; różnica tylko w gałęzi `_onBattleResolved` bez producenta (`InvasionSystem.js:354`). `AI_GARRISON_PLAN.md` §6 |
 | **395** | ⚪ | adnotacja `directorOrigin` trafia na zły kadłub — `_awaitingClaim` zdejmowane `shift()` przy każdym ukończonym kadłubie kolonii (`DirectorProduction.js:202-203`, `:237-241`); fixture: `v_28` | diagnostyka, bez wpływu na walkę. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **400** | ⚪ | guard `empireHasFreeCrew` zarejestrowany (`DirectorProduction.js:479`), a od S0-2 bez konsumenta w katalogu reguł | martwy, nieszkodliwy; decyzja przy S1. `AI_STRIKES_BACK_PLAN.md` §6 |

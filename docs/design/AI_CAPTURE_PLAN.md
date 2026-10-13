@@ -985,6 +985,8 @@ gate'u** ⇒ **D7**.
     gracza w UI.
     → **AI STRIKES BACK SB65 (2026-10-12):** dotyczy także desantu z ładunku (`InvasionSystem._landCargo`,
     `c97b73b`); pomiar dla celu odbijania — S3, sesja 2; naprawa — S4 (`AI_STRIKES_BACK_PLAN.md` §2).
+    → **Pomiar S3/2 (M6, 2026-10-13):** cel odbijania (kolonia pochodzenia AI) ma siatkę od założenia — `no_grid` nie
+    wystąpił w żadnym przebiegu (`AI_STRIKES_BACK_PLAN.md` §5l.4); naprawa dla kolonii gracza — S4.
 56. **`CombatSystem._tryRetreat:392-423` jest drugim moverem** — teleport o kafel bez sprawdzania budynku,
     właściciela i stolicy; martwy tylko dlatego, że legacy jednostki nie mają `morale` (`:235`
     `morale ?? 100`). Slice GROUND go uruchomi.
