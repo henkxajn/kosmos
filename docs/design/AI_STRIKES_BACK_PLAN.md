@@ -1566,11 +1566,17 @@ w `patches/trees.txt` folderu przekazania. Kolejność stała (C1 → C5b); C6 b
 |---|---|---|---|---|
 | **S3-4** (C1) | SB64, SB66 (**435**) | `840be7bf` | `sb3_landing_abort_smoke` 20 · 6 / 14 — zielone wyłącznie kontrole i warunki sceny | 289/289 · PASS 3456 |
 | **S3-5** (C2) | SB58 → SB63 (**434**) | `c8d377b6` | `sb3_hold_return_smoke` 22 · 6 / 16 | 290/290 · PASS 3456 |
-| **S3-6** (C3, kod) | SB56 | `e8164076` | `sb3_squadron_size_smoke` 18 · 4 / 14 | **286/290** — czerwone wyłącznie 4 keepery R-S3b · PASS 3456 |
+| **S3-6** (C3, kod) | SB56 | `e8164076` | `sb3_squadron_size_smoke` 18 · 4 / 14 | **287/291** — czerwone wyłącznie 4 keepery R-S3b · PASS 3456 |
 | **S3-6 + R-S3b** | jw. + przecelowanie (PROPOSED) | `4333b412` | — | 291/291 · PASS 3456 |
 | **S3-7** (C4) | SB57 | `dd5d12f2` (kod: `696d3f02`) | `sb3_retake_smoke` 29 · 3 / 26 | 292/292 (kod: 288/292 — te same 4 czerwone) · PASS 3456 |
 | **S3-8** (C5a) | **151**, **427** (SB59) | `7cb78e09` (kod: `d04daba2`) | `sb3_warp_transit_scope_smoke` 16 · 9 / 7 — zielone wyłącznie kontrole i warunki sceny | 293/293 (kod: 289/293 — jw.) · PASS 3456 |
 | **S3-9** (C5b) | SB59 — wpis dzwonka | `f2f13536` (kod: `e67008e4`) | `sb3_armed_contact_smoke` 26 · 2 / 24 | 294/294 (kod: 290/294 — jw.) · PASS **3458** |
+
+⚠ **Korekta (po commicie `998851e`):** sweep S3-6 (kod) to **287/291**, nie 286/290 — tamten plik z klonu deweloperskiego
+był zmierzony na drzewie BEZ nowego keepera C3 (290 suit), więc nie był pomiarem kroku. Pomiar w świeżym klonie
+(`verify_chain_S3B.sh --sweep` na `998851e`; `src/` identyczne z łańcuchem na `055f1b7`): drzewa 10/10 = `trees.txt`,
+fail-first jak w tabeli, sweep i `check-i18n` każdego kroku jak w tabeli — z S3-6 (kod) 287/291 (czerwone wyłącznie
+4 keepery R-S3b).
 
 - **S3-4** — `InvasionSystem._onVesselGroupVictory`: ciało bitwy = `location.planetId`; desant na nim, gdy jest kolonią gracza
   w układzie; ciało bitwy, które nią nie jest — brak desantu (`target_not_player_colony`); zrzutowiec eskadry, która nie leci
@@ -1669,8 +1675,8 @@ i wcześniejszej wojny (po 6 lat) · 5 scen ostrzeżenia (do desantu, najwyżej 
 | 0 / 3 | 1,00 | 3 / 3 | 6,7 | AI wygrywa (3 fregaty gracza wrakami, 2 eskorty AI wrakami) | AI | na celu | 9,3 | 0 / 0 | jw. (1 eskorta wraca) |
 | 4 / 3 | 1,00 | 3 / 3 | 6,7 | jw. | AI | na celu | 18,3 | 4 / 1 | jw. |
 | 8 / 3 | 1,00 | 3 / 3 | 6,7 | jw. | AI | na celu | 27,3 | 8 / 2 | jw. |
-| 16 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | 70 | 16 (10 w walce, 6 z głodu w 66,2–67,1) / 3 | trzyma orbitę 5,9 roku, potem jw. |
-| 24 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | nie do końca przebiegu | 24 (10 w walce, 14 z głodu w 69,2–70,0) / 2 | trzyma orbitę celu 8,4 roku (etap `landed`) |
+| 16 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | 70 | 16 (10 w walce, 6 z głodu w 66,1–67,0) / 3 | trzyma orbitę 5,9 roku, potem jw. |
+| 24 / 0 | 1,00 | 1 / 1 | 7 | — | AI | na celu | nie do końca przebiegu | 24 (9 w walce, 15 z głodu w 69,2–70,0) / 2 | trzyma orbitę celu 8,4 roku (etap `landed`) |
 | 8 / 0, fala 0,1 | 1,00 i 6,00 | 1 / 1 (dwa razy) | 7 / 5,9 | — | AI (dwa razy) | na celu (1 jednostka, dwa razy) | pierwsza fala zniszczona po 14 mies.; druga — przejęcie po 13 mies. | 1 w walce + 7 rozwiązanych `no_credits` w 63,87 / 1 | `wave_destroyed` → druga eskadra dokładnie 5 lat po pierwszej → `captured` |
 
 - **Odpalenie:** reguła wysyła eskadrę dokładnie rok po zdobyciu (61,37 przy zdobyciu w 60,37), z eskortą równą potrzebnej
@@ -1679,7 +1685,8 @@ i wcześniejszej wojny (po 6 lat) · 5 scen ostrzeżenia (do desantu, najwyżej 
 - **Trzymanie orbity (SB63):** eskorta i transportowiec stoją nad celem do rozstrzygnięcia walki naziemnej; transportowiec
   wraca i znika w stolicy (434 zamknięty w pomiarze), eskorta wraca na orbitę stolicy. Przy 24 obrońcach walka naziemna
   trwała 8 lat (obrońcy zginęli w końcu z głodu) — eskadra trzymała orbitę cały ten czas, a imperium nie mogło wysłać
-  innej eskadry (Finding **440**).
+  innej eskadry (Finding **440**). ⚠ Korekta (po `998851e`): podział strat U16 / U24 i przedział głodu U16 — z plików
+  przebiegów (`probes/m6/out/`).
 - **Druga próba po cooldownie:** przy domyślnej fali (6 jednostek) każda pierwsza eskadra brała ciało — drugiej próby nie
   było. Scena z kluczem właściciela `strikeWaveShare` 0,1 (fala 1 jednostki) przeciw 8 obrońcom: pierwsza fala zniszczona po
   14 mies. (eskadra `wave_destroyed` → powrót, transportowiec usunięty), druga eskadra wysłana DOKŁADNIE 5 lat po pierwszej
@@ -2419,7 +2426,7 @@ Do decyzji: czy obserwatorium (albo sama kolonia) ma wykrywać w swoim układzie
 `[code]` SB63: etap `landed` trwa do rozstrzygnięcia walki naziemnej (ciało zdobyte albo żadna jednostka desantu nie żyje);
 reguła odbijania ma guard `empireHasNoSquadronUnderway` (etap `landed` to eskadra w drodze). `[measured]` M6 (§5l.4), 24
 jednostki szturmowe gracza na celu: walka naziemna od 61,95; od 64,7 do 69,2 bez strat po żadnej stronie; obrońcy giną
-w końcu z GŁODU (14 jednostek w 69,2–70,0); do końca przebiegu (70,37) ciało nie przejęte — eskadra trzyma orbitę 8,4 roku.
+w końcu z GŁODU (15 jednostek w 69,2–70,0 — korekta po `998851e`, było 14); do końca przebiegu (70,37) ciało nie przejęte — eskadra trzyma orbitę 8,4 roku.
 Obserwacja projektu (czy trzymanie ma mieć limit czasu; czy głód obrońców na własnej kolonii jest zamierzony — niezbadane).
 
 ---

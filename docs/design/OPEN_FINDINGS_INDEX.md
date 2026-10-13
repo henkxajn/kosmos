@@ -526,7 +526,7 @@
 >
 > **Aktualizacja 2026-10-13 — AI STRIKES BACK: S3, sesja 2 z 2 PRZYGOTOWANA** (łańcuch S3-4 – S3-9 ZESTAGOWANY, NIE
 > zacommitowany; przecelowanie R-S3b czeka na zgodę właściciela). Audyt, łańcuch, C6, M6 i bramka: `AI_STRIKES_BACK_PLAN.md`
-> §5l. Sweep łańcucha (klon, baza `055f1b7`): 289 → 290 → 286/290 (kod; czerwone wyłącznie 4 keepery R-S3b) → 291 (z R-S3b)
+> §5l. Sweep łańcucha (świeży klon; ten sam `src/` na `055f1b7` i na commicie dokumentacji): 289 → 290 → 287/291 (kod; czerwone wyłącznie 4 keepery R-S3b) → 291 (z R-S3b)
 > → 292 → 293 → 294/294; `check-i18n` 3456 → **3458** (+2 klucze PL + EN); save v101 bez migracji.
 > • **Naprawy PRZYGOTOWANE (zamknięcie przy commicie):** ⚪ **435** (S3-4, SB66) · ⚪ **434** (S3-5, SB63) · 🟠 **427**
 >   i 🟠 **151** (S3-8; 151 — dwa żywe miejsca; trzy utajone filtry `FleetManagerOverlay` zostają, pinowane przez 166).
