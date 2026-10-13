@@ -26,6 +26,7 @@ const GROUP_ICONS = {
   collision_alert:  '☄',   // Finding 190 — prognoza kolizji (dawniej twarda pauza)
   withdrawalWarning: '⚑',  // G2-4 (D14, R5) — miesiąc do terminu wycofania wojsk po pokoju
   withdrawalExpired: '⚑',  // G2-4 F5 — termin minął, wojska na ciele utracone
+  armedContact:     '⚠',   // AI STRIKES BACK S3/2 (SB59) — uzbrojony wrogi okręt w układzie z kolonią gracza
 };
 
 function _groupTitle(type) {
@@ -38,6 +39,7 @@ function _groupTitle(type) {
     case 'invasionRepelled': return t('notif.group.invasionRepelled');
     case 'withdrawalWarning': return t('notif.group.withdrawalWarning');
     case 'withdrawalExpired': return t('notif.group.withdrawalExpired');
+    case 'armedContact':      return t('notif.group.armedContact');
     default:               return type;
   }
 }

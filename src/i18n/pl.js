@@ -731,6 +731,8 @@ export default {
   "drop.finished": "⚔ Desant zakończony — planeta zostaje otwarta, dowodź oddziałami",
   "drop.cancelled": "⚔ Desant anulowany",
   'notif.mobilizationTitle':    '⚓ {0} obsadza okręty załogami',
+  'notif.armedContactTitle':    '⚠ Uzbrojony wrogi okręt w układzie {0}',
+  'notif.group.armedContact':   'Uzbrojone kontakty',
   'notif.mobilizationSubtitle': 'Rezerwa wchodzi do służby: {0}',
   'notif.group.mobilization':   'Mobilizacje obcych',
   'fleet.battleHeader': 'Bitwa, rok {0}',

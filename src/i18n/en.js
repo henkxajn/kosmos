@@ -731,6 +731,8 @@ export default {
   "drop.finished": "⚔ Landing complete — the planet stays open, command your troops",
   "drop.cancelled": "⚔ Landing cancelled",
   'notif.mobilizationTitle':    '⚓ {0} is crewing warships',
+  'notif.armedContactTitle':    '⚠ Armed enemy warship in the {0} system',
+  'notif.group.armedContact':   'Armed contacts',
   'notif.mobilizationSubtitle': 'Reserve entering service: {0}',
   'notif.group.mobilization':   'Alien mobilizations',
   'fleet.battleHeader': 'Battle, year {0}',

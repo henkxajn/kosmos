@@ -16,6 +16,9 @@ import { t } from '../i18n/i18n.js';
 import { empireLogName } from '../utils/EmpireName.js';   // G2-4 F6 — nazwa strony traktatu (jak wpis pokoju)
 import { areAtWar } from '../utils/WarGate.js';             // G2-4 (a) — ostrzeżenie gaśnie, gdy wraca wojna
 import { withdrawalDeadlineReached } from './WithdrawalSystem.js';   // G2-4 (a) — ten sam próg terminu co usunięcie
+import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';   // AI STRIKES BACK S3/2 (SB59) — uzbrojony wrogi kadłub
+import { systemIdOf } from '../utils/SystemScope.js';
+import { systemDisplayName } from '../ui/MapLabelLogic.js';         // kanon nazwy układu (rejestr → gwiazda → id)
 
 const MAX_ITEMS = 50;
 
@@ -34,6 +37,13 @@ export class NotificationCenter {
    */
   static TILE_LOSS_COOLDOWN_YEARS = 0.5;
 
+  /**
+   * AI STRIKES BACK S3/2 (SB59) — okno grupy wpisu „uzbrojony wrogi okręt w układzie”, w latach WYŚWIETLANYCH:
+   * kadłuby BEZ wspólnej grupy (`groupId` eskadry) liczą się do jednej przylatującej grupy, gdy to samo imperium w tym
+   * samym układzie zostało zgłoszone w ostatnim roku. Eskadra — jeden wpis na układ, bez okna.
+   */
+  static ARMED_CONTACT_GROUP_YEARS = 1.0;
+
   constructor() {
     this._items = [];        // {id, type, severity, source, timestamp, year, title, subtitle, payload, dismissed}
     this._nextId = 1;
@@ -41,6 +51,11 @@ export class NotificationCenter {
     // przewraca kilka pustych kafli w kilka tików: bez agregacji dzwonek dostałby serię wpisów
     // o jednym wydarzeniu. Klucz: planetId → { pending, lastNotifiedYear }.
     this._tileLoss = new Map();
+    // AI STRIKES BACK S3/2 (SB59) — wpis „uzbrojony wrogi okręt w układzie z kolonią gracza”:
+    //   `_armedSeen` vesselId → układ, w którym kadłub już zgłoszono (czyszczone przy przylocie ze skoku i przy wraku),
+    //   `_armedGroups` klucz grupy → rok wpisu. Oba w zapisie (`serialize().armedContact`) — wczytanie nie powtarza wpisu.
+    this._armedSeen = new Map();
+    this._armedGroups = new Map();
 
     // Subskrypcje — silent events (NIE pauzują gry)
     EventBus.on('expedition:reconProgress',  e => this._handleReconProgress(e));
@@ -61,6 +76,13 @@ export class NotificationCenter {
     // `invasion:repelled` (odparcie desantu szło wyłącznie do `DebugLog`). Pierwsze jest
     // dokładnie tym sygnałem, którego brak sprawiał, że marsz najeźdźcy wyglądał jak cisza.
     EventBus.on('tile:ownerChanged',  e => this._handleTileOwnerChanged(e));
+    // AI STRIKES BACK S3/2 (SB59) — PIERWSZE WYKRYCIE uzbrojonego wrogiego kadłuba w układzie z kolonią gracza: wykrycie
+    //   przez obserwatorium (`vessel:detectionChanged`) albo przez sensory statku gracza (`vessel:proximityEnter`).
+    //   Przylot ze skoku i wrak czyszczą pamięć kadłuba (`_armedSeen`).
+    EventBus.on('vessel:detectionChanged', e => { if (e?.detected) this._noteArmedContact(e.vessel ?? this._vessel(e.vesselId)); });
+    EventBus.on('vessel:proximityEnter',   e => this._handleProximityContact(e));
+    EventBus.on('interstellar:arrived',    e => { if (e?.vessel?.id) this._armedSeen.delete(e.vessel.id); });
+    EventBus.on('vessel:wrecked',          e => { if (e?.vesselId) this._armedSeen.delete(e.vesselId); });
     EventBus.on('invasion:repelled',  e => this._handleInvasionRepelled(e));
     // G1b — POP-y jednostki naziemnej PRZEPADŁY, bo jej kolonia macierzysta nie należy już do
     //   właściciela jednostki (albo jej nie ma). Bez tego wpisu strata byłaby cicha.
@@ -200,7 +222,12 @@ export class NotificationCenter {
   serialize() {
     // Nie zapisujemy odrzuconych — clean state po reload
     const active = this._items.filter(n => !n.dismissed);
+    // SB59 — pamięć wpisów „uzbrojony wrogi okręt”: tylko kadłuby, które jeszcze istnieją.
+    const vm = window.KOSMOS?.vesselManager;
+    const seen = {};
+    for (const [id, sys] of this._armedSeen) if (!vm?.getVessel || vm.getVessel(id)) seen[id] = sys;
     return {
+      armedContact: { seen, groups: Object.fromEntries(this._armedGroups) },
       nextId: this._nextId,
       items: active.map(n => ({
         id: n.id,
@@ -220,6 +247,10 @@ export class NotificationCenter {
     if (!data) return;
     this._items = (data.items ?? []).map(n => ({ ...n, dismissed: false }));
     this._nextId = data.nextId ?? (this._items.length + 1);
+    // SB59 — zapis sprzed S3/2 nie ma pamięci wpisów: pusta (pierwsze wykrycie po wczytaniu da najwyżej jeden wpis
+    //   na imperium i układ).
+    this._armedSeen = new Map(Object.entries(data.armedContact?.seen ?? {}));
+    this._armedGroups = new Map(Object.entries(data.armedContact?.groups ?? {}));
     EventBus.emit('notify:listChanged', { count: this.getActiveCount() });
   }
 
@@ -369,6 +400,60 @@ export class NotificationCenter {
    *   w magazynie, bo to wynik rozpoznania, nie obserwacji. Wyrównanie obu do jednego szczebla
    *   albo odebrałoby graczowi widoczne zdarzenie, albo rozdało pełną kolejność bojową za darmo.
    */
+  _vessel(id) {
+    return id ? (window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null) : null;
+  }
+
+  /** SB59 — para z `ProximitySystem`: sensory statku GRACZA widzą wrogi kadłub (dokładnie jedna strona to gracz). */
+  _handleProximityContact({ vesselAId, vesselBId } = {}) {
+    const a = this._vessel(vesselAId);
+    const b = this._vessel(vesselBId);
+    if (!a || !b) return;
+    const aEnemy = isEnemyVessel(a);
+    const bEnemy = isEnemyVessel(b);
+    if (aEnemy === bEnemy) return;                                 // gracz–gracz albo AI–AI: nie wykrycie gracza
+    this._noteArmedContact(aEnemy ? a : b);
+  }
+
+  /**
+   * AI STRIKES BACK S3/2 (SB59) — PIERWSZE WYKRYCIE uzbrojonego wrogiego kadłuba w układzie, w którym gracz ma kolonię:
+   * JEDEN wpis dzwonka na przylatującą grupę. Kadłub zgłoszony w danym układzie nie zgłasza się tam ponownie, dopóki
+   * nie przyleci ze skoku (`interstellar:arrived` czyści pamięć). Grupa: eskadra (`groupId` w rozkazie złożonym, misji
+   * albo rozkazie ruchu) — jeden wpis na układ; kadłub bez grupy — jedno imperium w jednym układzie w oknie
+   * `ARMED_CONTACT_GROUP_YEARS`. Statek w skoku (`systemId === null`) nie jest w żadnym układzie — bez wpisu.
+   * Mgła wojny: wpis nie ujawnia imperium ani nazwy kadłuba — wyłącznie fakt i układ.
+   */
+  _noteArmedContact(v) {
+    if (!v || v.isWreck || !isEnemyVessel(v) || !hasWeapons(v)) return;
+    const systemId = systemIdOf(v);
+    if (!systemId) return;
+    if (this._armedSeen.get(v.id) === systemId) return;
+    const K = window.KOSMOS;
+    const hasColony = (K?.colonyManager?.getPlayerColonies?.() ?? [])
+      .some(c => systemIdOf(EntityManager.get(c.planetId) ?? c.planet ?? null) === systemId);
+    if (!hasColony) return;
+    this._armedSeen.set(v.id, systemId);
+    const groupId = v.pendingOrder?.groupId ?? v.mission?.groupId ?? v.movementOrder?.groupId ?? null;
+    const year = K?.timeSystem?.gameTime ?? 0;
+    const key = groupId ? `group:${groupId}|${systemId}` : `empire:${v.ownerEmpireId ?? v.owner ?? '?'}|${systemId}`;
+    const last = this._armedGroups.get(key);
+    if (last != null && (groupId || (year - last) < NotificationCenter.ARMED_CONTACT_GROUP_YEARS)) return;
+    this._armedGroups.set(key, year);
+    const sysName = systemDisplayName(systemId, {
+      systems:  K?.starSystemManager?.getAllSystems?.() ?? [],
+      starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
+    });
+    this.add({
+      type: 'armedContact',
+      severity: 'warn',
+      source: 'armedContact',
+      title: t('notif.armedContactTitle', sysName),
+      logChannel: 'intel',
+      logText: t('notif.armedContactTitle', sysName),
+      payload: { vesselId: v.id, systemId, groupKey: key },
+    });
+  }
+
   _handleMobilized({ empireId, count }) {
     if (!empireId || !(count > 0)) return;
     const intel = window.KOSMOS?.intelSystem;
