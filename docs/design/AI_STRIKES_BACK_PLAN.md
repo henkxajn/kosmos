@@ -35,10 +35,10 @@
 > `dafea9a` (S3-6 + R-S3b, SB56) · `6dd6081` (S3-7, SB57) · `53fb899` (S3-8, SB59; **427**, **151**) · `5a47c68` (S3-9,
 > SB59). Przygotowanie, C6 (SB67 — STOP), M6 i scenariusz bramki — §5l; zamknięcie — §5m. Findingi **438–440** — §6.
 > **S3 ZAMKNIĘTY W CAŁOŚCI.**
-> ⏳ **S4 — sesja 1 PRZYGOTOWANA 2026-10-13** (§5n): łańcuch S4-1 (**439**, SB69 — kolonia i obserwatorium wykrywają we
-> własnym układzie) i S4-2 (**440**, SB70 — limit trzymania orbity) zbudowany i zweryfikowany, ZESTAGOWANY, NIE zacommitowany;
-> pomiar D3 (głód i rozwiązywanie jednostek gracza na zdobytej kolonii — Findingi **442–444**); audyt S4 właściwego (D4 —
-> propozycja i pytania); bramka S4A. Finding **441** — §6.
+> ✅ **S4 — sesja 1 ZAMKNIĘTA 2026-10-14** (bramka S4A w przeglądarce właściciela PASS — §5o.2): łańcuch zacommitowany —
+> `c6b9e9c` (S4-1, **439**, SB69 — kolonia i obserwatorium wykrywają we własnym układzie) · `95c44ed` (S4-2, **440**, SB70 —
+> limit trzymania orbity). Przygotowanie, pomiar D3 (głód i rozwiązywanie jednostek gracza na zdobytej kolonii — Findingi
+> **442–444**), audyt S4 właściwego (D4) i scenariusz bramki — §5n; zamknięcie — §5o. Finding **441** — §6.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
@@ -182,7 +182,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
 | **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2 (2026-10-12/13, §5l): desant na cel, eskadra przerwana, trzymanie orbity i powrót, klucze eskadry, odbijanie, statek w skoku poza układem, wpis dzwonka — ✅ zacommitowane 2026-10-13 (`2c33033` · `bf3178c` · `dafea9a` · `6dd6081` · `53fb899` · `5a47c68`; §5m); C6 (SB67) — STOP | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 · sesja 2: **435** · **434** · **427** · **151** · SB56–SB59 · SB63–SB67 · nowe **438–440** | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]`; sesja 2: `defense_scope`, `w3_target_selection`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3b (zgoda 2026-10-13, w `dafea9a`; §5m.1) | tak — sesja 1: **PASS 2026-10-12** (§5k.2); sesja 2: **PASS 2026-10-13** (§5m.2) |
-| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — PRZYGOTOWANE, NIE zacommitowane; pomiar głodu garnizonu (D3); audyt S4 właściwego (D4) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania) | tak — sesja 1: scenariusz `GATE_S4A.md` zwalidowany (§5n.5), bramka właściciela czeka |
+| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania) | tak — sesja 1: **PASS 2026-10-14** (§5o.2) |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
 ⓘ Audyt fazy A (P6) liczył S3 2–3 dni, S4 2 dni, razem ~8–11 `[doc: audyt fazy A, P6]`.
@@ -1898,6 +1898,9 @@ SB10, SB11; reguła końca wojny; Finding **55**; pula a pokój — §5e.6). **4
 
 ### 5n. S4 — sesja 1 (2026-10-13): 439 i 440 — łańcuch PRZYGOTOWANY, NIE zacommitowany; pomiar D3; audyt S4 właściwego (D4); bramka S4A
 
+> **Zamknięcie sesji 1 — §5o (2026-10-14):** commity łańcucha, zapis bramki S4A (PASS). Ta sekcja opisuje stan PRZED
+> commitem.
+
 Polecenie właściciela (2026-10-13): po zamknięciu S3 (§5m) — **D1** (SB69, Finding 439) i **D2** (SB70, Finding 440): kod,
 keepery fail-first, STOP przed commitem (bramka w przeglądarce); **D3** (SB76) — pomiar przyczyny głodu i rozwiązywania
 jednostek gracza na zdobytej kolonii, bez naprawy; **D4** — audyt S4 właściwego (wojna z inicjatywy AI, kampania układ po
@@ -2039,6 +2042,76 @@ przejęcia ciała przez falę (zamknięcie `captured` w 64,11; obrońcy gracza 8
 
 Bramka S4A w przeglądarce właściciela, potem commity (`tools/commit_S4A.sh` w folderze przekazania — test na sucho PASS);
 odpowiedzi na §5n.6 → S4 właściwe.
+
+### 5o. S4 — sesja 1 — zamknięcie (2026-10-14): commity łańcucha, bramka S4A PASS
+
+Polecenie właściciela (2026-10-14): commity przygotowanego łańcucha po bramce w przeglądarce (PASS 2026-10-14) — „Commit
+S4-1 and S4-2 (owner consent given 2026-10-14)”; zapis bramki, zamknięcie Findingów 439 i 440. Odpowiedzi na pytania §5n.6 —
+osobny commit dokumentacji. Folder przekazania sesji: `kosmos-handover/ai-strikes-back-s4b/` (poza repo).
+
+#### 5o.1 Commity `[git]` `[measured]`
+
+Kotwica wejścia: HEAD `4f9167a` (drzewo `3d4d91cc`), indeks (liczony na kopii) = drzewo C2 `99655386`, `src/` = indeks,
+pozycje obce statusu jak na wejściu (` M .claude/settings.local.json` i 39 nieśledzonych), SHA256SUMS folderu S4
+**91 / 91**. Commity skryptem `tools/commit_S4A.sh` (folder `ai-strikes-back-s4`, bez argumentów); drzewo każdego kroku =
+`patches/trees.txt` (po skrypcie sprawdzone ponownie: `git rev-parse <commit>^{tree}`, 2 / 2):
+
+| commit | drzewo | treść | numstat |
+|---|---|---|---|
+| `c6b9e9c` | `3373e7f5` | S4-1 — **439** (SB69: kolonia i obserwatorium wykrywają we własnym układzie; okno pierwszego wykrycia przy widoku) | `ObservatorySystem` 88/75 · keeper `sb4_own_system_detection` 191/0 |
+| `95c44ed` | `99655386` | S4-2 — **440** (SB70: klucz `squadronHoldMaxYears`, wynik `hold_expired`, fala zostaje) | `StrikesBackData` 7/0 · `StrikeSquadronSystem` 24/7 · `StrikeWavePlanner` 5/0 · keeper `sb4_hold_limit` 252/0 |
+
+Na HEAD `95c44ed`: sweep **296/296 OK, 0 FAIL, 31 advisory**, `check-i18n` PASS pl = en **3458**; status — wyłącznie pozycje
+obce; w repo żadnego `*.PROPOSED`. **EOL:** `ObservatorySystem.js` zostaje CRLF (CR 769 = LF 769); pozostałe pliki LF; żaden
+commit nie odwraca całego pliku. Sweep kroku pośredniego — z weryfikacji łańcucha w świeżym klonie (§5n.2: 295 → 296/296);
+w repo zmierzony stan końcowy. Przecelowań nie było.
+
+#### 5o.2 Bramka S4A — zapis (2026-10-14, właściciel, przeglądarka) `[measured: odczyty właściciela]`
+
+Fixture GATE-S4-fresh-gy60; kod = drzewo robocze z łańcuchem S4-1 + S4-2 (indeks `99655386`); gra po angielsku; scenariusz
+`ai-strikes-back-s4/gate/GATE_S4A.md`. Odczyty właściciela — nie mój pomiar:
+
+| krok | odczyt |
+|---|---|
+| 0 | rok 60,42; widok `sys_home`; dom `entity_2`; stolica emp_001 `entity_115` (`sys_059`); pokój; język `en` |
+| 2 | „3 (domyślnie 3, lata gry)” |
+| 3 | `out_of_range` / `out_of_range` / `wrong_type` / „ok 3 → 0.5” |
+| 4 | „war; pula +2, obudzona rezerwa 6, limit 6” |
+| 5 | `entity_116` (Propus c, `sys_059`), właściciel gracz, widok `sys_home` |
+| 6 | 8 obrońców, dom `entity_2`, płatnik `entity_2` |
+| T1 + T2 | widok na dom: właściciel widział wpis dzwonka „Armed enemy warship in the Propus system” PRZED bitwą; okna wykrycia brak; potem okno bitwy (przegrana) i wpisy dzwonka „Troops landing on Propus c”, „Losing ground” |
+| 7 | widok `sys_home`; 1 wpis `armedContact` dla `sys_059`, tytuł „⚠ Armed enemy warship in the Propus system”; wpis przed desantem — `true`; 2,0 mies. przed desantem (reszta wklejki właściciela ucięta; własność kroku spełniona) |
+| 8 | `sys_059` / Propus |
+| T3 | okno wykrycia pojawiło się przy spojrzeniu na układ |
+| 9 | okna 2, wszystkie przy widoku `sys_059`; wpisy dzwonka 1; wykryte teraz 2 |
+| 10 | `sys_home` |
+| 11 | odczyt WCZESNY (właściciel, przed upływem 0,5 roku od desantu): etap `landed`, wynik —, fala żywa 6/6, obrońcy żywi 7, ciało gracza |
+| 12 | po T5: etap `closed`; „rok 62.56: transport_home, wynik hold_expired, rozwiązane 0”; transportowiec usunięty; fala żywa na ciele 6; ciało gracza; reguła odbijania `czeka_cooldown`; 1,25 roku od wysyłki |
+| 13 | reset → `squadronHoldMaxYears`, wartość 3; odczyt strojenia po resecie wypisał też „uderzenie entity_116 start” i „odbicie entity_116 czeka_cooldown” |
+| 14 | dzwonek „mobilization:1 armedContact:2 invasion:1 tileLost:2”; kontakty „61.88 sys_059 \| 62.20 sys_059”; okna wykrycia oba „sys_059@widok sys_059”; desant „62.05 entity_116”; bitwy 1; przejęcia — wartość nie podana (w poleceniu właściciela został szablon `<PRZEJECIA>`) |
+
+Konsola — wartość nie podana (w poleceniu właściciela został szablon `<CONSOLE>`); błędów konsoli nie potwierdzam.
+**WERDYKT: PASS.**
+
+#### 5o.3 Ustalenia bramki
+
+- **Krok 7** — wklejka właściciela ucięta po „2.0 months before landing”; własność kroku (wpis przed desantem przy widoku
+  domowym) spełniona. Zero okien wykrycia przed spojrzeniem na układ potwierdza krok 14 (oba okna przy widoku `sys_059`,
+  a widok był domowy do kroku 8). 2,0 mies. zgadza się z krokiem 14 (kontakt 61,88, desant 62,05; walidator: 1,8 mies.).
+- **Krok 11** — odczytany przed upływem limitu: etap `landed` to chwila odczytu, nie wada; zamknięcie `hold_expired`
+  potwierdza krok 12.
+- **Krok 12** — 1,25 roku od wysyłki (walidator: 1,1) — inny rok wejściowy (60,42 wobec 60,12) i losowanie przeglądarki bez
+  ziarna; fala na ciele 6 (walidator: 5).
+- **Krok 13** — dodatkowe wiersze to odczyt `printSquadronNeeds` (część `sbTuning()`, `StrikeWavePlanner.js:139-160`
+  `[code]`): dla emp_001 cel uderzenia `entity_116` z werdyktem `start` (`squadronVerdict`: potrzebne ≤ dostępne i ≤ sufit —
+  wiersz „co eskadra by potrzebowała”, nie wysłanie) i cel odbijania `entity_116` w `czeka_cooldown` — zapisane, jak
+  zaobserwowane.
+- **Krok 14** — `tileLost:2` (walidator: 1) — losowanie walki naziemnej.
+
+#### 5o.4 Następny krok
+
+Odpowiedzi właściciela na pytania §5n.6 — osobny commit dokumentacji; **S4, sesja 2** — S4 właściwe (kampania eskadrami,
+wojna z okazji, koniec wojny przy wyczerpanej kampanii, Finding **55**, pomiar SB72).
 
 ---
 
@@ -2682,7 +2755,7 @@ wtedy czas rundy (tempo dla oka, Finding **436**) da się uczynić kluczem stroj
 → **SB68 (2026-10-13):** kierunek (c) — stały krok czasu gry na rundę; czas rundy wyłącznie kluczem prezentacji, dzisiejsze
 wyniki zachowane. Osobny mały krok PO S4, najpierw audyt; do tego czasu (a) bez zmian.
 
-### 🟠 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
+### ✅ 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
 
 `[code]` wpis `armedContact` (`NotificationCenter`, S3-9) ma dwa źródła wykrycia: obserwatorium — WYŁĄCZNIE w oglądanym
 układzie (`ObservatorySystem._tickVesselDetection` klucza `activeSystemId` — Finding **191**) — i zmysły statków gracza
@@ -2693,11 +2766,11 @@ celu — 2,6 mies.
 Do decyzji: czy obserwatorium (albo sama kolonia) ma wykrywać w swoim układzie niezależnie od widoku (rodzina **191**).
 → **SB69 (2026-10-13):** kolonia i obserwatorium wykrywają we własnym układzie niezależnie od widoku — pierwszy element
 kodu S4.
-⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S4-1 (zestagowana, NIE zacommitowana; §5n.2):** sensory po układach, para
-(statek, kolonia) w jednym układzie; okno pierwszego wykrycia przy widoku; keeper `sb4_own_system_detection_smoke`. Bramka
-S4A (walidacja): wpis dzwonka 1,8 mies. przed desantem przy widoku domowym. Zamknięcie — przy commicie S4-1.
+✅ **ZAMKNIĘTY 2026-10-14 — `c6b9e9c` (S4-1, SB69), bramka S4A PASS (§5o.2):** sensory po układach, para (statek, kolonia)
+w jednym układzie; okno pierwszego wykrycia przy widoku; keeper `sb4_own_system_detection_smoke`. Bramka: wpis dzwonka
+2,0 mies. przed desantem przy widoku domowym, bez okna wykrycia; okna — dopiero po spojrzeniu na układ.
 
-### ⚪ 440 — eskadra odbicia trzyma orbitę celu przez całą walkę naziemną, także przez lata; w tym czasie imperium nie wyśle innej eskadry
+### ✅ 440 — eskadra odbicia trzyma orbitę celu przez całą walkę naziemną, także przez lata; w tym czasie imperium nie wyśle innej eskadry
 
 `[code]` SB63: etap `landed` trwa do rozstrzygnięcia walki naziemnej (ciało zdobyte albo żadna jednostka desantu nie żyje);
 reguła odbijania ma guard `empireHasNoSquadronUnderway` (etap `landed` to eskadra w drodze). `[measured]` M6 (§5l.4), 24
@@ -2706,9 +2779,10 @@ w końcu z GŁODU (15 jednostek w 69,2–70,0 — korekta po `998851e`, było 14
 Obserwacja projektu (czy trzymanie ma mieć limit czasu; czy głód obrońców na własnej kolonii jest zamierzony — niezbadane).
 → **SB70 (2026-10-13):** limit trzymania orbity — klucz strojenia, domyślnie 3 lata gry; po limicie eskorta i transportowiec
 wracają, wylądowana fala walczy dalej — S4. Głód obrońców — **SB76**: pomiar przyczyny w S4 (bez naprawy).
-⏳ **Naprawa PRZYGOTOWANA 2026-10-13 — S4-2 (zestagowana, NIE zacommitowana; §5n.2):** klucz `squadronHoldMaxYears`,
-wynik `hold_expired`, fala zostaje; keeper `sb4_hold_limit_smoke`. Głód obrońców — pomiar D3 (§5n.3): Findingi **442–444**.
-Zamknięcie — przy commicie S4-2.
+✅ **ZAMKNIĘTY 2026-10-14 — `95c44ed` (S4-2, SB70), bramka S4A PASS (§5o.2):** klucz `squadronHoldMaxYears`, wynik
+`hold_expired`, fala zostaje; keeper `sb4_hold_limit_smoke`. Bramka (limit skrócony do 0,5 roku): zamknięcie
+`transport_home, wynik hold_expired, rozwiązane 0`, fala 6 żywa na ciele, ciało gracza, odbijanie `czeka_cooldown`. Głód
+obrońców — pomiar D3 (§5n.3): Findingi **442–444**.
 
 ### #441–#444 — S4, sesja 1 (2026-10-13)
 
