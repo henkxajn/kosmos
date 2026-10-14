@@ -565,46 +565,57 @@ export class ObservatorySystem {
   }
 
   // Rebuild zbioru wykrytych wrogich statków na podstawie zasięgów wszystkich kolonii gracza.
-  // Statek jest "detected" gdy leży w zasięgu JAKIEJKOLWIEK kolonii (OR nie SUM).
+  // Statek jest "detected" gdy leży w zasięgu JAKIEJKOLWIEK kolonii gracza Z TEGO SAMEGO UKŁADU (OR nie SUM).
   // Zasięg per kolonia = max z VESSEL_DETECTION_RANGE dla jej obserwatorium.
+  // ⚠ AI STRIKES BACK S4 (SB69, Finding 439): kolonia i obserwatorium wykrywają we WŁASNYM układzie, NIEZALEŻNIE od
+  //   oglądanego. Do S4 skan był kluczowany na `activeSystemId` (kamera — rodzina 191): poza widokiem żadna kolonia niczego
+  //   nie wykrywała, a z detekcją znikał wpis dzwonka o uzbrojonym kontakcie (SB59) — o eskadrze odbicia gracz dowiadywał
+  //   się dopiero z alarmu desantu (M6). Para (statek, kolonia) liczona WYŁĄCZNIE w jednym układzie — współrzędne są
+  //   lokalne dla układu (gwiazda każdego w (0,0)). Koszt na tik: jeden przebieg po statkach + odległość do kolonii gracza
+  //   TEGO układu; zasięg kolonii liczony raz na tik (dawniej raz na parę statek–kolonia).
+  // ⚠ OKNO PIERWSZEGO WYKRYCIA (wpis Dziennika „niezidentyfikowany kontakt” + `vessel:firstSighting` → okno z pauzą
+  //   w GameScene, beat pierwszego kontaktu) zostaje przy OGLĄDANYM układzie — jak przed S4: statek wykryty poza widokiem
+  //   dostaje okno dopiero, gdy gracz spojrzy na jego układ. Dlatego przebieg „wykryty, w widoku, nie zgłoszony” idzie na
+  //   KAŻDYM tiku, nie tylko przy zmianie zbioru — przełączenie widoku nie zmienia już detekcji.
   _tickVesselDetection(civDeltaYears = 0) {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr   = window.KOSMOS?.vesselManager;
     if (!colMgr || !vMgr) return;
 
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    // Tylko kolonie GRACZA — radar/detekcja należą do gracza; obserwatoria AI nie zasilają jego widoku.
-    const colonies = colMgr.getAllColonies().filter(c => {
-      if (c.ownerEmpireId) return false;
-      const cs = c.planet?.systemId ?? c.systemId ?? sysId;
-      return cs === sysId;
-    });
+    const viewSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    // Sensory: kolonie GRACZA z zasięgiem > 0, po układzie — radar/detekcja należą do gracza; obserwatoria AI nie zasilają
+    // jego widoku. Układ kolonii: ciało (`planet.systemId`), potem stempel kolonii; brak obu — `sys_home` (kanon
+    // `systemIdOf`: brak pola = zapis sprzed wielu układów; dawny zapas „układ oglądany” wiązał kolonię z kamerą).
+    const sensors = new Map();   // systemId → [{ x, y, range }]
+    for (const c of colMgr.getAllColonies()) {
+      if (c.ownerEmpireId) continue;
+      const range = this.getVesselDetectionRangeAU(c);
+      if (!(range > 0)) continue;
+      const colPos = c.planet ?? EntityManager.get(c.planetId);
+      if (!colPos) continue;
+      const cs = c.planet?.systemId ?? c.systemId ?? 'sys_home';
+      if (!sensors.has(cs)) sensors.set(cs, []);
+      sensors.get(cs).push({ x: colPos.x ?? 0, y: colPos.y ?? 0, range });
+    }
 
     const currentlyDetected = new Set();
-    const detectedVessels   = new Map();  // id → vessel (do odświeżania ghost-sightingu)
+    const detectedVessels   = new Map();  // id → vessel (ghost-sighting, okno pierwszego wykrycia)
 
-    // Wczesne wyjście gdy brak kolonii gracza w aktywnym systemie — nic nie widzimy
-    if (colonies.length > 0) {
-      const allVessels = vMgr.getAllVessels?.() ?? [];
-      for (const v of allVessels) {
-        if (!isEnemyVessel(v) || v.isWreck) continue;   // wrak nie jest „kontaktem" (znika z listy/skanu)
-        // ⚠ AI STRIKES BACK S3/2 (SB59, Finding 427): statek W SKOKU (`systemId === null`) nie jest w oglądanym
-        //   układzie — koercja `?? sysId` liczyła go tu na współrzędnych sprzed skoku. Kanon `systemIdOf`.
-        if (systemIdOf(v) !== sysId) continue;
-
-        for (const col of colonies) {
-          const range = this.getVesselDetectionRangeAU(col);
-          if (range <= 0) continue;
-          const colPos = col.planet ?? EntityManager.get(col.planetId);
-          if (!colPos) continue;
-          const dist = DistanceUtils.euclideanAU(
-            { x: colPos.x ?? 0, y: colPos.y ?? 0 },
-            { x: v.position?.x ?? 0, y: v.position?.y ?? 0 }
-          );
-          if (dist <= range) {
-            currentlyDetected.add(v.id);
-            detectedVessels.set(v.id, v);
-            break;  // wystarczy jedna kolonia
+    // Wczesne wyjście gdy gracz nie ma kolonii z zasięgiem — nic nie widzimy. Koszt: (układy z sensorami) × (wrogie statki).
+    if (sensors.size > 0) {
+      const enemies = (vMgr.getAllVessels?.() ?? []).filter(v => isEnemyVessel(v) && !v.isWreck);   // wrak nie jest „kontaktem" (znika z listy/skanu)
+      for (const [sysId, here] of sensors) {
+        for (const v of enemies) {
+          // ⚠ AI STRIKES BACK S3/2 (SB59, Finding 427): statek W SKOKU (`systemId === null`) nie jest w żadnym układzie —
+          //   kanon `systemIdOf` (koercja `?? sysId` liczyła go na współrzędnych sprzed skoku).
+          if (systemIdOf(v) !== sysId) continue;
+          const vPos = { x: v.position?.x ?? 0, y: v.position?.y ?? 0 };
+          for (const s of here) {
+            if (DistanceUtils.euclideanAU({ x: s.x, y: s.y }, vPos) <= s.range) {
+              currentlyDetected.add(v.id);
+              detectedVessels.set(v.id, v);
+              break;  // wystarczy jedna kolonia
+            }
           }
         }
       }
@@ -619,7 +630,7 @@ export class ObservatorySystem {
     this._detectedVesselIds.forEach(id => { if (!currentlyDetected.has(id)) removed.push(id); });
 
     // Throttlowane odświeżenie pozycji ghost-sightingu już-wykrytych statków (nie co tick — churn).
-    // Działa też w steady-state (przed early-return); nowo wykryte dostają świeży zapis niżej.
+    // Działa też w steady-state (przed zmianą zbioru); nowo wykryte dostają świeży zapis niżej.
     this._sightingRefreshAccum = (this._sightingRefreshAccum ?? 0) + civDeltaYears;
     if (this._sightingRefreshAccum >= SIGHTING_REFRESH_YEARS) {
       this._sightingRefreshAccum = 0;
@@ -628,57 +639,59 @@ export class ObservatorySystem {
       }
     }
 
-    if (added.length === 0 && removed.length === 0) return;
+    if (added.length > 0 || removed.length > 0) {
+      this._detectedVesselIds = currentlyDetected;
 
-    this._detectedVesselIds = currentlyDetected;
+      for (const id of added) {
+        const v = detectedVessels.get(id) ?? vMgr.getVessel?.(id) ?? null;
+        EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: true, vessel: v });
 
-    const evtLog = window.KOSMOS?.eventLogSystem;
-    const reg    = window.KOSMOS?.empireRegistry;
+        if (!v) continue;
 
-    for (const id of added) {
-      const v = detectedVessels.get(id) ?? vMgr.getVessel?.(id) ?? null;
-      EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: true, vessel: v });
+        // Per-vessel intel: zdalny sighting obserwatorium = 'rumor' (pozycja bez identyfikacji).
+        // Faktyczny 'contact' (żywy + tożsamość) przychodzi z proximity / vessel:arrived / battle.
+        intelSys?.recordSighting?.(id, v, 'rumor');
 
-      if (!v) continue;
-
-      // Per-vessel intel: zdalny sighting obserwatorium = 'rumor' (pozycja bez identyfikacji).
-      // Faktyczny 'contact' (żywy + tożsamość) przychodzi z proximity / vessel:arrived / battle.
-      intelSys?.recordSighting?.(id, v, 'rumor');
-
-      // Intel poziomu IMPERIUM — osobny tor (ujawnia istnienie imperium, nie konkretny statek).
-      const empId = v.ownerEmpireId ?? v.owner;
-      if (empId && empId !== 'player') {
-        intelSys?.advanceIntel?.(empId, 'rumor', 'vessel_sighted');
+        // Intel poziomu IMPERIUM — osobny tor (ujawnia istnienie imperium, nie konkretny statek).
+        const empId = v.ownerEmpireId ?? v.owner;
+        if (empId && empId !== 'player') {
+          intelSys?.advanceIntel?.(empId, 'rumor', 'vessel_sighted');
+        }
       }
 
-      // EventLog + popup alert — tylko PIERWSZE wykrycie w sesji.
-      if (!this._reportedVesselSightings.has(id)) {
-        this._reportedVesselSightings.add(id);
-        const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : t('director.unknownEmpire');
-        // Fog-of-war tożsamości: detekcja obserwatorium = rumor (pozycja bez identyfikacji).
-        // Log NIE ujawnia nazwy statku — tylko fakt wykrycia kontaktu. Pełne dane = proximity.
-        evtLog?.push({
-          text:      t('log.unidentifiedContact'),
-          channel:   'intel',
-          severity:  'warn',
-          entityRef: id,
-        });
-        // Dedykowany event dla GameScene — popup z pauzą gry.
-        //
-        // ⚠ `firstContactFlyby` (decyzja 5): dla sondy przelotu pierwszego kontaktu generyczny
-        // popup jest TŁUMIONY (GameScene wychodzi na tej fladze), a beat narracyjny „Nie jesteśmy
-        // sami" wystawia `DirectorFirstContact`. Jeden fakt = jeden popup; wcześniej groziły dwa.
-        EventBus.emit('vessel:firstSighting', {
-          vessel: v,
-          empireId: empId,
-          empireName: empName,
-          firstContactFlyby: window.KOSMOS?.directorFirstContact?.isFlyby?.(id) === true,
-        });
+      for (const id of removed) {
+        EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: false });
       }
     }
 
-    for (const id of removed) {
-      EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: false });
+    // EventLog + popup alert — tylko PIERWSZE wykrycie w sesji i wyłącznie w OGLĄDANYM układzie (nagłówek wyżej).
+    const reg = window.KOSMOS?.empireRegistry;
+    const evtLog = window.KOSMOS?.eventLogSystem;
+    for (const [id, v] of detectedVessels) {
+      if (this._reportedVesselSightings.has(id)) continue;
+      if (systemIdOf(v) !== viewSys) continue;
+      this._reportedVesselSightings.add(id);
+      const empId = v.ownerEmpireId ?? v.owner;
+      const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : t('director.unknownEmpire');
+      // Fog-of-war tożsamości: detekcja obserwatorium = rumor (pozycja bez identyfikacji).
+      // Log NIE ujawnia nazwy statku — tylko fakt wykrycia kontaktu. Pełne dane = proximity.
+      evtLog?.push({
+        text:      t('log.unidentifiedContact'),
+        channel:   'intel',
+        severity:  'warn',
+        entityRef: id,
+      });
+      // Dedykowany event dla GameScene — popup z pauzą gry.
+      //
+      // ⚠ `firstContactFlyby` (decyzja 5): dla sondy przelotu pierwszego kontaktu generyczny
+      // popup jest TŁUMIONY (GameScene wychodzi na tej fladze), a beat narracyjny „Nie jesteśmy
+      // sami" wystawia `DirectorFirstContact`. Jeden fakt = jeden popup; wcześniej groziły dwa.
+      EventBus.emit('vessel:firstSighting', {
+        vessel: v,
+        empireId: empId,
+        empireName: empName,
+        firstContactFlyby: window.KOSMOS?.directorFirstContact?.isFlyby?.(id) === true,
+      });
     }
   }
 
