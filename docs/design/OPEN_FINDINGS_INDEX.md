@@ -581,6 +581,15 @@
 > • **NOWY: #445** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — ⚪ podwójne pobranie Kr za jednostki naziemne (żołd i rekrutacja;
 >   dotąd backlog bez numeru) — SB80, S4/3.
 > • Następny: **S4, sesja 2** (S4 właściwe).
+>
+> **Aktualizacja 2026-10-14 (S4/2) — AI STRIKES BACK: S4, sesja 2 ZAMKNIĘTA** (bramka S4B w przeglądarce właściciela PASS;
+> przygotowanie — `AI_STRIKES_BACK_PLAN.md` §5p, zamknięcie — §5q). Commity po zgodzie na przecelowanie R-S4b-1: `ea30ce8`
+> (S4-3; **55**) · `85b776b` (S4-4, kampania) · `e5020ec` (S4-5, wojna z okazji) · `8e63b98` (S4-6, koniec wojny). Sweep
+> **300/300**, `check-i18n` 3458.
+> • ✅ **55** — zamknięty w `AI_CAPTURE_PLAN.md`; wiersz zdjęty.
+> • **NOWY: #446** (rejestr: `AI_STRIKES_BACK_PLAN.md` §6) — 🟠 eskadra AI w locie wisi na zawsze, gdy cel zdobędzie
+>   wcześniejsza fala (skutek **195**; osiągalność **195** zmierzona — wiersz **195** uzupełniony).
+> • Następny: odpowiedzi właściciela na pytania §5p.7 i **S4, sesja 3**.
 
 
 ---
@@ -820,7 +829,6 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **49** | 🟠 | ⚠ **KOREKTA 2026-10-02 — zamknięty po stronie DANYCH**: `transport_assault` jest w katalogu od `0e6ea0d`; **nikt go nie zamawia** (jedyny `template:` w regułach to `science_probe`) ⇒ reszta żyje jako **201** | `W3_PLAN.md` §49 · `AI_GARRISON_PLAN.md` §7 |
 | **53** | 🟠 | „wieczna inwazja" na placówce gracza — rekord `active:true` nie może wygasnąć i trafia do **każdego** zapisu | |
 | **54** | 🟠 | startowy garnizon gracza wisi na **efekcie ubocznym UI**; kolonie wtórne i placówki: 0 jednostek na zawsze | |
-| **55** | 🟠 | kolonia macierzysta nie ma siatki do pierwszego otwarcia mapy ⇒ `launchInvasion` zwraca `no_grid` | dotyczy też desantu z ładunku; → **SB65** (2026-10-12): pomiar w S3/2, naprawa w S4; **M6 (S3/2):** cel odbijania (kolonia pochodzenia AI) ma siatkę — `no_grid` nie wystąpił |
 | **56 · 57 · 58 · 59 · 60 · 61 · 64 · 66 · 67 · 68** | 🟠/⚪ | drugi mover (`CombatSystem._tryRetreat`) · martwa dysjunkcja `capitalBase` · kafle placówki **nigdy** nie dostają stempla `owner` · najeźdźcy zostają po przejęciu · `startGroundUnitBuild` bez guardu właściciela · `autoPlaceBuilding` bez guardu placówki · kłamliwy komentarz `HexTile:321` · `_autoSpawnRover` · legacy `infantry` w katalogu · redesign `INVASION_UNIT_POOLS` | |
 | **62 · 63** | ⚪ | kolizje `PhysicsSystem` nie są bramkowane scenariuszem (rozjazd z dokumentacją) · `empire:colonyRemoved` brak w `DebugLog.TRACKED_EVENTS` | |
 | **W3-2** | 🟠 | `_resolveBatchedBattle` **nie filtruje rezerwy**, a `_wreckPlayerVesselsInSystem` **filtruje** ⇒ kadłub rezerwowy AI walczy, kadłub gracza jest zwolniony z wrakowania | ✔ zweryfikowane w źródle |

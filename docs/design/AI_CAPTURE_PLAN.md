@@ -996,6 +996,10 @@ gate'u** ⇒ **D7**.
     → **AI STRIKES BACK S4/2 (2026-10-14):** naprawa PRZYGOTOWANA (S4-3 — `ColonyGrid.ensureColonyGrid`: okno kolonii
     i desant), zestagowana, czeka na bramkę S4B; nowa gra zmierzona — kolonia macierzysta ma siatkę od startu (okno kolonii
     otwiera się samo), kolonia bez siatki = stary zapis albo przyszła droga bez okna (`AI_STRIKES_BACK_PLAN.md` §5p).
+    ✅ **ZAMKNIĘTY 2026-10-14 (AI STRIKES BACK S4-3, bramka S4B w przeglądarce PASS).** `ea30ce8`: jedna droga tworzenia
+    siatki — `ColonyGrid.ensureColonyGrid` (okno kolonii, `launchInvasion`, `_landCargo`); bramka S4B, krok 12: siatka
+    utworzona przy desancie na ciele, które jej nie miało (`AI_STRIKES_BACK_PLAN.md` §5q.2). Keeper `sb4_colony_grid`
+    23/23; pin `sb3_hold_return` T5 przecelowany za zgodą właściciela (R-S4b-1).
 56. **`CombatSystem._tryRetreat:392-423` jest drugim moverem** — teleport o kafel bez sprawdzania budynku,
     właściciela i stolicy; martwy tylko dlatego, że legacy jednostki nie mają `morale` (`:235`
     `morale ?? 100`). Slice GROUND go uruchomi.

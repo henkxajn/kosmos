@@ -40,10 +40,11 @@
 > `c6b9e9c` (S4-1, **439**, SB69 — kolonia i obserwatorium wykrywają we własnym układzie) · `95c44ed` (S4-2, **440**, SB70 —
 > limit trzymania orbity). Przygotowanie, pomiar D3 (głód i rozwiązywanie jednostek gracza na zdobytej kolonii — Findingi
 > **442–444**), audyt S4 właściwego (D4) i scenariusz bramki — §5n; zamknięcie — §5o. Finding **441** — §6.
-> ⏳ **S4 — sesja 2 PRZYGOTOWANA 2026-10-14** (S4 właściwe, opcja A — §5p): łańcuch S4-3 (D4 — SB87, Finding **55**) ·
-> S4-4 (D1 — kampania eskadrami, SB10, SB83, SB84) · S4-5 (D2 — wojna z okazji, SB81, SB82) · S4-6 (D3 — koniec wojny przy
-> wyczerpanej kampanii, SB85, SB86) zbudowany i zweryfikowany, ZESTAGOWANY w repo po commicie tej dokumentacji, NIE
-> zacommitowany (bramka S4B i zgoda na przecelowanie **R-S4b-1**); pomiar SB72 (D5, SB88) i M7 — §5p; Finding **446** — §6.
+> ✅ **S4 — sesja 2 ZAMKNIĘTA 2026-10-14** (bramka S4B w przeglądarce właściciela PASS — §5q.2): łańcuch zacommitowany po
+> zgodzie na przecelowanie **R-S4b-1** — `ea30ce8` (S4-3, **55**, SB87 — siatka kolonii przy desancie) · `85b776b` (S4-4,
+> kampania eskadrami, SB10, SB83, SB84) · `e5020ec` (S4-5, wojna z okazji, SB81, SB82) · `8e63b98` (S4-6, koniec wojny przy
+> wyczerpanej kampanii, SB85, SB86). Przygotowanie, pomiar SB72 (D5, SB88), M7 i scenariusz bramki — §5p; zamknięcie — §5q.
+> Finding **446** — §6; Finding **55** zamknięty (`AI_CAPTURE_PLAN.md`).
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
@@ -199,7 +200,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
 | **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2 (2026-10-12/13, §5l): desant na cel, eskadra przerwana, trzymanie orbity i powrót, klucze eskadry, odbijanie, statek w skoku poza układem, wpis dzwonka — ✅ zacommitowane 2026-10-13 (`2c33033` · `bf3178c` · `dafea9a` · `6dd6081` · `53fb899` · `5a47c68`; §5m); C6 (SB67) — STOP | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 · sesja 2: **435** · **434** · **427** · **151** · SB56–SB59 · SB63–SB67 · nowe **438–440** | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]`; sesja 2: `defense_scope`, `w3_target_selection`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3b (zgoda 2026-10-13, w `dafea9a`; §5m.1) | tak — sesja 1: **PASS 2026-10-12** (§5k.2); sesja 2: **PASS 2026-10-13** (§5m.2) |
-| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4); sesja 2 (2026-10-14, §5p): kampania eskadrami w porządku SB84, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — łańcuch PRZYGOTOWANY i zestagowany, NIE zacommitowany | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** · sesja 2: **55** · SB81–SB88 · nowy **446** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania); sesja 2: `sb3_hold_return` T5 — przecelowanie **R-S4b-1** (czeka na zgodę) | tak — sesja 1: **PASS 2026-10-14** (§5o.2); sesja 2: scenariusz S4B zwalidowany w prawdziwej grze (§5p.6) |
+| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4); sesja 2 (2026-10-14, §5p): kampania eskadrami w porządku SB84, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — ✅ zacommitowane 2026-10-14 (`ea30ce8` · `85b776b` · `e5020ec` · `8e63b98`; §5q) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** · sesja 2: **55** · SB81–SB88 · nowy **446** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania); sesja 2: `sb3_hold_return` T5 — przecelowanie **R-S4b-1** (zgoda 2026-10-14) | tak — sesja 1: **PASS 2026-10-14** (§5o.2); sesja 2: **PASS 2026-10-14** (§5q.2) |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
 ⓘ Audyt fazy A (P6) liczył S3 2–3 dni, S4 2 dni, razem ~8–11 `[doc: audyt fazy A, P6]`.
@@ -2303,6 +2304,75 @@ z okazji, kampanii i siatki. Błędy konsoli: 0 w obu przebiegach.
 
 Bramka S4B w przeglądarce właściciela, odpowiedzi na §5p.7, potem commity (`tools/commit_S4B.sh --zgoda-R-S4b-1` w folderze
 przekazania — test na sucho PASS). **S4, sesja 3** — **442**, **443**, **444**, **445** (SB78–SB80) i odpowiedzi 1–2.
+
+### 5q. S4 — sesja 2 — zamknięcie (2026-10-14): commity łańcucha, bramka S4B PASS
+
+Polecenie właściciela (2026-10-14): commity przygotowanego łańcucha po bramce w przeglądarce (PASS 2026-10-14) — „Owner's
+consent to R-S4b-1 given 2026-10-14”; zapis bramki, zamknięcie Findingu 55. Odpowiedzi na pytania §5p.7 — osobny commit
+dokumentacji. Folder przekazania sesji: `kosmos-handover/ai-strikes-back-s4c/` (poza repo).
+
+#### 5q.1 Commity `[git]` `[measured]`
+
+Kotwica wejścia: HEAD `06c8ac1` (drzewo `6b8f4039`), indeks (liczony na kopii) = drzewo C4 `b3e1129e`, `src/` = indeks,
+pozycja obca statusu jak na wejściu (` M .claude/settings.local.json`). Commity skryptem `tools/commit_S4B.sh
+--zgoda-R-S4b-1` (folder `ai-strikes-back-s4b`); drzewo każdego kroku = `patches/trees.txt` (skrypt sprawdza przed każdym
+commitem; po skrypcie ponownie `git rev-parse <commit>^{tree}`, 4 / 4):
+
+| commit | drzewo | treść | numstat |
+|---|---|---|---|
+| `ea30ce8` | `332d6b38` | S4-3 — **55** (SB87: `ColonyGrid.ensureColonyGrid` — okno kolonii i desant) + przecelowanie **R-S4b-1** | `InvasionSystem` 7/3 · `ColonyOverlay` 27/65 · `ColonyGridResolveLogic` 8/2 · `ColonyGrid` 115/0 · `sb3_hold_return` 10/7 · keeper `sb4_colony_grid` 238/0 |
+| `85b776b` | `8454f40e` | S4-4 — kampania (SB10, SB83, SB84: `DirectorCampaign`, `CampaignPlanner`, reguła `campaign_strike`) | `DirectorCampaign` 219/0 · `DirectorRetake` 44/25 · `DirectorRuleData` 26/1 · `DirectorOffensive` 16/0 · `CampaignPlanner` 42/0 · `StrikeWavePlanner` 8/0 · `StrikesBackData` 7/0 · `DebugLog` 4/0 · `StrikeSquadronSystem` 3/2 · `GameScene` 2/0 · keeper `sb4_campaign` 535/0 |
+| `e5020ec` | `94f0739d` | S4-5 — wojna z okazji (SB81, SB82: `DirectorOpportunityWar`, reguła `opportunity_war`) | `DirectorOpportunityWar` 134/0 · `DirectorRuleData` 23/0 · `DirectorOffensive` 19/0 · `StrikesBackData` 14/0 · `StrikeWavePlanner` 10/0 · `DebugLog` 5/0 · `GameScene` 2/0 · keeper `sb4_opportunity_war` 314/0 |
+| `8e63b98` | `b3e1129e` | S4-6 — koniec wojny przy wyczerpanej kampanii (SB85, SB86: `WarSystem.requestAiPeaceOffer`, reguła `campaign_peace_offer`) | `DirectorCampaign` 95/1 · `WarSystem` 36/4 · `DirectorRuleData` 22/0 · `StrikesBackData` 7/0 · `DebugLog` 5/0 · `DirectorOffensive` 5/0 · `StrikeWavePlanner` 5/0 · keeper `sb4_campaign_peace` 387/0 |
+
+Na HEAD `8e63b98`: sweep **300/300 OK, 0 FAIL, 31 advisory**, `check-i18n` PASS pl = en **3458**; status — wyłącznie pozycja
+obca; drzewo robocze `src/` = HEAD. **EOL:** `ColonyOverlay.js` (CR 5771 = LF 5771), `InvasionSystem.js` (648 = 648),
+`DirectorOffensive.js` (556 = 556), `DirectorRuleData.js` (408 = 408), `DebugLog.js` (254 = 254) zostają CRLF; pozostałe pliki
+LF. Sweep kroków pośrednich — z weryfikacji łańcucha w świeżym klonie (§5p.2: 297 → 300/300). Przecelowanie **R-S4b-1** —
+zgoda właściciela 2026-10-14.
+
+#### 5q.2 Bramka S4B — zapis (2026-10-14, właściciel, przeglądarka) `[measured: odczyty właściciela]`
+
+Fixture GATE-S4-fresh-gy60; kod = drzewo robocze z łańcuchem S4-3…S4-6 (indeks `b3e1129e`); gra po angielsku; scenariusz
+`ai-strikes-back-s4b/gate/GATE_S4B.md`. Odczyty właściciela — nie mój pomiar:
+
+| krok | odczyt |
+|---|---|
+| 0 | rok 60,15; widok `sys_home`; stolica emp_001 `entity_115` (`sys_059`); pokój; pula `false`; język `en` |
+| 2 | cztery klucze 40 / 5 / 5 / 3, z domyślnymi |
+| 3 | `out_of_range` ×3, `wrong_type` |
+| 4 | `entity_116` (Propus c, `sys_059`) zdobyte, siatka `false`; placówki `entity_10` (HD-4177 j), `entity_11` (HD-4177 k); pokój; ostrzeżenia `FactorySystem … fail-closed` (jak w kontroli) |
+| 5 | pula `true`, pokój `true`, rozejm, NAP `true`, rozejm 10 lat |
+| 6 | rozejm, NAP, napięcie 45, werdykt `not_at_peace` |
+| T1 | spokojnie |
+| 7 | rozejm; wojen po pokoju 0; wysyłek kampanii 0 |
+| 8 | pokój, NAP `true`, werdykt `non_aggression_pact` |
+| T2 | spokojnie |
+| 9 | pokój, 0 / 0 |
+| 10 | NAP `false`, werdykt „ok — cel entity_116” |
+| T3 | wpis „WAR: Empire … declared war” w Dzienniku |
+| 11 | wojna emp_001 → gracz od 61,12, powód `opportunity`; okazja 61,12, napięcie 45 ≥ 40, cel `entity_116`; kampania 61,12: `entity_116` (`colony`, `sys_059`, 0 ly, eskorta 1, fala 6); plan: `entity_116` `czeka_cooldown`, obie placówki `eskadra_w_drodze`, `entity_2` `czeka_capital_last` |
+| 12 | `entity_116` → emp_001; siatka `true`, „gridEnsured” `true`; desant 61,67 (6 jednostek); następny plan `insufficient → entity_10`; placówki `za_malo (3/2)`, stolica `czeka_capital_last (3/2)`; wyczerpanie `TAK (no_affordable_target)` |
+| T5 | okna depeszy pokojowej brak |
+| 13 | wojna; „rok 62.62: ai_refuses / no_affordable_target (ocena -46.2, próg -6)”; depesz brak; wyczerpanie AI 2 |
+| 14 | stolica przed `czeka_capital_last`, po `za_malo (3/2)`; placówki gracza 0 |
+| 15 | wojny „60.15 player_action \| 61.12 opportunity”; pokoje 1; kampania `entity_116/colony`; odmowy `insufficient_squadron`; przejęcia „62.53 entity_116 \| 62.90 entity_10 \| 62.90 entity_11”; zamknięcia `sq_emp_001_1: captured`; bitwy 1; dzwonek „mobilization:1 armedContact:2 invasion:1 tileLost:2 colonyLost:3” |
+
+Konsola — wartość nie podana (w poleceniu właściciela został szablon `<CONSOLE>`); błędów konsoli nie potwierdzam.
+**WERDYKT: PASS.**
+
+#### 5q.3 Ustalenia bramki
+
+- **Ułamki roku** — rok wejściowy 60,15 (walidator 60,12), wojna z okazji 61,12 (walidator 61,21, przebieg na zestagowanym
+  drzewie 61,20), desant 61,67 (61,74), ocena odmowy −46,2 (−48,2): kroki czasu T1/T2 prowadzi ręcznie gracz (≈ 6 s przy
+  1m/s), a przeglądarka losuje bez ziarna — bramka sprawdza własności, nie ułamki.
+- **Krok 12** — „gridEnsured” to słowo właściciela dla odczytu siatki z desantu (walidator: `siatkaZDesantu`); własność —
+  siatka utworzona przy desancie na ciele, które jej nie miało (krok 4) — spełniona ⇒ Finding **55** zamknięty
+  (`AI_CAPTURE_PLAN.md`).
+- **T5 / krok 13** — imperium z wyczerpaną kampanią odrzuca własną depeszę (ocena pokoju bez zmian, SB86); to warunek
+  powrotu z SB86 — odpowiedź właściciela: §5q.4.
+- **Krok 15** — dzwonek zgodny z walidatorem co do liczb (`colonyLost:3` = Propus c i dwie placówki przejęte narzędziem
+  w kroku 14).
 
 ---
 
