@@ -993,6 +993,9 @@ gate'u** ⇒ **D7**.
     i z okna kolonii (`AI_STRIKES_BACK_PLAN.md` §5n.4).
     → **AI STRIKES BACK SB87 (2026-10-14):** leniwe tworzenie siatki przy desancie (A4) — S4, sesja 2
     (`AI_STRIKES_BACK_PLAN.md` §2).
+    → **AI STRIKES BACK S4/2 (2026-10-14):** naprawa PRZYGOTOWANA (S4-3 — `ColonyGrid.ensureColonyGrid`: okno kolonii
+    i desant), zestagowana, czeka na bramkę S4B; nowa gra zmierzona — kolonia macierzysta ma siatkę od startu (okno kolonii
+    otwiera się samo), kolonia bez siatki = stary zapis albo przyszła droga bez okna (`AI_STRIKES_BACK_PLAN.md` §5p).
 56. **`CombatSystem._tryRetreat:392-423` jest drugim moverem** — teleport o kafel bez sprawdzania budynku,
     właściciela i stolicy; martwy tylko dlatego, że legacy jednostki nie mają `morale` (`:235`
     `morale ?? 100`). Slice GROUND go uruchomi.

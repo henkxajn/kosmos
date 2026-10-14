@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 PRZYGOTOWANA 2026-10-14, NIE zacommitowana)
 
-Plan, decyzje **SB1–SB88** i rejestr findingów **#391–#445**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB88** i rejestr findingów **#391–#446**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6199,3 +6199,28 @@ jego układ (przebieg na każdym tiku); keeper, który przełącza widok i liczy
 wywołaniach zwrotnych ładowania modeli — w czasie rzeczywistym), okno partii bitwy planetarnej na zegarze wirtualnym, stała
 liczba klatek rAF na klatkę czasu, rysowanie 3D wstrzymane (`ThreeRenderer.suspend()`); pierwsza wersja C6 miała kontrolę
 nieidentyczną (folder przekazania: `probes/detclock.mjs`).
+⏳ **S4 — sesja 2 PRZYGOTOWANA 2026-10-14, NIE zacommitowana** (łańcuch ZESTAGOWANY w repo; plan §5p; folder
+`kosmos-handover/ai-strikes-back-s4b/`, notatka `HANDOVER_S4_PART2.md`, bramka `gate/GATE_S4B.md`). **S4-3** — Finding **55**
+(SB87: NEW `src/utils/ColonyGrid.js` — `ensureColonyGrid`, jedna droga tworzenia siatki: okno kolonii i desant `launchInvasion`
+/ `_landCargo`; siatka z desantu reużywana przez okno) + przecelowanie **R-S4b-1** (`sb3_hold_return` T5 → `no_landing_zone`;
+czeka na zgodę) · **S4-4** — kampania (SB10, SB83, SB84: NEW `DirectorCampaign` + `CampaignPlanner`, reguła `campaign_strike`
+— eskadra z desantem na następne ciało gracza: najbliższy układ, placówki → kolonie → stolica gracza; stolica czeka, dopóki
+w jej układzie stoi inne ciało gracza; odbijanie ma pierwszeństwo; `strike_player_target` z guardem
+`empireSquadronUnaffordable`; klucz `campaignCooldownYears` 5) · **S4-5** — wojna z okazji (SB81, SB82: NEW
+`DirectorOpportunityWar`, reguła `opportunity_war` — pokój bez rozejmu i NAP, pula floty, napięcie ≥ `warTensionMin` 40,
+cooldown reguły `aiWarCooldownYears` 5, eskadra do wzięcia; w tym samym ticku kampania wysyła eskadrę) · **S4-6** — koniec
+wojny (SB85, SB86: `WarSystem.requestAiPeaceOffer` — drugi wyzwalacz depeszy status quo, bez progu `peaceCost`; reguła
+`campaign_peace_offer`; klucz `campaignMaxFailedAttempts` 3). Keepery NEW `sb4_colony_grid` 23, `sb4_campaign` 60,
+`sb4_opportunity_war` 33, `sb4_campaign_peace` 38; sweep 300/300, `check-i18n` 3458. **D5 (SB88):** bitwa planetarna
+(11 obron × 400 ziaren) — eskadra przy mnożniku 1,0 wygrywa 100 %, same eskorty 62–100 %; w przestrzeni (fregaty na orbicie)
+— wraki po obu stronach, eskadra przerwana. **M7** (prawdziwa gra, fixture): wojna z okazji 10,10 roku po pokoju (0,08 po
+wygaśnięciu rozejmu i NAP, napięcie 40); kolejność celów zgodna z SB84, stolica nietknięta do upadku placówek; po
+wyczerpaniu kampanii imperium co rok odrzuca własną depeszę (ocena ≈ −47 przy progu −6) — warunek powrotu z SB86. Nowy
+Finding **446** (skutek **195**: eskadra w locie wisi na zawsze, gdy cel zdobędzie wcześniejsza fala). Pytania — plan §5p.7.
+⚠ **Kampania i wojna z okazji czytają `reachableTargets`** (przestrzeń roszczona i powłoka graniczna `InfluenceMap`) — keeper,
+który nie dołoży domu gracza do zasięgu imperium, nie ma tam celów (świat keepera ≠ fixture GATE-S4).
+⚠ **Keeper, który bootuje `GameCore` kilka razy w jednym procesie, tworzy `TerritoryService` i `InfluenceMap` OD NOWA i robi
+`reseed`** — `window.KOSMOS` przeżywa kolejny boot (stara mapa wpływów i nakładka zasięgu), a strumień PRNG daje inną
+galaktykę (zmierzone w `sb4_campaign_smoke`).
+⚠ **Placówka bez budynku jest z projektu niezdobywalna** (`InvasionSystem.holdsDecisiveGround`) — scena testowa, w której
+AI ma zdobyć placówkę, musi postawić na niej budynek.
