@@ -20,7 +20,9 @@
 //   T3  FALA ZNISZCZONA: żadna jednostka desantu nie żyje → `returning` (`wave_destroyed`)
 //   T4  POKÓJ w drodze: `returning` (`peace`), composite zdjęte, przy celu brak bitwy i desantu (KONTROLA T4c: bez pokoju —
 //       desant)
-//   T5  ATAK BEZ DESANTU (cel bez siatki — Finding 55, `no_grid`): `returning` (`not_landed`, `lastBlockReason`)
+//   T5  ATAK BEZ DESANTU (cel bez miejsca do lądowania — `no_landing_zone`): `returning` (`not_landed`, `lastBlockReason`)
+//       ⚠ R-S4b-1 (S4/2): do S4/2 scena brała cel BEZ SIATKI (`no_grid`, Finding 55); od SB87 siatka powstaje przy desancie,
+//       więc brak miejsca do lądowania jest dziś drogą do ataku bez desantu.
 //   T6  ESKADRA PRZERWANA (SB66) — transportowiec w domu usunięty, niewylądowana fala znika z nim CICHO (bez śmierci)
 //   T7  ESKORTA STRACONA PRZY TRZYMANIU: `returning` (`escorts_lost`), transportowiec wraca; STRAŻNIK T7b — fala zostaje
 //   T8  źródło: `DirectorRecall` pomija `isHolding`; `squadron:closed` w `DebugLog.TRACKED_EVENTS`
@@ -193,12 +195,13 @@ header('T4  pokój, gdy eskadra jest w drodze — powrót, nic nie ląduje');
 }
 
 // ═══ T5 — atak bez desantu ═════════════════════════════════════════════════════
-header('T5  atak bez desantu (cel bez siatki) — powrót');
+header('T5  atak bez desantu (cel bez miejsca do lądowania) — powrót');
 {
   const w = boot();
   const homeCol = w.K.colonyManager.getColony(w.home.id);
-  const grid = homeCol.grid;
-  homeCol.grid = null;                                   // Finding 55 — kolonia bez siatki do pierwszego otwarcia mapy
+  const tiles = homeCol.grid.toArray().filter(Boolean);
+  const types = tiles.map(t => t.type);
+  for (const t of tiles) t.type = 'ocean';               // brak miejsca do lądowania (`InvasionSystem._findLandingHexes` → [])
   const { r, es, tr } = launch(w);
   jump(w, [...es, tr]);
   approach(w, [...es, tr]);
@@ -206,10 +209,10 @@ header('T5  atak bez desantu (cel bez siatki) — powrót');
   const r0 = rec(w, r);
   tick();
   const r1 = rec(w, r);
-  homeCol.grid = grid;
+  tiles.forEach((t, i) => { t.type = types[i]; });
   console.log(`     po bitwie ${r0?.stage} (${r0?.lastBlockReason}) · po tiku ${r1?.stage}/${r1?.outcome}`);
-  assert(evs(w, 'battle:resolved').some(b => b.result?.winner === 'A') && r0?.stage === 'launched' && r0.lastBlockReason === 'no_grid',
-    'T5-0 orbita wygrana, desant odmówiony (`no_grid`), rekord dalej `launched` z powodem');
+  assert(evs(w, 'battle:resolved').some(b => b.result?.winner === 'A') && r0?.stage === 'launched' && r0.lastBlockReason === 'no_landing_zone',
+    'T5-0 orbita wygrana, desant odmówiony (`no_landing_zone`), rekord dalej `launched` z powodem');
   assert(r1?.stage === 'returning' && r1.outcome === 'not_landed' && [...es, tr].every(v => homeBound(w, v)),
     'T5a tik — `returning` (`not_landed`), wszyscy w drodze do stolicy');
 }

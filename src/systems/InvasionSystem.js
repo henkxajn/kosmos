@@ -32,6 +32,7 @@ import { garrisonTier, readEmpireGarrisonSnapshot, invasionTroops } from '../uti
 import { warGateRefusal } from '../utils/WarGate.js';   // D13 / G2-2 — bramka wojny
 import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 import { dropTroop } from '../entities/Vessel.js';      // AI STRIKES BACK S3 (SB52) — desant z ładunku, droga gracza
+import { ensureColonyGrid } from '../utils/ColonyGrid.js';   // AI STRIKES BACK S4/2 (SB87, Finding 55) — siatka leniwie
 
 const CAPTURE_GRACE_YEARS = 3.0;
 const MIN_SURVIVING_STRENGTH_TO_LAND = 30; // flota ABSTRAKCYJNA musi mieć min. siły
@@ -127,10 +128,12 @@ export class InvasionSystem {
     const gum = window.KOSMOS?.groundUnitManager;
     if (!gum) return { success: false, reason: 'no_gum' };
 
-    // Grid planety
+    // Grid planety — S4/2 (SB87, Finding 55): kolonia, której mapy gracz nie otworzył (np. placówka założona małym statkiem),
+    //   dostaje siatkę TERAZ — jedna droga tworzenia (`ensureColonyGrid`, ta sama co okno kolonii). `no_grid` zostaje
+    //   wyłącznie dla ciała bez kolonii albo bez planety.
     const colMgr = window.KOSMOS?.colonyManager;
     const colony = colMgr?.getColony(planetId);
-    const grid = colony?.grid;
+    const grid = ensureColonyGrid(colony);
     if (!grid) return { success: false, reason: 'no_grid' };
 
     // G2b (D7, D9) — jedna gałka AI: morale ze szczebla drabiny imperium W CHWILI desantu (suma poziomów fabryk);
@@ -230,7 +233,8 @@ export class InvasionSystem {
     const gum = window.KOSMOS?.groundUnitManager;
     if (!gum) return { success: false, reason: 'no_gum' };
     const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId);
-    if (!colony?.grid) return { success: false, reason: 'no_grid' };
+    // S4/2 (SB87, Finding 55) — siatka leniwie (jedna droga tworzenia — `ensureColonyGrid`, jak w `launchInvasion`).
+    if (!ensureColonyGrid(colony)) return { success: false, reason: 'no_grid' };
     const aboard = [];
     for (const v of droppers) {
       for (const uid of [...(v.groundUnits ?? [])]) {

@@ -21,6 +21,7 @@ import { computeBuildResourceCost, computeBuildCommodityCost } from '../data/Env
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { shouldReuseColonyGrid } from './ColonyGridResolveLogic.js';
+import { ensureColonyGrid, syncTileBuildings } from '../utils/ColonyGrid.js';   // S4/2 (SB87, Finding 55) — jedna droga tworzenia siatki
 import { DepositSystem } from '../systems/DepositSystem.js';                   // C2 — getDepositsSummary (pozostało/początkowe)
 import { computeDepositReadout, fmtCompact } from './DepositReadoutLogic.js';  // C2 — odczyt złoża (ratio + ETA wyczerpania)
 import { computeEnvironmentEffects } from './EnvironmentEffectLogic.js';        // C3 — linie efektów środowiskowych (warunek → wpływ)
@@ -565,7 +566,8 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Uszanuj istniejący grid zamiast regenerować, gdy:
     //  • kolonia obca (spawnTestEnemy/EmpireGenerator ustawił grid z owner+capital), LUB
-    //  • kolonia gracza z gridem z SAVE (kafle niosą stan: syntheticSlot/droidy, owner).
+    //  • kolonia gracza z gridem z SAVE (kafle niosą stan: syntheticSlot/droidy, owner), LUB
+    //  • grid z `ensureColonyGrid` (S4/2, SB87 — desant na kolonię, której mapy gracz nie otworzył, albo samo okno).
     // ⚠ ROOT-CAUSE (Faza 4): dawny guard obejmował tylko `isHostileColony` → grid gracza był
     // regenerowany po każdym reloadzie, gubiąc syntheticSlot (droidy znikały; BUG A/B/C).
     const isHostileColony = !!colony.ownerEmpireId || !!colony.isTestEnemy;
@@ -581,41 +583,37 @@ export class ColonyOverlay extends BaseOverlay {
       }
       this._loadBiomeMap(colony.planet, colony.grid, pid);   // biomy nie są serializowane (async)
       this._syncTileBuildings(colony.grid, bSys);
+      // S4/2 (SB87, Finding 55) — siatka utworzona przy desancie (`ensureColonyGrid` poza oknem, nie z zapisu): stolica
+      //   jak przy pierwszym otwarciu mapy (gałąź generowania niżej). Siatka z zapisu — jak dotąd bez auto-stolicy.
+      if (colony._gridEnsured && !colony._gridFromSave) {
+        const again = this._autoPlaceCapital(colony, colony.grid, bSys, isHostileColony);
+        if (again) return again;
+      }
       return colony.grid;
     }
 
-    // Generuj grid z planety
-    const isHome = (pid === window.KOSMOS?.homePlanet?.id);
-    const grid = PlanetMapGenerator.generate(colony.planet, isHome);
+    // Generuj grid z planety — JEDNA droga tworzenia siatki (S4/2, SB87): `ensureColonyGrid` (generator, właściciel kafli,
+    //   BuildingSystem: siatka, wysokość, złoża, tryb heksów; stan budynków na kaflach). Tę samą funkcję woła desant
+    //   (`InvasionSystem`) na kolonię, której mapy gracz nie otworzył.
+    const grid = ensureColonyGrid(colony, { regenerate: true, homePlanetId: window.KOSMOS?.homePlanet?.id ?? null });
     this._gridCache[pid] = grid;
-    colony.grid = grid;
-
-    // Domyślny owner: dla obcej kolonii → empireId/isTestEnemy, inaczej → 'player'.
-    // Nie nadpisuje hexów które już mają ownera (np. po invasion).
-    const defaultOwner = colony.ownerEmpireId
-      ?? (colony.isTestEnemy ? 'enemy' : 'player');
-    for (const tile of grid.toArray()) {
-      if (tile && tile.owner == null) tile.owner = defaultOwner;
-    }
 
     // Próbuj załadować biome map (1:1 z 3D teksturą) — fallback: PlanetMapGenerator biomy
     this._loadBiomeMap(colony.planet, grid, pid);
 
-    // Ustaw gridHeight, deposits i tryb w BuildingSystem (krytyczne!)
     const bSys = colony.buildingSystem;
-    if (bSys) {
-      bSys._gridHeight = grid.height ?? 10;
-      bSys._grid = grid;
-      if (typeof bSys.setDeposits === 'function') {
-        bSys.setDeposits(colony.planet?.deposits ?? []);
-      }
-      if (typeof bSys.setRegionMode === 'function') {
-        bSys.setRegionMode(false); // hex grid, nie regiony
-      }
-    }
+    const again = this._autoPlaceCapital(colony, grid, bSys, isHostileColony);
+    if (again) return again;
 
-    // Auto-place stolicy przy pierwszym otwarciu (jeśli brak).
-    // Pomiń dla obcych/test-enemy kolonii — ich capital stawia spawnTestEnemy/EmpireGenerator.
+    this._syncTileBuildings(grid, bSys);
+    return grid;
+  }
+
+  // Auto-place stolicy przy pierwszym otwarciu (jeśli brak).
+  // Pomiń dla obcych/test-enemy kolonii — ich capital stawia spawnTestEnemy/EmpireGenerator.
+  // Zwraca siatkę z ponownego `_getGrid`, gdy stolica stanęła; inaczej `null` (wołający kończy swoją ścieżką).
+  _autoPlaceCapital(colony, grid, bSys, isHostileColony) {
+    const pid = colony.planetId;
     const isOutpost = colony.isOutpost ?? false;
     if (bSys && window.KOSMOS?.civMode && !isOutpost && !isHostileColony) {
       let hasCapital = false;
@@ -644,9 +642,7 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
     }
-
-    this._syncTileBuildings(grid, bSys);
-    return grid;
+    return null;
   }
 
   // Znajdź najlepszy hex na stolicę (równiny/las w środku mapy)
@@ -665,43 +661,9 @@ export class ColonyOverlay extends BaseOverlay {
     return bestTile;
   }
 
+  // S4/2 (SB87) — stan budynków na kaflach: jedno źródło z siatką tworzoną przy desancie (`ColonyGrid.syncTileBuildings`).
   _syncTileBuildings(grid, bSys) {
-    if (!grid || !bSys) return;
-    // Wyczyść stany budynków
-    grid.forEach(tile => {
-      tile.buildingId = null; tile.buildingLevel = 1;
-      tile.capitalBase = false; tile.underConstruction = null; tile.pendingBuild = null;
-    });
-    // Aktywne budynki
-    for (const [tileKey, entry] of bSys._active) {
-      if (tileKey.startsWith('capital_')) {
-        const coords = tileKey.slice(8).split(',').map(Number);
-        const t = grid.get(coords[0], coords[1]);
-        if (t) t.capitalBase = true;
-        continue;
-      }
-      const [q, r] = tileKey.split(',').map(Number);
-      const t = grid.get(q, r);
-      if (t) { t.buildingId = entry.building.id; t.buildingLevel = entry.level ?? 1; }
-    }
-    // Budowa w toku
-    if (bSys._constructionQueue) {
-      for (const [tileKey, constr] of bSys._constructionQueue) {
-        const [q, r] = tileKey.split(',').map(Number);
-        const t = grid.get(q, r);
-        if (t) t.underConstruction = constr;
-      }
-    }
-    // Oczekujące zamówienia (pending queue)
-    if (bSys._pendingQueue) {
-      for (const [tileKey, order] of bSys._pendingQueue) {
-        const [q, r] = tileKey.split(',').map(Number);
-        const t = grid.get(q, r);
-        if (t) t.pendingBuild = order.buildingId ?? order.building?.id;
-      }
-    }
-    // Aktualizuj _grid w BuildingSystem
-    bSys._grid = grid;
+    syncTileBuildings(grid, bSys);
   }
 
   // planetId opcjonalny — gdy podany, syncuj grid TEJ kolonii (nawet jeśli nie wyświetlana).
