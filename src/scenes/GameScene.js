@@ -509,6 +509,8 @@ export class GameScene {
     window.KOSMOS.directorRetake     = this.directorOffensive.retake ?? null;
     // AI STRIKES BACK S4/2 (SB10, SB83, SB84) — kampania (instancja rejestrowana przy uderzeniu: `registerOffensiveBehaviors`).
     window.KOSMOS.directorCampaign   = this.directorOffensive.campaign ?? null;
+    // AI STRIKES BACK S4/2 (SB81, SB82) — wojna z okazji (instancja rejestrowana przy uderzeniu).
+    window.KOSMOS.directorOpportunityWar = this.directorOffensive.opportunity ?? null;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;

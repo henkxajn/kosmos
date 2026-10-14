@@ -62,6 +62,8 @@ import { squadronHpRatio, squadronMaxShips } from '../../utils/StrikeWavePlanner
 import { DirectorRetake } from './DirectorRetake.js';
 // AI STRIKES BACK S4/2 (SB10, SB83, SB84) — kampania układ po układzie (części wspólne z odbijaniem).
 import { DirectorCampaign } from './DirectorCampaign.js';
+// AI STRIKES BACK S4/2 (SB81, SB82) — wojna z okazji (eskadra kampanii jako okazja).
+import { DirectorOpportunityWar } from './DirectorOpportunityWar.js';
 
 /**
  * ⚠ POKRĘTŁO BALANSU (D-199-1): ile razy więcej wytrzymałości musi mieć eskadra od obrońcy.
@@ -527,6 +529,23 @@ export function registerOffensiveBehaviors(instance, { allowOverride = false } =
     ({ empireId }) => campaign.squadronUnaffordable(empireId), { allowOverride });
   DirectorActions.register('launchCampaign',
     (ctx) => campaign.launchCampaign(ctx), { allowOverride });
+
+  // AI STRIKES BACK S4/2 (SB81, SB82) — reguła `opportunity_war` (wojna z okazji). Instancja wystawiona jako
+  //   `instance.opportunity` (lokator: `KOSMOS.directorOpportunityWar` w GameScene).
+  const opportunity = new DirectorOpportunityWar(campaign);
+  instance.opportunity = opportunity;
+  DirectorGuards.register('empireAtPeaceWithoutPact',
+    ({ empireId }) => opportunity.atPeaceWithoutPact(empireId), { allowOverride });
+  DirectorGuards.register('empireHasFleetPool',
+    ({ empireId }) => opportunity.hasFleetPool(empireId), { allowOverride });
+  DirectorGuards.register('empireWarTensionReached',
+    ({ empireId }) => opportunity.tensionReached(empireId), { allowOverride });
+  DirectorGuards.register('opportunityWarCooldownElapsed',
+    ({ empireId, year }) => opportunity.cooldownElapsed(empireId, year), { allowOverride });
+  DirectorGuards.register('empireSquadronAffordable',
+    ({ empireId }) => opportunity.squadronAffordable(empireId), { allowOverride });
+  DirectorActions.register('declareOpportunityWar',
+    (ctx) => opportunity.declareOpportunityWar(ctx), { allowOverride });
 }
 
 export default DirectorOffensive;

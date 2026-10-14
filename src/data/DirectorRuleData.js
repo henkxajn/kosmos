@@ -229,6 +229,29 @@ export const DIRECTOR_RULES = {
   },
 
   /**
+   * AI STRIKES BACK S4/2 (SB81, SB82) — WOJNA Z OKAZJI. „Mamy czym uderzyć, a stosunki są złe.”
+   *
+   * Pokój bez rozejmu i bez paktu o nieagresji, imperium z pulą floty, napięcie ≥ `warTensionMin` (40), od ostatniego
+   * odpalenia reguły minęło `aiWarCooldownYears` (5), a eskadra na najbliższy cel kampanii jest do wzięcia
+   * → `declareWar(…, 'opportunity')`. Szczegóły i powody odmowy: `DirectorOpportunityWar`.
+   *
+   * ⚠ BEZ RZUTU, więc MUSI mieć `cooldown` (decyzja 11) — `1.0` roku wyświetlanego to przepustnica decyzji; odstęp między
+   *   wojnami dają rozejm i NAP, a cooldown reguły to klucz `aiWarCooldownYears` (guard), nie ta liczba.
+   * ⚠ W katalogu PRZED uderzeniem i kampanią: w tym samym ticku `campaign_strike` widzi wojnę i wysyła eskadrę, która była
+   *   okazją, a `strike_player_target` widzi eskadrę do wzięcia (guard), więc zwykłego uderzenia nie ma.
+   * ⚠ `delay: 0` OBOWIĄZKOWO (pin katalogowy `w3_target_selection` T1).
+   */
+  opportunity_war: {
+    id:       'opportunity_war',
+    trigger:  { kind: 'poll', probe: 'campaignTargets', gte: 1 },
+    guard:    ['empireAtPeaceWithoutPact', 'empireHasFleetPool', 'empireWarTensionReached', 'opportunityWarCooldownElapsed',
+               'empireSquadronAffordable'],
+    delay:    0,
+    response: { action: 'declareOpportunityWar', params: {} },
+    cooldown: { years: 1.0 },
+  },
+
+  /**
    * W3-5 — UDERZENIE NA CEL GRACZA. Pierwsza reguła, w której AI wybiera cel SAMO.
    *
    * Trigger to OBECNOŚĆ CELU W ZASIĘGU, nie siła: zasięg wyznacza powłoka graniczna

@@ -180,6 +180,11 @@ const TRACKED_EVENTS = [
   //   (`no_capital`, `no_target`, `insufficient_squadron`, `target_beyond_reach`, `launch_refused`).
   'director:campaignLaunched',
   'director:campaignRefused',
+  // AI STRIKES BACK S4/2 (SB81, SB82) — wojna z okazji: wypowiedzenie (napięcie, próg, cel) i odmowa akcji z powodem
+  //   (`not_at_peace`, `non_aggression_pact`, `no_fleet_pool`, `tension_below_min`, `cooldown`, `no_squadron`,
+  //   `declare_refused`).
+  'director:opportunityWarDeclared',
+  'director:opportunityWarRefused',
 ];
 
 class DebugLog {

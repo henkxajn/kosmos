@@ -107,4 +107,18 @@ export const SB_TUNING = Object.freeze({
    * Konsument: `StrikeWavePlanner.campaignCooldownYears` → `DirectorCampaign`.
    */
   campaignCooldownYears: Object.freeze({ default: 5, type: 'number', min: 0, max: 100, unit: 'lata gry' }),
+
+  /**
+   * SB81 (S4/2) — WOJNA Z OKAZJI: najniższe napięcie z graczem (0–100), przy którym imperium z pulą floty i eskadrą do
+   * wzięcia wypowiada wojnę (`opportunity_war`). Dla porównania: napięcie 80 to wojna z wrogości, 60 — ultimatum.
+   * Konsument: `StrikeWavePlanner.warTensionMin` → `DirectorOpportunityWar`.
+   */
+  warTensionMin: Object.freeze({ default: 40, type: 'number', min: 0, max: 100, unit: 'napiecie' }),
+
+  /**
+   * SB82 (S4/2) — WOJNA Z OKAZJI: ile lat gry od ostatniego odpalenia reguły `opportunity_war` (tego imperium) przed
+   * następnym. Odstęp między wojnami dają przede wszystkim rozejm i pakt o nieagresji (10 lat po każdym pokoju); ten klucz
+   * jest cooldownem samej reguły. Konsument: `StrikeWavePlanner.aiWarCooldownYears` → `DirectorOpportunityWar`.
+   */
+  aiWarCooldownYears: Object.freeze({ default: 5, type: 'number', min: 0, max: 50, unit: 'lata gry' }),
 });

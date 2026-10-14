@@ -130,6 +130,16 @@ export function campaignCooldownYears() {
   return getTuning('campaignCooldownYears');
 }
 
+/** SB81 (S4/2) — najniższe napięcie z graczem, przy którym imperium wypowiada wojnę z okazji (`warTensionMin`). */
+export function warTensionMin() {
+  return getTuning('warTensionMin');
+}
+
+/** SB82 (S4/2) — cooldown reguły wojny z okazji w latach gry (`aiWarCooldownYears`). */
+export function aiWarCooldownYears() {
+  return getTuning('aiWarCooldownYears');
+}
+
 /** Werdykt eskadry: `start` (potrzebne ≤ dostępne i ≤ sufit) · `za_malo` (≤ sufit, > dostępne) · `poza_zasiegiem` (> sufit). */
 export function squadronVerdict(needed, available, cap) {
   if (needed > cap) return 'poza_zasiegiem';
