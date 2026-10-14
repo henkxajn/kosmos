@@ -1813,6 +1813,9 @@ AI = 0 (`ColonyManager.js:1680`, `:1701`) `[code]`. Bez przypisanego kroku.
 → **AI STRIKES BACK S4/1 (D3, 2026-10-13):** ten sam zapis dotyka jednostek GRACZA bez domu (więź zerwana przy utracie
 kolonii — 380, `debug.spawnMyUnit`) — po wczytaniu płaci kolonia ciała; zmierzone: 8/8 rozwiązane `no_credits` na zdobytej
 kolonii z 0 Kr — Finding **443** (`AI_STRIKES_BACK_PLAN.md` §6).
+→ **AI STRIKES BACK S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-11, SB79, zestagowana; zamknięcie przy commicie):
+`serialize` zapisuje `homeColonyId ?? null`, `restore` — fallback na ciało wyłącznie dla zapisu bez pola; `null`
+przeżywa zapis i wczytanie (także jednostek AI) — `AI_STRIKES_BACK_PLAN.md` §5r.
 
 ### 🟠 343 — zwykłe budynki AI stają na kaflach oceanu: martwy test `tile.buildable` w bootstrapie (→ osobny slice)
 

@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14 · S4 sesja 3 PRZYGOTOWANA 2026-10-14)
 
-Plan, decyzje **SB1–SB92** i rejestr findingów **#391–#446**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+Plan, decyzje **SB1–SB92** i rejestr findingów **#391–#448**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q, S4 sesja 3: §5r); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6234,3 +6234,29 @@ od razu jako zdobycie · **SB91** odczytania SB81 / SB82 zostają (pula = imperi
 wojny z okazji; cooldown reguły od jej ostatniego odpalenia) · **SB92** zwykłe uderzenie eskortą w porządku SB84 (najbliższy
 układ gracza; placówki → kolonie → stolica na końcu), nie po devScore · zgoda na R-S4b-1 (bez numeru SB). **442**, **443**,
 **444**, **445** (SB78–SB80) — S4, sesja 3.
+⏳ **S4 — sesja 3 PRZYGOTOWANA 2026-10-14** (łańcuch S4-7 … S4-12 ZESTAGOWANY, NIE zacommitowany — bramka S4C
+w przeglądarce właściciela i zgoda na przecelowania **R-S4c-1**, **R-S4c-2** przed commitem; plan §5r; folder
+`kosmos-handover/ai-strikes-back-s4c/`, notatka `HANDOVER_S4_PART3.md`, bramka `gate/GATE_S4C.md`, commity
+`tools/commit_S4C.sh --zgoda-R-S4c-1 --zgoda-R-S4c-2`). **S4-7** — **446** / **195** (SB90: statek AI pomijany w pętli
+`VesselManager._onColonyDestroyed` — nigdy nie przechodzi do gracza; eskadra `launched` z celem już własnym zamyka się od razu
+`captured / target_own`, kadłuby wracają do stolicy „ogonem” rekordu) · **S4-8** — SB89 (kontrole roczne końca wojny w
+`gameState.campaignPeaceChecks`, klucz `campaignPeaceAfterChecks` 2; warunek eskort w drodze; depesza status quo wysyłana BEZ
+oceny pokoju AI i WIĄŻĄCA przy przyjęciu — `WarSystem.isAiOfferBinding`) + **R-S4c-1** · **S4-9** — SB92
+(`DirectorOffensive.sb84Targets` — jedno źródło celów kampanii i zwykłego uderzenia) + **R-S4c-2** · **S4-10** — **442**
+(SB78: kolonia własna bez zużycia; uzupełnianie z `resourceSystem`) · **S4-11** — **443** / **342** (SB79: dom przeżywa
+zapis; naprawa przy wczytaniu) · **S4-12** — **444** / **445** (SB80: żołd tylu, ilu starcza kasy; jedno pobranie przez
+`ColonyManager._spendColonyCredits`). Keepery NEW `sb4_owned_target_close` 20, `sb4_peace_checks` 22, `sb4_strike_order` 7,
+`sb4_own_ground_supply` 8, `sb4_unit_home_load` 8, `sb4_ground_upkeep` 6; sweep świeżego klonu 300/300 → 301/301 → 302/302 → 303/303 → 304/304 → 305/305 → 306/306, `check-i18n` 3458.
+**M8** (prawdziwa gra, fixture): depesza status quo dokładnie 1,00 roku po pierwszej kontroli z wyczerpaniem; garnizon gracza
+na zdobytej kolonii po wczytaniu płacony przez stolicę, zapas 100 przez 9 lat, rozwiązania wyłącznie przy pustej kasie
+stolicy (kontrola: 24 / 24 rozwiązane 0,43 roku po wczytaniu); eskadra z celem zdobytym w locie zamknięta 0,0014 roku po
+zdobyciu (kontrola: wisi 8 lat). Nowe Findingi **447** (zwykłe uderzenie na ciało zdobyte w locie — bitwa na ciele już
+własnym), **448** (pierścień stolicy / koszar cudzej kolonii zwalnia z zużycia). Pytania — plan §5r.5.
+⚠ **Kontrola roczna końca wojny (SB89) = odpalenie reguły `campaign_peace_offer`;** keeper, który mierzy depeszę z wyczerpanej
+kampanii, musi przejść DWIE kolejne kontrole (rok gry między nimi) — jedna kontrola daje `exhaustion_not_held`.
+⚠ **Depesza z wyczerpanej kampanii jest WIĄŻĄCA** — przyjęcie bez ponownej oceny AI (tylko pokój bez warunków); depesza
+z wyczerpania z bitew — jak dotąd z oceną.
+⚠ **Naprawa domu przy wczytaniu (S4-11) biegnie przy KAŻDYM wczytaniu** — narzędzie bramki albo sondy, które tworzy jednostki
+gracza z domem = ciało, musi dać im więź POP (`popCost` + `lockPops(popCost, 'laborer')`), inaczej po wczytaniu dom znika.
+⚠ **Koszt w Kr kolonii — jedno pobranie przez `ColonyManager._spendColonyCredits`** (zdarzenie `trade:spendCredits`; bez
+systemu handlu — odjęcie wprost); nowy koszt nie odejmuje ręcznie I nie emituje (to był Finding 445).
