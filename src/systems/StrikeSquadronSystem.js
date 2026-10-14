@@ -15,8 +15,9 @@
 // PRZERWANIE (S3/2, SB66, Finding 435): eskadra w drodze, która straciła CAŁĄ eskortę, jest przerywana — transportowiec
 // zawraca do stolicy istniejącym odwołaniem (`OrderService.issueRecall`), desantu nie ma; reguły bitwy planetarnej bez zmian.
 // PO DESANCIE (S3/2, SB58 zmienione przez SB63, Finding 434): eskorta i transportowiec TRZYMAJĄ orbitę celu, aż walka
-// naziemna się rozstrzygnie (ciało zdobyte albo fala zniszczona); potem wszyscy wracają do stolicy tym samym odwołaniem,
-// a transportowiec, który dotarł na orbitę stolicy, jest usuwany (rekord `closed`). Odwołanie Directora
+// naziemna się rozstrzygnie (ciało zdobyte albo fala zniszczona) albo minie LIMIT TRZYMANIA (S4, SB70, Finding 440 — klucz
+// `squadronHoldMaxYears`, domyślnie 3 lata gry: wynik `hold_expired`, wylądowana fala zostaje i walczy dalej); potem wszyscy
+// wracają do stolicy tym samym odwołaniem, a transportowiec, który dotarł na orbitę stolicy, jest usuwany (rekord `closed`). Odwołanie Directora
 // (`DirectorRecall`) pomija kadłuby eskadry trzymającej orbitę (`isHolding`). POKÓJ z graczem w trakcie: eskadra wraca,
 // nic nie ląduje. Atak bez desantu (odmowa przy lądowaniu) — eskadra wraca.
 //
@@ -31,7 +32,7 @@ import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { isInService, hasWeapons, isEnemyVessel, loadGroundUnit } from '../entities/Vessel.js';
 import { garrisonAnchor, garrisonTier, readEmpireGarrisonSnapshot } from '../utils/GarrisonPlanner.js';
-import { readEmpireWavePlan, planWave, STRIKE_TRANSPORT_TEMPLATE } from '../utils/StrikeWavePlanner.js';
+import { readEmpireWavePlan, planWave, STRIKE_TRANSPORT_TEMPLATE, squadronHoldMaxYears } from '../utils/StrikeWavePlanner.js';
 import { systemIdOf } from '../utils/SystemScope.js';
 
 /** Klucz najwyższego poziomu w `gameState` (deklaracja: `GameState.createDefaultState`). */
@@ -40,7 +41,8 @@ export const SQUADRON_STATE_KEY = 'strikeSquadrons';
 /**
  * Etapy rekordu eskadry:
  *   `launched` (w drodze do celu) → `landed` (desant; eskorta i transportowiec trzymają orbitę celu — SB63) → `returning`
- *   (walka naziemna rozstrzygnięta albo pokój albo atak bez desantu — wszyscy wracają do stolicy; `outcome`) → `closed`
+ *   (walka naziemna rozstrzygnięta albo limit trzymania `hold_expired` — SB70 — albo pokój albo atak bez desantu — wszyscy
+ *   wracają do stolicy; `outcome`) → `closed`
  *   (transportowiec usunięty na orbicie stolicy);
  *   `launched` → `aborted` (SB66 — cała eskorta stracona; transportowiec wraca) → `closed`;
  *   `launched` / `aborted` → `transport_lost` (transportowiec wrakiem razem z falą — koniec).
@@ -310,7 +312,7 @@ export class StrikeSquadronSystem {
    * Tik czasu:
    *   • `launched` — atak skończony BEZ desantu (transportowiec bezczynny na orbicie celu, bitwa nie czeka w oknie
    *     `EnemyAttackHandler`) → `returning` (`not_landed`, powód ostatniej odmowy w `lastBlockReason`);
-   *   • `landed` — walka naziemna rozstrzygnięta (`_groundDecision`) → `returning`;
+   *   • `landed` — walka naziemna rozstrzygnięta (`_groundDecision`) albo limit trzymania (`_holdExpired`, SB70) → `returning`;
    *   • `aborted` — transportowiec bez rozkazu powrotu dostaje go; w domu — usunięty, `closed`;
    *   • `returning` — członek bezczynny poza domem dostaje rozkaz powrotu; transportowiec w domu — usunięty, `closed`.
    */
@@ -319,7 +321,7 @@ export class StrikeSquadronSystem {
       if (s.stage === 'launched') {
         if (this._attackEndedWithoutLanding(s)) this._toReturning(s, 'not_landed');
       } else if (s.stage === 'landed') {
-        const d = this._groundDecision(s);
+        const d = this._groundDecision(s) ?? this._holdExpired(s);
         if (d) this._toReturning(s, d);
       } else if (s.stage === 'aborted') {
         if (s.homeOrdered !== true) this._returnTransport(s);
@@ -359,6 +361,20 @@ export class StrikeSquadronSystem {
       return !!u && (u.hp ?? 0) > 0 && u.planetId === bodyId;
     });
     return alive ? null : 'wave_destroyed';
+  }
+
+  /**
+   * SB70 (S4, Finding 440) — LIMIT TRZYMANIA ORBITY: eskadra w etapie `landed` od co najmniej `squadronHoldMaxYears` lat gry
+   * (licząc od desantu) → `hold_expired`; inaczej `null`. Rozstrzygnięcie walki naziemnej w tym samym tiku ma pierwszeństwo
+   * (`_groundDecision` pierwsze). Wylądowana fala zostaje na ciele i walczy dalej — `_toReturning` zabiera wyłącznie kadłuby.
+   * Odbijanie traktuje tę próbę jak każdą inną: cooldown celu liczony od wysyłki eskadry (`DirectorRetake.retakeCandidates`).
+   * Rekord sprzed S4 (bez `landedYear`) — chwila wejścia w `landed` (`stageYear`).
+   */
+  _holdExpired(s) {
+    const now = this._K()?.timeSystem?.gameTime;
+    const from = Number.isFinite(s.landedYear) ? s.landedYear : s.stageYear;
+    if (!Number.isFinite(now) || !Number.isFinite(from)) return null;
+    return (now - from) >= squadronHoldMaxYears() ? 'hold_expired' : null;
   }
 
   /** Kadłub w domu: na orbicie (albo w doku) ciała stolicy, bez misji, rozkazu i composite. */
@@ -455,7 +471,8 @@ export class StrikeSquadronSystem {
     if (!Array.isArray(vesselIds)) return;
     for (const s of this.listSquadrons()) {
       if (s.stage === 'launched' && vesselIds.includes(s.transportId)) {
-        this._setStage(s.id, 'landed', { landedUnitIds: [...(unitIds ?? [])], landedOn: planetId ?? null });
+        this._setStage(s.id, 'landed', { landedUnitIds: [...(unitIds ?? [])], landedOn: planetId ?? null,
+                                         landedYear: this._K()?.timeSystem?.gameTime ?? null });
       }
     }
   }

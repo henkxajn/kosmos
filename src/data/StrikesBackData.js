@@ -93,4 +93,11 @@ export const SB_TUNING = Object.freeze({
    * (np. za mało okrętów) próbą nie jest. Konsument: `StrikeWavePlanner.retakeCooldownYears` → `DirectorRetake`.
    */
   retakeCooldownYears: Object.freeze({ default: 5, type: 'number', min: 0, max: 100, unit: 'lata gry' }),
+
+  /**
+   * SB70 (S4, Finding 440) — LIMIT TRZYMANIA ORBITY: ile lat gry eskadra (eskorta i transportowiec) stoi nad celem po
+   * desancie (etap `landed`), zanim wróci do stolicy, choćby walka naziemna trwała dalej — wylądowana fala zostaje i walczy.
+   * Konsument: `StrikeWavePlanner.squadronHoldMaxYears` → `StrikeSquadronSystem._tick`.
+   */
+  squadronHoldMaxYears: Object.freeze({ default: 3, type: 'number', min: 0.5, max: 20, unit: 'lata gry' }),
 });

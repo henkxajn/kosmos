@@ -120,6 +120,11 @@ export function retakeCooldownYears() {
   return getTuning('retakeCooldownYears');
 }
 
+/** SB70 (S4) — ile lat gry eskadra trzyma orbitę celu po desancie (`squadronHoldMaxYears`). Odczyt w chwili użycia. */
+export function squadronHoldMaxYears() {
+  return getTuning('squadronHoldMaxYears');
+}
+
 /** Werdykt eskadry: `start` (potrzebne ≤ dostępne i ≤ sufit) · `za_malo` (≤ sufit, > dostępne) · `poza_zasiegiem` (> sufit). */
 export function squadronVerdict(needed, available, cap) {
   if (needed > cap) return 'poza_zasiegiem';
