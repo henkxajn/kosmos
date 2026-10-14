@@ -6,7 +6,8 @@
 > pytania sesji 2 S1; **SB30–SB36** — **2026-10-08**, podpis S2 (§2); **SB37–SB38** — **2026-10-10**, przy zamknięciu
 > S2 (§2); **SB39–SB44** — **2026-10-10**, podpis S2b — poprawki przed S3 (§2); **SB45–SB48** — **2026-10-11**, przy
 > zamknięciu S2b (§2); **SB49–SB60** — **2026-10-11**, podpis S3 (§2); **SB61–SB67** — **2026-10-12**, przy zamknięciu
-> sesji 1 S3 (§2); **SB68–SB76** — **2026-10-13**, odpowiedzi na pytania sesji 2 S3 (§2, §5m.4).
+> sesji 1 S3 (§2); **SB68–SB76** — **2026-10-13**, odpowiedzi na pytania sesji 2 S3 (§2, §5m.4); **SB77–SB88** —
+> **2026-10-14**, odpowiedzi na pytania sesji 1 S4 (§2, §5o.4).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
@@ -42,7 +43,7 @@
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
-> **Rejestr macierzysty findingów #391–#440:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
+> **Rejestr macierzysty findingów #391–#445:** ten plik, §6. Korekty cudzych rejestrów (**50**): §7.
 > ⚠ Znaczniki źródła: `[code]` — przeczytane w źródle (#391–#396 na `8b72c47`, #397–#406 na `eb6c06e`, #412–#413 na
 > `1444184`, #414–#416 na `dab5e2a` i na łańcuchu S2, #417–#419 na `0eaa105`, #420–#425 na `f3fb8e0` i na łańcuchu S2b, #426–#435 na `2a09ac9` i na łańcuchu S3, #436–#437 na `c97b73b`, #438–#440 na łańcuchu S3/2 `dd31e11`) ·
 > `[measured]` — wykonane i policzone ·
@@ -165,6 +166,18 @@ W kolejności właściciela:
 | **SB74** | **Brzmienie nowych kluczy i18n S3-9 przyjęte bez zmian.** Odpowiedź na pytanie 8, **2026-10-13**. | `5a47c68` (S3-9). |
 | **SB75** | **298 × SB57 — zamierzone:** ciało zatrzymane pokojem status quo nie jest odbijane w żadnej kolejnej wojnie; w S4 jest zwykłym celem kampanii. Odpowiedź na pytanie 9, **2026-10-13**. | Finding **298** (`VESSEL_ORDERS_PLAN.md`); S4 (SB10). |
 | **SB76** | **Głód garnizonu gracza na zdobytej kolonii** (M6: 4 jednostki zginęły z głodu nawet bez ataku; 7 rozwiązanych `no_credits`) — w S4 ZMIERZYĆ przyczynę (wyłącznie audyt, bez naprawy); decyzja po pomiarze. **2026-10-13**. | → **S4, sesja 1** (pomiar). |
+| **SB77** | **Finding 441 (okno pierwszego wykrycia: „Distance” od planety macierzystej bez terminu układu, „in our system”) — polerka UI, nie S4.** Odpowiedź na pytanie 2 sesji 1 S4 (§5n.6), **2026-10-14**. | Finding **441** (§6). |
+| **SB78** | **Finding 442 — wariant (b): jednostka na kolonii WŁASNEGO imperium nie zużywa zaopatrzenia; zaopatrzenie liczy się wyłącznie na cudzym gruncie.** Odpowiedź na pytanie 3, **2026-10-14**. | → **S4, sesja 3**; Finding **442** (§6). |
+| **SB79** | **Finding 443 — wariant (a): stolica właściciela płaci jak przed wczytaniem; dom jednostki musi przeżyć zapis i wczytanie.** Odpowiedź na pytanie 4, **2026-10-14**. | → **S4, sesja 3**; Finding **443** (§6). |
+| **SB80** | **Finding 444 — wariant (a): płacić tylu jednostkom, ilu starcza kasy. Podwójne pobranie żołdu dostaje własny numer (Finding 445) i jest naprawiane razem z 444, jeśli audyt pokaże, że to mała zmiana.** Odpowiedź na pytanie 5, **2026-10-14**. | → **S4, sesja 3**; Findingi **444**, **445** (§6). |
+| **SB81** | **Wyzwalacz wojny z inicjatywy AI — (b) okazja + napięcie ≥ X; X jest kluczem strojenia (domyślnie 40).** Odpowiedź na pytanie 6, **2026-10-14**. | → **S4, sesja 2** (reguła wojny z okazji). |
+| **SB82** | **Odstęp między wojnami AI: wystarczą rozejm i NAP, plus cooldown reguły jako klucz strojenia (domyślnie 5 lat).** Odpowiedź na pytanie 7, **2026-10-14**. | → **S4, sesja 2**. |
+| **SB83** | **Kampania: pierwszeństwo mają eskadry z desantem; zwykłe uderzenia eskortą WYŁĄCZNIE, gdy pula nie pokrywa eskadry (to samo pierwszeństwo, co dziś przy odbijaniu).** Odpowiedź na pytanie 8, **2026-10-14**. | → **S4, sesja 2** (reguła kampanii). |
+| **SB84** | **Porządek celów: najpierw najbliższy układ gracza; w nim placówki, potem kolonie, stolica gracza na końcu.** Odpowiedź na pytanie 9, **2026-10-14**. | → **S4, sesja 2**; uszczegóławia **SB10**. |
+| **SB85** | **Koniec wojny — (b) status quo, gdy kampania jest wyczerpana (bez maszynerii cesji).** Odpowiedź na pytanie 10, **2026-10-14**. | → **S4, sesja 2** (drugi wyzwalacz depeszy pokojowej AI). |
+| **SB86** | **Pula a pokój (65 / 65) zostaje; powrót do tematu wyłącznie, jeśli bramka pokaże, że wojny się nie kończą.** Odpowiedź na pytanie 11, **2026-10-14**. | §5e.6. |
+| **SB87** | **Finding 55: leniwe tworzenie siatki kolonii przy desancie (A4).** Odpowiedź na pytanie 12, **2026-10-14**. | → **S4, sesja 2**; Finding **55** (`AI_CAPTURE_PLAN.md`). |
+| **SB88** | **Pomiar SB72 (czy uderzenia AI przegrywają za często) w ramach S4, na uprzęży.** Odpowiedź na pytanie 13, **2026-10-14**. | → **S4, sesja 2**; **SB72**. |
 
 ---
 
@@ -2038,6 +2051,8 @@ przejęcia ciała przez falę (zamknięcie `captured` w 64,11; obrońcy gracza 8
    cesja zdobyczy / status quo / bez zmian · (11) pula a pokój (65 / 65) · (12) Finding 55: naprawa leniwa przy desancie ·
    (13) pomiar SB72 (czy uderzenia AI przegrywają za często) w S4.
 
+**Odpowiedzi właściciela (2026-10-14):** §5o.4 — 1 commit po bramce (§5o.1), pozostałe → **SB77–SB88** (§2).
+
 #### 5n.7 Następny krok
 
 Bramka S4A w przeglądarce właściciela, potem commity (`tools/commit_S4A.sh` w folderze przekazania — test na sucho PASS);
@@ -2108,10 +2123,34 @@ Konsola — wartość nie podana (w poleceniu właściciela został szablon `<CO
   zaobserwowane.
 - **Krok 14** — `tileLost:2` (walidator: 1) — losowanie walki naziemnej.
 
-#### 5o.4 Następny krok
+#### 5o.4 Odpowiedzi właściciela na pytania §5n.6 (2026-10-14) → decyzje SB77–SB88
 
-Odpowiedzi właściciela na pytania §5n.6 — osobny commit dokumentacji; **S4, sesja 2** — S4 właściwe (kampania eskadrami,
-wojna z okazji, koniec wojny przy wyczerpanej kampanii, Finding **55**, pomiar SB72).
+Słowa właściciela (z polecenia sesji, dosłownie, po angielsku) i numer decyzji:
+
+| pytanie | słowa właściciela | decyzja |
+|---|---|---|
+| 1 | „Commit S4-1/S4-2 after gate: done (Part A).” | przebieg — §5o.1 |
+| 2 | „Finding 441 (detection window distance from wrong planet): UI polish, not S4.” | **SB77** |
+| 3 | „Finding 442: variant (b) — a unit on its own empire's colony consumes no supply; supply counts only on foreign ground. Scheduled for S4 session 3.” | **SB78** |
+| 4 | „Finding 443: variant (a) — the owner's capital pays as before reload; the unit's home must survive save/load. S4 session 3.” | **SB79** |
+| 5 | „Finding 444: variant (a) — pay as many units as the cash covers; the double upkeep deduction gets its own finding number and is fixed together if the audit shows it small. S4 session 3.” | **SB80**; numer — Finding **445** (§6) |
+| 6 | „AI war trigger: (b) opportunity + tension ≥ X, X as a tuning key (default 40).” | **SB81** |
+| 7 | „Spacing between AI wars: truce and NAP suffice, plus a rule cooldown as a tuning key (default 5 years).” | **SB82** |
+| 8 | „Campaign: squadrons with landing have priority; plain escort strikes only when the pool does not cover a squadron (same precedence as retake today).” | **SB83** |
+| 9 | „Target order: nearest player system first; inside it outposts, then colonies, player's capital last.” | **SB84** |
+| 10 | „War end: (b) status quo when the campaign is exhausted (no cession machinery).” | **SB85** |
+| 11 | „Pool vs peace (65/65): stays; revisit only if the gate shows wars do not end.” | **SB86** |
+| 12 | „Finding 55: lazy grid creation at landing (A4).” | **SB87** |
+| 13 | „SB72 measurement (do AI strikes lose too often) within S4, on the harness.” | **SB88** |
+
+Pytanie 1 bez numeru SB (precedens §5k, §5m.4: zgoda na commit po bramce nie jest decyzją projektu).
+
+#### 5o.5 Następny krok
+
+**S4, sesja 2** — S4 właściwe według opcji A (§5n.4) z decyzjami SB81–SB88: reguła kampanii (eskadry z desantem w porządku
+SB84, uderzenie eskortą wyłącznie przy puli za małej na eskadrę — SB83), reguła wojny z okazji (SB81, SB82), koniec wojny
+przy wyczerpanej kampanii — status quo (SB85), Finding **55** (SB87), pomiar SB72 (SB88). **S4, sesja 3** — **442**, **443**,
+**444**, **445** (SB78–SB80). **441** — polerka UI (SB77).
 
 ---
 
@@ -2797,6 +2836,7 @@ bez sprawdzenia układu; opis „Observatory detected an alien vessel in our sys
 (S4-1 tego nie zmienia) — przy widoku na inny układ z kolonią gracza (np. zdobyte Propus c) liczba jest odległością między
 współrzędnymi dwóch układów. `[measured]` bramka S4A (walidacja): 2 okna przy widoku `sys_059` — wartości „Distance” nie
 odczytywałem. → pytanie 2, §5n.6.
+→ **SB77 (2026-10-14):** polerka UI, nie S4.
 
 ### 🟠 442 — uzupełnianie zaopatrzenia jednostek naziemnych czyta pole, którego żadna kolonia nie ma
 
@@ -2806,6 +2846,8 @@ Jednostka na kaflu poza pierścieniem 1 heksu wokół stolicy / koszar zużywa z
 po zerze traci 5 % HP na rok cywilizacyjny. `[measured]` D3 (§5n.3): pola brak w zdobytej i macierzystej, `military_supplies`
 w magazynie 0; 8 jednostek gracza na zdobytym Propus c — śmierć głodowa 8/8 po 4,67 roku; na planecie macierzystej — 8/8 po
 7,42 roku. Fazy zaopatrzenia dotyczą wyłącznie jednostek gracza. → pytanie 3, §5n.6.
+→ **SB78 (2026-10-14):** wariant (b) — jednostka na kolonii WŁASNEGO imperium nie zużywa zaopatrzenia; zaopatrzenie liczy się
+wyłącznie na cudzym gruncie. **S4, sesja 3.**
 
 ### 🟠 443 — jednostka GRACZA bez domu po wczytaniu dostaje za dom ciało, na którym stoi — płaci kolonia tego ciała (rodzina 342)
 
@@ -2814,6 +2856,8 @@ należy do gracza. Jednostki gracza bez domu: więź zerwana przy utracie koloni
 wczytaniem płaci stolica gracza; po wczytaniu — kolonia ciała. `[measured]` D3: po wczytaniu dom i płatnik = Propus c (0 Kr)
 → 8/8 rozwiązane `no_credits` 0,42 roku po wczytaniu. Rozszerza **342** (tam: jednostki AI, „dziś nieszkodliwe”). → pytanie
 4, §5n.6.
+→ **SB79 (2026-10-14):** wariant (a) — stolica właściciela płaci jak przed wczytaniem; dom jednostki musi przeżyć zapis
+i wczytanie. **S4, sesja 3.**
 
 ### ⚪ 444 — żołd jednostek naziemnych kubłem atomowym: brak 1 Kr wyłącza wszystkie jednostki płatnika
 
@@ -2822,6 +2866,26 @@ po 5 kolejnych latach cywilizacyjnych — rozwiązanie `no_credits`. `[measured]
 — kasa 47 → 24/24 offline; scena 24 jednostek na zdobytym ciele (kubeł 48 Kr) → 24/24 rozwiązane po 0,5 roku.
 Przy okazji zmierzone podwójne pobranie żołdu (znane — `AI_GARRISON_PLAN.md`: „znane w backlogu, świadomie bez numeru”):
 kasa ≥ 2 × kubeł → pobrane 2 × (100 → 68 przy kuble 16). Obserwacja projektu. → pytanie 5, §5n.6.
+→ **SB80 (2026-10-14):** wariant (a) — płacić tylu jednostkom, ilu starcza kasy; podwójne pobranie — Finding **445**,
+naprawiane razem z 444, jeśli audyt pokaże, że to mała zmiana. **S4, sesja 3.**
+
+### #445 — odpowiedzi właściciela S4/1 (2026-10-14)
+
+⚠ **Registry-first (2026-10-14):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#444**; trafienia „445”–„450” w pamięci to zapis „wolny 445”, numery linii i wartości liczbowe, nie
+findingi `[measured]`. Źródło: decyzja **SB80** (numer dla podwójnego pobrania żołdu — dotąd „znane w backlogu, świadomie bez
+numeru”, `AI_GARRISON_PLAN.md`, kandydaci notatki G3-closing).
+
+### ⚪ 445 — podwójne pobranie Kr za jednostki naziemne: ręczne odjęcie kasy i `trade:spendCredits` tej samej kwoty
+
+`[code]` `ColonyManager._tickGroundUnitUpkeep`: `home.credits -= bucket.total` (`:1551`), potem
+`EventBus.emit('trade:spendCredits', …)` (`:1552-1554`) — subskrybent `CivilianTradeSystem.spendCredits` (`:898`) odejmuje TĘ
+SAMĄ kwotę drugi raz, o ile kasa po pierwszym odjęciu jeszcze ją pokrywa. Ten sam wzór przy rekrutacji jednostki
+(`startGroundUnitBuild`, `:1449-1450`, cel `ground_unit_recruit`). Przyspieszenie stoczni (`surgeShipBuild`, `:2014-2018`)
+wyłącznie emituje — jedno pobranie; utrzymanie floty omija ten wzór świadomie (`VesselManager`, komentarz `:2188`).
+`[measured]` D3 (§5n.3, żołd): przy kasie ≥ 2 × kubeł pobranie 2 × — 100 → 68 i 40 → 8 przy kuble 16, 100 → 4 przy kuble 48;
+przy kasie < 2 × kubeł — raz (20 → 4, 48 → 0). Rekrutacja — niezmierzona.
+→ **SB80 (2026-10-14):** naprawiane razem z **444** w S4, sesja 3, jeśli audyt pokaże, że to mała zmiana.
 
 ---
 
@@ -2831,3 +2895,6 @@ kasa ≥ 2 × kubeł → pobrane 2 × (100 → 68 przy kuble 16). Obserwacja pro
   `launchInvasion` tworzy każdą jednostkę desantu przez `createAIUnit` (`InvasionSystem.js:165`, `980043f`), jawna lista tą
   samą drogą (`f027e7c`, Finding **323**), `INVASION_UNIT_POOLS` usunięte (`23a87e5`, Finding **340**) `[code]` `[git]`;
   bramka live właściciela PASS (`AI_GARRISON_PLAN.md` §5ze) `[doc]`.
+- **Podwójne pobranie Kr za jednostki naziemne** (`AI_GARRISON_PLAN.md`, kandydaci bez numeru notatki G3-closing: „znane
+  w backlogu, świadomie bez numeru”) — od **2026-10-14** Finding **445** (decyzja **SB80**); wskaźnik dopisany w
+  `AI_GARRISON_PLAN.md`.

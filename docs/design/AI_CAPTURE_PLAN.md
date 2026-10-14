@@ -991,6 +991,8 @@ gate'u** ⇒ **D7**.
     generator, stemple właściciela kafli, synchronizacja budynków); fixture GATE-S4: 22 / 22 kolonie mają siatkę; nowa gra —
     niezmierzona. Kształt naprawy (propozycja): tworzenie siatki wydzielone do jednej funkcji wołanej leniwie z desantu
     i z okna kolonii (`AI_STRIKES_BACK_PLAN.md` §5n.4).
+    → **AI STRIKES BACK SB87 (2026-10-14):** leniwe tworzenie siatki przy desancie (A4) — S4, sesja 2
+    (`AI_STRIKES_BACK_PLAN.md` §2).
 56. **`CombatSystem._tryRetreat:392-423` jest drugim moverem** — teleport o kafel bez sprawdzania budynku,
     właściciela i stolicy; martwy tylko dlatego, że legacy jednostki nie mają `morale` (`:235`
     `morale ?? 100`). Slice GROUND go uruchomi.

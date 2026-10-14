@@ -1238,7 +1238,8 @@ Po zapisie i wczytaniu jednostka bez domu wraca z `homeColonyId` = id ciała (**
 `_spawnGroundUnit` — ścieżki porażki (`no_manager`, `no_spawn_hex`, `create_failed`) zdejmują wpis z kolejki bez zwolnienia
 blokady POP (prawdopodobnie nieosiągalne) · kolejka statków (`shipQueues` / `pendingShipOrders`) przeżywa `transferColony`
 (rodzina 381, możliwy związek z **95**) · załogi okrętów W2 (`crewColonyId`) w kolonii, która zmienia właściciela (klasa 380)
-· podwójne pobranie Kr za jednostki naziemne — znane w backlogu, świadomie bez numeru.
+· podwójne pobranie Kr za jednostki naziemne — znane w backlogu, świadomie bez numeru. → **Finding 445** (2026-10-14,
+AI STRIKES BACK **SB80**; `AI_STRIKES_BACK_PLAN.md` §6).
 
 ---
 

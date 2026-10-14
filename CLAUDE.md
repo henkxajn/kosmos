@@ -5929,7 +5929,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14)
 
-Plan, decyzje **SB1–SB76** i rejestr findingów **#391–#444**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+Plan, decyzje **SB1–SB88** i rejestr findingów **#391–#445**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
 §5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
@@ -6182,6 +6182,14 @@ kolonię ciała — **443** (rodzina 342); kubeł żołdu atomowy + zmierzone po
 liczy odległość od domu bez terminu układu — **441**. **D4** — propozycja S4 właściwego (kampania eskadrami z desantem w
 porządku SB10, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — Finding 55) i pytania
 (plan §5n.4, §5n.6). Zamknięte: ✅ **439** · **440**.
+Odpowiedzi właściciela na pytania §5n.6 (2026-10-14, plan §5o.4): **SB77** 441 → polerka UI · **SB78** 442 (b) — jednostka
+na kolonii własnego imperium nie zużywa zaopatrzenia (S4/3) · **SB79** 443 (a) — płaci stolica właściciela, dom jednostki
+przeżywa zapis (S4/3) · **SB80** 444 (a) — płacić tylu, ilu starcza kasy; podwójne pobranie = **445** (S4/3) · **SB81** wojna
+z okazji + napięcie ≥ X (klucz, domyślnie 40) · **SB82** odstęp: rozejm, NAP i cooldown reguły (klucz, 5 lat) · **SB83**
+kampania: eskadry z desantem najpierw, uderzenie eskortą tylko przy puli za małej na eskadrę · **SB84** porządek celów:
+najbliższy układ gracza, w nim placówki → kolonie → stolica gracza · **SB85** koniec wojny: status quo przy wyczerpanej
+kampanii · **SB86** pula a pokój (65 / 65) zostaje · **SB87** Finding 55 — siatka leniwie przy desancie · **SB88** pomiar SB72
+na uprzęży.
 ⚠ **Detekcja wrogich statków nie zależy już od widoku** (S4-1) — wpis dzwonka o uzbrojonym okręcie przychodzi z każdego
 układu z kolonią gracza; lista „Kontakty” obserwatorium pokazuje kontakty ze wszystkich takich układów (bez nazwy układu).
 ⚠ **Okno pierwszego wykrycia — przy oglądanym układzie:** statek wykryty poza widokiem dostaje okno, gdy gracz spojrzy na
