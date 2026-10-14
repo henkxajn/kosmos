@@ -142,42 +142,61 @@ export class DirectorRetake {
     });
   }
 
+  // ── Plan ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Plan odbijania TERAZ (bez wysyłki) — JEDNO źródło dla akcji `launchRetake` i pierwszeństwa kampanii (S4/2, SB83:
+   * `DirectorCampaign.retakePending`): pierwszy kandydat poza czekaniem (kolejność SB57) w zasięgu sufitu.
+   * @returns {{kind:'no_capital'|'none'|'beyond'|'insufficient'|'start', target?:object, pool?:object[], need?:object,
+   *            skipped:Array<{bodyId:string, needed:number}>, cap?:number}}
+   */
+  planRetake(empireId) {
+    if (!this._capital(empireId)) return { kind: 'no_capital', skipped: [] };
+    const cands = this.retakeCandidates(empireId).filter((c) => c.eligible);
+    if (cands.length === 0) return { kind: 'none', skipped: [] };
+    const cap = squadronMaxShips();
+    const skipped = [];
+    for (const c of cands) {
+      const pool = this.retakeEscortPool(empireId, c);
+      const need = this._off.requiredSquadron(c, pool);
+      if (need.needed > cap) { skipped.push({ bodyId: c.body.id, needed: need.needed }); continue; }
+      return { kind: pool.length < need.needed ? 'insufficient' : 'start', target: c, pool, need, skipped, cap };
+    }
+    return { kind: 'beyond', skipped, cap };
+  }
+
   // ── Akcja ──────────────────────────────────────────────────────────────────────────
 
   /**
-   * Akcja `launchRetake`: pierwszy kandydat (kolejność SB57) w zasięgu sufitu dostaje eskadrę.
+   * Akcja `launchRetake`: pierwszy kandydat (kolejność SB57) w zasięgu sufitu dostaje eskadrę (plan — `planRetake`).
    * @returns {{launched:number, reason?:string, squadronId?:string, targetBodyId?:string, needed?:number}}
    */
   launchRetake(ctx = {}) {
     const empireId = ctx?.empireId;
     const year = ctx?.year ?? this._year();
     try {
-      if (!this._capital(empireId)) return this._refuse(empireId, 'no_capital', year);
-      const cands = this.retakeCandidates(empireId).filter((c) => c.eligible);
-      if (cands.length === 0) return this._refuse(empireId, 'no_target', year);
-      const cap = squadronMaxShips();
-      const skipped = [];
-      for (const c of cands) {
-        const pool = this.retakeEscortPool(empireId, c);
-        const need = this._off.requiredSquadron(c, pool);
-        if (need.needed > cap) { skipped.push({ bodyId: c.body.id, needed: need.needed }); continue; }
-        if (pool.length < need.needed) {
-          return this._refuse(empireId, 'insufficient_squadron', year, {
-            targetBodyId: c.body.id, needed: need.needed, available: pool.length, defenderHp: need.defenderHp, skipped,
-          });
-        }
-        const escorts = pool.slice(0, need.needed).map((v) => v.id);
-        const r = this._K()?.strikeSquadronSystem?.launchSquadron?.(empireId, c.body.id, escorts);
-        if (!r?.ok) {
-          return this._refuse(empireId, 'launch_refused', year, { targetBodyId: c.body.id, detail: r?.reason ?? 'no_squadron_system', skipped });
-        }
-        EventBus.emit('director:retakeLaunched', {
-          empireId, year, squadronId: r.squadronId, targetBodyId: c.body.id, targetSystemId: c.systemId,
-          lostCapital: c.isLostCapital, needed: need.needed, escorts: [...escorts], wave: r.unitIds?.length ?? 0, skipped,
+      const p = this.planRetake(empireId);
+      if (p.kind === 'no_capital') return this._refuse(empireId, 'no_capital', year);
+      if (p.kind === 'none') return this._refuse(empireId, 'no_target', year);
+      if (p.kind === 'beyond') return this._refuse(empireId, 'target_beyond_reach', year, { skipped: p.skipped, cap: p.cap });
+      const c = p.target;
+      const need = p.need;
+      const skipped = p.skipped;
+      if (p.kind === 'insufficient') {
+        return this._refuse(empireId, 'insufficient_squadron', year, {
+          targetBodyId: c.body.id, needed: need.needed, available: p.pool.length, defenderHp: need.defenderHp, skipped,
         });
-        return { launched: 1, squadronId: r.squadronId, targetBodyId: c.body.id, needed: need.needed };
       }
-      return this._refuse(empireId, 'target_beyond_reach', year, { skipped, cap });
+      const escorts = p.pool.slice(0, need.needed).map((v) => v.id);
+      const r = this._K()?.strikeSquadronSystem?.launchSquadron?.(empireId, c.body.id, escorts, { origin: 'retake' });
+      if (!r?.ok) {
+        return this._refuse(empireId, 'launch_refused', year, { targetBodyId: c.body.id, detail: r?.reason ?? 'no_squadron_system', skipped });
+      }
+      EventBus.emit('director:retakeLaunched', {
+        empireId, year, squadronId: r.squadronId, targetBodyId: c.body.id, targetSystemId: c.systemId,
+        lostCapital: c.isLostCapital, needed: need.needed, escorts: [...escorts], wave: r.unitIds?.length ?? 0, skipped,
+      });
+      return { launched: 1, squadronId: r.squadronId, targetBodyId: c.body.id, needed: need.needed };
     } catch (err) {
       console.error('[DirectorRetake] launchRetake rzucił — odbicie pominięte', err);
       return { launched: 0, reason: 'exception' };

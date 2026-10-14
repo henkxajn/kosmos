@@ -507,6 +507,8 @@ export class GameScene {
     window.KOSMOS.directorRecall     = this.directorRecall;
     // AI STRIKES BACK S3/2 (SB57) — odbijanie (instancja rejestrowana przy uderzeniu: `registerOffensiveBehaviors`).
     window.KOSMOS.directorRetake     = this.directorOffensive.retake ?? null;
+    // AI STRIKES BACK S4/2 (SB10, SB83, SB84) — kampania (instancja rejestrowana przy uderzeniu: `registerOffensiveBehaviors`).
+    window.KOSMOS.directorCampaign   = this.directorOffensive.campaign ?? null;
     window.KOSMOS.directorSystem     = this.directorSystem;
     window.KOSMOS.systemPoolService  = this.systemPoolService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;

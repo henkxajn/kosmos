@@ -176,6 +176,10 @@ const TRACKED_EVENTS = [
   'director:retakeLaunched',
   'director:retakeRefused',
   'empire:capitalLost',
+  // AI STRIKES BACK S4/2 (SB83, SB84) — kampania: eskadra wysłana (cel, klasa, odległość, eskorta, fala) i odmowa z powodem
+  //   (`no_capital`, `no_target`, `insufficient_squadron`, `target_beyond_reach`, `launch_refused`).
+  'director:campaignLaunched',
+  'director:campaignRefused',
 ];
 
 class DebugLog {

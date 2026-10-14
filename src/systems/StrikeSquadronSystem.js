@@ -125,12 +125,13 @@ export class StrikeSquadronSystem {
    * @param {string} empireId
    * @param {string} targetBodyId
    * @param {string[]} escortIds — uzbrojone kadłuby imperium w służbie, w układzie stolicy, bez zajęcia, nie strażnicy
+   * @param {{origin?:string|null}} [opts] — S4/2: reguła, która wysyła (`'retake'` · `'campaign'`); w rekordzie (`origin`)
    * @returns {{ok:true, squadronId:string, transportId:string, unitIds:string[], wave:Object, composite:boolean}
    *         | {ok:false, reason:string, vesselId?:string, detail?:any}}
    *   powody: `unknown_empire` · `target_not_found` · `own_target` · `no_capital` · `no_escorts` · `escort_*` (statek) ·
    *   `empty_wave` · `transport_failed` · `unit_failed` · `cargo_full` · `group_refused`
    */
-  launchSquadron(empireId, targetBodyId, escortIds = []) {
+  launchSquadron(empireId, targetBodyId, escortIds = [], opts = {}) {
     const K = this._K();
     const refuse = (reason, extra = {}) => {
       EventBus.emit('squadron:launchRefused', { empireId, targetBodyId, reason, ...extra });
@@ -207,7 +208,7 @@ export class StrikeSquadronSystem {
     const record = {
       id: squadronId, empireId, targetBodyId, targetSystemId: body.systemId ?? null, capitalId: capital.planetId,
       escortIds: [...ids], transportId: transport.id, unitIds: [...unitIds], wave,
-      launchedYear: year, crossSystem, stage: 'launched', stageYear: year,
+      launchedYear: year, crossSystem, stage: 'launched', stageYear: year, origin: opts?.origin ?? null,
     };
     gameState.set(`${SQUADRON_STATE_KEY}.${squadronId}`, record, 'squadron_launched');
     EventBus.emit('squadron:launched', { ...record, escortIds: [...ids], unitIds: [...unitIds] });

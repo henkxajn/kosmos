@@ -125,6 +125,11 @@ export function squadronHoldMaxYears() {
   return getTuning('squadronHoldMaxYears');
 }
 
+/** SB83 (S4/2) — ile lat gry od ostatniej próby na to samo ciało (wysłana eskadra) przed następną kampanią na nie. */
+export function campaignCooldownYears() {
+  return getTuning('campaignCooldownYears');
+}
+
 /** Werdykt eskadry: `start` (potrzebne ≤ dostępne i ≤ sufit) · `za_malo` (≤ sufit, > dostępne) · `poza_zasiegiem` (> sufit). */
 export function squadronVerdict(needed, available, cap) {
   if (needed > cap) return 'poza_zasiegiem';
@@ -154,6 +159,9 @@ export function printSquadronNeeds(K) {
     for (const t of targets) push('uderzenie', t, off.requiredSquadron(t, ready), ready.length);
     // S3/2 (SB57) — cele odbijania z werdyktem reguły (`czeka_delay` / `czeka_cooldown` / `eskadra_w_drodze` / jak wyżej).
     for (const r of K?.directorRetake?.retakeNeeds?.(e.id) ?? []) push('odbicie', r.target, r.need, r.available, r.verdict);
+    // S4/2 (SB84) — cele kampanii w kolejności SB84 z werdyktem reguły (`czeka_cooldown` / `eskadra_w_drodze` /
+    //   `czeka_odbicie` / jak wyżej).
+    for (const r of K?.directorCampaign?.campaignNeeds?.(e.id) ?? []) push('kampania', r.target, r.need, r.pool.length, r.verdict);
   }
   console.table(rows);
   return rows;

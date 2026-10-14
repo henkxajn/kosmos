@@ -253,7 +253,9 @@ export const DIRECTOR_RULES = {
   strike_player_target: {
     id:       'strike_player_target',
     trigger:  { kind: 'poll', probe: 'reachablePlayerTargets', gte: 1 },
-    guard:    ['empireAtWarWithPlayer', 'empireHasStrikeForce'],
+    // ⚠ AI STRIKES BACK S4/2 (SB83) — `empireSquadronUnaffordable`: zwykłe uderzenie eskortą WYŁĄCZNIE, gdy pula nie pokrywa
+    //   eskadry z desantem (odbijanie albo kampania — `DirectorCampaign.squadronAffordable`). Guard OSTATNI: jest najdroższy.
+    guard:    ['empireAtWarWithPlayer', 'empireHasStrikeForce', 'empireSquadronUnaffordable'],
     roll:     { startPct: 20, stepPct: 15, capPct: 100, unit: 'displayedYear', saltGalaxySeed: true },
     delay:    0,
     // SB56 (AI STRIKES BACK S3/2) — sufit eskadry z tabeli strojenia (`squadronMaxShips`); parametr `maxShips: 3` zdjęty,
@@ -308,6 +310,29 @@ export const DIRECTOR_RULES = {
     guard:    ['empireAtWarWithPlayer', 'empireHasNoSquadronUnderway'],
     delay:    0,
     response: { action: 'launchRetake', params: {} },
+    cooldown: { years: 1.0 },
+  },
+
+  /**
+   * AI STRIKES BACK S4/2 (SB10, SB83, SB84) — KAMPANIA UKŁAD PO UKŁADZIE. „Bierzemy, co gracz ma najbliżej.”
+   *
+   * Eskadra z desantem (`StrikeSquadronSystem.launchSquadron`) na NASTĘPNE ciało gracza w zasięgu imperium: najbliższy
+   * układ gracza pierwszy, w nim placówki → kolonie → stolica gracza (SB84; stolica dopiero, gdy w jej układzie nie stoi
+   * inne ciało gracza); ciała odbijane w bieżącej wojnie — poza kampanią (reguła odbijania). ODBIJANIE MA PIERWSZEŃSTWO (guard `empireHasNoRetakePending`); jedna eskadra imperium
+   * naraz (guard `empireHasNoSquadronUnderway`). Eskorta = `requiredSquadron` (SB56), sufit, odmowy i cooldown celu
+   * (`campaignCooldownYears`) — jak w odbijaniu. Szczegóły: `DirectorCampaign`.
+   *
+   * ⚠ BEZ RZUTU (wzór odbijania), więc MUSI mieć `cooldown` (decyzja 11) — `1.0` roku wyświetlanego to przepustnica
+   *   decyzji, nie próg balansowy. Kolejność w katalogu PO odbijaniu: przy wysyłce odbicia w tym samym ticku kampania
+   *   widzi eskadrę w drodze.
+   * ⚠ `delay: 0` OBOWIĄZKOWO (pin katalogowy `w3_target_selection` T1).
+   */
+  campaign_strike: {
+    id:       'campaign_strike',
+    trigger:  { kind: 'poll', probe: 'campaignTargets', gte: 1 },
+    guard:    ['empireAtWarWithPlayer', 'empireHasNoSquadronUnderway', 'empireHasNoRetakePending'],
+    delay:    0,
+    response: { action: 'launchCampaign', params: {} },
     cooldown: { years: 1.0 },
   },
 

@@ -60,6 +60,8 @@ import { SB_TUNING } from '../../data/StrikesBackData.js';
 import { squadronHpRatio, squadronMaxShips } from '../../utils/StrikeWavePlanner.js';
 // AI STRIKES BACK S3/2 (SB57) — odbijanie utraconych kolonii (rejestracja w tej samej rodzinie co uderzenie).
 import { DirectorRetake } from './DirectorRetake.js';
+// AI STRIKES BACK S4/2 (SB10, SB83, SB84) — kampania układ po układzie (części wspólne z odbijaniem).
+import { DirectorCampaign } from './DirectorCampaign.js';
 
 /**
  * ⚠ POKRĘTŁO BALANSU (D-199-1): ile razy więcej wytrzymałości musi mieć eskadra od obrońcy.
@@ -511,6 +513,20 @@ export function registerOffensiveBehaviors(instance, { allowOverride = false } =
     ({ empireId }) => retake.hasNoSquadronUnderway(empireId), { allowOverride });
   DirectorActions.register('launchRetake',
     (ctx) => retake.launchRetake(ctx), { allowOverride });
+
+  // AI STRIKES BACK S4/2 (SB10, SB83, SB84) — reguła `campaign_strike` (kampania eskadrami) i guard zwykłego uderzenia
+  //   (`empireSquadronUnaffordable`: eskortą wyłącznie, gdy pula nie pokrywa eskadry). Instancja wystawiona jako
+  //   `instance.campaign` (lokator: `KOSMOS.directorCampaign` w GameScene).
+  const campaign = new DirectorCampaign(instance, retake);
+  instance.campaign = campaign;
+  DirectorProbes.register('campaignTargets',
+    ({ empireId }) => campaign.countCampaignTargets(empireId), { allowOverride });
+  DirectorGuards.register('empireHasNoRetakePending',
+    ({ empireId }) => campaign.hasNoRetakePending(empireId), { allowOverride });
+  DirectorGuards.register('empireSquadronUnaffordable',
+    ({ empireId }) => campaign.squadronUnaffordable(empireId), { allowOverride });
+  DirectorActions.register('launchCampaign',
+    (ctx) => campaign.launchCampaign(ctx), { allowOverride });
 }
 
 export default DirectorOffensive;

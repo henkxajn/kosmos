@@ -100,4 +100,11 @@ export const SB_TUNING = Object.freeze({
    * Konsument: `StrikeWavePlanner.squadronHoldMaxYears` → `StrikeSquadronSystem._tick`.
    */
   squadronHoldMaxYears: Object.freeze({ default: 3, type: 'number', min: 0.5, max: 20, unit: 'lata gry' }),
+
+  /**
+   * SB83 (S4/2) — KAMPANIA: ile lat gry od ostatniej próby na to samo ciało gracza (wysłana eskadra — kampanii albo
+   * odbijania) przed następną kampanią na nie. Odmowa (np. za mało okrętów) próbą nie jest. Lustro `retakeCooldownYears`.
+   * Konsument: `StrikeWavePlanner.campaignCooldownYears` → `DirectorCampaign`.
+   */
+  campaignCooldownYears: Object.freeze({ default: 5, type: 'number', min: 0, max: 100, unit: 'lata gry' }),
 });
