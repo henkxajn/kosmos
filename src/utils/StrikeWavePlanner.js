@@ -140,6 +140,11 @@ export function aiWarCooldownYears() {
   return getTuning('aiWarCooldownYears');
 }
 
+/** SB85 (S4/2) — ile kolejnych prób bez zdobycia celu wyczerpuje kampanię (`campaignMaxFailedAttempts`). */
+export function campaignMaxFailedAttempts() {
+  return getTuning('campaignMaxFailedAttempts');
+}
+
 /** Werdykt eskadry: `start` (potrzebne ≤ dostępne i ≤ sufit) · `za_malo` (≤ sufit, > dostępne) · `poza_zasiegiem` (> sufit). */
 export function squadronVerdict(needed, available, cap) {
   if (needed > cap) return 'poza_zasiegiem';

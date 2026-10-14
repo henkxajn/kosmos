@@ -359,6 +359,28 @@ export const DIRECTOR_RULES = {
     cooldown: { years: 1.0 },
   },
 
+  /**
+   * AI STRIKES BACK S4/2 (SB85, SB86) — KONIEC WOJNY PRZY WYCZERPANEJ KAMPANII. „Nie mamy już czym brać.”
+   *
+   * Drugi wyzwalacz depeszy pokojowej AI (pierwszy: wyczerpanie z bitew ≥ `casusBelli.peaceCost`, `WarSystem`):
+   * `campaignMaxFailedAttempts` (3) kolejnych prób bez zdobycia celu albo żadna eskadra do wzięcia i nic nie czeka na swój
+   * czas → `WarSystem.requestAiPeaceOffer` — depesza STATUS QUO, bramki jak dotąd (ocena pokoju bez zmian — SB86).
+   * Szczegóły: `DirectorCampaign.campaignExhaustion`.
+   *
+   * ⚠ BEZ RZUTU, więc MUSI mieć `cooldown` (decyzja 11) — `1.0` roku wyświetlanego: imperium, które odmówi samo sobie
+   *   (ocena pokoju = NIE), sprawdza ponownie po roku.
+   * ⚠ W katalogu PO kampanii: eskadra wysłana w tym samym ticku wstrzymuje wyczerpanie (eskadra w drodze).
+   * ⚠ `delay: 0` OBOWIĄZKOWO (pin katalogowy `w3_target_selection` T1).
+   */
+  campaign_peace_offer: {
+    id:       'campaign_peace_offer',
+    trigger:  { kind: 'poll', probe: 'campaignExhausted', gte: 1 },
+    guard:    ['empireAtWarWithPlayer'],
+    delay:    0,
+    response: { action: 'offerCampaignPeace', params: {} },
+    cooldown: { years: 1.0 },
+  },
+
   recall_strike_force: {
     id:       'recall_strike_force',
     trigger:  { kind: 'poll', probe: 'strandedWarshipsAwayFromHome', gte: 1 },

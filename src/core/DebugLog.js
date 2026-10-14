@@ -185,6 +185,11 @@ const TRACKED_EVENTS = [
   //   `declare_refused`).
   'director:opportunityWarDeclared',
   'director:opportunityWarRefused',
+  // AI STRIKES BACK S4/2 (SB85) — depesza pokojowa przy wyczerpanej kampanii: wysłana (powód wyczerpania, próby) i odmowa
+  //   z powodem (kampania trwa: `squadron_underway` / `squadron_affordable` / `target_waiting`; bramki depeszy:
+  //   `offer_open` / `cooldown` / `ai_refuses` z oceną).
+  'director:campaignPeaceOffered',
+  'director:campaignPeaceRefused',
 ];
 
 class DebugLog {

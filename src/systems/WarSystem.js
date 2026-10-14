@@ -315,13 +315,45 @@ export class WarSystem {
     if (!dipl) return false;
     const cb = CASUS_BELLI[war.casusBelli] ?? CASUS_BELLI.border_incident;
     if ((war.exhaustion?.[empireId] ?? 0) < (Number(cb?.peaceCost) || 0)) return false;
-    if ((dipl.getAiPeaceOfferCooldown?.(empireId) ?? 0) > 0) return false;
+    return this._sendAiPeaceOffer(warId, empireId, dipl).ok;
+  }
+
+  /**
+   * AI STRIKES BACK S4/2 (SB85) — DRUGI WYZWALACZ DEPESZY POKOJOWEJ AI: kampania imperium WYCZERPANA
+   * (`DirectorCampaign.campaignExhaustion`, reguła `campaign_peace_offer`). Ta sama depesza (status quo) i te same bramki
+   * co `_maybeAiPeaceOffer` — żadna depesza otwarta, cooldown depeszy, `evaluatePeace` = TAK (SB86: ocena pokoju bez
+   * zmian) — BEZ progu wyczerpania `casusBelli.peaceCost`: wyzwalaczem jest stan kampanii, nie bitwa.
+   * ⚠ Ładunek `war:aiPeaceOffer` niesie dodatkowo `trigger` (konsumenci czytają wyłącznie `empireId` i `warId`); ładunek
+   *   pierwszego wyzwalacza bez zmian.
+   * @param {string} empireId
+   * @param {string} [trigger]
+   * @returns {{ok:true, warId:string} | {ok:false, reason:string, warId?:string, score?:number|null, threshold?:number|null}}
+   */
+  requestAiPeaceOffer(empireId, trigger = 'campaign_exhausted') {
+    const war = this.getWarWith(empireId);
+    if (!war || !war.active) return { ok: false, reason: 'no_war' };
+    if (this._aiOfferOpen.has(war.id)) return { ok: false, reason: 'offer_open', warId: war.id };
+    const dipl = window.KOSMOS?.diplomacySystem;
+    if (!dipl) return { ok: false, reason: 'no_diplomacy', warId: war.id };
+    return this._sendAiPeaceOffer(war.id, empireId, dipl, { trigger });
+  }
+
+  /**
+   * Wspólny ogon obu wyzwalaczy depeszy pokojowej AI: cooldown depeszy, ocena pokoju, wysyłka.
+   * @returns {{ok:true, warId:string} | {ok:false, reason:'cooldown'|'ai_refuses', warId:string, score?:number|null,
+   *            threshold?:number|null}}
+   */
+  _sendAiPeaceOffer(warId, empireId, dipl, extra = null) {
+    if ((dipl.getAiPeaceOfferCooldown?.(empireId) ?? 0) > 0) return { ok: false, reason: 'cooldown', warId };
     // `terms: null` — oferta AI to zawsze STATUS QUO (D-WP-13). Warunki terytorialne
     // negocjuje gracz przy stole pokoju (C1), po kliknięciu „Kontrpropozycja".
-    if (dipl.evaluatePeace(empireId, null)?.decision !== true) return false;
+    const ev = dipl.evaluatePeace(empireId, null);
+    if (ev?.decision !== true) {
+      return { ok: false, reason: 'ai_refuses', warId, score: ev?.score ?? null, threshold: ev?.threshold ?? null };
+    }
     this._aiOfferOpen.add(warId);
-    EventBus.emit('war:aiPeaceOffer', { empireId, warId });
-    return true;
+    EventBus.emit('war:aiPeaceOffer', extra ? { empireId, warId, ...extra } : { empireId, warId });
+    return { ok: true, warId };
   }
 
   /**

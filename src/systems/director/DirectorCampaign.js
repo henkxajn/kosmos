@@ -28,14 +28,22 @@
 //   reguły `strike_player_target`): eskadra jest „do wzięcia”, gdy odbijanie albo kampania wysłałyby ją teraz i fala desantu
 //   nie jest pusta.
 //
+// KONIEC WOJNY (SB85, reguła `campaign_peace_offer`): kampania WYCZERPANA — `campaignMaxFailedAttempts` kolejnych prób bez
+//   zdobycia celu albo żadna eskadra do wzięcia i nic nie czeka na swój czas — imperium wysyła depeszę pokojową STATUS QUO
+//   (`WarSystem.requestAiPeaceOffer`; te same bramki co depesza z wyczerpania, ocena pokoju bez zmian — SB86).
+//
 // ⚠ AKCJA NIGDY NIE RZUCA (`_firePending` / `tickEmpire` biegną poza per-regułowym try/catch — zasada `DirectorOffensive`).
 // ⚠ Zero importów systemów — kolaboratorzy leniwie przez `window.KOSMOS`; liczby strojenia przez planery.
 
 import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import { distanceLY } from '../../utils/InfluenceMath.js';
-import { squadronMaxShips, squadronVerdict, readEmpireWavePlan, campaignCooldownYears } from '../../utils/StrikeWavePlanner.js';
+import { squadronMaxShips, squadronVerdict, readEmpireWavePlan, campaignCooldownYears, campaignMaxFailedAttempts }
+  from '../../utils/StrikeWavePlanner.js';
 import { orderCampaignTargets, campaignClass } from '../../utils/CampaignPlanner.js';
+
+/** Etapy eskadry, w których próba jeszcze TRWA (lot do celu, trzymanie orbity po desancie) — nie liczą się do wyczerpania. */
+const ATTEMPT_OPEN_STAGES = new Set(['launched', 'landed']);
 
 export class DirectorCampaign {
   /**
@@ -213,6 +221,92 @@ export class DirectorCampaign {
   _refuse(empireId, reason, year, extra = {}) {
     EventBus.emit('director:campaignRefused', { empireId, reason, year, ...extra });
     return { launched: 0, reason, ...extra };
+  }
+
+  // ── Koniec wojny (SB85) ────────────────────────────────────────────────────────────
+
+  /**
+   * Ile KOLEJNYCH prób bez zdobycia celu, od najnowszej: eskadry imperium wysłane w BIEŻĄCEJ wojnie (od jej początku),
+   * zakończone (etap poza `launched` / `landed`). Próba udana = w księdze zdobyczy wojny (`WarSystem.getCaptures`) ciało
+   * celu przeszło do imperium nie wcześniej niż w roku wysyłki — także po powrocie eskadry (fala zostaje na ziemi, SB70).
+   */
+  failedAttemptStreak(empireId) {
+    const K = this._K();
+    const war = K?.warSystem?.getWarWith?.(empireId);
+    if (!war?.active) return 0;
+    const start = Number.isFinite(war.startYear) ? war.startYear : 0;
+    const won = (K.warSystem.getCaptures?.(war.id) ?? []).filter((c) => c?.toEmpireId === empireId);
+    const done = (K?.strikeSquadronSystem?.listSquadrons?.(empireId) ?? [])
+      .filter((s) => Number.isFinite(s.launchedYear) && s.launchedYear >= start && !ATTEMPT_OPEN_STAGES.has(s.stage))
+      .sort((a, b) => (b.launchedYear - a.launchedYear) || String(b.id).localeCompare(String(a.id)));
+    let streak = 0;
+    for (const s of done) {
+      if (won.some((c) => c.bodyId === s.targetBodyId && Number(c.year) >= s.launchedYear)) break;
+      streak += 1;
+    }
+    return streak;
+  }
+
+  /**
+   * SB85 — czy kampania imperium jest WYCZERPANA (drugi wyzwalacz depeszy pokojowej AI):
+   *   • `failed_attempts` — `campaignMaxFailedAttempts` kolejnych prób bez zdobycia celu (`failedAttemptStreak`);
+   *   • `no_affordable_target` — żadnej eskadry do wzięcia TERAZ (`squadronAffordable`: odbijanie, potem kampania; pusta
+   *     fala desantu) i nic nie czeka na swój CZAS (cel odbicia w zwłoce albo cooldownie, cel kampanii w cooldownie —
+   *     w zasięgu sufitu; stolica czekająca na ciała swojego układu — `capital_last` — się nie liczy).
+   * Kampania trwa: `no_war`, `squadron_underway` (eskadra w drodze), `squadron_affordable`, `target_waiting`.
+   * @returns {{exhausted:boolean, reason:string, failedStreak?:number, max?:number, plan?:string}}
+   */
+  campaignExhaustion(empireId) {
+    const K = this._K();
+    if (!K?.warSystem?.getWarWith?.(empireId)?.active) return { exhausted: false, reason: 'no_war' };
+    if (!(this._rt?.hasNoSquadronUnderway?.(empireId) ?? true)) return { exhausted: false, reason: 'squadron_underway' };
+    const max = campaignMaxFailedAttempts();
+    const failedStreak = this.failedAttemptStreak(empireId);
+    if (failedStreak >= max) return { exhausted: true, reason: 'failed_attempts', failedStreak, max };
+    if (this.squadronAffordable(empireId)) return { exhausted: false, reason: 'squadron_affordable', failedStreak, max };
+    const cap = squadronMaxShips();
+    // Czekanie CZASOWE (zwłoka / cooldown) — nie `capital_last`: stolica czekająca na ciała, których nie da się wziąć,
+    // nie podtrzymuje kampanii.
+    const waiting = (this._rt?.retakeNeeds?.(empireId) ?? []).some((r) => r.target?.wait && r.need?.needed <= cap)
+      || this.campaignNeeds(empireId).some((r) => r.target?.wait === 'cooldown' && r.need?.needed <= cap);
+    if (waiting) return { exhausted: false, reason: 'target_waiting', failedStreak, max };
+    return { exhausted: true, reason: 'no_affordable_target', failedStreak, max, plan: this.planCampaign(empireId).kind };
+  }
+
+  /** Sonda katalogowa `campaignExhausted`: 1, gdy kampania wyczerpana, inaczej 0. */
+  countCampaignExhausted(empireId) {
+    return this.campaignExhaustion(empireId).exhausted ? 1 : 0;
+  }
+
+  /**
+   * Akcja `offerCampaignPeace`: depesza pokojowa AI (status quo) przy wyczerpanej kampanii.
+   * @returns {{offered:number, reason?:string, warId?:string}}
+   */
+  offerCampaignPeace(ctx = {}) {
+    const empireId = ctx?.empireId;
+    const year = ctx?.year ?? this._year();
+    try {
+      const ex = this.campaignExhaustion(empireId);
+      if (!ex.exhausted) return this._peaceRefuse(empireId, ex.reason, year, { failedStreak: ex.failedStreak ?? null });
+      const r = this._K()?.warSystem?.requestAiPeaceOffer?.(empireId, 'campaign_exhausted');
+      if (!r?.ok) {
+        return this._peaceRefuse(empireId, r?.reason ?? 'no_war_system', year, {
+          exhaustion: ex.reason, failedStreak: ex.failedStreak, score: r?.score ?? null, threshold: r?.threshold ?? null,
+        });
+      }
+      EventBus.emit('director:campaignPeaceOffered', {
+        empireId, year, warId: r.warId, exhaustion: ex.reason, failedStreak: ex.failedStreak, max: ex.max,
+      });
+      return { offered: 1, warId: r.warId };
+    } catch (err) {
+      console.error('[DirectorCampaign] offerCampaignPeace rzucił — depesza pominięta', err);
+      return { offered: 0, reason: 'exception' };
+    }
+  }
+
+  _peaceRefuse(empireId, reason, year, extra = {}) {
+    EventBus.emit('director:campaignPeaceRefused', { empireId, reason, year, ...extra });
+    return { offered: 0, reason, ...extra };
   }
 }
 

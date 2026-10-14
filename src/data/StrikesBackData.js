@@ -121,4 +121,11 @@ export const SB_TUNING = Object.freeze({
    * jest cooldownem samej reguły. Konsument: `StrikeWavePlanner.aiWarCooldownYears` → `DirectorOpportunityWar`.
    */
   aiWarCooldownYears: Object.freeze({ default: 5, type: 'number', min: 0, max: 50, unit: 'lata gry' }),
+
+  /**
+   * SB85 (S4/2) — KONIEC WOJNY: ile KOLEJNYCH prób (eskadr imperium w bieżącej wojnie, zakończonych) bez zdobycia celu
+   * wyczerpuje kampanię — wtedy imperium wysyła depeszę pokojową (status quo, ocena pokoju bez zmian — SB86).
+   * Konsument: `StrikeWavePlanner.campaignMaxFailedAttempts` → `DirectorCampaign`.
+   */
+  campaignMaxFailedAttempts: Object.freeze({ default: 3, type: 'int', min: 1, max: 20, unit: 'proby' }),
 });

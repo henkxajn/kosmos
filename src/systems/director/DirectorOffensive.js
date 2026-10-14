@@ -529,6 +529,11 @@ export function registerOffensiveBehaviors(instance, { allowOverride = false } =
     ({ empireId }) => campaign.squadronUnaffordable(empireId), { allowOverride });
   DirectorActions.register('launchCampaign',
     (ctx) => campaign.launchCampaign(ctx), { allowOverride });
+  // AI STRIKES BACK S4/2 (SB85) — reguła `campaign_peace_offer` (depesza pokojowa przy wyczerpanej kampanii).
+  DirectorProbes.register('campaignExhausted',
+    ({ empireId }) => campaign.countCampaignExhausted(empireId), { allowOverride });
+  DirectorActions.register('offerCampaignPeace',
+    (ctx) => campaign.offerCampaignPeace(ctx), { allowOverride });
 
   // AI STRIKES BACK S4/2 (SB81, SB82) — reguła `opportunity_war` (wojna z okazji). Instancja wystawiona jako
   //   `instance.opportunity` (lokator: `KOSMOS.directorOpportunityWar` w GameScene).
