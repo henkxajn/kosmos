@@ -7,7 +7,8 @@
 > S2 (§2); **SB39–SB44** — **2026-10-10**, podpis S2b — poprawki przed S3 (§2); **SB45–SB48** — **2026-10-11**, przy
 > zamknięciu S2b (§2); **SB49–SB60** — **2026-10-11**, podpis S3 (§2); **SB61–SB67** — **2026-10-12**, przy zamknięciu
 > sesji 1 S3 (§2); **SB68–SB76** — **2026-10-13**, odpowiedzi na pytania sesji 2 S3 (§2, §5m.4); **SB77–SB88** —
-> **2026-10-14**, odpowiedzi na pytania sesji 1 S4 (§2, §5o.4).
+> **2026-10-14**, odpowiedzi na pytania sesji 1 S4 (§2, §5o.4); **SB89–SB92** — **2026-10-14**, odpowiedzi na pytania
+> sesji 2 S4 (§2, §5q.4).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
@@ -183,6 +184,10 @@ W kolejności właściciela:
 | **SB86** | **Pula a pokój (65 / 65) zostaje; powrót do tematu wyłącznie, jeśli bramka pokaże, że wojny się nie kończą.** Odpowiedź na pytanie 11, **2026-10-14**. | §5e.6. |
 | **SB87** | **Finding 55: leniwe tworzenie siatki kolonii przy desancie (A4).** Odpowiedź na pytanie 12, **2026-10-14**. | → **S4, sesja 2**; Finding **55** (`AI_CAPTURE_PLAN.md`). |
 | **SB88** | **Pomiar SB72 (czy uderzenia AI przegrywają za często) w ramach S4, na uprzęży.** Odpowiedź na pytanie 13, **2026-10-14**. | → **S4, sesja 2**; **SB72**. |
+| **SB89** | **Rewizja SB86 — wojny się nie kończą: wariant (b) z korektą. Przy wyczerpanej kampanii AI wysyła graczowi depeszę pokojową status quo BEZ oceny pokoju AI, ale tylko gdy (i) wyczerpanie trwa przez dwie kolejne kontrole roczne i (ii) brak eskadry do wzięcia nie wynika z eskort w drodze (liczą się kadłuby z bakiem warp w puli imperium, nie tylko kadłuby dostępne teraz). Gracz przyjmuje albo odrzuca jak dziś. Wariant (d) odrzucony — w zmierzonym przypadku nie było nieudanych prób, tylko brak celu do wzięcia.** Odpowiedź na pytanie 1 sesji 2 S4 (§5p.7), **2026-10-14**. | → **S4, sesja 3**; zmienia **SB86**. |
+| **SB90** | **Finding 446 (i 195) — wariant (b): termin właściciela w `_onColonyDestroyed`, statki AI nigdy nie przechodzą do gracza; eskadra, której cel należy już do jej imperium, zamyka się od razu jako zdobycie.** Odpowiedź na pytanie 2, **2026-10-14**. | → **S4, sesja 3**; Findingi **446** (§6), **195** (`VESSEL_ORDERS_PLAN.md`). |
+| **SB91** | **Odczytania zostają: pula = imperium po pierwszej mobilizacji; sojusz nie blokuje wojny z okazji; cooldown reguły liczony od jej ostatniego odpalenia.** Odpowiedź na pytanie 4, **2026-10-14**. | §5p.1 (SB81, SB82). |
+| **SB92** | **Zwykłe uderzenie eskortą (gdy eskadry nie da się złożyć) celuje w porządku SB84 — najbliższy układ gracza; placówki, potem kolonie, stolica gracza na końcu — nie po devScore.** Odpowiedź na pytanie 5, **2026-10-14**. | → **S4, sesja 3**; uszczegóławia **SB83**, **SB84**. |
 
 ---
 
@@ -2300,6 +2305,8 @@ z okazji, kampanii i siatki. Błędy konsoli: 0 w obu przebiegach.
 5. **Cel zwykłego uderzenia eskortą** (gdy eskadry nie ma — SB83) to dalej najcenniejsze ciało w zasięgu (stolica gracza
    bywa pierwsza): (a) zostaje · (b) zwykłe uderzenie też w porządku SB84.
 
+**Odpowiedzi właściciela (2026-10-14):** §5q.4 — 3 zgoda na commit (§5q.1), pozostałe → **SB89–SB92** (§2).
+
 #### 5p.8 Następny krok
 
 Bramka S4B w przeglądarce właściciela, odpowiedzi na §5p.7, potem commity (`tools/commit_S4B.sh --zgoda-R-S4b-1` w folderze
@@ -2373,6 +2380,27 @@ Konsola — wartość nie podana (w poleceniu właściciela został szablon `<CO
   powrotu z SB86 — odpowiedź właściciela: §5q.4.
 - **Krok 15** — dzwonek zgodny z walidatorem co do liczb (`colonyLost:3` = Propus c i dwie placówki przejęte narzędziem
   w kroku 14).
+
+#### 5q.4 Odpowiedzi właściciela na pytania §5p.7 (2026-10-14) → decyzje SB89–SB92
+
+Słowa właściciela (z polecenia sesji, dosłownie, po angielsku) i numer decyzji:
+
+| pytanie | słowa właściciela | decyzja |
+|---|---|---|
+| 1 | „SB86 revisited — wars do not end: variant (b) WITH a correction. When the campaign is exhausted, the AI sends a status-quo peace offer to the player WITHOUT the AI peace evaluation, but only when (i) exhaustion has held on two consecutive yearly checks and (ii) the lack of an affordable squadron does not stem from escorts in transit (count hulls with warp tank in the empire's pool, not only hulls currently available). The player may accept or reject as today. (d) rejected: in the measured case there were no failed attempts, only no affordable target.” | **SB89** |
+| 2 | „Finding 446 (and 195): variant (b) — owner check in _onColonyDestroyed so AI vessels are never reassigned to the player, plus a squadron whose target is already its own empire's closes immediately as captured.” | **SB90** |
+| 3 | „R-S4b-1: consent (Part A).” | przebieg — §5q.1 |
+| 4 | „Readings stay: pool = empire after first mobilisation; alliance does not block opportunity war; rule cooldown counted from last firing.” | **SB91** |
+| 5 | „Plain escort strike (when a squadron is not affordable) targets in SB84 order (nearest player system; outposts → colonies → capital last), not by devScore.” | **SB92** |
+| — | „Record also, from 2026-10-13 (already SB78–SB80): 442 → (b), 443 → (a), 444 → (a) + number for the double deduction — now scheduled in this session.” | bez nowego numeru: SB78–SB80 (§2; odpowiedzi z 2026-10-14 na pytania sesji 1 S4 z 2026-10-13); numer podwójnego pobrania nadany wcześniej — Finding **445** (`d36adba`; registry-first: nowy numer nie powstaje) |
+
+Pytanie 3 bez numeru SB (precedens §5k, §5m.4, §5o.4: zgoda na commit po bramce nie jest decyzją projektu).
+
+#### 5q.5 Następny krok
+
+**S4, sesja 3** — łańcuch: **446** / **195** (SB90) · koniec wojny przy wyczerpanej kampanii bez oceny pokoju AI, z warunkami
+(i) i (ii) (SB89) · cel zwykłego uderzenia w porządku SB84 (SB92) · **442** (SB78) · **443** (SB79) · **444** + **445**
+(SB80); pomiar na fixture i bramka S4C.
 
 ---
 
@@ -3132,6 +3160,8 @@ przylotu przez 2 lata gry (przylot był zaplanowany na 0,31); kontrola bez przej
 Osiągalne w zwykłej grze: kampania (S4) i odbijanie (S3) wysyłają eskadrę na ciało, na którym walczy jeszcze fala
 poprzedniej (SB70 zostawia falę po limicie trzymania).
 → Decyzja właściciela — §5p.7, pytanie 2.
+→ **SB90 (2026-10-14):** wariant (b) — termin właściciela w `_onColonyDestroyed` (statki AI nigdy nie przechodzą do gracza)
++ eskadra, której cel należy już do jej imperium, zamyka się od razu jako zdobycie; S4, sesja 3.
 
 ---
 

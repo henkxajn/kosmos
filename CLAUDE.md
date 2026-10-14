@@ -5929,7 +5929,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14)
 
-Plan, decyzje **SB1–SB88** i rejestr findingów **#391–#446**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+Plan, decyzje **SB1–SB92** i rejestr findingów **#391–#446**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
 §5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
@@ -6225,3 +6225,12 @@ który nie dołoży domu gracza do zasięgu imperium, nie ma tam celów (świat 
 galaktykę (zmierzone w `sb4_campaign_smoke`).
 ⚠ **Placówka bez budynku jest z projektu niezdobywalna** (`InvasionSystem.holdsDecisiveGround`) — scena testowa, w której
 AI ma zdobyć placówkę, musi postawić na niej budynek.
+Odpowiedzi właściciela na pytania §5p.7 (2026-10-14, plan §5q.4): **SB89** (rewizja SB86 — wojny się nie kończą) — przy
+wyczerpanej kampanii AI wysyła graczowi depeszę status quo BEZ oceny pokoju AI, ale tylko gdy (i) wyczerpanie trwa przez dwie
+kolejne kontrole roczne i (ii) brak eskadry nie wynika z eskort w drodze (liczą się kadłuby z bakiem warp w puli imperium);
+gracz przyjmuje albo odrzuca jak dziś; wariant (d) odrzucony · **SB90** 446 / 195 (b) — termin właściciela
+w `_onColonyDestroyed` (statki AI nigdy nie przechodzą do gracza) + eskadra, której cel należy już do jej imperium, zamyka się
+od razu jako zdobycie · **SB91** odczytania SB81 / SB82 zostają (pula = imperium po pierwszej mobilizacji; sojusz nie blokuje
+wojny z okazji; cooldown reguły od jej ostatniego odpalenia) · **SB92** zwykłe uderzenie eskortą w porządku SB84 (najbliższy
+układ gracza; placówki → kolonie → stolica na końcu), nie po devScore · zgoda na R-S4b-1 (bez numeru SB). **442**, **443**,
+**444**, **445** (SB78–SB80) — S4, sesja 3.
