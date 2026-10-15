@@ -30,20 +30,31 @@
 //
 // KONIEC WOJNY (SB85, reguła `campaign_peace_offer`): kampania WYCZERPANA — `campaignMaxFailedAttempts` kolejnych prób bez
 //   zdobycia celu albo żadna eskadra do wzięcia i nic nie czeka na swój czas — imperium wysyła depeszę pokojową STATUS QUO
-//   (`WarSystem.requestAiPeaceOffer`; te same bramki co depesza z wyczerpania, ocena pokoju bez zmian — SB86).
+//   (`WarSystem.requestAiPeaceOffer`). SB89 (rewizja SB86): depesza idzie BEZ oceny pokoju AI i jest WIĄŻĄCA, ale tylko gdy
+//   (i) wyczerpanie trwa przez `campaignPeaceAfterChecks` KOLEJNE kontrole roczne (każde odpalenie reguły to kontrola) i
+//   (ii) brak eskadry do wzięcia nie wynika z eskort w drodze (kadłuby z bakiem warp w puli imperium liczone wszystkie).
 //
 // ⚠ AKCJA NIGDY NIE RZUCA (`_firePending` / `tickEmpire` biegną poza per-regułowym try/catch — zasada `DirectorOffensive`).
 // ⚠ Zero importów systemów — kolaboratorzy leniwie przez `window.KOSMOS`; liczby strojenia przez planery.
 
 import EventBus from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
+import gameState from '../../core/GameState.js';
+import { isEnemyVessel, hasWeapons, isInService } from '../../entities/Vessel.js';
 import { distanceLY } from '../../utils/InfluenceMath.js';
-import { squadronMaxShips, squadronVerdict, readEmpireWavePlan, campaignCooldownYears, campaignMaxFailedAttempts }
-  from '../../utils/StrikeWavePlanner.js';
+import { squadronMaxShips, squadronVerdict, readEmpireWavePlan, campaignCooldownYears, campaignMaxFailedAttempts,
+         campaignPeaceAfterChecks } from '../../utils/StrikeWavePlanner.js';
 import { orderCampaignTargets, campaignClass } from '../../utils/CampaignPlanner.js';
+import { DIRECTOR_RULES } from '../../data/DirectorRuleData.js';
 
 /** Etapy eskadry, w których próba jeszcze TRWA (lot do celu, trzymanie orbity po desancie) — nie liczą się do wyczerpania. */
 const ATTEMPT_OPEN_STAGES = new Set(['launched', 'landed']);
+
+/** SB89 — klucz `gameState` kontroli rocznych końca wojny (deklaracja: `GameState.createDefaultState`). */
+export const PEACE_CHECKS_STATE_KEY = 'campaignPeaceChecks';
+
+/** Krok Directora: 1 rok cywilizacyjny = 1/12 roku wyświetlanego (`AlienCivSystem._tickAll` → `tickEmpire`). */
+const DIRECTOR_TICK_YEARS = 1 / 12;
 
 export class DirectorCampaign {
   /**
@@ -278,9 +289,92 @@ export class DirectorCampaign {
     return this.campaignExhaustion(empireId).exhausted ? 1 : 0;
   }
 
+  // ── SB89 (i) — kontrole roczne ─────────────────────────────────────────────────────
+
+  /** Okres kontroli = cooldown reguły `campaign_peace_offer` (lata wyświetlane; reguła odpala najwyżej raz na okres). */
+  _peaceCheckYears() {
+    return Number(DIRECTOR_RULES.campaign_peace_offer?.cooldown?.years) || 1.0;
+  }
+
   /**
-   * Akcja `offerCampaignPeace`: depesza pokojowa AI (status quo) przy wyczerpanej kampanii.
-   * @returns {{offered:number, reason?:string, warId?:string}}
+   * SB89 (i) — zapisz KONTROLĘ ROCZNĄ z wyczerpaną kampanią (akcja reguły `campaign_peace_offer`). Kontrola liczy się do
+   * serii, gdy przyszła w NASTĘPNYM okresie po poprzedniej — od okresu do okresu i półtora kroku Directora (zapas na granicę
+   * cooldownu reguły) — w tej samej wojnie i bez eskadry imperium wysłanej od poprzedniej kontroli; później (kontrola bez
+   * wyczerpania nie odpala reguły, więc przerwa jest dłuższa) albo po wysyłce — seria od nowa. Wywołanie w tym samym okresie
+   * (spoza reguły) serii nie zmienia.
+   * @returns {number} ile KOLEJNYCH kontroli zastało kampanię wyczerpaną (z tą)
+   */
+  _notePeaceCheck(empireId, warId, year) {
+    const key = `${PEACE_CHECKS_STATE_KEY}.${empireId}`;
+    const rec = gameState.get(key) ?? null;
+    const period = this._peaceCheckYears();
+    const gap = (rec && rec.warId === warId && Number.isFinite(rec.lastCheckYear)) ? year - rec.lastCheckYear : null;
+    if (gap != null && gap < period - 1e-6) return rec.checks ?? 1;   // ta sama kontrola roczna
+    const launched = gap != null && (this._K()?.strikeSquadronSystem?.listSquadrons?.(empireId) ?? [])
+      .some((s) => Number.isFinite(s.launchedYear) && s.launchedYear > rec.lastCheckYear);
+    const consecutive = gap != null && gap <= period + 1.5 * DIRECTOR_TICK_YEARS && !launched;
+    const checks = consecutive ? (rec.checks ?? 1) + 1 : 1;
+    gameState.set(key, { warId, checks, lastCheckYear: year }, 'campaign_peace_check');
+    return checks;
+  }
+
+  // ── SB89 (ii) — eskorty w drodze ───────────────────────────────────────────────────
+
+  /** Uzbrojone kadłuby imperium w służbie z bakiem warp (nie strażnicy, nie wraki) — WSZĘDZIE, także w locie. */
+  _warpHulls(empireId) {
+    const K = this._K();
+    return (K?.vesselManager?.getAllVessels?.() ?? []).filter((v) => v && !v.isWreck && isEnemyVessel(v)
+      && (v.ownerEmpireId ?? v.owner) === empireId && hasWeapons(v) && isInService(v) && v.warpFuel?.max > 0
+      && !K?.directorDoctrine?.isGuard?.(empireId, v.id));
+  }
+
+  /**
+   * Plan, który CZEKA na eskortę (`insufficient`): odbicie przed kampanią (SB83); bez fali desantu — `null` (brak eskadry
+   * nie wynika wtedy z eskorty).
+   */
+  _waitingSquadronPlan(empireId) {
+    if (!((readEmpireWavePlan(this._K(), empireId)?.count ?? 0) > 0)) return null;
+    const r = this._rt?.planRetake?.(empireId);
+    if (r?.kind === 'insufficient') return r;
+    if (r?.kind === 'start') return null;
+    const c = this.planCampaign(empireId);
+    return c.kind === 'insufficient' ? c : null;
+  }
+
+  /**
+   * SB89 (ii) — czy brak eskadry do wzięcia wynika z ESKORT W DRODZE: plan czeka na eskortę (`insufficient`), a kadłuby
+   * z bakiem warp w puli imperium liczone wszystkie (także w locie i poza układem stolicy) pokryłyby potrzebną eskadrę.
+   * Pusta fala, brak celu, cel ponad sufit — nie (brak eskadry nie z eskort).
+   * @returns {{blocked:boolean, warpHulls:number, available:number|null, needed:number|null, targetBodyId:string|null}}
+   */
+  escortsInTransit(empireId) {
+    const warpHulls = this._warpHulls(empireId).length;
+    const plan = this._waitingSquadronPlan(empireId);
+    if (!plan) return { blocked: false, warpHulls, available: null, needed: null, targetBodyId: null };
+    const needed = plan.need?.needed ?? null;
+    const available = plan.pool?.length ?? 0;
+    return { blocked: Number.isFinite(needed) && warpHulls >= needed && available < needed, warpHulls, available, needed,
+             targetBodyId: plan.target?.body?.id ?? null };
+  }
+
+  /**
+   * Odczyt konsoli i bramki (bez zapisu): wyczerpanie, seria kontroli rocznych, warunek eskort w drodze.
+   * @returns {{exhaustion:object, checks:number, need:number, lastCheckYear:number|null, transit:object}}
+   */
+  peaceStatus(empireId) {
+    const rec = gameState.get(`${PEACE_CHECKS_STATE_KEY}.${empireId}`) ?? null;
+    const warId = this._K()?.warSystem?.getWarWith?.(empireId)?.id ?? null;
+    const same = !!rec && rec.warId === warId;
+    return { exhaustion: this.campaignExhaustion(empireId), checks: same ? (rec.checks ?? 0) : 0, need: campaignPeaceAfterChecks(),
+             lastCheckYear: same ? (rec.lastCheckYear ?? null) : null, transit: this.escortsInTransit(empireId) };
+  }
+
+  /**
+   * Akcja `offerCampaignPeace`: depesza pokojowa AI (status quo) przy wyczerpanej kampanii — SB89: bez oceny pokoju AI
+   * (`WarSystem.requestAiPeaceOffer` — depesza wiążąca), po (i) `campaignPeaceAfterChecks` kolejnych kontrolach rocznych
+   * z wyczerpaniem i (ii) gdy brak eskadry do wzięcia nie wynika z eskort w drodze (`escortsInTransit`; dotyczy wyczerpania
+   * `no_affordable_target`). Bramki depeszy bez zmian: depesza otwarta (`offer_open`), cooldown po odpowiedzi gracza.
+   * @returns {{offered:number, reason?:string, warId?:string, checks?:number}}
    */
   offerCampaignPeace(ctx = {}) {
     const empireId = ctx?.empireId;
@@ -288,16 +382,30 @@ export class DirectorCampaign {
     try {
       const ex = this.campaignExhaustion(empireId);
       if (!ex.exhausted) return this._peaceRefuse(empireId, ex.reason, year, { failedStreak: ex.failedStreak ?? null });
+      const warId = this._K()?.warSystem?.getWarWith?.(empireId)?.id ?? null;
+      const checks = this._notePeaceCheck(empireId, warId, year);
+      const need = campaignPeaceAfterChecks();
+      if (checks < need) {
+        return this._peaceRefuse(empireId, 'exhaustion_not_held', year, {
+          exhaustion: ex.reason, failedStreak: ex.failedStreak, checks, need,
+        });
+      }
+      if (ex.reason === 'no_affordable_target') {
+        const tr = this.escortsInTransit(empireId);
+        if (tr.blocked) {
+          return this._peaceRefuse(empireId, 'escorts_in_transit', year, { exhaustion: ex.reason, checks, need, ...tr });
+        }
+      }
       const r = this._K()?.warSystem?.requestAiPeaceOffer?.(empireId, 'campaign_exhausted');
       if (!r?.ok) {
         return this._peaceRefuse(empireId, r?.reason ?? 'no_war_system', year, {
-          exhaustion: ex.reason, failedStreak: ex.failedStreak, score: r?.score ?? null, threshold: r?.threshold ?? null,
+          exhaustion: ex.reason, failedStreak: ex.failedStreak, checks, need,
         });
       }
       EventBus.emit('director:campaignPeaceOffered', {
-        empireId, year, warId: r.warId, exhaustion: ex.reason, failedStreak: ex.failedStreak, max: ex.max,
+        empireId, year, warId: r.warId, exhaustion: ex.reason, failedStreak: ex.failedStreak, max: ex.max, checks, need,
       });
-      return { offered: 1, warId: r.warId };
+      return { offered: 1, warId: r.warId, checks };
     } catch (err) {
       console.error('[DirectorCampaign] offerCampaignPeace rzucił — depesza pominięta', err);
       return { offered: 0, reason: 'exception' };

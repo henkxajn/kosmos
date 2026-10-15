@@ -650,11 +650,15 @@ export class DiplomacySystem {
    *   za cudzą propozycję.
    */
   offerPeace(empireId, reason = '', {
-    playerInitiated = true, terms = null, stampRefusal = playerInitiated,
+    playerInitiated = true, terms = null, stampRefusal = playerInitiated, bindingAiOffer = false,
   } = {}) {
     if (this.getStatus(empireId) !== 'war') return false;
 
     const result = this.evaluatePeace(empireId, terms);
+    // AI STRIKES BACK S4/3 (SB89) — przyjęcie WIĄŻĄCEJ depeszy AI (status quo wysłane bez oceny pokoju AI, kampania
+    //   wyczerpana — `WarSystem.isAiOfferBinding`): decyzja oceny nie unieważnia przyjęcia. Wyłącznie status quo
+    //   (`terms == null`); blokada pre-warunku i reszta ścieżki — bez zmian.
+    const binding = bindingAiOffer === true && terms == null;
 
     // WP-2 — BLOKADA PRE-WARUNKU. Lustro `proposeTreaty` (ta sama gałąź, ten sam powód):
     // blokada NIE jest odmową ocenianą punktami, więc nie stempluje `recent_refusal` ani nie
@@ -667,7 +671,7 @@ export class DiplomacySystem {
       return false;
     }
 
-    if (!result.decision) {
+    if (!result.decision && !binding) {
       this.addMemory(empireId, 'peace_refused', { reason });
       // WP-4 / C4: stempel ZOSTAJE, ale od D-WP-4 jest zapisem COOLDOWNU, nie kary
       // punktowej (waga `recent_refusal` dla pokoju = 0). `stampRefusal` — patrz D-WP-16.

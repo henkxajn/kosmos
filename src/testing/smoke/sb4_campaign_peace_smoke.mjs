@@ -21,11 +21,17 @@
 //   T3  wyczerpanie: `failed_attempts` (2 — nie, 3 — tak, klucz w chwili użycia), `no_affordable_target` (brak celu,
 //       pula za mała na zawsze, pusta fala; stolica czekająca na ciała swojego układu — `capital_last` — nie
 //       podtrzymuje kampanii), kampania trwa: `no_war`, `squadron_underway`, `squadron_affordable`, `target_waiting`
-//   T4  `WarSystem.requestAiPeaceOffer`: bramki (`no_war`, `ai_refuses` z oceną, `offer_open`, `cooldown`), BEZ progu
-//       `peaceCost`; ładunek z `trigger`; KONTROLA — stara ścieżka: próg `peaceCost` dalej obowiązuje, ładunek bez zmian
-//   T5  akcja `offerCampaignPeace`: odmowa przy trwającej kampanii i przy odmowie oceny pokoju; wysyłka przy wyczerpaniu
-//   T6  silnik reguł: depesza raz (cooldown reguły, depesza otwarta); KONTROLA — eskadra do wzięcia: wysyłka eskadry,
-//       bez depeszy
+//   T4  `WarSystem.requestAiPeaceOffer`: bramki (`no_war`, `offer_open`, `cooldown`), BEZ progu `peaceCost` i — S4/3, SB89
+//       — BEZ oceny pokoju AI (depesza wiążąca); ładunek z `trigger`; KONTROLA — stara ścieżka: próg `peaceCost` dalej
+//       obowiązuje, ładunek bez zmian
+//   T5  akcja `offerCampaignPeace`: odmowa przy trwającej kampanii; przy wyczerpaniu — pierwsza kontrola roczna bez depeszy
+//       (SB89 i), kolejna po roku — depesza status quo
+//   T6  silnik reguł: kontrola roczna (cooldown reguły) — depesza przy DRUGIEJ kolejnej kontroli z wyczerpaniem, raz;
+//       po zamknięciu bez odpowiedzi — przy następnej kontroli; KONTROLA — eskadra do wzięcia: wysyłka eskadry, bez depeszy
+// ⚠ R-S4c-1 (S4/3, SB89 — rewizja SB86; zgoda właściciela — patrz `AI_STRIKES_BACK_PLAN.md`): T4b, T4c, T4i, T5b, T5c,
+//   T6a, T6b przecelowane. Przed S4/3 kodowały ocenę pokoju AI w drugim wyzwalaczu (`ai_refuses` przy świeżej wojnie)
+//   i wysyłkę przy PIERWSZEJ kontroli z wyczerpaniem; SB89 zmienia oba. Kolejne kontrole roczne i eskorty w drodze pinuje
+//   `sb4_peace_checks_smoke`.
 //   T7  audyt
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -269,16 +275,16 @@ header('T4  `WarSystem.requestAiPeaceOffer`: bramki, bez progu `peaceCost`; star
   const none = w.ws.requestAiPeaceOffer?.(w.emp, 'campaign_exhausted');
   war(w);
   const warRec = w.ws.getWarWith(w.emp);
-  const refused = w.ws.requestAiPeaceOffer?.(w.emp, 'campaign_exhausted');
-  console.log(`     bez wojny ${JSON.stringify(none)} · ocena ${JSON.stringify(refused)} · wyczerpanie imperium ${warRec?.exhaustion?.[w.emp]}`);
-  assert(none?.ok === false && none.reason === 'no_war', 'T4a bez wojny — `no_war`');
-  assert(refused?.ok === false && refused.reason === 'ai_refuses' && Number.isFinite(refused.score) && Number.isFinite(refused.threshold)
-    && refused.score < refused.threshold, 'T4b prawdziwa ocena pokoju (świeża wojna) — `ai_refuses` z oceną i progiem');
-  peaceYes(w);
+  const aiNo = dip(w).evaluatePeace(w.emp, null);
   const ok = w.ws.requestAiPeaceOffer?.(w.emp, 'campaign_exhausted');
+  console.log(`     bez wojny ${JSON.stringify(none)} · ocena AI ${aiNo?.score}/${aiNo?.threshold} · depesza ${JSON.stringify(ok)} · wyczerpanie imperium ${warRec?.exhaustion?.[w.emp]}`);
+  assert(none?.ok === false && none.reason === 'no_war', 'T4a bez wojny — `no_war`');
+  assert(aiNo?.decision === false && ok?.ok === true && w.ws.isAiOfferBinding?.(ok.warId) === true,
+    'T4b (R-S4c-1, SB89) prawdziwa ocena pokoju (świeża wojna) = NIE — depesza mimo to, wiążąca (bez oceny pokoju AI)');
   const ev = evs(w, 'war:aiPeaceOffer').at(-1);
   const again = w.ws.requestAiPeaceOffer?.(w.emp, 'campaign_exhausted');
-  assert(ok?.ok === true && ok.warId === warRec?.id && (warRec?.exhaustion?.[w.emp] ?? 0) === 0, 'T4c ocena TAK przy wyczerpaniu 0 — depesza (bez progu `peaceCost`)');
+  assert(ok?.ok === true && ok.warId === warRec?.id && (warRec?.exhaustion?.[w.emp] ?? 0) === 0,
+    'T4c (R-S4c-1) wyczerpanie imperium 0 — depesza (bez progu `peaceCost`)');
   assert(ev && ev.empireId === w.emp && ev.warId === warRec?.id && ev.trigger === 'campaign_exhausted', 'T4d ładunek `war:aiPeaceOffer` z `trigger`');
   assert(again?.ok === false && again.reason === 'offer_open', 'T4e depesza otwarta — `offer_open`');
   EventBus.emit('war:aiPeaceOfferResolved', { empireId: w.emp, warId: warRec?.id, choice: 'reject' });
@@ -303,8 +309,9 @@ header('T4  `WarSystem.requestAiPeaceOffer`: bramki, bez progu `peaceCost`; star
   assert(ev && JSON.stringify(Object.keys(ev).sort()) === JSON.stringify(['empireId', 'warId']), 'T4h KONTROLA: stara ścieżka — ładunek bez zmian (`empireId`, `warId`)');
   const body = src('../../systems/WarSystem.js');
   const fn = body.slice(body.indexOf('requestAiPeaceOffer(empireId'), body.indexOf('_sendAiPeaceOffer(warId, empireId, dipl, extra'));
-  assert(fn.length > 0 && !/peaceCost/.test(fn) && /_sendAiPeaceOffer\(war\.id, empireId, dipl, \{ trigger \}\)/.test(fn),
-    'T4i źródło: drugi wyzwalacz bez progu `peaceCost`, wspólny ogon bramek');
+  assert(fn.length > 0 && !/peaceCost/.test(fn)
+    && /_sendAiPeaceOffer\(war\.id, empireId, dipl, \{ trigger, binding: true \}, \{ evaluate: false \}\)/.test(fn),
+    'T4i (R-S4c-1, SB89) źródło: drugi wyzwalacz bez progu `peaceCost` i bez oceny pokoju AI, wspólny ogon bramek');
 }
 
 // ═══ T5 — akcja ═══════════════════════════════════════════════════════════════
@@ -325,15 +332,15 @@ header('T5  akcja `offerCampaignPeace`');
   war(w);
   const r2 = w.cp?.offerCampaignPeace?.({ empireId: w.emp, year: 1 });
   const rv = evs(w, 'director:campaignPeaceRefused').at(-1);
-  console.log(`     wyczerpana, prawdziwa ocena: ${JSON.stringify(r2)}`);
-  assert(r2?.offered === 0 && r2.reason === 'ai_refuses' && rv?.exhaustion === 'no_affordable_target' && Number.isFinite(rv?.score),
-    'T5b wyczerpana, ale ocena pokoju AI = NIE — odmowa `ai_refuses` z oceną (SB86: ocena bez zmian)');
-  peaceYes(w);
-  const r3 = w.cp?.offerCampaignPeace?.({ empireId: w.emp, year: 1 });
+  console.log(`     wyczerpana, pierwsza kontrola: ${JSON.stringify(r2)}`);
+  assert(r2?.offered === 0 && r2.reason === 'exhaustion_not_held' && rv?.exhaustion === 'no_affordable_target' && rv?.checks === 1,
+    'T5b (R-S4c-1, SB89 i) wyczerpana — pierwsza kontrola roczna: odmowa `exhaustion_not_held` (1 z 2)');
+  at(w, 2);
+  const r3 = w.cp?.offerCampaignPeace?.({ empireId: w.emp, year: 2 });
   const off = evs(w, 'director:campaignPeaceOffered').at(-1);
-  peaceReal(w);
   assert(r3?.offered === 1 && evs(w, 'war:aiPeaceOffer').some(e => e.trigger === 'campaign_exhausted')
-    && off?.exhaustion === 'no_affordable_target' && off.failedStreak === 0, 'T5c wyczerpana, ocena TAK — depesza status quo, `director:campaignPeaceOffered`');
+    && off?.exhaustion === 'no_affordable_target' && off.failedStreak === 0,
+    'T5c (R-S4c-1) kolejna kontrola po roku — depesza status quo (ocena AI = NIE), `director:campaignPeaceOffered`');
 }
 
 // ═══ T6 — silnik reguł ════════════════════════════════════════════════════════
@@ -344,21 +351,24 @@ const ENGINE = ['strike_player_target', 'retake_lost_colony', 'campaign_strike',
   escorts(w, 3);
   at(w, 1);
   war(w);
-  peaceYes(w);
   const ds = director(ENGINE);
   const n = withDirector(() => {
     const emp = w.K.empireRegistry.get(w.emp);
     at(w, 2.0); ds?.tickEmpire?.(w.emp, emp);
     const a = evs(w, 'war:aiPeaceOffer').length;
     at(w, 2.5); ds?.tickEmpire?.(w.emp, emp);
-    EventBus.emit('war:aiPeaceOfferResolved', { empireId: w.emp, warId: w.ws.getWarWith(w.emp)?.id, choice: 'dismissed' });
     at(w, 3.1); ds?.tickEmpire?.(w.emp, emp);
-    return [a, evs(w, 'war:aiPeaceOffer').length];
+    const b = evs(w, 'war:aiPeaceOffer').length;
+    EventBus.emit('war:aiPeaceOfferResolved', { empireId: w.emp, warId: w.ws.getWarWith(w.emp)?.id, choice: 'dismissed' });
+    at(w, 4.2); ds?.tickEmpire?.(w.emp, emp);
+    return [a, b, evs(w, 'war:aiPeaceOffer').length];
   });
-  peaceReal(w);
-  console.log(`     depesze: po 2,0 → ${n[0]} · po 2,5 i 3,1 → ${n[1]}`);
-  assert(!!ds && n[0] === 1, 'T6a reguła odpala: depesza przy wyczerpanej kampanii');
-  assert(n[1] === 2, 'T6b w roku — bez drugiej (cooldown reguły); po roku i zamknięciu depeszy — znowu');
+  console.log(`     ocena pokoju AI (prawdziwa) — NIE: ${dip(w).evaluatePeace(w.emp, null)?.decision === false}`);
+  console.log(`     depesze: po 2,0 → ${n[0]} · po 2,5 i 3,1 → ${n[1]} · po zamknięciu i 4,2 → ${n[2]}`);
+  assert(!!ds && n[0] === 0, 'T6a (R-S4c-1, SB89 i) reguła odpala: pierwsza kontrola roczna z wyczerpaniem — bez depeszy');
+  assert(n[1] === 1 && n[2] === 2,
+    'T6b (R-S4c-1) prawdziwa ocena pokoju AI = NIE: w roku — nic (cooldown reguły); kolejna kontrola (3,1) — depesza raz; ' +
+    'po zamknięciu bez odpowiedzi — przy następnej kontroli');
 }
 {
   const w = boot();

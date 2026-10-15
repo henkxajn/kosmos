@@ -71,8 +71,11 @@ export function acceptPeaceOffer(empireId, warId) {
   // NAP podpisuje się sam w `offerPeace`.
   // `stampRefusal: false` (D-WP-16) ⇒ jeśli świat zdążył się zmienić i ocena wypadnie
   // odmownie, gracz NIE traci własnego przycisku pokoju. Nie płaci za cudzą propozycję.
+  // AI STRIKES BACK S4/3 (SB89) — depesza WIĄŻĄCA (kampania wyczerpana, wysłana bez oceny pokoju AI): przyjęcie podpisuje
+  // pokój bez ponownej oceny. Czy depesza jest wiążąca, mówi `WarSystem` (jedno źródło), nie ładunek zdarzenia.
+  const binding = window.KOSMOS?.warSystem?.isAiOfferBinding?.(warId) === true;
   return dipl.offerPeace(empireId, 'ai_peace_offer_accept', {
-    terms: null, playerInitiated: true, stampRefusal: false,
+    terms: null, playerInitiated: true, stampRefusal: false, bindingAiOffer: binding,
   }) === true;
 }
 

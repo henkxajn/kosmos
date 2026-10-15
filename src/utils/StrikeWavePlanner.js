@@ -145,6 +145,11 @@ export function campaignMaxFailedAttempts() {
   return getTuning('campaignMaxFailedAttempts');
 }
 
+/** SB89 (S4/3) — na ilu kolejnych kontrolach rocznych kampania musi być wyczerpana przed depeszą pokojową (`campaignPeaceAfterChecks`). */
+export function campaignPeaceAfterChecks() {
+  return getTuning('campaignPeaceAfterChecks');
+}
+
 /** Werdykt eskadry: `start` (potrzebne ≤ dostępne i ≤ sufit) · `za_malo` (≤ sufit, > dostępne) · `poza_zasiegiem` (> sufit). */
 export function squadronVerdict(needed, available, cap) {
   if (needed > cap) return 'poza_zasiegiem';

@@ -124,8 +124,15 @@ export const SB_TUNING = Object.freeze({
 
   /**
    * SB85 (S4/2) — KONIEC WOJNY: ile KOLEJNYCH prób (eskadr imperium w bieżącej wojnie, zakończonych) bez zdobycia celu
-   * wyczerpuje kampanię — wtedy imperium wysyła depeszę pokojową (status quo, ocena pokoju bez zmian — SB86).
+   * wyczerpuje kampanię — wtedy imperium wysyła depeszę pokojową status quo (od SB89 bez oceny pokoju AI, warunki niżej).
    * Konsument: `StrikeWavePlanner.campaignMaxFailedAttempts` → `DirectorCampaign`.
    */
   campaignMaxFailedAttempts: Object.freeze({ default: 3, type: 'int', min: 1, max: 20, unit: 'proby' }),
+
+  /**
+   * SB89 (S4/3) — KONIEC WOJNY: na ilu KOLEJNYCH kontrolach rocznych (reguła `campaign_peace_offer`, cooldown reguły 1,0
+   * roku) kampania musi być wyczerpana, zanim imperium wyśle graczowi depeszę pokojową status quo bez oceny pokoju AI.
+   * Konsument: `StrikeWavePlanner.campaignPeaceAfterChecks` → `DirectorCampaign`.
+   */
+  campaignPeaceAfterChecks: Object.freeze({ default: 2, type: 'int', min: 1, max: 10, unit: 'kontrole' }),
 });

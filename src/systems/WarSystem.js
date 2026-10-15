@@ -84,10 +84,14 @@ export class WarSystem {
     //   więc dopóki depesza wisi na ekranie, TO JEST jedyna rzecz trzymająca kolejne emisje.
     //   Runtime-only: stan UI nie należy do zapisu, a nowa sesja startuje z pustym zbiorem.
     this._aiOfferOpen = new Set();
+    // AI STRIKES BACK S4/3 (SB89) — otwarta depesza WIĄŻĄCA (wysłana bez oceny pokoju AI — kampania wyczerpana): jej
+    //   przyjęcie podpisuje pokój bez ponownej oceny (`isAiOfferBinding` → `DiplomacySystem.offerPeace`, `bindingAiOffer`).
+    //   Runtime-only, jak `_aiOfferOpen`; gaśnie razem z nim.
+    this._aiOfferBinding = new Set();
     // Gaśnie na KAŻDEJ ścieżce zamknięcia depeszy (panel emituje to także przy ESC) oraz
     // przy końcu wojny — inaczej kolejny konflikt z tym imperium byłby cichy na zawsze.
-    EventBus.on('war:aiPeaceOfferResolved', ({ warId }) => { this._aiOfferOpen.delete(warId); });
-    EventBus.on('war:peaceSigned',          ({ warId }) => { this._aiOfferOpen.delete(warId); });
+    EventBus.on('war:aiPeaceOfferResolved', ({ warId }) => { this._aiOfferOpen.delete(warId); this._aiOfferBinding.delete(warId); });
+    EventBus.on('war:peaceSigned',          ({ warId }) => { this._aiOfferOpen.delete(warId); this._aiOfferBinding.delete(warId); });
 
     EventBus.on('diplomacy:warDeclared', ({ empireId, reason }) => this._onWarDeclared(empireId, reason));
     EventBus.on('diplomacy:peaceSigned', ({ empireId }) => this._onPeaceSigned(empireId));
@@ -320,14 +324,15 @@ export class WarSystem {
 
   /**
    * AI STRIKES BACK S4/2 (SB85) — DRUGI WYZWALACZ DEPESZY POKOJOWEJ AI: kampania imperium WYCZERPANA
-   * (`DirectorCampaign.campaignExhaustion`, reguła `campaign_peace_offer`). Ta sama depesza (status quo) i te same bramki
-   * co `_maybeAiPeaceOffer` — żadna depesza otwarta, cooldown depeszy, `evaluatePeace` = TAK (SB86: ocena pokoju bez
-   * zmian) — BEZ progu wyczerpania `casusBelli.peaceCost`: wyzwalaczem jest stan kampanii, nie bitwa.
-   * ⚠ Ładunek `war:aiPeaceOffer` niesie dodatkowo `trigger` (konsumenci czytają wyłącznie `empireId` i `warId`); ładunek
-   *   pierwszego wyzwalacza bez zmian.
+   * (`DirectorCampaign.campaignExhaustion`, reguła `campaign_peace_offer`). Ta sama depesza (status quo) i bramki
+   * żadna depesza otwarta, cooldown depeszy — BEZ progu wyczerpania `casusBelli.peaceCost`: wyzwalaczem jest stan kampanii,
+   * nie bitwa. S4/3 (SB89, rewizja SB86): BEZ oceny pokoju AI — depesza WIĄŻĄCA (`isAiOfferBinding`): przyjęcie podpisuje
+   * pokój bez ponownej oceny. Warunki wysyłki (kolejne kontrole roczne, eskorty w drodze) sprawdza `DirectorCampaign`.
+   * ⚠ Ładunek `war:aiPeaceOffer` niesie dodatkowo `trigger` i `binding` (konsumenci czytają wyłącznie `empireId` i `warId`);
+   *   ładunek pierwszego wyzwalacza bez zmian.
    * @param {string} empireId
    * @param {string} [trigger]
-   * @returns {{ok:true, warId:string} | {ok:false, reason:string, warId?:string, score?:number|null, threshold?:number|null}}
+   * @returns {{ok:true, warId:string} | {ok:false, reason:string, warId?:string}}
    */
   requestAiPeaceOffer(empireId, trigger = 'campaign_exhausted') {
     const war = this.getWarWith(empireId);
@@ -335,23 +340,36 @@ export class WarSystem {
     if (this._aiOfferOpen.has(war.id)) return { ok: false, reason: 'offer_open', warId: war.id };
     const dipl = window.KOSMOS?.diplomacySystem;
     if (!dipl) return { ok: false, reason: 'no_diplomacy', warId: war.id };
-    return this._sendAiPeaceOffer(war.id, empireId, dipl, { trigger });
+    return this._sendAiPeaceOffer(war.id, empireId, dipl, { trigger, binding: true }, { evaluate: false });
   }
 
   /**
-   * Wspólny ogon obu wyzwalaczy depeszy pokojowej AI: cooldown depeszy, ocena pokoju, wysyłka.
+   * SB89 — czy otwarta depesza pokojowa AI w tej wojnie jest WIĄŻĄCA (wysłana bez oceny pokoju AI). Czyta panel depeszy
+   * przy przyjęciu (`PeaceOfferModal.acceptPeaceOffer`).
+   */
+  isAiOfferBinding(warId) {
+    return this._aiOfferOpen.has(warId) && this._aiOfferBinding.has(warId);
+  }
+
+  /**
+   * Wspólny ogon obu wyzwalaczy depeszy pokojowej AI: cooldown depeszy, ocena pokoju (pierwszy wyzwalacz; drugi — SB89 —
+   * bez oceny, `evaluate: false`, depesza wiążąca), wysyłka.
    * @returns {{ok:true, warId:string} | {ok:false, reason:'cooldown'|'ai_refuses', warId:string, score?:number|null,
    *            threshold?:number|null}}
    */
-  _sendAiPeaceOffer(warId, empireId, dipl, extra = null) {
+  _sendAiPeaceOffer(warId, empireId, dipl, extra = null, { evaluate = true } = {}) {
     if ((dipl.getAiPeaceOfferCooldown?.(empireId) ?? 0) > 0) return { ok: false, reason: 'cooldown', warId };
     // `terms: null` — oferta AI to zawsze STATUS QUO (D-WP-13). Warunki terytorialne
     // negocjuje gracz przy stole pokoju (C1), po kliknięciu „Kontrpropozycja".
-    const ev = dipl.evaluatePeace(empireId, null);
-    if (ev?.decision !== true) {
-      return { ok: false, reason: 'ai_refuses', warId, score: ev?.score ?? null, threshold: ev?.threshold ?? null };
+    if (evaluate) {
+      const ev = dipl.evaluatePeace(empireId, null);
+      if (ev?.decision !== true) {
+        return { ok: false, reason: 'ai_refuses', warId, score: ev?.score ?? null, threshold: ev?.threshold ?? null };
+      }
     }
     this._aiOfferOpen.add(warId);
+    if (evaluate) this._aiOfferBinding.delete(warId);
+    else this._aiOfferBinding.add(warId);
     EventBus.emit('war:aiPeaceOffer', extra ? { empireId, warId, ...extra } : { empireId, warId });
     return { ok: true, warId };
   }

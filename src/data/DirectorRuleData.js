@@ -364,11 +364,12 @@ export const DIRECTOR_RULES = {
    *
    * Drugi wyzwalacz depeszy pokojowej AI (pierwszy: wyczerpanie z bitew ≥ `casusBelli.peaceCost`, `WarSystem`):
    * `campaignMaxFailedAttempts` (3) kolejnych prób bez zdobycia celu albo żadna eskadra do wzięcia i nic nie czeka na swój
-   * czas → `WarSystem.requestAiPeaceOffer` — depesza STATUS QUO, bramki jak dotąd (ocena pokoju bez zmian — SB86).
-   * Szczegóły: `DirectorCampaign.campaignExhaustion`.
+   * czas → `WarSystem.requestAiPeaceOffer` — depesza STATUS QUO. S4/3 (SB89, rewizja SB86): bez oceny pokoju AI (depesza
+   * wiążąca), po `campaignPeaceAfterChecks` (2) KOLEJNYCH kontrolach rocznych z wyczerpaniem i gdy brak eskadry nie wynika
+   * z eskort w drodze. Szczegóły: `DirectorCampaign.campaignExhaustion`, `DirectorCampaign.offerCampaignPeace`.
    *
-   * ⚠ BEZ RZUTU, więc MUSI mieć `cooldown` (decyzja 11) — `1.0` roku wyświetlanego: imperium, które odmówi samo sobie
-   *   (ocena pokoju = NIE), sprawdza ponownie po roku.
+   * ⚠ BEZ RZUTU, więc MUSI mieć `cooldown` (decyzja 11) — `1.0` roku wyświetlanego: KAŻDE odpalenie to KONTROLA ROCZNA
+   *   (SB89); seria liczy kolejne kontrole z wyczerpaniem (`DirectorCampaign._notePeaceCheck`).
    * ⚠ W katalogu PO kampanii: eskadra wysłana w tym samym ticku wstrzymuje wyczerpanie (eskadra w drodze).
    * ⚠ `delay: 0` OBOWIĄZKOWO (pin katalogowy `w3_target_selection` T1).
    */

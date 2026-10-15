@@ -70,6 +70,10 @@ function createDefaultState() {
     //   capitalId, escortIds, transportId, unitIds, wave, launchedYear, stage }. Właściciel stanu: `StrikeSquadronSystem`.
     //   Pusta mapa = zapis sprzed S3 (save v101 bez migracji).
     strikeSquadrons: {},
+    // AI STRIKES BACK S4/3 (SB89) — kontrole roczne końca wojny: empireId → { warId, checks, lastCheckYear } (ile KOLEJNYCH
+    //   kontroli reguły `campaign_peace_offer` zastało kampanię wyczerpaną). Właściciel stanu: `DirectorCampaign`.
+    //   Pusta mapa = zapis sprzed S4/3 (save v101 bez migracji): seria zaczyna się od następnej kontroli.
+    campaignPeaceChecks: {},
   };
 }
 
