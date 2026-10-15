@@ -38,10 +38,8 @@
 // ⚠ Zero importów systemów — kolaboratorzy leniwie przez `window.KOSMOS`; liczby strojenia przez planery.
 
 import EventBus from '../../core/EventBus.js';
-import EntityManager from '../../core/EntityManager.js';
 import gameState from '../../core/GameState.js';
 import { isEnemyVessel, hasWeapons, isInService } from '../../entities/Vessel.js';
-import { distanceLY } from '../../utils/InfluenceMath.js';
 import { squadronMaxShips, squadronVerdict, readEmpireWavePlan, campaignCooldownYears, campaignMaxFailedAttempts,
          campaignPeaceAfterChecks } from '../../utils/StrikeWavePlanner.js';
 import { orderCampaignTargets, campaignClass } from '../../utils/CampaignPlanner.js';
@@ -87,31 +85,20 @@ export class DirectorCampaign {
     const K = this._K();
     const cap = this._capital(empireId);
     if (!empireId || !cap) return [];
-    const capSys = EntityManager.get(cap.planetId)?.systemId ?? null;
-    const gal = new Map((K?.galaxyData?.systems ?? []).map((s) => [s.id, s]));
-    const capG = gal.get(capSys) ?? null;
     const retaken = new Set((this._rt?.retakeCandidates?.(empireId) ?? []).map((c) => c.body.id));
     const now = this._year();
     const cooldown = campaignCooldownYears();
     const squadrons = K?.strikeSquadronSystem?.listSquadrons?.(empireId) ?? [];
-    // SB84 — ciała gracza poza stolicą, per układ (wszystkie kolonie i placówki gracza, nie tylko cele w zasięgu).
-    const standing = new Map();
-    for (const col of K?.colonyManager?.getPlayerColonies?.() ?? []) {
-      if (col?.isHomePlanet === true) continue;
-      const sid = EntityManager.get(col.planetId)?.systemId ?? null;
-      if (sid) standing.set(sid, (standing.get(sid) ?? 0) + 1);
-    }
     const out = [];
-    for (const t of this._off.reachableTargets(empireId)) {
+    // SB84 / SB92 — odległość, klasa i czekanie stolicy z JEDNEGO źródła (`DirectorOffensive.sb84Targets`), wspólnego
+    //   z porządkiem zwykłego uderzenia.
+    for (const t of this._off.sb84Targets(empireId)) {
       if (retaken.has(t.body.id)) continue;
       const attempts = squadrons.filter((s) => s.targetBodyId === t.body.id && Number.isFinite(s.launchedYear)).map((s) => s.launchedYear);
       const lastAttemptYear = attempts.length ? Math.max(...attempts) : null;
-      const capital = t.colony?.isHomePlanet === true;
       const wait = (lastAttemptYear != null && now - lastAttemptYear < cooldown) ? 'cooldown'
-        : (capital && (standing.get(t.systemId) ?? 0) > 0) ? 'capital_last' : null;
-      const tg = gal.get(t.systemId) ?? null;
-      out.push({ ...t, distLY: (capG && tg) ? distanceLY(capG, tg) : 0, capital,
-                 outpost: !!t.colony?.isOutpost, lastAttemptYear, eligible: wait === null, wait });
+        : t.capitalLast ? 'capital_last' : null;
+      out.push({ ...t, lastAttemptYear, eligible: wait === null, wait });
     }
     return out;
   }

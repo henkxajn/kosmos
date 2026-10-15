@@ -417,12 +417,16 @@ console.log('T13 — `pickTarget` sortuje po GRADOWANYM `needed` rosnaco, nie po
 {
   const src = readFileSync(new URL('../../systems/director/DirectorOffensive.js', import.meta.url), 'utf-8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  // ⚠ Zmienna nazywala sie `scored` w commicie 2; Finding 210 przeniosl porzadek do
-  //   `pickAttainableTarget` i przemianowal ja na `ranked`. Pin celuje w SORTOWANIE, nie w nazwe,
-  //   wiec akceptujemy obie — inaczej stary regex meldowalby pusty string i pin bylby JALOWY.
-  const sortLine = (src.match(/(?:scored|ranked)\.sort\([^;]+;/s) ?? [''])[0];
+  // ⚠ R-S4c-2 (S4/3, SB92 — zgoda właściciela): porządek zwykłego uderzenia = porządek kampanii (SB84), więc
+  //   wyrażenie sortujące mieszka w `CampaignPlanner.orderCampaignTargets`, a `pickAttainableTarget` je WOŁA. Pin celuje
+  //   w SORTOWANIE (klucz `needed`, remis po id), nie w miejsce — czyta komparator planera i wywołanie w źródle uderzenia.
+  const planner = readFileSync(new URL('../../utils/CampaignPlanner.js', import.meta.url), 'utf-8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const sortLine = /orderCampaignTargets\(cands\.map\(/.test(src)
+    ? ((planner.match(/export function orderCampaignTargets[\s\S]*?\.sort\([^;]+;/) ?? [''])[0]) : '';
   assert(sortLine.length > 0,
-    'T13 NIEJALOWOSC: znaleziono wyrazenie sortujace w zrodle (pusty match = pin mierzylby cisze)');
+    'T13 NIEJALOWOSC (R-S4c-2): `pickAttainableTarget` porządkuje przez `orderCampaignTargets`, a w planerze jest ' +
+    'wyrażenie sortujące (pusty match = pin mierzyłby ciszę)');
   assert(/needed/.test(sortLine),
     `T13: klucz sortowania odwoluje sie do \`needed\` (jest: ${sortLine.replace(/\s+/g, ' ').slice(0, 120)})`);
   assert(!/Number\(a\.defended\)/.test(sortLine),
@@ -603,13 +607,16 @@ console.log('T18 — WYPLATA: AI wybiera cialo TANSZE do wziecia, a nie „pierw
 
 const EventBus = (await import('../../core/EventBus.js')).default;
 
-const SYS2 = 'sys_far', FAR = 'p_far';
+// ⚠ R-S4c-2 (S4/3, SB92): porządek zwykłego uderzenia = SB84 — odległość układu od stolicy imperium, potem id układu.
+//   Ten fixture nie ma danych galaktyki (odległość 0 dla obu układów), więc o głowie decyduje id układu; `sys_zfar`
+//   (dawniej `sys_far`) zostawia na głowie bogaty, broniony układ domowy — scena T19–T23 bez zmian.
+const SYS2 = 'sys_zfar', FAR = 'p_far';
 EntityManager.add({ id: FAR, name: 'Alioth', type: 'planet', systemId: SYS2, x: 110, y: 0 });
 
 const HEAVY = [{ id: 'defense_grid', level: 3 }, { id: 'defense_tower', level: 5 }];
 
 /**
- * Swiat DWUUKLADOWY: `sys_home` = BOGATY (wartosc 227), `sys_far` = ubogi (50).
+ * Swiat DWUUKLADOWY: `sys_home` = BOGATY (wartosc 227), `sys_zfar` = ubogi (50).
  * Roznica wartosci jest tu warunkiem koniecznym — bez niej tie-break `needed` z commitu 2
  * sam ustawilby tansze cialo na glowie i defektu nie byloby widac.
  */

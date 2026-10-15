@@ -58,6 +58,9 @@ import { SHIP_MODULES } from '../../data/ShipModulesData.js';
 // AI STRIKES BACK S3/2 (SB56) — mnożnik i sufit eskadry z tabeli strojenia (odczyt w chwili użycia przez planer eskadry).
 import { SB_TUNING } from '../../data/StrikesBackData.js';
 import { squadronHpRatio, squadronMaxShips } from '../../utils/StrikeWavePlanner.js';
+// AI STRIKES BACK S4/3 (SB92) — porządek celów zwykłego uderzenia = porządek kampanii (SB84).
+import { orderCampaignTargets } from '../../utils/CampaignPlanner.js';
+import { distanceLY } from '../../utils/InfluenceMath.js';
 // AI STRIKES BACK S3/2 (SB57) — odbijanie utraconych kolonii (rejestracja w tej samej rodzinie co uderzenie).
 import { DirectorRetake } from './DirectorRetake.js';
 // AI STRIKES BACK S4/2 (SB10, SB83, SB84) — kampania układ po układzie (części wspólne z odbijaniem).
@@ -218,6 +221,35 @@ export class DirectorOffensive {
   }
 
   /**
+   * AI STRIKES BACK S4/2–S4/3 (SB84, SB92) — cele w zasięgu z danymi PORZĄDKU KAMPANII: odległość układu od stolicy
+   * imperium (LY, `InfluenceMath.distanceLY`), klasa (placówka · kolonia · stolica gracza) i czekanie stolicy
+   * (`capitalLast`: stolica gracza nie jest celem, dopóki w jej układzie stoi INNE ciało gracza). Jedno źródło dla kampanii
+   * (`DirectorCampaign.campaignCandidates`) i zwykłego uderzenia (`pickAttainableTarget`); porządek —
+   * `CampaignPlanner.orderCampaignTargets`.
+   * @returns {Array<{colony:object, body:object, systemId:string, distLY:number, capital:boolean, outpost:boolean,
+   *                  capitalLast:boolean}>}
+   */
+  sb84Targets(empireId) {
+    const K = window.KOSMOS;
+    const capSys = this._homeSystemIdOf(empireId);
+    const gal = new Map((K?.galaxyData?.systems ?? []).map((s) => [s.id, s]));
+    const capG = gal.get(capSys) ?? null;
+    // Ciała gracza poza stolicą, per układ (wszystkie kolonie i placówki gracza, nie tylko cele w zasięgu).
+    const standing = new Map();
+    for (const col of K?.colonyManager?.getPlayerColonies?.() ?? []) {
+      if (col?.isHomePlanet === true) continue;
+      const sid = EntityManager.get(col.planetId)?.systemId ?? null;
+      if (sid) standing.set(sid, (standing.get(sid) ?? 0) + 1);
+    }
+    return this.reachableTargets(empireId).map((t) => {
+      const capital = t.colony?.isHomePlanet === true;
+      const tg = gal.get(t.systemId) ?? null;
+      return { ...t, distLY: (capG && tg) ? distanceLY(capG, tg) : 0, capital, outpost: !!t.colony?.isOutpost,
+               capitalLast: capital && (standing.get(t.systemId) ?? 0) > 0 };
+    });
+  }
+
+  /**
    * Czy cel jest BRONIONY? Dwa źródła, oba realne: budynki obronne kolonii ORAZ okręty gracza
    * w tym układzie. Świadomie NIE pytamy `ThreatAssessment` o globalną siłę gracza — tu chodzi
    * o to, co stoi NAD TYM CIAŁEM, a nie o to, ile gracz ma w całej galaktyce.
@@ -305,7 +337,8 @@ export class DirectorOffensive {
   }
 
   /**
-   * Wybór celu: najcenniejszy, a przy remisie — TAŃSZY DO WZIĘCIA.
+   * Wybór celu: GŁOWA porządku (od S4/3, SB92 — porządek SB84: najbliższy układ gracza, placówki → kolonie → stolica
+   * gracza; do S4/3: najcenniejszy, a przy remisie — tańszy do wzięcia).
    * Deterministyczny (żadnego RNG): los jest w RZUCIE reguły, nie w wyborze celu — inaczej
    * ten sam zapis dawałby po wczytaniu inny cel.
    *
@@ -337,6 +370,8 @@ export class DirectorOffensive {
    * w najsłabsze ciało — Alioth przy puli 1, 2 i 3 — czyli tę samą przewidywalność, którą
    * D-199-1 wyrzuciło z booleana. Zejście w porządku wartości eskaluje cel wraz z siłą
    * (Alioth → Średni → Placówka), więc **wybór AI niesie informację o imperium**.
+   * ⚠ S4/3 (SB92, decyzja właściciela 2026-10-14): porządkiem zejścia jest odtąd PORZĄDEK SB84 (kampania), nie wartość
+   *   układu — zejście nadal nie sortuje po koszcie (koszt rozstrzyga tylko remis w klasie, `orderCampaignTargets`).
    *
    * ⚠ `ready` JEST ARGUMENTEM I TO JEST KONTRAKT (D-210-2 + §6.3 planu): `needed` liczy się
    * z REALNEJ puli — i dla PROGU osiągalności, i dla PORZĄDKU. Jedna funkcja licząca ⇒ raport
@@ -350,16 +385,17 @@ export class DirectorOffensive {
    * @returns {{pick: object|null, head: object|null, ranked: object[]}}
    */
   pickAttainableTarget(empireId, ready = []) {
-    const cands = this.reachableTargets(empireId);
+    // ⚠ AI STRIKES BACK S4/3 (SB92) — PORZĄDEK SB84, nie wartość układu: najbliższy układ gracza, w nim placówki → kolonie
+    //   → stolica gracza; stolica gracza nie jest celem, dopóki w jej układzie stoi inne ciało gracza (`capitalLast` —
+    //   reguła kampanii). Remis w klasie — tańszy, potem id ciała (`CampaignPlanner.orderCampaignTargets`). Zejście do
+    //   pierwszego celu w zasięgu sufitu (Finding 210) — bez zmian, w tym porządku. Do S4/3: wartość desc → koszt asc → id.
+    const cands = this.sb84Targets(empireId).filter((c) => !c.capitalLast);
     if (cands.length === 0) return { pick: null, head: null, ranked: [] };
 
-    const ranked = cands.map(c => {
+    const ranked = orderCampaignTargets(cands.map(c => {
       const { needed, defenderHp } = this.requiredSquadron(c, ready);
-      return { ...c, value: this.targetValue(c), defended: this.isDefended(c), needed, defenderHp };
-    });
-    // Porządek BEZ ZMIAN wobec commitu 2: wartość desc → koszt asc → id (determinizm po wczytaniu).
-    ranked.sort((a, b) => (b.value - a.value) || (a.needed - b.needed)
-                       || String(a.body.id).localeCompare(String(b.body.id)));
+      return { ...c, bodyId: c.body.id, value: this.targetValue(c), defended: this.isDefended(c), needed, defenderHp };
+    }));
 
     const cap = Math.min(ready.length, squadronMaxShips());   // SB56 — sufit z tabeli strojenia
     const fits = (t) => t.needed <= cap;
@@ -409,6 +445,8 @@ export class DirectorOffensive {
       // wyglądała na bezbronną i dostawała jeden okręt. Teraz liczba pochodzi z jednostki,
       // którą bitwa NAPRAWDĘ zbuduje.
       const { pick, head, ranked } = this.pickAttainableTarget(empireId, ready);
+      // SB92 — cel w zasięgu, ale jedynie stolica gracza czekająca na ciała swojego układu (lista porządku pusta).
+      if (!head) return this._refuse(empireId, 'no_target_in_reach', year, { capitalLast: true });
 
       // ── STAN TERMINALNY (c): fall-through wyczerpał listę ────────────────────────────────
       // ⚠ TA GAŁĄŹ NIE MA PRAWA ZAMILKNĄĆ. „Wszystko jest twierdzą" to DZISIEJSZE zachowanie na
