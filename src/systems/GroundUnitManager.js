@@ -190,7 +190,7 @@ export class GroundUnitManager {
    *     w `ColonyManager.startGroundUnitBuild`); archetyp bez morale (`noMorale`) dostaje 0;
    *   • `org` i `supply` — bazowe i pełne (z fabryki); `popCost` 0 — AI nie płaci POP;
    *   • `homeColonyId` = kolonia imperium na tym ciele (pełna albo placówka), inaczej `null`.
-   *     ⚠ `serialize` zapisuje `homeColonyId ?? planetId`, więc `null` wraca z zapisu jako id ciała.
+   *     (S4/3, SB79, Findingi 342/443: `null` przeżywa zapis i wczytanie — dawniej wracał jako id ciała.)
    * Odmowa — NIC nie powstaje: nieznany archetyp (także legacy `infantry`/`mech`/`garrison`), imperium
    * spoza `empireRegistry` (także `'player'`), morale niebędące liczbą.
    *
@@ -1519,7 +1519,9 @@ export class GroundUnitManager {
         prevStatus:          u.prevStatus        ?? null,
         unpaidYears:         u.unpaidYears       ?? 0,
         popCost:             u.popCost           ?? 0,
-        homeColonyId:        u.homeColonyId      ?? u.planetId,
+        // AI STRIKES BACK S4/3 (SB79, Findingi 443 i 342) — brak domu zostaje brakiem domu: dawne `?? planetId` robiło
+        //   z ciała, na którym jednostka stoi, jej dom (po wczytaniu płaciła kolonia ciała — 443).
+        homeColonyId:        u.homeColonyId      ?? null,
         // Deploy/Pack state machine (tylko dla supportsDeploy archetypes)
         deployState:         u.deployState       ?? null,
         stateTimer:          u.stateTimer        ?? 0,
@@ -1583,8 +1585,9 @@ export class GroundUnitManager {
         rebuilt.prevStatus        = u.prevStatus        ?? null;
         rebuilt.unpaidYears       = u.unpaidYears       ?? 0;
         rebuilt.popCost           = u.popCost           ?? 0;
-        // Opcja C v3 "macierz": fallback na planetId dla legacy save (v54 i starsze)
-        rebuilt.homeColonyId      = u.homeColonyId      ?? u.planetId;
+        // Opcja C v3 "macierz": fallback na planetId WYŁĄCZNIE dla legacy save bez pola (v54 i starsze); `null` w zapisie
+        //   = jednostka bez domu (S4/3, SB79 — Findingi 443, 342).
+        rebuilt.homeColonyId      = u.homeColonyId === undefined ? u.planetId : u.homeColonyId;
         // Deploy/Pack: legacy save bez deployState → załóż 'deployed' (jak dotychczas
         // stacjonarne). Spawn świeżej jednostki ustawia 'mobile' w createUnit().
         if (arch.supportsDeploy) {
@@ -1623,6 +1626,20 @@ export class GroundUnitManager {
           _facingLeft: u.facingLeft ?? false,
         });
       }
+    }
+
+    // AI STRIKES BACK S4/3 (SB79, Finding 443) — ZAPIS SPRZED POPRAWKI: `serialize` zapisywał `homeColonyId ?? planetId`, więc
+    //   jednostka gracza BEZ domu wracała z domem = ciało, na którym stoi, a żołd płaciła kolonia ciała (zmierzone D3: 0 Kr
+    //   na zdobytym ciele → 8/8 rozwiązane `no_credits`). Ślad tego zapisu: jednostka gracza BEZ więzi POP (`popCost` 0 przy
+    //   archetypie, który POP kosztuje — więź zerwana przy utracie kolonii, 380; spawn debug) z domem = ciało. Jednostka z
+    //   więzią POP zawsze ma dom (rekrutacja), dron bez kosztu POP — też; taki dom jest więc artefaktem zapisu i wraca `null`
+    //   (płaci stolica właściciela — `ColonyManager._groundUnitPayerId`, jak przed wczytaniem). Save v101 bez migracji.
+    const popCosts = window.KOSMOS?.colonyManager?.constructor?.GROUND_UNIT_POP_COSTS ?? {};
+    for (const u of this._units.values()) {
+      if ((u.owner ?? 'player') !== 'player' || !u.archetypeId) continue;
+      if (u.homeColonyId == null || u.homeColonyId !== u.planetId) continue;
+      if (u.popCost > 0 || !((popCosts[u.archetypeId] ?? 0) > 0)) continue;
+      u.homeColonyId = null;
     }
 
     // Ground Unit System: przywróć capture progress
