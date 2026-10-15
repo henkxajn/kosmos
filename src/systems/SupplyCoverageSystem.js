@@ -2,7 +2,10 @@
 //
 // System zarządzający zaopatrzeniem jednostek naziemnych:
 //   - Coverage: obszar 1 hex wokół Capital/Barracks/Supply Unit (własne źródła)
-//   - Refill: jednostki w coverage dostają supply auto (z colony.commodities.military_supplies)
+//   - Refill: jednostki w coverage WŁASNEJ kolonii dostają supply auto (z magazynu kolonii — `resourceSystem`,
+//     towar `military_supplies`; S4/3, Finding 442: wcześniej czytane z nieistniejącego `colony.commodities`)
+//   - Własny grunt (S4/3, SB78 — wariant b): jednostka na kolonii WŁASNEGO imperium nie zużywa zaopatrzenia, nie głoduje
+//     i regeneruje się bez względu na zapas — zaopatrzenie liczy się wyłącznie na cudzym gruncie
 //   - Consumption matrix: idle 1.0×, moving 1.5×, attacking 2.0×, capturing 1.5×, loaded 0×
 //   - Attrition: supply<=0 → HP -5%/civY, morale -10/civY (pełny HOI4)
 //   - Regen: idle + supply>0 → org +3/civY, morale +5/civY (org>50 required)
@@ -18,6 +21,10 @@
 
 import EventBus from '../core/EventBus.js';
 import { DEFAULT_MORALE } from '../data/unitArchetypes.js';
+import { isPlayerColony } from '../utils/ColonyOwnership.js';
+
+/** Towar zaopatrzenia w magazynie kolonii (`resourceSystem`). */
+const SUPPLY_COMMODITY = 'military_supplies';
 
 // Consumption mnożniki per status jednostki (§4 planu)
 const CONSUMPTION_BY_STATUS = {
@@ -83,15 +90,15 @@ export class SupplyCoverageSystem {
         const cov = coverage.get(this._key(u.q, u.r));
         if (!cov)                              continue;
         if (cov.type !== 'capital' && cov.type !== 'barracks') continue;
-        const stock = colony?.commodities?.military_supplies ?? 0;
+        if (!this._onOwnColony(u, colony))     continue;   // magazyn wyłącznie WŁASNEJ kolonii (442)
+        const stock = colony.resourceSystem?.getAmount?.(SUPPLY_COMMODITY) ?? 0;
         if (stock <= 0) continue;
         const need = Math.max(0, (u.supplyCap ?? 100) - (u.supply ?? 0));
         if (need <= 0) continue;
         const rate = CAPITAL_REFILL_RATE * civDeltaYears;
         const draw = Math.min(need, rate, stock);
-        if (draw > 0) {
+        if (draw > 0 && colony.resourceSystem.spend({ [SUPPLY_COMMODITY]: draw })) {
           u.supply = (u.supply ?? 0) + draw;
-          colony.commodities.military_supplies -= draw;
           EventBus.emit('groundUnit:supplyChanged', { unitId: u.id, supply: u.supply, max: u.supplyCap });
         }
       }
@@ -103,15 +110,15 @@ export class SupplyCoverageSystem {
         const cov = coverage.get(this._key(u.q, u.r));
         if (!cov) continue;
         if (cov.type !== 'capital' && cov.type !== 'barracks') continue;
-        const stock = colony?.commodities?.military_supplies ?? 0;
+        if (!this._onOwnColony(u, colony)) continue;   // magazyn wyłącznie WŁASNEJ kolonii (442)
+        const stock = colony.resourceSystem?.getAmount?.(SUPPLY_COMMODITY) ?? 0;
         if (stock <= 0) continue;
         const need = Math.max(0, (u.supplyCap ?? 200) - (u.supply ?? 0));
         if (need <= 0) continue;
         const rate = SUPPLIER_REFILL_RATE * civDeltaYears;
         const draw = Math.min(need, rate, stock);
-        if (draw > 0) {
+        if (draw > 0 && colony.resourceSystem.spend({ [SUPPLY_COMMODITY]: draw })) {
           u.supply = (u.supply ?? 0) + draw;
-          colony.commodities.military_supplies -= draw;
           EventBus.emit('groundUnit:supplyChanged', { unitId: u.id, supply: u.supply, max: u.supplyCap });
         }
       }
@@ -145,6 +152,7 @@ export class SupplyCoverageSystem {
       for (const u of units) {
         if (u.transportStatus === 'loaded') continue;  // FROZEN — transport stasis
         if (u.owner && u.owner !== 'player') continue;
+        if (this._onOwnColony(u, colony)) continue;     // SB78 — własny grunt: bez zużycia
 
         const cov = coverage.get(this._key(u.q, u.r));
         const inRefillZone = cov && (cov.type === 'capital' || cov.type === 'barracks');
@@ -171,6 +179,7 @@ export class SupplyCoverageSystem {
         if (u.transportStatus === 'loaded') continue;
         if (u.owner && u.owner !== 'player') continue;
         if ((u.supply ?? 0) > 0) continue;
+        if (this._onOwnColony(u, colony)) continue;     // SB78 — własny grunt: zapas się nie liczy, bez głodu
 
         // Morale -10/civY (jeśli nie noMorale)
         if (!u.noMorale) {
@@ -216,7 +225,7 @@ export class SupplyCoverageSystem {
       for (const u of units) {
         if (u.transportStatus === 'loaded') continue;
         if (u.owner && u.owner !== 'player') continue;
-        if ((u.supply ?? 0) <= 0) continue;
+        if ((u.supply ?? 0) <= 0 && !this._onOwnColony(u, colony)) continue;   // SB78 — własny grunt: bez względu na zapas
         if (u.status !== 'idle') continue;
 
         const maxOrg = u.maxOrg ?? 100;
@@ -259,6 +268,16 @@ export class SupplyCoverageSystem {
   }
 
   _key(q, r) { return `${q},${r}`; }
+
+  /**
+   * SB78 (S4/3, Finding 442) — czy jednostka stoi na kolonii WŁASNEGO imperium (gracz: kolonia gracza — kanon
+   * `isPlayerColony`; imperium: kolonia z jego stemplem). Ciało bez kolonii albo kolonia innego właściciela — cudzy grunt.
+   */
+  _onOwnColony(u, colony) {
+    if (!colony) return false;
+    const owner = u?.owner ?? 'player';
+    return owner === 'player' ? isPlayerColony(colony) : colony.ownerEmpireId === owner;
+  }
 
   /**
    * Zwraca coverage map: hex → { type, sourceId? }.

@@ -762,7 +762,8 @@ export const BUILDINGS = {
   // ── Koszary (Opcja C v3) — rekrutacja jednostek naziemnych ────────────────
   // Każdy poziom = 1 slot rekrutacji równoległej (ColonyManager._getBarracksSlots).
   // Gating archetypów: Lv1 → shock/garrison; Lv2 (ground_warfare) → + artyleria/AA/medyk;
-  // Lv3 (drone_warfare) → + drony. Capital/Barracks adjacency → auto-supply z colony.commodities.military_supplies.
+  // Lv3 (drone_warfare) → + drony. Capital/Barracks adjacency → auto-supply z magazynu kolonii (`resourceSystem`,
+  // `military_supplies`; S4/3, Finding 442).
 
   barracks_lv1: {
     id:            'barracks_lv1',
