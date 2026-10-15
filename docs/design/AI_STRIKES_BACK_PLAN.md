@@ -1,6 +1,7 @@
 # AI STRIKES BACK — flota, strażnik i desant AI
 
-> **Status:** 📋 **PLAN PODPISANY 2026-10-06** — zakres (cztery pozycje, w kolejności właściciela) i decyzje
+> **Status:** 🏁 **ROZDZIAŁ ZAMKNIĘTY 2026-10-15** (podsumowanie — §8; sesja 4 S4 — commit po bramce S4D, §5t) ·
+> 📋 **PLAN PODPISANY 2026-10-06** — zakres (cztery pozycje, w kolejności właściciela) i decyzje
 > **SB1–SB12** podpisane przez właściciela **2026-10-06**; **SB13–SB19** — tego samego dnia, przy zamknięciu S0;
 > **SB20–SB25** — **2026-10-07**, odpowiedzi na pytania sesji 1 S1; **SB26–SB29** — **2026-10-08**, odpowiedzi na
 > pytania sesji 2 S1; **SB30–SB36** — **2026-10-08**, podpis S2 (§2); **SB37–SB38** — **2026-10-10**, przy zamknięciu
@@ -55,6 +56,10 @@
 > bramka S4D w przeglądarce i zgoda na przecelowanie **R-S4d-1** przed commitem): **447** (SB93 — bitwa pomijana, gdy ciało
 > celu należy już do napastnika) · **448** (SB94 — pierścień cudzej kolonii nie zwalnia z zaopatrzenia) · SB89 (ii) według
 > SB96 (każda eskorta w drodze). Przygotowanie, M9 i scenariusz bramki — §5t; zamknięcie rozdziału — §8.
+> 🏁 **ROZDZIAŁ ZAMKNIĘTY 2026-10-15** — podsumowanie §8: co weszło slice po slice z zakresami commitów, tabela
+> strojenia, indeks decyzji SB1–SB96, findingi otwarte i zamknięte, świadomie poza rozdziałem, pierwszy wolny numer
+> **449**, reguły wiążące dalej, następny arc — polerka UI i grafiki (pierwszy krok: model czasu starcia, **438** /
+> **436**).
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
@@ -3621,3 +3626,216 @@ wyłącznie dla kolonii gracza, faza 4 bez wyjątku pierścienia — §5t.1; M9:
 - **Podwójne pobranie Kr za jednostki naziemne** (`AI_GARRISON_PLAN.md`, kandydaci bez numeru notatki G3-closing: „znane
   w backlogu, świadomie bez numeru”) — od **2026-10-14** Finding **445** (decyzja **SB80**); wskaźnik dopisany w
   `AI_GARRISON_PLAN.md`.
+
+---
+
+## 8. AI STRIKES BACK — zamknięcie rozdziału (2026-10-15)
+
+**Stan:** rozdział zamknięty 2026-10-15. Slice'y S0 – S4 (sesje 1 – 3) zacommitowane; bramki w przeglądarce właściciela
+PASS: S0 (§5a), S1 (§5e), S2 (§5g), S2b (§5i), S3A (§5k), S3B (§5m), S4A (§5o), S4B (§5q), S4C (§5s.2) `[doc]`. Sesja 4
+(**447** / SB93, **448** / SB94, SB96) — łańcuch S4-13 … S4-15 zestagowany, commit `tools/commit_S4D.sh --zgoda-R-S4d-1`
+po bramce S4D i zgodzie na przecelowanie **R-S4d-1** (§5t). Ta sekcja nie mierzy niczego na nowo: liczby przepisane
+z §5a – §5t i z wyników folderów przekazania, przeliczone z repo tam, gdzie stoi `[git]` / `[code]`.
+
+### 8.1 Co weszło — slice po slice `[git]`
+
+| slice | daty | co weszło | commity kodu | bramka |
+|---|---|---|---|---|
+| **S0** | 2026-10-06 | trzy defekty bramkujące: zaległość floty GRACZA nie blokuje kadłubów AI (**391**), załoga AI bez POP (**392**), dominację orbitalną odbiera tylko kadłub, z którym da się walczyć — `isFightableInSpace` (**393**, **394**) | `9c73023` · `e73c890` · `cf2a598` (+ `eb6c06e` — poprawki tekstowe) | PASS (§5a) |
+| **S1** | 2026-10-07 – 09 | tabela strojenia (`StrikesBackData` / `StrikesBackTuning`), limit floty z siły imperium (`FleetLimit`), pula okrętów przy mobilizacji z odrastaniem (`FleetPoolSystem`, `VesselManager.createAIVessel`), wojna budzi całą rezerwę, wywiad „okręty uzbrojone / limit floty”, leczenie chimer doku przy wczytaniu (**407**); domknięcie: minimum z bakiem przy utworzeniu puli (SB27), para wzorzec ↔ minimum (SB28), w wojnie parytet nie hamuje (SB29, **411**), **413** | `eb17f97` · `8abe84d` · `d4f43a8` … `1444184` (8) · `6b40c30` · `dab5e2a` | PASS (§5e) |
+| **S2** | 2026-10-10 | strażnik stolicy NA ORBICIE i drugie strzeżone ciało w układzie stolicy (`GuardPostPlanner`, roster `director.doctrine.<id>.guard`), zastępstwo na granicy roku; **414** (wywiad z przylotu statku nie-gracza), **406** (zrzut bez dominacji — odmowa w chwili zrzutu) | `bf498d1` … `0eaa105` (5) | PASS (§5g) |
+| **S2b** | 2026-10-11 | poprawki przed S3: lot do ruchomego ciała z jednego źródła `VesselManager._interceptBody` (**416**), wrak nie wznawia misji, nie zrzuca i nie wychodzi z orbity (**417**, **418**, **425**), unikalne identyfikatory starć (**419**, **424**), pierścień ruchu tylko z oglądanego układu (**415**) | `a8de641` … `7b37a4d` (7) | PASS (§5i) |
+| **S3** | 2026-10-12 – 13 | zbliżenie na zasięg własnej broni (**421**), lot grupy razem (`GroupArrival`, **420**), eskadra z transportowcem i prawdziwym ładunkiem (`StrikeSquadronSystem`, `StrikeWavePlanner`; **396**, **384**), desant na CEL eskadry, eskadra bez eskorty przerywana (**435**), trzymanie orbity do rozstrzygnięcia walki naziemnej (**434**), mnożnik i sufit eskadry jako klucze, odbijanie utraconych kolonii (`DirectorRetake`), statek w skoku poza układami (**151**, **427**), wpis dzwonka o uzbrojonym kontakcie | `1cf1d24` · `ee44424` · `c97b73b` · `2c33033` … `5a47c68` (6) | S3A PASS (§5k), S3B PASS (§5m) |
+| **S4** | 2026-10-14 – 15 | detekcja we własnym układzie (**439**), limit trzymania orbity (**440**), siatka kolonii przy desancie (`ColonyGrid`, **55**), kampania układ po układzie (`DirectorCampaign`, `CampaignPlanner`), wojna z okazji (`DirectorOpportunityWar`), koniec wojny przy wyczerpanej kampanii — depesza status quo bez oceny AI, wiążąca (SB85, SB89), statki AI nigdy do gracza i eskadra z celem już własnym (**446**, **195**), porządek zwykłego uderzenia (SB92), garnizon gracza na zdobytym ciele: zaopatrzenie tylko na cudzym gruncie (**442**), dom jednostki przeżywa zapis (**443**, **342**), żołd tylu, ilu starcza kasy, jednym pobraniem (**444**, **445**) | `c6b9e9c` · `95c44ed` · `ea30ce8` … `8e63b98` (4) · `11c7cb0` … `69efacd` (6) | S4A PASS (§5o), S4B PASS (§5q), S4C PASS (§5s.2) |
+| **S4 / sesja 4** | 2026-10-15 | bitwa pomijana na ciele już własnym napastnika (**447**, SB93), pierścień cudzej kolonii bez zwolnienia z zaopatrzenia (**448**, SB94), każda eskorta w drodze w warunku (ii) depeszy (SB96) | S4-13 … S4-15 — zestagowane, commit po bramce | S4D — do zrobienia (§5t) |
+
+**Liczniki:** od `7bfefd3` (podpis planu) do tego commitu zamknięcia — **77** commitów: **48** kodu (feat
+22, fix 25, test 1) i **29** dokumentacji `[git]`; sesja 4
+dokłada 3 commity kodu. Keepery: **43** nowych `sb*` (+3 w sesji 4) `[git]`; sweep **263/263** na starcie rozdziału
+(AI GARRISON G2b) `[doc]` → **306/306** na HEAD → **309/309** z sesją 4 `[measured]`; `check-i18n` 3455
+`[doc]` → **3458** `[measured]` (+3: `drop.lostDominance` w S2-2, dwa klucze wpisu dzwonka w S3-9); save **v101**
+bez migracji przez cały rozdział.
+
+### 8.2 Tabela strojenia — wszystkie klucze i wartości domyślne `[code]`
+
+Jedno miejsce liczb rozdziału: `src/data/StrikesBackData.js` (`SB_TUNING`, 18 kluczy). Odczyt w chwili użycia,
+zmiana z walidacją typu i zakresu, reset — `src/utils/StrikesBackTuning.js`; wartości zmienione z konsoli jadą w zapisie
+(`gameState.strikesBackTuning`, brak wpisu = domyślna; SB16). Konsola: `KOSMOS.debug.sbTuning()` (odczyt per imperium,
+wartości różne od domyślnych oznaczone), `KOSMOS.debug.sbSet(klucz, wartość)`, `KOSMOS.debug.sbReset(klucz?)`. Para
+`fleetPoolPattern` ↔ `fleetMinWarpHulls` sprawdzana razem w obu kolejnościach (SB28).
+
+| klucz | domyślnie | zakres | jednostka | decyzja | od |
+|---|---|---|---|---|---|
+| `fleetMinHulls` | 2 | całkowita 0–100 | kadłuby | SB3 | S1 (`eb17f97`) |
+| `fleetPopPerHull` | 32 | całkowita 1–10000 | POP na kadłub | SB3 | S1 (`eb17f97`) |
+| `fleetRungMult` | 1 / 1 / 1 / 1,25 | 4 × [0–10] | mnożnik | SB3, SB25 | S1 (`eb17f97`) |
+| `fleetPoolPattern` | `frigate_system_defender`, `frigate_missile_escort`, `frigate_missile_escort`, `frigate_missile_escort` | 1–24 szablonów (znane, uzbrojone) | szablony | SB17, SB20 | S1 (`a1143fc`) |
+| `fleetMinWarpHulls` | 2 | całkowita 0–100 | kadłuby z bakiem | SB21 (para z wzorcem — SB28) | S1 (`a1143fc`) |
+| `fleetRegrowthPerYear` | 1 | całkowita 0–100 | kadłuby na rok | SB15 | S1 (`d707e3e`) |
+| `fleetGuardsPerBody` | 1 | całkowita 0–10 | strażnicy na ciało | SB30 | S2 (`d3fc782`) |
+| `strikeWaveShare` | 0,5 | liczba 0–1 | udział limitu garnizonu | SB8, SB53 | S3 (`c97b73b`) |
+| `squadronHpRatio` | 1,0 | liczba 0,1–10 | HP eskadry / HP obrońcy | SB56, SB72 | S3 (`dafea9a`) |
+| `squadronMaxShips` | 3 | całkowita 1–24 | kadłuby | SB56 | S3 (`dafea9a`) |
+| `retakeDelayYears` | 1 | liczba 0–50 | lata gry | SB57 | S3 (`6dd6081`) |
+| `retakeCooldownYears` | 5 | liczba 0–100 | lata gry | SB57 | S3 (`6dd6081`) |
+| `squadronHoldMaxYears` | 3 | liczba 0,5–20 | lata gry | SB70 | S4 (`95c44ed`) |
+| `campaignCooldownYears` | 5 | liczba 0–100 | lata gry | SB83 | S4 (`85b776b`) |
+| `warTensionMin` | 40 | liczba 0–100 | napięcie | SB81 | S4 (`e5020ec`) |
+| `aiWarCooldownYears` | 5 | liczba 0–50 | lata gry | SB82 | S4 (`e5020ec`) |
+| `campaignMaxFailedAttempts` | 3 | całkowita 1–20 | próby | SB85 | S4 (`8e63b98`) |
+| `campaignPeaceAfterChecks` | 2 | całkowita 1–10 | kontrole | SB89 | S4 (`36b7adc`) |
+
+### 8.3 Indeks decyzji SB1 – SB96
+
+Pełne brzmienie i ślad każdej decyzji — §2. Indeks w kolejności podpisu; ↻ — zmieniona późniejszą decyzją, → — przekazana
+dalej.
+
+| decyzje | podpis | treść (skrót) |
+|---|---|---|
+| **SB1 – SB12** | 2026-10-06, podpis planu | SB1 okręty z puli, straty odrastają · SB2 kadłuby puli bez POP · SB3 limit floty z siły imperium · SB4 zaległość floty gracza nie blokuje AI (**391**) · SB5 strażnik na orbicie; dok i rezerwa nie odbierają dominacji · SB6 drugie strzeżone ciało · SB7 żadnych magicznych lądowań · SB8 desant = część limitu garnizonu, falami · SB9 jedna tabela strojenia · SB10 ofensywa układ po układzie · SB11 reguły odbijania i wojny z inicjatywy na pomiarze (→ SB57, SB81 – SB85) · SB12 Finding **50** zamknięty |
+| **SB13 – SB19** | 2026-10-06, zamknięcie S0 | SB13 wojna budzi całą rezerwę · SB14 pula do limitu (↻ SB21) · SB15 odrastanie jak garnizon · SB16 strojenie w zapisie, reset · SB17 wzorzec puli w tabeli · SB18 pula w służbie, w doku (S1) · SB19 wywiad flota / limit (**398**) |
+| **SB20 – SB25** | 2026-10-07, sesja 1 S1 | SB20 wzorzec D, E, E, E · SB21 minimum 2 kadłubów z bakiem także ponad limitem · SB22 kadłuby puli „wszystko zbadane” · SB23 transportowiec nieuzbrojony, poza limitem · SB24 leczenie **407** przy wczytaniu · SB25 własny mnożnik szczebla floty |
+| **SB26 – SB29** | 2026-10-08, sesja 2 S1 | SB26 reparacje wstrzymują pulę i odrastanie · SB27 minimum z bakiem w chwili utworzenia · SB28 tabela odmawia pary bez baku · SB29 w wojnie parytet nie hamuje (**411**) |
+| **SB30 – SB36** | 2026-10-08, podpis S2 | SB30 strażnik = uzbrojony bez baku, jeden na ciało · SB31 własny roster strażników · SB32 strzeżone: stolica i najcenniejsze ciało w układzie stolicy · SB33 stanowiska od mobilizacji, zastępstwo na granicy roku · SB34 dominacja per układ · SB35 **406** bramką w `dropTroop` · SB36 **414** naprawa, **415** raport |
+| **SB37 – SB38** | 2026-10-10, zamknięcie S2 | SB37 zepchnięty strażnik wraca na orbitę na granicy miesiąca · SB38 pierwszeństwo stolicy przy obsadzaniu |
+| **SB39 – SB44** | 2026-10-10, podpis S2b | SB39 **416** · SB40 **417** · SB41 **418** · SB42 **419** · SB43 **415** · SB44 **151** w S3 (→ SB59) |
+| **SB45 – SB48** | 2026-10-11, zamknięcie S2b | SB45 **420** w S3, jeden pomocnik · SB46 **421** — kierunek (→ SB49) · SB47 **424**, **425** naprawione; **422**, **423** raport · SB48 wrak cmentarny jedzie z ciałem |
+| **SB49 – SB60** | 2026-10-11, podpis S3 | SB49 **421** kształt O2E · SB50 „przypięcie” zostaje (**426**) · SB51 transportowiec na falę · SB52 prawdziwy ładunek · SB53 wielkość fali · SB54 lot razem · SB55 desant po wygranej orbicie · SB56 mnożnik 1,0, sufit 3 · SB57 odbijanie · SB58 eskorta nad celem (↻ SB63) · SB59 **151** + wpis dzwonka · SB60 obrona naziemna poza S3 (**426** – **432**) |
+| **SB61 – SB67** | 2026-10-12, zamknięcie sesji 1 S3 | SB61 zbliżenie tylko statków zamrożonych · SB62 flota gracza po bitwie w locie osobno (**437**) · SB63 transportowiec z eskortą nad celem · SB64 desant na cel eskadry · SB65 **55** — pomiar, naprawa w S4 (→ SB87) · SB66 **435** · SB67 czas rundy kluczem tylko przy niezależności (→ SB68) |
+| **SB68 – SB76** | 2026-10-13, zamknięcie S3 | SB68 **438** — kierunek (c), po S4 (→ następny arc) · SB69 **439** · SB70 **440** · SB71 odczytania reguły odbijania · SB72 SB56 przy 1,0, pomiar w S4 (→ SB88) · SB73 trzy filtry FMO zostają · SB74 brzmienie kluczy S3-9 · SB75 **298** × SB57 zamierzone · SB76 głód garnizonu — pomiar (→ **442** – **445**) |
+| **SB77 – SB88** | 2026-10-14, zamknięcie sesji 1 S4 | SB77 **441** → polerka UI · SB78 **442** (b) · SB79 **443** (a) · SB80 **444** (a) + **445** · SB81 wojna z okazji, napięcie ≥ 40 · SB82 odstęp wojen: rozejm, NAP, cooldown 5 lat · SB83 kampania: eskadry z desantem najpierw · SB84 porządek celów · SB85 koniec wojny — status quo · SB86 pula a pokój (↻ SB89) · SB87 **55** — siatka leniwie · SB88 pomiar SB72 |
+| **SB89 – SB92** | 2026-10-14, zamknięcie sesji 2 S4 | SB89 depesza status quo bez oceny AI: (i) dwie kontrole, (ii) eskorty w drodze (↻ SB96) · SB90 **446** / **195** · SB91 odczytania SB81 / SB82 · SB92 zwykłe uderzenie w porządku SB84 |
+| **SB93 – SB96** | 2026-10-15, zamknięcie sesji 3 S4 | SB93 **447** wariant (a); (b) → po Alfie · SB94 **448** · SB95 eskadra `landed` bez zmian · SB96 każda eskorta w drodze |
+
+### 8.4 Findingi rozdziału — otwarte i zamknięte
+
+- **Rejestr macierzysty #391 – #448 (§6):** 58 wpisów — ✅ **34** zamkniętych, ⚪ **24**
+  otwartych, w tym **447** i **448** z naprawą zestagowaną (sesja 4; zamknięcie przy commicie). Zamknięte: **391** · **392** · **393** · **394** · **396** · **397** · **398** · **399** · **402** · **406** · **407** · **408** · **411** · **413** · **414** · **415** · **416** · **417** · **418** · **419** · **420** · **421** · **424** · **425** · **427** · **434** · **435** · **439** · **440** · **442** · **443** · **444** · **445** · **446**.
+- **Pochodzenie numerów:** 391 – 396 kandydaci K1 – K6 audytu fazy A · 397 – 406 S0 (notatka przekazania, bramka) ·
+  407 – 413 S1 · 414 – 419 S2 · 420 – 425 S2b · 426 – 437 S3, sesja 1 (426 – 432 — kandydaci notatki S2b, SB60) ·
+  438 – 440 S3, sesja 2 · 441 – 445 S4, sesja 1 · 446 S4, sesja 2 · 447 – 448 S4, sesja 3 — mapa numeracji:
+  `OPEN_FINDINGS_INDEX.md`.
+- **Zamknięte w rejestrach macierzystych innych arców** (wpisy tam): **50** (`W3_PLAN.md` §50, SB12, 2026-10-06) ·
+  **384** (`AI_GARRISON_PLAN.md` §6, `c97b73b`, S3-3) · **151** (`VESSEL_ORDERS_PLAN.md`, `53fb899`, S3-8) · **55**
+  (`AI_CAPTURE_PLAN.md`, `ea30ce8`, S4-3) · **195** (`VESSEL_ORDERS_PLAN.md`, `11c7cb0`, S4-7) · **342**
+  (`AI_GARRISON_PLAN.md` §6, `8d5e9d4`, S4-11). Podwójne pobranie Kr (backlog AI GARRISON, bez numeru) → **445**
+  (`69efacd`, S4-12).
+
+### 8.5 Świadomie poza rozdziałem
+
+- **AI ↔ AI** — wojny, desanty, kampanie i odbijanie między imperiami AI (zakres §1; bramki rozdziału dotyczą pary gracz ↔
+  imperium — np. 447 przy kolonii trzeciego imperium: bitwa jak dotąd, §5t.1). → backlog (§5 „AI imperiów”, obok B1).
+- **Liczba imperiów AI** — bez zmian (zakres §1). → backlog.
+- **Prawdziwa produkcja okrętów AI** — nietknięta (SB1): okręty rozdziału pochodzą z puli; kadłuby ze stoczni AI liczą się
+  do tego samego limitu. → backlog.
+- **Model czasu rundy starcia** (**438**, SB68 kierunek (c); z nim **436** i **432**) → kolejka polerki — pierwszy krok
+  następnego arca (§8.8).
+- **441** (okno pierwszego wykrycia) → polerka UI (SB77).
+- **447 (b)** (zwykłe uderzenie nie celuje w ciało, na które leci własna fala) → polerka po Alfie (SB93).
+- Balans obrony naziemnej gracza (SB60: **430**, **431**) — poza rozdziałem.
+
+### 8.6 Otwarte findingi i pierwszy wolny numer
+
+| finding | temat | dokąd |
+|---|---|---|
+| **395** | adnotacja `directorOrigin` trafia na zły kadłub | higiena — bez kroku |
+| **400** | guard `empireHasFreeCrew` bez konsumenta | higiena (martwy kod) |
+| **401** | gałąź księgi abstrakcyjnej odbiera dominację | bez kroku (stare zapisy, floty debugowe) |
+| **403** | `WarSystem.getPlanetOrbitalController` bez konsumenta | higiena (martwy kod) |
+| **404** | dwa polskie literały ostrzału z orbity (`ColonyOverlay`) | polerka UI — i18n (klasa 113 / 375) |
+| **405** | flash `drop.noDominance` w praktyce niewidoczny | polerka UI |
+| **409** | „Rezerwa wchodzi do służby: N” liczy też kadłuby z puli | polerka UI — tekst (decyzja 2026-10-08) |
+| **410** | `spawnMyVessel({ systemId })` tworzy chimerę doku | narzędzie debug — bez kroku |
+| **412** | panel WYWIAD po polsku w grze EN | polerka UI — i18n (klasa 113 / 375) |
+| **422** | misje `MissionSystem` i kurierzy AI: lot z prędkością różną od statku | raport (SB47) |
+| **423** | `intercept` na cel zadokowany albo na orbicie nie zamyka pościgu | raport (SB47) |
+| **426** | „przypięcie” w DSCS | zostaje (SB50) |
+| **428** | punkt przylotu po skoku losowany per statek (skok gracza) | raport |
+| **429** | detekcja bierze ZADOKOWANE statki gracza jako obserwatorów | do potwierdzenia, czy zamierzone |
+| **430** | obrona naziemna gracza nie zabija jednostek AI (technologie fixture’u) | poza rozdziałem — balans obrony naziemnej (SB60) |
+| **431** | koszary zniknęły z rejestru aktywnych budynków (1 z 36 przebiegów) | niezbadane (SB60) |
+| **432** | limit 20 rund — przegrana strona na wrak także żywymi okrętami | obserwacja projektu → model czasu starcia (§8.8) |
+| **433** | `w3_ai_invasion_smoke` T5 nie odróżnia dwóch list kolonii | naprawa pinu (scena z kolonią AI w układzie celu) |
+| **436** | starcie w przestrzeni rozstrzyga się w ułamku sekundy | następny arc — model czasu starcia (§8.8) |
+| **437** | flota GRACZA po bitwie w locie wznawia lot osobno | raport (SB62) |
+| **438** | wynik starcia zależy od czasu rundy | następny arc — pierwszy krok (SB68, kierunek (c)) |
+| **441** | okno pierwszego wykrycia: „Distance” bez terminu układu, „in our system” | polerka UI (SB77) |
+| **447** | zwykłe uderzenie na ciało zdobyte w locie — bitwa na ciele już własnym | naprawa (a) zestagowana (S4-13) — zamknięcie przy commicie; (b) po Alfie (SB93) |
+| **448** | pierścień stolicy / koszar CUDZEJ kolonii zwalnia z zaopatrzenia | naprawa zestagowana (S4-14) — zamknięcie przy commicie (SB94) |
+
+**Pierwszy wolny numer: 449.** Numer nadaje się registry-first: przed nadaniem sprawdzić §6 tego planu i mapę numeracji
+`OPEN_FINDINGS_INDEX.md` (lekcja kolizji 165 / 166 i 246 – 254). Prefiks `V-` (VISUALS) i `W2 1-14` to osobne przestrzenie.
+
+### 8.7 Reguły wiążące dalej (przeniesione z CLAUDE.md przy zamknięciu rozdziału)
+
+**Model i jedno źródło bytów AI:**
+- Spośród kadłubów dominację orbitalną odbiera wyłącznie uzbrojony wrogi kadłub w służbie, w locie albo na orbicie
+  w tym układzie (`isFightableInSpace`); zadokowany i rezerwowy — nie, po OBU stronach. Strona-kontroler trzyma orbitę
+  zawsze; strona gracza dolicza jeszcze księgę flot abstrakcyjnych (**401**). Dominacja zostaje per UKŁAD (SB34) —
+  strażnik na orbicie stolicy odbiera graczowi dominację w całym układzie stolicy.
+- Odmowę zrzutu pokazuje panel statku i wyszarzony przycisk; flash `drop.noDominance` jest w praktyce niewidoczny
+  (**405**). `dropTroop` odmawia bez dominacji właściciela jednostki w CHWILI zrzutu (**406**, SB35).
+- Kadłub AI z puli tworzy się WYŁĄCZNIE przez `VesselManager.createAIVessel`, wołane tylko z `FleetPoolSystem` (pin
+  `sb1_fleet_pool_smoke` T10e). Eskadrę AI tworzy WYŁĄCZNIE `StrikeSquadronSystem.launchSquadron` (transportowiec funkcją
+  puli, fala przez `createAIUnit` + `loadGroundUnit`); desant z bitwy kadłubów ląduje WYŁĄCZNIE z ładunku —
+  `launchInvasion` (z liczby) zostaje dla dźwigni `force_invasion` i martwej gałęzi floty abstrakcyjnej. Jednostka
+  naziemna AI — WYŁĄCZNIE `createAIUnit` (reguła AI GARRISON).
+- Strażnik to kadłub uzbrojony w służbie BEZ baku warp, NA ORBICIE — wypada z doktryn i z puli uderzenia (SB31).
+- Lot do ciała ma JEDNO źródło chwili przylotu: `VesselManager._interceptBody` (punkt i `arrivalYear` razem); nowy
+  producent lotu na ruchome ciało nie liczy własnej predykcji. Wrak nie wznawia misji — migawka wraku zdejmowana
+  w `_resumeMissionAfterOrder`; `_updatePositions` wraku nie prowadzi.
+- Detekcja wrogich statków nie zależy od widoku (S4-1): wpis dzwonka o uzbrojonym okręcie przychodzi z każdego układu
+  z kolonią gracza, lista „Kontakty” obserwatorium pokazuje kontakty ze wszystkich takich układów. Okno pierwszego
+  wykrycia — przy oglądanym układzie: statek wykryty poza widokiem dostaje okno, gdy gracz spojrzy na jego układ.
+- Kampania i wojna z okazji czytają `reachableTargets` (przestrzeń roszczona i powłoka graniczna `InfluenceMap`).
+  Kontrola roczna końca wojny (SB89) = odpalenie reguły `campaign_peace_offer`. Depesza z wyczerpanej kampanii jest
+  WIĄŻĄCA — przyjęcie bez ponownej oceny AI (tylko pokój bez warunków); depesza z wyczerpania z bitew — jak dotąd z oceną.
+- Koszt w Kr kolonii — jedno pobranie przez `ColonyManager._spendColonyCredits` (zdarzenie `trade:spendCredits`; bez
+  systemu handlu — odjęcie wprost); nowy koszt nie odejmuje ręcznie I nie emituje (**445**).
+- Sesja 4 (po commicie S4-13 i S4-14): bitwa planetarna `EnemyAttackHandler` jest pomijana, gdy ciało celu należy już do
+  imperium napastnika (`enemyAttack:battleSkipped`); zasięg stolicy i koszar w `SupplyCoverageSystem` liczony wyłącznie
+  dla kolonii gracza.
+
+**Keepery i sceny testowe:**
+- Keeper, który wypowiada wojnę, a nie pinuje puli, wyłącza ją w setupie (`fleetPoolSystem.enabled = false`, wzór
+  `garrisonSystem.enabled`) — wyłącznik jest narzędziem testów: w grze zawsze `true`, poza zapisem (pin
+  `sb1_pool_switch_smoke`). Dotyczy też keepera, który mierzy dominację albo zrzut w układzie stolicy AI — od S2 pula
+  stawia strażnika na orbicie w chwili mobilizacji.
+- Pula w świecie keeperów (limit 2) to D, E, E od razu (SB27), a odrastanie dla minimum potrzebuje STRATY — keeper,
+  który mierzy „pulę z 2 kadłubów” albo „+E na granicy roku”, koduje stan sprzed SB27.
+- Keeper, który mierzy desant AI z bitwy kadłubów, ładuje falę w setupie (wzór R-S3-3) — pusta ładownia nie ląduje.
+- Keeper kampanii albo wojny z okazji, który nie dołoży domu gracza do zasięgu imperium, nie ma tam celów (świat keepera
+  ≠ fixture GATE-S4). Keeper, który bootuje `GameCore` kilka razy w jednym procesie, tworzy `TerritoryService`
+  i `InfluenceMap` OD NOWA i robi `reseed` — `window.KOSMOS` przeżywa kolejny boot, a strumień PRNG daje inną galaktykę.
+- Placówka bez budynku jest z projektu niezdobywalna (`InvasionSystem.holdsDecisiveGround`) — scena, w której AI ma
+  zdobyć placówkę, stawia na niej budynek.
+- Keeper depeszy z wyczerpanej kampanii przechodzi DWIE kolejne kontrole roczne (rok gry między nimi) — jedna kontrola
+  daje `exhaustion_not_held`.
+- Naprawa domu jednostki przy wczytaniu (S4-11) biegnie przy KAŻDYM wczytaniu — narzędzie bramki albo sondy, które tworzy
+  jednostki gracza z domem = ciało, daje im więź POP (`popCost` + `lockPops(popCost, 'laborer')`), inaczej po wczytaniu
+  dom znika.
+- Scena bitwy planetarnej EAH nie stoi na kolonii imperium napastnika — od SB93 bitwy tam nie ma (przecelowanie R-S4d-1:
+  wolne ciało w układzie AI).
+
+**Pomiar w prawdziwej grze:**
+- Prawdziwa gra na fixture headless: `tools/kosmos_cdp.mjs` z folderów przekazania (izolowany Chrome — własny profil
+  i serwer tylko-do-odczytu; fixture wczytany produkcyjnym `importSave` → „Kontynuuj”); nim mierzono M1 – M9 i walidowano
+  jednolinijkowce bramek.
+- Walka DSCS i ruch potrzebują czasu ciągłego — tryb klatek: `TimeSystem.update(dt)` co ~16 ms z prawdziwym `dt`
+  (≤ 100 ms), nigdy krokiem miesięcznym. Kolejność `time:tick` przy końcu mobilizacji (`VesselManager` → Director →
+  stanowiska) zależy w czasie ciągłym od fazy akumulatora Directora — który kadłub zostanie strażnikiem, nie jest stałe.
+- Sonda, która porównuje dwa przebiegi, musi być deterministyczna i mieć kontrolę X = X: zegar wirtualny
+  (`performance.now` / `Date.now`), ziarnisty `Math.random` gry, osobny strumień losowań renderera, okno partii bitwy
+  planetarnej na zegarze wirtualnym, stała liczba klatek rAF na klatkę czasu, rysowanie 3D wstrzymane
+  (`ThreeRenderer.suspend()`).
+- Krok bramki, który wypowiada wojnę i w tej samej chwili mierzy pulę eskorty, widzi pulę PUSTĄ — obudzona rezerwa
+  przechodzi mobilizację przez 1,0 roku cywilizacyjnego (`DEPLOY_DURATION_CIVYEARS`); taki krok dokłada kadłuby
+  (`createAIVessel`) albo puszcza czas (zmierzone przy bramce S4D, §5t.3).
+
+### 8.8 Następny arc
+
+**Polerka UI i grafiki** (wskazanie właściciela przy zamknięciu, 2026-10-15). Pierwszy krok: **model czasu starcia
+w przestrzeni** — **438** (SB68, kierunek (c): stały krok czasu GRY na rundę, czas rundy wyłącznie kluczem prezentacji,
+dzisiejsze wyniki zachowane; najpierw audyt) razem z **436** (gracz nie zdąży zareagować) i **432** (limit rund). Dalej:
+**441** (SB77), literały i18n **404**, **412**, tekst **409**, flash **405**. **447 (b)** — po Alfie (SB93). Reszta
+otwartych — §8.6.

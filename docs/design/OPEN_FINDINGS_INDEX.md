@@ -630,6 +630,13 @@
 > • **Naprawy PRZYGOTOWANE (zamknięcie przy commicie):** ⚪ **447** (S4-13, SB93) · ⚪ **448** (S4-14, SB94); SB96 (S4-15).
 > • Przecelowanie **R-S4d-1** (`w3_cross_system_attack_smoke` T8) czeka na zgodę.
 > • Następny: bramka S4D w przeglądarce właściciela, zgoda na R-S4d-1 i commity; zamknięcie rozdziału — `AI_STRIKES_BACK_PLAN.md` §8.
+>
+> **Aktualizacja 2026-10-15 (zamknięcie rozdziału) — AI STRIKES BACK: rozdział ZAMKNIĘTY** (`AI_STRIKES_BACK_PLAN.md` §8).
+> • Rejestr #391–#448: 58 wpisów — ✅ 34 · ⚪ 24 (w tym **447**, **448** z naprawą zestagowaną —
+> zamknięcie przy commicie sesji 4).
+> • Otwarte z kierunkiem „polerka UI i grafiki” (następny arc; pierwszy krok **438** / **436**): **432** · **441** · **404** ·
+> **405** · **409** · **412**; reszta (raport, higiena, poza rozdziałem) — §8.6.
+> • **Pierwszy wolny numer: 449.**
 
 
 ---
@@ -708,7 +715,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **115-129** | `UNIFIED_VESSEL_ORDERS_AUDIT.md` §7 |
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
-| **391-435** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–11; 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
+| **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |

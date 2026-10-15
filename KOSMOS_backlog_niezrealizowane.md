@@ -74,6 +74,11 @@
 - **Personality System** (5-osiowy wektor) modyfikujący cooldowny akcji AI.
 - **EconAI jako 2-poziomowy GOAP** (roczny cel strategiczny → rozkład na akcje) — Faza 7 ongoing, do dopracowania.
 - **Realny hull-gating dla AI** (dziś AI zwolnione — buduje wszystko) → mniej rozwinięte AI buduje więcej małych kadłubów.
+- **Po AI STRIKES BACK (rozdział zamknięty 2026-10-15; `docs/design/AI_STRIKES_BACK_PLAN.md` §8.5) — świadomie poza
+  rozdziałem, bez numeru:** wojny, desanty, kampanie i odbijanie AI↔AI (sąsiaduje z B1 niżej) · liczba imperiów AI ·
+  prawdziwa produkcja okrętów AI (okręty rozdziału pochodzą z puli, stocznie AI nietknięte — SB1) · wariant (b)
+  Findingu 447 (zwykłe uderzenie nie celuje w ciało, na które leci własna fala) — po Alfie (SB93). Model czasu rundy
+  starcia (438, SB68) i 441 (SB77) mają numery — rejestr arca §6, kierunek §8.8.
 
 ### 🔴 DUZY SLOT: **POPYT NA WARP** — po co AI ma rdzenie skokowe (obok GROUND)
 
