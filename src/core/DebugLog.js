@@ -170,7 +170,8 @@ const TRACKED_EVENTS = [
   //   (`launchRefused`) — bez tej pary gate nie odróżniłby „brak eskorty” od „nic nie wywołało funkcji”.
   'squadron:launched',
   'squadron:launchRefused',
-  'squadron:closed',          // S3/2 (SB63) — eskadra zamknięta (transportowiec usunięty w domu albo bez stolicy)
+  'squadron:closed',          // S3/2 (SB63) — eskadra zamknięta (transportowiec usunięty w domu albo bez stolicy);
+                              //   S4/3 (SB90) — od razu, gdy cel jest już własny (`captured`, `target_own`, ogon `tail`)
   // AI STRIKES BACK S3/2 (SB57) — odbijanie: wysłane (cel, eskorta, fala) i odmowa z powodem (`no_capital`, `no_target`,
   //   `insufficient_squadron`, `target_beyond_reach`, `launch_refused`); utracona stolica imperium (`empire:capitalLost`).
   'director:retakeLaunched',

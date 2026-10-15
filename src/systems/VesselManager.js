@@ -1320,6 +1320,13 @@ export class VesselManager {
 
     for (const vessel of this._vessels.values()) {
       if (alreadyDestroyed.has(vessel.id)) continue;
+      // ⚠ AI STRIKES BACK S4/3 (SB90, Findingi 195 i 446) — STATKI AI NIGDY NIE PRZECHODZĄ DO GRACZA.
+      //   Port zastępczy wyżej jest kolonią GRACZA, a gałęzie niżej przepisywały na niego KAŻDY statek związany z utraconą
+      //   kolonią — także okręty imperium lecące na ciało, które ich imperium właśnie zdobyło (`colony:captured`: wpis do
+      //   floty domu gracza i wymuszony powrót do współrzędnych domu gracza liczonych w OBCYM układzie — eskadra wisiała
+      //   w locie do końca wojny, Finding 446) i statki imperium związane z jego własną usuniętą kolonią. Statkami AI po
+      //   utracie celu zarządza ich imperium (`StrikeSquadronSystem`, `DirectorRecall`), nie ewakuacja gracza.
+      if (isEnemyVessel(vessel)) continue;
 
       // Statki w tranzycie/orbitujące DO zniszczonego ciała → awaryjny powrót
       if (vessel.mission?.targetId === planetId &&

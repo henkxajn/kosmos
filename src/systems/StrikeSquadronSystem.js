@@ -20,6 +20,10 @@
 // wracają do stolicy tym samym odwołaniem, a transportowiec, który dotarł na orbitę stolicy, jest usuwany (rekord `closed`). Odwołanie Directora
 // (`DirectorRecall`) pomija kadłuby eskadry trzymającej orbitę (`isHolding`). POKÓJ z graczem w trakcie: eskadra wraca,
 // nic nie ląduje. Atak bez desantu (odmowa przy lądowaniu) — eskadra wraca.
+// CEL JUŻ WŁASNY (S4/3, SB90, Finding 446): eskadra w drodze, której cel zdobyła w trakcie lotu wcześniejsza fala imperium,
+// ZAMYKA SIĘ OD RAZU jako zdobycie (`closed`, wynik `captured`, powód `target_own`) — nie blokuje odbijania, kampanii ani
+// depeszy pokojowej; jej kadłuby wracają do stolicy „ogonem” rekordu (`homeTail`, `tailIds`), a transportowiec
+// z niewylądowaną falą jest usuwany w domu.
 //
 // ⚠ Wszystko albo nic: walidacja eskorty i fali PRZED utworzeniem czegokolwiek; odmowa rozkazu grupy cofa utworzony
 //   transportowiec i jednostki (nic nie zostaje).
@@ -45,6 +49,8 @@ export const SQUADRON_STATE_KEY = 'strikeSquadrons';
  *   wracają do stolicy; `outcome`) → `closed`
  *   (transportowiec usunięty na orbicie stolicy);
  *   `launched` → `aborted` (SB66 — cała eskorta stracona; transportowiec wraca) → `closed`;
+ *   `launched` → `closed` OD RAZU (SB90 — cel zdobyty w trakcie lotu przez wcześniejszą falę: wynik `captured`, powód
+ *   `target_own`; kadłuby wracają „ogonem” rekordu, `homeTail`);
  *   `launched` / `aborted` → `transport_lost` (transportowiec wrakiem razem z falą — koniec).
  * Etapy KOŃCOWE i „w drodze” (S3/2, SB57: reguła odbijania czeka, aż żadna eskadra imperium nie jest w drodze) niżej.
  */
@@ -311,16 +317,21 @@ export class StrikeSquadronSystem {
 
   /**
    * Tik czasu:
-   *   • `launched` — atak skończony BEZ desantu (transportowiec bezczynny na orbicie celu, bitwa nie czeka w oknie
-   *     `EnemyAttackHandler`) → `returning` (`not_landed`, powód ostatniej odmowy w `lastBlockReason`);
+   *   • `launched` — cel już własny (SB90) → `closed` od razu (`captured`, `target_own`, ogon); inaczej atak skończony BEZ
+   *     desantu (transportowiec bezczynny na orbicie celu, bitwa nie czeka w oknie `EnemyAttackHandler`) → `returning`
+   *     (`not_landed`, powód ostatniej odmowy w `lastBlockReason`);
    *   • `landed` — walka naziemna rozstrzygnięta (`_groundDecision`) albo limit trzymania (`_holdExpired`, SB70) → `returning`;
    *   • `aborted` — transportowiec bez rozkazu powrotu dostaje go; w domu — usunięty, `closed`;
-   *   • `returning` — członek bezczynny poza domem dostaje rozkaz powrotu; transportowiec w domu — usunięty, `closed`.
+   *   • `returning` — członek bezczynny poza domem dostaje rozkaz powrotu; transportowiec w domu — usunięty, `closed`;
+   *   • `closed` z ogonem (SB90) — kadłuby z listy wracają do stolicy (`_tickHomeTail`).
    */
   _tick() {
     for (const s of this.listSquadrons()) {
       if (s.stage === 'launched') {
-        if (this._attackEndedWithoutLanding(s)) this._toReturning(s, 'not_landed');
+        if (this._targetAlreadyOwn(s)) this._closeCaptured(s);
+        else if (this._attackEndedWithoutLanding(s)) this._toReturning(s, 'not_landed');
+      } else if (s.stage === 'closed' && s.homeTail === true) {
+        this._tickHomeTail(s);
       } else if (s.stage === 'landed') {
         const d = this._groundDecision(s) ?? this._holdExpired(s);
         if (d) this._toReturning(s, d);
@@ -332,6 +343,65 @@ export class StrikeSquadronSystem {
         this._closeIfHome(this.getSquadron(s.id));
       }
     }
+  }
+
+  /** SB90 — czy cel eskadry jest już kolonią jej imperium (zdobyty w trakcie lotu przez wcześniejszą falę). */
+  _targetAlreadyOwn(s) {
+    return this._K()?.colonyManager?.getColony?.(s.targetBodyId)?.ownerEmpireId === s.empireId;
+  }
+
+  /**
+   * SB90 (Finding 446) — cel eskadry w drodze (`launched`) należy już do jej imperium: eskadra ZAMYKA SIĘ OD RAZU jako
+   * zdobycie — rekord `closed` (wynik `captured`, powód `target_own`), więc nie blokuje odbijania, kampanii ani depeszy
+   * pokojowej (`hasSquadronUnderway`). Composite członków zdjęte od razu (przylot ze skoku nie wyda odcinka do celu — jak
+   * `_toReturning`); kadłuby wracają do stolicy „ogonem” rekordu (`homeTail`, lista `tailIds` — `_tickHomeTail`).
+   */
+  _closeCaptured(s) {
+    const vm = this._K()?.vesselManager;
+    const members = [s.transportId, ...(s.escortIds ?? [])];
+    for (const id of members) {
+      const v = vm?.getVessel?.(id);
+      if (v && !v.isWreck && v.pendingOrder && v.pendingOrder.kind !== 'recall') v.pendingOrder = null;
+    }
+    this._setStage(s.id, 'closed', { outcome: 'captured', closeReason: 'target_own', homeTail: true, tailIds: members });
+    EventBus.emit('squadron:closed', { squadronId: s.id, empireId: s.empireId, outcome: 'captured', closeReason: 'target_own',
+                                       tail: members.length });
+    this._tickHomeTail(this.getSquadron(s.id));
+  }
+
+  /**
+   * SB90 — „ogon” eskadry zamkniętej jako zdobycie: kadłuby z listy `tailIds` wracają do stolicy (`_sendHome`; w starciu
+   * albo w skoku — następny tik). Eskorta schodzi z listy, gdy jest w domu albo w drodze do niego — od tej chwili eskadra
+   * nie wydaje jej rozkazów, więc kadłub może wejść do następnej eskadry (dalsze porażki odwołania podejmuje
+   * `DirectorRecall`). Transportowiec schodzi z listy w domu: usunięty razem z niewylądowaną falą (`_disposeTransport`; bez
+   * stolicy — od razu). Wrak albo brak kadłuba — z listy. Pusta lista — ogon zgaszony (`homeTail: false`).
+   */
+  _tickHomeTail(s) {
+    if (!s || s.homeTail !== true) return;
+    const K = this._K();
+    const vm = K?.vesselManager;
+    const ids = s.tailIds ?? [];
+    const keep = [];
+    let dissolved = null;
+    for (const id of ids) {
+      const v = vm?.getVessel?.(id);
+      if (!v || v.isWreck) continue;
+      if (id === s.transportId) {
+        const d = this._disposeTransport(s, v);
+        if (d) { dissolved = d.dissolved; continue; }
+        if (!this._homeBound(v)) this._sendHome(v, s.empireId);
+        keep.push(id);
+        continue;
+      }
+      if (this._isHome(v, s.empireId) || this._homeBound(v)) continue;
+      const r = this._sendHome(v, s.empireId);
+      if (r !== 'ordered' && r !== 'at_home') keep.push(id);
+    }
+    if (keep.length === ids.length && !dissolved) return;
+    const patch = { tailIds: keep };
+    if (dissolved) patch.dissolvedUnitIds = dissolved;
+    if (keep.length === 0) { patch.homeTail = false; patch.tailClosedYear = K?.timeSystem?.gameTime ?? null; }
+    this._patch(s.id, patch);
   }
 
   /** Atak skończony bez desantu: transportowiec żywy, bezczynny na orbicie celu, poza starciem i poza oknem bitwy EAH. */
@@ -411,18 +481,28 @@ export class StrikeSquadronSystem {
    */
   _closeIfHome(s) {
     if (!s || TERMINAL_STAGES.has(s.stage)) return;
-    const K = this._K();
-    const vm = K?.vesselManager;
-    const tr = vm?.getVessel?.(s.transportId);
+    const tr = this._K()?.vesselManager?.getVessel?.(s.transportId);
     if (!tr || tr.isWreck) return;
+    const d = this._disposeTransport(s, tr);
+    if (!d) return;
+    this._setStage(s.id, 'closed', { closeReason: d.closeReason, dissolvedUnitIds: d.dissolved });
+    EventBus.emit('squadron:closed', { squadronId: s.id, empireId: s.empireId, outcome: s.outcome ?? s.abortReason ?? null,
+                                       closeReason: d.closeReason, dissolved: d.dissolved.length });
+  }
+
+  /**
+   * Transportowiec na orbicie stolicy (albo imperium bez stolicy): niewylądowana fala znika z nim CICHO, kadłub usunięty.
+   * Wspólne dla zamknięcia eskadry w domu (`_closeIfHome`) i ogona (SB90, `_tickHomeTail`).
+   * @returns {{closeReason:'transport_home'|'no_capital', dissolved:string[]}|null} — `null`: transportowiec jeszcze nie w domu
+   */
+  _disposeTransport(s, tr) {
+    const K = this._K();
     const hasCapital = !!K?.directorProduction?.capitalOf?.(s.empireId);
-    if (hasCapital && !this._isHome(tr, s.empireId)) return;
+    if (hasCapital && !this._isHome(tr, s.empireId)) return null;
     const dissolved = [...(tr.groundUnits ?? [])];
     for (const uid of dissolved) K?.groundUnitManager?.removeUnit?.(uid);
-    vm.destroyVessel?.(tr.id);
-    this._setStage(s.id, 'closed', { closeReason: hasCapital ? 'transport_home' : 'no_capital', dissolvedUnitIds: dissolved });
-    EventBus.emit('squadron:closed', { squadronId: s.id, empireId: s.empireId, outcome: s.outcome ?? s.abortReason ?? null,
-                                       closeReason: hasCapital ? 'transport_home' : 'no_capital', dissolved: dissolved.length });
+    K?.vesselManager?.destroyVessel?.(tr.id);
+    return { closeReason: hasCapital ? 'transport_home' : 'no_capital', dissolved };
   }
 
   /** Zawróć transportowiec eskadry do stolicy; zapisuje `homeOrdered`, gdy rozkaz poszedł. */
