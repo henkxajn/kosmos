@@ -5929,7 +5929,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14 · S4 sesja 3 ZAMKNIĘTA 2026-10-15)
 
-Plan, decyzje **SB1–SB92** i rejestr findingów **#391–#448**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
+Plan, decyzje **SB1–SB96** i rejestr findingów **#391–#448**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
 §5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q, S4 sesja 3: §5r, zamknięcie sesji 3 S4: §5s); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
@@ -6260,3 +6260,9 @@ z wyczerpania z bitew — jak dotąd z oceną.
 gracza z domem = ciało, musi dać im więź POP (`popCost` + `lockPops(popCost, 'laborer')`), inaczej po wczytaniu dom znika.
 ⚠ **Koszt w Kr kolonii — jedno pobranie przez `ColonyManager._spendColonyCredits`** (zdarzenie `trade:spendCredits`; bez
 systemu handlu — odjęcie wprost); nowy koszt nie odejmuje ręcznie I nie emituje (to był Finding 445).
+Odpowiedzi właściciela na pytania §5r.5 (2026-10-15, plan §5s.4): zgoda na R-S4c-1 i R-S4c-2 (bez numeru SB) · **SB93**
+447 (a) — bitwa pomijana, gdy ciało celu należy już do napastnika; (b) — polerka po Alfie · **SB94** 448 — pierścień
+stolicy / koszar CUDZEJ kolonii nie zwalnia jednostek gracza z zużycia zaopatrzenia (cudzy grunt jest cudzy) · **SB95**
+eskadra `landed`, której własna fala zdobyła cel, zamyka się jak w S3 (`transport_home`); od razu — wyłącznie `target_own`
+· **SB96** SB89 (ii) liczy KAŻDĄ eskortę w drodze, nie tylko kadłuby z bakiem warp. Następny: **S4, sesja 4** (447, 448,
+SB96) i zamknięcie rozdziału.

@@ -8,7 +8,7 @@
 > zamknięciu S2b (§2); **SB49–SB60** — **2026-10-11**, podpis S3 (§2); **SB61–SB67** — **2026-10-12**, przy zamknięciu
 > sesji 1 S3 (§2); **SB68–SB76** — **2026-10-13**, odpowiedzi na pytania sesji 2 S3 (§2, §5m.4); **SB77–SB88** —
 > **2026-10-14**, odpowiedzi na pytania sesji 1 S4 (§2, §5o.4); **SB89–SB92** — **2026-10-14**, odpowiedzi na pytania
-> sesji 2 S4 (§2, §5q.4).
+> sesji 2 S4 (§2, §5q.4); **SB93–SB96** — **2026-10-15**, odpowiedzi na pytania sesji 3 S4 (§2, §5s.4).
 > Faza A (audyt i pomiar, bez kodu): `docs/design/AI_STRIKES_BACK_AUDIT.md` (zmierzone na `8b72c47`, kod gry `23a87e5`).
 > ✅ **S0 ZAMKNIĘTY 2026-10-06** (trzy defekty: **391**, **392**, **393 + 394**; bramka live właściciela PASS — §5a,
 > wynik — §5b): `9c73023` · `e73c890` · `cf2a598` · `eb6c06e`.
@@ -193,6 +193,10 @@ W kolejności właściciela:
 | **SB90** | **Finding 446 (i 195) — wariant (b): termin właściciela w `_onColonyDestroyed`, statki AI nigdy nie przechodzą do gracza; eskadra, której cel należy już do jej imperium, zamyka się od razu jako zdobycie.** Odpowiedź na pytanie 2, **2026-10-14**. | → **S4, sesja 3**; Findingi **446** (§6), **195** (`VESSEL_ORDERS_PLAN.md`). |
 | **SB91** | **Odczytania zostają: pula = imperium po pierwszej mobilizacji; sojusz nie blokuje wojny z okazji; cooldown reguły liczony od jej ostatniego odpalenia.** Odpowiedź na pytanie 4, **2026-10-14**. | §5p.1 (SB81, SB82). |
 | **SB92** | **Zwykłe uderzenie eskortą (gdy eskadry nie da się złożyć) celuje w porządku SB84 — najbliższy układ gracza; placówki, potem kolonie, stolica gracza na końcu — nie po devScore.** Odpowiedź na pytanie 5, **2026-10-14**. | → **S4, sesja 3**; uszczegóławia **SB83**, **SB84**. |
+| **SB93** | **Finding 447 — wariant (a): bitwa jest pomijana, gdy ciało celu należy już do napastnika; wariant (b) (zwykłe uderzenie nie celuje w ciało z własną falą) odłożony do polerki po Alfie.** Odpowiedź na pytanie 2 sesji 3 S4 (§5r.5), **2026-10-15**. | → **S4, sesja 4**; Finding **447** (§6). |
+| **SB94** | **Finding 448 — naprawa: pierścień stolicy / koszar CUDZEJ kolonii nie zwalnia jednostek gracza z zużycia zaopatrzenia; cudzy grunt jest cudzy.** Odpowiedź na pytanie 3, **2026-10-15**. | → **S4, sesja 4**; Finding **448** (§6); uzupełnia **SB78**. |
+| **SB95** | **Eskadra `landed`, której WŁASNA fala zdobyła cel, zachowuje dzisiejsze zachowanie — zamyka się, gdy transportowiec wróci do domu (`transport_home`), spójnie z S3; zamknięcie od razu dotyczy wyłącznie celu zdobytego przed desantem (`target_own`).** Odpowiedź na pytanie 4, **2026-10-15**. | Bez zmiany kodu (`StrikeSquadronSystem`, §5r.1); zostaje tak, jak zbudowano. |
+| **SB96** | **SB89 (ii) liczy KAŻDĄ eskortę w drodze, nie tylko kadłuby z bakiem warp.** Odpowiedź na pytanie 5, **2026-10-15**. | → **S4, sesja 4**; zmienia **SB89** (ii). |
 
 ---
 
@@ -2557,6 +2561,8 @@ gracza na liście zwykłego uderzenia; eskadra `launched` z 3 statkami AI we flo
    kadłuby bez baku (bak wymagany tylko między układami — `DirectorRetake`, `StrikeSquadronSystem`), więc kadłub bez baku
    w drodze w układzie stolicy depeszy nie wstrzymuje. Zostaje?
 
+**Odpowiedzi właściciela (2026-10-15):** §5s.4 — 1 zgoda na commit (§5s.1), pozostałe → **SB93–SB96** (§2).
+
 #### 5r.6 Niezweryfikowane
 
 - Bitwa planetarna `EnemyAttackHandler`, gdy przejęcie celu i przylot eskadry wypadają w tym samym oknie partii (500 ms
@@ -2647,6 +2653,26 @@ Konsola: bez problemów (słowa właściciela). **WERDYKT: PASS.**
   głód 0 (SB78); jedno pobranie 24 przy 12 jednostkach (SB80 / 445); przy 5 Kr opłacone 2 z 12 (SB80 / 444).
 - ⇒ Findingi **446**, **195**, **442**, **443**, **342**, **444**, **445** zamknięte w rejestrach macierzystych (§6; 195 —
   `VESSEL_ORDERS_PLAN.md`; 342 — `AI_GARRISON_PLAN.md`).
+
+#### 5s.4 Odpowiedzi właściciela na pytania §5r.5 (2026-10-15) → decyzje SB93–SB96
+
+Słowa właściciela (z polecenia sesji, dosłownie, po angielsku) i numer decyzji:
+
+| pytanie | słowa właściciela | decyzja |
+|---|---|---|
+| 1 | „R-S4c-1 and R-S4c-2: consent (Part A).” | przebieg — §5s.1 |
+| 2 | „Finding 447: variant (a) — the battle is skipped when the target body already belongs to the attacker; (b) deferred to post-Alpha polish.” | **SB93** |
+| 3 | „Finding 448: fix — the capital/barracks ring of a FOREIGN colony does not exempt the player's units from supply consumption; foreign ground is foreign.” | **SB94** |
+| 4 | „A landed squadron whose own wave captured the target keeps today's behaviour (closes on transport_home), consistent with S3; immediate close applies only to target_own.” | **SB95** |
+| 5 | „SB89 (ii) counts EVERY escort in transit, not only hulls with a warp tank.” | **SB96** |
+
+Pytanie 1 bez numeru SB (precedens §5k, §5m.4, §5o.4, §5q.4: zgoda na commit po bramce nie jest decyzją projektu).
+
+#### 5s.5 Następny krok
+
+**S4, sesja 4** — zamknięcie rozdziału: **447** (SB93 — wariant (a): bitwa pomijana, gdy ciało celu należy już do
+napastnika) · **448** (SB94 — pierścień cudzej kolonii nie zwalnia z zużycia) · SB89 (ii) według SB96 (każda eskorta
+w drodze); bramka S4D; zamknięcie rozdziału AI STRIKES BACK.
 
 ---
 
@@ -3450,6 +3476,8 @@ emp_001 (`transferColony`). Łańcuch: kadłuby z domem = stolica imperium, przy
 `attack`, bitwa na zdobytym ciele (zwycięzca A). Kontrola `2264910`: kadłuby z domem = kolonia gracza (195), w locie do
 końca przebiegu, bez przylotu i bez bitwy. Kontrola bez przejęcia (oba kody): przylot i bitwa jak wyżej. Skutki bitwy poza
 rozstrzygnięciem — niezmierzone. → pytanie 2, §5r.5.
+→ **SB93 (2026-10-15):** wariant (a) — bitwa pomijana, gdy ciało celu należy już do napastnika; wariant (b) — polerka po
+Alfie. **S4, sesja 4.**
 
 ### ⚪ 448 — pierścień stolicy / koszar CUDZEJ kolonii zwalnia jednostki gracza z zużycia zaopatrzenia
 
@@ -3459,6 +3487,8 @@ komentarz); uzupełnianie (fazy 1–2) od S4-10 wyłącznie z magazynu kolonii W
 Na kolonii cudzej (desant gracza) jednostka obok stolicy albo koszar wroga nie zużywa zaopatrzenia i nie głoduje, a o krok
 dalej — zużywa. Sprzed S4/3 (warunek pierścienia nietknięty; SB78 dotyczył gruntu własnego). Niezmierzone. → pytanie 3,
 §5r.5.
+→ **SB94 (2026-10-15):** naprawa — pierścień stolicy / koszar CUDZEJ kolonii nie zwalnia jednostek gracza z zużycia
+zaopatrzenia (cudzy grunt jest cudzy). **S4, sesja 4.**
 
 ---
 
