@@ -235,7 +235,11 @@ Prompty do wygenerowania obu istnieją: `assets/event-videos/midjourney_prompts.
 a dla `population_milestone` kategoria to `colony` (`ScheduledEventsData.js:329`) i `colony.mp4`
 **istnieje** — popup gra normalnie, 404 dotyczy tylko pierwszego ogniwa.
 
-## 🔴 Podwójne pobranie Kr za jednostki naziemne (zgłoszone 2026-08-25, ZMIERZONE, NIENAPRAWIONE)
+## ✅ Podwójne pobranie Kr za jednostki naziemne (zgłoszone 2026-08-25, ZMIERZONE — NAPRAWIONE 2026-10-15: Finding 445, `69efacd`)
+
+✅ **NAPRAWIONE 2026-10-15** — Finding **445** (AI STRIKES BACK S4-12, SB80, `69efacd`): jedno pobranie przez
+`ColonyManager._spendColonyCredits` (żołd i rekrutacja); bramka S4C, krok 5: kasa 100 → 76 — jedno pobranie 24
+(`docs/design/AI_STRIKES_BACK_PLAN.md` §5s.2). Zapis sprzed naprawy niżej.
 
 Znalezione przy audycie utrzymania floty (wariant B). **Nie należy do tamtego arca** — właściciel
 polecił zalogować osobno, do naprawy kiedyś.

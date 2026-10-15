@@ -2988,7 +2988,7 @@ pusta lista) — każda wymaga teraz OBECNOŚCI świadka. Sweep **192/192 OK, 0 
 `move_to_point → stolica`, **ETA 4,68 roku** — zgodne z Pomiarem 2 (4,5-4,9).
 
 **Otwarte po tym slice'ie:** **195** (🔴 `_onColonyDestroyed` bez terminu właściciela — ten slice go
-OMIJA, nie naprawia) · **196** (`no_idle_hull` nieosiągalny w ścieżce reguły ⇒ gate NIE może czytać
+OMIJA, nie naprawia; ✅ zamknięty 2026-10-15 w AI STRIKES BACK S4-7) · **196** (`no_idle_hull` nieosiągalny w ścieżce reguły ⇒ gate NIE może czytać
 „pusta pula" ze zdarzeń) · **197** (`war:peaceSigned` bez konsumentów — złagodzony, reszta do W4) ·
 **198** (`_findActiveEncounterContaining` de facto publiczny).
 
@@ -5731,7 +5731,7 @@ relacji `'war'`, zaczep `diplomacy:warDeclared`) · D14 wycofanie po pokoju (6 m
 imperium · D16 zniszczenie ciała usuwa WSZYSTKIE jednostki · D17 stolice na oceanie · D18 kalibracja na fixture.
 Nowe findingi **336–342**: ✅ **336** stolica AI na oceanie (nie do przejęcia z ziemi; zamknięty w G2-K1) · ✅ **337** łazik przejmuje
 kolonię AI w pokoju · ✅ **338** „Wyładuj” bez bramek · ✅ **339** przejęcia ślepe na wojnę (trzy zamknięte w G2-2) · ⚪ **340** pule desantu ·
-⚪ **341** uprząż vs fixture · ⚪ **342** `homeColonyId: null` po zapisie.
+⚪ **341** uprząż vs fixture · ✅ **342** `homeColonyId: null` po zapisie (zamknięty 2026-10-15, AI STRIKES BACK S4-11).
 ✅ **G2-K1** (`8ea5af3` + `44967a3`, D17): stolica AI staje WYŁĄCZNIE na kaflu, na którym da się stanąć
 (`EmpireColonyBootstrap._placeBuildingSmart`); w starych zapisach stolica nie do stania nie decyduje o przejęciu —
 reguła placówki (`InvasionSystem.holdsDecisiveGround`); bliźniak AI — marsz terytorialny (`_findTerritorialGoal`)
@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14 · S4 sesja 3 PRZYGOTOWANA 2026-10-14)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14 · S4 sesja 3 ZAMKNIĘTA 2026-10-15)
 
 Plan, decyzje **SB1–SB92** i rejestr findingów **#391–#448**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q, S4 sesja 3: §5r); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q, S4 sesja 3: §5r, zamknięcie sesji 3 S4: §5s); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6234,10 +6234,10 @@ od razu jako zdobycie · **SB91** odczytania SB81 / SB82 zostają (pula = imperi
 wojny z okazji; cooldown reguły od jej ostatniego odpalenia) · **SB92** zwykłe uderzenie eskortą w porządku SB84 (najbliższy
 układ gracza; placówki → kolonie → stolica na końcu), nie po devScore · zgoda na R-S4b-1 (bez numeru SB). **442**, **443**,
 **444**, **445** (SB78–SB80) — S4, sesja 3.
-⏳ **S4 — sesja 3 PRZYGOTOWANA 2026-10-14** (łańcuch S4-7 … S4-12 ZESTAGOWANY, NIE zacommitowany — bramka S4C
-w przeglądarce właściciela i zgoda na przecelowania **R-S4c-1**, **R-S4c-2** przed commitem; plan §5r; folder
-`kosmos-handover/ai-strikes-back-s4c/`, notatka `HANDOVER_S4_PART3.md`, bramka `gate/GATE_S4C.md`, commity
-`tools/commit_S4C.sh --zgoda-R-S4c-1 --zgoda-R-S4c-2`). **S4-7** — **446** / **195** (SB90: statek AI pomijany w pętli
+✅ **S4 — sesja 3 ZAMKNIĘTA 2026-10-15** (bramka S4C w przeglądarce właściciela PASS; plan §5r — przygotowanie, §5s —
+commity i zapis bramki; folder `kosmos-handover/ai-strikes-back-s4c/`, notatka `HANDOVER_S4_PART3.md`, bramka
+`gate/GATE_S4C.md`). Commity po zgodzie na R-S4c-1 i R-S4c-2: `11c7cb0` · `36b7adc` · `c576b3a` · `78ef271` · `8d5e9d4` ·
+`69efacd`; ✅ **446**, **195**, **442**, **443**, **342**, **444**, **445** zamknięte; sweep 306/306, `check-i18n` 3458. **S4-7** — **446** / **195** (SB90: statek AI pomijany w pętli
 `VesselManager._onColonyDestroyed` — nigdy nie przechodzi do gracza; eskadra `launched` z celem już własnym zamyka się od razu
 `captured / target_own`, kadłuby wracają do stolicy „ogonem” rekordu) · **S4-8** — SB89 (kontrole roczne końca wojny w
 `gameState.campaignPeaceChecks`, klucz `campaignPeaceAfterChecks` 2; warunek eskort w drodze; depesza status quo wysyłana BEZ

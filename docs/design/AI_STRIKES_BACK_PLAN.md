@@ -46,10 +46,11 @@
 > kampania eskadrami, SB10, SB83, SB84) · `e5020ec` (S4-5, wojna z okazji, SB81, SB82) · `8e63b98` (S4-6, koniec wojny przy
 > wyczerpanej kampanii, SB85, SB86). Przygotowanie, pomiar SB72 (D5, SB88), M7 i scenariusz bramki — §5p; zamknięcie — §5q.
 > Finding **446** — §6; Finding **55** zamknięty (`AI_CAPTURE_PLAN.md`).
-> ⏳ **S4 — sesja 3 PRZYGOTOWANA 2026-10-14** (łańcuch S4-7 … S4-12 ZESTAGOWANY, NIE zacommitowany — bramka S4C
-> w przeglądarce i zgoda na przecelowania **R-S4c-1**, **R-S4c-2** przed commitem): **446** / **195** (SB90) · koniec
-> wojny bez oceny pokoju AI (SB89) · porządek zwykłego uderzenia (SB92) · **442** (SB78) · **443** / **342** (SB79) ·
-> **444** / **445** (SB80). Przygotowanie, M8 i scenariusz bramki — §5r. Findingi **447–448** — §6.
+> ✅ **S4 — sesja 3 ZAMKNIĘTA 2026-10-15** (bramka S4C w przeglądarce właściciela PASS — §5s.2): łańcuch zacommitowany po
+> zgodzie na przecelowania **R-S4c-1** i **R-S4c-2** — `11c7cb0` (S4-7, **446** / **195**, SB90) · `36b7adc` (S4-8, koniec
+> wojny bez oceny pokoju AI, SB89 + R-S4c-1) · `c576b3a` (S4-9, porządek zwykłego uderzenia, SB92 + R-S4c-2) · `78ef271`
+> (S4-10, **442**, SB78) · `8d5e9d4` (S4-11, **443** / **342**, SB79) · `69efacd` (S4-12, **444** / **445**, SB80).
+> Przygotowanie, M8 i scenariusz bramki — §5r; zamknięcie — §5s. Findingi **447–448** — §6.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
@@ -209,7 +210,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
 | **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2 (2026-10-12/13, §5l): desant na cel, eskadra przerwana, trzymanie orbity i powrót, klucze eskadry, odbijanie, statek w skoku poza układem, wpis dzwonka — ✅ zacommitowane 2026-10-13 (`2c33033` · `bf3178c` · `dafea9a` · `6dd6081` · `53fb899` · `5a47c68`; §5m); C6 (SB67) — STOP | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 · sesja 2: **435** · **434** · **427** · **151** · SB56–SB59 · SB63–SB67 · nowe **438–440** | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]`; sesja 2: `defense_scope`, `w3_target_selection`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3b (zgoda 2026-10-13, w `dafea9a`; §5m.1) | tak — sesja 1: **PASS 2026-10-12** (§5k.2); sesja 2: **PASS 2026-10-13** (§5m.2) |
-| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4); sesja 2 (2026-10-14, §5p): kampania eskadrami w porządku SB84, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — ✅ zacommitowane 2026-10-14 (`ea30ce8` · `85b776b` · `e5020ec` · `8e63b98`; §5q) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** · sesja 2: **55** · SB81–SB88 · nowy **446** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania); sesja 2: `sb3_hold_return` T5 — przecelowanie **R-S4b-1** (zgoda 2026-10-14) | tak — sesja 1: **PASS 2026-10-14** (§5o.2); sesja 2: **PASS 2026-10-14** (§5q.2) |
+| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4); sesja 2 (2026-10-14, §5p): kampania eskadrami w porządku SB84, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — ✅ zacommitowane 2026-10-14 (`ea30ce8` · `85b776b` · `e5020ec` · `8e63b98`; §5q); sesja 3 (2026-10-14, §5r): eskadra z celem już własnym, koniec wojny bez oceny pokoju AI, porządek zwykłego uderzenia, garnizon gracza — zaopatrzenie, dom po wczytaniu, żołd — ✅ zacommitowane 2026-10-15 (`11c7cb0` · `36b7adc` · `c576b3a` · `78ef271` · `8d5e9d4` · `69efacd`; §5s) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** · sesja 2: **55** · SB81–SB88 · nowy **446** · sesja 3: **446** · **195** · **442–445** · **342** · SB78–SB80 · SB89–SB92 · nowe **447–448** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania); sesja 2: `sb3_hold_return` T5 — przecelowanie **R-S4b-1** (zgoda 2026-10-14); sesja 3: `sb4_campaign_peace` — **R-S4c-1**, `defense_scope` — **R-S4c-2** (zgoda 2026-10-15) | tak — sesja 1: **PASS 2026-10-14** (§5o.2); sesja 2: **PASS 2026-10-14** (§5q.2); sesja 3: **PASS 2026-10-15** (§5s.2) |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
 ⓘ Audyt fazy A (P6) liczył S3 2–3 dni, S4 2 dni, razem ~8–11 `[doc: audyt fazy A, P6]`.
@@ -2568,6 +2569,85 @@ gracza na liście zwykłego uderzenia; eskadra `launched` z 3 statkami AI we flo
 Bramka S4C w przeglądarce właściciela; po niej i po zgodzie na R-S4c-1 / R-S4c-2 — `tools/commit_S4C.sh --zgoda-R-S4c-1
 --zgoda-R-S4c-2` (sześć commitów); odpowiedzi na pytania §5r.5.
 
+### 5s. S4 — sesja 3 — zamknięcie (2026-10-15): commity łańcucha, bramka S4C PASS
+
+Polecenie właściciela (2026-10-15): commity przygotowanego łańcucha po bramce w przeglądarce (PASS 2026-10-15) — zgoda na
+przecelowania **R-S4c-1** i **R-S4c-2** udzielona 2026-10-15; zapis bramki; zamknięcie Findingów 446, 195, 442, 443, 342,
+444, 445. Odpowiedzi na pytania §5r.5 — osobny commit dokumentacji. Folder przekazania sesji:
+`kosmos-handover/ai-strikes-back-s4d/` (poza repo).
+
+#### 5s.1 Commity `[git]` `[measured]`
+
+Kotwica wejścia: HEAD `c2fc107` (drzewo `b66bbd4f`), indeks (liczony na kopii) = drzewo C6 `f45f6fea`, `src/` = indeks,
+pozycja obca statusu jak na wejściu (` M .claude/settings.local.json`); folder przekazania S4C zgodny z `SHA256SUMS`
+(224 pliki). Commity skryptem `tools/commit_S4C.sh --zgoda-R-S4c-1 --zgoda-R-S4c-2` (folder `ai-strikes-back-s4c`);
+drzewo każdego kroku = `patches/trees.txt` (skrypt sprawdza przed każdym commitem; po skrypcie ponownie
+`git rev-parse <commit>^{tree}`, 6 / 6):
+
+| commit | drzewo | treść | numstat |
+|---|---|---|---|
+| `11c7cb0` | `76e109c0` | S4-7 — **446** / **195** (SB90: termin właściciela w `_onColonyDestroyed`; eskadra z celem już własnym `captured / target_own`, ogon rekordu) | `StrikeSquadronSystem` 92/12 · `VesselManager` 7/0 · `DebugLog` 2/1 · keeper `sb4_owned_target_close` 278/0 |
+| `36b7adc` | `12f070b6` | S4-8 — SB89 (kontrole roczne, eskorty w drodze, depesza wiążąca bez oceny pokoju AI; klucz `campaignPeaceAfterChecks`) + przecelowanie **R-S4c-1** | `DirectorCampaign` 116/8 · `WarSystem` 32/14 · `StrikesBackData` 8/1 · `DiplomacySystem` 6/2 · `DirectorRuleData` 5/4 · `StrikeWavePlanner` 5/0 · `GameState` 4/0 · `PeaceOfferModal` 4/1 · `sb4_campaign_peace` 38/28 · keeper `sb4_peace_checks` 321/0 |
+| `c576b3a` | `4f92e5d7` | S4-9 — SB92 (`DirectorOffensive.sb84Targets` — zwykłe uderzenie w porządku kampanii) + przecelowanie **R-S4c-2** | `DirectorOffensive` 46/8 · `DirectorCampaign` 5/18 · `defense_scope` 14/7 · keeper `sb4_strike_order` 160/0 |
+| `78ef271` | `599a8ff2` | S4-10 — **442** (SB78: kolonia własna — bez zużycia zaopatrzenia; uzupełnianie z magazynu kolonii) | `SupplyCoverageSystem` 27/8 · `BuildingsData` 2/1 · keeper `sb4_own_ground_supply` 152/0 |
+| `8d5e9d4` | `01c9ef60` | S4-11 — **443** / **342** (SB79: dom jednostki przeżywa zapis i wczytanie; naprawa przy wczytaniu) | `GroundUnitManager` 21/4 · keeper `sb4_unit_home_load` 156/0 |
+| `69efacd` | `f45f6fea` | S4-12 — **444** / **445** (SB80: żołd tylu jednostkom, ilu starcza kasy; jedno pobranie) | `ColonyManager` 41/19 · keeper `sb4_ground_upkeep` 142/0 |
+
+Na HEAD `69efacd`: sweep **306/306 OK, 0 FAIL, 31 advisory**, `check-i18n` PASS pl = en **3458**; status — wyłącznie pozycja
+obca; drzewo robocze `src/` = HEAD. **EOL:** `DebugLog.js` (CR 255 = LF 255), `GameState.js` (201 = 201), `BuildingsData.js`
+(1625 = 1625), `DirectorRuleData.js` (409 = 409), `ColonyManager.js` (2964 = 2964), `GroundUnitManager.js` (1681 = 1681),
+`DirectorOffensive.js` (594 = 594), `defense_scope_smoke.mjs` (766 = 766) zostają CRLF; pozostałe pliki LF. Sweep kroków
+pośrednich — z weryfikacji łańcucha w świeżym klonie (§5r.2: 301 → 306/306). Przecelowania **R-S4c-1** i **R-S4c-2** —
+zgoda właściciela 2026-10-15.
+
+#### 5s.2 Bramka S4C — zapis (2026-10-15, właściciel, przeglądarka) `[measured: odczyty właściciela]`
+
+Fixture GATE-S4-fresh-gy60; kod = drzewo robocze z łańcuchem S4-7…S4-12 (indeks `f45f6fea`); gra po angielsku; scenariusz
+`ai-strikes-back-s4c/gate/GATE_S4C.md`. Odczyty właściciela — nie mój pomiar:
+
+| krok | odczyt |
+|---|---|
+| 0 | rok 60,34; pokój; język `en`; rejestrator włączony |
+| 1 | klucz `campaignPeaceAfterChecks` 2 (domyślnie 2, kontrole); odmowy `out_of_range` ×2, `wrong_type` |
+| 2 | placówka X `entity_120` (Propus g, `sys_059`); kolonia C `entity_10` (HD-4177 j, 0 Kr); 8 jednostek na C; 4 jednostki na planecie macierzystej (więź POP 0,6); kasa stolicy 5000. ⚠ Krok uruchomiony omyłkowo dwa razy — drugie wywołanie założyło `entity_121` (Propus h) i `entity_11` (HD-4177 k); po zapisie, F5 i „Continue” odczyty zgodne ze sceną pojedynczą — 12 jednostek gracza (zapisane tak, jak zaobserwowane) |
+| 3 | po zapisie, F5 i „Continue”: C — 8 jednostek, dom `brak×8`, płatnik `entity_2×8`, `idle`, zapas 100; planeta macierzysta — 4 jednostki, dom `entity_2×4`, płatnik `entity_2×4`, zapas 100; głód 0; rozwiązane brak; kasa stolicy 5000, C 0 |
+| T1 | spokojnie |
+| 4 | C — 8 jednostek `idle`, zapas 100; planeta macierzysta — zapas 100; głód 0; rozwiązane brak; kasa stolicy 3052, C 10 |
+| 5 | 12 jednostek, żołd 24; kasa 100 → 76; jedno pobranie 24; opłacone 12, nieopłacone 0 |
+| 6 | kasa 5 → 1; pobranie 4; opłacone 2, nieopłacone 10 |
+| 7 | porządek zwykłego uderzenia = porządek kampanii: „entity_120/placówka@sys_059 → entity_10/kolonia@sys_home”, zgodne `true`, bez stolicy gracza |
+| 8 | wojna; pula `true`; eskadra `sq_emp_001_1`, cel `entity_120`, fala 6, przylot 62,237 |
+| T2 | wykonany (bez odczytu) |
+| 9 | X → emp_001; eskadra `launched` |
+| T3 | wykonany (bez odczytu) |
+| 10 | odczyt przed tickiem eskadry (słowa właściciela): etap nadal `launched`; wszystkie trzy kadłuby z domem `entity_115` (stolica emp_001), rozkaz `order_service_group`; statków AI we flocie domowej gracza 0 |
+| T4 | okno depeszy pokojowej AI — kliknięte „☮ Accept” |
+| 11 | rozejm, NAP `true`; kontrole „61.59: exhaustion_not_held (1 z 2) \| 62.67: wysłana (2)”; depesza „62.67: campaign_exhausted, wiążąca”; odpowiedź `accept`; pokój „62.67: ai_peace_offer_accept”; eskadry „sq_emp_001_1: captured/target_own”; głód 0; rozwiązane 0 |
+
+Konsola: bez problemów (słowa właściciela). **WERDYKT: PASS.**
+
+#### 5s.3 Ustalenia bramki
+
+- **Ułamki roku i kasa** — rok wejściowy 60,34 (walidator 60,12), kasa stolicy po roku 3052 (walidator 3046), przylot
+  eskadry 62,237 (walidator 61,823), kontrole roczne 61,59 i 62,67 (walidator 61,29 i 62,37 — w obu odstęp 1,08 roku): kroki
+  czasu prowadzi ręcznie gracz, a przeglądarka losuje bez ziarna — bramka sprawdza własności, nie ułamki.
+- **Krok 2 uruchomiony dwa razy** — drugie wywołanie założyło `entity_121` (Propus h) i `entity_11` (HD-4177 k); po zapisie,
+  F5 i „Continue” odczyty jak przy scenie pojedynczej: 12 jednostek gracza (krok 5), porządek celów bez `entity_121`
+  i `entity_11` (krok 7). Przyczyny nie badałem; własności kroków 3–11 sprawdzone na odczytach zgodnych z walidatorem.
+- **Krok 10 — odczyt przed tickiem eskadry:** etap `launched` (walidator: `closed · captured · target_own`), rozkaz
+  `order_service_group` (walidator: `ai_recall`) — zamknięcie `target_own` robi `StrikeSquadronSystem._tick` na `time:tick`
+  `[code]`, więc między przejęciem X a odczytem nie minął żaden tick czasu. Termin właściciela z S4-7 widoczny już w tym
+  odczycie: dom wszystkich trzech kadłubów = stolica emp_001 (`entity_115`), 0 statków AI we flocie domowej gracza
+  (kontrola: dom = stolica gracza, 3 statki AI we flocie). Zamknięcie `captured / target_own` — krok 11 („sq_emp_001_1:
+  captured/target_own”) ⇒ własność SB90 spełniona.
+- **T4 / krok 11** — pierwsza kontrola z wyczerpaniem bez depeszy (`exhaustion_not_held (1 z 2)`), druga 1,08 roku później —
+  depesza status quo, wiążąca (`campaign_exhausted`), „☮ Accept” → rozejm + NAP, pokój `ai_peace_offer_accept`; głód 0,
+  rozwiązane 0 ⇒ SB89 spełnione.
+- **Kroki 3–6** — jednostki C po wczytaniu bez domu, płatnik = stolica (SB79); po roku zapas 100 na obu własnych koloniach,
+  głód 0 (SB78); jedno pobranie 24 przy 12 jednostkach (SB80 / 445); przy 5 Kr opłacone 2 z 12 (SB80 / 444).
+- ⇒ Findingi **446**, **195**, **442**, **443**, **342**, **444**, **445** zamknięte w rejestrach macierzystych (§6; 195 —
+  `VESSEL_ORDERS_PLAN.md`; 342 — `AI_GARRISON_PLAN.md`).
+
 ---
 
 ## 6. Rejestr findingów arca (#391–#396, zebrane 2026-10-06)
@@ -3254,7 +3334,7 @@ współrzędnymi dwóch układów. `[measured]` bramka S4A (walidacja): 2 okna p
 odczytywałem. → pytanie 2, §5n.6.
 → **SB77 (2026-10-14):** polerka UI, nie S4.
 
-### 🟠 442 — uzupełnianie zaopatrzenia jednostek naziemnych czyta pole, którego żadna kolonia nie ma
+### ✅ 442 — uzupełnianie zaopatrzenia jednostek naziemnych czyta pole, którego żadna kolonia nie ma
 
 `[code]` `SupplyCoverageSystem` (fazy 1–2) uzupełnia z `colony.commodities.military_supplies`; kolonie przechowują towary
 w `resourceSystem`, a w `src/` nie ma żadnego zapisu `colony.commodities` ⇒ uzupełnianie nie działa nigdy.
@@ -3266,8 +3346,11 @@ w magazynie 0; 8 jednostek gracza na zdobytym Propus c — śmierć głodowa 8/8
 wyłącznie na cudzym gruncie. **S4, sesja 3.**
 → **S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-10, zestagowana; zamknięcie przy commicie): na kolonii własnego imperium
 bez zużycia i głodu; uzupełnianie z magazynu kolonii (`resourceSystem`, `military_supplies`) — §5r.1.
+✅ **ZAMKNIĘTY 2026-10-15 — `78ef271` (S4-10, SB78), bramka S4C PASS (§5s.2):** po roku gry 8 jednostek na C (własna
+kolonia, 0 Kr) `idle`, zapas 100 na obu własnych koloniach, głód 0 (krok 4; kontrola: 8 / 8 rozwiązane, zapas ≈ 62); keeper
+`sb4_own_ground_supply_smoke`. Pierścień stolicy / koszar cudzej kolonii — Finding **448**.
 
-### 🟠 443 — jednostka GRACZA bez domu po wczytaniu dostaje za dom ciało, na którym stoi — płaci kolonia tego ciała (rodzina 342)
+### ✅ 443 — jednostka GRACZA bez domu po wczytaniu dostaje za dom ciało, na którym stoi — płaci kolonia tego ciała (rodzina 342)
 
 `[code]` `GroundUnitManager.serialize` / `restore`: `homeColonyId ?? planetId`; `_groundUnitPayerId` płaci kolonia domu, gdy
 należy do gracza. Jednostki gracza bez domu: więź zerwana przy utracie kolonii (380), `debug.spawnMyUnit`, sonda M6. Przed
@@ -3278,8 +3361,11 @@ wczytaniem płaci stolica gracza; po wczytaniu — kolonia ciała. `[measured]` 
 i wczytanie. **S4, sesja 3.**
 → **S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-11, zestagowana; zamknięcie przy commicie): `homeColonyId` `null`
 przeżywa zapis; zapis sprzed poprawki — dom = ciało bez więzi POP wraca `null` (płaci stolica) — §5r.1.
+✅ **ZAMKNIĘTY 2026-10-15 — `8d5e9d4` (S4-11, SB79), bramka S4C PASS (§5s.2):** po zapisie, F5 i „Continue” jednostki C bez
+domu (`brak×8`), płatnik = stolica (`entity_2×8`); jednostki z więzią POP — dom = stolica (krok 3); keeper
+`sb4_unit_home_load_smoke`.
 
-### ⚪ 444 — żołd jednostek naziemnych kubłem atomowym: brak 1 Kr wyłącza wszystkie jednostki płatnika
+### ✅ 444 — żołd jednostek naziemnych kubłem atomowym: brak 1 Kr wyłącza wszystkie jednostki płatnika
 
 `[code]` `ColonyManager._tickGroundUnitUpkeep`: płatnik płaci cały kubeł albo nikt — wszystkie jego jednostki `offline`,
 po 5 kolejnych latach cywilizacyjnych — rozwiązanie `no_credits`. `[measured]` D3: kubeł 16 — kasa 15 → 8/8 offline; kubeł 48
@@ -3290,6 +3376,8 @@ kasa ≥ 2 × kubeł → pobrane 2 × (100 → 68 przy kuble 16). Obserwacja pro
 naprawiane razem z 444, jeśli audyt pokaże, że to mała zmiana. **S4, sesja 3.**
 → **S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-12, zestagowana; zamknięcie przy commicie): opłacane tylu, ilu starcza
 kasy (najtańsze pierwsze), zaległość per jednostka — §5r.1.
+✅ **ZAMKNIĘTY 2026-10-15 — `69efacd` (S4-12, SB80), bramka S4C PASS (§5s.2):** kasa 5 → 1 — opłacone 2 z 12, nieopłacone
+10 (krok 6; kontrola: 5 → 5, opłacone 0); keeper `sb4_ground_upkeep_smoke`.
 
 ### #445 — odpowiedzi właściciela S4/1 (2026-10-14)
 
@@ -3298,7 +3386,7 @@ najwyższy numer findingu **#444**; trafienia „445”–„450” w pamięci t
 findingi `[measured]`. Źródło: decyzja **SB80** (numer dla podwójnego pobrania żołdu — dotąd „znane w backlogu, świadomie bez
 numeru”, `AI_GARRISON_PLAN.md`, kandydaci notatki G3-closing).
 
-### ⚪ 445 — podwójne pobranie Kr za jednostki naziemne: ręczne odjęcie kasy i `trade:spendCredits` tej samej kwoty
+### ✅ 445 — podwójne pobranie Kr za jednostki naziemne: ręczne odjęcie kasy i `trade:spendCredits` tej samej kwoty
 
 `[code]` `ColonyManager._tickGroundUnitUpkeep`: `home.credits -= bucket.total` (`:1551`), potem
 `EventBus.emit('trade:spendCredits', …)` (`:1552-1554`) — subskrybent `CivilianTradeSystem.spendCredits` (`:898`) odejmuje TĘ
@@ -3310,6 +3398,8 @@ przy kasie < 2 × kubeł — raz (20 → 4, 48 → 0). Rekrutacja — niezmierzo
 → **SB80 (2026-10-14):** naprawiane razem z **444** w S4, sesja 3, jeśli audyt pokaże, że to mała zmiana.
 → **S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-12, zestagowana; zamknięcie przy commicie): jedno pobranie przez
 `ColonyManager._spendColonyCredits` — żołd i rekrutacja (zmierzone M8 / bramka S4C: 100 → 76 przy żołdzie 24) — §5r.1.
+✅ **ZAMKNIĘTY 2026-10-15 — `69efacd` (S4-12, SB80), bramka S4C PASS (§5s.2):** kasa 100 → 76 — jedno pobranie 24 przy
+12 jednostkach (krok 5; kontrola: 100 → 84 przy żołdzie 8 — dwa pobrania); keeper `sb4_ground_upkeep_smoke`.
 
 ### #446 — S4, sesja 2 (2026-10-14)
 
@@ -3317,7 +3407,7 @@ przy kasie < 2 × kubeł — raz (20 → 4, 48 → 0). Rekrutacja — niezmierzo
 najwyższy numer findingu **#445**. Przyczyna źródłowa — Finding **195** (`VESSEL_ORDERS_PLAN.md`), dotąd z osiągalnością
 NIEZMIERZONĄ; ten wpis zapisuje skutek w systemie eskadr i pomiar.
 
-### 🟠 446 — eskadra AI w locie wisi na zawsze, gdy jej cel zdobędzie wcześniejsza fala (skutek 195)
+### ✅ 446 — eskadra AI w locie wisi na zawsze, gdy jej cel zdobędzie wcześniejsza fala (skutek 195)
 
 `[code]` `colony:captured` → `VesselManager._onColonyDestroyed` (subskrypcja `:134-135`, Finding **195** — bez terminu
 właściciela): członkowie eskadry AI lecący na zdobyte ciało (`mission.targetId === planetId`, `in_transit`) dostają
@@ -3339,6 +3429,9 @@ poprzedniej (SB70 zostawia falę po limicie trzymania).
 → **S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-7, zestagowana; zamknięcie przy commicie): M8-S — eskadra zamknięta
 0,0014 roku po zdobyciu (`captured / target_own`), kadłuby z domem w stolicy imperium — §5r.3. Zwykłe uderzenie eskortą
 (bez rekordu eskadry) — Finding **447**.
+✅ **ZAMKNIĘTY 2026-10-15 — `11c7cb0` (S4-7, SB90), bramka S4C PASS (§5s.2):** eskadra z celem zdobytym w locie zamknięta
+`captured / target_own` (krok 11), kadłuby z domem = stolica emp_001, 0 statków AI we flocie domowej gracza (krok 10);
+keeper `sb4_owned_target_close_smoke`. Zwykłe uderzenie eskortą (bez rekordu eskadry) — Finding **447**.
 
 ### #447–#448 — S4, sesja 3 (2026-10-14)
 

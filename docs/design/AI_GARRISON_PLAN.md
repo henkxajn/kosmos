@@ -1803,7 +1803,7 @@ z D1: 4 / 4 i 3 / 5), a fixture `GATE-S4-fresh-gy60` (gy 60,12) — POP 185 / 17
 Ziarnistość ticka wykluczona: tick 0,25 civY daje 67 / 71 `[doc: raport G2-A]`. Przyczyna nieznana; fixture
 powstał na kodzie `bee26cf` (metryczka fixture'u) `[doc]`. Kierunek: **D18** (kalibracja na fixture).
 
-### ⚪ 342 — `homeColonyId: null` jednostki AI wraca z zapisu jako id ciała
+### ✅ 342 — `homeColonyId: null` jednostki AI wraca z zapisu jako id ciała
 
 `createAIUnit` zostawia `homeColonyId: null` na ciele bez kolonii imperium (decyzja właściciela 2026-10-02),
 a `serialize` zapisuje `homeColonyId ?? planetId` (`GroundUnitManager.js:1459`; `restore` tak samo, `:1522`)
@@ -1816,6 +1816,9 @@ kolonii z 0 Kr — Finding **443** (`AI_STRIKES_BACK_PLAN.md` §6).
 → **AI STRIKES BACK S4/3 (2026-10-14) — naprawa PRZYGOTOWANA** (S4-11, SB79, zestagowana; zamknięcie przy commicie):
 `serialize` zapisuje `homeColonyId ?? null`, `restore` — fallback na ciało wyłącznie dla zapisu bez pola; `null`
 przeżywa zapis i wczytanie (także jednostek AI) — `AI_STRIKES_BACK_PLAN.md` §5r.
+✅ **ZAMKNIĘTY 2026-10-15 — `8d5e9d4` (AI STRIKES BACK S4-11, SB79), bramka S4C PASS (`AI_STRIKES_BACK_PLAN.md` §5s.2):**
+`homeColonyId` `null` przeżywa zapis i wczytanie; bramka S4C, krok 3: jednostki gracza bez domu po wczytaniu dalej `brak`
+(płaci stolica). Keeper `sb4_unit_home_load_smoke`.
 
 ### 🟠 343 — zwykłe budynki AI stają na kaflach oceanu: martwy test `tile.buildable` w bootstrapie (→ osobny slice)
 
