@@ -1445,10 +1445,9 @@ export class ColonyManager {
 
     // 7. Wszystkie checki OK — pobierz
     colony.resourceSystem.spend(allCost);
-    if (krCost > 0) {
-      colony.credits = Math.max(0, (colony.credits ?? 0) - krCost);
-      EventBus.emit('trade:spendCredits', { colonyId: planetId, amount: krCost, purpose: 'ground_unit_recruit' });
-    }
+    // S4/3 (SB80, Finding 445) — JEDNO pobranie (dawniej ręczne odjęcie + `trade:spendCredits` = dwa razy). Bramka kredytów
+    //   (krok 5) gwarantuje pokrycie.
+    if (krCost > 0) this._spendColonyCredits(planetId, krCost, 'ground_unit_recruit');
     if (popCost > 0) colony.civSystem?.lockPops?.(popCost, 'laborer');
 
     // 8. Init stats z techBonuses
@@ -1507,6 +1506,8 @@ export class ColonyManager {
    *       Ale lokalna elektronika/radary ciągną prąd z lokalnej sieci.
    *
    * Brak któregoś → unit offline + unpaidYears++; 5 civYears → disband.
+   * S4/3 (SB80, Findingi 444, 445): płatnik płaci tylu jednostkom, ilu starcza kasy (najtańsze pierwsze), jednym
+   * pobraniem; zaległość — per jednostka.
    */
   _tickGroundUnitUpkeep(civDeltaYears) {
     if (!civDeltaYears || civDeltaYears <= 0) return;
@@ -1528,35 +1529,40 @@ export class ColonyManager {
     // Energy upkeep wyłączony (commit: remove ground unit energy upkeep) —
     // psuło drop/invasion UX (jednostki na wrogich planetach leciały w offline).
     // Utrzymanie jest teraz tylko kredytowe, płacone z home colony.
-    const krByHome = new Map();  // homeId → { total, units[] }
+    const krByHome = new Map();  // homeId (płatnik) → { units[] }
 
     for (const u of allUnits) {
       const up = ColonyManager.GROUND_UNIT_UPKEEP[u.archetypeId];
       if (!up) continue;
 
       const homeId = this._groundUnitPayerId(u);   // R6 (G2-4, Finding 354) — nigdy kolonia innego właściciela
-      const krBucket = krByHome.get(homeId) ?? { total: 0, units: [] };
-      krBucket.total += up.credits ?? 0;
+      const krBucket = krByHome.get(homeId) ?? { units: [] };
       krBucket.units.push(u);
       krByHome.set(homeId, krBucket);
     }
 
-    // ── Sprawdź credits per home colony → zapłać atomowo albo wszystkich z tego home
-    //    przenieś w offline ──
+    // ── AI STRIKES BACK S4/3 (SB80, Finding 444) — płatnik płaci TYLU jednostkom, ilu starcza kasy (najtańsze pierwsze,
+    //    potem id — przy tej samej kasie najwięcej opłaconych jednostek); nieopłacone naliczają zaległość KAŻDA z osobna.
+    //    Dawniej kubeł atomowy: brak 1 Kr wyłączał wszystkie jednostki płatnika. Jedno pobranie sumy opłaconych
+    //    (Finding 445 — `_spendColonyCredits`). ──
+    const krOf = (u) => ColonyManager.GROUND_UNIT_UPKEEP[u.archetypeId]?.credits ?? 0;
     for (const [homeId, bucket] of krByHome) {
       const home = homeId ? this.getColony(homeId) : null;
-      const hasCredits = home && (home.credits ?? 0) >= bucket.total;
-
-      if (hasCredits && bucket.total > 0) {
-        home.credits = Math.max(0, (home.credits ?? 0) - bucket.total);
-        EventBus.emit('trade:spendCredits', {
-          colonyId: homeId, amount: bucket.total, purpose: 'ground_unit_upkeep',
-        });
+      const units = [...bucket.units].sort((a, b) => (krOf(a) - krOf(b)) || String(a.id).localeCompare(String(b.id)));
+      let budget = home ? (home.credits ?? 0) : 0;
+      let total = 0;
+      const paidIds = new Set();
+      for (const u of units) {
+        const kr = krOf(u);
+        if (!home || kr > budget) continue;
+        budget -= kr;
+        total += kr;
+        paidIds.add(u.id);
       }
+      if (total > 0 && !this._spendColonyCredits(homeId, total, 'ground_unit_upkeep')) paidIds.clear();
 
-      // Tylko Kr decyduje: online jeśli home ma kredyty na cały bucket
-      for (const u of bucket.units) {
-        const online = hasCredits;
+      for (const u of units) {
+        const online = paidIds.has(u.id);
 
         if (online) {
           const wasOffline = u.status === 'offline';
@@ -1597,6 +1603,22 @@ export class ColonyManager {
         }
       }
     }
+  }
+
+  /**
+   * AI STRIKES BACK S4/3 (SB80, Finding 445) — JEDNO pobranie Kr z kolonii. Kanałem jest `trade:spendCredits` — subskrybent
+   * `CivilianTradeSystem.spendCredits` odejmuje i emituje `trade:creditsChanged`; dawniej wołający odejmował kwotę ręcznie
+   * I emitował to zdarzenie, więc subskrybent odejmował ją drugi raz, o ile kasa jeszcze ją pokrywała (zmierzone D3:
+   * 100 → 68 przy kuble 16; rekrutacja 1000 → 800). Bez systemu handlu (uprząż) — odjęcie wprost.
+   * @returns {boolean} czy pobrano (kasa pokrywa kwotę)
+   */
+  _spendColonyCredits(colonyId, amount, purpose) {
+    if (!(amount > 0)) return true;
+    const col = this.getColony(colonyId);
+    if (!col || (col.credits ?? 0) < amount) return false;
+    if (window.KOSMOS?.civilianTradeSystem) EventBus.emit('trade:spendCredits', { colonyId, amount, purpose });
+    else col.credits -= amount;
+    return true;
   }
 
   /**
