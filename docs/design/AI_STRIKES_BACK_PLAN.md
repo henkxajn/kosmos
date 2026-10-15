@@ -51,6 +51,10 @@
 > wojny bez oceny pokoju AI, SB89 + R-S4c-1) · `c576b3a` (S4-9, porządek zwykłego uderzenia, SB92 + R-S4c-2) · `78ef271`
 > (S4-10, **442**, SB78) · `8d5e9d4` (S4-11, **443** / **342**, SB79) · `69efacd` (S4-12, **444** / **445**, SB80).
 > Przygotowanie, M8 i scenariusz bramki — §5r; zamknięcie — §5s. Findingi **447–448** — §6.
+> ⏳ **S4 — sesja 4 PRZYGOTOWANA 2026-10-15** (zamknięcie rozdziału; łańcuch S4-13 … S4-15 ZESTAGOWANY, NIE zacommitowany —
+> bramka S4D w przeglądarce i zgoda na przecelowanie **R-S4d-1** przed commitem): **447** (SB93 — bitwa pomijana, gdy ciało
+> celu należy już do napastnika) · **448** (SB94 — pierścień cudzej kolonii nie zwalnia z zaopatrzenia) · SB89 (ii) według
+> SB96 (każda eskorta w drodze). Przygotowanie, M9 i scenariusz bramki — §5t; zamknięcie rozdziału — §8.
 > Save **v101**. Każdy slice zakłada zero migracji tam, gdzie się da: pola statku są na białych listach
 > `VesselManager.serialize`/`restore` (`VesselManager.js:1475-1478`, `:1540-1547`, `:1613-1617`, `:1677-1682`), a stan
 > puli i odrastania może żyć w `empires.<id>` — wzór flagi garnizonu D15 (`AI_GARRISON_PLAN.md` §1) `[doc: audyt fazy A]`.
@@ -214,7 +218,7 @@ dziennie `[doc: audyt fazy A, P6]`.
 | **S2** | strażnik na orbicie stolicy i drugiego ciała; strażnik drugiego ciała leci ze stolicy (SB5, SB6). ⓘ Kandydat 10 notatki przekazania S0 (zmobilizowani strażnicy stoją w doku, więc od S0-3 nie bronią orbity) NIE jest findingiem: odpowiada na niego S2. | SB5 · SB6 | 1–2 dni | `war_doctrine` (keepery dominacji z audytowego S2 przecelował S0: R3/R4, `cf2a598`) | tak |
 | **S2b** | poprawki przed S3: lot do ciała przylatuje wtedy i tam, gdzie ciało (416) · wrak się nie rusza i nie wznawia misji (417) · jednostki w ładowni giną z wrakiem (418) · unikalny identyfikator starcia (419) i bitwy ścieżki natychmiastowej (424) · pierścień ruchu wyłącznie z oglądanego układu (415) · wrak nie wychodzi na misję z orbity (425) | **415–419** · **424** · **425** · SB39–SB43 · SB47 · SB48 | 1 dzień — ✅ zamknięty 2026-10-11 (§5i) | żaden istniejący keeper nie przecelowany ani nie zmieniony | tak — **PASS 2026-10-11** (§5i.2) |
 | **S3** | eskadra z transportowcem · desant po wygranej orbicie · odbijanie · fale (SB7, SB8, reguły SB11). Sesja 1 (2026-10-11/12, §5j, §5k): zbliżenie w starciu, lot razem, transportowiec z ładunkiem — ✅ zacommitowane 2026-10-12 (`1cf1d24` · `ee44424` · `c97b73b`); sesja 2 (2026-10-12/13, §5l): desant na cel, eskadra przerwana, trzymanie orbity i powrót, klucze eskadry, odbijanie, statek w skoku poza układem, wpis dzwonka — ✅ zacommitowane 2026-10-13 (`2c33033` · `bf3178c` · `dafea9a` · `6dd6081` · `53fb899` · `5a47c68`; §5m); C6 (SB67) — STOP | **421** (SB46, SB49 — pierwszy commit) · **420** (SB45, SB54) · **396** · 384 · SB51–SB55 · 344 · 55 · SB7 · SB8 · SB11 · sesja 2: **435** · **434** · **427** · **151** · SB56–SB59 · SB63–SB67 · nowe **438–440** | 3–4 dni | z listy audytu czerwone na kodzie sesji 1 wyłącznie `w3_ai_invasion`, `ai_capture_outpost`; ponadto `sb0_fleet_defects`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3 (zgoda 2026-10-12, w `c97b73b`; §5j.2); `g2b_invasion`, `battle_announce_once`, `g2_war_gate` zielone `[measured]`; sesja 2: `defense_scope`, `w3_target_selection`, `sb1_fleet_tuning`, `sb1_pool_warp_minimum` — przecelowanie R-S3b (zgoda 2026-10-13, w `dafea9a`; §5m.1) | tak — sesja 1: **PASS 2026-10-12** (§5k.2); sesja 2: **PASS 2026-10-13** (§5m.2) |
-| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4); sesja 2 (2026-10-14, §5p): kampania eskadrami w porządku SB84, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — ✅ zacommitowane 2026-10-14 (`ea30ce8` · `85b776b` · `e5020ec` · `8e63b98`; §5q); sesja 3 (2026-10-14, §5r): eskadra z celem już własnym, koniec wojny bez oceny pokoju AI, porządek zwykłego uderzenia, garnizon gracza — zaopatrzenie, dom po wczytaniu, żołd — ✅ zacommitowane 2026-10-15 (`11c7cb0` · `36b7adc` · `c576b3a` · `78ef271` · `8d5e9d4` · `69efacd`; §5s) | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** · sesja 2: **55** · SB81–SB88 · nowy **446** · sesja 3: **446** · **195** · **442–445** · **342** · SB78–SB80 · SB89–SB92 · nowe **447–448** | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania); sesja 2: `sb3_hold_return` T5 — przecelowanie **R-S4b-1** (zgoda 2026-10-14); sesja 3: `sb4_campaign_peace` — **R-S4c-1**, `defense_scope` — **R-S4c-2** (zgoda 2026-10-15) | tak — sesja 1: **PASS 2026-10-14** (§5o.2); sesja 2: **PASS 2026-10-14** (§5q.2); sesja 3: **PASS 2026-10-15** (§5s.2) |
+| **S4** | wojna z inicjatywy AI · kampania układ po układzie (SB10, reguły SB11). Sesja 1 (2026-10-13, §5n): detekcja kolonii we własnym układzie (439), limit trzymania orbity (440) — ✅ zacommitowane 2026-10-14 (`c6b9e9c` · `95c44ed`; §5o); pomiar głodu garnizonu (D3); audyt S4 właściwego (D4); sesja 2 (2026-10-14, §5p): kampania eskadrami w porządku SB84, wojna z okazji, koniec wojny przy wyczerpanej kampanii, siatka kolonii przy desancie — ✅ zacommitowane 2026-10-14 (`ea30ce8` · `85b776b` · `e5020ec` · `8e63b98`; §5q); sesja 3 (2026-10-14, §5r): eskadra z celem już własnym, koniec wojny bez oceny pokoju AI, porządek zwykłego uderzenia, garnizon gracza — zaopatrzenie, dom po wczytaniu, żołd — ✅ zacommitowane 2026-10-15 (`11c7cb0` · `36b7adc` · `c576b3a` · `78ef271` · `8d5e9d4` · `69efacd`; §5s); sesja 4 (2026-10-15, §5t): bitwa pomijana na ciele już własnym napastnika, pierścień cudzej kolonii bez zwolnienia z zaopatrzenia, każda eskorta w drodze — łańcuch PRZYGOTOWANY i zestagowany, NIE zacommitowany | SB10 · SB11 · sesja 1: **439** · **440** · SB69 · SB70 · SB76 · nowe **441–444** · sesja 2: **55** · SB81–SB88 · nowy **446** · sesja 3: **446** · **195** · **442–445** · **342** · SB78–SB80 · SB89–SB92 · nowe **447–448** · sesja 4: **447** · **448** · SB93–SB96 | 2–3 dni | `director_pressure` (napięcie), `wp_truce_gate`, `wp_nap_expiry`, `wp_peace_seams`; sesja 1: żaden istniejący keeper nie przewrócony (`sb3_warp_transit_scope` T3e zielony bez przecelowania); sesja 2: `sb3_hold_return` T5 — przecelowanie **R-S4b-1** (zgoda 2026-10-14); sesja 3: `sb4_campaign_peace` — **R-S4c-1**, `defense_scope` — **R-S4c-2** (zgoda 2026-10-15); sesja 4: `w3_cross_system_attack_smoke` T8 — przecelowanie **R-S4d-1** (czeka na zgodę) | tak — sesja 1: **PASS 2026-10-14** (§5o.2); sesja 2: **PASS 2026-10-14** (§5q.2); sesja 3: **PASS 2026-10-15** (§5s.2); sesja 4: scenariusz S4D zwalidowany w prawdziwej grze (§5t.4) |
 
 Razem **~9–13 dni** (wariant puli, P1-A) — estymata uzgodniona z właścicielem 2026-10-06 (S3 3–4, S4 2–3).
 ⓘ Audyt fazy A (P6) liczył S3 2–3 dni, S4 2 dni, razem ~8–11 `[doc: audyt fazy A, P6]`.
@@ -2674,6 +2678,115 @@ Pytanie 1 bez numeru SB (precedens §5k, §5m.4, §5o.4, §5q.4: zgoda na commit
 napastnika) · **448** (SB94 — pierścień cudzej kolonii nie zwalnia z zużycia) · SB89 (ii) według SB96 (każda eskorta
 w drodze); bramka S4D; zamknięcie rozdziału AI STRIKES BACK.
 
+### 5t. S4 — sesja 4 (2026-10-15): 447, 448, SB96 — łańcuch PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany; M9; bramka S4D
+
+**Stan:** łańcuch S4-13 … S4-15 zbudowany w klonie roboczym na `d2f081f` i zweryfikowany w ŚWIEŻYM klonie
+(`tools/build_chain_S4D.sh`, etykieta `verify_d2f081f`: fail-first każdego nowego keepera na drzewie poprzedniego kroku,
+keeper kroku, pełny sweep i `check-i18n` po każdym kroku; drzewa kroków = drzewa klonu roboczego); zestagowany w repo PO
+commitach dokumentacji tej sesji (drzewo indeksu = C3 z `patches/trees.txt` folderu przekazania); commity —
+`tools/commit_S4D.sh --zgoda-R-S4d-1` po bramce S4D i zgodzie na przecelowanie **R-S4d-1**. Folder przekazania:
+`C:\Users\Komputer\kosmos-handover\ai-strikes-back-s4d\` (notatka `HANDOVER_S4_PART4.md`, bramka `gate/GATE_S4D.md`,
+wyniki `results/`).
+
+#### 5t.1 Audyt — odczytania decyzji SB93, SB94, SB96 (bez nowych decyzji) `[code]` `[measured]`
+
+- **SB93 (447)** — `EnemyAttackHandler._resolveBatchedBattle`: termin właściciela w chwili ROZSTRZYGNIĘCIA partii (obejmuje
+  przejęcie przed przylotem i w oknie partii 500 ms) — gdy kolonia ciała celu należy do imperium napastnika (imperium
+  pierwszego kadłuba partii), bitwy nie ma: bez wraków, bez wpisu w księdze wojny i bez wypowiedzenia wojny (termin stoi
+  PRZED bramką obecności gracza i przed `declareWar('enemy_attack_arrived')`). Kadłuby, które przyleciały z misją `attack`:
+  misja zdjęta, `idle` — stan jak po wygranej bitwie; powrót — istniejąca ścieżka: zamiatacz `DirectorRecall`
+  (`strandedWarshipsAwayFromHome`, reguła `recall_strike_force`) dla kadłubów poza układem stolicy. Zdarzenie audytu
+  `enemyAttack:battleSkipped` (`DebugLog.TRACKED_EVENTS`). Ciało bez kolonii albo kolonia INNEGO imperium (AI↔AI, poza
+  zakresem) — bitwa jak dotąd. Wariant (b) — nie robiony (SB93).
+- **SB94 (448)** — `SupplyCoverageSystem._computeCoverage`: zasięg stolicy i koszar wyłącznie dla kolonii gracza
+  (`isPlayerColony`); faza 4 bez wyjątku pierścienia (na kolonii własnej zużycia nie ma od SB78). Skutki: jednostka gracza
+  w pierścieniu stolicy / koszar cudzej kolonii zużywa zaopatrzenie i głoduje; nakładka zasięgu w UI (klawisz S) nie maluje
+  pierścienia wroga. Fazy 1–2 (uzupełnianie) bez zmian — od S4-10 wyłącznie z magazynu kolonii własnej.
+- **SB96** — `DirectorCampaign._escortsInTransit`: uzbrojone kadłuby imperium w służbie (nie strażnicy, nie wraki) z aktywnym
+  rozkazem ruchu, misją albo złożonym rozkazem — z bakiem warp albo bez; `escortsInTransit` blokuje, gdy plan czeka na
+  eskortę (dostępnych mniej niż potrzeba), a pokryłyby ją kadłuby z bakiem warp w puli liczone wszystkie (SB89 (ii), bez
+  zmian) ALBO dostępne + KAŻDA eskorta w drodze (SB96). ⚠ Odczytanie: SB96 ROZSZERZA SB89 (ii) — dawna gałąź zostaje
+  (słowa właściciela z 2026-10-14: „count hulls with warp tank in the empire's pool”); zastąpienie jej samym „w drodze” (rozkaz /
+  misja) przewróciłoby `sb4_peace_checks_smoke` T4a (kadłuby z bakiem poza układem bez rozkazu) — pytanie 2 (§5t.5).
+  Rozkazy doktryn (`defend_home`, `patrol_border`) kończą się przy przylocie — „w drodze” nie trwa bez końca `[code]`.
+
+#### 5t.2 Łańcuch — PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany `[git]` `[measured]`
+
+| krok | treść | drzewo (na `d2f081f`) | keeper NEW (asercje) · fail-first na poprzednim | sweep · `check-i18n` |
+|---|---|---|---|---|
+| **S4-13** | **447** (SB93): bitwa pomijana, gdy ciało celu należy już do napastnika; zdarzenie `enemyAttack:battleSkipped`; + **R-S4d-1** | `cea667bf` | `sb4_strike_own_target_smoke` 14 · **7 PASS / 7 FAIL** | **307/307** (31 advisory) · PASS 3458 |
+| **S4-14** | **448** (SB94): zasięg stolicy i koszar wyłącznie dla kolonii gracza; faza 4 bez wyjątku pierścienia | `f825bd60` | `sb4_foreign_ring_supply_smoke` 9 · **4 PASS / 5 FAIL** | **308/308** (31 advisory) · PASS 3458 |
+| **S4-15** | SB96: SB89 (ii) liczy każdą eskortę w drodze (z bakiem albo bez); odczyt `inTransit` | `5ec12afe` | `sb4_escorts_in_transit_smoke` 9 · **4 PASS / 5 FAIL** | **309/309** (31 advisory) · PASS 3458 |
+
+- Sweep świeżego klonu: baza `d2f081f` **306/306** (31 advisory), po krokach 307/307 → 308/308 → 309/309; `check-i18n` PASS pl = en
+  **3458** po każdym kroku (zero kluczy i18n). Czerwone w fail-first — wyłącznie piny naprawy; kontrole (zielone po obu
+  stronach) nazwane w nagłówkach keeperów.
+- **Przecelowanie R-S4d-1** (`w3_cross_system_attack_smoke` T8): scena bitwy planetarnej EAH stała na KOLONII NAPASTNIKA
+  (`foreignBody`); od SB93 połowa SEDNO przechodziła z innego powodu (pominięcie `target_own` zamiast bramki obecności),
+  a KONTROLA PINU („bitwa JEST księgowana, gdy gracz jest obecny”) padała — ORIG na kodzie C1: **41 PASS / 1 FAIL**.
+  Przecelowanie: miejsce bitwy = wolne ciało w układzie AI (`freeBodyIn`), zamiar pinu bez zmian, + pin sceny. Dowody:
+  **4 / 4** przecelowanych pinów zabitych co najmniej jedną z czterech mutacji (bramka obecności zdjęta, pominięcie
+  bezwarunkowe, termin właściciela odwrócony, bitwa bez księgowania); PROPOSED 43/43 na `d2f081f` i na kodzie S4-13
+  (`proposed/R-S4d-1_mutation_proof.txt`, `R-S4d-1.diff`).
+- **numstat** (blob, LF): S4-13 DebugLog.js 3/0 · EnemyAttackHandler.js 25/0 · sb4_strike_own_target_smoke.mjs 195/0 · w3_cross_system_attack_smoke.mjs 21/6 · S4-14 SupplyCoverageSystem.js 12/11 · sb4_foreign_ring_supply_smoke.mjs 151/0 · S4-15 DirectorCampaign.js 26/8 · sb4_escorts_in_transit_smoke.mjs 216/0. **EOL:** `DebugLog.js`,
+  `EnemyAttackHandler.js` — CRLF w drzewie właściciela zostaje CRLF (`tools/eolwrite.py`); pozostałe pliki LF.
+- Bez nowych kluczy strojenia; stan w zapisie bez zmian (v101 bez migracji).
+
+#### 5t.3 M9 — prawdziwa gra, fixture GATE-S4, tryb klatek `[measured]`
+
+Walidator bramki S4D (`gate/validate_gate_s4d.mjs`, izolowany headless Chrome, produkcyjny import fixture'u, gra po
+angielsku); łańcuch = klon roboczy, kontrola = `d2f081f` (te same pliki `src/` co `69efacd`). Wyniki:
+`results/gate/validate_gate_s4d_{chain_dev,control_69efacd}.{txt,json}`.
+
+- **447 (SB93), pokój:** w układzie domowym kolonia emp_001 (B) i kolonia gracza (C); 2 eskorty emp_001 przy B; zwykłe
+  uderzenie na C; w locie C przechodzi do emp_001. Przylot 0,06 roku po rozkazie. Łańcuch: bitwy brak,
+  pominięcie `60.17 entity_13: target_own (2)`, wraków 0, emp_001 w pokoju (wojny brak); odwołanie obu kadłubów
+  (60.20: 2) ≈ 0,03 roku po przylocie, oba w układzie stolicy emp_001
+  0,55 roku po przylocie. Kontrola: bitwa na C (`60.17 zwycięzca A`), **wypowiedziana wojna
+  `enemy_attack_arrived` w POKOJU**, **3 wraki** okrętów gracza w układzie domowym, bitwa w księdze wojny (1);
+  powrót kadłubów — ta sama ścieżka (po wygranej bitwie). ⇒ skutki 447 poza samym rozstrzygnięciem (§5r.6) zmierzone:
+  wojna, wraki, wpis w księdze.
+- **448 (SB94):** jeden cykl zaopatrzenia (1 civY) — jednostka gracza w pierścieniu stolicy emp_001: łańcuch
+  `entity_115: zapas 50 → 47`, kontrola `entity_115: zapas 50 → 50`; w pierścieniu własnej stolicy — 50 → 50 po
+  obu stronach; mapa pokrycia stolicy emp_001: łańcuch „—”, kontrola `capital`.
+- **SB96:** wojna z emp_001, placówka gracza X w układzie stolicy emp_001 z 3 fregatami gracza (potrzeba 3),
+  cała pula eskorty emp_001 pod rozkazami ruchu. Łańcuch: `blocked: true` — w drodze 6, z bakiem
+  2, dostępne 0; kontrola: `blocked: false` (z bakiem 2 < 3).
+  ⚠ Pierwszy przebieg kroku (bez dołożonych kadłubów) był jałowy — w łańcuchu wojna zaczyna się w tym kroku, a obudzona
+  rezerwa jest w mobilizacji (pula 0, `blocked: false` po obu stronach); scena poprawiona (4 kadłuby bez baku dołożone
+  narzędziem) — `results/gate/validate_gate_s4d_run1_step5_note.txt`.
+- Błędy konsoli: 0 w obu przebiegach (poza 404).
+
+#### 5t.4 Bramka S4D — scenariusz zwalidowany w prawdziwej grze
+
+`gate/GATE_S4D.md` (poza repo): 6 kroków konsoli + 2 kroki czasu, gra po angielsku, tryb klatek; walidator na klonie roboczym
+(`chain_dev`) i kontrola na kodzie `69efacd` (przebieg na `d2f081f`) — wyniki `results/gate/validate_gate_s4d_*`; po
+zestagowaniu — drugi przebieg łańcucha na zestagowanym drzewie repo (EOL właściciela), wynik w notatce przekazania
+(`results/gate/validate_gate_s4d_staged_repo.*`). Kroki: 0 stan + rejestrator · 1 scena uderzenia (pokój)
+· T1 przylot · 2 brak bitwy na ciele już własnym · T2 powrót · 3 odwołanie i dom · 4 jeden cykl zaopatrzenia (pierścień
+stolicy emp_001 i własny; jednostki usuwane na końcu kroku) · 5 wojna i warunek eskort w drodze.
+
+#### 5t.5 Pytania do właściciela
+
+1. **Zgoda na przecelowanie R-S4d-1** (§5t.2) — bez niego sweep po S4-13 jest czerwony.
+2. **SB96 + SB89 (ii)** — zbudowane jako ROZSZERZENIE: dawna gałąź (kadłuby z bakiem warp w puli liczone wszystkie, także
+   bezczynne poza układem stolicy) zostaje, dochodzi „dostępne + każda eskorta w drodze (rozkaz / misja), z bakiem albo bez”.
+   Zostaje tak? Alternatywa — wyłącznie „w drodze” — przewraca `sb4_peace_checks_smoke` T4a (wymagałaby przecelowania).
+
+#### 5t.6 Niezweryfikowane
+
+- Bramka S4D w przeglądarce właściciela — do zrobienia.
+- 447: kolonia celu należąca do TRZECIEGO imperium (AI↔AI) — poza zakresem, bez zmian (bitwa jak dotąd).
+- 448: pierścień koszar cudzej kolonii — w grze zmierzony wyłącznie pierścień stolicy; koszary pokrywa ta sama bramka mapy
+  pokrycia (pin źródłowy `sb4_foreign_ring_supply_smoke` T5b).
+- SB96: jak często warunek wstrzymuje depeszę w naturalnej kampanii (bez narzędzi) — niezmierzone; bramka mierzy scenę
+  narzędziową.
+
+#### 5t.7 Następny krok
+
+Bramka S4D w przeglądarce właściciela; po niej i po zgodzie na R-S4d-1 — `tools/commit_S4D.sh --zgoda-R-S4d-1` (trzy
+commity); zapis bramki, zamknięcie Findingów 447 i 448; odpowiedź na pytanie 2. Rozdział — §8.
+
 ---
 
 ## 6. Rejestr findingów arca (#391–#396, zebrane 2026-10-06)
@@ -3478,6 +3591,10 @@ końca przebiegu, bez przylotu i bez bitwy. Kontrola bez przejęcia (oba kody): 
 rozstrzygnięciem — niezmierzone. → pytanie 2, §5r.5.
 → **SB93 (2026-10-15):** wariant (a) — bitwa pomijana, gdy ciało celu należy już do napastnika; wariant (b) — polerka po
 Alfie. **S4, sesja 4.**
+→ **S4/4 (2026-10-15) — naprawa PRZYGOTOWANA** (S4-13, zestagowana; zamknięcie przy commicie): termin właściciela
+w `_resolveBatchedBattle`, zdarzenie `enemyAttack:battleSkipped` — §5t.1. M9 (§5t.3): w pokoju kontrola (przed S4/4)
+wypowiada wojnę `enemy_attack_arrived` i robi wraki okrętów gracza w układzie celu; łańcuch — bez bitwy, bez wojny, kadłuby
+wracają odwołaniem `DirectorRecall`.
 
 ### ⚪ 448 — pierścień stolicy / koszar CUDZEJ kolonii zwalnia jednostki gracza z zużycia zaopatrzenia
 
@@ -3489,6 +3606,9 @@ dalej — zużywa. Sprzed S4/3 (warunek pierścienia nietknięty; SB78 dotyczył
 §5r.5.
 → **SB94 (2026-10-15):** naprawa — pierścień stolicy / koszar CUDZEJ kolonii nie zwalnia jednostek gracza z zużycia
 zaopatrzenia (cudzy grunt jest cudzy). **S4, sesja 4.**
+→ **S4/4 (2026-10-15) — naprawa PRZYGOTOWANA** (S4-14, zestagowana; zamknięcie przy commicie): zasięg stolicy i koszar
+wyłącznie dla kolonii gracza, faza 4 bez wyjątku pierścienia — §5t.1; M9: pierścień stolicy emp_001 50 → 47 (kontrola
+50 → 50).
 
 ---
 

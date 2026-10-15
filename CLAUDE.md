@@ -5927,10 +5927,10 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14 · S4 sesja 3 ZAMKNIĘTA 2026-10-15)
+## AI STRIKES BACK — flota, strażnik i desant AI (save **v101**, PLAN PODPISANY 2026-10-06 — S0 ZAMKNIĘTY 2026-10-06 · S1 ZAMKNIĘTY 2026-10-08 (S1-8 zacommitowany 2026-10-09) · S2 ZAMKNIĘTY 2026-10-10 · S2b ZAMKNIĘTY 2026-10-11 · S3 sesja 1 ZAMKNIĘTA 2026-10-12 · S3 sesja 2 ZAMKNIĘTA 2026-10-13 — S3 ZAMKNIĘTY · S4 sesja 1 ZAMKNIĘTA 2026-10-14 · S4 sesja 2 ZAMKNIĘTA 2026-10-14 · S4 sesja 3 ZAMKNIĘTA 2026-10-15 · S4 sesja 4 PRZYGOTOWANA 2026-10-15)
 
 Plan, decyzje **SB1–SB96** i rejestr findingów **#391–#448**: `docs/design/AI_STRIKES_BACK_PLAN.md` (zapis bramki S0:
-§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q, S4 sesja 3: §5r, zamknięcie sesji 3 S4: §5s); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
+§5a, wynik S0: §5b, S1 sesja 1: §5c, S1 sesja 2: §5d, domknięcie S1 i bramka S1: §5e, S2 sesja 1: §5f, zamknięcie S2: §5g, S2b: §5h, zamknięcie S2b: §5i, S3 sesja 1: §5j, zamknięcie sesji 1: §5k, S3 sesja 2: §5l, zamknięcie S3: §5m, S4 sesja 1: §5n, zamknięcie sesji 1 S4: §5o, S4 sesja 2: §5p, zamknięcie sesji 2 S4: §5q, S4 sesja 3: §5r, zamknięcie sesji 3 S4: §5s, S4 sesja 4: §5t); audyt fazy A (pomiar przed kodem, na `8b72c47`): `docs/design/AI_STRIKES_BACK_AUDIT.md` (sondy
 i wyniki poza repo, `kosmos-handover/ai-strikes-back/`; łańcuch commitów i walidacja bramki S0:
 `kosmos-handover/ai-strikes-back-s0/`).
 
@@ -6266,3 +6266,10 @@ stolicy / koszar CUDZEJ kolonii nie zwalnia jednostek gracza z zużycia zaopatrz
 eskadra `landed`, której własna fala zdobyła cel, zamyka się jak w S3 (`transport_home`); od razu — wyłącznie `target_own`
 · **SB96** SB89 (ii) liczy KAŻDĄ eskortę w drodze, nie tylko kadłuby z bakiem warp. Następny: **S4, sesja 4** (447, 448,
 SB96) i zamknięcie rozdziału.
+⏳ **S4 — sesja 4 PRZYGOTOWANA 2026-10-15** (łańcuch S4-13 … S4-15 ZESTAGOWANY, NIE zacommitowany — bramka S4D
+w przeglądarce właściciela i zgoda na przecelowanie **R-S4d-1** przed commitem; plan §5t; folder
+`kosmos-handover/ai-strikes-back-s4d/`, notatka `HANDOVER_S4_PART4.md`, bramka `gate/GATE_S4D.md`, commity
+`tools/commit_S4D.sh --zgoda-R-S4d-1`). **S4-13** — **447** (SB93: `EnemyAttackHandler` pomija bitwę, gdy ciało celu należy
+już do napastnika; zdarzenie `enemyAttack:battleSkipped`) + **R-S4d-1** · **S4-14** — **448** (SB94: zasięg stolicy i koszar
+wyłącznie dla kolonii gracza) · **S4-15** — SB96 (`DirectorCampaign._escortsInTransit`). Keepery NEW
+`sb4_strike_own_target` 14, `sb4_foreign_ring_supply` 9, `sb4_escorts_in_transit` 9; sweep świeżego klonu 306 → 309/309, `check-i18n` 3458.

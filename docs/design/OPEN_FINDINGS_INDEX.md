@@ -623,6 +623,13 @@
 > kolonii nie zwalnia z zużycia) · eskadra `landed` z celem zdobytym własną falą — bez zmian (SB95) · SB89 (ii) — każda
 > eskorta w drodze, nie tylko z bakiem warp (SB96).
 > • Następny: **S4, sesja 4** (447, 448, SB96) i zamknięcie rozdziału.
+>
+> **Aktualizacja 2026-10-15 (S4/4) — AI STRIKES BACK: S4, sesja 4 PRZYGOTOWANA** (łańcuch S4-13 … S4-15 ZESTAGOWANY, NIE
+> zacommitowany; `AI_STRIKES_BACK_PLAN.md` §5t). Sweep łańcucha (świeży klon, baza `d2f081f`): 306/306 → 307/307 → 308/308 → 309/309;
+> `check-i18n` 3458; save v101 bez migracji.
+> • **Naprawy PRZYGOTOWANE (zamknięcie przy commicie):** ⚪ **447** (S4-13, SB93) · ⚪ **448** (S4-14, SB94); SB96 (S4-15).
+> • Przecelowanie **R-S4d-1** (`w3_cross_system_attack_smoke` T8) czeka na zgodę.
+> • Następny: bramka S4D w przeglądarce właściciela, zgoda na R-S4d-1 i commity; zamknięcie rozdziału — `AI_STRIKES_BACK_PLAN.md` §8.
 
 
 ---
@@ -814,8 +821,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2); **C6: wynik ZALEŻY od czasu rundy — klucza nie ma (438)**. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **437** | ⚪ | flota GRACZA po bitwie w locie wznawia lot osobno — ponowna synchronizacja (`OrderService._regroupAfterBattle`) obejmuje wyłącznie grupy z `mission.groupId` (eskadra AI) | **SB62**: zostaje, wyłącznie raport; niezmierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; → **SB68** (2026-10-13): kierunek (c) — stały krok czasu gry na rundę, osobny krok PO S4 (najpierw audyt). `AI_STRIKES_BACK_PLAN.md` §6 |
-| **447** | ⚪ | zwykłe uderzenie eskortą (`OrderService.issueAttack`, bez rekordu eskadry) na ciało zdobyte przez imperium w trakcie lotu — po naprawie 195 kadłuby dolatują do ciała już własnego i `EnemyAttackHandler` rozgrywa tam bitwę z obecnością gracza w układzie (uprząż: przylot 0,5 roku, bitwa); kontrola przed S4/3 — kadłuby wisiały w locie | → **SB93** (2026-10-15): wariant (a) — bitwa pomijana, gdy ciało celu należy już do napastnika; (b) — polerka po Alfie; S4, sesja 4. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **448** | ⚪ | `SupplyCoverageSystem` faza 4: pierścień stolicy / koszar CUDZEJ kolonii zwalnia jednostki gracza z zużycia zaopatrzenia (desant obok stolicy wroga nie głoduje, o krok dalej — głoduje); sprzed S4/3 | → **SB94** (2026-10-15): naprawa — pierścień cudzej kolonii nie zwalnia z zużycia; S4, sesja 4. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **447** | ⚪ | zwykłe uderzenie eskortą (`OrderService.issueAttack`, bez rekordu eskadry) na ciało zdobyte przez imperium w trakcie lotu — po naprawie 195 kadłuby dolatują do ciała już własnego i `EnemyAttackHandler` rozgrywa tam bitwę z obecnością gracza w układzie (uprząż: przylot 0,5 roku, bitwa); kontrola przed S4/3 — kadłuby wisiały w locie | → **SB93** (2026-10-15): wariant (a) — bitwa pomijana, gdy ciało celu należy już do napastnika; (b) — polerka po Alfie; S4, sesja 4 — **naprawa PRZYGOTOWANA** (S4-13, zestagowana). `AI_STRIKES_BACK_PLAN.md` §6 |
+| **448** | ⚪ | `SupplyCoverageSystem` faza 4: pierścień stolicy / koszar CUDZEJ kolonii zwalnia jednostki gracza z zużycia zaopatrzenia (desant obok stolicy wroga nie głoduje, o krok dalej — głoduje); sprzed S4/3 | → **SB94** (2026-10-15): naprawa — pierścień cudzej kolonii nie zwalnia z zużycia; S4, sesja 4 — **naprawa PRZYGOTOWANA** (S4-14, zestagowana). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **422** | ⚪ | misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4) — przylot na czas i bez przeskoku z konstrukcji (kurierzy: przylot − ETA ≤ 0,006 roku, przeskok ≤ 0,010 AU), prędkości lotu nie zmierzono | raport do zamknięcia arca (SB47). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **423** | ⚪ | rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5) — `_computeInterceptPoint` z `target.velocity`, zerowanej dla kadłuba zadokowanego i orbitującego | raport do zamknięcia arca (SB47); osiągalność niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
 
