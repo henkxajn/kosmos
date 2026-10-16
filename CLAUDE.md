@@ -1,6 +1,7 @@
 # KOSMOS — Symulator Układu Słonecznego + Strategia 4X
 
 > **Odroczone live-gate'y** (weryfikacje w przeglądarce świadomie odroczone + luki znalezione przy próbie): `docs/deferred-live-gates.md`.
+> **Bieżący arc — POLISH** (polerka UI i grafiki; P1 tempo starcia — audyt 2026-10-16, findingi od #449, pierwszy wolny 456): `docs/design/POLISH_PLAN.md`.
 
 ## Wizja gry
 

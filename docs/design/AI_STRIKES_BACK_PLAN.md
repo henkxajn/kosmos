@@ -3488,6 +3488,10 @@ właściciela: „walki odbywają się zbyt szybko albo czas mamy ustawiony zły
 → **SB67 (2026-10-12):** czas rundy jako klucz strojenia (domyślnie dzisiejsza wartość) WYŁĄCZNIE, jeśli pomiar pokaże, że
 wyniki bitew od niego nie zależą — S3, sesja 2.
 → **C6 (S3/2, 2026-10-13; §5l.3):** wynik ZALEŻY od czasu rundy — klucza nie ma; Finding **438**.
+→ **POLISH P1 — audyt (2026-10-16; `POLISH_PLAN.md` §2.2, §3.4):** `[measured]` dziś starcie trwa ≤ 2,2 s realnych
+(scena n: 1. starcie, 16 rund — 1664 ms). Prototyp B1 „siatka” w sondzie (czas gry w starciu odpięty od realnego,
+czas rundy kluczem): 16 rund — 5296 ms przy 350 ms i 9072 ms przy 600 ms, wynik bez zmian. Dalej: P1 (pytania §4
+planu POLISH).
 
 ### ⚪ 437 — flota GRACZA po bitwie w locie wznawia lot osobno (SB62)
 
@@ -3516,6 +3520,16 @@ Do decyzji: czy czas gry w trakcie starcia ma płynąć (dziś tak), czy ma sta�
 wtedy czas rundy (tempo dla oka, Finding **436**) da się uczynić kluczem strojenia.
 → **SB68 (2026-10-13):** kierunek (c) — stały krok czasu gry na rundę; czas rundy wyłącznie kluczem prezentacji, dzisiejsze
 wyniki zachowane. Osobny mały krok PO S4, najpierw audyt; do tego czasu (a) bez zmian.
+→ **POLISH P1 — audyt (2026-10-16; `POLISH_PLAN.md` §2.2, §3.4):** `[measured]` sonda deterministyczna z poprawką
+`three.core.js` (sonda C6 miała lukę: UUID Three.js zjadały strumień `Math.random` gry — `POLISH_PLAN.md` §8). Scena n
+(izolowany strażnik stolicy, 3 fregaty z laserem `engage`, start 0,6 AU): dziś 10 konfiguracji — 10 różnych sekwencji
+bitew; prędkość w walce od 1 d/s do 1 rok/s daje od 0,096–0,112 do 35–41 dni gry na rundę; strażnik żyje przy 1 d/s,
+ginie przy 3 d/s, 1 tydz./s i 1 mies./s, przy 1 rok/s „ucieka” strona gracza; zależność także od FPS (30 / 60 / 120),
+czasu rundy (110 / 350 / 600 ms) i pauzy (**449**). Prototyp B1 „siatka” (świat w starciu tyka dzisiejszą klatką
+16 ms × 1 d/s, odtwarzaną w tempie klucza; zegar orbit): wynik bit w bit jak dziś (60 FPS, 1 d/s) na scenach n (dwie
+geometrie) i a, niezależny od klucza (110 / 350 / 600 ms), prędkości w walce, FPS walki i pauzy. Prototyp „prosty”
+(jeden tik 0,110 dnia na rundę) też niezależny, ale zmienia wynik względem dziś (w dwóch scenach — kto ginie); bez
+zegara orbit 600 ms się różni (**452**). Kierunek SB68 (c) bez zmian; decyzje CP po odpowiedziach na §4 planu POLISH.
 
 ### ✅ 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
 
@@ -3848,15 +3862,16 @@ dalej.
 | **431** | koszary zniknęły z rejestru aktywnych budynków (1 z 36 przebiegów) | niezbadane (SB60) |
 | **432** | limit 20 rund — przegrana strona na wrak także żywymi okrętami | obserwacja projektu → model czasu starcia (§8.8) |
 | **433** | `w3_ai_invasion_smoke` T5 nie odróżnia dwóch list kolonii | naprawa pinu (scena z kolonią AI w układzie celu) |
-| **436** | starcie w przestrzeni rozstrzyga się w ułamku sekundy | następny arc — model czasu starcia (§8.8) |
+| **436** | starcie w przestrzeni rozstrzyga się w ułamku sekundy | POLISH P1 — audyt 2026-10-16 (`POLISH_PLAN.md`) |
 | **437** | flota GRACZA po bitwie w locie wznawia lot osobno | raport (SB62) |
-| **438** | wynik starcia zależy od czasu rundy | następny arc — pierwszy krok (SB68, kierunek (c)) |
+| **438** | wynik starcia zależy od czasu rundy | POLISH P1 — audyt 2026-10-16: także od prędkości, FPS i pauzy; prototyp B1 „siatka” w sondzie — wynik = dziś i niezależny (`POLISH_PLAN.md`) |
 | **441** | okno pierwszego wykrycia: „Distance” bez terminu układu, „in our system” | polerka UI (SB77) |
 
 **Pierwszy wolny numer: 449** — sprawdzone ponownie 2026-10-16 na `35defd1`: najwyższy nagłówek findingu w `docs/`
 to 448, trafienia „449” to numery linii, wartości tabel i zapis „wolny 449” `[measured]`. Numer nadaje się
 registry-first: przed nadaniem sprawdzić §6 tego planu i mapę numeracji
 `OPEN_FINDINGS_INDEX.md` (lekcja kolizji 165 / 166 i 246 – 254). Prefiks `V-` (VISUALS) i `W2 1-14` to osobne przestrzenie.
+→ **2026-10-16 (POLISH P1):** numery **#449–#455** nadał arc POLISH (`POLISH_PLAN.md` §6); pierwszy wolny **456**.
 
 ### 8.7 Reguły wiążące dalej (przeniesione z CLAUDE.md przy zamknięciu rozdziału)
 
