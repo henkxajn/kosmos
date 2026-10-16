@@ -1,7 +1,8 @@
 // SupplyCoverageSystem — Opcja C v3
 //
 // System zarządzający zaopatrzeniem jednostek naziemnych:
-//   - Coverage: obszar 1 hex wokół Capital/Barracks/Supply Unit (własne źródła)
+//   - Coverage: obszar 1 hex wokół Capital/Barracks/Supply Unit (własne źródła; stolica i koszary — wyłącznie kolonii
+//     GRACZA, S4/4, SB94: pierścień cudzej kolonii nie uzupełnia i nie zwalnia z zużycia)
 //   - Refill: jednostki w coverage WŁASNEJ kolonii dostają supply auto (z magazynu kolonii — `resourceSystem`,
 //     towar `military_supplies`; S4/3, Finding 442: wcześniej czytane z nieistniejącego `colony.commodities`)
 //   - Własny grunt (S4/3, SB78 — wariant b): jednostka na kolonii WŁASNEGO imperium nie zużywa zaopatrzenia, nie głoduje
@@ -148,19 +149,15 @@ export class SupplyCoverageSystem {
         EventBus.emit('groundUnit:supplyChanged', { unitId: su.id, supply: su.supply, max: su.supplyCap });
       }
 
-      // ── Faza 4: Konsumpcja (tylko jednostki poza zasięgiem refillu) ──
+      // ── Faza 4: Konsumpcja (wyłącznie na cudzym gruncie) ──
       for (const u of units) {
         if (u.transportStatus === 'loaded') continue;  // FROZEN — transport stasis
         if (u.owner && u.owner !== 'player') continue;
         if (this._onOwnColony(u, colony)) continue;     // SB78 — własny grunt: bez zużycia
-
-        const cov = coverage.get(this._key(u.q, u.r));
-        const inRefillZone = cov && (cov.type === 'capital' || cov.type === 'barracks');
-        // Coverage typu 'supplier' NIE zwalnia z konsumpcji — faza 3 transferuje supply,
-        // ale jednostka wciąż "pracuje". Wyjątek: Capital/Barracks refill jest na tyle szybki
-        // że jednostka nie spada poniżej cap (i tak konsumuje, ale od razu dostaje z powrotem).
-        // Dla czytelności: w refill zone pomijamy konsumpcję (net-zero effect).
-        if (inRefillZone) continue;
+        // SB94 (S4/4, Finding 448) — na cudzym gruncie zużycie TAKŻE w pierścieniu stolicy / koszar: dawny wyjątek „w strefie
+        //   uzupełniania pomijamy zużycie (efekt zerowy)” dotyczył zasięgu WŁASNEJ kolonii — od SB78 pokrytego wyjątkiem wyżej —
+        //   a na cudzej kolonii zwalniał desant obok stolicy wroga, choć nikt go tam nie uzupełnia. Cudzy grunt jest cudzy.
+        //   Zasięg 'supplier' (faza 3) z zużycia nie zwalniał i dalej nie zwalnia.
 
         const mult = CONSUMPTION_BY_STATUS[u.status] ?? 1.0;
         if (mult === 0) continue;
@@ -289,7 +286,11 @@ export class SupplyCoverageSystem {
 
     // 1. Capital hex + 6 sąsiadów
     const grid = colony?.grid;
-    if (grid) {
+    // SB94 (S4/4, Finding 448) — stolica i koszary dają zasięg WYŁĄCZNIE na kolonii gracza: mapa pokrycia jest mapą
+    //   zaopatrzenia jednostek GRACZA (fazy 1–6 pomijają jednostki innych właścicieli), a cudzy grunt jest cudzy — pierścień
+    //   stolicy / koszar kolonii innego właściciela nie uzupełnia i nie zwalnia z zużycia; nakładka zasięgu w UI (klawisz S)
+    //   nie maluje go jako strefy zaopatrzenia. Zasięg jednostek zaopatrzenia (3.) — bez zmian.
+    if (grid && isPlayerColony(colony)) {
       // Znajdź hex Capital
       for (const tile of grid.toArray()) {
         if (tile?.capitalBase) {
