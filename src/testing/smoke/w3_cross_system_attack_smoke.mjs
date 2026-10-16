@@ -63,6 +63,17 @@ function foreignBody(core) {
   return { empireId, body };
 }
 
+/**
+ * Wolne ciało (bez kolonii) w podanym układzie — miejsce bitwy planetarnej, które NIE należy do napastnika.
+ * ⚠ R-S4d-1 (S4-13, SB93): bitwa EAH na ciele już własnym napastnika jest pomijana (`enemyAttack:battleSkipped`,
+ *   `sb4_strike_own_target_smoke`), więc scena bramki obecności (T8) nie może stać na kolonii AI.
+ */
+function freeBodyIn(core, systemId) {
+  return ['planet', 'moon'].flatMap(t => EntityManager.getByTypeInSystem(t, systemId))
+    .filter(b => !core.colonyManager.getColony(b.id))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))[0] ?? null;
+}
+
 function spawnAt(core, body, { owner = null, modules = WARSHIP, name = 'Kadłub' } = {}) {
   const v = createVessel('hull_frigate', body.id, {
     name, modules: [...modules], x: body.x ?? 0, y: body.y ?? 0, systemId: body.systemId,
@@ -306,6 +317,10 @@ console.log('T8 — ⚠ uderzenie w układ BEZ gracza nie fabrykuje obrońcy i n
   const core = boot();
   const { empireId, body: aiBody } = foreignBody(core);
   const eah = new EnemyAttackHandler();
+  // R-S4d-1 — miejsce bitwy: wolne ciało w układzie AI, nie kolonia napastnika (SB93 pomija bitwę na ciele własnym).
+  const spot = freeBodyIn(core, aiBody.systemId);
+  assert(!!spot && spot.systemId === aiBody.systemId && !core.colonyManager.getColony(spot.id),
+    `T8 scena: miejsce bitwy ${spot?.id} — wolne ciało w układzie AI ${aiBody.systemId} (nie kolonia napastnika, SB93)`);
 
   window.KOSMOS.diplomacySystem?.declareWar?.(empireId, 'w3_4b_probe');
   const warId = core.warSystem.getWarWith(empireId)?.id;
@@ -323,13 +338,13 @@ console.log('T8 — ⚠ uderzenie w układ BEZ gracza nie fabrykuje obrońcy i n
   const exhaustBefore = JSON.stringify(core.warSystem.getWar(warId)?.exhaustion);
   const battlesBefore = core.warSystem.getWar(warId)?.battles?.length ?? 0;
 
-  const v = spawnAt(core, aiBody, { owner: empireId, name: 'Napastnik donikąd' });
-  eah._pendingBattles.set(aiBody.id, {
+  const v = spawnAt(core, spot, { owner: empireId, name: 'Napastnik donikąd' });
+  eah._pendingBattles.set(spot.id, {
     arrivedVesselIds: new Set([v.id]),
     firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
     timerId: null,
   });
-  eah._resolveBatchedBattle(aiBody.id);
+  eah._resolveBatchedBattle(spot.id);
 
   const warAfter = core.warSystem.getWar(warId);
   assert(JSON.stringify(warAfter?.exhaustion) === exhaustBefore,
@@ -341,16 +356,16 @@ console.log('T8 — ⚠ uderzenie w układ BEZ gracza nie fabrykuje obrońcy i n
     'T8: i nikt nie „zdobył" dominacji nad układem, w którym nie było z kim walczyć');
 
   // KONTROLA PINU: gdy gracz JEST obecny, bitwa dochodzi do skutku normalnie.
-  const guard = spawnAt(core, aiBody, { name: 'Strażnik gracza' });
+  const guard = spawnAt(core, spot, { name: 'Strażnik gracza' });
   guard.position.dockedAt = null;
   assert(core.warSystem.hasPlayerPresenceInSystem?.(aiBody.systemId) === true,
     'T8 KONTROLA PINU: jeden statek gracza wystarczy, by obecność była prawdziwa…');
-  eah._pendingBattles.set(aiBody.id, {
+  eah._pendingBattles.set(spot.id, {
     arrivedVesselIds: new Set([v.id]),
     firstVesselYear: window.KOSMOS.timeSystem.gameTime ?? 0,
     timerId: null,
   });
-  eah._resolveBatchedBattle(aiBody.id);
+  eah._resolveBatchedBattle(spot.id);
   assert((core.warSystem.getWar(warId)?.battles?.length ?? 0) === battlesBefore + 1,
     'T8 KONTROLA PINU: …i wtedy bitwa JEST księgowana — bramka odcina brak przeciwnika, ' +
     'a nie bitwy w ogóle');

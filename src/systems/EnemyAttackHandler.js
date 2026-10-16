@@ -105,6 +105,31 @@ export class EnemyAttackHandler {
     const firstVessel    = vMgr.getVessel(firstArrivedId) ?? allEnemies[0];
     const empireId       = firstVessel.ownerEmpireId ?? firstVessel.owner;
     const empire         = empireId ? reg?.get?.(empireId) : null;
+
+    // ⚠ AI STRIKES BACK S4/4 (SB93, Finding 447 — wariant a) — CEL JUŻ WŁASNY: BITWY NIE MA. Zwykłe uderzenie eskortą
+    //   (bez rekordu eskadry; eskadrę z celem już własnym zamyka `StrikeSquadronSystem` — SB90) dolatuje do ciała, które
+    //   imperium zdobyło w trakcie lotu (wcześniejsza fala, odbicie). Bitwa na ciele już własnym toczyłaby się z obecnością
+    //   gracza w układzie: wraki jego floty, dominacja orbitalna i wyczerpanie wojny z bitwy, której przedmiotu nie ma.
+    //   Przylatujące kadłuby zostają tak, jak po wygranej bitwie (orbita ciała, bez misji, `idle`) — dalej istniejąca
+    //   ścieżka powrotu (`DirectorRecall`, gdy ciało leży poza układem stolicy). Sprawdzane w chwili ROZSTRZYGNIĘCIA partii,
+    //   więc obejmuje także przejęcie w oknie partii (500 ms). Zdarzenie audytu `enemyAttack:battleSkipped` (DebugLog).
+    const targetOwner = K.colonyManager?.getColony?.(planetId)?.ownerEmpireId ?? null;
+    if (empireId && targetOwner === empireId) {
+      const arrived = allEnemies.filter(v => pending.arrivedVesselIds.has(v.id));
+      for (const v of arrived) {
+        if (v.mission && v.mission.type !== 'attack') continue;   // inna misja — nie ta, która się tu skończyła
+        v.mission = null;
+        v.status  = 'idle';
+      }
+      EventBus.emit('enemyAttack:battleSkipped', {
+        planetId, empireId,
+        systemId:  EntityManager.get(planetId)?.systemId ?? null,
+        vesselIds: arrived.map(v => v.id),
+        reason:    'target_own',
+        year:      K.timeSystem?.gameTime ?? pending.firstVesselYear,
+      });
+      return;
+    }
     // ⚠ W3-4b — UKŁAD BIERZEMY Z CELU, NIE Z NAPASTNIKA. Bitwa toczy się nad ATAKOWANYM
     // ciałem, więc to ono wyznacza układ dla: obrońcy (`_buildPlayerBattleUnit`), zapisu
     // `location`, wraków (`_wreckPlayerVesselsInSystem`) i dominacji orbitalnej. Wcześniej

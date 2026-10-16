@@ -191,6 +191,9 @@ const TRACKED_EVENTS = [
   //   `offer_open` / `cooldown` / `ai_refuses` z oceną).
   'director:campaignPeaceOffered',
   'director:campaignPeaceRefused',
+  // AI STRIKES BACK S4/4 (SB93, Finding 447) — bitwa planetarna POMINIĘTA: ciało celu należy już do napastnika
+  //   (`target_own`; ciało, imperium, kadłuby, które przyleciały) — bez tego zdarzenia bramka mierzyłaby ciszę.
+  'enemyAttack:battleSkipped',
 ];
 
 class DebugLog {
