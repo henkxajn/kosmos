@@ -32,7 +32,8 @@
 //   zdobycia celu albo żadna eskadra do wzięcia i nic nie czeka na swój czas — imperium wysyła depeszę pokojową STATUS QUO
 //   (`WarSystem.requestAiPeaceOffer`). SB89 (rewizja SB86): depesza idzie BEZ oceny pokoju AI i jest WIĄŻĄCA, ale tylko gdy
 //   (i) wyczerpanie trwa przez `campaignPeaceAfterChecks` KOLEJNE kontrole roczne (każde odpalenie reguły to kontrola) i
-//   (ii) brak eskadry do wzięcia nie wynika z eskort w drodze (kadłuby z bakiem warp w puli imperium liczone wszystkie).
+//   (ii) brak eskadry do wzięcia nie wynika z eskort w drodze (kadłuby z bakiem warp w puli imperium liczone wszystkie;
+//   SB96 — także KAŻDA eskorta w drodze, z bakiem albo bez, razem z dostępnymi teraz).
 //
 // ⚠ AKCJA NIGDY NIE RZUCA (`_firePending` / `tickEmpire` biegną poza per-regułowym try/catch — zasada `DirectorOffensive`).
 // ⚠ Zero importów systemów — kolaboratorzy leniwie przez `window.KOSMOS`; liczby strojenia przez planery.
@@ -316,6 +317,19 @@ export class DirectorCampaign {
   }
 
   /**
+   * SB96 (S4/4; zmienia SB89 (ii)) — eskorty imperium W DRODZE: uzbrojone, w służbie, nie strażnicy, nie wraki, z aktywnym
+   * rozkazem ruchu, misją albo złożonym rozkazem (`movementOrder` / `mission` / `pendingOrder`) — z bakiem warp ALBO BEZ.
+   * Kadłuby z puli eskorty (dostępne teraz) nie mają żadnego z nich, więc oba zbiory są rozłączne.
+   */
+  _escortsInTransit(empireId) {
+    const K = this._K();
+    return (K?.vesselManager?.getAllVessels?.() ?? []).filter((v) => v && !v.isWreck && isEnemyVessel(v)
+      && (v.ownerEmpireId ?? v.owner) === empireId && hasWeapons(v) && isInService(v)
+      && !K?.directorDoctrine?.isGuard?.(empireId, v.id)
+      && !!(v.movementOrder || v.mission || v.pendingOrder));
+  }
+
+  /**
    * Plan, który CZEKA na eskortę (`insufficient`): odbicie przed kampanią (SB83); bez fali desantu — `null` (brak eskadry
    * nie wynika wtedy z eskorty).
    */
@@ -329,19 +343,23 @@ export class DirectorCampaign {
   }
 
   /**
-   * SB89 (ii) — czy brak eskadry do wzięcia wynika z ESKORT W DRODZE: plan czeka na eskortę (`insufficient`), a kadłuby
-   * z bakiem warp w puli imperium liczone wszystkie (także w locie i poza układem stolicy) pokryłyby potrzebną eskadrę.
-   * Pusta fala, brak celu, cel ponad sufit — nie (brak eskadry nie z eskort).
-   * @returns {{blocked:boolean, warpHulls:number, available:number|null, needed:number|null, targetBodyId:string|null}}
+   * SB89 (ii) z SB96 — czy brak eskadry do wzięcia wynika z ESKORT W DRODZE: plan czeka na eskortę (`insufficient`, dostępnych
+   * mniej niż potrzeba), a pokryłyby ją (SB89 (ii)) kadłuby z bakiem warp w puli imperium liczone wszystkie (także w locie
+   * i poza układem stolicy) ALBO (SB96) eskorty dostępne teraz razem z KAŻDĄ eskortą w drodze (`_escortsInTransit` — z bakiem
+   * albo bez). Pusta fala, brak celu, cel ponad sufit — nie (brak eskadry nie z eskort).
+   * @returns {{blocked:boolean, warpHulls:number, inTransit:number, available:number|null, needed:number|null,
+   *   targetBodyId:string|null}}
    */
   escortsInTransit(empireId) {
     const warpHulls = this._warpHulls(empireId).length;
+    const inTransit = this._escortsInTransit(empireId).length;
     const plan = this._waitingSquadronPlan(empireId);
-    if (!plan) return { blocked: false, warpHulls, available: null, needed: null, targetBodyId: null };
+    if (!plan) return { blocked: false, warpHulls, inTransit, available: null, needed: null, targetBodyId: null };
     const needed = plan.need?.needed ?? null;
     const available = plan.pool?.length ?? 0;
-    return { blocked: Number.isFinite(needed) && warpHulls >= needed && available < needed, warpHulls, available, needed,
-             targetBodyId: plan.target?.body?.id ?? null };
+    const short = Number.isFinite(needed) && available < needed;
+    return { blocked: short && (warpHulls >= needed || available + inTransit >= needed), warpHulls, inTransit, available,
+             needed, targetBodyId: plan.target?.body?.id ?? null };
   }
 
   /**
