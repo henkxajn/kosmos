@@ -5927,7 +5927,7 @@ przyczółek — następny arc (zakres właściciela 2026-10-06).
 
 ---
 
-## AI STRIKES BACK — flota, strażnik, desant i kampania AI (save **v101 bez migracji**, ROZDZIAŁ ZAMKNIĘTY 2026-10-15 — S0–S4 zacommitowane, bramki S0–S4C PASS; sesja 4 (447, 448, SB96) zestagowana, commit po bramce S4D)
+## AI STRIKES BACK — flota, strażnik, desant i kampania AI (save **v101 bez migracji**, ROZDZIAŁ ZAMKNIĘTY 2026-10-15, w kodzie 2026-10-16 — S0–S4 zacommitowane, bramki S0–S4D PASS)
 
 Po AI GARRISON imperium AI broniło swoich ciał na ziemi, a w przestrzeni nie miało zębów — rozdział dał mu flotę z PULI
 tworzonej przy mobilizacji, z limitem z siły imperium i odrastaniem (S1), strażników NA ORBICIE stolicy i drugiego
@@ -5937,13 +5937,13 @@ przy wyczerpanej kampanii — depeszę status quo bez oceny AI (S4); po drodze t
 poprawki ruchu, wraków i starć przed S3 (S2b: 415–419, 424, 425) i garnizon gracza na zdobytym ciele (S4: 442–445).
 Nowe systemy: `FleetPoolSystem`, `StrikeSquadronSystem`, `DirectorRetake`, `DirectorCampaign`, `DirectorOpportunityWar`;
 jedna tabela strojenia `src/data/StrikesBackData.js` (18 kluczy; konsola `KOSMOS.debug.sbTuning()` / `sbSet` /
-`sbReset`, wartości w zapisie). Commity kodu: 48 (+3 w sesji 4); decyzje SB1–SB96; keepery `sb*`: 43 (+3); sweep
-263 → 306/306 (309/309 z sesją 4), `check-i18n` 3455 → 3458.
+`sbReset`, wartości w zapisie). Commity kodu: 51 (ostatni `35defd1`); decyzje SB1–SB96; keepery `sb*`: 46; sweep
+263 → 309/309, `check-i18n` 3455 → 3458.
 
 Stan: sesja 4 — bitwa pomijana na ciele już własnym napastnika (447 / SB93), pierścień cudzej kolonii bez zwolnienia
-z zaopatrzenia (448 / SB94), każda eskorta w drodze w warunku depeszy (SB96) — zestagowana; commit
-`kosmos-handover/ai-strikes-back-s4d/tools/commit_S4D.sh --zgoda-R-S4d-1` po bramce S4D (`gate/GATE_S4D.md`) i zgodzie
-na przecelowanie R-S4d-1. Otwartych findingów arca 22 (+447 i 448 do zamknięcia przy commicie); pierwszy
+z zaopatrzenia (448 / SB94), każda eskorta w drodze w warunku depeszy (SB96, rozszerzenie SB89 (ii)) — zacommitowana
+2026-10-16 (`cf39977` · `458146e` · `35defd1`) po bramce S4D (PASS) i zgodzie na przecelowanie R-S4d-1; 447 i 448
+zamknięte. Otwartych findingów arca 22; pierwszy
 wolny numer **449**. ⚠ Reguły wiążące dalej (pełna lista — plan §8.7): kadłub AI z puli WYŁĄCZNIE przez
 `VesselManager.createAIVessel`, eskadra WYŁĄCZNIE przez `StrikeSquadronSystem.launchSquadron`, jednostka AI WYŁĄCZNIE
 przez `createAIUnit`; keeper, który wypowiada wojnę, a nie pinuje puli, wyłącza ją w setupie (`fleetPoolSystem.enabled =
@@ -5953,6 +5953,6 @@ imperiów AI, prawdziwa produkcja okrętów AI, 447 (b) — po Alfie. **Następn
 model czasu starcia w przestrzeni (**438** / **436**, SB68 kierunek (c)), potem 441 i literały i18n (404, 409, 412).
 
 Podsumowanie rozdziału (co weszło slice po slice z zakresami commitów, tabela strojenia, indeks decyzji, findingi,
-reguły wiążące dalej, następny arc): `docs/design/AI_STRIKES_BACK_PLAN.md` §8; historia sesji — §5a – §5t; rejestr
+reguły wiążące dalej, następny arc): `docs/design/AI_STRIKES_BACK_PLAN.md` §8; historia sesji — §5a – §5u; rejestr
 findingów #391 – #448 — §6; audyt fazy A — `docs/design/AI_STRIKES_BACK_AUDIT.md`; foldery przekazania
 `kosmos-handover/ai-strikes-back*/`.
