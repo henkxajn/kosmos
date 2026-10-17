@@ -395,8 +395,9 @@ console.log('\nT11 — konsumenci limitu w grze (konsola i pula)');
   assert(same(importers('FleetLimit\\.js'), ['scenes/GameScene.js', 'systems/FleetPoolSystem.js']),
     `T11a: FleetLimit importują wyłącznie GameScene (konsola) i FleetPoolSystem (pula): ${JSON.stringify(importers('FleetLimit\\.js'))}`);
   // ⚠ PRZECELOWANIE R-S3-1 (AI STRIKES BACK S3, SB53): trzeci czytelnik tabeli — planer fali (`strikeWaveShare`).
-  assert(same(importers('StrikesBackTuning\\.js'), ['scenes/GameScene.js', 'utils/FleetLimit.js', 'utils/StrikeWavePlanner.js']),
-    `T11b: StrikesBackTuning importują GameScene, FleetLimit i planer fali: ${JSON.stringify(importers('StrikesBackTuning\\.js'))}`);
+  // ⚠ PRZECELOWANIE R-P1-2 (POLISH P1, CP2): czwarty czytelnik tabeli — `TimeSystem` (`combatRoundMs`, tempo starcia).
+  assert(same(importers('StrikesBackTuning\\.js'), ['scenes/GameScene.js', 'systems/TimeSystem.js', 'utils/FleetLimit.js', 'utils/StrikeWavePlanner.js']),
+    `T11b: StrikesBackTuning importują GameScene, TimeSystem (tempo starcia), FleetLimit i planer fali: ${JSON.stringify(importers('StrikesBackTuning\\.js'))}`);
   const users = files.filter((f) => /\bisFleetLimitHull\b/.test(stripComments(readFileSync(f, 'utf8')))).map((f) => path.relative(SRC, f).replace(/\\/g, '/')).sort();
   assert(same(users, ['entities/Vessel.js', 'utils/FleetLimit.js']), `T11c: predykat kadłuba używany tylko przez limit: ${JSON.stringify(users)}`);
 }

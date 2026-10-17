@@ -11,8 +11,9 @@
 // POLISH P1 (CP1, CP3, CP4, CP5) — ZEGAR STARCIA (siatka). Plan i decyzje: `docs/design/POLISH_PLAN.md`.
 //   Gdy trwa starcie `DeepSpaceCombatSystem`, `update()` nie mnoży czasu realnego przez prędkość gracza: świat tyka
 //   klatkami SIATKI — 16 ms przy 1 d/s (dzisiejsza klatka 60 FPS przy auto-slow), niezależnie od prędkości i FPS — a czas
-//   realny decyduje wyłącznie o tempie odtwarzania siatki: starcie oglądane — `combatRoundMs()` ms na rundę, starcie
-//   w innym układzie — dzisiejsze 110 ms (`CombatPaceData`). Runda pada co 110 ms zegara starcia (reguła DSCS).
+//   realny decyduje wyłącznie o tempie odtwarzania siatki: starcie oglądane — `combatRoundMs()` ms na rundę (klucz
+//   strojenia `combatRoundMs`, domyślnie 400 — CP2), starcie w innym układzie — dzisiejsze 110 ms (`CombatPaceData`).
+//   Runda pada co 110 ms zegara starcia (reguła DSCS).
 //   `simClockMs` — zegar klatek symulacji (ms): przyrasta tylko, gdy gra tyka (poza starciem o czas realny klatki,
 //   w starciu o klatkę siatki); pauza go zatrzymuje, po odpauzowaniu nic nie nadrabia. Czytają go rundy DSCS i kąt
 //   orbit statków (`src/utils/SimClock.js`). Nie jedzie w zapisie (jak dotąd `performance.now`).
@@ -22,8 +23,9 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t } from '../i18n/i18n.js';
 import {
   COMBAT_ROUND_RULE_MS, COMBAT_GRID_FRAME_MS, COMBAT_GRID_SPEED_INDEX, COMBAT_GRID_MAX_FRAMES,
-  COMBAT_UNWATCHED_ROUND_MS, COMBAT_WATCHED_ROUND_MS,
+  COMBAT_UNWATCHED_ROUND_MS,
 } from '../data/CombatPaceData.js';
+import { getTuning } from '../utils/StrikesBackTuning.js';   // POLISH P1 (CP2) — klucz strojenia `combatRoundMs`
 
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12 — mechaniki 4X biegną szybciej
 
@@ -119,10 +121,11 @@ export class TimeSystem {
 
   /**
    * POLISH P1 (CP1, CP2) — czas REALNY jednej rundy starcia OGLĄDANEGO (ms): tempo odtwarzania siatki starcia.
-   * Czytane w chwili użycia. Wynik starcia od tej wartości nie zależy.
+   * Klucz strojenia `combatRoundMs` (`KOSMOS.debug.sbSet('combatRoundMs', 400)`), czytany w chwili użycia — zmiana
+   * z konsoli działa od następnej klatki. Wynik starcia od tej wartości nie zależy.
    */
   combatRoundMs() {
-    return COMBAT_WATCHED_ROUND_MS;
+    return getTuning('combatRoundMs');
   }
 
   /**

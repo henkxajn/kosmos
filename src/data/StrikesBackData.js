@@ -135,4 +135,12 @@ export const SB_TUNING = Object.freeze({
    * Konsument: `StrikeWavePlanner.campaignPeaceAfterChecks` → `DirectorCampaign`.
    */
   campaignPeaceAfterChecks: Object.freeze({ default: 2, type: 'int', min: 1, max: 10, unit: 'kontrole' }),
+
+  /**
+   * POLISH P1 (CP2) — TEMPO starcia w przestrzeni: ile ms CZASU REALNEGO trwa jedna runda starcia, które gracz ogląda
+   * (starcie w innym układzie — dzisiejsze 110 ms, CP4). Wynik starcia od tej wartości nie zależy (CP1: świat w starciu
+   * tyka siatką 16 ms przy 1 d/s, runda co 110 ms zegara starcia); 16 rund ≈ 6 s, 20 rund ≈ 8 s przy 400 ms.
+   * Konsument: `TimeSystem.combatRoundMs` → siatka starcia (`TimeSystem._updateCombatGrid`).
+   */
+  combatRoundMs: Object.freeze({ default: 400, type: 'int', min: 50, max: 1000, unit: 'ms' }),
 });

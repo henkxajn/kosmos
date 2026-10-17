@@ -37,11 +37,15 @@
 //       w oglądanym starciu przyrasta krokami siatki (klucz 400 ⇒ 110 / 400 tempa czasu realnego)
 //   T9  pin źródłowy (komentarze zdjęte): DSCS bez czasu realnego; orbity (VesselManager ×3, EAH, OSS, ThreeRenderer ×2)
 //       przez `orbitClockSec()`; `TimeSystem` — siatka i zegar klatek
+//   T10 (C2, CP2) klucz strojenia `combatRoundMs`: wiersz tabeli (domyślnie 400, int, 50..1000, jednostka ms);
+//       `sbSet` zmienia tempo od następnej klatki (110 / 1000 — czas realny rund; sygnatura i czas gry rund = dziś);
+//       odmowy `out_of_range` (30, 1200) i `wrong_type` (400,5, '400', NaN) z zakresem — stan bez zmian (świadek:
+//       poprawna zmiana tuż po odmowach zmienia stan); `sbReset` → 400; konsument (`TimeSystem.combatRoundMs`)
 //
 // ⚠ Fail-first: moduły P1 (`SimClock`, `CombatPaceData`) powstają w tym slice — import dynamiczny w try/catch, wywołania
 //   przez pomocników, żeby na kodzie sprzed zmiany piny DEGRADOWAŁY (czerwone), a nie przerywały suitę.
-// ⚠ Klucz w tym kroku (C1) ustawiany zastąpieniem metody `TimeSystem.combatRoundMs` na instancji; klucz strojenia
-//   (`sbSet('combatRoundMs', …)`) — C2 (T10).
+// ⚠ T2–T8 ustawiają tempo zastąpieniem metody `TimeSystem.combatRoundMs` na instancji (od C1); klucz strojenia
+//   (`sbSet('combatRoundMs', …)`, C2) — T10.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -56,6 +60,9 @@ import { VesselCombatSystem }    from '../../systems/VesselCombatSystem.js';
 import { DeepSpaceCombatSystem } from '../../systems/DeepSpaceCombatSystem.js';
 import { EnemyAttackHandler }    from '../../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem }    from '../../systems/OrbitalSpaceSystem.js';
+import gameState                 from '../../core/GameState.js';
+import * as DATA                 from '../../data/StrikesBackData.js';
+import * as TUN                  from '../../utils/StrikesBackTuning.js';
 import { readFileSync }          from 'node:fs';
 
 const RECORD = process.argv.includes('--record');
@@ -378,6 +385,55 @@ header('T9  pin źródłowy: DSCS bez czasu realnego; orbity przez `orbitClockSe
   const tsSrc = readSrc('systems/TimeSystem.js');
   assert(/_updateCombatGrid\(deltaMs, view\)/.test(tsSrc) && /this\.simClockMs \+= COMBAT_GRID_FRAME_MS/.test(tsSrc) && /if \(this\.isPaused \|\| !this\._combatView\(\)\)/.test(tsSrc),
     'T9d TimeSystem: siatka starcia (`_updateCombatGrid`), zegar klatek +16 ms na klatkę siatki, przerwanie pętli przy pauzie i końcu starcia');
+}
+
+// ═══ T10 ══════════════════════════════════════════════════════════════════════════
+header('T10 klucz strojenia `combatRoundMs` (CP2): tabela, domyślna 400, `sbSet` działa od następnej klatki, odmowy, reset');
+{
+  const tun = (name, ...a) => (typeof TUN[name] === 'function' ? TUN[name](...a) : undefined);
+  const stateOf = () => JSON.stringify(gameState.get('strikesBackTuning') ?? null);
+  tun('resetTuning');
+  const def = DATA.SB_TUNING?.combatRoundMs;
+  assert(!!def && def.default === 400 && def.type === 'int' && def.min === 50 && def.max === 1000 && def.unit === 'ms',
+    `T10a tabela: combatRoundMs — domyślnie 400, int, zakres 50..1000, jednostka ms (${JSON.stringify(def ?? null)})`);
+  const row = (tun('tuningRows') ?? []).find(r => r.klucz === 'combatRoundMs');
+  assert(!!row && row.domyslna === 400 && row.biezaca === 400 && row.zmiana === '' && row.jednostka === 'ms',
+    `T10b wiersz tabeli sbTuning: domyślna 400, bieżąca 400, bez znacznika zmiany, jednostka ms (${JSON.stringify(row ?? null)})`);
+  world();
+  const d0 = ts.combatRoundMs();
+  const r110 = tun('setTuning', 'combatRoundMs', 110);
+  const d1 = ts.combatRoundMs();
+  assert(d0 === 400 && r110?.ok === true && d1 === 110 && stateOf() === JSON.stringify({ combatRoundMs: 110 }),
+    `T10c świeży świat czyta 400; sbSet('combatRoundMs', 110) → TimeSystem czyta 110 od razu, wartość w gameState.strikesBackTuning (${d0} → ${d1}, ${stateOf()})`);
+  const k110 = run();                                                        // tempo z klucza — BEZ zastąpienia metody
+  tun('setTuning', 'combatRoundMs', 1000);
+  const k1000 = run();
+  for (const [k, r] of [[110, k110], [1000, k1000]]) {
+    const p = pace(r);
+    console.log(`     klucz z konsoli ${k}: rund ${p.n}, czas realny ${p.realMs} ms (oczekiwane ${(p.n - 1) * k} ± ${quantum(k).toFixed(0)})`);
+    assert(p.n > 1 && Math.abs(p.realMs - (p.n - 1) * k) <= quantum(k) && same(r.sig, ref.sig) && same(gySeq(r), gySeq(ref)),
+      `T10d klucz z konsoli ${k}: czas realny rund = (rundy − 1) × ${k} ± kwant; sygnatura i czas gry rund = dziś`);
+  }
+  tun('setTuning', 'combatRoundMs', 400);                                    // wartość domyślna = brak wpisu
+  const before = stateOf();
+  const cases = [[30, 'out_of_range'], [1200, 'out_of_range'], [400.5, 'wrong_type'], ['400', 'wrong_type'], [NaN, 'wrong_type']];
+  for (const [v, reason] of cases) {
+    const r = tun('setTuning', 'combatRoundMs', v);
+    const txt = r && !r.ok ? (tun('describeRefusal', r) ?? '') : '';
+    assert(r?.ok === false && r.reason === reason && same(r.range, [50, 1000]) && stateOf() === before
+      && txt.includes('combatRoundMs') && txt.includes('50..1000'),
+      `T10e odmowa ${String(v)} (${typeof v}) → ${reason}, zakres 50..1000 w treści, stan bez zmian (${r?.reason ?? '—'})`);
+  }
+  const ok250 = tun('setTuning', 'combatRoundMs', 250);
+  assert(ok250?.ok === true && stateOf() !== before && ts.combatRoundMs() === 250,
+    'T10f świadek: poprawna zmiana tuż po odmowach zmienia stan (250)');
+  const rr = tun('resetTuning', 'combatRoundMs');
+  assert(rr?.ok === true && same(rr.reset, ['combatRoundMs']) && tun('getTuning', 'combatRoundMs') === 400 && ts.combatRoundMs() === 400
+    && stateOf() === JSON.stringify({}), "T10g sbReset('combatRoundMs') → 400, wpis zdjęty");
+  const tsSrc = readSrc('systems/TimeSystem.js');
+  const body = tsSrc.slice(tsSrc.indexOf('  combatRoundMs() {'), tsSrc.indexOf('  _combatView() {'));
+  assert(/return getTuning\('combatRoundMs'\);/.test(body), 'T10h konsument: TimeSystem.combatRoundMs() czyta klucz w chwili użycia (getTuning)');
+  tun('resetTuning');
 }
 
 console.log(`\n═══ combat_pace_smoke: ${pass} PASS / ${fail} FAIL ═══`);
