@@ -3477,7 +3477,7 @@ w drodze → `aborted` (`escorts_lost`), transportowiec odwołany do stolicy, de
 najwyższy numer findingu **#435**; trafienia „436”–„449” to numery linii i wartości tabel, nie findingi; pamięć: „wolny 436”
 `[measured]`. Źródło: bramka S3A (§5k.2) i odpowiedzi właściciela (SB62, SB67).
 
-### ⚪ 436 — starcie w przestrzeni rozstrzyga się w ułamku sekundy: gracz nie zdąży zareagować
+### ✅ 436 — starcie w przestrzeni rozstrzyga się w ułamku sekundy: gracz nie zdąży zareagować
 
 `[code]` `DeepSpaceCombatSystem` — runda co `ROUND_INTERVAL_MS` 110 ms czasu REALNEGO (do `MAX_ROUNDS_PER_TICK` 4 rund na
 klatkę nadrabiania), `MAX_ROUNDS` 20, obrażenia × `DAMAGE_MULT` 3,0 — starcie trwa najwyżej ok. 2,2 s realnych, niezależnie
@@ -3495,6 +3495,11 @@ planu POLISH).
 → **POLISH P1 — kod (2026-10-17; CP1–CP3; `POLISH_PLAN.md` §5, §9): naprawa PRZYGOTOWANA (C1 + C2, zestagowane) —
 zamknięcie przy commitach łańcucha P1.** Klucz `combatRoundMs` domyślnie 400 ms; `[measured]` scena n, 16 rund — 6048 ms
 (dziś 1664), scena a, 20 rund — 7616 ms (dziś 2096); wynik = dziś.
+✅ **ZAMKNIĘTY 2026-10-17 — `13ca6c9` (POLISH P1-1) + `bcecaa0` (P1-2: klucz `combatRoundMs`), bramka P1 PASS
+(`POLISH_PLAN.md` §9.5a):** oglądane starcie w przestrzeni toczy się w tempie klucza — domyślnie 400 ms na rundę
+(`[measured]` sonda: 16 rund — 6048 ms, 20 rund — 7616 ms); u właściciela salwy co ≈ 0,4 s przy 400 ms i szybko przy
+110 ms (odczyt wzrokowy, bez stopera; rejestrator bramki — 403 ms czasu gry na rundę), wynik w trzech przebiegach ten
+sam. Starcie w innym układzie — dzisiejsze 110 ms na rundę (CP4).
 
 ### ⚪ 437 — flota GRACZA po bitwie w locie wznawia lot osobno (SB62)
 
@@ -3511,7 +3516,7 @@ bitwie w locie każdy członek wznawia lot z własnym przechwyceniem (`DeepSpace
 najwyższy numer findingu **#437**; trafienia „438”–„449” to numery linii i wartości tabel, nie findingi `[measured]`.
 Źródło: C6 i M6 sesji 2 (§5l.3, §5l.4).
 
-### ⚪ 438 — wynik starcia w przestrzeni zależy od czasu rundy (i od prędkości gry w trakcie starcia)
+### ✅ 438 — wynik starcia w przestrzeni zależy od czasu rundy (i od prędkości gry w trakcie starcia)
 
 `[code]` `DeepSpaceCombatSystem` — runda co `ROUND_INTERVAL_MS` czasu REALNEGO, a między rundami gra płynie dalej na zegarze
 gry (auto-slow przy walce: 1 d/s); ruch na zegarze gry (rozkazy, orbity) działa między rundami. `[measured]` C6 (§5l.3,
@@ -3538,6 +3543,12 @@ zamknięcie przy commitach łańcucha P1.** Siatka „b1v” w `TimeSystem`, run
 `combatRoundMs` (400 ms), zegar orbit. `[measured]` 34 przebiegi sondy na kodzie P1 (sceny n g0 / g1, a, co; klucz
 110 / 400 / 1000; prędkość w walce 1 t/s i 1 r/s; klatka walki 33 ms; pauza 2 s i 30 s; starcie oglądane i nieoglądane) —
 wynik = dziś (60 FPS, 1 d/s) w każdej grupie.
+✅ **ZAMKNIĘTY 2026-10-17 — `13ca6c9` (POLISH P1-1: siatka starcia, rundy z zegara klatek symulacji, zegar orbit) +
+`bcecaa0` (P1-2: klucz `combatRoundMs`), bramka P1 PASS (`POLISH_PLAN.md` §9.5a):** wynik starcia nie zależy od czasu
+rundy, prędkości gracza w walce, FPS walki ani pauzy; u właściciela trzy przebiegi z jednego zapisu (klucz 400 ms ·
+110 ms · 400 ms z pauzą ~10 s i przełączeniem na 1 r/s) — ten sam wynik (20 rund, 28 strzałów, 20 trafień, zwycięzca B,
+straty 1/1; wraki P1 F0, P1 F1, P1 Guard0), najwyżej 1 runda na klatkę, 0 rund w pauzie; `combat_pace_smoke` na
+`bcecaa0` — 71 / 0. Kierunek SB68 (c) wykonany w kształcie siatki (CP1).
 
 ### ✅ 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
 
@@ -3823,8 +3834,8 @@ dalej.
 
 ### 8.4 Findingi rozdziału — otwarte i zamknięte
 
-- **Rejestr macierzysty #391 – #448 (§6):** 58 wpisów — ✅ **36** zamkniętych, ⚪ **22**
-  otwartych. Zamknięte: **391** · **392** · **393** · **394** · **396** · **397** · **398** · **399** · **402** · **406** · **407** · **408** · **411** · **413** · **414** · **415** · **416** · **417** · **418** · **419** · **420** · **421** · **424** · **425** · **427** · **434** · **435** · **439** · **440** · **442** · **443** · **444** · **445** · **446** · **447** · **448**.
+- **Rejestr macierzysty #391 – #448 (§6):** 58 wpisów — ✅ **38** zamkniętych, ⚪ **20**
+  otwartych (436 i 438 — 2026-10-17, arc POLISH P1: `13ca6c9`, `bcecaa0`). Zamknięte: **391** · **392** · **393** · **394** · **396** · **397** · **398** · **399** · **402** · **406** · **407** · **408** · **411** · **413** · **414** · **415** · **416** · **417** · **418** · **419** · **420** · **421** · **424** · **425** · **427** · **434** · **435** · **436** · **438** · **439** · **440** · **442** · **443** · **444** · **445** · **446** · **447** · **448**.
 - **Pochodzenie numerów:** 391 – 396 kandydaci K1 – K6 audytu fazy A · 397 – 406 S0 (notatka przekazania, bramka) ·
   407 – 413 S1 · 414 – 419 S2 · 420 – 425 S2b · 426 – 437 S3, sesja 1 (426 – 432 — kandydaci notatki S2b, SB60) ·
   438 – 440 S3, sesja 2 · 441 – 445 S4, sesja 1 · 446 S4, sesja 2 · 447 – 448 S4, sesja 3 — mapa numeracji:
@@ -3843,7 +3854,8 @@ dalej.
 - **Prawdziwa produkcja okrętów AI** — nietknięta (SB1): okręty rozdziału pochodzą z puli; kadłuby ze stoczni AI liczą się
   do tego samego limitu. → backlog.
 - **Model czasu rundy starcia** (**438**, SB68 kierunek (c); z nim **436** i **432**) → kolejka polerki — pierwszy krok
-  następnego arca (§8.8).
+  następnego arca (§8.8). → ✅ **438** i **436** zamknięte 2026-10-17 (POLISH P1: `13ca6c9`, `bcecaa0`; §6);
+  **432** bez zmian (wynik dzisiejszy).
 - **441** (okno pierwszego wykrycia) → polerka UI (SB77).
 - **447 (b)** (zwykłe uderzenie nie celuje w ciało, na które leci własna fala) → polerka po Alfie (SB93).
 - Balans obrony naziemnej gracza (SB60: **430**, **431**) — poza rozdziałem.
@@ -3870,9 +3882,7 @@ dalej.
 | **431** | koszary zniknęły z rejestru aktywnych budynków (1 z 36 przebiegów) | niezbadane (SB60) |
 | **432** | limit 20 rund — przegrana strona na wrak także żywymi okrętami | obserwacja projektu → model czasu starcia (§8.8) |
 | **433** | `w3_ai_invasion_smoke` T5 nie odróżnia dwóch list kolonii | naprawa pinu (scena z kolonią AI w układzie celu) |
-| **436** | starcie w przestrzeni rozstrzyga się w ułamku sekundy | POLISH P1 — audyt 2026-10-16 (`POLISH_PLAN.md`) |
 | **437** | flota GRACZA po bitwie w locie wznawia lot osobno | raport (SB62) |
-| **438** | wynik starcia zależy od czasu rundy | POLISH P1 — audyt 2026-10-16: także od prędkości, FPS i pauzy; prototyp B1 „siatka” w sondzie — wynik = dziś i niezależny (`POLISH_PLAN.md`) |
 | **441** | okno pierwszego wykrycia: „Distance” bez terminu układu, „in our system” | polerka UI (SB77) |
 
 **Pierwszy wolny numer: 449** — sprawdzone ponownie 2026-10-16 na `35defd1`: najwyższy nagłówek findingu w `docs/`
@@ -3881,6 +3891,8 @@ registry-first: przed nadaniem sprawdzić §6 tego planu i mapę numeracji
 `OPEN_FINDINGS_INDEX.md` (lekcja kolizji 165 / 166 i 246 – 254). Prefiks `V-` (VISUALS) i `W2 1-14` to osobne przestrzenie.
 → **2026-10-16 (POLISH P1):** numery **#449–#455** nadał arc POLISH (`POLISH_PLAN.md` §6); pierwszy wolny **456**.
 → **2026-10-17 (POLISH P1 — kod):** **#456–#457** (`POLISH_PLAN.md` §6); pierwszy wolny **458**.
+→ **2026-10-17 (POLISH P1 — zamknięcie w kodzie):** ✅ **436** i **438** zamknięte (§6; `13ca6c9`, `bcecaa0`) — wiersze
+zdjęte z tabeli; otwartych w rejestrze #391–#448 — **20**; pierwszy wolny bez zmian — **458**.
 
 ### 8.7 Reguły wiążące dalej (przeniesione z CLAUDE.md przy zamknięciu rozdziału)
 
