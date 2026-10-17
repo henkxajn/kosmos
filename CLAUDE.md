@@ -1,7 +1,7 @@
 # KOSMOS — Symulator Układu Słonecznego + Strategia 4X
 
 > **Odroczone live-gate'y** (weryfikacje w przeglądarce świadomie odroczone + luki znalezione przy próbie): `docs/deferred-live-gates.md`.
-> **Bieżący arc — POLISH** (polerka UI i grafiki; P1 tempo starcia — ✅ ZAMKNIĘTY W KODZIE 2026-10-17: `13ca6c9` · `bcecaa0`, bramka P1 PASS, CP1–CP12; następny krok P2 — widoczność, najpierw audyt (453, 450, 455, 451, 457), potem P3 — 456; findingi od #449, pierwszy wolny 458): `docs/design/POLISH_PLAN.md`.
+> **Bieżący arc — POLISH** (polerka UI i grafiki; P1 tempo starcia — ✅ ZAMKNIĘTY W KODZIE 2026-10-17: `13ca6c9` · `bcecaa0`, bramka P1 PASS, CP1–CP12; P2 widoczność — AUDYT 2026-10-17 (§10, bez kodu; findingi #458–#464), czeka na odpowiedzi właściciela (§10.11) → kod P2; potem P3 — 456; findingi od #449, pierwszy wolny 465): `docs/design/POLISH_PLAN.md`.
 
 ## Wizja gry
 

@@ -3,11 +3,13 @@
 > **Status:** ✅ **P1 — ZAMKNIĘTY W KODZIE 2026-10-17:** `13ca6c9` (P1-1) · `bcecaa0` (P1-2), zakres `20e23a2..bcecaa0`,
 > po bramce `gate/GATE_P1.md` w przeglądarce właściciela (PASS — §9.5a) i zgodzie na przecelowanie **R-P1-2** (CP9);
 > na `bcecaa0` sweep **310/310**, `check-i18n` PASS pl = en 3458 (§9.1). Decyzje **CP1–CP12** (§5); zamknięcia **449** ·
-> **452** · **454** · **438** · **436** — §9.6. Następny krok: **P2 — widoczność**, najpierw audyt (§7); potem **P3** —
-> **456** (CP12). Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit `1af65fc`). Arc otwarty
-> wskazaniem właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
-> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#457**; pierwszy wolny **458**. Sondy audytu:
-> `kosmos-handover/polish-p1-combat-pace/`; kod, dowód i bramka P1: `kosmos-handover/polish-p1-code/` (SHA256SUMS).
+> **452** · **454** · **438** · **436** — §9.6. **P2 — widoczność: AUDYT 2026-10-17** (§10, bez kodu, HEAD
+> `a7e2296`) — czeka na odpowiedzi właściciela (§10.11) → decyzje CP13+ → kod P2 (§10.10); potem **P3** — **456**
+> (CP12). Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit `1af65fc`). Arc otwarty wskazaniem
+> właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
+> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#464**; pierwszy wolny **465**. Sondy audytu:
+> `kosmos-handover/polish-p1-combat-pace/`; kod, dowód i bramka P1: `kosmos-handover/polish-p1-code/`; audyt P2:
+> `kosmos-handover/polish-p2-visible-battle/` (SHA256SUMS).
 > Tagi: `[code]` źródło · `[git]` historia · `[measured]` pomiar · `[doc]` dokumenty · `[derived]` wniosek z powyższych.
 
 ## 0. Cel arca
@@ -359,6 +361,9 @@ w pauzie, najwyżej 1 runda na klatkę, wynik ten sam. `combat_pace_smoke` na `b
 `[measured]` zrzut `p1_s4_wynik.png` (PL) po starciu 16-rundowym: okno „PORAŻKA · Gracz vs Liga Trzech Słońc · Tur: 0 ·
 Straty: 1 / 0”, Dziennik „⚔ Bitwa w głębokim kosmosie (Propus): … Straty: 1/0, 0 tur.” → P2 albo P1 (pytanie 6).
 → **CP6 (2026-10-17): P2** (§7).
+→ **P2 — audyt (2026-10-17, §10.7):** zmierzone w grze EN i PL — baner „PORAŻKA · … · Tur: 0 · Straty: 1 / 0”,
+Dziennik „0 turns” / „0 tur” przy `timeline` 16 rund; trzej czytelnicy `turns ?? 0` (baner, Dziennik, lista bitew
+wojny `WarSystem:523`); kształt `turns: encounter.currentRound` — P2b-1 razem z **163** i **464**.
 
 ### ⚪ 451 — HP pojedynczego statku nie jest widoczne nigdzie
 
@@ -367,6 +372,9 @@ statki — nazwą, kadłubem, bronią i kolorem żywy/zniszczony. Trwałe uszkod
 decyzja 2026-05-20) nie mają czytelnika w UI (grep: wyłącznie `VesselManager`, `DeepSpaceCombatSystem`,
 `SaveMigration`, `ThreatMath`). → P2.
 → **P2 (§7):** pasek HP nad statkiem aktywnego starcia + błysk trafienia na modelu (§3.3).
+→ **P2 — audyt (2026-10-17, §10.4):** HP per statek co rundę zmierzone (zmiana w 6 z 16 rund); makieta paska
+40 × 5 px pod statkiem (`p2_w_6_MOCK_hpbars.png`); błysk na modelu — statki gracza dzielą materiały szablonu GLB
+(klon per statek albo poświata dopasowana do modelu) — P2-3.
 
 ### ✅ 452 — kąt orbity statku wokół ciała liczony w czasie REALNYM zmienia geometrię walki
 
@@ -397,6 +405,10 @@ starcie w `sys_059`): po rundzie 1 pierścień w świecie (13,77; −6,00) = pun
 (13,19; −7,48) → (13,73; −6,14) na wysokości 0,3 (migawki), cel kamery (13,28; −5,78) przy malejącym dystansie — pusty
 punkt w ramce oglądanego układu (klasa „globalne id ≠ położenie”); zrzut `screenshots/cross_system/p1_x1_strzal.png`.
 → P1 albo P2 (pytanie 7).
+→ **P2 — audyt (2026-10-17, §10.2):** potwierdzone na kodzie P1 (auto-fokus w pusty punkt układu domowego; 10 smug,
+5 błysków i pierścień w złym układzie); czwarte miejsce — przycisk „Obserwuj / Watch” panelu walki (`CombatHUD.js:425`)
+zbliża kamerę na pusty punkt oglądanego układu; panel nie podaje układu starcia. Kształt: reguła `isEngagementInView`
+(wzór SB43) na 4 wejściach + „Obserwuj” przełącza widok na układ starcia — P2-1.
 
 ### ✅ 454 — `fleet_engage_scope` T3b i `fleet_engage_picker_frame` T5b zależą od tempa czasu realnego
 
@@ -420,6 +432,10 @@ efektów. `[code]` jedyna ścieżka, która pomija smugę: `_onCombatRoundFx` �
 ma jakość kontaktu poniżej `contact` (`_isEnemyEndpointVisible`, `ThreeRenderer:6182-6183`). Jakości kontaktu w chwili
 rundy 1 nie zmierzono; klatkę później etykieta wroga ma już nazwę. Najsilniejsza salwa tego starcia była widoczna
 wyłącznie w logu panelu. Zmierzone na jednym starciu. → P2 (§7).
+→ **P2 — audyt (2026-10-17, §10.5): hipoteza mgły POTWIERDZONA** — starcie rusza przy 0,3123 AU (próg z zasięgu rakiet
+0,315 AU > „sensor lock” 0,30 AU), salwa rundy 1 emitowana przy jakości `rumor` (2 zdarzenia pominięte), `contact`
+w tej samej klatce po rundzie; trzy przebiegi identycznie. Kamera auto-fokusu stoi wtedy na d 324 (**459**) — naprawa
+razem z 459: P2-6.
 
 ### #456–#457 — P1, kod (2026-10-17)
 
@@ -450,6 +466,74 @@ rundy 5→6; 1531 ms, rundy 2→3) i jedna także przy 110 ms (1221 ms, rundy 7�
 repo) tego nie potwierdza. W headless długie klatki rysowania wstrzymują grę na ~1 s, więc pomiar walidatora nie
 rozstrzyga — 457 stoi na `[code]`. Bramka u właściciela (§9.5a): zachowania znacznika nie raportowano. Prezentacja, nie
 przebieg. → P2 (§7).
+→ **P2 — audyt (2026-10-17, §10.6): zmierzone deterministycznie** (zegar klatek co do 16 ms): przy 400 ms dwie luki
+w trakcie aktywnego starcia — 416 ms (rundy 2–5 bez strzału) i 1808 ms (pauza 2,6 s); przy 110 ms — zero. Kształt:
+znacznik wg stanu starcia — P2-5.
+
+### #458–#464 — P2, audyt (2026-10-17)
+
+⚠ **Registry-first (2026-10-17, audyt P2):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed
+nadaniem — najwyższy numer findingu **#457**; trafienia „458”–„469” to numery linii i zapis „pierwszy wolny 458”
+`[measured]`. Sonda i zrzuty: `kosmos-handover/polish-p2-visible-battle/` (§10.1).
+
+### ⚪ 458 — „Obserwuj / Watch” kadruje STAŁY punkt startu starcia i nie śledzi walki, a nakładki w rozmiarze świata zasłaniają statki
+
+`[code]` `camera:watchBattle` (`ThreeRenderer:1076-1083`): cel = `encounter.location.point` (punkt środkowy pary
+wyzwalającej z chwili startu), dystans ≤ 1,2 j., `minDist` 0,005; `_focusEncounterId` bez czytelnika — śledzenia brak.
+Insygnia 0,32 j. (+0,4 j. nad statkiem), pierścień znacznika 0,25–0,32 j., celownik wroga 0,7 × max(0,5; d / 60) j., kula
+błysku 0,06 j. ×3 — rozmiar świata, więc przy zbliżeniu rosną; model fregaty 0,016 j. `[measured]` §10.3: przy
+„Obserwuj” (d 1,21–1,31) modele 8–9 px, szewrony 121–199 px, celownik 119–138 px, pierścień (promień) 121–165 px pod
+panelem walki, środek walki 0,091–0,115 AU od celu kamery (statki przy prawej krawędzi). Kadr dopasowany do sprite'ów
+uczestników (makieta sondy): d ≈ 0,40–0,43 j. — ~3 × bliżej niż dziś — modele 28–66 px, nakładki 20–31 px. ⚠ Kadr
+z pozycji LOGICZNYCH jest błędny dla statku na orbicie ciała (sprite na wysokości y = r·cos φ orbity) — zmierzone na
+pierwszej makiecie. → P2-2 (§10.10), pytania 1–3.
+
+### ⚪ 459 — auto-fokus starcia dolatuje 1,4 s po starcie: rundy 1–4 mijają, zanim kamera dotrze
+
+`[code]` `vessel:engaged` → `focusOn(punkt starcia)` + cel ≤ 6 j.; dystans dochodzi lerpem 0,08 na klatkę (zależnym od
+FPS). `[measured]` W_en / W2_pl / X_en: z kadru układu (d 450) do d ≤ 6,3 — **88 klatek = 1408 ms**; runda 1 po 64 ms
+(d 324), runda 2 po 480 ms (d 42), runda 3 po 880 ms (d 10,2), runda 4 po 1280 ms (d 6,6). Salwa otwierająca nie byłaby
+widziana nawet bez bramki mgły (**455**). Przełącznik `uiPrefs.battleAutoFocus` nie ma producenta (rodzina **164**).
+→ P2-6 (§10.10).
+
+### ⚪ 460 — śmierć statku widać dopiero na końcu starcia, a wrak „przeskakuje” do punktu środkowego
+
+`[code]` statek z HP ≤ 0 przestaje strzelać i być celem, ale wrak i wybuch powstają wyłącznie w `_finalizeBattle`
+(`_wreckOne` — `:1094`, `:1105`) — przy stronie z kilkoma statkami zniszczony kadłub leci dalej nietknięty do końca
+starcia, a wszystkie wybuchy padają naraz. `_wreckOne` → `_turnIntoWreck(vessel, mid)` stawia wrak w STAŁYM punkcie
+środkowym starcia. `[measured]` W_en / X_en: wybuch w pozycji żywej (13,416; −6,923), wrak w punkcie środkowym — skok
+**0,0895 AU**. Odroczenie wybuchu w czasie niezmierzone: w scenie 1 na 1 śmierć kończy starcie w tej samej rundzie.
+→ P2b-2 (§10.10), pytanie 7.
+
+### ⚪ 461 — zbliżenie w starciu idzie jednym skokiem raz na rundę (≈ 100 px co 400 ms przy „Obserwuj”)
+
+`[code]` w starciu statek gracza nie ma ruchu z rozkazu (pauza misji, `_freezeAsStationary`); przesuwa go wyłącznie
+`_closeToWeaponRange` — jeden krok `speedAU × CLOSE_STEP_YEARS` przed rundą, a sprite wolnego statku (`orbiting`,
+`dockedAt = null`) bierze pozycję logiczną w tej samej klatce. `[measured]` W_en: fregata (1,114 AU / rok) — skok
+0,0282 AU w rundach 2–8 (0,0226 w rundzie 9); przy „Obserwuj” ≈ 100 px co 400 ms (181 px na dwa kroki między rundami 7
+i 9), przy auto-fokusie ≈ 20 px `[derived]`. ⚠ **Sprostowanie P1 §3.3** („w siatce ruch idzie 6–7 krokami na rundę”) — dla
+zbliżenia w starciu nieprawda. → P2-4 (§10.10).
+
+### ⚪ 462 — wróg w starciu z graczem jest rysowany półprzezroczysty (krycie 0,5) przez całe starcie
+
+`[code]` `_applyVesselIntelVisibility`: jakość `contact` → krycie modelu 0,5 (pełne dopiero przy `detailed`); w starciu
+wróg dochodzi do `contact` przez „sensor lock” i tak zostaje. `[measured]` W_en: `intelOpacity` 0,5 w każdej migawce
+starcia. Panel walki podaje jednocześnie nazwę, kadłub i broń wroga. → P2b-3 (§10.10), pytanie 5.
+
+### ⚪ 463 — `ProximitySystem` re-emituje `vessel:combatRangeEnter` dla par tej samej frakcji co każde wywołanie (poza P2)
+
+`[code]` gałąź samonaprawy (M4 P3 polish #2, `ProximitySystem:264-282`) kasuje znacznik pary, gdy DSCS nie ma dla niej
+starcia — a dla pary tej samej frakcji starcia nie będzie nigdy, więc zdarzenie leci przy każdym wywołaniu proximity (dwa
+na tik). `[measured]` W2_pl (fixture GATE-S4): **17 481** zdarzeń w 1702 klatkach — 7 par AI tej samej frakcji
+(`emp_001` ×4, `emp_002` ×3) od klatki 0, po 2346 zdarzeń, para własnych fregat gracza 941 (od klatki 702); żadne nie
+utworzyło starcia. Szum zdarzeń i praca odbiorców (VCS → DSCS odmawia); czasu klatki nie mierzono. Poza P2 (logika).
+
+### ⚪ 464 — etykiety stron starcia DSCS zaszyte po polsku („Gracz — P1 n0” w grze EN)
+
+`[code]` `_createEncounter` (`DeepSpaceCombatSystem:350-355`): `Gracz (N)`, `Gracz — …`, `Wróg` — mimo kluczy
+`battle.label.playerGroup` / `playerUnit` / `enemyUnnamed`, których używa `VesselCombatSystem` (`:295-297`); etykieta
+idzie do panelu walki i do rekordu bitwy (`participantA.label`). `[measured]` zrzuty W_en (gra EN): panel „Gracz — P1 n0”.
+Klasa **113**; `check-i18n` nie widzi (szablon literału). → P2b-1 (§10.10), razem z **450** i **163**.
 
 ## 7. Następne kroki
 
@@ -457,10 +541,9 @@ przebieg. → P2 (§7).
 2. ~~P1 — kod~~ → **ZAMKNIĘTY W KODZIE 2026-10-17:** bramka `gate/GATE_P1.md` u właściciela PASS (§9.5a) → zgoda na
    R-P1-2 (CP9) → commity `13ca6c9` (P1-1) · `bcecaa0` (P1-2) → zamknięcia 449 / 452 / 454 (tutaj) i 438 / 436
    (`AI_STRIKES_BACK_PLAN.md` §6) — §9.6.
-3. **P2 — widoczność** (kolejność właściciela, CP6 / CP7) — **następny krok, najpierw audyt, bez kodu:** **453** (pierwsza —
-   termin układu w auto-fokusie, smugach i znaczniku starcia) · **450** („Tur: N” z liczby rund) · **455** (salwa
-   pierwszej rundy) · **451** (pasek HP nad statkiem aktywnego starcia + błysk trafienia na modelu) · kandydat **457**
-   (znacznik starcia przy 400 ms).
+3. **P2 — widoczność** (kolejność właściciela, CP6 / CP7): **AUDYT 2026-10-17 (§10, bez kodu)** — findingi #458–#464,
+   propozycja łańcucha P2-1 … P2-6 + P2b (§10.10). **Następny krok: odpowiedzi właściciela na §10.11** → decyzje
+   CP13+ → kod P2 (keeper fail-first na krok, bramka w przeglądarce).
 4. **P3** — **456** (okno partii bitwy planetarnej w czasie realnym; CP12): osobny krok po P2, najpierw audyt.
 5. Dalej kolejka arca (§0).
 
@@ -689,3 +772,252 @@ te same pliki, które weszły w `13ca6c9` + `bcecaa0`). Odczyty konsoli — z ra
 - Zapis i wczytanie w ŚRODKU starcia: pierwsza runda po wczytaniu pada od razu (jak dotąd) — przebieg może się różnić od
   przebiegu bez wczytania; bramka wczytuje zapis sprzed pierwszej rundy, więc tego nie ćwiczy.
 - Seria bitew kampanii AI przy 400 ms (galaktyka zwalnia na czas każdej oglądanej bitwy) — nie mierzone w grze.
+
+## 10. P2 — widoczność starcia: audyt (2026-10-17, bez kodu; HEAD `a7e2296`)
+
+**Cel właściciela (P2):** gracz WIDZI, jak walka się rozwija — częste widoczne strzały, spadek HP, reagujące statki; do
+tego nowa obserwacja: kamera „Obserwuj / Watch” zbliża się za bardzo i statków nie widać. Wyłącznie prezentacja: bez zmian
+matematyki walki, zegarów i wyników (P1 zostaje). Kolejność z CP6 / CP7: **453** pierwsza.
+
+### 10.1 Sonda P2 `[measured]`
+
+Prawdziwa gra (fixture GATE-S4) w izolowanym headless Chrome (SwiftShader, okno 1600 × 900, viewport 1584 × 805), kod
+HEAD `a7e2296` z eksportu `git archive` (repo nietknięte), determinizm sondy P1 (`detclock.mjs`: zegar wirtualny,
+ziarnisty `Math.random` gry, UUID Three.js i renderer na osobnym strumieniu). Klatka sondy = 16 ms czasu realnego gracza
+(60 FPS) = JEDNA klatka renderu (rAF z kolejki sondy). Scena „n” z P1: 3 fregaty gracza z laserem, `engage` na
+izolowanego strażnika stolicy `emp_001` (2 × wyrzutnia rakiet, ciężki pancerz), start 0,6 AU; w starcie wchodzi jedna
+fregata (P1 n0) — 1 na 1, 16 rund, wygrywa strażnik, straty 1 / 0. Klucz `combatRoundMs` = 400 ms (odczyt zwrotny).
+Rejestratory: każdy efekt (`_spawnFx`), każda salwa (`_onCombatRoundFx` — jakość wywiadu końców, bramka mgły, liczba
+efektów), cykl życia znacznika starcia, kolejność zdarzeń (proximity / sensor lock / wywiad / `vessel:engaged`), kamera co
+klatkę, rzut uczestników na ekran (model, insygnia, celownik, pierścień, panel walki), HP każdego statku co rundę.
+Przebiegi (`kosmos-handover/polish-p2-visible-battle/results/`): **W_en** — widok na układ starcia, gra EN (495 s);
+**X_en** — widok na układ domowy (starcie w innym układzie, tempo 110 ms — CP4); **W2_pl** — W po polsku + makiety
+sondy (kadr śledzący, nakładki w stałym rozmiarze ekranu, paski HP). W_en i W2_pl do chwili makiety — identyczne co do
+rundy (te same salwy, te same luki znacznika, ta sama kamera; kontrola X = X). Losowania `Math.random` poza klatką
+sondy: 0 we wszystkich trzech; wyjątki konsoli: 0. ⚠ Makiety to WYŁĄCZNIE sonda (podmienione metody instancji w stronie,
+kanwa nakładki) — oznaczone „MOCK” w nazwach zrzutów; kod gry bez zmian.
+
+### 10.2 A1 — starcie w innym układzie (453) `[code]` `[measured]`
+
+- **Potwierdzone na kodzie P1** (X_en; widok `sys_home`, starcie w `sys_059` w punkcie (137,66; −60,03) px): auto-fokus
+  przestawia cel kamery z (0; 0) na (13,77; −6,00) j. i dystans 450 → 6 — pusty punkt układu domowego; 7 salw rysuje
+  **10 smug i 5 błysków** oraz pierścień znacznika (13,766; −6,003) w układzie domowym (współrzędne z migawek ładunku —
+  sprite'ów statków z innego układu nie ma); zrzut `p2_x_2_autofocus_salvo.png` (smuga i pierścień obok gwiazdy domowej).
+- **Czwarte miejsce bez terminu układu (nowe):** przycisk „Obserwuj / Watch” panelu walki emituje
+  `camera:watchBattle { x, y }` bez układu (`CombatHUD.js:425`), a handler (`ThreeRenderer:1076`) zbliża kamerę na ten
+  punkt w OGLĄDANYM układzie — zrzut `p2_x_3_watch.png` (kula błysku trafienia w pustce obok gwiazdy domowej).
+- **Co gracz widzi zamiast tego dziś:** panel walki pokazuje wszystkie starcia (także z innego układu) — bez nazwy układu
+  w wierszu (`CombatHUD._drawEncounterRow`); wpis Dziennika „auto-slow” przy prędkości > 1 d/s; baner i linia Dziennika
+  po bitwie. Dzwonka dla startu starcia nie ma (`NotificationCenter` — żadnej subskrypcji `vessel:engaged`).
+- **Najmniejszy kształt:** jedna czysta reguła `isEngagementInView({ encounterSystemId, activeSystemId })` w
+  `VesselFxLogic` (wzór SB43 `isMovementPulseVisible`, Finding 415) na czterech wejściach: `_onCombatRoundFx` (DSCS
+  dokłada `systemId` do ładunku `combat:roundFx` — emit wyłącznie FX, bez zegara), auto-fokus `vessel:engaged`
+  (`location.systemId` już w ładunku), znacznik (karmiony tylko z salw), `camera:watchBattle` (panel podaje `systemId`;
+  dla innego układu renderer najpierw przełącza widok `starSystemManager.switchActiveSystem`, potem kadruje). W
+  oglądanym układzie — nic; w wierszu panelu — nazwa układu starcia.
+
+### 10.3 A2 — kamera „Obserwuj / Watch” (458, 459) `[code]` `[measured]`
+
+- **Mechanizm `[code]`:** `camera:watchBattle` (`ThreeRenderer:1076-1083`) — `setMinDist(0.005)`,
+  `focusOnInstant(punkt starcia, y 0,3)`, `setTargetDist(min(cel, 1,2))`; punkt = `encounter.location.point` — STAŁY punkt
+  środkowy pary wyzwalającej z chwili startu; śledzenia brak (`_focusEncounterId` jest ustawiany, ale nikt go nie czyta);
+  `minDist 0,005` zostaje po bitwie aż do następnego fokusu (ciało / statek / stacja). Kamera: FOV 55°, φ 1,1 rad;
+  kadr pionowo w płaszczyźnie celu = 2·d·tan 27,5°.
+- **Rozmiary `[code]`:** model fregaty 0,016 j. (`VESSEL_TARGET_SIZE.frigate`) = 0,0015 AU; zasięgi broni 0,05 / 0,15 /
+  0,30 AU = 33–200 długości statku. Nakładki w rozmiarze ŚWIATA: insygnia (szewron) 0,32 j. zawieszona 0,4 j. nad
+  statkiem; pierścień znacznika starcia promień 0,25–0,32 j.; celownik wroga 0,7 × max(0,5; d / 60) j. (rośnie przy
+  zbliżeniu poniżej d = 30); błysk trafienia — kula promienia 0,06 j. rosnąca ×3.
+- **Pomiar `[measured]`** (W_en = W2_pl; viewport 1584 × 805; panel walki x 479–1104, y 519–748 px):
+
+| kadr | dist [j.] | kadr pionowo [AU] | model px | insygnia px | celownik px | pierścień (promień) px | środek walki od celu kamery [AU] |
+|---|---|---|---|---|---|---|---|
+| auto-fokus, runda 6 | 6,01 | 0,568 | 1,9 / 2,4 | 41 / 35 | 38 | 25 | 0,079 |
+| „Obserwuj” +45 klatek, runda 7 | 1,31 | 0,124 | 8,7 / 8,4 | 199 / 121 | 119 | 121 | 0,091 |
+| „Obserwuj”, salwa rundy 9 | 1,21 | 0,115 | 9,1 / 9,0 | 176 / 129 | 138 | 150–165 | 0,115 |
+| MOCK: kadr śledzący + nakładki 22 / 30 px, salwa rundy 11 | 0,42 | 0,040 | 66 / 28 | 31 / 20 | 27 | ukryty | 0,001 |
+
+  Błysk trafienia przy „Obserwuj” (d 1,21) `[derived]`: 77 px na starcie → 230 px na końcu — przy modelu 9 px. Pierścień
+  pulsuje ±10 % (dwa przebiegi: 150 i 165 px w tej samej klatce). Zrzuty:
+  `p2_w_3_watch.png`, `p2_w_4_watch_salvo.png` (szewrony ~120–200 px, celownik ~130 px, pierścień pod panelem walki,
+  modele jako kropki przy prawej krawędzi), `p2_w_5_MOCK_watch_follow_salvo.png` (makieta).
+- **Werdykt A2:** „Obserwuj” nie jest za BLISKO — kadr wszystkich żywych uczestników z marginesem 80 px nad panelem
+  walki wymaga dla tej pary (0,043–0,047 AU) **d ≈ 0,40–0,43 j.**, czyli ~3 × bliżej. Statków nie widać, bo (1) kamera
+  patrzy w STAŁY punkt startu, a walka odpływa od niego o 0,08–0,115 AU (fregata podlatuje do strażnika, który trzyma
+  orbitę) — statki lądują przy krawędzi; (2) nakładki w rozmiarze świata rosną przy zbliżeniu do 120–200 px i
+  zasłaniają modele 8–9 px; (3) pierścień znacznika (promień 121–165 px) wisi w pustym punkcie pod panelem walki.
+  Zgłoszenie właściciela („za blisko”) `[derived]`: przy zbliżeniu ekran wypełniają ikony, a statków nie widać.
+- **Makieta (sonda):** cel = środek ciężkości SPRITE'ÓW żywych uczestników co klatkę, dystans = najmniejszy, przy którym
+  wszyscy mieszczą się w prostokącie bez panelu walki (szukanie po rzucie), [0,4; 12] j.; szewrony 22 px, celownik 30 px
+  w stałym rozmiarze ekranu, pierścień ukryty — modele 28–66 px, oba statki w kadrze, smugi czytelne. ⚠ Pierwsza wersja
+  makiety (pozycje LOGICZNE, wysokość 0,3) postawiła strażnika pod panelem walki: statek na orbicie ciała jest rysowany
+  w 3D na wysokości y = r·cos φ orbity, a pozycja logiczna jest płaska — **kadr musi liczyć się z pozycji sprite'ów**.
+  Zależność od rozpiętości `[derived]`: model px ≈ 0,016 / (1,0412 · d) × 805; dla pojedynku na zasięg rakiet (0,30 AU)
+  dopasowanie da d ≈ 2,5–3 j. ⇒ modele ~4–5 px — przy dalekim starciu statki zawsze będą małe, czytelność niosą ikony
+  z limitem rozmiaru i paski HP (pytanie 3).
+- **Auto-fokus (459) `[measured]`:** przy `vessel:engaged` kamera stoi na kadrze układu (d 450); cel 6, lerp 0,08 na
+  klatkę (zależny od FPS) — d ≤ 6,3 dopiero po **88 klatkach = 1408 ms**, a runda 1 pada po 64 ms (d 324), runda 2 po
+  480 ms (d 42), runda 3 po 880 ms (d 10,2), runda 4 po 1280 ms (d 6,6) — przy 400 ms na rundę cztery pierwsze rundy mijają
+  przed dolotem kamery. Przełącznik `uiPrefs.battleAutoFocus` nie ma producenta (rodzina **164**) — gracz nie wyłączy
+  auto-fokusu.
+- **Reguła kadru (propozycja):** „Obserwuj” = śledzenie środka sprite'ów żywych uczestników (lerp kontrolera jak dziś,
+  co klatkę), dystans z dopasowania rzutem do prostokąta bezpiecznego (viewport bez panelu walki i marginesu), granice
+  [0,4; 6] j.; śledzenie kończy ruch gracza (obrót, zoom, inny fokus) albo koniec starcia; `minDist` wraca do wartości
+  sprzed „Obserwuj”. Czysta matematyka kadru (rzut perspektywiczny bez THREE) — wykonywalna pod node w keeperze.
+
+### 10.4 A3 — HP pojedynczego statku (451) + błysk trafienia `[code]` `[measured]`
+
+- **Dziś:** panel walki — dwa zbiorcze paski stron z liczbami, lista statków (nazwa, kadłub, broń, kolor żywy / zniszczony),
+  6 ostatnich zdarzeń z obrażeniami („R9: P1 n0 → Wieża Laserowa → Sztylet (13 dmg)”); na mapie nic per statek.
+  Infrastruktura jest: `getVesselScreenPosition` („źródło prawdy dla 2D-zakotwiczonych UI per statek — ramki, paski HP”)
+  i ramki selekcji z paskami paliwa (`UIManager._drawSelectionBrackets`) — dziś tylko dla własnych, tylko zaznaczonych.
+- **Dane `[measured]`:** `vesselStates` niesie hp / hpStart / tarczę co rundę. Starcie W: P1 n0 120 → 49,6 (r1, dwie
+  rakiety) → 14,4 (r11) → −20,8 (r16, wrak); Sztylet 120 → 107 (r9) → 94 (r13) → 81 (r15) — HP zmienia się w 6 z 16 rund.
+- **Najmniejszy wskaźnik:** pasek 40 × 5 px pod statkiem (2D, warstwa UI jak ramki selekcji), kolor strony (własny zielony,
+  wróg czerwony) + pasek tarczy 2 px; widoczny dla uczestników aktywnego starcia w oglądanym układzie (wróg — przy
+  wywiadzie ≥ contact albo jako uczestnik starcia z graczem: panel i tak go nazywa — pytanie 4), znika z końcem starcia.
+  Koszt: jedno przejście rysowania na klatkę po uczestnikach (≤ 2 × N), bez nowych danych. Makieta:
+  `p2_w_6_MOCK_hpbars.png` (W2_pl) — paski pod oboma statkami w kadrze śledzącym.
+- **Błysk trafienia:** ładunek `combat:roundFx` niesie {atakujący, cel, trafienie, kategoria, zablokowane tarczą} — sygnał
+  jest. Dziś błysk to osobna kula przy celu (0,06 j. → ×3), przy „Obserwuj” 77 → 230 px wobec modelu 9 px; model nie
+  zmienia wyglądu. ⚠ `_addVesselModel3D` klonuje materiały tylko wrogom i wrakom — statki gracza dzielą materiały szablonu
+  GLB, więc puls emisji na modelu wymaga klonu per statek (leniwie, przy pierwszym trafieniu) albo poświaty dopasowanej do
+  rozmiaru modelu (addytywny sprite, ~150–200 ms); kulę błysku skalować do modelu.
+
+### 10.5 A4 — salwa pierwszej rundy (455) `[measured]` — hipoteza mgły POTWIERDZONA
+
+Kolejność zdarzeń (W_en = W2_pl = X_en, numery kolejne w obrębie klatki): `vessel:combatRangeEnter` strażnik ↔ P1 n0 przy
+**0,3123 AU** (próg wejścia = zasięg rakiet 0,30 × 1,05 = 0,315 AU, `ProximitySystem:257-261`) → `vessel:engaged` →
+runda 1 (zbliżenie do 0,2845 AU, strażnik odpala 2 rakiety, oba trafienia, −70,4 HP) → `combat:roundFx` przy jakości
+wroga **`rumor`** → `_combatEndpointWorld` → `null` (bramka mgły ≥ contact, `ThreeRenderer:6256`) → **0 smug, 0 błysków**
+(2 zdarzenia pominięte) → w TEJ SAMEJ klatce drugie wywołanie proximity w `VesselManager._tick`: `vessel:sensorLockEnter`
+przy 0,2841 AU (`SENSOR_LOCK_AU` 0,30 × mnożnik techu 1,0) → wywiad `rumor → contact` (powód `sensor_lock`). Salwa
+otwierająca to w tej scenie 59 % HP fregaty. Panel walki nazywa wroga od startu („Liga Trzech Słońc — Sztylet”, log
+„R1: Sztylet → Wyrzutnia Rakiet → P1 n0 (35 dmg)” × 2). Przy tempie 110 ms salwa otwierająca dawała przy okazji
+pokrycie rund 2–5 (symulacja §10.8: 65,1 % → 98,8 %).
+⚠ Nawet narysowana, salwa rundy 1 nie byłaby dziś WIDZIANA: kamera auto-fokusu stoi wtedy na d 324 (459). Naprawa ma
+sens tylko razem z 459.
+**Kształt:** reguła prezentacji w `VesselFxLogic` — wróg będący uczestnikiem aktywnego starcia z graczem jest widocznym
+końcem smugi (pozycja z migawki ładunku), niezależnie od wywiadu (pytanie 5). Odrzucone: podbicie wywiadu przy starcie
+starcia (zmiana stanu, nie prezentacja) i odroczenie efektów o klatkę (obejście).
+
+### 10.6 A5 — znacznik starcia (457) `[measured]`
+
+Na zegarze klatek co do 16 ms (W_en = W2_pl, 400 ms): znacznik powstaje przy rundzie 1 (+64 ms; `_upsertEngagementMarker`
+woła się także, gdy smugi pominęła mgła), **gaśnie przy aktywnym starciu dwa razy**: +1680 ms (rundy 2–5 bez strzału) —
+luka 416 ms do rundy 6; +5696 ms W PAUZIE 2,6 s — luka 1808 ms. Przy 110 ms (X_en): 0 usunięć, 6 dotknięć. Dotychczasowe
+„stoi na `[code]`” (walidator P1 w czasie realnym nie rozstrzygał) — teraz zmierzone deterministycznie.
+**Kształt:** znacznik żyje, dopóki starcie jest aktywne (także w pauzie), i znika z jego końcem: `_tickEngagementMarkers`
+synchronizuje się z `deepSpaceCombatSystem.listActive()` (z regułą 453 — tylko starcia w oglądanym układzie); TTL 1600 ms
+zostaje wyłącznie dla jednorazowych „imitacji” bitew orbitalnych (`orbital_*`, `_spawnBattleBurst`). Pozycja: stały
+punkt startu (dziś) albo środek sprite'ów walki (pytanie 2).
+
+### 10.7 A6 — „Tur: 0” (450) i język okna wyniku (163) `[code]` `[measured]`
+
+- **Pomiar:** EN — baner „PORAŻKA · Player vs Liga Trzech Słońc · Tur: 0 · Straty: 1 / 0”, Dziennik „⚔ Battle in deep
+  space (Propus): … Losses: 1/0, **0 turns**.” (zrzut `p2_w_8_result.png`); PL — „PORAŻKA · Gracz vs Liga Trzech Słońc ·
+  Tur: 0 · Straty: 1 / 0”, „… Straty: 1/0, **0 tur**.”; `battle:resolved` — pola `turns` brak, `timeline` 16 rund.
+- **Gdzie ginie:** rekord DSCS (`_finalizeBattle`, `:1061-1088`) nie ma pola `turns`; trzej czytelnicy `turns ?? 0` —
+  baner (`BattleIntroModal:289`), Dziennik (`GameScene:2667`), lista bitew wojny (`WarSystem:523` → `WarOverlay:349`).
+  **Kształt:** `turns: encounter.currentRound` — jedno pole (v101 bez migracji; stare rekordy `?? 0`).
+- **163 nie jest jedną linią:** `showBattleOutcome` ma 6 zaszytych literałów (`ZWYCIĘSTWO` / `PORAŻKA` / `REMIS`,
+  zastępcze `Agresor` / `Obrońca`, `Tur:`, `Straty:`) — ok. 6 par kluczy PL + EN, ~8 linii; `innerHTML` jest poza sinkami
+  `check-i18n` (baseline bez zmian). Naturalnie w jednym commicie z 450 (ta sama linia szablonu) i z **464** (etykiety
+  stron DSCS przez istniejące klucze). Mieści się w P2b (~0,25–0,5 sesji).
+
+### 10.8 A7 — efekty przy 400 ms `[code]` `[measured]` `[derived]`
+
+- **Czasy życia `[code]`:** smuga 260 ms (`FX_TRACER_MS`), błysk 460 ms po 150 ms, pierścień tarczy 360 ms po 150 ms,
+  rozrzut salwy 40 ms × (i mod 8), znacznik 1600 ms bez odświeżenia, eksplozja 600 / 800 ms — strojone pod rundy 110 ms.
+- **Pokrycie `[measured]`** (czas aktywnego starcia bez pauzy; symulacja offline z zarejestrowanych salw — `probes/pacing_p2.mjs`):
+
+| tempo | czas aktywny | rundy ze strzałem | dziś | + salwa otwierająca (455) | smuga max(260; 0,9 R), błysk max(460; R) | smuga max(260; 1,8 R), błysk max(460; 1,5 R) (+455) |
+|---|---|---|---|---|---|---|
+| 400 ms (W) | 6048 ms | 7 z 16 (r1 przez mgłę) | **32,5 %**, przerwy 2032 / 868 / 768 ms | 43,3 % | 32,5 % | 43,8 % (56,3 %) |
+| 110 ms (X, CP4) | 1664 ms | 7 z 16 | 65,1 %, najdłuższa 560 ms | 98,8 % | 65,1 % | 65,1 % (96,8 %) |
+
+  Same smugi: 18,7 % czasu aktywnego przy 400 ms, 65,1 % przy 110 ms. Werdykt: efekty strojone pod 110 ms pokrywają
+  przy 400 ms połowę udziału czasu sprzed P1; wydłużanie efektów pomaga mało — ograniczeniem jest KADENCJA salw z
+  reguł (laser co 2 rundy, rakieta co 5; rundy 2–5 to samo zbliżanie). Przerwy wypełnia ruch: zbliżenie dziś idzie
+  SKOKIEM (461 — 0,0282 AU raz na rundę, ≈ 100 px co 400 ms przy „Obserwuj”, ≈ 20 px przy auto-fokusie; sprostowanie
+  P1 §3.3 „w siatce ruch idzie 6–7 krokami na rundę” — dla zbliżenia w starciu nieprawda, `_closeToWeaponRange`
+  przesuwa raz przed rundą).
+- **Propozycja:** (1) czasy efektów oglądanego starcia z tempa rundy R (`timeSystem.combatRoundMs()` — bez nowego
+  czytelnika tabeli strojenia, R-P1-2): smuga max(260; 0,9 R), błysk max(460; R), rozrzut R / 10; (2) płynne zbliżenie —
+  renderer interpoluje sprite uczestnika do pozycji logicznej w czasie rundy (logika nietknięta); (3) opcjonalnie lot
+  pocisku rakiety przez ~0,8 R zamiast linii natychmiastowej.
+- **Dźwięk:** `AudioSystem` nie ma ŻADNEGO zaczepu walki (subskrybuje `body:collision`, zdarzenia życia, akcje gracza,
+  stan czasu). Sygnały gotowe do podpięcia: `vessel:engaged`, `combat:roundFx` (trafienie / kategoria per zdarzenie),
+  `vessel:wrecked` (eksplozja), `battle:resolved` — tylko lista.
+
+### 10.9 A8 — keepery a kroki P2 `[code]` `[measured]`
+
+| keeper | co pinuje | krok P2 | werdykt |
+|---|---|---|---|
+| `combat_pace_smoke` T9a | DSCS bez `performance.now` / `Date.now` / `_nowMs` | P2-1 (`systemId` w ładunku FX) | zielony — bez zegara; KAŻDY krok wnoszący czas realny do DSCS — czerwony |
+| `combat_pace_smoke` T9c | `_tickOrbitingVessels` / `_tickOrbitingStations`: `const tSec = orbitClockSec();` | P2-4 (płynne zbliżenie) | zielony, jeśli interpolacja nie rusza tej linii |
+| `sb3_combat_closing_smoke` T1–T10 | krok zbliżenia na zegarze starcia (logika) | P2-4 | zielony tylko przy interpolacji WYŁĄCZNIE w rendererze; rozłożenie kroku logicznego na klatki siatki — czerwony i zmiana wyniku (zakazane) |
+| `sb1_fleet_tuning_smoke` T11b | zamknięty zbiór 4 czytelników `StrikesBackTuning.js` | P2-4 (tempo efektów) | zielony przy odczycie `timeSystem.combatRoundMs()`; import tabeli w rendererze albo nowy klucz — czerwony (przecelowanie, zgoda) |
+| `sb1_fleet_pool_smoke` T1c | każdy klucz tabeli ma konsumenta | — | zielony (P2 nie dodaje klucza) |
+| `sb2b_pulse_scope_smoke` T6 | `_spawnMovementPulse` przez `isMovementPulseVisible` | P2-1 (siostrzana reguła w `VesselFxLogic`) | zielony (import przez przestrzeń nazw) |
+| `battle_result_classification_smoke` T2 | jeden producent `vessel:engaged` (DSCS) | P2-1, P2-2 | zielony (bez nowego emitenta) |
+| `patrol_render_sync_smoke` | jedna subskrypcja `vessel:positionUpdate` w rendererze | P2-4 | zielony, jeśli bez drugiej subskrypcji |
+| `map_vessel_panel_smoke` P13 | gałąź „docked” w `_syncVesselPositions` | P2-2 / P2-4 | zielony |
+| `i18n_269_amin_smoke`, `check-i18n` + `i18n_hardcoded_gate_smoke` | brak literałów PL w rendererze; nowe napisy przez `t()` | P2-1 (nazwa układu w panelu), P2b-1 | zielone przy kluczach PL + EN |
+| `fleet_engage_scope` T3b · `fleet_engage_picker_frame` T5b | pierwsza runda DSCS deterministycznie | — | zielone (P2 nie rusza rund) |
+| `battle_announce_once`, `w3_battle_booking`, `sb2b_*` (rekord bitwy) | pola rekordu, nie jego kształt | P2b-1 (`turns`) | zielone (grep: żaden keeper nie pinuje kluczy rekordu ani `turns`) |
+| `sb2b_wreck_still_smoke` T1 | wrak stoi w miejscu zniszczenia | P2b-2 (miejsce wraku) | do sprawdzenia fail-first przy zmianie `wreckLocation` |
+
+Renderera i `UIManager` nie da się zaimportować pod node — zachowanie rysowania pinują wyłącznie piny źródłowe i czyste
+moduły (wzór `VesselFxLogic`, `StationRenderLogic`); w krokach rendererowych keeper ma postać „czysta reguła wykonaniem +
+pin źródłowy wywołania”, a dowodem wyglądu jest bramka w przeglądarce.
+
+### 10.10 Propozycja — łańcuch kodu P2 (kolejność: CP7, potem wartość dla celu)
+
+| krok | treść | findingi | keeper | szacunek | co właściciel zobaczy na bramce |
+|---|---|---|---|---|---|
+| **P2-1** | termin układu dla efektów starcia (reguła `isEngagementInView`, 4 wejścia) + „Obserwuj” na starcie w innym układzie przełącza widok + nazwa układu w wierszu panelu | 453 | NEW `combat_view_scope_smoke`: reguła wykonaniem; DSCS emituje `systemId` (wykonanie — DSCS importuje się pod node); piny źródłowe 4 wejść | 0,5 sesji | starcie w innym układzie: widok czysty, kamera nie skacze; „Obserwuj” przenosi do układu bitwy |
+| **P2-2** | kadr „Obserwuj” śledzący środek sprite'ów, dystans z dopasowania [0,4; 6] j.; nakładki z limitem rozmiaru ekranowego; pierścień przy „Obserwuj” ukryty / przy walce | 458 | NEW `combat_watch_frame_smoke`: czysta matematyka kadru (rzut bez THREE) na liczbach z sondy; piny źródłowe | 1 sesja | klik „Obserwuj” → oba statki w kadrze, modele kilkadziesiąt px, ikony nie zasłaniają, kamera idzie za walką |
+| **P2-3** | pasek HP nad uczestnikami aktywnego starcia + błysk trafienia na modelu; kula błysku dopasowana do modelu | 451 | NEW `combat_hp_bar_smoke`: czysty model paska (ułamek, kolor, widoczność, mgła) wykonaniem; piny źródłowe | 1 sesja | pasek spada przy każdym trafieniu; trafiony statek błyska |
+| **P2-4** | czasy efektów z tempa rundy + płynne zbliżenie (interpolacja sprite'a) | A7, 461 | NEW `combat_fx_pace_smoke`: czysta funkcja czasów wykonaniem; `sb3_combat_closing` zielony | 0,5–1 sesji | salwa trwa dłużej; między salwami statek widocznie podlatuje zamiast skakać |
+| **P2-5** | znacznik starcia wg stanu starcia (także w pauzie) | 457 | czysta funkcja synchronizacji wykonaniem + pin źródłowy | 0,25 sesji | pierścień nie miga między salwami ani w pauzie |
+| **P2-6** | salwa otwierająca widoczna: reguła „uczestnik starcia z graczem = widoczny koniec smugi” + auto-fokus dolatuje przed rundą 1 (szybszy lerp albo natychmiastowe ustawienie celu przy starcie) | 455, 459 | rozszerzenie `combat_view_scope_smoke` (reguła) + pomiar w sondzie | 0,5 sesji | pierwsza salwa — najmocniejsza w tej scenie — widoczna na mapie |
+| P2b-1 | „Tur: N” + okno wyniku przez słownik + etykiety stron DSCS przez istniejące klucze | 450, 163, 464 | NEW `battle_outcome_i18n_smoke` (wykonanie, atrapa DOM z `headless/env.js` — do sprawdzenia, czy `BattleIntroModal` się importuje) | 0,25–0,5 sesji | „Tur: 16”; w grze EN „DEFEAT … Turns … Losses” |
+| P2b-2 | śmierć widoczna w rundzie zniszczenia (wybuch, model wygaszony do końca starcia) + miejsce wraku | 460 | do ustalenia (zmiana `wreckLocation` = zmiana stanu) | 0,5 sesji | statek wybucha, gdy ginie, nie na końcu |
+| P2b-3 | wróg — uczestnik starcia z graczem — w pełnym kryciu | 462 | czysta reguła + pin | 0,1 sesji | model wroga nie jest półprzezroczysty |
+
+**Linia cięcia (rekomendacja):** P2 = P2-1 … P2-6 (≈ 4 sesje + bramka w przeglądarce). Różnica wobec oczekiwania z
+polecenia: **455 w P2, nie w P2b** — sama naprawa jest mała, a bez niej najmocniejsza salwa starcia (tu 59 % HP fregaty)
+zostaje niewidzialna; ale ma sens wyłącznie razem z 459 (kamera dolatuje 1408 ms po starcie), dlatego P2-6 łączy obie.
+P2b = 450 + 163 + 464 (mały, oglądany po każdej bitwie — można dociągnąć do P2), 460, 462. Poza P2: **463** (szum
+zdarzeń w `ProximitySystem` — logika, nie prezentacja).
+
+### 10.11 Pytania do właściciela (tylko te, które zmieniają implementację)
+
+1. **Kadr „Obserwuj”:** (a) śledzi walkę i dopasowuje dystans co klatkę, aż gracz ruszy kamerą (rekomendacja; makieta
+   `p2_w_5_MOCK_watch_follow_salvo.png`); (b) jednorazowy kadr w chwili kliknięcia.
+2. **Nakładki przy zbliżeniu:** (a) limit rozmiaru na ekranie (szewrony ≤ ~36 px, celownik ≤ ~44 px), pierścień starcia
+   ukryty przy „Obserwuj”, a poza nim — w środku walki (rekomendacja); (b) szewrony i celownik ukryte przy „Obserwuj”;
+   (c) bez zmian.
+3. **Modele przy dalekim starciu:** przy wymianie na zasięg rakiet kadr wszystkich daje modele ~4–5 px. (a) zostają —
+   czytelność niosą ikony i paski HP (rekomendacja dla P2); (b) powiększenie modeli uczestników na czas oglądanego
+   starcia (prezentacja).
+4. **Paski HP:** (a) uczestnicy aktywnego starcia w oglądanym układzie, obie strony (rekomendacja); (b) tylko własne;
+   (c) także poza walką dla zaznaczonych (trwałe uszkodzenia `combatDamage`).
+5. **Wróg w starciu z graczem** (455, 462): (a) dla prezentacji „ujawniony” — smugi salwy otwierającej rysowane bez
+   względu na wywiad i model w pełnym kryciu (panel walki i tak go nazywa) (rekomendacja); (b) mgła bez wyjątku.
+6. **Błysk trafienia na modelu:** kolor (a) broni, jak smuga (rekomendacja) / (b) biały; czas (a) stały ~150–200 ms
+   (rekomendacja) / (b) od tempa rundy.
+7. **(P2b) Śmierć statku:** (a) wybuch w rundzie zniszczenia, wrak tam, gdzie statek zginął (zmiana stanu —
+   `wreckLocation`); (b) wybuch w rundzie zniszczenia, wrak jak dziś w punkcie środkowym; (c) bez zmian.
+
+### 10.12 Czego nie zweryfikowano
+
+- Wygląd docelowy — makiety to sonda (podmienione metody, kanwa nakładki); błysk na modelu i płynne zbliżenie — bez makiety.
+- Jedna scena: 1 na 1, laser ↔ rakiety, starcie na zasięg lasera. Starcia wielu statków i pojedynek na zasięg rakiet
+  (kadr ~2,5–3 j.) — tylko `[derived]` ze wzoru rozmiaru.
+- 460 (śmierć odroczona do końca starcia) — tylko `[code]`: w scenie 1 na 1 śmierć kończy starcie w tej samej rundzie;
+  zmierzony jest wyłącznie skok wraku do punktu środkowego (0,0895 AU).
+- Czas dolotu auto-fokusu (459) przy innym FPS — lerp jest na klatkę; zmierzone przy 60 FPS zegara sondy.
+- Panel walki w innych rozdzielczościach (zmierzone 1584 × 805, UI_SCALE 1,25).
+- Wydajność 463 (szum zdarzeń) — policzone zdarzenia, czasu klatki nie mierzono.
+- Bramka w przeglądarce właściciela — nie dotyczy (audyt).
