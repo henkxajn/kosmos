@@ -697,6 +697,17 @@
 > • Następny: odpowiedzi właściciela na `POLISH_PLAN.md` §10.11 → decyzje CP13+ → kod P2 (P2-1 … P2-6).
 > • **Pierwszy wolny numer: 465.**
 
+> **Aktualizacja 2026-10-17 (POLISH P2a — kod PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany)** (`POLISH_PLAN.md` §5,
+> §11). Decyzje **CP13–CP20** (odpowiedzi na §10.11). Łańcuch P2a-1 … P2a-4 na commicie dokumentacji: C1 (**453**) ·
+> C2 (**458**) · C3 (**457**) · C4 (**455**, **459**, **462**); przecelowań istniejących keeperów brak; sweep 310 →
+> **313/313**, `check-i18n` 3458; save v101 bez migracji. Bramka `gate/GATE_P2A.md` u właściciela → `tools/commit_P2A.sh`.
+> • Zamknięcia PRZYGOTOWANE (przy commicie): 453 · 455 · 457 · 458 · 459 · 462.
+> • **NOWE: #465–#466** (rejestr: `POLISH_PLAN.md` §6) — ⚪ **465** „Watch” zawsze do pierwszego starcia z listy panelu ·
+>   ⚪ **466** efekty walki w rozmiarze świata przy bliskim kadrze poza „Watch”.
+> • Rejestr #449–#466: 18 wpisów — ✅ 3 · ⚪ 15.
+> • Następny: bramka P2a + pytania `POLISH_PLAN.md` §11.7 → commity → P2b / P2c / 463 (CP20) / P3 (456).
+> • **Pierwszy wolny numer: 467.**
+
 
 ---
 
@@ -775,7 +786,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
-| **449-464** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–17; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2) |
+| **449-466** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–17; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
