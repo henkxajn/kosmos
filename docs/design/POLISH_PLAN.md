@@ -1,10 +1,12 @@
 # POLISH — polerka UI i grafiki
 
-> **Status:** 📋 **P1 — AUDYT 2026-10-16, bez kodu.** Arc otwarty wskazaniem właściciela przy zamknięciu AI STRIKES BACK
-> (`AI_STRIKES_BACK_PLAN.md` §8.8). HEAD audytu `3b7819f`. Decyzje arca — prefiks **CP** (żadna jeszcze niepodpisana).
-> Rejestr findingów arca — §6, **#449–#455**; pierwszy wolny **456**. Sondy, wyniki, zrzuty:
-> `kosmos-handover/polish-p1-combat-pace/` (SHA256SUMS). Tagi: `[code]` źródło · `[git]` historia · `[measured]` pomiar ·
-> `[doc]` dokumenty · `[derived]` wniosek z powyższych.
+> **Status:** 🟡 **P1 — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-17, NIE zacommitowany.** Decyzje **CP1–CP8** podpisane
+> 2026-10-17 (§5); łańcuch P1-1 / P1-2, dowód, keepery, bramka — §9. Commity — po bramce w przeglądarce właściciela
+> (`gate/GATE_P1.md`) i zgodzie na przecelowanie **R-P1-2**. Audyt — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`,
+> commit `1af65fc`). Arc otwarty wskazaniem właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
+> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#457**; pierwszy wolny **458**. Sondy audytu:
+> `kosmos-handover/polish-p1-combat-pace/`; kod, dowód i bramka P1: `kosmos-handover/polish-p1-code/` (SHA256SUMS).
+> Tagi: `[code]` źródło · `[git]` historia · `[measured]` pomiar · `[doc]` dokumenty · `[derived]` wniosek z powyższych.
 
 ## 0. Cel arca
 
@@ -25,6 +27,10 @@ dzisiejsze i nie zależą od prędkości gracza; (2) czas rundy w czasie realnym
 **Zakres P1:** krok czasu gry na rundę · klucz czasu rundy · pauza bez nadrabiania · zegar orbit w starciu.
 **Poza P1:** widoczność strzałów i HP (P2, §3.3) · limit 20 rund (**432** — wynik ma zostać dzisiejszy) · bitwa
 planetarna `EnemyAttackHandler` bez przebiegu (**165**).
+
+**Decyzje 2026-10-17 (§5):** kształt „siatka” (CP1), klucz `combatRoundMs` domyślnie **400 ms** (CP2), prędkość gracza
+w starciu bez wpływu na zegar starcia, pauza zatrzymuje starcie (CP3), starcie nieoglądane w dzisiejszym tempie (CP4),
+zegar orbit (CP5), 450 i 453 → P2 (CP6, CP7), zgoda na R-P1-1 (CP8). Kod — §9.
 
 ## 2. Audyt
 
@@ -199,6 +205,8 @@ bez nowego kodu: `KOSMOS.debug.sbSet('combatRoundMs', 350)`; odmowy z ogólnej w
 Czas realny starcia ≈ (rundy − 1) × klucz: przy 350 ms 20 rund 6,7 s, 16 rund 5,3 s, 11 rund 3,5 s, 6 rund 1,75 s
 (zmierzone w siatce: 16 rund — 5296 ms przy 350 i 9072 ms przy 600; 20 rund — 11 440 ms przy 600; nadwyżka to
 kwantowanie siatki 16 ms).
+→ **CP2 (2026-10-17): domyślnie 400 ms, jednostka „ms”** — zmierzone na kodzie P1: 16 rund — 6048 ms, 20 rund — 7616 ms
+(§9.3).
 
 ### 3.3 B3 — widoczność: OSOBNY krok P2
 
@@ -269,6 +277,10 @@ odczucie przy 350 ms, pauza i zmiana prędkości w trakcie walki, bitwa w innym 
 
 ## 4. Pytania do właściciela (tylko te, które zmieniają implementację)
 
+> **Odpowiedzi właściciela 2026-10-17 → decyzje CP1–CP8 (§5):** 1 → CP1 (siatka) · 2 → CP2 (stały klucz, domyślnie
+> **400 ms**) · 3 → CP3 ((a) — prędkość ignorowana dla zegara starcia; pauza zatrzymuje starcie) · 4 → CP4 ((a)) ·
+> 5 → CP5 · 6 → CP6 (P2) · 7 → CP7 (P2, pierwsza pozycja); zgoda na R-P1-1 → CP8.
+
 1. **Kształt B1:** siatka (wynik bit w bit jak dziś przy 60 FPS i 1 d/s — rekomendacja) czy prosty (jeden tik na rundę,
    krok dokładnie 0,110 dnia — wynik zmienia się względem dziś, w dwóch z trzech zmierzonych scen także klasa)?
 2. **Czas trwania:** klucz na rundę (350 ms ⇒ 20 rund 6,7 s, 16 rund 5,3 s, 11 rund 3,5 s, 6 rund 1,75 s — zmierzone
@@ -288,7 +300,19 @@ odczucie przy 350 ms, pauza i zmiana prędkości w trakcie walki, bitwa w innym 
 
 ## 5. Decyzje
 
-Prefiks **CP**. Żadna niepodpisana — powstaną z odpowiedzi na §4.
+Prefiks **CP**. Podpisane przez właściciela **2026-10-17** (odpowiedzi na §4). Słowa właściciela — dosłownie (oryginał
+angielski); obok — odczyt w kodzie P1 (§9).
+
+| CP | słowa właściciela (2026-10-17) | odczyt w kodzie P1 |
+|---|---|---|
+| **CP1** | „Shape = GRID (variant b1v): inside an engagement the world ticks with today's frame (16 ms game-step at 1 d/s) regardless of the player's speed setting or FPS; the DSCS round rule stays 110 ms of that grid; the tuning key only sets the real-time playback pace of grid frames. Outcome must equal today's (60 FPS, 1 d/s) in every probe scene.” | `TimeSystem`: gdy trwa co najmniej jedno aktywne starcie DSCS, tik gry = klatka siatki 16 ms przy 1 d/s, odtwarzana w tempie `110 / tempo rundy` czasu realnego; DSCS — runda co 110 ms zegara klatek symulacji. 34 przebiegi sondy na scenach n (g0, g1), a, co — wynik = dziś w każdej grupie (§9.3) |
+| **CP2** | „Key SB_TUNING.combatRoundMs — int, default 400, range 50–1000, unit "ms", in the sbTuning table with sbSet/sbReset refusals. 16 rounds ≈ 6.4 s, 20 rounds ≈ 8 s.” | `SB_TUNING.combatRoundMs = { default: 400, type: 'int', min: 50, max: 1000, unit: 'ms' }`; konsument `TimeSystem.combatRoundMs()` (`getTuning` w chwili użycia); odmowy z ogólnej walidacji tabeli. Zmierzone: 16 rund — 6048 ms, 20 rund — 7616 ms od rundy 1 do ostatniej (15 / 19 odstępów) |
+| **CP3** | „Player speed setting during an engagement is ignored for the engagement's own clock (restored after). PAUSE IS A PAUSE: while the game is paused the engagement is frozen too — no rounds, no grid frames, no catch-up after unpause (closes Finding 449); the engagement resumes exactly where it stopped, and the outcome is identical with or without the pause.” | siatka ma stały mnożnik 1 d/s; USTAWIENIA prędkości P1 nie rusza — po starciu świat tyka tym, które gracz ma w tej chwili (pytanie 3 §9.7). Pauza: `update()` wraca przed jakimkolwiek tikiem, zegar klatek i zaległość siatki stoją |
+| **CP4** | „Engagements the player is not watching (other system) run at today's pace (110 ms real), not at the key; they also freeze on pause.” | `DeepSpaceCombatSystem.engagementView(activeSystemId)` → `watched` / `unwatched` / `null`; przy samych `unwatched` tempo = 110 ms realnych na rundę; pauza jak CP3 |
+| **CP5** | „Orbit angle clock (Finding 452) switches to game time.” | kąt orbity statku (logika ×5, renderer ×2) liczy zegar klatek symulacji `TimeSystem` (`orbitClockSec()`): poza starciem przyrasta o czas realny klatki (dzisiejszy wygląd), w starciu krokami siatki, w pauzie stoi. „Game time” odczytany jako zegar `TimeSystem` z §3.1 i pytania 5 — nie rok gry `gameTime` (pytanie 2 §9.7) |
+| **CP6** | „Finding 450 ("Tur: 0") → P2.” | 450 bez zmian w P1 — P2 |
+| **CP7** | „Finding 453 (effects of a foreign-system engagement drawn in the viewed system, camera jump) → P2, first item.” | 453 bez zmian w P1 — P2, pozycja pierwsza |
+| **CP8** | „Consent to retarget R-P1-1 (sb3_combat_closing T1–T10 onto the new clock), given 2026-10-17.” | R-P1-1 w C1 (§9.4) |
 
 ## 6. Rejestr findingów arca
 
@@ -306,6 +330,12 @@ rundy po `MAX_ROUNDS_PER_TICK` = 4 na klatkę, bez czasu gry między nimi. Grę 
 (`showBattleOutcome` — przy dwóch równoczesnych starciach), popupy zdarzeń losowych i misji. `[measured]` sonda P1, scena n:
 pauza 2 s w rundzie 5 → rundy 6–16 w 3 klatkach (4 + 4 + 3), krok gry między nimi 0. → P1 (B1; w prototypie zero
 nadrabiania i wynik identyczny jak bez pauzy).
+→ **POLISH P1 — kod (2026-10-17; CP3): naprawa PRZYGOTOWANA w C1 (zestagowana) — zamknięcie przy commicie** (§9.6).
+Pauza: `TimeSystem.update` wraca przed tikiem, a rundy DSCS liczy zegar klatek symulacji (`simClockMs`), który w pauzie
+stoi — po odpauzowaniu nie ma czego nadrabiać. `[measured]` sonda na kodzie P1, scena n, klucz 400 ms, pauza 2 s i 30 s
+po rundzie 5, starcie oglądane i nieoglądane: 0 tików i 0 rund w pauzie, rok gry i zegar klatek stoją, potem ≤ 1 runda na
+klatkę, wynik = dziś; walidator bramki (prawdziwa gra, czas realny): pauza 10 s — 0 rund, rok gry i zegar klatek stoją;
+keeper `combat_pace_smoke` T5, T7c.
 
 ### ⚪ 450 — okno wyniku bitwy w przestrzeni pokazuje zawsze „Tur: 0”, a Dziennik „0 tur” / „0 turns”
 
@@ -314,6 +344,7 @@ nadrabiania i wynik identyczny jak bez pauzy).
 `currentRound`. Przypis po #165 w `VESSEL_ORDERS_PLAN.md` odnotował brak pola tylko jako wyjaśnienie odczytów „N tur”.
 `[measured]` zrzut `p1_s4_wynik.png` (PL) po starciu 16-rundowym: okno „PORAŻKA · Gracz vs Liga Trzech Słońc · Tur: 0 ·
 Straty: 1 / 0”, Dziennik „⚔ Bitwa w głębokim kosmosie (Propus): … Straty: 1/0, 0 tur.” → P2 albo P1 (pytanie 6).
+→ **CP6 (2026-10-17): P2** (§7).
 
 ### ⚪ 451 — HP pojedynczego statku nie jest widoczne nigdzie
 
@@ -321,6 +352,7 @@ Straty: 1 / 0”, Dziennik „⚔ Bitwa w głębokim kosmosie (Propus): … Stra
 statki — nazwą, kadłubem, bronią i kolorem żywy/zniszczony. Trwałe uszkodzenia `vessel.combatDamage` (bez regeneracji —
 decyzja 2026-05-20) nie mają czytelnika w UI (grep: wyłącznie `VesselManager`, `DeepSpaceCombatSystem`,
 `SaveMigration`, `ThreatMath`). → P2.
+→ **P2 (§7):** pasek HP nad statkiem aktywnego starcia + błysk trafienia na modelu (§3.3).
 
 ### ⚪ 452 — kąt orbity statku wokół ciała liczony w czasie REALNYM zmienia geometrię walki
 
@@ -331,6 +363,12 @@ przy 600 ms druga bitwa ma 6 rund zamiast 16 i strażnik ginie (pierwsza identyc
 z zegarem orbit; z zegarem orbit 110 = 350 = 600 ms. W scenie co (obrońcy z jawnie zarejestrowaną orbitą) bez wpływu na
 wynik — 110 = 350 = 600 ms także bez zegara orbit. Konieczność stoi na jednym zmierzonym przypadku. → P1 (zegar orbit,
 pytanie 5).
+→ **POLISH P1 — kod (2026-10-17; CP5): naprawa PRZYGOTOWANA w C1 — zamknięcie przy commicie** (§9.6). Kąt orbity
+z zegara klatek symulacji (`SimClock.orbitClockSec()`) w `VesselManager._updatePositions` ×3, `EnemyAttackHandler`
+(świeży wrak na orbicie) i `OrbitalSpaceSystem.getPosition` (wartość domyślna), a także w rendererze
+(`_tickOrbitingVessels`, `_tickOrbitingStations` — inaczej sprite rozjeżdżałby się z pozycją logiczną po każdej pauzie).
+`[measured]` scena co (orbita jawna), starcie oglądane, klucz 110 / 400 / 1000 — wynik = dziś; keeper `combat_pace_smoke`
+T8 (w pauzie kąt stoi, po 10 s pauzy pierwszy krok = ω × 16 ms, w starciu przyrasta krokami siatki).
 
 ### ⚪ 453 — starcie w innym układzie: kamera, smugi i znacznik starcia lądują w oglądanym układzie
 
@@ -349,6 +387,11 @@ punkt w ramce oglądanego układu (klasa „globalne id ≠ położenie”); zrz
 kolejne rundy (110 ms realne). `[measured]` z `performance.now` przesuwanym o 60 ms na wywołanie (wolna maszyna) obie
 padają (encounters = 0 — bitwa zdąży się rozstrzygnąć). → P1 (pod B1 — rundy z zegara starcia — surowe `time:tick`
 keeperów dają wyłącznie pierwszą rundę: piny stają się deterministyczne; do sprawdzenia fail-first przy wdrożeniu).
+→ **POLISH P1 — kod (2026-10-17): zmierzone — na kodzie P1 deterministyczne; zamknięcie przy commicie C1** (§9.6), bez
+zmian w keeperach. `[measured]` z zegarem realnym +60 ms na wywołanie (`probes/slowclock_454.mjs`): na `1af65fc`
+`fleet_engage_scope` 50 / 1 (T3b: encounters = 0) i `fleet_engage_picker_frame` 51 / 1 (T5b: encounters = 0); na kodzie P1
+51 / 0 i 52 / 0 (encounters = 1) — tak samo z zegarem zwykłym. Powód: keepery nie mają prawdziwego `TimeSystem`, więc
+`combatClockMs()` = 0 — zegar starcia stoi, starcie rozgrywa wyłącznie pierwszą rundę, niezależnie od tempa maszyny.
 
 ### ⚪ 455 — salwa pierwszej rundy starcia nie została narysowana na mapie — widoczna tylko w logu panelu
 
@@ -357,15 +400,41 @@ ze 120 fregaty gracza), a klatkę później `ThreeRenderer._activeEffects` = 0; 
 efektów. `[code]` jedyna ścieżka, która pomija smugę: `_onCombatRoundFx` → `_combatEndpointWorld` zwraca `null`, gdy wróg
 ma jakość kontaktu poniżej `contact` (`_isEnemyEndpointVisible`, `ThreeRenderer:6182-6183`). Jakości kontaktu w chwili
 rundy 1 nie zmierzono; klatkę później etykieta wroga ma już nazwę. Najsilniejsza salwa tego starcia była widoczna
-wyłącznie w logu panelu. Zmierzone na jednym starciu. → P2.
+wyłącznie w logu panelu. Zmierzone na jednym starciu. → P2 (§7).
+
+### #456–#457 — P1, kod (2026-10-17)
+
+⚠ **Registry-first (2026-10-17):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed nadaniem —
+najwyższy numer findingu **#455**; trafienia „456”–„459” to zapis „pierwszy wolny 456” `[measured]`.
+
+### ⚪ 456 — okno partii bitwy planetarnej liczy 500 ms CZASU REALNEGO: bitwa rozstrzyga się także w pauzie, a skład partii zależy od tempa
+
+`[code]` `EnemyAttackHandler._onVesselArrived` (`:66-69`): pierwszy przylot wroga z misją `attack` uruchamia
+`setTimeout(…, BATTLE_BATCH_WINDOW_MS)` = 500 ms (`:28`); napastnicy, którzy dolecą w tym oknie, walczą razem. Okno płynie
+w czasie REALNYM: bitwa planetarna rozstrzyga się także wtedy, gdy gracz zapauzował grę w tym oknie (pauza nie jest pauzą —
+rodzina **449**), a w trakcie oglądanego starcia DSCS (siatka P1, klucz 400 ms) 500 ms realnych to ≈ 137 ms czasu siatki
+zamiast dzisiejszych 500 ms — w jednej partii mniej przylotów. Bitwa planetarna nie ma przebiegu (**165**). Niezmierzone:
+sceny dowodu P1 nie mają bitwy planetarnej. → poza P1 (pytanie 4 §9.7).
+
+### ⚪ 457 — znacznik starcia gaśnie po 1600 ms CZASU REALNEGO bez rundy ze strzałem — przy 400 ms na rundę także w trakcie starcia
+
+`[code]` `ThreeRenderer._upsertEngagementMarker` (`:6292-6306`) odświeża znacznik WYŁĄCZNIE przy `combat:roundFx`, a DSCS
+emituje go tylko z rundy ze strzałem (`:720`, `round.events.length > 0`); `_tickEngagementMarkers` (`:6320-6327`) usuwa
+znacznik po 1600 ms realnych bez odświeżenia, następny strzał stawia go od nowa. Dziś (110 ms na rundę) to 14 rund bez
+strzału; przy 400 ms — 4 (zbliżanie, odliczanie broni: rakieta co 5 rund); w pauzie znacznik gaśnie po 1,6 s.
+`[measured]` walidator bramki P1 (prawdziwa gra, headless — klatki ~100–150 ms, więc przerwy w czasie zegarowym są
+zawyżone): przy 400 ms po jednej przerwie znacznika w trakcie starcia w obu przebiegach (1404 ms między rundami 1 i 4
+oraz 1613 ms między rundami 2 i 3), przy 110 ms i na `1af65fc` — zero. Prezentacja, nie przebieg. → P2 (§7).
 
 ## 7. Następne kroki
 
-1. Odpowiedzi na §4 → decyzje CP1… (osobny commit dokumentacji).
-2. **P1 — kod:** B1 w kształcie z odpowiedzi 1 (zegar starcia w `TimeSystem`, rundy DSCS z zegara starcia, zegar
-   orbit) + B2 (klucz) + keeper `combat_pace_smoke` + przecelowanie R-P1-1 (`sb3_combat_closing`, za zgodą);
-   fail-first; sonda tej sesji jako dowód I1–I7; bramka w przeglądarce.
-3. **P2 — widoczność** (§3.3): 451, 455, 450 (jeśli nie w P1), błysk na modelu, znacznik starcia.
+1. ~~Odpowiedzi na §4~~ → **CP1–CP8 (2026-10-17, §5).**
+2. **P1 — kod: PRZYGOTOWANY i zestagowany (§9).** Bramka `gate/GATE_P1.md` w przeglądarce właściciela → zgoda na
+   R-P1-2 → commity `tools/commit_P1.sh --zgoda-R-P1-2` → zamknięcia 449 / 452 / 454 (tutaj) i 438 / 436
+   (`AI_STRIKES_BACK_PLAN.md` §6) — treść §9.6.
+3. **P2 — widoczność** (kolejność właściciela, CP6 / CP7): **453** (pierwsza — termin układu w auto-fokusie, smugach
+   i znaczniku starcia) · **450** („Tur: N” z liczby rund) · **455** (salwa pierwszej rundy) · **451** (pasek HP nad
+   statkiem aktywnego starcia + błysk trafienia na modelu) · kandydat **457** (znacznik starcia przy 400 ms).
 4. Dalej kolejka arca (§0).
 
 ## 8. Warsztat — lekcje sondy (wiążące dalej)
@@ -389,3 +458,160 @@ wyłącznie w logu panelu. Zmierzone na jednym starciu. → P2.
   kontrola konstrukcji (`results/m5/README_M5.md`), poprawione — `results/m6/`.
 - **Obciążenie:** maszyna przerabia ~7 klatek gry na sekundę łącznie, niezależnie od liczby równoległych Chrome; render
   SwiftShader pod obciążeniem (5 Chrome) to dziesiątki sekund na klatkę — zrzuty robić osobno.
+- **(P1 — kod) Scena nieoglądana nie ćwiczy klucza.** Pierwsza partia dowodu na kodzie P1 dała ten sam czas realny
+  przy kluczu 110 i 1000 ms — starcia scen n i a toczą się w układzie stolicy `emp_001`, a widok sondy stał na układzie
+  domowym (CP4: tempo 110 ms). Dowód tempa wymaga widoku przełączonego na układ starcia (`run_p1c.mjs`, `P1_VIEW=battle`).
+- **(P1 — kod) Losowania poza klatką z ustawiania sceny przez samą sondę są deterministyczne:** scena co — 9 losowań
+  (`OrbitalSpaceSystem.assignOrbit` z `setupCDorbit`), te same w każdym przebiegu i w kontroli X = X; liczyć je osobno od
+  losowań asynchronicznych (UUID Three.js), które unieważniają porównanie.
+- **(P1 — kod) Bramka w czasie realnym — ziarno z roku utworzenia.** Ziarno starcia (`floor(rok × 10000) × 7919`) u
+  właściciela byłoby inne niż w walidatorze (inny rok utworzenia sceny): ta sama scena dała 6 rund z ziarnem roku
+  60,1171 i 16 z ziarnem ustawionym jawnie (strojenie, 16 ziaren: 7–20 rund). Krok sceny ustawia ziarno jawnie; liczba
+  rund i tak może się lekko różnić — bramka sprawdza własność (trzy przebiegi z jednego zapisu = ten sam wynik), nie
+  identyfikator.
+- **(P1 — kod) Po F5 → Continue gra rusza bez pauzy** (`isPaused` nie jedzie w zapisie): starcie z zapisu gra w tempie
+  klucza z zapisu, zanim właściciel wciśnie spację — krok sceny ustawia klucz 1000 ms przed zapisem.
+- **(P1 — kod) Zamknięty zbiór czytelników tabeli strojenia** (`sb1_fleet_tuning_smoke` T11b) nie stoi w audycie A5 —
+  każdy nowy konsument tabeli to przecelowanie (tu R-P1-2); sprawdzić przed wpięciem kolejnego klucza.
+- **(P1 — kod) Czas zegarowy headless ≠ czas gry:** klatki walidatora z rysowaniem SwiftShader trwają ~100–150 ms, a `dt`
+  ograniczone do 100 ms — tempo rund mierzyć z czasu, który gra dostała (suma `dt`), nie z zegara ściennego.
+
+## 9. P1 — kod (2026-10-17): PRZYGOTOWANY, ZESTAGOWANY, NIE zacommitowany
+
+Polecenie właściciela (2026-10-17): kod P1 według CP1–CP8 — audyt przed kodem (§2–§3), keeper fail-first, jeden temat na
+commit, każdy commit zielony (pełny sweep + `check-i18n`), STOP przed commitem; przecelowanie R-P1-1 za zgodą (CP8), każde
+inne czerwone → `*.PROPOSED` + dowód mutacyjny. Folder: `kosmos-handover/polish-p1-code/` (SHA256SUMS).
+
+### 9.1 Łańcuch `[git]` `[measured]`
+
+| krok | treść | keeper kroku | sweep · `check-i18n` |
+|---|---|---|---|
+| **P1-1 (C1)** | zegar starcia — siatka (CP1, CP3, CP4), zegar orbit (CP5), keeper NEW `combat_pace_smoke`, przecelowanie **R-P1-1** (CP8) | `combat_pace_smoke` 58 / 0; fail-first na bazie **27 PASS / 31 FAIL** | **310/310** OK, 0 FAIL, 31 advisory · PASS, pl = en 3458 |
+| **P1-2 (C2)** | klucz `combatRoundMs` (CP2), keeper T10, przecelowanie **R-P1-2** (za zgodą) | `combat_pace_smoke` 71 / 0; fail-first wersji z C2 na C1 **58 PASS / 13 FAIL** (czerwone dokładnie T10) | **310/310** OK, 0 FAIL, 31 advisory · PASS, pl = en 3458 |
+
+Baza `1af65fc`: sweep 309/309, `check-i18n` PASS 3458. Liczby — budowa weryfikacyjna w świeżym klonie
+(`tools/build_chain_P1.sh`, `results/chain_verify/`); drzewa kroków na bazie = ten commit dokumentacji — `patches/trees.txt`.
+Kod zestagowany w repo (drzewo indeksu = C2); commity: `tools/commit_P1.sh --zgoda-R-P1-2` (test na sucho
+`tools/dryrun_P1.sh`).
+
+**Pliki:** NEW `src/data/CombatPaceData.js` (reguła rund 110 ms, klatka siatki 16 ms, prędkość siatki = indeks 1 d/s,
+najwyżej 8 klatek siatki na klatkę gry, tempo starcia nieoglądanego 110 ms) · NEW `src/utils/SimClock.js` (`simClockMs()`,
+`combatClockMs()` — bez zegara stała 0, `orbitClockSec()` — bez zegara czas realny) · `TimeSystem` (`simClockMs`,
+`_updateCombatGrid`, `combatRoundMs()`, `_combatView()`) · `DeepSpaceCombatSystem` (`_tick` z `combatClockMs()`,
+`engagementView()`, `ROUND_INTERVAL_MS` = `COMBAT_ROUND_RULE_MS`, `_nowMs` usunięte) · zegar orbit:
+`VesselManager._updatePositions` ×3, `EnemyAttackHandler._turnIntoWreck`, `OrbitalSpaceSystem.getPosition` (wartość
+domyślna), `ThreeRenderer._tickOrbitingVessels` i `_tickOrbitingStations` · `StrikesBackData` (wiersz `combatRoundMs`) ·
+keepery: NEW `combat_pace_smoke`, `sb3_combat_closing_smoke` (R-P1-1), `sb1_fleet_tuning_smoke` (R-P1-2).
+Save v101 bez migracji: zegar klatek nie jedzie w zapisie (jak dotąd `performance.now`), klucz jedzie z tabelą strojenia
+(SB16). Zero nowych kluczy słownika: jednostka „ms” jest taka sama w PL i EN, a tabela strojenia trzyma jednostki jako
+dane (tak jak pozostałe 18 kluczy; tabela to narzędzie konsoli).
+
+### 9.2 Mechanizm `[code]`
+
+- `TimeSystem.update(deltaMs)`: pauza albo mnożnik 0 → powrót przed czymkolwiek (zegar klatek i zaległość siatki stoją).
+  Zegar klatek symulacji `simClockMs` (ms) kotwiczy się w czasie realnym przy pierwszym tiku; poza starciem przyrasta
+  o `deltaMs`, w starciu o 16 ms na klatkę siatki; nie jedzie w zapisie.
+- Starcie aktywne (`engagementView(activeSystemId)` ≠ `null`): zaległość += `deltaMs × 110 / tempo`; każda pełna klatka
+  siatki → `time:tick` z `deltaYears` = 16 ms × 1 d/s (dzisiejsza klatka 60 FPS przy auto-slow), najwyżej 8 na klatkę gry
+  (zaległość ≤ 8 klatek ≈ 1 runda); pauza w trakcie tików (okno wyniku, zdarzenie) albo koniec ostatniego starcia — reszta
+  zaległości przepada. Tempo: co najmniej jedno aktywne starcie w oglądanym układzie — `combatRoundMs()`; tylko starcia
+  w innych układach — 110 ms (CP4).
+- DSCS: runda co 110 ms zegara starcia (`combatClockMs()`); `MAX_ROUNDS_PER_TICK` zostaje jako bezpiecznik — przy siatce
+  ≤ 1 runda na tik; bez prawdziwego `TimeSystem` (keepery z surowym `time:tick`) zegar stoi — wyłącznie pierwsza runda.
+- Czas realny rundy: 6 albo 7 klatek siatki (96 / 112 ms, średnio 110) w tempie `tempo / 110` — przy 400 ms średnio
+  400 ms, kwant 16 × 400 / 110 ≈ 58 ms.
+- Galaktyka w trakcie oglądanego starcia płynie siatką: przy 400 ms ≈ 0,275 d/s (110 / 400 × 1 d/s) przez ≤ 7,6 s (20
+  rund), niezależnie od ustawionej prędkości; po starciu — prędkość ustawiona przez gracza (auto-slow do 1 d/s przy
+  rozpoczęciu starcia zostaje jak dotąd, `TimeSystem:51`).
+
+### 9.3 Dowód — sonda deterministyczna na kodzie P1 `[measured]`
+
+Sonda audytu (prawdziwa gra, fixture GATE-S4, zegar wirtualny, `Math.random` gry ziarnisty, `three.core.js` na strumieniu
+renderera, tryb klatek) na drzewie dev C2 (`staged`) i na `1af65fc` (`today`); sterowniki: `run_p1.mjs` audytu (widok na
+układzie domowym) i `run_p1c.mjs` (ta sama sonda + prawdziwa ścieżka pauzy, odczyt zwrotny klucza w grze, widok
+przełączany na układ starcia — `P1_VIEW=battle`). **34 przebiegi** (`results/TABLE_proof.md`); grupa = scena · geometria ·
+widok (starcie oglądane = układ bitwy jest układem oglądanym):
+
+| grupa | przebiegi | sygnatura |
+|---|---|---|
+| n g0 · nieoglądane | dziś · klucz 110 / 400 / 1000 · prędkość w walce 1 t/s i 1 r/s · klatka walki 33 ms · pauza 2 s i 30 s | **= dziś (9/9)** |
+| n g0 · oglądane | dziś · klucz 110 / 400 / 1000 · 400 + 1 r/s · 400 + klatka walki 33 ms · 400 + pauza 2 s i 30 s | **= dziś (8/8)** |
+| n g1 · nieoglądane / oglądane | nieoglądane: dziś · klucz 110 / 400 / 1000; oglądane: dziś · klucz 400 | **= dziś (4/4 · 2/2)** |
+| a · nieoglądane / oglądane | nieoglądane: dziś · klucz 110 / 400 / 1000; oglądane: dziś · klucz 400 | **= dziś (4/4 · 2/2)** |
+| co (orbita jawna) · oglądane | dziś + kontrola X = X · klucz 110 / 400 / 1000 | **= dziś (5/5)** |
+
+**Tempo** (czas realny 1. starcia od rundy 1 do ostatniej, zegar wirtualny sondy): oglądane — scena n g0 (16 rund): dziś
+1664 ms · klucz 110 → 1664 · **400 → 6048** · 1000 → 15 120 · 400 + 1 r/s → 6048 · 400 + klatka walki 33 ms → 6072 ·
+400 + pauza 2 s → 8048 · 400 + pauza 30 s → 36 048; scena a (20 rund): dziś 2096 · **400 → 7616**; n g1 (6 rund): dziś
+560 · 400 → 2032; co (6 rund): dziś 560 · 110 → 560 · 400 → 2032 · 1000 → 5088. Nieoglądane — przy KAŻDYM kluczu
+dzisiejsze 1664 / 560 / 2096 ms (CP4; pauza dodaje swoją długość: 3664 / 31 664). ⚠ CP2 „16 rounds ≈ 6.4 s” liczy
+16 × 400 — od pierwszej do ostatniej rundy jest 15 odstępów: 15 × 400 + 48 ms kwantu siatki = 6048 ms.
+**Krok gry na rundę** — 0,096 / 0,112 dnia we wszystkich przebiegach (dziś przy 60 FPS i 1 d/s — to samo). **Pauza** (4
+przebiegi): 0 tików i 0 rund w pauzie, rok gry i zegar klatek stoją; po pauzie najwyżej 1 runda na klatkę (wszystkie 34
+przebiegi: najwyżej 1). **Losowania poza klatką:** 0 — z wyjątkiem sceny co: 9 losowań samej sondy przy ustawianiu sceny
+(`assignOrbit`), deterministycznych, tych samych w każdym przebiegu i w kontroli X = X (§8).
+
+### 9.4 Keepery i przecelowania `[measured]`
+
+- **`combat_pace_smoke`** (NEW; T1–T10, 71 asercji po C2): prawdziwy `TimeSystem.update` w pętli klatek, zegar wirtualny,
+  łańcuch `time:tick` → VesselManager → Proximity → VCS → DSCS → MOS → EAH; sygnatura i czas gry KAŻDEJ rundy = nagranie
+  z `1af65fc` (`--record`; 17 rund, 1760 ms) przy kluczu 110 / 400 / 1000, prędkości w walce 1 d/s … 1 r/s, klatce walki
+  33 ms, pauzie 2 s i 30 s; starcie nieoglądane — 110 ms także przy kluczu 1000, zamarza w pauzie; zegar orbit; piny
+  źródłowe (DSCS bez czasu realnego, orbity przez `orbitClockSec()`); T10 — klucz (wiersz tabeli, odczyt w chwili użycia,
+  tempo z konsoli, pięć odmów bez zmiany stanu, reset, konsument). Fail-first: 27 / 31 na bazie (czerwone: tempo z kluczem,
+  prędkości 3 d/s … 1 r/s, klatka 33 ms, zegar w pauzie i brak nadrabiania, krok gry na rundę, świadek starcia oglądanego,
+  zegar orbit, piny źródłowe); wersja z C2 na C1 — 58 / 13 (T10).
+- **R-P1-1** (CP8, w C1): `sb3_combat_closing_smoke` — pomocnik `round()` przesuwa zegar starcia
+  (`timeSystem.simClockMs` += 110) zamiast podmienionego `performance.now`; asercje T1–T10 bez zmian. Oryginał na kodzie
+  C1: **25 / 3** (T1, T6, T6b — zegar starcia stoi, fregaty nie strzelają); przecelowany: na C1 28 / 0, na bazie 25 / 3.
+- **R-P1-2** (PROPOSED, w C2 — commit wymaga `--zgoda-R-P1-2`): `sb1_fleet_tuning_smoke` T11b pinuje ZAMKNIĘTY zbiór
+  czytelników `StrikesBackTuning.js` (GameScene, FleetLimit, planer fali — rozszerzony raz, R-S3-1); C2 dokłada czwartego:
+  `TimeSystem` (CP2 — konsument w chwili użycia). Audyt A5 (§2.5) tego pinu nie wymienił. Oryginał na C2: **70 / 1**
+  (T11b); propozycja: na C2 71 / 0, na C1 70 / 1. Dowód mutacyjny 7 / 7 zgodnych (3 / 3 mutanty zabite: piąty czytelnik
+  — DSCS, `TimeSystem` bez odczytu tabeli, czytelnik w nowym module); `proposed/sb1_fleet_tuning_smoke.mjs.{ORIG,PROPOSED}`,
+  `proposed/R-P1-2.diff`.
+- **454** — jak w §6 (deterministyczne na kodzie P1, bez zmian w keeperach).
+- Nietknięte i zielone (sweep 310/310): `battle_result_classification` (auto-slow), `sb1_fleet_pool` T1c (konsument
+  klucza), keepery kończące starcie wprost i ustawiające starcie ręcznie, keepery `GameCore`.
+
+### 9.5 Bramka w przeglądarce `[measured]`
+
+`kosmos-handover/polish-p1-code/gate/GATE_P1.md` — gra po angielsku, tryb klatek: 7 kroków konsoli, 3 kroki czasu
+(T1 — klucz 400 ms ze stoperem, T2 — 110 ms ze stoperem, T3 — 400 ms z pauzą 10 s w trakcie i przełączeniem na 1 r/s),
+3 × F5 → Continue. Scena: 2 fregaty gracza z laserem i 2 fregaty obrony układu emp_001 w wolnej przestrzeni układu
+domowego; starcie utworzone na pauzie, ziarno ustawione jawnie (ziarno z roku utworzenia byłoby u właściciela inne),
+klucz 1000 ms na czas wczytań, zapis — trzy przebiegi z tego zapisu. Walidator (prawdziwa gra na fixture GATE-S4,
+headless, klatki w czasie realnym): **kod P1** — trzy przebiegi identyczne (16 rund · 23 strzały · 15 trafień · zwycięzca
+B · straty 2/0), tempo z czasu gry 398 / 117 / 402 ms na rundę, w pauzie 10 s — 0 rund, rok gry i zegar klatek stoją,
+najwyżej 1 runda na klatkę, przy 1 r/s krok gry na rundę 0,096 / 0,112 dnia; **kontrola `1af65fc`** — w tej scenie wynik
+ten sam, ale ≈ 40 ms czasu gry na rundę, do 4 rund na klatkę (po pauzie — 449) i 7,1–7,4 dnia gry na rundę przy 1 r/s
+(438); 0 wyjątków w obu.
+
+### 9.6 Zamknięcia — PRZYGOTOWANE (wpis przy commitach)
+
+- **449** — zamknięty przez C1 w całości (CP3: zero rund i klatek siatki w pauzie, bez nadrabiania, wynik jak bez pauzy).
+- **452** — C1 (CP5).
+- **454** — C1 (bez zmian w keeperach; deterministyczne).
+- **438** / **436** (`AI_STRIKES_BACK_PLAN.md` §6) — C1 + C2 (wynik niezależny od prędkości, FPS walki, czasu rundy
+  i pauzy; starcie oglądane 400 ms na rundę — 16 rund ≈ 6 s).
+- Bez zmian: **432** (limit 20 rund — wynik dzisiejszy), **450** / **451** / **453** / **455** (P2), **165**.
+
+### 9.7 Pytania do właściciela
+
+1. **Zgoda na R-P1-2** (`sb1_fleet_tuning_smoke` T11b — czwarty czytelnik tabeli strojenia: `TimeSystem`)?
+2. **CP5 — „game time”:** zegar klatek `TimeSystem` (jak §3.1 i pytanie 5: poza starciem dzisiejszy wygląd, w starciu
+   z siatką, w pauzie stoi), nie rok gry `gameTime` — wtedy orbity kręciłyby się z prędkością gry (przy 1 r/s 365 razy
+   szybciej niż przy 1 d/s). Zostaje tak?
+3. **CP3 — „restored after”:** ustawienia prędkości kod P1 w ogóle nie zmienia; po starciu świat tyka tym, które gracz ma
+   (auto-slow do 1 d/s przy rozpoczęciu starcia zostaje jak dotąd). Zostaje tak?
+4. **456** (okno partii bitwy planetarnej w czasie realnym) — P2 czy osobny krok (rodzina 165)?
+
+### 9.8 Czego nie zweryfikowano
+
+- Bramka w przeglądarce właściciela (czeka) — odczucie tempa 400 ms, wygląd orbit w pauzie (statki na orbitach stoją).
+- 120 FPS walki (I3 — nie mierzone także w audycie dla siatki).
+- Starcie oglądane i nieoglądane naraz (tempo klucza obowiązuje wtedy oba) — nie mierzone.
+- Długa klatka i karta w tle w trakcie starcia (najwyżej 8 klatek siatki na klatkę gry, nadwyżka ucięta) — tylko `[code]`.
+- Zapis i wczytanie w ŚRODKU starcia: pierwsza runda po wczytaniu pada od razu (jak dotąd) — przebieg może się różnić od
+  przebiegu bez wczytania; bramka wczytuje zapis sprzed pierwszej rundy, więc tego nie ćwiczy.
+- Seria bitew kampanii AI przy 400 ms (galaktyka zwalnia na czas każdej oglądanej bitwy) — nie mierzone w grze.

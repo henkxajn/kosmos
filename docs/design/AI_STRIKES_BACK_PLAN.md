@@ -3492,6 +3492,9 @@ wyniki bitew od niego nie zależą — S3, sesja 2.
 (scena n: 1. starcie, 16 rund — 1664 ms). Prototyp B1 „siatka” w sondzie (czas gry w starciu odpięty od realnego,
 czas rundy kluczem): 16 rund — 5296 ms przy 350 ms i 9072 ms przy 600 ms, wynik bez zmian. Dalej: P1 (pytania §4
 planu POLISH).
+→ **POLISH P1 — kod (2026-10-17; CP1–CP3; `POLISH_PLAN.md` §5, §9): naprawa PRZYGOTOWANA (C1 + C2, zestagowane) —
+zamknięcie przy commitach łańcucha P1.** Klucz `combatRoundMs` domyślnie 400 ms; `[measured]` scena n, 16 rund — 6048 ms
+(dziś 1664), scena a, 20 rund — 7616 ms (dziś 2096); wynik = dziś.
 
 ### ⚪ 437 — flota GRACZA po bitwie w locie wznawia lot osobno (SB62)
 
@@ -3530,6 +3533,11 @@ czasu rundy (110 / 350 / 600 ms) i pauzy (**449**). Prototyp B1 „siatka” (ś
 geometrie) i a, niezależny od klucza (110 / 350 / 600 ms), prędkości w walce, FPS walki i pauzy. Prototyp „prosty”
 (jeden tik 0,110 dnia na rundę) też niezależny, ale zmienia wynik względem dziś (w dwóch scenach — kto ginie); bez
 zegara orbit 600 ms się różni (**452**). Kierunek SB68 (c) bez zmian; decyzje CP po odpowiedziach na §4 planu POLISH.
+→ **POLISH P1 — kod (2026-10-17; CP1–CP5; `POLISH_PLAN.md` §5, §9): naprawa PRZYGOTOWANA (C1 + C2, zestagowane) —
+zamknięcie przy commitach łańcucha P1.** Siatka „b1v” w `TimeSystem`, rundy DSCS z zegara klatek symulacji, klucz
+`combatRoundMs` (400 ms), zegar orbit. `[measured]` 34 przebiegi sondy na kodzie P1 (sceny n g0 / g1, a, co; klucz
+110 / 400 / 1000; prędkość w walce 1 t/s i 1 r/s; klatka walki 33 ms; pauza 2 s i 30 s; starcie oglądane i nieoglądane) —
+wynik = dziś (60 FPS, 1 d/s) w każdej grupie.
 
 ### ✅ 439 — wpis dzwonka o uzbrojonym kontakcie (SB59) nie pojawia się dla eskadry w układzie, którego gracz nie ogląda
 
@@ -3872,6 +3880,7 @@ to 448, trafienia „449” to numery linii, wartości tabel i zapis „wolny 44
 registry-first: przed nadaniem sprawdzić §6 tego planu i mapę numeracji
 `OPEN_FINDINGS_INDEX.md` (lekcja kolizji 165 / 166 i 246 – 254). Prefiks `V-` (VISUALS) i `W2 1-14` to osobne przestrzenie.
 → **2026-10-16 (POLISH P1):** numery **#449–#455** nadał arc POLISH (`POLISH_PLAN.md` §6); pierwszy wolny **456**.
+→ **2026-10-17 (POLISH P1 — kod):** **#456–#457** (`POLISH_PLAN.md` §6); pierwszy wolny **458**.
 
 ### 8.7 Reguły wiążące dalej (przeniesione z CLAUDE.md przy zamknięciu rozdziału)
 

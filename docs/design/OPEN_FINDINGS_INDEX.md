@@ -658,6 +658,17 @@
 >   w czasie realnym · ⚪ **453** starcie w innym układzie przestawia kamerę i rysuje efekty w oglądanym · ⚪ **454** dwa
 >   keepery zależne od tempa czasu realnego · ⚪ **455** salwa pierwszej rundy nie narysowana na mapie.
 > • **Pierwszy wolny numer: 456.**
+>
+> **Aktualizacja 2026-10-17 (POLISH P1 — kod PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany)** (`POLISH_PLAN.md` §5, §9).
+> Decyzje **CP1–CP8** (2026-10-17). Łańcuch P1-1 (siatka starcia, zegar orbit, keeper `combat_pace_smoke`, R-P1-1) ·
+> P1-2 (klucz `combatRoundMs`, R-P1-2 — czeka na zgodę); sweep 309 → **310/310**, `check-i18n` 3458; save v101 bez
+> migracji. Commity po bramce `gate/GATE_P1.md` i zgodzie na R-P1-2.
+> • **Naprawy PRZYGOTOWANE (zamknięcie przy commitach):** ⚪ **449** (CP3) · ⚪ **452** (CP5) · ⚪ **454** (deterministyczne
+>   na kodzie P1) · ⚪ **438** / ⚪ **436** (CP1–CP3).
+> • **450** → P2 (CP6) · **453** → P2, pierwsza pozycja (CP7).
+> • **NOWE: #456–#457** (rejestr: `POLISH_PLAN.md` §6) — ⚪ **456** okno partii bitwy planetarnej w czasie realnym ·
+>   ⚪ **457** znacznik starcia gaśnie po 1,6 s realnych bez strzału.
+> • **Pierwszy wolny numer: 458.**
 
 
 ---
@@ -737,7 +748,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
-| **449-455** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16; P1 — audyt tempa starcia) |
+| **449-457** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–17; 449-455 z audytu P1, 456-457 z kodu P1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -847,18 +858,20 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **373** | ⚪ | akcje silnika bez bramki `'in_cargo'` — `GroundUnitManager.deploy` (`:548`), `packUp` (`:570`), `startSurvey` (`:420`), `startAnalysis` (`:438`); `moveUnit` ma ją od F7 (`f90bc14`); z UI nieosiągalne po przycinaniu zaznaczenia (F7) — później. `AI_GARRISON_PLAN.md` §6 |
 | **426** | ⚪ | „przypięcie” DSCS: kadłub AI w ataku dostaje `dockedAt` = ciało, którego orbitę trzymają statki gracza, i przeskakuje na nie (0,245–0,30 AU); asymetria — gracz nie jest przyciągany do strażnika AI; SB50: zostaje w S3 |
 | **432** | ⚪ | limit 20 rund starcia DSCS: przegrana strona idzie na wrak także żywymi okrętami poza zasięgiem — część E S2b: 9 żywych w scenach (a)/(b); po S3-1 (SB49): 1 i 3 |
-| **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2); **C6: wynik ZALEŻY od czasu rundy — klucza nie ma (438)**. `AI_STRIKES_BACK_PLAN.md` §6 · **POLISH P1 (2026-10-16):** zmierzone 1. starcie 1664 ms; prototyp B1 „siatka” — 5296 ms przy 350 ms, wynik bez zmian — `POLISH_PLAN.md` §2.2, §3.4 |
+| **436** | ⚪ | starcie w przestrzeni (DSCS) rozstrzyga się w ułamku sekundy — runda co 110 ms czasu realnego, ≤ 20 rund, obrażenia ×3; bramka S3A: bitwa przegrana w ok. pół sekundy, zanim gracz zdążył zapauzować; fregata zginęła od 4 trafień z 4 w trakcie zbliżania | → **SB67**: czas rundy jako klucz strojenia wyłącznie przy wynikach niezależnych od niego (pomiar najpierw, S3/2); **C6: wynik ZALEŻY od czasu rundy — klucza nie ma (438)**. `AI_STRIKES_BACK_PLAN.md` §6 · **POLISH P1 (2026-10-16):** zmierzone 1. starcie 1664 ms; prototyp B1 „siatka” — 5296 ms przy 350 ms, wynik bez zmian — `POLISH_PLAN.md` §2.2, §3.4 · **POLISH P1 — kod (2026-10-17): naprawa PRZYGOTOWANA (C1 + C2) — 16 rund 6048 ms przy 400 ms, wynik = dziś; zamknięcie przy commitach** — `POLISH_PLAN.md` §9 |
 | **437** | ⚪ | flota GRACZA po bitwie w locie wznawia lot osobno — ponowna synchronizacja (`OrderService._regroupAfterBattle`) obejmuje wyłącznie grupy z `mission.groupId` (eskadra AI) | **SB62**: zostaje, wyłącznie raport; niezmierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; → **SB68** (2026-10-13): kierunek (c) — stały krok czasu gry na rundę, osobny krok PO S4 (najpierw audyt). `AI_STRIKES_BACK_PLAN.md` §6 · **POLISH P1 (2026-10-16):** dziś zależność także od prędkości w walce, FPS i pauzy (10 konfiguracji, 10 wyników); prototyp B1 „siatka” + zegar orbit — wynik = dziś, niezależny od czasu rundy, prędkości, FPS walki i pauzy — `POLISH_PLAN.md` §2.2, §3.4 |
+| **438** | ⚪ | wynik starcia w przestrzeni (DSCS) zależy od czasu rundy: rundy w czasie realnym, a gra płynie między nimi na zegarze gry (auto-slow 1 d/s); C6 (deterministycznie, kontrola 110 = 110): scena strażnika — przy 110 ms strażnik wygrywa trzy starcia i żyje, przy 300 i 600 ms wycofuje się i ginie | **SB67 niespełniony — klucza czasu rundy nie ma**; → **SB68** (2026-10-13): kierunek (c) — stały krok czasu gry na rundę, osobny krok PO S4 (najpierw audyt). `AI_STRIKES_BACK_PLAN.md` §6 · **POLISH P1 (2026-10-16):** dziś zależność także od prędkości w walce, FPS i pauzy (10 konfiguracji, 10 wyników); prototyp B1 „siatka” + zegar orbit — wynik = dziś, niezależny od czasu rundy, prędkości, FPS walki i pauzy — `POLISH_PLAN.md` §2.2, §3.4 · **POLISH P1 — kod (2026-10-17): naprawa PRZYGOTOWANA (C1 + C2; CP1–CP5) — 34 przebiegi sondy = dziś; zamknięcie przy commitach** — `POLISH_PLAN.md` §9 |
 | **422** | ⚪ | misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4) — przylot na czas i bez przeskoku z konstrukcji (kurierzy: przylot − ETA ≤ 0,006 roku, przeskok ≤ 0,010 AU), prędkości lotu nie zmierzono | raport do zamknięcia arca (SB47). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **423** | ⚪ | rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5) — `_computeInterceptPoint` z `target.velocity`, zerowanej dla kadłuba zadokowanego i orbitującego | raport do zamknięcia arca (SB47); osiągalność niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **449** | ⚪ | pauza w trakcie starcia DSCS nie zatrzymuje zegara rund — po odpauzowaniu zaległe rundy po 4 na klatkę, bez czasu gry między nimi (zmierzone: 4 + 4 + 3 w 3 klatkach po 2 s pauzy) | → P1. `POLISH_PLAN.md` §6 |
-| **450** | ⚪ | okno wyniku bitwy w przestrzeni: zawsze „Tur: 0”, Dziennik „0 tur” / „0 turns” — rekord DSCS bez pola `turns` (zmierzone na zrzucie) | → P1 albo P2 (pytanie 6). `POLISH_PLAN.md` §6 |
+| **449** | ⚪ | pauza w trakcie starcia DSCS nie zatrzymuje zegara rund — po odpauzowaniu zaległe rundy po 4 na klatkę, bez czasu gry między nimi (zmierzone: 4 + 4 + 3 w 3 klatkach po 2 s pauzy) | → P1; **naprawa PRZYGOTOWANA (C1, CP3) — zamknięcie przy commicie**. `POLISH_PLAN.md` §6, §9 |
+| **450** | ⚪ | okno wyniku bitwy w przestrzeni: zawsze „Tur: 0”, Dziennik „0 tur” / „0 turns” — rekord DSCS bez pola `turns` (zmierzone na zrzucie) | → **P2 (CP6)**. `POLISH_PLAN.md` §6 |
 | **451** | ⚪ | HP pojedynczego statku niewidoczne — panel walki tylko zbiorczo, `combatDamage` bez czytelnika w UI | → P2. `POLISH_PLAN.md` §6 |
-| **452** | ⚪ | kąt orbity statku wokół ciała w czasie realnym zmienia geometrię walki (zmierzone: B1 bez zegara orbit — 600 ms ≠ 110 / 350 ms) | → P1. `POLISH_PLAN.md` §6 |
-| **453** | ⚪ | starcie w innym układzie: auto-fokus przestawia kamerę, a smugi i znacznik starcia lądują w oglądanym układzie — bez terminu układu (zmierzone) | → P1 albo P2 (pytanie 7). `POLISH_PLAN.md` §6 |
-| **454** | ⚪ | `fleet_engage_scope` T3b i `fleet_engage_picker_frame` T5b zależą od tempa czasu realnego (zegar +60 ms / wywołanie ⇒ oba czerwone) | → P1 (przy przecelowaniach). `POLISH_PLAN.md` §6 |
+| **452** | ⚪ | kąt orbity statku wokół ciała w czasie realnym zmienia geometrię walki (zmierzone: B1 bez zegara orbit — 600 ms ≠ 110 / 350 ms) | → P1; **naprawa PRZYGOTOWANA (C1, CP5) — zamknięcie przy commicie**. `POLISH_PLAN.md` §6, §9 |
+| **453** | ⚪ | starcie w innym układzie: auto-fokus przestawia kamerę, a smugi i znacznik starcia lądują w oglądanym układzie — bez terminu układu (zmierzone) | → **P2, pierwsza pozycja (CP7)**. `POLISH_PLAN.md` §6 |
+| **454** | ⚪ | `fleet_engage_scope` T3b i `fleet_engage_picker_frame` T5b zależą od tempa czasu realnego (zegar +60 ms / wywołanie ⇒ oba czerwone) | → P1; **zmierzone: na kodzie P1 deterministyczne (zielone także przy zegarze +60 ms / wywołanie) — zamknięcie przy commicie C1**. `POLISH_PLAN.md` §6, §9 |
 | **455** | ⚪ | salwa pierwszej rundy starcia nie narysowana na mapie (zmierzone: 2 trafienia, 0 efektów) — widoczna tylko w logu panelu | → P2. `POLISH_PLAN.md` §6 |
+| **456** | ⚪ | okno partii bitwy planetarnej (`EnemyAttackHandler`) liczy 500 ms czasu REALNEGO — bitwa rozstrzyga się także w pauzie, a w oglądanym starciu P1 (400 ms) okno to ≈ 137 ms czasu siatki — niezmierzone | → poza P1 (pytanie 4 §9.7; rodzina 165 / 449). `POLISH_PLAN.md` §6 |
+| **457** | ⚪ | znacznik starcia gaśnie po 1600 ms czasu REALNEGO bez rundy ze strzałem — przy 400 ms na rundę także w trakcie starcia (walidator bramki: po jednej przerwie przy 400 ms, zero przy 110 ms) | → P2. `POLISH_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 
