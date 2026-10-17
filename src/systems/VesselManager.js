@@ -49,6 +49,7 @@ import { isStationId, resolveTransferStore, resolveHomeColony } from '../utils/T
 import { isPlayerColony } from '../utils/ColonyOwnership.js';   // Finding 97 / OG-3b
 import { warGateRefusal } from '../utils/WarGate.js';           // D13 / G2-2 — bramka wojny (away team)
 import { resolveTemplate } from '../utils/ShipTemplateResolver.js';   // AI STRIKES BACK S1 (SB22) — kadłub puli AI
+import { orbitClockSec } from '../utils/SimClock.js';                  // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -2494,7 +2495,7 @@ export class VesselManager {
           const orbital = window.KOSMOS?.orbitalSpaceSystem;
           const orbit = orbital?.getOrbit?.(vessel.id);
           if (orbit) {
-            const tSec = performance.now() * 0.001;
+            const tSec = orbitClockSec();   // POLISH P1 (CP5) — zegar klatek symulacji, nie czas realny
             const pos = orbital.getPosition(
               vessel.id,
               { x: body.x / 10, z: body.y / 10 },
@@ -2533,7 +2534,7 @@ export class VesselManager {
           const orbital = window.KOSMOS?.orbitalSpaceSystem;
           const orbit = orbital?.getOrbit?.(vessel.id);
           if (orbit) {
-            const tSec = performance.now() * 0.001;
+            const tSec = orbitClockSec();   // POLISH P1 (CP5) — zegar klatek symulacji, nie czas realny
             const pos = orbital.getPosition(
               vessel.id,
               { x: body.x / 10, z: body.y / 10 },
@@ -2570,7 +2571,7 @@ export class VesselManager {
         if (!body) { continue; }
 
         const orbital = window.KOSMOS?.orbitalSpaceSystem;
-        const tSec = performance.now() * 0.001;
+        const tSec = orbitClockSec();   // POLISH P1 (CP5) — zegar klatek symulacji, nie czas realny
         const orbit = orbital?.getOrbit?.(vessel.id);
         if (orbit) {
           // World-space Three.js — mnożymy przez WORLD_SCALE żeby dostać jednostki fizyki (px)

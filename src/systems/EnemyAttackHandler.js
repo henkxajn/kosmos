@@ -20,6 +20,7 @@ import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel, isInService } from '../entities/Vessel.js';
+import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
 
 // Okno czasu (ms realnych) na dołączenie kolejnych wrogów do tej samej bitwy.
 // Jeśli wrogi vessel #A przyleci, a w ciągu BATTLE_BATCH_WINDOW_MS dotrze #B
@@ -376,7 +377,7 @@ export class EnemyAttackHandler {
       // stoi w pozycji planety aż do pierwszego _updatePositions tick'a.
       const body = EntityManager.get(vessel.position.dockedAt);
       if (body) {
-        const tSec = performance.now() * 0.001;
+        const tSec = orbitClockSec();   // POLISH P1 (CP5) — ten sam zegar co `VesselManager._updatePositions`
         const pos = orbital.getPosition(
           vessel.id,
           { x: body.x / 10, z: body.y / 10 },

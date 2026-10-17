@@ -21,6 +21,7 @@
 
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
+import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit
 import {
   ORBITAL_ROLES,
   MIN_ANGULAR_SPACING_RAD,
@@ -191,12 +192,13 @@ export class OrbitalSpaceSystem {
   /**
    * Oblicz bieżącą pozycję (x, y, z) w world-space Three.js.
    * planetWorldPos — { x, z } planety (Y pozycji planety ignorowane; planety leżą na y=0).
-   * gameTimeSec   — czas gry (sekundy realne od startu; zwykle performance.now() * 0.001)
+   * gameTimeSec   — zegar kąta orbit (sekundy; POLISH P1, CP5: zegar klatek symulacji `TimeSystem` — `orbitClockSec()`;
+   *                 przyrasta tylko, gdy gra tyka, w starciu siatką starcia; dotąd `performance.now() * 0.001`)
    */
   getPosition(objectId, planetWorldPos, gameTimeSec) {
     const orbit = this.getOrbit(objectId);
     if (!orbit || !planetWorldPos) return null;
-    const t = gameTimeSec ?? (performance.now() * 0.001);
+    const t = gameTimeSec ?? orbitClockSec();
     const theta = orbit.anchored ? orbit.theta0 : (orbit.theta0 + orbit.omega * t);
     const sinPhi = Math.sin(orbit.phi);
     return {

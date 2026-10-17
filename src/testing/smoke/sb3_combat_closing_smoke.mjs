@@ -10,9 +10,12 @@
 //   `engage`, dopóki żyje; inaczej najbliższy wróg) na 0,95 × ten zasięg; krok na ZEGARZE STARCIA. Statek trzymający
 //   orbitę ciała stoi; uciekający — pominięty. Obie strony.
 //
-// ⚠ Zegar rund deterministyczny: `performance.now` podmienione na licznik — jedno `_tick` = DOKŁADNIE jedna runda
-//   (pętla rund DSCS jest taktowana czasem realnym, `ROUND_INTERVAL_MS`). Ciała bez orbity (pozycje stałe), `_tick`
-//   DSCS wołany wprost — ruch statków w scenie pochodzi WYŁĄCZNIE ze zbliżenia.
+// ⚠ Zegar rund deterministyczny: jedno `_tick` = DOKŁADNIE jedna runda — pomocnik `round()` przesuwa ZEGAR STARCIA
+//   (`timeSystem.simClockMs`, POLISH P1 / CP1) o `ROUND_INTERVAL_MS`. Ciała bez orbity (pozycje stałe), `_tick` DSCS
+//   wołany wprost — ruch statków w scenie pochodzi WYŁĄCZNIE ze zbliżenia.
+// ⚠ PRZECELOWANIE R-P1-1 (POLISH P1, zgoda właściciela 2026-10-17): do P1 pomocnik przesuwał podmienione
+//   `performance.now` (rundy DSCS taktowane czasem REALNYM); od P1 rundy liczy zegar starcia z `TimeSystem`, więc
+//   pomocnik przesuwa ten zegar. Asercje T1–T10 bez zmian (kotwica T10 `_tick(civDy) {` — bez zmian).
 //
 // PINY:
 //   T1  fregata z laserem, `engage` na strażnika NA ORBICIE (rakiety 0,30) z 0,25 AU: dochodzi do zasięgu i strzela
@@ -53,15 +56,14 @@ const FRIGATE_SPEED = 1.1139813200670667;   // hull_frigate z samym laserem (AU 
 const STEP = FRIGATE_SPEED * CIV_PER_ROUND / CIV;   // oczekiwany krok na rundę (AU)
 const EMP = 'emp_t';
 
-// ── zegar rund: jedno `_tick` = jedna runda ───────────────────────────────────
-const clock = { t: 1000 };
-performance.now = () => clock.t;
+// ── zegar rund: jedno `_tick` = jedna runda (R-P1-1 — zegar starcia, `timeSystem.simClockMs`) ─────────────────
+const CLOCK0_MS = 1000;
 
 let vMgr, mos, dscs;
 function scene() {
   EventBus.clear(); EntityManager.clear();
   global.window = global.window ?? {};
-  window.KOSMOS = { timeSystem: { gameTime: 100 }, activeSystemId: SYS };
+  window.KOSMOS = { timeSystem: { gameTime: 100, simClockMs: CLOCK0_MS }, activeSystemId: SYS };
   EntityManager.add({ id: 'star_t', type: 'star', name: 'G', systemId: SYS, x: 0, y: 0, mass: 1 });
   // ciała BEZ orbity — pozycje stałe przez całą scenę
   EntityManager.add({ id: 'p_cap', type: 'planet', name: 'Cap', systemId: SYS, x: 3 * AU, y: 0, radius: 4, mass: 1, visual: { radius: 4 } });
@@ -86,7 +88,7 @@ function ship({ x, y, name = 'S', empire = null, modules = ['weapon_laser', 'eng
 const MISSILES = ['weapon_missile', 'weapon_missile', 'engine_ion', 'armor_heavy'];
 const distAU = (a, b) => Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) / AU;
 const enc = () => [...dscs._activeEncounters.values()][0] ?? null;
-function round(civDy = 0.01) { clock.t += ROUND_INTERVAL_MS; dscs._tick(civDy); }
+function round(civDy = 0.01) { window.KOSMOS.timeSystem.simClockMs += ROUND_INTERVAL_MS; dscs._tick(civDy); }
 const shotsBy = (e, id) => (e?.timeline ?? []).flatMap(r => r.events).filter(ev => ev.attacker === id);
 const posOf = (v) => ({ x: v.position.x, y: v.position.y });
 const samePos = (a, b) => Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;

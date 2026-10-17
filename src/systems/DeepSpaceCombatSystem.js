@@ -46,6 +46,9 @@ import { SHIP_MODULES } from '../data/ShipModulesData.js';
 // ⚠ Wariant FAIL-CLOSED, wyłącznie dla warstwy walki. `isSameSystem` (fail-open) zostaje
 // nietknięty dla bramek wydawania rozkazów — uzasadnienie w SystemScope.
 import { isSameSystemStrict, systemIdOf } from '../utils/SystemScope.js';
+// POLISH P1 (CP1) — reguła rund i zegar starcia (siatka `TimeSystem`).
+import { COMBAT_ROUND_RULE_MS } from '../data/CombatPaceData.js';
+import { combatClockMs } from '../utils/SimClock.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -61,17 +64,17 @@ export const MAX_ROUNDS = 20;
 // (z reinforcement) → strona retreat. P3-4 logika.
 export const RETREAT_THRESHOLD = 0.2;
 
-// ── Tempo walki — STAŁE tempo realnego czasu (fix „walka trwa cholernie długo", 2026-07-26) ──
-// Wcześniej rundy bramkowane akumulatorem civDeltaYears (potrzeba CIV_PER_ROUND=0.3 civY na
-// rundę). Przy 1 dzień/s (domyślna prędkość ORAZ cel auto-slow przy starciu) civDy≈0.033/s →
-// ~9 SEKUND realnego czasu na jedną rundę → do ~4.5 minuty na bitwę. Teraz rundy płyną stałym
-// tempem realnego czasu (ROUND_INTERVAL_MS), NIEZALEŻNIE od prędkości gry — starcie to lokalny
-// spektakl odpięty od zegara galaktyki: ani instant przy 1 rok/s, ani wielominutowe przy 1 dzień/s.
-// CIV_PER_ROUND zostaje jako krok symulacji na rundę (rządzi cooldownami broni w rundach: laser
-// co 2 rundy, kinetyk co 3, rakieta co 5) — NIE bramkuje już realnego tempa.
+// ── Tempo walki — rundy na ZEGARZE STARCIA (POLISH P1, CP1; wcześniej: czas realny, 2026-07-26) ──
+// Historia: rundy bramkowane akumulatorem civDeltaYears dawały przy 1 d/s ~9 s realnych na rundę;
+// fix 2026-07-26 przeniósł rundy na czas REALNY (`performance.now`, co 110 ms) — a wtedy wynik zależał
+// od prędkości gracza, FPS i pauzy (Findingi 438, 449). Od P1 runda pada co ROUND_INTERVAL_MS ms
+// ZEGARA STARCIA: siatki `TimeSystem` (klatka 16 ms przy 1 d/s, niezależnie od prędkości i FPS;
+// pauza ją zatrzymuje). Czas realny rundy (`combatRoundMs`) to wyłącznie tempo odtwarzania siatki
+// — wynik od niego nie zależy. CIV_PER_ROUND zostaje krokiem symulacji na rundę (cooldowny broni
+// w rundach: laser co 2 rundy, kinetyk co 3, rakieta co 5).
 export const CIV_PER_ROUND = 0.3;
-export const ROUND_INTERVAL_MS = 110;    // ~9 rund/s — szybko, ale wciąż czytelnie
-export const MAX_ROUNDS_PER_TICK = 4;    // catch-up przy spadku klatek / wysokim odświeżaniu
+export const ROUND_INTERVAL_MS = COMBAT_ROUND_RULE_MS;   // 110 ms zegara starcia na rundę (reguła — dzisiejsza)
+export const MAX_ROUNDS_PER_TICK = 4;    // bezpiecznik — przy siatce 16 ms zegara starcia najwyżej 1 runda na tik
 
 // ── AI STRIKES BACK S3 (SB49, Finding 421) — ZBLIŻENIE PRZED RUNDĄ ──
 // Krok zbliżenia na rundę w LATACH GRY liczony z ZEGARA STARCIA: runda = CIV_PER_ROUND lat cywilizacyjnych (ta sama baza,
@@ -383,7 +386,7 @@ export class DeepSpaceCombatSystem {
       timeline:           [],
       isActive:           true,
       seedBase:           (Math.floor(year * 10000) * 7919) & 0x7FFFFFFF,
-      // Zegar tempa realnego czasu — null → pierwszy _tick odpala rundę od razu.
+      // Zegar starcia (ms, siatka `TimeSystem`) ostatniej rundy — null → pierwszy _tick odpala rundę od razu.
       _lastRoundMs:       null,
     };
 
@@ -506,15 +509,13 @@ export class DeepSpaceCombatSystem {
    */
   _tick(civDy) {
     if (civDy <= 0) return;   // pauza / 0× → brak postępu (respektuje pauzę gry)
-    const now = _nowMs();
+    // POLISH P1 (CP1, CP3) — zegar STARCIA: siatka `TimeSystem` (16 ms przy 1 d/s na tik, pauza go
+    // zatrzymuje). Bez prawdziwego `TimeSystem` (keepery z surowym `time:tick`) zegar stoi — tylko
+    // pierwsza runda (Finding 454). Wynik zależy od liczby rund, seeda i ruchu między rundami na
+    // siatce — nie od czasu realnego; zapis i wczytanie w trakcie: pierwsza runda od razu (jak dotąd).
+    const now = combatClockMs();
     for (const encounter of this._activeEncounters.values()) {
       if (!encounter.isActive) continue;
-      // Pacing STAŁYM tempem realnego czasu (ROUND_INTERVAL_MS), NIEZALEŻNIE od prędkości
-      // gry. Wcześniejszy akumulator civDy sprawiał, że przy 1 dzień/s (cel auto-slow!)
-      // jedna runda zajmowała ~9 s realnego czasu → bitwa ciągnęła się minutami. Teraz
-      // rundy płyną ~9/s przy każdej prędkości. MAX_ROUNDS_PER_TICK = catch-up przy
-      // spadku klatek. Determinizm WYNIKU zależy od liczby rund + seeda, nie od realnego
-      // tempa — save/load w trakcie po prostu resetuje zegar tempa.
       if (encounter._lastRoundMs == null) encounter._lastRoundMs = now - ROUND_INTERVAL_MS;
       let roundsThisTick = 0;
       while (
@@ -1523,6 +1524,22 @@ export class DeepSpaceCombatSystem {
     return [...this._activeEncounters.values()].filter(e => e.isActive);
   }
 
+  /**
+   * POLISH P1 (CP1, CP4) — odczyt dla zegara starcia `TimeSystem`: czy trwa starcie i czy gracz je ogląda.
+   * @param {string|null} viewSystemId — oglądany układ (`activeSystemId`)
+   * @returns {'watched'|'unwatched'|null} — `watched`: co najmniej jedno aktywne starcie w oglądanym układzie;
+   *   `unwatched`: starcia trwają wyłącznie w innych układach; `null`: żadnego aktywnego starcia
+   */
+  engagementView(viewSystemId) {
+    let any = false;
+    for (const enc of this._activeEncounters.values()) {
+      if (!enc.isActive) continue;
+      if (enc.location?.systemId === viewSystemId) return 'watched';
+      any = true;
+    }
+    return any ? 'unwatched' : null;
+  }
+
   // ── Serialization (P3-8 — save v71) ─────────────────────────────────
 
   /**
@@ -1597,14 +1614,6 @@ export class DeepSpaceCombatSystem {
 }
 
 // ── Module helpers (kopia z VesselCombatSystem dla symetrii) ───────────
-
-// Zegar realnego czasu (ms) — performance.now w przeglądarce, Date.now fallback (headless).
-// Pacing walki jest wizualny (nie serializowany), więc niedeterminizm nie rusza wyniku.
-function _nowMs() {
-  return (typeof performance !== 'undefined' && performance.now)
-    ? performance.now()
-    : Date.now();
-}
 
 // Znacznik odwrotu z bitwy — JEDNO źródło dla `_allOutsideOf` (D-FDd) i zbliżenia przed rundą (SB49).
 function _isRetreatingFromCombat(v) {

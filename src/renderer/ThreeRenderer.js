@@ -56,6 +56,7 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMo
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
+import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika)
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -4587,7 +4588,9 @@ export class ThreeRenderer {
   _tickOrbitingVessels() {
     const orbital = window.KOSMOS?.orbitalSpaceSystem;
     const vm = window.KOSMOS?.vesselManager;
-    const tSec = performance.now() * 0.001;
+    // POLISH P1 (CP5) — kąt orbity z TEGO SAMEGO zegara co pozycja logiczna (`VesselManager._updatePositions`):
+    // przy czasie realnym sprite po każdej pauzie wyprzedzałby statek (pauza zatrzymuje zegar klatek, nie czas realny).
+    const tSec = orbitClockSec();
     for (const [id, entry] of this._vessels) {
       // Fix desync 3D↔tactical (M4): statek w stanie 'orbiting' z dockedAt=null jest w
       // WOLNEJ PRZESTRZENI (engage / pursue-hold / drift), NIE orbituje ciała — jego
@@ -4770,7 +4773,7 @@ export class ThreeRenderer {
   _tickOrbitingStations() {
     const orbital = window.KOSMOS?.orbitalSpaceSystem;
     if (!orbital || this._stations.size === 0) return;
-    const tSec = performance.now() * 0.001;
+    const tSec = orbitClockSec();   // POLISH P1 (CP5) — ten sam zegar co `_tickOrbitingVessels`
     for (const [id, entry] of this._stations) {
       if (!entry.mesh) continue;
       const orb = orbital.getOrbit(id);
