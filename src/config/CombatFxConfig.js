@@ -33,6 +33,23 @@ export const FX_SHIELD_MS      = 360;   // pierścień tarczy (blocked)
 export const FX_RING_MS        = 1500;  // rozszerzający pierścień (skan/puls) — dłużej = widoczny
 export const FX_PING_MS        = 1300;  // „ping" ukończenia (dłużej widoczny)
 
+// POLISH P2b (D3, A7) — tempo efektów salwy OGLĄDANEGO starcia z czasu realnego rundy R (`timeSystem.combatRoundMs()`,
+// klucz `combatRoundMs`, domyślnie 400 ms). Stałe wyżej strojono pod dawne 110 ms na rundę: przy 400 ms smuga (260 ms)
+// gasła w ~2/3 rundy, a salwa kolejnej rundy startowała po dziurze. Teraz smuga, błysk i pierścień tarczy trwają
+// ~1,2 rundy (salwa trzyma się do następnej — bez dziury między salwami kolejnych rund, każda wciąż osobno: starsza już
+// gaśnie), rozrzut salwy R / 10, uderzenie po ~0,375 R; nigdy krócej niż stałe (przy 110 ms — dokładnie jak dawniej).
+export const FX_PACE_K = 1.2;
+export function combatFxPace(roundMs) {
+  const R = Number.isFinite(roundMs) && roundMs > 0 ? roundMs : 110;
+  return {
+    tracerMs:     Math.max(FX_TRACER_MS, Math.round(FX_PACE_K * R)),
+    flashMs:      Math.max(FX_FLASH_MS, Math.round(FX_PACE_K * R)),
+    flashDelayMs: Math.max(FX_FLASH_DELAY_MS, Math.round(0.375 * R)),
+    shieldMs:     Math.max(FX_SHIELD_MS, Math.round(FX_PACE_K * R)),
+    staggerMs:    Math.max(40, Math.round(R / 10)),
+  };
+}
+
 // Kolory FX nie-bojowe.
 export const FX_SHIELD_COLOR = 0x66ccff;  // tarcza (cyan-blue)
 export const FX_SCAN_COLOR   = 0x44ddff;  // skan (cyan)

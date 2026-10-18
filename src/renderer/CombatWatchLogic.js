@@ -224,3 +224,31 @@ export function watchFxScale(depth, refDepth = COMBAT_WATCH.FX_REF_DEPTH) {
   if (!(depth > 0) || !(refDepth > 0)) return 1;
   return Math.min(1, depth / refDepth);
 }
+
+// ── POLISH P2b (D3, Finding 461) — płynne zbliżenie w starciu (wyłącznie rysowanie) ────────────────────────────────
+// Krok zbliżenia (`DeepSpaceCombatSystem._closeToWeaponRange`) przesuwa statek raz na rundę — sprite wolnego statku brał
+// pozycję logiczną od razu i skakał (≈ 0,028 AU co rundę; przy kadrze „Obserwuj” setki px). Renderer prowadzi sprite od
+// pozycji WYŚWIETLANEJ do nowej pozycji logicznej przez jedną rundę czasu realnego (R = `combatRoundMs()`): ruch ciągły,
+// kolejny krok zastaje sprite u celu. Logika walki nietknięta — pozycji logicznej nikt tu nie pisze.
+// Stan: { from: {x,z}, to: {x,z}, elapsedMs, durMs, done } (płaszczyzna orbitalna; wysokość sprite'a bez zmian).
+export const COMBAT_GLIDE = Object.freeze({
+  DT_MAX_MS: 100,   // [ms] najdłuższy krok klatki (karta w tle / długa klatka — bez skoku na koniec ruchu)
+  EPS: 1e-9,        // [j.] ten sam cel
+});
+
+/** Nowy ruch, gdy cel (pozycja logiczna) się zmienił — od pozycji wyświetlanej `cur`; ten sam cel — stan bez zmian. */
+export function glideRetarget(glide, to, cur, durMs) {
+  if (glide && Math.abs(glide.to.x - to.x) <= COMBAT_GLIDE.EPS && Math.abs(glide.to.z - to.z) <= COMBAT_GLIDE.EPS) return glide;
+  const d = Number.isFinite(durMs) && durMs > 0 ? durMs : 1;
+  return { from: { x: cur.x, z: cur.z }, to: { x: to.x, z: to.z }, elapsedMs: 0, durMs: d, done: false };
+}
+
+/** Krok ruchu o `dtMs` czasu realnego (≤ `DT_MAX_MS`): pozycja liniowo od `from` do `to`, `done` u celu. */
+export function glideStep(glide, dtMs) {
+  const dur = glide.durMs > 0 ? glide.durMs : 1;
+  const dt = Math.min(Math.max(0, Number(dtMs) || 0), COMBAT_GLIDE.DT_MAX_MS);
+  const el = Math.min(dur, Math.max(0, (glide.elapsedMs ?? 0) + dt));
+  const k = el / dur;
+  return { x: glide.from.x + (glide.to.x - glide.from.x) * k, z: glide.from.z + (glide.to.z - glide.from.z) * k,
+    elapsedMs: el, done: el >= dur };
+}

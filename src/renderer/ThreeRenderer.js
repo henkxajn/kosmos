@@ -35,7 +35,7 @@ import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
   from './VesselModelResolver.js';
 import { isStationInActiveSystem } from './StationRenderLogic.js';
-import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt } from './CombatWatchLogic.js';
+import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -52,7 +52,7 @@ import { t } from '../i18n/i18n.js';
 import {
   weaponColor as fxWeaponColor,
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
-  FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
+  FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR, combatFxPace,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS,
@@ -481,6 +481,7 @@ export class ThreeRenderer {
     this._centreFrame          = -1;
     this._frameNo              = 0;          // licznik klatek pętli renderu
     this._hpBars               = new Map();  // POLISH P2b (D2, Finding 451) — vesselId → { bg, fill, col } (paski HP starcia)
+    this._glideLastMs          = null;       // POLISH P2b (D3, Finding 461) — czas realny ostatniej klatki płynnego zbliżenia
     // POLISH P2a (CP17) — statki aktywnych starć z udziałem gracza (zmiana zbioru → ponowne nałożenie widoczności wywiadu).
     this._combatRevealed       = new Set();
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
@@ -3743,6 +3744,9 @@ export class ThreeRenderer {
         }
 
         // POLISH P2a (CP13) — „Obserwuj”: cel i dystans kamery z kadru walki (co klatkę, także w pauzie gry).
+        // POLISH P2b (D3, Finding 461) — płynne zbliżenie uczestników oglądanego starcia, PRZED kamerą i efektami (kadr
+        // „Obserwuj”, auto-fokus, końce smug i paski HP czytają pozycje sprite'ów z tej klatki).
+        this._tickCombatGlide();
         if (this._watch) this._updateWatchCamera();
         // POLISH P2b (D1, Finding 467) — auto-fokus starcia: cel śledzi środek walki (co klatkę, także w pauzie gry).
         if (this._autoFocus) this._updateAutoFocusCamera();
@@ -4664,7 +4668,7 @@ export class ThreeRenderer {
       if (v && !v.isWreck && v.position?.state === 'orbiting' && v.position?.dockedAt == null) {
         const vx = isNaN(v.position.x) ? 0 : v.position.x;
         const vy = isNaN(v.position.y) ? 0 : v.position.y;
-        entry.sprite.position.set(S(vx), 0.3, S(vy));
+        this._placeFreeVessel(id, entry, vx, vy);   // POLISH P2b (D3, Finding 461) — w oglądanym starciu: płynnie
         continue;
       }
       if (!orbital) continue;
@@ -5017,7 +5021,8 @@ export class ThreeRenderer {
         } else if (!vessel.isWreck && vessel.position.dockedAt == null) {
           // Spójność z _tickOrbitingVessels: orbiting w wolnej przestrzeni (engage/drift,
           // dockedAt=null) — pozycja z real x,y, NIE z nieaktualnej orbity macierzystej.
-          entry.sprite.position.set(S(vx), 0.3, S(vy));
+          // POLISH P2b (D3, Finding 461) — uczestnik oglądanego starcia: płynnie (`_placeFreeVessel`).
+          this._placeFreeVessel(vessel.id, entry, vx, vy);
         }
         continue;
       }
@@ -6280,13 +6285,16 @@ export class ThreeRenderer {
     // lokalne dla układu starcia — w innym układzie smugi, błyski i pierścień lądowały w pustym punkcie widoku.
     if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
     const events = payload?.events ?? [];
+    // POLISH P2b (D3, A7) — czasy efektów z czasu realnego rundy oglądanego starcia (`combatRoundMs()`, CP2): salwa trzyma
+    // się do następnej rundy zamiast gasnąć po 260 ms (stałe strojone pod dawne 110 ms na rundę).
+    const pace = combatFxPace(window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? null);
     let stagger = 0;
     for (const ev of events) {
       const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
       const tw = this._combatEndpointWorld(ev.target, ev.tPos);
       if (!aw || !tw) continue;  // któryś endpoint fog-gated (wróg unknown) → skip, brak przecieku
-      const delay = (stagger++ % 8) * 40;  // rozłóż salwę po ~0..280ms (czytelność, nie 1-frame)
-      this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay, { attacker: ev.attacker, target: ev.target });
+      const delay = (stagger++ % 8) * pace.staggerMs;  // rozłóż salwę (czytelność, nie 1-frame)
+      this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay, { attacker: ev.attacker, target: ev.target }, pace);
     }
     // Znacznik starcia (midpoint) — POLISH P2a (Finding 457): stawia go i zdejmuje `_tickEngagementMarkers` wg STANU
     // starcia (nie salwa z czasem życia — gasł między salwami i w pauzie).
@@ -6364,29 +6372,96 @@ export class ThreeRenderer {
     return null;
   }
 
-  _spawnCombatTracer(aw, tw, category, hit, blockedByShield, delay = 0, ids = null) {
+  _spawnCombatTracer(aw, tw, category, hit, blockedByShield, delay = 0, ids = null, pace = combatFxPace(null)) {
     const color = fxWeaponColor(category);
     const ay = aw.y ?? 0.3, ty = tw.y ?? 0.3;  // poziom RYSOWANEGO statku (fix#3)
     const pts = [ new THREE.Vector3(aw.x, ay, aw.z), new THREE.Vector3(tw.x, ty, tw.z) ];
     const geom = new THREE.BufferGeometry().setFromPoints(pts);
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: hit ? 0.9 : 0.4 });
-    this._spawnFx(new THREE.Line(geom, mat), {
-      kind: 'tracer', lifetime: FX_TRACER_MS, baseOpacity: hit ? 0.9 : 0.4, delay,
+    const line = new THREE.Line(geom, mat);
+    line.frustumCulled = false;   // końce idą za statkami (D3) — sfera ograniczająca z chwili utworzenia nie obowiązuje
+    // POLISH P2b (D3, Finding 461) — końce smugi, błysk i pierścień tarczy idą za sprite'ami statków (płynne zbliżenie):
+    // smuga żyje ~1,2 rundy, a statek w tym czasie podlatuje — bez tego koniec smugi wisiałby w miejscu startu salwy.
+    this._spawnFx(line, {
+      kind: 'tracer', lifetime: pace.tracerMs, baseOpacity: hit ? 0.9 : 0.4, delay,
+      onTick: ids ? () => this._followTracerEnds(line, ids) : null,
     });
     if (!hit) return;
+    const followTarget = ids?.target ? (ef) => this._followFxTarget(ef.mesh, ids.target) : null;
     // Błysk trafienia (expand 1→3, fade) — na celu, mniejszy (fix#4: za mocne).
     const fMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
     const flash = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), fMat);
     flash.position.set(tw.x, ty, tw.z);
-    this._spawnFx(flash, { kind: 'flash', lifetime: FX_FLASH_MS, baseScale: 1, baseOpacity: 0.85, delay: delay + FX_FLASH_DELAY_MS });
+    this._spawnFx(flash, { kind: 'flash', lifetime: pace.flashMs, baseScale: 1, baseOpacity: 0.85, delay: delay + pace.flashDelayMs,
+      onTick: followTarget });
     // POLISH P2b (D2, CP18) — biały błysk NA MODELU trafionego statku (200 ms), w chwili uderzenia.
-    if (ids?.target) this._spawnHitGlow(ids.target, tw, delay + FX_FLASH_DELAY_MS);
+    if (ids?.target) this._spawnHitGlow(ids.target, tw, delay + pace.flashDelayMs);
     // Pierścień tarczy gdy trafienie zablokowane.
     if (blockedByShield > 0) {
       const sMat = new THREE.MeshBasicMaterial({ color: FX_SHIELD_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.10, 18), sMat);
       ring.position.set(tw.x, ty, tw.z); ring.rotation.x = -Math.PI / 2;
-      this._spawnFx(ring, { kind: 'shieldRing', lifetime: FX_SHIELD_MS, baseScale: 1, baseOpacity: 0.8, delay: delay + FX_FLASH_DELAY_MS });
+      this._spawnFx(ring, { kind: 'shieldRing', lifetime: pace.shieldMs, baseScale: 1, baseOpacity: 0.8, delay: delay + pace.flashDelayMs,
+        onTick: followTarget });
+    }
+  }
+
+  // POLISH P2b (D3) — końce smugi za sprite'ami strzelca i celu (widocznymi); niewidoczny / zniszczony — koniec zostaje.
+  _followTracerEnds(line, ids) {
+    const a = this._vessels.get(ids.attacker); const b = this._vessels.get(ids.target);
+    const arr = line.geometry?.attributes?.position;
+    if (!arr) return;
+    let moved = false;
+    if (a?.sprite?.visible) { const p = a.sprite.position; arr.setXYZ(0, p.x, p.y, p.z); moved = true; }
+    if (b?.sprite?.visible) { const p = b.sprite.position; arr.setXYZ(1, p.x, p.y, p.z); moved = true; }
+    if (moved) arr.needsUpdate = true;
+  }
+
+  // POLISH P2b (D3) — efekt w pozycji celu (sprite widoczny); inaczej zostaje tam, gdzie powstał.
+  _followFxTarget(mesh, vesselId) {
+    const e = this._vessels.get(vesselId);
+    if (e?.sprite?.visible) mesh.position.copy(e.sprite.position);
+  }
+
+  // ── POLISH P2b (D3, Finding 461) — płynne zbliżenie w starciu (wyłącznie rysowanie) ─────────────────────────────
+  // Statek w wolnej przestrzeni (`orbiting`, `dockedAt` null). Uczestnik AKTYWNEGO starcia w oglądanym układzie: sprite
+  // PŁYNIE do pozycji logicznej przez jedną rundę czasu realnego (`combatRoundMs()`) — krok zbliżenia
+  // (`_closeToWeaponRange`) pada raz na rundę, dawniej sprite skakał o ≈ 0,028 AU co rundę (setki px przy „Obserwuj”).
+  // Poza starciem — od razu (jak dotąd); ruch rozpoczęty w starciu dobiega do końca, jeśli cel się nie zmienił. Logika
+  // walki nietknięta: renderer czyta pozycję logiczną, nie pisze jej.
+  _placeFreeVessel(vid, entry, vx, vy) {
+    const to = { x: S(vx), z: S(vy) };
+    const p = entry.sprite.position;
+    const enc = window.KOSMOS?.deepSpaceCombatSystem?._findActiveEncounterContaining?.(vid);
+    const inCombat = !!enc?.isActive
+      && isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId });
+    const g = entry.glide;
+    const finishing = !!g && !g.done && Math.abs(g.to.x - to.x) <= 1e-9 && Math.abs(g.to.z - to.z) <= 1e-9;
+    if (!inCombat && !finishing) { entry.glide = null; p.set(to.x, 0.3, to.z); return; }
+    if (!g) {   // pierwszy raz w starciu — sprite już stoi w pozycji logicznej, ruch od następnego kroku
+      entry.glide = { from: { ...to }, to, elapsedMs: 0, durMs: 1, done: true };
+      p.set(to.x, 0.3, to.z);
+      return;
+    }
+    entry.glide = glideRetarget(g, to, { x: p.x, z: p.z }, window.KOSMOS?.timeSystem?.combatRoundMs?.() ?? 400);
+  }
+
+  // Co klatkę (także w pauzie gry — wtedy ruch stoi, jak starcie): sprite'y w ruchu o krok czasu realnego klatki.
+  _tickCombatGlide() {
+    const now = performance.now();
+    const dt = this._glideLastMs == null ? 0 : now - this._glideLastMs;
+    this._glideLastMs = now;
+    const paused = !!window.KOSMOS?.timeSystem?.isPaused;
+    const vm = window.KOSMOS?.vesselManager;
+    for (const [id, e] of this._vessels) {
+      const g = e.glide;
+      if (!g) continue;
+      const v = vm?.getVessel?.(id);
+      if (!v || v.isWreck || e.isWreck || v.position?.state !== 'orbiting' || v.position?.dockedAt != null) { e.glide = null; continue; }
+      if (g.done || paused) continue;
+      const st = glideStep(g, dt);
+      g.elapsedMs = st.elapsedMs; g.done = st.done;
+      e.sprite.position.set(st.x, 0.3, st.z);
     }
   }
 
