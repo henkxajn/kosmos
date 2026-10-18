@@ -736,6 +736,21 @@
 >   163 · 464 · 460 · 466 · 463 · 469) → P3 (456).
 > • **Pierwszy wolny numer: 470.**
 
+> **Aktualizacja 2026-10-18 (POLISH P2b CLOSE — zamknięcie w kodzie; temat widoczności starcia ZAMKNIĘTY, CP24)**
+> (bramka P2B w przeglądarce właściciela — scena A PASS, scena B PASS na karcie i „Tur: N”; `POLISH_PLAN.md` §5, §12.9,
+> §12.10, §13). Commity `tools/commit_P2B.sh`: `5504e2e` (P2b-1) · `9f03381` (P2b-2) · `96690d0` (P2b-3) · `f9d4efa`
+> (P2b-4) · `72509d4` (P2b-5); poprawka z bramki — **C6** `2ff8d26` (pierścień starcia subtelny: stała szerokość ~1,5 px
+> na ekranie, krycie 0,3, bez pulsu — CP27). Sweep **319/319**, `check-i18n` 3458; save v101 bez migracji. Decyzje
+> **CP25–CP28** (cel auto-fokusu nad kartą zostaje · karta ≤ 45 % zostaje · pierścień subtelny · 470 → backlog).
+> • ✅ **450** · **451** · **461** · **465** · **467** · **468** — zamknięte w rejestrze macierzystym (`POLISH_PLAN.md` §6);
+>   wiersze zdjęte (A5).
+> • **NOWY: #470** (rejestr: `POLISH_PLAN.md` §6) — ⚪ **470** dwa równoczesne starcia w jednym układzie: odczyty
+>   rejestratora bramki przy „Watch” (skok 660,5 px, kadr 45 %) — mechanizm z bramki nie potwierdzony (audyt) → backlog
+>   bez daty (CP28).
+> • Rejestr #449–#470: 22 wpisy — ✅ 15 · ⚪ 7.
+> • Backlog bez daty (CP24): 163 · 464 · 460 · 466 · 463 · 469 · 470. Następny: P3 (456).
+> • **Pierwszy wolny numer: 471.**
+
 
 ---
 
@@ -814,7 +829,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **130-158 · 161-185** | `VESSEL_ORDERS_PLAN.md` §7 + §Findings z live-gate'ów |
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
-| **449-469** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b) |
+| **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -927,18 +942,13 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **437** | ⚪ | flota GRACZA po bitwie w locie wznawia lot osobno — ponowna synchronizacja (`OrderService._regroupAfterBattle`) obejmuje wyłącznie grupy z `mission.groupId` (eskadra AI) | **SB62**: zostaje, wyłącznie raport; niezmierzone. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **422** | ⚪ | misje `MissionSystem` i kurierzy AI: lot do ciała z prędkością różną od prędkości statku (R4) — przylot na czas i bez przeskoku z konstrukcji (kurierzy: przylot − ETA ≤ 0,006 roku, przeskok ≤ 0,010 AU), prędkości lotu nie zmierzono | raport do zamknięcia arca (SB47). `AI_STRIKES_BACK_PLAN.md` §6 |
 | **423** | ⚪ | rozkaz `intercept` na cel zadokowany albo na orbicie ciała nie zamyka pościgu (R5) — `_computeInterceptPoint` z `target.velocity`, zerowanej dla kadłuba zadokowanego i orbitującego | raport do zamknięcia arca (SB47); osiągalność niezmierzona. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **450** | ⚪ | okno wyniku bitwy w przestrzeni: zawsze „Tur: 0”, Dziennik „0 tur” / „0 turns” — rekord DSCS bez pola `turns` (zmierzone na zrzucie) | → **P2b D5 — PRZYGOTOWANY w C5 (zestagowany; zamknięcie przy commicie)** (CP24; audyt P2 §10.7). `POLISH_PLAN.md` §6, §12 |
-| **451** | ⚪ | HP pojedynczego statku niewidoczne — panel walki tylko zbiorczo, `combatDamage` bez czytelnika w UI | → **P2b D2 — PRZYGOTOWANY w C2 (zestagowany; zamknięcie przy commicie)** (CP16, CP18). `POLISH_PLAN.md` §6, §12 |
 | **456** | ⚪ | okno partii bitwy planetarnej (`EnemyAttackHandler`) liczy 500 ms czasu REALNEGO — bitwa rozstrzyga się także w pauzie, a w oglądanym starciu P1 (400 ms) okno to ≈ 137 ms czasu siatki — niezmierzone | → **P3 (CP12)** — osobny krok po P2, najpierw audyt (rodzina 165 / 449). `POLISH_PLAN.md` §6 |
 | **460** | ⚪ | śmierć statku widoczna dopiero w `_finalizeBattle` (koniec starcia), wrak w stałym punkcie środkowym — skok 0,0895 AU (zmierzone) | → **backlog bez daty** (CP24; P2c nie powstaje, CP19). `POLISH_PLAN.md` §6 |
-| **461** | ⚪ | zbliżenie w starciu jednym skokiem 0,0282 AU raz na rundę (≈ 100 px co 400 ms przy „Obserwuj”); sprostowanie P1 §3.3 | → **P2b D3 — PRZYGOTOWANY w C3 (zestagowany; zamknięcie przy commicie)** (CP24). `POLISH_PLAN.md` §6, §12 |
 | **463** | ⚪ | `ProximitySystem` re-emituje `combatRangeEnter` dla par tej samej frakcji przy każdym wywołaniu (fixture: 17 481 zdarzeń w 1702 klatkach) | → **backlog bez daty** (CP24; osobny krok z CP20 nie powstaje). `POLISH_PLAN.md` §6 |
 | **464** | ⚪ | etykiety stron DSCS zaszyte po polsku („Gracz — P1 n0” w grze EN), klucze `battle.label.*` istnieją | → **backlog bez daty** (CP24, razem z 163). `POLISH_PLAN.md` §6 |
-| **465** | ⚪ | „Watch” w panelu walki zawsze do PIERWSZEGO starcia z listy (dwa równoczesne starcia — osiągalność niezmierzona) | → **P2b D4 — PRZYGOTOWANY w C4 (zestagowany; zamknięcie przy commicie)** (CP22). `POLISH_PLAN.md` §6, §12 |
 | **466** | ⚪ | efekty walki w rozmiarze świata przy bliskim kadrze POZA „Watch” zakrywają ekran (limit `watchFxScale` tylko przy „Watch”) | → **backlog bez daty** (CP21). `POLISH_PLAN.md` §6 |
-| **467** | ⚪ | znacznik starcia i cel auto-fokusu stoją w punkcie STARTU starcia (`location.point`), a walka odpływa ~0,1 AU — oko właściciela na bramce P2A: pierścień „z dala od statków”, auto-fokus „na pierścień, nie na statki” | → **P2b D1 — PRZYGOTOWANY w C1 (zestagowany; zamknięcie przy commicie)** (pytanie Q1 — cel auto-fokusu nad kartą). `POLISH_PLAN.md` §6, §12 |
-| **468** | ⚪ | panel walki przycina tekst po liczbie znaków (etykiety 20, statki 44, log 88 / nazwy 12) przy stałej szerokości 560 — „Liga Trzech Słońc (…”, log obcięty (zrzut właściciela) | → **P2b D4 — PRZYGOTOWANY w C4 (zestagowany; zamknięcie przy commicie)** (z 465 i nazwą układu — CP23; pytanie Q2 — karta ≤ 45 % ekranu). `POLISH_PLAN.md` §6, §12 |
 | **469** | ⚪ | auto-fokus przechodzi do KAŻDEGO nowego starcia — przy dwóch starciach kamera skacze z pierwszego na drugie (sonda P2b, scena Y: 1,1 s po pierwszym) | → **backlog bez daty** (CP24). `POLISH_PLAN.md` §6 |
+| **470** | ⚪ | dwa równoczesne starcia w jednym układzie (bramka P2B, scena B): rejestrator — skok modelu przy „Watch” 660,5 px (87,9 % drogi), kadr 45 % uczestników; walidator — 33,6 px, 1,3 %, 97,6 %; audyt: płynne zbliżenie obejmuje każde starcie w widoku, kolejność wierszy = kolejność starć — najbardziej prawdopodobny artefakt rejestratora (nie potwierdzony) | → **backlog bez daty** (CP28). `POLISH_PLAN.md` §6 |
 
 ## A6 — Własność / kolonia: reszta po arcu BRAMKA WŁASNOŚCI
 

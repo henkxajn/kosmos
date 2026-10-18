@@ -12,16 +12,20 @@
 > (CP24): **467** (znacznik i cel auto-fokusu za środkiem walki), **451** + CP16 (paski HP), błysk trafienia (CP18),
 > A7 + **461** (tempo efektów, płynne zbliżenie), panel walki — **468** + **465** (CP22) + nazwa układu w wierszu
 > (CP23), **450** (jeśli mały); po P2b — **backlog bez daty**: **163** · **464** · **460** · **466** · **463** (§7).
-> **P2b — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-18, NIE zacommitowany** (§12): łańcuch P2b-1 … P2b-5 (C1 467 · C2 451
-> · C3 461 · C4 468 / 465 · C5 450), przecelowań istniejących keeperów brak; bramka `gate/GATE_P2B.md` u właściciela →
-> commity `tools/commit_P2B.sh`; pytania Q1 (cel auto-fokusu), Q2 (karta ≤ 45 % ekranu) — §12.7. NOWY **469** (auto-fokus
-> przechodzi do każdego nowego starcia) → backlog bez daty.
-> **P3** — **456** (CP12). Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit `1af65fc`).
-> Arc otwarty wskazaniem właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
-> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#469**; pierwszy wolny **470**. Sondy audytu:
+> ✅ **P2b — ZAMKNIĘTY W KODZIE 2026-10-18:** `5504e2e` (P2b-1) · `9f03381` (P2b-2) · `96690d0` (P2b-3) · `f9d4efa`
+> (P2b-4) · `72509d4` (P2b-5), zakres `b1265f4..72509d4`, po bramce `gate/GATE_P2B.md` w przeglądarce właściciela (PASS —
+> §12.9); zamknięcia **450** · **451** · **461** · **465** · **467** · **468** — §12.10. Decyzje **CP25–CP28** (§5);
+> poprawka z bramki **C6** `2ff8d26` (pierścień starcia subtelny — CP27, §13); na `2ff8d26` sweep **319/319**,
+> `check-i18n` PASS pl = en 3458. **Temat widoczności starcia ZAMKNIĘTY (CP24, §13.5)** — backlog bez daty: **163** ·
+> **464** · **460** · **466** · **463** · **469** · **470** (§7). NOWY **470** (dwa równoczesne starcia w jednym układzie
+> — odczyty rejestratora bramki; audyt w §6, CP28).
+> **P3** — **456** (CP12) — następny krok arca. Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit
+> `1af65fc`). Arc otwarty wskazaniem właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
+> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#470**; pierwszy wolny **471**. Sondy audytu:
 > `kosmos-handover/polish-p1-combat-pace/`; kod, dowód i bramka P1: `kosmos-handover/polish-p1-code/`; audyt P2:
 > `kosmos-handover/polish-p2-visible-battle/`; kod, dowód i bramka P2a: `kosmos-handover/polish-p2a-code/`; kod, dowód
-> i bramka P2b: `kosmos-handover/polish-p2b-code/` (SHA256SUMS).
+> i bramka P2b: `kosmos-handover/polish-p2b-code/`; zamknięcie P2b i C6: `kosmos-handover/polish-p2b-close/`
+> (SHA256SUMS).
 > Tagi: `[code]` źródło · `[git]` historia · `[measured]` pomiar · `[doc]` dokumenty · `[derived]` wniosek z powyższych.
 
 ## 0. Cel arca
@@ -322,7 +326,8 @@ odczucie przy 350 ms, pauza i zmiana prędkości w trakcie walki, bitwa w innym 
 Prefiks **CP**. Podpisane przez właściciela **2026-10-17**: CP1–CP8 — odpowiedzi na §4, CP9–CP12 — odpowiedzi na
 pytania §9.7 po bramce (brzmienie z polecenia sesji zamykającej P1), CP13–CP20 — odpowiedzi na §10.11 (brzmienie
 z polecenia sesji kodu P2a). **2026-10-18:** CP21–CP24 — odpowiedzi na §11.7 po bramce P2A (brzmienie z polecenia sesji
-zamykającej P2a). Słowa właściciela — dosłownie (oryginał angielski); obok — odczyt w kodzie P1 (§9) i P2a (§11).
+zamykającej P2a); CP25–CP28 — odpowiedzi na §12.7 i uwaga z bramki P2B (brzmienie z polecenia sesji zamykającej P2b).
+Słowa właściciela — dosłownie (oryginał angielski); obok — odczyt w kodzie P1 (§9), P2a (§11), P2b (§12) i C6 (§13).
 
 | CP | słowa właściciela (2026-10-17) | odczyt w kodzie P1 |
 |---|---|---|
@@ -350,6 +355,10 @@ zamykającej P2a). Słowa właściciela — dosłownie (oryginał angielski); ob
 | **CP22** | „Q2: Watch button per battle row (465) → P2b.” | P2b (D4): przycisk „Watch” przy każdym wierszu panelu walki (**465**) |
 | **CP23** | „Q3: system name in the battle row → P2b.” | P2b (D4): nazwa układu starcia w wierszu panelu walki (propozycja P2-1 audytu — §10.2, §10.10) |
 | **CP24** | „P2b is the LAST code session of the combat-visibility topic; after it: 450 done in P2b if small, 163 / 464 / 460 / 466 / 463 → backlog without a date.” | P2b (D1–D5) zamyka temat widoczności starcia; **450** w P2b (D5); P2c (460, CP19) i osobny krok 463 (CP20) nie powstają — **163** · **464** · **460** · **466** · **463** → backlog bez daty (§7) |
+| **CP25** | „Auto-focus target = participants centred in band above card — stays; literal centre rejected: 100% frames hid guards under card.” | bez zmian w kodzie: cel auto-fokusu `watchTargetAt` przy bieżącym dystansie (P2b D1, `5504e2e`) zostaje; dosłowny środek uczestników na środku ekranu — scena V: strażnik pod kartą w 21 z 21 klatek auto-fokusu (§12.4); bramka P2B — wszyscy nad kartą 99,4 % (§12.9) |
+| **CP26** | „Card ≤ 45% — stays; 61% without cap.” | bez zmian w kodzie: `CARD_MAX_H_FRAC` 0,45 (P2b D4, `f9d4efa`) zostaje; dwa starcia — 438 z 720 j. (61 %) bez limitu, 307 j. (42,6 %) z limitem (§12.4); bramka — „karty nic nie zasłaniają” (§12.9) |
+| **CP27** | „Ring SUBTLE: thin line of constant on-screen width (~1.5 px regardless of zoom), low opacity (~0.3), NO pulsing (static). Must not cover models.” | C6 `2ff8d26` (§13.3): pas o stałej szerokości 1,5 px na ekranie w głębi każdego punktu okręgu, krycie 0,3, bez pulsu; promień (0,285 j.), pozycja (środek uczestników) i ukrycie przy „Watch” (CP14) bez zmian; keeper `combat_ring_subtle_smoke` |
+| **CP28** | „Register NEW Finding 470 (backlog, no date, no code).” | NOWY ⚪ **470** (§6) — audyt read-only bez kodu gry: mechanizm z bramki nie potwierdzony, najbardziej prawdopodobny artefakt rejestratora; backlog bez daty (§7) |
 
 ## 6. Rejestr findingów arca
 
@@ -378,7 +387,7 @@ w trakcie starcia — bez salw, nic się nie rusza; po klawiszu 5 (1 r/s) salwy 
 w przebiegu 1 krótka pauza (1455 ms) — rok gry i zegar klatek przed = po; we wszystkich trzech przebiegach 0 rund
 w pauzie, najwyżej 1 runda na klatkę, wynik ten sam. `combat_pace_smoke` na `bcecaa0` — 71 / 0.
 
-### ⚪ 450 — okno wyniku bitwy w przestrzeni pokazuje zawsze „Tur: 0”, a Dziennik „0 tur” / „0 turns”
+### ✅ 450 — okno wyniku bitwy w przestrzeni pokazuje zawsze „Tur: 0”, a Dziennik „0 tur” / „0 turns”
 
 `[code]` rekord bitwy DSCS (`_finalizeBattle`, `:1060-1087`) nie ma pola `turns`; okno wyniku czyta `res.turns ?? 0`
 (`BattleIntroModal:289`), linia Dziennika `result.turns ?? 0` (`GameScene:2667`). Liczba rund jest w `timeline` /
@@ -394,8 +403,11 @@ czytelników); **163** i **464** → backlog bez daty.
 → **POLISH P2b — kod (2026-10-18; D5): naprawa PRZYGOTOWANA w C5 (zestagowana) — zamknięcie przy commicie** (§12).
 `turns: encounter.currentRound` w `_finalizeBattle`; okno wyniku, Dziennik i lista bitew wojny bez zmian. `[measured]`
 sonda (§12.3): okno wyniku „Tur: N” = rundy bitwy we wszystkich scenach (przed — „Tur: 0”).
+✅ **ZAMKNIĘTY 2026-10-18 — `72509d4` (P2b-5), bramka P2B PASS (§12.9):** u właściciela okno wyniku „Tur: 16” (scena A)
+i „Tur: 20 | Tur: 20” (scena B) = rundy bitew; lista bitew wojny „16 rund · B · 2/0”, „20 rund · B · 0/0” ×2. Napis
+„Tur:” po polsku w grze EN — **163** (backlog).
 
-### ⚪ 451 — HP pojedynczego statku nie jest widoczne nigdzie
+### ✅ 451 — HP pojedynczego statku nie jest widoczne nigdzie
 
 `[code]` w starciu panel walki (`CombatHUD._drawEncounterRow`, `:193-288`) pokazuje wyłącznie zbiorcze paski HP stron;
 statki — nazwą, kadłubem, bronią i kolorem żywy/zniszczony. Trwałe uszkodzenia `vessel.combatDamage` (bez regeneracji —
@@ -411,6 +423,9 @@ decyzja 2026-05-20) nie mają czytelnika w UI (grep: wyłącznie `VesselManager`
 Paski HP 40 × 5 px pod uczestnikami aktywnego starcia (obie strony), biały błysk 200 ms na trafionym modelu. `[measured]`
 sonda (§12.3): każdy żywy uczestnik na ekranie z paskiem w 100 % klatek, ułamek = hp / hpStart, po końcu starcia 0 pasków,
 białe błyski = trafienia narysowane (przed — pasków i błysków brak).
+✅ **ZAMKNIĘTY 2026-10-18 — `9f03381` (P2b-2, CP16, CP18), bramka P2B PASS (§12.9):** u właściciela paski 42 × 7 px —
+każdy żywy uczestnik na ekranie z paskiem w 96 % klatek (scena A) i 72,5 % (scena B; walidator 100 — przyczyna
+niezmierzona); białe błyski = trafienia narysowane: 16 = 16 (A), 22 = 22 (B).
 
 ### ✅ 452 — kąt orbity statku wokół ciała liczony w czasie REALNYM zmienia geometrię walki
 
@@ -586,7 +601,7 @@ starcia, a wszystkie wybuchy padają naraz. `_wreckOne` → `_turnIntoWreck(vess
 → **CP19 (2026-10-17): wrak w miejscu śmierci — P2c; dziś bez zmian.**
 → **CP24 (2026-10-18): backlog bez daty** — P2c nie powstaje; dzisiejsze zachowanie zostaje (CP19).
 
-### ⚪ 461 — zbliżenie w starciu idzie jednym skokiem raz na rundę (≈ 100 px co 400 ms przy „Obserwuj”)
+### ✅ 461 — zbliżenie w starciu idzie jednym skokiem raz na rundę (≈ 100 px co 400 ms przy „Obserwuj”)
 
 `[code]` w starciu statek gracza nie ma ruchu z rozkazu (pauza misji, `_freezeAsStationary`); przesuwa go wyłącznie
 `_closeToWeaponRange` — jeden krok `speedAU × CLOSE_STEP_YEARS` przed rundą, a sprite wolnego statku (`orbiting`,
@@ -599,6 +614,10 @@ zbliżenia w starciu nieprawda. → P2-4 (§10.10).
 → **POLISH P2b — kod (2026-10-18; D3, A7): naprawa PRZYGOTOWANA w C3 (zestagowana) — zamknięcie przy commicie** (§12).
 Płynne zbliżenie (sprite płynie do pozycji logicznej przez rundę czasu realnego) i tempo efektów z `combatRoundMs()`.
 `[measured]` sonda (§12.3) — skoki i pokrycie salw przed / po w §12.3.
+✅ **ZAMKNIĘTY 2026-10-18 — `96690d0` (P2b-3), bramka P2B PASS (§12.9):** u właściciela (scena A) największy skok
+w jednej klatce 1,6 % drogi (walidator 1,6; kontrola `534f45c` 27,3), przy „Watch” 0 px, smugi w 56,5 % klatek biegu.
+Scena B — 660,5 px / 87,9 % przy „Watch” nie odtworzone w walidatorze (33,6 px / 1,3 %) → **470** (audyt: płynne
+zbliżenie obejmuje każdego uczestnika aktywnego starcia w oglądanym układzie).
 
 ### ✅ 462 — wróg w starciu z graczem jest rysowany półprzezroczysty (krycie 0,5) przez całe starcie
 
@@ -635,7 +654,7 @@ Klasa **113**; `check-i18n` nie widzi (szablon literału). → P2b-1 (§10.10), 
 nadaniem — najwyższy numer findingu **#464**; trafienia „465”–„469” to zapis „pierwszy wolny 465”, numery linii
 (`ColonyManager:468`) i wartości (0,467 AU) `[measured]`. Sonda i bramka: `kosmos-handover/polish-p2a-code/` (§11).
 
-### ⚪ 465 — przycisk „Obserwuj / Watch” zawsze kieruje do PIERWSZEGO starcia z listy panelu
+### ✅ 465 — przycisk „Obserwuj / Watch” zawsze kieruje do PIERWSZEGO starcia z listy panelu
 
 `[code]` `CombatHUD`: panel pokazuje do dwóch aktywnych starć (`MAX_VISIBLE_ENCOUNTERS = 2`, `:26`), a jedyny przycisk
 „Watch” bierze `visible[0]` (`:165`, `:183-184`) — pierwsze z `deepSpaceCombatSystem.listActive()`; na `9de9a20` tak samo
@@ -646,6 +665,8 @@ niezmierzona. → P2b (kandydat).
 → **POLISH P2b — kod (2026-10-18; D4, CP22): naprawa PRZYGOTOWANA w C4 (zestagowana) — zamknięcie przy commicie**
 (§12). `[measured]` sonda Y (dwa starcia naraz, §12.3): dwa przyciski „Watch”, klik drugiego — obserwacja DRUGIEGO
 starcia, wszyscy jego uczestnicy w kadrze (przed — jeden przycisk, drugiego brak).
+✅ **ZAMKNIĘTY 2026-10-18 — `f9d4efa` (P2b-4, CP22), bramka P2B PASS (§12.9):** u właściciela przy dwóch starciach dwa
+przyciski „Watch” (wiersze z nazwą układu 2); „Watch też fokusuje kamerę na danej bitwie”.
 
 ### ⚪ 466 — efekty walki w rozmiarze świata przy bliskim kadrze POZA „Watch” zakrywają ekran
 
@@ -663,7 +684,7 @@ zbliżeniu kółkiem albo fokusie statku poza „Watch” błysk (0,06 j.), pier
 przed nadaniem — najwyższy numer findingu **#466**; trafienia „467”–„479” to zapis „pierwszy wolny 467”, numery linii
 (`ColonyManager:468`), wartości (0,467 AU) i ziarno bramki P1 (468532936) `[measured]`.
 
-### ⚪ 467 — znacznik starcia i cel auto-fokusu stoją w punkcie STARTU starcia, a walka odpływa od niego ~0,1 AU
+### ✅ 467 — znacznik starcia i cel auto-fokusu stoją w punkcie STARTU starcia, a walka odpływa od niego ~0,1 AU
 
 `[code]` oba czytają `encounter.location.point` — punkt środkowy pary wyzwalającej z chwili startu, stały przez całe
 starcie (`DeepSpaceCombatSystem._createEncounter`: `location.point = mid`): znacznik — `ThreeRenderer._tickEngagementMarkers`
@@ -677,8 +698,11 @@ znacznika i celu auto-fokusu).
 → **POLISH P2b — kod (2026-10-18; D1): naprawa PRZYGOTOWANA w C1 (zestagowana) — zamknięcie przy commicie** (§12).
 Znacznik co klatkę w środku uczestników; auto-fokus śledzi walkę — uczestnicy wyśrodkowani w pasie NAD kartą (reguła
 kadru „Watch” przy bieżącym dystansie — pytanie Q1, §12.7). `[measured]` sonda (§12.3, §12.4).
+✅ **ZAMKNIĘTY 2026-10-18 — `5504e2e` (P2b-1; CP25 — cel auto-fokusu zostaje), bramka P2B PASS (§12.9):** u właściciela
+(scena A) pierścień w środku statków 0 px, auto-fokus — wszyscy nad kartą 99,4 %, środek grupy w środku pasa 0 px.
+Wygląd pierścienia (za duży, za mocny, puls) — **C6** (CP27, §13).
 
-### ⚪ 468 — panel walki: tekst nie mieści się w karcie — nazwa imperium ucięta, log walki obcięty
+### ✅ 468 — panel walki: tekst nie mieści się w karcie — nazwa imperium ucięta, log walki obcięty
 
 `[code]` `CombatHUD._drawEncounterRow` przycina po LICZBIE ZNAKÓW, nie po szerokości tekstu: etykiety stron — 20 znaków
 (`_truncate(enc.sideA/B.label, 20)`, `:233`, `:241`) — etykieta „Liga Trzech Słońc (2)” (21 znaków,
@@ -690,6 +714,8 @@ właściciela z bramki P2A (2026-10-18, gra EN): nazwa imperium ucięta („Liga
 → **POLISH P2b — kod (2026-10-18; D4, CP23): naprawa PRZYGOTOWANA w C4 (zestagowana) — zamknięcie przy commicie**
 (§12). Przycinanie po szerokości tekstu z podpowiedzią, log — ostatnie linie, karta ≤ 45 % ekranu (pytanie Q2, §12.7),
 nazwa układu w wierszu. `[measured]` sonda (§12.3): 0 napisów poza kartą we wszystkich scenach.
+✅ **ZAMKNIĘTY 2026-10-18 — `f9d4efa` (P2b-4, CP23; CP26 — karta ≤ 45 % zostaje), bramka P2B PASS (§12.9):**
+u właściciela 0 napisów poza kartą i 0 skróconych (sceny A i B), wiersze z nazwą układu 1 / 2; „karty nic nie zasłaniają”.
 
 ### #469 — P2b, kod (2026-10-18)
 
@@ -709,6 +735,44 @@ starcie rusza 70 klatek (1,1 s) po pierwszym — kamera przeskakuje z pierwszej 
 tak samo); osiągalność dwóch równoczesnych starć z graczem w normalnej grze — niezmierzona (465). → **backlog bez daty**
 (CP24 — po P2b reszta widoczności starcia trafia do backlogu).
 
+### #470 — P2b, bramka u właściciela (2026-10-18)
+
+⚠ **Registry-first (2026-10-18, zamknięcie P2b):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów
+przed nadaniem — najwyższy numer findingu **#469**; trafienia „470” to wyłącznie zapis „pierwszy wolny 470” (status
+`POLISH_PLAN.md`, wiadomość `b1265f4`) i identyfikatory sesji w pamięci `[measured]`. Audyt read-only (~35 min, bez
+kodu gry) i przebieg walidatora: `kosmos-handover/polish-p2b-close/probe470/` (§13).
+
+### ⚪ 470 — dwa równoczesne starcia w jednym układzie: odczyty rejestratora bramki („skok” modeli przy „Watch”, kadr 45 % uczestników) — mechanizm z bramki nie potwierdzony
+
+`[measured, Filip]` bramka P2B u właściciela, scena B (dwa starcia naraz w układzie domowym, pary ~5,65 AU od siebie):
+„Watch” — `starcie: 'pierwsze'`, 1173 klatki, wszyscy uczestnicy w kadrze **45 %**; największy skok modelu przy „Watch”
+**660,5 px**, największy skok w jednej klatce **87,9 %** drogi statku (scena A: 0 px, 1,6 %). Odczyt z bramki
+(brzmienie zgłoszenia): (1) modele NOWO oglądanego starcia przeskakują, bo płynne zbliżenie działa tylko dla śledzonego
+starcia; (2) kolejność wierszy karty ≠ kolejność starć w rejestratorze; (3) kadr „Watch” obejmuje 45 % uczestników.
+Słowa właściciela przy tym kroku (T2): „wszystko wygląda OK, Watch też fokusuje kamerę na danej bitwie” — skoku okiem nie
+zgłosił; liczby pochodzą wyłącznie z rejestratora.
+`[code]` audyt (2026-10-18, read-only) — (1) **nieprawda w kodzie:** `ThreeRenderer._placeFreeVessel` (`:6433`) płynnie
+prowadzi KAŻDEGO uczestnika AKTYWNEGO starcia w oglądanym układzie (`_findActiveEncounterContaining` + `isEngagementInView`
+— bez pojęcia „starcie śledzone”), a `_tickCombatGlide` (`:6451`) przesuwa wszystkie sprite'y w ruchu (stoi wyłącznie
+w pauzie). (2) **nieprawda:** wiersze karty idą w kolejności `DeepSpaceCombatSystem.listActive()` (`:1530` — kolejność
+wstawienia do `_activeEncounters`), wstawienie (`:393`) przed `vessel:engaged` (`:411`), starcia zakończone usuwane
+(`:534`), id unikalne (`_makeEncounterId`, `:1506`) ⇒ wiersz 1 = pierwsze starcie. Rejestrator (`gate/gate_steps_p2b.mjs`)
+nazywa starcie WYŁĄCZNIE z PIERWSZEGO kliknięcia „Watch” (`r.watchAt == null` — `:38`); kolejne kliknięcia nie zmieniają
+etykiety. `[measured]` walidator na `72509d4` (scena B, prawdziwy klik w pauzie): wiersz 1 → `'pierwsze'`, wiersz 2 →
+`'drugie'`; w obu przebiegach skok przy „Watch” **33,6 px**, **1,3 %** drogi, wszyscy w kadrze **97,6 %**
+(`probe470/results/gate/validate_gate_p2b_HEAD_72509d4_row1.*`, `polish-p2b-code/results/gate/`). (3) liczby 660,5 px,
+87,9 % i 45 % — **nie odtworzone.** Różnice wobec walidatora: walki 20-rundowe zakończone limitem rund (walidator:
+6 rund, zniszczenie), przeglądarka bez ziarna, prawdziwe FPS, sekwencja kliknięć. Najbardziej prawdopodobne —
+**artefakt rejestratora** `[code]` `[derived]`:
+poprzednie pozycje sprite'ów (`r.prev`, `:55–56`) aktualizowane są wyłącznie dla żywych, widocznych uczestników starcia
+MIERZONEGO (obserwowane, inaczej pierwsze w oglądanym układzie, `:43`) — przełączenie mierzonego starcia tam i z powrotem
+(np. „Watch” w wierszu 1 → 2 → 1) daje w pierwszej klatce „skok” = cały ruch statku z okresu bez pomiaru, a jego udział
+w drodze sięga ~90 %; klatki przejazdu kamery między walkami ~5,65 AU liczą się jako klatki „Watch” z uczestnikami poza
+kadrem. W kodzie gry nie znaleziono drogi, którą uczestnik aktywnego starcia w oglądanym układzie stawiany jest bez
+płynnego zbliżenia; nie sprawdzono przejścia ocalałego po końcu starcia z ruchu płynnego do ruchu rozkazu.
+→ **CP28 (2026-10-18): backlog bez daty, bez kodu** (temat widoczności starcia zamknięty — CP24). Do potwierdzenia przy
+wznowieniu: rejestrator z zapisem każdego kliknięcia „Watch” i z resetem `r.prev` przy zmianie mierzonego starcia.
+
 ## 7. Następne kroki
 
 1. ~~Odpowiedzi na §4~~ → **CP1–CP8 (2026-10-17, §5).**
@@ -727,12 +791,16 @@ tak samo); osiągalność dwóch równoczesnych starć z graczem w normalnej grz
    - **Backlog bez daty (CP24) — po P2b temat widoczności starcia jest zamknięty:** **163** (okno wyniku bitwy po
      polsku — rejestr `VESSEL_ORDERS_PLAN.md`) · **464** (etykiety stron DSCS po polsku) · **460** (śmierć widoczna
      dopiero na końcu starcia, wrak w punkcie środkowym — P2c nie powstaje, CP19 zostaje) · **466** (limit efektów walki
-     poza „Watch” — CP21) · **463** (szum `combatRangeEnter` w `ProximitySystem` — osobny krok z CP20 nie powstaje).
+     poza „Watch” — CP21) · **463** (szum `combatRangeEnter` w `ProximitySystem` — osobny krok z CP20 nie powstaje) ·
+     **469** (auto-fokus przechodzi do każdego nowego starcia) · **470** (odczyty rejestratora bramki przy dwóch
+     starciach — CP28).
      Opcja powiększenia modeli uczestników (CP15) — nie weszła do P2b (polecenie sesji: D1–D5).
-   - **P2b — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-18** (§12) → bramka `gate/GATE_P2B.md` u właściciela + odpowiedzi
-     Q1 / Q2 (§12.7) → `tools/commit_P2B.sh` → zamknięcia 467 / 451 / 461 / 468 / 465 / 450. **469** (auto-fokus
-     przechodzi do każdego nowego starcia) — backlog bez daty, razem z listą wyżej.
-4. **P3** — **456** (okno partii bitwy planetarnej w czasie realnym; CP12): osobny krok po P2, najpierw audyt.
+   - ~~P2b — kod~~ → **ZAMKNIĘTY W KODZIE 2026-10-18:** bramka `gate/GATE_P2B.md` u właściciela PASS (§12.9) →
+     `tools/commit_P2B.sh` → `5504e2e` · `9f03381` · `96690d0` · `f9d4efa` · `72509d4` → zamknięcia 467 / 451 / 461 /
+     468 / 465 / 450 (§12.10) → odpowiedzi na §12.7 i uwaga z bramki → **CP25–CP28** (§5) → poprawka bramki **C6**
+     `2ff8d26` (pierścień starcia subtelny, CP27 — §13). **Temat widoczności starcia ZAMKNIĘTY (CP24, §13.5).**
+4. **P3** — **456** (okno partii bitwy planetarnej w czasie realnym; CP12): osobny krok po P2, najpierw audyt —
+   **następny krok arca** (temat widoczności starcia zamknięty, §13.5).
 5. Dalej kolejka arca (§0).
 
 ## 8. Warsztat — lekcje sondy (wiążące dalej)
@@ -1494,7 +1562,7 @@ tekst poza kartą).
 ✅ **455** · **459** · **462** (`9e752cc`, P2a-4, CP17) — wpisy w §6. Przecelowań istniejących keeperów: brak. Decyzje
 po bramce: CP21–CP24 (§5); następny krok — **P2b** (§7), ostatnia sesja kodu tematu widoczności starcia.
 
-## 12. P2b — kod (2026-10-18): PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany — ostatnia sesja kodu widoczności starcia (CP24)
+## 12. P2b — kod (2026-10-18): ZACOMMITOWANY 2026-10-18 — `5504e2e` · `9f03381` · `96690d0` · `f9d4efa` · `72509d4` (ostatnia sesja kodu widoczności starcia, CP24)
 
 > Łańcuch P2b-1 … P2b-5 zbudowany w świeżym klonie na commicie dokumentacji P2b (ten commit) i ZESTAGOWANY w repo
 > właściciela (`tools/apply_to_repo_P2B.sh`, EOL właściciela — `ThreeRenderer.js` CRLF, reszta LF). Commity dopiero po
@@ -1511,6 +1579,11 @@ po bramce: CP21–CP24 (§5); następny krok — **P2b** (§7), ostatnia sesja k
 | **C3** P2b-3 | A7, 461 — tempo efektów z `combatRoundMs()`, płynne zbliżenie | NEW `combat_fx_pace_smoke` **5 / 22 → 27 / 0** | **316/316** · PASS 3458 |
 | **C4** P2b-4 | 468, 465 — tekst w karcie, podpowiedź, „Watch” przy każdym wierszu (CP22), nazwa układu (CP23), karta ≤ 45 % (Q2) | NEW `combat_card_fit_smoke` **5 / 17 → 22 / 0** | **317/317** · PASS 3458 |
 | **C5** P2b-5 | 450 — `turns` w rekordzie bitwy DSCS | NEW `combat_turns_smoke` **4 / 5 → 9 / 0** | **318/318** · PASS 3458 |
+
+**Commity (2026-10-18, `tools/commit_P2B.sh` bez argumentów, po bramce §12.9):** C1 `5504e2e` · C2 `9f03381` · C3
+`96690d0` · C4 `f9d4efa` · C5 `72509d4` — drzewa kroków = `patches/trees.txt` (C1 `9c6778e4` · C2 `4507ee81` · C3
+`fa0a5e27` · C4 `d2f0a5ff` · C5 `7b26741f`); na `72509d4` sweep **318/318, 0 FAIL** (31 advisory), `check-i18n` PASS
+pl = en 3458 `[measured]` (§13.1).
 
 Łańcuch zbudowany w świeżym klonie (`tools/build_chain_P2B.sh`; w klonie `gc.auto 0`, `maintenance.auto false` przed
 pierwszym commitem — lekcja P2a): fail-first keepera kroku (jego wersja z tego kroku) na drzewie POPRZEDNIEGO kroku,
@@ -1676,6 +1749,8 @@ z innego układu — keeper D4 T5 (§12.8).
 2. **Q2 — karta ≤ 45 % wysokości ekranu (D4).** Przy dwóch starciach log skraca się do 2 linii, a statki idą w jednej
    linii, żeby nad kartą został pas dla statków. Zostaje / inna granica / bez limitu?
 
+→ **Odpowiedzi właściciela 2026-10-18 (po bramce):** Q1 → **CP25** (zostaje) · Q2 → **CP26** (zostaje) — §5.
+
 ### 12.8 Czego nie zweryfikowano
 
 Bramka u właściciela (prawdziwe FPS, karta w tle, przeglądarka bez ziarna) · podpowiedź pełnego tekstu w prawdziwej grze
@@ -1685,3 +1760,151 @@ Bramka u właściciela (prawdziwe FPS, karta w tle, przeglądarka bez ziarna) ·
 starcia (stan płynnego zbliżenia nie jest zapisywany — wyłącznie rysowanie) · luki salw z kadencji broni (przeładowanie
 rakiet co 5 rund — rundy bez strzału nie mają czego rysować; czasy życia ich nie wypełnią) · przeskok auto-fokusu do
 każdego nowego starcia (**469** — zachowanie sprzed P2b, zapisane).
+
+### 12.9 Bramka u właściciela — 2026-10-18: PASS (scena A; scena B — karta i „Tur: N”) `[measured, Filip]`
+
+Przeglądarka właściciela, fixture GATE-S4 (kopia), gra po ANGIELSKU, kroki `gate/GATE_P2B.md` na zestagowanym kodzie
+P2b (drzewo C5); kontrola `534f45c` — w walidatorze (§12.6). **Każda liczba w tabeli to ODCZYT WŁAŚCICIELA** z konsoli
+jego przeglądarki `[measured, Filip]` — dosłownie z raportu; pola, których nie przekazał, zapisane jako nieprzekazane.
+
+| krok | odczyt właściciela |
+|---|---|
+| 1 — scena A | rozkazy ok, ok · klucz 400 · 0,32 AU · pauza true |
+| T1 — czas | słowa właściciela: „wszystko gra i pasuje, poza wielkością pierścienia — za duży i zbyt mocny, powinien być tylko subtelny i wąski, aby nie zasłaniał modeli; pierścień pulsuje w dużym zoomie, to psuje imersję” → **C6** (CP27, §13) |
+| 2 — odczyt A | starcie „w widoku” · auto-fokus: wszyscy nad kartą **99,4 %** (2000 klatek), środek grupy od środka pasa **0 px** · pierścień od środka statków (max) **0 px** · paski HP **96 %**, **42 × 7 px** · trafienia narysowane **16**, białe błyski **16** · rytm salw **63,2 %** · smugi widoczne **56,5 %** · skok max przed „Watch” **11,5 px**, przy „Watch” **0 px** · największy skok w jednej klatce **1,6 %** drogi · „Watch”: pierwsze starcie, 1013 klatek, wszyscy w kadrze **100 %** · karta: poza kartą 0 · skrócone 0 · wiersze z układem 1 · „Watch” 1 · wiersze 1 (wysokość — nieprzekazana) · okno wyniku „Tur: 16” · bitwa „16 rund · B · 2/0” · wiersze zapisu 10 498 · wywołania rejestratora 11 391 |
+| 3 — scena B | pary `v_35` → `v_34`, `v_37` → `v_36` · rozkazy ok, ok · 5,65 AU · pauza true |
+| T2 — czas | słowa właściciela: „obie walki w DEEP-SPACE BATTLES pokazały się w tym samym domowym układzie, karty nic nie zasłaniają, wszystko wygląda OK, Watch też fokusuje kamerę na danej bitwie” |
+| 4 — odczyt B | starcia „w widoku, w widoku” · auto-fokus **0 %** (436 klatek; środek grupy — n/d, **469**) · pierścień **0 px** · paski HP **72,5 %**, **42 × 7 px** · trafienia / białe błyski **22 / 22** · rytm salw **70,9 %** · smugi **61,5 %** · skok przed „Watch” **0 px**, przy „Watch” **660,5 px** · największy skok **87,9 %** drogi · „Watch”: starcie „pierwsze”, 1173 klatki, wszyscy w kadrze **45 %** · karta: poza kartą 0 · skrócone 0 · wiersze z układem 2 · „Watch” 2 · wiersze 2 (wysokość — nieprzekazana) · okna wyniku „Tur: 20 \| Tur: 20” · bitwy „20 rund · B · 0/0 \| 20 rund · B · 0/0” · wiersze zapisu 1619 · wywołania rejestratora 2486 |
+| konsola | nieprzekazane |
+
+Werdykt właściciela: **scena A — PASS; scena B — PASS na karcie (C4) i „Tur: N” (C5).** Odczyt własności (tabela
+`GATE_P2B.md`, liczby właściciela obok walidatora §12.6):
+
+- **A — D1:** wszyscy nad kartą 99,4 % (walidator 100), środek grupy w środku pasa 0 px (1), pierścień w środku statków
+  0 px (0) — PASS. Oko: pierścień za duży, za mocny i pulsuje → **C6** (CP27).
+- **A — D2:** paski 42 × 7 px; każdy żywy uczestnik na ekranie z paskiem w 96 % klatek (walidator 100 — różnica
+  niezmierzona: prawdziwe FPS, inny przebieg walki — 16 rund wobec 20); białe błyski = trafienia narysowane 16 = 16 —
+  PASS.
+- **A — D3:** smugi 56,5 % klatek biegu (walidator 70,6; kontrola `534f45c` 48), rytm salw 63,2 % (79,5); największy
+  skok 1,6 % drogi (= walidator), przy „Watch” 0 px — PASS.
+- **A — D4 / D5:** tekst w karcie (0 poza kartą, 0 skróconych), wiersz z układem i „Watch”; „Tur: 16” = 16 rund —
+  PASS.
+- **B — D4 (C4):** dwa wiersze, każdy z nazwą układu i własnym „Watch”, nic poza kartą, nic skrócone, „karty nic nie
+  zasłaniają” — PASS. **B — D5 (C5):** „Tur: 20” w obu oknach = rundy obu bitew — PASS.
+- **B — auto-fokus 0 %** — zachowanie **469** (auto-fokus przechodzi na drugie starcie, rejestrator mierzy pierwsze z
+  listy); poza zakresem P2b (backlog, CP24).
+- **B — skok przy „Watch” 660,5 px / 87,9 % drogi i „Watch” 45 %** — nie odtworzone w walidatorze (wiersz 1 i wiersz 2:
+  33,6 px / 1,3 % / 97,6 %); najbardziej prawdopodobny artefakt rejestratora przy przełączaniu obserwowanego starcia —
+  NOWY **470** (audyt §6, CP28 — backlog). Paski 72,5 % w scenie B (walidator 100) — przyczyna niezmierzona.
+- **Wynik walki** inny niż w walidatorze (A: 16 rund · B · 2/0 wobec 20 · A · 0/1; B: 20 rund · B · 0/0 ×2 wobec 6 · B ·
+  1/0 ×2) — przewidziane (przeglądarka bez ziarna; inny rok utworzenia sceny).
+
+Odpowiedzi na §12.7 i uwaga z bramki → **CP25–CP28** (§5, §13).
+
+### 12.10 Zamknięcia — 2026-10-18 (`5504e2e` · `9f03381` · `96690d0` · `f9d4efa` · `72509d4`; bramka §12.9 PASS)
+
+✅ **467** (`5504e2e`, P2b-1) · ✅ **451** (`9f03381`, P2b-2, CP16, CP18) · ✅ **461** (`96690d0`, P2b-3) ·
+✅ **468** · **465** (`f9d4efa`, P2b-4, CP22, CP23) · ✅ **450** (`72509d4`, P2b-5) — wpisy w §6. Przecelowań istniejących
+keeperów: brak. Poprawka z bramki — **C6** `2ff8d26` (pierścień starcia subtelny, CP27) — §13.
+
+## 13. P2b CLOSE (2026-10-18): commity P2b, bramka P2B, poprawka C6 — temat widoczności starcia ZAMKNIĘTY (CP24)
+
+Polecenie właściciela (2026-10-18): „commit staged P2b, record gate, C6 ring restyle, close the combat-visibility
+topic” — (a) commity tego, co zestagowane; (b) JEDNA poprawka kosmetyczna z bramki (C6 — pierścień starcia); (c) zapis
+bramki i zamknięcie tematu. Folder: `kosmos-handover/polish-p2b-close/` (SHA256SUMS). Save v101 bez migracji; bez
+nowych kluczy słownika.
+
+### 13.1 Commity P2b `[git]` `[measured]`
+
+`tools/commit_P2B.sh` (bez argumentów) w repo właściciela: C1 `5504e2e` · C2 `9f03381` · C3 `96690d0` · C4 `f9d4efa` ·
+C5 `72509d4` — drzewa kroków = `polish-p2b-code/patches/trees.txt` (`9c6778e4` · `4507ee81` · `fa0a5e27` · `d2f0a5ff` ·
+`7b26741f`); po commitach status czysty (poza `.claude/settings.local.json`), sweep **318/318**, 0 FAIL (31 advisory),
+`check-i18n` PASS pl = en 3458, keepery P2a i P2b (8) zielone. ⚠ Przy `git apply --cached` łatki C2 — jedno przejściowe
+„Permission denied” przy zapisie obiektu `7b087a78…`; ponowienie w skrypcie (`g()`) przeszło; obiekt sprawdzony (rozmiar
+i skrót treści), bloby 12 plików HEAD = bloby łańcucha, `git fsck --connectivity-only` czysty. Wypchnięcie `9de9a20..b1265f4`
+(P2a i obie dokumentacje) — przed tą sesją, na polecenie właściciela; commity P2b i dalsze — lokalne (pushuje właściciel).
+
+### 13.2 Bramka P2B — skrót `[measured, Filip]`
+
+Pełny zapis — §12.9. **Scena A — PASS:** auto-fokus — wszyscy nad kartą 99,4 %, środek grupy w środku pasa 0 px;
+pierścień w środku statków 0 px; paski HP 96 %, 42 × 7 px; białe błyski = trafienia 16 = 16; największy skok 1,6 % drogi;
+„Watch” — wszyscy w kadrze 100 %; „Tur: 16”. **Scena B — PASS na karcie** (dwa wiersze z nazwą układu i „Watch”, nic
+poza kartą, nic skrócone) **i „Tur: N”** („Tur: 20” ×2). Oko właściciela (T1): wszystko gra poza pierścieniem — za duży,
+za mocny, pulsuje przy dużym zoomie → **C6** (CP27). Odczyty sceny B przy „Watch” (660,5 px, 87,9 %, 45 %) → NOWY
+**470** (CP28).
+
+### 13.3 C6 — pierścień starcia subtelny (CP27) `[code]` `[measured]`
+
+- **Mechanizm** `[code]`: `ThreeRenderer._tickEngagementMarkers` — puls usunięty (dawniej krycie
+  `0,5 · (0,55 + 0,45 · sin 4t)` = 0,05–0,5 i skala `1 + 0,1 · sin 4t` z zegara realnego `this._clock`); co klatkę pas
+  pierścienia przeliczany przez NEW `VesselFxLogic.engagementRingBand` — w każdym z 65 punktów okręgu szerokość świata =
+  `WIDTH_PX` × świat na piksel w głębi tego punktu (`_viewDepth`), więc linia ma stałą szerokość na ekranie przy każdym
+  przybliżeniu (dawny pas świata 0,25–0,32 j.: ~1 px w kadrze układu, ~30 px przy 2 j., ~190–290 px przy 0,5 j.). Stałe
+  — NEW `VesselFxLogic.ENGAGEMENT_RING`: `WIDTH_PX 1.5`, `OPACITY 0.3`, `RADIUS 0.285` (środek dawnego pasa — promień bez
+  zmian), `SEGMENTS 64`; kolor bez zmian. Pozycja (środek uczestników, C1) i ukrycie przy „Watch” (CP14) bez zmian.
+  Wyłącznie render — znacznika nie czyta nic poza rendererem; nowy kod nie czyta zegara realnego. Pas jest siatką, nie
+  linią GL: `pixelRatio` sięga 2, więc linia GL miałaby 1 piksel bufora ≈ 0,5–0,67 px CSS.
+- **Keeper NEW `combat_ring_subtle_smoke`** (15): prawdziwe metody znacznika (`_upsertEngagementMarker`,
+  `_tickEngagementMarkers`, `_disposeEngagementMarker`, `_viewDepth` — wyciągnięte ze źródła) na prawdziwym Three.js r171;
+  60 klatek przy dystansach kamery 60 / 2 / 0,5 j. (kadr układu / auto-fokus / bliski kadr ≈ dolna granica „Watch” 0,4):
+  krycie 0,3 i skala stałe, szerokość na ekranie **1,50 / 1,52 / 1,83 px** (stała z klatki na klatkę), środek pasa
+  0,285 j.; ukryty przy „Watch” (wykonanie + `combat_watch_frame_smoke` T11i bez przecelowania); piny źródłowe (bez zegara
+  i sinusa); wzór pasa. Fail-first na `72509d4`: **5 / 10** (zielone po obu stronach: K0, K1, T5a, T5b, T6-0; dawny
+  pierścień: krycie 0,05–0,5, skala ±0,1, szerokość 0,94–1,11 / 28–35 / 186–288 px) → na C6 **15 / 0**. ⚠ 1,83 px przy
+  0,5 j.: szerokość liczona jest w głębi każdego punktu, ale przy bardzo bliskim kadrze punkty okręgu leżą daleko od osi
+  widoku i perspektywa poszerza odcinek (~1 / cos kąta) — w granicy keepera (≤ 2 px); poza „Watch” tak bliski kadr daje
+  wyłącznie fokus na księżycu (najmniejszy dystans 0,5).
+- **Sweep i słownik:** na C6 **319/319**, 0 FAIL (31 advisory), `check-i18n` PASS pl = en 3458 (bez nowych kluczy);
+  bez zmian: `combat_follow_centre` 27 / 0 · `combat_marker_life` 18 / 0 · `combat_view_scope` 47 / 0 ·
+  `combat_watch_frame` 42 / 0. Przecelowań istniejących keeperów: brak.
+- **Tożsamość wyników walki przed / po C6** `[measured]`:
+  walidator bramki (sceny A i B, zegar wirtualny, ziarno 4242) na `72509d4` i na C6 — wynik co do bajtu równy:
+  wyniki walki (A 20 rund · A · 0/1; B 6 rund · B · 1/0 ×2) i wszystkie odczyty rejestratora; 0 błędów konsoli, 0 utraty
+  kontekstu WebGL (przebieg na `72509d4` = przebieg na repo z sesji P2b co do bajtu — przyrząd deterministyczny). Sonda P2b
+  (zegar sondy, ziarno 12345) — scena W i scena Y (= T2 bramki) na C6 wobec przebiegów na kodzie C5: bitwy (rundy,
+  strzały, trafienia, straty, zwycięzca, odwrót), konsola, diagnostyka (0 losowań poza klatką) i wynik — równe; w zapisie
+  klatkowym różnią się wyłącznie promień pierścienia w px (sam C6) i rozmiar pulsującego celownika wroga (`ret`) — faza
+  pulsu z `THREE.Clock`, który startuje przy pierwszej klatce renderu jeszcze w czasie realnym, przed zegarem wirtualnym
+  sondy (kontrola: dwa przebiegi TEGO SAMEGO kodu — sesja P2b i dziś — różnią się `ret` do 13,7 %; kod C5 i C6, oba
+  dziś — do 0,6 %). Sygnatura P1 (scena n, 400 ms, starcie oglądane) na C6 = P1:
+  `[[16,12,7,1,0,"B",null],[6,4,4,1,0,"B",null],[11,7,6,1,0,"B",null]]` + wraki `v_24 … v_34` (błąd sondy brak, wyjątki
+  konsoli 0, losowania poza klatką 0).
+- **Bramka C6** `[measured, Filip]`:
+  krok 1 `GATE_P2B.md` w przeglądarce właściciela (2026-10-18) na zestagowanym C6 (drzewo indeksu `0ce955e9`):
+  rozkazy ok, ok · klucz 400 · pauza true; spacja, ~20 s oglądania. Słowa właściciela: „ok wygląda wszystko dobrze, więc
+  pass” — pierścień cienki, blady, bez pulsu, nie zasłania modeli. **PASS** → „go”.
+- **Commit** `[git]`: test na sucho (`tools/dryrun_C6.sh` — świeży klon, bajty plików właściciela, 4 kontrole negatywne)
+  PASS → `tools/commit_P2B_C6.sh` → `2ff8d26` (drzewo `0ce955e9`).
+
+### 13.4 Decyzje CP25–CP28
+
+Słowa właściciela (polecenie sesji zamykającej P2b, 2026-10-18) — w §5: **CP25** — cel auto-fokusu (uczestnicy
+wyśrodkowani w pasie nad kartą) zostaje, dosłowny środek odrzucony; **CP26** — karta ≤ 45 % ekranu zostaje; **CP27** —
+pierścień subtelny i statyczny (C6); **CP28** — **470** → backlog bez daty, bez kodu.
+
+### 13.5 Temat widoczności starcia — ZAMKNIĘTY (CP24)
+
+**Temat widoczności starcia ZAMKNIĘTY zgodnie z CP24. C6 był jedyną poprawką z bramki ostatniej sesji kodu. Backlog bez
+daty: 163 · 464 · 460 · 466 · 463 · 469 · 470.** (Polecenie: „Combat-visibility topic CLOSED per CP24. C6 was the single
+gate-fix of the last code session. Backlog, no date: 163, 464, 460, 466, 463, 469, 470.”) Następny krok arca — **P3**
+(**456**, CP12; najpierw audyt).
+
+### 13.6 Czego nie zweryfikowano
+
+- C6 w przeglądarce właściciela poza krokiem bramki C6 — inne rozdzielczości i skale UI; płaski kąt kamery (pas skraca
+  się w kierunku promienia jak każdy płaski element — przy wysokości kamery 50° ~1,15 px w najbliższym i najdalszym punkcie
+  elipsy); wiele starć naraz (koszt: 65 rzutów punktu na znacznik co klatkę — niezmierzony, pomijalny `[derived]`).
+- **470** — mechanizm z bramki nie potwierdzony; artefakt rejestratora — wniosek z kodu, nie pomiar (§6).
+- Paski HP u właściciela 96 % (A) i 72,5 % (B) wobec 100 % walidatora; skok przed „Watch” 11,5 px (walidator 4,4) —
+  przyczyna niezmierzona (prawdziwe FPS, inny przebieg walki).
+- Konsola przeglądarki właściciela na bramce P2B — nieprzekazana.
+
+### 13.7 Incydenty
+
+1. Przejściowe „Permission denied” przy łatce C2 (§13.1) — ponowienie w skrypcie przeszło, obiekty sprawdzone.
+2. Keeper C6, T7b (nowy, przed zestagowaniem): pierwsza wersja porównywała wynik `engagementRingBand` w `Float32Array`
+   z tolerancją 1e-6 i padała na poprawnym kodzie (szerokość to różnica dwóch promieni ~0,3 — float32 daje błąd ~1e-5,
+   zmierzone 9,6e-6); wzór sprawdzany teraz na `Float64Array` (`out`, tolerancja 1e-9), osobno — domyślna tablica
+   `Float32Array`. Fail-first zmierzony ponownie FINALNĄ wersją keepera (5 / 10).
+3. Stan wypchnięcia inny niż w poleceniu sesji: commity `e866bd6` … `b1265f4` były już wypchnięte (polecenie właściciela
+   „push” w poprzedniej sesji) — HEAD, indeks i drzewo robocze zgodne z oczekiwanym stanem, więc bez STOP.
