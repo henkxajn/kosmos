@@ -1072,6 +1072,10 @@ export class DeepSpaceCombatSystem {
       timeline:      encounter.timeline,
       lossesA,
       lossesB,
+      // POLISH P2b (D5, Finding 450) — liczba rund starcia: jedno pole czytane przez okno wyniku (`BattleIntroModal` —
+      // „Tur: N”), Dziennik (`GameScene` — „N tur”) i listę bitew wojny (`WarSystem.recordBattle` → `WarOverlay`);
+      // dawniej brak pola ⇒ wszędzie „0”. Stare rekordy bez pola — czytelnicy `?? 0` (zapis v101 bez migracji).
+      turns:         encounter.currentRound,
       finalHPA,
       finalHPB,
       participantA: {
