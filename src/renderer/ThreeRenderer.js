@@ -35,6 +35,7 @@ import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
   from './VesselModelResolver.js';
 import { isStationInActiveSystem } from './StationRenderLogic.js';
+import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -43,6 +44,7 @@ import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { THEME } from '../config/ThemeConfig.js';
+import { COSMIC } from '../config/LayoutConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
@@ -166,6 +168,13 @@ const BODY_VEIL_OPACITY = 0.72;             // 0=widać, 1=ukryte (grey-out do c
 const ALERT_MARKER_COLOR = 0xff4466;        // czerwony (konwencja wroga, == factionColorRaw fallback)
 const ALERT_MARKER_SCALE = 0.7;             // bazowa skala billboardu (encircle ~0.3 sprite statku)
 const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skalę bazową; dalej → skala rośnie (stały rozmiar ekranowy)
+const ALERT_MARKER_PULSE_MAX = 1.16;        // szczyt pulsu celownika (1 + 0,16 · puls) — limit ekranowy liczony dla szczytu
+const INSIGNIA_WORLD_SIZE = 0.32;           // [j.] rozmiar świata szewronu insygniów (bez limitu ekranowego)
+// POLISH P2a (CP14 — limit ekranowy także dla efektów walki przy „Obserwuj”): rodzaje efektów w rozmiarze świata,
+// które z bliska zakrywały kadr (sonda P2a, scena 3 na 2: pierścień osłony rośnie do 0,30 j. promienia).
+const FX_WATCH_CAPPED = new Set(['flash', 'shieldRing', 'explosion', 'explosionRing']);
+const INSIGNIA_LIFT_RATIO = 0.4 / 0.32;     // zawieszenie szewronu nad statkiem w proporcji do rozmiaru (dawne 0,4 j. przy 0,32 j.)
+const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy głębi widoku (`_viewDepth`)
 const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
 const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
 // 4f-2 — hover-podgląd trasy JEDNOZNACZNY: pełna nieprzezroczystość + jaśniejszy kolor + grubsza
@@ -458,6 +467,9 @@ export class ThreeRenderer {
     this._focusViewOffset      = null;       // { fracX, fracY } — przesunięcie widoku 3D w podglądzie obserwatorium
     this._observatoryPreviewActive = false;  // czy overlay obserwatorium jest otwarty (podgląd ciała)
     this._focusEncounterId     = null;       // Slice 1 — kamera śledzi midpoint bitwy
+    // POLISH P2a (CP13) — „Obserwuj / Watch”: kamera śledzi środek walki, dystans z dopasowania do rozpiętości
+    // uczestników. null | { encounterId, fitDist, minDistBefore, minDistSet, goal, dist } — `_updateWatchCamera`.
+    this._watch                = null;
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
@@ -1064,6 +1076,8 @@ export class ThreeRenderer {
       if (window.KOSMOS?.uiPrefs?.battleAutoFocus === false) return;
       // POLISH P2a (CP7, Finding 453) — starcie w innym układzie: kamera zostaje (punkt starcia jest w ramce INNEGO układu).
       if (!isEngagementInView({ encounterSystemId: location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
+      // POLISH P2a (CP13) — gracz obserwuje inną walkę („Obserwuj”): nowe starcie nie zabiera mu kamery.
+      if (this._watch) return;
       const vm = window.KOSMOS?.vesselManager;
       const playerIn = [...sideA, ...sideB].some(id => {
         const v = vm?.getVessel?.(id); return v && !isEnemyVessel(v);
@@ -1078,16 +1092,17 @@ export class ThreeRenderer {
     // Slice 1 — kamera „Obserwuj bitwę" (mirror vessel:focus, close-up na midpoint).
     // POLISH P2a (CP7, Finding 453) — starcie w INNYM układzie: najpierw widok przełączony na układ starcia
     // (`starSystemManager.switchActiveSystem` — ta sama droga co chipy układów), potem kadr; nieznany układ — nic.
-    EventBus.on('camera:watchBattle', safe(({ systemId, x, y }) => {
+    EventBus.on('camera:watchBattle', safe(({ encounterId, systemId, x, y }) => {
       if (!this._cameraController || !Number.isFinite(x) || !Number.isFinite(y)) return;
       const act = watchBattleAction({ encounterSystemId: systemId, activeSystemId: window.KOSMOS?.activeSystemId });
       if (!act.frame) return;
       if (act.switchTo && window.KOSMOS?.starSystemManager?.switchActiveSystem?.(act.switchTo) !== true) return;
       this._focusEntityId = null; this._focusVesselId = null; this._focusStationId = null;
       this._focusEncounterId = { x, y };
-      this._cameraController.setMinDist(0.005);  // bliski zoom — można obejrzeć model
-      this._cameraController.focusOnInstant(S(x), S(y), 0.3);
-      this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 1.2));
+      // POLISH P2a (CP13, Finding 458) — kamera ŚLEDZI walkę (środek sprite'ów żywych uczestników, dystans z dopasowania
+      // do ich rozpiętości z marginesem, [MIN_DIST; MAX_DIST]); dawniej kadr stałego punktu startu z bliska (≤ 1,2 j.),
+      // od którego walka odpływała, a statki lądowały przy krawędzi pod nakładkami.
+      this._startWatch(encounterId ?? null, x, y);
     }));
 
     // Slice 2 — efekty skanu (snop + pierścień + ping ukończenia). Eventy już lecą.
@@ -3697,6 +3712,9 @@ export class ThreeRenderer {
           }
         }
 
+        // POLISH P2a (CP13) — „Obserwuj”: cel i dystans kamery z kadru walki (co klatkę, także w pauzie gry).
+        if (this._watch) this._updateWatchCamera();
+
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
 
@@ -6080,6 +6098,10 @@ export class ThreeRenderer {
   _updateActiveEffects(nowMs) {
     if (!this._activeEffects.length) return;
     const keep = [];
+    // POLISH P2a (CP14) — przy „Obserwuj” efekt walki nie większy na ekranie niż w kadrze auto-fokusu (`watchFxScale`);
+    // macierz widoku bieżąca (pętla renderu woła to przed `render`). Poza „Obserwuj” — bez zmian.
+    const watchFx = !!this._watch;
+    if (watchFx) this.camera.updateMatrixWorld();
     for (const ef of this._activeEffects) {
       const age = nowMs - ef.startTime - ef.delay;
       if (age < 0) { ef.mesh.visible = false; keep.push(ef); continue; }  // czeka na delay
@@ -6127,6 +6149,7 @@ export class ThreeRenderer {
         default:
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
       }
+      if (watchFx && FX_WATCH_CAPPED.has(ef.kind)) ef.mesh.scale.multiplyScalar(watchFxScale(this._viewDepth(ef.mesh.position)));
       if (ef.onTick) ef.onTick(ef, progress);
       keep.push(ef);
     }
@@ -6302,6 +6325,114 @@ export class ThreeRenderer {
     }
   }
 
+  // ── POLISH P2a (CP13, Finding 458) — „Obserwuj / Watch”: kamera śledzi walkę ──────────────────────────────
+  // Start: cel kamery od razu w kadrze walki (jak dotąd `focusOnInstant`), dystans dochodzi lerpem kontrolera; minDist
+  // na czas obserwacji ≤ `ZOOM_MIN_DIST` (gracz może przybliżyć kółkiem), po końcu wraca do wartości sprzed.
+  // Co klatkę (`_updateWatchCamera`): kadr z pozycji SPRITE'ÓW (statek na orbicie ciała jest rysowany na wysokości orbity —
+  // pozycja logiczna jest płaska; audyt P2 §10.3), cel — szybkie śledzenie `focusOnSmooth`. Koniec: starcie się skończyło albo
+  // nie jest w oglądanym układzie, albo kamerę przejął ktoś inny (inny fokus, reset H, zmiana układu — cel ≠ ostatni
+  // ustawiony); samo kółko (dystans ≠ ostatni ustawiony) kończy wyłącznie dopasowanie dystansu.
+  _startWatch(encounterId, x, y) {
+    const cc = this._cameraController;
+    if (!cc) return;
+    if (this._watch) this._endWatch();
+    const minDistBefore = cc._minDist;
+    const enc = encounterId ? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(encounterId) : null;
+    if (!enc?.isActive) {
+      // Brak aktywnego starcia (ładunek bez id albo starcie już rozstrzygnięte) — dawny kadr punktu startu (bez śledzenia).
+      cc.setMinDist(0.005);
+      cc.focusOnInstant(S(x), S(y), 0.3);
+      cc.setTargetDist(Math.min(cc._targetDist, 1.2));
+      return;
+    }
+    cc.setMinDist(Math.min(minDistBefore, COMBAT_WATCH.ZOOM_MIN_DIST));
+    this._watch = { encounterId, fitDist: true, minDistBefore, minDistSet: cc._minDist, goal: null, dist: null };
+    const fit = this._computeWatchFit(enc);
+    if (fit) {
+      cc.focusOnInstant(fit.target.x, fit.target.z, fit.target.y);
+      cc.setTargetDist(fit.dist);
+    } else {
+      // Sprite'y uczestników jeszcze nie stoją: po przełączeniu widoku na układ starcia model GLB wstawia się
+      // asynchronicznie (obietnica loadera, także z pamięci podręcznej) — cel od razu na punkcie starcia, kadr i dystans
+      // dopasuje pierwsza klatka ze sprite'ami (`_updateWatchCamera`). Dawniej: stały kadr ≤ 1,2 j. bez śledzenia.
+      cc.focusOnInstant(S(x), S(y), 0.3);
+    }
+    this._watch.goal = { x: cc._goalTarget.x, y: cc._goalTarget.y, z: cc._goalTarget.z };
+    this._watch.dist = cc._targetDist;
+  }
+
+  _updateWatchCamera() {
+    const w = this._watch;
+    const cc = this._cameraController;
+    if (!w || !cc) { this._watch = null; return; }
+    const g = cc._goalTarget;
+    if (w.goal && (Math.abs(g.x - w.goal.x) > 1e-6 || Math.abs(g.y - w.goal.y) > 1e-6 || Math.abs(g.z - w.goal.z) > 1e-6)) {
+      this._endWatch();   // kamerę przejął inny fokus / reset / zmiana układu
+      return;
+    }
+    if (w.fitDist && w.dist != null && Math.abs(cc._targetDist - w.dist) > 1e-6) w.fitDist = false;   // kółko gracza
+    const enc = window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(w.encounterId);
+    if (!enc?.isActive || !isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) {
+      this._endWatch();
+      return;
+    }
+    const fit = this._computeWatchFit(enc);
+    if (!fit) return;
+    // Cel — szybkie śledzenie (`focusOnSmooth`, jak kamera na wybranym statku): sam lerp 0,08 na klatkę (`flyTo`) zostawiał
+    // kamerę ~12 klatek ruchu za walką — przy dystansie rzędu 0,4 j. formacja wyjeżdżała z kadru, a statek lecący ku
+    // kamerze potrafił w nią wjechać (sonda P2a w prawdziwej grze, scena 3 na 2). Dystans — lerp kontrolera.
+    cc.focusOnSmooth(fit.target.x, fit.target.z, fit.target.y);
+    if (w.fitDist) cc.setTargetDist(fit.dist);
+    w.goal = { x: g.x, y: g.y, z: g.z };
+    w.dist = cc._targetDist;
+  }
+
+  _endWatch() {
+    const w = this._watch;
+    this._watch = null;
+    const cc = this._cameraController;
+    if (!w || !cc) return;
+    if (cc._minDist === w.minDistSet) {
+      cc.setMinDist(w.minDistBefore);
+      if (cc._targetDist < w.minDistBefore) cc.setTargetDist(cc._targetDist);
+    }
+  }
+
+  // Kadr walki: pozycje sprite'ów żywych, widocznych uczestników (wróg ukryty mgłą nie wchodzi — bez przecieku), kąty
+  // i FOV bieżącej kamery, prostokąt bezpieczny bez pasków UI i panelu walki (`CombatHUD.getPanelRect`).
+  _computeWatchFit(enc) {
+    const cc = this._cameraController;
+    if (!cc || !enc) return null;
+    const pts = [];
+    const ids = [...(enc.sideA?.vesselIds ?? []), ...(enc.sideA?.joinedVesselIds ?? []),
+      ...(enc.sideB?.vesselIds ?? []), ...(enc.sideB?.joinedVesselIds ?? [])];
+    for (const id of ids) {
+      const st = enc.vesselStates?.get?.(id);
+      if (st && !(st.hp > 0)) continue;
+      const e = this._vessels.get(id);
+      if (!e?.sprite?.visible) continue;
+      const p = e.sprite.position;
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) continue;
+      pts.push({ x: p.x, y: p.y, z: p.z });
+    }
+    if (!pts.length) return null;
+    const W = window.innerWidth || 1, H = window.innerHeight || 1;
+    const civ = !!window.KOSMOS?.civMode;
+    const safe = watchSafeRect({
+      W, H, uiScale: window.KOSMOS?.uiScale ?? 1, hudRect: window.KOSMOS?.combatHud?.getPanelRect?.() ?? null,
+      topBarH: COSMIC.TOP_BAR_H, bottomH: civ ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : COSMIC.BOTTOM_BAR_H,
+      rightW: civ ? COSMIC.OUTLINER_W : 0,
+    });
+    return fitWatchFrame({ points: pts, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
+      aspect: this.camera.aspect, W, H, safe });
+  }
+
+  // Głębia punktu w przestrzeni widoku kamery [j.] — rozmiar billboardu na ekranie zależy od głębi, nie od odległości.
+  _viewDepth(pos) {
+    _WATCH_V.copy(pos).applyMatrix4(this.camera.matrixWorldInverse);
+    return -_WATCH_V.z;
+  }
+
   // ── Znacznik starcia (persistent, mark&sweep TTL) ────────────────────────
   _upsertEngagementMarker(encounterId, gx, gy) {
     if (!encounterId) return;
@@ -6338,6 +6469,7 @@ export class ThreeRenderer {
       if (nowMs - (e._lastTouch ?? 0) > 1600) { this._disposeEngagementMarker(id); continue; }
       e.mat.opacity = 0.5 * (0.55 + 0.45 * Math.sin(tt * 4));
       e.mesh.scale.setScalar(1 + 0.1 * Math.sin(tt * 4));
+      e.mesh.visible = !this._watch;   // POLISH P2a (CP14) — pierścień ukryty przy „Obserwuj” (kamera i tak jest przy walce)
     }
   }
 
@@ -6535,6 +6667,9 @@ export class ThreeRenderer {
   }
 
   _syncInsignia() {
+    // POLISH P2a (CP14) — macierz widoku z TEJ klatki (kontroler właśnie przestawił kamerę; render przelicza ją dopiero
+    // później): limit rozmiaru ekranowego szewronów i celownika (`_syncEnemyAlertMarkers` zaraz po) bez opóźnienia o klatkę.
+    this.camera.updateMatrixWorld();
     if (!GAME_CONFIG.FEATURES?.fcInsignia) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
@@ -6557,14 +6692,24 @@ export class ThreeRenderer {
       if (ins) this._disposeInsignia(vid);
       const tex = ThreeRenderer._createInsigniaTexture(col);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-      sp.scale.set(0.32, 0.32, 0.32);
+      sp.scale.set(INSIGNIA_WORLD_SIZE, INSIGNIA_WORLD_SIZE, INSIGNIA_WORLD_SIZE);
       sp._col = col;
       this.scene.add(sp);
       ins = sp;
       this._insigniaSprites.set(vid, ins);
     }
     const p = entry.sprite.position;
-    ins.position.set(p.x, p.y + 0.4, p.z);
+    // POLISH P2a (CP14, Finding 458) — limit rozmiaru EKRANOWEGO: szewron w rozmiarze świata 0,32 j. rósł przy zbliżeniu
+    // do 120–200 px i zasłaniał model (8–9 px przy „Obserwuj”). Powyżej limitu — mniejszy w świecie; zawieszenie nad
+    // statkiem w tej samej proporcji (0,4 / 0,32). Poniżej limitu — bez zmian.
+    // Głębia liczona w punkcie UNIESIONEGO szewronu (krok wstępny w głębi statku, potem poprawka) — szewron leży wyżej niż
+    // statek, więc limit liczony w głębi statku przekraczał się o ~3 % (zmierzone, sonda P2a: 37 px przy limicie 36).
+    const capOpts = { capPx: COMBAT_WATCH.INSIGNIA_MAX_PX, fovDeg: this.camera.fov, H: window.innerHeight || 1 };
+    let size = capBillboardWorld(INSIGNIA_WORLD_SIZE, { ...capOpts, depth: this._viewDepth(p) });
+    ins.position.set(p.x, p.y + size * INSIGNIA_LIFT_RATIO, p.z);
+    size = capBillboardWorld(INSIGNIA_WORLD_SIZE, { ...capOpts, depth: this._viewDepth(ins.position) });
+    ins.position.y = p.y + size * INSIGNIA_LIFT_RATIO;
+    ins.scale.set(size, size, size);
     ins.material.opacity = entry.intelOpacity ?? 1.0;  // dopasuj do ghost-opacity (contact 0.5)
   }
 
@@ -7131,7 +7276,11 @@ export class ThreeRenderer {
       // świata KURCZY się ekranowo przy oddaleniu (znikał z dalekiego zoomu). Mnożnik
       // dist/REF_DIST utrzymuje ~stały rozmiar na ekranie od bliska po cały układ.
       const distFactor = camPos ? Math.max(0.5, camPos.distanceTo(m.position) / ALERT_MARKER_REF_DIST) : 1;
-      m.scale.setScalar(pulseScale * distFactor);
+      // POLISH P2a (CP14, Finding 458) — limit rozmiaru EKRANOWEGO: poniżej dystansu 30 j. (współczynnik 0,5) celownik
+      // rósł na ekranie (119–138 px przy „Obserwuj”). Limit liczony dla szczytu pulsu — puls zostaje w każdym rozmiarze.
+      const base = capBillboardWorld(ALERT_MARKER_SCALE * distFactor, { capPx: COMBAT_WATCH.RETICLE_MAX_PX / ALERT_MARKER_PULSE_MAX,
+        depth: this._viewDepth(m.position), fovDeg: this.camera.fov, H: window.innerHeight || 1 });
+      m.scale.setScalar(base * (pulseScale / ALERT_MARKER_SCALE));
     }
     for (const k of [...this._enemyAlertMarkers.keys()]) if (!active.has(k)) this._disposeEnemyAlertMarker(k);
   }

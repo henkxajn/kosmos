@@ -37,6 +37,17 @@ export class CombatHUD extends BaseOverlay {
     this._minimizeBtnBounds = null;
     /** @type {{x:number,y:number,w:number,h:number,point:{x:number,y:number}|null,encounterId:string|null,systemId:string|null}|null} — przycisk „Obserwuj bitwę" */
     this._watchBtnBounds = null;
+    /** @type {{x:number,y:number,w:number,h:number}|null} — prostokąt panelu (jednostki LOGICZNE UI) z ostatniego rysowania */
+    this._panelRect = null;
+  }
+
+  /**
+   * POLISH P2a (CP13) — prostokąt panelu walki z ostatniego rysowania (jednostki LOGICZNE UI; px ekranu = × `uiScale`)
+   * albo `null`, gdy panel się nie rysuje (brak starć / zminimalizowany). Kadr „Obserwuj” (`ThreeRenderer`) trzyma
+   * statki NAD panelem.
+   */
+  getPanelRect() {
+    return this._panelRect ? { ...this._panelRect } : null;
   }
 
   toggle() { /* no-op */ }
@@ -64,6 +75,7 @@ export class CombatHUD extends BaseOverlay {
     if (encounters.length === 0) {
       this._minimizeBtnBounds = null;
       this._watchBtnBounds = null;
+      this._panelRect = null;
       // Auto-reset minimize gdy nie ma już active encounters (następna bitwa
       // startuje w expanded mode — bez tego user widziałby chip dla nic).
       if (this._minimized) this._minimized = false;
@@ -73,6 +85,7 @@ export class CombatHUD extends BaseOverlay {
       // Chip rysuje BottomBar; tu nic.
       this._minimizeBtnBounds = null;
       this._watchBtnBounds = null;
+      this._panelRect = null;
       return;
     }
 
@@ -105,6 +118,8 @@ export class CombatHUD extends BaseOverlay {
       + (window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0);   // Faza 4 — podnieś NAD Dok taktyczny
     const px = Math.floor(W / 2 - PANEL_W / 2);
     const py = Math.max((COSMIC.TOP_BAR_H ?? 32) + 8, H - bottomRes - (COSMIC.RESOURCE_BAR_H ?? 0) - totalH - 8);   // nad paskiem nawigacji + dziennikiem
+
+    this._panelRect = { x: px, y: py, w: PANEL_W, h: totalH };
 
     // Tło + ramka
     ctx.fillStyle = bgAlpha(0.78);
