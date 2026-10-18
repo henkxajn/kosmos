@@ -35,7 +35,7 @@ import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
   from './VesselModelResolver.js';
 import { isStationInActiveSystem } from './StationRenderLogic.js';
-import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale } from './CombatWatchLogic.js';
+import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -471,6 +471,12 @@ export class ThreeRenderer {
     // POLISH P2a (CP13) — „Obserwuj / Watch”: kamera śledzi środek walki, dystans z dopasowania do rozpiętości
     // uczestników. null | { encounterId, fitDist, minDistBefore, minDistSet, goal, dist } — `_updateWatchCamera`.
     this._watch                = null;
+    // POLISH P2b (D1, Finding 467) — auto-fokus starcia śledzi środek walki: null | { encounterId, goal } —
+    // `_updateAutoFocusCamera`; środek uczestników z kadru „Obserwuj” (`_engagementCentre`, pamięć na jedną klatkę).
+    this._autoFocus            = null;
+    this._centreCache          = new Map();  // encounterId → środek uczestników (klatka `_centreFrame`)
+    this._centreFrame          = -1;
+    this._frameNo              = 0;          // licznik klatek pętli renderu
     // POLISH P2a (CP17) — statki aktywnych starć z udziałem gracza (zmiana zbioru → ponowne nałożenie widoczności wywiadu).
     this._combatRevealed       = new Set();
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
@@ -1074,7 +1080,7 @@ export class ThreeRenderer {
 
     // Slice 1 — łagodny auto-focus kamery gdy gracz wchodzi w starcie (wide framing).
     // Domyślnie ON (gracz chce widzieć bitwy); close-up = klik statku / „Obserwuj bitwę".
-    EventBus.on('vessel:engaged', safe(({ sideA = [], sideB = [], location }) => {
+    EventBus.on('vessel:engaged', safe(({ sideA = [], sideB = [], location, encounterId }) => {
       if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
       if (window.KOSMOS?.uiPrefs?.battleAutoFocus === false) return;
       // POLISH P2a (CP7, Finding 453) — starcie w innym układzie: kamera zostaje (punkt starcia jest w ramce INNEGO układu).
@@ -1093,6 +1099,13 @@ export class ThreeRenderer {
       // (≤ 6 j.) jak dotąd; zbliżenie — „Obserwuj” albo klik statku.
       this._cameraController.focusOnInstant(S(p.x), S(p.y));
       this._cameraController.snapDist(Math.min(this._cameraController._targetDist, 6));
+      // POLISH P2b (D1, Finding 467) — od następnej klatki cel ŚLEDZI walkę (`_updateAutoFocusCamera`: uczestnicy
+      // wyśrodkowani nad panelem walki); dawniej stał w punkcie startu, a walka odpływała od niego o ~0,1 AU (kamera
+      // patrzyła na pierścień, nie na statki).
+      // Dotychczasowy fokus ciała / statku / stacji przerwany — inaczej `_updateCameraFocus` co tik ciągnąłby kamerę z walki.
+      this._focusEntityId = null; this._focusVesselId = null; this._focusStationId = null; this._focusEncounterId = null;
+      const g0 = this._cameraController._goalTarget;
+      this._autoFocus = { encounterId: encounterId ?? null, goal: { x: g0.x, y: g0.y, z: g0.z } };
     }));
 
     // POLISH P2a (CP17, Findingi 455, 462) — wróg w starciu z graczem: pełne krycie i smugi od startu starcia (przed salwą
@@ -3685,6 +3698,7 @@ export class ThreeRenderer {
 
       try {
         const t = this._clock.getElapsedTime();
+        this._frameNo++;   // POLISH P2b — klatka pętli renderu (pamięć środka uczestników starcia na jedną klatkę)
 
         // Aktualizuj migotanie gwiazd tła
         if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
@@ -3725,6 +3739,8 @@ export class ThreeRenderer {
 
         // POLISH P2a (CP13) — „Obserwuj”: cel i dystans kamery z kadru walki (co klatkę, także w pauzie gry).
         if (this._watch) this._updateWatchCamera();
+        // POLISH P2b (D1, Finding 467) — auto-fokus starcia: cel śledzi środek walki (co klatkę, także w pauzie gry).
+        if (this._autoFocus) this._updateAutoFocusCamera();
 
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
@@ -6439,6 +6455,55 @@ export class ThreeRenderer {
     }
   }
 
+  // POLISH P2b (D1, Finding 467) — auto-fokus starcia śledzi walkę (ta sama logika co „Obserwuj”: kadr
+  // `_computeWatchFit`, cel `_autoFocusTarget` — uczestnicy wyśrodkowani nad panelem walki, szybkie śledzenie
+  // `focusOnSmooth`; bez dopasowania dystansu). Koniec — `autoFocusFollowStep`.
+  _updateAutoFocusCamera() {
+    const a = this._autoFocus;
+    const cc = this._cameraController;
+    if (!a || !cc) { this._autoFocus = null; return; }
+    const enc = a.encounterId ? window.KOSMOS?.deepSpaceCombatSystem?._activeEncounters?.get?.(a.encounterId) : null;
+    const g = cc._goalTarget;
+    const step = autoFocusFollowStep({
+      watching: !!this._watch, active: !!enc?.isActive,
+      inView: isEngagementInView({ encounterSystemId: enc?.location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId }),
+      goal: g, lastGoal: a.goal, centre: enc?.isActive ? this._autoFocusTarget(enc) : null,
+    });
+    if (step.end) { this._autoFocus = null; return; }
+    if (step.target) cc.focusOnSmooth(step.target.x, step.target.z, step.target.y);
+    a.goal = { x: g.x, y: g.y, z: g.z };
+  }
+
+  // POLISH P2b (D1, Finding 467) — kadr „Obserwuj” starcia (`_computeWatchFit`: środek uczestników, punkty, prostokąt
+  // bezpieczny) pamiętany na jedną klatkę pętli renderu (znacznik i auto-fokus czytają go razem).
+  _engagementFit(enc) {
+    if (!enc?.id) return null;
+    if (this._centreFrame !== this._frameNo) { this._centreCache.clear(); this._centreFrame = this._frameNo; }
+    if (this._centreCache.has(enc.id)) return this._centreCache.get(enc.id);
+    const fit = this._computeWatchFit(enc);
+    this._centreCache.set(enc.id, fit);
+    return fit;
+  }
+
+  // Środek uczestników starcia (sprite'y żywych, widocznych) = `centroid` kadru „Obserwuj” — pozycja znacznika starcia.
+  _engagementCentre(enc) {
+    return this._engagementFit(enc)?.centroid ?? null;
+  }
+
+  // POLISH P2b (D1, Finding 467) — cel auto-fokusu: uczestnicy wyśrodkowani w prostokącie bezpiecznym kadru „Obserwuj”
+  // (ekran bez pasków UI i panelu walki — nie pod kartą) przy BIEŻĄCYM dystansie kamery: `watchTargetAt`, ta sama reguła
+  // co „Obserwuj”, bez dopasowania dystansu. Środek uczestników na środku ekranu stawiał część z nich pod panelem walki
+  // (sonda P2b w prawdziwej grze, scena 3 na 2: obaj strażnicy pod kartą we wszystkich klatkach auto-fokusu).
+  // Bez sprite'ów — null (cel bez zmian).
+  _autoFocusTarget(enc) {
+    const fit = this._engagementFit(enc);
+    const cc = this._cameraController;
+    if (!fit || !cc) return null;
+    const r = watchTargetAt({ points: fit.points, d: cc._targetDist, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
+      aspect: this.camera.aspect, W: fit.W, H: fit.H, safe: fit.safe });
+    return r.ok ? r.target : fit.centroid;
+  }
+
   // Kadr walki: pozycje sprite'ów żywych, widocznych uczestników (wróg ukryty mgłą nie wchodzi — bez przecieku), kąty
   // i FOV bieżącej kamery, prostokąt bezpieczny bez pasków UI i panelu walki (`CombatHUD.getPanelRect`).
   _computeWatchFit(enc) {
@@ -6464,8 +6529,10 @@ export class ThreeRenderer {
       topBarH: COSMIC.TOP_BAR_H, bottomH: civ ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : COSMIC.BOTTOM_BAR_H,
       rightW: civ ? COSMIC.OUTLINER_W : 0,
     });
-    return fitWatchFrame({ points: pts, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
+    const fit = fitWatchFrame({ points: pts, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
       aspect: this.camera.aspect, W, H, safe });
+    // POLISH P2b (D1) — punkty i prostokąt bezpieczny kadru także dla auto-fokusu (`_autoFocusTarget`).
+    return fit ? { ...fit, points: pts, safe, W, H } : null;
   }
 
   // Głębia punktu w przestrzeni widoku kamery [j.] — rozmiar billboardu na ekranie zależy od głębi, nie od odległości.
@@ -6517,6 +6584,15 @@ export class ThreeRenderer {
     for (const id of plan.dispose) this._disposeEngagementMarker(id);
     for (const u of plan.upsert) this._upsertEngagementMarker(u.id, u.x, u.y, 'encounter');
     if (!this._engagementMarkers.size) return;
+    // POLISH P2b (D1, Finding 467) — znacznik starcia DSCS w ŚRODKU uczestników (co klatkę — walka odpływa od punktu
+    // startu o ~0,1 AU); bez sprite'ów — punkt startu (`location.point`, jak dotąd).
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    for (const [id, e] of this._engagementMarkers) {
+      if ((e.kind ?? 'encounter') !== 'encounter') continue;
+      const enc = dscs?._activeEncounters?.get?.(id);
+      const c = enc?.isActive ? this._engagementCentre(enc) : null;
+      if (c) e.mesh.position.set(c.x, c.y, c.z);
+    }
     const tt = this._clock.getElapsedTime();
     for (const [, e] of this._engagementMarkers) {
       e.mat.opacity = 0.5 * (0.55 + 0.45 * Math.sin(tt * 4));

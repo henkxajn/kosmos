@@ -34,6 +34,37 @@ const add = (a, b) => v(a.x + b.x, a.y + b.y, a.z + b.z);
 const mul = (a, k) => v(a.x * k, a.y * k, a.z * k);
 
 /**
+ * POLISH P2b (D1, Finding 467) — środek uczestników starcia: średnia pozycji (sprite'ów) żywych, widocznych uczestników.
+ * JEDNO źródło dla kadru „Obserwuj” (`fitWatchFrame` — `centroid`), znacznika starcia i celu auto-fokusu (renderer bierze
+ * go z `_computeWatchFit(enc).centroid`). Punkty bez skończonych współrzędnych pomijane; brak punktów — `null`.
+ * @returns {{x:number,y:number,z:number}|null}
+ */
+export function centroidOf(points) {
+  const pts = (points ?? []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z));
+  if (!pts.length) return null;
+  return mul(pts.reduce((s, p) => add(s, p), v(0, 0, 0)), 1 / pts.length);
+}
+
+/**
+ * POLISH P2b (D1, Finding 467) — auto-fokus starcia ŚLEDZI walkę co klatkę (jak „Obserwuj”, bez dopasowania dystansu —
+ * dystans ustawia start, potem kółko gracza). Dawniej cel stał w punkcie STARTU starcia (`location.point`), a walka
+ * odpływała od niego o ~0,1 AU: kamera patrzyła na pierścień, nie na statki (bramka P2A u właściciela).
+ * Krok na klatkę: KONIEC, gdy „Obserwuj” przejęło kamerę, starcie się skończyło albo nie jest w oglądanym układzie, albo
+ * cel kamery zmienił ktoś inny (fokus ciała / statku / stacji, reset H, zmiana układu — cel ≠ ostatni ustawiony); inaczej
+ * nowy cel = punkt śledzenia `centre` (renderer: uczestnicy wyśrodkowani w prostokącie bezpiecznym kadru — `watchTargetAt`
+ * przy bieżącym dystansie); bez sprite'ów (model GLB jeszcze się wstawia) — cel bez zmian.
+ * @returns {{ end: boolean, reason?: string, target?: {x,y,z}|null }}
+ */
+export function autoFocusFollowStep({ watching = false, active = false, inView = false, goal = null, lastGoal = null,
+  centre = null, eps = 1e-6 }) {
+  if (watching) return { end: true, reason: 'watch' };
+  if (!active || !inView) return { end: true, reason: 'ended' };
+  if (goal && lastGoal && (Math.abs(goal.x - lastGoal.x) > eps || Math.abs(goal.y - lastGoal.y) > eps
+    || Math.abs(goal.z - lastGoal.z) > eps)) return { end: true, reason: 'camera_taken' };
+  return { end: false, target: centre ?? null };
+}
+
+/**
  * Baza kamery kontrolera dla kątów (θ, φ) — wersory w przestrzeni świata.
  * @returns {{ zc: {x,y,z}, xc: {x,y,z}, yc: {x,y,z} }}
  */
@@ -94,7 +125,7 @@ export function watchTargetAt({ points, d, theta, phi, fovDeg, aspect, W, H, saf
   const tanHalf = Math.tan((fovDeg * Math.PI / 180) / 2);
   const asp = aspect > 0 ? aspect : W / H;
   const basis = cameraBasis(theta, phi);
-  const c = mul(pts.reduce((s, p) => add(s, p), v(0, 0, 0)), 1 / pts.length);
+  const c = centroidOf(pts);
   const axPx = (safe.x0 + safe.x1) / 2, ayPx = (safe.y0 + safe.y1) / 2;
   const ax = (axPx / W) * 2 - 1, ay = 1 - (ayPx / H) * 2;
   let t = sub(sub(c, mul(basis.xc, ax * d * tanHalf * asp)), mul(basis.yc, ay * d * tanHalf));
@@ -144,7 +175,7 @@ export function fitWatchFrame({ points, theta, phi, fovDeg, aspect, W, H, safe,
   const tanHalf = Math.tan((fovDeg * Math.PI / 180) / 2);
   const asp = aspect > 0 ? aspect : W / H;
   const basis = cameraBasis(theta, phi);
-  const c = mul(pts.reduce((s, p) => add(s, p), v(0, 0, 0)), 1 / pts.length);
+  const c = centroidOf(pts);
   const at = (d) => watchTargetAt({ points: pts, d, theta, phi, fovDeg, aspect: asp, W, H, safe, near });
   const fits = (d) => {
     const r = at(d);
