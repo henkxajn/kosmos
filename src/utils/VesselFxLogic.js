@@ -101,6 +101,51 @@ export function planEngagementMarkers({ markers = [], encounters = [], activeSys
   return { upsert, dispose };
 }
 
+// ── POLISH P2b (D2) — paski HP uczestników starcia (Finding 451, CP16) i biały błysk trafienia na modelu (CP18) ────────
+// Pasek: stały rozmiar EKRANOWY (px), pod statkiem (odstęp od krawędzi modelu), tło + wypełnienie w kolorze właściciela.
+export const HP_BAR = Object.freeze({ W_PX: 40, H_PX: 5, BORDER_PX: 1, GAP_PX: 6 });
+// Błysk: biały, stałe 200 ms (CP18); rozmiar dopasowany do modelu (× MODEL_K), z podłogą MIN_PX na ekranie — przy kadrze
+// auto-fokusu (≤ 6 j.) model fregaty ma ~2 px, a błysk ma być widoczny.
+export const HIT_GLOW = Object.freeze({ MS: 200, COLOR: 0xffffff, MODEL_K: 1.6, MIN_PX: 12 });
+
+/** Ułamek HP paska: hp / hpStart w [0, 1]; brak stanu / hpStart ≤ 0 → 0. */
+export function hpBarFrac(state) {
+  const h0 = state?.hpStart;
+  if (!(h0 > 0) || !Number.isFinite(state?.hp)) return 0;
+  return Math.max(0, Math.min(1, state.hp / h0));
+}
+
+// Plan pasków HP — uczestnicy AKTYWNEGO starcia DSCS w oglądanym układzie (`isEngagementInView`), OBIE strony (CP16);
+// poległy w trakcie starcia — pasek pusty (frac 0; wrak powstaje dopiero na końcu starcia — Finding 460); koniec starcia —
+// pasków nie ma. Wejście: starcia z `DeepSpaceCombatSystem.listActive()` (pola `sideA/sideB`, `vesselStates`, `location`).
+// out: [{ vesselId, encounterId, frac, enemy }]
+export function planCombatHpBars({ encounters = [], activeSystemId }) {
+  const out = [];
+  for (const enc of encounters ?? []) {
+    if (!enc?.isActive) continue;
+    if (!isEngagementInView({ encounterSystemId: enc.location?.systemId, activeSystemId })) continue;
+    for (const side of [enc.sideA, enc.sideB]) {
+      if (!side) continue;
+      const enemy = side.ownerEmpireId !== 'player';
+      for (const id of [...(side.vesselIds ?? []), ...(side.joinedVesselIds ?? [])]) {
+        const st = enc.vesselStates?.get?.(id);
+        if (!st) continue;
+        out.push({ vesselId: id, encounterId: enc.id, frac: hpBarFrac(st), enemy });
+      }
+    }
+  }
+  return out;
+}
+
+// Rozmiar świata błysku trafienia: model × MODEL_K, ale na ekranie nie mniej niż MIN_PX (rozmiar px = świat · H /
+// (2 · głębia · tan(fov/2))). Głębia nieokreślona — sam rozmiar modelu.
+export function hitGlowWorldSize({ modelSize, depth, fovDeg, H }) {
+  const fit = Math.max(0, Number(modelSize) || 0) * HIT_GLOW.MODEL_K;
+  if (!(depth > 0) || !(H > 0) || !(fovDeg > 0)) return fit;
+  const floor = HIT_GLOW.MIN_PX * 2 * depth * Math.tan((fovDeg * Math.PI / 180) / 2) / H;
+  return Math.max(fit, floor);
+}
+
 // Resolver endpointu FX (gameplay coords — renderer aplikuje S()/skalę osobno).
 // own → live; enemy unknown → visible:false (BRAK przecieku); rumor → positionLastKnown
 // (NIE live — fog-of-war); contact/detailed → live.

@@ -56,7 +56,7 @@ import {
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS,
-  isPlayerEngagement, isEndpointVisibleInCombat,
+  isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR, HIT_GLOW, hitGlowWorldSize,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
@@ -176,6 +176,9 @@ const INSIGNIA_WORLD_SIZE = 0.32;           // [j.] rozmiar świata szewronu ins
 const FX_WATCH_CAPPED = new Set(['flash', 'shieldRing', 'explosion', 'explosionRing']);
 const INSIGNIA_LIFT_RATIO = 0.4 / 0.32;     // zawieszenie szewronu nad statkiem w proporcji do rozmiaru (dawne 0,4 j. przy 0,32 j.)
 const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy głębi widoku (`_viewDepth`)
+const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w prawo” ekranu w świecie (paski HP)
+const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
+let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
 const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
 const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
 // 4f-2 — hover-podgląd trasy JEDNOZNACZNY: pełna nieprzezroczystość + jaśniejszy kolor + grubsza
@@ -477,6 +480,7 @@ export class ThreeRenderer {
     this._centreCache          = new Map();  // encounterId → środek uczestników (klatka `_centreFrame`)
     this._centreFrame          = -1;
     this._frameNo              = 0;          // licznik klatek pętli renderu
+    this._hpBars               = new Map();  // POLISH P2b (D2, Finding 451) — vesselId → { bg, fill, col } (paski HP starcia)
     // POLISH P2a (CP17) — statki aktywnych starć z udziałem gracza (zmiana zbioru → ponowne nałożenie widoczności wywiadu).
     this._combatRevealed       = new Set();
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
@@ -3681,6 +3685,7 @@ export class ThreeRenderer {
     for (const [, e] of this._predictionConeMeshes)   each(e?.group);
     for (const [, sp] of this._enemyAlertMarkers)     each(sp);
     for (const [, sp] of this._tacticalGlyphs)        each(sp);
+    for (const [, b] of this._hpBars)                 { each(b.bg); each(b.fill); }   // POLISH P2b (D2)
   }
 
   // ── Pętla renderowania ────────────────────────────────────────
@@ -3767,6 +3772,7 @@ export class ThreeRenderer {
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
         this._syncInsignia();
+        this._syncCombatHpBars();        // POLISH P2b (D2, Finding 451, CP16) — paski HP uczestników aktywnego starcia
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
         this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
         this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
@@ -6280,7 +6286,7 @@ export class ThreeRenderer {
       const tw = this._combatEndpointWorld(ev.target, ev.tPos);
       if (!aw || !tw) continue;  // któryś endpoint fog-gated (wróg unknown) → skip, brak przecieku
       const delay = (stagger++ % 8) * 40;  // rozłóż salwę po ~0..280ms (czytelność, nie 1-frame)
-      this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay);
+      this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay, { attacker: ev.attacker, target: ev.target });
     }
     // Znacznik starcia (midpoint) — POLISH P2a (Finding 457): stawia go i zdejmuje `_tickEngagementMarkers` wg STANU
     // starcia (nie salwa z czasem życia — gasł między salwami i w pauzie).
@@ -6358,7 +6364,7 @@ export class ThreeRenderer {
     return null;
   }
 
-  _spawnCombatTracer(aw, tw, category, hit, blockedByShield, delay = 0) {
+  _spawnCombatTracer(aw, tw, category, hit, blockedByShield, delay = 0, ids = null) {
     const color = fxWeaponColor(category);
     const ay = aw.y ?? 0.3, ty = tw.y ?? 0.3;  // poziom RYSOWANEGO statku (fix#3)
     const pts = [ new THREE.Vector3(aw.x, ay, aw.z), new THREE.Vector3(tw.x, ty, tw.z) ];
@@ -6373,6 +6379,8 @@ export class ThreeRenderer {
     const flash = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), fMat);
     flash.position.set(tw.x, ty, tw.z);
     this._spawnFx(flash, { kind: 'flash', lifetime: FX_FLASH_MS, baseScale: 1, baseOpacity: 0.85, delay: delay + FX_FLASH_DELAY_MS });
+    // POLISH P2b (D2, CP18) — biały błysk NA MODELU trafionego statku (200 ms), w chwili uderzenia.
+    if (ids?.target) this._spawnHitGlow(ids.target, tw, delay + FX_FLASH_DELAY_MS);
     // Pierścień tarczy gdy trafienie zablokowane.
     if (blockedByShield > 0) {
       const sMat = new THREE.MeshBasicMaterial({ color: FX_SHIELD_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
@@ -6380,6 +6388,106 @@ export class ThreeRenderer {
       ring.position.set(tw.x, ty, tw.z); ring.rotation.x = -Math.PI / 2;
       this._spawnFx(ring, { kind: 'shieldRing', lifetime: FX_SHIELD_MS, baseScale: 1, baseOpacity: 0.8, delay: delay + FX_FLASH_DELAY_MS });
     }
+  }
+
+  // ── POLISH P2b (D2, CP18) — biały błysk trafienia NA MODELU ───────────────────────────────────────────────────
+  // Addytywny billboard w pozycji trafionego statku, 200 ms (stałe), rozmiar dopasowany do modelu (× `HIT_GLOW.MODEL_K`)
+  // z podłogą `HIT_GLOW.MIN_PX` na ekranie (przy kadrze auto-fokusu model ma ~2 px); co klatkę idzie za sprite'em celu.
+  _spawnHitGlow(vesselId, tw, delay = 0) {
+    const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    const modelSize = vessel ? vesselTargetSize(vessel) : 0.016;
+    const mat = new THREE.SpriteMaterial({ map: ThreeRenderer._hitGlowTexture(), color: HIT_GLOW.COLOR, transparent: true,
+      opacity: 1, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false });
+    const glow = new THREE.Sprite(mat);
+    glow.renderOrder = 995;
+    glow.position.set(tw.x, tw.y ?? 0.3, tw.z);
+    glow.scale.setScalar(modelSize * HIT_GLOW.MODEL_K);
+    this._spawnFx(glow, { kind: 'hitGlow', lifetime: HIT_GLOW.MS, baseOpacity: 1, delay, onTick: (ef) => {
+      const e = this._vessels.get(vesselId);
+      if (e?.sprite?.visible) ef.mesh.position.copy(e.sprite.position);
+      const size = hitGlowWorldSize({ modelSize, depth: this._viewDepth(ef.mesh.position), fovDeg: this.camera.fov,
+        H: window.innerHeight || 1 });
+      ef.mesh.scale.setScalar(size);
+    } });
+  }
+
+  static _hitGlowTexture() {
+    if (_HIT_GLOW_TEX) return _HIT_GLOW_TEX;
+    const sz = 64;
+    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+    const g = cv.getContext('2d');
+    const grad = g.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.75)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, sz, sz);
+    _HIT_GLOW_TEX = new THREE.CanvasTexture(cv);
+    return _HIT_GLOW_TEX;
+  }
+
+  // ── POLISH P2b (D2, Finding 451, CP16) — paski HP uczestników AKTYWNEGO starcia ───────────────────────────────
+  // Pod każdym uczestnikiem starcia w oglądanym układzie (obie strony — `planCombatHpBars`): tło + wypełnienie w kolorze
+  // właściciela, stały rozmiar EKRANOWY `HP_BAR` (40 × 5 px), odstęp od krawędzi modelu `HP_BAR.GAP_PX`; poległy w trakcie
+  // starcia — pusty pasek; koniec starcia — paski znikają. Billboardy w scenie 3D (ten sam kadr co modele, co klatkę).
+  _syncCombatHpBars() {
+    const list = window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [];
+    if (!list.length && !this._hpBars.size) return;
+    const plan = planCombatHpBars({ encounters: list, activeSystemId: window.KOSMOS?.activeSystemId });
+    const vm = window.KOSMOS?.vesselManager;
+    const keep = new Set();
+    this.camera.updateMatrixWorld();
+    const H = window.innerHeight || 1;
+    const tanHalf = Math.tan(this.camera.fov * Math.PI / 360);
+    const m = this.camera.matrixWorld.elements;
+    const right = _HP_R.set(m[0], m[1], m[2]).normalize();
+    const up = _HP_U.set(m[4], m[5], m[6]).normalize();
+    for (const b of plan) {
+      const entry = this._vessels.get(b.vesselId);
+      const v = vm?.getVessel?.(b.vesselId);
+      if (!entry?.sprite?.visible || !v || v.isWreck) continue;
+      const p = entry.sprite.position;
+      const depth = this._viewDepth(p);
+      if (!(depth > 0)) continue;
+      const wpp = 2 * depth * tanHalf / H;   // jednostki świata na piksel ekranu w głębi statku
+      let bar = this._hpBars.get(b.vesselId);
+      if (!bar) bar = this._createHpBar(b.vesselId);
+      keep.add(b.vesselId);
+      const col = this._factionColorHex(v);
+      if (bar.col !== col) { bar.fill.material.color.setHex(col); bar.col = col; }
+      const offPx = (vesselTargetSize(v) / 2) / wpp + HP_BAR.GAP_PX + HP_BAR.H_PX / 2;   // środek paska pod statkiem
+      const cx = p.x - up.x * offPx * wpp, cy = p.y - up.y * offPx * wpp, cz = p.z - up.z * offPx * wpp;
+      bar.bg.position.set(cx, cy, cz);
+      bar.bg.scale.set((HP_BAR.W_PX + 2 * HP_BAR.BORDER_PX) * wpp, (HP_BAR.H_PX + 2 * HP_BAR.BORDER_PX) * wpp, 1);
+      bar.bg.visible = true;
+      const half = (HP_BAR.W_PX / 2) * wpp;
+      bar.fill.position.set(cx - right.x * half, cy - right.y * half, cz - right.z * half);
+      bar.fill.scale.set(Math.max(1e-6, HP_BAR.W_PX * b.frac * wpp), HP_BAR.H_PX * wpp, 1);
+      bar.fill.visible = b.frac > 0;
+      bar.frac = b.frac;
+    }
+    for (const id of [...this._hpBars.keys()]) if (!keep.has(id)) this._disposeHpBar(id);
+  }
+
+  _createHpBar(vesselId) {
+    const mk = (color, opacity, order) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false }));
+      sp.renderOrder = order;
+      this.scene.add(sp);
+      return sp;
+    };
+    const bg = mk(0x000000, 0.65, 990);
+    const fill = mk(0xffffff, 1, 991);
+    fill.center.set(0, 0.5);   // wypełnienie rośnie od lewej krawędzi paska
+    const bar = { bg, fill, col: null, frac: 1 };
+    this._hpBars.set(vesselId, bar);
+    return bar;
+  }
+
+  _disposeHpBar(vesselId) {
+    const bar = this._hpBars.get(vesselId);
+    if (!bar) return;
+    for (const sp of [bar.bg, bar.fill]) { this.scene.remove(sp); sp.material?.dispose?.(); }
+    this._hpBars.delete(vesselId);
   }
 
   // ── POLISH P2a (CP13, Finding 458) — „Obserwuj / Watch”: kamera śledzi walkę ──────────────────────────────
