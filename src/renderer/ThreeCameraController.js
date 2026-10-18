@@ -209,6 +209,13 @@ export class ThreeCameraController {
     this._targetDist = Math.max(this._minDist, Math.min(450, dist));
   }
 
+  // POLISH P2a (CP17, Finding 459) — dystans NATYCHMIAST (bez lerpa): auto-fokus starcia ma być na miejscu przed
+  // pierwszą salwą (lerp 0,08 na klatkę dolatywał z kadru układu 1408 ms — rundy 1–4 mijały przed dolotem).
+  snapDist(dist) {
+    this.setTargetDist(dist);
+    this._dist = this._targetDist;
+  }
+
   get wasDrag()    { return this._hasMoved; }
   get isDragging() { return this._isDragging; }
   get moveEpoch()  { return this._moveEpoch; }   // B1 (W2.1): rośnie gdy kamera się rusza

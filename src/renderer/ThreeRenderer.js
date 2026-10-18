@@ -56,6 +56,7 @@ import {
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
   isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS,
+  isPlayerEngagement, isEndpointVisibleInCombat,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
@@ -470,6 +471,8 @@ export class ThreeRenderer {
     // POLISH P2a (CP13) — „Obserwuj / Watch”: kamera śledzi środek walki, dystans z dopasowania do rozpiętości
     // uczestników. null | { encounterId, fitDist, minDistBefore, minDistSet, goal, dist } — `_updateWatchCamera`.
     this._watch                = null;
+    // POLISH P2a (CP17) — statki aktywnych starć z udziałem gracza (zmiana zbioru → ponowne nałożenie widoczności wywiadu).
+    this._combatRevealed       = new Set();
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
@@ -1085,9 +1088,17 @@ export class ThreeRenderer {
       if (!playerIn || !this._cameraController) return;
       const p = location?.point;
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
-      this._cameraController.focusOn(S(p.x), S(p.y));  // wide — nie slam zoom
-      this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 6));
+      // POLISH P2a (CP17, Finding 459) — cel i dystans NATYCHMIAST: kamera ma być na miejscu przed pierwszą salwą (runda 1
+      // pada po ~64 ms; dawny lerp dolatywał z kadru układu 1408 ms — rundy 1–4 mijały przed dolotem). Kadr szeroki
+      // (≤ 6 j.) jak dotąd; zbliżenie — „Obserwuj” albo klik statku.
+      this._cameraController.focusOnInstant(S(p.x), S(p.y));
+      this._cameraController.snapDist(Math.min(this._cameraController._targetDist, 6));
     }));
+
+    // POLISH P2a (CP17, Findingi 455, 462) — wróg w starciu z graczem: pełne krycie i smugi od startu starcia (przed salwą
+    // otwierającą); dołączający do starcia — tak samo. Koniec starcia łapie `_syncCombatReveal` w pętli renderu.
+    EventBus.on('vessel:engaged', safe(() => this._syncCombatReveal()));
+    EventBus.on('vessel:joinedCombat', safe(() => this._syncCombatReveal()));
 
     // Slice 1 — kamera „Obserwuj bitwę" (mirror vessel:focus, close-up na midpoint).
     // POLISH P2a (CP7, Finding 453) — starcie w INNYM układzie: najpierw widok przełączony na układ starcia
@@ -3736,6 +3747,7 @@ export class ThreeRenderer {
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
+        this._syncCombatReveal();        // POLISH P2a (CP17) — koniec starcia z graczem: widoczność wg wywiadu
         // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
         this._syncInsignia();
@@ -5123,9 +5135,12 @@ export class ThreeRenderer {
     if (!entry || entry.isWreck) return;
     if (!isEnemyVessel(vessel)) return;
 
+    // POLISH P2a (CP17, Findingi 455, 462) — wróg w aktywnym starciu z graczem: widoczny w pełnym kryciu, w żywej pozycji.
+    const revealed = this._isCombatRevealed(vessel.id);
+
     // Legacy ścieżka — binarna widoczność z ObservatorySystem
     if (!GAME_CONFIG.FEATURES.m4EnemyGhosts) {
-      const detected = window.KOSMOS?.observatorySystem?.isVesselDetected?.(vessel.id) ?? false;
+      const detected = (window.KOSMOS?.observatorySystem?.isVesselDetected?.(vessel.id) ?? false) || revealed;
       entry.sprite.visible = detected;
       if (entry.routeLine) entry.routeLine.visible = detected;
       return;
@@ -5143,7 +5158,7 @@ export class ThreeRenderer {
     let quality = rec?.quality ?? 'unknown';
     if (detected && quality === 'unknown') quality = 'rumor';
 
-    if (quality === 'unknown') {
+    if (quality === 'unknown' && !revealed) {
       entry.sprite.visible = false;
       if (entry.routeLine) entry.routeLine.visible = false;
       entry.intelQuality = 'unknown';
@@ -5152,7 +5167,9 @@ export class ThreeRenderer {
 
     let opacity = 1.0;
     let posOverride = null;
-    if (quality === 'rumor') {
+    if (revealed) {
+      opacity = 1.0;                       // ujawniony w starciu — pełne krycie, pozycja żywa (bez ducha `rumor`)
+    } else if (quality === 'rumor') {
       const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
       const lastSeen = rec?.lastSeenYear ?? gameYear;
       const yearsAgo = Math.max(0, gameYear - lastSeen);
@@ -6025,7 +6042,34 @@ export class ThreeRenderer {
     if (!v) return false;
     const isEnemy = isEnemyVessel(v);
     const q = isEnemy ? (window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality ?? 'unknown') : null;
-    return isEndpointVisibleByQuality(isEnemy, q);
+    // POLISH P2a (CP17) — wróg w aktywnym starciu z graczem jest widoczny niezależnie od wywiadu (salwa otwierająca, insygnia).
+    return isEndpointVisibleInCombat({ isEnemy, quality: q, inPlayerEngagement: isEnemy && this._isCombatRevealed(vesselId) });
+  }
+
+  // POLISH P2a (CP17) — uczestnik aktywnego starcia DSCS, w którym walczy gracz.
+  _isCombatRevealed(vesselId) {
+    return isPlayerEngagement(window.KOSMOS?.deepSpaceCombatSystem?._findActiveEncounterContaining?.(vesselId));
+  }
+
+  // POLISH P2a (CP17) — zbiór statków aktywnych starć z udziałem gracza; przy zmianie (start, dołączenie, koniec starcia)
+  // ponowne nałożenie widoczności wywiadu: w starciu — pełne krycie, po końcu — wg jakości wywiadu.
+  _syncCombatReveal() {
+    const now = new Set();
+    for (const e of window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? []) {
+      if (!isPlayerEngagement(e)) continue;
+      for (const id of [...(e.sideA?.vesselIds ?? []), ...(e.sideA?.joinedVesselIds ?? []),
+        ...(e.sideB?.vesselIds ?? []), ...(e.sideB?.joinedVesselIds ?? [])]) now.add(id);
+    }
+    const prev = this._combatRevealed;
+    if (!now.size && !prev.size) return;
+    const vm = window.KOSMOS?.vesselManager;
+    for (const id of new Set([...now, ...prev])) {
+      if (now.has(id) === prev.has(id)) continue;
+      const v = vm?.getVessel?.(id);
+      const entry = this._vessels.get(id);
+      if (v && entry) this._applyVesselIntelVisibility(v, entry);
+    }
+    this._combatRevealed = now;
   }
 
   // Targetowalny dla rozkazów (engage/pursue) = own LUB wróg WYKRYTY (≥rumor, radar blip).

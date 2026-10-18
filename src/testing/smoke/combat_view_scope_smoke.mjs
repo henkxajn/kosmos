@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// combat_view_scope_smoke — KEEPER Findingu 453 (POLISH P2a, krok P2-1; decyzja CP7)
+// combat_view_scope_smoke — KEEPER Findingów 453 (krok P2-1, CP7) oraz 455 / 459 / 462 (krok P2-6, CP17) — POLISH P2a
 // Rejestr: `docs/design/POLISH_PLAN.md` §6 (453) i §11 (P2a).
 // ─────────────────────────────────────────────────────────────────────────────
 // CO ZAMYKA: starcie w przestrzeni (DSCS) toczące się w INNYM układzie niż oglądany rysowało smugi, błyski i pierścień
@@ -23,6 +23,18 @@
 //   T6  źródło `ThreeRenderer` — cztery wejścia: salwa (smugi + znacznik), auto-fokus, „Obserwuj” (przełączenie PRZED
 //       kadrem) — reguła na wejściu, PRZED pierwszym efektem / ruchem kamery
 //   T7  źródło DSCS: pole `systemId` w emisji `combat:roundFx`; plik bez czasu realnego (`combat_pace_smoke` T9a)
+// KROK P2-6 (CP17 — „wróg walczący z graczem jest w pełni widoczny”; Findingi 455, 462, 459):
+//   salwa rundy 1 nie była rysowana (starcie rusza przy 0,3123 AU, „sensor lock” 0,30 AU — wróg przy wywiadzie `rumor`),
+//   model wroga miał krycie 0,5 przez całe starcie, a auto-fokus dolatywał 1408 ms po starcie (rundy 1–4 przed dolotem).
+//   T8  `isPlayerEngagement` — prawdziwe starcie DSCS (gracz ↔ AI) i tabela (nieaktywne, AI ↔ AI, brak)
+//   T9  `isEndpointVisibleInCombat` — tabela: własny zawsze; wróg w starciu z graczem — przy każdym wywiadzie; poza
+//       starciem — jak dotąd (≥ contact)
+//   T10 PRAWDZIWE starcie DSCS, wróg przy wywiadzie `rumor`: salwa rundy 1 — oba końce widoczne wg reguły (smuga
+//       rysowana); KONTROLA: reguła sprzed kroku (≥ contact) na tej samej salwie — koniec wroga niewidoczny (0 smug)
+//   T11 źródło `ThreeRenderer`: centralna bramka końca smugi przez regułę i uczestnictwo w starciu z graczem; widoczność
+//       wywiadu — ujawniony w starciu: widoczny, krycie 1, bez ducha `rumor`; zbiór ujawnionych synchronizowany przy
+//       starcie / dołączeniu (natychmiast) i w pętli renderu (koniec starcia); auto-fokus natychmiast (cel + dystans)
+//   T12 źródło `ThreeCameraController`: `snapDist` — dystans bez lerpa (z granicami `setTargetDist`)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -45,6 +57,8 @@ const strip = (s) => s.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').r
 // Nowe reguły przez przestrzeń nazw — na kodzie sprzed kroku ich nie ma: pin DEGRADUJE (undefined), nie przerywa.
 const inView = (o) => (typeof FX.isEngagementInView === 'function' ? FX.isEngagementInView(o) : undefined);
 const watchAct = (o) => (typeof FX.watchBattleAction === 'function' ? FX.watchBattleAction(o) : undefined);
+const isPE = (e) => (typeof FX.isPlayerEngagement === 'function' ? FX.isPlayerEngagement(e) : undefined);
+const visC = (o) => (typeof FX.isEndpointVisibleInCombat === 'function' ? FX.isEndpointVisibleInCombat(o) : undefined);
 
 const AU  = GAME_CONFIG.AU_TO_PX;
 const SYS = 'sys_t';
@@ -201,6 +215,125 @@ header('T7  źródło DSCS: pole układu w emisji salwy, bez czasu realnego');
   assert(emit.length > 0 && /encounterId:\s*encounter\.id/.test(emit), 'T7-0 KONTROLA: emisja `combat:roundFx` znaleziona');
   assert(/systemId:\s*encounter\.location\.systemId/.test(emit), 'T7a ładunek: `systemId: encounter.location.systemId`');
   assert(!/performance\.now|Date\.now|_nowMs/.test(src), 'T7b DSCS bez czasu realnego (jak `combat_pace_smoke` T9a)');
+}
+
+// ═══ T8 ═══════════════════════════════════════════════════════════════════════
+header('T8  `isPlayerEngagement`');
+const scene = (enemyQuality) => {
+  EventBus.clear(); EntityManager.clear();
+  global.window = global.window ?? {};
+  window.KOSMOS = { timeSystem: { gameTime: 100, simClockMs: 1000 }, activeSystemId: SYS };
+  EntityManager.add({ id: 'star_t', type: 'star', name: 'G', systemId: SYS, x: 0, y: 0, mass: 1 });
+  EntityManager.add({ id: 'p_home', type: 'planet', name: 'Home', systemId: SYS, x: -3 * AU, y: 0, radius: 4, mass: 1, visual: { radius: 4 } });
+  const vMgr = new VesselManager(); const mos = new MovementOrderSystem(vMgr); const dscs = new DeepSpaceCombatSystem(vMgr);
+  const cols = [{ planetId: 'p_home', name: 'Dom', isOutpost: false, resourceSystem: {} }];
+  Object.assign(window.KOSMOS, {
+    civMode: true, vesselManager: vMgr, movementOrderSystem: mos, deepSpaceCombatSystem: dscs,
+    techSystem: { isResearched: () => true, getFuelEfficiency: () => 1, getShipSpeedMultiplier: () => 1, getShipRangeMultiplier: () => 1, getMultiplier: () => 1 },
+    colonyManager: { activePlanetId: 'p_home', getColony: (id) => cols.find((c) => c.planetId === id) ?? null, getAllColonies: () => cols, getPlayerColonies: () => cols, isPlayerColony: () => true },
+    intelSystem: { getVesselContact: () => ({ quality: enemyQuality }) },
+    eventLogSystem: { push: () => {} }, debug: { combatTrace: false },
+  });
+  const ship = (x, y, name, modules, empire = null) => {
+    const v = vMgr.createAndRegister('hull_frigate', 'p_home', { name, modules });
+    v.position.x = x; v.position.y = y; v.position.state = 'orbiting'; v.position.dockedAt = null;
+    v.status = 'idle'; v.mission = null; v.fuel.current = v.fuel.max = 9999; v.systemId = SYS;
+    if (empire) { v.ownerEmpireId = empire; v.owner = empire; v.isEnemy = true; }
+    return v;
+  };
+  return { vMgr, mos, dscs, ship };
+};
+{
+  const { mos, dscs, ship } = scene('rumor');
+  const me = ship(0, 2 * AU, 'Me', ['weapon_laser', 'engine_ion']);
+  const foe = ship(0, 2 * AU + 0.28 * AU, 'Foe', ['weapon_missile', 'weapon_missile', 'engine_ion', 'armor_heavy'], EMP);
+  mos.issueOrder(me.id, { type: 'engage', targetEntityId: foe.id, issuedBy: 'keeper' });
+  dscs.handleCombatRangeEnter(me.id, foe.id, false);
+  const enc = dscs._findActiveEncounterContaining(foe.id);
+  assert(!!enc && enc.sideA.ownerEmpireId === 'player', 'T8-0 KONTROLA: prawdziwe starcie gracza z AI (strona A gracza)');
+  assert(isPE(enc) === true, 'T8a starcie gracza ↔ AI — tak');
+  const aiVsAi = { isActive: true, sideA: { ownerEmpireId: 'emp_a' }, sideB: { ownerEmpireId: 'emp_b' } };
+  const sideB = { isActive: true, sideA: { ownerEmpireId: 'emp_a' }, sideB: { ownerEmpireId: 'player' } };
+  assert(isPE(aiVsAi) === false && isPE(sideB) === true && isPE({ ...enc, isActive: false }) === false && isPE(null) === false,
+    'T8b AI ↔ AI — nie; gracz po stronie B — tak; nieaktywne — nie; brak starcia — nie');
+}
+
+// ═══ T9 ═══════════════════════════════════════════════════════════════════════
+header('T9  `isEndpointVisibleInCombat`');
+{
+  const Q = ['unknown', 'rumor', 'contact', 'detailed'];
+  assert(Q.every((q) => visC({ isEnemy: false, quality: q, inPlayerEngagement: false }) === true), 'T9a własny — zawsze');
+  assert(Q.every((q) => visC({ isEnemy: true, quality: q, inPlayerEngagement: true }) === true), 'T9b SEDNO: wróg w starciu z graczem — przy każdym wywiadzie');
+  assert(visC({ isEnemy: true, quality: 'unknown', inPlayerEngagement: false }) === false && visC({ isEnemy: true, quality: 'rumor', inPlayerEngagement: false }) === false
+    && visC({ isEnemy: true, quality: 'contact', inPlayerEngagement: false }) === true && visC({ isEnemy: true, quality: 'detailed' }) === true,
+    'T9c poza starciem z graczem — jak dotąd (≥ contact)');
+}
+
+// ═══ T10 ══════════════════════════════════════════════════════════════════════
+header('T10 PRAWDZIWE starcie, wróg przy `rumor`: salwa rundy 1 rysowana');
+{
+  const { mos, dscs, ship, vMgr } = scene('rumor');
+  const me = ship(0, 2 * AU, 'Me', ['weapon_laser', 'engine_ion']);
+  // wróg z rakietami (0,30 AU) z 0,28 AU — strzela w rundzie 1 (jak strażnik sceny audytu: 2 × rakiety, oba trafienia)
+  const foe = ship(0, 2 * AU + 0.28 * AU, 'Foe', ['weapon_missile', 'weapon_missile', 'engine_ion', 'armor_heavy'], EMP);
+  const fx = [];
+  EventBus.on('combat:roundFx', (p) => fx.push(p));
+  mos.issueOrder(me.id, { type: 'engage', targetEntityId: foe.id, issuedBy: 'keeper' });
+  dscs.handleCombatRangeEnter(me.id, foe.id, false);
+  window.KOSMOS.timeSystem.simClockMs += ROUND_INTERVAL_MS; dscs._tick(0.01);    // runda 1
+  const r1 = fx[0] ?? null;
+  const enc = dscs._findActiveEncounterContaining(foe.id);
+  const q = (id) => (vMgr.getVessel(id)?.isEnemy ? window.KOSMOS.intelSystem.getVesselContact(id).quality : null);
+  const endpointNew = (id) => visC({ isEnemy: !!vMgr.getVessel(id)?.isEnemy, quality: q(id), inPlayerEngagement: isPE(dscs._findActiveEncounterContaining(id)) === true });
+  const endpointOld = (id) => FX.isEndpointVisibleByQuality(!!vMgr.getVessel(id)?.isEnemy, q(id));
+  const evs = r1?.events ?? [];
+  const drawnNew = evs.filter((e) => endpointNew(e.attacker) && endpointNew(e.target)).length;
+  const drawnOld = evs.filter((e) => endpointOld(e.attacker) && endpointOld(e.target)).length;
+  console.log(`     runda ${enc?.currentRound ?? '—'}: zdarzeń salwy ${evs.length} (trafień ${evs.filter((e) => e.hit).length}); smug wg reguły: ${drawnNew}; wg reguły sprzed kroku: ${drawnOld}`);
+  assert(!!r1 && evs.length > 0 && enc?.currentRound === 1, 'T10-0 KONTROLA: salwa rundy 1 wyemitowana (wróg strzela w rundzie 1)');
+  assert(evs.length > 0 && drawnOld === 0, 'T10-1 KONTROLA: reguła sprzed kroku (≥ contact) — przy `rumor` 0 smug (Finding 455)');
+  assert(evs.length > 0 && drawnNew === evs.length, 'T10 SEDNO: reguła kroku — każda smuga salwy rundy 1 rysowana (oba końce widoczne)');
+}
+
+// ═══ T11 ══════════════════════════════════════════════════════════════════════
+header('T11 źródło `ThreeRenderer` — ujawnienie wroga w starciu z graczem, auto-fokus natychmiast');
+{
+  const tr = strip(readFileSync(new URL('../../renderer/ThreeRenderer.js', import.meta.url), 'utf8'));
+  const body = (sig) => { const i = tr.indexOf(sig); return i < 0 ? '' : tr.slice(i, tr.indexOf('\n  }\n', i)); };
+  const ev = body('  _isEnemyEndpointVisible(vesselId) {');
+  assert(ev.length > 0 && body('  _combatEndpointWorld(vesselId, snapPos) {').includes('_isEnemyEndpointVisible('),
+    'T11-0 KONTROLA: centralna bramka końca smugi znaleziona i wołana przez `_combatEndpointWorld`');
+  assert(/isEndpointVisibleInCombat\(/.test(ev) && /inPlayerEngagement:\s*isEnemy && this\._isCombatRevealed\(vesselId\)/.test(ev),
+    'T11a bramka końca smugi: reguła z uczestnictwem w starciu z graczem');
+  const rv = body('  _isCombatRevealed(vesselId) {');
+  assert(/isPlayerEngagement\(/.test(rv) && /_findActiveEncounterContaining/.test(rv), 'T11b uczestnictwo: starcie zawierające statek, z udziałem gracza');
+  const iv = body('  _applyVesselIntelVisibility(vessel, entry) {');
+  const rIdx = iv.indexOf('const revealed = this._isCombatRevealed(vessel.id)');
+  const hide = iv.search(/if \(quality === 'unknown' && !revealed\)/);
+  const rev = iv.search(/if \(revealed\) \{\s*opacity = 1\.0;/);
+  const rum = iv.search(/else if \(quality === 'rumor'\)/);
+  assert(rIdx > 0 && hide > rIdx && rev > hide && rum > rev, 'T11c widoczność: ujawniony w starciu — nie ukrywany, krycie 1, bez gałęzi ducha `rumor`');
+  const sync = body('  _syncCombatReveal() {');
+  assert(/listActive/.test(sync) && /isPlayerEngagement\(/.test(sync) && /_applyVesselIntelVisibility\(/.test(sync),
+    'T11d zbiór ujawnionych: ze starć z graczem; przy zmianie — ponowne nałożenie widoczności');
+  const loop = body('  _startLoop() {');
+  assert(/this\._syncCombatReveal\(\)/.test(loop) && /EventBus\.on\('vessel:engaged',\s*safe\(\(\)\s*=>\s*this\._syncCombatReveal\(\)\)\)/.test(tr)
+    && /EventBus\.on\('vessel:joinedCombat',\s*safe\(\(\)\s*=>\s*this\._syncCombatReveal\(\)\)\)/.test(tr),
+    'T11e synchronizacja: natychmiast przy starcie i dołączeniu, co klatkę w pętli renderu (koniec starcia)');
+  const i = tr.indexOf("EventBus.on('vessel:engaged', safe(({ sideA");
+  const eng = i < 0 ? '' : tr.slice(i, tr.indexOf('\n    }));', i));
+  assert(/focusOnInstant\(S\(p\.x\), S\(p\.y\)\)/.test(eng) && /snapDist\(Math\.min\(this\._cameraController\._targetDist, 6\)\)/.test(eng)
+    && !/\.focusOn\(S\(p\.x\)/.test(eng), 'T11f auto-fokus: cel i dystans natychmiast (≤ 6 j.), bez dawnego lerpa');
+}
+
+// ═══ T12 ══════════════════════════════════════════════════════════════════════
+header('T12 źródło `ThreeCameraController` — `snapDist`');
+{
+  const cc = strip(readFileSync(new URL('../../renderer/ThreeCameraController.js', import.meta.url), 'utf8'));
+  const i = cc.indexOf('  snapDist(dist) {');
+  const b = i < 0 ? '' : cc.slice(i, cc.indexOf('\n  }', i));
+  assert(cc.includes('  setTargetDist(dist) {'), 'T12-0 KONTROLA: kontroler znaleziony (`setTargetDist`)');
+  assert(/this\.setTargetDist\(dist\);/.test(b) && /this\._dist = this\._targetDist;/.test(b), 'T12 `snapDist`: granice z `setTargetDist`, dystans bez lerpa');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

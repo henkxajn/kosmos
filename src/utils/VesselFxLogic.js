@@ -50,6 +50,25 @@ export function watchBattleAction({ encounterSystemId, activeSystemId }) {
   return { switchTo: encounterSystemId, frame: true };
 }
 
+// POLISH P2a (CP17, Findingi 455, 462) — starcie DSCS, w którym walczy gracz (strona A albo B gracza, starcie aktywne).
+export function isPlayerEngagement(encounter) {
+  if (!encounter?.isActive) return false;
+  return encounter.sideA?.ownerEmpireId === 'player' || encounter.sideB?.ownerEmpireId === 'player';
+}
+
+// POLISH P2a (CP17, Findingi 455, 462) — czy statek jest widoczny NA MAPIE (koniec smugi salwy, model w pełnym kryciu,
+// insygnia): własny zawsze; wróg — wywiad ≥ contact ALBO uczestnik aktywnego starcia z graczem. Wróg w starciu z graczem
+// jest „ujawniony” na potrzeby rysowania: panel walki nazywa go od pierwszej rundy (nazwa, kadłub, broń, log strzałów),
+// więc mapa nie zdradza niczego ponad panel. Dawniej salwa otwierająca (przy wywiadzie `rumor` — starcie rusza przy
+// 0,3123 AU, „sensor lock” przy 0,30 AU) nie była rysowana wcale, a model wroga przez całe starcie miał krycie 0,5.
+// Stan wywiadu (`IntelSystem`) — bez zmian; to wyłącznie reguła rysowania.
+// in: { isEnemy, quality, inPlayerEngagement }
+export function isEndpointVisibleInCombat({ isEnemy, quality, inPlayerEngagement = false }) {
+  if (!isEnemy) return true;
+  if (inPlayerEngagement) return true;
+  return isEndpointVisibleByQuality(isEnemy, quality);
+}
+
 // POLISH P2a (Finding 457) — znacznik starcia (pierścień) żyje wg STANU starcia, nie wg czasu realnego. Dawniej odświeżała
 // go wyłącznie salwa, a po 1600 ms CZASU REALNEGO bez strzału znikał — przy 400 ms na rundę także w trakcie starcia
 // (rundy bez strzału: zbliżanie, odliczanie broni) i w pauzie (P2 §10.6: luki 416 ms i 1808 ms). Teraz: znacznik jest,
