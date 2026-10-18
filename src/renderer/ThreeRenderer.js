@@ -55,7 +55,7 @@ import {
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
-  isEngagementInView, watchBattleAction,
+  isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
@@ -6222,11 +6222,8 @@ export class ThreeRenderer {
       const delay = (stagger++ % 8) * 40;  // rozłóż salwę po ~0..280ms (czytelność, nie 1-frame)
       this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay);
     }
-    // Znacznik starcia (midpoint) — żeby gracz zauważył walkę nawet zoom-out.
-    const mp = payload?.midpoint;
-    if (mp && Number.isFinite(mp.x) && Number.isFinite(mp.y)) {
-      this._upsertEngagementMarker(payload.encounterId, mp.x, mp.y);
-    }
+    // Znacznik starcia (midpoint) — POLISH P2a (Finding 457): stawia go i zdejmuje `_tickEngagementMarkers` wg STANU
+    // starcia (nie salwa z czasem życia — gasł między salwami i w pauzie).
   }
 
   // Fix#3 — FX dla bitew orbitalnych/abstrakcyjnych (bez per-rundy combat:roundFx).
@@ -6280,7 +6277,7 @@ export class ThreeRenderer {
         this._spawnFx(flash, { kind: 'flash', lifetime: FX_FLASH_MS, baseScale: 1, delay: delay + 120 });
       }
     }
-    this._upsertEngagementMarker('orbital_' + Math.round(gx) + '_' + Math.round(gy), gx, gy);
+    this._upsertEngagementMarker('orbital_' + Math.round(gx) + '_' + Math.round(gy), gx, gy, 'burst');
   }
 
   // Endpoint smugi → world coords {x,z} z bramką fog-of-war. Preferuj live/intel,
@@ -6433,8 +6430,10 @@ export class ThreeRenderer {
     return -_WATCH_V.z;
   }
 
-  // ── Znacznik starcia (persistent, mark&sweep TTL) ────────────────────────
-  _upsertEngagementMarker(encounterId, gx, gy) {
+  // ── Znacznik starcia (persistent; starcie DSCS — wg stanu starcia, imitacja bitwy orbitalnej — TTL) ──────
+  // kind: 'encounter' (starcie DSCS — żyje, dopóki starcie aktywne i w oglądanym układzie) | 'burst' (imitacja bitwy
+  // orbitalnej `_spawnBattleBurst` — 1600 ms czasu realnego). POLISH P2a (Finding 457).
+  _upsertEngagementMarker(encounterId, gx, gy, kind = 'encounter') {
     if (!encounterId) return;
     let entry = this._engagementMarkers.get(encounterId);
     if (!entry) {
@@ -6443,7 +6442,7 @@ export class ThreeRenderer {
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
       this.scene.add(mesh);
-      entry = { mesh, geom, mat, _lastTouch: 0 };
+      entry = { mesh, geom, mat, kind, _lastTouch: 0 };
       this._engagementMarkers.set(encounterId, entry);
     }
     entry.mesh.position.set(S(gx), 0.05, S(gy));
@@ -6461,12 +6460,21 @@ export class ThreeRenderer {
     for (const k of [...this._engagementMarkers.keys()]) this._disposeEngagementMarker(k);
   }
 
-  // Puls + auto-expire (combat:roundFx przestaje karmić gdy bitwa się kończy).
+  // POLISH P2a (Finding 457) — synchronizacja ze STANEM starć (co klatkę, także w pauzie gry): znacznik starcia DSCS jest,
+  // dopóki starcie aktywne i w oglądanym układzie, i znika z jego końcem; imitacja bitwy orbitalnej — 1600 ms. Puls.
   _tickEngagementMarkers(nowMs) {
+    const encounters = (window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [])
+      .map((e) => ({ id: e.id, isActive: e.isActive, systemId: e.location?.systemId, point: e.location?.point }));
+    if (!this._engagementMarkers.size && !encounters.length) return;
+    const plan = planEngagementMarkers({
+      markers: [...this._engagementMarkers].map(([id, e]) => ({ id, kind: e.kind ?? 'encounter', lastTouchMs: e._lastTouch ?? 0 })),
+      encounters, activeSystemId: window.KOSMOS?.activeSystemId, nowMs, burstTtlMs: ENGAGEMENT_BURST_TTL_MS,
+    });
+    for (const id of plan.dispose) this._disposeEngagementMarker(id);
+    for (const u of plan.upsert) this._upsertEngagementMarker(u.id, u.x, u.y, 'encounter');
     if (!this._engagementMarkers.size) return;
     const tt = this._clock.getElapsedTime();
-    for (const [id, e] of [...this._engagementMarkers]) {
-      if (nowMs - (e._lastTouch ?? 0) > 1600) { this._disposeEngagementMarker(id); continue; }
+    for (const [, e] of this._engagementMarkers) {
       e.mat.opacity = 0.5 * (0.55 + 0.45 * Math.sin(tt * 4));
       e.mesh.scale.setScalar(1 + 0.1 * Math.sin(tt * 4));
       e.mesh.visible = !this._watch;   // POLISH P2a (CP14) — pierścień ukryty przy „Obserwuj” (kamera i tak jest przy walce)

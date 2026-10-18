@@ -50,6 +50,38 @@ export function watchBattleAction({ encounterSystemId, activeSystemId }) {
   return { switchTo: encounterSystemId, frame: true };
 }
 
+// POLISH P2a (Finding 457) — znacznik starcia (pierścień) żyje wg STANU starcia, nie wg czasu realnego. Dawniej odświeżała
+// go wyłącznie salwa, a po 1600 ms CZASU REALNEGO bez strzału znikał — przy 400 ms na rundę także w trakcie starcia
+// (rundy bez strzału: zbliżanie, odliczanie broni) i w pauzie (P2 §10.6: luki 416 ms i 1808 ms). Teraz: znacznik jest,
+// dopóki starcie jest aktywne i w oglądanym układzie (`isEngagementInView`) — także w pauzie — i znika z jego końcem.
+// Czas życia 1600 ms zostaje WYŁĄCZNIE dla jednorazowych „imitacji” bitew orbitalnych (`kind: 'burst'`).
+// in: { markers: [{ id, kind: 'encounter'|'burst', lastTouchMs }], encounters: [{ id, isActive, systemId, point }],
+//       activeSystemId, nowMs, burstTtlMs }   out: { upsert: [{ id, x, y }], dispose: [id] }
+export const ENGAGEMENT_BURST_TTL_MS = 1600;
+export function planEngagementMarkers({ markers = [], encounters = [], activeSystemId, nowMs, burstTtlMs = ENGAGEMENT_BURST_TTL_MS }) {
+  const want = new Map();
+  for (const e of encounters) {
+    if (!e?.isActive || !e.id) continue;
+    if (!isEngagementInView({ encounterSystemId: e.systemId, activeSystemId })) continue;
+    if (!Number.isFinite(e.point?.x) || !Number.isFinite(e.point?.y)) continue;
+    want.set(e.id, e.point);
+  }
+  const upsert = [];
+  const dispose = [];
+  const have = new Set();
+  for (const m of markers) {
+    if (!m?.id) continue;
+    have.add(m.id);
+    if (m.kind === 'burst') {
+      if (nowMs - (m.lastTouchMs ?? 0) > burstTtlMs) dispose.push(m.id);
+      continue;
+    }
+    if (!want.has(m.id)) dispose.push(m.id);
+  }
+  for (const [id, p] of want) if (!have.has(id)) upsert.push({ id, x: p.x, y: p.y });
+  return { upsert, dispose };
+}
+
 // Resolver endpointu FX (gameplay coords — renderer aplikuje S()/skalę osobno).
 // own → live; enemy unknown → visible:false (BRAK przecieku); rumor → positionLastKnown
 // (NIE live — fog-of-war); contact/detailed → live.
