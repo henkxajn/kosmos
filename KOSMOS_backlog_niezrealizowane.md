@@ -119,6 +119,7 @@ Sasiaduje z Findingiem **251** (`frigate_system_defender` placi 2 rdzenie za sil
 - **Znaczniki UI statków na mapie** (counter-scale, widoczne z dalekiej kamery — wzorzec Stellaris/HOI) — prerequisite Slice 4.
 - **Fleet Groups P4+:** wizualny cluster na mapie 3D, control groups Ctrl+1..9, fleet templates (presety składów), POI rally jako cel floty, shared cargo pool, auto-formation, auto-tuning doktryn po porażce.
 - **Reforma zarządzania flotą — otwarte soczewki:** tryb taktyczny top-down `T` z „duchami ETA" (M3), przełącznik zakresu Układ/Wszędzie/Tranzyt z dwustronną sync (K1).
+- **Widoczność starcia — reszta po POLISH P2b (CP24, 2026-10-18, bez daty):** **163** okno wyniku bitwy po polsku · **464** etykiety stron starcia DSCS po polsku · **460** śmierć statku widoczna dopiero na końcu starcia, wrak w punkcie środkowym (zamiast w miejscu śmierci) · **466** efekty walki w rozmiarze świata przy bliskim kadrze poza „Watch” · **463** `ProximitySystem` — szum `combatRangeEnter` dla par tej samej frakcji. Rejestr: `docs/design/POLISH_PLAN.md` §6/§7 (163 — `VESSEL_ORDERS_PLAN.md`).
 
 *Źródło: `docs/design/milestone-*`, `docs/plan-fleet-groups.md`, `docs/KOSMOS_koncepcje_reforma_zarzadzania_flota.md`.*
 

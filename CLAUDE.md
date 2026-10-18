@@ -1,7 +1,7 @@
 # KOSMOS — Symulator Układu Słonecznego + Strategia 4X
 
 > **Odroczone live-gate'y** (weryfikacje w przeglądarce świadomie odroczone + luki znalezione przy próbie): `docs/deferred-live-gates.md`.
-> **Bieżący arc — POLISH** (polerka UI i grafiki; P1 tempo starcia — ✅ ZAMKNIĘTY W KODZIE 2026-10-17: `13ca6c9` · `bcecaa0`, bramka P1 PASS, CP1–CP12; P2 widoczność — AUDYT 2026-10-17 (§10; #458–#464) → CP13–CP20 → **P2a — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-17, NIE zacommitowany** (§11: C1 453 · C2 458 · C3 457 · C4 455/459/462; bramka `gate/GATE_P2A.md` u właściciela → `tools/commit_P2A.sh`); potem P2b, P2c, krok 463 (CP20), P3 — 456; findingi od #449, pierwszy wolny 467): `docs/design/POLISH_PLAN.md`.
+> **Bieżący arc — POLISH** (polerka UI i grafiki; P1 tempo starcia — ✅ ZAMKNIĘTY W KODZIE 2026-10-17: `13ca6c9` · `bcecaa0`, bramka P1 PASS, CP1–CP12; P2 widoczność — AUDYT 2026-10-17 (§10; #458–#464) → CP13–CP20 → **P2a — ✅ ZAMKNIĘTY W KODZIE 2026-10-18** (§11: `e866bd6` 453 · `51f8e81` 458 · `dc533cf` 457 · `9e752cc` 455/459/462; bramka P2A PASS) → CP21–CP24 → **P2b — OSTATNIA sesja kodu widoczności starcia** (467 · 451 · 461 · 468/465 · 450); po niej backlog bez daty 163/464/460/466/463, P3 — 456; findingi od #449, pierwszy wolny 469): `docs/design/POLISH_PLAN.md`.
 
 ## Wizja gry
 

@@ -2183,6 +2183,7 @@ ostatniego zapisu**. **CC nie pisze w trakcie gate'u.**
      się **także wtedy, gdy gracz pominął kino** (`_tryShowNextBattle:3830` — gałąź `skip`) **oraz**
      dla KAŻDEJ bitwy deep-space (`:3796`, `fcCombatFx`) ⇒ to najczęściej oglądane okno walki w grze,
      nie wariant. Naprawa 157/W3 świadomie go nie tyka (osobny podpis: i18n + nazwy nagłówków).
+     → **POLISH CP24 (2026-10-18): backlog bez daty** (`POLISH_PLAN.md` §7; zmierzone w grze EN i PL — §10.7).
 
 164. 🟠 **Przełącznik auto-slow nie ma producenta — gracz NIE MOŻE go wyłączyć.**
      `TimeSystem:34` nasłuchuje `time:autoSlowToggle`, a **zdarzenia tego nie emituje NIKT w całym

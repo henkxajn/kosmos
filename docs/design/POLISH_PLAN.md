@@ -4,13 +4,17 @@
 > po bramce `gate/GATE_P1.md` w przeglądarce właściciela (PASS — §9.5a) i zgodzie na przecelowanie **R-P1-2** (CP9);
 > na `bcecaa0` sweep **310/310**, `check-i18n` PASS pl = en 3458 (§9.1). Decyzje **CP1–CP12** (§5); zamknięcia **449** ·
 > **452** · **454** · **438** · **436** — §9.6. **P2 — widoczność: AUDYT 2026-10-17** (§10, bez kodu, HEAD
-> `a7e2296`) → odpowiedzi właściciela na §10.11 → **CP13–CP20** (§5) → **P2a — KOD PRZYGOTOWANY i ZESTAGOWANY
-> 2026-10-17, NIE zacommitowany** (§11): łańcuch P2a-1 … P2a-4 (C1 453 · C2 458 · C3 457 · C4 455 / 459 / 462),
-> przecelowań istniejących keeperów brak; bramka `gate/GATE_P2A.md` u właściciela → commity `tools/commit_P2A.sh`.
-> Potem **P2b** (451 + CP16, błysk trafienia CP18, A7 + 461, 450 / 163 / 464), **P2c** (460, CP19), osobny krok **463**
-> (CP20), **P3** — **456** (CP12). Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit `1af65fc`).
+> `a7e2296`) → odpowiedzi właściciela na §10.11 → **CP13–CP20** (§5) → ✅ **P2a — ZAMKNIĘTY W KODZIE 2026-10-18:**
+> `e866bd6` (P2a-1) · `51f8e81` (P2a-2) · `dc533cf` (P2a-3) · `9e752cc` (P2a-4), zakres `bd846b5..9e752cc`, po bramce
+> `gate/GATE_P2A.md` w przeglądarce właściciela (PASS na własnościach — §11.9); na `9e752cc` sweep **313/313**,
+> `check-i18n` PASS pl = en 3458; zamknięcia **453** · **455** · **457** · **458** · **459** · **462** — §11.10.
+> Odpowiedzi na §11.7 → **CP21–CP24** (2026-10-18, §5): **P2b — OSTATNIA sesja kodu tematu widoczności starcia**
+> (CP24): **467** (znacznik i cel auto-fokusu za środkiem walki), **451** + CP16 (paski HP), błysk trafienia (CP18),
+> A7 + **461** (tempo efektów, płynne zbliżenie), panel walki — **468** + **465** (CP22) + nazwa układu w wierszu
+> (CP23), **450** (jeśli mały); po P2b — **backlog bez daty**: **163** · **464** · **460** · **466** · **463** (§7).
+> **P3** — **456** (CP12). Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit `1af65fc`).
 > Arc otwarty wskazaniem właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
-> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#466**; pierwszy wolny **467**. Sondy audytu:
+> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#468**; pierwszy wolny **469**. Sondy audytu:
 > `kosmos-handover/polish-p1-combat-pace/`; kod, dowód i bramka P1: `kosmos-handover/polish-p1-code/`; audyt P2:
 > `kosmos-handover/polish-p2-visible-battle/`; kod, dowód i bramka P2a: `kosmos-handover/polish-p2a-code/` (SHA256SUMS).
 > Tagi: `[code]` źródło · `[git]` historia · `[measured]` pomiar · `[doc]` dokumenty · `[derived]` wniosek z powyższych.
@@ -312,8 +316,8 @@ odczucie przy 350 ms, pauza i zmiana prędkości w trakcie walki, bitwa w innym 
 
 Prefiks **CP**. Podpisane przez właściciela **2026-10-17**: CP1–CP8 — odpowiedzi na §4, CP9–CP12 — odpowiedzi na
 pytania §9.7 po bramce (brzmienie z polecenia sesji zamykającej P1), CP13–CP20 — odpowiedzi na §10.11 (brzmienie
-z polecenia sesji kodu P2a). Słowa właściciela — dosłownie (oryginał angielski); obok — odczyt w kodzie P1 (§9) i P2a
-(§11).
+z polecenia sesji kodu P2a). **2026-10-18:** CP21–CP24 — odpowiedzi na §11.7 po bramce P2A (brzmienie z polecenia sesji
+zamykającej P2a). Słowa właściciela — dosłownie (oryginał angielski); obok — odczyt w kodzie P1 (§9) i P2a (§11).
 
 | CP | słowa właściciela (2026-10-17) | odczyt w kodzie P1 |
 |---|---|---|
@@ -330,13 +334,17 @@ z polecenia sesji kodu P2a). Słowa właściciela — dosłownie (oryginał angi
 | **CP11** | „CP3 "restored after": P1 does not touch the speed setting; after a battle involving the player the existing auto-slow to 1 d/s (Finding 157) stays.” | bez zmian w kodzie: P1 ustawienia prędkości nie rusza (T3b); po bitwie z udziałem gracza — auto-slow do 1 d/s (`UIManager`, 157) |
 | **CP12** | „Finding 456 (planetary-battle batch window in real time) → separate step P3 after P2, audit first.” | 456 bez zmian w P1 i P2 — krok **P3** po P2, najpierw audyt (§7) |
 | **CP13** | „"Watch battle" camera follows the engagement centre; distance fitted to the participants' spread with a margin, clamped min/max.” | C2: `_startWatch` / `_updateWatchCamera` co klatkę (przed `update()` kontrolera, także w pauzie) — środek PROSTOKĄTA RZUTU żywych, widocznych uczestników (pozycje sprite'ów) w środku prostokąta bezpiecznego (ekran bez pasków UI, Outlinera i panelu walki, margines 40 px); dystans — najmniejszy mieszczący, [0,4; 12] j., najbliższy uczestnik ≥ 0,2 j. od kamery; cel — szybkie śledzenie `focusOnSmooth`; koniec — starcie skończone albo poza widokiem, albo kamerę przejął inny fokus; kółko gracza wyłącza tylko dopasowanie dystansu (§11.2) |
-| **CP14** | „Overlays (chevrons, enemy reticle) get a screen-size cap; the engagement ring is hidden while in Watch mode.” | C2: szewron insygniów ≤ 36 px, celownik wroga ≤ 44 px (poniżej limitu — rozmiar jak dotąd), pierścień znacznika ukryty przy „Watch”. ⚠ **Rozszerzenie do potwierdzenia (pytanie Q1, §11.7):** efekty walki w rozmiarze świata (błysk, pierścień osłony, wybuch) przy „Watch” nie większe na ekranie niż w kadrze auto-fokusu (głębia 6 j.) — bez tego bliski kadr robił z pierścienia osłony plamę na pół ekranu (§11.4) |
+| **CP14** | „Overlays (chevrons, enemy reticle) get a screen-size cap; the engagement ring is hidden while in Watch mode.” | C2: szewron insygniów ≤ 36 px, celownik wroga ≤ 44 px (poniżej limitu — rozmiar jak dotąd), pierścień znacznika ukryty przy „Watch”. ⚠ **Rozszerzenie do potwierdzenia (pytanie Q1, §11.7):** efekty walki w rozmiarze świata (błysk, pierścień osłony, wybuch) przy „Watch” nie większe na ekranie niż w kadrze auto-fokusu (głębia 6 j.) — bez tego bliski kadr robił z pierścienia osłony plamę na pół ekranu (§11.4) → **potwierdzone CP21 (2026-10-18): limit tylko przy „Watch”** |
 | **CP15** | „Model size at missile range (4–5 px) stays for now; enlargement of participants is a P2b option after the owner's gate.” | bez zmian w kodzie — modele w rozmiarze świata; opcja powiększenia — P2b, po bramce |
 | **CP16** | „HP bars: both sides of an ACTIVE engagement only (P2b).” | bez zmian w P2a — P2b (451) |
 | **CP17** | „An enemy fighting the player is fully visible: first-round salvo drawn, no translucency (Findings 455, 462).” | C4: `VesselFxLogic.isEndpointVisibleInCombat` — uczestnik aktywnego starcia z graczem jest widocznym końcem smugi niezależnie od wywiadu; model w kryciu 1, w żywej pozycji (bez ducha `rumor`); stan wywiadu bez zmian (reguła rysowania); auto-fokus starcia — cel i dystans natychmiast (459) |
 | **CP18** | „Hit flash: white, fixed 200 ms (P2b).” | bez zmian w P2a — P2b |
 | **CP19** | „Wreck at the place of death (460) → P2c; today's behaviour stays.” | bez zmian — P2c |
-| **CP20** | „Finding 463 (same-faction combatRangeEnter spam) → separate small step after P2, audit first.” | bez zmian w P2 — osobny krok po P2, najpierw audyt (§7) |
+| **CP20** | „Finding 463 (same-faction combatRangeEnter spam) → separate small step after P2, audit first.” | bez zmian w P2 — osobny krok po P2, najpierw audyt (§7) → zastąpione CP24 (2026-10-18): 463 → backlog bez daty |
+| **CP21** | „Q1: effect size cap only in Watch; 466 → backlog.” | bez zmian w kodzie: limit efektów walki (`watchFxScale`, C2) zostaje WYŁĄCZNIE przy „Watch” — rozszerzenie CP14 potwierdzone; **466** → backlog bez daty (§7) |
+| **CP22** | „Q2: Watch button per battle row (465) → P2b.” | P2b (D4): przycisk „Watch” przy każdym wierszu panelu walki (**465**) |
+| **CP23** | „Q3: system name in the battle row → P2b.” | P2b (D4): nazwa układu starcia w wierszu panelu walki (propozycja P2-1 audytu — §10.2, §10.10) |
+| **CP24** | „P2b is the LAST code session of the combat-visibility topic; after it: 450 done in P2b if small, 163 / 464 / 460 / 466 / 463 → backlog without a date.” | P2b (D1–D5) zamyka temat widoczności starcia; **450** w P2b (D5); P2c (460, CP19) i osobny krok 463 (CP20) nie powstają — **163** · **464** · **460** · **466** · **463** → backlog bez daty (§7) |
 
 ## 6. Rejestr findingów arca
 
@@ -376,6 +384,8 @@ Straty: 1 / 0”, Dziennik „⚔ Bitwa w głębokim kosmosie (Propus): … Stra
 → **P2 — audyt (2026-10-17, §10.7):** zmierzone w grze EN i PL — baner „PORAŻKA · … · Tur: 0 · Straty: 1 / 0”,
 Dziennik „0 turns” / „0 tur” przy `timeline` 16 rund; trzej czytelnicy `turns ?? 0` (baner, Dziennik, lista bitew
 wojny `WarSystem:523`); kształt `turns: encounter.currentRound` — P2b-1 razem z **163** i **464**.
+→ **CP24 (2026-10-18): w P2b, jeśli mały — P2b D5** (jedno pole liczby rund w rekordzie bitwy DSCS, czytane przez trzech
+czytelników); **163** i **464** → backlog bez daty.
 
 ### ⚪ 451 — HP pojedynczego statku nie jest widoczne nigdzie
 
@@ -388,6 +398,7 @@ decyzja 2026-05-20) nie mają czytelnika w UI (grep: wyłącznie `VesselManager`
 → **P2 — audyt (2026-10-17, §10.4):** HP per statek co rundę zmierzone (zmiana w 6 z 16 rund); makieta paska
 40 × 5 px pod statkiem (`p2_w_6_MOCK_hpbars.png`); błysk na modelu — statki gracza dzielą materiały szablonu GLB
 (klon per statek albo poświata dopasowana do modelu) — P2-3.
+→ **P2b D2 (CP16, CP18; CP24 — ostatnia sesja kodu widoczności starcia).**
 
 ### ✅ 452 — kąt orbity statku wokół ciała liczony w czasie REALNYM zmienia geometrię walki
 
@@ -408,7 +419,7 @@ T8 (w pauzie kąt stoi, po 10 s pauzy pierwszy krok = ω × 16 ms, w starciu prz
 sondzie (scena co) i keeperze T8 — scena bramki u właściciela (§9.5a) to statki w wolnej przestrzeni, bez orbit ciał,
 więc zegara orbit nie ćwiczy; wygląd orbit w pauzie w przeglądarce — nieraportowany (§9.8).
 
-### ⚪ 453 — starcie w innym układzie: kamera, smugi i znacznik starcia lądują w oglądanym układzie
+### ✅ 453 — starcie w innym układzie: kamera, smugi i znacznik starcia lądują w oglądanym układzie
 
 `[code]` brak terminu układu w trzech miejscach `ThreeRenderer`: auto-fokus na `vessel:engaged` (`:1060-1073`) przestawia
 cel kamery na punkt starcia i zbliża ją (≤ 6); `_onCombatRoundFx` (`:6176`) rysuje smugi — dla statków spoza oglądanego
@@ -429,6 +440,12 @@ starcie w innym układzie — `starSystemManager.switchActiveSystem`, potem kadr
 domowym i starciu w `sys_059` — 0 smug, 0 błysków, 0 znaczników, kamera stoi (`9de9a20`: 7 salw — 10 smug, 5 błysków,
 znacznik w 104 klatkach, kamera 450 → 6 j. w pusty punkt); po „Watch” widok `sys_059`. Nazwa układu w wierszu panelu
 (propozycja §10.10) — poza P2a (polecenie C1: cztery wejścia + przełączenie widoku).
+✅ **ZAMKNIĘTY 2026-10-18 — `e866bd6` (P2a-1, CP7), bramka P2A PASS (§11.9):** u właściciela w scenie B (starcie
+w układzie stolicy `emp_001`, widok domowy) — 0 smug, 0 błysków i 0 znaczników przy widoku innego układu, kamera stoi
+(ruszyła wyłącznie przy resecie kadru z kroku 3). „Watch” na starcie w innym układzie u właściciela NIEĆWICZONY —
+starcie nieoglądane (110 ms na rundę, CP4; 11 rund) skończyło się, zanim zdążył zapauzować i kliknąć; przełączenie widoku
+stoi na walidatorze (`results/gate/validate_gate_p2a_staged_repo.*`: widok → `sys_059`, wszyscy w kadrze 100 %)
+i keeperze `combat_view_scope_smoke` — przyjęte przez właściciela. Nazwa układu w wierszu panelu — CP23, P2b.
 
 ### ✅ 454 — `fleet_engage_scope` T3b i `fleet_engage_picker_frame` T5b zależą od tempa czasu realnego
 
@@ -444,7 +461,7 @@ zmian w keeperach. `[measured]` z zegarem realnym +60 ms na wywołanie (`probes/
 ✅ **ZAMKNIĘTY 2026-10-17 — `13ca6c9` (P1-1), bez zmian w keeperach:** na `bcecaa0` `fleet_engage_scope_smoke` 51 / 0
 i `fleet_engage_picker_frame_smoke` 52 / 0; sweep 310/310 `[measured]`.
 
-### ⚪ 455 — salwa pierwszej rundy starcia nie została narysowana na mapie — widoczna tylko w logu panelu
+### ✅ 455 — salwa pierwszej rundy starcia nie została narysowana na mapie — widoczna tylko w logu panelu
 
 `[measured]` sonda zrzutów P1 (scena n, kod HEAD): runda 1 pierwszego starcia — 2 strzały, 2 trafienia (rakiety, −70 HP
 ze 120 fregaty gracza), a klatkę później `ThreeRenderer._activeEffects` = 0; rundy 6 i 11 (strzały) — 2 i 5 aktywnych
@@ -460,6 +477,9 @@ razem z 459: P2-6.
 Uczestnik aktywnego starcia z graczem jest widocznym końcem smugi niezależnie od wywiadu (`isEndpointVisibleInCombat`).
 `[measured]` sonda (§11.3): salwa rundy 1 przy wywiadzie `rumor` — W 2 smugi / 2 błyski, V 4 smugi / 2 błyski
 (`9de9a20`: 0 / 0 w obu); keeper `combat_view_scope_smoke` T11 — PRAWDZIWE starcie przy `rumor`: każda smuga rundy 1.
+✅ **ZAMKNIĘTY 2026-10-18 — `9e752cc` (P2a-4, CP17), bramka P2A PASS (§11.9):** u właściciela (wywiad strażnika przed
+starciem `unknown`) salwa rundy 1 — „4 smug, 2 błysków (4 strzałów)”, oko: „smugi i błysk pierwszej salwy widoczne”;
+kontrola `9de9a20` w walidatorze — 0 / 0.
 
 ### #456–#457 — P1, kod (2026-10-17)
 
@@ -476,7 +496,7 @@ zamiast dzisiejszych 500 ms — w jednej partii mniej przylotów. Bitwa planetar
 sceny dowodu P1 nie mają bitwy planetarnej. → poza P1 (pytanie 4 §9.7).
 → **CP12 (2026-10-17): osobny krok P3 po P2 — najpierw audyt** (§7).
 
-### ⚪ 457 — znacznik starcia gaśnie po 1600 ms CZASU REALNEGO bez rundy ze strzałem — przy 400 ms na rundę także w trakcie starcia
+### ✅ 457 — znacznik starcia gaśnie po 1600 ms CZASU REALNEGO bez rundy ze strzałem — przy 400 ms na rundę także w trakcie starcia
 
 `[code]` `ThreeRenderer._upsertEngagementMarker` (`:6292-6306`) odświeża znacznik WYŁĄCZNIE przy `combat:roundFx`, a DSCS
 emituje go tylko z rundy ze strzałem (`:720`, `round.events.length > 0`); `_tickEngagementMarkers` (`:6320-6327`) usuwa
@@ -497,6 +517,9 @@ znacznik wg stanu starcia — P2-5.
 wg STANU starcia (`VesselFxLogic.planEngagementMarkers` co klatkę z `listActive()`, także w pauzie); czas życia 1600 ms
 wyłącznie dla imitacji bitew orbitalnych. `[measured]` sonda W (§11.3): znacznik w każdej klatce aktywnego starcia, także
 przez 313 klatek pauzy (5 s); keeper `combat_marker_life_smoke` — PRAWDZIWE starcie z pauzą 10 s.
+✅ **ZAMKNIĘTY 2026-10-18 — `dc533cf` (P2a-3), bramka P2A PASS (§11.9):** u właściciela znacznik w każdej klatce starcia
+w widoku — 0 bez znacznika z 2629, także w długiej pauzie (0 z 2267 klatek pauzy); oko: „pierścień stał cały czas”.
+⚠ Pozycja pierścienia — w punkcie STARTU starcia, „w dziwnym miejscu, z dala od statków” (oko właściciela) — NOWY **467**.
 
 ### #458–#464 — P2, audyt (2026-10-17)
 
@@ -504,7 +527,7 @@ przez 313 klatek pauzy (5 s); keeper `combat_marker_life_smoke` — PRAWDZIWE st
 nadaniem — najwyższy numer findingu **#457**; trafienia „458”–„469” to numery linii i zapis „pierwszy wolny 458”
 `[measured]`. Sonda i zrzuty: `kosmos-handover/polish-p2-visible-battle/` (§10.1).
 
-### ⚪ 458 — „Obserwuj / Watch” kadruje STAŁY punkt startu starcia i nie śledzi walki, a nakładki w rozmiarze świata zasłaniają statki
+### ✅ 458 — „Obserwuj / Watch” kadruje STAŁY punkt startu starcia i nie śledzi walki, a nakładki w rozmiarze świata zasłaniają statki
 
 `[code]` `camera:watchBattle` (`ThreeRenderer:1076-1083`): cel = `encounter.location.point` (punkt środkowy pary
 wyzwalającej z chwili startu), dystans ≤ 1,2 j., `minDist` 0,005; `_focusEncounterId` bez czytelnika — śledzenia brak.
@@ -519,8 +542,13 @@ pierwszej makiecie. → P2-2 (§10.10), pytania 1–3.
 (§11). Kadr z `CombatWatchLogic.fitWatchFrame` (pozycje sprite'ów, prostokąt bezpieczny, środek prostokąta rzutu),
 szybkie śledzenie, nakładki z limitem, pierścień ukryty przy „Watch”; efekty walki przy „Watch” z limitem (pytanie Q1).
 `[measured]` sonda (§11.3) — liczby przed / po w §11.3.
+✅ **ZAMKNIĘTY 2026-10-18 — `51f8e81` (P2a-2, CP13, CP14; CP21 — limit efektów walki tylko przy „Watch”), bramka P2A
+PASS (§11.9):** u właściciela „Watch” — 915 klatek obserwacji, wszyscy żywi uczestnicy w kadrze **93,4 %** (walidator
+100 %), model min 3 / mediana 14,3 px, szewron max 36 px (pozostałe pola odczytu — nieprzekazane); oko: „Watch przybliżył
+tak, że statki były widoczne — w miarę OK”. Różnica 93,4 % wobec 100 % — niezmierzona (inny przebieg walki: 16 rund,
+straty 2/0; prawdziwe FPS).
 
-### ⚪ 459 — auto-fokus starcia dolatuje 1,4 s po starcie: rundy 1–4 mijają, zanim kamera dotrze
+### ✅ 459 — auto-fokus starcia dolatuje 1,4 s po starcie: rundy 1–4 mijają, zanim kamera dotrze
 
 `[code]` `vessel:engaged` → `focusOn(punkt starcia)` + cel ≤ 6 j.; dystans dochodzi lerpem 0,08 na klatkę (zależnym od
 FPS). `[measured]` W_en / W2_pl / X_en: z kadru układu (d 450) do d ≤ 6,3 — **88 klatek = 1408 ms**; runda 1 po 64 ms
@@ -531,6 +559,9 @@ widziana nawet bez bramki mgły (**455**). Przełącznik `uiPrefs.battleAutoFocu
 Cel i dystans auto-fokusu natychmiast (`focusOnInstant` + NEW `ThreeCameraController.snapDist`). `[measured]` sonda
 (§11.3): kamera ≤ 6,3 j. w pierwszej klatce po `vessel:engaged` (16 ms) — W i V; `9de9a20`: do kliknięcia „Watch”
 kamera nie doleciała (W — 10,2 j. po 896 ms, V — 39,5 j. po 496 ms; w rundzie 1 — 324 j.).
+✅ **ZAMKNIĘTY 2026-10-18 — `9e752cc` (P2a-4, CP17), bramka P2A PASS (§11.9):** u właściciela dolot auto-fokusu
+0 klatek; oko: „kamera skoczyła od razu na walkę”. ⚠ Cel auto-fokusu = punkt STARTU starcia — „auto-fokus przybliżył na
+pierścień, nie na statki” — NOWY **467**.
 
 ### ⚪ 460 — śmierć statku widać dopiero na końcu starcia, a wrak „przeskakuje” do punktu środkowego
 
@@ -541,6 +572,7 @@ starcia, a wszystkie wybuchy padają naraz. `_wreckOne` → `_turnIntoWreck(vess
 **0,0895 AU**. Odroczenie wybuchu w czasie niezmierzone: w scenie 1 na 1 śmierć kończy starcie w tej samej rundzie.
 → P2b-2 (§10.10), pytanie 7.
 → **CP19 (2026-10-17): wrak w miejscu śmierci — P2c; dziś bez zmian.**
+→ **CP24 (2026-10-18): backlog bez daty** — P2c nie powstaje; dzisiejsze zachowanie zostaje (CP19).
 
 ### ⚪ 461 — zbliżenie w starciu idzie jednym skokiem raz na rundę (≈ 100 px co 400 ms przy „Obserwuj”)
 
@@ -551,8 +583,9 @@ starcia, a wszystkie wybuchy padają naraz. `_wreckOne` → `_turnIntoWreck(vess
 i 9), przy auto-fokusie ≈ 20 px `[derived]`. ⚠ **Sprostowanie P1 §3.3** („w siatce ruch idzie 6–7 krokami na rundę”) — dla
 zbliżenia w starciu nieprawda. → P2-4 (§10.10).
 → **P2b** (A7 — tempo efektów + płynne zbliżenie; polecenie sesji kodu P2a).
+→ **P2b D3 (CP24 — ostatnia sesja kodu widoczności starcia).**
 
-### ⚪ 462 — wróg w starciu z graczem jest rysowany półprzezroczysty (krycie 0,5) przez całe starcie
+### ✅ 462 — wróg w starciu z graczem jest rysowany półprzezroczysty (krycie 0,5) przez całe starcie
 
 `[code]` `_applyVesselIntelVisibility`: jakość `contact` → krycie modelu 0,5 (pełne dopiero przy `detailed`); w starciu
 wróg dochodzi do `contact` przez „sensor lock” i tak zostaje. `[measured]` W_en: `intelOpacity` 0,5 w każdej migawce
@@ -560,6 +593,8 @@ starcia. Panel walki podaje jednocześnie nazwę, kadłub i broń wroga. → P2b
 → **POLISH P2a — kod (2026-10-17; CP17 — w P2a, nie w P2b): naprawa PRZYGOTOWANA w C4 (zestagowana) — zamknięcie przy
 commicie** (§11). `[measured]` sonda (§11.3): krycie wroga w starciu 1 (min i max; materiał modelu 1) — W, X, V;
 `9de9a20`: 0,30–0,5 (W, V).
+✅ **ZAMKNIĘTY 2026-10-18 — `9e752cc` (P2a-4, CP17), bramka P2A PASS (§11.9):** u właściciela krycie wroga w starciu
+(min) 1 (odczyt kroku 2); kontrola `9de9a20` w walidatorze — 0,5.
 
 ### ⚪ 463 — `ProximitySystem` re-emituje `vessel:combatRangeEnter` dla par tej samej frakcji co każde wywołanie (poza P2)
 
@@ -569,6 +604,7 @@ na tik). `[measured]` W2_pl (fixture GATE-S4): **17 481** zdarzeń w 1702 klatka
 (`emp_001` ×4, `emp_002` ×3) od klatki 0, po 2346 zdarzeń, para własnych fregat gracza 941 (od klatki 702); żadne nie
 utworzyło starcia. Szum zdarzeń i praca odbiorców (VCS → DSCS odmawia); czasu klatki nie mierzono. Poza P2 (logika).
 → **CP20 (2026-10-17): osobny mały krok po P2, najpierw audyt.**
+→ **CP24 (2026-10-18): backlog bez daty** (osobny krok z CP20 nie powstaje).
 
 ### ⚪ 464 — etykiety stron starcia DSCS zaszyte po polsku („Gracz — P1 n0” w grze EN)
 
@@ -576,6 +612,7 @@ utworzyło starcia. Szum zdarzeń i praca odbiorców (VCS → DSCS odmawia); cza
 `battle.label.playerGroup` / `playerUnit` / `enemyUnnamed`, których używa `VesselCombatSystem` (`:295-297`); etykieta
 idzie do panelu walki i do rekordu bitwy (`participantA.label`). `[measured]` zrzuty W_en (gra EN): panel „Gracz — P1 n0”.
 Klasa **113**; `check-i18n` nie widzi (szablon literału). → P2b-1 (§10.10), razem z **450** i **163**.
+→ **CP24 (2026-10-18): backlog bez daty** (razem z **163**; **450** — P2b D5).
 
 ### #465–#466 — P2a, kod (2026-10-17)
 
@@ -590,6 +627,7 @@ nadaniem — najwyższy numer findingu **#464**; trafienia „465”–„469”
 (`visible[0]?.location?.point`, `:148`). Przy dwóch równoczesnych starciach gracz nie wybiera, które ogląda — po P2a
 „Watch” przełącza też widok na układ pierwszego z listy (453). Osiągalność dwóch równoczesnych starć z graczem —
 niezmierzona. → P2b (kandydat).
+→ **CP22 (2026-10-18): przycisk „Watch” przy każdym wierszu panelu walki — P2b D4.**
 
 ### ⚪ 466 — efekty walki w rozmiarze świata przy bliskim kadrze POZA „Watch” zakrywają ekran
 
@@ -599,6 +637,35 @@ pierścień ma do ~349 px średnicy `[derived]` (rzut keepera `combat_watch_fram
 (`watchFxScale`) działa WYŁĄCZNIE przy „Watch” (`_updateActiveEffects`: `if (watchFx && FX_WATCH_CAPPED.has(…))`); przy
 zbliżeniu kółkiem albo fokusie statku poza „Watch” błysk (0,06 j.), pierścień osłony (0,10 j.) i wybuch (pierścień do
 2 × rozmiar kadłuba, ≥ 0,4 j.) mają rozmiar świata, jak dziś. → pytanie Q1 (§11.7): limit także poza „Watch”?
+→ **CP21 (2026-10-18): limit efektów walki tylko przy „Watch”; 466 → backlog bez daty.**
+
+### #467–#468 — P2a, bramka u właściciela (2026-10-18)
+
+⚠ **Registry-first (2026-10-18, zamknięcie P2a):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów
+przed nadaniem — najwyższy numer findingu **#466**; trafienia „467”–„479” to zapis „pierwszy wolny 467”, numery linii
+(`ColonyManager:468`), wartości (0,467 AU) i ziarno bramki P1 (468532936) `[measured]`.
+
+### ⚪ 467 — znacznik starcia i cel auto-fokusu stoją w punkcie STARTU starcia, a walka odpływa od niego ~0,1 AU
+
+`[code]` oba czytają `encounter.location.point` — punkt środkowy pary wyzwalającej z chwili startu, stały przez całe
+starcie (`DeepSpaceCombatSystem._createEncounter`: `location.point = mid`): znacznik — `ThreeRenderer._tickEngagementMarkers`
+→ `VesselFxLogic.planEngagementMarkers` (`point: e.location?.point`; pozycja ustawiana przy utworzeniu znacznika, potem
+już nie); auto-fokus — słuchacz `vessel:engaged` (`focusOnInstant(location.point)`, jednorazowo). „Watch” (P2a-2, CP13)
+śledzi środek sprite'ów żywych uczestników co klatkę — te dwa nie. `[measured]` audyt P2 §10.3 (W_en): środek walki
+0,079–0,115 AU od punktu startu (fregata podlatuje do strażnika, który trzyma orbitę); bramka P2A u właściciela
+(2026-10-18, T1): „czerwony pierścień stał cały czas, ALE w dziwnym miejscu, z dala od statków; auto-fokus przybliżył na
+pierścień, nie na statki; Watch przybliżył tak, że statki były widoczne”. → P2b D1 (logika śledzenia „Watch” dla
+znacznika i celu auto-fokusu).
+
+### ⚪ 468 — panel walki: tekst nie mieści się w karcie — nazwa imperium ucięta, log walki obcięty
+
+`[code]` `CombatHUD._drawEncounterRow` przycina po LICZBIE ZNAKÓW, nie po szerokości tekstu: etykiety stron — 20 znaków
+(`_truncate(enc.sideA/B.label, 20)`, `:233`, `:241`) — etykieta „Liga Trzech Słońc (2)” (21 znaków,
+`DeepSpaceCombatSystem._createEncounter`) daje „Liga Trzech Słońc (…”; wiersze statków — 44 znaki (`:272`, `:277`); log
+walki — ostatnie 6 zdarzeń (`LOG_LINES_MAX`), wiersz 88 znaków (`:304`), nazwy w wierszu 12 znaków (`:411`); szerokość
+panelu stała — 560 (`PANEL_W`, `:20`). Pełnej nazwy nie ma gdzie zobaczyć (brak podpowiedzi). `[measured]` zrzut
+właściciela z bramki P2A (2026-10-18, gra EN): nazwa imperium ucięta („Liga Trzech Słońc (…”), log walki obcięty.
+→ P2b D4 (razem z **465** — CP22 — i nazwą układu w wierszu — CP23).
 
 ## 7. Następne kroki
 
@@ -607,14 +674,19 @@ zbliżeniu kółkiem albo fokusie statku poza „Watch” błysk (0,06 j.), pier
    R-P1-2 (CP9) → commity `13ca6c9` (P1-1) · `bcecaa0` (P1-2) → zamknięcia 449 / 452 / 454 (tutaj) i 438 / 436
    (`AI_STRIKES_BACK_PLAN.md` §6) — §9.6.
 3. **P2 — widoczność** (kolejność właściciela, CP6 / CP7): ~~audyt~~ (2026-10-17, §10) → ~~odpowiedzi na §10.11~~ →
-   **CP13–CP20** (§5) → **P2a — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-17** (§11). **Następny krok: bramka
-   `gate/GATE_P2A.md` u właściciela + odpowiedzi na §11.7** → `tools/commit_P2A.sh` (cztery commity, bez argumentów) →
-   commit dokumentacji zamknięcia (453 / 455 / 457 / 458 / 459 / 462).
-   - **P2b:** 451 — paski HP obu stron aktywnego starcia (CP16) · błysk trafienia — biały, stałe 200 ms (CP18) · A7 —
-     tempo efektów z tempa rundy + płynne zbliżenie (461) · opcja powiększenia modeli (CP15, po bramce) · P2b-1 — 450,
-     163, 464 · kandydaci z P2a: 465, 466.
-   - **P2c:** 460 — wrak w miejscu śmierci (CP19).
-   - **463** — osobny mały krok po P2, najpierw audyt (CP20).
+   **CP13–CP20** (§5) → ~~P2a — kod~~ → **ZAMKNIĘTY W KODZIE 2026-10-18:** bramka `gate/GATE_P2A.md` u właściciela PASS
+   na własnościach (§11.9) → `tools/commit_P2A.sh` → `e866bd6` · `51f8e81` · `dc533cf` · `9e752cc` → zamknięcia 453 /
+   455 / 457 / 458 / 459 / 462 (§11.10) → odpowiedzi na §11.7 → **CP21–CP24** (2026-10-18, §5).
+   - **P2b — OSTATNIA sesja kodu tematu widoczności starcia (CP24):** D1 — **467** (znacznik i cel auto-fokusu za
+     środkiem walki — logika śledzenia „Watch”) · D2 — **451** paski HP obu stron aktywnego starcia (CP16) + błysk
+     trafienia — biały, stałe 200 ms (CP18) · D3 — A7 tempo efektów z tempa rundy + płynne zbliżenie (**461**) · D4 —
+     panel walki: **468** (tekst w karcie), **465** „Watch” przy każdym wierszu (CP22), nazwa układu w wierszu (CP23) ·
+     D5 — **450** „Tur: N” (CP24: jeśli mały).
+   - **Backlog bez daty (CP24) — po P2b temat widoczności starcia jest zamknięty:** **163** (okno wyniku bitwy po
+     polsku — rejestr `VESSEL_ORDERS_PLAN.md`) · **464** (etykiety stron DSCS po polsku) · **460** (śmierć widoczna
+     dopiero na końcu starcia, wrak w punkcie środkowym — P2c nie powstaje, CP19 zostaje) · **466** (limit efektów walki
+     poza „Watch” — CP21) · **463** (szum `combatRangeEnter` w `ProximitySystem` — osobny krok z CP20 nie powstaje).
+     Opcja powiększenia modeli uczestników (CP15) — nie weszła do P2b (polecenie sesji: D1–D5).
 4. **P3** — **456** (okno partii bitwy planetarnej w czasie realnym; CP12): osobny krok po P2, najpierw audyt.
 5. Dalej kolejka arca (§0).
 
@@ -689,6 +761,12 @@ zbliżeniu kółkiem albo fokusie statku poza „Watch” błysk (0,06 j.), pier
   drzewem (`taskkill /PID … /T /F`).
 - **(P2a) Klonu roboczego serwowanego kolejce sond nie edytuje się w trakcie** — sondy „po” z migawki
   (`git worktree add --detach`), żeby poprawki w klonie nie mieszały wersji kodu między przebiegami.
+- **(P2a — bramka) Starcie nieoglądane trwa ~1 s** (CP4: 110 ms na rundę — 11 rund ≈ 1,2 s): krok bramki „od razu
+  spacja, potem w pauzie Watch” był dla człowieka niewykonalny — u właściciela starcie skończyło się przed kliknięciem
+  (T2). Krok, który wymaga reakcji w trakcie starcia nieoglądanego, musi zostawić czas (starcie dłuższe — więcej HP,
+  dalszy start) albo zrobić klik konsolą w pauzie.
+- **(P2a — bramka) Odczyt skrócony „…”:** pola odczytu, których właściciel nie przekazał, zapisujemy jako nieprzekazane —
+  nie jako PASS z walidatora.
 
 ## 9. P1 — kod (2026-10-17): ZACOMMITOWANY — `13ca6c9` (P1-1), `bcecaa0` (P1-2)
 
@@ -1123,7 +1201,7 @@ zdarzeń w `ProximitySystem` — logika, nie prezentacja).
 - Wydajność 463 (szum zdarzeń) — policzone zdarzenia, czasu klatki nie mierzono.
 - Bramka w przeglądarce właściciela — nie dotyczy (audyt).
 
-## 11. P2a — kod (2026-10-17): PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany
+## 11. P2a — kod (2026-10-17): ZACOMMITOWANY 2026-10-18 — `e866bd6` · `51f8e81` · `dc533cf` · `9e752cc`
 
 Polecenie właściciela (2026-10-17): kod P2a według CP13–CP20 — kamera „Watch”, nakładki, znacznik, pierwsza salwa,
 efekty starcia w innym układzie; prezentacja wyłącznie (bez zmian matematyki walki, zegarów, wyników i zapisu); keeper
@@ -1142,6 +1220,10 @@ CP13, CP14), P2-5 (457), P2-6 (455, 459; CP17 — także 462). P2b (451 + błysk
 | **C4** P2a-4 | 455, 459, 462 — wróg w starciu z graczem w pełni widoczny, auto-fokus natychmiast (CP17) | `combat_view_scope_smoke` (wersja C4) **34 / 13 → 47 / 0** | **313/313** · PASS 3458 |
 
 ⁽ᵃ⁾ Powtórka bez obciążenia; budowa weryfikacyjna — 311/312 (limit czasu `run-all`, §11.5).
+
+**Commity (2026-10-18, `tools/commit_P2A.sh` bez argumentów, po bramce §11.9):** C1 `e866bd6` · C2 `51f8e81` · C3
+`dc533cf` · C4 `9e752cc` — drzewa kroków = `patches/trees.txt` (C1 `6c07a53a` · C2 `1fd596cf` · C3 `bc7d60a0` · C4
+`8d2d9de7`); na `9e752cc` sweep **313/313, 0 FAIL** (31 advisory), `check-i18n` PASS pl = en 3458 `[measured]`.
 
 Na C4: `combat_view_scope_smoke` 47 / 0 · `combat_watch_frame_smoke` 42 / 0 · `combat_marker_life_smoke` 18 / 0 ·
 `combat_pace_smoke` 71 / 0. Kontrole pinu (np. `combat_watch_frame` T11-0) zielone po obu stronach fail-first.
@@ -1303,6 +1385,9 @@ renderu (792 / 792 wywołań w T1). Wyniki dosłownie: `results/gate/validate_ga
 3. **Q3 — nazwa układu w wierszu panelu walki** (propozycja P2-1 audytu, poza poleceniem C1): P2b-1 razem z 464 / 450
    / 163?
 
+→ **Odpowiedzi właściciela 2026-10-18:** Q1 → **CP21** (limit tylko przy „Watch”; 466 → backlog) · Q2 → **CP22**
+(„Watch” przy każdym wierszu — P2b) · Q3 → **CP23** (nazwa układu w wierszu — P2b); zakres P2b i backlog — **CP24** (§5).
+
 ### 11.8 Czego nie zweryfikowano
 
 - Bramka w przeglądarce właściciela (prawdziwe FPS, karta w tle) — przed commitem.
@@ -1315,3 +1400,35 @@ renderu (792 / 792 wywołań w T1). Wyniki dosłownie: `results/gate/validate_ga
 - Limit efektów walki poza „Watch” (466) — świadomie poza zakresem (Q1).
 - Pierwszy przebieg stanu pośredniego (śledzenie, bez limitu efektów) usunięty przy restarcie kolejki sond — zmierzony
   ponownie na migawce `9d0d9b5` (`results/V_en_nofxcap/`); liczby zgodne z odczytem z sesji.
+
+### 11.9 Bramka u właściciela — 2026-10-18: PASS na własnościach `[measured: odczyt właściciela]`
+
+Przeglądarka właściciela, fixture GATE-S4 (kopia), gra po angielsku, kroki `gate/GATE_P2A.md` na zestagowanym kodzie P2a
+(drzewo C4). Odczyty — dosłownie z raportu właściciela; pola, których nie przekazał, zapisane jako nieprzekazane.
+
+| krok | odczyt |
+|---|---|
+| 1 — scena A | rok 60,1372 · `sys_home` · strażnicy `v_30` / `v_31`, fregaty `v_32` / `v_33` · rozkazy ok, ok · 0,32 AU · wywiad strażnika `unknown` · klucz 400 |
+| T1 — czas | słowa właściciela: „kamera skoczyła od razu na walkę; smugi i błysk pierwszej salwy widoczne; czerwony pierścień stał cały czas, ALE w dziwnym miejscu, z dala od statków; auto-fokus przybliżył na pierścień, nie na statki; Watch przybliżył tak, że statki były widoczne — w miarę OK” |
+| 2 — odczyt A | salwa rundy 1 „4 smug, 2 błysków (4 strzałów)” · krycie wroga (min) 1 · klatki starcia w widoku 2629, bez znacznika 0 · klatki pauzy 2267 (długa pauza), bez znacznika 0 · dolot auto-fokusu 0 klatek · „Watch”: 915 klatek, wszyscy w kadrze 93,4 %, model min 3 / mediana 14,3 px, szewron max 36 px (pozostałe pola — nieprzekazane) · wynik 16 rund · zwycięzca B · straty 2/0 |
+| zrzut | panel walki: tekst wychodzi poza kartę — nazwa imperium ucięta („Liga Trzech Słońc (…”), log walki obcięty → **468** |
+| 3 — scena B | utworzona: `sys_059`, `v_34` / `v_35`, rozkaz ok |
+| T2 — czas | starcie nieoglądane (110 ms na rundę — CP4; 11 rund) skończyło się, zanim właściciel zdążył zapauzować i kliknąć „Watch”; widok domowy został, kamera oddaliła się wyłącznie przy resecie kadru (krok 3) |
+| 4 — odczyt B | smugi / błyski w innym układzie 0 / 0 · znaczniki przy widoku innego układu 0 · klatki starcia w widoku 0 · „Watch” — nie kliknięto · widok `sys_home` · wynik 11 rund · zwycięzca B · straty 1/0 |
+| konsola | bez błędów (raport właściciela) |
+
+Własności (tabela `GATE_P2A.md`): **1** start bez dolotu — PASS (0 klatek; oko) · **2** salwa rundy 1 — PASS (4 / 2;
+oko) · **3** model wroga pełny — PASS (krycie 1) · **4** znacznik przez całe starcie i w pauzie — PASS (0 z 2629, pauza
+0 z 2267); pozycja — **467** · **5** „Watch”: wszyscy w kadrze — 93,4 % wobec 100 % walidatora, oko „w miarę OK” · **6**
+szewron 36 px — PASS; celownik i efekt — nieprzekazane · **7** pierścień przy „Watch” — nieprzekazane · **8** starcie
+w innym układzie: widok domowy czysty, kamera stoi — PASS · **9** „Watch” przenosi do układu starcia — niećwiczone u
+właściciela (T2), przyjęte na walidatorze i keeperze · **10** wynik walki — inny niż w walidatorze (rok utworzenia sceny
+60,1372 wobec 60,1156 — inne ziarno; przewidziane w uwagach bramki). Werdykt właściciela: **PASS na własnościach**.
+Z bramki dwa NOWE findingi: **467** (znacznik i cel auto-fokusu w punkcie startu starcia) i **468** (panel walki —
+tekst poza kartą).
+
+### 11.10 Zamknięcia — 2026-10-18 (`e866bd6` · `51f8e81` · `dc533cf` · `9e752cc`; bramka §11.9 PASS)
+
+✅ **453** (`e866bd6`, P2a-1, CP7) · ✅ **458** (`51f8e81`, P2a-2, CP13, CP14, CP21) · ✅ **457** (`dc533cf`, P2a-3) ·
+✅ **455** · **459** · **462** (`9e752cc`, P2a-4, CP17) — wpisy w §6. Przecelowań istniejących keeperów: brak. Decyzje
+po bramce: CP21–CP24 (§5); następny krok — **P2b** (§7), ostatnia sesja kodu tematu widoczności starcia.
