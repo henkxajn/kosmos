@@ -12,11 +12,16 @@
 > (CP24): **467** (znacznik i cel auto-fokusu za środkiem walki), **451** + CP16 (paski HP), błysk trafienia (CP18),
 > A7 + **461** (tempo efektów, płynne zbliżenie), panel walki — **468** + **465** (CP22) + nazwa układu w wierszu
 > (CP23), **450** (jeśli mały); po P2b — **backlog bez daty**: **163** · **464** · **460** · **466** · **463** (§7).
+> **P2b — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-18, NIE zacommitowany** (§12): łańcuch P2b-1 … P2b-5 (C1 467 · C2 451
+> · C3 461 · C4 468 / 465 · C5 450), przecelowań istniejących keeperów brak; bramka `gate/GATE_P2B.md` u właściciela →
+> commity `tools/commit_P2B.sh`; pytania Q1 (cel auto-fokusu), Q2 (karta ≤ 45 % ekranu) — §12.7. NOWY **469** (auto-fokus
+> przechodzi do każdego nowego starcia) → backlog bez daty.
 > **P3** — **456** (CP12). Audyt P1 — 2026-10-16, bez kodu (§2–§4; HEAD audytu `3b7819f`, commit `1af65fc`).
 > Arc otwarty wskazaniem właściciela przy zamknięciu AI STRIKES BACK (`AI_STRIKES_BACK_PLAN.md` §8.8).
-> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#468**; pierwszy wolny **469**. Sondy audytu:
+> Decyzje arca — prefiks **CP**. Rejestr findingów arca — §6, **#449–#469**; pierwszy wolny **470**. Sondy audytu:
 > `kosmos-handover/polish-p1-combat-pace/`; kod, dowód i bramka P1: `kosmos-handover/polish-p1-code/`; audyt P2:
-> `kosmos-handover/polish-p2-visible-battle/`; kod, dowód i bramka P2a: `kosmos-handover/polish-p2a-code/` (SHA256SUMS).
+> `kosmos-handover/polish-p2-visible-battle/`; kod, dowód i bramka P2a: `kosmos-handover/polish-p2a-code/`; kod, dowód
+> i bramka P2b: `kosmos-handover/polish-p2b-code/` (SHA256SUMS).
 > Tagi: `[code]` źródło · `[git]` historia · `[measured]` pomiar · `[doc]` dokumenty · `[derived]` wniosek z powyższych.
 
 ## 0. Cel arca
@@ -386,6 +391,9 @@ Dziennik „0 turns” / „0 tur” przy `timeline` 16 rund; trzej czytelnicy `
 wojny `WarSystem:523`); kształt `turns: encounter.currentRound` — P2b-1 razem z **163** i **464**.
 → **CP24 (2026-10-18): w P2b, jeśli mały — P2b D5** (jedno pole liczby rund w rekordzie bitwy DSCS, czytane przez trzech
 czytelników); **163** i **464** → backlog bez daty.
+→ **POLISH P2b — kod (2026-10-18; D5): naprawa PRZYGOTOWANA w C5 (zestagowana) — zamknięcie przy commicie** (§12).
+`turns: encounter.currentRound` w `_finalizeBattle`; okno wyniku, Dziennik i lista bitew wojny bez zmian. `[measured]`
+sonda (§12.3): okno wyniku „Tur: N” = rundy bitwy we wszystkich scenach (przed — „Tur: 0”).
 
 ### ⚪ 451 — HP pojedynczego statku nie jest widoczne nigdzie
 
@@ -399,6 +407,10 @@ decyzja 2026-05-20) nie mają czytelnika w UI (grep: wyłącznie `VesselManager`
 40 × 5 px pod statkiem (`p2_w_6_MOCK_hpbars.png`); błysk na modelu — statki gracza dzielą materiały szablonu GLB
 (klon per statek albo poświata dopasowana do modelu) — P2-3.
 → **P2b D2 (CP16, CP18; CP24 — ostatnia sesja kodu widoczności starcia).**
+→ **POLISH P2b — kod (2026-10-18; D2): naprawa PRZYGOTOWANA w C2 (zestagowana) — zamknięcie przy commicie** (§12).
+Paski HP 40 × 5 px pod uczestnikami aktywnego starcia (obie strony), biały błysk 200 ms na trafionym modelu. `[measured]`
+sonda (§12.3): każdy żywy uczestnik na ekranie z paskiem w 100 % klatek, ułamek = hp / hpStart, po końcu starcia 0 pasków,
+białe błyski = trafienia narysowane (przed — pasków i błysków brak).
 
 ### ✅ 452 — kąt orbity statku wokół ciała liczony w czasie REALNYM zmienia geometrię walki
 
@@ -584,6 +596,9 @@ i 9), przy auto-fokusie ≈ 20 px `[derived]`. ⚠ **Sprostowanie P1 §3.3** (�
 zbliżenia w starciu nieprawda. → P2-4 (§10.10).
 → **P2b** (A7 — tempo efektów + płynne zbliżenie; polecenie sesji kodu P2a).
 → **P2b D3 (CP24 — ostatnia sesja kodu widoczności starcia).**
+→ **POLISH P2b — kod (2026-10-18; D3, A7): naprawa PRZYGOTOWANA w C3 (zestagowana) — zamknięcie przy commicie** (§12).
+Płynne zbliżenie (sprite płynie do pozycji logicznej przez rundę czasu realnego) i tempo efektów z `combatRoundMs()`.
+`[measured]` sonda (§12.3) — skoki i pokrycie salw przed / po w §12.3.
 
 ### ✅ 462 — wróg w starciu z graczem jest rysowany półprzezroczysty (krycie 0,5) przez całe starcie
 
@@ -628,6 +643,9 @@ nadaniem — najwyższy numer findingu **#464**; trafienia „465”–„469”
 „Watch” przełącza też widok na układ pierwszego z listy (453). Osiągalność dwóch równoczesnych starć z graczem —
 niezmierzona. → P2b (kandydat).
 → **CP22 (2026-10-18): przycisk „Watch” przy każdym wierszu panelu walki — P2b D4.**
+→ **POLISH P2b — kod (2026-10-18; D4, CP22): naprawa PRZYGOTOWANA w C4 (zestagowana) — zamknięcie przy commicie**
+(§12). `[measured]` sonda Y (dwa starcia naraz, §12.3): dwa przyciski „Watch”, klik drugiego — obserwacja DRUGIEGO
+starcia, wszyscy jego uczestnicy w kadrze (przed — jeden przycisk, drugiego brak).
 
 ### ⚪ 466 — efekty walki w rozmiarze świata przy bliskim kadrze POZA „Watch” zakrywają ekran
 
@@ -656,6 +674,9 @@ już nie); auto-fokus — słuchacz `vessel:engaged` (`focusOnInstant(location.p
 (2026-10-18, T1): „czerwony pierścień stał cały czas, ALE w dziwnym miejscu, z dala od statków; auto-fokus przybliżył na
 pierścień, nie na statki; Watch przybliżył tak, że statki były widoczne”. → P2b D1 (logika śledzenia „Watch” dla
 znacznika i celu auto-fokusu).
+→ **POLISH P2b — kod (2026-10-18; D1): naprawa PRZYGOTOWANA w C1 (zestagowana) — zamknięcie przy commicie** (§12).
+Znacznik co klatkę w środku uczestników; auto-fokus śledzi walkę — uczestnicy wyśrodkowani w pasie NAD kartą (reguła
+kadru „Watch” przy bieżącym dystansie — pytanie Q1, §12.7). `[measured]` sonda (§12.3, §12.4).
 
 ### ⚪ 468 — panel walki: tekst nie mieści się w karcie — nazwa imperium ucięta, log walki obcięty
 
@@ -666,6 +687,27 @@ walki — ostatnie 6 zdarzeń (`LOG_LINES_MAX`), wiersz 88 znaków (`:304`), naz
 panelu stała — 560 (`PANEL_W`, `:20`). Pełnej nazwy nie ma gdzie zobaczyć (brak podpowiedzi). `[measured]` zrzut
 właściciela z bramki P2A (2026-10-18, gra EN): nazwa imperium ucięta („Liga Trzech Słońc (…”), log walki obcięty.
 → P2b D4 (razem z **465** — CP22 — i nazwą układu w wierszu — CP23).
+→ **POLISH P2b — kod (2026-10-18; D4, CP23): naprawa PRZYGOTOWANA w C4 (zestagowana) — zamknięcie przy commicie**
+(§12). Przycinanie po szerokości tekstu z podpowiedzią, log — ostatnie linie, karta ≤ 45 % ekranu (pytanie Q2, §12.7),
+nazwa układu w wierszu. `[measured]` sonda (§12.3): 0 napisów poza kartą we wszystkich scenach.
+
+### #469 — P2b, kod (2026-10-18)
+
+⚠ **Registry-first (2026-10-18, kod P2b):** grep rejestrów (`docs/`), `CLAUDE.md`, pamięci i historii commitów przed
+nadaniem — najwyższy numer findingu **#468**; trafienia „469”–„470” to zapis „pierwszy wolny 469”, numery linii
+(`GameScene.js:469`, `FleetGroupPanel:470-472`) i wartości (7 470, 0,470) `[measured]`. Etykiety stron „Gracz (2)” /
+„Wróg” widoczne w karcie walki w grze EN (sonda P2b) — to istniejący **464** (backlog, CP24), nie nowy numer. Sonda
+i bramka: `kosmos-handover/polish-p2b-code/` (§12).
+
+### ⚪ 469 — auto-fokus przechodzi do KAŻDEGO nowego starcia — przy dwóch starciach kamera skacze z pierwszego na drugie
+
+`[code]` słuchacz `vessel:engaged` (`ThreeRenderer`, auto-fokus Slice 1 / P2a-4 / P2b-1): bramki — przełącznik
+`battleAutoFocus`, układ starcia w widoku (P2a-1), „Obserwuj” aktywne (P2a-2), gracz w starciu; brak bramki „auto-fokus
+już śledzi inne starcie” — nowe starcie przejmuje kamerę (natychmiast, `focusOnInstant` + `snapDist`), a śledzenie
+pierwszego się kończy. `[measured]` sonda P2b, scena Y (dwa starcia naraz w układzie domowym, ~2,4 AU od siebie): drugie
+starcie rusza 70 klatek (1,1 s) po pierwszym — kamera przeskakuje z pierwszej walki na drugą. Zachowanie sprzed P2b (P2a
+tak samo); osiągalność dwóch równoczesnych starć z graczem w normalnej grze — niezmierzona (465). → **backlog bez daty**
+(CP24 — po P2b reszta widoczności starcia trafia do backlogu).
 
 ## 7. Następne kroki
 
@@ -687,6 +729,9 @@ właściciela z bramki P2A (2026-10-18, gra EN): nazwa imperium ucięta („Liga
      dopiero na końcu starcia, wrak w punkcie środkowym — P2c nie powstaje, CP19 zostaje) · **466** (limit efektów walki
      poza „Watch” — CP21) · **463** (szum `combatRangeEnter` w `ProximitySystem` — osobny krok z CP20 nie powstaje).
      Opcja powiększenia modeli uczestników (CP15) — nie weszła do P2b (polecenie sesji: D1–D5).
+   - **P2b — KOD PRZYGOTOWANY i ZESTAGOWANY 2026-10-18** (§12) → bramka `gate/GATE_P2B.md` u właściciela + odpowiedzi
+     Q1 / Q2 (§12.7) → `tools/commit_P2B.sh` → zamknięcia 467 / 451 / 461 / 468 / 465 / 450. **469** (auto-fokus
+     przechodzi do każdego nowego starcia) — backlog bez daty, razem z listą wyżej.
 4. **P3** — **456** (okno partii bitwy planetarnej w czasie realnym; CP12): osobny krok po P2, najpierw audyt.
 5. Dalej kolejka arca (§0).
 
@@ -767,6 +812,22 @@ właściciela z bramki P2A (2026-10-18, gra EN): nazwa imperium ucięta („Liga
   dalszy start) albo zrobić klik konsolą w pauzie.
 - **(P2a — bramka) Odczyt skrócony „…”:** pola odczytu, których właściciel nie przekazał, zapisujemy jako nieprzekazane —
   nie jako PASS z walidatora.
+- **Sonda, która trzyma `isPaused = true` poza własnym `update`, pokazuje rendererowi PAUZĘ także w klatkach biegu gry
+  (P2b, 2026-10-18).** Pierwszy przebieg P2b po płynnym zbliżeniu: sprite'y uczestników stały w miejscu startu starcia przez
+  całe starcie, a pozycje logiczne szły o ~0,25 AU — metryka skoków wyszła 0 (fałszywa zieleń „bez skoków”). Kod sprzed P2b
+  nie miał w rendererze żadnego czytelnika pauzy, więc sondy P1 / P2 / P2a tego nie widziały. ⇒ przed pomiarem funkcji,
+  która ZALEŻY od pauzy, sprawdź, czym sonda tę pauzę symuluje; podkładka wąska — na czas jednego czytelnika.
+- **Dosłowna treść polecenia to hipoteza, którą mierzy się przed zestagowaniem (P2b D1, 2026-10-18).** „Auto-focus target =
+  centroid” w prawdziwej grze stawiało strażników sceny 3 na 2 pod kartą walki we WSZYSTKICH klatkach auto-fokusu; ta sama
+  reguła, co kadr „Obserwuj” (uczestnicy wyśrodkowani w pasie nad kartą) — 100 %. Zmiana idzie z pomiarem i pytaniem do
+  właściciela, nie po cichu (§12.7 Q1).
+- **Prostokąt bezpieczny kadru zależy od wysokości karty — a karta od liczby starć (P2b D4, 2026-10-18).** Dwa starcia
+  z pełnym logiem: karta 61 % ekranu, pas nad nią ~130 px — kadr „Obserwuj” i auto-fokus nie mają gdzie postawić statków.
+  Pomiar kadru przy JEDNYM starciu tego nie pokaże — scena z dwoma starciami (sonda Y) jest częścią dowodu.
+- **Pin jałowy wychodzi dopiero na kodzie sprzed kroku (P2b, 2026-10-18).** Trzy piny P2b przechodziły bez funkcji kroku:
+  pusta lista pasków (T3b — zero porównań), niezmienniki opisane jak sedno (karta T2a / T2b / T8b), a keeper D1 przerywał
+  się na brakującej funkcji, zamiast degradować. Fail-first na drzewie poprzedniego kroku z czytaniem KAŻDEGO zielonego pinu
+  — nie tylko licznika.
 
 ## 9. P1 — kod (2026-10-17): ZACOMMITOWANY — `13ca6c9` (P1-1), `bcecaa0` (P1-2)
 
@@ -1432,3 +1493,195 @@ tekst poza kartą).
 ✅ **453** (`e866bd6`, P2a-1, CP7) · ✅ **458** (`51f8e81`, P2a-2, CP13, CP14, CP21) · ✅ **457** (`dc533cf`, P2a-3) ·
 ✅ **455** · **459** · **462** (`9e752cc`, P2a-4, CP17) — wpisy w §6. Przecelowań istniejących keeperów: brak. Decyzje
 po bramce: CP21–CP24 (§5); następny krok — **P2b** (§7), ostatnia sesja kodu tematu widoczności starcia.
+
+## 12. P2b — kod (2026-10-18): PRZYGOTOWANY i ZESTAGOWANY, NIE zacommitowany — ostatnia sesja kodu widoczności starcia (CP24)
+
+> Łańcuch P2b-1 … P2b-5 zbudowany w świeżym klonie na commicie dokumentacji P2b (ten commit) i ZESTAGOWANY w repo
+> właściciela (`tools/apply_to_repo_P2B.sh`, EOL właściciela — `ThreeRenderer.js` CRLF, reszta LF). Commity dopiero po
+> bramce w przeglądarce (`gate/GATE_P2B.md`) — `tools/commit_P2B.sh` (bez argumentów; przecelowań istniejących keeperów
+> brak). Folder: `kosmos-handover/polish-p2b-code/` (SHA256SUMS). Save v101 bez migracji; bez nowych kluczy słownika.
+
+### 12.1 Łańcuch `[git]` `[measured]`
+
+| krok | treść | keeper kroku: fail-first (wersja kroku na drzewie poprzedniego) → na kroku | sweep · `check-i18n` |
+|---|---|---|---|
+| baza | `534f45c` | — | 313/313 · PASS, pl = en 3458 |
+| **C1** P2b-1 | 467 — znacznik w środku uczestników, auto-fokus śledzi walkę (uczestnicy nad kartą — Q1) | NEW `combat_follow_centre_smoke` **5 / 22 → 27 / 0** | **314/314** · PASS 3458 |
+| **C2** P2b-2 | 451 — paski HP obu stron aktywnego starcia (CP16), biały błysk 200 ms (CP18) | NEW `combat_hp_bar_smoke` **1 / 27 → 28 / 0** | **315/315** · PASS 3458 |
+| **C3** P2b-3 | A7, 461 — tempo efektów z `combatRoundMs()`, płynne zbliżenie | NEW `combat_fx_pace_smoke` **5 / 22 → 27 / 0** | **316/316** · PASS 3458 |
+| **C4** P2b-4 | 468, 465 — tekst w karcie, podpowiedź, „Watch” przy każdym wierszu (CP22), nazwa układu (CP23), karta ≤ 45 % (Q2) | NEW `combat_card_fit_smoke` **5 / 17 → 22 / 0** | **317/317** · PASS 3458 |
+| **C5** P2b-5 | 450 — `turns` w rekordzie bitwy DSCS | NEW `combat_turns_smoke` **4 / 5 → 9 / 0** | **318/318** · PASS 3458 |
+
+Łańcuch zbudowany w świeżym klonie (`tools/build_chain_P2B.sh`; w klonie `gc.auto 0`, `maintenance.auto false` przed
+pierwszym commitem — lekcja P2a): fail-first keepera kroku (jego wersja z tego kroku) na drzewie POPRZEDNIEGO kroku,
+łatka, commit, keeper, pełny sweep + `check-i18n`; budowa weryfikacyjna na `534f45c` (`results/chain_verify/`) i ostateczna
+na tym commicie (`results/chain_final/`, `patches/trees.txt`) — te same liczby. Treść łańcucha = klon roboczy blob w blob.
+**Przecelowań istniejących keeperów: BRAK** (sweep po każdym kroku 0 FAIL, 31 advisory jak na bazie). Save v101 bez
+migracji; bez nowych kluczy słownika; bez nowego klucza tabeli strojenia (`sb1_fleet_tuning_smoke`).
+
+### 12.2 Mechanizm `[code]`
+
+- **D1 — znacznik i auto-fokus przy statkach (467, C1).** Środek uczestników = `centroid` kadru „Obserwuj”
+  (`_computeWatchFit` — sprite'y żywych, widocznych uczestników; wróg ukryty mgłą nie wchodzi), pamiętany na jedną klatkę
+  pętli renderu (`_engagementFit`). Znacznik starcia DSCS — co klatkę w tym środku (bez sprite'ów — punkt startu, jak
+  dotąd). Auto-fokus — start natychmiast (P2a-4, bez zmian), potem stan `_autoFocus` i krok co klatkę
+  (`_updateAutoFocusCamera`, po „Obserwuj”, przed `update()` kontrolera; koniec przy „Obserwuj”, końcu starcia, wyjściu z
+  widoku albo przejęciu kamery — `autoFocusFollowStep`): cel = `watchTargetAt` przy BIEŻĄCYM dystansie — prostokąt rzutu
+  uczestników wyśrodkowany w prostokącie bezpiecznym kadru „Obserwuj” (ekran bez pasków UI i panelu walki), szybkie
+  śledzenie `focusOnSmooth`, bez dopasowania dystansu (dystans ustawia start, potem kółko gracza). ⚠ To nie jest dosłowne
+  „cel auto-fokusu = środek uczestników” z polecenia — pomiar przed zestagowaniem (§12.4) — pytanie **Q1** (§12.7).
+- **D2 — paski HP i biały błysk (451, CP16, CP18; C2).** `planCombatHpBars` — uczestnicy AKTYWNEGO starcia DSCS
+  w oglądanym układzie, obie strony; poległy w trakcie — pasek pusty; koniec starcia — brak pasków. `_syncCombatHpBars` co
+  klatkę: tło + wypełnienie w barwie właściciela (gracz — zielony, imperium — jego barwa), stały rozmiar EKRANOWY 40 × 5 px
+  z ramką 1 px (42 × 7 px), 6 px pod modelem, billboard w scenie 3D (ten sam kadr co modele; chowany w „czystym widoku”).
+  Biały błysk: addytywny billboard na trafionym statku w chwili uderzenia (razem z błyskiem trafienia), 200 ms, rozmiar
+  model × 1,6 z podłogą 12 px na ekranie, idzie za sprite'em.
+- **D3 — tempo efektów i płynne zbliżenie (A7, 461; C3).** `combatFxPace(combatRoundMs())` (CP2 — tempo z `TimeSystem`,
+  renderer bez tabeli strojenia): smuga, błysk i pierścień tarczy — max(dawna stała, 1,2 · R), opóźnienie błysku —
+  max(150, 0,375 · R), rozstaw salwy — max(40, R / 10) ms; przy 110 ms dokładnie dawne stałe (bitwa orbitalna, starcie
+  nieoglądane), przy 400 ms smuga i błysk 480 ms (salwa trzyma się do następnej rundy; starsza już gaśnie). Końce smugi,
+  błysk i pierścień tarczy idą za sprite'ami.
+  Płynne zbliżenie: sprite uczestnika aktywnego starcia w oglądanym układzie (statek w wolnej przestrzeni) płynie do
+  pozycji logicznej przez jedną rundę czasu realnego (`_placeFreeVessel` + `_tickCombatGlide`: krok z zegara realnego klatki,
+  ≤ 100 ms; w pauzie gry ruch stoi; ruch rozpoczęty w starciu dobiega do końca). Logika walki nietknięta — renderer czyta
+  pozycję logiczną; w systemie walki brak czasu realnego (`combat_pace` bez zmian, `combat_turns` T5c).
+- **D4 — karta walki (468, 465, CP22, CP23; C4).** Przycinanie po SZEROKOŚCI tekstu (`measureText`) z wielokropkiem, pełny
+  tekst w podpowiedzi (`UIManager.handleMouseMove` → karta); log — N ostatnich linii (6 → 2), potem statki w jednej linii,
+  gdy karta nie mieści się między paskami ALBO przekracza 45 % wysokości ekranu (`CARD_MAX_H_FRAC` — §12.4, pytanie
+  **Q2**); wiersz tytułu każdego starcia: nazwa układu (CP23, `systemDisplayName`) · runda i dystans · „👁 Watch” (CP22 —
+  przy KAŻDYM wierszu; `_watchBtnBounds` = przycisk pierwszego wiersza, zgodność wstecz).
+- **D5 — „Tur: N” (450; C5).** Rekord bitwy DSCS (`_finalizeBattle`) dostaje `turns: encounter.currentRound` — jedno pole
+  czytane przez okno wyniku (`BattleIntroModal`), Dziennik (`log.battleLine`) i listę bitew wojny (`WarSystem.recordBattle`
+  → `WarOverlay`); stare rekordy bez pola — `?? 0`. Napis „Tur:” zostaje po polsku (**163** — backlog, CP24).
+
+### 12.3 Dowód — sonda w prawdziwej grze `[measured]`
+
+Sonda P2b (`probes/run_p2b.mjs`, `p2b_page.mjs`, `analyze_p2b.mjs`, `proof_table_p2b.mjs`) — kopia sondy P2a: prawdziwa
+gra na fixture GATE-S4 w izolowanym headless Chrome (1600 × 900), zegar wirtualny, ziarnisty `Math.random` gry, UUID
+Three.js i renderer na osobnym strumieniu, klatka sondy 16 ms = jedna klatka renderu. Nowe metryki co klatkę: środek
+uczestników (świat, ekran), pierścień od środka, cel kamery od środka, kadr nad kartą (prostokąt bezpieczny), paski HP
+(widoczne, rozmiar px, ułamek), żywe efekty, pozycje sprite'ów (skoki px w głębi statku); audyt karty (`fillText`
+w `CombatHUD.draw`); „Watch” w wybranym wierszu. Sceny: **W** (1 na 1, układ stolicy emp_001, „Watch” w rundzie 3,
+pauza 5 s), **X** (1 na 1 w INNYM układzie), **V** (3 na 2, układ domowy, „Watch” w rundzie 2), **Y** (NOWA — dwa starcia
+naraz w układzie domowym: 2 na 2 i 1 na 1 ~2,4 AU od siebie, „Watch” w DRUGIM wierszu). „Przed” = kod P2a (`534f45c`),
+„po” = łańcuch P2b (eksport klonu roboczego; kod gry bajt w bajt = łańcuch ostateczny — różnią się wyłącznie keepery).
+⚠ **Podkładka pauzy w sondzie** (punkt 5 nagłówka `p2b_page.mjs`; zmierzone na pierwszym przebiegu): sonda trzyma
+`TimeSystem.isPaused = true` poza własnym `update`, więc renderer w klatce renderu widział PAUZĘ także w klatkach biegu
+gry — płynne zbliżenie stało (sprite'y w miejscu startu starcia przez całe starcie, pozycje logiczne szły o ~0,25 AU).
+W grze w klatkach biegu `isPaused` = false; podkładka ustawia to WYŁĄCZNIE na czas `_tickCombatGlide` w klatce biegu
+(jedyny czytelnik w rendererze). Ta sama podkładka w walidatorze bramki — nie w krokach właściciela.
+
+Skrót (pełna tabela — `results/proof_p2b.md`; „przed” → „po”; wariant A auto-fokusu — §12.4):
+
+| metryka | W (1 na 1) | X (inny układ) | V (3 na 2) | Y (dwa starcia) |
+|---|---|---|---|---|
+| sygnatura walki (rundy · zwycięzca · straty) | 16 · B · 1/0 = | 16 · B · 1/0 = | 15 · A · 0/1 (+1 r) = | 11 · B · 2/0 ‖ 16 · B · 1/0 = |
+| błędy konsoli / losowania poza klatką | 0 / 0 → 0 / 0 | 0 / 0 → 0 / 0 | 0 / 0 → 0 / 0 | 0 / 0 → 0 / 0 |
+| D1 środek grupy od środka pasa nad kartą — auto-fokus [px, mediana] | 133 → **0,8** | — (kamera stoi) | 194 → **0,6** | 216 → **0,9** |
+| D1 auto-fokus: wszyscy w oknie i nie pod kartą [% klatek] | 100 → 100 | — | 100 → 100 (A: **0**) | 100 → 100 (A: **34,4**) |
+| D1 pierścień od środka statków [AU max] | 0,115 → **0** | 0,115 → **0** | 0,137 → **0** | 0,158 → **0** |
+| D2 każdy żywy uczestnik na ekranie z paskiem HP [% klatek] | 0 → **100** | 0 → **100** | 0 → **100** | 0 → **100** |
+| D2 trafienia narysowane / białe błyski | 7 / 0 → 7 / **7** | 5 / 0 → 5 / **5** | 24 / 0 → 24 / **24** | 26 / 0 → 26 / **26** |
+| D3 smuga / błysk [ms] | 260 / 460 → 480 / 480 | = | = | = |
+| D3 klatki z widoczną smugą [%] | 24,5 → **41,4** | 28,1 → **48** | 46,6 → **67,6** | 56,3 → **80,8** |
+| D3 luki między salwami KOLEJNYCH rund (dodatnie) | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+| D3 największy skok modelu na klatkę [px]: bez „Watch” / przy „Watch” | 46,8 / 691 → **2,7 / 53,8** | — / 669 → — / **52,4** | 80,4 / 473 → **4 / 32** | 86 / — → **4,4 / 34,1** |
+| D3 największy skok w jednej klatce jako część drogi statku [%] | 11,2 → **0,7** | 16,9 → **1** | 21,3 → **1,3** | 21,7 → **2,5** |
+| D4 napisy poza kartą · skrócone | 0 · 1 → 0 · 0 | — | 0 · 1 → 0 · 0 | 0 · 2 → 0 · 0 |
+| D4 wiersze z nazwą układu · przyciski „Watch” | 0 · 1 → 1 · 1 | — | 0 · 1 → 1 · 1 | 0 · 1 → **2 · 2** |
+| D4 wysokość karty [% z 720 j.] | 28,5 → 31,0 | — | 35,1 → 37,6 | 56,0 → **42,6** (A bez limitu: 61,0) |
+| D4 „Watch” w drugim wierszu → wszyscy w kadrze [%] | — | — | — | brak przycisku → **100** |
+| D5 okno wyniku „Tur: N” / rundy | 0 / 16 → **16** / 16 | 0 / 16 → **16** / 16 | 0 / 15 → **15** / 15 | 0 / 11 → **11** / 11 |
+
+⚠ **Odczyt bez upiększeń:** (1) przy DOTYCHCZASOWYM auto-fokusie (punkt startu na środku ekranu) uczestnicy w tych scenach
+też stali nad kartą — zmiana D1 to cel NA statkach (środek grupy w środku pasa nad kartą, pierścień w środku walki), nie
+„wyciągnięcie spod karty”; dosłowne „środek uczestników na środku ekranu” (wariant A) chowało ich pod kartą (V, Y).
+(2) Dziur między salwami KOLEJNYCH rund nie było także przed — błysk trafienia (150 + 460 ms) zakrywał przerwę; zysk D3
+widać w smugach (każda trzyma się do następnej rundy) i w pudłach bez błysku (keeper D3 T2: dawne stałe — dziura w rundzie
+samych pudeł). Przerwy z kadencji broni zostają. (3) Skok przy „Watch” 52–54 px na klatkę to ruch ciągły przy bliskim
+kadrze (krok zbliżenia rozłożony na rundę — 0,7–2,5 % drogi na klatkę), nie skok.
+
+**Sygnatury walki = P1** `[measured]` (sonda P1 `run_p1c.mjs`, scena n, klucz 400 ms, starcie oglądane, na kodzie P2b):
+`[[16,12,7,1,0,"B",null],[6,4,4,1,0,"B",null],[11,7,6,1,0,"B",null]]` + wraki `v_24 … v_34` — **= P1** (błąd sondy brak,
+wyjątki konsoli 0, losowania poza klatką 0; `results/p1_signature/summary.txt`). W sondzie P2b — sygnatury przed = po we
+wszystkich czterech scenach (tabela wyżej).
+
+### 12.4 Zmiany po pomiarze — przed zestagowaniem `[measured]`
+
+1. **D1 — cel auto-fokusu: wariant A („środek uczestników”) odrzucony, wariant B („uczestnicy wyśrodkowani nad kartą”).**
+   Pierwsza wersja (cel = środek uczestników na środku ekranu — dosłownie z polecenia) stawiała część uczestników POD
+   kartą walki: V (karta ta sama w obu wariantach) — wszyscy żywi w oknie i nie pod kartą w **0 %** klatek auto-fokusu
+   (od 10. klatki; 21 z 21 klatek ze strażnikiem pod kartą — oba strażniki); Y (wariant A z kartą bez limitu, pkt 2) —
+   **34,4 %** (40 z 61). Wariant B (ta sama reguła co „Obserwuj” — `watchTargetAt` przy bieżącym dystansie): V i Y —
+   **100 %**, 0 klatek pod kartą; środek grupy od środka pasa nad kartą ≤ 1,6 px. Keeper D1 T6 odtwarza zmierzony kadr V (rzut ±2 px od sondy): dawna reguła — strażnicy pod kartą, nowa — nikt.
+   Pytanie **Q1**.
+2. **D4 — karta najwyżej 45 % wysokości ekranu.** Przy dwóch starciach pełny log dawał kartę **438 z 720 j. (61 %)** —
+   statki obu walk pod kartą, a pas nad nią ~130 px (prostokąt bezpieczny kadru na granicy zapasowego „cały ekran”).
+   Z limitem: **307 j. (42,6 %)**, log 2 linie na starcie, statki w jednej linii; Y — „Watch” w drugim wierszu: wszyscy
+   w kadrze 100 % (wariant A z kartą 61 %: 75,9 %, 92 klatki pod kartą). Pytanie **Q2**.
+3. **Etykiety pinów (fail-first).** Keeper D1 przerywał się na kodzie sprzed kroku (T6: `centroidOf` nie istnieje) —
+   kontrole liczą średnią lokalnie, T6 to wyprowadzenie (KONTROLA); keeper D2 T3b przechodził JAŁOWO (pusta lista pasków)
+   — liczy porównania; keeper D4 T2a / T2b / T8b — prawdziwe także przed krokiem → NIEZMIENNIK, nie SEDNO.
+
+### 12.5 Keepery `[measured]`
+
+| keeper | krok | asercje | fail-first (wersja kroku na drzewie poprzedniego) | zielone po obu stronach |
+|---|---|---|---|---|
+| NEW `combat_follow_centre_smoke` | C1 | 27 | **5 / 22** | T4-0, T4-1, T5-0 (kontrole), T6-0, T6 (wyprowadzenie) |
+| NEW `combat_hp_bar_smoke` | C2 | 28 | **1 / 27** | T3-0 (kontrola) |
+| NEW `combat_fx_pace_smoke` | C3 | 27 | **5 / 22** | T2-0, T2-1, T4-1 (kontrole), T1e, T5h (niezmienniki) |
+| NEW `combat_card_fit_smoke` | C4 | 22 | **5 / 17** | T1-0, T4-0 (kontrole), T2a, T2b, T8b (niezmienniki) |
+| NEW `combat_turns_smoke` | C5 | 9 | **4 / 5** | T1-0, T4-0 (kontrole), T5a, T5b (niezmienniki — czytelnicy bez zmian) |
+
+Na C5 bez zmian (przecelowań istniejących keeperów BRAK): `combat_view_scope` 47 / 0 · `combat_watch_frame` 42 / 0 ·
+`combat_marker_life` 18 / 0 · `combat_pace` 71 / 0 · `sb3_combat_closing` 28 / 0 (zamknięcie starcia nietknięte) ·
+`sb2b_pulse_scope` 10 / 0 · `map_vessel_panel` 120 / 120 · `patrol_render_sync` 42 / 0 · `sb1_fleet_tuning` 71 / 0
+(bez nowego klucza tabeli strojenia). Keepery czytają źródło po normalizacji EOL (ThreeRenderer CRLF u właściciela).
+
+### 12.6 Bramka w przeglądarce — `gate/GATE_P2B.md`
+
+Scenariusz dla właściciela (gra po ANGIELSKU; 4 kroki konsoli + 2 kroki czasu, fixture GATE-S4): **krok 1** rejestrator
+bramki (`window.__gp2b` — liczy wyłącznie to, co narysował renderer) + scena A — 2 fregaty obrony układu emp_001 i 2 fregaty
+gracza z laserem 0,32 AU od nich w układzie domowym; **T1** spacja — start starcia, kamera i pierścień przy statkach, paski HP
+i biały błysk, rytm salw, płynne zbliżenie, karta, „Watch” po kilku salwach, okno wyniku; **krok 2** odczyt; **krok 3**
+scena B — DWA starcia naraz w układzie domowym (dwie pary 1 na 1 ~5,7 AU od siebie); **T2** spacja — gdy karta pokaże dwa
+wiersze: pauza, nazwa układu i „Watch” w każdym wierszu, „Watch” w DRUGIM wierszu, do końca obu walk; **krok 4** odczyt.
+Jedno źródło kroków `gate/gate_steps_p2b.mjs`; każdy krok wykonany walidatorem (`gate/validate_gate_p2b.mjs`, prawdziwa gra,
+zegar wirtualny, rozgrzewka pętli renderu jak w P2a) na kodzie P2b i na kontroli `534f45c` (`results/gate/`):
+
+| własność | kod P2b | kontrola `534f45c` |
+|---|---|---|
+| A — środek grupy od środka pasa nad kartą (auto-fokus) | 1 px (wszyscy nad kartą 100 %) | 250,1 px (100 %) |
+| A — pierścień od środka statków (max) | 0 px | 553,4 px |
+| A / B — paski HP (każdy żywy uczestnik na ekranie) | 100 % / 100 %, 42 × 7 px | 0 / 0 |
+| A / B — białe błyski = trafienia narysowane | 20 = 20 / 10 = 10 | 0 / 0 |
+| A / B — klatki z widoczną smugą | 70,6 / 45,7 % | 48 / 28,3 % |
+| A / B — największy skok w jednej klatce jako część drogi | 1,6 / 1,3 % (A przed „Watch” 4,4 px) | 27,3 / 21,8 % (A 92 px) |
+| A — karta: poza kartą · skrócone · wiersze z układem · „Watch” | 0 · 0 · 1 · 1 (34,4 % ekranu) | 0 · 1 · 0 · 1 (31,9 %) |
+| B — karta: wiersze z układem · „Watch” · wysokość | 2 · 2 · 44,4 % | 0 · 1 · 52,8 % (skrócone 2) |
+| B — „Watch” w drugim wierszu | drugie starcie, wszyscy w kadrze 97,6 % | brak przycisku |
+| A / B — okno wyniku | „Tur: 20” / „Tur: 6”, „Tur: 6” | „Tur: 0” / „Tur: 0”, „Tur: 0” |
+| wynik walki | A 20 r · A · 0/1; B 6 r · B · 1/0 (×2) | to samo |
+
+0 wyjątków i błędów konsoli poza 404, 0 zdarzeń utraty kontekstu WebGL w obu przebiegach. ⚠ Walidator — ta sama podkładka
+pauzy co sonda (wyłącznie na czas `_tickCombatGlide`, w klatkach biegu gry; kroki właściciela jej nie zawierają). ⚠ Starcie
+nieoglądane (inny układ) trwa ~1 s (lekcja P2A) — scena B ma oba starcia w układzie domowym; „Watch” w wierszu starcia
+z innego układu — keeper D4 T5 (§12.8).
+
+### 12.7 Pytania do właściciela (tylko te, które zmieniają implementację)
+
+1. **Q1 — cel auto-fokusu (D1).** Polecenie: „auto-focus target = centroid”. W kodzie: uczestnicy wyśrodkowani w pasie NAD
+   kartą walki przy bieżącym dystansie (ta sama reguła co „Watch”); znacznik — dokładnie w środku uczestników. Powód —
+   §12.4 (1). Zostaje / dosłownie „środek na środku ekranu” (część statków pod kartą)?
+2. **Q2 — karta ≤ 45 % wysokości ekranu (D4).** Przy dwóch starciach log skraca się do 2 linii, a statki idą w jednej
+   linii, żeby nad kartą został pas dla statków. Zostaje / inna granica / bez limitu?
+
+### 12.8 Czego nie zweryfikowano
+
+Bramka u właściciela (prawdziwe FPS, karta w tle, przeglądarka bez ziarna) · podpowiedź pełnego tekstu w prawdziwej grze
+(w scenach sondy żaden napis karty nie był skrócony — wyłącznie keeper D4 T3) · „Watch” w wierszu starcia z INNEGO układu
+(keeper D4 T5 + reguła P2a-1; scena Y — oba starcia w układzie domowym) · starcia większe niż 3 na 2, bardzo długie nazwy
+(keeper), inne rozdzielczości i skale UI · zmiana prędkości gry w trakcie płynnego zbliżenia; zapis i wczytanie w trakcie
+starcia (stan płynnego zbliżenia nie jest zapisywany — wyłącznie rysowanie) · luki salw z kadencji broni (przeładowanie
+rakiet co 5 rund — rundy bez strzału nie mają czego rysować; czasy życia ich nie wypełnią) · przeskok auto-fokusu do
+każdego nowego starcia (**469** — zachowanie sprzed P2b, zapisane).
