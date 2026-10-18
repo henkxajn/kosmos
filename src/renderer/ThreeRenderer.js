@@ -55,7 +55,7 @@ import {
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR, combatFxPace,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
-  isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS,
+  isEngagementInView, watchBattleAction, planEngagementMarkers, ENGAGEMENT_BURST_TTL_MS, ENGAGEMENT_RING, engagementRingBand,
   isPlayerEngagement, isEndpointVisibleInCombat, planCombatHpBars, HP_BAR, HIT_GLOW, hitGlowWorldSize,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
@@ -178,6 +178,7 @@ const INSIGNIA_LIFT_RATIO = 0.4 / 0.32;     // zawieszenie szewronu nad statkiem
 const _WATCH_V = new THREE.Vector3();       // POLISH P2a — wektor roboczy głębi widoku (`_viewDepth`)
 const _HP_R = new THREE.Vector3();          // POLISH P2b (D2) — oś „w prawo” ekranu w świecie (paski HP)
 const _HP_U = new THREE.Vector3();          // POLISH P2b (D2) — oś „w górę” ekranu w świecie (paski HP)
+const _RING_P = new THREE.Vector3();        // POLISH P2b CLOSE (C6) — punkt okręgu pierścienia starcia (głębia widoku)
 let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
 const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
 const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
@@ -6731,8 +6732,10 @@ export class ThreeRenderer {
     if (!encounterId) return;
     let entry = this._engagementMarkers.get(encounterId);
     if (!entry) {
-      const geom = new THREE.RingGeometry(0.25, 0.32, 36);
-      const mat  = new THREE.MeshBasicMaterial({ color: 0xff5544, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
+      // POLISH P2b CLOSE (C6, CP27) — cienki pas: szerokość na ekranie co klatkę (`_tickEngagementMarkers`), stałe krycie.
+      const geom = new THREE.RingGeometry(ENGAGEMENT_RING.RADIUS - 0.001, ENGAGEMENT_RING.RADIUS + 0.001, ENGAGEMENT_RING.SEGMENTS);
+      const mat  = new THREE.MeshBasicMaterial({ color: ENGAGEMENT_RING.COLOR, transparent: true, opacity: ENGAGEMENT_RING.OPACITY,
+        side: THREE.DoubleSide, depthWrite: false });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
       this.scene.add(mesh);
@@ -6755,7 +6758,8 @@ export class ThreeRenderer {
   }
 
   // POLISH P2a (Finding 457) — synchronizacja ze STANEM starć (co klatkę, także w pauzie gry): znacznik starcia DSCS jest,
-  // dopóki starcie aktywne i w oglądanym układzie, i znika z jego końcem; imitacja bitwy orbitalnej — 1600 ms. Puls.
+  // dopóki starcie aktywne i w oglądanym układzie, i znika z jego końcem; imitacja bitwy orbitalnej — 1600 ms. Bez pulsu
+  // (POLISH P2b CLOSE, C6, CP27).
   _tickEngagementMarkers(nowMs) {
     const encounters = (window.KOSMOS?.deepSpaceCombatSystem?.listActive?.() ?? [])
       .map((e) => ({ id: e.id, isActive: e.isActive, systemId: e.location?.systemId, point: e.location?.point }));
@@ -6776,10 +6780,18 @@ export class ThreeRenderer {
       const c = enc?.isActive ? this._engagementCentre(enc) : null;
       if (c) e.mesh.position.set(c.x, c.y, c.z);
     }
-    const tt = this._clock.getElapsedTime();
+    // POLISH P2b CLOSE (C6, CP27) — pierścień SUBTELNY: pas o stałej szerokości na ekranie (`ENGAGEMENT_RING.WIDTH_PX`
+    // w głębi każdego punktu okręgu), stałe krycie, bez pulsu (dawniej krycie 0,05–0,5 i skala 0,9–1,1 z sinusa zegara
+    // realnego; przy bliskim kadrze pas świata 0,25–0,32 j. miał ~100–290 px). Promień bez zmian.
+    this.camera.updateMatrixWorld();
+    const H = window.innerHeight || 1;
     for (const [, e] of this._engagementMarkers) {
-      e.mat.opacity = 0.5 * (0.55 + 0.45 * Math.sin(tt * 4));
-      e.mesh.scale.setScalar(1 + 0.1 * Math.sin(tt * 4));
+      const c = e.mesh.position;
+      const pos = e.geom.attributes.position;
+      engagementRingBand({ radius: ENGAGEMENT_RING.RADIUS, widthPx: ENGAGEMENT_RING.WIDTH_PX, segments: ENGAGEMENT_RING.SEGMENTS,
+        fovDeg: this.camera.fov, H, out: pos.array, depthAt: (lx, ly) => this._viewDepth(_RING_P.set(c.x + lx, c.y, c.z - ly)) });
+      pos.needsUpdate = true;
+      e.geom.computeBoundingSphere();
       e.mesh.visible = !this._watch;   // POLISH P2a (CP14) — pierścień ukryty przy „Obserwuj” (kamera i tak jest przy walce)
     }
   }

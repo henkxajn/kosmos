@@ -101,6 +101,34 @@ export function planEngagementMarkers({ markers = [], encounters = [], activeSys
   return { upsert, dispose };
 }
 
+// ── POLISH P2b CLOSE (C6, CP27) — pierścień starcia SUBTELNY ───────────────────────────────────────────────────────
+// Bramka P2B (2026-10-18): pierścień „za duży i zbyt mocny … pulsuje w dużym zoomie”. Teraz: cienka linia o STAŁEJ
+// szerokości na ekranie (WIDTH_PX przy każdym zbliżeniu), stałe krycie, bez pulsu; promień bez zmian (środek dawnego pasa
+// 0,25–0,32 j. świata), pierścień w środku uczestników (P2b-1) i ukryty przy „Obserwuj” (CP14).
+export const ENGAGEMENT_RING = Object.freeze({ RADIUS: 0.285, WIDTH_PX: 1.5, OPACITY: 0.3, SEGMENTS: 64, COLOR: 0xff5544 });
+
+// Pozycje pasa pierścienia w płaszczyźnie XY (mesh obrócony o −π/2 wokół X), kolejność wierzchołków jak `RingGeometry`
+// z `phiSegments` = 1: najpierw okrąg wewnętrzny (segments + 1), potem zewnętrzny. Szerokość pasa w świecie na każdym
+// wierzchołku = widthPx · świat-na-piksel w głębi TEGO wierzchołka (2 · głębia · tan(fov/2) / H) → stała szerokość
+// na ekranie także przy bliskim kadrze, gdy bliższa i dalsza strona okręgu leżą w różnej głębi.
+// depthAt(lx, ly) — głębia widoku punktu okręgu (współrzędne lokalne pasa); `out` — tablica docelowa (opcjonalna).
+export function engagementRingBand({ radius, widthPx, segments, fovDeg, H, depthAt, out = null }) {
+  const n = segments + 1;
+  const arr = out ?? new Float32Array(n * 2 * 3);
+  const k = 2 * Math.tan((fovDeg * Math.PI) / 360) / Math.max(1, H);
+  for (let i = 0; i < n; i++) {
+    const th = (i / segments) * Math.PI * 2;
+    const cx = Math.cos(th), sy = Math.sin(th);
+    const d = Math.max(1e-6, Number(depthAt(radius * cx, radius * sy)) || 0);
+    const half = 0.5 * widthPx * k * d;
+    const ri = Math.max(0, radius - half), ro = radius + half;
+    arr[i * 3] = ri * cx; arr[i * 3 + 1] = ri * sy; arr[i * 3 + 2] = 0;
+    const j = (n + i) * 3;
+    arr[j] = ro * cx; arr[j + 1] = ro * sy; arr[j + 2] = 0;
+  }
+  return arr;
+}
+
 // ── POLISH P2b (D2) — paski HP uczestników starcia (Finding 451, CP16) i biały błysk trafienia na modelu (CP18) ────────
 // Pasek: stały rozmiar EKRANOWY (px), pod statkiem (odstęp od krawędzi modelu), tło + wypełnienie w kolorze właściciela.
 export const HP_BAR = Object.freeze({ W_PX: 40, H_PX: 5, BORDER_PX: 1, GAP_PX: 6 });
