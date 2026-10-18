@@ -25,6 +25,31 @@ export function isMovementPulseVisible({ systemId, fromSystemId = null, activeSy
   return isEndpointVisibleByQuality(isEnemy, quality);
 }
 
+// POLISH P2a (CP7, Finding 453) — czy starcie w przestrzeni (DSCS) toczy się w OGLĄDANYM układzie. JEDNA reguła dla
+// czterech wejść renderera (smugi i błyski salwy, auto-fokus kamery przy starcie, znacznik starcia, „Obserwuj”) — wzór
+// SB43 (`isMovementPulseVisible`). Współrzędne są lokalne dla układu (gwiazda każdego układu w (0,0)), a ładunek salwy
+// niesie migawki pozycji — bez tej reguły starcie z innego układu rysowało smugi, błyski i pierścień w pustym punkcie
+// oglądanego układu, a auto-fokus i „Obserwuj” zbliżały tam kamerę (zmierzone: P2 §10.2).
+//   • układ starcia = `encounter.location.systemId` (DSCS stempluje go przy utworzeniu — układ pary wyzwalającej);
+//   • ta sama odpowiedź co `DeepSpaceCombatSystem.engagementView` (`'watched'` ⇔ w widoku): tempo starcia (CP4) i to, co
+//     rysujemy, mówią o tym samym układzie; brak / pusty układ starcia ⇒ NIE w widoku (jak tam — fail-closed: lepiej
+//     nie narysować niż narysować w złym układzie); brak oglądanego układu ⇒ `sys_home` (jak `TimeSystem._combatView`).
+// in: { encounterSystemId, activeSystemId }
+export function isEngagementInView({ encounterSystemId, activeSystemId }) {
+  if (typeof encounterSystemId !== 'string' || encounterSystemId === '') return false;
+  return encounterSystemId === (activeSystemId ?? 'sys_home');
+}
+
+// POLISH P2a (CP7, Finding 453) — przycisk „Obserwuj / Watch” panelu walki. Starcie w oglądanym układzie — kadruj;
+// starcie w INNYM układzie — najpierw przełącz widok na układ starcia, potem kadruj (dziś kamera zbliżała się do pustego
+// punktu oglądanego układu); nieznany układ starcia — nic (nie ma czego kadrować).
+// in: { encounterSystemId, activeSystemId }  out: { switchTo: string|null, frame: boolean }
+export function watchBattleAction({ encounterSystemId, activeSystemId }) {
+  if (typeof encounterSystemId !== 'string' || encounterSystemId === '') return { switchTo: null, frame: false };
+  if (isEngagementInView({ encounterSystemId, activeSystemId })) return { switchTo: null, frame: true };
+  return { switchTo: encounterSystemId, frame: true };
+}
+
 // Resolver endpointu FX (gameplay coords — renderer aplikuje S()/skalę osobno).
 // own → live; enemy unknown → visible:false (BRAK przecieku); rumor → positionLastKnown
 // (NIE live — fog-of-war); contact/detailed → live.

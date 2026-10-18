@@ -35,7 +35,7 @@ export class CombatHUD extends BaseOverlay {
     this._minimized = false;
     /** @type {{x:number,y:number,w:number,h:number}|null} */
     this._minimizeBtnBounds = null;
-    /** @type {{x:number,y:number,w:number,h:number,point:{x:number,y:number}|null}|null} — przycisk „Obserwuj bitwę" */
+    /** @type {{x:number,y:number,w:number,h:number,point:{x:number,y:number}|null,encounterId:string|null,systemId:string|null}|null} — przycisk „Obserwuj bitwę" */
     this._watchBtnBounds = null;
   }
 
@@ -145,6 +145,8 @@ export class CombatHUD extends BaseOverlay {
 
     // „Obserwuj bitwę" (👁) — top-left header. Klik → camera:watchBattle na PIERWSZĄ
     // widoczną bitwę (close-up kamery na midpoint). Punkt = enc.location.point (gameplay px).
+    // POLISH P2a (CP7, Finding 453) — razem z punktem idzie id starcia i jego UKŁAD: punkt jest w ramce układu starcia,
+    // więc renderer najpierw przełącza widok na ten układ, gdy gracz ogląda inny.
     const watchPoint = visible[0]?.location?.point ?? null;
     if (watchPoint && Number.isFinite(watchPoint.x) && Number.isFinite(watchPoint.y)) {
       const wBtnW = 104;
@@ -163,7 +165,8 @@ export class CombatHUD extends BaseOverlay {
       ctx.fillText(`👁 ${t('combat.watchBattle')}`, wBtnX + wBtnW / 2, wBtnY + wBtnH / 2 + 1);
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
-      this._watchBtnBounds = { x: wBtnX, y: wBtnY, w: wBtnW, h: wBtnH, point: { x: watchPoint.x, y: watchPoint.y } };
+      this._watchBtnBounds = { x: wBtnX, y: wBtnY, w: wBtnW, h: wBtnH, point: { x: watchPoint.x, y: watchPoint.y },
+        encounterId: visible[0]?.id ?? null, systemId: visible[0]?.location?.systemId ?? null };
     } else {
       this._watchBtnBounds = null;
     }
@@ -422,7 +425,7 @@ export class CombatHUD extends BaseOverlay {
     // „Obserwuj bitwę" — close-up kamery na bitwę.
     const w = this._watchBtnBounds;
     if (w && mx >= w.x && mx <= w.x + w.w && my >= w.y && my <= w.y + w.h) {
-      if (w.point) EventBus.emit('camera:watchBattle', { x: w.point.x, y: w.point.y });
+      if (w.point) EventBus.emit('camera:watchBattle', { encounterId: w.encounterId ?? null, systemId: w.systemId ?? null, x: w.point.x, y: w.point.y });
       return true;
     }
     const b = this._minimizeBtnBounds;

@@ -53,6 +53,7 @@ import {
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
 } from '../config/CombatFxConfig.js';
 import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMovementPulseVisible,
+  isEngagementInView, watchBattleAction,
   exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
@@ -1061,6 +1062,8 @@ export class ThreeRenderer {
     EventBus.on('vessel:engaged', safe(({ sideA = [], sideB = [], location }) => {
       if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
       if (window.KOSMOS?.uiPrefs?.battleAutoFocus === false) return;
+      // POLISH P2a (CP7, Finding 453) — starcie w innym układzie: kamera zostaje (punkt starcia jest w ramce INNEGO układu).
+      if (!isEngagementInView({ encounterSystemId: location?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
       const vm = window.KOSMOS?.vesselManager;
       const playerIn = [...sideA, ...sideB].some(id => {
         const v = vm?.getVessel?.(id); return v && !isEnemyVessel(v);
@@ -1073,8 +1076,13 @@ export class ThreeRenderer {
     }));
 
     // Slice 1 — kamera „Obserwuj bitwę" (mirror vessel:focus, close-up na midpoint).
-    EventBus.on('camera:watchBattle', safe(({ x, y }) => {
+    // POLISH P2a (CP7, Finding 453) — starcie w INNYM układzie: najpierw widok przełączony na układ starcia
+    // (`starSystemManager.switchActiveSystem` — ta sama droga co chipy układów), potem kadr; nieznany układ — nic.
+    EventBus.on('camera:watchBattle', safe(({ systemId, x, y }) => {
       if (!this._cameraController || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      const act = watchBattleAction({ encounterSystemId: systemId, activeSystemId: window.KOSMOS?.activeSystemId });
+      if (!act.frame) return;
+      if (act.switchTo && window.KOSMOS?.starSystemManager?.switchActiveSystem?.(act.switchTo) !== true) return;
       this._focusEntityId = null; this._focusVesselId = null; this._focusStationId = null;
       this._focusEncounterId = { x, y };
       this._cameraController.setMinDist(0.005);  // bliski zoom — można obejrzeć model
@@ -6179,6 +6187,9 @@ export class ThreeRenderer {
   _onCombatRoundFx(payload) {
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
     if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;
+    // POLISH P2a (CP7, Finding 453) — salwa i znacznik WYŁĄCZNIE dla starcia w oglądanym układzie: pozycje ładunku są
+    // lokalne dla układu starcia — w innym układzie smugi, błyski i pierścień lądowały w pustym punkcie widoku.
+    if (!isEngagementInView({ encounterSystemId: payload?.systemId, activeSystemId: window.KOSMOS?.activeSystemId })) return;
     const events = payload?.events ?? [];
     let stagger = 0;
     for (const ev of events) {

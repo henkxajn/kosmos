@@ -726,6 +726,9 @@ export class DeepSpaceCombatSystem {
       };
       EventBus.emit('combat:roundFx', {
         encounterId: encounter.id,
+        // POLISH P2a (CP7, Finding 453) — układ starcia: renderer rysuje salwę WYŁĄCZNIE w oglądanym układzie
+        // (`isEngagementInView`); pozycje niżej są lokalne dla układu, więc bez tego pola nie da się ich przypisać.
+        systemId:    encounter.location.systemId,
         midpoint:    { x: encounter.location.point.x, y: encounter.location.point.y },
         events: round.events.map(ev => ({
           attacker: ev.attacker, target: ev.target,
