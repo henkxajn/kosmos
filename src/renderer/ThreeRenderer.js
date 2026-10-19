@@ -579,7 +579,11 @@ export class ThreeRenderer {
     this._hoverPlanetId = null;
 
     // ── Śledzenie kamery (focus na planecie/księżycu/statku) ───────
+    // ⚠ ARKUSZ UI U1-2 (D-UI-5): `_focusEntityId` = WYŁĄCZNIE cel kamery (śledzenie ciała, blokada podglądu
+    //   obserwatorium); zaznaczenie ciała (złota orbita, wyjątki filtra orbit, znaczniki kolonii, zasłona podglądu) —
+    //   `_selectedEntityId`. Dawniej jedno pole niosło oba znaczenia, więc zaznaczenie zawsze ruszało kamerę.
     this._focusEntityId = null;
+    this._selectedEntityId = null;
     this._focusVesselId = null;  // śledzenie statku w locie
     this._focusStationId = null; // S3.3b-S4a — focus kamery na stację (camera-only, bez selekcji)
 
@@ -1000,23 +1004,29 @@ export class ThreeRenderer {
       this._updateTradeFireflyRoutes(connections);
     }));
 
-    // ── Śledzenie kamery po kliknięciu ciała ─────────────────
-    EventBus.on('body:selected', safe(({ entity }) => {
-      this._focusEntityId = entity.id;
-      this._focusVesselId = null; // przerwij śledzenie statku
-      this._focusStationId = null;
-      // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
-      if (this._cameraController) {
-        this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
-      }
-      this._updateCameraFocus();
-      // Auto-zoom na każde kliknięte ciało (oprócz gwiazdy)
-      if (this._cameraController && entity.type !== 'star') {
-        const r = this._getEntityRadius(entity);
-        const idealDist = Math.max(r * 6, 0.8);
-        // Zbliżaj gdy kamera daleko — nie cofaj jeśli gracz już blisko
-        if (this._cameraController._targetDist > idealDist * 1.5) {
-          this._cameraController.setTargetDist(idealDist);
+    // ── Zaznaczenie ciała + (opcjonalnie) śledzenie kamery ──
+    // ARKUSZ UI U1-2 (D-UI-5): `body:selected { entity, focus }` — `focus` domyślnie `true`, więc emitenci spoza reguły
+    // klik/focus (Dziennik, Obserwatorium, Dowództwo, starty scenariusza / intro) zachowują dzisiejsze zachowanie;
+    // pierwszy klik reguły emituje `focus: false` → zaznaczenie i karta ciała, kamera STOI.
+    EventBus.on('body:selected', safe(({ entity, focus = true }) => {
+      this._selectedEntityId = entity.id;
+      if (focus !== false) {
+        this._focusEntityId = entity.id;
+        this._focusVesselId = null; // przerwij śledzenie statku
+        this._focusStationId = null;
+        // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
+        if (this._cameraController) {
+          this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
+        }
+        this._updateCameraFocus();
+        // Auto-zoom na każde kliknięte ciało (oprócz gwiazdy)
+        if (this._cameraController && entity.type !== 'star') {
+          const r = this._getEntityRadius(entity);
+          const idealDist = Math.max(r * 6, 0.8);
+          // Zbliżaj gdy kamera daleko — nie cofaj jeśli gracz już blisko
+          if (this._cameraController._targetDist > idealDist * 1.5) {
+            this._cameraController.setTargetDist(idealDist);
+          }
         }
       }
       // Ikony budynków na kolonizowaną planetę
@@ -1040,20 +1050,20 @@ export class ThreeRenderer {
       this._rebuildAllOrbits();
     }));
 
+    // ARKUSZ UI U1-2 (decyzja 2a, Finding 473): odznaczenie (klik w pustkę, ✕ karty ciała) czyści ZAZNACZENIE i kończy
+    // śledzenie obiektu — kamera STOI, bez żadnego polecenia ruchu. Dawne `focusOn(gwiazda)` zostawiało dystans fokusu,
+    // więc kamera kończyła WEWNĄTRZ tarczy gwiazdy (zmierzone, Polonia gy79: 3,583 j. od środka po ciele, 0,9 po
+    // statku, przy promieniu tarczy 3,6). „Obserwuj” i auto-fokus starcia — bez zmian (kończą się jak dotąd).
     EventBus.on('body:deselected', safe(() => {
+      this._selectedEntityId = null;
       this._focusEntityId = null;
       this._focusVesselId = null;
       this._focusStationId = null;
       // Ukryj ikony budynków kolonii + tooltip
       this._colonyMarkers.hide();
       this._hideColonyTooltip();
-      // Przywróć domyślny min zoom
-      if (this._cameraController) {
-        this._cameraController.setMinDist(0.3);
-        const sx = this._starGroup ? this._starGroup.position.x : 0;
-        const sz = this._starGroup ? this._starGroup.position.z : 0;
-        this._cameraController.focusOn(sx, sz);
-      }
+      // Przywróć domyślny min zoom (sam próg — kamera się nie rusza)
+      if (this._cameraController) this._cameraController.setMinDist(0.3);
       // Ukryj orbity planetoidów i księżyców
       this._hideAllPlanetoidOrbits();
       this._hideAllMoonOrbits();
@@ -1062,7 +1072,7 @@ export class ThreeRenderer {
 
     // Odśwież ikony budynków po budowie/rozbiórce (jeśli ta planeta jest focused)
     const refreshMarkers = () => {
-      if (!this._colonyMarkers.entityId || !this._focusEntityId) return;
+      if (!this._colonyMarkers.entityId || !this._selectedEntityId) return;
       const colony = window.KOSMOS?.colonyManager?.getColony(this._colonyMarkers.entityId);
       if (colony?.grid) this._colonyMarkers.refresh(colony.grid);
     };
@@ -1220,7 +1230,7 @@ export class ThreeRenderer {
       // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
       const showPlanetoids = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
       this._planetoidOrbits.forEach((line, id) => {
-        if (id !== this._focusEntityId) {
+        if (id !== this._selectedEntityId) {
           line.material.opacity = 0.12;
           line.visible = showPlanetoids;
         }
@@ -1229,7 +1239,7 @@ export class ThreeRenderer {
 
       // Hover na planetę → pokaż jej orbitę złotą tymczasowo
       this._orbits.forEach((line, id) => {
-        if (id === this._focusEntityId) return; // zaznaczona — nie ruszaj
+        if (id === this._selectedEntityId) return; // zaznaczona — nie ruszaj
         if (id === entityId) {
           line.visible = true;
           line.material.color.setHex(0xffc832);
@@ -1457,6 +1467,7 @@ export class ThreeRenderer {
     this._entityByUUID.clear();
     this._clickable = [];
     this._focusEntityId = null;
+    this._selectedEntityId = null;
     this._focusVesselId = null;
     this._focusStationId = null;
     this._star = null;
@@ -2607,7 +2618,7 @@ export class ThreeRenderer {
   _applyOrbitFilter() {
     // Orbity planet — przebuduj (uwzględnia _orbitFilter w _restoreOrbitDefaults)
     this._orbits.forEach((line, id) => {
-      if (id === this._focusEntityId) return; // zaznaczona — nie ruszaj
+      if (id === this._selectedEntityId) return; // zaznaczona — nie ruszaj
       this._restoreOrbitDefaults(id, line);
     });
 
@@ -2663,7 +2674,7 @@ export class ThreeRenderer {
     const isHomePlanet = planet.id === window.KOSMOS?.homePlanet?.id;
     const colMgr = window.KOSMOS?.colonyManager;
     const isColonized = colMgr ? colMgr.getColony(planet.id) != null : false;
-    const isFocused = planet.id === this._focusEntityId;
+    const isFocused = planet.id === this._selectedEntityId;   // U1-2: zaznaczenie (nie cel kamery)
     let orbitVisible = false;
     let orbitOpacity = 0.35;
     const showPlanets = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
@@ -3335,7 +3346,7 @@ export class ThreeRenderer {
     }
 
     // Tooltip — aktywny tylko przy bliskim zoomie i gdy overlay NIE jest otwarty
-    const focusId = this._focusEntityId;
+    const focusId = this._selectedEntityId;   // U1-2: zaznaczenie (nie cel kamery)
     if (!focusId || !this._colonyMarkers.isShown || window.KOSMOS?.overlayManager?.isAnyOpen()) {
       this._hideColonyTooltip();
       return;
@@ -6889,9 +6900,9 @@ export class ThreeRenderer {
   // Znika automatycznie gdy body.explored=true (po skanie) → efekt „grey-out → reveal".
   _syncBodyScanVeil() {
     let veilId = null;
-    if (this._observatoryPreviewActive && this._focusEntityId) {
-      const body = EntityManager.get(this._focusEntityId);
-      if (body && !body.explored) veilId = this._focusEntityId;  // grey-out tylko niezbadane
+    if (this._observatoryPreviewActive && this._selectedEntityId) {
+      const body = EntityManager.get(this._selectedEntityId);
+      if (body && !body.explored) veilId = this._selectedEntityId;  // grey-out tylko niezbadane
     }
     if (!veilId) { this._disposeBodyVeil(); return; }
 

@@ -20,6 +20,14 @@
 //       `resetToCenter` bez wołającego.
 //   T8  NIEZMIENNIK (zielony po obu stronach): WYKONANIE `ThreeCameraController.prototype.frameSystem` na atrapie —
 //       kadr układu z wymogu bramki U0: zasięg × 20 w [70; 450]; zapis Polonia gy79 (`sys_home`, 22,338 AU) → 446,76.
+//
+// Krok U1-2: zaznaczenie ciała (`_selectedEntityId`) osobno od celu kamery (`_focusEntityId`); `body:selected { focus }`
+// z `focus` domyślnie `true`; odznaczenie bez ruchu kamery (decyzja 2a, Finding 473).
+//   T9  WYKONANIE słuchaczy `body:selected` / `body:deselected` wyciętych ze źródła na atrapie renderera:
+//       `focus: false` → zaznaczenie bez polecenia kamery; brak `focus` → ciąg kamery jak przed U1 (kontrola);
+//       odznaczenie → śledzenie zakończone, zero ruchu. Piny źródłowe: `_focusEntityId` czytane wyłącznie przez
+//       `_updateCameraFocus`; siedem miejsc wizualizacji czyta `_selectedEntityId`; blokada podglądu obserwatorium
+//       nietknięta (kontrola).
 // Uruchom: node src/testing/smoke/click_focus_rule_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -303,6 +311,84 @@ header('T8  WYKONANIE frameSystem — kadr układu (wymóg z bramki U0)');
   ok(p._goalTarget?.x === 0 && p._goalTarget?.z === 0 && p._target?.x === 0 && p._theta === 0.3 && p._phi === 1.1,
     'T8b NIEZMIENNIK: cel = gwiazda (0, 0, 0), kąty domyślne');
   ok(TCC && frame(1)._dist === 70 && frame(40)._dist === 450, 'T8c NIEZMIENNIK: granice kadru 70 (mały układ) / 450 (duży)');
+}
+
+// ═══ T9 ═════════════════════════════════════════════════════════════════════
+header('T9  U1-2: zaznaczenie ciała ≠ cel kamery (słuchacze ThreeRenderer wycięte ze źródła, WYKONANIE na atrapie)');
+{
+  // Atrapa renderera: kamera rejestruje KAŻDE wywołanie (ruch celu, dystansu, kadru i progu zoomu).
+  const CAM = ['focusOn', 'focusOnInstant', 'focusOnSmooth', 'setMinDist', 'setTargetDist', 'snapDist', 'flyTo', 'frameSystem',
+    'resetToCenter', 'updateCameraFocus'];
+  const mkR = (over = {}) => {
+    const calls = [];
+    const cam = { _targetDist: 50 };
+    for (const m of CAM) cam[m] = (...a) => calls.push([m, ...a]);
+    return { calls, _cameraController: cam,
+      _selectedEntityId: 'old', _focusEntityId: 'camBody', _focusVesselId: 'v9', _focusStationId: 's9',
+      _starGroup: { position: { x: 0, z: 0 } },
+      _updateCameraFocus() { calls.push(['updateCameraFocus']); },
+      _getEntityRadius: () => 0.25,
+      _colonyMarkers: { show: () => calls.push(['markers.show']), hide: () => calls.push(['markers.hide']) },
+      _hideColonyTooltip() {}, _planets: new Map([['p1', { group: {} }]]),
+      _showPlanetoidOrbit() {}, _hideAllMoonOrbits() {}, _showMoonOrbit() {}, _hideAllPlanetoidOrbits() {},
+      _rebuildAllOrbits() { calls.push(['rebuildOrbits']); }, ...over };
+  };
+  globalThis.KOSMOS.colonyManager = { hasColony: (id) => id === 'p1', getColony: () => ({ grid: {} }) };
+  const camCalls = (r) => r.calls.filter(c => CAM.includes(c[0]));
+  const P1 = { id: 'p1', type: 'planet' };
+
+  // pierwszy klik reguły D-UI-5: `focus: false`
+  const r1 = mkR();
+  const sel = compileListener(TR_SRC, 'body:selected', r1);
+  sel?.({ entity: P1, focus: false });
+  ok(r1._selectedEntityId === 'p1', 'T9a `body:selected { focus: false }` — zaznaczenie ciała ustawione (`_selectedEntityId`)');
+  ok(!!sel && camCalls(r1).length === 0 && r1._focusEntityId === 'camBody' && r1._focusVesselId === 'v9' && r1._focusStationId === 's9',
+    'T9b … ZERO poleceń kamery, pola śledzenia nietknięte (jest: ' + JSON.stringify(camCalls(r1)) + ')');
+  ok(r1.calls.some(c => c[0] === 'markers.show') && r1.calls.some(c => c[0] === 'rebuildOrbits'),
+    'T9c KONTROLA: … wizualizacja zaznaczenia (znaczniki kolonii, złota orbita) — jak przed U1');
+  // emitent spoza reguły: brak pola `focus` = true (zachowanie sprzed U1)
+  const r2 = mkR();
+  const sel2 = compileListener(TR_SRC, 'body:selected', r2);
+  sel2?.({ entity: P1 });
+  ok(r2._focusEntityId === 'p1' && r2._focusVesselId === null && r2._focusStationId === null,
+    'T9d KONTROLA: `body:selected` bez `focus` (Dziennik, Obserwatorium, Dowództwo, starty) — kamera śledzi ciało jak dotąd');
+  ok(r2._selectedEntityId === 'p1', 'T9d2 … i zaznacza je (`_selectedEntityId`)');
+  ok(JSON.stringify(camCalls(r2)) === '[["setMinDist",0.3],["updateCameraFocus"],["setTargetDist",1.5]]',
+    'T9e KONTROLA: … ten sam ciąg poleceń kamery co przed U1 (jest: ' + JSON.stringify(camCalls(r2)) + ')');
+  // odznaczenie (klik w pustkę, ✕ karty ciała)
+  const r3 = mkR({ _selectedEntityId: 'p1', _focusEntityId: 'p1', _focusVesselId: 'v1', _focusStationId: 's1' });
+  const des = compileListener(TR_SRC, 'body:deselected', r3);
+  des?.();
+  ok(!!des && [r3._selectedEntityId, r3._focusEntityId, r3._focusVesselId, r3._focusStationId].every(v => v === null),
+    'T9f `body:deselected` — zaznaczenie zdjęte, śledzenie obiektu zakończone (kamera stoi w miejscu)');
+  ok(!!des && camCalls(r3).length > 0 && camCalls(r3).every(c => c[0] === 'setMinDist'),
+    'T9g `body:deselected` — ZERO ruchu kamery, tylko próg zoomu (473; był `focusOn(gwiazda)`) — jest: ' + JSON.stringify(camCalls(r3)));
+
+  // pin ŹRÓDŁOWY: `_focusEntityId` czytane WYŁĄCZNIE przez `_updateCameraFocus` (pole kamery; blokada obserwatorium)
+  const tr = TR_SRC;
+  const ucfStart = tr.indexOf('  _updateCameraFocus() {');
+  const ucfEnd = ucfStart + methodBody(tr, '  _updateCameraFocus() {').length;
+  const reads = [...tr.matchAll(/this\._focusEntityId(?!\s*=[^=])/g)].map(m => m.index);
+  const outside = reads.filter(i => !(i > ucfStart && i < ucfEnd));
+  ok(ucfStart > 0 && reads.length > 0 && outside.length === 0,
+    'T9h odczyty `_focusEntityId` wyłącznie w `_updateCameraFocus` (poza nim: ' + outside.length + ')');
+  const veil = methodBody(tr, '  _syncBodyScanVeil() {');
+  const SITES = [
+    ['znaczniki kolonii (odświeżenie)', /!this\._colonyMarkers\.entityId \|\| !this\._selectedEntityId/.test(tr)],
+    ['hover: orbita planetoidy',         /if \(id !== this\._selectedEntityId\) \{/.test(listenerText(tr, 'planet:hover'))],
+    ['hover: orbita planety',            /if \(id === this\._selectedEntityId\) return;/.test(listenerText(tr, 'planet:hover'))],
+    ['filtr orbit',                      /this\._selectedEntityId/.test(methodBody(tr, '  _applyOrbitFilter() {'))],
+    ['złota orbita',                     /const isFocused = planet\.id === this\._selectedEntityId;/.test(tr)],
+    ['tooltip znaczników kolonii',       /const focusId = this\._selectedEntityId;/.test(tr)],
+    ['zasłona podglądu obserwatorium',   (veil.match(/this\._selectedEntityId/g) ?? []).length === 3],
+  ];
+  for (const [name, hit] of SITES) ok(hit, 'T9i wizualizacja zaznaczenia czyta `_selectedEntityId`: ' + name);
+  ok(/this\._focusEntityId = null;\s*this\._selectedEntityId = null;/.test(methodBody(tr, '  _disposeAllMeshes() {')),
+    'T9j przebudowa sceny (zmiana układu) zdejmuje też zaznaczenie');
+  const ucf = methodBody(tr, '  _updateCameraFocus() {');
+  ok(/if \(this\._observatoryPreviewActive\) this\._cameraController\.focusOnInstant\(x, z, y\);/.test(ucf)
+    && /if \(this\._observatoryPreviewActive\) this\._updateCameraFocus\(\);/.test(tr),
+    'T9k KONTROLA (bez zmian w U1): podgląd obserwatorium — twarda blokada kamery na `_focusEntityId` co klatkę');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
