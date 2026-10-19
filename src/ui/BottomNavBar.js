@@ -98,7 +98,6 @@ export class BottomNavBar {
     this._anim = false;
 
     const slots = navSlotLayout(rect, NAV_GROUPS.length);
-    let baseSlotX = null, baseSlotW = 0;   // kolumna wysuniętego kafla (do pominięcia górnej ramki)
     for (const slot of slots) {
       const i = slot.index;
       const target = this._hoverSlot === i ? 1 : 0;
@@ -110,41 +109,11 @@ export class BottomNavBar {
       const grp = NAV_GROUPS[i];
       const hasAlert = this._peekEnabled && !!this._alertCache[grp.primary];
       const isPeekBase = !!this._peek && this._peek.activeGroup() === grp.primary;
-      if (isPeekBase) { baseSlotX = slot.x; baseSlotW = slot.w; }
       this._drawSlot(ctx, grp, slot.x, rect.y, slot.w, rect.h, activePrimary === grp.primary, p, hasAlert, isPeekBase);
     }
-
-    // ── Delikatna rama w kolorze motywu: GÓRA + BOKI (bez dołu — pasek siedzi na listwie
-    //    dziennika) + cienkie linie MIĘDZY przyciskami. Rysowane NA WIERZCHU kafli (crisp). ──
-    const a = hexToRgb(THEME.accent);
-    ctx.lineWidth = 1;
-    // Separatory między przyciskami — cienka linia 1px THEME.accent @0.3 na pełną wysokość paska
-    ctx.strokeStyle = `rgba(${a.r},${a.g},${a.b},0.3)`;
-    ctx.beginPath();
-    for (let i = 1; i < slots.length; i++) {
-      const lx = Math.round(slots[i].x) + 0.5;
-      ctx.moveTo(lx, rect.y); ctx.lineTo(lx, rect.y + rect.h);
-    }
-    ctx.stroke();
-    // Boki ramy (lewy + prawy, bez dołu) — cienkie 1px
-    ctx.strokeStyle = `rgba(${a.r},${a.g},${a.b},0.55)`;
-    ctx.beginPath();
-    ctx.moveTo(rect.x + 0.5, rect.y + rect.h);
-    ctx.lineTo(rect.x + 0.5, rect.y + 0.5);
-    ctx.moveTo(rect.x + rect.w - 0.5, rect.y + rect.h);
-    ctx.lineTo(rect.x + rect.w - 0.5, rect.y + 0.5);
-    ctx.stroke();
-    // GÓRNA ramka — pogrubiona. Pod WYSUNIĘTYM kaflem pomijamy segment ramki, żeby karta
-    // łączyła się bezszwowo z gniazdem (dla pozostałych slotów ramka zostaje).
-    const TOP_BORDER_H = 2.4;
-    ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},0.55)`;
-    if (baseSlotX == null) {
-      ctx.fillRect(rect.x, rect.y, rect.w, TOP_BORDER_H);
-    } else {
-      const gapL = Math.round(baseSlotX), gapR = Math.round(baseSlotX + baseSlotW);
-      if (gapL > rect.x)              ctx.fillRect(rect.x, rect.y, gapL - rect.x, TOP_BORDER_H);
-      if (gapR < rect.x + rect.w)     ctx.fillRect(gapR, rect.y, rect.x + rect.w - gapR, TOP_BORDER_H);
-    }
+    // ARKUSZ UI, U0-1 (D-UI-13): pasek BEZ ram — usunięte separatory między przyciskami, boki i górna listwa
+    // (razem z luką listwy pod wysuniętą kartą peek, która traci powód). Stan slotu niesie wyłącznie 2 px wskaźnik
+    // aktywnego / hover w `_drawSlot` — to wskaźnik stanu, nie rama.
 
     // ── Karta peek: wysuwa się nad slotem pod kursorem (lub trzymanym gdy kursor na karcie).
     //    Nie podglądamy grupy, której overlay jest już otwarty (bez sensu). ──
@@ -175,8 +144,7 @@ export class BottomNavBar {
     const tab = this._tabFor(grp.primary);
 
     // Gniazdo po „wysuniętym" przycisku — grafika przeniosła się do karty peek (nad paskiem).
-    // Tło = jak karta (bgAlpha 0.97) i BEZ górnego akcentu → bezszwowe połączenie z kartą
-    // (górna ramka paska w tej kolumnie też jest pominięta w draw()).
+    // Tło = jak karta (bgAlpha 0.97) i BEZ górnego akcentu → bezszwowe połączenie z kartą.
     if (isPeekBase) {
       ctx.fillStyle = bgAlpha(0.97);
       ctx.fillRect(x, y, w, h);

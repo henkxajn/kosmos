@@ -8,7 +8,7 @@
 // Bell: NotificationCenter + toggleNotificationDropdown (otwiera W GÓRĘ — bez topY).
 // MENU: deleguje do BottomBar (menu DOM) — ustawia _menuClickBounds + toggleMenu().
 
-import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
@@ -100,18 +100,10 @@ export class BottomControlBar {
     const bgW = lastSlotRight - lastSlotX;
     this._bgRect = { x: bgLeft, y: stripTop, w: bgW, h: STRIP_H };
 
-    // ── Tło paska + delikatna rama motywu (góra + boki), spójnie z dolnym nav ──
+    // ── Tło paska — BEZ ramy (ARKUSZ UI, U0-1: spójnie z dolnym nav bez ram, D-UI-13 / §7.15); obrysy
+    //    przycisków prędkości zostają (`_drawTextBtn`) ──
     ctx.fillStyle = bgAlpha(0.9);
     ctx.fillRect(bgLeft, stripTop, bgW, STRIP_H);
-    const a = hexToRgb(THEME.accent);
-    ctx.strokeStyle = `rgba(${a.r},${a.g},${a.b},0.5)`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bgLeft + 0.5, stripTop + STRIP_H);
-    ctx.lineTo(bgLeft + 0.5, stripTop + 0.5);
-    ctx.lineTo(bgLeft + bgW - 0.5, stripTop + 0.5);
-    ctx.lineTo(bgLeft + bgW - 0.5, stripTop + STRIP_H);
-    ctx.stroke();
 
     // ── Bell (🔔 + badge) ──
     this._drawBell(ctx, this._bellRect, cy);
