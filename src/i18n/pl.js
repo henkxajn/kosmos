@@ -2566,6 +2566,7 @@ export default {
   'leftOutliner.unrecognized': '{0} — ciało nierozpoznane',
   'leftOutliner.groundUnits': 'Jednostki naziemne: {0} — klik: mapa ciała',
   'leftOutliner.queue': 'W kolejce: {0}',
+  'leftOutliner.keyHint': '„,” lewy panel · „.” prawy panel · „B” oba',
 
   // === TopBar ===
   'topBar.resources': 'SUROWCE',

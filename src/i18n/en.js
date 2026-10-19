@@ -2565,6 +2565,7 @@ export default {
   'leftOutliner.unrecognized': '{0} — unidentified body',
   'leftOutliner.groundUnits': 'Ground units: {0} — click: body map',
   'leftOutliner.queue': 'Queued: {0}',
+  'leftOutliner.keyHint': '“,” left panel · “.” right panel · “B” both',
 
   // === TopBar ===
   'topBar.resources': 'RESOURCES',

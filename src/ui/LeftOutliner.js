@@ -46,6 +46,30 @@ const INDENT  = 10;   // wcięcie na poziom (księżyc, stacja)
 const ARROW_W = 14;   // strefa strzałki zwijania (od lewej krawędzi wiersza)
 
 /**
+ * ARKUSZ UI U2-4 (§7.16): klawisz outlinera z naciśnięcia — „,” lewy, „.” prawy, „B” oba. `e.code` (niezależnie od
+ * układu klawiatury PL / EN); z dowolnym modyfikatorem — nic (Ctrl i Shift to tryby przytrzymania mapy).
+ * @returns {'left'|'right'|'both'|null}
+ */
+export function outlinerKeyAction(e) {
+  if (!e || e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return null;
+  return e.code === 'Comma' ? 'left' : e.code === 'Period' ? 'right' : e.code === 'KeyB' ? 'both' : null;
+}
+
+/**
+ * Nowy stan widoczności outlinerów (sesja) po klawiszu. „B”: którykolwiek widoczny → oba schowane; oba schowane → oba
+ * pokazane (jednym klawiszem czysta mapa i powrót).
+ * @param {'left'|'right'|'both'} action
+ * @param {{left:boolean, right:boolean}} state
+ * @returns {{left:boolean, right:boolean}|null}
+ */
+export function applyOutlinerToggle(action, { left = true, right = true } = {}) {
+  if (action === 'left') return { left: !left, right: !!right };
+  if (action === 'right') return { left: !!left, right: !right };
+  if (action === 'both') { const any = !!left || !!right; return { left: !any, right: !any }; }
+  return null;
+}
+
+/**
  * Decyzja 4 (UI_PLAN §5): lewy outliner tylko nad mapą.
  * @returns {boolean}
  */
@@ -170,6 +194,10 @@ export class LeftOutliner {
     if ('letterSpacing' in ctx) ctx.letterSpacing = '1px';
     ctx.fillText(String(t('leftOutliner.systems', tree.systems.length)).toUpperCase(), g.x + PAD, g.y + HDR_H / 2 + 3);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    // U2-4 — klawisz zwijania przy nagłówku (pełna podpowiedź po najechaniu — `leftOutliner.keyHint`).
+    ctx.textAlign = 'right';
+    ctx.fillText('[ , ]', g.x + g.w - PAD, g.y + HDR_H / 2 + 3);
+    ctx.textAlign = 'left';
     this._clickTargets.push({ type: 'header', x: g.x, y: g.y, w: g.w, h: HDR_H });
 
     // Układ treści (współrzędne treści, przed przewinięciem).
@@ -403,7 +431,9 @@ export class LeftOutliner {
       const z = this._targetAt(x, y);
       const id = !z ? null : z.type === 'system' ? z.systemId : z.type === 'station' ? z.stationId : z.bodyId;
       this._hoverKey = z ? `${z.type}:${id}` : null;
-      if (z?.type === 'ground') this._tip = { text: t('leftOutliner.groundUnits', z.count), x, y };
+      const hd = this._clickTargets.find((h) => h.type === 'header' && x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
+      if (hd) this._tip = { text: t('leftOutliner.keyHint'), x, y };
+      else if (z?.type === 'ground') this._tip = { text: t('leftOutliner.groundUnits', z.count), x, y };
       else if (z?.type === 'queue') this._tip = { text: t('leftOutliner.queue', z.count), x, y };
       else if (z?.type === 'body' && z.recognized === false) this._tip = { text: t('leftOutliner.unrecognized', z.name), x, y };
     }

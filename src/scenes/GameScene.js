@@ -154,6 +154,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do au
 import { t, getLocale } from '../i18n/i18n.js';
 import { isSystemExploredId } from '../utils/SystemExploration.js';
 import { describeOrderFail } from '../utils/CameraFrame.js';   // Finding 267 — baner odmowy waypointu
+import { outlinerKeyAction } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2-4 — klawisze outlinerów (§7.16)
 import { printGarrisonPlans } from '../utils/GarrisonPlanner.js';   // G2-3a — odczyt planu garnizonu AI (tylko konsola)
 import { printTuningTable, consoleSetTuning, consoleResetTuning, sanitizeTuningAfterRestore } from '../utils/StrikesBackTuning.js';   // AI STRIKES BACK (SB9, SB16) — tabela strojenia (konsola + zapis)
 import { printFleetLimits } from '../utils/FleetLimit.js';   // AI STRIKES BACK (SB3, SB14) — limit floty AI (tylko odczyt konsoli)
@@ -4838,6 +4839,16 @@ export class GameScene {
             window.KOSMOS.tacticalMode?.toggle();
           }
           break;
+        // ARKUSZ UI U2-4 (§7.16): klawisze outlinerów — „,” lewy, „.” prawy, „B” oba. `e.code` — niezależnie od układu
+        // klawiatury (PL / EN); bez modyfikatorów (Ctrl i Shift to tryby przytrzymania). Działa też przy otwartym overlayu
+        // (decyzja 4: outlinery są wtedy ukryte, a klawisz zmienia stan, który wraca po zamknięciu overlayu).
+        case 'Comma':
+        case 'Period':
+        case 'KeyB': {
+          const act = window.KOSMOS?.civMode ? outlinerKeyAction(e) : null;
+          if (act && this.uiManager?.toggleOutliners?.(act)) e.preventDefault();
+          break;
+        }
         case 'Digit1': EventBus.emit('time:setMultiplier', { index: 1 }); EventBus.emit('time:play'); break; // 1d/s
         case 'Digit2': EventBus.emit('time:setMultiplier', { index: 2 }); EventBus.emit('time:play'); break; // 3d/s
         case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break; // 1t/s

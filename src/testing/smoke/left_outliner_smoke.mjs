@@ -40,6 +40,19 @@
 //   L12 §7.18 — chipy układów nie rysują się (statki w dwóch układach — dawniej rząd chipów); plakietki flot zostają
 //       (KONTROLA)
 //
+// PINY (krok U2-4 — §7.16, decyzja 4, Finding 483):
+//   L13 klawisze — `outlinerKeyAction` (e.code Comma / Period / KeyB, z modyfikatorem — nic) i `applyOutlinerToggle`
+//       („B”: którykolwiek widoczny → oba schowane, oba schowane → oba pokazane)
+//   L14 stan użytkownika: lewy schowany klawiszem — bez rysowania, trafień, wcięcia; decyzja 4 i klawisz niezależne
+//       (stan przeżywa otwarcie overlayu); podpowiedź klawiszy w nagłówku (PL / EN)
+//   L15 GameScene: klawisze w przełączniku `e.code`, tylko w trybie cywilizacji, przez `toggleOutliners` (pin
+//       źródłowy); UIManager `toggleOutliners` — oba stany, prawy schowany bez wysuniętej szuflady
+//   L16 prawy Outliner (dzisiejszy) — widoczność z klawisza we wszystkich wejściach: rysowanie, klik, blokada kamery,
+//       kółko, najechanie, podpowiedź, animacja (piny źródłowe)
+//   L17 Finding 483 — kolejność rysowania: etykiety mapy → lewy outliner → lista kolonii z belki → Dok / paski →
+//       pływające panele; kolejność kliku: pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy
+//       (piny źródłowe, komentarze zdjęte)
+//
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -528,6 +541,105 @@ header('L12 §7.18 — chipy układów wyłączone, plakietki flot zostają');
   ok(!threw, `L12-0 KONTROLA: \`drawVesselLabels\` bez wyjątku (${threw?.message ?? 'ok'})`);
   ok(m._chipZones.length === 0, `L12a SEDNO: statki gracza w dwóch układach — ŻADEN chip układu (strefy chipów: ${m._chipZones.length})`);
   ok(m._vesselHitZones.length >= 1, `L12b KONTROLA: plakietka floty (klaster dwóch statków) nadal rysowana (${m._vesselHitZones.length})`);
+}
+
+// ═══ L13 ══════════════════════════════════════════════════════════════════════
+header('L13 klawisze outlinerów (§7.16)');
+{
+  const ka = LO?.outlinerKeyAction, tg = LO?.applyOutlinerToggle;
+  ok(typeof ka === 'function' && typeof tg === 'function', 'L13-0 `outlinerKeyAction` i `applyOutlinerToggle` istnieją');
+  const k = (code, mods = {}) => (typeof ka === 'function' ? ka({ code, ...mods }) : undefined);
+  ok(k('Comma') === 'left' && k('Period') === 'right' && k('KeyB') === 'both', 'L13a SEDNO: „,” lewy, „.” prawy, „B” oba (e.code — układ klawiatury bez znaczenia)');
+  ok(k('Comma', { shiftKey: true }) === null && k('KeyB', { ctrlKey: true }) === null && k('Period', { altKey: true }) === null && k('KeyB', { metaKey: true }) === null,
+    'L13b z modyfikatorem (Shift / Ctrl — tryby przytrzymania, Alt, Meta) — nic');
+  ok(k('KeyM') === null && k('Home') === null, 'L13c KONTROLA: inne klawisze — nic');
+  const T = (a, st) => (typeof tg === 'function' ? JSON.stringify(tg(a, st)) : null);
+  ok(T('left', { left: true, right: true }) === '{"left":false,"right":true}' && T('right', { left: true, right: true }) === '{"left":true,"right":false}',
+    'L13d „,” / „.” przełączają tylko swój panel');
+  ok(T('both', { left: true, right: true }) === '{"left":false,"right":false}' && T('both', { left: false, right: true }) === '{"left":false,"right":false}'
+    && T('both', { left: false, right: false }) === '{"left":true,"right":true}',
+    'L13e „B”: którykolwiek widoczny → oba schowane; oba schowane → oba pokazane');
+  ok(typeof tg === 'function' && tg('x', {}) === null, 'L13f nieznana akcja → null');
+}
+
+// ═══ L14 ══════════════════════════════════════════════════════════════════════
+header('L14 stan użytkownika lewego outlinera, decyzja 4, podpowiedź klawiszy');
+{
+  reset(); const lo = newLO();
+  if (lo) lo.visible = false;
+  const { tr } = draw(lo);
+  ok(tr === null && (lo?._clickTargets ?? []).length === 0 && lo?.isOver?.(75, 300, W, H) === false && MI?.getMapInsets?.(K)?.left === 0,
+    'L14a KONTROLA (stan `visible` od U2-2): schowany — bez rysowania, trafień, blokady kamery i wcięcia');
+  reset({ overlay: true }); if (lo) lo.visible = true;
+  ok(lo?.isShown?.(K) === false, 'L14b KONTROLA (decyzja 4 od U2-2): overlay otwarty — ukryty mimo stanu „widoczny”');
+  reset(); ok(lo?.isShown?.(K) === true, 'L14c KONTROLA: overlay zamknięty — wraca (stan użytkownika przeżył overlay)');
+  reset({ overlay: true }); if (lo) lo.visible = false; reset();
+  ok(lo?.isShown?.(K) === false, 'L14d KONTROLA: schowany przy otwartym overlayu — po zamknięciu zostaje schowany');
+  if (lo) lo.visible = true; draw(lo);
+  const hd = (lo?._clickTargets ?? []).find((z) => z.type === 'header');
+  if (hd) lo.updateHover(hd.x + 20, hd.y + 5, W, H);
+  ok(!!hd && lo?._tip?.text === t('leftOutliner.keyHint') && /„,”/.test(lo?._tip?.text ?? '') && /„B”/.test(lo?._tip?.text ?? ''),
+    `L14e podpowiedź klawiszy po najechaniu na nagłówek (${lo?._tip?.text})`);
+  setLocale('en'); const en = t('leftOutliner.keyHint'); setLocale('pl');
+  ok(en !== 'leftOutliner.keyHint' && en !== t('leftOutliner.keyHint') && /B/.test(en), `L14f podpowiedź klawiszy po angielsku (${en})`);
+  const { ctx } = draw(lo);
+  ok(ctx._calls.text.some((x) => x.s === '[ , ]'), 'L14g klawisz przy nagłówku („[ , ]”)');
+}
+
+// ═══ L15 ══════════════════════════════════════════════════════════════════════
+header('L15 GameScene / UIManager — klawisze (piny źródłowe)');
+{
+  const gs = src('../../scenes/GameScene.js');
+  const sw = gs.slice(gs.indexOf("case 'Space':"), gs.indexOf("case 'F7':"));
+  ok(sw.length > 0, 'L15-0 KONTROLA: przełącznik `e.code` w keydown znaleziony');
+  ok(/case 'Comma':\s*case 'Period':\s*case 'KeyB': \{\s*const act = window\.KOSMOS\?\.civMode \? outlinerKeyAction\(e\) : null;\s*if \(act && this\.uiManager\?\.toggleOutliners\?\.\(act\)\) e\.preventDefault\(\);/.test(sw),
+    'L15a SEDNO: „,” „.” „B” w przełączniku `e.code`, tylko w trybie cywilizacji, przez `toggleOutliners`');
+  ok(/import \{ outlinerKeyAction \} from '\.\.\/ui\/LeftOutliner\.js'/.test(gs), 'L15b reguła klawiszy z czystego helpera (`outlinerKeyAction`)');
+  const ui = src('../../scenes/UIManager.js');
+  const tog = body(ui, '  toggleOutliners(action) {');
+  ok(/applyOutlinerToggle\(action, \{ left: this\._leftOutliner\.visible !== false, right: this\._outlinerUserVisible !== false \}\)/.test(tog)
+    && /this\._leftOutliner\.visible = next\.left;/.test(tog) && /this\._outlinerUserVisible = next\.right;/.test(tog),
+    'L15c `toggleOutliners` — oba stany z jednej reguły (`applyOutlinerToggle`)');
+  ok(/if \(!next\.right\) \{ const o = this\._outliner; o\._slideProgress = 0;/.test(tog), 'L15d prawy schowany — szuflada zsunięta (globus kolonii nie odsuwa się)');
+}
+
+// ═══ L16 ══════════════════════════════════════════════════════════════════════
+header('L16 prawy Outliner — widoczność z klawisza we wszystkich wejściach (piny źródłowe)');
+{
+  const ui = src('../../scenes/UIManager.js');
+  const has = (sig, re) => re.test(body(ui, sig));
+  ok(has('  isOverUI(rawX, rawY) {', /this\._outlinerUserVisible !== false && !this\.tacticalDock\?\.isExpanded\?\.\(\) && this\._outliner\.isOver\(/), 'L16a blokada kamery');
+  ok(has('  handleClick(x, y) {', /this\._outlinerUserVisible !== false && !this\.tacticalDock\?\.isExpanded\?\.\(\) && this\._outliner\?\.hitTest\?\.\(/), 'L16b klik');
+  ok(has('  handleWheel(rawX, rawY, deltaY) {', /this\._outlinerUserVisible !== false && this\._outliner\?\.handleWheel\?\.\(/), 'L16c kółko');
+  ok(has('  handleMouseMove(x, y) {', /if \(this\._outliner && this\._outlinerUserVisible !== false\) this\._outliner\.updateHover\(/), 'L16d najechanie');
+  const dr = body(ui, '  _draw() {');
+  ok(/this\._outlinerState && this\._outlinerUserVisible !== false && !this\.tacticalDock\?\.isExpanded\?\.\(\)\) \{\s*this\._outliner\._drawerMode = true;/.test(dr), 'L16e rysowanie');
+  ok(/this\._outlinerUserVisible !== false && !this\.overlayManager\.isAnyOpen\(\)\) this\._outliner\.drawTooltip\(ctx\)/.test(dr), 'L16f podpowiedź kolonii');
+  ok(/this\._outlinerUserVisible !== false && \(this\._outliner\?\.isAnimating\?\.\(\)/.test(dr), 'L16g animacja szuflady');
+  ok(/this\._outlinerUserVisible = true;/.test(ui), 'L16h KONTROLA: stan startowy — widoczny');
+}
+
+// ═══ L17 ══════════════════════════════════════════════════════════════════════
+header('L17 Finding 483 — kolejność rysowania i kliku (piny źródłowe)');
+{
+  const ui = src('../../scenes/UIManager.js');
+  const dr = body(ui, '  _draw() {');
+  const at = (n) => dr.indexOf(n);
+  const dLbl = at('this._mapLabelLayer.draw('), dVL = at('this._mapLabelLayer.drawVesselLabels('), dAll = at('this._drawAllLabels(ctx, tr)');
+  const dLO = at('this._leftOutliner.draw('), dTRD = at('this._topResourceDrawer.draw(ctx, W, H)'), dDock = at('this.tacticalDock.draw(');
+  const dNav = at('this._bottomNavBar.draw('), dSP = at('this.stationPanel.draw('), dFG = at('this.fleetGroupPanel.draw('), dBr = at('this._drawSelectionBrackets(');
+  ok([dLbl, dVL, dAll, dLO, dTRD, dDock, dNav, dSP, dFG, dBr].every((i) => i > 0), 'L17-0 KONTROLA: wszystkie wywołania w `_draw` znalezione');
+  ok(dAll < dLO && dLbl < dLO && dVL < dLO, 'L17a SEDNO: etykiety mapy (plakietki kolonii / stacji / flot, CTRL) PRZED lewym outlinerem');
+  ok(dLO < dTRD && dTRD < dDock && dTRD < dNav, 'L17b KONTROLA (od U2-2): lewy outliner → lista kolonii z belki → Dok taktyczny / paski');
+  ok(dTRD < dSP && dTRD < dFG && dBr > dVL, 'L17c KONTROLA: lista kolonii POD pływającymi panelami; ramki zaznaczenia nadal PO etykietach');
+  const hc = body(ui, '  handleClick(x, y) {');
+  const c = (n) => hc.indexOf(n);
+  const cSP = c('this.stationPanel?.handleClick?.('), cFC = c('this.fleetCommandPanel?.handleClick?.('), cTRD = c('this._topResourceDrawer?.handleClick?.(');
+  const cLog = c('this._eventLogDrawer?.handleClick?.('), cLO = c('this._leftOutliner?.hitTest?.('), cLbl = c('this._mapLabelLayer?.handleClick?.(');
+  ok([cSP, cFC, cTRD, cLog, cLO, cLbl].every((i) => i > 0), 'L17d-0 KONTROLA: wszystkie wywołania w `handleClick` znalezione');
+  ok(cSP < cTRD && cFC < cTRD && cTRD < cLog && cLog < cLO && cLO < cLbl,
+    'L17d SEDNO: klik — pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
+  ok(c('this._mapLabelLayer?.handleClick?.(') === hc.lastIndexOf('this._mapLabelLayer?.handleClick?.('), 'L17e KONTROLA: jedno wywołanie kliku etykiet');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
