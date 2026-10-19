@@ -1,6 +1,6 @@
 // Kontroler kamery Three.js — sferyczny orbit jak w space_4x_prototype.html
 // Zdarzenia nasłuchiwane na WINDOW (gwarantuje odbiór na każdej konfiguracji)
-// LPM drag = obrót | scroll = zoom | H = reset
+// LPM drag = obrót | scroll = zoom | Home = reset kamery (GameScene → ThreeRenderer.resetToSystemView, kadr układu — ARKUSZ UI U1-1)
 
 import * as THREE from 'three';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
