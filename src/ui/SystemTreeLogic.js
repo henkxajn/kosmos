@@ -197,7 +197,9 @@ function _bodyRows(systemId, ix) {
       // Własna kolonia → JEJ nazwa; ciało obce / bez kolonii → nazwa CIAŁA (nigdy nazwa nadana przez wroga —
       // polityka `OutlinerGroundLogic`).
       name: (own?.name || b.name) ?? b.id,
-      recognized: b.explored === true,
+      // Kolonia gracza na ciele = gracz je zna (kolonizacja wymaga rozpoznania) — wiersz bez „○” także przy niespójnej
+      // fladze w zapisie.
+      recognized: b.explored === true || !!own,
       colony: own ? (own.isOutpost === true ? 'outpost' : 'colony') : null,
       isHomeColony: own?.isHomePlanet === true,
       foreign: ix.aiColonyByBody.has(b.id),

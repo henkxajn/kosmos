@@ -2563,6 +2563,9 @@ export default {
 
   // === Lewy outliner (ARKUSZ UI U2) ===
   'leftOutliner.systems': 'UKŁADY [{0}]',
+  'leftOutliner.unrecognized': '{0} — ciało nierozpoznane',
+  'leftOutliner.groundUnits': 'Jednostki naziemne: {0} — klik: mapa ciała',
+  'leftOutliner.queue': 'W kolejce: {0}',
 
   // === TopBar ===
   'topBar.resources': 'SUROWCE',

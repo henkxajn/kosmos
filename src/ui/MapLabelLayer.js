@@ -260,9 +260,9 @@ export class MapLabelLayer {
     };
     const vessels = vm.getAllVessels();
 
-    // Chipy układów — screen-anchored UI, niezależne od LOD i kadru (statki w
-    // INNYCH układach oraz tranzyt zasilają chipy mimo pustej mapy lokalnej).
-    this._drawSystemChips(ctx, vessels, pictureCtx, W, H);
+    // ARKUSZ UI U2-3 (§7.18, podpisane 2026-10-19): chipy układów (lewy górny róg) WYŁĄCZONE — dublowały lewy outliner
+    // i stały w jego miejscu (razem z chipem tranzytu; „W drodze” wraca w prawym outlinerze, U3). Plakietki flot
+    // zostają. `_drawSystemChips` i gałąź kliku chipu w `handleClick` — bez wołających; do sprzątnięcia w U3-3.
 
     // Profil tactical (F2): pełna gęstość niezależnie od dystansu (te same funkcje,
     // inne progi — żadnego drugiego systemu etykiet); przeżywa system:switched

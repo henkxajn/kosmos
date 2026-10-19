@@ -24,9 +24,10 @@
 //       i martwy NIE; polityka nazw (własna kolonia → nazwa KOLONII, obce ciało → nazwa CIAŁA).
 //       + pin ŹRÓDŁOWY wpięcia w `UIManager` (ten plik nie importuje się pod node).
 //   T2  Grupowanie po ciele + kolejność (ciała bez mojej koloni PIERWSZE).
-//   T3  WYKONANIE — prawdziwy `Outliner.draw` na atrapie ctx i prawdziwy `hitTest`: sub-nagłówek
-//       obcego ciała się rysuje, ma hit-zonę `groundBody`, a klik woła `openPanel('colony',
-//       {colonyId})` z WŁAŚCIWYM id. KONTROLA PINU: własna kolonia nadal przełącza aktywną.
+//   T3  WYKONANIE — prawdziwy LEWY outliner (`LeftOutliner.draw` na atrapie ctx i `hitTest`; ARKUSZ UI U2-3 —
+//       przecelowanie z prawego Outlinera, intencja bez zmian): wiersz obcego ciała z 🪖N się rysuje, 🪖N ma własną
+//       strefę, a klik woła `openPanel('colony', {colonyId})` z WŁAŚCIWYM id. KONTROLA PINU: własna kolonia nadal
+//       przełącza aktywną.
 //   T4  WYKONANIE — `BottomContext._doAction` na obcej koloni: z moimi wojskami otwiera JEJ mapę,
 //       bez wojsk NIE otwiera ani cudzej, ani własnej. KONTROLA PINU: własna kolonia bez zmian.
 //   T5  Pin ŹRÓDŁOWY `_finishDropMode` (ColonyOverlay nie importuje się pod node — `TextureLoader`).
@@ -39,7 +40,7 @@ import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GameCore } from '../headless/GameCore.js';
-import { Outliner } from '../../ui/Outliner.js';
+import { markSystemExplored } from '../../utils/SystemExploration.js';
 import { BottomContext } from '../../ui/BottomContext.js';
 import { resolveBodyName } from '../../utils/BodyName.js';
 import { t, setLocale } from '../../i18n/i18n.js';
@@ -56,6 +57,9 @@ import EventBus from '../../core/EventBus.js';
 //   `map_click_frame_smoke`: pin musi DEGRADOWAĆ, nie PRZERYWAĆ — tu na poziomie MODUŁU).
 let GroundLogic = null;
 try { GroundLogic = await import('../../ui/OutlinerGroundLogic.js'); } catch { /* piny padną */ }
+// ARKUSZ UI U2-3 — lewy outliner (powstaje w U2-2): import dynamiczny, pin DEGRADUJE przy fail-first.
+let LeftLogic = null;
+try { LeftLogic = await import('../../ui/LeftOutliner.js'); } catch { /* piny padną */ }
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -174,72 +178,72 @@ console.log('\n== T2 - grupowanie po ciele ==');
     'null -> pusta lista (pin wymaga obecnosci modulu, inaczej przechodzi jalowo)');
 }
 
-console.log('\n== T3 - Outliner: WYKONANIE draw + hitTest ==');
+console.log('\n== T3 - lewy outliner: WYKONANIE draw + hitTest (ARKUSZ UI U2-3) ==');
+// ⚠ PRZECELOWANIE (UI_PLAN §4.3 U2-3, decyzja 3): JEDN. NAZIEMNE przenoszą się do LEWEGO outlinera jako znacznik 🪖N
+//   przy ciele (prawy Outliner traci swoją sekcję dopiero w U3 — w U2 obie drogi istnieją równolegle). Intencja pinu
+//   BEZ ZMIAN: obce ciało z moimi wojskami jest na liście, ma własną strefę trafienia, a klik otwiera mapę TEGO ciała
+//   (`openPanel('colony', { colonyId })`) bez zmiany aktywnej kolonii; własna kolonia nadal przełącza aktywną.
+//   Wiersze pojedynczych jednostek w lewym outlinerze nie istnieją (decyzja 3: znacznik przy ciele).
 {
   const { cm, gum, ai, mine } = boot();
   const calls = stubOverlayManager();
   const drop = gum.createUnit('shock_infantry', ai.planetId,   0, 0, { owner: 'player' });
   const home = gum.createUnit('shock_infantry', mine.planetId, 1, 0, { owner: 'player' });
   const aiBody = EntityManager.get(ai.planetId);
-
-  // Stan budowany RECZNIE — T3 mierzy polowe Outlinerowa niezaleznie od kolektora.
-  const groundUnits = [
-    { ...drop, planetName: aiBody.name },
-    { ...home, planetName: mine.name },
-  ];
-  const state = {
-    colonies: [], expeditions: [], fleet: [], shipQueues: [], groundUnits,
-    constructionQueue: [], pendingBuilds: [], pendingShipOrders: [],
-    pendingOutpostOrders: [], factoryQueue: [], factoryAllocations: [], inventory: {},
-  };
-
-  const out = new Outliner();
-  // Zwin pozostale sekcje — inaczej JEDN. NAZIEMNE (ostatnia) schodza ponizej pasma hitTestu.
-  out._sections.colonies = out._sections.expeditions = out._sections.fleet = out._sections.queue = false;
-  const sink = [];
+  const aiSys  = aiBody?.systemId;
+  // Lista jednostek — ta sama, którą UIManager podaje OBU outlinerom (kolektor z T1).
+  const groundUnits = GroundLogic?.collectPlayerGroundUnits?.(gum.getAllUnits(), {
+    getColony: (pid) => cm.getColony(pid), getBodyName: resolveBodyName,
+  }) ?? [];
+  const lo = LeftLogic?.LeftOutliner ? new LeftLogic.LeftOutliner() : null;
+  window.KOSMOS.leftOutliner = lo;
   const W = 1280, H = 720;
-  let threw = null;
-  try { out.draw(stubCtx(sink), W, H, state); } catch (e) { threw = e; }
+  const drawLO = () => { const sink = []; let threw = null; try { lo?.draw?.(stubCtx(sink), W, H, { colonies: cm.getAllColonies(), groundUnits }); } catch (e) { threw = e; } return { sink, threw }; };
+  const sysListed = () => (lo?._clickTargets ?? []).some((z) => z.type === 'system' && z.systemId === aiSys);
+
+  // Granica reguły widoczności (D-UI-3): układ kolonii AI bez przylotu statku gracza (niezbadany, bez mojej kolonii)
+  // nie jest na liście — w grze desant przylatuje statkiem, a przylot oznacza układ (`markSystemExplored`).
+  drawLO();
+  assert(!!lo && !!aiSys && aiSys !== 'sys_home' && !sysListed(),
+    `KONTROLA: układ kolonii AI (${aiSys}) bez przylotu gracza — poza listą (reguła D-UI-3; zapisy sprzed 186 — Finding 480)`);
+  const sd = window.KOSMOS.starSystemManager?.getSystem?.(aiSys);
+  if (sd?.galaxyStar) markSystemExplored(sd.galaxyStar);   // przylot statku z desantem
+  lo?._expanded?.set?.(aiSys, true);                         // ciała obcego układu widoczne (układ nie jest bieżący)
+  const { sink, threw } = drawLO();
   assert(!threw, `draw nie rzuca (${threw?.message ?? 'ok'})`);
-
+  assert(sysListed(), 'po przylocie układ kolonii AI na liście');
   const text = sink.join('\n');
-  assert(text.includes(aiBody.name), `sub-naglowek z nazwa OBCEGO ciala narysowany (${aiBody.name})`);
-  assert(text.includes(mine.name),   'sub-naglowek wlasnej koloni tez (kontrola pinu)');
-  assert(/\(1\)/.test(text),         'licznik jednostek przy ciele');
-  assert(text.includes(t('groundUnit.shock_infantry')) && !text.includes('groundUni'),
-    'etykieta jednostki to NAZWA, nie obciety klucz i18n');
+  assert(text.includes(aiBody.name), `wiersz OBCEGO ciała narysowany (${aiBody.name})`);
+  assert(text.includes(mine.name), 'wiersz własnej kolonii też (kontrola pinu)');
+  assert(/🪖1/.test(text), 'znacznik 🪖N przy ciele (licznik jednostek)');
+  const groundZones = (lo?._clickTargets ?? []).filter((z) => z.type === 'ground');
+  assert(groundZones.length === 2, `dwie strefy 🪖N (jest ${groundZones.length})`);
+  const aiZone = groundZones.find((z) => z.bodyId === ai.planetId);
+  assert(!!aiZone, 'obce ciało ma własną strefę 🪖N');
 
-  const bodyZones = out._clickTargets.filter(z => z.type === 'groundBody');
-  assert(bodyZones.length === 2, `dwie hit-zony groundBody (jest ${bodyZones.length})`);
-  const aiZone = bodyZones.find(z => z.planetId === ai.planetId);
-  assert(!!aiZone, 'obce cialo ma wlasna hit-zone');
-
-  // KLIK w sub-naglowek obcego ciala
+  // KLIK w 🪖N obcego ciała
   calls.length = 0;
   const before = cm.activePlanetId;
-  if (aiZone) out.hitTest(aiZone.x + 5, aiZone.y + 2, W, H);
+  if (aiZone) lo.hitTest(aiZone.x + 2, aiZone.y + 2, W, H);
   assert(calls.length === 1 && calls[0].id === 'colony' && calls[0].opts?.colonyId === ai.planetId,
-    `klik otwiera panel TEGO ciala (${JSON.stringify(calls[0] ?? null)})`);
-  assert(cm.activePlanetId === before,
-    'aktywna kolonia gracza NIETKNIETA przy obcym ciele (bramka wlasnosci D1 respektowana)');
+    `klik otwiera panel TEGO ciała (${JSON.stringify(calls[0] ?? null)})`);
+  assert(calls.length === 1 && cm.activePlanetId === before,
+    'aktywna kolonia gracza NIETKNIĘTA przy obcym ciele — po kliku (bramka własności D1 respektowana)');
 
-  // KLIK w wiersz jednostki na obcym ciele
+  // KONTROLA PINU — własna kolonia nadal przełącza aktywną (HUD idzie za graczem). Szpieg `switchActiveColony`:
+  // przełączenie musi przyjść z KLIKU (pierwowzór sprzed U2 ustawiał aktywną kolonię sam, przed klikiem — pin był
+  // prawdziwy bez kliku; odczyt fail-first U2-3).
+  const sw = [], swOwn = Object.prototype.hasOwnProperty.call(cm, 'switchActiveColony'), swOrig = cm.switchActiveColony;
+  cm.switchActiveColony = function (id) { sw.push(id); return swOrig.call(this, id); };
   calls.length = 0;
-  const unitZone = out._clickTargets.find(z => z.type === 'groundUnit' && z.unitId === drop.id);
-  assert(!!unitZone, 'wiersz jednostki ma hit-zone z planetId');
-  if (unitZone) out.hitTest(unitZone.x + 5, unitZone.y + 2, W, H);
-  assert(calls.length === 1 && calls[0].opts?.colonyId === ai.planetId,
-    'klik w jednostke desantu tez otwiera JEJ planete, nie moja kolonie');
-
-  // KONTROLA PINU — wlasna kolonia nadal przelacza aktywna (HUD idzie za graczem)
-  cm.switchActiveColony(mine.planetId);
-  calls.length = 0;
-  const myZone = bodyZones.find(z => z.planetId === mine.planetId);
-  if (myZone) out.hitTest(myZone.x + 5, myZone.y + 2, W, H);
+  const myZone = groundZones.find((z) => z.bodyId === mine.planetId);
+  if (myZone) lo.hitTest(myZone.x + 2, myZone.y + 2, W, H);
+  if (swOwn) cm.switchActiveColony = swOrig; else delete cm.switchActiveColony;
   assert(calls.length === 1 && calls[0].opts?.colonyId === mine.planetId,
-    'wlasne cialo: panel otwarty z jej id');
-  assert(cm.activePlanetId === mine.planetId,
-    'wlasne cialo: aktywna kolonia ustawiona (kontrola pinu - nie zabetonowalismy odmowy)');
+    'własne ciało: panel otwarty z jej id');
+  assert(sw.length === 1 && sw[0] === mine.planetId && cm.activePlanetId === mine.planetId,
+    'własne ciało: KLIK przełącza aktywną kolonię (kontrola pinu - nie zabetonowaliśmy odmowy)');
+  assert(!!drop && !!home, 'kontrola pinu: obie jednostki utworzone');
 }
 
 console.log('\n== T4 - BottomContext "mapa ciala" ==');

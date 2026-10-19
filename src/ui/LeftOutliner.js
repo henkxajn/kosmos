@@ -15,6 +15,10 @@
 //     aktywnej kolonii (§7.10).
 //   • D-UI-10 (ciała): zaznaczone ciało (karta) podświetla swój wiersz; zaznaczenie z mapy rozwija układ i przewija
 //     do wiersza (§7.12) — nasłuch `body:selected`.
+//   • Decyzja 3 (U2-3): KOLONIE + stacje + JEDN. NAZIEMNE z prawego Outlinera — kolonia gracza = glif na wierszu jej
+//     ciała (🏛 z POP / ⛺ placówka; ⚑ kolonia AI), stacja gracza = wiersz pod ciałem-matką (reguła klik/focus),
+//     🪖N przy ciele = mapa TEGO ciała (`openPanel('colony', { colonyId })` — droga powrotna desantu, naprawa
+//     `486982c`), ⏳N przy kolonii = jej kolejka. Prawy Outliner traci te sekcje dopiero w U3 (w U2 oba równolegle).
 //
 // Szkielet (sekcja, clip, przewijanie, prostokąty trafień) — wzór `Outliner.js` (prawy), bez trybu szuflady.
 // Importuje się pod node (keeper `left_outliner_smoke` — prawdziwy `draw` + `hitTest` na atrapie ctx).
@@ -25,9 +29,10 @@ import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t }               from '../i18n/i18n.js';
 import { systemIdOf }      from '../utils/SystemScope.js';
-import { buildSystemTree, isSystemExpanded, UNRECOGNIZED_GLYPH } from './SystemTreeLogic.js';
+import { isPlayerColony }  from '../utils/ColonyOwnership.js';
+import { buildSystemTree, isSystemExpanded, UNRECOGNIZED_GLYPH, PRESENCE_GLYPH } from './SystemTreeLogic.js';
 import { getMapInsets }    from './MapInsets.js';
-import { clickObject, bodyTarget, readClickSelection } from './ClickIntentLogic.js';
+import { clickObject, bodyTarget, stationTarget, readClickSelection } from './ClickIntentLogic.js';
 
 export const LEFT_OUTLINER_W = COSMIC.OUTLINER_W;   // 150 px — §7.17 (oba outlinery po 150 px)
 export const LEFT_OUTLINER_BG_ALPHA = 0.6;           // §7.17 — strojenie na bramce
@@ -60,6 +65,7 @@ export class LeftOutliner {
     this._hoverKey      = null;                        // `typ:id` najechanego wiersza
     this._revealId      = null;                        // ciało do przewinięcia w widok (zaznaczenie z mapy)
     this._rect          = null;                        // ostatnio narysowany panel {x,y,w,h}
+    this._tip           = null;                        // podpowiedź najechania { text, x, y }
     EventBus.on('body:selected', (p) => this._onBodySelected(p?.entity));
   }
 
@@ -173,8 +179,7 @@ export class LeftOutliner {
       items.push({ kind: 'system', node: s, y: cy, h: SYS_H });
       cy += SYS_H;
       for (const r of (s.bodies ?? [])) {
-        if (r.kind !== 'body') continue;
-        items.push({ kind: 'body', row: r, y: cy, h: ROW_H });
+        items.push({ kind: r.kind === 'station' ? 'station' : 'body', row: r, y: cy, h: ROW_H });
         cy += ROW_H;
       }
     }
@@ -198,6 +203,7 @@ export class LeftOutliner {
       const iy = contentTop + it.y - this._scrollY;
       if (iy + it.h < contentTop || iy > contentTop + viewH) continue;   // poza widokiem — bez rysowania i bez trafień
       if (it.kind === 'system') this._drawSystemRow(ctx, g, iy, it.node, active);
+      else if (it.kind === 'station') this._drawStationRow(ctx, g, iy, it.row, sel);
       else this._drawBodyRow(ctx, g, iy, it.row, sel);
     }
     ctx.restore();
@@ -267,15 +273,71 @@ export class LeftOutliner {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
     this._shadow(ctx, true);
-    if (!r.recognized) {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(UNRECOGNIZED_GLYPH, tx, iy + 12);
-      tx += ctx.measureText(UNRECOGNIZED_GLYPH).width + 3;
+    // Znaczniki po prawej (decyzja 3): 🪖N — klik = mapa TEGO ciała; ⏳N — kolejka kolonii (klik jak w wiersz ciała).
+    // Strefy znaczników przed strefą wiersza — `_targetAt` bierze pierwszą trafioną.
+    let right = g.x + g.w - PAD - 2;   // 2 px na pasek przewijania
+    const marks = [];
+    if (r.groundUnits > 0) marks.push({ type: 'ground', count: r.groundUnits, text: `🪖${r.groundUnits}`, color: THEME.textPrimary });
+    if (r.queue > 0)       marks.push({ type: 'queue',  count: r.queue,       text: `⏳${r.queue}`,       color: THEME.warning ?? THEME.textSecondary });
+    for (const m of marks) {
+      const mw = ctx.measureText(m.text).width;
+      right -= mw;
+      ctx.fillStyle = m.color;
+      ctx.fillText(m.text, right, iy + 12);
+      this._clickTargets.push({ type: m.type, bodyId: r.id, systemId: r.systemId, count: m.count, x: right - 2, y: iy, w: mw + 4, h: ROW_H });
+      right -= 4;
     }
-    ctx.fillStyle = isSel ? THEME.textPrimary : (r.recognized ? THEME.textSecondary : THEME.textDim);
-    ctx.fillText(this._fit(ctx, r.name, g.x + g.w - PAD - tx), tx, iy + 12);
+    // Glif przed nazwą: ○ nierozpoznane / 🏛 kolonia gracza z POP / ⛺ placówka gracza / ⚑ kolonia AI.
+    const glyph = !r.recognized ? UNRECOGNIZED_GLYPH
+      : r.colony === 'colony' ? PRESENCE_GLYPH.colony
+      : r.colony === 'outpost' ? PRESENCE_GLYPH.outpost
+      : r.foreign ? PRESENCE_GLYPH.foreign : '';
+    if (glyph) {
+      ctx.fillStyle = !r.recognized ? THEME.textDim : (r.colony ? THEME.textPrimary : (THEME.warning ?? THEME.textSecondary));
+      ctx.fillText(glyph, tx, iy + 12);
+      tx += ctx.measureText(glyph).width + 3;
+    }
+    ctx.fillStyle = (isSel || r.colony) ? THEME.textPrimary : (r.recognized ? THEME.textSecondary : THEME.textDim);
+    ctx.fillText(this._fit(ctx, r.name, right - tx), tx, iy + 12);
     this._shadow(ctx, false);
-    this._clickTargets.push({ type: 'body', bodyId: r.id, systemId: r.systemId, x: g.x, y: iy, w: g.w, h: ROW_H });
+    this._clickTargets.push({ type: 'body', bodyId: r.id, systemId: r.systemId, recognized: r.recognized, name: r.name, x: g.x, y: iy, w: g.w, h: ROW_H });
+  }
+
+  // Stacja gracza pod ciałem-matką (decyzja 3) — reguła klik/focus jak wiersz stacji dzisiejszego Outlinera.
+  _drawStationRow(ctx, g, iy, r, sel) {
+    const key = `station:${r.id}`;
+    const isSel = sel?.stationId != null && sel.stationId === r.id;
+    if (isSel)                        { ctx.fillStyle = THEME.accentMed ?? 'rgba(0,255,180,0.13)'; ctx.fillRect(g.x, iy, g.w, ROW_H); }
+    else if (this._hoverKey === key)  { ctx.fillStyle = THEME.accentDim ?? 'rgba(0,255,180,0.07)'; ctx.fillRect(g.x, iy, g.w, ROW_H); }
+    const tx = g.x + PAD + ARROW_W - 2 + r.depth * INDENT;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left';
+    this._shadow(ctx, true);
+    ctx.fillStyle = isSel ? THEME.textPrimary : THEME.textSecondary;
+    ctx.fillText(this._fit(ctx, `🛰 ${r.name}`, g.x + g.w - PAD - 2 - tx), tx, iy + 12);
+    this._shadow(ctx, false);
+    this._clickTargets.push({ type: 'station', stationId: r.id, systemId: r.systemId, x: g.x, y: iy, w: g.w, h: ROW_H });
+  }
+
+  /** Podpowiedź najechania (○, 🪖N, ⏳N) — rysowana na wierzchu, z tooltipami innych powierzchni. */
+  drawTooltip(ctx, W, H, K = this._K()) {
+    const tip = this._tip;
+    if (!tip?.text || !this.isShown(K)) return;
+    ctx.save();
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const tw = ctx.measureText(tip.text).width + 12, th = 18;
+    let tx = tip.x + 12, ty = tip.y + 14;
+    if (tx + tw > W - 4) tx = W - tw - 4;
+    if (ty + th > H - 4) ty = tip.y - th - 6;
+    ctx.fillStyle = bgAlpha(0.92);
+    ctx.fillRect(tx, ty, tw, th);
+    ctx.strokeStyle = THEME.borderActive ?? THEME.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tx + 0.5, ty + 0.5, tw - 1, th - 1);
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.textAlign = 'left';
+    ctx.fillText(tip.text, tx + 6, ty + 12);
+    ctx.restore();
   }
 
   // ── Wejście ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -304,9 +366,23 @@ export class LeftOutliner {
       else K?.threeRenderer?.resetToSystemView?.();
       return true;
     }
-    if (z.type === 'body') {
+    if (z.type === 'ground') {
+      // Decyzja 3: 🪖N = mapa TEGO ciała — droga powrotna desantu (naprawa `486982c`): `openPanel('colony', { colonyId })`.
+      // Własna kolonia — także aktywna kolonia (HUD idzie za graczem); cudze ciało — aktywna kolonia nietknięta (bramka D1).
+      const colMgr = K?.colonyManager;
+      const col = colMgr?.getColony?.(z.bodyId);
+      if (col && isPlayerColony(col)) colMgr.switchActiveColony?.(z.bodyId);
+      K?.overlayManager?.openPanel?.('colony', { colonyId: z.bodyId });
+      return true;
+    }
+    if (z.type === 'body' || z.type === 'queue') {
       const body = EntityManager.get(z.bodyId);
       if (body) clickObject(bodyTarget(body), env);
+      return true;
+    }
+    if (z.type === 'station') {
+      // Reguła U1: 1. klik = panel stacji (kamera stoi), 2. klik = najazd kamery; stacja z innego układu wg §7.8.
+      clickObject(stationTarget(z.stationId, EntityManager.get(z.stationId) ?? null, z.systemId), env);
       return true;
     }
     return true;
@@ -320,12 +396,17 @@ export class LeftOutliner {
   }
 
   updateHover(x, y, W, H, K = this._K()) {
-    const prev = this._hoverKey;
+    const prev = this._hoverKey, prevTip = this._tip?.text ?? null;
+    this._tip = null;
     if (!this.isOver(x, y, W, H, K)) this._hoverKey = null;
     else {
       const z = this._targetAt(x, y);
-      this._hoverKey = z ? `${z.type}:${z.systemId && z.type === 'system' ? z.systemId : (z.bodyId ?? '')}` : null;
+      const id = !z ? null : z.type === 'system' ? z.systemId : z.type === 'station' ? z.stationId : z.bodyId;
+      this._hoverKey = z ? `${z.type}:${id}` : null;
+      if (z?.type === 'ground') this._tip = { text: t('leftOutliner.groundUnits', z.count), x, y };
+      else if (z?.type === 'queue') this._tip = { text: t('leftOutliner.queue', z.count), x, y };
+      else if (z?.type === 'body' && z.recognized === false) this._tip = { text: t('leftOutliner.unrecognized', z.name), x, y };
     }
-    if (prev !== this._hoverKey) this._markDirty();
+    if (prev !== this._hoverKey || prevTip !== (this._tip?.text ?? null)) this._markDirty();
   }
 }

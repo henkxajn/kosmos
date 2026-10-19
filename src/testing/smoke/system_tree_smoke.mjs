@@ -261,6 +261,18 @@ header('T7  znaczniki 🪖N / ⏳N, nazwy kolonii (decyzja 3)');
     'T7c rodzaj obecności na ciele: kolonia / placówka gracza, kolonia AI (`foreign`)');
   ok(r('P1')?.name === 'Nowa Kolonia', 'T7d własna kolonia → nazwa KOLONII');
   ok(r('P2')?.name === 'Kepler c' && ai.name !== 'Kepler c', 'T7e kolonia AI → nazwa CIAŁA, nie nadana przez wroga (fixture rozjeżdża obie nazwy)');
+  // ciało z kolonią gracza przy fladze `explored = false` (niespójny zapis) — rozpoznane; ciało AI w tej samej sytuacji — „○”
+  B.push({ id: 'D9', type: 'planetoid', name: 'Plt-9', orbital: { a: 4.0 }, explored: false },
+         { id: 'D8', type: 'planetoid', name: 'Plt-8', orbital: { a: 5.0 }, explored: false });
+  const t2 = tree({
+    systems: [{ systemId: 'sys_home', galaxyStar: null }], activeSystemId: 'sys_home',
+    bodiesOf: (type) => B.filter((b) => b.type === type),
+    colonies: [{ planetId: 'D9', name: 'Plt-9', isOutpost: true, ownerEmpireId: null }, { planetId: 'D8', name: 'Plt-8', isOutpost: true, ownerEmpireId: 'emp_001' }],
+    systemOfBody: () => 'sys_home',
+  });
+  const r2 = (id) => (t2.systems[0]?.bodies ?? []).find((x) => x.id === id);
+  ok(r2('D9')?.recognized === true && r2('D8')?.recognized === false,
+    'T7f kolonia gracza ⇒ ciało rozpoznane (bez „○”) mimo `explored = false`; kolonia AI na nierozpoznanym — „○” zostaje (KONTROLA)');
 }
 
 // ═══ T8 ═══════════════════════════════════════════════════════════════════════

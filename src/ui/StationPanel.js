@@ -61,7 +61,10 @@ export class StationPanel extends BaseOverlay {
       window.KOSMOS?.panelDock?.unregister?.('station:' + sid);   // C2 — zdejmij belkę zniszczonej stacji
       if (sid === this._stationId) { this.hide(); this._float.minimized = false; this._markDirty(); }
     });
-    EventBus.on('body:deselected', () => {
+    EventBus.on('body:deselected', (p) => {
+      // ARKUSZ UI U2-3 (Finding 486): zamknięcie karty ciała przy przełączeniu układu NIE zamyka panelu stacji — panel
+      // przeżywa przełączenie jak dotąd (drugi klik reguły §7.8 w stację z innego układu przełącza układ, panel zostaje).
+      if (p?.reason === 'system_switch') return;
       if (this.visible) { this.hide(); this._markDirty(); }
     });
   }

@@ -69,6 +69,7 @@ import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
 import { LeftOutliner }   from '../ui/LeftOutliner.js';   // ARKUSZ UI U2 — lewy outliner (układy i ciała)
 import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
+import { syncBodyCardOnSystemSwitch } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 — Finding 486
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -743,6 +744,11 @@ export class UIManager {
       this._dirty = true;
     });
     EventBus.on('body:deselected', () => { this._selectedEntity = null; this._dirty = true; });
+    // ARKUSZ UI U2-3 (Finding 486): przełączenie układu zamyka kartę ciała spoza układu docelowego; karta ciała z układu
+    // docelowego zostaje, a renderer (przebudowa sceny wyzerowała jego zaznaczenie) dostaje je z powrotem — bez kamery.
+    EventBus.on('system:switched', ({ systemId } = {}) => {
+      syncBodyCardOnSystemSwitch(this._selectedEntity, systemId, (n, p) => EventBus.emit(n, p));
+    });
     EventBus.on('player:planetUpdated', ({ planet }) => {
       if (this._selectedEntity?.id === planet.id) { this._selectedEntity = planet; this._dirty = true; }
     });
@@ -2454,6 +2460,8 @@ export class UIManager {
 
     // ── Tooltip kolonii (Outliner) — na wierzchu (pomijaj gdy DOM overlay je zasłania)
     if (civMode && this._outliner && !this.overlayManager.isAnyOpen()) this._outliner.drawTooltip(ctx);
+    // ── Podpowiedź lewego outlinera (○, 🪖N, ⏳N — ARKUSZ UI U2-3); `drawTooltip` sprawdza widoczność (decyzja 4) ──
+    if (civMode && !globeOpen) this._leftOutliner.drawTooltip(ctx, W, H);
 
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();

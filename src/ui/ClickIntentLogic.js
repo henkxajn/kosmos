@@ -153,3 +153,26 @@ export function applyClickIntent(target, intent, { K = null, emit = null } = {})
 export function clickObject(target, env = {}) {
   return applyClickIntent(target, resolveClickIntent(target, readClickSelection(env.K)), env);
 }
+
+/**
+ * ARKUSZ UI U2-3 (Finding 486): karta ciała przy przełączeniu układu (wołane z `system:switched`, PO przebudowie sceny).
+ * Przebudowa (`ThreeRenderer.switchSystem` → `_disposeAllMeshes`) zeruje zaznaczenie renderera bez `body:deselected`,
+ * więc karta i renderer się rozjeżdżały. Reguła: karta ciała SPOZA układu docelowego się zamyka (`body:deselected`
+ * z `reason: 'system_switch'` — StationPanel go nie słucha: panel stacji przeżywa przełączenie jak dotąd); karta ciała
+ * Z układu docelowego zostaje, a renderer dostaje zaznaczenie z powrotem (`body:selected { focus: false }` — bez kamery;
+ * drugi klik reguły §7.8 dokłada potem swój `focus: true`). Reset widoku (Home, klik w bieżący układ) układu nie
+ * zmienia, więc karty nie dotyka.
+ * @param {object|null} entity — ciało na karcie (`UIManager._selectedEntity`)
+ * @param {string|null} systemId — układ docelowy
+ * @param {Function} [emit] — `EventBus.emit`
+ * @returns {'deselect'|'reselect'|null}
+ */
+export function syncBodyCardOnSystemSwitch(entity, systemId, emit = null) {
+  if (!entity || !systemId) return null;
+  if (systemIdOf(entity) !== systemId) {
+    emit?.('body:deselected', { reason: 'system_switch' });
+    return 'deselect';
+  }
+  emit?.('body:selected', { entity, focus: false });
+  return 'reselect';
+}

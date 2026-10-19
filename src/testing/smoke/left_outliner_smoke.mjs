@@ -27,6 +27,19 @@
 //       listą kolonii z belki i dziennikiem), kolejność rysowania (przed listą kolonii i pływającymi panelami), kółko,
 //       najechanie, bez podpowiedzi mapy 3D pod kolumną; panel statku z `MapInsets`; renderer — `leftW` kadru
 //
+// PINY (krok U2-3 — decyzja 3, Finding 486, §7.18):
+//   L8  wiersze ciał: glif kolonii gracza (🏛 z POP / ⛺ placówka), ⚑ przy kolonii AI, stacja gracza pod ciałem-matką,
+//       🪖N i ⏳N po prawej (strefy przed strefą wiersza)
+//   L9  🪖N → mapa TEGO ciała (`openPanel('colony', { colonyId })`): obce ciało — aktywna kolonia nietknięta; własne —
+//       aktywna kolonia przełączona (KONTROLA); ⏳N = klik w wiersz ciała; podpowiedzi ○ / 🪖N / ⏳N
+//   L10 wiersz stacji — reguła U1: 1. klik `station:selected`, 2. klik (panel otwarty) `station:focus`; stacja z innego
+//       układu wg §7.8; podświetlenie wiersza stacji w otwartym panelu
+//   L11 Finding 486 — `syncBodyCardOnSystemSwitch` (karta spoza układu docelowego → `body:deselected { reason }`; z układu
+//       docelowego → `body:selected { focus: false }`; bez karty → nic); StationPanel nie zamyka się przy tym
+//       odznaczeniu (KONTROLA: zwykłe odznaczenie zamyka); nasłuch `system:switched` w UIManagerze (pin źródłowy)
+//   L12 §7.18 — chipy układów nie rysują się (statki w dwóch układach — dawniej rząd chipów); plakietki flot zostają
+//       (KONTROLA)
+//
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -153,8 +166,9 @@ header('L2  draw — geometria (§7.17), nagłówek, wiersze, „○”');
   const bodies = (lo?._clickTargets ?? []).filter((z) => z.type === 'body').map((z) => z.bodyId);
   ok(bodies.join(' ') === 'P1 M1 D1', `L2e ciała tylko w rozwiniętym (bieżącym) układzie: P1, księżyc M1, planetoida D1 (jest ${bodies.join(' ')})`);
   const tM1 = target(lo, 'body', 'M1'), tP1 = target(lo, 'body', 'P1');
-  const txM1 = c.text.find((x) => x.s === 'Wancerzow'), txP1 = c.text.find((x) => x.s === 'Mstow');
-  ok(!!txM1 && !!txP1 && txM1.x > txP1.x && !!tM1 && !!tP1 && tM1.y > tP1.y, 'L2f księżyc wcięty pod planetą');
+  // pierwszy napis wiersza (glif albo nazwa) — wcięcie wiersza, niezależnie od glifu kolonii przed nazwą
+  const rowX = (z) => (z ? Math.min(...c.text.filter((x) => x.y === z.y + 12).map((x) => x.x)) : NaN);
+  ok(!!tM1 && !!tP1 && rowX(tM1) > rowX(tP1) && tM1.y > tP1.y, `L2f księżyc wcięty pod planetą (x ${rowX(tP1)} → ${rowX(tM1)})`);
   ok(text.includes('○') && !!c.text.find((x) => x.s === 'Plt-7' && x.fillStyle === THEME.textDim), 'L2g ciało nierozpoznane z „○” (decyzja 5 (b))');
   ok(text.includes('TOI-4493') && text.includes('Alioth'), 'L2h nazwy układów = nazwy gwiazd');
 }
@@ -355,6 +369,165 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   const tr = src('../../renderer/ThreeRenderer.js');
   ok(/leftW: civ \? getMapInsets\(window\.KOSMOS\)\.left : 0/.test(body(tr, '  _computeWatchFit(enc) {')),
     'L7j kadr „Obserwuj” (`_computeWatchFit`): `leftW` z `MapInsets`');
+}
+
+// ═══ wspólne dla L8–L10 (U2-3) ═══════════════════════════════════════════════════════════════════════════════════
+// Świat z kolonią AI, placówką gracza, stacją gracza i jednostkami naziemnymi gracza.
+const CA = { id: 'CA', type: 'planet', name: 'Alioth c', systemId: 'sys_A', orbital: { a: 2.0 }, explored: true };
+const U1 = { id: 'U1', type: 'planetoid', name: 'Plt-11', systemId: 'sys_home', orbital: { a: 3.0 }, explored: false };
+const OUT = { planetId: 'D1', name: 'Plt-7', isOutpost: true, ownerEmpireId: null, planet: D1 };
+const AIC = { planetId: 'CA', name: 'Alioth c [WRÓG]', isOutpost: false, ownerEmpireId: 'emp_001', planet: CA };
+const ST1 = { id: 'st1', type: 'station', name: 'Stacja Mstow', bodyId: 'P1', systemId: 'sys_home', ownerEmpireId: 'player',
+  depot: { inventory: new Map() }, modules: [], tier: 1, createdYear: 10 };
+const STB = { id: 'stB', type: 'station', name: 'Stacja Alioth', bodyId: 'PA', systemId: 'sys_A', ownerEmpireId: 'player',
+  depot: { inventory: new Map() }, modules: [], tier: 1, createdYear: 10 };
+const COLS3 = [...COLONIES, OUT, AIC];
+const GU3 = [{ planetId: 'CA' }, { planetId: 'CA' }, { planetId: 'P1' }];
+const world3 = () => {
+  resetWorld([CA, U1, ST1, STB]);
+  K.colonyManager.getAllColonies = () => COLS3;
+  K.colonyManager.getColony = (id) => COLS3.find((c) => c.planetId === id) ?? null;
+  K.stationSystem.getAllStations = () => [ST1, STB];
+  K.overlayManager = { openPanel: (id, o) => ops.push(['openPanel', id, o ?? null]) };
+};
+const restore3 = () => {
+  resetWorld();
+  K.colonyManager.getAllColonies = () => COLONIES;
+  K.colonyManager.getColony = (id) => COLONIES.find((c) => c.planetId === id) ?? null;
+  K.stationSystem.getAllStations = () => [];
+};
+const draw3 = (lo, queue = 0) => {
+  const ctx = recCtx();
+  const qBS = { serializeQueue: () => new Array(queue).fill(1), serializePendingQueue: () => [] };
+  COLONIES[0].buildingSystem = qBS;
+  lo?.draw?.(ctx, W, H, { colonies: COLS3, groundUnits: GU3 });
+  return ctx;
+};
+
+// ═══ L8 ═══════════════════════════════════════════════════════════════════════
+header('L8  wiersze ciał: glify kolonii, stacje, 🪖N / ⏳N (decyzja 3)');
+{
+  world3(); reset(); const lo = newLO(); if (lo) lo._expanded.set('sys_A', true);
+  const ctx = draw3(lo, 2);
+  const c = ctx._calls;
+  const rowText = (z) => (z ? c.text.filter((x) => x.y === z.y + 12).map((x) => x.s) : []);
+  const tP1 = target(lo, 'body', 'P1'), tD1 = target(lo, 'body', 'D1'), tCA = target(lo, 'body', 'CA');
+  ok(rowText(tP1).includes('🏛') && rowText(tD1).includes('⛺') && rowText(tCA).includes('⚑'),
+    `L8a SEDNO: glif na wierszu ciała — 🏛 kolonia gracza, ⛺ placówka gracza, ⚑ kolonia AI (P1 ${rowText(tP1).join(' ')} · D1 ${rowText(tD1).join(' ')} · CA ${rowText(tCA).join(' ')})`);
+  ok(rowText(tCA).includes('Alioth c') && !c.text.some((x) => x.s.includes('[WRÓG]')), 'L8b KONTROLA: kolonia AI — nazwa CIAŁA, nie nadana przez wroga (strażnik: przed U2-3 lista znała tylko nazwy ciał)');
+  const tS1 = (lo?._clickTargets ?? []).find((z) => z.type === 'station' && z.stationId === 'st1');
+  ok(!!tS1 && !!tP1 && tS1.y === tP1.y + 16 && c.text.some((x) => x.s === '🛰 Stacja Mstow'), 'L8c stacja gracza tuż pod ciałem-matką (🛰)');
+  const gCA = (lo?._clickTargets ?? []).find((z) => z.type === 'ground' && z.bodyId === 'CA');
+  const gP1 = (lo?._clickTargets ?? []).find((z) => z.type === 'ground' && z.bodyId === 'P1');
+  const qP1 = (lo?._clickTargets ?? []).find((z) => z.type === 'queue' && z.bodyId === 'P1');
+  ok(!!gCA && gCA.count === 2 && rowText(tCA).includes('🪖2') && !!gP1 && rowText(tP1).includes('🪖1'),
+    'L8d 🪖N przy ciele — 2 jednostki na kolonii AI (desant), 1 na własnej');
+  ok(!!qP1 && qP1.count === 2 && rowText(tP1).includes('⏳2') && !rowText(tCA).some((x) => x.startsWith('⏳')),
+    'L8e ⏳N przy kolonii gracza; przy kolonii AI — brak');
+  const zs = lo?._clickTargets ?? [];
+  ok(!!gCA && zs.indexOf(gCA) < zs.indexOf(tCA) && !!qP1 && zs.indexOf(qP1) < zs.indexOf(tP1) && gCA.x > 100,
+    'L8f strefy znaczników przed strefą wiersza (pierwsza trafiona), przy prawej krawędzi kolumny');
+  restore3();
+}
+
+// ═══ L9 ═══════════════════════════════════════════════════════════════════════
+header('L9  🪖N → mapa ciała (droga desantu), ⏳N, podpowiedzi');
+{
+  world3(); reset(); const lo = newLO(); if (lo) lo._expanded.set('sys_A', true);
+  draw3(lo, 2);
+  const gCA = (lo?._clickTargets ?? []).find((z) => z.type === 'ground' && z.bodyId === 'CA');
+  reset(); const r = gCA ? lo.hitTest(gCA.x + 2, gCA.y + 4, W, H) : null;
+  ok(r === true && JSON.stringify(ops) === '[["openPanel","colony",{"colonyId":"CA"}]]' && evs.length === 0,
+    'L9a SEDNO: 🪖N na obcym ciele → `openPanel(\'colony\', { colonyId })` TEGO ciała; aktywna kolonia nietknięta, bez zaznaczenia');
+  const gP1 = (lo?._clickTargets ?? []).find((z) => z.type === 'ground' && z.bodyId === 'P1');
+  reset(); if (gP1) lo.hitTest(gP1.x + 2, gP1.y + 4, W, H);
+  ok(JSON.stringify(ops) === '[["switchActiveColony","P1"],["openPanel","colony",{"colonyId":"P1"}]]',
+    'L9b KONTROLA: 🪖N na własnej kolonii → aktywna kolonia przełączona (HUD za graczem) + jej mapa');
+  const qP1 = (lo?._clickTargets ?? []).find((z) => z.type === 'queue' && z.bodyId === 'P1');
+  reset(); if (qP1) lo.hitTest(qP1.x + 2, qP1.y + 4, W, H);
+  ok(evs.length === 1 && evs[0][0] === 'body:selected' && evs[0][1]?.entity?.id === 'P1' && evs[0][1]?.focus === false && ops.length === 0,
+    'L9c ⏳N — klik jak w wiersz ciała (zaznaczenie, kamera stoi)');
+  if (gCA) lo.updateHover(gCA.x + 2, gCA.y + 4, W, H);
+  ok(lo?._tip?.text === t('leftOutliner.groundUnits', 2), `L9d podpowiedź 🪖N (${lo?._tip?.text})`);
+  if (qP1) lo.updateHover(qP1.x + 2, qP1.y + 4, W, H);
+  ok(lo?._tip?.text === t('leftOutliner.queue', 2), `L9e podpowiedź ⏳N (${lo?._tip?.text})`);
+  const tU1 = target(lo, 'body', 'U1');
+  if (tU1) lo.updateHover(tU1.x + 30, tU1.y + 4, W, H);
+  ok(lo?._tip?.text === t('leftOutliner.unrecognized', 'Plt-11'), `L9f podpowiedź „○” — ciało nierozpoznane bez kolonii (${lo?._tip?.text})`);
+  const tP1 = target(lo, 'body', 'P1');
+  if (tP1) lo.updateHover(tP1.x + 30, tP1.y + 4, W, H);
+  ok(lo?._tip === null, 'L9g KONTROLA: ciało rozpoznane bez znaczników — bez podpowiedzi');
+  setLocale('en');
+  ok(t('leftOutliner.groundUnits', 2) !== 'leftOutliner.groundUnits' && t('leftOutliner.groundUnits', 2) !== t('leftOutliner.queue', 2),
+    'L9h podpowiedzi także po angielsku');
+  setLocale('pl');
+  restore3();
+}
+
+// ═══ L10 ══════════════════════════════════════════════════════════════════════
+header('L10 wiersz stacji — reguła U1 (§7.8), podświetlenie');
+{
+  world3(); reset(); const lo = newLO(); if (lo) lo._expanded.set('sys_A', true);
+  draw3(lo);
+  const tS = (id) => (lo?._clickTargets ?? []).find((z) => z.type === 'station' && z.stationId === id) ?? null;
+  reset(); clickAt(lo, tS('st1'));
+  ok(JSON.stringify(evs) === '[["station:selected",{"stationId":"st1"}]]', 'L10a stacja, 1. klik → `station:selected` (panel, kamera stoi)');
+  reset(); K.stationPanel.visible = true; K.stationPanel._stationId = 'st1';
+  clickAt(lo, tS('st1'));
+  ok(JSON.stringify(evs) === '[["station:focus",{"stationId":"st1"}]]', 'L10b stacja w otwartym panelu, 2. klik → `station:focus`');
+  const ctx = draw3(lo);
+  const z1 = tS('st1');
+  ok(!!z1 && ctx._calls.rects.some((r) => r.y === z1.y && r.fillStyle === THEME.accentMed), 'L10c wiersz stacji w otwartym panelu podświetlony');
+  reset(); K.stationPanel._stationId = 'stB'; draw3(lo);
+  clickAt(lo, tS('stB'));
+  ok(JSON.stringify(ops) === '[["switch","sys_A"]]' && JSON.stringify(evs) === '[["station:focus",{"stationId":"stB"}]]',
+    'L10d stacja z INNEGO układu, 2. klik → przełączenie układu, potem kamera');
+  K.stationPanel.visible = false; K.stationPanel._stationId = null;
+  restore3();
+}
+
+// ═══ L11 ══════════════════════════════════════════════════════════════════════
+header('L11 Finding 486 — karta ciała przy przełączeniu układu');
+{
+  let CI = null; try { CI = await import('../../ui/ClickIntentLogic.js'); } catch { /* */ }
+  const f = CI?.syncBodyCardOnSystemSwitch;
+  ok(typeof f === 'function', 'L11-0 `syncBodyCardOnSystemSwitch` istnieje');
+  const run = (entity, sys) => { const out = []; const r = typeof f === 'function' ? f(entity, sys, (n, p) => out.push([n, p])) : undefined; return { r, out }; };
+  const a = run(P1, 'sys_A');
+  ok(a.r === 'deselect' && JSON.stringify(a.out) === '[["body:deselected",{"reason":"system_switch"}]]',
+    'L11a SEDNO: karta ciała SPOZA układu docelowego → `body:deselected { reason: \'system_switch\' }`');
+  const b = run(PA, 'sys_A');
+  ok(b.r === 'reselect' && b.out.length === 1 && b.out[0][0] === 'body:selected' && b.out[0][1]?.entity === PA && b.out[0][1]?.focus === false,
+    'L11b karta ciała Z układu docelowego → zostaje, renderer dostaje zaznaczenie z powrotem (`focus: false`, kamera stoi)');
+  const c = run(null, 'sys_A');
+  ok(c.r === null && c.out.length === 0, 'L11c KONTROLA: bez karty — nic');
+  const { StationPanel } = await import('../../ui/StationPanel.js');
+  const sp = new StationPanel(); sp.visible = true; sp._stationId = 'st1';
+  EventBus.emit('body:deselected', { reason: 'system_switch' });
+  ok(sp.visible === true, 'L11d StationPanel NIE zamyka się przy odznaczeniu z przełączenia układu (jak przed 486)');
+  EventBus.emit('body:deselected');
+  ok(sp.visible === false, 'L11e KONTROLA: zwykłe odznaczenie (pustka / ✕ karty) zamyka panel stacji jak dotąd');
+  const ui = src('../../scenes/UIManager.js');
+  ok(/EventBus\.on\('system:switched', \(\{ systemId \} = \{\}\) => \{\s*syncBodyCardOnSystemSwitch\(this\._selectedEntity, systemId,/.test(ui),
+    'L11f UIManager: nasłuch `system:switched` stosuje regułę do karty (`_selectedEntity`)');
+}
+
+// ═══ L12 ══════════════════════════════════════════════════════════════════════
+header('L12 §7.18 — chipy układów wyłączone, plakietki flot zostają');
+{
+  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
+  const mk = (id, sys) => ({ id, name: id, shipId: 'hull_frigate', systemId: sys, status: 'idle', mission: null,
+    position: { state: 'orbiting', x: 0, y: 0, dockedAt: null }, fuel: { current: 10, max: 10 }, modules: [] });
+  const vs = [mk('v1', 'sys_home'), mk('v2', 'sys_home'), mk('v3', 'sys_A')];
+  K.vesselManager = { getAllVessels: () => vs, getVessel: (id) => vs.find((v) => v.id === id) ?? null };
+  K.uiPrefs = {};
+  const tr = { getVesselScreenPosition: (id) => (id === 'v1' ? { x: 400, y: 300 } : id === 'v2' ? { x: 404, y: 300 } : null),
+    getCameraDistance: () => 50 };
+  reset(); const m = new MapLabelLayer();
+  let threw = null; try { m.drawVesselLabels(recCtx(), tr, W, H, 1); } catch (e) { threw = e; }
+  ok(!threw, `L12-0 KONTROLA: \`drawVesselLabels\` bez wyjątku (${threw?.message ?? 'ok'})`);
+  ok(m._chipZones.length === 0, `L12a SEDNO: statki gracza w dwóch układach — ŻADEN chip układu (strefy chipów: ${m._chipZones.length})`);
+  ok(m._vesselHitZones.length >= 1, `L12b KONTROLA: plakietka floty (klaster dwóch statków) nadal rysowana (${m._vesselHitZones.length})`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

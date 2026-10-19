@@ -2562,6 +2562,9 @@ export default {
 
   // === Left outliner (UI sheet U2) ===
   'leftOutliner.systems': 'SYSTEMS [{0}]',
+  'leftOutliner.unrecognized': '{0} — unidentified body',
+  'leftOutliner.groundUnits': 'Ground units: {0} — click: body map',
+  'leftOutliner.queue': 'Queued: {0}',
 
   // === TopBar ===
   'topBar.resources': 'RESOURCES',
