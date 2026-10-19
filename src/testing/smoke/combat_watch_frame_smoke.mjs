@@ -20,7 +20,8 @@
 //   T4  kadr 3 na 2 (rozpiętość ~0,2 AU): wszyscy w prostokącie, dystans w granicach
 //   T5  granice: rozrzut znikomy → MIN_DIST; rozrzut 3 AU → MAX_DIST i `fits: false`
 //   T6  wysoki panel walki NAD środkiem ekranu: kadr i tak nad panelem (kotwica w środku prostokąta, nie ekranu)
-//   T7  prostokąt bezpieczny: paski UI, panel boczny i panel walki odjęte; zbyt mały → cały ekran z marginesem
+//   T7  prostokąt bezpieczny: paski UI, panele boczne (lewy outliner — ARKUSZ UI U2-2, prawy Outliner) i panel walki
+//       odjęte; zbyt mały → cały ekran z marginesem
 //   T8  limit billboardu: na ekranie ≤ limit; poniżej limitu rozmiar bez zmian (dzisiejszy wygląd z daleka)
 //   T9  model przy kadrze 1 na 1 — nie mniejszy niż dziś przy „Obserwuj” (d 1,21: ~10 px); liczby z prawdziwej sceny — sonda
 //   T10 `CombatHUD.getPanelRect` (wykonanie): prostokąt narysowanego panelu; brak przy braku starć i po minimalizacji
@@ -115,7 +116,8 @@ header('T2  rzut modułu = rzut niezależny');
   assert(maxErr < 1e-6, 'T2 rzut modułu = macierz widoku · perspektywa (3 punkty, ≤ 1e-6 px)');
 }
 
-const safe1 = call('watchSafeRect', { W: VW, H: VH, uiScale: UI, hudRect: HUD, topBarH: 46, bottomH: 42, rightW: 150 });
+// ARKUSZ UI U2-2 (przecelowanie T7a): prostokąt jak w rendererze — z lewym outlinerem nad mapą (`leftW` 150).
+const safe1 = call('watchSafeRect', { W: VW, H: VH, uiScale: UI, hudRect: HUD, topBarH: 46, bottomH: 42, rightW: 150, leftW: 150 });
 const fitOf = (points, safe = safe1) => call('fitWatchFrame', { points, theta: TH, phi: PH, fovDeg: FOV, aspect: ASP, W: VW, H: VH, safe });
 const proj = (p, fit) => refProject(p, { target: fit.target, dist: fit.dist, theta: TH, phi: PH, fovDeg: FOV, aspect: ASP, Wpx: VW, Hpx: VH });
 /** środek prostokąta rzutu punktów (rzut niezależny) i jego odległość od środka prostokąta bezpiecznego [px] */
@@ -207,8 +209,10 @@ header('T7  prostokąt bezpieczny');
 {
   const r = safe1;
   const m = C.MARGIN_PX ?? 40;
-  assert(!!r && r.x0 === m && r.x1 === VW - 150 * UI - m && r.y0 === 46 * UI + m && r.y1 === HUD.y * UI - m && r.fallback === false,
-    'T7a paski UI (góra 46, dół 42), Outliner (150) i panel walki odjęte, margines 40 px');
+  assert(!!r && r.x0 === 150 * UI + m && r.x1 === VW - 150 * UI - m && r.y0 === 46 * UI + m && r.y1 === HUD.y * UI - m && r.fallback === false,
+    'T7a paski UI (góra 46, dół 42), lewy outliner (150), prawy Outliner (150) i panel walki odjęte, margines 40 px');
+  const noLeft = call('watchSafeRect', { W: VW, H: VH, uiScale: UI, hudRect: HUD, topBarH: 46, bottomH: 42, rightW: 150 });
+  assert(!!noLeft && noLeft.x0 === m && noLeft.x1 === r?.x1, 'T7a2 KONTROLA: lewy outliner ukryty (`leftW` 0) — lewa krawędź = margines, jak przed U2');
   const noHud = call('watchSafeRect', { W: VW, H: VH, uiScale: UI, hudRect: null, topBarH: 46, bottomH: 42, rightW: 150 });
   assert(!!noHud && noHud.y1 === VH - 42 * UI - m, 'T7b bez panelu walki — dół nad dolnymi paskami');
   const tiny = call('watchSafeRect', { W: VW, H: VH, uiScale: UI, hudRect: { x: 0, y: 60, w: 1000, h: 500 }, topBarH: 46, bottomH: 42, rightW: 150 });

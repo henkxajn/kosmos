@@ -11,7 +11,7 @@ import { COSMIC }         from '../config/LayoutConfig.js';
 import { DistanceUtils }  from '../utils/DistanceUtils.js';
 import { showRenameModal } from '../ui/ModalInput.js';
 import EventBus            from '../core/EventBus.js';
-import { CIV_SIDEBAR_W }  from '../ui/CivPanelDrawer.js';
+import { getMapInsets }   from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { t }              from '../i18n/i18n.js';
 import { computeFloatingPlacement } from '../ui/BottomContextLogic.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
@@ -89,7 +89,9 @@ export class BottomContext {
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
   _bounds(W, H) {
     const civMode = window.KOSMOS?.civMode;
-    const ox = civMode ? CIV_SIDEBAR_W : 0;
+    // ARKUSZ UI U2-2 — lewa krawędź za lewym outlinerem (`MapInsets`, gdy widoczny nad mapą). Prawe 150 px (szuflada
+    // dzisiejszego prawego Outlinera) i górny pas — jak dotąd; prawe wcięcie przechodzi na `MapInsets` w U3-2.
+    const ox = getMapInsets().left;
     const oy = TOP_BAR_H;
     const resBar = civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0; // Slice 3 — pasek surowców nad BottomBar
     // UI v3 — w civMode rezerwa dolna = pasek nawigacji + listwa dziennika; poza = dolny pasek.

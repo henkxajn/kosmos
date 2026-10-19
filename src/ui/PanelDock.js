@@ -10,7 +10,7 @@
 
 import { THEME, bgAlpha }   from '../config/ThemeConfig.js';
 import { COSMIC }           from '../config/LayoutConfig.js';
-import { CIV_SIDEBAR_W }    from './CivPanelDrawer.js';
+import { getMapInsets }     from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { computeDockSlots } from './PanelDockLogic.js';
 
 const BAR_W = 156;
@@ -44,12 +44,11 @@ export class PanelDock {
 
   // Geometria doku — lewy-dół obszaru mapy, nad paskiem nawigacji (civMode) / dolnym paskiem.
   _geom(W, H) {
-    const civMode = window.KOSMOS?.civMode;
-    const leftX = (civMode ? CIV_SIDEBAR_W : 0) + 8;
-    const navReserved = (civMode
-      ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
-      : COSMIC.BOTTOM_BAR_H)
-      + (window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0);   // Faza 4 — belki nad Dokiem taktycznym
+    // Wcięcia obszaru mapy — jedno źródło (`MapInsets`, ARKUSZ UI U2-2): belki za lewym outlinerem (gdy widoczny
+    // nad mapą), nad paskiem nawigacji + listwą dziennika / dolnym paskiem (+ Dok taktyczny).
+    const ins = getMapInsets();
+    const leftX = ins.left + 8;
+    const navReserved = ins.bottom;
     // #6/#7 (review) — panele floty (FleetGroupPanel/FleetCommandPanel) też siedzą w lewym-dole;
     // jeśli widoczne, dok stackuje się NAD nimi (nie nakłada się i nie kradnie im klików).
     let floorY = H - navReserved - 6;   // dolna krawędź najniższej belki

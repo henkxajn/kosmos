@@ -72,8 +72,9 @@ const EMP = 'emp_t';
 const VIEW = { W: 1584, H: 805, uiScale: 1.1181, fovDeg: 55, theta: 0.3, phi: 1.1 };
 const HUD_PX = { x: 479.087, y: 445.545, w: 624.993, h: 302.993 };
 const hudLogical = { x: HUD_PX.x / VIEW.uiScale, y: HUD_PX.y / VIEW.uiScale, w: HUD_PX.w / VIEW.uiScale, h: HUD_PX.h / VIEW.uiScale };
+// ARKUSZ UI U2-2 (przecelowanie): prostokąt jak w rendererze po U2-2 — z lewym outlinerem nad mapą (`leftW` 150).
 const SAFE = W.watchSafeRect({ W: VIEW.W, H: VIEW.H, uiScale: VIEW.uiScale, hudRect: hudLogical, topBarH: COSMIC.TOP_BAR_H,
-  bottomH: COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H, rightW: COSMIC.OUTLINER_W });
+  bottomH: COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H, rightW: COSMIC.OUTLINER_W, leftW: COSMIC.OUTLINER_W });
 const target6 = (pts) => W.watchTargetAt({ points: pts, d: 6, theta: VIEW.theta, phi: VIEW.phi, fovDeg: VIEW.fovDeg,
   aspect: VIEW.W / VIEW.H, W: VIEW.W, H: VIEW.H, safe: SAFE });
 // rzut punktów przy celu `t` i dystansie `d` (kamera = t + zc · d) — px ekranu

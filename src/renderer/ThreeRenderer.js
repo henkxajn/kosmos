@@ -42,6 +42,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
+import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 — lewe wcięcie kadru „Obserwuj” (lewy outliner)
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { THEME } from '../config/ThemeConfig.js';
@@ -6821,6 +6822,7 @@ export class ThreeRenderer {
       W, H, uiScale: window.KOSMOS?.uiScale ?? 1, hudRect: window.KOSMOS?.combatHud?.getPanelRect?.() ?? null,
       topBarH: COSMIC.TOP_BAR_H, bottomH: civ ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : COSMIC.BOTTOM_BAR_H,
       rightW: civ ? COSMIC.OUTLINER_W : 0,
+      leftW: civ ? getMapInsets(window.KOSMOS).left : 0,   // ARKUSZ UI U2-2 — lewy outliner (0 gdy ukryty)
     });
     const fit = fitWatchFrame({ points: pts, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
       aspect: this.camera.aspect, W, H, safe });

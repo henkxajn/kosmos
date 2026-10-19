@@ -26,6 +26,7 @@ import { summarizeFleetGroup, buildRosterRows, countActionable } from './FleetGr
 import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
+import { getMapInsets }    from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 
 // Wymiary
 const PW           = 340;  // szerokość karty
@@ -111,12 +112,11 @@ export class FleetGroupPanel extends BaseOverlay {
     this._hitZones = [];
     const C = THEME;
 
-    // Rezerwa dolna (wzór CombatHUD): w civMode = pasek nawigacji + listwa dziennika.
-    const bottomRes = (window.KOSMOS?.civMode
-      ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
-      : (COSMIC.BOTTOM_BAR_H ?? 32))
-      + (window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0);   // Faza 4 — podnieś NAD Dok taktyczny
-    const px = (COSMIC.CIV_SIDEBAR_W ?? 0) + 8;
+    // Wcięcia obszaru mapy — jedno źródło (`MapInsets`, ARKUSZ UI U2-2): dół = pasek nawigacji + listwa dziennika
+    // (+ Dok taktyczny), lewa krawędź = za lewym outlinerem (gdy widoczny nad mapą).
+    const ins = getMapInsets();
+    const bottomRes = ins.bottom;
+    const px = ins.left + 8;
 
     // ── Tryb zwinięty — chip „⛬ Zazn. N" ──
     if (this._minimized) {

@@ -2560,6 +2560,9 @@ export default {
   'outliner.epoch': '⭐ Epoch: {0}',
   'outliner.popInfo': '👤 POP: {0}/{1}  Prosperity: {2}',
 
+  // === Left outliner (UI sheet U2) ===
+  'leftOutliner.systems': 'SYSTEMS [{0}]',
+
   // === TopBar ===
   'topBar.resources': 'RESOURCES',
   'topBar.stocks': 'STOCKS',

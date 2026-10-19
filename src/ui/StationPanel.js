@@ -21,6 +21,7 @@ import { STATION_MODULES }        from '../data/StationModuleData.js';
 import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import { resolveStationTabHost } from '../utils/StationGroup.js';   // C6c-3 — „Zarządzaj" → zakładka Stacja
+import { getMapInsets }          from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 
 // Wymiary
 const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
@@ -111,9 +112,12 @@ export class StationPanel extends BaseOverlay {
 
     // Kotwica: ekranowa pozycja stacji + offset; null (za kamerą) → fallback lewy-górny róg mapy.
     const b  = this._getOverlayBounds(W, H);
-    // Faza 4 — Dok taktyczny zajmuje dół: skurcz obszar clampu, by panel nie chował się pod pasem.
-    const dockRes = window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0;
-    if (dockRes > 0) b.oh = Math.max(40, b.oh - dockRes);
+    // Wcięcia obszaru mapy — jedno źródło (`MapInsets`, ARKUSZ UI U2-2): za lewym outlinerem (gdy widoczny nad mapą),
+    // nad paskiem nawigacji i Dokiem taktycznym. Góra — z granic overlayu (pas zakładek grupy przy otwartym overlayu).
+    const ins = getMapInsets();
+    b.ox = ins.left;
+    b.ow = Math.max(80, W - ins.left - ins.right);
+    b.oh = Math.max(40, H - b.oy - ins.bottom);
     const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);
     let ax, ay;
     if (sp) { ax = sp.x + 18;     ay = sp.y - PH / 2; }

@@ -34,6 +34,7 @@ import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal 
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
+import { getMapInsets }    from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 
 const PW           = 340;
 const PAD          = 8;
@@ -121,11 +122,11 @@ export class FleetCommandPanel extends BaseOverlay {
     const C = THEME;
     const members = this._members(fleet);
 
-    const bottomRes = (window.KOSMOS?.civMode
-      ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
-      : (COSMIC.BOTTOM_BAR_H ?? 32))
-      + (window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0);   // Faza 4 — podnieś NAD Dok taktyczny
-    const px = (COSMIC.CIV_SIDEBAR_W ?? 0) + 8;
+    // Wcięcia obszaru mapy — jedno źródło (`MapInsets`, ARKUSZ UI U2-2): dół = pasek nawigacji + listwa dziennika
+    // (+ Dok taktyczny), lewa krawędź = za lewym outlinerem (gdy widoczny nad mapą).
+    const ins = getMapInsets();
+    const bottomRes = ins.bottom;
+    const px = ins.left + 8;
 
     // ── Tryb zwinięty — chip ──
     if (this._minimized) {

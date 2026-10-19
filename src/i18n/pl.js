@@ -2561,6 +2561,9 @@ export default {
   'outliner.epoch': '⭐ Epoka: {0}',
   'outliner.popInfo': '👤 POP: {0}/{1}  Prosperity: {2}',
 
+  // === Lewy outliner (ARKUSZ UI U2) ===
+  'leftOutliner.systems': 'UKŁADY [{0}]',
+
   // === TopBar ===
   'topBar.resources': 'SUROWCE',
   'topBar.stocks': 'ZASOBY',

@@ -90,14 +90,15 @@ export function projectPoint(p, cam, basis, { tanHalf, aspect, W, H }) {
 }
 
 /**
- * Prostokąt bezpieczny kadru (px ekranu): ekran bez górnego paska, dolnych pasków, panelu bocznego (Outliner) i panelu
- * walki, z marginesem. Panel walki (`hudRect`, w jednostkach LOGICZNYCH UI) leży na dole na środku — prostokąt kończy się
- * nad nim. Zbyt mały prostokąt → cały ekran z marginesem (lepiej zahaczyć o panel niż zgubić statki).
+ * Prostokąt bezpieczny kadru (px ekranu): ekran bez górnego paska, dolnych pasków, paneli bocznych (lewy outliner —
+ * ARKUSZ UI U2-2 `leftW`; prawy Outliner — `rightW`) i panelu walki, z marginesem. Panel walki (`hudRect`, w jednostkach
+ * LOGICZNYCH UI) leży na dole na środku — prostokąt kończy się nad nim. Zbyt mały prostokąt → cały ekran z marginesem
+ * (lepiej zahaczyć o panel niż zgubić statki).
  */
-export function watchSafeRect({ W, H, uiScale = 1, hudRect = null, topBarH = 0, bottomH = 0, rightW = 0,
+export function watchSafeRect({ W, H, uiScale = 1, hudRect = null, topBarH = 0, bottomH = 0, rightW = 0, leftW = 0,
   marginPx = COMBAT_WATCH.MARGIN_PX, minSide = COMBAT_WATCH.MIN_SAFE_SIDE_PX }) {
   const s = Number.isFinite(uiScale) && uiScale > 0 ? uiScale : 1;
-  const x0 = marginPx;
+  const x0 = (Number.isFinite(leftW) && leftW > 0 ? leftW : 0) * s + marginPx;
   const x1 = W - rightW * s - marginPx;
   const y0 = topBarH * s + marginPx;
   let bottom = H - bottomH * s;
