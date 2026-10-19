@@ -8,8 +8,14 @@
 // Tooltipy per token zachowane (port z BottomResourceBar — wartości z danych kolonii,
 // bez globalnego getResourceBreakdown). Substrat Canvas 2D; zdarzenia z window → UIManager.
 //
-// Wzorzec slide/hover/scroll: NavDrawer (stepSlide + _hovered/_hideAt + clampScroll),
-// ale PIONOWO (panel zjeżdża w dół, clip-reveal). Non-exclusive: rysowany PO overlayManager.
+// Wzorzec slide/scroll: NavDrawer (stepSlide + clampScroll), ale PIONOWO (panel zjeżdża w dół,
+// clip-reveal). Non-exclusive: rysowany PO overlayManager.
+//
+// ARKUSZ UI, U0-2 (D-UI-11, UI_PLAN §7.13): lista kolonii rozwija się KLIKNIĘCIEM, nie najechaniem.
+// Klik w pasmo poza nazwą = rozwiń / zwiń; klik w nazwę = panel kolonii (i lista się zwija — wybór
+// zakończony); klik poza listą = zwiń BEZ pochłaniania kliku. Hover zostaje wyłącznie dla tooltipów
+// tokenów. Kliki przechwycone wcześniej przez inne panele (UIManager woła ten drawer w środku łańcucha)
+// łapie nasłuch `click` w fazie przechwytywania na window, podpinany tylko na czas otwarcia listy.
 
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
@@ -20,12 +26,11 @@ import EntityManager         from '../core/EntityManager.js';
 import { t, getName }        from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, hasResourceIcon } from './ResourceIcons.js';
 import { TIME_W }            from './TopBar.js';
-import { stepSlide, navIsAnimating, clampScroll, pointInRect, NAV_HIDE_DELAY }
+import { stepSlide, navIsAnimating, clampScroll, pointInRect }
   from './NavDrawerLogic.js';
 
 // UI v3 — pasek surowców: STAŁE pasmo z wierszem aktywnej kolonii (zawsze na wierzchu) +
-// hover rozwija PONIŻEJ dodatkowe kolonie. Pasmo/panel kończą się PRZED chipem czasu
-// (prawy-górny róg, TIME_W), żeby go nie zakrywać. Po hoverze pozostałe kolonie znikają,
+// klik (U0-2) rozwija PONIŻEJ dodatkowe kolonie. Po zwinięciu pozostałe kolonie znikają,
 // aktywna zostaje.
 const ROW_H      = 24;                   // wysokość wiersza kolonii
 const PAD        = 8;
@@ -67,8 +72,10 @@ function _fmtDelta(n) {
 export class TopResourceDrawer {
   constructor() {
     this._slideProgress = 0;   // 0=schowany, 1=wysunięty
-    this._hovered       = false;
-    this._hideAt        = 0;
+    this._open          = false; // U0-2: stan „lista rozwinięta" — zmienia go WYŁĄCZNIE klik (D-UI-11)
+    this._hovered       = false; // kursor nad pasmem / panelem — tylko wyróżnienie chevronu i tooltipy
+    this._outsideClick  = null;  // nasłuch `click` (capture) na window — podpięty tylko gdy lista otwarta
+    this._extraCount    = 0;     // liczba kolonii poza aktywną (z ostatniej klatki) — 0 = nie ma czego rozwijać
     this._scrollY       = 0;
     this._maxScroll     = 0;
     this._triggerRect   = null;  // pasek 6px (zawsze hoverowalny)
@@ -82,8 +89,36 @@ export class TopResourceDrawer {
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
-  isAnimating() { return navIsAnimating(this._slideProgress, this._hideAt); }
+  isAnimating() { return navIsAnimating(this._slideProgress, 0); }
   isOpen() { return this._slideProgress > 0.001; }
+
+  // U0-2 — jedyne miejsce zmiany stanu „otwarte". Na czas otwarcia podpina nasłuch `click` w fazie
+  // przechwytywania na window: klik POZA pasmem i listą zwija listę, ale niczego nie pochłania (zdarzenie
+  // idzie dalej — do UIManagera, paneli i mapy). Klik w pasmo / listę obsługuje handleClick.
+  _setOpen(open) {
+    open = !!open;
+    if (open === this._open) return;
+    this._open = open;
+    this._markDirty();
+    const w = typeof window !== 'undefined' ? window : null;
+    if (open && !this._outsideClick && typeof w?.addEventListener === 'function') {
+      this._outsideClick = (e) => {
+        const s = w.KOSMOS?.uiScale || 1;
+        const x = e.clientX / s, y = e.clientY / s;
+        if (!this._isInside(x, y)) this._setOpen(false);
+      };
+      w.addEventListener('click', this._outsideClick, true);
+    } else if (!open && this._outsideClick) {
+      if (typeof w?.removeEventListener === 'function') w.removeEventListener('click', this._outsideClick, true);
+      this._outsideClick = null;
+    }
+  }
+
+  // Punkt w paśmie albo w rozwiniętej liście (współrzędne LOGICZNE UI).
+  _isInside(x, y) {
+    if (pointInRect(this._triggerRect, x, y)) return true;
+    return this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y);
+  }
 
   // ── Kolonie gracza (aktywna pierwsza) ──────────────────────────────────────
   _playerColonies() {
@@ -183,10 +218,9 @@ export class TopResourceDrawer {
   }
 
   // ── Rysowanie ───────────────────────────────────────────────────────────
-  // STAŁE pasmo (aktywna kolonia, zawsze) + hover-expand dodatkowych kolonii poniżej.
+  // STAŁE pasmo (aktywna kolonia, zawsze) + rozwinięcie dodatkowych kolonii poniżej (klik, U0-2).
   draw(ctx, W, H) {
-    if (this._hideAt > 0 && Date.now() >= this._hideAt) { this._hideAt = 0; this._hovered = false; }
-    this._slideProgress = stepSlide(this._slideProgress, this._hovered ? 1 : 0);
+    this._slideProgress = stepSlide(this._slideProgress, this._open ? 1 : 0);
 
     this._hitItems = [];
     this._colonyRects = [];
@@ -203,6 +237,8 @@ export class TopResourceDrawer {
 
     const cols = this._playerColonies();
     const extraCount = Math.max(0, cols.length - 1);
+    this._extraCount = extraCount;
+    if (extraCount === 0 && this._open) this._setOpen(false);   // nie ma czego rozwijać (np. utrata kolonii)
     const bandRowPw = bandPw - (extraCount > 0 ? HINT_W : 0);   // rezerwa na chevron przy >1 kolonii
     let anyBrownout = false;
 
@@ -268,7 +304,7 @@ export class TopResourceDrawer {
     // ── Chevron „▾/▴ +N" na prawym końcu PASMA aktywnego (sygnał rozwijalności) ──
     if (extraCount > 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = this._hovered ? THEME.accent : THEME.textSecondary;
+      ctx.fillStyle = (this._hovered || this._open) ? THEME.accent : THEME.textSecondary;
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
       const glyph = this._slideProgress > 0.5 ? '▴' : `▾${extraCount}`;
       ctx.fillText(glyph, px + bandPw - 4, panelTop + baseH / 2);
@@ -593,12 +629,9 @@ export class TopResourceDrawer {
   handleMouseMove(x, y) {
     const overTrigger = pointInRect(this._triggerRect, x, y);
     const overPanel   = this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y);
-    if (overTrigger || overPanel) {
-      if (!this._hovered) this._markDirty();
-      this._hovered = true; this._hideAt = 0;
-    } else if (this._hovered && this._hideAt === 0) {
-      this._hideAt = Date.now() + NAV_HIDE_DELAY;
-    }
+    // U0-2 (D-UI-11): hover NIE rozwija listy — tylko wyróżnienie chevronu i tooltipy tokenów.
+    const hovered = overTrigger || overPanel;
+    if (hovered !== this._hovered) { this._hovered = hovered; this._markDirty(); }
 
     // Tooltip per token — działa nad pasmem stałym (zawsze) ORAZ rozwiniętym panelem.
     this._hoverTip = null;
@@ -616,10 +649,11 @@ export class TopResourceDrawer {
   handleClick(x, y) {
     const overBand  = pointInRect(this._triggerRect, x, y);
     const overPanel = this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y);
-    if (!overBand && !overPanel) return false;
+    // U0-2 (§7.13): klik poza pasmem i listą = zwiń, ale klik NIE jest pochłaniany (idzie dalej).
+    if (!overBand && !overPanel) { this._setOpen(false); return false; }
 
     // Klik nazwy kolonii (pasmo stałe lub rozwinięte) → przełącz aktywną (swap systemów)
-    // + otwórz panel kolonii. Wzór z Outliner._handleClick (colony).
+    // + otwórz panel kolonii. Wzór z Outliner._handleClick (colony). Wybór kończy rozwinięcie listy.
     for (const c of this._colonyRects) {
       if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) {
         const colMgr = window.KOSMOS?.colonyManager;
@@ -631,11 +665,13 @@ export class TopResourceDrawer {
           colMgr.switchActiveColony(c.planetId);
         }
         window.KOSMOS?.overlayManager?.openPanel?.('colony');
+        this._setOpen(false);
         return true;
       }
     }
-    // Klik w pasmo poza nazwą → wymuś rozwinięcie + absorbuj (nie spadaj na overlay/3D).
-    this._hovered = true; this._hideAt = 0; this._markDirty();
+    // Klik w pasmo poza nazwą → rozwiń / zwiń (D-UI-11). Klik w rozwiniętą listę poza nazwą — nic.
+    // Oba pochłaniane (wewnątrz prostokąta belki — nie spadają na overlay/3D).
+    if (overBand) this._setOpen((this._extraCount ?? 0) > 0 ? !this._open : false);
     return true;
   }
 
