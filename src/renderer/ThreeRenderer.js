@@ -41,6 +41,7 @@ import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
+import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { THEME } from '../config/ThemeConfig.js';
@@ -586,6 +587,11 @@ export class ThreeRenderer {
     this._selectedEntityId = null;
     this._focusVesselId = null;  // śledzenie statku w locie
     this._focusStationId = null; // S3.3b-S4a — focus kamery na stację (camera-only, bez selekcji)
+    // ARKUSZ UI U1-3 (D-UI-5): pamięć pingu wroga (decyzja 2d — drugi klik = focus), wynik pickera kliku dla sceny (jeden
+    // picker na gest) i fokus statku czekający na sprite (po przełączeniu układu model GLB wstawia się asynchronicznie).
+    this._pingedEnemyId      = null;
+    this.lastClickPick       = null;
+    this._pendingVesselFocus = null;
 
     // ── Referencja do kontrolera kamery (ustawiana z zewnątrz) ─
     this._cameraController = null;
@@ -1010,6 +1016,7 @@ export class ThreeRenderer {
     // pierwszy klik reguły emituje `focus: false` → zaznaczenie i karta ciała, kamera STOI.
     EventBus.on('body:selected', safe(({ entity, focus = true }) => {
       this._selectedEntityId = entity.id;
+      this._pingedEnemyId = null;   // U1-3: inne zaznaczenie — pamięć pingu wroga gaśnie
       if (focus !== false) {
         this._focusEntityId = entity.id;
         this._focusVesselId = null; // przerwij śledzenie statku
@@ -1056,6 +1063,7 @@ export class ThreeRenderer {
     // statku, przy promieniu tarczy 3,6). „Obserwuj” i auto-fokus starcia — bez zmian (kończą się jak dotąd).
     EventBus.on('body:deselected', safe(() => {
       this._selectedEntityId = null;
+      this._pingedEnemyId = null;
       this._focusEntityId = null;
       this._focusVesselId = null;
       this._focusStationId = null;
@@ -1083,6 +1091,7 @@ export class ThreeRenderer {
     // Fleet Command Console (Slice 0) — mirror zaznaczenia z UIManager
     // (wskaźnik = ramki 2D w UIManager._drawSelectionBrackets).
     EventBus.on('ui:selectionChanged', safe(({ vesselId }) => {
+      this._pingedEnemyId = null;   // U1-3: inne zaznaczenie — pamięć pingu wroga gaśnie
       this._selectedVesselId = vesselId ?? null;
     }));
 
@@ -1166,6 +1175,7 @@ export class ThreeRenderer {
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
     EventBus.on('vessel:focus', safe(({ vesselId }) => {
       if (!this._cameraController) return;
+      this._pendingVesselFocus = null;
       const entry = this._vessels.get(vesselId);
       if (entry) {
         // Statek w locie/orbicie — śledź go (co klatkę, bez lerpa)
@@ -1201,8 +1211,26 @@ export class ThreeRenderer {
             // Zaznacz ciało — feedback wizualny (orbita, glow)
             if (entity) EventBus.emit('body:selected', { entity });
           }
+        } else if (vessel?.position && Number.isFinite(vessel.position.x) && Number.isFinite(vessel.position.y)
+                   && (vessel.systemId === undefined ? 'sys_home' : vessel.systemId) === (window.KOSMOS?.activeSystemId ?? 'sys_home')) {
+          // ARKUSZ UI U1-3 (§7.8, Finding 478): statek bez sprite'a w OGLĄDANYM układzie — po przełączeniu układu model
+          // GLB wstawia się asynchronicznie (obietnica loadera, także z pamięci podręcznej). Cel kamery od razu na pozycji
+          // logicznej; śledzenie przejmie sprite, gdy stanie (`_applyPendingVesselFocus`), o ile kamery nie przejął
+          // w międzyczasie nikt inny (cel bez zmian — wzór „Obserwuj”). Dawniej: cichy no-op.
+          const cc = this._cameraController;
+          this._focusEntityId = null; this._focusVesselId = null; this._focusStationId = null; this._focusEncounterId = null;
+          cc.setMinDist(0.05);
+          cc.focusOnInstant(S(vessel.position.x), S(vessel.position.y), 0.3);
+          cc.setTargetDist(Math.min(cc._targetDist, 0.9));
+          const g = cc._goalTarget;
+          this._pendingVesselFocus = { vesselId, goal: { x: g.x, y: g.y, z: g.z } };
         }
       }
+    }));
+
+    // ARKUSZ UI U1-3: otwarcie panelu stacji to inne zaznaczenie — pamięć pingu wroga gaśnie (decyzja 2d).
+    EventBus.on('station:selected', safe(() => {
+      this._pingedEnemyId = null;
     }));
 
     // Centruj kamerę na stacji (klik w scenie 3D) — TYLKO kamera, BEZ selekcji/panelu (S3.3b-S4a).
@@ -1468,6 +1496,8 @@ export class ThreeRenderer {
     this._clickable = [];
     this._focusEntityId = null;
     this._selectedEntityId = null;
+    this._pingedEnemyId = null;
+    this._pendingVesselFocus = null;
     this._focusVesselId = null;
     this._focusStationId = null;
     this._star = null;
@@ -3112,13 +3142,31 @@ export class ThreeRenderer {
 
   // ── Kliknięcie (raycasting) ───────────────────────────────────
   // screenX/Y w CSS-pikselach (e.clientX) — normalizujemy przez window.innerWidth/H
-  handleClick(screenX, screenY) {
+  // ARKUSZ UI U1-3 (D-UI-5, decyzja 2 a–d): reguła klik/focus (`ClickIntentLogic`) — 1. klik w statek / stację / ciało
+  // = zaznaczenie + okno, kamera STOI; 2. klik w ten sam obiekt = focus; wróg: 1. klik ping, 2. klik focus; gwiazda:
+  // focus = domyślny widok układu. `mods.ctrl` — CTRL+klik własnego statku przełącza zbiór (robi to scena), bez kamery.
+  // JEDEN picker na gest: wynik (`lastClickPick`) czyta `GameScene._handleTacticalLeftClick` w tym samym geście —
+  // dawniej scena miała własne pickery (`_getVesselAtScreen` bez preferencji statku najechanego; raycast sceny, który
+  // przy kliku obok statku zwracał „pustkę” — zmierzone, U1).
+  handleClick(screenX, screenY, mods = {}) {
+    const K = window.KOSMOS;
+    const env = { K, emit: (name, payload) => EventBus.emit(name, payload) };
+    // Obiekt w scenie leży w OGLĄDANYM układzie (scena rysuje tylko jego) — cel kliku bierze ten układ wprost.
+    const sys = readClickSelection(K).activeSystemId;
     // Najpierw vessel/wrak — jeśli hover ma ustawiony, klik jest zamiarowy.
-    // Bez tego klik w pobliżu statku (ale obok mesh'a planet) trafiałby do
-    // `body:deselected` → kamera lata na gwiazdę.
-    const vid = this._hoverVesselId ?? this._getVesselAtScreen?.(screenX, screenY, 40);
+    const vid = this._pickVesselForClick(screenX, screenY);
+    this.lastClickPick = { vesselId: vid ?? null };
     if (vid) {
-      EventBus.emit('vessel:focus', { vesselId: vid });
+      const v = K?.vesselManager?.getVessel?.(vid);
+      if (v && isEnemyVessel(v)) {
+        clickObject({ type: 'enemy', id: vid, systemId: sys }, env);     // decyzja 2d: ping celu / focus
+      } else if (!mods.ctrl) {
+        // Własny statek: zaznaczenie robi scena (CTRL, tryb celowania) z TEGO pickera; tu kamera — tylko gdy klik
+        // jest DRUGI (statek jest bieżącym zaznaczeniem, lider przy N == 1).
+        const target = { type: 'vessel', id: vid, systemId: sys };
+        const intent = resolveClickIntent(target, readClickSelection(K));
+        if (intent !== CLICK_INTENT.SELECT) applyClickIntent(target, intent, env);
+      }
       return true;
     }
 
@@ -3126,8 +3174,8 @@ export class ThreeRenderer {
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
 
-    // Stacja orbitalna — focus kamery (BEZ selekcji; mesh nie w _clickable). PRZED ciałami,
-    // bo stacja orbituje blisko planety (klik w stację nie ma zaznaczać planety za nią). S3.3b-S4a.
+    // Stacja orbitalna (mesh nie w _clickable) — PRZED ciałami, bo stacja orbituje blisko planety (klik w stację nie ma
+    // zaznaczać planety za nią). S3.3b-S4a. 1. klik = StationPanel, 2. klik = kamera (`station:focus`).
     if (this._stations.size > 0) {
       const sMeshes = [];
       for (const e of this._stations.values()) if (e.mesh) sMeshes.push(e.mesh);
@@ -3137,8 +3185,7 @@ export class ThreeRenderer {
         while (o && !o.userData?.stationId) o = o.parent;      // walk-up do Group z userData
         if (o?.userData?.stationId) {
           const sid = o.userData.stationId;
-          EventBus.emit('station:focus',    { stationId: sid }); // kamera (S3.3b-S4a, bez zmian)
-          EventBus.emit('station:selected', { stationId: sid }); // S4-2 — otwiera StationPanel
+          clickObject({ type: 'station', id: sid, systemId: sys }, env);
           return true;
         }
       }
@@ -3147,10 +3194,27 @@ export class ThreeRenderer {
     const hits = this._ray.intersectObjects(this._clickable);
     if (hits.length > 0) {
       const entity = this._entityByUUID.get(hits[0].object.uuid);
-      if (entity) { EventBus.emit('body:selected', { entity }); return true; }
+      if (entity) { clickObject({ type: 'body', id: entity.id, entity, systemId: sys }, env); return true; }
     }
     EventBus.emit('body:deselected');
     return false;
+  }
+
+  // ARKUSZ UI U1-3 — picker statku dla kliku: najechany statek, inaczej najbliższy w promieniu 40 px; wyłącznie sprite'y
+  // WIDOCZNE (wróg ukryty mgłą wojny nie jest celem kliku — ping / kamera zdradzałyby jego położenie).
+  _pickVesselForClick(sx, sy) {
+    const hv = this._hoverVesselId;
+    if (hv && this._vessels.get(hv)?.sprite?.visible) return hv;
+    return this._getVesselAtScreen?.(sx, sy, 40, true) ?? null;
+  }
+
+  // ARKUSZ UI U1-3 (decyzja 2d) — pierwszy klik we wrogi statek: ping celu, kamera stoi; ping zapamiętany jako
+  // „bieżące zaznaczenie” wroga (wroga nie da się zaznaczyć — `addToSelection` go odrzuca), więc drugi klik = focus.
+  // Pamięć gaśnie przy każdym innym zaznaczeniu (statek, ciało, stacja, odznaczenie) i zmianie układu.
+  pingEnemyTarget(vesselId) {
+    if (!vesselId) return;
+    this.pingVessel(vesselId);
+    this._pingedEnemyId = vesselId;
   }
 
   // Zwraca encję pod kursorem BEZ emitowania eventów (do dblclick)
@@ -3474,7 +3538,7 @@ export class ThreeRenderer {
 
   // Screen-space picking statków: rzutuj pozycję wrapera/sprite na ekran
   // i zwróć vesselId najbliższego w promieniu thresholdPx. Bez modyfikacji sceny.
-  _getVesselAtScreen(sx, sy, thresholdPx = 28) {
+  _getVesselAtScreen(sx, sy, thresholdPx = 28, visibleOnly = false) {
     if (!this._vessels || this._vessels.size === 0) return null;
     const canvas = this.renderer?.domElement;
     const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
@@ -3484,7 +3548,7 @@ export class ThreeRenderer {
     let bestDist = thresholdPx * thresholdPx;
     for (const [vid, entry] of this._vessels) {
       const obj = entry?.sprite;
-      if (!obj) continue;
+      if (!obj || (visibleOnly && !obj.visible)) continue;   // U1-3: klik — tylko widoczne
       obj.getWorldPosition(tmp);
       tmp.project(this.camera);
       // Poza frustum (głównie: za kamerą) — pomiń
@@ -4429,6 +4493,7 @@ export class ThreeRenderer {
         const entry = this._vessels.get(vessel.id);
         this._applyVesselIntelVisibility(vessel, entry);
       }
+      this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
 
       // Wrak — ustaw orbit cache natychmiast, na wyższej warstwie Y niż żywe statki.
       // Flag `isWreck` + `initAngle` pozwalają _calcVisualOrbitFromCache użyć
@@ -4631,6 +4696,18 @@ export class ThreeRenderer {
     if (isEnemy && GAME_CONFIG.FEATURES.m4EnemyGhosts) {
       this._applyVesselIntelVisibility(vessel, this._vessels.get(vessel.id));
     }
+    this._applyPendingVesselFocus(vessel.id);   // U1-3 — fokus, o który poproszono, zanim sprite stał
+  }
+
+  // ARKUSZ UI U1-3 — sprite statku stanął: dokończ fokus zgłoszony, zanim istniał (`vessel:focus` po przełączeniu
+  // układu), o ile cel kamery jest wciąż ten, który wtedy ustawiono (nikt inny kamery nie przejął).
+  _applyPendingVesselFocus(vesselId) {
+    const p = this._pendingVesselFocus;
+    if (!p || p.vesselId !== vesselId) return;
+    this._pendingVesselFocus = null;
+    const g = this._cameraController?._goalTarget;
+    if (!g || Math.abs(g.x - p.goal.x) > 1e-6 || Math.abs(g.y - p.goal.y) > 1e-6 || Math.abs(g.z - p.goal.z) > 1e-6) return;
+    EventBus.emit('vessel:focus', { vesselId });
   }
 
   /**

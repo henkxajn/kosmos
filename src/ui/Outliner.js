@@ -21,6 +21,7 @@ import { isPlayerColony }  from '../utils/ColonyOwnership.js';
 import { ARCHETYPE_ICONS } from '../data/unitArchetypes.js';
 import { GROUND_UNITS }    from '../data/GroundUnitData.js';
 import { groupGroundUnitsByBody } from './OutlinerGroundLogic.js';
+import { clickObject, vesselTarget, bodyTarget, stationTarget } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
@@ -690,14 +691,16 @@ export class Outliner {
     for (const t of this._clickTargets) {
       if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
         if (t.type === 'vessel') {
-          // Klik = zaznacz (→ FleetGroupPanel, komenda z mapy/PPM) + kamera; CTRL+klik = multi-toggle.
-          // Działa też dla ZADOKOWANYCH (brak sprite'a 3D) — jedyna droga ich zaznaczenia.
-          const um = window.KOSMOS?.uiManager;
+          // ARKUSZ UI U1-3 (D-UI-5): 1. klik = zaznaczenie + okno statku (kamera stoi); 2. klik w zaznaczony statek =
+          // kamera (zadokowany → ciało hangaru); statek z INNEGO układu: 1. klik bez przełączania, 2. klik = przełączenie
+          // układu + kamera (§7.8, Finding 478). CTRL+klik = multi-toggle (bez zmian). Działa też dla ZADOKOWANYCH
+          // (brak sprite'a 3D) — jedyna droga ich zaznaczenia.
+          const K = window.KOSMOS;
+          const um = K?.uiManager;
           if (this._lastMouseMods?.ctrl && um?.toggleSelection) {
             um.toggleSelection(t.vesselId);
           } else {
-            um?.setSelectedVesselId?.(t.vesselId);
-            EventBus.emit('vessel:focus', { vesselId: t.vesselId });   // kamera (docked → ciało hangaru)
+            clickObject(vesselTarget(t.vesselId, K?.vesselManager?.getVessel?.(t.vesselId)), { K, emit: (n, p) => EventBus.emit(n, p) });
           }
           return true;
         }
@@ -728,27 +731,21 @@ export class Outliner {
             if (colMgr) colMgr.switchActiveColony(t.planetId);
             window.KOSMOS?.overlayManager?.openPanel('colony');
           } else {
-            // Klik na nazwę kolonii → focus kamery na planecie (nie otwieramy globusa)
-            // Przełącz układ jeśli kolonia w innym systemie
-            const colSysId = colony.systemId ?? 'sys_home';
-            const curSysId = window.KOSMOS?.starSystemManager?.activeSystemId;
-            if (curSysId && colSysId !== curSysId) {
-              window.KOSMOS.starSystemManager.switchActiveSystem(colSysId);
-            }
-            if (colMgr) colMgr.switchActiveColony(t.planetId);
-            EventBus.emit('colony:switched', { planetId: t.planetId });
-            EventBus.emit('camera:focusTarget', { targetId: t.planetId });
+            // ARKUSZ UI U1-3 (D-UI-5): klik na nazwę = ciało kolonii przez regułę — 1. klik zaznacza (karta ciała, kamera
+            // stoi), 2. klik = kamera; kolonia w INNYM układzie: 1. klik bez przełączania, 2. klik = przełączenie układu +
+            // kamera (§7.8). Wiersz NIE zmienia aktywnej kolonii (§7.10 — robi to lista w górnej belce i otwarcie kolonii:
+            // ikona 🗺 wyżej, „Mapa ciała” w karcie).
+            const K = window.KOSMOS;
+            const body = EntityManager.get(t.planetId) ?? colony.planet;
+            clickObject({ ...bodyTarget(body), systemId: colony.systemId ?? 'sys_home' }, { K, emit: (n, p) => EventBus.emit(n, p) });
           }
           return true;
         }
         if (t.type === 'station') {
-          // Przełącz układ jeśli stacja w innym systemie, potem otwórz panel + najazd kamery.
-          const ssMgr = window.KOSMOS?.starSystemManager;
-          if (ssMgr && t.systemId && ssMgr.activeSystemId !== t.systemId) {
-            ssMgr.switchActiveSystem(t.systemId);
-          }
-          EventBus.emit('station:selected', { stationId: t.stationId });   // StationPanel
-          EventBus.emit('station:focus',    { stationId: t.stationId });   // najazd kamery
+          // ARKUSZ UI U1-3 (D-UI-5): 1. klik = panel stacji (kamera stoi), 2. klik = najazd kamery; stacja z INNEGO
+          // układu: 1. klik bez przełączania, 2. klik = przełączenie układu + kamera (§7.8).
+          const K = window.KOSMOS;
+          clickObject(stationTarget(t.stationId, null, t.systemId ?? 'sys_home'), { K, emit: (n, p) => EventBus.emit(n, p) });
           return true;
         }
         if (t.type === 'expedition') {

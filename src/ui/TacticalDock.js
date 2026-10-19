@@ -21,6 +21,7 @@ import {
   DOCK_SIDE_GAP_FRAC, TACTICAL_DOCK_CLOCK_CLEARANCE,
 } from '../config/LayoutConfig.js';
 import { t }                from '../i18n/i18n.js';
+import { CLICK_INTENT, clickObject, vesselTarget } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5, decyzja 2c)
 import { toneColor, buildTimelineRows, buildShipEntry } from './FleetPictureLogic.js';
 import {
   DOCK_TABS, DEFAULT_DOCK_TAB, computeDockLayout,
@@ -37,7 +38,6 @@ import {
 const TACTICAL_DOCK_BG_ALPHA = 0.32;
 
 const DOCK_ROW_H      = 22;    // wysokość wiersza LISTY / lane'u OSI (px logiczne)
-const DOCK_DBLCLICK_MS = 300;  // okno dwukliku wiersza → vessel:focus (inaczej select+ping)
 const DOCK_ROW_FUEL_W = 44;    // mini-pasek paliwa w wierszu
 const DOCK_TL_GUTTER  = 128;   // szerokość lewej rynny OSI (glif + nazwa)
 const DOCK_TL_HEADER  = 14;    // pasek podziałki lat OSI (nad lane'ami)
@@ -68,8 +68,6 @@ export class TacticalDock extends BaseOverlay {
     this._drawnRect = null;
     this._rowCount    = 0;                // z ostatniego draw (clamp scrolla w handleWheel)
     this._visibleRows = 0;
-    this._lastRowClickMs = 0;            // detekcja dwukliku wiersza
-    this._lastRowClickId = null;
     this._pendingScrollToId = null;      // auto-scroll do statku wybranego na mapie
     this._syncPrefs();
 
@@ -638,20 +636,15 @@ export class TacticalDock extends BaseOverlay {
         // a akcje zbiorcze ma FleetGroupPanel (wisi nad pasem).
         if (this._lastMouseMods?.ctrl && um?.toggleSelection) {
           um.toggleSelection(id);
-          this._lastRowClickMs = 0; this._lastRowClickId = null;   // CTRL nie liczy się do dwukliku
           this._markDirty();
           return;
         }
-        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-        const isDouble = (now - this._lastRowClickMs < DOCK_DBLCLICK_MS) && this._lastRowClickId === id;
-        this._lastRowClickMs = now;
-        this._lastRowClickId = id;
-        if (isDouble) {
-          EventBus.emit('vessel:focus', { vesselId: id });     // dwuklik → dolot kamery + śledzenie
-        } else {
-          um?.setSelectedVesselId?.(id);                        // klik → selekcja (współdzielona)
-          window.KOSMOS?.threeRenderer?.pingVessel?.(id);       // + ping FX (kamera nietknięta)
-        }
+        // ARKUSZ UI U1-3 (D-UI-5, decyzja 2c): „drugi klik”, nie dwuklik z oknem 300 ms — 1. klik = zaznaczenie
+        // (współdzielone) + ping FX, kamera stoi; 2. klik w zaznaczony statek (lider przy N == 1) = dolot kamery
+        // i śledzenie, bez względu na odstęp czasu.
+        const K = window.KOSMOS;
+        const intent = clickObject(vesselTarget(id, K?.vesselManager?.getVessel?.(id)), { K, emit: (n, p) => EventBus.emit(n, p) });
+        if (intent === CLICK_INTENT.SELECT) K?.threeRenderer?.pingVessel?.(id);
         this._markDirty();
         return;
       }

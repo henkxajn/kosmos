@@ -76,10 +76,13 @@ const {
   const { TacticalDock } = await import('../../ui/TacticalDock.js');
 
   let toggled = null, selected = null, pinged = null, focusEmit = null;
+  let selSet = [];   // U1-3 (4.6): stan zaznaczenia w stubie — reguła klik/focus czyta go z UIManagera
   globalThis.KOSMOS.uiManager = {
     _dirty: false,
     toggleSelection(id) { toggled = id; },
-    setSelectedVesselId(id) { selected = id; },
+    setSelectedVesselId(id) { selected = id; selSet = id == null ? [] : [id]; },
+    getSelectedVesselIds: () => [...selSet],
+    getSelectedVesselId: () => selSet[0] ?? null,
   };
   globalThis.KOSMOS.threeRenderer = { pingVessel(id) { pinged = id; } };
   EventBus.on('vessel:focus', (e) => { focusEmit = e?.vesselId; });
@@ -103,10 +106,16 @@ const {
   T('4.4 zwykły klik → pingVessel', pinged === 'v2');
   T('4.5 zwykły klik NIE toggluje', toggled === null);
 
-  // Dwuklik (drugi klik tego samego id w oknie) → vessel:focus.
-  selected = null;
+  // 4.6 — PRZECELOWANE (ARKUSZ UI U1-3, decyzja 2c, zgoda właściciela): „drugi klik”, nie dwuklik z oknem 300 ms.
+  // Drugi klik w ZAZNACZONY statek (lider przy N == 1) → vessel:focus — także 2 s po pierwszym (dawny warunek
+  // „ten sam id w oknie 300 ms” dawał tu zaznaczenie zamiast kamery).
+  const realNow = performance.now.bind(performance);
+  const t0 = realNow();
+  performance.now = () => t0 + 2000;
+  selected = null; pinged = null;
   dock._onHit({ type: 'row', data: { id: 'v2' } });
-  T('4.6 dwuklik → vessel:focus', focusEmit === 'v2');
+  performance.now = realNow;
+  T('4.6 drugi klik w zaznaczony statek (po 2 s, bez okna czasu) → vessel:focus', focusEmit === 'v2' && selected === null && pinged === null);
 
   // getReservedHeight — 4f-1 uwzględnia prześwit zegara.
   dock.visible = true; dock._collapsed = false;

@@ -5481,11 +5481,11 @@ export class GameScene {
 
       // Najpierw UI, potem 3D
       if (!this.uiManager.handleClick(x, y)) {
-        this.threeRenderer.handleClick(x, y);
-        // M3 P1.2: tactical map left click → selection / deselect via raycaster.
-        // Wykonywane PO threeRenderer.handleClick (dblclick focus dalej działa).
+        // ARKUSZ UI U1-3 (D-UI-5): renderer stosuje regułę klik/focus i pickuje statek RAZ; scena zaznacza statek
+        // z TEGO samego wyniku (`lastClickPick`) — jeden picker na gest.
+        this.threeRenderer.handleClick(x, y, { ctrl: e.ctrlKey });
         // wasDrag już sprawdzone wyżej (ignored gdy camera drag) — tutaj dodatkowych guardów nie ma.
-        this._handleTacticalLeftClick(e);
+        this._handleTacticalLeftClick(e, this.threeRenderer.lastClickPick);
       }
     });
 
@@ -5595,44 +5595,24 @@ export class GameScene {
       }).catch(() => { /* ignore */ });
     });
 
-    // Dwuklik na planetę/księżyc → otwórz ColonyOverlay
-    // Dwuklik na vessel/wrak → fokus kamery (bliski zoom, śledzenie)
+    // ARKUSZ UI U1-3 (D-UI-5, decyzja 2b): dwuklik NIE otwiera już ColonyOverlay i NIE fokusuje statku — „drugi klik”
+    // w ten sam obiekt (część każdego dwukliku) daje focus kamery, a mapę kolonii otwiera „Mapa ciała” w karcie ciała
+    // (`BottomContext._doAction`) i klawisz H. Zostaje wyłącznie poza trybem cywilizacji: planeta z życiem → kolonizuj.
     window.addEventListener('dblclick', (e) => {
+      if (window.KOSMOS?.civMode) return;
       if (this.planetScene?.isOpen) return;
       if (this.uiManager?.overlayManager?.isAnyOpen()) return;
-      // Faza 4 (Dok taktyczny) + higiena: dwuklik nad panelem UI (dok/panele floty/stacji)
-      // NIE fokusuje statku „pod spodem" — 3D picking tylko nad odsłoniętą mapą.
       if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
-
-      // Najpierw vessel — hover state łapie go niezależnie od rozmiaru sprite.
-      // Screen-space picking zwiększamy do 50px (sprite ma często <5px na ekranie).
-      const vesselId = this.threeRenderer._hoverVesselId
-                    ?? this.threeRenderer._getVesselAtScreen?.(e.clientX, e.clientY, 50);
-      if (vesselId) {
-        EventBus.emit('vessel:focus', { vesselId });
-        return;
-      }
 
       let entity = this.threeRenderer.getEntityAtScreen(e.clientX, e.clientY);
       if (!entity || (entity.type !== 'planet' && entity.type !== 'moon')) {
-        const focusId = this.threeRenderer._focusEntityId;
-        if (focusId) entity = EntityManager.get(focusId);
+        const selId = this.threeRenderer._selectedEntityId;   // U1-2: zaznaczenie ciała (nie cel kamery)
+        if (selId) entity = EntityManager.get(selId);
       }
       if (!entity) return;
 
-      // Tryb cywilizacyjny + ciało z kolonią → otwórz ColonyOverlay z animacją
-      if (window.KOSMOS?.civMode && this.colonyManager.hasColony(entity.id)) {
-        this.colonyManager.switchActiveColony(entity.id);
-        const screenPos = this.threeRenderer.getScreenPosition(entity.id);
-        this.uiManager.overlayManager.openPanel('colony', {
-          originX: screenPos?.x ?? window.innerWidth / 2,
-          originY: screenPos?.y ?? window.innerHeight / 2,
-        });
-        return;
-      }
-
       // Planeta z życiem (lifeScore > 80) → kolonizuj
-      if (!window.KOSMOS?.civMode && entity.type === 'planet' && entity.lifeScore > 80) {
+      if (entity.type === 'planet' && entity.lifeScore > 80) {
         EventBus.emit('planet:colonize', { planet: entity });
       }
     });
@@ -5977,7 +5957,7 @@ export class GameScene {
     });
   }
 
-  _handleTacticalLeftClick(e) {
+  _handleTacticalLeftClick(e, pick = null) {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
@@ -5989,26 +5969,22 @@ export class GameScene {
     const targetId = e.target?.id;
     const isMapCanvas = (targetId === 'three-canvas' || targetId === 'planet-canvas');
     // Fleet Command Console (Slice 0) — mapa 3D NIE jest już read-only dla selekcji.
-    // Zwykły klik = zaznacz OWN statek przez NIEZAWODNY screen-space picker
-    // (_getVesselAtScreen; raycast tonie na sub-pikselowych GLB skala 0.002-0.012).
+    // Zwykły klik = zaznacz OWN statek przez NIEZAWODNY screen-space picker renderera
+    // (`_pickVesselForClick`; raycast tonie na sub-pikselowych GLB skala 0.002-0.012).
     // Picker mode (POI/patrol) padają do worldPoint flow niżej. Rollback: fcConsole=false → no-op.
+    // Cel kliku w zwykłej grze to `#planet-canvas` (z-index 4 nad `#event-layer`; `display: block` z reguły
+    // `#game-container canvas`) — ta gałąź; gałąź z raycastem sceny niżej biegnie, gdy celem jest inny element, np.
+    // ekran ładowania tuż po wczytaniu (zmierzone, U1).
+    // ARKUSZ UI U1-3 (D-UI-5): statek pod kursorem z JEDNEGO pickera — wyniku `ThreeRenderer.handleClick` w tym samym
+    // geście; obie gałęzie zaznaczają z niego. Dawniej scena miała własne: tu `_getVesselAtScreen(40)` (najbliższy,
+    // a renderer brał najpierw statek najechany), niżej raycast sceny (przy kliku obok statku „pustka” → odznaczenie,
+    // podczas gdy renderer fokusował kamerę — zmierzone). Slice 8: CTRL+klik = przełączenie zbioru.
+    const vid = pick?.vesselId ?? null;
+    const multi = !!(GAME_CONFIG.FEATURES?.fcMultiSelect && e.ctrlKey);
     if (isMapCanvas) {
       if (!GAME_CONFIG.FEATURES?.fcConsole) return;
       if (!this.uiManager?.isPickerActive?.()) {
-        const tr = this.threeRenderer;
-        const vid = tr?._getVesselAtScreen?.(e.clientX, e.clientY, 40);
-        // Slice 8 — CTRL+klik = toggle do zbioru (multi-select); inaczej single-select.
-        const multi = GAME_CONFIG.FEATURES?.fcMultiSelect && e.ctrlKey;
-        if (vid) {
-          const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
-          if (v && !isEnemyVessel(v)) {
-            if (multi) this.uiManager.toggleSelection(vid);
-            else       this.uiManager.setSelectedVesselId(vid);
-            return;
-          }
-          if (v) return;  // wrogi statek pod kursorem — nie zaznaczamy (P1.2 semantyka), bez deselect
-        }
-        if (!multi) this.uiManager.clearSelection();  // klik w pustkę/ciało → deselekcja (CTRL+pustka zachowuje zbiór)
+        this._selectFromClickPick(vid, multi, null);
         return;
       }
       // picker aktywny → kontynuuj do worldPoint flow niżej (NIE return)
@@ -6049,12 +6025,27 @@ export class GameScene {
       return;  // NIE robić selection/deselect w picker mode
     }
 
-    if (target.type === 'ownVessel') {
-      this.uiManager.setSelectedVesselId(target.entityId);
-    } else if (target.type === 'empty') {
-      this.uiManager.clearSelection();
+    // Cel kliku inny niż canvas mapy (np. ekran ładowania): statek z pickera renderera; raycast sceny rozstrzyga już
+    // wyłącznie „pustka czy ciało” (pustka → odznaczenie zbioru; ciało / POI → zbiór bez zmian, jak dotąd).
+    this._selectFromClickPick(vid, multi, target);
+  }
+
+  // ARKUSZ UI U1-3 — zaznaczenie statku z wyniku pickera renderera (jeden picker na gest). Własny: CTRL → przełączenie
+  // zbioru, inaczej pojedyncze zaznaczenie (renderer już zdecydował, czy to drugi klik = kamera). Wróg: bez zaznaczenia
+  // i bez odznaczenia (ping / kamera — renderer, decyzja 2d). Bez statku: gałąź canvas (`target` null — zwykła gra,
+  // także klik w ciało, jak dotąd) albo pustka z raycastu → odznaczenie zbioru, CTRL zachowuje zbiór; ciało / POI /
+  // inny obiekt trafiony raycastem sceny → zbiór bez zmian (jak dotąd).
+  _selectFromClickPick(vid, multi, target) {
+    if (vid) {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
+      if (v && !isEnemyVessel(v)) {
+        if (multi) this.uiManager.toggleSelection(vid);
+        else       this.uiManager.setSelectedVesselId(vid);
+      }
+      return;
     }
-    // POI/planet/enemyVessel — left-click no-op w P1.2 (tooltip w P1.5).
+    if (multi) return;
+    if (!target || target.type === 'empty') this.uiManager.clearSelection();
   }
 
   _handleTacticalRightClick(e) {

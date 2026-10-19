@@ -28,6 +28,15 @@
 //       odznaczenie → śledzenie zakończone, zero ruchu. Piny źródłowe: `_focusEntityId` czytane wyłącznie przez
 //       `_updateCameraFocus`; siedem miejsc wizualizacji czyta `_selectedEntityId`; blokada podglądu obserwatorium
 //       nietknięta (kontrola).
+//
+// Krok U1-3: producenci reguły — mapa 3D (`ThreeRenderer.handleClick`; jeden picker na gest, scena zaznacza z jego
+// wyniku), dwuklik bez ColonyOverlay i bez `vessel:focus` (2b), plakietki i etykiety mapy, dzisiejszy Outliner (statek,
+// kolonia bez zmiany aktywnej kolonii — §7.10, stacja; obiekt z innego układu — §7.8), karta ciała z doku, wróg (2d),
+// Dok taktyczny (2c). „KONTROLA” = zachowanie, które U1 zostawia (zielone po obu stronach).
+//   T10 WYKONANIE `Outliner.hitTest` · T11 `MapLabelLayer.handleClick` · T12 `TacticalDock._onHit` · T13 `BottomContext`
+//   T14 `ThreeRenderer.handleClick` i T15 `GameScene._handleTacticalLeftClick` (wycięte ze źródła, atrapa `this`) ·
+//   T16 dwuklik (wycięty słuchacz) · T17 fokus statku bez sprite'a po przełączeniu układu · T18 pamięć pingu wroga ·
+//   T19 picker kliku tylko widocznych sprite'ów.
 // Uruchom: node src/testing/smoke/click_focus_rule_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -389,6 +398,347 @@ header('T9  U1-2: zaznaczenie ciała ≠ cel kamery (słuchacze ThreeRenderer wy
   ok(/if \(this\._observatoryPreviewActive\) this\._cameraController\.focusOnInstant\(x, z, y\);/.test(ucf)
     && /if \(this\._observatoryPreviewActive\) this\._updateCameraFocus\(\);/.test(tr),
     'T9k KONTROLA (bez zmian w U1): podgląd obserwatorium — twarda blokada kamery na `_focusEntityId` co klatkę');
+}
+
+// ═══ wspólne dla T10–T19 (U1-3) ══════════════════════════════════════════════
+// Stan gry w kształcie, z którego reguła czyta zaznaczenie (UIManager, StationPanel, ping wroga) + rejestr zdarzeń.
+const EventBus = (await import('../../core/EventBus.js')).default;
+const { isEnemyVessel } = await import('../../entities/Vessel.js');
+const { GAME_CONFIG } = await import('../../config/GameConfig.js');
+const { worldToGameplay } = await import('../../utils/CoordTransform.js');
+const evs = [];
+for (const ev of ['vessel:focus', 'station:focus', 'station:selected', 'body:selected', 'body:deselected',
+  'camera:focusTarget', 'colony:switched', 'planet:colonize']) EventBus.on(ev, (p) => evs.push([ev, p]));
+const VESSELS = {
+  v1: { id: 'v1', systemId: 'sys_home' }, v2: { id: 'v2', systemId: 'sys_home' }, v3: { id: 'v3', systemId: 'sys_home' },
+  vA: { id: 'vA', systemId: 'sys_A' },    vT: { id: 'vT', systemId: null },
+  x1: { id: 'x1', systemId: 'sys_home', ownerEmpireId: 'emp_001' },
+};
+const P1 = { id: 'p1', type: 'planet', systemId: 'sys_home' };
+const PB = { id: 'pB', type: 'planet', systemId: 'sys_B' };
+const STAR_H = { id: 'star_h', type: 'star', systemId: 'sys_home' };
+const ops = [];
+let selSet = [];
+const UM = {
+  _selectedEntity: null,
+  getSelectedVesselIds: () => [...selSet], getSelectedVesselId: () => selSet[0] ?? null, getSelectedFleetId: () => null,
+  setSelectedVesselId(id) { ops.push(['select', id]); selSet = id == null ? [] : [id]; },
+  addToSelection(id) { ops.push(['add', id]); if (!selSet.includes(id)) selSet.push(id); },
+  toggleSelection(id) { ops.push(['toggle', id]); },
+  clearSelection() { ops.push(['clear']); selSet = []; },
+  isPickerActive: () => false, overlayManager: { isAnyOpen: () => false, openPanel: (id) => ops.push(['openPanel', id]) },
+  isOverUI: () => false,
+};
+const TRS = {   // stub renderera dla producentów spoza renderera (Outliner, MapLabelLayer, Dok)
+  _pingedEnemyId: null,
+  pingEnemyTarget(id) { ops.push(['pingEnemy', id]); this._pingedEnemyId = id; },
+  pingVessel(id) { ops.push(['ping', id]); },
+  resetToSystemView() { ops.push(['reset']); return true; },
+};
+const SP = { visible: false, _stationId: null, _float: { minimized: false } };
+Object.assign(globalThis.KOSMOS, {
+  uiManager: UM, threeRenderer: TRS, stationPanel: SP, activeSystemId: 'sys_home',
+  vesselManager: { getVessel: (id) => VESSELS[id] ?? null },
+  starSystemManager: { activeSystemId: 'sys_home', switchActiveSystem(s) { ops.push(['switch', s]); return true; } },
+  colonyManager: { getColony: (id) => ({ planetId: id, planet: id === 'pB' ? PB : P1, systemId: id === 'pB' ? 'sys_B' : 'sys_home', name: 'K' }),
+    switchActiveColony: (id) => ops.push(['switchActiveColony', id]), hasColony: () => true },
+  overlayManager: { openPanel: (id) => ops.push(['openPanel', id]) },
+});
+const EM = (await import('../../core/EntityManager.js')).default;
+const reset = (o = {}) => {
+  evs.length = 0; ops.length = 0; selSet = o.sel ?? [];
+  UM._selectedEntity = o.entity ?? null; TRS._pingedEnemyId = o.pinged ?? null;
+  SP.visible = !!o.station; SP._stationId = o.station ?? null;
+};
+const evNames = () => evs.map(e => e[0]);
+const cam = () => evs.filter(e => e[0] === 'vessel:focus' || e[0] === 'station:focus' || (e[0] === 'body:selected' && e[1]?.focus !== false))
+  .concat(ops.filter(o => o[0] === 'reset').map(o => ['reset']));
+
+// ═══ T10 ════════════════════════════════════════════════════════════════════
+header('T10 WYKONANIE Outliner.hitTest — wiersz statku, kolonii, stacji (§7.8, §7.10)');
+{
+  const { Outliner } = await import('../../ui/Outliner.js');
+  const o = new Outliner();
+  const hit = (target, x = W - 140) => { o._clickTargets = [{ ...target, x: W - 150, y: 100, w: 150, h: 18 }]; return o.hitTest(x, 105, W, H); };
+  o._lastMouseMods = { ctrl: false };
+  reset(); hit({ type: 'vessel', vesselId: 'v1' });
+  ok(JSON.stringify(ops) === '[["select","v1"]]' && cam().length === 0, 'T10a statek, 1. klik → zaznaczenie + okno, kamera stoi (dawniej `vessel:focus` od razu)');
+  reset({ sel: ['v1'] }); hit({ type: 'vessel', vesselId: 'v1' });
+  ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"v1"}]]' && ops.length === 0, 'T10b statek zaznaczony, 2. klik → `vessel:focus`, zaznaczenie bez zmian');
+  reset(); hit({ type: 'vessel', vesselId: 'vA' });
+  ok(JSON.stringify(ops) === '[["select","vA"]]' && cam().length === 0, 'T10c statek z INNEGO układu, 1. klik → zaznaczenie BEZ przełączania układu (§7.8)');
+  reset({ sel: ['vA'] }); hit({ type: 'vessel', vesselId: 'vA' });
+  ok(JSON.stringify(ops) === '[["switch","sys_A"]]' && JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"vA"}]]',
+    'T10d … 2. klik → przełączenie układu, potem `vessel:focus` (Finding 478)');
+  reset({ sel: ['vT'] }); hit({ type: 'vessel', vesselId: 'vT' });
+  ok(ops.length === 0 && JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"vT"}]]', 'T10e statek w tranzycie warp, 2. klik → focus bez przełączania (układ nieznany)');
+  o._lastMouseMods = { ctrl: true }; reset(); hit({ type: 'vessel', vesselId: 'v2' });
+  ok(JSON.stringify(ops) === '[["toggle","v2"]]' && evs.length === 0, 'T10f KONTROLA: CTRL+klik → przełączenie zbioru, bez kamery');
+  o._lastMouseMods = { ctrl: false };
+  const col = (id) => ({ type: 'colony', planetId: id, colony: {}, mapIconX: W - 20 });
+  reset(); hit(col('p1'));
+  ok(evs.length === 1 && evs[0][0] === 'body:selected' && evs[0][1]?.entity?.id === 'p1' && evs[0][1]?.focus === false,
+    'T10g kolonia (nazwa), 1. klik → `body:selected { focus: false }` (karta ciała, kamera stoi)');
+  ok(!ops.some(x => x[0] === 'switchActiveColony') && !evNames().includes('colony:switched') && !evNames().includes('camera:focusTarget'),
+    'T10h … aktywna kolonia NIE zmienia się (§7.10; dawniej `switchActiveColony` + `colony:switched` + `camera:focusTarget`)');
+  reset({ entity: P1 }); hit(col('p1'));
+  ok(evs.length === 1 && evs[0][0] === 'body:selected' && evs[0][1]?.focus === true, 'T10i kolonia zaznaczona, 2. klik → `body:selected { focus: true }`');
+  reset(); hit(col('pB'));
+  ok(!ops.some(x => x[0] === 'switch') && evs[0]?.[1]?.focus === false, 'T10j kolonia w INNYM układzie, 1. klik → bez przełączania układu');
+  reset({ entity: PB }); hit(col('pB'));
+  ok(JSON.stringify(ops) === '[["switch","sys_B"]]' && evs.length === 1 && evs[0][1]?.entity?.id === 'pB' && evs[0][1]?.focus === true,
+    'T10k … 2. klik → przełączenie układu, potem kamera');
+  reset(); hit(col('p1'), W - 10);
+  ok(JSON.stringify(ops) === '[["switchActiveColony","p1"],["openPanel","colony"]]', 'T10l KONTROLA: ikona 🗺 → otwarcie kolonii (aktywna kolonia się zmienia — jak dotąd)');
+  reset(); hit({ type: 'station', stationId: 's1', systemId: 'sys_home' });
+  ok(JSON.stringify(evs) === '[["station:selected",{"stationId":"s1"}]]', 'T10m stacja, 1. klik → panel stacji, kamera stoi (dawniej panel + `station:focus`)');
+  reset({ station: 's1' }); hit({ type: 'station', stationId: 's1', systemId: 'sys_home' });
+  ok(JSON.stringify(evs) === '[["station:focus",{"stationId":"s1"}]]', 'T10n stacja w otwartym panelu, 2. klik → `station:focus`');
+  reset({ station: 's2' }); hit({ type: 'station', stationId: 's2', systemId: 'sys_C' });
+  ok(JSON.stringify(ops) === '[["switch","sys_C"]]' && JSON.stringify(evs) === '[["station:focus",{"stationId":"s2"}]]',
+    'T10o stacja z INNEGO układu, 2. klik → przełączenie, potem kamera');
+}
+
+// ═══ T11 ════════════════════════════════════════════════════════════════════
+header('T11 WYKONANIE MapLabelLayer.handleClick — plakietka własna / wroga, etykieta stacji (decyzja 2d)');
+{
+  const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
+  const m = new MapLabelLayer();
+  m._vesselHitZones = [{ x: 100, y: 100, w: 60, h: 14, vesselIds: ['v1', 'v2'], isEnemy: false },
+                       { x: 100, y: 200, w: 60, h: 14, vesselIds: ['x1'], isEnemy: true }];
+  m._chipZones = [];
+  m._hitZones = [{ x: 100, y: 300, w: 60, h: 14, stationId: 's1' }];
+  reset(); m.handleClick(110, 105);
+  ok(JSON.stringify(ops) === '[["select","v1"],["add","v2"]]' && cam().length === 0, 'T11a KONTROLA (jak przed U1): plakietka własna (klaster), 1. klik → zaznaczenie zbioru, kamera stoi');
+  reset({ sel: ['v1', 'v2'] }); m.handleClick(110, 105);
+  ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"v1"}]]' && ops.length === 0, 'T11b … 2. klik w ten sam zbiór → kamera na liderze (dawniej drugiego kliku brak)');
+  reset(); m.handleClick(110, 205);
+  ok(JSON.stringify(ops) === '[["pingEnemy","x1"]]' && cam().length === 0, 'T11c plakietka wroga, 1. klik → ping celu, kamera stoi (dawniej `vessel:focus` od razu)');
+  reset({ pinged: 'x1' }); m.handleClick(110, 205);
+  ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"x1"}]]' && ops.length === 0, 'T11d KONTROLA (zgodne z dawnym „zawsze kamera”): 2. klik (ten sam wróg) → `vessel:focus`');
+  reset(); m.handleClick(110, 305);
+  ok(JSON.stringify(evs) === '[["station:selected",{"stationId":"s1"}]]', 'T11e etykieta stacji, 1. klik → panel, kamera stoi');
+  reset({ station: 's1' }); m.handleClick(110, 305);
+  ok(JSON.stringify(evs) === '[["station:focus",{"stationId":"s1"}]]', 'T11f … 2. klik → `station:focus`');
+}
+
+// ═══ T12 ════════════════════════════════════════════════════════════════════
+header('T12 WYKONANIE TacticalDock._onHit — „drugi klik” zamiast dwukliku 300 ms (decyzja 2c)');
+{
+  const { TacticalDock } = await import('../../ui/TacticalDock.js');
+  const dock = Object.create(TacticalDock.prototype);
+  dock._markDirty = () => {};
+  dock._lastMouseMods = { ctrl: false };
+  reset(); dock._onHit({ type: 'row', data: { id: 'v1' } });
+  ok(JSON.stringify(ops) === '[["select","v1"],["ping","v1"]]' && cam().length === 0, 'T12a KONTROLA (jak przed U1): 1. klik → zaznaczenie + ping FX, kamera stoi');
+  const realNow = performance.now.bind(performance); const t0 = realNow(); performance.now = () => t0 + 5000;
+  ops.length = 0; evs.length = 0; dock._onHit({ type: 'row', data: { id: 'v1' } });
+  performance.now = realNow;
+  ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"v1"}]]' && ops.length === 0, 'T12b 2. klik w zaznaczony statek po 5 s → `vessel:focus` (bez okna czasu)');
+  reset({ sel: ['v2'] }); dock._onHit({ type: 'row', data: { id: 'v1' } });
+  ok(JSON.stringify(ops) === '[["select","v1"],["ping","v1"]]' && cam().length === 0, 'T12c KONTROLA (jak przed U1): klik w INNY statek niż zaznaczony → zaznaczenie (nie kamera)');
+  dock._lastMouseMods = { ctrl: true }; reset(); dock._onHit({ type: 'row', data: { id: 'v2' } });
+  ok(JSON.stringify(ops) === '[["toggle","v2"]]' && evs.length === 0, 'T12d KONTROLA: CTRL+klik → przełączenie zbioru');
+  const td = src('../../ui/TacticalDock.js');
+  ok(!/DOCK_DBLCLICK_MS|_lastRowClick/.test(td), 'T12e źródło: okno dwukliku i jego pola zdjęte');
+}
+
+// ═══ T13 ════════════════════════════════════════════════════════════════════
+header('T13 WYKONANIE BottomContext — przywrócenie karty z doku bez kamery');
+{
+  const { BottomContext } = await import('../../ui/BottomContext.js');
+  const reg = new Map();
+  globalThis.KOSMOS.panelDock = { register: (k, o) => reg.set(k, o), unregister: (k) => reg.delete(k), has: (k) => reg.has(k) };
+  const bc = new BottomContext();
+  bc._minimize(P1);
+  reset(); reg.get('body:p1')?.onRestore?.();
+  const sel = evs.find(e => e[0] === 'body:selected');
+  ok(!!sel && sel[1]?.entity === P1 && sel[1]?.focus === false, 'T13a przywrócenie karty → `body:selected { focus: false }` (karta wraca, kamera stoi)');
+  ok(bc._minimized === false && !reg.has('body:p1'), 'T13b KONTROLA: karta zdjęta z doku i rozwinięta (s34b)');
+}
+
+// ═══ T14 ════════════════════════════════════════════════════════════════════
+header('T14 WYKONANIE ThreeRenderer.handleClick (wycięte ze źródła) — mapa 3D, jeden picker na gest');
+{
+  const hc = compileMethod(TR_SRC, 'handleClick', {
+    EventBus, isEnemyVessel, CLICK_INTENT: CI?.CLICK_INTENT, clickObject: CI?.clickObject,
+    resolveClickIntent: CI?.resolveClickIntent, readClickSelection: CI?.readClickSelection, applyClickIntent: CI?.applyClickIntent,
+  });
+  const R = { _pickVesselForClick: () => null, _mouse: {}, camera: {}, _stations: new Map(), _clickable: [], _entityByUUID: new Map(),
+    _ray: { hitsStation: [], hitsBody: [], setFromCamera() {}, intersectObjects(objs, rec) { return rec ? this.hitsStation : this.hitsBody; } },
+    get _pingedEnemyId() { return TRS._pingedEnemyId; },
+    pingEnemyTarget: (id) => TRS.pingEnemyTarget(id), resetToSystemView: () => TRS.resetToSystemView() };
+  globalThis.KOSMOS.threeRenderer = R;
+  const run = (o = {}, mods = {}) => {
+    reset(o);
+    R._pickVesselForClick = () => o.pick ?? null;
+    R._stations = new Map(o.stationHit ? [['s1', { mesh: {} }]] : []);
+    R._ray.hitsStation = o.stationHit ? [{ object: { userData: { stationId: 's1' } } }] : [];
+    R._ray.hitsBody = o.body ? [{ object: { uuid: 'u1' } }] : [];
+    R._entityByUUID = new Map(o.body ? [['u1', o.body]] : []);
+    return hc ? hc.call(R, 640, 360, mods) : undefined;
+  };
+  ok(!!hc, 'T14-0 KONTROLA: `handleClick` wycięte i skompilowane');
+  let r = run({ pick: 'v1' });
+  ok(r === true && cam().length === 0 && R.lastClickPick?.vesselId === 'v1', 'T14a własny statek, 1. klik → BEZ kamery; wynik pickera dla sceny (`lastClickPick`)');
+  r = run({ pick: 'v1', sel: ['v1'] });
+  ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"v1"}]]', 'T14b KONTROLA (zgodne z dawnym „zawsze kamera”): własny statek zaznaczony, 2. klik → `vessel:focus`');
+  r = run({ pick: 'v1', sel: ['v1'] }, { ctrl: true });
+  ok(evs.length === 0, 'T14c CTRL+klik zaznaczonego statku → bez kamery (zbiór przełącza scena)');
+  r = run({ pick: 'x1' });
+  ok(JSON.stringify(ops) === '[["pingEnemy","x1"]]' && evs.length === 0, 'T14d wróg, 1. klik → ping celu, kamera stoi (decyzja 2d)');
+  r = run({ pick: 'x1', pinged: 'x1' });
+  ok(JSON.stringify(evs) === '[["vessel:focus",{"vesselId":"x1"}]]', 'T14e KONTROLA (zgodne z dawnym „zawsze kamera”): wróg pingowany, 2. klik → `vessel:focus`');
+  r = run({ stationHit: true });
+  ok(r === true && JSON.stringify(evs) === '[["station:selected",{"stationId":"s1"}]]', 'T14f stacja, 1. klik → panel, kamera stoi');
+  r = run({ stationHit: true, station: 's1' });
+  ok(JSON.stringify(evs) === '[["station:focus",{"stationId":"s1"}]]', 'T14g stacja w otwartym panelu, 2. klik → `station:focus`');
+  r = run({ body: P1 });
+  ok(r === true && evs.length === 1 && evs[0][1]?.entity === P1 && evs[0][1]?.focus === false, 'T14h ciało, 1. klik → `body:selected { focus: false }`');
+  r = run({ body: P1, entity: P1 });
+  ok(evs.length === 1 && evs[0][1]?.focus === true, 'T14i ciało zaznaczone, 2. klik → `body:selected { focus: true }`');
+  r = run({ body: STAR_H, entity: STAR_H });
+  ok(JSON.stringify(ops) === '[["reset"]]' && evs.length === 0, 'T14j gwiazda zaznaczona, 2. klik → `resetToSystemView` (kadr układu, nie wnętrze tarczy)');
+  r = run({});
+  ok(r === false && JSON.stringify(evNames()) === '["body:deselected"]' && R.lastClickPick?.vesselId === null, 'T14k pustka → `body:deselected`, pick pusty');
+  globalThis.KOSMOS.threeRenderer = TRS;
+}
+
+// ═══ T15 ════════════════════════════════════════════════════════════════════
+header('T15 WYKONANIE GameScene._handleTacticalLeftClick (wycięte) — zaznaczenie z pickera renderera, CTRL');
+{
+  const GS_SRC = src('../../scenes/GameScene.js');
+  const scope = { GAME_CONFIG, isEnemyVessel, worldToGameplay };
+  const tl = compileMethod(GS_SRC, '_handleTacticalLeftClick', scope);
+  const sp = compileMethod(GS_SRC, '_selectFromClickPick', scope);
+  let rayTarget = { type: 'empty', worldPoint: { x: 0, z: 0 } };
+  // Dawny picker sceny w gałęzi canvas (`tr?._getVesselAtScreen?.(x, y, 40)` — najbliższy statek, bez preferencji
+  // najechanego); w kodzie U1 nieczytany. Atrapa pozwala wykonać ten sam przypadek na kodzie sprzed U1.
+  let oldNearest = null;
+  const G = { planetScene: null, uiManager: UM, _resolveClickTarget: () => rayTarget, _selectFromClickPick: sp,
+    threeRenderer: { _getVesselAtScreen: () => oldNearest } };
+  // Cel kliku: w ZWYKŁEJ grze `#planet-canvas` (z-index 4 nad `#event-layer`, `display: block` z reguły
+  // `#game-container canvas` — zmierzone, U1) → gałąź canvas; inny element (np. ekran ładowania tuż po wczytaniu)
+  // → gałąź z raycastem sceny.
+  const ev = (o = {}) => (o.canvas
+    ? { target: { id: 'planet-canvas', tagName: 'CANVAS', closest: () => null }, ctrlKey: !!o.ctrl, clientX: 640, clientY: 360 }
+    : { target: { id: 'loading-screen', tagName: 'DIV', closest: () => null }, ctrlKey: !!o.ctrl, clientX: 640, clientY: 360 });
+  const go = (pick, ray, o = {}) => { reset({ sel: o.sel ?? ['v9'] }); rayTarget = ray; oldNearest = o.oldNearest ?? pick ?? null; tl?.call(G, ev(o), pick == null ? { vesselId: null } : { vesselId: pick }); return [...ops]; };
+  ok(!!tl, 'T15-0 KONTROLA: `_handleTacticalLeftClick` wycięte i skompilowane');
+  // — gałąź canvas (zwykła gra)
+  ok(JSON.stringify(go('v1', null, { canvas: true, oldNearest: 'v3' })) === '[["select","v1"]]',
+    'T15i gałąź canvas (zwykła gra): zaznacza statek z pickera renderera — najechany `v1`, choć najbliższy jest `v3` (dawniej scena zaznaczała `v3`, a renderer fokusował `v1`)');
+  ok(JSON.stringify(go('v2', null, { canvas: true, ctrl: true })) === '[["toggle","v2"]]', 'T15j KONTROLA (jak dotąd): gałąź canvas, CTRL+klik w statek → przełączenie zbioru');
+  ok(JSON.stringify(go(null, null, { canvas: true })) === '[["clear"]]', 'T15k KONTROLA (jak dotąd): gałąź canvas, bez statku (pustka albo ciało) → odznaczenie zbioru');
+  ok(JSON.stringify(go(null, null, { canvas: true, ctrl: true })) === '[]', 'T15l KONTROLA (jak dotąd): gałąź canvas, CTRL bez statku → zbiór zachowany');
+  ok(JSON.stringify(go('x1', null, { canvas: true })) === '[]', 'T15m KONTROLA (jak dotąd): gałąź canvas, wróg → bez zaznaczenia i bez odznaczenia');
+  // — gałąź poza canvas (raycast sceny)
+  ok(JSON.stringify(go('v1', { type: 'empty', worldPoint: { x: 0, z: 0 } })) === '[["select","v1"]]',
+    'T15a poza canvas: picker renderera = statek, raycast sceny = pustka → ZAZNACZENIE (dawniej odznaczenie — zmierzone, U1)');
+  ok(JSON.stringify(go('v2', { type: 'empty', worldPoint: { x: 0, z: 0 } }, { ctrl: true })) === '[["toggle","v2"]]',
+    'T15b poza canvas: CTRL+klik w statek → przełączenie zbioru (dawniej pojedyncze zaznaczenie albo odznaczenie)');
+  ok(JSON.stringify(go(null, { type: 'empty', worldPoint: { x: 0, z: 0 } })) === '[["clear"]]', 'T15c KONTROLA: poza canvas, pustka → odznaczenie zbioru');
+  ok(JSON.stringify(go(null, { type: 'planet', worldPoint: { x: 0, z: 0 } })) === '[]', 'T15d KONTROLA: poza canvas, ciało → zbiór bez zmian (jak dotąd)');
+  ok(JSON.stringify(go('x1', { type: 'empty', worldPoint: { x: 0, z: 0 } })) === '[]', 'T15e poza canvas: wróg → bez zaznaczenia i bez odznaczenia');
+  ok(JSON.stringify(go(null, { type: 'empty', worldPoint: { x: 0, z: 0 } }, { ctrl: true })) === '[]', 'T15f poza canvas: CTRL+pustka → zbiór zachowany');
+  const body = methodBody(GS_SRC, '  _handleTacticalLeftClick(');
+  // ⚠ Dawne wywołanie miało postać `tr?._getVesselAtScreen?.(` — wzorzec musi przepuścić `?.` przed nawiasem (bez tego
+  // pin był zielony także na kodzie sprzed U1). Drugi picker to też gałąź `ownVessel` z raycastu sceny.
+  ok(body.length > 0 && !/_getVesselAtScreen\s*(?:\?\.)?\s*\(/.test(body) && !/ownVessel/.test(body),
+    'T15g źródło: scena nie ma własnego pickera statku (ani `_getVesselAtScreen`, ani gałęzi `ownVessel` z raycastu sceny)');
+  ok(/this\.threeRenderer\.handleClick\(x, y, \{ ctrl: e\.ctrlKey \}\);\s*[\s\S]{0,200}this\._handleTacticalLeftClick\(e, this\.threeRenderer\.lastClickPick\);/.test(GS_SRC),
+    'T15h źródło: klik → renderer (z CTRL), potem scena z TYM SAMYM wynikiem pickera');
+}
+
+// ═══ T16 ════════════════════════════════════════════════════════════════════
+header('T16 WYKONANIE dwukliku GameScene (wycięty słuchacz) — bez ColonyOverlay i bez vessel:focus (decyzja 2b)');
+{
+  const GS_SRC = src('../../scenes/GameScene.js');
+  const sig = "window.addEventListener('dblclick', (e) => {";
+  const i = GS_SRC.indexOf(sig);
+  const txt = i < 0 ? '' : GS_SRC.slice(i + "window.addEventListener('dblclick', ".length, GS_SRC.indexOf('\n    });', i) + '\n    }'.length);
+  const S = { planetScene: null, uiManager: UM, colonyManager: globalThis.KOSMOS.colonyManager,
+    threeRenderer: { _hoverVesselId: 'v1', _getVesselAtScreen: () => 'v1', getEntityAtScreen: () => ({ ...P1, lifeScore: 90 }),
+      getScreenPosition: () => ({ x: 1, y: 1 }), _focusEntityId: null, _selectedEntityId: null } };
+  const fn = compileWith(txt, { EventBus, EntityManager: EM }, S);
+  ok(!!fn, 'T16-0 KONTROLA: słuchacz dwukliku wycięty i skompilowany');
+  globalThis.KOSMOS.civMode = true; reset();
+  fn?.({ clientX: 640, clientY: 360 });
+  ok(!!fn && evs.length === 0 && ops.length === 0, 'T16a tryb cywilizacji: dwuklik w statek / kolonię → NIC (dawniej `vessel:focus` / ColonyOverlay)');
+  globalThis.KOSMOS.civMode = false; S.threeRenderer._hoverVesselId = null; S.threeRenderer._getVesselAtScreen = () => null; reset();
+  fn?.({ clientX: 640, clientY: 360 });
+  ok(JSON.stringify(evNames()) === '["planet:colonize"]', 'T16b KONTROLA: poza trybem cywilizacji — planeta z życiem → kolonizuj (jak dotąd)');
+  globalThis.KOSMOS.civMode = true;
+  ok(!/_focusEntityId/.test(GS_SRC), 'T16c źródło: scena nie czyta pola kamery `_focusEntityId` (dwuklik — zaznaczenie `_selectedEntityId`)');
+}
+
+// ═══ T17 ════════════════════════════════════════════════════════════════════
+header('T17 WYKONANIE vessel:focus (wycięty słuchacz) — statek bez sprite\'a po przełączeniu układu (§7.8, 478)');
+{
+  const WS = Number((TR_SRC.match(/const WORLD_SCALE = (\d+(?:\.\d+)?);/) ?? [])[1]);
+  const Sfn = (v) => v / WS;
+  const out = [];
+  const bus = { emit: (n, p) => out.push([n, p]) };
+  const calls = [];
+  const cc = { _targetDist: 50, _goalTarget: { x: 0, y: 0, z: 0 },
+    setMinDist: (d) => calls.push(['setMinDist', d]), setTargetDist: (d) => { calls.push(['setTargetDist', d]); cc._targetDist = d; },
+    focusOnInstant(x, z, y) { calls.push(['focusOnInstant', x, z, y]); this._goalTarget = { x, y, z }; }, focusOn: () => calls.push(['focusOn']) };
+  const R = { _cameraController: cc, _vessels: new Map(), _stations: new Map(), _planets: new Map(), _moons: new Map(), _entityByUUID: new Map(),
+    _focusEntityId: 'p0', _focusVesselId: null, _focusStationId: 's0', _focusEncounterId: null, _pendingVesselFocus: null };
+  globalThis.KOSMOS.vesselManager = { getVessel: (id) => id === 'vA' ? { id: 'vA', systemId: 'sys_A', position: { x: 220, y: -110, state: 'orbiting', dockedAt: null } } : null };
+  globalThis.KOSMOS.activeSystemId = 'sys_A';
+  const vf = compileListener(TR_SRC, 'vessel:focus', R, { EventBus: bus, S: Sfn });
+  vf?.({ vesselId: 'vA' });
+  ok(!!vf && R._pendingVesselFocus?.vesselId === 'vA' && R._focusEntityId === null && R._focusStationId === null,
+    'T17a brak sprite\'a, statek w OGLĄDANYM układzie → fokus oczekujący, dotychczasowe śledzenie przerwane (dawniej cichy no-op)');
+  ok(calls.some(c => c[0] === 'focusOnInstant' && Math.abs(c[1] - 220 / WS) < 1e-9 && Math.abs(c[2] + 110 / WS) < 1e-9),
+    'T17b cel kamery od razu na pozycji logicznej statku');
+  const ap = compileMethod(TR_SRC, '_applyPendingVesselFocus', { EventBus: bus });
+  out.length = 0; ap?.call(R, 'vA');
+  ok(!!ap && JSON.stringify(out) === '[["vessel:focus",{"vesselId":"vA"}]]' && R._pendingVesselFocus === null,
+    'T17c sprite stanął, cel kamery bez zmian → dokończ fokus (`vessel:focus`, teraz ze śledzeniem sprite\'a)');
+  out.length = 0; R._pendingVesselFocus = { vesselId: 'vA', goal: { x: 1, y: 2, z: 3 } }; cc._goalTarget = { x: 9, y: 9, z: 9 };
+  ap?.call(R, 'vA');
+  ok(!!ap && out.length === 0 && R._pendingVesselFocus === null, 'T17d kamerę w międzyczasie przejął ktoś inny → fokus przepada (bez szarpnięcia)');
+  ok(/this\._applyPendingVesselFocus\(vessel\.id\);/.test(methodBody(TR_SRC, '  _addVesselModel3D(vessel, modelPath) {'))
+    && /this\._applyPendingVesselFocus\(vessel\.id\);/.test(methodBody(TR_SRC, '  _addVesselSpriteFallback(vessel) {')),
+    'T17e źródło: dokończenie wołane, gdy stanie model GLB i gdy stanie sprite zapasowy');
+  globalThis.KOSMOS.activeSystemId = 'sys_home';
+  globalThis.KOSMOS.vesselManager = { getVessel: (id) => VESSELS[id] ?? null };
+}
+
+// ═══ T18 ════════════════════════════════════════════════════════════════════
+header('T18 pamięć pingu wroga gaśnie przy każdym innym zaznaczeniu (wycięte słuchacze ThreeRenderer)');
+{
+  const R = { _pingedEnemyId: 'x1', _selectedVesselId: null };
+  compileListener(TR_SRC, 'ui:selectionChanged', R)?.({ vesselId: 'v1' });
+  ok(R._pingedEnemyId === null, 'T18a zaznaczenie statku → ping wroga zapomniany');
+  R._pingedEnemyId = 'x1';
+  compileListener(TR_SRC, 'station:selected', R)?.({ stationId: 's1' });
+  ok(R._pingedEnemyId === null, 'T18b panel stacji → ping wroga zapomniany');
+  ok(/pingEnemyTarget\(vesselId\) \{[\s\S]{0,120}this\.pingVessel\(vesselId\);\s*this\._pingedEnemyId = vesselId;/.test(TR_SRC),
+    'T18c `pingEnemyTarget` = ping FX + zapamiętanie celu');
+  ok(/this\._pingedEnemyId = null;/.test(listenerText(TR_SRC, 'body:selected')) && /this\._pingedEnemyId = null;/.test(listenerText(TR_SRC, 'body:deselected'))
+    && /this\._pingedEnemyId = null;/.test(methodBody(TR_SRC, '  _disposeAllMeshes() {')),
+    'T18d … także przy zaznaczeniu / odznaczeniu ciała i zmianie układu');
+}
+
+// ═══ T19 ════════════════════════════════════════════════════════════════════
+header('T19 WYKONANIE pickera kliku — wyłącznie WIDOCZNE sprite\'y (wróg ukryty mgłą wojny nie jest celem)');
+{
+  const gv = compileMethod(TR_SRC, '_getVesselAtScreen', {});
+  const pv = compileMethod(TR_SRC, '_pickVesselForClick', {});
+  const spr = (nx, ny, visible) => ({ visible, getWorldPosition(v) { v.x = nx; v.y = ny; v.z = 0; } });
+  const R = { camera: {}, renderer: { domElement: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) } },
+    _tmpPickVec: { x: 0, y: 0, z: 0, project() {} },
+    _vessels: new Map([['xHidden', { sprite: spr(0, 0, false) }], ['vOwn', { sprite: spr(20 / 640, 0, true) }]]),
+    _hoverVesselId: 'xHidden' };
+  R._getVesselAtScreen = gv;
+  ok(!!gv && gv.call(R, 640, 360, 40) === 'xHidden', 'T19a KONTROLA: picker bez filtra (hover, PPM) — najbliższy, także ukryty (jak dotąd)');
+  ok(!!gv && gv.call(R, 640, 360, 40, true) === 'vOwn', 'T19b picker kliku (`visibleOnly`) — ukryty pominięty, widoczny 20 px dalej wybrany');
+  ok(!!pv && pv.call(R, 640, 360) === 'vOwn', 'T19c `_pickVesselForClick`: najechany, ale ukryty wróg nie przejmuje kliku');
+  R._hoverVesselId = 'vOwn';
+  ok(!!pv && pv.call(R, 700, 600) === 'vOwn', 'T19d … najechany WIDOCZNY statek wygrywa (klik zamiarowy)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

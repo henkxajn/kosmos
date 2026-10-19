@@ -534,7 +534,9 @@ export class BottomContext {
         dock.unregister(key);
         this._minimized = false;
         this._float.reanchor();
-        EventBus.emit('body:selected', { entity });   // pokaż kartę (ustawia _selectedEntity + fokus + _dirty)
+        // pokaż kartę (ustawia _selectedEntity + _dirty); ARKUSZ UI U1-3 (D-UI-5): przywrócenie karty z doku to
+        // zaznaczenie, nie focus — kamera stoi
+        EventBus.emit('body:selected', { entity, focus: false });
       },
     });
   }

@@ -7,7 +7,8 @@
 // W2.1 (live-gate FAZY 5 — wybór Filipa: W2 z korektami; W1/wariant usunięte w cleanupie):
 //   K1 LOD — 3 poziomy wg dystansu kamery (plakietka → znacznik → fade), przejścia płynne (cross-fade).
 //   K2 anty-nakładanie — greedy vertical stacking + łącznik do ciała (stackLabels).
-//   K3 klik stacji — station:selected ORAZ station:focus (najazd kamery, reuse ścieżki Outlinera).
+//   K3 klik stacji — reguła klik/focus (ARKUSZ UI U1-3, D-UI-5): 1. klik station:selected (panel), 2. klik
+//      station:focus (najazd kamery).
 //   K4 kosmetyka — ucinanie nazw „…" + plakietka NAD/POD tarczą ciała (nie na niej) + łącznik.
 //
 // Etykieta stacji KLIKALNA (bez body:selected). Kolonie = display-only (klik ciała = raycast 3D).
@@ -24,6 +25,7 @@ import {
 } from './MapLabelLogic.js';
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 import { t } from '../i18n/i18n.js';
+import { clickObject, vesselsTarget } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
 
 const KIND_COLOR = () => ({
   home:    THEME.accent,
@@ -511,19 +513,20 @@ export class MapLabelLayer {
   handleClick(x, y) {
     const inside = (z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
 
-    // Plakietka flotowa → selekcja zbioru (multi przy klastrze) przez UIManager.
+    // ARKUSZ UI U1-3 (D-UI-5): plakietki i etykiety leżą NA mapie — ta sama reguła co klik w obiekt 3D. Obiekty
+    // plakietek są w OGLĄDANYM układzie (warstwa rysuje tylko jego).
+    const K = window.KOSMOS;
+    const env = { K, emit: (n, p) => EventBus.emit(n, p) };
+    const sys = K?.activeSystemId ?? K?.starSystemManager?.activeSystemId ?? 'sys_home';
+    // Plakietka flotowa: własna — 1. klik zaznacza zbiór (klaster = lider + reszta), 2. klik w ten sam zbiór = kamera
+    // na liderze; wroga (decyzja 2d) — 1. klik = ping celu, 2. klik = kamera (wroga nie da się zaznaczyć).
     for (const z of this._vesselHitZones) {
       if (!inside(z)) continue;
       if (z.isEnemy) {
-        // Wróg: bez selekcji (selekcja = własne statki); tylko dolot kamery.
-        EventBus.emit('vessel:focus', { vesselId: z.vesselIds[0] });
+        clickObject({ type: 'enemy', id: z.vesselIds[0], systemId: sys }, env);
         return true;
       }
-      const um = window.KOSMOS?.uiManager;
-      if (um?.setSelectedVesselId) {
-        um.setSelectedVesselId(z.vesselIds[0]);
-        for (let i = 1; i < z.vesselIds.length; i++) um.addToSelection?.(z.vesselIds[i]);
-      }
+      clickObject(vesselsTarget(z.vesselIds, sys), env);
       return true;
     }
 
@@ -546,11 +549,10 @@ export class MapLabelLayer {
       return true;
     }
 
-    // Etykieta stacji (K3 — jak dotąd).
+    // Etykieta stacji: 1. klik = panel stacji (kamera stoi), 2. klik = najazd kamery (U1-3, D-UI-5).
     for (const z of this._hitZones) {
       if (inside(z)) {
-        EventBus.emit('station:selected', { stationId: z.stationId });   // panel (jak dotąd)
-        EventBus.emit('station:focus',    { stationId: z.stationId });   // K3 — najazd kamery (reuse ścieżki)
+        clickObject({ type: 'station', id: z.stationId, systemId: sys }, env);
         return true;
       }
     }
