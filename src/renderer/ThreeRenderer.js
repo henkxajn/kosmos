@@ -4163,6 +4163,27 @@ export class ThreeRenderer {
     this._cameraController.frameSystem(this._computeSystemExtentAU());
   }
 
+  // ── ARKUSZ UI U1-1 (D-UI-5 §7.9; Findingi 471, 472, 473) — domyślny widok układu ─────────────────────────────────
+  // Jedna droga „wróć do widoku układu”: klawisz Home, klik w BIEŻĄCY układ (Outliner, chip mapy), focus na gwieździe.
+  // Zeruje WSZYSTKIE pola kamery — śledzenie ciała / statku / stacji, punkt walki, „Obserwuj” (`_endWatch` oddaje
+  // minDist sprzed obserwacji), auto-fokus starcia — inaczej pętla renderu cofałaby reset w następnej klatce (472),
+  // potem kadr `frameSystem`: cel = gwiazda, dystans = zasięg układu × 20 w [70; 450]. Każdy automatyczny ruch kamery
+  // z celem na gwieździe kończy się w tym kadrze, nigdy bliżej (wymóg z bramki U0). Zaznaczenie (karta ciała, okno
+  // statku, złota orbita) — bez zmian. Podgląd obserwatorium i lot intro trzymają kamerę — wtedy nic.
+  resetToSystemView() {
+    if (!this._cameraController?.frameSystem) return false;
+    if (this._observatoryPreviewActive || this._cinematicDriver) return false;
+    if (this._watch) this._endWatch();
+    this._autoFocus        = null;
+    this._focusEncounterId = null;
+    this._focusEntityId    = null;
+    this._focusVesselId    = null;
+    this._focusStationId   = null;
+    this._cameraController.setMinDist(0.3);   // domyślny min zoom (fokus statku / stacji go obniża)
+    this._frameActiveSystem();
+    return true;
+  }
+
   // ── Vessel sprites ──────────────────────────────────────────────────
 
   // ── Modele 3D statków ──────────────────────────────────────────

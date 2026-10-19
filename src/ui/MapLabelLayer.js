@@ -539,8 +539,11 @@ export class MapLabelLayer {
             : { tab: 'tactical' });
       } else if (!chip.isActive) {
         window.KOSMOS?.starSystemManager?.switchActiveSystem?.(chip.systemId);
+      } else {
+        // ARKUSZ UI U1-1 (§7.9): klik aktywnego chipu = domyślny widok układu (ta sama funkcja co klawisz Home).
+        window.KOSMOS?.threeRenderer?.resetToSystemView?.();
       }
-      return true;   // klik aktywnego chipu = świadomy no-op (absorbuje klik)
+      return true;
     }
 
     // Etykieta stacji (K3 — jak dotąd).

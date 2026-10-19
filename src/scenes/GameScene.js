@@ -4823,9 +4823,13 @@ export class GameScene {
           e.preventDefault();
           ts.isPaused ? EventBus.emit('time:play') : EventBus.emit('time:pause');
           break;
+        // ARKUSZ UI U1-1 (Findingi 471, 472): reset kamery = domyślny widok układu (`resetToSystemView` — zeruje
+        // WSZYSTKIE pola kamery, potem kadr `frameSystem`). W trybie cywilizacji „h” zjada wyżej skrót Kolonii
+        // (`overlayManager.handleKey`), więc resetem jest Home; KeyH zostaje poza tym trybem.
+        case 'Home':
         case 'KeyH':
-          this.threeRenderer._focusEntityId = null;
-          this.cameraController.resetToCenter();
+          e.preventDefault();
+          this.threeRenderer?.resetToSystemView?.();
           break;
         case 'KeyY':
           // Obraz Operacyjny F2 — tryb taktyczny (Y zamiast zajętego T — decyzja

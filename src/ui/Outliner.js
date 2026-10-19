@@ -709,10 +709,13 @@ export class Outliner {
           return true;
         }
         if (t.type === 'system') {
-          // Klik na nagłówek gwiazdy → przełącz widok na ten układ
+          // Klik na nagłówek gwiazdy → przełącz widok na ten układ (kadr `frameSystem`); klik w BIEŻĄCY układ =
+          // domyślny widok układu (ARKUSZ UI U1-1, §7.9 — ta sama funkcja co klawisz Home).
           const ssMgr = window.KOSMOS?.starSystemManager;
           if (ssMgr && ssMgr.activeSystemId !== t.systemId) {
             ssMgr.switchActiveSystem(t.systemId);
+          } else {
+            window.KOSMOS?.threeRenderer?.resetToSystemView?.();
           }
           return true;
         }
