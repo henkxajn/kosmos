@@ -791,6 +791,26 @@
 > • Następny: **U2** — lewy outliner (`UI_PLAN.md` §4.3).
 > • **Pierwszy wolny numer: 488.**
 
+> **Aktualizacja 2026-10-19 (ARKUSZ UI — U2: zamknięcie w kodzie)** (rejestr macierzysty `UI_PLAN.md` §6). U2 (lewy
+> outliner — układy i ciała; D-UI-1 lewy, D-UI-2, D-UI-3, D-UI-4, D-UI-10 dla ciał; decyzje 3, 4, 5) — bramka U2
+> w przeglądarce właściciela PASS (część A K0–K32 — ZF gy120, część B K40–K44 — Polonia gy79; okno 1280×833; „do
+> potwierdzenia” 1–14 bez zmian; `UI_PLAN.md` §4.3); commity `tools/commit_U2.sh`: `58a1e99` (U2-1 — `SystemTreeLogic`)
+> · `5413cbd` (U2-2 — `LeftOutliner` + `MapInsets`, konsumenci wcięć mapy) · `6197c6b` (U2-3 — kolonie / stacje / 🪖N /
+> ⏳N w lewym, 486, chipy układów wyłączone) · `087949c` (U2-4 — klawisze „,” „.” „B”, kolejność rysowania i kliku, 483).
+> Sweep **325/325**, `check-i18n` pl = en = **3465** (+5 par `leftOutliner.*`); save v101 bez migracji.
+> • ✅ **483** · **486** — zamknięte w rejestrze macierzystym (`UI_PLAN.md` §6); wiersze zdjęte z A10.
+> • **NOWE: #488–#493** (z bramki U2 i sesji U2) — wiersze w A10: ⚪ **488** glif „−” zamknięcia karty ciała wobec „✕”
+>   panelu stacji · 🟠 **489** układ z Twoim statkiem albo wojskami niewidoczny w lewym outlinerze (reguła widoczności
+>   + 480) — decyzja właściciela: **U3-0** · ⚪ **490** prawy klik nad lewą kolumną otwiera menu mapy (zmierzone; rodzina
+>   484) · ⚪ **491** panel stacji zostaje po przełączeniu układu · 🟠 **492** czarny ekran po zamknięciu klawiszem H mapy
+>   kolonii z innego układu — NIE odtworzony w 8 przebiegach, jednolinijkowiec diagnostyczny, bez hotfiksu · ⚪ **493**
+>   karta ciała po fokusie zakrywa 33–41 % tarczy.
+> • **487** → U3 (wiersz w A10 zostaje). Obserwacje C (⏳N — ikonki pozycji kolejki zamiast liczby) i D (podpowiedź
+>   kolonii w lewym) — zakres U3, bez numeru (`UI_PLAN.md` §4.4).
+> • Rejestr #471–#493: 23 wpisy — ✅ 12 · ⚪ 8 · 🟠 3.
+> • Następny: **U3** — prawy outliner; pierwszy commit U3-0 (489) (`UI_PLAN.md` §4.4).
+> • **Pierwszy wolny numer: 494.**
+
 
 ---
 
@@ -870,7 +890,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
-| **471-487** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki; 2026-10-18–19; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1) |
+| **471-493** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki; 2026-10-18–19; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1136,17 +1156,21 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **409** | ⚪ | powiadomienie o mobilizacji (`notif.mobilizationSubtitle`, „Rezerwa wchodzi do służby: N”) liczy też kadłuby z puli — bramka S1, krok 9: `emp_002` „…: 6” przy zerze w rezerwie | decyzja właściciela 2026-10-08: tekst zostaje — etap polerki UI. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **410** | ⚪ | `KOSMOS.debug.spawnMyVessel(hull, { systemId })` tworzy chimerę doku (dok przy domu, `systemId` z opcji) — zmierzone w prawdziwej grze; na kodzie sesji 2 leczy ją dopiero wczytanie | tylko narzędzie debug; hipoteza producenta 407. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **412** | ⚪ | panel WYWIAD w grze EN pokazuje polskie „Ostatnie incydenty” (`IntelOverlay.js:346`, klucza brak — kandydat `intel.recentIncidents`) i „(brak)” (`:356`, klucz istnieje: `intel.none`), a pod nimi surowy slug incydentu `ev.type` (`:361`) — z bramki S1 (krok P) | od `347a64d` (2026-04-16); `check-i18n` trzyma oba literały w baseline (`IntelOverlay.js: 2`, `tools/check-i18n.mjs:387`); klasa **113**; etap polerki UI. `AI_STRIKES_BACK_PLAN.md` §6 |
-| **480** | 🟠 | zapisy sprzed naprawy **186** niosą układy odwiedzone (a nawet skolonizowane) jako niezbadane — `galaxyStar.explored = false` przy lustrze `sysData.explored = true` (zmierzone: ZF gy120 `sys_024`, Polonia gy79 `sys_036`); naprawa 186 nie leczy danych ⇒ kanon `isSystemExplored` mówi „nieznany” o układzie, który gracz zna albo kolonizuje (STRATCOM) | osobny slice (kandydaci: „zbadany ⇐ własna kolonia / placówka / stacja” albo leczenie przy wczytaniu); U2 omija regułą widoczności z „lub”. `UI_PLAN.md` §6 |
+| **480** | 🟠 | zapisy sprzed naprawy **186** niosą układy odwiedzone (a nawet skolonizowane) jako niezbadane — `galaxyStar.explored = false` przy lustrze `sysData.explored = true` (zmierzone: ZF gy120 `sys_024`, Polonia gy79 `sys_036`); naprawa 186 nie leczy danych ⇒ kanon `isSystemExplored` mówi „nieznany” o układzie, który gracz zna albo kolonizuje (STRATCOM) | osobny slice (kandydaci: „zbadany ⇐ własna kolonia / placówka / stacja” albo leczenie przy wczytaniu); U2 omija regułą widoczności z „lub” dla własnej kolonii / placówki / stacji; statek albo wojska w układzie — **489** (U3-0). `UI_PLAN.md` §6 |
 
 ## A10 — Arkusz UI: kamera, reguła klik/focus, warstwy (rejestr `UI_PLAN.md` §6)
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **483** | ⚪ | rozwinięta lista kolonii w górnej belce leży pod warstwą etykiet mapy — chipy układów i plakietki `MapLabelLayer` rysowane po belce (`UIManager.js:2374` wobec `:2332`), a klik w chip układu, plakietkę floty albo etykietę stacji pochłania `MapLabelLayer` (`:2003`, przed belką `:2006`); istniało przed U0 | → **U2** (§7.18 — chipy wyłączone; lista rysowana i klikana przed `MapLabelLayer`). `UI_PLAN.md` §6 |
 | **484** | ⚪ | `#planet-canvas` (legacy PlanetScene) jest niewidzialnym celem KAŻDEGO kliku mapy — `display: none` (`index.html:33`) przegrywa specyficznością z `#game-container canvas { display: block }` (`:24-30`), z-index 4 nad `#event-layer` (3); gałąź canvas lewego kliku (`GameScene.js:5970`, `:5984`) i pominięcie `isOverUI` w prawym (`:6072-6073`) polegają na tym celu — cel kliku zmierzony, prawy klik — wniosek z kodu | → przy usuwaniu PlanetScene (ostrzeżenie: cel kliku przejdzie na `#event-layer` — lewy klik na gałąź z raycastem sceny, prawy zacznie pytać `isOverUI`). `UI_PLAN.md` §6 |
 | **485** | ⚪ | podpowiedź po najechaniu zdradza statek ukryty mgłą wojny — picker najechania (`ThreeRenderer.js:3400`) nie pyta o `sprite.visible`; `_showVesselTooltip` (`:3593`) ma bramkę tożsamości, nie widoczności; picker kliku filtruje od U1-3 — wniosek z kodu | → U3 albo osobny drobny krok. `UI_PLAN.md` §6 |
-| **486** | ⚪ | przełączenie układu zostawia kartę ciała przy wyczyszczonym zaznaczeniu renderera — `_disposeAllMeshes` (`ThreeRenderer.js:1497-1502`) zeruje `_selectedEntityId` bez `body:deselected`; rozjazd trwa po powrocie i po Home, następny klik w ciało = od razu kamera; Home / chip / nagłówek bieżącego układu zaznaczenie zostawiają — zmierzone (Polonia gy79; tak samo na `d1f2158`) | → **U2** (przełączenie układu zamyka kartę ciała spoza układu docelowego). `UI_PLAN.md` §4.2, §6 |
-| **487** | ⚪ | picker statku (40 px, `_pickVesselForClick`) biegnie przed raycastem ciała (`ThreeRenderer.js:3151-3194`) — sprite statku obok zabiera klik w tarczę; zmierzone (Polonia gy79, Mstow + „Fregata I” na orbicie stacji): tarcza klikalna jako ciało 0 % przy 40 i 20 j., 15–19 % przy 10 j., 100 % od 6 j.; tak samo na `d1f2158` | → **U2 / U3** (do rozważenia; lewy outliner daje ciało bez pickera mapy). `UI_PLAN.md` §6 |
+| **487** | ⚪ | picker statku (40 px, `_pickVesselForClick`) biegnie przed raycastem ciała (`ThreeRenderer.js:3151-3194`) — sprite statku obok zabiera klik w tarczę; zmierzone (Polonia gy79, Mstow + „Fregata I” na orbicie stacji): tarcza klikalna jako ciało 0 % przy 40 i 20 j., 15–19 % przy 10 j., 100 % od 6 j.; tak samo na `d1f2158` | → **U3** (zakres U3 z bramki U2; lewy outliner daje ciało bez pickera mapy). `UI_PLAN.md` §6 |
+| **488** | ⚪ | zamknięcie karty ciała to glif „−” (`BottomContext.js:218`), panel stacji ma w tym miejscu „✕” (`StationPanel.js:151`) — „−” wygląda jak minimalizacja; z bramki U1 (obserwacja 1, strefa zmierzona przy pięciu rozdzielczościach) | → reforma pływających okien (zaparkowana). `UI_PLAN.md` §6 |
+| **489** | 🟠 | układ odwiedzony w zapisie sprzed **186** (`explored = false`) bez Twojej kolonii, placówki ani stacji wypada z lewego outlinera także przy Twoich statkach albo wojskach na miejscu (`SystemTreeLogic.js:143`; Polonia gy79: Akhernar z Twoim statkiem — bramka U2 K41); w U3-3 znika z prawego jedyna droga do takich wojsk (JEDN. NAZIEMNE) | → **U3-0** (decyzja właściciela 2026-10-19: „∨ własny statek w układzie ∨ własne jednostki naziemne na ciele układu” — dosłowne D-UI-3, bez nowego stanu); leczenie danych **480** — osobny slice. `UI_PLAN.md` §6 |
+| **490** | ⚪ | prawy klik nad lewą kolumną otwiera menu kontekstowe mapy pod nią — przy celu `CANVAS` prawy klik nie pyta `isOverUI` (`GameScene.js:6083-6084`); zmierzone (ZF r120, `087949c`): menu otwarte nad wierszami i nad tłem kolumny przy `isOverUI` = `true` | → U3 albo osobny drobny krok (rodzina **484**). `UI_PLAN.md` §6 |
+| **491** | ⚪ | panel stacji zostaje otwarty po przełączeniu układu, także dla stacji spoza układu docelowego — `StationPanel.js:67` ignoruje `reason: 'system_switch'` (świadomie: 486 objęło kartę ciała); zmierzone w pełnej części A bramki (panel stacji domowej nad Thubanem); sprzed U2 | → U3 (do rozważenia razem z 486). `UI_PLAN.md` §6 |
+| **492** | 🟠 | czarny ekran po zamknięciu klawiszem H mapy kolonii z innego układu (bramka U2, 2× u właściciela) — **NIE odtworzony** w 8 przebiegach (`803a927` i `087949c`; SwiftShader i GPU; pauza i płynący czas; po „Obserwuj”; pełna część A bramki; przytrzymany H); H i Esc zamykają tą samą funkcją (`ColonyOverlay.hide`); „Rebake: 58 tekstur” = przełączenie układu z kliku w listę kolonii z górnej belki (`TopResourceDrawer.js:722`, sprzed U2), log asynchroniczny | → **U3** (diagnoza jednolinijkowcem z `UI_PLAN.md` §4.3 A przy następnym wystąpieniu; naprawa po pomiarze; bez hotfiksu). `UI_PLAN.md` §6 |
+| **493** | ⚪ | karta ciała po drugim kliku (focus) zakrywa 33–41 % tarczy śledzonego ciała — `computeFloatingPlacement` (`BottomContextLogic.js:28-29`) kotwiczy kartę 18 px od ŚRODKA ciała, bez promienia tarczy; zmierzone (ZF r120, `087949c`, GPU); sprzed U2 | → reforma pływających okien (zaparkowana) — tylko rejestr. `UI_PLAN.md` §6 |
 
 ---
 
