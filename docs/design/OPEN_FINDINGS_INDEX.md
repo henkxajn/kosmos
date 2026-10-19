@@ -768,6 +768,29 @@
 > • Następny: **U1** — reguła klik/focus (D-UI-5; `UI_PLAN.md` §4.2).
 > • **Pierwszy wolny numer: 484.**
 
+> **Aktualizacja 2026-10-19 (ARKUSZ UI — U1: zamknięcie w kodzie)** (rejestr macierzysty `UI_PLAN.md` §6). U1 (reguła
+> klik/focus, D-UI-5; decyzja 2 a–d) — bramka U1 w przeglądarce właściciela PASS (`UI_PLAN.md` §4.2; okno wyższe niż 720,
+> relacje zgodne; K6 pokryty ścieżką `body:deselected` z K3; „do potwierdzenia” 1–12 bez zmian); commity
+> `tools/commit_U1.sh`: `4a645eb` (U1-1 — `ClickIntentLogic`, `resetToSystemView`, Home, klik w bieżący układ) ·
+> `be52d8a` (U1-2 — zaznaczenie ciała osobno od kamery, odznaczenie bez ruchu kamery) · `d8cfe62` (U1-3 — producenci
+> przez regułę: mapa, Outliner, etykiety, karta ciała, wróg, Dok; jeden picker na gest; dwuklik bez ColonyOverlay) ·
+> `0c4b30b` (komentarz `ThreeCameraController.js:3` „H = reset” → Home). Sweep **323/323**, `check-i18n` pl = en =
+> **3460** (bez nowych kluczy); save v101 bez migracji.
+> • ✅ **471** · **472** · **473** · **478** — zamknięte w rejestrze macierzystym (`UI_PLAN.md` §6); wiersze zdjęte z A1
+>   (478) i A10 (471, 472, 473). 478 — ścieżka Outlinera i mapy; Tab → U3 (`UI_PLAN.md` §4.4, U3-2).
+> • **NOWE: #484–#487** (z bramki U1 i sesji U1) — wiersze w A10: ⚪ **484** `#planet-canvas` jako niewidzialny cel
+>   każdego kliku mapy (ostrzeżenie przy usuwaniu PlanetScene) · ⚪ **485** podpowiedź najechania zdradza statek ukryty
+>   mgłą wojny · ⚪ **486** przełączenie układu zostawia kartę ciała przy wyczyszczonym zaznaczeniu renderera (→ U2) ·
+>   ⚪ **487** picker statku (40 px) wygrywa z tarczą ciała (→ U2 / U3).
+> • **477** — dopisek z bramki U1 (wiersz A1): pierwszy klik w wiersz Doku (statek w skoku) idzie regułą jako
+>   zaznaczenie + ping, tą samą ścieżką co przed U1.
+> • Obserwacja 3 z bramki (ikony budynków znikają po odznaczeniu) — ⚪ bez numeru: zachowanie sprzed U1, odsłonięte przez
+>   U1, bo kamera nie odlatuje już w gwiazdę (`UI_PLAN.md` §4.2). Obserwacja 1 (zamknięcie karty ciała to „−”, nie „✕”) —
+>   bez numeru, kandydat do zaparkowanej reformy pływających okien.
+> • Rejestr #471–#487: 17 wpisów — ✅ 10 · ⚪ 6 · 🟠 1.
+> • Następny: **U2** — lewy outliner (`UI_PLAN.md` §4.3).
+> • **Pierwszy wolny numer: 488.**
+
 
 ---
 
@@ -847,7 +870,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
-| **471-483** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki; 2026-10-18–19; 471-481 z audytu fazy A, 482-483 z sesji U0) |
+| **471-487** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki; 2026-10-18–19; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -902,8 +925,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **154** | 🟠 | `AutoRetreatSystem._findNearestFriendlyPlanet` dalej bez terminu układu | **ŻYWA** przez trzy przyciski „Powrót do bazy" (`FMO:4581`, `FleetGroupPanel:445`, `FleetCommandPanel:384`) |
 | **166a** | 🟠 | `FMO._handleFleetEngage:4534` — lista wrogów wg KAMERY, poziom floty | **ODCZYT, nie pomiar** (D-SS6) |
 | **123** | 🟠 | reszta po naprawie: `_calcDistAU` = surowy hypot na dwóch ramkach karmi `reachable` | dwie z trzech ścieżek zamknięte |
-| **477** | ⚪ | `pingVessel` bez terminu układu (`ThreeRenderer.js:7151-7158`): statek bez sprite'a (inny układ, tranzyt warp) pinguje po `vessel.position` w ramce oglądanego układu; osiągalne dziś z Doku taktycznego (wiersz statku w tranzycie) — wniosek z kodu, bez kliknięcia | → **U3-2** (arkusz UI; uzbraja się w U3 — D-UI-10 dla wszystkich układów). `UI_PLAN.md` §6 |
-| **478** | ⚪ | `vessel:focus` dla statku w INNYM układzie to cichy no-op (`ThreeRenderer.js:1157-1197`) — Outliner i Tab (`UIManager.cycleSelectedVessel`) zaznaczają statek, kamera stoi, układ się nie przełącza | → **U1-3 / U3** (`UI_PLAN.md` §7.8). `UI_PLAN.md` §6 |
+| **477** | ⚪ | `pingVessel` bez terminu układu (`ThreeRenderer.js:7151-7158`): statek bez sprite'a (inny układ, tranzyt warp) pinguje po `vessel.position` w ramce oglądanego układu; osiągalne dziś z Doku taktycznego (wiersz statku w tranzycie) — wniosek z kodu, bez kliknięcia; **bramka U1 (2026-10-19):** po U1 pierwszy klik w wiersz Doku (statek w skoku) idzie regułą jako zaznaczenie + ping — ta sama ścieżka co przed U1 (wniosek z kodu) | → **U3-2** (arkusz UI; uzbraja się w U3 — D-UI-10 dla wszystkich układów). `UI_PLAN.md` §6 |
 
 ## A2 — Prawdomówność rozkazów (slice **ORDER_TRUTHFULNESS**, §7a — uzasadniony i oszacowany)
 
@@ -1120,10 +1142,11 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 
 | # | | opis | uwaga |
 |---|---|---|---|
-| **471** | ⚪ | klawisz H (reset kamery) martwy w `civMode` — `overlayManager.handleKey` zjada „h” → `'colony'` (`GameScene.js:4817`, `OverlayManager.js:23`) przed `case 'KeyH'` (`:4826-4829`); dokumentacja opisuje funkcję nieosiągalną w głównym trybie gry | → **U1-1** (`Home`). `UI_PLAN.md` §6 |
-| **472** | ⚪ | reset kamery niepełny — `KeyH` zeruje tylko `_focusEntityId`; śledzenie `_focusVesselId` / `_focusStationId` oraz `_watch` / `_autoFocus` cofają reset w następnej klatce | → **U1-1** (`resetToSystemView`). `UI_PLAN.md` §6 |
-| **473** | 🟠 | odznaczenie przesuwa kamerę — klik w pustkę mapy i ✕ karty ciała → `focusOn(gwiazda)` (`ThreeRenderer.js:1043-1060`); **bramka U0 (2026-10-19):** kamera kończy za blisko gwiazdy („wnętrze słońca”) | → **U1-2** (decyzja 2a) + wymóg z bramki U0: po odznaczeniu kamera stoi; żaden automatyczny ruch kamery nie kończy się bliżej gwiazdy niż kadr układu (`frameSystem`). `UI_PLAN.md` §4.2, §6 |
 | **483** | ⚪ | rozwinięta lista kolonii w górnej belce leży pod warstwą etykiet mapy — chipy układów i plakietki `MapLabelLayer` rysowane po belce (`UIManager.js:2374` wobec `:2332`), a klik w chip układu, plakietkę floty albo etykietę stacji pochłania `MapLabelLayer` (`:2003`, przed belką `:2006`); istniało przed U0 | → **U2** (§7.18 — chipy wyłączone; lista rysowana i klikana przed `MapLabelLayer`). `UI_PLAN.md` §6 |
+| **484** | ⚪ | `#planet-canvas` (legacy PlanetScene) jest niewidzialnym celem KAŻDEGO kliku mapy — `display: none` (`index.html:33`) przegrywa specyficznością z `#game-container canvas { display: block }` (`:24-30`), z-index 4 nad `#event-layer` (3); gałąź canvas lewego kliku (`GameScene.js:5970`, `:5984`) i pominięcie `isOverUI` w prawym (`:6072-6073`) polegają na tym celu — cel kliku zmierzony, prawy klik — wniosek z kodu | → przy usuwaniu PlanetScene (ostrzeżenie: cel kliku przejdzie na `#event-layer` — lewy klik na gałąź z raycastem sceny, prawy zacznie pytać `isOverUI`). `UI_PLAN.md` §6 |
+| **485** | ⚪ | podpowiedź po najechaniu zdradza statek ukryty mgłą wojny — picker najechania (`ThreeRenderer.js:3400`) nie pyta o `sprite.visible`; `_showVesselTooltip` (`:3593`) ma bramkę tożsamości, nie widoczności; picker kliku filtruje od U1-3 — wniosek z kodu | → U3 albo osobny drobny krok. `UI_PLAN.md` §6 |
+| **486** | ⚪ | przełączenie układu zostawia kartę ciała przy wyczyszczonym zaznaczeniu renderera — `_disposeAllMeshes` (`ThreeRenderer.js:1497-1502`) zeruje `_selectedEntityId` bez `body:deselected`; rozjazd trwa po powrocie i po Home, następny klik w ciało = od razu kamera; Home / chip / nagłówek bieżącego układu zaznaczenie zostawiają — zmierzone (Polonia gy79; tak samo na `d1f2158`) | → **U2** (przełączenie układu zamyka kartę ciała spoza układu docelowego). `UI_PLAN.md` §4.2, §6 |
+| **487** | ⚪ | picker statku (40 px, `_pickVesselForClick`) biegnie przed raycastem ciała (`ThreeRenderer.js:3151-3194`) — sprite statku obok zabiera klik w tarczę; zmierzone (Polonia gy79, Mstow + „Fregata I” na orbicie stacji): tarcza klikalna jako ciało 0 % przy 40 i 20 j., 15–19 % przy 10 j., 100 % od 6 j.; tak samo na `d1f2158` | → **U2 / U3** (do rozważenia; lewy outliner daje ciało bez pickera mapy). `UI_PLAN.md` §6 |
 
 ---
 

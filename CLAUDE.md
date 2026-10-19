@@ -2,7 +2,7 @@
 
 > **Odroczone live-gate'y** (weryfikacje w przeglądarce świadomie odroczone + luki znalezione przy próbie): `docs/deferred-live-gates.md`.
 > **Bieżący arc — POLISH** (polerka UI i grafiki; P1 tempo starcia — ✅ ZAMKNIĘTY W KODZIE 2026-10-17: `13ca6c9` · `bcecaa0`, bramka P1 PASS, CP1–CP12; P2 widoczność — AUDYT 2026-10-17 (§10; #458–#464) → CP13–CP20 → **P2a — ✅ ZAMKNIĘTY W KODZIE 2026-10-18** (§11: `e866bd6` 453 · `51f8e81` 458 · `dc533cf` 457 · `9e752cc` 455/459/462; bramka P2A PASS) → CP21–CP24 → **P2b — ✅ ZACOMMITOWANY 2026-10-18** (§12–§13: `5504e2e` 467 · `9f03381` 451 · `96690d0` 461 · `f9d4efa` 468/465 · `72509d4` 450 + C6 `2ff8d26` pierścień subtelny, CP27; bramka P2B PASS; CP25–CP28) → **temat widoczności starcia ZAMKNIĘTY (CP24)**; backlog bez daty 163/464/460/466/463/469/470, następny P3 — 456; findingi #449–#470): `docs/design/POLISH_PLAN.md`.
-> **ARKUSZ UI** (dwa outlinery + górna i dolna belka; faza A — audyt read-only + decyzje 1–6 podpisane, `d346c8c`; **U0 belki — ✅ ZAMKNIĘTE 2026-10-19**: `7d8231b` U0-1 ramy paska nawigacji i zegara · `97dd86c` U0-2 lista kolonii z kliku · `92f1b33` U0-3 stałe komórki belki, format wg języka, kredyty w całości, czip ⚔ przy pasku zegara; bramka U0 PASS 21/21; ✅ 474/475/476/479/481/482; 483 → U2; wymóg z bramki — po odznaczeniu kamera stoi, żaden automatyczny ruch kamery nie kończy bliżej gwiazdy niż kadr układu — → U1 (473); **następne U1 — reguła klik/focus D-UI-5**; findingi #471–#483, pierwszy wolny 484): `docs/design/UI_PLAN.md`.
+> **ARKUSZ UI** (dwa outlinery + górna i dolna belka; faza A — audyt read-only + decyzje 1–6 podpisane, `d346c8c`; **U0 belki — ✅ ZAMKNIĘTE 2026-10-19**: `7d8231b` U0-1 · `97dd86c` U0-2 · `92f1b33` U0-3, bramka U0 PASS 21/21, ✅ 474/475/476/479/481/482; **U1 reguła klik/focus D-UI-5 — ✅ ZAMKNIĘTE 2026-10-19**: `4a645eb` U1-1 `ClickIntentLogic` + `resetToSystemView` + Home + klik w bieżący układ · `be52d8a` U1-2 zaznaczenie ciała osobno od kamery, odznaczenie bez ruchu kamery · `d8cfe62` U1-3 producenci przez regułę (mapa, Outliner, etykiety, karta ciała, wróg, Dok), jeden picker na gest, dwuklik bez ColonyOverlay · `0c4b30b` komentarz kontrolera kamery; bramka U1 PASS; ✅ 471/472/473/478 (Tab → U3); nowe 484–487; §7.18 podpisane (chipy układów znikają w U2); 483 → U2; **następne U2 — lewy outliner**; findingi #471–#487, pierwszy wolny 488): `docs/design/UI_PLAN.md`.
 
 ## Wizja gry
 
@@ -59,7 +59,8 @@ generate-planets.js (CLI, Node.js) → assets/planet-textures/*.png
 - `physics:updated { planets, star, moons }` → `_syncPlanetMeshes()` — synchronizuje pozycje
 
 **ThreeCameraController** (`src/renderer/ThreeCameraController.js`):
-- Sferyczny orbit: LPM drag = obrót, scroll = zoom (3–450 j., 0.5 przy focus na księżycu), H = reset
+- Sferyczny orbit: LPM drag = obrót, scroll = zoom (3–450 j., 0.5 przy focus na księżycu), Home = reset kamery — domyślny
+  widok układu (`ThreeRenderer.resetToSystemView`, kadr `frameSystem`; ARKUSZ UI U1-1); H w trybie cywilizacji = Kolonia
 - `wasDrag` — flaga odróżniająca drag od kliknięcia
 - `_minDist` — dynamiczny min zoom: 3 (domyślny), 0.5 (focus na księżycu)
 - `setMinDist(val)` — wywoływany przez ThreeRenderer przy body:selected/deselected
