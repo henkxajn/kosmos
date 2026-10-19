@@ -1,10 +1,12 @@
 # UI_PLAN — ARKUSZ UI: outlinery + belki
 
-> **Stan: FAZA A zamknięta, U0 w toku.** Faza A — audyt read-only 2026-10-18 na HEAD `a3c6c29` (POLISH P2b zamknięte,
-> `POLISH_PLAN.md` §13). Podpisy właściciela 2026-10-18: decyzje 1–6 (§5), próg skrótu 10 000 (D-UI-12), odczytanie
-> D-UI-3 przez decyzję 5 (§2) oraz zgoda na §7.13–§7.15. Teczka Fazy A: `C:\Users\Komputer\kosmos-handover\ui-phase-a\`.
-> Rejestr macierzysty findingów arca: **§6 tego pliku** (#471–#481; `OPEN_FINDINGS_INDEX.md` ruszamy dopiero przy
-> commicie dokumentacji). **Pierwszy wolny numer po tym audycie: 482.**
+> **Stan: FAZA A zamknięta · U0 — ✅ ZAMKNIĘTE 2026-10-19** (commity `7d8231b` U0-1 · `97dd86c` U0-2 · `92f1b33` U0-3;
+> bramka U0 u właściciela PASS 21/21 — §4.1) **· następne: U1** (reguła klik/focus, §4.2). Faza A — audyt read-only
+> 2026-10-18 na HEAD `a3c6c29` (POLISH P2b zamknięte, `POLISH_PLAN.md` §13). Podpisy właściciela 2026-10-18: decyzje 1–6
+> (§5), próg skrótu 10 000 (D-UI-12), odczytanie D-UI-3 przez decyzję 5 (§2) oraz zgoda na §7.13–§7.15. Teczki:
+> `C:\Users\Komputer\kosmos-handover\ui-phase-a\` (faza A) · `C:\Users\Komputer\kosmos-handover\ui-u0\` (U0).
+> Rejestr macierzysty findingów arca: **§6 tego pliku** (#471–#483; otwarte mają wiersze w `OPEN_FINDINGS_INDEX.md` od
+> commitu dokumentacji U0). **Pierwszy wolny numer: 484** (482 i 483 — sesja U0, 2026-10-18).
 > Tagi: `[code]` źródło (plik:linia przy HEAD `a3c6c29`) · `[measured]` pomiar sondą read-only (zapisy właściciela,
 > fixture) · `[derived]` wyliczenie z kodu i założonej metryki · `[git]` historia.
 
@@ -256,7 +258,28 @@ przewijanie i zwijanie układów, które już istnieją). Canvas w trybie natych
   | sama wartość | ~55 px | ~930 px | tak (zapas ~120 px) |
 
   → **decyzja 1.** Metrykę zmierzyć `measureText` w U0 (to jedyne założenie w tej tabeli).
-- **Prawy koniec pasma:** czip „⚔ Walki [N]" (`BottomBar.js:158-171`, x = `W − szer. − 8`, y 6–26) leży w belce
+- **Pomiar U0 `[measured]` (2026-10-18, `measureText` w Chrome 155; teczka `kosmos-handover/ui-u0/`).** ⚠ Belka NIE
+  rysuje się w grze fontem Space Mono z `ThemeConfig` — `TitleScene` przy KAŻDYM rozruchu nakłada preset motywu ekranu
+  tytułowego (`TitleScene.js:81-90`, `applyPreset` `:163-167`): 4 z 5 motywów → **Share Tech Mono 9/11** (5,94 px na
+  znak przy 11 px = 0,54 em), „Neon Cyber" → **Rajdhani 10/12** (proporcjonalny: cyfry 3,80–6,24 px; „,", „k" węższe
+  od cyfry). **Space Mono** (6,732 px = 0,612 em, nie 0,6) — wyłącznie preset `default` z ThemeOverlay (F7), do
+  następnego rozruchu. Budżet wariantu 1(a) przed implementacją (`STOP_U0_BUDGET.md`), najgorszy realny przypadek
+  (>1 kolonia, czip EN „⚔ Battles [12]", kredyty 7-cyfrowe; zapas w px, ujemny = nie mieści się):
+
+  | Font | 1(a), czip w paśmie | 1(a), czip poza pasmem | (b) bez strzałek | maks. strefa nazwy przy czipie w paśmie |
+  |---|---|---|---|---|
+  | Share Tech Mono (domyślny) | −33,6 | +57,4 | +70,6 | 166 |
+  | Rajdhani | −39,5 | +36,5 | +139,0 | 160 |
+  | Space Mono (tylko F7) | −111,3 | −12,3 | −7,1 | 88 |
+
+  W pasku zegara (jeden slot nawigacji, x 1092–1274 przy W = 1280) miejsca na czip też nie ma: klaster 159–172 px,
+  wolne 0,2–12,8 px, czip 20–93 px (`STOP_U0_CHIP.md`). ⇒ **czip ⚔ na lewo od paska zegara (decyzja właściciela,
+  opcja 1 — Finding 482)**; strefa nazwy 200 → podłoga 160 dynamicznie przy ujemnym budżecie, nazwa z wielokropkiem;
+  szablony szerokości z `measureText` AKTYWNEGO fontu, z najszerszą cyfrą (w Rajdhani najszersza realna postać to
+  „444,4", nie „44,4k"). Po implementacji, na zapisie Polonia r79 (18 tokenów — z plakietką puli hubu): Share Tech Mono
+  17/17 zwykłych, strefa 200 · Rajdhani 17/17, 172 · Space Mono 16/17 (znika wyłącznie plakietka puli na końcu), 160;
+  kolumny równe w 6 wierszach, kredyty w całości (`results/belt_dev_C3_pl/`).
+- **Prawy koniec pasma (stan przed U0 — czip przeniesiony, Finding 482):** czip „⚔ Walki [N]" (`BottomBar.js:158-171`, x = `W − szer. − 8`, y 6–26) leży w belce
   dokładnie tam, gdzie D-UI-12 przypnie kredyty; tekst czipu zaszyty po polsku (Finding 481).
 - **Blokada kamery:** `TopBar.isOver` = `y ≤ TOP_BAR_H (46)` (`TopBar.js:21, 813-815`) przy belce 28 px ⇒ martwy pas
   18 px pod belką dla przeciągania i zoomu kamery (Finding 476).
@@ -346,12 +369,31 @@ wykonaniowe.
 - **U0-3 (D-UI-12 + Findingi 474, 475, 479, 481; opcjonalnie 476).** NEW `src/ui/TopBarFormatLogic.js` (czysty: format
   liczby wg języka i progu 10 000, szablony szerokości, plan slotów z kredytami przypiętymi do prawego końca) +
   `TopResourceDrawer` na nim; czip ⚔ przez i18n i poza slotem kredytów; `TopBar.isOver` → `TOP_BAND_H`.
+  **Wykonanie (2026-10-18):** czip przeniesiony do `BottomControlBar` — na lewo od paska zegara, z własnym hit-testem
+  (opcja 1, Finding 482); strefa nazwy 200 → 160 dynamicznie (pomiar §3.6).
   **Keeper:** tabela formatu PL/EN; x tokenu k identyczne w każdym wierszu listy (wykonanie `_drawRow` na atrapie ctx,
   dwie kolonie o różnych liczbach); kredyty narysowane przy 18 tokenach i dużych liczbach.
 - **Bramka U0** (przeglądarka): hover nie rozwija · klik rozwija i zwija · kolumny równe przy 3+ koloniach ·
   12 400 → `12,4k` (PL) / `12.4k` (EN), 9 999 w całości · kredyty w całości także obok czipu ⚔ · pasek nawigacji bez ram,
   aktywny slot widoczny · karty peek i zegar bez regresji.
 - **Ryzyko:** niskie; zapis bez zmian (v101); i18n +2–3 pary.
+- **Bramka U0 u właściciela — 2026-10-19: PASS 21/21** `[measured: odczyt właściciela]`. Scenariusz
+  `kosmos-handover/ui-u0/gate/GATE_U0.md` (21 kroków K0–K12, kopia zapisu Polonia r79, gra po polsku); kod U0 zestagowany
+  (drzewo indeksu = C3 `5488d754` — te same pliki, które weszły w trzy commity niżej). Okno właściciela wyższe niż 720,
+  więc liczby bezwzględne inne niż u walidatora (1280×720); relacje z dokumentu bramki zgodne:
+  `czip.x + czip.w + 4 = zegarX` (K8) · `czipY = góraKarty − 20` przy karcie „Dowództwo” (K9) · `zegarY = góraKarty − 20`
+  przy karcie „Nauka” (K9b). Punkty „do potwierdzenia” 1–6 przyjęte bez zmian: klik w nazwę kolonii zwija listę ·
+  liczby wyrównane do prawej w komórce · próg strzałki trendu 0,05 na rok (dobrobyt 0,5) · wygląd czipu (tło + czerwona
+  obwódka, szerokość = tekst + 14 px, 4 px od paska zegara) · Space Mono: strefa nazwy 160 z wielokropkiem, odpada
+  plakietka puli · klik poza listą zwija ją także przy kliku w inny panel (lista nie pochłania kliku).
+  Obserwacja właściciela z bramki (poza U0): po odznaczeniu ciała kamera leci na gwiazdę i kończy za blisko („wnętrze
+  słońca”) — Finding **473**, wymóg zapisany do U1 (§4.2, §5 decyzja 2 (a)).
+- **Zamknięcie U0 — 2026-10-19:** `tools/commit_U0.sh` — `7d8231b` (U0-1, drzewo `2a2cf6a8`) · `97dd86c` (U0-2,
+  `84863ff0`) · `92f1b33` (U0-3, `5488d754`); drzewo każdego commitu = `patches/trees.txt`, przecelowań keeperów brak.
+  Zamknięte w §6: ✅ **474** · **475** · **476** · **479** · **481** · **482** (wszystkie w U0-3). **483** → U2 (§7.18).
+  Keepery NEW: `ui_bar_frames_smoke` 13/13 · `ui_colony_list_click_smoke` 11/11 · `ui_top_belt_slots_smoke` 82/82.
+  Sweep 319 → 320 → 321 → **322/322, 0 FAIL** (łańcuch w klonie; na `92f1b33` w repo gry — **322/322**), `check-i18n`
+  PASS pl = en = **3460** (+2: `combat.hudChip`, `combat.hudChipN`); zapis v101 bez migracji.
 
 ### 4.2 U1 — reguła klik/focus (D-UI-5)
 
@@ -366,6 +408,11 @@ wykonaniowe.
   Dowództwo, starty scenariusza) zostają bez zmian; słuchacz `:1004-1041` rusza kamerę tylko przy `focus !== false`;
   odznaczenie wg decyzji 2a. ⚠ Podgląd obserwatorium używa `_focusEntityId` jako twardej blokady kamery (`:2163-2167`,
   `:3734`) — to pole zostaje polem KAMERY.
+- **Wymóg z bramki U0 (2026-10-19, obserwacja właściciela — Finding 473).** Dziś po odznaczeniu ciała kamera leci na
+  gwiazdę i kończy za blisko („wnętrze słońca”). **Po odznaczeniu kamera stoi; żaden automatyczny ruch kamery nie kończy
+  się bliżej gwiazdy niż kadr układu (`frameSystem`).** Do audytu U1: lista automatycznych ruchów kamery z celem na
+  gwieździe (dziś m.in. `body:deselected` → `focusOn(gwiazda)`, `ThreeRenderer.js:1043-1060`; rodzina V-268 — kamera
+  wchodzi do wnętrza tarczy) i zakres zdania wobec fokusu na ciele leżącym bliżej gwiazdy niż kadr układu.
 - **U1-3.** Producenci w zakresie: `ThreeRenderer.handleClick` (statek / stacja / ciało; jeden picker dla gestu zamiast
   dwóch), `GameScene` dwuklik (2b), `MapLabelLayer` (plakietka własna / wroga, etykieta stacji), dzisiejszy `Outliner`
   (statek, kolonia, stacja; klik w bieżący układ = reset), `BottomContext:537` (przywrócenie karty bez kamery), wróg (2d),
@@ -375,8 +422,8 @@ wykonaniowe.
   część pinem źródłowym + bramką. Przecelowania: `dok_taktyczny_4f` 4.6 (tylko przy 2c, za zgodą właściciela);
   `s34b_bottomcontext` powinien zostać zielony (`body:selected` dalej zdejmuje minimalizację).
 - **Bramka U1** (przeglądarka): statek, ciało, stacja — pierwszy klik otwiera okno bez kamery, drugi klik rusza kamerę ·
-  pustka i ✕ wg 2a · dwuklik wg 2b · wróg wg 2d · dzisiejszy Outliner tak samo · klik w bieżący układ = domyślny widok ·
-  `Home`.
+  pustka i ✕ wg 2a (kamera stoi; żaden automatyczny ruch kamery nie kończy bliżej gwiazdy niż kadr układu) · dwuklik
+  wg 2b · wróg wg 2d · dzisiejszy Outliner tak samo · klik w bieżący układ = domyślny widok · `Home`.
 - **Ryzyko:** średnie — zmienia „czucie" mapy w każdym miejscu.
 
 ### 4.3 U2 — lewy outliner (D-UI-1 lewy, D-UI-2, D-UI-3, D-UI-4, D-UI-10 dla ciał)
@@ -434,6 +481,8 @@ Tylko te, których nie da się wyprowadzić z D-UI-1…13. Resztę rozstrzygam d
 ### Decyzja 1 (U0) — D-UI-12: co z deltami w stałej komórce
 
 **PODPISANA (2026-10-18): (a)** — strzałka ▲ / ▼ w kolorze zysku / straty zamiast liczby delty; liczba delty w tooltipie.
+**Dopisek (2026-10-18, po pomiarze U0 — §3.6):** czip ⚔ → na lewo od paska zegara (opcja 1, Finding 482); strefa nazwy
+kolonii 200 → podłoga 160 dynamicznie przy ujemnym budżecie, nazwa z wielokropkiem.
 
 **Pomiar `[derived]`:** pasmo ~1048 px (W = 1280 do 16:9), 17 tokenów. Komórka z liczbową deltą ~84 px → ~1430 px
 (ucięte 4–5 ostatnich tokenów); ze strzałką trendu ~62 px → ~1055 px (mieści się po zwężeniu strefy nazwy 200 → 190 px);
@@ -454,6 +503,9 @@ kamery; dwuklik → ColonyOverlay zdjęty; Dok taktyczny na „drugi klik" (zgod
 Cztery przypadki, których reguła nie rozstrzyga:
 - **(a) Odznaczenie.** Klik w pustą przestrzeń i ✕ karty ciała przesuwają dziś kamerę na gwiazdę (Finding 473).
   **Rekomendacja:** odznaczenie bez ruchu kamery. **Koszt:** jedna gałąź w słuchaczu + pin.
+  **Dopisek (2026-10-19, z bramki U0 — obserwacja właściciela):** po odznaczeniu kamera leci dziś na gwiazdę i kończy za
+  blisko („wnętrze słońca”). Wymóg do U1: po odznaczeniu kamera stoi; żaden automatyczny ruch kamery nie kończy się
+  bliżej gwiazdy niż kadr układu (`frameSystem`) — §4.2.
 - **(b) Dwuklik na kolonię** otwiera pełnoekranowy ColonyOverlay (`GameScene.js:5619-5628`). Przy „drugim kliku = focus"
   szybki dwuklik da focus i overlay naraz. **Rekomendacja:** zdjąć dwuklik → ColonyOverlay; wejście zostaje przez
   przycisk „Mapa ciała" w karcie ciała (`BottomContext._doAction`) i klawisz H. Dwuklik → `vessel:focus` jest wtedy
@@ -529,21 +581,26 @@ układu.
 
 ---
 
-## 6. Findingi #471–#481 (rejestr macierzysty)
+## 6. Findingi #471–#483 (rejestr macierzysty)
 
 | # | | Treść | Gdzie domknąć |
 |---|---|---|---|
 | **471** | ⚪ | **Klawisz H (reset kamery) martwy w `civMode`.** `GameScene.js:4817` (`overlayManager.handleKey(e.key)`) zjada „h" → `'colony'` (`OverlayManager.js:23`) zanim `switch (e.code)` dojdzie do `case 'KeyH'` (`:4826-4829`). Dokumentacja (`ThreeCameraController.js:3`, `CLAUDE.md` „H = reset") opisuje funkcję nieosiągalną w głównym trybie gry. | U1-1 (`Home`) |
 | **472** | ⚪ | **Reset kamery niepełny.** `KeyH` zeruje tylko `_focusEntityId` (`GameScene.js:4827`); `_updateCameraFocus` (`ThreeRenderer.js:2159-2192`) dalej śledzi `_focusVesselId` / `_focusStationId`, a `_watch` / `_autoFocus` biegną w pętli renderu (`:3750-3753`) ⇒ przy śledzonym statku lub stacji reset jest cofany w następnej klatce. | U1-1 (`resetToSystemView`) |
-| **473** | 🟠 | **Odznaczenie przesuwa kamerę.** Klik w pustą przestrzeń mapy (`ThreeRenderer.handleClick:3141` → `body:deselected`) i ✕ karty ciała (`BottomContext.js:452`) uruchamiają `focusOn(gwiazda)` (`ThreeRenderer.js:1043-1060`). Komentarz `:3105-3107` opisuje to jako znany kłopot przy statkach („kamera lata na gwiazdę"). Sprzeczne z celem arca. | U1-2 (decyzja 2a) |
-| **474** | ⚪ | **Kolumny listy kolonii w górnej belce niewyrównane.** Szerokość slotu kluczowana `kolonia\|token` (`TopResourceDrawer.js:356`); maksimum nie maleje w sesji. | U0-3 |
-| **475** | ⚪ | **Kredyty ucinane pierwsze.** Ostatni token (`:164-169`) + `break` przy przepełnieniu (`:342`) — „loose-end #2" z UI v3. | U0-3 |
-| **476** | ⚪ | **Martwy pas 18 px pod górną belką dla kamery.** `TopBar.isOver` → `y ≤ TOP_BAR_H` (46) (`TopBar.js:21, 813-815`) przy belce 28 px (`TOP_BAND_H`). | U0-3 (opcjonalnie) |
+| **473** | 🟠 | **Odznaczenie przesuwa kamerę.** Klik w pustą przestrzeń mapy (`ThreeRenderer.handleClick:3141` → `body:deselected`) i ✕ karty ciała (`BottomContext.js:452`) uruchamiają `focusOn(gwiazda)` (`ThreeRenderer.js:1043-1060`). Komentarz `:3105-3107` opisuje to jako znany kłopot przy statkach („kamera lata na gwiazdę"). Sprzeczne z celem arca. **Bramka U0 (2026-10-19), obserwacja właściciela:** po odznaczeniu ciała kamera kończy za blisko gwiazdy („wnętrze słońca”). | U1-2 (decyzja 2a) + wymóg z bramki U0: po odznaczeniu kamera stoi; żaden automatyczny ruch kamery nie kończy się bliżej gwiazdy niż kadr układu (`frameSystem`) — §4.2 |
+| **474** | ✅ | **Kolumny listy kolonii w górnej belce niewyrównane.** Szerokość slotu kluczowana `kolonia\|token` (`TopResourceDrawer.js:356`); maksimum nie maleje w sesji. | U0-3 — ✅ **2026-10-19** `92f1b33` (jeden plan komórek dla wszystkich wierszy; bramka U0 K5, K10r, K10s) |
+| **475** | ✅ | **Kredyty ucinane pierwsze.** Ostatni token (`:164-169`) + `break` przy przepełnieniu (`:342`) — „loose-end #2" z UI v3. | U0-3 — ✅ **2026-10-19** `92f1b33` (kredyty przypięte do prawego końca, w całości; bramka U0 K5, K8) |
+| **476** | ✅ | **Martwy pas 18 px pod górną belką dla kamery.** `TopBar.isOver` → `y ≤ TOP_BAR_H` (46) (`TopBar.js:21, 813-815`) przy belce 28 px (`TOP_BAND_H`). | U0-3 (opcjonalnie) — ✅ **2026-10-19** `92f1b33` (`TopBar.isOver` w `civMode` → 28 px; bramka U0 K11) |
 | **477** | ⚪ | **`pingVessel` bez terminu układu** (`ThreeRenderer.js:7151-7158`): statek bez sprite'a (inny układ, tranzyt warp) pinguje po `vessel.position` w ramce oglądanego układu. Osiągalne dziś z Doku taktycznego (wiersz statku w tranzycie — `TacticalDockLogic.js:33`; renderer usuwa sprite poza aktywnym układem). Klasa „globalne id ≠ położenie" — wniosek z kodu, bez kliknięcia w przeglądarce. Uzbraja się w U3 (D-UI-10 dla wszystkich układów). | U3-2 |
 | **478** | ⚪ | **`vessel:focus` dla statku w INNYM układzie to cichy no-op** (`ThreeRenderer.js:1157-1197`: brak sprite'a, ciało doku nie w scenie). Outliner i Tab (`UIManager.cycleSelectedVessel :601-620` cyklują po WSZYSTKICH statkach gracza) zaznaczają statek, kamera stoi, układ się nie przełącza. | U1-3 / U3 (§7.8) |
-| **479** | ⚪ | **Liczby w górnej belce zawsze z kropką dziesiętną, także w grze PL** (`_fmtNum` / `_fmtDelta`, `TopResourceDrawer.js:47-65`); wzór zależny od języka jest w `NavPeekCardLogic`. | U0-3 |
+| **479** | ✅ | **Liczby w górnej belce zawsze z kropką dziesiętną, także w grze PL** (`_fmtNum` / `_fmtDelta`, `TopResourceDrawer.js:47-65`); wzór zależny od języka jest w `NavPeekCardLogic`. | U0-3 — ✅ **2026-10-19** `92f1b33` (`TopBarFormatLogic`; bramka U0 K6, K6en, K6pl) |
 | **480** | 🟠 | **Zapisy sprzed naprawy 186 niosą układy odwiedzone (a nawet skolonizowane) jako niezbadane — naprawa nie leczy danych.** Zmierzone w 2 z 5 partii: ZF gy120 `sys_024` (kolonia pełna + placówka gracza) i Polonia gy79 `sys_036` (dom `emp_001`, statek gracza na miejscu) mają `galaxyStar.explored = false` przy lustrze `sysData.explored = true`. To sygnatura stanu sprzed 2026-08-29: bootstrap AI gasił wtedy TYLKO flagę gwiazdy, a przylot do układu wygenerowanego wcześniej niczego nie oznaczał (opis 186 w `CLAUDE.md`). W linii ZF stan trwa od gy71 (v91, lipiec) do gy120 (zapis z 2026-10-04 — już po naprawie, bo od tamtej pory żaden statek gracza nie przyleciał tam skokiem). Skutek dziś: kanon `isSystemExplored` mówi „nieznany" o układzie, który gracz zna albo kolonizuje → STRATCOM pokazuje go jako niezbadany (`SystemReveal.js:55-64`, `place = false`; nazwa tylko przy skanie lub wywiadzie). Skutek w U2: dosłowne D-UI-3 ukryłoby te układy. Naprawa danych poza tym arciem (kandydaci: kanon „zbadany ⇐ własna kolonia / placówka / stacja" albo leczenie przy wczytaniu, gdy lustro = `true`); U2 omija przez regułę widoczności z „lub". ⚠ Statki-chimery z Findingu 407 (Pikaczu `sys_060`, UF `sys_021`) to INNY stan — leczony przy wczytaniu (`_healDockedSystemId`). | osobny slice (U2 omija) |
-| **481** | ⚪ | **Czip „⚔ Walki [N]" zaszyty po polsku** (`BottomBar.js:166`) — klasa 113, niewidoczny dla bramki `check-i18n` (literał w zmiennej, bez polskiego znaku). Stoi w prawym końcu górnej belki, gdzie D-UI-12 przypnie kredyty. | U0-3 |
+| **481** | ✅ | **Czip „⚔ Walki [N]" zaszyty po polsku** (`BottomBar.js:166`) — klasa 113, niewidoczny dla bramki `check-i18n` (literał w zmiennej, bez polskiego znaku). Stoi w prawym końcu górnej belki, gdzie D-UI-12 przypnie kredyty. | U0-3 — ✅ **2026-10-19** `92f1b33` (etykieta przez i18n, +2 pary `combat.hudChip` / `combat.hudChipN`; czip poza belką; bramka U0 K8) |
+| **482** | ✅ | **Czip „⚔ Walki" martwy w `civMode` — klik zjada pasmo górnej belki.** `UIManager.handleClick` woła `_topResourceDrawer.handleClick` (`UIManager.js:2006`) przed `_bottomBar._hitTestTopButtons` (`:2016`); prostokąt pasma `{0, 0, W − 6, 28}` (`TopResourceDrawer.js:211`) obejmował czip (x = `W − szer − 8`, y 6–26), a klik „poza nazwą" kończył się `return true` z wymuszonym rozwinięciem listy (`:637-639`). `toggleMinimize` ma dwóch wołających: klik czipu (`BottomBar.js:521`) i „—" w samym HUD (`CombatHUD.js:561`, po minimalizacji nierysowany) ⇒ zminimalizowany HUD wracał dopiero po końcu wszystkich starć (`CombatHUD.js:107`). Zmierzone na żywej grze (fixture GATE-S4, 1280×720): klik w środek czipu → `handleClick = true`, HUD bez zmian, lista rozwinięta. | U0-3 (czip na lewo od paska zegara z własnym hit-testem — opcja 1) — ✅ **2026-10-19** `92f1b33` (czip w `BottomControlBar`; bramka U0 K8, K8c, K12) |
+| **483** | ⚪ | **Rozwinięta lista kolonii pod warstwą etykiet mapy.** `MapLabelLayer` rysuje chipy układów (lewy górny róg, `CHIP_TOP 34`, `MapLabelLogic.js:389-390`) oraz plakietki floty, kolonii i stacji PO górnej belce (`UIManager.js:2374` wobec `:2332`) ⇒ leżą na wierszach rozwiniętej listy kolonii (zmierzone na obrazach klatek, zapis Polonia r79: chipy na wierszu drugiej kolonii — `kosmos-handover/ui-u0/results/belt_dev_C3_pl/`; plakietki Jaskrow, Wancerzow, Mstow, „Stacja Mstow” i fregaty na wierszach 1–6 po najeździe kamery na układ domowy — `results/gate/owner_repo/K10s_spacemono.png`). Klik pochłania `MapLabelLayer.handleClick` (`UIManager.js:2003`, przed belką `:2006`) dla chipu układu, plakietki floty i etykiety stacji (`MapLabelLayer.js:511-551`); plakietka kolonii nie jest klikalna — klik przechodzi do listy (wniosek z kodu, bez kliknięcia). Istniało także przy rozwijaniu hoverem (U0 tego nie zmienia). | U2 (§7.18 — chipy wyłączone; lista rysowana i klikana przed `MapLabelLayer` — kolejność §7.17) |
+
+Rejestr #471–#483 po U0 (2026-10-19): **13 wpisów — ✅ 6** (474, 475, 476, 479, 481, 482 — wszystkie `92f1b33`) **·
+otwarte 7** (471, 472, 473 → U1 · 477 → U3-2 · 478 → U1-3 / U3 · 480 → osobny slice · 483 → U2). Pierwszy wolny **484**.
 
 ---
 
@@ -587,7 +644,9 @@ układu.
     nie rama). Rama paska zegara (`BottomControlBar.js:103-114`) znika razem z nimi (spójność); obrysy przycisków prędkości
     zostają; rama karty peek bez zmian.
 16. **Klawisze outlinerów.** `B` — oba / `,` — lewy / `.` — prawy.
-17. **D-UI-1 — geometria.** Oba po 150 px, od dołu górnej belki (y 28) do górnej krawędzi paska nawigacji; tło
+17. **D-UI-1 — geometria.** Oba po 150 px, od dołu górnej belki (y 28); lewy — do górnej krawędzi paska nawigacji,
+    **prawy — do górnej krawędzi paska zegara** (`BottomControlBar`, y 658 przy H = 720; korekta z pomiaru U0 2026-10-18:
+    kolumna 150 px przy prawej krawędzi sięgająca paska nawigacji pokrywałaby pasek zegara — x 1092–1274, y 658–678); tło
     ~`bgAlpha(0.6)` + cień tekstu (do strojenia na bramce); lista kolonii z górnej belki rysowana NAD outlinerami.
 18. **Chipy układów na mapie** (`fleetMapLabels`, lewy górny róg) — wyłączone w U2 jako dublujące lewy outliner; plakietki
     flot na mapie zostają.
@@ -596,7 +655,8 @@ układu.
 
 ## 8. Czego nie zweryfikowano
 
-- **Metryka Space Mono 0,6 em** — założenie; budżet z A6 do zmierzenia `measureText` w U0.
+- ~~Metryka Space Mono 0,6 em~~ — **zmierzona w U0** (§3.6): font efektywny belki to Share Tech Mono (0,54 em), Space
+  Mono ma 0,612 em i działa wyłącznie po F7, Rajdhani (Neon Cyber) jest proporcjonalny.
 - **Zapisy właściciela** czytane strukturalnie, bez silnika (bez restore): „unieruchomione" z pola `unpaidYears` w zapisie,
   „w skoku" z `mission.phase` w chwili zapisu. Wersje v99–v101.
 - **Koszt klatki outlinerów** — niezmierzony; A8 to wniosek z rozmiarów list.
@@ -605,7 +665,8 @@ układu.
 - **Osiągalność 477 z Doku** — wniosek z kodu, bez kliknięcia w przeglądarce.
 - **Czytelność półprzezroczystego tła** nad jasnymi obiektami (gwiazda, pierścienie) — do bramki U2.
 - **Ekrany szersze niż 16:9** (W > 1280) — więcej miejsca w belce; nie liczone.
-- **Sweep** nieuruchamiany (sesja bez kodu); ostatni znany przy tym kodzie: 319/319 (`2ff8d26`, handover P2b close).
+- **Sweep** — w fazie A nieuruchamiany (sesja bez kodu; ostatni znany 319/319, `2ff8d26`, handover P2b close); po U0
+  — **322/322** na `92f1b33` (§4.1).
 
 ## 9. Warsztat — lekcje tego audytu
 

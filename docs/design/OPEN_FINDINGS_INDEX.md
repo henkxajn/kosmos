@@ -751,6 +751,23 @@
 > • Backlog bez daty (CP24): 163 · 464 · 460 · 466 · 463 · 469 · 470. Następny: P3 (456).
 > • **Pierwszy wolny numer: 471.**
 
+> **Aktualizacja 2026-10-19 (ARKUSZ UI — faza A i U0: zamknięcie w kodzie)** (nowy arc: dwa outlinery + górna i dolna
+> belka; rejestr macierzysty `UI_PLAN.md` §6). Faza A — audyt read-only 2026-10-18 na `a3c6c29` + podpisy decyzji 1–6
+> (`d346c8c`). U0 (belki) — bramka U0 w przeglądarce właściciela PASS 21/21 (`UI_PLAN.md` §4.1); commity
+> `tools/commit_U0.sh`: `7d8231b` (U0-1 — dolny pasek nawigacji i pasek zegara bez ram, D-UI-13) · `97dd86c` (U0-2 —
+> lista kolonii z kliku, D-UI-11) · `92f1b33` (U0-3 — stałe komórki belki, format wg języka, kredyty w całości, czip ⚔
+> przy pasku zegara, `TopBar.isOver`, D-UI-12). Sweep **322/322**, `check-i18n` pl = en = **3460** (+2); save v101 bez
+> migracji.
+> • **NOWE: #471–#483** (rejestr: `UI_PLAN.md` §6) — 471–481 z audytu fazy A, 482–483 z sesji U0.
+> • ✅ **474** · **475** · **476** · **479** · **481** · **482** — zamknięte w rejestrze macierzystym (`UI_PLAN.md` §6,
+>   `92f1b33`); wierszy w A nie dostają.
+> • Otwarte — wiersze: A1 (**477** · **478**), A9 (**480**), NOWA grupa A10 (**471** · **472** · **473** · **483**):
+>   471 / 472 / 473 → U1 (473 + wymóg z bramki U0: po odznaczeniu kamera stoi; żaden automatyczny ruch kamery nie kończy
+>   się bliżej gwiazdy niż kadr układu) · 477 → U3-2 · 478 → U1-3 / U3 · 480 → osobny slice (U2 omija) · 483 → U2.
+> • Rejestr #471–#483: 13 wpisów — ✅ 6 · ⚪ 5 · 🟠 2.
+> • Następny: **U1** — reguła klik/focus (D-UI-5; `UI_PLAN.md` §4.2).
+> • **Pierwszy wolny numer: 484.**
+
 
 ---
 
@@ -830,6 +847,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **309-390** | `AI_GARRISON_PLAN.md` §6 Rejestr findingów arca (2026-10-02–06; 326-335 z sesji G1b; 336-342 z fazy A G2 i z G2-1; 343-347 z sesji G2-K1; 348-357 z sesji i bramki live G2-2; 358-362 z sesji i bramki G2-3b; 363-367 z sesji G2-4; 368-378 z sesji zamykającej G2-4; 379 z sesji G3; 380-383 z sesji zamykającej G3 i bramki G1c; 384-390 z sesji G2b) |
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
+| **471-483** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki; 2026-10-18–19; 471-481 z audytu fazy A, 482-483 z sesji U0) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -884,6 +902,8 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **154** | 🟠 | `AutoRetreatSystem._findNearestFriendlyPlanet` dalej bez terminu układu | **ŻYWA** przez trzy przyciski „Powrót do bazy" (`FMO:4581`, `FleetGroupPanel:445`, `FleetCommandPanel:384`) |
 | **166a** | 🟠 | `FMO._handleFleetEngage:4534` — lista wrogów wg KAMERY, poziom floty | **ODCZYT, nie pomiar** (D-SS6) |
 | **123** | 🟠 | reszta po naprawie: `_calcDistAU` = surowy hypot na dwóch ramkach karmi `reachable` | dwie z trzech ścieżek zamknięte |
+| **477** | ⚪ | `pingVessel` bez terminu układu (`ThreeRenderer.js:7151-7158`): statek bez sprite'a (inny układ, tranzyt warp) pinguje po `vessel.position` w ramce oglądanego układu; osiągalne dziś z Doku taktycznego (wiersz statku w tranzycie) — wniosek z kodu, bez kliknięcia | → **U3-2** (arkusz UI; uzbraja się w U3 — D-UI-10 dla wszystkich układów). `UI_PLAN.md` §6 |
+| **478** | ⚪ | `vessel:focus` dla statku w INNYM układzie to cichy no-op (`ThreeRenderer.js:1157-1197`) — Outliner i Tab (`UIManager.cycleSelectedVessel`) zaznaczają statek, kamera stoi, układ się nie przełącza | → **U1-3 / U3** (`UI_PLAN.md` §7.8). `UI_PLAN.md` §6 |
 
 ## A2 — Prawdomówność rozkazów (slice **ORDER_TRUTHFULNESS**, §7a — uzasadniony i oszacowany)
 
@@ -1094,6 +1114,16 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **409** | ⚪ | powiadomienie o mobilizacji (`notif.mobilizationSubtitle`, „Rezerwa wchodzi do służby: N”) liczy też kadłuby z puli — bramka S1, krok 9: `emp_002` „…: 6” przy zerze w rezerwie | decyzja właściciela 2026-10-08: tekst zostaje — etap polerki UI. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **410** | ⚪ | `KOSMOS.debug.spawnMyVessel(hull, { systemId })` tworzy chimerę doku (dok przy domu, `systemId` z opcji) — zmierzone w prawdziwej grze; na kodzie sesji 2 leczy ją dopiero wczytanie | tylko narzędzie debug; hipoteza producenta 407. `AI_STRIKES_BACK_PLAN.md` §6 |
 | **412** | ⚪ | panel WYWIAD w grze EN pokazuje polskie „Ostatnie incydenty” (`IntelOverlay.js:346`, klucza brak — kandydat `intel.recentIncidents`) i „(brak)” (`:356`, klucz istnieje: `intel.none`), a pod nimi surowy slug incydentu `ev.type` (`:361`) — z bramki S1 (krok P) | od `347a64d` (2026-04-16); `check-i18n` trzyma oba literały w baseline (`IntelOverlay.js: 2`, `tools/check-i18n.mjs:387`); klasa **113**; etap polerki UI. `AI_STRIKES_BACK_PLAN.md` §6 |
+| **480** | 🟠 | zapisy sprzed naprawy **186** niosą układy odwiedzone (a nawet skolonizowane) jako niezbadane — `galaxyStar.explored = false` przy lustrze `sysData.explored = true` (zmierzone: ZF gy120 `sys_024`, Polonia gy79 `sys_036`); naprawa 186 nie leczy danych ⇒ kanon `isSystemExplored` mówi „nieznany” o układzie, który gracz zna albo kolonizuje (STRATCOM) | osobny slice (kandydaci: „zbadany ⇐ własna kolonia / placówka / stacja” albo leczenie przy wczytaniu); U2 omija regułą widoczności z „lub”. `UI_PLAN.md` §6 |
+
+## A10 — Arkusz UI: kamera, reguła klik/focus, warstwy (rejestr `UI_PLAN.md` §6)
+
+| # | | opis | uwaga |
+|---|---|---|---|
+| **471** | ⚪ | klawisz H (reset kamery) martwy w `civMode` — `overlayManager.handleKey` zjada „h” → `'colony'` (`GameScene.js:4817`, `OverlayManager.js:23`) przed `case 'KeyH'` (`:4826-4829`); dokumentacja opisuje funkcję nieosiągalną w głównym trybie gry | → **U1-1** (`Home`). `UI_PLAN.md` §6 |
+| **472** | ⚪ | reset kamery niepełny — `KeyH` zeruje tylko `_focusEntityId`; śledzenie `_focusVesselId` / `_focusStationId` oraz `_watch` / `_autoFocus` cofają reset w następnej klatce | → **U1-1** (`resetToSystemView`). `UI_PLAN.md` §6 |
+| **473** | 🟠 | odznaczenie przesuwa kamerę — klik w pustkę mapy i ✕ karty ciała → `focusOn(gwiazda)` (`ThreeRenderer.js:1043-1060`); **bramka U0 (2026-10-19):** kamera kończy za blisko gwiazdy („wnętrze słońca”) | → **U1-2** (decyzja 2a) + wymóg z bramki U0: po odznaczeniu kamera stoi; żaden automatyczny ruch kamery nie kończy się bliżej gwiazdy niż kadr układu (`frameSystem`). `UI_PLAN.md` §4.2, §6 |
+| **483** | ⚪ | rozwinięta lista kolonii w górnej belce leży pod warstwą etykiet mapy — chipy układów i plakietki `MapLabelLayer` rysowane po belce (`UIManager.js:2374` wobec `:2332`), a klik w chip układu, plakietkę floty albo etykietę stacji pochłania `MapLabelLayer` (`:2003`, przed belką `:2006`); istniało przed U0 | → **U2** (§7.18 — chipy wyłączone; lista rysowana i klikana przed `MapLabelLayer`). `UI_PLAN.md` §6 |
 
 ---
 
