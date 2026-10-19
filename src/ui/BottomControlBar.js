@@ -7,6 +7,7 @@
 // Czas: emituje EventBus (time:play/pause/setMultiplier) — jak dawny TopBar._hitTestTime.
 // Bell: NotificationCenter + toggleNotificationDropdown (otwiera W GÓRĘ — bez topY).
 // MENU: deleguje do BottomBar (menu DOM) — ustawia _menuClickBounds + toggleMenu().
+// Czip walk (ARKUSZ UI, U0-3): przy zminimalizowanym HUD walki — na lewo od paska, z własnym hit-testem (482).
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
@@ -26,6 +27,14 @@ const SPEED_W = 13;
 const GAP     = 1;
 const BELL_W  = 16;
 const MENU_W  = 16;
+// Czip „⚔ Walki [N]" (ARKUSZ UI, U0-3 — decyzja właściciela 2026-10-18, opcja 1; Findingi 481 / 482): widoczny przy
+// zminimalizowanym HUD walki w trakcie starć, TUŻ NA LEWO od paska zegara, w tym samym rzędzie (nad przedostatnim
+// slotem nawigacji). Dawniej rysował go BottomBar w prawym końcu górnej belki — tam pasmo surowców pochłaniało klik
+// (482: `UIManager` woła belkę przed `_hitTestTopButtons`), a D-UI-12 przypina tam kredyty. Tu ma własny hit-test,
+// wołany w łańcuchu UIManagera PRZED pasmem belki. W samym pasku zegara miejsca nie ma (klaster zajmuje 159–172 px
+// z 182 px slotu — pomiar U0, `kosmos-handover/ui-u0/STOP_U0_CHIP.md`).
+const CHIP_PAD_X = 14;   // szerokość czipu = tekst + 14 (jak dawny czip w BottomBar)
+const CHIP_GAP   = 4;    // odstęp czipu od lewej krawędzi paska zegara
 
 export class BottomControlBar {
   constructor() {
@@ -34,19 +43,21 @@ export class BottomControlBar {
     this._menuRect  = null;
     this._playRect  = null;
     this._speedRects = [];
+    this._chipRect  = null;   // U0-3: czip walk {x,y,w,h,label} albo null (niewidoczny)
     this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|null
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
 
-  _stripTop(H) {
+  // Górna krawędź rzędu nad slotem nawigacji `slotIndex` (domyślnie ostatnim). Gdy kafelek TEGO slotu jest
+  // wysunięty (karta peek) — rząd jedzie w górę razem z nim (siada tuż nad kartą, animowany w synchronizacji),
+  // zamiast być zasłanianym. Pasek zegara używa ostatniego slotu, czip walk (U0-3) — przedostatniego.
+  _stripTop(H, slotIndex = NAV_GROUPS.length - 1) {
     const navTop = H - COSMIC.BOTTOM_LOG_TRIG_H - COSMIC.BOTTOM_NAV_H;
     let top = navTop - STRIP_H;
-    // Gdy kafelek OSTATNIEGO slotu (Science/'tech') jest wysunięty — pasek czasu jedzie w górę
-    // razem z nim (siada tuż nad kartą, animowany w synchronizacji), zamiast być zasłanianym.
     const peek = window.KOSMOS?.bottomNavBar?._peek;
-    const lastPrimary = NAV_GROUPS.length ? NAV_GROUPS[NAV_GROUPS.length - 1].primary : null;
-    const cardTop = peek?.peekTopY?.(lastPrimary);
+    const primary = NAV_GROUPS[slotIndex]?.primary ?? null;
+    const cardTop = primary ? peek?.peekTopY?.(primary) : null;
     if (cardTop != null) top = Math.round(cardTop - STRIP_H);
     return top;
   }
@@ -130,6 +141,35 @@ export class BottomControlBar {
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(displayText || '', dateLeft, cy + 0.5);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+    // ── Czip walk (U0-3, opcja 1): na lewo od paska zegara, w rzędzie nad PRZEDOSTATNIM slotem nawigacji ──
+    this._chipRect = null;
+    const hud = window.KOSMOS?.combatHud;
+    if (hud?.isMinimized?.() && hud?.hasActiveEncounters?.()) {
+      const n = window.KOSMOS?.deepSpaceCombatSystem?.listActive?.()?.length ?? 0;
+      const label = n > 1 ? t('combat.hudChipN', n) : t('combat.hudChip');
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      const w = Math.ceil(ctx.measureText(label).width) + CHIP_PAD_X;
+      const top = this._stripTop(H, NAV_GROUPS.length - 2);
+      this._chipRect = { x: lastSlotX - CHIP_GAP - w, y: top, w, h: STRIP_H, label };
+      this._drawCombatChip(ctx, this._chipRect);
+    }
+  }
+
+  // Czip walk — własne tło i ramka jak dawny czip w górnej belce (ciemny podkład + akcent, czerwona ramka i tekst).
+  _drawCombatChip(ctx, b) {
+    ctx.fillStyle = bgAlpha(0.9);
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = THEME.accentMed ?? 'rgba(60, 60, 60, 0.6)';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = THEME.danger ?? '#ff4466';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger ?? '#ff4466';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 0.5);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
   _drawTextBtn(ctx, rc, cy, label, textColor, bgColor, hover, fontSize) {
@@ -176,6 +216,12 @@ export class BottomControlBar {
   _in(rc, x, y) { return rc && x >= rc.x && x <= rc.x + rc.w && y >= rc.y && y <= rc.y + rc.h; }
 
   handleClick(x, y) {
+    // Czip walk (U0-3, Finding 482) — przywraca zminimalizowany HUD walki; własny prostokąt, przed resztą paska.
+    if (this._in(this._chipRect, x, y)) {
+      window.KOSMOS?.combatHud?.toggleMinimize?.();
+      this._markDirty();
+      return true;
+    }
     if (!this._bgRect) return false;
     // Bell → dropdown powiadomień (otwiera W GÓRĘ: bez topY, barH = wys. od dołu ekranu do paska)
     if (this._in(this._bellRect, x, y)) {
@@ -224,5 +270,5 @@ export class BottomControlBar {
     if (h !== this._hover) { this._hover = h; this._markDirty(); }
   }
 
-  isOver(x, y) { return this._in(this._bgRect, x, y); }
+  isOver(x, y) { return this._in(this._bgRect, x, y) || this._in(this._chipRect, x, y); }
 }

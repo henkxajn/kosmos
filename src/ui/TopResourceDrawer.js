@@ -23,11 +23,13 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
 import { BUILDINGS }         from '../data/BuildingsData.js';
 import EntityManager         from '../core/EntityManager.js';
-import { t, getName }        from '../i18n/i18n.js';
-import { drawResourceIcon, hasIconFile, hasResourceIcon } from './ResourceIcons.js';
-import { TIME_W }            from './TopBar.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
+import { drawResourceIcon, hasIconFile } from './ResourceIcons.js';
 import { stepSlide, navIsAnimating, clampScroll, pointInRect }
   from './NavDrawerLogic.js';
+import { fmtBeltValue, fmtBeltSigned, fmtBeltFull, fmtBeltPrecise, fmtBeltDelta, trendGlyph, TREND_UP,
+  beltFontKey, measureBeltTemplates, planBeltRow, ellipsize,
+  ICON_SIZE, ICON_GAP, VALUE_GAP, TOKEN_GAP } from './TopBarFormatLogic.js';
 
 // UI v3 — pasek surowców: STAŁE pasmo z wierszem aktywnej kolonii (zawsze na wierzchu) +
 // klik (U0-2) rozwija PONIŻEJ dodatkowe kolonie. Po zwinięciu pozostałe kolonie znikają,
@@ -35,38 +37,22 @@ import { stepSlide, navIsAnimating, clampScroll, pointInRect }
 const ROW_H      = 24;                   // wysokość wiersza kolonii
 const PAD        = 8;
 const ROW_PAD_Y  = 3;                    // górny/dolny margines listy
-const CHIP_GAP   = 8;                    // odstęp pasma od chipa czasu (prawy róg)
-const HINT_W     = 16;                   // rezerwa na chevron „▾ +N" po prawej pasma stałego
-const LEFT_W     = 200;                  // STAŁA szerokość lewej strefy (nazwa kolonii + pop); reszta = strefa środkowa (zasoby, overflow hidden)
-const RIGHT_RESERVE = 80;               // fallback rezerwy prawego bloku (bell+MENU) gdy topClusterLeftX nieustawione
 
-// Anti-jitter (UI v3): treść tokenu rysowana jak dawniej (ikona·wartość·delta,
-// hugujące), ale każdy slot ma szerokość = HIGH-WATER MARK (najszersza, jaką token
-// kiedykolwiek pokazał — patrz _hwSlot). Dzięki temu przy zmianie liczb pozycje
-// kolejnych surowców nie skaczą (zero kaskady), a zarazem nie rezerwujemy
-// pesymistycznego maksa (gęstość ~ jak wcześniej, mieści 17 tokenów w ~1048 px).
-const ICON_GAP   = 2;        // ikona → wartość
-const VALUE_GAP  = 2;        // wartość → delta
-const TOKEN_GAP  = 3;        // slot → następny token (= dawny GAP_TOKEN → ta sama gęstość)
+// ARKUSZ UI, U0-3 (D-UI-12, Findingi 474 / 475 / 479): STAŁA komórka na token zamiast „przytulania" z high-water
+// mark kluczowanym per kolonia (474: kolumny różnych wierszy się rozjeżdżały). Szerokości z szablonów mierzonych dla
+// AKTYWNEGO fontu (`TopBarFormatLogic` — najszersza cyfra, „88,8k", strzałka trendu, kredyty 7-cyfrowe), JEDEN plan
+// dla wszystkich wierszy listy ⇒ x tokenu k jest identyczny w każdym wierszu. Kredyty przypięte do prawego końca
+// pasma, nigdy nieucinane (475: były ostatnim tokenem przed `break` na przepełnieniu). Strefa nazwy 200 → podłoga
+// 160 przy ujemnym budżecie, nazwa z wielokropkiem. Kolejność tokenów kanoniczna — ta sama w każdym wierszu; token,
+// którego kolonia nie ma (np. dobrobyt placówki), zostawia puste miejsce zamiast przesuwać kolejne.
+const PNG_TOKENS  = [...Object.keys(MINED_RESOURCES), ...Object.keys(HARVESTED_RESOURCES), 'fuel'];
+const TOKEN_ORDER = [...PNG_TOKENS, 'research', 'energy', 'prosperity', 'hubpool'];
+const TREND_THRESHOLD = { prosperity: 0.5 };   // próg strzałki trendu (reszta: 0.05 — jak dawny próg liczby delty)
 
-function _fmtNum(n) {
-  const a = Math.abs(n);
-  if (a >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (a >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
-  return Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1);
-}
 function _fmtPop(n) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
   return String(Math.round(n));
-}
-function _fmtDelta(n) {
-  const a = Math.abs(n);
-  let r;
-  if (a >= 1_000) r = `${(n / 1_000).toFixed(1)}k`;
-  else if (a >= 10) r = n.toFixed(0);
-  else r = n.toFixed(1);
-  return (n >= 0 ? '+' : '') + r;
 }
 
 export class TopResourceDrawer {
@@ -83,9 +69,11 @@ export class TopResourceDrawer {
     this._colonyRects   = [];    // [{x,y,w,h, planetId}] — klik nazwy → panel kolonii
     this._hitItems      = [];    // [{x,y,w,h, tip}] — tooltipy per token
     this._hoverTip      = null;
-    this._hw            = new Map(); // high-water szer. slotu per (kolonia|token) → stałe pozycje
-    this._hwFontKey     = null;      // reset HW przy zmianie fontu motywu
-    this._hwRowId       = '_';       // id kolonii bieżącego wiersza (klucz HW)
+    this._metrics       = null;  // U0-3: szablony szerokości aktywnego fontu (TopBarFormatLogic.measureBeltTemplates)
+    this._metricsKey    = null;  // klucz pomiaru: rodzina + rozmiary fontu + gotowość fontu z sieci
+    this._metricsFontKey = null; // sama rodzina + rozmiary (zmiana presetu / motywu = nowy pomiar)
+    this._metricsReady  = false; // font z sieci załadowany przy ostatnim pomiarze
+    this._layout        = null;  // plan wierszy z ostatniej klatki (keys, cell, plan) — wspólny dla całej listy
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
@@ -196,11 +184,11 @@ export class TopResourceDrawer {
         kind: 'prosperity', delta: trend, showDelta: true });
     }
 
-    // Kredyty (per-kolonia)
+    // Kredyty (per-kolonia) — rysowane osobno, w slocie przypiętym do prawego końca pasma (U0-3, D-UI-12: zawsze
+    // w całości, pełna liczba z separatorem tysięcy — `fmtBeltFull`).
     const credits = col.credits;
     if (credits !== undefined && credits !== null) {
-      items.push({ id: 'credits', icon: '🪙', val: credits, valText: _fmtNum(credits),
-        raw: true, color: THEME.warning, kind: 'credits' });
+      items.push({ id: 'credits', icon: '🪙', val: credits, raw: true, color: THEME.warning, kind: 'credits' });
     }
 
     // Orbital Logistics Hub — plakietka „pula": ▸PULA (członek aktywnej puli) / ⚠PULA (odcięty blokadą).
@@ -239,7 +227,12 @@ export class TopResourceDrawer {
     const extraCount = Math.max(0, cols.length - 1);
     this._extraCount = extraCount;
     if (extraCount === 0 && this._open) this._setOpen(false);   // nie ma czego rozwijać (np. utrata kolonii)
-    const bandRowPw = bandPw - (extraCount > 0 ? HINT_W : 0);   // rezerwa na chevron przy >1 kolonii
+    // U0-3: szablony aktywnego fontu + JEDEN plan dla wszystkich wierszy. Szerokość wiersza bez rezerwy chevronu
+    // jest WSPÓLNA (także dla wierszy rozwiniętych), więc kredyty stoją w jednej kolumnie w całej liście.
+    const metrics = this._beltMetrics(ctx);
+    const rowW = bandPw - (extraCount > 0 ? metrics.hintW : 0);   // rezerwa na chevron przy >1 kolonii
+    const layout = this._planLayout(ctx, metrics, cols, px, rowW);
+    this._layout = layout;
     let anyBrownout = false;
 
     // ── Stałe pasmo: wiersz AKTYWNEJ kolonii (zawsze widoczny). Tło + dolną krawędź belki
@@ -248,12 +241,12 @@ export class TopResourceDrawer {
 
     if (cols.length > 0) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(px, panelTop, bandRowPw, baseH); ctx.clip();
+      ctx.beginPath(); ctx.rect(px, panelTop, rowW, baseH); ctx.clip();
       ctx.textAlign = 'left';
       const col = cols[0];
       const data = this._colonyTokens(col);
       if (data?.brownout) anyBrownout = true;
-      this._drawRow(ctx, col, data, px, panelTop + ROW_PAD_Y, bandRowPw, true);
+      this._drawRow(ctx, col, data, px, panelTop + ROW_PAD_Y, rowW, true, layout);
       ctx.restore();
     }
 
@@ -283,7 +276,7 @@ export class TopResourceDrawer {
           if (rowTop + ROW_H <= extraTop || rowTop >= extraTop + revealH) continue;
           const data = this._colonyTokens(col);
           if (data?.brownout) anyBrownout = true;
-          this._drawRow(ctx, col, data, px, rowTop, panelPw, false);
+          this._drawRow(ctx, col, data, px, rowTop, rowW, false, layout);
         }
         ctx.restore();
 
@@ -312,13 +305,77 @@ export class TopResourceDrawer {
     }
   }
 
-  // Wiersz w układzie 3-strefowym: LEWA (nazwa+pop, stała LEFT_W, przycięta) | ŚRODEK
-  // (zasoby od stałego x=px+LEFT_W, overflow hidden do px+pw). Prawa strefa (bell/MENU/zegar)
-  // jest poza tym drawerem (TopBar/BottomBar, fixed do prawej) — `pw` już ją rezerwuje.
-  _drawRow(ctx, col, data, px, rowTop, pw, isActive) {
+  // ── U0-3: szablony szerokości aktywnego fontu (cache per klucz fontu) ──────────────────────
+  // Klucz = rodzina + rozmiary fontu motywu (preset F7 / motyw tytułu = nowy klucz). Font z sieci (Google Fonts)
+  // może dojść PO pierwszym pomiarze — dopóki `document.fonts.check` mówi „nie", sprawdzamy co klatkę i po zmianie
+  // mierzymy od nowa (inaczej zostałyby szerokości fontu zastępczego).
+  _beltMetrics(ctx) {
+    const fontKey = beltFontKey(THEME);
+    const fonts = {
+      value: `${THEME.fontSizeNormal}px ${THEME.fontFamily}`,
+      small: `${THEME.fontSizeSmall}px ${THEME.fontFamily}`,
+      icon:  `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`,
+    };
+    let ready = this._metricsReady && this._metricsFontKey === fontKey;
+    if (!ready) {
+      const fs = typeof document !== 'undefined' ? document.fonts : null;
+      ready = typeof fs?.check === 'function' ? !!fs.check(fonts.value) : true;
+    }
+    const key = `${fontKey}|${ready ? 1 : 0}`;
+    if (this._metrics && this._metricsKey === key) return this._metrics;
+    const prevFont = ctx.font;
+    const measure = (text, font) => { ctx.font = font; return ctx.measureText(text).width; };
+    const m = { ...measureBeltTemplates(measure, fonts), fonts, icon: {} };
+    for (const g of ['🔬', '⚡', '⭐', '▸', '⚠']) m.icon[g] = measure(g, fonts.icon);
+    ctx.font = prevFont;
+    this._metrics = m; this._metricsKey = key; this._metricsFontKey = fontKey; this._metricsReady = ready;
+    return m;
+  }
+
+  // ── U0-3: JEDEN plan dla wszystkich wierszy listy ──────────────────────────────────────────
+  // Kształt WSZYSTKICH kolonii gracza (bez snapshotów zasobów — tanio): czy którakolwiek ma dobrobyt / plakietkę
+  // puli hubu / kredyty; najszerszy tekst kredytów (co najmniej szablon 7-cyfrowy). Plan liczony także przy
+  // zwiniętej liście, więc rozwinięcie niczego w aktywnym wierszu nie przesuwa.
+  _planLayout(ctx, m, cols, px, rowW) {
+    const locale = getLocale();
+    const pool = window.KOSMOS?.systemPoolService;
+    let anyProsp = false, anyHub = false, anyCredits = false, creditsTextW = m.creditsW;
+    ctx.font = m.fonts.value;
+    for (const c of cols) {
+      if (c?.prosperitySystem?.prosperity != null) anyProsp = true;
+      if (pool?.getHubLinkInfo?.(c.planetId)) anyHub = true;
+      if (c?.credits != null) {
+        anyCredits = true;
+        creditsTextW = Math.max(creditsTextW, ctx.measureText(fmtBeltFull(c.credits, locale)).width);
+      }
+    }
+    const keys = TOKEN_ORDER.filter(k => (k !== 'prosperity' || anyProsp) && (k !== 'hubpool' || anyHub));
+    const badgeW = anyHub ? ctx.measureText(t('topBar.hubPoolBadge')).width : 0;
+    const cell = {};
+    for (const k of keys) cell[k] = this._cellSpec(k, m, badgeW);
+    const creditsW = anyCredits ? ICON_SIZE + ICON_GAP + creditsTextW : 0;
+    const plan = planBeltRow({ px, rowW, cells: keys.map(k => cell[k].w), creditsW });
+    return { keys, cell, plan, locale };
+  }
+
+  // Komórka tokenu: ikona (PNG 16 albo zmierzone emoji) · wartość w stałym slocie szablonu · strzałka trendu.
+  _cellSpec(key, m, badgeW) {
+    let iconW, valueW, arrow = true;
+    if (key === 'research')        { iconW = m.icon['🔬']; valueW = m.valueW; }
+    else if (key === 'energy')     { iconW = m.icon['⚡']; valueW = m.signedW; arrow = false; }   // bilans ze znakiem, bez trendu
+    else if (key === 'prosperity') { iconW = m.icon['⭐']; valueW = m.prospW; }
+    else if (key === 'hubpool')    { iconW = Math.max(m.icon['▸'], m.icon['⚠']); valueW = badgeW; arrow = false; }
+    else                           { iconW = ICON_SIZE; valueW = m.valueW; }   // PNG: wydobywalne, zbieralne, paliwo
+    return { iconW, valueW, arrow, w: iconW + ICON_GAP + valueW + (arrow ? VALUE_GAP + m.arrowW : 0) + TOKEN_GAP };
+  }
+
+  // Wiersz w układzie 3-strefowym: LEWA (nazwa + POP, szerokość z planu: 200 → 160 przy ujemnym budżecie, nazwa
+  // z wielokropkiem) | ŚRODEK (tokeny w stałych komórkach od planu.tokenX0) | PRAWA (kredyty przypięte do końca
+  // wiersza). `pw` jest wspólne dla wszystkich wierszy (bez rezerwy chevronu).
+  _drawRow(ctx, col, data, px, rowTop, pw, isActive, L) {
     const cy = rowTop + ROW_H / 2;
-    this._hwRowId = col?.planetId ?? '_';   // klucz HW slotów dla tego wiersza
-    const leftW = Math.min(LEFT_W, Math.max(0, pw - 40));   // na wąskim wierszu nie zjadaj całości
+    const m = this._metrics;
+    const leftW = Math.min(L.plan.nameW, Math.max(0, pw - 40));   // na wąskim wierszu nie zjadaj całości
 
     // Dolna linia + highlight aktywnego (pełna szerokość wiersza)
     ctx.strokeStyle = THEME.border;
@@ -328,124 +385,127 @@ export class TopResourceDrawer {
 
     ctx.textBaseline = 'middle';
 
-    // ── LEWA STREFA (stała LEFT_W): nazwa kolonii + pop, przycięta do strefy ──
+    // ── LEWA STREFA: nazwa kolonii (z wielokropkiem, gdy nie mieści się obok POP) + POP ──
     ctx.save();
     ctx.beginPath(); ctx.rect(px, rowTop, leftW, ROW_H); ctx.clip();
     let cx = px + PAD;
     const name = col.name ?? EntityManager.get(col.planetId)?.name ?? col.planetId ?? '—';
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = isActive ? THEME.accent : THEME.textPrimary;
-    ctx.fillText(name, cx, cy);
-    cx += ctx.measureText(name).width + 6;
-
     const civSys = col.civSystem;
+    let pop = null;
     if (civSys) {
-      const popTotal = civSys.population ?? 0;
-      const popFree  = civSys.freePops ?? 0;
-      const popEmp   = civSys.employed ?? 0;   // ludzcy pracownicy (Σstrata) — spójne z Workforce (Faza 4)
-      const popLock  = civSys._lockedPops ?? 0;
-      const popBase  = `👤 ${_fmtPop(popTotal)} `;
-      const popFreeS = t('resBar.freeSuffix', _fmtPop(popFree));   // Slice 5D (item 3): integer, nie ułamek
+      const popFree = civSys.freePops ?? 0;
+      pop = { total: civSys.population ?? 0, free: popFree, employed: civSys.employed ?? 0, locked: civSys._lockedPops ?? 0,
+        base: `👤 ${_fmtPop(civSys.population ?? 0)} `, freeS: t('resBar.freeSuffix', _fmtPop(popFree)) };
+      ctx.font = m.fonts.small;
+      pop.w = ctx.measureText(pop.base).width + ctx.measureText(pop.freeS).width;
+    }
+    ctx.font = m.fonts.value;
+    const nameMax = Math.max(0, leftW - PAD - (pop ? 6 + pop.w : 0) - 2);
+    const shown = ellipsize(name, nameMax, (s) => ctx.measureText(s).width);
+    ctx.fillStyle = isActive ? THEME.accent : THEME.textPrimary;
+    ctx.fillText(shown, cx, cy);
+    cx += ctx.measureText(shown).width + 6;
+
+    if (pop) {
       const popStartX = cx;
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.font = m.fonts.small;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(popBase, cx, cy); cx += ctx.measureText(popBase).width;
-      ctx.fillStyle = popFree > 0 ? THEME.success : THEME.textSecondary;
-      ctx.fillText(popFreeS, cx, cy); cx += ctx.measureText(popFreeS).width;
+      ctx.fillText(pop.base, cx, cy); cx += ctx.measureText(pop.base).width;
+      ctx.fillStyle = pop.free > 0 ? THEME.success : THEME.textSecondary;   // Slice 5D (item 3): integer, nie ułamek
+      ctx.fillText(pop.freeS, cx, cy); cx += ctx.measureText(pop.freeS).width;
       this._hitItems.push({ x: popStartX, y: rowTop, w: Math.max(0, Math.min(cx, px + leftW) - popStartX), h: ROW_H,
-        tip: { kind: 'pop', total: popTotal, free: popFree, employed: popEmp, locked: popLock } });
+        tip: { kind: 'pop', total: pop.total, free: pop.free, employed: pop.employed, locked: pop.locked } });
     }
     ctx.restore();   // koniec lewej strefy
 
     // Klik lewej strefy → panel kolonii
     this._colonyRects.push({ x: px, y: rowTop, w: leftW, h: ROW_H, planetId: col.planetId });
 
-    // Separator stref (pionowy) na granicy LEFT_W
+    // Separator stref (pionowy) na granicy strefy nazwy
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(px + leftW + 0.5, rowTop + 4); ctx.lineTo(px + leftW + 0.5, rowTop + ROW_H - 4); ctx.stroke();
 
-    // ── ŚRODKOWA STREFA: zasoby od STAŁEGO x = px+leftW (nie przepychane nazwą), clip do px+pw ──
+    // ── ŚRODEK + PRAWA: tokeny w komórkach planu; kredyty w slocie przypiętym do prawego końca ──
     if (data?.items) {
-      const iconCY = cy;
-      const iconSize = ROW_H - 8;  // 16px
-      const rightClip = px + pw - 4;
-      let tx = px + leftW + 6;
+      const byKey = new Map(data.items.map(it => [it.id ?? it.kind, it]));
       for (const it of data.items) {
         // Stempel kontekstu kolonii na tokenie — tooltip rozbicia produkcji/zużycia
         // (getResourceBreakdown) jest poprawny TYLKO dla aktywnej kolonii (czyta globalny
         // window.KOSMOS dla kopalni/fabryk), więc rozbicie pokazujemy wyłącznie dla niej.
         it._col = col; it._active = isActive;
-        if (tx > rightClip) break;   // overflow hidden — ucinaj zamiast nachodzić na prawą strefę
-        tx = this._drawItem(ctx, it, tx, iconCY, rowTop, iconSize);
       }
+      for (let i = 0; i < L.plan.visible; i++) {
+        const k = L.keys[i];
+        const it = byKey.get(k);
+        if (it) this._drawCell(ctx, it, L.plan.xs[i], L.cell[k], cy, rowTop, L.locale);   // brak tokenu = puste miejsce
+      }
+      const cr = byKey.get('credits');
+      if (cr && L.plan.creditsX != null) this._drawCredits(ctx, cr, L, cy, rowTop);
     }
     ctx.textBaseline = 'alphabetic';
   }
 
-  // High-water szerokość slotu dla tokenu w bieżącym wierszu: max(dotychczasowa,
-  // bieżąca naturalna). Nigdy nie maleje → przy spadku liczby zostaje luz na końcu
-  // slotu zamiast wciągać kolejne tokeny w lewo (zero kaskady). Reset przy zmianie
-  // fontu motywu (px ≠ porównywalne między fontami). Klucz = kolonia|token.
-  _hwSlot(it, naturalW) {
-    const fontKey = `${THEME.fontSizeNormal}|${THEME.fontSizeSmall}|${THEME.fontFamily}`;
-    if (this._hwFontKey !== fontKey) { this._hw.clear(); this._hwFontKey = fontKey; }
-    const key = `${this._hwRowId}|${it.id ?? it.kind ?? 'x'}`;
-    const prev = this._hw.get(key) ?? 0;
-    if (naturalW > prev) { this._hw.set(key, naturalW); return naturalW; }
-    return prev;
+  // Tekst wartości w komórce (format wg języka i progu 10 000 — Finding 479; bilans energii ze znakiem).
+  _valueText(it, locale) {
+    if (it.valText != null) return it.valText;
+    return it.signed ? fmtBeltSigned(it.val, locale) : fmtBeltValue(it.val, locale);
   }
 
-  // Rysuje token (ikona PNG/emoji + wartość + delta, hugujące jak dawniej) i dorzuca
-  // hit-rect. Zwraca początek następnego slotu = slotX + HIGH-WATER szer. + TOKEN_GAP,
-  // więc pozycja kolejnego surowca jest stała mimo zmian liczb (anti-jitter, UI v3).
-  _drawItem(ctx, it, slotX, iconCY, rowTop, iconSize) {
-    let cx = slotX;
-
-    // 1. Ikona (naturalna szerokość — stała w czasie dla danego surowca)
-    ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
+  // Komórka tokenu: ikona w stałym slocie · wartość wyrównana do PRAWEJ krawędzi swojego slotu (cyfry w kolumnach
+  // listy stoją równo) · strzałka trendu ▲ / ▼ (decyzja 1 (a); liczba delty — w tooltipie). Hit-rect = komórka.
+  _drawCell(ctx, it, x, spec, cy, rowTop, locale) {
+    const m = this._metrics;
+    ctx.font = m.fonts.icon;
     ctx.fillStyle = it.color || THEME.textSecondary;
+    ctx.textAlign = 'left';
     if (it.id && hasIconFile(it.id)) {
-      cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + ICON_GAP;
+      drawResourceIcon(ctx, it.id, x, cy, ICON_SIZE, it.icon);
     } else {
       ctx.textBaseline = 'middle';
-      ctx.fillText(it.icon, cx, iconCY);
-      cx += ctx.measureText(it.icon).width + ICON_GAP;
+      ctx.fillText(it.icon, x, cy);
     }
 
-    // 2. Wartość (lewy-align, huga ikonę — jak wcześniej)
-    const valStr = it.valText != null
-      ? it.valText
-      : it.raw
-        ? (it.signed && it.val > 0 ? '+' : '') + String(it.val)
-        : _fmtNum(it.val);
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    const vRight = x + spec.iconW + ICON_GAP + spec.valueW;
+    ctx.font = m.fonts.value;
     ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
+    ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(valStr, cx, iconCY);
-    cx += ctx.measureText(valStr).width + VALUE_GAP;
+    ctx.fillText(this._valueText(it, locale), vRight, cy);
+    ctx.textAlign = 'left';
 
-    // 3. Delta (huga wartość; rysowana tylko gdy istotna — lewy brzeg = prawy brzeg
-    //    wartości, więc przy zmianie delty „dorasta" tylko jej prawy koniec).
-    if (it.showDelta) {
-      const dThresh = it.kind === 'prosperity' ? 0.5 : 0.05;
-      if (Math.abs(it.delta ?? 0) > dThresh) {
-        const dStr = _fmtDelta(it.delta);
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = it.delta >= 0 ? THEME.success : THEME.danger;
-        ctx.fillText(dStr, cx, iconCY);
-        cx += ctx.measureText(dStr).width;
+    if (spec.arrow && it.showDelta) {
+      const g = trendGlyph(it.delta ?? 0, TREND_THRESHOLD[it.kind] ?? 0.05);
+      if (g) {
+        ctx.font = m.fonts.small;
+        ctx.fillStyle = g === TREND_UP ? THEME.success : THEME.danger;
+        ctx.fillText(g, vRight + VALUE_GAP, cy);
       }
     }
+    if (it.kind) this._hitItems.push({ x, y: rowTop, w: spec.w - TOKEN_GAP, h: ROW_H, tip: it });
+  }
 
-    // Slot = high-water (stały po „rozgrzaniu") → następny token nie skacze.
-    const slotW = this._hwSlot(it, cx - slotX);
-    if (it.kind) this._hitItems.push({ x: slotX, y: rowTop, w: slotW, h: ROW_H, tip: it });
-    return slotX + slotW + TOKEN_GAP;
+  // Kredyty: ikona na lewym brzegu slotu (wspólny x w całej liście), pełna liczba wyrównana do prawego końca
+  // wiersza — nigdy nieucinana (slot ma szerokość najszerszego tekstu kredytów wszystkich kolonii, ≥ szablon 7 cyfr).
+  _drawCredits(ctx, it, L, cy, rowTop) {
+    const m = this._metrics;
+    const x = L.plan.creditsX, right = L.plan.creditsRight;
+    ctx.font = m.fonts.icon;
+    ctx.fillStyle = it.color || THEME.warning;
+    ctx.textAlign = 'left';
+    drawResourceIcon(ctx, 'credits', x, cy, ICON_SIZE, it.icon);
+    ctx.font = m.fonts.value;
+    ctx.fillStyle = it.color || THEME.warning;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fmtBeltFull(it.val, L.locale), right, cy);
+    ctx.textAlign = 'left';
+    this._hitItems.push({ x, y: rowTop, w: right - x, h: ROW_H, tip: it });
   }
 
   // ── Tooltip (port z BottomResourceBar — dane per token, bez globalnego breakdown) ──
   _buildTooltipLines(item) {
     const lines = [];
+    const loc = getLocale();   // U0-3 (Finding 479): liczby tooltipu wg języka, jak w belce
     if (item.kind === 'resource' || item.kind === 'commodity') {
       const prefix = item.kind === 'commodity' ? 'commodity' : 'resource';
       const def = item.kind === 'commodity'
@@ -453,10 +513,9 @@ export class TopResourceDrawer {
         : (MINED_RESOURCES[item.id] ?? HARVESTED_RESOURCES[item.id] ?? { id: item.id });
       const name = getName({ id: item.id, namePL: def.namePL, nameEN: def.nameEN }, prefix);
       lines.push({ text: name, color: THEME.accent, bold: true, iconId: item.id, emoji: item.icon });
-      lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.textPrimary });
+      lines.push({ text: t('ui.amount', fmtBeltPrecise(item.val, loc)), color: THEME.textPrimary });
       if (Math.abs(item.delta) > 0.01) {
-        const sign = item.delta >= 0 ? '+' : '';
-        lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
+        lines.push({ text: t('ui.change', fmtBeltDelta(item.delta, loc)),
           color: item.delta >= 0 ? THEME.success : THEME.danger });
       }
       this._appendBreakdownLines(lines, item);   // źródła produkcji/zużycia (aktywna kolonia)
@@ -465,17 +524,16 @@ export class TopResourceDrawer {
     if (item.kind === 'research') {
       lines.push({ text: `🔬 ${t('resource.research')}`, color: THEME.accent, bold: true });
       if (item.global) lines.push({ text: t('resBar.researchGlobal'), color: THEME.textDim });
-      lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.textPrimary });
+      lines.push({ text: t('ui.amount', fmtBeltPrecise(item.val, loc)), color: THEME.textPrimary });
       if (Math.abs(item.delta) > 0.01) {
-        const sign = item.delta >= 0 ? '+' : '';
-        lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
+        lines.push({ text: t('ui.change', fmtBeltDelta(item.delta, loc)),
           color: item.delta >= 0 ? THEME.success : THEME.danger });
       }
       return lines;
     }
     if (item.kind === 'credits') {
       lines.push({ text: t('resBar.credits'), color: THEME.accent, bold: true, iconId: 'credits', emoji: item.icon });
-      lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.warning });
+      lines.push({ text: t('ui.amount', fmtBeltFull(item.val, loc)), color: THEME.warning });
       return lines;
     }
     if (item.kind === 'pop') {
@@ -492,11 +550,10 @@ export class TopResourceDrawer {
     }
     if (item.kind === 'prosperity') {
       const descKey = item.val < 30 ? 'resBar.prospLow' : item.val < 60 ? 'resBar.prospMedium' : 'resBar.prospHigh';
-      lines.push({ text: '⭐ Prosperity', color: THEME.accent, bold: true });
+      lines.push({ text: `⭐ ${t('workforce.prosperity')}`, color: THEME.accent, bold: true });
       lines.push({ text: t('resBar.prospValue', item.val, t(descKey)), color: item.color || THEME.textPrimary });
       if (Math.abs(item.delta) > 0.5) {
-        const sign = item.delta >= 0 ? '+' : '';
-        lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
+        lines.push({ text: t('ui.change', fmtBeltDelta(item.delta, loc)),
           color: item.delta >= 0 ? THEME.success : THEME.danger });
       }
       return lines;
@@ -504,10 +561,10 @@ export class TopResourceDrawer {
     if (item.kind === 'energy') {
       const e = item.energy || {};
       lines.push({ text: `⚡ ${t('resource.energy')}`, color: THEME.accent, bold: true });
-      lines.push({ text: t('ui.production', _fmtNum(e.production ?? 0)), color: THEME.success });
-      lines.push({ text: t('ui.consumption', _fmtNum(e.consumption ?? 0)), color: THEME.danger });
+      lines.push({ text: t('ui.production', fmtBeltPrecise(e.production ?? 0, loc)), color: THEME.success });
+      lines.push({ text: t('ui.consumption', fmtBeltPrecise(e.consumption ?? 0, loc)), color: THEME.danger });
       const bal = e.balance ?? 0;
-      lines.push({ text: t('ui.balance', (bal >= 0 ? '+' : '') + _fmtNum(bal)),
+      lines.push({ text: t('ui.balance', (bal >= 0 ? '+' : '') + fmtBeltPrecise(bal, loc)),
         color: bal >= 0 ? THEME.success : THEME.danger });
       if (e.brownout) lines.push({ text: t('topBar.brownoutWarning'), color: THEME.danger });
       // Rozbicie per budynek (id syntetyczne 'energy' — item energii nie ma .id)
@@ -526,7 +583,7 @@ export class TopResourceDrawer {
       if (snap) {
         for (const { colony, inv } of snap.byBody) {
           const nm = colony.name ?? EntityManager.get(colony.planetId)?.name ?? colony.planetId;
-          const parts = [...inv].filter(([, v]) => v > 0).slice(0, 6).map(([k, v]) => `${k} ${_fmtNum(v)}`).join('  ');
+          const parts = [...inv].filter(([, v]) => v > 0).slice(0, 6).map(([k, v]) => `${k} ${fmtBeltValue(v, loc)}`).join('  ');
           lines.push({ text: `▸ ${nm}: ${parts || '—'}`, color: THEME.textDim });
         }
       }
@@ -541,6 +598,7 @@ export class TopResourceDrawer {
   // globalny window.KOSMOS, więc dla rozwiniętych (nieaktywnych) kolonii byłyby błędne.
   _appendBreakdownLines(lines, item) {
     if (!item?._active || !item.id) return;
+    const loc = getLocale();
     const rs = item._col?.resourceSystem;
     if (!rs || typeof rs.getResourceBreakdown !== 'function') return;
     const bd = rs.getResourceBreakdown(item.id);
@@ -556,7 +614,7 @@ export class TopResourceDrawer {
         const g = bd.producers[type];
         const meta = this._breakdownTypeMeta(type);
         const cnt = g.count > 1 ? ` ×${g.count}` : '';
-        lines.push({ text: `${meta.icon} ${meta.name}${cnt}  +${_fmtNum(g.total)}/r`, color: THEME.success });
+        lines.push({ text: `${meta.icon} ${meta.name}${cnt}  +${fmtBeltValue(g.total, loc)}/r`, color: THEME.success });
       }
     }
     if (consKeys.length > 0) {
@@ -565,7 +623,7 @@ export class TopResourceDrawer {
         const g = bd.consumers[type];   // total ujemny
         const meta = this._breakdownTypeMeta(type);
         const cnt = g.count > 1 ? ` ×${g.count}` : '';
-        lines.push({ text: `${meta.icon} ${meta.name}${cnt}  ${_fmtNum(g.total)}/r`, color: THEME.danger });
+        lines.push({ text: `${meta.icon} ${meta.name}${cnt}  ${fmtBeltValue(g.total, loc)}/r`, color: THEME.danger });
       }
     }
   }

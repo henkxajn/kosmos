@@ -3488,6 +3488,8 @@ export default {
   // === CombatHUD (deep-space) ===
   'combat.hudHeaderSingle': 'DEEP-SPACE BATTLE',
   'combat.hudHeaderMulti':  'DEEP-SPACE BATTLES ({0})',
+  'combat.hudChip':         '⚔ Battles',        // ARKUSZ UI U0-3 (Finding 481) — minimized combat HUD chip
+  'combat.hudChipN':        '⚔ Battles [{0}]',
   'combat.hudMore':         '+ {0} more…',
   'combat.hudRound':        'round {0}',
   'combat.hudAlive':        'alive: {0}/{1}',

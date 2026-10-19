@@ -3489,6 +3489,8 @@ export default {
   // === CombatHUD (deep-space) — PL celowo ASCII (font HUD) ===
   'combat.hudHeaderSingle': 'BITWA W DEEP-SPACE',
   'combat.hudHeaderMulti':  'BITWY W DEEP-SPACE ({0})',
+  'combat.hudChip':         '⚔ Walki',          // ARKUSZ UI U0-3 (Finding 481) — czip zminimalizowanego HUD walki
+  'combat.hudChipN':        '⚔ Walki [{0}]',
   'combat.hudMore':         '+ {0} kolejnych…',
   'combat.hudRound':        'runda {0}',
   'combat.hudAlive':        'zywych: {0}/{1}',

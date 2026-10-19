@@ -154,24 +154,11 @@ export class BottomBar {
       }
     }
 
-    // UI v3 — bell 🔔 + MENU ☰ + blok czasu PRZENIESIONE do dolnego BottomControlBar.
-    // Tu zostaje tylko chip „⚔ Walki [N]" (top-right, dosunięty do prawej krawędzi), gdy
-    // CombatHUD zminimalizowany i DSCS ma active encounters. _bellClickBounds nieużywane.
-    const clTopY = 6, clBtnH = 20;
+    // UI v3 — bell 🔔 + MENU ☰ + blok czasu PRZENIESIONE do dolnego BottomControlBar. Czip walk
+    // (zminimalizowany CombatHUD) też tam — ARKUSZ UI, U0-3 (opcja 1): na lewo od paska zegara, z własnym
+    // hit-testem (Finding 482 — tu, w prawym końcu górnej belki, klik zjadało pasmo surowców). _bellClickBounds
+    // nieużywane.
     this._bellClickBounds = null;
-    const combatHud = window.KOSMOS?.combatHud;
-    if (combatHud?.isMinimized?.() && combatHud?.hasActiveEncounters?.()) {
-      const dscs = window.KOSMOS?.deepSpaceCombatSystem;
-      const n = dscs?.listActive?.()?.length ?? 0;
-      const chipLabel = n > 1 ? `⚔ Walki [${n}]` : '⚔ Walki';
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      const combatChipW = Math.ceil(ctx.measureText(chipLabel).width) + 14;
-      const combatChipX = W - combatChipW - 8;
-      this._combatChipClickBounds = { x: combatChipX, y: clTopY, w: combatChipW, h: clBtnH, label: chipLabel };
-      this._drawCombatChip(ctx, this._combatChipClickBounds, clTopY + 14);
-    } else {
-      this._combatChipClickBounds = null;
-    }
 
     this._logClickBounds = null;  // EventLog → EventLogDrawer
 
@@ -382,20 +369,6 @@ export class BottomBar {
   // Rysuj panel MENU — stub (menu jest teraz DOM, nie canvas)
   drawMenu() { /* noop — DOM menu zarządzane przez _syncDomMenu() */ }
 
-  // ── Chip „⚔ Walki [N]" — restoreuje zminimalizowany CombatHUD ──
-  _drawCombatChip(ctx, b, textY) {
-    ctx.fillStyle = THEME.accentMed ?? 'rgba(60, 60, 60, 0.6)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = THEME.danger ?? '#ff4466';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.danger ?? '#ff4466';
-    ctx.textAlign = 'center';
-    ctx.fillText(b.label, b.x + b.w / 2, textY);
-    ctx.textAlign = 'left';
-  }
-
   // ── Przycisk bell (🔔 + badge count) — silent notifications ──
   // Stan żyje w window.KOSMOS.notificationCenter. Klik toggle DOM dropdown.
   _drawBellButton(ctx, x, y, w, h, textY) {
@@ -506,7 +479,8 @@ export class BottomBar {
     this._menuOpen = false; this._syncDomMenu(); return false;
   }
 
-  // ── Klik w klaster prawego górnego rogu (MENU / chip walk / bell). True = obsłużono. ──
+  // ── Klik w klaster prawego górnego rogu (MENU / bell). True = obsłużono. Czip walk ma własny hit-test
+  //    w BottomControlBar (ARKUSZ UI, U0-3). ──
   // Wołane też z UIManager.handleClick PRZED overlayManager (priorytet, dostępne zawsze).
   _hitTestTopButtons(x, y) {
     const m = this._menuClickBounds;
@@ -514,11 +488,6 @@ export class BottomBar {
       this._menuOpen = !this._menuOpen;
       this._syncDomMenu();
       this._hoverRow = -1;
-      return true;
-    }
-    const cc = this._combatChipClickBounds;
-    if (cc && x >= cc.x && x <= cc.x + cc.w && y >= cc.y && y <= cc.y + cc.h) {
-      window.KOSMOS?.combatHud?.toggleMinimize?.();
       return true;
     }
     const b = this._bellClickBounds;

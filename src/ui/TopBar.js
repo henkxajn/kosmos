@@ -809,8 +809,11 @@ export class TopBar {
     return true; // pochłoń klik w bloku czasu
   }
 
-  // Sprawdza czy punkt jest nad TopBar (do blokady kamery)
+  // Sprawdza czy punkt jest nad TopBar (do blokady kamery). ARKUSZ UI, U0-3 (Finding 476): w civMode belka ma
+  // TOP_BAND_H (28 px) — dawne `y <= TOP_BAR_H` (46) zostawiało pod nią martwy pas 18 px dla przeciągania i zoomu
+  // kamery. Tryb Generator rysuje własny pasek 46 px (`UIManager._drawSimpleTopBar`) — tam bez zmian.
   isOver(x, y) {
-    return y <= BAR_H;
+    const h = window.KOSMOS?.civMode ? COSMIC.TOP_BAND_H : BAR_H;
+    return y <= h;
   }
 }
