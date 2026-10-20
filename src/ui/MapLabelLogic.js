@@ -247,7 +247,7 @@ export function gatherVesselLabels(vessels, ctx = {}) {
     if (!v) continue;
     const entry = buildShipEntry(v, ctx.pictureCtx ?? {});
     if (!entry || entry.isWreck) continue;                     // wraki poza mapą etykiet
-    if (entry.systemId !== activeSys) continue;                // tylko aktywny układ (null=tranzyt → chip)
+    if (entry.systemId !== activeSys) continue;                // tylko aktywny układ (null = tranzyt — „W drodze” w prawym outlinerze)
     const pos = ctx.getScreenPos?.(v.id);
     if (!pos) continue;                                        // za kamerą (z-clamp)
     const enemy = isEnemyVessel(v);
@@ -332,82 +332,6 @@ export function edgeIndicators(points, W, H, opts = {}) {
       worstTone: worstTone(g.tones),
       alertCount: g.alertCount,
     });
-  }
-  return out;
-}
-
-/**
- * Chipy układów (prawa krawędź): po jednym na układ z ≥1 WŁASNYM statkiem
- * (grupowanie po systemId; wrogowie i wraki pomijani) + chip 🌀 tranzytu dla
- * statków w skoku międzygwiezdnym (systemId === null).
- * @param {object[]} vessels
- * @param {object} ctx — { activeSystemId, systemName(id)→string|null, pictureCtx }
- * @returns {Array<{systemId:string|null,name,count,alertCount,isActive,isTransit}>}
- *   sort: aktywny układ → pozostałe alfabetycznie → tranzyt na końcu.
- */
-export function buildSystemChips(vessels, ctx = {}) {
-  const activeSys = ctx.activeSystemId ?? 'sys_home';
-  const groups = new Map();   // systemId|'__transit' → { count, alertCount }
-  for (const v of vessels ?? []) {
-    if (!v || isEnemyVessel(v)) continue;
-    const entry = buildShipEntry(v, ctx.pictureCtx ?? {});
-    if (!entry || entry.isWreck) continue;
-    const key = entry.systemId === null ? '__transit' : entry.systemId;
-    if (!groups.has(key)) groups.set(key, { count: 0, alertCount: 0 });
-    const g = groups.get(key);
-    g.count++;
-    g.alertCount += entry.alerts.length;
-  }
-  const out = [];
-  for (const [key, g] of groups) {
-    const isTransit = key === '__transit';
-    const systemId = isTransit ? null : key;
-    out.push({
-      systemId,
-      name: isTransit ? null : (ctx.systemName?.(systemId) ?? systemId),
-      count: g.count,
-      alertCount: g.alertCount,
-      isActive: !isTransit && systemId === activeSys,
-      isTransit,
-    });
-  }
-  out.sort((a, b) => {
-    if (a.isTransit !== b.isTransit) return a.isTransit ? 1 : -1;   // tranzyt na końcu
-    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;      // aktywny pierwszy
-    return String(a.name).localeCompare(String(b.name));
-  });
-  return out;
-}
-
-// Layout chipów układów — poziomy RZĄD tuż pod górnym paskiem surowców (jedna
-// linia, chip za chipem od lewej). Wcześniej pionowy stos przy prawej krawędzi
-// zasłaniał treść mapy — Filip: „wszystko w jednej linii pod belką surowców".
-// Czysta geometria (testowalna) — render w MapLabelLayer.
-export const CHIP_W       = 112;   // px logiczne — domyślna szerokość (fallback bez pomiaru)
-export const CHIP_H       = 18;
-export const CHIP_GAP     = 6;     // odstęp poziomy między chipami
-export const CHIP_LEFT_M  = 12;    // odstęp od lewej krawędzi ekranu
-export const CHIP_TOP     = 34;    // y rzędu — pod górnym pasmem surowców (TOP_BAND_H 28 + luz)
-export const CHIP_MIN_W   = 54;    // min szerokość chipa
-export const CHIP_MAX_W   = 168;   // max szerokość chipa (dłuższe nazwy ucinane w renderze)
-
-/**
- * @param {Array} chips — wynik buildSystemChips
- * @param {object} opts — { chipWidths?: number[] (per chip; fallback CHIP_W), top?, left? }
- * @returns {Array<{x,y,w,h,chip}>} recty w px logicznych; rząd przycinany do szerokości W
- */
-export function layoutSystemChips(chips, W, H, opts = {}) {
-  const out = [];
-  const widths = opts.chipWidths ?? null;
-  const top  = opts.top  ?? CHIP_TOP;
-  const maxRight = opts.maxRight ?? (W - CHIP_LEFT_M);   // prawa granica rzędu (np. lewa krawędź Outlinera)
-  let x = opts.left ?? CHIP_LEFT_M;
-  const list = chips ?? [];
-  for (let i = 0; i < list.length; i++) {
-    const w = widths ? widths[i] : CHIP_W;
-    if (x + w > maxRight) break;   // jeden wiersz — nie wychodź poza prawą granicę
-    out.push({ x, y: top, w, h: CHIP_H, chip: list[i] });
-    x += w + CHIP_GAP;
   }
   return out;
 }

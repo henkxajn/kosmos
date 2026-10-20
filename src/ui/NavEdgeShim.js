@@ -5,8 +5,8 @@
 // canvasem — canvas nie może namalować lewego drawera nad nimi, a ich lewa krawędź (left:0)
 // zasłania trigger NavDrawera. Ten shim (z60, NAD overlayami) przejmuje klik krawędzi,
 // zamyka DOM overlay (closeActive) i oddaje stery canvasowemu NavDrawerowi (który ma teraz
-// czyste pole). Prawy drawer Outlinera NIE potrzebuje shima — Tech/Observatory zostawiają
-// prawą rynnę OUTLINER_W, w której drawer rysuje się natywnie.
+// czyste pole). (ARKUSZ UI U3: prawy Outliner nie jest już szufladą — kolumna statków chowa się pod overlayem
+// pełnoekranowym, a Obserwatorium nie zostawia prawej rynny; prawa krawędź shima nie potrzebuje.)
 //
 // Aktywny pointer-events TYLKO przy DOM overlayu → nie koliduje z canvasowym triggerem
 // NavDrawera (ten działa przez zdarzenia window nad overlayami canvasowymi).

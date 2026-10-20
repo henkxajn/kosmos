@@ -24,8 +24,10 @@
 //   T2  stan undefined / token nieznany / brak `position` → etykieta NIE jest żadnym słowem stanu
 //       realnego i JEST „Unknown" (klucz dedykowany `fleetGroup.statusUnknown`).
 //   T3  kształt z gate'u legu D (`sys_020`, orbiting, dockedAt:null) → „In space" bez nazwy ciała
-//       na obu panelach, w K3, w NavPeek i w `FMO._getLocationText` (koniec „Orbit: ???");
-//       KONTROLA: ten sam statek z dockedAt:'h2' → „Orbiting h2".
+//       na obu panelach, w K3 i w `FMO._getLocationText` (koniec „Orbit: ???");
+//       KONTROLA: ten sam statek z dockedAt:'h2' → „Orbiting h2". ARKUSZ UI U4-1 — przecelowanie: karta floty NavPeek
+//       usunięta razem z kartami peek (UI_PLAN §4.5, decyzja 4) — dawne dwie asercje karty zastępuje świadek „tej
+//       powierzchni nie ma” (moduł bez `getPeekData`), żeby żadna karta nie wróciła po cichu ze starym słowem.
 //   T4  bliźniaki: FleetPictureLogic (aktywność + kolumna Stan K3), FleetRegistryLogic (fallback
 //       „Idle"), Outliner — nierozpoznany stan NIE wygląda jak „Docked". ARKUSZ UI U3-2 — przecelowanie: prawy outliner
 //       to drzewo statków (D-UI-6) bez kubełków stanu; stan pokazuje ZNACZNIK (kolor glifu roli, D-UI-9) i podpowiedź
@@ -58,7 +60,7 @@ import { FleetGroupPanel } from '../../ui/FleetGroupPanel.js';
 import { FleetCommandPanel } from '../../ui/FleetCommandPanel.js';
 import { Outliner } from '../../ui/Outliner.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
-import { getPeekData } from '../../ui/NavPeekProviders.js';
+import * as NavPeek from '../../ui/NavPeekProviders.js';   // ARKUSZ UI U4-1 — przestrzeń nazw: karta floty usunięta
 import { HULLS } from '../../data/HullsData.js';
 import { THEME } from '../../config/ThemeConfig.js';
 
@@ -307,12 +309,10 @@ header('T3  leg-D (sys_020, orbiting, dockedAt:null) → „In space"; kontrola 
   // K3
   const rD = buildRegistryRows([D], { bodyName: (id) => EntityManager.get(id)?.name ?? id })[0];
   ok(rD.stateKey === 'fleetGroup.statusInSpace' && rD.body === null, `K3 leg-D: stateKey=inSpace, body=null (${rD.stateKey}/${rD.body})`);
-  // NavPeek — karta floty: dryf ma WŁASNY nagłówek, NIE „Orbiting"; kontrola: orbiter z ciałem pod „Orbiting"
-  world([D, Dc]);
-  const peek = getPeekData('fleet');
-  const heads = (peek?.rows ?? []).filter((r) => r.kind === 'head').map((r) => r.label);
-  ok(heads.some((h) => h.startsWith(inSpace) && /1$/.test(h)), `NavPeek: nagłówek „${inSpace} 1" (nagłówki: ${J(heads)})`);
-  ok(heads.some((h) => h === t('navPeek.fleet.orbiting', 1)), `NavPeek KONTROLA: „${t('navPeek.fleet.orbiting', 1)}" dla orbitera z ciałem`);
+  // NavPeek — karta floty usunięta w U4-1 (UI_PLAN §4.5, decyzja 4): powierzchni, która mogłaby wypisać stan, już nie ma;
+  // z modułu zostały predykaty plakietek alertów kafli (`hasSlotAlert`).
+  ok(!('getPeekData' in NavPeek) && typeof NavPeek.hasSlotAlert === 'function',
+     'NavPeek (U4-1): karty floty nie ma — moduł bez `getPeekData`, zostały predykaty plakietek (`hasSlotAlert`)');
   // kanon wprost
   ok(!!Canon && J(Canon.resolveVesselStatus(D)) === J({ token: 'in_space', bodyId: null }),
      `KANON: resolveVesselStatus(leg-D) = {in_space,null} (${Canon ? J(Canon.resolveVesselStatus(D)) : 'brak kanonu'})`);

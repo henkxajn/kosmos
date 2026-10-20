@@ -27,7 +27,7 @@
 import { THEME }           from '../config/ThemeConfig.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
-import { t, getName }      from '../i18n/i18n.js';
+import { t, getName, getShort } from '../i18n/i18n.js';
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { isPlayerColony }  from '../utils/ColonyOwnership.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';   // ARKUSZ UI U3-0 — statki gracza dla widoczności układów (489)
@@ -321,9 +321,38 @@ export function queueTipLines(colony, count) {
   return lines;
 }
 
+// ARKUSZ UI U4-1 (Finding 495, decyzja (e)): nazwy w podpowiedzi kolonii z ISTNIEJĄCYCH kluczy, nie surowe id. Dosłowne klucze
+// (nie składane) — `check-i18n` sprawdza, że istnieją.
+// Epoka: klucze `EPOCHS` (early / developing / advanced / cosmic) ≠ klucze słownika — najwyższa to `epoch.space`
+// (mapowanie jak w `PopulationOverlay`; dawniej „Epoka: epoch.cosmic”).
+function _epochLabel(key) {
+  const names = { early: t('epoch.early'), developing: t('epoch.developing'), advanced: t('epoch.advanced'), cosmic: t('epoch.space') };
+  return names[key] ?? key;
+}
+
+// Typ ciała: planeta — `planetType.*`, księżyc i planetoida — `bodyType.*` (dawniej surowe `planetType` / `type`).
+function _bodyTypeLabel(body) {
+  const pt = { rocky: t('planetType.rocky'), gas: t('planetType.gas'), ice: t('planetType.ice'), volcanic: t('planetType.volcanic'), life: t('planetType.life') };
+  if (body?.planetType && pt[body.planetType]) return pt[body.planetType];
+  const bt = { planet: t('bodyType.Planet'), moon: t('bodyType.Moon'), planetoid: t('bodyType.Planetoid') };
+  return bt[body?.type] ?? '';
+}
+
+// Zapas: towar — nazwa skrócona z `getShort` (towar bez klucza skrótu — pełna nazwa z danych przez `getName`; dziś
+// `orbital_shells`, `quantum_cores`, `antimatter_cells`), surowiec — nazwa z `getName` (prefiks zasobu); bez definicji — id.
+function _stockName(id) {
+  if (COMMODITIES[id]) {
+    const short = getShort(id);
+    return short !== id ? short : getName(COMMODITIES[id], 'commodity');
+  }
+  const def = ALL_RESOURCES[id];
+  return def ? getName(def, 'resource') : id;
+}
+
 /**
  * Podpowiedź kolonii (obserwacja D) — przeniesiona z prawego Outlinera sprzed U3 (`_buildColonyTooltip`): nazwa, typ
- * i temperatura ciała, POP i prosperity, epoka, zasoby (segmenty wielokolorowe po 4), budynki (po 3).
+ * i temperatura ciała, POP i prosperity, epoka, zasoby (segmenty wielokolorowe po 4), budynki (po 3). Nazwy typu, epoki
+ * i zapasów — z kluczy (U4-1, Finding 495).
  */
 export function colonyTooltipLines(colony) {
   if (!colony) return [];
@@ -331,7 +360,7 @@ export function colonyTooltipLines(colony) {
   const planet = colony.planet;
   if (planet) {
     const tempC = planet.temperatureC != null ? Math.round(planet.temperatureC) : (planet.temperatureK ? Math.round(planet.temperatureK - 273) : null);
-    lines.push({ text: `${planet.planetType ?? planet.type} ${tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : ''}`, color: THEME.textDim });
+    lines.push({ text: `${_bodyTypeLabel(planet)} ${tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : ''}`.trim(), color: THEME.textDim });
   }
   const cSys = colony.civSystem;
   if (cSys) {
@@ -342,7 +371,7 @@ export function colonyTooltipLines(colony) {
     const prosp = Math.round(colony.prosperitySystem?.prosperity ?? 50);
     lines.push({ text: `👤 ${dPopStr} (${pop}/${housing === Infinity ? '∞' : housing} POP)  ⭐${prosp}`, color: THEME.textSecondary });
     const epoch = colony.prosperitySystem?._getCurrentEpoch?.()?.key ?? 'early';
-    lines.push({ text: t('outliner.epoch', t(`epoch.${epoch}`)), color: THEME.textSecondary });
+    lines.push({ text: t('outliner.epoch', _epochLabel(epoch)), color: THEME.textSecondary });
   }
   const inv = colony.resourceSystem?.inventory;
   if (inv) {
@@ -350,7 +379,7 @@ export function colonyTooltipLines(colony) {
     for (const [k, v] of inv.entries()) {
       if (v <= 0) continue;
       const resDef = ALL_RESOURCES[k];
-      segments.push({ label: `${resDef?.icon ?? COMMODITIES[k]?.icon ?? ''}${k}:${Math.floor(v)}`, color: resDef?.color ?? THEME.yellow });
+      segments.push({ label: `${resDef?.icon ?? COMMODITIES[k]?.icon ?? ''}${_stockName(k)}:${Math.floor(v)}`, color: resDef?.color ?? THEME.yellow });
     }
     for (let i = 0; i < segments.length; i += 4) lines.push({ segments: segments.slice(i, i + 4) });
   }

@@ -12,16 +12,15 @@
 //
 // ARKUSZ UI U3-0b (decyzja właściciela 2026-10-19): karta peek nad slotem WYŁĄCZONA bez zamiennika — zostaje
 // podświetlenie kafelka przy najechaniu (jasność + 2 px wskaźnik) i pasywne badge alertów; pasek zegara i czip ⚔
-// nie „jeżdżą” już za kartą (`BottomControlBar._stripTop` stały). `NavPeekCard` / `NavPeekCardLogic` zostają na dysku
-// do sprzątania w U4 (`NavPeekCardLogic` dalej formatuje liczby dla `TopBarFormatLogic` i `NavPeekProviders`).
+// nie „jeżdżą” już za kartą (`BottomControlBar._stripTop` stały). ARKUSZ UI U4-1: pliki kart usunięte; plakietka kafla
+// pyta wyłącznie o obecność alertu (`NavPeekProviders.hasSlotAlert` — same predykaty), bez flagi `navPeekCards`.
 
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t } from '../i18n/i18n.js';
 import { NAV_GROUPS, CIV_TABS, getNavGroup } from './CivPanelDrawer.js';
 import { bottomNavBarRect, navSlotLayout, hitNavSlot, pointInRect } from './BottomNavBarLogic.js';
 import { NAV_TILE_FILES, NAV_ICON_DIR } from './NavDrawerLogic.js';
-import { getPeekAlert } from './NavPeekProviders.js';
+import { hasSlotAlert } from './NavPeekProviders.js';
 
 export class BottomNavBar {
   constructor() {
@@ -33,8 +32,7 @@ export class BottomNavBar {
     this._hoverP    = [];     // per-slot progres hovera 0..1 (animacja 150ms)
     this._lastMs    = 0;      // znacznik czasu ostatniej klatki (dt animacji)
     this._anim      = false;  // czy któryś slot jest w trakcie animacji
-    // Pasywne badge alertów na slotach — gated FEATURES.navPeekCards (ARKUSZ UI U3-0b: karty peek nad slotem już nie ma).
-    this._alertBadges = GAME_CONFIG.FEATURES?.navPeekCards !== false;
+    // Pasywne badge alertów na slotach (ARKUSZ UI U4-1: bez flagi — karty peek i `FEATURES.navPeekCards` usunięte).
     this._alertCache = {};    // primary → bool (odświeżane throttlingiem)
     this._alertAt  = 0;
   }
@@ -78,14 +76,12 @@ export class BottomNavBar {
     const activePrimary = activeGrp?.primary ?? null;
 
     // Odśwież cache alertów (throttling 600ms) — zasila pasywne badge na slotach.
-    if (this._alertBadges) {
-      const nowA = Date.now();
-      if (nowA - this._alertAt > 600) {
-        this._alertAt = nowA;
-        const cache = {};
-        for (const g of NAV_GROUPS) cache[g.primary] = !!getPeekAlert(g.primary);
-        this._alertCache = cache;
-      }
+    const nowA = Date.now();
+    if (nowA - this._alertAt > 600) {
+      this._alertAt = nowA;
+      const cache = {};
+      for (const g of NAV_GROUPS) cache[g.primary] = hasSlotAlert(g.primary);
+      this._alertCache = cache;
     }
 
     // Animacja hovera (150ms): progres każdego slotu pełznie do 1 (hover) lub 0 (poza).
@@ -105,7 +101,7 @@ export class BottomNavBar {
       this._hoverP[i] = p;
       if (p > 0.001 && p < 0.999) this._anim = true;
       const grp = NAV_GROUPS[i];
-      const hasAlert = this._alertBadges && !!this._alertCache[grp.primary];
+      const hasAlert = !!this._alertCache[grp.primary];
       this._drawSlot(ctx, grp, slot.x, rect.y, slot.w, rect.h, activePrimary === grp.primary, p, hasAlert);
     }
     // ARKUSZ UI, U0-1 (D-UI-13): pasek BEZ ram — usunięte separatory między przyciskami, boki i górna listwa

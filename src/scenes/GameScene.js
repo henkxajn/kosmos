@@ -5471,7 +5471,7 @@ export class GameScene {
       // Propaguj modifiery kliku do ColonyOverlay (multi-select shift/ctrl)
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (overlay) overlay._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
-      // Slice 8b — modifiery kliku do Outlinera (CTRL+klik statku = multi-select w drawerze).
+      // Slice 8b — modifiery kliku do prawego outlinera (CTRL+klik statku = przełączenie w zbiorze zaznaczonych; ARKUSZ UI U3).
       const outl = this.uiManager?._outliner;
       if (outl) outl._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
       // 4f-3 — modifiery kliku do Doku taktycznego (CTRL+klik wiersza = multi-toggle, jak Outliner).

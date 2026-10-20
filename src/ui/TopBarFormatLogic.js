@@ -1,6 +1,6 @@
 // TopBarFormatLogic — czyste helpery górnej belki surowców (ARKUSZ UI, U0-3: D-UI-12 + Findingi 474, 475, 479).
 //
-// Bez DOM / canvas / i18n / window → testowalne headless. Wzór NavPeekCardLogic: język i funkcja pomiaru tekstu
+// Bez DOM / canvas / i18n / window → testowalne headless. Wzór NumberFormatLogic: język i funkcja pomiaru tekstu
 // są PARAMETRAMI, nie importami. Zawiera:
 //   • format liczby w komórce wg języka i progu 10 000 (12 400 → „12,4k" PL / „12.4k" EN; 9 999 w całości) —
 //     Finding 479 (dawniej zawsze kropka i skrót już od 1 000);
@@ -15,7 +15,7 @@
 //     budżecie, dopiero potem zrzucenie ostatnich ZWYKŁYCH tokenów;
 //   • skracanie tekstu z wielokropkiem (nazwa kolonii w zwężonej strefie).
 
-import { fmtInt, fmtDec } from './NavPeekCardLogic.js';
+import { fmtInt, fmtDec } from './NumberFormatLogic.js';   // ARKUSZ UI U4-1 — formatery wyjęte z dawnych kart peek
 
 export const ABBREV_FROM     = 10_000;  // D-UI-12: skrót liczb od 10 000 (próg potwierdzony 2026-10-18)
 export const NAME_ZONE_W     = 200;     // strefa nazwy kolonii + POP — szerokość domyślna (px logiczne)

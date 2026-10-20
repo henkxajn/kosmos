@@ -50,7 +50,10 @@
 //   L19 (U3-3, obserwacja C — podpisane (a)) podpowiedź ⏳N wylicza pozycje kolejki (ikona typu + nazwa; oczekujące
 //       na zasoby kolorem ostrzeżenia); nagłówek = liczba przy ciele; ponad 10 pozycji — „(+N więcej)”
 //   L20 (U3-3, obserwacja D) wiersz ciała z WŁASNĄ kolonią — podpowiedź kolonii (POP, prosperity, epoka, zasoby);
-//       kolonia AI — bez (mgła wojny); ciało bez kolonii — bez
+//       kolonia AI — bez (mgła wojny); ciało bez kolonii — bez. ARKUSZ UI U4-1 (Finding 495, decyzja (e)): L20b
+//       przecelowany — zasoby nazwą z klucza (`getName(…, 'resource')`), nie surowym id; NOWY L20d — epoka `cosmic` →
+//       `epoch.space` (dawniej „Epoka: epoch.cosmic”), typ planety z `planetType.*`, towar skrótem `commodity.*.short`,
+//       towar bez klucza skrótu (`quantum_cores`) — pełną nazwą z danych (`getName`), nie surowym id
 //   L16 prawy outliner — od ARKUSZ UI U3-2 kolumna nad mapą (`OutlinerColumn`, jak lewy): wejścia w UIManagerze bez
 //       własnej flagi widoczności (klawisz i decyzja 4 — wewnątrz kolumny), w warstwie lewego; bez szuflady (piny
 //       źródłowe; wykonanie — `right_outliner_smoke`)
@@ -619,10 +622,32 @@ header('L20 obserwacja D — podpowiedź kolonii na wierszu ciała z własną ko
   const texts = (lo?._tip?.lines ?? []).map((l) => l.text ?? (l.segments ?? []).map((s) => s.label).join(' '));
   ok(texts[0] === '🏛 Mstow' && texts.includes('👤 8k (8/16 POP)  ⭐61') && texts.includes(t('outliner.epoch', t('epoch.early'))),
     `L20a SEDNO: własna kolonia — POP, prosperity, epoka (${JSON.stringify(texts)})`);
-  ok(texts.some((x) => x.includes('Fe:120')) && !texts.some((x) => x.includes('food:')), 'L20b zasoby (dodatnie stany)');
+  const { getName, getShort } = await import('../../i18n/i18n.js');
+  const { ALL_RESOURCES } = await import('../../data/ResourcesData.js');
+  const feName = getName(ALL_RESOURCES.Fe, 'resource'), foodName = getName(ALL_RESOURCES.food, 'resource');
+  ok(feName !== 'Fe' && texts.some((x) => x.includes(`${feName}:120`)) && !texts.some((x) => x.includes('Fe:') || x.includes(foodName)),
+    `L20b (U4-1, Finding 495) zasoby nazwą z klucza („${feName}:120”, nie „Fe:120”), tylko dodatnie stany`);
   const tCA = target(lo, 'body', 'CA');
   if (tCA) lo.updateHover(tCA.x + 30, tCA.y + 4, W, H);
   ok(!!tCA && lo?._tip === null, 'L20c KONTROLA: kolonia AI (⚑) — bez podpowiedzi kolonii (mgła wojny)');
+  // L20d — Finding 495: najwyższa epoka, typ planety, towar (dawniej „epoch.cosmic”, „rocky”, „structural_alloys:40”)
+  const planet0 = col.planet;
+  col.planet = { planetType: 'rocky', temperatureK: 290 };
+  col.prosperitySystem = { prosperity: 61, _getCurrentEpoch: () => ({ key: 'cosmic' }) };
+  col.resourceSystem = { inventory: new Map([['Fe', 120], ['structural_alloys', 40], ['quantum_cores', 7]]) };
+  lo?.draw?.(recCtx(), W, H, { colonies: COLS3, groundUnits: [] });
+  const tP1d = target(lo, 'body', 'P1');
+  if (tP1d) lo.updateHover(tP1d.x + 30, tP1d.y + 4, W, H);
+  const td = (lo?._tip?.lines ?? []).map((l) => l.text ?? (l.segments ?? []).map((sg) => sg.label).join(' '));
+  const alloys = getShort('structural_alloys');
+  const { COMMODITIES } = await import('../../data/CommoditiesData.js');
+  const qc = getName(COMMODITIES.quantum_cores, 'commodity');   // towar BEZ klucza skrótu — pełna nazwa z danych
+  ok(td.includes(t('outliner.epoch', t('epoch.space'))) && !td.some((x) => /epoch\./.test(x))
+    && td.some((x) => x.startsWith(t('planetType.rocky')) && x.includes('+17°C')) && !td.some((x) => /^rocky\b/.test(x))
+    && alloys !== 'structural_alloys' && td.some((x) => x.includes(`${alloys}:40`)) && !td.some((x) => x.includes('structural_alloys'))
+    && qc !== 'quantum_cores' && td.some((x) => x.includes(`${qc}:7`)) && !td.some((x) => x.includes('quantum_cores')),
+    `L20d SEDNO (U4-1, Finding 495): epoka „${t('epoch.space')}”, typ „${t('planetType.rocky')}”, towar „${alloys}:40”, towar bez skrótu „${qc}:7” — bez surowych kluczy (${JSON.stringify(td)})`);
+  col.planet = planet0;
   Object.assign(col, keep);
   restore3();
 }

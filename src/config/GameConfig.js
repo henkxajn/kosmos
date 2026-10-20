@@ -259,10 +259,6 @@ export const GAME_CONFIG = {
     //   Nie eksploruje układu (bez podglądu/kolonizacji) — ujawnia tylko liczby ciał zdalnie.
     //   Bramkuje: startSystemScan, przycisk STRATCOM. Bez migracji save (pola z ?? {}).
     observatorySystemScan: true,
-    // navPeekCards: karta "peek" wysuwana nad slotem dolnego paska nawigacji na
-    //   hover (podgląd kluczowych danych domeny) + pasywne badge alertów na slotach.
-    //   Render/UI-only — brak migracji save. Rollback OFF przywraca goły pasek.
-    navPeekCards:         true,
     // ── S3.4 FAZA 5 — etykiety kolonii + stacji na mapie 3D (MapLabelLayer) ──
     //   Overlay 2D tekstowych etykiet (Trasa A) nad WebGL: kolonia (ikona+nazwa+POP),
     //   stacja (🛰+nazwa+pop/cap+badge status). Stacja klikalna → station:selected+focus.

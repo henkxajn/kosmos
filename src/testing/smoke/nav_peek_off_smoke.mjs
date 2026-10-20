@@ -17,8 +17,12 @@
 //   P4  czip walk nieruchomy przy najechaniu na PRZEDOSTATNI kafelek (dawniej jechał w górę z kartą)
 //   P5  źródło: `BottomNavBar` nie importuje `NavPeekCard` ani zwłoki karty; `BottomControlBar` nie czyta karty
 // KONTROLE (zielone po obu stronach):
-//   K2  klik w kafelek nadal otwiera jego grupę; K3 badge alertów nadal liczone (źródło: `getPeekAlert`)
-//   K4  `NavPeekCard` i `NavPeekCardLogic` zostają na dysku (sprzątanie w U4)
+//   K2  klik w kafelek nadal otwiera jego grupę
+// PRZECELOWANE W U4-1 (UI_PLAN §4.5, decyzja 4 — sprzątanie kart peek; padają na drzewie sprzed U4-1, więc nie są już
+// kontrolami):
+//   K3  badge alertów nadal liczone — z predykatu `hasSlotAlert` (dawniej `getPeekAlert`), bez flagi `navPeekCards`
+//   K4  pliki kart usunięte (`NavPeekCard.js`, `NavPeekCardLogic.js`; dawniej „zostają na dysku do U4”), formatery liczb
+//       w `NumberFormatLogic.js`
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -150,9 +154,11 @@ header('P5 · K3 · K4 — źródło');
   const bcb = strip(srcOf('../../ui/BottomControlBar.js'));
   ok(!/NavPeekCard|PEEK_HOVER_DELAY|_dwell|_peekSlot/.test(nav), 'P5a `BottomNavBar` bez karty peek: zero `NavPeekCard`, zwłoki karty i stanu najechania karty');
   ok(!/peekTopY|_peek\b/.test(bcb), 'P5b `BottomControlBar` nie czyta karty peek (rząd stały)');
-  ok(/getPeekAlert\(/.test(nav) && /hasAlert/.test(nav), 'K3 KONTROLA: pasywne badge alertów dalej liczone (`getPeekAlert` → `hasAlert` slotu)');
-  ok(existsSync(fileURLToPath(new URL('../../ui/NavPeekCard.js', import.meta.url))) && existsSync(fileURLToPath(new URL('../../ui/NavPeekCardLogic.js', import.meta.url))),
-    'K4 KONTROLA: `NavPeekCard.js` i `NavPeekCardLogic.js` zostają na dysku (sprzątanie w U4)');
+  ok(/hasSlotAlert\(/.test(nav) && /hasAlert/.test(nav) && !/getPeekAlert|navPeekCards|_alertBadges/.test(nav),
+    'K3 (U4-1): pasywne badge alertów dalej liczone — predykat `hasSlotAlert` → `hasAlert` slotu, bez flagi `navPeekCards`');
+  const there = (f) => existsSync(fileURLToPath(new URL(`../../ui/${f}`, import.meta.url)));
+  ok(!there('NavPeekCard.js') && !there('NavPeekCardLogic.js') && there('NumberFormatLogic.js'),
+    'K4 (U4-1): pliki kart usunięte (`NavPeekCard.js`, `NavPeekCardLogic.js`), formatery liczb w `NumberFormatLogic.js`');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
