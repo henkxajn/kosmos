@@ -189,7 +189,7 @@ function _gatherAlerts(vessel, ctx) {
  *   null dla braku vessela.
  *
  * Kształt wpisu (kontrakt):
- * { id, name, role, glyph, tone, activityKey, activityArgs,
+ * { id, name, role, glyph, tone, moving, activityKey, activityArgs,
  *   eta:{year:number|null, confidence:'firm'|'moving'},
  *   systemId (string | null — null ZOSTAJE null = tranzyt międzygwiezdny!),
  *   fleetId, fuelPct (0..1|null), warpFuelPct (0..1|null), alerts:[{kind,severity}],
@@ -212,6 +212,7 @@ export function buildShipEntry(vessel, ctx = {}) {
       role:        null,
       glyph:       '💀',
       tone:        'idle',
+      moving:      false,
       state:       'wreck',
       dockedAt:    vessel.position?.dockedAt ?? null,   // ciało cmentarne (kolumna „Ciało")
       activityKey: 'fleetPicture.state.wreck',
@@ -244,10 +245,14 @@ export function buildShipEntry(vessel, ctx = {}) {
   const mission     = vessel.mission ?? null;
 
   // Ton — JEDNA funkcja priorytetów (plan §2): combat > alert > move > mission > idle.
+  // ARKUSZ UI U3-1: `moving` — warunek tonu `move` (lot ∨ aktywny rozkaz) wystawiony osobno we wpisie. Ton przejmuje
+  // KAŻDY alert (np. niski poziom paliwa w locie), a znacznik prawego outlinera (D-UI-9, `ShipTreeLogic.shipMarker`)
+  // ma pokazać „w ruchu” także wtedy — bez liczenia ruchu po swojemu.
+  const inMotion = state === 'in_transit' || orderActive;
   let tone;
   if (ctx?.combatCheck?.(vessel.id) === true) tone = 'combat';
   else if (alerts.length > 0)                 tone = 'alert';
-  else if (state === 'in_transit' || orderActive) tone = 'move';
+  else if (inMotion)                          tone = 'move';
   else if (mission)                           tone = 'mission';
   else                                        tone = 'idle';
 
@@ -325,6 +330,7 @@ export function buildShipEntry(vessel, ctx = {}) {
     role,
     glyph,
     tone,
+    moving:      inMotion,   // ARKUSZ UI U3-1 — lot ∨ aktywny rozkaz (warunek tonu `move`, niezasłonięty alertem)
     state,       // token KANONU statusu fizycznego (kolumna „Stan" rejestru K3; Finding 266)
     activityKey,
     activityArgs,
