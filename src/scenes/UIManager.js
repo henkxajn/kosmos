@@ -422,7 +422,7 @@ export class UIManager {
       let dy = e.deltaY;
       if (e.deltaMode === 1) dy *= 20;       // linie → px (typowy wiersz ~20px)
       else if (e.deltaMode === 2) dy *= 400;  // strony → px
-      this.handleWheel(e.clientX, e.clientY, dy);
+      this.handleWheel(e.clientX, e.clientY, dy, e.deltaY);   // surowe deltaY — suwak zoomu (ARKUSZ UI U4-4)
     }, { passive: true });
   }
 
@@ -2060,11 +2060,15 @@ export class UIManager {
   }
 
   // Obsługa scrolla
-  handleWheel(rawX, rawY, deltaY) {
+  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {
     this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
+    // ARKUSZ UI U4-4 (decyzja (d)) — kółko nad suwakiem zoomu = kółko nad mapą: ten sam krok kontrolera kamery
+    // (`wheelZoom` z surowym deltaY, jak nasłuch kamery); sama kamera nad pasem nie zoomuje (`isOverUI`).
+    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen()
+        && this._bottomControlBar?.handleZoomWheel?.(x, y, rawDeltaY)) return true;
     // Faza 4 — Dok taktyczny: kółko NAD pasem = scroll listy (blokuje zoom kamery). Na
     // POCZĄTKU łańcucha (w trybie Y overlay zawsze zamknięty → bramka isAnyOpen nie zadziała).
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
@@ -2097,6 +2101,8 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y, button); return; }
+    // ARKUSZ UI U4-4 — przeciąganie suwaka zoomu na pasie dolnym (kamera zablokowana przez isOverUI — pas).
+    if (button === 0 && window.KOSMOS?.civMode && this._bottomControlBar?.tryBeginZoomDrag?.(x, y)) return;
     // C1 (S3.4b) — drag pływających paneli za nagłówek (kamera już zablokowana przez isOverUI).
     if (button === 0) {
       if (this.tryBeginVesselPanelDrag(x, y)) return;   // Slice B — drag panelu statku
@@ -2114,7 +2120,8 @@ export class UIManager {
     const draggedV = this.endVesselPanelDrag();   // Slice B
     const draggedS = this.stationPanel?.endDrag?.();
     const draggedB = this._bottomContext?.endDrag?.();
-    if (draggedS || draggedB) this._panelDragConsumedClick = true;
+    const draggedZ = this._bottomControlBar?.endZoomDrag?.();   // ARKUSZ UI U4-4 — suwak zoomu
+    if (draggedS || draggedB || draggedZ) this._panelDragConsumedClick = true;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y, button); return; }
   }
 
@@ -2131,7 +2138,9 @@ export class UIManager {
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
     // #4 (review) — overlay/modal pojawił się w trakcie draga → przerwij drag (inaczej _dragging utyka).
-    if (this.overlayManager.isAnyOpen()) { this.stationPanel?.endDrag?.(); this._bottomContext?.endDrag?.(); }
+    if (this.overlayManager.isAnyOpen()) { this.stationPanel?.endDrag?.(); this._bottomContext?.endDrag?.(); this._bottomControlBar?.endZoomDrag?.(); }
+    // ARKUSZ UI U4-4 — przeciąganie suwaka zoomu: aktualizuj i POCHŁOŃ ruch (także poza suwakiem — klamra toru).
+    if (this._bottomControlBar?.handleZoomDrag?.(x)) return;
     // C1 (S3.4b) — jeśli panel jest przeciągany, aktualizuj i POCHŁOŃ ruch (bez hoverów pod spodem).
     if (this.isDraggingVesselPanel())            { this.handleVesselPanelDragMove(x, y);   return; }   // Slice B
     if (this.stationPanel?.isDraggingPanel?.())   { this.stationPanel.handleDragMove(x, y);   return; }

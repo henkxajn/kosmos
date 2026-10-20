@@ -91,6 +91,9 @@
 //   L5f / L5g / L5h — dok zminimalizowanych paneli to od U4-3 rząd chipów na pasie dolnym (koniec stosu pionowego):
 //         chipy od lewego końca pasa (prawa krawędź lewego outlinera, x 150 + 4), przy schowanym lewym — od x 4, na
 //         pasie także przy Doku taktycznym. Prawdziwy `BottomControlBar` → `getDockSpan` → `PanelDock`.
+// PRZECELOWANIA (ARKUSZ UI U4-4 — decyzja (d)):
+//   L7f / L16c — `UIManager.handleWheel` dostał czwarty parametr (surowe `deltaY` dla suwaka zoomu — ten sam krok co
+//         kółko nad mapą); piny szukają metody po nowej sygnaturze, trasa kółka do outlinerów bez zmian.
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -431,7 +434,7 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   ok(dLO > 0 && dLO < dTRD && dLO < dSP && dLO < dFG, 'L7d rysowanie: outliner PRZED listą kolonii z belki i pływającymi panelami (§7.17)');
   ok(/this\._leftOutliner\.draw\(ctx, W, H, \{ colonies: this\._cachedColonies, groundUnits: this\._outlinerState\?\.groundUnits/.test(dr),
     'L7e dane drzewa: wszystkie kolonie (cache) i jednostki naziemne z tej samej listy co prawy Outliner');
-  ok(/this\._leftOutliner\?\.handleWheel\?\.\(x, y, delta, W, H\)/.test(body(ui, '  handleWheel(rawX, rawY, deltaY) {')), 'L7f kółko');
+  ok(/this\._leftOutliner\?\.handleWheel\?\.\(x, y, delta, W, H\)/.test(body(ui, '  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {')), 'L7f kółko');
   ok(/this\._leftOutliner\?\.updateHover\?\.\(x, y, W, H\)/.test(body(ui, '  handleMouseMove(x, y) {')), 'L7g najechanie');
   ok(/this\._leftOutliner\?\.isOver\?\.\(x, y, W, H\)/.test(body(ui, '  isPointerOverFloatingPanel(rawX, rawY) {')),
     'L7h bez podpowiedzi mapy 3D pod kolumną (`isPointerOverFloatingPanel`)');
@@ -754,7 +757,7 @@ header('L16 prawy outliner — kolumna w warstwie lewego; klawisz i decyzja 4 we
   const iLO = hc.indexOf('this._leftOutliner?.hitTest?.('), iRO = hc.indexOf('this._outliner?.hitTest?.('), iLbl = hc.indexOf('this._mapLabelLayer?.handleClick?.(');
   ok(iLO > 0 && iRO > iLO && iRO < iLbl && hc.split('this._outliner?.hitTest?.(').length === 2,
     'L16b klik — jedno wywołanie, zaraz po lewym (pod listą kolonii i dziennikiem), przed etykietami mapy (decyzja 4)');
-  ok(has('  handleWheel(rawX, rawY, deltaY) {', /if \(this\._outliner\?\.handleWheel\?\.\(x, y, delta, W, H\)\) return true;/), 'L16c kółko (bez własnej bramki — widoczność sprawdza kolumna)');
+  ok(has('  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {', /if \(this\._outliner\?\.handleWheel\?\.\(x, y, delta, W, H\)\) return true;/), 'L16c kółko (bez własnej bramki — widoczność sprawdza kolumna)');
   ok(has('  handleMouseMove(x, y) {', /this\._outliner\?\.updateHover\?\.\(x, y, W, H\)/), 'L16d najechanie');
   const dr = body(ui, '  _draw() {');
   const dLO = dr.indexOf('this._leftOutliner.draw('), dRO = dr.indexOf('this._outliner.draw('), dTRD = dr.indexOf('this._topResourceDrawer.draw(');

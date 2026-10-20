@@ -14,6 +14,10 @@ const DRAG_THRESHOLD = 5;  // px — poniżej = kliknięcie, powyżej = orbit
 // (ciaśniej/bardziej kompaktowo na ekranie), mniejsze = bliżej (rozleglej).
 const SYSTEM_FIT_DIST_PER_AU = 20;
 
+// Sufit dystansu kamery od celu [j.] — kółko, `setTargetDist`, ramka układu. ARKUSZ UI U4-4: czyta go też suwak zoomu
+// na pasie dolnym (`maxDist`) — jedno źródło zakresu.
+const MAX_DIST = 450;
+
 export class ThreeCameraController {
   constructor(camera) {
     this.camera = camera;
@@ -98,17 +102,26 @@ export class ThreeCameraController {
       e.preventDefault();
       // Blokuj zoom gdy overlay jest otwarty (scroll obsługuje UIManager)
       if (window.KOSMOS?.overlayManager?.isAnyOpen()) return;
-      // Blokuj zoom gdy kursor jest nad elementem UI
+      // Blokuj zoom gdy kursor jest nad elementem UI (nad suwakiem zoomu ten sam krok woła UIManager — `wheelZoom`)
       if (this._isOverUI && this._isOverUI(e.clientX, e.clientY)) return;
-      // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja.
-      // Fix#5: drobniejsze kroki w zakresie statku (0.05–0.6) → łatwiej trafić pośredni zoom.
-      const zoomSpeed = this._targetDist < 0.15 ? 0.0006
-                      : this._targetDist < 0.6  ? 0.0012
-                      : this._targetDist < 2    ? 0.004
-                      : this._targetDist < 5    ? 0.01
-                      : this._targetDist < 20   ? 0.02 : 0.05;
-      this._targetDist = Math.max(this._minDist, Math.min(450, this._targetDist + e.deltaY * zoomSpeed));
+      this.wheelZoom(e.deltaY);
     }, { passive: false });
+  }
+
+  /**
+   * Krok zoomu kółka myszy — wspólny dla kółka nad mapą i nad suwakiem zoomu na pasie dolnym (ARKUSZ UI U4-4,
+   * decyzja (d): „ten sam krok”). Zmienia wyłącznie `_targetDist` (cel kamery nietknięty).
+   * @param {number} deltaY — surowe `WheelEvent.deltaY`
+   */
+  wheelZoom(deltaY) {
+    // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja.
+    // Fix#5: drobniejsze kroki w zakresie statku (0.05–0.6) → łatwiej trafić pośredni zoom.
+    const zoomSpeed = this._targetDist < 0.15 ? 0.0006
+                    : this._targetDist < 0.6  ? 0.0012
+                    : this._targetDist < 2    ? 0.004
+                    : this._targetDist < 5    ? 0.01
+                    : this._targetDist < 20   ? 0.02 : 0.05;
+    this._targetDist = Math.max(this._minDist, Math.min(MAX_DIST, this._targetDist + deltaY * zoomSpeed));
   }
 
   update() {
@@ -162,7 +175,7 @@ export class ThreeCameraController {
   // Ustawia też _defaultDist → reset (H) wraca do tej ramki, nie do sztywnego 85.
   frameSystem(maxOrbitAU) {
     if (!Number.isFinite(maxOrbitAU) || maxOrbitAU <= 0) return;
-    const fit = Math.max(70, Math.min(450, maxOrbitAU * SYSTEM_FIT_DIST_PER_AU));
+    const fit = Math.max(70, Math.min(MAX_DIST, maxOrbitAU * SYSTEM_FIT_DIST_PER_AU));
     this._defaultDist = fit;
     this._dist = this._targetDist = fit;  // snap bez lerpa — start / zmiana układu
     this._theta = 0.3;
@@ -206,8 +219,11 @@ export class ThreeCameraController {
 
   // Ustaw docelowy dystans kamery (auto-zoom, płynny lerp w update)
   setTargetDist(dist) {
-    this._targetDist = Math.max(this._minDist, Math.min(450, dist));
+    this._targetDist = Math.max(this._minDist, Math.min(MAX_DIST, dist));
   }
+
+  /** Sufit dystansu kamery od celu [j.] — zakres suwaka zoomu (ARKUSZ UI U4-4). */
+  get maxDist() { return MAX_DIST; }
 
   // POLISH P2a (CP17, Finding 459) — dystans NATYCHMIAST (bez lerpa): auto-fokus starcia ma być na miejscu przed
   // pierwszą salwą (lerp 0,08 na klatkę dolatywał z kadru układu 1408 ms — rundy 1–4 mijały przed dolotem).

@@ -2613,6 +2613,7 @@ export default {
 
   // === BottomBar ===
   'bottomBar.stab': 'STAB:',
+  'bottomBar.zoomHint': 'Camera zoom: drag (left — farther) or use the mouse wheel',
 
   // === FleetManagerOverlay / FleetTabPanel ===
   'fleetPanel.legendColony': '● Colony',

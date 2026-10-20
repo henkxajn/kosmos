@@ -2614,6 +2614,7 @@ export default {
 
   // === BottomBar ===
   'bottomBar.stab': 'STAB:',
+  'bottomBar.zoomHint': 'Zoom kamery: przeciągnij (w lewo — dalej) albo kółko myszy',
 
   // === FleetManagerOverlay / FleetTabPanel ===
   'fleetPanel.legendColony': '● Kolonia',

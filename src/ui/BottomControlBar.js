@@ -13,6 +13,10 @@
 // tło pasa biegnie od prawej krawędzi lewego outlinera (`MapInsets.left`; 0 przy schowanym) do prawej krawędzi ekranu,
 // a od lewego końca — rząd chipów doku (`getDockSpan` → `PanelDock`); pod overlayem — jak dotąd: sam klaster zegara
 // nad ostatnim slotem nawigacji i czip ⚔ (chipy doku chowają się jak outlinery — decyzja 4).
+// SUWAK ZOOMU (ARKUSZ UI U4-4, decyzja (d)): nad mapą, tuż na lewo od 🔔 (czip ⚔ na lewo od suwaka); skala logarytmiczna
+// dystansu kamery od jej celu, LEWO = DALEKO, zakres `_minDist` (jedzie z fokusem) – `maxDist`; gałka co klatkę z
+// `_targetDist` (kółko i auto-zoom fokusu ją przesuwają), zapis wyłącznie `setTargetDist` (cel kamery nietknięty);
+// przeciąganie przez `UIManager.handleMouseDown/Move/Up`, kółko nad suwakiem — ten sam krok co nad mapą (`wheelZoom`).
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
@@ -23,6 +27,7 @@ import { bottomNavBarRect, navSlotLayout } from './BottomNavBarLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { BOTTOM_STRIP_H } from './MapInsets.js';   // ARKUSZ UI U3-2 — jedno źródło wysokości pasa dolnego
 import { DOCK_CHIP_H, DOCK_CHIP_GAP } from './PanelDockLogic.js';   // ARKUSZ UI U4-3 — rząd chipów doku na pasie
+import { distToPos, posToDist, xToPos, posToX } from './ZoomSliderLogic.js';   // ARKUSZ UI U4-4 — suwak zoomu
 
 // Metryki kompaktowe — cały klaster (bell/menu/play/5×speed/data) musi zmieścić się w
 // JEDNYM slocie nawigacji ("Technologie"), więc bell/menu są wąskie (16) a reszta drobna.
@@ -41,7 +46,14 @@ const MENU_W  = 16;
 // wołany w łańcuchu UIManagera PRZED pasmem belki. W samym pasku zegara miejsca nie ma (klaster zajmuje 159–172 px
 // z 182 px slotu — pomiar U0, `kosmos-handover/ui-u0/STOP_U0_CHIP.md`).
 const CHIP_PAD_X = 14;   // szerokość czipu = tekst + 14 (jak dawny czip w BottomBar)
-const CHIP_GAP   = 4;    // odstęp czipu od lewej krawędzi paska zegara
+const CHIP_GAP   = 4;    // odstęp czipu od lewej krawędzi paska zegara (nad mapą — od suwaka zoomu)
+// Suwak zoomu (U4-4, decyzja (d)) — tylko kreski i prostokąty z `fillRect` (pas bez ram i obrysów — U0-1).
+const ZOOM_W     = 100;  // px — szerokość suwaka (z końcówkami „−” / „+”)
+const ZOOM_GAP   = 6;    // px — odstęp od 🔔
+const ZOOM_END_W = 10;   // px — końcówka „−” (lewo, daleko) / „+” (prawo, blisko)
+const TRACK_H    = 2;    // px — tor
+const KNOB_W     = 6;    // px — gałka
+const KNOB_H     = 12;
 
 export class BottomControlBar {
   constructor() {
@@ -52,10 +64,17 @@ export class BottomControlBar {
     this._speedRects = [];
     this._chipRect  = null;   // U0-3: czip walk {x,y,w,h,label} albo null (niewidoczny)
     this._dockSpan  = null;   // U4-3: rząd chipów doku {x0,x1,y,h} w trybie mapy; null pod overlayem
+    this._zoomRect  = null;   // U4-4: suwak zoomu {x,y,w,h} nad mapą; null pod overlayem / bez kamery
+    this._zoomTrack = null;   // U4-4: tor suwaka {x,w}
+    this._zoomDragging = false;
+    this._zoomDragMoved = false;
     this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|null
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
+
+  // Kontroler kamery (U4-4) — ta sama droga co `TacticalModeController` / `POIPanel`.
+  _cam() { return window.KOSMOS?.threeRenderer?._cameraController ?? null; }
 
   // Górna krawędź rzędu tuż nad paskiem nawigacji — STAŁA (ARKUSZ UI U3-0b, decyzja właściciela 2026-10-19: karta peek
   // nad slotem wyłączona, więc pasek zegara i czip walk nie „jeżdżą” już za nią). Jeden rząd dla obu: pasek zegara nad
@@ -151,7 +170,18 @@ export class BottomControlBar {
     ctx.fillText(displayText || '', dateLeft, cy + 0.5);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
-    // ── Czip walk (U0-3, opcja 1): na lewo od paska zegara, w rzędzie nad PRZEDOSTATNIM slotem nawigacji ──
+    // ── Suwak zoomu (U4-4, decyzja (d)): nad mapą, tuż na lewo od 🔔; pod overlayem — brak (sterowanie mapą) ──
+    this._zoomRect = null;
+    this._zoomTrack = null;
+    const cam = mapMode ? this._cam() : null;
+    if (cam) {
+      this._zoomRect = { x: this._bellRect.x - ZOOM_GAP - ZOOM_W, y: stripTop, w: ZOOM_W, h: STRIP_H };
+      this._zoomTrack = { x: this._zoomRect.x + ZOOM_END_W, w: ZOOM_W - 2 * ZOOM_END_W };
+      this._drawZoomSlider(ctx, cam, cy);
+    }
+
+    // ── Czip walk (U0-3, opcja 1): na lewo od paska zegara, w rzędzie nad PRZEDOSTATNIM slotem nawigacji; nad mapą —
+    //    na lewo od suwaka zoomu (U4-4) ──
     this._chipRect = null;
     const hud = window.KOSMOS?.combatHud;
     if (hud?.isMinimized?.() && hud?.hasActiveEncounters?.()) {
@@ -160,17 +190,98 @@ export class BottomControlBar {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       const w = Math.ceil(ctx.measureText(label).width) + CHIP_PAD_X;
       const top = this._stripTop(H);
-      this._chipRect = { x: lastSlotX - CHIP_GAP - w, y: top, w, h: STRIP_H, label };
+      this._chipRect = { x: (this._zoomRect ? this._zoomRect.x : lastSlotX) - CHIP_GAP - w, y: top, w, h: STRIP_H, label };
       this._drawCombatChip(ctx, this._chipRect);
     }
 
-    // ── Rząd chipów doku (U4-3, decyzja (c)): od lewego końca pasa do lewej krawędzi klastra po prawej (czip ⚔ albo
-    //    🔔); tylko w trybie mapy — pod overlayem chipy chowają się jak outlinery (decyzja 4). ──
+    // ── Rząd chipów doku (U4-3, decyzja (c)): od lewego końca pasa do lewej krawędzi klastra po prawej (czip ⚔, suwak
+    //    zoomu albo 🔔); tylko w trybie mapy — pod overlayem chipy chowają się jak outlinery (decyzja 4). ──
     this._dockSpan = null;
     if (mapMode) {
-      const right = (this._chipRect ? this._chipRect.x : this._bellRect.x) - DOCK_CHIP_GAP;
+      const right = (this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x) - DOCK_CHIP_GAP;
       this._dockSpan = { x0: bgLeft + DOCK_CHIP_GAP, x1: right, y: stripTop + (STRIP_H - DOCK_CHIP_H) / 2, h: DOCK_CHIP_H };
     }
+
+    // Podpowiedź suwaka zoomu (U4-4) — nad pasem, przy suwaku.
+    if (this._zoomRect && this._hover === 'zoom' && !this._zoomDragging) this._drawZoomTip(ctx, W);
+  }
+
+  // Suwak zoomu (U4-4): końcówki „−” (daleko) / „+” (blisko), tor i gałka — wyłącznie `fillRect` (bez obrysów).
+  _drawZoomSlider(ctx, cam, cy) {
+    const z = this._zoomRect, tr = this._zoomTrack;
+    const active = this._hover === 'zoom' || this._zoomDragging;
+    if (active) { ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(z.x, z.y, z.w, z.h); }
+    const gy = Math.round(cy);
+    const mx = z.x + ZOOM_END_W / 2, px = z.x + z.w - ZOOM_END_W / 2;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillRect(mx - 2.5, gy - 0.5, 5, 1);                               // „−”
+    ctx.fillRect(px - 2.5, gy - 0.5, 5, 1); ctx.fillRect(px - 0.5, gy - 2.5, 1, 5);   // „+”
+    ctx.fillStyle = THEME.border;
+    ctx.fillRect(tr.x, gy - TRACK_H / 2, tr.w, TRACK_H);                  // tor
+    // Gałka — co klatkę z bieżącego `_targetDist` (kółko i auto-zoom fokusu przesuwają suwak).
+    const kx = posToX(distToPos(cam._targetDist, cam._minDist, cam.maxDist), tr.x, tr.w);
+    ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
+    ctx.fillRect(Math.round(kx - KNOB_W / 2), Math.round(cy - KNOB_H / 2), KNOB_W, KNOB_H);
+  }
+
+  _drawZoomTip(ctx, W) {
+    const text = t('bottomBar.zoomHint');
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const w = Math.ceil(ctx.measureText(text).width) + 12, h = 16;
+    const z = this._zoomRect;
+    const x = Math.max(4, Math.min(W - w - 4, z.x + z.w / 2 - w / 2));
+    const y = z.y - 4 - h;
+    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 6, y + h / 2 + 0.5);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  /** ARKUSZ UI U4-4 — dystans kamery z pozycji x na torze (zapis wyłącznie `setTargetDist`). */
+  _zoomFromX(x) {
+    const cam = this._cam(), tr = this._zoomTrack;
+    if (!cam || !tr) return;
+    cam.setTargetDist(posToDist(xToPos(x, tr.x, tr.w), cam._minDist, cam.maxDist));
+    this._markDirty();
+  }
+
+  /** Wciśnięcie LPM na suwaku — początek przeciągania (dystans od razu z pozycji kursora). */
+  tryBeginZoomDrag(x, y) {
+    if (!this._in(this._zoomRect, x, y) || !this._cam()) return false;
+    this._zoomDragging = true;
+    this._zoomDragMoved = false;
+    this._zoomFromX(x);
+    return true;
+  }
+
+  /** Ruch myszy w trakcie przeciągania (także poza suwakiem — klamra toru). */
+  handleZoomDrag(x) {
+    if (!this._zoomDragging) return false;
+    this._zoomDragMoved = true;
+    this._zoomFromX(x);
+    return true;
+  }
+
+  /** Koniec przeciągania — true, gdy suwak się ruszył (UIManager pochłania wtedy nadchodzący klik). */
+  endZoomDrag() {
+    const moved = this._zoomDragging && this._zoomDragMoved;
+    this._zoomDragging = false;
+    this._zoomDragMoved = false;
+    return moved;
+  }
+
+  isDraggingZoom() { return this._zoomDragging === true; }
+
+  /** Kółko nad suwakiem — ten sam krok co nad mapą (`wheelZoom` kontrolera, surowe `deltaY`). */
+  handleZoomWheel(x, y, rawDeltaY) {
+    if (!this._in(this._zoomRect, x, y)) return false;
+    const cam = this._cam();
+    if (!cam?.wheelZoom) return false;
+    cam.wheelZoom(rawDeltaY);
+    this._markDirty();
+    return true;
   }
 
   /** ARKUSZ UI U4-3 — rząd chipów doku z ostatniej klatki (`PanelDock.draw`); null pod overlayem. */
@@ -286,6 +397,7 @@ export class BottomControlBar {
     if (this._in(this._bellRect, x, y)) h = 'bell';
     else if (this._in(this._menuRect, x, y)) h = 'menu';
     else if (this._in(this._playRect, x, y)) h = 'play';
+    else if (this._in(this._zoomRect, x, y)) h = 'zoom';   // U4-4 — suwak zoomu
     else { for (let i = 0; i < 5; i++) if (this._in(this._speedRects[i], x, y)) { h = `speed${i}`; break; } }
     if (h !== this._hover) { this._hover = h; this._markDirty(); }
   }
