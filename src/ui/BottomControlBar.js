@@ -8,6 +8,7 @@
 // Bell: NotificationCenter + toggleNotificationDropdown (otwiera W GÓRĘ — bez topY).
 // MENU: deleguje do BottomBar (menu DOM) — ustawia _menuClickBounds + toggleMenu().
 // Czip walk (ARKUSZ UI, U0-3): przy zminimalizowanym HUD walki — na lewo od paska, z własnym hit-testem (482).
+// Rząd paska i czipu stały — bez karty peek (ARKUSZ UI U3-0b).
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
@@ -49,17 +50,11 @@ export class BottomControlBar {
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
 
-  // Górna krawędź rzędu nad slotem nawigacji `slotIndex` (domyślnie ostatnim). Gdy kafelek TEGO slotu jest
-  // wysunięty (karta peek) — rząd jedzie w górę razem z nim (siada tuż nad kartą, animowany w synchronizacji),
-  // zamiast być zasłanianym. Pasek zegara używa ostatniego slotu, czip walk (U0-3) — przedostatniego.
-  _stripTop(H, slotIndex = NAV_GROUPS.length - 1) {
-    const navTop = H - COSMIC.BOTTOM_LOG_TRIG_H - COSMIC.BOTTOM_NAV_H;
-    let top = navTop - STRIP_H;
-    const peek = window.KOSMOS?.bottomNavBar?._peek;
-    const primary = NAV_GROUPS[slotIndex]?.primary ?? null;
-    const cardTop = primary ? peek?.peekTopY?.(primary) : null;
-    if (cardTop != null) top = Math.round(cardTop - STRIP_H);
-    return top;
+  // Górna krawędź rzędu tuż nad paskiem nawigacji — STAŁA (ARKUSZ UI U3-0b, decyzja właściciela 2026-10-19: karta peek
+  // nad slotem wyłączona, więc pasek zegara i czip walk nie „jeżdżą” już za nią). Jeden rząd dla obu: pasek zegara nad
+  // ostatnim slotem, czip walk (U0-3) — na lewo od niego.
+  _stripTop(H) {
+    return H - COSMIC.BOTTOM_LOG_TRIG_H - COSMIC.BOTTOM_NAV_H - STRIP_H;
   }
 
   // ── Rysowanie ───────────────────────────────────────────────────────────
@@ -150,7 +145,7 @@ export class BottomControlBar {
       const label = n > 1 ? t('combat.hudChipN', n) : t('combat.hudChip');
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       const w = Math.ceil(ctx.measureText(label).width) + CHIP_PAD_X;
-      const top = this._stripTop(H, NAV_GROUPS.length - 2);
+      const top = this._stripTop(H);
       this._chipRect = { x: lastSlotX - CHIP_GAP - w, y: top, w, h: STRIP_H, label };
       this._drawCombatChip(ctx, this._chipRect);
     }

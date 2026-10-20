@@ -9,6 +9,11 @@
 //
 // Brak animacji (pasek stały) → brak isAnimating. Czysta geometria/layout/hit → BottomNavBarLogic.
 // Ładowanie PNG (leniwe, raz; fallback emoji) — port z NavDrawer._ensureIcons/_drawTile.
+//
+// ARKUSZ UI U3-0b (decyzja właściciela 2026-10-19): karta peek nad slotem WYŁĄCZONA bez zamiennika — zostaje
+// podświetlenie kafelka przy najechaniu (jasność + 2 px wskaźnik) i pasywne badge alertów; pasek zegara i czip ⚔
+// nie „jeżdżą” już za kartą (`BottomControlBar._stripTop` stały). `NavPeekCard` / `NavPeekCardLogic` zostają na dysku
+// do sprzątania w U4 (`NavPeekCardLogic` dalej formatuje liczby dla `TopBarFormatLogic` i `NavPeekProviders`).
 
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -16,8 +21,6 @@ import { t } from '../i18n/i18n.js';
 import { NAV_GROUPS, CIV_TABS, getNavGroup } from './CivPanelDrawer.js';
 import { bottomNavBarRect, navSlotLayout, hitNavSlot, pointInRect } from './BottomNavBarLogic.js';
 import { NAV_TILE_FILES, NAV_ICON_DIR } from './NavDrawerLogic.js';
-import { NavPeekCard } from './NavPeekCard.js';
-import { PEEK_HOVER_DELAY } from './NavPeekCardLogic.js';
 import { getPeekAlert } from './NavPeekProviders.js';
 
 export class BottomNavBar {
@@ -30,21 +33,16 @@ export class BottomNavBar {
     this._hoverP    = [];     // per-slot progres hovera 0..1 (animacja 150ms)
     this._lastMs    = 0;      // znacznik czasu ostatniej klatki (dt animacji)
     this._anim      = false;  // czy któryś slot jest w trakcie animacji
-    // Karta peek (wysuwana nad slotem) + pasywne badge alertów — gated FEATURES.navPeekCards.
-    this._peekEnabled = GAME_CONFIG.FEATURES?.navPeekCards !== false;
-    this._peek     = this._peekEnabled ? new NavPeekCard() : null;
-    this._peekSlot = -1;      // slot karty peek (pod kursorem LUB trzymany gdy kursor na karcie)
-    this._dwellSlot = -1;     // slot, na którym spoczywa kursor (do naliczania zwłoki hovera)
-    this._dwellAt   = 0;      // znacznik czasu wejścia na _dwellSlot (dwell timer)
+    // Pasywne badge alertów na slotach — gated FEATURES.navPeekCards (ARKUSZ UI U3-0b: karty peek nad slotem już nie ma).
+    this._alertBadges = GAME_CONFIG.FEATURES?.navPeekCards !== false;
     this._alertCache = {};    // primary → bool (odświeżane throttlingiem)
     this._alertAt  = 0;
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
-  // UIManager kontynuuje redraw póki hover animuje LUB karta peek jest widoczna (żywe liczby)
-  // LUB trwa zwłoka hovera (dwell) — inaczej przy pauzie karta nie wysunęłaby się po upływie czasu.
+  // UIManager kontynuuje redraw póki animuje podświetlenie slotu (150 ms). Bez karty peek nie ma zwłoki hovera (U3-0b).
   isAnimating() {
-    return this._anim || (this._peek?.isActive?.() ?? false) || this._dwellSlot >= 0;
+    return this._anim;
   }
 
   _tabFor(primary) { return CIV_TABS.find(tb => tb.id === primary) ?? null; }
@@ -80,7 +78,7 @@ export class BottomNavBar {
     const activePrimary = activeGrp?.primary ?? null;
 
     // Odśwież cache alertów (throttling 600ms) — zasila pasywne badge na slotach.
-    if (this._peekEnabled) {
+    if (this._alertBadges) {
       const nowA = Date.now();
       if (nowA - this._alertAt > 600) {
         this._alertAt = nowA;
@@ -107,49 +105,20 @@ export class BottomNavBar {
       this._hoverP[i] = p;
       if (p > 0.001 && p < 0.999) this._anim = true;
       const grp = NAV_GROUPS[i];
-      const hasAlert = this._peekEnabled && !!this._alertCache[grp.primary];
-      const isPeekBase = !!this._peek && this._peek.activeGroup() === grp.primary;
-      this._drawSlot(ctx, grp, slot.x, rect.y, slot.w, rect.h, activePrimary === grp.primary, p, hasAlert, isPeekBase);
+      const hasAlert = this._alertBadges && !!this._alertCache[grp.primary];
+      this._drawSlot(ctx, grp, slot.x, rect.y, slot.w, rect.h, activePrimary === grp.primary, p, hasAlert);
     }
     // ARKUSZ UI, U0-1 (D-UI-13): pasek BEZ ram — usunięte separatory między przyciskami, boki i górna listwa
     // (razem z luką listwy pod wysuniętą kartą peek, która traci powód). Stan slotu niesie wyłącznie 2 px wskaźnik
     // aktywnego / hover w `_drawSlot` — to wskaźnik stanu, nie rama.
-
-    // ── Karta peek: wysuwa się nad slotem pod kursorem (lub trzymanym gdy kursor na karcie).
-    //    Nie podglądamy grupy, której overlay jest już otwarty (bez sensu). ──
-    if (this._peek) {
-      const gi = this._peekSlot;
-      const grpP  = (gi >= 0 && gi < NAV_GROUPS.length) ? NAV_GROUPS[gi] : null;
-      const suppress = grpP && grpP.primary === activePrimary;
-      const slotP = (gi >= 0 && gi < slots.length) ? slots[gi] : null;
-      const slotRect = (slotP && !suppress) ? { x: slotP.x, y: rect.y, w: slotP.w, h: rect.h } : null;
-      const img = grpP ? this._imgCache.get(grpP.primary) : null;   // grafika przycisku → baner karty
-      // Bramka zwłoki: karta wysuwa się dopiero po PEEK_HOVER_DELAY ms ciągłego hovera na slocie.
-      // Gdy karta już wysunięta dla tej grupy — trzymaj (nie re-bramkuj), inaczej chowałaby się i
-      // wysuwała w kółko. Blokuje przypadkowe wywołanie przy zwykłym przejechaniu myszą nad paskiem.
-      const dwellOk = gi >= 0 && this._dwellSlot === gi &&
-                      (now - this._dwellAt) >= PEEK_HOVER_DELAY;
-      const alreadyShown = this._peek.activeGroup() === grpP?.primary && this._peek.isActive();
-      const armed = grpP && !suppress && (dwellOk || alreadyShown);
-      this._peek.update(armed ? grpP.primary : null, slotRect, rect, W, H, img);
-      this._peek.draw(ctx);
-    }
   }
 
   // Slot = gotowa ikona PNG w wielkości przycisku (center-crop do slotu) + dolny pasek etykiety.
   // Fallback emoji z CIV_TABS dopóki PNG się nie załaduje. Port z NavDrawer._drawTile (poziomo).
   // p = progres hovera 0..1 (animowany). Jasność miniaturki przez globalAlpha 0.7→1.0,
   // górna linia akcentu fade-in z p (zawsze widoczna na aktywnym). Aktywny = pełny kolor.
-  _drawSlot(ctx, grp, x, y, w, h, isActive, p, hasAlert = false, isPeekBase = false) {
+  _drawSlot(ctx, grp, x, y, w, h, isActive, p, hasAlert = false) {
     const tab = this._tabFor(grp.primary);
-
-    // Gniazdo po „wysuniętym" przycisku — grafika przeniosła się do karty peek (nad paskiem).
-    // Tło = jak karta (bgAlpha 0.97) i BEZ górnego akcentu → bezszwowe połączenie z kartą.
-    if (isPeekBase) {
-      ctx.fillStyle = bgAlpha(0.97);
-      ctx.fillRect(x, y, w, h);
-      return;
-    }
 
     // Tło kafla (na wypadek braku grafiki / alfy w PNG)
     ctx.fillStyle = bgAlpha(0.6);
@@ -220,31 +189,14 @@ export class BottomNavBar {
   // ── Hit / zdarzenia ─────────────────────────────────────────────────────
   handleMouseMove(x, y) {
     if (!this._rect) return;
+    // Slot pod kursorem — wyłącznie podświetlenie kafelka (ARKUSZ UI U3-0b: karta peek wyłączona).
     const idx = hitNavSlot(this._rect, NAV_GROUPS.length, x, y);
-    // Slot pod kursorem; a gdy kursor zjedzie na wysuniętą kartę — trzymaj slot TEJ karty.
-    // Retencja NIEZALEŻNA od _peekSlot: po chwilowym wyjściu poza kartę _peekSlot spadał na -1,
-    // przez co brama `_peekSlot >= 0` na trwałe wyłączała covers() — powrót na wciąż-widoczne
-    // ciało karty (w oknie PEEK_HIDE_DELAY) już jej nie łapał → cykl wysuwa/znika/wysuwa (najostrzej
-    // przy Stoczni: krótka karta = mały cel, overshoot nieunikniony). Slot odtwarzamy z aktywnej
-    // grupy karty; covers() już potwierdza, że kursor jest nad JEJ _rect (brak fałszywej retencji).
-    let newSlot;
-    if (idx >= 0) newSlot = idx;
-    else if (this._peek && this._peek.covers(x, y)) {
-      const g = this._peek.activeGroup();
-      newSlot = g ? NAV_GROUPS.findIndex(gr => gr.primary === g) : -1;
-    } else newSlot = -1;
-    if (newSlot !== this._hoverSlot || newSlot !== this._peekSlot) this._markDirty();
-    // Zwłoka hovera: gdy kursor przechodzi na INNY slot, restartuj timer dwell. Wjechanie na już
-    // wysuniętą kartę nie zmienia _peekSlot (isOver-branch) → timer nie jest restartowany.
-    if (newSlot !== this._peekSlot) { this._dwellSlot = newSlot; this._dwellAt = Date.now(); }
-    this._hoverSlot = newSlot;
-    this._peekSlot  = newSlot;
+    if (idx !== this._hoverSlot) this._markDirty();
+    this._hoverSlot = idx;
   }
 
   handleClick(x, y) {
     if (!this._rect) return false;
-    // Klik na wysuniętej karcie → otwórz overlay jej grupy (przed hit-testem slotów).
-    if (this._peek && this._peek.handleClick(x, y)) { this._markDirty(); return true; }
     const idx = hitNavSlot(this._rect, NAV_GROUPS.length, x, y);
     if (idx < 0) {
       // Klik w pasek poza slotem — pochłoń (nie spadaj na overlay/3D).
@@ -262,6 +214,6 @@ export class BottomNavBar {
     return true;
   }
 
-  // Blokada kamery — punkt nad paskiem LUB nad wysuniętą kartą peek.
-  isOver(x, y) { return pointInRect(this._rect, x, y) || (this._peek?.isOver?.(x, y) ?? false); }
+  // Blokada kamery — punkt nad paskiem.
+  isOver(x, y) { return pointInRect(this._rect, x, y); }
 }

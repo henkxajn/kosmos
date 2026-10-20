@@ -17,8 +17,8 @@
 //     L*  liczby w belce wg języka (12,4k PL / 12.4k EN; 9 999 w całości),
 //     M*  szerokość komórki = szablon AKTYWNEGO fontu, przeliczona po zmianie presetu (i z powrotem),
 //     C*  czip walk: na lewo od paska zegara (nie przecina pasma belki ani klastra zegara), etykieta przez i18n,
-//         klik → toggleMinimize, jedzie w górę z kartą peek PRZEDOSTATNIEGO slotu tym samym `_stripTop`; BottomBar
-//         nie rysuje już czipu w górnej belce — 481, 482,
+//         klik → toggleMinimize, rząd stały — nie jedzie z kartą peek (ARKUSZ UI U3-0b: karta wyłączona, C6
+//         przecelowane); BottomBar nie rysuje już czipu w górnej belce — 481, 482,
 //     T1  TopBar.isOver w civMode kończy się na belce 28 px — 476.
 //   WYMAGANIA (B1, B4, B4b — „17 tokenów + ▾N + kredyty mieszczą się"): sprawdzane na nowym kodzie; w Share Tech Mono
 //   i Rajdhani prawdziwe także przed U0-3 (stary układ skracał kredyty do „8.9M" i przytulał komórki), w Space Mono
@@ -349,7 +349,10 @@ for (const [f, loc] of [['stm', 'pl'], ['raj', 'en'], ['spm', 'pl']]) {
 }
 setLocale('pl'); usePreset('stm');
 
-console.log('\n── C6: czip jedzie z kartą peek PRZEDOSTATNIEGO slotu (ten sam _stripTop) ──');
+// ⚠ PRZECELOWANIE (ARKUSZ UI U3-0b, decyzja właściciela 2026-10-19 — karty peek WYŁĄCZONE bez zamiennika): C6 pinowało
+//   „czip i pasek zegara jadą w górę z kartą peek swojego slotu”. Karty nie ma, więc rząd jest STAŁY — tuż nad paskiem
+//   nawigacji. Ta sama scena (atrapa karty zgłaszająca górę 500 / 450) — teraz NIC się nie przesuwa.
+console.log('\n── C6: rząd czipu i paska zegara stały — bez karty peek (U3-0b) ──');
 const prevPrimary = NAV_GROUPS[NAV_GROUPS.length - 2].primary, lastPrimary = NAV_GROUPS[NAV_GROUPS.length - 1].primary;
 const peekAt = { [prevPrimary]: null, [lastPrimary]: null };
 scene([colony('c1', 'Alfa')], {
@@ -360,16 +363,20 @@ scene([colony('c1', 'Alfa')], {
 const barP = new BottomControlBar();
 barP.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
 const baseY = barP._bgRect.y;
+ok(baseY === H - 6 - 36 - 20 && barP._chipRect?.y === baseY,
+  `C6-0 KONTROLA: rząd tuż nad paskiem nawigacji (y ${baseY} = H − 6 − 36 − 20), czip w tym samym rzędzie (${barP._chipRect?.y})`);
 peekAt[prevPrimary] = 500;
 barP.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
-ok(barP._chipRect?.y === 480 && barP._bgRect.y === baseY, `C6a karta przedostatniego slotu (góra 500) → czip y ${barP._chipRect?.y} (= 500 − 20), pasek zegara bez zmian (${barP._bgRect.y})`);
+ok(barP._chipRect?.y === baseY && barP._bgRect.y === baseY,
+  `C6a atrapa karty przedostatniego slotu (góra 500) → czip zostaje (${barP._chipRect?.y}), pasek zegara też (${barP._bgRect.y}) — dawniej czip 480`);
 peekAt[prevPrimary] = null; peekAt[lastPrimary] = 450;
 barP.draw(recCtx(), W, H, window.KOSMOS.uiManager._timeState);
-ok(barP._chipRect?.y === baseY && barP._bgRect.y === 430, `C6b karta ostatniego slotu → pasek zegara y ${barP._bgRect.y} (= 450 − 20), czip zostaje (${barP._chipRect?.y})`);
+ok(barP._chipRect?.y === baseY && barP._bgRect.y === baseY,
+  `C6b atrapa karty ostatniego slotu (góra 450) → pasek zegara zostaje (${barP._bgRect.y}) — dawniej 430`);
 const srcBCB = readFileSync(fileURLToPath(new URL('../../ui/BottomControlBar.js', import.meta.url)), 'utf8');
 const codeBCB = srcBCB.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-ok(/this\._stripTop\(\s*H\s*,\s*NAV_GROUPS\.length\s*-\s*2\s*\)/.test(codeBCB) && (codeBCB.match(/peekTopY/g) ?? []).length === 1,
-  'C6c czip liczy y tym samym `_stripTop` (slot przedostatni), jedno wywołanie peekTopY w pliku — bez drugiego mechanizmu');
+ok(/_stripTop\(H\) \{/.test(codeBCB) && (codeBCB.match(/this\._stripTop\(H\)/g) ?? []).length === 2 && !/peekTopY|_peek\b/.test(codeBCB),
+  'C6c czip i pasek zegara liczą rząd JEDNYM `_stripTop(H)` (dwa wywołania, bez parametru slotu), zero odczytu karty peek w pliku');
 
 console.log('\n── C7: BottomBar nie rysuje już czipu w górnej belce ──');
 scene([colony('c1', 'Alfa')], {

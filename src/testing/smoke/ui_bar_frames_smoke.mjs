@@ -6,11 +6,13 @@
 //     N1  pasek nawigacji nie wywołuje stroke() — zero separatorów i boków,
 //     N2  zero odcinków na granicach slotów (dawne separatory 1 px),
 //     N3  zero pełnoszerokościowej górnej listwy (fillRect h ≤ 3 px szerszy niż slot),
-//     N4  przy wysuniętej karcie peek też zero listwy (dawna logika szwu: dwa odcinki wokół gniazda),
+//     N4  kursor długo nad slotem (dawniej wysuwał kartę peek) — też zero listwy (ARKUSZ UI U3-0b: karta peek
+//         wyłączona; przecelowanie z atrapy karty na prawdziwy hover — dawna logika szwu: dwa odcinki wokół gniazda),
 //     C1  pasek zegara bez ramy (zero odcinków na krawędziach tła),
 //     C2  pasek zegara: jedyny stroke() to separator przed datą.
 //   KONTROLE (zielone po obu stronach — dowód, że atrapa naprawdę rysuje pasek):
-//     K1  tło paska nawigacji, K2 wskaźnik 2 px aktywnego slotu, K3 wskaźnik 2 px hover,
+//     K1  tło paska nawigacji, K2 wskaźnik 2 px aktywnego slotu, K3 wskaźnik 2 px hover, K1b kafelek slotu pod
+//         kursorem narysowany w pełnym rozmiarze (dawniej „gniazdo” po wysuniętej karcie),
 //     K4  tło paska zegara = ostatni slot (jak `fleet_clock_band` T4), K5 obrysy 5 przycisków prędkości zostają.
 // Uruchom: node src/testing/smoke/ui_bar_frames_smoke.mjs
 import '../headless/env.js';
@@ -81,18 +83,21 @@ const ind = (i) => ops(c1, 'fillRect').some(c => near(c.args[0], slots[i].x) && 
 ok(ind(ACTIVE), 'K2 [kontrola] wskaźnik 2 px aktywnego slotu (akcent, krycie 1)');
 ok(ind(HOVER), 'K3 [kontrola] wskaźnik 2 px slotu pod kursorem');
 
-// ── Wysunięta karta peek nad slotem 5: dawniej listwa dzielona na dwa odcinki wokół gniazda ───────
-console.log('\n── BottomNavBar.draw z wysuniętą kartą peek nad slotem 5 ──');
+// ── Kursor długo nad slotem 5 (dawniej wysuwał kartę peek — listwa dzielona na dwa odcinki wokół gniazda) ──────────
+// ⚠ PRZECELOWANIE (ARKUSZ UI U3-0b, decyzja właściciela 2026-10-19): kartę peek wyłączono bez zamiennika, więc atrapa
+//   karty (`nav2._peek = …`) nie ma już czego wywołać. Ta sama sytuacja — kursor na slocie 5 — prawdziwym `handleMouseMove`.
+console.log('\n── BottomNavBar.draw z kursorem na slocie 5 (dawniej karta peek) ──');
 const PEEK = 5;
 const nav2 = new BottomNavBar();
-nav2._peek = { activeGroup: () => NAV_GROUPS[PEEK].primary, isActive: () => true, update() {}, draw() {},
-  covers: () => false, isOver: () => false, peekTopY: () => null, handleClick: () => false };
+nav2.draw(recCtx(), W, H);
+nav2.handleMouseMove(slots[PEEK].x + slots[PEEK].w / 2, rect.y + rect.h / 2);
+nav2._hoverP[PEEK] = 1; nav2._lastMs = Date.now();
 const c2 = recCtx();
 nav2.draw(c2, W, H);
 const listwa2 = ops(c2, 'fillRect').filter(c => near(c.args[1], rect.y) && c.args[3] > 0 && c.args[3] <= 3 && c.args[3] !== 2);
-ok(listwa2.length === 0, `N4 z kartą peek zero odcinków listwy — znaleziono ${listwa2.length}`);
+ok(nav2._hoverSlot === PEEK && listwa2.length === 0, `N4 kursor na slocie ${PEEK}: zero odcinków listwy — znaleziono ${listwa2.length} (slot pod kursorem ${nav2._hoverSlot})`);
 ok(ops(c2, 'fillRect').some(c => near(c.args[0], slots[PEEK].x) && near(c.args[2], slots[PEEK].w) && near(c.args[3], rect.h)),
-  'K1b [kontrola] gniazdo pod kartą peek (tło slotu 5) narysowane');
+  'K1b [kontrola] kafelek slotu 5 pod kursorem narysowany w pełnym rozmiarze');
 
 // ── Pasek zegara: bez ramy, obrysy prędkości zostają ─────────────────────────────────────────────
 console.log('\n── BottomControlBar.draw (pauza: 5 obrysów prędkości) ──');
