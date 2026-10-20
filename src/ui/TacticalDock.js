@@ -18,8 +18,9 @@ import { THEME, bgAlpha }   from '../config/ThemeConfig.js';
 import { GAME_CONFIG }      from '../config/GameConfig.js';
 import {
   BOTTOM_RESERVED, TACTICAL_DOCK_H, TACTICAL_DOCK_PANEL_W, TACTICAL_DOCK_TAB_H, COSMIC,
-  DOCK_SIDE_GAP_FRAC, TACTICAL_DOCK_CLOCK_CLEARANCE,
+  DOCK_SIDE_GAP_FRAC,
 } from '../config/LayoutConfig.js';
+import { BOTTOM_STRIP_H }   from './MapInsets.js';   // ARKUSZ UI U4-2 — prześwit nad pasem dolnym z jednego źródła
 import { t }                from '../i18n/i18n.js';
 import { CLICK_INTENT, clickObject, vesselTarget } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5, decyzja 2c)
 import { toneColor, buildTimelineRows, buildShipEntry } from './FleetPictureLogic.js';
@@ -127,10 +128,10 @@ export class TacticalDock extends BaseOverlay {
    */
   getReservedHeight() {
     if (!this.visible) return 0;
-    // 4f-1 — pas podniesiony o TACTICAL_DOCK_CLOCK_CLEARANCE nad zegar → pływające panele muszą
-    // podnieść się o (wysokość pasa + prześwit), by usiąść dokładnie NAD górną krawędzią pasa.
+    // 4f-1 — pas podniesiony nad pas dolny (`BOTTOM_STRIP_H`, ARKUSZ UI U4-2 — dawniej osobna stała prześwitu nad
+    // zegarem) → pływające panele muszą podnieść się o (wysokość pasa + prześwit), by usiąść NAD górną krawędzią pasa.
     const barH = this._collapsed ? TACTICAL_DOCK_TAB_H : TACTICAL_DOCK_H;
-    return barH + TACTICAL_DOCK_CLOCK_CLEARANCE;
+    return barH + BOTTOM_STRIP_H;
   }
 
   _layout(W, H) {
@@ -140,7 +141,7 @@ export class TacticalDock extends BaseOverlay {
       panelW:         TACTICAL_DOCK_PANEL_W,
       tabH:           TACTICAL_DOCK_TAB_H,
       sideGapFrac:    DOCK_SIDE_GAP_FRAC,                              // 4f-1: wycentrowanie ~90%
-      bottomReserved: BOTTOM_RESERVED + TACTICAL_DOCK_CLOCK_CLEARANCE, // 4f-1: podniesienie nad zegar
+      bottomReserved: BOTTOM_RESERVED + BOTTOM_STRIP_H, // 4f-1: podniesienie nad pas dolny (U4-2: jedno źródło)
       topLimit:       COSMIC.TOP_BAND_H + 8,
     });
   }

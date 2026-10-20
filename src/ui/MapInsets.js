@@ -5,16 +5,17 @@
 //   left   — lewy outliner (układy i ciała), gdy widoczny nad mapą (decyzja 4: nie przy otwartym overlayu
 //            pełnoekranowym ani przy rozwiniętym Doku taktycznym) — `LeftOutliner.getReservedWidth`;
 //   right  — prawy outliner (statki gracza, ARKUSZ UI U3-2), gdy widoczny nad mapą — `Outliner.getReservedWidth`
-//            (`KOSMOS.rightOutliner`); kotwica zapasowa i clamp panelu statku oraz panelu stacji kończą się przed nim.
-//            ⚠ Dwaj konsumenci rezerwują prawe 150 px SAMI, także przy schowanym outlinerze (`BottomContext._bounds`,
-//            kadr „Obserwuj” `rightW`) — bez zmian w U3 (kandydaci do U4);
+//            (`KOSMOS.rightOutliner`; 0, gdy schowany); kotwica zapasowa i clamp panelu statku, panel stacji, karta ciała
+//            i kadr „Obserwuj” kończą się przed nim (karta i kadr od ARKUSZ UI U4-2, Finding 496 — dawniej 150 px na sztywno);
 //   top    — dolna krawędź górnej belki (`TOP_BAND_H`, tryb cywilizacji) / górnego paska (`TOP_BAR_H`, Generator);
-//   bottom — pasek nawigacji + listwa dziennika (`BOTTOM_RESERVED`, tryb cywilizacji) / dolny pasek (Generator)
-//            + rezerwa Doku taktycznego.
+//   bottom — tryb cywilizacji: pasek nawigacji + listwa dziennika (`BOTTOM_RESERVED`) + PAS DOLNY albo rezerwa Doku
+//            taktycznego (większa z dwóch — rezerwa Doku zawiera już prześwit nad pasem; ARKUSZ UI U4-2); Generator: dolny
+//            pasek + rezerwa Doku.
 //
-// ARKUSZ UI U3-2 — PAS DOLNY: `BOTTOM_STRIP_H` (dziś pasek zegara `BottomControlBar`, 20 px nad paskiem nawigacji).
-// Oba outlinery kończą się NAD nim (`outlinerBottomInset`); U4 wypełni pas na całą szerokość. Pozostałe wcięcia bez
-// zmian (pływające panele i kadr „Obserwuj” liczą dół jak dotąd).
+// PAS DOLNY: `BOTTOM_STRIP_H` (ARKUSZ UI U3-2) — 20 px nad paskiem nawigacji; jedno źródło wysokości dla paska zegara,
+// kolumn outlinerów, Doku taktycznego (prześwit nad pasem) i Dowództwa (treść ustępuje pasowi). Od U4-2 obszar mapy w
+// trybie cywilizacji kończy się nad nim dla WSZYSTKICH konsumentów (pływające panele, karta ciała, kadr „Obserwuj”,
+// strzałki krawędzi mapy), nie tylko dla kolumn.
 //
 // Czysta arytmetyka (`computeMapInsets`, `outlinerBottomInset`) + odczyt z żywego stanu (`getMapInsets(K)`,
 // K = `window.KOSMOS`). Bez EventBusa; jedyne importy — stałe układu.
@@ -36,13 +37,16 @@ export function computeMapInsets({ civMode = false, leftW = 0, rightW = 0, dockH
     left:   civ ? pos(leftW) : 0,
     right:  civ ? pos(rightW) : 0,
     top:    civ ? COSMIC.TOP_BAND_H : COSMIC.TOP_BAR_H,
-    bottom: (civ ? BOTTOM_RESERVED : COSMIC.BOTTOM_BAR_H) + pos(dockH),
+    // ARKUSZ UI U4-2: w trybie cywilizacji dół zawsze NAD pasem dolnym; rezerwa Doku taktycznego (pas + prześwit = pas
+    // dolny) wygrywa, gdy większa — liczba przy Doku bez zmian, bez Doku +20 px.
+    bottom: civ ? BOTTOM_RESERVED + Math.max(BOTTOM_STRIP_H, pos(dockH)) : COSMIC.BOTTOM_BAR_H + pos(dockH),
   };
 }
 
 /**
  * ARKUSZ UI U3-2: dolne wcięcie KOLUMN outlinerów — nad pasem dolnym (`BOTTOM_STRIP_H` ponad paskiem nawigacji).
- * Rezerwa Doku taktycznego zawiera już prześwit nad pasem zegara, więc wygrywa większa z dwóch wartości.
+ * Rezerwa Doku taktycznego zawiera już prześwit nad pasem zegara, więc wygrywa większa z dwóch wartości. Od U4-2
+ * `computeMapInsets` liczy dół tak samo dla całego obszaru mapy — dla wcięć z `getMapInsets` wynik = `insets.bottom`.
  * @param {{bottom:number}} insets — wynik `computeMapInsets` / `getMapInsets`
  * @param {boolean} civMode
  * @returns {number}

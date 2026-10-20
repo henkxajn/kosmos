@@ -7,6 +7,7 @@
 
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
+import { BOTTOM_STRIP_H } from './MapInsets.js';   // ARKUSZ UI U4-2 — pas dolny z jednego źródła (TIME_STRIP_H)
 import { CIV_SIDEBAR_W, getSubNavHeight }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
@@ -254,7 +255,7 @@ const TOP_BASE  = COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H;
 //     dolna treść prawego panelu (akcje statku: Refuel / „Tankuj automatycznie") chowała się pod
 //     zawsze-wierzchnim sterowaniem czasu i była nieosiągalna mimo scrolla.
 // Wypadkowa: geometria treści (contentY/contentH) BEZ ZMIAN — rośnie wyłącznie zamalowane tło.
-const TIME_STRIP_H = 20;   // = BottomControlBar.STRIP_H (pasek czasu nad nawigacją)
+const TIME_STRIP_H = BOTTOM_STRIP_H;   // pas dolny (`MapInsets`; pasek zegara nad nawigacją) — ARKUSZ UI U4-2: dawniej 20 na sztywno
 const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 
 // Kolory statusów statków

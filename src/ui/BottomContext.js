@@ -20,8 +20,6 @@ import { readGarrisonReadout, formatGarrisonReadout } from '../utils/GarrisonRea
 import { FloatingPanel }  from '../ui/FloatingPanel.js';
 
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;    // 46px
-const BAR_H      = COSMIC.BOTTOM_BAR_H; // 26px
-const OUTLINER_W = COSMIC.OUTLINER_W;   // 170px
 const ANIM_SPEED = 0.16;                // prędkość fade (0→1)
 
 // Wymiary karty
@@ -89,14 +87,14 @@ export class BottomContext {
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
   _bounds(W, H) {
     const civMode = window.KOSMOS?.civMode;
-    // ARKUSZ UI U2-2 — lewa krawędź za lewym outlinerem (`MapInsets`, gdy widoczny nad mapą). Prawe 150 px (szuflada
-    // dzisiejszego prawego Outlinera) i górny pas — jak dotąd; prawe wcięcie przechodzi na `MapInsets` w U3-2.
-    const ox = getMapInsets().left;
+    // ARKUSZ UI U4-2 (Finding 496) — obszar mapy z `MapInsets`: lewa krawędź za lewym outlinerem, prawa przed prawym
+    // (0, gdy schowany — dawniej 150 px na sztywno), dół nad pasem dolnym / Dokiem taktycznym (tryb cywilizacji) albo
+    // dolnym paskiem (Generator). Górny pas jak dotąd (`TOP_BAR_H`).
+    const ins = getMapInsets();
+    const ox = ins.left;
     const oy = TOP_BAR_H;
     const resBar = civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0; // Slice 3 — pasek surowców nad BottomBar
-    // UI v3 — w civMode rezerwa dolna = pasek nawigacji + listwa dziennika; poza = dolny pasek.
-    const bottomRes = civMode ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : BAR_H;
-    return { ox, oy, ow: W - OUTLINER_W - ox, oh: H - bottomRes - resBar - oy };
+    return { ox, oy, ow: W - ins.right - ox, oh: H - ins.bottom - resBar - oy };
   }
 
   _visibleTabs(entity) {

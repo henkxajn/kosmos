@@ -290,27 +290,31 @@ export const EDGE_MARGIN = 26;        // px logiczne — odstęp strzałki od kr
 export const EDGE_BANDS  = 4;         // liczba sektorów na każdą krawędź (grupowanie)
 
 /**
- * Wskaźniki krawędziowe dla punktów POZA kadrem (px logiczne, prostokąt 0..W × 0..H).
+ * Wskaźniki krawędziowe dla punktów POZA kadrem (px logiczne). Kadr = `opts.rect` {x0, y0, x1, y1} — od ARKUSZ UI U4-2
+ * (Finding 494) prostokąt OBSZARU MAPY z `MapInsets` (bez kolumn outlinerów, górnej belki, pasa dolnego i paska
+ * nawigacji), żeby strzałka nie stała pod nimi; bez `rect` — cały ekran 0..W × 0..H (jak dotąd).
  * Punkt poza → clamp do ramki z marginesem; wiele punktów w tym samym sektorze
  * krawędzi → jedna strzałka z licznikiem i worst-of tonem.
- * @param {Array<{x,y,tone,alertCount?}>} points — WSZYSTKIE punkty (on-screen pomijane)
+ * @param {Array<{x,y,tone,alertCount?}>} points — WSZYSTKIE punkty (w kadrze pomijane)
  * @returns {Array<{x,y,edge:'left'|'right'|'top'|'bottom',count,worstTone,alertCount}>}
  */
 export function edgeIndicators(points, W, H, opts = {}) {
   const m = opts.margin ?? EDGE_MARGIN;
+  const r = opts.rect ?? { x0: 0, y0: 0, x1: W, y1: H };
+  const spanX = Math.max(1, r.x1 - r.x0), spanY = Math.max(1, r.y1 - r.y0);
   const groups = new Map();   // `${edge}:${band}` → { xs, ys, tones, count, alertCount }
   for (const p of points ?? []) {
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-    if (p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H) continue;   // w kadrze — nie dotyczy
+    if (p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1) continue;   // w kadrze — nie dotyczy
     // Krawędź = oś większego przekroczenia (deterministycznie; remis → pozioma).
-    const dx = p.x < 0 ? -p.x : (p.x > W ? p.x - W : 0);
-    const dy = p.y < 0 ? -p.y : (p.y > H ? p.y - H : 0);
+    const dx = p.x < r.x0 ? r.x0 - p.x : (p.x > r.x1 ? p.x - r.x1 : 0);
+    const dy = p.y < r.y0 ? r.y0 - p.y : (p.y > r.y1 ? p.y - r.y1 : 0);
     const edge = (dx >= dy)
-      ? (p.x < 0 ? 'left' : 'right')
-      : (p.y < 0 ? 'top' : 'bottom');
-    const cx = Math.min(Math.max(p.x, m), W - m);
-    const cy = Math.min(Math.max(p.y, m), H - m);
-    const along = (edge === 'left' || edge === 'right') ? cy / H : cx / W;
+      ? (p.x < r.x0 ? 'left' : 'right')
+      : (p.y < r.y0 ? 'top' : 'bottom');
+    const cx = Math.min(Math.max(p.x, r.x0 + m), r.x1 - m);
+    const cy = Math.min(Math.max(p.y, r.y0 + m), r.y1 - m);
+    const along = (edge === 'left' || edge === 'right') ? (cy - r.y0) / spanY : (cx - r.x0) / spanX;
     const band = Math.min(EDGE_BANDS - 1, Math.max(0, Math.floor(along * EDGE_BANDS)));
     const key = `${edge}:${band}`;
     if (!groups.has(key)) groups.set(key, { edge, xs: 0, ys: 0, tones: [], count: 0, alertCount: 0 });
@@ -325,8 +329,8 @@ export function edgeIndicators(points, W, H, opts = {}) {
     const y = g.ys / g.count;
     // Strzałka siedzi NA ramce swojej krawędzi (druga oś = uśredniona pozycja clamp).
     out.push({
-      x: g.edge === 'left' ? m : g.edge === 'right' ? W - m : x,
-      y: g.edge === 'top' ? m : g.edge === 'bottom' ? H - m : y,
+      x: g.edge === 'left' ? r.x0 + m : g.edge === 'right' ? r.x1 - m : x,
+      y: g.edge === 'top' ? r.y0 + m : g.edge === 'bottom' ? r.y1 - m : y,
       edge: g.edge,
       count: g.count,
       worstTone: worstTone(g.tones),

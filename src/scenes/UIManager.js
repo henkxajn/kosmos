@@ -264,7 +264,6 @@ export class UIManager {
     this._hoverAction     = null;
     this._audioEnabled    = true;
     this._musicEnabled    = window.KOSMOS?.audioSystem?.isMusicEnabled ?? true;
-    this._notifications   = [];
     this._confirmDialog   = null;
     this._gameOverData    = null;   // { reason, planetName } — ekran końca gry
 
@@ -2538,26 +2537,6 @@ export class UIManager {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label;
       ctx.fillText(`Koszt: ${act.cost} en.`, bx + 8, by + 26);
-    });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // Powiadomienia
-  // ══════════════════════════════════════════════════════════════
-  _drawNotifications() {
-    const ctx = this.ctx;
-    const now = Date.now();
-    this._notifications = this._notifications.filter(n => n.endTime > now);
-    this._notifications.forEach((n, i) => {
-      const remaining = n.endTime - now;
-      n.alpha = Math.min(1.0, remaining / 600);
-      ctx.globalAlpha = n.alpha;
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.title;
-      ctx.textAlign = 'right';
-      ctx.fillText(n.text, W - COSMIC.OUTLINER_W - 14, COSMIC.TOP_BAR_H + 16 + i * 14);
-      ctx.textAlign = 'left';
-      ctx.globalAlpha = 1.0;
     });
   }
 

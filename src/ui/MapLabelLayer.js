@@ -23,6 +23,7 @@ import {
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 import { t } from '../i18n/i18n.js';
 import { clickObject, vesselsTarget } from './ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
+import { getMapInsets } from './MapInsets.js';   // ARKUSZ UI U4-2 (Finding 494) — kadr strzałek krawędzi = obszar mapy
 
 const KIND_COLOR = () => ({
   home:    THEME.accent,
@@ -52,6 +53,7 @@ export class MapLabelLayer {
     this._vesselPrevClustersEnemy = new Map();   // osobna histereza WROGÓW (stron nie sklejamy)
     this._vesselHitZones          = [];          // { x, y, w, h, vesselIds[], isEnemy } — klik plakietki
     this._lastOffscreenPoints     = [];          // punkty poza kadrem → strzałki krawędziowe
+    this._lastMapRect             = null;        // kadr (obszar mapy z `MapInsets`) ostatniej klatki — U4-2, Finding 494
   }
 
   /**
@@ -285,10 +287,15 @@ export class MapLabelLayer {
       return;
     }
 
-    // On-screen → klastry/plakietki; off-screen → strzałki krawędziowe (slice 1c).
+    // W kadrze → klastry/plakietki; poza kadrem → strzałki krawędziowe (slice 1c). ARKUSZ UI U4-2 (Finding 494): kadr =
+    // OBSZAR MAPY z `MapInsets` (bez kolumn outlinerów, górnej belki, pasa dolnego i paska nawigacji) — statek pod
+    // kolumną dostaje strzałkę przy krawędzi obszaru mapy zamiast plakietki zakrytej kolumną.
+    const ins = getMapInsets(K);
+    const rect = { x0: ins.left, y0: ins.top, x1: W - ins.right, y1: H - ins.bottom };
+    this._lastMapRect = rect;
     const onScreen = [];
     for (const p of points) {
-      if (p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H) onScreen.push(p);
+      if (p.x >= rect.x0 && p.x <= rect.x1 && p.y >= rect.y0 && p.y <= rect.y1) onScreen.push(p);
       else this._lastOffscreenPoints.push(p);
     }
 
@@ -348,7 +355,7 @@ export class MapLabelLayer {
     if (alpha <= 0.02 || !this._lastOffscreenPoints.length) return;
     const DIRS = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
     ctx.globalAlpha = alpha * 0.9;
-    for (const a of edgeIndicators(this._lastOffscreenPoints, W, H)) {
+    for (const a of edgeIndicators(this._lastOffscreenPoints, W, H, { rect: this._lastMapRect ?? undefined })) {
       const color = toneColor(a.worstTone, THEME) ?? THEME.textSecondary;
       const [dx, dy] = DIRS[a.edge];
       const s = 6;   // px logiczne — rozmiar grotu

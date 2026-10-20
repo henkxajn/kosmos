@@ -43,7 +43,7 @@ import { isEnemyVessel } from '../entities/Vessel.js';
 import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
-import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 — lewe wcięcie kadru „Obserwuj” (lewy outliner)
+import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 / U4-2 — wcięcia kadru „Obserwuj” (outlinery, pas dolny)
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { THEME } from '../config/ThemeConfig.js';
@@ -6854,12 +6854,14 @@ export class ThreeRenderer {
     }
     if (!pts.length) return null;
     const W = window.innerWidth || 1, H = window.innerHeight || 1;
-    const civ = !!window.KOSMOS?.civMode;
+    // ARKUSZ UI U4-2 (Finding 496) — wcięcia z jednego źródła: lewy i prawy outliner (0, gdy schowane — dawniej prawe
+    // 150 px na sztywno), dół nad pasem dolnym / Dokiem taktycznym; górny pas jak dotąd (`TOP_BAR_H`).
+    const ins = getMapInsets(window.KOSMOS);
     const safe = watchSafeRect({
       W, H, uiScale: window.KOSMOS?.uiScale ?? 1, hudRect: window.KOSMOS?.combatHud?.getPanelRect?.() ?? null,
-      topBarH: COSMIC.TOP_BAR_H, bottomH: civ ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : COSMIC.BOTTOM_BAR_H,
-      rightW: civ ? COSMIC.OUTLINER_W : 0,
-      leftW: civ ? getMapInsets(window.KOSMOS).left : 0,   // ARKUSZ UI U2-2 — lewy outliner (0 gdy ukryty)
+      topBarH: COSMIC.TOP_BAR_H, bottomH: ins.bottom,
+      rightW: ins.right,
+      leftW: ins.left,
     });
     const fit = fitWatchFrame({ points: pts, theta: cc._theta, phi: cc._phi, fovDeg: this.camera.fov,
       aspect: this.camera.aspect, W, H, safe });

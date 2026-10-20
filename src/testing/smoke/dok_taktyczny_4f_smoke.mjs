@@ -3,7 +3,10 @@
 //
 // Pokrywa:
 //   4f-1 computeDockLayout — wycentrowanie (sideGapFrac) + parytet pełnej szerokości (regresja).
-//   4f-1 getReservedHeight — uwzględnia prześwit zegara (TACTICAL_DOCK_CLOCK_CLEARANCE).
+//   4f-1 getReservedHeight — uwzględnia prześwit nad pasem dolnym (`MapInsets.BOTTOM_STRIP_H`).
+//   PRZECELOWANE W ARKUSZ UI U4-2: 4.7 / 4.8 czytały `TACTICAL_DOCK_CLOCK_CLEARANCE` z `LayoutConfig` — stała usunięta,
+//   prześwit = wysokość pasa dolnego z jednego źródła (`MapInsets.BOTTOM_STRIP_H`, ta sama liczba 20). Że Dok czyta ją
+//   z `MapInsets`, pilnuje `map_insets_single_source_smoke` (M5).
 //   4f-3 TacticalDock._onHit('row') — CTRL=toggle / zwykły=single / dwuklik=vessel:focus.
 //   4f   computePanelMode / canCancelOrder — regresja.
 //   Fix stacji — stationLabelLOD: marker z podłogą przy oddaleniu (kolonie declutterują normalnie).
@@ -117,12 +120,13 @@ const {
   performance.now = realNow;
   T('4.6 drugi klik w zaznaczony statek (po 2 s, bez okna czasu) → vessel:focus', focusEmit === 'v2' && selected === null && pinged === null);
 
-  // getReservedHeight — 4f-1 uwzględnia prześwit zegara.
+  // getReservedHeight — 4f-1 uwzględnia prześwit nad pasem dolnym (ARKUSZ UI U4-2: `MapInsets.BOTTOM_STRIP_H`).
   dock.visible = true; dock._collapsed = false;
-  const { TACTICAL_DOCK_H, TACTICAL_DOCK_TAB_H, TACTICAL_DOCK_CLOCK_CLEARANCE } = await import('../../config/LayoutConfig.js');
-  T('4.7 getReservedHeight rozwinięty = pas + prześwit', dock.getReservedHeight() === TACTICAL_DOCK_H + TACTICAL_DOCK_CLOCK_CLEARANCE);
+  const { TACTICAL_DOCK_H, TACTICAL_DOCK_TAB_H } = await import('../../config/LayoutConfig.js');
+  const { BOTTOM_STRIP_H } = await import('../../ui/MapInsets.js');
+  T('4.7 getReservedHeight rozwinięty = pas + prześwit (pas dolny)', BOTTOM_STRIP_H === 20 && dock.getReservedHeight() === TACTICAL_DOCK_H + BOTTOM_STRIP_H);
   dock._collapsed = true;
-  T('4.8 getReservedHeight zwinięty = tabH + prześwit', dock.getReservedHeight() === TACTICAL_DOCK_TAB_H + TACTICAL_DOCK_CLOCK_CLEARANCE);
+  T('4.8 getReservedHeight zwinięty = tabH + prześwit (pas dolny)', dock.getReservedHeight() === TACTICAL_DOCK_TAB_H + BOTTOM_STRIP_H);
   dock.visible = false;
   T('4.9 getReservedHeight ukryty = 0', dock.getReservedHeight() === 0);
 }

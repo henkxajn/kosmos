@@ -78,6 +78,12 @@
 //   L9g — wiersz WŁASNEJ kolonii ma od U3-3 podpowiedź kolonii (obserwacja D); kontrolą „bez podpowiedzi” jest ciało
 //         rozpoznane BEZ kolonii i bez znaczników (Alioth b).
 //   L12a — kod chipów usunięty (U3-3): pin sprawdza brak pola i metody, nie pustą listę.
+// PRZECELOWANIA (ARKUSZ UI U4-2 — Finding 496):
+//   L5i / L5j — karta ciała kończy się przed prawym outlinerem z `MapInsets.right` (dawniej 150 px na sztywno); świat
+//         keepera dostaje kolumnę prawą widoczną (150 px, jak w grze), więc liczby pinów bez zmian. Dół karty nad pasem
+//         dolnym i prawy outliner schowany — `map_insets_single_source_smoke` (M2).
+//   L7j — kadr „Obserwuj” bierze wszystkie wcięcia z jednego odczytu `getMapInsets` (`ins.left`, `ins.right`,
+//         `ins.bottom`); pin czyta lewe wcięcie w nowym kształcie.
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -318,12 +324,15 @@ header('L5  wcięcia obszaru mapy (`MapInsets`) i konsumenci');
   reset({ overlay: true }); ok(pd._geom(W, H).leftX === 8, 'L5g KONTROLA: outliner ukryty → leftX 8 jak dotąd');
   reset({ dockRes: 44 }); ok(pd._geom(W, H).bottomReserved >= 42 + 44, 'L5h dół: pasek nawigacji + Dok taktyczny (bez zmian)');
 
-  // BottomContext — karta ciała
+  // BottomContext — karta ciała. ARKUSZ UI U4-2: prawa krawędź z `MapInsets.right` — świat dostaje prawy outliner
+  // widoczny (150 px, jak w grze; dawniej karta odejmowała 150 px na sztywno).
   const { BottomContext } = await import('../../ui/BottomContext.js');
+  K.rightOutliner = { getReservedWidth: () => 150 };
   reset(); const bc = new BottomContext(); const b1 = bc._bounds(W, H);
-  ok(b1.ox === 150 && b1.ow === W - 150 - 150, `L5i karta ciała: obszar od x 150 (prawe 150 px szuflady — jak dotąd); jest ox ${b1.ox}, ow ${b1.ow}`);
+  ok(b1.ox === 150 && b1.ow === W - 150 - 150, `L5i karta ciała: obszar od x 150 do prawego outlinera (\`MapInsets.right\` 150 — U4-2); jest ox ${b1.ox}, ow ${b1.ow}`);
   reset({ overlay: true }); const b0 = bc._bounds(W, H);
   ok(b0.ox === 0 && b0.ow === W - 150, 'L5j KONTROLA: outliner ukryty → ox 0 jak dotąd');
+  delete K.rightOutliner;
 
   // FleetGroupPanel / FleetCommandPanel — chip zminimalizowany (lewy dół)
   const V = { v1: { id: 'v1', name: 'Furia', shipId: 'hull_frigate' } };
@@ -409,8 +418,9 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   ok(/getMapInsets\(window\.KOSMOS\)/.test(vpb) && /ox: ins\.left \+ 8/.test(vpb) && /H - ins\.bottom - oy/.test(vpb),
     'L7i panel statku (tryb kompaktowy): obszar clampu z `MapInsets` (za outlinerem, nad dołem)');
   const tr = src('../../renderer/ThreeRenderer.js');
-  ok(/leftW: civ \? getMapInsets\(window\.KOSMOS\)\.left : 0/.test(body(tr, '  _computeWatchFit(enc) {')),
-    'L7j kadr „Obserwuj” (`_computeWatchFit`): `leftW` z `MapInsets`');
+  const wf = body(tr, '  _computeWatchFit(enc) {');
+  ok(/const ins = getMapInsets\(window\.KOSMOS\);/.test(wf) && /leftW: ins\.left\b/.test(wf),
+    'L7j kadr „Obserwuj” (`_computeWatchFit`): `leftW` z `MapInsets` (jeden odczyt `ins` — U4-2)');
 }
 
 // ═══ wspólne dla L8–L10 (U2-3) ═══════════════════════════════════════════════════════════════════════════════════

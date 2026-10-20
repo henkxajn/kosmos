@@ -33,9 +33,8 @@ export const TACTICAL_DOCK_TAB_H   = 24;    // wysokość paska zakładek [LISTA
 // 4f-1 — pas NIE na całą szerokość: margines boczny (frakcja szer. ekranu na KAŻDĄ stronę), pas
 // wycentrowany → mapa prześwituje po bokach. 0.05 = ~1/20 na stronę (łącznie ~90% szerokości).
 export const DOCK_SIDE_GAP_FRAC    = 0.05;
-// 4f-1 — podniesienie dolnej krawędzi pasa nad blok zegara/kalendarza (BottomControlBar STRIP_H=20),
-// który siada tuż nad paskiem nawigacji w prawym-dolnym rogu. Pas zatrzymuje się NAD nim → zero kolizji.
-export const TACTICAL_DOCK_CLOCK_CLEARANCE = 20;
+// 4f-1 — dolna krawędź pasa NAD pasem dolnym (zegar, od U4 — pas na całą szerokość): prześwit = `BOTTOM_STRIP_H`
+// z `ui/MapInsets.js` (ARKUSZ UI U4-2 — jedno źródło; dawniej `TACTICAL_DOCK_CLOCK_CLEARANCE = 20` tutaj).
 
 export const GLOBE = {
   TOP_BAR_H:     50,   // pasek zasobów + "Wróć" (góra)
