@@ -2,8 +2,11 @@
 //
 // Reguły (podpisane — UI_PLAN §2, §5, §7):
 //   • WIDOCZNOŚĆ (D-UI-3 + decyzja 5 (b)): układ jest na liście ⇔ dom ∨ własna kolonia / placówka / stacja
-//     ∨ `isSystemExploredData`. „Lub” własnej obecności omija zapisy sprzed naprawy 186, w których układ
-//     skolonizowany niesie `galaxyStar.explored = false` (Finding 480 — ZF gy120 `sys_024`).
+//     ∨ `isSystemExploredData` ∨ własny statek w układzie ∨ własne jednostki naziemne na ciele układu. „Lub” własnej
+//     obecności omija zapisy sprzed naprawy 186, w których układ odwiedzony niesie `galaxyStar.explored = false`
+//     (Finding 480 — ZF gy120 `sys_024` z kolonią; Finding 489 — Polonia gy79 `sys_036` Akhernar z samym statkiem).
+//     Statek i wojska — dosłowne D-UI-3 („dotarł tam statek gracza”), bez nowego stanu w zapisie (ARKUSZ UI U3-0,
+//     decyzja właściciela z bramki U2). Statek w tranzycie warp (`systemId === null`) i wrak nie odsłaniają układu.
 //   • KOLEJNOŚĆ (D-UI-2, §7.4): (1) dom; (2) własne układy z kolonią — najpierw z kolonią z POP, potem same
 //     placówki; (3) reszta. W grupach remis rozstrzyga `galaxyStar.distanceLY`, potem nazwa. Układ z samą stacją
 //     (bez kolonii) → grupa (3).
@@ -21,10 +24,11 @@
 //     wygrywa z domyślnym (`isSystemExpanded`).
 //
 // Czysty: bez `window`, bez EventBusa, bez UI. Wszystkie wejścia przez `ctx` (wołający podaje funkcje rejestrów).
-// Importy — wyłącznie kanony bez importów (`SystemExploration`, `ColonyOwnership`).
+// Importy — wyłącznie kanony bez importów (`SystemExploration`, `ColonyOwnership`, `SystemScope`).
 
 import { isSystemExploredData, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
 import { isPlayerColony } from '../utils/ColonyOwnership.js';
+import { systemIdOf } from '../utils/SystemScope.js';
 
 /** Grupy kolejności D-UI-2 (mniejsza = wyżej na liście). */
 export const SYSTEM_GROUP = Object.freeze({ HOME: 0, COLONY: 1, OUTPOST: 2, OTHER: 3 });
@@ -79,6 +83,8 @@ export function colonyQueueCount(colony) {
  * @param {Array<object>} [ctx.colonies] — WSZYSTKIE kolonie (gracz + AI); własność kanonem `isPlayerColony`
  * @param {Array<object>} [ctx.stations] — `StationSystem.getAllStations()` (pokazujemy tylko stacje gracza)
  * @param {Array<{planetId:string}>} [ctx.groundUnits] — jednostki gracza na powierzchniach (`collectPlayerGroundUnits`)
+ * @param {Array<object>} [ctx.vessels] — statki GRACZA (wołający filtruje `isEnemyVessel`); wraki i statki w tranzycie
+ *   warp (`systemId === null`) pomijane — reszta odsłania swój układ (Finding 489)
  * @param {(type:string, systemId:string) => Array<object>} [ctx.bodiesOf] — `EntityManager.getByTypeInSystem`
  * @param {(systemId:string) => string|null} [ctx.starName] — nazwa gwiazdy układu
  * @param {(bodyId:string) => string|null} [ctx.systemOfBody] — układ ciała (`EntityManager.get(id)?.systemId`)
@@ -128,9 +134,17 @@ export function buildSystemTree(ctx = {}) {
     }
   }
   const unitsByBody = new Map();
+  const presenceSystems = new Set();   // Finding 489: układy z własnym statkiem albo własnymi wojskami na ciele
   for (const u of (ctx.groundUnits ?? [])) {
     if (!u?.planetId) continue;
     unitsByBody.set(u.planetId, (unitsByBody.get(u.planetId) ?? 0) + 1);
+    const us = sysOfBody(u.planetId);
+    if (us) presenceSystems.add(us);
+  }
+  for (const v of (ctx.vessels ?? [])) {
+    if (!v || v.isWreck) continue;
+    const vs = systemIdOf(v);              // kanon: brak pola = `sys_home`; `null` = tranzyt warp (między układami)
+    if (vs) presenceSystems.add(vs);
   }
 
   // ── Układy: widoczność, grupa, glif, odległość ──────────────────────────────────────────────────────────────
@@ -140,7 +154,7 @@ export function buildSystemTree(ctx = {}) {
     if (!systemId) continue;
     const s = sysStats.get(systemId) ?? { pop: false, outpost: false, foreign: false, station: false };
     const isHome = systemId === HOME_SYSTEM_ID;
-    const visible = isHome || s.pop || s.outpost || s.station || isSystemExploredData(sys);
+    const visible = isHome || s.pop || s.outpost || s.station || isSystemExploredData(sys) || presenceSystems.has(systemId);
     if (!visible) continue;
     const group = isHome ? SYSTEM_GROUP.HOME
       : s.pop ? SYSTEM_GROUP.COLONY

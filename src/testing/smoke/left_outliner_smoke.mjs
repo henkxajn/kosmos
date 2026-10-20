@@ -53,6 +53,10 @@
 //       pływające panele; kolejność kliku: pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy
 //       (piny źródłowe, komentarze zdjęte)
 //
+// PINY (ARKUSZ UI U3-0 — Finding 489):
+//   L18 statek GRACZA w niezbadanym układzie odsłania go na liście (`treeContext` czyta rejestr statków); statek
+//       wroga — nie (filtr `isEnemyVessel` w `treeContext`); KONTROLA: bez Twojego statku oba układy poza listą
+//
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -640,6 +644,33 @@ header('L17 Finding 483 — kolejność rysowania i kliku (piny źródłowe)');
   ok(cSP < cTRD && cFC < cTRD && cTRD < cLog && cLog < cLO && cLO < cLbl,
     'L17d SEDNO: klik — pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
   ok(c('this._mapLabelLayer?.handleClick?.(') === hc.lastIndexOf('this._mapLabelLayer?.handleClick?.('), 'L17e KONTROLA: jedno wywołanie kliku etykiet');
+}
+
+// ═══ L18 ══════════════════════════════════════════════════════════════════════
+header('L18 ARKUSZ UI U3-0 (Finding 489) — statek GRACZA odsłania układ na liście; statek wroga — nie');
+{
+  // Dwa niezbadane układy (`galaxyStar.explored = false` — jak Akhernar i Wezen w Polonii gy79): w `sys_B` Twój statek,
+  // w `sys_C` statek wroga. Prawdziwy `LeftOutliner.draw` czyta statki z rejestru (`treeContext`) — wroga odfiltrowuje
+  // TUTAJ (logika drzewa nie zna `isEnemyVessel`).
+  const SB = { systemId: 'sys_B', explored: true, galaxyStar: { id: 'sys_B', name: 'Akhernar', distanceLY: 6.0, explored: false } };
+  const SC = { systemId: 'sys_C', explored: true, galaxyStar: { id: 'sys_C', name: 'Wezen', distanceLY: 21.8, explored: false } };
+  SYSTEMS.push(SB, SC);
+  resetWorld([{ id: 'star_b', type: 'star', name: 'Akhernar', systemId: 'sys_B' }, { id: 'star_c', type: 'star', name: 'Wezen', systemId: 'sys_C' }]);
+  const vOwn = { id: 'v_16', name: 'Galileo', systemId: 'sys_B' };
+  const vEnemy = { id: 'x_1', name: 'Rajder', systemId: 'sys_C', ownerEmpireId: 'emp_002' };
+  const setVessels = (vs) => { K.vesselManager = { getAllVessels: () => vs, getVessel: (id) => vs.find((v) => v.id === id) ?? null }; };
+  const listed = (lo) => (lo?._clickTargets ?? []).filter((z) => z.type === 'system').map((z) => z.systemId);
+  reset(); setVessels([vOwn, vEnemy]); const lo = newLO(); draw(lo);
+  const l1 = listed(lo);
+  console.log('     układy: ' + l1.join(' '));
+  ok(l1.includes('sys_B'), 'L18a SEDNO: niezbadany układ z Twoim statkiem — na liście (dosłowne D-UI-3)');
+  ok(l1.length > 0 && !l1.includes('sys_C'), 'L18b statek WROGA w niezbadanym układzie go nie odsłania (wróg odfiltrowany w `treeContext`)');
+  reset(); setVessels([vEnemy]); draw(lo);
+  const l2 = listed(lo);
+  ok(l2.length > 0 && !l2.includes('sys_B') && !l2.includes('sys_C'), 'L18c KONTROLA: bez Twojego statku — oba niezbadane układy poza listą');
+  SYSTEMS.splice(SYSTEMS.indexOf(SB), 2);
+  delete K.vesselManager;
+  resetWorld();
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

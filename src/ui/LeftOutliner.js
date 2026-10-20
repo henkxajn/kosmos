@@ -30,6 +30,7 @@ import EntityManager       from '../core/EntityManager.js';
 import { t }               from '../i18n/i18n.js';
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { isPlayerColony }  from '../utils/ColonyOwnership.js';
+import { isEnemyVessel }   from '../entities/Vessel.js';   // ARKUSZ UI U3-0 — statki gracza dla widoczności układów (489)
 import { buildSystemTree, isSystemExpanded, UNRECOGNIZED_GLYPH, PRESENCE_GLYPH } from './SystemTreeLogic.js';
 import { getMapInsets }    from './MapInsets.js';
 import { clickObject, bodyTarget, stationTarget, readClickSelection } from './ClickIntentLogic.js';
@@ -151,6 +152,9 @@ export class LeftOutliner {
       colonies:       input.colonies ?? K?.colonyManager?.getAllColonies?.() ?? [],
       stations:       K?.stationSystem?.getAllStations?.() ?? [],
       groundUnits:    input.groundUnits ?? [],
+      // ARKUSZ UI U3-0 (Finding 489): statki GRACZA odsłaniają swój układ — wróg odfiltrowany TUTAJ (kontrakt
+      // `buildSystemTree`: logika nie zna `isEnemyVessel`).
+      vessels:        input.vessels ?? (K?.vesselManager?.getAllVessels?.() ?? []).filter((v) => !isEnemyVessel(v)),
       bodiesOf:       (type, sys) => EntityManager.getByTypeInSystem(type, sys),
       starName:       (sys) => EntityManager.getStarOfSystem(sys)?.name ?? null,
       systemOfBody:   (id) => EntityManager.get(id)?.systemId ?? null,

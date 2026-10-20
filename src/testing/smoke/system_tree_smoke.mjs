@@ -24,6 +24,9 @@
 //   T8  `colonyQueueCount` — budynki, statki, placówki, kolejka fabryki; bez stałej produkcji (alokacji)
 //   T9  zwijanie (D-UI-4, §7.5): domyślnie tylko bieżący; jawny stan wygrywa w obie strony; układ zwinięty bez
 //       wierszy ciał i bez odczytu rejestru ciał
+//   T10 (ARKUSZ UI U3-0, Finding 489) Polonia gy79 — Akhernar (`explored = false`, Twój statek) na liście w grupie (3)
+//       z glifem ⚑; Wezen (nic gracza) ukryty; KONTROLA: bez statków Akhernar ukryty; tranzyt warp i wrak nie
+//       odsłaniają układu; własne wojska na ciele układu (desant) — odsłaniają
 //
 // ⚠ Moduł POWSTAJE w U2-1 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa całej suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -306,6 +309,65 @@ header('T9  zwijanie (D-UI-4, §7.5)');
     bodiesOf: (type, sys) => { asked.push(sys); return []; } });
   ok(Array.isArray(t.systems[0]?.bodies) && t.systems[1]?.bodies === null && asked.length > 0 && !asked.includes('sys_x'),
     'T9d układ zwinięty — bez wierszy ciał (`null`) i bez odczytu rejestru ciał (koszt klatki: tylko rozwinięte)');
+}
+
+// ═══ T10 ══════════════════════════════════════════════════════════════════════
+header('T10 Finding 489 — układ z własnym statkiem albo wojskami (ARKUSZ UI U3-0, Polonia gy79)');
+{
+  // Kształt zapisu Polonia gy79 (sonda read-only `kosmos-handover/ui-u3/probes/fixture_shape_u3.mjs`): Akhernar (`sys_036`)
+  // i Wezen (`sys_059`) — `galaxyStar.explored = false` przy lustrze `true` (sygnatura sprzed 186), w każdym kolonia AI
+  // (dom `emp_001` / `emp_002`) i stocznia orbitalna AI; w Akhernarze statek gracza („Galileo”, zwiad w locie w układzie),
+  // w Wezenie — nic gracza.
+  const POL = [
+    // [id, nazwa, distanceLY, galaxyStar.explored]
+    ['sys_home', 'TOI-4493', 0, true], ['sys_036', 'Akhernar', 6.0, false], ['sys_059', 'Wezen', 21.8, false],
+    ['sys_014', 'Alioth', 4.6, true], ['sys_031', 'Antares', 4.8, true], ['sys_044', 'Mira', 8.3, true],
+    ['sys_008', 'Aludra', 13.1, true], ['sys_032', 'Naos', 3.7, true], ['sys_001', 'Fomalhaut', 4.7, true],
+  ];
+  const bodySys = new Map([['entity_3', 'sys_home'], ['entity_11', 'sys_home'], ['entity_79', 'sys_home'], ['entity_80', 'sys_home'],
+    ['entity_2', 'sys_home'], ['entity_283', 'sys_014'], ['entity_96', 'sys_036'], ['entity_191', 'sys_059']]);
+  const own = (pid, outpost = false) => ({ planetId: pid, name: pid, isOutpost: outpost, ownerEmpireId: null });
+  const ves = (id, sys) => ({ id, systemId: sys, isWreck: false });
+  const VESSELS = [ves('v_3', 'sys_home'), ves('v_4', 'sys_home'), ves('v_13', 'sys_home'), ves('v_18', 'sys_home'),
+    ves('v_14', 'sys_044'), ves('v_16', 'sys_036'), ves('v_17', 'sys_032')];
+  const world = (o = {}) => ({
+    systems: POL.map(([id, name, dist, expl]) => ({ systemId: id, explored: true, galaxyStar: id === 'sys_home' ? null : { id, name, distanceLY: dist, explored: expl } })),
+    colonies: [own('entity_3'), own('entity_11'), own('entity_79', true), own('entity_80', true), own('entity_2'), own('entity_283'),
+      { planetId: 'entity_96', name: 'Akhernar h', isOutpost: false, ownerEmpireId: 'emp_001' },
+      { planetId: 'entity_191', name: 'Wezen g', isOutpost: false, ownerEmpireId: 'emp_002' }],
+    stations: [{ id: 'st_mstow', name: 'Stacja Mstow', bodyId: 'entity_3', systemId: 'sys_home', ownerEmpireId: 'player' },
+      { id: 'st_akh', name: 'Stocznia orbitalna Akhernar h', bodyId: 'entity_96', systemId: 'sys_036', ownerEmpireId: 'emp_001' },
+      { id: 'st_wez', name: 'Stocznia orbitalna Wezen g', bodyId: 'entity_191', systemId: 'sys_059', ownerEmpireId: 'emp_002' }],
+    groundUnits: o.groundUnits ?? [],
+    vessels: o.vessels ?? VESSELS,
+    activeSystemId: 'sys_home',
+    starName: (id) => POL.find((r) => r[0] === id)?.[1] ?? null,
+    systemOfBody: (pid) => bodySys.get(pid) ?? null,
+    bodiesOf: () => [], expanded: () => false,
+  });
+  const w0 = world();
+  ok(w0.systems.length === 9 && w0.systems.filter((s) => s.galaxyStar?.explored === false).map((s) => s.systemId).join(' ') === 'sys_036 sys_059'
+    && w0.systems.every((s) => s.explored === true),
+    'T10-0 KONTROLA: fixture — 9 układów; Akhernar i Wezen z `galaxyStar.explored = false` przy lustrze `true`');
+  const t = tree(w0);
+  const order = ids(t).join(' ');
+  console.log('     kolejność: ' + order);
+  ok(order === 'sys_home sys_014 sys_032 sys_001 sys_031 sys_036 sys_044 sys_008',
+    'T10a SEDNO: Akhernar (Twój statek „Galileo”) na liście — grupa (3) wg odległości: Naos 3,7 · Fomalhaut 4,7 · Antares 4,8 · Akhernar 6,0 · Mira 8,3 · Aludra 13,1');
+  const akh = t.systems.find((s) => s.systemId === 'sys_036');
+  ok(akh?.group === L?.SYSTEM_GROUP?.OTHER && akh?.glyph === '⚑' && akh?.presence === 'foreign',
+    'T10b Akhernar: grupa (3) i glif ⚑ (kolonia AI) — statek odsłania układ, nie zmienia jego grupy ani glifu');
+  ok(order.length > 0 && !ids(t).includes('sys_059'), 'T10c KONTROLA: Wezen (bez statku i wojsk gracza, niezbadany) — dalej ukryty (lista niepusta)');
+  const tNo = tree(world({ vessels: [] }));
+  ok(ids(tNo).length === 7 && !ids(tNo).includes('sys_036'),
+    'T10d KONTROLA: ten sam zapis bez statków gracza — Akhernar ukryty (odsłania go statek, nie lustro `explored`)');
+  const tTr = tree(world({ vessels: [{ id: 'vT', systemId: null }, { id: 'vW', systemId: 'sys_059', isWreck: true }, { id: 'vU' }] }));
+  ok(ids(tTr).length === 7 && !ids(tTr).includes('sys_036') && !ids(tTr).includes('sys_059') && ids(tTr)[0] === 'sys_home',
+    'T10e statek w tranzycie warp (`systemId: null`) i wrak (Wezen) nie odsłaniają układu; statek bez pola `systemId` = dom (kanon)');
+  const tGu = tree(world({ vessels: [], groundUnits: [{ planetId: 'entity_191' }] }));
+  ok(ids(tGu).includes('sys_059') && !ids(tGu).includes('sys_036'),
+    'T10f SEDNO: moje jednostki naziemne na ciele Wezena (desant na kolonii AI) — Wezen na liście, bez statku i bez zbadania');
+  ok(tGu.systems.find((s) => s.systemId === 'sys_059')?.group === L?.SYSTEM_GROUP?.OTHER, 'T10g … grupa (3) — wojska nie są kolonią');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

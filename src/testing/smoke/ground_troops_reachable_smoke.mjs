@@ -27,7 +27,8 @@
 //   T3  WYKONANIE — prawdziwy LEWY outliner (`LeftOutliner.draw` na atrapie ctx i `hitTest`; ARKUSZ UI U2-3 —
 //       przecelowanie z prawego Outlinera, intencja bez zmian): wiersz obcego ciała z 🪖N się rysuje, 🪖N ma własną
 //       strefę, a klik woła `openPanel('colony', {colonyId})` z WŁAŚCIWYM id. KONTROLA PINU: własna kolonia nadal
-//       przełącza aktywną.
+//       przełącza aktywną. Granica widoczności (ARKUSZ UI U3-0, Finding 489): układ AI bez przylotu i bez moich
+//       wojsk na jego ciałach — poza listą; moje wojska na ciele (desant) — odsłaniają go.
 //   T4  WYKONANIE — `BottomContext._doAction` na obcej koloni: z moimi wojskami otwiera JEJ mapę,
 //       bez wojsk NIE otwiera ani cudzej, ani własnej. KONTROLA PINU: własna kolonia bez zmian.
 //   T5  Pin ŹRÓDŁOWY `_finishDropMode` (ColonyOverlay nie importuje się pod node — `TextureLoader`).
@@ -198,14 +199,21 @@ console.log('\n== T3 - lewy outliner: WYKONANIE draw + hitTest (ARKUSZ UI U2-3) 
   const lo = LeftLogic?.LeftOutliner ? new LeftLogic.LeftOutliner() : null;
   window.KOSMOS.leftOutliner = lo;
   const W = 1280, H = 720;
-  const drawLO = () => { const sink = []; let threw = null; try { lo?.draw?.(stubCtx(sink), W, H, { colonies: cm.getAllColonies(), groundUnits }); } catch (e) { threw = e; } return { sink, threw }; };
+  const drawLO = (units = groundUnits) => { const sink = []; let threw = null; try { lo?.draw?.(stubCtx(sink), W, H, { colonies: cm.getAllColonies(), groundUnits: units }); } catch (e) { threw = e; } return { sink, threw }; };
   const sysListed = () => (lo?._clickTargets ?? []).some((z) => z.type === 'system' && z.systemId === aiSys);
 
   // Granica reguły widoczności (D-UI-3): układ kolonii AI bez przylotu statku gracza (niezbadany, bez mojej kolonii)
-  // nie jest na liście — w grze desant przylatuje statkiem, a przylot oznacza układ (`markSystemExplored`).
+  // i BEZ moich wojsk na jego ciałach nie jest na liście.
+  // ⚠ PRZECELOWANIE (ARKUSZ UI U3-0, Finding 489 — decyzja właściciela z bramki U2): dawna KONTROLA rysowała listę
+  //   z desantem już na ciele AI i żądała, by układ był UKRYTY bez przylotu — to była stara reguła. Własne jednostki
+  //   naziemne na ciele układu odsłaniają go teraz same (dosłowne D-UI-3, bez nowego stanu w zapisie). Granica
+  //   zostaje zmierzona tym samym rysowaniem, ale bez wojsk na ciele AI; wojska — osobny pin niżej.
+  const unitsHome = groundUnits.filter((u) => u.planetId !== ai.planetId);
+  drawLO(unitsHome);
+  assert(!!lo && !!aiSys && aiSys !== 'sys_home' && unitsHome.length === 1 && unitsHome.length < groundUnits.length && !sysListed(),
+    `KONTROLA: układ kolonii AI (${aiSys}) bez przylotu gracza i bez moich wojsk na jego ciałach — poza listą (reguła D-UI-3; zapisy sprzed 186 — Finding 480)`);
   drawLO();
-  assert(!!lo && !!aiSys && aiSys !== 'sys_home' && !sysListed(),
-    `KONTROLA: układ kolonii AI (${aiSys}) bez przylotu gracza — poza listą (reguła D-UI-3; zapisy sprzed 186 — Finding 480)`);
+  assert(sysListed(), `Finding 489: moje wojska na ciele układu (desant) odsłaniają układ (${aiSys}) — bez przylotu i bez zbadania`);
   const sd = window.KOSMOS.starSystemManager?.getSystem?.(aiSys);
   if (sd?.galaxyStar) markSystemExplored(sd.galaxyStar);   // przylot statku z desantem
   lo?._expanded?.set?.(aiSys, true);                         // ciała obcego układu widoczne (układ nie jest bieżący)
