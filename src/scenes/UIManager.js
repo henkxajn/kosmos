@@ -278,7 +278,6 @@ export class UIManager {
     this._wasBrownout = false;
 
     // ── Stan ekspedycji ───────────────────────────────────────
-    this._expeditions = [];
     this._expPanelOpen = false;
 
     // ── Stan fabryk ────────────────────────────────────────────
@@ -871,56 +870,12 @@ export class UIManager {
       this.addInfo(`Badanie: ${reason}`);
     });
 
-    // Ekspedycje
-    EventBus.on('expedition:launched', ({ expedition }) => {
-      this._expeditions.push(expedition);
-      this._dirty = true;
-    });
-    EventBus.on('expedition:arrived',  ({ expedition }) => {
-      // Aktualizuj stan — orbiting/returning, nie usuwaj od razu
-      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
-      if (idx !== -1) {
-        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
-        // Usuwaj tylko jeśli completed (colony, transport po powrocie)
-        if (expedition.status === 'completed') {
-          this._expeditions.splice(idx, 1);
-        }
-      }
-      this._dirty = true;
-    });
-    EventBus.on('expedition:disaster', ({ expedition }) => {
-      this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
-      this._dirty = true;
-    });
-    EventBus.on('expedition:returned', ({ expedition }) => {
-      this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
-      this._dirty = true;
-    });
-    EventBus.on('expedition:returnOrdered', ({ expedition }) => {
-      // Aktualizuj status na returning
-      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
-      if (idx !== -1) {
-        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
-      }
-      this._dirty = true;
-    });
-    EventBus.on('expedition:reconProgress', ({ expedition }) => {
-      // Sekwencyjny full_system recon — aktualizuj dane (nowy targetId, arrivalYear, bodiesDiscovered)
-      // ObservatorySystem emituje ten sam event dla discovery ciał — bez expedition.
-      if (!expedition) return;
-      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
-      if (idx !== -1) {
-        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
-      }
-      this._dirty = true;
-    });
-    EventBus.on('expedition:redirected', ({ expedition }) => {
-      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
-      if (idx !== -1) {
-        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
-      }
-      this._dirty = true;
-    });
+    // Ekspedycje — ARKUSZ UI U3-3: lista `_expeditions` (czytała ją wyłącznie sekcja EKSPEDYCJE prawego outlinera, decyzja
+    // 3 — usunięta) zniknęła; zostaje odświeżenie UI (znaczniki statków w outlinerach także przy pauzie).
+    for (const ev of ['expedition:launched', 'expedition:arrived', 'expedition:disaster', 'expedition:returned',
+      'expedition:returnOrdered', 'expedition:reconProgress', 'expedition:redirected']) {
+      EventBus.on(ev, () => { this._dirty = true; });
+    }
     EventBus.on('expedition:redirectFailed', ({ reason }) => {
       this._addNotification(t('log.el.redirectFailed', reason), 'fleet', 'warn');
     });
@@ -2105,17 +2060,6 @@ export class UIManager {
     return ids;
   }
 
-  // Wszystkie statki gracza — niezależne od aktywnej kolonii (do outlinera)
-  _getAllPlayerVessels() {
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr) return [];
-    // Outliner pokazuje tylko statki gracza — wrogi vessel dostaje się do
-    // FleetManagerOverlay (sekcja WROGIE JEDNOSTKI), nie tutaj.
-    return vMgr.getAllVessels()
-      .filter(v => !isEnemyVessel(v))
-      .map(v => v.id);
-  }
-
   // Obsługa scrolla
   handleWheel(rawX, rawY, deltaY) {
     this._dirty = true;
@@ -2284,28 +2228,14 @@ export class UIManager {
 
     // ── CivPanel sidebar USUNIĘTY (Slice 4 — nawigacja w TopBarze, poziomy pasek) ──
 
-    // ── Outliner (prawy panel) ───────────────────────────────
+    // ── Outlinery (ARKUSZ UI U2 / U3) — dane wspólne: kolonie (cache) i jednostki naziemne gracza ──────────────────
     if (civMode && !globeOpen) {
       const colMgr = window.KOSMOS?.colonyManager;
-      const activePid = colMgr?.activePlanetId;
       // Cache getAllColonies() — invalidowany przez eventy koloni
       if (this._coloniesDirty) {
         this._cachedColonies = colMgr?.getAllColonies() ?? [];
         this._coloniesDirty = false;
       }
-      // Outliner pokazuje tylko kolonie gracza. Wrogie kolonie (ownerEmpireId
-       // !== 'player') są widoczne na mapie przez detekcję statków / Intel,
-       // nie w liście Kolonie.
-      const allColonies = this._cachedColonies.filter(c =>
-        !c?.ownerEmpireId || c.ownerEmpireId === 'player'
-      );
-      // Filtruj ekspedycje po aktywnej kolonii (spójność z AKTYWNE MISJE)
-      const vMgrOut = window.KOSMOS?.vesselManager;
-      const outlinerExps = this._expeditions.filter(exp => {
-        if (!exp.vesselId || !vMgrOut) return false;
-        const v = vMgrOut.getVessel(exp.vesselId);
-        return v && v.colonyId === activePid;
-      });
       // Jednostki naziemne gracza z KAŻDEGO ciała — także z planet, na których NIE MAM kolonii
       // (desant). Pętla po `allColonies` (kolonie GRACZA) czyniła oddział desantowy niewidzialnym
       // dokładnie wtedy, gdy był jedyną rzeczą wymagającą rozkazów; widać go było dopiero po
@@ -2318,30 +2248,11 @@ export class UIManager {
             getBodyName: resolveBodyName,
           })
         : [];
-      // Zbierz dane kolejek aktywnej kolonii
-      let constructionQueue = [], pendingBuilds = [], pendingShipOrders = [];
-      let pendingOutpostOrders = [], factoryQueue = [], factoryAllocations = [];
-      try {
-        const activeCol = colMgr?.getColony(activePid);
-        constructionQueue    = activeCol?.buildingSystem?.serializeQueue() ?? [];
-        pendingBuilds        = activeCol?.buildingSystem?.serializePendingQueue() ?? [];
-        pendingShipOrders    = colMgr?.getPendingShipOrders(activePid) ?? [];
-        pendingOutpostOrders = colMgr?.getPendingOutpostOrders(activePid) ?? [];
-        factoryQueue         = activeCol?.factorySystem?.getQueue() ?? [];
-        factoryAllocations   = activeCol?.factorySystem?.getAllocations() ?? [];
-      } catch (_) { /* defensywne — nie blokuj renderingu */ }
-      // Stan sekcji prawego outlinera sprzed U3 (KOLONIE / EKSPEDYCJE / KOLEJKA / JEDN. NAZIEMNE — do U3-3) i lista
-      // jednostek naziemnych lewego (🪖N). Rysowanie — w warstwie outlinerów niżej.
-      this._outlinerState = {
-        colonies: allColonies,
-        expeditions: outlinerExps,
-        groundUnits,
-        constructionQueue, pendingBuilds, pendingShipOrders,
-        pendingOutpostOrders, factoryQueue, factoryAllocations,
-        inventory: colMgr?.getColony(activePid)?.resourceSystem?.inventorySnapshot() ?? {},
-      };
+      // ARKUSZ UI U3-3 (decyzja 3): sekcje prawego outlinera sprzed U3 (KOLONIE / EKSPEDYCJE / KOLEJKA / JEDN. NAZIEMNE)
+      // zniknęły — zostaje lista jednostek: 🪖N w lewym i widoczność układów z Twoimi wojskami (Finding 489) w obu.
+      this._outlinerState = { groundUnits };
     } else {
-      this._outlinerState = null;   // poza civMode / w globe — brak danych Outlinera
+      this._outlinerState = null;   // poza civMode / w globe — brak danych outlinerów
     }
 
     // ── BottomContext (dolny panel info o encji) ──────────────
@@ -2419,7 +2330,7 @@ export class UIManager {
       this._leftOutliner.draw(ctx, W, H, { colonies: this._cachedColonies, groundUnits: this._outlinerState?.groundUnits ?? [] });
       // ARKUSZ UI U3-2 — prawy outliner (statki): ta sama warstwa co lewy — nad mapą, pod listą kolonii z górnej belki
       // (§7.17) i pod pływającymi panelami; kolejność układów z tego samego drzewa co lewy (`treeColonies`).
-      this._outliner.draw(ctx, W, H, { ...(this._outlinerState ?? {}), treeColonies: this._cachedColonies });
+      this._outliner.draw(ctx, W, H, { groundUnits: this._outlinerState?.groundUnits ?? [], treeColonies: this._cachedColonies });
     }
     if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);
     // ── Faza 4 — „Dok taktyczny": pas dowodzenia (tryb Y). Rysowany PRZED nav+control
@@ -3282,8 +3193,8 @@ export class UIManager {
       const sidebarFullH = H - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarFullH) return 'civpanel';
     }
-    // Outliner
-    if (window.KOSMOS?.civMode && x >= W - COSMIC.OUTLINER_W && y >= COSMIC.TOP_BAR_H) return 'outliner';
+    // Prawy outliner — tylko gdy widoczny nad mapą (ARKUSZ UI U3-3: dawniej cały pas 150 px, także pod overlayem)
+    if (this._outliner?.isOver?.(x, y, W, H)) return 'outliner';
     // ActionPanel
     if (!window.KOSMOS?.civMode) {
       const PW = 220, PH = 166;

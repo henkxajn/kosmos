@@ -60,19 +60,35 @@ export function isSystemExpanded(systemId, activeSystemId, explicit = null) {
 }
 
 /**
- * ⏳N — liczba pozycji kolejki kolonii (decyzja 3): budowa budynków (w toku + oczekujące na zasoby), statki
- * (w budowie + oczekujące), placówki oczekujące, kolejka fabryki. BEZ stałej produkcji fabryki (alokacje —
- * to nie kolejka) i bez zleceń stacji.
+ * Pozycje kolejki kolonii (decyzja 3; ARKUSZ UI U3-3 — obserwacja C, podpisane (a)): budowa budynków (w toku
+ * + oczekujące na zasoby), statki (w budowie + oczekujące), placówki oczekujące, kolejka fabryki. BEZ stałej produkcji
+ * fabryki (alokacje — to nie kolejka) i bez zleceń stacji. JEDNO źródło liczby ⏳N i podpowiedzi z pozycjami; pozycje
+ * surowe (identyfikatory) — nazwy i ikony rozwiązuje widok z danych.
+ * @param {object} colony — wpis `ColonyManager`
+ * @returns {Array<{kind:'building'|'pendingBuilding'|'ship'|'pendingShip'|'outpost'|'factory', id:string|null, level?:number|null, qty?:number|null}>}
+ */
+export function colonyQueueItems(colony) {
+  if (!colony || typeof colony !== 'object') return [];
+  const arr = (a) => (Array.isArray(a) ? a : []);
+  const bs = colony.buildingSystem, fs = colony.factorySystem;
+  const lvl = (e) => (e?.isUpgrade ? (e.targetLevel ?? null) : null);
+  const out = [];
+  for (const e of arr(bs?.serializeQueue?.()))        out.push({ kind: 'building', id: e?.buildingId ?? null, level: lvl(e) });
+  for (const e of arr(bs?.serializePendingQueue?.())) out.push({ kind: 'pendingBuilding', id: e?.buildingId ?? null, level: lvl(e) });
+  for (const e of arr(colony.shipQueues))             out.push({ kind: 'ship', id: e?.shipId ?? null });
+  for (const e of arr(colony.pendingShipOrders))      out.push({ kind: 'pendingShip', id: e?.shipId ?? null });
+  for (const e of arr(colony.pendingOutpostOrders))   out.push({ kind: 'outpost', id: e?.buildingId ?? null });
+  for (const e of arr(fs?.getQueue?.()))              out.push({ kind: 'factory', id: e?.commodityId ?? null, qty: e?.qty ?? null });
+  return out;
+}
+
+/**
+ * ⏳N — liczba pozycji kolejki kolonii (`colonyQueueItems`).
  * @param {object} colony — wpis `ColonyManager`
  * @returns {number}
  */
 export function colonyQueueCount(colony) {
-  if (!colony || typeof colony !== 'object') return 0;
-  const n = (a) => (Array.isArray(a) ? a.length : 0);
-  const bs = colony.buildingSystem, fs = colony.factorySystem;
-  return n(bs?.serializeQueue?.()) + n(bs?.serializePendingQueue?.())
-    + n(colony.shipQueues) + n(colony.pendingShipOrders) + n(colony.pendingOutpostOrders)
-    + n(fs?.getQueue?.());
+  return colonyQueueItems(colony).length;
 }
 
 /**

@@ -35,6 +35,9 @@
 //       (wykonanie wyciętych metod)
 //   R13 Finding 491 — `syncStationPanelOnSystemSwitch` + słuchacz `system:switched` w UIManagerze (wykonanie)
 //   R14 pas dolny — jedno źródło wysokości (`BottomControlBar` czyta `MapInsets.BOTTOM_STRIP_H`)
+//   R15 (U3-3, decyzja 3 i 4) sprzątanie: w prawym tylko statki (bez sekcji KOLONIE / EKSPEDYCJE / KOLEJKA / JEDN.
+//       NAZIEMNE i ich kodu); bez szuflady (`getCoveredWidth` — także w `ColonyOverlay`); bez prawej rynny
+//       Obserwatorium; UIManager bez martwej listy ekspedycji i listy id statków; szablon kolumny bez haka treści
 //
 // ⚠ Moduł POWSTAJE w U3-2 (`OutlinerColumn`, kształt prawego) — importy dynamiczne w try/catch (pin DEGRADUJE).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -499,6 +502,30 @@ header('R14 pas dolny — jedno źródło wysokości');
   ok(/import \{ BOTTOM_STRIP_H \} from '\.\/MapInsets\.js';/.test(bcb) && /const STRIP_H = BOTTOM_STRIP_H;/.test(bcb),
     'R14a pasek zegara czyta wysokość pasa dolnego z `MapInsets` (ta sama liczba kończy oba outlinery)');
   ok(STL?.MARKER_TONES && Object.values(STL.MARKER_TONES).every((tok) => typeof THEME[tok] === 'string'), 'R14b KONTROLA: tokeny znaczników istnieją w motywie');
+}
+
+// ═══ R15 ══════════════════════════════════════════════════════════════════════
+header('R15 sprzątanie U3-3 — w prawym tylko statki; bez szuflady i rynny');
+{
+  reset(); const ro = newRO(); const { ctx } = draw(ro);
+  const types = new Set((ro?._clickTargets ?? []).map((z) => z.type));
+  const legacy = ['section', 'colony', 'station', 'expedition', 'queueItem', 'queueCancel', 'groundBody', 'groundUnit'];
+  ok(types.has('vessel') && !legacy.some((x) => types.has(x)), `R15a SEDNO: w prawym tylko wiersze drzewa statków (typy: ${[...types].join(', ')})`);
+  const text = ctx._calls.text.map((x) => x.s);
+  ok(text.length > 0 && !text.some((x) => /KOLONIE|EKSPEDYCJE|KOLEJKA|JEDN\. NAZIEMNE/.test(x)), 'R15b bez nagłówków sekcji sprzed U3 (decyzja 3)');
+  const os = src('../../ui/Outliner.js');
+  ok(os.length > 1000 && !/_drawExtra|_drawSection|_onLegacyHit|_cancelQueueItem|_buildQueueItems|_buildColonyTooltip|getCoveredWidth|_sections\b|_drawerMode/.test(os),
+    'R15c źródło prawego: bez kodu sekcji, podpowiedzi kolonii (przeszła do lewego), szuflady i `getCoveredWidth`');
+  const oc = src('../../ui/OutlinerColumn.js');
+  ok(/_drawItem\(ctx, g, iy, it, model\)/.test(oc) && !/_drawExtra|_extraH/.test(oc), 'R15d szablon kolumny bez haka treści dorysowywanej (przejściowego w U3-2)');
+  const co = src('../../ui/ColonyOverlay.js');
+  ok(/const availRight = \(x \+ w\) - 4;/.test(co) && !/getCoveredWidth/.test(co), 'R15e ColonyOverlay: globus bez odsuwania spod szuflady (decyzja 4)');
+  const ob = src('../../ui/ObservatoryOverlay.js');
+  ok(/right: 0px;/.test(ob) && !/OUTLINER_W/.test(ob), 'R15f Obserwatorium bez prawej rynny 150 px (decyzja 4)');
+  const ui = src('../../scenes/UIManager.js');
+  ok(/this\._outlinerState = \{ groundUnits \};/.test(ui) && !/_expeditions|_getAllPlayerVessels/.test(ui),
+    'R15g UIManager: stan outlinerów = jednostki naziemne; bez martwej listy ekspedycji i listy id statków');
+  ok(/for \(const ev of \['expedition:launched', 'expedition:arrived'/.test(ui), 'R15h odświeżenie UI na zdarzeniach ekspedycji zostaje (jedna pętla zamiast listy; znaczniki przy pauzie)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

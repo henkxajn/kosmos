@@ -18,17 +18,25 @@
 //     ciała (🏛 z POP / ⛺ placówka; ⚑ kolonia AI), stacja gracza = wiersz pod ciałem-matką (reguła klik/focus),
 //     🪖N przy ciele = mapa TEGO ciała (`openPanel('colony', { colonyId })` — droga powrotna desantu, naprawa
 //     `486982c`), ⏳N przy kolonii = jej kolejka.
+//   • Podpowiedzi (ARKUSZ UI U3-3): ⏳N — pozycje kolejki (ikona typu + nazwa; obserwacja C, podpisane (a)); wiersz
+//     ciała z WŁASNĄ kolonią — podpowiedź kolonii (POP, prosperity, zasoby, budynki; obserwacja D — dawniej w prawym
+//     Outlinerze); kolonia AI — bez (mgła wojny).
 //
 // Importuje się pod node (keeper `left_outliner_smoke` — prawdziwy `draw` + `hitTest` na atrapie ctx).
 
 import { THEME }           from '../config/ThemeConfig.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
-import { t }               from '../i18n/i18n.js';
+import { t, getName }      from '../i18n/i18n.js';
 import { systemIdOf }      from '../utils/SystemScope.js';
 import { isPlayerColony }  from '../utils/ColonyOwnership.js';
 import { isEnemyVessel }   from '../entities/Vessel.js';   // ARKUSZ UI U3-0 — statki gracza dla widoczności układów (489)
-import { buildSystemTree, UNRECOGNIZED_GLYPH, PRESENCE_GLYPH } from './SystemTreeLogic.js';
+import { BUILDINGS }       from '../data/BuildingsData.js';
+import { SHIPS }           from '../data/ShipsData.js';
+import { HULLS }           from '../data/HullsData.js';
+import { COMMODITIES }     from '../data/CommoditiesData.js';
+import { ALL_RESOURCES }   from '../data/ResourcesData.js';
+import { buildSystemTree, colonyQueueItems, UNRECOGNIZED_GLYPH, PRESENCE_GLYPH } from './SystemTreeLogic.js';
 import { clickObject, bodyTarget, stationTarget, readClickSelection } from './ClickIntentLogic.js';
 import { OutlinerColumn, outlinerShown, OUTLINER_COLUMN_W, OUTLINER_BG_ALPHA, OUTLINER_TEXT_SHADOW, OUTLINER_PAD } from './OutlinerColumn.js';
 
@@ -213,7 +221,7 @@ export class LeftOutliner extends OutlinerColumn {
     ctx.fillStyle = (isSel || r.colony) ? THEME.textPrimary : (r.recognized ? THEME.textSecondary : THEME.textDim);
     ctx.fillText(this._fit(ctx, r.name, right - tx), tx, iy + 12);
     this._shadow(ctx, false);
-    this._clickTargets.push({ type: 'body', bodyId: r.id, systemId: r.systemId, recognized: r.recognized, name: r.name, x: g.x, y: iy, w: g.w, h: ROW_H });
+    this._clickTargets.push({ type: 'body', bodyId: r.id, systemId: r.systemId, recognized: r.recognized, name: r.name, colony: r.colony ?? null, x: g.x, y: iy, w: g.w, h: ROW_H });
   }
 
   // Stacja gracza pod ciałem-matką (decyzja 3) — reguła klik/focus jak wiersz stacji dzisiejszego Outlinera.
@@ -268,10 +276,92 @@ export class LeftOutliner extends OutlinerColumn {
     return `${z.type}:${id}`;
   }
 
-  _hoverTip(z, x, y) {
+  _hoverTip(z, x, y, K) {
     if (z.type === 'ground') return { text: t('leftOutliner.groundUnits', z.count), x, y };
-    if (z.type === 'queue') return { text: t('leftOutliner.queue', z.count), x, y };
+    // Obserwacja C (podpisane (a)): ⏳N zostaje, podpowiedź wylicza pozycje kolejki (to samo źródło co liczba).
+    if (z.type === 'queue') return { lines: queueTipLines(K?.colonyManager?.getColony?.(z.bodyId) ?? null, z.count), x, y };
     if (z.type === 'body' && z.recognized === false) return { text: t('leftOutliner.unrecognized', z.name), x, y };
+    // Obserwacja D: wiersz ciała z WŁASNĄ kolonią — podpowiedź kolonii (kolonia AI — bez: mgła wojny).
+    if (z.type === 'body' && z.colony) {
+      const col = K?.colonyManager?.getColony?.(z.bodyId);
+      if (col && isPlayerColony(col)) return { lines: colonyTooltipLines(col), x, y };
+    }
     return null;
   }
+}
+
+// ── Podpowiedzi wielowierszowe (ARKUSZ UI U3-3) ─────────────────────────────────────────────────────────────────────
+const QUEUE_TIP_MAX = 10;   // pozycji w podpowiedzi ⏳N; reszta jako „(+N więcej)”
+
+/** Pozycja kolejki → „ikona nazwa” (dane gry; nieznany identyfikator — sam identyfikator). */
+export function queueItemLabel(it) {
+  if (!it) return '';
+  if (it.kind === 'building' || it.kind === 'pendingBuilding' || it.kind === 'outpost') {
+    const b = BUILDINGS[it.id];
+    const icon = it.kind === 'outpost' ? '🏕' : (b?.icon ?? '🏗');
+    return `${icon} ${b ? getName(b, 'building') : (it.id ?? '?')}${it.level ? ` →Lv${it.level}` : ''}`;
+  }
+  if (it.kind === 'ship' || it.kind === 'pendingShip') {
+    const s = SHIPS[it.id] ?? HULLS[it.id];
+    return `${s?.icon ?? '🚀'} ${s ? getName(s, 'ship') : (it.id ?? '?')}`;
+  }
+  const c = COMMODITIES[it.id];
+  return `${c?.icon ?? '🏭'} ${c ? getName(c, 'commodity') : (it.id ?? '?')}${it.qty ? ` ×${it.qty}` : ''}`;
+}
+
+/** Podpowiedź ⏳N: nagłówek z liczbą + pozycje (oczekujące na zasoby — kolorem ostrzeżenia, jak dawna sekcja KOLEJKA). */
+export function queueTipLines(colony, count) {
+  const items = colonyQueueItems(colony);
+  const lines = [{ text: t('leftOutliner.queue', count ?? items.length), header: true }];
+  for (const it of items.slice(0, QUEUE_TIP_MAX)) {
+    const waiting = it.kind === 'pendingBuilding' || it.kind === 'pendingShip' || it.kind === 'outpost';
+    lines.push({ text: queueItemLabel(it), color: waiting ? (THEME.warning ?? THEME.textSecondary) : THEME.textSecondary });
+  }
+  if (items.length > QUEUE_TIP_MAX) lines.push({ text: `(+${items.length - QUEUE_TIP_MAX} ${t('outliner.queueMore')})`, color: THEME.textDim });
+  return lines;
+}
+
+/**
+ * Podpowiedź kolonii (obserwacja D) — przeniesiona z prawego Outlinera sprzed U3 (`_buildColonyTooltip`): nazwa, typ
+ * i temperatura ciała, POP i prosperity, epoka, zasoby (segmenty wielokolorowe po 4), budynki (po 3).
+ */
+export function colonyTooltipLines(colony) {
+  if (!colony) return [];
+  const lines = [{ text: `${colony.isHomePlanet ? '🏛' : '🏙'} ${colony.name}`, header: true }];
+  const planet = colony.planet;
+  if (planet) {
+    const tempC = planet.temperatureC != null ? Math.round(planet.temperatureC) : (planet.temperatureK ? Math.round(planet.temperatureK - 273) : null);
+    lines.push({ text: `${planet.planetType ?? planet.type} ${tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : ''}`, color: THEME.textDim });
+  }
+  const cSys = colony.civSystem;
+  if (cSys) {
+    const pop = cSys.population ?? 0;
+    const dPop = cSys.displayPopulation ?? 0;
+    const dPopStr = dPop >= 1_000_000 ? `${(dPop / 1_000_000).toFixed(1)}M` : dPop >= 1_000 ? `${(dPop / 1_000).toFixed(0)}k` : `${dPop}`;
+    const housing = cSys.effectiveHousing ?? 0;
+    const prosp = Math.round(colony.prosperitySystem?.prosperity ?? 50);
+    lines.push({ text: `👤 ${dPopStr} (${pop}/${housing === Infinity ? '∞' : housing} POP)  ⭐${prosp}`, color: THEME.textSecondary });
+    const epoch = colony.prosperitySystem?._getCurrentEpoch?.()?.key ?? 'early';
+    lines.push({ text: t('outliner.epoch', t(`epoch.${epoch}`)), color: THEME.textSecondary });
+  }
+  const inv = colony.resourceSystem?.inventory;
+  if (inv) {
+    const segments = [];
+    for (const [k, v] of inv.entries()) {
+      if (v <= 0) continue;
+      const resDef = ALL_RESOURCES[k];
+      segments.push({ label: `${resDef?.icon ?? COMMODITIES[k]?.icon ?? ''}${k}:${Math.floor(v)}`, color: resDef?.color ?? THEME.yellow });
+    }
+    for (let i = 0; i < segments.length; i += 4) lines.push({ segments: segments.slice(i, i + 4) });
+  }
+  const active = colony.buildingSystem?._active;
+  if (active && active.size > 0) {
+    const bList = [];
+    active.forEach((entry) => {
+      const lvl = entry.level ?? 1;
+      bList.push(`${entry.building.icon ?? '🏗'}${getName(entry.building, 'building')}${lvl > 1 ? ` Lv${lvl}` : ''}`);
+    });
+    for (let i = 0; i < bList.length; i += 3) lines.push({ text: bList.slice(i, i + 3).join(', '), color: THEME.textDim });
+  }
+  return lines;
 }

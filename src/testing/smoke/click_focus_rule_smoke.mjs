@@ -242,18 +242,20 @@ header('T4  WYKONANIE Outliner.hitTest — nagłówek układu (§7.9)');
 }
 
 // ═══ T5 ═════════════════════════════════════════════════════════════════════
-header('T5  WYKONANIE MapLabelLayer.handleClick — chip układu (§7.9)');
+// ARKUSZ UI U3-3 — przecelowanie: chipy układów usunięte (wyłączone w U2-3, §7.18; ich rolę ma lewy outliner, a regułę
+// §7.9 dla bieżącego układu pinują T4 i `left_outliner` L3). Pin: klik w dawny rząd chipów nie przełącza i nie jest
+// pochłaniany przez warstwę etykiet; w źródle nie ma kodu chipów.
+header('T5  MapLabelLayer — bez chipów układów (U3-3; §7.18)');
 {
   const { MapLabelLayer } = await import('../../ui/MapLabelLayer.js');
   const m = new MapLabelLayer();
-  m._chipZones = [{ x: 10, y: 30, w: 80, h: 18, chip: { systemId: 'sys_home', isActive: true } },
-                  { x: 10, y: 50, w: 80, h: 18, chip: { systemId: 'sys_008', isActive: false } }];
   rec.reset = 0; rec.switched = [];
   const r1 = m.handleClick(20, 35);
-  ok(r1 === true && rec.reset === 1 && rec.switched.length === 0, 'T5a aktywny chip → `resetToSystemView` (dawniej świadomy no-op)');
-  rec.reset = 0; rec.switched = [];
-  m.handleClick(20, 55);
-  ok(JSON.stringify(rec.switched) === '["sys_008"]' && rec.reset === 0, 'T5b KONTROLA: inny chip → przełączenie układu');
+  ok(r1 === false && rec.reset === 0 && rec.switched.length === 0 && !('_chipZones' in m),
+    'T5a klik w dawny rząd chipów — niepochłonięty, bez przełączenia i bez resetu (warstwa bez stref chipów)');
+  const ml = src('../../ui/MapLabelLayer.js');
+  ok(ml.length > 1000 && !/_drawSystemChips|_chipZones|buildSystemChips|layoutSystemChips/.test(ml), 'T5b źródło: bez rysowania, stref i kliku chipów');
+  ok(/handleClick\(x, y\) \{/.test(ml), 'T5c KONTROLA: metoda kliku warstwy etykiet istnieje (plakietki, stacje — T11)');
 }
 
 // ═══ T6 ═════════════════════════════════════════════════════════════════════
@@ -481,26 +483,37 @@ header('T10 WYKONANIE Outliner.hitTest — wiersz statku, kolonii, stacji (§7.8
   o._lastMouseMods = { ctrl: true }; reset(); hit({ type: 'vessel', vesselId: 'v2' });
   ok(JSON.stringify(ops) === '[["toggle","v2"]]' && evs.length === 0, 'T10f KONTROLA: CTRL+klik → przełączenie zbioru, bez kamery');
   o._lastMouseMods = { ctrl: false };
-  const col = (id) => ({ type: 'colony', planetId: id, colony: {}, mapIconX: W - 20 });
-  reset(); hit(col('p1'));
+  globalThis.KOSMOS.civMode = civ0;
+}
+// ARKUSZ UI U3-3 — przecelowanie T10g–o: wiersze kolonii i stacji przeszły z prawego outlinera do LEWEGO (decyzja 3) —
+// ta sama reguła i te same oczekiwania; ikona 🗺 prawego → 🪖N lewego (jedyne wejście „mapa ciała” z outlinera).
+{
+  const { LeftOutliner } = await import('../../ui/LeftOutliner.js');
+  const lo = new LeftOutliner();
+  const civ0 = globalThis.KOSMOS.civMode; globalThis.KOSMOS.civMode = true;
+  if (!EM.get('p1')) EM.add(P1);
+  if (!EM.get('pB')) EM.add(PB);
+  const hitL = (target, x = 60) => { lo._clickTargets = [{ ...target, x: 0, y: 100, w: 150, h: 18 }]; return lo.hitTest(x, 105, W, H); };
+  const col = (id) => ({ type: 'body', bodyId: id, systemId: id === 'pB' ? 'sys_B' : 'sys_home', recognized: true, name: 'K', colony: 'colony' });
+  reset(); hitL(col('p1'));
   ok(evs.length === 1 && evs[0][0] === 'body:selected' && evs[0][1]?.entity?.id === 'p1' && evs[0][1]?.focus === false,
-    'T10g kolonia (nazwa), 1. klik → `body:selected { focus: false }` (karta ciała, kamera stoi)');
+    'T10g kolonia (wiersz ciała w lewym), 1. klik → `body:selected { focus: false }` (karta ciała, kamera stoi)');
   ok(!ops.some(x => x[0] === 'switchActiveColony') && !evNames().includes('colony:switched') && !evNames().includes('camera:focusTarget'),
     'T10h … aktywna kolonia NIE zmienia się (§7.10; dawniej `switchActiveColony` + `colony:switched` + `camera:focusTarget`)');
-  reset({ entity: P1 }); hit(col('p1'));
+  reset({ entity: P1 }); hitL(col('p1'));
   ok(evs.length === 1 && evs[0][0] === 'body:selected' && evs[0][1]?.focus === true, 'T10i kolonia zaznaczona, 2. klik → `body:selected { focus: true }`');
-  reset(); hit(col('pB'));
+  reset(); hitL(col('pB'));
   ok(!ops.some(x => x[0] === 'switch') && evs[0]?.[1]?.focus === false, 'T10j kolonia w INNYM układzie, 1. klik → bez przełączania układu');
-  reset({ entity: PB }); hit(col('pB'));
+  reset({ entity: PB }); hitL(col('pB'));
   ok(JSON.stringify(ops) === '[["switch","sys_B"]]' && evs.length === 1 && evs[0][1]?.entity?.id === 'pB' && evs[0][1]?.focus === true,
     'T10k … 2. klik → przełączenie układu, potem kamera');
-  reset(); hit(col('p1'), W - 10);
-  ok(JSON.stringify(ops) === '[["switchActiveColony","p1"],["openPanel","colony"]]', 'T10l KONTROLA: ikona 🗺 → otwarcie kolonii (aktywna kolonia się zmienia — jak dotąd)');
-  reset(); hit({ type: 'station', stationId: 's1', systemId: 'sys_home' });
+  reset(); hitL({ type: 'ground', bodyId: 'p1', systemId: 'sys_home', count: 1 });
+  ok(JSON.stringify(ops) === '[["switchActiveColony","p1"],["openPanel","colony"]]', 'T10l KONTROLA: 🪖N (dawniej ikona 🗺 prawego) → mapa kolonii (aktywna kolonia się zmienia — jak dotąd)');
+  reset(); hitL({ type: 'station', stationId: 's1', systemId: 'sys_home' });
   ok(JSON.stringify(evs) === '[["station:selected",{"stationId":"s1"}]]', 'T10m stacja, 1. klik → panel stacji, kamera stoi (dawniej panel + `station:focus`)');
-  reset({ station: 's1' }); hit({ type: 'station', stationId: 's1', systemId: 'sys_home' });
+  reset({ station: 's1' }); hitL({ type: 'station', stationId: 's1', systemId: 'sys_home' });
   ok(JSON.stringify(evs) === '[["station:focus",{"stationId":"s1"}]]', 'T10n stacja w otwartym panelu, 2. klik → `station:focus`');
-  reset({ station: 's2' }); hit({ type: 'station', stationId: 's2', systemId: 'sys_C' });
+  reset({ station: 's2' }); hitL({ type: 'station', stationId: 's2', systemId: 'sys_C' });
   ok(JSON.stringify(ops) === '[["switch","sys_C"]]' && JSON.stringify(evs) === '[["station:focus",{"stationId":"s2"}]]',
     'T10o stacja z INNEGO układu, 2. klik → przełączenie, potem kamera');
   globalThis.KOSMOS.civMode = civ0;

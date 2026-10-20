@@ -370,5 +370,24 @@ header('T10 Finding 489 — układ z własnym statkiem albo wojskami (ARKUSZ UI 
   ok(tGu.systems.find((s) => s.systemId === 'sys_059')?.group === L?.SYSTEM_GROUP?.OTHER, 'T10g … grupa (3) — wojska nie są kolonią');
 }
 
+// ═══ T11 ══════════════════════════════════════════════════════════════════════
+header('T11 `colonyQueueItems` — pozycje kolejki, jedno źródło liczby ⏳N (ARKUSZ UI U3-3, obserwacja C)');
+{
+  const col = {
+    buildingSystem: { serializeQueue: () => [{ buildingId: 'mine' }, { buildingId: 'farm', isUpgrade: true, targetLevel: 3 }],
+      serializePendingQueue: () => [{ buildingId: 'solar_farm', isUpgrade: false }] },
+    shipQueues: [{ shipId: 'hull_small' }], pendingShipOrders: [{ id: 'o1', shipId: 'hull_medium' }],
+    pendingOutpostOrders: [{ id: 'po1', buildingId: 'mine', targetId: 'X' }],
+    factorySystem: { getQueue: () => [{ commodityId: 'power_cells', qty: 4 }], getAllocations: () => [{ commodityId: 'steel' }] },
+  };
+  const items = typeof L?.colonyQueueItems === 'function' ? L.colonyQueueItems(col) : null;
+  ok(Array.isArray(items) && items.map((i) => i.kind).join(' ') === 'building building pendingBuilding ship pendingShip outpost factory',
+    `T11a rodzaje w kolejności źródeł (${items?.map((i) => i.kind).join(' ')})`);
+  ok(!!items && items[1].level === 3 && items[0].level === null && items[6].qty === 4 && items[5].id === 'mine' && items[4].id === 'hull_medium',
+    'T11b identyfikatory, poziom ulepszenia, ilość fabryki');
+  ok(!!items && L.colonyQueueCount(col) === items.length && items.length === 7, 'T11c SEDNO: ⏳N = liczba pozycji (alokacje fabryki poza kolejką)');
+  ok(typeof L?.colonyQueueItems === 'function' && L.colonyQueueItems(null).length === 0 && L.colonyQueueItems({}).length === 0, 'T11d brak kolonii / pusta — brak pozycji');
+}
+
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);
 process.exit(fail > 0 ? 1 : 0);

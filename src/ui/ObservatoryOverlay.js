@@ -50,7 +50,8 @@ export class ObservatoryOverlay {
     const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     const W = window.innerWidth, H = window.innerHeight;
     const left   = CIV_SIDEBAR_W * S;
-    const right  = W - COSMIC.OUTLINER_W * S;
+    // ARKUSZ UI U3-3 (decyzja 4): bez prawej rynny 150 px — prawy outliner jest ukryty przy otwartym overlayu.
+    const right  = W;
     const top    = (COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H) * S;
     const bottom = H - (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) * S;
     const ow = right - left;
@@ -70,13 +71,13 @@ export class ObservatoryOverlay {
     return true;
   }
 
-  /** Czy punkt (x,y) jest w obszarze overlaya (nie TopBar/BottomBar/Outliner) */
+  /** Czy punkt (x,y) jest w obszarze overlaya (nie TopBar/BottomBar; prawy outliner ukryty przy overlayu — U3-3) */
   _isInOverlayArea(x, y) {
     const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     const W = Math.round(window.innerWidth / S);
     const H = Math.round(window.innerHeight / S);
     return x >= CIV_SIDEBAR_W &&
-           x <= W - COSMIC.OUTLINER_W &&
+           x <= W &&
            y >= COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H &&
            y <= H - COSMIC.BOTTOM_NAV_H - COSMIC.BOTTOM_LOG_TRIG_H;
   }
@@ -104,7 +105,7 @@ export class ObservatoryOverlay {
       position: fixed;
       top: ${Math.round((COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H) * S)}px;
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
-      right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
+      right: 0px;
       bottom: ${Math.round((COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) * S)}px;
       background: ${bgAlpha(0.38)}; color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily};
       z-index: 50; display: flex; flex-direction: column; padding: 10px 14px;

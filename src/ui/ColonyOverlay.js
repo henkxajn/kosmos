@@ -1273,13 +1273,10 @@ export class ColonyOverlay extends BaseOverlay {
     const pad = 12;
 
     // ── Globus 3D (góra) ──
-    // Globus to osobny DOM canvas (z-index:3) NAD ui-canvas — drawer rysowany na
-    // ui-canvas nie może go zakryć. Dlatego kurczymy/przesuwamy globus tak, by nie
-    // wchodził pod prawy drawer (Outliner). availRight = prawy limit (krawędź info
-    // panelu minus aktualnie zasłonięta przez drawer szerokość).
-    const drawer = window.KOSMOS?.uiManager?._outliner;
-    const drawerCover = drawer?.getCoveredWidth?.() ?? 0;
-    const availRight = (x + w - drawerCover) - 4;
+    // Globus to osobny DOM canvas (z-index:3) NAD ui-canvas. availRight = prawy limit (krawędź info panelu).
+    // ARKUSZ UI U3-3 (decyzja 4): prawy outliner jest ukryty przy otwartym overlayu — nie ma już szuflady, spod której
+    // globus musiałby się odsuwać (dawniej `Outliner.getCoveredWidth`).
+    const availRight = (x + w) - 4;
     // ── Zakładki prawej kolumny: [Planeta | Załoga] (Population 2.0 Faza 2) ──
     // Podgląd (isPreview) i outposty (brak civSystem/POP) → tylko dane planety.
     const civ = colony?.civSystem ?? null;
@@ -1325,7 +1322,7 @@ export class ColonyOverlay extends BaseOverlay {
     let discSize = fixedGlobeSize(h, w, pad);
     let discX = x + (w - discSize) / 2;
     if (discX + discSize > availRight) {
-      discX = availRight - discSize;            // przesuń w lewo spod drawera
+      discX = availRight - discSize;            // przesuń w lewo (nie poza info panel)
       if (discX < x + pad) {                     // nie mieści się — zmniejsz
         discX = x + pad;
         discSize = Math.max(60, availRight - discX);

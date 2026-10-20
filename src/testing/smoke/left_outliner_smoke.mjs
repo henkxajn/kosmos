@@ -47,6 +47,10 @@
 //       (stan przeżywa otwarcie overlayu); podpowiedź klawiszy w nagłówku (PL / EN)
 //   L15 GameScene: klawisze w przełączniku `e.code`, tylko w trybie cywilizacji, przez `toggleOutliners` (pin
 //       źródłowy); UIManager `toggleOutliners` — oba stany, prawy schowany bez wysuniętej szuflady
+//   L19 (U3-3, obserwacja C — podpisane (a)) podpowiedź ⏳N wylicza pozycje kolejki (ikona typu + nazwa; oczekujące
+//       na zasoby kolorem ostrzeżenia); nagłówek = liczba przy ciele; ponad 10 pozycji — „(+N więcej)”
+//   L20 (U3-3, obserwacja D) wiersz ciała z WŁASNĄ kolonią — podpowiedź kolonii (POP, prosperity, epoka, zasoby);
+//       kolonia AI — bez (mgła wojny); ciało bez kolonii — bez
 //   L16 prawy outliner — od ARKUSZ UI U3-2 kolumna nad mapą (`OutlinerColumn`, jak lewy): wejścia w UIManagerze bez
 //       własnej flagi widoczności (klawisz i decyzja 4 — wewnątrz kolumny), w warstwie lewego; bez szuflady (piny
 //       źródłowe; wykonanie — `right_outliner_smoke`)
@@ -66,6 +70,11 @@
 //   L15c / L15d / L16 — prawy outliner przestał być szufladą z flagą `_outlinerUserVisible` (U3-2: kolumna jak lewy,
 //         `visible` i decyzja 4 wewnątrz `OutlinerColumn.isShown`); piny pilnują tej samej intencji (klawisz działa we
 //         wszystkich wejściach) w nowym kształcie montażu.
+// PRZECELOWANIA (ARKUSZ UI U3-3):
+//   L9e — podpowiedź ⏳N to od U3-3 lista pozycji (obserwacja C, podpisane (a)); pin czyta nagłówek listy.
+//   L9g — wiersz WŁASNEJ kolonii ma od U3-3 podpowiedź kolonii (obserwacja D); kontrolą „bez podpowiedzi” jest ciało
+//         rozpoznane BEZ kolonii i bez znaczników (Alioth b).
+//   L12a — kod chipów usunięty (U3-3): pin sprawdza brak pola i metody, nie pustą listę.
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -480,13 +489,13 @@ header('L9  🪖N → mapa ciała (droga desantu), ⏳N, podpowiedzi');
   if (gCA) lo.updateHover(gCA.x + 2, gCA.y + 4, W, H);
   ok(lo?._tip?.text === t('leftOutliner.groundUnits', 2), `L9d podpowiedź 🪖N (${lo?._tip?.text})`);
   if (qP1) lo.updateHover(qP1.x + 2, qP1.y + 4, W, H);
-  ok(lo?._tip?.text === t('leftOutliner.queue', 2), `L9e podpowiedź ⏳N (${lo?._tip?.text})`);
+  ok(lo?._tip?.lines?.[0]?.text === t('leftOutliner.queue', 2), `L9e podpowiedź ⏳N — nagłówek listy pozycji (${lo?._tip?.lines?.[0]?.text})`);
   const tU1 = target(lo, 'body', 'U1');
   if (tU1) lo.updateHover(tU1.x + 30, tU1.y + 4, W, H);
   ok(lo?._tip?.text === t('leftOutliner.unrecognized', 'Plt-11'), `L9f podpowiedź „○” — ciało nierozpoznane bez kolonii (${lo?._tip?.text})`);
-  const tP1 = target(lo, 'body', 'P1');
-  if (tP1) lo.updateHover(tP1.x + 30, tP1.y + 4, W, H);
-  ok(lo?._tip === null, 'L9g KONTROLA: ciało rozpoznane bez znaczników — bez podpowiedzi');
+  const tPA = target(lo, 'body', 'PA');
+  if (tPA) lo.updateHover(tPA.x + 30, tPA.y + 4, W, H);
+  ok(!!tPA && lo?._tip === null, 'L9g KONTROLA: ciało rozpoznane bez kolonii i bez znaczników (Alioth b) — bez podpowiedzi');
   setLocale('en');
   ok(t('leftOutliner.groundUnits', 2) !== 'leftOutliner.groundUnits' && t('leftOutliner.groundUnits', 2) !== t('leftOutliner.queue', 2),
     'L9h podpowiedzi także po angielsku');
@@ -556,8 +565,66 @@ header('L12 §7.18 — chipy układów wyłączone, plakietki flot zostają');
   reset(); const m = new MapLabelLayer();
   let threw = null; try { m.drawVesselLabels(recCtx(), tr, W, H, 1); } catch (e) { threw = e; }
   ok(!threw, `L12-0 KONTROLA: \`drawVesselLabels\` bez wyjątku (${threw?.message ?? 'ok'})`);
-  ok(m._chipZones.length === 0, `L12a SEDNO: statki gracza w dwóch układach — ŻADEN chip układu (strefy chipów: ${m._chipZones.length})`);
+  const mll = src('../../ui/MapLabelLayer.js');
+  ok(!('_chipZones' in m) && !/_drawSystemChips|_chipZones|buildSystemChips|layoutSystemChips/.test(mll),
+    'L12a SEDNO: statki gracza w dwóch układach — ŻADEN chip układu (kod chipów usunięty w U3-3: bez pola, metody i importów)');
   ok(m._vesselHitZones.length >= 1, `L12b KONTROLA: plakietka floty (klaster dwóch statków) nadal rysowana (${m._vesselHitZones.length})`);
+}
+
+// ═══ L19 ══════════════════════════════════════════════════════════════════════
+header('L19 obserwacja C — podpowiedź ⏳N wylicza pozycje kolejki (U3-3)');
+{
+  world3(); reset(); const lo = newLO();
+  const col = COLONIES[0];
+  const bs0 = col.buildingSystem, fs0 = col.factorySystem, sq0 = col.shipQueues;
+  col.buildingSystem = {
+    serializeQueue: () => [{ buildingId: 'mine' }, { buildingId: 'farm', isUpgrade: true, targetLevel: 2 }],
+    serializePendingQueue: () => [{ buildingId: 'solar_farm' }],
+  };
+  col.shipQueues = [{ shipId: 'hull_small' }];
+  col.factorySystem = { getQueue: () => [{ commodityId: 'power_cells', qty: 5 }] };
+  lo?.draw?.(recCtx(), W, H, { colonies: COLS3, groundUnits: [] });
+  const q = (lo?._clickTargets ?? []).find((z) => z.type === 'queue' && z.bodyId === 'P1');
+  if (q) lo.updateHover(q.x + 2, q.y + 4, W, H);
+  const lines = lo?._tip?.lines ?? [];
+  const texts = lines.map((l) => l.text);
+  ok(!!q && q.count === 5 && texts[0] === t('leftOutliner.queue', 5), `L19a nagłówek = liczba przy ciele (⏳${q?.count}; ${texts[0]})`);
+  ok(texts.slice(1).join(' | ') === '⛏ Kopalnia | 🌾 Farma →Lv2 | ☀ Elektrownia Słoneczna | 🔹 Kadłub Mały | 🔋 Ogniwa Zasilające ×5',
+    `L19b SEDNO: pozycje — ikona typu + nazwa (ulepszenie z poziomem, fabryka z ilością): ${texts.slice(1).join(' | ')}`);
+  ok(lines[3]?.color === THEME.warning && lines[1]?.color !== THEME.warning, 'L19c oczekujące na zasoby — kolorem ostrzeżenia (jak dawna sekcja KOLEJKA)');
+  col.buildingSystem = { serializeQueue: () => new Array(12).fill(0).map(() => ({ buildingId: 'mine' })), serializePendingQueue: () => [] };
+  col.shipQueues = []; col.factorySystem = null;
+  lo?.draw?.(recCtx(), W, H, { colonies: COLS3, groundUnits: [] });
+  const q2 = (lo?._clickTargets ?? []).find((z) => z.type === 'queue' && z.bodyId === 'P1');
+  if (q2) lo.updateHover(q2.x + 2, q2.y + 4, W, H);
+  const t2 = (lo?._tip?.lines ?? []).map((l) => l.text);
+  ok(!!q2 && q2.count === 12 && t2.length === 12 && t2[11] === `(+2 ${t('outliner.queueMore')})`, `L19d ponad 10 pozycji — 10 + „(+2 więcej)” (${t2[11]})`);
+  col.buildingSystem = bs0; col.factorySystem = fs0; col.shipQueues = sq0;
+  restore3();
+}
+
+// ═══ L20 ══════════════════════════════════════════════════════════════════════
+header('L20 obserwacja D — podpowiedź kolonii na wierszu ciała z własną kolonią (U3-3)');
+{
+  world3(); reset(); const lo = newLO(); lo?._expanded?.set?.('sys_A', true);
+  const col = COLONIES[0];
+  const keep = { civSystem: col.civSystem, prosperitySystem: col.prosperitySystem, resourceSystem: col.resourceSystem, buildingSystem: col.buildingSystem };
+  col.buildingSystem = { serializeQueue: () => [], serializePendingQueue: () => [] };
+  col.civSystem = { population: 8, displayPopulation: 8000, effectiveHousing: 16 };
+  col.prosperitySystem = { prosperity: 61, _getCurrentEpoch: () => ({ key: 'early' }) };
+  col.resourceSystem = { inventory: new Map([['Fe', 120], ['food', 0]]) };
+  lo?.draw?.(recCtx(), W, H, { colonies: COLS3, groundUnits: [] });
+  const tP1 = target(lo, 'body', 'P1');
+  if (tP1) lo.updateHover(tP1.x + 30, tP1.y + 4, W, H);
+  const texts = (lo?._tip?.lines ?? []).map((l) => l.text ?? (l.segments ?? []).map((s) => s.label).join(' '));
+  ok(texts[0] === '🏛 Mstow' && texts.includes('👤 8k (8/16 POP)  ⭐61') && texts.includes(t('outliner.epoch', t('epoch.early'))),
+    `L20a SEDNO: własna kolonia — POP, prosperity, epoka (${JSON.stringify(texts)})`);
+  ok(texts.some((x) => x.includes('Fe:120')) && !texts.some((x) => x.includes('food:')), 'L20b zasoby (dodatnie stany)');
+  const tCA = target(lo, 'body', 'CA');
+  if (tCA) lo.updateHover(tCA.x + 30, tCA.y + 4, W, H);
+  ok(!!tCA && lo?._tip === null, 'L20c KONTROLA: kolonia AI (⚑) — bez podpowiedzi kolonii (mgła wojny)');
+  Object.assign(col, keep);
+  restore3();
 }
 
 // ═══ L13 ══════════════════════════════════════════════════════════════════════

@@ -124,8 +124,7 @@ export class OutlinerColumn {
     for (const it of model.items) { it.y = cy; cy += it.h; }
     const contentTop = g.y + OUTLINER_HDR_H + 2;
     const viewH = Math.max(0, g.y + g.h - contentTop);
-    const extraPrev = this._extraH ?? 0;
-    this._maxScroll = Math.max(0, cy + extraPrev - viewH);
+    this._maxScroll = Math.max(0, cy - viewH);
     // §7.12 — przewinięcie do wiersza zaznaczonego obiektu (raz, po zaznaczeniu).
     if (this._revealKey) {
       const it = model.items.find((i) => i.key === this._revealKey);
@@ -144,14 +143,8 @@ export class OutlinerColumn {
       if (iy + it.h < contentTop || iy > contentTop + viewH) continue;   // poza widokiem — bez rysowania i bez trafień
       this._drawItem(ctx, g, iy, it, model);
     }
-    // Treść dorysowywana za wierszami listy (podklasa; jej wysokość znana dopiero po rysowaniu — przewinięcie
-    // uwzględnia ją od następnej klatki).
-    const extraH = this._drawExtra?.(ctx, g, contentTop + cy - this._scrollY, input, K) ?? 0;
-    this._extraH = extraH;
     ctx.restore();
-    const contentH = cy + extraH;
-    this._maxScroll = Math.max(0, contentH - viewH);
-    if (this._scrollY > this._maxScroll) this._scrollY = this._maxScroll;
+    const contentH = cy;
 
     // Pasek przewijania (po stronie mapy kolumny prawej — przy jej lewej krawędzi; lewej — przy prawej).
     if (this._maxScroll > 0 && viewH > 0) {

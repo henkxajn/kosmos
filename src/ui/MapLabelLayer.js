@@ -14,14 +14,11 @@
 // Etykieta stacji KLIKALNA (bez body:selected). Kolonie = display-only (klik ciała = raycast 3D).
 
 import { THEME } from '../config/ThemeConfig.js';
-import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
-import EntityManager from '../core/EntityManager.js';
 import {
   gatherColonyLabels, gatherStationLabels, labelLOD, stationLabelLOD, stackLabels, BADGE_ICON,
   gatherVesselLabels, vesselLabelLOD, toLogicalPx,
-  edgeIndicators, buildSystemChips, layoutSystemChips, systemDisplayName,
-  CHIP_MIN_W, CHIP_MAX_W,
+  edgeIndicators,
 } from './MapLabelLogic.js';
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 import { t } from '../i18n/i18n.js';
@@ -55,7 +52,6 @@ export class MapLabelLayer {
     this._vesselPrevClustersEnemy = new Map();   // osobna histereza WROGÓW (stron nie sklejamy)
     this._vesselHitZones          = [];          // { x, y, w, h, vesselIds[], isEnemy } — klik plakietki
     this._lastOffscreenPoints     = [];          // punkty poza kadrem → strzałki krawędziowe
-    this._chipZones               = [];          // { x, y, w, h, chip } — klik chipu układu
   }
 
   /**
@@ -238,7 +234,6 @@ export class MapLabelLayer {
   drawVesselLabels(ctx, tr, W, H, uiScale) {
     this._vesselHitZones = [];
     this._lastOffscreenPoints = [];
-    this._chipZones = [];
     if (!tr) return;
     if (window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible === false) {
       this._vesselPrevClusters.clear();
@@ -261,8 +256,8 @@ export class MapLabelLayer {
     const vessels = vm.getAllVessels();
 
     // ARKUSZ UI U2-3 (§7.18, podpisane 2026-10-19): chipy układów (lewy górny róg) WYŁĄCZONE — dublowały lewy outliner
-    // i stały w jego miejscu (razem z chipem tranzytu; „W drodze” wraca w prawym outlinerze, U3). Plakietki flot
-    // zostają. `_drawSystemChips` i gałąź kliku chipu w `handleClick` — bez wołających; do sprzątnięcia w U3-3.
+    // i stały w jego miejscu (razem z chipem tranzytu; „W drodze” jest w prawym outlinerze, U3). Plakietki flot
+    // zostają. Kod chipów (rysowanie i klik) usunięty w U3-3.
 
     // Profil tactical (F2): pełna gęstość niezależnie od dystansu (te same funkcje,
     // inne progi — żadnego drugiego systemu etykiet); przeżywa system:switched
@@ -345,75 +340,6 @@ export class MapLabelLayer {
     }
     // Strzałki krawędziowe — statki poza kadrem (alpha jak plakietki klastrów).
     this._drawEdgeArrows(ctx, W, H, clusterAlpha);
-    ctx.restore();
-  }
-
-  // Chipy układów — poziomy rząd w jednej linii pod górnym paskiem surowców.
-  // Chowamy rząd, gdy jedynym wpisem jest aktywny układ bez alertów (zero szumu).
-  _drawSystemChips(ctx, vessels, pictureCtx, W, H) {
-    const K = window.KOSMOS;
-    const chips = buildSystemChips(vessels, {
-      activeSystemId: K?.activeSystemId ?? 'sys_home',
-      // 1e: nigdy surowe id — rejestr układów → fallback nazwa GWIAZDY układu
-      // (macierzysty bywa poza rejestrem wygenerowanych; np. real save: sys_home).
-      systemName: (id) => systemDisplayName(id, {
-        systems: K?.starSystemManager?.getAllSystems?.() ?? [],
-        starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
-      }),
-      pictureCtx,
-    });
-    if (!chips.length) return;
-    if (chips.length === 1 && chips[0].isActive && chips[0].alertCount === 0) return;
-
-    ctx.save();
-    ctx.textBaseline = 'middle';
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-
-    // Poziomy rząd (jedna linia pod paskiem surowców) — szerokość chipa dopasowana
-    // do treści (nazwa + ×N + ewentualny ⚠N), z clampem do CHIP_MIN_W/CHIP_MAX_W.
-    // Etykietę składamy raz i cache'ujemy w rekcie, by render nie mierzył dwa razy.
-    const built = chips.map((chip) => {
-      const alert = chip.alertCount > 0 ? ` ⚠${chip.alertCount}` : '';
-      let label;
-      if (chip.isTransit) {
-        label = `🌀 ×${chip.count}`;
-      } else {
-        const prefix = chip.isActive ? '◉ ' : '';
-        // Nazwa ucinana do maksimum, tak by cały chip zmieścił się w CHIP_MAX_W.
-        const suffix = ` ×${chip.count}${alert}`;
-        const budget = CHIP_MAX_W - 12 - ctx.measureText(prefix + suffix).width;
-        const name = this._truncate(ctx, String(chip.name), Math.max(24, budget));
-        label = `${prefix}${name}${suffix}`;
-      }
-      const w = Math.min(CHIP_MAX_W, Math.max(CHIP_MIN_W, ctx.measureText(label).width + 12));
-      return { chip, label, w };
-    });
-
-    // Prawa granica rzędu = lewa krawędź Outlinera (150px dok) − luz, by chipy nie
-    // wchodziły pod prawy panel przy wielu układach.
-    const rects = layoutSystemChips(chips, W, H, {
-      chipWidths: built.map(b => b.w),
-      maxRight: W - 158,
-    });
-    for (let i = 0; i < rects.length; i++) {
-      const r = rects[i];
-      const { chip, label } = built[i];
-      const color = chip.isTransit ? THEME.info
-        : chip.isActive ? THEME.accent : THEME.textSecondary;
-      ctx.globalAlpha = 0.92;
-      ctx.fillStyle = 'rgba(8,12,20,0.80)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-      ctx.textAlign = 'left';
-      // 1e: aktywny układ = „◉ tu jesteś" (świadomy no-op; agregat alertów) —
-      // wyraźnie odróżniony od klikalnych chipów innych układów. ⚠N wliczony w label.
-      ctx.fillStyle = color;
-      ctx.fillText(label, r.x + 6, r.y + r.h / 2);
-      this._chipZones.push(r);
-    }
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -506,9 +432,8 @@ export class MapLabelLayer {
   }
 
   /**
-   * Klik warstwy etykiet (logical px). Priorytet: plakietki flotowe → chipy
-   * układów → etykiety stacji. Rozkazy NIE stąd — wyłącznie selekcja/nawigacja
-   * istniejącymi kanałami (twarda reguła planu §0).
+   * Klik warstwy etykiet (logical px). Priorytet: plakietki flotowe → etykiety stacji (chipy układów usunięte —
+   * ARKUSZ UI U3-3). Rozkazy NIE stąd — wyłącznie selekcja/nawigacja istniejącymi kanałami (twarda reguła planu §0).
    */
   handleClick(x, y) {
     const inside = (z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
@@ -527,25 +452,6 @@ export class MapLabelLayer {
         return true;
       }
       clickObject(vesselsTarget(z.vesselIds, sys), env);
-      return true;
-    }
-
-    // Chip układu → przełączenie układu (kanał STAR ATLAS) / tranzyt → COMMAND.
-    for (const z of this._chipZones) {
-      if (!inside(z)) continue;
-      const chip = z.chip;
-      if (chip.isTransit) {
-        // F3: REJESTR z prefiltrem 🌀 tranzytu (fallback: tactical, gdy flaga OFF).
-        window.KOSMOS?.uiManager?.overlayManager?.openPanel?.('fleet',
-          GAME_CONFIG.FEATURES?.fleetRegistry === true
-            ? { tab: 'tactical', view: 'registry', registrySystemKey: '__transit' }
-            : { tab: 'tactical' });
-      } else if (!chip.isActive) {
-        window.KOSMOS?.starSystemManager?.switchActiveSystem?.(chip.systemId);
-      } else {
-        // ARKUSZ UI U1-1 (§7.9): klik aktywnego chipu = domyślny widok układu (ta sama funkcja co klawisz Home).
-        window.KOSMOS?.threeRenderer?.resetToSystemView?.();
-      }
       return true;
     }
 
