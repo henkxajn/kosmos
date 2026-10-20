@@ -4,15 +4,18 @@
 > bramka U0 u właściciela PASS 21/21 — §4.1) **· U1 — ✅ ZAMKNIĘTE 2026-10-19** (commity `4a645eb` U1-1 · `be52d8a`
 > U1-2 · `d8cfe62` U1-3 + `0c4b30b` komentarz kontrolera kamery; bramka U1 u właściciela PASS — §4.2) **· U2 — ✅ ZAMKNIĘTE
 > 2026-10-19** (commity `58a1e99` U2-1 · `5413cbd` U2-2 · `6197c6b` U2-3 · `087949c` U2-4; bramka U2 u właściciela PASS —
-> §4.3) **· następne: U3** (prawy outliner, §4.4; pierwszy commit — U3-0, Finding 489). Faza A — audyt read-only
-> 2026-10-18 na HEAD `a3c6c29` (POLISH P2b zamknięte, `POLISH_PLAN.md` §13). Podpisy właściciela 2026-10-18: decyzje 1–6
-> (§5), próg skrótu 10 000 (D-UI-12), odczytanie D-UI-3 przez decyzję 5 (§2) oraz zgoda na §7.13–§7.15; 2026-10-19
-> (bramka U1): §7.18; 2026-10-19 (prompt U2): §7.6 (korekta) i §7.19; 2026-10-19 (bramka U2): decyzja do 489 — U3-0
-> (§4.3). Teczki: `C:\Users\Komputer\kosmos-handover\ui-phase-a\` (faza A) · `C:\Users\Komputer\kosmos-handover\ui-u0\`
-> (U0) · `C:\Users\Komputer\kosmos-handover\ui-u1\` (U1; pomiary po bramce — `post_gate/`) ·
-> `C:\Users\Komputer\kosmos-handover\ui-u2\` (U2; pomiary po bramce — `post_gate/`).
-> Rejestr macierzysty findingów arca: **§6 tego pliku** (#471–#493; otwarte mają wiersze w `OPEN_FINDINGS_INDEX.md`).
-> **Pierwszy wolny numer: 494** (488–493 — bramka U2 i sesja U2, 2026-10-19).
+> §4.3) **· U3 — ✅ ZAMKNIĘTE 2026-10-20** (commity `58877d7` U3-0a · `eb7cea7` U3-0b · `b6d9691` U3-1 · `4524ffd` U3-2
+> · `10343b2` U3-3; bramka U3 u właściciela PASS 21/21 — §4.4) **· następne: U4** (dolny pas, §4.5). Faza A — audyt
+> read-only 2026-10-18 na HEAD `a3c6c29` (POLISH P2b zamknięte, `POLISH_PLAN.md` §13). Podpisy właściciela 2026-10-18:
+> decyzje 1–6 (§5), próg skrótu 10 000 (D-UI-12), odczytanie D-UI-3 przez decyzję 5 (§2) oraz zgoda na §7.13–§7.15;
+> 2026-10-19 (bramka U1): §7.18; 2026-10-19 (prompt U2): §7.6 (korekta) i §7.19; 2026-10-19 (bramka U2): decyzja do 489 —
+> U3-0 (§4.3); 2026-10-19 (prompt U3): obserwacja C — (a), karty peek wyłączone bez zastępstwa (§4.4); 2026-10-20
+> (zamknięcie U3): zakres U4 i jego decyzje (§4.5). Teczki: `C:\Users\Komputer\kosmos-handover\ui-phase-a\` (faza A) ·
+> `C:\Users\Komputer\kosmos-handover\ui-u0\` (U0) · `C:\Users\Komputer\kosmos-handover\ui-u1\` (U1; pomiary po bramce —
+> `post_gate/`) · `C:\Users\Komputer\kosmos-handover\ui-u2\` (U2; pomiary po bramce — `post_gate/`) ·
+> `C:\Users\Komputer\kosmos-handover\ui-u3\` (U3).
+> Rejestr macierzysty findingów arca: **§6 tego pliku** (#471–#496; otwarte mają wiersze w `OPEN_FINDINGS_INDEX.md`).
+> **Pierwszy wolny numer: 497** (494–496 — sesja U3, zapisane przy zamknięciu U3, 2026-10-20).
 > Tagi: `[code]` źródło (plik:linia przy HEAD `a3c6c29`) · `[measured]` pomiar sondą read-only (zapisy właściciela,
 > fixture) · `[derived]` wyliczenie z kodu i założonej metryki · `[git]` historia.
 
@@ -563,7 +566,8 @@ wykonaniowe.
 ### 4.4 U3 — prawy outliner (D-UI-1 prawy, D-UI-6…D-UI-10)
 
 **Koszt:** 4 commity kodu (z U3-0) + 1 dokumentacji · **bramka:** jedna · **prerekwizyty:** U2, decyzja 6, decyzja do 489
-(bramka U2, §4.3).
+(bramka U2, §4.3). **Wykonanie:** 5 commitów kodu (U3-0 w dwóch — 0a: 489, 0b: karty peek wyłączone) + 1 dokumentacji;
+bramka jedna (21 kroków).
 
 - **U3-0 (Finding 489 — decyzja właściciela z bramki U2).** `SystemTreeLogic` (`:143`): widoczność układu = dom ∨ własna
   kolonia / placówka / stacja ∨ `isSystemExploredData` **∨ własny statek w układzie ∨ własne jednostki naziemne na ciele
@@ -583,16 +587,166 @@ wykonaniowe.
 - **Do U3 z bramki U2 (2026-10-19):** **487** (picker statku wygrywa z tarczą ciała) · **491** (panel stacji po
   przełączeniu układu) · Tab — reszta **478** (U3-2) · **492** (czarny ekran po H — diagnoza przy następnym wystąpieniu,
   naprawa po pomiarze; §4.3 A) · **C — decyzja OTWARTA, przed U3-3:** ⏳N przy kolonii w lewym — liczba, małe ikonki pozycji
-  kolejki budowy przy kolonii albo liczba + ikonki w podpowiedzi (§4.3 C) · **D** — podpowiedź kolonii (POP, morale) na
-  wierszu ciała z kolonią w lewym (dawniej w prawym; „do potwierdzenia” 10 bramki U2).
+  kolejki budowy przy kolonii albo liczba + ikonki w podpowiedzi (§4.3 C) *(podpisana w prompcie U3, 2026-10-19: **(a)** —
+  ⏳N zostaje liczbą, podpowiedź wymienia pozycje kolejki; wykonanie — U3-3 `10343b2`)* · **D** — podpowiedź kolonii (POP,
+  morale) na wierszu ciała z kolonią w lewym (dawniej w prawym; „do potwierdzenia” 10 bramki U2; wykonanie — U3-3
+  `10343b2`).
 - **Bramka U3** (przeglądarka): grupowanie, „W drodze", węzły flot, znaczniki (czytelność 5 kolorów), synchronizacja
   z mapą, statek zadokowany, statek w innym układzie.
+- **Bramka U3 u właściciela — 2026-10-20: PASS 21/21** `[measured: odczyt właściciela]`. Scenariusz
+  `kosmos-handover/ui-u3/gate/GATE_U3.md` (21 kroków: część A K0–K17 — kopia zapisu ZF gy120, część B K40–K42 — kopia
+  zapisu Polonia gy79; gra po polsku); kod U3 zestagowany (drzewo indeksu = C5 `1af037ea` — te same pliki, które weszły
+  w pięć commitów niżej). Okno właściciela 1280×833 = okno walidatora (skala UI 1 — liczby walidatora są liczbami
+  właściciela). Walidator: 0 błędów konsoli w repo gry i w przebiegu kontrolnym na `cb7a8f7`; kontrola pokazała stan sprzed
+  U3 tam, gdzie da się go zmierzyć (K2 karta peek, K8 Tab bez przejścia układu, K14 granica panelu stacji, K16 ⏳N bez
+  pozycji i bez podpowiedzi kolonii, K17 chipy i rynna Obserwatorium, K41 Akhernar poza lewą listą, K42 klik w tarczę
+  Mstow wybiera „Fregatę I”). Punkty „do potwierdzenia” 1–20 przyjęte bez zmian — m.in.: ping wyłącznie dla statku
+  zadokowanego w oglądanym układzie (statek z modelem — ramki, z innego układu — nic) · węzeł floty zawsze rozwinięty,
+  licznik = wszyscy członkowie · dopisek układu przy członku floty do 56 px · kolory znaczników = tokeny motywu (danger /
+  warning / textPrimary / success / textDim) · mutex flota / statek w obie strony · Tab przez regułę U1 · 487: na tarczy
+  ciała statek wygrywa tylko w obrębie rdzenia sprite'a = max(6 px, połowa rzutu modelu) · 491 tylko dla panelu stacji
+  widocznego i niezminimalizowanego · pas dolny 20 px w `MapInsets` · karty peek wyłączone bez zastępstwa · szybkie
+  otwarcie mapy kolonii 🗺 i paski postępu budowy statków z dawnego prawego Outlinera znikły (drogi zastępcze: górna
+  belka, karta ciała, 🪖N, Stocznia, podpowiedź ⏳N) · przy schowanej prawej kolumnie karta ciała i kadr „Obserwuj” nadal
+  zostawiają 150 px (→ Finding 496). Tło prawej kolumny — kod bez strojenia (`bgAlpha` 0,6, `textShadowBlur` 3 — jak
+  lewa). **Obserwacje właściciela z bramki: brak nowych.** Kandydaci z sekcji „Znane, poza U3” dokumentu bramki — zapisani
+  jako Findingi **494–496** (§6).
+- **Zamknięcie U3 — 2026-10-20:** `tools/commit_U3.sh` (po próbie łańcucha na tymczasowym indeksie — zgodnej) —
+  `58877d7` (U3-0a, drzewo `8808ec66`) · `eb7cea7` (U3-0b, `06d87b04`) · `b6d9691` (U3-1, `36b2adc7`) · `4524ffd` (U3-2,
+  `6d86b5f8`) · `10343b2` (U3-3, `1af037ea`); drzewo każdego commitu = `patches/trees.txt`. Przecelowania:
+  `ground_troops_reachable` T3 (U3-0a — dawna KONTROLA rysowała desant już na ciele AI; po 489 wojska odsłaniają układ) ·
+  `ui_top_belt_slots` C6 (+ kontrola C6-0) i `ui_bar_frames` N4 (U3-0b — rząd paska zegara stały; atrapa karty celowała
+  w usunięte pole) · `left_outliner` L2a (+ NEW L2a2), L15c, L15d, L16a–h, `vessel_status_label` T4, `click_focus_rule`
+  T4 / T10 — atrapa trybu cywilizacji (U3-2) · `left_outliner` L9e, L9g, L12a, `click_focus_rule` T5 (+ kontrola T5c),
+  T10g–o (U3-3). Zamknięte w §6: ✅ **477** (U3-2 — bramka K5, K6) · **478** — reszta: Tab (U3-2 — K8) · **487** (U3-2 —
+  K42) · **489** (U3-0a — K41) · **491** (U3-2 — K15); obserwacje **C** (decyzja (a)) i **D** — U3-3 (K16). Keepery NEW:
+  `nav_peek_off_smoke` **13/13** · `ship_tree_smoke` **49/49** · `right_outliner_smoke` **100/100**; `system_tree_smoke`
+  **58/58** · `left_outliner_smoke` **146/146** · `ground_troops_reachable` **56/56** · `ui_top_belt_slots` **83/83** ·
+  `ui_bar_frames` **13/13** · `vessel_status_label` **84/84** · `click_focus_rule` **161/161**. Sweep 325 → 325 → 326 →
+  327 → 328 → **328/328, 0 FAIL, 31 advisory** (łańcuch w świeżym klonie; na `10343b2` w repo gry — **328/328**);
+  `check-i18n` PASS pl = en = 3465 → 3471 (+6 par `rightOutliner.*`, U3-2) → **3458** (−13 par `outliner.*`, U3-3);
+  zapis v101 bez migracji. Koszt klatki prawego — zmierzony (§8). Bez zmian: **485**, **490** (prawy klik nad kolumną
+  trafia w mapę — od U3 także nad prawą), **492** (nie odtworzony w sesji U3; bez kodu, zgodnie z zakresem). Nowe
+  findingi: **494–496** (§6). Dalej: **U4** (§4.5).
 
-### 4.5 Suma
+### 4.5 U4 — DOLNY PAS
+
+Pas dolny na całą szerokość, dok paneli na pasie, suwak zoomu; sprzątanie po kartach peek; wcięcia z jednego źródła.
+
+**Koszt (propozycja):** 4 commity kodu + 1 dokumentacji (U4-3 może się rozpaść na dwa) · **bramka:** jedna (~25–30 min)
+· **prerekwizyty:** U3 (✅ 2026-10-20), odpowiedzi na pytania (a)–(e) niżej. Zakres — propozycja z handoveru U3
+(`kosmos-handover/ui-u3/HANDOVER_U3.md` §11) z decyzjami właściciela przy zamknięciu U3.
+
+**Decyzje właściciela (zamknięcie U3, 2026-10-20):**
+1. **Pas dolny na całą szerokość** — od prawej krawędzi lewego outlinera do prawej krawędzi ekranu.
+2. **Chipy doku pomniejszone, na pasie** — belki zminimalizowanych paneli (`PanelDock`) przechodzą na pas.
+3. **Suwak zoomu obok 🔔** — skala logarytmiczna, lewo = daleko; dwukierunkowo z kółkiem myszy; względem bieżącego celu
+   kamery (nie środka układu).
+4. **Sprzątanie kart peek** — `NavPeekCard*`, `FEATURES.navPeekCards`, klucze i18n kart; formatery liczb do osobnego
+   modułu.
+5. **Wcięcia mapy z jednego źródła** — Findingi **494** i **496**, `TIME_STRIP_H`, luz Doku taktycznego.
+6. **Finding 495** (podpowiedź kolonii: surowy klucz epoki i surowe id zasobów).
+7. **Martwe pomocniki chipów** w `MapLabelLogic`.
+8. **Nieaktualne komentarze** o szufladzie prawego Outlinera.
+
+**Stan dziś** `[code]` (linie przy `10343b2`):
+- **Pas dolny.** `BOTTOM_STRIP_H` = 20 px (`MapInsets.js:25`) jest jedynym źródłem wysokości; oba outlinery kończą się
+  nad pasem (`outlinerBottomInset`, `:50-53`). Tło paska zegara = DOKŁADNIE ostatni slot nawigacji
+  (`BottomControlBar.js:106-108`; klaster 🔔 ☰ ▶ prędkości data liczony od prawej krawędzi slotu, `:74-104`), czip ⚔ na
+  lewo od niego w tym samym rzędzie; rząd stały od U3-0b (`_stripTop`, `:57-59`). `isOver` = tło paska ∪ czip (`:269`).
+- **Dok paneli.** Belki 156 × 24 px (`PanelDock.js:16-18`) w stosie W GÓRĘ w lewym dolnym rogu obszaru mapy
+  (`PanelDockLogic.computeDockSlots`, `:13-26`), za lewym outlinerem (`leftX` = wcięcie + 8) i nad panelami floty
+  (`PanelDock._geom`, `:46-62`); rysowane tylko bez globusa i bez overlaya (`UIManager.js:2370`), klik przed overlayem
+  (`:1970`), blokada kamery (`:1908`).
+- **Kamera.** Dystans `_targetDist` = odległość od CELU kamery `_goalTarget` (`ThreeCameraController.js:30-32`), zakres
+  `_minDist` (0,3 domyślnie, `:42`; zmienia się z fokusem) – 450; kółko — krok adaptacyjny (`:97-111`), zablokowane nad UI
+  i przy overlayu (`:100-102`); zapis z zewnątrz — `setTargetDist` (`:208-210`). Suwak zmieniający wyłącznie
+  `_targetDist` zoomuje więc względem bieżącego celu z konstrukcji. Przeciąganie — `UIManager.handleMouseDown` /
+  `handleMouseUp` (`:2096`, `:2109`) istnieją.
+- **Karty peek.** Od U3-0b nikt nie rysuje kart; pliki leżą: `NavPeekCard.js` (245 linii), `NavPeekCardLogic.js` (148;
+  formatery `fmtInt` / `fmtDec` / `fmtSigned` / `fmtPeople` / `fmtPct` `:108-148` — czytane przez `TopBarFormatLogic.js:18`
+  i `NavPeekProviders.js:19`), `NavPeekProviders.js` (376). Plakietka alertu na kaflu czyta wyłącznie OBECNOŚĆ alertu
+  (`!!getPeekAlert(g)` co 600 ms, `BottomNavBar.js:80-87`), a `getPeekAlert` składa całą kartę (`getPeekData(g)?.alert`,
+  `NavPeekProviders.js:71-89`) — wiersze kart i ich klucze i18n żyją dziś tylko po to, żeby policzyć alert.
+  `FEATURES.navPeekCards` (`GameConfig.js:262-265`) bramkuje już wyłącznie plakietki (`BottomNavBar.js:37`). Klucze
+  `navPeek.*` — 65 par.
+- **Wcięcia na sztywno** (Findingi 494, 496): `BottomContext._bounds` (`:90-100`; prawe 150 px, dół bez pasa dolnego),
+  kadr „Obserwuj” (`ThreeRenderer.js:6858-6863`: `rightW` 150 w trybie cywilizacji, `bottomH` bez pasa), tekst powiadomień
+  (`UIManager.js:2558`), strzałki krawędzi (`MapLabelLayer.js:351` → `edgeIndicators`, margines 26 px od krawędzi EKRANU —
+  `MapLabelLogic.js:289, 299-337`); dublujące `BOTTOM_STRIP_H`: `TIME_STRIP_H` (`FleetManagerOverlay.js:257`) i
+  `TACTICAL_DOCK_CLOCK_CLEARANCE` (`LayoutConfig.js:38`; `TacticalDock.js:133, 143`).
+- **Keepery pinujące dzisiejszą geometrię** (przecelowania w U4 — za zgodą): `fleet_clock_band` T4 (pas zegara =
+  ostatni slot) · `s34b_paneldock` 2–5 (stos pionowy 156 × 24) · `left_outliner` L5f (dok za lewym outlinerem,
+  `leftX` 158) i — przy odpowiedzi (a) — L2a / L2a2 · `nav_peek_off` K3 (źródło plakietek `getPeekAlert`) i K4 (pliki kart
+  na dysku — świadek „sprzątanie w U4”) · `vessel_status_label` T3 (część NavPeek — karta floty) · `dok_taktyczny_4f`
+  4.7 / 4.8 (nazwa `TACTICAL_DOCK_CLOCK_CLEARANCE`). `right_outliner` R14a pinuje import `BOTTOM_STRIP_H` z `MapInsets` —
+  stała zostaje tam (jedno źródło), więc R14a bez zmian.
+
+**Do rozstrzygnięcia w prompcie U4** (rekomendacja pierwsza):
+- **(a) Lewy outliner przy pasie.** Rekomendacja: lewa kolumna wraca do paska nawigacji (jak po U2), pas zaczyna się przy
+  jej prawej krawędzi; lewa schowana („,” / „B”) — pas od lewej krawędzi ekranu. Alternatywa: kolumna zostaje nad pasem,
+  pod nią pusty narożnik 150 × 20 px.
+- **(b) Pas pod overlayem pełnoekranowym.** Rekomendacja: tylko klaster zegara i czip ⚔ — jak dziś (sterowanie czasem
+  zawsze dostępne); chipy doku i suwak zoomu to sterowanie MAPĄ — chowają się jak outlinery (decyzja 4). Alternatywa: pas
+  na pełną szerokość także nad overlayem — wtedy każdy overlay ustępuje 20 px u dołu (dziś robi to tylko Dowództwo,
+  `TIME_STRIP_H`).
+- **(c) Chipy doku.** Rekomendacja: od lewego końca pasa, wysokość 16 px, szerokość = ikona + skrócona nazwa (do ~110 px),
+  odstęp 4 px; przy braku miejsca ostatni chip „+N” z listą w podpowiedzi; klik = przywrócenie panelu (jak belka dziś).
+- **(d) Suwak.** Rekomendacja: ~100 px tuż na lewo od 🔔 (czip ⚔ na lewo od suwaka); kółko nad suwakiem = kółko nad mapą
+  (ten sam krok); zakres `_minDist`–450 (dolna granica jedzie z fokusem — `setMinDist`: 0,3 domyślnie, 0,15 przy
+  księżycu, 0,05 przy statku, 0,005 przy stacji i przy „Obserwuj” bez aktywnego starcia; `ThreeRenderer.js:1030`, `:1193`,
+  `:1250`, `:6731`).
+- **(e) 495 — epoka `cosmic`.** Rekomendacja: mapowanie `cosmic → epoch.space` („Kosmiczna” / „Space Age”) — wzór jest
+  w repo (`PopulationOverlay.js:1026`), zero nowych kluczy; alternatywa: nowa para `epoch.cosmic`.
+
+**Propozycja cięcia (do podpisu w prompcie U4):**
+- **U4-1 — sprzątanie i teksty** (bez zmian w zachowaniu poza podpowiedzią kolonii). NEW czysty moduł formaterów liczb
+  (przeniesione bit w bit z `NavPeekCardLogic`; `TopBarFormatLogic` na nim); `NavPeekProviders` → same predykaty alertów
+  kafli (obecność alertu, bez wierszy); usunięte `NavPeekCard.js`, `NavPeekCardLogic.js`, `FEATURES.navPeekCards`
+  (plakietki bez bramki — dziś i tak włączone), klucze `navPeek.*` (−65 par), martwe pomocniki chipów w `MapLabelLogic`
+  (`buildSystemChips :348`, `layoutSystemChips :399`, `CHIP_* :386-392`), nieaktualne komentarze (`NavEdgeShim.js:8-9`,
+  `GameScene.js:5474`); 495 wg (e) + nazwy zasobów i typu planety z istniejących kluczy. Keepery: NEW predykaty alertów —
+  tabela 8 grup kafli × kryzysy (głód, woda, brownout, niepokój, unieruchomione), wynik przed zmianą zapisany jako wzorzec;
+  przecelowania `nav_peek_off` K3 / K4, `vessel_status_label` T3 (NavPeek); pin 495 w `left_outliner` (L20). Ryzyko
+  niskie.
+- **U4-2 — wcięcia z jednego źródła.** `computeMapInsets`: dół obszaru mapy zawsze nad pasem dolnym (dziś tylko kolumny
+  outlinerów — `outlinerBottomInset`); `BottomContext._bounds`, kadr „Obserwuj” (`rightW`, `bottomH`), tekst powiadomień
+  i strzałki krawędzi (`edgeIndicators` z prostokątem obszaru mapy zamiast ekranu) czytają `MapInsets` (494, 496);
+  `TIME_STRIP_H` i `TACTICAL_DOCK_CLOCK_CLEARANCE` → `BOTTOM_STRIP_H`. Keepery: NEW pin jednego źródła (wykonanie
+  `BottomContext._bounds`, `edgeIndicators`, `TacticalDock.getReservedHeight`; źródło — wołający w `ThreeRenderer`
+  i `UIManager`, które się nie importują pod node); przecelowania `dok_taktyczny_4f` 4.7 / 4.8, `left_outliner` L2a2
+  (arytmetyka dołu). Ryzyko średnie (kadr „Obserwuj” — arc POLISH P2; karta ciała).
+- **U4-3 — pas na całą szerokość + chipy doku na pasie** (wg (a), (b), (c)). `BottomControlBar`: tło od prawej krawędzi
+  lewego outlinera (`MapInsets.left`) do W; klaster zegara i czip ⚔ bez zmian. `PanelDock`: chipy na pasie (układ
+  poziomy zamiast `computeDockSlots`), koniec stosu nad panelami floty. Keepery: NEW `bottom_strip_smoke` (prawdziwy
+  `BottomControlBar` / `PanelDock` na atrapie ctx: zasięg tła przy lewym widocznym i schowanym, chipy, „+N”, klik
+  przywraca, `isOver`); przecelowania `fleet_clock_band` T4, `s34b_paneldock`, `left_outliner` L5f (+ L2a przy (a)).
+  Ryzyko średnie (pas a overlaye — (b); trafienia kliku pasa przed overlayem). Przy dużym diffie — dwa commity (pas · dok).
+- **U4-4 — suwak zoomu obok 🔔** (wg (d)). NEW czysty `ZoomSliderLogic` (dystans ↔ pozycja w skali log, lewo = daleko,
+  klamra); `BottomControlBar` — suwak, przeciąganie przez `UIManager.handleMouseDown` / `handleMouseUp`, co klatkę odczyt
+  `_targetDist` (kółko i auto-zoom fokusu przesuwają suwak), zapis `setTargetDist` (cel kamery nietknięty). i18n +1 para
+  (podpowiedź suwaka). Keeper NEW `zoom_slider_smoke` (tabela skali, przeciągnięcie, synchronizacja w obie strony
+  z atrapą kontrolera, cel kamery bez zmian). Ryzyko niskie–średnie.
+- **Bramka U4** (przeglądarka, okno 1280×833, ZF gy120 — panele floty, dok, kolonia w epoce `cosmic` do 495 — do
+  sprawdzenia w sesji; Polonia gy79 jako druga, jeśli potrzebna): pas od prawej krawędzi lewego outlinera, „,” → od 0 ·
+  chipy doku (karta ciała, panel stacji, okno statku), „+N”, przywracanie · suwak ↔ kółko w obie strony, lewo = daleko,
+  zoom wokół śledzonego ciała · overlay pełnoekranowy wg (b), Dowództwo bez treści pod pasem · prawa kolumna schowana:
+  karta ciała do prawej krawędzi, kadr „Obserwuj” na pełną szerokość, powiadomienia przy prawej krawędzi (496) · strzałki
+  krawędzi w obszarze mapy (494) · podpowiedź kolonii (495) · plakietki alertów kafli jak dotąd · Dok taktyczny
+  rozwinięty / zwinięty nad pasem.
+- **i18n:** 3458 → ~3394 (−65 `navPeek.*`, +1 suwak; 495 przy (e) bez nowych kluczy). Zapis v101 bez migracji (stan
+  pasa, doku i suwaka — sesja UI).
+- **Pierwszy wolny numer na start U4: 497.**
+
+### 4.6 Suma
 
 ~14 commitów kodu + 4 dokumentacji; 4 bramki; zapis bez migracji (v101); i18n ~12–15 nowych par; keepery: 4 nowe
 (U0, U1, U2-1, U3-1) + 5 przecelowań (`ground_troops_reachable` T3, `vessel_status_label` T4, `combat_watch_frame` T7a,
 `combat_follow_centre`, `dok_taktyczny_4f` 4.6 — ten ostatni tylko przy 2c).
+**Wykonanie U0–U3 (2026-10-19 – 2026-10-20):** 15 commitów kodu (U0 3 · U1 3 + komentarz `0c4b30b` · U2 4 · U3 5)
++ 4 dokumentacji; 4 bramki, wszystkie PASS; zapis v101 bez migracji; i18n pl = en 3458 → 3460 (U0) → 3460 (U1) → 3465
+(U2) → 3471 → **3458** (U3: +6 / −13 par); sweep 319 → **328/328**. Plan U4 — §4.5 (zakres spoza pierwotnego cięcia,
+z decyzjami właściciela przy zamknięciu U3).
 
 ---
 
@@ -703,7 +857,7 @@ układu.
 
 ---
 
-## 6. Findingi #471–#493 (rejestr macierzysty)
+## 6. Findingi #471–#496 (rejestr macierzysty)
 
 | # | | Treść | Gdzie domknąć |
 |---|---|---|---|
@@ -713,29 +867,32 @@ układu.
 | **474** | ✅ | **Kolumny listy kolonii w górnej belce niewyrównane.** Szerokość slotu kluczowana `kolonia\|token` (`TopResourceDrawer.js:356`); maksimum nie maleje w sesji. | U0-3 — ✅ **2026-10-19** `92f1b33` (jeden plan komórek dla wszystkich wierszy; bramka U0 K5, K10r, K10s) |
 | **475** | ✅ | **Kredyty ucinane pierwsze.** Ostatni token (`:164-169`) + `break` przy przepełnieniu (`:342`) — „loose-end #2" z UI v3. | U0-3 — ✅ **2026-10-19** `92f1b33` (kredyty przypięte do prawego końca, w całości; bramka U0 K5, K8) |
 | **476** | ✅ | **Martwy pas 18 px pod górną belką dla kamery.** `TopBar.isOver` → `y ≤ TOP_BAR_H` (46) (`TopBar.js:21, 813-815`) przy belce 28 px (`TOP_BAND_H`). | U0-3 (opcjonalnie) — ✅ **2026-10-19** `92f1b33` (`TopBar.isOver` w `civMode` → 28 px; bramka U0 K11) |
-| **477** | ⚪ | **`pingVessel` bez terminu układu** (`ThreeRenderer.js:7151-7158`): statek bez sprite'a (inny układ, tranzyt warp) pinguje po `vessel.position` w ramce oglądanego układu. Osiągalne dziś z Doku taktycznego (wiersz statku w tranzycie — `TacticalDockLogic.js:33`; renderer usuwa sprite poza aktywnym układem). Klasa „globalne id ≠ położenie" — wniosek z kodu, bez kliknięcia w przeglądarce. Uzbraja się w U3 (D-UI-10 dla wszystkich układów). **Bramka U1 (2026-10-19):** po U1 pierwszy klik w wiersz Doku taktycznego idzie regułą jako zaznaczenie + `pingVessel` (`TacticalDock.js:646-647`); Dok listuje statki bieżącego układu i w tranzycie (`filterDockVessels`, `TacticalDockLogic.js:26`), więc „statek z innego układu” w Doku to statek w skoku — ta sama ścieżka co przed U1 (1. klik = zaznaczenie + ping); wniosek z kodu, bez kliknięcia. | U3-2 |
-| **478** | ✅ | **`vessel:focus` dla statku w INNYM układzie to cichy no-op** (`ThreeRenderer.js:1157-1197`: brak sprite'a, ciało doku nie w scenie). Outliner i Tab (`UIManager.cycleSelectedVessel :601-620` cyklują po WSZYSTKICH statkach gracza) zaznaczają statek, kamera stoi, układ się nie przełącza. | U1-3 / U3 (§7.8) — ✅ **2026-10-19** `d8cfe62` dla Outlinera i mapy (statek z innego układu: 1. klik = zaznaczenie bez przełączania, 2. klik = przełączenie układu + kamera; `vessel:focus` bez sprite'a w oglądanym układzie — kamera na pozycji logicznej, śledzenie po wstawieniu sprite'a; bramka U1 K24, K25). **Tab → U3** (§4.4 U3-2; zakres U1: Tab bez zmian — K22) |
+| **477** | ✅ | **`pingVessel` bez terminu układu** (`ThreeRenderer.js:7151-7158`): statek bez sprite'a (inny układ, tranzyt warp) pinguje po `vessel.position` w ramce oglądanego układu. Osiągalne dziś z Doku taktycznego (wiersz statku w tranzycie — `TacticalDockLogic.js:33`; renderer usuwa sprite poza aktywnym układem). Klasa „globalne id ≠ położenie" — wniosek z kodu, bez kliknięcia w przeglądarce. Uzbraja się w U3 (D-UI-10 dla wszystkich układów). **Bramka U1 (2026-10-19):** po U1 pierwszy klik w wiersz Doku taktycznego idzie regułą jako zaznaczenie + `pingVessel` (`TacticalDock.js:646-647`); Dok listuje statki bieżącego układu i w tranzycie (`filterDockVessels`, `TacticalDockLogic.js:26`), więc „statek z innego układu” w Doku to statek w skoku — ta sama ścieżka co przed U1 (1. klik = zaznaczenie + ping); wniosek z kodu, bez kliknięcia. | U3-2 — ✅ **2026-10-20** `4524ffd` (`pingVessel` z terminem układu — statek bez sprite'a w innym układzie niż oglądany: bez pierścienia w cudzej ramce; statek zadokowany w oglądanym układzie — ping przy hangarze; bramka U3 K5, K6; producent z Doku — statek w skoku — przez tę samą funkcję, bez kliknięcia) |
+| **478** | ✅ | **`vessel:focus` dla statku w INNYM układzie to cichy no-op** (`ThreeRenderer.js:1157-1197`: brak sprite'a, ciało doku nie w scenie). Outliner i Tab (`UIManager.cycleSelectedVessel :601-620` cyklują po WSZYSTKICH statkach gracza) zaznaczają statek, kamera stoi, układ się nie przełącza. | U1-3 / U3 (§7.8) — ✅ **2026-10-19** `d8cfe62` dla Outlinera i mapy (statek z innego układu: 1. klik = zaznaczenie bez przełączania, 2. klik = przełączenie układu + kamera; `vessel:focus` bez sprite'a w oglądanym układzie — kamera na pozycji logicznej, śledzenie po wstawieniu sprite'a; bramka U1 K24, K25). **Tab → U3** (§4.4 U3-2; zakres U1: Tab bez zmian — K22); Tab — ✅ **2026-10-20** `4524ffd` (`cycleSelectedVessel` przez regułę U1: zaznaczenie + kamera, statek z innego układu — przełączenie układu i kamera; bramka U3 K8) |
 | **479** | ✅ | **Liczby w górnej belce zawsze z kropką dziesiętną, także w grze PL** (`_fmtNum` / `_fmtDelta`, `TopResourceDrawer.js:47-65`); wzór zależny od języka jest w `NavPeekCardLogic`. | U0-3 — ✅ **2026-10-19** `92f1b33` (`TopBarFormatLogic`; bramka U0 K6, K6en, K6pl) |
-| **480** | 🟠 | **Zapisy sprzed naprawy 186 niosą układy odwiedzone (a nawet skolonizowane) jako niezbadane — naprawa nie leczy danych.** Zmierzone w 2 z 5 partii: ZF gy120 `sys_024` (kolonia pełna + placówka gracza) i Polonia gy79 `sys_036` (dom `emp_001`, statek gracza na miejscu) mają `galaxyStar.explored = false` przy lustrze `sysData.explored = true`. To sygnatura stanu sprzed 2026-08-29: bootstrap AI gasił wtedy TYLKO flagę gwiazdy, a przylot do układu wygenerowanego wcześniej niczego nie oznaczał (opis 186 w `CLAUDE.md`). W linii ZF stan trwa od gy71 (v91, lipiec) do gy120 (zapis z 2026-10-04 — już po naprawie, bo od tamtej pory żaden statek gracza nie przyleciał tam skokiem). Skutek dziś: kanon `isSystemExplored` mówi „nieznany" o układzie, który gracz zna albo kolonizuje → STRATCOM pokazuje go jako niezbadany (`SystemReveal.js:55-64`, `place = false`; nazwa tylko przy skanie lub wywiadzie). Skutek w U2: dosłowne D-UI-3 ukryłoby te układy. Naprawa danych poza tym arciem (kandydaci: kanon „zbadany ⇐ własna kolonia / placówka / stacja" albo leczenie przy wczytaniu, gdy lustro = `true`); U2 omija przez regułę widoczności z „lub". ⚠ Statki-chimery z Findingu 407 (Pikaczu `sys_060`, UF `sys_021`) to INNY stan — leczony przy wczytaniu (`_healDockedSystemId`). | osobny slice (U2 omija) |
+| **480** | 🟠 | **Zapisy sprzed naprawy 186 niosą układy odwiedzone (a nawet skolonizowane) jako niezbadane — naprawa nie leczy danych.** Zmierzone w 2 z 5 partii: ZF gy120 `sys_024` (kolonia pełna + placówka gracza) i Polonia gy79 `sys_036` (dom `emp_001`, statek gracza na miejscu) mają `galaxyStar.explored = false` przy lustrze `sysData.explored = true`. To sygnatura stanu sprzed 2026-08-29: bootstrap AI gasił wtedy TYLKO flagę gwiazdy, a przylot do układu wygenerowanego wcześniej niczego nie oznaczał (opis 186 w `CLAUDE.md`). W linii ZF stan trwa od gy71 (v91, lipiec) do gy120 (zapis z 2026-10-04 — już po naprawie, bo od tamtej pory żaden statek gracza nie przyleciał tam skokiem). Skutek dziś: kanon `isSystemExplored` mówi „nieznany" o układzie, który gracz zna albo kolonizuje → STRATCOM pokazuje go jako niezbadany (`SystemReveal.js:55-64`, `place = false`; nazwa tylko przy skanie lub wywiadzie). Skutek w U2: dosłowne D-UI-3 ukryłoby te układy. Naprawa danych poza tym arciem (kandydaci: kanon „zbadany ⇐ własna kolonia / placówka / stacja" albo leczenie przy wczytaniu, gdy lustro = `true`); U2 omija przez regułę widoczności z „lub". ⚠ Statki-chimery z Findingu 407 (Pikaczu `sys_060`, UF `sys_021`) to INNY stan — leczony przy wczytaniu (`_healDockedSystemId`). | osobny slice (U2 omija; od U3-0a — `58877d7` — także statek albo wojska w układzie, 489) |
 | **481** | ✅ | **Czip „⚔ Walki [N]" zaszyty po polsku** (`BottomBar.js:166`) — klasa 113, niewidoczny dla bramki `check-i18n` (literał w zmiennej, bez polskiego znaku). Stoi w prawym końcu górnej belki, gdzie D-UI-12 przypnie kredyty. | U0-3 — ✅ **2026-10-19** `92f1b33` (etykieta przez i18n, +2 pary `combat.hudChip` / `combat.hudChipN`; czip poza belką; bramka U0 K8) |
 | **482** | ✅ | **Czip „⚔ Walki" martwy w `civMode` — klik zjada pasmo górnej belki.** `UIManager.handleClick` woła `_topResourceDrawer.handleClick` (`UIManager.js:2006`) przed `_bottomBar._hitTestTopButtons` (`:2016`); prostokąt pasma `{0, 0, W − 6, 28}` (`TopResourceDrawer.js:211`) obejmował czip (x = `W − szer − 8`, y 6–26), a klik „poza nazwą" kończył się `return true` z wymuszonym rozwinięciem listy (`:637-639`). `toggleMinimize` ma dwóch wołających: klik czipu (`BottomBar.js:521`) i „—" w samym HUD (`CombatHUD.js:561`, po minimalizacji nierysowany) ⇒ zminimalizowany HUD wracał dopiero po końcu wszystkich starć (`CombatHUD.js:107`). Zmierzone na żywej grze (fixture GATE-S4, 1280×720): klik w środek czipu → `handleClick = true`, HUD bez zmian, lista rozwinięta. | U0-3 (czip na lewo od paska zegara z własnym hit-testem — opcja 1) — ✅ **2026-10-19** `92f1b33` (czip w `BottomControlBar`; bramka U0 K8, K8c, K12) |
 | **483** | ✅ | **Rozwinięta lista kolonii pod warstwą etykiet mapy.** `MapLabelLayer` rysuje chipy układów (lewy górny róg, `CHIP_TOP 34`, `MapLabelLogic.js:389-390`) oraz plakietki floty, kolonii i stacji PO górnej belce (`UIManager.js:2374` wobec `:2332`) ⇒ leżą na wierszach rozwiniętej listy kolonii (zmierzone na obrazach klatek, zapis Polonia r79: chipy na wierszu drugiej kolonii — `kosmos-handover/ui-u0/results/belt_dev_C3_pl/`; plakietki Jaskrow, Wancerzow, Mstow, „Stacja Mstow” i fregaty na wierszach 1–6 po najeździe kamery na układ domowy — `results/gate/owner_repo/K10s_spacemono.png`). Klik pochłania `MapLabelLayer.handleClick` (`UIManager.js:2003`, przed belką `:2006`) dla chipu układu, plakietki floty i etykiety stacji (`MapLabelLayer.js:511-551`); plakietka kolonii nie jest klikalna — klik przechodzi do listy (wniosek z kodu, bez kliknięcia). Istniało także przy rozwijaniu hoverem (U0 tego nie zmienia). | U2 (§7.18 — chipy wyłączone; lista rysowana i klikana przed `MapLabelLayer` — kolejność §7.17) — ✅ **2026-10-19** `087949c` (etykiety mapy rysowane PRZED lewym outlinerem, listą kolonii, Dokiem i paskami, klik — PO nich; chipy układów wyłączone `6197c6b`; bramka U2 K29: rysowanie etykiety → plakietki → lewy outliner → lista kolonii, klik lista kolonii → lewy outliner → etykiety) |
 | **484** | ⚪ | **`#planet-canvas` (legacy PlanetScene, nigdy nieotwierany) jest niewidzialnym celem KAŻDEGO kliku mapy.** `#planet-canvas { z-index: 4; display: none }` (`index.html:33`) przegrywa specyficznością z `#game-container canvas { … display: block }` (`:24-30`), a z-index 4 leży nad `#event-layer` (3, `:34`) — zmierzone w prawdziwej grze (`elementFromPoint` na środku mapy = `planet-canvas`; pre-flight U1). Gałąź canvas lewego kliku (`GameScene.js:5970`, `:5984`) polega na tym celu; prawy klik ma cel `CANVAS`, więc `isOverUI` nie jest tam pytany nigdy (`isGameCanvas`, `:6072-6073` — wniosek z kodu). ⚠ **Przy usuwaniu PlanetScene** (CLAUDE.md: kandydat do usunięcia) cel kliku przejdzie na `#event-layer`: lewy klik pójdzie gałęzią z raycastem sceny (po U1 zaznaczanie statków jest w obu gałęziach takie samo — różni się klik w ciało: canvas zdejmuje zaznaczenie statków, raycast je zostawia), a prawy klik zacznie pytać `isOverUI`. W headless ekran ładowania (`#loading-screen`, z 9999) przejmuje kliki jeszcze ~20 s po wczytaniu. | przy usuwaniu PlanetScene (ostrzeżenie, nie naprawa) |
-| **485** | ⚪ | **Podpowiedź po najechaniu zdradza statek ukryty mgłą wojny.** Picker najechania (`ThreeRenderer.handleMouseMove` → `_getVesselAtScreen(x, y)`, `:3400`) nie pyta o `sprite.visible`; `_showVesselTooltip` (`:3593`) ma bramkę TOŻSAMOŚCI (kontakt poniżej `contact` → „❓ niezidentyfikowany kontakt”), nie WIDOCZNOŚCI ⇒ najechanie w miejsce wroga ukrytego mgłą pokazuje podpowiedź — obecność i położenie. Picker KLIKU filtruje od U1-3 (`_pickVesselForClick`, `:3205` — tylko widoczne). Istniało przed U1; wniosek z kodu, bez kliku. | U3 (statki na mapie) albo osobny drobny krok |
+| **485** | ⚪ | **Podpowiedź po najechaniu zdradza statek ukryty mgłą wojny.** Picker najechania (`ThreeRenderer.handleMouseMove` → `_getVesselAtScreen(x, y)`, `:3400`) nie pyta o `sprite.visible`; `_showVesselTooltip` (`:3593`) ma bramkę TOŻSAMOŚCI (kontakt poniżej `contact` → „❓ niezidentyfikowany kontakt”), nie WIDOCZNOŚCI ⇒ najechanie w miejsce wroga ukrytego mgłą pokazuje podpowiedź — obecność i położenie. Picker KLIKU filtruje od U1-3 (`_pickVesselForClick`, `:3205` — tylko widoczne). Istniało przed U1; wniosek z kodu, bez kliku. | osobny drobny krok — U3 bez zmian (zmieniony tylko picker KLIKU — 487; picker najechania nietknięty) |
 | **486** | ✅ | **Przełączenie układu zostawia kartę ciała przy wyczyszczonym zaznaczeniu renderera** (obserwacja 2 z bramki U1). `ThreeRenderer.switchSystem` → `_disposeAllMeshes` zeruje `_selectedEntityId` i pola `_focus*` (`:1497-1502`) bez `body:deselected`, więc karta (`UIManager._selectedEntity`, `:731-738`) zostaje, a znaczniki kolonii trzymają stan starej sceny (`_colonyMarkers.entityId` bez zmian). Zmierzone (Polonia gy79, C3; `post_gate/`): karta „Mstow” → `sys_036` → `_selectedEntityId` null, karta „Mstow”; po powrocie i po Home — to samo (bez złotej orbity i ikon budynków), a następny klik w nazwę Mstow w Outlinerze daje od razu kamerę (reguła czyta kartę jako „bieżące zaznaczenie”). Home, klik w aktywny chip i w nagłówek bieżącego układu zaznaczenie ZOSTAWIAJĄ (renderer i karta zgodne). Tak samo na `d1f2158` (wtedy `_focusEntityId`). **Rozstrzygnięcie z pomiaru:** reset zostawia zaznaczenie; przełączenie układu zamyka kartę ciała spoza układu docelowego (`body:deselected` przed przebudową sceny) — zaznaczenie w układzie docelowym (drugi klik, §7.8) i tak wraca przez `body:selected { focus: true }` po przełączeniu. | U2 (lewy outliner — przełączanie układów kliknięciem) — ✅ **2026-10-19** `6197c6b` (`syncBodyCardOnSystemSwitch`, `ClickIntentLogic.js:170`: przełączenie układu zamyka kartę ciała spoza układu docelowego, a kartę z układu docelowego oddaje rendererowi bez ruchu kamery; bramka U2 K11, K22) |
-| **487** | ⚪ | **Picker statku wygrywa z tarczą ciała** (obserwacja 4 z bramki U1). `ThreeRenderer.handleClick` (`:3151-3157`) pyta o statek — najechany albo najbliższy widoczny w 40 px (`_pickVesselForClick`, `:3205`) — PRZED raycastem ciała (`:3194`) ⇒ sprite statku w promieniu 40 px od punktu kliku zabiera klik, nawet gdy kursor jest na tarczy. Zmierzone (Polonia gy79; „Fregata I” na orbicie „Stacji Mstow”, sprite 9 / 18 / 36 px od środka Mstow przy dystansie 40 / 20 / 10 j.): część tarczy Mstow klikalna jako ciało — 0 % przy 40 i 20 j. (tarcza 1,7 / 3,3 px), 15–19 % przy 10 j. (6,6 px), 100 % od 6 j. (≥ 11 px); klik w środek tarczy zaznacza „Fregatę I”. Te same liczby na `d1f2158` (picker `_hoverVesselId ?? _getVesselAtScreen(40)`) — sprzed U1. Kierunek: pierwszeństwo ciała, gdy punkt kliku leży na tarczy, a statek nie jest najechany wprost. | U3 (zakres U3 z bramki U2; lewy outliner daje ciało bez pickera mapy) |
+| **487** | ✅ | **Picker statku wygrywa z tarczą ciała** (obserwacja 4 z bramki U1). `ThreeRenderer.handleClick` (`:3151-3157`) pyta o statek — najechany albo najbliższy widoczny w 40 px (`_pickVesselForClick`, `:3205`) — PRZED raycastem ciała (`:3194`) ⇒ sprite statku w promieniu 40 px od punktu kliku zabiera klik, nawet gdy kursor jest na tarczy. Zmierzone (Polonia gy79; „Fregata I” na orbicie „Stacji Mstow”, sprite 9 / 18 / 36 px od środka Mstow przy dystansie 40 / 20 / 10 j.): część tarczy Mstow klikalna jako ciało — 0 % przy 40 i 20 j. (tarcza 1,7 / 3,3 px), 15–19 % przy 10 j. (6,6 px), 100 % od 6 j. (≥ 11 px); klik w środek tarczy zaznacza „Fregatę I”. Te same liczby na `d1f2158` (picker `_hoverVesselId ?? _getVesselAtScreen(40)`) — sprzed U1. Kierunek: pierwszeństwo ciała, gdy punkt kliku leży na tarczy, a statek nie jest najechany wprost. | U3 (zakres U3 z bramki U2) — ✅ **2026-10-20** `4524ffd` (`_pickVesselForClick`: klik na widocznej tarczy ciała — `_isOnBodyDisc`; gwiazda: widoczny rdzeń — wybiera statek tylko w obrębie rdzenia jego sprite'a, max(6 px, połowa rzutu modelu); poza tarczą 40 px jak dotąd; okno 1280×833, Mstow i „Fregata I”: tarcza klikalna jako ciało przy 40 / 20 / 15 / 12 / 10 j. — przed 0 / 0 / 0 / 44 / 100 %, po 100 % przy każdym dystansie; bramka U3 K42) |
 | **488** | ⚪ | **Zamknięcie karty ciała to glif „−”, panel stacji ma w tym miejscu „✕”** (obserwacja 1 z bramki U1, §4.2). `BottomContext.js:218` rysuje „−” w rogu nagłówka (strefa `close`, obok „▼” minimalizacji i „✏”), `StationPanel.js:151` — „✕”. „−” wygląda jak minimalizacja: na bramce U1 właściciel nie znalazł zamknięcia karty (strefa zmierzona przy pięciu rozdzielczościach, zawsze na ekranie). Bez wpływu na działanie. | reforma pływających okien (§1, zaparkowana) |
-| **489** | 🟠 | **Układ z Twoim statkiem albo wojskami bywa w lewym outlinerze niewidoczny (reguła widoczności + Finding 480).** Widoczność (`SystemTreeLogic.js:143`) = dom ∨ własna kolonia / placówka / stacja ∨ `isSystemExploredData`; w zapisie sprzed naprawy 186 (`explored = false`) układ odwiedzony bez Twojej kolonii, placówki ani stacji wypada z listy — także gdy stoją tam Twoje statki albo wojska (Polonia gy79: Akhernar z Twoim statkiem — bramka U2 K41). W U2 drogą do takich wojsk jest prawy Outliner (JEDN. NAZIEMNE); w U3-3 ta sekcja znika. **Decyzja właściciela (bramka U2, 2026-10-19):** „∨ własny statek w układzie ∨ własne jednostki naziemne na ciele układu” — dosłowne D-UI-3, bez nowego stanu w zapisie. | **U3-0** (pierwszy commit U3); leczenie danych 480 — osobny slice |
-| **490** | ⚪ | **Prawy klik nad lewą kolumną otwiera menu kontekstowe mapy pod nią.** Przy celu `CANVAS` (`#planet-canvas`, Finding 484) prawy klik nie pyta `isOverUI` (`GameScene.js:6083-6084`). Zmierzone (`087949c`, ZF r120, 1280×833, `post_gate/probes/probe_490.mjs`): prawy klik nad wierszami kolumny i nad jej pustym tłem → menu otwarte, choć `isOverUI` = `true` w tym punkcie; kontrola — prawy klik w pustą mapę → menu. Dotyczy każdej kanwowej powierzchni UI (prawy Outliner też — wniosek z kodu). | U3 albo osobny drobny krok (rodzina 484) |
-| **491** | ⚪ | **Panel stacji zostaje otwarty po przełączeniu układu, także dla stacji spoza układu docelowego.** `StationPanel.js:67` ignoruje `body:deselected { reason: 'system_switch' }` — świadomie: 486 objęło kartę ciała („do potwierdzenia” 13 bramki U2 — jak przed U2). Zmierzone w pełnej części A bramki (`087949c`, GPU; `post_gate/results/fullA_H_C4gpu/K29.png`): panel „Stacja Nowa Ziemia” (układ domowy, otwarty w K23) nad widokiem Thubana. Sprzed U2. | U3 (do rozważenia razem z 486) |
-| **492** | 🟠 | **Czarny ekran po zamknięciu klawiszem H mapy kolonii z innego układu — nie odtworzony** (obserwacja A z bramki U2). Zgłoszenie (2×): układ aktywny — dom; mapa Thuban c otwarta przez 🪖N w lewym albo przez listę kolonii z górnej belki; H → czarny ekran, konsola czysta, procesor pracuje jak przy zmianie układu, w logu „Rebake: 58 tekstur”; ponowne H otwiera mapę od nowa; Esc tej samej mapy działa; ratunek — klik w kolonię bieżącego układu + H. Pomiar (8 przebiegów, `803a927` i `087949c`, SwiftShader i GPU — §4.3 A): H i Esc zamykają TĄ SAMĄ funkcją `ColonyOverlay.hide()`; po H — zwykły widok, kontekst WebGL żywy; „Rebake: 58” i procesor = przełączenie na Thuban z KLIKU w belkę (`TopResourceDrawer.js:722`, sprzed U2), log asynchroniczny; 🪖N układu nie przełącza. Przyczyny czerni nie ustalono. | U3 (diagnoza jednolinijkowcem z §4.3 A przy następnym wystąpieniu; naprawa po pomiarze) — bez hotfiksu |
+| **489** | ✅ | **Układ z Twoim statkiem albo wojskami bywa w lewym outlinerze niewidoczny (reguła widoczności + Finding 480).** Widoczność (`SystemTreeLogic.js:143`) = dom ∨ własna kolonia / placówka / stacja ∨ `isSystemExploredData`; w zapisie sprzed naprawy 186 (`explored = false`) układ odwiedzony bez Twojej kolonii, placówki ani stacji wypada z listy — także gdy stoją tam Twoje statki albo wojska (Polonia gy79: Akhernar z Twoim statkiem — bramka U2 K41). W U2 drogą do takich wojsk jest prawy Outliner (JEDN. NAZIEMNE); w U3-3 ta sekcja znika. **Decyzja właściciela (bramka U2, 2026-10-19):** „∨ własny statek w układzie ∨ własne jednostki naziemne na ciele układu” — dosłowne D-UI-3, bez nowego stanu w zapisie. | **U3-0** — ✅ **2026-10-20** `58877d7` (U3-0a; `SystemTreeLogic.buildSystemTree`: widoczność układu ∨ własny statek w układzie — kanon `systemIdOf`; tranzyt warp i wrak nie odsłaniają — ∨ własne jednostki naziemne na ciele układu; Polonia gy79: Akhernar wraca na listę, Wezen zostaje ukryty; bramka U3 K41); leczenie danych 480 — osobny slice |
+| **490** | ⚪ | **Prawy klik nad lewą kolumną otwiera menu kontekstowe mapy pod nią.** Przy celu `CANVAS` (`#planet-canvas`, Finding 484) prawy klik nie pyta `isOverUI` (`GameScene.js:6083-6084`). Zmierzone (`087949c`, ZF r120, 1280×833, `post_gate/probes/probe_490.mjs`): prawy klik nad wierszami kolumny i nad jej pustym tłem → menu otwarte, choć `isOverUI` = `true` w tym punkcie; kontrola — prawy klik w pustą mapę → menu. Dotyczy każdej kanwowej powierzchni UI (prawy Outliner też — wniosek z kodu). | osobny drobny krok (rodzina 484) — U3 bez zmian; dotyczy też prawej kolumny (zawsze widocznej od U3-2 — wniosek z kodu) |
+| **491** | ✅ | **Panel stacji zostaje otwarty po przełączeniu układu, także dla stacji spoza układu docelowego.** `StationPanel.js:67` ignoruje `body:deselected { reason: 'system_switch' }` — świadomie: 486 objęło kartę ciała („do potwierdzenia” 13 bramki U2 — jak przed U2). Zmierzone w pełnej części A bramki (`087949c`, GPU; `post_gate/results/fullA_H_C4gpu/K29.png`): panel „Stacja Nowa Ziemia” (układ domowy, otwarty w K23) nad widokiem Thubana. Sprzed U2. | U3 (do rozważenia razem z 486) — ✅ **2026-10-20** `4524ffd` (`syncStationPanelOnSystemSwitch`, `ClickIntentLogic.js:206` — lustro 486: przełączenie układu zamyka panel stacji spoza układu docelowego, widoczny i niezminimalizowany; stacja z układu docelowego — panel zostaje; bramka U3 K15) |
+| **492** | 🟠 | **Czarny ekran po zamknięciu klawiszem H mapy kolonii z innego układu — nie odtworzony** (obserwacja A z bramki U2). Zgłoszenie (2×): układ aktywny — dom; mapa Thuban c otwarta przez 🪖N w lewym albo przez listę kolonii z górnej belki; H → czarny ekran, konsola czysta, procesor pracuje jak przy zmianie układu, w logu „Rebake: 58 tekstur”; ponowne H otwiera mapę od nowa; Esc tej samej mapy działa; ratunek — klik w kolonię bieżącego układu + H. Pomiar (8 przebiegów, `803a927` i `087949c`, SwiftShader i GPU — §4.3 A): H i Esc zamykają TĄ SAMĄ funkcją `ColonyOverlay.hide()`; po H — zwykły widok, kontekst WebGL żywy; „Rebake: 58” i procesor = przełączenie na Thuban z KLIKU w belkę (`TopResourceDrawer.js:722`, sprzed U2), log asynchroniczny; 🪖N układu nie przełącza. Przyczyny czerni nie ustalono. | diagnoza jednolinijkowcem z §4.3 A przy następnym wystąpieniu; naprawa po pomiarze — bez hotfiksu (w sesji U3 nie odtworzony; bez kodu, zgodnie z zakresem U3) |
 | **493** | ⚪ | **Karta ciała po drugim kliku (focus) staje na tarczy śledzonego ciała** (obserwacja B z bramki U2). `computeFloatingPlacement` (`BottomContextLogic.js:8, 28-29`) kotwiczy kartę `GAP` = 18 px od ŚRODKA ciała (`getBodyScreenPosition`, `BottomContext.js:182-183`), bez promienia tarczy; po fokusie ciało stoi na środku ekranu, a tarcza ma 71–133 px promienia ⇒ karta zakrywa 33–41 % tarczy (zmierzone — §4.3 B; po pierwszym kliku — 0 %). Właściciel chce kotwicę odsuniętą w bok od tarczy. Pliki spoza zmian U2 — sprzed U2. | reforma pływających okien (§1, zaparkowana) — tylko rejestr |
+| **494** | ⚪ | **Strzałki krawędzi mapy leżą pod kolumnami outlinerów.** `MapLabelLayer._drawEdgeArrows` → `edgeIndicators` (`MapLabelLayer.js:351`; `MapLabelLogic.js:299-337`) liczy kadr i klamrę od krawędzi EKRANU z marginesem 26 px (`EDGE_MARGIN`, `MapLabelLogic.js:289`), bez `MapInsets` ⇒ strzałka statku poza kadrem przy lewej / prawej krawędzi stoi pod kolumną outlinera (x 26 / W − 26 wobec kolumn 0–150 / W − 150–W; kolumny rysowane po etykietach — `UIManager.js:2330`, `:2333` wobec `:2317`), a statek pod kolumną liczy się jako „w kadrze” — bez strzałki. Wniosek z kodu (sesja U3; dokument bramki U3, „Znane, poza U3”) — okiem niepotwierdzany. ⚠ Ten sam margines kładzie strzałkę dolną (H − 26) w pasku nawigacji (y H − 42…H − 6, rysowany po etykietach — `:2345`); górna (y 26) rysuje się na paśmie górnej belki (tło belki wcześniej — `:2215`) — do sprawdzenia razem. Linie przy `10343b2`. | U4 (§4.5 — wcięcia z jednego źródła, U4-2: `edgeIndicators` z prostokątem obszaru mapy z `MapInsets`) |
+| **495** | ⚪ | **Podpowiedź kolonii w lewym outlinerze wypisuje surowy klucz epoki i surowe identyfikatory.** `LeftOutliner.colonyTooltipLines` (`:328`; przeniesiona 1:1 ze starego prawego Outlinera — `_buildColonyTooltip` w `git show cb7a8f7:src/ui/Outliner.js`): epoka — `t()` na kluczu składanym z `epoch.` i klucza epoki (`:344-345`), a klucze `EPOCHS` to early / developing / advanced / cosmic (`ConsumerGoodsData.js:40-44`) — klucza `epoch.cosmic` nie ma (w pl / en `epoch.early` … `epoch.space`), więc najwyższa epoka daje „Epoka: epoch.cosmic”; zasoby — ikona + surowe id + ilość (`:352`); typ planety — surowe `planetType` (`:334`), choć klucze `planetType.*` istnieją. **Zmierzone w prawdziwej grze:** walidator bramki U3, K16, „Nowa Ziemia” (ZF gy120) — „⭐ Epoka: epoch.cosmic”, „rocky +13°C”, „🍖food:53684”, „🔧structural_alloys:300” (`kosmos-handover/ui-u3/results/gate/validate_owner_repo.txt:109`). `check-i18n` tego nie widzi (klucz składany dynamicznie). Wzór poprawki epoki jest w repo: `PopulationOverlay.js:1026` (`cosmic` → `epoch.space`). Przyjęte na bramce U3 („do potwierdzenia” 16). Linie przy `10343b2`. | U4 (§4.5 (e), U4-1) |
+| **496** | ⚪ | **Prawa rezerwa 150 px na sztywno przy schowanej prawej kolumnie.** Trzech konsumentów odejmuje `OUTLINER_W` sami, zamiast czytać `MapInsets.right` (0, gdy prawa kolumna schowana — „.”, overlay): karta ciała (`BottomContext._bounds`, `:90-100` — `ow: W − OUTLINER_W − ox`; komentarz `:92-93` zapowiadał przejście na `MapInsets` w U3-2 — pliku nie było na liście §4.4, zostawiony), kadr „Obserwuj” (`ThreeRenderer.js:6861` — `rightW: civ ? COSMIC.OUTLINER_W : 0`) i tekst powiadomień (`UIManager.js:2558` — od `W − COSMIC.OUTLINER_W − 14`). Pozostałe miejsca z `W − COSMIC.OUTLINER_W` w `UIManager` (`_vesselPanelBounds :474` — tylko przy fladze `mapVesselPanelCompact` OFF; panel akcji `:1926`, `:2497`, `:3175`, `:3201` — tylko poza trybem cywilizacji, gdzie kolumny nie ma) — bez skutku w grze. Przyjęte na bramce U3 („do potwierdzenia” 20). Linie przy `10343b2`. | U4 (§4.5 — wcięcia z jednego źródła, U4-2) |
 
-Rejestr #471–#493 po U2 (2026-10-19): **23 wpisy — ✅ 12** (474, 475, 476, 479, 481, 482 — `92f1b33`; 471, 472 —
-`4a645eb`; 473 — `be52d8a`; 478 — `d8cfe62`; 486 — `6197c6b`; 483 — `087949c`) **· otwarte 11** (🟠 3 · ⚪ 8: 477 → U3-2 ·
-480 → osobny slice · 484 → przy usuwaniu PlanetScene · 485 → U3 albo osobny drobny krok · 487 → U3 · 488 → reforma
-pływających okien · 489 → U3-0 · 490 → U3 albo osobny drobny krok · 491 → U3 · 492 → U3, diagnoza · 493 → reforma
-pływających okien). Pierwszy wolny **494**.
+Rejestr #471–#496 po U3 (2026-10-20): **26 wpisów — ✅ 16** (474, 475, 476, 479, 481, 482 — `92f1b33`; 471, 472 —
+`4a645eb`; 473 — `be52d8a`; 478 — `d8cfe62` + Tab `4524ffd`; 486 — `6197c6b`; 483 — `087949c`; 489 — `58877d7`; 477,
+487, 491 — `4524ffd`) **· otwarte 10** (🟠 2 · ⚪ 8: 480 → osobny slice · 484 → przy usuwaniu PlanetScene · 485 → osobny
+drobny krok · 488 → reforma pływających okien · 490 → osobny drobny krok · 492 → diagnoza przy następnym wystąpieniu ·
+493 → reforma pływających okien · 494, 495, 496 → U4). Pierwszy wolny **497**.
 
 ---
 
@@ -804,18 +961,28 @@ pływających okien). Pierwszy wolny **494**.
   `kosmos-handover/ui-u2/probes/frame_cost_u2.mjs`, 1600×900): `buildSystemTree` 0,022 ms (ZF gy120: 11 układów,
   44 wiersze) / 0,026 ms (Polonia gy79: 7 układów, 51 wierszy); wszystkie układy rozwinięte — 0,111 / 0,060 ms
   (512 / 322 wiersze); cały `_draw()` UI z lewym outlinerem i bez — różnica 0,15 / 0,13 ms; `LeftOutliner.draw` z wymuszoną
-  rasteryzacją p50 0,4 ms, p95 0,5 ms. Daleko poniżej 1 ms na klatkę — bez pamięci podręcznej (A8 potwierdzone). Prawy
-  (U3) — niezmierzony.
+  rasteryzacją p50 0,4 ms, p95 0,5 ms. Daleko poniżej 1 ms na klatkę — bez pamięci podręcznej (A8 potwierdzone). **Prawy
+  zmierzony w U3** (ta sama metoda — sonda `kosmos-handover/ui-u3/probes/frame_cost_u3.mjs`, 1600×900, końcowe drzewo U3,
+  0 błędów konsoli; wyniki `results/frame_cost/`; wartości „domyślnie → wszystko rozwinięte”, pierwsza z rozgrzewką JIT):
+  ZF gy120 — 6 układów / 26 statków, 18 → 45 wierszy: `buildShipTree` 0,045 → 0,023 ms; drzewo + wpisy + kolejność
+  układów (to, co `Outliner.draw` składa co klatkę) 0,072 → 0,029 ms; `Outliner.draw` z wymuszoną rasteryzacją p50 / p95
+  0,3 / 0,4 → 0,4 / 0,5 ms; cały `_draw()` UI z prawą kolumną i bez — 0,614 / 0,470 ms, różnica **+0,14 ms**. Polonia
+  gy79 — 4 / 13, 17 → 23 wiersze: 0,033 → 0,010 · 0,025 → 0,013 · 0,2 / 0,3 → 0,3 / 0,4 ms; 0,539 / 0,444 ms, różnica
+  **+0,10 ms** (mediana 12 bloków po 100 klatek). Drzewo składane od zera w każdej klatce kosztuje setne części
+  milisekundy — koszt kolumny to rysowanie tekstu; bez pamięci podręcznej (A8 potwierdzone dla obu kolumn).
 - **Finding 480** — mechanizm wyprowadzony ze wzoru flag (lustro `true` / gwiazda `false` = sygnatura sprzed 186)
   i z dat zapisów; samego momentu powstania w linii ZF (gy60 → gy71) nie odtworzono.
 - **Osiągalność 477 z Doku** — wniosek z kodu, bez kliknięcia w przeglądarce (po U1 — pierwszy klik w wiersz statku
-  w skoku; §6). **485** (podpowiedź najechania w mgle) — także wniosek z kodu. Prawy klik w **484** (`isOverUI`
-  pomijany przy celu `CANVAS`) — zmierzony po U2 nad lewą kolumną (**490**).
+  w skoku; §6). Zamknięte w U3-2 w samym `pingVessel` (termin układu) — ścieżka prawego outlinera sprawdzona na bramce U3
+  (K5, K6); ścieżka Doku idzie przez tę samą funkcję, bez kliknięcia. **485** (podpowiedź najechania w mgle) — także
+  wniosek z kodu. Prawy klik w **484** (`isOverUI` pomijany przy celu `CANVAS`) — zmierzony po U2 nad lewą kolumną
+  (**490**).
 - ~~**Czytelność półprzezroczystego tła** nad jasnymi obiektami (gwiazda, pierścienie) — do bramki U2~~ — bramka U2:
   bez strojenia (`bgAlpha` 0,6, `textShadowBlur` 3; §4.3).
 - **Ekrany szersze niż 16:9** (W > 1280) — więcej miejsca w belce; nie liczone.
 - **Sweep** — w fazie A nieuruchamiany (sesja bez kodu; ostatni znany 319/319, `2ff8d26`, handover P2b close); po U0
-  — **322/322** na `92f1b33` (§4.1); po U1 — **323/323** na `d8cfe62` (§4.2); po U2 — **325/325** na `087949c` (§4.3).
+  — **322/322** na `92f1b33` (§4.1); po U1 — **323/323** na `d8cfe62` (§4.2); po U2 — **325/325** na `087949c` (§4.3);
+  po U3 — **328/328** na `10343b2` (§4.4).
 
 ## 9. Warsztat — lekcje tego audytu
 
