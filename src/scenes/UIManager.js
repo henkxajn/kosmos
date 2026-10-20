@@ -2342,8 +2342,13 @@ export class UIManager {
     // ── BottomNavBar (stały dolny pasek nawigacji, 7 grup) — UI v3. PO overlayManager (na
     //    wierzchu canvasowych overlay'i), PRZED dziennikiem (ten może go zakryć na hoverze). ──
     if (civMode && !globeOpen) this._bottomNavBar.draw(ctx, W, H);
-    // ── BottomControlBar (bell + MENU + zegar) — UI v3, mały pasek nad nawigacją, prawy. ──
-    if (civMode && !globeOpen) this._bottomControlBar.draw(ctx, W, H, this._timeState);
+    // ── BottomControlBar (bell + MENU + zegar) — UI v3, pasek nad nawigacją. ARKUSZ UI U4-3 (decyzje 1, (a), (b)): nad
+    //    mapą — pas na całą szerokość od prawej krawędzi lewego outlinera (`MapInsets.left`) z rzędem chipów doku; pod
+    //    overlayem pełnoekranowym — sam klaster zegara nad ostatnim slotem i czip ⚔ (jak dotąd). ──
+    if (civMode && !globeOpen) {
+      this._bottomControlBar.draw(ctx, W, H, this._timeState,
+        this.overlayManager.isAnyOpen() ? null : { left: getMapInsets(window.KOSMOS).left });
+    }
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
@@ -2364,9 +2369,13 @@ export class UIManager {
       this._fleetOverlay?.drawVesselPanel?.(ctx, r.x, r.y, r.w, r.h,
         { compact: GAME_CONFIG.FEATURES?.mapVesselPanelCompact === true });
     }
-    // C2 (S3.4b) — pasek zadań zminimalizowanych paneli (lewy-dół, nad nawigacją); ukryty gdy pełny overlay.
+    // C2 (S3.4b) — dok zminimalizowanych paneli; ukryty gdy pełny overlay. ARKUSZ UI U4-3 (decyzja (c)): chipy w rzędzie
+    // na pasie dolnym — prostokąt rzędu z `BottomControlBar` (narysowany wyżej w tej klatce); poza trybem cywilizacji
+    // (bez pasa) — rząd nad dolną krawędzią obszaru mapy.
     // #1 (review) — bez bramki civMode: BottomContext (a więc i minimalizacja) działa też poza civMode.
-    if (!globeOpen && !this.overlayManager.isAnyOpen()) this.panelDock.draw(ctx, W, H);
+    if (!globeOpen && !this.overlayManager.isAnyOpen()) {
+      this.panelDock.draw(ctx, W, H, civMode ? this._bottomControlBar.getDockSpan() : null);
+    }
     if (civMode && !globeOpen) this._eventLogDrawer.draw(ctx, W, H);   // dziennik — hover-drawer dolnej krawędzi (nad overlay'em, nad paskiem bell/MENU)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──

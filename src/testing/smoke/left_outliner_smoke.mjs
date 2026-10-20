@@ -84,6 +84,13 @@
 //         dolnym i prawy outliner schowany — `map_insets_single_source_smoke` (M2).
 //   L7j — kadr „Obserwuj” bierze wszystkie wcięcia z jednego odczytu `getMapInsets` (`ins.left`, `ins.right`,
 //         `ins.bottom`); pin czyta lewe wcięcie w nowym kształcie.
+// PRZECELOWANIA (ARKUSZ UI U4-3 — decyzje (a), (c)):
+//   L2a — lewa kolumna schodzi do górnej krawędzi paska nawigacji (jak po U2; pas dolny na całą szerokość zaczyna się
+//         przy jej prawej krawędzi); NOWY L2a3 — arytmetyka `MapInsets.leftColumnBottomInset` (pada na drzewie sprzed
+//         U4-3). L2a2 (`outlinerBottomInset` — prawa kolumna nad pasem) bez zmian.
+//   L5f / L5g / L5h — dok zminimalizowanych paneli to od U4-3 rząd chipów na pasie dolnym (koniec stosu pionowego):
+//         chipy od lewego końca pasa (prawa krawędź lewego outlinera, x 150 + 4), przy schowanym lewym — od x 4, na
+//         pasie także przy Doku taktycznym. Prawdziwy `BottomControlBar` → `getDockSpan` → `PanelDock`.
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -202,10 +209,13 @@ header('L2  draw — geometria (§7.17), nagłówek, wiersze, „○”');
   const c = ctx._calls;
   ok(!!tr && Array.isArray(tr.systems) && tr.systems.length === 2, 'L2-0 `draw` zwraca drzewo z tej klatki (2 układy)');
   const bg = c.rects.find((r) => r.x === 0 && r.w === 150);
-  ok(!!bg && bg.y === 28 && bg.h === 720 - 28 - 62, `L2a kolumna 150 px od y 28 (dół górnej belki) do górnej krawędzi pasa dolnego (y ${720 - 62} — 20 px nad paskiem nawigacji; U3-2) — jest ${bg ? `${bg.y}+${bg.h}` : '—'}`);
+  ok(!!bg && bg.y === 28 && bg.h === 720 - 28 - 42, `L2a kolumna 150 px od y 28 (dół górnej belki) do górnej krawędzi paska nawigacji (y ${720 - 42}; U4-3, decyzja (a) — pas dolny zaczyna się przy jej prawej krawędzi) — jest ${bg ? `${bg.y}+${bg.h}` : '—'}`);
   ok(MI?.BOTTOM_STRIP_H === 20 && MI?.outlinerBottomInset?.({ bottom: 42 }, true) === 62 && MI?.outlinerBottomInset?.({ bottom: 42 + 64 }, true) === 106
     && MI?.outlinerBottomInset?.({ bottom: 26 }, false) === 26,
     'L2a2 `outlinerBottomInset`: tryb cywilizacji — nad pasem dolnym (42 + 20), rezerwa Doku wygrywa, gdy większa; Generator bez zmian');
+  const lcb = MI?.leftColumnBottomInset;
+  ok(typeof lcb === 'function' && lcb({ civMode: true }) === 42 && lcb({ civMode: true, dockH: 44 }) === 86 && lcb({ civMode: false }) === 26,
+    'L2a3 `leftColumnBottomInset` (U4-3, decyzja (a)): lewa kolumna do paska nawigacji (42), nad Dokiem taktycznym (42 + 44), Generator — dolny pasek');
   ok(!!bg && bg.fillStyle === bgAlpha(0.6), `L2b tło półprzezroczyste \`bgAlpha(0.6)\` (jest ${bg?.fillStyle})`);
   const text = c.text.map((x) => x.s);
   ok(text.includes(t('leftOutliner.systems', 2).toUpperCase()) && text.includes('UKŁADY [2]'), 'L2c nagłówek „UKŁADY [2]” (i18n)');
@@ -317,12 +327,23 @@ header('L5  wcięcia obszaru mapy (`MapInsets`) i konsumenci');
   ok(gi({ overlay: true }) === 0 && gi({ dockExp: true }) === 0 && gi({ civ: false }) === 0, 'L5d overlay / rozwinięty Dok / poza trybem cywilizacji → 0');
   reset(); if (lo) lo.visible = false; ok(MI?.getMapInsets?.(K)?.left === 0, 'L5e stan użytkownika „ukryty” → 0'); if (lo) lo.visible = true;
 
-  // PanelDock — belki zminimalizowanych paneli
+  // PanelDock — chipy zminimalizowanych paneli. ARKUSZ UI U4-3 (decyzja (c)): rząd na pasie dolnym, który zaczyna się
+  // przy prawej krawędzi lewego outlinera (`MapInsets.left`) — prostokąt rzędu z `BottomControlBar.getDockSpan()`.
   const { PanelDock } = await import('../../ui/PanelDock.js');
-  reset(); const pd = new PanelDock();
-  ok(pd._geom(W, H).leftX === 158, `L5f PanelDock: belki za outlinerem (leftX ${pd._geom(W, H).leftX})`);
-  reset({ overlay: true }); ok(pd._geom(W, H).leftX === 8, 'L5g KONTROLA: outliner ukryty → leftX 8 jak dotąd');
-  reset({ dockRes: 44 }); ok(pd._geom(W, H).bottomReserved >= 42 + 44, 'L5h dół: pasek nawigacji + Dok taktyczny (bez zmian)');
+  const { BottomControlBar } = await import('../../ui/BottomControlBar.js');
+  const dockChip = () => {
+    const bar = new BottomControlBar();
+    bar.draw(recCtx(), W, H, { isPaused: true, multiplierIndex: 1, displayText: '' }, { left: MI?.getMapInsets?.(K)?.left ?? 0 });
+    const pd = new PanelDock(); pd.register('body:P1', { icon: '🪐', label: 'Mstow', onRestore: () => {} });
+    pd.draw(recCtx(), W, H, bar.getDockSpan?.() ?? null);
+    return pd._hitZones?.[0] ?? null;
+  };
+  reset(); const z1 = dockChip();
+  ok(z1?.x === 150 + 4, `L5f PanelDock: chipy za lewym outlinerem — od lewego końca pasa (x ${z1?.x}; U4-3)`);
+  reset(); if (lo) lo.visible = false; const z0 = dockChip(); if (lo) lo.visible = true;
+  ok(z0?.x === 4, `L5g lewy outliner schowany → pas i chipy od lewej krawędzi ekranu (x ${z0?.x}; U4-3, decyzja (a))`);
+  reset({ dockRes: 44 }); const z2 = dockChip();
+  ok(z2?.y === H - 42 - 20 + 2 && z2?.h === 16, `L5h chipy 16 px na pasie dolnym — także przy Doku taktycznym (y ${z2?.y}; U4-3)`);
 
   // BottomContext — karta ciała. ARKUSZ UI U4-2: prawa krawędź z `MapInsets.right` — świat dostaje prawy outliner
   // widoczny (150 px, jak w grze; dawniej karta odejmowała 150 px na sztywno).

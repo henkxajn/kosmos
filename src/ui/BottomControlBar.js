@@ -9,6 +9,10 @@
 // MENU: deleguje do BottomBar (menu DOM) — ustawia _menuClickBounds + toggleMenu().
 // Czip walk (ARKUSZ UI, U0-3): przy zminimalizowanym HUD walki — na lewo od paska, z własnym hit-testem (482).
 // Rząd paska i czipu stały — bez karty peek (ARKUSZ UI U3-0b).
+// PAS NA CAŁĄ SZEROKOŚĆ (ARKUSZ UI U4-3, UI_PLAN §4.5 — decyzje 1, (a), (b)): w trybie MAPY (bez overlayu pełnoekranowego)
+// tło pasa biegnie od prawej krawędzi lewego outlinera (`MapInsets.left`; 0 przy schowanym) do prawej krawędzi ekranu,
+// a od lewego końca — rząd chipów doku (`getDockSpan` → `PanelDock`); pod overlayem — jak dotąd: sam klaster zegara
+// nad ostatnim slotem nawigacji i czip ⚔ (chipy doku chowają się jak outlinery — decyzja 4).
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
@@ -18,6 +22,7 @@ import { toggleNotificationDropdown, isNotificationDropdownOpen } from './Notifi
 import { bottomNavBarRect, navSlotLayout } from './BottomNavBarLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { BOTTOM_STRIP_H } from './MapInsets.js';   // ARKUSZ UI U3-2 — jedno źródło wysokości pasa dolnego
+import { DOCK_CHIP_H, DOCK_CHIP_GAP } from './PanelDockLogic.js';   // ARKUSZ UI U4-3 — rząd chipów doku na pasie
 
 // Metryki kompaktowe — cały klaster (bell/menu/play/5×speed/data) musi zmieścić się w
 // JEDNYM slocie nawigacji ("Technologie"), więc bell/menu są wąskie (16) a reszta drobna.
@@ -46,6 +51,7 @@ export class BottomControlBar {
     this._playRect  = null;
     this._speedRects = [];
     this._chipRect  = null;   // U0-3: czip walk {x,y,w,h,label} albo null (niewidoczny)
+    this._dockSpan  = null;   // U4-3: rząd chipów doku {x0,x1,y,h} w trybie mapy; null pod overlayem
     this._hover     = null;   // 'bell'|'menu'|'play'|`speed${i}`|null
   }
 
@@ -59,7 +65,12 @@ export class BottomControlBar {
   }
 
   // ── Rysowanie ───────────────────────────────────────────────────────────
-  draw(ctx, W, H, timeState) {
+  /**
+   * @param {{left:number}|null} [strip] — ARKUSZ UI U4-3: tryb MAPY — pas od `strip.left` (prawa krawędź lewego
+   *   outlinera, `MapInsets.left`) do prawej krawędzi ekranu, z rzędem chipów doku; `null` (pod overlayem
+   *   pełnoekranowym, decyzja (b)) — tło = ostatni slot nawigacji, bez rzędu doku (jak dotąd)
+   */
+  draw(ctx, W, H, timeState, strip = null) {
     const ts = timeState ?? window.KOSMOS?.uiManager?._timeState ?? { isPaused: true, multiplierIndex: 1, displayText: '' };
     const { isPaused, multiplierIndex, displayText } = ts;
 
@@ -103,8 +114,10 @@ export class BottomControlBar {
       dateLeft += shift; sepX += shift;
     }
 
-    const bgLeft = lastSlotX;
-    const bgW = lastSlotRight - lastSlotX;
+    // U4-3: tryb mapy — tło od prawej krawędzi lewego outlinera do prawej krawędzi ekranu; pod overlayem — ostatni slot.
+    const mapMode = Number.isFinite(strip?.left);
+    const bgLeft = mapMode ? Math.max(0, strip.left) : lastSlotX;
+    const bgW = (mapMode ? W : lastSlotRight) - bgLeft;
     this._bgRect = { x: bgLeft, y: stripTop, w: bgW, h: STRIP_H };
 
     // ── Tło paska — BEZ ramy (ARKUSZ UI, U0-1: spójnie z dolnym nav bez ram, D-UI-13 / §7.15); obrysy
@@ -150,7 +163,18 @@ export class BottomControlBar {
       this._chipRect = { x: lastSlotX - CHIP_GAP - w, y: top, w, h: STRIP_H, label };
       this._drawCombatChip(ctx, this._chipRect);
     }
+
+    // ── Rząd chipów doku (U4-3, decyzja (c)): od lewego końca pasa do lewej krawędzi klastra po prawej (czip ⚔ albo
+    //    🔔); tylko w trybie mapy — pod overlayem chipy chowają się jak outlinery (decyzja 4). ──
+    this._dockSpan = null;
+    if (mapMode) {
+      const right = (this._chipRect ? this._chipRect.x : this._bellRect.x) - DOCK_CHIP_GAP;
+      this._dockSpan = { x0: bgLeft + DOCK_CHIP_GAP, x1: right, y: stripTop + (STRIP_H - DOCK_CHIP_H) / 2, h: DOCK_CHIP_H };
+    }
   }
+
+  /** ARKUSZ UI U4-3 — rząd chipów doku z ostatniej klatki (`PanelDock.draw`); null pod overlayem. */
+  getDockSpan() { return this._dockSpan; }
 
   // Czip walk — własne tło i ramka jak dawny czip w górnej belce (ciemny podkład + akcent, czerwona ramka i tekst).
   _drawCombatChip(ctx, b) {

@@ -15,10 +15,12 @@
 // PAS DOLNY: `BOTTOM_STRIP_H` (ARKUSZ UI U3-2) — 20 px nad paskiem nawigacji; jedno źródło wysokości dla paska zegara,
 // kolumn outlinerów, Doku taktycznego (prześwit nad pasem) i Dowództwa (treść ustępuje pasowi). Od U4-2 obszar mapy w
 // trybie cywilizacji kończy się nad nim dla WSZYSTKICH konsumentów (pływające panele, karta ciała, kadr „Obserwuj”,
-// strzałki krawędzi mapy), nie tylko dla kolumn.
+// strzałki krawędzi mapy), nie tylko dla kolumn. Od U4-3 pas biegnie od prawej krawędzi lewego outlinera (`left`) do
+// prawej krawędzi ekranu, a LEWA kolumna schodzi do paska nawigacji (`leftColumnBottomInset`, decyzja (a)); prawa
+// kończy się nad pasem (`outlinerBottomInset`).
 //
-// Czysta arytmetyka (`computeMapInsets`, `outlinerBottomInset`) + odczyt z żywego stanu (`getMapInsets(K)`,
-// K = `window.KOSMOS`). Bez EventBusa; jedyne importy — stałe układu.
+// Czysta arytmetyka (`computeMapInsets`, `outlinerBottomInset`, `leftColumnBottomInset`) + odczyt z żywego stanu
+// (`getMapInsets(K)`, K = `window.KOSMOS`). Bez EventBusa; jedyne importy — stałe układu.
 
 import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 
@@ -54,6 +56,18 @@ export function computeMapInsets({ civMode = false, leftW = 0, rightW = 0, dockH
 export function outlinerBottomInset(insets, civMode) {
   const b = Number.isFinite(insets?.bottom) ? insets.bottom : 0;
   return civMode === true ? Math.max(b, BOTTOM_RESERVED + BOTTOM_STRIP_H) : b;
+}
+
+/**
+ * ARKUSZ UI U4-3 (UI_PLAN §4.5, decyzja (a)): dolne wcięcie LEWEJ kolumny — do górnej krawędzi paska nawigacji (jak po
+ * U2; pas dolny zaczyna się przy prawej krawędzi kolumny), nad Dokiem taktycznym, gdy widoczny (rezerwa Doku zawiera
+ * prześwit nad pasem). Prawa kolumna kończy się nad pasem — `outlinerBottomInset`.
+ * @param {{civMode?:boolean, dockH?:number}} p — `dockH` = rezerwa Doku taktycznego (`getReservedHeight`, 0 — ukryty)
+ * @returns {number}
+ */
+export function leftColumnBottomInset({ civMode = false, dockH = 0 } = {}) {
+  const d = Number.isFinite(dockH) && dockH > 0 ? dockH : 0;
+  return (civMode === true ? BOTTOM_RESERVED : COSMIC.BOTTOM_BAR_H) + d;
 }
 
 /**

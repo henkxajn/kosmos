@@ -2,8 +2,9 @@
 // D-UI-3, D-UI-4, D-UI-10 dla ciał).
 //
 //   • Geometria i widoczność — wspólny szkielet obu outlinerów (`OutlinerColumn`, ARKUSZ UI U3-2): kolumna 150 px przy
-//     lewej krawędzi, od dolnej krawędzi górnej belki do górnej krawędzi pasa dolnego (§7.17; U3 — `MapInsets`
-//     `outlinerBottomInset`); tło półprzezroczyste + cień tekstu (`KOSMOS.leftOutliner.bgAlpha` / `.textShadowBlur`);
+//     lewej krawędzi, od dolnej krawędzi górnej belki do górnej krawędzi paska nawigacji (§7.17; ARKUSZ UI U4-3,
+//     decyzja (a) — `MapInsets.leftColumnBottomInset`; pas dolny zaczyna się przy prawej krawędzi kolumny); tło
+//     półprzezroczyste + cień tekstu (`KOSMOS.leftOutliner.bgAlpha` / `.textShadowBlur`);
 //     tylko nad mapą (decyzja 4) — ukryty przy otwartym overlayu pełnoekranowym, przy rozwiniętym Doku taktycznym, przy
 //     podglądzie globusa i poza trybem cywilizacji.
 //   • Treść: drzewo z czystego `SystemTreeLogic.buildSystemTree` (widoczność, kolejność, ciała); stan zwinięcia —

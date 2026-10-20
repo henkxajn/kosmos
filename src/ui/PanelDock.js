@@ -1,30 +1,34 @@
-// PanelDock — wspólny pasek zadań zminimalizowanych pływających paneli (S3.4b C2).
+// PanelDock — wspólny dok zminimalizowanych pływających paneli (S3.4b C2; ARKUSZ UI U4-3 — chipy na pasie dolnym).
 //
-// Współdzielony przez BottomContext („okno planety") i StationPanel. Panel minimalizuje się
-// przez register() (belka trafia do doku, karta znika), a klik belki woła jej onRestore()
-// (przywrócenie panelu na poprzednią pozycję). Belki stackują się pionowo w lewym-dolnym rogu
-// nad paskiem nawigacji (geometria + kolejność w PanelDockLogic.computeDockSlots).
+// Współdzielony przez BottomContext („okno planety") i StationPanel. Panel minimalizuje się przez register() (chip trafia
+// do doku, karta znika), a klik chipa woła jego onRestore() (przywrócenie panelu na poprzednią pozycję).
 //
-// Trzymany bezpośrednio przez UIManager (jak StationPanel): rysowany PO overlayManagerze,
-// klikany PRZED nim, blokuje kamerę przez isOver w UIManager.isOverUI.
+// ARKUSZ UI U4-3 (UI_PLAN §4.5, decyzja (c)): chipy 16 px w JEDNYM rzędzie na pasie dolnym, od lewego końca pasa —
+// prostokąt rzędu daje `BottomControlBar.getDockSpan()` (pas zaczyna się przy prawej krawędzi lewego outlinera, rząd
+// kończy się przed klastrem po prawej). Szerokość chipa = ikona + skrócona nazwa (do `DOCK_CHIP_MAX_W`), odstęp 4 px;
+// gdy wszystkie się nie mieszczą — ostatni chip „+N” z listą niewidocznych w podpowiedzi (klik w „+N” przywraca pierwszy
+// niewidoczny panel). Bez pasa (Generator, wywołanie bez prostokąta) — ten sam rząd nad dolną krawędzią obszaru mapy
+// (`MapInsets`). Dawniej belki 156 × 24 px w stosie pionowym w lewym dolnym rogu mapy (koniec stosu — decyzja (c)).
+//
+// Trzymany bezpośrednio przez UIManager (jak StationPanel): rysowany PO overlayManagerze, klikany PRZED nim, blokuje
+// kamerę przez isOver w UIManager.isOverUI.
 
 import { THEME, bgAlpha }   from '../config/ThemeConfig.js';
-import { COSMIC }           from '../config/LayoutConfig.js';
 import { getMapInsets }     from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
-import { computeDockSlots } from './PanelDockLogic.js';
+import { layoutDockChips, DOCK_CHIP_H, DOCK_CHIP_GAP, DOCK_CHIP_MAX_W } from './PanelDockLogic.js';
 
-const BAR_W = 156;
-const BAR_H = 24;
-const GAP   = 4;
+const CHIP_PAD_X = 6;          // px — margines tekstu w chipie
+const TIP_LINE_H = 13;         // px — wiersz podpowiedzi „+N”
+const MORE_KEY   = '__more__'; // klucz trafienia chipa „+N”
 
 export class PanelDock {
   constructor() {
-    this._entries  = [];    // [{ key, icon, label, restorePos, onRestore }] — kolejność = stack (najstarszy najniżej)
-    this._hitZones = [];    // [{ x, y, w, h, key }] z ostatniego draw
-    this._hover    = null;  // key belki pod kursorem
+    this._entries  = [];    // [{ key, icon, label, restorePos, onRestore }] — kolejność = rząd (najstarszy pierwszy)
+    this._hitZones = [];    // [{ x, y, w, h, key, first? }] z ostatniego draw (`first` — chip „+N”)
+    this._hover    = null;  // key chipa pod kursorem (`MORE_KEY` — „+N”)
   }
 
-  /** Zadokuj (lub zaktualizuj) belkę. Idempotent po `key`. */
+  /** Zadokuj (lub zaktualizuj) chip. Idempotent po `key`. */
   register(key, { icon, label, restorePos = null, onRestore } = {}) {
     const ex = this._entries.find(e => e.key === key);
     if (ex) { ex.icon = icon; ex.label = label; ex.restorePos = restorePos; ex.onRestore = onRestore; return; }
@@ -42,74 +46,91 @@ export class PanelDock {
   count()   { return this._entries.length; }
   clear()   { this._entries = []; this._hitZones = []; this._hover = null; }
 
-  // Geometria doku — lewy-dół obszaru mapy, nad paskiem nawigacji (civMode) / dolnym paskiem.
-  _geom(W, H) {
-    // Wcięcia obszaru mapy — jedno źródło (`MapInsets`, ARKUSZ UI U2-2): belki za lewym outlinerem (gdy widoczny
-    // nad mapą), nad paskiem nawigacji + listwą dziennika / dolnym paskiem (+ Dok taktyczny).
+  // Bez pasa dolnego (Generator; wywołanie bez prostokąta) — rząd nad dolną krawędzią obszaru mapy (`MapInsets`).
+  _fallbackSpan(W, H) {
     const ins = getMapInsets();
-    const leftX = ins.left + 8;
-    const navReserved = ins.bottom;
-    // #6/#7 (review) — panele floty (FleetGroupPanel/FleetCommandPanel) też siedzą w lewym-dole;
-    // jeśli widoczne, dok stackuje się NAD nimi (nie nakłada się i nie kradnie im klików).
-    let floorY = H - navReserved - 6;   // dolna krawędź najniższej belki
-    const um  = window.KOSMOS?.uiManager;
-    const fcp = um?.fleetCommandPanel?.visible ? um.fleetCommandPanel?._drawnRect : null;
-    const fgp = um?.fleetGroupPanel?.visible   ? um.fleetGroupPanel?._drawnRect   : null;
-    if (fcp) floorY = Math.min(floorY, fcp.y - 6);
-    if (fgp) floorY = Math.min(floorY, fgp.y - 6);
-    // computeDockSlots liczy baseY = H - bottomReserved - marginBottom - barH → chcemy baseY = floorY - barH.
-    return { H, barW: BAR_W, barH: BAR_H, gap: GAP, leftX, bottomReserved: H - floorY, marginBottom: 0, topLimit: COSMIC.TOP_BAR_H };
+    return { x0: ins.left + 8, x1: W - ins.right - 8, y: H - ins.bottom - DOCK_CHIP_H - 6, h: DOCK_CHIP_H };
   }
 
-  draw(ctx, W, H) {
+  /**
+   * @param {{x0:number, x1:number, y:number, h:number}|null} [span] — rząd chipów na pasie dolnym
+   *   (`BottomControlBar.getDockSpan()`); bez niego — `_fallbackSpan`
+   */
+  draw(ctx, W, H, span = null) {
     this._hitZones = [];
     if (!this._entries.length) return;
-    const slots = computeDockSlots(this._entries.length, this._geom(W, H));
-
+    const row = span ?? this._fallbackSpan(W, H);
     ctx.save();
-    for (const s of slots) {
-      const e = this._entries[s.index];
-      const hover = this._hover === e.key;
-      // Tło + ramka (brutalist terminal — jak pływające panele)
-      ctx.fillStyle = bgAlpha(hover ? 0.95 : 0.85);
-      ctx.fillRect(s.x, s.y, s.w, s.h);
-      ctx.strokeStyle = hover ? THEME.accent : (THEME.borderActive ?? THEME.accent);
-      ctx.lineWidth = 1;
-      ctx.strokeRect(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1);
-      // Pasek akcentu (lewa krawędź — ikonografia „okno")
-      ctx.fillStyle = THEME.accent;
-      ctx.fillRect(s.x + 1.5, s.y + 3, 2.5, s.h - 6);
-      // Ikona + nazwa (ucięta do szerokości belki)
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = hover ? THEME.accent : THEME.textSecondary;
-      const label = this._truncate(ctx, `${e.icon ?? '▪'} ${e.label ?? ''}`, s.w - 12);
-      ctx.fillText(label, s.x + 8, s.y + s.h / 2 + 0.5);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const labels = this._entries.map(e => this._truncate(ctx, `${e.icon ?? '▪'} ${e.label ?? ''}`, DOCK_CHIP_MAX_W - 2 * CHIP_PAD_X));
+    const widths = labels.map(s => Math.ceil(Math.min(DOCK_CHIP_MAX_W, ctx.measureText(s).width + 2 * CHIP_PAD_X)));
+    // „+N” liczony dla najszerszego możliwego licznika (wszystkie wpisy) — rzeczywisty N jest mniejszy.
+    const moreW = Math.ceil(ctx.measureText(`+${this._entries.length}`).width + 2 * CHIP_PAD_X);
+    const { chips, more } = layoutDockChips(widths, { x0: row.x0, x1: row.x1, y: row.y, h: row.h ?? DOCK_CHIP_H, gap: DOCK_CHIP_GAP, moreW });
+    for (const c of chips) {
+      const e = this._entries[c.index];
+      this._drawChip(ctx, c, labels[c.index], this._hover === e.key);
+      this._hitZones.push({ x: c.x, y: c.y, w: c.w, h: c.h, key: e.key });
     }
-    ctx.textBaseline = 'alphabetic';
+    if (more) {
+      const hover = this._hover === MORE_KEY;
+      this._drawChip(ctx, more, `+${more.count}`, hover);
+      this._hitZones.push({ x: more.x, y: more.y, w: more.w, h: more.h, key: MORE_KEY, first: more.first });
+      if (hover) this._drawMoreTip(ctx, W, more, this._entries.slice(more.first));
+    }
     ctx.restore();
-
-    for (const s of slots) {
-      this._hitZones.push({ x: s.x, y: s.y, w: s.w, h: s.h, key: this._entries[s.index].key });
-    }
   }
 
-  /** Klik belki → przywróć panel (onRestore). Zwraca true gdy trafiono. */
+  // Chip — tło i ramka jak dawna belka (brutalist terminal — jak pływające panele), tekst ikona + nazwa.
+  _drawChip(ctx, r, label, hover) {
+    ctx.fillStyle = bgAlpha(hover ? 0.95 : 0.85);
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = hover ? THEME.accent : (THEME.borderActive ?? THEME.accent);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx.fillStyle = hover ? THEME.accent : THEME.textSecondary;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, r.x + CHIP_PAD_X, r.y + r.h / 2 + 0.5);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // Podpowiedź „+N” — lista niewidocznych paneli nad pasem, przy chipie „+N” (w granicach ekranu).
+  _drawMoreTip(ctx, W, more, hidden) {
+    const lines = hidden.map(e => `${e.icon ?? '▪'} ${e.label ?? ''}`);
+    const w = Math.ceil(Math.max(0, ...lines.map(s => ctx.measureText(s).width))) + 2 * CHIP_PAD_X;
+    const h = lines.length * TIP_LINE_H + 8;
+    const x = Math.max(4, Math.min(W - w - 4, more.x));
+    const y = more.y - 4 - h;
+    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = THEME.borderActive ?? THEME.accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    lines.forEach((s, i) => ctx.fillText(s, x + CHIP_PAD_X, y + 4 + i * TIP_LINE_H + TIP_LINE_H / 2));
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  _zoneAt(x, y) {
+    return this._hitZones.find(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) ?? null;
+  }
+
+  /** Klik chipa → przywróć panel (onRestore); „+N” → pierwszy niewidoczny. Zwraca true gdy trafiono. */
   handleClick(x, y) {
-    const z = this._hitZones.find(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
+    const z = this._zoneAt(x, y);
     if (!z) return false;
-    const e = this._entries.find(e => e.key === z.key);
+    const e = z.key === MORE_KEY ? this._entries[z.first] : this._entries.find(e => e.key === z.key);
     if (e?.onRestore) e.onRestore();
     return true;
   }
 
-  isOver(x, y) {
-    return this._hitZones.some(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
-  }
+  isOver(x, y) { return !!this._zoneAt(x, y); }
 
   handleMouseMove(x, y) {
-    const z = this._hitZones.find(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
+    const z = this._zoneAt(x, y);
     this._hover = z ? z.key : null;
   }
 

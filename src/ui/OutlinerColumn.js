@@ -4,8 +4,9 @@
 // przewijana lista wierszy z clipem, pasek przewijania, stan zwinięcia układów, prostokąty trafień, kółko, podpowiedź.
 //
 //   • Geometria (§7.17; U3): kolumna 150 px przy SWOJEJ krawędzi (lewy — x 0, prawy — x W − 150), od dolnej krawędzi
-//     górnej belki do górnej krawędzi PASA DOLNEGO (`outlinerBottomInset` — dziś pasek zegara 20 px nad paskiem
-//     nawigacji; U4 wypełni pas na całą szerokość). Krawędź od strony mapy — linia.
+//     górnej belki w dół: PRAWA — do górnej krawędzi PASA DOLNEGO (`outlinerBottomInset`), LEWA — do górnej krawędzi
+//     paska nawigacji (`leftColumnBottomInset`; ARKUSZ UI U4-3, decyzja (a) — pas na całą szerokość zaczyna się przy
+//     jej prawej krawędzi). Krawędź od strony mapy — linia.
 //   • Widoczność (decyzja 4): tylko nad mapą — ukryta przy otwartym overlayu pełnoekranowym, przy rozwiniętym Doku
 //     taktycznym i przy podglądzie globusa; poza trybem cywilizacji nic. `visible` — stan użytkownika (klawisze §7.16,
 //     sesja). Tło `bgAlpha(0.6)` + cień tekstu — strojenie na bramce (`KOSMOS.leftOutliner` / `KOSMOS.rightOutliner`).
@@ -23,7 +24,7 @@ import { COSMIC }          from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
 import { t }               from '../i18n/i18n.js';
 import { isSystemExpanded } from './SystemTreeLogic.js';
-import { getMapInsets, outlinerBottomInset } from './MapInsets.js';
+import { getMapInsets, outlinerBottomInset, leftColumnBottomInset } from './MapInsets.js';
 
 export const OUTLINER_COLUMN_W     = COSMIC.OUTLINER_W;   // 150 px — §7.17 (oba outlinery po 150 px)
 export const OUTLINER_BG_ALPHA     = 0.6;                 // §7.17 — strojenie na bramce
@@ -78,7 +79,10 @@ export class OutlinerColumn {
 
   _geom(W, H, K) {
     const ins = getMapInsets(K);
-    const bottom = outlinerBottomInset(ins, !!K?.civMode);
+    // U4-3 (decyzja (a)): lewa kolumna schodzi do paska nawigacji (nad Dokiem taktycznym, gdy widoczny), prawa — nad pas.
+    const bottom = this.side === 'left'
+      ? leftColumnBottomInset({ civMode: !!K?.civMode, dockH: K?.tacticalDock?.getReservedHeight?.() ?? 0 })
+      : outlinerBottomInset(ins, !!K?.civMode);
     return {
       x: this.side === 'right' ? W - OUTLINER_COLUMN_W : 0,
       y: ins.top,
