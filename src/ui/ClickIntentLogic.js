@@ -96,6 +96,11 @@ export const enemyTarget   = (id, vessel) => ({ type: 'enemy', id, systemId: sys
 export const vesselsTarget = (ids, systemId) => ({ type: 'vessels', ids: [...(ids ?? [])], id: ids?.[0] ?? null, systemId: systemId ?? null });
 export const stationTarget = (id, station, fallbackSystemId = null) => ({ type: 'station', id, systemId: station ? systemIdOf(station) : fallbackSystemId });
 export const bodyTarget    = (entity) => ({ type: 'body', id: entity?.id ?? null, entity, systemId: systemIdOf(entity) });
+/**
+ * ARKUSZ UI U3-2 (D-UI-7, §7.11) — węzeł floty w prawym outlinerze: układ celu = układ PROWADZĄCEGO (pierwszy żywy
+ * członek — decyzja 6 (a)); bez prowadzącego układ nieznany (focus bez przełączania).
+ */
+export const fleetTarget   = (id, lead) => ({ type: 'fleet', id, leadId: lead?.id ?? null, systemId: lead ? systemIdOf(lead) : null });
 
 /**
  * Wykonanie intencji — jedno miejsce dla wszystkich powierzchni.
@@ -104,6 +109,8 @@ export const bodyTarget    = (entity) => ({ type: 'body', id: entity?.id ?? null
  *   focus  → kamera (statek / klaster / wróg: `vessel:focus` lidera; stacja: `station:focus`; ciało:
  *            `body:selected { focus: true }`; gwiazda: `resetToSystemView`); zaznaczenie bez zmian;
  *   switchSystem+focus → najpierw `switchActiveSystem(układ celu)` (odmowa = nic), potem jak `focus`.
+ *   Flota (U3-2, §7.11): select → menu floty (`setSelectedFleetId`) + mutex — zaznaczenie statków zdjęte (jak klik floty
+ *   w Dowództwie); focus → `vessel:focus` prowadzącego.
  * @param {object} target
  * @param {string|null} intent
  * @param {{K?:object, emit?:Function}} env — K = `window.KOSMOS`, emit = `EventBus.emit`
@@ -137,6 +144,15 @@ export function applyClickIntent(target, intent, { K = null, emit = null } = {})
       break;
     case 'station':
       emit?.(focus ? 'station:focus' : 'station:selected', { stationId: target.id });
+      break;
+    case 'fleet':
+      if (focus) {
+        if (target.leadId == null) return null;
+        emit?.('vessel:focus', { vesselId: target.leadId });
+      } else {
+        um?.setSelectedFleetId?.(target.id);
+        um?.setSelectedVesselId?.(null);   // §7.11 — mutex flota / statek (flota wygrywa kontekst, jak w Dowództwie)
+      }
       break;
     case 'body':
       if (!target.entity) return null;
@@ -175,4 +191,23 @@ export function syncBodyCardOnSystemSwitch(entity, systemId, emit = null) {
   }
   emit?.('body:selected', { entity, focus: false });
   return 'reselect';
+}
+
+/**
+ * ARKUSZ UI U3-2 (Finding 491) — lustro 486 dla panelu stacji (wołane w tym samym miejscu: `system:switched`, PO
+ * przebudowie sceny): przełączenie układu zamyka panel stacji SPOZA układu docelowego; panel stacji Z układu docelowego
+ * zostaje (drugi klik reguły §7.8 w stację z innego układu przełącza układ, panel zostaje). Panel zadokowany jako belka
+ * (zminimalizowany) — bez zmian (to wybór gracza).
+ * @param {object|null} station — stacja w otwartym panelu (`StationPanel._station()`)
+ * @param {string|null} systemId — układ docelowy
+ * @param {Function} [close] — zamknięcie panelu
+ * @returns {'close'|'keep'|null}
+ */
+export function syncStationPanelOnSystemSwitch(station, systemId, close = null) {
+  if (!station || !systemId) return null;
+  if (systemIdOf(station) !== systemId) {
+    close?.();
+    return 'close';
+  }
+  return 'keep';
 }

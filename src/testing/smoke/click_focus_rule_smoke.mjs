@@ -228,6 +228,9 @@ header('T4  WYKONANIE Outliner.hitTest — nagłówek układu (§7.9)');
 {
   const { Outliner } = await import('../../ui/Outliner.js');
   const o = new Outliner();
+  // ARKUSZ UI U3-2 — przecelowanie: prawy outliner to kolumna nad mapą (`OutlinerColumn`), klik działa tylko, gdy kolumna
+  // jest widoczna (tryb cywilizacji — decyzja 4); dawniej szuflada odpowiadała zawsze. Asercje bez zmian.
+  const civ0 = globalThis.KOSMOS.civMode; globalThis.KOSMOS.civMode = true;
   const hit = (target) => { o._clickTargets = [{ ...target, x: W - 150, y: 100, w: 150, h: 16 }]; return o.hitTest(W - 140, 105, W, H); };
   rec.reset = 0; rec.switched = [];
   const r1 = hit({ type: 'system', systemId: 'sys_home' });
@@ -235,6 +238,7 @@ header('T4  WYKONANIE Outliner.hitTest — nagłówek układu (§7.9)');
   rec.reset = 0; rec.switched = [];
   hit({ type: 'system', systemId: 'sys_044' });
   ok(JSON.stringify(rec.switched) === '["sys_044"]' && rec.reset === 0, 'T4b KONTROLA: inny układ → przełączenie (kadr `frameSystem` w `initSystem`)');
+  globalThis.KOSMOS.civMode = civ0;
 }
 
 // ═══ T5 ═════════════════════════════════════════════════════════════════════
@@ -459,6 +463,8 @@ header('T10 WYKONANIE Outliner.hitTest — wiersz statku, kolonii, stacji (§7.8
 {
   const { Outliner } = await import('../../ui/Outliner.js');
   const o = new Outliner();
+  // ARKUSZ UI U3-2 — przecelowanie jak w T4: kolumna widoczna tylko w trybie cywilizacji (decyzja 4). Asercje bez zmian.
+  const civ0 = globalThis.KOSMOS.civMode; globalThis.KOSMOS.civMode = true;
   const hit = (target, x = W - 140) => { o._clickTargets = [{ ...target, x: W - 150, y: 100, w: 150, h: 18 }]; return o.hitTest(x, 105, W, H); };
   o._lastMouseMods = { ctrl: false };
   reset(); hit({ type: 'vessel', vesselId: 'v1' });
@@ -497,6 +503,7 @@ header('T10 WYKONANIE Outliner.hitTest — wiersz statku, kolonii, stacji (§7.8
   reset({ station: 's2' }); hit({ type: 'station', stationId: 's2', systemId: 'sys_C' });
   ok(JSON.stringify(ops) === '[["switch","sys_C"]]' && JSON.stringify(evs) === '[["station:focus",{"stationId":"s2"}]]',
     'T10o stacja z INNEGO układu, 2. klik → przełączenie, potem kamera');
+  globalThis.KOSMOS.civMode = civ0;
 }
 
 // ═══ T11 ════════════════════════════════════════════════════════════════════

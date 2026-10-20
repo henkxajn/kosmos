@@ -27,7 +27,9 @@
 //       na obu panelach, w K3, w NavPeek i w `FMO._getLocationText` (koniec „Orbit: ???");
 //       KONTROLA: ten sam statek z dockedAt:'h2' → „Orbiting h2".
 //   T4  bliźniaki: FleetPictureLogic (aktywność + kolumna Stan K3), FleetRegistryLogic (fallback
-//       „Idle"), Outliner (kubełek) — nierozpoznany stan NIE ląduje pod „Docked".
+//       „Idle"), Outliner — nierozpoznany stan NIE wygląda jak „Docked". ARKUSZ UI U3-2 — przecelowanie: prawy outliner
+//       to drzewo statków (D-UI-6) bez kubełków stanu; stan pokazuje ZNACZNIK (kolor glifu roli, D-UI-9) i podpowiedź
+//       wiersza — pin sprawdza oba (intencja Findingu 266 bez zmian).
 //   T5  zgoda nagłówka z rosterem: `summarizeFleetGroup.dockedCount` == liczba wierszy „Docked"
 //       na fixture mieszanym — NIEZALEŻNE od wybranego słowa fallbacku.
 //   T6  kontrola „tylko etykieta": `countActionable` / `summarizeFleetGroup` na stanie undefined
@@ -58,6 +60,7 @@ import { Outliner } from '../../ui/Outliner.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import { getPeekData } from '../../ui/NavPeekProviders.js';
 import { HULLS } from '../../data/HullsData.js';
+import { THEME } from '../../config/ThemeConfig.js';
 
 // Kanon — na HEAD sprzed naprawy NIE ISTNIEJE. Import owinięty: pin ma DEGRADOWAĆ, nie przerywać
 // (lekcja legu D: `TypeError` na T5 zabierał kolor wszystkim pinom niżej).
@@ -336,32 +339,43 @@ header('T4  bliźniaki — FleetPictureLogic (aktywność+Stan), FleetRegistryLo
     const e = buildShipEntry(d, {});
     ok(e.activityKey === 'fleetPicture.state.docked' && e.dockedAt === 'p_mstow', `KONTROLA: docked → activity docked + dockedAt (${e.activityKey}/${e.dockedAt})`);
   }
-  // Outliner — sekcja FLOTA na atrapie ctx: nazwa statku o stanie nierozpoznanym NIE stoi pod
-  // nagłówkiem „Docked (n)"; realnie zadokowany — stoi (kontrola nośna).
+  // Outliner (prawy — drzewo statków, ARKUSZ UI U3-2) na atrapie ctx z kolorem każdego napisu: znacznik statku
+  // o stanie nierozpoznanym NIE jest znacznikiem „zadokowany” (D-UI-9: zadokowany = `success`, reszta stanów stojących
+  // = bezczynny `textDim`), a jego podpowiedź mówi „Unknown”, nie „Docked”; realnie zadokowany — tak (kontrola nośna).
   {
     const dock = SHAPES.docked(), und = SHAPES.undef();
     world([dock, und]);
     const out = new Outliner();
-    const ctx = capCtx();
+    const drawn = [];   // [napis, fillStyle]
+    const ctx = new Proxy({}, {
+      get: (tgt, k) => {
+        if (k === 'fillText') return (s) => { drawn.push([String(s), tgt.fillStyle]); };
+        if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
+        if (k in tgt) return tgt[k];
+        return typeof k === 'string' ? () => {} : undefined;
+      },
+      set: (tgt, k, v) => { tgt[k] = v; return true; },
+    });
     let err = null;
-    try { out.draw(ctx, 1920, 1080, { colonies: [], expeditions: [], fleet: [dock.id, und.id], shipQueues: [] }); }
+    try { out.draw(ctx, 1920, 1080, {}); }
     catch (e) { err = e; }
     ok(err === null, `Outliner.draw() nie rzuca (${err ? err.message : 'ok'})`);
-    const texts = ctx.__texts;
-    const dockedHdr = t('outliner.fleetDocked');
-    const iHdr = texts.findIndex((s) => s.startsWith(dockedHdr + ' ('));
-    ok(iHdr >= 0, `KONTROLA: nagłówek „${dockedHdr} (n)" narysowany (indeks ${iHdr})`);
-    // blok pod nagłówkiem = do następnego nagłówka „… (n)" albo końca
-    const isHdr = (s) => /\(\d+\)$/.test(s);
-    let iEnd = texts.length;
-    for (let i = iHdr + 1; i < texts.length; i++) if (isHdr(texts[i])) { iEnd = i; break; }
-    const block = iHdr >= 0 ? texts.slice(iHdr + 1, iEnd) : [];
-    ok(block.some((s) => s.includes('Kotwica')), `KONTROLA NOŚNA: zadokowany „Kotwica" stoi pod „${dockedHdr}" (${J(block)})`);
-    ok(!block.some((s) => s.includes('Widmo')), `stan nierozpoznany „Widmo" NIE stoi pod „${dockedHdr}"`);
-    const unkHdr = texts.findIndex((s) => s.startsWith(UNKNOWN_WORD() + ' ('));
-    ok(unkHdr >= 0 && texts.slice(unkHdr + 1).some((s) => s.includes('Widmo')),
-       `„Widmo" stoi pod własnym nagłówkiem „${UNKNOWN_WORD()} (n)" (indeks ${unkHdr})`);
-    ok(texts.some((s) => s.startsWith(dockedHdr + ' (1)')), `nagłówek liczy TYLKO realnie zadokowane: „${dockedHdr} (1)"`);
+    // glif roli rysowany tuż przed nazwą — jego kolor to znacznik
+    const glyphColor = (name) => { const i = drawn.findIndex(([s]) => s.includes(name)); return i > 0 ? drawn[i - 1][1] : null; };
+    ok(drawn.some(([s]) => s.includes('Kotwica')) && drawn.some(([s]) => s.includes('Widmo')), `ANTY-JAŁOWOŚĆ: oba wiersze narysowane (${J(drawn.map(([s]) => s))})`);
+    ok(glyphColor('Kotwica') === THEME.success, `ANTY-JAŁOWOŚĆ: zadokowany „Kotwica" — znacznik „zadokowany" (${glyphColor('Kotwica')})`);
+    ok(glyphColor('Widmo') !== THEME.success && glyphColor('Widmo') === THEME.textDim,
+       `stan nierozpoznany „Widmo" — znacznik bezczynny, NIE „zadokowany" (${glyphColor('Widmo')})`);
+    const tip = (id) => {
+      const z = (out._clickTargets ?? []).find((c) => c.type === 'vessel' && c.vesselId === id);
+      if (!z) return [];
+      out.updateHover(z.x + 40, z.y + z.h / 2, 1920, 1080);
+      return (out._tip?.lines ?? []).map((l) => l.text ?? '');
+    };
+    const tDock = tip(dock.id), tUnd = tip(und.id);
+    ok(tDock.includes(t('fleetPicture.state.docked')), `ANTY-JAŁOWOŚĆ: podpowiedź „Kotwica" — „${t('fleetPicture.state.docked')}" (${J(tDock)})`);
+    ok(tUnd.includes(UNKNOWN_WORD()) && !tUnd.includes(t('fleetPicture.state.docked')) && !tUnd.includes(t('fleetGroup.statusDocked')),
+       `podpowiedź „Widmo" — „${UNKNOWN_WORD()}", bez słowa dokowania (${J(tUnd)})`);
   }
 }
 

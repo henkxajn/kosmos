@@ -4,17 +4,25 @@
 //
 //   left   — lewy outliner (układy i ciała), gdy widoczny nad mapą (decyzja 4: nie przy otwartym overlayu
 //            pełnoekranowym ani przy rozwiniętym Doku taktycznym) — `LeftOutliner.getReservedWidth`;
-//   right  — 0: prawy outliner jest w U2 wysuwaną szufladą NAD mapą (bez rezerwy). Kolumna i jej wcięcie — U3-2
-//            (§4.4; m.in. kotwica zapasowa panelu statku). ⚠ Dwaj konsumenci rezerwują dziś prawe 150 px SAMI
-//            (`BottomContext._bounds`, kadr „Obserwuj” `rightW`) — zostaje bez zmian do U3;
+//   right  — prawy outliner (statki gracza, ARKUSZ UI U3-2), gdy widoczny nad mapą — `Outliner.getReservedWidth`
+//            (`KOSMOS.rightOutliner`); kotwica zapasowa i clamp panelu statku oraz panelu stacji kończą się przed nim.
+//            ⚠ Dwaj konsumenci rezerwują prawe 150 px SAMI, także przy schowanym outlinerze (`BottomContext._bounds`,
+//            kadr „Obserwuj” `rightW`) — bez zmian w U3 (kandydaci do U4);
 //   top    — dolna krawędź górnej belki (`TOP_BAND_H`, tryb cywilizacji) / górnego paska (`TOP_BAR_H`, Generator);
 //   bottom — pasek nawigacji + listwa dziennika (`BOTTOM_RESERVED`, tryb cywilizacji) / dolny pasek (Generator)
 //            + rezerwa Doku taktycznego.
 //
-// Czysta arytmetyka (`computeMapInsets`) + odczyt z żywego stanu (`getMapInsets(K)`, K = `window.KOSMOS`). Bez
-// EventBusa; jedyne importy — stałe układu.
+// ARKUSZ UI U3-2 — PAS DOLNY: `BOTTOM_STRIP_H` (dziś pasek zegara `BottomControlBar`, 20 px nad paskiem nawigacji).
+// Oba outlinery kończą się NAD nim (`outlinerBottomInset`); U4 wypełni pas na całą szerokość. Pozostałe wcięcia bez
+// zmian (pływające panele i kadr „Obserwuj” liczą dół jak dotąd).
+//
+// Czysta arytmetyka (`computeMapInsets`, `outlinerBottomInset`) + odczyt z żywego stanu (`getMapInsets(K)`,
+// K = `window.KOSMOS`). Bez EventBusa; jedyne importy — stałe układu.
 
 import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
+
+/** Wysokość pasa dolnego nad paskiem nawigacji (px logiczne) — dziś pasek zegara (`BottomControlBar`). */
+export const BOTTOM_STRIP_H = 20;
 
 /**
  * Wcięcia obszaru mapy z wymiarów składowych.
@@ -33,6 +41,18 @@ export function computeMapInsets({ civMode = false, leftW = 0, rightW = 0, dockH
 }
 
 /**
+ * ARKUSZ UI U3-2: dolne wcięcie KOLUMN outlinerów — nad pasem dolnym (`BOTTOM_STRIP_H` ponad paskiem nawigacji).
+ * Rezerwa Doku taktycznego zawiera już prześwit nad pasem zegara, więc wygrywa większa z dwóch wartości.
+ * @param {{bottom:number}} insets — wynik `computeMapInsets` / `getMapInsets`
+ * @param {boolean} civMode
+ * @returns {number}
+ */
+export function outlinerBottomInset(insets, civMode) {
+  const b = Number.isFinite(insets?.bottom) ? insets.bottom : 0;
+  return civMode === true ? Math.max(b, BOTTOM_RESERVED + BOTTOM_STRIP_H) : b;
+}
+
+/**
  * Wcięcia z żywego stanu gry.
  * @param {object} [K] — `window.KOSMOS` (przekazany jawnie w keeperach)
  */
@@ -40,7 +60,7 @@ export function getMapInsets(K = (typeof window !== 'undefined' ? window.KOSMOS 
   return computeMapInsets({
     civMode: !!K?.civMode,
     leftW:   K?.leftOutliner?.getReservedWidth?.(K) ?? 0,
-    rightW:  0,   // U3-2 — prawy outliner jako kolumna (dziś szuflada nad mapą)
+    rightW:  K?.rightOutliner?.getReservedWidth?.(K) ?? 0,   // ARKUSZ UI U3-2 — prawy outliner (statki) jako kolumna
     dockH:   K?.tacticalDock?.getReservedHeight?.() ?? 0,
   });
 }

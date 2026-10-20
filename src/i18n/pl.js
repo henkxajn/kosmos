@@ -2567,6 +2567,13 @@ export default {
   'leftOutliner.groundUnits': 'Jednostki naziemne: {0} — klik: mapa ciała',
   'leftOutliner.queue': 'W kolejce: {0}',
   'leftOutliner.keyHint': '„,” lewy panel · „.” prawy panel · „B” oba',
+  // ARKUSZ UI U3-2 — prawy outliner (statki): nagłówek, sekcja „W drodze” (D-UI-8, §7.3), kubełki typu (D-UI-6, §7.1)
+  'rightOutliner.ships': 'STATKI [{0}]',
+  'rightOutliner.inTransit': 'W drodze',
+  'rightOutliner.group.war': 'Wojenne',
+  'rightOutliner.group.science': 'Naukowe',
+  'rightOutliner.group.cargo': 'Cargo',
+  'rightOutliner.group.other': 'Pozostałe',
 
   // === TopBar ===
   'topBar.resources': 'SUROWCE',

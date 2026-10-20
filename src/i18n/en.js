@@ -2566,6 +2566,13 @@ export default {
   'leftOutliner.groundUnits': 'Ground units: {0} — click: body map',
   'leftOutliner.queue': 'Queued: {0}',
   'leftOutliner.keyHint': '“,” left panel · “.” right panel · “B” both',
+  // ARKUSZ UI U3-2 — right outliner (ships): header, "In transit" section (D-UI-8, §7.3), type buckets (D-UI-6, §7.1)
+  'rightOutliner.ships': 'SHIPS [{0}]',
+  'rightOutliner.inTransit': 'In transit',
+  'rightOutliner.group.war': 'Military',
+  'rightOutliner.group.science': 'Science',
+  'rightOutliner.group.cargo': 'Cargo',
+  'rightOutliner.group.other': 'Other',
 
   // === TopBar ===
   'topBar.resources': 'RESOURCES',

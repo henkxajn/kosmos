@@ -47,8 +47,9 @@
 //       (stan przeżywa otwarcie overlayu); podpowiedź klawiszy w nagłówku (PL / EN)
 //   L15 GameScene: klawisze w przełączniku `e.code`, tylko w trybie cywilizacji, przez `toggleOutliners` (pin
 //       źródłowy); UIManager `toggleOutliners` — oba stany, prawy schowany bez wysuniętej szuflady
-//   L16 prawy Outliner (dzisiejszy) — widoczność z klawisza we wszystkich wejściach: rysowanie, klik, blokada kamery,
-//       kółko, najechanie, podpowiedź, animacja (piny źródłowe)
+//   L16 prawy outliner — od ARKUSZ UI U3-2 kolumna nad mapą (`OutlinerColumn`, jak lewy): wejścia w UIManagerze bez
+//       własnej flagi widoczności (klawisz i decyzja 4 — wewnątrz kolumny), w warstwie lewego; bez szuflady (piny
+//       źródłowe; wykonanie — `right_outliner_smoke`)
 //   L17 Finding 483 — kolejność rysowania: etykiety mapy → lewy outliner → lista kolonii z belki → Dok / paski →
 //       pływające panele; kolejność kliku: pływające panele → lista kolonii → dziennik → lewy outliner → etykiety mapy
 //       (piny źródłowe, komentarze zdjęte)
@@ -56,6 +57,15 @@
 // PINY (ARKUSZ UI U3-0 — Finding 489):
 //   L18 statek GRACZA w niezbadanym układzie odsłania go na liście (`treeContext` czyta rejestr statków); statek
 //       wroga — nie (filtr `isEnemyVessel` w `treeContext`); KONTROLA: bez Twojego statku oba układy poza listą
+//
+// PRZECELOWANIA (ARKUSZ UI U3-2):
+//   L2a — kolumna kończy się nad PASEM DOLNYM (`MapInsets.BOTTOM_STRIP_H` 20 px nad paskiem nawigacji — dziś pasek
+//         zegara; U4 wypełni pas na całą szerokość), nie na pasku nawigacji: decyzja właściciela z promptu U3
+//         („zakończ OBA outlinery nad nim już teraz”); intencja pinu (geometria §7.17) bez zmian.
+//   L2a2 — NOWY pin arytmetyki pasa dolnego (`MapInsets.outlinerBottomInset`; pada na drzewie sprzed U3-2).
+//   L15c / L15d / L16 — prawy outliner przestał być szufladą z flagą `_outlinerUserVisible` (U3-2: kolumna jak lewy,
+//         `visible` i decyzja 4 wewnątrz `OutlinerColumn.isShown`); piny pilnują tej samej intencji (klawisz działa we
+//         wszystkich wejściach) w nowym kształcie montażu.
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -174,7 +184,10 @@ header('L2  draw — geometria (§7.17), nagłówek, wiersze, „○”');
   const c = ctx._calls;
   ok(!!tr && Array.isArray(tr.systems) && tr.systems.length === 2, 'L2-0 `draw` zwraca drzewo z tej klatki (2 układy)');
   const bg = c.rects.find((r) => r.x === 0 && r.w === 150);
-  ok(!!bg && bg.y === 28 && bg.h === 720 - 28 - 42, `L2a kolumna 150 px od y 28 (dół górnej belki) do górnej krawędzi paska nawigacji (y ${720 - 42}) — jest ${bg ? `${bg.y}+${bg.h}` : '—'}`);
+  ok(!!bg && bg.y === 28 && bg.h === 720 - 28 - 62, `L2a kolumna 150 px od y 28 (dół górnej belki) do górnej krawędzi pasa dolnego (y ${720 - 62} — 20 px nad paskiem nawigacji; U3-2) — jest ${bg ? `${bg.y}+${bg.h}` : '—'}`);
+  ok(MI?.BOTTOM_STRIP_H === 20 && MI?.outlinerBottomInset?.({ bottom: 42 }, true) === 62 && MI?.outlinerBottomInset?.({ bottom: 42 + 64 }, true) === 106
+    && MI?.outlinerBottomInset?.({ bottom: 26 }, false) === 26,
+    'L2a2 `outlinerBottomInset`: tryb cywilizacji — nad pasem dolnym (42 + 20), rezerwa Doku wygrywa, gdy większa; Generator bez zmian');
   ok(!!bg && bg.fillStyle === bgAlpha(0.6), `L2b tło półprzezroczyste \`bgAlpha(0.6)\` (jest ${bg?.fillStyle})`);
   const text = c.text.map((x) => x.s);
   ok(text.includes(t('leftOutliner.systems', 2).toUpperCase()) && text.includes('UKŁADY [2]'), 'L2c nagłówek „UKŁADY [2]” (i18n)');
@@ -601,26 +614,32 @@ header('L15 GameScene / UIManager — klawisze (piny źródłowe)');
   ok(/import \{ outlinerKeyAction \} from '\.\.\/ui\/LeftOutliner\.js'/.test(gs), 'L15b reguła klawiszy z czystego helpera (`outlinerKeyAction`)');
   const ui = src('../../scenes/UIManager.js');
   const tog = body(ui, '  toggleOutliners(action) {');
-  ok(/applyOutlinerToggle\(action, \{ left: this\._leftOutliner\.visible !== false, right: this\._outlinerUserVisible !== false \}\)/.test(tog)
-    && /this\._leftOutliner\.visible = next\.left;/.test(tog) && /this\._outlinerUserVisible = next\.right;/.test(tog),
-    'L15c `toggleOutliners` — oba stany z jednej reguły (`applyOutlinerToggle`)');
-  ok(/if \(!next\.right\) \{ const o = this\._outliner; o\._slideProgress = 0;/.test(tog), 'L15d prawy schowany — szuflada zsunięta (globus kolonii nie odsuwa się)');
+  ok(/applyOutlinerToggle\(action, \{ left: this\._leftOutliner\.visible !== false, right: this\._outliner\.visible !== false \}\)/.test(tog)
+    && /this\._leftOutliner\.visible = next\.left;/.test(tog) && /this\._outliner\.visible = next\.right;/.test(tog),
+    'L15c `toggleOutliners` — oba stany z jednej reguły (`applyOutlinerToggle`), prawy przez `visible` kolumny (U3-2)');
+  ok(tog.length > 0 && !/_slideProgress|_hideAt|_drawerMode|_outlinerUserVisible/.test(ui),
+    'L15d prawy schowany — kolumna (bez szuflady): w UIManagerze ani stanu szuflady, ani osobnej flagi widoczności (U3-2)');
 }
 
 // ═══ L16 ══════════════════════════════════════════════════════════════════════
-header('L16 prawy Outliner — widoczność z klawisza we wszystkich wejściach (piny źródłowe)');
+header('L16 prawy outliner — kolumna w warstwie lewego; klawisz i decyzja 4 wewnątrz kolumny (piny źródłowe, U3-2)');
 {
   const ui = src('../../scenes/UIManager.js');
   const has = (sig, re) => re.test(body(ui, sig));
-  ok(has('  isOverUI(rawX, rawY) {', /this\._outlinerUserVisible !== false && !this\.tacticalDock\?\.isExpanded\?\.\(\) && this\._outliner\.isOver\(/), 'L16a blokada kamery');
-  ok(has('  handleClick(x, y) {', /this\._outlinerUserVisible !== false && !this\.tacticalDock\?\.isExpanded\?\.\(\) && this\._outliner\?\.hitTest\?\.\(/), 'L16b klik');
-  ok(has('  handleWheel(rawX, rawY, deltaY) {', /this\._outlinerUserVisible !== false && this\._outliner\?\.handleWheel\?\.\(/), 'L16c kółko');
-  ok(has('  handleMouseMove(x, y) {', /if \(this\._outliner && this\._outlinerUserVisible !== false\) this\._outliner\.updateHover\(/), 'L16d najechanie');
+  ok(has('  isOverUI(rawX, rawY) {', /this\._outliner\?\.isOver\?\.\(x, y, W, H\)/), 'L16a blokada kamery (`isOver` kolumny — z jej widocznością)');
+  const hc = body(ui, '  handleClick(x, y) {');
+  const iLO = hc.indexOf('this._leftOutliner?.hitTest?.('), iRO = hc.indexOf('this._outliner?.hitTest?.('), iLbl = hc.indexOf('this._mapLabelLayer?.handleClick?.(');
+  ok(iLO > 0 && iRO > iLO && iRO < iLbl && hc.split('this._outliner?.hitTest?.(').length === 2,
+    'L16b klik — jedno wywołanie, zaraz po lewym (pod listą kolonii i dziennikiem), przed etykietami mapy (decyzja 4)');
+  ok(has('  handleWheel(rawX, rawY, deltaY) {', /if \(this\._outliner\?\.handleWheel\?\.\(x, y, delta, W, H\)\) return true;/), 'L16c kółko (bez własnej bramki — widoczność sprawdza kolumna)');
+  ok(has('  handleMouseMove(x, y) {', /this\._outliner\?\.updateHover\?\.\(x, y, W, H\)/), 'L16d najechanie');
   const dr = body(ui, '  _draw() {');
-  ok(/this\._outlinerState && this\._outlinerUserVisible !== false && !this\.tacticalDock\?\.isExpanded\?\.\(\)\) \{\s*this\._outliner\._drawerMode = true;/.test(dr), 'L16e rysowanie');
-  ok(/this\._outlinerUserVisible !== false && !this\.overlayManager\.isAnyOpen\(\)\) this\._outliner\.drawTooltip\(ctx\)/.test(dr), 'L16f podpowiedź kolonii');
-  ok(/this\._outlinerUserVisible !== false && \(this\._outliner\?\.isAnimating\?\.\(\)/.test(dr), 'L16g animacja szuflady');
-  ok(/this\._outlinerUserVisible = true;/.test(ui), 'L16h KONTROLA: stan startowy — widoczny');
+  const dLO = dr.indexOf('this._leftOutliner.draw('), dRO = dr.indexOf('this._outliner.draw('), dTRD = dr.indexOf('this._topResourceDrawer.draw(');
+  ok(dLO > 0 && dRO > dLO && dRO < dTRD && dr.split('this._outliner.draw(').length === 2,
+    'L16e rysowanie — raz, w warstwie lewego (po nim, przed listą kolonii z belki i pływającymi panelami)');
+  ok(/if \(civMode && !globeOpen\) this\._outliner\.drawTooltip\(ctx, W, H\);/.test(dr), 'L16f podpowiedź prawego (widoczność sprawdza kolumna)');
+  ok(dr.length > 0 && !/_outliner\?\.isAnimating/.test(dr) && !/_drawerMode/.test(dr), 'L16g bez animacji i trybu szuflady');
+  ok(/window\.KOSMOS\.rightOutliner = this\._outliner;/.test(ui), 'L16h kolumna wystawiona w `KOSMOS.rightOutliner` (wcięcie prawe `MapInsets`, strojenie)');
 }
 
 // ═══ L17 ══════════════════════════════════════════════════════════════════════

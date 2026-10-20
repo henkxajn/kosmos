@@ -69,7 +69,7 @@ import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
 import { LeftOutliner, applyOutlinerToggle } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2 — lewy outliner (układy i ciała)
 import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
-import { syncBodyCardOnSystemSwitch } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 — Finding 486
+import { syncBodyCardOnSystemSwitch, syncStationPanelOnSystemSwitch, clickObject, vesselTarget } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 (486), U3-2 (491, Tab)
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -222,14 +222,15 @@ export class UIManager {
     this._topBar       = new TopBar();
     this._bottomBar    = new BottomBar();
     this._bottomContext = new BottomContext();
+    // ARKUSZ UI U3-2 (D-UI-1 prawy) — prawy outliner: statki gracza, półprzezroczysty nad mapą, tylko nad mapą (decyzja 4),
+    // stan użytkownika `visible` (klawisze „.” / „B”). Wystawiony w `KOSMOS.rightOutliner` — rezerwa prawej krawędzi
+    // (`MapInsets`), strojenie tła na bramce.
     this._outliner     = new Outliner();
+    if (window.KOSMOS) window.KOSMOS.rightOutliner = this._outliner;
     // ARKUSZ UI U2 (D-UI-1 lewy) — lewy outliner: układy i ciała, półprzezroczysty nad mapą, tylko nad mapą (decyzja 4).
     // Wystawiony w `KOSMOS.leftOutliner` — rezerwa lewej krawędzi (`MapInsets`), strojenie tła na bramce.
     this._leftOutliner = new LeftOutliner();
     if (window.KOSMOS) window.KOSMOS.leftOutliner = this._leftOutliner;
-    // ARKUSZ UI U2-4 (§7.16) — widoczność PRAWEGO Outlinera z klawiszy „.” / „B” (sesja). W U2 prawy zostaje szufladą
-    // nad mapą i nad overlayem (decyzja 4 dla prawego — U3-2, razem z końcem trybu szuflady).
-    this._outlinerUserVisible = true;
 
     // ── Stan UI ───────────────────────────────────────────────
     this._selectedEntity  = null;
@@ -607,8 +608,9 @@ export class UIManager {
   }
 
   // M4 P2 — Tab / Shift+Tab cycling przez własne nie-wrak vessele.
-  // Sortuje po id (deterministyczne), wraparound. Aktualizuje selection +
-  // emituje vessel:focus żeby kamera 3D poleciała do wybranego statku.
+  // Sortuje po id (deterministyczne), wraparound. Aktualizuje selection, potem kamera — ARKUSZ UI U3-2 (reszta Findingu
+  // 478, §7.8): Tab = zaznaczenie + „drugi klik” reguły U1 — statek z INNEGO układu najpierw przełącza układ (dawniej
+  // `vessel:focus` statku bez sprite'a w oglądanym układzie był cichym no-op).
   cycleSelectedVessel(direction = 1) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return;
@@ -627,7 +629,7 @@ export class UIManager {
     }
     const next = list[nextIdx];
     this.setSelectedVesselId(next.id);
-    EventBus.emit('vessel:focus', { vesselId: next.id });
+    clickObject(vesselTarget(next.id, next), { K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p) });
   }
 
   clearSelection() {
@@ -636,16 +638,15 @@ export class UIManager {
 
   /**
    * ARKUSZ UI U2-4 (§7.16): klawisze outlinerów — `left` („,”), `right` („.”), `both` („B”). Stan — sesja (nie zapis).
-   * Schowany prawy Outliner nie zostawia wysuniętej szuflady (globus kolonii nie odsuwa się — `getCoveredWidth` 0).
+   * U3-2: oba outlinery to kolumny nad mapą (`OutlinerColumn.visible`) — bez szuflady do zsuwania.
    * @param {'left'|'right'|'both'} action
    * @returns {boolean} czy klawisz coś zmienił
    */
   toggleOutliners(action) {
-    const next = applyOutlinerToggle(action, { left: this._leftOutliner.visible !== false, right: this._outlinerUserVisible !== false });
+    const next = applyOutlinerToggle(action, { left: this._leftOutliner.visible !== false, right: this._outliner.visible !== false });
     if (!next) return false;
     this._leftOutliner.visible = next.left;
-    this._outlinerUserVisible = next.right;
-    if (!next.right) { const o = this._outliner; o._slideProgress = 0; o._hovered = false; o._hideAt = 0; o._colonyTooltip = null; }
+    this._outliner.visible = next.right;
     this._dirty = true;
     return true;
   }
@@ -767,6 +768,11 @@ export class UIManager {
     // docelowego zostaje, a renderer (przebudowa sceny wyzerowała jego zaznaczenie) dostaje je z powrotem — bez kamery.
     EventBus.on('system:switched', ({ systemId } = {}) => {
       syncBodyCardOnSystemSwitch(this._selectedEntity, systemId, (n, p) => EventBus.emit(n, p));
+      // ARKUSZ UI U3-2 (Finding 491) — lustro 486: panel stacji SPOZA układu docelowego się zamyka (zadokowany — bez zmian).
+      const sp = this.stationPanel;
+      if (sp?.visible && !sp._float?.minimized) {
+        syncStationPanelOnSystemSwitch(sp._station?.() ?? null, systemId, () => { sp.hide(); this._dirty = true; });
+      }
     });
     EventBus.on('player:planetUpdated', ({ planet }) => {
       if (this._selectedEntity?.id === planet.id) { this._selectedEntity = planet; this._dirty = true; }
@@ -1914,11 +1920,9 @@ export class UIManager {
     // BottomBar (zawsze widoczny) + panel menu
     if (this._bottomBar.isOver(x, y, W, H)) return true;
 
-    // Outliner (prawy panel — tylko civMode; chowany gdy Dok taktyczny rozwinięty, §1.8)
-    if (window.KOSMOS?.civMode && this._outlinerUserVisible !== false && !this.tacticalDock?.isExpanded?.() && this._outliner.isOver(x, y, W, H)) return true;
-
-    // ARKUSZ UI U2 — lewy outliner (tylko nad mapą — decyzja 4; `isOver` zawiera warunek widoczności).
+    // ARKUSZ UI U2 / U3-2 — outlinery (tylko nad mapą — decyzja 4; `isOver` zawiera warunek widoczności).
     if (this._leftOutliner?.isOver?.(x, y, W, H)) return true;
+    if (this._outliner?.isOver?.(x, y, W, H)) return true;
 
     // Górny pasek surowców — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.isOver?.(x, y)) return true;
@@ -1983,6 +1987,7 @@ export class UIManager {
     if (this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
     if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
     if (this._leftOutliner?.isOver?.(x, y, W, H)) return true;   // ARKUSZ UI U2 — bez podpowiedzi mapy 3D pod outlinerem
+    if (this._outliner?.isOver?.(x, y, W, H)) return true;       // ARKUSZ UI U3-2 — także pod prawym
     return false;
   }
 
@@ -2003,10 +2008,6 @@ export class UIManager {
       return this._hitTestConfirm(x, y);
     }
 
-    // Outliner — prawy drawer rysowany NA SAMYM WIERZCHU (zawsze na topie), więc jego
-    // klik ma priorytet PRZED wszystkimi panelami, które wizualnie zasłania (combatHud,
-    // stationPanel, bell/MENU, dziennik). hitTest zwraca false poza drawerem/triggerem.
-    if (window.KOSMOS?.civMode && this._outlinerUserVisible !== false && !this.tacticalDock?.isExpanded?.() && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager; chowany gdy dok rozwinięty)
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
@@ -2035,6 +2036,9 @@ export class UIManager {
     // ARKUSZ UI U2 — lewy outliner: POD listą kolonii z górnej belki i rozwiniętym dziennikiem (oba leżą nad nim — wyżej
     // w łańcuchu), nad mapą 3D. `hitTest` zawiera warunek widoczności (decyzja 4) i pochłania każdy klik w kolumnę.
     if (this._leftOutliner?.hitTest?.(x, y, W, H)) return true;
+    // ARKUSZ UI U3-2 — prawy outliner (statki) w tym samym miejscu łańcucha co lewy (decyzja 4: tylko nad mapą; dawniej
+    // szuflada klikana PRZED wszystkim, bo wisiała nad overlayami).
+    if (this._outliner?.hitTest?.(x, y, W, H)) return true;
 
     // ⚠ ARKUSZ UI U2-4 (Finding 483): klik etykiet mapy PO lewym outlinerze, liście kolonii z górnej belki, dolnych
     //   paskach i dzienniku — w tej samej kolejności, w jakiej leżą na ekranie (etykiety są NA mapie). Dawniej
@@ -2080,9 +2084,6 @@ export class UIManager {
 
     // BottomBar (stabilność + EventLog + menu)
     if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
-
-    // Outliner — Slice C: hitTest przeniesiony WYŻEJ (przed overlayManager), żeby trigger/
-    // panel prawego drawera miał priorytet nad pełnoekranowym overlayem.
 
     // BottomContext (dolny panel kontekstowy)
     if (this._selectedEntity && this._bottomContext.hitTest(x, y, W, H, this._selectedEntity)) return true;
@@ -2134,10 +2135,9 @@ export class UIManager {
     //   `isAnyOpen()`, a panel mapy istnieje wyłącznie gdy NIC nie jest otwarte (D-MVP-7).
     if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel'
         && this._fleetOverlay?.handleVesselPanelScroll?.(x, y, delta)) return true;
-    // Prawy Outliner — scroll listy (kolonie/flota potrafią być dłuższe niż panel).
-    if (window.KOSMOS?.civMode && this._outlinerUserVisible !== false && this._outliner?.handleWheel?.(x, y, delta, W, H)) return true;
-    // ARKUSZ UI U2 — lewy outliner: przewijanie listy układów i ciał.
+    // ARKUSZ UI U2 / U3-2 — outlinery: przewijanie list (układy i ciała / statki).
     if (this._leftOutliner?.handleWheel?.(x, y, delta, W, H)) return true;
+    if (this._outliner?.handleWheel?.(x, y, delta, W, H)) return true;
     // Overlay pełnoekranowy — scroll
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleScroll(delta, x, y)) return true;
@@ -2219,9 +2219,8 @@ export class UIManager {
     this._tooltip = this._detectCivPanelTooltip(x, y);
     // TopBar hover (tooltip zasobów)
     this._topBar.updateHover(x, y);
-    // Outliner hover (tooltip kolonii)
-    if (this._outliner && this._outlinerUserVisible !== false) this._outliner.updateHover(x, y, W, H);
     this._leftOutliner?.updateHover?.(x, y, W, H);   // ARKUSZ UI U2 — podświetlenie wiersza lewego outlinera
+    this._outliner?.updateHover?.(x, y, W, H);       // ARKUSZ UI U3-2 — wiersz i podpowiedź prawego outlinera
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -2331,13 +2330,11 @@ export class UIManager {
         factoryQueue         = activeCol?.factorySystem?.getQueue() ?? [];
         factoryAllocations   = activeCol?.factorySystem?.getAllocations() ?? [];
       } catch (_) { /* defensywne — nie blokuj renderingu */ }
-      // Slice C — nie rysujemy tu: zbieramy stan i rysujemy PO overlayu (prawy drawer
-      // musi być na wierzchu pełnoekranowego overlayu). Gdy brak overlaya → dok.
+      // Stan sekcji prawego outlinera sprzed U3 (KOLONIE / EKSPEDYCJE / KOLEJKA / JEDN. NAZIEMNE — do U3-3) i lista
+      // jednostek naziemnych lewego (🪖N). Rysowanie — w warstwie outlinerów niżej.
       this._outlinerState = {
         colonies: allColonies,
         expeditions: outlinerExps,
-        fleet: this._getAllPlayerVessels(),
-        shipQueues: colMgr?.getShipQueues(activePid) ?? [],
         groundUnits,
         constructionQueue, pendingBuilds, pendingShipOrders,
         pendingOutpostOrders, factoryQueue, factoryAllocations,
@@ -2420,6 +2417,9 @@ export class UIManager {
     //    w prawym Outlinerze (`OutlinerGroundLogic`). ──
     if (civMode && !globeOpen) {
       this._leftOutliner.draw(ctx, W, H, { colonies: this._cachedColonies, groundUnits: this._outlinerState?.groundUnits ?? [] });
+      // ARKUSZ UI U3-2 — prawy outliner (statki): ta sama warstwa co lewy — nad mapą, pod listą kolonii z górnej belki
+      // (§7.17) i pod pływającymi panelami; kolejność układów z tego samego drzewa co lewy (`treeColonies`).
+      this._outliner.draw(ctx, W, H, { ...(this._outlinerState ?? {}), treeColonies: this._cachedColonies });
     }
     if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);
     // ── Faza 4 — „Dok taktyczny": pas dowodzenia (tryb Y). Rysowany PRZED nav+control
@@ -2465,16 +2465,6 @@ export class UIManager {
       musicEnabled: this._musicEnabled,
     });
 
-    // ── Outliner — Slice B+C: ZAWSZE prawy WYSUWANY drawer w civMode (hover prawej
-    //    krawędzi → wysuwa; brak hovera → chowa), niezależnie od tego czy overlay jest
-    //    otwarty. Rysowany NA SAMYM WIERZCHU (po wszystkich panelach: combatHud,
-    //    stationPanel, dziennik, pasek bell/MENU, MENU) — prawy drawer ma być zawsze
-    //    widoczny, nic go nie zasłania. ──
-    if (civMode && !globeOpen && this._outlinerState && this._outlinerUserVisible !== false && !this.tacticalDock?.isExpanded?.()) {
-      this._outliner._drawerMode = true;
-      this._outliner.draw(ctx, W, H, this._outlinerState);
-    }
-
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
     if (!civMode && window.KOSMOS?.scenario === 'generator') this._drawActionPanel();
 
@@ -2483,10 +2473,10 @@ export class UIManager {
     // ── Tooltip TopBar (na wierzchu) ─────────────────────────
     if (civMode) this._topBar.drawTooltip(ctx, W, UI_SCALE);
 
-    // ── Tooltip kolonii (Outliner) — na wierzchu (pomijaj gdy DOM overlay je zasłania)
-    if (civMode && this._outliner && this._outlinerUserVisible !== false && !this.overlayManager.isAnyOpen()) this._outliner.drawTooltip(ctx);
-    // ── Podpowiedź lewego outlinera (○, 🪖N, ⏳N — ARKUSZ UI U2-3); `drawTooltip` sprawdza widoczność (decyzja 4) ──
+    // ── Podpowiedzi outlinerów (lewy: ○, 🪖N, ⏳N — U2-3; prawy: statek / flota — U3-2); `drawTooltip` sprawdza
+    //    widoczność (decyzja 4) ──
     if (civMode && !globeOpen) this._leftOutliner.drawTooltip(ctx, W, H);
+    if (civMode && !globeOpen) this._outliner.drawTooltip(ctx, W, H);
 
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();
@@ -2526,8 +2516,7 @@ export class UIManager {
     this._animating = flashActive || !!this._gameOverData
       || (this._topResourceDrawer?.isAnimating?.() ?? false)
       || (this._eventLogDrawer?.isAnimating?.() ?? false)
-      || (this._bottomNavBar?.isAnimating?.() ?? false)
-      || (this._outlinerUserVisible !== false && (this._outliner?.isAnimating?.() ?? false));
+      || (this._bottomNavBar?.isAnimating?.() ?? false);
 
     ctx.restore();
   }

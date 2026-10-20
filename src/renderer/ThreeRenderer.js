@@ -40,6 +40,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
 import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 — lewe wcięcie kadru „Obserwuj” (lewy outliner)
@@ -184,6 +185,8 @@ const _RING_P = new THREE.Vector3();        // POLISH P2b CLOSE (C6) — punkt o
 let _HIT_GLOW_TEX = null;                   // POLISH P2b (D2, CP18) — tekstura białego błysku trafienia (jedna, współdzielona)
 const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
 const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
+// ARKUSZ UI U3-2 (Finding 487) — minimalny promień rdzenia sprite'a statku (px ekranu) dla kliku NA TARCZY ciała.
+const VESSEL_CORE_PICK_PX = 6;
 // 4f-2 — hover-podgląd trasy JEDNOZNACZNY: pełna nieprzezroczystość + jaśniejszy kolor + grubsza
 // linia (linewidth honorowane tylko tam, gdzie GPU je wspiera; głównym leverem jest kolor+opacity).
 // Bazowe linie w trybie Y lekko pogrubione podniesieniem bazowej opacity (0.4→0.55).
@@ -3203,7 +3206,10 @@ export class ThreeRenderer {
 
   // ARKUSZ UI U1-3 — picker statku dla kliku: najechany statek, inaczej najbliższy w promieniu 40 px; wyłącznie sprite'y
   // WIDOCZNE (wróg ukryty mgłą wojny nie jest celem kliku — ping / kamera zdradzałyby jego położenie).
+  // ARKUSZ UI U3-2 (Finding 487): kursor NA TARCZY ciała — statek wygrywa tylko w obrębie RDZENIA swojego sprite'a
+  // (`_vesselCorePickPx`; nie 40 px i nie „najechany” z 28 px), reszta tarczy należy do ciała. Poza tarczami — bez zmian.
   _pickVesselForClick(sx, sy) {
+    if (this._isOnBodyDisc?.(sx, sy)) return this._getVesselAtScreen?.(sx, sy, VESSEL_CORE_PICK_PX, true, true) ?? null;
     const hv = this._hoverVesselId;
     if (hv && this._vessels.get(hv)?.sprite?.visible) return hv;
     return this._getVesselAtScreen?.(sx, sy, 40, true) ?? null;
@@ -3537,16 +3543,43 @@ export class ThreeRenderer {
     this._showColonyTooltipEl(html, sx, sy);
   }
 
+  // ARKUSZ UI U3-2 (Finding 487) — czy punkt ekranu leży na WIDOCZNEJ tarczy ciała. Raycast `_clickable` (planety,
+  // księżyce, planetoidy — ich siatki to tarcze); gwiazda ma tam niewidoczną sferę klikalną 2,5× większą od tarczy, więc
+  // dla gwiazdy liczy się wyłącznie jej rdzeń (`_starCore`).
+  _isOnBodyDisc(sx, sy) {
+    const ent = this.getEntityAtScreen?.(sx, sy);
+    if (!ent) return false;
+    if (ent.type !== 'star') return true;
+    return !!this._starCore && this._ray.intersectObject(this._starCore, false).length > 0;
+  }
+
+  // ARKUSZ UI U3-2 (Finding 487) — promień rdzenia sprite'a statku w px ekranu: połowa rozmiaru docelowego modelu
+  // (`vesselTargetSize` — największy wymiar po normalizacji, × skala świata wrappera) w rzucie perspektywicznym; nie
+  // mniej niż `VESSEL_CORE_PICK_PX` (model w typowym kadrze ma 1–3 px).
+  _vesselCorePickPx(vesselId, obj, viewportH) {
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    const cam = this.camera;
+    if (!v || !obj || !cam?.fov || !cam.position) return VESSEL_CORE_PICK_PX;
+    const ws = obj.getWorldScale?.(this._tmpPickScale ?? (this._tmpPickScale = new THREE.Vector3()));
+    const scale = ws ? Math.max(ws.x, ws.y, ws.z) : 1;
+    const pos = obj.getWorldPosition?.(this._tmpPickPos ?? (this._tmpPickPos = new THREE.Vector3()));
+    const dist = pos ? cam.position.distanceTo(pos) : 0;
+    if (!(dist > 0)) return VESSEL_CORE_PICK_PX;
+    const pxPerUnit = (viewportH / 2) / (dist * Math.tan((cam.fov * Math.PI / 180) / 2));
+    return Math.max(VESSEL_CORE_PICK_PX, (vesselTargetSize(v) / 2) * scale * pxPerUnit);
+  }
+
   // Screen-space picking statków: rzutuj pozycję wrapera/sprite na ekran
   // i zwróć vesselId najbliższego w promieniu thresholdPx. Bez modyfikacji sceny.
-  _getVesselAtScreen(sx, sy, thresholdPx = 28, visibleOnly = false) {
+  // `coreOnly` (U3-2, Finding 487): promień per statek = rdzeń jego sprite'a (`_vesselCorePickPx`), nie mniej niż próg.
+  _getVesselAtScreen(sx, sy, thresholdPx = 28, visibleOnly = false, coreOnly = false) {
     if (!this._vessels || this._vessels.size === 0) return null;
     const canvas = this.renderer?.domElement;
     const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
     const cw = rect.width, ch = rect.height;
     const tmp = this._tmpPickVec ?? (this._tmpPickVec = new THREE.Vector3());
     let best = null;
-    let bestDist = thresholdPx * thresholdPx;
+    let bestDist = coreOnly ? Infinity : thresholdPx * thresholdPx;
     for (const [vid, entry] of this._vessels) {
       const obj = entry?.sprite;
       if (!obj || (visibleOnly && !obj.visible)) continue;   // U1-3: klik — tylko widoczne
@@ -3559,6 +3592,10 @@ export class ThreeRenderer {
       const dx = vx - sx;
       const dy = vy - sy;
       const d2 = dx * dx + dy * dy;
+      if (coreOnly) {
+        const lim = Math.max(thresholdPx, this._vesselCorePickPx?.(vid, obj, ch) ?? thresholdPx);
+        if (d2 > lim * lim) continue;
+      }
       if (d2 < bestDist) { bestDist = d2; best = vid; }
     }
     return best;
@@ -7254,18 +7291,27 @@ export class ThreeRenderer {
 
   // Krótki „ping" (pierścień ripple) na pozycji statku — feedback selekcji w doku BEZ
   // ruszania kamery. Throttle koalescuje szybkie kliki; auto-dispose przez silnik FX.
+  // ARKUSZ UI U3-2 (Finding 477): termin układu — statek bez widocznego sprite'a pinguje się po `vessel.position` tylko,
+  // gdy leży w OGLĄDANYM układzie (współrzędne są lokalne dla układu); statek z innego układu albo w tranzycie warp —
+  // odmowa (`false`), zamiast pierścienia w ramce cudzego układu.
   pingVessel(vesselId) {
-    if (!vesselId) return;
+    if (!vesselId) return false;
+    const K = window.KOSMOS;
+    const sp = this._vessels.get(vesselId)?.sprite;
+    const vessel = K?.vesselManager?.getVessel?.(vesselId) ?? null;
+    if (!(sp?.visible && sp.position)) {
+      const viewed = K?.activeSystemId ?? K?.starSystemManager?.activeSystemId ?? 'sys_home';
+      if (!vessel || systemIdOf(vessel) !== viewed) return false;
+    }
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    if (now - (this._lastTacticalPingMs || 0) < TACTICAL_PING_THROTTLE_MS) return;
+    if (now - (this._lastTacticalPingMs || 0) < TACTICAL_PING_THROTTLE_MS) return false;
     this._lastTacticalPingMs = now;
     // Pozycja: sprite.position = gotowy world (orbita/dok); fallback vessel.position → S().
-    const sp = this._vessels.get(vesselId)?.sprite;
     let x, y, z;
     if (sp?.visible && sp.position) { x = sp.position.x; y = sp.position.y; z = sp.position.z; }
     else {
-      const p = window.KOSMOS?.vesselManager?.getVessel?.(vesselId)?.position;
-      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      const p = vessel?.position;
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
       x = S(p.x); y = 0.3; z = S(p.y);
     }
     const ring = new THREE.Mesh(

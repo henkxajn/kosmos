@@ -17,10 +17,11 @@ import { t } from '../i18n/i18n.js';
 import { toggleNotificationDropdown, isNotificationDropdownOpen } from './NotificationDropdown.js';
 import { bottomNavBarRect, navSlotLayout } from './BottomNavBarLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
+import { BOTTOM_STRIP_H } from './MapInsets.js';   // ARKUSZ UI U3-2 — jedno źródło wysokości pasa dolnego
 
 // Metryki kompaktowe — cały klaster (bell/menu/play/5×speed/data) musi zmieścić się w
 // JEDNYM slocie nawigacji ("Technologie"), więc bell/menu są wąskie (16) a reszta drobna.
-const STRIP_H = 20;
+const STRIP_H = BOTTOM_STRIP_H;   // 20 px — pas dolny (`MapInsets`); outlinery kończą się nad nim (U3-2)
 const PAD     = 5;
 const BTN_H   = 12;
 const PLAY_W  = 13;
