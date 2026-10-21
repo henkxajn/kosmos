@@ -872,6 +872,18 @@
 >   (skala UI ≈ 1,25), 1280 × 833 i kod sprzed zmiany jako kontrole.
 > • **Pierwszy wolny numer: 504.**
 
+> **Aktualizacja 2026-10-21 (ARKUSZ HUD — faza A: audyt read-only + podpisy D-HUD-1…18; H0 w toku)** (nowy arc:
+> warstwa informacyjna mapy układu — radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; rejestr
+> macierzysty `HUD_PLAN.md` §3). Audyt na HEAD `ad65e47` (prawdziwa gra, zapis ZF gy120, okno 1600 × 1041 CSS,
+> kontrola 1280 × 833); podpisy właściciela 2026-10-21 — odczytania §1.1 (1)–(5), D-HUD-1…18, D-HUD-b/c bez zmian,
+> cięcie H0 → H4 (`HUD_PLAN.md` §5.0). Kod: zero zmian (commit dokumentacji = kotwica H0).
+> • **NOWE: #504–#516** (z audytu fazy A) — wiersze w A11: 🟠 **504** · **505** · **506** · **514** · **516**;
+>   ⚪ **507**–**513**, **515**.
+> • **504** — osobny drobny krok (Dziennik), NIE w kroku arkusza (podpis 2026-10-21).
+> • Rejestr #504–#516: 13 wpisów — 🟠 5 · ⚪ 8; wszystkie otwarte.
+> • Następny: **H0** — role kolorów z motywu + orbity (`HUD_PLAN.md` §4.1; cel: 510, 511, 512).
+> • **Pierwszy wolny numer: 517.**
+
 
 ---
 
@@ -952,6 +964,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
 | **471-503** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki + dolny pas + U5; 2026-10-18–21; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2, 494-496 z sesji U3 — zapisane przy zamknięciu, 497-501 z sesji i bramki U4 — zapisane przy zamknięciu, 502-503 z sesji i bramki 501 — zapisane przy zamknięciu U5) |
+| **504-516** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; 2026-10-21; 504-516 z audytu fazy A) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1234,6 +1247,25 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **500** | ⚪ | `check-i18n` (`tools/check-i18n.mjs:115`, `T_CALL = /(?<![\w$.])t\s*\(/g`) czyta komentarze, a `\w` bez flagi `u` nie zna polskich liter — „skrót (” w komentarzu = fałszywy „klucz bez definicji” (dwa razy w sesji U4); rodzina reguły z Findingu 269 (bramka czyta `t('…')` także w komentarzach) | → osobny drobny krok (narzędzie, z własnym keeperem) — poza U5 (U5 zamknięte na 501, 2026-10-21; `UI_PLAN.md` §4.7 (e)). `UI_PLAN.md` §6 |
 | **502** | 🟠 | tarcza gwiazdy nie zależy od klasy — `renderStar` czyta `star.mass` (`ThreeRenderer.js:1551`), a encja `Star` trzyma masę w `physics.mass` (`CelestialBody.js:17`) ⇒ masa 1,0 dla każdej gwiazdy, tarcza 3,6 j.; ten sam odczyt w `SystemGenerator.js:170` (`minOrbitAU` 0,55 AU dla każdej gwiazdy); od `9a6a52e` (2026-03-18); zmierzone w grze (ZF gy120: Kepler-4799, typ M — `physics.mass` 0,3159, `_sunCoreRadius` 3,6); liczby V-261 / V-268 liczone z masy | → rejestr VISUALS — osobny krok (naprawa zmienia tarczę i orbitę minimalną — wygląd i balans; strefa i podłoga 501 pójdą za tarczą). `UI_PLAN.md` §6 |
 | **503** | ⚪ | w kadrze układu (450 j.) środek gwiazdy przykrywa strefa kliku plakietki stacji („Stacja Nowa Ziemia”, `MapLabelLayer._hitZones`) — klik w gwiazdę wybiera stację (2. klik — kamera na stację); od ok. 40 j. — gwiazda; zmierzone (ZF gy120, sonda `kosmos-handover/ui-501/probes/probe_k2_star_click.mjs`) | → warstwa etykiet mapy — osobny drobny krok, bez decyzji. `UI_PLAN.md` §6 |
+
+## A11 — Arkusz HUD: radar, etykiety, trasy, orbity, paleta z motywu (rejestr `HUD_PLAN.md` §3)
+
+| # | | opis | uwaga |
+|---|---|---|---|
+| **504** | 🟠 | Dziennik zdradza nazwę wrogiego statku przy jakości „rumor” — `UIManager.js:1493-1513` pisze `log.m4.proximityContact` z `enemy.name` przy `vessel:proximityEnter` (wykrycie — w ZF 11,52 AU), a para ma wtedy `rumor` (`contact` dopiero poniżej 0,3 AU, sensor-lock 1,38 AU); wniosek z kodu | → osobny drobny krok (Dziennik), **NIE w kroku arkusza** (podpis 2026-10-21); alerty HUD (H4) stosują regułę „bez nazwy poniżej `contact`”. `HUD_PLAN.md` §3 |
+| **505** | 🟠 | pierścień radaru statku = stałe `SENSOR_LOCK_AU` 0,3 AU (`ThreeRenderer.js:6101-6105`), a mechanika liczy wykrycie `sensorRangeAU` × tech i ujawnienie 0,3 × tech; zmierzone (ZF gy120): 11,52 / 1,38 AU — pierścień 38× i 4,6× za mały | → H1 (promień = zasięg wykrycia, D-HUD-3). `HUD_PLAN.md` §3 |
+| **506** | 🟠 | pierścienie radaru kolonii AI — `ThreeRenderer.js:6114` iteruje `getAllColonies()` bez terminu właściciela: gracz widzi poziom obserwatorium AI, a cudze pokrycie wygląda jak własne; wniosek z kodu | → H1 (D-HUD-4 — radar tylko obiektów gracza). `HUD_PLAN.md` §3 |
+| **507** | ⚪ | pierścienie statków zadokowanych i w rezerwie — filtr `_syncSensorOverlay` (`:6094-6099`) nie pyta o stan ani o `isInService`; w ZF 8 z 10 pierścieni statków („pełne niebieskie elipsy”) | → H1. `HUD_PLAN.md` §3 |
+| **508** | ⚪ | pas pierścienia zasięgu = 1,5 % promienia ⇒ grubość od ułamka piksela (kreski — „kropkowane odcinki przy Fobosie”) do kilkudziesięciu px; zmierzone | → H1 (pierścienie 3D zastąpione warstwą 2D). `HUD_PLAN.md` §3 |
+| **509** | ⚪ | trasa obcego statku nie pokazuje się nigdy — `_applyVesselIntelVisibility` (`:5375-5376`) wymaga jakości `'detailed'`, której żaden producent nie nadaje statkowi | → H3 (D-HUD-10). `HUD_PLAN.md` §3 |
+| **510** | ⚪ | po wczytaniu zapisu na pauzie orbity domu i kolonii są ukryte do pierwszej przebudowy (co 180 wywołań `_syncPlanetMeshes` — po odpauzowaniu): `_buildOrbit` czyta `homePlanet` i `getColony` przed ich odtworzeniem; zmierzone (ZF gy120) | → **H0** (przebudowa po wczytaniu). `HUD_PLAN.md` §3 |
+| **511** | ⚪ | filtr orbit „Żadne” zostawia orbitę domu i kolonii (`_restoreOrbitDefaults`, `_buildOrbit`), choć etykieta `menu.orbitsNone` obiecuje brak orbit; zmierzone | → **H0** („Żadne” chowa WSZYSTKIE, D-HUD-7). `HUD_PLAN.md` §3 |
+| **512** | ⚪ | tokeny mapy `orbitLine` / `orbitColony` / `starfield` / `vignetteEnd` bez czytelnika — orbity zaszyte w turkusie w każdym motywie | → **H0** (orbity z `orbitLine` / `orbitColony`); `starfield` / `vignetteEnd` poza zakresem. `HUD_PLAN.md` §3 |
+| **513** | ⚪ | nazwy etykiet ucięte bez wielokropka (`MapLabelLogic.js:121`, `:160` — `.slice(0, 16)`); zmierzone: „Stacja Nowa Ziem” | → H2. `HUD_PLAN.md` §3 |
+| **514** | 🟠 | etykiety mapy wychodzą poza obszar mapy (bez kadru i clipu — plakietki malują się na górnej belce) i nakładają się w paśmie przejścia LOD 150–215 j. (znaczniki poza `stackLabels`; przy 200 j. 10 nakładających się par); zmierzone, oba okna | → H2. `HUD_PLAN.md` §3 |
+| **515** | ⚪ | karta ciała leży pod etykietami mapy — w rysowaniu (`UIManager.js:2269` wobec `:2323-2331`) i w kliku (`:2008` wobec `:2043`); wniosek z kodu | → H2 (etykiety pod kartą, D-HUD-1). `HUD_PLAN.md` §3 |
+| **516** | 🟠 | pierścień radaru statku w skoku warp zostaje w punkcie odlotu — filtr `v.systemId && v.systemId !== activeSys` (`:6098`) przepuszcza `systemId === null`; rodzina „globalne id ≠ położenie”; wniosek z kodu | → H1. `HUD_PLAN.md` §3 |
+
 
 ---
 
