@@ -14,7 +14,8 @@
 // a od lewego końca — rząd chipów doku (`getDockSpan` → `PanelDock`); pod overlayem — jak dotąd: sam klaster zegara
 // nad ostatnim slotem nawigacji i czip ⚔ (chipy doku chowają się jak outlinery — decyzja 4).
 // SUWAK ZOOMU (ARKUSZ UI U4-4, decyzja (d)): nad mapą, tuż na lewo od 🔔 (czip ⚔ na lewo od suwaka); skala logarytmiczna
-// dystansu kamery od jej celu, LEWO = DALEKO, zakres `_minDist` (jedzie z fokusem) – `maxDist`; gałka co klatkę z
+// dystansu kamery od jej celu, LEWO = DALEKO, zakres: podłoga efektywna `minDist` (jedzie z fokusem; przy gwieździe
+// `STAR_FLOOR_MULT` × promień rdzenia — poprawka 501) – `maxDist`; gałka co klatkę z
 // `_targetDist` (kółko i auto-zoom fokusu ją przesuwają), zapis wyłącznie `setTargetDist` (cel kamery nietknięty);
 // przeciąganie przez `UIManager.handleMouseDown/Move/Up`, kółko nad suwakiem — ten sam krok co nad mapą (`wheelZoom`).
 
@@ -218,8 +219,9 @@ export class BottomControlBar {
     ctx.fillRect(px - 2.5, gy - 0.5, 5, 1); ctx.fillRect(px - 0.5, gy - 2.5, 1, 5);   // „+”
     ctx.fillStyle = THEME.border;
     ctx.fillRect(tr.x, gy - TRACK_H / 2, tr.w, TRACK_H);                  // tor
-    // Gałka — co klatkę z bieżącego `_targetDist` (kółko i auto-zoom fokusu przesuwają suwak).
-    const kx = posToX(distToPos(cam._targetDist, cam._minDist, cam.maxDist), tr.x, tr.w);
+    // Gałka — co klatkę z bieżącego `_targetDist` (kółko i auto-zoom fokusu przesuwają suwak); prawy koniec = podłoga
+    // efektywna kamery (`minDist` — ta sama co dla kółka, poprawka 501).
+    const kx = posToX(distToPos(cam._targetDist, cam.minDist, cam.maxDist), tr.x, tr.w);
     ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
     ctx.fillRect(Math.round(kx - KNOB_W / 2), Math.round(cy - KNOB_H / 2), KNOB_W, KNOB_H);
   }
@@ -243,7 +245,7 @@ export class BottomControlBar {
   _zoomFromX(x) {
     const cam = this._cam(), tr = this._zoomTrack;
     if (!cam || !tr) return;
-    cam.setTargetDist(posToDist(xToPos(x, tr.x, tr.w), cam._minDist, cam.maxDist));
+    cam.setTargetDist(posToDist(xToPos(x, tr.x, tr.w), cam.minDist, cam.maxDist));
     this._markDirty();
   }
 

@@ -1655,6 +1655,9 @@ export class ThreeRenderer {
     // Ambient — ustawiany przy KAŻDEJ gwieździe (nie tylko M/K), inaczej przejście
     // na jaśniejszy układ zostawiłoby chłodne wypełnienie poprzedniego.
     this._applyAmbientForClass(lightBase.ambientCool);
+    // ARKUSZ UI poprawka 501 — podłoga zoomu przy gwieździe z promienia TEJ tarczy (`_sunCoreRadius`, z którego powstał
+    // rdzeń); przy starcie kontroler jeszcze niewpięty — promień podaje wtedy `setCameraController`.
+    this._cameraController?.setStarCoreRadius?.(this._sunCoreRadius);
   }
 
   // Rozmiary 3D planet per typ — logarytmiczna skala masy
@@ -4248,6 +4251,9 @@ export class ThreeRenderer {
   // Rejestracja kontrolera kamery (ustawiany przez GameScene)
   setCameraController(ctrl) {
     this._cameraController = ctrl;
+    // ARKUSZ UI poprawka 501 — promień tarczy gwiazdy dla podłogi zoomu (`GameScene.create` woła `initSystem` → `renderStar`
+    // PRZED wpięciem kontrolera).
+    ctrl?.setStarCoreRadius?.(this._star ? this._sunCoreRadius : 0);
     this._frameActiveSystem();  // ramka startowa układu (skala 3D ↔ tactical)
   }
 

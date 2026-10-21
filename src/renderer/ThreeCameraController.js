@@ -18,6 +18,15 @@ const SYSTEM_FIT_DIST_PER_AU = 20;
 // na pasie dolnym (`maxDist`) — jedno źródło zakresu.
 const MAX_DIST = 450;
 
+// ARKUSZ UI poprawka 501 (rodzina V-268) — podłoga zoomu przy gwieździe [× promień rdzenia gwiazdy R]. STREFA: cel kamery
+// (`_goalTarget`) w obrębie STAR_ZONE_MULT × R od środka gwiazdy; PODŁOGA: wtedy dystans od celu nie schodzi poniżej
+// STAR_FLOOR_MULT × R (kamera nie wchodzi do tarczy, przy maksymalnym zbliżeniu cała tarcza w kadrze); cel dalej — podłoga
+// z fokusu (`_minDist`) jak dotąd. Strefa 1,3 — decyzja (c) właściciela; podłoga 2,2 — decyzja właściciela po oku K1
+// bramki 501 (2026-10-21). Strefa NIE rośnie z podłogą: planety na orbitach wewnętrznych („Nowa Ziemia” — 6,2 j. od
+// środka gwiazdy przy R 3,6) leżą między 1,3 R a 2,2 R — przy celu na nich obowiązuje podłoga z fokusu.
+export const STAR_ZONE_MULT = 1.3;
+export const STAR_FLOOR_MULT = 2.2;
+
 export class ThreeCameraController {
   constructor(camera) {
     this.camera = camera;
@@ -44,6 +53,9 @@ export class ThreeCameraController {
 
     // Dynamiczny min zoom — mniejszy gdy focus na księżycu
     this._minDist    = 0.3;    // domyślny min zoom (jednostki Three.js)
+    // ARKUSZ UI poprawka 501 — promień rdzenia gwiazdy aktywnego układu [j.] (`setStarCoreRadius` z `ThreeRenderer`);
+    // 0 = bez gwiazdy (podłoga przy gwieździe wyłączona). Gwiazda każdego układu stoi w środku sceny (0, 0, 0).
+    this._starCoreRadius = 0;
 
     // Callback: (clientX, clientY) => bool — blokuje kamerę gdy kursor nad UI
     this._isOverUI = null;
@@ -121,7 +133,7 @@ export class ThreeCameraController {
                     : this._targetDist < 2    ? 0.004
                     : this._targetDist < 5    ? 0.01
                     : this._targetDist < 20   ? 0.02 : 0.05;
-    this._targetDist = Math.max(this._minDist, Math.min(MAX_DIST, this._targetDist + deltaY * zoomSpeed));
+    this._targetDist = Math.max(this.minDist, Math.min(MAX_DIST, this._targetDist + deltaY * zoomSpeed));
   }
 
   update() {
@@ -214,12 +226,29 @@ export class ThreeCameraController {
     this.focusOn(world.worldX, world.worldZ);
   }
 
-  // Ustaw minimalny dystans kamery (np. 0.5 dla księżyców, 3 domyślnie)
+  // Ustaw minimalny dystans kamery z fokusu (0,3 domyślnie, 0,15 księżyc, 0,05 statek, 0,005 stacja / „Obserwuj”) — sam
+  // próg, bieżący dystans bez zmian; przy gwieździe obowiązuje podłoga efektywna (`minDist`, poprawka 501)
   setMinDist(val) { this._minDist = val; }
+
+  /** ARKUSZ UI poprawka 501 — promień rdzenia gwiazdy aktywnego układu [j.]; 0 / brak = bez podłogi przy gwieździe. */
+  setStarCoreRadius(r) { this._starCoreRadius = Number.isFinite(r) && r > 0 ? r : 0; }
+
+  /**
+   * ARKUSZ UI poprawka 501 — podłoga EFEKTYWNA dystansu od celu [j.], jedna dla kółka (`wheelZoom`), suwaka zoomu (prawy
+   * koniec toru — `BottomControlBar`) i auto-zoomu (`setTargetDist`, `snapDist`, `flyTo`): cel kamery w obrębie
+   * STAR_ZONE_MULT × R od środka gwiazdy (strefa) ⇒ max(`_minDist`, STAR_FLOOR_MULT × R); cel dalej albo bez gwiazdy —
+   * `_minDist`. Liczona przy każdym kroku zoomu; sama kamery nie rusza (jak `setMinDist`).
+   */
+  get minDist() {
+    const R = this._starCoreRadius, g = this._goalTarget;
+    if (!(R > 0) || !g) return this._minDist;
+    const inZone = Math.hypot(g.x, g.y, g.z) <= STAR_ZONE_MULT * R;   // strefa — odległość CELU od środka gwiazdy
+    return inZone ? Math.max(this._minDist, STAR_FLOOR_MULT * R) : this._minDist;
+  }
 
   // Ustaw docelowy dystans kamery (auto-zoom, płynny lerp w update)
   setTargetDist(dist) {
-    this._targetDist = Math.max(this._minDist, Math.min(MAX_DIST, dist));
+    this._targetDist = Math.max(this.minDist, Math.min(MAX_DIST, dist));
   }
 
   /** Sufit dystansu kamery od celu [j.] — zakres suwaka zoomu (ARKUSZ UI U4-4). */
@@ -261,9 +290,11 @@ export class ThreeCameraController {
   flyTo({ theta, phi, dist, target } = {}) {
     if (Number.isFinite(theta)) this._goalTheta = theta;
     if (Number.isFinite(phi))   this._goalPhi = Math.max(0.1, Math.min(Math.PI * 0.9, phi));
-    if (Number.isFinite(dist))  this.setTargetDist(dist);
+    // Cel PRZED dystansem (poprawka 501): podłoga efektywna zależy od celu — wyjście z trybu taktycznego (cel w trybie =
+    // środek układu) wraca do dystansu sprzed trybu wobec celu sprzed trybu, nie wobec gwiazdy.
     if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) {
       this._goalTarget.set(target.x, target.y ?? 0, target.z);
     }
+    if (Number.isFinite(dist))  this.setTargetDist(dist);
   }
 }
