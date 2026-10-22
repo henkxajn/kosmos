@@ -888,6 +888,16 @@ export function bgAlpha(alpha) {
 let _crtUpdateFn = null;
 export function setCrtUpdateCallback(fn) { _crtUpdateFn = fn; }
 
+// ── Epoka motywu (ARKUSZ HUD H0, D-HUD-15) ──────────────────────
+
+// Licznik zmian motywu. `applyTheme` i `applyPreset` — jedyne miejsca, które wiedzą o zmianie `THEME` — podbijają go
+// o 1 przy każdym wywołaniu (także `loadTheme` i `resetTheme`, które idą przez `applyTheme`). Warstwy 3D (orbity —
+// `ThreeRenderer._syncHudOrbits`) porównują epokę co klatkę i przebudowują się przy zmianie (F7 w trakcie gry);
+// Canvas 2D czyta tokeny przy każdym rysunku i licznika nie potrzebuje. Bezpośredni zapis `THEME[key] = …`
+// (pojedyncze pola koloru w F7) epoki NIE podbija.
+let _themeEpoch = 0;
+export function themeEpoch() { return _themeEpoch; }
+
 // ── Aplikowanie motywu ──────────────────────────────────────────
 
 export function applyTheme(partial) {
@@ -896,6 +906,7 @@ export function applyTheme(partial) {
       THEME[key] = partial[key];
     }
   }
+  _themeEpoch++;   // ARKUSZ HUD H0 — epoka motywu (warstwy 3D przebudowują się przy zmianie)
   // Synchronizuj CRT overlay z aktualnym stanem THEME
   if (_crtUpdateFn) _crtUpdateFn();
 }
@@ -912,6 +923,7 @@ export function applyPreset(preset) {
       THEME[key] = preset[key];
     }
   }
+  _themeEpoch++;   // ARKUSZ HUD H0 — epoka motywu (warstwy 3D przebudowują się przy zmianie)
   if (_crtUpdateFn) _crtUpdateFn();
 }
 
