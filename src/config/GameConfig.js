@@ -540,6 +540,20 @@ export const GAME_CONFIG = {
     //     Sfery znikałby całkowicie na gwiazdach K/G/F — OFF nie ma prawa
     //     przywracać regresji, której ta flaga miała uniknąć (precedens V-260/D-V2z).
     sceneDepthUnification: true,
+
+    // ── ARKUSZ HUD H0 (D-HUD-7, D-HUD-15) — orbity w kolorach motywu ─────────────
+    // hudOrbits: orbity planet, pierścienie księżyców i orbity planetoid w kolorach z tokenów motywu UI
+    //   (`orbitLine` — domyślne i filtr, `orbitColony` — dom i kolonie; zaznaczona — rola HUD `primary`,
+    //   niestabilna — `alert`; `HudOrbitLogic.js`, role — `HudPalette.js`), krycie = dzisiejsze × 0,8, grubość
+    //   bez zmian. Filtr „Żadne” — tylko zaznaczona (511, 3b). Przebudowa przy zmianie flagi, epoki motywu
+    //   (F7) i domu gracza (wczytanie zapisu — Finding 510) — co klatkę w pętli renderu, także w pauzie
+    //   (`ThreeRenderer._syncHudOrbits`). Tokeny `orbitLine` / `orbitColony` dostają czytelnika (Finding 512).
+    //   ⚠ Brak klucza = OFF (idiom liveGasShaders); ścieżka OFF = dzisiejszy kod co do bitu (turkusowe hexy
+    //     w `ThreeRenderer` nietknięte).
+    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `mapVesselPanelCompact`): ten wpis wchodzi
+    //     commitem H0-2 po bramce H0. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudOrbits = false`)
+    //     przebudowuje orbity od następnej klatki, także w pauzie; F5 wczytuje wartość z tego pliku.
+    hudOrbits: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

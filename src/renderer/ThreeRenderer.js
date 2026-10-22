@@ -46,7 +46,7 @@ import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, appl
 import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 / U4-2 — wcięcia kadru „Obserwuj” (outlinery, pas dolny)
 import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
-import { THEME } from '../config/ThemeConfig.js';
+import { THEME, themeEpoch } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
@@ -64,6 +64,8 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMo
   EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
 import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika)
+import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
+  hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -93,6 +95,9 @@ const STAR_LUMINOSITY_EXP = 0.22;
 //   jedyna ścieżka rollbacku, jaką gate ma bez edycji pliku i F5.
 // ⚠ Idiom „brak klucza = OFF" (liveGasShaders / liveSunShader / dayNightAtmosphere).
 const logDepthOn = () => !!GAME_CONFIG.FEATURES?.sceneDepthUnification;
+// ARKUSZ HUD H0 (D-HUD-7, D-HUD-15) — orbity w kolorach motywu. Czytana FUNKCJĄ przy każdym użyciu: przestawienie
+// w konsoli działa od następnej klatki (`_syncHudOrbits` przebudowuje orbity), także w pauzie. Brak klucza = OFF.
+const hudOrbitsOn = () => isHudOrbitsOn(GAME_CONFIG.FEATURES);
 // ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
 //   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
@@ -539,6 +544,8 @@ export class ThreeRenderer {
 
     // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
     this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
+    this._hudOrbitKey     = null;   // ARKUSZ HUD H0 — klucz przebudowy orbit (`_syncHudOrbits`; null = flaga OFF)
+    this._hudHoverOrbitId = null;   // ARKUSZ HUD H0 — ciało pod kursorem (styl orbit przy `hudOrbits`)
 
     // Współdzielona tekstura kropki życia — tworzona raz
     this._lifeDotTex    = ThreeRenderer._createLifeDotTexture();
@@ -1259,6 +1266,8 @@ export class ThreeRenderer {
 
     // Hover na ciało → pokaż orbitę tymczasowo (planeta/planetoid) + HZ (gwiazda)
     EventBus.on('planet:hover', safe(({ entityId }) => {
+      // ARKUSZ HUD H0 (D-HUD-7) — przy `hudOrbits` styl orbit ze stanu (najechanie zapamiętane; „Żadne” — tylko zaznaczona).
+      if (hudOrbitsOn()) { this._hudHoverOrbitId = entityId ?? null; this._hudRestyleOrbits(); return; }
       // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
       const showPlanetoids = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
       this._planetoidOrbits.forEach((line, id) => {
@@ -2470,6 +2479,7 @@ export class ThreeRenderer {
     const showMoons = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
     ring.visible = showMoons;  // widoczność wg filtra orbit
     ring.material.opacity = showMoons ? 0.15 : 0;
+    if (hudOrbitsOn()) this._hudStyleMoonRing(moon.id, ring);   // ARKUSZ HUD H0 — kolor z motywu, krycie × 0,8
     parentEntry.group.add(ring);
 
     // Sfera księżyca — w scenie, pozycja synchronizowana z moon.x/y
@@ -2523,6 +2533,7 @@ export class ThreeRenderer {
 
   // Pokaż orbitę konkretnego księżyca
   _showMoonOrbit(moonId) {
+    if (hudOrbitsOn()) { this._hudRestyleMoonRings(); return; }   // ARKUSZ HUD H0 — styl ze stanu (zaznaczenie)
     const entry = this._moons.get(moonId);
     if (!entry?.ring) return;
     entry.ring.material.opacity = 0.30;
@@ -2531,6 +2542,7 @@ export class ThreeRenderer {
 
   // Ukryj/pokaż orbity księżyców (wg filtra)
   _hideAllMoonOrbits() {
+    if (hudOrbitsOn()) { this._hudRestyleMoonRings(); return; }   // ARKUSZ HUD H0 — styl ze stanu (filtr, zaznaczenie)
     const show = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
     this._moons.forEach(entry => {
       if (entry.ring) {
@@ -2625,6 +2637,11 @@ export class ThreeRenderer {
 
   // Przywraca domyślny stan widoczności orbity (ukryta chyba że home/kolonia/orbitFilter)
   _restoreOrbitDefaults(planetId, line) {
+    if (hudOrbitsOn()) {   // ARKUSZ HUD H0 — styl ze stanu (dom, kolonia, filtr, zaznaczenie, najechanie)
+      const planet = EntityManager.get(planetId);
+      if (planet) this._hudStylePlanetOrbit(planet, line);
+      return;
+    }
     const isHomePlanet = planetId === window.KOSMOS?.homePlanet?.id;
     const colMgr = window.KOSMOS?.colonyManager;
     const isColonized = colMgr ? colMgr.getColony(planetId) != null : false;
@@ -2653,6 +2670,7 @@ export class ThreeRenderer {
 
   // Aktualizuje widoczność wszystkich orbit wg aktualnego filtra
   _applyOrbitFilter() {
+    if (hudOrbitsOn()) { this._hudRestyleOrbits(); return; }   // ARKUSZ HUD H0 — „Żadne”: tylko zaznaczona (511, 3b)
     // Orbity planet — przebuduj (uwzględnia _orbitFilter w _restoreOrbitDefaults)
     this._orbits.forEach((line, id) => {
       if (id === this._selectedEntityId) return; // zaznaczona — nie ruszaj
@@ -2745,6 +2763,7 @@ export class ThreeRenderer {
     line.visible = orbitVisible;
     this.scene.add(line);
     this._orbits.set(planet.id, line);
+    if (hudOrbitsOn()) this._hudStylePlanetOrbit(planet, line);   // ARKUSZ HUD H0 — kolory z motywu, krycie × 0,8
   }
 
   // ── Planetoidy: indywidualne meshe + ukryte orbity ───────────────
@@ -2849,6 +2868,7 @@ export class ThreeRenderer {
 
   // Pokaż orbitę konkretnej planetoidy (hover/click)
   _showPlanetoidOrbit(entityId, opacity = 0.25) {
+    if (hudOrbitsOn()) { this._hudRestylePlanetoidOrbits(); return; }   // ARKUSZ HUD H0 — styl ze stanu
     const line = this._planetoidOrbits.get(entityId);
     if (!line) return;
     line.material.opacity = opacity;
@@ -2857,6 +2877,7 @@ export class ThreeRenderer {
 
   // Przywróć domyślną widoczność orbit planetoidów (wg filtra)
   _hideAllPlanetoidOrbits() {
+    if (hudOrbitsOn()) { this._hudRestylePlanetoidOrbits(); return; }   // ARKUSZ HUD H0 — styl ze stanu
     const show = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
     this._planetoidOrbits.forEach(line => {
       line.material.opacity = 0.12;
@@ -2866,6 +2887,7 @@ export class ThreeRenderer {
 
   // Przebuduj geometrię orbit planetoidów (zachowaj widoczność)
   _rebuildPlanetoidOrbits() {
+    if (hudOrbitsOn()) { this._hudRebuildPlanetoidOrbits(); return; }   // ARKUSZ HUD H0 — od zera, styl ze stanu
     // Zapamiętaj stan widoczności
     const wasVisible = new Map();
     this._planetoidOrbits.forEach((line, id) => {
@@ -2924,6 +2946,113 @@ export class ThreeRenderer {
     line.visible = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
     this.scene.add(line);
     this._planetoidOrbits.set(planetoid.id, line);
+    if (hudOrbitsOn()) this._hudStylePlanetoidOrbit(planetoid.id, line);   // ARKUSZ HUD H0 — kolor z motywu, krycie × 0,8
+  }
+
+  // ── ARKUSZ HUD H0 — orbity w kolorach motywu (D-HUD-7, D-HUD-15; flaga `hudOrbits`) ─────────────────────
+  // Ścieżka ON: styl KAŻDEJ orbity liczony ze stanu (filtr, zaznaczenie `_selectedEntityId`, najechanie, dom /
+  // kolonia, stabilność, czysty widok) i z tokenów motywu (`HudOrbitLogic`). Ścieżka OFF — kod wyżej, bez zmian.
+
+  // Co klatkę (pętla renderu — także w pauzie): klucz = flaga + epoka motywu (`applyPreset` / `applyTheme`, np. F7
+  // w trakcie gry) + dom gracza (po wczytaniu zapisu dom ustawia blok odroczony `GameScene` — Finding 510: orbity
+  // domu i kolonii widoczne na pauzie bez biegu gry). OFF ⇒ klucz null ⇒ bez pracy; zmiana klucza ⇒ pełne odświeżenie.
+  _syncHudOrbits() {
+    const key = hudOrbitSyncKey(GAME_CONFIG.FEATURES, themeEpoch(), window.KOSMOS?.homePlanet?.id ?? null);
+    if (key === this._hudOrbitKey) return;
+    this._hudOrbitKey = key;
+    this._hudRefreshAllOrbits();
+  }
+
+  // Pełne odświeżenie orbit ścieżką bieżącej flagi: planety i planetoidy od zera, pierścienie księżyców przestylowane.
+  // ON → OFF: stan dzisiejszego kodu — kolor bazowy pierścieni, filtr, zaznaczenie jak w `body:selected`.
+  _hudRefreshAllOrbits() {
+    this._rebuildAllOrbits();
+    this._hudRebuildPlanetoidOrbits();
+    if (hudOrbitsOn()) {
+      this._hudRestyleMoonRings();
+    } else {
+      this._hudHoverOrbitId = null;
+      this._moons.forEach((e) => {
+        const base = e.ring?.userData?.hudBaseHex;
+        if (base === undefined) return;
+        e.ring.material.color.setHex(base);
+        delete e.ring.userData.hudBaseHex;
+      });
+      this._hideAllMoonOrbits();
+      const sel = this._selectedEntityId;
+      if (sel) {
+        this._showPlanetoidOrbit(sel, 0.35);
+        if (this._moons.has(sel)) this._showMoonOrbit(sel);
+      }
+    }
+    if (this._cleanView) this._applyCleanViewVisibility(true);   // SHIFT trwa — nowe linie też ukryte
+  }
+
+  // Orbity planetoid od zera — bez przenoszenia widoczności i krycia ze starych linii (`_rebuildPlanetoidOrbits` przenosi,
+  // więc po zmianie flagi zostawiłby krycie drugiej ścieżki).
+  _hudRebuildPlanetoidOrbits() {
+    this._planetoidOrbits.forEach((line) => {
+      this.scene.remove(line);
+      line.geometry?.dispose();
+      line.material?.dispose();
+    });
+    this._planetoidOrbits.clear();
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    EntityManager.getByTypeInSystem('planetoid', sysId).forEach((p) => this._buildPlanetoidOrbit(p));
+  }
+
+  // Stan wspólny partii stylowania: filtr, czysty widok, barwy z motywu (liczone raz na partię).
+  _hudOrbitState() {
+    return { filter: this._orbitFilter, cleanView: this._cleanView === true, palette: orbitPalette() };
+  }
+
+  _hudStylePlanetOrbit(planet, line, st = this._hudOrbitState()) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    applyOrbitStyle(line, planetOrbitStyle({
+      ...st,
+      isHome: planet.id === window.KOSMOS?.homePlanet?.id,
+      isColonized: colMgr ? colMgr.getColony(planet.id) != null : false,
+      unstable: planet.orbitalStability < 0.5,
+      selected: planet.id === this._selectedEntityId,
+      hovered: planet.id === this._hudHoverOrbitId,
+    }));
+  }
+
+  // Kolor bazowy pierścienia (ścieżka OFF) zapamiętany przy pierwszym stylowaniu — przywraca go przejście ON → OFF.
+  _hudStyleMoonRing(moonId, ring, st = this._hudOrbitState()) {
+    if (ring.userData.hudBaseHex === undefined) ring.userData.hudBaseHex = ring.material.color.getHex();
+    applyOrbitStyle(ring, moonOrbitStyle({ ...st, selected: moonId === this._selectedEntityId }));
+  }
+
+  _hudStylePlanetoidOrbit(id, line, st = this._hudOrbitState()) {
+    applyOrbitStyle(line, planetoidOrbitStyle({
+      ...st,
+      selected: id === this._selectedEntityId,
+      hovered: id === this._hudHoverOrbitId,
+    }));
+  }
+
+  _hudRestylePlanetOrbits(st = this._hudOrbitState()) {
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    for (const p of EntityManager.getByTypeInSystem('planet', sysId)) {
+      const line = this._orbits.get(p.id);
+      if (line) this._hudStylePlanetOrbit(p, line, st);
+    }
+  }
+
+  _hudRestyleMoonRings(st = this._hudOrbitState()) {
+    this._moons.forEach((e, id) => { if (e.ring) this._hudStyleMoonRing(id, e.ring, st); });
+  }
+
+  _hudRestylePlanetoidOrbits(st = this._hudOrbitState()) {
+    this._planetoidOrbits.forEach((line, id) => this._hudStylePlanetoidOrbit(id, line, st));
+  }
+
+  _hudRestyleOrbits() {
+    const st = this._hudOrbitState();
+    this._hudRestylePlanetOrbits(st);
+    this._hudRestyleMoonRings(st);
+    this._hudRestylePlanetoidOrbits(st);
   }
 
   // ── Dysk protoplanetarny ──────────────────────────────────────
@@ -3804,6 +3933,9 @@ export class ThreeRenderer {
     for (const [, sp] of this._enemyAlertMarkers)     each(sp);
     for (const [, sp] of this._tacticalGlyphs)        each(sp);
     for (const [, b] of this._hpBars)                 { each(b.bg); each(b.fill); }   // POLISH P2b (D2)
+    // ARKUSZ HUD H0 — przy `hudOrbits` widoczność orbit po wyjściu z czystego widoku liczona z preferencji (filtr,
+    // zaznaczenie, najechanie), nie z `_cvVis`: linie przebudowane w trakcie SHIFT nie mają `_cvVis` i wracałyby wszystkie.
+    if (!hidden && hudOrbitsOn()) this._hudRestyleOrbits();
   }
 
   // ── Pętla renderowania ────────────────────────────────────────
@@ -3883,6 +4015,7 @@ export class ThreeRenderer {
         this._tickGasMaterials();        // C1a — uDetail + kierunek światła żywych gazowców
         this._tickSunMaterials();        // S1 — drabina gwiazdy (bramkowane liveSunShader)
         this._tickAtmoMaterials();       // V3/A0 — siła powłoki atmosfery (bramkowane dayNightAtmosphere)
+        this._syncHudOrbits();           // ARKUSZ HUD H0 — orbity w kolorach motywu: flaga, epoka motywu, dom (510)
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
