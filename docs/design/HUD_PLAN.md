@@ -1,19 +1,21 @@
 # HUD_PLAN — ARKUSZ HUD: zasięgi radarów, etykiety, trasy, model uwagi, paleta z motywu
 
-> **Stan: FAZA A zamknięta — podpisy właściciela 2026-10-21 (§5.0); H0 w toku.** Faza A — audyt read-only 2026-10-21
+> **Stan: FAZA A zamknięta — podpisy właściciela 2026-10-21 (§5.0); H0 WYKONANE 2026-10-22** (§4.1: `5449674` H0-1 ·
+> `6464e4d` H0-2; bramka H0 PASS; ✅ 510, 511, 512; D-HUD-7 uzupełnienie — §5.0). Faza A — audyt read-only 2026-10-21
 > na HEAD `ad65e47` (ARKUSZ UI zamknięty — `UI_PLAN.md` §4.7; origin = `ad65e47`, ahead 0); w fazie A zero zmian
 > w `src/`. Plan zacommitowany razem z podpisami — commit `docs(HUD A)` = kotwica H0. Podpisy właściciela 2026-10-21:
 > odczytania §1.1 (1)–(5), decyzje D-HUD-1…18, D-HUD-b/c bez zmian, cięcie H0 → H4 (§4), 504 — osobny drobny krok.
-> **Następny krok:** H0 — role kolorów z motywu + orbity (§4.1).
+> **Następny krok:** H1 — warstwa HUD 2D + radar (§4.2); kotwica H1 = commit dokumentacji `docs(HUD H0 CLOSE)`.
 > **Pomiary:** prawdziwa gra w Chrome (CDP, GPU — ANGLE / RTX 3070, `devicePixelRatio` 1 → `pixelRatio` renderera 1,5),
 > zapis ZF gy120 (Kepler-4799 — ten sam co bramki ARKUSZA UI), okno **1600×1041 CSS** (skala UI gry 1,25 — logicznie
 > 1280×833), kontrola **1280×833**; przed każdym odczytem 4 s biegu gry (stan po wczytaniu na pauzie jest inny —
-> Finding 510). Kontrast motywów — czysty node na `src/config/ThemeConfig.js` (5 motywów ekranu tytułowego + 24 presety).
+> Finding 510). Kontrast motywów — czysty node na `src/config/ThemeConfig.js` (5 motywów ekranu tytułowego + 23 presety;
+> sprostowanie 2026-10-22 — w fazie A pisało „24”, `Object.keys(PRESET_THEMES)` = 23).
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\hud-phase-a\` — `probes/` (sondy), `results/` (JSON, zrzuty PNG,
 > `hexes_hud.txt` — pełna lista kolorów na sztywno), `HANDOVER_HUD_PHASE_A.md`.
 > **Oznaczenia** jak w `UI_PLAN.md`: `[code]` — odczyt źródła (linie przy `ad65e47`) · `[measured]` — pomiar w grze albo
-> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#516 (§3); 502 i 503 —
-> `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie: **517**.
+> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#521 (§3; 517–521 z H0); 502
+> i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie: 517; **po H0: 522**.
 
 ---
 
@@ -316,7 +318,8 @@ jedyny callback to CRT (`_crtUpdateFn`).
 **Tokeny.** Obiekt JS `THEME` (`ThemeConfig.js:9-58`), nie CSS custom properties: powierzchnie (`bgPrimary`…), ramki,
 tekst (`textPrimary`, `textSecondary`, `textLabel`, `textDim`, `textHeader`), akcent (`accent`, `accentDim`,
 `accentMed`), statusy (`success`, `successDim`, `danger`, `dangerDim`, `warning`, `yellow`, `info`, `purple`, `mint`),
-mapa (`orbitLine`, `orbitColony`, `starfield`, `vignetteEnd` — bez czytelnika, Finding 512), fonty, CRT; 24 presety.
+mapa (`orbitLine`, `orbitColony`, `starfield`, `vignetteEnd` — bez czytelnika, Finding 512; od H0 `orbitLine` /
+`orbitColony` czytają orbity), fonty, CRT; 23 presety (sprostowanie 2026-10-22 — było „24”).
 Token ostrzeżenia (`warning`) i alertu (`danger`) ma każdy motyw. Tokenu `text` NIE ma — mimo to czytają go dwa miejsca
 jako wartość zapasową (`FleetPictureLogic.toneColor`, `:57-58`; `ThreeRenderer.js:7355`) — dziś nieosiągalne (ton zawsze
 znany), w HUD nie powielać.
@@ -442,7 +445,7 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 
 ---
 
-## 3. Findingi #504–#516 (rejestr macierzysty)
+## 3. Findingi #504–#521 (rejestr macierzysty; 517–521 z H0)
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
@@ -452,16 +455,25 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **507** | ⚪ | **Pierścienie statków zadokowanych i w rezerwie.** Filtr `_syncSensorOverlay` (`:6094-6099`) nie pyta o stan ani o `isInService`: statek zadokowany (bez sprite'a, `:5133-5137`) dostaje pierścień w środku kolonii — w ZF 8 z 10 pierścieni statków, po 3 nałożone w Nt i w Nowej Ziemi („pełne niebieskie elipsy”); kadłub w rezerwie nie wykrywa (`ProximitySystem.js:75-78`), a pierścień ma. | H1 |
 | **508** | ⚪ | **Pas pierścienia = 1,5 % promienia, więc grubość na ekranie od ułamka piksela do kilkudziesięciu.** `_upsertSensorRing` (`:6149`: wewnętrzny 0,985 × zewnętrzny; komentarz `:6146-6148` mówi „~3 %”). Zmierzone: statek 0,3 AU przy 40 j. — promień 29 px, pas 0,43 px; Nowa Ziemia 35 AU przy 40 j. — 701 px / 10,5 px. Pas węższy niż piksel rasteryzuje się w kreski — to są „krótkie kropkowane odcinki przy Fobosie” (§2.9). Stała szerokość ekranowa jest w repo (`engagementRingBand`, `VesselFxLogic.js:115`, CP27). | H1 |
 | **509** | ⚪ | **Trasa obcego statku nie pokazuje się nigdy.** `_applyVesselIntelVisibility` (`ThreeRenderer.js:5375-5376`) pokazuje linię wyłącznie przy jakości `'detailed'`, a żaden producent nie nadaje statkowi `'detailed'` (`IntelSystem._observeVessel` `:411-412` — `rumor`/`contact`; `_onSensorLock` `:408` — `contact`; skan obserwatorium — `contact`; `recordSighting` — `rumor`) ⇒ gałąź martwa. | H3 — trasy obcych wg D-HUD-10 |
-| **510** | ⚪ | **Po wczytaniu zapisu na pauzie orbity domu i kolonii są ukryte.** `_buildOrbit` (`:2706-2726`) czyta `window.KOSMOS.homePlanet` i `colonyManager.getColony` w chwili budowy sceny, zanim wczytywany zapis je odtworzy ⇒ obie orbity ukryte do pierwszej przebudowy — co 180 wywołań `_syncPlanetMeshes` (`:2425-2431`), czyli dopiero po odpauzowaniu. Zmierzone (ZF gy120): po wczytaniu orbita Nowej Ziemi `#005540`, ukryta (gałąź „życie” — `isHomePlanet` był wtedy fałszywy); po 4 s biegu — `#007852`, krycie 0,15, widoczna. | H0 (orbity) |
-| **511** | ⚪ | **Filtr orbit „Żadne” / „None” zostawia orbitę domu i kolonii** — `_restoreOrbitDefaults` (`:2627-2646`) i `_buildOrbit` (`:2715-2726`) pokazują je niezależnie od filtra; zmierzone (`orbits_none`). Etykieta `menu.orbitsNone` obiecuje brak orbit. | H0 — razem z semantyką chipa [O] (D-HUD-7) |
-| **512** | ⚪ | **Tokeny mapy w motywach bez czytelnika.** `orbitLine`, `orbitColony`, `starfield`, `vignetteEnd` (`ThemeConfig.js:37-40` i każdy preset — np. Amber Noir `rgba(196,152,48,0.06)` / `rgba(196,152,48,0.20)`) — zero czytelników w `src/` poza `ThemeConfig.js`; orbity mają zaszyte 0x003828 / 0x005540 / 0x007852 — turkus w KAŻDYM motywie, także bursztynowym i fioletowym. | H0 — orbity z `orbitLine` / `orbitColony` (D-HUD-7); `starfield` / `vignetteEnd` poza zakresem |
+| **510** | ✅ | **Po wczytaniu zapisu na pauzie orbity domu i kolonii są ukryte.** `_buildOrbit` (`:2706-2726`) czyta `window.KOSMOS.homePlanet` i `colonyManager.getColony` w chwili budowy sceny, zanim wczytywany zapis je odtworzy ⇒ obie orbity ukryte do pierwszej przebudowy — co 180 wywołań `_syncPlanetMeshes` (`:2425-2431`), czyli dopiero po odpauzowaniu. Zmierzone (ZF gy120): po wczytaniu orbita Nowej Ziemi `#005540`, ukryta (gałąź „życie” — `isHomePlanet` był wtedy fałszywy); po 4 s biegu — `#007852`, krycie 0,15, widoczna. | ✅ **H0** — `6464e4d` (przy `hudOrbits` ON): klucz synchronizacji orbit = flaga + epoka motywu + dom gracza, przebudowa w pętli renderu także w pauzie ⇒ orbita domu i kolonii widoczna od razu po wczytaniu (bramka H0, K1); przy OFF — jak dziś |
+| **511** | ✅ | **Filtr orbit „Żadne” / „None” zostawia orbitę domu i kolonii** — `_restoreOrbitDefaults` (`:2627-2646`) i `_buildOrbit` (`:2715-2726`) pokazują je niezależnie od filtra; zmierzone (`orbits_none`). Etykieta `menu.orbitsNone` obiecuje brak orbit. | ✅ **H0** — `6464e4d` (ON): „Żadne” chowa wszystkie orbity, także dom i kolonie, poza orbitą zaznaczonego ciała (D-HUD-7 uzupełnienie 3b — §5.0; bramka H0, K4); przy OFF — jak dziś; chip [O] — H4 |
+| **512** | ✅ | **Tokeny mapy w motywach bez czytelnika.** `orbitLine`, `orbitColony`, `starfield`, `vignetteEnd` (`ThemeConfig.js:37-40` i każdy preset — np. Amber Noir `rgba(196,152,48,0.06)` / `rgba(196,152,48,0.20)`) — zero czytelników w `src/` poza `ThemeConfig.js`; orbity mają zaszyte 0x003828 / 0x005540 / 0x007852 — turkus w KAŻDYM motywie, także bursztynowym i fioletowym. | ✅ **H0** — `6464e4d`: `orbitLine` / `orbitColony` czyta `HudOrbitLogic` (ON; bramka H0, K1–K3); `starfield` / `vignetteEnd` — poza zakresem, dalej bez czytelnika |
 | **513** | ⚪ | **Nazwy etykiet ucięte bez wielokropka** — `MapLabelLogic.js:121` i `:160` (`.slice(0, 16)`), choć warstwa ma `_truncate` z „…” (`MapLabelLayer.js:129`); zmierzone: „Stacja Nowa Ziem”. | H2 |
 | **514** | 🟠 | **Etykiety mapy wychodzą poza obszar mapy i nakładają się w paśmie przejścia LOD.** (a) `MapLabelLayer` nie ma clipu ani kadru, a górna belka rysuje się PRZED etykietami (`UIManager.js:2223` wobec `:2323-2331`) — plakietki ciał nad kadrem malują się na belce: zmierzone „Nt” na belce przy 12 j. (`S4_nowaZiemia_d12.png`), plakietki do y = −29 px przy Fobosie z 1,5 j., oba okna. (b) Znaczniki LOD (`_drawMarker`) nie biorą udziału w anti-overlap (`stackLabels` — tylko plakietki), a w paśmie 150–215 j. rysują się razem z plakietkami: przy 200 j. 10 nakładających się par, w tym znaczniki Nowej Ziemi, Nowego Księżyca i stacji nałożone w 88–95 % (oba okna) — zgłoszone „zachodzą na siebie”. | H2 |
 | **515** | ⚪ | **Karta ciała leży pod etykietami mapy** — w rysowaniu (`BottomContext.draw`, `UIManager.js:2269`; etykiety `:2323-2331`) i w kliku (etykiety `:2008`, karta `:2043`): plakietka albo strefa stacji nad kartą zabiera klik karcie. Panele pływające przeniesiono nad etykiety w U2-4 (483) — karta ciała została. Wniosek z kodu, nieodtworzony. | H2 — nowe etykiety pod kartą (D-HUD-1) |
 | **516** | 🟠 | **Pierścień radaru statku w skoku warp zostaje w oglądanym układzie.** Filtr `v.systemId && v.systemId !== activeSys` (`ThreeRenderer.js:6098`) przepuszcza `systemId === null` (tranzyt warp — `VesselManager.dispatchInterstellar`, `:1014`; stan `in_transit`, pozycja sprzed skoku), a sprite filtruje ściśle (`vessel.systemId === activeSys`, `:5121-5127`) ⇒ statek znika, jego pierścień zostaje w punkcie odlotu na cały czas skoku. Rodzina „globalne id ≠ położenie”. Wniosek z kodu (w ZF brak własnego statku w skoku). | H1 |
+| **517** | ⚪ | **Pojedyncze pole koloru w panelu motywu (F7) nie podbija epoki motywu.** `ThemeOverlay.js:264`, `:270`, `:361` zapisują `THEME[key] = …` wprost, z pominięciem `applyTheme`, więc licznik epoki (`themeEpoch`, D-HUD-15) stoi — warstwy 3D (orbity H0) przyjmują nową barwę dopiero przy najbliższej przebudowie (zdarzenie, co 180 synchronizacji fizyki, zmiana układu), w pauzie — wcale. Paleta orbit ma pamięć po WARTOŚCIACH tokenów (`orbitPalette`, keeper `hud_orbits_smoke` O8c) — brakuje wyłącznie sygnału. Wniosek z kodu; bramka H0, punkt 9. | drobny krok poza arkuszem — 3 linie w `ThemeOverlay` (`applyTheme({ [key]: v })` albo podbicie epoki); rodzina 520, 521 |
+| **518** | ⚪ | **Orbity kolonii AI wyróżnione jak kolonie gracza.** Rola „kolonia” orbity planety z `colonyManager.getColony(id) != null` — bez terminu właściciela (`ThreeRenderer.js:2647`, `:2731` — ścieżka OFF; `:3014` — ścieżka ON H0): przy ON barwa `orbitColony` motywu GRACZA i widoczność niezależna od filtra (poza „Żadne”). Semantyka sprzed H0 zachowana świadomie. Rodzina 506. Wniosek z kodu (w ZF brak kolonii AI w układzie domowym); bramka H0, punkt 10. | do decyzji — razem z 506 (H1, D-HUD-4: tylko obiekty gracza) albo osobno |
+| **519** | ✅ | **SHIFT przy biegnącej grze kasował orbity planetoid na stałe.** Okresowe odświeżenie orbit (co 180 synchronizacji fizyki, ok. 3 s) przebudowuje też orbity planetoid, a `_rebuildPlanetoidOrbits` (`ThreeRenderer.js:2889-2914`) kopiuje widoczność ze starych linii — w czystym widoku ukrytych ⇒ po puszczeniu Shift orbity planetoid zostają ukryte, a każde kolejne odświeżenie kopiuje to dalej (do zmiany filtra). Zmierzone w grze (sonda `probe_shift_running_h0.mjs`, Shift 6 s): kod sprzed H0 — 18/18 → 0/18 i 0/18 po kolejnych 7 s; H0 (ON) — 18/18 i 18/18; bramka H0, K6 (kontrola `ad65e47`: 19 → 1). | ✅ **H0** — `6464e4d` (ON: `_hudRebuildPlanetoidOrbits` od zera, widoczność po SHIFT liczona ze stanu); przy OFF zostaje (OFF = kod sprzed H0) |
+| **520** | ⚪ | **Klik w przycisk panelu motywu (F7) przechodzi do mapy jako klik w pustkę.** Globalny `click` na `window` (`GameScene._setupMouseInput`, `:5462`) ma strażniki dla modali i menu ☰ (`.kosmos-menu-panel`, `:5483`), ale nie dla `ThemeOverlay` (panel bez klasy i bez `stopPropagation`) ⇒ klik w „⚡ Neon Cyber” odznacza zaznaczone ciało (w kodzie sprzed H0 — wraz z przebudową orbit; stąd orbita domu w kontroli K2 bramki H0, to nie naprawa 510). Czy ciało pod przyciskiem zostałoby zaznaczone — niezmierzone. Bramka H0, punkt 16. | drobny krok poza arkuszem — strażnik klasy panelu albo `stopPropagation`; rodzina 517, 521 |
+| **521** | ⚪ | **Pola koloru panelu F7 dostają wartości rgba.** `ThemeOverlay.js:442` (`controls.picker.value = THEME[key]`) wpisuje do `<input type="color">` tokeny w formie `rgba(…)` (np. `orbitLine` / `orbitColony` w każdym presecie), a pole przyjmuje wyłącznie `#rrggbb` ⇒ ostrzeżenia konsoli przy każdym otwarciu F7. Sprzed H0; zgłoszenie właściciela z bramki H0. | drobny krok poza arkuszem (konwersja `rgba` → `#rrggbb` w panelu); rodzina 517, 520 |
 
 Rejestr #504–#516 po fazie A: **13 wpisów — 🟠 5** (504, 505, 506, 514, 516) **· ⚪ 8** (507–513, 515). Wszystkie
 otwarte; 504 — osobny drobny krok, reszta w krokach H0–H3. Pierwszy wolny: **517**.
+
+Po H0 (2026-10-22): rejestr #504–#521 — **18 wpisów — ✅ 4** (510, 511, 512, 519 — przy `hudOrbits` ON) **· 🟠 5** (504,
+505, 506, 514, 516) **· ⚪ 9** (507, 508, 509, 513, 515, 517, 518, 520, 521). Punkt 12 bramki H0 (tryb Y — wzmocnienie
+orbit gaśnie przy restylu) — odsyłacz do **V-249**, bez numeru. Pierwszy wolny: **522**.
 
 ---
 
@@ -497,6 +509,22 @@ dopiero po bramce. Zapis v101 bez migracji (stan warstw w `uiPrefs` przez `?? do
 
 ### 4.1 H0 — role kolorów z motywu + orbity (D-HUD-2, D-HUD-7, D-HUD-15)
 
+> **✅ WYKONANE 2026-10-22.** Commity `tools/commit_H0.sh`: **`5449674`** (H0-1 — NEW `src/ui/HudPalette.js`: role HUD
+> z motywu wg reguły B2, raport kontrastu; epoka motywu w `ThemeConfig.js` — `applyPreset` / `applyTheme`) ·
+> **`6464e4d`** (H0-2 — NEW `src/renderer/HudOrbitLogic.js`, orbity planet, pierścienie księżyców i orbity planetoid
+> w kolorach tokenów `orbitLine` / `orbitColony` za `FEATURES.hudOrbits` — ON; zaznaczona `primary`, niestabilna `alert`,
+> krycie × 0,8; `_syncHudOrbits` w pętli renderu — przebudowa przy zmianie flagi, epoki motywu i domu gracza; poprawka 3b
+> po bramce — przy „Żadne” zostaje orbita zaznaczonego ciała, §5.0). **Bramka H0 u właściciela — PASS 2026-10-22:** K0–K7
+> na Biopunk Green (wczytanie) i Amber Noir (`applyPreset` z konsoli), K0 / K1 / K3 z rozwiniętą tablicą planet na Neon
+> Cyber; obie gałęzie alertu okiem (`0xcc4433` danger / `0xffaa44` warning); okno 1618×1053, DPR 0,9 → `pixelRatio` 1,35
+> → linia orbity 0,74 px CSS; 16 punktów „Do potwierdzenia” przyjętych, decyzje 8 = (a) i 3 = (b) (§5.0); po poprawce 3b
+> K4 powtórzone na Neon Cyber: wariant A 0/32, wariant B („Kepler-4799 i” zaznaczona — `0xff2288`, 0,56) 1/32, po
+> odznaczeniu 0/32. Keepery: `hud_palette_smoke` 30/30 (fail-first na `6496b38`: 3/27), `hud_orbits_smoke` 57/57
+> (na `6496b38`: 12/45; poprawka 3b wobec drzewa H0-2 sprzed niej: 52/5); bateria mutacji 19/19; sweep **335/335**;
+> `check-i18n` pl = en = **3394** (bez nowych kluczy); koszt `_rebuildAllOrbits` przy ON 0,063–0,0715 ms (faza A:
+> 0,07 ms); save v101 bez migracji. ✅ **510**, **511**, **512**; nowe **517–521** (§3; 519 ✅ przy ON). Teczka:
+> `C:\Users\Komputer\kosmos-handover\hud-h0\` (`HANDOVER_H0.md`, `gate/GATE_H0.md`).
+
 **Koszt (propozycja):** 2 commity kodu + 1 dokumentacji · **bramka:** jedna (~15 min, 5 motywów).
 - NEW `src/ui/HudPalette.js` — czysty: `resolveHudRoles(theme)` → `{ primary, dim, alert, foreign, alertSource }` wg
   reguły D-HUD-2; `hudContrastReport(theme)` dla keepera. Zero hexów.
@@ -506,7 +534,7 @@ dopiero po bramce. Zapis v101 bez migracji (stan warstw w `uiPrefs` przez `?? do
   z `orbitLine` (domyślne) i `orbitColony` (dom, kolonie), krycie × 0,8; zaznaczona i niestabilna wg D-HUD-7;
   przebudowa przy zmianie flagi, motywu i po wczytaniu zapisu (510); filtr „Żadne” wg D-HUD-7 (511). Ścieżka OFF —
   dzisiejsze hexy co do bitu.
-- **Keepery:** NEW `hud_palette_smoke` (role i progi ΔE dla 5 motywów ekranu tytułowego, raport dla 24 presetów, zero
+- **Keepery:** NEW `hud_palette_smoke` (role i progi ΔE dla 5 motywów ekranu tytułowego, raport dla 23 presetów, zero
   hexów w module, odczyt tokenów co wywołanie — zmiana motywu widoczna od razu) · NEW `hud_orbits_smoke` (kolory z
   tokenów przy ON, dzisiejsze przy OFF; krycie × 0,8; przebudowa po zmianie epoki; 510 — orbita domu widoczna po
   wczytaniu bez biegu gry; 511 — wg decyzji). Do sprawdzenia: `click_focus_rule_smoke` (podświetlenie orbity przy
@@ -605,6 +633,7 @@ kolejnością.
 | **D-HUD-5** | jak rekomendacja (progi 40 / 6 px tarczy — do kalibracji na bramce H2) |
 | **D-HUD-6** | **kratka cyfr** |
 | **D-HUD-7** | grubość bez zmian; krycie × 0,8; tokeny `orbitLine` / `orbitColony`; zaznaczona `hud.primary` 0,7 × 0,8; niestabilna `hud.alert`; 510 naprawione; „Żadne” chowa WSZYSTKIE (511); chip [O] OFF = „Żadne” / ON = ostatni tryb |
+| **D-HUD-7 — uzupełnienie (2026-10-22, po bramce H0)** | **decyzja 8 = (a):** w 5 motywach ekranu tytułowego (`orbitLine` = `orbitColony` = `accent` w RGB) hierarchię orbit niesie samo krycie (0,064 / 0,08 / 0,12 / 0,56) — bez kroku, bez zmiany tokenów · **decyzja 3 = (b) — poprawka 3b:** przy filtrze „Żadne” orbita **zaznaczonego ciała** zostaje widoczna (`primary`); zakres (pytanie z sesji poprawki, odpowiedź 2026-10-22): **każde zaznaczone ciało** — planeta 0,56, pierścień księżyca 0,24, orbita planetoidy 0,28; reszta ukryta — także dom i kolonie (511 bez zmian); najechana — bez orbity; odznaczenie — orbita znika, zmiana zaznaczenia — przeskakuje; SHIFT chowa także ją; tylko ścieżka ON, OFF = dziś co do bitu (`6464e4d`) |
 | **D-HUD-8** | jak rekomendacja |
 | **D-HUD-9** | kreski do krawędzi kadru + glif; tylko układ odlotu |
 | **D-HUD-10** | jak rekomendacja |
@@ -659,6 +688,8 @@ bliskim zoomie. Wpisane do H4; oddychanie na zegarze z D-HUD-12.
    kolory z tokenów `orbitLine` (domyślne i filtr) i `orbitColony` (dom, kolonie); zaznaczona — `hud.primary`, krycie
    0,7 × 0,8; niestabilna — `hud.alert` w kryciu kolonii; 510 naprawione (przebudowa po wczytaniu). Filtr „Żadne”
    chowa WSZYSTKIE orbity (zgodnie z etykietą — 511); chip [O] OFF = „Żadne”, ON = ostatni tryb z menu.
+   **Uzupełnienie 2026-10-22 (po bramce H0, §5.0):** (8a) hierarchię orbit w 5 motywach tytułowych niesie samo krycie;
+   (3b) „Żadne” chowa wszystkie orbity poza orbitą zaznaczonego ciała — każdego: planety, księżyca, planetoidy.
 8. **D-HUD-8 — trasy.** Kolor `hud.primary` / `hud.foreign` (nie kolor typu rozkazu — typ niesie glif celu i druga
    linia); alfa 0,6 → 0,15 × poziom uwagi (D-HUD-11); wzór kresek w px ekranu (punkt wyjścia 6 / 4 px), marsz ~4 px/s
    czasu biegu gry; cel: puste kółko (ciało), chevron (punkt w przestrzeni); zestaw rozkazów: dzisiejszy + patrol

@@ -884,6 +884,25 @@
 > • Następny: **H0** — role kolorów z motywu + orbity (`HUD_PLAN.md` §4.1; cel: 510, 511, 512).
 > • **Pierwszy wolny numer: 517.**
 
+> **Aktualizacja 2026-10-22 (ARKUSZ HUD — H0: role kolorów z motywu + orbity, WYKONANE)** (rejestr macierzysty
+> `HUD_PLAN.md` §3, §4.1). Commity `tools/commit_H0.sh`: `5449674` (H0-1 — role HUD z motywu, reguła B2; epoka motywu
+> w `ThemeConfig`) · `6464e4d` (H0-2 — orbity w kolorach tokenów `orbitLine` / `orbitColony` za `FEATURES.hudOrbits`,
+> ON; poprawka 3b po bramce — przy „Żadne” zostaje orbita każdego zaznaczonego ciała). Bramka H0 u właściciela PASS
+> 2026-10-22 (Biopunk Green, Amber Noir, Neon Cyber; 1618 × 1053, DPR 0,9; K4 powtórzone po 3b na Neon Cyber); 16 punktów
+> „Do potwierdzenia” przyjętych, decyzje 8 = (a) i 3 = (b) — D-HUD-7 uzupełnienie (`HUD_PLAN.md` §5.0). Sweep
+> **335/335**, `check-i18n` pl = en = **3394**; save v101 bez migracji.
+> • ✅ **510** · **511** · **512** — zamknięte w rejestrze macierzystym (przy `hudOrbits` ON; OFF = kod sprzed H0);
+>   wiersze zdjęte z A11.
+> • **NOWE: #517–#521** (z sesji i bramki H0) — wiersze w A11: ⚪ **517** pojedyncze pole koloru w F7 nie podbija
+>   epoki motywu · ⚪ **518** orbity kolonii AI wyróżnione jak kolonie gracza (rodzina 506) · ⚪ **520** klik w przycisk
+>   panelu F7 przechodzi do mapy · ⚪ **521** pola koloru F7 dostają `rgba` (ostrzeżenia konsoli); ✅ **519** SHIFT przy
+>   biegnącej grze kasował orbity planetoid — zamknięty w `6464e4d` przy ON (przy OFF zostaje), wiersza w A11 nie ma.
+> • Punkt 12 bramki H0 (tryb Y — wzmocnienie orbit gaśnie przy restylu) — odsyłacz do **V-249**, bez numeru.
+> • Rejestr #504–#521: 18 wpisów — ✅ 4 · 🟠 5 · ⚪ 9.
+> • Następny: **H1** — warstwa HUD 2D + radar (`HUD_PLAN.md` §4.2; cel: 505, 506, 507, 508, 516); kotwica H1 = commit
+>   dokumentacji `docs(HUD H0 CLOSE)`.
+> • **Pierwszy wolny numer: 522.**
+
 
 ---
 
@@ -964,7 +983,7 @@ przypadek i nie rozstrzyga się go automatycznie tą decyzją.
 | **391-448** | `AI_STRIKES_BACK_PLAN.md` §6 Rejestr findingów arca (2026-10-06–15; rozdział zamknięty — podsumowanie §8; 436-437 z zamknięcia S3, sesja 1 (bramka S3A, SB62); 438-440 z S3, sesja 2 (C6, M6); 441-445 z S4, sesja 1 (D3; 445 — SB80); 446 z S4, sesja 2 (M7); 447-448 z S4, sesja 3 (M8); 426-432 kandydaci notatki przekazania zamknięcia S2b §9.3 (SB60); 433-435 z S3, sesja 1; 391-396 kandydaci K1–K6 audytu fazy A, `AI_STRIKES_BACK_AUDIT.md`; 397-404 kandydaci notatki przekazania S0; 405-406 obserwacje z bramki S0; 407-408 z pomiarów S1, sesja 1; 409-411 z S1, sesja 2; 412-413 z domknięcia S1 i jego bramki; 414-415 z audytu S2 (SB36); 416 z M4 S2, sesja 1; 417-419 z audytu 416 i ustaleń bramki S2; 420-425 z audytu i pomiarów S2b) |
 | **449-470** | `POLISH_PLAN.md` §6 Rejestr findingów arca POLISH (2026-10-16–18; 449-455 z audytu P1, 456-457 z kodu P1, 458-464 z audytu P2, 465-466 z kodu P2a, 467-468 z bramki P2A u właściciela, 469 z kodu P2b, 470 z bramki P2B u właściciela) |
 | **471-503** | `UI_PLAN.md` §6 Rejestr findingów ARKUSZA UI (outlinery + belki + dolny pas + U5; 2026-10-18–21; 471-481 z audytu fazy A, 482-483 z sesji U0, 484-487 z bramki U1 i sesji U1, 488-493 z bramki U2 i sesji U2, 494-496 z sesji U3 — zapisane przy zamknięciu, 497-501 z sesji i bramki U4 — zapisane przy zamknięciu, 502-503 z sesji i bramki 501 — zapisane przy zamknięciu U5) |
-| **504-516** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; 2026-10-21; 504-516 z audytu fazy A) |
+| **504-521** | `HUD_PLAN.md` §3 Findingi ARKUSZA HUD (warstwa informacyjna mapy układu: radar, etykiety, trasy, model uwagi, paleta z motywu, chipy w pasie; 2026-10-21–22; 504-516 z audytu fazy A, 517-521 z sesji i bramki H0) |
 | **W2 1-14** | `W2_PLAN.md` §Findings filed — ⚠ **OSOBNA przestrzeń nazw**, to NIE te same numery |
 | **V-246 … V-275** | `VISUALS_PLAN.md` §Rejestr findingów arca — ⚠ **OSOBNA przestrzeń nazw**, 🔴 **koliduje** z 246-254 wyżej |
 | bez numeru | `KOSMOS_backlog_niezrealizowane.md` · `VO3B_PLAN.md` §9 (GATE B2) |
@@ -1258,13 +1277,14 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **507** | ⚪ | pierścienie statków zadokowanych i w rezerwie — filtr `_syncSensorOverlay` (`:6094-6099`) nie pyta o stan ani o `isInService`; w ZF 8 z 10 pierścieni statków („pełne niebieskie elipsy”) | → H1. `HUD_PLAN.md` §3 |
 | **508** | ⚪ | pas pierścienia zasięgu = 1,5 % promienia ⇒ grubość od ułamka piksela (kreski — „kropkowane odcinki przy Fobosie”) do kilkudziesięciu px; zmierzone | → H1 (pierścienie 3D zastąpione warstwą 2D). `HUD_PLAN.md` §3 |
 | **509** | ⚪ | trasa obcego statku nie pokazuje się nigdy — `_applyVesselIntelVisibility` (`:5375-5376`) wymaga jakości `'detailed'`, której żaden producent nie nadaje statkowi | → H3 (D-HUD-10). `HUD_PLAN.md` §3 |
-| **510** | ⚪ | po wczytaniu zapisu na pauzie orbity domu i kolonii są ukryte do pierwszej przebudowy (co 180 wywołań `_syncPlanetMeshes` — po odpauzowaniu): `_buildOrbit` czyta `homePlanet` i `getColony` przed ich odtworzeniem; zmierzone (ZF gy120) | → **H0** (przebudowa po wczytaniu). `HUD_PLAN.md` §3 |
-| **511** | ⚪ | filtr orbit „Żadne” zostawia orbitę domu i kolonii (`_restoreOrbitDefaults`, `_buildOrbit`), choć etykieta `menu.orbitsNone` obiecuje brak orbit; zmierzone | → **H0** („Żadne” chowa WSZYSTKIE, D-HUD-7). `HUD_PLAN.md` §3 |
-| **512** | ⚪ | tokeny mapy `orbitLine` / `orbitColony` / `starfield` / `vignetteEnd` bez czytelnika — orbity zaszyte w turkusie w każdym motywie | → **H0** (orbity z `orbitLine` / `orbitColony`); `starfield` / `vignetteEnd` poza zakresem. `HUD_PLAN.md` §3 |
 | **513** | ⚪ | nazwy etykiet ucięte bez wielokropka (`MapLabelLogic.js:121`, `:160` — `.slice(0, 16)`); zmierzone: „Stacja Nowa Ziem” | → H2. `HUD_PLAN.md` §3 |
 | **514** | 🟠 | etykiety mapy wychodzą poza obszar mapy (bez kadru i clipu — plakietki malują się na górnej belce) i nakładają się w paśmie przejścia LOD 150–215 j. (znaczniki poza `stackLabels`; przy 200 j. 10 nakładających się par); zmierzone, oba okna | → H2. `HUD_PLAN.md` §3 |
 | **515** | ⚪ | karta ciała leży pod etykietami mapy — w rysowaniu (`UIManager.js:2269` wobec `:2323-2331`) i w kliku (`:2008` wobec `:2043`); wniosek z kodu | → H2 (etykiety pod kartą, D-HUD-1). `HUD_PLAN.md` §3 |
 | **516** | 🟠 | pierścień radaru statku w skoku warp zostaje w punkcie odlotu — filtr `v.systemId && v.systemId !== activeSys` (`:6098`) przepuszcza `systemId === null`; rodzina „globalne id ≠ położenie”; wniosek z kodu | → H1. `HUD_PLAN.md` §3 |
+| **517** | ⚪ | pojedyncze pole koloru w panelu motywu (F7) nie podbija epoki motywu — `ThemeOverlay.js:264`, `:270`, `:361` zapisują `THEME[key]` wprost (bez `applyTheme`), więc orbity H0 przyjmują barwę dopiero przy najbliższej przebudowie (w pauzie — wcale); wniosek z kodu, bramka H0 punkt 9 | → drobny krok poza arkuszem (3 linie w `ThemeOverlay`); rodzina 520, 521. `HUD_PLAN.md` §3 |
+| **518** | ⚪ | orbity kolonii AI wyróżnione jak kolonie gracza — rola „kolonia” z `getColony(id) != null` bez terminu właściciela (`ThreeRenderer.js:2647`, `:2731` — OFF; `:3014` — ON), przy ON w barwie `orbitColony` motywu gracza; semantyka sprzed H0 zachowana świadomie; wniosek z kodu (w ZF brak kolonii AI w układzie domowym) | → do decyzji — razem z 506 (H1, D-HUD-4) albo osobno. `HUD_PLAN.md` §3 |
+| **520** | ⚪ | klik w przycisk panelu motywu (F7) przechodzi do mapy jako klik w pustkę — globalny `click` (`GameScene._setupMouseInput`, `:5462`) ma strażnik `.kosmos-menu-panel` (`:5483`), a nie ma strażnika `ThemeOverlay` ⇒ odznaczenie ciała; czy ciało pod przyciskiem zostałoby zaznaczone — niezmierzone; bramka H0 punkt 16 | → drobny krok poza arkuszem (strażnik klasy panelu albo `stopPropagation`); rodzina 517, 521. `HUD_PLAN.md` §3 |
+| **521** | ⚪ | pola koloru panelu F7 dostają wartości `rgba` — `ThemeOverlay.js:442` (`controls.picker.value = THEME[key]`) do `<input type="color">`, który przyjmuje wyłącznie `#rrggbb` ⇒ ostrzeżenia konsoli przy każdym otwarciu F7; sprzed H0, zgłoszenie właściciela z bramki H0 | → drobny krok poza arkuszem (konwersja `rgba` → `#rrggbb`); rodzina 517, 520. `HUD_PLAN.md` §3 |
 
 
 ---
