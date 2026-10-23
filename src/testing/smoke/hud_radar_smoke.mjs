@@ -31,6 +31,13 @@
 //       dziś (KONTROLA: 15 w scenie jak ZF — także zadokowane, rezerwa, skok, kolonia AI); w pętli renderu — usunięcie
 //       przy ON także w pauzie
 //   R11 menu ☰ „Radar” (WYKONANIE metod `BottomBar`): ON — wartość i przełącznik `hudRadarVisible`; OFF — jak dziś
+//   — H1-3 (błysk na granicy, D-HUD-4) —
+//   R12 logika: namiar w ramce UKŁADU, łuk ±15°, krycie 1 → 0 w 0,8 s, para z graczem (`isEnemyVessel`), najbliższa kolonia
+//       gracza w zasięgu (układ obcego; AI i inny układ — nie; statek w skoku — nie)
+//   R13 warstwa (prawdziwe zdarzenia `EventBus`): `vessel:proximityEnter` → łuk na granicy NIEzaznaczonego statku w namiarze
+//       obcego (punkty = rzut łuku świata), rola `alert`, gaśnie w czasie realnym, potem spoczynek; bez błysku: swoi,
+//       zaznaczony, zadokowany, flaga OFF, inny układ; `vessel:detectionChanged` → najbliższa kolonia w zasięgu (∞ — bez
+//       błysku); mgła wojny — rekord błysku bez danych obcego, warstwa nie czyta wywiadu
 //   — korekta 1b (czytelność granicy — bramka H1 2026-10-23) —
 //   R14 granica: kropki 1,5 px z okrągłym końcem co 6 px (α 0,35), podziałka 10 px / główne 16 px (α 0,55), odczyt
 //       zasięgu „11,5 AU” / „1,0 AU” (α 0,6, separator wg języka — `fmtDec`) przy NAJWYŻSZEJ na ekranie kresce głównej, na
@@ -111,7 +118,7 @@ const setWorld = () => {
       getBodyWorldInfo: (id) => (BODIES[id] ? { ...BODIES[id] } : null), getVesselWorldPosition: (id) => (SPRITES[id] ? { ...SPRITES[id] } : null),
     },
     vesselManager: { getAllVessels: () => [...VESSELS], getVessel: (id) => VESSELS.find((v) => v.id === id) ?? null, getVesselSensorRangeAU: realSensorAU },
-    colonyManager: { getAllColonies: () => [...COLONIES] },
+    colonyManager: { getAllColonies: () => [...COLONIES], getColony: (id) => COLONIES.find((c) => c.planetId === id) ?? null },
     observatorySystem: { getVesselDetectionRangeAU: (c) => ObservatorySystem.prototype.getVesselDetectionRangeAU.call(null, c) },
     techSystem: { getMultiplier: (cat) => (cat === 'sensor_range' ? SENSOR_MULT : 1) },
     timeSystem: { get simClockMs() { return W0.sim; } },
@@ -476,6 +483,132 @@ header('R11  menu ☰ „Radar” — wykonanie metod BottomBar');
   ok(d?.valueOn === false && e?.valueOn === true && K.uiPrefs.sensorOverlayVisible === true && K.uiPrefs.hudRadarVisible === undefined,
     'R11b KONTROLA: OFF — jak dziś: wartość i przełącznik `sensorOverlayVisible`');
   FEATURES.hudRadar = true;
+}
+
+// ═══ R12 ═════════════════════════════════════════════════════════════════════
+header('R12  błysk — logika (D-HUD-4)');
+{
+  const B = (a, b) => RL?.bearingRad?.(a, b);
+  ok(near(B({ x: 0, y: 0 }, { x: 10, y: 0 }), 0) && near(B({ x: 0, y: 0 }, { x: 0, y: 10 }), Math.PI / 2) && near(B({ x: 5, y: 5 }, { x: -5, y: 5 }), Math.PI),
+    'R12a SEDNO: namiar w ramce układu — oś x układu = 0, oś y = 90° (współrzędne logiki gry, bez kamery)');
+  const arc = RL?.flashArc?.(1);
+  ok(near(arc?.[0], 1 - Math.PI / 12) && near(arc?.[1], 1 + Math.PI / 12), 'R12b SEDNO: łuk błysku ±15° wokół namiaru');
+  const FA = (t) => RL?.flashAlpha?.(t);
+  ok(FA(0) === 1 && near(FA(400), 0.75) && FA(800) === 0 && FA(5000) === 0 && FA(-1) === 0 && RL?.HUD_RADAR?.FLASH_MS === 800,
+    'R12c SEDNO: krycie błysku 1 → 0 w 0,8 s czasu realnego (poza oknem — 0)');
+  const pl = V('p1'), en = V('e1', { ownerEmpireId: 'emp_1', isEnemy: true }), en2 = V('e2', { ownerEmpireId: 'emp_2', isEnemy: true });
+  const pr = (a, b) => RL?.proximityFlashPair?.(a, b);
+  ok(pr(pl, en)?.holder === pl && pr(en, pl)?.holder === pl && pr(en, pl)?.foe === en && pr(pl, V('p2')) === null && pr(en, en2) === null
+    && pr(pl, { ...en, isWreck: true }) === null,
+    'R12d SEDNO: para z graczem — właściciel radaru = statek gracza (w obu kolejnościach); swoi, AI↔AI, wrak — bez błysku');
+  const pos = { p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_ai: { x: -280, y: 120 }, p_out: { x: -400, y: -50 }, p_x: { x: -300, y: 120 } };
+  const NC = (foe) => RL?.nearestCoveringColony?.({ foe, colonies: COLONIES, auToPx: 110, posOf: (c) => pos[c.planetId] ?? null,
+    rangeOf: (c) => RL.colonyRadarRangeAU(c, K.observatorySystem) }) ?? null;
+  const nearFob = NC(V('f1', { ownerEmpireId: 'emp_1', position: { x: -245, y: 120 } }));
+  ok(nearFob?.colony?.planetId === 'p_fob' && near(nearFob?.distAU, 0.5), `R12e SEDNO: obcy 0,5 AU od Fobosa (1 AU) — kolonia Fobos (najbliższa w zasięgu; ${nearFob?.colony?.planetId})`);
+  const nearNz = NC(V('f2', { ownerEmpireId: 'emp_1', position: { x: 600, y: 0 } }));
+  ok(nearNz?.colony?.planetId === 'p_nz' && nearNz?.rangeAU === Infinity, 'R12f SEDNO: obcy poza zasięgiem kolonii 1 AU — Nowa Ziemia (∞; wołający: bez granicy, bez błysku)');
+  ok(NC(V('f3', { ownerEmpireId: 'emp_1', position: { x: -280, y: 125 } }))?.colony?.planetId === 'p_fob' && NC(V('f4', { ownerEmpireId: 'emp_1', systemId: null, position: { x: -245, y: 120 } })) === null
+    && NC(V('f5', { ownerEmpireId: 'emp_1', systemId: 'sys_067', position: { x: -299, y: 120 } }))?.colony?.planetId === 'p_x',
+    'R12g SEDNO: kolonia AI obok — nie (Fobos); statek w skoku — brak; inny układ — kolonia TEGO układu');
+}
+
+// ═══ R13 ═════════════════════════════════════════════════════════════════════
+header('R13  błysk — warstwa i prawdziwe zdarzenia');
+{
+  const EB = (await import('../../core/EventBus.js')).default;
+  const P = (await tryImport('../../ui/HudProjection.js'))?.makeHudProjector;
+  TC.applyPreset(TC.PRESET_THEMES.ambient_1);
+  const T = { now: 10000 };
+  const mkHudT = () => {
+    const ctx = mkCtx(); const cv = { width: 0, height: 0, getContext: () => ctx };
+    const hud = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;   // domyślne podwarstwy gry (radar)
+    const radar = hud?._sublayers?.[0] ?? null;
+    return { ctx, hud, radar, frame: () => (hud ? hud.frame(T.now) : null), dbg: () => radar?.debug?.() ?? null };
+  };
+  K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
+  setWorld(); K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
+  select({}); W0.sim = 5000; FEATURES.hudRadar = true;
+  const h = mkHudT();
+  ok(h.radar instanceof (RLay?.HudRadarLayer ?? class {}), 'R13-0 SEDNO: domyślna podwarstwa warstwy HUD gry = radar (`HudRadarLayer`)');
+  h.frame();
+  const idle0 = h.frame();
+  h.ctx.calls.length = 0;
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
+  const r1 = h.frame(), d1 = h.dbg();
+  const fl = d1?.flashes?.[0];
+  const want = (Math.atan2(40 - 0, 400 - 500) * 180) / Math.PI;
+  ok(idle0 === 'idle' && r1 === 'drawn' && d1?.flashes?.length === 1 && fl?.key === 'v:v_kur' && near(fl?.angleDeg, +want.toFixed(1), 1e-9) && fl?.alpha === 1,
+    `R13a SEDNO: \`vessel:proximityEnter\` (Kurier ↔ Rajder) → błysk na granicy NIEzaznaczonego Kuriera w namiarze ${fl?.angleDeg}° (z pozycji logicznych: ${want.toFixed(1)}°)`);
+  // Punkty łuku = rzut łuku świata na granicy (środek = sprite, promień 11,52 AU).
+  const proj = P?.({ ...viewOf(CAM_FAR), uiScale: 1.25 });
+  const a0 = (Math.atan2(40, -100)) - Math.PI / 12;
+  const p0 = proj?.point?.(50 + 126.72 * Math.cos(a0), 0.3, 0 + 126.72 * Math.sin(a0));
+  const mv = h.ctx.calls.find((c) => c[0] === 'moveTo' && near(c[1], p0?.x, 1e-6) && near(c[2], p0?.y, 1e-6));
+  const flashStroke = h.ctx.calls.filter((c) => c[0] === '=strokeStyle').map((c) => c[1]);
+  ok(!!mv && flashStroke.includes(TC.THEME.danger) && !flashStroke.includes(TC.THEME.accent),
+    `R13b SEDNO: łuk zaczyna się w rzucie punktu granicy (namiar − 15°), kolor roli \`alert\` (Amber Noir: danger ${TC.THEME.danger}); bez okręgu radaru (statek niezaznaczony)`);
+  T.now += 400; const r2 = h.frame(); const a2 = h.dbg()?.flashes?.[0]?.alpha;
+  T.now += 450; const r3 = h.frame(); const n3 = h.dbg()?.flashes?.length;
+  const r4 = h.frame();
+  ok(r2 === 'drawn' && near(a2, 0.75, 1e-9) && r3 === 'drawn' && n3 === 0 && r4 === 'idle',
+    `R13c SEDNO: błysk gaśnie w czasie realnym (po 0,4 s krycie ${a2}); po 0,8 s jedna klatka czyszcząca, potem spoczynek (${r2} → ${r3} → ${r4})`);
+  // Bez błysku: swoi, zaznaczony, zadokowany, flaga OFF, inny układ.
+  const none = [];
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_orb', distanceAU: 1, sameFaction: true }); none.push(h.radar?._flashes?.length ?? -1);
+  select({ lead: 'v_kur' }); h.frame();
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_foe', vesselBId: 'v_kur', distanceAU: 1, sameFaction: false }); none.push(h.radar?._flashes?.length ?? -1);
+  select({}); h.frame();
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_dock', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false }); none.push(h.radar?._flashes?.length ?? -1);
+  FEATURES.hudRadar = false;
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false }); none.push(h.radar?._flashes?.length ?? -1);
+  FEATURES.hudRadar = true;
+  ok(none.every((n) => n === 0), `R13d SEDNO: bez błysku — swoi, zaznaczony (ma pełny radar), zadokowany (bez radaru), flaga OFF (${none.join(', ')})`);
+  // Kolonia — obserwatorium: najbliższa kolonia gracza w zasięgu.
+  const foe2 = V('v_foe2', { ownerEmpireId: 'emp_1', isEnemy: true, position: { x: -245, y: 120, state: 'in_transit', dockedAt: null } });
+  VESSELS.push(foe2);
+  h.ctx.calls.length = 0;
+  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe2', detected: true, vessel: foe2 });
+  const r5 = h.frame(); const f5 = h.dbg()?.flashes?.[0];
+  ok(r5 === 'drawn' && f5?.key === 'c:p_fob' && near(f5?.angleDeg, 0, 1e-9),
+    `R13e SEDNO: \`vessel:detectionChanged { detected: true }\` → błysk kolonii Fobos (najbliższa w zasięgu 1 AU) w namiarze ${f5?.angleDeg}°`);
+  T.now += 1000; h.frame(); h.frame();
+  const foe3 = V('v_foe3', { ownerEmpireId: 'emp_1', isEnemy: true, position: { x: 600, y: 0, state: 'in_transit', dockedAt: null } });
+  VESSELS.push(foe3);
+  const before = h.radar?._flashes?.length ?? -1;
+  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe3', detected: true, vessel: foe3 });
+  EB.emit('vessel:detectionChanged', { vesselId: 'v_foe2', detected: false });
+  ok(before === 0 && h.radar?._flashes?.length === 0, 'R13f SEDNO: obcy złapany tylko przez Nową Ziemię (∞ — bez granicy) i `detected: false` — bez błysku');
+  // Mgła wojny: rekord błysku bez danych obcego; warstwa nie czyta wywiadu.
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_orb', vesselBId: 'v_foe', distanceAU: 1, sameFaction: false });
+  const rec = h.radar?._flashes?.[0];
+  const recKeys = rec ? Object.keys(rec).sort().join(',') : '';
+  const lay = strip(src('../../ui/HudRadarLayer.js'));
+  ok(recKeys === 'angle,id,key,kind,systemId,t0' && rec?.id === 'v_orb' && !/intelSystem|getVesselContact|isAtLeast|\.name\b/.test(lay),
+    `R13g SEDNO: mgła wojny — rekord błysku (${recKeys}) bez nazwy, typu i id obcego; warstwa nie czyta wywiadu (ta sama geometria przy rumor i contact)`);
+  // Inny układ: właściciel radaru w sys_067 przy oglądanym sys_home — nie rysowany.
+  T.now += 1000; h.frame(); h.frame();
+  const foeFar = V('v_foeFar', { ownerEmpireId: 'emp_1', isEnemy: true, systemId: 'sys_067', position: { x: 20, y: 10, state: 'in_transit', dockedAt: null } });
+  VESSELS.push(foeFar);
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_far', vesselBId: 'v_foeFar', distanceAU: 1, sameFaction: false });
+  const r8 = h.frame(); const d8 = h.dbg();
+  ok((h.radar?._flashes?.length ?? 0) === 1 && (d8?.flashes?.length ?? -1) === 0 && r8 !== 'drawn',
+    `R13h SEDNO: błysk statku z innego układu — zapisany (${h.radar?._flashes?.length}), nierysowany w oglądanym układzie (${r8})`);
+  // Neon Cyber — alert = warning (reguła B2).
+  TC.applyPreset(TC.PRESET_THEMES.neon_cyber);
+  T.now += 1000; K.activeSystemId = 'sys_home'; h.frame(); h.frame();
+  h.ctx.calls.length = 0;
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
+  h.frame();
+  const ns = h.ctx.calls.filter((c) => c[0] === '=strokeStyle').map((c) => c[1]);
+  ok(ns.includes(TC.THEME.warning) && !ns.includes(TC.THEME.danger), `R13i SEDNO: Neon Cyber — błysk w roli \`alert\` = warning (${TC.THEME.warning}; reguła B2)`);
+  T.now += 1000; h.frame(); h.frame();
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
+  const beforeDestroy = h.radar?._flashes?.length ?? 0;   // świadek: przed zniszczeniem zdarzenie daje błysk
+  h.hud?.destroy?.();
+  EB.emit('vessel:proximityEnter', { vesselAId: 'v_kur', vesselBId: 'v_foe', distanceAU: 11.5, sameFaction: false });
+  ok(beforeDestroy === 1 && (h.radar?._flashes?.length ?? -1) === 0, `R13j SEDNO: \`destroy\` — podwarstwa odpina słuchaczy (przed: ${beforeDestroy} błysk, po zniszczeniu i zdarzeniu: ${h.radar?._flashes?.length})`);
+  VESSELS.splice(VESSELS.length - 3, 3);
 }
 
 // ═══ R14 ═════════════════════════════════════════════════════════════════════
