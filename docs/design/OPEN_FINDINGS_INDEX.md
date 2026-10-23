@@ -903,6 +903,27 @@
 >   dokumentacji `docs(HUD H0 CLOSE)`.
 > • **Pierwszy wolny numer: 522.**
 
+> **Aktualizacja 2026-10-24 (ARKUSZ HUD — H1: warstwa HUD 2D + radar, WYKONANE)** (rejestr macierzysty `HUD_PLAN.md`
+> §3, §4.2). Commity `tools/commit_H1.sh`: `6630665` (H1-1 — `#hud-canvas` pod `#ui-canvas`, warstwa `HudLayer`, projektor
+> `HudProjection`) · `a756fab` (H1-2 — radar zaznaczonego obiektu za `FEATURES.hudRadar`, ON; korekta 1b — granica z kropek,
+> podziałka 10 / 16 px, odczyt zasięgu, wariant `primary`) · `29cf778` (H1-3 — błysk na granicy w roli `alert`). Bramka H1
+> u właściciela PASS 2026-10-23 (przed korektą K0, K1, K2, K5–K11 i K3 na Neon Cyber; po korekcie 1b — „PASS, wariant
+> primary”; punkty „Do potwierdzenia” 1–27 przyjęte). Sweep **337/337**, `check-i18n` pl = en = **3394**; save v101 bez
+> migracji.
+> • ✅ **505** · **506** · **507** · **508** · **516** — zamknięte w rejestrze macierzystym (przy `hudRadar` ON; OFF = kod
+>   sprzed H1); wiersze zdjęte z A11.
+> • **NOWE: #522–#527** — wiersze w A11: ⚪ **522** `planetGlobeOpen` bez pisarza · ⚪ **523** pierścienie 3D znikają po
+>   zmianie układu w pauzie (przed H1; przy ON nie występuje) · ⚪ **524** rola `dim` w 4 z 5 motywów tytułowych =
+>   akcent × 0,32 (różni się od `primary` tylko jasnością) · ⚪ **525** odczyt zasięgu pod plakietką stosu · ⚪ **526**
+>   podziałka na małych okręgach · ⚪ **527** bramka K11 (czas JS) nie widziała kosztu rasteryzacji.
+> • Obserwacja (b) z korekty 1b (karta ciała zakrywa radar) — ten sam temat co **493**; 493 = osobny mały krok po H1
+>   (zaplanowany, nieuruchomiony; paczka A — `HUD_PLAN.md` §4.2a); wiersz w A10 z nowym celem.
+> • **Protokół od H2** (aneks 2026-10-23, `HUD_PLAN.md` §4.0): paczki A (H2 + H3 + 493) i B (H4), commit raz na paczkę,
+>   keepery wyłącznie dla logiki, walidator → arkusz kontaktowy HTML, bramka = oglądanie + pętla strojenia.
+> • Rejestr #504–#527: 24 wpisy — ✅ 9 · 🟠 2 · ⚪ 13.
+> • Następny: **paczka A** — H2 etykiety + H3 trasy + 493; kotwica paczki A = commit dokumentacji `docs(HUD H1 CLOSE)`.
+> • **Pierwszy wolny numer: 528.**
+
 
 ---
 
@@ -1259,7 +1280,7 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | **488** | ⚪ | zamknięcie karty ciała to glif „−” (`BottomContext.js:218`), panel stacji ma w tym miejscu „✕” (`StationPanel.js:151`) — „−” wygląda jak minimalizacja; z bramki U1 (obserwacja 1, strefa zmierzona przy pięciu rozdzielczościach) | → reforma pływających okien (zaparkowana). `UI_PLAN.md` §6 |
 | **490** | ⚪ | prawy klik nad lewą kolumną otwiera menu kontekstowe mapy pod nią — przy celu `CANVAS` prawy klik nie pyta `isOverUI` (`GameScene.js:6083-6084`); zmierzone (ZF r120, `087949c`): menu otwarte nad wierszami i nad tłem kolumny przy `isOverUI` = `true` | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — `isOverUI` przy prawym kliku bez wyjątku `CANVAS`; rodzina **484**); od U3 dotyczy też prawej kolumny, zawsze widocznej (wniosek z kodu). `UI_PLAN.md` §6 |
 | **492** | 🟠 | czarny ekran po zamknięciu klawiszem H mapy kolonii z innego układu (bramka U2, 2× u właściciela) — **NIE odtworzony** w 8 przebiegach (`803a927` i `087949c`; SwiftShader i GPU; pauza i płynący czas; po „Obserwuj”; pełna część A bramki; przytrzymany H); H i Esc zamykają tą samą funkcją (`ColonyOverlay.hide`); „Rebake: 58 tekstur” = przełączenie układu z kliku w listę kolonii z górnej belki (`TopResourceDrawer.js:722`, sprzed U2), log asynchroniczny | → diagnoza jednolinijkowcem z `UI_PLAN.md` §4.3 A przy następnym wystąpieniu; naprawa po pomiarze; bez hotfiksu (w sesji U3 nie odtworzony; bez kodu). `UI_PLAN.md` §6 |
-| **493** | ⚪ | karta ciała po drugim kliku (focus) zakrywa 33–41 % tarczy śledzonego ciała — `computeFloatingPlacement` (`BottomContextLogic.js:28-29`) kotwiczy kartę 18 px od ŚRODKA ciała, bez promienia tarczy; zmierzone (ZF r120, `087949c`, GPU); sprzed U2 | → reforma pływających okien (zaparkowana) — tylko rejestr. `UI_PLAN.md` §6 |
+| **493** | ⚪ | karta ciała po drugim kliku (focus) zakrywa 33–41 % tarczy śledzonego ciała — `computeFloatingPlacement` (`BottomContextLogic.js:28-29`) kotwiczy kartę 18 px od ŚRODKA ciała, bez promienia tarczy; zmierzone (ZF r120, `087949c`, GPU); sprzed U2 | → osobny mały krok po H1 ARKUSZA HUD — „karta ciała z boku tarczy” (paczka A, `HUD_PLAN.md` §4.2a; zaplanowany, nieuruchomiony); ten sam temat — karta zakrywa radar HUD zaznaczonego ciała (obserwacja (b) z korekty 1b). `UI_PLAN.md` §6 |
 | **497** | ⚪ | strzałki krawędzi mapy nie rysują się, gdy w kadrze nie ma żadnej plakietki statku — `MapLabelLayer.drawVesselLabels`: `if (!jobs.length) return;` (`:322`) przed `_drawEdgeArrows` (`:349`); zmierzone keeperem (sesja U4): przy samych samotnych, zdrowych statkach bez floty i bez zaznaczenia strzałek brak mimo punktów poza kadrem; linie przy `50ed3d3` | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — strzałki także bez plakietek). `UI_PLAN.md` §6 |
 | **498** | ⚪ | karta walki (`CombatHUD`, `:132-137`) liczy dół sama — pasek nawigacji + listwa dziennika + rezerwa Doku + 8 px — bez pasa dolnego ⇒ od U4-3 dolne ~12 px karty leżą na pasie; wniosek z kodu (w zapisie ZF gy120 brak starcia) | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — dół z `MapInsets.bottom`). `UI_PLAN.md` §6 |
 | **499** | ⚪ | rozwinięta lista kolonii górnej belki (`TopResourceDrawer`, `:257`: `H − BOTTOM_RESERVED − 8`) sięga `H − 42 − 8` — przy długiej liście dolne ~12 px wchodzą na pas dolny; wniosek z kodu | → **zapisany, nieuruchomiony** (U5 zamknięte na 501, 2026-10-21; kształt naprawy — `UI_PLAN.md` §4.7, U5-2 — dół z `MapInsets.bottom`). `UI_PLAN.md` §6 |
@@ -1272,19 +1293,20 @@ Legenda: 🔴 defekt żywy i dotkliwy · 🟠 realny, ograniczony · ⚪ obserwa
 | # | | opis | uwaga |
 |---|---|---|---|
 | **504** | 🟠 | Dziennik zdradza nazwę wrogiego statku przy jakości „rumor” — `UIManager.js:1493-1513` pisze `log.m4.proximityContact` z `enemy.name` przy `vessel:proximityEnter` (wykrycie — w ZF 11,52 AU), a para ma wtedy `rumor` (`contact` dopiero poniżej 0,3 AU, sensor-lock 1,38 AU); wniosek z kodu | → osobny drobny krok (Dziennik), **NIE w kroku arkusza** (podpis 2026-10-21); alerty HUD (H4) stosują regułę „bez nazwy poniżej `contact`”. `HUD_PLAN.md` §3 |
-| **505** | 🟠 | pierścień radaru statku = stałe `SENSOR_LOCK_AU` 0,3 AU (`ThreeRenderer.js:6101-6105`), a mechanika liczy wykrycie `sensorRangeAU` × tech i ujawnienie 0,3 × tech; zmierzone (ZF gy120): 11,52 / 1,38 AU — pierścień 38× i 4,6× za mały | → H1 (promień = zasięg wykrycia, D-HUD-3). `HUD_PLAN.md` §3 |
-| **506** | 🟠 | pierścienie radaru kolonii AI — `ThreeRenderer.js:6114` iteruje `getAllColonies()` bez terminu właściciela: gracz widzi poziom obserwatorium AI, a cudze pokrycie wygląda jak własne; wniosek z kodu | → H1 (D-HUD-4 — radar tylko obiektów gracza). `HUD_PLAN.md` §3 |
-| **507** | ⚪ | pierścienie statków zadokowanych i w rezerwie — filtr `_syncSensorOverlay` (`:6094-6099`) nie pyta o stan ani o `isInService`; w ZF 8 z 10 pierścieni statków („pełne niebieskie elipsy”) | → H1. `HUD_PLAN.md` §3 |
-| **508** | ⚪ | pas pierścienia zasięgu = 1,5 % promienia ⇒ grubość od ułamka piksela (kreski — „kropkowane odcinki przy Fobosie”) do kilkudziesięciu px; zmierzone | → H1 (pierścienie 3D zastąpione warstwą 2D). `HUD_PLAN.md` §3 |
 | **509** | ⚪ | trasa obcego statku nie pokazuje się nigdy — `_applyVesselIntelVisibility` (`:5375-5376`) wymaga jakości `'detailed'`, której żaden producent nie nadaje statkowi | → H3 (D-HUD-10). `HUD_PLAN.md` §3 |
 | **513** | ⚪ | nazwy etykiet ucięte bez wielokropka (`MapLabelLogic.js:121`, `:160` — `.slice(0, 16)`); zmierzone: „Stacja Nowa Ziem” | → H2. `HUD_PLAN.md` §3 |
 | **514** | 🟠 | etykiety mapy wychodzą poza obszar mapy (bez kadru i clipu — plakietki malują się na górnej belce) i nakładają się w paśmie przejścia LOD 150–215 j. (znaczniki poza `stackLabels`; przy 200 j. 10 nakładających się par); zmierzone, oba okna | → H2. `HUD_PLAN.md` §3 |
 | **515** | ⚪ | karta ciała leży pod etykietami mapy — w rysowaniu (`UIManager.js:2269` wobec `:2323-2331`) i w kliku (`:2008` wobec `:2043`); wniosek z kodu | → H2 (etykiety pod kartą, D-HUD-1). `HUD_PLAN.md` §3 |
-| **516** | 🟠 | pierścień radaru statku w skoku warp zostaje w punkcie odlotu — filtr `v.systemId && v.systemId !== activeSys` (`:6098`) przepuszcza `systemId === null`; rodzina „globalne id ≠ położenie”; wniosek z kodu | → H1. `HUD_PLAN.md` §3 |
 | **517** | ⚪ | pojedyncze pole koloru w panelu motywu (F7) nie podbija epoki motywu — `ThemeOverlay.js:264`, `:270`, `:361` zapisują `THEME[key]` wprost (bez `applyTheme`), więc orbity H0 przyjmują barwę dopiero przy najbliższej przebudowie (w pauzie — wcale); wniosek z kodu, bramka H0 punkt 9 | → drobny krok poza arkuszem (3 linie w `ThemeOverlay`); rodzina 520, 521. `HUD_PLAN.md` §3 |
-| **518** | ⚪ | orbity kolonii AI wyróżnione jak kolonie gracza — rola „kolonia” z `getColony(id) != null` bez terminu właściciela (`ThreeRenderer.js:2647`, `:2731` — OFF; `:3014` — ON), przy ON w barwie `orbitColony` motywu gracza; semantyka sprzed H0 zachowana świadomie; wniosek z kodu (w ZF brak kolonii AI w układzie domowym) | → do decyzji — razem z 506 (H1, D-HUD-4) albo osobno. `HUD_PLAN.md` §3 |
+| **518** | ⚪ | orbity kolonii AI wyróżnione jak kolonie gracza — rola „kolonia” z `getColony(id) != null` bez terminu właściciela (`ThreeRenderer.js:2647`, `:2731` — OFF; `:3014` — ON), przy ON w barwie `orbitColony` motywu gracza; semantyka sprzed H0 zachowana świadomie; wniosek z kodu (w ZF brak kolonii AI w układzie domowym) | → do decyzji — osobno (radar kolonii AI zamknięty w H1 — 506; tu orbity). `HUD_PLAN.md` §3 |
 | **520** | ⚪ | klik w przycisk panelu motywu (F7) przechodzi do mapy jako klik w pustkę — globalny `click` (`GameScene._setupMouseInput`, `:5462`) ma strażnik `.kosmos-menu-panel` (`:5483`), a nie ma strażnika `ThemeOverlay` ⇒ odznaczenie ciała; czy ciało pod przyciskiem zostałoby zaznaczone — niezmierzone; bramka H0 punkt 16 | → drobny krok poza arkuszem (strażnik klasy panelu albo `stopPropagation`); rodzina 517, 521. `HUD_PLAN.md` §3 |
 | **521** | ⚪ | pola koloru panelu F7 dostają wartości `rgba` — `ThemeOverlay.js:442` (`controls.picker.value = THEME[key]`) do `<input type="color">`, który przyjmuje wyłącznie `#rrggbb` ⇒ ostrzeżenia konsoli przy każdym otwarciu F7; sprzed H0, zgłoszenie właściciela z bramki H0 | → drobny krok poza arkuszem (konwersja `rgba` → `#rrggbb`); rodzina 517, 520. `HUD_PLAN.md` §3 |
+| **522** | ⚪ | `window.KOSMOS.planetGlobeOpen` bez pisarza — czytają go `UIManager.js:2008`, `:2219`, `OutlinerColumn.js:70` i od H1 `HudLayer`; dziś bez skutku (globus tylko w overlayu kolonii — chowa reguła overlayu); wniosek z kodu | → do decyzji (pisarz albo usunięcie flagi). `HUD_PLAN.md` §3 |
+| **523** | ⚪ | pierścienie radaru 3D znikają po przełączeniu układu w pauzie (`switchSystem` → `_disposeAllMeshes`, odbudowa dopiero przy `physics:updated` / `vessel:positionUpdate` / ☰); zmierzone — bramka H1, K10 linia 2; sprzed H1 | → przy `hudRadar` ON nie występuje; przy OFF (rollback) zostaje. `HUD_PLAN.md` §3 |
+| **524** | ⚪ | rola `dim` w 4 z 5 motywów ekranu tytułowego = akcent × 0,32 — różni się od `primary` tylko jasnością, ma odcień orbit; granica radaru w `dim` — kontrast 1,09–1,12, ΔE od orbit 0,3–2,3 (zmierzone, korekta 1b H1) | → paczka A (H2 — etykiety w roli `dim`; decyzja właściciela). `HUD_PLAN.md` §3 |
+| **525** | ⚪ | odczyt zasięgu radaru (HUD) pod plakietką stosu „◆ ×2” (`#ui-canvas`) — bez wspólnej antykolizji; bramka H1, K2 (Fobos) | → paczka A (H2 — wspólny anti-overlap; rodzina 514). `HUD_PLAN.md` §3 |
+| **526** | ⚪ | podziałka radaru na małych okręgach — kreski 10 / 16 px przy okręgu ~19 px sięgają do 53 / 84 % promienia („słoneczko”); bramka H1, K2 | → do decyzji przy paczce A. `HUD_PLAN.md` §3 |
+| **527** | ⚪ | bramka H1 sprzed korekty 1b (K11 — czas JS) nie widziała kosztu rasteryzacji: przy S5 radar zbijał obraz do 18–23 kl./s (kropki na całej ścieżce — 6); w H1 zamknięte przycięciem do okna (60 kl./s), otwarta reguła pomiaru | → protokół od H2 — keepery budżetu klatek w kl./s. `HUD_PLAN.md` §3 |
 
 
 ---
