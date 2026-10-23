@@ -66,6 +66,7 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality, isMo
 import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Finding 452) — zegar kąta orbit (jak logika)
 import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
   hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
+import { isHudRadarOn } from '../ui/HudRadarLogic.js';   // ARKUSZ HUD H1 (D-HUD-3/4) — radar na warstwie HUD 2D
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -98,6 +99,9 @@ const logDepthOn = () => !!GAME_CONFIG.FEATURES?.sceneDepthUnification;
 // ARKUSZ HUD H0 (D-HUD-7, D-HUD-15) — orbity w kolorach motywu. Czytana FUNKCJĄ przy każdym użyciu: przestawienie
 // w konsoli działa od następnej klatki (`_syncHudOrbits` przebudowuje orbity), także w pauzie. Brak klucza = OFF.
 const hudOrbitsOn = () => isHudOrbitsOn(GAME_CONFIG.FEATURES);
+// ARKUSZ HUD H1 (D-HUD-1 a, D-HUD-3/4) — radar na warstwie HUD 2D: przy fladze dzisiejsze pierścienie 3D wyłączone (Finding
+// 508 znika z nimi). Czytana FUNKCJĄ przy każdym użyciu (konsola działa od następnej klatki). Brak klucza = OFF.
+const hudRadarOn = () => isHudRadarOn(GAME_CONFIG.FEATURES);
 // ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
 //   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
@@ -4068,6 +4072,9 @@ export class ThreeRenderer {
         this._tickSunMaterials();        // S1 — drabina gwiazdy (bramkowane liveSunShader)
         this._tickAtmoMaterials();       // V3/A0 — siła powłoki atmosfery (bramkowane dayNightAtmosphere)
         this._syncHudOrbits();           // ARKUSZ HUD H0 — orbity w kolorach motywu: flaga, epoka motywu, dom (510)
+        // ARKUSZ HUD H1 — przy `hudRadar` pierścienie 3D znikają od następnej klatki, także w pauzie (zdarzenia
+        // `_syncSensorOverlay` w pauzie nie lecą); przy OFF — bez zmian.
+        if (this._sensorRingMeshes.size > 0 && hudRadarOn()) this._disposeAllSensorRings();
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
@@ -6261,6 +6268,11 @@ export class ThreeRenderer {
   // window.KOSMOS.uiPrefs.sensorOverlayVisible (player toggle).
 
   _syncSensorOverlay() {
+    // ARKUSZ HUD H1 — przy `hudRadar` radar rysuje warstwa HUD 2D (`HudRadarLayer`); pierścienie 3D wyłączone.
+    if (hudRadarOn()) {
+      if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
+      return;
+    }
     if (!GAME_CONFIG.FEATURES.m4SensorOverlay) {
       if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
       return;

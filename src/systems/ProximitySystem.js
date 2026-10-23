@@ -33,6 +33,7 @@ import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isSameSystemStrict } from '../utils/SystemScope.js';   // AI STRIKES BACK S3/2 (SB59, Finding 151)
+import { DETECTION_BASE_AU, vesselDetectionRangeAU } from '../utils/DetectionRange.js';   // ARKUSZ HUD H1 (D-HUD-3) — reguła zasięgu wykrycia
 
 // Stałe — użyte w detection + combat logic.
 //   PROXIMITY_DETECTION_AU (enter), PROXIMITY_EXIT_AU (exit, hysteresis +20%),
@@ -44,7 +45,7 @@ import { isSameSystemStrict } from '../utils/SystemScope.js';   // AI STRIKES BA
 // dynamic via _getDetectionRangeAU (player z TechSystem.getMultiplier('sensor_range');
 // empire bez tech → base). Hysteresis ratio (×1.2) zachowany. Combat range
 // pozostaje hardcoded — to fizyczne ograniczenie engagement, nie sensora.
-export const PROXIMITY_DETECTION_AU = 0.5;
+export const PROXIMITY_DETECTION_AU = DETECTION_BASE_AU;   // 0,5 AU — ARKUSZ HUD H1: jedno źródło (`DetectionRange.js`)
 export const PROXIMITY_EXIT_AU      = 0.6;
 export const COMBAT_ENGAGEMENT_AU   = 0.15;
 export const COMBAT_EXIT_AU         = 0.20;
@@ -309,7 +310,7 @@ export class ProximitySystem {
   /**
    * M4 P3-7 — dynamic detection range per vessel.
    *
-   * Player vessel: BASE × TechSystem.getMultiplier('sensor_range'). Empire
+   * Player vessel: sensorRangeAU kadłuba × TechSystem.getMultiplier('sensor_range'). Empire
    * vessel: BASE × 1.0 (empire tech state nie jest yet trackowany w grze;
    * P5 doda EmpireTechState i empire-specific multipliers).
    *
@@ -320,16 +321,13 @@ export class ProximitySystem {
    * @returns {number} detection range w AU
    */
   _getDetectionRangeAU(vessel) {
-    const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
-    // Wróg: flat baza (empire tech state nie trackowany — P5). Asymetria na korzyść gracza.
-    if (!isPlayer) return PROXIMITY_DETECTION_AU;
-    // Gracz: per-kadłub sensorRangeAU × mnożnik techu sensorów. Fallback do bazy gdy
-    // VesselManager/TechSystem niedostępny (np. headless smoke bez window.KOSMOS).
-    const vm      = window.KOSMOS?.vesselManager;
-    const techSys = window.KOSMOS?.techSystem;
-    const base    = vm?.getVesselSensorRangeAU ? vm.getVesselSensorRangeAU(vessel) : PROXIMITY_DETECTION_AU;
-    const mult    = techSys?.getMultiplier ? techSys.getMultiplier('sensor_range') : 1.0;
-    return base * mult;
+    // ARKUSZ HUD H1 (D-HUD-3, Finding 505) — reguła w `DetectionRange.vesselDetectionRangeAU` (ta sama funkcja liczy
+    // promień radaru HUD): gracz — sensorRangeAU kadłuba × mnożnik techu sensorów; wróg — płaska baza (tech imperium
+    // nie śledzony — P5). Zapas bazy / mnożnika 1, gdy VesselManager / TechSystem niedostępny (headless bez KOSMOS).
+    return vesselDetectionRangeAU(vessel, {
+      vesselManager: window.KOSMOS?.vesselManager,
+      techSystem:    window.KOSMOS?.techSystem,
+    });
   }
 
   /**

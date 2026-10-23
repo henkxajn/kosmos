@@ -14,6 +14,8 @@ import { toggleNotificationDropdown, isNotificationDropdownOpen } from './Notifi
 import { TIME_W } from './TopBar.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { buildSaveFileName, downloadSave, pickSaveFile, markPendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isHudRadarOn } from './HudRadarLogic.js';   // ARKUSZ HUD H1 — ☰ „Radar” przy `hudRadar` steruje warstwą HUD
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -437,8 +439,11 @@ export class BottomBar {
     const apEnabled = apSys ? apSys.isEnabled() : true;
     const apLabel = pl ? 'Auto-pauza...' : 'Auto-pause...';
     const apValue = apEnabled ? (pl ? 'WŁ' : 'ON') : (pl ? 'WYŁ' : 'OFF');
-    // M4 P2 — radar toggle (window.KOSMOS.uiPrefs.sensorOverlayVisible)
-    const radarOn = window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
+    // M4 P2 — radar toggle (window.KOSMOS.uiPrefs.sensorOverlayVisible). ARKUSZ HUD H1 — przy `hudRadar` stan warstwy HUD:
+    // `uiPrefs.hudRadarVisible` (brak klucza = widoczna — bez migracji zapisu).
+    const radarOn = isHudRadarOn(GAME_CONFIG.FEATURES)
+      ? window.KOSMOS?.uiPrefs?.hudRadarVisible !== false
+      : window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
     // Obraz Operacyjny F1 — plakietki flotowe (default ON: brak klucza ≠ false)
     const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     return [
@@ -553,6 +558,12 @@ export class BottomBar {
   _toggleSensorOverlay() {
     if (!window.KOSMOS) return;
     window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+    // ARKUSZ HUD H1 — przy `hudRadar` przełącznik steruje warstwą HUD (pierścienie 3D wyłączone; warstwa czyta preferencję
+    // w każdej klatce). `sensorOverlayVisible` zostaje stanem ścieżki OFF i trybu Y — nietknięty.
+    if (isHudRadarOn(GAME_CONFIG.FEATURES)) {
+      window.KOSMOS.uiPrefs.hudRadarVisible = window.KOSMOS.uiPrefs.hudRadarVisible === false;
+      return;
+    }
     const next = !window.KOSMOS.uiPrefs.sensorOverlayVisible;
     window.KOSMOS.uiPrefs.sensorOverlayVisible = next;
     EventBus.emit('ui:sensorOverlayToggle', { visible: next });

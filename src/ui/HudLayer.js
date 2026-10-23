@@ -23,6 +23,7 @@ import { readClickSelection } from './ClickIntentLogic.js';
 import { getMapInsets } from './MapInsets.js';
 import { simClockMs } from '../utils/SimClock.js';
 import { makeHudProjector } from './HudProjection.js';
+import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3, D-HUD-4, D-HUD-b)
 
 // [klatki rysunku] okno pomiaru kosztu (bramka H1: ≤ 0,5 ms na klatkę CPU)
 const COST_WINDOW = 120;
@@ -85,7 +86,7 @@ export class HudLayer {
   }
 
   /** Podwarstwy gry (kolejność = kolejność rysowania). */
-  _defaultSublayers() { return []; }
+  _defaultSublayers() { return [new HudRadarLayer(this)]; }
 
   addSublayer(s) {
     if (s) this._sublayers.push(s);

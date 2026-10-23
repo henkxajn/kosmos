@@ -554,6 +554,23 @@ export const GAME_CONFIG = {
     //     commitem H0-2 po bramce H0. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudOrbits = false`)
     //     przebudowuje orbity od następnej klatki, także w pauzie; F5 wczytuje wartość z tego pliku.
     hudOrbits: true,
+
+    // ── ARKUSZ HUD H1 (D-HUD-3, D-HUD-4, D-HUD-12, D-HUD-18, D-HUD-b) — radar na warstwie HUD 2D ────────────────────
+    // hudRadar: zasięgi radarów rysuje warstwa HUD 2D (`#hud-canvas`, `HudLayer` / `HudRadarLayer`, logika
+    //   `HudRadarLogic.js`): granica kropkami, podziałka co 30°, ping z zaznaczonego obiektu (pierwszy w chwili
+    //   zaznaczenia — czas realny; kolejne co 6 s na zegarze symulacji — stoją w pauzie; przy dużym pierścieniu albo dużej
+    //   tarczy ping stoi). Tylko ZAZNACZONY obiekt gracza (w trybie Y — wszystkie własne): statek w służbie (promień = zasięg
+    //   WYKRYCIA — Finding 505), kolonia gracza (obserwatorium; ∞ — bez okręgu); bez rezerwy (507), bez kolonii AI (506),
+    //   bez statku w skoku (516). Kolory z ról motywu. Preferencja ☰ „Radar” przy ON = `uiPrefs.hudRadarVisible`
+    //   (brak klucza = widoczna, bez migracji zapisu).
+    //   ⚠ Brak klucza = OFF; przy ON dzisiejsze pierścienie 3D (`ThreeRenderer._syncSensorOverlay`) wyłączone (Finding 508
+    //     znika z nimi), przy OFF — dzisiejszy kod co do bitu (pierścienie 3D wracają przy najbliższej synchronizacji
+    //     pierścieni: w biegu gry — od razu; w pauzie — po klatce gry albo przełączeniu ☰ „Radar”; samo wejście do układu
+    //     w pauzie ich nie odbudowuje — jak dziś: przebudowa sceny je usuwa, a odbudowuje je dopiero synchronizacja).
+    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `hudOrbits`): ten wpis wchodzi commitem H1-2 po
+    //     bramce H1. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudRadar = false`) działa od następnej klatki
+    //     warstwy HUD; F5 wczytuje wartość z tego pliku.
+    hudRadar: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
