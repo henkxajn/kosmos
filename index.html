@@ -29,6 +29,8 @@
       display: block;
     }
     #three-canvas  { z-index: 1; background: #020405; }
+    /* ARKUSZ HUD H1 (D-HUD-1 a) — warstwa HUD 2D: nad sceną 3D (ten sam z-index, później w DOM), pod #ui-canvas */
+    #hud-canvas    { z-index: 1; pointer-events: none; }
     #ui-canvas     { z-index: 2; pointer-events: none; }
     #planet-canvas { z-index: 4; display: none; }
     #event-layer   { z-index: 3; cursor: default; }
@@ -46,6 +48,7 @@
   <div id="boot-placeholder">KOSMOS</div>
   <div id="game-container">
     <canvas id="three-canvas"></canvas>
+    <canvas id="hud-canvas"></canvas>
     <canvas id="ui-canvas"></canvas>
     <canvas id="planet-canvas"></canvas>
     <div    id="event-layer"></div>

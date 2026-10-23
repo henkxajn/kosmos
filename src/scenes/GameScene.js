@@ -138,6 +138,7 @@ import { isEnemyVessel, hasWeapons } from '../entities/Vessel.js';
 import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
+import { HudLayer }          from '../ui/HudLayer.js';   // ARKUSZ HUD H1 (D-HUD-1 a) — warstwa HUD 2D (`#hud-canvas`)
 import { RightClickMenu }    from '../ui/RightClickMenu.js';
 import { ToastSystem }       from '../ui/ToastSystem.js';
 import { Tooltip }           from '../ui/Tooltip.js';
@@ -218,6 +219,12 @@ export class GameScene {
     // ── UI ─────────────────────────────────────────────────────
     this.uiManager = new UIManager(uiCanvas);
     this.uiManager.addInfo(t('dialog.systemFormed'));
+
+    // ARKUSZ HUD H1 (D-HUD-1 a) — warstwa HUD 2D: osobna kanwa `#hud-canvas` pod `#ui-canvas`, własna pętla (rysuje przy
+    // zmianie kamery, zaznaczenia, motywu albo w trakcie animacji). Po `EventBus.clear()` wyżej — podwarstwy słuchają zdarzeń.
+    window.KOSMOS.hudLayer?.destroy?.();
+    this.hudLayer = new HudLayer(document.getElementById('hud-canvas'));
+    window.KOSMOS.hudLayer = this.hudLayer;
 
     // M3 P1.1: RightClickMenu — DOM popup, self-managed (nie OverlayManager).
     // window.KOSMOS exposure dla devtools + przyszłych P1.x integration.

@@ -3423,6 +3423,58 @@ export class ThreeRenderer {
     return this._cameraController?.moveEpoch ?? 0;
   }
 
+  // ── ARKUSZ HUD H1 (D-HUD-1 (a)) — odczyty dla warstwy HUD 2D (`HudLayer`); rzut liczy czysty `HudProjection` ──────
+  // Widok kamery: macierze (kolumnowe — kopie `Matrix4.elements`), FOV, okno (px CSS), skala świata (j. na 1 AU).
+  // `updateMatrixWorld` — macierz widoku aktualna także wtedy, gdy pętla HUD biegnie przed renderem tej klatki.
+  getHudView() {
+    const cam = this.camera;
+    if (!cam) return null;
+    cam.updateMatrixWorld();
+    return {
+      view: cam.matrixWorldInverse.elements.slice(),
+      proj: cam.projectionMatrix.elements.slice(),
+      fovDeg: cam.fov,
+      cssW: window.innerWidth,
+      cssH: window.innerHeight,
+      worldPerAU: AU / WORLD_SCALE,
+    };
+  }
+
+  // Środek ciała w świecie (j.) i promień tarczy (j.; 0 — stacja) — planeta, księżyc, planetoida, gwiazda, stacja.
+  getBodyWorldInfo(entityId) {
+    if (!entityId) return null;
+    let obj = null, mesh = null;
+    const pe = this._planets.get(entityId);
+    if (pe) { obj = pe.group; mesh = pe.mesh; }
+    if (!obj) { const me = this._moons.get(entityId);      if (me) obj = mesh = me.mesh; }
+    if (!obj) { const ae = this._planetoids.get(entityId); if (ae) obj = mesh = ae.mesh; }
+    if (!obj) { const se = this._stations.get(entityId);   if (se?.mesh) obj = se.mesh; }
+    if (!obj && this._starGroup) {
+      const star = EntityManager.getByType('star')?.[0];
+      if (star && star.id === entityId) { obj = this._starGroup; mesh = this._starCore ?? null; }
+    }
+    if (!obj) return null;
+    const tmp = this._tmpHudVec ?? (this._tmpHudVec = new THREE.Vector3());
+    obj.getWorldPosition(tmp);
+    const out = { x: tmp.x, y: tmp.y, z: tmp.z, r: 0 };
+    const g = mesh?.geometry;
+    if (g) {
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      const ws = mesh.getWorldScale(tmp);
+      out.r = (g.boundingSphere?.radius ?? 0) * Math.max(ws.x, ws.y, ws.z);
+    }
+    return out;
+  }
+
+  // Pozycja sprite'a statku w świecie (j.) — `null`, gdy statek nie ma sprite'a (inny układ, zadokowany).
+  getVesselWorldPosition(vesselId) {
+    const sp = this._vessels.get(vesselId)?.sprite;
+    if (!sp) return null;
+    const tmp = this._tmpHudVec ?? (this._tmpHudVec = new THREE.Vector3());
+    sp.getWorldPosition(tmp);
+    return { x: tmp.x, y: tmp.y, z: tmp.z };
+  }
+
   // Flag: pokaż labele wszystkich widocznych obiektów (toggle CTRL).
   // UIManager w draw() czyta ten flag przez getAllVisibleLabels() i rysuje.
   setShowAllLabels(on) { this._showAllLabels = !!on; }
