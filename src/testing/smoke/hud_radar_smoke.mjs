@@ -523,15 +523,15 @@ header('R13  błysk — warstwa i prawdziwe zdarzenia');
   const mkHudT = () => {
     const ctx = mkCtx(); const cv = { width: 0, height: 0, getContext: () => ctx };
     const hud = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;   // domyślne podwarstwy gry (radar)
-    // ARKUSZ HUD paczka A: podwarstwy gry = radar, etykiety — radar wybierany po klasie, nie po indeksie.
+    // ARKUSZ HUD paczka A: podwarstwy gry = trasy, radar, etykiety — radar wybierany po klasie, nie po indeksie.
     const radar = hud?._sublayers?.find?.((s) => s instanceof (RLay?.HudRadarLayer ?? class {})) ?? null;
     return { ctx, hud, radar, frame: () => (hud ? hud.frame(T.now) : null), dbg: () => radar?.debug?.() ?? null };
   };
   K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
   setWorld(); K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
   select({}); W0.sim = 5000; FEATURES.hudRadar = true;
-  // ARKUSZ HUD paczka A — etykiety (H2) wyłączone: liczymy wywołania ctx samego radaru (warstwa jak po H1).
-  FEATURES.hudLabels = false;
+  // ARKUSZ HUD paczka A — etykiety (H2) i trasy (H3) wyłączone: liczymy wywołania ctx samego radaru (warstwa jak po H1).
+  FEATURES.hudLabels = false; FEATURES.hudRoutes = false;
   const h = mkHudT();
   ok(h.radar instanceof (RLay?.HudRadarLayer ?? class {}), 'R13-0 SEDNO: domyślne podwarstwy warstwy HUD gry zawierają radar (`HudRadarLayer`)');
   h.frame();

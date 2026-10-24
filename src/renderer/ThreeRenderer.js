@@ -67,6 +67,7 @@ import { orbitClockSec } from '../utils/SimClock.js';   // POLISH P1 (CP5, Findi
 import { isHudOrbitsOn, planetOrbitStyle, moonOrbitStyle, planetoidOrbitStyle, applyOrbitStyle, orbitPalette,
   hudOrbitSyncKey } from './HudOrbitLogic.js';   // ARKUSZ HUD H0 (D-HUD-7) — orbity w kolorach motywu
 import { isHudRadarOn } from '../ui/HudRadarLogic.js';   // ARKUSZ HUD H1 (D-HUD-3/4) — radar na warstwie HUD 2D
+import { isHudRoutesOn } from '../ui/HudRouteLogic.js';   // ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy na warstwie HUD 2D
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -102,6 +103,10 @@ const hudOrbitsOn = () => isHudOrbitsOn(GAME_CONFIG.FEATURES);
 // ARKUSZ HUD H1 (D-HUD-1 a, D-HUD-3/4) — radar na warstwie HUD 2D: przy fladze dzisiejsze pierścienie 3D wyłączone (Finding
 // 508 znika z nimi). Czytana FUNKCJĄ przy każdym użyciu (konsola działa od następnej klatki). Brak klucza = OFF.
 const hudRadarOn = () => isHudRadarOn(GAME_CONFIG.FEATURES);
+// ARKUSZ HUD paczka A (H3, D-HUD-8) — trasy statków na warstwie HUD 2D: przy fladze dzisiejsze linie tras 3D
+// (`LineDashedMaterial`) nie powstają, a istniejące znikają od następnej klatki, także w pauzie. Czytana FUNKCJĄ przy każdym
+// użyciu (konsola działa od następnej klatki). Brak klucza = OFF — linie 3D co do bitu jak dziś.
+const hudRoutesOn = () => isHudRoutesOn(GAME_CONFIG.FEATURES);
 // ── Pokrętła warstwy chmur (V-278) ───────────────────────────────────────────
 // ⚠ Gate stroi to JEDNYM tokenem z konsoli: KOSMOS.threeRenderer.cloudTuning.ALPHA = 0.4
 //   — _tickClouds przepisuje wynik do uniformów KAŻDEJ klatki, więc zmiana łapie się
@@ -4089,6 +4094,8 @@ export class ThreeRenderer {
         // ARKUSZ HUD H1 — przy `hudRadar` pierścienie 3D znikają od następnej klatki, także w pauzie (zdarzenia
         // `_syncSensorOverlay` w pauzie nie lecą); przy OFF — bez zmian.
         if (this._sensorRingMeshes.size > 0 && hudRadarOn()) this._disposeAllSensorRings();
+        // ARKUSZ HUD paczka A (H3) — przy `hudRoutes` linie tras 3D znikają od następnej klatki, także w pauzie; przy OFF — bez zmian.
+        if (hudRoutesOn()) this._disposeAllRouteLines();
 
         // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
         this._updateActiveEffects(performance.now());
@@ -4691,9 +4698,9 @@ export class ThreeRenderer {
 
       this.scene.add(wrapper);
 
-      // Linia trasy — wraki NIE mają trasy (nic nie lecą)
+      // Linia trasy — wraki NIE mają trasy (nic nie lecą). ARKUSZ HUD paczka A — przy `hudRoutes` trasę rysuje warstwa HUD 2D.
       let routeLine = null;
-      if (vessel.mission && !isWreck) {
+      if (vessel.mission && !isWreck && !hudRoutesOn()) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
         let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
@@ -4904,9 +4911,9 @@ export class ThreeRenderer {
 
     this.scene.add(sprite);
 
-    // Linia trasy (przerywana, 2 punkty: statek → cel)
+    // Linia trasy (przerywana, 2 punkty: statek → cel). ARKUSZ HUD paczka A — przy `hudRoutes` trasę rysuje warstwa HUD 2D.
     let routeLine = null;
-    if (vessel.mission) {
+    if (vessel.mission && !hudRoutesOn()) {
       const m = vessel.mission;
       const isReturn = m.phase === 'returning';
       let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
@@ -5425,7 +5432,9 @@ export class ThreeRenderer {
           }
         }
 
-        if (!entry.routeLine) {
+        if (hudRoutesOn()) {
+          // ARKUSZ HUD paczka A (H3) — trasę rysuje warstwa HUD 2D; linię 3D (jeśli była) zdejmuje pętla renderu.
+        } else if (!entry.routeLine) {
           const savedColor = entry.color ?? 0xaaaaaa;
           const pts = [
             new THREE.Vector3(S(vx), shipY, S(vy)),
@@ -6388,6 +6397,17 @@ export class ThreeRenderer {
   _disposeAllSensorRings() {
     for (const k of [...this._sensorRingMeshes.keys()]) {
       this._disposeSensorRing(k);
+    }
+  }
+
+  // ARKUSZ HUD paczka A (H3) — zdejmij wszystkie linie tras 3D (przy `hudRoutes` trasy rysuje warstwa HUD 2D). Bez linii — nic.
+  _disposeAllRouteLines() {
+    for (const entry of this._vessels.values()) {
+      if (!entry?.routeLine) continue;
+      this.scene.remove(entry.routeLine);
+      entry.routeLine.geometry?.dispose?.();
+      entry.routeLine.material?.dispose?.();
+      entry.routeLine = null;
     }
   }
 

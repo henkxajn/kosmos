@@ -572,7 +572,7 @@ export const GAME_CONFIG = {
     //     warstwy HUD; F5 wczytuje wartość z tego pliku.
     hudRadar: true,
 
-    // ── ARKUSZ HUD paczka A (HUD_PLAN.md §4.0 aneks 2026-10-23, §4.3) — etykiety ──
+    // ── ARKUSZ HUD paczka A (HUD_PLAN.md §4.0 aneks 2026-10-23, §4.3, §4.4) — etykiety, trasy ──
     // hudLabels (H2 — D-HUD-5, D-HUD-6, D-HUD-16): etykiety mapy rysuje warstwa HUD 2D (`HudLabelLayer`, logika
     //   `HudLabelLogic.js`): tekst na pasku bez ramki, nitka do obiektu, kolonie wersalikami, statki małymi literami, zaznaczony
     //   jedyny pogrubiony, druga linia dla zaznaczonego i najechanego, cyfry w kratce; stos planeta + księżyce + stacje — LOD
@@ -580,11 +580,18 @@ export const GAME_CONFIG = {
     //   w kadrze obszaru mapy (514), pełne nazwy z „…” (513), strzałki krawędzi bez wczesnego wyjścia (497), fade-in 150 ms;
     //   klik etykiety PO karcie ciała (515), tarcza ciała wygrywa (487, 503); etykiety CTRL w rolach motywu (D-HUD-16).
     //   Przy ON plakietki `MapLabelLayer` wyłączone (rysunek i klik); przy OFF — dzisiejszy kod co do bitu.
-    //   ⚠ Brak klucza = OFF (idiom `hudRadar`); flaga czytana przy każdym rysunku — przestawienie w konsoli
-    //     (`KOSMOS.gameConfig.FEATURES.hudLabels = false`) działa od następnej klatki; F5 wczytuje plik.
-    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `hudRadar`): wpis wchodzi commitem paczki A po bramce
+    // hudRoutes (H3 — D-HUD-8, D-HUD-9, D-HUD-10, D-HUD-12): trasy statków rysuje warstwa HUD 2D (`HudRouteLayer`, logika
+    //   `HudRouteLogic.js`): linia 1 px w roli `primary` (obce — `foreign`), krycie 0,6 → 0,15 wzdłuż długości (× 0,25 dla
+    //   niezaznaczonych), kreski w px ekranu z marszem na zegarze symulacji (stoi w pauzie), cel — kółko / chevron; patrol,
+    //   pościg i przechwycenie; skok warp — kreski do krawędzi kadru z glifem układu docelowego (tylko układ odlotu); obce —
+    //   tylko wykryte TERAZ i ≥ contact (509). Przy ON linie tras 3D (`LineDashedMaterial`) wyłączone; przy OFF — jak dziś.
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`); każda flaga czytana przy każdym rysunku — przestawienie w konsoli
+    //     (`KOSMOS.gameConfig.FEATURES.hudLabels = false` itd.) działa od następnej klatki; linie tras 3D po przestawieniu
+    //     `hudRoutes` na OFF wracają przy najbliższej synchronizacji statków (w pauzie — po klatce gry); F5 wczytuje plik.
+    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `hudRadar`): te wpisy wchodzą commitem paczki A po bramce
     //     właściciela.
     hudLabels: true,
+    hudRoutes: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

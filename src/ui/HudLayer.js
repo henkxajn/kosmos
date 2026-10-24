@@ -24,11 +24,12 @@ import { getMapInsets } from './MapInsets.js';
 import { simClockMs } from '../utils/SimClock.js';
 import { makeHudProjector } from './HudProjection.js';
 import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3, D-HUD-4, D-HUD-b)
+import { HudRouteLayer } from './HudRouteLayer.js';   // paczka A (H3) — trasy statków (D-HUD-8, D-HUD-9, D-HUD-10)
 import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 
 // [klatki rysunku] okno pomiaru kosztu (bramka H1: ≤ 0,5 ms na klatkę CPU)
 const COST_WINDOW = 120;
-// [px CSS] picker najechania statku dla warstwy (paczka A — druga linia etykiety): tylko WIDOCZNE
+// [px CSS] picker najechania statku dla warstwy (paczka A — druga linia etykiety, podświetlenie trasy): tylko WIDOCZNE
 // sprite'y (485), próg jak `ThreeRenderer.handleMouseMove`.
 const HOVER_VESSEL_PX = 28;
 
@@ -90,9 +91,9 @@ export class HudLayer {
     if (autoStart) this.start();
   }
 
-  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): radar, etykiety (na wierzchu — ich anti-overlap czyta
-   *  przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru). */
-  _defaultSublayers() { return [new HudRadarLayer(this), new HudLabelLayer(this)]; }
+  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): trasy (pod spodem), radar, etykiety (na wierzchu —
+   *  ich anti-overlap czyta przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru, glify warp). */
+  _defaultSublayers() { return [new HudRouteLayer(this), new HudRadarLayer(this), new HudLabelLayer(this)]; }
 
   addSublayer(s) {
     if (s) this._sublayers.push(s);
@@ -104,11 +105,11 @@ export class HudLayer {
   wake() { this._wake = true; }
 
   /**
-   * Kursor nad oknem (paczka A — najechanie mapy dla etykiet): px logiczne + surowe px CSS; `overUI` — kursor nad
+   * Kursor nad oknem (paczka A — najechanie mapy dla etykiet i tras): px logiczne + surowe px CSS; `overUI` — kursor nad
    * powierzchnią UI (outlinery, belki, karty), wtedy bez najechania mapy (hover outlinera nie — D-HUD-5).
    */
   setPointer(lx, ly, rawX, rawY, overUI = false) {
-    // Bez wymuszania klatki: najechanie trafia do kluczy podwarstw (etykiety) — rysunek tylko, gdy coś się zmieniło.
+    // Bez wymuszania klatki: najechanie trafia do kluczy podwarstw (etykiety, trasy) — rysunek tylko, gdy coś się zmieniło.
     this._pointer = { lx, ly, rawX, rawY, overUI: overUI === true };
   }
 
