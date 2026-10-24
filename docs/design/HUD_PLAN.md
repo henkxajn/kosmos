@@ -12,9 +12,10 @@
 > **Protokół od H2 — aneks 2026-10-23 (§4.0):** paczki A (H2 + H3 + 493) i B (H4), commit raz na paczkę (paczka A —
 > trzy commity kodu A-1 / A-2 / A-3 na prośbę właściciela), keepery wyłącznie dla logiki, walidator → arkusz kontaktowy
 > HTML na 5 motywach, bramka = oglądanie + pętla strojenia.
-> **Dalej:** w arkuszu — paczka B, H4 (§4.5; w niej D-HUD-16 — kolory 3D w rolach, §5.0); poza arkuszem, zaplanowana
-> po paczce A — **REFORMA ZAKŁADEK** (ramy właściciela 2026-10-24: `TABS_REFORM_PLAN.md`; pierwszy krok — inwentarz
-> zakładek read-only). Kotwica następnego kroku = commit dokumentacji `docs(HUD A CLOSE)`.
+> **Dalej (podpis właściciela 2026-10-24, `TABS_REFORM_PLAN.md` §6.0):** najpierw — poza arkuszem — **REFORMA ZAKŁADEK**
+> (ramy 2026-10-24; inwentarz wykonany 2026-10-24): 531 / 532 → T3 → T1 → T2 → T4; **paczka B, H4 (§4.5; w niej D-HUD-16
+> — kolory 3D w rolach, §5.0) PO T4** — chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku. Kotwica kroku 531 / 532
+> = commit dokumentacji `docs(TABS 0)`.
 > **Pomiary:** prawdziwa gra w Chrome (CDP, GPU — ANGLE / RTX 3070, `devicePixelRatio` 1 → `pixelRatio` renderera 1,5),
 > zapis ZF gy120 (Kepler-4799 — ten sam co bramki ARKUSZA UI), okno **1600×1041 CSS** (skala UI gry 1,25 — logicznie
 > 1280×833), kontrola **1280×833**; przed każdym odczytem 4 s biegu gry (stan po wczytaniu na pauzie jest inny —
@@ -23,9 +24,10 @@
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\hud-phase-a\` — `probes/` (sondy), `results/` (JSON, zrzuty PNG,
 > `hexes_hud.txt` — pełna lista kolorów na sztywno), `HANDOVER_HUD_PHASE_A.md`.
 > **Oznaczenia** jak w `UI_PLAN.md`: `[code]` — odczyt źródła (linie przy `ad65e47`) · `[measured]` — pomiar w grze albo
-> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#530 (§3; 517–521 z H0,
-> 522–527 z H1, 528–530 z paczki A); 493, 497, 502 i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer
-> po audycie: 517; po H0: 522; po H1: 528; **po paczce A: 531**.
+> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#543 (§3; 517–521 z H0,
+> 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek); 493, 497, 502 i 503 — `UI_PLAN.md` §6 (tu
+> tylko odsyłacze). Pierwszy wolny numer po audycie: 517; po H0: 522; po H1: 528; po paczce A: 531; **po inwentarzu
+> reformy zakładek: 544**.
 
 ---
 
@@ -455,7 +457,7 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 
 ---
 
-## 3. Findingi #504–#530 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A)
+## 3. Findingi #504–#543 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek)
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
@@ -486,6 +488,19 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **528** | ⚪ | **Kotwice kart na ścieżce OFF traktują px CSS jako logiczne.** Karta ciała (`computeFloatingPlacement` z `getBodyScreenPosition`, `BottomContext`) i panel stacji (`sp.x + 18` z `getStationScreenPosition`, `StationPanel`) dostają położenie w px CSS i stawiają kartę w px logicznych UI ⇒ przy skali UI ≠ 1 karta przesunięta: w oknie właściciela (skala UI 1,26) karta ciała stoi ok. 169 px za daleko w prawo, prosto na tarczy — część przyczyny 493. Przy `bodyCardSide` ON nie występuje (px logiczne z projektora HUD — `objectScreenDisc`). Sesja paczki A. | przy `bodyCardSide` ON — nie dotyczy; przy OFF (rollback) zostaje |
 | **529** | ⚪ | **Panel statku z boku modelu potrafi przykryć trasę i cel statku.** Reguła 493 (`BodyCardSideLogic`) chroni wyłącznie tarczę / model zaznaczonego obiektu; trasa HUD (A-2) i jej cel mogą wypaść pod panelem. Wniosek z kodu (sesja paczki A). | → reforma zakładek (ramy 2026-10-24: pływający panel statku znika — `TABS_REFORM_PLAN.md`) |
 | **530** | ⚪ | **Dymek „Pozycja: (x, y)” przy kursorze nad pustą mapą może zasłaniać etykiety HUD.** Podpowiedź współrzędnych przy kursorze stojącym na pustej mapie leży nad warstwą HUD (`#ui-canvas`); walidator arkusza kontaktowego paczki A odstawiał kursor w róg okna, żeby nie wchodziła w kadry. Sesja paczki A. | do decyzji (polerka) |
+| **531** | 🟠 | **Podpowiedź mapy nad kolonią AI kłamie o właścicielu i zdradza populację.** `TooltipContent._planetContent` (`:146-153`) bierze kolonię z `colonyManager.getColony` (kolonie AI też tam są) i pisze „Właściciel: Imperium gracza” oraz populację, bez terminu właściciela i bez bramki wywiadu (kanon `SystemReveal.js:92` — populacja od `detailed`). Zmierzone (Polonia gy79): Akhernar h (`emp_001`, wywiad `contact`) — „Właściciel: Imperium gracza”, „Populacja: 55”. Rodzina 188, 506, 518. Inwentarz reformy zakładek (2026-10-24). | drobny krok od razu, przed T3 (D-TR-15 (b) — `TABS_REFORM_PLAN.md` §6.0); w T1 rozwinięcie zastępuje podpowiedź (D-TR-2) |
+| **532** | 🟠 | **Drugi klik w statek zadokowany przy planetoidzie nic nie robi.** `vessel:focus` (`ThreeRenderer.js:1213-1233`) szuka miejsca postoju tylko w `_planets` i `_moons`; planetoida → brak pozycji → kamera stoi, karty brak. Zmierzone (ZF): Fracht @ Nt, Dostawca II @ Cu i Hv — kamera STOI; kontrola: planeta i księżyc — kamera + karta. Reguła D-UI-5 (2. klik = focus) martwa dla statków placówek na planetoidach — prawy outliner, Dok taktyczny, Tab. Inwentarz reformy zakładek (2026-10-24). | drobny krok od razu, przed T3 (D-TR-15 (b)) — panel przy outlinerze (T3) stoi na 2. kliku z wiersza |
+| **533** | ⚪ | **Podpowiedź kolonii (`#colony-3d-tooltip`) bez limitu wysokości.** Lista budynków stolicy ZF wychodzi poza okno 1041 px i przykrywa pasek nawigacji; `top = min(sy − 10, innerHeight − 250)` zakłada ≤ 250 px (`ThreeRenderer.js:3957-3958`). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T1 (D-TR-2 (a)) |
+| **534** | ⚪ | **Esc nie zamyka karty ciała ani panelu stacji** — bez zaznaczonego statku otwiera menu ☰ (`GameScene.js:4758-4808`). Zmierzone (M3). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T2 (D-TR-5 (a)) |
+| **535** | ⚪ | **Karta ciała zminimalizowana do doku zostaje „bieżącym zaznaczeniem”** (`readClickSelection.entityId` bez warunku minimalizacji, `ClickIntentLogic.js:85`) → klik w to ciało = kamera + karta wraca; panel stacji w doku daje `select` (`:81`, T2e). Zmierzone (M4). Inwentarz reformy zakładek (2026-10-24). | znika z dokiem — reforma zakładek T4 (D-TR-6 (a)); tylko rejestr |
+| **536** | ⚪ | **Trzy warstwy najechania naraz** — statek: `#colony-3d-tooltip` (od razu) + druga linia etykiety HUD + `#kosmos-tooltip` (po 500 ms); zaznaczona kolonia: K4 + K5 + K6. Zmierzone (M6). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T1 (D-TR-2 (a)) |
+| **537** | ⚪ | **Karta ciała, panel stacji i panel statku otwierają się niezależnie i nakładają** — przy stacji na orbicie planety i statku obok trzy prostokąty leżą na sobie, karta ciała całkowicie przykryta. Zmierzone (M1). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T2 / T3 (D-TR-5 (a)) |
+| **538** | ⚪ | **Literały i surowe identyfikatory na czterech powierzchniach** (klasa 113 / 495): karta — typ surowym `planetType`, `-type star`, „Luminosity”, „HZ”, „lat” w ORBICIE, złoża surowym `resourceId`; panel stacji — „Układ: sys_home” (`:228`); panel statku — etykieta rozkazu („→ MoveTo:”, „⚔ Pursue:”, „⚠ Order blocked: <slug>”, „(mission paused)”, „↻ Patrol manualny” — `FMO :8605-8649`), „📦 Cargo:” (`:7751`); podpowiedzi DOM — „wolne”, „Budynki:”, „Energia:”, „ETA … lat”, „Etap:”; `#kosmos-tooltip` — „Typ: rocky”, „[in_transit]”. `check-i18n` ich nie widzi (bez polskich znaków / surowe pola). Inwentarz reformy zakładek (2026-10-24). | pola przechodzące do rozwinięć i panelu — przez `t()` w T1–T3; reszta w T4 |
+| **539** | ⚪ | **Klik ciała na mapie zdejmuje zaznaczenie statku, klik ciała w lewym outlinerze — nie** (`GameScene._selectFromClickPick` `:6066` — gałąź kanwy bez celu). Zmierzone (M2, mapa); outliner — z kodu. Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T3 (D-TR-14 (a) — klik ciała na mapie nie zdejmuje statku) |
+| **540** | ⚪ | **Panel stacji rysuje się i łapie klik nad otwartym overlayem pełnoekranowym** — także nad Technologiami, Dowództwem itd. (`UIManager.js:2388`, `:1983` bez `!isAnyOpen()`; zamysł S4-2 „coexist z colony”). Z kodu. Inwentarz reformy zakładek (2026-10-24). | znika z panelem stacji — reforma zakładek T2 |
+| **541** | ⚪ | **Chip doku nie zna układu** — przywrócenie karty ciała / panelu stacji z innego układu otwiera kartę bez kotwicy (róg obszaru mapy) dla obiektu spoza kadru, bez przełączenia układu (`BottomContext.js:544-551`, `StationPanel.js:390-410`). Z kodu. Inwentarz reformy zakładek (2026-10-24). | znika z dokiem — reforma zakładek T4 (D-TR-6 (a)) |
+| **542** | ⚪ | **Tryb Y: dwa panele statku naraz** — mini-panel Doku taktycznego i pływający panel statku (`UIManager.js:2397` bez warunku trybu Y). Z kodu. Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T3 (D-TR-10 (a)) |
+| **543** | ⚪ | **Rozbiórka statku bez potwierdzenia** — jeden klik „🗑 Disband” → `fleet:disbandRequest` (`FMO :2732-2736` → `ColonyManager._disbandVessel`); nieodwracalne. Z kodu. Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T3 (D-TR-13 (a)) |
 
 Rejestr #504–#516 po fazie A: **13 wpisów — 🟠 5** (504, 505, 506, 514, 516) **· ⚪ 8** (507–513, 515). Wszystkie
 otwarte; 504 — osobny drobny krok, reszta w krokach H0–H3. Pierwszy wolny: **517**.
@@ -504,6 +519,10 @@ Po paczce A (2026-10-24): rejestr #504–#530 — **27 wpisów — ✅ 14** (509
 518, 520–524, 526–530). Z rejestru `UI_PLAN.md` §6 zamknięte w paczce A: 493 (przejściowo — reforma zakładek), 497, 503.
 Cyjan z kadru 10 arkusza paczki A (najpewniej stożki przechwycenia `0x00ffff`) — pozycja D-HUD-16 dla paczki B (§5.0),
 bez numeru. Pierwszy wolny: **531**.
+
+Po inwentarzu reformy zakładek (2026-10-24; kandydaci przyjęci w całości — `TABS_REFORM_PLAN.md` §6.0, §7): rejestr #504–#543 —
+**40 wpisów — ✅ 14** (bez zmian) **· 🟠 3** (504, 531, 532) **· ⚪ 23** (517, 518, 520–524, 526–530, 533–543).
+Kolejność kroków (podpis 2026-10-24): 531 / 532 → reforma zakładek T3 → T1 → T2 → T4 → paczka B. Pierwszy wolny: **544**.
 
 ---
 
