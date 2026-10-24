@@ -3,14 +3,18 @@
 > **Stan: FAZA A zamknięta — podpisy właściciela 2026-10-21 (§5.0); H0 WYKONANE 2026-10-22** (§4.1: `5449674` H0-1 ·
 > `6464e4d` H0-2; bramka H0 PASS; ✅ 510, 511, 512; D-HUD-7 uzupełnienie — §5.0); **H1 WYKONANE 2026-10-24** (§4.2:
 > `6630665` H1-1 · `a756fab` H1-2 · `29cf778` H1-3; bramka H1 PASS 2026-10-23 z korektą 1b — wariant granicy `primary`;
-> ✅ 505, 506, 507, 508, 516). Faza A — audyt read-only 2026-10-21
+> ✅ 505, 506, 507, 508, 516); **paczka A WYKONANA 2026-10-24** (§4.3, §4.4, §4.2a: `5a6d953` A-1 etykiety · `1664c84`
+> A-2 trasy · `9b5e6f1` A-3 karta z boku tarczy; bramka paczki A PASS 2026-10-24 ze strojeniem 1; ✅ 509, 513, 514, 515,
+> 525; z rejestru `UI_PLAN.md` §6 — 493 (przejściowo), 497, 503). Faza A — audyt read-only 2026-10-21
 > na HEAD `ad65e47` (ARKUSZ UI zamknięty — `UI_PLAN.md` §4.7; origin = `ad65e47`, ahead 0); w fazie A zero zmian
 > w `src/`. Plan zacommitowany razem z podpisami — commit `docs(HUD A)` = kotwica H0. Podpisy właściciela 2026-10-21:
 > odczytania §1.1 (1)–(5), decyzje D-HUD-1…18, D-HUD-b/c bez zmian, cięcie H0 → H4 (§4), 504 — osobny drobny krok.
-> **Protokół od H2 — aneks 2026-10-23 (§4.0):** paczki A (H2 + H3 + 493) i B (H4), commit raz na paczkę, keepery
-> wyłącznie dla logiki, walidator → arkusz kontaktowy HTML na 5 motywach, bramka = oglądanie + pętla strojenia.
-> **Następny krok:** paczka A — H2 etykiety + H3 trasy + 493 karta ciała z boku tarczy (§4.3, §4.4, §4.2a); kotwica
-> paczki A = commit dokumentacji `docs(HUD H1 CLOSE)`.
+> **Protokół od H2 — aneks 2026-10-23 (§4.0):** paczki A (H2 + H3 + 493) i B (H4), commit raz na paczkę (paczka A —
+> trzy commity kodu A-1 / A-2 / A-3 na prośbę właściciela), keepery wyłącznie dla logiki, walidator → arkusz kontaktowy
+> HTML na 5 motywach, bramka = oglądanie + pętla strojenia.
+> **Dalej:** w arkuszu — paczka B, H4 (§4.5; w niej D-HUD-16 — kolory 3D w rolach, §5.0); poza arkuszem, zaplanowana
+> po paczce A — **REFORMA ZAKŁADEK** (ramy właściciela 2026-10-24: `TABS_REFORM_PLAN.md`; pierwszy krok — inwentarz
+> zakładek read-only). Kotwica następnego kroku = commit dokumentacji `docs(HUD A CLOSE)`.
 > **Pomiary:** prawdziwa gra w Chrome (CDP, GPU — ANGLE / RTX 3070, `devicePixelRatio` 1 → `pixelRatio` renderera 1,5),
 > zapis ZF gy120 (Kepler-4799 — ten sam co bramki ARKUSZA UI), okno **1600×1041 CSS** (skala UI gry 1,25 — logicznie
 > 1280×833), kontrola **1280×833**; przed każdym odczytem 4 s biegu gry (stan po wczytaniu na pauzie jest inny —
@@ -19,9 +23,9 @@
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\hud-phase-a\` — `probes/` (sondy), `results/` (JSON, zrzuty PNG,
 > `hexes_hud.txt` — pełna lista kolorów na sztywno), `HANDOVER_HUD_PHASE_A.md`.
 > **Oznaczenia** jak w `UI_PLAN.md`: `[code]` — odczyt źródła (linie przy `ad65e47`) · `[measured]` — pomiar w grze albo
-> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#527 (§3; 517–521 z H0,
-> 522–527 z H1); 493, 502 i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie: 517; po H0:
-> 522; **po H1: 528**.
+> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#530 (§3; 517–521 z H0,
+> 522–527 z H1, 528–530 z paczki A); 493, 497, 502 i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer
+> po audycie: 517; po H0: 522; po H1: 528; **po paczce A: 531**.
 
 ---
 
@@ -451,7 +455,7 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 
 ---
 
-## 3. Findingi #504–#527 (rejestr macierzysty; 517–521 z H0, 522–527 z H1)
+## 3. Findingi #504–#530 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A)
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
@@ -460,13 +464,13 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **506** | ✅ | **Pierścienie radaru kolonii AI.** `ThreeRenderer.js:6114` iteruje `getAllColonies()` bez terminu właściciela; kolonia AI w oglądanym układzie dostaje bursztynowy pierścień o promieniu z poziomu JEJ obserwatorium (1/3/6/15 AU, ∞ → 35) — gracz widzi poziom obserwatorium AI, a cudze pokrycie wygląda jak własne; detekcja liczy wyłącznie kolonie gracza (`ObservatorySystem.js:589-591`). Wniosek z kodu (w ZF brak kolonii AI w układzie domowym). | ✅ **H1** — `a756fab` (ON): radar wyłącznie kolonii gracza (`isPlayerColony`); przy OFF — jak dziś; orbity kolonii AI — 518 |
 | **507** | ✅ | **Pierścienie statków zadokowanych i w rezerwie.** Filtr `_syncSensorOverlay` (`:6094-6099`) nie pyta o stan ani o `isInService`: statek zadokowany (bez sprite'a, `:5133-5137`) dostaje pierścień w środku kolonii — w ZF 8 z 10 pierścieni statków, po 3 nałożone w Nt i w Nowej Ziemi („pełne niebieskie elipsy”); kadłub w rezerwie nie wykrywa (`ProximitySystem.js:75-78`), a pierścień ma. | ✅ **H1** — `a756fab` (ON): statki tylko w służbie, zadokowany wyłącznie zaznaczony (okrąg w środku ciała postoju); przy OFF — jak dziś |
 | **508** | ✅ | **Pas pierścienia = 1,5 % promienia, więc grubość na ekranie od ułamka piksela do kilkudziesięciu.** `_upsertSensorRing` (`:6149`: wewnętrzny 0,985 × zewnętrzny; komentarz `:6146-6148` mówi „~3 %”). Zmierzone: statek 0,3 AU przy 40 j. — promień 29 px, pas 0,43 px; Nowa Ziemia 35 AU przy 40 j. — 701 px / 10,5 px. Pas węższy niż piksel rasteryzuje się w kreski — to są „krótkie kropkowane odcinki przy Fobosie” (§2.9). Stała szerokość ekranowa jest w repo (`engagementRingBand`, `VesselFxLogic.js:115`, CP27). | ✅ **H1** — `a756fab` (ON): pierścienie 3D wyłączone, granica 2D o stałej szerokości na ekranie (kropki 1,5 px co 6 px — korekta 1b); przy OFF — jak dziś |
-| **509** | ⚪ | **Trasa obcego statku nie pokazuje się nigdy.** `_applyVesselIntelVisibility` (`ThreeRenderer.js:5375-5376`) pokazuje linię wyłącznie przy jakości `'detailed'`, a żaden producent nie nadaje statkowi `'detailed'` (`IntelSystem._observeVessel` `:411-412` — `rumor`/`contact`; `_onSensorLock` `:408` — `contact`; skan obserwatorium — `contact`; `recordSighting` — `rumor`) ⇒ gałąź martwa. | H3 — trasy obcych wg D-HUD-10 |
+| **509** | ✅ | **Trasa obcego statku nie pokazuje się nigdy.** `_applyVesselIntelVisibility` (`ThreeRenderer.js:5375-5376`) pokazuje linię wyłącznie przy jakości `'detailed'`, a żaden producent nie nadaje statkowi `'detailed'` (`IntelSystem._observeVessel` `:411-412` — `rumor`/`contact`; `_onSensorLock` `:408` — `contact`; skan obserwatorium — `contact`; `recordSighting` — `rumor`) ⇒ gałąź martwa. | ✅ **paczka A** — `1664c84` A-2 (przy `hudRoutes` ON): trasa obcego statku tylko, gdy wykryty TERAZ (para wykrycia z własnym statkiem albo obserwatorium kolonii gracza) i jakość ≥ `contact` — reguła pulsu ruchu (SB43); `rumor` — nigdy; przy OFF — jak dziś |
 | **510** | ✅ | **Po wczytaniu zapisu na pauzie orbity domu i kolonii są ukryte.** `_buildOrbit` (`:2706-2726`) czyta `window.KOSMOS.homePlanet` i `colonyManager.getColony` w chwili budowy sceny, zanim wczytywany zapis je odtworzy ⇒ obie orbity ukryte do pierwszej przebudowy — co 180 wywołań `_syncPlanetMeshes` (`:2425-2431`), czyli dopiero po odpauzowaniu. Zmierzone (ZF gy120): po wczytaniu orbita Nowej Ziemi `#005540`, ukryta (gałąź „życie” — `isHomePlanet` był wtedy fałszywy); po 4 s biegu — `#007852`, krycie 0,15, widoczna. | ✅ **H0** — `6464e4d` (przy `hudOrbits` ON): klucz synchronizacji orbit = flaga + epoka motywu + dom gracza, przebudowa w pętli renderu także w pauzie ⇒ orbita domu i kolonii widoczna od razu po wczytaniu (bramka H0, K1); przy OFF — jak dziś |
 | **511** | ✅ | **Filtr orbit „Żadne” / „None” zostawia orbitę domu i kolonii** — `_restoreOrbitDefaults` (`:2627-2646`) i `_buildOrbit` (`:2715-2726`) pokazują je niezależnie od filtra; zmierzone (`orbits_none`). Etykieta `menu.orbitsNone` obiecuje brak orbit. | ✅ **H0** — `6464e4d` (ON): „Żadne” chowa wszystkie orbity, także dom i kolonie, poza orbitą zaznaczonego ciała (D-HUD-7 uzupełnienie 3b — §5.0; bramka H0, K4); przy OFF — jak dziś; chip [O] — H4 |
 | **512** | ✅ | **Tokeny mapy w motywach bez czytelnika.** `orbitLine`, `orbitColony`, `starfield`, `vignetteEnd` (`ThemeConfig.js:37-40` i każdy preset — np. Amber Noir `rgba(196,152,48,0.06)` / `rgba(196,152,48,0.20)`) — zero czytelników w `src/` poza `ThemeConfig.js`; orbity mają zaszyte 0x003828 / 0x005540 / 0x007852 — turkus w KAŻDYM motywie, także bursztynowym i fioletowym. | ✅ **H0** — `6464e4d`: `orbitLine` / `orbitColony` czyta `HudOrbitLogic` (ON; bramka H0, K1–K3); `starfield` / `vignetteEnd` — poza zakresem, dalej bez czytelnika |
-| **513** | ⚪ | **Nazwy etykiet ucięte bez wielokropka** — `MapLabelLogic.js:121` i `:160` (`.slice(0, 16)`), choć warstwa ma `_truncate` z „…” (`MapLabelLayer.js:129`); zmierzone: „Stacja Nowa Ziem”. | H2 |
-| **514** | 🟠 | **Etykiety mapy wychodzą poza obszar mapy i nakładają się w paśmie przejścia LOD.** (a) `MapLabelLayer` nie ma clipu ani kadru, a górna belka rysuje się PRZED etykietami (`UIManager.js:2223` wobec `:2323-2331`) — plakietki ciał nad kadrem malują się na belce: zmierzone „Nt” na belce przy 12 j. (`S4_nowaZiemia_d12.png`), plakietki do y = −29 px przy Fobosie z 1,5 j., oba okna. (b) Znaczniki LOD (`_drawMarker`) nie biorą udziału w anti-overlap (`stackLabels` — tylko plakietki), a w paśmie 150–215 j. rysują się razem z plakietkami: przy 200 j. 10 nakładających się par, w tym znaczniki Nowej Ziemi, Nowego Księżyca i stacji nałożone w 88–95 % (oba okna) — zgłoszone „zachodzą na siebie”. | H2 |
-| **515** | ⚪ | **Karta ciała leży pod etykietami mapy** — w rysowaniu (`BottomContext.draw`, `UIManager.js:2269`; etykiety `:2323-2331`) i w kliku (etykiety `:2008`, karta `:2043`): plakietka albo strefa stacji nad kartą zabiera klik karcie. Panele pływające przeniesiono nad etykiety w U2-4 (483) — karta ciała została. Wniosek z kodu, nieodtworzony. | H2 — nowe etykiety pod kartą (D-HUD-1) |
+| **513** | ✅ | **Nazwy etykiet ucięte bez wielokropka** — `MapLabelLogic.js:121` i `:160` (`.slice(0, 16)`), choć warstwa ma `_truncate` z „…” (`MapLabelLayer.js:129`); zmierzone: „Stacja Nowa Ziem”. | ✅ **paczka A** — `5a6d953` A-1 (przy `hudLabels` ON): pełne nazwy, „…” tylko przy braku miejsca; przy OFF — jak dziś |
+| **514** | ✅ | **Etykiety mapy wychodzą poza obszar mapy i nakładają się w paśmie przejścia LOD.** (a) `MapLabelLayer` nie ma clipu ani kadru, a górna belka rysuje się PRZED etykietami (`UIManager.js:2223` wobec `:2323-2331`) — plakietki ciał nad kadrem malują się na belce: zmierzone „Nt” na belce przy 12 j. (`S4_nowaZiemia_d12.png`), plakietki do y = −29 px przy Fobosie z 1,5 j., oba okna. (b) Znaczniki LOD (`_drawMarker`) nie biorą udziału w anti-overlap (`stackLabels` — tylko plakietki), a w paśmie 150–215 j. rysują się razem z plakietkami: przy 200 j. 10 nakładających się par, w tym znaczniki Nowej Ziemi, Nowego Księżyca i stacji nałożone w 88–95 % (oba okna) — zgłoszone „zachodzą na siebie”. | ✅ **paczka A** — `5a6d953` A-1 (ON): etykiety na `#hud-canvas` pod belkami (kolejność z konstrukcji — D-HUD-1), kadr = obszar mapy z `MapInsets`, anti-overlap WSZYSTKICH etykiet jednym przebiegiem (zwinięte „+N” i szyna w nim); scena 200 j.: 10 nakładających się par → 0 (keeper `hud_labels_smoke` L2); przy OFF — jak dziś |
+| **515** | ✅ | **Karta ciała leży pod etykietami mapy** — w rysowaniu (`BottomContext.draw`, `UIManager.js:2269`; etykiety `:2323-2331`) i w kliku (etykiety `:2008`, karta `:2043`): plakietka albo strefa stacji nad kartą zabiera klik karcie. Panele pływające przeniesiono nad etykiety w U2-4 (483) — karta ciała została. Wniosek z kodu, nieodtworzony. | ✅ **paczka A** — `5a6d953` A-1 (ON): etykiety pod kartą w rysowaniu (`#hud-canvas` pod `#ui-canvas`) i w kliku (etykiety HUD w `UIManager.handleClick` PO karcie ciała); przy OFF — jak dziś |
 | **516** | ✅ | **Pierścień radaru statku w skoku warp zostaje w oglądanym układzie.** Filtr `v.systemId && v.systemId !== activeSys` (`ThreeRenderer.js:6098`) przepuszcza `systemId === null` (tranzyt warp — `VesselManager.dispatchInterstellar`, `:1014`; stan `in_transit`, pozycja sprzed skoku), a sprite filtruje ściśle (`vessel.systemId === activeSys`, `:5121-5127`) ⇒ statek znika, jego pierścień zostaje w punkcie odlotu na cały czas skoku. Rodzina „globalne id ≠ położenie”. Wniosek z kodu (w ZF brak własnego statku w skoku). | ✅ **H1** — `a756fab` (ON): filtr układu ścisły (`systemIdOf`) — statek w skoku bez radaru; przy OFF — jak dziś |
 | **517** | ⚪ | **Pojedyncze pole koloru w panelu motywu (F7) nie podbija epoki motywu.** `ThemeOverlay.js:264`, `:270`, `:361` zapisują `THEME[key] = …` wprost, z pominięciem `applyTheme`, więc licznik epoki (`themeEpoch`, D-HUD-15) stoi — warstwy 3D (orbity H0) przyjmują nową barwę dopiero przy najbliższej przebudowie (zdarzenie, co 180 synchronizacji fizyki, zmiana układu), w pauzie — wcale. Paleta orbit ma pamięć po WARTOŚCIACH tokenów (`orbitPalette`, keeper `hud_orbits_smoke` O8c) — brakuje wyłącznie sygnału. Wniosek z kodu; bramka H0, punkt 9. | drobny krok poza arkuszem — 3 linie w `ThemeOverlay` (`applyTheme({ [key]: v })` albo podbicie epoki); rodzina 520, 521 |
 | **518** | ⚪ | **Orbity kolonii AI wyróżnione jak kolonie gracza.** Rola „kolonia” orbity planety z `colonyManager.getColony(id) != null` — bez terminu właściciela (`ThreeRenderer.js:2647`, `:2731` — ścieżka OFF; `:3014` — ścieżka ON H0): przy ON barwa `orbitColony` motywu GRACZA i widoczność niezależna od filtra (poza „Żadne”). Semantyka sprzed H0 zachowana świadomie. Rodzina 506. Wniosek z kodu (w ZF brak kolonii AI w układzie domowym); bramka H0, punkt 10. | do decyzji — osobno (radar kolonii AI zamknięty w H1 — 506; tu orbity) |
@@ -475,10 +479,13 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **521** | ⚪ | **Pola koloru panelu F7 dostają wartości rgba.** `ThemeOverlay.js:442` (`controls.picker.value = THEME[key]`) wpisuje do `<input type="color">` tokeny w formie `rgba(…)` (np. `orbitLine` / `orbitColony` w każdym presecie), a pole przyjmuje wyłącznie `#rrggbb` ⇒ ostrzeżenia konsoli przy każdym otwarciu F7. Sprzed H0; zgłoszenie właściciela z bramki H0. | drobny krok poza arkuszem (konwersja `rgba` → `#rrggbb` w panelu); rodzina 517, 520 |
 | **522** | ⚪ | **`window.KOSMOS.planetGlobeOpen` nie ma pisarza.** Czytają go `UIManager.js:2008` (klik plakietek mapy), `:2219` (etykiety), `OutlinerColumn.js:70` i od H1 `HudLayer` (reguła „globus”); w `src/` nikt go nie ustawia. Dziś bez skutku — globus planety żyje wyłącznie w overlayu kolonii, więc chowa wszystko reguła overlayu (bramka H1, K8: `"overlay"`); globus poza overlayem (np. podgląd z mapy) odsłoniłby nad sobą etykiety, outlinery i HUD. Wniosek z kodu (sesja H1). | do decyzji — pisarz w miejscu otwarcia globusa albo usunięcie flagi u czterech czytelników |
 | **523** | ⚪ | **Pierścienie radaru 3D znikają po przełączeniu układu w pauzie (przed H1).** `switchSystem` → `_disposeAllMeshes` usuwa je, a odbudowuje dopiero `physics:updated` / `vessel:positionUpdate` / ☰ „Radar” ⇒ do pierwszej klatki gry oglądany układ jest bez radaru. Zmierzone: bramka H1, K10 linia 2 — 0 pierścieni w kontroli `e047f04` i w ścieżce OFF kodu H1. Przy `hudRadar` ON nie występuje (warstwa HUD liczy radar w każdej klatce rysunku). | przy ON — nie dotyczy; przy OFF (rollback) zostaje |
-| **524** | ⚪ | **Rola `dim` w 4 z 5 motywów ekranu tytułowego różni się od `primary` tylko jasnością.** `textDim` w Amber Noir, Cold Blue, Galactic Violet i Biopunk Green = akcent z kryciem 0,32 (orbity — ten sam akcent: `orbitLine` 0,06, `orbitColony` 0,20); inny odcień tylko Neon Cyber (`rgba(220,190,210,0.25)`). D-HUD-2 wymaga, by role się różniły — raport kontrastu (`hudContrastReport`) liczy ΔE z kryciem tokenu na czerni, więc duże ΔE(primary, dim) bierze się z jasności, nie z barwy. Zmierzone (korekta 1b H1, `probes/contrast_1b.mjs`): granica radaru w `dim` — kontrast z tłem 1,09–1,12, ΔE od orbit domu i kolonii 0,3–2,3 (nieodróżnialna); powód wyboru `primary` na bramce H1. | paczka A (H2 — etykiety w roli `dim`): odróżnialność od orbit okiem na arkuszu kontaktowym; zmiana tokenu albo roli — decyzja właściciela |
-| **525** | ⚪ | **Odczyt zasięgu radaru pod plakietką stosu „◆ ×2”.** Plakietki mapy (`#ui-canvas`, nad HUD) i odczyt zasięgu przy najwyższej kresce głównej (HUD) bez wspólnej antykolizji — w K2 bramki H1 odczyt „1,0 AU” Fobosa wypada pod plakietką stosu. | paczka A (H2 — etykiety na warstwie HUD: wspólny anti-overlap z odczytem radaru; rodzina 514) |
-| **526** | ⚪ | **Podziałka radaru na małych okręgach („słoneczko”).** Kreski 10 / 16 px do wewnątrz mają stałą długość na ekranie, więc przy okręgu ~19 px (Fobos w widoku układu — bramka H1, K2) sięgają do 53 / 84 % promienia. | do decyzji przy paczce A — propozycja: kreski ≤ ~30 % promienia na ekranie albo bez podziałki poniżej ~40 px |
+| **524** | ⚪ | **Rola `dim` w 4 z 5 motywów ekranu tytułowego różni się od `primary` tylko jasnością.** `textDim` w Amber Noir, Cold Blue, Galactic Violet i Biopunk Green = akcent z kryciem 0,32 (orbity — ten sam akcent: `orbitLine` 0,06, `orbitColony` 0,20); inny odcień tylko Neon Cyber (`rgba(220,190,210,0.25)`). D-HUD-2 wymaga, by role się różniły — raport kontrastu (`hudContrastReport`) liczy ΔE z kryciem tokenu na czerni, więc duże ΔE(primary, dim) bierze się z jasności, nie z barwy. Zmierzone (korekta 1b H1, `probes/contrast_1b.mjs`): granica radaru w `dim` — kontrast z tłem 1,09–1,12, ΔE od orbit domu i kolonii 0,3–2,3 (nieodróżnialna); powód wyboru `primary` na bramce H1. | paczka A: etykiety w rolach `primary` / `foreign`, `dim` wyłącznie w nazwach wraków przy CTRL (D-HUD-16) — odróżnialność `dim` od orbit w paczce A nie wystąpiła; zostaje: zmiana tokenu albo roli — decyzja właściciela |
+| **525** | ✅ | **Odczyt zasięgu radaru pod plakietką stosu „◆ ×2”.** Plakietki mapy (`#ui-canvas`, nad HUD) i odczyt zasięgu przy najwyższej kresce głównej (HUD) bez wspólnej antykolizji — w K2 bramki H1 odczyt „1,0 AU” Fobosa wypada pod plakietką stosu. | ✅ **paczka A** — `5a6d953` A-1 (ON): odczyt zasięgu radaru jest przeszkodą wspólnego anti-overlap etykiet (keeper `hud_labels_smoke` L2h); plakietki stosu przy ON nie istnieją |
+| **526** | ⚪ | **Podziałka radaru na małych okręgach („słoneczko”).** Kreski 10 / 16 px do wewnątrz mają stałą długość na ekranie, więc przy okręgu ~19 px (Fobos w widoku układu — bramka H1, K2) sięgają do 53 / 84 % promienia. | do decyzji (paczka A jej nie rozstrzygnęła) — propozycja: kreski ≤ ~30 % promienia na ekranie albo bez podziałki poniżej ~40 px |
 | **527** | ⚪ | **Bramka H1 sprzed korekty 1b (K11 — czas JS warstwy) nie widziała kosztu rasteryzacji.** Przy S5 (kamera ~3 j. od Fobosa; okrąg 1 AU w rzucie ~1,7 mln px — przycięcie płaszczyzną bliską kamery) radar zbijał obraz: kod sprzed 1b 18,4 kl./s w sondzie (walidator, kontrola `bc62bdb`: 22–23 kl./s przy ~57 bez radaru), kropki 1b na całej ścieżce 6,0 kl./s — przy czasie JS `stroke()` ~0,005 ms. W H1 zamknięte przycięciem kropek do okna (`clipRunsToRect`, faza `lineDashOffset`; 60 kl./s); otwarta zostaje reguła pomiaru. | protokół od H2 (§4.0, aneks 2026-10-23): keepery budżetu klatek mierzą kl./s przy ruchu kamery, z warstwą i bez |
+| **528** | ⚪ | **Kotwice kart na ścieżce OFF traktują px CSS jako logiczne.** Karta ciała (`computeFloatingPlacement` z `getBodyScreenPosition`, `BottomContext`) i panel stacji (`sp.x + 18` z `getStationScreenPosition`, `StationPanel`) dostają położenie w px CSS i stawiają kartę w px logicznych UI ⇒ przy skali UI ≠ 1 karta przesunięta: w oknie właściciela (skala UI 1,26) karta ciała stoi ok. 169 px za daleko w prawo, prosto na tarczy — część przyczyny 493. Przy `bodyCardSide` ON nie występuje (px logiczne z projektora HUD — `objectScreenDisc`). Sesja paczki A. | przy `bodyCardSide` ON — nie dotyczy; przy OFF (rollback) zostaje |
+| **529** | ⚪ | **Panel statku z boku modelu potrafi przykryć trasę i cel statku.** Reguła 493 (`BodyCardSideLogic`) chroni wyłącznie tarczę / model zaznaczonego obiektu; trasa HUD (A-2) i jej cel mogą wypaść pod panelem. Wniosek z kodu (sesja paczki A). | → reforma zakładek (ramy 2026-10-24: pływający panel statku znika — `TABS_REFORM_PLAN.md`) |
+| **530** | ⚪ | **Dymek „Pozycja: (x, y)” przy kursorze nad pustą mapą może zasłaniać etykiety HUD.** Podpowiedź współrzędnych przy kursorze stojącym na pustej mapie leży nad warstwą HUD (`#ui-canvas`); walidator arkusza kontaktowego paczki A odstawiał kursor w róg okna, żeby nie wchodziła w kadry. Sesja paczki A. | do decyzji (polerka) |
 
 Rejestr #504–#516 po fazie A: **13 wpisów — 🟠 5** (504, 505, 506, 514, 516) **· ⚪ 8** (507–513, 515). Wszystkie
 otwarte; 504 — osobny drobny krok, reszta w krokach H0–H3. Pierwszy wolny: **517**.
@@ -491,6 +498,12 @@ Po H1 (2026-10-24): rejestr #504–#527 — **24 wpisy — ✅ 9** (505, 506, 50
 512, 519 — przy `hudOrbits` ON) **· 🟠 2** (504, 514) **· ⚪ 13** (509, 513, 515, 517, 518, 520–527). Obserwacja (b)
 z korekty 1b — karta ciała zakrywa radar zaznaczonego ciała — to ten sam temat co **493** (`UI_PLAN.md` §6; tu §4.2a),
 bez nowego numeru. Pierwszy wolny: **528**.
+
+Po paczce A (2026-10-24): rejestr #504–#530 — **27 wpisów — ✅ 14** (509, 513, 514, 515, 525 — przy flagach paczki A ON;
+505, 506, 507, 508, 516 — przy `hudRadar` ON; 510, 511, 512, 519 — przy `hudOrbits` ON) **· 🟠 1** (504) **· ⚪ 12** (517,
+518, 520–524, 526–530). Z rejestru `UI_PLAN.md` §6 zamknięte w paczce A: 493 (przejściowo — reforma zakładek), 497, 503.
+Cyjan z kadru 10 arkusza paczki A (najpewniej stożki przechwycenia `0x00ffff`) — pozycja D-HUD-16 dla paczki B (§5.0),
+bez numeru. Pierwszy wolny: **531**.
 
 ---
 
@@ -533,6 +546,14 @@ dopiero po bramce. Zapis v101 bez migracji (stan warstw w `uiPrefs` przez `?? do
   kontroli na poprzednim commicie i **bez** drugiego okna (kontrola 1280×833).
 - **Walidator → arkusz kontaktowy HTML** na 5 motywach ekranu tytułowego (zrzuty do oglądania) zamiast tabel wartości.
 - **Bramka właściciela = oglądanie arkusza + pętla strojenia** (stałe rysunku stroi się w trakcie bramki).
+- **Paczka A — wykonanie (2026-10-24):** na prośbę właściciela trzy commity kodu zamiast jednego — `5a6d953` A-1
+  etykiety · `1664c84` A-2 trasy · `9b5e6f1` A-3 karta 493 — sweep i rozruch gry na każdym stanie pośrednim (338 / 339 /
+  340 suit, 0 FAIL); jedna bramka. Arkusz kontaktowy `gate/kontakt_A.html` (16 kadrów × 5 motywów, pary przed / po);
+  smoke w grze (ZF gy120, okno 1618×1195, DPR 0,9): 0 wyjątków JS; OFF = stary kod — plakietki, linie tras 3D i karta
+  ciała identyczne przy wspólnym czasie gry; 60 kl./s z warstwami i bez; CPU warstwy HUD — pełne przerysowanie
+  147–234 µs, realne klatki przy obrocie kamery średnio 329–465 µs (radar 126–178 µs); strojenie 1 (a — histereza strony
+  karty, b — strzałki krawędzi w rolach, c — glif warp = cel trasy) z mini-arkuszem `gate/kontakt_A_s1.html`; **PASS
+  2026-10-24**. Teczka: `C:\Users\Komputer\kosmos-handover\hud-paczka-a\` (`RAPORT_A.md`, `gate/`, `probes/`).
 
 ### 4.1 H0 — role kolorów z motywu + orbity (D-HUD-2, D-HUD-7, D-HUD-15)
 
@@ -612,15 +633,40 @@ dopiero po bramce. Zapis v101 bez migracji (stan warstw w `uiPrefs` przez `?? do
   `DirectorRecall` odwołuje bezczynnego rajdera; `VESSEL_ORDERS_PLAN.md` §268), statek w skoku bez pierścienia,
   budżet ≤ 0,5 ms.
 
-### 4.2a 493 — karta ciała z boku tarczy (osobny mały krok po H1; zaplanowany, nieuruchomiony — paczka A)
+### 4.2a 493 — karta ciała z boku tarczy (osobny mały krok po H1 — paczka A)
+
+> **✅ WYKONANE 2026-10-24 — A-3 `9b5e6f1`** (`FEATURES.bodyCardSide`, ON). NEW `src/ui/BodyCardSideLogic.js`: karta
+> ciała (`BottomContext`), panel statku w trybie kompaktowym (`UIManager`) i panel stacji (`StationPanel`) z boku tarczy /
+> modelu — prawo (odstęp 16 px), flip w lewo przy braku miejsca w obszarze mapy, nigdy nad tarczą, gdy którakolwiek
+> strona się mieści; przy zoomie karta idzie za krawędzią tarczy; tarcza z projektora HUD w px logicznych
+> (`objectScreenDisc` — ciało, statek, stacja; `ThreeRenderer.getStationWorldInfo`); ścieżka OFF myli px CSS z logicznymi
+> — Finding 528. **Strojenie 1 (a):** strona wybierana przy zaznaczeniu i trzymana (`makeCardSideMemory`), zmiana tylko,
+> gdy karta wyszłaby poza obszar mapy (a druga strona się mieści), nie częściej niż co 400 ms — zoom na stację z panelem:
+> 42 zmiany strony w 435 klatkach (najkrótszy odstęp 16 ms) → 0 w 433; `HudProjection.point` z opcjonalnym progiem
+> głębi — kotwica obiektu 1e-4 j. (przy podłodze zoomu stacji 0,005 j. karta nie skacze do rogu kadru; radar bez zmian).
+> Decyzja 5 strojenia: karta z boku także po pierwszym kliku. Keepery: NEW `body_card_side_smoke` 26/26 (histereza
+> z kontrolą — ta sama scena bez pamięci migocze), `right_outliner_smoke` przecelowany (R9e / R9f przy OFF).
+> **Rozwiązanie przejściowe** — w reformie zakładek karta ciała i panel stacji znikają (ramy właściciela 2026-10-24,
+> `TABS_REFORM_PLAN.md`).
 
 Finding **493** (`UI_PLAN.md` §6): karta ciała kotwiczona 18 px od ŚRODKA ciała (`computeFloatingPlacement`,
 `BottomContextLogic.js`) po fokusie zakrywa 33–41 % tarczy, a od H1 — także radar zaznaczonego ciała: w K2 bramki H1
 karta Fobosa otwiera się nad Fobosem i zakrywa cały jego radar (obserwacja (b) z korekty 1b — ten sam temat; walidator
 i właściciel przeciągali kartę za nagłówek). Kierunek (decyzja właściciela 2026-10-23): **karta ciała z boku tarczy** —
-osobny mały krok po H1, w paczce A (§4.0, aneks 2026-10-23). Zaplanowany, nieuruchomiony.
+osobny mały krok po H1, w paczce A (§4.0, aneks 2026-10-23).
 
 ### 4.3 H2 — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
+
+> **✅ WYKONANE 2026-10-24 — A-1 `5a6d953`** (`FEATURES.hudLabels`, ON). NEW `src/ui/HudLabelLogic.js` (LOD stosu,
+> anti-overlap z kadrem, strefy kliku, kratka cyfr, „…”, fade-in) + `src/ui/HudLabelLayer.js` (podwarstwa nad radarem —
+> odczyt świata, rzut, pomiar tekstu, rysunek, klik); przy ON plakietki `MapLabelLayer` wyłączone (rysunek i klik), klik
+> etykiet HUD po karcie ciała, etykiety CTRL w rolach; przy OFF — dzisiejszy kod co do bitu. Progi LOD 6 / 40 px bez
+> zmian; **decyzje strojenia 1:** 1 — trzeci stan LOD (tarcza kotwicy ≥ 40 px — każdy członek stosu przy swoim obiekcie)
+> — TAK; 2 — nazwy kolonii w widoku układu (~450 j.) — ZOSTAJĄ; (b) strzałki krawędzi w rolach — własne `primary` (także
+> z alertem), obce `foreign`. ✅ 513, 514, 515, 525; z `UI_PLAN.md` §6 — 497, 503. Keepery: NEW `hud_labels_smoke` 55/55;
+> `hud_radar_smoke` przecelowany (radar po klasie, nie po indeksie; R13 / R14 przy etykietach i trasach OFF); świadkowie
+> plakietek (`map_labels`, `click_focus_rule`, `map_vessel_panel_compact`, `left_outliner`, `map_insets_single_source`,
+> `dok_taktyczny_4f`, `event_log_entry`) zieloni przy ON i OFF — bez przecelowania.
 
 **Koszt:** 3 commity kodu (logika układu · rysunek · strefy kliku) + 1 dokumentacji · **bramka:** jedna (~30 min).
 - Etykiety za flagą `hudLabels` na warstwie HUD: tekst `THEME.fontFamily` na pasku bez ramki (0,72 zaznaczony / 0,55
@@ -641,6 +687,14 @@ osobny mały krok po H1, w paczce A (§4.0, aneks 2026-10-23). Zaplanowany, nieu
   klik etykiety i karty, 5 motywów (cyfry w Neon Cyber), budżet.
 
 ### 4.4 H3 — trasy (D-HUD-8, D-HUD-9, D-HUD-10, D-HUD-12)
+
+> **✅ WYKONANE 2026-10-24 — A-2 `1664c84`** (`FEATURES.hudRoutes`, ON). NEW `src/ui/HudRouteLogic.js` (zestaw rozkazów,
+> mgła wojny, układ ściśle, marsz kresek na `simClockMs`, promień warp) + `src/ui/HudRouteLayer.js` (podwarstwa pod
+> radarem; glify warp jako przeszkody etykiet); przy ON linie tras 3D nie powstają, a istniejące zwalnia pętla renderu
+> (także w pauzie); przy OFF — jak dziś. **Decyzje strojenia 1:** 3 — glif warp z nazwą układu DOCELOWEGO TRASY
+> (`warpRoute.finalSystemId`), kreski w kierunku pierwszego (bieżącego) przeskoku — poprawka c („Lalande” → „Bellatrix”
+> przy rozkazie do Bellatrix); 4 — pościg: trasa tylko do celu widocznego na mapie — TAK. ✅ 509. Keeper NEW
+> `hud_routes_smoke` 51/51.
 
 **Koszt:** 2 commity kodu + 1 dokumentacji · **bramka:** jedna (~25 min).
 - Trasy za flagą `hudRoutes` na warstwie HUD: linia 1 px w `hud.primary` (obce — `hud.foreign`), alfa gasnąca 0,6 →
@@ -666,6 +720,8 @@ osobny mały krok po H1, w paczce A (§4.0, aneks 2026-10-23). Zaplanowany, nieu
   (dziś 0,8 s, łuk ±15° — za krótki), scalenie z celownikiem wroga; kolonia z zasięgiem ∞ (bez granicy, więc bez
   błysku) — alert przez etykietę; statek i ciało zaznaczone naraz (dziś dwa radary — punkt 6 bramki H1); scalenie
   pingu HUD z pingiem zaznaczenia D-UI-10 (`pingVessel` — statek w doku zaznaczony z wiersza).
+- **Z bramki paczki A (2026-10-24) — D-HUD-16:** kolory 3D w rolach — stożki przechwycenia `0x00ffff` (cyjan z kadru 10
+  arkusza paczki A — najpewniej one); bez numeru findingu (§5.0).
 - **Keepery:** NEW `hud_attention_smoke` (poziomy alfy, warunek alertu, treść i mgła wojny, namiar), NEW
   `hud_chips_smoke` (geometria grupy względem suwaka zoomu, czipu ⚔ i rzędu doku na prawdziwym `BottomControlBar` z
   atrapą ctx; szerokości per font; zapis `uiPrefs`; klawisze; brak chipów pod overlayem). Do przecelowania za zgodą:
@@ -681,6 +737,9 @@ kolejnością.
 
 **Po aneksie 2026-10-23 (§4.0):** H0 i H1 wykonane (5 commitów kodu + 2 dokumentacji, 2 bramki); dalej dwie paczki —
 A (H2 + H3 + 493) i B (H4) — po jednym commicie kodu, commicie dokumentacji i bramce na paczkę.
+
+**Po paczce A (2026-10-24):** H2 + H3 + 493 wykonane — 3 commity kodu (A-1 / A-2 / A-3 — na prośbę właściciela) + 1
+dokumentacji, 1 bramka ze strojeniem 1; w arkuszu zostaje paczka B (H4).
 
 ---
 
@@ -713,6 +772,9 @@ A (H2 + H3 + 493) i B (H4) — po jednym commicie kodu, commicie dokumentacji i 
 | **D-HUD-b / D-HUD-c** | domyślne właściciela bez zmian |
 | **504** | osobny drobny krok, **NIE w kroku arkusza**; zapisany w rejestrze (§3) |
 | Cięcie H0 → H4 (§4) | **PRZYJĘTE** |
+| **Paczka A — strojenie 1 (2026-10-24)** | decyzje: **1 = TAK** (trzeci stan LOD — tarcza kotwicy ≥ 40 px: każdy członek stosu przy swoim obiekcie) · **2 = ZOSTAJE** (nazwy kolonii w widoku układu ~450 j.) · **3 = nazwa CELU trasy** przy glifie warp, kierunek pierwszego przeskoku · **4 = TAK** (pościg — trasa tylko do celu widocznego na mapie) · **5 = TAK** (karta z boku także po pierwszym kliku); poprawki a (histereza strony karty), b (strzałki krawędzi w rolach), c (glif = cel trasy) — **PASS**; findingi 528–530 → rejestr ⚪ |
+| **D-HUD-16 — uzupełnienie (2026-10-24, po bramce paczki A)** | w paczce B także kolory 3D w rolach — stożki przechwycenia `0x00ffff` (cyjan z kadru 10 arkusza paczki A); bez numeru findingu |
+| **Reforma zakładek — ramy (2026-10-24)** | krok ZAPLANOWANY po paczce A, poza arkuszem HUD — `TABS_REFORM_PLAN.md` (statki: panel wysuwany w lewo od prawego outlinera, pływający panel statku znika; kolonie, ciała, stacje: model etykiety — karta ciała i panel stacji znikają, 493 = rozwiązanie przejściowe; pierwszy krok — inwentarz zakładek read-only) |
 
 ### 5.1 Decyzje — treść z fazy A (rekomendacja pierwsza)
 
@@ -794,6 +856,8 @@ bliskim zoomie. Wpisane do H4; oddychanie na zegarze z D-HUD-12.
     wroga, podpowiedź DOM, puls ruchu, stożek przechwycenia, pierścień starcia, POI, tryb taktyczny, znaczniki budynków).
     Rekomendacja: w arkuszu tylko to, co HUD zastępuje albo obejmuje — etykiety CTRL (H2), ramki statków i celownik
     wroga (H4); reszta zostaje, lista do osobnego kroku polerki.
+    **Uzupełnienie 2026-10-24 (po bramce paczki A, §5.0):** w paczce B także kolory 3D w rolach — stożki przechwycenia
+    `0x00ffff` (cyjan widoczny w kadrze 10 arkusza paczki A); bez numeru findingu.
 17. **D-HUD-17 — 490 przy chipach.** Prawy klik w chip otworzy menu mapy pod nim. Rekomendacja: minimalna poprawka 490
     (prawy klik pyta `isOverUI` także dla celu `CANVAS`) jako commit H4 — inaczej chipy mają znaną dziurę od pierwszego
     dnia. Alternatywa: zostawić 490 na osobny krok.
