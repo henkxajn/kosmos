@@ -3746,6 +3746,14 @@ export default {
   'fleetPicture.role.cargo':     'Freighter',
   'fleetPicture.role.scout':     'Scout',
 
+  // ── HUD sheet, package A (H2) — second line of a map label (data of the selected / hovered object) ──
+  'hudLabel.pop':        '{0} POP',
+  'hudLabel.free':       '{0} free',
+  'hudLabel.capital':    '✦ capital',
+  'hudLabel.stationPop': '{0}/{1} POP',
+  'hudLabel.detect':     'det. {0}',
+  'hudLabel.lock':       'lock {0}',
+
   // ── Journal entries that were HARDCODED IN POLISH until the 2026-08-27 audit (Finding 170) ──
   'log.el.vesselDetected':       "🔭 Alien vessel detected ({0}): {1}",
   'log.el.contactLost':          "🔭 Lost contact with {0} — last position {1}",

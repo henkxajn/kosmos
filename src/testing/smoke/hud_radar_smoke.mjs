@@ -523,14 +523,17 @@ header('R13  błysk — warstwa i prawdziwe zdarzenia');
   const mkHudT = () => {
     const ctx = mkCtx(); const cv = { width: 0, height: 0, getContext: () => ctx };
     const hud = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;   // domyślne podwarstwy gry (radar)
-    const radar = hud?._sublayers?.[0] ?? null;
+    // ARKUSZ HUD paczka A: podwarstwy gry = radar, etykiety — radar wybierany po klasie, nie po indeksie.
+    const radar = hud?._sublayers?.find?.((s) => s instanceof (RLay?.HudRadarLayer ?? class {})) ?? null;
     return { ctx, hud, radar, frame: () => (hud ? hud.frame(T.now) : null), dbg: () => radar?.debug?.() ?? null };
   };
   K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
   setWorld(); K.entityManager = { get: (id) => ({ p_nz: { x: 682, y: 0 }, p_fob: { x: -300, y: 120 }, p_out: { x: -400, y: -50 } })[id] ?? null };
   select({}); W0.sim = 5000; FEATURES.hudRadar = true;
+  // ARKUSZ HUD paczka A — etykiety (H2) wyłączone: liczymy wywołania ctx samego radaru (warstwa jak po H1).
+  FEATURES.hudLabels = false;
   const h = mkHudT();
-  ok(h.radar instanceof (RLay?.HudRadarLayer ?? class {}), 'R13-0 SEDNO: domyślna podwarstwa warstwy HUD gry = radar (`HudRadarLayer`)');
+  ok(h.radar instanceof (RLay?.HudRadarLayer ?? class {}), 'R13-0 SEDNO: domyślne podwarstwy warstwy HUD gry zawierają radar (`HudRadarLayer`)');
   h.frame();
   const idle0 = h.frame();
   h.ctx.calls.length = 0;
@@ -631,7 +634,7 @@ header('R14  korekta 1b — granica czytelna: kropki, podziałka 10 / 16 px, odc
     const ctx = mkCtx(); ctx.measureText = (s) => ({ width: String(s).length * 5 }); ctx.calls.length = 0;
     const cv = { width: 0, height: 0, getContext: () => ctx };
     const hud = HL?.HudLayer ? new HL.HudLayer(cv, { autoStart: false, now: () => T.now }) : null;
-    const radar = hud?._sublayers?.[0] ?? null;
+    const radar = hud?._sublayers?.find?.((s) => s instanceof (RLay?.HudRadarLayer ?? class {})) ?? null;   // paczka A — po klasie
     return { ctx, hud, radar, frame: () => (hud ? hud.frame(T.now) : null), dbg: () => radar?.debug?.() ?? null };
   };
   const ops = (calls) => {

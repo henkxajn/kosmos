@@ -24,9 +24,13 @@ import { getMapInsets } from './MapInsets.js';
 import { simClockMs } from '../utils/SimClock.js';
 import { makeHudProjector } from './HudProjection.js';
 import { HudRadarLayer } from './HudRadarLayer.js';   // H1-2 — radar (D-HUD-3, D-HUD-4, D-HUD-b)
+import { HudLabelLayer } from './HudLabelLayer.js';   // paczka A (H2) — etykiety (D-HUD-5, D-HUD-6, D-HUD-16)
 
 // [klatki rysunku] okno pomiaru kosztu (bramka H1: ≤ 0,5 ms na klatkę CPU)
 const COST_WINDOW = 120;
+// [px CSS] picker najechania statku dla warstwy (paczka A — druga linia etykiety): tylko WIDOCZNE
+// sprite'y (485), próg jak `ThreeRenderer.handleMouseMove`.
+const HOVER_VESSEL_PX = 28;
 
 /**
  * Bramka widoczności warstwy HUD (czysta). Kolejność powodów = kolejność sprawdzania.
@@ -80,13 +84,15 @@ export class HudLayer {
     this._rafId = null;
     this._size = { cssW: 0, cssH: 0, pr: 0 };
     this._gate = { shown: false, reason: 'start' };
+    this._pointer = null;       // paczka A — kursor nad mapą: { lx, ly (px logiczne), rawX, rawY (px CSS), overUI }
     this.stats = { frames: 0, passes: 0, draws: 0, clears: 0, lastMs: 0, maxMs: 0, costs: [] };
     for (const s of (sublayers ?? this._defaultSublayers())) this.addSublayer(s);
     if (autoStart) this.start();
   }
 
-  /** Podwarstwy gry (kolejność = kolejność rysowania). */
-  _defaultSublayers() { return [new HudRadarLayer(this)]; }
+  /** Podwarstwy gry (kolejność = kolejność zbierania i rysowania): radar, etykiety (na wierzchu — ich anti-overlap czyta
+   *  przeszkody z warstw zebranych wcześniej w tej samej klatce: odczyt zasięgu radaru). */
+  _defaultSublayers() { return [new HudRadarLayer(this), new HudLabelLayer(this)]; }
 
   addSublayer(s) {
     if (s) this._sublayers.push(s);
@@ -96,6 +102,29 @@ export class HudLayer {
 
   /** Wymuś przebieg w następnej klatce (zdarzenie podwarstwy). */
   wake() { this._wake = true; }
+
+  /**
+   * Kursor nad oknem (paczka A — najechanie mapy dla etykiet): px logiczne + surowe px CSS; `overUI` — kursor nad
+   * powierzchnią UI (outlinery, belki, karty), wtedy bez najechania mapy (hover outlinera nie — D-HUD-5).
+   */
+  setPointer(lx, ly, rawX, rawY, overUI = false) {
+    // Bez wymuszania klatki: najechanie trafia do kluczy podwarstw (etykiety) — rysunek tylko, gdy coś się zmieniło.
+    this._pointer = { lx, ly, rawX, rawY, overUI: overUI === true };
+  }
+
+  /**
+   * Klik w warstwę HUD (paczka A — etykiety; px logiczne + surowe px CSS). Podwarstwy od wierzchu; tylko gdy warstwa była
+   * narysowana w ostatniej klatce (pod overlayem / globusem / w czystym widoku — nic). Woła `UIManager.handleClick` PO karcie
+   * ciała (515).
+   * @returns {boolean} — klik obsłużony
+   */
+  handleClick(x, y, rawX, rawY) {
+    if (!this._gate.shown || !this._shown) return false;
+    for (let i = this._sublayers.length - 1; i >= 0; i--) {
+      if (this._sublayers[i].handleClick?.(x, y, rawX, rawY) === true) { this._wake = true; return true; }
+    }
+    return false;
+  }
 
   start() {
     if (!this._raf || this._rafId != null) return;
@@ -160,9 +189,19 @@ export class HudLayer {
 
     const tr = K.threeRenderer;
     const sel = readClickSelection(K);
-    let rolesMemo = null, mapMemo = null;
+    let rolesMemo = null, mapMemo = null, hoverMemo = null;
+    const ptr = this._pointer;
     const F = {
       K, now, sim: simClockMs(), sel, cssW, cssH, pr, uiScale, W: cssW / uiScale, H: cssH / uiScale,
+      pointer: ptr,
+      // Najechanie MAPY (paczka A): statek pod kursorem — wyłącznie widoczne sprite'y (485); ciało — raycast tarcz renderera.
+      get hover() {
+        if (hoverMemo) return hoverMemo;
+        if (!ptr || ptr.overUI) return (hoverMemo = { vesselId: null, bodyId: null });
+        let vesselId = null;
+        try { vesselId = tr?._getVesselAtScreen?.(ptr.rawX, ptr.rawY, HOVER_VESSEL_PX, true) ?? null; } catch { vesselId = null; }
+        return (hoverMemo = { vesselId, bodyId: tr?._hoverPlanetId ?? null });
+      },
       activeSystemId: sel.activeSystemId,
       features: GAME_CONFIG.FEATURES ?? {},
       tactical: K.tacticalMode?.isActive === true,

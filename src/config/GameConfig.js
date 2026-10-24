@@ -571,6 +571,20 @@ export const GAME_CONFIG = {
     //     bramce H1. Przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.hudRadar = false`) działa od następnej klatki
     //     warstwy HUD; F5 wczytuje wartość z tego pliku.
     hudRadar: true,
+
+    // ── ARKUSZ HUD paczka A (HUD_PLAN.md §4.0 aneks 2026-10-23, §4.3) — etykiety ──
+    // hudLabels (H2 — D-HUD-5, D-HUD-6, D-HUD-16): etykiety mapy rysuje warstwa HUD 2D (`HudLabelLayer`, logika
+    //   `HudLabelLogic.js`): tekst na pasku bez ramki, nitka do obiektu, kolonie wersalikami, statki małymi literami, zaznaczony
+    //   jedyny pogrubiony, druga linia dla zaznaczonego i najechanego, cyfry w kratce; stos planeta + księżyce + stacje — LOD
+    //   po średnicy tarczy kotwicy („NOWA ZIEMIA +2” → szyna → każdy przy swoim obiekcie); anti-overlap wszystkich etykiet
+    //   w kadrze obszaru mapy (514), pełne nazwy z „…” (513), strzałki krawędzi bez wczesnego wyjścia (497), fade-in 150 ms;
+    //   klik etykiety PO karcie ciała (515), tarcza ciała wygrywa (487, 503); etykiety CTRL w rolach motywu (D-HUD-16).
+    //   Przy ON plakietki `MapLabelLayer` wyłączone (rysunek i klik); przy OFF — dzisiejszy kod co do bitu.
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`); flaga czytana przy każdym rysunku — przestawienie w konsoli
+    //     (`KOSMOS.gameConfig.FEATURES.hudLabels = false`) działa od następnej klatki; F5 wczytuje plik.
+    //   ⚠ DOMYŚLNIE ON — reguła „default-ON dopiero PO bramce” (wzór `hudRadar`): wpis wchodzi commitem paczki A po bramce
+    //     właściciela.
+    hudLabels: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

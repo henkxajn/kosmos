@@ -3479,6 +3479,20 @@ export class ThreeRenderer {
     return { x: tmp.x, y: tmp.y, z: tmp.z };
   }
 
+  // ARKUSZ HUD paczka A — środek sprite'a statku (j.) i promień jego modelu (j.): połowa rozmiaru docelowego × skala świata
+  // wrappera — ten sam rachunek co rdzeń kliku (`_vesselCorePickPx`). `null` bez sprite'a. Etykiety HUD (prześwit nitki).
+  getVesselWorldInfo(vesselId) {
+    const sp = this._vessels.get(vesselId)?.sprite;
+    if (!sp) return null;
+    const tmp = this._tmpHudVec ?? (this._tmpHudVec = new THREE.Vector3());
+    sp.getWorldPosition(tmp);
+    const out = { x: tmp.x, y: tmp.y, z: tmp.z, r: 0 };
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    const ws = sp.getWorldScale?.(this._tmpPickScale ?? (this._tmpPickScale = new THREE.Vector3()));
+    if (v && ws) out.r = (vesselTargetSize(v) / 2) * Math.max(ws.x, ws.y, ws.z);
+    return out;
+  }
+
   // Flag: pokaż labele wszystkich widocznych obiektów (toggle CTRL).
   // UIManager w draw() czyta ten flag przez getAllVisibleLabels() i rysuje.
   setShowAllLabels(on) { this._showAllLabels = !!on; }

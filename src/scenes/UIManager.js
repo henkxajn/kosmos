@@ -70,6 +70,8 @@ import { Outliner }       from '../ui/Outliner.js';
 import { LeftOutliner, applyOutlinerToggle } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2 — lewy outliner (układy i ciała)
 import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { syncBodyCardOnSystemSwitch, syncStationPanelOnSystemSwitch, clickObject, vesselTarget } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 (486), U3-2 (491, Tab)
+import { isHudLabelsOn, ctrlLabelStyle } from '../ui/HudLabelLogic.js';   // ARKUSZ HUD paczka A (H2) — etykiety na warstwie HUD
+import { resolveHudRoles } from '../ui/HudPalette.js';                    // … etykiety CTRL w rolach (D-HUD-16)
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -2002,8 +2004,11 @@ export class UIManager {
     // hit-zony gdy warstwa nie była rysowana (np. podczas podglądu globusa).
     // Obraz Operacyjny F1: także fleetMapLabels (plakietki/chipy) — zone-listy per
     // powierzchnia są puste gdy dana flaga nie rysowała, więc OR jest bezpieczny.
+    // ARKUSZ HUD paczka A (H2): przy `hudLabels` plakietek nie ma (rysuje je warstwa HUD) — ich strefy z ostatniego rysunku
+    // byłyby nieaktualne; etykiety HUD klikane niżej, PO karcie ciała (515).
     if (window.KOSMOS?.civMode
         && (GAME_CONFIG.FEATURES?.mapLabels || GAME_CONFIG.FEATURES?.fleetMapLabels)
+        && !isHudLabelsOn(GAME_CONFIG.FEATURES)
         && !this.overlayManager.isAnyOpen()
         && !window.KOSMOS?.planetGlobeOpen && this._mapLabelLayer?.handleClick?.(x, y)) return true;
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
@@ -2041,6 +2046,11 @@ export class UIManager {
 
     // BottomContext (dolny panel kontekstowy)
     if (this._selectedEntity && this._bottomContext.hitTest(x, y, W, H, this._selectedEntity)) return true;
+
+    // ARKUSZ HUD paczka A (H2, Finding 515) — etykiety warstwy HUD: PO karcie ciała (karta leży nad nimi), przed raycastem 3D;
+    // punkt na tarczy ciała wygrywa (487, 503 — rozstrzyga warstwa); reguła D-UI-5 (`clickObject`) bez zmian.
+    if (window.KOSMOS?.civMode && isHudLabelsOn(GAME_CONFIG.FEATURES) && !this.overlayManager.isAnyOpen()
+        && !window.KOSMOS?.planetGlobeOpen && window.KOSMOS?.hudLayer?.handleClick?.(x, y, x * UI_SCALE, y * UI_SCALE)) return true;
 
     // Akcje gracza
     if (this._hitTestActionPanel(x, y)) return true;
@@ -2134,6 +2144,8 @@ export class UIManager {
 
   handleMouseMove(x, y) {
     this._dirty = true;
+    // ARKUSZ HUD paczka A — kursor dla warstwy HUD (najechanie MAPY; nad UI — bez najechania, hover outlinera nie — D-HUD-5).
+    window.KOSMOS?.hudLayer?.setPointer?.(x / UI_SCALE, y / UI_SCALE, x, y, this.isOverUI(x, y));
     x /= UI_SCALE; y /= UI_SCALE;
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
@@ -2320,13 +2332,14 @@ export class UIManager {
     if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
 
     // S3.4 FAZA 5 — etykiety kolonii+stacji (pod ramkami statków; overlay 2D nad WebGL).
-    if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels
+    // ARKUSZ HUD paczka A (H2): przy `hudLabels` etykiety rysuje warstwa HUD (`HudLabelLayer`) — plakietki wyłączone.
+    if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels && !isHudLabelsOn(GAME_CONFIG.FEATURES)
         && !this.overlayManager.isAnyOpen() && !globeOpen) {
       this._mapLabelLayer.draw(ctx, tr, W, H, UI_SCALE);
     }
     // Obraz Operacyjny F1 — plakietki flotowe (OSOBNA flaga od mapLabels; toggle
     // uiPrefs czyta layer wewnętrznie). OFF = zero kosztów (jeden boolean).
-    if (civMode && tr && GAME_CONFIG.FEATURES?.fleetMapLabels
+    if (civMode && tr && GAME_CONFIG.FEATURES?.fleetMapLabels && !isHudLabelsOn(GAME_CONFIG.FEATURES)
         && !this.overlayManager.isAnyOpen() && !globeOpen) {
       this._mapLabelLayer.drawVesselLabels(ctx, tr, W, H, UI_SCALE);
     }
@@ -2567,6 +2580,9 @@ export class UIManager {
   _drawAllLabels(ctx, tr) {
     const labels = tr.getAllVisibleLabels?.();
     if (!labels?.length) return;
+    // ARKUSZ HUD paczka A (D-HUD-16) — przy `hudLabels` kolory z ról motywu (własne / obce / wraki / ciała), cień w kolorze tła
+    // motywu; przy OFF — jak dziś.
+    const roles = isHudLabelsOn(GAME_CONFIG.FEATURES) ? resolveHudRoles(THEME) : null;
     ctx.save();
     ctx.font = `10px ${THEME.fontFamily}`;
     ctx.textBaseline = 'middle';
@@ -2575,6 +2591,21 @@ export class UIManager {
       const sx = lbl.x / UI_SCALE;
       const sy = lbl.y / UI_SCALE;
       if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
+      if (roles) {
+        const st = ctrlLabelStyle(lbl.kind, roles);
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = THEME.bgPrimary;
+        ctx.fillText(name, sx + 9, sy + 1);
+        ctx.globalAlpha = st.alpha;
+        ctx.fillStyle = st.color;
+        ctx.fillText(name, sx + 8, sy);
+        ctx.globalAlpha = st.alpha * 0.7;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        continue;
+      }
 
       // Subtelny shadow — poprawia czytelność bez ciężkich ramek
       ctx.fillStyle = 'rgba(0,0,0,0.55)';

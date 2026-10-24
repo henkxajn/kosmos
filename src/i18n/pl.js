@@ -3747,6 +3747,14 @@ export default {
   'fleetPicture.role.cargo':     'Frachtowiec',
   'fleetPicture.role.scout':     'Zwiadowca',
 
+  // ── ARKUSZ HUD paczka A (H2) — druga linia etykiety mapy (dane zaznaczonego / najechanego obiektu) ──
+  'hudLabel.pop':        '{0} POP',
+  'hudLabel.free':       '{0} wolne',
+  'hudLabel.capital':    '✦ stolica',
+  'hudLabel.stationPop': '{0}/{1} POP',
+  'hudLabel.detect':     'wykr. {0}',
+  'hudLabel.lock':       'lock {0}',
+
   // ── Dziennik: wpisy, ktore do audytu 2026-08-27 byly ZASZYTE PO POLSKU (Finding 170) ──
   // Gracz z angielskim Dziennikiem widzial je po polsku BEZ zadnego przelaczania jezyka;
   // `check-i18n` ich nie widzial, bo pyta o klucze w `t()`, a nie o napisy w `push({text})`.
