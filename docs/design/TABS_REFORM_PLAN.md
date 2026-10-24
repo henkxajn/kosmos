@@ -3,8 +3,10 @@
 > **Stan: RAMY PODPISANE 2026-10-24; KROK 1 — INWENTARZ WYKONANY 2026-10-24 (read-only, HEAD = origin = `ae23697`,
 > ahead 0); PODPISY WŁAŚCICIELA 2026-10-24 — decyzje D-TR-1…15 (§6.0), findingi §7 przyjęte w całości do rejestru
 > `HUD_PLAN.md` §3.** Inwentarz — zero zmian w `src/`; plik zacommitowany razem z podpisami (commit `docs(TABS 0)` =
-> kotwica kroku 531 / 532). **Kolejność całości (podpis D-TR-12 (b), D-TR-15 (b)): 531 / 532 (drobny krok od razu) → T3
-> → T1 → T2 → T4 → paczka B ARKUSZA HUD** (B po T4: chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku). Reforma
+> kotwica kroku 531 / 532). **531 / 532 — ✅ WYKONANE 2026-10-24** (§5.4: `471191d` 531 · `da8b2c9` 532; bramka
+> właściciela PASS); **następny krok — T3**, kotwica = commit dokumentacji `docs(TABS 531/532)`. **Kolejność całości
+> (podpis D-TR-12 (b), D-TR-15 (b)): 531 / 532 (drobny krok od razu) → T3 → T1 → T2 → T4 → paczka B ARKUSZA HUD** (B po
+> T4: chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku). Reforma
 > poza arkuszem HUD, po paczce A; dotyczy tych samych powierzchni co „reforma pływających okien” zaparkowana w ARKUSZU UI
 > (`UI_PLAN.md` §1). Findingi — numeracja wspólna (`HUD_PLAN.md` §3): pierwszy wolny przed inwentarzem **531**, po
 > przyjęciu §7 **544**. Powiązane: 488, 493 (`UI_PLAN.md` §6), 515, 528, 529, 530 (`HUD_PLAN.md` §3).
@@ -509,8 +511,12 @@ zwinięcie), a rząd chipów na pasie dolnym zwalnia miejsce — także dla chip
 | M7 | 1280×720 | obszar mapy 980 × 630 @ (150, 28); prawy outliner 150 × 630; 11 wierszy statków y 80–238 |
 | 531 | najechanie kolonii AI (Polonia gy79, Akhernar h — `emp_001`, wywiad `contact`) | `#kosmos-tooltip`: „Właściciel: Imperium gracza”, „Populacja: 55” |
 
-Błędy konsoli w przebiegach: wyłącznie 404 zasobów `assets/icons/build…` i `assets/buildings/…` (serwer sondy), zero
-wyjątków JS.
+Błędy konsoli w przebiegach: wyłącznie 404 zasobów `assets/icons/build…` i `assets/buildings/…`, zero wyjątków JS.
+**Sprostowanie 2026-10-24 (krok 531 / 532):** te 404 NIE pochodzą z serwera sondy — tych plików nie ma w repo:
+`BuildingTextures.js:35` sonduje teksturę każdego budynku („~30/61 budynków bez PNG → cichy fallback do emoji”), a
+`PlanetGlobeTexture.js:56` — ikony budynków globusa (`onerror` — fallback do markera Canvas 2D); te same 404 pojawiają
+się w Live Server. Zmierzone: 32 ścieżki (31 × `assets/buildings/`, 1 × `assets/icons/building_…`), te same przed
+poprawką 531 / 532 i po niej.
 
 ---
 
@@ -583,6 +589,33 @@ przestaje dotyczyć.
   `body_card_side_smoke` C4c. Treść (`_drawRight`, golden P1/C6, E1/E2, f-1/f-2, oś służby) — bez zmian.
 - **dok:** `s34b_paneldock_smoke` · `bottom_strip_smoke` B5–B6, D1–D6, U1–U3 · `left_outliner_smoke` L5f–L5h.
 
+### 5.4 Drobny krok 531 / 532 — WYKONANY 2026-10-24 (D-TR-15 (b))
+
+Commity: **`471191d`** `fix(531)` · **`da8b2c9`** `fix(532)`; bramka właściciela 2026-10-24 — **PASS** (oglądanie
+kadrów przed / po). Teczka: `C:\Users\Komputer\kosmos-handover\tabs-531-532\` — `probes/` (sondy CDP),
+`results/before|after/` (JSON i zrzuty), `kontakt_531_532.html` (arkusz przed / po), `RAPORT_531_532.md`.
+
+- **531** (`TooltipContent._planetContent`, `GameScene._tooltipDeps` + `intelSystem`): kolonia obca (`!isPlayerColony`)
+  dostaje właściciela i populację wg osi właściciela kanonu `SystemReveal` — ta sama reguła co panel STRATCOM: nazwa
+  imperium od `contact`, „Właściciel: obce imperium” od `rumor`, „Właściciel: nieznany” poniżej, populacja od
+  `detailed`; brak wywiadu w `deps` ⇒ fail-closed. **Decyzja właściciela 2026-10-24:** przy `unknown` „nieznany”, nie
+  „Neutralne” (ciało ma kolonię; karta ciała i tak pokazuje obcą kolonię przy każdym wywiadzie). Kolonia gracza — bez
+  zmian. i18n — zero nowych kluczy (`fleet.stratcomEmpireForeign` / `fleet.stratcomEmpireUnknown` jako całe linie).
+- **532** (`ThreeRenderer`, słuchacz `vessel:focus`): miejsce postoju szukane także w `_planetoids` — tej samej mapie, z
+  której rysowane są placówki (`getBodyWorldInfo`, `getBodyScreenPosition`) — kamera na planetoidę (podłoga 0,3,
+  zoom 0,8) + karta ciała, jak przy planecie; planeta i księżyc — kod co do znaku jak dotąd. Ten sam słuchacz obsługuje
+  prawy outliner, Dok taktyczny i Tab.
+- **Keepery:** NEW `tooltip_foreign_colony_smoke` 24/24 (fail-first `git stash` 10 / 14) · NEW
+  `docked_focus_planetoid_smoke` 17/17 (fail-first na kopii drzewa z HEAD 10 / 7 — `stash` przy `eol=lf` przepisałby
+  CRLF `ThreeRenderer.js` na LF, zmierzone). Sweep 342/342 OK, 0 FAIL, 31 advisory; `check-i18n` PASS, pl = en = 3400.
+- **Smoke w grze** (izolowany headless Chrome z GPU, okno 1600×1041, ten sam przebieg na kodzie przed i po): Polonia,
+  Akhernar h (`emp_001`, `contact`) — przed „Właściciel: Imperium gracza”, „Populacja: 55”, po „Właściciel: Liga
+  Spalonej Drogi”, bez populacji; kontrola — dymek własnej kolonii (ZF, Nowa Ziemia) identyczny. ZF, Fracht @ Nt — dwa
+  prawdziwe kliki w prawym outlinerze: przed kamera stoi i karty brak, po kamera na Nt i karta „Nt”; kontrole Fracht III
+  (planeta) i Kurier II (księżyc) bez zmian. Konsola — 0 błędów JS (404 tekstur budynków — §3.6, sprostowanie).
+- **Obserwacja:** w kadrze 532 „po” panel statku (kotwica zapasowa statku w doku) przykrywa część karty ciała Nt — to
+  537 (T2 / T3), jak przy planecie (M1).
+
 ---
 
 ## 6. Decyzje (D-TR-1…15) — PODPISANE 2026-10-24
@@ -605,11 +638,12 @@ przestaje dotyczyć.
 | **D-TR-12** | **(b) — T3 NA POCZĄTEK** | kolejność całości niżej |
 | **D-TR-13** | (a) | potwierdzenie rozbiórki statku przy przenosinach panelu (T3) |
 | **D-TR-14** | (a) | klik ciała na mapie nie zdejmuje zaznaczenia statku — jak w lewym outlinerze (T3) |
-| **D-TR-15** | **(b) — 531 i 532 od razu** | oba osobnym drobnym krokiem, przed T3 |
+| **D-TR-15** | **(b) — 531 i 532 od razu** | oba osobnym drobnym krokiem, przed T3 — ✅ 2026-10-24 (`471191d` · `da8b2c9`, §5.4) |
 
 **Kolejność całości:** **531 / 532 → T3 → T1 → T2 → T4 → paczka B ARKUSZA HUD** — paczka B (H4) po T4, bo chipy warstw
 [R] [T] [E] [O] (D-HUD-13) stają w pasie dolnym w miejscu doku (D-TR-6, §3.5 I7). **§7:** kandydaci 531–543 przyjęci
-w całości do rejestru `HUD_PLAN.md` §3 — 531, 532 🟠, reszta ⚪; pierwszy wolny **544**.
+w całości do rejestru `HUD_PLAN.md` §3 — 531, 532 🟠, reszta ⚪; pierwszy wolny **544**. (531, 532 — ✅ 2026-10-24,
+§5.4.)
 
 ### 6.1 Decyzje — treść z inwentarza (rekomendacja pierwsza)
 
@@ -635,13 +669,14 @@ w całości do rejestru `HUD_PLAN.md` §3 — 531, 532 🟠, reszta ⚪; pierwsz
 
 ## 7. Findingi #531–#543 — przyjęte 2026-10-24 do rejestru `HUD_PLAN.md` §3
 
-> Przyjęte w całości (podpis 2026-10-24, §6.0): **531, 532 🟠; 533–543 ⚪**. Rejestr macierzysty — `HUD_PLAN.md` §3
+> Przyjęte w całości (podpis 2026-10-24, §6.0): **531, 532 ✅** (drobny krok 2026-10-24 — `471191d` · `da8b2c9`,
+> §5.4); **533–543 ⚪**. Rejestr macierzysty — `HUD_PLAN.md` §3
 > (tam statusy i zamknięcia); ta tabela — zapis inwentarza, kolumna „Kierunek” wg podpisów.
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
-| **531** | 🟠 | **Podpowiedź mapy nad kolonią AI kłamie o właścicielu i zdradza populację.** `TooltipContent._planetContent` (`:146-153`) bierze kolonię z `colonyManager.getColony` (kolonie AI też tam są) i pisze „Właściciel: Imperium gracza” oraz populację, bez terminu właściciela i bez bramki wywiadu (kanon `SystemReveal.js:92` — populacja od `detailed`). Zmierzone (Polonia gy79): Akhernar h (`emp_001`, wywiad `contact`) — „Właściciel: Imperium gracza”, „Populacja: 55”. Rodzina 188, 506, 518. | osobny drobny krok od razu, przed T3 (D-TR-15 (b)); w T1 rozwinięcie zastępuje podpowiedź (D-TR-2) |
-| **532** | 🟠 | **Drugi klik w statek zadokowany przy planetoidzie nic nie robi.** `vessel:focus` (`ThreeRenderer.js:1213-1233`) szuka miejsca postoju tylko w `_planets` i `_moons`; planetoida → brak pozycji → kamera stoi, karty brak. Zmierzone (ZF): Fracht @ Nt, Dostawca II @ Cu i Hv — kamera STOI; kontrola: planeta i księżyc — kamera + karta. Reguła D-UI-5 (2. klik = focus) martwa dla statków placówek na planetoidach — prawy outliner, Dok taktyczny, Tab. | osobny drobny krok od razu, przed T3 (D-TR-15 (b)) — panel przy outlinerze stoi na 2. kliku z wiersza |
+| **531** | ✅ | **Podpowiedź mapy nad kolonią AI kłamie o właścicielu i zdradza populację.** `TooltipContent._planetContent` (`:146-153`) bierze kolonię z `colonyManager.getColony` (kolonie AI też tam są) i pisze „Właściciel: Imperium gracza” oraz populację, bez terminu właściciela i bez bramki wywiadu (kanon `SystemReveal.js:92` — populacja od `detailed`). Zmierzone (Polonia gy79): Akhernar h (`emp_001`, wywiad `contact`) — „Właściciel: Imperium gracza”, „Populacja: 55”. Rodzina 188, 506, 518. | ✅ drobny krok 2026-10-24 — `471191d` (§5.4); przy wywiadzie `unknown` „nieznany”, nie „Neutralne” (decyzja właściciela); w T1 rozwinięcie zastępuje podpowiedź (D-TR-2) |
+| **532** | ✅ | **Drugi klik w statek zadokowany przy planetoidzie nic nie robi.** `vessel:focus` (`ThreeRenderer.js:1213-1233`) szuka miejsca postoju tylko w `_planets` i `_moons`; planetoida → brak pozycji → kamera stoi, karty brak. Zmierzone (ZF): Fracht @ Nt, Dostawca II @ Cu i Hv — kamera STOI; kontrola: planeta i księżyc — kamera + karta. Reguła D-UI-5 (2. klik = focus) martwa dla statków placówek na planetoidach — prawy outliner, Dok taktyczny, Tab. | ✅ drobny krok 2026-10-24 — `da8b2c9` (§5.4); panel przy outlinerze (T3) stoi na 2. kliku z wiersza |
 | **533** | ⚪ | **Podpowiedź kolonii (`#colony-3d-tooltip`) bez limitu wysokości.** Lista budynków stolicy ZF wychodzi poza okno 1041 px i przykrywa pasek nawigacji; `top = min(sy − 10, innerHeight − 250)` zakłada ≤ 250 px (`ThreeRenderer.js:3957-3958`). | T1 (D-TR-2) |
 | **534** | ⚪ | **Esc nie zamyka karty ciała ani panelu stacji** — bez zaznaczonego statku otwiera menu ☰ (`GameScene.js:4758-4808`). Zmierzone (M3). | T2 (D-TR-5) |
 | **535** | ⚪ | **Karta ciała zminimalizowana do doku zostaje „bieżącym zaznaczeniem”** (`readClickSelection.entityId` bez warunku minimalizacji, `ClickIntentLogic.js:85`) → klik w to ciało = kamera + karta wraca; panel stacji w doku daje `select` (`:81`, T2e). Zmierzone (M4). | znika z dokiem (T4) — tylko rejestr |
