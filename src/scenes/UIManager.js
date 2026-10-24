@@ -72,6 +72,7 @@ import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — 
 import { syncBodyCardOnSystemSwitch, syncStationPanelOnSystemSwitch, clickObject, vesselTarget } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U2-3 (486), U3-2 (491, Tab)
 import { isHudLabelsOn, ctrlLabelStyle } from '../ui/HudLabelLogic.js';   // ARKUSZ HUD paczka A (H2) — etykiety na warstwie HUD
 import { resolveHudRoles } from '../ui/HudPalette.js';                    // … etykiety CTRL w rolach (D-HUD-16)
+import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc } from '../ui/BodyCardSideLogic.js';   // paczka A (493)
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -484,8 +485,18 @@ export class UIManager {
     const ins = getMapInsets(window.KOSMOS);
     const oy = ins.top + 8;
     const b = { ox: ins.left + 8, oy, ow: Math.max(80, W - ins.left - ins.right - 16), oh: Math.max(60, H - ins.bottom - oy) };
-    const sp = window.KOSMOS?.threeRenderer?.getVesselScreenPosition?.(this._selectedVesselId);
-    const a  = resolveVesselPanelAnchor(sp, UI_SCALE, b, w, h, 24);
+    // ARKUSZ HUD paczka A (493) — przy `bodyCardSide` karta z boku modelu statku (prawo, flip w lewo), nigdy na nim; strona
+    // trzymana (histereza — bez migotania lewo↔prawo); statek bez sprite'a (zadokowany) — kotwica zapasowa jak dziś.
+    const disc = isBodyCardSideOn(GAME_CONFIG.FEATURES) ? objectScreenDisc(window.KOSMOS, 'vessel', this._selectedVesselId) : null;
+    let a;
+    if (disc) {
+      this._vesselPanelSide ??= makeCardSideMemory();
+      const pl = this._vesselPanelSide.place({ key: this._selectedVesselId, disc, PW: w, PH: h, bounds: b, now: performance.now() });
+      a = { x: pl.px, y: pl.py, anchored: true };
+    } else {
+      const sp = window.KOSMOS?.threeRenderer?.getVesselScreenPosition?.(this._selectedVesselId);
+      a  = resolveVesselPanelAnchor(sp, UI_SCALE, b, w, h, 24);
+    }
     // drag (dragPos) wygrywa nad kotwicą aż do `reanchor()` przy zmianie statku.
     const { px, py } = this._vesselPanelFloat.place(a.x, a.y, w, h, b);
     this._vesselPanelDragBounds = b;

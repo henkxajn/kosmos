@@ -51,6 +51,7 @@ import { t, setLocale } from '../../i18n/i18n.js';
 import { isEnemyVessel } from '../../entities/Vessel.js';
 import { systemIdOf } from '../../utils/SystemScope.js';
 import { resolveVesselPanelAnchor } from '../../ui/MapVesselPanelLogic.js';
+import { GAME_CONFIG } from '../../config/GameConfig.js';
 
 let OL = null, LO = null, MI = null, CI = null, STL = null, SPm = null;
 try { OL = await import('../../ui/Outliner.js'); } catch { /* piny padną */ }
@@ -376,7 +377,10 @@ header('R9  `MapInsets.right` i konsumenci (kotwica panelu statku, StationPanel)
   const b = { ox: ins.left + 8, oy: ins.top + 8, ow: Math.max(80, W - ins.left - ins.right - 16), oh: 400 };
   const a = resolveVesselPanelAnchor(null, 1, b, 300, 300, 24);
   ok(a.x + 300 <= W - 150, `R9d kotwica zapasowa panelu statku kończy się przed kolumną (prawa krawędź ${a.x + 300})`);
-  // StationPanel — stacja tuż przy prawej krawędzi ekranu
+  // StationPanel — stacja tuż przy prawej krawędzi ekranu. ARKUSZ HUD paczka A (493): to kotwica sprzed zmiany (`sp.x + 18`)
+  // — ścieżka `bodyCardSide` OFF; przy ON panel stoi z boku modelu stacji (keeper `body_card_side_smoke`, kadr z `MapInsets`).
+  const sideWas = GAME_CONFIG.FEATURES.bodyCardSide;
+  GAME_CONFIG.FEATURES.bodyCardSide = false;
   const sp = SPm?.StationPanel ? new SPm.StationPanel() : null;
   const st = { id: 'stR', type: 'station', name: 'Stacja R', systemId: 'sys_home', depot: { inventory: new Map() }, modules: [] };
   EntityManager.add(st);
@@ -390,6 +394,7 @@ header('R9  `MapInsets.right` i konsumenci (kotwica panelu statku, StationPanel)
   ok(!!r0 && r0.px + pw > W - 150, `R9f KONTROLA: kolumna schowana — panel może stanąć przy krawędzi ekranu (px ${r0?.px})`);
   delete K.threeRenderer.getStationScreenPosition;
   EntityManager.remove?.('stR');
+  GAME_CONFIG.FEATURES.bodyCardSide = sideWas;
 }
 
 // ═══ R10 ══════════════════════════════════════════════════════════════════════

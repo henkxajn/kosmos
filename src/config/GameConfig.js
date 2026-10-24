@@ -572,7 +572,7 @@ export const GAME_CONFIG = {
     //     warstwy HUD; F5 wczytuje wartość z tego pliku.
     hudRadar: true,
 
-    // ── ARKUSZ HUD paczka A (HUD_PLAN.md §4.0 aneks 2026-10-23, §4.3, §4.4) — etykiety, trasy ──
+    // ── ARKUSZ HUD paczka A (HUD_PLAN.md §4.0 aneks 2026-10-23, §4.2a, §4.3, §4.4) — etykiety, trasy, karta z boku tarczy ──
     // hudLabels (H2 — D-HUD-5, D-HUD-6, D-HUD-16): etykiety mapy rysuje warstwa HUD 2D (`HudLabelLayer`, logika
     //   `HudLabelLogic.js`): tekst na pasku bez ramki, nitka do obiektu, kolonie wersalikami, statki małymi literami, zaznaczony
     //   jedyny pogrubiony, druga linia dla zaznaczonego i najechanego, cyfry w kratce; stos planeta + księżyce + stacje — LOD
@@ -585,6 +585,8 @@ export const GAME_CONFIG = {
     //   niezaznaczonych), kreski w px ekranu z marszem na zegarze symulacji (stoi w pauzie), cel — kółko / chevron; patrol,
     //   pościg i przechwycenie; skok warp — kreski do krawędzi kadru z glifem układu docelowego (tylko układ odlotu); obce —
     //   tylko wykryte TERAZ i ≥ contact (509). Przy ON linie tras 3D (`LineDashedMaterial`) wyłączone; przy OFF — jak dziś.
+    // bodyCardSide (Finding 493): karta ciała, panel statku (tryb kompaktowy) i panel stacji z boku tarczy / modelu (prawo,
+    //   flip w lewo, nigdy na tarczy), w px logicznych z projektora HUD (`BodyCardSideLogic.js`). Przy OFF — dzisiejsze kotwice.
     //   ⚠ Brak klucza = OFF (idiom `hudRadar`); każda flaga czytana przy każdym rysunku — przestawienie w konsoli
     //     (`KOSMOS.gameConfig.FEATURES.hudLabels = false` itd.) działa od następnej klatki; linie tras 3D po przestawieniu
     //     `hudRoutes` na OFF wracają przy najbliższej synchronizacji statków (w pauzie — po klatce gry); F5 wczytuje plik.
@@ -592,6 +594,7 @@ export const GAME_CONFIG = {
     //     właściciela.
     hudLabels: true,
     hudRoutes: true,
+    bodyCardSide: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

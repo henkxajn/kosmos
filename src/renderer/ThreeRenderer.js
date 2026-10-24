@@ -3485,7 +3485,8 @@ export class ThreeRenderer {
   }
 
   // ARKUSZ HUD paczka A — środek sprite'a statku (j.) i promień jego modelu (j.): połowa rozmiaru docelowego × skala świata
-  // wrappera — ten sam rachunek co rdzeń kliku (`_vesselCorePickPx`). `null` bez sprite'a. Etykiety HUD (prześwit nitki).
+  // wrappera — ten sam rachunek co rdzeń kliku (`_vesselCorePickPx`). `null` bez sprite'a. Etykiety HUD (prześwit nitki) i karta
+  // statku z boku modelu (493).
   getVesselWorldInfo(vesselId) {
     const sp = this._vessels.get(vesselId)?.sprite;
     if (!sp) return null;
@@ -3495,6 +3496,24 @@ export class ThreeRenderer {
     const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
     const ws = sp.getWorldScale?.(this._tmpPickScale ?? (this._tmpPickScale = new THREE.Vector3()));
     if (v && ws) out.r = (vesselTargetSize(v) / 2) * Math.max(ws.x, ws.y, ws.z);
+    return out;
+  }
+
+  // ARKUSZ HUD paczka A (493) — środek stacji (j.) i promień jej modelu (j.; sfera prostopadłościanu modelu w świecie,
+  // liczona raz na model — stacja nie obraca się; placeholder → GLB przelicza). `null`, gdy stacji nie ma w scenie.
+  getStationWorldInfo(stationId) {
+    const e = this._stations.get(stationId);
+    if (!e?.mesh) return null;
+    const tmp = this._tmpHudVec ?? (this._tmpHudVec = new THREE.Vector3());
+    e.mesh.getWorldPosition(tmp);
+    const out = { x: tmp.x, y: tmp.y, z: tmp.z, r: 0 };
+    if (e._hudR == null || e._hudRModel !== e.isModel3D) {
+      const box = new THREE.Box3().setFromObject(e.mesh);
+      const sph = box.isEmpty() ? null : box.getBoundingSphere(new THREE.Sphere());
+      e._hudR = sph && Number.isFinite(sph.radius) ? sph.radius : 0;
+      e._hudRModel = e.isModel3D;
+    }
+    out.r = e._hudR;
     return out;
   }
 

@@ -22,6 +22,8 @@ import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import { resolveStationTabHost } from '../utils/StationGroup.js';   // C6c-3 — „Zarządzaj" → zakładka Stacja
 import { getMapInsets }          from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
+import { GAME_CONFIG }           from '../config/GameConfig.js';
+import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc } from './BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493)
 
 // Wymiary
 const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
@@ -121,10 +123,19 @@ export class StationPanel extends BaseOverlay {
     b.ox = ins.left;
     b.ow = Math.max(80, W - ins.left - ins.right);
     b.oh = Math.max(40, H - b.oy - ins.bottom);
-    const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);
     let ax, ay;
-    if (sp) { ax = sp.x + 18;     ay = sp.y - PH / 2; }
-    else    { ax = b.ox + 12;     ay = b.oy + 12; }
+    if (isBodyCardSideOn(GAME_CONFIG.FEATURES)) {
+      // ARKUSZ HUD paczka A (493) — karta z boku modelu stacji (prawo, flip w lewo), px logiczne z projektora HUD; strona
+      // trzymana (histereza — bez migotania lewo↔prawo przy zoomie).
+      this._sideMem ??= makeCardSideMemory();
+      const pl = this._sideMem.place({ key: this._stationId, disc: objectScreenDisc(window.KOSMOS, 'station', this._stationId), PW, PH,
+        bounds: { ox: b.ox, oy: b.oy, ow: b.ow, oh: b.oh }, now: performance.now() });
+      ax = pl.px; ay = pl.py;
+    } else {
+      const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);
+      if (sp) { ax = sp.x + 18;     ay = sp.y - PH / 2; }
+      else    { ax = b.ox + 12;     ay = b.oy + 12; }
+    }
     // C1 (S3.4b) — drag override kotwicy; place() clampuje panel do obszaru mapy.
     const { px, py } = this._float.place(ax, ay, PW, PH, b);
     // Rect + strefa-drag (pas nagłówka POZA przyciskami [✏][▼][✕]) do przeciągania (tryBeginDrag).

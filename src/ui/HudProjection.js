@@ -51,10 +51,11 @@ export function makeHudProjector(v) {
     /** Głębia punktu w przestrzeni widoku [j.] (jak `_viewDepth`); ujemna — za kamerą. */
     depth(x, y, z) { return -toView(x, y, z, tv)[2]; },
 
-    /** Punkt świata → `{ x, y, depth }` (px logiczne) albo `null` (za płaszczyzną bliską kamery). */
-    point(x, y, z) {
+    /** Punkt świata → `{ x, y, depth }` (px logiczne) albo `null` (za płaszczyzną bliską kamery). `near` — próg głębi
+     *  (domyślnie `HUD_NEAR_CLIP`; paczka A, karta 493: kotwica obiektu bliżej niż 0,01 j. — podłoga zoomu stacji 0,005 j.). */
+    point(x, y, z, near = HUD_NEAR_CLIP) {
       toView(x, y, z, tv);
-      if (-tv[2] < HUD_NEAR_CLIP) return null;
+      if (-tv[2] < near) return null;
       viewToScreen(tv[0], tv[1], tv[2], ts);
       return { x: ts[0], y: ts[1], depth: -tv[2] };
     },
