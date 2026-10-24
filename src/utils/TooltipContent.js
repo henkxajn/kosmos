@@ -1,7 +1,7 @@
 // ── M3 P1.5 — Tooltip content lookup (pure helper) ──────────────────────
 // Pure functions zwracające schema tooltip dla danej encji. Dep injection
 // (flag #2 z aprobaty): getTooltipContent(entityType, entity, deps) gdzie
-// deps = { t, colonyManager, empireRegistry } — testowalne offline z mockami.
+// deps = { t, colonyManager, empireRegistry, intelSystem, auToPx } — testowalne offline z mockami.
 //
 // L24 mandate (robust schema): graceful skip linii dla missing fields.
 //   - vessel.hp NIE ISTNIEJE na entity (off-spec #1) → no HP line.
@@ -9,6 +9,8 @@
 //     (flag #1: multi-shape isEnemy / owner / ownerEmpireId).
 //   - planet.owner NIE ISTNIEJE na entity → colonyManager.getColony(planetId).
 //   - planet.population NIE ISTNIEJE na entity → colony.civSystem.population.
+//   - Finding 531: `getColony` zwraca też kolonie AI — kolonia OBCA dostaje właściciela i populację
+//     wg wywiadu (kanon mgły wojny `SystemReveal`), nigdy „Imperium gracza”.
 //   - planet.systemName brak (off-spec #4) → skip linia "System:" (single-system MVP).
 //
 // L31 mandate: explicit type discriminator + null guards. Multi-shape per type.
@@ -16,12 +18,15 @@
 // Output shape: { title, lines: [string] } | null
 //   null gdy entity null/invalid lub unknown type.
 
+import { isPlayerColony } from './ColonyOwnership.js';
+import { resolveSystemReveal } from './SystemReveal.js';
+
 /**
  * Główny entry point.
  *
  * @param {string} entityType — 'vessel' | 'planet' | 'poi'
  * @param {object} entity — runtime instance (Vessel/Planet/POI shape)
- * @param {object} [deps] — { t, colonyManager, empireRegistry }
+ * @param {object} [deps] — { t, colonyManager, empireRegistry, intelSystem, auToPx }
  * @returns {{ title: string, lines: string[] } | null}
  */
 export function getTooltipContent(entityType, entity, deps = {}) {
@@ -144,12 +149,29 @@ function _planetContent(planet, t, deps) {
   // Owner / population — przez colonyManager.getColony lookup
   const colMgr = deps.colonyManager ?? null;
   const colony = colMgr?.getColony?.(planet.id) ?? null;
-  if (colony) {
-    // Owner — colony zawsze player (gracz zarządza własnymi koloniami).
-    // Multi-empire planety obcych dodamy gdy colonyManager wesprze frakcje.
+  if (colony && isPlayerColony(colony)) {
+    // Kolonia GRACZA — właściciel i populacja jak dotąd.
     lines.push(`${t('tooltip.planet.owner')}: ${t('tooltip.empire.player')}`);
     const pop = colony.civSystem?.population;
     if (typeof pop === 'number') {
+      lines.push(`${t('tooltip.planet.population')}: ${Math.floor(pop * 10) / 10}`);
+    }
+  } else if (colony) {
+    // Finding 531 — kolonia OBCA. Dawniej każda kolonia z `getColony` (kolonie AI też tam są) dostawała
+    //   „Właściciel: Imperium gracza” i realną populację przy DOWOLNYM wywiadzie. Teraz oba fakty wg osi WŁAŚCICIELA
+    //   z kanonu mgły wojny (`SystemReveal`, ta sama reguła co panel STRATCOM): nazwa imperium od `contact`, sam fakt
+    //   „obce” od `rumor`, populacja dopiero od `detailed` (D-188-5). Brak wywiadu w `deps` ⇒ fail-closed:
+    //   „nieznany”, bez liczby.
+    const empId = colony.ownerEmpireId;
+    const reveal = resolveSystemReveal({ empireId: empId }, {
+      intelAtLeast: (lvl) => deps.intelSystem?.isAtLeast?.(empId, lvl) === true,
+    });
+    const empName = reveal.ownerIdentity ? (deps.empireRegistry?.get?.(empId)?.name ?? null) : null;
+    if (empName) lines.push(`${t('tooltip.planet.owner')}: ${empName}`);
+    else if (reveal.ownerExists) lines.push(t('fleet.stratcomEmpireForeign'));
+    else lines.push(t('fleet.stratcomEmpireUnknown'));
+    const pop = colony.civSystem?.population;
+    if (reveal.population && typeof pop === 'number') {
       lines.push(`${t('tooltip.planet.population')}: ${Math.floor(pop * 10) / 10}`);
     }
   } else {

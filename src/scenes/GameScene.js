@@ -5902,6 +5902,7 @@ export class GameScene {
       t,
       colonyManager:   window.KOSMOS?.colonyManager ?? null,
       empireRegistry:  window.KOSMOS?.empireRegistry ?? null,
+      intelSystem:     window.KOSMOS?.intelSystem ?? null,  // Finding 531: właściciel / populacja obcej kolonii wg wywiadu
       auToPx:          GAME_CONFIG.AU_TO_PX,  // M3: distance computation w _planetContent
     };
   }
