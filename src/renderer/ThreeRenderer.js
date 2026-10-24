@@ -1222,9 +1222,14 @@ export class ThreeRenderer {
           }
           const pEntry = this._planets.get(dockedAt);
           const mEntry = this._moons.get(dockedAt);
+          // Finding 532: dok przy PLANETOIDZIE (placówka) — ta sama mapa, z której rysowane są placówki
+          // (`getBodyWorldInfo`, `getBodyScreenPosition`); dawniej szukano tylko w planetach i księżycach, więc 2. klik
+          // w statek zadokowany przy planetoidzie nie ruszał kamery ani nie otwierał karty ciała (reguła D-UI-5).
+          const pdEntry = this._planetoids.get(dockedAt);
           const entity = pEntry ? this._entityByUUID.get(pEntry.mesh.uuid)
-                                : mEntry ? this._entityByUUID.get(mEntry.mesh.uuid) : null;
-          const pos = pEntry?.group?.position ?? mEntry?.mesh?.position;
+                                : mEntry ? this._entityByUUID.get(mEntry.mesh.uuid)
+                                : pdEntry ? this._entityByUUID.get(pdEntry.mesh.uuid) : null;
+          const pos = pEntry?.group?.position ?? mEntry?.mesh?.position ?? pdEntry?.mesh?.position;
           if (pos) {
             this._focusEntityId = dockedAt;
             this._cameraController.focusOn(pos.x, pos.z);
