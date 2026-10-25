@@ -3335,6 +3335,7 @@ export class ThreeRenderer {
         while (o && !o.userData?.stationId) o = o.parent;      // walk-up do Group z userData
         if (o?.userData?.stationId) {
           const sid = o.userData.stationId;
+          this.lastClickPick.object = 'station';   // REFORMA ZAKŁADEK T3 (D-TR-14) — scena: klik stacji nie odznacza statku
           clickObject({ type: 'station', id: sid, systemId: sys }, env);
           return true;
         }
@@ -3344,7 +3345,11 @@ export class ThreeRenderer {
     const hits = this._ray.intersectObjects(this._clickable);
     if (hits.length > 0) {
       const entity = this._entityByUUID.get(hits[0].object.uuid);
-      if (entity) { clickObject({ type: 'body', id: entity.id, entity, systemId: sys }, env); return true; }
+      if (entity) {
+        this.lastClickPick.object = 'body';     // REFORMA ZAKŁADEK T3 (D-TR-14) — scena: klik ciała nie odznacza statku
+        clickObject({ type: 'body', id: entity.id, entity, systemId: sys }, env);
+        return true;
+      }
     }
     EventBus.emit('body:deselected');
     return false;

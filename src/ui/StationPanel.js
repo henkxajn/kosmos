@@ -23,7 +23,7 @@ import { resolveHomeColony } from '../utils/TransferStore.js';
 import { resolveStationTabHost } from '../utils/StationGroup.js';   // C6c-3 — „Zarządzaj" → zakładka Stacja
 import { getMapInsets }          from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { GAME_CONFIG }           from '../config/GameConfig.js';
-import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc } from './BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493)
+import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc, cardObstacles } from './BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493); T3 strojenie 1 (544)
 
 // Wymiary
 const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
@@ -126,10 +126,11 @@ export class StationPanel extends BaseOverlay {
     let ax, ay;
     if (isBodyCardSideOn(GAME_CONFIG.FEATURES)) {
       // ARKUSZ HUD paczka A (493) — karta z boku modelu stacji (prawo, flip w lewo), px logiczne z projektora HUD; strona
-      // trzymana (histereza — bez migotania lewo↔prawo przy zoomie).
+      // trzymana (histereza — bez migotania lewo↔prawo przy zoomie). REFORMA ZAKŁADEK T3, strojenie 1 (544): panel statku przy
+      // prawym outlinerze jest przeszkodą — panel stacji staje po wolnej stronie modelu.
       this._sideMem ??= makeCardSideMemory();
       const pl = this._sideMem.place({ key: this._stationId, disc: objectScreenDisc(window.KOSMOS, 'station', this._stationId), PW, PH,
-        bounds: { ox: b.ox, oy: b.oy, ow: b.ow, oh: b.oh }, now: performance.now() });
+        bounds: { ox: b.ox, oy: b.oy, ow: b.ow, oh: b.oh }, obstacles: cardObstacles(window.KOSMOS), now: performance.now() });
       ax = pl.px; ay = pl.py;
     } else {
       const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);

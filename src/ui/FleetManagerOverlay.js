@@ -34,6 +34,8 @@ import { isSystemExplored } from '../utils/SystemExploration.js';
 import { resolveSystemReveal } from '../utils/SystemReveal.js';
 import { resolveStratcomZone } from './StratcomHitLogic.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
+// REFORMA ZAKŁADEK T3 (D-TR-7, D-TR-13) — panel statku przy outlinerze: wspólna krawędź, rozbiórka z potwierdzeniem.
+import { isShipPanelOutlinerOn, confirmThenDisband } from './ShipPanelAnchorLogic.js';
 // D-255a (Finding 154) — JEDNO źródło doboru celu POWROTU: własna kolonia W UKŁADZIE STATKU.
 import { buildFleetReturnPlan } from '../utils/FleetReturnPlan.js';
 import { fleetOffendersOutOfFrame, describeOrderFail, describeFleetOrderRefusal } from '../utils/CameraFrame.js';
@@ -1435,7 +1437,18 @@ export class FleetManagerOverlay {
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = THEME.borderActive ?? THEME.accent;
     ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    if (opts.seamRight === true) {
+      // REFORMA ZAKŁADEK T3 — panel przy wierszu prawego outlinera: bez własnej krawędzi od strony kolumny (wspólną
+      //   krawędzią jest linia kolumny) — trzy boki ramki. Bez `seamRight` (OFF, kotwica zapasowa) — ramka jak dotąd.
+      ctx.beginPath();
+      ctx.moveTo(x + w, y + 0.5);
+      ctx.lineTo(x + 0.5, y + 0.5);
+      ctx.lineTo(x + 0.5, y + h - 0.5);
+      ctx.lineTo(x + w, y + h - 0.5);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    }
 
     // D-MVP-4 — router ma widzieć WYŁĄCZNIE strefy z TEGO rysowania.
     this._hitZones = [];
@@ -2730,6 +2743,9 @@ export class FleetManagerOverlay {
         break;
       }
       case 'disband':
+        // REFORMA ZAKŁADEK T3 (D-TR-13 (a), Finding 543) — przy `shipPanelOutliner` rozbiórka (nieodwracalna) dopiero po
+        //   potwierdzeniu w istniejącym oknie `ConfirmModal` (Esc / tło = anuluj); przy OFF — jak dotąd, jednym klikiem.
+        if (isShipPanelOutlinerOn(GAME_CONFIG.FEATURES)) { this._disbandVesselConfirmed(zone.data.vesselId); break; }
         EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
         this._setSelectedVesselViaUI(null);
         this._missionConfig = null;
@@ -4934,6 +4950,38 @@ export class FleetManagerOverlay {
     //   fan-out PPM w `RightClickMenu`); sukces nadal MILCZY (D-256d). Bliźniak: `FleetCommandPanel._announce`.
     const refusal = describeFleetOrderRefusal(res);
     if (refusal) window.KOSMOS?.eventLogSystem?.push?.({ channel: 'fleet', severity: 'warn', ...refusal });
+  }
+
+  /**
+   * REFORMA ZAKŁADEK T3 (D-TR-13 (a), Finding 543) — rozbiórka statku z potwierdzeniem: `fleet:disbandRequest` DOPIERO
+   * po „Rozwiąż” (`ShipPanelAnchorLogic.confirmThenDisband`); po wysłaniu — zaznaczenie zdjęte (jak dotąd), o ile to
+   * nadal ten statek. Anulowanie (przycisk, Esc, tło) — nic.
+   * @returns {Promise<boolean>} czy żądanie wysłano
+   */
+  async _disbandVesselConfirmed(vesselId) {
+    const vm = window.KOSMOS?.vesselManager;
+    const sent = await confirmThenDisband({
+      vesselId,
+      confirm: () => this._confirmVesselDisband(vm?.getVessel?.(vesselId) ?? null),
+      isAlive: (id) => { const v = vm?.getVessel?.(id); return !!v && !v.isWreck; },
+      emit: (n, p) => EventBus.emit(n, p),
+    });
+    if (sent && this._selectedVesselId === vesselId) {
+      this._setSelectedVesselViaUI(null);
+      this._missionConfig = null;
+    }
+    return sent;
+  }
+
+  /** Okno potwierdzenia rozbiórki statku — istniejący `ConfirmModal` (wzór `_handleDisbandFleet`). */
+  async _confirmVesselDisband(vessel) {
+    const { showConfirmModal } = await import('../ui/ConfirmModal.js');
+    return showConfirmModal({
+      title:        t('fleet.disbandReturn'),
+      message:      t('fleet.disbandVesselConfirm', vessel?.name ?? vessel?.id ?? ''),
+      confirmLabel: t('common.disband'),
+      danger:       true,
+    });
   }
 
   async _handleDisbandFleet(fleetId) {

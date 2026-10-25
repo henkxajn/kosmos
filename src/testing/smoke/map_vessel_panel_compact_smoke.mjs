@@ -32,6 +32,9 @@
 //   A2  panel nie zakrywa sprite'a statku
 //   D1  DRAG na PRAWDZIWYM `FloatingPanel`: dragPos > kotwica, `reanchor()` wraca, clamp
 //   D2  pin ŹRÓDŁOWY: host (FloatingPanel + kotwica + drag) zamontowany w `UIManager`
+//   ⚠ PRZECELOWANE 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): A1, A2, D1, D2 i Z1 opisują
+//     kotwicę przy STATKU — ścieżkę `shipPanelOutliner` OFF (dzisiejszy kod, piny bez zmian). Przy ON panel stoi przy
+//     wierszu prawego outlinera bez przeciągania — warianty „-T3” (pełne piny: `ship_panel_outliner_smoke`).
 //   S1  Finding 260: kółko przewija panel i jest POCHŁANIANE (kontrola: poza panelem `false`)
 //   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
 //   Z   KOLEJNOŚĆ: etykiety mapy rysowane PRZED klastrem paneli (Z1/Z1b panel statku,
@@ -76,6 +79,9 @@ const EntityManager           = (await import('../../core/EntityManager.js')).de
 // na starcie (martwy harness = 0/0 = fałszywa zieleń).
 let MapLogic = null;
 try { MapLogic = await import('../../ui/MapVesselPanelLogic.js'); } catch { /* fail-first */ }
+// REFORMA ZAKŁADEK T3 — kotwica panelu przy wierszu prawego outlinera (moduł powstaje w T3; import owinięty).
+let SPA = null;
+try { SPA = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ FAIL: ' + m); } };
@@ -409,6 +415,23 @@ header('A1  PIN — kotwica panelu: px CSS → px LOGICZNE, offset prawo-dół, 
     const nan = f({ x: NaN, y: 10 }, 1, B, 300, 300, 24);
     ok(nan.anchored === false, 'NaN w pozycji ⇒ fallback, nie panel na NaN');
   }
+  // A1-T3 — przy `shipPanelOutliner` ON kotwica = WIERSZ prawego outlinera; pozycja sprite'a nie jest wejściem.
+  const place = SPA?.computeShipPanelPlacement;
+  const INS = { left: 150, right: 150, top: 28, bottom: 62 };
+  const COL = { x: 1130, y: 28, w: 150, h: 630 };
+  const row = { key: 'vessel:v_1', rowTop: 200, h: 16, anchorY: 200, visible: true, edge: null, viaSection: false };
+  const pr = typeof place === 'function' ? place({ W: 1280, H: 720, insets: INS, column: COL, anchor: row, panelH: 300 }) : null;
+  ok(pr?.mode === 'row' && pr.x === 830 && pr.y === 200,
+     `A1-T3 przy ON kotwica przy wierszu outlinera: x = 1280 − 150 − 300, y = wiersz (jest: ${pr?.x},${pr?.y})`);
+  // kolumna ukryta (klawisz „.”: wcięcie prawe 0) i statek bez wiersza (kolumna widoczna) → dzisiejszy fallback
+  const fbHid = typeof place === 'function' ? place({ W: 1280, H: 720, insets: { ...INS, right: 0 }, column: null, anchor: null, panelH: 300 }) : null;
+  const oldHid = f?.(null, 1, { ox: 158, oy: 36, ow: 1114, oh: 622 }, 300, 300, 24);
+  ok(fbHid?.mode === 'fallback' && fbHid.x === oldHid?.x && fbHid.y === oldHid?.y,
+     `A1-T3 kolumna ukryta → kotwica zapasowa = dzisiejszy fallback (${fbHid?.x},${fbHid?.y} = ${oldHid?.x},${oldHid?.y})`);
+  const fbRow = typeof place === 'function' ? place({ W: 1280, H: 720, insets: INS, column: COL, anchor: null, panelH: 300 }) : null;
+  const oldRow = f?.(null, 1, { ox: 158, oy: 36, ow: 964, oh: 622 }, 300, 300, 24);
+  ok(fbRow?.mode === 'fallback' && fbRow.x === oldRow?.x && fbRow.y === oldRow?.y,
+     `A1-T3 statek bez wiersza w liście (kolumna widoczna) → ten sam fallback (${fbRow?.x},${fbRow?.y} = ${oldRow?.x},${oldRow?.y})`);
 }
 
 // ═══ A2 — PANEL NIE ZAKRYWA STATKU ═══════════════════════════════════════════════════════════
@@ -427,6 +450,11 @@ header('A2  PIN — zakotwiczony panel nie zachodzi na sprite statku');
     ok(!overlaps, `panel zaczyna się poza sprite'em (panel ${a.x},${a.y} vs statek ${shipLogical.x},${shipLogical.y} r=${SPRITE_R})`);
     ok(a.x > shipLogical.x && a.y > shipLogical.y, 'kierunek: PRAWO-DÓŁ od statku');
   }
+  // A2-T3 — przy ON panel stoi przy kolumnie (sprite statku nie jest wejściem kotwicy — 529): nie zasłania kolumny,
+  // prawa krawędź = lewa krawędź kolumny.
+  const pr = SPA?.computeShipPanelPlacement?.({ W: 1280, H: 720, insets: { left: 150, right: 150, top: 28, bottom: 62 },
+    column: { x: 1130, y: 28, w: 150, h: 630 }, anchor: { rowTop: 400, h: 16, anchorY: 400, visible: true, edge: null }, panelH: 300 });
+  ok(!!pr && pr.x + pr.w === 1130 && pr.x >= 150, `A2-T3 przy ON panel kończy się na lewej krawędzi kolumny (${pr?.x}–${pr ? pr.x + pr.w : '—'})`);
 }
 
 // ═══ D1 — DRAG: `dragPos` wygrywa nad kotwicą, `reanchor()` go zdejmuje ══════════════════════
@@ -455,6 +483,27 @@ header('D1  PIN — drag panelu: dragPos wygrywa nad kotwicą, reanchor wraca do
   const far = fp2.place(5000, 5000, 300, 300, B);
   ok(far.px <= B.ox + B.ow - 300 && far.py <= B.oy + B.oh - 300,
      `clamp trzyma panel na ekranie (${far.px},${far.py})`);
+  // D1-T3 — przy ON bez przeciągania: `UIManager.tryBeginVesselPanelDrag` (wycięte ze źródła) wraca `false` przed
+  // `beginDrag`; przy OFF ten sam punkt nagłówka chwyta (dzisiejszy kod).
+  const { readFileSync } = await import('node:fs');
+  const ui = readFileSync(new URL('../../scenes/UIManager.js', import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
+  const i0 = ui.indexOf('  tryBeginVesselPanelDrag(x, y) {');
+  const txt = i0 < 0 ? '' : ui.slice(i0, ui.indexOf('\n  }\n', i0) + 4).split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  let drag = null;
+  try {
+    drag = new Function('GAME_CONFIG', 'isShipPanelOutlinerOn', '__s', 'return eval("(function " + __s.trim().slice("tryBeginVesselPanelDrag".length) + ")");')(
+      GAME_CONFIG, SPA?.isShipPanelOutlinerOn, txt);
+  } catch { drag = null; }
+  const self = { _mapSurface: () => 'vessel', overlayManager: { isAnyOpen: () => false },
+    _fleetOverlay: { _vesselPanelRect: { x: 100, y: 100, w: 300, h: 300 } }, _vesselPanelFloat: new FloatingPanel() };
+  const was = GAME_CONFIG.FEATURES.shipPanelOutliner;
+  GAME_CONFIG.FEATURES.shipPanelOutliner = true;
+  let on = null; try { on = drag ? drag.call(self, 150, 110) : null; } catch { on = 'WYJĄTEK'; }
+  ok(on === false && self._vesselPanelFloat.isDragging() === false, 'D1-T3 przy ON nagłówek panelu nie chwyta (bez przeciągania)');
+  GAME_CONFIG.FEATURES.shipPanelOutliner = false;
+  let off = null; try { off = drag ? drag.call(self, 150, 110) : null; } catch { off = 'WYJĄTEK'; }
+  ok(off === true, 'D1-T3 KONTROLA: przy OFF ten sam punkt chwyta (przeciąganie jak dziś)');
+  GAME_CONFIG.FEATURES.shipPanelOutliner = was;
 }
 
 // ═══ D2 — pin ŹRÓDŁOWY: host jest ZAMONTOWANY w UIManagerze ══════════════════════════════════
@@ -473,6 +522,11 @@ header('D2  PIN ŹRÓDŁOWY — FloatingPanel + kotwica + drag realnie wpięte w
   ok(code.includes('reanchor()'), 'zmiana statku wraca do kotwicy');
   ok(code.length > 50000, `KONTROLA: źródło realnie wczytane (${code.length} zn.)`);
   ok(!code.includes('resolveVesselPanelAnchorXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+  // D2-T3 — przy ON `_vesselPanelBounds` kończy się kotwicą wiersza ZANIM dojdzie do FloatingPanel / kotwicy przy statku.
+  const vb = code.slice(code.indexOf('_vesselPanelBounds(W, H) {'), code.indexOf('tryBeginVesselPanelDrag(x, y) {'));
+  const iT3 = vb.indexOf('if (isShipPanelOutlinerOn(GAME_CONFIG.FEATURES)) return this._shipPanelAtOutliner(W, H, w, h);');
+  ok(iT3 > 0 && iT3 < vb.indexOf('resolveVesselPanelAnchor(') && iT3 < vb.indexOf('this._vesselPanelFloat.place('),
+     'D2-T3 przy ON kotwica wiersza przed kotwicą przy statku i przed `FloatingPanel` (pływający panel wyłączony — 529)');
 }
 
 
@@ -576,6 +630,11 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
   // Z1 / Z1b — etykiety przed panelem statku.
   ok(iLabels < iPanel, `Z1: plakietki kolonii PRZED panelem statku (${iLabels} < ${iPanel})`);
   ok(iVessLb < iPanel, `Z1b: plakietki flotowe PRZED panelem statku (${iVessLb} < ${iPanel})`);
+  // Z1-T3 — przy ON panel stoi przy wierszu prawego outlinera: outliner rysowany PRZED panelem (układ listy z tej samej
+  // klatki), łącznik z wierszem PO panelu.
+  const iOutl = at('this._outliner.draw(');
+  const iTab  = at('this._drawShipPanelTab(ctx, r)');
+  ok(iOutl > 0 && iOutl < iPanel && iTab > iPanel, `Z1-T3: prawy outliner PRZED panelem, łącznik PO nim (${iOutl} < ${iPanel} < ${iTab})`);
 
   // Z2 — to jest fix KLASOWY, nie jednopanelowy.
   ok(iLabels < iStation && iVessLb < iStation, `Z2: etykiety PRZED stationPanel (${iLabels}/${iVessLb} < ${iStation})`);

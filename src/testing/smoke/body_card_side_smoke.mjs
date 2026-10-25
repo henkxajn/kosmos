@@ -15,6 +15,11 @@
 //       zaznaczeniu i trzymana; zmiana tylko, gdy karta na bieżącej stronie wyszłaby poza obszar mapy (i druga się mieści),
 //       nie częściej niż co 400 ms; nowy obiekt / karta schowana dłużej — wybór od nowa; KONTROLA: ta sama scena bez pamięci
 //       migocze (scena odtwarza zgłoszenie)
+//   C6  PRZESZKODA (REFORMA ZAKŁADEK T3, strojenie 1, Finding 544): panel statku przy prawym outlinerze — karta ciała /
+//       stacji na wolnej stronie (scena K12: KONTROLA — bez przeszkody karta zachodzi na panel); żadna wolna — większy
+//       prześwit; przeszkoda nie czeka na histerezę; przeszkoda poza kandydatami — wynik jak bez niej; `cardObstacles`;
+//       montaż: karta ciała i panel stacji podają przeszkody, `UIManager` — prostokąt z ostatniej klatki tylko przy ON
+//   ⚠ C4a — wzorzec wywołania uzupełniony o `obstacles: cardObstacles(window.KOSMOS)` (strojenie 1 T3; to samo wywołanie).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -131,7 +136,7 @@ header('C3  scena ZF: Nowa Ziemia po fokusie — karta obok tarczy');
 header('C4  montaż (piny źródłowe): ON — z boku, OFF — dzisiejsze kotwice');
 {
   const bc = strip(src('../../ui/BottomContext.js'));
-  ok(/if \(isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)\) \{\s*this\._sideMem \?\?= makeCardSideMemory\(\);\s*pl = this\._sideMem\.place\(\{ key: entity\.id, disc: objectScreenDisc\(window\.KOSMOS, 'body', entity\.id\), PW, PH, bounds, now: performance\.now\(\) \}\);\s*\} else \{\s*const sp = window\.KOSMOS\?\.threeRenderer\?\.getBodyScreenPosition\?\.\(entity\.id\) \?\? null;\s*pl = computeFloatingPlacement\(/.test(bc),
+  ok(/if \(isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)\) \{\s*this\._sideMem \?\?= makeCardSideMemory\(\);\s*pl = this\._sideMem\.place\(\{ key: entity\.id, disc: objectScreenDisc\(window\.KOSMOS, 'body', entity\.id\), PW, PH, bounds,\s*obstacles: cardObstacles\(window\.KOSMOS\), now: performance\.now\(\) \}\);\s*\} else \{\s*const sp = window\.KOSMOS\?\.threeRenderer\?\.getBodyScreenPosition\?\.\(entity\.id\) \?\? null;\s*pl = computeFloatingPlacement\(/.test(bc),
     'C4a: karta ciała — z boku tarczy z pamięcią strony (klucz = ciało) przy ON; przy OFF `computeFloatingPlacement` jak dziś');
   const sp = strip(src('../../ui/StationPanel.js'));
   ok(/if \(isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)\) \{[\s\S]{0,300}?this\._sideMem \?\?= makeCardSideMemory\(\);\s*const pl = this\._sideMem\.place\(\{ key: this\._stationId, disc: objectScreenDisc\(window\.KOSMOS, 'station', this\._stationId\)[\s\S]{0,300}?\} else \{\s*const sp = window\.KOSMOS\?\.threeRenderer\?\.getStationScreenPosition\?\.\(this\._stationId\);\s*if \(sp\) \{ ax = sp\.x \+ 18;/.test(sp),
@@ -141,6 +146,11 @@ header('C4  montaż (piny źródłowe): ON — z boku, OFF — dzisiejsze kotwic
     'C4c: panel statku — z boku modelu z pamięcią strony (klucz = statek) przy ON (bez sprite\'a — kotwica zapasowa); przy OFF `resolveVesselPanelAnchor` jak dziś');
   ok(/getMapInsets/.test(bc) && /getMapInsets/.test(sp) && /_vesselPanelBounds\(W, H\) \{[\s\S]{0,1200}?getMapInsets\(window\.KOSMOS\)/.test(ui),
     'C4d: KONTROLA — kadr karty: obszar mapy z `MapInsets` (pod outlinerami i pasem; zielona po obu stronach)');
+  // ⚠ C4c PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): pin wyżej — ścieżka
+  //   `shipPanelOutliner` OFF (493 dla panelu statku); przy ON panel statku stoi przy wierszu prawego outlinera, a gałąź
+  //   T3 wraca ZANIM `_vesselPanelBounds` dojdzie do kotwicy z boku modelu (karta ciała i panel stacji — bez zmian, do T2).
+  ok(/_vesselPanelBounds\(W, H\) \{[\s\S]{0,800}?if \(isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\)\) return this\._shipPanelAtOutliner\(W, H, w, h\);[\s\S]{0,800}?const disc = isBodyCardSideOn\(GAME_CONFIG\.FEATURES\)/.test(ui),
+    'C4c-T3: przy ON panel statku bez kotwicy z boku modelu — gałąź wiersza outlinera przed `objectScreenDisc`');
 }
 
 // ═══ C5 ══════════════════════════════════════════════════════════════════════
@@ -181,6 +191,64 @@ header('C5  histereza strony karty (migotanie lewo↔prawo przy zoomie na stacj�
   m4?.place?.({ key: 'p_x', disc: { x: 950, y: 400, r: 10 }, PW: 260, PH: 300, bounds: B, now: 0 });               // lewa
   const back = m4?.place?.({ key: 'p_x', disc: { x: 500, y: 400, r: 10 }, PW: 260, PH: 300, bounds: B, now: 5000 });  // po przerwie
   ok(n1?.side === 'right' && back?.side === 'right', 'C5e: nowy obiekt albo ponowne pokazanie karty po przerwie — strona wybrana od nowa');
+}
+
+// ═══ C6 ══════════════════════════════════════════════════════════════════════
+header('C6  przeszkoda — panel statku przy prawym outlinerze (T3, strojenie 1, Finding 544)');
+{
+  // Scena K12 (ZF gy120, okno właściciela — logicznie 1280×945): tarcza Nowej Ziemi przy x 639, panel „Frachtu” przy wierszu
+  // prawego outlinera x 830–1130, y 98–398; obszar mapy 150–1130 × 28–883.
+  const BK = { ox: 150, oy: 28, ow: 980, oh: 855 };
+  const PANEL = { x: 830, y: 98, w: 300, h: 300 };
+  const disc = { x: 639, y: 472, r: 7 };
+  const PW = 260, PH = 260;
+  const over = (p, o) => !!p && p.px < o.x + o.w && p.px + PW > o.x && p.py < o.y + o.h && p.py + PH > o.y;
+  const bare = call(CS?.computeSideCardPlacement, { disc, PW, PH, bounds: BK });
+  const withP = call(CS?.computeSideCardPlacement, { disc, PW, PH, bounds: BK, obstacles: [PANEL] });
+  ok(bare?.side === 'right' && over(bare, PANEL), `C6-0 KONTROLA: bez przeszkody karta po prawej zachodzi na panel statku (px ${bare?.px}) — scena odtwarza 544`);
+  ok(withP?.side === 'left' && !over(withP, PANEL) && withP.blocked === false && withP.overDisc === false && withP.fits === true,
+    `C6a SEDNO: z przeszkodą — karta po lewej, wolna, nie na tarczy (px ${withP?.px})`);
+  // Przeszkoda nie czeka na histerezę: zmiana strony 20 ms po poprzedniej, gdy trzymana strona leży pod przeszkodą.
+  const OB = { x: 180, y: 300, w: 300, h: 200 };   // zasłania lewą stronę tarczy (500, 400)
+  const seq = (obs3, disc3) => {
+    const m = call(CS?.makeCardSideMemory);
+    const a = m?.place?.({ key: 'p', disc: { x: 500, y: 400, r: 20 }, PW, PH: 300, bounds: B, now: 0 })?.side;      // prawa
+    const b = m?.place?.({ key: 'p', disc: { x: 1000, y: 400, r: 20 }, PW, PH: 300, bounds: B, now: 20 })?.side;   // prawa poza kadrem → lewa
+    const c = m?.place?.({ key: 'p', disc: disc3, PW, PH: 300, bounds: B, now: 40, obstacles: obs3 });
+    return { a, b, c };
+  };
+  const blockedSeq = seq([OB], { x: 500, y: 400, r: 20 });
+  ok(blockedSeq.a === 'right' && blockedSeq.b === 'left' && blockedSeq.c?.side === 'right' && blockedSeq.c.blocked === false,
+    `C6b przeszkoda na trzymanej stronie — zmiana od razu, 20 ms po poprzedniej (${blockedSeq.a} → ${blockedSeq.b} → ${blockedSeq.c?.side})`);
+  const lockSeq = seq([], { x: 200, y: 400, r: 20 });
+  ok(lockSeq.b === 'left' && lockSeq.c?.side === 'left', `C6b KONTROLA: bez przeszkody histereza trzyma stronę 400 ms (${lockSeq.b} → ${lockSeq.c?.side})`);
+  // Żadna strona wolna — większy prześwit (tarcza większa niż kadr, panel po prawej w pasie karty).
+  const big = { x: 640, y: 450, r: 300 }, PANEL2 = { x: 830, y: 300, w: 300, h: 300 };
+  const bigBare = call(CS?.computeSideCardPlacement, { disc: big, PW, PH, bounds: BK });
+  const bigP = call(CS?.computeSideCardPlacement, { disc: big, PW, PH, bounds: BK, obstacles: [PANEL2] });
+  ok(bigBare?.side === 'right' && bigBare.fits === false, 'C6c KONTROLA: tarcza większa niż kadr bez przeszkody — strona z większym zapasem kadru (prawa, remis)');
+  ok(bigP?.side === 'left' && bigP.blocked === false, `C6c żadna strona wolna, panel po prawej — strona z większym prześwitem (lewa, px ${bigP?.px})`);
+  // Przeszkoda poza kandydatami — wynik jak bez niej (co do pola).
+  const far = { x: 900, y: 800, w: 100, h: 40 };
+  const s0 = call(CS?.computeSideCardPlacement, { disc: { x: 500, y: 400, r: 20 }, PW, PH, bounds: BK });
+  const s1 = call(CS?.computeSideCardPlacement, { disc: { x: 500, y: 400, r: 20 }, PW, PH, bounds: BK, obstacles: [far, null, { x: NaN, y: 0, w: 1, h: 1 }] });
+  ok(!!s0 && JSON.stringify(s0) === JSON.stringify(s1), 'C6d KONTROLA (niezmiennik): przeszkoda poza kandydatami (i wpisy nieprawidłowe) — wynik co do pola jak bez niej');
+  const mem = call(CS?.makeCardSideMemory);
+  const mp = mem?.place?.({ key: 'p_nz', disc, PW, PH, bounds: BK, obstacles: [PANEL], now: 0 });
+  ok(mp?.side === 'left' && mp.blocked === false, 'C6e pamięć strony podaje przeszkody (scena K12 — lewa)');
+  const K0 = { uiManager: { getShipPanelObstacle: () => null } }, K1 = { uiManager: { getShipPanelObstacle: () => ({ ...PANEL }) } };
+  const o0 = call(CS?.cardObstacles, K0), o1 = call(CS?.cardObstacles, K1), o2 = call(CS?.cardObstacles, {});
+  ok(Array.isArray(o0) && o0.length === 0 && Array.isArray(o2) && o2.length === 0 && o1?.length === 1 && o1[0].x === 830,
+    'C6f `cardObstacles`: panel statku z `UIManager.getShipPanelObstacle` — jest → [prostokąt], brak → []');
+  // Montaż (piny źródłowe).
+  const sp = strip(src('../../ui/StationPanel.js')), bcx = strip(src('../../ui/BottomContext.js')), ui = strip(src('../../scenes/UIManager.js'));
+  ok(/key: this\._stationId, disc: objectScreenDisc\(window\.KOSMOS, 'station', this\._stationId\), PW, PH,\s*bounds: \{ ox: b\.ox, oy: b\.oy, ow: b\.ow, oh: b\.oh \}, obstacles: cardObstacles\(window\.KOSMOS\), now: performance\.now\(\) \}\);/.test(sp)
+    && /obstacles: cardObstacles\(window\.KOSMOS\), now: performance\.now\(\)/.test(bcx),
+    'C6g montaż: panel stacji i karta ciała podają przeszkody (`cardObstacles(window.KOSMOS)`)');
+  const go = ui.slice(ui.indexOf('  getShipPanelObstacle() {'), ui.indexOf('  _noteShipPanelDrawn(rect) {'));
+  ok(/if \(!isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\)\) return null;/.test(go) && /shipPanelDrawn = this\._fleetOverlay\?\._vesselPanelRect \?\? null;/.test(ui)
+    && /if \(isShipPanelOutlinerOn\(GAME_CONFIG\.FEATURES\)\) this\._noteShipPanelDrawn\(shipPanelDrawn\);/.test(ui),
+    'C6h montaż: `UIManager` — prostokąt panelu z ostatniej klatki, tylko przy `shipPanelOutliner` (OFF — brak przeszkody, karty jak dziś)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

@@ -1627,6 +1627,7 @@ export default {
   'fleet.phaseLabel': 'PHASE:',
   'fleet.disbandReturn': '🗑 Disband (75% refund)',
   'fleet.disbandRequiresShipyard': '🗑 Disband — requires shipyard',
+  'fleet.disbandVesselConfirm': 'Disband vessel "{0}"? This cannot be undone.',
   'fleet.refuelNow': '⛽ Refuel',
   'fleet.refuelAutoOn': 'Auto: ON',
   'fleet.refuelAutoOff': 'Auto: OFF',

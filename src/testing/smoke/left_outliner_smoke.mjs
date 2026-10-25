@@ -441,6 +441,11 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   const vpb = body(ui, '  _vesselPanelBounds(W, H) {');
   ok(/getMapInsets\(window\.KOSMOS\)/.test(vpb) && /ox: ins\.left \+ 8/.test(vpb) && /H - ins\.bottom - oy/.test(vpb),
     'L7i panel statku (tryb kompaktowy): obszar clampu z `MapInsets` (za outlinerem, nad dołem)');
+  // ⚠ L7i PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): pin wyżej — ścieżka
+  //   `shipPanelOutliner` OFF; przy ON panel przy wierszu prawego outlinera bierze wcięcia z TEGO SAMEGO źródła.
+  const spo = body(ui, '  _shipPanelAtOutliner(W, H, w, h) {');
+  ok(/insets: getMapInsets\(K\)/.test(spo) && /column: shown \? ro\._rect : null/.test(spo),
+    'L7i-T3 przy ON: klamra panelu z `MapInsets` (góra — pod belką, dół — nad pasem), kolumna z ostatniego rysunku outlinera');
   const tr = src('../../renderer/ThreeRenderer.js');
   const wf = body(tr, '  _computeWatchFit(enc) {');
   ok(/const ins = getMapInsets\(window\.KOSMOS\);/.test(wf) && /leftW: ins\.left\b/.test(wf),

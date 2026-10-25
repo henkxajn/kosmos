@@ -37,6 +37,10 @@
 //            Odwrót ZOSTAJE — to inna akcja). Zwęża też Finding 154: producentów 3 → 2.
 //   P12      ③ — klik w PROSTOKĄT panelu jest pochłaniany ZAWSZE, także bez trafienia w strefę
 //            (kontrola kierunku: poza prostokątem nadal `false`, inaczej panel zjadałby mapę)
+//   ⚠ P11, P12 — PRZECELOWANE 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): piny bez zmian
+//     (prostokąt panelu niezależny od kotwicy); dochodzą warianty „-T3” — panel przy wierszu prawego outlinera
+//     (`shipPanelOutliner` ON): jeden producent rysowania za bramką trybu Y (D-TR-10) i pochłanianie kliku w nowym
+//     prostokącie (wspólna krawędź z kolumną — `seamRight`).
 //   P13      INTEGRACJA — akcja CELOWANA klikana z panelu mapy zmienia stan PRAWDZIWEGO
 //            `MissionSystem` (+ P13-src: pin premisy populacji)
 //   P-plate  płyta tła pokrywa CAŁY prostokąt panelu i NIE jest strefą (absorber ③ ma być
@@ -682,6 +686,13 @@ header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia 
      `dokładnie JEDNO miejsce wywołania fleetGroupPanel.draw( (jest: ${cnt(uiCode, 'fleetGroupPanel.draw(')})`);
   ok(cnt(uiCode, 'drawVesselPanel?.(') === 1,
      `dokładnie JEDNO miejsce wywołania drawVesselPanel?.( (jest: ${cnt(uiCode, 'drawVesselPanel?.(')})`);
+  // P11-T3 — przy ON ten sam JEDYNY producent, za bramką trybu Y (rozwinięty Dok — panel statku się nie rysuje, D-TR-10).
+  ok(/!this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*const r = this\._vesselPanelBounds\(W, H\);/.test(uiCode),
+     'P11-T3: jedyne wywołanie panelu statku za bramką trybu Y (`_shipPanelDockHidden`) i powierzchni N == 1');
+  let SPA = null; try { SPA = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
+  ok(SPA?.shipPanelHiddenByDock?.({ shipPanelOutliner: true }, true) === true && SPA?.shipPanelHiddenByDock?.({ shipPanelOutliner: true }, false) === false
+     && SPA?.shipPanelHiddenByDock?.({}, true) === false,
+     'P11-T3: rozwinięty Dok chowa panel statku tylko przy ON (zwinięty — panel przy wierszu; OFF — jak dziś, 542)');
 
   vm._vessels.delete('v_2');
   delete window.KOSMOS.fleetSystem;
@@ -804,6 +815,21 @@ header('P12  PIN — klik WEWNĄTRZ prostokąta panelu jest pochłaniany także 
     fmo.handleVesselPanelClick(az.x + az.w / 2, az.y + az.h / 2);
     ok(spy.length === 1, `KONTROLA: trafiona akcja DALEJ dyspozycjonuje (wywołań: ${spy.length})`);
   }
+  // P12-T3 — panel przy wierszu prawego outlinera (x 830 = 1280 − 150 − 300, wspólna krawędź `seamRight`): ten sam router —
+  // klik w prostokąt pochłaniany, tuż za jego prawą krawędzią (kolumna outlinera) — nie; panel zdjęty przez Dok — nie.
+  let SPA2 = null; try { SPA2 = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
+  const pT3 = SPA2?.computeShipPanelPlacement?.({ W: 1280, H: 720, insets: { left: 150, right: 150, top: 28, bottom: 62 },
+    column: { x: 1130, y: 28, w: 150, h: 630 }, anchor: { rowTop: 160, h: 16, anchorY: 160, visible: true, edge: null }, panelH: 300 });
+  const f2 = new FleetManagerOverlay();
+  f2._selectedVesselId = 'v_1';
+  if (pT3) f2.drawVesselPanel(stubCtx(), pT3.x, pT3.y, pT3.w, pT3.h, { compact: true, seamRight: pT3.seam === true });
+  const r2 = f2._vesselPanelRect;
+  ok(r2?.x === 830 && r2?.y === 160 && r2?.w === 300 && r2?.h === 300 && pT3?.seam === true,
+     `P12-T3 prostokąt panelu przy wierszu outlinera (kotwica T3, wspólna krawędź): ${JSON.stringify(r2)}`);
+  ok(!!r2 && f2.handleVesselPanelClick(1129, 300) === true, 'P12-T3 klik przy wspólnej krawędzi (wewnątrz panelu) — pochłonięty');
+  ok(!!r2 && f2.handleVesselPanelClick(1135, 300) === false, 'P12-T3 klik w kolumnę outlinera (za panelem) — nie dla panelu');
+  f2._vesselPanelRect = null;
+  ok(f2.handleVesselPanelClick(900, 300) === false, 'P12-T3 KONTROLA: prostokąt zdjęty (panel schowany przez Dok — D-TR-10) — klik nie pochłonięty');
 }
 
 // ═══ P13 — INTEGRACJA: rozkaz CELOWANY z panelu mapy dochodzi do PRAWDZIWEGO MissionSystem ══

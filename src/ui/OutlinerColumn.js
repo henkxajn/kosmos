@@ -55,6 +55,10 @@ export class OutlinerColumn {
     this._hoverKey      = null;                        // `typ:id` najechanego wiersza
     this._revealKey     = null;                        // klucz wiersza do przewinięcia w widok (zaznaczenie z mapy)
     this._rect          = null;                        // ostatnio narysowana kolumna {x,y,w,h}
+    // REFORMA ZAKŁADEK T3 — układ listy z ostatniej klatki: okno listy (`contentTop`, `viewH`), przewinięcie i położenie
+    // wierszy w treści (klucz → { y, h }) + wynik modelu; null, gdy kolumna ukryta. Czyta go panel statku przy wierszu
+    // prawego outlinera (`ShipPanelAnchorLogic.resolveRowAnchor`) w tej samej klatce (`UIManager._draw`: outliner przed panelem).
+    this._layout        = null;
     this._tip           = null;                        // podpowiedź najechania { text | lines, x, y }
   }
 
@@ -115,7 +119,7 @@ export class OutlinerColumn {
   draw(ctx, W, H, input = {}) {
     const K = input.K ?? this._K();
     this._clickTargets = [];
-    if (!this.isShown(K)) { this._rect = null; return null; }
+    if (!this.isShown(K)) { this._rect = null; this._layout = null; return null; }
     const g = this._geom(W, H, K);
     this._rect = g;
     const model = this._model(K, input, g);
@@ -139,6 +143,11 @@ export class OutlinerColumn {
       this._revealKey = null;
     }
     this._scrollY = Math.max(0, Math.min(this._maxScroll, this._scrollY));
+    this._layout = {
+      contentTop, viewH, scrollY: this._scrollY,
+      rows: new Map(model.items.map((it) => [it.key, { y: it.y, h: it.h }])),
+      result: model.result ?? null,
+    };
 
     ctx.save();
     ctx.beginPath(); ctx.rect(g.x, contentTop, g.w, viewH); ctx.clip();

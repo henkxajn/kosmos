@@ -595,6 +595,19 @@ export const GAME_CONFIG = {
     hudLabels: true,
     hudRoutes: true,
     bodyCardSide: true,
+
+    // ── REFORMA ZAKŁADEK T3 (TABS_REFORM_PLAN.md §5.2; D-TR-7, 8, 10, 13, 14) — panel statku przy prawym outlinerze ──
+    // shipPanelOutliner: panel statku (tryb kompaktowy, treść `_drawRight` bez zmian) wysunięty W LEWO od prawego outlinera
+    //   na wysokości wiersza zaznaczonego statku (`ShipPanelAnchorLogic.js`): prawa krawędź = lewa krawędź kolumny, wspólna
+    //   krawędź i łącznik z wierszem, klamra do obszaru mapy; wiersz przewinięty poza listę — panel przy górnej / dolnej
+    //   krawędzi listy; kolumna ukryta (klawisz „.”) — kotwica zapasowa jak dziś (prawy górny róg obszaru mapy); bez
+    //   przeciągania; tryb Y z rozwiniętym Dokiem — panel się nie rysuje (542); przełączenie układu zdejmuje zaznaczenie
+    //   statku spoza układu docelowego; klik ciała / stacji na mapie nie zdejmuje zaznaczenia statku (539); rozbiórka
+    //   statku dopiero po potwierdzeniu (543). Przy ON pływający panel statku (kotwica przy modelu, 493) wyłączony (529).
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejszy kod co do bitu; flaga czytana przy każdym rysunku
+    //     i kliku — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.shipPanelOutliner = false`) działa od następnej
+    //     klatki; F5 wczytuje wartość z tego pliku.
+    shipPanelOutliner: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

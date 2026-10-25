@@ -28,6 +28,8 @@
 //       położenie), flota, nagłówek (klawisze)
 //   R9  `MapInsets.right` = 150 przy widocznej kolumnie (0 ukryta); kotwica zapasowa panelu statku i `StationPanel`
 //       kończą się przed nią (KONTROLA: kolumna ukryta — do krawędzi ekranu)
+//       ⚠ R9d PRZECELOWANY 2026-10-24 (REFORMA ZAKŁADEK T3, `TABS_REFORM_PLAN.md` §5.3, za zgodą): pin bez zmian (kotwica
+//       zapasowa — `shipPanelOutliner` OFF); R9d-T3 — przy ON panel przy wierszu kończy się DOKŁADNIE na kolumnie
 //   R10 Tab (reszta 478): `cycleSelectedVessel` = zaznaczenie + „drugi klik” reguły — statek z innego układu przełącza
 //       układ, potem kamera (wykonanie metody wyciętej z UIManagera)
 //   R11 Finding 477 — `pingVessel` z terminem układu (wykonanie wyciętej metody)
@@ -377,6 +379,21 @@ header('R9  `MapInsets.right` i konsumenci (kotwica panelu statku, StationPanel)
   const b = { ox: ins.left + 8, oy: ins.top + 8, ow: Math.max(80, W - ins.left - ins.right - 16), oh: 400 };
   const a = resolveVesselPanelAnchor(null, 1, b, 300, 300, 24);
   ok(a.x + 300 <= W - 150, `R9d kotwica zapasowa panelu statku kończy się przed kolumną (prawa krawędź ${a.x + 300})`);
+  // R9d-T3 — przy `shipPanelOutliner` ON panel statku przy wierszu zaznaczonego statku: prawa krawędź = lewa krawędź kolumny
+  // (wspólna krawędź), z PRAWDZIWEGO układu listy (`Outliner._layout`); kolumna schowana — kotwica zapasowa do krawędzi ekranu.
+  let SPA = null; try { SPA = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
+  reset({ sel: ['v1'] }); draw(ro);
+  const L = ro?._layout;
+  const an = SPA?.resolveRowAnchor?.(L, SPA?.shipRowKeys?.('v1', L?.result));
+  const pT3 = SPA?.computeShipPanelPlacement?.({ W, H, insets: MI?.getMapInsets?.(K), column: ro?._rect ?? null, anchor: an, panelH: 300 });
+  const zv1 = zone(ro, 'vessel', 'v1');
+  ok(pT3?.mode === 'row' && pT3.x + pT3.w === W - 150 && pT3.y === zv1?.y,
+    `R9d-T3 przy ON panel przy wierszu „Kurier” kończy się dokładnie na kolumnie (${pT3?.x}–${pT3 ? pT3.x + pT3.w : '—'}, y ${pT3?.y} = ${zv1?.y})`);
+  if (ro) ro.visible = false; draw(ro);
+  const pHid = SPA?.computeShipPanelPlacement?.({ W, H, insets: MI?.getMapInsets?.(K), column: null, anchor: null, panelH: 300 });
+  ok(pHid?.mode === 'fallback' && pHid.x + 300 > W - 150, `R9d-T3b kolumna schowana — kotwica zapasowa może sięgać krawędzi ekranu (x ${pHid?.x})`);
+  if (ro) ro.visible = true;
+  reset();
   // StationPanel — stacja tuż przy prawej krawędzi ekranu. ARKUSZ HUD paczka A (493): to kotwica sprzed zmiany (`sp.x + 18`)
   // — ścieżka `bodyCardSide` OFF; przy ON panel stoi z boku modelu stacji (keeper `body_card_side_smoke`, kadr z `MapInsets`).
   const sideWas = GAME_CONFIG.FEATURES.bodyCardSide;

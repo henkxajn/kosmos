@@ -13,6 +13,7 @@ import { tacticalToWorld } from '../utils/TacticalRaycaster.js';
 import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } from '../ui/POIModal.js';
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import { systemDisplayName }  from '../ui/MapLabelLogic.js';
+import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 (D-TR-14)
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -6003,7 +6004,7 @@ export class GameScene {
     if (isMapCanvas) {
       if (!GAME_CONFIG.FEATURES?.fcConsole) return;
       if (!this.uiManager?.isPickerActive?.()) {
-        this._selectFromClickPick(vid, multi, null);
+        this._selectFromClickPick(vid, multi, null, pick?.object ?? null);
         return;
       }
       // picker aktywny → kontynuuj do worldPoint flow niżej (NIE return)
@@ -6046,7 +6047,7 @@ export class GameScene {
 
     // Cel kliku inny niż canvas mapy (np. ekran ładowania): statek z pickera renderera; raycast sceny rozstrzyga już
     // wyłącznie „pustka czy ciało” (pustka → odznaczenie zbioru; ciało / POI → zbiór bez zmian, jak dotąd).
-    this._selectFromClickPick(vid, multi, target);
+    this._selectFromClickPick(vid, multi, target, pick?.object ?? null);
   }
 
   // ARKUSZ UI U1-3 — zaznaczenie statku z wyniku pickera renderera (jeden picker na gest). Własny: CTRL → przełączenie
@@ -6054,7 +6055,10 @@ export class GameScene {
   // i bez odznaczenia (ping / kamera — renderer, decyzja 2d). Bez statku: gałąź canvas (`target` null — zwykła gra,
   // także klik w ciało, jak dotąd) albo pustka z raycastu → odznaczenie zbioru, CTRL zachowuje zbiór; ciało / POI /
   // inny obiekt trafiony raycastem sceny → zbiór bez zmian (jak dotąd).
-  _selectFromClickPick(vid, multi, target) {
+  // REFORMA ZAKŁADEK T3 (D-TR-14 (a), Finding 539): `objectHit` — co trafił picker renderera w tym geście
+  // (`lastClickPick.object`: 'body' | 'station' | brak); przy `shipPanelOutliner` klik ciała / stacji na mapie NIE zdejmuje
+  // zaznaczenia statku (jak klik w lewym outlinerze), pustka — jak dotąd.
+  _selectFromClickPick(vid, multi, target, objectHit = null) {
     if (vid) {
       const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
       if (v && !isEnemyVessel(v)) {
@@ -6064,7 +6068,10 @@ export class GameScene {
       return;
     }
     if (multi) return;
-    if (!target || target.type === 'empty') this.uiManager.clearSelection();
+    if (!target || target.type === 'empty') {
+      if (objectHit != null && keepShipSelectionOnMapClick(GAME_CONFIG.FEATURES, objectHit)) return;
+      this.uiManager.clearSelection();
+    }
   }
 
   _handleTacticalRightClick(e) {
