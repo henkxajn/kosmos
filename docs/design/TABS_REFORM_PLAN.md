@@ -4,12 +4,15 @@
 > ahead 0); PODPISY WŁAŚCICIELA 2026-10-24 — decyzje D-TR-1…15 (§6.0), findingi §7 przyjęte w całości do rejestru
 > `HUD_PLAN.md` §3.** Inwentarz — zero zmian w `src/`; plik zacommitowany razem z podpisami (commit `docs(TABS 0)` =
 > kotwica kroku 531 / 532). **531 / 532 — ✅ WYKONANE 2026-10-24** (§5.4: `471191d` 531 · `da8b2c9` 532; bramka
-> właściciela PASS); **następny krok — T3**, kotwica = commit dokumentacji `docs(TABS 531/532)`. **Kolejność całości
+> właściciela PASS). **T3 — ✅ WYKONANE 2026-10-25** (§5.5: `496ab80` — panel statku przy prawym outlinerze ze strojeniem 1;
+> bramka właściciela PASS); **następny krok — T1**, kotwica = commit dokumentacji `docs(TABS T3)`. Findingi po T3:
+> ✅ 529, 539, 542, 543, 544, 545, 547; ⚪ 546, 548 (rejestr `HUD_PLAN.md` §3); pierwszy wolny **549**. **Kolejność całości
 > (podpis D-TR-12 (b), D-TR-15 (b)): 531 / 532 (drobny krok od razu) → T3 → T1 → T2 → T4 → paczka B ARKUSZA HUD** (B po
 > T4: chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku). Reforma
 > poza arkuszem HUD, po paczce A; dotyczy tych samych powierzchni co „reforma pływających okien” zaparkowana w ARKUSZU UI
 > (`UI_PLAN.md` §1). Findingi — numeracja wspólna (`HUD_PLAN.md` §3): pierwszy wolny przed inwentarzem **531**, po
-> przyjęciu §7 **544**. Powiązane: 488, 493 (`UI_PLAN.md` §6), 515, 528, 529, 530 (`HUD_PLAN.md` §3).
+> przyjęciu §7 **544**, po T3 **549** (544–548 z T3 — §5.5). Powiązane: 488, 493 (`UI_PLAN.md` §6), 515, 528, 529, 530
+> (`HUD_PLAN.md` §3).
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\tabs-inventory\` — `probes/` (3 sondy CDP), `tools/` (kopia
 > `kosmos_cdp_gpu.mjs` z paczki A), `results/behaviour/` (JSON i zrzuty pomiarów), `RAPORT_TABS_INV.md`.
 > **Oznaczenia:** `[code]` — odczyt źródła, linie przy `ae23697` · `[measured]` — prawdziwa gra w izolowanym headless
@@ -564,7 +567,7 @@ stałych rysunku, walidator → **arkusz kontaktowy HTML na 5 motywach** ekranu 
 |---|---|---|---|---|
 | **T1** rozwinięcie informacyjne | (a) rozwinięcie pod etykietą kolonii / stacji gracza (≤ 4 linie wg D-TR-3); (b) etykieta na żądanie przy najechaniu tarczy ciała bez etykiety, z tym samym rozwinięciem (D-TR-1 (a)); (c) rozwinięcie etykiety statku (aktywność / ETA / paliwo — D-TR-3); (d) przy ON wygaszone `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkowa część `#kosmos-tooltip` (D-TR-2) — 531 i 536 zamknięte z konstrukcji; (e) karta ciała wyłączona dla ciał bez akcji | `labelHover` | stan najechania (czas realny, pauza), treść wg wywiadu i właściciela (531), strefy (punkt na tarczy wygrywa — 487, 503), etykieta najechana nie zmienia położenia (bez oscylacji — I8.3), kl./s | kolonia gracza, ciało bez kolonii (zbadane / nie), kolonia AI (Polonia), stacja w szynie i pojedyncza, statek; najechanie w biegu i w pauzie |
 | **T2** przypięcie | 1. klik (D-UI-5) przypina rozwinięcie z akcjami: Mapa ciała (4 warianty), Raport (`BodyDetailModal`), Zarządzaj, listy z limitem (złoża, magazyn, ruch, moduły), ✕; Esc zdejmuje (D-TR-5); `readClickSelection` czyta przypięcie; przełączenie układu zdejmuje przypięcie spoza układu (486 / 491); przy ON karta ciała i panel stacji wyłączone | `labelPin` | strefy (przycisk przypięcia > etykieta > tarcza), 1. / 2. klik z przypięciem, Esc, przełączenie układu, warianty Mapy ciała (jedyny producent podglądu), limit list | przypięcie każdego rodzaju, akcje, Esc, przełączenie układu, przypięcie przy ruchu kamery i orbity |
-| **T3** panel statku przy outlinerze | `_drawRight` (kompakt) w geometrii przy wierszu (D-TR-7), zapas przy schowanym outlinerze (D-TR-8), tryb Y (D-TR-10), potwierdzenie rozbiórki (D-TR-13), zaznaczenie przy kliku ciała (D-TR-14), panel pływający wyłączony (529) | `shipPanelOutliner` | kotwica wiersz → prostokąt panelu (klamra, przewinięcie, wiersz poza kadrem kolumny), zapas, mutex N, wejścia (mapa, outliner, Dok, etykieta, Tab), zamknięcie, Esc | statek w ruchu / w doku / w obcym układzie, konfigurator (360 px), wiersz u dołu listy, outliner schowany, tryb Y, starcie |
+| **T3** panel statku przy outlinerze — **✅ WYKONANE 2026-10-25** (`496ab80`, §5.5) | `_drawRight` (kompakt) w geometrii przy wierszu (D-TR-7), zapas przy schowanym outlinerze (D-TR-8), tryb Y (D-TR-10), potwierdzenie rozbiórki (D-TR-13), zaznaczenie przy kliku ciała (D-TR-14), panel pływający wyłączony (529) | `shipPanelOutliner` | kotwica wiersz → prostokąt panelu (klamra, przewinięcie, wiersz poza kadrem kolumny), zapas, mutex N, wejścia (mapa, outliner, Dok, etykieta, Tab), zamknięcie, Esc | statek w ruchu / w doku / w obcym układzie, konfigurator (360 px), wiersz u dołu listy, outliner schowany, tryb Y, starcie |
 | **T4** sprzątanie | dok, `BodyCardSideLogic`, `FloatingPanel`, kotwice OFF, `_cardRects`, flagi po bramkach; i18n pól, które przeszły do rozwinięć i panelu (538) — albo osobno | — | przecelowania z §5.3 | — |
 
 Kolejność: T1 → T2 (przypięcie stoi na rozwinięciu) → T3 → T4; **T3 można przenieść na początek** (brak zależności od
@@ -616,6 +619,58 @@ kadrów przed / po). Teczka: `C:\Users\Komputer\kosmos-handover\tabs-531-532\` �
 - **Obserwacja:** w kadrze 532 „po” panel statku (kotwica zapasowa statku w doku) przykrywa część karty ciała Nt — to
   537 (T2 / T3), jak przy planecie (M1).
 
+### 5.5 T3 — panel statku przy prawym outlinerze — WYKONANE 2026-10-25 (D-TR-7, 8, 9, 10, 13, 14)
+
+Commit: **`496ab80`** `feat(T3)` (jedna paczka ze strojeniem 1 — strojenie zmienia te same funkcje: `UIManager`,
+`ShipPanelAnchorLogic`); bramka właściciela 2026-10-25 — **PASS** (oglądanie arkusza, zachowania 1–7 przyjęte), strojenie
+1 — **PASS** (zachowania 1–4 przyjęte; łącznik i odstępy bez uwag). Flaga `FEATURES.shipPanelOutliner` (brak klucza =
+OFF — dzisiejszy kod; w `GameConfig` ON). Teczka: `C:\Users\Komputer\kosmos-handover\tabs-t3\` — `probes/`, `gate/`
+(`shots_T3.mjs` → `kontakt_T3.html` — 14 scen × 5 motywów, przed = `e71ffad`; `shots_T3s1.mjs` → `kontakt_T3s1.html` —
+strojenie, K4 / K12 / K10b, przed = T3 sprzed strojenia), `results/` (sweep, `check-i18n`, fail-first, kl./s, Polonia),
+`RAPORT_T3.md`, `RAPORT_T3_S1.md`.
+
+- **Kotwica (D-TR-7 (a)):** NEW `ShipPanelAnchorLogic.js` — panel 300 × 300 (360 w kroku wyboru celu) wysunięty W LEWO od
+  prawego outlinera: prawa krawędź = lewa krawędź kolumny, górna = wiersz zaznaczonego statku (`OutlinerColumn._layout` —
+  układ listy z tej samej klatki; outliner rysowany przed panelem); klamra do obszaru mapy z `MapInsets`; wiersz
+  przewinięty poza listę → panel przy krawędzi listy (idzie za przewijaniem), bez łącznika; układ zwinięty → nagłówek
+  układu (z łącznikiem); „spawanie” — bez własnej krawędzi od strony kolumny (`seamRight`) i łącznik na wysokości wiersza
+  (stałe rysunku `UIManager.shipPanelTab`). Bez przeciągania; pływający panel statku (`FloatingPanel`) i kotwica z boku
+  modelu (493) przy ON nieużywane — **529 ✅**.
+- **Zapas (D-TR-8 (a)):** kolumna ukryta („.”, overlay, rozwinięty Dok) albo statku brak w liście — dzisiejsza kotwica
+  zapasowa (prawy górny róg obszaru mapy); po powrocie kolumny — przy wierszu.
+- **Tryb Y (D-TR-10 (a)) — 542 ✅:** przy rozwiniętym Doku panel statku nad mapą się nie rysuje (klik, kółko, blokada kamery
+  i prostokąt wyłączone); po zwinięciu Doku — przy wierszu.
+- **Cykl:** otwiera 1. klik statku (mapa, prawy outliner, Dok „Pokaż”, etykieta HUD, Tab — wg `readClickSelection`, U1);
+  zwija się przy zmianie zaznaczenia (przeskok do nowego wiersza), odznaczeniu, Esc (kaskada bez zmian) i przełączeniu
+  układu na układ bez tego statku (`system:switched`; Tab i 2. klik §7.8 przełączają na układ statku — panel zostaje;
+  statek w skoku — zdjęty). Mutex D-TR-9 (a) bez zmian.
+- **Rozbiórka (D-TR-13 (a)) — 543 ✅:** „🗑 Rozbiórka” → istniejący `ConfirmModal`, `fleet:disbandRequest` dopiero po
+  „Rozwiąż” (`confirmThenDisband`); także w Rejestrze Dowództwa (wspólny `_handleHit`). Nowy klucz
+  `fleet.disbandVesselConfirm` (PL + EN).
+- **D-TR-14 (a) — 539 ✅:** klik ciała albo stacji na mapie nie zdejmuje zaznaczenia statku (`ThreeRenderer.lastClickPick.object`,
+  `GameScene._selectFromClickPick`); karta ciała i panel statku razem. 537 — domknięty częściowo (reszta: T2).
+- **Strojenie 1 (2026-10-25):** **544 ✅** — panel statku jest przeszkodą karty ciała i panelu stacji (`BodyCardSideLogic`:
+  `obstacles`, `cardObstacles`; `UIManager.getShipPanelObstacle` — prostokąt z ostatniej klatki, zmiana → jeszcze jedna
+  klatka): karta na wolnej stronie tarczy, żadna wolna — większy prześwit, bez histerezy dla przeszkody. **545 ✅** —
+  karta walki jest przeszkodą kotwicy: panel przy wierszu przesuwa się w pionie nad / pod kartę (przy kolumnie, łącznik
+  gdy wiersz w zasięgu), brak miejsca → kotwica zapasowa; przy ON klik pyta panel statku przed kartą walki i panelem
+  stacji (rysunek = klik). **547 ✅** — PL `fleet.disbandReturn` = „🗑 Rozbiórka (zwrot 75%)” (tytuł okna potwierdzenia
+  z tego klucza), zero nowych kluczy.
+- **Keepery:** NEW `ship_panel_outliner_smoke` 112/112 (S0–S13); `body_card_side_smoke` 38/38 (NEW C6 — przeszkoda; C4a —
+  wywołanie z przeszkodą). Przecelowania za zgodą (§5.3 „panel statku”; piny OFF bez zmian, dopisane „-T3”):
+  `map_vessel_panel_compact` A1, A2, D1, D2, Z1 · `map_vessel_panel` P11, P12 · `right_outliner` R9d · `left_outliner`
+  L7i · `body_card_side` C4c. Fail-first: kopia `e71ffad` (`git archive`, pliki CRLF) — nowy keeper 23 / 66 (zielone =
+  same kontrole), przecelowania 94/101 · 121/126 · 100/102 · 148/149 · 26/27; strojenie — kopia T3 sprzed strojenia:
+  95 / 17 · 30 / 8 (zielone nowe piny = same kontrole). Sweep 343/343 OK, 0 FAIL, 31 advisory; `check-i18n` PASS,
+  pl = en = 3401.
+- **Gra** (izolowany headless Chrome z GPU, okno 1618×1195 DPR 0,9): ZF gy120 — arkusz 14 scen × 5 motywów i arkusz
+  strojenia (K4, K12, K10b), 0 błędów JS; Polonia gy79 — wiersz → zapas „.” → wiersz → tryb Y bez panelu → przełączenie
+  układu zdejmuje statek → Esc, 0 błędów; kl./s bez regresji (60 / 60; `_draw` 1,24 / 1,07 ms przy ON wobec 1,16 / 1,07 ms
+  przy OFF).
+- **Nowe findingi (rejestr `HUD_PLAN.md` §3):** 544, 545, 547 — ✅ w strojeniu 1; **546** ⚪ (konfigurator misji nie zna
+  statku — zmiana zaznaczenia w kroku wyboru celu przenosi go na nowy statek; także przed T3); **548** ⚪ (karta ciała przy
+  pauzie i nieruchomej kamerze zostaje półprzezroczysta — wjeżdżanie nie podtrzymuje redrawu; także przed T3).
+
 ---
 
 ## 6. Decyzje (D-TR-1…15) — PODPISANE 2026-10-24
@@ -630,14 +685,14 @@ kadrów przed / po). Teczka: `C:\Users\Komputer\kosmos-handover\tabs-531-532\` �
 | **D-TR-4** | (a) | przypięcie ciała bez zakładek: Mapa ciała + Raport (`BodyDetailModal` — orbita, fizyka, skład, złoża, ✏) + ✕ (T2) |
 | **D-TR-5** | (a) | jedno przypięcie naraz (ciało albo stacja), panel statku osobno; Esc zdejmuje przypięcie — po zaznaczeniu statku, przed overlayem (T2) |
 | **D-TR-6** | (a) | dok minimalizacji znika w T4 razem z kartami; pas dolny wolny dla chipów warstw (D-HUD-13) |
-| **D-TR-7** | (a) | panel statku 300 × 300 / 360, wysunięty w lewo od prawego outlinera (x = W − 150 − 300), górna krawędź na wysokości wiersza, klamra do obszaru mapy (T3) |
-| **D-TR-8** | (a) | bez prawego outlinera (klawisz „.”, overlay, rozwinięty Dok) — kotwica zapasowa jak dziś: prawy górny róg obszaru mapy |
-| **D-TR-9** | (a) | flota (węzeł) i grupa N ≥ 2 poza reformą — `FleetCommandPanel` i `FleetGroupPanel` zostają; osobny krok po T3 |
-| **D-TR-10** | (a) | tryb Y: przy rozwiniętym Doku panel statku nad mapą się nie rysuje (mini-panel Doku + „Pokaż w rejestrze”) |
+| **D-TR-7** | (a) | panel statku 300 × 300 / 360, wysunięty w lewo od prawego outlinera (x = W − 150 − 300), górna krawędź na wysokości wiersza, klamra do obszaru mapy (T3) — ✅ 2026-10-25 (`496ab80`, §5.5) |
+| **D-TR-8** | (a) | bez prawego outlinera (klawisz „.”, overlay, rozwinięty Dok) — kotwica zapasowa jak dziś: prawy górny róg obszaru mapy — ✅ 2026-10-25 (`496ab80`, §5.5) |
+| **D-TR-9** | (a) | flota (węzeł) i grupa N ≥ 2 poza reformą — `FleetCommandPanel` i `FleetGroupPanel` zostają; osobny krok po T3 — ✅ w T3 bez zmian (§5.5) |
+| **D-TR-10** | (a) | tryb Y: przy rozwiniętym Doku panel statku nad mapą się nie rysuje (mini-panel Doku + „Pokaż w rejestrze”) — ✅ 2026-10-25 (`496ab80`, §5.5) |
 | **D-TR-11** | (a) | panel statku bez zmian; paliwo i utrzymanie w rozwinięciu wiersza / etykiety (D-TR-3) |
 | **D-TR-12** | **(b) — T3 NA POCZĄTEK** | kolejność całości niżej |
-| **D-TR-13** | (a) | potwierdzenie rozbiórki statku przy przenosinach panelu (T3) |
-| **D-TR-14** | (a) | klik ciała na mapie nie zdejmuje zaznaczenia statku — jak w lewym outlinerze (T3) |
+| **D-TR-13** | (a) | potwierdzenie rozbiórki statku przy przenosinach panelu (T3) — ✅ 2026-10-25 (`496ab80`, §5.5) |
+| **D-TR-14** | (a) | klik ciała na mapie nie zdejmuje zaznaczenia statku — jak w lewym outlinerze (T3) — ✅ 2026-10-25 (`496ab80`, §5.5) |
 | **D-TR-15** | **(b) — 531 i 532 od razu** | oba osobnym drobnym krokiem, przed T3 — ✅ 2026-10-24 (`471191d` · `da8b2c9`, §5.4) |
 
 **Kolejność całości:** **531 / 532 → T3 → T1 → T2 → T4 → paczka B ARKUSZA HUD** — paczka B (H4) po T4, bo chipy warstw
@@ -681,13 +736,13 @@ w całości do rejestru `HUD_PLAN.md` §3 — 531, 532 🟠, reszta ⚪; pierwsz
 | **534** | ⚪ | **Esc nie zamyka karty ciała ani panelu stacji** — bez zaznaczonego statku otwiera menu ☰ (`GameScene.js:4758-4808`). Zmierzone (M3). | T2 (D-TR-5) |
 | **535** | ⚪ | **Karta ciała zminimalizowana do doku zostaje „bieżącym zaznaczeniem”** (`readClickSelection.entityId` bez warunku minimalizacji, `ClickIntentLogic.js:85`) → klik w to ciało = kamera + karta wraca; panel stacji w doku daje `select` (`:81`, T2e). Zmierzone (M4). | znika z dokiem (T4) — tylko rejestr |
 | **536** | ⚪ | **Trzy warstwy najechania naraz** — statek: `#colony-3d-tooltip` (od razu) + druga linia etykiety HUD + `#kosmos-tooltip` (po 500 ms); zaznaczona kolonia: K4 + K5 + K6. Zmierzone (M6). | T1 (D-TR-2) |
-| **537** | ⚪ | **Karta ciała, panel stacji i panel statku otwierają się niezależnie i nakładają** — przy stacji na orbicie planety i statku obok trzy prostokąty leżą na sobie, karta ciała całkowicie przykryta. Zmierzone (M1). | T2 / T3 (D-TR-5) |
+| **537** | ⚪ | **Karta ciała, panel stacji i panel statku otwierają się niezależnie i nakładają** — przy stacji na orbicie planety i statku obok trzy prostokąty leżą na sobie, karta ciała całkowicie przykryta. Zmierzone (M1). | T2 / T3 (D-TR-5) — po T3 (`496ab80`) częściowo: karta ciała i panel statku razem (D-TR-14), karta omija panel (544); reszta — T2 |
 | **538** | ⚪ | **Literały i surowe identyfikatory na czterech powierzchniach** (klasa 113 / 495): karta — typ surowym `planetType`, `-type star`, „Luminosity”, „HZ”, „lat” w ORBICIE, złoża surowym `resourceId`; panel stacji — „Układ: sys_home” (`:228`); panel statku — etykieta rozkazu („→ MoveTo:”, „⚔ Pursue:”, „⚠ Order blocked: <slug>”, „(mission paused)”, „↻ Patrol manualny” — `FMO :8605-8649`), „📦 Cargo:” (`:7751`); podpowiedzi DOM — „wolne”, „Budynki:”, „Energia:”, „ETA … lat”, „Etap:”; `#kosmos-tooltip` — „Typ: rocky”, „[in_transit]”. `check-i18n` ich nie widzi (bez polskich znaków / surowe pola). | pola przechodzące do rozwinięć i panelu — przez `t()` w T1–T3; reszta w T4 |
-| **539** | ⚪ | **Klik ciała na mapie zdejmuje zaznaczenie statku, klik ciała w lewym outlinerze — nie** (`GameScene._selectFromClickPick` `:6066` — gałąź kanwy bez celu). Zmierzone (M2, mapa); outliner — z kodu. | T3 (D-TR-14) |
+| **539** | ✅ | **Klik ciała na mapie zdejmuje zaznaczenie statku, klik ciała w lewym outlinerze — nie** (`GameScene._selectFromClickPick` `:6066` — gałąź kanwy bez celu). Zmierzone (M2, mapa); outliner — z kodu. | T3 (D-TR-14) — ✅ T3 `496ab80` (2026-10-25; `TABS_REFORM_PLAN.md` §5.5) |
 | **540** | ⚪ | **Panel stacji rysuje się i łapie klik nad otwartym overlayem pełnoekranowym** — także nad Technologiami, Dowództwem itd. (`UIManager.js:2388`, `:1983` bez `!isAnyOpen()`; zamysł S4-2 „coexist z colony”). Z kodu. | znika z panelem (T2) |
 | **541** | ⚪ | **Chip doku nie zna układu** — przywrócenie karty ciała / panelu stacji z innego układu otwiera kartę bez kotwicy (róg obszaru mapy) dla obiektu spoza kadru, bez przełączenia układu (`BottomContext.js:544-551`, `StationPanel.js:390-410`). Z kodu. | znika z dokiem (T4) |
-| **542** | ⚪ | **Tryb Y: dwa panele statku naraz** — mini-panel Doku taktycznego i pływający panel statku (`UIManager.js:2397` bez warunku trybu Y). Z kodu. | T3 (D-TR-10) |
-| **543** | ⚪ | **Rozbiórka statku bez potwierdzenia** — jeden klik „🗑 Disband” → `fleet:disbandRequest` (`FMO :2732-2736` → `ColonyManager._disbandVessel`); nieodwracalne. Z kodu. | T3 (D-TR-13) |
+| **542** | ✅ | **Tryb Y: dwa panele statku naraz** — mini-panel Doku taktycznego i pływający panel statku (`UIManager.js:2397` bez warunku trybu Y). Z kodu. | T3 (D-TR-10) — ✅ T3 `496ab80` (2026-10-25; `TABS_REFORM_PLAN.md` §5.5) |
+| **543** | ✅ | **Rozbiórka statku bez potwierdzenia** — jeden klik „🗑 Disband” → `fleet:disbandRequest` (`FMO :2732-2736` → `ColonyManager._disbandVessel`); nieodwracalne. Z kodu. | T3 (D-TR-13) — ✅ T3 `496ab80` (2026-10-25; `TABS_REFORM_PLAN.md` §5.5) |
 
 Przyjęte w całości — pierwszy wolny numer: **544**.
 
