@@ -14,9 +14,9 @@
 > HTML na 5 motywach, bramka = oglądanie + pętla strojenia.
 > **Dalej (podpis właściciela 2026-10-24, `TABS_REFORM_PLAN.md` §6.0):** najpierw — poza arkuszem — **REFORMA ZAKŁADEK**
 > (ramy 2026-10-24; inwentarz wykonany 2026-10-24): **531 / 532 — ✅ 2026-10-24** (`471191d` · `da8b2c9`) → **T3 —
-> ✅ 2026-10-25** (`496ab80`, ze strojeniem 1) → T1 → T2 → T4; **paczka B, H4 (§4.5; w niej D-HUD-16 — kolory 3D w rolach,
-> §5.0) PO T4** — chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku. Kotwica T1 = commit dokumentacji
-> `docs(TABS T3)`.
+> ✅ 2026-10-25** (`496ab80`, ze strojeniem 1) → **T1 — ✅ 2026-10-26** (`fc44de7`) → T2 → T4; **paczka B, H4 (§4.5;
+> w niej D-HUD-16 — kolory 3D w rolach, §5.0) PO T4** — chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku.
+> Kotwica T2 = commit dokumentacji `docs(TABS T1)`.
 > **Pomiary:** prawdziwa gra w Chrome (CDP, GPU — ANGLE / RTX 3070, `devicePixelRatio` 1 → `pixelRatio` renderera 1,5),
 > zapis ZF gy120 (Kepler-4799 — ten sam co bramki ARKUSZA UI), okno **1600×1041 CSS** (skala UI gry 1,25 — logicznie
 > 1280×833), kontrola **1280×833**; przed każdym odczytem 4 s biegu gry (stan po wczytaniu na pauzie jest inny —
@@ -25,10 +25,10 @@
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\hud-phase-a\` — `probes/` (sondy), `results/` (JSON, zrzuty PNG,
 > `hexes_hud.txt` — pełna lista kolorów na sztywno), `HANDOVER_HUD_PHASE_A.md`.
 > **Oznaczenia** jak w `UI_PLAN.md`: `[code]` — odczyt źródła (linie przy `ad65e47`) · `[measured]` — pomiar w grze albo
-> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#548 (§3; 517–521 z H0,
-> 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3 reformy zakładek); 493, 497, 502
-> i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie: 517; po H0: 522; po H1: 528; po paczce A:
-> 531; po inwentarzu reformy zakładek: 544; **po T3 reformy zakładek: 549**.
+> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#552 (§3; 517–521 z H0,
+> 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3, 549–552 z T1 reformy zakładek);
+> 493, 497, 502 i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie: 517; po H0: 522; po H1:
+> 528; po paczce A: 531; po inwentarzu reformy zakładek: 544; po T3 reformy zakładek: 549; **po T1 reformy zakładek: 553**.
 
 ---
 
@@ -458,7 +458,7 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 
 ---
 
-## 3. Findingi #504–#543 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek)
+## 3. Findingi #504–#552 (rejestr macierzysty; 517–521 z H0, 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3, 549–552 z T1 reformy zakładek)
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
@@ -491,10 +491,10 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **530** | ⚪ | **Dymek „Pozycja: (x, y)” przy kursorze nad pustą mapą może zasłaniać etykiety HUD.** Podpowiedź współrzędnych przy kursorze stojącym na pustej mapie leży nad warstwą HUD (`#ui-canvas`); walidator arkusza kontaktowego paczki A odstawiał kursor w róg okna, żeby nie wchodziła w kadry. Sesja paczki A. | do decyzji (polerka) |
 | **531** | ✅ | **Podpowiedź mapy nad kolonią AI kłamie o właścicielu i zdradza populację.** `TooltipContent._planetContent` (`:146-153`) bierze kolonię z `colonyManager.getColony` (kolonie AI też tam są) i pisze „Właściciel: Imperium gracza” oraz populację, bez terminu właściciela i bez bramki wywiadu (kanon `SystemReveal.js:92` — populacja od `detailed`). Zmierzone (Polonia gy79): Akhernar h (`emp_001`, wywiad `contact`) — „Właściciel: Imperium gracza”, „Populacja: 55”. Rodzina 188, 506, 518. Inwentarz reformy zakładek (2026-10-24). | ✅ **drobny krok reformy zakładek** — `471191d` (2026-10-24): kolonia obca (`!isPlayerColony`) — właściciel i populacja wg osi właściciela kanonu `SystemReveal` (ta sama reguła co panel STRATCOM): nazwa imperium od `contact`, „obce imperium” od `rumor`, „nieznany” poniżej (decyzja właściciela — nie „Neutralne”), populacja od `detailed`; brak wywiadu ⇒ fail-closed; kolonia gracza bez zmian; zero nowych kluczy i18n. Keeper `tooltip_foreign_colony_smoke` 24/24; smoke przed / po w grze (Polonia — „Właściciel: Liga Spalonej Drogi”, bez populacji) — PASS. W T1 rozwinięcie zastąpi podpowiedź (D-TR-2) |
 | **532** | ✅ | **Drugi klik w statek zadokowany przy planetoidzie nic nie robi.** `vessel:focus` (`ThreeRenderer.js:1213-1233`) szuka miejsca postoju tylko w `_planets` i `_moons`; planetoida → brak pozycji → kamera stoi, karty brak. Zmierzone (ZF): Fracht @ Nt, Dostawca II @ Cu i Hv — kamera STOI; kontrola: planeta i księżyc — kamera + karta. Reguła D-UI-5 (2. klik = focus) martwa dla statków placówek na planetoidach — prawy outliner, Dok taktyczny, Tab. Inwentarz reformy zakładek (2026-10-24). | ✅ **drobny krok reformy zakładek** — `da8b2c9` (2026-10-24): miejsce postoju szukane także w `_planetoids` (ta sama mapa, z której rysowane są placówki) — kamera na planetoidę (podłoga 0,3, zoom 0,8) + karta ciała, jak przy planecie; planeta i księżyc bez zmian. Keeper `docked_focus_planetoid_smoke` 17/17; smoke przed / po w grze (ZF — Fracht @ Nt, dwa kliki w prawym outlinerze) — PASS |
-| **533** | ⚪ | **Podpowiedź kolonii (`#colony-3d-tooltip`) bez limitu wysokości.** Lista budynków stolicy ZF wychodzi poza okno 1041 px i przykrywa pasek nawigacji; `top = min(sy − 10, innerHeight − 250)` zakłada ≤ 250 px (`ThreeRenderer.js:3957-3958`). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T1 (D-TR-2 (a)) |
+| **533** | ✅ | **Podpowiedź kolonii (`#colony-3d-tooltip`) bez limitu wysokości.** Lista budynków stolicy ZF wychodzi poza okno 1041 px i przykrywa pasek nawigacji; `top = min(sy − 10, innerHeight − 250)` zakłada ≤ 250 px (`ThreeRenderer.js:3957-3958`). Inwentarz reformy zakładek (2026-10-24). | ✅ **reforma zakładek T1** — `fc44de7` (2026-10-26; przy `labelHover` ON): kolonię opisuje rozwinięcie etykiety HUD (≤ 4 linie), `#colony-3d-tooltip` wygaszony (D-TR-2 (a)); przy OFF — jak dziś (`TABS_REFORM_PLAN.md` §5.6) |
 | **534** | ⚪ | **Esc nie zamyka karty ciała ani panelu stacji** — bez zaznaczonego statku otwiera menu ☰ (`GameScene.js:4758-4808`). Zmierzone (M3). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T2 (D-TR-5 (a)) |
 | **535** | ⚪ | **Karta ciała zminimalizowana do doku zostaje „bieżącym zaznaczeniem”** (`readClickSelection.entityId` bez warunku minimalizacji, `ClickIntentLogic.js:85`) → klik w to ciało = kamera + karta wraca; panel stacji w doku daje `select` (`:81`, T2e). Zmierzone (M4). Inwentarz reformy zakładek (2026-10-24). | znika z dokiem — reforma zakładek T4 (D-TR-6 (a)); tylko rejestr |
-| **536** | ⚪ | **Trzy warstwy najechania naraz** — statek: `#colony-3d-tooltip` (od razu) + druga linia etykiety HUD + `#kosmos-tooltip` (po 500 ms); zaznaczona kolonia: K4 + K5 + K6. Zmierzone (M6). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T1 (D-TR-2 (a)) |
+| **536** | ✅ | **Trzy warstwy najechania naraz** — statek: `#colony-3d-tooltip` (od razu) + druga linia etykiety HUD + `#kosmos-tooltip` (po 500 ms); zaznaczona kolonia: K4 + K5 + K6. Zmierzone (M6). Inwentarz reformy zakładek (2026-10-24). | ✅ **reforma zakładek T1** — `fc44de7` (2026-10-26; przy `labelHover` ON): jedna warstwa — rozwinięcie etykiety HUD; `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkowa część `#kosmos-tooltip` wygaszone, zostają podpowiedź budynku (K3), POI, współrzędne pustej mapy (D-TR-2 (a)); przy OFF — jak dziś (`TABS_REFORM_PLAN.md` §5.6) |
 | **537** | ⚪ | **Karta ciała, panel stacji i panel statku otwierają się niezależnie i nakładają** — przy stacji na orbicie planety i statku obok trzy prostokąty leżą na sobie, karta ciała całkowicie przykryta. Zmierzone (M1). Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T2 / T3 (D-TR-5 (a)) — po T3 (`496ab80`) częściowo: karta ciała i panel statku razem (D-TR-14), karta omija panel (544); reszta — T2 |
 | **538** | ⚪ | **Literały i surowe identyfikatory na czterech powierzchniach** (klasa 113 / 495): karta — typ surowym `planetType`, `-type star`, „Luminosity”, „HZ”, „lat” w ORBICIE, złoża surowym `resourceId`; panel stacji — „Układ: sys_home” (`:228`); panel statku — etykieta rozkazu („→ MoveTo:”, „⚔ Pursue:”, „⚠ Order blocked: <slug>”, „(mission paused)”, „↻ Patrol manualny” — `FMO :8605-8649`), „📦 Cargo:” (`:7751`); podpowiedzi DOM — „wolne”, „Budynki:”, „Energia:”, „ETA … lat”, „Etap:”; `#kosmos-tooltip` — „Typ: rocky”, „[in_transit]”. `check-i18n` ich nie widzi (bez polskich znaków / surowe pola). Inwentarz reformy zakładek (2026-10-24). | pola przechodzące do rozwinięć i panelu — przez `t()` w T1–T3; reszta w T4 |
 | **539** | ✅ | **Klik ciała na mapie zdejmuje zaznaczenie statku, klik ciała w lewym outlinerze — nie** (`GameScene._selectFromClickPick` `:6066` — gałąź kanwy bez celu). Zmierzone (M2, mapa); outliner — z kodu. Inwentarz reformy zakładek (2026-10-24). | reforma zakładek T3 (D-TR-14 (a) — klik ciała na mapie nie zdejmuje statku) — ✅ T3 `496ab80` (2026-10-25; `TABS_REFORM_PLAN.md` §5.5) |
@@ -507,6 +507,10 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **546** | ⚪ | **Konfigurator misji nie zna statku** — zmiana zaznaczenia w kroku wyboru celu przenosi „WYBIERZ CEL — TRANSPORT” na nowy statek (`FleetManagerOverlay._missionConfig` bez id statku). Zmierzone na `e71ffad` i po T3 (sonda `obs_t3.mjs`). Reforma zakładek T3 (2026-10-25). | do decyzji (panel statku) |
 | **547** | ✅ | **Polska etykieta rozbiórki po angielsku** — `fleet.disbandReturn` PL = „🗑 Disband (zwrot 75%)”; T3 powtarza ją w tytule okna potwierdzenia; `check-i18n` tego nie widzi (klucz istnieje w obu językach). Reforma zakładek T3 (2026-10-25). | ✅ T3 strojenie 1 `496ab80` — „🗑 Rozbiórka (zwrot 75%)” (§5.5) |
 | **548** | ⚪ | **Karta ciała z boku tarczy przy pauzie i nieruchomej kamerze zostaje półprzezroczysta** — wjeżdżanie (`BottomContext._slideProgress`, przyrost na klatkę) nie podtrzymuje redrawu (`UIManager._animating` liczy tylko dziennik, górny pasek, nawigację i koniec gry). Widać na K12 w obu arkuszach T3 — także przed T3. Reforma zakładek T3 (2026-10-25). | reforma zakładek T2 (karta ciała znika) albo wjeżdżanie karty w `_animating` |
+| **549** | ✅ | **Dymek mapy nad obcym statkiem przy wywiadzie `rumor` zdradza nazwę statku i imperium.** `#kosmos-tooltip` — treść z `TooltipContent._vesselContent` (`src/utils/TooltipContent.js:77-120`) bez pytania o wywiad: tytuł = nazwa statku, imperium, paliwo, wytrzymałość; zmierzone (arkusz T1, K9 przed: „Dostawca \| Imperium: Konsorcjum Siódmego Kręgu \| Paliwo: 0.0/20.0 \| …”), choć `#colony-3d-tooltip` w tej samej chwili mówi „Niezidentyfikowany kontakt” — wyciek mgły wojny (klasa 504). Reforma zakładek T1 (2026-10-26). | ✅ **reforma zakładek T1** — `fc44de7` (ON: dymek wygaszony, rozwinięcie etykiety obcego statku poniżej `contact` bez nazwy — „Niezidentyfikowany kontakt”); przy OFF zostaje (OFF = kod sprzed T1) |
+| **550** | ✅ | **Słownik PL: `bodyType.Planetoid` = „Planetoid”** (angielskie słowo) — lewy outliner, okno szczegółów ciała (`BodyDetailModal`), od T1 rozwinięcie planetoidy (arkusz T1: K3, K5, K12). `check-i18n` tego nie widzi (klucz istnieje w obu językach). Reforma zakładek T1 (2026-10-26). | ✅ **reforma zakładek T1** — `fc44de7`: „Planetoida” (`pl.js:532`, jedna linia, zero nowych kluczy; słownik — bez flagi); linia dodana przy commicie po PASS, więc arkusz T1 pokazuje jeszcze „Planetoid” |
+| **551** | ✅ | **Najechana etykieta rośnie o drugą linię i podskakuje o jej wysokość** (I8.3 sprzed T1) — zmierzone (arkusz T1, K12 przed: górna krawędź 352,8 → 339,8 px we wszystkich 5 motywach). Reforma zakładek T1 (2026-10-26). | ✅ **reforma zakładek T1** — `fc44de7` (ON: najechana etykieta stoi — górna krawędź i strona bez zmian, sąsiedzi ustępują i wracają — `placeLabelsPinned`, `makeYieldMemory`); przy OFF zostaje (OFF = kod sprzed T1) |
+| **552** | ✅ | **Najechanie środka tarczy gwiazdy pokazuje dymek statku stojącego w pobliżu w rzucie** — promień najechania statku (28 px) wygrywa z tarczą (bliźniak 487 dla najechania); zmierzone (arkusz T1, K4 przed: `#colony-3d-tooltip` „Smok II”). Reforma zakładek T1 (2026-10-26). | ✅ **reforma zakładek T1** — `fc44de7` (ON: statek na tarczy tylko w rdzeniu sprite'a, gwiazda wygrywa — lustro reguły kliku, `resolveHoverTarget`); przy OFF zostaje (OFF = kod sprzed T1) |
 
 Rejestr #504–#516 po fazie A: **13 wpisów — 🟠 5** (504, 505, 506, 514, 516) **· ⚪ 8** (507–513, 515). Wszystkie
 otwarte; 504 — osobny drobny krok, reszta w krokach H0–H3. Pierwszy wolny: **517**.
@@ -538,6 +542,11 @@ Po T3 reformy zakładek (2026-10-25, `496ab80`; bramka właściciela PASS ze str
 ✅ 23** (16 jak wyżej + 529, 539, 542, 543, 544, 545, 547) **· 🟠 1** (504) **· ⚪ 21** (517, 518, 520–524, 526–528, 530,
 533–538, 540, 541, 546, 548). 537 — częściowo (T3: D-TR-14 i przeszkoda 544; reszta — T2). Następny krok: reforma
 zakładek T1. Pierwszy wolny: **549**.
+
+Po T1 reformy zakładek (2026-10-26, `fc44de7`; bramka właściciela PASS — oglądanie, bez uwag do treści i wyglądu):
+rejestr #504–#552 — **49 wpisów — ✅ 29** (23 jak wyżej + 533, 536, 549, 551, 552 — przy `labelHover` ON; 550 — słownik)
+**· 🟠 1** (504) **· ⚪ 19** (517, 518, 520–524, 526–528, 530, 534, 535, 537, 538, 540, 541, 546, 548). Następny krok:
+reforma zakładek T2. Pierwszy wolny: **553**.
 
 ---
 

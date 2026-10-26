@@ -5,14 +5,17 @@
 > `HUD_PLAN.md` §3.** Inwentarz — zero zmian w `src/`; plik zacommitowany razem z podpisami (commit `docs(TABS 0)` =
 > kotwica kroku 531 / 532). **531 / 532 — ✅ WYKONANE 2026-10-24** (§5.4: `471191d` 531 · `da8b2c9` 532; bramka
 > właściciela PASS). **T3 — ✅ WYKONANE 2026-10-25** (§5.5: `496ab80` — panel statku przy prawym outlinerze ze strojeniem 1;
-> bramka właściciela PASS); **następny krok — T1**, kotwica = commit dokumentacji `docs(TABS T3)`. Findingi po T3:
-> ✅ 529, 539, 542, 543, 544, 545, 547; ⚪ 546, 548 (rejestr `HUD_PLAN.md` §3); pierwszy wolny **549**. **Kolejność całości
+> bramka właściciela PASS). **T1 — ✅ WYKONANE 2026-10-26** (§5.6: `fc44de7` — rozwinięcie informacyjne etykiet, etykieta
+> na żądanie, dymki DOM wygaszone, karta ciała dla ciała bez akcji się nie otwiera; bramka właściciela PASS — oglądanie,
+> bez uwag); **następny krok — T2**, kotwica = commit dokumentacji `docs(TABS T1)`. Findingi po T3: ✅ 529, 539, 542, 543,
+> 544, 545, 547; ⚪ 546, 548; po T1: ✅ 533, 536, 549, 551, 552 (przy `labelHover` ON), ✅ 550 (słownik) (rejestr
+> `HUD_PLAN.md` §3); pierwszy wolny **553**. **Kolejność całości
 > (podpis D-TR-12 (b), D-TR-15 (b)): 531 / 532 (drobny krok od razu) → T3 → T1 → T2 → T4 → paczka B ARKUSZA HUD** (B po
 > T4: chipy warstw D-HUD-13 stają w pasie dolnym w miejscu doku). Reforma
 > poza arkuszem HUD, po paczce A; dotyczy tych samych powierzchni co „reforma pływających okien” zaparkowana w ARKUSZU UI
 > (`UI_PLAN.md` §1). Findingi — numeracja wspólna (`HUD_PLAN.md` §3): pierwszy wolny przed inwentarzem **531**, po
-> przyjęciu §7 **544**, po T3 **549** (544–548 z T3 — §5.5). Powiązane: 488, 493 (`UI_PLAN.md` §6), 515, 528, 529, 530
-> (`HUD_PLAN.md` §3).
+> przyjęciu §7 **544**, po T3 **549** (544–548 z T3 — §5.5), po T1 **553** (549–552 z T1 — §5.6). Powiązane: 488, 493
+> (`UI_PLAN.md` §6), 515, 528, 529, 530 (`HUD_PLAN.md` §3).
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\tabs-inventory\` — `probes/` (3 sondy CDP), `tools/` (kopia
 > `kosmos_cdp_gpu.mjs` z paczki A), `results/behaviour/` (JSON i zrzuty pomiarów), `RAPORT_TABS_INV.md`.
 > **Oznaczenia:** `[code]` — odczyt źródła, linie przy `ae23697` · `[measured]` — prawdziwa gra w izolowanym headless
@@ -565,7 +568,7 @@ stałych rysunku, walidator → **arkusz kontaktowy HTML na 5 motywach** ekranu 
 
 | Paczka | Treść | Flaga (robocza) | Keepery (logika) | Sceny arkusza (ZF, Polonia) |
 |---|---|---|---|---|
-| **T1** rozwinięcie informacyjne | (a) rozwinięcie pod etykietą kolonii / stacji gracza (≤ 4 linie wg D-TR-3); (b) etykieta na żądanie przy najechaniu tarczy ciała bez etykiety, z tym samym rozwinięciem (D-TR-1 (a)); (c) rozwinięcie etykiety statku (aktywność / ETA / paliwo — D-TR-3); (d) przy ON wygaszone `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkowa część `#kosmos-tooltip` (D-TR-2) — 531 i 536 zamknięte z konstrukcji; (e) karta ciała wyłączona dla ciał bez akcji | `labelHover` | stan najechania (czas realny, pauza), treść wg wywiadu i właściciela (531), strefy (punkt na tarczy wygrywa — 487, 503), etykieta najechana nie zmienia położenia (bez oscylacji — I8.3), kl./s | kolonia gracza, ciało bez kolonii (zbadane / nie), kolonia AI (Polonia), stacja w szynie i pojedyncza, statek; najechanie w biegu i w pauzie |
+| **T1** rozwinięcie informacyjne — **✅ WYKONANE 2026-10-26** (`fc44de7`, §5.6) | (a) rozwinięcie pod etykietą kolonii / stacji gracza (≤ 4 linie wg D-TR-3); (b) etykieta na żądanie przy najechaniu tarczy ciała bez etykiety, z tym samym rozwinięciem (D-TR-1 (a)); (c) rozwinięcie etykiety statku (aktywność / ETA / paliwo — D-TR-3); (d) przy ON wygaszone `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkowa część `#kosmos-tooltip` (D-TR-2) — 531 i 536 zamknięte z konstrukcji; (e) karta ciała wyłączona dla ciał bez akcji | `labelHover` | stan najechania (czas realny, pauza), treść wg wywiadu i właściciela (531), strefy (punkt na tarczy wygrywa — 487, 503), etykieta najechana nie zmienia położenia (bez oscylacji — I8.3), kl./s | kolonia gracza, ciało bez kolonii (zbadane / nie), kolonia AI (Polonia), stacja w szynie i pojedyncza, statek; najechanie w biegu i w pauzie |
 | **T2** przypięcie | 1. klik (D-UI-5) przypina rozwinięcie z akcjami: Mapa ciała (4 warianty), Raport (`BodyDetailModal`), Zarządzaj, listy z limitem (złoża, magazyn, ruch, moduły), ✕; Esc zdejmuje (D-TR-5); `readClickSelection` czyta przypięcie; przełączenie układu zdejmuje przypięcie spoza układu (486 / 491); przy ON karta ciała i panel stacji wyłączone | `labelPin` | strefy (przycisk przypięcia > etykieta > tarcza), 1. / 2. klik z przypięciem, Esc, przełączenie układu, warianty Mapy ciała (jedyny producent podglądu), limit list | przypięcie każdego rodzaju, akcje, Esc, przełączenie układu, przypięcie przy ruchu kamery i orbity |
 | **T3** panel statku przy outlinerze — **✅ WYKONANE 2026-10-25** (`496ab80`, §5.5) | `_drawRight` (kompakt) w geometrii przy wierszu (D-TR-7), zapas przy schowanym outlinerze (D-TR-8), tryb Y (D-TR-10), potwierdzenie rozbiórki (D-TR-13), zaznaczenie przy kliku ciała (D-TR-14), panel pływający wyłączony (529) | `shipPanelOutliner` | kotwica wiersz → prostokąt panelu (klamra, przewinięcie, wiersz poza kadrem kolumny), zapas, mutex N, wejścia (mapa, outliner, Dok, etykieta, Tab), zamknięcie, Esc | statek w ruchu / w doku / w obcym układzie, konfigurator (360 px), wiersz u dołu listy, outliner schowany, tryb Y, starcie |
 | **T4** sprzątanie | dok, `BodyCardSideLogic`, `FloatingPanel`, kotwice OFF, `_cardRects`, flagi po bramkach; i18n pól, które przeszły do rozwinięć i panelu (538) — albo osobno | — | przecelowania z §5.3 | — |
@@ -671,6 +674,67 @@ strojenie, K4 / K12 / K10b, przed = T3 sprzed strojenia), `results/` (sweep, `ch
   statku — zmiana zaznaczenia w kroku wyboru celu przenosi go na nowy statek; także przed T3); **548** ⚪ (karta ciała przy
   pauzie i nieruchomej kamerze zostaje półprzezroczysta — wjeżdżanie nie podtrzymuje redrawu; także przed T3).
 
+### 5.6 T1 — rozwinięcie informacyjne etykiet + etykieta na żądanie — WYKONANE 2026-10-26 (D-TR-1, 2, 3)
+
+Commit: **`fc44de7`** `feat(T1)`; bramka właściciela 2026-10-26 — **PASS** (oglądanie arkusza, bez uwag do treści
+i wyglądu; zachowania 1–5 przyjęte — niżej). Flaga `FEATURES.labelHover` (brak klucza = OFF — dzisiejszy kod;
+w `GameConfig` ON); stoi na warstwie etykiet HUD z paczki A (`hudLabels`). Teczka:
+`C:\Users\Komputer\kosmos-handover\tabs-t1\` — `probes/` (`fps_t1.mjs`, `k12_pick.mjs`, `k12_diag.mjs`, `k12_return.mjs`,
+sondy rozpoznania), `gate/` (`shots_T1.mjs` → `kontakt_T1.html` — 19 kadrów: 17 ZF gy120 + 2 Polonia gy79, × 5 motywów,
+przed = `b3b0902`, okno 1618×1195, DPR 0,9), `results/` (pomiary, kontrola OFF, `fps/fps.json`, pierwszy przebieg arkusza
+sprzed poprawki powrotu — `kontakt_v1`), `RAPORT_T1.md`.
+
+- **(a) Rozwinięcie pod nazwą (D-TR-3 — tabele I7):** ≤ 4 linie (9 px, kratka cyfr) na najechanie etykiety albo obiektu
+  (tarcza, sprite, model stacji — wybór lustrem reguły kliku: etykieta, chyba że punkt leży na tarczy ciała — 487 / 503;
+  statek na tarczy tylko w rdzeniu sprite'a; picker `visibleOnly` — 485) i stale dla zaznaczonego. Treść: kolonia gracza
+  · ciało bez kolonii · gwiazda · obca kolonia (właściciel, garnizon, populacja wg wywiadu — reguła 531) · stacja · statek
+  (obcy poniżej `contact` — bez nazwy, „Niezidentyfikowany kontakt” — 504). Fade-in 150 ms, wygasanie ~200 ms — czas
+  realny (działa w pauzie). Najechana etykieta stoi (I8.3: górna krawędź i strona bez zmian; po stronie W — prawa
+  krawędź i tekst do prawej); sąsiedzi ustępują w kadrze `MapInsets` i po zjechaniu kursora wracają (`makeYieldMemory`;
+  kamera ruszona w trakcie — bez powrotu). „+N” najechane → rozwinięcie kotwicy, szyna zwinięta. Treść z pamięci
+  (TTL 250 ms); rozwinięcie z najechania — jedno naraz.
+- **(b) Etykieta na żądanie (D-TR-1 (a) — część T1; przypięcie — T2):** gwiazda, ciała bez kolonii, kolonie i stacje AI,
+  planetoidy — pojawia się przy najechaniu, zostaje, dopóki obiekt jest zaznaczony; 1. klik zaznacza (tarcza wygrywa —
+  487 / 503); nazwa obcego wg `SystemReveal` (oś miejsca), kolonia AI — nazwa CIAŁA, nigdy nazwa cudzej kolonii.
+- **(c) Dymki DOM (D-TR-2 (a)) — 533 ✅, 536 ✅:** przy ON wygaszone `#colony-3d-tooltip` (kolonia, statek)
+  i ciałowo-statkowa część `#kosmos-tooltip`; zostają: podpowiedź budynku (K3), POI, współrzędne pustej mapy (530 — tylko
+  nad PUSTĄ mapą, nie pod etykietą, gwiazdą ani stacją).
+- **(d) Karta ciała dla ciała bez akcji:** przy ON się nie otwiera — gwiazda oraz ciało bez kolonii i bez pełnego skanu
+  (`analyzed`; w ZF planetoidy bez placówki); 1. klik zaznacza + etykieta na żądanie, 2. klik — kamera (D-UI-5 bez
+  zmian); ciało z akcją („Mapa ciała”, „Przejmij cywilizację”) — karta jak dziś. Lustro: `bodyCardAction` =
+  `BottomContext._actionLabel` (`UIManager._bodyCardEntity` — rysunek, klik, kursor nad UI, kółko).
+- **550 ✅ (słownik):** PL `bodyType.Planetoid` = „Planetoida” (`pl.js:532`, jedna linia, zero nowych kluczy; bez flagi).
+  Linia dodana przy commicie po PASS — w drzewie oglądanym na bramce jej nie było, więc arkusz pokazuje jeszcze
+  „Planetoid”.
+- **Pliki:** NEW `src/ui/LabelHoverLogic.js` (czysty — flaga, `LABEL_HOVER`, pamięć najechania, `resolveHoverTarget`,
+  treść I7, przypięcie, `makeYieldMemory`, `placeLabelsPinned`) · `HudLabelLayer.js` (`_t1Prepare`, etykiety na żądanie,
+  rozkład z przypięciem i pamięcią powrotu, rysunek, `hoverObjectKey`, `coversPoint`) · `HudLayer.js` (`hoverObjectKey`,
+  `coversPoint`) · `ThreeRenderer.js` (statek i kolonia — `#colony-3d-tooltip` tylko przy OFF) ·
+  `GameScene._tooltipHoverFromMain3D` · `UIManager._bodyCardEntity` · `GameConfig` (`labelHover: true`) · 8 kluczy
+  `labelHover.*` PL + EN (reszta treści — istniejące klucze).
+- **Keepery:** NEW `label_hover_smoke` 72/72 (K0 API i flaga · K1 zegary · K2 treść i mgła · K3 wybór obiektu · K4 warstwa
+  · K5 przypięcie I8.3 i powrót sąsiadów · K6 „+N” · K7 dymki · K8 karta ciała · K9 budżet logiki · K10 OFF = dziś).
+  Fail-first na kopii `git archive b3b0902` (pliki CRLF — bez stash): 11 PASS / 61 FAIL — zielone wyłącznie kontrole
+  i świadek sceny (K4, K4a, K5a, K5f, K7c, K7f, K8b, K8g, K9a, K10a, K10b). Przecelowania — zero (świadkowie dymków
+  i karty ciała zieloni bez zmian — `RAPORT_T1.md` §4). Sweep 344/344 OK, 0 FAIL, 31 advisory; `check-i18n` PASS,
+  pl = en = 3401 → 3409.
+- **Gra** (izolowany headless Chrome z GPU): arkusz = smoke — 0 wyjątków JS w 20 przebiegach (404 — brakujące tekstury
+  budynków, §3.6). **OFF = dziś** (kod T1, flaga przestawiona po rozruchu, Amber Noir): kadry statyczne ZF 11/11
+  i Polonia 2/2 identyczne z `b3b0902` (etykiety, oba dymki DOM, karta ciała). Sonda K12 złapała wadę przed arkuszem —
+  sąsiad, który ustąpił rozwinięciu, nie wracał (lepkość wyboru kandydata z paczki A); naprawa `makeYieldMemory` (5 scen
+  80–450 j.: 0 etykiet poza miejscem 0,4 s po zjechaniu). Budżet: warstwa HUD 261–375 µs na narysowaną klatkę przy ON
+  (+29…53 µs wobec OFF; dwa rozwinięcia naraz — najgorszy przypadek), p95 ≤ 0,5 ms, 60 / 60 kl./s; w spoczynku
+  0 wywołań ctx.
+- **Zachowania przyjęte na bramce (2026-10-26):** (1) dwa rozwinięcia naraz — zaznaczony (stałe) + najechany inny —
+  zostają; (2) najechanie tarczy członka zwiniętego stosu rozkłada stos na szynę na czas najechania, najechanie „+N” —
+  tylko kotwica; (3) sąsiedzi wracają po zjechaniu kursora, przy ruchu kamery w trakcie — zostają tam, gdzie ułożył je
+  rozkład; (4) gwiazda — etykieta na żądanie tylko nad widocznym rdzeniem (487), nad poświatą nic; (5) karta przy
+  1. kliku znika dla każdego ciała bez akcji (w innej partii także np. nieprzeskanowany księżyc).
+- **Nowe findingi (rejestr `HUD_PLAN.md` §3):** **549** ✅ przy ON (dymek mapy nad obcym statkiem przy `rumor` zdradza
+  nazwę statku i imperium — klasa 504) · **550** ✅ (słownik) · **551** ✅ przy ON (najechana etykieta podskakuje o drugą
+  linię — I8.3) · **552** ✅ przy ON (dymek statku nad tarczą gwiazdy — bliźniak 487 dla najechania); 549, 551 i 552 przy
+  OFF zostają.
+
 ---
 
 ## 6. Decyzje (D-TR-1…15) — PODPISANE 2026-10-24
@@ -679,9 +743,9 @@ strojenie, K4 / K12 / K10b, przed = T3 sprzed strojenia), `results/` (sweep, `ch
 
 | # | Podpis | Co to znaczy dla cięcia |
 |---|---|---|
-| **D-TR-1** | (a) | etykieta na żądanie przy najechaniu tarczy ciała bez etykiety, z tym samym rozwinięciem (T1); 1. klik przypina (T2), odznaczenie zdejmuje |
-| **D-TR-2** | (a) | przy ON rozwinięcie zastępuje `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkową część `#kosmos-tooltip`; zostają: podpowiedź budynku (K3), współrzędne pustej mapy (530), POI (T1) |
-| **D-TR-3** | tabele I7 | treść rozwinięć wg tabel I7 (§3.1, §3.2, §3.4); szczegóły — strojenie na bramce T1 |
+| **D-TR-1** | (a) | etykieta na żądanie przy najechaniu tarczy ciała bez etykiety, z tym samym rozwinięciem (T1); 1. klik przypina (T2), odznaczenie zdejmuje — ✅ T1 2026-10-26 (`fc44de7`, §5.6 — etykieta na żądanie); przypięcie — T2 |
+| **D-TR-2** | (a) | przy ON rozwinięcie zastępuje `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkową część `#kosmos-tooltip`; zostają: podpowiedź budynku (K3), współrzędne pustej mapy (530), POI (T1) — ✅ 2026-10-26 (`fc44de7`, §5.6) |
+| **D-TR-3** | tabele I7 | treść rozwinięć wg tabel I7 (§3.1, §3.2, §3.4); szczegóły — strojenie na bramce T1 — ✅ 2026-10-26 (`fc44de7`, §5.6; bramka bez uwag do treści — bez strojenia) |
 | **D-TR-4** | (a) | przypięcie ciała bez zakładek: Mapa ciała + Raport (`BodyDetailModal` — orbita, fizyka, skład, złoża, ✏) + ✕ (T2) |
 | **D-TR-5** | (a) | jedno przypięcie naraz (ciało albo stacja), panel statku osobno; Esc zdejmuje przypięcie — po zaznaczeniu statku, przed overlayem (T2) |
 | **D-TR-6** | (a) | dok minimalizacji znika w T4 razem z kartami; pas dolny wolny dla chipów warstw (D-HUD-13) |
@@ -725,17 +789,17 @@ w całości do rejestru `HUD_PLAN.md` §3 — 531, 532 🟠, reszta ⚪; pierwsz
 ## 7. Findingi #531–#543 — przyjęte 2026-10-24 do rejestru `HUD_PLAN.md` §3
 
 > Przyjęte w całości (podpis 2026-10-24, §6.0): **531, 532 ✅** (drobny krok 2026-10-24 — `471191d` · `da8b2c9`,
-> §5.4); **533–543 ⚪**. Rejestr macierzysty — `HUD_PLAN.md` §3
-> (tam statusy i zamknięcia); ta tabela — zapis inwentarza, kolumna „Kierunek” wg podpisów.
+> §5.4); **539, 542, 543 ✅** (T3 — `496ab80`, §5.5); **533, 536 ✅** (T1 — `fc44de7`, §5.6); reszta ⚪. Rejestr
+> macierzysty — `HUD_PLAN.md` §3 (tam statusy i zamknięcia); ta tabela — zapis inwentarza, kolumna „Kierunek” wg podpisów.
 
 | # | | Treść | Kierunek |
 |---|---|---|---|
 | **531** | ✅ | **Podpowiedź mapy nad kolonią AI kłamie o właścicielu i zdradza populację.** `TooltipContent._planetContent` (`:146-153`) bierze kolonię z `colonyManager.getColony` (kolonie AI też tam są) i pisze „Właściciel: Imperium gracza” oraz populację, bez terminu właściciela i bez bramki wywiadu (kanon `SystemReveal.js:92` — populacja od `detailed`). Zmierzone (Polonia gy79): Akhernar h (`emp_001`, wywiad `contact`) — „Właściciel: Imperium gracza”, „Populacja: 55”. Rodzina 188, 506, 518. | ✅ drobny krok 2026-10-24 — `471191d` (§5.4); przy wywiadzie `unknown` „nieznany”, nie „Neutralne” (decyzja właściciela); w T1 rozwinięcie zastępuje podpowiedź (D-TR-2) |
 | **532** | ✅ | **Drugi klik w statek zadokowany przy planetoidzie nic nie robi.** `vessel:focus` (`ThreeRenderer.js:1213-1233`) szuka miejsca postoju tylko w `_planets` i `_moons`; planetoida → brak pozycji → kamera stoi, karty brak. Zmierzone (ZF): Fracht @ Nt, Dostawca II @ Cu i Hv — kamera STOI; kontrola: planeta i księżyc — kamera + karta. Reguła D-UI-5 (2. klik = focus) martwa dla statków placówek na planetoidach — prawy outliner, Dok taktyczny, Tab. | ✅ drobny krok 2026-10-24 — `da8b2c9` (§5.4); panel przy outlinerze (T3) stoi na 2. kliku z wiersza |
-| **533** | ⚪ | **Podpowiedź kolonii (`#colony-3d-tooltip`) bez limitu wysokości.** Lista budynków stolicy ZF wychodzi poza okno 1041 px i przykrywa pasek nawigacji; `top = min(sy − 10, innerHeight − 250)` zakłada ≤ 250 px (`ThreeRenderer.js:3957-3958`). | T1 (D-TR-2) |
+| **533** | ✅ | **Podpowiedź kolonii (`#colony-3d-tooltip`) bez limitu wysokości.** Lista budynków stolicy ZF wychodzi poza okno 1041 px i przykrywa pasek nawigacji; `top = min(sy − 10, innerHeight − 250)` zakłada ≤ 250 px (`ThreeRenderer.js:3957-3958`). | T1 (D-TR-2) — ✅ T1 `fc44de7` (2026-10-26; przy `labelHover` ON — kolonię opisuje rozwinięcie etykiety, §5.6) |
 | **534** | ⚪ | **Esc nie zamyka karty ciała ani panelu stacji** — bez zaznaczonego statku otwiera menu ☰ (`GameScene.js:4758-4808`). Zmierzone (M3). | T2 (D-TR-5) |
 | **535** | ⚪ | **Karta ciała zminimalizowana do doku zostaje „bieżącym zaznaczeniem”** (`readClickSelection.entityId` bez warunku minimalizacji, `ClickIntentLogic.js:85`) → klik w to ciało = kamera + karta wraca; panel stacji w doku daje `select` (`:81`, T2e). Zmierzone (M4). | znika z dokiem (T4) — tylko rejestr |
-| **536** | ⚪ | **Trzy warstwy najechania naraz** — statek: `#colony-3d-tooltip` (od razu) + druga linia etykiety HUD + `#kosmos-tooltip` (po 500 ms); zaznaczona kolonia: K4 + K5 + K6. Zmierzone (M6). | T1 (D-TR-2) |
+| **536** | ✅ | **Trzy warstwy najechania naraz** — statek: `#colony-3d-tooltip` (od razu) + druga linia etykiety HUD + `#kosmos-tooltip` (po 500 ms); zaznaczona kolonia: K4 + K5 + K6. Zmierzone (M6). | T1 (D-TR-2) — ✅ T1 `fc44de7` (2026-10-26; przy `labelHover` ON — jedna warstwa: rozwinięcie etykiety, §5.6) |
 | **537** | ⚪ | **Karta ciała, panel stacji i panel statku otwierają się niezależnie i nakładają** — przy stacji na orbicie planety i statku obok trzy prostokąty leżą na sobie, karta ciała całkowicie przykryta. Zmierzone (M1). | T2 / T3 (D-TR-5) — po T3 (`496ab80`) częściowo: karta ciała i panel statku razem (D-TR-14), karta omija panel (544); reszta — T2 |
 | **538** | ⚪ | **Literały i surowe identyfikatory na czterech powierzchniach** (klasa 113 / 495): karta — typ surowym `planetType`, `-type star`, „Luminosity”, „HZ”, „lat” w ORBICIE, złoża surowym `resourceId`; panel stacji — „Układ: sys_home” (`:228`); panel statku — etykieta rozkazu („→ MoveTo:”, „⚔ Pursue:”, „⚠ Order blocked: <slug>”, „(mission paused)”, „↻ Patrol manualny” — `FMO :8605-8649`), „📦 Cargo:” (`:7751`); podpowiedzi DOM — „wolne”, „Budynki:”, „Energia:”, „ETA … lat”, „Etap:”; `#kosmos-tooltip` — „Typ: rocky”, „[in_transit]”. `check-i18n` ich nie widzi (bez polskich znaków / surowe pola). | pola przechodzące do rozwinięć i panelu — przez `t()` w T1–T3; reszta w T4 |
 | **539** | ✅ | **Klik ciała na mapie zdejmuje zaznaczenie statku, klik ciała w lewym outlinerze — nie** (`GameScene._selectFromClickPick` `:6066` — gałąź kanwy bez celu). Zmierzone (M2, mapa); outliner — z kodu. | T3 (D-TR-14) — ✅ T3 `496ab80` (2026-10-25; `TABS_REFORM_PLAN.md` §5.5) |
