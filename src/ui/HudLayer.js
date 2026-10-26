@@ -127,6 +127,22 @@ export class HudLayer {
     return false;
   }
 
+  /**
+   * REFORMA ZAKŁADEK T1 — obiekt z rozwinięciem z najechania (podwarstwa etykiet; `null` — brak albo flaga `labelHover`
+   * OFF). Warstwa schowana (overlay, globus, czysty widok) — `null`.
+   */
+  hoverObjectKey() {
+    if (!this._gate.shown) return null;
+    for (const s of this._sublayers) { const k = s.hoverObjectKey?.(); if (k != null) return k; }
+    return null;
+  }
+
+  /** REFORMA ZAKŁADEK T1 — czy punkt (px logiczne) leży pod obiektem z rozwinięciem (etykieta, stacja, najechanie). */
+  coversPoint(lx, ly) {
+    if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return false;
+    return this._sublayers.some((s) => s.coversPoint?.(lx, ly) === true);
+  }
+
   start() {
     if (!this._raf || this._rafId != null) return;
     const loop = () => {

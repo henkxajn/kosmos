@@ -35,6 +35,24 @@ import {
   threadGeometry, railRows, railBlockSize, resolveLabelClick, layoutTabular, truncateText, updateBorn, fadeAlpha,
   pointInRect,
 } from './HudLabelLogic.js';
+// REFORMA ZAKŁADEK T1 (flaga `labelHover`) — rozwinięcie informacyjne i etykieta na żądanie; przy OFF nic stąd nie biegnie.
+import {
+  isLabelHoverOn, LABEL_HOVER, makeHoverMemory, expansionFade, resolveHoverTarget, hoverObjectKey, pickStationAt,
+  colonyExpansionLines, bodyExpansionLines, starExpansionLines, foreignColonyExpansionLines, stationExpansionLines,
+  foreignStationExpansionLines, vesselExpansionLines, enemyVesselExpansionLines, depositSummary, pinFor, updatePins,
+  placeLabelsPinned, makeYieldMemory,
+} from './LabelHoverLogic.js';
+import { objectScreenDisc } from './BodyCardSideLogic.js';
+import { buildShipEntry } from './FleetPictureLogic.js';
+import { colonyQueueCount } from './SystemTreeLogic.js';
+import { gatherStationTraders } from './StationPanelLogic.js';
+import { isPlayerColony } from '../utils/ColonyOwnership.js';
+import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
+import { readGarrisonReadout, formatGarrisonReadout } from '../utils/GarrisonReadout.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
+import { resolveSystemReveal } from '../utils/SystemReveal.js';
+import { isSystemExplored, HOME_SYSTEM_ID } from '../utils/SystemExploration.js';
+import { STATIONS } from '../data/StationData.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const q = (v) => Math.round(v * 1000);          // klucz klatki — położenie z dokładnością 0,001 j.
@@ -56,6 +74,14 @@ export class HudLabelLayer {
     this._subCache = new Map();      // druga linia statku: id → { t (czas realny), text } (zasięgi zmienia tylko technologia)
     this._ptsCache = null;           // stan statków do etykiet (`gatherVesselLabels`): { key, t, points } — `SUB_TTL_MS`
     this._fontStatus = null;         // `document.fonts.status` — zmiana czyści pamięć pomiaru (font doładowany po pomiarze)
+    // REFORMA ZAKŁADEK T1 (`labelHover`): stan najechania (czas realny), przypięcia etykiet rozwiniętych (I8.3), narodziny
+    // rozwinięć (fade-in), pamięć treści (TTL) i wyboru obiektu pod kursorem.
+    this._hoverMem = makeHoverMemory();
+    this._pins = new Map();          // klucz etykiety → { cand, baseH }
+    this._yieldMem = makeYieldMemory();   // wybór kandydatów sprzed rozwinięcia — sąsiedzi wracają po jego końcu
+    this._expBorn = new Map();       // klucz treści (`body:X` / `station:Y` / `vessel:V`) → chwila rozwinięcia
+    this._expCache = new Map();      // klucz treści → { t, loc, tac, lines }
+    this._pickCache = null;          // { key, t, v } — `_hoverPick`
   }
 
   // ── Pomiar tekstu (ctx warstwy; atrapa bez `measureText` — przybliżenie z rozmiaru fontu) ──────────────────────────
@@ -203,8 +229,240 @@ export class HudLabelLayer {
     for (const [a, w] of anchors) key += `|a${a}:${q(w.r ?? 0)}`;
     for (const r of this._cardRects(K)) key += `|k${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
     for (const p of points) { const w = vworld.get(p.id); key += `|v${p.id}:${w ? `${q(w.x)},${q(w.y)},${q(w.z)}` : ''}:${p.name}:${p.fleetId ?? ''}:${p.alertCount}:${p.activityKey ?? ''}:${p.etaYear != null ? Math.round(p.etaYear) : ''}`; }
-    this._prep = { on: true, bodies, anchors, points, vworld, hover, homeId };
+    // REFORMA ZAKŁADEK T1 — rozwinięcie i etykieta na żądanie (flaga `labelHover`; przy OFF — klucz i stan jak dziś).
+    let t1 = null;
+    if (isLabelHoverOn(F.features)) {
+      t1 = this._t1Prepare(F, { bodies, pictureCtx, sel, sys });
+      key += t1.key;
+    }
+    this._prep = { on: true, bodies, anchors, points, vworld, hover, homeId, t1 };
     return key;
+  }
+
+  // ── REFORMA ZAKŁADEK T1 (D-TR-1 (a), D-TR-2 (a), D-TR-3) — najechanie, treść rozwinięć, etykiety na żądanie ─────────
+
+  /**
+   * Wybór obiektu pod kursorem — pola, których nie liczy `F.hover`: czy punkt leży na tarczy ciała (gwiazda — wyłącznie
+   * widoczny rdzeń, `_isOnBodyDisc`), statek na tarczy wyłącznie w obrębie rdzenia sprite'a (487) i stacja pod kursorem
+   * (sfera modelu w rzucie). Pamięć na `PICK_TTL_MS` przy nieruchomym kursorze, kamerze i najechanym ciele.
+   */
+  _hoverPick(F) {
+    const none = { onDisc: false, vesselCoreId: null, stationId: null };
+    const ptr = F.pointer ?? null;
+    if (!ptr || ptr.overUI) return none;
+    const K = F.K, tr = K.threeRenderer;
+    const hb = tr?._hoverPlanetId ?? null;
+    const ck = `${ptr.rawX}|${ptr.rawY}|${tr?.getCameraMoveEpoch?.() ?? 0}|${hb ?? ''}`;
+    const c = this._pickCache;
+    if (c && c.key === ck && F.now - c.t >= 0 && F.now - c.t < LABEL_HOVER.PICK_TTL_MS) return c.v;
+    let onDisc = false;
+    if (hb != null) onDisc = K.entityManager?.get?.(hb)?.type === 'star' ? tr?._isOnBodyDisc?.(ptr.rawX, ptr.rawY) === true : true;
+    let vesselCoreId = null;
+    if (onDisc) vesselCoreId = tr?._getVesselAtScreen?.(ptr.rawX, ptr.rawY, LABEL_HOVER.VESSEL_CORE_PICK_PX, true, true) ?? null;
+    const st = [];
+    for (const id of tr?._stations?.keys?.() ?? []) st.push({ id, disc: objectScreenDisc(K, 'station', id) });
+    const v = { onDisc, vesselCoreId, stationId: pickStationAt(st, ptr.lx, ptr.ly) };
+    this._pickCache = { key: ck, t: F.now, v };
+    return v;
+  }
+
+  /** Nazwa ciała dla etykiety na żądanie — oś MIEJSCA kanonu mgły wojny (`SystemReveal.name`) oglądanego układu. */
+  _t1NameVisible(F) {
+    const K = F.K, sys = F.activeSystemId;
+    const rec = (K.galaxyData?.systems ?? []).find((s) => s?.id === sys) ?? (sys === HOME_SYSTEM_ID ? { id: sys, isHome: true } : null);
+    const intel = K.intelSystem;
+    return resolveSystemReveal(rec, {
+      explored: isSystemExplored(rec),
+      scanned: !!K.observatorySystem?.getSystemScanResult?.(sys),
+      intelAtLeast: (lvl) => intel?.isAtLeast?.(rec?.empireId, lvl) === true,
+    }).name === true;
+  }
+
+  /**
+   * Stan T1 klatki: obiekt pod kursorem → pamięć najechania; klucze treści rozwinięć (najechany + zaznaczone: ciało, stacja,
+   * prowadzący statek); etykiety na żądanie (ciała i stacje BEZ etykiety stałej — gwiazda, ciała bez kolonii, kolonie i stacje
+   * AI, planetoidy — tylko najechane albo zaznaczone); treść z pamięci (TTL); część klucza klatki.
+   */
+  _t1Prepare(F, { bodies, pictureCtx, sel, sys }) {
+    const K = F.K, tr = K.threeRenderer, em = K.entityManager, cm = K.colonyManager;
+    const ptr = F.pointer ?? null;
+    let target = null;
+    if (ptr && !ptr.overUI) {
+      const z = resolveLabelClick(this._zones, ptr.lx, ptr.ly);
+      const pick = this._hoverPick(F);
+      const h = F.hover ?? {};
+      target = resolveHoverTarget({ labelKey: z?.key ?? null, onDisc: pick.onDisc, vesselId: h.vesselId ?? null,
+        vesselCoreId: pick.vesselCoreId, stationId: pick.stationId, bodyId: h.bodyId ?? null });
+    }
+    const hov = this._hoverMem.update(hoverObjectKey(target), F.now);
+    // Etykiety stałe (kolonie i stacje gracza w scenie) i stacje oglądanego układu.
+    const permanent = new Map();
+    for (const b of bodies) permanent.set(String(b.id), b);
+    const stations = new Map();
+    for (const st of K.stationSystem?.getAllStations?.() ?? []) if (st && tr?._stations?.has?.(st.id)) stations.set(String(st.id), st);
+    const groups = groupByAnchor(bodies);
+    const lead = sel.leadId ?? (sel.vesselIds?.[0] ?? null);
+    // Klucz treści obiektu: grupa „+N” → głowa grupy (kotwica — ciało, które etykieta nazywa); klaster statków → prowadzący
+    // (gdy w klastrze), inaczej pierwszy z klucza.
+    const contentKeyOf = (objKey) => {
+      if (!objKey || !objKey.startsWith('lbl:')) return objKey ?? null;
+      const lk = objKey.slice(4), i = lk.indexOf(':'), p = lk.slice(0, i), rest = lk.slice(i + 1);
+      if (p === 'g') {
+        const m = groups.get(rest) ?? [];
+        const head = m.find((x) => x.kind === 'colony' && String(x.id) === rest) ?? m[0];
+        return head ? (head.kind === 'colony' ? 'body:' : 'station:') + head.id : null;
+      }
+      if (p === 'k' || p === 'e') {
+        const ids = rest.split(',');
+        const id = (p === 'k' && lead != null && ids.includes(String(lead))) ? String(lead) : ids[0];
+        return id ? 'vessel:' + id : null;
+      }
+      return null;
+    };
+    const hoverContent = contentKeyOf(hov.key);
+    const selContent = new Set();
+    if (sel.entityId != null) selContent.add('body:' + sel.entityId);
+    if (sel.stationId != null) selContent.add('station:' + sel.stationId);
+    if (lead != null) selContent.add('vessel:' + lead);
+    const contentKeys = new Set(selContent);
+    if (hoverContent) contentKeys.add(hoverContent);
+    // Narodziny rozwinięć (fade-in na czasie realnym) — nowy klucz rodzi się teraz, zniknięty — zapomniany.
+    let fading = false;
+    for (const k of [...this._expBorn.keys()]) if (!contentKeys.has(k)) this._expBorn.delete(k);
+    for (const k of contentKeys) {
+      if (!this._expBorn.has(k)) this._expBorn.set(k, F.now);
+      if (expansionFade(F.now, this._expBorn.get(k)) < 1) fading = true;
+    }
+    const hoverOnly = hoverContent != null && !selContent.has(hoverContent);
+    const alphaOf = (ck) => {
+      if (!ck || !contentKeys.has(ck)) return 0;
+      const a = expansionFade(F.now, this._expBorn.get(ck));
+      return (hoverOnly && ck === hoverContent) ? Math.min(a, hov.fadeOut) : a;
+    };
+    // Etykiety na żądanie — obiekty z rozwinięciem bez etykiety stałej, obecne w scenie.
+    const nameOk = this._t1NameVisible(F);
+    const demand = [];
+    for (const ck of contentKeys) {
+      const i = ck.indexOf(':'), kind = ck.slice(0, i), id = ck.slice(i + 1);
+      if (permanent.has(id)) continue;
+      if (kind === 'body') {
+        const entity = em?.get?.(id) ?? null;
+        const world = entity ? tr?.getBodyWorldInfo?.(id) : null;
+        if (!world) continue;
+        const colony = cm?.getColony?.(id) ?? null;
+        const foreign = !!colony && !isPlayerColony(colony);
+        demand.push({ key: 'h:' + id, ck, kind: 'demand', id, entity, world, foreign, colony: !!colony,
+          name: nameOk ? String(entity.name ?? id) : '???', selected: selContent.has(ck),
+          target: { type: 'body', id, entity, systemId: sys } });
+      } else if (kind === 'station') {
+        const st = stations.get(id);
+        const world = st ? (tr?.getStationWorldInfo?.(id) ?? tr?.getBodyWorldInfo?.(id)) : null;
+        if (!world) continue;
+        const foreign = (st.ownerEmpireId ?? 'player') !== 'player';
+        demand.push({ key: 'hs:' + id, ck, kind: 'demand', id, entity: st, world, foreign, colony: false,
+          name: nameOk ? String(st.name ?? id) : '???', selected: selContent.has(ck),
+          target: { type: 'station', id, systemId: sys } });
+      }
+    }
+    // Treść rozwinięć (pamięć `CONTENT_TTL_MS`).
+    const ctx = { permanent, stations, pictureCtx };
+    const content = new Map();
+    for (const ck of contentKeys) content.set(ck, this._t1Content(ck, F, ctx));
+    let key = `|lh:${hov.key ?? ''}:${hov.lingering ? 1 : 0}:${nameOk ? 1 : 0}`;
+    for (const d of demand) key += `|d${d.key}:${q(d.world.x)},${q(d.world.y)},${q(d.world.z)}:${q(d.world.r ?? 0)}:${d.name}:${d.selected ? 1 : 0}`;
+    for (const [ck, lines] of content) key += `|x${ck}:${lines.join('/')}`;
+    return { key, hov, hoverContent, selContent, contentKeys, alphaOf, demand, content, contentKeyOf, lead,
+      animating: fading || (hoverOnly && hov.animating) };
+  }
+
+  /** Treść rozwinięcia obiektu (≤ 4 linie) — pamięć na `CONTENT_TTL_MS` czasu realnego (zmiana języka i trybu Y — od nowa). */
+  _t1Content(ck, F, ctx) {
+    const loc = getLocale(), tac = F.tactical === true;
+    const c = this._expCache.get(ck);
+    if (c && c.loc === loc && c.tac === tac && F.now - c.t >= 0 && F.now - c.t < LABEL_HOVER.CONTENT_TTL_MS) return c.lines;
+    const i = ck.indexOf(':'), kind = ck.slice(0, i), id = ck.slice(i + 1);
+    const lines = kind === 'vessel' ? this._t1Vessel(id, F, ctx)
+      : kind === 'station' ? this._t1Station(id, F, ctx)
+      : kind === 'body' ? this._t1Body(id, F, ctx) : [];
+    if (this._expCache.size > 64) this._expCache.clear();
+    this._expCache.set(ck, { t: F.now, loc, tac, lines });
+    return lines;
+  }
+
+  _t1Body(id, F, ctx) {
+    const K = F.K, loc = getLocale();
+    const entity = K.entityManager?.get?.(id) ?? null;
+    const colony = K.colonyManager?.getColony?.(id) ?? null;
+    const occ = readOccupier(id);
+    const occupierName = occ ? readOccupierName(occ, t('warOverlay.player')) : null;
+    const homeId = K.homePlanet?.id ?? null;
+    if (colony && isPlayerColony(colony)) {
+      const b = ctx.permanent.get(String(id));
+      const body = entity ?? colony.planet ?? null;
+      const known = body?.explored === true || String(id) === String(homeId);
+      return colonyExpansionLines({ sub: b ? this._subColony(b, F) : null, body, deposits: known ? depositSummary(body?.deposits) : null,
+        occupierName, queue: colonyQueueCount(colony) }, t);
+    }
+    if (colony) {
+      const empId = colony.ownerEmpireId, intel = K.intelSystem;
+      const pop = colony.civSystem?.population;
+      return foreignColonyExpansionLines({
+        owner: { empireId: empId, empireName: K.empireRegistry?.get?.(empId)?.name ?? null, intelAtLeast: (lvl) => intel?.isAtLeast?.(empId, lvl) === true },
+        populationText: Number.isFinite(pop) ? fmtInt(Math.round(pop), loc) : null,
+        garrisonText: formatGarrisonReadout(readGarrisonReadout(K, id)), occupierName, body: entity }, t);
+    }
+    if (!entity) return [];
+    if (entity.type === 'star') {
+      const hz = entity.habitableZone;
+      return starExpansionLines({ star: entity, tempText: Number.isFinite(entity.temperature) ? fmtInt(entity.temperature, loc) : null,
+        hzText: hz && Number.isFinite(hz.min) && Number.isFinite(hz.max) ? [fmtDec(hz.min, 2, loc), fmtDec(hz.max, 2, loc)] : null }, t);
+    }
+    const explored = entity.explored === true || String(id) === String(homeId);
+    const distAU = (Number.isFinite(entity.x) && Number.isFinite(entity.y)) ? Math.hypot(entity.x, entity.y) / AU_TO_PX : null;
+    return bodyExpansionLines({ body: entity, explored, deposits: depositSummary(entity.deposits),
+      distText: distAU != null ? fmtDec(distAU, 2, loc) : null }, t);
+  }
+
+  _t1Station(id, F, ctx) {
+    const K = F.K;
+    const st = ctx.stations.get(String(id)) ?? null;
+    if (!st) return [];
+    if ((st.ownerEmpireId ?? 'player') !== 'player') {
+      const empId = st.ownerEmpireId, intel = K.intelSystem;
+      return foreignStationExpansionLines({ owner: { empireId: empId, empireName: K.empireRegistry?.get?.(empId)?.name ?? null,
+        intelAtLeast: (lvl) => intel?.isAtLeast?.(empId, lvl) === true } }, t);
+    }
+    const b = ctx.permanent.get(String(id));
+    const mother = resolveHomeColony(st);
+    let storage;
+    if (mother) {
+      const snap = K.systemPoolService?.getPoolSnapshot?.(mother.planetId);
+      const head = String(mother.name ?? mother.planetId);
+      storage = (snap?.byBody?.length > 1) ? { kind: 'pool', head, others: snap.byBody.length - 1 } : { kind: 'mother', name: head };
+    } else if (st.depotDetached) storage = { kind: 'cut' };
+    else storage = { kind: 'own', items: [...(st.depot?.inventory ?? [])].filter(([, v]) => v > 0).length };
+    const traders = gatherStationTraders(st.id, { vesselManager: K.vesselManager, missionSystem: K.missionSystem });
+    const docked = traders.filter((x) => x.status === 'docked').length;
+    const max = STATIONS[st.stationType ?? 'orbital_station']?.maxModules ?? STATIONS.orbital_station.maxModules;
+    return stationExpansionLines({ sub: b ? this._subStation(b) : null, storage, traffic: { moving: traders.length - docked, docked },
+      modules: { n: (st.modules ?? []).length, max, shipyard: st.hasActiveShipyard === true } }, t);
+  }
+
+  _t1Vessel(id, F, ctx) {
+    const K = F.K;
+    const v = K.vesselManager?.getVessel?.(id);
+    if (!v) return [];
+    if (isEnemyVessel(v)) {
+      const quality = K.intelSystem?.getVesselContact?.(id)?.quality ?? 'unknown';
+      return enemyVesselExpansionLines({ quality, roleLabel: t(`fleetPicture.role.${getPrimaryRole(v)}`) }, t);
+    }
+    const e = buildShipEntry(v, ctx.pictureCtx ?? {});
+    const eta = Number.isFinite(e?.eta?.year) ? `${e.eta.confidence === 'moving' ? '~' : '⏱'}${Math.round(e.eta.year)}` : null;
+    const pct = (x) => `${Math.round(x * 100)}%`;
+    const fuel = [e?.fuelPct != null ? `${t('tacticalDock.fuel')} ${pct(e.fuelPct)}` : null,
+      e?.warpFuelPct != null && (v.warpFuel?.max ?? 0) > 0 ? `${t('tacticalDock.warp')} ${pct(e.warpFuelPct)}` : null].filter(Boolean).join(' · ');
+    return vesselExpansionLines({ sub: this._subVessel(v, K), activity: e?.activityKey ? t(e.activityKey, ...(e.activityArgs ?? [])) : null,
+      etaText: eta, fuelText: fuel || null, skipActivity: F.tactical === true }, t);
   }
 
   // Treść drugiej linii (dane) — kolonia: „pop POP · N wolne · ✦ stolica · wykr. X AU” (zasięg wykrycia — ta sama reguła co
@@ -279,6 +537,26 @@ export class HudLabelLayer {
     return lines;
   }
 
+  /**
+   * REFORMA ZAKŁADEK T1 — linie etykiety ciała / stacji: pierwsza linia jak `_bodyLines` (wersaliki kolonii, „+N”, pogrubienie
+   * zaznaczonej), pod nią — gdy obiekt ma rozwinięcie — treść z pamięci `_t1Prepare` (zastępuje dzisiejszą drugą linię:
+   * pierwsza linia rozwinięcia kolonii i stacji to ta sama treść). `baseH` — wysokość bez rozwinięcia (przypięcie, I8.3).
+   */
+  _t1BodyLines(b, { selected, ck, collapsedOthers = 0 }, F, T) {
+    const R = HUD_LABELS;
+    const size = (THEME.fontSizeNormal ?? 11) + R.MAIN_SIZE_DELTA;
+    const subSize = THEME.fontSizeSmall ?? 9;
+    const loc = getLocale();
+    const isColony = b.kind === 'colony';
+    const name = isColony ? String(b.name).toLocaleUpperCase(loc) : String(b.name);
+    const lines = [this._line(collapsedOthers > 0 ? collapsedText(name, collapsedOthers) : name,
+      { size, bold: selected, spacing: isColony ? R.LETTER_SPACING_COLONY : 0, maxW: R.MAX_NAME_PX })];
+    const baseH = this._labelBox(lines).h;
+    const expanded = !!ck && T.contentKeys.has(ck);
+    if (expanded) for (const s of T.content.get(ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+    return { lines, baseH, expanded, expAlpha: expanded ? T.alphaOf(ck) : 0 };
+  }
+
   /** Geometria etykiet (px logiczne), rozkład, strefy kliku; `animating` — trwa fade-in. */
   collect(F, proj) {
     const P = this._prep;
@@ -338,6 +616,15 @@ export class HudLabelLayer {
     const isSelBody = (b) => (b.kind === 'colony' && sel.entityId != null && String(sel.entityId) === String(b.id))
       || (b.kind === 'station' && sel.stationId != null && String(sel.stationId) === String(b.id));
     const isHovBody = (b, key) => P.hover.labelKey === key || (b.kind === 'colony' && P.hover.bodyId != null && String(P.hover.bodyId) === String(b.id));
+    // REFORMA ZAKŁADEK T1 (`labelHover`): linie z rozwinięciem (treść z `_t1Prepare`), priorytet najechanej (na wierzchu)
+    // i przypięcie etykiety rozwiniętej (I8.3). Przy OFF — `T` puste, ścieżki jak dziś.
+    const T = P.t1 ?? null;
+    const bodyCk = (b) => (b.kind === 'colony' ? 'body:' : 'station:') + b.id;
+    const hovPrio = (ck) => (T && T.hov.key != null && ck === T.hoverContent ? LABEL_HOVER.HOVER_PRIO : null);
+    const pinIt = (it, baseH) => {
+      if (it.expanded) { const pin = pinFor(it.key, { pins: this._pins, prev: this._prev, baseH }); if (pin) it.pin = pin; }
+      return it;
+    };
     const groups = groupByAnchor(P.bodies);
     for (const [anchorId, members] of groups) {
       const proj1 = members.map((b) => ({ b, d: pushDisc(b.id, b.world) ?? discOf(b.world) })).filter((x) => x.d && pointInRect(x.d.x, x.d.y, map));
@@ -345,16 +632,20 @@ export class HudLabelLayer {
       const aw = P.anchors.get(anchorId);
       const ad = aw ? (pushDisc(anchorId, aw) ?? discOf(aw)) : null;
       let state = stackLOD(ad ? 2 * ad.r : NaN, proj1.length);
-      const selIdx = proj1.findIndex((x) => isSelBody(x.b));
+      // T1: członek inny niż kotwica — zaznaczony ALBO najechany (tarcza) — widoczny (co najmniej szyna).
+      const selIdx = proj1.findIndex((x) => (T ? T.contentKeys.has(bodyCk(x.b)) : isSelBody(x.b)));
       if (selIdx > 0) state = atLeastLOD(state, 'rail');           // zaznaczony członek inny niż kotwica — widoczny
       if (state === 'single' || state === 'spread') {
         for (const { b, d } of proj1) {
           const key = b.key, selected = isSelBody(b);
-          const lines = this._bodyLines(b, { selected, sub: selected || isHovBody(b, key) }, F);
+          const L = T ? this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T) : null;
+          const lines = L ? L.lines : this._bodyLines(b, { selected, sub: selected || isHovBody(b, key) }, F);
           const box = this._labelBox(lines);
-          pushItem({ key, kind: b.kind, ax: d.x, ay: d.y, clear: d.r, w: box.w, h: box.h, lines, selected,
-            role: 'primary', prio: selected ? LABEL_PRIO.selected : b.home ? LABEL_PRIO.home : b.kind === 'colony' ? LABEL_PRIO.colony : LABEL_PRIO.station,
-            target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } });
+          const it = { key, kind: b.kind, ax: d.x, ay: d.y, clear: d.r, w: box.w, h: box.h, lines, selected,
+            role: 'primary', prio: (L?.expanded ? hovPrio(bodyCk(b)) : null) ?? (selected ? LABEL_PRIO.selected : b.home ? LABEL_PRIO.home : b.kind === 'colony' ? LABEL_PRIO.colony : LABEL_PRIO.station),
+            target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
+          if (L) Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+          pushItem(L ? pinIt(it, L.baseH) : it);
         }
         continue;
       }
@@ -364,25 +655,57 @@ export class HudLabelLayer {
         const head = proj1.find((x) => x.b.kind === 'colony' && x.b.id === anchorId) ?? proj1[0];
         const key = 'g:' + anchorId;
         const selected = isSelBody(head.b);
-        const lines = this._bodyLines(head.b, { selected, sub: selected || isHovBody(head.b, key) || P.hover.labelKey === key, collapsedOthers: proj1.length - 1 }, F);
+        // T1: najechana zwinięta „+N” — rozwinięcie GŁOWY grupy (ciało, które etykieta nazywa), bez rozwijania szyny.
+        const L = T ? this._t1BodyLines(head.b, { selected, ck: bodyCk(head.b), collapsedOthers: proj1.length - 1 }, F, T) : null;
+        const lines = L ? L.lines : this._bodyLines(head.b, { selected, sub: selected || isHovBody(head.b, key) || P.hover.labelKey === key, collapsedOthers: proj1.length - 1 }, F);
         const box = this._labelBox(lines);
-        pushItem({ key, kind: 'group', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: box.w, h: box.h, lines, selected,
-          role: 'primary', prio: selected ? LABEL_PRIO.selected : LABEL_PRIO.group, members: proj1.map((x) => x.b.key),
-          target: { type: 'body', id: anchorId, entity: anchorEntity, systemId: sys } });
+        const it = { key, kind: 'group', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: box.w, h: box.h, lines, selected,
+          role: 'primary', prio: (L?.expanded ? hovPrio(bodyCk(head.b)) : null) ?? (selected ? LABEL_PRIO.selected : LABEL_PRIO.group), members: proj1.map((x) => x.b.key),
+          target: { type: 'body', id: anchorId, entity: anchorEntity, systemId: sys } };
+        if (L) Object.assign(it, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha });
+        pushItem(L ? pinIt(it, L.baseH) : it);
         continue;
       }
       // Szyna — blok wierszy (każdy wiersz z własną strefą kliku).
       const rows = proj1.map(({ b }) => {
         const rkey = b.key, selected = isSelBody(b);
-        const lines = this._bodyLines(b, { selected, sub: selected || isHovBody(b, rkey) }, F);
+        const L = T ? this._t1BodyLines(b, { selected, ck: bodyCk(b) }, F, T) : null;
+        const lines = L ? L.lines : this._bodyLines(b, { selected, sub: selected || isHovBody(b, rkey) }, F);
         const box = this._labelBox(lines);
-        return { key: rkey, kind: b.kind, w: box.w, h: box.h, lines, selected,
+        const row = { key: rkey, kind: b.kind, w: box.w, h: box.h, lines, selected,
           target: b.kind === 'colony' ? { type: 'body', id: b.id, entity: b.body, systemId: sys } : { type: 'station', id: b.id, systemId: sys } };
+        if (L) Object.assign(row, { expanded: L.expanded, expFrom: 1, expAlpha: L.expAlpha, baseH: L.baseH, ck: bodyCk(b) });
+        return row;
       });
       const size = railBlockSize(rows);
       const anySel = rows.some((r) => r.selected);
-      pushItem({ key: 'r:' + anchorId, kind: 'rail', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: size.w, h: size.h,
-        rows, selected: anySel, role: 'primary', prio: anySel ? LABEL_PRIO.selected : LABEL_PRIO.group });
+      const it = { key: 'r:' + anchorId, kind: 'rail', ax: anchorPt.x, ay: anchorPt.y, clear: anchorPt.r ?? 0, w: size.w, h: size.h,
+        rows, selected: anySel, role: 'primary', prio: anySel ? LABEL_PRIO.selected : LABEL_PRIO.group };
+      if (T) {
+        const exp = rows.filter((r) => r.expanded);
+        it.expanded = exp.length > 0;
+        if (exp.some((r) => r.ck === T.hoverContent && T.hov.key != null)) it.prio = LABEL_HOVER.HOVER_PRIO;
+        // Wysokość bloku bez rozwinięć (przypięcie: górna krawędź bloku stoi, wiersze rosną w dół).
+        const baseH = rows.reduce((s, r, i) => s + r.baseH + (i > 0 ? R.ROW_GAP : 0), 0);
+        pushItem(pinIt(it, baseH));
+      } else pushItem(it);
+    }
+    // ── REFORMA ZAKŁADEK T1 — etykiety na żądanie (D-TR-1 (a)): ciała i stacje bez etykiety stałej, najechane albo zaznaczone ──
+    if (T) {
+      const size = (THEME.fontSizeNormal ?? 11) + R.MAIN_SIZE_DELTA;
+      const subSize = THEME.fontSizeSmall ?? 9;
+      for (const dm of T.demand) {
+        const dd = discAt.get(dm.id) ?? discOf(dm.world);   // tarcza z przeszkód tej klatki (gwiazda, planety, księżyce), inaczej rzut
+        if (!dd || !pointInRect(dd.x, dd.y, map)) continue;
+        const name = dm.colony ? String(dm.name).toLocaleUpperCase(loc) : String(dm.name);
+        const lines = [this._line(name, { size, bold: dm.selected, spacing: dm.colony ? R.LETTER_SPACING_COLONY : 0, maxW: R.MAX_NAME_PX })];
+        for (const s of T.content.get(dm.ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+        const box = this._labelBox(lines);
+        const it = { key: dm.key, kind: 'demand', ax: dd.x, ay: dd.y, clear: dd.r ?? 0, w: box.w, h: box.h, lines, selected: dm.selected,
+          role: dm.foreign ? 'foreign' : 'primary', prio: hovPrio(dm.ck) ?? LABEL_PRIO.selected, target: dm.target,
+          expanded: true, demand: true, demandAlpha: T.alphaOf(dm.ck) };
+        pushItem(pinIt(it, box.h));
+      }
     }
     // ── Statki: w kadrze → klastry (jak dziś), poza kadrem → strzałki krawędzi (497 — zawsze) ──────────────────────────
     const onScreen = [], offScreen = [];
@@ -433,24 +756,43 @@ export class HudLabelLayer {
         text = `⚑ ${low(K.fleetSystem?.getFleet?.(c.fleetId)?.name ?? '')} ×${c.items.length}`;
       } else text = `◆ ×${c.items.length}`;
       const selected = !!lead;
-      const subFor = lead ?? (hov ?? (P.hover.labelKey === key ? c.items[0] : null));
       const lines = [this._line(text, { size, bold: selected, maxW: R.MAX_NAME_PX })];
-      if (subFor && (single || lead || subFor === hov)) {
-        const isAnon = isEnemy && subFor.name === '?';
-        const sub = isAnon ? null : this._subVesselCached(subFor.id, F);
-        if (sub) lines.push(this._line(sub, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+      // REFORMA ZAKŁADEK T1: rozwinięcie statku (prowadzący w klastrze, najechany sprite albo etykieta) — treść z pamięci
+      // `_t1Prepare` (obcy statek wg wywiadu — 504); przy OFF — druga linia jak dziś.
+      let t1 = null;
+      if (T) {
+        const sids = ids.map(String), hk = T.hov.key;
+        const ck = (!isEnemy && lead) ? 'vessel:' + lead.id
+          : (hk?.startsWith('vessel:') && sids.includes(hk.slice(7))) ? hk
+          : (hk === 'lbl:' + key ? T.hoverContent : null);
+        const expanded = !!ck && T.contentKeys.has(ck);
+        const baseH = this._labelBox(lines).h;
+        if (expanded) for (const s of T.content.get(ck) ?? []) lines.push(this._line(s, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+        t1 = { expanded, baseH, expAlpha: expanded ? T.alphaOf(ck) : 0, prio: expanded ? hovPrio(ck) : null };
+      } else {
+        const subFor = lead ?? (hov ?? (P.hover.labelKey === key ? c.items[0] : null));
+        if (subFor && (single || lead || subFor === hov)) {
+          const isAnon = isEnemy && subFor.name === '?';
+          const sub = isAnon ? null : this._subVesselCached(subFor.id, F);
+          if (sub) lines.push(this._line(sub, { size: subSize, maxW: R.MAX_NAME_PX + 40 }));
+        }
       }
       const box = this._labelBox(lines);
       const ax = single ? c.items[0].x : c.x, ay = single ? c.items[0].y : c.y;
       const bracketClear = single && bracketIds.has(String(c.items[0].id)) ? R.BRACKET_HALF * Math.SQRT2 : 0;
-      return { key, kind: isEnemy ? 'enemy' : 'vessel', ax, ay, clear: single ? Math.max(2, c.items[0].r, bracketClear) : 3, w: box.w, h: box.h, lines,
-        selected, role: isEnemy ? 'foreign' : 'primary', prio: selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own,
+      const it = { key, kind: isEnemy ? 'enemy' : 'vessel', ax, ay, clear: single ? Math.max(2, c.items[0].r, bracketClear) : 3, w: box.w, h: box.h, lines,
+        selected, role: isEnemy ? 'foreign' : 'primary', prio: (t1?.prio ?? null) ?? (selected ? LABEL_PRIO.selected : isEnemy ? LABEL_PRIO.enemy : LABEL_PRIO.own),
         target: isEnemy ? { type: 'enemy', id: ids[0], systemId: sys } : vesselsTarget(ids, sys) };
+      if (!t1) return it;
+      Object.assign(it, { expanded: t1.expanded, expFrom: 1, expAlpha: t1.expAlpha });
+      return pinIt(it, t1.baseH);
     };
+    // T1: statek najechany (także w trakcie wygasania rozwinięcia) — etykieta widoczna jak przy dzisiejszym najechaniu.
+    const t1Hovered = (c) => !!T && typeof T.hov.key === 'string' && T.hov.key.startsWith('vessel:') && c.items.some((p) => 'vessel:' + p.id === T.hov.key);
     for (const c of ownClusters) {
       const single = c.items.length === 1;
       const show = !single || c.label === 'fleet' || c.alertCount > 0 || c.items.some((p) => p.selected || (leadId != null && String(p.id) === String(leadId)))
-        || F.tactical || (P.hover.vesselId != null && c.items.some((p) => String(p.id) === String(P.hover.vesselId)));
+        || F.tactical || (T ? t1Hovered(c) : (P.hover.vesselId != null && c.items.some((p) => String(p.id) === String(P.hover.vesselId))));
       if (show) pushItem(vesselItem(c, false));
     }
     for (const c of enemyClusters) pushItem(vesselItem(c, true));
@@ -463,15 +805,25 @@ export class HudLabelLayer {
     }
     // ── Rozkład (anti-overlap + kadr) ───────────────────────────────────────────────────────────────────────────────
     this._lastPlaceInput = { items, obstacles, rect: map };   // odczyt bramki / keepera (`debugPlacement`)
-    const { placed } = placeLabels(items, { rect: map, obstacles, prev: this._prev });
+    // T1: etykiety rozwinięte stoją na przypiętym kandydacie (I8.3), sąsiedzi je omijają, a po końcu rozwinięcia wracają
+    // (`_yieldMem`, kamera nieruszona); przy OFF — rozkład jak dziś.
+    const expandedKeys = T ? new Set(items.filter((it) => it.expanded).map((it) => it.key)) : null;
+    if (T) this._yieldMem.step(this._prev, expandedKeys.size > 0, tr?.getCameraMoveEpoch?.() ?? 0);
+    const { placed } = T ? placeLabelsPinned(items, { rect: map, obstacles, prev: this._prev }) : placeLabels(items, { rect: map, obstacles, prev: this._prev });
     this._prev.clear();
     for (const p of placed) this._prev.set(p.key, p.cand);
+    if (T) updatePins(this._pins, placed, expandedKeys);
+    else {
+      if (this._pins.size) this._pins.clear();
+      this._yieldMem.reset();
+    }
     const fading = updateBorn(this._born, placed.map((p) => p.key), F.now);
     // Strefy kliku — prostokąty tekstu (wiersze szyny osobno), w kolejności rysowania.
     const zones = [];
     const drawList = [...placed].sort((a, b) => (b.prio - a.prio));    // zaznaczone rysowane ostatnie (na wierzchu)
     for (const p of drawList) {
-      p.fade = fadeAlpha(F.now, this._born.get(p.key));
+      // T1: etykieta na żądanie — cała gaśnie i rozjaśnia się z rozwinięciem (czas realny).
+      p.fade = p.demand ? p.demandAlpha : fadeAlpha(F.now, this._born.get(p.key));
       if (p.kind === 'rail') {
         p.rail = railRows(p);
         for (const r of p.rail.rows) zones.push({ x: r.x, y: r.y, w: r.w, h: r.h, key: r.key, target: r.target, kind: r.kind });
@@ -479,7 +831,7 @@ export class HudLabelLayer {
     }
     this._zones = zones;
     this._last = { labels: drawList, arrows, obstacles };
-    return { count: drawList.length + arrows.length, animating: fading, labels: drawList, arrows };
+    return { count: drawList.length + arrows.length, animating: fading || T?.animating === true, labels: drawList, arrows };
   }
 
   _cardRects(K) {
@@ -534,7 +886,9 @@ export class HudLabelLayer {
     ctx.textAlign = 'left';
   }
 
-  _drawBox(ctx, box, lines, color, barAlpha, fade, alignRight = false) {
+  // `expFrom` / `expAlpha` (REFORMA ZAKŁADEK T1): linie od `expFrom` (rozwinięcie) z dodatkowym kryciem (fade-in / wygasanie);
+  // domyślnie — bez zmian (wszystkie linie jak dziś).
+  _drawBox(ctx, box, lines, color, barAlpha, fade, alignRight = false, expFrom = Infinity, expAlpha = 1) {
     const R = HUD_LABELS;
     ctx.globalAlpha = barAlpha * fade;
     ctx.fillStyle = THEME.bgPrimary;
@@ -543,7 +897,7 @@ export class HudLabelLayer {
     lines.forEach((ln, i) => {
       if (i > 0) y += R.LINE_GAP;
       const x = alignRight ? box.x + box.w - R.PAD_X - ln.w : box.x + R.PAD_X;
-      this._drawLine(ctx, ln, x, y + ln.size, color, (i === 0 ? 1 : R.SUB_ALPHA) * fade);
+      this._drawLine(ctx, ln, x, y + ln.size, color, (i === 0 ? 1 : R.SUB_ALPHA) * fade * (i >= expFrom ? expAlpha : 1));
       y += ln.h;
     });
   }
@@ -579,7 +933,8 @@ export class HudLabelLayer {
         ctx.fillStyle = color;
         for (const r of rr.rows) { ctx.beginPath(); ctx.arc(rr.railX, r.lineY, R.RAIL_DOT_R, 0, Math.PI * 2); ctx.fill(); }
         for (const r of rr.rows) {
-          this._drawBox(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, r.lines, color, r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, fade, p.side === 'W');
+          this._drawBox(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, r.lines, color, r.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, fade, p.side === 'W',
+            r.expFrom ?? Infinity, r.expAlpha ?? 1);
         }
         continue;
       }
@@ -587,7 +942,9 @@ export class HudLabelLayer {
       ctx.moveTo(p.attach.x, p.attach.y);
       ctx.lineTo(ux, p.attach.y);
       ctx.stroke();
-      this._drawBox(ctx, p, p.lines, color, p.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, fade);
+      // T1 (I8.3): rozwinięta etykieta po stronie W rośnie W LEWO (prawa krawędź przy kotwicy) — tekst do prawej, nazwa stoi.
+      this._drawBox(ctx, p, p.lines, color, p.selected ? R.BAR_ALPHA_SELECTED : R.BAR_ALPHA, fade, p.expanded === true && p.side === 'W',
+        p.expFrom ?? Infinity, p.expAlpha ?? 1);
     }
     // Strzałki krawędzi — trójkąt ku krawędzi + liczba.
     const DIRS = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
@@ -641,19 +998,45 @@ export class HudLabelLayer {
     };
   }
 
+  /**
+   * REFORMA ZAKŁADEK T1 — tożsamość obiektu z rozwinięciem z najechania (`body:X`, `station:Y`, `vessel:V`, `lbl:…`) albo
+   * `null` (flaga OFF, brak najechania). Czyta ją scena (współrzędne pustej mapy nie przykrywają rozwinięcia).
+   */
+  hoverObjectKey() {
+    return this._prep?.on && this._prep.t1 ? (this._prep.t1.hov.key ?? null) : null;
+  }
+
+  /**
+   * REFORMA ZAKŁADEK T1 — punkt (px logiczne) pod etykietą z ostatniej klatki, pod stacją oglądanego układu albo przy
+   * aktywnym najechaniu (scena: współrzędne pustej mapy nie przykrywają rozwinięcia — 530). Flaga OFF — `false`.
+   */
+  coversPoint(lx, ly) {
+    if (!this._prep?.on || !this._prep.t1) return false;
+    if (this._prep.t1.hov.key != null || resolveLabelClick(this._zones, lx, ly) != null) return true;
+    const K = (typeof window !== 'undefined') ? window.KOSMOS : null;
+    const st = [];
+    for (const id of K?.threeRenderer?._stations?.keys?.() ?? []) st.push({ id, disc: objectScreenDisc(K, 'station', id) });
+    return pickStationAt(st, lx, ly) != null;
+  }
+
   /** Odczyt dla bramki: etykiety z ostatniej klatki rysunku (px logiczne). */
   debug() {
     const r1 = (v) => (Number.isFinite(v) ? +v.toFixed(1) : v);
     const L = this._last;
+    const T = this._prep?.t1 ?? null;
     return {
       id: 'labels', on: this._prep.on,
       labels: (L?.labels ?? []).map((p) => ({
         key: p.key, kind: p.kind, text: p.kind === 'rail' ? p.rows.map((r) => r.lines[0].text) : p.lines.map((l) => l.text),
         x: r1(p.x), y: r1(p.y), w: r1(p.w), h: r1(p.h), side: p.side, below: p.below, cand: p.cand, overlap: p.overlap,
         selected: !!p.selected, fade: r1(p.fade), anchor: { x: r1(p.ax), y: r1(p.ay) },
+        ...(T ? { expanded: !!p.expanded || (p.kind === 'rail' && p.rows.some((r) => r.expanded)), pinned: !!p.pinned,
+          rows: p.kind === 'rail' ? p.rows.map((r) => r.lines.map((l) => l.text)) : undefined } : {}),
       })),
       arrows: (L?.arrows ?? []).map((a) => ({ edge: a.edge, x: r1(a.x), y: r1(a.y), count: a.count, role: a.role })),
       zones: this._zones.length,
+      ...(T ? { hover: { key: T.hov.key, alpha: r1(T.hov.alpha), lingering: T.hov.lingering }, expanded: [...T.contentKeys],
+        demand: T.demand.map((d) => d.key) } : {}),
     };
   }
 }

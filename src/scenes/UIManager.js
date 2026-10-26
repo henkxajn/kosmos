@@ -75,6 +75,7 @@ import { resolveHudRoles } from '../ui/HudPalette.js';                    // …
 import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc } from '../ui/BodyCardSideLogic.js';   // paczka A (493)
 import { isShipPanelOutlinerOn, shipPanelHiddenByDock, shipRowKeys, resolveRowAnchor, computeShipPanelPlacement,
          syncShipPanelOnSystemSwitch } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 — panel statku przy outlinerze
+import { isLabelHoverActive, bodyCardAction } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (d) — karta ciała bez akcji
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -530,6 +531,18 @@ export class UIManager {
       obstacles: card ? [card] : [] });
     this._shipPanelPlacement = p;   // odczyt dla bramki / sondy
     return p;
+  }
+
+  /**
+   * REFORMA ZAKŁADEK T1 (d) — ciało na karcie ciała: zaznaczone ciało (`_selectedEntity`), a przy `labelHover` `null` dla ciała
+   * BEZ akcji karty (`bodyCardAction` — lustro `BottomContext._actionLabel`; w ZF: gwiazda i planetoidy bez placówki): karta
+   * się nie rysuje, nie łapie kliku, kółka ani kursora; zaznaczenie zostaje (2. klik — kamera, D-UI-5; etykieta na żądanie
+   * z rozwinięciem na warstwie HUD). Przy OFF — zawsze `_selectedEntity` (jak dziś).
+   */
+  _bodyCardEntity() {
+    const e = this._selectedEntity;
+    if (!e || !isLabelHoverActive(GAME_CONFIG.FEATURES) || !window.KOSMOS?.civMode) return e;
+    return bodyCardAction(e, window.KOSMOS) ? e : null;
   }
 
   /** T3 (D-TR-10 (a), Finding 542) — tryb Y: przy rozwiniętym Doku taktycznym panel statku nad mapą się nie rysuje. */
@@ -2025,7 +2038,7 @@ export class UIManager {
     if (this.panelDock?.isOver?.(x, y)) return true;
 
     // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
-    if (this._bottomContext.isOver(x, y, W, H, this._selectedEntity)) return true;
+    if (this._bottomContext.isOver(x, y, W, H, this._bodyCardEntity())) return true;   // T1 (d) — karta ciała bez akcji przy `labelHover` — brak
 
     // Overlay otwarty — blokuj kamerę
     if (this.overlayManager?.isAnyOpen()) return true;
@@ -2165,7 +2178,8 @@ export class UIManager {
     if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
 
     // BottomContext (dolny panel kontekstowy)
-    if (this._selectedEntity && this._bottomContext.hitTest(x, y, W, H, this._selectedEntity)) return true;
+    const cardEntity = this._bodyCardEntity();   // REFORMA ZAKŁADEK T1 (d) — przy `labelHover` karta ciała bez akcji nie istnieje
+    if (cardEntity && this._bottomContext.hitTest(x, y, W, H, cardEntity)) return true;
 
     // ARKUSZ HUD paczka A (H2, Finding 515) — etykiety warstwy HUD: PO karcie ciała (karta leży nad nimi), przed raycastem 3D;
     // punkt na tarczy ciała wygrywa (487, 503 — rozstrzyga warstwa); reguła D-UI-5 (`clickObject`) bez zmian.
@@ -2220,8 +2234,8 @@ export class UIManager {
       if (this.overlayManager.handleScroll(delta, x, y)) return true;
     }
     // BottomContext scroll
-    if (this._selectedEntity) {
-      if (this._bottomContext.handleWheel(x, y, delta, W, H, this._selectedEntity)) return true;
+    if (this._bodyCardEntity()) {   // T1 (d)
+      if (this._bottomContext.handleWheel(x, y, delta, W, H, this._bodyCardEntity())) return true;
     }
     return false;
   }
@@ -2398,7 +2412,7 @@ export class UIManager {
     // ── BottomContext (dolny panel info o encji) ──────────────
     // Ukryj gdy aktywny overlay (Ekonomia, Flota itp.) — przeszkadza
     if (!globeOpen && !this.overlayManager.isAnyOpen()) {
-      this._bottomContext.draw(ctx, W, H, this._selectedEntity);
+      this._bottomContext.draw(ctx, W, H, this._bodyCardEntity());   // REFORMA ZAKŁADEK T1 (d) — ciało bez akcji przy `labelHover`: bez karty
     }
 
     // ── (Slice 4 — sidebar usunięty, brak przerysowania nad BottomContext) ──

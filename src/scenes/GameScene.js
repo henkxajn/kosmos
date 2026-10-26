@@ -14,6 +14,7 @@ import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } fr
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import { systemDisplayName }  from '../ui/MapLabelLogic.js';
 import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 (D-TR-14)
+import { isLabelHoverActive } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -5775,11 +5776,22 @@ export class GameScene {
       return;
     }
     const target = this._resolveClickTarget(clientX, clientY);
+    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — przy `labelHover` ciało i statek opisuje rozwinięcie etykiety HUD: bez podpowiedzi
+    // mapy (531, 536); POI — bez zmian; współrzędne tylko nad PUSTĄ mapą — nie pod etykietą HUD ani nad gwiazdą / stacją
+    // (obiektem z rozwinięciem; resolver zwraca dla nich „pustkę” — 530).
+    const lh = isLabelHoverActive(GAME_CONFIG.FEATURES);
+    if (lh && target && target.type !== 'empty' && target.type !== 'poi') {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
     if (!target || target.type === 'empty') {
       // M3 P2.3 — coord tooltip dla empty space (override P1.5 D2 = no tooltip)
       // 3D worldPoint to Three.js coords (XZ plane Y=0). Konwersja → gameplay px.
       const wp = target?.worldPoint;
-      if (wp && typeof wp.x === 'number' && typeof wp.z === 'number') {
+      const local = lh ? this.uiManager?.toLocalUI?.(clientX, clientY) : null;
+      const covered = lh && (this.threeRenderer?._hoverPlanetId != null
+        || window.KOSMOS?.hudLayer?.coversPoint?.(local?.x, local?.y) === true);
+      if (!covered && wp && typeof wp.x === 'number' && typeof wp.z === 'number') {
         const gp = worldToGameplay(wp.x, wp.z);
         if (gp) {
           this._scheduleCoordTooltip(gp, clientX, clientY);

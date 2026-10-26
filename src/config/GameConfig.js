@@ -608,6 +608,21 @@ export const GAME_CONFIG = {
     //     i kliku — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.shipPanelOutliner = false`) działa od następnej
     //     klatki; F5 wczytuje wartość z tego pliku.
     shipPanelOutliner: true,
+
+    // ── REFORMA ZAKŁADEK T1 (TABS_REFORM_PLAN.md §5.2; D-TR-1 (a), D-TR-2 (a), D-TR-3) — rozwinięcie informacyjne etykiet ──
+    // labelHover: na warstwie etykiet HUD (wymaga `hudLabels`; logika `LabelHoverLogic.js`) — najechanie etykiety albo
+    //   obiektu (tarcza, sprite, model stacji) rozwija pod nazwą do 4 linii (treść wg tabel I7: kolonia gracza, ciało bez
+    //   kolonii, gwiazda, obca kolonia — właściciel / populacja / garnizon wg wywiadu, stacja, statek — obcy wg wywiadu, 504);
+    //   fade-in 150 ms i wygasanie 200 ms po zejściu kursora na czasie realnym (działa w pauzie); zaznaczony obiekt —
+    //   rozwinięcie stałe; etykieta rozwinięta nie zmienia położenia (I8.3 — sąsiedzi ustępują i po niej wracają); ciała
+    //   i stacje bez etykiety stałej (gwiazda, ciała bez kolonii, kolonie i stacje AI, planetoidy) dostają etykietę NA ŻĄDANIE
+    //   przy najechaniu i do odznaczenia; podpowiedzi `#colony-3d-tooltip` (kolonia, statek) i ciałowo-statkowa część
+    //   `#kosmos-tooltip` wygaszone (zostają: podpowiedź budynku, POI, współrzędne pustej mapy); karta ciała dla ciała bez
+    //   akcji (gwiazda, planetoida bez placówki) się nie otwiera — 1. klik zaznacza, 2. klik — kamera.
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejszy kod co do bitu; flaga czytana przy każdym rysunku,
+    //     ruchu kursora i kliku — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.labelHover = false`) działa od
+    //     następnej klatki; F5 wczytuje wartość z tego pliku.
+    labelHover: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

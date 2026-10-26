@@ -529,7 +529,7 @@ export default {
   // === Typy ciał niebieskich ===
   'bodyType.Planet': 'Planeta',
   'bodyType.Moon': 'Księżyc',
-  'bodyType.Planetoid': 'Planetoid',
+  'bodyType.Planetoid': 'Planetoida',
   'bodyType.Asteroid': 'Asteroida',
   'bodyType.Comet': 'Kometa',
 
@@ -3755,6 +3755,16 @@ export default {
   'hudLabel.stationPop': '{0}/{1} POP',
   'hudLabel.detect':     'wykr. {0}',
   'hudLabel.lock':       'lock {0}',
+
+  // ── REFORMA ZAKŁADEK T1 — rozwinięcie informacyjne etykiet mapy (D-TR-3, tabele I7) ──
+  'labelHover.deposits':   'złoża {0} · ★★★ {1}',
+  'labelHover.distStar':   '{0} AU od gwiazdy',
+  'labelHover.hz':         'strefa życia {0}–{1} AU',
+  'labelHover.pool':       'pula hubu: {0} +{1}',
+  'labelHover.storage':    'magazyn: {0}',
+  'labelHover.storageOwn': 'magazyn własny: {0} poz.',
+  'labelHover.traffic':    'ruch {0} ⇄ · {1} w doku',
+  'labelHover.modules':    'moduły {0}/{1}',
 
   // ── Dziennik: wpisy, ktore do audytu 2026-08-27 byly ZASZYTE PO POLSKU (Finding 170) ──
   // Gracz z angielskim Dziennikiem widzial je po polsku BEZ zadnego przelaczania jezyka;

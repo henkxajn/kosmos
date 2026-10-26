@@ -3755,6 +3755,16 @@ export default {
   'hudLabel.detect':     'det. {0}',
   'hudLabel.lock':       'lock {0}',
 
+  // ── TABS REFORM T1 — informational expansion of map labels (D-TR-3, I7 tables) ──
+  'labelHover.deposits':   'deposits {0} · ★★★ {1}',
+  'labelHover.distStar':   '{0} AU from the star',
+  'labelHover.hz':         'habitable zone {0}–{1} AU',
+  'labelHover.pool':       'hub pool: {0} +{1}',
+  'labelHover.storage':    'storage: {0}',
+  'labelHover.storageOwn': 'own storage: {0} item(s)',
+  'labelHover.traffic':    'traffic {0} ⇄ · {1} docked',
+  'labelHover.modules':    'modules {0}/{1}',
+
   // ── Journal entries that were HARDCODED IN POLISH until the 2026-08-27 audit (Finding 170) ──
   'log.el.vesselDetected':       "🔭 Alien vessel detected ({0}): {1}",
   'log.el.contactLost':          "🔭 Lost contact with {0} — last position {1}",
