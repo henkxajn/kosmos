@@ -24,6 +24,7 @@ import { resolveStationTabHost } from '../utils/StationGroup.js';   // C6c-3 —
 import { getMapInsets }          from './MapInsets.js';   // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
 import { GAME_CONFIG }           from '../config/GameConfig.js';
 import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc, cardObstacles } from './BodyCardSideLogic.js';   // ARKUSZ HUD paczka A (493); T3 strojenie 1 (544)
+import { PIN_SWAP_REASON } from './LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 — zamiana przypięcia ciało → stacja
 
 // Wymiary
 const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
@@ -67,6 +68,8 @@ export class StationPanel extends BaseOverlay {
       // ARKUSZ UI U2-3 (Finding 486): zamknięcie karty ciała przy przełączeniu układu NIE zamyka panelu stacji — panel
       // przeżywa przełączenie jak dotąd (drugi klik reguły §7.8 w stację z innego układu przełącza układ, panel zostaje).
       if (p?.reason === 'system_switch') return;
+      // REFORMA ZAKŁADEK T2 (D-TR-5 (a)): odznaczenie ciała przy przypięciu TEJ stacji (zamiana przypięcia) — panel zostaje.
+      if (p?.reason === PIN_SWAP_REASON) return;
       if (this.visible) { this.hide(); this._markDirty(); }
     });
   }

@@ -143,6 +143,13 @@ export class HudLayer {
     return this._sublayers.some((s) => s.coversPoint?.(lx, ly) === true);
   }
 
+  /** REFORMA ZAKŁADEK T2 — przycisk przypięcia pod punktem (px logiczne; `null` — brak / warstwa schowana): kursor „rączki”. */
+  pinButtonAt(lx, ly) {
+    if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return null;
+    for (const s of this._sublayers) { const b = s.pinButtonAt?.(lx, ly); if (b != null) return b; }
+    return null;
+  }
+
   start() {
     if (!this._raf || this._rafId != null) return;
     const loop = () => {

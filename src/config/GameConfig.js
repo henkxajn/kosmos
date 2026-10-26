@@ -623,6 +623,21 @@ export const GAME_CONFIG = {
     //     ruchu kursora i kliku — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.labelHover = false`) działa od
     //     następnej klatki; F5 wczytuje wartość z tego pliku.
     labelHover: true,
+
+    // ── REFORMA ZAKŁADEK T2 (TABS_REFORM_PLAN.md §5.2; D-TR-1 (a), D-TR-4 (a), D-TR-5 (a)) — przypięcie etykiety z akcjami ──
+    // labelPin: na rozwinięciu T1 (wymaga `hudLabels` i `labelHover`; logika `LabelPinLogic.js`) — przypięcie = zaznaczenie
+    //   (D-UI-5 bez zmian: 1. klik w ciało / kolonię / stację — tarcza, etykieta, etykieta na żądanie, lewy outliner — przypina,
+    //   2. klik — kamera): przy etykiecie obiektu rozwinięcie T1 + wiersz akcji — ciało: „Mapa ciała” (4 warianty karty, w tym
+    //   jedyny producent `planet:previewMap`), „Raport” (`BodyDetailModal` — orbita, fizyka, skład, złoża, ✏), lista złóż, ✕;
+    //   stacja gracza: „Zarządzaj”, listy ruchu, modułów i magazynu (z limitem wierszy), ✕; jedno przypięcie naraz (ciało albo
+    //   stacja; panel statku osobno); Esc zdejmuje przypięcie (po zaznaczeniu statku; przy otwartym overlayu — overlay);
+    //   przełączenie układu zdejmuje przypięcie spoza układu. Przypięta etykieta stoi przy swoim obiekcie (członek stosu ma
+    //   własną etykietę; sąsiedzi ustępują). Przy ON karta ciała i panel stacji (pływające) wyłączone — bez rysunku, kliku,
+    //   przeciągania i doku (stan zaznaczenia zostaje źródłem przypięcia); w trybie Generator (bez warstwy HUD) — jak dziś.
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejszy kod co do bitu; flaga czytana przy każdym rysunku,
+    //     kliku i klawiszu — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.labelPin = false`) działa od następnej
+    //     klatki; F5 wczytuje wartość z tego pliku.
+    labelPin: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

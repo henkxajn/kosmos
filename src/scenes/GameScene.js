@@ -15,6 +15,7 @@ import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import { systemDisplayName }  from '../ui/MapLabelLogic.js';
 import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 (D-TR-14)
 import { isLabelHoverActive } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona
+import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -4769,9 +4770,21 @@ export class GameScene {
           rcm.hide();
           return;
         }
+        // REFORMA ZAKŁADEK T2 — okno DOM (raport ciała z przypięcia, `.kosmos-modal-overlay`) zamyka się własnym Esc; kaskada
+        // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰). Przy `labelPin` OFF — jak dziś.
+        if (escapeHeldByModal({ K: window.KOSMOS, features: GAME_CONFIG.FEATURES, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
         if (um?.getSelectedVesselId?.()) {
           e.preventDefault();
           um.clearSelection();
+          return;
+        }
+        // REFORMA ZAKŁADEK T2 (D-TR-5 (a), Finding 534): Esc zdejmuje przypięcie (ciało albo stacja) PO zaznaczeniu statku —
+        // nie przy otwartym overlayu (przypięcie leży pod nim, Esc należy do overlayu) ani nad oknem DOM (raport ciała).
+        if (escapeUnpin({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p), features: GAME_CONFIG.FEATURES,
+          overlayOpen: um?.overlayManager?.isAnyOpen?.() === true,
+          modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay') })) {
+          e.preventDefault();
+          um?.markDirty?.();
           return;
         }
         // Brak picker/menu/selection → spada do istniejącego handling (overlay close, bottom menu)

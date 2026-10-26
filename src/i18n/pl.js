@@ -3766,6 +3766,9 @@ export default {
   'labelHover.traffic':    'ruch {0} ⇄ · {1} w doku',
   'labelHover.modules':    'moduły {0}/{1}',
 
+  // ── REFORMA ZAKŁADEK T2 — przypięcie etykiety z akcjami (D-TR-4 (a)); reszta przycisków — klucze karty ciała i panelu stacji ──
+  'labelPin.report':       'Raport',
+
   // ── Dziennik: wpisy, ktore do audytu 2026-08-27 byly ZASZYTE PO POLSKU (Finding 170) ──
   // Gracz z angielskim Dziennikiem widzial je po polsku BEZ zadnego przelaczania jezyka;
   // `check-i18n` ich nie widzial, bo pyta o klucze w `t()`, a nie o napisy w `push({text})`.

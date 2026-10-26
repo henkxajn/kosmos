@@ -1082,17 +1082,23 @@ export class ThreeRenderer {
     // śledzenie obiektu — kamera STOI, bez żadnego polecenia ruchu. Dawne `focusOn(gwiazda)` zostawiało dystans fokusu,
     // więc kamera kończyła WEWNĄTRZ tarczy gwiazdy (zmierzone, Polonia gy79: 3,583 j. od środka po ciele, 0,9 po
     // statku, przy promieniu tarczy 3,6). „Obserwuj” i auto-fokus starcia — bez zmian (kończą się jak dotąd).
-    EventBus.on('body:deselected', safe(() => {
+    EventBus.on('body:deselected', safe((p) => {
       this._selectedEntityId = null;
       this._pingedEnemyId = null;
-      this._focusEntityId = null;
-      this._focusVesselId = null;
-      this._focusStationId = null;
+      // REFORMA ZAKŁADEK T2 (D-TR-5 (a)): zamiana przypięcia ciało → stacja (`reason: 'pin_swap'` — 1. klik w stację) zdejmuje
+      // ZAZNACZENIE ciała, ale nie śledzenie kamery ani jej progu — 1. klik bez polecenia kamery (D-UI-5), jak dziś. Literał =
+      // `LabelPinLogic.PIN_SWAP_REASON` (keeper `label_pin_smoke` pinuje zgodność; słuchacz bez importu — keepery go kompilują).
+      const swap = p?.reason === 'pin_swap';
+      if (!swap) {
+        this._focusEntityId = null;
+        this._focusVesselId = null;
+        this._focusStationId = null;
+      }
       // Ukryj ikony budynków kolonii + tooltip
       this._colonyMarkers.hide();
       this._hideColonyTooltip();
       // Przywróć domyślny min zoom (sam próg — kamera się nie rusza)
-      if (this._cameraController) this._cameraController.setMinDist(0.3);
+      if (this._cameraController && !swap) this._cameraController.setMinDist(0.3);
       // Ukryj orbity planetoidów i księżyców
       this._hideAllPlanetoidOrbits();
       this._hideAllMoonOrbits();

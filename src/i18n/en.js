@@ -3765,6 +3765,9 @@ export default {
   'labelHover.traffic':    'traffic {0} ⇄ · {1} docked',
   'labelHover.modules':    'modules {0}/{1}',
 
+  // ── REFORMA ZAKŁADEK T2 — label pin with actions (D-TR-4 (a)); other buttons reuse body card and station panel keys ──
+  'labelPin.report':       'Report',
+
   // ── Journal entries that were HARDCODED IN POLISH until the 2026-08-27 audit (Finding 170) ──
   'log.el.vesselDetected':       "🔭 Alien vessel detected ({0}): {1}",
   'log.el.contactLost':          "🔭 Lost contact with {0} — last position {1}",

@@ -76,6 +76,7 @@ import { isBodyCardSideOn, makeCardSideMemory, objectScreenDisc } from '../ui/Bo
 import { isShipPanelOutlinerOn, shipPanelHiddenByDock, shipRowKeys, resolveRowAnchor, computeShipPanelPlacement,
          syncShipPanelOnSystemSwitch } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 — panel statku przy outlinerze
 import { isLabelHoverActive, bodyCardAction } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (d) — karta ciała bez akcji
+import { isLabelPinActive, enforceSinglePinOnStation, enforceSinglePinOnBody } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -542,7 +543,19 @@ export class UIManager {
   _bodyCardEntity() {
     const e = this._selectedEntity;
     if (!e || !isLabelHoverActive(GAME_CONFIG.FEATURES) || !window.KOSMOS?.civMode) return e;
+    // REFORMA ZAKŁADEK T2 (D-TR-4 (a)) — przy `labelPin` karta ciała wyłączona: zaznaczone ciało jest PRZYPIĘCIEM przy etykiecie
+    // (warstwa HUD — akcje, raport, ✕); karta się nie rysuje i nie łapie kliku, kółka ani kursora.
+    if (isLabelPinActive(GAME_CONFIG.FEATURES)) return null;
     return bodyCardAction(e, window.KOSMOS) ? e : null;
+  }
+
+  /**
+   * REFORMA ZAKŁADEK T2 — czy panel stacji jest powierzchnią (rysunek, klik, kursor, przeciąganie, blokada kamery). Przy
+   * `labelPin` w trybie cywilizacji — nie: jego stan (`visible` + `_stationId`) jest przypięciem stacji przy etykiecie (warstwa
+   * HUD); cykl życia panelu (otwarcie, zniszczenie stacji, przełączenie układu, odznaczenie) — bez zmian. Przy OFF — jak dziś.
+   */
+  _stationPanelSurface() {
+    return !(isLabelPinActive(GAME_CONFIG.FEATURES) && window.KOSMOS?.civMode);
   }
 
   /** T3 (D-TR-10 (a), Finding 542) — tryb Y: przy rozwiniętym Doku taktycznym panel statku nad mapą się nie rysuje. */
@@ -887,9 +900,16 @@ export class UIManager {
       if (this._infoPanelTab === 'composition' && !entity.composition) {
         this._infoPanelTab = 'orbit';
       }
+      // REFORMA ZAKŁADEK T2 (D-TR-5 (a)) — jedno przypięcie naraz: przypięcie ciała zdejmuje przypięcie stacji (przy OFF — nic).
+      enforceSinglePinOnBody({ K: window.KOSMOS, features: GAME_CONFIG.FEATURES });
       this._dirty = true;
     });
     EventBus.on('body:deselected', () => { this._selectedEntity = null; this._dirty = true; });
+    // T2 (D-TR-5 (a)) — przypięcie stacji zdejmuje przypięcie ciała (`body:deselected` z powodem `pin_swap`: renderer bez
+    // polecenia kamery, panel stacji go nie słucha). Słuchacz po panelu stacji (panel tworzony w konstruktorze — już „otwarty”).
+    EventBus.on('station:selected', () => {
+      if (enforceSinglePinOnStation({ K: window.KOSMOS, emit: (n, p) => EventBus.emit(n, p), features: GAME_CONFIG.FEATURES })) this._dirty = true;
+    });
     // ARKUSZ UI U2-3 (Finding 486): przełączenie układu zamyka kartę ciała spoza układu docelowego; karta ciała z układu
     // docelowego zostaje, a renderer (przebudowa sceny wyzerowała jego zaznaczenie) dostaje je z powrotem — bez kamery.
     EventBus.on('system:switched', ({ systemId } = {}) => {
@@ -2026,8 +2046,8 @@ export class UIManager {
     if (window.KOSMOS?.civMode && this._mapSurface() === 'group'
         && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
     if (window.KOSMOS?.civMode && this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
-    // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim.
-    if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
+    // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim. T2 — przy `labelPin` panel nie jest powierzchnią.
+    if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
 
     // Faza 4 — Dok taktyczny (tryb Y): kursor nad pasem blokuje zoom+drag+box-select kamery.
     // TEN SAM _hitTest co handleWheel (spójność: inaczej scroll nad pasem „znika").
@@ -2070,7 +2090,7 @@ export class UIManager {
     if (this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
     if (this._mapSurface() === 'group' && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
     if (this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
-    if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
+    if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;   // T2 — przy `labelPin` bez panelu
     if (this._leftOutliner?.isOver?.(x, y, W, H)) return true;   // ARKUSZ UI U2 — bez podpowiedzi mapy 3D pod outlinerem
     if (this._outliner?.isOver?.(x, y, W, H)) return true;       // ARKUSZ UI U3-2 — także pod prawym
     return false;
@@ -2103,7 +2123,9 @@ export class UIManager {
     if (this.combatHud?.handleClick?.(x, y)) return true;
     // C2 (S3.4b) — belki doku (zminimalizowane panele) na wierzchu, PRZED overlayManager; tylko gdy dok widoczny.
     if (!this.overlayManager.isAnyOpen() && this.panelDock?.handleClick?.(x, y)) return true;
-    if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
+    // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager). REFORMA ZAKŁADEK T2 — przy `labelPin` panel nie łapie kliku
+    // (przypięcie stacji przy etykiecie — warstwa HUD; 540: nic nad overlayem).
+    if (this._stationPanelSurface() && this.stationPanel?.handleClick?.(x, y)) return true;
     // Faza 4 — Dok taktyczny (PRZED overlayManager; gate flaga+tryb Y). Konsumuje kliki w pas.
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
         && !this.overlayManager.isAnyOpen() && this.tacticalDock?.handleClick?.(x, y)) return true;
@@ -2250,7 +2272,7 @@ export class UIManager {
     // C1 (S3.4b) — drag pływających paneli za nagłówek (kamera już zablokowana przez isOverUI).
     if (button === 0) {
       if (this.tryBeginVesselPanelDrag(x, y)) return;   // Slice B — drag panelu statku
-      if (this.stationPanel?.visible && this.stationPanel.tryBeginDrag?.(x, y)) return;
+      if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel.tryBeginDrag?.(x, y)) return;   // T2 — bez przeciągania przy `labelPin`
       if (this._bottomContext?.tryBeginDrag?.(x, y)) return;
     }
   }
@@ -2295,7 +2317,7 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) {
       this.overlayManager.handleMouseMove(x, y);
     }
-    if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
+    if (this._stationPanelSurface() && this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu (T2 — przy `labelPin` bez panelu)
     this.combatHud?.handleMouseMove?.(x, y);       // POLISH P2b (D4, Finding 468) — podpowiedź pełnego tekstu karty walki
     this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku (bez bramki civMode, #1)
     if (this.tacticalDock?.isShowing?.() && !this.overlayManager.isAnyOpen()) this.tacticalDock.handleMouseMove(x, y);   // Faza 4 — hover doku taktycznego
@@ -2508,7 +2530,9 @@ export class UIManager {
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
-    if (civMode && !globeOpen) this.stationPanel.draw(ctx, W, H);   // S4-2 — na wierzchu overlay'i (coexist z colony)
+    // S4-2 — na wierzchu overlay'i (coexist z colony). REFORMA ZAKŁADEK T2 — przy `labelPin` panel się nie rysuje: stacja jest
+    // przypięta przy etykiecie na warstwie HUD (pod overlayem chowa się razem z warstwą — 540).
+    if (civMode && !globeOpen && this._stationPanelSurface()) this.stationPanel.draw(ctx, W, H);
     // Slice 8b — FleetCommandPanel (flota) RYSOWANY PRZED FleetGroupPanel, by jego _drawnRect był
     // świeży gdy FleetGroupPanel stackuje się NAD nim. Oba ukryte gdy otwarty pełnoekranowy overlay.
     if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.draw(ctx, W, H);
@@ -3368,6 +3392,8 @@ export class UIManager {
     }
     // Prawy outliner — tylko gdy widoczny nad mapą (ARKUSZ UI U3-3: dawniej cały pas 150 px, także pod overlayem)
     if (this._outliner?.isOver?.(x, y, W, H)) return 'outliner';
+    // REFORMA ZAKŁADEK T2 — przycisk przypięcia etykiety (warstwa HUD) — kursor „rączki”
+    if (window.KOSMOS?.hudLayer?.pinButtonAt?.(x, y) != null) return 'pin';
     // ActionPanel
     if (!window.KOSMOS?.civMode) {
       const PW = 220, PH = 166;
