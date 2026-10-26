@@ -3768,6 +3768,10 @@ export default {
   // ── REFORMA ZAKŁADEK T2 — label pin with actions (D-TR-4 (a)); other buttons reuse body card and station panel keys ──
   'labelPin.report':       'Report',
 
+  // ── REFORMA ZAKŁADEK T5 — ship panel in the label idiom: the 16 mission orders under "[ Orders ▼ ]"; other chips reuse
+  //    the T3 ship panel keys (`fleet.*`, `fleetGroup.*`) ──
+  'shipPanelHud.orders':   'Orders',
+
   // ── Journal entries that were HARDCODED IN POLISH until the 2026-08-27 audit (Finding 170) ──
   'log.el.vesselDetected':       "🔭 Alien vessel detected ({0}): {1}",
   'log.el.contactLost':          "🔭 Lost contact with {0} — last position {1}",

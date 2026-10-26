@@ -1627,9 +1627,9 @@ export default {
   'fleet.phaseFlyToTarget': 'LOT DO CELU',
   'fleet.phaseLabel': 'FAZA:',
   'fleet.disbandReturn': '🗑 Rozbiórka (zwrot 75%)',
-  'fleet.disbandRequiresShipyard': '🗑 Disband — wymaga stoczni',
+  'fleet.disbandRequiresShipyard': '🗑 Rozbiórka — wymaga stoczni',
   'fleet.disbandVesselConfirm': 'Czy na pewno rozebrać statek „{0}"? Tej akcji nie można cofnąć.',
-  'fleet.refuelNow': '⛽ Refuel',
+  'fleet.refuelNow': '⛽ Tankuj',
   'fleet.refuelAutoOn': 'Auto: WŁ',
   'fleet.refuelAutoOff': 'Auto: WYŁ',
   'fleet.tradeRoutesHeader': '🔄 PĘTLE TRANSPORTOWE ({0})',
@@ -3768,6 +3768,10 @@ export default {
 
   // ── REFORMA ZAKŁADEK T2 — przypięcie etykiety z akcjami (D-TR-4 (a)); reszta przycisków — klucze karty ciała i panelu stacji ──
   'labelPin.report':       'Raport',
+
+  // ── REFORMA ZAKŁADEK T5 — panel statku w idiomie etykiet: lista 16 rozkazów misji pod „[ Rozkazy ▼ ]”; reszta chipów —
+  //    klucze panelu statku T3 (`fleet.*`, `fleetGroup.*`) ──
+  'shipPanelHud.orders':   'Rozkazy',
 
   // ── Dziennik: wpisy, ktore do audytu 2026-08-27 byly ZASZYTE PO POLSKU (Finding 170) ──
   // Gracz z angielskim Dziennikiem widzial je po polsku BEZ zadnego przelaczania jezyka;

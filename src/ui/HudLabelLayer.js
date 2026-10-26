@@ -1084,7 +1084,8 @@ export class HudLabelLayer {
     const um = K?.uiManager;
     const bc = um?._bottomContext?._cardRect;
     if (bc && um?._selectedEntity) out.push({ x: bc.x, y: bc.y, w: bc.w, h: bc.h });
-    const vp = um?._fleetOverlay?._vesselPanelRect;
+    // REFORMA ZAKŁADEK T5: panel statku w idiomie etykiet (`shipPanelHud`) — jego prostokąt (przy ON panel T3 bez prostokąta).
+    const vp = um?._shipPanelHud?.rect ?? um?._fleetOverlay?._vesselPanelRect;
     if (vp && um?._mapSurface?.() === 'vessel') out.push({ x: vp.x, y: vp.y, w: vp.w, h: vp.h });
     const sp = K?.stationPanel;
     const sr = sp?._lastRect;
@@ -1293,6 +1294,15 @@ export class HudLabelLayer {
     const st = [];
     for (const id of K?.threeRenderer?._stations?.keys?.() ?? []) st.push({ id, disc: objectScreenDisc(K, 'station', id) });
     return pickStationAt(st, lx, ly) != null;
+  }
+
+  /**
+   * Finding 530 (REFORMA ZAKŁADEK T5) — czy punkt (px logiczne) leży na strefie etykiety albo przypięcia z ostatniej klatki
+   * (dymek współrzędnych pustej mapy nie pokazuje się nad UI warstwy HUD) — niezależnie od `labelHover` / `labelPin`.
+   */
+  coversUiPoint(lx, ly) {
+    if (!this._prep?.on) return false;
+    return resolveLabelClick(this._zones, lx, ly) != null || pinHitAt(this._pinZones, lx, ly) != null;
   }
 
   /** REFORMA ZAKŁADEK T2 — przycisk przypięcia pod punktem (px logiczne) z ostatniej klatki albo `null` (kursor „rączki”). */

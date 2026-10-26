@@ -16,6 +16,7 @@ import { systemDisplayName }  from '../ui/MapLabelLogic.js';
 import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   // REFORMA ZAKŁADEK T3 (D-TR-14)
 import { isLabelHoverActive } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
+import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -5798,6 +5799,12 @@ export class GameScene {
       return;
     }
     if (!target || target.type === 'empty') {
+      // REFORMA ZAKŁADEK T5 — Finding 530: nad JAKIMKOLWIEK UI (panel statku, przypięcie, etykieta, outlinery, pas, belka) —
+      // bez dymka współrzędnych; jeden warunek, przy każdym stanie flag (`_coordTooltipOverUi`).
+      if (this._coordTooltipOverUi(clientX, clientY)) {
+        this._scheduleEntityTooltip(null, clientX, clientY);
+        return;
+      }
       // M3 P2.3 — coord tooltip dla empty space (override P1.5 D2 = no tooltip)
       // 3D worldPoint to Three.js coords (XZ plane Y=0). Konwersja → gameplay px.
       const wp = target?.worldPoint;
@@ -5931,6 +5938,20 @@ export class GameScene {
       intelSystem:     window.KOSMOS?.intelSystem ?? null,  // Finding 531: właściciel / populacja obcej kolonii wg wywiadu
       auToPx:          GAME_CONFIG.AU_TO_PX,  // M3: distance computation w _planetContent
     };
+  }
+
+  /**
+   * REFORMA ZAKŁADEK T5 — Finding 530: czy kursor (px CSS) leży nad UI — powierzchnią `UIManager.isOverUI` (panel statku,
+   * outlinery, belka, pas, nawigacja, dziennik, panele) albo strefą warstwy HUD (etykieta, przypięcie). Wtedy bez dymka
+   * współrzędnych pustej mapy.
+   */
+  _coordTooltipOverUi(clientX, clientY) {
+    const um = this.uiManager;
+    const local = um?.toLocalUI?.(clientX, clientY) ?? null;
+    return coordTooltipBlocked({
+      overUI: um?.isOverUI?.(clientX, clientY) === true,
+      hudZone: window.KOSMOS?.hudLayer?.coversUiPoint?.(local?.x, local?.y) === true,
+    });
   }
 
   // M3 P2.3 — coord tooltip dla empty space hover (mapa 3D + tactical).

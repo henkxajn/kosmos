@@ -143,6 +143,15 @@ export class HudLayer {
     return this._sublayers.some((s) => s.coversPoint?.(lx, ly) === true);
   }
 
+  /**
+   * Finding 530 (REFORMA ZAKŁADEK T5) — czy punkt (px logiczne) leży na strefie UI warstwy (etykieta, przypięcie) z ostatniej
+   * klatki; warstwa schowana — `false`. Scena: dymek współrzędnych pustej mapy nie pokazuje się nad UI.
+   */
+  coversUiPoint(lx, ly) {
+    if (!this._gate.shown || !this._shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return false;
+    return this._sublayers.some((s) => s.coversUiPoint?.(lx, ly) === true);
+  }
+
   /** REFORMA ZAKŁADEK T2 — przycisk przypięcia pod punktem (px logiczne; `null` — brak / warstwa schowana): kursor „rączki”. */
   pinButtonAt(lx, ly) {
     if (!this._gate.shown || !Number.isFinite(lx) || !Number.isFinite(ly)) return null;

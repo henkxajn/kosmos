@@ -638,6 +638,20 @@ export const GAME_CONFIG = {
     //     kliku i klawiszu — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.labelPin = false`) działa od następnej
     //     klatki; F5 wczytuje wartość z tego pliku.
     labelPin: true,
+
+    // ── REFORMA ZAKŁADEK T5 (TABS_REFORM_PLAN.md §5.8; decyzje właściciela 2026-10-26) — panel statku w idiomie etykiet ──
+    // shipPanelHud: na panelu T3 (wymaga `shipPanelOutliner` i trybu kompaktowego; logika `ShipPanelHudLogic.js`, rysunek
+    //   `ShipPanelHudLayer.js`) — lekki renderer panelu statku przy prawym outlinerze w stylu przypięć HUD: ciemny półprzezroczysty
+    //   pasek bez ramki, font motywu, kolory z ról HUD, cyfry w kratce; szerokość ~200 px (konfigurator misji ~260), wysokość =
+    //   treść (brak miejsca — przewija się lista rozkazów / celów, nie panel); nazwa pełna w 2 liniach + ✎, „typ · kadłub · ★”,
+    //   „● stan · baza”, linie rozkazu / misji / ETA / paliwa, MODUŁY n/m, ładunek (pasek 2 px), akcje jako chipy „[ … ]”, 16 rozkazów
+    //   misji pod „[ Rozkazy ▼ ]” (zwija się przy zmianie zaznaczenia). Akcje — TE SAME handlery co przyciski panelu T3
+    //   (`FleetManagerOverlay._handleHit`, footer); geometria T3 bez zmian (kotwica przy wierszu, łącznik, karta walki, zapas,
+    //   tryb Y). Przy ON panel T3 (`drawVesselPanel`) się nie rysuje i nie łapie kliku; Rejestr Dowództwa — bez zmian.
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF panel T3 co do bitu; flaga czytana przy każdym rysunku i kliku —
+    //     przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.shipPanelHud = false`) działa od następnej klatki; F5 wczytuje
+    //     wartość z tego pliku. Sprząta ją krok T4.
+    shipPanelHud: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
