@@ -27,11 +27,11 @@
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\hud-phase-a\` — `probes/` (sondy), `results/` (JSON, zrzuty PNG,
 > `hexes_hud.txt` — pełna lista kolorów na sztywno), `HANDOVER_HUD_PHASE_A.md`.
 > **Oznaczenia** jak w `UI_PLAN.md`: `[code]` — odczyt źródła (linie przy `ad65e47`) · `[measured]` — pomiar w grze albo
-> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#557 (§3; 517–521 z H0,
+> sondą · `[derived]` — wniosek bez osobnego pomiaru · `[git]`. **Findingi:** rejestr #504–#564 (§3; 517–521 z H0,
 > 522–527 z H1, 528–530 z paczki A, 531–543 z inwentarza reformy zakładek, 544–548 z T3, 549–552 z T1, 553–555 z T2,
-> 556–557 z T5 reformy zakładek); 488, 493, 497, 502 i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie:
+> 556–557 z T5, 558–564 z T6 reformy zakładek); 488, 493, 497, 502 i 503 — `UI_PLAN.md` §6 (tu tylko odsyłacze). Pierwszy wolny numer po audycie:
 > 517; po H0: 522; po H1: 528; po paczce A: 531; po inwentarzu reformy zakładek: 544; po T3 reformy zakładek: 549; po T1
-> reformy zakładek: 553; po T2 reformy zakładek: 556; **po T5 reformy zakładek: 558**.
+> reformy zakładek: 553; po T2 reformy zakładek: 556; po T5 reformy zakładek: 558; **po T6 reformy zakładek: 565**.
 
 ---
 
@@ -519,6 +519,13 @@ Przebudowy okresowe: `_rebuildAllOrbits` 0,07 ms, `_rebuildPlanetoidOrbits` 0,22
 | **555** | ⚪ | **Okno szczegółów ciała pokazuje „???” zamiast nazwy ciała niezbadanego** (`BodyDetailModal.js:62` — `explored ? body.name : '???'`), choć etykieta, przypięcie i lewy outliner pokazują nazwę (oś miejsca `SystemReveal`) — dwie reguły nazwy dla tego samego ciała (rodzina 372, `AI_GARRISON_PLAN.md` §6). Od T2 częściej na widoku („[ Raport ]” z każdego przypięcia). Reforma zakładek T2 (2026-10-26). | rejestr — do decyzji (jedna reguła nazwy ciała; polerka) |
 | **556** | ✅ | **Słownik PL: chipy tankowania i rozbiórki po angielsku** — `fleet.refuelNow` PL = „⛽ Refuel”, `fleet.disbandRequiresShipyard` PL = „🗑 Disband — wymaga stoczni” (obok „🗑 Rozbiórka (zwrot 75%)” po 547); panel statku T3 i chipy T5 (arkusz T5: K2). `check-i18n` tego nie widzi (klucze istnieją w obu językach). Reforma zakładek T5 (2026-10-26). | ✅ **reforma zakładek T5** — `409f82b` (strojenie 1): „⛽ Tankuj”, „🗑 Rozbiórka — wymaga stoczni” (`TABS_REFORM_PLAN.md` §5.8) |
 | **557** | ⚪ | **Nazwa celu misji renderowana przy utworzeniu i zapisywana** — `MissionSystem.js:1376` (`targetName: t('mission.fullSystem')`) i `ExpeditionSystem.js:1080` (`t('expedition.fullSystemTarget')`) piszą do rekordu misji (zapis) tekst w języku z chwili wysłania; Polonia gy79 (misja wysłana po angielsku) pokazuje w PL „Rozpoznanie → Entire system” w panelu statku T3 i T5 (arkusz T5: Polonia, Scan Warp). Rodzina 165 (tekst renderowany przy emisji i zapisywany). Reforma zakładek T5 (2026-10-26). | rejestr — do decyzji (cel misji jako klucz, tekst przy rysowaniu; polerka) |
+| **558** | ✅ | **Dzisiejsze panele floty i grupy: SUROWY typ rozkazu / misji w linii członka** (`moveToPoint`, `interstellar_jump` — arkusz T6, K11, „USS Furia”) — rodzina 538. Reforma zakładek T6 (2026-10-27). | ✅ **przy `fleetPanelHud` ON** — `694cfcf`: linia członka bez typu rozkazu; rozkaz floty słowami z kluczy (`ORDER_ACTIVITY_KEYS`) w linii stanu (`TABS_REFORM_PLAN.md` §5.9); przy OFF — jak dziś |
+| **559** | ✅ | **Picker celu floty (Rusz / Atak z panelu floty) przeżywa zmianę zaznaczenia** — lustro 546 dla floty; przy OFF zostaje. Reforma zakładek T6 (2026-10-27). | ✅ przy ON — `694cfcf`: zmiana zaznaczenia statków albo floty zdejmuje picker floty, której panel już nie pokazuje (`shouldDropFleetPicker`) |
+| **560** | ✅ | **Zaznaczenie statku (mapa, Tab, etykieta HUD, Dok, CTRL) nie zdejmuje floty — panel floty i panel statku naraz** (przy OFF). Reforma zakładek T6 (2026-10-27). | ✅ przy ON — `694cfcf`: mutex trzech paneli (flota > N ≥ 2 > lider), zaznaczenie statku zdejmuje flotę (`dropFleetOnShipSelection`); strojenie 1 — także klik w pustą mapę (uzbrojony picker — klik = cel) |
+| **561** | ✅ | **Esc nie zamyka panelu floty** (przy OFF; lustro 534). Reforma zakładek T6 (2026-10-27). | ✅ przy ON — `694cfcf`: Esc zdejmuje flotę (przed krokiem zaznaczenia statków; nie przy overlayu i oknie DOM) |
+| **562** | ✅ | **„Odwrót” panelu grupy aktywny poza walką, a MOS odmawia po cichu** — `countActionable.canRetreat` liczył statki poza dokiem i nieunieruchomione, a MOS przyjmuje `retreat` wyłącznie w aktywnym starciu (`MovementOrderSystem.js:555`, `not_in_combat`); handler (`FleetGroupPanel._onHit`) ignoruje wynik `issueOrder`. Reforma zakładek T6 (2026-10-27). | ✅ **przy OFF i ON** — `694cfcf` (strojenie 1): przycisk / chip aktywny tylko, gdy któryś członek jest w aktywnym starciu — predykat bramki MOS (`combatCheckOf` = `_findActiveEncounterContaining`); unieruchomiony w starciu — aktywny (D-FDk); handler bez zmian |
+| **563** | ⚪ | **PL liczba mnoga: `fleet.shipsCount` „{0} statków” także dla 2–4** („3 statków”) — w T6 (linia podtytułu panelu floty, nagłówek grupy) i dziś (dymek węzła floty, `Outliner.js:327`). W repo brak pomocnika polskiej liczby mnogiej (jest tylko jednorazowe „1 vs wiele” w `ObservatoryOverlay`) — decyzja właściciela: bez nowego mechanizmu w T6. Rodzina 377. Reforma zakładek T6 (2026-10-27). | rejestr — do decyzji (pomocnik liczby mnogiej PL; polerka i18n) |
+| **564** | ⚪ | **Pozostałości po wyzwalaczu starego wysuwanego outlinera: pasek nawigacji i pasmo surowców belki kończą się 6 px przed prawą krawędzią** — `BottomNavBarLogic.js:8` `BOTTOM_NAV_EDGE = 6` (`bottomNavBarRect` `w = W − 6`; czarny pas przy prawej krawędzi, po lewej kafelki do x 0) i `TopResourceDrawer.js:220` `EDGE_R = 6` (wiersz aktywnej kolonii, rozwijana lista i strefa do W − 6; z polem chevronu „▾N” ciemniejsza końcówka belki nad prawą kolumną). Kolumna prawego outlinera dochodzi do krawędzi (0 px — zmierzone w grze przy 1618×1195 i 1280×720). Do ostatniego slotu nawigacji kotwiczą zegar, suwak zoomu i chip ⚔ (`BottomControlBar.js:105–194`). Reforma zakładek T6, diagnoza przy strojeniu 1 (2026-10-27). | rejestr — kierunek: **paczka B** (razem z chipami warstw w pasie dolnym); pin „pasek nawigacji i pasmo belki = W” |
 
 Rejestr #504–#516 po fazie A: **13 wpisów — 🟠 5** (504, 505, 506, 514, 516) **· ⚪ 8** (507–513, 515). Wszystkie
 otwarte; 504 — osobny drobny krok, reszta w krokach H0–H3. Pierwszy wolny: **517**.
@@ -568,6 +575,12 @@ Po T5 reformy zakładek (2026-10-26, `409f82b`; bramka właściciela PASS ze str
 520–524, 526–528, 535, 538, 541, 548, 555, 557). 538 — częściowo (T5: panel statku przy ON; reszta — T4). D-TR-9
 zmieniona decyzją właściciela 2026-10-26 — następny krok: reforma zakładek T6 (panele floty i grupy przy outlinerze
 w idiomie etykiet — `TABS_REFORM_PLAN.md` §5.9), potem T4. Pierwszy wolny: **558**.
+
+Po T6 reformy zakładek (2026-10-27, `694cfcf`; bramka właściciela PASS ze strojeniem 1): rejestr #504–#564 — **61 wpisów —
+✅ 42** (37 jak wyżej + 558, 559, 560, 561 — przy `fleetPanelHud` ON; 562 — przy OFF i ON) **· 🟠 1** (504) **· ⚪ 18**
+(517, 518, 520–524, 526–528, 535, 538, 541, 548, 555, 557, 563, 564). 564 — kierunek: paczka B (chipy warstw w pasie
+dolnym). D-TR-9 ✅. Następny krok: reforma zakładek T4 (sprzątanie — dok, `BodyCardSideLogic`, `FloatingPanel`, flagi T5
+i T6), potem paczka B. Pierwszy wolny: **565**.
 
 ---
 
