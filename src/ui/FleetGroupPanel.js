@@ -22,7 +22,7 @@ import { isEnemyVessel }   from '../entities/Vessel.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
 import { resolveBodyName } from '../utils/BodyName.js';
-import { summarizeFleetGroup, buildRosterRows, countActionable } from './FleetGroupPanelLogic.js';
+import { summarizeFleetGroup, buildRosterRows, countActionable, combatCheckOf } from './FleetGroupPanelLogic.js';
 import { vesselStatusLabelKey } from '../utils/VesselStatus.js';
 import { assignVesselsToFleet, openDockPicker } from './VesselGroupActions.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
@@ -142,7 +142,8 @@ export class FleetGroupPanel extends BaseOverlay {
 
     const summary = summarizeFleetGroup(vessels, { vesselManager: window.KOSMOS?.vesselManager });
     const rows = buildRosterRows(vessels, { vesselManager: window.KOSMOS?.vesselManager });
-    const act  = countActionable(vessels, { vesselManager: window.KOSMOS?.vesselManager });
+    // Finding 562 (REFORMA ZAKŁADEK T6, strojenie 1) — „Odwrót” tym samym predykatem co bramka MOS (`not_in_combat`).
+    const act  = countActionable(vessels, { vesselManager: window.KOSMOS?.vesselManager, combatCheck: combatCheckOf(window.KOSMOS) });
 
     const totalPages = Math.max(1, Math.ceil(rows.length / ROWS_VISIBLE));
     if (this._page > totalPages - 1) this._page = totalPages - 1;

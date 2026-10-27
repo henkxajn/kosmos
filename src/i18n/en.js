@@ -3772,6 +3772,11 @@ export default {
   //    the T3 ship panel keys (`fleet.*`, `fleetGroup.*`) ──
   'shipPanelHud.orders':   'Orders',
 
+  // ── REFORMA ZAKŁADEK T6 — fleet and group panels in the label idiom: group header and lead line; the rest reuses the keys
+  //    of today's panels (`fleetCmd.*`, `fleetGroup.*`, `fleet.shipsCount`) and T5 (`shipPanelHud.orders`) ──
+  'fleetPanelHud.group':   'group',
+  'fleetPanelHud.leader':  'lead: {0}',
+
   // ── Journal entries that were HARDCODED IN POLISH until the 2026-08-27 audit (Finding 170) ──
   'log.el.vesselDetected':       "🔭 Alien vessel detected ({0}): {1}",
   'log.el.contactLost':          "🔭 Lost contact with {0} — last position {1}",

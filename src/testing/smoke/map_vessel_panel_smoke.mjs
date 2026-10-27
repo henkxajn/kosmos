@@ -714,10 +714,15 @@ header('P-A1  PIN — żadna powierzchnia mapy nie wystawia „Powrotu" (ani prz
   for (const id of ['v_1', 'v_2']) vm.getVessel(id).position.state = 'orbiting';
   window.KOSMOS.fleetSystem = { listFleets: () => [] };
   window.KOSMOS.movementOrderSystem = { issueOrder: () => ({ ok: true }), cancelOrder: () => true };
+  // ⚠ PRZECELOWANIE ŚWIADOME (REFORMA ZAKŁADEK T6, strojenie 1 — Finding 562, podpis właściciela 2026-10-27): „Odwrót” jest
+  //   aktywny tylko dla członka w AKTYWNYM STARCIU (predykat bramki MOS `not_in_combat`). Kontrola niejałowości niżej ma
+  //   widzieć rząd rozkazów z aktywnym „Odwrotem” — grupa stoi w starciu (atrapa systemu walki), asercje bez zmian.
+  window.KOSMOS.deepSpaceCombatSystem = { _findActiveEncounterContaining: (id) => (id === 'v_1' || id === 'v_2' ? { isActive: true } : null) };
 
   const gp = new FleetGroupPanel();
   gp._ids = ['v_1', 'v_2']; gp.show(); gp._hitZones = [];
   gp.draw(stubCtx(), 1920, 1080);
+  delete window.KOSMOS.deepSpaceCombatSystem;
   const grpTypes = [...new Set(gp._hitZones.map((z) => z.type))].sort();
   ok(gp._hitZones.length > 0, `KONTROLA: panel grupy realnie się narysował (${gp._hitZones.length} stref)`);
   ok(!grpTypes.includes('grpReturn'), `N>=2 — brak strefy grpReturn (typy: ${JSON.stringify(grpTypes)})`);

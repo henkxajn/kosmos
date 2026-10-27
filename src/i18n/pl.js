@@ -3773,6 +3773,11 @@ export default {
   //    klucze panelu statku T3 (`fleet.*`, `fleetGroup.*`) ──
   'shipPanelHud.orders':   'Rozkazy',
 
+  // ── REFORMA ZAKŁADEK T6 — panele floty i grupy w idiomie etykiet: nagłówek grupy i linia lidera; reszta — klucze dzisiejszych
+  //    paneli (`fleetCmd.*`, `fleetGroup.*`, `fleet.shipsCount`) i T5 (`shipPanelHud.orders`) ──
+  'fleetPanelHud.group':   'grupa',
+  'fleetPanelHud.leader':  'lider: {0}',
+
   // ── Dziennik: wpisy, ktore do audytu 2026-08-27 byly ZASZYTE PO POLSKU (Finding 170) ──
   // Gracz z angielskim Dziennikiem widzial je po polsku BEZ zadnego przelaczania jezyka;
   // `check-i18n` ich nie widzial, bo pyta o klucze w `t()`, a nie o napisy w `push({text})`.

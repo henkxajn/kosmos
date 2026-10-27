@@ -79,6 +79,9 @@ import { isLabelHoverActive, bodyCardAction } from '../ui/LabelHoverLogic.js';  
 import { isLabelPinActive, enforceSinglePinOnStation, enforceSinglePinOnBody } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2
 import { ShipPanelHudLayer } from '../ui/ShipPanelHudLayer.js';            // REFORMA ZAKŁADEK T5 — panel statku w idiomie etykiet
 import { isShipPanelHudActive, shouldDropMissionConfig } from '../ui/ShipPanelHudLogic.js';
+import { FleetPanelHudLayer } from '../ui/FleetPanelHudLayer.js';          // REFORMA ZAKŁADEK T6 — panele floty i grupy w idiomie etykiet
+import { isFleetPanelHudActive, fleetHudSurface, fleetRowKeys, dropFleetOnShipSelection,
+         shouldDropFleetPicker, dropFleetOnEmptyMapClick, pickerBannerHidden } from '../ui/FleetPanelHudLogic.js';
 // UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
 // NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
 import { BottomNavBar }   from '../ui/BottomNavBar.js';
@@ -402,6 +405,11 @@ export class UIManager {
     // Self-managed przez ui:fleetSelectionChanged. Anchor lewy-dolny; FleetGroupPanel stackuje się NAD nim.
     this.fleetCommandPanel = new FleetCommandPanel();
     window.KOSMOS.fleetCommandPanel = this.fleetCommandPanel;
+    // REFORMA ZAKŁADEK T6 — panel floty i panel grupy N ≥ 2 w idiomie etykiet przy prawym outlinerze (flaga `fleetPanelHud`):
+    // renderer i strefy w geometrii T3; handlery — dzisiejsze panele wyżej (`_onHit`), które dalej trzymają stan (flota,
+    // zaznaczenie, zwinięcie). Przy OFF nieużywany (prostokąt `null`). Odczyt i strojenie: `KOSMOS.fleetPanelHud.debug()` / `.tune()`.
+    this._fleetPanelHud = new FleetPanelHudLayer();
+    window.KOSMOS.fleetPanelHud = this._fleetPanelHud;
 
     // Redesign UI — TopResourceDrawer: górny wysuwany pasek surowców (zastąpił dolny
     // BottomResourceBar). Trigger 6px od górnej krawędzi (y=0); hover → panel z wierszem na kolonię.
@@ -466,9 +474,14 @@ export class UIManager {
    * @returns {'none'|'vessel'|'group'}
    */
   _mapSurface() {
-    return resolveMapSelectionSurface([...this._selectedVesselIds], {
+    const surface = resolveMapSelectionSurface([...this._selectedVesselIds], {
       flagOn: GAME_CONFIG.FEATURES?.mapVesselPanel !== false,
     });
+    // REFORMA ZAKŁADEK T6 — mutex trzech paneli (flota > N ≥ 2 > lider — reguła Doku taktycznego `computePanelMode`): przy
+    // `fleetPanelHud` flota → `fleetHud`, grupa → `groupHud` (panel statku i dzisiejszy panel grupy wyłączone z konstrukcji —
+    // ich bramki pytają o `vessel` / `group`). Przy OFF — jak dziś.
+    return fleetHudSurface(surface, { features: GAME_CONFIG.FEATURES, fleetId: this._selectedFleetId ?? null,
+      vesselCount: this._selectedVesselIds.size, leadId: this._selectedVesselId ?? null });
   }
 
   /**
@@ -614,6 +627,115 @@ export class UIManager {
     return isShipPanelHudActive(GAME_CONFIG.FEATURES);
   }
 
+  /** REFORMA ZAKŁADEK T6 — panele floty i grupy N ≥ 2 w idiomie etykiet (flaga `fleetPanelHud`, stoi na T5). */
+  _fleetPanelHudActive() {
+    return isFleetPanelHudActive(GAME_CONFIG.FEATURES);
+  }
+
+  /**
+   * T6 — zaznaczenie statku (każda powierzchnia: mapa, Tab, etykieta, Dok, outliner, Rejestr) zdejmuje flotę — lustro §7.11
+   * outlinera i P2.5 Rejestru; bez tego mutex (flota wygrywa) zostawiłby panel floty po kliku statku na mapie. Przy OFF — nic.
+   * @returns {boolean} czy flotę zdjęto
+   */
+  _dropFleetOnShipSelection(vesselId) {
+    if (!dropFleetOnShipSelection({ features: GAME_CONFIG.FEATURES, vesselId, fleetId: this._selectedFleetId ?? null })) return false;
+    this.setSelectedFleetId(null);
+    return true;
+  }
+
+  /**
+   * T6, reguła 546 dla floty — słuchacz `ui:selectionChanged` / `ui:fleetSelectionChanged`: picker celu floty (Rusz / Atak)
+   * uzbrojony dla floty, której panel już nie pokazuje — zdjęty (jak „ANULUJ”). Przy OFF — jak dziś (picker zostaje).
+   * @returns {boolean} czy picker zdjęto
+   */
+  _dropFleetPickerOnSelection() {
+    if (!shouldDropFleetPicker({ features: GAME_CONFIG.FEATURES, picker: this._pickerState ?? null, fleetId: this._selectedFleetId ?? null })) return false;
+    this.cancelPickerMode();
+    return true;
+  }
+
+  /**
+   * T6, strojenie 1 (3) — klik w PUSTĄ mapę (`GameScene._selectFromClickPick`, gałąź pustki po `clearSelection`) zdejmuje też
+   * flotę: panel floty znika jak panel statku i przypięcia (grupa N ≥ 2 znika już z `clearSelection`). Uzbrojony picker —
+   * wyjątek (klik w mapę = cel; `GameScene` w ogóle tu nie dochodzi, warunek — obrona w głąb). Przy OFF — nic.
+   * @returns {boolean} czy flotę zdjęto
+   */
+  _dropFleetOnEmptyMapClick() {
+    if (!dropFleetOnEmptyMapClick({ features: GAME_CONFIG.FEATURES, fleetId: this._selectedFleetId ?? null,
+      pickerActive: this.isPickerActive() })) return false;
+    this.setSelectedFleetId(null);
+    return true;
+  }
+
+  /**
+   * T6, strojenie 1 (4) — baner pickera u góry ekranu (`#kosmos-picker-banner`, `GameScene._createPickerHUD`) ukryty, gdy panel
+   * floty T6 pokazuje konfigurator celu (podpowiedź tylko w panelu). Przez `visibility`, NIE `display`: `display` należy do
+   * zdarzeń pickera w `GameScene` (pokaż przy starcie, schowaj przy końcu), więc oba stany się nie nadpisują. Woła: rysunek
+   * (stan z tej klatki) i zdarzenia pickera (stan z ostatniej klatki — bez mignięcia banera na klatkę). Przy OFF — nic się
+   * nie zmienia (baner jak dziś).
+   * @param {boolean} panelShown — panel floty T6 narysowany
+   * @returns {boolean} czy baner ukryty
+   */
+  _syncPickerBanner(panelShown) {
+    const hidden = pickerBannerHidden({ features: GAME_CONFIG.FEATURES, picker: this._pickerState ?? null,
+      fleetId: this._selectedFleetId ?? null, minimized: this.fleetCommandPanel?._minimized === true, panelShown: panelShown === true });
+    const el = typeof document !== 'undefined' ? document.getElementById?.('kosmos-picker-banner') : null;
+    const v = hidden ? 'hidden' : '';
+    if (el && el.style.visibility !== v) el.style.visibility = v;
+    return hidden;
+  }
+
+  /**
+   * T6 — panel floty / grupy w idiomie etykiet: model i układ (`FleetPanelHudLayer.prepare` — 200 / 260 px, wysokość = treść,
+   * klamra), kotwica przy wierszu węzła floty albo lidera grupy (`_fleetPanelAtOutliner` — geometria T3), łącznik jak w T3.
+   * @returns {{x:number,y:number,w:number,h:number}|null} prostokąt narysowanego panelu
+   */
+  _drawFleetPanelHud(ctx, W, H) {
+    const surf = this._mapSurface();
+    if (surf !== 'fleetHud' && surf !== 'groupHud') return null;
+    const K = window.KOSMOS;
+    const ins = getMapInsets(K);
+    const size = this._fleetPanelHud.prepare({ ctx, K, um: this, fcp: this.fleetCommandPanel, fgp: this.fleetGroupPanel, surface: surf,
+      maxH: Math.max(60, H - ins.top - ins.bottom - 16) });
+    if (!size) return null;
+    const p = this._fleetPanelAtOutliner(W, H, size.w, size.h, surf);
+    this._fleetPanelHud.draw(ctx, p, { pointer: { x: this._tooltipMouseX, y: this._tooltipMouseY } });
+    if (p.tab) this._drawShipPanelTab(ctx, p);
+    return this._fleetPanelHud.rect;
+  }
+
+  /**
+   * T6 — prostokąt panelu przy wierszu węzła floty (`fleetRowKeys`) albo lidera grupy (`shipRowKeys`): reszta jak T3
+   * (`computeShipPanelPlacement` — klamra, łącznik, karta walki jako przeszkoda, zapas przy schowanym outlinerze).
+   */
+  _fleetPanelAtOutliner(W, H, w, h, surf) {
+    const K = window.KOSMOS;
+    const ro = this._outliner;
+    const shown = !!ro?._layout && !!ro._rect && ro.isShown?.(K) === true;
+    const tree = ro?._layout?.result ?? null;
+    const keys = surf === 'fleetHud' ? fleetRowKeys(this._selectedFleetId, tree) : shipRowKeys(this._selectedVesselId, tree);
+    const anchor = shown ? resolveRowAnchor(ro._layout, keys) : null;
+    const card = this.combatHud?.getPanelRect?.() ?? null;
+    const p = computeShipPanelPlacement({ W, H, insets: getMapInsets(K), column: shown ? ro._rect : null, anchor, panelW: w, panelH: h,
+      obstacles: card ? [card] : [] });
+    this._fleetPanelPlacement = p;   // odczyt dla bramki / sondy
+    return p;
+  }
+
+  /** T6 — klik w panel floty / grupy narysowany w ostatniej klatce (ta sama bramka co rysunek). */
+  _fleetPanelHudClick(x, y) {
+    if (!this._fleetPanelHud?.rect || !window.KOSMOS?.civMode || this.overlayManager.isAnyOpen()) return false;
+    const surf = this._mapSurface();
+    if (surf !== 'fleetHud' && surf !== 'groupHud') return false;
+    return this._fleetPanelHud.handleClick(x, y, { K: window.KOSMOS, um: this, fcp: this.fleetCommandPanel, fgp: this.fleetGroupPanel });
+  }
+
+  /** T6 — czy kursor jest nad panelem floty / grupy (blokada kamery, pochłonięcie kliku, dymki). */
+  _fleetPanelHudHit(x, y) {
+    const r = this._fleetPanelHud?.rect;
+    return !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
   /**
    * T5, zachowanie 9 (Finding 546) — słuchacz `ui:selectionChanged`: przy aktywnym panelu T5 i bez otwartego overlayu zmiana
    * zaznaczenia zdejmuje konfigurator misji (jak „ANULUJ”), więc wybór celu nie przechodzi na inny statek. Rejestr Dowództwa
@@ -719,6 +841,9 @@ export class UIManager {
 
   // Single-select: zastępuje CAŁY zbiór jednym statkiem (lub czyści gdy null).
   setSelectedVesselId(vesselId) {
+    // REFORMA ZAKŁADEK T6 — zaznaczenie statku zdejmuje flotę (przed deduplikacją: statek już zaznaczony przy wybranej flocie —
+    // np. po „→ Flota” — też ją zdejmuje); przy OFF — nic.
+    if (vesselId !== null && window.KOSMOS?.vesselManager?.getVessel?.(vesselId)) this._dropFleetOnShipSelection(vesselId);
     // Dedupe tylko gdy zbiór to już dokładnie {vesselId} (re-klik leada przy
     // multi-select MUSI zwinąć zbiór do jednego — dlatego warunek o rozmiarze).
     if (this._selectedVesselId === vesselId && this._selectedVesselIds.size <= 1) return;
@@ -743,6 +868,7 @@ export class UIManager {
     if (vesselId == null) return;
     const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
     if (!v || v.isWreck || isEnemyVessel(v)) return;
+    this._dropFleetOnShipSelection(vesselId);   // T6 — zaznaczenie statku (CTRL, prostokąt SHIFT) zdejmuje flotę; OFF — nic
     if (this._selectedVesselIds.has(vesselId)) return;
     this._selectedVesselIds.add(vesselId);
     if (this._selectedVesselId == null) this._selectedVesselId = vesselId;  // pierwszy = lead
@@ -980,6 +1106,17 @@ export class UIManager {
     // REFORMA ZAKŁADEK T5 — zachowanie 9 (Finding 546): zmiana zaznaczenia przy panelu statku w idiomie etykiet zdejmuje
     // konfigurator misji (lista rozkazów zwija się w `ShipPanelHudLayer`); Rejestr Dowództwa i OFF — bez zmian.
     EventBus.on('ui:selectionChanged', () => { this._dropMissionConfigOnSelection(); });
+    // REFORMA ZAKŁADEK T6 (reguła 546 dla floty) — zmiana zaznaczenia statków albo floty zdejmuje picker celu floty, której panel
+    // już nie pokazuje (akordeon zwija `FleetPanelHudLayer`); przy OFF — bez zmian.
+    EventBus.on('ui:selectionChanged', () => { this._dropFleetPickerOnSelection(); });
+    EventBus.on('ui:fleetSelectionChanged', () => { this._dropFleetPickerOnSelection(); });
+    // T6, strojenie 1 (4) — baner pickera: decyzja W CHWILI zdarzenia (panel z ostatniej klatki) — baner nie miga na klatkę przed
+    // rysunkiem konfiguratora; koniec pickera zdejmuje ukrycie (następny baner — jak dziś). Przy OFF — bez zmian.
+    EventBus.on('ui:pickerModeStarted', () => {
+      this._syncPickerBanner(!!this._fleetPanelHud?.rect && this._mapSurface() === 'fleetHud');
+      this._dirty = true;
+    });
+    EventBus.on('ui:pickerModeEnded', () => { this._syncPickerBanner(false); });
     EventBus.on('player:planetUpdated', ({ planet }) => {
       if (this._selectedEntity?.id === planet.id) { this._selectedEntity = planet; this._dirty = true; }
     });
@@ -2100,9 +2237,10 @@ export class UIManager {
 
     // Slice 8b — FleetGroupPanel / FleetCommandPanel (lewy-dolny, pływające) blokują kamerę gdy kursor nad nimi.
     if (window.KOSMOS?.civMode && this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
+    if (window.KOSMOS?.civMode && this._fleetPanelHudHit?.(x, y)) return true;   // REFORMA ZAKŁADEK T6 — panel floty / grupy
     if (window.KOSMOS?.civMode && this._mapSurface() === 'group'
         && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
-    if (window.KOSMOS?.civMode && this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
+    if (window.KOSMOS?.civMode && !this._fleetPanelHudActive?.() && this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
     // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim. T2 — przy `labelPin` panel nie jest powierzchnią.
     if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
 
@@ -2145,8 +2283,9 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
+    if (this._fleetPanelHudHit?.(x, y)) return true;   // REFORMA ZAKŁADEK T6 — panel floty / grupy
     if (this._mapSurface() === 'group' && this.fleetGroupPanel?.visible && this.fleetGroupPanel._hitTest(x, y)) return true;
-    if (this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
+    if (!this._fleetPanelHudActive?.() && this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
     if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;   // T2 — przy `labelPin` bez panelu
     if (this._leftOutliner?.isOver?.(x, y, W, H)) return true;   // ARKUSZ UI U2 — bez podpowiedzi mapy 3D pod outlinerem
     if (this._outliner?.isOver?.(x, y, W, H)) return true;       // ARKUSZ UI U3-2 — także pod prawym
@@ -2175,6 +2314,8 @@ export class UIManager {
     // walki. Przy OFF — kolejność jak dziś (panel niżej).
     const shipPanelFirst = isShipPanelOutlinerOn(GAME_CONFIG.FEATURES);
     if (shipPanelFirst && this._vesselPanelClick(x, y)) return true;
+    // REFORMA ZAKŁADEK T6 — panel floty / grupy w idiomie etykiet (miejsce panelu statku w rysunku i kliku; mutex — jeden z trzech).
+    if (this._fleetPanelHudClick(x, y)) return true;
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
@@ -2195,7 +2336,7 @@ export class UIManager {
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
         && this._mapSurface() === 'group' && this.fleetGroupPanel?.handleClick?.(x, y)) return true;
     // Slice 8b — panel dowodzenia flotą (FleetCommandPanel).
-    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen()
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen() && !this._fleetPanelHudActive()
         && this.fleetCommandPanel?.handleClick?.(x, y)) return true;
     if (window.KOSMOS?.civMode && this._bottomNavBar?.handleClick?.(x, y)) return true;   // UI v3 — dolny pasek nawigacji (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._bottomControlBar?.handleClick?.(x, y)) return true;   // UI v3 — bell/MENU/zegar (PRZED overlayManager)
@@ -2304,6 +2445,9 @@ export class UIManager {
     // ⚠ Gałąź `overlayManager` NIŻEJ jest dla tej powierzchni MARTWA Z DEFINICJI — bramkuje ją
     //   `isAnyOpen()`, a panel mapy istnieje wyłącznie gdy NIC nie jest otwarte (D-MVP-7).
     // REFORMA ZAKŁADEK T5 — panel w idiomie etykiet: kółko przewija listę (rozkazy / cele), zawsze pochłonięte nad panelem.
+    // REFORMA ZAKŁADEK T6 — panel floty / grupy: kółko przewija listę członków, nad panelem zawsze pochłonięte.
+    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this._fleetPanelHud?.rect
+        && this._fleetPanelHud.handleWheel(x, y, delta)) return true;
     if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel'
         && !this._shipPanelDockHidden() && this._shipPanelHud?.handleWheel?.(x, y, delta)) return true;
     if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this._mapSurface() === 'vessel'
@@ -2381,8 +2525,8 @@ export class UIManager {
     this.combatHud?.handleMouseMove?.(x, y);       // POLISH P2b (D4, Finding 468) — podpowiedź pełnego tekstu karty walki
     this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku (bez bramki civMode, #1)
     if (this.tacticalDock?.isShowing?.() && !this.overlayManager.isAnyOpen()) this.tacticalDock.handleMouseMove(x, y);   // Faza 4 — hover doku taktycznego
-    if (this.fleetGroupPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu grupy
-    if (this.fleetCommandPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu floty
+    if (this.fleetGroupPanel?.visible && !this.overlayManager.isAnyOpen() && !this._fleetPanelHudActive()) this.fleetGroupPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu grupy (T6 — przy ON panel w idiomie etykiet)
+    if (this.fleetCommandPanel?.visible && !this.overlayManager.isAnyOpen() && !this._fleetPanelHudActive()) this.fleetCommandPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu floty
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
     if (window.KOSMOS?.civMode) this._bottomControlBar.handleMouseMove(x, y); // UI v3 — hover bell/MENU/prędkości
     if (window.KOSMOS?.civMode) this._topResourceDrawer.handleMouseMove(x, y); // górny pasek surowców — hover triggera/panelu + tooltipy
@@ -2595,7 +2739,7 @@ export class UIManager {
     if (civMode && !globeOpen && this._stationPanelSurface()) this.stationPanel.draw(ctx, W, H);
     // Slice 8b — FleetCommandPanel (flota) RYSOWANY PRZED FleetGroupPanel, by jego _drawnRect był
     // świeży gdy FleetGroupPanel stackuje się NAD nim. Oba ukryte gdy otwarty pełnoekranowy overlay.
-    if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.draw(ctx, W, H);
+    if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen() && !this._fleetPanelHudActive()) this.fleetCommandPanel.draw(ctx, W, H);
     // Slice 8b — panel grupy statków: NA WIERZCHU sceny, ukryty gdy otwarty pełnoekranowy overlay
     // (jak ramki selekcji) — by nie nadrysowywać FleetManagerOverlay (rysowany wcześniej).
     if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
@@ -2626,6 +2770,13 @@ export class UIManager {
     }
     // T5 — panel w idiomie etykiet nienarysowany w tej klatce (OFF, overlay, tryb Y, brak zaznaczenia) — bez prostokąta i stref.
     if (!shipPanelHudDrawn) this._shipPanelHud?.clear?.();
+    // REFORMA ZAKŁADEK T6 — panel floty / grupy N ≥ 2 w idiomie etykiet (flaga `fleetPanelHud`) w tym samym miejscu cyklu co panel
+    // statku; mutex `_mapSurface` (flota > N ≥ 2 > lider) — w klatce co najwyżej jeden z trzech. Nienarysowany — bez prostokąta i stref.
+    const fleetPanelDrawn = (civMode && !globeOpen && !this.overlayManager.isAnyOpen()) ? this._drawFleetPanelHud(ctx, W, H) : null;
+    if (fleetPanelDrawn) shipPanelDrawn = fleetPanelDrawn;
+    else { this._fleetPanelHud?.clear?.(); this._fleetPanelPlacement = null; }
+    // T6, strojenie 1 (4) — baner pickera ukryty, gdy panel floty T6 pokazuje w tej klatce konfigurator celu floty.
+    this._syncPickerBanner(!!fleetPanelDrawn && this._mapSurface() === 'fleetHud');
     // T3, strojenie 1 (Finding 544): prostokąt panelu z TEJ klatki — przeszkoda karty ciała i panelu stacji (rysowanych
     // wcześniej w klatce, więc czytają go w następnej — `getShipPanelObstacle`).
     if (isShipPanelOutlinerOn(GAME_CONFIG.FEATURES)) this._noteShipPanelDrawn(shipPanelDrawn);
@@ -3465,6 +3616,8 @@ export class UIManager {
     if (window.KOSMOS?.hudLayer?.pinButtonAt?.(x, y) != null) return 'pin';
     // REFORMA ZAKŁADEK T5 — aktywny chip panelu statku w idiomie etykiet — kursor „rączki”
     if (this._shipPanelHud?.chipAt?.(x, y) != null) return 'shippanel';
+    // REFORMA ZAKŁADEK T6 — aktywny chip albo linia członka panelu floty / grupy — kursor „rączki”
+    if (this._fleetPanelHud?.chipAt?.(x, y) != null) return 'fleetpanel';
     // ActionPanel
     if (!window.KOSMOS?.civMode) {
       const PW = 220, PH = 166;

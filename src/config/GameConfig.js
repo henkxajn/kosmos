@@ -652,6 +652,20 @@ export const GAME_CONFIG = {
     //     przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.shipPanelHud = false`) działa od następnej klatki; F5 wczytuje
     //     wartość z tego pliku. Sprząta ją krok T4.
     shipPanelHud: true,
+
+    // ── REFORMA ZAKŁADEK T6 (TABS_REFORM_PLAN.md §5.9; decyzja właściciela 2026-10-26 — D-TR-9 zmieniona) — panele floty i grupy ──
+    // fleetPanelHud: na panelu statku T5 (wymaga `shipPanelHud` aktywnego; logika `FleetPanelHudLogic.js`, rysunek
+    //   `FleetPanelHudLayer.js`) — panel floty (`FleetCommandPanel`) przy wierszu węzła floty w prawym outlinerze i panel grupy
+    //   N ≥ 2 (`FleetGroupPanel`) przy wierszu lidera, w idiomie etykiet z T5 (ciemny pasek bez ramki, font motywu, kolory z ról,
+    //   cyfry w kratce; ~200 px, konfigurator celu floty ~260): nazwa + ✎, linia „N statków · lider · stan”, doktryna, członkowie
+    //   jako linie (klik — panel statku T5), akcje główne jako chipy, rozkazy pod „[ Rozkazy ▼ ]”. Akcje — TE SAME handlery co
+    //   przyciski dzisiejszych paneli (`_onHit`); geometria T3 bez zmian. Mutex: jeden z trzech paneli (flota > N ≥ 2 > lider),
+    //   zaznaczenie statku zdejmuje flotę, Esc zamyka panel floty. Przy ON dzisiejsze panele w lewym dolnym rogu się nie
+    //   rysują i nie łapią kliku; Rejestr Dowództwa i overlay floty — bez zmian.
+    //   ⚠ Brak klucza = OFF (idiom `hudRadar`) — przy OFF dzisiejsze panele co do bitu; flaga czytana przy każdym rysunku,
+    //     kliku i klawiszu — przestawienie w konsoli (`KOSMOS.gameConfig.FEATURES.fleetPanelHud = false`) działa od następnej
+    //     klatki; F5 wczytuje wartość z tego pliku. Sprząta ją krok T4.
+    fleetPanelHud: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

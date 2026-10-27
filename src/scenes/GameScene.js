@@ -17,6 +17,7 @@ import { keepShipSelectionOnMapClick } from '../ui/ShipPanelAnchorLogic.js';   /
 import { isLabelHoverActive } from '../ui/LabelHoverLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedź mapy wygaszona
 import { escapeUnpin, escapeHeldByModal } from '../ui/LabelPinLogic.js';   // REFORMA ZAKŁADEK T2 (D-TR-5 (a), 534) — Esc zdejmuje przypięcie
 import { coordTooltipBlocked } from '../ui/ShipPanelHudLogic.js';   // REFORMA ZAKŁADEK T5 — 530: dymek współrzędnych nie nad UI
+import { escapeClosesFleetPanel } from '../ui/FleetPanelHudLogic.js';   // REFORMA ZAKŁADEK T6 — Esc zamyka panel floty
 import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
@@ -4774,6 +4775,17 @@ export class GameScene {
         // REFORMA ZAKŁADEK T2 — okno DOM (raport ciała z przypięcia, `.kosmos-modal-overlay`) zamyka się własnym Esc; kaskada
         // mapy stoi (bez tego Esc w raporcie zamykał okno i otwierał menu ☰). Przy `labelPin` OFF — jak dziś.
         if (escapeHeldByModal({ K: window.KOSMOS, features: GAME_CONFIG.FEATURES, domModalOpen: !!document.querySelector('.kosmos-modal-overlay') })) return;
+        // REFORMA ZAKŁADEK T6 — panel floty w idiomie etykiet (`fleetPanelHud`): Esc zamyka panel floty (zdejmuje flotę) PRZED
+        // zaznaczeniem statków — flota wygrywa mutex, więc Esc zamyka widoczny panel; przy otwartym overlayu i nad oknem DOM —
+        // nie (Esc należy do nich). Przy OFF — jak dziś (Esc panelu floty nie zamyka).
+        if (escapeClosesFleetPanel({ features: GAME_CONFIG.FEATURES, fleetId: um?.getSelectedFleetId?.() ?? null,
+          overlayOpen: um?.overlayManager?.isAnyOpen?.() === true,
+          modalOpen: !!document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay') })) {
+          e.preventDefault();
+          um.setSelectedFleetId(null);
+          um?.markDirty?.();
+          return;
+        }
         if (um?.getSelectedVesselId?.()) {
           e.preventDefault();
           um.clearSelection();
@@ -6117,6 +6129,9 @@ export class GameScene {
     if (!target || target.type === 'empty') {
       if (objectHit != null && keepShipSelectionOnMapClick(GAME_CONFIG.FEATURES, objectHit)) return;
       this.uiManager.clearSelection();
+      // REFORMA ZAKŁADEK T6, strojenie 1 (3) — pustka zdejmuje też flotę (panel floty znika jak panel statku i przypięcia);
+      // ciało / stacja — wyżej, flota zostaje (D-TR-14); uzbrojony picker — ta funkcja nie biegnie (klik = cel); OFF — nic.
+      this.uiManager._dropFleetOnEmptyMapClick?.();
     }
   }
 

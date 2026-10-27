@@ -395,7 +395,11 @@ header('T5  summarizeFleetGroup.dockedCount == liczba wierszy „Docked" na fixt
 header('T6  countActionable / summarizeFleetGroup na undefined i dryfie — identyczne jak przed naprawą');
 {
   const und = SHAPES.undef(), D = SHAPES.legD();
-  const deps = { vesselManager: { isImmobilized: () => false, getVesselUpkeepCredits: () => 0 } };
+  // ⚠ PRZECELOWANIE ŚWIADOME (REFORMA ZAKŁADEK T6, strojenie 1 — Finding 562, podpis właściciela 2026-10-27): „Odwrót” liczy
+  //   statki w AKTYWNYM STARCIU (predykat bramki MOS `not_in_combat`), nie „w przestrzeni i nie unieruchomione”. Fixture stoi
+  //   w starciu (`combatCheck`), więc porównanie z HEAD dalej mierzy WYŁĄCZNIE odczyt surowego stanu (sens tego pinu);
+  //   literał oczekiwany bez zmian. Regułę 562 pinuje `fleet_panel_hud_smoke` F17.
+  const deps = { vesselManager: { isImmobilized: () => false, getVesselUpkeepCredits: () => 0 }, combatCheck: () => true };
   ok(J(countActionable([und], deps)) === J({ canRefuel: 0, canStop: 0, canRetreat: 1, canUndock: 0, canDock: 1 }),
      `countActionable(undefined) bit w bit jak na HEAD (${J(countActionable([und], deps))})`);
   const s1 = summarizeFleetGroup([und], deps);

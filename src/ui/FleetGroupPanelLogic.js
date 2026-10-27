@@ -103,14 +103,20 @@ export function buildRosterRows(vessels, { vesselManager } = {}) {
  *   N==1 vs N>=2; rejestr nie ma tej akcji od Findingu 145 (a')). Nikt inny go nie czytał.
  * - refuel: zadokowany (manualRefuel wymaga state==='docked')
  * - stop:   ma aktywny rozkaz ruchu (cancelOrder zwróci false bez niego)
- * - retreat:w przestrzeni (nie zadokowany) i nie unieruchomiony
+ * - retreat:w AKTYWNYM STARCIU — ten sam predykat co bramka MOS `_issueRetreat` (`not_in_combat`):
+ *           `deepSpaceCombatSystem._findActiveEncounterContaining` (`combatCheckOf`). ⚠ Finding 562 (REFORMA
+ *           ZAKŁADEK T6, strojenie 1): dawniej „w przestrzeni i nie unieruchomiony” — przycisk aktywny poza walką,
+ *           a MOS po cichu odmawiał każdemu statkowi. Unieruchomienie i rezerwa NIE gaszą przycisku — ucieczka
+ *           z bitwy przebija obie bramki (D-FDk). Bez `combatCheck` (brak systemu walki) — 0: MOS odmawia wtedy
+ *           każdemu odwrotowi (fail-closed jak bramka).
  * @param {Array<object>} vessels
- * @param {{ vesselManager? }} deps
+ * @param {{ vesselManager?, combatCheck?:(vesselId:string) => boolean }} deps
  * @returns {{ canRefuel:number, canStop:number, canRetreat:number,
  *            canUndock:number, canDock:number }}
  */
-export function countActionable(vessels, { vesselManager } = {}) {
+export function countActionable(vessels, { vesselManager, combatCheck = null } = {}) {
   const list = vessels ?? [];
+  const inCombat = typeof combatCheck === 'function' ? (v) => !!combatCheck(v?.id) : () => false;
   let canRefuel = 0, canStop = 0, canRetreat = 0, canUndock = 0, canDock = 0;
   for (const v of list) {
     const immob   = !!vesselManager?.isImmobilized?.(v);
@@ -119,9 +125,21 @@ export function countActionable(vessels, { vesselManager } = {}) {
     const hasActiveOrder = v?.movementOrder?.status === 'active';
     if (docked)                 canRefuel++;
     if (hasActiveOrder)         canStop++;
-    if (!docked && !immob)      canRetreat++;
+    if (inCombat(v))            canRetreat++;   // Finding 562 — lustro MOS `not_in_combat` (D-FDk: także unieruchomiony)
     if (docked)                 canUndock++;   // Undock: zadokowany → orbita ciała
     if (!immob)                 canDock++;      // Dock: dowolny ruchomy (picker wybiera ciało)
   }
   return { canRefuel, canStop, canRetreat, canUndock, canDock };
+}
+
+/**
+ * Predykat „statek w aktywnym starciu” — TEN SAM, którym MOS bramkuje odwrót: `_issueRetreat` → `not_in_combat`,
+ * `deepSpaceCombatSystem._findActiveEncounterContaining(id)`. Jedno źródło dla panelu grupy (OFF), panelu grupy T6 (ON)
+ * i znacznika walki członka (`FleetPanelHudLogic.pictureCtx`). Finding 562 (REFORMA ZAKŁADEK T6, strojenie 1).
+ * @param {object} K — `window.KOSMOS` (podaje wołający; moduł bez `window`)
+ * @returns {((vesselId:string) => boolean)|null} `null` — brak systemu walki
+ */
+export function combatCheckOf(K) {
+  const dscs = K?.deepSpaceCombatSystem;
+  return typeof dscs?._findActiveEncounterContaining === 'function' ? (id) => !!dscs._findActiveEncounterContaining(id) : null;
 }

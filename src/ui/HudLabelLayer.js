@@ -1087,6 +1087,9 @@ export class HudLabelLayer {
     // REFORMA ZAKŁADEK T5: panel statku w idiomie etykiet (`shipPanelHud`) — jego prostokąt (przy ON panel T3 bez prostokąta).
     const vp = um?._shipPanelHud?.rect ?? um?._fleetOverlay?._vesselPanelRect;
     if (vp && um?._mapSurface?.() === 'vessel') out.push({ x: vp.x, y: vp.y, w: vp.w, h: vp.h });
+    // REFORMA ZAKŁADEK T6: panel floty / grupy w idiomie etykiet (`fleetPanelHud`) — jego prostokąt z ostatniej klatki (OFF — `null`).
+    const fp = um?._fleetPanelHud?.rect;
+    if (fp) out.push({ x: fp.x, y: fp.y, w: fp.w, h: fp.h });
     const sp = K?.stationPanel;
     const sr = sp?._lastRect;
     // T2: przy `labelPin` panel stacji się nie rysuje (jego stan = przypięcie stacji) — prostokąt z dawnej klatki nie jest przeszkodą.
