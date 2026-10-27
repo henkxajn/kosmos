@@ -1,6 +1,7 @@
 # REFORMA ZAKŁADEK — ramy (decyzje właściciela 2026-10-24) i inwentarz (krok 1)
 
-> **Stan: RAMY PODPISANE 2026-10-24; KROK 1 — INWENTARZ WYKONANY 2026-10-24 (read-only, HEAD = origin = `ae23697`,
+> **Stan: REFORMA ZAKŁADEK ZAMKNIĘTA 2026-10-27 (T4 — §5.10); RAMY PODPISANE 2026-10-24; KROK 1 — INWENTARZ WYKONANY
+> 2026-10-24 (read-only, HEAD = origin = `ae23697`,
 > ahead 0); PODPISY WŁAŚCICIELA 2026-10-24 — decyzje D-TR-1…15 (§6.0), findingi §7 przyjęte w całości do rejestru
 > `HUD_PLAN.md` §3.** Inwentarz — zero zmian w `src/`; plik zacommitowany razem z podpisami (commit `docs(TABS 0)` =
 > kotwica kroku 531 / 532). **531 / 532 — ✅ WYKONANE 2026-10-24** (§5.4: `471191d` 531 · `da8b2c9` 532; bramka
@@ -14,19 +15,23 @@
 > „Rozbiórka” (556); bramka właściciela PASS — szerokość 200 zostaje); **T6 — ✅ WYKONANE 2026-10-27** (§5.9: `694cfcf` —
 > panele floty i grupy N ≥ 2 w idiomie etykiet przy prawym outlinerze za `fleetPanelHud`; strojenie 1 — klik w pustą mapę
 > zdejmuje flotę, baner pickera ukryty przy konfiguratorze, „Odwrót” grupy tylko w starciu (562); bramka właściciela PASS;
-> D-TR-9 ✅); **następny krok — T4** (sprzątanie: dok, `BodyCardSideLogic`, `FloatingPanel`, flagi T5 i T6), kotwica =
-> commit dokumentacji `docs(TABS T6)`. Findingi po T3: ✅ 529, 539, 542, 543, 544, 545, 547; ⚪ 546, 548; po T1: ✅ 533,
+> D-TR-9 ✅); **T4 — ✅ WYKONANE 2026-10-27** (§5.10: `8794038` · `15c34af` · `c31a916` · `b008f23` — sprzątanie: karta ciała, pływający
+> panel stacji, dok z `FloatingPanel`, karta z boku tarczy, panel statku T3, rysunek dawnych paneli floty i grupy, dymki DOM
+> ciała i statku, flagi kroków reformy i 24 klucze i18n; decyzje właściciela Q1–Q4; bramka właściciela PASS — arkusz
+> kontaktowy 40/40 par bez różnic); **REFORMA ZAKŁADEK ZAMKNIĘTA — następny: paczka B ARKUSZA HUD**, kotwica = commit
+> dokumentacji `docs(TABS T4)`. Findingi po T3: ✅ 529, 539, 542, 543, 544, 545, 547; ⚪ 546, 548; po T1: ✅ 533,
 > 536, 549, 551, 552 (przy `labelHover` ON), ✅ 550 (słownik); po T2: ✅ 488, 534, 537, 540, 553, 554 (przy `labelPin` ON),
 > ⚪ 555; po T5: ✅ 530, 546 (przy `shipPanelHud` ON), 556 (słownik), 538 — część panelu statku (przy ON), ⚪ 557; po T6:
 > ✅ 558, 559, 560, 561 (przy `fleetPanelHud` ON), 562 (przy OFF i ON), ⚪ 563, 564 (rejestr `HUD_PLAN.md` §3; 488 —
-> `UI_PLAN.md` §6); pierwszy wolny **565**.
+> `UI_PLAN.md` §6); po T4: ✅ 528, 535, 538 (reszta), 541, 548, 566, ⚪ 565, 567 (bez kroku); pierwszy wolny **568**.
 > **Kolejność całości (podpis D-TR-12 (b), D-TR-15 (b); T5 i T6 — decyzje właściciela 2026-10-26): 531 / 532 (drobny
 > krok od razu) → T3 → T1 → T2 → T5 → T6 → T4 → paczka B ARKUSZA HUD** (B po T4: chipy warstw D-HUD-13 stają w pasie
 > dolnym w miejscu doku; T4 sprząta flagi T5 i T6, a `FloatingPanel` — dopiero po T6). Reforma
 > poza arkuszem HUD, po paczce A; dotyczy tych samych powierzchni co „reforma pływających okien” zaparkowana w ARKUSZU UI
 > (`UI_PLAN.md` §1). Findingi — numeracja wspólna (`HUD_PLAN.md` §3): pierwszy wolny przed inwentarzem **531**, po
 > przyjęciu §7 **544**, po T3 **549** (544–548 z T3 — §5.5), po T1 **553** (549–552 z T1 — §5.6), po T2 **556** (553–555
-> z T2 — §5.7), po T5 **558** (556–557 z T5 — §5.8), po T6 **565** (558–564 z T6 — §5.9). Powiązane: 488, 493
+> z T2 — §5.7), po T5 **558** (556–557 z T5 — §5.8), po T6 **565** (558–564 z T6 — §5.9), po T4 **568** (565–567 z T4 —
+> §5.10). Powiązane: 488, 493
 > (`UI_PLAN.md` §6), 515, 528, 529, 530 (`HUD_PLAN.md` §3).
 > **Teczka:** `C:\Users\Komputer\kosmos-handover\tabs-inventory\` — `probes/` (3 sondy CDP), `tools/` (kopia
 > `kosmos_cdp_gpu.mjs` z paczki A), `results/behaviour/` (JSON i zrzuty pomiarów), `RAPORT_TABS_INV.md`.
@@ -585,7 +590,7 @@ stałych rysunku, walidator → **arkusz kontaktowy HTML na 5 motywach** ekranu 
 | **T3** panel statku przy outlinerze — **✅ WYKONANE 2026-10-25** (`496ab80`, §5.5) | `_drawRight` (kompakt) w geometrii przy wierszu (D-TR-7), zapas przy schowanym outlinerze (D-TR-8), tryb Y (D-TR-10), potwierdzenie rozbiórki (D-TR-13), zaznaczenie przy kliku ciała (D-TR-14), panel pływający wyłączony (529) | `shipPanelOutliner` | kotwica wiersz → prostokąt panelu (klamra, przewinięcie, wiersz poza kadrem kolumny), zapas, mutex N, wejścia (mapa, outliner, Dok, etykieta, Tab), zamknięcie, Esc | statek w ruchu / w doku / w obcym układzie, konfigurator (360 px), wiersz u dołu listy, outliner schowany, tryb Y, starcie |
 | **T5** panel statku w idiomie etykiet — **✅ WYKONANE 2026-10-26** (`409f82b`, §5.8) | osobny lekki renderer panelu statku przy outlinerze w stylu przypięć HUD (treść — §5.8); Rejestr Dowództwa i `_drawRight` bez zmian; geometria, histereza, zapas i tryb Y z T3 bez zmian; przy okazji 530 | `shipPanelHud`; sprząta ją T4 | strefy kliku chipów i „[ Rozkazy ▼ ]”, kotwica T3 bez zmian, OFF = panel z T3, kl./s | statek w ruchu / w doku / w obcym układzie, długa nazwa (2 linie), konfigurator i wybór celu (~260 px), rozkazy rozwinięte, 530 |
 | **T6** panele floty i grupy przy outlinerze — **✅ WYKONANE 2026-10-27** (`694cfcf`, §5.9; decyzja właściciela 2026-10-26 — D-TR-9 zmieniona) | panel floty (`FleetCommandPanel`) przy wierszu węzła floty w prawym outlinerze, panel grupy N ≥ 2 (`FleetGroupPanel`) przy wierszu lidera — oba w idiomie etykiet z T5 (osobne lekkie renderery); Rejestr / overlay floty nietknięte; geometria, łącznik, histereza, zapas i tryb Y z T3 | `fleetPanelHud`; sprząta ją T4 | zbiór akcji ON = OFF (te same handlery), strefy kliku, kotwica przy węźle floty / wierszu lidera, OFF = dzisiejsze panele, kl./s | flota (węzeł) i grupa N ≥ 2, lider w obcym układzie, outliner schowany, tryb Y, 1280×720 |
-| **T4** sprzątanie | dok, `BodyCardSideLogic` (przed usunięciem — przenieść `objectScreenDisc`, z którego T1 korzysta w wyborze stacji pod kursorem; §5.7), `FloatingPanel` (dopiero po T6), kotwice OFF, `_cardRects`, flagi po bramkach (w tym flagi T5 i T6 — decyzje 2026-10-26); i18n pól, które przeszły do rozwinięć i panelu (538) — albo osobno | — | przecelowania z §5.3 | — |
+| **T4** sprzątanie — **✅ WYKONANE 2026-10-27** (`8794038` · `15c34af` · `c31a916` · `b008f23`, §5.10; decyzje właściciela Q1–Q4) | dok, `BodyCardSideLogic` (przed usunięciem — przenieść `objectScreenDisc`, z którego T1 korzysta w wyborze stacji pod kursorem; §5.7), `FloatingPanel` (dopiero po T6), kotwice OFF, `_cardRects`, flagi po bramkach (w tym flagi T5 i T6 — decyzje 2026-10-26); i18n pól, które przeszły do rozwinięć i panelu (538) — albo osobno | — (flagi kroków usunięte) | pin czystości `tabs_t4_clean_smoke`; przecelowania z §5.3; migawki wyroczni paneli T3 / floty / grupy | arkusz `kontakt_T4` — 8 kadrów × 5 motywów, przed / po |
 
 Kolejność: T1 → T2 (przypięcie stoi na rozwinięciu) → T3 → T4; **T3 można przenieść na początek** (brak zależności od
 T1/T2; zamyka 529) — D-TR-12.
@@ -601,6 +606,9 @@ sprząta także flagę T5. Kolejność całości: **531 / 532 → T3 → T1 → 
 **Decyzja właściciela 2026-10-26 (po bramce T5):** D-TR-9 zmieniona — po T5 **T6** (panele floty i grupy przy outlinerze
 w idiomie etykiet, §5.9), przed T4; T4 sprząta `FloatingPanel` dopiero po T6. Kolejność całości: **531 / 532 → T3 → T1
 → T2 → T5 → T6 → T4 → paczka B ARKUSZA HUD**.
+
+**T4 — ✅ WYKONANE 2026-10-27** (`8794038` · `15c34af` · `c31a916` · `b008f23`, §5.10; bramka właściciela PASS). **REFORMA ZAKŁADEK ZAMKNIĘTA** — następny:
+paczka B ARKUSZA HUD (chipy warstw D-HUD-13 w pasie dolnym w miejscu doku), kotwica = commit dokumentacji `docs(TABS T4)`.
 
 ### 5.3 Keepery, które reforma zmieni (przecelowanie za zgodą albo usunięcie razem z powierzchnią)
 
@@ -1119,6 +1127,89 @@ mapy; panel STATKU w trybie Y — jak T3, schowany); (4) picker floty przeżywa 
 (5) piny źródłowe na tekście `UIManager` (jedno `fleetGroupPanel.draw(`, bramka panelu statku, kolejność kliku i rysunku)
 — gałąź T6 obok, bez zmiany tych napisów; (6) węzeł floty w zwiniętym układzie — kotwica przy nagłówku układu (jak T3),
 flota w skoku — „W drodze”; (7) członek floty w innym układzie niż prowadzący — linia z dopiskiem układu (jak outliner).
+
+---
+
+### 5.10 T4 — sprzątanie — WYKONANE 2026-10-27 (decyzje właściciela Q1–Q4 z 2026-10-27)
+
+**Commity:** `8794038` T4-1 (flagi kroków reformy na stałe ON — ścieżki OFF i pływający panel statku usunięte) · `15c34af`
+T4-2 (karta ciała, pływający panel stacji, dok paneli i `FloatingPanel` usunięte) · `c31a916` T4-3 (dawne panele floty
+i grupy bez rysunku, panel statku T3 usunięty z FMO — migawki wyroczni) · `b008f23` T4-4 (dymki DOM ciała i statku, klucze
+i18n usuniętych powierzchni, pin czystości). Kod przygotowany w klonie roboczym, commity odtworzone w repo przez sam indeks —
+drzewa commitów identyczne z klonem. Bramka właściciela: **PASS** (oglądanie — „wszystko działa jak wczoraj, pas dolny bez
+rzędu doku”). Zapis v101, bez migracji. Kod produkcyjny: 43 pliki, +499 / −3335 linii. Inwentarz przed kodem (read-only
+na `e873127`): STOP z zasady briefu — cztery moduły z listy „usunąć” miały żywych konsumentów, a trzy konfiguracje
+„rollbacku” wracały na stare powierzchnie; stąd pytania Q1–Q4.
+
+**Decyzje właściciela (2026-10-27):**
+- **Q1 = „Usuwamy mimo to”** — przy `hudLabels` OFF zostają same plakietki `MapLabelLayer` (bez karty ciała, bez dymków DOM
+  ciała i statku, bez rozwinięć i przypięć; panel statku T5 i panele floty / grupy T6 bez zmian); scenariusz Generator
+  traci kartę informacyjną ciała.
+- **Q2 = „Na stałe ON w T4”** — klucze `mapVesselPanel` / `mapVesselPanelCompact` usunięte; adapter panelu statku nad mapą
+  (`drawVesselPanel`, footer, klik / kółko, `_vesselPanelRect`, `MVP_FOOTER_H`) usunięty; `_drawRight` z gałęzią kompaktową
+  — bez zmian.
+- **Q3 = „Rdzeń zostaje, nazwy bez zmian”** — `BottomContext._doAction` → `LabelPinLogic.runBodyMapAction` (czysta funkcja,
+  4 warianty „Mapy ciała”); `StationPanel`, `FleetCommandPanel`, `FleetGroupPanel` zostają jako STAN + słuchacze + `_onHit`
+  (cele chipów przypięcia stacji i paneli T6); nazwy klas i uchwyty `KOSMOS.*` bez zmian.
+- **Q4 = „Zamrozić migawkę”** — strefy i dyspozycje dawnych paneli nagrane TYMI SAMYMI keeperami (`--record`) na realnym
+  `git worktree` przy `e873127`: `src/testing/fixtures/traces/T4-ship-panel-t3-baseline.json` (20 stanów statku, 209 stref,
+  31 typów, 209 dyspozycji) i `T4-fleet-panels-baseline.json` (7 stanów floty, 8 grupy, 6 sekwencji kliku), z metryczkami
+  `.md` — wyrocznia zbioru akcji paneli T5 / T6 zamiast żywego porównania ON / OFF (wzór Finding 273); kontrola: na
+  `e873127` z żywymi panelami piny przechodzą, mutacja migawki (strefa mniej) — 3 piny padają.
+
+**Co usunięto:** moduły `BottomContext.js`, `BottomContextLogic.js`, `FloatingPanel.js`, `PanelDock.js`, `PanelDockLogic.js`,
+`BodyCardSideLogic.js` (`objectScreenDisc` → `HudProjection.js`) z keeperami `body_card_side`, `s34b_bottomcontext`,
+`s34b_paneldock`; flagi `bodyCardSide`, `shipPanelOutliner`, `labelHover`, `labelPin`, `shipPanelHud`, `fleetPanelHud`,
+`mapVesselPanel`, `mapVesselPanelCompact` z predykatami `is*On` / `is*Active`; rząd chipów doku na pasie dolnym
+(`getDockSpan`, `DOCK_CHIP_*`); rysunek, klik w prostokąt i stronicowanie dawnych paneli floty i grupy
+(`FleetGroupPanelLogic.buildRosterRows`); dymki DOM `#colony-3d-tooltip` kolonii i statku (`_showColonyTooltip`,
+`_showVesselTooltip`) i ciałowo-statkowa część `#kosmos-tooltip` także przy `hudLabels` OFF; 24 klucze i18n czytane
+wyłącznie przez usunięte powierzchnie (`context.*` karty ciała, pola pływającego panelu stacji, `fleetGroup.title`,
+`body.occupied`, `atmosphere.habitable`, `life.complex`, `ui.unexplored`; pl = en = 3389).
+
+**Zostaje (nie ruszane):** Rejestr Dowództwa i `_drawRight`, `ColonyOverlay`, `BodyDetailModal`, outlinery, zegar / suwak
+/ chip ⚔, ARKUSZ HUD (orbity, radar, etykiety, trasy, `HudPalette`, flagi `hudOrbits` / `hudRadar` / `hudLabels` /
+`hudRoutes`); podpowiedź budynku (K3, element `#colony-3d-tooltip`); budowniczy treści `#kosmos-tooltip` dla POI i uśpionej
+mapy taktycznej (`commandTacticalMap: false`).
+
+**Keepery:** NEW `tabs_t4_clean_smoke` — pin czystości: pliki i importy usuniętych modułów (kod produkcyjny, keepery,
+`index.html`), identyfikatory usuniętych powierzchni w kodzie produkcyjnym (7 rodzin, 44 nazwy, komentarze zdjęte, granica
+identyfikatora), kształt `StationPanel` / `FleetCommandPanel` / `FleetGroupPanel`, następcy przeniesionego rdzenia, flagi
+w `FEATURES` i ich odczyty, klucze i18n; strażnik C5b — 18 kluczy czytanych przez zmienną (chipy T6, przypięcie, etapy
+życia; `check-i18n` widzi je od T4 na liście informacyjnej „zdefiniowane-a-nieużyte”, usunięcie pokazałoby surowy klucz);
+kontrole tego, co zostaje. Na `e873127` 11 PASS / 15 FAIL (każdy pin czystości czerwony; zielone kontrole i strażnicy), po
+T4 26 / 0. Przecelowane (uzasadnienia w nagłówkach): `click_focus_rule`, `fleet_panel_hud` i `ship_panel_hud` (wyrocznia
+z migawki), `map_vessel_panel` (P13 — łańcuch chipa T5 do prawdziwego `MissionSystem`), `map_vessel_panel_compact`,
+`vessel_status_label`, `left_outliner`, `right_outliner`, `ship_panel_outliner`, `label_hover`, `label_pin`, `hud_labels`,
+`bottom_strip`, `zoom_slider`, `map_insets_single_source`, `g3_ground_visibility`, `g3_regrowth`, `ground_troops_reachable`,
+`wp_occupied_badge` (T5 — następca dymka kolonii, odznaka w rozwinięciu etykiety kolonii gracza zdobytej w wojnie,
+wykonaniem), `i18n_269_amin` (trzeci site stanu statku — rozwinięcie etykiety). Fail-first T4-4 w realnym `git worktree`
+na T4-3: czerwone dokładnie przecelowane piny, kontrole zielone po obu stronach. Sweep po krokach: T4-1 347/347 · T4-2
+344/344 (−3 keepery usuniętych modułów) · T4-3 344/344 · T4-4 **345/345, 0 FAIL, 29 advisory**; `check-i18n` PASS.
+
+**Pomiary (prawdziwa gra w headless Chrome z GPU, okno 1618×1195 przy DPR 0,9):**
+- **smoke** (ciało → przypięcie → „Raport”, „Mapa ciała”, Esc; stacja → lista, „Zarządzaj”, ✕; statek z outlinera → chipy,
+  „[ Rozkazy ▼ ]”, kółko, „.”, tryb Y, Tab, Esc; węzeł floty; grupa N = 3; wrak w zaznaczeniu): 11 przebiegów (T4-3,
+  T4-4 i repo po przeniesieniu; ZF gy120, Polonia gy79, `hudLabels` OFF) — **0 błędów konsoli**;
+- **kl./s** 60 → 60 we wszystkich stanach (limit vsync); **`UIManager._draw`** — pomiar stabilny (wywołania synchroniczne,
+  mediana partii, 3 rozruchy na drzewo naprzemiennie): bez zmiany poza szumem (−1,5 … +1,1 %, zakresy przed / po
+  pokrywają się). Spadek oczekiwany w briefie nie wyszedł: przy domyślnej konfiguracji `e873127` usunięte gałęzie były
+  wczesnymi powrotami (koszt rzędu µs przy ~600–750 µs na klatkę);
+- **arkusz kontaktowy** `kontakt_T4.html` (teczka `kosmos-handover\tabs-t4\gate\`) — 8 kadrów (przypięcie kolonii,
+  przypięcie stacji z listą ruchu, panel statku przy wierszu, panel floty, panel grupy, najechanie na ciało bez etykiety,
+  pas dolny, 1280×720) × 5 motywów, przed / po: **40/40 par — 0 pikseli różnicy, ślad stref kliku identyczny 40/40**,
+  dymków DOM 0. Metoda: zrzuty bezstratne warstw UI / HUD / DOM z ukrytym płótnem 3D (shadery na zegarze realnym)
+  i zegarami ujednoliconymi w obu drzewach — `simClockMs` (marsz kresek tras, kąty orbit statków przy ciałach;
+  zakotwiczony w czasie realnym przy rozruchu), `performance.now`, `Date.now`; bez ujednolicenia każda para różniła się
+  o 385–12 933 px wyłącznie fazą animacji. Rząd doku na `e873127` był w konfiguracji domyślnej zawsze pusty (od T2 nic nie
+  minimalizowało się do doku) — jego usunięcie widać w odczycie `getDockSpan()`, nie w pikselach.
+
+**Findingi:** ✅ 528 (kotwice kart na ścieżce OFF — karty usunięte), ✅ 535, ✅ 541 (dok usunięty), ✅ 548 (karta ciała
+usunięta), ✅ 538 (reszta: karta, panel stacji, panel statku nad mapą, dymki DOM mapy usunięte albo przez klucze;
+literały zostają w `_drawRight` Rejestru Dowództwa i w budowniczym `#kosmos-tooltip` uśpionej mapy taktycznej — klasa
+113); nowe ⚪ 565 (zdejmowanie wraków z zaznaczenia w słuchaczu `FleetGroupPanel`), ✅ 566 (geometria T3 liczona dwa razy
+na klatkę — usunięta), ⚪ 567 (komentarze nazywające usunięte powierzchnie jak żywe) — 565 i 567 bez kroku (`HUD_PLAN.md`
+§3). Pierwszy wolny: **568**.
 
 ---
 
