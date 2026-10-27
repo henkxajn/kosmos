@@ -19,8 +19,8 @@
 // T-tabela:
 //   T0  enumeracja pisarzy `position.state` w `src/` (regex \s-tolerantny, BEZ kotwic \n — Finding
 //       270): zbiór ≡ {docked, in_transit, orbiting}; anty-jałowość ≥3 pliki, ≥40 trafień.
-//   T1  KAŻDY token z T0 (nie z tablicy w keeperze) renderuje WŁASNĄ etykietę — prawdziwy `draw()`
-//       FleetGroupPanel i FleetCommandPanel na atrapie ctx (przechwycone `fillText`).
+//   T1  KAŻDY token z T0 (nie z tablicy w keeperze) daje WŁASNĄ etykietę — wiersz rejestru K3 (`buildRegistryRows`)
+//       i linia stanu panelu statku T5 (`ShipPanelHudLogic.buildShipPanelModel(…).status`).
 //   T2  stan undefined / token nieznany / brak `position` → etykieta NIE jest żadnym słowem stanu
 //       realnego i JEST „Unknown" (klucz dedykowany `fleetGroup.statusUnknown`).
 //   T3  kształt z gate'u legu D (`sys_020`, orbiting, dockedAt:null) → „In space" bez nazwy ciała
@@ -38,6 +38,12 @@
 //       i na dryfie dają DOKŁADNIE to, co przed naprawą (logika czyta SUROWY stan, nie etykietę).
 //   T7  dowód sweepu: `map_vessel_panel_smoke` wykonuje się w procesie potomnym z 0 FAIL, a jego
 //       źródło nie asertuje etykiety „Docked" dla fixture'u bez stanu.
+//   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4-3, `TABS_REFORM_PLAN.md` §5.10): rysunek dawnych paneli grupy i floty
+//     (`FleetGroupPanel.draw` / `FleetCommandPanel.draw` — wiersze rostera „kadłub · stan”) i `buildRosterRows` usunięte;
+//     panele grupy i floty T6 pokazują stan członka ZNACZNIKIEM (kolor glifu z kanonu — jak outliner, T4), nie słowem.
+//     Słowo stanu na mapie niesie dziś linia stanu panelu statku T5 (`FleetManagerOverlay._statusText` — kanon), a wiersz
+//     statku z kolumną „stan” — rejestr K3: T1 / T2 / T3 przecelowane na te dwie powierzchnie, T5 (zgoda nagłówka
+//     z rosterem) — na wiersze K3.
 //
 // FAIL-FIRST (finalne piny, REALNY `git worktree` na 9127f14 + ten plik; NIE `git archive`):
 //   patrz sekcja „Wynik fail-first" w `docs/design/VESSEL_ORDERS_PLAN.md` §266 — oczekiwane
@@ -52,22 +58,22 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 import EntityManager from '../../core/EntityManager.js';
-import { t, getName, setLocale, getLocale } from '../../i18n/i18n.js';
-import { buildRosterRows, summarizeFleetGroup, countActionable } from '../../ui/FleetGroupPanelLogic.js';
+import { t, setLocale, getLocale } from '../../i18n/i18n.js';
+import { summarizeFleetGroup, countActionable } from '../../ui/FleetGroupPanelLogic.js';
 import { buildShipEntry } from '../../ui/FleetPictureLogic.js';
 import { buildRegistryRows } from '../../ui/FleetRegistryLogic.js';
-import { FleetGroupPanel } from '../../ui/FleetGroupPanel.js';
-import { FleetCommandPanel } from '../../ui/FleetCommandPanel.js';
 import { Outliner } from '../../ui/Outliner.js';
 import { FleetManagerOverlay } from '../../ui/FleetManagerOverlay.js';
 import * as NavPeek from '../../ui/NavPeekProviders.js';   // ARKUSZ UI U4-1 — przestrzeń nazw: karta floty usunięta
-import { HULLS } from '../../data/HullsData.js';
 import { THEME } from '../../config/ThemeConfig.js';
 
 // Kanon — na HEAD sprzed naprawy NIE ISTNIEJE. Import owinięty: pin ma DEGRADOWAĆ, nie przerywać
 // (lekcja legu D: `TypeError` na T5 zabierał kolor wszystkim pinom niżej).
 let Canon = null;
 try { Canon = await import('../../utils/VesselStatus.js'); } catch { /* fail-first */ }
+// Panel statku T5 — linia stanu (T4-3: następca słowa stanu z wierszy dawnych paneli grupy i floty).
+let L5 = null;
+try { L5 = await import('../../ui/ShipPanelHudLogic.js'); } catch { /* pin padnie */ }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..', '..');
@@ -85,22 +91,6 @@ setLocale('en');   // etykiety porównujemy przez t() — locale nie ma znaczeni
 const REAL_WORDS = () => [t('fleetGroup.statusDocked'), t('fleetGroup.statusOrbiting'), t('fleetGroup.statusTransit')];
 const UNKNOWN_WORD  = () => t('fleetGroup.statusUnknown');
 const INSPACE_WORD  = () => t('fleetGroup.statusInSpace');
-
-// ── atrapa ctx z przechwytem fillText ─────────────────────────────────────────────────────
-function capCtx() {
-  const texts = [];
-  const ctx = new Proxy({ __texts: texts }, {
-    get: (tgt, k) => {
-      if (k === '__texts') return texts;
-      if (k === 'fillText') return (s) => { texts.push(String(s)); };
-      if (k === 'measureText') return (s) => ({ width: String(s).length * 6 });
-      if (k === 'canvas') return { width: 1920, height: 1080 };
-      return typeof k === 'string' ? () => {} : undefined;
-    },
-    set: () => true,
-  });
-  return ctx;
-}
 
 // ── fixture'y ─────────────────────────────────────────────────────────────────────────────
 const AU = 100;
@@ -163,30 +153,23 @@ function world(vessels) {
   return { ids, map };
 }
 
-/** Wiersze rostera FleetGroupPanel dla podanych statków: tablica linii „kadłub · status[ ciało]". */
-function drawGroupPanel(vessels) {
-  const { ids } = world(vessels);
-  const gp = new FleetGroupPanel();
-  gp._ids = [...ids];
-  gp.show();
-  const ctx = capCtx();
-  gp.draw(ctx, 1920, 1080);
-  return ctx.__texts;
+const low = (s) => String(s ?? '').toLocaleLowerCase(getLocale());
+/** Słowo stanu z linii stanu panelu statku T5 („<stan> · baza: X”, małe litery) — część przed „ · ”. */
+function t5Status(v) {
+  world([v]);
+  const fmo = new FleetManagerOverlay();
+  fmo._selectedVesselId = v.id;
+  const m = L5?.buildShipPanelModel?.(v, { K: window.KOSMOS, fmo, features: {} });
+  return String(m?.status?.text ?? '').split(' · ')[0];
 }
-function drawCommandPanel(vessels) {
-  world(vessels);
-  const cp = new FleetCommandPanel();
-  cp._fleetId = 'f_1';
-  cp.show();
-  const ctx = capCtx();
-  cp.draw(ctx, 1920, 1080);
-  return ctx.__texts;
+/** Wiersz statku w rejestrze K3 (`buildRegistryRows` z nazwą ciała). */
+function k3Row(v) {
+  world([v]);
+  return buildRegistryRows([v], { bodyName: (id) => EntityManager.get(id)?.name ?? id })[0] ?? null;
 }
-/** Linie statusu wierszy rostera: „<kadłub> · <status>[ ciało]" — selektor po NAZWIE KADŁUBA fixture'u,
- *  żeby tytuł panelu („Selected vessels · 3") ani separatory nie liczyły się jako wiersze. */
-const HULL_NAME = () => getName(HULLS.hull_medium, 'ship');
-const statusLines = (texts) => texts.filter((s) => s.startsWith(HULL_NAME() + ' · '));
-const hasWord = (line, w) => line.includes(w);
+/** Słowa stanu REALNEGO w linii stanu T5 (`_statusText`): dok — hangar / tankowanie / czeka na paliwo, orbita, lot. */
+const T5_REAL_WORDS = () => ['fleet.statusTextHangar', 'fleet.statusTextRefueling', 'fleet.statusTextAwaitingFuel',
+  'fleet.statusTextOrbiting', 'fleet.statusTextInFlight'].map((k) => low(t(k)));
 
 // ═══ T0 — ENUMERACJA pisarzy `position.state` ze ŹRÓDŁA (CRLF-safe, \s-tolerantne) ═════════
 header('T0  ŹRÓDŁO — zbiór tokenów position.state w silniku = {docked, in_transit, orbiting}');
@@ -227,33 +210,32 @@ const T0 = { tokens: new Map(), files: new Set(), hits: 0 };
 const ENGINE_TOKENS = [...T0.tokens.keys()].sort();
 
 // ═══ T1 — KAŻDY realny token renderuje WŁASNĄ etykietę (zbiór z T0, nie z keepera) ═════════
-header('T1  każdy token z T0 → własna etykieta na FleetGroupPanel i FleetCommandPanel');
+header('T1  każdy token z T0 → własna etykieta: wiersz rejestru K3 i linia stanu panelu statku T5');
 {
-  // Oczekiwana etykieta per token: tabela ma DOKŁADNIE trzy wpisy — czwarty token z T0 nie
+  // Oczekiwane etykiety per token: tabele mają DOKŁADNIE trzy wpisy — czwarty token z T0 nie
   // znajdzie wpisu i pin padnie głośno („brak oczekiwanej etykiety").
-  const EXPECT = { docked: t('fleetGroup.statusDocked'), in_transit: t('fleetGroup.statusTransit'), orbiting: t('fleetGroup.statusOrbiting') };
+  const EXPECT_K3 = { docked: 'fleetPicture.state.docked', in_transit: 'fleetPicture.state.inTransit', orbiting: 'fleetPicture.state.orbiting' };
+  const EXPECT_T5 = { docked: t('fleet.statusTextHangar'), in_transit: t('fleet.statusTextInFlight'), orbiting: t('fleet.statusTextOrbiting') };
   const seen = new Set();
   for (const tok of ENGINE_TOKENS) {
-    const want = EXPECT[tok];
-    ok(typeof want === 'string' && want.length > 0 && !want.startsWith('fleetGroup.'),
-       `token '${tok}' ma oczekiwaną, przetłumaczoną etykietę (${J(want)})`);
+    const wantK = EXPECT_K3[tok], wantT = EXPECT_T5[tok];
+    ok(typeof wantK === 'string' && typeof wantT === 'string' && wantT.length > 0 && !wantT.startsWith('fleet.'),
+       `token '${tok}' ma oczekiwane, przetłumaczone etykiety (K3 ${J(wantK)}, T5 ${J(wantT)})`);
     const v = SHAPES[tok]?.();
     ok(!!v, `fixture istnieje dla tokena '${tok}'`);
-    if (!v || !want) continue;
-    const row = buildRosterRows([v])[0];
-    ok(row.statusKey === tok, `buildRosterRows: statusKey === '${tok}' (jest: ${row.statusKey})`);
-    const gLines = statusLines(drawGroupPanel([v]));
-    ok(gLines.length === 1 && hasWord(gLines[0], want), `FleetGroupPanel rysuje ${J(want)} (linia: ${J(gLines[0])})`);
-    const cLines = statusLines(drawCommandPanel([v]));
-    ok(cLines.length === 1 && hasWord(cLines[0], want), `FleetCommandPanel rysuje ${J(want)} (linia: ${J(cLines[0])})`);
-    seen.add(want);
+    if (!v || !wantK || !wantT) continue;
+    ok(!!Canon && Canon.resolveVesselStatus(v).token === tok, `KANON: resolveVesselStatus → '${tok}'`);
+    const r = k3Row(v);
+    ok(r?.stateKey === wantK, `rejestr K3: stateKey ${J(wantK)} (jest: ${r?.stateKey})`);
+    const st = t5Status(v);
+    ok(st === low(wantT), `panel statku T5: stan „${low(wantT)}” (jest: ${J(st)})`);
+    seen.add(st);
   }
-  ok(seen.size === ENGINE_TOKENS.length && seen.size >= 3, `ANTY-JAŁOWOŚĆ: ${seen.size} RÓŻNE etykiety dla ${ENGINE_TOKENS.length} tokenów`);
-  // dok/orbita niosą nazwę ciała (KANON: bodyId ≠ null tylko tam)
-  const dl = statusLines(drawGroupPanel([SHAPES.docked()]))[0] ?? '';
-  const ol = statusLines(drawGroupPanel([SHAPES.orbiting()]))[0] ?? '';
-  ok(dl.includes('Mstow'), `docked niesie nazwę ciała (${J(dl)})`);
-  ok(ol.includes('Halny'), `orbiting niesie nazwę ciała (${J(ol)})`);
+  ok(seen.size === ENGINE_TOKENS.length && seen.size >= 3, `ANTY-JAŁOWOŚĆ: ${seen.size} RÓŻNE etykiety T5 dla ${ENGINE_TOKENS.length} tokenów`);
+  // dok/orbita niosą nazwę ciała (KANON: bodyId ≠ null tylko tam) — kolumna „ciało” rejestru K3
+  const rd = k3Row(SHAPES.docked()), ro = k3Row(SHAPES.orbiting());
+  ok(rd?.body === 'Mstow', `docked niesie nazwę ciała (K3: ${J(rd?.body)})`);
+  ok(ro?.body === 'Halny', `orbiting niesie nazwę ciała (K3: ${J(ro?.body)})`);
 }
 
 // ═══ T2 — stan nierozpoznany NIE renderuje żadnego słowa stanu realnego; renderuje „Unknown" ═
@@ -263,19 +245,21 @@ header('T2  undefined / token nieznany / brak position → NIE „Docked", TAK �
   const unknownWord = UNKNOWN_WORD();
   ok(unknownWord !== 'fleetGroup.statusUnknown' && unknownWord.length > 0,
      `klucz fleetGroup.statusUnknown ISTNIEJE w słowniku (${J(unknownWord)})`);
-  for (const surface of ['group', 'command']) {
-    const lines = statusLines(surface === 'group' ? drawGroupPanel(trio) : drawCommandPanel(trio));
-    ok(lines.length === 3, `${surface}: ANTY-JAŁOWOŚĆ — narysowano 3 wiersze statusu (jest: ${lines.length})`);
-    for (const [i, line] of lines.entries()) {
-      const bad = REAL_WORDS().filter((w) => hasWord(line, w));
-      ok(line.length > 0 && bad.length === 0, `${surface} wiersz ${i}: bez słowa stanu realnego (${J(line)})`);
-      ok(hasWord(line, unknownWord), `${surface} wiersz ${i}: zawiera „${unknownWord}"`);
-    }
+  // Panel statku T5 — linia stanu (`_statusText`, kanon) dla kształtów nierozpoznanych OSIĄGALNYCH: stan undefined (zapis bez
+  // pola — `VesselManager.restore` daje `position: {}`) i token nieznany. Brak CAŁEGO `position` jest nieosiągalny z zapisu,
+  // a model T5 (lustro `_drawRight` → `getAvailableActions`) wymaga obiektu `position` jak dawny panel T3 — ten kształt
+  // pinują rejestr K3 (niżej) i `buildShipEntry` (T4).
+  for (const v of trio.filter((x) => x.position)) {
+    const st = t5Status(v);
+    const bad = [...T5_REAL_WORDS(), ...REAL_WORDS().map(low)].filter((w) => st.includes(w));
+    ok(st.length > 0 && bad.length === 0, `T5 ${v.id}: bez słowa stanu realnego (${J(st)})`);
+    ok(st === low(unknownWord), `T5 ${v.id}: stan „${low(unknownWord)}” (jest: ${J(st)})`);
   }
   // undefined + dockedAt ustawiony → NADAL nieznany (dockedAt nie dowodzi doku — ustawiają go też orbiterzy)
   const half = mkVessel('v_half', 'Polowka', { dockedAt: 'p_mstow', x: 0, y: 0 });
-  const hl = statusLines(drawGroupPanel([half]))[0] ?? '';
-  ok(hasWord(hl, unknownWord) && !hl.includes('Mstow'), `undefined+dockedAt → „Unknown" BEZ nazwy ciała (${J(hl)})`);
+  const hs = t5Status(half), hr = k3Row(half);
+  ok(hs === low(unknownWord) && hr?.body === null && hr?.stateKey === 'fleetGroup.statusUnknown',
+     `undefined+dockedAt → „Unknown" BEZ nazwy ciała (T5 ${J(hs)}, K3 ${hr?.stateKey} / ${hr?.body})`);
   // rejestr K3 — kolumna Stan
   for (const v of trio) {
     world([v]);
@@ -286,20 +270,18 @@ header('T2  undefined / token nieznany / brak position → NIE „Docked", TAK �
 }
 
 // ═══ T3 — kształt z legu D: orbiting + dockedAt:null → „In space", bez ciała; KONTROLA dockedAt:'h2' ═
-header('T3  leg-D (sys_020, orbiting, dockedAt:null) → „In space"; kontrola dockedAt:h2 → „Orbiting Halny"');
+header('T3  leg-D (sys_020, orbiting, dockedAt:null) → „In space"; kontrola dockedAt:h2 → „Orbiting” (T5) i „Halny” (K3)');
 {
   const inSpace = INSPACE_WORD();
   ok(inSpace !== 'fleetGroup.statusInSpace' && inSpace.length > 0, `klucz fleetGroup.statusInSpace ISTNIEJE (${J(inSpace)})`);
   const D = SHAPES.legD(), Dc = SHAPES.legDctl();
-  for (const surface of ['group', 'command']) {
-    const draw = surface === 'group' ? drawGroupPanel : drawCommandPanel;
-    const l = statusLines(draw([D]))[0] ?? '';
-    ok(hasWord(l, inSpace) && !hasWord(l, t('fleetGroup.statusOrbiting')) && !l.includes('Mstow') && !l.includes('Halny'),
-       `${surface}: leg-D → „${inSpace}" bez ciała i bez „Orbiting" (${J(l)})`);
-    const lc = statusLines(draw([Dc]))[0] ?? '';
-    ok(hasWord(lc, t('fleetGroup.statusOrbiting')) && lc.includes('Halny') && !hasWord(lc, inSpace),
-       `${surface} KONTROLA: dockedAt:h2 → „Orbiting Halny" (${J(lc)})`);
-  }
+  // Panel statku T5 — linia stanu: leg-D → „In space” (bez „Orbiting”); kontrola dockedAt:h2 → „Orbiting”.
+  const l = t5Status(D), lc = t5Status(Dc);
+  ok(l === low(inSpace) && !l.includes(low(t('fleet.statusTextOrbiting'))), `T5: leg-D → „${low(inSpace)}” bez „Orbiting” (${J(l)})`);
+  ok(lc === low(t('fleet.statusTextOrbiting')) && lc !== low(inSpace), `T5 KONTROLA: dockedAt:h2 → „${low(t('fleet.statusTextOrbiting'))}” (${J(lc)})`);
+  // Rejestr K3 — ciało tylko przy orbicie WOKÓŁ ciała (kontrola).
+  const rc = k3Row(Dc);
+  ok(rc?.stateKey === 'fleetPicture.state.orbiting' && rc?.body === 'Halny', `K3 KONTROLA: dockedAt:h2 → orbiting + „Halny” (${rc?.stateKey}/${rc?.body})`);
   // Command — `_getLocationText` (dawniej „Orbit: ???" przez `_resolveName(null)`)
   world([D, Dc]);
   const loc  = FleetManagerOverlay.prototype._getLocationText.call({}, D);
@@ -380,15 +362,16 @@ header('T4  bliźniaki — FleetPictureLogic (aktywność+Stan), FleetRegistryLo
 }
 
 // ═══ T5 — zgoda nagłówka z rosterem (niezależna od wybranego słowa fallbacku) ═══════════════
-header('T5  summarizeFleetGroup.dockedCount == liczba wierszy „Docked" na fixture mieszanym');
+header('T5  summarizeFleetGroup.dockedCount == liczba wierszy „Docked” rejestru K3 na fixture mieszanym');
 {
   const mix = [SHAPES.docked(), SHAPES.orbiting(), SHAPES.undef()];
+  world(mix);
   const { dockedCount } = summarizeFleetGroup(mix, { vesselManager: window.KOSMOS?.vesselManager });
-  const lines = statusLines(drawGroupPanel(mix));
-  const drawnDocked = lines.filter((l) => hasWord(l, t('fleetGroup.statusDocked'))).length;
-  ok(lines.length === 3, `ANTY-JAŁOWOŚĆ: 3 wiersze narysowane (jest: ${lines.length})`);
+  const rows = buildRegistryRows(mix, { bodyName: (id) => EntityManager.get(id)?.name ?? id });
+  const shownDocked = rows.filter((r) => r.stateKey === 'fleetPicture.state.docked').length;
+  ok(rows.length === 3, `ANTY-JAŁOWOŚĆ: 3 wiersze rejestru (jest: ${rows.length})`);
   ok(dockedCount === 1, `KONTROLA: nagłówek liczy 1 zadokowany (jest: ${dockedCount})`);
-  ok(drawnDocked === dockedCount, `roster pokazuje tyle „Docked", ile liczy nagłówek: ${drawnDocked} == ${dockedCount}`);
+  ok(shownDocked === dockedCount, `rejestr K3 pokazuje tyle „Docked”, ile liczy nagłówek: ${shownDocked} == ${dockedCount}`);
 }
 
 // ═══ T6 — kontrola „tylko etykieta": logika czyta SUROWY stan i NIE zmieniła wyniku ══════════

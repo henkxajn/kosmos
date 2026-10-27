@@ -1,10 +1,10 @@
-// FleetGroupPanelLogic — czyste helpery dla FleetGroupPanel (Slice 8b). Bez zależności
-// UI/DOM/three — testowalne headless (wzór StationPanelLogic). Dwie funkcje: podsumowanie
-// zaznaczonej grupy statków (agregaty do nagłówka) + budowa wierszy rostera. Zwraca
-// liczby/KLUCZE (status/rozkaz), więc moduł jest locale-free (lokalizacja w widoku).
+// FleetGroupPanelLogic — czyste helpery grupy statków (Slice 8b; od REFORMY ZAKŁADEK T6 / T4 — panel floty i grupy
+// w idiomie etykiet, `FleetPanelHudLogic`). Bez zależności UI/DOM/three — testowalne headless (wzór StationPanelLogic):
+// podsumowanie zaznaczonej grupy (agregaty linii zbiorczej), liczniki rozkazów grupowych (wyszarzanie chipów) i predykat
+// „w aktywnym starciu”. Zwraca liczby, więc moduł jest locale-free (lokalizacja w widoku). Wiersze rostera dawnego panelu
+// grupy (`buildRosterRows`) usunięte w T4 razem z jego rysunkiem.
 
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { resolveVesselStatus } from '../utils/VesselStatus.js';
 
 // Czy statek ma jakikolwiek moduł broni. Inline (mirror Vessel.hasWeapons) — nie ciągniemy
 // łańcucha i18n z Vessel.js do czystej logiki; ShipModulesData to czyste dane.
@@ -63,41 +63,6 @@ export function summarizeFleetGroup(vessels, { vesselManager } = {}) {
 }
 
 /**
- * Wiersze rostera — po jednym na statek. statusKey/orderKey to KLUCZE (widok → t()),
- * fuelPct/warpPct znormalizowane 0..1. hullId = shipId (widok rozwiązuje nazwę kadłuba).
- *
- * ⚠ Finding 266: statusKey to TOKEN KANONU (`utils/VesselStatus.resolveVesselStatus`), nie
- *   surowy `position.state` z domyślnym `'docked'`. Stan nierozpoznany = 'unknown' (fail-closed),
- *   orbita bez ciała = 'in_space'. `dockedAt` też idzie z kanonu (null dla in_transit/in_space).
- * @param {Array<object>} vessels
- * @param {{ vesselManager? }} deps
- * @returns {Array<{ id:string, name:string, hullId:string,
- *            statusKey:('docked'|'in_transit'|'orbiting'|'in_space'|'unknown'), fuelPct:number,
- *            warpPct:number, orderKey:(string|null), immobilized:boolean,
- *            hasWeapons:boolean, dockedAt:(string|null) }>}
- */
-export function buildRosterRows(vessels, { vesselManager } = {}) {
-  const list = vessels ?? [];
-  return list.map((v) => {
-    const fMax = v?.fuel?.max ?? 0;
-    const wMax = v?.warpFuel?.max ?? 0;
-    const st = resolveVesselStatus(v);
-    return {
-      id:          v.id,
-      name:        v.name ?? v.id,
-      hullId:      v.shipId,
-      statusKey:   st.token,
-      fuelPct:     fMax > 0 ? (v.fuel.current / fMax) : 0,
-      warpPct:     wMax > 0 ? (v.warpFuel.current / wMax) : 0,
-      orderKey:    v?.movementOrder?.type ?? v?.mission?.type ?? null,
-      immobilized: !!vesselManager?.isImmobilized?.(v),
-      hasWeapons:  _hasWeapons(v),
-      dockedAt:    st.bodyId,
-    };
-  });
-}
-
-/**
  * Liczba statków kwalifikujących się do każdej akcji grupowej (do wyszarzania przycisków).
  * ⚠ Slice 258 / A1 — `canReturn` USUNIĘTE razem z przyciskiem „Powrót" (rozjazd słownika
  *   N==1 vs N>=2; rejestr nie ma tej akcji od Findingu 145 (a')). Nikt inny go nie czytał.
@@ -134,8 +99,8 @@ export function countActionable(vessels, { vesselManager, combatCheck = null } =
 
 /**
  * Predykat „statek w aktywnym starciu” — TEN SAM, którym MOS bramkuje odwrót: `_issueRetreat` → `not_in_combat`,
- * `deepSpaceCombatSystem._findActiveEncounterContaining(id)`. Jedno źródło dla panelu grupy (OFF), panelu grupy T6 (ON)
- * i znacznika walki członka (`FleetPanelHudLogic.pictureCtx`). Finding 562 (REFORMA ZAKŁADEK T6, strojenie 1).
+ * `deepSpaceCombatSystem._findActiveEncounterContaining(id)`. Jedno źródło dla panelu grupy T6 („Odwrót”) i znacznika walki
+ * członka (`FleetPanelHudLogic.pictureCtx`). Finding 562 (REFORMA ZAKŁADEK T6, strojenie 1).
  * @param {object} K — `window.KOSMOS` (podaje wołający; moduł bez `window`)
  * @returns {((vesselId:string) => boolean)|null} `null` — brak systemu walki
  */

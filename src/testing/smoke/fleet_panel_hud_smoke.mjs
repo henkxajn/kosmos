@@ -3,9 +3,10 @@
 // w idiomie etykiet z T5 (flaga kroku `fleetPanelHud` — na stałe ON od T4, klucz usunięty; dawne panele bez rysunku i kliku).
 //
 // Keeper WYŁĄCZNIE logiki (protokół `HUD_PLAN.md` §4.0, aneks 2026-10-23 — bez pinów na stałych rysunku):
-//   F0  moduły (flagi kroków na stałe ON od T4) · F1 zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO `FleetCommandPanel.draw` /
-//   `FleetGroupPanel.draw` (typ + dane) w każdym stanie z inwentarza §5.9.1, pokrycie typów, kontrola czułości · F2 każdy
-//   chip → ten sam handler (prawdziwy klik obu paneli, szpieg `_onHit`) · F3 stany nieaktywne · F4 strefy kliku (chip >
+//   F0  moduły (flagi kroków na stałe ON od T4) · F1 zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy dawnych `FleetCommandPanel.draw` /
+//   `FleetGroupPanel.draw` (typ + dane; MIGAWKA — niżej) w każdym stanie z inwentarza §5.9.1, pokrycie typów, kontrola czułości ·
+//   F2 każdy chip → ten sam handler (klik dawnych paneli — migawka, chipy T6 — prawdziwy klik; szpieg `_onHit`) · F3 stany
+//   nieaktywne · F4 strefy kliku (chip >
 //   linia członka > nazwa > pasek) · F5 mutex trzech paneli (`fleetHudSurface` = reguła Doku; `UIManager._mapSurface`,
 //   `setSelectedVesselId`, `addToSelection` wykonane) · F6 klik w członka → panel statku · F7 akordeon · F8 konfigurator celu
 //   floty i reguła 546 · F9 kotwica na prawdziwym Outlinerze (węzeł floty, układ zwinięty, lider grupy, zapas, tryb Y, karta
@@ -22,10 +23,15 @@
 //   poza rysunkiem i klikiem `UIManager`. F1 / F2 / F3 / F17 (dawne panele jako wyrocznia stref i dyspozycji) — bez zmian do
 //   kolejnego kroku T4. T4-2 (karta ciała, panel stacji i dok usunięte): F11f / F16f — blok rysunku T6 bez zapisu przeszkody
 //   kart (`_noteShipPanelDrawn` zniknął razem z kartą ciała i panelem stacji).
+// ⚠ MIGAWKA DAWNYCH PANELI (REFORMA ZAKŁADEK T4-3, decyzja właściciela Q4 — wzór Finding 273): rysunek, klik i stronicowanie
+//   `FleetCommandPanel` / `FleetGroupPanel` usunięte (zostają stan, słuchacze i `_onHit` — cele chipów T6); wyrocznią F1 / F2 /
+//   F3 / F17 jest MIGAWKA ich stref (wszystkie strony, bez stronicowania i tła) i dyspozycji kliku, nagrana TYM SAMYM keeperem
+//   na drzewie `e873127`: `node src/testing/smoke/fleet_panel_hud_smoke.mjs --record` na kopii tamtego drzewa
+//   (`src/testing/fixtures/traces/T4-fleet-panels-baseline.json`, metryczka `.md` obok); porównanie — `zoneKey` bieżącego modułu.
 // ⚠ Moduły POWSTAJĄ w T6 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 
 import '../headless/env.js';           // MUSI być pierwszy
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import EventBus      from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import { setLocale, t } from '../../i18n/i18n.js';
@@ -203,7 +209,8 @@ function groupScene(name) {
   return { s, w, fgp };
 }
 const PAGING = new Set(L?.PAGING_ZONE_TYPES ?? ['pageUp', 'pageDown']);
-/** Strefy dzisiejszego panelu (prawdziwy `draw`) — wszystkie strony, bez stronicowania i tła. */
+/** Strefy dawnego panelu (prawdziwy `draw`) — wszystkie strony, bez stronicowania i tła. WYŁĄCZNIE tryb `--record` na drzewie
+ *  z rysunkiem paneli (`e873127`); od T4-3 wyrocznią jest migawka (`SNAP`, niżej). */
 function oldZones(panel) {
   const out = [];
   for (let page = 0; page < 6; page++) {
@@ -237,6 +244,39 @@ function t6Panel(surface, { lay = null, ctx = recCtx(), fcp = null, fgp = null, 
 }
 const mid = (z) => ({ x: z.x + z.w / 2, y: z.y + z.h / 2 });
 
+// ── Migawka dawnych paneli floty i grupy (REFORMA ZAKŁADEK T4-3, Q4) ──────────────────────────────────────────────────
+const SNAP_URL = new URL('../fixtures/traces/T4-fleet-panels-baseline.json', import.meta.url);
+const plainZone = (z) => ({ type: z?.type, data: { ...(z?.data ?? {}) } });
+/** Klik w środek każdej strefy dawnego panelu (prawdziwy `handleClick`, szpieg `_onHit`) — jak F2 przed T4-3. */
+const clickAllOldRec = (panel) => {
+  const rec = []; panel._onHit = (z) => rec.push(plainZone(z));
+  const zs = oldZones(panel);
+  for (const z of zs) { panel.draw(recCtx(), 1280, 720); const c = mid(z); panel.handleClick(c.x, c.y); }
+  return rec;
+};
+const F2_FLEET = ['f_mixed', 'f_docked', 'f_other'], F2_GROUP = ['g_docked', 'g_space', 'g_combat'];
+if (process.argv.includes('--record')) {
+  if (typeof FleetCommandPanel.prototype.draw !== 'function' || typeof FleetGroupPanel.prototype.draw !== 'function') {
+    console.log('--record wymaga drzewa z rysunkiem dawnych paneli (e873127)'); process.exit(2);
+  }
+  const out = { keeper: 'fleet_panel_hud_smoke', recordedFrom: process.env.T4_SNAPSHOT_COMMIT ?? null,
+    panels: 'FleetCommandPanel.draw / FleetGroupPanel.draw + handleClick', fleet: {}, group: {}, clicks: {} };
+  for (const name of Object.keys(FLEET_STATES)) { const { fcp } = fleetScene(name); out.fleet[name] = oldZones(fcp).map(plainZone); }
+  for (const name of Object.keys(GROUP_STATES)) { const { fgp } = groupScene(name); out.group[name] = oldZones(fgp).map(plainZone); }
+  for (const name of F2_FLEET) { const { fcp } = fleetScene(name); out.clicks[name] = clickAllOldRec(fcp); }
+  for (const name of F2_GROUP) { const { fgp } = groupScene(name); out.clicks[name] = clickAllOldRec(fgp); }
+  writeFileSync(SNAP_URL, JSON.stringify(out, null, 1) + '\n');
+  console.log(`migawka zapisana: flota ${Object.keys(out.fleet).length}, grupa ${Object.keys(out.group).length}, kliki ${Object.keys(out.clicks).length}`);
+  process.exit(0);
+}
+let SNAP = null;
+try { SNAP = JSON.parse(readFileSync(SNAP_URL, 'utf8')); } catch (e) { console.log('    (migawka dawnych paneli: ' + e.message + ')'); }
+/** Strefy dawnego panelu floty / grupy w stanie `name` (migawka `{ type, data }`). */
+const snapFleet = (name) => SNAP?.fleet?.[name] ?? [];
+const snapGroup = (name) => SNAP?.group?.[name] ?? [];
+/** Wywołania `_onHit` z kliku w każdą strefę dawnego panelu (migawka) — klucze `zoneKey`. */
+const snapClicks = (name) => (SNAP?.clicks?.[name] ?? []).map((z) => L?.zoneKey?.(z) ?? z?.type);
+
 // ═══ F0 ═══════════════════════════════════════════════════════════════════════
 header('F0  moduły (flagi kroków na stałe ON od T4)');
 {
@@ -255,15 +295,19 @@ header('F0  moduły (flagi kroków na stałe ON od T4)');
   ok((L?.FLEET_PANEL_ZONE_TYPES?.length ?? 0) === 16 && new Set(L?.FLEET_PANEL_ZONE_TYPES ?? []).size === 16
     && (L?.GROUP_PANEL_ZONE_TYPES?.length ?? 0) === 11 && new Set(L?.GROUP_PANEL_ZONE_TYPES ?? []).size === 11,
     'F0f typy stref (inwentarz §5.9.1 I2): flota 16, grupa 11, bez powtórzeń (stronicowanie i tło osobno)');
+  const fs = Object.keys(SNAP?.fleet ?? {}), gs = Object.keys(SNAP?.group ?? {}), cs = Object.keys(SNAP?.clicks ?? {});
+  ok(SNAP?.recordedFrom === 'e873127' && fs.length === Object.keys(FLEET_STATES).length && gs.length === Object.keys(GROUP_STATES).length && cs.length === F2_FLEET.length + F2_GROUP.length
+    && typeof FleetCommandPanel.prototype.draw === 'undefined' && typeof FleetGroupPanel.prototype.draw === 'undefined',
+    `F0g wyrocznia F1 / F2 / F3 / F17 = migawka dawnych paneli (flota ${fs.length}, grupa ${gs.length}, kliki ${cs.length}; nagrana na \`e873127\`); rysunek dawnych paneli usunięty (T4-3)`);
 }
 
 // ═══ F1 ═══════════════════════════════════════════════════════════════════════
-header('F1  zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO dzisiejszego panelu (typ + dane), każdy stan');
+header('F1  zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy dawnego panelu (migawka, typ + dane), każdy stan');
 {
   const fTypes = new Set(), gTypes = new Set(), sigs = new Set();
   for (const name of Object.keys(FLEET_STATES)) {
     const { w, fcp } = fleetScene(name);
-    const z0 = oldZones(fcp);
+    const z0 = snapFleet(name);
     const m = fleetModel(w.K, fcp);
     const z6 = L?.modelZones?.(m) ?? [];
     for (const z of z0) fTypes.add(z.type);
@@ -272,7 +316,7 @@ header('F1  zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO dz
   }
   for (const name of Object.keys(GROUP_STATES)) {
     const { w, fgp } = groupScene(name);
-    const z0 = oldZones(fgp);
+    const z0 = snapGroup(name);
     const m = groupModel(w.K, fgp);
     const z6 = L?.modelZones?.(m) ?? [];
     for (const z of z0) gTypes.add(z.type);
@@ -286,7 +330,7 @@ header('F1  zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO dz
   ok(gTypes.size === 11 && gMiss.length === 0, `F1-q pokrycie grupy: stany ćwiczą wszystkie 11 typów (brak: ${gMiss.join(', ') || '—'})`);
   // KONTROLA czułości: model bez jednego chipa / bez akcji członka — porównanie zgłasza różnicę.
   const { w, fcp } = fleetScene('f_mixed');
-  const z0 = oldZones(fcp);
+  const z0 = snapFleet('f_mixed');
   const m = fleetModel(w.K, fcp);
   if (m) m.chips = [];
   const m2 = fleetModel(w.K, fcp);
@@ -296,19 +340,9 @@ header('F1  zbiór akcji ON = OFF — strefy panelu T6 ≡ strefy PRAWDZIWEGO dz
 }
 
 // ═══ F2 ═══════════════════════════════════════════════════════════════════════
-header('F2  każdy chip → TEN SAM handler (`_onHit` dzisiejszego panelu) — prawdziwe kliki obu paneli');
+header('F2  każdy chip → TEN SAM handler (`_onHit` panelu) — klik dawnego panelu (migawka), prawdziwe kliki chipów T6');
 {
   const spy = (panel) => { const rec = []; panel._onHit = (z) => rec.push(L?.zoneKey?.(z) ?? z?.type); return rec; };
-  const clickAllOld = (panel) => {
-    const rec = spy(panel);
-    const zs = oldZones(panel);
-    for (const z of zs) {
-      panel.draw(recCtx(), 1280, 720);   // strefy z tej klatki (jak gra)
-      const c = mid(z);
-      panel.handleClick(c.x, c.y);
-    }
-    return rec;
-  };
   const clickAllT6 = (surface, panel, args) => {
     const rec = spy(panel);
     const r = t6Panel(surface, { ...args, open: true });
@@ -316,15 +350,15 @@ header('F2  każdy chip → TEN SAM handler (`_onHit` dzisiejszego panelu) — p
     for (const z of zs) { const c = mid(z); r.layer.handleClick(c.x, c.y, { K: globalThis.window.KOSMOS, um: UM, ...args }); }
     return rec;
   };
-  for (const name of ['f_mixed', 'f_docked', 'f_other']) {
-    const a = fleetScene(name); const old = clickAllOld(a.fcp).sort();
+  for (const name of F2_FLEET) {
+    const old = snapClicks(name).sort();
     const b = fleetScene(name); const neu = clickAllT6('fleetHud', b.fcp, { fcp: b.fcp });
-    ok(old.length > 0 && same(old, [...neu].sort()), `F2 flota ${name} — ${old.length} wywołań \`_onHit\` z dzisiejszego panelu = ${neu.length} z chipów T6`);
+    ok(old.length > 0 && same(old, [...neu].sort()), `F2 flota ${name} — ${old.length} wywołań \`_onHit\` z dawnego panelu (migawka) = ${neu.length} z chipów T6`);
   }
-  for (const name of ['g_docked', 'g_space', 'g_combat']) {
-    const a = groupScene(name); const old = clickAllOld(a.fgp).sort();
+  for (const name of F2_GROUP) {
+    const old = snapClicks(name).sort();
     const b = groupScene(name); const neu = clickAllT6('groupHud', b.fgp, { fgp: b.fgp });
-    ok(old.length > 0 && same(old, [...neu].sort()), `F2 grupa ${name} — ${old.length} wywołań \`_onHit\` z dzisiejszego panelu = ${neu.length} z chipów T6`);
+    ok(old.length > 0 && same(old, [...neu].sort()), `F2 grupa ${name} — ${old.length} wywołań \`_onHit\` z dawnego panelu (migawka) = ${neu.length} z chipów T6`);
   }
   // Dyspozycja `runFleetPanelAction` — panel podany wprost (bez panelu — nic).
   const rec = [];
@@ -344,7 +378,7 @@ header('F3  stany nieaktywne zgodne z dziś (chip przygaszony ⇔ dzisiejszy prz
   const { w, fcp } = fleetScene('f_docked');
   const m = fleetModel(w.K, fcp);
   const off = (m?.orders?.items ?? []).filter((c) => !c.enabled).map((c) => c.id).sort();
-  const old = new Set(oldZones(fcp).map((z) => z.type));
+  const old = new Set(snapFleet('f_docked').map((z) => z.type));
   ok(same(off, ['bgReturn', 'bgStop']) && !old.has('bgReturn') && !old.has('bgStop') && old.has('bgUndock'),
     `F3a flota w doku bez rozkazu: przygaszone ${off.join(', ')} — dziś bez strefy; „Odcumuj” aktywny w obu`);
   const rec = []; fcp._onHit = (z) => rec.push(z.type);
@@ -813,7 +847,7 @@ header('F17 Finding 562 — „Odwrót” grupy tylko dla członka w AKTYWNYM ST
   // Prawdziwy panel grupy (OFF) i model T6 (ON): strefa „Odwrót” tylko przy członku w starciu.
   const zt = (name) => {
     const { w: ww, fgp } = groupScene(name);
-    const old = oldZones(fgp).some((z) => z.type === 'grpRetreat');
+    const old = snapGroup(name).some((z) => z.type === 'grpRetreat');
     const neu = (groupModel(ww.K, fgp)?.orders?.items ?? []).find((c) => c.id === 'grpRetreat')?.enabled === true;
     return [old, neu];
   };

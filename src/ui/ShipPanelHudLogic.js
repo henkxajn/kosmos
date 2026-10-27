@@ -3,11 +3,12 @@
 // `shipPanelOutliner`, slice 258 / B `mapVesselPanel`, `mapVesselPanelCompact` — na stałe ON od T4, klucze usunięte).
 // Rysunek, pomiar tekstu i strefy — `ShipPanelHudLayer`; spięcie z hostem (geometria T3, klik, kółko, kursor, przeszkody)
 // — `UIManager`.
-//   • TREŚĆ I AKCJE = LUSTRO `FleetManagerOverlay._drawRight` (tryb kompaktowy) + footer `drawVesselPanel`: te same warunki
+//   • TREŚĆ I AKCJE = LUSTRO `FleetManagerOverlay._drawRight` (tryb kompaktowy) + footer dawnego `drawVesselPanel` (panel T3
+//     usunięty w T4 — wyrocznią keepera jest jego migawka `src/testing/fixtures/traces/T4-ship-panel-t3-baseline.json`): te same warunki
 //     pokazania, te same strefy `{ type, data }` — 31 typów (`SHIP_PANEL_ZONE_TYPES`; 16 rozkazów misji = typ `action`
 //     z `getAvailableActions`) — i TE SAME handlery: footer → `FleetManagerOverlay._handleVesselPanelFooter`, reszta →
-//     `_handleHit` (`runShipPanelAction` — dyspozycja jak `handleVesselPanelClick`). Żadnej nowej logiki akcji; keeper
-//     `ship_panel_hud_smoke` porównuje zbiór stref z PRAWDZIWYM `_drawRight` w każdym stanie statku. Dane tekstowe — te same
+//     `_handleHit` (`runShipPanelAction` — dyspozycja jak dawne `handleVesselPanelClick`). Żadnej nowej logiki akcji; keeper
+//     `ship_panel_hud_smoke` porównuje zbiór stref z migawką panelu T3 w każdym stanie statku. Dane tekstowe — te same
 //     źródła co panel T3 (`_statusText`, `_baseText`, `_roleLabel`, `_xpStars`, `_missionTypeName`, `_getValidTargets` —
 //     metody instancji `FleetManagerOverlay`), słowa wyłącznie z istniejących kluczy i18n (+ jeden nowy: „Rozkazy”).
 //   • Układ (od góry): „← Stocznia” (linia tekstowa) · nazwa statku małymi literami jak etykieta statku (glif roli), PEŁNA,
@@ -121,7 +122,7 @@ export function reasonText(reason) {
 const low = (s) => String(s ?? '').toLocaleLowerCase(getLocale());
 const stripBrackets = (s) => String(s ?? '').replace(/^\s*\[\s*/, '').replace(/\s*\]\s*$/, '');
 
-// ── Model panelu (lustro `_drawRight` w trybie kompaktowym + footer `drawVesselPanel`) ──────────────────────────────────
+// ── Model panelu (lustro `_drawRight` w trybie kompaktowym + footer dawnego `drawVesselPanel`) ──────────────────────────
 
 /**
  * Chip akcji: `zone` = strefa jak w panelu T3 (`{ type, data }`), `null` — nieaktywny (rysowany przygaszony, nieklikalny).
@@ -130,7 +131,7 @@ const stripBrackets = (s) => String(s ?? '').replace(/^\s*\[\s*/, '').replace(/\
 const chip = (id, label, zone, enabled = !!zone) => ({ id, label, enabled: enabled && !!zone, zone: enabled ? zone : null });
 
 /**
- * Model panelu statku — `null` dla braku statku, wraku i wroga (D-MVP-12 — jak `drawVesselPanel`).
+ * Model panelu statku — `null` dla braku statku, wraku i wroga (D-MVP-12 — jak dawny `drawVesselPanel`).
  * @param {object} vessel
  * @param {{ K:object, fmo:object, features?:object, orderTargetInfo?:Function, gameYear?:number }} env
  * @returns {object|null}
@@ -421,7 +422,7 @@ function rallyChips(vessel, K, info) {
   ];
 }
 
-/** Footer-3 (lustro `_drawVesselPanelFooter`, D-MVP-8): Dokuj / → Flota / Odwrót — nieaktywne bez strefy. */
+/** Footer-3 (lustro dawnego `_drawVesselPanelFooter`, D-MVP-8): Dokuj / → Flota / Odwrót — nieaktywne bez strefy. */
 function footerChips(vessel, K) {
   const docked = vessel?.position?.state === 'docked';
   const immob = !!K?.vesselManager?.isImmobilized?.(vessel);
@@ -619,7 +620,7 @@ export function shipPanelHitAt(zones, x, y) {
 }
 
 /**
- * Wykonanie chipa — DZISIEJSZE handlery co do metody (dyspozycja jak `FleetManagerOverlay.handleVesselPanelClick`):
+ * Wykonanie chipa — DZISIEJSZE handlery co do metody (dyspozycja jak dawne `FleetManagerOverlay.handleVesselPanelClick`):
  * footer-3 → `_handleVesselPanelFooter(zone)`, reszta → `_handleHit(zone, x, y)`.
  * @returns {'footer'|'hit'|null}
  */

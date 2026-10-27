@@ -79,3 +79,15 @@ nie mogą się rozjechać; (2) nagranie wykonuje się na **REALNYM `git worktree
 naprawy (hash w metryczce **i** w polu `recordedFrom`); (3) keeper sprawdza schemat (DT, N, jednostki)
 PRZED porównaniem, żeby zmiana konfiguracji nie udawała regresji; (4) porównanie jest **bajt w bajt**
 (`===`), bez tolerancji — determinizm ścieżki jest częścią pinu.
+
+**Drugi rodzaj (REFORMA ZAKŁADEK T4, 2026-10-27): migawka WYROCZNI usuniętej powierzchni.** Gdy powierzchnia, która
+w keeperze była wyrocznią dla swojej następczyni (strefy kliku i dyspozycja dawnego panelu vs nowy panel), znika z kodu,
+jej zachowanie zostaje zamrożone tym samym mechanizmem: TEN SAM keeper z `--record` na realnym `git worktree` przy ostatnim
+commicie z tą powierzchnią, pole `recordedFrom` + metryczka `.md`. Porównanie liczy klucze bieżącym modułem po obu
+stronach (nie bajt w bajt — dane to zbiory stref). Migawki nie da się nagrać ponownie z bieżącego drzewa — zmiana
+wymaga świadomej edycji z uzasadnieniem w metryczce.
+
+```
+traces/T4-ship-panel-t3-baseline.json   — panel statku T3 (`drawVesselPanel`) → `ship_panel_hud_smoke` H1–H3
+traces/T4-fleet-panels-baseline.json    — rysunek `FleetCommandPanel` / `FleetGroupPanel` → `fleet_panel_hud_smoke` F1–F3, F17
+```

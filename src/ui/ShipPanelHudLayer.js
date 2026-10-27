@@ -9,7 +9,7 @@
 //     (rozkazy misji albo cele konfiguratora), nie panel; kółko nad panelem zawsze pochłonięte (jak panel T3);
 //   • klik: chip > linia nazwy (reguła D-UI-5 — `clickObject`: 2. klik, kamera) > reszta panelu (pochłonięta); chip woła
 //     TE SAME handlery co przycisk panelu T3 (`runShipPanelAction` → `FleetManagerOverlay._handleHit` / footer); okno DOM
-//     na wierzchu — klik pochłonięty bez akcji (lustro `handleVesselPanelClick`);
+//     na wierzchu — klik pochłonięty bez akcji (lustro dawnego `handleVesselPanelClick`, usuniętego w T4);
 //   • akordeon „[ Rozkazy ▼ ]” — zwija się przy zmianie zaznaczenia (`ui:selectionChanged`).
 // ⚠ Moduł importuje się pod node (keeper `ship_panel_hud_smoke` — atrapa ctx): bez three i bez DOM poza strażnikiem okna.
 import EventBus from '../core/EventBus.js';
@@ -397,7 +397,7 @@ export class ShipPanelHudLayer {
    */
   handleClick(x, y, { K = null, fmo = null, emit = null } = {}) {
     if (!this._inside(x, y)) return false;
-    // Okno DOM na wierzchu (zmiana nazwy, ładunek, potwierdzenie) — klik pochłonięty bez akcji (lustro `handleVesselPanelClick`).
+    // Okno DOM na wierzchu (zmiana nazwy, ładunek, potwierdzenie) — klik pochłonięty bez akcji (lustro dawnego `handleVesselPanelClick`).
     if (typeof document !== 'undefined' && document.querySelector?.('.mission-modal-overlay, .kosmos-modal-overlay')) return true;
     const z = shipPanelHitAt(this._zones, x, y);
     if (!z) return true;

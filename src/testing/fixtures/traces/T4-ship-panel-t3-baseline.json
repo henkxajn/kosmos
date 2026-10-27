@@ -1,0 +1,2948 @@
+{
+ "keeper": "ship_panel_hud_smoke",
+ "recordedFrom": "e873127",
+ "panel": "FleetManagerOverlay.drawVesselPanel (T3, compact) + handleVesselPanelClick",
+ "states": {
+  "hangar": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "dock_noyard": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "dock_colonists": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "unload_colonists",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "colonize",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "load_colonists",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport_passenger",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "orbit": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "flight": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cancel_movement_order",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "combat": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cancel_movement_order",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "foreign_orbit": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "foreign_recon_body",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "type": "foreign_recon_system",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "foreign_colonize",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "type": "foreign_unload",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "interstellar": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cluster_switch",
+    "data": {
+     "systemId": "sys_B"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "foreign_recon": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "abort_foreign_recon",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "loop": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cancel_loop",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "reserve": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "deploy_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "mobilizing": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "rally_none": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "rally_assign_open",
+    "data": {
+     "vesselId": "v_1",
+     "currentRallyId": null
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "rally_member": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "rally_assign_open",
+    "data": {
+     "vesselId": "v_1",
+     "currentRallyId": "poi_1"
+    }
+   },
+   {
+    "type": "rally_assign_remove",
+    "data": {
+     "vesselId": "v_1",
+     "rallyId": "poi_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "pool": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_logistics_pool",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "immobilized": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "blocked": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_select": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "select_target",
+    "data": {
+     "targetId": "p_two",
+     "targetSystemId": "sys_home"
+    }
+   },
+   {
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_confirm": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "change_target",
+    "data": {}
+   },
+   {
+    "type": "toggle_repeat",
+    "data": {}
+   },
+   {
+    "type": "confirm_mission",
+    "data": {}
+   },
+   {
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_home": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "change_target",
+    "data": {}
+   },
+   {
+    "type": "toggle_repeat",
+    "data": {}
+   },
+   {
+    "type": "set_return_cargo",
+    "data": {}
+   },
+   {
+    "type": "confirm_mission",
+    "data": {}
+   },
+   {
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ]
+ },
+ "clicks": {
+  "hangar": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "dock_noyard": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "dock_colonists": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "unload_colonists",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "colonize",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "load_colonists",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport_passenger",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "orbit": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "flight": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cancel_movement_order",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "combat": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cancel_movement_order",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "foreign_orbit": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "foreign_recon_body",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "foreign_recon_system",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "foreign_colonize",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "foreign_unload",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "interstellar": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cluster_switch",
+    "data": {
+     "systemId": "sys_B"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "foreign_recon": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "abort_foreign_recon",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "loop": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cancel_loop",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "reserve": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "deploy_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "mobilizing": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "rally_none": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "rally_assign_open",
+    "data": {
+     "vesselId": "v_1",
+     "currentRallyId": null
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "rally_member": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "rally_assign_open",
+    "data": {
+     "vesselId": "v_1",
+     "currentRallyId": "poi_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "rally_assign_remove",
+    "data": {
+     "vesselId": "v_1",
+     "rallyId": "poi_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "pool": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "orbit",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "toggle_logistics_pool",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "immobilized": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "blocked": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_select": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "select_target",
+    "data": {
+     "targetId": "p_two",
+     "targetSystemId": "sys_home"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_confirm": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "change_target",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "toggle_repeat",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "confirm_mission",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_home": [
+   {
+    "via": "hit",
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "hit",
+    "type": "change_target",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "toggle_repeat",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "set_return_cargo",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "confirm_mission",
+    "data": {}
+   },
+   {
+    "via": "hit",
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "via": "footer",
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "via": "footer",
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ]
+ },
+ "variants": {
+  "foreign_orbit_analyzed": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "foreign_recon_system",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "foreign_unload",
+    "data": {
+     "vesselId": "v_1",
+     "targetId": "p_far"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "mvpRetreat",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "hangar_no_rocketry": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "withdraw_vessel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "transport",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "action",
+    "data": {
+     "actionId": "found_outpost",
+     "vessel": "v_1"
+    }
+   },
+   {
+    "type": "disband",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "manual_refuel",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "toggle_refuel_auto",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ],
+  "config_confirm_no_fuel": [
+   {
+    "type": "back_to_shipyard",
+    "data": {}
+   },
+   {
+    "type": "rename",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "cargo_load",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "undock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "change_target",
+    "data": {}
+   },
+   {
+    "type": "toggle_repeat",
+    "data": {}
+   },
+   {
+    "type": "cancel_config",
+    "data": {}
+   },
+   {
+    "type": "mvpFleet",
+    "data": {
+     "vesselId": "v_1"
+    }
+   },
+   {
+    "type": "mvpDock",
+    "data": {
+     "vesselId": "v_1"
+    }
+   }
+  ]
+ }
+}

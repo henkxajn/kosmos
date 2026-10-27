@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // WYKONANIE prawdziwego `LeftOutliner` (`draw` na atrapie ctx z rejestrem napisów i prostokątów, `hitTest`,
 // `handleWheel`, `updateHover`) na świecie w EntityManagerze; prawdziwe `MapInsets` i ich konsumenci, którzy importują
-// się pod node (`FleetGroupPanel`, `FleetCommandPanel`, kadr „Obserwuj”
+// się pod node (kadr „Obserwuj”
 // `watchSafeRect`). `UIManager` i `ThreeRenderer` nie importują się pod node (THREE) — montaż i ich wcięcia: piny
 // źródłowe (komentarze zdjęte).
 //
@@ -103,6 +103,8 @@
 //   T4-2 (karta ciała, panel stacji, dok i `FloatingPanel` usunięte): L5f / L5g / L5h (chipy doku), L5i / L5j (obszar karty
 //         ciała) i L5n / L5o (kotwica panelu stacji) usunięte razem z tymi powierzchniami; L7d / L17-0 / L17c / L17d-0 / L17d
 //         — kolejność rysowania i kliku bez panelu stacji (panel stacji nie rysuje się i nie łapie kliku — stan przypięcia).
+//   T4-3 (rysunek dawnych paneli floty i grupy usunięty): L5k / L5l / L5m (chip zminimalizowanego panelu za lewym outlinerem)
+//         usunięte razem z tym rysunkiem — panele floty i grupy T6 stoją przy prawym outlinerze (`fleet_panel_hud_smoke` F9).
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -338,21 +340,6 @@ header('L5  wcięcia obszaru mapy (`MapInsets`) i konsumenci');
   ok(gi({}) === 150, 'L5c SEDNO: lewy outliner nad mapą → wcięcie lewe 150');
   ok(gi({ overlay: true }) === 0 && gi({ dockExp: true }) === 0 && gi({ civ: false }) === 0, 'L5d overlay / rozwinięty Dok / poza trybem cywilizacji → 0');
   reset(); if (lo) lo.visible = false; ok(MI?.getMapInsets?.(K)?.left === 0, 'L5e stan użytkownika „ukryty” → 0'); if (lo) lo.visible = true;
-
-  // FleetGroupPanel / FleetCommandPanel — chip zminimalizowany (lewy dół)
-  const V = { v1: { id: 'v1', name: 'Furia', shipId: 'hull_frigate' } };
-  K.vesselManager = { getVessel: (id) => V[id] ?? null };
-  const { FleetGroupPanel } = await import('../../ui/FleetGroupPanel.js');
-  reset(); const fg = new FleetGroupPanel(); fg.visible = true; fg._ids = ['v1']; fg._minimized = true;
-  fg.draw(recCtx(), W, H);
-  ok(fg._drawnRect?.x === 158, `L5k panel grupy statków za outlinerem (x ${fg._drawnRect?.x})`);
-  reset({ overlay: true }); fg.draw(recCtx(), W, H);
-  ok(fg._drawnRect?.x === 8, 'L5l KONTROLA: outliner ukryty → x 8 jak dotąd');
-  const { FleetCommandPanel } = await import('../../ui/FleetCommandPanel.js');
-  K.fleetSystem = { getFleet: (id) => (id === 'f1' ? { id: 'f1', name: 'Flota I', memberIds: ['v1'] } : null) };
-  reset(); const fc = new FleetCommandPanel(); fc.visible = true; fc._fleetId = 'f1'; fc._minimized = true;
-  fc.draw(recCtx(), W, H);
-  ok(fc._drawnRect?.x === 158, `L5m panel floty za outlinerem (x ${fc._drawnRect?.x})`);
 
   // Kadr „Obserwuj” — `watchSafeRect` z `leftW`
   const CW = await import('../../renderer/CombatWatchLogic.js');

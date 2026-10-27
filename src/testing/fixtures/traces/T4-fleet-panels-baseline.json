@@ -1,0 +1,1807 @@
+{
+ "keeper": "fleet_panel_hud_smoke",
+ "recordedFrom": "e873127",
+ "panels": "FleetCommandPanel.draw / FleetGroupPanel.draw + handleClick",
+ "fleet": {
+  "f_docked": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_space": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgReturn",
+    "data": {
+     "label": "Powrót"
+    }
+   },
+   {
+    "type": "bgStop",
+    "data": {
+     "label": "Stop"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_mixed": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "d"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "d"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgReturn",
+    "data": {
+     "label": "Powrót"
+    }
+   },
+   {
+    "type": "bgStop",
+    "data": {
+     "label": "Stop"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_empty": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_other": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgReturn",
+    "data": {
+     "label": "Powrót"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_big": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v0"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v0"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v1"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v1"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v2"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v2"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v3"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v3"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v4"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v4"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v5"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v5"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgReturn",
+    "data": {
+     "label": "Powrót"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v6"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v6"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v7"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v7"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "v8"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "v8"
+    }
+   }
+  ],
+  "f_min": [
+   {
+    "type": "restore",
+    "data": {}
+   }
+  ]
+ },
+ "group": {
+  "g_docked": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "grpRefuel",
+    "data": {
+     "label": "Tankuj"
+    }
+   }
+  ],
+  "g_space": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpStop",
+    "data": {
+     "label": "Stop"
+    }
+   }
+  ],
+  "g_immob": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   }
+  ],
+  "g_nofs": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "grpRefuel",
+    "data": {
+     "label": "Tankuj"
+    }
+   }
+  ],
+  "g_big": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v0"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v0"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v0"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v1"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v1"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v1"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v2"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v2"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v2"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v3"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v3"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v3"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v4"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v4"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v4"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v5"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v5"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v5"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "grpRefuel",
+    "data": {
+     "label": "Tankuj"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v6"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v6"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v6"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v7"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v7"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v7"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "v8"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "v8"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "v8"
+    }
+   }
+  ],
+  "g_min": [
+   {
+    "type": "restore",
+    "data": {}
+   }
+  ],
+  "g_combat": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpRetreat",
+    "data": {
+     "label": "Odwrót"
+    }
+   }
+  ],
+  "g_combat_immob": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "grpRetreat",
+    "data": {
+     "label": "Odwrót"
+    }
+   }
+  ]
+ },
+ "clicks": {
+  "f_mixed": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "d"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "d"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgReturn",
+    "data": {
+     "label": "Powrót"
+    }
+   },
+   {
+    "type": "bgStop",
+    "data": {
+     "label": "Stop"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_docked": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "f_other": [
+   {
+    "type": "prevFleet",
+    "data": {
+     "id": "_pf"
+    }
+   },
+   {
+    "type": "nextFleet",
+    "data": {
+     "id": "_nf"
+    }
+   },
+   {
+    "type": "renameFleet",
+    "data": {
+     "id": "_rn"
+    }
+   },
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "closeFleet",
+    "data": {
+     "id": "_cl"
+    }
+   },
+   {
+    "type": "doctrine",
+    "data": {}
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "memberFocus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "memberRemove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "bgMove",
+    "data": {
+     "label": "Rusz"
+    }
+   },
+   {
+    "type": "bgEngage",
+    "data": {
+     "label": "Atak"
+    }
+   },
+   {
+    "type": "bgDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "bgUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "bgReturn",
+    "data": {
+     "label": "Powrót"
+    }
+   },
+   {
+    "type": "bgDisband",
+    "data": {
+     "label": "Rozwiąż"
+    }
+   }
+  ],
+  "g_docked": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "c"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpUndock",
+    "data": {
+     "label": "Odcumuj"
+    }
+   },
+   {
+    "type": "grpRefuel",
+    "data": {
+     "label": "Tankuj"
+    }
+   }
+  ],
+  "g_space": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpStop",
+    "data": {
+     "label": "Stop"
+    }
+   }
+  ],
+  "g_combat": [
+   {
+    "type": "minimize",
+    "data": {
+     "id": "_min"
+    }
+   },
+   {
+    "type": "assignFleet",
+    "data": {
+     "label": "→ Flota"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "a"
+    }
+   },
+   {
+    "type": "focus",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "rename",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "remove",
+    "data": {
+     "id": "b"
+    }
+   },
+   {
+    "type": "grpDock",
+    "data": {
+     "label": "Dokuj"
+    }
+   },
+   {
+    "type": "grpRetreat",
+    "data": {
+     "label": "Odwrót"
+    }
+   }
+  ]
+ }
+}

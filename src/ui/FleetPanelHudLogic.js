@@ -2,7 +2,8 @@
 // czysta logika PANELU FLOTY (`FleetCommandPanel`) i PANELU GRUPY N ≥ 2 (`FleetGroupPanel`) W IDIOMIE ETYKIET z T5, przy
 // prawym outlinerze (flaga kroku `fleetPanelHud` — na stałe ON od T4, klucz usunięty). Rysunek, pomiar tekstu i strefy —
 // `FleetPanelHudLayer`; spięcie z hostem (geometria T3, klik, kółko, kursor, przeszkody, mutex) — `UIManager`.
-//   • TREŚĆ I AKCJE = LUSTRO `FleetCommandPanel.draw` / `FleetGroupPanel.draw`: te same warunki aktywności, te same strefy
+//   • TREŚĆ I AKCJE = LUSTRO dawnych `FleetCommandPanel.draw` / `FleetGroupPanel.draw` (rysunek usunięty w T4 — wyrocznią
+//     keepera jest ich migawka `src/testing/fixtures/traces/T4-fleet-panels-baseline.json`): te same warunki aktywności, te same strefy
 //     `{ type, data }` (flota — 16 typów `FLEET_PANEL_ZONE_TYPES`, grupa — 11 `GROUP_PANEL_ZONE_TYPES`) i TE SAME handlery:
 //     `runFleetPanelAction` → `_onHit(zone)` instancji z `UIManager` (`fleetCommandPanel` / `fleetGroupPanel`), które dalej
 //     trzymają stan — flotę, zaznaczenie, zwinięcie. Stronicowanie (▲ ▼, `PAGING_ZONE_TYPES`) zastępuje przewijanie listy
@@ -202,10 +203,10 @@ export function fleetStateText(rows, fleet, pc) {
   return t('fleetPicture.state.idle');
 }
 
-// ── Model panelu floty (lustro `FleetCommandPanel.draw`) ────────────────────────────────────────────────────────────
+// ── Model panelu floty (lustro dawnego `FleetCommandPanel.draw`) ────────────────────────────────────────────────────
 
 /**
- * Model panelu floty — `null` dla braku floty (jak `FleetCommandPanel.draw`: `!fleet` → bez panelu).
+ * Model panelu floty — `null` dla braku floty (jak dawny `FleetCommandPanel.draw`: `!fleet` → bez panelu).
  * @param {object} fleet — `FleetSystem.getFleet(id)`
  * @param {{ K:object, minimized?:boolean, picker?:object, orderTargetInfo?:Function, systemName?:Function }} env
  */
@@ -241,7 +242,7 @@ export function buildFleetPanelModel(fleet, env = {}) {
   m.sub = [t('fleet.shipsCount', members.length), lead ? t('fleetPanelHud.leader', low(lead.name ?? lead.id)) : null,
     low(fleetStateText(m.members, fleet, pc))].filter(Boolean).join(' · ');
   m.doctrine = { label: `${low(t('fleetCmd.doctrine'))}: ${low(t(doctrineNameKey(fleet.doctrine)))} ▾`, zone: zone('doctrine') };
-  // Rozkazy (lustro F5): warunki aktywności co do znaku jak `FleetCommandPanel.draw`.
+  // Rozkazy (lustro F5): warunki aktywności co do znaku jak dawny `FleetCommandPanel.draw`.
   const hasOrder = !!fleet.activeOrder;
   const inSpace = members.some((v) => v.position?.state !== 'docked');
   const hasDocked = members.some((v) => v.position?.state === 'docked');
@@ -263,10 +264,10 @@ export function buildFleetPanelModel(fleet, env = {}) {
   return m;
 }
 
-// ── Model panelu grupy (lustro `FleetGroupPanel.draw`) ──────────────────────────────────────────────────────────────
+// ── Model panelu grupy (lustro dawnego `FleetGroupPanel.draw`) ──────────────────────────────────────────────────────
 
 /**
- * Model panelu grupy N ≥ 2 — `null` bez żywych statków gracza (jak `FleetGroupPanel.draw`).
+ * Model panelu grupy N ≥ 2 — `null` bez żywych statków gracza (jak dawny `FleetGroupPanel.draw`).
  * @param {object[]} vessels — żywe statki gracza z zaznaczenia (lustro `_liveVessels`), w kolejności zaznaczenia
  * @param {{ K:object, leadId?:string|null, minimized?:boolean, orderTargetInfo?:Function }} env
  */

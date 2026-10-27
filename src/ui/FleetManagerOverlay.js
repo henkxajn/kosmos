@@ -232,9 +232,6 @@ const STRATCOM_FAN_DY   = -13;  // wysokość rządka nad gwiazdą [px]
 // siebie. Szersze wymagałyby tie-breaku między ikonami — czyli dokładnie tej dwuznaczności, którą
 // usuwał Finding 109. Wysokość 12 px przy ikonie 7×8 (ikona: `sy−17,5…sy−9,5` przy `FAN_DY = −13`).
 const STRATCOM_SHIP_HIT_H = 12; // wysokość strefy ikony statku [px]
-// Eksportowane, bo keeper musi porownywac panel mapy z Rejestrem przy TEJ SAMEJ wysokosci
-// tresci (`_clipRightHitZones` przycina strefy pod spodem) — inaczej pin dryfowalby od kodu.
-export const MVP_FOOTER_H = 34;  // Slice 258 — pasmo footera-3 panelu statku nad mapa [px]
 
 // Offset idx-tej ikony z `count` statków stojących w tym samym układzie (rządek wyśrodkowany).
 function _stratcomFanOffset(idx, count) {
@@ -1403,116 +1400,10 @@ export class FleetManagerOverlay {
 
   // ── Obsługa kliknięć ──────────────────────────────────────────────────────
 
-  // ── Slice 258 — panel statku nad mapą 3D (Wariant A, „panel mode") ────────────────────────
-  //
-  // ⚠ TO NIE JEST DRUGI RENDER. `drawVesselPanel` DELEGUJE do `this._drawRight` — tej samej
-  //   metody, na tej samej instancji, na tych samych polach (`_selectedVesselId`, `_missionConfig`,
-  //   `_rightScrollY`, `_cachedTargets`). Identyczność panelu mapy z prawą kolumną Rejestru jest
-  //   więc STRUKTURALNA, a nie utrzymywana dyscypliną. Gdyby ktoś zamienił delegację na kopię,
-  //   pada `map_vessel_panel_smoke` P1-id (szpieg na `_drawRight`) — i o to w tym pinie chodzi.
-  //
-  // ⚠ JEDYNA mutacja współdzielonego stanu to TRANSIENTNE wymuszenie gałęzi (D-MVP-5):
-  //   `_drawRight` jest multiplekserem i czyta `_selectedFleetId` / `_pendingSendSystemId` u góry,
-  //   więc bez wyzerowania mapa pokazałaby detal floty albo ship picker. Przywracamy w `finally`,
-  //   bo `_drawRight` potrafi rzucić (ma własny `finally` na clip) — nieprzywrócone pola zepsułyby
-  //   Dowództwo przy najbliższym otwarciu.
-  drawVesselPanel(ctx, x, y, w, h, opts = {}) {
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr || !this._selectedVesselId) { this._vesselPanelRect = null; return false; }
-    const v = vMgr.getVessel(this._selectedVesselId);
-    // D-MVP-12 — mapa nie zaznacza wrogów ani wraków; panel nie jest dla nich.
-    if (!v || v.isWreck || isEnemyVessel(v)) { this._vesselPanelRect = null; return false; }
-
-    // ⚠ PŁYTA TŁA (③, ten sam commit) — panel MUSI czytać się jak PANEL, nie jak tekst
-    //   wiszący nad gwiazdami. `_drawRight` NIE maluje własnego tła: w Dowództwie leży na
-    //   płycie overlaya, a nad mapą takiej płyty NIE MA (`UIManager` woła `drawVesselPanel`
-    //   bez podkładu) — czyli treść Rejestru rysowała się wprost na scenie 3D.
-    //   Po ③ prostokąt panelu POCHŁANIA każdy klik, więc bez płyty gracz widziałby „napisy,
-    //   które zjadają kliki w pustce". Płyta czyni absorber CZYTELNYM.
-    //   Styl 1:1 z `FleetGroupPanel:171-175` (drugi panel pływający nad mapą): `bgAlpha(0.92)`
-    //   + ramka `borderActive ?? accent`. ⚠ To jest WYŁĄCZNIE malowanie tła — ZERO `_addHit`,
-    //   więc golden stref (P1/C6) zostaje bit w bit, a prostokąt panelu (`_vesselPanelRect`,
-    //   bramka ③/P12) jest ten sam co dotąd.
-    ctx.fillStyle = bgAlpha(0.92);
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = THEME.borderActive ?? THEME.accent;
-    ctx.lineWidth = 1;
-    if (opts.seamRight === true) {
-      // REFORMA ZAKŁADEK T3 — panel przy wierszu prawego outlinera: bez własnej krawędzi od strony kolumny (wspólną
-      //   krawędzią jest linia kolumny) — trzy boki ramki. Bez `seamRight` (OFF, kotwica zapasowa) — ramka jak dotąd.
-      ctx.beginPath();
-      ctx.moveTo(x + w, y + 0.5);
-      ctx.lineTo(x + 0.5, y + 0.5);
-      ctx.lineTo(x + 0.5, y + h - 0.5);
-      ctx.lineTo(x + w, y + h - 0.5);
-      ctx.stroke();
-    } else {
-      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    }
-
-    // D-MVP-4 — router ma widzieć WYŁĄCZNIE strefy z TEGO rysowania.
-    this._hitZones = [];
-
-    const savedFleetId = this._selectedFleetId;
-    const savedSendSys = this._pendingSendSystemId;
-    this._selectedFleetId     = null;
-    this._pendingSendSystemId = null;
-    // Footer-3 (Odwrót / → Flota / Dokuj) dostaje własne pasmo NA DOLE, POZA `_drawRight`.
-    // ⚠ ŚWIADOMIE poza `_drawRight`: ta metoda jest WSPÓLNA z prawą kolumną Dowództwa, więc
-    //   dorysowanie footera w niej dołożyłoby trzy przyciski TAKŻE tam i zerwało golden C6/P6.
-    //   Footer jest mapo-specyficzny, ale jego DYSPOZYCJA idzie przez to samo, JEDYNE źródło
-    //   (`VesselGroupActions`) co `FleetGroupPanel` — więc nie powstaje „jedno plus własne mapy".
-    const bodyH = Math.max(80, h - MVP_FOOTER_H);
-    try {
-      const colMgr = window.KOSMOS?.colonyManager;
-      this._drawRight(ctx, x, y, w, bodyH, vMgr,
-        window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem,
-        colMgr, colMgr?.activePlanetId, opts);
-    } finally {
-      this._selectedFleetId     = savedFleetId;
-      this._pendingSendSystemId = savedSendSys;
-    }
-    this._drawVesselPanelFooter(ctx, x, y + h - MVP_FOOTER_H, w, MVP_FOOTER_H, v);
-    this._vesselPanelRect = { x, y, w, h };
-    return true;
-  }
-
   /**
-   * Trzy rozkazy grupowe, których panel Rejestru nie ma, a `FleetGroupPanel` miał (D-MVP-8).
-   * Bez nich przejście na panel statku przy N==1 ODEBRAŁOBY graczowi Odwrót, → Flotę i Dokuj.
-   */
-  _drawVesselPanelFooter(ctx, x, y, w, h, vessel) {
-    const pad = 8, gap = 6, n = 3;
-    const bw = (w - pad * 2 - gap * (n - 1)) / n;
-    const by = y + (h - 22) / 2;
-    const docked = vessel?.position?.state === 'docked';
-    const immob  = !!window.KOSMOS?.vesselManager?.isImmobilized?.(vessel);
-    const btns = [
-      { type: 'mvpRetreat', label: t('fleetGroup.actionRetreat'), enabled: !docked && !immob },
-      { type: 'mvpFleet',   label: t('fleetGroup.assignFleet'),   enabled: !!window.KOSMOS?.fleetSystem },
-      { type: 'mvpDock',    label: t('fleetGroup.actionDock'),    enabled: !immob },
-    ];
-    for (let i = 0; i < btns.length; i++) {
-      const b = btns[i];
-      const bx = x + pad + i * (bw + gap);
-      ctx.fillStyle   = b.enabled ? 'rgba(40,60,90,0.75)' : 'rgba(30,34,42,0.5)';
-      ctx.fillRect(bx, by, bw, 22);
-      ctx.strokeStyle = b.enabled ? THEME.accent : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, 21);
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = b.enabled ? THEME.textPrimary : THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(_fitText(ctx, b.label, bw - 8), bx + bw / 2, by + 15);
-      ctx.textAlign = 'left';
-      if (b.enabled) this._hitZones.push({ x: bx, y: by, w: bw, h: 22, type: b.type, data: { vesselId: vessel.id } });
-    }
-  }
-
-  /**
-   * JEDYNE miejsce, które przewija prawą kolumnę (Rejestr, Dowództwo I panel mapy).
-   * Wyciągnięte z `handleScroll` przy Findingu 260, żeby panel mapy NIE dostał drugiej,
-   * osobnej kopii tej samej arytmetyki — clamp i czułość mają zostać jedne.
+   * JEDYNE miejsce, które przewija prawą kolumnę (Rejestr i Dowództwo). Wyciągnięte z `handleScroll` przy Findingu 260
+   * (wtedy także dla dawnego panelu statku nad mapą — usuniętego w REFORMIE ZAKŁADEK T4; panel statku T5 przewija własną
+   * listę rozkazów): clamp i czułość w jednym miejscu.
    */
   _applyRightScroll(delta) {
     const maxScroll = Math.max(0, (this._rightContentH || 0) - (this._rightViewH || 0));
@@ -1520,86 +1411,10 @@ export class FleetManagerOverlay {
   }
 
   /**
-   * Kółko myszy nad panelem statku na mapie 3D (Finding 260).
-   *
-   * ⚠ DLACZEGO OSOBNE WEJŚCIE, a nie trasa do `handleScroll`: tamta metoda bramkuje na
-   *   `!this._visible || !this._bounds`, czyli na stanie OVERLAYA — a nad mapą overlay jest
-   *   ZAMKNIĘTY (D-MVP-7). Trasa do niej dawałaby ciche `false` przy każdym obrocie kółka.
-   *   To dokładnie ta sama asymetria, dla której `handleVesselPanelClick` istnieje obok
-   *   `handleClick` — i to samo lekarstwo: wąskie wejście z bramką PROSTOKĄTA panelu.
-   * ⚠ Maszyneria przewijania (`_rightScrollY` / `_rightContentH` / `_rightViewH`, reset per
-   *   statek przez `_rightScrollVesselId`) ISTNIAŁA od 258 — brakowało wyłącznie TRASY.
-   *   Scroll jest WSPÓLNY z Rejestrem (D-MVP-6, pinowane P-scroll) i to jest zamierzone.
-   * ⚠ Zwraca `true` na KAŻDY obrót w prostokącie panelu, także gdy treść się mieści i clamp
-   *   nic nie zmieni — inaczej kółko przelatywałoby do kamery i ZOOMOWAŁO mapę pod panelem.
-   *   Ten sam idiom pochłaniania co ③ w `handleVesselPanelClick`.
+   * Dyspozycja footera-3 (Odwrót / → Flota / Dokuj; D-MVP-8) — WYŁĄCZNIE przez `VesselGroupActions` (jedyne źródło). Woła ją
+   * panel statku T5 (`ShipPanelHudLogic.runShipPanelAction` — chipy footera); dawny panel statku nad mapą (slice 258,
+   * `drawVesselPanel` / `handleVesselPanelClick`) usunięty w REFORMIE ZAKŁADEK T4.
    */
-  handleVesselPanelScroll(mx, my, delta) {
-    const r = this._vesselPanelRect;
-    if (!r) return false;
-    if (mx < r.x || mx > r.x + r.w || my < r.y || my > r.y + r.h) return false;
-    this._applyRightScroll(delta);
-    return true;
-  }
-
-  /**
-   * Klik w panel statku nad mapą 3D. Osobne wejście od `handleClick`, bo tamto bramkuje na
-   * `_visible`/`_bounds` OVERLAYA (a tu overlay jest zamknięty) — ale rozstrzyganie trafień
-   * i dyspozycja są TE SAME: `resolveStratcomZone` → `_handleHit`.
-   *
-   * ⚠ Prostokąt panelu jest bramką: bez niego klik w mapę poza panelem mógłby trafić w strefę
-   *   zostawioną przez POPRZEDNIE rysowanie (np. tuż po zamknięciu overlaya). Mirror `_bounds`.
-   *
-   * ⚠ ③ (live-gate 2026-09-07) — KLIK W PROSTOKĄT PANELU JEST POCHŁANIANY ZAWSZE.
-   *   Dawniej trzy ścieżki zwracały `false` MIMO trafienia w prostokąt: brak stref, modal DOM
-   *   na wierzchu i — najczęstsza — klik w etykietę / pasek / puste miejsce między strefami.
-   *   `UIManager.handleClick` jest łańcuchem `if (...) return true`, a `GameScene:5360` robi
-   *   `if (!uiManager.handleClick(x, y)) { threeRenderer.handleClick(...); _handleTacticalLeftClick(...) }`,
-   *   więc każde `false` oddawało klik MAPIE 3D: statek się ODZNACZAŁ, panel znikał, a kamera
-   *   zjeżdżała na środek układu. Panel był wtedy GORSZY niż jego brak.
-   *   ⚠ Bramka `isOverUI` NIE MOGŁA tu pomóc, choć zwraca `true` nad panelem: `GameScene:5903`
-   *   pyta o nią wyłącznie `if (!isGameCanvas)`, a panel rysuje się na `#ui-canvas` — czyli na
-   *   CANVASIE. Jedynym chokepointem jest zwrotka tej metody.
-   *   To jest idiom `bg`-absorbera, który `FleetGroupPanel` ma od Slice'u 8b (`_addHit(px, py,
-   *   PW, totalH, 'bg')` na KOŃCU listy): panel konsumuje własny prostokąt, nawet gdy pod
-   *   kursorem nie ma żadnej akcji.
-   *   ⚠ Zmiana dotyczy WYŁĄCZNIE zwrotki routera — dyspozycja i zbiór stref są nietknięte
-   *   (golden P1/C6 zostaje bit w bit).
-   */
-  handleVesselPanelClick(mx, my) {
-    const r = this._vesselPanelRect;
-    if (!r) return false;
-    if (mx < r.x || mx > r.x + r.w || my < r.y || my > r.y + r.h) return false;
-
-    // ══ OD TEGO MIEJSCA KAŻDA ŚCIEŻKA ZWRACA true (③) ══
-    // Guard modalu DOM — mirror `handleClick`: modal na wierzchu połyka klik. NIE dyspozycjonujemy,
-    // ale POCHŁANIAMY: panel dalej się rysuje pod modalem (modal DOM nie ustawia
-    // `overlayManager.active`), więc oddanie kliku mapie odznaczyłoby statek spod otwartego modalu.
-    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return true;
-
-    if (this._hitZones?.length) {
-      // Priorytet ciała/stacji przy wyborze celu — mirror `handleClick`. Dziś inertny
-      // (`commandTacticalMap:false` ⇒ `map_body`/`map_station` nie mają producentów), zachowany
-      // ŚWIADOMIE, żeby obie powierzchnie miały JEDEN algorytm trafień, nie dwa podobne.
-      if (this._missionConfig?.step === 'select') {
-        const tgt = this._hitZones.find(z =>
-          (z.type === 'map_body' || z.type === 'map_station') &&
-          mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
-        if (tgt) { this._handleHit(tgt, mx, my); return true; }
-      }
-      const zone = resolveStratcomZone(this._hitZones, mx, my);
-      // Footer-3 obsługiwany TU, nie w `_handleHit`: tamten router jest WSPÓLNY z Dowództwem,
-      // a te trzy strefy istnieją wyłącznie na mapie. Dyspozycja idzie do JEDNEGO źródła.
-      if (zone && (zone.type === 'mvpRetreat' || zone.type === 'mvpFleet' || zone.type === 'mvpDock')) {
-        this._handleVesselPanelFooter(zone);
-      } else if (zone) {
-        this._handleHit(zone, mx, my);
-      }
-    }
-    return true;
-  }
-
-  /** Dyspozycja footera-3 — WYŁĄCZNIE przez `VesselGroupActions` (jedyne źródło). */
   _handleVesselPanelFooter(zone) {
     const ids = zone.data?.vesselId ? [zone.data.vesselId] : [];
     if (ids.length === 0) return;

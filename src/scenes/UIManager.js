@@ -355,9 +355,8 @@ export class UIManager {
     this.stationPanel = new StationPanel();
     window.KOSMOS.stationPanel = this.stationPanel;
 
-    // Slice 8b — FleetGroupPanel: panel zaznaczonej grupy statków (lewy-dolny róg).
-    // Non-exclusive (jak StationPanel/CombatHUD): self-managed przez ui:selectionChanged,
-    // rysowany PO overlayManager (tylko gdy żaden overlay otwarty), klik PRZED overlayManager.
+    // Slice 8b / REFORMA ZAKŁADEK T4 — FleetGroupPanel: STAN zaznaczonej grupy statków (self-managed przez
+    // ui:selectionChanged; zniszczony statek zdjęty z zaznaczenia) i cele chipów panelu grupy T6 (`_onHit`). Bez rysunku.
     this.fleetGroupPanel = new FleetGroupPanel();
     // REFORMA ZAKŁADEK T3 — panel statku przy prawym outlinerze: ostatnie położenie (odczyt dla bramki) i stałe rysunku
     // łącznika z wierszem (px logiczne: podświetlenie wiersza przedłużone w panel, kreska na wspólnej krawędzi — strojenie okiem).
@@ -383,8 +382,8 @@ export class UIManager {
     this.tacticalDock = new TacticalDock();
     if (window.KOSMOS) window.KOSMOS.tacticalDock = this.tacticalDock;
 
-    // Slice 8b — FleetCommandPanel: pływający panel dowodzenia WYBRANĄ flotą (battlegroup).
-    // Self-managed przez ui:fleetSelectionChanged. Anchor lewy-dolny; FleetGroupPanel stackuje się NAD nim.
+    // Slice 8b / REFORMA ZAKŁADEK T4 — FleetCommandPanel: STAN wybranej floty (self-managed przez ui:fleetSelectionChanged)
+    // i cele chipów panelu floty T6 (`_onHit`: doktryna, nazwa, rozkazy, pickery celu). Bez rysunku.
     this.fleetCommandPanel = new FleetCommandPanel();
     window.KOSMOS.fleetCommandPanel = this.fleetCommandPanel;
     // REFORMA ZAKŁADEK T6 — panel floty i panel grupy N ≥ 2 w idiomie etykiet przy prawym outlinerze: renderer i strefy
@@ -630,7 +629,6 @@ export class UIManager {
   _drawShipPanelHud(ctx, W, H) {
     const K = window.KOSMOS;
     const fo = this._fleetOverlay;
-    if (fo) fo._vesselPanelRect = null;
     const ins = getMapInsets(K);
     const size = this._shipPanelHud.prepare({ ctx, K, fmo: fo, vesselId: this._selectedVesselId,
       maxH: Math.max(60, H - ins.top - ins.bottom - 16), features: GAME_CONFIG.FEATURES });

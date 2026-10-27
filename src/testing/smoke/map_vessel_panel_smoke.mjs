@@ -46,6 +46,17 @@
 //     stałe ON — w `UIManager` panel statku nad mapą to panel T5 (`_drawShipPanelHud`, klik `_vesselPanelClick`), panel
 //     floty / grupy to panel T6 (`_drawFleetPanelHud`); dawne wywołania `drawVesselPanel` / `fleetGroupPanel.draw` w
 //     `UIManager` usunięte (metody dawnych paneli — do kolejnego kroku T4; `drawFor` w P11 rysuje je wprost jako wyrocznię).
+//   ⚠ T4-3 — PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): dawny panel statku nad mapą
+//     (adapter `drawVesselPanel` / `handleVesselPanelClick` / `handleVesselPanelScroll`, płyta, footer, `_vesselPanelRect`)
+//     i rysunek dawnych paneli grupy i floty USUNIĘTE; „warianty T5 / T6 stają się jedynymi”. Usunięte razem z adapterem
+//     (podmiot zniknął; następca w nawiasie): P1 / P1-id / P1-src (panel ≡ Rejestr przez delegację — strefy panelu T5 ≡
+//     migawka panelu T3: `ship_panel_hud_smoke` H1), P2 / P3 / P5 (router, picker, jeden producent stref — T5: H2, H6, H11),
+//     P7 (gałąź statku mimo floty — model T5 bierze statek wprost), P-open, P-scroll (wspólny scroll — T5 przewija własną
+//     listę: H7h), P12 / P12-T3 (pochłanianie kliku w prostokąt — T5: H4), P-plate (płyta T3 — T5 bez ramki). Przecelowane
+//     na panel statku T5 i panel grupy T6: P-footer (chipy footera T5 → prawdziwe `_handleVesselPanelFooter`), P10 (stan
+//     i akcje paneli floty i grupy wykonują się bez rysunku — `_onHit` każdego typu), P11 (jedna powierzchnia na N: model
+//     T5 przy N == 1, model grupy T6 przy N ≥ 2, `fleetHudSurface`), P-A1 (bez „Powrotu” w modelach T5 / T6), P13
+//     (integracja: łańcuch klików panelu T5 → PRAWDZIWY `MissionSystem`); P-mount — także FMO bez adaptera.
 //   P13      INTEGRACJA — akcja CELOWANA klikana z panelu mapy zmienia stan PRAWDZIWEGO
 //            `MissionSystem` (+ P13-src: pin premisy populacji)
 //   P-plate  płyta tła pokrywa CAŁY prostokąt panelu i NIE jest strefą (absorber ③ ma być
@@ -95,7 +106,7 @@ globalThis.localStorage = {
   get length() { return Object.keys(this._s).length; },
 };
 
-const { FleetManagerOverlay, MVP_FOOTER_H } = await import('../../ui/FleetManagerOverlay.js');
+const { FleetManagerOverlay } = await import('../../ui/FleetManagerOverlay.js');
 const { GAME_CONFIG }         = await import('../../config/GameConfig.js');
 const EntityManager           = (await import('../../core/EntityManager.js')).default;
 
@@ -105,6 +116,11 @@ let MapLogic = null;
 try { MapLogic = await import('../../ui/MapVesselPanelLogic.js'); } catch { /* fail-first */ }
 let VGA = null;
 try { VGA = await import('../../ui/VesselGroupActions.js'); } catch { /* fail-first */ }
+// REFORMA ZAKŁADEK T4-3 — powierzchnie mapy: panel statku T5 (renderer + model) i panel floty / grupy T6 (model).
+let Y5 = null, L5 = null, L6 = null;
+try { Y5 = await import('../../ui/ShipPanelHudLayer.js'); } catch { /* piny padną */ }
+try { L5 = await import('../../ui/ShipPanelHudLogic.js'); } catch { /* piny padną */ }
+try { L6 = await import('../../ui/FleetPanelHudLogic.js'); } catch { /* piny padną */ }
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ FAIL: ' + m); } };
@@ -180,6 +196,34 @@ function overlayDraw(fmo) {
   return [...fmo._hitZones];
 }
 
+/** Atrapa ctx z fontem (pomiar 0,6 em na znak) — renderer T5 czyta rozmiar fontu. */
+function fontCtx() {
+  let font = '10px monospace';
+  return new Proxy({}, {
+    get(o, k) {
+      if (k === 'font') return font;
+      if (k === 'measureText') return (str) => ({ width: [...String(str)].length * (Number(/(\d+(?:\.\d+)?)px/.exec(font)?.[1]) || 10) * 0.6 });
+      if (k === 'canvas') return { width: 1920, height: 1080 };
+      if (k in o) return o[k];
+      return typeof k === 'string' ? () => {} : undefined;
+    },
+    set(o, k, v) { if (k === 'font') font = v; else o[k] = v; return true; },
+  });
+}
+/** Panel statku T5 (prawdziwy `ShipPanelHudLayer`): model, układ i rysunek w (930, 60); strefy z tej klatki. */
+function t5Zones(fmo, lay, { open = false } = {}) {
+  if (!lay || !L5) return [];
+  const vid = fmo._selectedVesselId;
+  if (open && !L5.ordersOpen?.(lay._open, vid)) lay._open = L5.toggleOrders(lay._open, vid);
+  const ctx = fontCtx();
+  const sz = lay.prepare({ ctx, K: window.KOSMOS, fmo, vesselId: vid, maxH: 4000, features: GAME_CONFIG.FEATURES });
+  if (sz) lay.draw(ctx, { x: 930, y: 60, w: sz.w, h: sz.h }, {});
+  return [...(lay._zones ?? [])];
+}
+const t5Click = (lay, fmo, z) => lay.handleClick(z.x + z.w / 2, z.y + z.h / 2, { K: window.KOSMOS, fmo });
+const t5ModelTypes = (fmo, vessel) => (L5?.modelZones?.(L5.buildShipPanelModel(vessel, { K: window.KOSMOS, fmo, features: GAME_CONFIG.FEATURES })) ?? []).map((z) => z.type);
+const t6GroupTypes = (vessels) => (L6?.modelZones?.(L6.buildGroupPanelModel(vessels, { K: window.KOSMOS, leadId: vessels[0]?.id ?? null })) ?? []).map((z) => z.type);
+
 // ═══ C1 — baseline: `_drawRight` headless, NIEPUSTY, z konkretnymi akcjami ═══════════════════
 header('C1  KONTROLA — baseline prawej kolumny Rejestru (anty-jałowość dla P1/P6)');
 let GOLDEN = null, GOLDEN_ACTIONS = null;
@@ -218,135 +262,6 @@ let FLEET_BRANCH_SIG = null;
   delete window.KOSMOS.fleetSystem;
 }
 
-// ═══ P1 — drawVesselPanel ≡ _drawRight ═══════════════════════════════════════════════════════
-header('P1  PIN — panel mapy ≡ prawa kolumna Rejestru (ten sam zbiór stref)');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'FleetManagerOverlay.drawVesselPanel istnieje');
-    ok(false, 'panel mapy ≡ Rejestr (zbiór stref)');
-    ok(false, 'panel mapy zawiera akcje orbit+transport (anty-jałowość)');
-  } else {
-    const overlayZones = overlayDraw(fmo);
-    // ⚠ Panel mapy rezerwuje pasmo na footer, więc TREŚĆ jest niższa o MVP_FOOTER_H.
-    //   Porównanie musi iść przy RÓWNEJ wysokości treści — `_clipRightHitZones` przycina
-    //   strefy poniżej panelu, więc niższy panel dałby mniej stref i pin kłamałby o różnicy.
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 800 + MVP_FOOTER_H);
-    const mapZones = [...fmo._hitZones];
-    ok(true, 'FleetManagerOverlay.drawVesselPanel istnieje');
-    ok(JSON.stringify(sigBody(mapZones)) === JSON.stringify(sig(overlayZones)),
-       `zbiory stref identyczne BEZ footera (mapa: ${sigBody(mapZones).length}, overlay: ${sig(overlayZones).length})`);
-    ok(mapZones.length > 0 && actionIds(mapZones).includes('orbit') && actionIds(mapZones).includes('transport'),
-       `panel mapy NIEPUSTY i z akcjami orbit+transport (jest: ${JSON.stringify(actionIds(mapZones))})`);
-  }
-}
-
-// ═══ P1-id — IDENTYCZNOŚĆ STRUKTURALNA, nie zbieżność wyniku ═════════════════════════════════
-// ⚠ SEDNO WYBORU WARIANTU A. P1 wyżej porównuje DWA WYNIKI — i przeszedłby także wtedy, gdyby
-//   `drawVesselPanel` był KOPIĄ renderu, która dziś przypadkiem daje to samo. Wtedy A po cichu
-//   stałoby się mini-B (dwie rzeczy do utrzymania w zgodzie). Ten pin sprawdza MECHANIZM:
-//   panel mapy musi WOŁAĆ `this._drawRight` na TEJ SAMEJ instancji, dokładnie raz.
-header('P1-id  PIN — drawVesselPanel DELEGUJE do _drawRight (ta sama instancja, nie kopia)');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'drawVesselPanel woła _drawRight dokładnie raz');
-    ok(false, 'woła je na TEJ SAMEJ instancji (this === fmo)');
-    ok(false, 'KONTROLA: bez wywołania drawVesselPanel szpieg milczy');
-    ok(false, 'gałąź statku wymuszona TRANSIENTNIE — pola przywrócone po rysowaniu');
-  } else {
-    let calls = 0, sameThis = null, gotArgs = null;
-    const orig = fmo._drawRight;
-    fmo._drawRight = function (...a) { calls++; sameThis = (this === fmo); gotArgs = a; return orig.apply(this, a); };
-    // KONTROLA niejałowości: szpieg nie może liczyć niczego, zanim zawołamy panel.
-    ok(calls === 0, 'KONTROLA: bez wywołania drawVesselPanel szpieg milczy');
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    ok(calls === 1, `drawVesselPanel woła _drawRight dokładnie raz (jest: ${calls})`);
-    ok(sameThis === true, 'woła je na TEJ SAMEJ instancji (this === fmo)');
-    // D-MVP-5 — wymuszenie gałęzi jest TRANSIENTNE; nieprzywrócone pola zepsułyby Dowództwo.
-    fmo._drawRight = orig;
-    fmo._selectedFleetId = 'f_9';
-    fmo._pendingSendSystemId = 'sys_061';
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    ok(fmo._selectedFleetId === 'f_9' && fmo._pendingSendSystemId === 'sys_061',
-       `pola przywrócone po rysowaniu (fleet=${fmo._selectedFleetId}, send=${fmo._pendingSendSystemId})`);
-  }
-}
-
-// ═══ P1-src — pin ŹRÓDŁOWY: jedna implementacja renderu, nie dwie ══════════════════
-header('P1-src  PIN ŹRÓDŁOWY — w FMO istnieje DOKŁADNIE JEDNA implementacja `_drawRight`');
-{
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8');
-  // Kod BEZ komentarzy — komentarze cytują nazwę i same by pin zazieleniły
-  // (reguła `source-pin-strip-comments`). Bez regex-ów: same operacje na łańcuchach.
-  const lines = src.split(String.fromCharCode(10));
-  const codeLines = lines.filter((l) => !l.trim().startsWith('//'));
-  const defs = codeLines.filter((l) => l.startsWith('  _drawRight(')).length;
-  ok(defs === 1, `dokładnie jedna definicja _drawRight (jest: ${defs})`);
-  const code = codeLines.join(String.fromCharCode(10));
-  // ⚠ Kotwica CELOWO bez listy parametrów: slice B (B1) dołożył `opts = {}` i pełna
-  //   sygnatura przestała pasować — pin zgasł, a złapała to dopiero jego KONTROLA
-  //   (`body.length > 300`). Kotwica na samej nazwie przeżyje kolejną zmianę sygnatury,
-  //   a kontrola długości dalej dowodzi, że ciało zostało realnie znalezione.
-  const at = code.indexOf('  drawVesselPanel(');
-  const body = at >= 0 ? code.slice(at, at + 1800) : '';
-  ok(body.includes('this._drawRight('), 'drawVesselPanel odwołuje się do this._drawRight (delegacja, nie kopia)');
-  // KONTROLA: pin nie jest jałowy — ciało metody zostało realnie znalezione w źródle.
-  ok(at >= 0 && body.length > 300, `KONTROLA: ciało drawVesselPanel znalezione w źródle (${body.length} zn.)`);
-}
-
-// ═══ P2 — router klików ══════════════════════════════════════════════════════════════════════
-header('P2  PIN — handleVesselPanelClick routuje `action` do `_handleAction`');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.handleVesselPanelClick !== 'function' || typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'FleetManagerOverlay.handleVesselPanelClick istnieje');
-    ok(false, 'klik w strefę `action` dochodzi do _handleAction');
-    ok(false, 'KONTROLA: klik POZA strefami nie woła _handleAction');
-  } else {
-    ok(true, 'FleetManagerOverlay.handleVesselPanelClick istnieje');
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    const spy = [];
-    fmo._handleAction = (d) => spy.push(d);
-    const z = fmo._hitZones.find((q) => q.type === 'action' && q.data?.actionId === 'orbit');
-    if (!z) { ok(false, 'strefa action:orbit istnieje w panelu mapy (anty-jałowość)'); ok(false, 'kontrola'); }
-    else {
-      fmo.handleVesselPanelClick(z.x + z.w / 2, z.y + z.h / 2);
-      ok(spy.length === 1 && spy[0].actionId === 'orbit', `klik w action:orbit dotarł do _handleAction (wywołań: ${spy.length})`);
-      const before = spy.length;
-      fmo.handleVesselPanelClick(-9999, -9999);
-      ok(spy.length === before, 'KONTROLA: klik POZA strefami nie woła _handleAction');
-    }
-  }
-}
-
-// ═══ P3 — picker osiągalny z panelu mapy ═════════════════════════════════════════════════════
-header('P3  PIN — picker celu osiągalny z panelu mapy');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'po akcji `orbit` _missionConfig.step === "select"');
-    ok(false, 'kolejne rysowanie panelu mapy emituje ≥1 strefę select_target');
-  } else {
-    const v = window.KOSMOS.vesselManager.getVessel('v_1');
-    fmo._handleAction({ actionId: 'orbit', vessel: v });
-    ok(fmo._missionConfig?.step === 'select', `_missionConfig.step === "select" (jest: ${fmo._missionConfig?.step})`);
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    const targets = fmo._hitZones.filter((z) => z.type === 'select_target');
-    // ⚠ ANTY-JAŁOWOŚĆ: pusta lista celów przeszłaby „≥0" — wymagamy KONKRETNIE ≥1.
-    ok(targets.length >= 1, `panel mapy emituje ≥1 select_target (jest: ${targets.length})`);
-  }
-}
-
 // ═══ P4 — mutex po LICZBIE zaznaczenia ═══════════════════════════════════════════════════════
 header('P4  PIN — mutex: 0 → none · 1 → vessel · ≥2 → group');
 {
@@ -366,22 +281,6 @@ header('P4  PIN — mutex: 0 → none · 1 → vessel · ≥2 → group');
   }
 }
 
-// ═══ P5 — brak podwójnego producenta stref ═══════════════════════════════════════════════════
-header('P5  PIN — dwa rysowania pod rząd nie mnożą stref (D-MVP-4)');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'liczba stref action:orbit po dwóch rysowaniach === 1');
-  } else {
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    const n = fmo._hitZones.filter((z) => z.type === 'action' && z.data?.actionId === 'orbit').length;
-    ok(n === 1, `dokładnie JEDNA strefa action:orbit (jest: ${n}) — nie ">= 1"`);
-  }
-}
-
 // ═══ C6 — regresja prawej kolumny Rejestru ═══════════════════════════════════════════════════
 header('C6  KONTROLA — golden prawej kolumny Rejestru nietknięty');
 {
@@ -391,44 +290,6 @@ header('C6  KONTROLA — golden prawej kolumny Rejestru nietknięty');
   const zones = overlayDraw(fmo);
   ok(zones.length > 0, `golden niepusty (jest: ${zones.length})`);
   ok(JSON.stringify(sig(zones)) === JSON.stringify(GOLDEN), 'zbiór stref Rejestru identyczny z C1');
-}
-
-// ═══ P7 — wymuszenie gałęzi statku ═══════════════════════════════════════════════════════════
-header('P7  PIN — panel mapy wymusza gałąź STATKU mimo `_selectedFleetId` (D-MVP-5)');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  fmo._selectedFleetId = 'f_1';
-  fmo._pendingSendSystemId = 'sys_061';
-  window.KOSMOS.fleetSystem = { getFleet: () => ({ id: 'f_1', name: 'Alfa', memberIds: ['v_1'], activeOrder: null }),
-                                listFleets: () => [{ id: 'f_1', name: 'Alfa', memberIds: ['v_1'] }] };
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'panel mapy renderuje gałąź statku mimo _selectedFleetId/_pendingSendSystemId');
-  } else {
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 800 + MVP_FOOTER_H);
-    ok(JSON.stringify(sigBody([...fmo._hitZones])) === JSON.stringify(GOLDEN),
-       'panel mapy renderuje gałąź STATKU (zbiór == golden), nie gałąź floty/pickera');
-  }
-  delete window.KOSMOS.fleetSystem;
-}
-
-// ═══ P-open — panel nie perturbuje isAnyOpen() ═══════════════════════════════════════════════
-header('P-open  PIN — rysowanie panelu nie ustawia `_visible` (D-MVP-7)');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'po drawVesselPanel isVisible === false');
-    ok(false, 'KONTROLA: po open() isVisible === true');
-  } else {
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 600);
-    ok(fmo.isVisible === false, 'po drawVesselPanel isVisible === false');
-    fmo.open();
-    ok(fmo.isVisible === true, 'KONTROLA: po open() isVisible === true (pin nie jest jałowy)');
-    fmo.close();
-  }
 }
 
 // ═══ P-flag — kill-switch ════════════════════════════════════════════════════════════════════
@@ -442,33 +303,6 @@ header('P-flag  PIN — kill-switch `mapVesselPanel` usunięty (T4): N==1 obsłu
     ok(f(['a'], { flagOn: false }) === 'vessel' && f(['a'], false) === 'vessel' && f(['a']) === 'vessel',
       'N==1 → vessel bez względu na drugi argument (dawne `{ flagOn: false }` → `group` usunięte w T4)');
     ok(f(['a', 'b']) === 'group' && f([]) === 'none', 'KONTROLA: N==2 → group, N==0 → none (mutex po liczbie bez zmian)');
-  }
-}
-
-// ═══ P-scroll — wspólny scroll (D-MVP-6) ═════════════════════════════════════════════════════
-header('P-scroll  PIN — `_rightScrollY` WSPÓLNY, reset przy zmianie statku dalej działa');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.drawVesselPanel !== 'function') {
-    ok(false, 'scroll ustawiony na mapie jest widoczny w overlayu (wspólne pole)');
-    ok(false, 'KONTROLA: zmiana statku resetuje scroll');
-  } else {
-    // ⚠ Panel MUSI być niższy niż treść, inaczej `_drawRight` zaciska scroll do 0 (maxS=0)
-    //   i pin przechodziłby jałowo — mierzyłby clamp, nie współdzielenie pola.
-    fmo.drawVesselPanel(stubCtx(), 20, 400, 300, 200);
-    ok(fmo._rightContentH > 200, `KONTROLA: treść przekracza panel (${fmo._rightContentH} > 200) — scroll ma sens`);
-    fmo._rightScrollY = 40;
-    fmo._drawRight(stubCtx(), 1600, 100, 300, 200, window.KOSMOS.vesselManager,
-      window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home');
-    ok(fmo._rightScrollY === 40, `scroll z mapy widoczny w overlayu — TO SAMO pole (jest: ${fmo._rightScrollY})`);
-    fmo._selectedVesselId = 'v_2';
-    window.KOSMOS.vesselManager._vessels.set('v_2',
-      { ...window.KOSMOS.vesselManager.getVessel('v_1'), id: 'v_2', name: 'Wenus' });
-    fmo._drawRight(stubCtx(), 1600, 100, 300, 200, window.KOSMOS.vesselManager,
-      window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home');
-    ok(fmo._rightScrollY === 0, `KONTROLA: zmiana statku resetuje scroll (jest: ${fmo._rightScrollY})`);
   }
 }
 
@@ -490,6 +324,11 @@ header('P-mount  PIN ŹRÓDŁOWY — adapter jest ZAMONTOWANY w UIManagerze');
   ok(code.includes("_mapSurface() === 'vessel'"), 'panel statku bramkowany na _mapSurface()===vessel');
   ok(code.length > 50000, `KONTROLA: źródło UIManagera realnie wczytane (${code.length} zn.)`);
   ok(!code.includes('drawVesselPanelXYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
+  const fmoSrcM = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8')
+    .split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
+  ok(!/drawVesselPanel\(|_drawVesselPanelFooter\(|handleVesselPanelClick\(|handleVesselPanelScroll\(|_vesselPanelRect|MVP_FOOTER_H/.test(fmoSrcM)
+     && /_handleVesselPanelFooter\(zone\) \{/.test(fmoSrcM) && /_drawRight\(ctx, x, y, w, h, vMgr, ms, colMgr, activePid, opts = \{\}\) \{/.test(fmoSrcM),
+     'FMO: adapter dawnego panelu statku nad mapą usunięty (T4-3); `_handleVesselPanelFooter` (cele footera T5) i `_drawRight` zostają');
 }
 
 // ═══ P8 — scalenie docka 2→1 jest CZYSTYM PRZERZUTEM, nie zmianą zachowania ═══════════════
@@ -558,7 +397,9 @@ header('P9  PIN — sameSystemOnly odsiewa cel z obcego układu, a false go ZACH
 }
 
 // ═══ P-footer — trzy akcje na mapie, dyspozycja przez JEDNO źródło ════════════════════════
-header('P-footer  PIN — Odwrót / → Flota / Dokuj na panelu mapy');
+// T4-3: footer-3 żyje na panelu statku T5 (chipy „Odwrót / → Flota / Dokuj”) — klik idzie do TEGO SAMEGO celu co dawny
+// panel T3 (`FleetManagerOverlay._handleVesselPanelFooter` → `VesselGroupActions` / MOS).
+header('P-footer  PIN — Odwrót / → Flota / Dokuj na panelu statku nad mapą (T5 → `_handleVesselPanelFooter`)');
 {
   world();
   const fmo = new FleetManagerOverlay();
@@ -566,16 +407,17 @@ header('P-footer  PIN — Odwrót / → Flota / Dokuj na panelu mapy');
   const v = window.KOSMOS.vesselManager.getVessel('v_1');
   v.position.state = 'orbiting';           // Odwrót wymaga statku w przestrzeni
   window.KOSMOS.fleetSystem = { listFleets: () => [] };
-  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 600);
-  const foot = fmo._hitZones.filter((z) => FOOTER_TYPES.has(z.type)).map((z) => z.type).sort();
-  ok(foot.length === 3, `footer wystawia DOKŁADNIE 3 strefy (jest: ${foot.length} — ${JSON.stringify(foot)})`);
+  const lay = Y5 ? new Y5.ShipPanelHudLayer() : null;
+  const zones = t5Zones(fmo, lay);
+  const foot = zones.filter((z) => z.kind === 'chip' && z.enabled !== false && FOOTER_TYPES.has(z.zone?.type)).map((z) => z.zone.type).sort();
+  ok(foot.length === 3, `footer wystawia DOKŁADNIE 3 chipy na panelu T5 (jest: ${foot.length} — ${JSON.stringify(foot)})`);
   const issued = [];
   window.KOSMOS.movementOrderSystem = { issueOrder: (id, spec) => { issued.push(spec.type); return { ok: true }; } };
-  const rz = fmo._hitZones.find((z) => z.type === 'mvpRetreat');
-  if (!rz) ok(false, 'strefa mvpRetreat istnieje (bez niej nie ma czego klikać)');
+  const rz = zones.find((z) => z.zone?.type === 'mvpRetreat');
+  if (!rz) ok(false, 'chip mvpRetreat istnieje (bez niego nie ma czego klikać)');
   else {
-    fmo.handleVesselPanelClick(rz.x + 2, rz.y + 2);
-    ok(issued.length === 1 && issued[0] === 'retreat', `Odwrót dyspozycjonuje rozkaz retreat (jest: ${JSON.stringify(issued)})`);
+    t5Click(lay, fmo, rz);
+    ok(issued.length === 1 && issued[0] === 'retreat', `Odwrót (prawdziwy klik chipa T5 → \`_handleVesselPanelFooter\`) dyspozycjonuje rozkaz retreat (jest: ${JSON.stringify(issued)})`);
   }
   const { readFileSync } = await import('node:fs');
   const fmoSrc = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8')
@@ -587,14 +429,15 @@ header('P-footer  PIN — Odwrót / → Flota / Dokuj na panelu mapy');
   ok(!body.includes("type: 'dock'"), 'footer NIE ma własnej kopii rozkazu dock');
   ok(body.includes('sameSystemOnly: true'), 'panel mapy prosi o sameSystemOnly:true (Finding 256)');
   ok(at >= 0 && body.length > 300, `KONTROLA: ciało _handleVesselPanelFooter znalezione (${body.length} zn.)`);
+  delete window.KOSMOS.fleetSystem;
 }
 
 // ═══ P10 — obie stare powierzchnie NADAL SIĘ WYKONUJĄ po przerzucie ═══════════════════════
 // ⚠ `node --check` NIE JEST TESTEM (lekcja z arca OG-4). Usunięcie importu osieroconego przez
 //   przerzut zostawia poprawną SKŁADNIĘ i `ReferenceError` dopiero przy pierwszym kliknięciu.
-//   Żaden keeper w repo nie wykonywał tych dwóch paneli (sprawdzone: tylko `FleetGroupPanelLogic`),
-//   więc bez tego pinu regresja 2→1 przeszłaby na zielono.
-header('P10  PIN — FleetGroupPanel / FleetCommandPanel wykonują się po scaleniu docka');
+// ⚠ T4-3: rysunek obu paneli usunięty (importy rysunku zniknęły razem z nim) — zostają stan i `_onHit`, który wołają chipy
+//   panelu T6. Pin wykonuje KAŻDY obsługiwany typ strefy obu paneli: żaden nie może skończyć się `ReferenceError`.
+header('P10  PIN — FleetGroupPanel / FleetCommandPanel: stan i akcje wykonują się bez rysunku (T4-3)');
 {
   const callSafe = (fn) => { try { fn(); return null; } catch (e) { return e; } };
   // KONTROLA HELPERA: musi realnie wykrywać ReferenceError, inaczej cały pin jest jałowy.
@@ -604,85 +447,67 @@ header('P10  PIN — FleetGroupPanel / FleetCommandPanel wykonują się po scale
   world();
   const { FleetGroupPanel }   = await import('../../ui/FleetGroupPanel.js');
   const { FleetCommandPanel } = await import('../../ui/FleetCommandPanel.js');
-  window.KOSMOS.movementOrderSystem = { issueOrder: () => ({ ok: true }), cancelOrder: () => true };
+  const calls = [];
+  window.KOSMOS.movementOrderSystem = { issueOrder: (id, s) => { calls.push(['issueOrder', s?.type]); return { ok: true }; },
+    cancelOrder: (id) => { calls.push(['cancelOrder', id]); return true; } };
   window.KOSMOS.fleetSystem = {
     listFleets: () => [{ id: 'f_1', name: 'Alfa', memberIds: ['v_1'] }],
     getFleet: () => ({ id: 'f_1', name: 'Alfa', memberIds: ['v_1'], activeOrder: null, doctrine: null }),
     createFleet: () => ({ id: 'f_1' }), addMember: () => ({ ok: true }),
+    issueFleetOrder: () => ({ ok: true, accepted: [], rejected: [] }), cancelFleetOrder: (id) => { calls.push(['cancelFleetOrder', id]); },
+    disbandFleet: () => {}, setDoctrine: () => {}, setName: () => {}, removeMember: () => {},
   };
+  window.KOSMOS.vesselManager.undockToOrbit = () => {};
+  window.KOSMOS.vesselManager.manualRefuel = () => {};
 
   const gp = new FleetGroupPanel();
-  gp._ids = ['v_1'];
-  gp.show();   // ⚠ bez tego `draw` wraca na `if (!this.visible)` i asercja niżej jest JAŁOWA
-  ok(callSafe(() => gp.draw(stubCtx(), 1920, 1080)) === null, 'FleetGroupPanel.draw() nie rzuca');
-  ok(gp._hitZones.length > 0, `KONTROLA: draw realnie coś narysował (${gp._hitZones.length} stref)`);
-  for (const type of ['grpDock', 'assignFleet']) {
-    const e = callSafe(() => gp._onHit({ type }));
+  ok(typeof gp.draw === 'undefined' && typeof gp.handleClick === 'undefined' && typeof gp._onHit === 'function',
+     'FleetGroupPanel: rysunek i klik w prostokąt usunięte (T4-3), `_onHit` (cel chipów T6) zostaje');
+  gp._ids = ['v_1']; gp.show();
+  for (const type of ['minimize', 'restore', 'focus', 'remove', 'assignFleet', 'grpRefuel', 'grpStop', 'grpRetreat', 'grpUndock', 'grpDock']) {
+    const e = callSafe(() => gp._onHit({ type, data: { id: 'v_1' } }));
     ok(!(e instanceof ReferenceError), `FleetGroupPanel ${type} bez ReferenceError (${e?.name ?? 'brak wyjątku'})`);
   }
+  ok(calls.some((c) => c[0] === 'cancelOrder') && calls.some((c) => c[0] === 'issueOrder' && c[1] === 'retreat'),
+     `KONTROLA: akcje grupy realnie wołają MOS (Stop → cancelOrder, Odwrót → retreat): ${JSON.stringify(calls)}`);
 
   const cp = new FleetCommandPanel();
+  ok(typeof cp.draw === 'undefined' && typeof cp.handleClick === 'undefined' && typeof cp._onHit === 'function',
+     'FleetCommandPanel: rysunek i klik w prostokąt usunięte (T4-3), `_onHit` (cel chipów T6) zostaje');
   cp._fleetId = 'f_1';
-  const e2 = callSafe(() => cp._onHit({ type: 'bgDock' }));
-  ok(!(e2 instanceof ReferenceError), `FleetCommandPanel bgDock bez ReferenceError (${e2?.name ?? 'brak wyjątku'})`);
+  for (const type of ['minimize', 'restore', 'prevFleet', 'nextFleet', 'doctrine', 'memberFocus', 'memberRemove',
+    'bgMove', 'bgEngage', 'bgReturn', 'bgStop', 'bgUndock', 'bgDock', 'bgDisband', 'closeFleet']) {
+    const e = callSafe(() => cp._onHit({ type, data: { id: 'v_1' } }));
+    ok(!(e instanceof ReferenceError), `FleetCommandPanel ${type} bez ReferenceError (${e?.name ?? 'brak wyjątku'})`);
+  }
+  ok(calls.some((c) => c[0] === 'cancelFleetOrder' && c[1] === 'f_1'), 'KONTROLA: „Stop” floty realnie woła `cancelFleetOrder(f_1)`');
+  delete window.KOSMOS.fleetSystem;
+  delete window.KOSMOS.movementOrderSystem;
 }
 
 // ═══ P11 — RENDER: dokładnie JEDNA powierzchnia rysuje przy każdym N ══════════════════════
 // ⚠ PO CO, skoro P4 pinuje już mutex? Bo P4 pinuje CZYSTĄ REGUŁĘ, a nie to, że reguła rozstrzyga
-//   RENDER. Live-gate 2026-09-07 zgłosił ① („dwa panele naraz przy N>=2") i analiza pokazała, że
-//   to NIE był defekt adaptera — ale w repo NIE BYŁO ANI JEDNEGO pinu tego inwariantu, więc
-//   odpowiedź trzeba było wyprowadzać z lektury źródła. Teraz jest pin.
-// ⚠ ANTY-JAŁOWOŚĆ (część nośna): przy N==1 OBA panele muszą UMIEĆ narysować niepusty zbiór stref.
-//   Bez tej kontroli pin przechodziłby także wtedy, gdyby panel grupy milczał z powodu PUSTKI
-//   (np. `visible === false`), a nie z powodu mutexu — czyli mierzyłby ciszę, nie rozdział.
+//   RENDER. Live-gate 2026-09-07 zgłosił ① („dwa panele naraz przy N>=2").
+// ⚠ T4-3: powierzchnie to panel statku T5 (N == 1) i panel grupy T6 (N ≥ 2); o rysunku rozstrzyga `UIManager._mapSurface`
+//   (`fleetHudSurface` nad `resolveMapSelectionSurface` — wykonanie na prawdziwych metodach: `fleet_panel_hud_smoke` F5).
+// ⚠ ANTY-JAŁOWOŚĆ (część nośna): oba modele UMIEJĄ dać niepusty zbiór stref — inaczej cisza brałaby się z pustki, nie z mutexu.
 header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia (0 / 1 / >=2)');
 {
   const f = MapLogic?.resolveMapSelectionSurface;
   world();
-  const { FleetGroupPanel } = await import('../../ui/FleetGroupPanel.js');
   const vm = window.KOSMOS.vesselManager;
   vm._vessels.set('v_2', { ...vm.getVessel('v_1'), id: 'v_2', name: 'Wenus' });
   window.KOSMOS.fleetSystem = { listFleets: () => [] };
-  window.KOSMOS.movementOrderSystem = { issueOrder: () => ({ ok: true }), cancelOrder: () => true };
-
   const fmo = new FleetManagerOverlay();
-  const gp  = new FleetGroupPanel();
-
-  // Wyrocznia dawnych paneli (rysowane WPROST — od T4 `UIManager` ich nie rysuje; P-mount pinuje montaż T5 / T6).
-  const drawFor = (ids) => {
-    const surface = f(ids, { flagOn: true });
-    fmo._selectedVesselId = ids[0] ?? null;
-    fmo._hitZones = [];
-    fmo._vesselPanelRect = null;
-    gp._ids = [...ids];
-    gp._hitZones = [];
-    if (ids.length) gp.show(); else gp.hide();
-    if (surface === 'vessel') fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
-    if (surface === 'group')  gp.draw(stubCtx(), 1920, 1080);
-    return { surface, vesselZones: fmo._hitZones.length, groupZones: gp._hitZones.length };
-  };
-
-  // KONTROLA NOŚNA — przy N==1 OBA panele UMIEJĄ narysować niepusty zbiór stref.
-  {
-    fmo._selectedVesselId = 'v_1'; fmo._hitZones = [];
-    fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
-    const vOne = fmo._hitZones.length;
-    gp._ids = ['v_1']; gp._hitZones = []; gp.show();
-    gp.draw(stubCtx(), 1920, 1080);
-    const gOne = gp._hitZones.length;
-    ok(vOne > 0 && gOne > 0,
-       `KONTROLA: przy N==1 OBA panele umieją rysować (statek: ${vOne}, grupa: ${gOne}) — cisza bierze się z MUTEXU, nie z pustki`);
-  }
-
-  const r0 = drawFor([]);
-  ok(r0.surface === 'none' && r0.vesselZones === 0 && r0.groupZones === 0,
-     `N==0 → nic nie rysuje (surface=${r0.surface}, statek=${r0.vesselZones}, grupa=${r0.groupZones})`);
-  const r1 = drawFor(['v_1']);
-  ok(r1.vesselZones > 0 && r1.groupZones === 0,
-     `N==1 → rysuje TYLKO panel statku (statek=${r1.vesselZones}, grupa=${r1.groupZones})`);
-  const r2 = drawFor(['v_1', 'v_2']);
-  ok(r2.groupZones > 0 && r2.vesselZones === 0,
-     `N==2 → rysuje TYLKO panel grupy (statek=${r2.vesselZones}, grupa=${r2.groupZones})`);
+  fmo._selectedVesselId = 'v_1';
+  const vOne = t5ModelTypes(fmo, vm.getVessel('v_1')).length;
+  const gTwo = t6GroupTypes([vm.getVessel('v_1'), vm.getVessel('v_2')]).length;
+  ok(vOne > 0 && gTwo > 0,
+     `KONTROLA: oba panele umieją dać strefy (statek T5 przy N==1: ${vOne}, grupa T6 przy N==2: ${gTwo}) — cisza bierze się z MUTEXU, nie z pustki`);
+  const surfaceOf = (ids) => L6?.fleetHudSurface?.(f?.(ids), { features: GAME_CONFIG.FEATURES, fleetId: null, vesselCount: ids.length, leadId: ids[0] ?? null });
+  ok(surfaceOf([]) === 'none', `N==0 → nic nie rysuje (powierzchnia ${surfaceOf([])})`);
+  ok(surfaceOf(['v_1']) === 'vessel', `N==1 → rysuje TYLKO panel statku T5 (powierzchnia ${surfaceOf(['v_1'])})`);
+  ok(surfaceOf(['v_1', 'v_2']) === 'groupHud', `N==2 → rysuje TYLKO panel grupy T6 (powierzchnia ${surfaceOf(['v_1', 'v_2'])})`);
 
   // Pin ŹRÓDŁOWY — JEDEN producent każdego rysowania w `UIManager`. Ten fakt był JEDYNĄ
   // odpowiedzią na ①, a nic go nie pilnowało. `UIManager` nie importuje się pod node.
@@ -714,7 +539,6 @@ header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia 
 header('P-A1  PIN — żadna powierzchnia mapy nie wystawia „Powrotu" (ani przy N==1, ani przy N>=2)');
 {
   world();
-  const { FleetGroupPanel } = await import('../../ui/FleetGroupPanel.js');
   const vm = window.KOSMOS.vesselManager;
   vm._vessels.set('v_2', { ...vm.getVessel('v_1'), id: 'v_2', name: 'Wenus' });
   // Stan, w którym „Powrót" BYŁ aktywny (`!docked && !immob`) — inaczej pin mierzyłby wyszarzenie.
@@ -726,28 +550,25 @@ header('P-A1  PIN — żadna powierzchnia mapy nie wystawia „Powrotu" (ani prz
   //   widzieć rząd rozkazów z aktywnym „Odwrotem” — grupa stoi w starciu (atrapa systemu walki), asercje bez zmian.
   window.KOSMOS.deepSpaceCombatSystem = { _findActiveEncounterContaining: (id) => (id === 'v_1' || id === 'v_2' ? { isActive: true } : null) };
 
-  const gp = new FleetGroupPanel();
-  gp._ids = ['v_1', 'v_2']; gp.show(); gp._hitZones = [];
-  gp.draw(stubCtx(), 1920, 1080);
+  // T4-3: powierzchnie keyed-on-N to model grupy T6 (N >= 2) i model panelu statku T5 (N == 1).
+  const grpTypes = [...new Set(t6GroupTypes([vm.getVessel('v_1'), vm.getVessel('v_2')]))].sort();
   delete window.KOSMOS.deepSpaceCombatSystem;
-  const grpTypes = [...new Set(gp._hitZones.map((z) => z.type))].sort();
-  ok(gp._hitZones.length > 0, `KONTROLA: panel grupy realnie się narysował (${gp._hitZones.length} stref)`);
+  ok(grpTypes.length > 0, `KONTROLA: model grupy T6 realnie dał strefy (${grpTypes.length} typów)`);
   ok(!grpTypes.includes('grpReturn'), `N>=2 — brak strefy grpReturn (typy: ${JSON.stringify(grpTypes)})`);
   // KONTROLA niejałowości: pozostałe rozkazy grupowe SĄ (nie zniknął cały rząd przycisków).
   ok(grpTypes.includes('grpDock') && grpTypes.includes('grpRetreat'),
-     'KONTROLA: pozostałe rozkazy grupowe (grpDock, grpRetreat) dalej się rysują');
+     'KONTROLA: pozostałe rozkazy grupowe (grpDock, grpRetreat) dalej są w modelu');
 
   const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1'; fmo._hitZones = [];
-  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
-  const mapTypes = [...new Set(fmo._hitZones.map((z) => z.type))];
+  fmo._selectedVesselId = 'v_1';
+  const mapTypes = t5ModelTypes(fmo, vm.getVessel('v_1'));
   ok(!mapTypes.includes('grpReturn') && !mapTypes.includes('mvpReturn'),
-     'N==1 — panel statku też nie wystawia Powrotu');
+     'N==1 — panel statku T5 też nie wystawia Powrotu');
   // ⚠ Odwrót — `retreat` — to CO INNEGO niż Powrót i musi zostać na obu powierzchniach.
   //   ⚠ Nawias po słowie „Odwrót" świadomie usunięty: `check-i18n` skanuje wywołania i18n
   //   w CAŁYM `src/`, a polskie „ó" nie jest znakiem słowa w jego wzorcu — więc końcówka
   //   „...ót" tuż przed nawiasem parsowała się jako wywołanie i18n z kluczem `retreat`.
-  ok(fmo._hitZones.some((z) => z.type === 'mvpRetreat'),
+  ok(mapTypes.includes('mvpRetreat'),
      'KONTROLA: Odwrót (mvpRetreat) NIE został zdjęty razem z Powrotem');
 
   // Klucz i18n wycofany z OBU słowników (parytet — `check-i18n` liczy pl == en).
@@ -764,86 +585,6 @@ header('P-A1  PIN — żadna powierzchnia mapy nie wystawia „Powrotu" (ani prz
 }
 
 
-// ═══ P12 — ③ POCHŁANIANIE: klik w prostokąt panelu NIGDY nie leci do mapy 3D ══════════════
-// ⚠ TO JEST PIN INTEGRACYJNY, nie logiczny. Keeper miał 66/66 i mimo to live-gate 2026-09-07
-//   złapał ③: `handleVesselPanelClick` zwracało `false`, gdy klik nie trafił w strefę — a
-//   `UIManager.handleClick` jest łańcuchem `if (...) return true`, więc `GameScene:5360` oddawał
-//   ten klik mapie 3D (odznaczenie statku + zjazd kamery). P2 tego NIE MOGŁO złapać: pinowało
-//   wyłącznie ścieżkę TRAFIONĄ, a defekt siedział w ścieżce NIETRAFIONEJ, której nikt nie mierzył.
-header('P12  PIN — klik WEWNĄTRZ prostokąta panelu jest pochłaniany także BEZ trafienia w strefę');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
-  const r = fmo._vesselPanelRect;
-  ok(!!r, `KONTROLA: panel ustawił prostokąt (${JSON.stringify(r)})`);
-  ok(fmo._hitZones.length > 0, `KONTROLA: panel ma strefy (${fmo._hitZones.length}) — pin nie mierzy pustego panelu`);
-
-  // Znajdź punkt WEWNĄTRZ prostokąta, który NIE trafia w żadną strefę (etykieta / pasek / luka).
-  const inZone = (zx, zy) => fmo._hitZones.some(z => zx >= z.x && zx <= z.x + z.w && zy >= z.y && zy <= z.y + z.h);
-  let gap = null;
-  for (let gy = r.y + 1; gy < r.y + r.h - 1 && !gap; gy += 3) {
-    for (let gx = r.x + 1; gx < r.x + r.w - 1; gx += 3) {
-      if (!inZone(gx, gy)) { gap = { x: gx, y: gy }; break; }
-    }
-  }
-  // ⚠ ANTY-JAŁOWOŚĆ: bez tej asercji „nie znaleźliśmy luki" po cichu pominęłoby cały pin.
-  ok(!!gap, `KONTROLA: istnieje punkt w panelu bez strefy (${JSON.stringify(gap)}) — jest co klikać`);
-
-  if (gap) {
-    let dispatched = 0;
-    const origHit = fmo._handleHit;
-    fmo._handleHit = function (...a) { dispatched++; return origHit.apply(this, a); };
-    ok(fmo.handleVesselPanelClick(gap.x, gap.y) === true,
-       'klik w LUKĘ wewnątrz panelu zwraca true (nie leci do mapy 3D)');
-    ok(dispatched === 0, `KONTROLA: klik w lukę NICZEGO nie dyspozycjonuje (wywołań _handleHit: ${dispatched})`);
-    fmo._handleHit = origHit;
-  }
-
-  // Panel BEZ ŻADNYCH stref (drugi wariant ③) — prostokąt dalej pochłania.
-  fmo._hitZones = [];
-  ok(fmo.handleVesselPanelClick(r.x + r.w / 2, r.y + r.h / 2) === true,
-     'panel bez stref też pochłania klik w swój prostokąt');
-
-  // KONTROLA KIERUNKU — poza prostokątem NADAL `false`, inaczej panel zjadałby całą mapę.
-  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
-  ok(fmo.handleVesselPanelClick(r.x - 5, r.y + 10) === false, 'KONTROLA: klik NA LEWO od panelu → false');
-  ok(fmo.handleVesselPanelClick(r.x + r.w + 5, r.y + 10) === false, 'KONTROLA: klik NA PRAWO od panelu → false');
-  ok(fmo.handleVesselPanelClick(r.x + 10, r.y - 5) === false, 'KONTROLA: klik NAD panelem → false');
-  ok(fmo.handleVesselPanelClick(r.x + 10, r.y + r.h + 5) === false, 'KONTROLA: klik POD panelem → false');
-
-  // KONTROLA: brak narysowanego panelu (rect === null) → false, żeby nie połykać kliku na ślepo.
-  fmo._vesselPanelRect = null;
-  ok(fmo.handleVesselPanelClick(r.x + 10, r.y + 10) === false, 'KONTROLA: bez narysowanego panelu → false');
-
-  // KONTROLA: TRAFIONA strefa dalej dyspozycjonuje (nie zamieniliśmy routera w no-op).
-  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700);
-  const spy = [];
-  fmo._handleAction = (d) => spy.push(d.actionId);
-  const az = fmo._hitZones.find(z => z.type === 'action');
-  ok(!!az, 'KONTROLA: jest strefa action do kliknięcia');
-  if (az) {
-    fmo.handleVesselPanelClick(az.x + az.w / 2, az.y + az.h / 2);
-    ok(spy.length === 1, `KONTROLA: trafiona akcja DALEJ dyspozycjonuje (wywołań: ${spy.length})`);
-  }
-  // P12-T3 — panel przy wierszu prawego outlinera (x 830 = 1280 − 150 − 300, wspólna krawędź `seamRight`): ten sam router —
-  // klik w prostokąt pochłaniany, tuż za jego prawą krawędzią (kolumna outlinera) — nie; panel zdjęty przez Dok — nie.
-  let SPA2 = null; try { SPA2 = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
-  const pT3 = SPA2?.computeShipPanelPlacement?.({ W: 1280, H: 720, insets: { left: 150, right: 150, top: 28, bottom: 62 },
-    column: { x: 1130, y: 28, w: 150, h: 630 }, anchor: { rowTop: 160, h: 16, anchorY: 160, visible: true, edge: null }, panelH: 300 });
-  const f2 = new FleetManagerOverlay();
-  f2._selectedVesselId = 'v_1';
-  if (pT3) f2.drawVesselPanel(stubCtx(), pT3.x, pT3.y, pT3.w, pT3.h, { compact: true, seamRight: pT3.seam === true });
-  const r2 = f2._vesselPanelRect;
-  ok(r2?.x === 830 && r2?.y === 160 && r2?.w === 300 && r2?.h === 300 && pT3?.seam === true,
-     `P12-T3 prostokąt panelu przy wierszu outlinera (kotwica T3, wspólna krawędź): ${JSON.stringify(r2)}`);
-  ok(!!r2 && f2.handleVesselPanelClick(1129, 300) === true, 'P12-T3 klik przy wspólnej krawędzi (wewnątrz panelu) — pochłonięty');
-  ok(!!r2 && f2.handleVesselPanelClick(1135, 300) === false, 'P12-T3 klik w kolumnę outlinera (za panelem) — nie dla panelu');
-  f2._vesselPanelRect = null;
-  ok(f2.handleVesselPanelClick(900, 300) === false, 'P12-T3 KONTROLA: prostokąt zdjęty (panel schowany przez Dok — D-TR-10) — klik nie pochłonięty');
-}
-
 // ═══ P13 — INTEGRACJA: rozkaz CELOWANY z panelu mapy dochodzi do PRAWDZIWEGO MissionSystem ══
 // ⚠ FIXTURE POCHODZI Z POPULACJI OSIĄGALNEJ NA TEJ POWIERZCHNI — to jest cała lekcja z ②/③.
 //   P2/P3 prowadzą statek ZADOKOWANY, a zadokowany statek NIE MA SPRITE'A na mapie 3D
@@ -855,7 +596,7 @@ header('P12  PIN — klik WEWNĄTRZ prostokąta panelu jest pochłaniany także 
 //   z Rejestru; ma własny finding i własny slice. P13 dowozi to, co należy do TEGO slice'u:
 //   że łańcuch klików panelu mapy (akcja → picker → potwierdzenie) dociera do prawdziwego
 //   silnika i ZMIENIA JEGO STAN — na akcji, która jest z mapy realnie osiągalna.
-header('P13  PIN INTEGRACYJNY — akcja celowana z panelu mapy zmienia stan PRAWDZIWEGO MissionSystem');
+header('P13  PIN INTEGRACYJNY — akcja celowana z panelu statku T5 zmienia stan PRAWDZIWEGO MissionSystem');
 {
   world();
   const { MissionSystem } = await import('../../systems/MissionSystem.js');
@@ -894,8 +635,11 @@ header('P13  PIN INTEGRACYJNY — akcja celowana z panelu mapy zmienia stan PRAW
 
   const fmo = new FleetManagerOverlay();
   fmo._selectedVesselId = 'v_1';
-  const draw  = () => { fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 700); return [...fmo._hitZones]; };
-  const click = (z) => fmo.handleVesselPanelClick(z.x + z.w / 2, z.y + z.h / 2);
+  // T4-3: panel mapy = panel statku T5 (prawdziwy `ShipPanelHudLayer`): strefy chipów z TEJ klatki, klik → `_handleHit`.
+  const lay = Y5 ? new Y5.ShipPanelHudLayer() : null;
+  const draw  = () => t5Zones(fmo, lay, { open: true }).filter((z) => z.kind === 'chip' && z.zone && z.enabled !== false)
+    .map((z) => ({ ...z.zone, x: z.x, y: z.y, w: z.w, h: z.h }));
+  const click = (z) => t5Click(lay, fmo, z);
 
   let zones = draw();
   const mapActions = actionIds(zones);
@@ -912,12 +656,12 @@ header('P13  PIN INTEGRACYJNY — akcja celowana z panelu mapy zmienia stan PRAW
 
   const az = zones.find(z => z.type === 'action' && z.data?.actionId === 'redirect');
   if (!az) {
-    ok(false, 'akcja celowana `redirect` dostępna z panelu mapy');
+    ok(false, 'akcja celowana `redirect` dostępna z panelu statku T5');
     ok(false, 'picker celu emituje >=2 cele'); ok(false, 'wybór celu → krok confirm');
     ok(false, 'potwierdzenie zmienia stan MissionSystem'); ok(false, 'VesselManager dostał redirectToTarget');
     ok(false, 'brak expedition:launchFailed w łańcuchu');
   } else {
-    ok(click(az) === true, 'klik w akcję celowaną pochłonięty i obsłużony');
+    ok(click(az) === true, 'klik w akcję celowaną (chip T5) pochłonięty i obsłużony');
     ok(fmo._missionConfig?.step === 'select', `krok pickera (jest: ${fmo._missionConfig?.step})`);
 
     zones = draw();
@@ -933,7 +677,7 @@ header('P13  PIN INTEGRACYJNY — akcja celowana z panelu mapy zmienia stan PRAW
 
       zones = draw();
       const cz = zones.find(z => z.type === 'confirm_mission');
-      ok(!!cz, 'panel mapy emituje strefę confirm_mission');
+      ok(!!cz, 'panel statku T5 emituje chip confirm_mission');
       if (cz) {
         ok(click(cz) === true, 'klik w potwierdzenie pochłonięty i obsłużony');
         const after = ms.getActive();
@@ -960,46 +704,6 @@ header('P13-src  PIN ŹRÓDŁOWY — zadokowany statek nie dostaje sprite\'a (pr
      'ThreeRenderer ma gałąź „docked” w synchronizacji sprite\'ów');
   ok(code.length > 100000, `KONTROLA: źródło ThreeRenderera realnie wczytane (${code.length} zn.)`);
   ok(!code.includes('docked_XYZZY'), 'KONTROLA: pin nie przechodzi na dowolnym tokenie');
-}
-
-
-// ═══ P-plate — płyta tła jest MALOWANIEM, nie strefą ══════════════════════════════════════
-// ⚠ Panel nad mapą maluje własną płytę (`_drawRight` jej nie ma — w Dowództwie leży na płycie
-//   overlaya). Bez płyty treść Rejestru wisiała wprost nad sceną 3D, a po ③ prostokąt pochłania
-//   KAŻDY klik ⇒ gracz widziałby „napisy zjadające kliki w pustce".
-//   Ten pin trzyma DWA warunki naraz: płyta pokrywa CAŁY prostokąt panelu ORAZ nie dokłada
-//   ANI JEDNEJ strefy (inaczej golden P1/C6 by się rozjechał, a `_hitTest` łapałby tło).
-header('P-plate  PIN — panel maluje płytę na CAŁYM prostokącie i NIE dodaje przez to strefy');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-
-  // ctx nagrywający operacje tła (reszta jak stubCtx).
-  const painted = [];
-  const recCtx = new Proxy({}, {
-    get: (t, k) => k === 'measureText' ? ((str) => ({ width: String(str).length * 6 }))
-      : (k === 'canvas' ? { width: 1920, height: 1080 }
-      : (typeof k === 'string'
-          ? ((...a) => { if (k === 'fillRect' || k === 'strokeRect') painted.push(k + ':' + a.join(',')); })
-          : undefined)),
-    set: () => true,
-  });
-
-  fmo.drawVesselPanel(recCtx, 20, 100, 300, 700);
-  ok(painted.includes('fillRect:20,100,300,700'),
-     `płyta wypełnia CAŁY prostokąt panelu (fillRect 20,100,300,700 — jest: ${painted.includes('fillRect:20,100,300,700')})`);
-  ok(painted.some((c) => c.startsWith('strokeRect:20.5,100.5,')), 'płyta ma ramkę na krawędzi panelu');
-  ok(painted.length > 2, `KONTROLA: ctx realnie nagrywał operacje (${painted.length}) — pin nie mierzy ciszy`);
-
-  // Płyta NIE jest strefą: ani jednej strefy o wymiarach całego panelu.
-  const full = fmo._hitZones.filter((z) => z.x === 20 && z.y === 100 && z.w === 300 && z.h === 700);
-  ok(full.length === 0, `płyta NIE dodaje strefy pełnowymiarowej (jest: ${full.length})`);
-  ok(fmo._hitZones.length > 0, `KONTROLA: panel ma normalne strefy (${fmo._hitZones.length})`);
-
-  // Prostokąt-bramka ③/P12 nietknięty przez płytę.
-  ok(JSON.stringify(fmo._vesselPanelRect) === JSON.stringify({ x: 20, y: 100, w: 300, h: 700 }),
-     `prostokąt panelu bez zmian (${JSON.stringify(fmo._vesselPanelRect)})`);
 }
 
 

@@ -4,18 +4,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Wyłącznie LOGIKA (protokół `HUD_PLAN.md` §4.0, aneks 2026-10-23): zbiór akcji, handlery, stany nieaktywne, strefy kliku,
 // akordeon, konfigurator, kotwica T3, łamanie nazwy, 530, budżet. Bez pinów na stałych rysunku (szerokość, odstępy,
-// krycie — strojenie okiem; piny czytają `SHIP_PANEL_HUD` symbolicznie). WYKONANIE: prawdziwy `FleetManagerOverlay` (panel
-// T3 `drawVesselPanel` — źródło prawdy zbioru stref i dyspozycji), prawdziwy `ShipPanelHudLayer` (rysunek na atrapie ctx,
+// krycie — strojenie okiem; piny czytają `SHIP_PANEL_HUD` symbolicznie). WYKONANIE: prawdziwy `FleetManagerOverlay` (handlery
+// `_handleHit` / `_handleVesselPanelFooter`; zbiór stref i dyspozycja dawnego panelu T3 — MIGAWKA, niżej), prawdziwy
+// `ShipPanelHudLayer` (rysunek na atrapie ctx,
 // prawdziwe kliki), prawdziwy `Outliner` (kotwica przy wierszu), prawdziwe `HudLabelLayer` / `HudLayer` (530); metody
 // `UIManager` i `GameScene` (nie importują się pod node — THREE) wycięte ze źródła (komentarze zdjęte) i wykonane z atrapą
 // `this`.
 //
 // PINY:
 //   H0  moduły (flaga kroku `shipPanelHud` i flagi, na których stała — na stałe ON od T4: predykaty i klucze usunięte)
-//   H1  ZBIÓR AKCJI ON = OFF: strefy panelu T5 ≡ strefy panelu T3 (`drawVesselPanel`, wysokość bez przycinania) co do typu
+//   H1  ZBIÓR AKCJI ON = OFF: strefy panelu T5 ≡ strefy panelu T3 (migawka `drawVesselPanel`, wysokość bez przycinania) co do typu
 //       i danych — 20 stanów (hangar, dok bez stoczni, koloniści, orbita, lot, walka, obca orbita, przylot międzygwiezdny,
 //       rekon obcy, pętla, rezerwa, mobilizacja, rally ×2, pula, unieruchomiony, blokada, konfigurator ×3); pokrycie 31 typów
-//   H2  KAŻDY CHIP → TEN SAM HANDLER: prawdziwy klik w każdą strefę panelu T3 (`handleVesselPanelClick`) i w każdy chip
+//   H2  KAŻDY CHIP → TEN SAM HANDLER: klik w każdą strefę panelu T3 (migawka `handleVesselPanelClick`) i w każdy chip
 //       panelu T5 (`handleClick`, rozkazy po rozwinięciu) daje te same wywołania `_handleHit` / `_handleVesselPanelFooter`
 //   H3  STANY NIEAKTYWNE zgodne z dziś: chip przygaszony ⇔ panel T3 bez strefy; klik w przygaszony — nic
 //   H4  STREFY KLIKU: chip > nazwa > pasek (pochłania) > mapa; nazwa = reguła D-UI-5 (`vessel:focus`); ✎; okno DOM;
@@ -37,11 +38,17 @@
 //   zamiast `labelHover` × `shipPanelHud`; H10 (OFF = T3) przecelowany na „panel T5 jedyną powierzchnią”; H11d — bramka bez
 //   `_vesselPanelBounds`. H1 / H2 / H3 (panel T3 jako wyrocznia zbioru stref i dyspozycji) — bez zmian do kolejnego kroku T4.
 //   T4-2 (karta ciała i panel stacji usunięte): H11d — wynik rysunku panelu T5 bez zapisu przeszkody kart (`shipPanelHudDrawn`).
+// ⚠ MIGAWKA PANELU T3 (REFORMA ZAKŁADEK T4-3, decyzja właściciela Q4 — wzór Finding 273): dawny panel statku nad mapą
+//   (`FleetManagerOverlay.drawVesselPanel` + footer, klik `handleVesselPanelClick`) usunięty; wyrocznią H1 / H2 / H3 jest jego
+//   MIGAWKA — strefy (typ + dane) i dyspozycja kliku w każdym stanie — nagrana TYM SAMYM keeperem na drzewie `e873127`
+//   (ostatni commit z panelem T3): `node src/testing/smoke/ship_panel_hud_smoke.mjs --record` na kopii tamtego drzewa
+//   (`src/testing/fixtures/traces/T4-ship-panel-t3-baseline.json`, metryczka `.md` obok). Porównanie — `zoneKey` bieżącego
+//   modułu po obu stronach. H7a — FMO bez panelu T3 (metody i prostokąt usunięte).
 // ⚠ Moduły POWSTAJĄ w T5 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import EventBus      from '../../core/EventBus.js';
 import EntityManager from '../../core/EntityManager.js';
 import { setLocale, t } from '../../i18n/i18n.js';
@@ -197,7 +204,8 @@ function scene(name) {
   fmo._missionConfig = s.cfg ? { ...s.cfg } : null;
   return { s, feat, fmo };
 }
-/** Strefy panelu T3 (prawdziwy `drawVesselPanel`, wysokość bez przycinania — cała treść). */
+/** Strefy panelu T3 (prawdziwy `drawVesselPanel`, wysokość bez przycinania — cała treść). WYŁĄCZNIE tryb `--record` na drzewie
+ *  z panelem T3 (`e873127`); od T4-3 wyrocznią jest migawka (`SNAP`, niżej). */
 function t3Zones(fmo) {
   fmo.drawVesselPanel(recCtx(), 0, 0, 300, 6000, { compact: true });
   return [...fmo._hitZones];
@@ -218,6 +226,42 @@ const mid = (z) => ({ x: z.x + z.w / 2, y: z.y + z.h / 2 });
 /** Szpieg dyspozycji FMO: `_handleHit` i `_handleVesselPanelFooter` — zapis bez wykonania. */
 const spyFmo = (fmo) => { const rec = []; fmo._handleHit = (z) => rec.push('hit|' + L?.zoneKey?.(z)); fmo._handleVesselPanelFooter = (z) => rec.push('footer|' + L?.zoneKey?.(z)); return rec; };
 
+// ── Migawka dawnego panelu T3 (REFORMA ZAKŁADEK T4-3, Q4) ─────────────────────────────────────────────────────────────
+const SNAP_URL = new URL('../fixtures/traces/T4-ship-panel-t3-baseline.json', import.meta.url);
+/** Strefa bez geometrii: typ + dane; obiekt statku → jego id (ta sama normalizacja co `zoneKey`). */
+const plainZone = (z) => { const d = { ...(z?.data ?? {}) }; if (d.vessel && typeof d.vessel === 'object') d.vessel = d.vessel.id; return { type: z?.type, data: d }; };
+if (process.argv.includes('--record')) {
+  // Drzewo z panelem T3 (`e873127`): strefy każdego stanu (H1), dyspozycja kliku w środek każdej strefy (H2) i trzy światy
+  // ad hoc z H3 — każdy pomiar dokładnie tak, jak liczyły go piny przed T4-3.
+  if (typeof FleetManagerOverlay.prototype.drawVesselPanel !== 'function') { console.log('--record wymaga drzewa z panelem T3 (e873127)'); process.exit(2); }
+  const out = { keeper: 'ship_panel_hud_smoke', recordedFrom: process.env.T4_SNAPSHOT_COMMIT ?? null,
+    panel: 'FleetManagerOverlay.drawVesselPanel (T3, compact) + handleVesselPanelClick',
+    states: {}, clicks: {}, variants: {} };
+  for (const name of Object.keys(STATES)) {
+    { const { feat, fmo } = scene(name); out.states[name] = withFeatures(feat, () => t3Zones(fmo)).map(plainZone); }
+    { const { feat, fmo } = scene(name); const z3 = withFeatures(feat, () => t3Zones(fmo)); const rec = [];
+      fmo._handleHit = (z) => rec.push({ via: 'hit', ...plainZone(z) }); fmo._handleVesselPanelFooter = (z) => rec.push({ via: 'footer', ...plainZone(z) });
+      for (const z of z3) { const q = mid(z); fmo.handleVesselPanelClick(q.x, q.y); }
+      out.clicks[name] = rec; }
+  }
+  { const s0 = STATES.foreign_orbit(); world(s0.v, { farAnalyzed: true, farExplored: false }); const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1';
+    out.variants.foreign_orbit_analyzed = t3Zones(fmo).map(plainZone); }
+  { const s0 = STATES.hangar(); world(s0.v, { noRocketry: true }); const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1';
+    out.variants.hangar_no_rocketry = t3Zones(fmo).map(plainZone); }
+  { const s0 = STATES.config_confirm(); s0.v.fuel.current = 0; world(s0.v, {}); const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1';
+    fmo._missionConfig = { ...s0.cfg }; out.variants.config_confirm_no_fuel = t3Zones(fmo).map(plainZone); }
+  writeFileSync(SNAP_URL, JSON.stringify(out, null, 1) + '\n');
+  console.log(`migawka zapisana: ${Object.keys(out.states).length} stanów, ${Object.keys(out.variants).length} światy ad hoc`);
+  process.exit(0);
+}
+let SNAP = null;
+try { SNAP = JSON.parse(readFileSync(SNAP_URL, 'utf8')); } catch (e) { console.log('    (migawka panelu T3: ' + e.message + ')'); }
+/** Strefy panelu T3 w stanie `name` (migawka) — `{ type, data }`, porównywane przez `zoneKey` bieżącego modułu. */
+const snapZones = (name) => SNAP?.states?.[name] ?? [];
+/** Dyspozycja kliku w każdą strefę panelu T3 (migawka) — w kształcie szpiega `spyFmo`. */
+const snapClicks = (name) => (SNAP?.clicks?.[name] ?? []).map((r) => `${r.via}|${L?.zoneKey?.(r) ?? '?'}`);
+const snapVariant = (name) => SNAP?.variants?.[name] ?? [];
+
 // ═══ H0 ═══════════════════════════════════════════════════════════════════════
 header('H0  moduły (flagi kroków na stałe ON od T4)');
 {
@@ -231,6 +275,10 @@ header('H0  moduły (flagi kroków na stałe ON od T4)');
     && gone.every((k) => !new RegExp('\\b' + k + ':\\s*(true|false)').test(cfgSrc)),
     'H0c flagi `shipPanelHud`, `shipPanelOutliner`, `mapVesselPanel`, `mapVesselPanelCompact` na stałe ON (T4) — predykaty i klucze usunięte');
   ok((L?.SHIP_PANEL_ZONE_TYPES?.length ?? 0) === 31 && new Set(L?.SHIP_PANEL_ZONE_TYPES ?? []).size === 31, 'H0f 31 typów stref panelu statku (inwentarz I2 §3.3), bez powtórzeń');
+  const snapStates = Object.keys(SNAP?.states ?? {});
+  ok(SNAP?.recordedFrom === 'e873127' && snapStates.length === Object.keys(STATES).length && snapStates.every((n) => n in STATES) && Object.keys(SNAP?.variants ?? {}).length === 3
+    && typeof FleetManagerOverlay.prototype.drawVesselPanel === 'undefined',
+    `H0g wyrocznia H1–H3 = migawka panelu T3 (${snapStates.length} stanów + 3 światy ad hoc, nagrana na \`e873127\`); panel T3 usunięty z FMO (T4-3)`);
 }
 
 // ═══ H1 ═══════════════════════════════════════════════════════════════════════
@@ -240,7 +288,7 @@ const T3_TYPES = new Set();
   const sigs = new Set();
   for (const name of Object.keys(STATES)) {
     const { s, feat, fmo } = scene(name);
-    const z3 = withFeatures(feat, () => t3Zones(fmo));
+    const z3 = snapZones(name);
     fmo._missionConfig = s.cfg ? { ...s.cfg } : null;
     const m = L?.buildShipPanelModel?.(s.v, { K: globalThis.window.KOSMOS, fmo, features: feat });
     const z5 = L?.modelZones?.(m) ?? [];
@@ -253,7 +301,7 @@ const T3_TYPES = new Set();
   ok(missing.length === 0 && T3_TYPES.size === 31, `H1-p pokrycie: stany ćwiczą wszystkie 31 typów stref panelu T3 (brak: ${missing.join(', ') || '—'})`);
   // KONTROLA czułości: model bez rozbiórki (mutacja stanu) — porównanie łapie różnicę.
   const { s, feat, fmo } = scene('hangar');
-  const z3 = withFeatures(feat, () => t3Zones(fmo));
+  const z3 = snapZones('hangar');
   const m = L?.buildShipPanelModel?.(s.v, { K: globalThis.window.KOSMOS, fmo, features: feat });
   if (m) m.chips = m.chips.filter((c) => c.id !== 'disband');
   ok(!sameMultiset(keys(z3), keys(L?.modelZones?.(m) ?? [])), 'H1-c KONTROLA: model bez jednego chipa (rozbiórka) — porównanie zgłasza różnicę');
@@ -264,14 +312,13 @@ const T3_TYPES = new Set();
 }
 
 // ═══ H2 ═══════════════════════════════════════════════════════════════════════
-header('H2  każdy chip → ten sam handler co przycisk panelu T3 (prawdziwe kliki obu paneli)');
+header('H2  każdy chip → ten sam handler co przycisk panelu T3 (migawka kliku T3, prawdziwe kliki T5)');
 {
   for (const name of Object.keys(STATES)) {
     const { s, feat, fmo } = scene(name);
-    // T3: klik w środek każdej strefy panelu T3 (prawdziwy `handleVesselPanelClick`)
-    const z3 = withFeatures(feat, () => t3Zones(fmo));
-    const rec3 = spyFmo(fmo);
-    for (const z of z3) { const p = mid(z); fmo.handleVesselPanelClick(p.x, p.y); }
+    // T3: klik w środek każdej strefy panelu T3 (migawka prawdziwego `handleVesselPanelClick`, `e873127`)
+    const z3 = snapZones(name);
+    const rec3 = snapClicks(name);
     // T5: klik w każdy aktywny chip (rozkazy — po rozwinięciu listy prawdziwym klikiem w „[ Rozkazy ▼ ]”)
     const fmo5 = new FleetManagerOverlay(); fmo5._selectedVesselId = s.v.id; fmo5._missionConfig = s.cfg ? { ...s.cfg } : null;
     const rec5 = spyFmo(fmo5);
@@ -298,7 +345,7 @@ header('H3  stany nieaktywne zgodne z dziś — chip przygaszony ⇔ panel T3 be
 {
   const check = (name, id, label) => {
     const { s, feat, fmo } = scene(name);
-    const z3 = withFeatures(feat, () => t3Zones(fmo));
+    const z3 = snapZones(name);
     const m = L?.buildShipPanelModel?.(s.v, { K: globalThis.window.KOSMOS, fmo, features: feat });
     const all = [...(m?.chips ?? []), ...(m?.orders?.items ?? []), ...(m?.config?.chips ?? []), ...(m?.config?.tail ?? [])];
     const c = all.find((x) => x.id === id);
@@ -314,20 +361,20 @@ header('H3  stany nieaktywne zgodne z dziś — chip przygaszony ⇔ panel T3 be
     ok(m?.chips?.find?.((c) => c.id === 'disband')?.label === t('fleet.disbandRequiresShipyard'), 'H3-t dok bez stoczni — tekst dzisiejszego przycisku (`fleet.disbandRequiresShipyard`)'); }
   // obca orbita: ciało przeanalizowane — recon ciała nieaktywny; niezbadane — kolonizacja nieaktywna z dopiskiem
   { const s0 = STATES.foreign_orbit(); world(s0.v, { farAnalyzed: true, farExplored: false }); const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1';
-    const z3 = t3Zones(fmo); const m = L?.buildShipPanelModel?.(s0.v, { K: globalThis.window.KOSMOS, fmo, features: FEATURES });
+    const z3 = snapVariant('foreign_orbit_analyzed'); const m = L?.buildShipPanelModel?.(s0.v, { K: globalThis.window.KOSMOS, fmo, features: FEATURES });
     const rb = m?.chips?.find?.((c) => c.id === 'foreign_recon_body'), fc = m?.chips?.find?.((c) => c.id === 'foreign_colonize');
     ok(rb?.enabled === false && !z3.some((z) => z.type === 'foreign_recon_body'), 'H3 obca orbita, ciało przeanalizowane — „Recon ciała” przygaszony (T3 bez strefy)');
     ok(fc?.enabled === false && fc.label.includes(t('fleet.requiresExplored')) && !z3.some((z) => z.type === 'foreign_colonize'),
       'H3 obca orbita, ciało niezbadane — „Kolonizuj (wymaga zbadania)” przygaszony (T3 bez strefy)'); }
   // rozkazy z odmową: bez technologii — `getAvailableActions` ok:false; chip przygaszony, powód jak dziś
   { const s0 = STATES.hangar(); world(s0.v, { noRocketry: true }); const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1';
-    const z3 = t3Zones(fmo); const m = L?.buildShipPanelModel?.(s0.v, { K: globalThis.window.KOSMOS, fmo, features: FEATURES });
+    const z3 = snapVariant('hangar_no_rocketry'); const m = L?.buildShipPanelModel?.(s0.v, { K: globalThis.window.KOSMOS, fmo, features: FEATURES });
     const dis = (m?.orders?.items ?? []).filter((c) => !c.enabled);
     ok(dis.length > 0 && dis.every((c) => !z3.some((z) => z.type === 'action' && z.data?.actionId === c.id.slice(7))), `H3 rozkazy z odmową (bez „rocketry”) — ${dis.length} przygaszonych, T3 bez ich stref`);
     ok((m?.orders?.reasons ?? []).includes(t('fleet.reason.needRocketry')), 'H3-r powód blokady z `canExecute` (ten sam tekst co pod siatką T3)'); }
   // potwierdzenie bez paliwa: WYŚLIJ nieaktywny z dzisiejszym tekstem
   { const s0 = STATES.config_confirm(); s0.v.fuel.current = 0; world(s0.v, {}); const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1'; fmo._missionConfig = { ...s0.cfg };
-    const z3 = t3Zones(fmo); fmo._missionConfig = { ...s0.cfg }; const m = L?.buildShipPanelModel?.(s0.v, { K: globalThis.window.KOSMOS, fmo, features: FEATURES });
+    const z3 = snapVariant('config_confirm_no_fuel'); fmo._missionConfig = { ...s0.cfg }; const m = L?.buildShipPanelModel?.(s0.v, { K: globalThis.window.KOSMOS, fmo, features: FEATURES });
     const send = m?.config?.tail?.find?.((c) => c.id === 'confirm_mission');
     ok(send?.enabled === false && send.label === t('fleet.sendMissionNoFuel') && !z3.some((z) => z.type === 'confirm_mission'), 'H3 potwierdzenie bez paliwa — „⛽ BRAK PALIWA” przygaszony (T3 bez strefy)'); }
   // „[ Rozkazy ▼ ]” — w locie brak rozkazów misji: przycisk przygaszony, klik nic nie otwiera
@@ -496,7 +543,7 @@ header('H7  kotwica T3 bez zmian — prawdziwy Outliner, wycięte `_drawShipPane
   const mShip = compileMethod(UI, '_shipPanelAtOutliner', { resolveRowAnchor: SPA.resolveRowAnchor, shipRowKeys: SPA.shipRowKeys,
     computeShipPanelPlacement: SPA.computeShipPanelPlacement, getMapInsets });
   const mDraw = compileMethod(UI, '_drawShipPanelHud', { getMapInsets, GAME_CONFIG });
-  const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1'; fmo._vesselPanelRect = { x: 1, y: 1, w: 300, h: 300 };
+  const fmo = new FleetManagerOverlay(); fmo._selectedVesselId = 'v_1';
   const lay = Y ? new Y.ShipPanelHudLayer() : null;
   const tabs = [];
   const self = { _outliner: ro, _fleetOverlay: fmo, _shipPanelHud: lay, _selectedVesselId: 'v_1', _tooltipMouseX: -1, _tooltipMouseY: -1,
@@ -508,7 +555,9 @@ header('H7  kotwica T3 bez zmian — prawdziwy Outliner, wycięte `_drawShipPane
   const z = zoneOf('v_1');
   const pl = lay?.rect;
   ok(!!mShip && !!mDraw && typeof rect === 'object' && rect !== null, 'H7-0 metody wycięte i wykonane (`_drawShipPanelHud` zwraca prostokąt narysowanego panelu)');
-  ok(fmo._vesselPanelRect === null, 'H7a panel T3 przy ON bez prostokąta (klik, kółko, kursor i przeszkody czytają panel T5)');
+  ok(fmo._vesselPanelRect === undefined && typeof fmo.drawVesselPanel === 'undefined' && typeof fmo.handleVesselPanelClick === 'undefined'
+    && typeof fmo.handleVesselPanelScroll === 'undefined' && typeof fmo._handleVesselPanelFooter === 'function',
+    'H7a FMO bez panelu T3 (rysunek, klik, kółko i prostokąt usunięte w T4-3); footer panelu T5 — `_handleVesselPanelFooter` zostaje');
   ok(!!pl && !!ro?._rect && pl.x + pl.w === ro._rect.x && pl.w === S.W, `H7b prawa krawędź panelu = lewa krawędź kolumny (${pl?.x} + ${pl?.w} = ${ro?._rect?.x}); szerokość z renderera T5`);
   ok(!!z && pl?.y === z.y && tabs.length === 1 && tabs[0].tab?.y === z.y, `H7c górna krawędź = wiersz statku (${pl?.y} = ${z?.y}), łącznik T3 na wysokości wiersza`);
   const ins = getMapInsets(K);

@@ -23,7 +23,7 @@
 //
 // PINY (mają PAŚĆ przed zmianą, przejść po niej)
 //   E1  RÓWNOŚĆ: zbiór akcji w `compact` ≡ zbiór akcji Rejestru (ta sama metoda, ta sama instancja)
-//   E2  GOLDEN NIETKNIĘTY: Rejestr BEZ `compact` = dzisiejsza sygnatura Z GEOMETRIĄ stref
+//   (E2 — Rejestr = panel mapy bez `compact` — usunięty w T4-3: panelu mapy T3 nie ma; golden Rejestru — `map_vessel_panel` C6)
 //   E3  `{compact:false}` ≡ brak `opts`, CO DO PIKSELA (`_drawRight` odróżnia jawne `false` od braku `opts`)
 //   M   (T4) flagi `mapVesselPanel` / `mapVesselPanelCompact` usunięte; `UIManager` nie rysuje dawnego panelu T3
 //   R1  RENDER: `compact` realnie SKRACA panel — karta katalogowa znika, akcje idą do góry
@@ -39,7 +39,13 @@
 //     malowania panelu statku T5 (`_drawShipPanelHud`). C1–R2 i S1 (dawny panel T3 `drawVesselPanel` — wyrocznia trybu
 //     kompaktowego) — do kolejnego kroku T4. T4-2 (panel stacji usunięty): Z2 / K1 — drugim panelem klastra jest panel floty /
 //     grupy T6 (`_drawFleetPanelHud`) w miejscu `stationPanel.draw`.
-//   S1  Finding 260: kółko przewija panel i jest POCHŁANIANE (kontrola: poza panelem `false`)
+//   ⚠ T4-3 (dawny panel statku T3 usunięty z FMO — `drawVesselPanel`, footer, `handleVesselPanelClick` / `Scroll`): tryb
+//     kompaktowy żyje dalej jako gałąź `_drawRight(…, { compact: true })` — decyzja właściciela T4 (Q2): `_drawRight` z gałęzią
+//     kompaktową bez zmian. C1 / C2 / E1 / E3 / R1 / R2 wołają `_drawRight` WPROST (ten sam obszar 300 px; bez pasma footera,
+//     który dorysowywał adapter); E2 (Rejestr = panel mapy bez `compact`) i S1 (kółko nad panelem T3) usunięte — druga
+//     strona porównania i trasa kółka zniknęły razem z panelem (kółko panelu T5: `ship_panel_hud_smoke` H7h / H7i); S2 —
+//     `_applyRightScroll` ma jednego wołającego (Rejestr).
+//   (S1 — kółko nad panelem T3 — usunięty w T4-3)
 //   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
 //   Z   KOLEJNOŚĆ: etykiety mapy rysowane PRZED klastrem paneli (Z1/Z1b panel statku,
 //       Z2 stationPanel+combatHud = fix KLASOWY, Z3 ramki RTS zostają nad etykietami)
@@ -139,12 +145,15 @@ const actionIds = (z) => z.filter((q) => q.type === 'action').map((q) => q.data.
 const sigGeom = (z) => z.map((q) => q.type + (q.data?.actionId ? ':' + q.data.actionId : '')
   + '@' + Math.round(q.x) + ',' + Math.round(q.y) + ',' + Math.round(q.w) + ',' + Math.round(q.h)).sort();
 
+/** `_drawRight` wprost w obszarze (20, 100, w, h) — `opts === null` — bez argumentu `opts` (jak Rejestr). */
 function draw(opts, w = 300, h = 700) {
   world();
   const fmo = new FleetManagerOverlay();
   fmo._selectedVesselId = 'v_1';
-  if (opts === null) fmo.drawVesselPanel(stubCtx(), 20, 100, w, h);
-  else               fmo.drawVesselPanel(stubCtx(), 20, 100, w, h, opts);
+  fmo._hitZones = [];
+  const K = window.KOSMOS;
+  if (opts === null) fmo._drawRight(stubCtx(), 20, 100, w, h, K.vesselManager, K.missionSystem, K.colonyManager, 'p_home');
+  else               fmo._drawRight(stubCtx(), 20, 100, w, h, K.vesselManager, K.missionSystem, K.colonyManager, 'p_home', opts);
   return { fmo, zones: [...fmo._hitZones], contentH: fmo._rightContentH ?? -1 };
 }
 
@@ -198,25 +207,6 @@ header('E1  PIN — zbiór akcji w `compact` ≡ zbiór akcji Rejestru (ta sama 
      'compact ZACHOWUJE przycisk Cargo (to afordancja akcji, nie karta katalogowa)');
 }
 
-// ═══ E2 — GOLDEN: Rejestr bez `compact` nietknięty, Z GEOMETRIĄ ══════════════════════════════
-// ⚠ Chronione Z KONSTRUKCJI: Rejestr NIE PODAJE `opts`, więc `compact` jest falsy. Ten pin
-//   pilnuje, żeby nikt nie „uprościł" tego, przekazując flagę globalnie z konfiguracji.
-header('E2  PIN — Rejestr BEZ `compact` = panel mapy BEZ `compact`, co do PIKSELA');
-{
-  const reg = overlayDraw();
-  const map = draw(null);
-  const FOOTER = new Set(['mvpRetreat', 'mvpFleet', 'mvpDock']);
-  // Porównanie po TYPACH+akcjach (geometria X różni się, bo panele stoją w innych miejscach),
-  // ale contentH — czyli WYSOKOŚĆ treści — musi być identyczna co do piksela.
-  const tReg = sigGeom(reg.zones).map((s) => s.split('@')[0]).sort();
-  const tMap = sigGeom(map.zones.filter((z) => !FOOTER.has(z.type))).map((s) => s.split('@')[0]).sort();
-  ok(JSON.stringify(tReg) === JSON.stringify(tMap),
-     `ten sam zestaw stref (rejestr ${tReg.length}, mapa bez footera ${tMap.length})`);
-  ok(Math.round(reg.contentH) === Math.round(map.contentH),
-     `contentH IDENTYCZNE (rejestr ${Math.round(reg.contentH)}, mapa ${Math.round(map.contentH)})`);
-  ok(reg.contentH > 500, `KONTROLA: mierzymy PEŁNĄ treść, nie pustkę (${Math.round(reg.contentH)})`);
-}
-
 // ═══ E3 — KILL-SWITCH PRZEŻYWA FLIP: `{compact:false}` ≡ brak `opts`, CO DO PIKSELA ══════════
 // PYTANIE, NA KTÓRE TEN PIN ODPOWIADA: po flipie na default-ON `UIManager` przekazuje
 // `{ compact: false }` (jawne false), a NIE pomija `opts` — bo argument jest zawsze budowany
@@ -243,8 +233,6 @@ header('E3  PIN — runtime OFF (`{compact:false}`) = kolumna A bit w bit (kontr
      `sygnatura Z GEOMETRIĄ identyczna (${sOff.length} vs ${sNo.length} stref)`);
   ok(Math.round(offFlg.contentH) === Math.round(noOpts.contentH),
      `contentH identyczne (${Math.round(noOpts.contentH)} = ${Math.round(offFlg.contentH)})`);
-  ok(JSON.stringify(offFlg.fmo._vesselPanelRect) === JSON.stringify(noOpts.fmo._vesselPanelRect),
-     `prostokąt panelu identyczny (${JSON.stringify(offFlg.fmo._vesselPanelRect)})`);
   // KONTROLA KIERUNKU — bez niej pin przeszedłby także wtedy, gdyby `compact` NIC nie robił.
   ok(JSON.stringify(sOn) !== JSON.stringify(sNo),
      `KONTROLA: `.concat(`{compact:true} RÓŻNI się od bazy (contentH ${Math.round(onFlg.contentH)} vs ${Math.round(noOpts.contentH)})`));
@@ -275,7 +263,8 @@ header('R2  PIN — krok `select` mieści listę celów w ~360 px');
   const fmo = new FleetManagerOverlay();
   fmo._selectedVesselId = 'v_1';
   fmo._missionConfig = { actionId: 'transport', targetId: null, step: 'select' };
-  fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 360, { compact: true });
+  fmo._hitZones = [];
+  fmo._drawRight(stubCtx(), 20, 100, 300, 360, window.KOSMOS.vesselManager, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home', { compact: true });
   const targets = fmo._hitZones.filter((z) => z.type === 'select_target');
   ok(targets.length >= 1, `picker emituje >=1 cel przy h=360 (jest: ${targets.length})`);
   ok(fmo._rightContentH <= 360 + 40,
@@ -285,7 +274,7 @@ header('R2  PIN — krok `select` mieści listę celów w ~360 px');
   const fmo2 = new FleetManagerOverlay();
   fmo2._selectedVesselId = 'v_1';
   fmo2._missionConfig = { actionId: 'transport', targetId: null, step: 'select' };
-  fmo2.drawVesselPanel(stubCtx(), 20, 100, 300, 360);
+  fmo2._drawRight(stubCtx(), 20, 100, 300, 360, window.KOSMOS.vesselManager, window.KOSMOS.missionSystem, window.KOSMOS.colonyManager, 'p_home');
   ok(fmo2._rightContentH > 360,
      `KONTROLA: bez kompaktu ten sam krok NIE mieści się w 360 px (contentH ${Math.round(fmo2._rightContentH)})`);
 }
@@ -355,46 +344,6 @@ header('A2  PIN — panel przy kolumnie (T3): nie zasłania kolumny');
   ok(!!pr && pr.x + pr.w === 1130 && pr.x >= 150, `A2-T3 przy ON panel kończy się na lewej krawędzi kolumny (${pr?.x}–${pr ? pr.x + pr.w : '—'})`);
 }
 
-// ═══ S1 — Finding 260: KÓŁKO przewija panel i jest POCHŁANIANE ═══════════════════════════════
-// ⚠ Maszyneria przewijania istniała od 258 (`_rightScrollY`/`_rightContentH`/`_rightViewH`
-//   + clamp) — brakowało wyłącznie TRASY. Trasa do `handleScroll` NIE działa: tamta metoda
-//   bramkuje na `_visible`/`_bounds` OVERLAYA, a nad mapą overlay jest ZAMKNIĘTY (D-MVP-7).
-// ⚠ W kompakcie scroll jest NOŚNY, nie kosmetyczny: przy 300 px okna treść (322 px) i tak
-//   wystaje, a krok wyboru celu ma 326 px — bez kółka część rozkazów byłaby nieosiągalna.
-header('S1  PIN — kółko myszy przewija panel statku i NIE przelatuje do kamery');
-{
-  world();
-  const fmo = new FleetManagerOverlay();
-  fmo._selectedVesselId = 'v_1';
-  if (typeof fmo.handleVesselPanelScroll !== 'function') {
-    for (let i = 0; i < 8; i++) ok(false, 'FleetManagerOverlay.handleVesselPanelScroll istnieje');
-  } else {
-    ok(true, 'FleetManagerOverlay.handleVesselPanelScroll istnieje');
-    // Panel NIŻSZY niż treść — inaczej clamp trzyma 0 i pin przechodziłby jałowo.
-    fmo.drawVesselPanel(stubCtx(), 20, 100, 300, 200, { compact: true });
-    const r = fmo._vesselPanelRect;
-    ok(fmo._rightContentH > fmo._rightViewH,
-       `KONTROLA: treść przekracza okno (${Math.round(fmo._rightContentH)} > ${Math.round(fmo._rightViewH)}) — jest co przewijać`);
-    const before = fmo._rightScrollY || 0;
-    const consumed = fmo.handleVesselPanelScroll(r.x + r.w / 2, r.y + r.h / 2, 40);
-    ok(consumed === true, 'obrót kółka NAD panelem jest POCHŁONIĘTY (nie zoomuje mapy)');
-    ok((fmo._rightScrollY || 0) > before,
-       `scroll faktycznie się przesunął (${before} → ${Math.round(fmo._rightScrollY)})`);
-    // Clamp — ten sam, co w Rejestrze (jedno źródło `_applyRightScroll`).
-    fmo.handleVesselPanelScroll(r.x + 5, r.y + 5, 99999);
-    const maxS = Math.max(0, (fmo._rightContentH || 0) - (fmo._rightViewH || 0));
-    ok(Math.round(fmo._rightScrollY) === Math.round(maxS),
-       `clamp górny trzyma na maxScroll (${Math.round(fmo._rightScrollY)} == ${Math.round(maxS)})`);
-    fmo.handleVesselPanelScroll(r.x + 5, r.y + 5, -99999);
-    ok((fmo._rightScrollY || 0) === 0, `clamp dolny trzyma na 0 (jest ${fmo._rightScrollY})`);
-    // KONTROLA KIERUNKU — poza prostokątem NIE pochłaniamy (inaczej panel zjadłby zoom całej mapy).
-    ok(fmo.handleVesselPanelScroll(r.x - 5, r.y + 10, 40) === false, 'KONTROLA: kółko POZA panelem → false');
-    fmo._vesselPanelRect = null;
-    ok(fmo.handleVesselPanelScroll(r.x + 10, r.y + 10, 40) === false,
-       'KONTROLA: bez narysowanego panelu → false');
-  }
-}
-
 // ═══ S2 — JEDNO źródło clampu (Rejestr i panel mapy przewijają się tak samo) ══════════════════
 header('S2  PIN ŹRÓDŁOWY — clamp przewijania ma JEDNO źródło, nie dwie kopie');
 {
@@ -402,8 +351,8 @@ header('S2  PIN ŹRÓDŁOWY — clamp przewijania ma JEDNO źródło, nie dwie k
   const src = readFileSync(new URL('../../ui/FleetManagerOverlay.js', import.meta.url), 'utf-8');
   const code = src.split(String.fromCharCode(10)).filter((l) => !l.trim().startsWith('//')).join(String.fromCharCode(10));
   const cnt = (h, n) => h.split(n).length - 1;
-  ok(cnt(code, '_applyRightScroll(') >= 3,
-     `_applyRightScroll: 1 definicja + >=2 wołających (jest wystąpień: ${cnt(code, '_applyRightScroll(')})`);
+  ok(cnt(code, '_applyRightScroll(') >= 2 && !code.includes('handleVesselPanelScroll('),
+     `_applyRightScroll: 1 definicja + wołający Rejestru (dawny panel mapy usunięty w T4-3; jest wystąpień: ${cnt(code, '_applyRightScroll(')})`);
   // Arytmetyka clampu występuje DOKŁADNIE RAZ — w helperze, nie skopiowana do panelu mapy.
   ok(cnt(code, "this._rightScrollY = Math.max(0, Math.min(maxScroll") === 1,
      `arytmetyka clampu występuje raz (jest: ${cnt(code, "this._rightScrollY = Math.max(0, Math.min(maxScroll")})`);

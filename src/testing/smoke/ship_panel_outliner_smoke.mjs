@@ -40,6 +40,7 @@
 //   S12f; połowy OFF S7g, S9a); S3 — wyrocznia kotwicy zapasowej bez `FloatingPanel`; S4 / S10 / S11j / S11k — dawny panel
 //   pływający (`_vesselPanelBounds`, przeciąganie, `drawVesselPanel` w `UIManager`) usunięty: kotwica wiersza z
 //   `_shipPanelAtOutliner`, rysunek i klik panelu T5; S4b (wysokość 360 px dawnego panelu T3) — wysokość podaje panel T5.
+//   T4-3 (dawny panel statku T3 usunięty z FMO): S10d — płyta `seamRight` zniknęła razem z `drawVesselPanel`.
 //   T4-2 (karta ciała, panel stacji i dok usunięte): S11j — kolejność kliku bez panelu stacji (panel stacji nie łapie kliku);
 //   S12 (przeszkoda kart: `getShipPanelObstacle`, `_noteShipPanelDrawn`) usunięty — kart, które omijały panel statku, nie ma.
 // ⚠ Moduł POWSTAJE w T3 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
@@ -547,9 +548,8 @@ header('S10 montaż');
   const sph = body(UI, '  _drawShipPanelHud(ctx, W, H) {');
   ok(/const p = this\._shipPanelAtOutliner\(W, H, size\.w, size\.h\);/.test(sph) && /if \(p\.tab\) this\._drawShipPanelTab\(ctx, p\);/.test(sph),
     'S10b panel przy wierszu — kotwica `_shipPanelAtOutliner` i łącznik (`_drawShipPanelTab`)');
-  const dp = body(FMO_SRC, '  drawVesselPanel(ctx, x, y, w, h, opts = {}) {');
-  ok(/if \(opts\.seamRight === true\) \{[\s\S]*?\} else \{\s*ctx\.strokeRect\(x \+ 0\.5, y \+ 0\.5, w - 1, h - 1\);/.test(dp),
-    'S10d płyta panelu: bez `seamRight` — ramka jak dotąd (strokeRect)');
+  ok(FMO_SRC.length > 100000 && !/\bdrawVesselPanel\b|\bseamRight\b/.test(FMO_SRC),
+    'S10d płyta dawnego panelu T3 (`seamRight`, `drawVesselPanel`) usunięta z FMO razem z panelem (T4-3); panel T5 rysuje się bez ramki');
   const pl = readFileSync(new URL('../../i18n/pl.js', import.meta.url), 'utf8');
   const en = readFileSync(new URL('../../i18n/en.js', import.meta.url), 'utf8');
   ok(/'fleet\.disbandVesselConfirm':/.test(pl) && /'fleet\.disbandVesselConfirm':/.test(en), 'S10e klucz `fleet.disbandVesselConfirm` w PL i EN');
