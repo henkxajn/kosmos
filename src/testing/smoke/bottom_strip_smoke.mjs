@@ -12,21 +12,20 @@
 // KONTROLA — zielona po obu stronach):
 //   B1–B3 tło pasa: nad mapą od prawej krawędzi lewego outlinera do W; lewy schowany — od 0; pod overlayem — ostatni slot
 //   B4    klaster zegara (🔔 ☰ ▶ prędkości) w tym samym miejscu w obu trybach
-//   B5–B6 rząd chipów doku (`getDockSpan`): od lewego końca pasa do lewej krawędzi klastra (🔔) albo czipu ⚔; pod
-//         overlayem — brak
+//   B5–B6 (T4) pin px: klaster zegara, suwak zoomu i czip ⚔ w tych samych px co przed usunięciem rzędu doku (liczby
+//         zmierzone na drzewie `e873127` — sonda `strip_geom_T4.mjs`, teczka T4); rząd doku (`getDockSpan`) usunięty
 //   B7    pas bez ramy także nad mapą (jedyny stroke() — separator przed datą)
 //   B8–B9 `isOver` i klik w tło pasa nad mapą — pochłonięte (kamera i mapa nie dostają zdarzenia)
-//   D1–D6 chipy doku: rząd od lewego końca pasa, szerokość ≤ 110 px z wielokropkiem, „+N” z listą niewidocznych
-//         w podpowiedzi, klik przywraca panel („+N” — pierwszy niewidoczny), `isOver`; bez pasa (Generator) — rząd nad
-//         dolną krawędzią obszaru mapy
-//   U1–U3 UIManager (pin źródłowy — moduł nie importuje się pod node): pas dostaje `MapInsets.left` tylko bez overlayu,
-//         dok — prostokąt rzędu z paska; kolejność rysowania i kliku
+//   U1–U3 UIManager (pin źródłowy — moduł nie importuje się pod node): pas dostaje `MapInsets.left` tylko bez overlayu;
+//         doku paneli brak (T4)
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): dok zminimalizowanych paneli (`PanelDock`)
+//   usunięty razem z kartą ciała i panelem stacji — sekcja D (chipy doku) i piny rzędu doku (B5, B5b, B6, U2, U3) usunięte;
+//   w ich miejscu pin px klastra zegara, suwaka i czipu ⚔ (B5, B6) i brak doku w `UIManager` (U2, U3).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
 import { BottomControlBar } from '../../ui/BottomControlBar.js';
-import { PanelDock } from '../../ui/PanelDock.js';
 import { bottomNavBarRect, navSlotLayout } from '../../ui/BottomNavBarLogic.js';
 import { NAV_GROUPS } from '../../ui/CivPanelDrawer.js';
 import * as MI from '../../ui/MapInsets.js';
@@ -69,9 +68,11 @@ const slots = navSlotLayout(navRect, NAV_GROUPS.length);
 const last = slots[slots.length - 1];
 
 // ═══ B ═══════════════════════════════════════════════════════════════════════
-header('B  pas dolny — tło, klaster zegara, rząd doku');
+header('B  pas dolny — tło, klaster zegara, suwak, czip ⚔');
 {
   K.combatHud = null;
+  // Kamera (suwak zoomu rysuje się wyłącznie nad mapą z kontrolerem kamery — U4-4); jak w sondzie `strip_geom_T4.mjs`.
+  K.threeRenderer = { _cameraController: { minDist: 0.3, maxDist: 450, _targetDist: 85, _dist: 85, setTargetDist() {}, wheelZoom() {} } };
   const mapBar = new BottomControlBar();
   const cMap = recCtx();
   mapBar.draw(cMap, W, H, TS, { left: 150 });
@@ -90,20 +91,23 @@ header('B  pas dolny — tło, klaster zegara, rząd doku');
   ok(same(mapBar._bellRect, ovBar._bellRect) && same(mapBar._menuRect, ovBar._menuRect) && same(mapBar._playRect, ovBar._playRect)
     && mapBar._speedRects.every((r, i) => same(r, ovBar._speedRects[i])),
     'B4 KONTROLA: klaster zegara (🔔 ☰ ▶ prędkości) w tym samym miejscu nad mapą i pod overlayem');
-  const span = mapBar.getDockSpan?.();
-  ok(!!span && span.x0 === 154 && span.x1 === mapBar._bellRect.x - 4 && span.y === stripTop + 2 && span.h === 16,
-    `B5 SEDNO: rząd chipów doku — od lewego końca pasa (x 154) do 🔔 (x ${mapBar._bellRect?.x} − 4), 16 px na pasie (jest ${JSON.stringify(span)})`);
-  ok((ovBar.getDockSpan?.() ?? null) === null && typeof ovBar.getDockSpan === 'function',
-    'B5b SEDNO: pod overlayem brak rzędu doku (chipy chowają się jak outlinery — decyzja (b))');
-  // B6 — czip ⚔ (HUD walki zminimalizowany przy trwających starciach): rząd kończy się przed nim
+  // B5 — pin px (T4): liczby zmierzone na drzewie `e873127` (przed usunięciem rzędu doku), okno 1280×833, nad mapą (lewy 150).
+  const at = (r, x, y, w, h) => !!r && r.x === x && r.y === y && r.w === w && r.h === h;
+  ok(at(mapBar._bellRect, 1097, 775, 16, 12) && at(mapBar._menuRect, 1115, 775, 16, 12) && at(mapBar._playRect, 1133, 775, 13, 12)
+    && at(mapBar._speedRects[0], 1149, 775, 13, 12) && at(mapBar._speedRects[4], 1205, 775, 13, 12) && at(mapBar._zoomRect, 991, 771, 100, 20),
+    `B5 SEDNO (pin px): 🔔 x 1097, ☰ 1115, ▶ 1133, prędkości 1149–1205, suwak zoomu x 991 w 100 — jak przed T4 (jest 🔔 ${mapBar._bellRect?.x}, suwak ${mapBar._zoomRect?.x})`);
+  ok(mapBar.getDockSpan === undefined && mapBar._dockSpan === undefined,
+    'B5b SEDNO: rząd chipów doku usunięty (T4) — pas bez `getDockSpan`');
+  // B6 — czip ⚔ (HUD walki zminimalizowany przy trwających starciach): na lewo od suwaka, px jak przed T4
   K.combatHud = { isMinimized: () => true, hasActiveEncounters: () => true };
   K.deepSpaceCombatSystem = { listActive: () => [{}] };
   const chipBar = new BottomControlBar();
   chipBar.draw(recCtx(), W, H, TS, { left: 150 });
-  const cs = chipBar.getDockSpan?.();
-  ok(!!chipBar._chipRect && !!cs && cs.x1 === chipBar._chipRect.x - 4,
-    `B6 SEDNO: z czipem ⚔ — rząd doku kończy się przed nim (x1 ${cs?.x1}, czip x ${chipBar._chipRect?.x})`);
-  K.combatHud = null; delete K.deepSpaceCombatSystem;
+  const ovChip = new BottomControlBar();
+  ovChip.draw(recCtx(), W, H, TS);
+  ok(at(chipBar._chipRect, 931, 771, 56, 20) && at(ovChip._chipRect, 1032, 771, 56, 20),
+    `B6 SEDNO (pin px): czip ⚔ nad mapą x 931 (na lewo od suwaka), pod overlayem x 1032 (na lewo od zegara) — jak przed T4 (jest ${chipBar._chipRect?.x} / ${ovChip._chipRect?.x})`);
+  K.combatHud = null; delete K.deepSpaceCombatSystem; delete K.threeRenderer;
   ok(ops(cMap, 'stroke').length === 1 && ops(cMap, 'strokeRect').length === 5,
     `B7 KONTROLA: pas bez ramy także nad mapą — jedyny stroke() to separator (${ops(cMap, 'stroke').length}), 5 obrysów prędkości (${ops(cMap, 'strokeRect').length})`);
   ok(ops(cMap, 'fillRect').some((c) => c.args[0] === 150 && c.args[1] === stripTop && near(c.args[0] + c.args[2], W) && c.args[3] === STRIP_H),
@@ -113,80 +117,15 @@ header('B  pas dolny — tło, klaster zegara, rząd doku');
   ok(mapBar.handleClick(300, stripTop + 10) === true, 'B9 SEDNO: klik w puste tło pasa nad mapą pochłonięty (nie spada na mapę 3D)');
 }
 
-// ═══ D ═══════════════════════════════════════════════════════════════════════
-header('D  chipy doku na pasie');
-{
-  const bar = new BottomControlBar();
-  bar.draw(recCtx(), W, H, TS, { left: 150 });
-  const span = bar.getDockSpan?.() ?? null;
-  const restored = [];
-  const mkDock = (n, long = false) => {
-    const pd = new PanelDock();
-    for (let i = 0; i < n; i++) {
-      const label = long ? `Bardzo długa nazwa stacji orbitalnej numer ${i}` : `Ciało ${i}`;
-      pd.register(`body:B${i}`, { icon: '🪐', label, onRestore: () => restored.push(`body:B${i}`) });
-    }
-    return pd;
-  };
-  const pd3 = mkDock(3);
-  const c3 = recCtx();
-  pd3.draw(c3, W, H, span);
-  const z = pd3._hitZones;
-  ok(z.length === 3 && z[0].x === 154 && z[1].x === z[0].x + z[0].w + 4 && z[2].x === z[1].x + z[1].w + 4
-    && z.every((q) => q.y === stripTop + 2 && q.h === 16),
-    `D1 SEDNO: trzy chipy w rzędzie na pasie — od x 154, odstęp 4 px, 16 px (jest ${JSON.stringify(z.map((q) => [q.x, q.y, q.w, q.h]))})`);
-  const pdL = mkDock(1, true);
-  const cL = recCtx();
-  pdL.draw(cL, W, H, span);
-  const txtL = ops(cL, 'fillText').map((c) => String(c.args[0]));
-  ok(pdL._hitZones[0]?.w <= 110 && txtL.some((s) => s.endsWith('…')),
-    `D2 SEDNO: chip najwyżej 110 px, długa nazwa skrócona wielokropkiem (w ${pdL._hitZones[0]?.w}; ${JSON.stringify(txtL)})`);
-  const pdM = mkDock(12, true);   // 12 × 110 px nie mieści się w rzędzie → „+N”
-  const cM = recCtx();
-  pdM.draw(cM, W, H, span);
-  const more = pdM._hitZones.find((q) => q.key === '__more__');
-  const shown = pdM._hitZones.filter((q) => q.key !== '__more__').length;
-  const txtM = ops(cM, 'fillText').map((c) => String(c.args[0]));
-  ok(!!more && more.first === shown && txtM.includes(`+${12 - shown}`) && more.x + more.w <= span.x1,
-    `D3 SEDNO: brak miejsca — ostatni chip „+${12 - shown}” (pierwszy niewidoczny ${more?.first}), w granicy rzędu`);
-  if (more) pdM.handleMouseMove(more.x + 2, more.y + 4);   // pin degraduje, nie przerywa (fail-first)
-  const cTip = recCtx();
-  pdM.draw(cTip, W, H, span);
-  const tipTexts = ops(cTip, 'fillText').filter((c) => c.args[2] < stripTop).map((c) => String(c.args[0]));
-  ok(!!more && tipTexts.length === 12 - shown && !!tipTexts[0]?.includes(`numer ${shown}`),
-    `D3b SEDNO: podpowiedź „+N” nad pasem — lista niewidocznych (${tipTexts.length})`);
-  restored.length = 0;
-  if (z[1]) pd3.handleClick(z[1].x + 3, z[1].y + 3);
-  if (more) pdM.handleClick(more.x + 2, more.y + 4);
-  ok(restored[0] === 'body:B1' && restored[1] === `body:B${shown}`,
-    `D4 SEDNO: klik chipa przywraca jego panel, klik „+N” — pierwszy niewidoczny (${JSON.stringify(restored)})`);
-  ok(!!z[2] && pd3.isOver(z[0].x + 2, z[0].y + 2) && !pd3.isOver(z[2].x + z[2].w + 30, z[2].y + 2),
-    'D5 KONTROLA: `isOver` chipa — tak; pas poza chipami — nie (ten obszar blokuje `BottomControlBar.isOver`)');
-  // D6 — bez pasa (Generator): rząd nad dolną krawędzią obszaru mapy
-  K.civMode = false;
-  K.leftOutliner = { getReservedWidth: () => 0 }; K.rightOutliner = { getReservedWidth: () => 0 };
-  K.tacticalDock = { getReservedHeight: () => 0, isExpanded: () => false };
-  const pdG = mkDock(2);
-  pdG.draw(recCtx(), W, H);
-  const g = pdG._hitZones;
-  const genBottom = MI.computeMapInsets({ civMode: false }).bottom;
-  ok(g.length === 2 && g[0].x === 8 && g[0].y === H - genBottom - 16 - 6 && g[1].x > g[0].x && g[1].y === g[0].y,
-    `D6 SEDNO: bez pasa (Generator) — chipy w rzędzie nad dolną krawędzią obszaru mapy (jest ${JSON.stringify(g.map((q) => [q.x, q.y]))})`);
-  K.civMode = true;
-}
-
 // ═══ U ═══════════════════════════════════════════════════════════════════════
-header('U  UIManager — podłączenie pasa i doku (pin źródłowy)');
+header('U  UIManager — podłączenie pasa (pin źródłowy)');
 {
   const ui = src('../../scenes/UIManager.js');
   ok(/this\._bottomControlBar\.draw\(ctx, W, H, this\._timeState,\s*this\.overlayManager\.isAnyOpen\(\) \? null : \{ left: getMapInsets\(window\.KOSMOS\)\.left \}\);/.test(ui),
     'U1 SEDNO: pas dostaje `MapInsets.left` tylko bez overlayu pełnoekranowego (pod overlayem — null, decyzja (b))');
-  ok(/this\.panelDock\.draw\(ctx, W, H, civMode \? this\._bottomControlBar\.getDockSpan\(\) : null\);/.test(ui),
-    'U2 SEDNO: dok rysuje chipy w rzędzie z paska (`getDockSpan`), poza trybem cywilizacji — bez pasa');
-  const iBar = ui.indexOf('this._bottomControlBar.draw('), iDock = ui.indexOf('this.panelDock.draw(');
-  const iDockClick = ui.indexOf('this.panelDock?.handleClick?.(x, y)'), iBarClick = ui.indexOf('this._bottomControlBar?.handleClick?.(x, y)');
-  ok(iBar > 0 && iDock > iBar && iDockClick > 0 && iBarClick > iDockClick,
-    'U3 KONTROLA: pas rysowany PRZED dokiem (rząd z tej samej klatki), klik doku PRZED klikiem pasa (chip wygrywa z tłem)');
+  ok(!/\bpanelDock\b|\bPanelDock\b|\bgetDockSpan\b/.test(ui), 'U2 SEDNO: dok zminimalizowanych paneli usunięty z `UIManager` (T4)');
+  const iBar = ui.indexOf('this._bottomControlBar.draw('), iBarClick = ui.indexOf('this._bottomControlBar?.handleClick?.(x, y)');
+  ok(iBar > 0 && iBarClick > 0, 'U3 KONTROLA: pas rysowany i klikany (wywołania znalezione)');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

@@ -19,8 +19,8 @@
 //      `active:false`, więc odznaka gaśnie Z KONSTRUKCJI (czytamy `listActive`), a nie przez
 //      osobne sprzątanie.
 //
-// ⚠ GRANICA DOWODU: `BottomContext` importuje się pod node i bierze encję ARGUMENTEM
-//   (`draw(ctx, W, H, entity)`), więc panel ciała pinujemy WYKONANIEM. `ThreeRenderer` NIE
+// ⚠ GRANICA DOWODU: `HudLabelLayer` importuje się pod node, a treść rozwinięcia etykiety ciała buduje czysta metoda
+//   (`_t1Body(id, F, ctx)`), więc panel ciała pinujemy WYKONANIEM. `ThreeRenderer` NIE
 //   importuje się (brak `three/addons/postprocessing/EffectComposer.js` w stubie) ⇒ tooltip
 //   mapy pinujemy ŹRÓDŁOWO i nazywamy to wprost.
 //
@@ -28,10 +28,15 @@
 //   odznaka wchodzi WYŁĄCZNIE do tooltipa KOLONIJNEGO (`_showColonyTooltip`), czyli nad
 //   koloniami GRACZA. Ciało obce (np. kolonia oddana imperium) pokazuje na mapie INNY tooltip —
 //   PLANETARNY, osobną ścieżką i z angielskim na sztywno — i ten świadomie zostaje bez wstawki;
-//   okupację obcych ciał czyta się z KARTY ciała (`BottomContext`, T4). Zapisane w rejestrze
+//   okupację obcych ciał czyta się z rozwinięcia etykiety ciała (dawniej karta ciała `BottomContext`; sekcja T4).
+//   Zapisane w rejestrze
 //   obok F-b. Pin T5 celuje więc w tooltip kolonijny i tylko w niego — brak odznaki nad obcym
 //   ciałem NIE jest regresją tego keepera.
 //
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta —
+//   jej następcą jest rozwinięcie etykiety ciała na warstwie HUD (najechanie i przypięcie, `HudLabelLayer._t1Body`):
+//   T0b — import warstwy; sekcja T4 czyta linie rozwinięcia (odznaka `body.occupiedBy` w `colonyExpansionLines` /
+//   `foreignColonyExpansionLines`); T6b — brak polskiego literału odznaki w warstwie i w budowniczych linii.
 // ⚠ IMPORT DYNAMICZNY modułu POWSTAJĄCEGO w tym slice (lekcja WP-2/WP-3).
 // ⚠ ŻADNEGO wywołania funkcji tłumaczącej w tym pliku — `check-i18n` skanuje je w całym `src/`.
 //
@@ -47,8 +52,8 @@ import EntityManager from '../../core/EntityManager.js';
 // Moduł POWSTAJE w tym slice — dynamicznie, żeby fail-first miał kolory.
 let OL = null;
 try { OL = await import('../../utils/OccupationLedger.js'); } catch { /* fail-first */ }
-let BCMod = null;
-try { BCMod = await import('../../ui/BottomContext.js'); } catch { /* fail-first */ }
+let HLMod = null;
+try { HLMod = await import('../../ui/HudLabelLayer.js'); } catch { /* fail-first */ }
 
 let pass = 0, fail = 0;
 const assert = (c, l) => { if (c) { console.log('  ✓ ' + l); pass++; } else { console.log('  ✗ ' + l); fail++; } };
@@ -81,8 +86,8 @@ console.log('T0 — kontrola narzędzia');
 {
   assert(!!OL?.occupierOf && !!OL?.isOccupiedBody && !!OL?.latestCaptureOf,
     'T0a: moduł `OccupationLedger` wystawia rodzinę (latestCaptureOf / occupierOf / isOccupiedBody)');
-  assert(!!BCMod?.BottomContext,
-    'T0b: `BottomContext` importuje się pod node — panel ciała pinujemy WYKONANIEM');
+  assert(!!HLMod?.HudLabelLayer,
+    'T0b: `HudLabelLayer` importuje się pod node — rozwinięcie etykiety ciała (następca karty ciała) pinujemy WYKONANIEM');
   // ⚠ `readFileSync` RZUCA na brakującym pliku — na kotwicy modułu jeszcze nie ma, a pin
   //   ma DEGRADOWAĆ, nie przerywać całego keepera (lekcja: pin, który wywala przebieg,
   //   zabiera kolor wszystkim niżej).
@@ -154,7 +159,7 @@ console.log('T3 — normalizacja właściciela i wiele wojen');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-console.log('T4 — PANEL CIAŁA: wiersz odznaki w karcie (WYKONANIOWO)');
+console.log('T4 — PANEL CIAŁA: wiersz odznaki w rozwinięciu etykiety ciała (WYKONANIOWO)');
 {
   // Żywy świat: wojna + realne przejęcie kolonii gracza ścieżką produkcyjną.
   const core = new GameCore();
@@ -178,49 +183,32 @@ console.log('T4 — PANEL CIAŁA: wiersz odznaki w karcie (WYKONANIOWO)');
   const plain  = free[1];
   cm.transferColony(victim.id, EMP, 'ground_invasion');
 
-  const texts = () => {
-    const out = [];
-    const noop = () => {};
-    return {
-      out,
-      canvas: { width: 1280, height: 720 },
-      measureText: (s) => ({ width: String(s).length * 6 }),
-      save: noop, restore: noop, beginPath: noop, moveTo: noop, lineTo: noop, stroke: noop,
-      fill: noop, clip: noop, rect: noop, fillRect: noop, strokeRect: noop, closePath: noop,
-      arc: noop, translate: noop, setLineDash: noop, roundRect: noop, ellipse: noop,
-      createLinearGradient: () => ({ addColorStop: noop }),
-      fillText: (s) => out.push(String(s)), strokeText: (s) => out.push(String(s)),
-      font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: 'left', globalAlpha: 1,
-      shadowColor: '', shadowBlur: 0,
-    };
-  };
+  // Rozwinięcie etykiety ciała tak, jak buduje je gra (`HudLabelLayer._t1Body`): ta sama treść przy najechaniu i w przypięciu.
   const render = (entity) => {
-    const bc = new BCMod.BottomContext();
-    const ctx = texts();
-    bc.draw(ctx, 1280, 720, entity);   // pierwsza klatka = fade-in
-    const ctx2 = texts();
-    bc.draw(ctx2, 1280, 720, entity);
-    return ctx2.out;
+    try {
+      const lay = new HLMod.HudLabelLayer();
+      return lay._t1Body(entity.id, { K, now: 0, tactical: false }, { permanent: new Map(), stations: new Map(), pictureCtx: {} }) ?? [];
+    } catch (e) { console.log('    (' + e.message + ')'); return []; }
   };
-
   const occRe = /Okupowan|Occupied|🏴/;
-  const onVictim = BCMod?.BottomContext ? render(victim) : [];
-  const onPlain  = BCMod?.BottomContext ? render(plain)  : [];
+  const onVictim = HLMod?.HudLabelLayer ? render(victim) : [];
+  const onPlain  = HLMod?.HudLabelLayer ? render(plain)  : [];
   const badgeOnVictim = onVictim.some(s => occRe.test(s));
-  assert(onVictim.length > 3, 'T4a (KONTROLA PINU): karta ciała REALNIE się narysowała (' + onVictim.length + ' napisów)');
+  assert(onVictim.length >= 2, 'T4a (KONTROLA PINU): rozwinięcie etykiety ciała REALNIE zbudowane (' + onVictim.length + ' linii: '
+    + onVictim.join(' | ') + ')');
   assert(badgeOnVictim,
-    'T4b (WYKONANIOWO): karta ciała PRZEJĘTEGO w trwającej wojnie pokazuje odznakę okupacji');
+    'T4b (WYKONANIOWO): rozwinięcie etykiety ciała PRZEJĘTEGO w trwającej wojnie pokazuje odznakę okupacji');
   // ⚠ ŚWIADEK: bez `badgeOnVictim` ten pin przechodzi jałowo wszędzie, gdzie odznaki NIE MA W OGÓLE.
-  assert(badgeOnVictim && onPlain.length > 3 && !onPlain.some(s => occRe.test(s)),
-    'T4c: zwykła kolonia gracza odznaki NIE dostaje, choć przejęta ją ma (' + onPlain.length + ' napisów)');
+  assert(badgeOnVictim && onPlain.length >= 1 && !onPlain.some(s => occRe.test(s)),
+    'T4c: zwykła kolonia gracza odznaki NIE dostaje, choć przejęta ją ma (' + onPlain.length + ' linii)');
 
   // Po pokoju znacznik gaśnie — ta sama encja, ten sam panel.
   const signed = K.diplomacySystem.offerPeace(EMP, 'wp4_c2_probe', { playerInitiated: false });
   assert(signed === true && K.warSystem.getWarWith(EMP) == null,
     'T4d0 (KONTROLA PINU): pokój REALNIE podpisany i wojna zamknięta — bez tego T4d mierzyłby ' +
     'odznakę w trwającej wojnie i przechodził z niewłaściwego powodu');
-  const afterPeace = BCMod?.BottomContext ? render(victim) : [];
-  assert(badgeOnVictim && afterPeace.length > 3 && !afterPeace.some(s => occRe.test(s)),
+  const afterPeace = HLMod?.HudLabelLayer ? render(victim) : [];
+  assert(badgeOnVictim && afterPeace.length >= 1 && !afterPeace.some(s => occRe.test(s)),
     'T4d (WYKONANIOWO): po podpisaniu pokoju odznaka znika — bez osobnego sprzątania stanu');
 }
 
@@ -249,10 +237,11 @@ console.log('T6 — i18n: klucze odznaki w OBU słownikach');
   for (const k of ['body.occupied', 'body.occupiedBy']) {
     assert(pl.includes("'" + k + "'") && en.includes("'" + k + "'"), 'T6a: klucz `' + k + '` w pl I en');
   }
-  const bcSrc = readClean('ui', 'BottomContext.js');
-  const literals = (bcSrc.match(/['`][^'`]*Okupowan[^'`]*['`]/g) ?? []);
-  assert(literals.length === 0,
-    'T6b: panel ciała nie ma polskiego literału odznaki' + (literals.length ? ' — ' + literals.join(' | ') : ''));
+  const hudSrc = readClean('ui', 'HudLabelLayer.js') + '\n' + readClean('ui', 'LabelHoverLogic.js');
+  const literals = (hudSrc.match(/['`][^'`]*Okupowan[^'`]*['`]/g) ?? []);
+  assert(hudSrc.length > 1000 && literals.length === 0,
+    'T6b: rozwinięcie etykiety ciała (warstwa HUD i budowniczy linii) nie ma polskiego literału odznaki'
+    + (literals.length ? ' — ' + literals.join(' | ') : ''));
 }
 
 // ════════════════════════════════════════════════════════════════════════════

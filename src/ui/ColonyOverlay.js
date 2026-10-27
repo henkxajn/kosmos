@@ -435,7 +435,7 @@ export class ColonyOverlay extends BaseOverlay {
     }
     // Domknij stale modale poprzedniej kolonii. openPanel('colony') re-woła show() dla WSZYSTKICH ścieżek
     // zmiany kolonii, które NIE idą przez _switchColony (jedyny inny resetujący): top bar (TopResourceDrawer),
-    // Outliner, BottomContext, CivilizationOverlay, EventLogOverlay. Bez tego picker/draft zostają „otwarte"
+    // Outliner, przypięcie etykiety („Mapa ciała”), CivilizationOverlay, EventLogOverlay. Bez tego picker/draft zostają „otwarte"
     // → _anyFullBoundsModalOpen()=true → globus schowany po zmianie kolonii (i picker rysuje starą stację).
     closeFullBoundsModals(this);
     // C6c-3 — otwarcie na konkretnej zakładce info panelu (Stacja z „Zarządzaj" w StationPanel). Dawny

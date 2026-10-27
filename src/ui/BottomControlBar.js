@@ -10,9 +10,9 @@
 // Czip walk (ARKUSZ UI, U0-3): przy zminimalizowanym HUD walki — na lewo od paska, z własnym hit-testem (482).
 // Rząd paska i czipu stały — bez karty peek (ARKUSZ UI U3-0b).
 // PAS NA CAŁĄ SZEROKOŚĆ (ARKUSZ UI U4-3, UI_PLAN §4.5 — decyzje 1, (a), (b)): w trybie MAPY (bez overlayu pełnoekranowego)
-// tło pasa biegnie od prawej krawędzi lewego outlinera (`MapInsets.left`; 0 przy schowanym) do prawej krawędzi ekranu,
-// a od lewego końca — rząd chipów doku (`getDockSpan` → `PanelDock`); pod overlayem — jak dotąd: sam klaster zegara
-// nad ostatnim slotem nawigacji i czip ⚔ (chipy doku chowają się jak outlinery — decyzja 4).
+// tło pasa biegnie od prawej krawędzi lewego outlinera (`MapInsets.left`; 0 przy schowanym) do prawej krawędzi ekranu;
+// pod overlayem — jak dotąd: sam klaster zegara nad ostatnim slotem nawigacji i czip ⚔. (Rząd chipów doku paneli od
+// lewego końca pasa — U4-3 — usunięty w REFORMIE ZAKŁADEK T4 razem z dokiem.)
 // SUWAK ZOOMU (ARKUSZ UI U4-4, decyzja (d)): nad mapą, tuż na lewo od 🔔 (czip ⚔ na lewo od suwaka); skala logarytmiczna
 // dystansu kamery od jej celu, LEWO = DALEKO, zakres: podłoga efektywna `minDist` (jedzie z fokusem; przy gwieździe
 // `STAR_FLOOR_MULT` × promień rdzenia — poprawka 501) – `maxDist`; gałka co klatkę z
@@ -27,7 +27,6 @@ import { toggleNotificationDropdown, isNotificationDropdownOpen } from './Notifi
 import { bottomNavBarRect, navSlotLayout } from './BottomNavBarLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 import { BOTTOM_STRIP_H } from './MapInsets.js';   // ARKUSZ UI U3-2 — jedno źródło wysokości pasa dolnego
-import { DOCK_CHIP_H, DOCK_CHIP_GAP } from './PanelDockLogic.js';   // ARKUSZ UI U4-3 — rząd chipów doku na pasie
 import { distToPos, posToDist, xToPos, posToX } from './ZoomSliderLogic.js';   // ARKUSZ UI U4-4 — suwak zoomu
 
 // Metryki kompaktowe — cały klaster (bell/menu/play/5×speed/data) musi zmieścić się w
@@ -64,7 +63,6 @@ export class BottomControlBar {
     this._playRect  = null;
     this._speedRects = [];
     this._chipRect  = null;   // U0-3: czip walk {x,y,w,h,label} albo null (niewidoczny)
-    this._dockSpan  = null;   // U4-3: rząd chipów doku {x0,x1,y,h} w trybie mapy; null pod overlayem
     this._zoomRect  = null;   // U4-4: suwak zoomu {x,y,w,h} nad mapą; null pod overlayem / bez kamery
     this._zoomTrack = null;   // U4-4: tor suwaka {x,w}
     this._zoomDragging = false;
@@ -195,14 +193,6 @@ export class BottomControlBar {
       this._drawCombatChip(ctx, this._chipRect);
     }
 
-    // ── Rząd chipów doku (U4-3, decyzja (c)): od lewego końca pasa do lewej krawędzi klastra po prawej (czip ⚔, suwak
-    //    zoomu albo 🔔); tylko w trybie mapy — pod overlayem chipy chowają się jak outlinery (decyzja 4). ──
-    this._dockSpan = null;
-    if (mapMode) {
-      const right = (this._chipRect?.x ?? this._zoomRect?.x ?? this._bellRect.x) - DOCK_CHIP_GAP;
-      this._dockSpan = { x0: bgLeft + DOCK_CHIP_GAP, x1: right, y: stripTop + (STRIP_H - DOCK_CHIP_H) / 2, h: DOCK_CHIP_H };
-    }
-
     // Podpowiedź suwaka zoomu (U4-4) — nad pasem, przy suwaku.
     if (this._zoomRect && this._hover === 'zoom' && !this._zoomDragging) this._drawZoomTip(ctx, W);
   }
@@ -285,9 +275,6 @@ export class BottomControlBar {
     this._markDirty();
     return true;
   }
-
-  /** ARKUSZ UI U4-3 — rząd chipów doku z ostatniej klatki (`PanelDock.draw`); null pod overlayem. */
-  getDockSpan() { return this._dockSpan; }
 
   // Czip walk — własne tło i ramka jak dawny czip w górnej belce (ciemny podkład + akcent, czerwona ramka i tekst).
   _drawCombatChip(ctx, b) {

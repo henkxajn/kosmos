@@ -31,8 +31,7 @@
 //       panel przy wierszu przesunięty w pionie nad kartę (łącznik, gdy wiersz w zasięgu), „Obserwuj” odsłonięte; brak
 //       miejsca → kotwica zapasowa; KONTROLE: bez przeszkody panel zakrywa „Obserwuj”, bez starcia i w oknie właściciela —
 //       bez zmian; kolejność kliku przy ON — panel przed kartą walki (rysunek = klik)
-//   S12 STROJENIE 1 (Finding 544) — `UIManager`: prostokąt panelu z ostatniej klatki jako przeszkoda kart,
-//       zmiana prostokąta zamawia klatkę (logika kart — `body_card_side_smoke` C6)
+//   (S12 — przeszkoda kart z prostokąta panelu, Finding 544 — usunięty w T4-2 razem z kartą ciała i panelem stacji)
 //   S13 STROJENIE 1 (Finding 547) — PL „🗑 Rozbiórka (zwrot 75%)”; tytuł okna potwierdzenia z tego samego klucza
 //   ⚠ S4k (strojenie 1) — bramka kliku panelu w `_vesselPanelClick` (wołana z `handleClick` przed / po karcie walki).
 //
@@ -41,6 +40,8 @@
 //   S12f; połowy OFF S7g, S9a); S3 — wyrocznia kotwicy zapasowej bez `FloatingPanel`; S4 / S10 / S11j / S11k — dawny panel
 //   pływający (`_vesselPanelBounds`, przeciąganie, `drawVesselPanel` w `UIManager`) usunięty: kotwica wiersza z
 //   `_shipPanelAtOutliner`, rysunek i klik panelu T5; S4b (wysokość 360 px dawnego panelu T3) — wysokość podaje panel T5.
+//   T4-2 (karta ciała, panel stacji i dok usunięte): S11j — kolejność kliku bez panelu stacji (panel stacji nie łapie kliku);
+//   S12 (przeszkoda kart: `getShipPanelObstacle`, `_noteShipPanelDrawn`) usunięty — kart, które omijały panel statku, nie ma.
 // ⚠ Moduł POWSTAJE w T3 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -636,13 +637,12 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
   const p945 = panelWith(hud945, 945); const z945 = zoneOf('v2');
   ok(!!hud945.getPanelRect() && p945?.shifted !== true && p945.y === z945?.y && !over(p945, hud945.getPanelRect()),
     'S11i KONTROLA: okno właściciela (1280×945) — karta niżej, panel przy wierszu bez przesunięcia (K10)');
-  // E — kolejność kliku: panel PRZED kartą walki i panelem stacji (rysowany po nich)
+  // E — kolejność kliku: panel PRZED kartą walki (rysowany po niej); panel stacji nie łapie kliku (T4)
   const hc = body(UI, '  handleClick(x, y) {');
   const iFirst = hc.indexOf('if (this._vesselPanelClick(x, y)) return true;');
   const iCombat = hc.indexOf('this.combatHud?.handleClick?.(x, y)');
-  const iStation = hc.indexOf('this.stationPanel?.handleClick?.(x, y)');
-  ok(iFirst > 0 && iCombat > iFirst && iStation > iCombat && hc.split('this._vesselPanelClick(x, y)').length === 2,
-    'S11j kolejność kliku: panel statku przed kartą walki i panelem stacji (rysunek = klik), jedno wywołanie');
+  ok(iFirst > 0 && iCombat > iFirst && hc.split('this._vesselPanelClick(x, y)').length === 2 && !/stationPanel\??\.handleClick/.test(hc),
+    'S11j kolejność kliku: panel statku przed kartą walki (rysunek = klik), jedno wywołanie; klik panelu stacji usunięty (T4)');
   const mVpc = compileMethod(UI, '_vesselPanelClick', {});
   const vself = (hidden, surf = 'vessel', ovl = false) => ({ overlayManager: { isAnyOpen: () => ovl }, _mapSurface: () => surf,
     _shipPanelDockHidden: () => hidden, _shipPanelHud: { rect: { x: 0, y: 0, w: 10, h: 10 }, handleClick: () => true } });
@@ -651,27 +651,6 @@ header('S11 strojenie 1 (Finding 545) — karta walki jako przeszkoda kotwicy, o
     && call(mVpc, vself(false, 'vessel', true), 1, 1) === false, 'S11k `_vesselPanelClick` — ta sama bramka co rysunek (overlay, powierzchnia, tryb Y)');
   K.civMode = civWas;
   reset();
-}
-
-// ═══ S12 ══════════════════════════════════════════════════════════════════════
-header('S12 strojenie 1 (Finding 544) — panel statku jako przeszkoda kart: prostokąt z ostatniej klatki (`UIManager`)');
-{
-  const mGet = compileMethod(UI, 'getShipPanelObstacle', { GAME_CONFIG });
-  const mNote = compileMethod(UI, '_noteShipPanelDrawn', {});
-  ok(!!mGet && !!mNote, 'S12-0 metody strojenia (`getShipPanelObstacle`, `_noteShipPanelDrawn`) wycięte ze źródła i skompilowane');
-  const self = { _shipPanelDrawn: null, _dirty: false };
-  const r1 = { x: 830, y: 162, w: 300, h: 300, mode: 'row' };
-  const ch1 = call(mNote, self, r1);
-  const o1 = call(mGet, self);
-  ok(ch1 === true && self._dirty === true && !!o1 && o1.x === 830 && o1.y === 162 && o1.w === 300 && o1.h === 300 && o1.mode === undefined && o1 !== self._shipPanelDrawn,
-    'S12a SEDNO: panel narysowany → przeszkoda = jego prostokąt (kopia); klatka zamówiona (karty rysują się wcześniej w klatce)');
-  self._dirty = false;
-  ok(call(mNote, self, { x: 830, y: 162, w: 300, h: 300 }) === false && self._dirty === false, 'S12b ten sam prostokąt — bez dodatkowej klatki (bez pętli rysowania)');
-  ok(call(mNote, self, { x: 830, y: 142, w: 300, h: 300 }) === true && self._dirty === true, 'S12c przesunięcie panelu (np. nad kartę walki) — klatka zamówiona');
-  self._dirty = false;
-  ok(call(mNote, self, null) === true && self._dirty === true && call(mGet, self) === null, 'S12d panel zniknął — bez przeszkody, klatka zamówiona');
-  call(mNote, self, r1);
-  ok(call(mGet, self)?.x === 830, 'S12f ten sam zapis znowu daje przeszkodę');
 }
 
 // ═══ S13 ══════════════════════════════════════════════════════════════════════

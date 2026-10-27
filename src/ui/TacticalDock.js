@@ -124,7 +124,7 @@ export class TacticalDock extends BaseOverlay {
 
   /**
    * Wysokość zajęta przez pas u dołu — JEDNO źródło prawdy dla podnoszenia pływających
-   * paneli (FleetGroupPanel/FleetCommandPanel/CombatHUD/PanelDock/StationPanel). 0 gdy ukryty.
+   * powierzchni (CombatHUD, wcięcie dolne `MapInsets`). 0 gdy ukryty.
    */
   getReservedHeight() {
     if (!this.visible) return 0;

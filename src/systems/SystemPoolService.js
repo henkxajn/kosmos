@@ -89,7 +89,7 @@ export class SystemPoolService {
   }
 
   /**
-   * Snapshot puli (do StationPanel/StationManagementView): { anchorPlanetId, total:Map, byBody:[{colony, inv:Map}] }.
+   * Snapshot puli (do przypięcia stacji / StationManagementView): { anchorPlanetId, total:Map, byBody:[{colony, inv:Map}] }.
    * null gdy kolonia nie jest w puli.
    */
   getPoolSnapshot(colonyId) {

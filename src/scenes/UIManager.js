@@ -1,5 +1,5 @@
 // UIManager — zarządzanie interfejsem gry na Canvas 2D
-// Redesign Stellaris-inspired: TopBar, Outliner, BottomContext, BottomBar, CivPanel
+// Redesign Stellaris-inspired: TopBar, Outliner, BottomBar, CivPanel
 //
 // Rysuje na #ui-canvas nakładanym nad Three.js.
 // Obsługuje kliknięcia przez metodę handleClick(x, y) zwracającą true/false.
@@ -47,7 +47,6 @@ import { DiplomacyOverlay }    from '../ui/DiplomacyOverlay.js';
 import { WarOverlay }          from '../ui/WarOverlay.js';
 import { POIPanel }            from '../ui/POIPanel.js';
 import { StationPanel }        from '../ui/StationPanel.js';
-import { PanelDock }           from '../ui/PanelDock.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
@@ -64,7 +63,6 @@ import { ORDER_ACTIVITY_KEYS, ORDER_ACTIVITY_FALLBACK_KEY,
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
 import { BottomBar }     from '../ui/BottomBar.js';
-import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
 import { LeftOutliner, applyOutlinerToggle } from '../ui/LeftOutliner.js';   // ARKUSZ UI U2 — lewy outliner (układy i ciała)
 import { getMapInsets }   from '../ui/MapInsets.js';      // ARKUSZ UI U2-2 — jedno źródło wcięć obszaru mapy
@@ -225,7 +223,6 @@ export class UIManager {
     // ── Nowe komponenty UI ───────────────────────────────
     this._topBar       = new TopBar();
     this._bottomBar    = new BottomBar();
-    this._bottomContext = new BottomContext();
     // ARKUSZ UI U3-2 (D-UI-1 prawy) — prawy outliner: statki gracza, półprzezroczysty nad mapą, tylko nad mapą (decyzja 4),
     // stan użytkownika `visible` (klawisze „.” / „B”). Wystawiony w `KOSMOS.rightOutliner` — rezerwa prawej krawędzi
     // (`MapInsets`), strojenie tła na bramce.
@@ -353,12 +350,10 @@ export class UIManager {
     // Expose dla BottomBar (chip „⚔ Walki") + click handler.
     window.KOSMOS.combatHud = this.combatHud;
 
-    // S4-2 — StationPanel: lekki pływający panel info stacji. Non-exclusive (jak CombatHUD):
-    // trzymany bezpośrednio, rysowany PO overlayManager, coexist z colony panelem i widokiem 3D.
+    // S4-2 / REFORMA ZAKŁADEK T4 — StationPanel: STAN przypięcia stacji (`visible` + `_stationId`) i cele przycisków
+    // „Zarządzaj” / ✕ przypięcia; treść i przyciski rysuje warstwa etykiet HUD (T2). Bez rysunku i kliku.
     this.stationPanel = new StationPanel();
     window.KOSMOS.stationPanel = this.stationPanel;
-    this.panelDock = new PanelDock();       // C2 (S3.4b) — pasek zadań zminimalizowanych paneli
-    window.KOSMOS.panelDock = this.panelDock;
 
     // Slice 8b — FleetGroupPanel: panel zaznaczonej grupy statków (lewy-dolny róg).
     // Non-exclusive (jak StationPanel/CombatHUD): self-managed przez ui:selectionChanged,
@@ -367,7 +362,6 @@ export class UIManager {
     // REFORMA ZAKŁADEK T3 — panel statku przy prawym outlinerze: ostatnie położenie (odczyt dla bramki) i stałe rysunku
     // łącznika z wierszem (px logiczne: podświetlenie wiersza przedłużone w panel, kreska na wspólnej krawędzi — strojenie okiem).
     this._shipPanelPlacement = null;
-    this._shipPanelDrawn = null;      // strojenie 1 (544): prostokąt panelu z ostatniej klatki — przeszkoda kart (`getShipPanelObstacle`)
     this.shipPanelTab = { inPanel: 6, bar: 2 };
     // REFORMA ZAKŁADEK T5 — panel statku w idiomie przypięć HUD: renderer i strefy w geometrii T3 (prostokąt `null`, gdy
     // panel nienarysowany). Odczyt i strojenie z konsoli: `KOSMOS.shipPanelHud.debug()` / `.tune()`.
@@ -488,52 +482,9 @@ export class UIManager {
     return p;
   }
 
-  /**
-   * REFORMA ZAKŁADEK T2 (D-TR-4 (a)) — ciało na karcie ciała: na warstwie etykiet HUD w trybie cywilizacji — `null` (zaznaczone
-   * ciało jest PRZYPIĘCIEM przy etykiecie: akcje, raport, ✕; karta się nie rysuje i nie łapie kliku, kółka ani kursora);
-   * bez warstwy etykiet (`hudLabels` OFF) i poza trybem cywilizacji — zaznaczone ciało (`_selectedEntity`).
-   */
-  _bodyCardEntity() {
-    const e = this._selectedEntity;
-    if (!e || !isHudLabelsOn(GAME_CONFIG.FEATURES) || !window.KOSMOS?.civMode) return e;
-    return null;
-  }
-
-  /**
-   * REFORMA ZAKŁADEK T2 — czy panel stacji jest powierzchnią (rysunek, klik, kursor, przeciąganie, blokada kamery). Na warstwie
-   * etykiet HUD w trybie cywilizacji — nie: jego stan (`visible` + `_stationId`) jest przypięciem stacji przy etykiecie; cykl
-   * życia panelu (otwarcie, zniszczenie stacji, przełączenie układu, odznaczenie) — bez zmian.
-   */
-  _stationPanelSurface() {
-    return !(isHudLabelsOn(GAME_CONFIG.FEATURES) && window.KOSMOS?.civMode);
-  }
-
   /** T3 (D-TR-10 (a), Finding 542) — tryb Y: przy rozwiniętym Doku taktycznym panel statku nad mapą się nie rysuje. */
   _shipPanelDockHidden() {
     return shipPanelHiddenByDock(this.tacticalDock?.isExpanded?.() === true);
-  }
-
-  /**
-   * T3, strojenie 1 (Finding 544) — prostokąt panelu statku przy outlinerze narysowanego w ostatniej klatce (`null` — panelu
-   * nie było): PRZESZKODA karty ciała i panelu stacji (`BodyCardSideLogic.cardObstacles`).
-   */
-  getShipPanelObstacle() {
-    const r = this._shipPanelDrawn;
-    return r ? { ...r } : null;
-  }
-
-  /**
-   * T3, strojenie 1 (544) — zapis prostokąta panelu z tej klatki. Karty rysują się WCZEŚNIEJ w klatce (czytają przeszkodę
-   * w następnej), więc zmiana prostokąta (pojawienie, przesunięcie, zniknięcie) zamawia jeszcze jedną klatkę — karta dochodzi
-   * na wolną stronę także przy pauzie i nieruchomej kamerze.
-   */
-  _noteShipPanelDrawn(rect) {
-    const next = rect ? { x: rect.x, y: rect.y, w: rect.w, h: rect.h } : null;
-    const prev = this._shipPanelDrawn ?? null;
-    const same = prev === next || (!!prev && !!next && prev.x === next.x && prev.y === next.y && prev.w === next.w && prev.h === next.h);
-    this._shipPanelDrawn = next;
-    if (!same) this._dirty = true;
-    return !same;
   }
 
   /**
@@ -977,9 +928,9 @@ export class UIManager {
     // docelowego zostaje, a renderer (przebudowa sceny wyzerowała jego zaznaczenie) dostaje je z powrotem — bez kamery.
     EventBus.on('system:switched', ({ systemId } = {}) => {
       syncBodyCardOnSystemSwitch(this._selectedEntity, systemId, (n, p) => EventBus.emit(n, p));
-      // ARKUSZ UI U3-2 (Finding 491) — lustro 486: panel stacji SPOZA układu docelowego się zamyka (zadokowany — bez zmian).
+      // ARKUSZ UI U3-2 (Finding 491) — lustro 486: przypięcie stacji SPOZA układu docelowego zdjęte.
       const sp = this.stationPanel;
-      if (sp?.visible && !sp._float?.minimized) {
+      if (sp?.visible) {
         syncStationPanelOnSystemSwitch(sp._station?.() ?? null, systemId, () => { sp.hide(); this._dirty = true; });
       }
     });
@@ -2121,19 +2072,11 @@ export class UIManager {
     // Panele przy prawym outlinerze (statek — T5, flota / grupa — T6) blokują kamerę, gdy kursor nad nimi.
     if (window.KOSMOS?.civMode && this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
     if (window.KOSMOS?.civMode && this._fleetPanelHudHit?.(x, y)) return true;   // REFORMA ZAKŁADEK T6 — panel floty / grupy
-    // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim. T2 — na warstwie etykiet HUD panel nie jest powierzchnią.
-    if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
 
     // Faza 4 — Dok taktyczny (tryb Y): kursor nad pasem blokuje zoom+drag+box-select kamery.
     // TEN SAM _hitTest co handleWheel (spójność: inaczej scroll nad pasem „znika").
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock
         && this._tacticalMode?.isActive && this.tacticalDock?._hitTest?.(x, y)) return true;
-
-    // C2 (S3.4b) — belki doku (zminimalizowane panele) blokują kamerę.
-    if (this.panelDock?.isOver?.(x, y)) return true;
-
-    // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
-    if (this._bottomContext.isOver(x, y, W, H, this._bodyCardEntity())) return true;   // T2 — na warstwie etykiet HUD karty brak
 
     // Overlay otwarty — blokuj kamerę
     if (this.overlayManager?.isAnyOpen()) return true;
@@ -2156,7 +2099,7 @@ export class UIManager {
     return false;
   }
 
-  // Czy kursor (raw px) jest nad panelem nad mapą (panel statku T5, panel floty / grupy T6, panel stacji, outlinery).
+  // Czy kursor (raw px) jest nad panelem nad mapą (panel statku T5, panel floty / grupy T6, outlinery).
   // Używane przez GameScene do wygaszenia tooltipa mapy 3D pod panelem (panel rysowany na #ui-canvas, raycast 3D leci
   // osobnym torem przez #event-layer).
   isPointerOverFloatingPanel(rawX, rawY) {
@@ -2164,7 +2107,6 @@ export class UIManager {
     const y = rawY / UI_SCALE;
     if (this._mapSurface() === 'vessel' && this._vesselPanelHit(x, y)) return true;
     if (this._fleetPanelHudHit?.(x, y)) return true;   // REFORMA ZAKŁADEK T6 — panel floty / grupy
-    if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;   // T2 — na warstwie HUD bez panelu
     if (this._leftOutliner?.isOver?.(x, y, W, H)) return true;   // ARKUSZ UI U2 — bez podpowiedzi mapy 3D pod outlinerem
     if (this._outliner?.isOver?.(x, y, W, H)) return true;       // ARKUSZ UI U3-2 — także pod prawym
     return false;
@@ -2195,11 +2137,6 @@ export class UIManager {
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
-    // C2 (S3.4b) — belki doku (zminimalizowane panele) na wierzchu, PRZED overlayManager; tylko gdy dok widoczny.
-    if (!this.overlayManager.isAnyOpen() && this.panelDock?.handleClick?.(x, y)) return true;
-    // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager). REFORMA ZAKŁADEK T2 — na warstwie etykiet HUD panel nie łapie
-    // kliku (przypięcie stacji przy etykiecie; 540: nic nad overlayem).
-    if (this._stationPanelSurface() && this.stationPanel?.handleClick?.(x, y)) return true;
     // Faza 4 — Dok taktyczny (PRZED overlayManager; gate flaga+tryb Y). Konsumuje kliki w pas.
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
         && !this.overlayManager.isAnyOpen() && this.tacticalDock?.handleClick?.(x, y)) return true;
@@ -2262,12 +2199,8 @@ export class UIManager {
     // BottomBar (stabilność + EventLog + menu)
     if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
 
-    // BottomContext (dolny panel kontekstowy)
-    const cardEntity = this._bodyCardEntity();   // REFORMA ZAKŁADEK T2 — na warstwie etykiet HUD karta ciała nie istnieje
-    if (cardEntity && this._bottomContext.hitTest(x, y, W, H, cardEntity)) return true;
-
-    // ARKUSZ HUD paczka A (H2, Finding 515) — etykiety warstwy HUD: PO karcie ciała (karta leży nad nimi), przed raycastem 3D;
-    // punkt na tarczy ciała wygrywa (487, 503 — rozstrzyga warstwa); reguła D-UI-5 (`clickObject`) bez zmian.
+    // ARKUSZ HUD paczka A (H2) — etykiety warstwy HUD: przed raycastem 3D (karta ciała, dawniej nad nimi — 515, usunięta w
+    // T4); punkt na tarczy ciała wygrywa (487, 503 — rozstrzyga warstwa); reguła D-UI-5 (`clickObject`) bez zmian.
     if (window.KOSMOS?.civMode && isHudLabelsOn(GAME_CONFIG.FEATURES) && !this.overlayManager.isAnyOpen()
         && !window.KOSMOS?.planetGlobeOpen && window.KOSMOS?.hudLayer?.handleClick?.(x, y, x * UI_SCALE, y * UI_SCALE)) return true;
 
@@ -2322,10 +2255,6 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleScroll(delta, x, y)) return true;
     }
-    // BottomContext scroll
-    if (this._bodyCardEntity()) {   // T1 (d)
-      if (this._bottomContext.handleWheel(x, y, delta, W, H, this._bodyCardEntity())) return true;
-    }
     return false;
   }
 
@@ -2336,23 +2265,16 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y, button); return; }
     // ARKUSZ UI U4-4 — przeciąganie suwaka zoomu na pasie dolnym (kamera zablokowana przez isOverUI — pas).
     if (button === 0 && window.KOSMOS?.civMode && this._bottomControlBar?.tryBeginZoomDrag?.(x, y)) return;
-    // C1 (S3.4b) — drag pływających paneli za nagłówek (kamera już zablokowana przez isOverUI).
-    if (button === 0) {
-      if (this._stationPanelSurface() && this.stationPanel?.visible && this.stationPanel.tryBeginDrag?.(x, y)) return;   // T2 — bez przeciągania na warstwie HUD
-      if (this._bottomContext?.tryBeginDrag?.(x, y)) return;
-    }
   }
 
   handleMouseUp(rawX, rawY, button = 0) {
     this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
-    // C1 (S3.4b) — zakończ drag paneli ZAWSZE (przed early-return na overlay — inaczej _dragging utyka, #4).
-    // Realny drag (moved) pochłania nadchodzący click, by nie przeleciał do sceny 3D (deselekcja, #5).
-    const draggedS = this.stationPanel?.endDrag?.();
-    const draggedB = this._bottomContext?.endDrag?.();
-    const draggedZ = this._bottomControlBar?.endZoomDrag?.();   // ARKUSZ UI U4-4 — suwak zoomu
-    if (draggedS || draggedB || draggedZ) this._panelDragConsumedClick = true;
+    // ARKUSZ UI U4-4 — zakończ przeciąganie suwaka zoomu ZAWSZE (przed early-return na overlay — inaczej utyka); realne
+    // przeciągnięcie pochłania nadchodzący click, by nie przeleciał do sceny 3D (deselekcja).
+    const draggedZ = this._bottomControlBar?.endZoomDrag?.();
+    if (draggedZ) this._panelDragConsumedClick = true;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y, button); return; }
   }
 
@@ -2370,20 +2292,15 @@ export class UIManager {
     x /= UI_SCALE; y /= UI_SCALE;
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
-    // #4 (review) — overlay/modal pojawił się w trakcie draga → przerwij drag (inaczej _dragging utyka).
-    if (this.overlayManager.isAnyOpen()) { this.stationPanel?.endDrag?.(); this._bottomContext?.endDrag?.(); this._bottomControlBar?.endZoomDrag?.(); }
+    // Overlay / okno pojawiło się w trakcie przeciągania suwaka zoomu → przerwij (inaczej przeciąganie utyka).
+    if (this.overlayManager.isAnyOpen()) this._bottomControlBar?.endZoomDrag?.();
     // ARKUSZ UI U4-4 — przeciąganie suwaka zoomu: aktualizuj i POCHŁOŃ ruch (także poza suwakiem — klamra toru).
     if (this._bottomControlBar?.handleZoomDrag?.(x)) return;
-    // C1 (S3.4b) — jeśli panel jest przeciągany, aktualizuj i POCHŁOŃ ruch (bez hoverów pod spodem).
-    if (this.stationPanel?.isDraggingPanel?.())   { this.stationPanel.handleDragMove(x, y);   return; }
-    if (this._bottomContext?.isDraggingPanel?.()) { this._bottomContext.handleDragMove(x, y); return; }
     // Overlay pełnoekranowy — hover
     if (this.overlayManager.isAnyOpen()) {
       this.overlayManager.handleMouseMove(x, y);
     }
-    if (this._stationPanelSurface() && this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu (T2 — na warstwie HUD bez panelu)
     this.combatHud?.handleMouseMove?.(x, y);       // POLISH P2b (D4, Finding 468) — podpowiedź pełnego tekstu karty walki
-    this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku (bez bramki civMode, #1)
     if (this.tacticalDock?.isShowing?.() && !this.overlayManager.isAnyOpen()) this.tacticalDock.handleMouseMove(x, y);   // Faza 4 — hover doku taktycznego
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
     if (window.KOSMOS?.civMode) this._bottomControlBar.handleMouseMove(x, y); // UI v3 — hover bell/MENU/prędkości
@@ -2493,14 +2410,6 @@ export class UIManager {
       this._outlinerState = null;   // poza civMode / w globe — brak danych outlinerów
     }
 
-    // ── BottomContext (dolny panel info o encji) ──────────────
-    // Ukryj gdy aktywny overlay (Ekonomia, Flota itp.) — przeszkadza
-    if (!globeOpen && !this.overlayManager.isAnyOpen()) {
-      this._bottomContext.draw(ctx, W, H, this._bodyCardEntity());   // REFORMA ZAKŁADEK T2 — na warstwie etykiet HUD bez karty
-    }
-
-    // ── (Slice 4 — sidebar usunięty, brak przerysowania nad BottomContext) ──
-
     // ── BottomBar (stabilność + EventLog + przyciski) ────────
     this._bottomBar.draw(ctx, W, H, {
       stability: this._stability,
@@ -2524,8 +2433,8 @@ export class UIManager {
     // ⚠ DEFEKT KOLEJNOŚCI MALOWANIA, NIE Z-INDEXU: wszystko leci w JEDNYM `_draw()` na JEDNYM
     //   `#ui-canvas`, więc „na wierzchu" = „rysowane później". Etykiety stały na KOŃCU przebiegu,
     //   a `MapLabelLayer` NIE MA ŻADNEGO CLIPU (zero `clip`/bounds w pliku) ⇒ malowały po
-    //   WSZYSTKICH OŚMIU powierzchniach rysowanych wcześniej: `combatHud`, `stationPanel`,
-    //   `fleetCommandPanel`, `fleetGroupPanel`, panel statku (slice B), `panelDock`, dziennik
+    //   WSZYSTKICH OŚMIU powierzchniach rysowanych wcześniej: `combatHud`, dawny panel stacji,
+    //   dawne panele floty i grupy, panel statku (slice B), dawny dok paneli, dziennik
     //   ORAZ Outliner.
     // ⚠ To NIE był defekt panelu statku — on tylko ujawnił klasę. Dowód, że winna była POZYCJA
     //   PRZEBIEGU: `_outliner.draw` ma nad sobą komentarz „Rysowany NA SAMYM WIERZCHU … nic go
@@ -2592,36 +2501,21 @@ export class UIManager {
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
-    // S4-2 — na wierzchu overlay'i (coexist z colony). REFORMA ZAKŁADEK T2 — na warstwie etykiet HUD panel się nie rysuje: stacja
-    // jest przypięta przy etykiecie (pod overlayem chowa się razem z warstwą — 540).
-    if (civMode && !globeOpen && this._stationPanelSurface()) this.stationPanel.draw(ctx, W, H);
     // Panel statku (N==1) w idiomie przypięć HUD — REFORMA ZAKŁADEK T5 (renderer `ShipPanelHudLayer`; szerokość i wysokość z treści),
     // geometria T3 (`_shipPanelAtOutliner` — kotwica przy wierszu prawego outlinera, łącznik, karta walki, zapas). Tryb Y
     // z rozwiniętym Dokiem: panel statku nad mapą się nie rysuje (D-TR-10).
-    let shipPanelDrawn = null, shipPanelHudDrawn = false;
+    let shipPanelHudDrawn = false;
     if (civMode && !globeOpen && !this.overlayManager.isAnyOpen() && !this._shipPanelDockHidden() && this._mapSurface() === 'vessel') {
-      shipPanelDrawn = this._drawShipPanelHud(ctx, W, H);
-      shipPanelHudDrawn = !!shipPanelDrawn;
+      shipPanelHudDrawn = !!this._drawShipPanelHud(ctx, W, H);
     }
     // T5 — panel nienarysowany w tej klatce (overlay, tryb Y, brak zaznaczenia) — bez prostokąta i stref.
     if (!shipPanelHudDrawn) this._shipPanelHud?.clear?.();
     // REFORMA ZAKŁADEK T6 — panel floty / grupy N ≥ 2 w idiomie etykiet w tym samym miejscu cyklu co panel statku; mutex
     // `_mapSurface` (flota > N ≥ 2 > lider) — w klatce co najwyżej jeden z trzech. Nienarysowany — bez prostokąta i stref.
     const fleetPanelDrawn = (civMode && !globeOpen && !this.overlayManager.isAnyOpen()) ? this._drawFleetPanelHud(ctx, W, H) : null;
-    if (fleetPanelDrawn) shipPanelDrawn = fleetPanelDrawn;
-    else { this._fleetPanelHud?.clear?.(); this._fleetPanelPlacement = null; }
+    if (!fleetPanelDrawn) { this._fleetPanelHud?.clear?.(); this._fleetPanelPlacement = null; }
     // T6, strojenie 1 (4) — baner pickera ukryty, gdy panel floty T6 pokazuje w tej klatce konfigurator celu floty.
     this._syncPickerBanner(!!fleetPanelDrawn && this._mapSurface() === 'fleetHud');
-    // T3, strojenie 1 (Finding 544): prostokąt panelu z TEJ klatki — przeszkoda karty ciała i panelu stacji (rysowanych
-    // wcześniej w klatce, więc czytają go w następnej — `getShipPanelObstacle`).
-    this._noteShipPanelDrawn(shipPanelDrawn);
-    // C2 (S3.4b) — dok zminimalizowanych paneli; ukryty gdy pełny overlay. ARKUSZ UI U4-3 (decyzja (c)): chipy w rzędzie
-    // na pasie dolnym — prostokąt rzędu z `BottomControlBar` (narysowany wyżej w tej klatce); poza trybem cywilizacji
-    // (bez pasa) — rząd nad dolną krawędzią obszaru mapy.
-    // #1 (review) — bez bramki civMode: BottomContext (a więc i minimalizacja) działa też poza civMode.
-    if (!globeOpen && !this.overlayManager.isAnyOpen()) {
-      this.panelDock.draw(ctx, W, H, civMode ? this._bottomControlBar.getDockSpan() : null);
-    }
     if (civMode && !globeOpen) this._eventLogDrawer.draw(ctx, W, H);   // dziennik — hover-drawer dolnej krawędzi (nad overlay'em, nad paskiem bell/MENU)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──

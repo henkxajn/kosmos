@@ -648,7 +648,7 @@ export class ObservatoryOverlay {
     return `<span style="color:${THEME.textDim}">○</span>`;
   }
 
-  // Zgrubne pasmo jakości złoża (te same progi co BodyDetailModal/BottomContext).
+  // Zgrubne pasmo jakości złoża (te same progi co BodyDetailModal).
   _richnessStars(r) {
     return r >= 0.7 ? '★★★' : r >= 0.4 ? '★★' : '★';
   }

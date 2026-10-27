@@ -3,7 +3,7 @@
 // PO CO OSOBNY MODUŁ (a nie `if` w UIManagerze): `UIManager` NIE IMPORTUJE SIĘ pod node
 // (`THREE.TextureLoader is not a constructor` — ta sama ściana co `ColonyOverlay`; stub `three`
 // celowo nie wystawia loadera i NIE WOLNO go podnosić). Reguła zaszyta w `UIManager` byłaby
-// niepinowalna wykonaniem. Wzór: `FleetGroupPanelLogic`, `PanelDockLogic`, `ColonyModalLogic`.
+// niepinowalna wykonaniem. Wzór: `FleetGroupPanelLogic`, `ColonyModalLogic`.
 //
 // ZERO importów — moduł jest czysty i node-testowalny.
 

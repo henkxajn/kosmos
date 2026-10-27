@@ -27,8 +27,9 @@
 //       kolonii w chwili wybuchu wojny (Finding 360).
 //   R8  (G3-3) odczyt, który woła UI (`GarrisonReadout`): „detailed” — jednostki naprawdę stojące na ciele (także po
 //       stracie i odrośnięciu); przed mobilizacją — rezerwa planera dla ciała; poniżej — nieznany; kolonia gracza i ciało
-//       bez kolonii — bez odczytu; bez modułu wywiadu — nieznany. Powierzchnie WYKONANIEM: karta ciała
-//       (`BottomContext.draw` na atrapie ctx) i okno zrzutu (`showDropTroopsModal` na atrapie DOM z env.js); PL i EN.
+//       bez kolonii — bez odczytu; bez modułu wywiadu — nieznany. Powierzchnie WYKONANIEM: rozwinięcie etykiety ciała
+//       (`HudLabelLayer._t1Body` — od T4 następca karty ciała `BottomContext.draw`) i okno zrzutu (`showDropTroopsModal`
+//       na atrapie DOM z env.js); PL i EN.
 //       ⚠ Tylko przeglądarka pokaże układ wiersza na karcie i w oknie.
 //   R9  (G3-4) jeden wpis w Dzienniku na mobilizację, tylko przy kontakcie (nazwa i liczba dopiero przy „detailed”);
 //       bez kontaktu — nic; druga wojna i odrastanie — bez wpisu; mobilizacja przy kontroli rocznej — jeden wpis; PL i EN.
@@ -38,6 +39,8 @@
 // ⚠ Każdy pin wykluczający ma ŚWIADKA; świadek stanu wejściowego to MIGAWKA sprzed akcji.
 // ⚠ Harness jak `g2_mobilisation_smoke`: `bootWithDirector` (prawdziwa dyplomacja, wojna); rok gry = 12 kroków po
 //   1 civY (boot zaczyna na granicy roku).
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta —
+//   R8 czyta rozwinięcie etykiety ciała (`HudLabelLayer._t1Body`): wiersz „Garnizon: <odczyt>” (ten sam `GarrisonReadout`).
 
 import '../headless/env.js';           // MUSI być pierwszy
 import EventBus from '../../core/EventBus.js';
@@ -47,7 +50,7 @@ import { bootWithDirector } from '../headless/DirectorHarness.js';
 import * as GP from '../../utils/GarrisonPlanner.js';
 import EntityManager from '../../core/EntityManager.js';
 import * as VS from '../../entities/Vessel.js';
-import { BottomContext } from '../../ui/BottomContext.js';
+import { HudLabelLayer } from '../../ui/HudLabelLayer.js';
 import { showDropTroopsModal } from '../../ui/DropTroopsModal.js';
 import { t, setLocale, getLocale } from '../../i18n/i18n.js';
 import { NotificationCenter } from '../../systems/NotificationCenter.js';
@@ -486,25 +489,13 @@ function neutralBody(w) {
   w.K.intelSystem = intelSys;
   assert(rn?.kind === 'unknown', `R8f: bez modułu wywiadu — nieznany, nie liczba (fail-closed: ${rn?.kind})`);
 }
-/** Karta ciała tak, jak rysuje ją gra (`BottomContext.draw` na atrapie ctx) — wszystkie napisy drugiej klatki. */
-function renderCard(entity) {
-  const texts = () => {
-    const out = [];
-    const noop = () => {};
-    return {
-      out, canvas: { width: 1280, height: 720 }, measureText: (s) => ({ width: String(s).length * 6 }),
-      save: noop, restore: noop, beginPath: noop, moveTo: noop, lineTo: noop, stroke: noop, fill: noop, clip: noop,
-      rect: noop, fillRect: noop, strokeRect: noop, closePath: noop, arc: noop, translate: noop, setLineDash: noop,
-      roundRect: noop, ellipse: noop, createLinearGradient: () => ({ addColorStop: noop }),
-      fillText: (s) => out.push(String(s)), strokeText: (s) => out.push(String(s)),
-      font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: 'left', globalAlpha: 1, shadowColor: '', shadowBlur: 0,
-    };
-  };
-  const bc = new BottomContext();
-  bc.draw(texts(), 1280, 720, entity);                 // pierwsza klatka = fade-in
-  const ctx2 = texts();
-  bc.draw(ctx2, 1280, 720, entity);
-  return ctx2.out;
+/** Rozwinięcie etykiety ciała tak, jak buduje je gra (`HudLabelLayer._t1Body` — następca karty ciała od REFORMY ZAKŁADEK
+ *  T4; ta sama treść rozwija się przy najechaniu i w przypięciu) — linie tekstu. */
+function renderExpansion(K, id) {
+  try {
+    const lay = new HudLabelLayer();
+    return lay._t1Body(id, { K, now: 0, tactical: false }, { permanent: new Map(), stations: new Map(), pictureCtx: {} }) ?? [];
+  } catch (e) { console.log('    (' + e.message + ')'); return []; }
 }
 /** Okno zrzutu desantu tak, jak otwiera je gra (`showDropTroopsModal` na atrapie DOM z env.js) — wszystkie napisy. */
 function dropModalTexts(w, dockedAt) {
@@ -526,7 +517,7 @@ function dropModalTexts(w, dockedAt) {
   return { loaded, opened: !!overlay, texts: nodes.map(n => n.textContent).filter(s => typeof s === 'string' && s.length > 0) };
 }
 {
-  console.log('\nR8 — powierzchnie: karta ciała i okno zrzutu desantu pokazują ten sam odczyt (PL i EN)');
+  console.log('\nR8 — powierzchnie: rozwinięcie etykiety ciała i okno zrzutu desantu pokazują ten sam odczyt (PL i EN)');
   const w = boot();
   run(w, 40 * 12);
   const [e1] = w.emps;
@@ -534,29 +525,29 @@ function dropModalTexts(w, dockedAt) {
   const body = EntityManager.get(cap);
   const label = t('garrison.readout.label') + ': ';
   setIntel(w.K, e1, 'contact');
-  const cardUnknown = renderCard(body);
+  const cardUnknown = renderExpansion(w.K, cap);
   const dropUnknown = dropModalTexts(w, cap);
-  assert(cardUnknown.length > 3 && dropUnknown.opened && dropUnknown.loaded,
-    `świadek: karta ciała ${body?.name} narysowana (${cardUnknown.length} napisów), okno zrzutu otwarte z jednostką w ładowni`);
-  assert(cardUnknown.includes(label) && cardUnknown.includes(t('garrison.readout.unknown'))
+  assert(!!body && cardUnknown.length >= 2 && dropUnknown.opened && dropUnknown.loaded,
+    `świadek: rozwinięcie etykiety ${body?.name} zbudowane (${cardUnknown.length} linii), okno zrzutu otwarte z jednostką w ładowni`);
+  assert(cardUnknown.includes(label + t('garrison.readout.unknown'))
       && dropUnknown.texts.includes(t('garrison.readout.dropLine', t('garrison.readout.unknown'))),
-    `R8g: poniżej „detailed” — karta „${label}${t('garrison.readout.unknown')}”, okno „${t('garrison.readout.dropLine', t('garrison.readout.unknown'))}”`);
+    `R8g: poniżej „detailed” — rozwinięcie „${label}${t('garrison.readout.unknown')}”, okno „${t('garrison.readout.dropLine', t('garrison.readout.unknown'))}”`);
   setIntel(w.K, e1, 'detailed');
-  const cardReserve = renderCard(body);
+  const cardReserve = renderExpansion(w.K, cap);
   const capPlanned = planFor(w.K, e1).perBody.find(b => b.planetId === cap)?.count;
-  assert(cardReserve.includes(t('garrison.readout.reserve', capPlanned)),
-    `R8h: „detailed” przed mobilizacją — karta pokazuje rezerwę (${t('garrison.readout.reserve', capPlanned)})`);
+  assert(cardReserve.includes(label + t('garrison.readout.reserve', capPlanned)),
+    `R8h: „detailed” przed mobilizacją — rozwinięcie pokazuje rezerwę (${t('garrison.readout.reserve', capPlanned)})`);
   declare(w.K, e1);
   const n = onBody(w, e1, cap).length;
-  const cardUnits = renderCard(body);
+  const cardUnits = renderExpansion(w.K, cap);
   const dropUnits = dropModalTexts(w, cap);
-  assert(n >= 1 && cardUnits.includes(t('garrison.readout.units', n))
+  assert(n >= 1 && cardUnits.includes(label + t('garrison.readout.units', n))
       && dropUnits.texts.includes(t('garrison.readout.dropLine', t('garrison.readout.units', n))),
-    `R8i: po mobilizacji — karta „${t('garrison.readout.units', n)}”, okno „${t('garrison.readout.dropLine', t('garrison.readout.units', n))}”`);
-  const own = renderCard(EntityManager.get(w.K.homePlanet.id));
+    `R8i: po mobilizacji — rozwinięcie „${label}${t('garrison.readout.units', n)}”, okno „${t('garrison.readout.dropLine', t('garrison.readout.units', n))}”`);
+  const own = renderExpansion(w.K, w.K.homePlanet.id);
   const dropOwn = dropModalTexts(w, w.K.homePlanet.id);
-  assert(own.length > 3 && !own.includes(label) && dropOwn.opened && !dropOwn.texts.some(s => s.startsWith(t('garrison.readout.dropLine', '').trim())),
-    'R8j kontrola: karta i okno zrzutu nad WŁASNĄ kolonią — bez wiersza garnizonu (pin nie łapie każdego ciała)');
+  assert(own.length >= 1 && !own.some(s => s.startsWith(label)) && dropOwn.opened && !dropOwn.texts.some(s => s.startsWith(t('garrison.readout.dropLine', '').trim())),
+    'R8j kontrola: rozwinięcie i okno zrzutu nad WŁASNĄ kolonią — bez wiersza garnizonu (pin nie łapie każdego ciała)');
   const prev = getLocale();
   const both = {};
   for (const loc of ['pl', 'en']) {

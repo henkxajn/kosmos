@@ -1,7 +1,7 @@
 // NavDrawer — lewy wysuwany pasek nawigacji (redesign UI v1, Slice A)
 //
 // Zastępuje poziomy pasek nav (14 ikon emoji) w TopBarze 7 dużymi kaflami grup
-// (NAV_GROUPS). Wzorce: slide jak BottomContext (_slideProgress + ANIM_SPEED),
+// (NAV_GROUPS). Wzorce: slide (_slideProgress + ANIM_SPEED),
 // hit-zony jak StationPanel (tło dodawane NA KOŃCU = priorytet kafli). Non-exclusive:
 // trzymany bezpośrednio przez UIManager, rysowany PO overlayManager (na wierzchu
 // overlay'i), klik routowany PRZED overlayManager. Substrat Canvas 2D (#ui-canvas);

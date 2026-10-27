@@ -14,7 +14,7 @@
 //     (525), glify skoku warp, strzałki krawędzi, karty obiektów i ramki zaznaczenia statków (`fcBrackets` — rysowane NAD
 //     warstwą HUD); strzałki krawędzi dla statków poza kadrem — zawsze, bez wczesnego wyjścia (497);
 //   • fade-in 150 ms czasu realnego (działa w pauzie); poprzedni wybór miejsca wygrywa — bez skoków przy ruchu kamery;
-//   • klik (D-UI-5, `clickObject`) — wołany z `UIManager.handleClick` PO karcie ciała (515); punkt na tarczy ciała wygrywa
+//   • klik (D-UI-5, `clickObject`) — wołany z `UIManager.handleClick` przed raycastem 3D; punkt na tarczy ciała wygrywa
 //     (487, 503); zwinięta etykieta zaznacza kotwicę; kolory WYŁĄCZNIE z ról motywu (`F.roles`).
 // ⚠ Moduł importuje się pod node (keeper `hud_labels_smoke` — atrapa ctx): bez three i bez DOM.
 import EventBus from '../core/EventBus.js';
@@ -719,8 +719,8 @@ export class HudLabelLayer {
         obstacles.push({ x: rc.x - rw / 2 - 2, y: rc.y - rs / 2 - 2, w: rw + 4, h: rs + 4 });
       }
     }
-    // Karty obiektów (UI nad warstwą HUD — karta ciała, panel statku, panel stacji): etykiety ich unikają, żeby karta
-    // zaznaczonego obiektu nie zakrywała jego etykiety (sama warstwa leży POD kartami — 515).
+    // Panele UI nad warstwą HUD (panel statku T5, panel floty / grupy T6): etykiety ich unikają, żeby panel nie zakrywał
+    // etykiety (sama warstwa leży POD panelami).
     const cards = this._cardRects(K);
     for (const r of cards) obstacles.push(r);
     // ── Ciała: grupy stosu i LOD ────────────────────────────────────────────────────────────────────────────────────
@@ -1031,20 +1031,12 @@ export class HudLabelLayer {
   _cardRects(K) {
     const out = [];
     const um = K?.uiManager;
-    const bc = um?._bottomContext?._cardRect;
-    if (bc && um?._selectedEntity) out.push({ x: bc.x, y: bc.y, w: bc.w, h: bc.h });
     // REFORMA ZAKŁADEK T5: panel statku w idiomie etykiet — jego prostokąt z ostatniej klatki.
     const vp = um?._shipPanelHud?.rect;
     if (vp && um?._mapSurface?.() === 'vessel') out.push({ x: vp.x, y: vp.y, w: vp.w, h: vp.h });
     // REFORMA ZAKŁADEK T6: panel floty / grupy w idiomie etykiet — jego prostokąt z ostatniej klatki (`null` — nienarysowany).
     const fp = um?._fleetPanelHud?.rect;
     if (fp) out.push({ x: fp.x, y: fp.y, w: fp.w, h: fp.h });
-    const sp = K?.stationPanel;
-    const sr = sp?._lastRect;
-    // T2: w trybie cywilizacji panel stacji się nie rysuje (jego stan = przypięcie stacji) — prostokąt z dawnej klatki nie jest
-    // przeszkodą.
-    const spDrawn = !K?.civMode;
-    if (sr && spDrawn && sp.visible && !sp._float?.minimized) out.push({ x: sr.px, y: sr.py, w: sr.PW, h: sr.PH });
     return out;
   }
 

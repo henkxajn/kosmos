@@ -29,12 +29,16 @@
 //       strefę, a klik woła `openPanel('colony', {colonyId})` z WŁAŚCIWYM id. KONTROLA PINU: własna kolonia nadal
 //       przełącza aktywną. Granica widoczności (ARKUSZ UI U3-0, Finding 489): układ AI bez przylotu i bez moich
 //       wojsk na jego ciałach — poza listą; moje wojska na ciele (desant) — odsłaniają go.
-//   T4  WYKONANIE — `BottomContext._doAction` na obcej koloni: z moimi wojskami otwiera JEJ mapę,
+//   T4  WYKONANIE — akcja „Mapa ciała” (`LabelPinLogic.runBodyMapAction` — od REFORMY ZAKŁADEK T4 rdzeń dawnego
+//       `BottomContext._doAction`, woła go przypięcie etykiety) na obcej koloni: z moimi wojskami otwiera JEJ mapę,
 //       bez wojsk NIE otwiera ani cudzej, ani własnej. KONTROLA PINU: własna kolonia bez zmian.
 //   T5  Pin ŹRÓDŁOWY `_finishDropMode` (ColonyOverlay nie importuje się pod node — `TextureLoader`).
 //   T6  Etykiety: KAŻDY typ jednostki ma nazwę ≠ klucz w PL i EN, i ma ikonę. Przed naprawą
 //       `t('groundUnit.shock_infantry')` zwracało SAM KLUCZ → lista pokazywała „groundUni…".
 //
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta;
+//   jej akcja „Mapa ciała” przeniesiona BEZ ZMIANY treści do `LabelPinLogic.runBodyMapAction` (K i emiter wstrzyknięte) —
+//   T4 woła tę funkcję zamiast metody karty; asercje bez zmian.
 // Uruchom: node src/testing/smoke/ground_troops_reachable_smoke.mjs
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -42,7 +46,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GameCore } from '../headless/GameCore.js';
 import { markSystemExplored } from '../../utils/SystemExploration.js';
-import { BottomContext } from '../../ui/BottomContext.js';
+// ⚠ NAMESPACE: `runBodyMapAction` POWSTAJE w REFORMIE ZAKŁADEK T4 — nazwany import wywróciłby moduł na starszym kodzie.
+import * as LabelPin from '../../ui/LabelPinLogic.js';
 import { resolveBodyName } from '../../utils/BodyName.js';
 import { t, setLocale } from '../../i18n/i18n.js';
 // ⚠ NAMESPACE, nie nazwany import: `ARCHETYPE_ICONS` POWSTAJE w tym slice, a nazwany import
@@ -254,13 +259,15 @@ console.log('\n== T3 - lewy outliner: WYKONANIE draw + hitTest (ARKUSZ UI U2-3) 
   assert(!!drop && !!home, 'kontrola pinu: obie jednostki utworzone');
 }
 
-console.log('\n== T4 - BottomContext "mapa ciala" ==');
+console.log('\n== T4 - akcja "Mapa ciala" (runBodyMapAction) ==');
 {
   const { cm, gum, ai, mine } = boot();
   const calls = stubOverlayManager();
   const aiBody = EntityManager.get(ai.planetId);
   const myBody = EntityManager.get(mine.planetId);
-  const bc = new BottomContext();
+  // Akcja „Mapa ciała” tak, jak woła ją przypięcie etykiety (`runPinAction('map')`): K = `window.KOSMOS`, emiter = EventBus.
+  const act = (entity) => LabelPin.runBodyMapAction?.(entity, { K: window.KOSMOS, emit: (n, pl) => EventBus.emit(n, pl) });
+  assert(typeof LabelPin.runBodyMapAction === 'function', 'kontrola pinu: `runBodyMapAction` istnieje (rdzeń akcji „Mapa ciała”)');
 
   // (a) obca kolonia BEZ moich wojsk — nie otwiera ANI cudzej, ANI wlasnej.
   // ⚠ `analyzed` ustawiane JAWNIE, zeby zmierzyc SKUTEK (spadek do read-only podgladu), a nie
@@ -270,7 +277,7 @@ console.log('\n== T4 - BottomContext "mapa ciala" ==');
   EventBus.on('planet:previewMap', () => { previewed++; });
   calls.length = 0;
   const activeBefore = cm.activePlanetId;
-  bc._doAction(aiBody);
+  act(aiBody);
   assert(!calls.some(c => c.id === 'colony' && c.opts?.colonyId == null),
     'bez wojsk: NIE otwiera panelu bez colonyId (dawniej = przeskok na wlasna kolonie)');
   assert(!calls.some(c => c.opts?.colonyId === ai.planetId),
@@ -281,7 +288,7 @@ console.log('\n== T4 - BottomContext "mapa ciala" ==');
   // (b) obca kolonia Z moimi wojskami — otwiera JEJ mape
   gum.createUnit('shock_infantry', ai.planetId, 0, 0, { owner: 'player' });
   calls.length = 0;
-  bc._doAction(aiBody);
+  act(aiBody);
   assert(calls.length === 1 && calls[0].id === 'colony' && calls[0].opts?.colonyId === ai.planetId,
     `z wojskami: otwiera mape obcego ciala (${JSON.stringify(calls[0] ?? null)})`);
 
@@ -290,16 +297,15 @@ console.log('\n== T4 - BottomContext "mapa ciala" ==');
   const calls2 = stubOverlayManager();
   const aiBody2 = EntityManager.get(ai2.planetId);
   gum2.createUnit('shock_infantry', ai2.planetId, 0, 0, { owner: 'emp_001' });
-  const bc2 = new BottomContext();
   calls2.length = 0;
-  bc2._doAction(aiBody2);
+  act(aiBody2);
   assert(!calls2.some(c => c.opts?.colonyId === ai2.planetId) &&
          !calls2.some(c => c.id === 'colony' && c.opts?.colonyId == null),
     'cudze wojska na cudzym ciele nie otwieraja ANI jej mapy, ANI mojej koloni (bilet = MOJE buty)');
 
   // KONTROLA PINU — wlasna kolonia zachowuje sie jak dotad
   calls2.length = 0;
-  bc2._doAction(EntityManager.get(mine2.planetId) ?? myBody);
+  act(EntityManager.get(mine2.planetId) ?? myBody);
   assert(calls2.length === 1 && calls2[0].id === 'colony' && calls2[0].opts === undefined,
     'wlasna kolonia: openPanel("colony") bez opts - sciezka sprzed zmiany');
 }

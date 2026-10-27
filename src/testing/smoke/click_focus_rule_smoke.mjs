@@ -33,10 +33,14 @@
 // wyniku), dwuklik bez ColonyOverlay i bez `vessel:focus` (2b), plakietki i etykiety mapy, dzisiejszy Outliner (statek,
 // kolonia bez zmiany aktywnej kolonii — §7.10, stacja; obiekt z innego układu — §7.8), karta ciała z doku, wróg (2d),
 // Dok taktyczny (2c). „KONTROLA” = zachowanie, które U1 zostawia (zielone po obu stronach).
-//   T10 WYKONANIE `Outliner.hitTest` · T11 `MapLabelLayer.handleClick` · T12 `TacticalDock._onHit` · T13 `BottomContext`
+//   T10 WYKONANIE `Outliner.hitTest` · T11 `MapLabelLayer.handleClick` · T12 `TacticalDock._onHit` · (T13 — usunięte w T4)
 //   T14 `ThreeRenderer.handleClick` i T15 `GameScene._handleTacticalLeftClick` (wycięte ze źródła, atrapa `this`) ·
 //   T16 dwuklik (wycięty słuchacz) · T17 fokus statku bez sprite'a po przełączeniu układu · T18 pamięć pingu wroga ·
 //   T19 picker kliku tylko widocznych sprite'ów.
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): dok zminimalizowanych paneli i karta ciała
+//   (`BottomContext`) usunięte — T2e: stacja ZAMKNIĘTA (panel ukryty, id zostaje) nie jest bieżącym zaznaczeniem (dawniej:
+//   zminimalizowana do doku); T13 (przywrócenie karty z doku bez kamery) usunięte razem z dokiem; atrapy panelu stacji bez
+//   `_float`.
 // Uruchom: node src/testing/smoke/click_focus_rule_smoke.mjs
 import '../headless/env.js';           // MUSI być pierwszy
 import { readFileSync } from 'node:fs';
@@ -125,7 +129,7 @@ header('T2  readClickSelection — istniejący stan');
   const K = {
     uiManager: { getSelectedVesselIds: () => ['v3'], getSelectedVesselId: () => 'v3', _selectedEntity: { id: 'e7' },
       getSelectedFleetId: () => 'f2' },
-    stationPanel: { visible: true, _stationId: 's9', _float: { minimized: false } },
+    stationPanel: { visible: true, _stationId: 's9' },
     threeRenderer: { _pingedEnemyId: 'x4' },
     activeSystemId: 'sys_C',
   };
@@ -134,10 +138,10 @@ header('T2  readClickSelection — istniejący stan');
   ok(s.entityId === 'e7', 'T2b ciało: `_selectedEntity` (karta ciała)');
   ok(s.stationId === 's9', 'T2c stacja: otwarty StationPanel');
   ok(s.pingedEnemyId === 'x4' && s.fleetId === 'f2' && s.activeSystemId === 'sys_C', 'T2d ping wroga, flota, układ widoku');
-  const K2 = { ...K, stationPanel: { visible: true, _stationId: 's9', _float: { minimized: true } }, activeSystemId: undefined,
+  const K2 = { ...K, stationPanel: { visible: false, _stationId: 's9' }, activeSystemId: undefined,
     starSystemManager: { activeSystemId: 'sys_D' } };
   const s2 = call(CI?.readClickSelection, K2) ?? {};
-  ok(s2.stationId === null, 'T2e stacja ZMINIMALIZOWANA do doku nie jest bieżącym zaznaczeniem (klik ją przywraca)');
+  ok(s2.stationId === null, 'T2e stacja ZAMKNIĘTA (panel ukryty, id zostaje) nie jest bieżącym zaznaczeniem');
   ok(s2.activeSystemId === 'sys_D', 'T2f układ widoku: rezerwa `starSystemManager.activeSystemId` (nowa gra bez pola)');
   const s3 = call(CI?.readClickSelection, {}) ?? {};
   ok(s3.activeSystemId === 'sys_home' && Array.isArray(s3.vesselIds) && s3.vesselIds.length === 0,
@@ -441,7 +445,7 @@ const TRS = {   // stub renderera dla producentów spoza renderera (Outliner, Ma
   pingVessel(id) { ops.push(['ping', id]); },
   resetToSystemView() { ops.push(['reset']); return true; },
 };
-const SP = { visible: false, _stationId: null, _float: { minimized: false } };
+const SP = { visible: false, _stationId: null };
 Object.assign(globalThis.KOSMOS, {
   uiManager: UM, threeRenderer: TRS, stationPanel: SP, activeSystemId: 'sys_home',
   vesselManager: { getVessel: (id) => VESSELS[id] ?? null },
@@ -561,20 +565,6 @@ header('T12 WYKONANIE TacticalDock._onHit — „drugi klik” zamiast dwukliku 
   ok(JSON.stringify(ops) === '[["toggle","v2"]]' && evs.length === 0, 'T12d KONTROLA: CTRL+klik → przełączenie zbioru');
   const td = src('../../ui/TacticalDock.js');
   ok(!/DOCK_DBLCLICK_MS|_lastRowClick/.test(td), 'T12e źródło: okno dwukliku i jego pola zdjęte');
-}
-
-// ═══ T13 ════════════════════════════════════════════════════════════════════
-header('T13 WYKONANIE BottomContext — przywrócenie karty z doku bez kamery');
-{
-  const { BottomContext } = await import('../../ui/BottomContext.js');
-  const reg = new Map();
-  globalThis.KOSMOS.panelDock = { register: (k, o) => reg.set(k, o), unregister: (k) => reg.delete(k), has: (k) => reg.has(k) };
-  const bc = new BottomContext();
-  bc._minimize(P1);
-  reset(); reg.get('body:p1')?.onRestore?.();
-  const sel = evs.find(e => e[0] === 'body:selected');
-  ok(!!sel && sel[1]?.entity === P1 && sel[1]?.focus === false, 'T13a przywrócenie karty → `body:selected { focus: false }` (karta wraca, kamera stoi)');
-  ok(bc._minimized === false && !reg.has('body:p1'), 'T13b KONTROLA: karta zdjęta z doku i rozwinięta (s34b)');
 }
 
 // ═══ T14 ════════════════════════════════════════════════════════════════════

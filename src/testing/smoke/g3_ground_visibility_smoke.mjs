@@ -17,7 +17,8 @@
 //       (nie `moving`, nie `in_cargo`); ukryta pierwsza na heksie — klik bierze widoczną.
 //   V7  wypisywanie: przełącznik heksu (lista po regule); przycinanie zaznaczenia — cudza jednostka, której gracz już nie
 //       widzi, wypada (kompozycja `pruneUnitSelection` + odczyt przez regułę, jak w `ColonyOverlay`).
-//   V8  karta ciała (`readGarrisonReadout` + `BottomContext.draw` na atrapie ctx): własne jednostki na ciele — liczba;
+//   V8  karta ciała (`readGarrisonReadout` + rozwinięcie etykiety ciała `HudLabelLayer._t1Body` — od T4 następca
+//       `BottomContext.draw`): własne jednostki na ciele — liczba;
 //       bez nich i bez `detailed` — „nieznany”; `detailed` przed mobilizacją — rezerwa (bez zmian); jedno źródło progu.
 //   V9  okablowanie `ColonyOverlay` (piny źródłowe — plik nie importuje się pod node): `_drawUnits`, klik na heks,
 //       przełącznik heksu, przycinanie zaznaczenia; kontrole: źródło czytane, reguła gry przy lądowaniu nietknięta.
@@ -26,6 +27,8 @@
 //   suity — żaden pin nie dostałby koloru.
 // ⚠ Każdy pin wykluczający ma ŚWIADKA (jednostka naprawdę stoi na ciele, `getUnitAt` ją zwraca).
 // ⚠ Źródło bez komentarzy i z LF (pin niezależny od checkoutu). ⚠ Tylko przeglądarka pokaże render i klik na mapie.
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta —
+//   V8b czyta rozwinięcie etykiety ciała (`HudLabelLayer._t1Body`, wiersz „Garnizon: …” z tego samego `GarrisonReadout`).
 
 import '../headless/env.js';           // MUSI być pierwszy
 import gameState from '../../core/GameState.js';
@@ -35,7 +38,7 @@ import * as GP from '../../utils/GarrisonPlanner.js';
 import * as VS from '../../entities/Vessel.js';
 import { isPlayerColony } from '../../utils/ColonyOwnership.js';
 import { pruneUnitSelection } from '../../ui/ColonySelectionLogic.js';
-import { BottomContext } from '../../ui/BottomContext.js';
+import { HudLabelLayer } from '../../ui/HudLabelLayer.js';
 import { t } from '../../i18n/i18n.js';
 import { readFileSync } from 'node:fs';
 
@@ -103,25 +106,14 @@ function neutralBody(w) {
   return ['moon', 'planet', 'planetoid'].flatMap(tp => EntityManager.getByType(tp))
     .find(b => b.systemId === sys && b.id !== w.K.homePlanet.id && !w.cm.getColony(b.id)) ?? null;
 }
-/** Karta ciała tak, jak rysuje ją gra (`BottomContext.draw` na atrapie ctx) — napisy drugiej klatki. */
-function renderCard(entity) {
-  const texts = () => {
-    const out = [];
-    const noop = () => {};
-    return {
-      out, canvas: { width: 1280, height: 720 }, measureText: (s) => ({ width: String(s).length * 6 }),
-      save: noop, restore: noop, beginPath: noop, moveTo: noop, lineTo: noop, stroke: noop, fill: noop, clip: noop,
-      rect: noop, fillRect: noop, strokeRect: noop, closePath: noop, arc: noop, translate: noop, setLineDash: noop,
-      roundRect: noop, ellipse: noop, createLinearGradient: () => ({ addColorStop: noop }),
-      fillText: (s) => out.push(String(s)), strokeText: (s) => out.push(String(s)),
-      font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: 'left', globalAlpha: 1, shadowColor: '', shadowBlur: 0,
-    };
-  };
-  const bc = new BottomContext();
-  bc.draw(texts(), 1280, 720, entity);                 // pierwsza klatka = fade-in
-  const ctx2 = texts();
-  bc.draw(ctx2, 1280, 720, entity);
-  return ctx2.out;
+
+/** Rozwinięcie etykiety ciała tak, jak buduje je gra (`HudLabelLayer._t1Body` — następca karty ciała od REFORMY ZAKŁADEK
+ *  T4; ta sama treść rozwija się przy najechaniu i w przypięciu) — linie tekstu. */
+function renderExpansion(K, id) {
+  try {
+    const lay = new HudLabelLayer();
+    return lay._t1Body(id, { K, now: 0, tactical: false }, { permanent: new Map(), stations: new Map(), pictureCtx: {} }) ?? [];
+  } catch (e) { console.log('    (' + e.message + ')'); return []; }
 }
 
 console.log('\nV0 — moduł reguły');
@@ -342,9 +334,10 @@ assert(['GARRISON_READOUT_INTEL', 'playerHasGroundUnitsOn', 'foreignGroundUnitsV
   const live = onBody(w, cap).filter(u => u.owner === e1 && (u.hp ?? 0) > 0).length;
   assert(r1?.kind === 'units' && r1?.count === live && live >= 1 && readoutText(r1) === t('garrison.readout.units', live),
     `V8a: „contact” + własna jednostka na ciele — liczba jednostek stojących na ciele (${r1?.kind}:${r1?.count} = ${live})`);
-  const card = renderCard(EntityManager.get(cap));
-  assert(card.includes(t('garrison.readout.units', live)),
-    `V8b: karta ciała (BottomContext.draw) pokazuje „${t('garrison.readout.units', live)}”`);
+  const card = renderExpansion(w.K, cap);
+  const wantLine = `${t('garrison.readout.label')}: ${t('garrison.readout.units', live)}`;
+  assert(card.includes(wantLine),
+    `V8b: rozwinięcie etykiety ciała (HudLabelLayer._t1Body — następca karty ciała, T4) pokazuje „${wantLine}” (linie: ${card.join(' | ')})`);
   loadIntoShip(w, p);
   const r2 = readout(w.K, cap);
   assert(p.status === 'in_cargo' && r1?.kind === 'units' && r2?.kind === 'unknown',

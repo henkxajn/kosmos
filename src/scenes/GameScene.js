@@ -5641,8 +5641,9 @@ export class GameScene {
     });
 
     // ARKUSZ UI U1-3 (D-UI-5, decyzja 2b): dwuklik NIE otwiera już ColonyOverlay i NIE fokusuje statku — „drugi klik”
-    // w ten sam obiekt (część każdego dwukliku) daje focus kamery, a mapę kolonii otwiera „Mapa ciała” w karcie ciała
-    // (`BottomContext._doAction`) i klawisz H. Zostaje wyłącznie poza trybem cywilizacji: planeta z życiem → kolonizuj.
+    // w ten sam obiekt (część każdego dwukliku) daje focus kamery, a mapę kolonii otwiera „Mapa ciała” w przypięciu etykiety
+    // (`LabelPinLogic.runBodyMapAction`) i klawisz H. Zostaje wyłącznie poza trybem cywilizacji: planeta z życiem → kolonizuj
+    // (jedyna droga od REFORMY ZAKŁADEK T4 — karta ciała Generatora usunięta, decyzja właściciela Q1).
     window.addEventListener('dblclick', (e) => {
       if (window.KOSMOS?.civMode) return;
       if (this.planetScene?.isOpen) return;
@@ -5794,7 +5795,7 @@ export class GameScene {
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }
-    // Slice 8b — kursor nad pływającym panelem (FleetGroupPanel/StationPanel) na #ui-canvas:
+    // Slice 8b — kursor nad panelem nad mapą (panel statku T5, panel floty / grupy T6, outlinery) na #ui-canvas:
     // nie pokazuj tooltipa mapy 3D (koordynaty/encja) przebijającego przez panel.
     if (this.uiManager?.isPointerOverFloatingPanel?.(clientX, clientY)) {
       this._scheduleEntityTooltip(null, clientX, clientY);

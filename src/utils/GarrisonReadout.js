@@ -1,8 +1,9 @@
 // GarrisonReadout — AI GARRISON (G3-3): co gracz wie o garnizonie OBCEJ kolonii (podpis G3, domyślne potwierdzone przez
 // właściciela 2026-10-04; D6: „liczebność garnizonu widać na poziomie wywiadu 'detailed'”).
 //
-// Jedna funkcja odpowiada na pytanie, jedna zamienia odpowiedź na tekst; obie czytają karta ciała (`BottomContext`) i okno
-// zrzutu desantu (`DropTroopsModal`), więc te powierzchnie nie mogą się rozjechać:
+// Jedna funkcja odpowiada na pytanie, jedna zamienia odpowiedź na tekst; obie czytają rozwinięcie etykiety HUD obcej kolonii
+// (`HudLabelLayer` — dawniej karta ciała, usunięta w REFORMIE ZAKŁADEK T4) i okno zrzutu desantu (`DropTroopsModal`), więc
+// te powierzchnie nie mogą się rozjechać:
 //   • ciało bez kolonii albo kolonia gracza                → `null` (brak wiersza);
 //   • gracz nie widzi jednostek właściciela na tym ciele   → `unknown` (fail-closed: bez `IntelSystem` — nieznany,
 //     o ile gracz nie ma na ciele własnych jednostek);

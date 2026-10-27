@@ -20,13 +20,16 @@
 //   K6  zwinięta „+N” → rozwinięcie głowy grupy bez szyny; tarcza członka innego niż kotwica — co najmniej szyna
 //   K7  dymki (piny na wywołaniach): `#colony-3d-tooltip` (statek, kolonia) i ciałowo-statkowa część `#kosmos-tooltip`
 //       wygaszone na warstwie etykiet HUD; podpowiedź budynku (K3), POI i współrzędne pustej mapy — zostają
-//   K8  karta ciała: `bodyCardAction` = lustro `BottomContext._actionLabel` (tabela ciał); na warstwie etykiet HUD w trybie
-//       cywilizacji karta ciała się nie otwiera (od T2 — przypięcie; piny na wywołaniach `UIManager`), zaznaczenie zostaje
+//   K8  akcja „Mapa ciała”: `bodyCardAction` = lustro skutku `LabelPinLogic.runBodyMapAction` (tabela ciał; dawniej lustro
+//       `BottomContext._actionLabel`); karta ciała usunięta z `UIManager` (T4 — przypięcie jest jedyną powierzchnią ciała),
+//       zaznaczenie zostaje
 //   K9  budżet: w spoczynku z kursorem na etykiecie — 0 wywołań ctx; treść z pamięci (jedno liczenie na obiekt w TTL)
 //   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `labelHover` na stałe ON —
 //     K0b–K0d (flaga) zastąpione pinem braku predykatów i klucza; K5i bez połowy OFF; K7 / K8e — bramką jest warstwa etykiet
 //     HUD (`isHudLabelsOn`); K10 (OFF = dziś: druga linia przy najechaniu, bez etykiet na żądanie) usunięty razem z tą ścieżką
-//     (K10c — ta sama kolonia rozwinięta — zostaje jako K4j).
+//     (K10c — ta sama kolonia rozwinięta — zostaje jako K4j). T4-2 (karta ciała usunięta): K8b / K8c — lustro tabeli akcji
+//     wobec skutku `runBodyMapAction` (rdzeń dawnego `BottomContext._doAction`), K8d — Generator tym samym lustrem; K8e / K8f
+//     (bramka i wywołania karty w `UIManager`) zastąpione pinem braku karty w `UIManager`.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -48,7 +51,7 @@ const LH = await tryImport('../../ui/LabelHoverLogic.js');
 const LL = await tryImport('../../ui/HudLabelLogic.js');
 const LLay = await tryImport('../../ui/HudLabelLayer.js');
 const HL = await tryImport('../../ui/HudLayer.js');
-const BCm = await tryImport('../../ui/BottomContext.js');
+const LP = await tryImport('../../ui/LabelPinLogic.js');
 const FEATURES = GAME_CONFIG.FEATURES;
 
 // ═══ K0 ══════════════════════════════════════════════════════════════════════
@@ -441,11 +444,13 @@ header('K7  dymki — wygaszone na warstwie etykiet HUD, zostają: budynek (K3),
 }
 
 // ═══ K8 ══════════════════════════════════════════════════════════════════════
-header('K8  karta ciała: na warstwie etykiet HUD w trybie cywilizacji — bez karty; zaznaczenie zostaje');
+header('K8  akcja „Mapa ciała”: tabela = lustro skutku `runBodyMapAction`; karty ciała brak (T4); zaznaczenie zostaje');
 {
   const save = { ...K };
   K.civMode = true; K.homePlanet = { id: 'p_nz' };
-  K.colonyManager = { hasColony: (id) => id === 'p_nz' || id === 'pd_out' || id === 'p_ai' };
+  const fx = [];
+  K.colonyManager = { hasColony: (id) => id === 'p_nz' || id === 'pd_out' || id === 'p_ai', switchActiveColony: (id) => fx.push(['switch', id]) };
+  K.overlayManager = { openPanel: (id, opts) => fx.push(['open', id, opts ?? null]) };
   const ROWS = [
     ['gwiazda', { id: 'star', type: 'star' }, null],
     ['planetoida bez placówki', { id: 'pd_1', type: 'planetoid' }, null],
@@ -455,24 +460,25 @@ header('K8  karta ciała: na warstwie etykiet HUD w trybie cywilizacji — bez k
     ['dom', { id: 'p_nz', type: 'planet' }, 'openMap'],
     ['kolonia AI', { id: 'p_ai', type: 'planet' }, 'openMap'],
   ];
-  const bc = BCm?.BottomContext ? new BCm.BottomContext() : null;
+  // Skutek akcji tak, jak woła ją przypięcie (`runPinAction('map')`): coś się dzieje (panel, podgląd, przejęcie) ⇔ wynik ≠ null.
+  const act = (e) => call(LP?.runBodyMapAction, e, { K, emit: (n, pl) => fx.push(['emit', n]) });
   const mine = ROWS.map(([n, e]) => call(LH?.bodyCardAction, e, K));
-  const card = ROWS.map(([n, e]) => (bc ? bc._actionLabel(e) : undefined));
+  const card = ROWS.map(([n, e]) => { fx.length = 0; const r = act(e); return r == null ? (fx.length ? 'SKUTEK-BEZ-WYNIKU' : null) : r; });
   ok(ROWS.every(([n, e, want], i) => mine[i] === want), `K8a: \`bodyCardAction\` — tabela (gwiazda i planetoida bez placówki — bez akcji): ${JSON.stringify(mine)}`);
-  ok(bc && ROWS.every((r, i) => (card[i] != null) === (r[2] != null)), 'K8b KONTROLA: `BottomContext._actionLabel` daje tę samą tabelę akcji (karta dziś)');
-  ok(ROWS.every((r, i) => (mine[i] != null) === (card[i] != null)), 'K8c: lustro — `bodyCardAction` i karta ciała zgodne na każdym wierszu');
+  ok(typeof LP?.runBodyMapAction === 'function' && ROWS.every((r, i) => (card[i] != null) === (r[2] != null) && card[i] !== 'SKUTEK-BEZ-WYNIKU'),
+    `K8b KONTROLA: \`runBodyMapAction\` (rdzeń dawnej karty) daje skutek dokładnie na wierszach z akcją: ${JSON.stringify(card)}`);
+  ok(ROWS.every((r, i) => (mine[i] != null) === (card[i] != null)), 'K8c: lustro — `bodyCardAction` i skutek akcji „Mapa ciała” zgodne na każdym wierszu');
   K.civMode = false;
   const gen = call(LH?.bodyCardAction, { id: 'p_q', type: 'planet', lifeScore: 90 }, K);
-  ok(gen === 'takeCiv' && bc?._actionLabel({ id: 'p_q', type: 'planet', lifeScore: 90 }) != null, 'K8d: Generator — „Przejmij cywilizację” (lustro)');
+  fx.length = 0;
+  const genAct = act({ id: 'p_q', type: 'planet', lifeScore: 90 });
+  ok(gen === 'takeCiv' && genAct === 'colonize' && fx.some((f) => f[0] === 'emit' && f[1] === 'planet:colonize'),
+    'K8d: Generator — „Przejmij cywilizację” (lustro: `planet:colonize`)');
   Object.assign(K, save);
+  for (const k of ['overlayManager', 'colonyManager']) if (!(k in save)) delete K[k];
   const ui = strip(src('../../scenes/UIManager.js'));
-  const fn = ui.slice(ui.indexOf('  _bodyCardEntity() {'), ui.indexOf('  _shipPanelDockHidden() {'));
-  ok(/if \(!e \|\| !isHudLabelsOn\(GAME_CONFIG\.FEATURES\) \|\| !window\.KOSMOS\?\.civMode\) return e;\s*return null;/.test(fn)
-    && !/_selectedEntity\s*=[^=]/.test(fn), 'K8e: `_bodyCardEntity` — na warstwie etykiet HUD w trybie cywilizacji karty nie ma (każde ciało); bez warstwy i w Generatorze — zaznaczone ciało; zaznaczenia NIE zmienia');
-  ok(/this\._bottomContext\.draw\(ctx, W, H, this\._bodyCardEntity\(\)\)/.test(ui) && /this\._bottomContext\.isOver\(x, y, W, H, this\._bodyCardEntity\(\)\)/.test(ui)
-    && /const cardEntity = this\._bodyCardEntity\(\);\s*if \(cardEntity && this\._bottomContext\.hitTest\(x, y, W, H, cardEntity\)\) return true;/.test(ui)
-    && /this\._bottomContext\.handleWheel\(x, y, delta, W, H, this\._bodyCardEntity\(\)\)/.test(ui),
-    'K8f: rysunek, klik, kursor nad UI i kółko karty — przez `_bodyCardEntity()` (bez karty — bez blokady kamery)');
+  ok(ui.length > 10000 && /this\._selectedEntity = /.test(ui) && !/_bodyCardEntity|_bottomContext|\bBottomContext\b/.test(ui),
+    'K8e: karta ciała usunięta z `UIManager` (T4) — brak `_bodyCardEntity` i `BottomContext`; zaznaczenie ciała (`_selectedEntity`) zostaje');
   const ci = strip(src('../../ui/ClickIntentLogic.js'));
   ok(/entityId:\s*um\?\._selectedEntity\?\.id \?\? null,/.test(ci), 'K8g KONTROLA: reguła kliku czyta zaznaczenie z `_selectedEntity` — 2. klik w ciało bez karty = kamera (D-UI-5)');
 }

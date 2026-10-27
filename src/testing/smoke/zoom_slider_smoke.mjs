@@ -17,7 +17,8 @@
 //   Z5 podłoga jedzie z fokusem (`_minDist` 0,05 przy statku)
 //   Z6 kółko nad suwakiem = ten sam krok co nad mapą; poza suwakiem — nic
 //   Z7 `wheelZoom` — tabela kroku (adaptacyjna czułość jak dawny nasłuch kółka), klamry; nasłuch kółka woła `wheelZoom`
-//   Z8 czip ⚔ na lewo od suwaka, rząd doku kończy się przed nimi
+//   Z8 czip ⚔ na lewo od suwaka (rząd doku przed nimi — usunięty w REFORMIE ZAKŁADEK T4 razem z dokiem paneli; Z8a / Z8b
+//      bez połowy rzędu doku; Z11e — puszczenie kończy wyłącznie przeciąganie suwaka)
 //   Z9 suwak bez obrysów (pas bez ram — U0-1): Z9a liczby obrysów jak bez suwaka (KONTROLA), Z9b gałka z `fillRect`
 //   Z10 podpowiedź suwaka (i18n PL + EN)
 //   Z11 UIManager (pin źródłowy): kółko, wciśnięcie, ruch, puszczenie
@@ -166,17 +167,18 @@ header('Z6–Z7  kółko nad suwakiem = kółko nad mapą');
 }
 
 // ═══ Z8–Z10 ══════════════════════════════════════════════════════════════════
-header('Z8–Z10  czip ⚔, rząd doku, bez obrysów, podpowiedź');
+header('Z8–Z10  czip ⚔, bez obrysów, podpowiedź');
 {
   cam = mkCam(85);
   K.combatHud = { isMinimized: () => true, hasActiveEncounters: () => true };
   K.deepSpaceCombatSystem = { listActive: () => [{}] };
   bar = new BottomControlBar(); drawMap(bar);
-  const z = bar._zoomRect, c = bar._chipRect, sp = bar.getDockSpan?.();
-  ok(!!z && !!c && c.x + c.w === z.x - 4 && sp?.x1 === c.x - 4, `Z8a SEDNO: czip ⚔ na lewo od suwaka (${c?.x + c?.w} = ${z?.x} − 4), rząd doku przed czipem`);
+  const z = bar._zoomRect, c = bar._chipRect;
+  ok(!!z && !!c && c.x + c.w === z.x - 4 && bar.getDockSpan === undefined, `Z8a SEDNO: czip ⚔ na lewo od suwaka (${c?.x + c?.w} = ${z?.x} − 4); rzędu doku brak (T4)`);
   K.combatHud = null; delete K.deepSpaceCombatSystem;
   bar = new BottomControlBar(); const ctx = drawMap(bar);
-  ok(!!bar._zoomRect && bar.getDockSpan?.()?.x1 === bar._zoomRect.x - 4, 'Z8b SEDNO: bez czipu — rząd doku kończy się przed suwakiem');
+  ok(!!bar._zoomRect && bar._chipRect === null && bar._zoomRect.x + bar._zoomRect.w === bar._bellRect.x - 6,
+    'Z8b SEDNO: bez czipu — suwak tuż na lewo od 🔔 (odstęp 6 px), czipu brak');
   ok(ops(ctx, 'stroke').length === 1 && ops(ctx, 'strokeRect').length === 5,
     `Z9a KONTROLA: pas nad mapą bez obrysów — jedyny stroke() to separator (${ops(ctx, 'stroke').length}), 5 obrysów prędkości (${ops(ctx, 'strokeRect').length})`);
   ok(knobX(ctx) != null, 'Z9b SEDNO: suwak z samych `fillRect` (gałka 6 × 12) — liczby obrysów jak bez suwaka');
@@ -209,7 +211,7 @@ header('Z11  UIManager — kółko, wciśnięcie, ruch, puszczenie (pin źródł
   ok(/if \(this\._bottomControlBar\?\.handleZoomDrag\?\.\(x\)\) return;/.test(mm) && /this\._bottomControlBar\?\.endZoomDrag\?\.\(\);/.test(mm),
     'Z11d `handleMouseMove`: ruch w trakcie przeciągania pochłonięty; overlay w trakcie — koniec przeciągania');
   const mu = body(ui, '  handleMouseUp(rawX, rawY, button = 0) {');
-  ok(/const draggedZ = this\._bottomControlBar\?\.endZoomDrag\?\.\(\);/.test(mu) && /if \(draggedS \|\| draggedB \|\| draggedZ\) this\._panelDragConsumedClick = true;/.test(mu),
+  ok(/const draggedZ = this\._bottomControlBar\?\.endZoomDrag\?\.\(\);/.test(mu) && /if \(draggedZ\) this\._panelDragConsumedClick = true;/.test(mu),
     'Z11e `handleMouseUp`: koniec przeciągania; ruszony suwak pochłania nadchodzący klik');
 }
 

@@ -36,6 +36,7 @@
 //   zastąpione pinem braku predykatów i kluczy; H6g / H6j bez połowy OFF; H9b — stany warstwy etykiet HUD (`hudLabels`)
 //   zamiast `labelHover` × `shipPanelHud`; H10 (OFF = T3) przecelowany na „panel T5 jedyną powierzchnią”; H11d — bramka bez
 //   `_vesselPanelBounds`. H1 / H2 / H3 (panel T3 jako wyrocznia zbioru stref i dyspozycji) — bez zmian do kolejnego kroku T4.
+//   T4-2 (karta ciała i panel stacji usunięte): H11d — wynik rysunku panelu T5 bez zapisu przeszkody kart (`shipPanelHudDrawn`).
 // ⚠ Moduły POWSTAJĄ w T5 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -612,8 +613,8 @@ header('H9  530 — dymek współrzędnych nie nad UI (isOverUI + strefy HUD), z
     _topBar: { isOver: () => surf.topBar }, _bottomBar: { isOver: () => surf.bottomBar }, _leftOutliner: { isOver: () => surf.left }, _outliner: { isOver: () => surf.right },
     _topResourceDrawer: { isOver: () => surf.res }, _bottomNavBar: { isOver: () => surf.nav }, _bottomControlBar: { isOver: () => surf.control }, _eventLogDrawer: { isOver: () => surf.log },
     _mapSurface: () => 'vessel', _vesselPanelHit: mHit, _shipPanelHud: lay, _fleetOverlay: { _vesselPanelRect: null }, _shipPanelDockHidden: () => false,
-    fleetGroupPanel: null, fleetCommandPanel: null, _stationPanelSurface: () => false, stationPanel: null, _tacticalMode: null, tacticalDock: null,
-    panelDock: null, _bottomContext: { isOver: () => false }, _bodyCardEntity: () => null, overlayManager: { isAnyOpen: () => false },
+    fleetGroupPanel: null, fleetCommandPanel: null, stationPanel: null, _tacticalMode: null, tacticalDock: null,
+    overlayManager: { isAnyOpen: () => false },
   };
   globalThis.window.KOSMOS.civMode = true;
   ok(call(mOver, self, 1000, 200) === true, 'H9c `isOverUI` (wykonanie) — kursor nad panelem statku T5 (prostokąt z `_vesselPanelHit`)');
@@ -655,7 +656,7 @@ header('H10 panel T5 jedyną powierzchnią statku nad mapą (dawny panel T3 poza
     'H10c KONTROLA: panel T5 narysowany — trafienie wg JEGO prostokąta (110,110 leży w dawnym T3, nie w T5)');
   // HudLabelLayer: przeszkoda — wyłącznie prostokąt panelu T5
   const HLx = HLL?.HudLabelLayer ? new HLL.HudLabelLayer() : null;
-  const um = { _mapSurface: () => 'vessel', _bottomContext: {}, _selectedEntity: null, _shipPanelHud: { rect: null }, _fleetOverlay: { _vesselPanelRect: t3r } };
+  const um = { _mapSurface: () => 'vessel', _selectedEntity: null, _shipPanelHud: { rect: null }, _fleetOverlay: { _vesselPanelRect: t3r } };
   const rNone = HLx?._cardRects?.({ uiManager: um, civMode: true }) ?? null;
   um._shipPanelHud.rect = { x: 930, y: 60, w: 200, h: 250 };
   const rOn = HLx?._cardRects?.({ uiManager: um, civMode: true }) ?? [];
@@ -679,7 +680,7 @@ header('H11 budżet — powtórna klatka bez pomiaru tekstu, jeden model na klat
   ok(lay?.rect === null && (lay?._zones?.length ?? -1) === 0 && lay.chipAt(1000, 100) === null && lay.handleClick(1000, 100, {}) === false
     && lay.handleWheel(1000, 100, 50) === false, 'H11c panel nienarysowany — bez stref: brak kliku, kółka i „rączki”');
   const dr = body(UI, '  _draw() {');
-  ok(/if \(civMode && !globeOpen && !this\.overlayManager\.isAnyOpen\(\) && !this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*shipPanelDrawn = this\._drawShipPanelHud\(ctx, W, H\);/.test(dr),
+  ok(/if \(civMode && !globeOpen && !this\.overlayManager\.isAnyOpen\(\) && !this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*shipPanelHudDrawn = !!this\._drawShipPanelHud\(ctx, W, H\);/.test(dr),
     'H11d model liczony wyłącznie przy rysunku panelu (bramka T3: tryb cywilizacji, bez globusa i overlayu, bez trybu Y, N == 1)');
 }
 

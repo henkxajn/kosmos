@@ -78,7 +78,7 @@ export function readClickSelection(K) {
   const um = K?.uiManager ?? null;
   const ids = um?.getSelectedVesselIds?.() ?? [];
   const sp = K?.stationPanel ?? null;
-  const stationOpen = !!(sp?.visible && !sp?._float?.minimized && sp?._stationId != null);
+  const stationOpen = !!(sp?.visible && sp?._stationId != null);
   return {
     vesselIds:     [...ids],
     leadId:        um?.getSelectedVesselId?.() ?? null,
@@ -196,8 +196,8 @@ export function syncBodyCardOnSystemSwitch(entity, systemId, emit = null) {
 /**
  * ARKUSZ UI U3-2 (Finding 491) — lustro 486 dla panelu stacji (wołane w tym samym miejscu: `system:switched`, PO
  * przebudowie sceny): przełączenie układu zamyka panel stacji SPOZA układu docelowego; panel stacji Z układu docelowego
- * zostaje (drugi klik reguły §7.8 w stację z innego układu przełącza układ, panel zostaje). Panel zadokowany jako belka
- * (zminimalizowany) — bez zmian (to wybór gracza).
+ * zostaje (drugi klik reguły §7.8 w stację z innego układu przełącza układ, panel zostaje). Od REFORMY ZAKŁADEK T4 panel
+ * stacji to stan przypięcia stacji (bez rysunku i doku).
  * @param {object|null} station — stacja w otwartym panelu (`StationPanel._station()`)
  * @param {string|null} systemId — układ docelowy
  * @param {Function} [close] — zamknięcie panelu

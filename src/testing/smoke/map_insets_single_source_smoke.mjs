@@ -11,8 +11,7 @@
 // PINY (SEDNO pada na drzewie sprzed U4-2; KONTROLA — zielona po obu stronach):
 //   M1 `computeMapInsets`: tryb cywilizacji — dół NAD pasem dolnym także bez Doku (42 + 20); z Dokiem bez zmian;
 //      kolumna i obszar mapy kończą się na tej samej linii (`outlinerBottomInset` = `insets.bottom`); Generator bez zmian
-//   M2 `BottomContext._bounds` (wykonanie): prawa krawędź karty z `MapInsets.right` (schowany prawy outliner → do
-//      krawędzi ekranu, 496), dół nad pasem dolnym / nad Dokiem taktycznym
+//   (M2 — obszar karty ciała `BottomContext._bounds` — usunięty w REFORMIE ZAKŁADEK T4 razem z kartą)
 //   M3 `edgeIndicators` (wykonanie): kadr = prostokąt `opts.rect`; bez niego — cały ekran jak dotąd
 //   M4 `MapLabelLayer.drawVesselLabels` (wykonanie): statek pod lewą kolumną i statek pod pasem dolnym → strzałki przy
 //      krawędzi OBSZARU MAPY (494); lewy schowany → ten sam statek w kadrze (KONTROLA)
@@ -22,7 +21,9 @@
 //   M8 kadr „Obserwuj” (`ThreeRenderer._computeWatchFit`, pin źródłowy — moduł nie importuje się pod node): lewo,
 //      prawo i dół z jednego odczytu `getMapInsets`; bez `OUTLINER_W` i bez sumy pasków nawigacji
 //   M9 UIManager: martwy tekst powiadomień usunięty (`_drawNotifications` bez wywołań, `_notifications` bez pisarza)
-//   M10 karta ciała bez 150 px na sztywno (`OUTLINER_W`), obszar z `getMapInsets` (pin źródłowy)
+//   (M10 — źródło karty ciała — usunięty w REFORMIE ZAKŁADEK T4 razem z kartą)
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta —
+//   M2 i M10 usunięte; pozostali konsumenci `MapInsets` (strzałki, Dok, Dowództwo, kadr „Obserwuj”) — bez zmian.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -67,33 +68,6 @@ header('M1  computeMapInsets — dół obszaru mapy nad pasem dolnym');
   ok(MI.outlinerBottomInset(civ, true) === civ.bottom,
     `M1e SEDNO: kolumna outlinera i obszar mapy kończą się na tej samej linii (kolumna ${MI.outlinerBottomInset(civ, true)}, mapa ${civ.bottom})`);
   ok(MI.outlinerBottomInset(civDock, true) === civDock.bottom, 'M1f KONTROLA: to samo z Dokiem (rezerwa Doku wygrywa po obu stronach)');
-}
-
-// ═══ M2 ══════════════════════════════════════════════════════════════════════
-header('M2  karta ciała (BottomContext._bounds) — obszar mapy z MapInsets');
-{
-  const { BottomContext } = await import('../../ui/BottomContext.js');
-  const bc = new BottomContext();
-  const TOP = LC.COSMIC.TOP_BAR_H;
-  setWorld({ left: 150, right: 150 });
-  const b1 = bc._bounds(W, H);
-  ok(b1.ox === 150 && b1.oy === TOP && b1.ow === W - 150 - 150,
-    `M2a KONTROLA: oba outlinery widoczne — od x 150 do prawego outlinera (ox ${b1.ox}, oy ${b1.oy}, ow ${b1.ow})`);
-  setWorld({ left: 150, right: 0 });
-  const b2 = bc._bounds(W, H);
-  ok(b2.ox === 150 && b2.ow === W - 150,
-    `M2b SEDNO (Finding 496): prawy outliner schowany — karta do krawędzi ekranu (ow ${W - 150}; dawniej ${W - 300}) — jest ${b2.ow}`);
-  setWorld({ left: 150, right: 150 });
-  const b3 = bc._bounds(W, H);
-  ok(b3.oy + b3.oh === H - NAV - STRIP,
-    `M2c SEDNO: dół karty nad pasem dolnym (y ${H - NAV - STRIP}; dawniej ${H - NAV}) — jest ${b3.oy + b3.oh}`);
-  setWorld({ left: 150, right: 150, dock: LC.TACTICAL_DOCK_TAB_H + STRIP });
-  const b4 = bc._bounds(W, H);
-  ok(b4.oy + b4.oh === H - NAV - LC.TACTICAL_DOCK_TAB_H - STRIP,
-    `M2d SEDNO: z Dokiem taktycznym — dół karty nad Dokiem (y ${H - NAV - LC.TACTICAL_DOCK_TAB_H - STRIP}; dawniej ${H - NAV}) — jest ${b4.oy + b4.oh}`);
-  setWorld({ civ: false, left: 0, right: 0 });
-  const b5 = bc._bounds(W, H);
-  ok(b5.ox === 0 && b5.oy + b5.oh === H - LC.COSMIC.BOTTOM_BAR_H, `M2e KONTROLA: Generator — od x 0, dół nad dolnym paskiem (${b5.oy + b5.oh})`);
 }
 
 // ═══ M3 ══════════════════════════════════════════════════════════════════════
@@ -191,10 +165,6 @@ header('M5–M10  jedno źródło pasa dolnego i wcięć — Dok, LayoutConfig, 
   const ui = src('../../scenes/UIManager.js');
   ok(/class UIManager\b/.test(ui) && /this\._leftOutliner\.draw\(/.test(ui) && !/_drawNotifications|this\._notifications\b/.test(ui),
     'M9 SEDNO: UIManager bez martwego tekstu powiadomień (`_drawNotifications`, `_notifications`)');
-  const bcs = src('../../ui/BottomContext.js');
-  const bb = body(bcs, '  _bounds(W, H) {');
-  ok(!/OUTLINER_W/.test(bcs) && /getMapInsets\(\)/.test(bb) && /W - ins\.right - ox/.test(bb) && /H - ins\.bottom - resBar - oy/.test(bb),
-    'M10 SEDNO: karta ciała — obszar z `getMapInsets` (prawa krawędź i dół), bez `OUTLINER_W`');
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

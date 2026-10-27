@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // WYKONANIE prawdziwego `LeftOutliner` (`draw` na atrapie ctx z rejestrem napisów i prostokątów, `hitTest`,
 // `handleWheel`, `updateHover`) na świecie w EntityManagerze; prawdziwe `MapInsets` i ich konsumenci, którzy importują
-// się pod node (`FleetGroupPanel`, `FleetCommandPanel`, `PanelDock`, `BottomContext`, `StationPanel`, kadr „Obserwuj”
+// się pod node (`FleetGroupPanel`, `FleetCommandPanel`, kadr „Obserwuj”
 // `watchSafeRect`). `UIManager` i `ThreeRenderer` nie importują się pod node (THREE) — montaż i ich wcięcia: piny
 // źródłowe (komentarze zdjęte).
 //
@@ -100,6 +100,9 @@
 //   L7i — pływający panel statku (`_vesselPanelBounds`, ścieżka `shipPanelOutliner` OFF) usunięty; zostaje L7i-T3.
 //   L17d-0 / L17d — klik dawnego panelu floty (`fleetCommandPanel.handleClick`) usunięty; w jego miejscu klik panelu
 //         floty / grupy T6 (`_fleetPanelHudClick`), nadal przed listą kolonii z belki.
+//   T4-2 (karta ciała, panel stacji, dok i `FloatingPanel` usunięte): L5f / L5g / L5h (chipy doku), L5i / L5j (obszar karty
+//         ciała) i L5n / L5o (kotwica panelu stacji) usunięte razem z tymi powierzchniami; L7d / L17-0 / L17c / L17d-0 / L17d
+//         — kolejność rysowania i kliku bez panelu stacji (panel stacji nie rysuje się i nie łapie kliku — stan przypięcia).
 //
 // ⚠ Moduły POWSTAJĄ w U2-2 — importy dynamiczne w try/catch (pin DEGRADUJE, nie przerywa suity przy fail-first).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -177,7 +180,7 @@ Object.assign(globalThis.window.KOSMOS, {
   civMode: true, planetGlobeOpen: false, activeSystemId: 'sys_home',
   uiManager: UM, starSystemManager: SSM,
   threeRenderer: { _pingedEnemyId: null, resetToSystemView: () => { ops.push(['reset']); return true; } },
-  stationPanel: { visible: false, _stationId: null, _float: { minimized: false } },
+  stationPanel: { visible: false, _stationId: null },
   tacticalDock: { isExpanded: () => dockExpanded, getReservedHeight: () => dockRes },
   colonyManager: { getAllColonies: () => COLONIES, getColony: (id) => COLONIES.find((c) => c.planetId === id) ?? null,
     switchActiveColony: (id) => ops.push(['switchActiveColony', id]), activePlanetId: 'P1' },
@@ -336,34 +339,6 @@ header('L5  wcięcia obszaru mapy (`MapInsets`) i konsumenci');
   ok(gi({ overlay: true }) === 0 && gi({ dockExp: true }) === 0 && gi({ civ: false }) === 0, 'L5d overlay / rozwinięty Dok / poza trybem cywilizacji → 0');
   reset(); if (lo) lo.visible = false; ok(MI?.getMapInsets?.(K)?.left === 0, 'L5e stan użytkownika „ukryty” → 0'); if (lo) lo.visible = true;
 
-  // PanelDock — chipy zminimalizowanych paneli. ARKUSZ UI U4-3 (decyzja (c)): rząd na pasie dolnym, który zaczyna się
-  // przy prawej krawędzi lewego outlinera (`MapInsets.left`) — prostokąt rzędu z `BottomControlBar.getDockSpan()`.
-  const { PanelDock } = await import('../../ui/PanelDock.js');
-  const { BottomControlBar } = await import('../../ui/BottomControlBar.js');
-  const dockChip = () => {
-    const bar = new BottomControlBar();
-    bar.draw(recCtx(), W, H, { isPaused: true, multiplierIndex: 1, displayText: '' }, { left: MI?.getMapInsets?.(K)?.left ?? 0 });
-    const pd = new PanelDock(); pd.register('body:P1', { icon: '🪐', label: 'Mstow', onRestore: () => {} });
-    pd.draw(recCtx(), W, H, bar.getDockSpan?.() ?? null);
-    return pd._hitZones?.[0] ?? null;
-  };
-  reset(); const z1 = dockChip();
-  ok(z1?.x === 150 + 4, `L5f PanelDock: chipy za lewym outlinerem — od lewego końca pasa (x ${z1?.x}; U4-3)`);
-  reset(); if (lo) lo.visible = false; const z0 = dockChip(); if (lo) lo.visible = true;
-  ok(z0?.x === 4, `L5g lewy outliner schowany → pas i chipy od lewej krawędzi ekranu (x ${z0?.x}; U4-3, decyzja (a))`);
-  reset({ dockRes: 44 }); const z2 = dockChip();
-  ok(z2?.y === H - 42 - 20 + 2 && z2?.h === 16, `L5h chipy 16 px na pasie dolnym — także przy Doku taktycznym (y ${z2?.y}; U4-3)`);
-
-  // BottomContext — karta ciała. ARKUSZ UI U4-2: prawa krawędź z `MapInsets.right` — świat dostaje prawy outliner
-  // widoczny (150 px, jak w grze; dawniej karta odejmowała 150 px na sztywno).
-  const { BottomContext } = await import('../../ui/BottomContext.js');
-  K.rightOutliner = { getReservedWidth: () => 150 };
-  reset(); const bc = new BottomContext(); const b1 = bc._bounds(W, H);
-  ok(b1.ox === 150 && b1.ow === W - 150 - 150, `L5i karta ciała: obszar od x 150 do prawego outlinera (\`MapInsets.right\` 150 — U4-2); jest ox ${b1.ox}, ow ${b1.ow}`);
-  reset({ overlay: true }); const b0 = bc._bounds(W, H);
-  ok(b0.ox === 0 && b0.ow === W - 150, 'L5j KONTROLA: outliner ukryty → ox 0 jak dotąd');
-  delete K.rightOutliner;
-
   // FleetGroupPanel / FleetCommandPanel — chip zminimalizowany (lewy dół)
   const V = { v1: { id: 'v1', name: 'Furia', shipId: 'hull_frigate' } };
   K.vesselManager = { getVessel: (id) => V[id] ?? null };
@@ -378,18 +353,6 @@ header('L5  wcięcia obszaru mapy (`MapInsets`) i konsumenci');
   reset(); const fc = new FleetCommandPanel(); fc.visible = true; fc._fleetId = 'f1'; fc._minimized = true;
   fc.draw(recCtx(), W, H);
   ok(fc._drawnRect?.x === 158, `L5m panel floty za outlinerem (x ${fc._drawnRect?.x})`);
-
-  // StationPanel — kotwica przy stacji po lewej: panel nie wchodzi pod outliner
-  const { StationPanel } = await import('../../ui/StationPanel.js');
-  EntityManager.add({ id: 'st1', type: 'station', name: 'Stacja Mstow', bodyId: 'P1', systemId: 'sys_home', ownerEmpireId: 'player',
-    depot: { inventory: new Map() }, modules: [], tier: 1, createdYear: 10 });
-  K.threeRenderer.getStationScreenPosition = () => ({ x: 20, y: 300 });
-  reset(); const sp = new StationPanel(); sp._stationId = 'st1'; sp.visible = true;
-  let threw = null; try { sp.draw(recCtx(), W, H); } catch (e) { threw = e; }
-  ok(!threw && sp._lastRect?.px >= 150, `L5n StationPanel: przy stacji 20 px od lewej krawędzi panel zaczyna się za outlinerem (px ${sp._lastRect?.px}${threw ? ', wyjątek ' + threw.message : ''})`);
-  reset({ overlay: true }); sp._float.reanchor?.(); sp.draw(recCtx(), W, H);
-  ok(sp._lastRect?.px < 150, `L5o KONTROLA: outliner ukryty → panel może stanąć przy lewej krawędzi (px ${sp._lastRect?.px})`);
-  delete K.threeRenderer.getStationScreenPosition;
 
   // Kadr „Obserwuj” — `watchSafeRect` z `leftW`
   const CW = await import('../../renderer/CombatWatchLogic.js');
@@ -436,8 +399,9 @@ header('L7  montaż w UIManager i rendererze (piny źródłowe)');
   ok(iLO > iTRD && iLO > iLog && iLO < iOv, 'L7c SEDNO: klik outlinera PO liście kolonii z belki i dzienniku (leżą nad nim), przed overlayem');
   const dr = body(ui, '  _draw() {');
   const dLO = dr.indexOf('this._leftOutliner.draw('), dTRD = dr.indexOf('this._topResourceDrawer.draw(');
-  const dSP = dr.indexOf('this.stationPanel.draw('), dFG = dr.indexOf('this._drawFleetPanelHud(');
-  ok(dLO > 0 && dLO < dTRD && dLO < dSP && dLO < dFG, 'L7d rysowanie: outliner PRZED listą kolonii z belki i panelami nad mapą (panel stacji, panel floty / grupy T6; §7.17)');
+  const dFG = dr.indexOf('this._drawFleetPanelHud(');
+  ok(dLO > 0 && dLO < dTRD && dLO < dFG && !/stationPanel\.draw\(/.test(dr),
+    'L7d rysowanie: outliner PRZED listą kolonii z belki i panelem nad mapą (panel floty / grupy T6; §7.17); panel stacji się nie rysuje (T4)');
   ok(/this\._leftOutliner\.draw\(ctx, W, H, \{ colonies: this\._cachedColonies, groundUnits: this\._outlinerState\?\.groundUnits/.test(dr),
     'L7e dane drzewa: wszystkie kolonie (cache) i jednostki naziemne z tej samej listy co prawy Outliner');
   ok(/this\._leftOutliner\?\.handleWheel\?\.\(x, y, delta, W, H\)/.test(body(ui, '  handleWheel(rawX, rawY, deltaY, rawDeltaY = deltaY) {')), 'L7f kółko');
@@ -784,18 +748,18 @@ header('L17 Finding 483 — kolejność rysowania i kliku (piny źródłowe)');
   const at = (n) => dr.indexOf(n);
   const dLbl = at('this._mapLabelLayer.draw('), dVL = at('this._mapLabelLayer.drawVesselLabels('), dAll = at('this._drawAllLabels(ctx, tr)');
   const dLO = at('this._leftOutliner.draw('), dTRD = at('this._topResourceDrawer.draw(ctx, W, H)'), dDock = at('this.tacticalDock.draw(');
-  const dNav = at('this._bottomNavBar.draw('), dSP = at('this.stationPanel.draw('), dFG = at('this._drawFleetPanelHud('), dBr = at('this._drawSelectionBrackets(');
-  ok([dLbl, dVL, dAll, dLO, dTRD, dDock, dNav, dSP, dFG, dBr].every((i) => i > 0), 'L17-0 KONTROLA: wszystkie wywołania w `_draw` znalezione');
+  const dNav = at('this._bottomNavBar.draw('), dFG = at('this._drawFleetPanelHud('), dBr = at('this._drawSelectionBrackets(');
+  ok([dLbl, dVL, dAll, dLO, dTRD, dDock, dNav, dFG, dBr].every((i) => i > 0), 'L17-0 KONTROLA: wszystkie wywołania w `_draw` znalezione');
   ok(dAll < dLO && dLbl < dLO && dVL < dLO, 'L17a SEDNO: etykiety mapy (plakietki kolonii / stacji / flot, CTRL) PRZED lewym outlinerem');
   ok(dLO < dTRD && dTRD < dDock && dTRD < dNav, 'L17b KONTROLA (od U2-2): lewy outliner → lista kolonii z belki → Dok taktyczny / paski');
-  ok(dTRD < dSP && dTRD < dFG && dBr > dVL, 'L17c KONTROLA: lista kolonii POD pływającymi panelami; ramki zaznaczenia nadal PO etykietach');
+  ok(dTRD < dFG && dBr > dVL, 'L17c KONTROLA: lista kolonii POD panelem floty / grupy T6; ramki zaznaczenia nadal PO etykietach');
   const hc = body(ui, '  handleClick(x, y) {');
   const c = (n) => hc.indexOf(n);
-  const cSP = c('this.stationPanel?.handleClick?.('), cFC = c('this._fleetPanelHudClick(x, y)'), cTRD = c('this._topResourceDrawer?.handleClick?.(');
+  const cFC = c('this._fleetPanelHudClick(x, y)'), cTRD = c('this._topResourceDrawer?.handleClick?.(');
   const cLog = c('this._eventLogDrawer?.handleClick?.('), cLO = c('this._leftOutliner?.hitTest?.('), cLbl = c('this._mapLabelLayer?.handleClick?.(');
-  ok([cSP, cFC, cTRD, cLog, cLO, cLbl].every((i) => i > 0), 'L17d-0 KONTROLA: wszystkie wywołania w `handleClick` znalezione');
-  ok(cSP < cTRD && cFC < cTRD && cTRD < cLog && cLog < cLO && cLO < cLbl,
-    'L17d SEDNO: klik — panele nad mapą (panel floty / grupy T6, panel stacji) → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
+  ok([cFC, cTRD, cLog, cLO, cLbl].every((i) => i > 0) && !/stationPanel\??\.handleClick/.test(hc), 'L17d-0 KONTROLA: wszystkie wywołania w `handleClick` znalezione; klik panelu stacji usunięty (T4)');
+  ok(cFC < cTRD && cTRD < cLog && cLog < cLO && cLO < cLbl,
+    'L17d SEDNO: klik — panel nad mapą (panel floty / grupy T6) → lista kolonii → dziennik → lewy outliner → etykiety mapy (tak jak leżą na ekranie)');
   ok(c('this._mapLabelLayer?.handleClick?.(') === hc.lastIndexOf('this._mapLabelLayer?.handleClick?.('), 'L17e KONTROLA: jedno wywołanie kliku etykiet');
 }
 

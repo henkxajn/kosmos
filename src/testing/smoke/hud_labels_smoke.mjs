@@ -17,8 +17,11 @@
 //       strzałki krawędzi bez etykiet w kadrze (497); flaga OFF i `uiPrefs.fleetMapLabelsVisible` — pusto
 //   L6  zegary: fade-in na czasie REALNYM (działa w pauzie), potem spoczynek — 0 wywołań ctx (budżet klatek)
 //   L7  montaż (piny źródłowe — UIManager nie importuje się pod node): plakietki `MapLabelLayer` (rysunek i klik) tylko
-//       przy OFF; klik etykiet HUD PO karcie ciała (515), przed raycastem; kursor do warstwy; kolejność podwarstw
+//       przy OFF; klik etykiet HUD przed raycastem (karta ciała — dawniej nad etykietami, 515 — usunięta w T4); kursor do
+//       warstwy; kolejność podwarstw
 //   L8  ucinanie z „…” (513) — pełna nazwa, gdy się mieści
+//   L9  tarcza obiektu z projektora HUD (`HudProjection.objectScreenDisc` — przeniesione z `BodyCardSideLogic` w T4; piny
+//       dawnego `body_card_side_smoke` C2): ciało, statek, stacja; za kamerą — brak; stacja bliżej niż próg radaru — jest
 //
 //   ⚠ PRZECELOWANE 2026-10-26 (REFORMA ZAKŁADEK T2, `TABS_REFORM_PLAN.md` §5.3, za zgodą): L5c–L5f opisują klik zwiniętej
 //     grupy i etykietę na tarczy przy `labelPin` OFF (dzisiejszy kod, piny bez zmian — blok L5 przestawia flagę). Przy ON
@@ -27,7 +30,8 @@
 //     warianty „-T2” (pełne piny: `label_pin_smoke`).
 //   ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): flaga kroku `labelPin` na stałe ON (klucz
 //     usunięty) — warianty OFF L5c, L5d, L5f usunięte (w trybie cywilizacji tej ścieżki już nie ma); jedynymi zostają L5c-T2,
-//     L5d-T2, L5f-T2. L5e (środek gwiazdy) stoi przed blokiem przypięcia — bez zaznaczenia.
+//     L5d-T2, L5f-T2. L5e (środek gwiazdy) stoi przed blokiem przypięcia — bez zaznaczenia. L7c — karta ciała usunięta (bez
+//     porządku „PO karcie”); L9 — piny `objectScreenDisc` z usuniętego `body_card_side_smoke` (C2).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -413,7 +417,7 @@ header('L6  zegary: fade-in na czasie realnym (także w pauzie), potem spoczynek
 }
 
 // ═══ L7 ══════════════════════════════════════════════════════════════════════
-header('L7  montaż (piny źródłowe): plakietki tylko przy OFF; klik HUD PO karcie ciała (515); kursor; kolejność podwarstw');
+header('L7  montaż (piny źródłowe): plakietki tylko przy OFF; klik HUD przed raycastem; kursor; kolejność podwarstw');
 {
   const ui = strip(src('../../scenes/UIManager.js'));
   const drawLbl = ui.indexOf('this._mapLabelLayer.draw('), drawVes = ui.indexOf('this._mapLabelLayer.drawVesselLabels(');
@@ -421,12 +425,13 @@ header('L7  montaż (piny źródłowe): plakietki tylko przy OFF; klik HUD PO ka
     && /fleetMapLabels\s*&&\s*!isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(ui.slice(drawVes - 300, drawVes)),
     'L7a: plakietki kolonii i flot (`MapLabelLayer`) rysowane tylko przy `hudLabels` OFF');
   const hc = ui.slice(ui.indexOf('  handleClick(x, y) {'), ui.indexOf('  _getAllVesselsForColony('));
-  const iOld = hc.indexOf('this._mapLabelLayer?.handleClick?.('), iCard = hc.indexOf('this._bottomContext.hitTest('),
+  const iOld = hc.indexOf('this._mapLabelLayer?.handleClick?.('), iTop = hc.indexOf('this._bottomBar.hitTest('),
     iHud = hc.indexOf('hudLayer?.handleClick?.('), iAct = hc.indexOf('this._hitTestActionPanel(');
   ok(iOld > 0 && /!isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(hc.slice(iOld - 300, iOld)),
     'L7b: klik plakietek `MapLabelLayer` tylko przy OFF (przy ON ich strefy z ostatniego rysunku byłyby nieaktualne)');
-  ok(iCard > 0 && iHud > iCard && iAct > iHud && /isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(hc.slice(iCard, iHud)),
-    `L7c: klik etykiet HUD PO karcie ciała (515) i przed końcem łańcucha UI (karta ${iCard} < HUD ${iHud} < akcje ${iAct})`);
+  ok(iTop > 0 && iHud > iTop && iAct > iHud && /isHudLabelsOn\(GAME_CONFIG\.FEATURES\)/.test(hc.slice(iTop, iHud))
+    && !/_bottomContext|_bodyCardEntity/.test(hc),
+    `L7c: klik etykiet HUD po pasku dolnym, przed końcem łańcucha UI (pasek ${iTop} < HUD ${iHud} < akcje ${iAct}); karty ciała brak (T4)`);
   const mm = ui.slice(ui.indexOf('  handleMouseMove(x, y) {'), ui.indexOf('  handleMouseMove(x, y) {') + 600);
   ok(/hudLayer\?\.setPointer\?\.\(x \/ UI_SCALE, y \/ UI_SCALE, x, y, this\.isOverUI\(x, y\)\)/.test(mm), 'L7d: kursor do warstwy HUD (px logiczne + CSS, flaga „nad UI”)');
   const hl = strip(src('../../ui/HudLayer.js'));
@@ -441,6 +446,43 @@ header('L8  ucinanie z „…” (513)');
   ok(LL?.truncateText?.('Stacja Nowa Ziemia', 200, w) === 'Stacja Nowa Ziemia', 'L8a: pełna nazwa, gdy się mieści (dziś `.slice(0, 16)` — „Stacja Nowa Ziem”)');
   const t = LL?.truncateText?.('Bardzo długa nazwa stacji orbitalnej', 60, w) ?? '';
   ok(t.endsWith('…') && w(t) <= 60, `L8b: za długa — ucięta z „…” („${t}”)`);
+}
+
+// ═══ L9 ══════════════════════════════════════════════════════════════════════
+// Piny dawnego `body_card_side_smoke` C2 (keeper usunięty w REFORMIE ZAKŁADEK T4 razem z kartą ciała) — tarcza obiektu
+// z WSPÓLNEGO projektora HUD (`HudProjection.objectScreenDisc`, woła warstwa etykiet: stacja pod kursorem, `coversPoint`).
+header('L9  tarcza obiektu z projektora HUD (`objectScreenDisc`)');
+{
+  let HP = null; try { HP = await import('../../ui/HudProjection.js'); } catch (e) { console.log('    (' + e.message + ')'); }
+  const disc = (K, kind, id) => { try { return HP?.objectScreenDisc?.(K, kind, id); } catch (e) { console.log('    (' + e.message + ')'); return undefined; } };
+  const NZ = { x: 6.2, y: 0, z: 0, r: 0.3 };
+  const camAt = (dist) => mkCam([NZ.x, dist * 0.5, dist * 0.866], [NZ.x, 0, 0]);
+  const KST = (cam) => ({ uiScale: 1.25, threeRenderer: {
+    getHudView: () => viewOf(cam),
+    getBodyWorldInfo: (id) => (id === 'p_nz' ? { ...NZ } : null),
+    getVesselWorldInfo: (id) => (id === 'v_1' ? { x: 6.5, y: 0.3, z: 0.2, r: 0.02 } : null),
+    getStationWorldInfo: (id) => (id === 'st_1' ? { x: 6.55, y: 0, z: 0.05, r: 0.012 } : null),
+  } });
+  const cam = camAt(2);
+  const d = disc(KST(cam), 'body', 'p_nz');
+  const v = new T3.Vector3(NZ.x, NZ.y, NZ.z).project(cam);
+  const ex = (v.x * 0.5 + 0.5) * 1600 / 1.25, ey = (-v.y * 0.5 + 0.5) * 1041 / 1.25;
+  const fpx = (1041 / 2) / Math.tan((55 / 2) * Math.PI / 180) / 1.25;      // ogniskowa w px logicznych
+  const er = 0.3 / 2 * fpx;                                                 // promień przy odległości 2 j.
+  ok(!!d && Math.abs(d.x - ex) < 0.01 && Math.abs(d.y - ey) < 0.01 && Math.abs(d.r - er) / er < 0.01,
+    `L9a: ciało — środek i promień jak rzut kamery w px logicznych (r ${d?.r?.toFixed?.(1)} ≈ ${er.toFixed(1)} px)`);
+  const dv = disc(KST(cam), 'vessel', 'v_1'), ds = disc(KST(cam), 'station', 'st_1');
+  ok(dv?.r > 0 && ds?.r > 0 && dv.r < d.r && ds.r < d.r, 'L9b: statek i stacja — tarcza z rozmiaru modelu (mniejsza niż planety)');
+  const behind = mkCam([NZ.x + 5, 0.5, 0], [NZ.x + 10, 0.5, 0]);          // Nowa Ziemia za kamerą
+  ok(disc(KST(behind), 'body', 'p_nz') === null && disc(KST(cam), 'body', 'nope') === null, 'L9c: za kamerą / nie w scenie — brak tarczy');
+  // Podłoga zoomu stacji (0,005 j.) leży bliżej niż próg głębi okręgów radaru (0,01 j.) — tarcza ma przetrwać.
+  const ST = { x: 6.55, y: 0, z: 0.05 };
+  const close = mkCam([ST.x, 0.003, ST.z + 0.0052], [ST.x, 0, ST.z]);
+  const dClose = disc(KST(close), 'station', 'st_1');
+  const projD = HP?.makeHudProjector?.({ ...viewOf(close), uiScale: 1.25 });
+  const defNull = projD ? projD.point(ST.x, ST.y, ST.z) : 'brak';
+  ok(!!dClose && Math.abs(dClose.x - 640) < 2 && dClose.r > 100 && defNull === null,
+    `L9d: stacja 0,006 j. przed kamerą (bliżej niż próg radaru 0,01 j.) — tarcza jest (r ${dClose?.r?.toFixed?.(0)} px); KONTROLA: domyślny próg projektora ją odrzuca`);
 }
 
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL ===`);

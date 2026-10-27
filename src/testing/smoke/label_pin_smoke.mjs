@@ -15,8 +15,9 @@
 //   P5  Esc w kaskadzie: po zaznaczeniu statku, przed overlayem; overlay / okno DOM — nie
 //   P6  przełączenie układu zdejmuje przypięcie spoza układu (486 / 491)
 //   P7  `readClickSelection` z przypięcia (wykonanie) i przycisk ✕
-//   P8  „Mapa ciała” — 4 warianty karty (prawdziwe `BottomContext._doAction`; pin na `planet:previewMap`); strojenie 1 (554):
-//       przycisk tylko wtedy, gdy `_doAction` coś zrobi (obca kolonia bez moich wojsk i bez skanu — brak; karta przy OFF bez zmian)
+//   P8  „Mapa ciała” — 4 warianty (prawdziwe `runBodyMapAction` — od T4 rdzeń dawnego `BottomContext._doAction`; pin na
+//       `planet:previewMap`); strojenie 1 (554): przycisk tylko wtedy, gdy akcja coś zrobi (obca kolonia bez moich wojsk i bez
+//       skanu — brak)
 //   P9  „Raport” → `BodyDetailModal`; gwiazda bez raportu
 //   P10 listy z limitem (5 + „+N więcej”), akordeon ▼ / ▲, stacja obca — bez list (mgła wojny)
 //   P11 przypięta etykieta stoi przy swoim obiekcie (I8.3): członek stosu ma własną etykietę, lista rośnie w dół, sąsiad ustępuje
@@ -27,7 +28,7 @@
 //       rozwinięcie NAJECHANIA (T1) — ta sama reguła raz przy pojawieniu się (P11za–P11zb)
 //   Fail-first (kopia `git archive 1eed72d`): zielone wyłącznie KONTROLE, świadkowie sceny i OFF; strojenie 1 — kopia drzewa
 //   z T2 sprzed strojenia: czerwone piny strojenia, zielone kontrole i świadkowie.
-//   P12 karta ciała i panel stacji przy ON — nierysowane i nieklikalne (piny na wywołaniach `UIManager`)
+//   P12 karta ciała i panel stacji usunięte z `UIManager` (T4); panel stacji = stan przypięcia stacji (bez rysunku i kliku)
 //   P13 wejścia I3 (karta ciała ×9, panel stacji ×4) prowadzą do przypięcia; strojenie 1 (b): 1. klik w wiersz ciała z INNEGO
 //       układu w lewym outlinerze — wiersz podświetlony jak zaznaczenie (U2), przypięcie dopiero po 2. kliku (przełączenie)
 //   P14 budżet: treść przypięcia z pamięci (TTL), spoczynek — 0 wywołań ctx
@@ -36,6 +37,10 @@
 //     P0b–P0d (flaga) zastąpione pinem braku predykatów i klucza; sekcje OFF usunięte (P4d, P5e, P11z, P15a); P5i i P15 —
 //     „bez przypięcia” znaczy teraz bez warstwy etykiet HUD (`hudLabels`, flaga do paczki B); P11g — przeszkodą jest prostokąt
 //     panelu statku T5 (`_shipPanelHud.rect`); P12a / P12b / P12g — bramką jest warstwa etykiet HUD w trybie cywilizacji.
+//     T4-2 (karta ciała, panel stacji i dok usunięte): P8 — skutek prawdziwego `runBodyMapAction` (akcja przeniesiona bez
+//     zmiany treści z karty), lustro przycisku wobec tabeli `bodyCardAction`; P12 — pin braku karty ciała i rysunku / kliku
+//     panelu stacji w `UIManager` (P12a, P12b), panel stacji jako stan (P12c), przeszkody etykiet — wyłącznie panele T5 / T6
+//     (P12g); P12d usunięty (wywołania karty).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -61,7 +66,6 @@ const LL = await tryImport('../../ui/HudLabelLogic.js');
 const LLay = await tryImport('../../ui/HudLabelLayer.js');
 const HL = await tryImport('../../ui/HudLayer.js');
 const CI = await tryImport('../../ui/ClickIntentLogic.js');
-const BCm = await tryImport('../../ui/BottomContext.js');
 const SPm = await tryImport('../../ui/StationPanel.js');
 const LOm = await tryImport('../../ui/LeftOutliner.js');
 const FEATURES = GAME_CONFIG.FEATURES;
@@ -85,7 +89,7 @@ header('P0  API (flaga kroku `labelPin` na stałe ON od T4)');
 {
   const need = ['LABEL_PIN', 'PIN_SWAP_REASON', 'pinnedContentKey', 'stripArrow', 'stripColon',
     'visibleDeposits', 'homeDistanceLine', 'depositStars', 'depositRows', 'trafficRows', 'moduleRows', 'storageRows', 'limitRows',
-    'bodyPinButtons', 'stationPinButtons', 'layoutButtonRows', 'toggleOpenList', 'openListFor', 'pinHitAt', 'runPinAction',
+    'bodyPinButtons', 'stationPinButtons', 'layoutButtonRows', 'toggleOpenList', 'openListFor', 'pinHitAt', 'runPinAction', 'runBodyMapAction',
     'enforceSinglePinOnStation', 'enforceSinglePinOnBody', 'escapeUnpin', 'escapeHeldByModal', 'pinnedBox', 'yieldToPinnedLabel'];
   const missing = need.filter((n) => LP?.[n] === undefined);
   ok(missing.length === 0, `P0a: \`LabelPinLogic\` — ${need.length} eksportów (brak: ${missing.join(', ') || '—'})`);
@@ -98,7 +102,7 @@ header('P0  API (flaga kroku `labelPin` na stałe ON od T4)');
   ok(missing1.length === 0, `P0f: strojenie 1 — \`mapActionWorks\` (554), \`pinLabelPlacement\` i \`discExcess\` (zachowanie 5) (brak: ${missing1.join(', ') || '—'})`);
 }
 
-// ═══ Świat (stub) — prawdziwy `HudLayer` + `HudLabelLayer`, prawdziwe `BottomContext` i `StationPanel` ════════════════
+// ═══ Świat (stub) — prawdziwy `HudLayer` + `HudLabelLayer` i prawdziwy `StationPanel` ══════════════════════════════════
 const K = globalThis.window.KOSMOS ?? (globalThis.window.KOSMOS = {});
 const mkCam = (pos, look = [0, 0, 0]) => { const c = new T3.PerspectiveCamera(55, 1600 / 1041, 0.001, 5000); c.position.set(...pos); c.lookAt(...look); c.updateMatrixWorld(); return c; };
 const viewOf = (cam) => ({ view: cam.matrixWorldInverse.elements.slice(), proj: cam.projectionMatrix.elements.slice(), fovDeg: 55, cssW: 1600, cssH: 1041, worldPerAU: 11 });
@@ -135,7 +139,6 @@ const capture = (n) => (e) => emits.push([n, e]);
 for (const n of ['body:selected', 'body:deselected', 'station:selected', 'station:focus', 'planet:previewMap', 'planet:colonize']) EventBus.on(n, capture(n));
 const lastOf = (n) => { for (let i = emits.length - 1; i >= 0; i--) if (emits[i][0] === n) return emits[i][1]; return undefined; };
 const countOf = (n) => emits.filter((e) => e[0] === n).length;
-const bottomContext = BCm?.BottomContext ? new BCm.BottomContext() : null;
 const panelCalls = [];
 const setWorld = () => {
   globalThis.innerWidth = 1600; globalThis.innerHeight = 1041;
@@ -146,7 +149,7 @@ const setWorld = () => {
       getSelectedVesselIds: () => [...W0.ids], getSelectedVesselId: () => W0.lead,
       get _selectedEntity() { return W0.entity ? (ENT[W0.entity] ?? { id: W0.entity }) : null; }, getSelectedFleetId: () => null,
       setSelectedVesselId: (id) => { W0.lead = id; W0.ids = id ? [id] : []; }, addToSelection: (id) => { W0.ids.push(id); },
-      _bottomContext: bottomContext, _mapSurface: () => null, _dirty: false,
+      _mapSurface: () => null, _dirty: false,
     },
     overlayManager: { openPanel: (id, o) => panelCalls.push(['openPanel', id, o ?? null]) },
     threeRenderer: {
@@ -422,24 +425,25 @@ header('P7  `readClickSelection` z przypięcia i ✕');
 }
 
 // ═══ P8 ══════════════════════════════════════════════════════════════════════
-header('P8  „Mapa ciała” — 4 warianty karty (prawdziwe `BottomContext._doAction`)');
+header('P8  „Mapa ciała” — 4 warianty (prawdziwe `runBodyMapAction` — rdzeń dawnej karty)');
 {
-  // Każdy wariant: przycisk przypięcia → `_bottomContext._doAction(entity)` (spy), a prawdziwe `_doAction` daje dzisiejszy cel.
-  const spyCalls = [];
-  const realDo = bottomContext?._doAction?.bind(bottomContext);
-  if (bottomContext) bottomContext._doAction = (e) => { spyCalls.push(e?.id); return realDo?.(e); };
+  // Każdy wariant: przycisk przypięcia → `runPinAction('map')` → `runBodyMapAction(entity, { K, emit })`; skutek mierzony na
+  // wywołaniach panelu i zdarzeniach (ESM — wywołania wewnątrz modułu nie da się podsłuchać; liczy się skutek).
+  const realDo = (e) => LP?.runBodyMapAction?.(e, { K, emit: (n, p) => EventBus.emit(n, p) });
   const run = (id) => { panelCalls.length = 0; emits.length = 0; return call(LP?.runPinAction, 'map', { ck: 'body:' + id, entity: ENT[id], K, emit: (n, p) => EventBus.emit(n, p) }); };
   reset();
-  run('p_nz');
-  ok(spyCalls.at(-1) === 'p_nz' && JSON.stringify(panelCalls) === '[["switchActiveColony","p_nz"],["openPanel","colony",null]]',
+  const r0 = run('p_nz');
+  ok(r0 === 'map' && /case 'map':\s*if \(!isBody \|\| !entity\) return null;\s*runBodyMapAction\(entity, \{ K, emit \}\);/.test(strip(src('../../ui/LabelPinLogic.js'))),
+    'P8-0: przycisk „Mapa ciała” woła `runBodyMapAction(entity, { K, emit })` (pin na wywołaniu; wynik `map`)');
+  ok(JSON.stringify(panelCalls) === '[["switchActiveColony","p_nz"],["openPanel","colony",null]]',
     `P8a: (i) własna kolonia — \`switchActiveColony\` + \`openPanel('colony')\` (${JSON.stringify(panelCalls)})`);
   W0.myUnitsOn = 'p_ai';
   run('p_ai');
-  ok(spyCalls.at(-1) === 'p_ai' && JSON.stringify(panelCalls) === '[["openPanel","colony",{"colonyId":"p_ai"}]]',
+  ok(JSON.stringify(panelCalls) === '[["openPanel","colony",{"colonyId":"p_ai"}]]',
     `P8b: (ii) obca kolonia z moimi wojskami — \`openPanel('colony', { colonyId })\` (${JSON.stringify(panelCalls)})`);
   W0.myUnitsOn = null;
   run('p_x');
-  ok(spyCalls.at(-1) === 'p_x' && countOf('planet:previewMap') === 1 && lastOf('planet:previewMap')?.planet?.id === 'p_x' && panelCalls.length === 0,
+  ok(countOf('planet:previewMap') === 1 && lastOf('planet:previewMap')?.planet?.id === 'p_x' && panelCalls.length === 0,
     'P8c: (iii) ciało `analyzed` bez kolonii — `planet:previewMap` (jedyny producent podglądu) — SEDNO');
   run('p_ai');
   ok(countOf('planet:previewMap') === 1 && lastOf('planet:previewMap')?.planet?.id === 'p_ai' && panelCalls.length === 0,
@@ -449,16 +453,17 @@ header('P8  „Mapa ciała” — 4 warianty karty (prawdziwe `BottomContext._do
   ENT.g1 = gen; run('g1'); delete ENT.g1;
   ok(countOf('planet:colonize') === 1 && lastOf('planet:colonize')?.planet?.id === 'g1', 'P8e: (iv) Generator (życie > 80) — `planet:colonize`');
   K.civMode = true;
-  // Przycisk istnieje dokładnie wtedy, gdy karta dziś ma akcję (`bodyCardAction` = lustro `_actionLabel` — K8 T1); nazwa z klucza karty.
+  // Przycisk istnieje dokładnie wtedy, gdy tabela akcji ma akcję (`bodyCardAction` — lustro skutku `runBodyMapAction`, K8 T1)
+  // i ta akcja coś zrobi (554); nazwa z klucza dawnej karty.
   const btnIds = (id) => (call(LP?.bodyPinButtons, ENT[id], K, { t: tx }) ?? []).map((b) => b.id);
   const label = (id) => (call(LP?.bodyPinButtons, ENT[id], K, { t: tx }) ?? []).find((b) => b.id === 'map')?.label;
-  const cardLabel = (e) => call(bottomContext?._actionLabel?.bind(bottomContext), e);
+  const cardLabel = (e) => call(LH?.bodyCardAction, e, K);
   const table = ['p_nz', 'p_moon', 'p_x', 'p_ai', 'pd_1', 'star'];
   const agree = table.every((id) => btnIds(id).includes('map') === !!cardLabel(ENT[id]));
   ok(agree && !btnIds('pd_1').includes('map') && !btnIds('star').includes('map') && label('p_nz') === tx('context.openMap').replace(/^►\s*/, ''),
-    `P8f: „Mapa ciała” wtedy i tylko wtedy, gdy karta ma akcję (tabela ${table.length} ciał); nazwa z \`context.openMap\` bez „► ” („${label('p_nz')}”)`);
-  // STROJENIE 1 (554): przycisk tylko wtedy, gdy `_doAction` coś zrobi. Obca kolonia BEZ moich wojsk i BEZ pełnego skanu — karta
-  // (OFF) ma dla niej akcję, a `_doAction` nic nie robi (martwy przycisk) ⇒ przy ON przycisku brak; karta przy OFF bez zmian.
+    `P8f: „Mapa ciała” wtedy i tylko wtedy, gdy tabela akcji ma akcję (tabela ${table.length} ciał); nazwa z \`context.openMap\` bez „► ” („${label('p_nz')}”)`);
+  // STROJENIE 1 (554): przycisk tylko wtedy, gdy akcja coś zrobi. Obca kolonia BEZ moich wojsk i BEZ pełnego skanu — tabela
+  // akcji ma dla niej akcję, a `runBodyMapAction` nic nie robi (martwy przycisk) ⇒ przycisku brak.
   ENT.p_ai2 = { id: 'p_ai2', type: 'planet', planetType: 'rocky', name: 'Wezen g', explored: true, analyzed: false, x: 500, y: 120, orbital: { a: 3.5 } };
   const AI_COL2 = { planetId: 'p_ai2', ownerEmpireId: 'emp_1', name: 'Placówka Ligi', planet: { id: 'p_ai2', name: 'Wezen g' }, civSystem: { population: 12, freePops: 1 } };
   const cm = K.colonyManager, getCol0 = cm.getColony, hasCol0 = cm.hasColony;
@@ -468,18 +473,18 @@ header('P8  „Mapa ciała” — 4 warianty karty (prawdziwe `BottomContext._do
   const dead = effect(ENT.p_ai2);
   ok(!btnIds('p_ai2').includes('map') && call(LP?.mapActionWorks, ENT.p_ai2, K) === false,
     `P8g: (554) obca kolonia bez moich wojsk i bez pełnego skanu — „Mapa ciała” ukryta (przyciski ${JSON.stringify(btnIds('p_ai2'))})`);
-  ok(dead === 0 && !!cardLabel(ENT.p_ai2), `P8h KONTROLA (świadek): karta ciała (OFF) ma dla niej akcję („${cardLabel(ENT.p_ai2)}”), a prawdziwe \`_doAction\` nic nie robi (${dead} skutków) — karta przy OFF bez zmian`);
+  ok(dead === 0 && !!cardLabel(ENT.p_ai2), `P8h KONTROLA (świadek): tabela akcji ma dla niej akcję („${cardLabel(ENT.p_ai2)}”), a prawdziwe \`runBodyMapAction\` nic nie robi (${dead} skutków)`);
   W0.myUnitsOn = 'p_ai2';
   const troops = effect(ENT.p_ai2), btnTroops = btnIds('p_ai2').includes('map');
   W0.myUnitsOn = null; ENT.p_ai2.analyzed = true;
   const scan = effect(ENT.p_ai2), btnScan = btnIds('p_ai2').includes('map');
   ENT.p_ai2.analyzed = false;
   ok(btnTroops && troops > 0 && btnScan && scan > 0, `P8i: ta sama kolonia z moimi wojskami (${troops} skutek) albo z pełnym skanem (${scan}) — przycisk jest (wariant (ii) / (iii))`);
-  // Lustro na tabeli ciał: przycisk ⇔ skutek prawdziwego `_doAction` (własne kolonie, obca ze skanem i bez, ciało ze skanem i bez, gwiazda).
+  // Lustro na tabeli ciał: przycisk ⇔ skutek prawdziwego `runBodyMapAction` (własne kolonie, obca ze skanem i bez, ciało ze skanem
+  // i bez, gwiazda).
   const rows = ['p_nz', 'p_moon', 'p_x', 'p_ai', 'p_ai2', 'pd_1', 'star'].map((id) => [id, btnIds(id).includes('map'), effect(ENT[id]) > 0]);
-  ok(rows.every(([, b, e]) => b === e), `P8j: „Mapa ciała” ⇔ skutek \`_doAction\` (${rows.map(([i, b, e]) => `${i}:${b ? 'P' : '-'}${e ? 'S' : '-'}`).join(' ')})`);
+  ok(rows.every(([, b, e]) => b === e), `P8j: „Mapa ciała” ⇔ skutek \`runBodyMapAction\` (${rows.map(([i, b, e]) => `${i}:${b ? 'P' : '-'}${e ? 'S' : '-'}`).join(' ')})`);
   cm.getColony = getCol0; cm.hasColony = hasCol0; delete ENT.p_ai2;
-  if (bottomContext) bottomContext._doAction = realDo;
   reset();
 }
 
@@ -827,44 +832,25 @@ header('P11 przypięta etykieta przy swoim obiekcie (I8.3)');
 }
 
 // ═══ P12 ═════════════════════════════════════════════════════════════════════
-header('P12 karta ciała i panel stacji na warstwie etykiet HUD — nierysowane i nieklikalne (piny na wywołaniach)');
+header('P12 karta ciała i panel stacji usunięte z `UIManager` (T4); panel stacji = stan przypięcia stacji');
 {
-  const bce = methodBody(UIM, '_bodyCardEntity');
-  let fBce = null, fSurf = null;
-  const sps = methodBody(UIM, '_stationPanelSurface');
-  try { fBce = new Function('GAME_CONFIG', 'isHudLabelsOn', 'window', `return function () {${bce?.body}\n};`); } catch (e) { console.log('    (' + e.message + ')'); }
-  try { fSurf = new Function('GAME_CONFIG', 'isHudLabelsOn', 'window', `return function () {${sps?.body}\n};`); } catch (e) { console.log('    (' + e.message + ')'); }
-  const mk = (feat, civ) => {
-    const G = { FEATURES: feat };
-    const win = { KOSMOS: { ...K, civMode: civ } };
-    const b = fBce ? fBce(G, LL?.isHudLabelsOn, win) : null;
-    const s = fSurf ? fSurf(G, LL?.isHudLabelsOn, win) : null;
-    return { b: (e) => (b ? b.call({ _selectedEntity: e }) : undefined), s: () => (s ? s.call({}) : undefined) };
-  };
-  const ON = mk({ hudLabels: true }, true);
-  const NOHUD = mk({}, true);
-  const GEN = mk({ hudLabels: true }, false);
-  ok(ON.b(ENT.p_nz) === null && ON.b(ENT.p_x) === null && ON.b(ENT.pd_1) === null && NOHUD.b(ENT.p_nz) === ENT.p_nz && NOHUD.b(ENT.pd_1) === ENT.pd_1
-    && GEN.b(ENT.p_nz) === ENT.p_nz,
-    'P12a: `_bodyCardEntity` — na warstwie etykiet HUD w trybie cywilizacji karta ciała nie istnieje (każde ciało); KONTROLA: bez warstwy (`hudLabels` OFF) i w Generatorze — zaznaczone ciało');
-  ok(ON.s() === false && NOHUD.s() === true && GEN.s() === true, 'P12b: `_stationPanelSurface` — na warstwie etykiet HUD w trybie cywilizacji panel stacji nie jest powierzchnią; bez warstwy i w Generatorze — jest');
-  const gated = (re) => re.test(UIM);
-  ok(gated(/if \(civMode && !globeOpen && this\._stationPanelSurface\(\)\) this\.stationPanel\.draw\(ctx, W, H\);/)
-    && gated(/if \(this\._stationPanelSurface\(\) && this\.stationPanel\?\.handleClick\?\.\(x, y\)\) return true;/)
-    && gated(/if \(this\._stationPanelSurface\(\) && this\.stationPanel\?\.visible && this\.stationPanel\._hitTest\(x, y\)\) return true;/)
-    && (UIM.match(/this\._stationPanelSurface\(\) && this\.stationPanel\?\.visible && this\.stationPanel\._hitTest\(x, y\)/g) ?? []).length === 2
-    && gated(/if \(this\._stationPanelSurface\(\) && this\.stationPanel\?\.visible && this\.stationPanel\.tryBeginDrag\?\.\(x, y\)\) return;/)
-    && gated(/if \(this\._stationPanelSurface\(\) && this\.stationPanel\?\.visible\) this\.stationPanel\.handleMouseMove\(x, y\);/),
-    'P12c: panel stacji — rysunek, klik, blokada kamery, podpowiedź mapy, przeciąganie i najechanie za `_stationPanelSurface()`');
-  const cardUses = UIM.match(/this\._bottomContext\.(draw|hitTest|isOver|handleWheel)\([^)]*\)/g) ?? [];
-  ok(cardUses.length === 4 && cardUses.every((s) => /_bodyCardEntity\(\)|cardEntity/.test(s)), `P12d KONTROLA (T1): karta ciała — rysunek, klik, kursor i kółko z \`_bodyCardEntity()\` (${cardUses.length})`);
+  ok(UIM.length > 10000 && !/_bodyCardEntity|_bottomContext|\bBottomContext\b/.test(UIM),
+    'P12a: karta ciała usunięta z `UIManager` (T4) — brak `BottomContext` i `_bodyCardEntity` (przypięcie etykiety jest jedyną powierzchnią ciała)');
+  ok(!/_stationPanelSurface|stationPanel\.draw\(|stationPanel\??\.handleClick|stationPanel\._hitTest|stationPanel\.tryBeginDrag|stationPanel\.handleMouseMove/.test(UIM),
+    'P12b: panel stacji bez rysunku, kliku, blokady kamery, przeciągania i najechania w `UIManager` (T4)');
+  const spx = SPm?.StationPanel ? new SPm.StationPanel() : null;
+  ok(!!spx && typeof spx._onHit === 'function' && typeof spx.show === 'function' && typeof spx.hide === 'function'
+    && spx.draw === undefined && spx.handleClick === undefined && spx._hitTest === undefined && spx.tryBeginDrag === undefined,
+    'P12c: `StationPanel` — stan przypięcia stacji (`show` / `hide` / `_onHit`: Zarządzaj, ✕) bez rysunku, kliku i przeciągania');
   ok(/enforceSinglePinOnBody\(\{ K: window\.KOSMOS, features: GAME_CONFIG\.FEATURES \}\)/.test(UIM)
     && /EventBus\.on\('station:selected', \(\) => \{\n\s*if \(enforceSinglePinOnStation\(/.test(UIM),
     'P12e: `UIManager` — jedno przypięcie naraz w słuchaczach `body:selected` i `station:selected`');
   ok(/if \(p\?\.reason === PIN_SWAP_REASON\) return;/.test(SPsrc), 'P12f: `StationPanel` nie zamyka się przy `pin_swap` (panel = przypięcie stacji)');
-  // Strefy kart w etykietach: panel stacji przy ON nie jest przeszkodą (prostokąt z dawnej klatki).
+  // Przeszkody etykiet: wyłącznie panele w idiomie etykiet (statek T5, flota / grupa T6) — karty ciała i panelu stacji brak.
   const lay = strip(src('../../ui/HudLabelLayer.js'));
-  ok(/const spDrawn = !K\?\.civMode;/.test(lay), 'P12g: etykiety nie omijają niewidocznego panelu stacji (w trybie cywilizacji panel stacji się nie rysuje)');
+  const cr = lay.slice(lay.indexOf('  _cardRects(K) {'), lay.indexOf('  _edgeArrows('));
+  ok(cr.length > 100 && /um\?\._shipPanelHud\?\.rect/.test(cr) && /um\?\._fleetPanelHud\?\.rect/.test(cr) && !/stationPanel|bottomContext|_vesselPanel/.test(cr),
+    'P12g: przeszkody etykiet — wyłącznie panel statku T5 i panel floty / grupy T6 (karta ciała i panel stacji usunięte, T4)');
 }
 
 // ═══ P13 ═════════════════════════════════════════════════════════════════════

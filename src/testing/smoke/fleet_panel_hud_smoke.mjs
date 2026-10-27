@@ -20,7 +20,8 @@
 //   zastąpione pinem braku predykatów i kluczy; sekcje OFF usunięte (F5b, F5f, F14c, F15f, F16e; połowy OFF F8f, F10a, F15a,
 //   F16b); F5k — bramki rysunku bez dawnego panelu floty; F11 (OFF = dziś) przecelowany na montaż: dawne panele floty i grupy
 //   poza rysunkiem i klikiem `UIManager`. F1 / F2 / F3 / F17 (dawne panele jako wyrocznia stref i dyspozycji) — bez zmian do
-//   kolejnego kroku T4.
+//   kolejnego kroku T4. T4-2 (karta ciała, panel stacji i dok usunięte): F11f / F16f — blok rysunku T6 bez zapisu przeszkody
+//   kart (`_noteShipPanelDrawn` zniknął razem z kartą ciała i panelem stacji).
 // ⚠ Moduły POWSTAJĄ w T6 — import dynamiczny w try/catch (pin DEGRADUJE, nie przerywa suity).
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -613,10 +614,11 @@ header('F11 montaż — dawne panele floty i grupy poza rysunkiem i klikiem `UIM
   const dr = body(UI, '\n  _draw() {');
   ok(dr.length > 0 && !/fleetCommandPanel\.draw\(|fleetGroupPanel\.draw\(/.test(UI),
     'F11d rysunek: dawne panele floty i grupy NIE są rysowane przez `UIManager` (T4; jedyną powierzchnią jest panel T6)');
-  ok(/if \(fleetPanelDrawn\) shipPanelDrawn = fleetPanelDrawn;\s*else \{ this\._fleetPanelHud\?\.clear\?\.\(\); this\._fleetPanelPlacement = null; \}/.test(dr)
+  ok(/if \(!fleetPanelDrawn\) \{ this\._fleetPanelHud\?\.clear\?\.\(\); this\._fleetPanelPlacement = null; \}/.test(dr)
+    && dr.indexOf('if (!shipPanelHudDrawn) this._shipPanelHud?.clear?.();') > 0
     && dr.indexOf('this._drawFleetPanelHud(ctx, W, H)') > dr.indexOf('if (!shipPanelHudDrawn) this._shipPanelHud?.clear?.();')
-    && dr.indexOf('this._drawFleetPanelHud(ctx, W, H)') < dr.indexOf('this._noteShipPanelDrawn(shipPanelDrawn)'),
-    'F11f rysunek T6 w miejscu panelu statku (po T5, przed zapisem przeszkody kart); nienarysowany — `clear` + kotwica wyzerowana');
+    && !/_noteShipPanelDrawn|_shipPanelDrawn\b/.test(UI),
+    'F11f rysunek T6 w miejscu panelu statku (zaraz po T5); nienarysowany — `clear` + kotwica wyzerowana; zapisu przeszkody kart brak (T4)');
   const hc = body(UI, '\n  handleClick(x, y) {');
   ok(hc.indexOf('this._vesselPanelClick(x, y)') > 0 && hc.indexOf('this._fleetPanelHudClick(x, y)') > hc.indexOf('this._vesselPanelClick(x, y)')
     && hc.indexOf('this._fleetPanelHudClick(x, y)') < hc.indexOf('this.combatHud?.handleClick?.(x, y)')
@@ -674,13 +676,13 @@ header('F14 trafienie, blokada kamery i przeszkody — prostokąt panelu T6');
   const fcpStub = { visible: true, _hitTest: () => true };
   const base = () => ({ _gameOverData: null, _confirmDialog: null, _topBar: no, _bottomBar: no, _leftOutliner: no, _outliner: no, _topResourceDrawer: no,
     _bottomNavBar: no, _bottomControlBar: no, _eventLogDrawer: no, _mapSurface: () => 'none', _vesselPanelHit: () => false, _fleetPanelHud: lay,
-    _fleetPanelHudHit: mHit, fleetGroupPanel: null, fleetCommandPanel: fcpStub, _stationPanelSurface: () => false,
-    stationPanel: null, _tacticalMode: null, tacticalDock: null, panelDock: null, _bottomContext: no, _bodyCardEntity: () => null, overlayManager: { isAnyOpen: () => false } });
+    _fleetPanelHudHit: mHit, fleetGroupPanel: null, fleetCommandPanel: fcpStub,
+    stationPanel: null, _tacticalMode: null, tacticalDock: null, overlayManager: { isAnyOpen: () => false } });
   globalThis.window.KOSMOS.civMode = true;
   ok(call(mOver, base(), 1000, 100) === true && call(mOver, base(), 400, 400) === false,
     'F14b `isOverUI` (wykonanie): nad panelem T6 — UI; pusta mapa — nie (dawny panel floty nie jest pytany, nawet gdy jego `_hitTest` mówi „tak”)');
   const HLx = HLL?.HudLabelLayer ? new HLL.HudLabelLayer() : null;
-  const um = { _mapSurface: () => 'fleetHud', _bottomContext: {}, _selectedEntity: null, _shipPanelHud: { rect: null }, _fleetOverlay: { _vesselPanelRect: null },
+  const um = { _mapSurface: () => 'fleetHud', _selectedEntity: null, _shipPanelHud: { rect: null }, _fleetOverlay: { _vesselPanelRect: null },
     _fleetPanelHud: { rect: { x: 930, y: 60, w: 200, h: 220 } } };
   const rr = HLx?._cardRects?.({ uiManager: um, civMode: true }) ?? [];
   um._fleetPanelHud.rect = null;
@@ -776,7 +778,7 @@ header('F16 strojenie 1 (4) — baner pickera u góry ekranu ukryty, gdy panel f
   ok(rOn === true && visOn === 'hidden' && rGone === false && visGone === '' && el.style.display === 'block',
     'F16d `_syncPickerBanner` (wykonanie): panel z konfiguratorem — `visibility: hidden`; panel znika — widoczny; `display` (zdarzenia pickera) nietknięte');
   const dr = body(UI, '\n  _draw() {');
-  ok(/else \{ this\._fleetPanelHud\?\.clear\?\.\(\); this\._fleetPanelPlacement = null; \}\s*this\._syncPickerBanner\(!!fleetPanelDrawn && this\._mapSurface\(\) === 'fleetHud'\);/.test(dr),
+  ok(/if \(!fleetPanelDrawn\) \{ this\._fleetPanelHud\?\.clear\?\.\(\); this\._fleetPanelPlacement = null; \}\s*this\._syncPickerBanner\(!!fleetPanelDrawn && this\._mapSurface\(\) === 'fleetHud'\);/.test(dr),
     'F16f montaż w klatce: zaraz po rysunku panelu T6 (stan z tej klatki)');
   ok(/EventBus\.on\('ui:pickerModeStarted', \(\) => \{\s*this\._syncPickerBanner\(!!this\._fleetPanelHud\?\.rect && this\._mapSurface\(\) === 'fleetHud'\);/.test(UI)
     && /EventBus\.on\('ui:pickerModeEnded', \(\) => \{ this\._syncPickerBanner\(false\); \}\);/.test(UI),

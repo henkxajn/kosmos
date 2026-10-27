@@ -347,7 +347,7 @@ export class EventLogOverlay extends BaseOverlay {
   /**
    * Przejście z klikniętego wpisu do encji:
    *  - jeśli encja jest kolonią → switchActiveColony + otwórz ColonyOverlay
-   *  - w innym wypadku → emituj body:selected (fokus kamery + BottomContext)
+   *  - w innym wypadku → emituj body:selected (fokus kamery + przypięcie etykiety)
    */
   _navigateToEntity(entityRef) {
     const entity = EntityManager.get(entityRef);

@@ -135,12 +135,12 @@ export function pickStationAt(stations, lx, ly) {
   return best;
 }
 
-// ── Karta ciała dla ciał bez akcji (d) ───────────────────────────────────────────────────────────────────────────────
+// ── Akcja „Mapa ciała” ───────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Akcja karty ciała — LUSTRO `BottomContext._actionLabel` (keeper `label_hover_smoke` pinuje zgodność na tabeli ciał):
- * `takeCiv` (Generator, życie > 80) · `openMap` (dom, kolonia — także AI, ciało `analyzed`) · `null` — ciało bez akcji
- * (w ZF: gwiazda i planetoidy bez placówki). Karta ciała bez akcji się nie otwiera (T1 (d)).
+ * Akcja „Mapa ciała” w przypięciu (reguła dawnej karty ciała `BottomContext._actionLabel`, karta usunięta w T4; keeper
+ * `label_hover_smoke` pinuje tabelę ciał): `takeCiv` (Generator, życie > 80) · `openMap` (dom, kolonia — także AI, ciało
+ * `analyzed`) · `null` — ciało bez akcji (w ZF: gwiazda i planetoidy bez placówki).
  * @param {object} entity
  * @param {object} K — `window.KOSMOS` (jawnie)
  * @returns {'takeCiv'|'openMap'|null}

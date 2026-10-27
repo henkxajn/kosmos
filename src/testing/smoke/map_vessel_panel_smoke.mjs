@@ -695,7 +695,7 @@ header('P11  PIN RENDER — przy każdym N rysuje DOKŁADNIE JEDNA powierzchnia 
   ok(cnt(uiCode, 'this._drawShipPanelHud(') === 1,
      `dokładnie JEDNO miejsce wywołania panelu statku T5 (jest: ${cnt(uiCode, 'this._drawShipPanelHud(')})`);
   // P11-T3 — jedyny producent panelu statku za bramką trybu Y (rozwinięty Dok — panel statku się nie rysuje, D-TR-10).
-  ok(/!this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*shipPanelDrawn = this\._drawShipPanelHud\(ctx, W, H\);/.test(uiCode),
+  ok(/!this\._shipPanelDockHidden\(\) && this\._mapSurface\(\) === 'vessel'\) \{\s*shipPanelHudDrawn = !!this\._drawShipPanelHud\(ctx, W, H\);/.test(uiCode),
      'P11-T3: jedyne wywołanie panelu statku za bramką trybu Y (`_shipPanelDockHidden`) i powierzchni N == 1');
   let SPA = null; try { SPA = await import('../../ui/ShipPanelAnchorLogic.js'); } catch { /* fail-first */ }
   ok(SPA?.shipPanelHiddenByDock?.(true) === true && SPA?.shipPanelHiddenByDock?.(false) === false,

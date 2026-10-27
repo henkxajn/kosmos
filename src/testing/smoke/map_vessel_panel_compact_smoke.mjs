@@ -37,7 +37,8 @@
 //     wariantów „-T3”; D1 / D2 (przeciąganie na `FloatingPanel`, host w `UIManager`) usunięte; M / M2 (flagi
 //     `mapVesselPanelCompact` / `mapVesselPanel`) zastąpione pinem M usunięcia; S2 / Z / K1 — trasa kółka i kolejność
 //     malowania panelu statku T5 (`_drawShipPanelHud`). C1–R2 i S1 (dawny panel T3 `drawVesselPanel` — wyrocznia trybu
-//     kompaktowego) — do kolejnego kroku T4.
+//     kompaktowego) — do kolejnego kroku T4. T4-2 (panel stacji usunięty): Z2 / K1 — drugim panelem klastra jest panel floty /
+//     grupy T6 (`_drawFleetPanelHud`) w miejscu `stationPanel.draw`.
 //   S1  Finding 260: kółko przewija panel i jest POCHŁANIANE (kontrola: poza panelem `false`)
 //   S2  pin ŹRÓDŁOWY: clamp przewijania ma JEDNO źródło (`_applyRightScroll`), nie dwie kopie
 //   Z   KOLEJNOŚĆ: etykiety mapy rysowane PRZED klastrem paneli (Z1/Z1b panel statku,
@@ -436,7 +437,7 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
   const iLabels = at('this._mapLabelLayer.draw(');
   const iVessLb = at('this._mapLabelLayer.drawVesselLabels(');
   const iPanel  = at('this._drawShipPanelHud(ctx, W, H)');
-  const iStation= at('this.stationPanel.draw(');
+  const iFleet  = at('this._drawFleetPanelHud(');
   const iCombat = at('this.combatHud.draw(');
   const iBrack  = at('this._drawSelectionBrackets(');
 
@@ -448,8 +449,8 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
      `K1: drawVesselLabels wywołane dokładnie raz (jest: ${cnt('this._mapLabelLayer.drawVesselLabels(')})`);
   ok(cnt('this._drawShipPanelHud(') === 1,
      `K1: panel statku T5 (_drawShipPanelHud) wywołany dokładnie raz (jest: ${cnt('this._drawShipPanelHud(')})`);
-  ok(iLabels > 0 && iVessLb > 0 && iPanel > 0 && iStation > 0 && iCombat > 0,
-     'K1: wszystkie mierzone wywołania REALNIE znalezione w źródle');
+  ok(iLabels > 0 && iVessLb > 0 && iPanel > 0 && iFleet > 0 && iCombat > 0 && at('this.stationPanel.draw(') < 0,
+     'K1: wszystkie mierzone wywołania REALNIE znalezione w źródle (panel stacji nie rysuje się — T4)');
 
   // Z1 / Z1b — etykiety przed panelem statku.
   ok(iLabels < iPanel, `Z1: plakietki kolonii PRZED panelem statku (${iLabels} < ${iPanel})`);
@@ -463,7 +464,7 @@ header('Z  PIN ŹRÓDŁOWY — etykiety mapy rysowane PRZED klastrem paneli pły
      `Z1-T3: prawy outliner PRZED panelem (${iOutl} < ${iPanel}), łącznik PO panelu w \`_drawShipPanelHud\` (${iDrawT5} < ${iTab})`);
 
   // Z2 — to jest fix KLASOWY, nie jednopanelowy.
-  ok(iLabels < iStation && iVessLb < iStation, `Z2: etykiety PRZED stationPanel (${iLabels}/${iVessLb} < ${iStation})`);
+  ok(iLabels < iFleet && iVessLb < iFleet, `Z2: etykiety PRZED panelem floty / grupy T6 (${iLabels}/${iVessLb} < ${iFleet})`);
   ok(iLabels < iCombat  && iVessLb < iCombat,  `Z2: etykiety PRZED combatHud (${iLabels}/${iVessLb} < ${iCombat})`);
 
   // Z3 — czego NIE wolno było przestawić: ramki RTS zostają NAD etykietami.

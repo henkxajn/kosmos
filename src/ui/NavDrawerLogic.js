@@ -1,7 +1,7 @@
 // NavDrawerLogic — czyste helpery NavDrawer (bez DOM/canvas), testowalne headless.
 //
 // Geometria panelu, layout kafli, krok animacji slide, hit-test, scroll clamp.
-// Wzór: BottomContextLogic/StationPanelLogic/POIPanelLogic (logika oddzielona od
+// Wzór: StationPanelLogic/POIPanelLogic (logika oddzielona od
 // rysowania → smoke test bez przeglądarki).
 
 import { COSMIC } from '../config/LayoutConfig.js';
@@ -9,7 +9,7 @@ import { COSMIC } from '../config/LayoutConfig.js';
 // ── Stałe layoutu (współdzielone z NavDrawer.js) ───────────────────────────
 export const NAV_TRIGGER_W   = 6;     // px — pasek-trigger lewej krawędzi
 export const NAV_HIDE_DELAY  = 300;   // ms — opóźnienie chowania po opuszczeniu hovera
-export const NAV_ANIM_SPEED  = 0.16;  // przyrost _slideProgress na klatkę (wzór BottomContext)
+export const NAV_ANIM_SPEED  = 0.16;  // przyrost _slideProgress na klatkę
 export const NAV_TILE_ASPECT = 5;     // proporcja kafla 5:1 (grafika źródłowa 1280×256)
 export const NAV_TILE_GAP    = 4;     // odstęp pionowy między kaflami
 export const NAV_PANEL_PAD   = 8;     // wewnętrzny padding panelu

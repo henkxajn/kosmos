@@ -1,7 +1,7 @@
 // LayoutConfig — stałe wymiarów paneli UI
 //
 // Dwa layouty: COSMIC (widok kosmiczny) i GLOBE (widok globusa planety).
-// Importowane przez UIManager, TopBar, Outliner, BottomContext, BottomBar, ColonyOverlay.
+// Importowane przez UIManager, TopBar, Outliner, BottomBar, ColonyOverlay.
 
 export const COSMIC = {
   TOP_BAR_H:     46,   // pasek zasobów + czas (góra)
@@ -13,14 +13,14 @@ export const COSMIC = {
   BOTTOM_BAR_H:  26,   // cienki pasek dolny (Generator: stabilność/EventLog/przyciski); w civMode = strefa triggera dziennika
   BOTTOM_NAV_H:  36,   // UI v3 — stały poziomy pasek nawigacji (7 grup) dobity w dół do listwy dziennika; tylko civMode
   BOTTOM_LOG_TRIG_H: 6, // UI v3 — wysokość listwy schowanego dziennika (EventLogDrawer trigger) pod paskiem nawigacji
-  RESOURCE_BAR_H: 0,   // dawny dolny pasek surowców usunięty (zastąpiony górnym TopResourceDrawer, hover-drawer); =0 → konsumenci (Outliner/BaseOverlay/BottomContext/CombatHUD) odzyskują tę przestrzeń
+  RESOURCE_BAR_H: 0,   // dawny dolny pasek surowców usunięty (zastąpiony górnym TopResourceDrawer, hover-drawer); =0 → konsumenci (Outliner/BaseOverlay/CombatHUD) odzyskują tę przestrzeń
   CIV_PANEL_W:   280,  // szerokość rozwiniętego CivPanel
   CIV_SIDEBAR_W: 0,    // Slice 4 — pionowy sidebar usunięty (nav na górze); lewa krawędź = 0
 };
 
 // UI v3 — łączna rezerwacja dolnej krawędzi w civMode: stały pasek nawigacji (BOTTOM_NAV_H)
 // dobity do listwy schowanego dziennika (BOTTOM_LOG_TRIG_H). Konsumenci (BaseOverlay/Outliner/
-// BottomContext/CombatHUD/TopResourceDrawer + DOM overlaye Tech/Observatory) rezerwują tę wysokość.
+// CombatHUD/TopResourceDrawer + DOM overlaye Tech/Observatory) rezerwują tę wysokość.
 export const BOTTOM_RESERVED = COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H;
 
 // Obraz Operacyjny Faza 4 — „Dok taktyczny" (pas dowodzenia w trybie Y). Wymiary px LOGICZNE.

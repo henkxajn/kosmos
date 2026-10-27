@@ -3332,7 +3332,7 @@ export class ThreeRenderer {
     this._ray.setFromCamera(this._mouse, this.camera);
 
     // Stacja orbitalna (mesh nie w _clickable) — PRZED ciałami, bo stacja orbituje blisko planety (klik w stację nie ma
-    // zaznaczać planety za nią). S3.3b-S4a. 1. klik = StationPanel, 2. klik = kamera (`station:focus`).
+    // zaznaczać planety za nią). S3.3b-S4a. 1. klik = przypięcie stacji (stan `StationPanel`), 2. klik = kamera (`station:focus`).
     if (this._stations.size > 0) {
       const sMeshes = [];
       for (const e of this._stations.values()) if (e.mesh) sMeshes.push(e.mesh);
@@ -3395,9 +3395,9 @@ export class ThreeRenderer {
     };
   }
 
-  // S4-2 — pozycja stacji na ekranie (px) dla StationPanel (anchored, podąża za orbitującym ciałem).
-  // Mirror getScreenPosition, ale czyta _stations i zwraca null gdy stacja za kamerą (NDC z poza [-1,1])
-  // — wtedy panel zaczepia fallback zamiast rysować poza ekranem.
+  // S4-2 — pozycja stacji na ekranie (px) — dawniej dla pływającego panelu stacji (usunięty w REFORMIE ZAKŁADEK T4); dziś
+  // dla plakietek stacji `MapLabelLayer`. Mirror getScreenPosition, ale czyta _stations i zwraca null gdy stacja za
+  // kamerą (NDC z poza [-1,1]) — wtedy plakietka się nie rysuje.
   getStationScreenPosition(stationId) {
     const entry = this._stations.get(stationId);
     if (!entry?.mesh) return null;
@@ -3411,7 +3411,8 @@ export class ThreeRenderer {
   }
 
   // Redesign UI v1 (Slice 1) — ogólna pozycja ekranowa DOWOLNEGO ciała
-  // (planeta/księżyc/planetoida/gwiazda) dla pływającego panelu BottomContext.
+  // (planeta/księżyc/planetoida/gwiazda) — dawniej dla pływającej karty ciała (usunięta w REFORMIE ZAKŁADEK T4); dziś dla
+  // plakietek kolonii `MapLabelLayer` (warstwa etykiet HUD wyłączona).
   // Mirror getStationScreenPosition (z-clamp), ale getScreenPosition pokrywał tylko
   // planety → tu obsługujemy wszystkie typy. getWorldPosition (księżyce mogą być
   // zagnieżdżone). Zwraca null gdy ciało za kamerą (NDC z poza [-1,1]).
@@ -3747,8 +3748,8 @@ export class ThreeRenderer {
     //   kolonia oddana imperium) dostaje na mapie INNY tooltip — PLANETARNY, osobną ścieżką
     //   i z angielskim na sztywno — i ten świadomie NIE ma tej wstawki (decyzja właściciela
     //   na gate'cie C1+C2, zapisana w rejestrze obok F-b). Okupację obcych ciał pokazuje
-    //   KARTA ciała (`BottomContext._occupationLine`). Brak odznaki w tooltipie planetarnym
-    //   NIE jest defektem tej wstawki — to nazwany zakres.
+    //   rozwinięcie etykiety HUD (T1 — dawniej karta ciała, usunięta w T4). Brak odznaki w tooltipie
+    //   planetarnym NIE jest defektem tej wstawki — to nazwany zakres.
     const occupier = readOccupier(entityId);
     if (occupier) {
       const occName = readOccupierName(occupier, t('warOverlay.player')) ?? '???';

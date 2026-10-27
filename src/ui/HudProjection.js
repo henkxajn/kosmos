@@ -113,8 +113,8 @@ const OBJECT_NEAR_CLIP = 1e-4;
 /**
  * Tarcza obiektu na ekranie (px logiczne): środek i promień — ciało (`getBodyWorldInfo`), statek (`getVesselWorldInfo`),
  * stacja (`getStationWorldInfo`) rzutowane wspólnym projektorem HUD. `null` — obiekt za kamerą albo nie w scenie.
- * Przeniesione z `BodyCardSideLogic` (ARKUSZ HUD paczka A, 493) w REFORMIE ZAKŁADEK T4 — wołają: warstwa etykiet (T1 —
- * stacja pod kursorem, `coversPoint`). Czyta z przekazanego `K` (atrapa w keeperze).
+ * Przeniesione z dawnego `BodyCardSideLogic` (ARKUSZ HUD paczka A, 493 — karta z boku tarczy; moduł usunięty w REFORMIE
+ * ZAKŁADEK T4) — woła warstwa etykiet (T1 — stacja pod kursorem, `coversPoint`). Czyta z przekazanego `K` (atrapa w keeperze).
  * @param {object} K — `window.KOSMOS`
  * @param {'body'|'vessel'|'station'} kind
  */

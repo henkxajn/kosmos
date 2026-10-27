@@ -3,7 +3,7 @@
 // PO CO TU, A NIE W UIManagerze: kolektor żył w `UIManager.draw`, a ten plik NIE importuje się
 // pod node (wywraca się na `THREE.TextureLoader`) — jedyny defekt, jaki miał, był pinowalny
 // wyłącznie źródłowo. Tu jest pinowalny WYKONANIEM. Precedens: `FleetGroupPanelLogic.js`,
-// `BottomContextLogic.js`, `ColonyModalLogic.js`.
+// `ColonyModalLogic.js`.
 //
 // ⚠ ZMIERZONY DEFEKT, KTÓRY TO ZAMYKA: kolektor iterował WYŁĄCZNIE kolonie gracza
 //   (`for (const col of allColonies)`, gdzie `allColonies` to `getAllColonies()` przefiltrowane

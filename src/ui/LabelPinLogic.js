@@ -1,19 +1,20 @@
 // LabelPinLogic — REFORMA ZAKŁADEK T2 (TABS_REFORM_PLAN.md §5.1–§5.2; D-TR-1 (a) — przypięcie, D-TR-4 (a), D-TR-5 (a); treść
 // wg tabel I7 §3.1 / §3.2 / §3.4): czysta logika PRZYPIĘCIA etykiety z akcjami. Rysunek, strefy kliku i odczyt świata —
-// `HudLabelLayer` (warstwa etykiet HUD — `hudLabels`; flaga kroku `labelPin` na stałe ON od T4); spięcie z kartą ciała
-// i panelem stacji — `UIManager`, Esc — `GameScene`.
+// `HudLabelLayer` (warstwa etykiet HUD — `hudLabels`; flaga kroku `labelPin` na stałe ON od T4); stan przypięcia stacji —
+// `StationPanel`, spięcie zaznaczenia — `UIManager`, Esc — `GameScene`.
 //   • PRZYPIĘCIE = ZAZNACZENIE (D-UI-5 bez zmian: 1. klik zaznacza i przypina, 2. klik — kamera): ciało = zaznaczone ciało
 //     (`UIManager._selectedEntity`), stacja = panel stacji w stanie „otwarty” (`StationPanel.visible` + `_stationId`) —
-//     BEZ nowego pola stanu; `readClickSelection.entityId / stationId` czyta przypięcie z konstrukcji. Przy ON karta ciała
-//     i panel stacji się nie rysują i nie łapią kliku (ich stan zostaje źródłem przypięcia);
+//     BEZ nowego pola stanu; `readClickSelection.entityId / stationId` czyta przypięcie z konstrukcji (karta ciała i
+//     pływający panel stacji usunięte w T4 — zostaje ich stan jako źródło przypięcia);
 //   • jedno przypięcie naraz (D-TR-5 (a)): przypięcie stacji zdejmuje przypięcie ciała (`body:deselected` z powodem
 //     `PIN_SWAP_REASON` — renderer nie rusza wtedy kamery, panel stacji go nie słucha), przypięcie ciała chowa panel stacji;
 //     panel statku (T3) — osobno;
-//   • akcje wołają DZISIEJSZE cele co do metody: „Mapa ciała” = `BottomContext._doAction` (wszystkie 4 warianty — w tym
-//     jedyny producent `planet:previewMap`), „Raport” = `showBodyDetailModal` (orbita, fizyka, skład, złoża, ✏ — D-TR-4 (a)),
-//     „Zarządzaj” = `StationPanel._onHit({ type: 'manage' })`, ✕ ciała = `body:deselected` (dzisiejsze „−” karty), ✕ stacji =
-//     `StationPanel._onHit({ type: 'close' })`; listy (złoża, ruch, moduły, magazyn) — rozwijane z limitem wierszy;
-//     „Mapa ciała” tylko wtedy, gdy `_doAction` coś zrobi (strojenie 1, 554 — obca kolonia bez moich wojsk i bez skanu: brak);
+//   • akcje: „Mapa ciała” = `runBodyMapAction` (dawne `BottomContext._doAction`, przeniesione w T4 — wszystkie 4 warianty,
+//     w tym jedyny producent `planet:previewMap`), „Raport” = `showBodyDetailModal` (orbita, fizyka, skład, złoża, ✏ —
+//     D-TR-4 (a)), „Zarządzaj” = `StationPanel._onHit({ type: 'manage' })`, ✕ ciała = `body:deselected` (dawne „−” karty),
+//     ✕ stacji = `StationPanel._onHit({ type: 'close' })`; listy (złoża, ruch, moduły, magazyn) — rozwijane z limitem
+//     wierszy; „Mapa ciała” tylko wtedy, gdy jej cel coś zrobi (strojenie 1, 554 — obca kolonia bez moich wojsk i bez
+//     skanu: brak);
 //   • położenie (strojenie 1, zachowanie 5): przypięty pasek rośnie W DÓŁ jak przy najechaniu (górna krawędź z przypięcia
 //     położenia T1 — przypięcie po najechaniu bez skoku), a gdy wszedłby na tarczę swojego ciała, ciała-gospodarza stacji albo
 //     kotwicy stosu — przesuwa się W GÓRĘ dokładnie o nadmiar; bez miejsca w kadrze — przeskakuje POD tarczę i rośnie w dół;
@@ -57,7 +58,7 @@ export const stripArrow = (s) => String(s ?? '').replace(/^►\s*/, '');
 export const stripColon = (s) => String(s ?? '').replace(/:\s*$/, '');
 
 /**
- * Złoża widoczne w przypięciu — LUSTRO `BottomContext._visibleDeposits` (keeper pinuje zgodność na tabeli ciał) bez ucięcia
+ * Złoża widoczne w przypięciu (reguła dawnej karty ciała `BottomContext._visibleDeposits`, karta usunięta w T4) bez ucięcia
  * do 12 (lista przypięcia ma własny limit): zbadane ∨ dom ∨ poza trybem cywilizacji.
  */
 export function visibleDeposits(entity, K) {
@@ -71,10 +72,10 @@ export function visibleDeposits(entity, K) {
 }
 
 /**
- * Linia dystansu od planety macierzystej — LUSTRO `BottomContext._distLine` (B3 → przypięcie, I7): nie gwiazda, z orbitą,
- * tryb cywilizacji, ciało ≠ dom; ODSTĘPSTWO od karty: tylko ciało z UKŁADU domu — współrzędne są lokalne dla układu, więc
- * dystans do ciała z innego układu nie ma sensu (karta przy OFF podaje go — kandydat w raporcie T2). `distAU(entity)` podaje
- * wołający (`DistanceUtils.fromHomePlanetAU`), `fmt` — liczbę.
+ * Linia dystansu od planety macierzystej (reguła dawnej karty ciała `BottomContext._distLine`, B3 → przypięcie, I7): nie
+ * gwiazda, z orbitą, tryb cywilizacji, ciało ≠ dom; ODSTĘPSTWO od karty: tylko ciało z UKŁADU domu — współrzędne są lokalne
+ * dla układu, więc dystans do ciała z innego układu nie ma sensu. `distAU(entity)` podaje wołający
+ * (`DistanceUtils.fromHomePlanetAU`), `fmt` — liczbę.
  * @returns {{ text:string, warn:boolean }|null}
  */
 export function homeDistanceLine(entity, K, { distAU, fmt, t }) {
@@ -146,9 +147,9 @@ export function limitRows(rows, t, limit = LABEL_PIN.LIST_LIMIT) {
 }
 
 /**
- * Czy „Mapa ciała” coś zrobi (strojenie 1, Finding 554) — LUSTRO `BottomContext._doAction` (keeper pinuje zgodność na tabeli
- * ciał z prawdziwym `_doAction`): akcja karty (`bodyCardAction`); obca kolonia — moje wojska na ciele ALBO pełny skan
- * (`analyzed`); bez obu `_doAction` nic nie robi. Przy ON przycisk ukryty; karta ciała przy OFF — bez zmian (`_actionLabel`).
+ * Czy „Mapa ciała” coś zrobi (strojenie 1, Finding 554) — LUSTRO `runBodyMapAction` (keeper pinuje zgodność na tabeli ciał
+ * z prawdziwym `runBodyMapAction`): akcja mapy (`bodyCardAction`); obca kolonia — moje wojska na ciele ALBO pełny skan
+ * (`analyzed`); bez obu cel nic nie robi — przycisk ukryty.
  */
 export function mapActionWorks(entity, K) {
   const act = bodyCardAction(entity, K);
@@ -167,9 +168,9 @@ export function mapActionWorks(entity, K) {
 }
 
 /**
- * Przyciski przypięcia CIAŁA (I7 §3.1): „Mapa ciała” (gdy karta dziś ją ma — `bodyCardAction`, lustro `_actionLabel` — i gdy
- * jej cel coś zrobi — `mapActionWorks`, 554; nazwa z klucza karty), „Raport” (nie gwiazda — `BodyDetailModal` nie opisuje
- * gwiazdy), „Złoża” (lista; gdy karta dziś je pokazuje), ✕.
+ * Przyciski przypięcia CIAŁA (I7 §3.1): „Mapa ciała” (gdy ciało ma akcję mapy — `bodyCardAction` — i gdy jej cel coś zrobi
+ * — `mapActionWorks`, 554; nazwa z klucza dawnej karty), „Raport” (nie gwiazda — `BodyDetailModal` nie opisuje gwiazdy),
+ * „Złoża” (lista; gdy złoża są widoczne — `visibleDeposits`), ✕.
  * @returns {Array<{ id:string, label:string, list?:string, open?:boolean }>}
  */
 export function bodyPinButtons(entity, K, { t, openList = null } = {}) {
@@ -360,16 +361,58 @@ export function pinHitAt(zones, x, y) {
   return null;
 }
 
-// ── Akcje (dzisiejsze cele) ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Akcje ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Wykonanie przycisku przypięcia — DZISIEJSZE cele co do metody (keeper pinuje wywołania):
- *   map     → `K.uiManager._bottomContext._doAction(entity)` (4 warianty karty: własna kolonia — `switchActiveColony` +
+ * „Mapa ciała” — cel przycisku przypięcia ciała (dawne `BottomContext._doAction`, przeniesione w REFORMIE ZAKŁADEK T4 —
+ * karta ciała usunięta; te same 4 warianty co do metody): Generator, planeta z życiem > 80 — `planet:colonize`; własna
+ * kolonia (i dom) — `switchActiveColony` + `openPanel('colony')`; obca kolonia z moimi wojskami — `openPanel('colony',
+ * { colonyId })` (biletem do powierzchni obcego ciała są WŁASNE BUTY na nim — nie sam fakt istnienia kolonii; dawniej
+ * `switchActiveColony` odmawiał, a gołe `openPanel` otwierało WŁASNĄ kolonię — „Obserwacja UX z GATE OG-3 §3”); ciało
+ * `analyzed` bez kolonii (i obca kolonia bez moich wojsk) — `planet:previewMap` (podgląd tylko do odczytu; niezbadane — nic).
+ * @param {object} entity
+ * @param {{ K?:object, emit?:Function }} env — `window.KOSMOS` i `EventBus.emit` (jawnie)
+ * @returns {'colonize'|'colony'|'foreignColony'|'preview'|null} co zrobiono
+ */
+export function runBodyMapAction(entity, { K = null, emit = null } = {}) {
+  if (!entity) return null;
+  const civMode = K?.civMode;
+  const homePl = K?.homePlanet;
+  const isHome = !!homePl && entity.id === homePl.id;
+  const colMgr = K?.colonyManager;
+  if (!civMode && entity.type === 'planet' && (entity.lifeScore ?? 0) > 80) {
+    emit?.('planet:colonize', { planet: entity });
+    return 'colonize';
+  }
+  if (civMode && (isHome || colMgr?.hasColony?.(entity.id))) {
+    const col = colMgr?.getColony?.(entity.id);
+    if (!col || isPlayerColony(col)) {                 // własne
+      colMgr?.switchActiveColony?.(entity.id);
+      K?.overlayManager?.openPanel?.('colony');
+      return 'colony';
+    }
+    const mine = (K?.groundUnitManager?.getUnitsOnPlanet?.(entity.id) ?? []).some((u) => !u.owner || u.owner === 'player');
+    if (mine) {
+      K?.overlayManager?.openPanel?.('colony', { colonyId: entity.id });
+      return 'foreignColony';
+    }
+    // Bez moich wojsk — NIE przeskakujemy na własną kolonię; niżej podgląd (własna bramka `analyzed`).
+  }
+  if (civMode && entity.analyzed && entity.type !== 'star') {
+    emit?.('planet:previewMap', { planet: entity });
+    return 'preview';
+  }
+  return null;
+}
+
+/**
+ * Wykonanie przycisku przypięcia (keeper pinuje wywołania):
+ *   map     → `runBodyMapAction(entity, { K, emit })` (4 warianty: własna kolonia — `switchActiveColony` +
  *             `openPanel('colony')`; obca z moimi wojskami — `openPanel('colony', { colonyId })`; ciało `analyzed` bez kolonii
  *             (i obca kolonia bez moich wojsk) — `planet:previewMap`; Generator — `planet:colonize`);
  *   report  → `showReport(entity)` (`showBodyDetailModal`);
  *   manage  → `K.stationPanel._onHit({ type: 'manage' })` (zakładka Stacja gospodarza; panel — przypięcie — zdjęty);
- *   close   → ciało: `body:deselected` (dzisiejsze „−”); stacja: `K.stationPanel._onHit({ type: 'close' })` (dzisiejsze ✕);
+ *   close   → ciało: `body:deselected` (dawne „−” karty); stacja: `K.stationPanel._onHit({ type: 'close' })`;
  *   list:*  → `{ toggle: <lista> }` (stan listy trzyma warstwa).
  * @returns {string|{toggle:string}|null}
  */
@@ -379,7 +422,7 @@ export function runPinAction(id, { ck, entity = null, K = null, emit = null, sho
   switch (id) {
     case 'map':
       if (!isBody || !entity) return null;
-      K?.uiManager?._bottomContext?._doAction?.(entity);
+      runBodyMapAction(entity, { K, emit });
       return 'map';
     case 'report':
       if (!isBody || !entity) return null;

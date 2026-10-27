@@ -39,6 +39,8 @@
 //   R12 Finding 487 — picker kliku na tarczy ciała: statek tylko w obrębie rdzenia sprite'a; poza tarczą bez zmian
 //       (wykonanie wyciętych metod)
 //   R13 Finding 491 — `syncStationPanelOnSystemSwitch` + słuchacz `system:switched` w UIManagerze (wykonanie)
+//       ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4-2): dok zminimalizowanych paneli usunięty — R13e: panel stacji
+//       ukryty (bez przypięcia) — słuchacz nic nie robi (dawniej: panel zadokowany jako belka); atrapa bez `_float`.
 //   R14 pas dolny — jedno źródło wysokości (`BottomControlBar` czyta `MapInsets.BOTTOM_STRIP_H`)
 //   R15 (U3-3, decyzja 3 i 4) sprzątanie: w prawym tylko statki (bez sekcji KOLONIE / EKSPEDYCJE / KOLEJKA / JEDN.
 //       NAZIEMNE i ich kodu); bez szuflady (`getCoveredWidth` — także w `ColonyOverlay`); bez prawej rynny
@@ -489,14 +491,15 @@ header('R13 Finding 491 — panel stacji przy przełączeniu układu');
   const sig = "EventBus.on('system:switched', ({ systemId } = {}) => {";
   const i = ui.indexOf(sig), e = ui.indexOf('\n    });', i);
   const text = i < 0 || e < 0 ? '' : ui.slice(i + "EventBus.on('system:switched', ".length, e + '\n    }'.length);
-  const sp = { visible: true, _float: { minimized: false }, _station: () => ({ id: 's1', systemId: 'sys_home' }), hide() { this.visible = false; } };
+  const sp = { visible: true, _station: () => ({ id: 's1', systemId: 'sys_home' }), hide() { this.visible = false; } };
   const self = { _selectedEntity: null, stationPanel: sp, _dirty: false };
   const lis = compileWith(text, { syncBodyCardOnSystemSwitch: CI?.syncBodyCardOnSystemSwitch, syncStationPanelOnSystemSwitch: f, EventBus }, self);
   call(lis, null, { systemId: 'sys_A' });
   ok(!!lis && sp.visible === false && self._dirty === true, 'R13d słuchacz `system:switched` w UIManagerze zamyka panel stacji spoza układu (wykonanie)');
-  sp.visible = true; sp._float.minimized = true; call(lis, null, { systemId: 'sys_A' });
-  ok(sp.visible === true, 'R13e KONTROLA: panel zadokowany jako belka (zminimalizowany) — bez zmian');
-  sp._float.minimized = false; sp._station = () => ({ id: 's2', systemId: 'sys_A' }); call(lis, null, { systemId: 'sys_A' });
+  let hides = 0; const hide0 = sp.hide; sp.hide = function () { hides++; hide0.call(this); };
+  sp.visible = false; self._dirty = false; call(lis, null, { systemId: 'sys_A' });
+  ok(sp.visible === false && self._dirty === false && hides === 0, 'R13e KONTROLA: panel stacji ukryty (bez przypięcia) — słuchacz nic nie robi');
+  sp.visible = true; sp._station = () => ({ id: 's2', systemId: 'sys_A' }); call(lis, null, { systemId: 'sys_A' });
   ok(sp.visible === true, 'R13f KONTROLA: stacja w układzie docelowym — panel zostaje');
 }
 

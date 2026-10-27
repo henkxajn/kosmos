@@ -106,7 +106,7 @@ export class StationSystem {
     return EntityManager.getByType('station');
   }
 
-  /** S4-2 — zmień nazwę stacji (mirror VesselManager._renameVessel; StationPanel czyta name live). */
+  /** S4-2 — zmień nazwę stacji (mirror VesselManager._renameVessel; przypięcie stacji czyta nazwę na żywo). */
   _renameStation(stationId, name) {
     const s = EntityManager.get(stationId);
     if (s && s.type === 'station' && name) s.name = name;

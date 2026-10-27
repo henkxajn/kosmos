@@ -1,7 +1,7 @@
 // BottomNavBarLogic — czyste helpery BottomNavBar (bez DOM/canvas), testowalne headless.
 //
 // Geometria stałego dolnego paska nawigacji + layout slotów + hit-test. Wzór:
-// NavDrawerLogic/BottomContextLogic (logika oddzielona od rysowania → smoke bez przeglądarki).
+// NavDrawerLogic (logika oddzielona od rysowania → smoke bez przeglądarki).
 
 import { COSMIC } from '../config/LayoutConfig.js';
 
