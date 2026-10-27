@@ -540,14 +540,12 @@ export default {
   'atmosphere.none': 'Brak',
   'atmosphere.rare': 'Rzadka',
   'atmosphere.veryDense': 'Bardzo gęsta',
-  'atmosphere.habitable': '(zdatna)',
   'atmosphere.thick': 'Gęsta',
 
   // === Etapy życia ===
   'life.barren': 'Jałowa',
   'life.prebiotic': 'Chemia prebiotyczna',
   'life.microorganisms': 'Mikroorganizmy',
-  'life.complex': 'Złożone życie',
   'life.civilization': 'Cywilizacja',
 
   // === Epoki cywilizacji ===
@@ -764,7 +762,6 @@ export default {
   'ui.deposits': 'Złoża:',
   'ui.depositsHeader': 'ZŁOŻA',
   'ui.compositionHeader': 'SKŁAD',
-  'ui.unexplored': '??? (wymaga rozpoznania)',
   'ui.unexploredBody': 'Ciało niezbadane \u2014 wyślij misję rozpoznawczą',
   'ui.badTerrain': 'Zły teren',
   'ui.noResources': 'Brak surowców',
@@ -789,11 +786,6 @@ export default {
   'station.flashCancelled': 'Zlecenie anulowane',
   'station.flashRejected': 'Brak technologii (Konstrukcja Orbitalna)',
   // === StationPanel (S4-2) ===
-  'station.ownerPlayer': 'Gracz',
-  'station.orbit': 'Orbita',
-  'station.system': 'Układ',
-  'station.tier': 'Poziom',
-  'station.created': 'Rok budowy',
   'station.depot': 'Magazyn',
   'station.depotEmpty': '— pusty —',
   'station.sharedStorage': 'Wspólny magazyn:',       // S3.4c (D9) — stacja z matką dzieli magazyn kolonii
@@ -821,7 +813,6 @@ export default {
   'station.mgmt.tradeCap': 'Handel',
   'station.mgmt.slots': 'Moduły',
   'station.mgmt.addModule': 'Dodaj moduł',
-  'station.mgmt.noModules': 'Brak modułów',
   'station.mgmt.noPower': 'brak energii',
   'station.mgmt.noCrew': 'brak załogi',
   'station.mgmt.noCrewHint': 'Brak załogi — przetransportuj POP z kolonii (statek pasażerski)',
@@ -1222,7 +1213,6 @@ export default {
   'log.fleetArrearsCleared': 'Zaległości opłacone — {0} okr. znów operacyjnych',
 
   // Slice 8b — FleetGroupPanel (panel zaznaczonej grupy statków)
-  'fleetGroup.title': 'Zaznaczone statki',
   'fleetGroup.fuel': 'Paliwo',
   'fleetGroup.upkeep': 'Utrzymanie',
   'fleetGroup.upkeepPerYear': '{0} Kr/rok',
@@ -2596,20 +2586,7 @@ export default {
   'speed.1m': '1m',
   'speed.1y': '1r',
 
-  // === BottomContext ===
-  'context.orbit': 'ORBITA',
-  'context.physics': 'FIZYKA',
-  'context.composition': 'SKŁAD',
-  'context.orbitLabel': 'Orbita',
-  'context.eccentricity': 'Mimośród',
-  'context.period': 'Okres',
-  'context.stability': 'Stabilność',
-  'context.age': 'Wiek',
-  'context.mass': 'Masa',
-  'context.type': 'Typ',
-  'context.temp': 'Temp',
-  'context.atm': 'Atm',
-  'context.life': '\u017bycie',
+  // === Akcja „Mapa ciała” przypięcia etykiety (dawniej karta ciała BottomContext — REFORMA ZAKŁADEK T2 / T4) ===
   'context.takeCiv': '► Przejmij cywilizację',
   'context.openMap': '► Mapa ciała',
 
@@ -3626,7 +3603,6 @@ export default {
   'log.war.playerExhausted':        'Imperium wyczerpane wojną — czas rozważyć pokój',
 
   // === Odznaka okupacji (WP-4 C2) — czytana z księgi zdobyczy aktywnej wojny ===
-  'body.occupied':               '🏴 Okupowana',
   'body.occupiedBy':             '🏴 Okupowana przez {0}',
 
   // === SaveFile — zapis/odczyt pliku na dysku gracza ===

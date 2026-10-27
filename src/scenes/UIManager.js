@@ -2127,8 +2127,8 @@ export class UIManager {
       return this._hitTestConfirm(x, y);
     }
 
-    // REFORMA ZAKŁADEK T3, strojenie 1 (Finding 545): panel statku — rysowany PO karcie walki i panelu stacji — dostaje klik
-    // PRZED nimi: rysunek i klik spójne także wtedy, gdy kotwica zapasowa nie omija karty walki.
+    // REFORMA ZAKŁADEK T3, strojenie 1 (Finding 545): panel statku — rysowany PO karcie walki (i dawnym panelu stacji, usuniętym
+    // w T4) — dostaje klik PRZED nią: rysunek i klik spójne także wtedy, gdy kotwica zapasowa nie omija karty walki.
     if (this._vesselPanelClick(x, y)) return true;
     // REFORMA ZAKŁADEK T6 — panel floty / grupy w idiomie etykiet (miejsce panelu statku w rysunku i kliku; mutex — jeden z trzech).
     if (this._fleetPanelHudClick(x, y)) return true;
@@ -2158,7 +2158,7 @@ export class UIManager {
     // Obraz Operacyjny F1: także fleetMapLabels (plakietki/chipy) — zone-listy per
     // powierzchnia są puste gdy dana flaga nie rysowała, więc OR jest bezpieczny.
     // ARKUSZ HUD paczka A (H2): przy `hudLabels` plakietek nie ma (rysuje je warstwa HUD) — ich strefy z ostatniego rysunku
-    // byłyby nieaktualne; etykiety HUD klikane niżej, PO karcie ciała (515).
+    // byłyby nieaktualne; etykiety HUD klikane niżej, przed raycastem 3D (515).
     if (window.KOSMOS?.civMode
         && (GAME_CONFIG.FEATURES?.mapLabels || GAME_CONFIG.FEATURES?.fleetMapLabels)
         && !isHudLabelsOn(GAME_CONFIG.FEATURES)

@@ -552,8 +552,11 @@ export const GAME_CONFIG = {
     //   jedyny pogrubiony, druga linia dla zaznaczonego i najechanego, cyfry w kratce; stos planeta + księżyce + stacje — LOD
     //   po średnicy tarczy kotwicy („NOWA ZIEMIA +2” → szyna → każdy przy swoim obiekcie); anti-overlap wszystkich etykiet
     //   w kadrze obszaru mapy (514), pełne nazwy z „…” (513), strzałki krawędzi bez wczesnego wyjścia (497), fade-in 150 ms;
-    //   klik etykiety PO karcie ciała (515), tarcza ciała wygrywa (487, 503); etykiety CTRL w rolach motywu (D-HUD-16).
-    //   Przy ON plakietki `MapLabelLayer` wyłączone (rysunek i klik); przy OFF — dzisiejszy kod co do bitu.
+    //   klik etykiety przed raycastem 3D (515 — karta ciała, dawniej nad nią, usunięta w REFORMIE ZAKŁADEK T4), tarcza ciała
+    //   wygrywa (487, 503); etykiety CTRL w rolach motywu (D-HUD-16).
+    //   Przy ON plakietki `MapLabelLayer` wyłączone (rysunek i klik); przy OFF — same plakietki `MapLabelLayer`: od REFORMY
+    //   ZAKŁADEK T4 (decyzja właściciela Q1) bez karty ciała, bez podpowiedzi DOM ciała i statku i bez rozwinięć / przypięć
+    //   etykiet (ich miejscem jest warstwa HUD); panel statku (T5) i panele floty / grupy (T6) — bez zmian.
     // hudRoutes (H3 — D-HUD-8, D-HUD-9, D-HUD-10, D-HUD-12): trasy statków rysuje warstwa HUD 2D (`HudRouteLayer`, logika
     //   `HudRouteLogic.js`): linia 1 px w roli `primary` (obce — `foreign`), krycie 0,6 → 0,15 wzdłuż długości (× 0,25 dla
     //   niezaznaczonych), kreski w px ekranu z marszem na zegarze symulacji (stoi w pauzie), cel — kółko / chevron; patrol,

@@ -25,6 +25,9 @@
 //       `CargoLoadModal` jako `dom:` — kontrola nie-jałowości: sink DOM naprawdę mierzy (na HEAD sprzed
 //       naprawy narzędzie nie ma sinku DOM ⇒ CargoLoadModal nieobecny ⇒ pin czerwony, nie zielony-jałowy)
 //
+// ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4-4, `TABS_REFORM_PLAN.md` §5.10): tooltip 3D statku (`_showVesselTooltip`)
+//   usunięty razem z importem kanonu w rendererze — trzecim site'em stanu jest jego NASTĘPCA, rozwinięcie etykiety statku
+//   (`HudLabelLayer._t1Vessel` → `buildShipEntry`, kanon `VesselStatus`); pin „renderer bez literałów” zostaje.
 // ⚠ Fail-first w REALNYM `git worktree` na `59cbc2c` (reguła Findingu 270: źródło czytane po
 //   normalizacji `\r\n → \n`; keeper ma przechodzić w drzewie autora (CRLF) i w świeżym checkoucie (LF)).
 //
@@ -204,9 +207,16 @@ header('T3  statusy (i) — _drawEnemyDetails WYKONANIEM: „Stan:" = słowo kan
   const fmo = stripComments(src('ui/FleetManagerOverlay.js'));
   const tr  = stripComments(src('renderer/ThreeRenderer.js'));
   ok(/import \{[^}]*vesselStatusLabelKey[^}]*\} from '\.\.\/utils\/VesselStatus\.js'/.test(fmo), 'FMO importuje vesselStatusLabelKey z kanonu');
-  ok(/import \{[^}]*vesselStatusLabelKey[^}]*\} from '\.\.\/utils\/VesselStatus\.js'/.test(tr),  'ThreeRenderer importuje vesselStatusLabelKey z kanonu');
+  // T4-4: tooltip 3D statku usunięty — renderer nie etykietuje już stanu statku; następca: rozwinięcie etykiety statku.
+  const hll = stripComments(src('ui/HudLabelLayer.js'));
+  const fpl = stripComments(src('ui/FleetPictureLogic.js'));
+  const t1v = hll.slice(hll.indexOf('  _t1Vessel('), hll.indexOf('\n  }\n', hll.indexOf('  _t1Vessel(')));
+  ok(!/_showVesselTooltip\s*\(/.test(tr) && !/vesselStatusLabelKey/.test(tr),
+     'ThreeRenderer: tooltip 3D statku usunięty (T4-4) — bez `_showVesselTooltip` i bez kanonu stanu (nie ma czego etykietować)');
   ok((fmo.match(/vesselStatusLabelKey\(/g) ?? []).length >= 2, `FMO woła vesselStatusLabelKey ≥ 2× (wiersz wroga + detal; jest ${(fmo.match(/vesselStatusLabelKey\(/g) ?? []).length})`);
-  ok((tr.match(/vesselStatusLabelKey\(/g) ?? []).length >= 1,  `ThreeRenderer woła vesselStatusLabelKey ≥ 1× (tooltip; jest ${(tr.match(/vesselStatusLabelKey\(/g) ?? []).length})`);
+  ok(t1v.length > 50 && /buildShipEntry\(/.test(t1v) && /import \{[^}]*\bbuildShipEntry\b[^}]*\} from '\.\/FleetPictureLogic\.js'/.test(hll)
+     && /import \{[^}]*\bresolveVesselStatus\b[^}]*\} from '\.\.\/utils\/VesselStatus\.js'/.test(fpl),
+     'następca tooltipa 3D: rozwinięcie etykiety statku (`HudLabelLayer._t1Vessel`) bierze stan z `buildShipEntry` — kanon `VesselStatus`');
   ok(!/hangarze|[Ww] locie'|Bezczynny|'Na orbicie'/.test(fmo), 'FMO (kod bez komentarzy): ZERO literałów W hangarze / w locie / Bezczynny / Na orbicie');
   ok(!/hangarze|[Ww] locie'|Bezczynny|'Na orbicie'/.test(tr),  'ThreeRenderer (kod bez komentarzy): ZERO literałów W hangarze / Na orbicie / Bezczynny');
   // Wiersz wroga: glif per token + słowo kanonu — jedno wyrażenie, nie łańcuch ternary z literałami.

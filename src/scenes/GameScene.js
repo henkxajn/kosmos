@@ -5802,11 +5802,12 @@ export class GameScene {
       return;
     }
     const target = this._resolveClickTarget(clientX, clientY);
-    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — na warstwie etykiet HUD ciało i statek opisuje rozwinięcie etykiety: bez podpowiedzi
-    // mapy (531, 536); POI — bez zmian; współrzędne tylko nad PUSTĄ mapą — nie pod etykietą HUD ani nad gwiazdą / stacją
-    // (obiektem z rozwinięciem; resolver zwraca dla nich „pustkę” — 530).
+    // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) / T4 — ciało i statek opisuje rozwinięcie etykiety HUD: bez podpowiedzi mapy (531, 536;
+    // od T4 także bez warstwy etykiet — `hudLabels` OFF zostawia same plakietki `MapLabelLayer`); POI — bez zmian; współrzędne
+    // tylko nad PUSTĄ mapą — nie pod etykietą HUD ani nad gwiazdą / stacją (obiektem z rozwinięciem; resolver zwraca dla nich
+    // „pustkę” — 530).
     const lh = isHudLabelsOn(GAME_CONFIG.FEATURES);
-    if (lh && target && target.type !== 'empty' && target.type !== 'poi') {
+    if (target && target.type !== 'empty' && target.type !== 'poi') {
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }

@@ -539,14 +539,12 @@ export default {
   'atmosphere.none': 'None',
   'atmosphere.rare': 'Rare',
   'atmosphere.veryDense': 'Very Dense',
-  'atmosphere.habitable': '(habitable)',
   'atmosphere.thick': 'Thick',
 
   // === Life stages ===
   'life.barren': 'Barren',
   'life.prebiotic': 'Prebiotic Chemistry',
   'life.microorganisms': 'Microorganisms',
-  'life.complex': 'Complex Life',
   'life.civilization': 'Civilization',
 
   // === Civilization epochs ===
@@ -764,7 +762,6 @@ export default {
   'ui.deposits': 'Deposits:',
   'ui.depositsHeader': 'DEPOSITS',
   'ui.compositionHeader': 'COMPOSITION',
-  'ui.unexplored': '??? (requires reconnaissance)',
   'ui.unexploredBody': 'Body unexplored — send a recon mission',
   'ui.badTerrain': 'Bad terrain',
   'ui.noResources': 'Insufficient resources',
@@ -790,11 +787,6 @@ export default {
   'station.flashCancelled': 'Order cancelled',
   'station.flashRejected': 'Missing tech (Orbital Construction)',
   // === StationPanel (S4-2) ===
-  'station.ownerPlayer': 'Player',
-  'station.orbit': 'Orbit',
-  'station.system': 'System',
-  'station.tier': 'Tier',
-  'station.created': 'Built (year)',
   'station.depot': 'Depot',
   'station.depotEmpty': '— empty —',
   'station.sharedStorage': 'Shared storage:',        // S3.4c (D9) — station with mother shares colony storage
@@ -822,7 +814,6 @@ export default {
   'station.mgmt.tradeCap': 'Trade',
   'station.mgmt.slots': 'Modules',
   'station.mgmt.addModule': 'Add module',
-  'station.mgmt.noModules': 'No modules',
   'station.mgmt.noPower': 'no power',
   'station.mgmt.noCrew': 'no crew',
   'station.mgmt.noCrewHint': 'No crew — transport POP from a colony (passenger ship)',
@@ -1221,7 +1212,6 @@ export default {
   'log.fleetArrearsCleared': 'Arrears paid — {0} ship(s) operational again',
 
   // Slice 8b — FleetGroupPanel (selected vessel group panel)
-  'fleetGroup.title': 'Selected vessels',
   'fleetGroup.fuel': 'Fuel',
   'fleetGroup.upkeep': 'Upkeep',
   'fleetGroup.upkeepPerYear': '{0} Kr/yr',
@@ -2595,20 +2585,7 @@ export default {
   'speed.1m': '1m',
   'speed.1y': '1y',
 
-  // === BottomContext ===
-  'context.orbit': 'ORBIT',
-  'context.physics': 'PHYSICS',
-  'context.composition': 'COMP',
-  'context.orbitLabel': 'Orbit',
-  'context.eccentricity': 'Eccentricity',
-  'context.period': 'Period',
-  'context.stability': 'Stability',
-  'context.age': 'Age',
-  'context.mass': 'Mass',
-  'context.type': 'Type',
-  'context.temp': 'Temp',
-  'context.atm': 'Atm',
-  'context.life': 'Life',
+  // === “Body map” action of the label pin (formerly the BottomContext body card — TABS REFORM T2 / T4) ===
   'context.takeCiv': '► Take Civilization',
   'context.openMap': '► Body Map',
 
@@ -3625,7 +3602,6 @@ export default {
   'log.war.playerExhausted':        'Empire worn down by war — time to consider peace',
 
   // === Occupation badge (WP-4 C2) — read from the active war's capture ledger ===
-  'body.occupied':               '🏴 Occupied',
   'body.occupiedBy':             '🏴 Occupied by {0}',
 
   // === SaveFile — save/load a file on the player's disk ===

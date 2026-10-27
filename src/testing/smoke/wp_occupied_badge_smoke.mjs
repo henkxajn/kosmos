@@ -21,8 +21,8 @@
 //
 // ⚠ GRANICA DOWODU: `HudLabelLayer` importuje się pod node, a treść rozwinięcia etykiety ciała buduje czysta metoda
 //   (`_t1Body(id, F, ctx)`), więc panel ciała pinujemy WYKONANIEM. `ThreeRenderer` NIE
-//   importuje się (brak `three/addons/postprocessing/EffectComposer.js` w stubie) ⇒ tooltip
-//   mapy pinujemy ŹRÓDŁOWO i nazywamy to wprost.
+//   importuje się (brak `three/addons/postprocessing/EffectComposer.js` w stubie) ⇒ brak dymka
+//   kolonii w rendererze pinujemy ŹRÓDŁOWO i nazywamy to wprost (T5d).
 //
 // ⚠ ZAKRES TOOLTIPA JEST ZAWĘŻONY ŚWIADOMIE (decyzja właściciela na gate'cie C1+C2, NIE defekt):
 //   odznaka wchodzi WYŁĄCZNIE do tooltipa KOLONIJNEGO (`_showColonyTooltip`), czyli nad
@@ -30,13 +30,19 @@
 //   PLANETARNY, osobną ścieżką i z angielskim na sztywno — i ten świadomie zostaje bez wstawki;
 //   okupację obcych ciał czyta się z rozwinięcia etykiety ciała (dawniej karta ciała `BottomContext`; sekcja T4).
 //   Zapisane w rejestrze
-//   obok F-b. Pin T5 celuje więc w tooltip kolonijny i tylko w niego — brak odznaki nad obcym
-//   ciałem NIE jest regresją tego keepera.
+//   obok F-b. Pin T5 celował więc w tooltip kolonijny i tylko w niego — brak odznaki nad obcym
+//   ciałem NIE jest regresją tego keepera. (Od REFORMY ZAKŁADEK T4-4 dymka kolonijnego nie ma —
+//   patrz przecelowanie niżej.)
 //
 // ⚠ PRZECELOWANE 2026-10-27 (REFORMA ZAKŁADEK T4, `TABS_REFORM_PLAN.md` §5.10): karta ciała (`BottomContext`) usunięta —
 //   jej następcą jest rozwinięcie etykiety ciała na warstwie HUD (najechanie i przypięcie, `HudLabelLayer._t1Body`):
 //   T0b — import warstwy; sekcja T4 czyta linie rozwinięcia (odznaka `body.occupiedBy` w `colonyExpansionLines` /
 //   `foreignColonyExpansionLines`); T6b — brak polskiego literału odznaki w warstwie i w budowniczych linii.
+//   T4-4 (dymki DOM ciała i statku usunięte — decyzja właściciela Q1): dymek KOLONIJNY (`_showColonyTooltip`) zniknął
+//   razem z importem kanonu w rendererze — T5 pinuje jego NASTĘPCĘ WYKONANIEM: kolonia zdobyta przez gracza w trwającej
+//   wojnie (kolonia GRACZA) pokazuje odznakę w rozwinięciu etykiety (`colonyExpansionLines`), zwykła — nie; T5d (źródłowo)
+//   — dymka w rendererze nie ma, kanon okupacji czyta warstwa HUD; T6a — klucz `body.occupied` (wyłącznie dymka) usunięty,
+//   `body.occupiedBy` zostaje.
 // ⚠ IMPORT DYNAMICZNY modułu POWSTAJĄCEGO w tym slice (lekcja WP-2/WP-3).
 // ⚠ ŻADNEGO wywołania funkcji tłumaczącej w tym pliku — `check-i18n` skanuje je w całym `src/`.
 //
@@ -213,20 +219,45 @@ console.log('T4 — PANEL CIAŁA: wiersz odznaki w rozwinięciu etykiety ciała 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-console.log('T5 — TOOLTIP KOLONIJNY (kolonie GRACZA): pin ŹRÓDŁOWY — renderer nie importuje się pod node');
+console.log('T5 — KOLONIA GRACZA zdobyta w wojnie: odznaka w rozwinięciu etykiety kolonii (WYKONANIOWO; dymek usunięty w T4)');
 {
-  const src = readClean('renderer', 'ThreeRenderer.js');
-  const i = src.indexOf('_showColonyTooltip(');
-  const body = i < 0 ? '' : src.slice(i, i + 2600);
-  assert(i >= 0 && /OccupationLedger|readOccupier|occupierOf/.test(body),
-    'T5a (pin ŹRÓDŁOWY): tooltip KOLONIJNY (`_showColonyTooltip` — kolonie gracza) czyta księgę '
-    + 'okupacji przez KANON, nie własną kopią reguły. ⚠ Tooltip PLANETARNY obcych ciał jest POZA '
-    + 'zakresem z decyzji właściciela — tam okupację pokazuje karta ciała (T4)');
-  assert(/from\s+'[^']*OccupationLedger\.js'/.test(src),
-    'T5b (pin ŹRÓDŁOWY): renderer importuje `OccupationLedger` — jedna definicja okupacji dla karty i tooltipa kolonii');
-  // Odznaka MUSI iść przez i18n, choć reszta tooltipa zostaje po polsku (klasa 113, precedens 269).
-  assert(/t\(\s*'body\.occupied/.test(src),
-    'T5c (pin ŹRÓDŁOWY): sama odznaka renderuje się przez słownik (reszta tooltipa — osobny arc)');
+  // Następca dymka kolonijnego (`_showColonyTooltip`, usunięty w REFORMIE ZAKŁADEK T4-4): rozwinięcie etykiety kolonii GRACZA
+  // na warstwie HUD (`colonyExpansionLines`) — ta sama księga (`readOccupier`) i ten sam klucz odznaki (`body.occupiedBy`).
+  const core = new GameCore();
+  core.boot({ quiet: true, scenario: 'civilization', aiEmpires: true });
+  const K = window.KOSMOS;
+  const cm = K.colonyManager;
+  K.diplomacySystem.declareWar(EMP, 'player_action');
+  const prize = cm.getAllColonies().find((c) => c.ownerEmpireId === EMP) ?? null;
+  const home = cm.getPlayerColonies().find((c) => c.planetId !== prize?.planetId) ?? null;
+  const captured = !!prize && cm.captureColonyForPlayer(prize.planetId) === true;
+  const w = K.warSystem.getWarWith(EMP);
+  const booked = !!w && K.warSystem.getCaptures(w.id).some((c) => c.bodyId === prize?.planetId && c.toEmpireId === PL);
+  assert(captured && !cm.getColony(prize.planetId)?.ownerEmpireId && booked,
+    'T5a (KONTROLA PINU): kolonia imperium REALNIE przejęta przez gracza w trwającej wojnie — jest KOLONIĄ GRACZA i stoi w księdze '
+    + 'zdobyczy (bez tego T5b mierzyłby gałąź obcej kolonii albo ciało bez wpisu)');
+  const render = (id) => {
+    try {
+      const lay = new HLMod.HudLabelLayer();
+      return lay._t1Body(id, { K, now: 0, tactical: false }, { permanent: new Map(), stations: new Map(), pictureCtx: {} }) ?? [];
+    } catch (e) { console.log('    (' + e.message + ')'); return []; }
+  };
+  const occRe = /Okupowan|Occupied|🏴/;
+  const onPrize = (captured && HLMod?.HudLabelLayer) ? render(prize.planetId) : [];
+  const onHome  = (home && HLMod?.HudLabelLayer) ? render(home.planetId) : [];
+  const badge = onPrize.some((s) => occRe.test(s));
+  assert(badge,
+    'T5b (WYKONANIOWO): rozwinięcie etykiety kolonii GRACZA zdobytej w trwającej wojnie pokazuje odznakę okupacji ('
+    + onPrize.join(' | ') + ')');
+  // ⚠ ŚWIADEK: bez `badge` ten pin przechodzi jałowo wszędzie, gdzie odznaki NIE MA W OGÓLE.
+  assert(badge && onHome.length >= 1 && !onHome.some((s) => occRe.test(s)),
+    'T5c: zwykła kolonia gracza odznaki NIE dostaje, choć zdobyta ją ma (' + onHome.length + ' linii)');
+  const tr = readClean('renderer', 'ThreeRenderer.js');
+  const hl = readClean('ui', 'HudLabelLayer.js');
+  assert(!/_showColonyTooltip\s*\(/.test(tr) && !/from\s+'[^']*OccupationLedger\.js'/.test(tr)
+      && /import\s*\{[^}]*\breadOccupier\b[^}]*\}\s*from\s+'[^']*OccupationLedger\.js'/.test(hl),
+    'T5d (pin ŹRÓDŁOWY): dymka kolonijnego w rendererze nie ma (T4-4), kanon okupacji (`OccupationLedger`) czyta warstwa HUD — '
+    + 'jedna definicja okupacji, jedna powierzchnia');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -234,9 +265,10 @@ console.log('T6 — i18n: klucze odznaki w OBU słownikach');
 {
   const pl = readRaw('i18n', 'pl.js');
   const en = readRaw('i18n', 'en.js');
-  for (const k of ['body.occupied', 'body.occupiedBy']) {
-    assert(pl.includes("'" + k + "'") && en.includes("'" + k + "'"), 'T6a: klucz `' + k + '` w pl I en');
-  }
+  const has = (k) => pl.includes("'" + k + "'") && en.includes("'" + k + "'");
+  const none = (k) => !pl.includes("'" + k + "'") && !en.includes("'" + k + "'");
+  assert(has('body.occupiedBy') && none('body.occupied'),
+    'T6a: klucz odznaki `body.occupiedBy` w pl I en; `body.occupied` (wyłącznie usuniętego dymka kolonijnego) — w żadnym (T4-4)');
   const hudSrc = readClean('ui', 'HudLabelLayer.js') + '\n' + readClean('ui', 'LabelHoverLogic.js');
   const literals = (hudSrc.match(/['`][^'`]*Okupowan[^'`]*['`]/g) ?? []);
   assert(hudSrc.length > 1000 && literals.length === 0,

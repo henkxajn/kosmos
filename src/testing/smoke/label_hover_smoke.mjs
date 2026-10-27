@@ -19,7 +19,7 @@
 //       przypięcia skacze, bez pamięci powrotu sąsiad zostaje
 //   K6  zwinięta „+N” → rozwinięcie głowy grupy bez szyny; tarcza członka innego niż kotwica — co najmniej szyna
 //   K7  dymki (piny na wywołaniach): `#colony-3d-tooltip` (statek, kolonia) i ciałowo-statkowa część `#kosmos-tooltip`
-//       wygaszone na warstwie etykiet HUD; podpowiedź budynku (K3), POI i współrzędne pustej mapy — zostają
+//       usunięte (T4-4 — także bez warstwy etykiet HUD); podpowiedź budynku (K3), POI i współrzędne pustej mapy — zostają
 //   K8  akcja „Mapa ciała”: `bodyCardAction` = lustro skutku `LabelPinLogic.runBodyMapAction` (tabela ciał; dawniej lustro
 //       `BottomContext._actionLabel`); karta ciała usunięta z `UIManager` (T4 — przypięcie jest jedyną powierzchnią ciała),
 //       zaznaczenie zostaje
@@ -29,7 +29,10 @@
 //     HUD (`isHudLabelsOn`); K10 (OFF = dziś: druga linia przy najechaniu, bez etykiet na żądanie) usunięty razem z tą ścieżką
 //     (K10c — ta sama kolonia rozwinięta — zostaje jako K4j). T4-2 (karta ciała usunięta): K8b / K8c — lustro tabeli akcji
 //     wobec skutku `runBodyMapAction` (rdzeń dawnego `BottomContext._doAction`), K8d — Generator tym samym lustrem; K8e / K8f
-//     (bramka i wywołania karty w `UIManager`) zastąpione pinem braku karty w `UIManager`.
+//     (bramka i wywołania karty w `UIManager`) zastąpione pinem braku karty w `UIManager`. T4-4 (dymki DOM ciała i statku
+//     usunięte — decyzja właściciela Q1: przy `hudLabels` OFF zostają same plakietki `MapLabelLayer`): K7a / K7b / K7d —
+//     dymek statku i kolonii schowany, a podpowiedź mapy ciała / statku odwołana BEZ bramki warstwy etykiet; K7g — metod
+//     `_showColonyTooltip` / `_showVesselTooltip` w rendererze już nie ma.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import '../headless/env.js';           // MUSI być pierwszy
@@ -424,23 +427,26 @@ header('K6  zwinięta „+N” — rozwinięcie głowy grupy bez szyny; tarcza c
 }
 
 // ═══ K7 ══════════════════════════════════════════════════════════════════════
-header('K7  dymki — wygaszone na warstwie etykiet HUD, zostają: budynek (K3), POI, współrzędne pustej mapy (piny na wywołaniach)');
+header('K7  dymki ciała i statku — usunięte (T4-4), zostają: budynek (K3), POI, współrzędne pustej mapy (piny na wywołaniach)');
 {
   const tr = strip(src('../../renderer/ThreeRenderer.js'));
   const mm = tr.slice(tr.indexOf('  handleMouseMove(screenX, screenY) {'), tr.indexOf('  _showBuildingTooltip(markerHit, sx, sy) {'));
-  ok(/if \(isHudLabelsOn\(GAME_CONFIG\.FEATURES\)\) this\._hideColonyTooltip\(\);\s*else this\._showVesselTooltip\(vesselHover, screenX, screenY\);/.test(mm),
-    'K7a: `#colony-3d-tooltip` statku — na warstwie etykiet HUD schowany (bez niej — `_showVesselTooltip`)');
-  ok(/if \(newId && newId === focusId && !isHudLabelsOn\(GAME_CONFIG\.FEATURES\)\) \{[\s\S]*?this\._showColonyTooltip\(newId, screenX, screenY\);/.test(mm),
-    'K7b: `#colony-3d-tooltip` kolonii (533) — tylko bez warstwy etykiet HUD');
+  ok(/if \(vesselHover\) \{[\s\S]*?this\._hideColonyTooltip\(\);\s*return;/.test(mm) && !/_showVesselTooltip|isHudLabelsOn/.test(mm),
+    'K7a: `#colony-3d-tooltip` statku — zawsze schowany (T4-4: bez `_showVesselTooltip` i bez bramki warstwy etykiet)');
+  ok(!/_showColonyTooltip\(/.test(mm)
+    && /if \(markerHit\?\.buildingId\) \{\s*this\._showBuildingTooltip\(markerHit, screenX, screenY\);\s*return;\s*\}\s*this\._hideColonyTooltip\(\);\s*\}/.test(mm),
+    'K7b: `#colony-3d-tooltip` kolonii (533) — usunięty (T4-4): za markerem budynku gałąź tylko chowa dymek, bez `_showColonyTooltip`');
   const iB = mm.indexOf('this._showBuildingTooltip(markerHit, screenX, screenY);');
   ok(iB > 0 && !/isHudLabelsOn/.test(mm.slice(mm.indexOf('const markerHit'), iB)), 'K7c KONTROLA: podpowiedź budynku (K3) — bez bramki warstwy etykiet');
   const gs = strip(src('../../scenes/GameScene.js'));
   const m3 = gs.slice(gs.indexOf('  _tooltipHoverFromMain3D(clientX, clientY) {'), gs.indexOf('  _tooltipHoverFromTactical(clientX, clientY) {'));
-  ok(/const lh = isHudLabelsOn\(GAME_CONFIG\.FEATURES\);\s*if \(lh && target && target\.type !== 'empty' && target\.type !== 'poi'\) \{\s*this\._scheduleEntityTooltip\(null, clientX, clientY\);\s*return;/.test(m3),
-    'K7d: `#kosmos-tooltip` ciała i statku — na warstwie etykiet HUD odwołany (531, 536); POI — przechodzi');
+  ok(/const lh = isHudLabelsOn\(GAME_CONFIG\.FEATURES\);\s*if \(target && target\.type !== 'empty' && target\.type !== 'poi'\) \{\s*this\._scheduleEntityTooltip\(null, clientX, clientY\);\s*return;/.test(m3),
+    'K7d: `#kosmos-tooltip` ciała i statku — odwołany zawsze (531, 536; T4-4 — także bez warstwy etykiet HUD); POI — przechodzi');
   ok(/const covered = lh && \(/.test(m3) && /if \(!covered && wp &&/.test(m3), 'K7e: współrzędne tylko nad PUSTĄ mapą — nie pod etykietą / gwiazdą / stacją z rozwinięciem (530)');
   ok(/this\._scheduleCoordTooltip\(gp, clientX, clientY\)/.test(m3) && /this\._scheduleEntityTooltip\(target, clientX, clientY\);/.test(m3),
-    'K7f KONTROLA: ścieżki współrzędnych i encji (POI, bez warstwy etykiet) zostają w kodzie');
+    'K7f KONTROLA: ścieżki współrzędnych i encji (POI) zostają w kodzie');
+  ok(!/\b_showColonyTooltip\s*\(|\b_showVesselTooltip\s*\(/.test(tr) && /\b_showColonyTooltipEl\s*\(html, sx, sy\)\s*\{/.test(tr),
+    'K7g: metod `_showColonyTooltip` / `_showVesselTooltip` w rendererze nie ma (T4-4); element dymka (`_showColonyTooltipEl`) zostaje dla podpowiedzi budynku');
 }
 
 // ═══ K8 ══════════════════════════════════════════════════════════════════════

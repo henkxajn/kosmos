@@ -29,7 +29,7 @@ import { atmoStrengthFor, densityMul, discFade } from './AtmosphereLogic.js';
 import { sunDiscPx, sunDetailLevel, granFadeEdges, integratePhase,
          classGranParams, granAmplitude, promEnvelope, limbWeight } from './SunAnimationLogic.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
-import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
+import { BUILDINGS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
@@ -37,22 +37,17 @@ import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
 import { isStationInActiveSystem } from './StationRenderLogic.js';
 import { COMBAT_WATCH, fitWatchFrame, watchSafeRect, capBillboardWorld, watchFxScale, autoFocusFollowStep, watchTargetAt, glideRetarget, glideStep } from './CombatWatchLogic.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-import { ALL_RESOURCES } from '../data/ResourcesData.js';
-import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { systemIdOf } from '../utils/SystemScope.js';   // ARKUSZ UI U3-2 — termin układu pingu (Finding 477)
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { CLICK_INTENT, clickObject, resolveClickIntent, readClickSelection, applyClickIntent } from '../ui/ClickIntentLogic.js';   // ARKUSZ UI U1-3 (D-UI-5)
 import { getMapInsets } from '../ui/MapInsets.js';   // ARKUSZ UI U2-2 / U4-2 — wcięcia kadru „Obserwuj” (outlinery, pas dolny)
-import { resolveVesselStatus, vesselStatusLabelKey } from '../utils/VesselStatus.js';
-import { readOccupier, readOccupierName } from '../utils/OccupationLedger.js';
 import { THEME, themeEpoch } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
-import { isHudLabelsOn } from '../ui/HudLabelLogic.js';   // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — podpowiedzi DOM wygaszone na warstwie HUD
 import {
   weaponColor as fxWeaponColor,
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
@@ -3653,9 +3648,8 @@ export class ThreeRenderer {
       if (vesselHover !== this._hoverVesselId) {
         this._hoverVesselId = vesselHover;
       }
-      // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) — na warstwie etykiet HUD statek opisuje rozwinięcie etykiety, nie podpowiedź DOM.
-      if (isHudLabelsOn(GAME_CONFIG.FEATURES)) this._hideColonyTooltip();
-      else this._showVesselTooltip(vesselHover, screenX, screenY);
+      // REFORMA ZAKŁADEK T1 (D-TR-2 (a)) / T4 — statek opisuje rozwinięcie etykiety HUD; podpowiedź DOM statku usunięta.
+      this._hideColonyTooltip();
       return;
     }
     if (this._hoverVesselId) {
@@ -3676,16 +3670,8 @@ export class ThreeRenderer {
       return;
     }
 
-    // Sprawdź hover na planetę (podsumowanie kolonii) — REFORMA ZAKŁADEK T1 (D-TR-2 (a)): na warstwie etykiet HUD kolonię opisuje
-    // rozwinięcie etykiety (podpowiedź DOM wygaszona, 533); podpowiedź budynku (K3) wyżej — bez zmian.
-    if (newId && newId === focusId && !isHudLabelsOn(GAME_CONFIG.FEATURES)) {
-      const colMgr = window.KOSMOS?.colonyManager;
-      if (colMgr?.hasColony(newId)) {
-        this._showColonyTooltip(newId, screenX, screenY);
-        return;
-      }
-    }
-
+    // Kolonię opisuje rozwinięcie etykiety HUD (REFORMA ZAKŁADEK T1, 533); podpowiedź DOM kolonii usunięta w T4 — z elementu
+    // `#colony-3d-tooltip` korzysta już tylko podpowiedź budynku (K3) wyżej.
     this._hideColonyTooltip();
   }
 
@@ -3723,69 +3709,6 @@ export class ThreeRenderer {
     if (b.energyCost) html += `<br><span style="color:#ffdd44">⚡ -${b.energyCost} energy/rok</span>`;
     if (b.jobs) html += `<br>👤 ${b.jobs} POP`;
     if (b.housing) html += `<br>🏠 +${b.housing} housing`;
-
-    this._showColonyTooltipEl(html, sx, sy);
-  }
-
-  // ── Tooltip kolonii (hover na planetę) ────────────────────────────────
-  _showColonyTooltip(entityId, sx, sy) {
-    const colMgr = window.KOSMOS?.colonyManager;
-    const colony = colMgr?.getColony(entityId);
-    if (!colony) { this._hideColonyTooltip(); return; }
-
-    const civ = colony.civSystem;
-    const pop = civ?.population ?? 0;
-    const housing = civ?.housing ?? 0;
-    const freePops = Math.floor(civ?.freePops ?? 0);   // getter netuje syntetyki + locki (Faza 4 fix)
-
-    let html = `<b>${colony.planet?.name ?? entityId}</b>`;
-
-    // WP-4 C2 — ODZNAKA OKUPACJI. Reguła z kanonu `OccupationLedger` (ten sam, który czyta
-    // karta ciała), więc obie powierzchnie nie mogą się rozjechać. ⚠ Sama odznaka idzie przez
-    // słownik; reszta tego tooltipa zostaje po polsku — klasa 113, precedens Findingu 269.
-    //
-    // ⚠ ZAKRES: to jest tooltip KOLONIJNY, czyli w praktyce kolonie GRACZA. Obce ciało (np.
-    //   kolonia oddana imperium) dostaje na mapie INNY tooltip — PLANETARNY, osobną ścieżką
-    //   i z angielskim na sztywno — i ten świadomie NIE ma tej wstawki (decyzja właściciela
-    //   na gate'cie C1+C2, zapisana w rejestrze obok F-b). Okupację obcych ciał pokazuje
-    //   rozwinięcie etykiety HUD (T1 — dawniej karta ciała, usunięta w T4). Brak odznaki w tooltipie
-    //   planetarnym NIE jest defektem tej wstawki — to nazwany zakres.
-    const occupier = readOccupier(entityId);
-    if (occupier) {
-      const occName = readOccupierName(occupier, t('warOverlay.player')) ?? '???';
-      html += `<br><b style="color:#D8A030">${t('body.occupiedBy', occName)}</b>`;
-    }
-    html += `<br>👤 POP: ${pop}/${housing} (wolne: ${freePops})`;
-
-    // Lista budynków
-    const buildingSummary = {};
-    let totalEnergy = 0;
-    if (colony.buildingSystem?._active) {
-      for (const [key, entry] of colony.buildingSystem._active) {
-        if (key.startsWith('capital_')) continue;
-        const bid = entry.building?.id;
-        if (!bid) continue;
-        const lv = entry.level ?? 1;
-        if (!buildingSummary[bid]) buildingSummary[bid] = [];
-        buildingSummary[bid].push(lv);
-        // Bilans energii
-        const rates = entry.effectiveRates ?? entry.baseRates;
-        if (rates?.energy) totalEnergy += rates.energy;
-      }
-    }
-
-    if (Object.keys(buildingSummary).length > 0) {
-      html += '<br><b>Budynki:</b>';
-      for (const [bid, levels] of Object.entries(buildingSummary)) {
-        const b = BUILDINGS[bid];
-        if (!b) continue;
-        const lvStr = levels.length === 1 ? `Lv.${levels[0]}` : levels.map(l => `Lv.${l}`).join(', ');
-        html += `<br>${b.icon ?? ''} ${b.namePL ?? bid} ${lvStr}`;
-      }
-    }
-
-    // Bilans energii
-    html += `<br><br><b>⚡ Energia:</b> <span style="color:${totalEnergy >= 0 ? '#88ff88' : '#ff8888'}">${totalEnergy >= 0 ? '+' : ''}${totalEnergy.toFixed(1)}/rok</span>`;
 
     this._showColonyTooltipEl(html, sx, sy);
   }
@@ -3874,91 +3797,7 @@ export class ThreeRenderer {
     return out;
   }
 
-  // ── Tooltip statku (hover na vessel sprite/model) ─────────────────────
-  _showVesselTooltip(vesselId, sx, sy) {
-    const vMgr = window.KOSMOS?.vesselManager;
-    const vessel = vMgr?.getVessel(vesselId);
-    if (!vessel) { this._hideColonyTooltip(); return; }
-
-    // Fog-of-war tożsamości: wrogi statek bez pełnego kontaktu (rumor/unknown) = ghost
-    // „pozycja bez tożsamości". Pełne info (nazwa/misja/cargo) tylko przy intel ≥ contact
-    // (bliskie spotkanie proximity). Bez tej bramki hover na ghoście zdradzał wszystko —
-    // niwecząc sens reformy detekcji obserwatorium.
-    if (isEnemyVessel(vessel)) {
-      const q = window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality ?? 'unknown';
-      if (q !== 'contact' && q !== 'detailed') {
-        this._showColonyTooltipEl(
-          `<b style="color:#ff8888">❓ ${t('intel.unidentifiedContact')}</b>` +
-          `<br><span style="opacity:0.7">${t('intel.unidentifiedHint')}</span>`,
-          sx, sy);
-        return;
-      }
-    }
-
-    const mSys = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
-    const missions = mSys?._missions ?? mSys?._expeditions ?? [];
-    const mission = missions.find(m => m.vesselId === vesselId && m.status !== 'completed') ?? null;
-
-    // Kolor nagłówka = kolor cargo = zielony mint; inaczej biały
-    let html = `<b style="color:#88ff99">🚀 ${vessel.name}</b>`;
-
-    if (mission) {
-      const typeIcon = mission.type === 'transport' ? '📦'
-                     : mission.type === 'recon' || mission.type === 'survey' ? '🔭'
-                     : mission.type === 'colony' ? '🏗'
-                     : mission.type === 'mining' ? '⛏' : '🚀';
-      const legBadge = mission.loop ? ' 🔁' : '';
-      html += `<br><span style="opacity:0.85">${typeIcon} → ${mission.targetName ?? '?'}${legBadge}</span>`;
-      // ETA
-      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-      let eta = null;
-      if (mission.status === 'returning') eta = mission.returnYear;
-      else if (mission.status === 'en_route') eta = mission.arrivalYear;
-      if (eta != null && eta > now) {
-        const delta = eta - now;
-        html += `<br><span style="opacity:0.75">ETA ${delta.toFixed(1)} lat</span>`;
-      }
-      // Etap pętli
-      if (mission.loop && mission.leg) {
-        const legLabel = { outbound: 'W drodze tam', return: 'Powrót', waiting_reload: 'Czeka (paliwo)', waiting_return_cargo: 'Czeka (paliwo)' }[mission.leg] ?? mission.leg;
-        html += `<br><span style="color:#b0c4b0">Etap: ${legLabel}</span>`;
-      }
-    } else {
-      // Finding 266: KANON; Finding 269 (A-MIN, decyzja (i)): słowo z kanonu (`vesselStatusLabelKey`)
-      // — in_transit bez misji przestaje być zgadywane jako „Bezczynny". ⚠ Reszta tooltipa
-      // („ETA … lat", „Etap:", „W drodze tam") zostaje po polsku — klasa 113, osobny arc.
-      const stateLabel = t(vesselStatusLabelKey(resolveVesselStatus(vessel).token));
-      html += `<br><span style="opacity:0.7">${stateLabel}</span>`;
-    }
-
-    // Cargo top-3
-    const cargoEntries = Object.entries(vessel.cargo ?? {}).filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]);
-    if (cargoEntries.length > 0) {
-      html += `<br><b style="color:#66aa88">📦 Cargo:</b>`;
-      const top = cargoEntries.slice(0, 3);
-      for (const [id, qty] of top) {
-        const icon = RESOURCE_ICONS[id] ?? ALL_RESOURCES[id]?.icon ?? COMMODITIES[id]?.icon ?? '•';
-        const name = ALL_RESOURCES[id]?.namePL ?? COMMODITIES[id]?.namePL ?? id;
-        html += `<br>${icon} ${name} ×${qty}`;
-      }
-      if (cargoEntries.length > 3) {
-        html += `<br><span style="opacity:0.7">+${cargoEntries.length - 3} więcej</span>`;
-      }
-    }
-
-    // Manifest planowany (plan misji) — gdy różny od aktualnego cargo
-    if (mission?.cargo) {
-      const planEntries = Object.entries(mission.cargo).filter(([, q]) => q > 0);
-      const diffFromBoard = planEntries.some(([id, q]) => (vessel.cargo?.[id] ?? 0) !== q);
-      if (planEntries.length > 0 && diffFromBoard) {
-        html += `<br><span style="opacity:0.65; color:#a0a0c0">Plan: ${planEntries.slice(0, 3).map(([id, q]) => (RESOURCE_ICONS[id] ?? ALL_RESOURCES[id]?.icon ?? COMMODITIES[id]?.icon ?? '•') + q).join(' ')}${planEntries.length > 3 ? ' +' + (planEntries.length - 3) : ''}</span>`;
-      }
-    }
-
-    this._showColonyTooltipEl(html, sx, sy);
-  }
-
-  // ── DOM tooltip element ───────────────────────────────────────────────
+  // ── DOM tooltip element (podpowiedź budynku K3 — podpowiedzi kolonii i statku usunięte w REFORMIE ZAKŁADEK T4) ──
   _showColonyTooltipEl(html, sx, sy) {
     if (!this._colonyTooltipEl) {
       const el = document.createElement('div');
